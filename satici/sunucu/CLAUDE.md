@@ -6,7 +6,7 @@
 
 Fabrikaların lisansını verir ve yönetir: **etkinleştirme** (tek kullanımlık kod → HAK + KİRA; kimliksiz istekte kurulumu KOD belirler, yanıt lisans kimliğini taşır — D14), **yoklama** (kira yenileme + kira zinciri kararı + indirme belirteçleri), **kapı zili** (SSE; içerik taşımaz, "şimdi yokla" der; kurulum başına ≤ `ZIL_AZAMI_ABONE`), **çevrimdışı/QR**, **taşıma** (yeni makine yalnız TALEP açar; satıcı onayı tek kullanımlık `tasima` kodu üretir, anahtar kodla etkinleşmede değişir — D8), **DR devralımı** (self-servis + anında bildirim), **yaptırım** (K0–K5, zorlama, geçerlilik bitişi, planlı eylem, taksit), **portal JSON API'si** (satıcı: tailnet `/portal/api` ve internetten ERİŞİM `/portal/api` — Cloudflare Access arkası · bayi: genel `/bayi/api`). **Kurulum kaydı + destek (3d-2):** yoklamanın `kurulumKayitlari` (fabrikanın `kur.ps1` geçmişi) `kurulum_kaydi`na `(kurulum, kaynakKayitId)` ile idempotent yazılır; `POST /v1/destek` (amaç `destek`, ham gövde ≤2 MB, ek ≤1 MB görüntü) talep açar, destek kutusu (`/portal/api/destek*`, yazma `destek:yanitla`) yanıtlar/kapatır → zil `destek`, yanıt yoklama yanıtının `destek` alanıyla döner. Portal web arayüzü `satici/web`'dedir (kendi `CLAUDE.md`'si); derlenmiş çıktısını bu sunucu API ile AYNI kökenden sunar (`src/http/web-static.ts`).
 
-**VDS kurulumu** (compose · imaj · yalıtım denetimi · yedek): `deploy/satici/` + runbook `docs/ops/SATICI-KURULUM.md` — imaj Mac'te HEAD'den derlenir, VDS'te kaynak yok; hazırlık anahtarları `~/.tekserp/satici-hazirlik/` (repo dışı).
+**VDS kurulumu** (compose · imaj · yalıtım denetimi · yedek): `deploy/satici/` + runbook `docs/ops/SATICI-KURULUM.md` — imaj Mac'te HEAD'den derlenir, VDS'te kaynak yok; hazırlık anahtarları `~/.tekserp/satici-hazirlik/` (repo dışı). ÜRETİM anahtar kümesi YALNIZ tören aracıyla (`deploy/satici/uretim-toren.mjs` → `~/.tekserp/satici-uretim/`, runbook `docs/ops/URETIM-SATICI-TOREN.md`); üretim satıcısı aynı compose, `ORTAM=uretim` (runbook §13).
 
 ## Katmanlar
 
@@ -77,7 +77,7 @@ Yaşa göre silinen tablolar YALNIZ (`src/services/maintenance.ts` `PRUNED_MODEL
 ```bash
 cd satici/sunucu
 npx prisma migrate deploy && npx prisma generate      # migrate dev/reset YASAK (yeni migration: migrate diff ile üret)
-npx tsx scripts/anahtar.ts kok-uret --kid=kok-2026-1  # parola TTY/stdin; alt-uret · indirme-uret · bayi-uret
+npx tsx scripts/anahtar.ts kok-uret --kid=hazirlik-2026-2  # parola TTY/stdin; alt-uret · indirme-uret · bayi-uret (ÜRETİM kümesi: deploy/satici/uretim-toren.mjs)
 npx tsx scripts/portal-kullanici.ts ekle --kullanici=ad --ad-soyad="Ad Soyad" --rol=SATICI_YONETICI  # ilk yönetici (parola TTY/stdin; TOTP sırrı BİR KEZ basılır)
 npm run typecheck && npm run typecheck:scripts && npm run lint   # commit kapısı dördüncü proje olarak aynısını ölçer (tip + eslint + lint-baseline.json tavanı)
 node ../../scripts/agir-is.mjs -- npx tsx scripts/run-all-tests.ts [ad-parçası]   # yalnız *_test DB

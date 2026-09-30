@@ -219,7 +219,7 @@ Satıcı tarafı `SATICI-KURULUM.md` §5b'dedir: ağ (`IC_API_AGI`), sabit adres
 
 ## 11. Açık riskler
 
-- **Hazırlık satıcısı yalnız TEST/DEMO imzalar**, patron eşitlemeyi yalnız `URETIM` sınıfından kabul eder → `SATICI_IC_API_AGI=tekserp-satici-hazirlik-ic-api` ile kurulu patron web/giriş/hesap yönetimi için doğrulanabilir, ama fabrikadan gerçek eşitleme **üretim satıcısı** (ayrı compose, `ORTAM=uretim`) kurulup patron onun ağına bağlanınca akar (ağ adı + iki adres + sır değişir, §10).
+- **Hazırlık satıcısı yalnız TEST/DEMO imzalar**, patron eşitlemeyi yalnız `URETIM` sınıfından kabul eder → `SATICI_IC_API_AGI=tekserp-satici-hazirlik-ic-api` ile kurulu patron web/giriş/hesap yönetimi için doğrulanabilir, ama fabrikadan gerçek eşitleme **üretim satıcısı** (ayrı compose, `ORTAM=uretim`) kurulup patron onun ağına bağlanınca akar (ağ adı + iki adres + sır değişir, §10) — geçiş adımları §14.
 - **Bildirim çıkışı yok:** kenar/ic internal, ic-api internal → patron dış dünyaya bağlanamaz. B5 (Expo push · FCM · APNs · web push) dış çıkış ister: yalnız çıkışa izinli ayrı bir ağ ya da vekil — ayrı karar, bu yığında YOK (bilerek; ilk kurulum sıfır çıkışla başlar).
 - **`cf-connecting-ip` taklit edilebilir** — köken (VDS:443) yalnız Cloudflare IP'lerine açılana dek doğrudan köke gelen istek başlığı uydurabilir; etkisi IP başına hız sınırının (giriş, `/v1`) atlatılmasıdır. Giriş ayrıca hesap başına kilitlidir (`GIRIS_ESIGI` → `KILIT_DK`), `/v1` her istek kurulum imzalıdır. Kalıcı çare satıcıyla aynı (Faz 3a, köken CF'ye kapatma).
 - **`patron-totp.key` tek noktadır:** kaybı bütün hesapların yeniden daveti demektir → VDS dışı kopya (USB) + şifreli yedek (§7). Konteyner kaçışı anahtarı okur (kök FS salt okunur, yetenek yok; kabul edilen risk).
@@ -282,3 +282,49 @@ Satıcı tarafı `SATICI-KURULUM.md` §5b'dedir: ağ (`IC_API_AGI`), sabit adres
 - **İç API:** patrondan hazırlık kurulumu (`eecfd6b7…`) 200 (tesis `c0f70948…` `Etkili Yazılım Hazırlık`, `ETKINLESMEDI`, `TEST`, `saklamaAy 13`) · sıfır UUID 404 · belirteçsiz 401 · patronun ic-api adresinde 4620 `ECONNREFUSED`.
 - **Kaynak (VDS, boşta):** patron 79 / 512 MiB (12 süreç) · DB 31 / 384 · yedek 1 / 128; kullanılabilir bellek 2133 MB; disk 53 GB boş. VDS'te üç imaj çifti duruyor (`f446424bbedf` · `dd54c2526ecc` geri alma · `55203d9708ba` iki sürüm eski — kaldırmak ayrı karar).
 - **Geri alma:** `.env`'e `~/p5-env-yedek-dd54c2526ecc` geri yazılır + `docker compose up -d` (eski imaj yerinde; şema aynı, göç yok); veri gerekirse `patron_20260930_114720` yedeğinden (§7).
+
+## 14. İç API kaynağını hazırlıktan ÜRETİM satıcısına çevirme
+
+> **Durum:** HAZIRLANDI, UYGULANMADI (2026-09-30). Patron aynı anda TEK satıcının `ic-api` ağına bağlanır (compose'da tek `ic-api` ağı); geçiş = ağ adı + iki adres + sır kopyası + patronun yeniden yaratılması. Önkoşul: üretim satıcısı kurulu ([`SATICI-KURULUM.md`](SATICI-KURULUM.md) §13, günlükte `ic=4612`). VDS yazımıdır — kullanıcının "uygula" cümlesiyle; önce ve sonra `deploy/vds-dogrula.sh` ✅, Traefik yeniden başlatılmaz.
+
+`v() { ssh -p 2222 oguzhan@80.253.255.188 "$@"; }` · `P=/opt/stack/apps/tekserp-patron-uretim` · `Y=tekserp-satici-yedek:<üretim satıcısı sha>` (yardımcı konteyner) · `T=$(mktemp -d)`.
+
+1. **Ölç (salt okuma):** `v "docker network inspect tekserp-satici-uretim-ic-api --format '{{range .Containers}}{{.Name}} {{.IPv4Address}} {{end}}'"` → yalnız `tekserp-satici-uretim 172.31.251.34/28` (`172.31.251.35` BOŞ); `v "grep -E '^(SATICI_IC_API_AGI|SATICI_IC_API_IP|PATRON_IC_IP|KURULUM_KAYNAGI)=' $P/.env"` → bugünkü hazırlık değerleri (not edilir: geri dönüş).
+2. **Önce yedek:** `v "cd $P && docker compose exec -T patron-yedek /arac/yedek-dongusu.sh tek"`.
+3. **`.env` (Mac'te hazırlanır, sır içermez):**
+
+   ```bash
+   v "cat $P/.env" > $T/patron-vds.env
+   sed -e 's#^SATICI_IC_API_AGI=.*#SATICI_IC_API_AGI=tekserp-satici-uretim-ic-api#' -e 's#^SATICI_IC_API_IP=.*#SATICI_IC_API_IP=172.31.251.34#' \
+       -e 's#^PATRON_IC_IP=.*#PATRON_IC_IP=172.31.251.35#' $T/patron-vds.env > $T/patron-uretim.env && diff $T/patron-vds.env $T/patron-uretim.env
+   node deploy/patron/compose-denetle.mjs --env-file $T/patron-uretim.env --satici-env ~/.tekserp/satici-uretim-vds.env
+   ```
+
+   Beklenen: `diff` yalnız üç satır; denetim 0 ihlal (⑨ üretim satıcısının `.env`'iyle: ağ adı · `PATRON_IC_IP` · iç API adresi aynı, `SIR_GID` farklı, ağlar çakışmaz).
+4. **Sır kopyası** (üretim satıcısının belirteci patron dizinine AYRI dosya olarak; eski kopya yanında kalır, içerik basılmaz):
+
+   ```bash
+   v "P=$P Y=$Y sh -s" <<'UZAK'
+   set -eu
+   docker run --rm --network none --user 0 -v /opt/stack/apps/tekserp-satici-uretim/sirlar:/s:ro -v "$P/sirlar:/p" --entrypoint sh "$Y" -c '
+     cp -p /p/ic-api-belirteci /p/ic-api-belirteci.yedek-hazirlik &&
+     cat /s/ic-api-belirteci > /p/ic-api-belirteci &&
+     chown 0:61062 /p/ic-api-belirteci && chmod 440 /p/ic-api-belirteci &&
+     cmp -s /s/ic-api-belirteci /p/ic-api-belirteci && echo "belirteç kopyası bayt-eşit (içerik basılmadı)"'
+   UZAK
+   ```
+
+5. **`.env` yerinde** (sahip/izin/inode korunur; yedek ev dizininde):
+
+   ```bash
+   scp -P 2222 $T/patron-uretim.env oguzhan@80.253.255.188:patron-env-yeni
+   v "P=$P sh -s" <<'UZAK'
+   set -eu
+   cp -p "$P/.env" "$HOME/patron-env-yedek-$(date +%Y%m%d_%H%M)" && cat "$HOME/patron-env-yeni" > "$P/.env" && rm "$HOME/patron-env-yeni"
+   cd "$P" && docker compose config -q && echo "config yeşil"
+   UZAK
+   ```
+
+6. **Yeniden yarat (yalnız patron):** `v "cd $P && docker compose up -d patron"` → patron üretim satıcısının `ic-api` ağına `172.31.251.35` ile katılır, hazırlığınkinden çıkar; DB ve yedek konteyneri dokunulmaz. Günlük: `PATRON_DINLIYOR … kurulumKaynagi=satici web=acik`.
+7. **Doğrula:** patrondan iç API — `v "docker exec tekserp-patron-uretim patron-baslat node -e \"fetch('http://172.31.251.34:4612/ic/v1/kurulum/00000000-0000-4000-8000-000000000000',{headers:{Authorization:'Bearer '+process.env.SATICI_IC_API_BELIRTECI}}).then(r=>console.log(r.status))\""` → `404` (kapı geçildi); aynı komut başlıksız → `401` · `docker network inspect tekserp-satici-uretim-ic-api` → satıcı `.34` + patron `.35`; `tekserp-satici-hazirlik-ic-api` → yalnız hazırlık satıcısı · `curl -s https://patron.etkiliyazilim.com/saglik` → `{"success":true}` · sonra `deploy/vds-dogrula.sh` ✅.
+8. **Etki ve geri dönüş:** hazırlıkta açılmış deneme tesisinin kurulumu (`eecfd6b7…`, TEST) üretim satıcısında YOK → patron ilk sorguda `404` alır ve kaydı pasife çeker (beklenen; §10). Gerçek tesisler üretim satıcısının tesis kimliğiyle `tesis-ac` ile açılır (geçiş dilimi). Geri dönüş: `.env` yedeği (`cat ~/patron-env-yedek-<damga> > $P/.env`) + `ic-api-belirteci.yedek-hazirlik` → `ic-api-belirteci` (aynı yardımcı konteyner kalıbı) → `docker compose up -d patron`. Üretim satıcısı geri alınacaksa bu dönüş ÖNCE yapılır (patron bağlıyken ağ silinemez; SATICI-KURULUM §13.8).

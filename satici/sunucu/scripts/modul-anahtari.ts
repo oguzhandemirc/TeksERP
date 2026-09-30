@@ -22,7 +22,6 @@ import { loadServerSecrets } from "../src/keys/server-secrets";
 import { loadEnvFile } from "../src/lib/env";
 import { ModuleKeySchema, moduleKeyId, parseModuleKeyFile } from "../src/lisans-protokol";
 import type { VendorContext } from "../src/services/context";
-import { importModuleKey } from "../src/services/module-key.service";
 import { CliError, args } from "./lib/cli-girdi";
 
 export const MODULE_KEY_DIR_DEFAULT = path.join(os.homedir(), ".tekserp", "satici-hazirlik", "modul-anahtarlari");
@@ -59,6 +58,8 @@ async function importFile(flags: Map<string, string>): Promise<void> {
   const config = loadConfig(process.env, path.resolve(__dirname, ".."));
   // Anahtar birimi imajda salt okunur: kasa anahtarı yalnız OKUNUR (üreticisi `anahtar.ts sirlar-uret`).
   const ctx: VendorContext = { config, keys: KeyStore.load(config), ...loadServerSecrets(config.ANAHTAR_DIZINI) };
+  // Servis (denetim → prisma) yalnız burada yüklenir: `uret` DB'siz makinede (tören) koşabilsin.
+  const { importModuleKey } = await import("../src/services/module-key.service");
   const { prisma, pool } = await import("../src/lib/prisma");
   try {
     const r = await importModuleKey(ctx, { modul: key.modul, surum: key.surum, anahtar: key.anahtar, yapan: "cli" });

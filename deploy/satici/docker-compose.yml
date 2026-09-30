@@ -4,8 +4,11 @@ name: tekserp-satici-${ORTAM:?ORTAM gerekli (hazirlik|uretim)}
 # TeksERP SATICI (lisans) sunucusu — tekserp-vds · /opt/stack/apps/tekserp-satici-<ortam>/
 # =============================================================================
 # Runbook: docs/ops/SATICI-KURULUM.md (kurulum · doğrulama · geri alma). Bu dosya sunucuya ELLE
-# kopyalanır; değerler yanındaki `.env`ten (ornek.env). Bugün yalnız ORTAM=hazirlik kurulur
-# (lisans-test.etkiliyazilim.com, yalnız TEST/DEMO imzalayan hazırlık kökü).
+# kopyalanır; değerler yanındaki `.env`ten. İki ortam, AYNI dosya, ayrı proje:
+#   ORTAM=hazirlik (ornek.env)       lisans-test.etkiliyazilim.com · yalnız TEST/DEMO imzalayan hazırlık kökü
+#   ORTAM=uretim   (ornek-uretim.env) lisans.etkiliyazilim.com · üretim kökü (tören) — runbook §13
+# Konteyner/ağ/DB hacmi adları ORTAM'dan türer; host yolları, alt ağlar ve sır grubu .env'de ayrıdır
+# (compose-denetle.mjs --diger-env iki ortamın çakışmadığını ölçer).
 #
 # Dört ağ, dört ayrı kapı — yalnız `ic-api` patron konteyneriyle ORTAK; hiçbiri güncelleme/kiracıyla değil:
 #   kenar   (internal) Traefik ↔ satıcının GENEL dinleyicisi (/v1/*, /q, /bayi/api). Traefik bu ağa
