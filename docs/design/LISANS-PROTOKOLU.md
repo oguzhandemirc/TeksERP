@@ -19,6 +19,7 @@
 | `protocol/indirme.ts` | İNDİRME belirteci imzala/doğrula + `isDownloadPathAllowed` (CF Worker'ın kâhini) |
 | `protocol/istek.ts` | İSTEK imzala/doğrula · `readRequestIdentity` · `bodyDigest` · `generateNonce` · `NonceLedger` · çevrimdışı `zarf` |
 | `protocol/parmak-izi.ts` | etken normalleştirme · tuzlu özet · eşleşme kararı (üç sonuç) |
+| `protocol/anahtar-sarma.ts` | anahtar dosyası SARMASI — tek uygulama: `sealPrivateKey` · `openSealedKey` (scrypt → AES-256-GCM, AAD tür + kid + açık yarı + sınıflar) · `KeyFileError` · `passwordBuffer` · `assertPasswordStrength` (≥ 12) · ham ↔ Ed25519 özel yarı; satıcının kök/bayi dosyaları (`keys/key-files.ts`) ve imza aracının üretim PAKET anahtarı (`scripts/lib/butunluk-imza.ts`) kullanır, fabrika çalışma zamanı kullanmaz (`index.ts`e girmez) |
 | `protocol/uclar.ts` | satıcı uç yolları, istek/yanıt gövde şemaları, sağlık özeti allowlist'i, zil konuları, satıcı hata kodları, durum/kademe/kip kelime dağarcığı, etkinleştirme kodu biçimi + TEK üreticisi |
 | `state.ts` + `state-rules.ts` + `state-rules-trust.ts` | SAF lisans durumu (fabrika tarafı; aynaya girmez) — güven kuralları (geri alma pini, okunamayan dosya, satıcı saati) ayrı dosyada |
 | `saat.ts` | güvenilir saat hesabı + imzalı `durum.json` belgesi (fabrika tarafı) |

@@ -13,7 +13,7 @@ import {
   type LicenseClass,
   type RootKey,
 } from "../../src/lib/license/protocol";
-import { isStagingPackageKid } from "../../src/lib/license/integrity-scope";
+import { isProductionPackageKid, isStagingPackageKid } from "../../src/lib/license/integrity-scope";
 import type { PackageKey } from "../../src/lib/license/integrity";
 
 /** Depo köküne göre yollar. Aynalar kaynağın BAYT-EŞİT kopyasıdır (`test_lisans_protokol_aynasi`). */
@@ -26,13 +26,14 @@ export const CAPA_DOSYALARI = Object.freeze({
 
 /** Kök kid'i: üretim `kok-<yıl>-<n>` · hazırlık `hazirlik-<yıl>-<n>` (satıcı `anahtar.ts kok-uret` ile aynı biçim). */
 export const KOK_KID_BICIMI = /^(?:kok|hazirlik)-\d{4}-\d{1,3}$/;
-/** Üretim PAKET kid'i: `paket-<yıl>[-<n>]`; hazırlık kid'i `isStagingPackageKid` kuralındadır. */
-export const URETIM_PAKET_KID_BICIMI = /^paket-\d{4}(?:-\d{1,3})?$/;
 const PAKET_KID_ZEMIN = /^paket-[a-z0-9-]{1,40}$/;
 
-/** Çapaya girebilecek PAKET kid'i mi — fikstür kid'leri (`paket-fikstur`) bu kuralın DIŞINDADIR. */
+/**
+ * Çapaya girebilecek PAKET kid'i mi: üretim (`paket-<yıl>[-<n>]`) ya da hazırlık (`paket-hazirlik…`) — iki kural
+ * `integrity-scope.ts`te; fikstür kid'leri (`paket-fikstur`) bu kuralın DIŞINDADIR.
+ */
 export function paketKidGecerli(kid: string): boolean {
-  return PAKET_KID_ZEMIN.test(kid) && (URETIM_PAKET_KID_BICIMI.test(kid) || isStagingPackageKid(kid));
+  return PAKET_KID_ZEMIN.test(kid) && (isProductionPackageKid(kid) || isStagingPackageKid(kid));
 }
 
 export class CapaHatasi extends Error {
