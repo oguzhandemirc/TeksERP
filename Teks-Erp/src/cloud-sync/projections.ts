@@ -98,6 +98,10 @@ const SNAPSHOTS: readonly SnapshotProjection[] = [
     reads: ["rolls", "work_order_steps", "stations", "sacks", "shipments"],
   },
   {
+    name: "tesis", kind: "ANLIK", source: "constants/time getFactoryTimezone (kurulumun saat dilimi; bulutta gün anahtarı/gösterim bundan)",
+    cadence: "HER_TUR", permission: "bulut:oturum", reads: [],
+  },
+  {
     name: "saglik", kind: "ANLIK", source: "lib/health-snapshot backupHealth (gece yedeği hükmü + zamanı; patron bildirimi 'yedek-basarisiz')",
     cadence: "HER_TUR", permission: "bulut:ozet:oku", reads: [],
   },

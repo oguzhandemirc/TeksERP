@@ -35,7 +35,7 @@ import { assertMasterDataLiveTx } from "./helpers/master-data-live.helper";
 import { assertItemUsable, assertItemUsableTx, type ItemUsage } from "./helpers/item-usage.helper";
 import { assertRollReplayAlive, tokenReplay } from "./helpers/token-replay.helper";
 import { ApiResponse, PaginatedResponse, QueryParams } from "../types/api.types";
-import { FACTORY_TIMEZONE } from "../constants/time";
+import { getFactoryTimezone } from "../constants/time";
 import { resolveQualityGradeIdStrict } from "./helpers/quality-grade.helper";
 // G4 sayım metraj düzeltmesi — sapma satırı TEK yazma noktasından doğar
 // (`roll-variance.helper` başlığındaki kural: çağıran `tx.rollVariance.create` yazmaz).
@@ -407,7 +407,7 @@ export interface RollCancelPreview {
  */
 function formatFactoryDateTime(at: Date): string {
   return at.toLocaleString("tr-TR", {
-    timeZone: FACTORY_TIMEZONE,
+    timeZone: getFactoryTimezone(),
     day: "2-digit",
     month: "2-digit",
     year: "numeric",

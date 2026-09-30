@@ -1,5 +1,5 @@
 // Standart dönem pencereleri (§3.3, §7): "bugün · bu ay · geçen ay · son 30 gün". Sınırlar
-// FABRİKA günüdür (`constants/time.ts`, Europe/Istanbul) — bulut tarih aritmetiği yapmaz.
+// FABRİKA günüdür (`constants/time.ts`, seçilen fabrika dilimi) — bulut tarih aritmetiği yapmaz.
 import { factoryDayStart, factoryYmd } from "../constants/time";
 import type { DateRange } from "../services/reports/_shared";
 

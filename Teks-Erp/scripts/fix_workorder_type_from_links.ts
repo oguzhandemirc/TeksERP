@@ -41,13 +41,13 @@ import prisma, { pool } from "../src/lib/prisma";
 import { ACTIVE_ORDER_LINK } from "../src/services/helpers/order-link.helper";
 import { WorkOrderStatus, WorkOrderType } from "@prisma/client";
 import { AuditService } from "../src/services/audit.service";
-import { FACTORY_TIMEZONE } from "../src/constants/time";
+import { getFactoryTimezone } from "../src/constants/time";
 
 const APPLY = process.argv.includes("--apply");
 
 /** Listede fabrika saati (operatör UTC okumaz). */
 const fmt = (d: Date | undefined | null): string =>
-  d ? d.toLocaleString("tr-TR", { timeZone: FACTORY_TIMEZONE, dateStyle: "short", timeStyle: "short" }) : "—";
+  d ? d.toLocaleString("tr-TR", { timeZone: getFactoryTimezone(), dateStyle: "short", timeStyle: "short" }) : "—";
 
 async function main(): Promise<void> {
   console.log(

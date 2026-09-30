@@ -29,7 +29,7 @@
 // =============================================================================
 import { Prisma, RollStatus } from "@prisma/client";
 
-import { FACTORY_TIMEZONE } from "../src/constants/time";
+import { getFactoryTimezone } from "../src/constants/time";
 import prisma, { pool } from "../src/lib/prisma";
 import { AuditService } from "../src/services/audit.service";
 
@@ -351,7 +351,7 @@ function m(d: Prisma.Decimal): string {
 }
 
 function zaman(d: Date): string {
-  return d.toLocaleString("tr-TR", { timeZone: FACTORY_TIMEZONE, dateStyle: "short", timeStyle: "short" });
+  return d.toLocaleString("tr-TR", { timeZone: getFactoryTimezone(), dateStyle: "short", timeStyle: "short" });
 }
 
 const ETIKET: Record<Hukum, string> = { KESIN: "KESİN HASAR", BELIRSIZ: "BELİRSİZ", TEMIZ: "TEMİZ" };

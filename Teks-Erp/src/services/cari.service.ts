@@ -22,6 +22,7 @@ import { periodCloseService } from "./period-close.service";
 import { collectAgingRows } from "./reports/finance-aging.report";
 import { buildTurkishSearch } from "../utils/query-parser";
 import type { ApiResponse } from "../types/api.types";
+import { factoryDateTr } from "../constants/time";
 
 export interface CariListRow {
   id: string;
@@ -429,7 +430,7 @@ export class CariService {
         // 409 GERÇEK yolu gösterir — "ters bir düzeltme kaydı girin" diyen eski
         // mesajın gösterdiği uç ürün genelinde YOKTU (Sınıf 2'nin kök bulgusu).
         throw AppError.conflict(
-          `Bu cari için ${input.currency} devri zaten girilmiş (${dup.txnDate.toLocaleDateString("tr-TR")}). ` +
+          `Bu cari için ${input.currency} devri zaten girilmiş (${factoryDateTr(dup.txnDate)}). ` +
             `Düzeltmek için önce mevcut devri iptal edin (Devri İptal Et).`,
         );
       }

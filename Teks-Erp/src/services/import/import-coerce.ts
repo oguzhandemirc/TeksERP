@@ -9,7 +9,7 @@
 // olmadan veri SİLMESİ demekti; "temizle" niyeti açıkça yazılmalı.
 
 import { AppError } from "../../utils/app-error";
-import { FACTORY_TIMEZONE } from "../../constants/time";
+import { getFactoryTimezone } from "../../constants/time";
 import { upperTr } from "../../utils/tr-case";
 
 /** "Temizle" niyetinin açık yazımı. Şablonun Açıklama sayfasında anlatılır. */
@@ -102,7 +102,7 @@ export function parseDateCell(raw: string): Date | null {
 /** Verilen andaki Europe/Istanbul UTC ofseti (ms). DST'yi Intl üzerinden çözer. */
 function istanbulOffsetMs(at: Date): number {
   const dtf = new Intl.DateTimeFormat("en-US", {
-    timeZone: FACTORY_TIMEZONE,
+    timeZone: getFactoryTimezone(),
     hour12: false,
     year: "numeric",
     month: "2-digit",

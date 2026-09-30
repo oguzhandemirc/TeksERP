@@ -45,6 +45,7 @@ import {
   type RecordProjection,
 } from "../src/cloud-sync/projections";
 import { DERIVERS } from "../src/cloud-sync/derived";
+import { getFactoryTimezone } from "../src/constants/time";
 import { buildRecords } from "../src/cloud-sync/record-builder";
 import { buildSnapshots, SNAPSHOT_WIRE_SCHEMAS } from "../src/cloud-sync/snapshots";
 import { PackageSchema } from "../src/cloud-sync/wire";
@@ -112,7 +113,7 @@ function bicimBolumu(): void {
   console.log("\n§1 — katalog biçimi");
   const boyut = RECORD_PROJECTIONS.filter((p) => p.role === "BOYUT").length;
   const olgu = RECORD_PROJECTIONS.filter((p) => p.role === "OLGU").length;
-  check("§1a 24 KAYIT (7 BOYUT + 17 OLGU) + 7 ANLIK", RECORD_PROJECTIONS.length === 24 && boyut === 7 && olgu === 17 && SNAPSHOT_PROJECTIONS.length === 7,
+  check("§1a 24 KAYIT (7 BOYUT + 17 OLGU) + 8 ANLIK", RECORD_PROJECTIONS.length === 24 && boyut === 7 && olgu === 17 && SNAPSHOT_PROJECTIONS.length === 8,
     `${RECORD_PROJECTIONS.length} (${boyut}+${olgu}) + ${SNAPSHOT_PROJECTIONS.length}`);
   const adlar = [...RECORD_PROJECTIONS, ...SNAPSHOT_PROJECTIONS].map((p) => p.name);
   check("§1b projeksiyon adları tekil ve tel biçiminde", new Set(adlar).size === adlar.length && adlar.every((a) => /^[a-z][a-z0-9-]*$/.test(a)));
@@ -284,6 +285,9 @@ async function anlikBolumu(): Promise<void> {
   const saglik = snaps.find((s) => s.projection === "saglik");
   check("§6d saglik yalnız yedek hükmü + zamanı + yaşı taşır (dosya adı/yol GİTMEZ)", !!saglik && JSON.stringify(anahtarlar(saglik.data)) === JSON.stringify(["yedek", "yedek.hukum", "yedek.sonGeceYedegi", "yedek.yasSaat"]),
     saglik ? anahtarlar(saglik.data).join(",") : "üretilmedi");
+  const tesis = snaps.find((s) => s.projection === "tesis");
+  check("§6e tesis yalnız saat dilimini taşır (fabrikanın kullandığı dilim)", !!tesis && JSON.stringify(anahtarlar(tesis.data)) === JSON.stringify(["saatDilimi"]) &&
+    (tesis.data as { saatDilimi?: unknown }).saatDilimi === getFactoryTimezone(), tesis ? JSON.stringify(tesis.data) : "üretilmedi");
 }
 
 function paketBolumu(): void {

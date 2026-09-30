@@ -21,7 +21,7 @@ import {
   MODULE_PROFILES,
   MODULE_PROFILE_IDS,
 } from "../constants/module-profiles";
-import { isReservedSettingKey, PROFILE_STAMP_SETTING_KEY } from "../constants/reserved-settings";
+import { FACTORY_TIMEZONE_SETTING_KEY, isReservedSettingKey, PROFILE_STAMP_SETTING_KEY } from "../constants/reserved-settings";
 import { requireSettingsPassword } from "../middlewares/settings-password.middleware";
 import {
   protectSystemAccountTarget,
@@ -1509,6 +1509,12 @@ router.put(
       // açardı — yani ayar şifresi, tam da korumaya çalıştığı iznin sahibi
       // tarafından ele geçirilebilirdi. Tek yazıcı: süperadminin
       // `PUT /api/admin/settings-password` ucu.
+      if (key === FACTORY_TIMEZONE_SETTING_KEY) {
+        throw AppError.badRequest(
+          "Fabrika saat dilimi yalnız önizlemeli saat dilimi ucundan değiştirilir",
+          { code: "SETTING_KEY_RESERVED", key },
+        );
+      }
       if (isReservedSettingKey(key)) {
         throw AppError.badRequest(
           "Bu ayar güvenlik satırıdır ve bu uçtan değiştirilemez",

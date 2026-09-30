@@ -26,6 +26,7 @@ import { applyCashTxTx, cancelCashTxTx, KIND_DIRECTION, nextCashNoTx, type Accou
 import { buildTurkishSearch } from "../utils/query-parser";
 import { tokenReplay } from "./helpers/token-replay.helper";
 import type { ApiResponse } from "../types/api.types";
+import { factoryDateTr } from "../constants/time";
 
 // Tür→yön, belge no ve bakiye yazımı TEK YAZAR helper'ında (`cash-ledger.helper`); burada yeniden dışa verilir.
 export { KIND_DIRECTION };
@@ -231,7 +232,7 @@ export class CashTransactionService {
         input.exchangeRate != null ? D(input.exchangeRate) : await resolveExchangeRateTx(tx, acc.currency, txnDate);
       if (rate == null) {
         throw AppError.badRequest(
-          `${acc.currency} için ${txnDate.toLocaleDateString("tr-TR")} tarihli kur bulunamadı — Kurlar ekranından girin.`,
+          `${acc.currency} için ${factoryDateTr(txnDate)} tarihli kur bulunamadı — Kurlar ekranından girin.`,
         );
       }
       if (rate.lte(0)) throw AppError.badRequest("Kur sıfır veya negatif olamaz.");
@@ -340,7 +341,7 @@ export class CashTransactionService {
       const rate = await resolveExchangeRateTx(tx, fromAcc.currency, txnDate);
       if (rate == null) {
         throw AppError.badRequest(
-          `${fromAcc.currency} için ${txnDate.toLocaleDateString("tr-TR")} tarihli kur bulunamadı — Kurlar ekranından girin.`,
+          `${fromAcc.currency} için ${factoryDateTr(txnDate)} tarihli kur bulunamadı — Kurlar ekranından girin.`,
         );
       }
       const amountTry = amount.mul(rate).toDecimalPlaces(2, Prisma.Decimal.ROUND_HALF_UP);

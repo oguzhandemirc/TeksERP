@@ -176,7 +176,7 @@ const FACTORY_TZ_LITERAL = {
   // çok-şubeli senaryoda tek noktadan çözümü imkânsızlaştırır.
   selector: "Literal[value='Europe/Istanbul']",
   message:
-    "`'Europe/Istanbul'` literalini kopyalama — `FACTORY_TIMEZONE` (src/constants/time.ts) kullan. bkz. docs/kurallar/raporlar.md.",
+    "`'Europe/Istanbul'` literalini kopyalama — `getFactoryTimezone()` (seçilen dilim) ya da `DEFAULT_FACTORY_TIMEZONE` (src/constants/time.ts) kullan. bkz. docs/kurallar/raporlar.md.",
 };
 
 /**

@@ -15,7 +15,7 @@
 // biçimi değiştir (örn. `/` ayırıcı) → §1 her TZ'de kırmızı.
 
 import { fmtDate, fmtDateTime } from "../src/services/document-render/fmt-date";
-import { FACTORY_TIMEZONE, factoryYmd } from "../src/constants/time";
+import { getFactoryTimezone, factoryYmd } from "../src/constants/time";
 
 let pass = 0;
 let fail = 0;
@@ -75,7 +75,7 @@ const grid = [
   "2026-06-15T12:34:56.789Z",
 ];
 
-if (TZ === FACTORY_TIMEZONE) {
+if (TZ === getFactoryTimezone()) {
   // §1 — biçim aynen (yalnız fabrika diliminde anlamlı: eski formül süreç dilimini okur)
   for (const iso of grid) {
     check(`§1 boş-fallback ailesi @${iso}`, fmtDate(iso) === legacy.bos(iso), `${fmtDate(iso)} ↔ ${legacy.bos(iso)}`);
@@ -94,7 +94,7 @@ if (TZ === FACTORY_TIMEZONE) {
   }
   check("§1 fason-ceki geçersiz dize", fmtDate("abc") === legacy.fasonCeki("abc"));
 } else {
-  console.log(`ℹ️ §1 (biçim aynen) yalnız TZ=${FACTORY_TIMEZONE} altında ölçülür; şu an TZ=${TZ}`);
+  console.log(`ℹ️ §1 (biçim aynen) yalnız TZ=${getFactoryTimezone()} altında ölçülür; şu an TZ=${TZ}`);
 }
 
 // §2 — gün kaynağı fabrika (her TZ'de aynı sonuç vermeli)

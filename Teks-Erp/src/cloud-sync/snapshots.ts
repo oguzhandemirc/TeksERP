@@ -19,6 +19,7 @@ import { SNAPSHOT_PROJECTIONS, type SnapshotProjection } from "./projections";
 import { toWireValue, type WireContainer } from "./wire";
 import { remoteReportCatalog } from "./report-requests";
 import { snapshotDigest } from "./digest";
+import { getFactoryTimezone } from "../constants/time";
 
 export interface BuiltSnapshot {
   /** Tel adı (`ozet.stok`, `stok-karnesi`…). */
@@ -74,6 +75,7 @@ export const SNAPSHOT_WIRE_SCHEMAS: Readonly<Record<string, z.ZodType>> = {
   "rapor-katalogu": z.strictObject({
     raporlar: z.array(z.strictObject({ anahtar: Str, baslik: Str, soru: Str, aile: Str, izin: Str, parametreler: z.array(Str), standartDonemler: z.array(Str) })),
   }),
+  tesis: z.strictObject({ saatDilimi: Str }),
   saglik: z.strictObject({
     yedek: z.strictObject({ hukum: z.enum(["ok", "uyari", "kritik", "yapilandirilmamis"]), sonGeceYedegi: Str.nullable(), yasSaat: Num.nullable() }),
   }),
@@ -193,6 +195,11 @@ async function buildProductionFlow(): Promise<BuiltSnapshot> {
   });
 }
 
+/** Tesisin saat dilimi (IANA) — bulut gün anahtarını ve gösterimi fabrikanın gününe hizalar. */
+function buildFacility(): BuiltSnapshot {
+  return seal("tesis", { saatDilimi: getFactoryTimezone() });
+}
+
 /** Sistem sağlığı (yalnız gece yedeği): yaş saate YUVARLANIR ki içerik özeti saatte bir değişsin. */
 function buildHealth(): BuiltSnapshot {
   const b = backupHealth();
@@ -236,6 +243,9 @@ export async function buildSnapshots(ctx: SnapshotContext): Promise<BuiltSnapsho
         break;
       case "saglik":
         out.push(buildHealth());
+        break;
+      case "tesis":
+        out.push(buildFacility());
         break;
       case "uretim-akisi":
         out.push(await buildProductionFlow());

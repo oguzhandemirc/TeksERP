@@ -36,7 +36,7 @@ import type { Prisma } from "@prisma/client";
 import { AppError } from "../../utils/app-error";
 import { factoryDayStart } from "../../constants/time";
 import { readFinanceFutureDatedDocumentBlockEnabled } from "../system-setting.service";
-import { FACTORY_TIMEZONE } from "../../constants/time";
+import { getFactoryTimezone } from "../../constants/time";
 
 /** Verilen an, FABRİKA takvim gününün İLERİSİNDE mi? (saf — bayrak okumaz) */
 export function isFutureFactoryDay(date: Date, now: Date = new Date()): boolean {
@@ -51,7 +51,7 @@ export function isFutureFactoryDay(date: Date, now: Date = new Date()): boolean 
 
 /** Türkçe gün etiketi — mesajda hangi tarihin sorun olduğu OKUNABİLİR yazılır. */
 function trDay(d: Date): string {
-  return d.toLocaleDateString("tr-TR", { timeZone: FACTORY_TIMEZONE });
+  return d.toLocaleDateString("tr-TR", { timeZone: getFactoryTimezone() });
 }
 
 export interface FutureDateRef {

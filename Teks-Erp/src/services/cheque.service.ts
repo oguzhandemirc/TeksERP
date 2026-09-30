@@ -58,7 +58,7 @@ import { AuditService } from "./audit.service";
 import { withBarcodeRetry } from "../utils/barcode-retry";
 import { isClientTokenP2002 } from "../utils/p2002";
 import { nextSeriesNo } from "./number-series.service";
-import { factoryDaySql, factoryYmd } from "../constants/time";
+import { factoryDateTr, factoryDaySql, factoryYmd } from "../constants/time";
 import { D, D0, applyCariBalanceTx, CARI_TXN_LATEST_FIRST, ensureCariAccountTx, resolveExchangeRateTx } from "./helpers/finance.helper";
 import { assertPeriodOpenTx, assertPeriodsOpenTx } from "./helpers/period-guard.helper";
 import { assertCashPeriodOpenTx } from "./helpers/cash-period-guard.helper";
@@ -928,7 +928,7 @@ export class ChequeService {
           input.exchangeRate != null ? D(input.exchangeRate) : await resolveExchangeRateTx(tx, currency, postingDate);
         if (rate == null) {
           throw AppError.badRequest(
-            `${currency} için ${postingDate.toLocaleDateString("tr-TR")} tarihli kur bulunamadı — Kurlar ekranından girin veya elle belirtin.`,
+            `${currency} için ${factoryDateTr(postingDate)} tarihli kur bulunamadı — Kurlar ekranından girin veya elle belirtin.`,
           );
         }
         if (rate.lte(0)) throw AppError.badRequest("Kur sıfır veya negatif olamaz.");

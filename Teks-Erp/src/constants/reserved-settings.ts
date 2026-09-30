@@ -72,6 +72,13 @@ export const INSTALLATION_ID_SETTING_KEY = "system.installationId";
 export const PATRON_CLOUD_USER_SETTING_KEY = "patronBulutu.teknikKullaniciId";
 
 /**
+ * Fabrikanın saat dilimi (`SETTING_KEYS.COMPANY_TIMEZONE` ile AYNI değer — döngü olmasın diye literal).
+ * KURULUM DEĞERİ: gün anahtarlarını kaydırır; tek yazma yüzeyi önizlemeli + atomik
+ * `PUT /api/feature-flags/factory-timezone`. Okuması serbest (sır değil).
+ */
+export const FACTORY_TIMEZONE_SETTING_KEY = "company.timezone";
+
+/**
  * `PUT /api/admin/settings/:key` ucunun REDDETTİĞİ anahtarlar.
  *
  * Kümeye ek olarak ön ek kuralı da uygulanır (`isReservedSettingKey`) — küme
@@ -83,6 +90,7 @@ export const RESERVED_SETTING_KEYS: ReadonlySet<string> = new Set([
   PROFILE_STAMP_SETTING_KEY,
   INSTALLATION_ID_SETTING_KEY,
   PATRON_CLOUD_USER_SETTING_KEY,
+  FACTORY_TIMEZONE_SETTING_KEY,
 ]);
 
 /** `security.` ile başlıyor mu — liste/dışa-aktarım süzgeçlerinin yüklemi. */

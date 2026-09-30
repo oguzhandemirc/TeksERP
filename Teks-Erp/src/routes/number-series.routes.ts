@@ -36,6 +36,7 @@ import { cancelPendingSeriesFormat } from "../services/helpers/series-pending.he
 import { listSeries, previewNextNumber, seriesImpactCount } from "../services/helpers/series-panel.helper";
 import { seriesExhaustion, seriesExhaustionWarnings } from "../services/helpers/series-exhaustion.helper";
 import { numberSeriesCatalogEntry } from "../constants/number-series-catalog";
+import { factoryDateTr } from "../constants/time";
 
 const router = Router();
 
@@ -286,7 +287,7 @@ router.patch(
         success: true,
         data: row,
         message: effectiveFrom
-          ? `${row.label} biçimi ${new Date(effectiveFrom).toLocaleDateString("tr-TR")} tarihinden itibaren değişecek. Bugünkü numaralar etkilenmez.`
+          ? `${row.label} biçimi ${factoryDateTr(new Date(effectiveFrom))} tarihinden itibaren değişecek. Bugünkü numaralar etkilenmez.`
           : `${row.label} biçimi güncellendi. Bundan sonra açılacak kayıtlar yeni numarayı alır; geçmiş değişmez.`,
       });
     } catch (e) {

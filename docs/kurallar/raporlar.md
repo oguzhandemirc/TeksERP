@@ -34,7 +34,8 @@
 ### Yasaklar
 
 - **[ÇEKİRDEK]** Damganın KAYNAK STATÜ LİSTESİ load-bearing: yalnız IN_PRODUCTION|STOCK|AT_SUBCONTRACTOR|RETURNED_FROM_SUBCONTRACTOR → WAREHOUSE|A1_STOCK|SCRAP geçişi finalizedAt yazar. SHIPPED/CANCELLED BİLEREK dışarıda: storno aylar önceki topu bugünün karnesine sokar. · bekçi: `scripts/test_quality_scorecard.ts §8 — ÖLÇÜLDÜ 2026-09-13: trigger'ın OLD kaynak listesine SHIPPED eklenince TAM 1 kontrol kırmızı (33/0 → 32/1), kırmızı olan "SHIPPED → WAREHOUSE (storno/iade) damgayı DEĞİŞTİRMEZ"` <sub>(CLAUDE.md:69)</sub>
-- **[ÇEKİRDEK]** Fabrika günü = Europe/Istanbul takvim günü, TEK KAYNAK src/constants/time.ts: literali hiçbir yere kopyalama — FACTORY_TIMEZONE + factoryDaySql/factoryDayStart/factoryDayKeyUtcMidnight/factoryYmd kullan. Çıplak DATE_TRUNC günü OTURUM (UTC) diliminde keser. · bekçi: `scripts/test_report_day_boundary.ts 4. cephe — src/ içinde elle yazılmış DATE_TRUNC('day'/'week'/'month') veya CURRENT_DATE YOK` <sub>(CLAUDE.md:301)</sub>
+- **[ÇEKİRDEK]** Fabrika günü = fabrikanın saat dilimindeki takvim günü ([PROFİL] `company.timezone`, varsayılan Europe/Istanbul), TEK KAYNAK src/constants/time.ts: dilim literal'ini hiçbir yere kopyalama — getFactoryTimezone + factoryDaySql/factoryDayStart/factoryDayKeyUtcMidnight/factoryYmd kullan. Çıplak DATE_TRUNC günü OTURUM (UTC) diliminde keser. · bekçi: `scripts/test_report_day_boundary.ts 4. cephe — src/ içinde elle yazılmış DATE_TRUNC('day'/'week'/'month') veya CURRENT_DATE YOK` <sub>(CLAUDE.md:301)</sub>
+- **[ÇEKİRDEK]** Saat dilimi değişikliği kurulum değeridir: yalnız önizlemeli `PUT /api/feature-flags/factory-timezone` (admin:settings + ayar şifresi, `expectedCurrent` ile atomik claim, audit) yazar; ham ayar ucu ve `PATCH /api/feature-flags` yazamaz. · bekçi: `scripts/test_fabrika_saat_dilimi.ts §5 — önizleme yazmaz, yanlış beklenen dilim 409, anahtar rezerve` <sub>(arşiv 2026-09-30)</sub>
 
 ### Tuzaklar
 
