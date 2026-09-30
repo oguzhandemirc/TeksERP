@@ -167,6 +167,19 @@ JWT_SECRET="<en az 32 karakter güçlü rastgele>"
 > bırakılır ve env anahtarlarının FARKI ekrana basılır ("pakette YENİ ayar" /
 > "pakette ARTIK YOK") — değerler basılmaz, karar operatörde kalır.
 >
+> **Korumalı paket (`runtime\node.exe` taşıyan) istisnası — BİRLEŞTİRME (2026-09-30, F-ECO):**
+> runtime bağı (`interpreter`) olmayan eski dosya korumalı paketi sistem Node'uyla açtırır ve
+> yükleyici reddeder (çıkış 78; thinkpad-1'de `[9/9]` migration eşiğinden sonra düştü). Bu yüzden
+> `kur.ps1` `[2/9]`da (pm2 durmadan, `[3/9]`dan önce) dosyayı PAKETİN Node'uyla okur: bağ doğruysa
+> dokunmaz; değilse paketin şablonu (name/script/cwd/interpreter tek kaynak) + sunucunun diğer
+> BÜTÜN alanları (env bloğu AYNEN, env'siz dosyaya env eklenmez) birleşik dosyayı yazar, eskisi
+> ÖNCE `ecosystem.config.js.onceki`ye yedeklenir, `[8/9]`da yalnız bu uygulama `pm2 delete` +
+> `start` + `save` edilir — pm2 yorumlayıcıyı kendi dökümünde saklar, `pm2 restart` ESKİ
+> yorumlayıcıyla açar (elle düzeltmede de restart DEĞİL delete + start). Dosya okunamazsa kurulum
+> hiçbir şey değişmeden durur. `-GeriAl` simetrik: `app.eski-<damga>` birleştirme öncesi dosyayı
+> taşır (bayt ölçülür), pm2 kaydı delete + start ile önceki yorumlayıcıyla yenilenir. Korumasız
+> pakette davranış aynen (bayt bayt kopya).
+>
 > ⚠️ **ÖNCESİ (2026-08-29'dan önce) BÖYLE DEĞİLDİ** ve sahadaki ayar her
 > kurulumda sessizce repo değerine dönüyordu. Ölçüm o dönemin izini taşıyor:
 > repo dosyası `BACKUP_SCHEDULE_ENABLED:"false"` derken canlı sistem 2026-08-25

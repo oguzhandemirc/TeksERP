@@ -20,10 +20,14 @@
 //   §17 müşteri paketi (`PAKET.json`) üreticinin makine/kullanıcı adını taşımaz (derleme kaydında).
 //   §18 `paketle.ps1 -Sifrele` (G5): varsayılan ŞİFRESİZ, yalnız -Korumali ile, CI'da reddedilir, anahtar dizini
 //      repo içinde olamaz; CI iş akışı şifreleme bayrağı geçirmez (mühürleme anahtarı CI'a girmez).
+//   §19 korumalı pakette `kur.ps1` sunucunun ecosystem'ini paketin Node'una BAĞLAR (birleştirme, [3/9] öncesi
+//      karar, yedek önce, [8/9] delete+start, -GeriAl simetrik, korumasız dal aynen); §20 birleştiricinin davranışı.
 // Kaynak ölçülür, davranış değil: pwsh her ortamda yok, 5.1 hiç yok.
 // =============================================================================
-import { readFileSync, existsSync, readdirSync } from "node:fs";
+import { readFileSync, existsSync, readdirSync, mkdtempSync, mkdirSync, writeFileSync, rmSync, realpathSync } from "node:fs";
 import { join } from "node:path";
+import { tmpdir } from "node:os";
+import { spawnSync } from "node:child_process";
 import { psTara, kapsayanFonksiyon } from "./lib/ps-tarama";
 import { INSTALL_HISTORY_FILE_NAME, INSTALL_RECORD_KINDS, InstallRecordSchema } from "../src/lib/license/protocol";
 
@@ -549,6 +553,161 @@ function sifreleIhlalleri(paketle: string, isAkisi: string): string[] {
   for (const [ad, p2, w2] of sondalar) {
     const uygulandi = p2 !== pk || w2 !== wf;
     check(`§18 sonda: ${ad} → kırmızı`, uygulandi && sifreleIhlalleri(p2, w2).length > 0, uygulandi ? "" : "MUTASYON UYGULANMADI");
+  }
+}
+
+// §19 — ECOSYSTEM BİRLEŞTİRME (thinkpad-1 2026-09-30: korunan eski dosya korumalı paketi sistem Node'uyla
+// başlattı, yükleyici çıkış 78, [9/9] migration eşiğinden SONRA düştü). Runtime taşıyan pakette sunucunun
+// dosyası paketin Node'uyla BİRLEŞTİRİLİR ([2/9], [3/9]'dan önce; okunamazsa Fail); yedek ÖNCE; yorumlayıcı
+// değişince [8/9]'da yalnız bu uygulama delete + start (restart pm2 dökümündeki ESKİ yorumlayıcıyı korur);
+// -GeriAl simetrik; korumasız dal bugünkü bayt-bayt kopya. Kaynak ölçülür; ihlal listesi döner.
+function ecoJs(kur: string): string | null {
+  const m = /^\$ecoBirlestirJs = @'\r?\n([\s\S]*?)\r?\n'@/m.exec(kur);
+  return m ? m[1]!.replace(/\r\n/g, "\n") : null;
+}
+function ecoBirlestirmeIhlalleri(kur: string): string[] {
+  const ih: string[] = [];
+  const t = psTara(kur);
+  const kod = t.satirlar.map((x) => x.kod);
+  const ilk = (re: RegExp): number => kod.findIndex((x) => re.test(x));
+  const js = ecoJs(kur);
+  if (!js) return ["$ecoBirlestirJs here-string'i yok (körlük)"];
+  if (!/const SABLON_ALANLARI = \[[^\]]*"interpreter"[^\]]*\]/.test(js)) ih.push("birleştirici interpreter'ı şablondan almıyor");
+  const govde = (ad: string): string[] => {
+    const f = t.fonksiyonlar.find((x) => x.ad === ad);
+    return f ? t.satirlar.filter((x) => x.no > f.bas && x.no <= f.son).map((x) => x.kod) : [];
+  };
+  const hesap = govde("EcoBirlestirHesapla");
+  if (!hesap.some((x) => /& \$nodeExe \$arac /.test(x))) ih.push("birleştirici verilen Node ile koşmuyor");
+  const bas = ilk(/^\$paketRuntime = \$null/), rtSet = ilk(/^\s+\$paketRuntime = \$runtimeExe\s*$/), rtKapi = ilk(/^if \(Test-Path \$runtimeExe\) \{/);
+  if (bas < 0 || rtSet < 0 || !(bas < rtKapi && rtKapi < rtSet)) ih.push("$paketRuntime yalnız doğrulanmış runtime dalında dolmuyor");
+  const kapi = ilk(/^if \(\$paketRuntime -and \$ecoBayt\) \{/), cagri = ilk(/EcoBirlestirHesapla \$paketRuntime /);
+  const adim3 = ilk(/^Adim "\[3\/9\]/), adim4 = ilk(/^Adim "\[4\/9\]/);
+  if (kapi < 0 || cagri < kapi) ih.push("birleştirme runtime kapısının dışında (korumasız dal değişir)");
+  if (cagri < 0 || adim3 < 0 || cagri > adim3 || cagri > adim4) ih.push("birleştirme kararı [3/9]/[4/9]'dan ÖNCE değil");
+  const blok = kod.slice(kapi, kapi + 12).join("\n");
+  if (!/catch \{\s*\n?\s*Fail /.test(blok)) ih.push("birleştirilemeyen dosyada Fail yok");
+  if (!/^\$ecoBirlesikBayt = \$null/m.test(kod.join("\n"))) ih.push("$ecoBirlesikBayt varsayılanı $null değil");
+  const yer = govde("EcoYerlestir");
+  const yedek = yer.findIndex((x) => /WriteAllBytes\("\$ecoHedef\.onceki", \$sunucuBayt\)/.test(x));
+  const birlesik = yer.findIndex((x) => /WriteAllBytes\(\$ecoHedef, \$birlesikBayt\)/.test(x));
+  if (yedek < 0 || birlesik < 0 || yedek > birlesik) ih.push("yedek (.onceki) birleşik dosyadan ÖNCE yazılmıyor");
+  if (!yer.some((x) => /^\s*\} else \{\s*$/.test(x)) || !yer.some((x) => /WriteAllBytes\(\$ecoHedef, \$sunucuBayt\)/.test(x))) ih.push("korumasız dal bayt-bayt kopya değil");
+  if (ilk(/^\s+if \(\$ecoBayt\) \{ EcoYerlestir \$appDir \$ecoBayt \$ecoBirlesikBayt \}/) < 0) ih.push("[5/9] EcoYerlestir'i çağırmıyor");
+  const adim8 = ilk(/^Adim "\[8\/9\]/), start8 = kod.findIndex((x, i) => i > adim8 && /^& \$pm2 start ecosystem\.config\.js/.test(x));
+  const sil8 = kod.slice(adim8, start8).join("\n");
+  if (adim8 < 0 || start8 < 0 || !/if \(\$ecoPlan -and \$ecoPlan\.Karar -ceq "BIRLESTIR"\) \{\s*\n\s*Pm2Kos delete \$uygulama/.test(sil8)) ih.push("[8/9] yorumlayıcı değişince start'tan önce delete yok");
+  if (kod.some((x) => /(?:\$pm2|Pm2Kos)\s+(?:restart|reload)\b/.test(x))) ih.push("pm2 restart/reload kullanılıyor (dökümdeki eski yorumlayıcı)");
+  const geri = ilk(/^if \(\$GeriAl\) \{/), gSil = kod.findIndex((x, i) => i > geri && /Pm2Kos delete \$uygulama/.test(x));
+  const gOlc = kod.findIndex((x, i) => i > geri && /^\s+EcoGeriAlOlc \$appDir /.test(x));
+  const gStart = kod.findIndex((x, i) => i > gOlc && gOlc > 0 && /^\s+& \$pm2 start ecosystem\.config\.js/.test(x));
+  if (geri < 0 || !(gSil > geri && gOlc > gSil && gStart > gOlc) || !/^\s+& \$pm2 save/.test(kod[gStart + 1] ?? "")) ih.push("-GeriAl simetrik değil (delete → ölçüm → start → save)");
+  if (!govde("EcoGeriAlOlc").some((x) => /ecosystem\.config\.js\.onceki/.test(x))) ih.push("-GeriAl birleştirme öncesi yedeği ölçmüyor");
+  const ad = ilk(/^\$env:TEKSERP_PM2_AD = \$uygulama/);
+  if (ad < 0 || ad > geri) ih.push("pm2 adı -GeriAl'den ÖNCE env'e yazılmıyor");
+  return ih;
+}
+{
+  const kr = readFileSync(join(KOK, "deploy/kur.ps1"), "utf8");
+  const ih = ecoBirlestirmeIhlalleri(kr);
+  check("§19a ⭐ korumalı pakette ecosystem birleştirilir: runtime kapısı, [3/9] öncesi karar + Fail, yedek önce, [8/9] delete+start, restart yok, -GeriAl simetrik, korumasız dal aynen",
+    ih.length === 0, ih.join(" | ") || "temiz");
+  const sondalar: Array<[string, string]> = [
+    ["runtime kapısı kalktı", kr.replace("if ($paketRuntime -and $ecoBayt) {", "if ($ecoBayt) {")],
+    ["karar [3/9] sonrasına", kr.replace(/^(\$ecoPlan = \$null)/m, 'Adim "[3/9] erken"\r\n$1')],
+    ["yedek yazımı silindi", kr.replace(/^\s+\[System\.IO\.File\]::WriteAllBytes\("\$ecoHedef\.onceki", \$sunucuBayt\)\r?\n/m, "")],
+    ["[8/9] delete silindi", kr.replace(/(if \(\$ecoPlan -and \$ecoPlan\.Karar -ceq "BIRLESTIR"\) \{[\s\S]*?)Pm2Kos delete \$uygulama \| Out-Null/, "$1$null = 0")],
+    ["restart eklendi", kr.replace("& $pm2 save    # ZORUNLU", "& $pm2 restart $uygulama\r\n& $pm2 save    # ZORUNLU")],
+    ["-GeriAl ölçümü silindi", kr.replace(/^\s+EcoGeriAlOlc \$appDir .*\r?\n/m, "")],
+    ["şablon interpreter'ı bırakıldı", kr.replace('"cwd", "interpreter", "exec_interpreter"]', '"cwd"]')],
+    ["pm2 adı env'i global değil", kr.replace(/^\$env:TEKSERP_PM2_AD = \$uygulama\r?\n(?=\r?\n# --- KURULUM KAYDI)/m, "")],
+  ];
+  for (const [ad, k2] of sondalar) {
+    const uygulandi = k2 !== kr;
+    const ih2 = uygulandi ? ecoBirlestirmeIhlalleri(k2) : [];
+    check(`§19 sonda: ${ad} → kırmızı`, ih2.length > 0, uygulandi ? ih2.join(" | ") : "MUTASYON UYGULANMADI");
+  }
+}
+
+// §20 — birleştiricinin DAVRANIŞI (Node birim): kur.ps1'deki here-string AYNEN çıkarılır ve paketin
+// gerçek şablonuyla koşulur. ① env'li eski dosya → env + sunucuya özgü alan korunur, interpreter paketten
+// ② env'siz eski dosya → env EKLENMEZ, interpreter paketten ③ zaten bağlı dosya (birleşik çıktı dahil) →
+// DOKUNMA, çıktı yazılmaz ④ JSON'a dönmeyen değer ve bağsız şablon → HATA (kur.ps1 [3/9] öncesi Fail).
+function ecoBirimIhlalleri(js: string): string[] {
+  const ih: string[] = [];
+  const dir = realpathSync(mkdtempSync(join(tmpdir(), "eco-birim-")));  // require __dirname'i gerçek yola çözer
+  try {
+    const rt = process.platform === "win32" ? ["runtime", "node.exe"] : ["runtime", "bin", "node"];
+    const paketKok = join(dir, "paket"), app = join(dir, "kok", "app"), bagsiz = join(dir, "bagsiz");
+    for (const d of [join(paketKok, ...rt.slice(0, -1)), join(app, ...rt.slice(0, -1)), bagsiz]) mkdirSync(d, { recursive: true });
+    writeFileSync(join(paketKok, ...rt), ""); writeFileSync(join(app, ...rt), "");
+    const sablon = join(KOK, "Teks-Erp/ecosystem.config.js");
+    const arac = join(dir, "b.cjs"); writeFileSync(arac, js);
+    const kos = (sunucu: string, kok = paketKok) => {
+      const cikti = join(dir, `c-${Math.random().toString(36).slice(2)}.js`);
+      const r = spawnSync(process.execPath, [arac, "--sunucu", sunucu, "--paket", sablon, "--app", app, "--paket-kok", kok, "--cikti", cikti], { encoding: "utf8" });
+      let j: { karar?: string } = {};
+      try { j = JSON.parse(r.stdout.trim().split("\n").pop() ?? ""); } catch { /* karar yok */ }
+      return { kod: r.status, j, cikti: existsSync(cikti) ? cikti : null };
+    };
+    const oku = (eco: string): Record<string, unknown> => {
+      const hedef = join(app, "ecosystem.config.js"); writeFileSync(hedef, readFileSync(eco));
+      const r = spawnSync(process.execPath, ["-e", "process.stdout.write(JSON.stringify(require(process.argv[1]).apps[0]))", hedef],
+        { encoding: "utf8", env: { ...process.env, TEKSERP_PM2_AD: "ad-sablondan" } });
+      return JSON.parse(r.stdout || "{}");
+    };
+    const beklenenY = join(app, ...rt).replace(/\\/g, "/");
+    const eskiEnv = { NODE_ENV: "production", PORT: "4100", BACKUP_RCLONE_REMOTE: "gdrive:TeksERP", PG_BIN_DIR: "D:/pg/bin" };
+    const envli = join(dir, "envli.js");
+    writeFileSync(envli, `const path=require("path");const KOK=path.resolve(__dirname,"..");\nmodule.exports={apps:[{name:"eski-ad",script:"dist/server.js",cwd:__dirname,max_memory_restart:"2G",out_file:KOK+"/logs/o.log",env:${JSON.stringify(eskiEnv)}}]};\n`);
+    const a = kos(envli);
+    if (a.j.karar !== "BIRLESTIR" || !a.cikti) ih.push(`① env'li eski dosya BIRLESTIR değil (${a.j.karar ?? a.kod})`);
+    else {
+      const m = oku(a.cikti);
+      if (m.interpreter !== beklenenY) ih.push(`① interpreter paketten değil (${String(m.interpreter)})`);
+      if (JSON.stringify(m.env) !== JSON.stringify(eskiEnv)) ih.push("① env bloğu AYNEN korunmadı");
+      if (m.max_memory_restart !== "2G" || m.out_file !== join(dir, "kok") + "/logs/o.log") ih.push("① sunucuya özgü alan korunmadı");
+      if (m.name !== "ad-sablondan" || m.cwd !== app || m.script !== "dist/server.js") ih.push("① name/cwd/script şablondan gelmiyor");
+      const tekrar = kos(a.cikti);
+      if (tekrar.j.karar !== "DOKUNMA" || tekrar.cikti) ih.push("③ birleşik çıktı ikinci kurulumda DOKUNMA değil");
+    }
+    const envsiz = join(dir, "envsiz.js");
+    writeFileSync(envsiz, `module.exports={apps:[{name:"x",script:"dist/server.js",cwd:__dirname}]};\n`);
+    const b = kos(envsiz);
+    if (b.j.karar !== "BIRLESTIR" || !b.cikti) ih.push(`② env'siz eski dosya BIRLESTIR değil (${b.j.karar ?? b.kod})`);
+    else {
+      const m = oku(b.cikti);
+      if (m.interpreter !== beklenenY) ih.push("② interpreter paketten değil");
+      if ("env" in m) ih.push("② env'siz dosyaya şablonun env'i eklendi");
+    }
+    const c = kos(sablon);
+    if (c.j.karar !== "DOKUNMA" || c.cikti || c.kod !== 0) ih.push(`③ zaten bağlı dosya DOKUNMA değil (${c.j.karar ?? c.kod})`);
+    const fn = join(dir, "fn.js");
+    writeFileSync(fn, `module.exports={apps:[{name:"x",script:"dist/server.js",env:{A:()=>1}}]};\n`);
+    const d = kos(fn);
+    if (d.j.karar !== "HATA" || d.kod === 0 || d.cikti) ih.push("④ JSON'a dönmeyen değer HATA vermedi");
+    const e = kos(envli, bagsiz);
+    if (e.j.karar !== "HATA" || e.kod === 0) ih.push("④ runtime bağı üretmeyen şablon HATA vermedi");
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+  return ih;
+}
+{
+  const js = ecoJs(readFileSync(join(KOK, "deploy/kur.ps1"), "utf8")) ?? "";
+  const ih = js ? ecoBirimIhlalleri(js) : ["here-string yok"];
+  check("§20a ⭐ birleştirici: env'li → env + sunucu alanı korunur, interpreter paketten · env'siz → env eklenmez · bağlı → DOKUNMA · bozuk → HATA",
+    ih.length === 0, ih.join(" | ") || "temiz");
+  const sondalar: Array<[string, string]> = [
+    ["şablon interpreter'ı almıyor", js.replace('"cwd", "interpreter", "exec_interpreter"]', '"cwd", "exec_interpreter"]')],
+    ["zaten doğru dosyaya da yazar", js.replace("if (mevcut === beklenen)", "if (false)")],
+    ["env şablondan gelir", js.replace("const app = Object.assign({}, sunucu.app);", "const app = Object.assign({}, sunucu.app, { env: s.env });")],
+    ["JSON denetimi kalktı", js.replace('jsonDuz(app, "apps[0]");', "")],
+  ];
+  for (const [ad, j2] of sondalar) {
+    const uygulandi = j2 !== js && js !== "";
+    const ih2 = uygulandi ? ecoBirimIhlalleri(j2) : [];
+    check(`§20 sonda: ${ad} → kırmızı`, ih2.length > 0, uygulandi ? ih2.join(" | ") : "MUTASYON UYGULANMADI");
   }
 }
 

@@ -82,7 +82,9 @@ bulut sahada açık değil). Panel **1.4.0** · tablet **1.0.13** ile aynı turd
 - **Sıra:** backend ÖNCE, panel 1.4.0 + tablet 1.0.13 OTA sonra (tablet native değişmedi → APK yok).
 - **Kurulum yöntemi:** paketin kendi `kur.ps1` + `uzaktan-kos.ps1`i çıkarılır (zip SHA256 kıyası), SYSTEM
   görevi: `uzaktan-kos.ps1 -Betik kur.ps1 -ZamanAsimiDakika 45 -Argumanlar '-Kok C:\TeksERP -Paket {zip} -Zorla'`
-  (prova paketinde ek olarak `-ProvaKabul`). `kur.ps1` sunucunun `.env` ve `ecosystem.config.js`ini BAYT BAYT korur.
+  (prova paketinde ek olarak `-ProvaKabul`). `kur.ps1` sunucunun `.env`ini BAYT BAYT korur; korumalı pakette
+  `ecosystem.config.js`ini paketin Node'una BAĞLAYARAK birleştirir (env ve diğer ayarlar sunucunun; yedek
+  `ecosystem.config.js.onceki`; `[2/9]` satırı `ecosystem.config.js BIRLESTIRILECEK`) — bu düzeltmeyi taşıyan paketle kurulur.
 - **Bu sürüme özel:**
   - Korumalı paket HEDEF platformda üretilir (pwsh 7, prizde, ayrık ve düşük öncelikli — DEPLOY-RUNBOOK §3c);
     imzasız korumalı paketi `kur.ps1` REDDEDER; imza Mac'te (`build-korumali-imza.ts zip`).
@@ -131,6 +133,8 @@ o migration'ı FAILED işaretler — elle `resolve` YAPILMAZ, insana rapor edili
   ("KORUMALI PAKET bu Node ile ACILAMAZ" — paket V8 13.6). Kök neden: `kur.ps1` sunucunun ESKİ `ecosystem.config.js`ini
   korudu ve onda `interpreter`/`RUNTIME_NODE` bağı yok (paketin `.paket` kopyasında var). **Korumalı paketin ilk
   kurulumundan ÖNCE sunucu ecosystem'ine runtime bağı eklenmeli ya da `kur.ps1` bu durumda `[3/9]`dan önce durmalı.**
+  → Çözüm (F-ECO, dal `fix/ecosystem-yukseltme`): `kur.ps1` `[2/9]`da sunucunun dosyasını paketin Node'una bağlayarak
+  birleştirir, `[8/9]`da delete + start; okunamazsa `[3/9]`dan önce durur (DEPLOY-RUNBOOK ecosystem notu).
 - Geri alma (SYSTEM, `-Kok C:\TeksERP -GeriAl -Zorla`): `API UP / DB UP / v2.11.2-lis-prova.771ac50d`; DB 367 migration'da
   kaldı (dördü yalnız ekler; eski kod açıldı, `backend-err` yalnız bilinen offsite uyarısı). Kesinti ~7 dk (04:59 → 05:06);
   bağlı istemci 0; etkin oturumlar (ELECTRON 7 · MOBILE 12) değişmedi.

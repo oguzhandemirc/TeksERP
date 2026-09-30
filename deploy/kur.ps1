@@ -241,6 +241,8 @@ $uygulama  = $UygulamaAdi
 # Operatore basilan komutlar: cipla `kur.ps1` yurutme ilkesine takilir (baslik).
 $kurKomut  = "powershell -NoProfile -ExecutionPolicy Bypass -File $kok\kur.ps1"
 $env:PM2_HOME = "$kok\pm2-home"
+# pm2 adi TUM yollarda (kurulum, -GeriAl, otomatik geri alma) ayni: sablon adi bu env'den okur.
+$env:TEKSERP_PM2_AD = $uygulama
 
 # --- KURULUM KAYDI (3d-2) -----------------------------------------------------
 # Her kurulum ve -GeriAl, kurulum kokundeki EKLEME-YALNIZ gecmis dosyasina BIR JSON
@@ -318,6 +320,173 @@ function Saglik($saniye) {
     } catch { Start-Sleep -Milliseconds 800 }
   }
   return $null
+}
+
+# =============================================================================
+# ECOSYSTEM BIRLESTIRME - korumali paket (runtime\node.exe) yukseltmesi
+# =============================================================================
+# ecosystem.config.js SUNUCUNUNDUR (env blogu: yedek/rclone/PG ayarlari) ve [5/9] onu korur.
+# Ama runtime bagi (`interpreter`) olmayan eski dosya korumali paketi SISTEM Node'uyla
+# baslatir; yukleyici V8 uyumsuzlugunda reddeder (cikis 78) ve [9/9] migration esigi
+# GECILDIKTEN sonra duser (thinkpad-1, 2026-09-30). Bu yuzden runtime tasiyan pakette dosya
+# BIRLESTIRILIR: paketin sablonu name/script/cwd/interpreter'in TEK kaynagidir, sunucunun
+# diger butun alanlari (env AYNEN) korunur. Karar [2/9]'da, [3/9]'dan ONCE verilir: dosya
+# okunamazsa HICBIR SEY degismeden durulur. Korumasiz pakette bu blok hic kosmaz.
+# Birlestirici PAKETIN Node'uyla kosar (sunucu Node'u sablonu yanlis surumle degerlendirmesin).
+$ecoBirlestirJs = @'
+// ecosystem birlestirici - kur.ps1 [2/9] bunu gecici dosyaya yazar ve PAKETIN Node'uyla kosar.
+// Karar: sunucunun dosyasi paketin kokunde paketin Node'una BAGLANIYORSA dokunulmaz; yoksa
+// paketin sablonu (tek kaynak: name/script/cwd/interpreter) + sunucunun diger BUTUN alanlari.
+// stdout'un SON satiri tek satir JSON'dur; hata da oraya yazilir (stderr yonlendirilmez).
+"use strict";
+const fs = require("fs");
+const path = require("path");
+const Module = require("module");
+const SABLON_ALANLARI = ["name", "script", "cwd", "interpreter", "exec_interpreter"];
+function arg(ad) { const i = process.argv.indexOf("--" + ad); return i > 1 ? process.argv[i + 1] : undefined; }
+function cik(nesne, kod) {
+  const s = JSON.stringify(nesne).replace(/[\u007f-\uffff]/g, (c) => "\\u" + c.charCodeAt(0).toString(16).padStart(4, "0"));
+  process.stdout.write("\n" + s + "\n");
+  process.exitCode = kod;
+}
+function yukle(kaynak, sanal) {
+  const m = new Module(sanal, null);
+  m.filename = sanal;
+  m.paths = Module._nodeModulePaths(path.dirname(sanal));
+  m._compile(String(kaynak).replace(/^\uFEFF/, ""), sanal);
+  return m.exports;
+}
+function tekUygulama(c, ad) {
+  const a = c && Array.isArray(c.apps) && c.apps.length === 1 ? c.apps[0] : null;
+  if (!a || typeof a !== "object" || Array.isArray(a)) throw new Error(ad + ": apps tek uygulama tasimiyor");
+  return a;
+}
+function yorumlayici(a) { const y = a.interpreter || a.exec_interpreter; return y ? String(y).replace(/\\/g, "/") : null; }
+function goreli(y, kok) {
+  const k = String(kok).replace(/\\/g, "/").replace(/\/+$/, "") + "/";
+  return y && y.startsWith(k) ? y.slice(k.length) : y;
+}
+function jsonDuz(d, yol) {
+  if (d === null || d === undefined || typeof d === "string" || typeof d === "boolean") return;
+  if (typeof d === "number") { if (!Number.isFinite(d)) throw new Error(yol + ": sonlu sayi degil"); return; }
+  if (Array.isArray(d)) { d.forEach((x, i) => jsonDuz(x, yol + "[" + i + "]")); return; }
+  const p = typeof d === "object" ? Object.getPrototypeOf(d) : undefined;
+  if (p === Object.prototype || p === null) { for (const k of Object.keys(d)) jsonDuz(d[k], yol + "." + k); return; }
+  throw new Error(yol + ": JSON'a kayipsiz donmeyen deger (" + typeof d + ")");
+}
+function birlestir(o) {
+  const sanalPaket = path.join(o.paketKok, "ecosystem.config.js");
+  const beklenen = yorumlayici(tekUygulama(yukle(o.paketKaynak, sanalPaket), "paket sablonu"));
+  if (!beklenen) throw new Error("paket sablonu paketin kokunde interpreter uretmiyor (runtime bagi yok)");
+  const mevcut = yorumlayici(tekUygulama(yukle(o.sunucuKaynak, sanalPaket), "sunucu dosyasi"));
+  if (mevcut === beklenen) return { karar: "DOKUNMA", eski: goreli(mevcut, o.paketKok), yeni: goreli(beklenen, o.paketKok) };
+  const sunucu = yukle(o.sunucuKaynak, path.join(o.app, "ecosystem.config.js"));
+  const sApp = tekUygulama(sunucu, "sunucu dosyasi");
+  const app = {};
+  for (const k of Object.keys(sApp)) if (!SABLON_ALANLARI.includes(k) && sApp[k] !== undefined) app[k] = sApp[k];
+  const ust = {};
+  for (const k of Object.keys(sunucu)) if (k !== "apps" && sunucu[k] !== undefined) ust[k] = sunucu[k];
+  jsonDuz(app, "apps[0]");
+  jsonDuz(ust, "module.exports");
+  const veri = JSON.stringify({ ust, app }, null, 2);
+  const metin = String(o.paketKaynak).replace(/^\uFEFF/, "").replace(/\s*$/, "\n") + [
+    "",
+    "// =============================================================================",
+    "// KUR.PS1 BIRLESTIRMESI - ustteki metin PAKETIN sablonudur; " + SABLON_ALANLARI.join("/") + " oradan",
+    "// gelir (RUNTIME_NODE: paketin kendi Node'u). Asagidaki nesne sunucunun ONCEKI dosyasinin degerleridir",
+    "// (env blogu dahil, kurulum aninda donduruldu; yedek: ecosystem.config.js.onceki). Sunucuya ozgu",
+    "// ayar ASAGIDA duzenlenir; bir sonraki kurulum bu dosyaya dokunmaz (bag zaten dogru).",
+    "// =============================================================================",
+    "module.exports = (function (sablon, sunucu) {",
+    "  const s = sablon.apps[0];",
+    "  const app = Object.assign({}, sunucu.app);",
+    "  for (const k of " + JSON.stringify(SABLON_ALANLARI) + ") {",
+    "    if (s[k] !== undefined) app[k] = s[k]; else delete app[k];",
+    "  }",
+    "  return Object.assign({}, sunucu.ust, { apps: [app] });",
+    "})(module.exports, " + veri + ");",
+    "",
+  ].join("\n");
+  return {
+    karar: "BIRLESTIR", eski: sApp.interpreter || sApp.exec_interpreter ? yorumlayici(sApp) : null,
+    yeni: goreli(beklenen, o.paketKok), envAnahtar: app.env && typeof app.env === "object" ? Object.keys(app.env).length : null, metin,
+  };
+}
+try {
+  const r = birlestir({
+    sunucuKaynak: fs.readFileSync(arg("sunucu"), "utf8"), paketKaynak: fs.readFileSync(arg("paket"), "utf8"),
+    app: arg("app"), paketKok: arg("paket-kok"),
+  });
+  if (r.metin !== undefined) fs.writeFileSync(arg("cikti"), r.metin, "utf8");
+  cik({ karar: r.karar, eski: r.eski, yeni: r.yeni, envAnahtar: r.envAnahtar === undefined ? null : r.envAnahtar }, 0);
+} catch (e) {
+  cik({ karar: "HATA", hata: String((e && e.message) || e) }, 3);
+}
+'@
+
+# Karar nesnesi: Karar = DOKUNMA | BIRLESTIR, Bayt = birlesik dosya (yalniz BIRLESTIR).
+# Hata FIRLATIR - cagiran [3/9] oncesi Fail eder.
+function EcoBirlestirHesapla($nodeExe, $sunucuEco, $paketEco, $hedefApp, $paketKok) {
+  $arac  = Join-Path ([System.IO.Path]::GetTempPath()) ("tekserp-eco-birlestir-" + [guid]::NewGuid().ToString("N") + ".cjs")
+  $cikti = "$arac.birlesik.js"
+  try {
+    [System.IO.File]::WriteAllText($arac, $ecoBirlestirJs, (New-Object System.Text.UTF8Encoding $false))
+    $satirlar = @(& $nodeExe $arac --sunucu $sunucuEco --paket $paketEco --app $hedefApp --paket-kok $paketKok --cikti $cikti)
+    $kod = $LASTEXITCODE
+    $r = $null
+    if ($satirlar.Count -gt 0) { try { $r = [string]$satirlar[-1] | ConvertFrom-Json } catch { $r = $null } }
+    if ($kod -ne 0 -or -not $r -or ([string]$r.karar -ceq "HATA")) {
+      $neden = if ($r -and $r.hata) { [string]$r.hata } else { "birlestirici cikis kodu $kod" }
+      throw "ecosystem.config.js birlestirilemedi: $neden"
+    }
+    $bayt = $null
+    if ([string]$r.karar -ceq "BIRLESTIR") {
+      if (-not (Test-Path $cikti)) { throw "ecosystem.config.js birlestirilemedi: cikti yazilmadi" }
+      $bayt = [System.IO.File]::ReadAllBytes($cikti)
+    } elseif ([string]$r.karar -cne "DOKUNMA") {
+      throw "ecosystem.config.js birlestirilemedi: taninmayan karar '$($r.karar)'"
+    }
+    return [pscustomobject]@{ Karar = [string]$r.karar; Bayt = $bayt; Eski = $r.eski; Yeni = $r.yeni; EnvAnahtar = $r.envAnahtar }
+  } finally {
+    Remove-Item -LiteralPath $arac, $cikti -Force -ErrorAction SilentlyContinue
+  }
+}
+
+# [5/9] yerlestirme: paketinki '.paket' olarak yanda kalir; birlesik yazilacaksa sunucununki
+# ONCE '.onceki' olarak yedeklenir (yazim yarida kalsa da ayar app\ icinde durur).
+function EcoYerlestir($hedefApp, $sunucuBayt, $birlesikBayt) {
+  $ecoHedef = Join-Path $hedefApp "ecosystem.config.js"
+  if (Test-Path $ecoHedef) { Copy-Item $ecoHedef "$ecoHedef.paket" -Force }
+  if ($birlesikBayt) {
+    [System.IO.File]::WriteAllBytes("$ecoHedef.onceki", $sunucuBayt)
+    [System.IO.File]::WriteAllBytes($ecoHedef, $birlesikBayt)
+  } else {
+    [System.IO.File]::WriteAllBytes($ecoHedef, $sunucuBayt)
+  }
+}
+
+# Dosyanin pm2'ye verecegi yorumlayici (sistem Node'uyla okunur; okunamazsa "?").
+function EcoYorumlayici($eco) {
+  if (-not (Test-Path $eco)) { return "?" }
+  try {
+    $y = & node -e "try{const c=require(process.argv[1]);const a=(c.apps||[])[0]||{};process.stdout.write(String(a.interpreter||a.exec_interpreter||'sistem Node'))}catch(e){process.stdout.write('?')}" $eco
+    if ($y) { return [string]$y } else { return "?" }
+  } catch { return "?" }
+}
+
+# -GeriAl simetrisi: birakilan kurulum birlestirme yaptiysa ('.onceki' var) geri alinan kurulumun
+# dosyasi o yedekle AYNI olmali (kenara alinan app\ onu tasir). pm2 kaydi cagirida delete+start
+# ile yenilenir - `restart` pm2 dokumundeki ESKI yorumlayiciyi korurdu.
+function EcoGeriAlOlc($geriApp, $birakilan) {
+  $onceki = Join-Path $birakilan "ecosystem.config.js.onceki"
+  if (-not (Test-Path $onceki)) { return }
+  $eco = Join-Path $geriApp "ecosystem.config.js"
+  $a = [System.IO.File]::ReadAllBytes($onceki)
+  $b = if (Test-Path $eco) { [System.IO.File]::ReadAllBytes($eco) } else { [byte[]]@() }
+  $ayni = ($a.Length -eq $b.Length)
+  if ($ayni) { for ($i = 0; $i -lt $a.Length; $i++) { if ($a[$i] -ne $b[$i]) { $ayni = $false; break } } }
+  if ($ayni) { Ok "ecosystem: birlestirme oncesi dosya geri geldi (yorumlayici: $(EcoYorumlayici $eco))" }
+  else { Uyar "ecosystem: geri alinan dosya birlestirme oncesi yedekten FARKLI (baska app.eski secildi?) - yedek: $onceki" }
 }
 
 # --- Yonetici kontrolu ------------------------------------------------------
@@ -439,6 +608,9 @@ if ($GeriAl) {
     }
     Fail "Geri alma yapilamadi. app\ uzerindeki acik pencere/terminal/editoru kapatip tekrar dene."
   }
+  # Simetri: birlestirilmis dosyanin yerine birlestirme ONCESI dosya geri gelir (olculur) ve pm2
+  # kaydi yukaridaki delete + asagidaki start ile ONUN yorumlayicisiyla yenilenir (restart DEGIL).
+  EcoGeriAlOlc $appDir "$kok\app.basarisiz-$damga"
   Push-Location $appDir
   & $pm2 start ecosystem.config.js
   & $pm2 save
@@ -494,6 +666,11 @@ if (Test-Path "$temp\PAKET.json") {
       Fail "Bu bir PROVA paketi (PAKET.json prova=true: etiketsiz, surum belgesiz). Fabrikaya KURULMAZ. Prova makinesindeysen -ProvaKabul ver."
     }
     Uyar "PROVA PAKETI kuruluyor (-ProvaKabul) - surum: $($m.uygulamaSurumu)"
+  }
+  # Kanal kimligi (paketle.ps1 -Musteri) pm2 adini tasir; kurulum adi DEGISTIRMEZ (calisan
+  # uygulamayi yetim birakirdi) - yalniz soyler. Silinen/baslatilan ad daima -UygulamaAdi.
+  if (($m.PSObject.Properties.Name -contains 'backendPm2Ad') -and $m.backendPm2Ad -and ([string]$m.backendPm2Ad -cne $uygulama)) {
+    Uyar "Paketin kanal kimligi pm2 adi '$($m.backendPm2Ad)', bu kurulum '$uygulama' (-UygulamaAdi). Yalniz '$uygulama' silinip baslatilir."
   }
 } else { Uyar "PAKET.json yok - eski surum paket." }
 
@@ -591,6 +768,7 @@ if ($m -and $m.nodeSurumu) {
 #   dist\server.js) - uygulama yukaridaki sistem Node'uyla kosmaya devam eder,
 #   davranis DEGISMEZ. Yeni bicim yalniz `runtime\` varsa devreye girer.
 $runtimeExe = Join-Path $temp "runtime\node.exe"
+$paketRuntime = $null   # yalniz dogrulanmis runtime: ecosystem birlestirmesi [2/9] bunu bekler
 if (Test-Path $runtimeExe) {
   # MZ imzasi: yarim inen / bozuk ikili "var" gorunur ama backend acilamaz.
   $rtImza = [System.IO.File]::ReadAllBytes($runtimeExe)[0..1]
@@ -605,6 +783,7 @@ if (Test-Path $runtimeExe) {
     Fail "Paketin runtime\node.exe surumu $rtSurum, manifest $beklenenRt bekliyor - .jsc bayt kodu bu ikilide acilmaz. Paket bozuk."
   }
   Ok "paket kendi Node'unu tasiyor: runtime\node.exe v$rtSurum (uygulama BUNUNLA kosar - .jsc uyumu)"
+  $paketRuntime = $runtimeExe
   # Bu paket bayt kodu tasiyorsa (dist\server.jsc) dist\server.js yalniz yukleyicidir;
   # yukleyici acmadan ONCE process.versions.v8'i manifestteki v8Taban ile de kiyaslar (build-korumali).
   if (Test-Path (Join-Path $temp "dist\server.jsc")) {
@@ -653,10 +832,31 @@ $envBayt = [System.IO.File]::ReadAllBytes($envKaynak)
 # PG_BIN_DIR, DISCOVERY_MDNS_ENABLED. Paketteki dosya REPO varsayilanlarini tasir
 # (offsite bos, scheduler acik) -> her kurulum sahadaki ayari sessizce geri aliyordu:
 # gece yedegi ve makine disi kopya, guncelleme yapilan gece KAPANIYORDU.
+# Tek istisna runtime tasiyan (korumali) paket: dosya korunur ama paketin Node'una BAGLANIR
+# (ECOSYSTEM BIRLESTIRME blogu) - env ve diger ayarlar yine sunucunun.
 $ecoKaynak = Join-Path $mevcut "ecosystem.config.js"
 $ecoBayt   = $null
 if (Test-Path $ecoKaynak) { $ecoBayt = [System.IO.File]::ReadAllBytes($ecoKaynak) }
 Ok "mevcut: $mevcut   |  .env + ecosystem.config.js kenara alindi"
+# Korumali paket: sunucunun dosyasi paketin Node'una bagli degilse BIRLESTIRILIR (blok basligi).
+# Karar SIMDI - [3/9]'dan ve pm2 durdurmadan ONCE; okunamayan dosyada hicbir sey degismeden durulur.
+$ecoPlan = $null
+$ecoBirlesikBayt = $null
+if ($paketRuntime -and $ecoBayt) {
+  try {
+    $ecoPlan = EcoBirlestirHesapla $paketRuntime $ecoKaynak (Join-Path $temp "ecosystem.config.js") $appDir $temp
+  } catch {
+    Fail "$($_.Exception.Message) - HICBIR SEY DEGISMEDI. Korumali paket sunucunun ecosystem.config.js'ine paketin Node'unu baglamadan kurulmaz; dosyayi duzeltip tekrar kosun."
+  }
+  if ($ecoPlan.Karar -ceq "BIRLESTIR") {
+    $ecoBirlesikBayt = $ecoPlan.Bayt
+    $eskiY = if ($ecoPlan.Eski) { $ecoPlan.Eski } else { "sistem Node" }
+    $envNot = if ($null -ne $ecoPlan.EnvAnahtar) { "env $($ecoPlan.EnvAnahtar) anahtar AYNEN" } else { "env blogu yoktu, eklenmez" }
+    Ok "ecosystem.config.js BIRLESTIRILECEK: yorumlayici $eskiY -> $($ecoPlan.Yeni) (paketin sablonundan) | sunucu ayarlari korunur ($envNot) | yedek: ecosystem.config.js.onceki"
+  } else {
+    Ok "ecosystem.config.js zaten paketin Node'una bagli ($($ecoPlan.Yeni)) - DOKUNULMAYACAK"
+  }
+}
 
 # --- Onay -------------------------------------------------------------------
 if (-not $Zorla) {
@@ -800,11 +1000,8 @@ try {
   # Sunucunun ecosystem'i KORUNUR; paketinki yanina '.paket' olarak birakilir.
   # Prompt YOK (kurulum -Zorla ile otomatik kosabiliyor) - fark EKRANA basilir,
   # karar operatorde kalir. Yeni ayar geldiyse .paket dosyasindan elle alinir.
-  if ($ecoBayt) {
-    $ecoHedef = Join-Path $appDir "ecosystem.config.js"
-    if (Test-Path $ecoHedef) { Copy-Item $ecoHedef "$ecoHedef.paket" -Force }
-    [System.IO.File]::WriteAllBytes($ecoHedef, $ecoBayt)
-  }
+  # Korumali pakette [2/9] BIRLESTIR dediyse sunucunun degerleriyle birlesik dosya yazilir.
+  if ($ecoBayt) { EcoYerlestir $appDir $ecoBayt $ecoBirlesikBayt }
 } catch { GeriAlOtomatik "Dosya yerlestirme basarisiz: $($_.Exception.Message)" }
 SirIzniDaralt (Join-Path $appDir ".env")
 LisansDiziniKur $lisansDizini
@@ -851,7 +1048,8 @@ if ($ecoBayt) {
       if (-not $ham) { return @() }
       ([regex]::Matches($ham, '(?m)^\s{6,}([A-Z][A-Z0-9_]{2,})\s*:') | ForEach-Object { $_.Groups[1].Value }) | Sort-Object -Unique
     }
-    $sunucu = & $anahtar $ecoHedef
+    # Birlesik dosya sablonun metnini tasir; sunucunun anahtarlari yedekten okunur.
+    $sunucu = & $anahtar $(if ($ecoBirlesikBayt) { "$ecoHedef.onceki" } else { $ecoHedef })
     # ⚠ DEGISKEN ADI `$paket` OLAMAZ (2026-09-04 ev provasi, BULGU-7).
     #   param() blogunda `[string]$Paket` var ve PowerShell HARF DUYARSIZDIR:
     #   ikisi AYNI degiskendir. Tip kisiti yuzunden 13 elemanlik dizi ona
@@ -928,6 +1126,12 @@ Adim "[8/9] pm2 baslatiliyor..."
 #   [8/9]'un BASLATTIGI ad YAPISAL OLARAK ayni olur — eskiden ad dosyada sabitti
 #   ve ikisi ayrisinca ayni porta ikinci uygulama kalkiyordu.
 $env:TEKSERP_PM2_AD = $uygulama
+if ($ecoPlan -and $ecoPlan.Karar -ceq "BIRLESTIR") {
+  # Yorumlayici DEGISTI: pm2 onu kendi dokumunde saklar; kayit yasarsa `start` onu RESTART
+  # eder ve ESKI yorumlayiciyla acar. [4/9] silmisti - kayit geri dogmussa yalniz BU uygulama
+  # yeniden silinir ("not found" BEKLENEN).
+  Pm2Kos delete $uygulama | Out-Null
+}
 & $pm2 start ecosystem.config.js
 if ($LASTEXITCODE -ne 0) { Fail "pm2 start basarisiz. Geri donus: $kurKomut -GeriAl" }
 & $pm2 save    # ZORUNLU: reboot'ta dogru klasor kalksin (dump.pm2 tazelenir)
