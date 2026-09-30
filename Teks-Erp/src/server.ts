@@ -280,14 +280,14 @@ function startRemoteListener(): Server | null {
 
 // Fabrika saat dilimi dinleyiciden ÖNCE yüklenir: ilk istek de ilk zamanlayıcı da doğru günü görür.
 // Geçersiz kayıtlı dilim → açılmaz (fail-closed); DB'ye ulaşılamazsa bugünkü gibi açılır.
-let server: Server | null = null;
+let lanListener: Server | null = null;
 let remoteServer: Server | null = null;
 void bootFactoryTimezone({
   info: (m) => bilgi("saat-dilimi", m),
   warn: (m, e) => uyari("saat-dilimi", m, e),
 }).then(
   () => {
-    server = startLanListener();
+    lanListener = startLanListener();
     remoteServer = startRemoteListener();
   },
   (err: unknown) => {
@@ -304,8 +304,8 @@ let shuttingDown = false;
 function gracefulShutdown(signal: string, exitCode = 0): void {
     if (shuttingDown) return;
     shuttingDown = true;
-    const lanServer = server;
-    if (!lanServer) {
+    const server = lanListener;
+    if (!server) {
         // Dinleyici henüz açılmadı (saat dilimi yükleniyor) — boşaltılacak istek yok.
         process.exit(exitCode);
         return;
@@ -330,7 +330,7 @@ function gracefulShutdown(signal: string, exitCode = 0): void {
         // `getConnections` geri çağrısı da gelmeyebilir (kapanan dinleyici) —
         // 250ms sonra sayı OLMADAN çıkılır; teşhis için faz tek başına da değerli.
         setTimeout(() => bailOut(""), 250).unref();
-        lanServer.getConnections((_err, count) => bailOut(`, açık bağlantı: ${count}`));
+        server.getConnections((_err, count) => bailOut(`, açık bağlantı: ${count}`));
     }, 5000);
     forceTimer.unref();
     // Son gecikme delta'ları kaybolmasın (dev'de nodemon her kayıtta restart eder!)
@@ -358,7 +358,7 @@ function gracefulShutdown(signal: string, exitCode = 0): void {
         // Tünel dinleyicisi ÖNCE kapanır: yeni uzak istek kabul edilmesin ama
         // LAN'daki uçuştaki istekler normal akışında bitsin.
         remoteServer?.close();
-        lanServer.close(() => {
+        server.close(() => {
             shutdownPhase = "DB kapatılıyor";
             bilgi("shutdown", "Sunucu kapandı.");
             // O3-3: DB kaynaklarını temiz bırak (eski lib/prisma.ts shutdown handler'ından

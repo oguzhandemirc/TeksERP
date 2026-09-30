@@ -22,10 +22,15 @@ import { SETTING_KEYS, systemSettingService } from "../src/services/system-setti
 import { previewFactoryTimezone, setFactoryTimezone } from "../src/services/factory-timezone.service";
 import { hedefDbAdi, hedefDbEngeli } from "./lib/hedef-db-kapisi";
 import { ensureTestAdmin } from "./fixture-test-user";
+import { httpBekciKapisi } from "./lib/http-bekci-kapisi";
+import { atlamaDefteri } from "./lib/atlama";
 import { yorumlariSok } from "./lib/regime-gate-scan";
 
 let pass = 0;
 let fail = 0;
+const ATLAMA = atlamaDefteri(() => {
+  fail++;
+});
 function check(label: string, ok: boolean, extra = ""): void {
   if (ok) pass++;
   else fail++;
@@ -184,6 +189,48 @@ async function dbSection(): Promise<void> {
   check("§5l iki başarılı yazım audit'e düştü", audits >= 2, `${audits}`);
 }
 
+const BASE = process.env.TEST_API_URL ?? "http://localhost:4112";
+const HTTP_CHECKS = 8;
+
+async function call(token: string, method: string, url: string, body?: unknown): Promise<{ status: number; json: Record<string, unknown> }> {
+  const r = await fetch(`${BASE}${url}`, {
+    method,
+    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+    body: body === undefined ? undefined : JSON.stringify(body),
+    signal: AbortSignal.timeout(10_000),
+  });
+  return { status: r.status, json: (await r.json().catch(() => ({}))) as Record<string, unknown> };
+}
+const codeOf = (j: Record<string, unknown>): unknown => (j.details as { code?: unknown } | undefined)?.code;
+
+/** §7 — gerçek sunucu: uçların sözleşmesi ve süreç içi dilimin yazmayla değişmesi (bekci-http.ts ile koşar). */
+async function httpSection(): Promise<void> {
+  console.log("\n§7 — HTTP (gerçek sunucu)");
+  const kapi = await httpBekciKapisi({ base: BASE, kontrolSayisi: HTTP_CHECKS });
+  if (kapi.kirmizi) { check("§7 HTTP ayağı ölçülebildi", false, kapi.kirmizi); return; }
+  if (!kapi.token) { ATLAMA.atla("§7 HTTP", kapi.atlaSebebi ?? "sunucu yok", HTTP_CHECKS); return; }
+  const t = kapi.token;
+  const f0 = await call(t, "GET", "/api/feature-flags");
+  const tz0 = (f0.json.data as { factoryTimezone?: unknown } | undefined)?.factoryTimezone;
+  check("§7a ayar yanıtı factoryTimezone taşır", f0.status === 200 && tz0 === DEFAULT_FACTORY_TIMEZONE, String(tz0));
+  const bad = await call(t, "GET", "/api/feature-flags/factory-timezone/preview?timeZone=Mars%2FOlympus");
+  check("§7b uydurma dilim önizlemesi 400", bad.status === 400 && codeOf(bad.json) === "FACTORY_TIMEZONE_INVALID", `${bad.status}`);
+  const raw = await call(t, "PUT", `/api/admin/settings/${KEY}`, { value: "Europe/Berlin" });
+  check("§7c ⭐ ham ayar ucu 400 SETTING_KEY_RESERVED", raw.status === 400 && codeOf(raw.json) === "SETTING_KEY_RESERVED", `${raw.status} ${String(codeOf(raw.json))}`);
+  const patch = await call(t, "PATCH", "/api/feature-flags", { factoryTimezone: "Europe/Berlin" });
+  check("§7d ⭐ PATCH /api/feature-flags dilimi yazamaz", patch.status === 400, `${patch.status}`);
+  const stale = await call(t, "PUT", "/api/feature-flags/factory-timezone", { timeZone: "Europe/Berlin", expectedCurrent: "Asia/Tokyo" });
+  check("§7e ⭐ yanlış beklenen dilim 409", stale.status === 409 && codeOf(stale.json) === "FACTORY_TIMEZONE_CHANGED", `${stale.status}`);
+  const ok = await call(t, "PUT", "/api/feature-flags/factory-timezone", { timeZone: "Europe/Berlin", expectedCurrent: DEFAULT_FACTORY_TIMEZONE });
+  const f1 = await call(t, "GET", "/api/feature-flags");
+  check("§7f ⭐ yazım sunucunun süreç içi dilimini değiştirir", ok.status === 200 &&
+    (f1.json.data as { factoryTimezone?: unknown }).factoryTimezone === "Europe/Berlin", `${ok.status}`);
+  const back = await call(t, "PUT", "/api/feature-flags/factory-timezone", { timeZone: DEFAULT_FACTORY_TIMEZONE, expectedCurrent: "Europe/Berlin" });
+  check("§7g geri dönüş 200", back.status === 200, `${back.status}`);
+  const f2 = await call(t, "GET", "/api/feature-flags");
+  check("§7h sunucu varsayılana döndü", (f2.json.data as { factoryTimezone?: unknown }).factoryTimezone === DEFAULT_FACTORY_TIMEZONE);
+}
+
 async function temizle(): Promise<void> {
   await prisma.systemSetting.deleteMany({ where: { key: KEY } });
   if (rowExisted && savedRow) {
@@ -204,13 +251,13 @@ async function main(): Promise<void> {
     return;
   }
   console.log(`\nHedef veritabanı: ${hedefDbAdi()}`);
-  try { await dbSection(); } finally { await temizle(); }
+  try { await dbSection(); await httpSection(); } finally { await temizle(); }
 }
 
 main()
   .catch((e) => { console.error(e); fail++; })
   .finally(async () => {
-    console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
+    console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız${ATLAMA.ozetEki()} ===`);
     await prisma.$disconnect();
     await pool.end();
     process.exit(fail ? 1 : 0);

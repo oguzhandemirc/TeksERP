@@ -104,15 +104,16 @@ export interface FactoryTimezonePreview {
   warnings: string[];
 }
 
-async function countShifted(from: string, to: string): Promise<{ rolls: number; shipments: number }> {
+async function countShifted(from: string, to: string, now: Date): Promise<{ rolls: number; shipments: number }> {
+  const since = new Date(now.getTime() - PREVIEW_DAYS * 86_400_000);
   // Saat dilimleri bind parametresi — bu sorgu ifade istatistiği aramaz.
   const rows = await prisma.$queryRaw<Array<{ rolls: bigint; shipments: bigint }>>`
     SELECT
       (SELECT count(*) FROM rolls
-        WHERE "createdAt" >= now() - (${PREVIEW_DAYS}::int * interval '1 day')
+        WHERE "createdAt" >= ${since}
           AND ("createdAt" AT TIME ZONE ${from})::date <> ("createdAt" AT TIME ZONE ${to})::date)::bigint AS rolls,
       (SELECT count(*) FROM shipments
-        WHERE "dispatchedAt" >= now() - (${PREVIEW_DAYS}::int * interval '1 day')
+        WHERE "dispatchedAt" >= ${since}
           AND ("dispatchedAt" AT TIME ZONE ${from})::date <> ("dispatchedAt" AT TIME ZONE ${to})::date)::bigint AS shipments`;
   return { rolls: Number(rows[0]?.rolls ?? 0), shipments: Number(rows[0]?.shipments ?? 0) };
 }
@@ -125,7 +126,7 @@ export async function previewFactoryTimezone(proposed: string, now: Date = new D
   const changed = current !== proposed;
   const curOff = zoneOffsetMinutes(current, now);
   const newOff = zoneOffsetMinutes(proposed, now);
-  const { rolls, shipments } = changed ? await countShifted(current, proposed) : { rolls: 0, shipments: 0 };
+  const { rolls, shipments } = changed ? await countShifted(current, proposed, now) : { rolls: 0, shipments: 0 };
   const warnings: string[] = [];
   if (changed) {
     warnings.push(
