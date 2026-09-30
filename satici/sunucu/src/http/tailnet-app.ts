@@ -2,10 +2,12 @@
 // Kapı iki koşullu ve FAIL-CLOSED: istek (1) tailnet dinleyicisinin soketine gelmiş olmalı ve
 // (2) kaynak adresi tailnet ağında olmalı (geri döngü yalnız TAILNET_LOOPBACK=1 iken); biri tutmazsa 404.
 // Portal JSON API'si /portal/api altında (portal-routes.ts); /portal/saglik yalnız sayılar taşır;
-// satıcı web arayüzü (satici/web dist/portal) /portal altında, kapının ARKASINDA.
+// satıcı web arayüzü (satici/web dist/portal) /portal altında, kapının ARKASINDA. Aynı arayüzün Cloudflare
+// Access arkasındaki genel yolu ERİŞİM dinleyicisidir (access-app.ts) — kök parolalı uçlar yalnız BURADA.
 import type { AddressInfo } from "node:net";
 import express, { type Express, type NextFunction, type Request, type Response } from "express";
 import { auditFailureCount } from "../lib/audit";
+import type { AccessVerifier } from "./access-jwt";
 import type { VendorContext } from "../services/context";
 import type { DoorbellHub } from "../services/doorbell";
 import { blockListOf, inList, stripMapped } from "./client-address";
@@ -28,16 +30,15 @@ export function isTailnetSource(remote: string | undefined, allowLoopback: boole
   return inList(tailnet, a) || (allowLoopback && inList(loopback, a));
 }
 
+/** İstek bu dinleyicinin SOKETİNE mi geldi (istemci seçemez, başlıkla etkileyemez); dinleyici yoksa hayır. */
+export function arrivedOn(req: Pick<Request, "socket">, bound: AddressInfo | string | null): boolean {
+  return bound !== null && typeof bound === "object" && req.socket.localPort === bound.port && stripMapped(req.socket.localAddress) === stripMapped(bound.address);
+}
+
 /** Ara katman: dinleyici soketi + kaynak ağı. `listener()` null ise (henüz dinlemiyor) RED. */
 export function requireTailnet(listener: () => AddressInfo | string | null, allowLoopback: boolean) {
   return (req: Request, res: Response, next: NextFunction): void => {
-    const bound = listener();
-    const onListener =
-      bound !== null &&
-      typeof bound === "object" &&
-      req.socket.localPort === bound.port &&
-      stripMapped(req.socket.localAddress) === stripMapped(bound.address);
-    if (!onListener || !isTailnetSource(req.socket.remoteAddress, allowLoopback)) {
+    if (!arrivedOn(req, listener()) || !isTailnetSource(req.socket.remoteAddress, allowLoopback)) {
       notFound(req, res);
       return;
     }
@@ -45,15 +46,21 @@ export function requireTailnet(listener: () => AddressInfo | string | null, allo
   };
 }
 
-export function createTailnetApp(ctx: VendorContext, hub: DoorbellHub | null, listener: () => AddressInfo | string | null): Express {
+export function createTailnetApp(
+  ctx: VendorContext,
+  hub: DoorbellHub | null,
+  listener: () => AddressInfo | string | null,
+  access: AccessVerifier | null = null,
+): Express {
   const app = express();
   app.disable("x-powered-by");
   app.set("etag", false);
   app.use(accessLog);
-  app.use(requireTailnet(listener, ctx.config.TAILNET_LOOPBACK === "1"));
+  const gate = requireTailnet(listener, ctx.config.TAILNET_LOOPBACK === "1");
+  app.use(gate);
   // Ham gövdeli dağıtım uçları JSON yönlendiricisinden ÖNCE (JSON-yalnız yazma kapısı parça PUT'unu reddederdi).
-  app.use("/portal/api/ham", createDistributionRawRouter(ctx));
-  app.use("/portal/api", createPortalRouter(ctx, "TAILNET", VENDOR_PORTAL_ROUTES));
+  app.use("/portal/api/ham", createDistributionRawRouter(ctx, "TAILNET"));
+  app.use("/portal/api", createPortalRouter(ctx, "TAILNET", VENDOR_PORTAL_ROUTES, { rootPasswordGate: gate }));
   const portal = express.Router();
   portal.get("/saglik", (_req, res) => {
     const now = Date.now();
@@ -68,6 +75,7 @@ export function createTailnetApp(ctx: VendorContext, hub: DoorbellHub | null, li
           uyariSayisi: ctx.keys.warnings.length,
         },
         denetimYazmaHatasi: auditFailureCount(),
+        erisim: access ? { kip: "acik", jwks: access.jwks.state() } : { kip: "kapali" },
       },
     });
   });

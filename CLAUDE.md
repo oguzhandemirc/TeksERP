@@ -11,7 +11,7 @@ Tekstil fabrikası ERP'si. Üç alt proje (+ doğmakta olan satıcı platformu),
 | `Teks-Erp/` | Express 5 + Prisma 7 + PostgreSQL backend | 4000 |
 | `Electron/` | Electron 42 + React 19 + Vite yönetim paneli (**admin frontend buraya yazılır**; `React/` yok) | 5174 |
 | `mobil/` | React Native + Expo 54, Android tablet (yatay) + telefon (dikey) — saha | — |
-| `satici/` | Express 5 + Prisma 7 satıcı sunucusu (lisans API `/v1/*` + portal JSON API; VDS'te, fabrikaya kurulmaz; kendi `CLAUDE.md`'si `satici/sunucu/`) + React 19 + Vite portal web arayüzü (`satici/web/`, aynı kökenden sunulur) | 4610 genel (`/bayi`) · 4611 portal (`/portal`, yalnız tailnet) |
+| `satici/` | Express 5 + Prisma 7 satıcı sunucusu (lisans API `/v1/*` + portal JSON API; VDS'te, fabrikaya kurulmaz; kendi `CLAUDE.md`'si `satici/sunucu/`) + React 19 + Vite portal web arayüzü (`satici/web/`, aynı kökenden sunulur) | 4610 genel (`/bayi`) · 4611 portal (`/portal`, tailnet) · 4613 portal (`portal.<alan>`, Cloudflare Access; kök parolası yok) |
 | `patron/` | Express 5 + Prisma 7 patron bulutu sunucusu (`patron/sunucu`: eşitleme alıcısı `/v1/*` + hesap API'si `/api/*`; çok kiracılı tek DB + PostgreSQL RLS; VDS'te, fabrikaya kurulmaz; kendi `CLAUDE.md`'si) | 4620 |
 | `patron/uygulama/` | React Native + Expo 54 patron uygulaması (Android + iOS + web tek kod tabanı; hesap API'sini okur, salt-okunur çevrimdışı önbellek; tel tipleri `patron/sunucu/src/wire/api.ts`in bayt-eşit aynası) | — |
 | `Teks-Erp/native/lisans-cekirdek/` | Rust + napi-rs native lisans çekirdeği (backend paketine `.node` olarak girer; ayrı süreç değil; kendi `CLAUDE.md`'si) | — |

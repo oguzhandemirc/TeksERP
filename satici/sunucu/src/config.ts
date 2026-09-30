@@ -26,6 +26,20 @@ const positiveInt = (min: number, max: number) => z.coerce.number().int().min(mi
 /** Tailnet dinleyicisi joker adrese bağlanamaz: portal internete açılmasın. */
 const WILDCARD_ADDRESSES = new Set(["0.0.0.0", "::", "[::]", "*", ""]);
 
+/** Cloudflare Access takım alanı: JWKS ve `iss` bu alandan türer, yalnız `<takım>.cloudflareaccess.com` kabul edilir. */
+export const ACCESS_TEAM_DOMAIN_PATTERN = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.cloudflareaccess\.com$/;
+/** Access uygulamasının AUD etiketi (64 onaltılık). */
+export const ACCESS_AUD_PATTERN = /^[a-f0-9]{64}$/;
+
+const accessTeamDomain = z
+  .string()
+  .transform((v) => v.trim().toLowerCase().replace(/^https:\/\//, "").replace(/\/+$/, ""))
+  .refine((v) => v === "" || ACCESS_TEAM_DOMAIN_PATTERN.test(v), "CF_ACCESS_TAKIM_ALANI <takım>.cloudflareaccess.com biçiminde olmalı");
+const accessAud = z
+  .string()
+  .transform((v) => v.trim().toLowerCase())
+  .refine((v) => v === "" || ACCESS_AUD_PATTERN.test(v), "CF_ACCESS_AUD 64 onaltılık karakter olmalı (Access uygulamasının AUD etiketi)");
+
 const EnvSchema = z.object({
   DATABASE_URL: z.string().min(1),
   PORT_GENEL: port.default(4610),
@@ -104,6 +118,18 @@ const EnvSchema = z.object({
   IC_KAYNAK_AGLARI: cidrList.optional(),
   /** İç API ortak sırrının (Bearer) dosyası; yoksa, okunamazsa ya da zayıfsa iç API AÇILMAZ. */
   IC_API_BELIRTEC_DOSYASI: z.string().min(1).optional(),
+  /**
+   * ERİŞİM dinleyicisi: satıcı portalının Cloudflare Access arkasındaki GENEL yolu (portal.<alan>). Port
+   * verilmezse dinleyici AÇILMAZ. Açıksa her istek geçerli Access JWT'si ister; kök parolalı uçlar burada 404.
+   */
+  PORT_ERISIM: port.optional(),
+  ERISIM_BIND: z
+    .string()
+    .default("127.0.0.1")
+    .refine((v) => !WILDCARD_ADDRESSES.has(v.trim()), "ERISIM_BIND joker adres olamaz (0.0.0.0 / ::)"),
+  /** Access takım alanı ve uygulama AUD etiketi; ikisinden biri yoksa ERİŞİM dinleyicisi her isteğe 404 (kapalı). */
+  CF_ACCESS_TAKIM_ALANI: accessTeamDomain.optional(),
+  CF_ACCESS_AUD: accessAud.optional(),
   /** İç zil: tesis başına dakikalık tavan. */
   IC_ZIL_HIZ_DK: positiveInt(1, 1000).default(12),
   /** İç API çağrı sayacının denetime yazılma aralığı (dk; her istek değil, pencere başına tek satır). */

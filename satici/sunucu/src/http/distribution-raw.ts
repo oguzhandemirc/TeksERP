@@ -1,4 +1,4 @@
-// SATICI PORTALI — ham gövdeli/akışlı dağıtım uçları (/portal/api/ham, tailnet). JSON rota tablosuna
+// SATICI PORTALI — ham gövdeli/akışlı dağıtım uçları (/portal/api/ham; tailnet ve ERİŞİM). JSON rota tablosuna
 // sığmaz (gövde ham bayt ya da yanıt dosya akışı) ama AYNI oturum + izin kapısından geçer
 // (`requirePortalSession`). CSRF: SameSite=Strict çerez + parça PUT'u özel başlık ister (form gönderemez).
 //   PUT /giden-oturum/:id/parca/:sira   (X-Parca-Sha256)      GET /dosyalar/:id   (gövdeyi indir)
@@ -10,6 +10,7 @@ import { VendorError, notFoundError } from "../lib/errors";
 import { prisma } from "../lib/prisma";
 import type { VendorContext } from "../services/context";
 import { openVerified, streamFile } from "./distribution-public";
+import type { PortalListener } from "../portal/roles";
 import { requirePortalSession } from "./portal-http";
 
 function uuidOf(req: Request, name: string, what: string): string {
@@ -18,7 +19,7 @@ function uuidOf(req: Request, name: string, what: string): string {
   return v;
 }
 
-export function createDistributionRawRouter(ctx: VendorContext): Router {
+export function createDistributionRawRouter(ctx: VendorContext, listener: PortalListener): Router {
   const router = express.Router();
   router.use((_req: Request, res: Response, next: () => void) => {
     res.set({ "Cache-Control": "no-store", "X-Content-Type-Options": "nosniff", "Referrer-Policy": "no-referrer" });
@@ -26,7 +27,7 @@ export function createDistributionRawRouter(ctx: VendorContext): Router {
   });
 
   router.put("/giden-oturum/:id/parca/:sira", async (req: Request, res: Response) => {
-    const session = await requirePortalSession(ctx, "TAILNET", { req, res }, "dagitim:yaz");
+    const session = await requirePortalSession(ctx, listener, { req, res }, "dagitim:yaz");
     const id = uuidOf(req, "id", "Yükleme oturumu");
     const s = await prisma.yuklemeOturumu.findUnique({ where: { id }, select: { musteriId: true } });
     if (!s) throw notFoundError("Yükleme oturumu");
@@ -43,7 +44,7 @@ export function createDistributionRawRouter(ctx: VendorContext): Router {
   });
 
   router.get("/dosyalar/:id", async (req: Request, res: Response) => {
-    await requirePortalSession(ctx, "TAILNET", { req, res }, "portal:oku");
+    await requirePortalSession(ctx, listener, { req, res }, "portal:oku");
     const f = await prisma.dagitimDosyasi.findUnique({ where: { id: uuidOf(req, "id", "Dosya") } });
     if (!f) throw notFoundError("Dosya");
     if (f.govdeBudandiAt) throw new VendorError(410, "GOVDE_BUDANDI", "Dosyanın saklama süresi dolmuş; gövde budandı");

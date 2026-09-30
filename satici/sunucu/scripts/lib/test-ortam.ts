@@ -544,11 +544,11 @@ export interface PortalYanit extends Yanit {
   readonly veri: Record<string, unknown>;
 }
 
-/** JSON portal isteği; `cerez` "ad=değer" biçiminde. */
+/** JSON portal isteği; `cerez` "ad=değer" biçiminde; `basliklar` ek başlıklar (ör. Access JWT'si). */
 export async function portalIstek(
   taban: string,
   yol: string,
-  g: { yontem?: string; govde?: unknown; cerez?: string; icerikTuru?: string } = {},
+  g: { yontem?: string; govde?: unknown; cerez?: string; icerikTuru?: string; basliklar?: Record<string, string> } = {},
 ): Promise<PortalYanit> {
   const yontem = g.yontem ?? (g.govde === undefined ? "GET" : "POST");
   const r = await fetch(`${taban}${yol}`, {
@@ -556,6 +556,7 @@ export async function portalIstek(
     headers: {
       ...(yontem === "GET" ? {} : { "Content-Type": g.icerikTuru ?? "application/json" }),
       ...(g.cerez ? { Cookie: g.cerez } : {}),
+      ...(g.basliklar ?? {}),
     },
     ...(g.govde === undefined ? {} : { body: typeof g.govde === "string" ? g.govde : JSON.stringify(g.govde) }),
   });
@@ -575,10 +576,11 @@ export async function portalGiris(
   taban: string,
   yol: PortalYolu,
   k: PortalKimlik,
-  g: { totp?: string; parola?: string; adimKaydir?: number } = {},
+  g: { totp?: string; parola?: string; adimKaydir?: number; basliklar?: Record<string, string> } = {},
 ): Promise<PortalYanit & { cerez: string | null; setCookie: string | null }> {
   const y = await portalIstek(taban, `${yol}/oturum/ac`, {
     govde: { kullaniciAdi: k.kullaniciAdi, parola: g.parola ?? k.parola, totp: g.totp ?? (await totpKodu(k.sir, g.adimKaydir ?? 0)) },
+    basliklar: g.basliklar,
   });
   const setCookie = y.basliklar.get("set-cookie");
   const cerez = y.status === 200 && setCookie ? setCookie.split(";")[0]!.trim() : null;

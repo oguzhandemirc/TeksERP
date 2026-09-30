@@ -8,7 +8,7 @@ Satıcı sunucusunun portal JSON API'sine arayüz. Tek kod tabanından **iki ayr
 
 | Uygulama | Giriş | Derleme | Sunulduğu yer | API |
 |---|---|---|---|---|
-| Satıcı arayüzü | `portal.html` → `src/portal/` | `npm run build:portal` → `dist/portal` | tailnet dinleyicisi `/portal` (tailnet kapısının arkasında) | `/portal/api` |
+| Satıcı arayüzü | `portal.html` → `src/portal/` | `npm run build:portal` → `dist/portal` | tailnet dinleyicisi `/portal` (tailnet kapısının arkasında) + ERİŞİM dinleyicisi `/portal` (Cloudflare Access kapısının arkasında, `portal.<alan>`) | `/portal/api` |
 | Bayi arayüzü | `bayi.html` → `src/bayi/` | `npm run build:bayi` → `dist/bayi` | genel dinleyici `/bayi` | `/bayi/api` |
 
 - `src/shared/` ortak katmandır ve hiçbir uygulamaya bağımlı değildir; **bayi paketi satıcı kodunu TAŞIMAZ** (bekçi `src/test/app-isolation.test.ts`).
@@ -25,6 +25,7 @@ Satıcı sunucusunun portal JSON API'sine arayüz. Tek kod tabanından **iki ayr
 - **Giriş:** kullanıcı adı + parola + TOTP TEK adım (TOTP'siz oturum yok). TOTP kurulumu hesabı AÇAN ya da SIFIRLAYAN yöneticinin ekranında QR ile bir kez; kurtarma kodu YOK (kayıpta yönetici sıfırlar, yönetici yoksa sunucu CLI'ı `scripts/portal-kullanici.ts`).
 - **Yıkıcı / deftere yazan eylem** `shared/ConfirmAction.tsx` ile: etkilenen kaydı ADIYLA gösterir, sebep ister (sunucuda zorunlu). **Ağır yaptırım** (K4 · K5 · geri sayımı 7 günden kısa K3 — planlı eylem ve taksit kısıtlama günü dahil) yalnız yöneticiye görünür ve kurulumun lisans numarası AYNEN yazılarak (`onay`) gider; K4/K5 `/agir-yaptirim`, K3 `/yaptirim` ucundan.
 - **Dağıtım ekranları (Faz 3d):** Kurulum → İlk kurulum sekmesi · Dosyalar · Sürümler. `/d` · `/y` bağlantı adresi BİR KEZ gösterilir (`TokenSecretModal`; sunucu `GENEL_KOK_ADRESI` yoksa yalnız yol); giden dosya parçalı yüklenir (`portal/distribution/upload.ts`, artımlı SHA-256, aynı dosya yeniden seçilince aynı işlem kimliği → oturum SÜRER); ham uçlar (`/portal/api/ham/…`) JSON tablosunun dışında olduğundan ayna testi onları sunucunun `distribution-raw.ts` yönlendiricisinde ayrıca arar.
+- **Genel yol (ERİŞİM oturumu, `dinleyici: "ERISIM"`):** kök parolası Cloudflare'den geçmez — imza formu ("Lisansı imzala/yenile") HİÇ açılmaz, yerine tailnet/geri döngü yolunu anlatan açıklama; sunucu o ucu orada zaten 404'ler ama 404 parolanın gönderilmesini engellemez (bekçi `src/test/erisim-imza.test.tsx`).
 - Kurulum fabrikanın `installationId`'siyle açılır; kanal yalnız KAYITLI kanaldan seçilir (satıcıda `/kanallar`, bayide tavanın kanalları).
 - Tanımlayıcılar İngilizce; tel/şema anahtarları, kod değerleri ve kullanıcı metinleri Türkçe (i18n yok).
 

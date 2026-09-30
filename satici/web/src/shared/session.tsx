@@ -14,9 +14,12 @@ export interface SessionUser {
   readonly bayiId: string | null;
 }
 
+/** Oturumun doğduğu dinleyici: TAILNET (tailnet/geri döngü) · ERISIM (Cloudflare Access arkası genel yol) · GENEL (bayi). */
+export type SessionListener = "TAILNET" | "GENEL" | "ERISIM";
+
 export interface SessionInfo {
   readonly kullanici: SessionUser;
-  readonly dinleyici: "TAILNET" | "GENEL";
+  readonly dinleyici: SessionListener;
   readonly bitis: string;
 }
 
@@ -102,6 +105,13 @@ export function useUser(): SessionUser {
   const { state } = useSessionContext();
   if (state.status !== "in") throw new Error("Oturum yok");
   return state.session.kullanici;
+}
+
+/** Oturumun dinleyicisi (yalnız girişli sayfalarda çağrılır). */
+export function useListener(): SessionListener {
+  const { state } = useSessionContext();
+  if (state.status !== "in") throw new Error("Oturum yok");
+  return state.session.dinleyici;
 }
 
 export function useCan(permission: PortalPermission): boolean {

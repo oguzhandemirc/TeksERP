@@ -1,4 +1,5 @@
-// SATICI PORTALI JSON API'si — YALNIZ tailnet dinleyicisinde, /portal/api altında (web arayüzü 1f).
+// SATICI PORTALI JSON API'si — tailnet ve ERİŞİM (Cloudflare Access arkası) dinleyicilerinde, /portal/api
+// altında (web arayüzü 1f). Kök parolası taşıyan rota `kokParolasi: true` beyan eder: yalnız tailnet/geri döngü.
 // Her rota bir izin beyan eder (roles.ts); her yazma işlem kimliğiyle (clientToken) idempotenttir.
 // Yol parametresi gövde özetine girer (`_yol`): aynı kimlik başka kayıtta kullanılamaz.
 import { DISTRIBUTION_PORTAL_ROUTES } from "./distribution-routes";
@@ -548,6 +549,7 @@ export const VENDOR_PORTAL_ROUTES: readonly PortalRouteDef[] = [
     path: "/haklar/:id/surum",
     permission: "hak:yaz",
     kimlik: "ISLEM_KIMLIGI",
+    kokParolasi: true,
     handler: async (c) => {
       const id = idParam(c.req, "id", "Hak");
       const b = bodyOf(c, EntitlementVersion);
