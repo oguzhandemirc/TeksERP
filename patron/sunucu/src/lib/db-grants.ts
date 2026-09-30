@@ -12,7 +12,8 @@ export const APP_GRANTS: Readonly<Record<string, readonly Privilege[]>> = {
   installations: ["SELECT"],
   accounts: ["SELECT", "INSERT", "UPDATE"],
   sessions: ["SELECT", "INSERT", "UPDATE", "DELETE"],
-  account_audit: ["SELECT", "INSERT", "DELETE"],
+  // UPDATE yalnız bakım işinin IP alanı silmesi için (`maintenance.ts` `AGED_FIELDS`; bekçi başka yazanı ısırır).
+  account_audit: ["SELECT", "INSERT", "UPDATE", "DELETE"],
   operation_receipts: ["SELECT", "INSERT", "DELETE"],
   inbox_messages: ["SELECT", "INSERT", "UPDATE", "DELETE"],
   report_requests: ["SELECT", "INSERT", "UPDATE", "DELETE"],

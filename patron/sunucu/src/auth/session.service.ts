@@ -49,7 +49,10 @@ export function sessionProjections(permissions: ReadonlySet<CloudPermission>): s
 
 const loginFailed = (): CloudError => new CloudError(401, "GIRIS_BASARISIZ", "E-posta, parola ya da doğrulama kodu hatalı");
 
-async function registerFailure(ctx: CloudContext, account: Account, nowMs: number): Promise<void> {
+/** Giriş olayının istemci adresi — hesap güvenlik kaydına girer, 30 gün sonra alan silinir (`maintenance.ts` `AGED_FIELDS`). */
+const ipSummary = (ip: string | null): { ip?: string } => (ip && ip !== "?" ? { ip: ip.slice(0, 64) } : {});
+
+async function registerFailure(ctx: CloudContext, account: Account, nowMs: number, ip: string | null): Promise<void> {
   const locked = await withTesis(ctx.app, { tesisId: account.tesisId }, async (tx) => {
     const bumped = await tx.account.update({ where: { id: account.id }, data: { failedLogins: { increment: 1 } }, select: { failedLogins: true } });
     if (bumped.failedLogins < ctx.config.GIRIS_ESIGI) return null;
@@ -57,8 +60,8 @@ async function registerFailure(ctx: CloudContext, account: Account, nowMs: numbe
     const r = await tx.account.updateMany({ where: { id: account.id, failedLogins: { gte: ctx.config.GIRIS_ESIGI } }, data: { lockedUntil: until, failedLogins: 0 } });
     return r.count > 0 ? until : null;
   });
-  await recordAudit(ctx.app, { tesisId: account.tesisId, actor: "giris", event: "GIRIS_BASARISIZ", entity: "Account", entityId: account.id });
-  if (locked) await recordAudit(ctx.app, { tesisId: account.tesisId, actor: "giris", event: "HESAP_GECICI_KILIT", entity: "Account", entityId: account.id, summary: { bitis: locked.toISOString() } });
+  await recordAudit(ctx.app, { tesisId: account.tesisId, actor: "giris", event: "GIRIS_BASARISIZ", entity: "Account", entityId: account.id, summary: ipSummary(ip) });
+  if (locked) await recordAudit(ctx.app, { tesisId: account.tesisId, actor: "giris", event: "HESAP_GECICI_KILIT", entity: "Account", entityId: account.id, summary: { bitis: locked.toISOString(), ...ipSummary(ip) } });
 }
 
 export interface LoginInput {
@@ -66,6 +69,8 @@ export interface LoginInput {
   readonly password: string;
   readonly totp: string;
   readonly client: "mobil" | "web" | null;
+  /** İstemci adresi (vekil başlığı ya da soket); güvenlik kaydına 30 gün girer. */
+  readonly ip: string | null;
 }
 
 export async function login(ctx: CloudContext, g: LoginInput): Promise<{ token: string; session: SessionContext; expiresAt: Date }> {
@@ -74,7 +79,7 @@ export async function login(ctx: CloudContext, g: LoginInput): Promise<{ token: 
   const account = email ? await withLookup(ctx.app, { kind: "eposta", value: email }, (tx) => tx.account.findUnique({ where: { email } })) : null;
   if (!account || account.status !== "AKTIF" || !account.passwordHash || !account.totpSecretSealed) {
     await burnPasswordCheck(g.password);
-    if (account) await recordAudit(ctx.app, { tesisId: account.tesisId, actor: "giris", event: "GIRIS_REDDEDILDI", entity: "Account", entityId: account.id, summary: { durum: account.status } });
+    if (account) await recordAudit(ctx.app, { tesisId: account.tesisId, actor: "giris", event: "GIRIS_REDDEDILDI", entity: "Account", entityId: account.id, summary: { durum: account.status, ...ipSummary(g.ip) } });
     throw loginFailed();
   }
   if (account.lockedUntil && account.lockedUntil.getTime() > nowMs) {
@@ -89,7 +94,7 @@ export async function login(ctx: CloudContext, g: LoginInput): Promise<{ token: 
   }
   const totp = verifyTotp(secret, g.totp, { atMs: nowMs, lastUsedStep: account.totpLastStep });
   if (!passwordOk || !totp.ok) {
-    await registerFailure(ctx, account, nowMs);
+    await registerFailure(ctx, account, nowMs, g.ip);
     throw loginFailed();
   }
   const { token, digest } = newToken();
@@ -111,10 +116,10 @@ export async function login(ctx: CloudContext, g: LoginInput): Promise<{ token: 
   });
   if (session === "KAPALI") throw new CloudError(403, "HIZMET_KAPANDI", "Patron bulutu hizmeti sona erdi ve salt okuma süresi doldu; veriler imha sürecinde");
   if (!session) {
-    await registerFailure(ctx, account, nowMs);
+    await registerFailure(ctx, account, nowMs, g.ip);
     throw loginFailed();
   }
-  await recordAudit(ctx.app, { tesisId: account.tesisId, actor: accountActor(account.id), event: "GIRIS", entity: "Account", entityId: account.id, summary: { oturumId: session.id, istemci: g.client } });
+  await recordAudit(ctx.app, { tesisId: account.tesisId, actor: accountActor(account.id), event: "GIRIS", entity: "Account", entityId: account.id, summary: { oturumId: session.id, istemci: g.client, ...ipSummary(g.ip) } });
   const permissions = effectivePermissions(account.permissions);
   return {
     token,
@@ -172,7 +177,7 @@ export async function logout(ctx: CloudContext, s: SessionContext): Promise<void
 }
 
 /** Kendi parolasını değiştirme: mevcut parola + TOTP; öteki oturumlar kapanır. */
-export async function changeOwnPassword(ctx: CloudContext, s: SessionContext, g: { current: string; next: string; totp: string }): Promise<void> {
+export async function changeOwnPassword(ctx: CloudContext, s: SessionContext, g: { current: string; next: string; totp: string; ip: string | null }): Promise<void> {
   assertPasswordStrength(g.next);
   const nowMs = ctx.now();
   const account = await withTesis(ctx.app, { tesisId: s.tesisId }, (tx) => tx.account.findUnique({ where: { id: s.accountId } }));
@@ -180,7 +185,7 @@ export async function changeOwnPassword(ctx: CloudContext, s: SessionContext, g:
   const secret = ctx.secrets.open(account.totpSecretSealed, account.id);
   const totp = secret ? verifyTotp(secret, g.totp, { atMs: nowMs, lastUsedStep: account.totpLastStep }) : null;
   if (!(await verifyPassword(g.current, account.passwordHash)) || !totp?.ok) {
-    await registerFailure(ctx, account, nowMs);
+    await registerFailure(ctx, account, nowMs, g.ip);
     throw new CloudError(400, "GIRIS_BASARISIZ", "Mevcut parola ya da doğrulama kodu hatalı");
   }
   const hash = await hashPassword(g.next);

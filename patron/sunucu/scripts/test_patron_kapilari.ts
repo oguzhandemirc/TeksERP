@@ -14,6 +14,9 @@
 //   §6 katalog: izin kodları tekil · her okuma izni en az bir projeksiyon/rapor ailesi açar · yazma ve
 //      yönetim izinleri kodda kullanılır (ölü izin yok) · hata kodları tekil
 //   §7 protokol aynası: `src/lisans-protokol/` ↔ `Teks-Erp/src/lib/license/protocol/` bayt-eşit
+//   §8 yaşa göre silinen ALAN beyanı (`AGED_FIELDS`, IP 30 gün): denetim satırı YALNIZ `maintenance.ts`te güncellenir
+//      ve güncellenen her alan beyanda, beyandaki her alanın silme yeri var (iki yönlü) · istemci adresi
+//      (`clientAddress(`) yalnız HTTP katmanında okunur
 // ⭐ KALICI SONDA (her koşumda): §4 ve §5 yüklemleri sentetik girdide ısırır, temiz girdide susar.
 // Koşum: npx tsx scripts/test_patron_kapilari.ts   (DB GEREKMEZ)
 // =============================================================================
@@ -28,7 +31,7 @@ import { CLOUD_ERROR_CODES } from "../src/lib/errors";
 import { CLOUD_TABLES } from "../src/lib/db-grants";
 import { LOCK_NAMESPACES } from "../src/lib/locks";
 import { DESTRUCTION_STEPS, RETAINED_TABLES } from "../src/services/facility-destruction";
-import { PRUNED_TABLES } from "../src/services/maintenance";
+import { AGED_FIELDS, PRUNED_TABLES } from "../src/services/maintenance";
 
 const KOK = path.resolve(__dirname, "..");
 let gecti = 0;
@@ -187,6 +190,30 @@ function katalog(): void {
   kontrol("§6c hata kodları tekil", new Set(CLOUD_ERROR_CODES).size === CLOUD_ERROR_CODES.length);
 }
 
+/** Denetim satırını güncelleyen ifadeler → güncellenen alan anahtarı (`account_audit.summary.<anahtar>`). */
+export function denetimGuncellemeleri(metin: string): { alanlar: Set<string>; prisma: number } {
+  const k = kod(metin);
+  const alanlar = new Set<string>();
+  for (const m of k.matchAll(/UPDATE\s+"?account_audit"?\s+SET\s+summary\s*=\s*summary\s*-\s*'([a-zA-Z]+)'/gi)) alanlar.add(`account_audit.summary.${m[1]}`);
+  const prisma = [...k.matchAll(/\b(?:tx|db|prisma)\.accountAudit\.(?:update|updateMany|upsert)\s*\(/g)].length;
+  const genel = [...k.matchAll(/UPDATE\s+"?account_audit"?/gi)].length;
+  return { alanlar, prisma: prisma + genel - alanlar.size };
+}
+
+function alanBeyani(): void {
+  console.log("\n§8 yaşa göre silinen alan beyanı (IP 30 gün)");
+  const bakim = path.join(SRC, "services", "maintenance.ts");
+  const baskaYer = kaynaklar.filter((f) => f !== bakim && /UPDATE\s+"?account_audit|accountAudit\.(?:update|updateMany|upsert)\s*\(/i.test(kod(readFileSync(f, "utf8")))).map(goreli);
+  kontrol("§8a denetim satırı YALNIZ services/maintenance.ts'te güncellenir", baskaYer.length === 0, baskaYer.join(", ") || "temiz");
+  const g = denetimGuncellemeleri(readFileSync(bakim, "utf8"));
+  const beyan = new Set(Object.keys(AGED_FIELDS));
+  kontrol("§8b güncellenen her alan AGED_FIELDS'ta, beyandaki her alanın silme yeri var (iki yönlü)", g.prisma === 0 && [...g.alanlar].every((a) => beyan.has(a)) && [...beyan].every((a) => g.alanlar.has(a)), [...g.alanlar].join(",") || "yok");
+  const okuyan = kaynaklar.filter((f) => !/http[/\\]/.test(f) && /\bclientAddress\(/.test(kod(readFileSync(f, "utf8")))).map(goreli);
+  kontrol("§8c istemci adresi yalnız HTTP katmanında okunur", okuyan.length === 0, okuyan.join(", ") || "temiz");
+  const sonda = denetimGuncellemeleri("await tx.$executeRaw`UPDATE account_audit SET summary = summary - 'eposta' WHERE x`; await tx.accountAudit.updateMany({});");
+  kontrol("§8d ✓K sonda: beyansız alan silmesi ve Prisma güncellemesi ısırır", sonda.alanlar.has("account_audit.summary.eposta") && !beyan.has("account_audit.summary.eposta") && sonda.prisma === 1);
+}
+
 function ayna(): void {
   console.log("\n§7 protokol aynası");
   const ozet = (d: string) =>
@@ -208,5 +235,6 @@ budama();
 rotalar();
 katalog();
 ayna();
+alanBeyani();
 console.log(`\n=== Sonuç: ${gecti} geçti, ${kaldi} başarısız ===`);
 process.exit(kaldi > 0 ? 1 : 0);

@@ -2,7 +2,8 @@
 // her satır işi o tesisin kiracı kapsamında (RLS) koşar.
 //   · Tik: süresi dolan claim'ler — gelen kutusu ISLENIYOR → BEKLIYOR (fabrikanın makbuzu tekrarı
 //     idempotent kılar); rapor HESAPLANIYOR → BEKLIYOR (bir kez), ikincide HATA `ZAMAN_ASIMI`; hizmet
-//     bitiş damgası (`service-lifecycle.ts`); kapanıştan 30 gün geçen hesabın kimlik silmesi.
+//     bitiş damgası (`service-lifecycle.ts`); kapanıştan 30 gün geçen hesabın kimlik silmesi; 30 günü dolan
+//     giriş olayının IP alanı (`AGED_FIELDS`).
 //   · Günlük: SAKLAMA (tesis başına 3 · 13 · 25 ay · tümü) + telemetri/ayak izi budaması.
 // Hard delete YALNIZ burada ve YALNIZ `PRUNED_TABLES` beyanındaki tablolarda (bekçi
 // `test_patron_kapilari` ölçer). Budanan hiçbir satır fabrikanın defteri değildir: bulut okuma
@@ -41,6 +42,16 @@ const TOMBSTONE_DAYS = 7;
  * durum, izinler, tarihler. Ayak izi `HESAP_KIMLIGI_SILINDI` (imha kaydı, Ek-6/A §6.1).
  */
 export const IDENTITY_PURGE_DAYS = 30;
+
+/**
+ * Yaşa göre silinen ALANLAR (satır kalır) → gerekçe. Erişim/IP kaydı ZAMAN BAZLIDIR (Ek-6/A §2.4, Ek-3 D: "30 gün"):
+ * giriş olaylarının istemci adresi `IP_RETENTION_DAYS` sonra olaydan çıkarılır; olay kendi süresiyle (90 gün / 2 yıl)
+ * kalır. Uygulamanın başka hiçbir yeri IP saklamaz (erişim günlüğü satırı yöntem + yol + durum + süredir).
+ */
+export const AGED_FIELDS = {
+  "account_audit.summary.ip": "IP_RETENTION_DAYS (30) — giriş olayının istemci adresi; olay kaydı kendi süresiyle kalır",
+} as const;
+export const IP_RETENTION_DAYS = 30;
 
 /** Silinmiş hesabın gösterim adı ve e-postası (`.invalid` ayrılmış TLD: gerçek adres olamaz; tekillik kimlikten). */
 export const tombstoneName = (accountId: string): string => `Silinmiş hesap #${accountId.slice(0, 8)}`;
@@ -216,6 +227,15 @@ export async function purgeClosedIdentities(ctx: CloudContext, tesisId: string, 
   return purged.length;
 }
 
+/** Tik: 30 günü dolan giriş olaylarından IP alanı çıkarılır (tesis kapsamında; yalnız `ip` anahtarı). */
+export async function stripAgedIps(ctx: CloudContext, tesisId: string, nowMs: number): Promise<number> {
+  const cutoff = new Date(nowMs - IP_RETENTION_DAYS * DAY_MS);
+  return withTesis(ctx.app, { tesisId }, (tx) =>
+    tx.$executeRaw`UPDATE account_audit SET summary = summary - 'ip'
+       WHERE tesis_id = ${tesisId}::uuid AND created_at <= ${cutoff}::timestamptz AND summary ? 'ip'`,
+  );
+}
+
 export async function runDaily(ctx: CloudContext, nowMs: number): Promise<number> {
   let n = 0;
   for (const f of await listFacilities(ctx)) {
@@ -251,7 +271,10 @@ export class MaintenanceScheduler {
       await expireClaims(this.ctx, nowMs);
       const service = await refreshAllServiceEnds(this.ctx, nowMs);
       let purged = 0;
-      for (const f of await listFacilities(this.ctx)) purged += await purgeClosedIdentities(this.ctx, f.tesisId, nowMs);
+      for (const f of await listFacilities(this.ctx)) {
+        purged += await purgeClosedIdentities(this.ctx, f.tesisId, nowMs);
+        await stripAgedIps(this.ctx, f.tesisId, nowMs);
+      }
       if (purged > 0) console.log(`[patron] bakım: ${purged} kapanmış hesabın kimliği silindi (Ek-6/A §2.5)`);
       const day = new Date(nowMs).toISOString().slice(0, 10);
       if (this.lastDailyDay !== day) {
