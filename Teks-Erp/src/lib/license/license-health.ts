@@ -2,6 +2,7 @@
 import { getLicenseSnapshot } from "./runtime";
 import { getDoorbellStatus, getLicenseEngineStatus, getPollStatus } from "./license-signals";
 import { getIntegrityOutcome, integrityStatusForState } from "./integrity-state";
+import { integrityReason } from "./integrity-check";
 import { getLicenseCoreStatus } from "./native";
 import { BUILD_WATERMARK } from "./watermark";
 
@@ -27,6 +28,7 @@ export function licenseHealthBlock(): Record<string, unknown> {
       cekirdek: getLicenseCoreStatus().kaynak,
       butunluk: integrityStatusForState(),
       butunlukKod: getIntegrityOutcome()?.kod ?? null,
+      butunlukNeden: integrityReason(getIntegrityOutcome()),
       paketId: BUILD_WATERMARK?.paketId ?? null,
     };
   } catch {

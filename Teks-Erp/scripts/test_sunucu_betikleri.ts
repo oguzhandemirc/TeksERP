@@ -22,6 +22,8 @@
 //      repo içinde olamaz; CI iş akışı şifreleme bayrağı geçirmez (mühürleme anahtarı CI'a girmez).
 //   §19 korumalı pakette `kur.ps1` sunucunun ecosystem'ini paketin Node'una BAĞLAR (birleştirme, [3/9] öncesi
 //      karar, yedek önce, [8/9] delete+start, -GeriAl simetrik, korumasız dal aynen); §20 birleştiricinin davranışı.
+//   §21 pm2 AD KAPISI: [1/9] ve -GeriAl dokunmadan önce pm2 listesini ölçer (aynı portta ikinci backend yok);
+//      §22 aracın DAVRANIŞI (Node birim, sahte `pm2 jlist`).
 // Kaynak ölçülür, davranış değil: pwsh her ortamda yok, 5.1 hiç yok.
 // =============================================================================
 import { readFileSync, existsSync, readdirSync, mkdtempSync, mkdirSync, writeFileSync, rmSync, realpathSync } from "node:fs";
@@ -708,6 +710,120 @@ function ecoBirimIhlalleri(js: string): string[] {
     const uygulandi = j2 !== js && js !== "";
     const ih2 = uygulandi ? ecoBirimIhlalleri(j2) : [];
     check(`§20 sonda: ${ad} → kırmızı`, ih2.length > 0, uygulandi ? ih2.join(" | ") : "MUTASYON UYGULANMADI");
+  }
+}
+
+// §21 — PM2 AD KAPISI (F2): -UygulamaAdi / varsayılan ad pm2'de BAŞKA adla çalışan backend'i hedeflerse
+// [4/9] `delete` hiçbir şeyi durdurmaz, [8/9] `start` AYNI PORTA ikinci backend doğururdu (kök yasak: ikinci
+// Node süreci). [1/9] ve -GeriAl hiçbir şeye dokunmadan ÖNCE pm2 listesini ölçer; ihlal ve ölçülemedi DURUR.
+// Liste diske yazılmaz (env taşır), Node'a stdin'den gider. Kaynak ölçülür; ihlal listesi döner.
+function pm2AdJs(kur: string): string | null {
+  const m = /^\$pm2AdJs = @'\r?\n([\s\S]*?)\r?\n'@/m.exec(kur);
+  return m ? m[1]!.replace(/\r\n/g, "\n") : null;
+}
+function pm2AdKapisiIhlalleri(kur: string): string[] {
+  const ih: string[] = [];
+  const t = psTara(kur);
+  const kod = t.satirlar.map((x) => x.kod);
+  const ilk = (re: RegExp, bas = 0): number => kod.findIndex((x, i) => i >= bas && re.test(x));
+  if (!pm2AdJs(kur)) return ["$pm2AdJs here-string'i yok (körlük)"];
+  const f = t.fonksiyonlar.find((x) => x.ad === "Pm2AdiDogrula");
+  const govde = f ? t.satirlar.filter((x) => x.no > f.bas && x.no <= f.son).map((x) => x.kod) : [];
+  if (!govde.length) return ["Pm2AdiDogrula yok (körlük)"];
+  if (!govde.some((x) => /\$liste = \(@\(& \$pm2 jlist\) -join/.test(x))) ih.push("pm2 listesi `pm2 jlist`ten okunmuyor");
+  if (!govde.some((x) => /\$liste \| & node \$arac --ad \$uygulama --app \$appDir /.test(x))) ih.push("liste Node'a stdin'den gitmiyor");
+  if (govde.some((x) => /(WriteAll\w+|Set-Content|Out-File|Add-Content)[^\n]*\$liste/.test(x))) ih.push("pm2 listesi diske yazılıyor (env taşır)");
+  if (!govde.some((x) => /^\s*else \{ Fail "pm2 ad kapisi/.test(x))) ih.push("tanınmayan karar (IHLAL/OLCULEMEDI) Fail değil");
+  if (!govde.some((x) => /if \(-not \$r\) \{ Fail /.test(x))) ih.push("cevapsız araç Fail değil");
+  const acik = ilk(/^\$adAcik\s+= \$PSBoundParameters\.ContainsKey\('UygulamaAdi'\)/);
+  const ssh = ilk(/^if \(\$env:SSH_CONNECTION -or \$env:SSH_CLIENT\) \{/);
+  const geri = ilk(/^if \(\$GeriAl\) \{/);
+  if (acik < 0 || acik > geri) ih.push("$adAcik (ad açıkça verildi mi) -GeriAl'den önce ölçülmüyor");
+  const gCagri = ilk(/^\s+Pm2AdiDogrula \(EcoPortu /, geri), gSil = ilk(/Pm2Kos delete \$uygulama/, geri), gSor = ilk(/Read-Host "Devam\?/, geri);
+  if (geri < 0 || gCagri < 0 || !(gCagri > ssh && gCagri < gSil && gCagri < gSor)) ih.push("-GeriAl ad kapısı delete/onaydan ÖNCE değil");
+  const a1 = ilk(/^Adim "\[1\/9\]/), a2 = ilk(/^Adim "\[2\/9\]/), a4 = ilk(/^Adim "\[4\/9\]/);
+  const pCagri = ilk(/^Pm2AdiDogrula \(EcoPortu \$ecoPortKaynak\)/);
+  if (pCagri < 0 || !(pCagri > a1 && pCagri < a2 && pCagri < a4 && pCagri > ssh)) ih.push("kurulum ad kapısı [1/9] içinde ([2/9]'dan önce) değil");
+  return ih;
+}
+{
+  const kr = readFileSync(join(KOK, "deploy/kur.ps1"), "utf8");
+  const ih = pm2AdKapisiIhlalleri(kr);
+  check("§21a ⭐ pm2 ad kapısı: [1/9] ve -GeriAl'de dokunmadan önce ölçer, liste stdin'den, ihlal/ölçülemedi Fail",
+    ih.length === 0, ih.join(" | ") || "temiz");
+  const sondalar: Array<[string, string]> = [
+    ["-GeriAl çağrısı silindi", kr.replace(/^\s+Pm2AdiDogrula \(EcoPortu \(Join-Path \$hedef .*\r?\n/m, "")],
+    ["kurulum çağrısı [4/9] sonrasına", kr.replace(/^Pm2AdiDogrula \(EcoPortu \$ecoPortKaynak\)\r?\n/m, "").replace(/^(Adim "\[5\/9\])/m, "Pm2AdiDogrula (EcoPortu $$ecoPortKaynak)\r\n$1")],
+    ["ihlal yalnız uyarır", kr.replace('else { Fail "pm2 ad kapisi', 'else { Uyar "pm2 ad kapisi')],
+    ["liste diske yazılır", kr.replace("$satirlar = @($liste | & node $arac", "[System.IO.File]::WriteAllText(\"$arac.json\", $liste)\r\n    $satirlar = @($liste | & node $arac")],
+    ["$adAcik ölçülmüyor", kr.replace(/^\$adAcik\s+= .*\r?\n/m, "")],
+  ];
+  for (const [ad, k2] of sondalar) {
+    const uygulandi = k2 !== kr;
+    const ih2 = uygulandi ? pm2AdKapisiIhlalleri(k2) : [];
+    check(`§21 sonda: ${ad} → kırmızı`, ih2.length > 0, uygulandi ? ih2.join(" | ") : "MUTASYON UYGULANMADI");
+  }
+}
+
+// §22 — pm2 ad kapısı aracının DAVRANIŞI (Node birim): kur.ps1'deki here-string AYNEN çıkarılır, sahte `pm2 jlist`
+// çıktısı stdin'den verilir. ① aynı ad (Windows yolu, büyük/küçük harf) → UYUMLU ② pm2 günlük satırı + boş
+// liste → ILK ③ thinkpad-1: bu kökte başka adla kayıtlı (çalışan ya da duran) → IHLAL + doğru -UygulamaAdi
+// ④ başka kökte çalışan, ad açık değil → IHLAL ⑤ ad açık + başka kök: farklı port YAN_YANA, aynı/ölçülemeyen
+// port IHLAL ⑥ TeksERP dışı pm2 uygulaması sayılmaz ⑦ bozuk/boş liste → OLCULEMEDI ⑧ aynı ad + aynı kökte
+// ikinci çalışan → IHLAL ⑨ boş ad → IHLAL.
+function pm2AdBirimIhlalleri(js: string): string[] {
+  const ih: string[] = [];
+  const dir = mkdtempSync(join(tmpdir(), "pm2-ad-"));
+  try {
+    const arac = join(dir, "a.cjs");
+    writeFileSync(arac, js);
+    const APP = "C:\\TeksERP\\app";
+    const u = (name: string, status: string, cwd: string, port = "4000", betik = `${cwd}\\dist\\server.js`) =>
+      ({ name, pm_id: 0, pm2_env: { status, pm_cwd: cwd, pm_exec_path: betik, env: { PORT: port } } });
+    const kos = (jlist: string, ad: string, o: { port?: string; acik?: boolean } = {}) => {
+      const r = spawnSync(process.execPath, [arac, "--ad", ad, "--app", APP, "--port", o.port ?? "4000", "--acik", o.acik ? "1" : "0"], { input: jlist, encoding: "utf8" });
+      try { return JSON.parse(r.stdout.trim().split("\n").pop() ?? "") as { karar?: string; neden?: string }; } catch { return { karar: `cikis ${r.status}` }; }
+    };
+    const beklenen = (ad: string, r: { karar?: string; neden?: string }, k: string, icerir?: string) => {
+      if (r.karar !== k || (icerir && !(r.neden ?? "").includes(icerir))) ih.push(`${ad}: ${r.karar} (beklenen ${k}${icerir ? ` + "${icerir}"` : ""})`);
+    };
+    const j = (...x: unknown[]) => JSON.stringify(x);
+    beklenen("①", kos(j(u("tekserp-backend-yeni", "online", "c:/tekserp/APP/")), "tekserp-backend-yeni"), "UYUMLU");
+    beklenen("②", kos(`[PM2] Spawning PM2 daemon with pm2_home=C:\\TeksERP\\pm2-home\n[PM2] PM2 Successfully daemonized\n[]\n`, "tekserp-backend-yeni"), "ILK");
+    const tp = u("tekserp-backend-yeni", "online", APP);
+    beklenen("③ çalışan", kos(j(tp), "tekserp-backend-testfabrika", { acik: true }), "IHLAL", "-UygulamaAdi tekserp-backend-yeni");
+    beklenen("③ duran", kos(j({ ...tp, pm2_env: { ...tp.pm2_env, status: "stopped" } }), "tekserp-backend-testfabrika"), "IHLAL", "-UygulamaAdi tekserp-backend-yeni");
+    const baska = u("tekserp-backend-eski", "online", "D:\\Eski\\app");
+    beklenen("④", kos(j(baska), "tekserp-backend-yeni"), "IHLAL", "-UygulamaAdi tekserp-backend-eski");
+    beklenen("⑤ farklı port", kos(j(baska), "tekserp-backend-yeni", { acik: true, port: "4100" }), "YAN_YANA");
+    beklenen("⑤ aynı port", kos(j(baska), "tekserp-backend-yeni", { acik: true }), "IHLAL");
+    beklenen("⑤ port ölçülemedi", kos(j(baska), "tekserp-backend-yeni", { acik: true, port: "" }), "IHLAL");
+    beklenen("⑥", kos(j(u("yedek-izleyici", "online", "C:\\Araclar", "", "C:\\Araclar\\izle.js")), "tekserp-backend-yeni"), "ILK");
+    beklenen("⑦ bozuk", kos("[PM2][ERROR] connect EPERM \\\\.\\pipe\\rpc.sock\n", "tekserp-backend-yeni"), "OLCULEMEDI");
+    beklenen("⑦ boş", kos("", "tekserp-backend-yeni"), "OLCULEMEDI");
+    beklenen("⑧", kos(j(tp, u("tekserp-backend-ikinci", "online", APP, "4000")), "tekserp-backend-yeni"), "IHLAL");
+    beklenen("⑨", kos(j(tp), ""), "IHLAL");
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+  return ih;
+}
+{
+  const js = pm2AdJs(readFileSync(join(KOK, "deploy/kur.ps1"), "utf8")) ?? "";
+  const ih = js ? pm2AdBirimIhlalleri(js) : ["here-string yok"];
+  check("§22a ⭐ pm2 ad ölçümü: aynı ad UYUMLU · boş ILK · bu kökte başka ad / açık olmayan ad / aynı port IHLAL · farklı port YAN_YANA · bozuk liste OLCULEMEDI",
+    ih.length === 0, ih.join(" | ") || "temiz");
+  const sondalar: Array<[string, string]> = [
+    ["kök karşılaştırması kalktı", js.replace('const ayniKok = (x) => app !== "" && yolDuz(x.cwd) === app;', "const ayniKok = (x) => false;")],
+    ["açık olmayan ad serbest", js.replace("if (calisan.length && !o.acik)", "if (false)")],
+    ["bozuk liste boş sayılır", js.replace("  return null;\n}\nfunction yolDuz", "  return [];\n}\nfunction yolDuz")],
+    ["port ölçülemedi serbest", js.replace('o.port === "" || x.port === "" || x.port === o.port', "x.port === o.port")],
+    ["her pm2 uygulaması backend", js.replace("function backendMi(x) { return", "function backendMi(x) { return true ||")],
+  ];
+  for (const [ad, j2] of sondalar) {
+    const uygulandi = j2 !== js && js !== "";
+    const ih2 = uygulandi ? pm2AdBirimIhlalleri(j2) : [];
+    check(`§22 sonda: ${ad} → kırmızı`, ih2.length > 0, uygulandi ? ih2.join(" | ") : "MUTASYON UYGULANMADI");
   }
 }
 

@@ -1,9 +1,8 @@
 // Aşama 6–8 kontrolleri: portal (geri döngü tüneli) · etkinleştirme (gözlem kipi) · Senaryo T. SALT OKUMA.
 import fs from 'node:fs';
-import path from 'node:path';
 import { evYolu } from './ag.mjs';
 import { ozet, tsvOku } from './gozlem.mjs';
-import { I, O, U, httpSonuc, s, vdsDogrulaDegerlendir } from './ortak.mjs';
+import { I, O, U, httpSonuc, s, vdsDogrulaDegerlendir, vdsDogrulaKos } from './ortak.mjs';
 
 const detay = (ag, g) => ag.http(`${g.tpKok}/api/license/detay`, { belirtec: g.belirtec });
 const veri = (r) => r.json?.data ?? r.json ?? {};
@@ -84,5 +83,5 @@ export const ASAMA_8 = [
     const oran = o.basariOrani === null ? '-' : `%${(o.basariOrani * 100).toFixed(1)}`;
     return s(o.sonuc, `${o.olculen}/${o.ornek} örnek · yoklama ${oran} · YP ${o.yanlisPozitif.length} · iz değişimi ${o.parmakIziDegisimi}`);
   } },
-  { no: '8.4', ad: 'T6: vds-dogrula (adnansahin 0 fark)', kos: (ag, g) => ag.yerelBetik(path.join(g.wtKok, 'vds-dogrula.sh')), degerlendir: vdsDogrulaDegerlendir },
+  { no: '8.4', ad: 'T6: vds-dogrula (adnansahin 0 fark)', kos: vdsDogrulaKos, degerlendir: vdsDogrulaDegerlendir },
 ];

@@ -2,7 +2,7 @@
 
 > **Durum (2026-09-29):** hazırlık satıcısı tekserp-vds'te **KURULU** — `ORTAM=hazirlik`, **geri döngü kipinde** (§4a; Tailscale kullanıcı onayı bekliyor), imaj `tekserp-satici:0ca31403525a`, `https://lisans-test.etkiliyazilim.com` yanıt veriyor, portal Mac'ten `portal-baglan.mjs` ile. Kurulum kaydı ve ölçümler §12. Kullanıcıya kalan: Tailscale onayı (§4) ve ana kipe geçiş (§4a), sudo gerektiren adımlar (§12 "sudo'suz kurulum").
 > Yapıtlar: [`deploy/satici/`](../../deploy/satici/) (compose · Dockerfile · imaj derleme · yalıtım denetimi · VDS birimi). Protokol: [`LISANS-PROTOKOLU.md`](../design/LISANS-PROTOKOLU.md). Alan kuralları: [`kurallar/lisans.md`](../kurallar/lisans.md). Sunucu envanteri: [`SUNUCU-ENVANTERI.md`](SUNUCU-ENVANTERI.md).
-> **Değişmez:** her VDS yazımından ÖNCE ve SONRA `Teks-Erp-wt/vds-dogrula.sh` → *adnansahin baytları AYNI* (salt okuma, çıkış 0). Fark çıkarsa dur.
+> **Değişmez:** her VDS yazımından ÖNCE ve SONRA `deploy/vds-dogrula.sh` → *adnansahin baytları AYNI* (salt okuma, çıkış 0). Fark çıkarsa dur.
 
 ## 0. Kapsam
 
@@ -134,7 +134,7 @@ Tailscale kullanıcı onayı beklerken satıcı **geri döngü kipinde** koşar:
 
 ## 5. Kurulum (VDS YAZIMI — kullanıcının "uygula" cümlesiyle)
 
-0. **Önce:** `Teks-Erp-wt/vds-dogrula.sh` → ✅ (çıkış 0).
+0. **Önce:** `deploy/vds-dogrula.sh` → ✅ (çıkış 0).
 1. **Dizinler ve sahiplik** (`SIR_GID` .env'deki sayı; sunucuda bir grup olması gerekmez):
 
    ```bash
@@ -181,7 +181,7 @@ Tailscale kullanıcı onayı beklerken satıcı **geri döngü kipinde** koşar:
 
    Kayıpta kurtarma kodu YOK: bir yönetici diğerini sıfırlar; yönetici yoksa aynı CLI `totp-sifirla` · `parola-sifirla` · `kilit-ac`.
 9. **İlk yedek:** `sudo docker compose exec satici-yedek /arac/yedek-dongusu.sh tek` → `satici_<damga>.dump.tkenc` + `anahtarlar_<damga>.tar.tkenc`. Günlükteki "Yerel anahtar (yerel.tkkey) yok" uyarısı BEKLENİR: satıcıda yerel alıcı bilerek yoktur — VDS kendi yedeğini açamaz, açan özel yarı yalnız Mac'te (§7).
-10. **Sonra:** `Teks-Erp-wt/vds-dogrula.sh` → ✅ adnansahin AYNI.
+10. **Sonra:** `deploy/vds-dogrula.sh` → ✅ adnansahin AYNI.
 
 ## 5b. İç API (patron bulutu → satıcı) — sır, ağ, patronun katılması
 
