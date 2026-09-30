@@ -10,6 +10,7 @@ import {
   LeaseUpdatePolicySchema,
   UpdateReportSchema,
   checkPackageBinding,
+  checkPgBinding,
   compareVersions,
   decideUpdate,
   decodeDocument,
@@ -17,12 +18,15 @@ import {
   readReleasePointer,
   releasePointerText,
   signJws,
+  signPgPackageManifest,
   signReleaseManifest,
+  verifyPgPackageManifest,
   verifyReleaseManifest,
   windowIntervals,
-  type LeaseDoc,
   type PackageIdentity,
   type PackagePublicKey,
+  type PgPackageManifest,
+  type PgRequirement,
   type ReleaseManifest,
   type UpdateDecisionInput,
 } from "../../src/lib/license/protocol";
@@ -40,6 +44,8 @@ export function guncellemeVektorDizini(teksKok: string): string {
 export type GuncellemeVektoru =
   | { readonly tur: "bildirim"; readonly ad: string; readonly token: unknown; readonly keys: PackagePublicKey[]; readonly kanal: string }
   | { readonly tur: "isaretci"; readonly ad: string; readonly metin: string }
+  | { readonly tur: "pg-kunye"; readonly ad: string; readonly token: unknown; readonly keys: PackagePublicKey[] }
+  | { readonly tur: "pg-bagi"; readonly ad: string; readonly gereksinim: PgRequirement; readonly kunye: PgPackageManifest }
   | { readonly tur: "politika"; readonly ad: string; readonly girdi: unknown }
   | { readonly tur: "kira-yuku"; readonly ad: string; readonly girdi: unknown }
   | { readonly tur: "etkin-politika"; readonly ad: string; readonly kira: unknown; readonly nowMs: number }
@@ -69,6 +75,10 @@ export function guncellemeDegerlendir(v: GuncellemeVektoru): unknown {
       return sonuc(verifyReleaseManifest(v.token, { keys: v.keys, kanal: v.kanal }));
     case "isaretci":
       return sonuc(readReleasePointer(v.metin));
+    case "pg-kunye":
+      return sonuc(verifyPgPackageManifest(v.token, { keys: v.keys }));
+    case "pg-bagi":
+      return sonuc(checkPgBinding(v.gereksinim, v.kunye));
     case "politika":
       return sonuc(decodeDocument(LeaseUpdatePolicySchema, v.girdi));
     case "kira-yuku": {
@@ -99,6 +109,19 @@ const ISO = (ms: number) => new Date(ms).toISOString();
 const SAAT = 60 * 60 * 1000;
 const GUN = 24 * SAAT;
 
+const PG_HEDEF = {
+  surum: "16.15",
+  derleme: 4,
+  paket: { ad: "postgresql-16.15-4-win-x64.zip", boyut: 97_000_000, sha256: "2".repeat(64) },
+  icerikSha256: "3".repeat(64),
+  icuSurum: "67",
+};
+const PG_GEREKSINIM: PgRequirement = { cizgi: 16, enAz: "16.9", hedef: PG_HEDEF };
+
+function pgKunyeYuku(ek: Partial<PgPackageManifest> = {}): PgPackageManifest {
+  return { v: 1, urun: "postgresql", platform: "win32-x64", cizgi: 16, ...PG_HEDEF, yayinZamani: "2026-09-30T21:00:00.000Z", ...ek };
+}
+
 function bildirimYuku(ek: Partial<ReleaseManifest> = {}): ReleaseManifest {
   return {
     v: 1,
@@ -113,7 +136,7 @@ function bildirimYuku(ek: Partial<ReleaseManifest> = {}): ReleaseManifest {
     paketImzaKid: "paket-hazirlik",
     minKaynakSurum: "2.9.0",
     gocSayisi: 251,
-    pg: { gerekenSurum: "16.4", paket: null },
+    pg: PG_GEREKSINIM,
     runtime: { node: "24.18.0" },
     notlar: { ozet: "Sevkiyat ekranı hızlandı; yedek şifreleme varsayılan." },
     zorunlu: false,
@@ -160,7 +183,7 @@ function kararGirdisi(ek: Partial<UpdateDecisionInput> = {}): UpdateDecisionInpu
     guncellemeDonuk: false,
     bakimBitisMs: Date.parse("2027-06-30T00:00:00.000Z"),
     kuruluSurum: "2.10.4",
-    pgSurumu: "16.4",
+    pg: { kip: "KENDI", surum: "16.15", derleme: 4 },
     aday: bildirimYuku(),
     onay: null,
     // 2026-10-02 12:00 İstanbul — pencere dışı; sıradaki pencere 2026-10-03 02:00 İstanbul.
@@ -182,8 +205,10 @@ function vektorler(anahtar: TestAnahtari, yabanci: TestAnahtari, uretim: TestAna
   const [bas, , imza] = gecerli.split(".");
   const kurcali = `${bas}.${Buffer.from(JSON.stringify({ ...bildirimYuku(), surum: "9.9.9" })).toString("base64url")}.${imza}`;
   const hamYuk = (y: Record<string, unknown>, typ = "tekserp-surum", kid = anahtar.kid) => signJws({ typ, kid, payload: y, privateKey: anahtar.privateKey });
-  const pg = (surum: string, paket: ReleaseManifest["pg"]["paket"] = null) => bildirimYuku({ pg: { gerekenSurum: surum, paket } });
-  const pgPaketi = { ad: "postgresql-16.6-win-x64.zip", boyut: 300_000_000, sha256: "1".repeat(64) };
+  const hedefsiz = bildirimYuku({ pg: { cizgi: 16, enAz: "16.9", hedef: null } });
+  const pgImzala = (y: Record<string, unknown>, typ = "tekserp-pg", k: TestAnahtari = anahtar) => signJws({ typ, kid: k.kid, payload: y, privateKey: k.privateKey });
+  const pgGecerli = signPgPackageManifest({ payload: pgKunyeYuku(), key: { kid: anahtar.kid, privateKey: anahtar.privateKey } });
+  const [pbas, , pimza] = pgGecerli.split(".");
   const paket: PackageIdentity = { kid: "paket-hazirlik", paketId: bildirimYuku().paket.paketId, urun: "backend", surum: "2.11.0", derlemeTarihi: "2026-09-30T18:00:00.000Z", musteri: "testfabrika" };
   return [
     // ── bildirim ──
@@ -203,6 +228,20 @@ function vektorler(anahtar: TestAnahtari, yabanci: TestAnahtari, uretim: TestAna
     { tur: "bildirim", ad: "derleme yayından sonra", token: hamYuk({ ...bildirimYuku(), derlemeTarihi: "2026-10-05T00:00:00.000Z" }), keys, kanal: "testfabrika" },
     { tur: "bildirim", ad: "tanınmayan alan atılır (v:1 ekleme)", token: hamYuk({ ...bildirimYuku(), yeniBilgi: 1 }), keys, kanal: "testfabrika" },
     { tur: "bildirim", ad: "platform linux", token: hamYuk({ ...bildirimYuku(), platform: "linux-x64" }), keys, kanal: "testfabrika" },
+    { tur: "bildirim", ad: "pg hedefsiz (küçük sürüm güncellemesi yok)", token: imzala(hedefsiz), keys, kanal: "testfabrika" },
+    { tur: "bildirim", ad: "pg enAz başka ana sürümde", token: hamYuk({ ...bildirimYuku(), pg: { ...PG_GEREKSINIM, enAz: "15.8" } }), keys, kanal: "testfabrika" },
+    { tur: "bildirim", ad: "pg hedef başka ana sürümde (17)", token: hamYuk({ ...bildirimYuku(), pg: { ...PG_GEREKSINIM, hedef: { ...PG_HEDEF, surum: "17.6" } } }), keys, kanal: "testfabrika" },
+    { tur: "bildirim", ad: "pg hedef enAz'dan eski", token: hamYuk({ ...bildirimYuku(), pg: { ...PG_GEREKSINIM, enAz: "16.16" } }), keys, kanal: "testfabrika" },
+    { tur: "bildirim", ad: "pg eski biçim (gerekenSurum) — sözleşme sürümü 1", token: hamYuk({ ...bildirimYuku(), pg: { gerekenSurum: "16.4", paket: null } }), keys, kanal: "testfabrika" },
+    // ── PG künyesi (sözleşme sürümü 2) ──
+    { tur: "pg-kunye", ad: "geçerli PG künyesi", token: pgGecerli, keys },
+    { tur: "pg-kunye", ad: "PG künyesi kurcalandı", token: `${pbas}.${Buffer.from(JSON.stringify({ ...pgKunyeYuku(), derleme: 5 })).toString("base64url")}.${pimza}`, keys },
+    { tur: "pg-kunye", ad: "PG künyesi yanlış tür (tekserp-surum)", token: pgImzala(pgKunyeYuku(), "tekserp-surum"), keys },
+    { tur: "pg-kunye", ad: "PG künyesi bilinmeyen anahtar", token: pgImzala(pgKunyeYuku(), "tekserp-pg", yabanci), keys },
+    { tur: "pg-kunye", ad: "PG sürümü çizginin ana sürümünde değil", token: pgImzala({ ...pgKunyeYuku(), surum: "17.6" }), keys },
+    { tur: "pg-kunye", ad: "PG derlemesi 0", token: pgImzala({ ...pgKunyeYuku(), derleme: 0 }), keys },
+    { tur: "pg-kunye", ad: "PG künyesi v:2", token: pgImzala({ ...pgKunyeYuku(), v: 2 }), keys },
+    { tur: "pg-kunye", ad: "PG künyesi başka ürün", token: pgImzala({ ...pgKunyeYuku(), urun: "backend" }), keys },
     // ── işaretçi ──
     { tur: "isaretci", ad: "geçerli işaretçi", metin: releasePointerText(gecerli) },
     { tur: "isaretci", ad: "JSON değil", metin: "<html>404</html>" },
@@ -255,10 +294,16 @@ function vektorler(anahtar: TestAnahtari, yabanci: TestAnahtari, uretim: TestAna
     { tur: "karar", ad: "ön sürüm kaynağı sınırın altında", girdi: kararGirdisi({ kuruluSurum: "2.9.0-rc.1" }) },
     { tur: "karar", ad: "HAK yok", girdi: kararGirdisi({ bakimBitisMs: null }) },
     { tur: "karar", ad: "derleme bakım sonundan sonra", girdi: kararGirdisi({ bakimBitisMs: Date.parse("2026-09-30T00:00:00.000Z") }) },
-    { tur: "karar", ad: "PostgreSQL ölçülemedi", girdi: kararGirdisi({ pgSurumu: null }) },
-    { tur: "karar", ad: "PostgreSQL ana sürüm farklı", girdi: kararGirdisi({ pgSurumu: "15.8" }) },
-    { tur: "karar", ad: "PostgreSQL küçük sürüm eski, paket yok", girdi: kararGirdisi({ pgSurumu: "16.2" }) },
-    { tur: "karar", ad: "PostgreSQL küçük sürüm eski, paket var → birlikte", girdi: kararGirdisi({ pgSurumu: "16.2", aday: pg("16.6", pgPaketi), nowMs: ICINDE }) },
+    { tur: "karar", ad: "PostgreSQL ölçülemedi", girdi: kararGirdisi({ pg: null }) },
+    { tur: "karar", ad: "kendi kipte PG derlemesi bilinmiyor", girdi: kararGirdisi({ pg: { kip: "KENDI", surum: "16.15", derleme: null } }) },
+    { tur: "karar", ad: "PostgreSQL ana sürüm farklı (kendi)", girdi: kararGirdisi({ pg: { kip: "KENDI", surum: "15.8", derleme: 1 } }) },
+    { tur: "karar", ad: "PostgreSQL ana sürüm farklı (harici 17)", girdi: kararGirdisi({ pg: { kip: "HARICI", surum: "17.2", derleme: null } }) },
+    { tur: "karar", ad: "harici PG enAz altında", girdi: kararGirdisi({ pg: { kip: "HARICI", surum: "16.2", derleme: null } }) },
+    { tur: "karar", ad: "harici PG enAz üstünde, hedefe dokunulmaz", girdi: kararGirdisi({ pg: { kip: "HARICI", surum: "16.9", derleme: null }, nowMs: ICINDE }) },
+    { tur: "karar", ad: "kendi PG hedeften eski → PG birlikte", girdi: kararGirdisi({ pg: { kip: "KENDI", surum: "16.9", derleme: 1 }, nowMs: ICINDE }) },
+    { tur: "karar", ad: "kendi PG aynı sürüm eski derleme → PG birlikte", girdi: kararGirdisi({ pg: { kip: "KENDI", surum: "16.15", derleme: 3 }, nowMs: ICINDE }) },
+    { tur: "karar", ad: "kendi PG hedeften yeni → geri inmez", girdi: kararGirdisi({ pg: { kip: "KENDI", surum: "16.16", derleme: 1 }, nowMs: ICINDE }) },
+    { tur: "karar", ad: "hedefsiz bildirim, kendi PG enAz altında", girdi: kararGirdisi({ aday: hedefsiz, pg: { kip: "KENDI", surum: "16.2", derleme: 1 } }) },
     { tur: "karar", ad: "otomatik, pencere dışı → sıradaki pencere", girdi: kararGirdisi() },
     { tur: "karar", ad: "otomatik, pencere içi → kur", girdi: kararGirdisi({ nowMs: ICINDE }) },
     { tur: "karar", ad: "otomatik, HEMEN onayı hızlandırır", girdi: kararGirdisi({ onay: { surum: "2.11.0", zamanlama: "HEMEN" } }) },
@@ -290,6 +335,13 @@ function vektorler(anahtar: TestAnahtari, yabanci: TestAnahtari, uretim: TestAna
     { tur: "paket-bagi", ad: "sürüm farklı", bildirim: bildirimYuku(), paket: { ...paket, surum: "2.10.9" } },
     { tur: "paket-bagi", ad: "imzalayan farklı", bildirim: bildirimYuku(), paket: { ...paket, kid: "paket-2026" } },
     { tur: "paket-bagi", ad: "derleme tarihi aynı an, farklı yazım", bildirim: bildirimYuku(), paket: { ...paket, derlemeTarihi: "2026-09-30T18:00:00Z" } },
+    // ── PG bağı (sözleşme sürümü 2) ──
+    { tur: "pg-bagi", ad: "PG künyesi hedefle bağlı", gereksinim: PG_GEREKSINIM, kunye: pgKunyeYuku() },
+    { tur: "pg-bagi", ad: "bildirim PG hedefi taşımıyor", gereksinim: { ...PG_GEREKSINIM, hedef: null }, kunye: pgKunyeYuku() },
+    { tur: "pg-bagi", ad: "PG paket özeti farklı", gereksinim: PG_GEREKSINIM, kunye: pgKunyeYuku({ paket: { ...PG_HEDEF.paket, sha256: "4".repeat(64) } }) },
+    { tur: "pg-bagi", ad: "PG künyesi başka ana sürüm (17)", gereksinim: PG_GEREKSINIM, kunye: pgKunyeYuku({ cizgi: 17, surum: "17.6" }) },
+    { tur: "pg-bagi", ad: "PG ICU sürümü farklı", gereksinim: PG_GEREKSINIM, kunye: pgKunyeYuku({ icuSurum: "74" }) },
+    { tur: "pg-bagi", ad: "PG derlemesi farklı", gereksinim: PG_GEREKSINIM, kunye: pgKunyeYuku({ derleme: 5 }) },
     // ── rapor ──
     { tur: "rapor", ad: "tam rapor", girdi: raporYuku() },
     { tur: "rapor", ad: "güncelleyici yok, sonuç yok", girdi: { saatDilimi: DEFAULT_FACTORY_TIMEZONE, guncelleyici: { durum: "YOK", surum: null }, bekleyen: null, son: null } },
@@ -323,9 +375,9 @@ function raporYuku(son: Record<string, unknown> = {}): Record<string, unknown> {
 
 /** Dosya adı → o dosyanın vektör türleri (Rust tarafı dosya başına okur). */
 const DOSYA_TURLERI: Record<GuncellemeVektorDosyasi, readonly GuncellemeVektoru["tur"][]> = {
-  "guncelleme-surum.json": ["bildirim", "isaretci"],
+  "guncelleme-surum.json": ["bildirim", "isaretci", "pg-kunye"],
   "guncelleme-kira.json": ["politika", "kira-yuku", "etkin-politika"],
-  "guncelleme-karar.json": ["karar", "surum-karsilastir", "paket-bagi"],
+  "guncelleme-karar.json": ["karar", "surum-karsilastir", "paket-bagi", "pg-bagi"],
   "guncelleme-rapor.json": ["rapor"],
 };
 

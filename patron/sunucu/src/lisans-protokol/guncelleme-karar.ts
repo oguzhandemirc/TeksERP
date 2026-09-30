@@ -2,7 +2,6 @@
 // etkin hâli · pencere kuralının mutlak aralıkları (yalnız satıcı basar) · güncelleyicinin TEK karar noktası.
 // SAF; güncelleyici (Rust) kararı `native/test-vektorleri/guncelleme-karar.json` ile aynalar.
 import {
-  PgVersionSchema,
   compareVersions,
   parseVersion,
   type ApprovalTiming,
@@ -10,6 +9,7 @@ import {
   type UpdateDecisionKind,
   type UpdateDecisionReason,
 } from "./guncelleme";
+import { PgVersionSchema, comparePgVersions, pgMajor, type PgRequirement } from "./guncelleme-pg";
 import {
   TimeZoneNameSchema,
   UPDATE_INTERVAL_MAX,
@@ -119,6 +119,16 @@ export function effectiveUpdatePolicy(
   return lease.guncelleme ? { politika: lease.guncelleme, kaynak: "KIRA" } : { politika: defaultUpdatePolicy(), kaynak: "VARSAYILAN" };
 }
 
+/** Kurulu PostgreSQL örneği: kendi (güncelleyici yönetir) ya da harici (dokunulmaz) — `pgsql/ornek.json` + `SHOW server_version`. */
+export const PG_MODES = ["KENDI", "HARICI"] as const;
+export type PgMode = (typeof PG_MODES)[number];
+export interface InstalledPg {
+  readonly kip: PgMode;
+  readonly surum: string;
+  /** Kendi kipte EDB derlemesi (zorunlu); harici kipte null. */
+  readonly derleme: number | null;
+}
+
 /** Yerel onay (panel) — YETKİ DEĞİL: yalnız politikanın izin verdiği zamanlamayı tetikler, tek sürüme bağlıdır. */
 export interface UpdateApproval {
   readonly surum: string;
@@ -133,8 +143,8 @@ export interface UpdateDecisionInput {
   /** Doğrulanmış HAK'ın `bakimBitis`i (ms); null = HAK yok. */
   readonly bakimBitisMs: number | null;
   readonly kuruluSurum: string;
-  /** Kurulu PostgreSQL `ana.küçük`; null = ölçülemedi. */
-  readonly pgSurumu: string | null;
+  /** Kurulu PostgreSQL (kip · `ana.küçük` · kendi kipte derleme); null = ölçülemedi. */
+  readonly pg: InstalledPg | null;
   /** Doğrulanmış bildirim — sabitlemede SABİTLENEN sürümünki; null = aday yok. */
   readonly aday: ReleaseManifest | null;
   readonly onay: UpdateApproval | null;
@@ -154,13 +164,18 @@ function decision(karar: UpdateDecisionKind, neden: UpdateDecisionReason | null,
   return { karar, neden, aralik, pgGuncellemesi: pg };
 }
 
-function pgCheck(required: string, installed: string | null, hasPackage: boolean): UpdateDecision | "OK" | "GUNCELLE" {
-  if (installed === null || !PgVersionSchema.safeParse(installed).success) return decision("UYGUN_DEGIL", "PG_OLCULEMEDI");
-  const [reqMajor, reqMinor] = required.split(".").map(Number);
-  const [major, minor] = installed.split(".").map(Number);
-  if (major !== reqMajor) return decision("UYGUN_DEGIL", "PG_ANA_SURUM");
-  if (minor >= reqMinor) return "OK";
-  return hasPackage ? "GUNCELLE" : decision("UYGUN_DEGIL", "PG_SURUMU_ESKI");
+/**
+ * PG uygunluğu (sözleşme sürümü 2): ana sürüm bildirimin çizgisi değilse ASLA (runbook); kendi örnekte hedef kuruludan
+ * yeniyse küçük sürüm güncellemesi backend'den ÖNCE ayrı adımda; harici örneğe dokunulmaz, yalnız `enAz` denetlenir.
+ */
+function pgCheck(req: PgRequirement, installed: InstalledPg | null): UpdateDecision | "OK" | "GUNCELLE" {
+  if (installed === null || !PgVersionSchema.safeParse(installed.surum).success || (installed.kip === "KENDI" && installed.derleme === null)) {
+    return decision("UYGUN_DEGIL", "PG_OLCULEMEDI");
+  }
+  if (pgMajor(installed.surum) !== req.cizgi) return decision("UYGUN_DEGIL", "PG_ANA_SURUM");
+  if (installed.kip === "KENDI" && req.hedef !== null && (comparePgVersions(req.hedef, installed) ?? 0) > 0) return "GUNCELLE";
+  const atLeast = comparePgVersions({ surum: installed.surum, derleme: null }, { surum: req.enAz, derleme: null }) ?? -1;
+  return atLeast >= 0 ? "OK" : decision("UYGUN_DEGIL", "PG_SURUMU_ESKI");
 }
 
 function timing(politika: LeaseUpdatePolicy, onay: UpdateApproval | null, nowMs: number, pg: boolean): UpdateDecision {
@@ -190,7 +205,7 @@ export function decideUpdate(g: UpdateDecisionInput): UpdateDecision {
   if (a.minKaynakSurum !== null && (compareVersions(g.kuruluSurum, a.minKaynakSurum) ?? -1) < 0) return decision("UYGUN_DEGIL", "KAYNAK_SURUM_ESKI");
   if (g.bakimBitisMs === null) return decision("UYGUN_DEGIL", "HAK_YOK");
   if (isoToMs(a.derlemeTarihi) > g.bakimBitisMs) return decision("UYGUN_DEGIL", "BAKIM_DISI");
-  const pg = pgCheck(a.pg.gerekenSurum, g.pgSurumu, a.pg.paket !== null);
+  const pg = pgCheck(a.pg, g.pg);
   if (typeof pg !== "string") return pg;
   const onay = g.onay !== null && compareVersions(g.onay.surum, a.surum) === 0 ? g.onay : null;
   return timing(p, onay, g.nowMs, pg === "GUNCELLE");

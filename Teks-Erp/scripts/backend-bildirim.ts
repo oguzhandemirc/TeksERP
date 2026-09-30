@@ -1,20 +1,25 @@
 // =============================================================================
-// BACKEND SÜRÜM BİLDİRİMİ — imzalı paketten `tekserp-surum` (Dağıtım v2, docs/design/GUNCELLEYICI.md §1)
+// BACKEND SÜRÜM BİLDİRİMİ + PG PAKETİ KÜNYESİ (Dağıtım v2, docs/design/GUNCELLEYICI.md §1 · §1.6)
 // =============================================================================
 // Satıcı Mac'inde koşar; imza anahtarı CI'a ve pakete GİRMEZ. Yayıncı `deploy/backend-yayinla.mjs` çağırır.
 //
 //   npx tsx scripts/backend-bildirim.ts dogrula --zip=<paket.zip> --kanal=<kod> --kanal-turu=<uretim|hazirlik>
-//       --pg-gerekli=<ana.küçük> --ozet-dosyasi=<txt> --cikti=<dizin> [--pg-paket=<zip>] [--min-kaynak=<sürüm>] [--zorunlu]
+//       --pg-cizgi=<16> --pg-en-az=<16.9> [--pg-kunye=<pg.json>] --ozet-dosyasi=<txt> --cikti=<dizin> [--min-kaynak=<sürüm>] [--zorunlu]
 //   npx tsx scripts/backend-bildirim.ts imzala  … aynı … --anahtar=<PAKET anahtar dosyası>
+//   npx tsx scripts/backend-bildirim.ts pg-imzala --zip=<PG sahne zip> --cizgi=<16> --surum=<16.15> --derleme=<4> --icu=<67>
+//       --anahtar=<PAKET anahtar dosyası> --cikti=<dizin>
+//   npx tsx scripts/backend-bildirim.ts pg-dogrula --kunye=<pg.json> --zip=<PG sahne zip> --cikti=<dizin>
 //
-// dogrula: zip'i geçici dizine açar, imzalı dosya listesini (`butunluk.jws`) PAKET çapasıyla TAM denetler
-//   (GEÇERLİ değilse DUR), künyeyi `PAKET.json`la ve kanalla bağlar, bildirimi kurar (imzasız).
-// imzala: aynısı + PAKET anahtarıyla imzalar (parola TTY'de gizli ya da stdin satırı — argümandan ASLA);
-//   imzalayan = paketin `butunluk.jws`ini imzalayan anahtar olmalı; imza geri doğrulanır.
-// Çıktı: `<cikti>/sonuc.json` {v, kip, bildirim, surum, paket, uyarilar}; imzada ayrıca `<cikti>/surum.json`
-//   (işaretçi — yayıncı hem `<sürüm>/surum.json` hem `son.json` olarak yükler).
-// Test çapası (`--capa=<json>` ya da ortam `TEKSERP_TEST_PAKET_CAPASI`) YALNIZ bekçiler içindir ve YALNIZ hazırlık
-// kanalında kabul edilir; gerçek çapa `PACKAGE_PUBLIC_KEYS`. Kurulumun güncelleyicisi kendi gömülü çapasıyla doğrular.
+// dogrula/imzala: zip'i geçici dizine açar, imzalı dosya listesini (`butunluk.jws`) PAKET çapasıyla TAM denetler
+//   (GEÇERLİ değilse DUR), künyeyi `PAKET.json`la ve kanalla bağlar, bildirimi kurar; imzada paketi imzalayan
+//   anahtarla imzalar (parola TTY'de gizli ya da stdin satırı — argümandan ASLA) ve geri doğrular.
+//   `--pg-kunye` verilirse PG hedefi O KÜNYEDEN (imzası doğrulanarak) alınır; verilmezse hedef yok (küçük sürüm
+//   güncellemesi olmaz). Çıktı `<cikti>/sonuc.json` + imzada `<cikti>/surum.json` (işaretçi).
+// pg-imzala: PG sahne zip'inin boyu/özeti ölçülür; içerik özeti zip'teki `TEKSERP-ICERIK.sha256`dan ÖLÇÜLÜR (elle
+//   yazılmaz), `bin/icuuc<icu>.dll` aranır; künye imzalanır → `<cikti>/pg.json` + `<cikti>/sonuc.json`.
+// pg-dogrula: künyenin imzası (PAKET çapası) + zip'in boyu/özeti künyeyle birebir → `<cikti>/sonuc.json` (yayıncı okur).
+// Test çapası (`--capa=<json>` ya da ortam `TEKSERP_TEST_PAKET_CAPASI`) YALNIZ bekçiler içindir ve backend
+// bildiriminde YALNIZ hazırlık kanalında kabul edilir; gerçek çapa `PACKAGE_PUBLIC_KEYS`.
 // =============================================================================
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
@@ -22,13 +27,22 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import {
+  IcuVersionSchema,
+  PgBuildSchema,
+  PgMajorSchema,
+  PgRequirementSchema,
   PgVersionSchema,
   ReleaseVersionSchema,
   compareVersions,
   parseJws,
+  readReleasePointer,
   releasePointerText,
+  signPgPackageManifest,
   signReleaseManifest,
+  verifyPgPackageManifest,
   verifyReleaseManifest,
+  type PgPackageManifest,
+  type PgRequirement,
   type ReleaseManifest,
 } from "../src/lib/license/protocol";
 import { PACKAGE_PUBLIC_KEYS, verifyIntegrity, type PackageKey } from "../src/lib/license/integrity";
@@ -36,61 +50,52 @@ import { INTEGRITY_FILE, isStagingPackageKid } from "../src/lib/license/integrit
 import { openPackageKey } from "./lib/butunluk-imza";
 import { CliError, args, askPassword } from "./lib/cli-girdi";
 
-interface Girdi {
-  readonly komut: "dogrula" | "imzala";
-  readonly zip: string;
-  readonly kanal: string;
-  readonly kanalTuru: "uretim" | "hazirlik";
-  readonly pgGerekli: string;
-  readonly pgPaket: string | null;
-  readonly minKaynak: string | null;
-  readonly zorunlu: boolean;
-  readonly ozet: string;
-  readonly cikti: string;
-  readonly anahtar: string | null;
-  readonly capa: readonly PackageKey[];
-}
+type Bayraklar = ReadonlyMap<string, string>;
 
 function sha256Dosya(yol: string): string {
   return createHash("sha256").update(fs.readFileSync(yol)).digest("hex");
 }
 
-function girdiOku(argv: readonly string[]): Girdi {
-  const { command, flags } = args(argv);
-  if (command !== "dogrula" && command !== "imzala") throw new CliError("komut: dogrula | imzala");
-  const gerek = (ad: string): string => {
-    const v = flags.get(ad);
-    if (!v) throw new CliError(`--${ad}=… gerekli`);
-    return v;
-  };
-  const kanalTuru = gerek("kanal-turu");
-  if (kanalTuru !== "uretim" && kanalTuru !== "hazirlik") throw new CliError("--kanal-turu uretim | hazirlik");
-  const pgGerekli = gerek("pg-gerekli");
-  if (!PgVersionSchema.safeParse(pgGerekli).success) throw new CliError(`--pg-gerekli ana.küçük biçiminde olmalı (ör. 16.4): ${pgGerekli}`);
-  const minKaynak = flags.get("min-kaynak") ?? null;
-  if (minKaynak !== null && !ReleaseVersionSchema.safeParse(minKaynak).success) throw new CliError(`--min-kaynak sürüm biçiminde değil: ${minKaynak}`);
-  const ozet = fs.readFileSync(gerek("ozet-dosyasi"), "utf8").trim();
-  if (ozet.length === 0 || ozet.length > 2000) throw new CliError(`sürüm özeti 1–2000 karakter olmalı (${ozet.length})`);
-  const capaDosyasi = flags.get("capa") ?? process.env.TEKSERP_TEST_PAKET_CAPASI;
-  if (capaDosyasi && kanalTuru !== "hazirlik") throw new CliError("test çapası yalnız hazırlık kanalında kabul edilir");
-  const capa: readonly PackageKey[] = capaDosyasi ? (JSON.parse(fs.readFileSync(capaDosyasi, "utf8")) as PackageKey[]) : PACKAGE_PUBLIC_KEYS;
-  if (capaDosyasi) console.error("⚠ TEST ÇAPASI kullanılıyor — yalnız bekçi içindir");
-  return {
-    komut: command,
-    zip: path.resolve(gerek("zip")),
-    kanal: gerek("kanal"),
-    kanalTuru,
-    pgGerekli,
-    pgPaket: flags.get("pg-paket") ? path.resolve(flags.get("pg-paket")!) : null,
-    minKaynak,
-    zorunlu: flags.has("zorunlu"),
-    ozet,
-    cikti: path.resolve(gerek("cikti")),
-    anahtar: command === "imzala" ? gerek("anahtar") : null,
-    capa,
-  };
+function gerek(f: Bayraklar, ad: string): string {
+  const v = f.get(ad);
+  if (!v) throw new CliError(`--${ad}=… gerekli`);
+  return v;
 }
 
+function capaOku(f: Bayraklar, kanalTuru: string | null): readonly PackageKey[] {
+  const dosya = f.get("capa") ?? process.env.TEKSERP_TEST_PAKET_CAPASI;
+  if (!dosya) return PACKAGE_PUBLIC_KEYS;
+  if (kanalTuru !== null && kanalTuru !== "hazirlik") throw new CliError("test çapası yalnız hazırlık kanalında kabul edilir");
+  console.error("⚠ TEST ÇAPASI kullanılıyor — yalnız bekçi içindir");
+  return JSON.parse(fs.readFileSync(dosya, "utf8")) as PackageKey[];
+}
+
+function paketAnahtari(dosya: string) {
+  return openPackageKey(dosya, (kid) => askPassword(`PAKET anahtarı (${kid}) parolası: `));
+}
+
+// ── PG gereksinimi (backend bildiriminin `pg` bloğu) ─────────────────────────
+function pgGereksinimi(f: Bayraklar, capa: readonly PackageKey[]): PgRequirement {
+  const cizgi = PgMajorSchema.safeParse(Number(gerek(f, "pg-cizgi")));
+  if (!cizgi.success) throw new CliError("--pg-cizgi PostgreSQL ana sürümü (ör. 16)");
+  const enAz = gerek(f, "pg-en-az");
+  if (!PgVersionSchema.safeParse(enAz).success) throw new CliError(`--pg-en-az ana.küçük biçiminde olmalı (ör. 16.9): ${enAz}`);
+  let hedef: PgRequirement["hedef"] = null;
+  const kunyeDosyasi = f.get("pg-kunye");
+  if (kunyeDosyasi) {
+    const isaretci = readReleasePointer(fs.readFileSync(kunyeDosyasi, "utf8"));
+    if (!isaretci.ok) throw new CliError(`PG künyesi okunamadı: ${isaretci.code}`);
+    const k = verifyPgPackageManifest(isaretci.value, { keys: capa });
+    if (!k.ok) throw new CliError(`PG künyesi doğrulanamadı: ${k.code}`);
+    if (k.value.cizgi !== cizgi.data) throw new CliError(`PG künyesi ${k.value.cizgi} ana sürümünün, bildirim çizgisi ${cizgi.data} — ana sürüm geçişi otomatik değildir`);
+    hedef = { surum: k.value.surum, derleme: k.value.derleme, paket: k.value.paket, icerikSha256: k.value.icerikSha256, icuSurum: k.value.icuSurum };
+  }
+  const p = PgRequirementSchema.safeParse({ cizgi: cizgi.data, enAz, hedef });
+  if (!p.success) throw new CliError(`PG gereksinimi geçersiz: ${p.error.issues[0]?.message ?? "şema"}`);
+  return p.data;
+}
+
+// ── Backend bildirimi ───────────────────────────────────────────────────────
 interface PaketKunyesi {
   readonly korumali?: unknown;
   readonly korumaHedef?: unknown;
@@ -102,8 +107,30 @@ interface PaketKunyesi {
   readonly runtimeNodeSurumu?: unknown;
 }
 
+interface BackendGirdisi {
+  readonly zip: string;
+  readonly kanal: string;
+  readonly kanalTuru: string;
+  readonly minKaynak: string | null;
+  readonly zorunlu: boolean;
+  readonly ozet: string;
+  readonly pg: PgRequirement;
+  readonly capa: readonly PackageKey[];
+}
+
+function backendGirdisi(f: Bayraklar): BackendGirdisi {
+  const kanalTuru = gerek(f, "kanal-turu");
+  if (kanalTuru !== "uretim" && kanalTuru !== "hazirlik") throw new CliError("--kanal-turu uretim | hazirlik");
+  const minKaynak = f.get("min-kaynak") ?? null;
+  if (minKaynak !== null && !ReleaseVersionSchema.safeParse(minKaynak).success) throw new CliError(`--min-kaynak sürüm biçiminde değil: ${minKaynak}`);
+  const ozet = fs.readFileSync(gerek(f, "ozet-dosyasi"), "utf8").trim();
+  if (ozet.length === 0 || ozet.length > 2000) throw new CliError(`sürüm özeti 1–2000 karakter olmalı (${ozet.length})`);
+  const capa = capaOku(f, kanalTuru);
+  return { zip: path.resolve(gerek(f, "zip")), kanal: gerek(f, "kanal"), kanalTuru, minKaynak, zorunlu: f.has("zorunlu"), ozet, pg: pgGereksinimi(f, capa), capa };
+}
+
 /** Paketi açar, bütünlüğünü ve künyesini denetler; bildirim yükünü kurar (imzasız). */
-async function bildirimKur(g: Girdi, uyarilar: string[]): Promise<ReleaseManifest> {
+async function bildirimKur(g: BackendGirdisi, uyarilar: string[]): Promise<ReleaseManifest> {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "tekserp-bildirim-"));
   try {
     execFileSync("unzip", ["-q", g.zip, "-d", tmp]);
@@ -129,9 +156,6 @@ async function bildirimKur(g: Girdi, uyarilar: string[]): Promise<ReleaseManifes
       throw new CliError("PAKET.json commit / runtimeNodeSurumu / migrationSayisi eksik");
     }
     if (g.minKaynak !== null && (compareVersions(g.minKaynak, p.surum) ?? 0) >= 0) throw new CliError(`--min-kaynak (${g.minKaynak}) sürümden (${p.surum}) eski olmalı`);
-    const pgPaket = g.pgPaket
-      ? { ad: path.basename(g.pgPaket), boyut: fs.statSync(g.pgPaket).size, sha256: sha256Dosya(g.pgPaket) }
-      : null;
     return {
       v: 1,
       urun: "backend",
@@ -145,7 +169,7 @@ async function bildirimKur(g: Girdi, uyarilar: string[]): Promise<ReleaseManifes
       paketImzaKid: kid,
       minKaynakSurum: g.minKaynak,
       gocSayisi: kunye.migrationSayisi,
-      pg: { gerekenSurum: g.pgGerekli, paket: pgPaket },
+      pg: g.pg,
       runtime: { node: kunye.runtimeNodeSurumu },
       notlar: { ozet: g.ozet },
       zorunlu: g.zorunlu,
@@ -155,24 +179,83 @@ async function bildirimKur(g: Girdi, uyarilar: string[]): Promise<ReleaseManifes
   }
 }
 
-async function main(): Promise<void> {
-  const g = girdiOku(process.argv.slice(2));
+async function backend(komut: "dogrula" | "imzala", f: Bayraklar): Promise<void> {
+  const g = backendGirdisi(f);
+  const cikti = path.resolve(gerek(f, "cikti"));
   const uyarilar: string[] = [];
   const yuk = await bildirimKur(g, uyarilar);
-  fs.mkdirSync(g.cikti, { recursive: true });
+  fs.mkdirSync(cikti, { recursive: true });
   let bildirim: string | null = null;
-  if (g.komut === "imzala" && g.anahtar) {
-    const key = await openPackageKey(g.anahtar, (kid) => askPassword(`PAKET anahtarı (${kid}) parolası: `));
+  if (komut === "imzala") {
+    const key = await paketAnahtari(gerek(f, "anahtar"));
     if (key.kid !== yuk.paketImzaKid) throw new CliError(`anahtar ${key.kid}, paketin imzalayanı ${yuk.paketImzaKid} — bildirim paketi imzalayan anahtarla imzalanır`);
     bildirim = signReleaseManifest({ payload: yuk, key: { kid: key.kid, privateKey: key.privateKey } });
     const geri = verifyReleaseManifest(bildirim, { keys: [{ kid: key.kid, x: key.x }], kanal: g.kanal });
     if (!geri.ok) throw new Error(`öz-denetim düştü: ${geri.code}`);
-    fs.writeFileSync(path.join(g.cikti, "surum.json"), releasePointerText(bildirim), { mode: 0o644 });
+    fs.writeFileSync(path.join(cikti, "surum.json"), releasePointerText(bildirim), { mode: 0o644 });
   }
-  const sonuc = { v: 1, kip: g.komut, surum: yuk.surum, bildirim: yuk, jws: bildirim, uyarilar };
-  fs.writeFileSync(path.join(g.cikti, "sonuc.json"), `${JSON.stringify(sonuc, null, 2)}\n`);
+  fs.writeFileSync(path.join(cikti, "sonuc.json"), `${JSON.stringify({ v: 1, kip: komut, surum: yuk.surum, bildirim: yuk, jws: bildirim, uyarilar }, null, 2)}\n`);
   for (const u of uyarilar) console.error(`⚠ ${u}`);
-  console.error(`✓ ${g.komut}: backend ${yuk.surum} → ${g.kanal} · paket ${yuk.paket.ad} (${yuk.paket.boyut} B) · kid ${yuk.paketImzaKid}`);
+  const pg = yuk.pg.hedef ? ` · PG hedefi ${yuk.pg.hedef.surum}-${yuk.pg.hedef.derleme}` : " · PG hedefi yok";
+  console.error(`✓ ${komut}: backend ${yuk.surum} → ${g.kanal} · paket ${yuk.paket.ad} (${yuk.paket.boyut} B) · kid ${yuk.paketImzaKid}${pg}`);
+}
+
+// ── PG paketi künyesi ───────────────────────────────────────────────────────
+async function pgImzala(f: Bayraklar): Promise<void> {
+  const zip = path.resolve(gerek(f, "zip"));
+  const cizgi = PgMajorSchema.parse(Number(gerek(f, "cizgi")));
+  const surum = PgVersionSchema.parse(gerek(f, "surum"));
+  const derleme = PgBuildSchema.parse(Number(gerek(f, "derleme")));
+  const icu = IcuVersionSchema.parse(gerek(f, "icu"));
+  const liste = execFileSync("unzip", ["-Z1", zip], { encoding: "utf8", maxBuffer: 16 * 1024 * 1024 }).split("\n");
+  if (!liste.includes(`bin/icuuc${icu}.dll`)) throw new CliError(`zip'te bin/icuuc${icu}.dll yok — ICU sürümü paketle uyuşmuyor`);
+  const icerik = execFileSync("unzip", ["-p", zip, "TEKSERP-ICERIK.sha256"], { maxBuffer: 16 * 1024 * 1024 });
+  if (icerik.length === 0) throw new CliError("zip'te TEKSERP-ICERIK.sha256 yok ya da boş (içerik manifestosu)");
+  const yuk: PgPackageManifest = {
+    v: 1,
+    urun: "postgresql",
+    platform: "win32-x64",
+    cizgi,
+    surum,
+    derleme,
+    paket: { ad: path.basename(zip), boyut: fs.statSync(zip).size, sha256: sha256Dosya(zip) },
+    icerikSha256: createHash("sha256").update(icerik).digest("hex"),
+    icuSurum: icu,
+    yayinZamani: new Date().toISOString(),
+  };
+  const key = await paketAnahtari(gerek(f, "anahtar"));
+  const token = signPgPackageManifest({ payload: yuk, key: { kid: key.kid, privateKey: key.privateKey } });
+  const geri = verifyPgPackageManifest(token, { keys: [{ kid: key.kid, x: key.x }] });
+  if (!geri.ok) throw new Error(`öz-denetim düştü: ${geri.code}`);
+  const cikti = path.resolve(gerek(f, "cikti"));
+  fs.mkdirSync(cikti, { recursive: true });
+  fs.writeFileSync(path.join(cikti, "pg.json"), releasePointerText(token), { mode: 0o644 });
+  fs.writeFileSync(path.join(cikti, "sonuc.json"), `${JSON.stringify({ v: 1, kip: "pg-imzala", kunye: yuk }, null, 2)}\n`);
+  console.error(`✓ pg-imzala: PostgreSQL ${surum}-${derleme} (çizgi ${cizgi}, ICU ${icu}) · ${yuk.paket.ad} (${yuk.paket.boyut} B) · kid ${key.kid}`);
+}
+
+function pgDogrula(f: Bayraklar): void {
+  const zip = path.resolve(gerek(f, "zip"));
+  const isaretci = readReleasePointer(fs.readFileSync(gerek(f, "kunye"), "utf8"));
+  if (!isaretci.ok) throw new CliError(`PG künyesi okunamadı: ${isaretci.code}`);
+  const k = verifyPgPackageManifest(isaretci.value, { keys: capaOku(f, null) });
+  if (!k.ok) throw new CliError(`PG künyesi doğrulanamadı: ${k.code}`);
+  const olcu = { ad: path.basename(zip), boyut: fs.statSync(zip).size, sha256: sha256Dosya(zip) };
+  if (olcu.ad !== k.value.paket.ad || olcu.boyut !== k.value.paket.boyut || olcu.sha256 !== k.value.paket.sha256) {
+    throw new CliError(`PG zip'i künyeyle TUTMUYOR (${olcu.ad} ${olcu.boyut} B) — künye başka paketin`);
+  }
+  const cikti = path.resolve(gerek(f, "cikti"));
+  fs.mkdirSync(cikti, { recursive: true });
+  fs.writeFileSync(path.join(cikti, "sonuc.json"), `${JSON.stringify({ v: 1, kip: "pg-dogrula", kunye: k.value }, null, 2)}\n`);
+  console.error(`✓ pg-dogrula: PostgreSQL ${k.value.surum}-${k.value.derleme} · ${olcu.ad} künyeyle birebir`);
+}
+
+async function main(): Promise<void> {
+  const { command, flags } = args(process.argv.slice(2));
+  if (command === "dogrula" || command === "imzala") return backend(command, flags);
+  if (command === "pg-imzala") return pgImzala(flags);
+  if (command === "pg-dogrula") return pgDogrula(flags);
+  throw new CliError("komut: dogrula | imzala | pg-imzala | pg-dogrula");
 }
 
 main().catch((e: unknown) => {

@@ -13,7 +13,11 @@
 //      eski doğrulayıcı alanı atar · indirme öneki backend/
 //   §4 pencere aritmetiği: İstanbul · gece yarısı · gün süzgeci · 24:00 · yaz saati boşluğu/çifti ·
 //      bilinmeyen dilim · çıktı şemadan geçer · tavan
-//   §5 karar tablosu: her neden en az bir kez, sıra (yetki → sürüm → uygunluk → zamanlama)
+//   §5 karar tablosu: her neden en az bir kez, sıra (yetki → sürüm → uygunluk → zamanlama); PG kararı
+//      (sözleşme sürümü 2): ana sürüm farkı hiçbir kipte otomatik değil · kendi örnekte hedef yeniyse birlikte ·
+//      harici örneğe dokunulmaz (yalnız enAz) · geri inme yok
+//   §1'' PG künyesi `tekserp-pg` (sözleşme sürümü 2): geçerli · kurcalı · typ · anahtar · ana sürüm ≠ çizgi ·
+//      derleme · v:2 · ürün; §7' PG bağı: hedef yok · özet · ANA SÜRÜM · ICU · derleme
 //   §6 sürüm karşılaştırma (semver önceliği)  §7 paket bağı  §8 rapor şeması KATI
 //   §9 vektör dosyaları (`native/test-vektorleri/guncelleme-*.json`, Rust güncelleyici de okur): her
 //      kaydın beklenen sonucu BUGÜNKÜ TS'le aynı (bayat yok) · kapsam (her neden/kod en az bir kayıtta)
@@ -38,6 +42,7 @@ import {
   decodeDocument,
   defaultUpdatePolicy,
   isKnownTimeZone,
+  pgReleaseFilePath,
   releaseFilePath,
   releasePointerPath,
   windowIntervals,
@@ -102,10 +107,20 @@ function bolum1(): void {
   beklenenKod("bildirim", "imzalayan paketImzaKid değil", "SURUM_ANAHTAR");
   beklenenKod("bildirim", "v:2", "BELGE_SURUM");
   for (const ad of ["sürümde +yapı eki", "paket adında yol", "sha256 büyük harf", "minKaynakSurum sürümden yeni", "derleme yayından sonra", "platform linux"]) beklenenKod("bildirim", ad, "BELGE_SEMA");
+  beklenenKod("bildirim", "pg hedefsiz (küçük sürüm güncellemesi yok)", "OK");
+  for (const ad of ["pg enAz başka ana sürümde", "pg hedef başka ana sürümde (17)", "pg hedef enAz'dan eski", "pg eski biçim (gerekenSurum) — sözleşme sürümü 1"]) beklenenKod("bildirim", ad, "BELGE_SEMA");
+  console.log("\n§1'' — PG paketi künyesi (tekserp-pg, sözleşme sürümü 2)");
+  beklenenKod("pg-kunye", "geçerli PG künyesi", "OK");
+  beklenenKod("pg-kunye", "PG künyesi kurcalandı", "JWS_IMZA");
+  beklenenKod("pg-kunye", "PG künyesi yanlış tür (tekserp-surum)", "JWS_TYP");
+  beklenenKod("pg-kunye", "PG künyesi bilinmeyen anahtar", "JWS_KID");
+  beklenenKod("pg-kunye", "PG künyesi v:2", "BELGE_SURUM");
+  for (const ad of ["PG sürümü çizginin ana sürümünde değil", "PG derlemesi 0", "PG künyesi başka ürün"]) beklenenKod("pg-kunye", ad, "BELGE_SEMA");
+  check("§1'' yol yardımcısı", pgReleaseFilePath("k1", "16.15", 4, "pg.json") === "/k1/backend/pg/16.15-4/pg.json");
   const ek = kayit("bildirim", "tanınmayan alan atılır (v:1 ekleme)").beklenen as { ok: boolean; value?: Record<string, unknown> };
   check("§1 tanınmayan alan doğrulamada ATILIR (v:1 içinde ekleme kırmaz)", ek.ok === true && !!ek.value && !("yeniBilgi" in ek.value));
   check("§1 yol yardımcıları", releasePointerPath("testfabrika") === "/testfabrika/backend/son.json" && releaseFilePath("k1", "2.11.0", "a.zip") === "/k1/backend/2.11.0/a.zip");
-  check("§1 protokol kodları kayıtlı (SURUM_* · PAKET_BAGI)", ["SURUM_ISARETCI", "SURUM_KANAL", "SURUM_ANAHTAR", "PAKET_BAGI"].every((c) => (PROTOCOL_ERROR_CODES as readonly string[]).includes(c)));
+  check("§1 protokol kodları kayıtlı (SURUM_* · PAKET_BAGI · PG_BAGI)", ["SURUM_ISARETCI", "SURUM_KANAL", "SURUM_ANAHTAR", "PAKET_BAGI", "PG_BAGI"].every((c) => (PROTOCOL_ERROR_CODES as readonly string[]).includes(c)));
 }
 
 function bolum2(): void {
@@ -196,9 +211,15 @@ function bolum5(): void {
     ["HAK yok", "UYGUN_DEGIL", "HAK_YOK"],
     ["derleme bakım sonundan sonra", "UYGUN_DEGIL", "BAKIM_DISI"],
     ["PostgreSQL ölçülemedi", "UYGUN_DEGIL", "PG_OLCULEMEDI"],
-    ["PostgreSQL ana sürüm farklı", "UYGUN_DEGIL", "PG_ANA_SURUM"],
-    ["PostgreSQL küçük sürüm eski, paket yok", "UYGUN_DEGIL", "PG_SURUMU_ESKI"],
-    ["PostgreSQL küçük sürüm eski, paket var → birlikte", "KUR", "PENCERE"],
+    ["kendi kipte PG derlemesi bilinmiyor", "UYGUN_DEGIL", "PG_OLCULEMEDI"],
+    ["PostgreSQL ana sürüm farklı (kendi)", "UYGUN_DEGIL", "PG_ANA_SURUM"],
+    ["PostgreSQL ana sürüm farklı (harici 17)", "UYGUN_DEGIL", "PG_ANA_SURUM"],
+    ["harici PG enAz altında", "UYGUN_DEGIL", "PG_SURUMU_ESKI"],
+    ["harici PG enAz üstünde, hedefe dokunulmaz", "KUR", "PENCERE"],
+    ["kendi PG hedeften eski → PG birlikte", "KUR", "PENCERE"],
+    ["kendi PG aynı sürüm eski derleme → PG birlikte", "KUR", "PENCERE"],
+    ["kendi PG hedeften yeni → geri inmez", "KUR", "PENCERE"],
+    ["hedefsiz bildirim, kendi PG enAz altında", "UYGUN_DEGIL", "PG_SURUMU_ESKI"],
     ["otomatik, pencere dışı → sıradaki pencere", "PENCERE_BEKLIYOR", null],
     ["otomatik, pencere içi → kur", "KUR", "PENCERE"],
     ["otomatik, HEMEN onayı hızlandırır", "KUR", "ONAY_HEMEN"],
@@ -216,7 +237,10 @@ function bolum5(): void {
     const k = kararOf(ad);
     check(`§5 ${ad} → ${karar}${neden ? `/${neden}` : ""}`, k.karar === karar && k.neden === neden, `${k.karar}/${k.neden}`);
   }
-  check("§5' PG küçük güncellemesi işaretlenir", kararOf("PostgreSQL küçük sürüm eski, paket var → birlikte").pgGuncellemesi === true && kararOf("otomatik, pencere içi → kur").pgGuncellemesi === false);
+  check("§5' PG küçük sürüm güncellemesi YALNIZ kendi örnekte ve hedef yeniyse işaretlenir",
+    kararOf("kendi PG hedeften eski → PG birlikte").pgGuncellemesi && kararOf("kendi PG aynı sürüm eski derleme → PG birlikte").pgGuncellemesi &&
+      !kararOf("kendi PG hedeften yeni → geri inmez").pgGuncellemesi && !kararOf("harici PG enAz üstünde, hedefe dokunulmaz").pgGuncellemesi &&
+      !kararOf("otomatik, pencere içi → kur").pgGuncellemesi);
   check("§5'' pencere dışı bekleyiş SIRADAKİ aralığı verir", kararOf("otomatik, pencere dışı → sıradaki pencere").aralik?.baslangic === "2026-10-02T23:00:00.000Z");
   check("§5''' HEMEN onayı aralık taşımaz", kararOf("onaylı, HEMEN").aralik === null);
 }
@@ -233,6 +257,9 @@ function bolum6ila8(): void {
   beklenenKod("paket-bagi", "kanal-dışı paket (müşteri null) bağlı", "OK");
   beklenenKod("paket-bagi", "derleme tarihi aynı an, farklı yazım", "OK");
   for (const ad of ["başka kanalın paketi", "paketId farklı", "sürüm farklı", "imzalayan farklı"]) beklenenKod("paket-bagi", ad, "PAKET_BAGI");
+  console.log("\n§7' — PG bağı (künye ↔ bildirimin PG hedefi)");
+  beklenenKod("pg-bagi", "PG künyesi hedefle bağlı", "OK");
+  for (const ad of ["bildirim PG hedefi taşımıyor", "PG paket özeti farklı", "PG künyesi başka ana sürüm (17)", "PG ICU sürümü farklı", "PG derlemesi farklı"]) beklenenKod("pg-bagi", ad, "PG_BAGI");
   console.log("\n§8 — yoklama raporu (KATI allowlist)");
   beklenenKod("rapor", "tam rapor", "OK");
   beklenenKod("rapor", "güncelleyici yok, sonuç yok", "OK");
@@ -281,8 +308,8 @@ function bolum9(): void {
   }
   const eksik = kapsamEksigi(hepsi);
   check("§9c kapsam: her karar ve neden en az bir karar vektöründe", eksik.length === 0, eksik.join(", ") || `${UPDATE_DECISIONS.length + UPDATE_DECISION_REASONS.length} değer`);
-  const kodlar = new Set(hepsi.filter((k) => k.vektor.tur === "bildirim" || k.vektor.tur === "isaretci" || k.vektor.tur === "paket-bagi").map((k) => kodu(k.beklenen)));
-  const gereken = ["OK", "JWS_IMZA", "JWS_KID", "JWS_TYP", "BELGE_SEMA", "BELGE_SURUM", "SURUM_ISARETCI", "SURUM_KANAL", "SURUM_ANAHTAR", "PAKET_BAGI"];
+  const kodlar = new Set(hepsi.filter((k) => ["bildirim", "isaretci", "paket-bagi", "pg-kunye", "pg-bagi"].includes(k.vektor.tur)).map((k) => kodu(k.beklenen)));
+  const gereken = ["OK", "JWS_IMZA", "JWS_KID", "JWS_TYP", "BELGE_SEMA", "BELGE_SURUM", "SURUM_ISARETCI", "SURUM_KANAL", "SURUM_ANAHTAR", "PAKET_BAGI", "PG_BAGI"];
   check("§9d kapsam: bildirim/işaretçi/bağ kodlarının her biri en az bir vektörde", gereken.every((c) => kodlar.has(c)), gereken.filter((c) => !kodlar.has(c)).join(",") || `${gereken.length} kod`);
   check("§9e kayıt adları dosyalar arası tekil (Rust testi adla raporlar)", new Set(hepsi.map((k) => `${k.vektor.tur}:${k.vektor.ad}`)).size === hepsi.length);
 }

@@ -17,8 +17,10 @@
  *    kenardan belirteçle okunur ve yüklenenle bayt bayt kıyaslanır.
  *
  * Kullanım:
- *   node deploy/backend-yayinla.mjs --musteri=<kod> --paket=<imzalı zip> --anahtar=<PAKET anahtar dosyası> --pg-gerekli=<16.x>
- *        [--pg-paket=<zip>] [--min-kaynak=<sürüm>] [--zorunlu] [--kuru] [--terfi-atla="<cümle>"] [--ssh=<hedef>]
+ *   node deploy/backend-yayinla.mjs --musteri=<kod> --paket=<imzalı zip> --anahtar=<PAKET anahtar dosyası> --pg-cizgi=<16>
+ *        --pg-en-az=<16.9> [--pg-kunye=<pg.json>] [--min-kaynak=<sürüm>] [--zorunlu] [--kuru] [--terfi-atla="<cümle>"] [--ssh=<hedef>]
+ *   node deploy/backend-yayinla.mjs --musteri=<kod> --pg-yayinla --pg-paket=<PG sahne zip> --pg-kunye=<pg.json> [--kuru]
+ *        # PG paketi (sözleşme sürümü 2): `<kanal>/backend/pg/<sürüm>-<derleme>/` DEĞİŞMEZ dizinine; son.json'a dokunmaz
  *   node deploy/backend-yayinla.mjs --musteri=<kod> --dogrula        # yükleme YOK: kenardaki son.json'u oku
  * `--kuru`: künye + sürüm notu + terfi (ağsız) + paket bütünlüğü ölçülür, bildirim İMZASIZ kurulur; ağa ÇIKILMAZ.
  */
@@ -39,7 +41,9 @@ import {
   defterKomutu,
   defterSatiri,
   isaretciSurumu,
+  isaretciYuku,
   ozetCikar,
+  pgYayinPlani,
   surumKiyasla,
   yayinPlani,
 } from '../scripts/lib/backend-yayin.mjs';
@@ -133,6 +137,51 @@ if (argv.includes('--dogrula')) {
 }
 
 /* ------------------------------------------------------------------ *
+ * PG paketi (sözleşme sürümü 2) — ayrı, değişmez dizin; kanal kapısından sonra, son.json'a dokunmadan
+ * ------------------------------------------------------------------ */
+
+const PG_KUNYE = arg('pg-kunye') ? path.resolve(arg('pg-kunye')) : null;
+function pgKunyeYukuOku() {
+  if (!PG_KUNYE || !fs.existsSync(PG_KUNYE)) dur('PG KÜNYESİ YOK', '`--pg-kunye=<pg.json>` (Teks-Erp/scripts/backend-bildirim.ts pg-imzala çıktısı)');
+  const y = isaretciYuku(fs.readFileSync(PG_KUNYE, 'utf8'));
+  if (!y || typeof y.surum !== 'string' || !Number.isInteger(y.derleme) || typeof y.paket?.ad !== 'string') dur('PG künyesi çözülemedi', PG_KUNYE);
+  return y;
+}
+
+function tsArac(komut, argumanlar, cikti) {
+  const r = spawnSync(process.execPath, ['--import', 'tsx', 'scripts/backend-bildirim.ts', komut, ...argumanlar, `--cikti=${cikti}`], { cwd: TEKS, stdio: 'inherit' });
+  if (r.status !== 0) dur(`backend-bildirim.ts ${komut} başarısız (çıkış ${r.status})`, 'Yukarıdaki satır nedeni söyler; hiçbir şey yüklenmedi.');
+  return JSON.parse(fs.readFileSync(path.join(cikti, 'sonuc.json'), 'utf8'));
+}
+
+if (argv.includes('--pg-yayinla')) {
+  const pgZip = arg('pg-paket') ? path.resolve(arg('pg-paket')) : null;
+  if (!pgZip || !fs.existsSync(pgZip)) dur('PG PAKETİ YOK', '`--pg-paket=<PG sahne zip>`');
+  const y = pgKunyeYukuOku();
+  console.log(`\n${BAR}\n  PostgreSQL ${y.surum}-${y.derleme} → ${MUSTERI}${KURU ? ' — KURU' : ''}\n${BAR}`);
+  const pgCikti = fs.mkdtempSync(path.join(os.tmpdir(), 'tekserp-pg-yayin-'));
+  const k = tsArac('pg-dogrula', [`--kunye=${PG_KUNYE}`, `--zip=${pgZip}`], pgCikti).kunye;
+  const pgPlan = pgYayinPlani({ vdsBackend: KANAL.yayin.vdsBackend, surum: k.surum, derleme: k.derleme, paketAd: k.paket.ad, damga: crypto.randomBytes(6).toString('hex') });
+  if (!KURU && uzak(pgPlan.komut.varMi, 'PG sürüm dizini var mı?', { sessiz: true }).status === 0) dur(`${pgPlan.dizin} ZATEN VAR — yayınlanmış PG paketi EZİLMEZ`);
+  uzakZorunlu(pgPlan.komut.geciciAc, `geçici dizin: ${pgPlan.gecici}`);
+  gonder(pgZip, `${pgPlan.gecici}/${k.paket.ad}`, 'PG paketi');
+  gonder(PG_KUNYE, `${pgPlan.gecici}/pg.json`, 'PG künyesi (pg.json)');
+  if (!KURU) {
+    const [ozetU, boyU] = String(uzakZorunlu(pgPlan.komut.olc, 'uzakta boy + sha256 ölçülüyor').stdout).trim().split(/\s+/);
+    if (ozetU !== k.paket.sha256 || Number(boyU) !== k.paket.boyut) {
+      uzak(pgPlan.komut.geciciSil, 'yarım yükleme siliniyor');
+      dur('Uzaktaki PG paketi künyeyle TUTMUYOR — yayın yapılmadı', `beklenen ${k.paket.sha256}/${k.paket.boyut} · uzak ${ozetU}/${boyU}`);
+    }
+  }
+  uzakZorunlu(pgPlan.komut.yayinla, `PG dizini yayında: ${pgPlan.dizin}`);
+  const pgSatir = defterSatiri({ zaman: istanbulSaati(), surum: `${k.surum}-${k.derleme}`, kim: `${os.userInfo().username}@${os.hostname().split('.')[0]}`, sha16: k.paket.sha256.slice(0, 16), boyut: k.paket.boyut, urun: 'pg' });
+  uzak(defterKomutu(KANAL.yayin.backendDefter, pgSatir), 'yayın defteri');
+  fs.rmSync(pgCikti, { recursive: true, force: true });
+  console.log(`\n${BAR}\n  ${KURU ? 'KURU — hiçbir şey yüklenmedi' : `✔ PostgreSQL ${k.surum}-${k.derleme} "${MUSTERI}" kanalında (backend bildirimi --pg-kunye ile hedefler)`}\n${BAR}\n`);
+  process.exit(0);
+}
+
+/* ------------------------------------------------------------------ *
  * 1) Paket künyesi + sürüm notu
  * ------------------------------------------------------------------ */
 
@@ -140,10 +189,12 @@ const PAKET = arg('paket') ? path.resolve(arg('paket')) : null;
 if (!PAKET || !fs.existsSync(PAKET)) dur('PAKET YOK', '`--paket=<imzalı zip>` (paketle.ps1 -Korumali + build-korumali-imza.ts zip çıktısı)');
 const ANAHTAR = arg('anahtar');
 if (!KURU && !ANAHTAR) dur('PAKET ANAHTARI YOK', '`--anahtar=<PAKET anahtar dosyası>` — bildirim paketi imzalayan anahtarla imzalanır (kuru kip anahtarsız çalışır).');
-const PG_GEREKLI = arg('pg-gerekli');
-if (!PG_GEREKLI || !/^[0-9]{2}\.[0-9]{1,3}$/.test(PG_GEREKLI)) dur('PostgreSQL ALT SINIRI YOK', '`--pg-gerekli=<ana.küçük>` (ör. 16.4) — bildirimin `pg.gerekenSurum`u; ana sürüm geçişi otomatik değildir.');
-const PG_PAKET = arg('pg-paket') ? path.resolve(arg('pg-paket')) : null;
-if (PG_PAKET && !fs.existsSync(PG_PAKET)) dur('PG PAKETİ YOK', PG_PAKET);
+const PG_CIZGI = arg('pg-cizgi');
+const PG_EN_AZ = arg('pg-en-az');
+if (!PG_CIZGI || !/^[0-9]{2}$/.test(PG_CIZGI) || !PG_EN_AZ || !/^[0-9]{2}\.[0-9]{1,3}$/.test(PG_EN_AZ)) {
+  dur('PostgreSQL GEREKSİNİMİ YOK', '`--pg-cizgi=<ana sürüm>` + `--pg-en-az=<ana.küçük>` (ör. 16 · 16.9) — bildirimin `pg` bloğu; ana sürüm geçişi otomatik değildir.');
+}
+const PG_HEDEF = PG_KUNYE ? pgKunyeYukuOku() : null;
 
 let kunye;
 try {
@@ -191,9 +242,9 @@ const ozetDosyasi = path.join(CIKTI, 'ozet.txt');
 fs.writeFileSync(ozetDosyasi, ozet);
 const aracArg = [
   '--import', 'tsx', 'scripts/backend-bildirim.ts', KURU ? 'dogrula' : 'imzala',
-  `--zip=${PAKET}`, `--kanal=${MUSTERI}`, `--kanal-turu=${KANAL.tur}`, `--pg-gerekli=${PG_GEREKLI}`,
+  `--zip=${PAKET}`, `--kanal=${MUSTERI}`, `--kanal-turu=${KANAL.tur}`, `--pg-cizgi=${PG_CIZGI}`, `--pg-en-az=${PG_EN_AZ}`,
   `--ozet-dosyasi=${ozetDosyasi}`, `--cikti=${CIKTI}`,
-  ...(PG_PAKET ? [`--pg-paket=${PG_PAKET}`] : []),
+  ...(PG_KUNYE ? [`--pg-kunye=${PG_KUNYE}`] : []),
   ...(arg('min-kaynak') ? [`--min-kaynak=${arg('min-kaynak')}`] : []),
   ...(argv.includes('--zorunlu') ? ['--zorunlu'] : []),
   ...(KURU ? [] : [`--anahtar=${ANAHTAR}`]),
@@ -204,14 +255,13 @@ const sonuc = JSON.parse(fs.readFileSync(path.join(CIKTI, 'sonuc.json'), 'utf8')
 const B = sonuc.bildirim;
 if (B.surum !== SURUM || B.kanal !== MUSTERI) dur('Bildirim künyeyle bağlanmıyor', `${B.surum}/${B.kanal} ≠ ${SURUM}/${MUSTERI}`);
 const sha16 = B.paket.sha256.slice(0, 16);
-bilgi(`✓ paket ${B.paket.ad} · ${B.paket.boyut} B · sha256 ${sha16}… · kid ${B.paketImzaKid}${B.pg.paket ? ` · PG ${B.pg.paket.ad}` : ''}`);
+bilgi(`✓ paket ${B.paket.ad} · ${B.paket.boyut} B · sha256 ${sha16}… · kid ${B.paketImzaKid} · PG ${B.pg.cizgi} ≥ ${B.pg.enAz}${B.pg.hedef ? ` · hedef ${B.pg.hedef.surum}-${B.pg.hedef.derleme}` : ''}`);
 
 const plan = yayinPlani({
   vdsBackend: KANAL.yayin.vdsBackend,
   backendDefter: KANAL.yayin.backendDefter,
   surum: SURUM,
   paketAd: B.paket.ad,
-  pgAd: B.pg.paket ? B.pg.paket.ad : null,
   damga: crypto.randomBytes(6).toString('hex'),
 });
 
@@ -240,6 +290,13 @@ if (KURU) {
   } else bilgi('✓ kanalın İLK backend yayını (son.json yok)');
   const var_ = uzak(plan.komut.varMi, 'sürüm dizini var mı?', { sessiz: true });
   if (var_.status === 0) dur(`${plan.surumDizini} ZATEN VAR — yayınlanmış sürüm EZİLMEZ`);
+  if (PG_HEDEF) {
+    const pgPlan = pgYayinPlani({ vdsBackend: KANAL.yayin.vdsBackend, surum: PG_HEDEF.surum, derleme: PG_HEDEF.derleme, paketAd: PG_HEDEF.paket.ad, damga: 'denetim' });
+    if (uzak(pgPlan.komut.hazirMi, 'hedeflenen PG paketi kanalda mı?', { sessiz: true }).status !== 0) {
+      dur(`PG ${PG_HEDEF.surum}-${PG_HEDEF.derleme} bu kanalda YOK — önce: --pg-yayinla --pg-paket=<zip> --pg-kunye=<pg.json>`, 'Bildirim yayınlanmadı: hedef paket olmadan kurulumlar PG adımında düşerdi.');
+    }
+    bilgi(`✓ hedeflenen PG paketi kanalda: ${pgPlan.dizin}`);
+  }
 }
 
 /* ------------------------------------------------------------------ *
@@ -248,14 +305,12 @@ if (KURU) {
 
 uzakZorunlu(plan.komut.geciciAc, `geçici dizin: ${plan.gecici}`);
 gonder(PAKET, `${plan.gecici}/${B.paket.ad}`, `paket → ${plan.gecici}/`);
-if (PG_PAKET) gonder(PG_PAKET, `${plan.gecici}/${B.pg.paket.ad}`, `PG paketi → ${plan.gecici}/`);
 const isaretci = path.join(CIKTI, 'surum.json');
 gonder(isaretci, `${plan.gecici}/surum.json`, 'sürüm işaretçisi (surum.json)');
 if (!KURU) {
   const olcum = uzakZorunlu(plan.komut.olc, 'uzakta boy + sha256 ölçülüyor');
-  const [ozetU, boyU, pgOzet, pgBoy] = String(olcum.stdout).trim().split(/\s+/);
-  const tutar = ozetU === B.paket.sha256 && Number(boyU) === B.paket.boyut &&
-    (!B.pg.paket || (pgOzet === B.pg.paket.sha256 && Number(pgBoy) === B.pg.paket.boyut));
+  const [ozetU, boyU] = String(olcum.stdout).trim().split(/\s+/);
+  const tutar = ozetU === B.paket.sha256 && Number(boyU) === B.paket.boyut;
   if (!tutar) {
     uzak(plan.komut.geciciSil, 'yarım yükleme siliniyor');
     dur('Uzaktaki dosya bildirimle TUTMUYOR — yayın yapılmadı', `beklenen ${B.paket.sha256}/${B.paket.boyut} · uzak ${ozetU}/${boyU}`);

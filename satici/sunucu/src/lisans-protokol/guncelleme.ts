@@ -4,11 +4,10 @@
 // (`Teks-Erp/native/test-vektorleri/guncelleme-*.json`) aynalar.
 import type { KeyObject } from "node:crypto";
 import { z } from "zod";
-import { publicKeyFromX, verifyJws } from "./jws";
+import { verifyJws } from "./jws";
 import {
   ChannelCodeSchema,
   IsoTimeSchema,
-  JwsTextSchema,
   PROTOCOL_VERSION,
   ReleaseVersionSchema,
   TYP,
@@ -19,19 +18,17 @@ import {
   signDocument,
   type DownloadProduct,
 } from "./belgeler";
-import { CLOCK_SKEW_MS, failure, forwardFailure, isPlainObject, isoToMs, success, type Result } from "./ortak";
+import { ArtifactSchema, PackageKidSchema, UPDATE_PLATFORMS, isPackageKid, packageKeyLookup, type PackagePublicKey } from "./guncelleme-ortak";
+import { PgRequirementSchema } from "./guncelleme-pg";
+import { CLOCK_SKEW_MS, failure, forwardFailure, isoToMs, success, type Result } from "./ortak";
 
 // ── Yayın düzeni ──────────────────────────────────────────────────────────────
 export const RELEASE_PRODUCT_DIR: DownloadProduct = "backend";
 export const UPDATE_PRODUCTS = ["backend"] as const;
-export const UPDATE_PLATFORMS = ["win32-x64"] as const;
 /** Kanalın en yeni sürümü: `/<kanal>/backend/son.json` — yayında EN SON yüklenir. */
 export const RELEASE_POINTER_FILE = "son.json";
 /** Sürüm dizinindeki DEĞİŞMEZ işaretçi: `/<kanal>/backend/<sürüm>/surum.json` (sabitlemede okunur). */
 export const RELEASE_MANIFEST_FILE = "surum.json";
-export const PACKAGE_MAX_BYTES = 4 * 1024 * 1024 * 1024;
-const POINTER_MAX_BYTES = 64 * 1024;
-const PACKAGE_KID = /^paket-[a-z0-9-]{1,40}$/;
 
 export function releasePointerPath(kanal: string): string {
   return `/${kanal}/${RELEASE_PRODUCT_DIR}/${RELEASE_POINTER_FILE}`;
@@ -42,18 +39,7 @@ export function releaseFilePath(kanal: string, surum: string, dosya: string): st
 }
 
 // ── Sürüm bildirimi (`tekserp-surum`) ────────────────────────────────────────
-const Sha256HexSchema = z.string().regex(/^[0-9a-f]{64}$/);
-const ArtifactNameSchema = z.string().max(120).regex(/^[A-Za-z0-9][A-Za-z0-9._-]{0,115}\.zip$/);
-export const PackageKidSchema = z.string().regex(PACKAGE_KID);
-/** PostgreSQL `ana.küçük` (`16.4`). */
-export const PgVersionSchema = z.string().regex(/^[0-9]{2}\.[0-9]{1,3}$/);
 const NodeVersionSchema = z.string().regex(/^[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}$/);
-
-const ArtifactSchema = z.object({
-  ad: ArtifactNameSchema,
-  boyut: z.number().int().min(1).max(PACKAGE_MAX_BYTES),
-  sha256: Sha256HexSchema,
-});
 
 export const ReleaseManifestSchema = z
   .object({
@@ -73,8 +59,8 @@ export const ReleaseManifestSchema = z
     /** Doğrudan geçişin en eski kaynak sürümü; daha eski kurulum önce ara sürüme sabitlenir. null = sınır yok. */
     minKaynakSurum: ReleaseVersionSchema.nullable(),
     gocSayisi: z.number().int().min(0).max(100_000),
-    /** `paket` varsa küçük sürüm güncellemesi bu zip'le yapılır; ana sürüm geçişi otomatik DEĞİLDİR. */
-    pg: z.object({ gerekenSurum: PgVersionSchema, paket: ArtifactSchema.nullable() }),
+    /** PG gereksinimi (sözleşme sürümü 2): tek ana sürüm + en eski küçük sürüm + kendi örnek hedefi (`guncelleme-pg.ts`). */
+    pg: PgRequirementSchema,
     /** Paketin kendi taşıdığı Node (`runtime/node.exe`) — bilgi. */
     runtime: z.object({ node: NodeVersionSchema }),
     notlar: z.object({ ozet: z.string().min(1).max(2000) }),
@@ -89,36 +75,11 @@ export const ReleaseManifestSchema = z
   });
 export type ReleaseManifest = z.infer<typeof ReleaseManifestSchema>;
 
-/** `son.json` ve `<sürüm>/surum.json` aynı biçimdedir; yalnız imzalı `bildirim`e güvenilir. */
-export const ReleasePointerSchema = z.strictObject({ v: z.literal(PROTOCOL_VERSION), bildirim: JwsTextSchema });
-
-export function releasePointerText(token: string): string {
-  return `${JSON.stringify(ReleasePointerSchema.parse({ v: PROTOCOL_VERSION, bildirim: token }))}\n`;
-}
-
-export function readReleasePointer(text: string): Result<string> {
-  if (text.length > POINTER_MAX_BYTES) return failure("SURUM_ISARETCI", "Sürüm işaretçisi çok büyük");
-  let raw: unknown;
-  try {
-    raw = JSON.parse(text);
-  } catch {
-    return failure("SURUM_ISARETCI", "Sürüm işaretçisi JSON değil");
-  }
-  if (isPlainObject(raw) && raw.v !== PROTOCOL_VERSION) return failure("BELGE_SURUM", `Desteklenmeyen işaretçi sürümü: ${String(raw.v)}`);
-  const p = ReleasePointerSchema.safeParse(raw);
-  return p.success ? success(p.data.bildirim) : failure("SURUM_ISARETCI", "Sürüm işaretçisi biçimsiz");
-}
-
-export interface PackagePublicKey {
-  readonly kid: string;
-  readonly x: string;
-}
-
 export function signReleaseManifest(g: {
   readonly payload: ReleaseManifest;
   readonly key: { readonly kid: string; readonly privateKey: KeyObject };
 }): string {
-  if (!PACKAGE_KID.test(g.key.kid)) throw new Error("signReleaseManifest: kid paket- ile başlamalı");
+  if (!isPackageKid(g.key.kid)) throw new Error("signReleaseManifest: kid paket- ile başlamalı");
   if (g.payload.paketImzaKid !== g.key.kid) throw new Error("signReleaseManifest: paketImzaKid imzalayan anahtar olmalı");
   return signDocument({ typ: TYP.SURUM, schema: ReleaseManifestSchema, payload: g.payload, key: g.key });
 }
@@ -131,11 +92,7 @@ export function verifyReleaseManifest(
   token: unknown,
   g: { readonly keys: readonly PackagePublicKey[]; readonly kanal: string },
 ): Result<ReleaseManifest> {
-  const lookup = new Map<string, KeyObject>();
-  for (const k of g.keys) {
-    const keyObj = PACKAGE_KID.test(k.kid) ? publicKeyFromX(k.x) : null;
-    if (keyObj) lookup.set(k.kid, keyObj);
-  }
+  const lookup = packageKeyLookup(g.keys);
   const j = verifyJws(token, { typ: TYP.SURUM, findKey: (kid) => lookup.get(kid) });
   if (!j.ok) return forwardFailure(j);
   const b = decodeDocument(ReleaseManifestSchema, j.value.payload);

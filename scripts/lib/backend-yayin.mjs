@@ -122,10 +122,49 @@ export function yayinPlani({ vdsBackend, backendDefter, surum, paketAd, pgAd = n
   };
 }
 
+/**
+ * PG paketi planı (sözleşme sürümü 2): `<vdsBackend>/pg/<sürüm>-<derleme>/` DEĞİŞMEZ dizinine paket + `pg.json`;
+ * `son.json`a dokunulmaz (PG paketi ancak onu hedefleyen backend bildirimi yayınlanınca kullanılır).
+ */
+export function pgYayinPlani({ vdsBackend, surum, derleme, paketAd, damga }) {
+  if (!/^[0-9]{2}\.[0-9]{1,3}$/.test(String(surum)) || !Number.isInteger(derleme) || derleme < 1 || derleme > 999) {
+    throw new Error(`PG planı: güvensiz sürüm/derleme: ${surum}-${derleme}`);
+  }
+  for (const [ne, v, d] of [['vdsBackend', vdsBackend, UZAK_YOL_DESENI], ['paket adı', paketAd, PAKET_ADI_DESENI], ['damga', damga, /^[0-9A-Za-z]{6,40}$/]]) {
+    if (typeof v !== 'string' || !d.test(v) || v.split('/').includes('..')) throw new Error(`PG planı: güvensiz ${ne}: ${v}`);
+  }
+  const pgKok = `${vdsBackend.replace(/\/+$/, '')}/pg`;
+  const dizin = `${pgKok}/${surum}-${derleme}`;
+  const gecici = `${pgKok}/${GECICI_ONEKI}${surum}-${derleme}-${damga}`;
+  return {
+    dizin,
+    gecici,
+    komut: {
+      varMi: `test -e ${tirnak(dizin)}`,
+      hazirMi: `test -f ${tirnak(`${dizin}/${paketAd}`)} && test -f ${tirnak(`${dizin}/pg.json`)}`,
+      geciciAc: `mkdir -p ${tirnak(gecici)}`,
+      olc: `sha256sum ${tirnak(`${gecici}/${paketAd}`)} | cut -d' ' -f1 && stat -c %s ${tirnak(`${gecici}/${paketAd}`)}`,
+      yayinla: `test ! -e ${tirnak(dizin)} && mv ${tirnak(gecici)} ${tirnak(dizin)}`,
+      geciciSil: `rm -rf ${tirnak(gecici)}`,
+    },
+  };
+}
+
+/** İşaretçi dosyasındaki imzalı yükün alanları (imzasız okuma — yalnız yol hesabı; imza TS aracında doğrulanır). */
+export function isaretciYuku(govde) {
+  try {
+    const yuk = String(JSON.parse(govde)?.bildirim ?? '').split('.')[1];
+    const y = JSON.parse(Buffer.from(yuk ?? '', 'base64url').toString('utf8'));
+    return y && typeof y === 'object' ? y : null;
+  } catch {
+    return null;
+  }
+}
+
 /** Yayın defteri satırı (TSV): zaman · sürüm · yayıncı · sha16 · boyut [· terfi kaçışı]. Sekme/satır sızmaz. */
-export function defterSatiri({ zaman, surum, kim, sha16, boyut, terfiAtla }) {
+export function defterSatiri({ zaman, surum, kim, sha16, boyut, terfiAtla, urun = 'backend' }) {
   const temiz = (x) => String(x ?? '-').replace(/[\t\r\n]/g, ' ');
-  const alanlar = [zaman, `backend-${surum}`, kim, sha16, boyut];
+  const alanlar = [zaman, `${urun}-${surum}`, kim, sha16, boyut];
   if (terfiAtla) alanlar.push(`terfi-atlandi: ${terfiAtla}`);
   return alanlar.map(temiz).join('\t');
 }

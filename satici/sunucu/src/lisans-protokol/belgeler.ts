@@ -22,6 +22,8 @@ export const TYP = {
   KABUL: "tekserp-kabul",
   /** Backend sürüm bildirimi (PAKET anahtarıyla imzalı, Dağıtım v2) — doğrulayan güncelleyici (`guncelleme.ts`). */
   SURUM: "tekserp-surum",
+  /** PostgreSQL paketi künyesi (PAKET imzalı, Dağıtım v2 sözleşme sürümü 2) — doğrulayan güncelleyici + kurulum (`guncelleme-pg.ts`). */
+  PG: "tekserp-pg",
 } as const;
 
 export const LICENSE_CLASSES = ["URETIM", "TEST", "DR", "DEMO", "BAYI", "BARINDIRILAN"] as const;

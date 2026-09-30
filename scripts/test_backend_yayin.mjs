@@ -16,7 +16,9 @@
 //      SON, geçici dizin kalmaz, defter) · kenar okuması belirteçli ve yüklenenle aynı · aynı/eski sürüm DUR ·
 //      yeni prova sürümü monotonluğu geçer · başka kanalın paketi · üretim kanalına prova · kurcalı paket ·
 //      sürüm notu yok · belirteç yok · uzakta bozulan dosya (son.json DEĞİŞMEZ, geçici silinir) — her DUR'da
-//      uzağa yazma SIFIR
+//      uzağa yazma SIFIR · PG paketi (sözleşme sürümü 2): hedeflenen PG kanalda yoksa backend DUR · `--pg-yayinla`
+//      değişmez dizine yazar, son.json'a dokunmaz, ikinci kez DUR · bildirim PG hedefini künyeden alır (içerik
+//      özeti zip'teki manifestodan ölçülür) · künyeyle tutmayan zip / yanlış ICU → DUR
 //
 //   node scripts/test_backend_yayin.mjs
 // =============================================================================
@@ -66,7 +68,7 @@ function bolum1() {
   ol(`§1a sürüm önceliği = protokol compareVersions (${vektorler.length} ortak vektör)`, vektorler.length >= 8 && farkli.length === 0,
     farkli.map((k) => `${k.vektor.a} ? ${k.vektor.b}: ${surumKiyasla(k.vektor.a, k.vektor.b)} ≠ ${k.beklenen}`).join('\n'));
   const belgeler = fs.readFileSync(path.join(TEKS, 'src/lib/license/protocol/belgeler.ts'), 'utf8');
-  const guncelleme = fs.readFileSync(path.join(TEKS, 'src/lib/license/protocol/guncelleme.ts'), 'utf8');
+  const guncelleme = fs.readFileSync(path.join(TEKS, 'src/lib/license/protocol/guncelleme-ortak.ts'), 'utf8');
   const zodSurum = /export const ReleaseVersionSchema = z\.string\(\)\.regex\(\/(.+)\/\);/.exec(belgeler)?.[1];
   const zodAd = /const ArtifactNameSchema = z\.string\(\)\.max\(120\)\.regex\(\/(.+)\/\);/.exec(guncelleme)?.[1];
   ol('§1b sürüm deseni protokolün ReleaseVersionSchema deseniyle AYNI metin', zodSurum !== undefined && zodSurum === SURUM_DESENI.source, `${zodSurum} ↔ ${SURUM_DESENI.source}`);
@@ -224,7 +226,7 @@ function bolum3() {
   console.log('\n§3 — uçtan uca (sahte ssh/scp, sahte kenar, gerçek imza aracı)');
   sahteAraclarKur();
   Object.assign(ORTAK, anahtarKur());
-  const ortak = (zip, ek = []) => ['--musteri=testfabrika', `--paket=${zip}`, `--anahtar=${ORTAK.dosya}`, '--pg-gerekli=16.4', ...ek];
+  const ortak = (zip, ek = []) => ['--musteri=testfabrika', `--paket=${zip}`, `--anahtar=${ORTAK.dosya}`, '--pg-cizgi=16', '--pg-en-az=16.9', ...ek];
   const p1 = paketKur('p1', { surum: '9.9.9-prova.1', kanal: 'testfabrika', prova: true, anahtar: ORTAK.dosya });
 
   const kuru = yayinla(ortak(p1, ['--kuru']));
@@ -251,7 +253,8 @@ function bolum3() {
   const isaretci = JSON.parse(fs.readFileSync(sonJson, 'utf8'));
   const bildirim = JSON.parse(Buffer.from(isaretci.bildirim.split('.')[1], 'base64url').toString('utf8'));
   ol('§3h bildirim: kanal · sürüm · paket özeti · imzalayan = paketin anahtarı · PG alt sınırı', bildirim.kanal === 'testfabrika' && bildirim.surum === '9.9.9-prova.1' &&
-    bildirim.paketImzaKid === 'paket-hazirlik-bekci' && bildirim.pg.gerekenSurum === '16.4' && bildirim.paket.boyut === fs.statSync(p1).size);
+    bildirim.paketImzaKid === 'paket-hazirlik-bekci' && bildirim.pg.cizgi === 16 && bildirim.pg.enAz === '16.9' && bildirim.pg.hedef === null &&
+    bildirim.paket.boyut === fs.statSync(p1).size);
 
   const tekrar = yayinla(ortak(p1));
   ol('§3i aynı sürüm ikinci kez → DUR (monotonluk), uzağa yazma SIFIR', tekrar.kod !== 0 && tekrar.yazma.length === 0 && /YENİ değil/.test(tekrar.cikti), tekrar.cikti.slice(-400));
@@ -266,7 +269,7 @@ function bolum3() {
   const ry = yayinla(ortak(yabanci));
   ol('§3l başka kanalın paketi → DUR, uzak/kenar SIFIR', ry.kod !== 0 && ry.log.length === 0 && /kanalı için üretilmiş/.test(ry.cikti));
   const provaUretim = paketKur('pu', { surum: '9.9.9-prova.4', kanal: 'adnansahin', prova: true, anahtar: ORTAK.dosya });
-  const ru = yayinla(['--musteri=adnansahin', `--paket=${provaUretim}`, `--anahtar=${ORTAK.dosya}`, '--pg-gerekli=16.4']);
+  const ru = yayinla(['--musteri=adnansahin', `--paket=${provaUretim}`, `--anahtar=${ORTAK.dosya}`, '--pg-cizgi=16', '--pg-en-az=16.9']);
   ol('§3m üretim kanalına PROVA → DUR, uzak SIFIR', ru.kod !== 0 && ru.log.length === 0 && /PROVA/.test(ru.cikti));
   const kurcali = paketKur('pk', { surum: '9.9.9-prova.5', kanal: 'testfabrika', prova: true, anahtar: ORTAK.dosya, kurcala: true });
   const rk = yayinla(ortak(kurcali));
@@ -283,8 +286,51 @@ function bolum3() {
   const rz = yayinla(ortak(p6), { SAHTE_SCP_BOZ: '1' });
   ol('§3q uzakta bozulan paket → DUR, son.json DEĞİŞMEDİ, geçici silindi, sürüm dizini yok', rz.kod !== 0 && fs.readFileSync(sonJson, 'utf8') === once &&
     !fs.existsSync(uzakDosya('testfabrika/backend/9.9.9-prova.6')) && fs.readdirSync(uzakDosya('testfabrika/backend')).filter((f) => f.startsWith('.')).length === 0, rz.cikti.slice(-400));
-  const rpg = yayinla(ortak(p6, []).filter((a) => !a.startsWith('--pg-gerekli')));
-  ol('§3r PG alt sınırı verilmeden → DUR, uzak SIFIR', rpg.kod !== 0 && rpg.log.length === 0 && /PostgreSQL/.test(rpg.cikti));
+  const rpg = yayinla(ortak(p6, []).filter((a) => !a.startsWith('--pg-en-az')));
+  ol('§3r PG gereksinimi verilmeden → DUR, uzak SIFIR', rpg.kod !== 0 && rpg.log.length === 0 && /PostgreSQL GEREKSİNİMİ/.test(rpg.cikti));
+  bolum3pg(ortak);
+}
+
+/** PG paketi (sözleşme sürümü 2): ayrı değişmez dizin, ayrı künye; backend bildirimi hedefi künyeden alır. */
+function bolum3pg(ortak) {
+  console.log('\n§3pg — PostgreSQL paketi (sözleşme sürümü 2)');
+  const pgKok = path.join(GECICI, 'pg-sahne');
+  fs.mkdirSync(path.join(pgKok, 'bin'), { recursive: true });
+  fs.writeFileSync(path.join(pgKok, 'bin/postgres.exe'), 'sahte');
+  fs.writeFileSync(path.join(pgKok, 'bin/icuuc67.dll'), 'sahte');
+  fs.writeFileSync(path.join(pgKok, 'TEKSERP-ICERIK.sha256'), 'aa  bin/postgres.exe\nbb  bin/icuuc67.dll\n');
+  const pgZip = path.join(GECICI, 'postgresql-16.15-4-win-x64.zip');
+  execFileSync('zip', ['-q', '-r', '-X', pgZip, '.'], { cwd: pgKok });
+  const pgCikti = path.join(GECICI, 'pg-kunye');
+  tsx(['scripts/backend-bildirim.ts', 'pg-imzala', `--zip=${pgZip}`, '--cizgi=16', '--surum=16.15', '--derleme=4', '--icu=67', `--anahtar=${ORTAK.dosya}`, `--cikti=${pgCikti}`]);
+  const pgJson = path.join(pgCikti, 'pg.json');
+  const yanlisIcu = spawnSync(process.execPath, ['--import', 'tsx', 'scripts/backend-bildirim.ts', 'pg-imzala', `--zip=${pgZip}`, '--cizgi=16', '--surum=16.15',
+    '--derleme=4', '--icu=74', `--anahtar=${ORTAK.dosya}`, `--cikti=${path.join(GECICI, 'pg-yanlis')}`], { cwd: TEKS, encoding: 'utf8' });
+  ol('§3s pg-imzala: zip ICU sürümünü taşımıyorsa DUR', yanlisIcu.status !== 0 && /icuuc74/.test(yanlisIcu.stderr));
+  const sonJson = uzakDosya('testfabrika/backend/son.json');
+  const once = fs.readFileSync(sonJson, 'utf8');
+  const p7 = paketKur('p7', { surum: '9.9.9-prova.7', kanal: 'testfabrika', prova: true, anahtar: ORTAK.dosya });
+  const r0 = yayinla(ortak(p7, [`--pg-kunye=${pgJson}`]));
+  ol('§3t hedeflenen PG kanalda YOKKEN backend yayını → DUR, yazma SIFIR', r0.kod !== 0 && r0.yazma.length === 0 && /bu kanalda YOK/.test(r0.cikti), r0.cikti.slice(-400));
+  const bozukZip = path.join(GECICI, 'bozuk', 'postgresql-16.15-4-win-x64.zip');
+  fs.mkdirSync(path.dirname(bozukZip), { recursive: true });
+  fs.writeFileSync(bozukZip, Buffer.concat([fs.readFileSync(pgZip), Buffer.from('x')]));
+  const rb = yayinla(['--musteri=testfabrika', '--pg-yayinla', `--pg-paket=${bozukZip}`, `--pg-kunye=${pgJson}`]);
+  ol('§3u künyeyle tutmayan PG zip → DUR, uzak SIFIR', rb.kod !== 0 && rb.log.length === 0 && /TUTMUYOR/.test(rb.cikti), rb.cikti.slice(-300));
+  const ry = yayinla(['--musteri=testfabrika', '--pg-yayinla', `--pg-paket=${pgZip}`, `--pg-kunye=${pgJson}`]);
+  ol('§3v --pg-yayinla: değişmez dizinde paket + pg.json, son.json DEĞİŞMEDİ, geçici yok', ry.kod === 0 &&
+    fs.existsSync(uzakDosya('testfabrika/backend/pg/16.15-4/postgresql-16.15-4-win-x64.zip')) && fs.existsSync(uzakDosya('testfabrika/backend/pg/16.15-4/pg.json')) &&
+    fs.readFileSync(sonJson, 'utf8') === once && fs.readdirSync(uzakDosya('testfabrika/backend/pg')).filter((f) => f.startsWith('.')).length === 0, ry.cikti.slice(-500));
+  const defter = fs.readFileSync(path.join(UZAK, 'defter', 'testfabrika-BACKEND-YAYIN-DEFTERI.tsv'), 'utf8');
+  ol('§3w PG yayını defterde (pg-16.15-4)', /\tpg-16\.15-4\t/.test(defter));
+  const ry2 = yayinla(['--musteri=testfabrika', '--pg-yayinla', `--pg-paket=${pgZip}`, `--pg-kunye=${pgJson}`]);
+  ol('§3x aynı PG ikinci kez → DUR (değişmez), yazma SIFIR', ry2.kod !== 0 && ry2.yazma.length === 0 && /ZATEN VAR/.test(ry2.cikti));
+  const r1 = yayinla(ortak(p7, [`--pg-kunye=${pgJson}`]));
+  const b = JSON.parse(Buffer.from(JSON.parse(fs.readFileSync(sonJson, 'utf8')).bildirim.split('.')[1], 'base64url').toString('utf8'));
+  const icerik = execFileSync('shasum', ['-a', '256', path.join(pgKok, 'TEKSERP-ICERIK.sha256')], { encoding: 'utf8' }).split(' ')[0];
+  const zipOzet = execFileSync('shasum', ['-a', '256', pgZip], { encoding: 'utf8' }).split(' ')[0];
+  ol('§3y backend bildirimi PG hedefini KÜNYEDEN alır (sürüm · derleme · zip özeti · içerik özeti ölçülmüş · ICU)', r1.kod === 0 && b.pg.hedef?.surum === '16.15' &&
+    b.pg.hedef?.derleme === 4 && b.pg.hedef?.paket?.sha256 === zipOzet && b.pg.hedef?.icerikSha256 === icerik && b.pg.hedef?.icuSurum === '67', r1.cikti.slice(-400));
 }
 
 function main() {
