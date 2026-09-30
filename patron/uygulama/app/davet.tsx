@@ -1,4 +1,4 @@
-// Davet: kod → parola → doğrulama uygulamasına sır → ilk kod. TOTP sırrı YALNIZ bu ekranda bir kez
+// Davet: kod → parola → doğrulama uygulamasına sır (karekod + elle anahtar) → ilk kod. TOTP sırrı YALNIZ bu ekranda bir kez
 // görünür; ekran kapanınca bellekten düşer (depoya yazılmaz).
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useState } from "react";
@@ -8,6 +8,7 @@ import type { InviteAccepted, InviteInfo } from "../src/api/wire";
 import { formatDateTime } from "../src/lib/format";
 import { useSession } from "../src/state/session";
 import { Banner, Body, Button, Field, Muted, Title } from "../src/ui/kit";
+import { TotpQr } from "../src/ui/TotpQr";
 import { color, space } from "../src/ui/theme";
 
 export default function Invite() {
@@ -47,7 +48,9 @@ export default function Invite() {
         </View>
       ) : secret ? (
         <View>
-          <Body>Doğrulama uygulamanıza (Google Authenticator, Microsoft Authenticator vb.) bu anahtarı ekleyin:</Body>
+          <Body>Doğrulama uygulamanızla (Google Authenticator, Microsoft Authenticator vb.) karekodu okutun:</Body>
+          <TotpQr value={secret.otpauth} />
+          <Muted>Karekod okutamıyorsanız bu anahtarı elle ekleyin:</Muted>
           <Text selectable style={{ fontSize: 20, fontWeight: "700", letterSpacing: 2, marginVertical: space.m }} testID="totp-sirri">
             {secret.totpSirri.replace(/(.{4})/g, "$1 ").trim()}
           </Text>
