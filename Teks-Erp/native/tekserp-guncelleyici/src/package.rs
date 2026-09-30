@@ -3,8 +3,7 @@
 //! dizin `butunluk.jws` + `butunluk-liste.txt`e karşı `tekserp_dogrulama::integrity` ile (lisans
 //! çekirdeğiyle AYNI kod) doğrulanır; `GECERLI` değilse sürüm dizini kullanılmaz.
 use crate::codes;
-use crate::env::Env;
-use crate::trust::{self, TrustAnchor};
+use crate::release::PackageIdentity;
 use serde_json::Value;
 use std::io::Read;
 use std::path::Path;
@@ -72,13 +71,6 @@ pub fn extract_real(archive: &Path, dest: &Path, limits: &ExtractLimits) -> Resu
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct PackageInfo {
-    pub integrity_kid: String,
-    pub package_id: Option<String>,
-    pub commit: Option<String>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PkgError {
     pub code: &'static str,
     pub message: String,
@@ -88,35 +80,17 @@ fn perr(code: &'static str, message: impl Into<String>) -> PkgError {
     PkgError { code, message: message.into() }
 }
 
-/// Hazırlık PAKET anahtarı yalnız TEST/DEMO sınıfında (sınıf bilinmiyorsa RED — fail-closed).
-pub fn check_key_class(kid: &str, class: Option<&str>) -> Result<(), PkgError> {
-    if trust::is_staging_package_kid(kid) && !class.is_some_and(|c| trust::STAGING_PACKAGE_CLASSES.contains(&c)) {
-        return Err(perr(
-            codes::PAKET_HAZIRLIK_ANAHTARI,
-            format!("hazırlık anahtarıyla ({kid}) imzalı paket bu kurulumun sınıfında ({}) kurulmaz", class.unwrap_or("bilinmiyor")),
-        ));
-    }
-    Ok(())
-}
-
-/// Açılmış sürüm dizinini doğrular: bütünlük GEÇERLİ · sürüm/ürün/müşteri tutarlı · anahtar sınıfı.
-pub fn verify_dir(
-    env: &Env,
-    dir: &Path,
-    anchor: &TrustAnchor,
-    version: &str,
-    channel: &str,
-    class: Option<&str>,
-) -> Result<PackageInfo, PkgError> {
-    let jws_text = env
-        .fs
+/// Açılmış dizini doğrular (sözleşme §1.5 madde 2): `butunluk.jws` bu kurulumun PAKET anahtar
+/// kümesiyle (hazırlık anahtarı yalnız TEST/DEMO'da — çağıran süzer) ve dosya listesi GEÇERLİ; dönen
+/// künye bildirimle `release::check_package_binding`e girer (madde 3).
+pub fn verify_dir(dir: &Path, fs: &dyn crate::env::Fs, keys: &[(String, String)]) -> Result<PackageIdentity, PkgError> {
+    let jws_text = fs
         .read(&dir.join(integrity_file()))
-        .map_err(|e| perr(codes::PAKET_BUTUNLUK, format!("butunluk.jws okunamadı: {e}")))
-        .and_then(|b| String::from_utf8(b).map_err(|_| perr(codes::PAKET_BUTUNLUK, "butunluk.jws UTF-8 değil")))?;
+        .map_err(|e| perr(codes::BUTUNLUK_GECERSIZ, format!("butunluk.jws okunamadı: {e}")))
+        .and_then(|b| String::from_utf8(b).map_err(|_| perr(codes::BUTUNLUK_GECERSIZ, "butunluk.jws UTF-8 değil")))?;
     let token = Value::String(jws_text.trim().to_string());
-    let kid = jws::parse(&token).map(|p| p.header.kid).map_err(|f| perr(codes::PAKET_BUTUNLUK, f.message))?;
-    check_key_class(&kid, class)?;
-    let report = integrity::verify(&token, &dir.to_string_lossy(), &anchor.package_keys);
+    let kid = jws::parse(&token).map(|p| p.header.kid).map_err(|f| perr(codes::BUTUNLUK_GECERSIZ, f.message))?;
+    let report = integrity::verify(&token, &dir.to_string_lossy(), keys);
     if report.get("durum").and_then(Value::as_str) != Some("GECERLI") {
         let kod = report.get("kod").and_then(Value::as_str).unwrap_or("?");
         let ornek = ["eksik", "degisik", "fazla", "okunamayan"]
@@ -127,30 +101,20 @@ pub fn verify_dir(
             .collect::<Vec<_>>()
             .join(" · ");
         return Err(perr(
-            codes::PAKET_BUTUNLUK,
+            codes::BUTUNLUK_GECERSIZ,
             format!("bütünlük {} ({kod}) {ornek}", report.get("durum").and_then(Value::as_str).unwrap_or("?")),
         ));
     }
     let pkg = &report["paket"];
-    if pkg.get("surum").and_then(Value::as_str) != Some(version) {
-        return Err(perr(codes::PAKET_BUTUNLUK, "paketin imzalı sürümü manifestteki sürüm değil"));
-    }
-    if pkg.get("urun").and_then(Value::as_str) != Some("backend") {
-        return Err(perr(codes::PAKET_BUTUNLUK, "paket backend ürünü değil"));
-    }
-    match pkg.get("musteri") {
-        None | Some(Value::Null) => {}
-        Some(Value::String(m)) if m == channel => {}
-        Some(_) => return Err(perr(codes::PAKET_BUTUNLUK, "paket başka bir müşteri için derlenmiş")),
-    }
-    let meta: Option<Value> = env.fs.read(&dir.join("PAKET.json")).ok().and_then(|b| serde_json::from_slice(&b).ok());
-    let commit = meta
-        .as_ref()
-        .and_then(|m| m.get("commit"))
-        .and_then(Value::as_str)
-        .filter(|c| (7..=40).contains(&c.len()) && c.bytes().all(|b| b.is_ascii_hexdigit()))
-        .map(str::to_string);
-    Ok(PackageInfo { integrity_kid: kid, package_id: pkg.get("paketId").and_then(Value::as_str).map(str::to_string), commit })
+    let s = |k: &str| pkg.get(k).and_then(Value::as_str).map(str::to_string);
+    Ok(PackageIdentity {
+        kid,
+        package_id: s("paketId").unwrap_or_default(),
+        urun: s("urun").unwrap_or_default(),
+        surum: s("surum").unwrap_or_default(),
+        built_at: s("derlemeTarihi").unwrap_or_default(),
+        musteri: s("musteri"),
+    })
 }
 
 pub fn integrity_file() -> &'static str {

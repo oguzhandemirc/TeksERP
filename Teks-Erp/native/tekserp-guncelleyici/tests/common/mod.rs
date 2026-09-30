@@ -33,6 +33,13 @@ pub const BACKEND: &str = "TeksERP-Backend";
 pub const PG: &str = "TeksERP-PostgreSQL";
 /// Sabit test saati: 2026-09-30T23:30:00Z (İstanbul 02:30).
 pub const T0: i64 = 1_790_811_000_000;
+pub const HOUR: i64 = 3_600_000;
+pub const DAY: i64 = 24 * HOUR;
+/// Paketin imzalı künyesiyle bildirimin bağlandığı alanlar (sözleşme §1.5).
+pub const PACKAGE_ID: &str = "0b0b0b0b-0b0b-4b0b-8b0b-0b0b0b0b0b0b";
+pub const BUILT_AT: &str = "2026-09-30T00:00:00Z";
+pub const COMMIT: &str = "abcdef1234";
+pub const TOKEN: &str = "belirtec.test.imza";
 
 /// Enjekte edilen ölüm (panik yükü).
 #[derive(Debug)]
@@ -238,7 +245,11 @@ pub fn sha_b64u(b: &[u8]) -> String {
     b64::encode(&Sha256::digest(b))
 }
 
-fn iso(ms: i64) -> String {
+pub fn sha_hex(b: &[u8]) -> String {
+    Sha256::digest(b).iter().map(|x| format!("{x:02x}")).collect()
+}
+
+pub fn iso(ms: i64) -> String {
     tekserp_hizmet::timefmt::iso_seconds(ms)
 }
 
@@ -604,10 +615,10 @@ pub fn integrity_files(
     }
     let payload = json!({
         "v": 1,
-        "paketId": "0b0b0b0b-0b0b-4b0b-8b0b-0b0b0b0b0b0b",
+        "paketId": PACKAGE_ID,
         "urun": "backend",
         "surum": v,
-        "derlemeTarihi": "2026-09-30T00:00:00Z",
+        "derlemeTarihi": BUILT_AT,
         "musteri": customer,
         "liste": { "sha256": sha_b64u(list.as_bytes()), "boyut": list.len(), "dosyaSayisi": scoped.len() },
         "kapsam": { "dizinler": ["dist", "node_modules", "prisma/migrations", "runtime"], "dosyalar": ["package.json"] },
@@ -632,22 +643,41 @@ pub fn zip_of(files: &[(String, Vec<u8>)]) -> Vec<u8> {
     buf.into_inner()
 }
 
+/// Kiranın `guncelleme` politikası (sözleşme §2): mutlak aralıklar ms çiftleri olarak verilir.
+pub fn policy(kip: &str, intervals: &[(i64, i64)], target: Option<&str>) -> Value {
+    let rule = (!intervals.is_empty() || kip == "OTOMATIK")
+        .then(|| json!({ "baslangic": "02:00", "bitis": "05:00", "gunler": [1, 2, 3, 4, 5, 6, 7], "saatDilimi": "Europe/Istanbul" }));
+    json!({
+        "kip": kip,
+        "pencere": rule,
+        "araliklar": intervals.iter().map(|(a, b)| json!({ "baslangic": iso(*a), "bitis": iso(*b) })).collect::<Vec<_>>(),
+        "hedefSurum": target,
+    })
+}
+
+/// T0'ı içeren pencere (İstanbul 02:00–05:00 = 23:00–02:00Z) ve sonraki günlerinki.
+pub fn open_window() -> Vec<(i64, i64)> {
+    (0..5).map(|d| (T0 - 30 * 60_000 + d * DAY, T0 + 150 * 60_000 + d * DAY)).collect()
+}
+
 pub struct LeaseOpts {
+    /// `guncelleme` alanı (yoksa eski satıcı: varsayılan ONAYLI).
     pub update: Option<Value>,
     pub frozen_by_sanction: bool,
-    pub channel_backend: Option<&'static str>,
     pub class: &'static str,
     pub expired: bool,
+    /// HAK `bakimBitis` (ms); `None` = HAK dosyası yok.
+    pub maintenance_end: Option<i64>,
 }
 
 impl Default for LeaseOpts {
     fn default() -> Self {
         LeaseOpts {
-            update: Some(json!({ "kip": "OTOMATIK" })),
+            update: Some(policy("OTOMATIK", &open_window(), None)),
             frozen_by_sanction: false,
-            channel_backend: Some(NEW),
             class: "URETIM",
             expired: false,
+            maintenance_end: Some(T0 + 365 * DAY),
         }
     }
 }
@@ -655,62 +685,98 @@ impl Default for LeaseOpts {
 const HAK_ID: &str = "11111111-1111-4111-8111-111111111111";
 const KURULUM_ID: &str = "22222222-2222-4222-8222-222222222222";
 
-pub fn lease_and_entitlement(k: &Keys, o: &LeaseOpts, now: i64) -> (String, String) {
-    let day = 86_400_000;
+/// (kira, HAK) — HAK `maintenance_end` yoksa `None`.
+pub fn lease_and_entitlement(k: &Keys, o: &LeaseOpts, now: i64) -> (String, Option<String>) {
     let cert = sign(
         &k.root,
         "tekserp-sertifika",
         "kok-test-1",
         &json!({
             "v": 1, "sertifikaId": "33333333-3333-4333-8333-333333333333", "kullanim": "ALT", "kid": "alt-test-1",
-            "x": x_of(&k.alt), "siniflar": ["URETIM", "TEST"], "baslangic": iso(now - 400 * day), "bitis": iso(now + 400 * day), "bayi": null,
+            "x": x_of(&k.alt), "siniflar": ["URETIM", "TEST"], "baslangic": iso(now - 400 * DAY), "bitis": iso(now + 400 * DAY), "bayi": null,
         }),
     );
-    let issued = if o.expired { now - 44 * day } else { now - day };
+    let issued = if o.expired { now - 44 * DAY } else { now - DAY };
     let mut lease = json!({
         "v": 1, "kiraId": "44444444-4444-4444-8444-444444444444", "hakId": HAK_ID, "hakSurum": 1, "kurulumId": KURULUM_ID,
         "kurulumAnahtarKimligi": format!("kur-{}", "A".repeat(43)),
         "parmakIzi": { "f1": null, "f2": null, "f3": null, "f4": null, "f5": null },
-        "verilis": iso(issued), "bitis": iso(issued + 30 * day), "sunucuSaati": iso(issued), "ekSureGun": if o.expired { 0 } else { 30 },
+        "verilis": iso(issued), "bitis": iso(issued + 30 * DAY), "sunucuSaati": iso(issued), "ekSureGun": if o.expired { 0 } else { 30 },
         "zorlama": false, "gecerlilikBitis": null,
         "yaptirim": { "kademe": null, "mesaj": null, "kisitlamaTarihi": null, "donmusModuller": [], "guncellemeDonuk": o.frozen_by_sanction },
         "yoklamaAraligiDk": 60, "esitlemeAraligiDk": null, "patronBulutBitis": null, "devredildi": false,
-        "kanal": { "kod": CHANNEL, "guncelSurumler": match o.channel_backend { Some(v) => json!({ "backend": v }), None => json!({}) } },
+        "kanal": { "kod": CHANNEL, "guncelSurumler": { "backend": NEW } },
         "altSertifika": cert,
     });
     if let Some(u) = &o.update {
         lease["guncelleme"] = u.clone();
     }
-    let hak = json!({
-        "v": 1, "hakId": HAK_ID, "surum": 1, "lisansNo": "TKS-2026-0001",
-        "musteri": { "id": "55555555-5555-4555-8555-555555555555", "ad": "Test" },
-        "tesis": { "id": "66666666-6666-4666-8666-666666666666", "ad": "Test tesis" },
-        "kurulumId": KURULUM_ID, "sinif": o.class, "moduller": [], "kalici": true,
-        "bakimBitis": iso(now + 365 * day), "verilis": iso(now - 10 * day),
+    let hak = o.maintenance_end.map(|end| {
+        let hak = json!({
+            "v": 1, "hakId": HAK_ID, "surum": 1, "lisansNo": "TKS-2026-0001",
+            "musteri": { "id": "55555555-5555-4555-8555-555555555555", "ad": "Test" },
+            "tesis": { "id": "66666666-6666-4666-8666-666666666666", "ad": "Test tesis" },
+            "kurulumId": KURULUM_ID, "sinif": o.class, "moduller": [], "kalici": true,
+            "bakimBitis": iso(end), "verilis": iso(now - 10 * DAY),
+        });
+        sign(&k.root, "tekserp-hak", "kok-test-1", &hak)
     });
-    (sign(&k.alt, "tekserp-kira", "alt-test-1", &lease), sign(&k.root, "tekserp-hak", "kok-test-1", &hak))
+    (sign(&k.alt, "tekserp-kira", "alt-test-1", &lease), hak)
 }
 
-pub fn manifest_for(k: &SigningKey, kid: &str, v: &str, zip: &[u8], extra: Option<Value>) -> String {
+pub fn package_name(v: &str) -> String {
+    format!("tekserp-backend-{v}.zip")
+}
+
+/// Sözleşme §1.3 bildirim yükü (TS `ReleaseManifestSchema` biçimi); `extra` üst düzey alanları ezer.
+pub fn manifest_payload(kid: &str, v: &str, zip: &[u8], extra: Option<&Value>) -> Value {
     let mut p = json!({
-        "v": 1, "urun": "backend", "kanal": CHANNEL, "surum": v,
-        "paket": { "yol": format!("/{CHANNEL}/backend/{v}/paket.zip"), "sha256": sha_b64u(zip), "boyut": zip.len() },
-        "enAzKaynakSurum": null, "gocSayisi": migrations_of(v),
+        "v": 1, "urun": "backend", "platform": "win32-x64", "kanal": CHANNEL, "surum": v, "commit": COMMIT,
+        "derlemeTarihi": BUILT_AT, "yayinZamani": "2026-09-30T01:00:00Z",
+        "paket": { "ad": package_name(v), "boyut": zip.len(), "sha256": sha_hex(zip), "paketId": PACKAGE_ID },
+        "paketImzaKid": kid, "minKaynakSurum": null, "gocSayisi": migrations_of(v),
+        "pg": { "cizgi": 16, "enAz": "16.9", "hedef": null },
+        "runtime": { "node": "24.18.0" }, "notlar": { "ozet": "Test sürümü" }, "zorunlu": false,
     });
     if let Some(Value::Object(e)) = extra {
         for (a, b) in e {
-            p[a] = b;
+            p[a] = b.clone();
         }
     }
-    sign(k, "tekserp-guncelleme", kid, &p)
+    p
 }
 
-pub fn intent(v: &str, id: &str, approval: Option<Value>) -> Value {
+/// İşaretçi (`son.json` · `<sürüm>/surum.json` · `pg.json`): `{v:1, bildirim}`.
+pub fn pointer(token: &str) -> Vec<u8> {
+    format!("{}\n", json!({ "v": 1, "bildirim": token })).into_bytes()
+}
+
+pub fn sign_manifest(k: &SigningKey, kid: &str, payload: &Value) -> String {
+    sign(k, "tekserp-surum", kid, payload)
+}
+
+/// Bildirimi yayınlar: `<sürüm>/surum.json` + `son.json` (+ paket, verilirse) — yayın sırası gibi.
+pub fn publish(files: &Mutex<HashMap<String, Vec<u8>>>, payload: &Value, token: &str, zip: Option<Vec<u8>>, latest: bool) {
+    let v = payload["surum"].as_str().unwrap().to_string();
+    let mut f = files.lock().unwrap();
+    if let Some(z) = zip {
+        f.insert(format!("/{CHANNEL}/backend/{v}/{}", payload["paket"]["ad"].as_str().unwrap()), z);
+    }
+    f.insert(format!("/{CHANNEL}/backend/{v}/surum.json"), pointer(token));
+    if latest {
+        f.insert(format!("/{CHANNEL}/backend/son.json"), pointer(token));
+    }
+}
+
+pub fn approval(id: &str, v: &str, timing: &str) -> Value {
+    json!({ "onayId": id, "surum": v, "zamanlama": timing, "kullaniciId": "u-1", "ad": "Ayşe", "zaman": iso(T0) })
+}
+
+/// Niyet (§5.1): belirteç + (varsa) panel onayı.
+pub fn intent(approval: Option<Value>) -> Value {
     json!({
-        "v": 1, "niyetId": id, "yazildi": iso(T0), "urun": "backend", "surum": v,
-        "manifestYolu": format!("/{CHANNEL}/backend/{v}/manifest.jws"),
-        "indirme": { "belirtec": "belirtec.test.imza", "bitis": iso(T0 + 3_600_000 * 24 * 30) },
-        "saatDilimi": "Europe/Istanbul",
+        "v": 1, "yazildi": iso(T0),
+        "indirme": { "belirtec": TOKEN, "bitis": iso(T0 + 30 * DAY) },
         "onay": approval,
     })
 }
@@ -734,7 +800,7 @@ impl Default for Setup {
             customer: Some(CHANNEL),
             extra_file_in_scope: false,
             manifest_extra: None,
-            intent: Some(intent(NEW, "niyet-1", None)),
+            intent: Some(intent(None)),
         }
     }
 }
@@ -790,21 +856,22 @@ impl World {
         let (lease, hak) = lease_and_entitlement(&keys, &s.lease, T0);
         std::fs::create_dir_all(root.join("lisans")).unwrap();
         std::fs::write(root.join("lisans").join("kira.jws"), lease).unwrap();
-        std::fs::write(root.join("lisans").join("hak.jws"), hak).unwrap();
-        // Yeni paket + manifest (sunucuda)
-        let mut files = version_files(NEW);
+        if let Some(h) = hak {
+            std::fs::write(root.join("lisans").join("hak.jws"), h).unwrap();
+        }
+        // Yeni paket + imzalı bildirim + işaretçiler (sunucuda)
+        let files = version_files(NEW);
         let (signer, kid) = if s.package_signer_staging { (&keys.staging, "paket-hazirlik") } else { (&keys.package, "paket-2026") };
         let mut all = files.clone();
         all.extend(integrity_files(&files, NEW, signer, kid, s.customer));
         if s.extra_file_in_scope {
-            files.push(("dist/arka-kapi.js".into(), b"// imzasiz".to_vec()));
             all.push(("dist/arka-kapi.js".into(), b"// imzasiz".to_vec()));
         }
         let zip = zip_of(&all);
-        let manifest = manifest_for(signer, kid, NEW, &zip, s.manifest_extra.clone());
-        let mut served = HashMap::new();
-        served.insert(format!("/{CHANNEL}/backend/{NEW}/paket.zip"), zip);
-        served.insert(format!("/{CHANNEL}/backend/{NEW}/manifest.jws"), manifest.into_bytes());
+        let payload = manifest_payload(kid, NEW, &zip, s.manifest_extra.as_ref());
+        let served = Mutex::new(HashMap::new());
+        publish(&served, &payload, &sign_manifest(signer, kid, &payload), Some(zip), true);
+        let served = served.into_inner().unwrap();
         if let Some(i) = &s.intent {
             std::fs::create_dir_all(layout.intent_file().parent().unwrap()).unwrap();
             std::fs::write(layout.intent_file(), i.to_string()).unwrap();

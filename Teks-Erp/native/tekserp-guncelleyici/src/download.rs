@@ -1,13 +1,13 @@
-//! Sürdürülebilir indirme (§6.4): `.part` dosyasına `Range: bytes=<n>-` ile devam eder; İNDİRME
-//! belirteci `X-TKL-Indirme` başlığıyla (Worker doğrular). Bitince sha256 + boy manifestteki imzalı
-//! değere EŞİT olmadan dosya asıl adını almaz — imzasız veri zip ayrıştırıcısına hiç girmez.
+//! Sürdürülebilir indirme (§6.4, sözleşme §1.5 madde 1): `.part` dosyasına `Range: bytes=<n>-` ile devam
+//! eder; İNDİRME belirteci `X-TKL-Indirme` başlığıyla (Worker doğrular). Bitince sha256 (küçük harf hex)
+//! ve boy imzalı bildirimdekine EŞİT olmadan dosya asıl adını almaz — imzasız veri zip ayrıştırıcısına
+//! hiç girmez; tutmazsa parça silinir (`PAKET_OZETI`).
 use crate::codes;
 use crate::env::Env;
 use sha2::{Digest, Sha256};
 use std::io::Read;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
-use tekserp_dogrulama::b64;
 
 pub const TOKEN_HEADER: &str = "X-TKL-Indirme";
 const CODE_HEADER: &str = "X-TKL-Kod";
@@ -20,7 +20,8 @@ pub struct Spec {
     pub part: PathBuf,
     pub dest: PathBuf,
     pub size: u64,
-    pub sha256_b64u: String,
+    /// İmzalı bildirimdeki sha256 (küçük harf hex).
+    pub sha256_hex: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -33,7 +34,7 @@ fn dl_err(code: &'static str, message: impl Into<String>) -> DlError {
     DlError { code, message: message.into() }
 }
 
-/// Dosyanın sha256'sı (base64url) — akışla, bellekte tutmadan.
+/// Dosyanın sha256'sı (küçük harf hex) — akışla, bellekte tutmadan.
 pub fn sha256_file(env: &Env, p: &Path) -> std::io::Result<String> {
     let mut f = env.fs.open_read(p)?;
     let mut h = Sha256::new();
@@ -45,11 +46,11 @@ pub fn sha256_file(env: &Env, p: &Path) -> std::io::Result<String> {
         }
         h.update(&buf[..n]);
     }
-    Ok(b64::encode(&h.finalize()))
+    Ok(hex(&h.finalize()))
 }
 
-pub fn hex_of_b64u(d: &str) -> Option<String> {
-    b64::decode_exact::<32>(d).map(|b| b.iter().map(|x| format!("{x:02x}")).collect())
+pub fn hex(bytes: &[u8]) -> String {
+    bytes.iter().map(|x| format!("{x:02x}")).collect()
 }
 
 fn headers(spec: &Spec, from: u64) -> Vec<(String, String)> {
@@ -63,7 +64,7 @@ fn headers(spec: &Spec, from: u64) -> Vec<(String, String)> {
     h
 }
 
-/// Küçük bir belgeyi (manifest) indirir; 64 KB tavanlı.
+/// Küçük bir belgeyi (işaretçi: `son.json` · `surum.json` · `pg.json`) indirir; 64 KB tavanlı.
 pub fn fetch_small(env: &Env, url: &str, token: Option<&str>) -> Result<Vec<u8>, DlError> {
     let mut h = Vec::new();
     if let Some(t) = token {
@@ -78,7 +79,7 @@ pub fn fetch_small(env: &Env, url: &str, token: Option<&str>) -> Result<Vec<u8>,
     let mut out = Vec::new();
     r.body.take(64 * 1024 + 1).read_to_end(&mut out).map_err(|e| dl_err(codes::MANIFEST_INDIRILEMEDI, e.to_string()))?;
     if out.len() > 64 * 1024 {
-        return Err(dl_err(codes::MANIFEST_GECERSIZ, "manifest 64 KB'ı aşıyor"));
+        return Err(dl_err(codes::MANIFEST_GECERSIZ, "işaretçi 64 KB'ı aşıyor"));
     }
     Ok(out)
 }
@@ -95,7 +96,7 @@ fn rejected(r: &crate::env::HttpResponse) -> DlError {
 pub fn download(env: &Env, spec: &Spec, progress: &mut dyn FnMut(u64, u64), stop: &dyn Fn() -> bool) -> Result<(), DlError> {
     if env.fs.exists(&spec.dest) {
         let ok = env.fs.file_len(&spec.dest).ok() == Some(spec.size)
-            && sha256_file(env, &spec.dest).ok().as_deref() == Some(spec.sha256_b64u.as_str());
+            && sha256_file(env, &spec.dest).ok().as_deref() == Some(spec.sha256_hex.as_str());
         if ok {
             return Ok(());
         }
@@ -150,7 +151,7 @@ pub fn download(env: &Env, spec: &Spec, progress: &mut dyn FnMut(u64, u64), stop
             if have + n as u64 > spec.size {
                 drop(out);
                 let _ = env.fs.remove_file(&spec.part);
-                return Err(dl_err(codes::PAKET_OZET, "sunucu imzalı boydan fazla veri gönderdi"));
+                return Err(dl_err(codes::PAKET_OZETI, "sunucu imzalı boydan fazla veri gönderdi"));
             }
             std::io::Write::write_all(&mut out, &buf[..n]).map_err(|e| dl_err(codes::INDIRME_HATASI, e.to_string()))?;
             have += n as u64;
@@ -166,9 +167,9 @@ pub fn download(env: &Env, spec: &Spec, progress: &mut dyn FnMut(u64, u64), stop
         }
     }
     let got = sha256_file(env, &spec.part).map_err(|e| dl_err(codes::INDIRME_HATASI, e.to_string()))?;
-    if got != spec.sha256_b64u {
+    if got != spec.sha256_hex {
         let _ = env.fs.remove_file(&spec.part);
-        return Err(dl_err(codes::PAKET_OZET, "paketin sha256'sı imzalı manifesttekiyle aynı değil"));
+        return Err(dl_err(codes::PAKET_OZETI, "paketin sha256'sı imzalı bildirimdekiyle aynı değil"));
     }
     env.fs.rename(&spec.part, &spec.dest).map_err(|e| dl_err(codes::INDIRME_HATASI, e.to_string()))
 }

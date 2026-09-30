@@ -5,7 +5,6 @@ use crate::codes;
 use crate::download;
 use crate::env::Env;
 use crate::layout::Layout;
-use crate::manifest::PgTarget;
 use crate::operation::{self, start_service, step_err, stop_service, switch_link, Ctx, OpOutcome, Operation, StepError};
 use crate::tools;
 use serde::{Deserialize, Serialize};
@@ -13,7 +12,6 @@ use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 use std::path::{Path, PathBuf};
 use std::time::Duration;
-use tekserp_dogrulama::b64;
 use tekserp_hizmet::contract;
 use tekserp_hizmet::timefmt;
 
@@ -52,10 +50,6 @@ pub fn read_instance(env: &Env, layout: &Layout) -> Option<Instance> {
     env.fs.read(&layout.pg_instance_file()).ok().and_then(|b| serde_json::from_slice(&b).ok())
 }
 
-pub fn tag_of(t: &PgTarget) -> String {
-    format!("{}-{}", t.version, t.build)
-}
-
 /// `bin\icuuc<N>.dll` → N (ICU sürümü değişirse ICU'ya bağlı index'ler yeniden kurulur, D4 U9).
 pub fn icu_version(env: &Env, dir: &Path) -> Option<String> {
     env.fs.list(&dir.join("bin")).ok()?.into_iter().find_map(|n| {
@@ -65,11 +59,11 @@ pub fn icu_version(env: &Env, dir: &Path) -> Option<String> {
     })
 }
 
-/// İçerik manifestosuna karşı ölçüm: manifestonun özeti imzalı değere eşit, her satırdaki dosya
-/// var ve özeti tutuyor, listede olmayan dosya YOK.
-pub fn verify_content(env: &Env, dir: &Path, content_sha256_b64u: &str) -> Result<usize, String> {
+/// İçerik manifestosuna karşı ölçüm: manifestonun özeti imzalı değere (`icerikSha256`, hex) eşit, her
+/// satırdaki dosya var ve özeti tutuyor, listede olmayan dosya YOK.
+pub fn verify_content(env: &Env, dir: &Path, content_sha256_hex: &str) -> Result<usize, String> {
     let text = env.fs.read(&dir.join(CONTENT_MANIFEST)).map_err(|e| format!("{CONTENT_MANIFEST} yok: {e}"))?;
-    if b64::encode(&Sha256::digest(&text)) != content_sha256_b64u {
+    if download::hex(&Sha256::digest(&text)) != content_sha256_hex {
         return Err("içerik manifestosunun özeti imzalı değerle aynı değil".into());
     }
     let text = String::from_utf8(text).map_err(|_| "içerik manifestosu UTF-8 değil".to_string())?;
@@ -82,7 +76,7 @@ pub fn verify_content(env: &Env, dir: &Path, content_sha256_b64u: &str) -> Resul
         }
         let path = rel.split(['/', '\\']).fold(dir.to_path_buf(), |acc, seg| acc.join(seg));
         let got = download::sha256_file(env, &path).map_err(|e| format!("{rel}: {e}"))?;
-        if download::hex_of_b64u(&got).as_deref() != Some(&hex.to_ascii_lowercase()) {
+        if got != hex.to_ascii_lowercase() {
             return Err(format!("{rel}: özet tutmuyor"));
         }
         listed.insert(rel.replace('\\', "/"));
@@ -119,8 +113,11 @@ pub struct PgPlan {
     pub kind: String,
     #[serde(rename = "islemId")]
     pub op_id: String,
-    #[serde(rename = "niyetId")]
-    pub intent_id: Option<String>,
+    #[serde(rename = "onayId")]
+    pub approval_id: Option<String>,
+    /// Bu PG adımının ön koşul olduğu backend sürümü (denemenin hedefi — rapor `hedefSurum`).
+    #[serde(rename = "hedefBackend")]
+    pub backend_target: String,
     #[serde(rename = "kaynakSurum")]
     pub source_tag: String,
     #[serde(rename = "surum")]
@@ -143,8 +140,6 @@ pub struct PgPlan {
     pub data_dir: PathBuf,
     #[serde(rename = "icuDegisti")]
     pub icu_changed: bool,
-    #[serde(rename = "reindexIcu")]
-    pub reindex_icu: bool,
     #[serde(rename = "backendSurumu")]
     pub backend_version: String,
     #[serde(rename = "araclar")]
@@ -275,8 +270,8 @@ impl Operation for PgOp {
     fn target(&self) -> &str {
         &self.plan.target_tag
     }
-    fn intent_id(&self) -> Option<&str> {
-        self.plan.intent_id.as_deref()
+    fn approval_id(&self) -> Option<&str> {
+        self.plan.approval_id.as_deref()
     }
     fn steps(&self) -> &'static [&'static str] {
         PG_STEPS
@@ -308,10 +303,10 @@ impl Operation for PgOp {
                 self.wait_version(ctx, &p.new_dir, &p.target_server_version).map(|()| Value::Null)
             }
             "PG_ICU" => {
-                if p.icu_changed || p.reindex_icu {
+                if p.icu_changed {
                     self.reindex_icu(ctx, &p.new_dir)?;
                 }
-                Ok(json!({ "yenidenDizinlendi": p.icu_changed || p.reindex_icu }))
+                Ok(json!({ "yenidenDizinlendi": p.icu_changed }))
             }
             "BACKEND_BASLAT" => {
                 start_service(ctx, contract::BACKEND_SERVICE, &[], codes::HIZMET_BASLAMADI)?;
@@ -326,27 +321,31 @@ impl Operation for PgOp {
         matches!(step, "BACKEND_DURDUR" | "PG_DURDUR" | "PG_YOL" | "PG_BAGLANTI" | "PG_BASLAT" | "BACKEND_BASLAT")
     }
 
-    fn compensate(&self, ctx: &Ctx, view: &crate::journal::OpView, step: &str) -> Result<(), StepError> {
+    fn compensate(&self, ctx: &Ctx, view: &crate::journal::OpView, step: &str) -> Result<Value, StepError> {
         let p = &self.plan;
+        let done = |r: Result<(), StepError>| r.map(|()| Value::Null);
         match step {
-            "BACKEND_BASLAT" => stop_service(ctx, contract::BACKEND_SERVICE, codes::HIZMET_YOK, codes::HIZMET_DURMADI),
-            "PG_BASLAT" => stop_service(ctx, &p.service, codes::HIZMET_YOK, codes::PG_DURMADI),
-            "PG_BAGLANTI" => switch_link(ctx, &ctx.layout.pg_bin_link(), &p.old_dir.join("bin"), codes::PG_YOL_HATASI),
-            "PG_YOL" => self.set_image_path(ctx, &p.old_image_path),
+            "BACKEND_BASLAT" => done(stop_service(ctx, contract::BACKEND_SERVICE, codes::HIZMET_YOK, codes::HIZMET_DURMADI)),
+            "PG_BASLAT" => done(stop_service(ctx, &p.service, codes::HIZMET_YOK, codes::PG_DURMADI)),
+            "PG_BAGLANTI" => done(switch_link(ctx, &ctx.layout.pg_bin_link(), &p.old_dir.join("bin"), codes::PG_YOL_HATASI)),
+            "PG_YOL" => done(self.set_image_path(ctx, &p.old_image_path)),
             "PG_DURDUR" => {
                 start_service(ctx, &p.service, &[], codes::PG_BASLAMADI)?;
                 self.wait_version(ctx, &p.old_dir, &p.source_server_version)?;
-                if view.began("PG_ICU") && (p.icu_changed || p.reindex_icu) {
+                if view.began("PG_ICU") && p.icu_changed {
                     self.reindex_icu(ctx, &p.old_dir)?;
                 }
-                Ok(())
+                Ok(Value::Null)
             }
             "BACKEND_DURDUR" => {
                 start_service(ctx, contract::BACKEND_SERVICE, &[], codes::GERI_DONUS_SAGLIKSIZ)?;
-                self.backend_health(ctx)
-                    .map_err(|e| step_err(codes::GERI_DONUS_SAGLIKSIZ, format!("backend sağlıklı başlamadı: {} {}", e.code, e.message)))
+                done(
+                    self.backend_health(ctx).map_err(|e| {
+                        step_err(codes::GERI_DONUS_SAGLIKSIZ, format!("backend sağlıklı başlamadı: {} {}", e.code, e.message))
+                    }),
+                )
             }
-            _ => Ok(()),
+            _ => Ok(Value::Null),
         }
     }
 
@@ -359,12 +358,15 @@ impl Operation for PgOp {
         let line = crate::ipc::HistoryLine {
             v: 1,
             op_id: self.plan.op_id.clone(),
-            intent_id: self.plan.intent_id.clone(),
+            approval_id: self.plan.approval_id.clone(),
             product: "pg".into(),
+            backend_target: Some(self.plan.backend_target.clone()),
             source_version: self.plan.source_tag.clone(),
             version: self.plan.target_tag.clone(),
             result,
-            error_code: code,
+            error_code: code.as_deref().map(|c| codes::report_code(c).to_string()),
+            detail_code: code,
+            data_restored: false,
             started: timefmt::iso_millis(self.plan.started_ms),
             finished: ctx.now_iso(),
             migrations: crate::ipc::MigrationCounts { before: None, after: None },

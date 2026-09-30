@@ -47,7 +47,7 @@ pub struct Progress<'a> {
     pub product: &'a str,
     pub source: &'a str,
     pub target: &'a str,
-    pub intent_id: Option<&'a str>,
+    pub approval_id: Option<&'a str>,
     pub step: &'a str,
     pub rolling_back: bool,
 }
@@ -73,13 +73,15 @@ pub trait Operation {
     fn product(&self) -> &'static str;
     fn source(&self) -> &str;
     fn target(&self) -> &str;
-    fn intent_id(&self) -> Option<&str>;
+    /// Bu işlemi tetikleyen panel onayı (`onayId`); pencere/otomatik kipte `None`.
+    fn approval_id(&self) -> Option<&str>;
     fn steps(&self) -> &'static [&'static str];
     /// Yarımda kalan bu adımda açılış GERİ AL mı yapar (varsayılan DEVAM).
     fn rollback_if_interrupted(&self, step: &str) -> bool;
     fn run_step(&self, ctx: &Ctx, view: &OpView, step: &str) -> Result<Value, StepError>;
     fn has_compensation(&self, step: &str) -> bool;
-    fn compensate(&self, ctx: &Ctx, view: &OpView, step: &str) -> Result<(), StepError>;
+    /// Telafi; dönen veri TELAFİ_BİTTİ satırına yazılır (ör. DB geri yüklendi mi).
+    fn compensate(&self, ctx: &Ctx, view: &OpView, step: &str) -> Result<Value, StepError>;
     /// Sonuçtan sonra en iyi çaba (geçmiş satırı, kurulum kaydı) — hata işlemi değiştirmez.
     fn after_result(&self, ctx: &Ctx, view: &OpView, outcome: &OpOutcome);
 }
@@ -100,7 +102,7 @@ fn progress(ctx: &Ctx, op: &dyn Operation, step: &str, rolling_back: bool) {
         product: op.product(),
         source: op.source(),
         target: op.target(),
-        intent_id: op.intent_id(),
+        approval_id: op.approval_id(),
         step,
         rolling_back,
     });
@@ -220,8 +222,8 @@ fn rollback(ctx: &Ctx, journal: &mut Journal, op: &dyn Operation) -> OpOutcome {
         }
         let v = view(journal, &id);
         match op.compensate(ctx, &v, step) {
-            Ok(()) => {
-                if let Err(e) = record(ctx, journal, &id, Kind::CompEnd, Some(step), Value::Null) {
+            Ok(data) => {
+                if let Err(e) = record(ctx, journal, &id, Kind::CompEnd, Some(step), data) {
                     return OpOutcome::Failed(e);
                 }
             }
@@ -257,7 +259,7 @@ const ALL_CODES: &[&str] = &[
     codes::SAGLIK_LISANS_OLCULEMEDI,
     codes::GERI_YUKLEME_HATASI,
     codes::GERI_DONUS_SAGLIKSIZ,
-    codes::PAKET_BUTUNLUK,
+    codes::BUTUNLUK_GECERSIZ,
     codes::DISK_DOLU,
     codes::PG_DURMADI,
     codes::PG_BASLAMADI,
@@ -313,8 +315,8 @@ pub struct BackendPlan {
     pub kind: String,
     #[serde(rename = "islemId")]
     pub op_id: String,
-    #[serde(rename = "niyetId")]
-    pub intent_id: Option<String>,
+    #[serde(rename = "onayId")]
+    pub approval_id: Option<String>,
     #[serde(rename = "kaynakSurum")]
     pub source_version: String,
     #[serde(rename = "surum")]
@@ -327,6 +329,7 @@ pub struct BackendPlan {
     pub migrations_before: Option<MigrationCount>,
     #[serde(rename = "lisansOnce")]
     pub license_before: Option<LicenseHealth>,
+    /// Zip'in sha256'sı (hex, imzalı bildirimden).
     #[serde(rename = "paketOzeti")]
     pub package_hex: Option<String>,
     #[serde(rename = "commit")]
@@ -596,8 +599,8 @@ impl Operation for BackendOp {
     fn target(&self) -> &str {
         &self.plan.version
     }
-    fn intent_id(&self) -> Option<&str> {
-        self.plan.intent_id.as_deref()
+    fn approval_id(&self) -> Option<&str> {
+        self.plan.approval_id.as_deref()
     }
     fn steps(&self) -> &'static [&'static str] {
         BACKEND_STEPS
@@ -632,9 +635,11 @@ impl Operation for BackendOp {
         matches!(step, "BACKEND_DURDUR" | "GECIS" | "GOC" | "DOGRULAMA" | "BASLAT")
     }
 
-    fn compensate(&self, ctx: &Ctx, view: &OpView, step: &str) -> Result<(), StepError> {
+    fn compensate(&self, ctx: &Ctx, view: &OpView, step: &str) -> Result<Value, StepError> {
         match step {
-            "BASLAT" | "DOGRULAMA" => stop_service(ctx, contract::BACKEND_SERVICE, codes::HIZMET_YOK, codes::HIZMET_DURMADI),
+            "BASLAT" | "DOGRULAMA" => {
+                stop_service(ctx, contract::BACKEND_SERVICE, codes::HIZMET_YOK, codes::HIZMET_DURMADI).map(|()| Value::Null)
+            }
             "GOC" => {
                 if self.db_changed(ctx, view) {
                     ctx.log.warn(&format!(
@@ -642,18 +647,19 @@ impl Operation for BackendOp {
                         self.plan.op_id
                     ));
                     restore_backup(ctx, &self.plan.op_id, &self.plan.tools_dir, self.plan.migrations_before)
+                        .map(|()| json!({ "geriYuklendi": true }))
                 } else {
-                    Ok(())
+                    Ok(json!({ "geriYuklendi": false }))
                 }
             }
-            "GECIS" => switch_link(ctx, &ctx.layout.current(), &self.plan.previous_target, codes::GECIS_HATASI),
+            "GECIS" => switch_link(ctx, &ctx.layout.current(), &self.plan.previous_target, codes::GECIS_HATASI).map(|()| Value::Null),
             "BACKEND_DURDUR" => {
                 start_service(ctx, contract::BACKEND_SERVICE, &[], codes::GERI_DONUS_SAGLIKSIZ)?;
-                self.health(ctx, &self.plan.source_version, false).map(|_| ()).map_err(|e| {
+                self.health(ctx, &self.plan.source_version, false).map(|_| Value::Null).map_err(|e| {
                     step_err(codes::GERI_DONUS_SAGLIKSIZ, format!("önceki sürüm sağlıklı başlamadı: {} {}", e.code, e.message))
                 })
             }
-            _ => Ok(()),
+            _ => Ok(Value::Null),
         }
     }
 
@@ -684,15 +690,22 @@ impl Operation for BackendOp {
                 ctx.log.warn(&format!("geri alma kaydı yazılamadı: {e}"));
             }
         }
+        let restored = view
+            .records
+            .iter()
+            .any(|r| r.kind == Kind::CompEnd && r.step.as_deref() == Some("GOC") && r.data.get("geriYuklendi") == Some(&Value::Bool(true)));
         let line = crate::ipc::HistoryLine {
             v: 1,
             op_id: self.plan.op_id.clone(),
-            intent_id: self.plan.intent_id.clone(),
+            approval_id: self.plan.approval_id.clone(),
             product: "backend".into(),
+            backend_target: None,
             source_version: self.plan.source_version.clone(),
             version: self.plan.version.clone(),
             result,
-            error_code: code,
+            error_code: code.as_deref().map(|c| codes::report_code(c).to_string()),
+            detail_code: code,
+            data_restored: restored,
             started: timefmt::iso_millis(self.plan.started_ms),
             finished: ctx.now_iso(),
             migrations: crate::ipc::MigrationCounts {

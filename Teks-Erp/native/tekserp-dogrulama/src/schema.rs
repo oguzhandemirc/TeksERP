@@ -19,6 +19,10 @@ pub const CERT_USAGES: [&str; 3] = ["ALT", "INDIRME", "BAYI"];
 pub const DAY_MS: f64 = 86_400_000.0;
 pub const LEASE_MAX_DAYS: f64 = 45.0;
 pub const GRACE_MAX_DAYS: f64 = 60.0;
+/// Kiranın `guncelleme` politikası (Dağıtım v2, TS `UPDATE_MODES` · `UPDATE_INTERVAL_MAX(_MS)`).
+pub const UPDATE_MODES: [&str; 3] = ["OTOMATIK", "ONAYLI", "DONDUR"];
+pub const UPDATE_INTERVAL_MAX: usize = 64;
+pub const UPDATE_INTERVAL_MAX_MS: f64 = 25.0 * 60.0 * 60.0 * 1000.0;
 
 struct Patterns {
     uuid: Regex,
@@ -31,6 +35,10 @@ struct Patterns {
     cert_kid: Regex,
     module_key_id: Regex,
     wrapped_key: Regex,
+    release_version: Regex,
+    clock_start: Regex,
+    clock_end: Regex,
+    time_zone: Regex,
 }
 
 fn patterns() -> &'static Patterns {
@@ -50,21 +58,25 @@ fn patterns() -> &'static Patterns {
         cert_kid: Regex::new(r"^[a-z]+-[a-z0-9-]{1,60}$").expect("sertifika kid"),
         module_key_id: Regex::new(r"^mk-[A-Za-z0-9_-]{22}$").expect("modul kid"),
         wrapped_key: Regex::new(r"^[A-Za-z0-9_-]{64}$").expect("sarili"),
+        release_version: Regex::new(r"^[0-9]{1,4}\.[0-9]{1,4}\.[0-9]{1,6}(-[0-9A-Za-z]{1,20}(\.[0-9A-Za-z]{1,20}){0,3})?$").expect("yayin surumu"),
+        clock_start: Regex::new(r"^([01][0-9]|2[0-3]):[0-5][0-9]$").expect("saat baslangic"),
+        clock_end: Regex::new(r"^(([01][0-9]|2[0-3]):[0-5][0-9]|24:00)$").expect("saat bitis"),
+        time_zone: Regex::new(r"^[A-Za-z][A-Za-z0-9_+-]*(/[A-Za-z0-9_+-]+){0,2}$").expect("saat dilimi"),
     })
 }
 
 /// Tek bir alan denetimi; ilk başarısızlıkta alan yolu mesaja girer.
-type Check<'a> = &'a dyn Fn(&Value) -> bool;
+pub type Check<'a> = &'a dyn Fn(&Value) -> bool;
 
-fn is_str_matching(v: &Value, re: &Regex) -> bool {
+pub fn is_str_matching(v: &Value, re: &Regex) -> bool {
     matches!(v, Value::String(s) if re.is_match(s))
 }
 
-fn is_uuid(v: &Value) -> bool {
+pub fn is_uuid(v: &Value) -> bool {
     is_str_matching(v, &patterns().uuid)
 }
 
-fn is_iso(v: &Value) -> bool {
+pub fn is_iso(v: &Value) -> bool {
     matches!(v, Value::String(s) if iso::is_zod_datetime(s))
 }
 
@@ -72,18 +84,18 @@ fn is_digest(v: &Value) -> bool {
     is_str_matching(v, &patterns().digest)
 }
 
-fn is_bool(v: &Value) -> bool {
+pub fn is_bool(v: &Value) -> bool {
     v.is_boolean()
 }
 
 /// `z.number().int()` (+ `.min/.max`): sonlu, güvenli tamsayı.
-fn is_int(v: &Value, min: Option<f64>, max: Option<f64>) -> bool {
+pub fn is_int(v: &Value, min: Option<f64>, max: Option<f64>) -> bool {
     let Some(n) = js_number(v) else { return false };
     const MAX_SAFE: f64 = 9_007_199_254_740_991.0;
     n.is_finite() && n.fract() == 0.0 && n.abs() <= MAX_SAFE && min.is_none_or(|m| n >= m) && max.is_none_or(|m| n <= m)
 }
 
-fn is_string_len(v: &Value, min: usize, max: usize) -> bool {
+pub fn is_string_len(v: &Value, min: usize, max: usize) -> bool {
     matches!(v, Value::String(s) if (min..=max).contains(&utf16_len(s)))
 }
 
@@ -108,11 +120,11 @@ fn is_class_list(v: &Value) -> bool {
     matches!(v, Value::Array(a) if !a.is_empty() && a.iter().all(is_class) && unique_strings(a))
 }
 
-fn is_nullable(v: &Value, inner: Check) -> bool {
+pub fn is_nullable(v: &Value, inner: Check) -> bool {
     v.is_null() || inner(v)
 }
 
-fn is_jws_text(v: &Value) -> bool {
+pub fn is_jws_text(v: &Value) -> bool {
     is_string_len(v, 1, 32 * 1024)
 }
 
@@ -121,22 +133,22 @@ fn is_name(v: &Value) -> bool {
 }
 
 /// `z.object` alan listesi: (ad, zorunlu mu, denetim). Tanınmayan anahtar atılır.
-struct Field<'a> {
+pub struct Field<'a> {
     name: &'static str,
     required: bool,
     check: Check<'a>,
 }
 
-fn req<'a>(name: &'static str, check: Check<'a>) -> Field<'a> {
+pub fn req<'a>(name: &'static str, check: Check<'a>) -> Field<'a> {
     Field { name, required: true, check }
 }
 
-fn opt<'a>(name: &'static str, check: Check<'a>) -> Field<'a> {
+pub fn opt<'a>(name: &'static str, check: Check<'a>) -> Field<'a> {
     Field { name, required: false, check }
 }
 
 /// Alanları denetler ve atılmış kopyayı döndürür; `strict` tanınmayan anahtarı reddeder.
-fn object(v: &Value, fields: &[Field], strict: bool) -> Result<Map<String, Value>, String> {
+pub fn object(v: &Value, fields: &[Field], strict: bool) -> Result<Map<String, Value>, String> {
     let Value::Object(input) = v else {
         return Err("nesne bekleniyordu".into());
     };
@@ -162,21 +174,21 @@ fn object(v: &Value, fields: &[Field], strict: bool) -> Result<Map<String, Value
 }
 
 /// İç içe `z.object` denetimi (atılmış çıktı yerine geçer).
-fn nested(value: &Value, fields: &[Field], strict: bool) -> Option<Value> {
+pub fn nested(value: &Value, fields: &[Field], strict: bool) -> Option<Value> {
     object(value, fields, strict).ok().map(Value::Object)
 }
 
 /// `a > b` — NaN (ayrıştırılamayan damga) karşılaştırılamaz ve JS'teki gibi YANLIŞ döner.
-fn strictly_after(a: f64, b: f64) -> bool {
+pub fn strictly_after(a: f64, b: f64) -> bool {
     a.partial_cmp(&b) == Some(Ordering::Greater)
 }
 
 /// `a <= b` — NaN'da YANLIŞ (JS `<=` gibi).
-fn at_most(a: f64, b: f64) -> bool {
+pub fn at_most(a: f64, b: f64) -> bool {
     matches!(a.partial_cmp(&b), Some(Ordering::Less | Ordering::Equal))
 }
 
-fn ms(m: &Map<String, Value>, key: &str) -> f64 {
+pub fn ms(m: &Map<String, Value>, key: &str) -> f64 {
     m.get(key).and_then(Value::as_str).map_or(f64::NAN, iso::date_parse_ms)
 }
 
@@ -185,10 +197,10 @@ fn named_entity(v: &Value) -> Option<Value> {
 }
 
 /// İç içe nesneyi denetleyip atılmış hâlini döndüren şekillendirici.
-type Shaper<'a> = &'a dyn Fn(&Value) -> Option<Value>;
+pub type Shaper<'a> = &'a dyn Fn(&Value) -> Option<Value>;
 
 /// İç içe nesneleri atılmış hâlleriyle değiştirerek denetler.
-fn object_with_nested(v: &Value, fields: &[Field], nested_fields: &[(&'static str, Shaper)]) -> Result<Map<String, Value>, String> {
+pub fn object_with_nested(v: &Value, fields: &[Field], nested_fields: &[(&'static str, Shaper)]) -> Result<Map<String, Value>, String> {
     let mut out = object(v, fields, false)?;
     for (name, shaper) in nested_fields {
         if let Some(value) = out.get(*name) {
@@ -257,6 +269,80 @@ fn sanction(v: &Value) -> Option<Value> {
         return None;
     }
     Some(Value::Object(out))
+}
+
+/// Kanal kodu (`ChannelCodeSchema`).
+pub fn is_channel_code(v: &Value) -> bool {
+    is_str_matching(v, &patterns().channel)
+}
+
+/// YAYINLANAN backend sürümü (`ReleaseVersionSchema`): `+yapı` eki yok, ön sürüm en çok dört parça.
+pub fn is_release_version(v: &Value) -> bool {
+    is_str_matching(v, &patterns().release_version)
+}
+
+// ── Güncelleme politikası (Dağıtım v2 — kiranın `guncelleme` alanı; TS `LeaseUpdatePolicySchema`) ──
+
+/// İnsan kuralı (`UpdateWindowRuleSchema`): gün listesi artan ve tekrarsız, başlangıç ≠ bitiş.
+fn window_rule(v: &Value) -> Option<Value> {
+    let is_start = |x: &Value| is_str_matching(x, &patterns().clock_start);
+    let is_end = |x: &Value| is_str_matching(x, &patterns().clock_end);
+    let is_days =
+        |x: &Value| matches!(x, Value::Array(a) if (1..=7).contains(&a.len()) && a.iter().all(|d| is_int(d, Some(1.0), Some(7.0))));
+    let is_zone = |x: &Value| is_string_len(x, 0, 64) && is_str_matching(x, &patterns().time_zone);
+    let out = object(v, &[req("baslangic", &is_start), req("bitis", &is_end), req("gunler", &is_days), req("saatDilimi", &is_zone)], false)
+        .ok()?;
+    let days: Vec<f64> = out.get("gunler")?.as_array()?.iter().filter_map(js_number).collect();
+    if !days.windows(2).all(|w| w[1] > w[0]) || out.get("baslangic") == out.get("bitis") {
+        return None;
+    }
+    Some(Value::Object(out))
+}
+
+/// Mutlak aralık (`UpdateIntervalSchema`): bitiş > başlangıç, en çok 25 saat.
+fn interval(v: &Value) -> Option<Value> {
+    let out = object(v, &[req("baslangic", &is_iso), req("bitis", &is_iso)], false).ok()?;
+    let (start, end) = (ms(&out, "baslangic"), ms(&out, "bitis"));
+    (strictly_after(end, start) && at_most(end - start, UPDATE_INTERVAL_MAX_MS)).then_some(Value::Object(out))
+}
+
+/// En çok 64 aralık; sıralı ve çakışmasız (bitişik serbest).
+fn interval_list(v: &Value) -> Option<Value> {
+    let Value::Array(items) = v else { return None };
+    if items.len() > UPDATE_INTERVAL_MAX {
+        return None;
+    }
+    let shaped: Vec<Value> = items.iter().map(interval).collect::<Option<_>>()?;
+    let at = |x: &Value, k: &str| x.get(k).and_then(Value::as_str).map_or(f64::NAN, iso::date_parse_ms);
+    let ordered = shaped
+        .windows(2)
+        .all(|w| matches!(at(&w[1], "baslangic").partial_cmp(&at(&w[0], "bitis")), Some(Ordering::Greater | Ordering::Equal)));
+    ordered.then_some(Value::Array(shaped))
+}
+
+/// `LeaseUpdatePolicySchema`: OTOMATİK pencere ister; pencere kuralı yokken mutlak aralık olamaz.
+pub fn update_policy(v: &Value) -> Result<Map<String, Value>, String> {
+    let is_mode = |x: &Value| matches!(x, Value::String(s) if UPDATE_MODES.contains(&s.as_str()));
+    let is_rule_or_null = |x: &Value| x.is_null() || x.is_object();
+    let is_array = |x: &Value| x.is_array();
+    let is_target = |x: &Value| is_nullable(x, &is_release_version);
+    let out = object_with_nested(
+        v,
+        &[req("kip", &is_mode), req("pencere", &is_rule_or_null), req("araliklar", &is_array), req("hedefSurum", &is_target)],
+        &[("pencere", &window_rule), ("araliklar", &interval_list)],
+    )?;
+    let no_rule = out.get("pencere").is_none_or(Value::is_null);
+    if out.get("kip").and_then(Value::as_str) == Some("OTOMATIK") && no_rule {
+        return Err("Otomatik kip bir güncelleme penceresi ister".into());
+    }
+    if no_rule && !out.get("araliklar").and_then(Value::as_array).is_some_and(Vec::is_empty) {
+        return Err("Pencere kuralı yokken mutlak aralık olamaz".into());
+    }
+    Ok(out)
+}
+
+fn update_policy_shape(v: &Value) -> Option<Value> {
+    update_policy(v).ok().map(Value::Object)
 }
 
 fn channel(v: &Value) -> Option<Value> {
@@ -342,8 +428,15 @@ pub fn lease(v: &Value) -> Result<Map<String, Value>, String> {
             req("kanal", &any_object),
             req("altSertifika", &is_jws_text),
             opt("modulAnahtarlari", &is_array),
+            opt("guncelleme", &any_object),
         ],
-        &[("parmakIzi", &fingerprint), ("yaptirim", &sanction), ("kanal", &channel), ("modulAnahtarlari", &module_key_grants)],
+        &[
+            ("parmakIzi", &fingerprint),
+            ("yaptirim", &sanction),
+            ("kanal", &channel),
+            ("modulAnahtarlari", &module_key_grants),
+            ("guncelleme", &update_policy_shape),
+        ],
     )?;
     let (issued, ends) = (ms(&out, "verilis"), ms(&out, "bitis"));
     if !strictly_after(ends, issued) {
@@ -351,6 +444,14 @@ pub fn lease(v: &Value) -> Result<Map<String, Value>, String> {
     }
     if !at_most(ends - issued, LEASE_MAX_DAYS * DAY_MS) {
         return Err("Kira ömrü 45 günü aşamaz".into());
+    }
+    // Dağıtım v2: her mutlak aralık kiranın ömrüyle kesişir (satıcı `windowIntervals` ile böyle basar).
+    let intervals = out.get("guncelleme").and_then(|g| g.get("araliklar")).and_then(Value::as_array);
+    let at = |x: &Value, k: &str| x.get(k).and_then(Value::as_str).map_or(f64::NAN, iso::date_parse_ms);
+    if intervals
+        .is_some_and(|list| !list.iter().all(|a| strictly_after(at(a, "bitis"), issued) && strictly_after(ends, at(a, "baslangic"))))
+    {
+        return Err("Güncelleme aralıkları kiranın ömrüyle kesişmeli".into());
     }
     Ok(out)
 }

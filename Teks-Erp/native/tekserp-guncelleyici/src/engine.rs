@@ -1,25 +1,27 @@
-//! Motor — hizmetin her turu: yarım işlem varsa ÖNCE onu sonuçlandır; yoksa niyet → kira politikası →
-//! manifest (imza) → paket (indir · sha256 · aç · bütünlük) → HAZIR → pencere/onay → uygula (§5–§8).
-//! Her turun sonunda `durum.json` (yalnız değiştiyse) yazılır. Hiçbir karar niyetten YETKİ almaz:
-//! niyet yalnız "ne zaman bakılacağı" ve belirteçtir; kurulabilirlik imzalı kira + manifestten gelir.
+//! Motor — hizmetin her turu (§5–§8): yarım işlem varsa ÖNCE onu sonuçlandır; yoksa kira (yetki) →
+//! aday (işaretçi → PAKET imzalı sürüm bildirimi) → TEK karar (`decision::decide`, TS aynası) →
+//! paket (indir · sha256 · aç · bütünlük · bağ) → HAZIR → karar KUR ise (PG küçük sürümü önce) uygula.
+//! Her turun sonunda `durum.json` yazılır (canlılık). Hiçbir karar niyetten YETKİ almaz: niyet yalnız
+//! panel onayı ve indirme belirtecidir; kurulabilirlik imzalı kira + bildirim + paketten gelir.
 use crate::codes;
+use crate::decision::{self, Decision, InstalledPg, Kind, PgMode, PolicySource, UpdatePolicy};
 use crate::download::{self, Spec};
 use crate::env::Env;
 use crate::health;
-use crate::ipc::{self, Intent, IntentRead, PolicyView, Progress as IpcProgress, State, StatusDoc};
-use crate::journal::Journal;
+use crate::ipc::{self, Approval, IntentRead, LastDetail, Pending, PolicyView, Progress as IpcProgress, State, StatusDoc, UpdateResult};
+use crate::journal::{Journal, Kind as JKind};
 use crate::layout::Layout;
-use crate::manifest::{self, Manifest};
 use crate::operation::{self, BackendOp, BackendPlan, Ctx, OpOutcome, Progress};
 use crate::package::{self, ExtractLimits};
 use crate::pgminor::{self, PgOp, PgPlan};
-use crate::policy::{self, Decision, Mode, Policy, VersionVerdict};
+use crate::policy::{self, LicenseView};
+use crate::release::{self, Checked, PgTarget, ReleaseManifest};
 use crate::selfupdate;
 use crate::settings::{self, BackendEnv, UpdaterSettings};
 use crate::tools::{self, Runtime};
 use crate::trust::TrustAnchor;
 use crate::version;
-use serde_json::{json, Value};
+use serde_json::{json, Map, Value};
 use std::cell::RefCell;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -27,12 +29,25 @@ use std::time::Duration;
 use tekserp_hizmet::logfile::RotatingLog;
 use tekserp_hizmet::timefmt;
 
+/// Doğrulanmış aday bu kadar süre yeniden indirilmeden kullanılır; uygulamadan hemen önce tazelenir.
+const CANDIDATE_TTL_MS: i64 = 5 * 60 * 1000;
+const CANDIDATE_FRESH_FOR_APPLY_MS: i64 = 60 * 1000;
+/// Kesin paket hatalarında (özet · bütünlük · bağ) yeniden indirme aralığı: 15 dk × 4ⁿ, en çok 24 sa.
+const BACKOFF_BASE_MS: i64 = 15 * 60 * 1000;
+const BACKOFF_MAX_MS: i64 = 24 * 60 * 60 * 1000;
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum TickResult {
     /// Bir sonraki tura kadar bekle (niyet değişirse erken uyan).
     Idle(Duration),
     /// Yeni ikiliyle yeniden başlatılmak için çık (§10).
     RestartForSelfUpdate,
+}
+
+struct Candidate {
+    fetched_ms: i64,
+    pointer: String,
+    manifest: Checked<ReleaseManifest>,
 }
 
 pub struct Engine {
@@ -44,6 +59,7 @@ pub struct Engine {
     pub own_exe: Option<PathBuf>,
     last_status: RefCell<Option<StatusDoc>>,
     last_progress_ms: RefCell<i64>,
+    candidate: RefCell<Option<Candidate>>,
 }
 
 struct Inputs {
@@ -51,51 +67,84 @@ struct Inputs {
     backend: BackendEnv,
 }
 
-/// Biten (ya da sürdürülen) işlemin durum yazımı için özeti.
-struct OpReport {
-    outcome: OpOutcome,
-    product: &'static str,
-    intent_id: Option<String>,
-    op_id: String,
-    source: String,
-    target: String,
+/// Bir turun ortak görüntüsü: durum yazımı bunun üstüne kurulur.
+struct Frame {
+    installed: Option<String>,
+    policy: Option<PolicyView>,
+    decision: Option<Decision>,
+    pending: Option<Pending>,
+    last: Option<UpdateResult>,
+    last_detail: Option<LastDetail>,
+    tick_s: u64,
 }
 
-fn b64u_to_hex(d: &str) -> Option<String> {
-    download::hex_of_b64u(d)
+/// Son tamamlanan işlem (işlem günlüğü tek doğru kaynaktır: `durum.json` yazılmadan ölünse bile sonuç
+/// buradan türer).
+struct LastOp {
+    outcome: OpOutcome,
+    target: String,
+    approval_id: Option<String>,
+    result: UpdateResult,
+    detail: LastDetail,
+    /// Başarılı PG adımı bir denemenin sonucu değildir (backend adımı onu izler).
+    attempt_end: bool,
+}
+
+type Fail = (&'static str, String);
+
+fn fail(code: &'static str, m: impl Into<String>) -> Fail {
+    (code, m.into())
 }
 
 impl Engine {
     pub fn new(env: Env, layout: Layout, anchor: TrustAnchor, log: Arc<RotatingLog>, own_exe: Option<PathBuf>) -> Engine {
-        Engine { env, layout, anchor, log, own_exe, last_status: RefCell::new(None), last_progress_ms: RefCell::new(0) }
+        Engine {
+            env,
+            layout,
+            anchor,
+            log,
+            own_exe,
+            last_status: RefCell::new(None),
+            last_progress_ms: RefCell::new(0),
+            candidate: RefCell::new(None),
+        }
     }
 
     fn now(&self) -> i64 {
         self.env.clock.now_ms()
     }
 
-    fn status(&self, mut doc: StatusDoc) {
+    fn write_status(&self, mut doc: StatusDoc) {
         doc.at = timefmt::iso_millis(self.now());
-        let changed = self.last_status.borrow().as_ref().is_none_or(|p| !p.same_as(&doc) || p.progress != doc.progress);
-        if changed {
-            if let Err(e) = ipc::write_status(self.env.fs.as_ref(), &self.layout, &doc) {
-                self.log.warn(&format!("durum.json yazılamadı: {e}"));
-            }
-            *self.last_status.borrow_mut() = Some(doc);
+        if let Err(e) = ipc::write_status(self.env.fs.as_ref(), &self.layout, &doc) {
+            self.log.warn(&format!("durum.json yazılamadı: {e}"));
         }
+        *self.last_status.borrow_mut() = Some(doc);
     }
 
-    fn base(&self, state: State, installed: Option<&str>) -> StatusDoc {
-        let mut d = StatusDoc::new(state, String::new());
-        d.installed_version = installed.map(str::to_string);
-        d
-    }
-
-    fn waiting(&self, installed: Option<&str>, code: Option<&str>, message: &str) -> StatusDoc {
-        let mut d = self.base(State::Waiting, installed);
+    fn doc(&self, f: &Frame, state: State, code: Option<&str>, message: &str) -> StatusDoc {
+        let mut d = StatusDoc::new(state);
+        d.tick_s = f.tick_s;
+        d.installed_version = f.installed.clone();
+        d.source_version = f.installed.clone();
+        d.version = f.pending.as_ref().map(|p| p.surum.clone());
+        let mut policy = f.policy.clone();
+        if let (Some(p), Some(dec)) = (policy.as_mut(), f.decision.as_ref()) {
+            p.reason = ipc::legacy_reason(dec);
+            p.allowed = p.reason.is_none();
+        }
+        d.policy = policy;
+        d.decision = f.decision.clone();
+        d.pending = f.pending.clone();
+        d.last = f.last.clone();
+        d.last_detail = f.last_detail.clone();
         d.error_code = code.map(str::to_string);
-        d.message = Some(message.to_string());
+        d.message = (!message.is_empty()).then(|| message.to_string());
         d
+    }
+
+    fn previous_status(&self) -> Option<StatusDoc> {
+        self.last_status.borrow().clone().or_else(|| ipc::read_status(self.env.fs.as_ref(), &self.layout))
     }
 
     /// Kurulu sürüm: `current` bağlantısının hedef dizininin adı.
@@ -105,9 +154,9 @@ impl Engine {
         version::parse(&name).map(|_| (name, target))
     }
 
-    fn inputs(&self) -> Result<Inputs, (String, &'static str)> {
-        let settings = settings::read_settings(self.env.fs.as_ref(), &self.layout).map_err(|e| (e, codes::AYAR_BICIMSIZ))?;
-        let backend = settings::read_backend_env(self.env.fs.as_ref(), &self.layout).map_err(|e| (e, codes::AYAR_BICIMSIZ))?;
+    fn inputs(&self) -> Result<Inputs, Fail> {
+        let settings = settings::read_settings(self.env.fs.as_ref(), &self.layout).map_err(|e| fail(codes::AYAR_BICIMSIZ, e))?;
+        let backend = settings::read_backend_env(self.env.fs.as_ref(), &self.layout).map_err(|e| fail(codes::AYAR_BICIMSIZ, e))?;
         Ok(Inputs { settings, backend })
     }
 
@@ -127,20 +176,33 @@ impl Engine {
         Ok(())
     }
 
+    fn bare_frame(&self, tick_s: u64) -> Frame {
+        let prev = self.previous_status();
+        Frame {
+            installed: self.installed_version().map(|v| v.0),
+            policy: None,
+            decision: None,
+            pending: None,
+            last: prev.as_ref().and_then(|p| p.last.clone()),
+            last_detail: prev.and_then(|p| p.last_detail),
+            tick_s,
+        }
+    }
+
     /// Bir tur. `stop()` doğru olursa uzun işler (indirme) güvenli noktada bırakılır.
     pub fn tick(&self, stop: &dyn Fn() -> bool) -> TickResult {
         let idle = |s: u64| TickResult::Idle(Duration::from_secs(s));
         if let Err(m) = self.private_area_ok() {
             self.log.error(&m);
             self.env.events.event(tekserp_hizmet::logfile::Level::Error, &m);
-            self.status(self.waiting(None, Some(codes::IC_HATA), &m));
+            self.write_status(self.doc(&self.bare_frame(300), State::Waiting, Some(codes::IC_HATA), &m));
             return idle(300);
         }
         let inputs = match self.inputs() {
             Ok(i) => i,
-            Err((m, code)) => {
+            Err((code, m)) => {
                 self.log.warn(&format!("ayar okunamadı: {m}"));
-                self.status(self.waiting(self.installed_version().as_ref().map(|v| v.0.as_str()), Some(code), &m));
+                self.write_status(self.doc(&self.bare_frame(300), State::Waiting, Some(code), &m));
                 return idle(300);
             }
         };
@@ -148,8 +210,9 @@ impl Engine {
         let mut journal = match Journal::open(self.env.fs.as_ref(), &self.layout.journal_file()) {
             Ok(j) => j,
             Err(e) => {
-                self.log.error(&format!("işlem günlüğü açılamadı: {e}"));
-                self.status(self.waiting(None, Some(codes::IC_HATA), &format!("işlem günlüğü açılamadı: {e}")));
+                let m = format!("işlem günlüğü açılamadı: {e}");
+                self.log.error(&m);
+                self.write_status(self.doc(&self.bare_frame(tick_s), State::Waiting, Some(codes::IC_HATA), &m));
                 return idle(tick_s);
             }
         };
@@ -157,7 +220,7 @@ impl Engine {
         if let Some(v) = journal.unfinished() {
             self.log.warn(&format!("yarım işlem bulundu ({}) — sürdürülüyor", v.op));
             let outcome = self.resume(&inputs, &mut journal, v.plan().cloned().unwrap_or(Value::Null));
-            return self.after_op(&inputs, outcome, tick_s);
+            return self.after_op(&journal, outcome, tick_s);
         }
         self.cycle(&inputs, &mut journal, stop, tick_s)
     }
@@ -174,90 +237,118 @@ impl Engine {
         }
     }
 
-    fn report_fn(&self) -> impl Fn(&Progress) + '_ {
+    fn report_fn(&self, tick_s: u64) -> impl Fn(&Progress) + '_ {
         move |p: &Progress| {
-            let mut d = self.base(State::Applying, None);
-            d.product = p.product.to_string();
-            d.source_version = Some(p.source.to_string());
-            d.version = Some(p.target.to_string());
-            d.installed_version = self.installed_version().map(|v| v.0);
-            d.step = Some(p.step.to_string());
+            let mut f = self.bare_frame(tick_s);
+            if let Some(prev) = self.previous_status() {
+                f.policy = prev.policy;
+                f.decision = prev.decision;
+                f.pending = prev.pending;
+            }
+            let message = if p.rolling_back { format!("geri alınıyor: {}", p.step) } else { format!("uygulanıyor: {}", p.step) };
+            let mut d = self.doc(&f, State::Applying, None, &message);
+            d.product = Some(p.product.to_string());
             d.op_id = Some(p.op_id.to_string());
-            d.intent_id = p.intent_id.map(str::to_string);
-            d.message = Some(if p.rolling_back { format!("geri alınıyor: {}", p.step) } else { format!("uygulanıyor: {}", p.step) });
-            self.status(d);
+            d.step = Some(p.step.to_string());
+            // PG adımı backend denemesinin parçasıdır: `surum` adayın (backend) sürümü kalır.
+            if p.product != "pg" {
+                d.version = Some(p.target.to_string());
+                d.source_version = Some(p.source.to_string());
+            }
+            self.write_status(d);
         }
     }
 
-    fn resume(&self, inputs: &Inputs, journal: &mut Journal, plan: Value) -> OpReport {
-        let report = self.report_fn();
+    /// Yarım işlemi planıyla sürdürür (plan ISLEM satırındadır; yeniden HESAPLANMAZ).
+    fn resume(&self, inputs: &Inputs, journal: &mut Journal, plan: Value) -> OpOutcome {
+        let tick_s = inputs.settings.tick_s.clamp(10, 3600);
+        let report = self.report_fn(tick_s);
         let ctx = self.ctx(inputs, &report);
-        let broken = |product: &'static str, e: String| OpReport {
-            outcome: OpOutcome::Failed(operation::step_err(codes::IC_HATA, format!("yarım işlem planı okunamadı: {e}"))),
-            product,
-            intent_id: None,
-            op_id: String::new(),
-            source: String::new(),
-            target: String::new(),
-        };
+        let broken = |e: String| OpOutcome::Failed(operation::step_err(codes::IC_HATA, format!("yarım işlem planı okunamadı: {e}")));
         match plan.get("tur").and_then(Value::as_str) {
             Some("PG") => match serde_json::from_value::<PgPlan>(plan) {
-                Ok(p) => {
-                    let op = PgOp { plan: p };
-                    let outcome = operation::drive(&ctx, journal, &op);
-                    let p = op.plan;
-                    OpReport { outcome, product: "pg", intent_id: p.intent_id, op_id: p.op_id, source: p.source_tag, target: p.target_tag }
-                }
-                Err(e) => broken("pg", e.to_string()),
+                Ok(p) => operation::drive(&ctx, journal, &PgOp { plan: p }),
+                Err(e) => broken(e.to_string()),
             },
             _ => match serde_json::from_value::<BackendPlan>(plan) {
-                Ok(p) => {
-                    let op = BackendOp { plan: p };
-                    let outcome = operation::drive(&ctx, journal, &op);
-                    let p = op.plan;
-                    OpReport {
-                        outcome,
-                        product: "backend",
-                        intent_id: p.intent_id,
-                        op_id: p.op_id,
-                        source: p.source_version,
-                        target: p.version,
-                    }
-                }
-                Err(e) => broken("backend", e.to_string()),
+                Ok(p) => operation::drive(&ctx, journal, &BackendOp { plan: p }),
+                Err(e) => broken(e.to_string()),
             },
         }
     }
 
-    fn outcome_status(&self, r: &OpReport) -> StatusDoc {
-        let installed = self.installed_version().map(|v| v.0);
-        let (state, code, message) = match &r.outcome {
-            OpOutcome::Succeeded => (State::Succeeded, None, format!("{} {} → {} kuruldu", r.product, r.source, r.target)),
-            OpOutcome::RolledBack(e) => (State::RolledBack, Some(e.code.to_string()), format!("geri dönüldü ({}): {}", e.code, e.message)),
-            OpOutcome::Failed(e) => (State::Failed, Some(e.code.to_string()), format!("İNSAN GEREKİYOR ({}): {}", e.code, e.message)),
+    /// Günlükteki son TAMAMLANMIŞ işlem ve sözleşme §3.1 biçiminde sonucu.
+    fn last_op(&self, journal: &Journal) -> Option<LastOp> {
+        let v = journal.last_op()?;
+        let result_rec = v.records.iter().rev().find(|r| r.kind == JKind::Result)?.clone();
+        let plan = v.plan()?.clone();
+        let outcome = operation::outcome_of(&v);
+        let s = |k: &str| plan.get(k).and_then(Value::as_str).map(str::to_string);
+        let is_pg = s("tur").as_deref() == Some("PG");
+        let target = if is_pg { s("hedefBackend") } else { s("surum") }.unwrap_or_default();
+        let source = if is_pg { s("backendSurumu") } else { s("kaynakSurum") };
+        let started = plan.get("basladi").and_then(Value::as_i64).map(timefmt::iso_millis).unwrap_or_else(|| result_rec.at.clone());
+        let restored = v.records.iter().any(|r| {
+            r.kind == JKind::CompEnd && r.step.as_deref() == Some("GOC") && r.data.get("geriYuklendi") == Some(&Value::Bool(true))
+        });
+        let (result, code, message) = match &outcome {
+            OpOutcome::Succeeded => ("BASARILI", None, None),
+            OpOutcome::RolledBack(e) => ("GERI_DONDU", Some(e.code), Some(e.message.clone())),
+            OpOutcome::Failed(e) => ("BASARISIZ", Some(e.code), Some(e.message.clone())),
         };
-        let mut d = self.base(state, installed.as_deref());
-        d.product = r.product.to_string();
-        d.source_version = Some(r.source.clone());
-        d.version = Some(r.target.clone());
-        d.error_code = code;
-        d.message = Some(message);
-        d.op_id = Some(r.op_id.clone());
-        d.intent_id = r.intent_id.clone();
-        d
+        Some(LastOp {
+            attempt_end: !(is_pg && outcome == OpOutcome::Succeeded),
+            target: target.clone(),
+            approval_id: s("onayId"),
+            result: UpdateResult {
+                record_id: s("islemId").unwrap_or_default(),
+                target,
+                source,
+                result: result.into(),
+                kod: code.map(|c| codes::report_code(c).to_string()),
+                baslangic: started,
+                bitis: result_rec.at,
+                data_restored: restored,
+            },
+            detail: LastDetail {
+                product: if is_pg { "pg".into() } else { "backend".into() },
+                error_code: code.map(str::to_string),
+                message,
+            },
+            outcome,
+        })
     }
 
-    fn after_op(&self, inputs: &Inputs, r: OpReport, tick_s: u64) -> TickResult {
-        self.status(self.outcome_status(&r));
-        if r.outcome == OpOutcome::Succeeded && r.product == "backend" {
-            if let Some(t) = self.maybe_self_update(inputs) {
+    fn after_op(&self, journal: &Journal, outcome: OpOutcome, tick_s: u64) -> TickResult {
+        let mut f = self.bare_frame(tick_s);
+        if let Some(prev) = self.previous_status() {
+            f.policy = prev.policy;
+            f.decision = prev.decision;
+            f.pending = prev.pending;
+        }
+        let last = self.last_op(journal);
+        if let Some(l) = last.as_ref().filter(|l| l.attempt_end) {
+            f.last = Some(l.result.clone());
+            f.last_detail = Some(l.detail.clone());
+        }
+        let product = last.as_ref().map_or("backend", |l| if l.detail.product == "pg" { "pg" } else { "backend" });
+        let (state, code, message) = match &outcome {
+            OpOutcome::Succeeded => (State::Succeeded, None, format!("{product} güncellemesi tamamlandı")),
+            OpOutcome::RolledBack(e) => (State::RolledBack, Some(e.code), format!("geri dönüldü ({}): {}", e.code, e.message)),
+            OpOutcome::Failed(e) => (State::Failed, Some(e.code), format!("İNSAN GEREKİYOR ({}): {}", e.code, e.message)),
+        };
+        // Başarılı PG adımının ardından backend adımı bu turda koşmadıysa (süreç o arada öldü) iş sürer.
+        let state = if outcome == OpOutcome::Succeeded && product == "pg" { State::Waiting } else { state };
+        self.write_status(self.doc(&f, state, code, &message));
+        if outcome == OpOutcome::Succeeded && product == "backend" {
+            if let Some(t) = self.maybe_self_update() {
                 return t;
             }
         }
         TickResult::Idle(Duration::from_secs(tick_s.min(60)))
     }
 
-    fn maybe_self_update(&self, _inputs: &Inputs) -> Option<TickResult> {
+    fn maybe_self_update(&self) -> Option<TickResult> {
         let own = self.own_exe.as_ref()?;
         let (_, current_dir) = self.installed_version()?;
         match selfupdate::stage(&self.env, &self.layout, own, &current_dir) {
@@ -273,426 +364,552 @@ impl Engine {
         }
     }
 
-    /// Bu niyetin günlükteki SON sonucu (işlem günlüğü tek doğru kaynaktır: `durum.json` yazılmadan
-    /// ölünse bile sonuç buradan türer).
-    fn last_report(&self, journal: &Journal, intent: &Intent) -> Option<OpReport> {
-        let last = journal.last_op()?;
-        let plan = last.plan()?.clone();
-        if plan.get("niyetId").and_then(Value::as_str) != Some(intent.id.as_str()) {
-            return None;
-        }
-        last.result()?;
-        let outcome = operation::outcome_of(&last);
-        let s = |k: &str| plan.get(k).and_then(Value::as_str).unwrap_or_default().to_string();
-        let product = if s("tur") == "PG" { "pg" } else { "backend" };
-        Some(OpReport {
-            outcome,
-            product,
-            intent_id: Some(intent.id.clone()),
-            op_id: s("islemId"),
-            source: s("kaynakSurum"),
-            target: s("surum"),
+    fn policy_view(lic: &LicenseView, pol: Option<&(UpdatePolicy, PolicySource)>) -> Option<PolicyView> {
+        pol.map(|(p, src)| PolicyView {
+            mode: p.kip.label().into(),
+            allowed: true,
+            reason: None,
+            source: match src {
+                PolicySource::Lease => "KIRA".into(),
+                PolicySource::Default => "VARSAYILAN".into(),
+            },
+            target: p.target.clone(),
+            frozen: lic.frozen,
         })
     }
 
     fn cycle(&self, inputs: &Inputs, journal: &mut Journal, stop: &dyn Fn() -> bool, tick_s: u64) -> TickResult {
         let idle = TickResult::Idle(Duration::from_secs(tick_s));
+        let mut f = self.bare_frame(tick_s);
         let Some((installed, current_dir)) = self.installed_version() else {
-            self.status(self.waiting(None, Some(codes::KURULU_SURUM_YOK), "current bağlantısı yok ya da bir sürüm dizinini göstermiyor"));
+            self.write_status(self.doc(
+                &f,
+                State::Waiting,
+                Some(codes::KURULU_SURUM_YOK),
+                "current bağlantısı yok ya da bir sürüm dizinini göstermiyor",
+            ));
             return idle;
         };
-        let intent = match ipc::read_intent(self.env.fs.as_ref(), &self.layout) {
-            IntentRead::Missing => {
-                self.keep_or_wait(Some(&installed), codes::NIYET_YOK, "backend'den güncelleme niyeti yok");
-                return idle;
-            }
-            IntentRead::Invalid(m) => {
-                self.status(self.waiting(Some(&installed), Some(codes::NIYET_BICIMSIZ), &m));
-                return idle;
-            }
-            IntentRead::Ok(i) => *i,
+        let (intent, intent_problem) = match ipc::read_intent(self.env.fs.as_ref(), &self.layout) {
+            IntentRead::Ok(i) => (Some(*i), None),
+            IntentRead::Missing => (None, None),
+            IntentRead::Invalid(m) => (None, Some(m)),
         };
-        let pol = match policy::load(self.env.fs.as_ref(), &inputs.backend.license_dir, &self.anchor, self.now()) {
-            Ok(p) => p,
-            Err(e) => {
-                self.status(self.waiting(Some(&installed), Some(e.code), &e.message));
+        let approval: Option<Approval> = intent.as_ref().and_then(|i| i.approval.clone());
+        let lic = policy::load(self.env.fs.as_ref(), &inputs.backend.license_dir, &self.anchor);
+        let now = self.now();
+        let pol = decision::effective_update_policy(lic.lease.as_ref(), now as f64);
+        f.policy = Self::policy_view(&lic, pol.as_ref());
+        let base_input = decision::Input {
+            politika: pol.as_ref().map(|p| &p.0),
+            guncelleme_donuk: lic.frozen,
+            bakim_bitis_ms: lic.maintenance_end_ms,
+            kurulu_surum: &installed,
+            pg: None,
+            aday: None,
+            onay: None,
+            now_ms: now as f64,
+        };
+        let pre = decision::decide(&base_input);
+        let last = self.last_op(journal);
+        if let Some(l) = last.as_ref().filter(|l| l.attempt_end) {
+            f.last = Some(l.result.clone());
+            f.last_detail = Some(l.detail.clone());
+        }
+        // Geri alınamamış işlem: insan gerekir — yeni bir panel onayı gelene dek hiçbir şey yapılmaz.
+        if let Some(l) = last.as_ref().filter(|l| matches!(l.outcome, OpOutcome::Failed(_))) {
+            let fresh = approval.as_ref().is_some_and(|a| Some(&a.id) != l.approval_id.as_ref());
+            if !fresh {
+                f.decision = Some(pre);
+                let m = format!(
+                    "son işlem geri alınamadı ({}) — yeni bir panel onayı ya da müdahale gerekir",
+                    l.result.kod.clone().unwrap_or_default()
+                );
+                self.write_status(self.doc(&f, State::Failed, Some(codes::INSAN_GEREKIYOR), &m));
                 return idle;
             }
-        };
-        let view =
-            PolicyView { mode: pol.mode.label().into(), allowed: pol.mode != Mode::Frozen, reason: pol.frozen_reason.map(str::to_string) };
-        let last = self.last_report(journal, &intent);
-        if let Some(prev) = last.as_ref().filter(|r| r.outcome != OpOutcome::Succeeded) {
-            let mut d = self.outcome_status(prev);
-            d.message =
-                Some(format!("{} — aynı niyet yeniden denenmez; yeni onay ya da yeni sürüm gerekir", d.message.unwrap_or_default()));
-            d.policy = Some(view);
-            self.status(d);
+        }
+        if !decision::needs_candidate(&pre) {
+            let (code, message) = match (&pre.karar, lic.problem.as_ref()) {
+                (Kind::Frozen, Some((c, m))) if pre.neden.as_deref() == Some("KIRA_YOK") => (Some(*c), m.clone()),
+                _ => (None, format!("{}{}", pre.karar.label(), pre.neden.as_deref().map(|n| format!(" / {n}")).unwrap_or_default())),
+            };
+            f.decision = Some(pre);
+            let state = self.resting_state(last.as_ref(), &installed, None);
+            self.write_status(self.doc(&f, state, code, &message));
             return idle;
         }
-        match policy::version_verdict(&pol, &installed, &intent.version) {
-            VersionVerdict::UpToDate => {
-                match last.as_ref().filter(|r| r.product == "backend") {
-                    Some(done) => self.status(self.outcome_status(done)),
-                    None => self.keep_or_wait(Some(&installed), "", "kurulu sürüm güncel"),
+        // ── Aday: işaretçi → imzalı bildirim ───────────────────────────────────────────────
+        let Some(channel) = lic.channel.clone() else {
+            self.write_status(self.doc(&f, State::Waiting, Some(codes::KIRA_GECERSIZ), "kira kanal taşımıyor"));
+            return idle;
+        };
+        let keys = policy::package_keys(&self.anchor, lic.class.as_deref());
+        let token = intent.as_ref().and_then(|i| i.token_at(now)).map(str::to_string);
+        let token_problem = || -> Fail {
+            match (&intent, &intent_problem) {
+                (_, Some(m)) => fail(codes::NIYET_BICIMSIZ, format!("niyet okunamadı ({m}) — indirme belirteci yok")),
+                (Some(i), _) if i.download.is_some() => {
+                    fail(codes::BELIRTEC_SURESI_DOLDU, "indirme belirtecinin süresi doldu — backend yenisini yazacak")
                 }
-                return idle;
+                _ => fail(codes::BELIRTEC_YOK, "niyet indirme belirteci taşımıyor — backend yazacak"),
             }
-            VersionVerdict::NotAllowed(m) => {
-                let mut d = self.waiting(Some(&installed), Some(codes::SURUM_IZINSIZ), &m);
-                d.version = Some(intent.version.clone());
-                d.policy = Some(view);
-                self.status(d);
-                return idle;
-            }
-            VersionVerdict::Allowed => {}
-        }
-        if pol.mode == Mode::Frozen {
-            let mut d = self.waiting(Some(&installed), pol.frozen_reason, "güncelleme dondurulmuş (kira)");
-            d.version = Some(intent.version.clone());
-            d.intent_id = Some(intent.id.clone());
-            d.policy = Some(view);
-            self.status(d);
-            return idle;
-        }
+        };
         let server = match inputs.settings.server_base() {
             Ok(s) => s,
             Err(m) => {
-                self.status(self.waiting(Some(&installed), Some(codes::AYAR_BICIMSIZ), &m));
+                f.decision = Some(pre);
+                self.write_status(self.doc(&f, State::Waiting, Some(codes::AYAR_BICIMSIZ), &m));
                 return idle;
             }
         };
-        let manifest = match self.manifest(&server, &intent, &pol, &installed) {
+        let pointer = match pol.as_ref().and_then(|p| p.0.target.clone()) {
+            Some(t) => release::release_file_path(&channel, &t, release::RELEASE_MANIFEST_FILE),
+            None => release::release_pointer_path(&channel),
+        };
+        let m = match self.candidate(&server, &pointer, token.as_deref(), &keys, &channel, CANDIDATE_TTL_MS, &token_problem) {
             Ok(m) => m,
-            Err((code, m)) => {
-                let mut d = self.waiting(Some(&installed), Some(code), &m);
-                d.version = Some(intent.version.clone());
-                d.intent_id = Some(intent.id.clone());
-                d.policy = Some(view);
-                self.status(d);
+            Err((code, msg)) => {
+                f.decision = Some(pre);
+                self.write_status(self.doc(&f, State::Waiting, Some(code), &msg));
                 return idle;
             }
         };
-        let instance = pgminor::read_instance(&self.env, &self.layout);
-        if let Err((code, m)) = self.external_pg_gate(inputs, &manifest, instance.as_ref()) {
-            let mut d = self.waiting(Some(&installed), Some(code), &m);
-            d.version = Some(intent.version.clone());
-            d.policy = Some(view);
-            self.status(d);
+        // ── Karar (PG yalnız gerekirse ölçülür) ───────────────────────────────────────────
+        let onay = approval.as_ref().map(Approval::for_decision);
+        let mut input = decision::Input { aday: Some(&m.doc), onay: onay.as_ref(), ..base_input.clone() };
+        let mut d = decision::decide(&input);
+        let mut instance = None;
+        let measured;
+        if d.karar == Kind::NotEligible && d.neden.as_deref() == Some("PG_OLCULEMEDI") {
+            let (pg, inst) = self.installed_pg(inputs);
+            measured = pg;
+            instance = inst;
+            input.pg = measured.as_ref();
+            d = decision::decide(&input);
+        }
+        f.decision = Some(d.clone());
+        f.pending = Some(Pending {
+            surum: m.doc.surum.clone(),
+            karar: d.karar.label().into(),
+            neden: d.neden.clone(),
+            aralik: d.aralik.clone(),
+            pg_update: d.pg_update,
+            zorunlu: m.doc.zorunlu,
+            summary: m.doc.notlar.ozet.clone(),
+        });
+        if !matches!(d.karar, Kind::Install | Kind::AwaitingApproval | Kind::AwaitingWindow) {
+            let message =
+                format!("{} {}{}", m.doc.surum, d.karar.label(), d.neden.as_deref().map(|n| format!(" / {n}")).unwrap_or_default());
+            let state = self.resting_state(last.as_ref(), &installed, None);
+            self.write_status(self.doc(&f, state, None, &message));
             return idle;
         }
-        let pkg_hex = b64u_to_hex(&manifest.package.sha256);
-        if let Err((code, m)) = self.prepare_backend(&server, &intent, &manifest, &pol, &installed, stop) {
-            let state =
-                if code == codes::INDIRME_HATASI || code == codes::BELIRTEC_SURESI_DOLDU { State::Downloading } else { State::Waiting };
-            let mut d = self.base(state, Some(&installed));
-            d.error_code = Some(code.to_string());
-            d.message = Some(m);
-            d.version = Some(intent.version.clone());
-            d.intent_id = Some(intent.id.clone());
-            d.policy = Some(view);
-            self.status(d);
+        // Geri dönen sürüm kendiliğinden yeniden denenmez: aynı sürüme YENİ bir panel onayı gerekir.
+        let used_approval = approval.as_ref().filter(|a| version::compare(&a.version, &m.doc.surum) == Some(std::cmp::Ordering::Equal));
+        if let Some(l) = last.as_ref().filter(|l| l.attempt_end && l.outcome != OpOutcome::Succeeded && l.target == m.doc.surum) {
+            let fresh = used_approval.is_some_and(|a| Some(&a.id) != l.approval_id.as_ref());
+            if !fresh {
+                let msg =
+                    format!("{} geri dönmüştü — aynı sürüm kendiliğinden yeniden denenmez; yeni bir panel onayı gerekir", m.doc.surum);
+                let state = self.resting_state(last.as_ref(), &installed, Some(&m.doc.surum));
+                self.write_status(self.doc(&f, state, l.detail.error_code.as_deref(), &msg));
+                return idle;
+            }
+        }
+        // ── Hazırlık (onay/pencere beklenirken de: uygulama anında iş kısa sürsün) ─────────
+        let Some(token) = token else {
+            let (code, msg) = token_problem();
+            self.write_status(self.doc(&f, State::Waiting, Some(code), &msg));
+            return idle;
+        };
+        if let Err((code, msg)) = self.disk_check(&m.doc) {
+            self.write_status(self.doc(&f, State::Waiting, Some(code), &msg));
+            return idle;
+        }
+        if let Err((code, msg)) = self.prepare_backend(&f, &server, &channel, &keys, &m.doc, &token, stop) {
+            let state = if matches!(code, codes::INDIRME_HATASI | codes::INDIRME_REDDEDILDI) { State::Downloading } else { State::Waiting };
+            self.write_status(self.doc(&f, state, Some(code), &msg));
             return TickResult::Idle(Duration::from_secs(tick_s.min(60)));
         }
-        let pg_pending = match self.prepare_pg(&server, &intent, &manifest, instance.as_ref(), stop) {
-            Ok(p) => p,
-            Err((code, m)) => {
-                let mut d = self.waiting(Some(&installed), Some(code), &m);
-                d.version = Some(intent.version.clone());
-                d.policy = Some(view);
-                self.status(d);
+        let pg_target = if d.pg_update { m.doc.pg.hedef.clone() } else { None };
+        if let Some(target) = &pg_target {
+            let Some(inst) = instance.as_ref().filter(|i| i.own()) else {
+                self.write_status(self.doc(&f, State::Waiting, Some(codes::PG_PAKET), "PG güncellemesi istendi ama kendi örnek kaydı yok"));
+                return idle;
+            };
+            if let Err((code, msg)) = self.prepare_pg(&server, &channel, &keys, &m.doc, target, inst, &token, stop) {
+                self.write_status(self.doc(&f, State::Waiting, Some(code), &msg));
                 return idle;
             }
-        };
-        match policy::decide(&pol, &intent, self.now()) {
-            Decision::Wait(at, why) => {
-                let mut d = self.base(State::Ready, Some(&installed));
-                d.version = Some(intent.version.clone());
-                d.source_version = Some(installed.clone());
-                d.intent_id = Some(intent.id.clone());
-                d.planned = at.map(timefmt::iso_millis);
-                d.message = Some(format!("paket doğrulandı; {why}"));
-                d.policy = Some(view);
-                self.status(d);
-                return idle;
-            }
-            Decision::Blocked(code, why) => {
-                let mut d = self.waiting(Some(&installed), Some(code), &why);
-                d.version = Some(intent.version.clone());
-                d.policy = Some(view);
-                self.status(d);
-                return idle;
-            }
-            Decision::Apply => {}
         }
-        if let Err((code, m)) = self.disk_check(&manifest) {
-            self.status(self.waiting(Some(&installed), Some(code), &m));
+        if d.karar != Kind::Install {
+            let mut doc = self.doc(&f, State::Ready, None, &format!("{} hazır; {}", m.doc.surum, d.karar.label()));
+            doc.planned = d.aralik.as_ref().filter(|_| d.karar == Kind::AwaitingWindow).map(|a| a.baslangic.clone());
+            self.write_status(doc);
             return idle;
         }
-        if let Some((inst, target)) = pg_pending {
-            let r = self.run_pg(inputs, journal, &intent, &inst, &target, &manifest, &current_dir, &installed);
-            if r.outcome != OpOutcome::Succeeded {
-                // PG adımı düştüyse backend'e dokunulmaz (D4 §5).
-                self.status(self.outcome_status(&r));
+        // ── Uygulama: bildirim bayatsa önce tazelenir ve karar yeniden verilir ─────────────
+        let m = match self.candidate(&server, &pointer, Some(&token), &keys, &channel, CANDIDATE_FRESH_FOR_APPLY_MS, &token_problem) {
+            Ok(fresh) if fresh.doc == m.doc => fresh,
+            Ok(_) => {
+                self.write_status(self.doc(
+                    &f,
+                    State::Waiting,
+                    None,
+                    "aday uygulama anında değişti — sonraki turda yeniden değerlendirilir",
+                ));
                 return idle;
             }
-        }
-        let outcome = self.run_backend(inputs, journal, &intent, &manifest, &installed, &current_dir, pkg_hex);
-        self.after_op(inputs, outcome, tick_s)
-    }
-
-    /// Son durum bir işlem sonucuysa (BAŞARILI/GERİ DÖNDÜ/HATA) korunur; değilse BEKLİYOR yazılır.
-    fn keep_or_wait(&self, installed: Option<&str>, code: &str, message: &str) {
-        let prev = self.last_status.borrow().clone().or_else(|| ipc::read_status(self.env.fs.as_ref(), &self.layout));
-        if let Some(mut p) = prev.filter(|p| matches!(p.state, State::Succeeded | State::RolledBack | State::Failed)) {
-            p.installed_version = installed.map(str::to_string);
-            self.status(p);
-            return;
-        }
-        self.status(self.waiting(installed, (!code.is_empty()).then_some(code), message));
-    }
-
-    fn manifest(&self, server: &str, intent: &Intent, pol: &Policy, installed: &str) -> Result<Manifest, (&'static str, String)> {
-        if !ipc::valid_manifest_path(&intent.manifest_path, &pol.channel) {
-            return Err((codes::NIYET_BICIMSIZ, format!("manifest yolu kanal ({}) öneki altında değil", pol.channel)));
-        }
-        let fs = self.env.fs.as_ref();
-        let stored = self.layout.manifests().join(format!("{}.jws", intent.version));
-        let text = match fs.read(&stored).ok().and_then(|b| String::from_utf8(b).ok()) {
-            Some(t) => t,
-            None => {
-                let token = intent.download.as_ref().map(|d| d.token.as_str());
-                let bytes = download::fetch_small(&self.env, &format!("{server}{}", intent.manifest_path), token)
-                    .map_err(|e| (e.code, e.message))?;
-                String::from_utf8(bytes).map_err(|_| (codes::MANIFEST_GECERSIZ, "manifest UTF-8 değil".to_string()))?
+            Err((code, msg)) => {
+                self.write_status(self.doc(&f, State::Waiting, Some(code), &msg));
+                return idle;
             }
         };
-        let m = manifest::verify(&text, &self.anchor).map_err(|e| {
-            let _ = fs.remove_file(&stored);
-            (codes::MANIFEST_GECERSIZ, e)
-        })?;
-        let reject = |code: &'static str, msg: String| {
-            let _ = fs.remove_file(&stored);
-            Err((code, msg))
-        };
-        if m.channel != pol.channel {
-            return reject(codes::MANIFEST_GECERSIZ, format!("manifest {} kanalının, kurulum {}", m.channel, pol.channel));
+        if let Err((code, msg)) = self.disk_check(&m.doc) {
+            self.write_status(self.doc(&f, State::Waiting, Some(code), &msg));
+            return idle;
         }
-        if m.version != intent.version {
-            return reject(codes::MANIFEST_GECERSIZ, format!("manifest sürümü {}, niyet {}", m.version, intent.version));
-        }
-        if !m.package.path.starts_with(&format!("/{}/backend/", pol.channel)) {
-            return reject(codes::MANIFEST_GECERSIZ, "paket yolu kanalın backend dizini altında değil".into());
-        }
-        if let Some(min) = &m.min_source {
-            if version::compare(installed, min) == Some(std::cmp::Ordering::Less) {
-                return reject(
-                    codes::KAYNAK_SURUM_ESKI,
-                    format!("{} doğrudan kurulamaz: kurulu {installed}, en az {min} gerekir", m.version),
-                );
+        let approval_id = used_approval.map(|a| a.id.clone());
+        if let (Some(target), Some(inst)) = (&pg_target, instance.as_ref()) {
+            let outcome = self.run_pg(inputs, journal, inst, target, &m.doc, &current_dir, &installed, approval_id.clone());
+            if outcome != OpOutcome::Succeeded {
+                // PG adımı düştüyse backend'e dokunulmaz (D4 §5).
+                return self.after_op(journal, outcome, tick_s);
             }
         }
-        if let Err(e) = package::check_key_class(&m.kid, pol.license_class.as_deref()) {
-            return reject(e.code, e.message);
-        }
-        if fs.read(&stored).is_err() {
-            let _ = fs.write_atomic(&stored, text.trim().as_bytes());
-        }
-        Ok(m)
+        let outcome = self.run_backend(inputs, journal, &m.doc, &installed, &current_dir, approval_id, used_approval.cloned());
+        self.after_op(journal, outcome, tick_s)
     }
 
-    /// Harici PG kipinde (ya da örnek kaydı yoksa) `pg.enAz` denetimi — altındaysa backend RED (D4 §7).
-    fn external_pg_gate(&self, inputs: &Inputs, m: &Manifest, instance: Option<&pgminor::Instance>) -> Result<(), (&'static str, String)> {
-        let Some(pg) = &m.pg else { return Ok(()) };
-        let Some(min) = &pg.min else { return Ok(()) };
-        if instance.is_some_and(pgminor::Instance::own) {
-            return Ok(());
+    /// Yapılacak iş yokken gösterilen durum: son deneme bu kurulumun sürümüne BAŞARILI geçtiyse ya da
+    /// (aday verildiğinde) aday geri dönmüş sürümse sonucu korunur; aksi hâlde BEKLİYOR.
+    fn resting_state(&self, last: Option<&LastOp>, installed: &str, blocked: Option<&str>) -> State {
+        match last.filter(|l| l.attempt_end) {
+            Some(l) if l.outcome == OpOutcome::Succeeded && l.target == installed => State::Succeeded,
+            Some(l) if matches!(l.outcome, OpOutcome::RolledBack(_)) && blocked == Some(l.target.as_str()) => State::RolledBack,
+            _ => State::Waiting,
         }
-        let v = tools::server_version(&self.env, &inputs.backend, &inputs.backend.pg_bin_dir)
-            .map_err(|e| (codes::PG_SURUM_ESKI, format!("harici PostgreSQL sürümü ölçülemedi: {e}")))?;
-        let num = |s: &str| s.split('.').map(|p| p.parse::<u64>().unwrap_or(0)).collect::<Vec<_>>();
-        if num(&v) < num(min) {
-            return Err((
-                codes::PG_SURUM_ESKI,
-                format!("harici PostgreSQL {v}, bu sürüm en az {min} ister (kendi örneğe taşıma: D4 runbook'u)"),
-            ));
+    }
+
+    /// Doğrulanmış aday: önbellekteki (aynı işaretçi, `max_age`dan taze) ya da indirilip doğrulanan.
+    #[allow(clippy::too_many_arguments)]
+    fn candidate(
+        &self,
+        server: &str,
+        pointer: &str,
+        token: Option<&str>,
+        keys: &[(String, String)],
+        channel: &str,
+        max_age: i64,
+        token_problem: &dyn Fn() -> Fail,
+    ) -> Result<Checked<ReleaseManifest>, Fail> {
+        let now = self.now();
+        if let Some(c) = self.candidate.borrow().as_ref().filter(|c| c.pointer == pointer && now - c.fetched_ms < max_age) {
+            return Ok(c.manifest.clone());
         }
-        Ok(())
+        let Some(token) = token else { return Err(token_problem()) };
+        let bytes = download::fetch_small(&self.env, &format!("{server}{pointer}"), Some(token)).map_err(|e| (e.code, e.message))?;
+        let text = String::from_utf8(bytes).map_err(|_| fail(release::code::SURUM_ISARETCI, "işaretçi UTF-8 değil"))?;
+        let jws_text = release::read_release_pointer(&text).map_err(|e| (e.code, format!("{pointer}: {}", e.message)))?;
+        let checked = release::verify_release_manifest(&Value::String(jws_text), keys, channel)
+            .map_err(|e| (e.code, format!("sürüm bildirimi reddedildi ({}): {}", e.code, e.message)))?;
+        *self.candidate.borrow_mut() = Some(Candidate { fetched_ms: now, pointer: pointer.to_string(), manifest: checked.clone() });
+        Ok(checked)
+    }
+
+    /// Kurulu PG (sözleşme §1.6): kip `pgsql\ornek.json`dan (yoksa HARİCİ: bugünkü kurulumlar), sürüm
+    /// her koşumda `SHOW server_version`dan, kendi kipte derleme örnek kaydından. Ölçülemezse `None`.
+    fn installed_pg(&self, inputs: &Inputs) -> (Option<InstalledPg>, Option<pgminor::Instance>) {
+        let inst = pgminor::read_instance(&self.env, &self.layout);
+        let (kip, bin, build) = match &inst {
+            Some(i) if i.own() => (PgMode::Own, i.bin_dir.join("bin"), i.derleme.parse::<u32>().ok().filter(|b| (1..=999).contains(b))),
+            Some(i) if i.kip == "harici" => (PgMode::External, inputs.backend.pg_bin_dir.clone(), None),
+            Some(_) => return (None, inst),
+            None => (PgMode::External, inputs.backend.pg_bin_dir.clone(), None),
+        };
+        let surum = tools::server_version(&self.env, &inputs.backend, &bin).ok().and_then(|v| release::pg_version_of(&v));
+        (surum.map(|surum| InstalledPg { kip, surum, derleme: build }), inst)
     }
 
     fn ready_marker(&self, v: &str) -> PathBuf {
         self.layout.ready_markers().join(format!("{v}.json"))
     }
 
-    /// Paket HAZIR mı; değilse indir → aç → doğrula → yerleştir.
+    // ── Kesin paket hatalarında yeniden indirme aralığı ───────────────────────────────────────
+
+    fn backoff_file(&self) -> PathBuf {
+        self.layout.work().join("ertele.json")
+    }
+
+    fn backoff_map(&self) -> Map<String, Value> {
+        self.env.fs.read(&self.backoff_file()).ok().and_then(|b| serde_json::from_slice(&b).ok()).unwrap_or_default()
+    }
+
+    fn backoff_until(&self, key: &str) -> Option<i64> {
+        self.backoff_map().get(key).and_then(|v| v.get("sonraki")).and_then(Value::as_i64).filter(|t| *t > self.now())
+    }
+
+    fn backoff_mark(&self, key: &str, failed: bool) {
+        let mut m = self.backoff_map();
+        if failed {
+            let n = m.get(key).and_then(|v| v.get("sayi")).and_then(Value::as_u64).unwrap_or(0) + 1;
+            let wait = BACKOFF_BASE_MS.saturating_mul(4_i64.saturating_pow(u32::try_from(n - 1).unwrap_or(8).min(8))).min(BACKOFF_MAX_MS);
+            m.insert(key.to_string(), json!({ "sayi": n, "sonraki": self.now() + wait }));
+        } else if m.remove(key).is_none() {
+            return;
+        }
+        let _ = self.env.fs.write_atomic(&self.backoff_file(), Value::Object(m).to_string().as_bytes());
+    }
+
+    fn definitive(code: &str) -> bool {
+        matches!(code, codes::PAKET_OZETI | codes::PAKET_YOL | codes::BUTUNLUK_GECERSIZ | codes::PG_PAKET)
+            || code == release::code::PAKET_BAGI
+            || code == release::code::PG_BAGI
+    }
+
+    /// Paket HAZIR mı; değilse indir → özet → aç → bütünlük → bağ → yerleştir (sözleşme §1.5).
+    #[allow(clippy::too_many_arguments)]
     fn prepare_backend(
         &self,
+        f: &Frame,
         server: &str,
-        intent: &Intent,
-        m: &Manifest,
-        pol: &Policy,
-        installed: &str,
+        channel: &str,
+        keys: &[(String, String)],
+        m: &ReleaseManifest,
+        token: &str,
         stop: &dyn Fn() -> bool,
-    ) -> Result<(), (&'static str, String)> {
+    ) -> Result<(), Fail> {
+        let key = format!("paket:{}:{}", m.surum, m.paket.sha256);
+        let r = self.prepare_backend_inner(f, server, channel, keys, m, token, stop, &key);
+        match &r {
+            Ok(()) => self.backoff_mark(&key, false),
+            Err((code, _)) if Self::definitive(code) => self.backoff_mark(&key, true),
+            Err(_) => {}
+        }
+        r
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn prepare_backend_inner(
+        &self,
+        f: &Frame,
+        server: &str,
+        channel: &str,
+        keys: &[(String, String)],
+        m: &ReleaseManifest,
+        token: &str,
+        stop: &dyn Fn() -> bool,
+        key: &str,
+    ) -> Result<(), Fail> {
         let fs = self.env.fs.as_ref();
-        let dir = self.layout.version_dir(&m.version);
-        let marker = self.ready_marker(&m.version);
-        if fs.exists(&marker) && fs.is_dir(&dir) {
+        let dir = self.layout.version_dir(&m.surum);
+        let marker = self.ready_marker(&m.surum);
+        let marked = fs
+            .read(&marker)
+            .ok()
+            .and_then(|b| serde_json::from_slice::<Value>(&b).ok())
+            .is_some_and(|v| v.get("paketId").and_then(Value::as_str) == Some(m.paket.package_id.as_str()));
+        if marked && fs.is_dir(&dir) {
             return Ok(());
         }
+        let place_marker = || {
+            fs.write_atomic(
+                &marker,
+                json!({ "surum": m.surum, "paketId": m.paket.package_id, "zaman": timefmt::iso_millis(self.now()) }).to_string().as_bytes(),
+            )
+            .map_err(|x| fail(codes::INDIRME_HATASI, x.to_string()))
+        };
         if fs.is_dir(&dir) {
-            // İşaretsiz sürüm dizini (yarım yerleştirme ya da elle konmuş): doğrulanırsa kabul, değilse silinir.
-            match package::verify_dir(&self.env, &dir, &self.anchor, &m.version, &pol.channel, pol.license_class.as_deref()) {
-                Ok(_) => {
-                    let _ = fs.write_atomic(
-                        &marker,
-                        json!({ "surum": m.version, "zaman": timefmt::iso_millis(self.now()) }).to_string().as_bytes(),
-                    );
-                    return Ok(());
-                }
-                Err(e) => {
-                    if version::compare(&m.version, installed) == Some(std::cmp::Ordering::Equal) {
-                        return Err((e.code, e.message));
-                    }
-                    self.log.warn(&format!("{} doğrulanamadı ({}), yeniden açılacak", dir.display(), e.message));
-                    fs.remove_dir_all(&dir).map_err(|x| (codes::INDIRME_HATASI, x.to_string()))?;
+            // İşaretsiz sürüm dizini (yarım yerleştirme ya da elle konmuş): doğrulanır ve bağlanırsa kabul, değilse silinir.
+            let verified = package::verify_dir(&dir, fs, keys)
+                .map_err(|e| (e.code, e.message))
+                .and_then(|id| release::check_package_binding(m, &id).map_err(|e| (e.code, e.message)));
+            match verified {
+                Ok(()) => return place_marker(),
+                Err(e) if f.installed.as_deref() == Some(m.surum.as_str()) => return Err(e),
+                Err((_, why)) => {
+                    self.log.warn(&format!("{} doğrulanamadı ({why}), yeniden açılacak", dir.display()));
+                    fs.remove_dir_all(&dir).map_err(|x| fail(codes::INDIRME_HATASI, x.to_string()))?;
                 }
             }
         }
-        let Some(tok) = intent.download.as_ref() else {
-            return Err((codes::BELIRTEC_SURESI_DOLDU, "niyet indirme belirteci taşımıyor".into()));
-        };
-        let exp = tekserp_dogrulama::iso::date_parse_ms(&tok.expires);
-        if !(exp.is_finite() && (self.now() as f64) < exp) {
-            return Err((codes::BELIRTEC_SURESI_DOLDU, "indirme belirtecinin süresi doldu — backend yenisini yazacak".into()));
+        if let Some(until) = self.backoff_until(key) {
+            return Err(fail(
+                codes::INDIRME_ERTELENDI,
+                format!("{} paketi önceki denemede doğrulanamadı — yeniden indirme {} sonra", m.surum, timefmt::iso_millis(until)),
+            ));
         }
-        let zip = self.layout.downloads().join(format!("{}.zip", m.version));
+        let zip = self.layout.downloads().join(format!("{}.zip", m.surum));
         let spec = Spec {
-            url: format!("{server}{}", m.package.path),
-            token: Some(tok.token.clone()),
-            part: self.layout.downloads().join(format!("{}.zip.part", m.version)),
+            url: format!("{server}{}", release::release_file_path(channel, &m.surum, &m.paket.ad)),
+            token: Some(token.to_string()),
+            part: self.layout.downloads().join(format!("{}.zip.part", m.surum)),
             dest: zip.clone(),
-            size: m.package.size,
-            sha256_b64u: m.package.sha256.clone(),
+            size: m.paket.boyut,
+            sha256_hex: m.paket.sha256.clone(),
         };
-        let mut progress = |done: u64, total: u64| self.download_progress(intent, installed, done, total);
+        let mut progress = |done: u64, total: u64| self.download_progress(f, done, total);
         download::download(&self.env, &spec, &mut progress, stop).map_err(|e| (e.code, e.message))?;
-        let staging = self.layout.staging_dir(&m.version);
-        fs.remove_dir_all(&staging).map_err(|x| (codes::INDIRME_HATASI, x.to_string()))?;
-        fs.create_dir_all(&self.layout.versions()).map_err(|x| (codes::INDIRME_HATASI, x.to_string()))?;
+        let staging = self.layout.staging_dir(&m.surum);
+        fs.remove_dir_all(&staging).map_err(|x| fail(codes::INDIRME_HATASI, x.to_string()))?;
+        fs.create_dir_all(&self.layout.versions()).map_err(|x| fail(codes::INDIRME_HATASI, x.to_string()))?;
         if let Err(e) = fs.extract_zip(&zip, &staging, &ExtractLimits::default()) {
             let _ = fs.remove_dir_all(&staging);
-            let code = if e.starts_with("PAKET_YOL") { codes::PAKET_YOL } else { codes::PAKET_BUTUNLUK };
-            return Err((code, e));
+            let _ = fs.remove_file(&zip);
+            let code = if e.starts_with("PAKET_YOL") { codes::PAKET_YOL } else { codes::BUTUNLUK_GECERSIZ };
+            return Err(fail(code, e));
         }
-        if let Err(e) = package::verify_dir(&self.env, &staging, &self.anchor, &m.version, &pol.channel, pol.license_class.as_deref()) {
+        let verified = package::verify_dir(&staging, fs, keys)
+            .map_err(|e| (e.code, e.message))
+            .and_then(|id| release::check_package_binding(m, &id).map_err(|e| (e.code, e.message)));
+        if let Err(e) = verified {
             let _ = fs.remove_dir_all(&staging);
-            return Err((e.code, e.message));
+            let _ = fs.remove_file(&zip);
+            return Err(e);
         }
-        fs.rename(&staging, &dir).map_err(|x| (codes::INDIRME_HATASI, x.to_string()))?;
-        fs.write_atomic(&marker, json!({ "surum": m.version, "zaman": timefmt::iso_millis(self.now()) }).to_string().as_bytes())
-            .map_err(|x| (codes::INDIRME_HATASI, x.to_string()))?;
+        fs.rename(&staging, &dir).map_err(|x| fail(codes::INDIRME_HATASI, x.to_string()))?;
+        place_marker()?;
         let _ = fs.remove_file(&zip);
-        self.log.info(&format!("{} hazır: indirildi, sha256 + PAKET imzası + bütünlük listesi doğrulandı", m.version));
+        self.log.info(&format!("{} hazır: indirildi, sha256 + PAKET imzası + bütünlük listesi + bildirim bağı doğrulandı", m.surum));
         Ok(())
     }
 
-    fn download_progress(&self, intent: &Intent, installed: &str, done: u64, total: u64) {
+    fn download_progress(&self, f: &Frame, done: u64, total: u64) {
         let now = self.now();
         if now - *self.last_progress_ms.borrow() < 2000 && done < total {
             return;
         }
         *self.last_progress_ms.borrow_mut() = now;
-        let mut d = self.base(State::Downloading, Some(installed));
-        d.version = Some(intent.version.clone());
-        d.intent_id = Some(intent.id.clone());
+        let mut d = self.doc(f, State::Downloading, None, "paket indiriliyor");
         d.progress = Some(IpcProgress { done, total });
-        d.message = Some("paket indiriliyor".into());
-        self.status(d);
+        self.write_status(d);
     }
 
-    /// Kendi örnekte hedef PG kuruludan farklıysa PG paketini hazırlar; bekleyen PG işi döner.
+    /// Kendi örnekte hedef PG kuruludan yeniyse paketi hazırlar (sözleşme §1.6, D4 U0–U1).
+    #[allow(clippy::too_many_arguments)]
     fn prepare_pg(
         &self,
         server: &str,
-        intent: &Intent,
-        m: &Manifest,
-        instance: Option<&pgminor::Instance>,
+        channel: &str,
+        keys: &[(String, String)],
+        m: &ReleaseManifest,
+        target: &PgTarget,
+        inst: &pgminor::Instance,
+        token: &str,
         stop: &dyn Fn() -> bool,
-    ) -> Result<Option<(pgminor::Instance, crate::manifest::PgTarget)>, (&'static str, String)> {
-        let (Some(pg), Some(inst)) = (&m.pg, instance) else { return Ok(None) };
-        let Some(target) = &pg.target else { return Ok(None) };
-        if !inst.own() || pgminor::tag_of(target) == inst.tag() {
-            return Ok(None);
+    ) -> Result<(), Fail> {
+        let key = format!("pg:{}:{}", target.tag(), target.paket.sha256);
+        let r = self.prepare_pg_inner(server, channel, keys, m, target, inst, token, stop, &key);
+        match &r {
+            Ok(()) => self.backoff_mark(&key, false),
+            Err((code, _)) if Self::definitive(code) => self.backoff_mark(&key, true),
+            Err(_) => {}
         }
+        r
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn prepare_pg_inner(
+        &self,
+        server: &str,
+        channel: &str,
+        keys: &[(String, String)],
+        m: &ReleaseManifest,
+        target: &PgTarget,
+        inst: &pgminor::Instance,
+        token: &str,
+        stop: &dyn Fn() -> bool,
+        key: &str,
+    ) -> Result<(), Fail> {
         let fs = self.env.fs.as_ref();
         let data_major =
             fs.read_untrusted(&inst.data_dir.join("PG_VERSION"), 64).ok().map(|b| String::from_utf8_lossy(&b).trim().to_string());
-        if data_major.as_deref() != Some(pg.line.as_str()) {
-            return Err((
+        if data_major.as_deref() != Some(m.pg.cizgi.to_string().as_str()) {
+            return Err(fail(
                 codes::PG_BUYUK_SURUM,
-                format!("veri dizini ana sürümü {data_major:?}, paket {} — büyük sürüm geçişi otomatik değil (runbook)", pg.line),
+                format!(
+                    "veri dizini ana sürümü {data_major:?}, bildirim çizgisi {} — büyük sürüm geçişi otomatik değil (runbook)",
+                    m.pg.cizgi
+                ),
             ));
         }
-        let tag = pgminor::tag_of(target);
+        let tag = target.tag();
         let dir = self.layout.pg_version_dir(&tag);
         let marker = self.layout.ready_markers().join(format!("pg-{tag}.json"));
         if fs.exists(&marker) && fs.is_dir(&dir) {
-            return Ok(Some((inst.clone(), target.clone())));
+            return Ok(());
         }
-        if !target.package.path.starts_with(&format!("/{}/backend/", m.channel)) {
-            return Err((codes::PG_PAKET, "PG paket yolu kanalın backend dizini altında değil".into()));
+        if let Some(until) = self.backoff_until(key) {
+            return Err(fail(
+                codes::INDIRME_ERTELENDI,
+                format!("PG {tag} paketi önceki denemede doğrulanamadı — yeniden {} sonra", timefmt::iso_millis(until)),
+            ));
         }
-        let Some(tok) = intent.download.as_ref() else {
-            return Err((codes::BELIRTEC_SURESI_DOLDU, "niyet indirme belirteci taşımıyor".into()));
-        };
+        // Künye: ayrı PAKET imzalı belge, bildirimin hedefiyle BAĞLANIR (ana sürüm dahil).
+        let pointer = release::pg_release_file_path(channel, &target.surum, target.derleme, release::PG_POINTER_FILE);
+        let bytes = download::fetch_small(&self.env, &format!("{server}{pointer}"), Some(token)).map_err(|e| (e.code, e.message))?;
+        let text = String::from_utf8(bytes).map_err(|_| fail(release::code::SURUM_ISARETCI, "PG künyesi UTF-8 değil"))?;
+        let jws_text = release::read_release_pointer(&text).map_err(|e| (e.code, format!("{pointer}: {}", e.message)))?;
+        let kunye = release::verify_pg_package_manifest(&Value::String(jws_text), keys)
+            .map_err(|e| (e.code, format!("PG künyesi reddedildi ({}): {}", e.code, e.message)))?;
+        release::check_pg_binding(&m.pg, &kunye.doc).map_err(|e| (e.code, e.message))?;
         let zip = self.layout.downloads().join(format!("pg-{tag}.zip"));
         let spec = Spec {
-            url: format!("{server}{}", target.package.path),
-            token: Some(tok.token.clone()),
+            url: format!("{server}{}", release::pg_release_file_path(channel, &target.surum, target.derleme, &target.paket.ad)),
+            token: Some(token.to_string()),
             part: self.layout.downloads().join(format!("pg-{tag}.zip.part")),
             dest: zip.clone(),
-            size: target.package.size,
-            sha256_b64u: target.package.sha256.clone(),
+            size: target.paket.boyut,
+            sha256_hex: target.paket.sha256.clone(),
         };
         let mut noop = |_: u64, _: u64| {};
         download::download(&self.env, &spec, &mut noop, stop).map_err(|e| (e.code, e.message))?;
         let staging = self.layout.pg_staging_dir(&tag);
-        fs.remove_dir_all(&staging).map_err(|x| (codes::PG_PAKET, x.to_string()))?;
+        fs.remove_dir_all(&staging).map_err(|x| fail(codes::PG_PAKET, x.to_string()))?;
         if fs.is_dir(&dir) {
-            fs.remove_dir_all(&dir).map_err(|x| (codes::PG_PAKET, x.to_string()))?;
+            fs.remove_dir_all(&dir).map_err(|x| fail(codes::PG_PAKET, x.to_string()))?;
         }
-        if let Err(e) = fs.extract_zip(&zip, &staging, &ExtractLimits::default()) {
+        let checked = fs
+            .extract_zip(&zip, &staging, &ExtractLimits::default())
+            .map(|_| ())
+            .and_then(|()| pgminor::verify_content(&self.env, &staging, &target.content_sha256).map(|_| ()))
+            .and_then(|()| {
+                let icu = pgminor::icu_version(&self.env, &staging);
+                if icu.as_deref() == Some(target.icu.as_str()) {
+                    Ok(())
+                } else {
+                    Err(format!("paketin ICU'su {icu:?}, künye {}", target.icu))
+                }
+            })
+            .and_then(|()| {
+                let c = crate::env::Cmd::new(&staging.join("bin").join(if cfg!(windows) { "postgres.exe" } else { "postgres" }))
+                    .arg("--version")
+                    .timeout(Duration::from_secs(30));
+                let out = self.env.procs.run(&c).map_err(|e| e.0)?;
+                let text = String::from_utf8_lossy(&out.stdout).to_string();
+                if out.ok() && text.trim().ends_with(&format!("(PostgreSQL) {}", target.surum)) {
+                    Ok(())
+                } else {
+                    Err(format!("postgres --version beklenen {} değil: {}", target.surum, text.trim()))
+                }
+            });
+        if let Err(e) = checked {
             let _ = fs.remove_dir_all(&staging);
-            return Err((codes::PG_PAKET, e));
+            let _ = fs.remove_file(&zip);
+            return Err(fail(codes::PG_PAKET, e));
         }
-        let check = pgminor::verify_content(&self.env, &staging, &target.content_sha256).and_then(|_| {
-            let c = crate::env::Cmd::new(&staging.join("bin").join(if cfg!(windows) { "postgres.exe" } else { "postgres" }))
-                .arg("--version")
-                .timeout(Duration::from_secs(30));
-            let out = self.env.procs.run(&c).map_err(|e| e.0)?;
-            let text = String::from_utf8_lossy(&out.stdout).to_string();
-            if out.ok() && text.contains(&format!("(PostgreSQL) {}", target.version)) {
-                Ok(())
-            } else {
-                Err(format!("postgres --version beklenen {} değil: {}", target.version, text.trim()))
-            }
-        });
-        if let Err(e) = check {
-            let _ = fs.remove_dir_all(&staging);
-            return Err((codes::PG_PAKET, e));
-        }
-        fs.rename(&staging, &dir).map_err(|x| (codes::PG_PAKET, x.to_string()))?;
-        fs.write_atomic(&marker, json!({ "surum": tag }).to_string().as_bytes()).map_err(|x| (codes::PG_PAKET, x.to_string()))?;
+        fs.rename(&staging, &dir).map_err(|x| fail(codes::PG_PAKET, x.to_string()))?;
+        fs.write_atomic(&marker, json!({ "surum": tag }).to_string().as_bytes()).map_err(|x| fail(codes::PG_PAKET, x.to_string()))?;
         let _ = fs.remove_file(&zip);
-        Ok(Some((inst.clone(), target.clone())))
+        Ok(())
     }
 
-    fn disk_check(&self, m: &Manifest) -> Result<(), (&'static str, String)> {
-        let need = m.package.size.saturating_mul(3).saturating_add(2 * 1024 * 1024 * 1024);
+    fn disk_check(&self, m: &ReleaseManifest) -> Result<(), Fail> {
+        let need = m.paket.boyut.saturating_mul(3).saturating_add(2 * 1024 * 1024 * 1024);
         match self.env.fs.free_space(&self.layout.root) {
             Ok(free) if free < need => {
-                Err((codes::DISK_DOLU, format!("boş alan {} MB, en az {} MB gerekir", free / 1_048_576, need / 1_048_576)))
+                Err(fail(codes::DISK_DOLU, format!("boş alan {} MB, en az {} MB gerekir", free / 1_048_576, need / 1_048_576)))
             }
             _ => Ok(()),
         }
@@ -711,62 +928,49 @@ impl Engine {
         &self,
         inputs: &Inputs,
         journal: &mut Journal,
-        intent: &Intent,
         inst: &pgminor::Instance,
-        target: &crate::manifest::PgTarget,
-        m: &Manifest,
+        target: &PgTarget,
+        m: &ReleaseManifest,
         current_dir: &Path,
         backend_version: &str,
-    ) -> OpReport {
-        let tag = pgminor::tag_of(target);
+        approval_id: Option<String>,
+    ) -> OpOutcome {
+        let tag = target.tag();
         let new_dir = self.layout.pg_version_dir(&tag);
-        let not_started = |e: operation::StepError| OpReport {
-            outcome: OpOutcome::RolledBack(e),
-            product: "pg",
-            intent_id: Some(intent.id.clone()),
-            op_id: String::new(),
-            source: inst.tag(),
-            target: tag.clone(),
-        };
         let old_image = match self.env.svc.image_path(&inst.hizmet) {
             Ok(p) => p,
-            Err(e) => return not_started(operation::step_err(codes::PG_YOL_HATASI, e.0)),
+            Err(e) => return OpOutcome::RolledBack(operation::step_err(codes::PG_YOL_HATASI, e.0)),
         };
         let Some(new_image) = pgminor::replace_dir(&old_image, &inst.bin_dir, &new_dir) else {
-            return not_started(operation::step_err(
+            return OpOutcome::RolledBack(operation::step_err(
                 codes::PG_YOL_HATASI,
                 "PG hizmetinin ImagePath'i ornek.json'daki ikili dizinini göstermiyor",
             ));
         };
-        let icu_changed = pgminor::icu_version(&self.env, &inst.bin_dir) != pgminor::icu_version(&self.env, &new_dir);
-        let reindex = m.pg.as_ref().is_some_and(|p| p.reindex_icu);
         let plan = PgPlan {
             kind: "PG".into(),
             op_id: crate::ids::uuid_v4(),
-            intent_id: Some(intent.id.clone()),
+            approval_id,
+            backend_target: m.surum.clone(),
             source_tag: inst.tag(),
-            target_tag: tag.clone(),
+            target_tag: tag,
             source_server_version: inst.surum.clone(),
-            target_server_version: target.version.clone(),
+            target_server_version: target.surum.clone(),
             service: inst.hizmet.clone(),
             old_dir: inst.bin_dir.clone(),
-            new_dir,
+            new_dir: new_dir.clone(),
             old_image_path: old_image,
             new_image_path: new_image,
             data_dir: inst.data_dir.clone(),
-            icu_changed,
-            reindex_icu: reindex,
+            icu_changed: pgminor::icu_version(&self.env, &inst.bin_dir) != pgminor::icu_version(&self.env, &new_dir),
             backend_version: backend_version.to_string(),
             tools_dir: current_dir.to_path_buf(),
             started_ms: self.now(),
         };
-        let report = self.report_fn();
+        let report = self.report_fn(inputs.settings.tick_s.clamp(10, 3600));
         let ctx = self.ctx(inputs, &report);
         let value = serde_json::to_value(&plan).unwrap_or(Value::Null);
-        let op = PgOp { plan };
-        let outcome = operation::start(&ctx, journal, &op, value);
-        let p = op.plan;
-        OpReport { outcome, product: "pg", intent_id: p.intent_id, op_id: p.op_id, source: p.source_tag, target: p.target_tag }
+        operation::start(&ctx, journal, &PgOp { plan }, value)
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -774,13 +978,13 @@ impl Engine {
         &self,
         inputs: &Inputs,
         journal: &mut Journal,
-        intent: &Intent,
-        m: &Manifest,
+        m: &ReleaseManifest,
         installed: &str,
         current_dir: &Path,
-        pkg_hex: Option<String>,
-    ) -> OpReport {
-        let new_dir = self.layout.version_dir(&m.version);
+        approval_id: Option<String>,
+        approval: Option<Approval>,
+    ) -> OpOutcome {
+        let new_dir = self.layout.version_dir(&m.surum);
         // Ön koşul ölçümleri (backend henüz ÇALIŞIYORKEN): göç sayısı ve lisans görüntüsü.
         let migrations_before = match tools::migration_count(&self.env, &inputs.backend) {
             Ok(c) => Some(c),
@@ -790,44 +994,25 @@ impl Engine {
             }
         };
         let license_before = health::probe(&self.env, inputs.backend.port).and_then(|h| h.license);
-        let commit = self
-            .env
-            .fs
-            .read(&new_dir.join("PAKET.json"))
-            .ok()
-            .and_then(|b| serde_json::from_slice::<Value>(&b).ok())
-            .and_then(|v| v.get("commit").and_then(Value::as_str).map(str::to_string));
         let plan = BackendPlan {
             kind: "BACKEND".into(),
             op_id: crate::ids::uuid_v4(),
-            intent_id: Some(intent.id.clone()),
+            approval_id,
             source_version: installed.to_string(),
-            version: m.version.clone(),
+            version: m.surum.clone(),
             previous_target: current_dir.to_path_buf(),
             new_target: new_dir.clone(),
             migrations_before,
             license_before,
-            package_hex: pkg_hex,
-            commit,
+            package_hex: Some(m.paket.sha256.clone()),
+            commit: Some(m.commit.clone()),
             started_ms: self.now(),
-            approval: intent.approval.clone(),
+            approval,
             tools_dir: self.tools_dir(current_dir, &new_dir),
         };
-        let report = self.report_fn();
+        let report = self.report_fn(inputs.settings.tick_s.clamp(10, 3600));
         let ctx = self.ctx(inputs, &report);
         let value = serde_json::to_value(&plan).unwrap_or(Value::Null);
-        let op = BackendOp { plan };
-        let outcome = operation::start(&ctx, journal, &op, value);
-        let p = op.plan;
-        OpReport { outcome, product: "backend", intent_id: p.intent_id, op_id: p.op_id, source: p.source_version, target: p.version }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    #[test]
-    fn hex_conversion() {
-        let b = tekserp_dogrulama::b64::encode(&[0xab; 32]);
-        assert_eq!(super::b64u_to_hex(&b).unwrap(), "ab".repeat(32));
+        operation::start(&ctx, journal, &BackendOp { plan }, value)
     }
 }

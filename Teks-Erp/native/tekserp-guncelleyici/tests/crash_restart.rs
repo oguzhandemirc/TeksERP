@@ -29,15 +29,24 @@ fn happy_path_updates_and_records() {
     assert_eq!(recs[0]["yeniSurum"], NEW);
     assert_eq!(recs[0]["migrationSayisi"], 2);
     assert_eq!(recs[0]["yeniMigrationSayisi"], 4);
-    assert_eq!(recs[0]["commit"], "abcdef1234");
+    assert_eq!(recs[0]["commit"], COMMIT, "commit imzalı bildirimden");
+    assert_eq!(recs[0]["paketOzeti"].as_str().map(str::len), Some(64));
+    // Yoklama raporunun `son`u (sözleşme §3.1): tam biçim, başarıda kod yok.
+    let son = st.last.clone().expect("son");
+    assert_eq!(
+        (son.target.as_str(), son.source.as_deref(), son.result.as_str(), son.kod.as_deref(), son.data_restored),
+        (NEW, Some(OLD), "BASARILI", None, false)
+    );
     // Yedek: kurulumun alıcısı + geçici anahtar; düz döküm yok; anahtar DPAPI'li.
-    let op = st.op_id.clone().unwrap();
+    let op = son.record_id.clone();
     let enc = std::fs::read(w.layout.update_backup_dir(&op).join("db.dump.tkenc")).unwrap();
     assert!(enc.starts_with(b"ENC2:"), "iki alıcı (müşteri + geçici)");
     assert!(w.layout.op_keys(&op).join("guncelleme.tksec.dpapi").exists());
-    // Sonraki tur: aynı niyet için iş yok, durum korunur.
+    // Sonraki tur: aday kurulu sürüm (GUNCEL/SURUM_GUNCEL) — iş yok, sonuç korunur.
     w.run(2).unwrap();
-    assert_eq!(w.state(), Some(State::Succeeded));
+    let st = w.status().unwrap();
+    assert_eq!(st.state, State::Succeeded);
+    assert_eq!(st.pending.map(|p| (p.karar, p.neden)), Some(("GUNCEL".into(), Some("SURUM_GUNCEL".into()))));
     assert_eq!(install_records(&w).len(), 1, "ikinci kayıt yok");
 }
 
@@ -82,6 +91,8 @@ fn kill_at_every_point_of_a_rollback() {
     let st = w.status().unwrap();
     assert_eq!(st.state, State::RolledBack);
     assert_eq!(st.error_code.as_deref(), Some("SAGLIK_ZAMAN_ASIMI"), "{:?}", st.message);
+    let son = st.last.clone().expect("son");
+    assert_eq!((son.result.as_str(), son.kod.as_deref(), son.data_restored), ("GERI_DONDU", Some("SAGLIK_HATASI"), true));
     assert_invariants(&w, "sağlık geri dönüşü");
     let recs = install_records(&w);
     assert_eq!(recs.last().unwrap()["tur"], "GERI_ALMA");
@@ -124,7 +135,11 @@ fn migration_failure_restores_database() {
     let st = w.status().unwrap();
     assert_eq!(st.state, State::RolledBack);
     assert_eq!(st.error_code.as_deref(), Some("GOC_HATASI"));
-    assert!(!st.message.unwrap().contains("gizli-parola"), "araç çıktısındaki parola maskelenmeli");
+    assert!(!st.message.clone().unwrap().contains("gizli-parola"), "araç çıktısındaki parola maskelenmeli");
+    let son = st.last.clone().expect("son");
+    assert_eq!((son.result.as_str(), son.kod.as_deref(), son.data_restored), ("GERI_DONDU", Some("GOC_HATASI"), true));
+    let text = std::fs::read_to_string(w.layout.status_file()).unwrap();
+    assert!(!text.contains("gizli-parola"), "durum.json sır taşımaz");
     assert_invariants(&w, "göç hatası");
 }
 
@@ -139,19 +154,25 @@ fn license_regression_rolls_back() {
 }
 
 #[test]
-fn rolled_back_intent_is_not_retried_until_a_new_one() {
+fn rolled_back_version_is_not_retried_until_a_fresh_approval() {
     let w = world("tekrar");
     *w.faults.unhealthy_version.lock().unwrap() = Some(NEW.into());
     w.run_to_rest(0);
     let starts = w.backend().starts;
     w.run(3).unwrap();
-    assert_eq!(w.backend().starts, starts, "aynı niyet yeniden denendi");
+    assert_eq!(w.backend().starts, starts, "geri dönen sürüm kendiliğinden yeniden denendi");
     assert_eq!(w.state(), Some(State::RolledBack));
     *w.faults.unhealthy_version.lock().unwrap() = None;
-    w.write_intent(&intent(NEW, "niyet-2", None));
+    // Başka bir sürümün onayı açmaz; aynı sürüme YENİ onay açar.
+    w.write_intent(&intent(Some(approval("onay-baska", "2.12.9", "HEMEN"))));
+    w.run(2).unwrap();
+    assert_eq!(w.backend().starts, starts, "başka sürümün onayı geri dönen sürümü açmaz");
+    w.write_intent(&intent(Some(approval("onay-2", NEW, "HEMEN"))));
     w.run_to_rest(0);
     assert_eq!(w.state(), Some(State::Succeeded));
-    assert_invariants(&w, "yeni niyetle ikinci deneme");
+    assert_invariants(&w, "yeni onayla ikinci deneme");
+    let hist = std::fs::read_to_string(w.layout.history_file()).unwrap();
+    assert!(hist.contains("\"onayId\":\"onay-2\""), "geçmiş tetikleyen onayı taşır: {hist}");
 }
 
 #[test]

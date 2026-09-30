@@ -13,11 +13,6 @@ use tekserp_guncelleyici::ipc::State;
 const OLD_TAG: &str = "16.9-1";
 const NEW_TAG: &str = "16.15-4";
 
-fn hex(b: &[u8]) -> String {
-    use sha2::Digest;
-    sha2::Sha256::digest(b).iter().map(|x| format!("{x:02x}")).collect()
-}
-
 fn pg_files(version: &str, icu: &str) -> Vec<(String, Vec<u8>)> {
     vec![
         ("bin/postgres".into(), b"#!fake postgres".to_vec()),
@@ -37,7 +32,32 @@ fn image_for(root: &Path, tag: &str) -> String {
     )
 }
 
-/// Kendi PG örneği (16.9-1) + sunucuda 16.15-4 paketi ve onu isteyen manifest.
+const PG_ZIP: &str = "postgresql-16.15-4-win-x64.zip";
+
+/// Sözleşme §1.6: PG künyesi yükü (`tekserp-pg`, kanaldan bağımsız).
+fn pg_manifest(zip: &[u8], content_hex: &str, icu: &str) -> Value {
+    json!({
+        "v": 1, "urun": "postgresql", "platform": "win32-x64", "cizgi": 16, "surum": "16.15", "derleme": 4,
+        "paket": { "ad": PG_ZIP, "boyut": zip.len(), "sha256": sha_hex(zip) },
+        "icerikSha256": content_hex, "icuSurum": icu, "yayinZamani": "2026-09-30T21:00:00Z",
+    })
+}
+
+/// Backend bildiriminin `pg` bloğu künyeye bağlanır (§1.6); `hedef` künyenin alanlarıdır.
+fn pg_requirement(k: &Value) -> Value {
+    json!({ "cizgi": 16, "enAz": "16.9", "hedef": {
+        "surum": k["surum"], "derleme": k["derleme"], "paket": k["paket"], "icerikSha256": k["icerikSha256"], "icuSurum": k["icuSurum"],
+    } })
+}
+
+/// Backend bildirimini verilen `pg` bloğuyla yeniden imzalayıp yayınlar (paket aynı).
+fn republish_backend(w: &World, pg: Value) {
+    let zip = w.files.lock().unwrap().get(&format!("/{CHANNEL}/backend/{NEW}/{}", package_name(NEW))).cloned().unwrap();
+    let payload = manifest_payload("paket-2026", NEW, &zip, Some(&json!({ "pg": pg })));
+    publish(&w.files, &payload, &sign_manifest(&w.keys.package, "paket-2026", &payload), None, true);
+}
+
+/// Kendi PG örneği (16.9-1) + sunucuda 16.15-4 paketi, imzalı künyesi ve onu isteyen backend bildirimi.
 fn pg_world(tag: &str, kind: &str, new_icu: &str) -> World {
     let w = World::new(tag, Setup::default());
     let root = w.layout.root.clone();
@@ -61,34 +81,31 @@ fn pg_world(tag: &str, kind: &str, new_icu: &str) -> World {
         pg.image = image_for(&root, OLD_TAG);
         pg.version = Some("16.9".into());
     }
-    // PG paketi: sahne + `shasum -c` biçiminde içerik manifestosu.
+    // PG paketi: sahne + `shasum -c` biçiminde içerik manifestosu + imzalı künye (pg.json).
     let files = pg_files("16.15", new_icu);
     let mut manifest_text = String::new();
     for (p, c) in &files {
-        manifest_text.push_str(&format!("{}  {p}\n", hex(c)));
+        manifest_text.push_str(&format!("{}  {p}\n", sha_hex(c)));
     }
     let mut all = files.clone();
     all.push(("TEKSERP-ICERIK.sha256".into(), manifest_text.clone().into_bytes()));
     let pg_zip = zip_of(&all);
-    let pg_path = format!("/{CHANNEL}/backend/pg/{NEW_TAG}.zip");
-    // Backend manifestine pg bloğu (backend paketi aynı).
-    let backend_zip = w.files.lock().unwrap().get(&format!("/{CHANNEL}/backend/{NEW}/paket.zip")).cloned().unwrap();
-    let manifest = manifest_for(
-        &w.keys.package,
-        "paket-2026",
-        NEW,
-        &backend_zip,
-        Some(json!({ "pg": {
-            "cizgi": "16", "enAz": "16.9",
-            "hedef": { "surum": "16.15", "derleme": "4", "paket": pg_path, "boyut": pg_zip.len(), "sha256": sha_b64u(&pg_zip),
-                       "icerikSha256": sha_b64u(manifest_text.as_bytes()), "icuSurum": new_icu },
-        } })),
-    );
-    let mut served = w.files.lock().unwrap();
-    served.insert(pg_path, pg_zip);
-    served.insert(format!("/{CHANNEL}/backend/{NEW}/manifest.jws"), manifest.into_bytes());
-    drop(served);
+    let kunye = pg_manifest(&pg_zip, &sha_hex(manifest_text.as_bytes()), new_icu);
+    let dir = format!("/{CHANNEL}/backend/pg/{NEW_TAG}");
+    {
+        let mut served = w.files.lock().unwrap();
+        served.insert(format!("{dir}/{PG_ZIP}"), pg_zip);
+        served.insert(format!("{dir}/pg.json"), pointer(&sign(&w.keys.package, "tekserp-pg", "paket-2026", &kunye)));
+    }
+    republish_backend(&w, pg_requirement(&kunye));
     w
+}
+
+fn served_kunye(w: &World) -> Value {
+    let text = w.files.lock().unwrap().get(&format!("/{CHANNEL}/backend/pg/{NEW_TAG}/pg.json")).cloned().unwrap();
+    let token = serde_json::from_slice::<Value>(&text).unwrap()["bildirim"].as_str().unwrap().to_string();
+    let payload = token.split('.').nth(1).unwrap();
+    serde_json::from_slice(&tekserp_dogrulama::b64::decode_strict(payload).unwrap()).unwrap()
 }
 
 fn instance(w: &World) -> Value {
@@ -115,23 +132,25 @@ fn pg_consistent(w: &World, ctx: &str) -> &'static str {
     tag
 }
 
+/// Son denemenin ürünü (`sonAyrinti.urun`): `pg` · `backend`.
+fn product(w: &World) -> String {
+    w.status().and_then(|s| s.last_detail).map(|d| d.product).unwrap_or_default()
+}
+
 /// PG + backend işlemleri bitene (ya da PG geri dönene) dek yeniden başlatarak koşar.
 fn run_both(w: &World) {
     for _ in 0..8 {
         match w.run(3) {
             Ok(_) => {
                 let s = w.status().unwrap();
-                let done = !w.unfinished()
-                    && (s.product == "backend" && matches!(s.state, State::Succeeded | State::RolledBack | State::Failed)
-                        || s.product == "pg" && matches!(s.state, State::RolledBack | State::Failed));
-                if done {
+                if !w.unfinished() && matches!(s.state, State::Succeeded | State::RolledBack | State::Failed) {
                     return;
                 }
             }
             Err(Killed) => w.crash.disarm(),
         }
     }
-    panic!("PG + backend dinlenmeye varmadı: {:?}", w.status().map(|s| (s.product, s.state, s.error_code, s.message)));
+    panic!("PG + backend dinlenmeye varmadı: {:?}", w.status().map(|s| (s.state, s.error_code, s.message, s.decision)));
 }
 
 #[test]
@@ -139,7 +158,7 @@ fn minor_update_then_backend() {
     let w = pg_world("pg-mutlu", "kendi", "72");
     run_both(&w);
     let s = w.status().unwrap();
-    assert_eq!((s.product.as_str(), s.state), ("backend", State::Succeeded), "{:?}", s.message);
+    assert_eq!((product(&w).as_str(), s.state), ("backend", State::Succeeded), "{:?}", s.message);
     assert_eq!(pg_consistent(&w, "pg mutlu"), NEW_TAG);
     let inst = instance(&w);
     assert_eq!(inst["derleme"], "4");
@@ -167,10 +186,16 @@ fn failed_pg_rolls_back_and_backend_is_untouched() {
     run_both(&w);
     let s = w.status().unwrap();
     assert_eq!(
-        (s.product.as_str(), s.state, s.error_code.as_deref()),
+        (product(&w).as_str(), s.state, s.error_code.as_deref()),
         ("pg", State::RolledBack, Some("PG_SURUM_UYUSMAZ")),
         "{:?}",
         s.message
+    );
+    let son = s.last.clone().expect("son");
+    assert_eq!(
+        (son.target.as_str(), son.result.as_str(), son.kod.as_deref(), son.data_restored),
+        (NEW, "GERI_DONDU", Some("PG_GUNCELLEME_HATASI"), false),
+        "rapor: PG düştü, deneme backend {NEW} içindi"
     );
     assert_eq!(pg_consistent(&w, "pg geri"), OLD_TAG);
     assert_eq!(w.current().as_deref(), Some(OLD), "PG düştü: backend güncellenmez");
@@ -185,7 +210,12 @@ fn icu_failure_rolls_back_and_reindexes_under_old_binaries() {
     *w.faults.reindex_fail_for.lock().unwrap() = Some(NEW_TAG.into());
     run_both(&w);
     let s = w.status().unwrap();
-    assert_eq!((s.product.as_str(), s.state, s.error_code.as_deref()), ("pg", State::RolledBack, Some("PG_ICU_HATASI")), "{:?}", s.message);
+    assert_eq!(
+        (product(&w).as_str(), s.state, s.error_code.as_deref()),
+        ("pg", State::RolledBack, Some("PG_ICU_HATASI")),
+        "{:?}",
+        s.message
+    );
     assert_eq!(pg_consistent(&w, "icu geri"), OLD_TAG);
     assert_eq!(
         w.events.lock().unwrap().iter().filter(|e| *e == "reindex").count(),
@@ -200,16 +230,29 @@ fn external_pg_is_never_touched() {
     let w = pg_world("pg-harici", "harici", "72");
     run_both(&w);
     let s = w.status().unwrap();
-    assert_eq!((s.product.as_str(), s.state), ("backend", State::Succeeded));
+    assert_eq!((product(&w).as_str(), s.state), ("backend", State::Succeeded));
     assert_eq!(pg_consistent(&w, "harici"), OLD_TAG, "harici kipte PG'ye dokunulmaz");
     assert!(!w.layout.pg_version_dir(NEW_TAG).exists(), "harici kipte PG paketi indirilmez");
-    // enAz altındaki harici sunucu: backend güncellemesi RED.
+    // enAz altındaki harici sunucu: backend güncellemesi RED (karar).
     let w = pg_world("pg-harici-eski", "harici", "72");
     w.svcs.lock().unwrap().get_mut(PG).unwrap().version = Some("16.4".into());
     w.run(2).unwrap();
-    let s = w.status().unwrap();
-    assert_eq!(s.error_code.as_deref(), Some("PG_SURUM_ESKI"), "{:?}", s.message);
+    let d = w.status().unwrap().decision.unwrap();
+    assert_eq!((d.karar.label(), d.neden.as_deref()), ("UYGUN_DEGIL", Some("PG_SURUMU_ESKI")));
     assert_eq!(w.current().as_deref(), Some(OLD));
+    // Kurulu PG'nin ANA sürümü bildirimin çizgisi değil: hiçbir kipte otomatik değil.
+    let w = pg_world("pg-ana", "kendi", "72");
+    w.svcs.lock().unwrap().get_mut(PG).unwrap().version = Some("15.8".into());
+    w.run(2).unwrap();
+    let d = w.status().unwrap().decision.unwrap();
+    assert_eq!((d.karar.label(), d.neden.as_deref()), ("UYGUN_DEGIL", Some("PG_ANA_SURUM")));
+    assert_eq!(pg_consistent_version(&w), "15.8");
+    // Örnek kaydı yok (bugünkü kurulumlar): harici sayılır, PG'ye dokunulmaz.
+    let w = pg_world("pg-kayitsiz", "kendi", "72");
+    std::fs::remove_file(w.layout.pg_instance_file()).unwrap();
+    run_both(&w);
+    assert_eq!((product(&w).as_str(), w.state()), ("backend", Some(State::Succeeded)));
+    assert!(!w.layout.pg_version_dir(NEW_TAG).exists());
 }
 
 #[test]
@@ -223,25 +266,33 @@ fn major_version_data_dir_is_refused() {
 
 #[test]
 fn tampered_pg_content_is_refused() {
+    // Künye ile bildirim bağlı ama içerik özeti paketin manifestosu değil: açılır, ölçülür, RED.
     let w = pg_world("pg-icerik", "kendi", "72");
-    // İmzalı manifestte içerik özeti farklı (paket değiştirilmiş gibi): manifest yeniden imzalanır.
-    let backend_zip = w.files.lock().unwrap().get(&format!("/{CHANNEL}/backend/{NEW}/paket.zip")).cloned().unwrap();
-    let pg_zip = w.files.lock().unwrap().get(&format!("/{CHANNEL}/backend/pg/{NEW_TAG}.zip")).cloned().unwrap();
-    let manifest = manifest_for(
-        &w.keys.package,
-        "paket-2026",
-        NEW,
-        &backend_zip,
-        Some(
-            json!({ "pg": { "cizgi": "16", "enAz": "16.9", "hedef": { "surum": "16.15", "derleme": "4", "paket": format!("/{CHANNEL}/backend/pg/{NEW_TAG}.zip"),
-            "boyut": pg_zip.len(), "sha256": sha_b64u(&pg_zip), "icerikSha256": sha_b64u(b"baska"), "icuSurum": "72" } } }),
-        ),
-    );
-    w.files.lock().unwrap().insert(format!("/{CHANNEL}/backend/{NEW}/manifest.jws"), manifest.into_bytes());
-    w.run(2).unwrap();
+    let mut kunye = served_kunye(&w);
+    kunye["icerikSha256"] = json!(sha_hex(b"baska"));
+    w.files
+        .lock()
+        .unwrap()
+        .insert(format!("/{CHANNEL}/backend/pg/{NEW_TAG}/pg.json"), pointer(&sign(&w.keys.package, "tekserp-pg", "paket-2026", &kunye)));
+    republish_backend(&w, pg_requirement(&kunye));
+    w.run(1).unwrap();
     assert_eq!(w.status().unwrap().error_code.as_deref(), Some("PG_PAKET"));
+    w.run(1).unwrap();
+    assert_eq!(w.status().unwrap().error_code.as_deref(), Some("INDIRME_ERTELENDI"), "kesin hatada hemen yeniden indirilmez");
     assert!(!w.layout.pg_version_dir(NEW_TAG).exists() && !w.layout.pg_staging_dir(NEW_TAG).exists());
     assert_eq!(pg_consistent(&w, "içerik"), OLD_TAG);
+    // Künye bildirimin hedefiyle bağlanmıyor (ICU farklı): paket hiç indirilmez.
+    let w = pg_world("pg-bag", "kendi", "72");
+    let mut kunye = served_kunye(&w);
+    kunye["icuSurum"] = json!("73");
+    w.files
+        .lock()
+        .unwrap()
+        .insert(format!("/{CHANNEL}/backend/pg/{NEW_TAG}/pg.json"), pointer(&sign(&w.keys.package, "tekserp-pg", "paket-2026", &kunye)));
+    w.run(1).unwrap();
+    assert_eq!(w.status().unwrap().error_code.as_deref(), Some("PG_BAGI"));
+    assert!(!w.layout.downloads().join(format!("pg-{NEW_TAG}.zip")).exists());
+    assert_eq!(pg_consistent(&w, "bağ"), OLD_TAG);
 }
 
 #[test]
@@ -265,13 +316,21 @@ fn kill_at_every_point_of_a_pg_minor_update() {
         if tag == OLD_TAG {
             assert_eq!(w.current().as_deref(), Some(OLD), "{ctx}: PG eski kaldıysa backend de eski olmalı ({:?})", s.message);
         }
-        if s.product == "backend" {
+        if product(&w) == "backend" {
             assert_invariants(&w, &ctx);
         } else {
             let b = w.backend();
             assert_eq!((b.state, b.version.as_deref()), (SvcState::Running, Some(OLD)), "{ctx}");
         }
     }
+}
+
+/// PG çalışıyor ve bildirdiği sürüm (ana sürüm reddinde dokunulmadığını ölçmek için).
+fn pg_consistent_version(w: &World) -> String {
+    let pg = w.svcs.lock().unwrap().get(PG).cloned().unwrap();
+    assert_eq!(pg.state, SvcState::Running);
+    assert!(pg.image.contains(OLD_TAG), "ImagePath değişti: {}", pg.image);
+    pg.version.unwrap_or_default()
 }
 
 #[allow(dead_code)]
