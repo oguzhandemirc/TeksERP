@@ -12,14 +12,11 @@
 // =============================================================================
 import { readFileSync, existsSync } from "node:fs";
 import { calistirilacakParcalar } from "./lib/komut-cozumleme.mjs";
-import { execFileSync, spawnSync } from "node:child_process";
-import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
+import { agacKoku, commitHedefleri, gitKapisiKurulu } from "./lib/commit-hedefi.mjs";
+import { spawnSync } from "node:child_process";
+import { basename, join } from "node:path";
 import { commitTabani, etkilenenProjeler, stagedFiles } from "../hooks/lib/staged.mjs";
 
-// Depo kökü DOSYA KONUMUNDAN çözülür: Bash aracının cwd'si bir alt dizin
-// olabilir ve o zaman `process.cwd()` staged çözümünü sessizce boşa düşürürdü.
-const REPO = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
 if (process.env.TEKSERP_HOOK_SKIP === "1") process.exit(0);
 let input = "";
 try { input = readFileSync(0, "utf8"); } catch { process.exit(0); }
@@ -92,36 +89,46 @@ for (const b of BANS) {
   }
 }
 
-// --- 2) git commit → ORTAK commit kapısı ---
+// --- 2) git commit → HEDEF AĞACIN KENDİ commit kapısı ---
 // Kaçışlar (`--no-verify`, TEKSERP_HOOK_SKIP=1) git hook'uyla aynı anlamı taşır:
 // kırmızıyı bilerek geçmek bir karardır, kapı onu tekrar dayatmaz.
-if (/\bgit\s+commit\b/.test(cmd) && !/--no-verify/.test(cmd)) {
+// Hedef betiğin konumu (ana ağaç) değil KOMUTUN hedefidir: `cd <wt> && …` ve
+// `git -C <wt> …` çözülür; heredoc/echo metnindeki commit sayılmaz (lib/commit-hedefi.mjs).
+const BASLANGIC = typeof payload.cwd === "string" && payload.cwd ? payload.cwd : process.cwd();
+for (const h of commitHedefleri(cmd, BASLANGIC)) {
+  if (h.noVerify || h.kacis) continue;
+  if (h.cwd === null) {
+    // ÖLÇÜLEMEDİ: yanlış ağacın kapısını koşmak sahte kırmızı üretir ve kaçışı
+    // normalleştirir; yedek git'in kendi kancasıdır.
+    process.stderr.write("⚠️  commit kapısı: hedef ağaç çözülemedi (değişkenli yol?) — git kancasına bırakıldı\n");
+    continue;
+  }
+  const kok = agacKoku(h.cwd);
+  const govde = kok ? join(kok, "scripts", "hooks", "pre-commit.mjs") : "";
+  if (!govde || !existsSync(govde)) continue; // TeksERP ağacı değil
   // Git'in kendi kapısı kuruluysa BU hook susar: aynı adımlar iki kez koşarsa
   // commit başına ödenen süre ikiye katlanır (ölçüm: Electron 23 sn + mobil 29 sn).
-  let hooksPath = "";
-  try { hooksPath = execFileSync("git", ["config", "--get", "core.hooksPath"], { cwd: REPO, encoding: "utf8" }).trim(); } catch { hooksPath = ""; }
-  const gitKapisiKurulu = hooksPath === ".githooks" && existsSync(join(REPO, ".githooks", "pre-commit"));
+  if (gitKapisiKurulu(kok)) continue;
 
   // ⚠️ AMEND'İ BURADA KESİN BİLİYORUZ — komut metni elimizde. Git hook yolunda bu
   // bilgi yoktur ve `ps`/`GIT_AUTHOR_DATE` ile teşhis edilir; burada tahmine gerek yok.
   // Değeri spawn edilen kapıya `TEKSERP_COMMIT_BASE` ile geçiyoruz: o taraf değeri
   // körlemesine yutmaz, ebeveyninin gerçekten bu dosya olduğunu ÖLÇER ve yalnız
   // {HEAD, HEAD^} kümesinden bir SHA kabul eder (bkz. hooks/lib/staged.mjs).
-  const amend = /--amend\b/.test(cmd);
-  const staged = stagedFiles(REPO, amend);
-  if (staged.length === 0 || gitKapisiKurulu) process.exit(0);
+  const staged = stagedFiles(kok, h.amend);
+  if (staged.length === 0) continue;
 
-  const projeler = etkilenenProjeler(REPO, staged).map((p) => p.ad);
+  const projeler = etkilenenProjeler(kok, staged).map((p) => p.ad);
   process.stderr.write(
-    `⏳ commit kapısı (git hook'u KURULU DEĞİL → Claude tarafından koşuluyor)` +
+    `⏳ commit kapısı (git hook'u KURULU DEĞİL → Claude tarafından koşuluyor) · ağaç ${basename(kok)}` +
       `${projeler.length ? `: ${projeler.join(" · ")}` : ""}\n` +
       `   Kalıcı kurulum: node scripts/hooks-kur.mjs\n`,
   );
-  const r = spawnSync("node", [join(REPO, "scripts", "hooks", "pre-commit.mjs")], {
-    cwd: REPO,
+  const r = spawnSync("node", [govde], {
+    cwd: kok,
     encoding: "utf8",
     timeout: 600_000,
-    env: { ...process.env, TEKSERP_COMMIT_BASE: commitTabani(REPO, amend) },
+    env: { ...process.env, TEKSERP_COMMIT_BASE: commitTabani(kok, h.amend) },
   });
   if (r.status !== 0 || r.error) {
     process.stderr.write(
