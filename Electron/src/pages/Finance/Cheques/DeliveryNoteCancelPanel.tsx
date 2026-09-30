@@ -26,13 +26,14 @@ import {
   type RowIssue,
 } from "./chequeNoteMovement";
 import { cancelChequeDeliveryNote, getDeliveryNoteCancelPreview, type DeliveryNoteRow } from "./service";
+import { factoryLocaleDateString } from "@/lib/factory-time";
 
 interface Props {
   note: DeliveryNoteRow;
   onClose: () => void;
 }
 
-const dt = (iso: string): string => new Date(iso).toLocaleDateString("tr-TR");
+const dt = (iso: string): string => factoryLocaleDateString(iso, "tr-TR");
 
 export function DeliveryNoteCancelPanel({ note, onClose }: Props) {
   const qc = useQueryClient();

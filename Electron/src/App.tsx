@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { Fragment, useEffect, useRef } from "react";
 import { RouterProvider } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { ThemeProvider } from "next-themes";
@@ -24,6 +24,8 @@ import { BOSS_PATH } from "@/lib/boss-path";
 import { useHashPath } from "@/lib/use-hash-path";
 import { loadScanSeries } from "@/lib/scanner/barcode-kind";
 import { DEFAULT_STALE_MS, applyQueryFreshness } from "@/lib/query-freshness";
+import { useFeatureFlags } from "@/hooks/usePricingEnabled";
+import { useFactoryTimezone } from "@/lib/factory-time-react";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -94,6 +96,15 @@ function ScanSeriesLoader() {
   return null;
 }
 
+/**
+ * Fabrika saat dilimini giriş SONRASI yükler (bayrak ucu `verifyToken` ister): `featureFlagService.get`
+ * dilimi `lib/factory-time`a uygular. Yüklenene kadar varsayılan dilim (Europe/Istanbul) geçerlidir.
+ */
+function FactoryTimezoneLoader() {
+  useFeatureFlags();
+  return null;
+}
+
 function CacheUserGuard() {
   const userId = useAuthStore((s) => s.user?.userId ?? null);
   const prev = useRef<string | null>(null);
@@ -120,6 +131,8 @@ function Root() {
   const hashPath = useHashPath();
   // K5: kabuk (yüzlerce uç) hiç bağlanmaz; oturum-dışı router "verilerimi al" sayfasını açar.
   const licenseSuspended = useLicenseSuspension((s) => s.suspended);
+  // Dilim değişince kabuk YENİDEN KURULUR: çizilmiş her tarih/saat yeni dilimle basılsın (nadir — kurulum değeri).
+  const factoryTimezone = useFactoryTimezone();
 
   if (!isHydrated) return null;
   // ⚠️ 2FA KURULUM SAYFASI OTURUM DURUMUNDAN BAĞIMSIZ AÇILIR.
@@ -148,8 +161,9 @@ function Root() {
   // ayrıntısı kimliksize verilmez). Gözlemde kademe NORMAL → hiç çizilmez.
   return (
     <>
-      {kabuk}
+      <Fragment key={factoryTimezone}>{kabuk}</Fragment>
       {!oturumDisi && <LicenseLockGate />}
+      {!oturumDisi && <FactoryTimezoneLoader />}
       <UpdateGate girisEkrani={oturumDisi} />
     </>
   );

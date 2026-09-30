@@ -18,6 +18,7 @@ import { useReportDateRange } from "../_hooks/useReportDateRange";
 import { useAsOfDay, useFactoryDay } from "../_hooks/useReportDay";
 import { REPORT_DATE_PARAM_KEYS, REPORT_DATE_URL_KEYS, rangeDayParams } from "../_lib/report-date";
 import { ReportDateFilter } from "./ReportDateFilter";
+import { formatFactory } from "@/lib/factory-time";
 
 /** Her sözleşmeden kataloğun İLK yaprağı — körlük zemini: altısının da satırı olmalı. */
 function sampleKey(tarih: ReportTarih): ReportKey {
@@ -159,9 +160,9 @@ describe("ReportDateFilter — sözleşme katalogdan, parametre adı K7 tablosun
     const p = readParams();
     expect(Object.keys(p)).toEqual([...REPORT_DATE_PARAM_KEYS.kesit]);
     const asOf = new Date(String(p.asOf));
-    expect(asOf.getHours()).toBe(23);
-    expect(asOf.getMinutes()).toBe(59);
-    expect(asOf.getDate()).toBe(10);
+    expect(Number(formatFactory(asOf, "H"))).toBe(23);
+    expect(Number(formatFactory(asOf, "mm"))).toBe(59);
+    expect(Number(formatFactory(asOf, "d"))).toBe(10);
   });
 
   it("§e ileri-pencere: iki kutu + İLERİ ön ayarlar (çıpa yokken pasif); boş URL → BOŞ parametre (backend varsayılanı)", () => {
@@ -185,8 +186,8 @@ describe("ReportDateFilter — sözleşme katalogdan, parametre adı K7 tablosun
     mount(<ForwardProbe reportKey={key} />, "/reports/x/y?dueFrom=2026-05-01&dueTo=2026-05-08");
     const p = readParams();
     expect(Object.keys(p).sort()).toEqual([...REPORT_DATE_PARAM_KEYS["ileri-pencere"]].sort());
-    expect(new Date(String(p.dateFrom)).getHours()).toBe(0);
-    expect(new Date(String(p.dateTo)).getHours()).toBe(23);
+    expect(Number(formatFactory(new Date(String(p.dateFrom)), "H"))).toBe(0);
+    expect(Number(formatFactory(new Date(String(p.dateTo)), "H"))).toBe(23);
     expect(REPORT_DATE_URL_KEYS["ileri-pencere"]).toEqual(["dueFrom", "dueTo"]);
   });
 

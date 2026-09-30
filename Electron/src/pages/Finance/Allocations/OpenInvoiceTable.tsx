@@ -17,6 +17,7 @@ import { Input } from "@/components/ui/input";
 import { INVOICE_TYPE_LABEL, money, type Currency } from "../service";
 import { fromKurus, isOverdue, toKurus } from "./allocationMath";
 import type { OpenInvoiceRow } from "./service";
+import { factoryLocaleDateString } from "@/lib/factory-time";
 
 interface Props {
   rows: OpenInvoiceRow[];
@@ -107,7 +108,7 @@ export function OpenInvoiceTable({
                       {INVOICE_TYPE_LABEL[inv.type] ?? inv.type}
                     </td>
                     <td className={`px-3 py-2 whitespace-nowrap ${late ? "text-destructive" : ""}`}>
-                      {new Date(inv.effectiveDueDate).toLocaleDateString("tr-TR")}
+                      {factoryLocaleDateString(inv.effectiveDueDate, "tr-TR")}
                       {late && <span className="ml-1 text-xs">(geçti)</span>}
                     </td>
                     <td className="px-3 py-2 text-right text-muted-foreground">

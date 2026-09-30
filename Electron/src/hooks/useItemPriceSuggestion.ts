@@ -36,6 +36,7 @@ import { useEffect, useRef } from "react";
 import { useQuery } from "@tanstack/react-query";
 import apiClient from "@/services/apiClient";
 import { useFeatureFlags } from "@/hooks/usePricingEnabled";
+import { addDaysToKey } from "@/lib/factory-time";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // SAF KATMAN — React yok, HTTP yok.
@@ -137,12 +138,8 @@ export function computeDueDateSuggestion(
 ): string | null {
   if (termDays === null || termDays === undefined) return null;
   if (!Number.isInteger(termDays) || termDays < 0) return null;
-  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(issueYmd);
-  if (!m) return null;
-  const d = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]) + termDays);
-  if (Number.isNaN(d.getTime())) return null;
-  const pad = (n: number) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(issueYmd)) return null;
+  return addDaysToKey(issueYmd, termDays);
 }
 
 export type ResolvedPriceSource = "CUSTOMER" | "DEFAULT";

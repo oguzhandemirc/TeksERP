@@ -14,6 +14,7 @@
 // ("3324" → "3324", olması gereken "3.324,00"). Bu yüzden `kg()` de
 // `number | string` alır ve İÇERİDE `Number()` ile çevirir.
 // =============================================================================
+import { factoryDayEndIso, factoryDayStartIso } from "@/lib/factory-time";
 
 /** Decimal kolonun JSON karşılığı — number DA string DE gelebilir. */
 type Numeric = number | string | null | undefined;
@@ -128,15 +129,11 @@ function parseYmdLocal(value: string): Date | null {
 }
 
 export function dayStartIso(value: string): string | undefined {
-  const d = parseYmdLocal(value);
-  if (!d) return undefined;
-  d.setHours(0, 0, 0, 0);
-  return d.toISOString();
+  if (!parseYmdLocal(value)) return undefined;
+  return factoryDayStartIso(value.trim());
 }
 
 export function dayEndIso(value: string): string | undefined {
-  const d = parseYmdLocal(value);
-  if (!d) return undefined;
-  d.setHours(23, 59, 59, 999);
-  return d.toISOString();
+  if (!parseYmdLocal(value)) return undefined;
+  return factoryDayEndIso(value.trim());
 }

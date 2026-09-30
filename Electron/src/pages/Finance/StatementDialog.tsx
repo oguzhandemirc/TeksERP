@@ -38,6 +38,7 @@ import {
   type Currency,
   type StatementRow,
 } from "./service";
+import { factoryDayEndIso, factoryDayKey, factoryDayStartIso, factoryLocaleDateString } from "@/lib/factory-time";
 
 interface Props {
   cari: CariRow;
@@ -45,19 +46,8 @@ interface Props {
   onOpenChange: (open: boolean) => void;
 }
 
-/** Yerel gün sınırı — backend mutlak an olarak alır (useReportDateRange sözleşmesi). */
-function dayStart(d: Date): string {
-  const x = new Date(d);
-  x.setHours(0, 0, 0, 0);
-  return x.toISOString();
-}
-function dayEnd(d: Date): string {
-  const x = new Date(d);
-  x.setHours(23, 59, 59, 999);
-  return x.toISOString();
-}
 function ymd(d: Date): string {
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  return factoryDayKey(d);
 }
 
 /**
@@ -120,8 +110,8 @@ export function StatementDialog({ cari, open, onOpenChange }: Props) {
       getStatement({
         cariId: cari.id,
         currency,
-        from: dayStart(new Date(from)),
-        to: dayEnd(new Date(to)),
+        from: factoryDayStartIso(from),
+        to: factoryDayEndIso(to),
       }),
   });
 
@@ -312,7 +302,7 @@ export function StatementDialog({ cari, open, onOpenChange }: Props) {
                     return (
                     <tr key={r.id} className="border-t">
                       <td className="px-3 py-2 whitespace-nowrap">
-                        {new Date(r.txnDate).toLocaleDateString("tr-TR")}
+                        {factoryLocaleDateString(r.txnDate, "tr-TR")}
                       </td>
                       <td className="px-3 py-2 font-mono text-xs">
                         {target ? (
@@ -465,7 +455,7 @@ export function StatementDialog({ cari, open, onOpenChange }: Props) {
               </div>
               <div className="flex justify-between gap-4">
                 <span className="text-muted-foreground">Devir tarihi</span>
-                <span>{new Date(cancelRow.txnDate).toLocaleDateString("tr-TR")}</span>
+                <span>{factoryLocaleDateString(cancelRow.txnDate, "tr-TR")}</span>
               </div>
               <div className="flex justify-between gap-4">
                 <span className="text-muted-foreground">Tutar</span>

@@ -7,6 +7,7 @@ import { Label } from "@/components/ui/label";
 import { accountingDispatchService } from "./service";
 import { DatePickerInput } from "@/components/forms/DatePickerInput";
 import { toastServerSuccess } from "@/lib/serverNotes";
+import { factoryDayKey } from "@/lib/factory-time";
 
 /**
  * Dialog'un ihtiyaç duyduğu MİNİMUM satır şekli — `DispatchListItem` değil.
@@ -26,11 +27,9 @@ export interface InvoiceTarget {
   invoicedAt: string | null;
 }
 
-/** `yyyy-MM-dd` — <input type="date"> değeri (yerel gün, UTC kaymasız). */
+/** `yyyy-MM-dd` — <input type="date"> değeri (fabrika günü). */
 function toDateInput(iso: string | null): string {
-  const d = iso ? new Date(iso) : new Date();
-  const pad = (n: number) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+  return factoryDayKey(iso ?? new Date());
 }
 
 interface Props {

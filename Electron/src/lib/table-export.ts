@@ -6,6 +6,7 @@ import {
   buildCsvContent,
   type ExportColumn,
 } from "./list-export";
+import { factoryDayKey } from "@/lib/factory-time";
 
 // TanStack tablosunun dışa aktarım ADAPTÖRÜ. Üretimin kendisi `list-export.ts`te —
 // tablosuz ekranlar (kullanıcılar, cihazlar, yetenek matrisi…) aynı motoru kullanır;
@@ -66,12 +67,11 @@ function toExportColumns<T>(table: Table<T>): ExportColumn<T>[] {
 
 /** yyyy-MM-dd (dosya adına eklenen, sıralanabilir tarih damgası). */
 function dateStamp(d: Date = new Date()): string {
-  const p = (n: number) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+  return factoryDayKey(d);
 }
 
-/** ISO an → yyyy-MM-dd (YEREL gün). Filtre sınırları yerel 00:00/23:59 olarak
- *  gönderiliyor (`useReportDateRange` sözleşmesi) — UTC'ye çevirmek dosya adında
+/** ISO an → yyyy-MM-dd (FABRİKA günü). Filtre sınırları fabrika gününün 00:00/23:59'u
+ *  olarak gönderiliyor (`useReportDateRange` sözleşmesi) — UTC'ye çevirmek dosya adında
  *  günü kaydırırdı. Çözülemezse null (ad damgasız kalır, indirme düşmez). */
 function isoToDayLabel(iso: string | null | undefined): string | null {
   if (!iso) return null;

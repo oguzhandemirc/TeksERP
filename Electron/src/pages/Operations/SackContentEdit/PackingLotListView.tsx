@@ -16,10 +16,11 @@ import { PackingLotSummaryCards } from "./PackingLotSummaryCards";
 import { lotSackLabel } from "./packingLotUi";
 import { DEFAULT_LOT_SORT, filterLots, nextLotSort, sortLots, type LotSort, type LotSortKey } from "./packingLotList";
 import { UNGROUPED_FILTER_VALUE, type PackingGroup, type PackingLotCustomerSummary } from "./types";
+import { factoryLocaleDateString } from "@/lib/factory-time";
 
 const fmtQty = (n: number): string => n.toLocaleString("tr-TR", { maximumFractionDigits: 1 });
 const fmtKg = (n: number | null): string => (n == null ? "—" : n.toLocaleString("tr-TR", { maximumFractionDigits: 1 }));
-const fmtDate = (iso: string): string => new Date(iso).toLocaleDateString("tr-TR", { day: "2-digit", month: "2-digit" });
+const fmtDate = (iso: string): string => factoryLocaleDateString(iso, "tr-TR", { day: "2-digit", month: "2-digit" });
 
 /**
  * CARİ ÇALIŞMA ALANI — parti LİSTESİ (sevk partisi modu, 2026-09-22 kullanıcı kararı).

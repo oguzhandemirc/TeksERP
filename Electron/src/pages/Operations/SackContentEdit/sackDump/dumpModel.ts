@@ -9,6 +9,7 @@ import type { SackDumpNameMode } from "@/lib/shipping-flags";
 
 import { upTo3Text } from "@/lib/number-format";
 import { dumpTotalQty, type SackDump, type SackDumpOptions, type SackDumpRoll } from "./types";
+import { factoryLocaleString } from "@/lib/factory-time";
 
 /** Hücre türü — HTML metnini ve Excel sayı biçimini BİRLİKTE belirler. */
 export type DumpKind = "text" | "qty" | "int" | "cm";
@@ -200,7 +201,7 @@ export function buildSackDumpModel(dumps: SackDump[], opts: SackDumpOptions = {}
     `${dumps.length} çuval`,
     `${totalRolls} top`,
     `${dumpCellText("qty", totalQty)} m`,
-    `Basım: ${now.toLocaleString("tr-TR")}`,
+    `Basım: ${factoryLocaleString(now, "tr-TR")}`,
     ...(opts.withNotes ? ["çuval notları dahil"] : []),
   ].join(" · ");
   return {

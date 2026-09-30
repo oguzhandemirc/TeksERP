@@ -35,6 +35,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { money, setOpeningBalance, type CariRow, type Currency } from "./service";
 import { DatePickerInput } from "@/components/forms/DatePickerInput";
+import { factoryDayKey } from "@/lib/factory-time";
 
 function errorText(error: unknown): string {
   if (axios.isAxiosError(error)) {
@@ -50,7 +51,7 @@ function errorText(error: unknown): string {
 }
 
 function ymdLocal(d: Date): string {
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  return factoryDayKey(d);
 }
 
 interface Props {

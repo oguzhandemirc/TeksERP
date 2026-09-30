@@ -52,6 +52,7 @@ import {
   yarnLineState,
   yarnStateLabel,
 } from "./stockCountRules";
+import { formatFactory } from "@/lib/factory-time";
 
 // -----------------------------------------------------------------------------
 // FİXTURE — backend `findById` select'inin şekli (Decimal alanlar STRING gelir)
@@ -456,10 +457,10 @@ describe("süzgeç → sorgu", () => {
     });
   });
 
-  it("gün sınırı İSTEMCİNİN yerel günüdür (00:00 ↔ 23:59:59.999)", () => {
+  it("gün sınırı FABRİKA günüdür (istemcinin dilimi değil) (00:00 ↔ 23:59:59.999)", () => {
     const q = buildListQuery({ ...EMPTY_STOCK_COUNT_FILTERS, from: "2026-08-01", to: "2026-08-15" });
-    expect(new Date(q.from!).getHours()).toBe(0);
-    expect(new Date(q.to!).getHours()).toBe(23);
+    expect(Number(formatFactory(new Date(q.from!), "H"))).toBe(0);
+    expect(Number(formatFactory(new Date(q.to!), "H"))).toBe(23);
     expect(new Date(q.to!).getMilliseconds()).toBe(999);
   });
 

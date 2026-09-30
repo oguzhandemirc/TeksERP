@@ -12,6 +12,7 @@
 // =============================================================================
 import { describe, expect, it } from "vitest";
 import { checkQtyInput, dayEndIso, dayStartIso, isNegative, kg } from "./qty";
+import { formatFactory } from "@/lib/factory-time";
 
 describe("kg()", () => {
   it("Decimal STRING'i de sayı gibi biçimlendirir (asıl tuzak)", () => {
@@ -91,18 +92,18 @@ describe("gün sınırı", () => {
     expect(dayStartIso("2026-02-31")).toBeUndefined();
   });
 
-  it("YEREL günün başını/sonunu üretir (UTC'ye kaydırmaz)", () => {
+  it("FABRİKA gününün başını/sonunu üretir (istemci diliminden bağımsız)", () => {
     const start = dayStartIso("2026-08-14");
     const end = dayEndIso("2026-08-14");
     expect(start).toBeDefined();
     expect(end).toBeDefined();
     const s = new Date(start as string);
     const e = new Date(end as string);
-    expect(s.getFullYear()).toBe(2026);
-    expect(s.getDate()).toBe(14);
-    expect(s.getHours()).toBe(0);
-    expect(e.getDate()).toBe(14);
-    expect(e.getHours()).toBe(23);
+    expect(Number(formatFactory(s, "yyyy"))).toBe(2026);
+    expect(Number(formatFactory(s, "d"))).toBe(14);
+    expect(Number(formatFactory(s, "H"))).toBe(0);
+    expect(Number(formatFactory(e, "d"))).toBe(14);
+    expect(Number(formatFactory(e, "H"))).toBe(23);
     expect(e.getTime()).toBeGreaterThan(s.getTime());
   });
 });

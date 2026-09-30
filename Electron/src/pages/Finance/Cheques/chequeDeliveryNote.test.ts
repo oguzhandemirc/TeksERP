@@ -65,6 +65,7 @@ import {
   type DeliveryNoteDraft,
 } from "./chequeDeliveryNote";
 import type { ChequeRow } from "./service";
+import { formatFactory } from "@/lib/factory-time";
 
 type Sel = Pick<ChequeRow, "id" | "kind" | "status">;
 
@@ -119,16 +120,16 @@ describe("§2 teslim tarihi", () => {
     expect(() => buildDeliveryNoteBody(draft({ dateYmd: "" }))).toThrow(DELIVERY_DATE_ERROR);
   });
 
-  it("§2c tarih MUTLAK AN olarak gider ve YEREL günü işaret eder", () => {
+  it("§2c tarih MUTLAK AN olarak gider ve FABRİKA gününü işaret eder", () => {
     const body = buildDeliveryNoteBody(draft({ dateYmd: "2026-08-15" }));
     const d = new Date(body.deliveryDate);
     expect(Number.isNaN(d.getTime())).toBe(false);
     // Yerel bileşenlerden kurulur — `new Date("2026-08-15")` UTC gece yarısıdır
     // ve negatif UTC farkında günü bir geri kaydırırdı.
-    expect(d.getFullYear()).toBe(2026);
-    expect(d.getMonth()).toBe(7);
-    expect(d.getDate()).toBe(15);
-    expect(d.getHours()).toBe(0);
+    expect(Number(formatFactory(d, "yyyy"))).toBe(2026);
+    expect(Number(formatFactory(d, "M")) - 1).toBe(7);
+    expect(Number(formatFactory(d, "d"))).toBe(15);
+    expect(Number(formatFactory(d, "H"))).toBe(0);
   });
 });
 

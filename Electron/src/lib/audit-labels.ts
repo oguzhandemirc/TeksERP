@@ -21,8 +21,8 @@
 // HER sistem olayının burada karşılığı olduğunu mekanik doğrular (KIRMIZI).
 // =============================================================================
 
-import { format, parseISO, isValid } from "date-fns";
-import { tr } from "date-fns/locale";
+import { parseISO, isValid } from "date-fns";
+import { formatFactory } from "@/lib/factory-time";
 
 /** Backend `tableName` → Türkçe modül adı. */
 export const TABLE_LABELS: Record<string, string> = {
@@ -1072,7 +1072,7 @@ export function formatAuditValue(value: unknown, ctx?: EnumLabelContext): string
   if (typeof value === "string") {
     if (ISO_DATE_RE.test(value)) {
       const d = parseISO(value);
-      if (isValid(d)) return format(d, "dd.MM.yyyy HH:mm", { locale: tr });
+      if (isValid(d)) return formatFactory(d, "dd.MM.yyyy HH:mm");
     }
     // ⚠️ Bağlam VARSA alan-kapsamlı katmandan geçer (çelişen enum değerleri);
     // yoksa bugünkü davranış birebir korunur.

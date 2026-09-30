@@ -12,6 +12,7 @@
 // sessizce uygulanır ve ekran "vade yok" derdi.
 // =============================================================================
 import type { ReportTarih } from "@/lib/report-catalog";
+import { addDaysToKey, factoryBackWindowIso, factoryDayEndIso, factoryDayKey, factoryDayStartIso } from "@/lib/factory-time";
 
 /** Sözleşme → backend parametre ADLARI. Bileşen testi bu tabloyu ölçer; K7'nin tek evi. */
 export const REPORT_DATE_PARAM_KEYS: Record<ReportTarih, readonly string[]> = {
@@ -43,46 +44,25 @@ export const BACK_PRESETS = [
 /** İleri bakan ön ayarlar (`ileri-pencere`). Çıpa backend'in "bugün"üdür. */
 export const FORWARD_PRESETS = [7, 30, 90] as const;
 
-/**
- * Yerel gün `YYYY-MM-DD`. ⚠️ `toISOString().slice(0,10)` KULLANILMAZ: UTC'ye çevirir
- * ve TR'de gece yarısından önceki saatlerde günü BİR GERİ kaydırır.
- */
+/** An → fabrika günü `YYYY-MM-DD` (`lib/factory-time`; istemcinin bilgisayar dilimi değil). Boş/geçersiz → "". */
 export function toYmd(value: string | Date | undefined): string {
   if (value === undefined || value === "") return "";
-  const d = typeof value === "string" ? new Date(value) : value;
-  if (Number.isNaN(d.getTime())) return "";
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  return factoryDayKey(value);
 }
 
-/** ISO an → fabrika günü `YYYY-MM-DD` (panel fabrika saat dilimindedir); boşsa BUGÜN. */
+/** ISO an → fabrika günü `YYYY-MM-DD`; boşsa BUGÜN. */
 export function toFactoryYmd(iso: string | undefined): string {
-  return toYmd(iso ? new Date(iso) : new Date());
+  return factoryDayKey(iso ? iso : new Date());
 }
 
-export function startOfDayIso(ymd: string): string {
-  const [y = 1970, m = 1, d = 1] = ymd.split("-").map(Number);
-  return new Date(y, m - 1, d, 0, 0, 0, 0).toISOString();
-}
-
-export function endOfDayIso(ymd: string): string {
-  const [y = 1970, m = 1, d = 1] = ymd.split("-").map(Number);
-  return new Date(y, m - 1, d, 23, 59, 59, 999).toISOString();
-}
+export const startOfDayIso = factoryDayStartIso;
+export const endOfDayIso = factoryDayEndIso;
 
 /** Takvim gününü `days` kadar kaydırır (UTC aritmetiği: yerel DST sıçraması günü kaydırmasın). */
-export function shiftYmd(ymd: string, days: number): string {
-  const [y, m, d] = ymd.split("-").map(Number);
-  const dt = new Date(Date.UTC(y ?? 1970, (m ?? 1) - 1, (d ?? 1) + days));
-  const p = (n: number): string => String(n).padStart(2, "0");
-  return `${dt.getUTCFullYear()}-${p(dt.getUTCMonth() + 1)}-${p(dt.getUTCDate())}`;
-}
+export const shiftYmd = addDaysToKey;
 
-/** "Son N gün" penceresi: N gün önce gün başı → bugün gün sonu (ISO). */
-export function backWindowIso(days: number, today = new Date()): { dateFrom: string; dateTo: string } {
-  const from = new Date(today.getFullYear(), today.getMonth(), today.getDate() - days, 0, 0, 0, 0);
-  const to = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 23, 59, 59, 999);
-  return { dateFrom: from.toISOString(), dateTo: to.toISOString() };
-}
+/** "Son N gün" penceresi: N gün önce gün başı → bugün gün sonu (ISO), fabrika gününe göre. */
+export const backWindowIso = factoryBackWindowIso;
 
 export const YMD_RE = /^\d{4}-\d{2}-\d{2}$/;
 

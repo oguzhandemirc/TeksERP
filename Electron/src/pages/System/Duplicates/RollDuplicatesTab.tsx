@@ -17,6 +17,7 @@ import {
   duplicateRollsService,
   type DuplicateRollCluster,
 } from "@/services/mergeService";
+import { factoryLocaleString } from "@/lib/factory-time";
 
 const RANGES = [
   { days: 30, label: "Son 30 gün" },
@@ -193,7 +194,7 @@ export function RollDuplicatesTab() {
                         <code className="text-xs">{r.barcode ?? "(barkodsuz)"}</code>
                       </label>
                       <span className="text-xs text-muted-foreground">
-                        {new Date(r.createdAt).toLocaleString("tr-TR")} · {r.status}
+                        {factoryLocaleString(r.createdAt, "tr-TR")} · {r.status}
                       </span>
                       {r.labelPrinted && (
                         <Badge variant="outline" className="text-xs">
@@ -241,7 +242,7 @@ export function RollDuplicatesTab() {
                 {cancelListOf(confirmFor).map((r) => (
                   <li key={r.id}>
                     <code>{r.barcode ?? r.id.slice(0, 8)}</code> ·{" "}
-                    {new Date(r.createdAt).toLocaleString("tr-TR")}
+                    {factoryLocaleString(r.createdAt, "tr-TR")}
                     {r.labelPrinted ? " · etiket basılı" : ""}
                   </li>
                 ))}

@@ -8,8 +8,9 @@ import type { UpdateStatus } from "@shared/ipc-contract";
 import { useUpdater } from "@/hooks/useUpdater";
 import { useClientPolicy } from "@/hooks/useClientPolicy";
 import { isBelowMinimum } from "@/lib/version-compare";
+import { factoryDateTimeFormat } from "@/lib/factory-time";
 
-const dtFmt = new Intl.DateTimeFormat("tr-TR", {
+const dtFmt = () => factoryDateTimeFormat("tr-TR", {
   day: "2-digit",
   month: "short",
   hour: "2-digit",
@@ -96,7 +97,7 @@ export function UpdateSection() {
           </div>
           <p className="text-xs text-muted-foreground">
             {status.lastCheckedAt
-              ? `Son kontrol: ${dtFmt.format(new Date(status.lastCheckedAt))}`
+              ? `Son kontrol: ${dtFmt().format(new Date(status.lastCheckedAt))}`
               : "Henüz kontrol edilmedi"}
           </p>
           {policy && (

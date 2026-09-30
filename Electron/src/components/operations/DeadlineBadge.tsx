@@ -1,4 +1,4 @@
-import { differenceInCalendarDays, format } from "date-fns";
+import { factoryDayDiff, formatFactory } from "@/lib/factory-time";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 
@@ -14,8 +14,8 @@ export function DeadlineBadge({ deadline, className, stacked }: Props) {
   if (!deadline) return <span className="text-muted-foreground">—</span>;
 
   const date = typeof deadline === "string" ? new Date(deadline) : deadline;
-  const days = differenceInCalendarDays(date, new Date());
-  const dateText = format(date, "dd.MM.yyyy");
+  const days = factoryDayDiff(date, new Date());
+  const dateText = formatFactory(date, "dd.MM.yyyy");
 
   let tone = "bg-muted text-muted-foreground";
   let suffix = "";

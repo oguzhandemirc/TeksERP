@@ -1,7 +1,6 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { format } from "date-fns";
-import { tr } from "date-fns/locale";
+import { formatFactory } from "@/lib/factory-time";
 import { Plus, FileText } from "lucide-react";
 import { PageShell, PageBody } from "@/components/layout/PageShell";
 import { PageHeader } from "@/components/layout/PageHeader";
@@ -124,7 +123,7 @@ export function GoodsReceiptsPage() {
                     >
                       <td className="p-3 font-mono text-xs">{r.receiptNo}</td>
                       <td className="p-3">
-                        {format(new Date(r.createdAt), "dd MMM yyyy HH:mm", { locale: tr })}
+                        {formatFactory(r.createdAt, "dd MMM yyyy HH:mm")}
                       </td>
                       <td className="p-3">{r.warehouse?.name ?? "—"}</td>
                       <td className="p-3">

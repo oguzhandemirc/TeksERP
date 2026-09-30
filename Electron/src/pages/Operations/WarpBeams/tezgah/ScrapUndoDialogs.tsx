@@ -10,6 +10,7 @@ import { formatM, type WarpBeam } from "../types";
 import { BeamDialogShell, ReasonCodeSelect, ReasonField } from "./BeamDialogShell";
 import { STATUS_EVENT_LABEL, undoCandidates } from "./beam-undo";
 import { useBeamReasons } from "./useBeamReasons";
+import { factoryLocaleString } from "@/lib/factory-time";
 
 interface ScrapProps {
   target: WarpBeam;
@@ -58,7 +59,7 @@ interface UndoProps {
   onConfirm: (pick: { kind: "status" | "consumed"; eventId: string }, reason: string) => void;
 }
 
-const fmtTs = (iso: string) => new Date(iso).toLocaleString("tr-TR", { dateStyle: "short", timeStyle: "short" });
+const fmtTs = (iso: string) => factoryLocaleString(iso, "tr-TR", { dateStyle: "short", timeStyle: "short" });
 
 export function UndoDialog({ target, isPending, onClose, onConfirm }: UndoProps) {
   const [pick, setPick] = useState("");

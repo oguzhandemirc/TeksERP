@@ -7,6 +7,7 @@
 
 import type { ReportExportSpec, ReportTableSpec } from "../_components/reportExport";
 import type { PlanDeviationBreakdownRow, PlanDeviationScorecard } from "./service";
+import { factoryLocaleString } from "@/lib/factory-time";
 
 function breakdownTable(name: string, labelHeader: string, rows: PlanDeviationBreakdownRow[]): ReportTableSpec {
   return {
@@ -74,7 +75,7 @@ export function buildPlanDeviationExport(opts: {
           { header: "Onaylayan", key: "confirmedBy", width: 22 },
         ],
         rows: sc.detail.map((d) => ({
-          date: new Date(d.createdAt).toLocaleString("tr-TR"),
+          date: factoryLocaleString(d.createdAt, "tr-TR"),
           roll: d.rollBarcode ?? "—",
           child: d.childBarcode ?? "—",
           wo: d.workOrderNumber,

@@ -19,6 +19,7 @@ import { ConfirmDialog } from "@/components/forms/ConfirmDialog";
 import { PermissionGate } from "@/components/PermissionGate";
 import { money } from "../service";
 import { deallocate, listAllocations, type AllocationRow, type SourceKind } from "./service";
+import { factoryLocaleDateString } from "@/lib/factory-time";
 
 interface Props {
   sourceKind: SourceKind;
@@ -94,10 +95,10 @@ export function SourceAllocationsTable({ sourceKind, sourceId, sourceDocNo }: Pr
               <tr key={a.id} className="border-t">
                 <td className="px-3 py-2 font-mono text-xs">{a.invoice.docNo}</td>
                 <td className="px-3 py-2 whitespace-nowrap">
-                  {new Date(a.invoice.issueDate).toLocaleDateString("tr-TR")}
+                  {factoryLocaleDateString(a.invoice.issueDate, "tr-TR")}
                 </td>
                 <td className="px-3 py-2 whitespace-nowrap text-muted-foreground">
-                  {new Date(a.createdAt).toLocaleDateString("tr-TR")}
+                  {factoryLocaleDateString(a.createdAt, "tr-TR")}
                 </td>
                 <td className="px-3 py-2 text-muted-foreground">{a.notes ?? "—"}</td>
                 <td className="px-3 py-2 text-right font-medium">

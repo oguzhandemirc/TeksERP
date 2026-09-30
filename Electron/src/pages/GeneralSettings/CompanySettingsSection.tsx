@@ -17,6 +17,7 @@ import {
   type CompanyLetterhead,
 } from "@/services/featureFlagService";
 import { SETTINGS_ADMIN_PERMISSION } from "./settings-config";
+import { FactoryTimezoneField } from "./FactoryTimezoneField";
 
 /**
  * Şirket bilgileri paneli — firma adı + belge künyesi (adres/telefon/vergi).
@@ -151,6 +152,8 @@ export function CompanySettingsSection({
         </div>
 
         <LogoField />
+
+        <FactoryTimezoneField />
 
         <SettingsSaveBar
           dirty={dirty}

@@ -1,4 +1,5 @@
 import type { CloudAccount, CloudIneligibleReason, CloudUrlSource } from "./service";
+import { factoryLocaleString } from "@/lib/factory-time";
 
 /** Ön koşulun (fail-closed) neden düştüğü — kullanıcıya ne eksik olduğunu söyler. */
 export const INELIGIBLE_LABELS: Record<CloudIneligibleReason, string> = {
@@ -47,4 +48,4 @@ export function runOutcomeLabel(outcome: string): string {
   return why ? `${base} — ${why}` : base;
 }
 
-export const stamp = (iso: string | null | undefined): string => (iso ? new Date(iso).toLocaleString("tr-TR") : "—");
+export const stamp = (iso: string | null | undefined): string => (iso ? factoryLocaleString(iso, "tr-TR") : "—");

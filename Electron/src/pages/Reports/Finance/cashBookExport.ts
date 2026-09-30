@@ -39,6 +39,7 @@ import {
   type CashBookAccountSummary,
   type CashBookReport,
 } from "./cashBookService";
+import { factoryLocaleDateString } from "@/lib/factory-time";
 
 const MONEY = "#,##0.00";
 
@@ -190,7 +191,7 @@ function ledgerTable(account: CashBookAccountSummary, rep: CashBookReport): Repo
       { header: "Durum", key: "state", width: 10 },
     ],
     rows: rows.map((r) => ({
-      date: new Date(r.date).toLocaleDateString("tr-TR"),
+      date: factoryLocaleDateString(r.date, "tr-TR"),
       docNo: r.docNo,
       source: CASH_SOURCE_LABEL[r.source],
       kind: r.kind ? CASH_KIND_LABEL[r.kind] ?? r.kind : "",

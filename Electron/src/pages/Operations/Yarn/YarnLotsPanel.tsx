@@ -26,6 +26,7 @@ import { YarnLotQualityMenu } from "./YarnLotQualityMenu";
 import { lotQualityOf, qualityFilterParam, YARN_LOT_QUALITY, YARN_LOT_QUALITY_FILTER_ALL, YARN_LOT_QUALITY_FILTER_OPTIONS } from "./yarnLotQuality";
 import { createYarnLot, listYarnLots, updateYarnLot, type YarnLotRow } from "./service";
 import { kg } from "./qty";
+import { factoryLocaleDateString } from "@/lib/factory-time";
 
 const LOTS_KEY = ["yarn", "lots"] as const;
 
@@ -121,7 +122,7 @@ function LotTable({ rows, onToggle, busy, onDone }: { rows: YarnLotRow[]; onTogg
                 <Badge variant="outline" className={YARN_LOT_QUALITY[lotQualityOf(r)].cls} title={r.qualityNote ?? undefined}>{YARN_LOT_QUALITY[lotQualityOf(r)].label}</Badge>
                 {(r.qualityNote || r.qualityDecidedAt) && (
                   <div className="max-w-[16rem] truncate text-xs text-muted-foreground" title={r.qualityNote ?? undefined}>
-                    {r.qualityDecidedAt ? new Date(r.qualityDecidedAt).toLocaleDateString("tr-TR") : null}{r.qualityDecidedAt && r.qualityNote ? " · " : ""}{r.qualityNote}
+                    {r.qualityDecidedAt ? factoryLocaleDateString(r.qualityDecidedAt, "tr-TR") : null}{r.qualityDecidedAt && r.qualityNote ? " · " : ""}{r.qualityNote}
                   </div>
                 )}
               </td>

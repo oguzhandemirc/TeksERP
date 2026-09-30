@@ -1,11 +1,11 @@
-import { differenceInCalendarDays } from "date-fns";
+import { factoryDayDiff } from "@/lib/factory-time";
 import { deriveWoRollup } from "./work-order-rollup";
 import type { Order } from "./types";
 
 /**
  * Sipariş listesinde termin riski sinyali — termin yaklaşıyor/geçti VE üretim
  * durumu belirli bir eşiğin altında. Termin eşiği DeadlineBadge ile AYNI
- * `differenceInCalendarDays` fonksiyonunu kullanır → ikon ve rozet asla çelişmez.
+ * `factoryDayDiff` fonksiyonunu (fabrika takvim günü) kullanır → ikon ve rozet asla çelişmez.
  *
  * İki değişkenin birleşimi olduğundan (termin + rollup) DeadlineBadge'e SOKULMAZ
  * (o saf, domain'siz, WorkOrders listesiyle paylaşılan tarih bileşeni). Burada,
@@ -40,7 +40,7 @@ export function deriveDeadlineRisk(
   // Kapanan/iptal olan sipariş risk taşımaz.
   if (order.status === "COMPLETED" || order.status === "CANCELLED") return null;
 
-  const daysLeft = differenceInCalendarDays(new Date(order.deadline), today);
+  const daysLeft = factoryDayDiff(order.deadline, today);
   if (daysLeft > RISK_WINDOW_DAYS) return null;
 
   const { state } = deriveWoRollup(order.lines);

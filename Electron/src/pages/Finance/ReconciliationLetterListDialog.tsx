@@ -38,6 +38,7 @@ import {
   listReconciliationLetters,
   type ReconciliationLetterRow,
 } from "./service";
+import { factoryLocaleDateString } from "@/lib/factory-time";
 
 interface Props {
   cariId: string;
@@ -46,7 +47,7 @@ interface Props {
   onOpenChange: (open: boolean) => void;
 }
 
-const dt = (iso: string): string => new Date(iso).toLocaleDateString("tr-TR");
+const dt = (iso: string): string => factoryLocaleDateString(iso, "tr-TR");
 
 export function ReconciliationLetterListDialog({ cariId, cariName, open, onOpenChange }: Props) {
   const qc = useQueryClient();

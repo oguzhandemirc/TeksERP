@@ -15,6 +15,7 @@ import {
   isPaymentFilterDirty,
   paymentFilterKey,
 } from "./paymentFilters";
+import { formatFactory } from "@/lib/factory-time";
 
 describe("buildPaymentListQuery", () => {
   it("⭐ hiçbir filtre yokken TEK parametre üretilmez (bugünkü istek korunur)", () => {
@@ -44,16 +45,16 @@ describe("buildPaymentListQuery", () => {
     expect(buildPaymentListQuery({ ...EMPTY_PAYMENT_FILTERS, search: "   " }).search).toBeUndefined();
   });
 
-  it("⭐ tarih aralığı yerel gün sınırlarına kurulur (başlangıç 00:00, bitiş 23:59:59.999)", () => {
+  it("⭐ tarih aralığı FABRİKA gün sınırlarına kurulur (başlangıç 00:00, bitiş 23:59:59.999)", () => {
     const q = buildPaymentListQuery({ ...EMPTY_PAYMENT_FILTERS, from: "2026-08-01", to: "2026-08-15" });
     const from = new Date(q.from as string);
     const to = new Date(q.to as string);
-    expect(from.getHours()).toBe(0);
-    expect(from.getMinutes()).toBe(0);
-    expect(from.getDate()).toBe(1);
-    expect(to.getHours()).toBe(23);
-    expect(to.getMinutes()).toBe(59);
-    expect(to.getDate()).toBe(15);
+    expect(Number(formatFactory(from, "H"))).toBe(0);
+    expect(Number(formatFactory(from, "mm"))).toBe(0);
+    expect(Number(formatFactory(from, "d"))).toBe(1);
+    expect(Number(formatFactory(to, "H"))).toBe(23);
+    expect(Number(formatFactory(to, "mm"))).toBe(59);
+    expect(Number(formatFactory(to, "d"))).toBe(15);
   });
 
   it("⭐ BOZUK/BOŞ tarih `undefined` döner — 1900'e düşmez", () => {

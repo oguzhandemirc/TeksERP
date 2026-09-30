@@ -1,4 +1,5 @@
 import type { ActivityRoll, SessionActivityEvent, SessionActivitySummary } from "./types";
+import { factoryDayKey } from "@/lib/factory-time";
 
 /** RollOperationType → insan-okur Türkçe etiket. */
 export const operationTypeLabels: Record<string, string> = {
@@ -121,10 +122,7 @@ export function summaryLine(s: SessionActivitySummary): string {
   return parts.join(" · ");
 }
 
-const toDateInput = (d: Date): string => {
-  const p = (n: number) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
-};
+const toDateInput = (d: Date): string => factoryDayKey(d);
 
 /** Varsayılan tarih aralığı — son N gün (bugün dahil), <Input type="date"> değerleri. */
 export function defaultRange(days: number, now: Date = new Date()): { from: string; to: string } {

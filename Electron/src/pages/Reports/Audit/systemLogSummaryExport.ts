@@ -5,7 +5,7 @@
 // Göre Kayıt Sayısı tablosu) her biri BİR tabloya karşılık gelir; kolon adları
 // ekrandakiyle aynıdır.
 //
-// ⚠️ GÜN ETİKETİ: `daily[].day` backend'de FABRİKA takvim gününe (Europe/Istanbul)
+// ⚠️ GÜN ETİKETİ: `daily[].day` backend'de FABRİKA takvim gününe (fabrika saat dilimi)
 // göre gruplanmış hazır bir etikettir. Burada yeniden `Date` kurup biçimlemek,
 // günü istemcinin saat diliminde İKİNCİ KEZ yorumlamak olur ve gece vardiyasının
 // satırlarını bir gün kaydırabilir. API ne döndüyse o basılır.
@@ -13,6 +13,7 @@
 import type { ReportExportSpec } from "../_components/reportExport";
 import { actionLabel, tableLabel } from "../_components/audit-labels";
 import type { SystemLogSummary } from "./service";
+import { getFactoryTimezone } from "@/lib/factory-time";
 
 export function buildSystemLogSummaryExport(opts: {
   summary: SystemLogSummary;
@@ -25,7 +26,7 @@ export function buildSystemLogSummaryExport(opts: {
     subtitle: periodLabel,
     meta: [
       "Kapsam: SystemLog tablosunda aralık İÇİNDE oluşan kayıtlar (kaydın oluşma anına göre).",
-      "Günlük kırılım FABRİKA takvim gününe göredir (Europe/Istanbul) — gece 00:00–03:00 arası işlemler kendi gününde sayılır.",
+      `Günlük kırılım FABRİKA takvim gününe göredir (${getFactoryTimezone()}) — gece yarısından sonraki işlemler kendi gününde sayılır.`,
       "Toplam kayıt, yalnız CUD değildir: giriş/çıkış ve sistem olayları da işlem türü kırılımına dahildir.",
     ],
     tables: [
@@ -55,7 +56,7 @@ export function buildSystemLogSummaryExport(opts: {
           delete: s.daily.reduce((a, d) => a + d.delete, 0),
         },
         notes: [
-          "Gün etiketi fabrika takvim günüdür (Europe/Istanbul), biçim YYYY-AA-GG.",
+          `Gün etiketi fabrika takvim günüdür (${getFactoryTimezone()}), biçim YYYY-AA-GG.`,
           "Bu tablo yalnız Oluştur/Güncelle/Sil'i ayırır; diğer olaylar sütunlara girmez, bu yüzden satır toplamı 'İşlem Türü' toplamından küçük olabilir.",
         ],
       },

@@ -29,6 +29,7 @@ import axios from "axios";
 import apiClient from "@/services/apiClient";
 import { money, type Currency } from "@/pages/Finance/service";
 import type { ReportResponse, ReportSecenekler, ReportSuzgec } from "../_services/types";
+import { factoryDayKey } from "@/lib/factory-time";
 
 export type { Currency };
 
@@ -132,11 +133,8 @@ export function dayEndIso(ymd: string): string {
   return new Date(y, m - 1, d, 23, 59, 59, 999).toISOString();
 }
 export function toYmd(value: string | Date): string {
-  const d = typeof value === "string" ? new Date(value) : value;
-  if (Number.isNaN(d.getTime())) return "";
-  // ⚠️ `toISOString().slice(0,10)` KULLANILMAZ: UTC'ye çevirir ve TR'de gece
-  // yarısından önceki saatlerde günü BİR GERİ kaydırır.
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  // ⚠️ `toISOString().slice(0,10)` KULLANILMAZ (UTC günü); gün FABRİKA dilimindendir.
+  return factoryDayKey(value);
 }
 
 // -----------------------------------------------------------------------------

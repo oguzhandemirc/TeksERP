@@ -19,6 +19,7 @@
 
 import apiClient from "@/services/apiClient";
 import { money, type Currency } from "../service";
+import { addDaysToKey, factoryDayKey, factoryLocaleString, factoryWallTimeToDate } from "@/lib/factory-time";
 
 /** Backend Decimal alanı — JSON'da string gelir, sayı gibi davranmaz. */
 export type Decimalish = string | number;
@@ -121,7 +122,7 @@ export function formatInstant(iso: string | null | undefined): string {
   if (!iso) return "—";
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return "—";
-  return d.toLocaleString("tr-TR", { dateStyle: "short", timeStyle: "short" });
+  return factoryLocaleString(d, "tr-TR", { dateStyle: "short", timeStyle: "short" });
 }
 
 /**
@@ -131,17 +132,19 @@ export function formatInstant(iso: string | null | undefined): string {
  * yarısından önceki saatlerde günü bir geri kaydırır.
  */
 export function ymd(d: Date): string {
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  return factoryDayKey(d);
 }
 
 /** Geçen ayın son günü — kapanışın açık ara en sık kullanılan tarihi. */
 export function lastDayOfPreviousMonth(today = new Date()): Date {
-  return new Date(today.getFullYear(), today.getMonth(), 0);
+  const key = factoryDayKey(today);
+  return factoryWallTimeToDate(addDaysToKey(`${key.slice(0, 7)}-01`, -1), "12:00") ?? today;
 }
 
 /** Geçen yılın son günü. */
 export function lastDayOfPreviousYear(today = new Date()): Date {
-  return new Date(today.getFullYear() - 1, 11, 31);
+  const year = Number(factoryDayKey(today).slice(0, 4));
+  return factoryWallTimeToDate(`${year - 1}-12-31`, "12:00") ?? today;
 }
 
 /**

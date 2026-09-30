@@ -4,6 +4,7 @@
 import { reportsClient } from "../_services/reportsClient";
 import type { ReportDateParams, ReportResponse } from "../_services/types";
 import type { ReportExportSpec } from "../_components/reportExport";
+import { factoryLocaleDateString } from "@/lib/factory-time";
 
 export interface LeadTimeStats {
   sampleSize: number;
@@ -130,8 +131,8 @@ export function buildLeadTimeExport(opts: {
         ],
         rows: lt.orders.map((o) => ({
           ...o,
-          orderDateText: new Date(o.orderDate).toLocaleDateString("tr-TR"),
-          firstShipText: o.firstShipDate ? new Date(o.firstShipDate).toLocaleDateString("tr-TR") : "—",
+          orderDateText: factoryLocaleDateString(o.orderDate, "tr-TR"),
+          firstShipText: o.firstShipDate ? factoryLocaleDateString(o.firstShipDate, "tr-TR") : "—",
           firstShipDays: o.firstShipDays ?? "",
           fullCloseDays: o.fullCloseDays ?? "",
           openDays: o.openDays ?? "",

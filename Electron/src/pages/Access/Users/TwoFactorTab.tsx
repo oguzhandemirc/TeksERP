@@ -7,6 +7,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { ConfirmDialog } from "@/components/forms/ConfirmDialog";
 import { adminUserService } from "@/services/adminUserService";
 import { buildTotpEnrollUrl } from "@/lib/totp-enroll-url";
+import { factoryLocaleDateString, factoryLocaleTimeString } from "@/lib/factory-time";
 
 interface Props {
   userId: string;
@@ -70,7 +71,7 @@ export function TwoFactorTab({ userId, username }: Props) {
           <p className="font-medium">
             {status?.enabled ? "Kurulu" : "Kurulu değil"}
             {status?.enabled && status.enabledAt
-              ? ` · ${new Date(status.enabledAt).toLocaleDateString("tr-TR")}`
+              ? ` · ${factoryLocaleDateString(status.enabledAt, "tr-TR")}`
               : ""}
           </p>
           <p className="mt-1 text-muted-foreground">
@@ -118,7 +119,7 @@ export function TwoFactorTab({ userId, username }: Props) {
             </Button>
           </div>
           <p className="text-xs text-muted-foreground">
-            {new Date(link.expiresAt).toLocaleTimeString("tr-TR")}'e kadar geçerli ve{" "}
+            {factoryLocaleTimeString(link.expiresAt, "tr-TR")}'e kadar geçerli ve{" "}
             <span className="font-medium">tek kullanımlıktır</span>. Süresi geçerse yeni bir
             bağlantı üretin — eskisi kendiliğinden geçersiz olur.
           </p>

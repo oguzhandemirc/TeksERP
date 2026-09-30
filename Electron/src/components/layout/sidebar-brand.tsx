@@ -7,12 +7,13 @@ import { RELEASE_NOTES_PATH } from "@/pages/ReleaseNotes/release-notes-path";
 import { useAppVersion } from "@/hooks/useAppVersion";
 import { useTabsStore } from "@/store/tabs";
 import { useServerClock } from "@/hooks/useServerClock";
+import { factoryDateTimeFormat } from "@/lib/factory-time";
 
 // Sunucu saatini yerel TZ'de biçimlendiren sabit formatlayıcılar (tek-site'de
 // client TZ = sunucu TZ → sunucunun duvar saati). Modül seviyesinde 1 kez kurulur.
-const dateFmt = new Intl.DateTimeFormat("tr-TR", { day: "2-digit", month: "short" });
-const timeFmt = new Intl.DateTimeFormat("tr-TR", { hour: "2-digit", minute: "2-digit" });
-const fullFmt = new Intl.DateTimeFormat("tr-TR", {
+const dateFmt = () => factoryDateTimeFormat("tr-TR", { day: "2-digit", month: "short" });
+const timeFmt = () => factoryDateTimeFormat("tr-TR", { hour: "2-digit", minute: "2-digit" });
+const fullFmt = () => factoryDateTimeFormat("tr-TR", {
   weekday: "long",
   day: "numeric",
   month: "long",
@@ -50,11 +51,11 @@ function SidebarServerStatus() {
   }
   return (
     <span
-      title={`Sunucu saati · ${fullFmt.format(serverDate)}`}
+      title={`Sunucu saati · ${fullFmt().format(serverDate)}`}
       className="flex items-center gap-1.5 text-[10px] font-medium leading-tight text-muted-foreground"
     >
       <span className="live-dot shrink-0" />
-      {dateFmt.format(serverDate)} · {timeFmt.format(serverDate)}
+      {dateFmt().format(serverDate)} · {timeFmt().format(serverDate)}
     </span>
   );
 }

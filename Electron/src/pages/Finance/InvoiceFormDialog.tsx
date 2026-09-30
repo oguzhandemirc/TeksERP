@@ -42,6 +42,7 @@ import {
   type InvoiceFormInitial,
   type InvoiceFormLine,
 } from "./invoiceForm";
+import { factoryDayKey } from "@/lib/factory-time";
 
 /**
  * Bir kaynak belgeden (sevkiyat / mal kabul) ön-doldurulmuş taslak.
@@ -126,9 +127,7 @@ const CURRENCIES: Currency[] = ["TRY", "USD", "EUR", "GBP", "RUB"];
 /** Yerel takvim günü (YYYY-MM-DD) — vade önerisinin tabanı. Form `issueDate`
  *  göndermez, backend "şimdi"yi yazar; öneri de aynı günü taban alır. */
 function todayYmd(): string {
-  const d = new Date();
-  const pad = (n: number) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+  return factoryDayKey();
 }
 
 /**

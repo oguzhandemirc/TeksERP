@@ -22,6 +22,7 @@ import {
   DEFAULT_COMPANY_LETTERHEAD,
 } from "./documentConfig";
 import type { NumberSourceInfo } from "@/lib/number-source";
+import { setFactoryTimezone } from "@/lib/factory-time";
 
 export type { CompanyLetterhead, DocumentsConfig } from "./documentConfig";
 
@@ -630,14 +631,34 @@ export interface BatchNumberState {
  * Yeni bir uç açılmadı — izin guard'sız uç sayısı cırcırlı bir tabandır ve onu
  * bir form ayrıntısı için yükseltmek kapıyı gevşetirdi.
  */
+/** `GET /api/feature-flags/factory-timezone/preview` — hiçbir şey yazmaz. */
+export interface FactoryTimezonePreview {
+  current: string;
+  proposed: string;
+  changed: boolean;
+  currentOffset: string;
+  proposedOffset: string;
+  todayCurrent: string;
+  todayProposed: string;
+  recentRollsShifted: number;
+  recentShipmentsShifted: number;
+  windowDays: number;
+  warnings: string[];
+}
+
 export type FeatureFlagsView = FeatureFlags & {
   settingsPasswordRequired?: boolean;
   numberSources?: NumberSourceInfo[];
+  /** Fabrika saat dilimi (IANA, salt-okunur) — bütün tarih/saat gösterimi bununla (`lib/factory-time`). */
+  factoryTimezone?: string;
 };
 
 export const featureFlagService = {
   get: (): Promise<ApiResponse<FeatureFlagsView>> =>
-    apiClient.get<ApiResponse<FeatureFlagsView>>("/api/feature-flags").then((r) => r.data),
+    apiClient.get<ApiResponse<FeatureFlagsView>>("/api/feature-flags").then((r) => {
+      setFactoryTimezone(r.data?.data?.factoryTimezone);
+      return r.data;
+    }),
 
   /**
    * ⚠️ AYAR ŞİFRESİ KAPISINDAN GEÇER. İstek önce şifresiz gider; sunucu
@@ -649,6 +670,26 @@ export const featureFlagService = {
       apiClient
         .patch<ApiResponse<FeatureFlags>>("/api/feature-flags", flags, { headers })
         .then((r) => r.data),
+    ),
+
+  /** Saat dilimi değişikliğinin etkisi (gün sınırı kayması) — yazmadan önce gösterilir. */
+  previewFactoryTimezone: (timeZone: string): Promise<ApiResponse<FactoryTimezonePreview>> =>
+    apiClient
+      .get<ApiResponse<FactoryTimezonePreview>>("/api/feature-flags/factory-timezone/preview", { params: { timeZone } })
+      .then((r) => r.data),
+
+  /**
+   * Fabrika saat dilimini değiştirir — TEK yazma ucu (PATCH bu alanı taşımaz). `expectedCurrent` önizlemede
+   * görülen dilimdir: arada başkası değiştirdiyse 409 `FACTORY_TIMEZONE_CHANGED`. AYAR ŞİFRESİ KAPISINDAN GEÇER.
+   */
+  updateFactoryTimezone: (body: { timeZone: string; expectedCurrent: string }): Promise<ApiResponse<{ timeZone: string; changed: boolean }>> =>
+    withSettingsPassword((headers) =>
+      apiClient
+        .put<ApiResponse<{ timeZone: string; changed: boolean }>>("/api/feature-flags/factory-timezone", body, { headers })
+        .then((r) => {
+          setFactoryTimezone(r.data?.data?.timeZone);
+          return r.data;
+        }),
     ),
 
   /**

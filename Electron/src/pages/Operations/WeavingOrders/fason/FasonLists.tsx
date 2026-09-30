@@ -8,8 +8,9 @@ import { formatM } from "@/pages/Operations/WarpBeams/types";
 import { dispatchMeters } from "./fason-summary";
 import { FasonYarnRows } from "./FasonYarnRows";
 import type { FasonDispatch, FasonReceipt, FasonYarnItem } from "./types";
+import { factoryLocaleDateString } from "@/lib/factory-time";
 
-const day = (iso: string) => new Date(iso).toLocaleDateString("tr-TR");
+const day = (iso: string) => factoryLocaleDateString(iso, "tr-TR");
 
 export function Stat({ label, value, hint }: { label: string; value: string; hint?: string }) {
   return (

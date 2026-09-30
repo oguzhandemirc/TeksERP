@@ -3,6 +3,7 @@ import { Button } from "@/components/ui/button";
 import { lockSentence, lockBadge, userCanResolve } from "./lockText";
 import { LockInfo } from "./LockInfo";
 import type { NumberSeriesRow } from "./types";
+import { factoryLocaleDateString } from "@/lib/factory-time";
 
 /**
  * Seri tablosu. ⚠️ KİLİTLİ SATIR DA ÇİZİLİR — süzgeç YOK. Gerekçe sayfanın
@@ -79,7 +80,7 @@ function NumberingRow({
         )}
         {row.pending && (
           <div className="mt-0.5 text-[10px] text-amber-700 dark:text-amber-400">
-            {new Date(row.pending.effectiveFrom).toLocaleDateString("tr-TR")} → {row.pending.preview}
+            {factoryLocaleDateString(row.pending.effectiveFrom, "tr-TR")} → {row.pending.preview}
           </div>
         )}
       </td>

@@ -1,6 +1,7 @@
 import { ArrowUpCircle, Sparkles, Wrench } from "lucide-react";
 import { foldedIncludes } from "@/lib/search-fold";
 import type { ReleaseEntry, ReleaseItem, ReleaseItemScope, ReleaseItemType } from "@/lib/surum-notlari";
+import { formatFactory } from "@/lib/factory-time";
 
 export const TYPE_ORDER: ReleaseItemType[] = ["yeni", "iyilestirme", "duzeltme"];
 
@@ -31,13 +32,11 @@ export const SCOPE_LABEL: Record<ReleaseItemScope, string> = {
   "her-ikisi": "Panel + Tablet",
 };
 
-const dateFmt = new Intl.DateTimeFormat("tr-TR", { day: "numeric", month: "long", year: "numeric" });
 
 /** Tarih kimliğini ("2026-08-28", "2026-08-28b") okunur başlığa çevirir. */
 export function formatReleaseDate(id: string): string {
-  const t = new Date(id.slice(0, 10));
-  if (Number.isNaN(t.getTime())) return id;
-  return dateFmt.format(t);
+  // Kimlik bir TAKVİM günüdür (an değil): dilim uygulanmaz.
+  return formatFactory(`${id.slice(0, 10)}T00:00:00Z`, "d MMMM yyyy", id, "UTC");
 }
 
 export type ScopeFilter = "all" | "panel" | "tablet";

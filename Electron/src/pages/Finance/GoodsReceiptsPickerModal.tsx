@@ -9,6 +9,7 @@ import { cn } from "@/lib/utils";
 import { PICKER_MAX_PAGE_SIZE } from "@/lib/picker-loader";
 import { listGoodsReceipts, type GoodsReceiptListRow } from "@/pages/Operations/GoodsReceipts/service";
 import { receiptLabel } from "./invoiceReceipts";
+import { factoryLocaleDateString } from "@/lib/factory-time";
 
 interface Props {
   open: boolean;
@@ -77,7 +78,7 @@ function Row({ row, selected, onToggle }: { row: GoodsReceiptListRow; selected: 
         {selected && <Check className="h-3.5 w-3.5" />}
       </span>
       <span className="min-w-0 flex-1 truncate font-medium">{receiptLabel(row)}</span>
-      <span className="shrink-0 text-xs text-muted-foreground">{new Date(row.createdAt).toLocaleDateString("tr-TR")} · {count}</span>
+      <span className="shrink-0 text-xs text-muted-foreground">{factoryLocaleDateString(row.createdAt, "tr-TR")} · {count}</span>
     </button>
   );
 }

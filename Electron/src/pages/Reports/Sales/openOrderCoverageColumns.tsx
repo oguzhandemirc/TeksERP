@@ -4,6 +4,7 @@
 import type { ColumnDef } from "@tanstack/react-table";
 import { fmtInt, fmtNum, fmtPercent } from "../_components/formatters";
 import { COVERAGE_STATE_LABEL, type CoverageBucketRow, type CoverageLineRow, type CoverageState } from "./openOrderCoverage";
+import { factoryLocaleDateString } from "@/lib/factory-time";
 
 const STATE_TONE: Record<CoverageState, string> = {
   HAZIR: "text-emerald-600 dark:text-emerald-400",
@@ -70,7 +71,7 @@ export const lineColumns: ColumnDef<CoverageLineRow, unknown>[] = [
     cell: ({ row }) => {
       const l = row.original;
       if (!l.deadline) return <span className="text-muted-foreground">—</span>;
-      const d = new Date(l.deadline).toLocaleDateString("tr-TR");
+      const d = factoryLocaleDateString(l.deadline, "tr-TR");
       return l.daysLate != null ? (
         <span className="font-medium text-destructive">
           {d} <span className="text-[10px]">({fmtInt(l.daysLate)} gün geçti)</span>

@@ -1,10 +1,11 @@
 import { useRouteError, isRouteErrorResponse } from "react-router-dom";
 import { ErrorFallbackUI } from "@/components/ErrorBoundary";
+import { factoryLocaleTimeString } from "@/lib/factory-time";
 
 /** React Router errorElement — route içi hataları custom sayfamızla gösterir. */
 export function RouteErrorFallback() {
   const routeError = useRouteError();
-  const errorTime = new Date().toLocaleTimeString("tr-TR");
+  const errorTime = factoryLocaleTimeString(new Date(), "tr-TR");
 
   let error: Error;
   if (routeError instanceof Error) {

@@ -1,14 +1,13 @@
-import { format, isValid } from "date-fns";
+import { formatFactory } from "@/lib/factory-time";
 
+/** Tarih/saat kalıpla, FABRİKA diliminde (date-fns belirteçleri; bkz. `lib/factory-time`). */
 export function safeFormat(
   date: string | Date | null | undefined,
   fmt: string,
   fallback = "—",
 ): string {
   if (!date) return fallback;
-  const d = typeof date === "string" ? new Date(date) : date;
-  if (!isValid(d)) return fallback;
-  return format(d, fmt);
+  return formatFactory(date, fmt, fallback);
 }
 
 // Perf: Intl.NumberFormat kurulumu görece pahalı; locale + useGrouping sabit,

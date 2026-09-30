@@ -3,6 +3,7 @@
 import apiClient from "@/services/apiClient";
 import { fetchAllTimeline, timelineFooterText } from "@/components/timeline/EventTimeline";
 import type { ExportColumn } from "@/lib/list-export";
+import { factoryLocaleString } from "@/lib/factory-time";
 
 export type TimelineGroup = "DURUM" | "PLAN" | "SIPARIS" | "PARTI" | "FASON" | "TAMBUR" | "KAPANIS";
 
@@ -55,7 +56,7 @@ export async function getWorkOrderEvents(
 export const eventsFooterText = timelineFooterText;
 
 export const formatEventInstant = (iso: string) =>
-  new Date(iso).toLocaleString("tr-TR", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" });
+  factoryLocaleString(iso, "tr-TR", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" });
 
 /**
  * TEK SÜTUN MODELİ — ekrandaki tablo ve Excel dışa aktarımı BURADAN türer (ekrandaki

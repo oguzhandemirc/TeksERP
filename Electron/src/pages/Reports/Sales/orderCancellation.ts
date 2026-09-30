@@ -4,6 +4,7 @@
 import { reportsClient } from "../_services/reportsClient";
 import type { ReportDateParams, ReportResponse } from "../_services/types";
 import type { ReportExportSpec } from "../_components/reportExport";
+import { factoryLocaleDateString } from "@/lib/factory-time";
 
 export const NO_REASON_KEY = "__NO_REASON__";
 
@@ -132,8 +133,8 @@ export function buildCancellationExport(opts: {
         ],
         rows: oc.orders.map((o) => ({
           ...o,
-          orderDateText: new Date(o.orderDate).toLocaleDateString("tr-TR"),
-          cancelledAtText: new Date(o.cancelledAt).toLocaleDateString("tr-TR"),
+          orderDateText: factoryLocaleDateString(o.orderDate, "tr-TR"),
+          cancelledAtText: factoryLocaleDateString(o.cancelledAt, "tr-TR"),
           reasonText: o.reasonLabel ?? "—",
         })),
       },

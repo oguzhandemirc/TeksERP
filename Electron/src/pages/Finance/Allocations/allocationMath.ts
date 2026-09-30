@@ -15,6 +15,7 @@
 // ⚠️ Girdi tipi `string | number` — bilinçli. `/allocations/*` uçları tutarları
 // string, `/cheques` number döndürüyor (bkz. `service.ts` başlığı). Tek okuma
 // noktası olması, iki şeklin karışıp sessiz `NaN` üretmesini engeller.
+import { factoryDayStart } from "@/lib/factory-time";
 
 /** Ham değeri sayıya çevirir; okunamayan/boş değer 0'dır (NaN yayılmaz). */
 export function num(v: string | number | null | undefined): number {
@@ -54,10 +55,8 @@ export function isOverdue(isoDate: string | null | undefined): boolean {
   if (!isoDate) return false;
   const d = new Date(isoDate);
   if (Number.isNaN(d.getTime())) return false;
-  // Gün sınırı CİHAZIN YEREL günüdür (panelin her yerinde aynı sözleşme):
+  // Gün sınırı FABRİKA günüdür (panelin her yerinde aynı sözleşme; `lib/factory-time`):
   // saat karşılaştırması yapılsaydı bugün vadesi dolan fatura sabah "gecikmiş"
   // görünmezken öğleden sonra görünürdü.
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  return d.getTime() < today.getTime();
+  return d.getTime() < factoryDayStart().getTime();
 }

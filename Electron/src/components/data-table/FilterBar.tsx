@@ -26,6 +26,7 @@ import { foldSearchText } from "@/lib/search-fold";
 import { useDebouncedValue } from "@/hooks/useDebouncedValue";
 import { DateRangeInput } from "@/components/forms/DateRangeInput";
 import { useTruncationWarning } from "@/hooks/useTruncationWarning";
+import { factoryBackWindowIso, factoryDayEndIso, factoryDayKey, factoryDayStartIso } from "@/lib/factory-time";
 
 /**
  * Lookup açılır listesinde gösterilecek en fazla satır. Arama SUNUCUDA
@@ -34,23 +35,12 @@ import { useTruncationWarning } from "@/hooks/useTruncationWarning";
  */
 const LOOKUP_PAGE_SIZE = 200;
 
-// Local-time day boundaries — kullanıcı "07.05.2026" derken İstanbul tz'inde
-// o günün 00:00:00 ile 23:59:59'u kastediyor; UTC midnight değil.
-function startOfDayIso(ymd: string): string {
-  const [y = 1970, m = 1, d = 1] = ymd.split("-").map(Number);
-  return new Date(y, m - 1, d, 0, 0, 0, 0).toISOString();
-}
-function endOfDayIso(ymd: string): string {
-  const [y = 1970, m = 1, d = 1] = ymd.split("-").map(Number);
-  return new Date(y, m - 1, d, 23, 59, 59, 999).toISOString();
-}
+// Gün sınırları FABRİKA diliminde — kullanıcı "07.05.2026" derken fabrikanın o gününün
+// 00:00:00 ile 23:59:59'unu kastediyor; UTC ya da bilgisayarın gece yarısı değil.
+const startOfDayIso = factoryDayStartIso;
+const endOfDayIso = factoryDayEndIso;
 function toLocalYmd(iso: string): string {
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return "";
-  const yyyy = d.getFullYear();
-  const mm = String(d.getMonth() + 1).padStart(2, "0");
-  const dd = String(d.getDate()).padStart(2, "0");
-  return `${yyyy}-${mm}-${dd}`;
+  return factoryDayKey(iso);
 }
 
 /**
@@ -205,22 +195,10 @@ export function FilterBar({ filters, defaultDateRangeDays = 0, leading, inline =
       if (key.startsWith("filter[")) return;
     }
     const next = new URLSearchParams(searchParams);
-    const today = new Date();
-    const from = new Date(
-      today.getFullYear(),
-      today.getMonth(),
-      today.getDate() - defaultDateRangeDays,
-      0, 0, 0, 0,
-    );
-    const to = new Date(
-      today.getFullYear(),
-      today.getMonth(),
-      today.getDate(),
-      23, 59, 59, 999,
-    );
+    const { dateFrom, dateTo } = factoryBackWindowIso(defaultDateRangeDays);
     next.set("dateField", searchParams.get("dateField") ?? dateDef.defaultField);
-    next.set("dateFrom", from.toISOString());
-    next.set("dateTo", to.toISOString());
+    next.set("dateFrom", dateFrom);
+    next.set("dateTo", dateTo);
     setSearchParams(next, { replace: true });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -589,12 +567,10 @@ function DateRangeFilter({ def, sp, update, h }: SubProps<Extract<FilterDef, { k
 
   const applyPreset = (days: number) =>
     update((next) => {
-      const today = new Date();
-      const from = new Date(today.getFullYear(), today.getMonth(), today.getDate() - days, 0, 0, 0, 0);
-      const to = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 23, 59, 59, 999);
+      const { dateFrom, dateTo } = factoryBackWindowIso(days);
       next.set("dateField", dateField);
-      next.set("dateFrom", from.toISOString());
-      next.set("dateTo", to.toISOString());
+      next.set("dateFrom", dateFrom);
+      next.set("dateTo", dateTo);
     });
 
   const clear = () =>

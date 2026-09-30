@@ -8,6 +8,7 @@ import { toast } from "sonner";
 import { buildWorkbook, saveWorkbook, type SheetSpec } from "./xlsx-export";
 import { upTo3ExcelNumFmt, upTo3Text } from "./number-format";
 import { saveTextAs } from "./file-save";
+import { factoryLocaleString } from "./factory-time";
 
 /** Tek sütun tarifi: başlık + satırdan değer çıkaran fonksiyon. */
 export interface ExportColumn<T> {
@@ -49,7 +50,7 @@ function pickName(o: Record<string, unknown>): string {
 export function cellText(v: unknown): string {
   if (v === null || v === undefined) return "";
   if (typeof v === "string" || typeof v === "number" || typeof v === "boolean") return String(v);
-  if (v instanceof Date) return v.toLocaleString("tr-TR");
+  if (v instanceof Date) return factoryLocaleString(v, "tr-TR");
   if (Array.isArray(v)) return v.map(cellText).filter(Boolean).join(", ");
   if (typeof v === "object") return pickName(v as Record<string, unknown>);
   return String(v);
