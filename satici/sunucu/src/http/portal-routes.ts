@@ -1051,7 +1051,7 @@ export const VENDOR_PORTAL_ROUTES: readonly PortalRouteDef[] = [
   {
     method: "post",
     path: "/bayiler/:id/anahtar",
-    permission: "bayi:yonet",
+    permission: "bayi:anahtar",
     kimlik: "ISLEM_KIMLIGI",
     handler: async (c) => {
       const id = idParam(c.req, "id", "Bayi");

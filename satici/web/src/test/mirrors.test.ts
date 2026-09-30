@@ -116,7 +116,7 @@ describe("izin tablosu aynası (satici/sunucu src/portal/roles.ts)", () => {
 
   it("yalnız tailnet izinleri (hassas sınıf: ERİŞİM oturumunda ekran yok) birebir aynı", () => {
     const server = listStrings(read("portal/roles.ts"), "export const TAILNET_ONLY_PERMISSIONS: readonly PortalPermission\\[\\]");
-    expect(server).toContain("kullanici:yonet");
+    expect(server).toEqual(expect.arrayContaining(["kullanici:yonet", "bayi:anahtar", "yayinci:anahtar"]));
     expect([...TAILNET_ONLY_PERMISSIONS].sort()).toEqual([...server].sort());
   });
 });

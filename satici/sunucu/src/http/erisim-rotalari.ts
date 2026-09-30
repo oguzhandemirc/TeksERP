@@ -1,6 +1,7 @@
 // ERİŞİM İZİN LİSTESİ — Cloudflare Access arkasındaki genel portal yoluna (ERİŞİM dinleyicisi) YALNIZ buradaki rotalar
 // bağlanır (OPT-IN): listede olmayan istek gövdesi okunmadan 404; yeni rota ERİŞİM'e ancak bilinçli bir satırla açılır.
-// Kök parolalı (`kokParolasi`) ve hassas izinli (roles.ts `TAILNET_ONLY_PERMISSIONS`) rota listeye GİREMEZ, tabloda
+// Kök parolalı (`kokParolasi`) ve hassas izinli (roles.ts `TAILNET_ONLY_PERMISSIONS`: kullanıcı yönetimi, bayi anahtarı
+// bağlama, yayıncı anahtarı kaydı) rota listeye GİREMEZ, tabloda
 // olmayan satır da kalamaz — yönlendirici kurulurken düşer (portal-http.ts `erisimListesiBulgulari`).
 // Anahtar "YÖNTEM /yol": rota tablosundaki yazımla birebir. Bekçi: scripts/test_erisim_kapisi.ts §4 · §6.
 
@@ -62,12 +63,11 @@ export const ERISIM_PORTAL_ROTALARI: ReadonlySet<string> = new Set([
   "POST /kurulumlar/:id/dr-geri-al",
   "POST /kurulumlar/:id/iptal",
   "POST /kurulumlar/:id/iptal-geri-al",
-  // kanal · bayi (anahtar kaydı kid ile; parola taşımaz)
+  // kanal · bayi (anahtar bağlama güven kökü ekler → yalnız tailnet/geri döngü, listede YOK)
   "POST /kanallar",
   "PATCH /kanallar/:id",
   "POST /bayiler",
   "POST /bayiler/:id/tavan",
-  "POST /bayiler/:id/anahtar",
   "POST /bayiler/:id/pasif",
   "POST /bayiler/:id/aktif",
   // dağıtım · sürümler · yayıncılar
@@ -85,8 +85,7 @@ export const ERISIM_PORTAL_ROTALARI: ReadonlySet<string> = new Set([
   "POST /dagitim/giden-oturum/:id/tamamla",
   "GET /surumler",
   "GET /yayincilar",
-  "POST /yayincilar",
-  "POST /yayincilar/:id/pasif",
+  "POST /yayincilar/:id/pasif", // kayıt (POST /yayincilar) güven kökü ekler → yalnız tailnet/geri döngü
   // destek kutusu
   "GET /destek",
   "GET /destek/:id",

@@ -270,7 +270,7 @@ export const DISTRIBUTION_PORTAL_ROUTES: readonly PortalRouteDef[] = [
   {
     method: "post",
     path: "/yayincilar",
-    permission: "yayinci:yonet",
+    permission: "yayinci:anahtar",
     kimlik: "ISLEM_KIMLIGI",
     handler: async (c) => {
       const b = bodyOf(c, PublisherCreate);

@@ -16,10 +16,12 @@ export const PORTAL_PERMISSIONS = {
   "kurulum:iptal": ADMIN,
   "kanal:yonet": ADMIN,
   "bayi:yonet": ADMIN,
+  "bayi:anahtar": ADMIN,
   "kullanici:yonet": ADMIN,
   "denetim:oku": VENDOR,
   "dagitim:yaz": VENDOR,
   "yayinci:yonet": ADMIN,
+  "yayinci:anahtar": ADMIN,
   "destek:yanitla": VENDOR,
   "anahtar:oku": VENDOR,
   "bildirim:oku": VENDOR,
@@ -35,9 +37,14 @@ export function roleHas(role: PortalRole | undefined, permission: PortalPermissi
 
 /**
  * Yalnız tailnet/geri döngü oturumunda kullanılabilen izinler (hassas sınıf: hesap açma, TOTP ve parola sıfırlama
- * sırları Cloudflare'den geçmez). Sunucudaki `TAILNET_ONLY_PERMISSIONS` aynası; ERİŞİM oturumunda ekran çizilmez.
+ * sırları Cloudflare'den geçmez; bayi/yayıncı anahtarı kaydı güven kökü ekler). Sunucudaki `TAILNET_ONLY_PERMISSIONS`
+ * aynası; ERİŞİM oturumunda ekran/düğme çizilmez.
  */
-export const TAILNET_ONLY_PERMISSIONS: readonly PortalPermission[] = ["kullanici:yonet"];
+export const TAILNET_ONLY_PERMISSIONS: readonly PortalPermission[] = ["kullanici:yonet", "bayi:anahtar", "yayinci:anahtar"];
+
+/** ERİŞİM oturumunda rolü izinli ama dinleyicisi izin vermeyen anahtar kaydı düğmesinin yerine çizilen açıklama. */
+export const KEY_REGISTRATION_TAILNET_ONLY =
+  "Anahtar kaydı güven kökü ekler ve bu bağlantıdan yapılamaz. Portala tailnet ya da geri döngü tüneliyle (portal-baglan) bağlanın.";
 
 /** Rol izni + oturumun dinleyicisi: ERİŞİM (Cloudflare Access arkası genel yol) oturumunda hassas izin yok. */
 export function canUse(role: PortalRole | undefined, permission: PortalPermission, listener: "TAILNET" | "GENEL" | "ERISIM" | undefined): boolean {

@@ -30,12 +30,16 @@ export const PORTAL_PERMISSIONS = {
   /** Kanal ana verisi (kod · ad · tür · güncel sürümler). */
   "kanal:yonet": ADMIN,
   "bayi:yonet": ADMIN,
+  /** Bayinin imza anahtarını (kid) bağlama/değiştirme — HASSAS: yalnız tailnet/geri döngü. */
+  "bayi:anahtar": ADMIN,
   "kullanici:yonet": ADMIN,
   "denetim:oku": VENDOR,
   /** İlk kurulum bağlantısı · paylaşım bağlantısı · yükleme isteği · dosya yükle/indir (Faz 3d). */
   "dagitim:yaz": VENDOR,
-  /** Yayıncı imza anahtarı kaydı ve pasife alınması (yayın bildirimi güveni). */
+  /** Yayıncı imza anahtarının pasife alınması (yayın bildirimi güvenini daraltır; genel yoldan da açık). */
   "yayinci:yonet": ADMIN,
+  /** Yayıncı imza anahtarı KAYDI (yayın bildirimi güvenini genişletir) — HASSAS: yalnız tailnet/geri döngü. */
+  "yayinci:anahtar": ADMIN,
   /** Destek kutusu: fabrikanın talebine yanıt yazma ve talebi kapatma (okuma `portal:oku`). */
   "destek:yanitla": VENDOR,
   "anahtar:oku": VENDOR,
@@ -49,11 +53,12 @@ export const PORTAL_PERMISSIONS = {
 export type PortalPermission = keyof typeof PORTAL_PERMISSIONS;
 
 /**
- * HASSAS sınıf (kök parolalı rotalarla aynı): bu izinlerin rotaları gövdede ya da yanıtta TOTP tohumu / başka
- * kullanıcının parolasını taşır — yalnız tailnet/geri döngüden; ERİŞİM listesine giremez (portal-http.ts
- * `erisimListesiBulgulari`), arayüz ERİŞİM oturumunda bu ekranları çizmez.
+ * HASSAS sınıf (kök parolalı rotalarla aynı), yalnız tailnet/geri döngüden: TOTP tohumu / başka kullanıcının parolası
+ * taşıyan kullanıcı yönetimi ve GÜVEN KÖKÜ EKLEYEN anahtar kayıtları (bayi imza anahtarı bağlama · yayıncı anahtarı
+ * kaydı — en az yetki). ERİŞİM listesine giremez (portal-http.ts `erisimListesiBulgulari`), arayüz ERİŞİM oturumunda
+ * bu düğmeleri/ekranları çizmez.
  */
-export const TAILNET_ONLY_PERMISSIONS: readonly PortalPermission[] = ["kullanici:yonet"];
+export const TAILNET_ONLY_PERMISSIONS: readonly PortalPermission[] = ["kullanici:yonet", "bayi:anahtar", "yayinci:anahtar"];
 
 export const LISTENER_ROLES: Readonly<Record<PortalListener, readonly PortalRole[]>> = {
   TAILNET: VENDOR,

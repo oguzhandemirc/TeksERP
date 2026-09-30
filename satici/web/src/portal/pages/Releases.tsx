@@ -9,7 +9,8 @@ import { ConfirmAction } from "../../shared/ConfirmAction";
 import { fmtDateTime } from "../../shared/format";
 import { useGet } from "../../shared/hooks";
 import { label } from "../../shared/labels";
-import { useApi, useCan } from "../../shared/session";
+import { KEY_REGISTRATION_TAILNET_ONLY, roleHas } from "../../shared/permissions";
+import { useApi, useCan, useListener, useUser } from "../../shared/session";
 import { Badge, Button, ErrorText, Field, Modal, ModalActions, PageTitle, QueryState, Section, Table } from "../../shared/ui";
 import { NOTICE_EVENT_LABEL, type ChannelRelease, type Publisher, type ReleaseOverview } from "../distribution/types";
 
@@ -111,14 +112,19 @@ function ChannelDetail({ channel }: { channel: ChannelRelease }) {
 function PublishersSection() {
   const api = useApi();
   const canManage = useCan("yayinci:yonet");
+  const canRegister = useCan("yayinci:anahtar");
+  const listener = useListener();
+  const user = useUser();
+  const registerBlocked = listener === "ERISIM" && roleHas(user.rol, "yayinci:anahtar");
   const queryClient = useQueryClient();
   const list = useGet<Publisher[]>(["yayincilar"], "/yayincilar");
   const [adding, setAdding] = useState(false);
   const [off, setOff] = useState<Publisher | null>(null);
   const refresh = () => void queryClient.invalidateQueries({ queryKey: ["yayincilar"] });
   return (
-    <Section title="Yayıncı anahtarları" actions={canManage ? <Button onClick={() => setAdding(true)}>Anahtar kaydet</Button> : null}>
+    <Section title="Yayıncı anahtarları" actions={canRegister ? <Button onClick={() => setAdding(true)}>Anahtar kaydet</Button> : null}>
       <p className="muted">Yayın betikleri bildirimi bu anahtarlardan biriyle imzalar (özel yarı yayıncının makinesinde: node scripts/lib/yayin-bildirim.mjs anahtar-uret).</p>
+      {registerBlocked ? <p className="muted small">{KEY_REGISTRATION_TAILNET_ONLY}</p> : null}
       <QueryState isLoading={list.isLoading} error={list.error} />
       <Table
         rows={list.data ?? []}
