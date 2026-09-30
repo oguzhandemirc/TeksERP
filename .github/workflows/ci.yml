@@ -495,14 +495,16 @@ jobs:
         run: npm run build
 
   # ===========================================================================
-  # NATIVE — lisans çekirdeği (Teks-Erp/native/lisans-cekirdek; Rust + napi-rs, Faz 2c). DB'siz:
-  # biçim + clippy (uyarı = hata) + `cargo test` (TS kâhininin vektör dosyası) + linux-x64 `.node`
-  # + kâhin bekçisi GERÇEK `.node`a karşı. TEKSERP_STRICT: bekçinin "ATLANDI"sı burada KIRMIZIDIR
-  # (backend job'ı native derlemez; orada sayılı beyanla atlar). Üretim özellikli (test çapasız)
-  # win-x64 + linux-x64 paket derlemesi `korumali-paket.yml`de (Faz 2b sahipliği).
+  # NATIVE — Cargo çalışma alanı (Teks-Erp/native): lisans çekirdeği (Rust + napi-rs, Faz 2c) + ORTAK
+  # doğrulama crate'i + güncelleyici/backend hizmet konağı (Dağıtım v2). DB'siz: biçim + clippy
+  # (uyarı = hata, bütün alan) + `cargo test` (TS kâhininin vektör dosyası + durum makinesi birimleri)
+  # + linux-x64 `.node` + kâhin bekçisi GERÇEK `.node`a karşı. TEKSERP_STRICT: bekçinin "ATLANDI"sı
+  # burada KIRMIZIDIR (backend job'ı native derlemez; orada sayılı beyanla atlar). Hizmet ikililerinin
+  # Windows derlemesi + SCM dumanı `native-windows.yml`de; üretim özellikli (test çapasız) win-x64 +
+  # linux-x64 paket derlemesi `korumali-paket.yml`de (Faz 2b sahipliği).
   # ===========================================================================
   native:
-    name: Native lisans çekirdeği (fmt + clippy + test + kâhin)
+    name: Native çalışma alanı (fmt + clippy + test + kâhin)
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -522,10 +524,10 @@ jobs:
         run: npm ci
         working-directory: Teks-Erp
       - run: npm ci
-      - name: Biçim + clippy
-        run: node scripts/kapi.mjs denetle
-      - name: cargo test (TS kâhininin vektörleri)
-        run: node scripts/kapi.mjs test
+      - name: Biçim + clippy (bütün çalışma alanı)
+        run: node ../scripts/kapi.mjs denetle
+      - name: cargo test (TS kâhininin vektörleri + güncelleyici/konak birimleri)
+        run: node ../scripts/kapi.mjs test
       - name: Native derleme (linux-x64-gnu, test çapalı)
         run: npx napi build --platform --release --no-js --features test-anchor --output-dir dist
       - name: Kâhin bekçisi (TS ↔ gerçek .node)

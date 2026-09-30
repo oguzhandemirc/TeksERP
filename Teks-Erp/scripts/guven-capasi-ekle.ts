@@ -86,9 +86,9 @@ const SONRAKI_ADIMLAR = [
   "  node ../scripts/agir-is.mjs -- npx tsx scripts/run-all-tests.ts lisans_native_kahin              (§0e gömülü çapa)",
   "  node ../scripts/agir-is.mjs -- npx tsx scripts/run-all-tests.ts lisans_butunluk                  (§2 PAKET çapası)",
   "  node ../scripts/agir-is.mjs -- npx tsx scripts/run-all-tests.ts guven_capasi_ekle",
-  "  cd native/lisans-cekirdek && npm run denetle && npm test                                          (rustfmt + cargo test)",
+  "  cd native && npm run denetle && npm test                                                          (rustfmt + clippy + cargo test, bütün çalışma alanı)",
   "  satici/sunucu ve patron/sunucu: npx tsc --noEmit (ayna)",
-  "Sonra: native .node YENİDEN derlenir (gömülü çapa ikilide) → yeni backend paketi; satıcı/patron imajı yeni aynayla.",
+  "Sonra: native .node VE güncelleyici ikilisi YENİDEN derlenir (gömülü çapa ikisinde de: tekserp-dogrulama) → yeni backend paketi; satıcı/patron imajı yeni aynayla.",
   "Belgeler: docs/kurallar/lisans.md (güven çapası satırı) · docs/design/LISANS-PROTOKOLU.md §0 tablosu · docs/ops/SATICI-KURULUM.md anahtar tablosu.",
 ];
 

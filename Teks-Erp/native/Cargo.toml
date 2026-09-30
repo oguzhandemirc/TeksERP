@@ -1,0 +1,35 @@
+# TeksERP native çalışma alanı: lisans çekirdeği (napi `.node`), ORTAK doğrulama crate'i, fabrika
+# sunucusunun iki Windows hizmeti (güncelleyici + backend hizmet konağı). Tek kilit dosyası, tek
+# `target/`, tek derleme profili — doğrulama kodu bir kez yazılır, üç ikili aynı kodu bağlar.
+[workspace]
+resolver = "2"
+members = ["lisans-cekirdek", "tekserp-dogrulama"]
+
+[workspace.package]
+edition = "2021"
+rust-version = "1.85"
+publish = false
+license = "UNLICENSED"
+
+# Sürüm tek yerde: bir bağımlılığın iki sürümü aynı ikiliye girmesin (doğrulama kodu tekil).
+[workspace.dependencies]
+tekserp-dogrulama = { path = "tekserp-dogrulama" }
+ed25519-dalek = { version = "2.2", default-features = false, features = ["std", "zeroize"] }
+x25519-dalek = { version = "2.0", default-features = false, features = ["static_secrets", "zeroize"] }
+sha2 = "0.10"
+hmac = "0.12"
+hkdf = "0.12"
+aes-gcm = { version = "0.10", default-features = false, features = ["aes", "alloc"] }
+base64 = "0.22"
+serde_json = { version = "1", features = ["arbitrary_precision"] }
+regex = { version = "1", default-features = false, features = ["std", "perf"] }
+unicode-normalization = "0.1"
+zeroize = "1"
+
+[profile.release]
+# panic = "unwind" (varsayılan) bilerek: napi'de native hata JS istisnasına döner (`catch_unwind`);
+# hizmet ikilileri paniği en üstte yakalar, günlüğe yazar ve hata koduyla çıkar (SCM kurtarması).
+lto = true
+codegen-units = 1
+strip = "symbols"
+opt-level = 3

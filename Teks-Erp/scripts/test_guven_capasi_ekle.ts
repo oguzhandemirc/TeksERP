@@ -282,7 +282,7 @@ function bolum7(): void {
     // Tek satır 141 karakter: rustfmt `=` sonrasına iner (bugünkü anchor.rs) — genişlik eşiği tam sınırda ölçülür.
     ["sınır (tek satır 141 karakter)", "pub const BUILTIN_ROOTS: &[(&str, &str, &[&str])] =", ['("hazirlik-2026-1", "705hChzAL045Gp-XoG6SaUKAW8muK1SFcW0Vpwhf-mo", &["TEST", "DEMO"])']],
   ];
-  const ayar = path.join(DEPO, "Teks-Erp/native/lisans-cekirdek/rustfmt.toml");
+  const ayar = path.join(DEPO, "Teks-Erp/native/rustfmt.toml");
   const gecici = mkdtempSync(path.join(os.tmpdir(), "guven-capasi-rs-"));
   try {
     for (const [ad, bas, ogeler] of duzenler) {

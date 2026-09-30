@@ -5,13 +5,14 @@
 //             npx tsx scripts/test_lisans_native_kahin.ts --vektor-yaz   (vektör dosyasını TS'ten yeniden üretir)
 // Native'i sına: önce `cd native/lisans-cekirdek && npm run derle` (ya da TEKSERP_LISANS_CEKIRDEK=<.node>).
 //
-// NE ÖLÇER: native çekirdek (`native/lisans-cekirdek`, Rust + napi-rs) TS protokolünün AYNASIDIR;
+// NE ÖLÇER: native çekirdek (`native/lisans-cekirdek` + ortak `native/tekserp-dogrulama`, Rust + napi-rs) TS protokolünün AYNASIDIR;
 // ayrışırsa fabrika aynı belgeyi iki yolda farklı doğrular ve hata sessizdir.
 //   §0 STATİK aynalar (native gerekmez): Rust kod kümeleri ⊆/= TS · yer tutucu listesi · Windows
 //      sondası satır satır · gömülü çapa = ROOT_PUBLIC_KEYS / PACKAGE_PUBLIC_KEYS · arayüz sürümü ·
 //      HKDF öneki · Rust'taki HER regex TS kaynağında (ya da canlı Zod deseninde) birebir var ·
 //      derleme sabiti geliştirmede kapalı · Rust'taki her belge türü (TYP_*) protokolün TYP kayıt
-//      defterinde aynı ad/değerle (bütünlük türü dahil)
+//      defterinde aynı ad/değerle (bütünlük türü dahil) · aynanın kaynağı iki crate'tedir (`lisans-cekirdek` +
+//      ORTAK `tekserp-dogrulama`) ve dosya adları ikisinde tekildir (§0l)
 //   §1 yükleyici: dosya yok → TS (zorunlu değil) / "yok" + her doğrulama CEKIRDEK_YOK + bütünlük
 //      GEÇERSİZ, istisna yok (zorunlu) · desteklenmeyen platform · bozuk .node · zorunlu kip ortam
 //      yolunu okumaz · aday sırası
@@ -77,9 +78,20 @@ const ATLAMA = atlamaDefteri(() => {
 
 const TEKS = path.resolve(__dirname, "..");
 const NATIVE_DIZIN = path.join(TEKS, "native", "lisans-cekirdek");
+/**
+ * Aynanın Rust kaynağı İKİ crate'e yayılır: napi yapıştırıcısı · parmak izi · modül anahtarı `lisans-cekirdek`te,
+ * doğrulama (JWS · zincir · şema · gömülü çapa · bütünlük) ORTAK `tekserp-dogrulama`da (güncelleyici de bağlar).
+ * Dosya adı iki dizinde TEKİLDİR (§0l ölçer) — ad → dosya eşlemesi tahmin istemez.
+ */
+const RUST_KAYNAK_DIZINLERI = [path.join(NATIVE_DIZIN, "src"), path.join(TEKS, "native", "tekserp-dogrulama", "src")];
 const VEKTOR_DOSYASI = vektorDosyasiYolu(TEKS);
 const oku = (p: string) => readFileSync(p, "utf8");
-const rustKaynak = (ad: string) => oku(path.join(NATIVE_DIZIN, "src", ad));
+const rustDosyaYollari = (): string[] => RUST_KAYNAK_DIZINLERI.flatMap((d) => readdirSync(d).filter((f) => f.endsWith(".rs")).map((f) => path.join(d, f)));
+function rustKaynak(ad: string): string {
+  const dizin = RUST_KAYNAK_DIZINLERI.find((d) => existsSync(path.join(d, ad)));
+  if (!dizin) throw new Error(`Rust kaynağı bulunamadı: ${ad} (${RUST_KAYNAK_DIZINLERI.map((d) => path.relative(TEKS, d)).join(" · ")})`);
+  return oku(path.join(dizin, ad));
+}
 
 // ── Rust kaynağından metin çıkarımı ─────────────────────────────────────────────
 function rustDizge(ham: string): string {
@@ -252,7 +264,12 @@ function bolum0(): void {
   check("§0h Rust'taki HER regex TS kaynağında ya da canlı Zod deseninde birebir", rust.length >= 12 && yetim.length === 0, yetim.length ? `yetim: ${yetim.join(" · ")}` : `${rust.length} desen`);
   check("§0i derleme sabiti geliştirmede KAPALI (native zorunlu değil)", NATIVE_REQUIRED === false);
 
-  const tumRust = readdirSync(path.join(NATIVE_DIZIN, "src")).filter((d) => d.endsWith(".rs")).sort().map(rustKaynak);
+  const yollar = rustDosyaYollari().sort();
+  // Crate kökü (`lib.rs`) her crate'te vardır ve adıyla okunmaz; tekillik modül dosyaları içindir.
+  const adlar = yollar.map((y) => path.basename(y)).filter((a) => a !== "lib.rs");
+  const tekrarli = adlar.filter((a, i) => adlar.indexOf(a) !== i);
+  check("§0l Rust modül dosya adları iki crate'te tekil (lisans-cekirdek · tekserp-dogrulama)", adlar.length >= 15 && tekrarli.length === 0, tekrarli.join(",") || `${adlar.length} dosya`);
+  const tumRust = yollar.map(oku);
   const rustTyp = rustTypSabitleri(tumRust);
   const typFark = typFarklari(rustTyp, TYP);
   const rustTypAdlari = new Set(rustTyp.map(([ad]) => ad));

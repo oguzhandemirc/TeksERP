@@ -1,0 +1,11 @@
+{
+  "name": "@tekserp/native",
+  "version": "0.1.0",
+  "private": true,
+  "description": "TeksERP native Cargo çalışma alanı (lisans çekirdeği · ortak doğrulama · güncelleyici · backend hizmet konağı) — kapı ve derleme komutları",
+  "license": "UNLICENSED",
+  "scripts": {
+    "denetle": "node scripts/kapi.mjs denetle",
+    "test": "node scripts/kapi.mjs test"
+  }
+}

@@ -8,7 +8,7 @@
 
 | Parça | Nerede | Ölçüm |
 |---|---|---|
-| Rust çekirdeği (napi-rs) | `Teks-Erp/native/lisans-cekirdek/` | `cargo test` 6 birim + vektör dosyası (319 kayıt) · clippy üç hedefte temiz |
+| Rust çekirdeği (napi-rs) | `Teks-Erp/native/lisans-cekirdek/` (doğrulama modülleri 2026-09-30'dan beri ORTAK `Teks-Erp/native/tekserp-dogrulama/`da — güncelleyici aynı kodu bağlar, `docs/design/GUNCELLEYICI.md`) | `cargo test` 6 birim + vektör dosyası (319 kayıt) · clippy üç hedefte temiz |
 | Arayüz + TS uygulaması | `Teks-Erp/src/lib/license/license-core.ts` | TS protokolünün kendisi — kâhin |
 | Yükleyici · adaptör | `Teks-Erp/src/lib/license/native.ts` · `Teks-Erp/src/lib/license/native-adapter.ts` | dosya yok / bozuk / künye uyuşmaz / zorunlu kip dalları bekçide; native yanıtı sözleşme şemalarından geçer |
 | Bütünlük (2e arayüzü) · modül anahtarı (2d arayüzü) | `Teks-Erp/src/lib/license/integrity.ts` · `Teks-Erp/src/lib/license/module-key.ts` | TS başvurusu = native ile aynı vektörler |
@@ -55,7 +55,7 @@ Her dışa aktarım JSON metni alır, JSON metni döndürür (napi nesne eşleme
 
 ## 3. Güven çapası
 
-- Çapa native ikiliye **gömülüdür** (`src/anchor.rs` = `ROOT_PUBLIC_KEYS` + `PACKAGE_PUBLIC_KEYS`, bekçi §0e hem kaynak metinden hem çalışan ikiliden ölçer). Üretim çağıranı çapayı native'e VERMEZ.
+- Çapa native ikiliye **gömülüdür** (`tekserp-dogrulama/src/anchor.rs` = `ROOT_PUBLIC_KEYS` + `PACKAGE_PUBLIC_KEYS`, bekçi §0e hem kaynak metinden hem çalışan ikiliden ölçer; aynı çapa güncelleyici ikilisine de gömülür). Üretim çağıranı çapayı native'e VERMEZ.
 - Dışarıdan çapa yalnız `test-anchor` cargo özellikli derlemede kabul edilir; özelliksiz (üretim) derleme `CAPA_ENJEKSIYONU_KAPALI` döner (bekçi §7b, ölçüldü darwin + Windows). Paketleme (2b) özelliksiz derlemeyi taşır; yükleyici zorunlu kipte test çapalı derlemeyi reddeder.
 
 ## 4. Eşlik — nerede ve nasıl

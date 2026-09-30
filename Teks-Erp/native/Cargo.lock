@@ -390,7 +390,6 @@ version = "0.1.0"
 dependencies = [
  "aes-gcm",
  "base64",
- "ed25519-dalek",
  "hkdf",
  "hmac",
  "napi",
@@ -399,6 +398,7 @@ dependencies = [
  "regex",
  "serde_json",
  "sha2",
+ "tekserp-dogrulama",
  "unicode-normalization",
  "x25519-dalek",
  "zeroize",
@@ -689,6 +689,17 @@ dependencies = [
  "proc-macro2",
  "quote",
  "unicode-ident",
+]
+
+[[package]]
+name = "tekserp-dogrulama"
+version = "0.1.0"
+dependencies = [
+ "base64",
+ "ed25519-dalek",
+ "regex",
+ "serde_json",
+ "sha2",
 ]
 
 [[package]]

@@ -1,11 +1,11 @@
 [package]
 name = "lisans-cekirdek"
 version = "0.1.0"
-edition = "2021"
-rust-version = "1.85"
-publish = false
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
 description = "TeksERP lisans çekirdeği (native): JWS/EdDSA doğrulama, parmak izi, bütünlük, modül anahtarı"
-license = "UNLICENSED"
+license.workspace = true
 
 [lib]
 # cdylib = Node eklentisi (.node); rlib = `cargo test` bütünleşme testleri aynı çekirdeği bağlasın.
@@ -21,26 +21,20 @@ napi = ["dep:napi", "dep:napi-derive"]
 test-anchor = []
 
 [dependencies]
+# JWS/Ed25519 · güven zinciri · belge şemaları · gömülü çapa · bütünlük: ORTAK crate (tek doğrulama kodu).
+tekserp-dogrulama.workspace = true
 napi = { version = "3", default-features = false, features = ["napi4"], optional = true }
 napi-derive = { version = "3", optional = true }
-ed25519-dalek = { version = "2.2", default-features = false, features = ["std", "zeroize"] }
-x25519-dalek = { version = "2.0", default-features = false, features = ["static_secrets", "zeroize"] }
-sha2 = "0.10"
-hmac = "0.12"
-hkdf = "0.12"
-aes-gcm = { version = "0.10", default-features = false, features = ["aes", "alloc"] }
-base64 = "0.22"
-serde_json = { version = "1", features = ["arbitrary_precision"] }
-regex = { version = "1", default-features = false, features = ["std", "perf"] }
-unicode-normalization = "0.1"
-zeroize = "1"
+x25519-dalek.workspace = true
+sha2.workspace = true
+hmac.workspace = true
+hkdf.workspace = true
+aes-gcm.workspace = true
+base64.workspace = true
+serde_json.workspace = true
+regex.workspace = true
+unicode-normalization.workspace = true
+zeroize.workspace = true
 
 [build-dependencies]
 napi-build = "2"
-
-[profile.release]
-# panic = "unwind" (varsayılan) bilerek: native hata JS istisnasına döner (`catch_unwind`), süreç düşmez.
-lto = true
-codegen-units = 1
-strip = "symbols"
-opt-level = 3

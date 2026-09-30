@@ -1,0 +1,2 @@
+# Çalışma alanının ortak derleme dizini (üyeler kendi dizinlerinde target/ üretmez).
+/target/
