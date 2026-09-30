@@ -1,0 +1,65 @@
+name: Native Windows (hizmetler)
+
+# =============================================================================
+# HİZMET İKİLİLERİ — güncelleyici (TeksERP-Guncelleyici) + backend hizmet konağı (TeksERP-Backend)
+# =============================================================================
+# windows-latest (x86_64-pc-windows-msvc, CRT statik) üzerinde: biçim + clippy (uyarı = hata) ·
+# `cargo test` bütün Cargo çalışma alanı (durum makinesinin öldür-yeniden başlat testleri GERÇEK
+# NTFS junction'larıyla) · sürüm derlemesi · gerçek SCM ile duman (`scripts/duman-windows.ps1`:
+# kayıt → başlat → ortam sözleşmesi → stdin kapanışı → doğrulama kipi → SCM kurtarması → iş nesnesi
+# → güncelleyicinin durum.json'u ve özel alan DACL'i → kaldırma). Yapıtlar (iki .exe) 7 gün tutulur;
+# İMZA KANCASI: kod imzalama sertifikası gelince imzalama bu işe eklenir (anahtar CI'a girmez — imza
+# Mac'te, `korumali-paket.yml` kalıbı). Mac/Linux'ta aynı Windows kodu `kapi.mjs denetle`
+# (clippy --target x86_64-pc-windows-msvc) ile derleme düzeyinde ölçülür; SCM/iş nesnesi/DPAPI
+# davranışı YALNIZ burada.
+# Yalnız native alan (ya da bu dosya) değişince koşar — gereksiz Windows dakikası harcanmaz.
+# =============================================================================
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "Teks-Erp/native/**"
+      - ".github/workflows/native-windows.yml"
+  pull_request:
+    branches: [main]
+    paths:
+      - "Teks-Erp/native/**"
+      - ".github/workflows/native-windows.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  windows:
+    name: Native Windows (clippy + test + hizmet dumanı)
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: pwsh
+        working-directory: Teks-Erp/native
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Rust araç zinciri (stable + rustfmt + clippy)
+        run: rustup toolchain install stable --profile minimal --component rustfmt,clippy; rustup default stable
+      - name: Biçim + clippy (bütün çalışma alanı, Windows yerel hedef)
+        run: node scripts/kapi.mjs denetle
+      - name: cargo test (vektörler + durum makinesi + öldür-yeniden başlat, NTFS junction)
+        run: node scripts/kapi.mjs test
+      - name: Sürüm derlemesi (güncelleyici + konak)
+        run: cargo build --release --locked -p tekserp-guncelleyici -p tekserp-hizmet
+      - name: Hizmet dumanı (gerçek SCM)
+        run: ./scripts/duman-windows.ps1 -Bin (Resolve-Path target/release)
+      - name: Yapıtlar (imzasız test ikilileri)
+        uses: actions/upload-artifact@v4
+        with:
+          name: tekserp-hizmetler-win-x64
+          path: |
+            Teks-Erp/native/target/release/tekserp-guncelleyici.exe
+            Teks-Erp/native/target/release/tekserp-hizmet.exe
+          if-no-files-found: error
+          retention-days: 7

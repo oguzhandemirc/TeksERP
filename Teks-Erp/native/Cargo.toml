@@ -3,7 +3,7 @@
 # `target/`, tek derleme profili — doğrulama kodu bir kez yazılır, üç ikili aynı kodu bağlar.
 [workspace]
 resolver = "2"
-members = ["lisans-cekirdek", "tekserp-dogrulama"]
+members = ["lisans-cekirdek", "tekserp-dogrulama", "tekserp-guncelleyici", "tekserp-hizmet"]
 
 [workspace.package]
 edition = "2021"
@@ -25,6 +25,24 @@ serde_json = { version = "1", features = ["arbitrary_precision"] }
 regex = { version = "1", default-features = false, features = ["std", "perf"] }
 unicode-normalization = "0.1"
 zeroize = "1"
+# Hizmet ikilileri (Dağıtım v2): fabrika saat dilimi/yerel saat (jiff), döndürülen günlüğün gzip'i
+# (flate2 — zip'in zaten kullandığı saf Rust zlib-rs arka ucuyla, ikinci sıkıştırma kodu girmez).
+jiff = "0.2"
+flate2 = { version = "1.1", default-features = false, features = ["zlib-rs"] }
+# Hizmet ikilileri (Dağıtım v2) — yalnız Windows'ta derlenen SCM/Win32 bağları.
+windows-service = "0.8.1"
+windows-sys = { version = "0.61", features = [
+  "Win32_Foundation",
+  "Win32_Security",
+  "Win32_Security_Cryptography",
+  "Win32_Security_Authorization",
+  "Win32_Storage_FileSystem",
+  "Win32_System_EventLog",
+  "Win32_System_JobObjects",
+  "Win32_System_Registry",
+  "Win32_System_Services",
+  "Win32_System_Threading",
+] }
 
 [profile.release]
 # panic = "unwind" (varsayılan) bilerek: napi'de native hata JS istisnasına döner (`catch_unwind`);

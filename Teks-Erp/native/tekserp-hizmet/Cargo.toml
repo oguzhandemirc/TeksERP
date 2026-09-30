@@ -1,0 +1,25 @@
+[package]
+name = "tekserp-hizmet"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+description = "TeksERP backend hizmet konağı (TeksERP-Backend) + iki Windows hizmetinin ortak yardımcıları (SCM, olay günlüğü, iş nesnesi)"
+license.workspace = true
+
+[lib]
+name = "tekserp_hizmet"
+path = "src/lib.rs"
+
+[[bin]]
+name = "tekserp-hizmet"
+path = "src/main.rs"
+
+[dependencies]
+serde_json.workspace = true
+jiff.workspace = true
+flate2.workspace = true
+
+[target.'cfg(windows)'.dependencies]
+windows-service.workspace = true
+windows-sys.workspace = true

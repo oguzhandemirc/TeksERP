@@ -16,11 +16,22 @@
 - C bağımlılığı eklenmez (saf Rust; Windows API'leri `windows-sys`/`windows-service`); yeni crate yönetici onayıyla.
 - Tanımlayıcılar İngilizce; tel/şema anahtarları, kod değerleri, günlük/ileti metinleri Türkçe.
 
+## Hizmetler — kurallar
+
+- Yerel sözleşme (dizinler, hizmetler, IPC, güven, adımlar) `docs/design/GUNCELLEYICI.md` §4–§13'tedir; dizin/ortam adlarının Rust tek kaynağı `tekserp-hizmet/src/contract.rs` (= backend `hizmet-duzeni.ts` `SERVICE_DIRS`). Ad değişirse iki taraf birlikte değişir.
+- Güncelleyici çekirdeği platformdan bağımsızdır: dünyaya YALNIZ `env::Env` (dosya · hizmet · süreç · ağ · saat · olay · DPAPI) üzerinden dokunur; Windows bağları `src/windows/`. Yeni bir yan etki `Env` dışından yapılmaz (öldür-yeniden başlat ölçümü onu göremez).
+- Her uygulama adımı TEKRARLANABİLİR yazılır ve işlem günlüğüne önce BAŞLADI iner; yeni adım/telafi `tests/crash_restart.rs`in "her noktada öldür" döngüsünden geçmeden inmez. Değişmezler `tests/common/mod.rs` `assert_invariants`.
+- SYSTEM, backend'in yazabildiği dizine YAZMAZ; oradan `Fs::read_untrusted` ile okur (bağlantı izlemez, boy sınırlı). Güncelleme öncesi yedek ve geçici anahtar yalnız `guncelleme\is\` (korumalı DACL) altında.
+- Sır (parola, belirteç, `.env` değeri) günlüğe, duruma, argümana girmez: parola yalnız çocuk sürecin `PGPASSWORD` ortamına; araç çıktısı `settings::redact`ten geçer.
+
 ## Komutlar (bu dizinde; `lisans-cekirdek/`teki `npm run denetle`/`npm test` buraya delege eder)
 
 | Komut | Ne |
 |---|---|
 | `npm run denetle` | `cargo fmt --all --check` + clippy (uyarı = hata): bütün alan · lisans çekirdeği napi'siz · hizmet crate'leri `x86_64-pc-windows-msvc` hedefinde (yalnız denetim; hedef std'si yoksa ⏭ beyan) |
-| `npm test` | `cargo test` bütün alan (lisans çekirdeği napi'siz + test çapasıyla) |
+| `npm test` | `cargo test` bütün alan (lisans çekirdeği napi'siz + test çapasıyla; güncelleyicinin öldür-yeniden başlat paketi ~1 dk) |
+| `npm run derle:hizmetler:win` | Mac'ten iki Windows ikilisi (cargo-xwin, CRT statik) → `target/x86_64-pc-windows-msvc/release/` — thinkpad-1 provası için; CI yapıtı `native-windows.yml` |
 
-Commit kapısı bu dizini `Teks-Erp/`den ayrı TEK proje sayar (`scripts/hooks/lib/staged.mjs`); cargo yoksa ⏭ beyanla geçer, ölçüm CI'da (`ci.yml` "Native" · `native-windows.yml`).
+Tanı (Windows'ta, yönetici): `tekserp-guncelleyici.exe durum --kok <KOK>` · `tur --kok <KOK>` (tek tur ön planda; yarım işlemi de sonuçlandırır) · `tekserp-hizmet.exe on-planda --kok <KOK> [--dogrulama]` (stdin'e satır = durdur).
+
+Commit kapısı bu dizini `Teks-Erp/`den ayrı TEK proje sayar (`scripts/hooks/lib/staged.mjs`); cargo yoksa ⏭ beyanla geçer, ölçüm CI'da (`ci.yml` "Native" · `native-windows.yml` — gerçek SCM dumanı `scripts/duman-windows.ps1`).

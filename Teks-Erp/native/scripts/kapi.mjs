@@ -44,7 +44,7 @@ function windowsHedefiKurulu(bulunan, env) {
   return r.status === 0 && r.stdout.split(/\r?\n/).includes(WINDOWS_HEDEFI);
 }
 
-const HIZMETLER = ["-p", "tekserp-dogrulama"];
+const HIZMETLER = ["-p", "tekserp-dogrulama", "-p", "tekserp-guncelleyici", "-p", "tekserp-hizmet"];
 const ADIMLAR = {
   denetle: [
     ["fmt", "--all", "--check"],
