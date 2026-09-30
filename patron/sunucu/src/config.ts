@@ -55,6 +55,7 @@ const EnvSchema = z
     // Boş değer = verilmedi: compose `${BILDIRIM_VAPID_KONU:-}` ile her zaman geçirir (kapali kipte boş kalır).
     BILDIRIM_VAPID_KONU: z.preprocess((v) => (v === "" ? undefined : v), z.string().regex(/^(mailto:|https:\/\/)\S+$/).optional()),
     EXPO_PUSH_URL: z.url().default("https://exp.host/--/api/v2/push/send"),
+    EXPO_MAKBUZ_URL: z.url().default("https://exp.host/--/api/v2/push/getReceipts"),
     /** Expo erişim belirteci (isteğe bağlı "enhanced push security") — SIRdır, günlüğe yazılmaz. */
     EXPO_ERISIM_BELIRTECI: z.string().min(16).optional(),
   })

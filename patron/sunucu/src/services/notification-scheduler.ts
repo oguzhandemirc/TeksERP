@@ -1,5 +1,5 @@
 // BİLDİRİM İŞİ — süreç içi zamanlayıcı (bakım işinin eşi): her turda AKTİF tesisler için önce olay üretimi, sonra
-// gönderim. `BILDIRIM_KIPI=kapali` (varsayılan = bugünkü davranış) iken iş KURULMAZ. Taşıyıcı kipten seçilir:
+// gönderim, sonra makbuz yoklaması. `BILDIRIM_KIPI=kapali` (varsayılan = bugünkü davranış) iken iş KURULMAZ. Taşıyıcı kipten seçilir:
 // `sahte` → kayıtlı sahte gönderici (ağ yok) · `gercek` → Expo + web push (VAPID). Canlı deneme mağaza hesapları ve
 // patron VDS kurulumu sonrasına bırakıldı (runbook notu); yerelde gerçek gönderim DENENMEZ.
 import type { CloudConfig } from "../config";
@@ -8,6 +8,7 @@ import { ExpoTransport, RecordingTransport, RoutingTransport, WebPushTransport, 
 import { VapidKeys } from "../push/vapid";
 import type { CloudContext } from "./context";
 import { generateForFacility } from "./notification-events";
+import { checkReceipts, type ReceiptTotals } from "./notification-receipts";
 import { deliverDue, type DeliveryTotals } from "./notification-sender";
 
 export interface NotificationRuntime {
@@ -25,9 +26,9 @@ export function createNotificationRuntime(config: CloudConfig): NotificationRunt
   return { transport: new RoutingTransport(new ExpoTransport(config), web), webPushKey: vapid.publicKey };
 }
 
-export async function runNotificationRound(ctx: CloudContext, transport: PushTransport, nowMs: number): Promise<{ created: number } & DeliveryTotals> {
+export async function runNotificationRound(ctx: CloudContext, transport: PushTransport, nowMs: number): Promise<{ created: number } & DeliveryTotals & ReceiptTotals> {
   const facilities = await withMaintenanceList(ctx.app, (tx) => tx.facility.findMany({ where: { status: "AKTIF" }, select: { tesisId: true }, orderBy: { tesisId: "asc" } }));
-  const total = { created: 0, sent: 0, skipped: 0, deferred: 0, retried: 0, failed: 0 };
+  const total = { created: 0, sent: 0, skipped: 0, deferred: 0, retried: 0, failed: 0, checked: 0, invalid: 0 };
   for (const f of facilities) {
     total.created += await generateForFacility(ctx, f.tesisId, nowMs);
     const d = await deliverDue(ctx, transport, f.tesisId, nowMs);
@@ -36,6 +37,9 @@ export async function runNotificationRound(ctx: CloudContext, transport: PushTra
     total.deferred += d.deferred;
     total.retried += d.retried;
     total.failed += d.failed;
+    const r = await checkReceipts(ctx, transport, f.tesisId, nowMs);
+    total.checked += r.checked;
+    total.invalid += r.invalid;
   }
   return total;
 }
@@ -65,7 +69,7 @@ export class NotificationScheduler {
     this.running = true;
     try {
       const t = await runNotificationRound(this.ctx, this.runtime.transport, nowMs);
-      if (t.created + t.sent + t.failed > 0) console.log(`[patron] bildirim: ${t.created} doğdu · ${t.sent} gitti · ${t.skipped} atlandı · ${t.deferred} ertelendi · ${t.retried} yeniden · ${t.failed} başarısız`);
+      if (t.created + t.sent + t.failed + t.checked > 0) console.log(`[patron] bildirim: ${t.created} doğdu · ${t.sent} gitti · ${t.skipped} atlandı · ${t.deferred} ertelendi · ${t.retried} yeniden · ${t.failed} başarısız · ${t.checked} makbuz · ${t.invalid} kayıtsız cihaz`);
     } catch (err) {
       console.error(`[patron] bildirim turu başarısız: ${(err as Error).name}`);
     } finally {

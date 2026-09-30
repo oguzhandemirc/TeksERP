@@ -25,6 +25,7 @@ import type {
   ReportRequestDetail,
   Snapshot,
   SnapshotRefresh,
+  TestNotificationResult,
 } from "./wire";
 
 export const ENDPOINTS = {
@@ -60,6 +61,7 @@ export const ENDPOINTS = {
   notificationSettingsSet: ["post", "/bildirim/ayarlar"],
   notificationFacilityDefaults: ["post", "/bildirim/tesis-varsayilani"],
   notificationHistory: ["get", "/bildirimler"],
+  notificationTest: ["post", "/bildirim/deneme"],
 } as const satisfies Record<string, readonly ["get" | "post" | "patch", string]>;
 
 type Name = keyof typeof ENDPOINTS;
@@ -121,6 +123,7 @@ export function createApi(c: ApiClient) {
     notificationSettingsSet: (ayarlar: NotificationSettings | null) => c.post<NotificationSettingsView>(pathOf("notificationSettingsSet"), { ayarlar }),
     notificationFacilityDefaults: (ayarlar: NotificationSettings) => c.post<NotificationSettingsView>(pathOf("notificationFacilityDefaults"), { ayarlar }),
     notificationHistory: (p: { imlec?: string; limit?: number } = {}) => c.get<Page<NotificationItem>>(pathOf("notificationHistory"), p),
+    notificationTest: () => c.post<TestNotificationResult>(pathOf("notificationTest"), {}),
   };
 }
 

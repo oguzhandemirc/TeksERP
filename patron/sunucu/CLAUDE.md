@@ -58,7 +58,9 @@ Audit istisnaları (beyanlı sınıflar): fabrika kanalı yazımları (paket mak
 - **Olay üretimi durumsuz** (`notification-events.ts`): bulut HESAP YAPMAZ — eşik fabrikanın özet sayısıyla yalnız karşılaştırılır; `dedup_key` (gün / olay kimliği) + `UNIQUE(tesis, hesap, dedup_key)` ⇒ aynı olay ikinci kez doğmaz. Kural düşüren olay ATLANDI doğar (tür sonradan açılınca eski olay gitmez).
 - **Gönderim** (`notification-sender.ts`): `FOR UPDATE SKIP LOCKED` claim; ağ çağrısı tx dışında; sonuç yalnız kendi claim'imiz duruyorsa yazılır; gönderim anında izin/tür/sessiz saat YENİDEN (sessizde bitişe ertelenir, hak yanmaz); geçersiz cihaz pasife; geçici hata 5 denemeye kadar.
 - **Sır:** VAPID çifti `ANAHTAR_DIZINI/patron-vapid.json` (0600, üstüne yazılmaz); gizli anahtar yalnız `VapidKeys` kapanışında, günlüğe/DB'ye/API'ye düşmez (taşıyıcı hatası yalnız kısa KOD olarak saklanır). Web aboneliği yalnız izinli push servisine (SSRF kapısı, kayıtta ve gönderimde aynı yüklem `push/targets.ts`).
-- Bekçiler: `test_bildirim_kurallari` (tekrar yok · sessiz saat · kapalı tür · izin) · `test_bildirim_gonderim` (katalog · kip · VAPID sırrı · SSRF · teslim · API · budama).
+- **Makbuz (Expo ikinci aşama)** (`notification-receipts.ts`): bilet alınan teslim `receipt_due_at` taşır, 15 dk sonra atomik claim'le yoklanır; makbuzdaki `DeviceNotRegistered` cihazı pasife çeker, bildirimin durumu değişmez; hazır olmayan makbuz yeniden sorulur, 24 saatte `ZAMAN_ASIMI`. Biletsiz teslim (web, sahte kip) yoklamaya girmez.
+- **Deneme bildirimi** (`POST /api/bildirim/deneme`, `notification-test.service.ts`): yalnız kendi etkin cihazlarına, kuyruğa/geçmişe yazılmadan; hesap başına dakikada bir (429 `HIZ_SINIRI`); kip kapalıyken ya da cihaz yokken 409; ayak izi `account_audit`.
+- Bekçiler: `test_bildirim_kurallari` (tekrar yok · sessiz saat · kapalı tür · izin) · `test_bildirim_gonderim` (katalog · kip · VAPID sırrı · SSRF · teslim · API · budama) · `test_bildirim_makbuz` (Expo makbuzu · deneme bildirimi).
 
 ## Komutlar
 

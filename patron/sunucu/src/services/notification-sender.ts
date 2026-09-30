@@ -2,7 +2,7 @@
 // alınabilir), ağ çağrısı tx DIŞINDA yapılır, sonuç yalnız kendi claim'imiz hâlâ duruyorsa yazılır (count 0 → başka
 // tur almış, dokunulmaz). Gönderim anında kural YENİDEN verilir: hesap aktif mi · bildirim/tür açık mı · izin yetiyor
 // mu (doğuştan sonra düşürülen izin/ayar da tutar) · sessiz saat (sessizde gönderilmez, bitişe ertelenir; deneme
-// hakkı yanmaz). Geçersiz cihaz pasife çekilir. Günlüğe yalnız sayı ve kısa kod düşer — belirteç/anahtar DÜŞMEZ.
+// hakkı yanmaz). Geçersiz cihaz pasife çekilir; Expo bileti alınan teslim makbuz yoklamasına girer (`notification-receipts`). Günlüğe yalnız sayı ve kısa kod düşer — belirteç/anahtar DÜŞMEZ.
 import { Prisma, type DevicePlatform } from "@prisma/client";
 import { effectivePermissions } from "../catalog/permissions";
 import { NOTIFICATION_KINDS, type NotificationKind } from "../wire/api";
@@ -11,6 +11,7 @@ import { withTesis } from "../lib/tenant";
 import type { PushOutcome, PushTransport } from "../push/transports";
 import type { CloudContext } from "./context";
 import { ruleVerdict } from "./notification-events";
+import { RECEIPT_DELAY_MS } from "./notification-receipts";
 import { loadFacilitySettings, resolveSettings } from "./notification-settings.service";
 
 export const MAX_ATTEMPTS = 5;
@@ -113,11 +114,12 @@ export async function deliverDue(ctx: CloudContext, transport: PushTransport, te
     const results = await sendAll(transport, n, d.devices);
     const invalid = results.filter((r) => r.outcome.kind === "GECERSIZ_CIHAZ").map((r) => r.id);
     if (invalid.length > 0) await withTesis(ctx.app, { tesisId }, (tx) => tx.pushDevice.updateMany({ where: { tesisId, id: { in: invalid }, active: true }, data: { active: false } }));
-    const deliveries = results.map((r) => ({ cihazId: r.id, sonuc: r.outcome.kind === "OK" ? "OK" : `${r.outcome.kind}:${r.outcome.code}` }));
+    const deliveries = results.map((r) => ({ cihazId: r.id, sonuc: r.outcome.kind === "OK" ? "OK" : `${r.outcome.kind}:${r.outcome.code}`, ...(r.outcome.kind === "OK" && r.outcome.ticket ? { bilet: r.outcome.ticket } : {}) }));
+    const receiptDueAt = deliveries.some((d) => "bilet" in d) ? new Date(nowMs + RECEIPT_DELAY_MS) : null;
     const firstError = results.find((r) => r.outcome.kind !== "OK")?.outcome;
     const lastError = firstError && firstError.kind !== "OK" ? firstError.code : null;
     if (results.some((r) => r.outcome.kind === "OK")) {
-      if (await finish(ctx, mine, { status: "GONDERILDI", sentAt: new Date(nowMs), deliveries, lastError })) t.sent++;
+      if (await finish(ctx, mine, { status: "GONDERILDI", sentAt: new Date(nowMs), deliveries, lastError, receiptDueAt })) t.sent++;
     } else if (results.some((r) => r.outcome.kind === "GECICI") && n.attempts < MAX_ATTEMPTS) {
       const wait = BACKOFF_MIN[Math.min(n.attempts - 1, BACKOFF_MIN.length - 1)]! * 60_000;
       if (await finish(ctx, mine, { status: "BEKLIYOR", nextAttemptAt: new Date(nowMs + wait), deliveries, lastError })) t.retried++;

@@ -18,6 +18,8 @@
 4. Beklenen: bir tur içinde (`BILDIRIM_ARALIGI_SN`) telefonda "Geciken sipariş"; dokununca Siparişler ekranı. `notifications` satırı `GONDERILDI`, `deliveries` `OK`.
 5. Sessiz saat: pencereyi şimdiye kur → satır `BEKLIYOR` ve `next_attempt_at` = bitiş; bitişte gider.
 6. Web: tarayıcıda (iOS'ta 16.4+ ve ana ekrana eklenmiş) aynı akış.
+7. Deneme bildirimi: Profil → Bildirimler → "Deneme bildirimi gönder" → telefonda "Deneme bildirimi"; dakikada bir (ikinci dokunuş 429 "… sn sonra"). Kayıtsız cihaz pasife düşer, yanıt cihaz başına sonucu gösterir.
+8. Makbuz (Expo ikinci aşama): gönderimden 15 dk sonra tur makbuzu yoklar — `deliveries[].bilet` dolu, `makbuz` `OK` olur; uygulaması silinmiş telefonda `GECERSIZ_CIHAZ:EXPO_CIHAZ_KAYITSIZ` ve cihaz `active=false`. Hazır olmayan makbuz 15 dk'da bir yeniden sorulur, 24 saatte `ZAMAN_ASIMI`.
 
 ## Geri alma
 

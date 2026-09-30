@@ -315,6 +315,12 @@ export interface NotificationSettingsView {
   readonly webPushAnahtari: string | null;
 }
 
+/** `POST /bildirim/deneme` — kendi etkin cihazlarına tek deneme (hız sınırlı; geçmişe yazılmaz). */
+export interface TestNotificationResult {
+  readonly gonderilen: number;
+  readonly cihazlar: readonly { readonly id: string; readonly ad: string | null; readonly platform: string; readonly sonuc: "OK" | "GECERSIZ_CIHAZ" | "GECICI" | "KALICI" }[];
+}
+
 export const NOTIFICATION_STATUSES = ["BEKLIYOR", "GONDERILIYOR", "GONDERILDI", "BASARISIZ", "ATLANDI"] as const;
 export type NotificationStatus = (typeof NOTIFICATION_STATUSES)[number];
 

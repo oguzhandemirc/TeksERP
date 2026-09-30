@@ -2,6 +2,7 @@
 import { useRouter } from "expo-router";
 import { useCallback, useRef, useState } from "react";
 import { Pressable, Text, View } from "react-native";
+import type { TestNotificationResult } from "../api/wire";
 import { safeRoute } from "../lib/notification-form";
 import { formatDateTime } from "../lib/format";
 import { registerThisDevice } from "../push/register";
@@ -20,6 +21,16 @@ const SKIP_LABEL: Readonly<Record<string, string>> = {
 };
 const STATUS_LABEL: Readonly<Record<string, string>> = { BEKLIYOR: "Bekliyor", GONDERILIYOR: "Gönderiliyor", GONDERILDI: "Gönderildi", BASARISIZ: "Gönderilemedi", ATLANDI: "Gönderilmedi" };
 
+/** Deneme sonucu: kaç cihaza gitti, kayıtsız cihaz çıkarıldı mı. */
+export function testOutcome(r: TestNotificationResult): { tone: "off" | "warn"; text: string } {
+  const dropped = r.cihazlar.filter((c) => c.sonuc === "GECERSIZ_CIHAZ").length;
+  const failed = r.cihazlar.length - r.gonderilen - dropped;
+  const parts = [r.gonderilen > 0 ? `Deneme bildirimi ${r.gonderilen} cihaza gönderildi` : "Deneme bildirimi hiçbir cihaza gönderilemedi"];
+  if (dropped > 0) parts.push(`${dropped} cihaz artık kayıtlı değil, listeden çıkarıldı`);
+  if (failed > 0) parts.push(`${failed} cihaza şu an ulaşılamadı`);
+  return { tone: r.gonderilen > 0 && failed + dropped === 0 ? "off" : "warn", text: parts.join(" · ") };
+}
+
 export function NotificationDevices({ vapidKey }: { vapidKey: string | null }) {
   const { api } = useSession();
   const devices = useRemote("cihazlar", () => api.deviceList());
@@ -28,6 +39,13 @@ export function NotificationDevices({ vapidKey }: { vapidKey: string | null }) {
   // Hedef cihaz ref'te: aynı dokunuşta yazılıp okunur (state bir sonraki render'a kalır).
   const removeId = useRef<string | null>(null);
   const remove = useWrite(useCallback(() => api.deviceRemove(String(removeId.current)), [api]));
+  const test = useWrite(useCallback(() => api.notificationTest(), [api]));
+  const onTest = async () => {
+    const r = await test.run();
+    if (!r) return;
+    setOutcome(testOutcome(r));
+    devices.reload();
+  };
   const onRegister = async () => {
     const r = await register.run();
     if (!r) return;
@@ -48,6 +66,10 @@ export function NotificationDevices({ vapidKey }: { vapidKey: string | null }) {
             onConfirm={() => { removeId.current = d.id; void remove.run(d.id).then(() => devices.reload()); }} />
         </Card>
       ))}
+      {devices.data && devices.data.length > 0 ? (
+        <Button label="Deneme bildirimi gönder" tone="plain" busy={test.busy} disabled={test.disabled} onPress={() => void onTest()} testID="bildirim-deneme" />
+      ) : null}
+      {test.error ? <Banner tone="error" text={test.error} testID="bildirim-deneme-hata" /> : null}
       {devices.data && devices.data.length === 0 ? <Muted>Kayıtlı cihaz yok; bildirim almak için yukarıdaki düğmeye dokunun.</Muted> : null}
     </View>
   );

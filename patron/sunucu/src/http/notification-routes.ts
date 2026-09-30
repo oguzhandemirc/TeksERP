@@ -2,6 +2,7 @@
 import { z } from "zod";
 import { SettingsSchema } from "../catalog/notifications";
 import { getSettingsView, listOwnNotifications, setFacilityDefaults, setOwnSettings } from "../services/notification-settings.service";
+import { sendTestNotification } from "../services/notification-test.service";
 import { body, page, s, uuidCursor, webPushKey, type ApiRouteDef } from "./api-route-kit";
 
 export const NOTIFICATION_ROUTES: readonly ApiRouteDef[] = [
@@ -19,6 +20,13 @@ export const NOTIFICATION_ROUTES: readonly ApiRouteDef[] = [
     auth: "OTURUM",
     kimlik: { muaf: "tesis varsayılanının TAM yerine konması (bulut:hesap:yonet); tekrarı aynı sonuç" },
     handler: async (c) => ({ data: await setFacilityDefaults(c.ctx, s(c), body(c, z.strictObject({ ayarlar: SettingsSchema })).ayarlar, webPushKey(c)) }),
+  },
+  {
+    method: "post",
+    path: "/bildirim/deneme",
+    auth: "OTURUM",
+    kimlik: { muaf: "yan etkisi yalnız kendi cihazlarına bir deneme bildirimi; tekrarı hesap başına dakikada bir hız sınırına takılır (429)" },
+    handler: async (c) => ({ data: await sendTestNotification(c.ctx, s(c)) }),
   },
   {
     method: "get",
