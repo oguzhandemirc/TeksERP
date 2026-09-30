@@ -20,6 +20,7 @@ import { hashPortalPassword } from "../portal/password";
 import { withSigningPasswordGuard } from "../portal/signing-guard";
 import { NOTIFICATION_PORTAL_ROUTES } from "./notification-routes";
 import { SUPPORT_PORTAL_ROUTES } from "./support-routes";
+import { fleetView, installationUpdateView } from "../portal/fleet";
 import * as q from "../portal/queries";
 import { PORTAL_ROLES, roleHas } from "../portal/roles";
 import {
@@ -88,6 +89,7 @@ import {
   setValidityEndTx,
 } from "../services/sanction.service";
 import { decideTransferTx, findTransferRequest } from "../services/transfer.service";
+import { UpdatePolicyInputSchema, setUpdatePolicyTx } from "../services/update-policy.service";
 import {
   ClientTokenSchema,
   IsoSchema,
@@ -135,6 +137,7 @@ const InstallationUpdate = z.strictObject({
   bulutSaklamaAy: z.number().int().nullable().optional(),
   sinif: ClassEnum.optional(),
 });
+const UpdatePolicyBody = UpdatePolicyInputSchema.extend({ clientToken: Token, sebep: Reason });
 const EntitlementCreate = z.strictObject({
   clientToken: Token,
   moduller: ModuleList.optional(),
@@ -371,6 +374,14 @@ export const VENDOR_PORTAL_ROUTES: readonly PortalRouteDef[] = [
     }),
   },
   { method: "get", path: "/anahtarlar", permission: "anahtar:oku", kimlik: "OKUMA", handler: async (c) => ({ data: await q.keyStatus(c.ctx, prisma, c.nowMs) }) },
+  { method: "get", path: "/filo", permission: "portal:oku", kimlik: "OKUMA", handler: async (c) => ({ data: await fleetView(prisma, c.ctx.config.YAYIN_DIZINI) }) },
+  {
+    method: "get",
+    path: "/kurulumlar/:id/guncelleme",
+    permission: "portal:oku",
+    kimlik: "OKUMA",
+    handler: async (c) => ({ data: await installationUpdateView(prisma, idParam(c.req, "id", "Kurulum")) }),
+  },
 
   // ------------------------------------------------------------ müşteri · tesis · kurulum
   {
@@ -596,6 +607,26 @@ export const VENDOR_PORTAL_ROUTES: readonly PortalRouteDef[] = [
           stored: { id: r.id, kod: null, gecerlilikBitis: r.expiresAt, kodGosterilemez: true },
         }),
         audit: (r) => [{ event: "ETKINLESTIRME_KODU", entity: "Kurulum", entityId: id, summary: { kodId: r.id, tur: r.kind } }],
+      });
+    },
+  },
+
+  // ------------------------------------------------------------ güncelleme politikası (Dağıtım v2)
+  {
+    method: "post",
+    path: "/kurulumlar/:id/guncelleme-politikasi",
+    permission: "guncelleme:yaz",
+    kimlik: "ISLEM_KIMLIGI",
+    handler: async (c) => {
+      const id = idParam(c.req, "id", "Kurulum");
+      const b = bodyOf(c, UpdatePolicyBody);
+      return portalAction(c, {
+        action: "GUNCELLEME_POLITIKASI",
+        clientToken: b.clientToken,
+        body: withPath(b, id),
+        run: (tx) => setUpdatePolicyTx(tx, { installationDbId: id, policy: { kip: b.kip, pencere: b.pencere, hedefSurum: b.hedefSurum }, reason: b.sebep, actor: c.session.actor }),
+        respond: (r) => ({ data: { kurulumId: r.kurulum.id, politika: r.politika, degisti: r.degisti } }),
+        audit: (r) => (r.degisti ? [{ event: "GUNCELLEME_POLITIKASI", entity: "Kurulum", entityId: id, summary: { ...r.politika, sebep: b.sebep } }] : []),
       });
     },
   },

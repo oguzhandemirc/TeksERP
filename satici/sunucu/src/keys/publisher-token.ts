@@ -1,12 +1,13 @@
 // YAYINCI İNDİRME belirteçleri — yayın betiklerinin kenar (CF Worker) doğrulaması için. Kurulum kiraya
 // eşlik eden belirteçle AYNI biçimdedir (kanal + ürün öneki + ≤ 70 dk); kurulum kimliği yerine sabit
 // yayıncı kimliği taşır. Özel anahtar yalnız satıcının İNDİRME anahtarıdır (hazırlık ya da VDS).
-import { ChannelCodeSchema, DOWNLOAD_MAX_TTL_MS, msToIso, signDownloadToken } from "../lisans-protokol";
+import { ChannelCodeSchema, DOWNLOAD_MAX_TTL_MS, DOWNLOAD_PRODUCTS, msToIso, signDownloadToken } from "../lisans-protokol";
 import type { KeyStore } from "./key-store";
 
 /** Kurulum değil yayıncı: belirteç kimin için basıldı (Worker kurulumu sorgulamaz). */
 export const PUBLISHER_INSTALLATION_ID = "00000000-0000-4000-8000-000000000000";
-export const PUBLISHER_PRODUCTS = ["electron", "mobil"] as const;
+/** Kurulumun belirteç kümesiyle aynı ürünler (protokol `DOWNLOAD_PRODUCTS`: electron · mobil · backend). */
+export const PUBLISHER_PRODUCTS = DOWNLOAD_PRODUCTS;
 export const PUBLISHER_DEFAULT_MINUTES = 60;
 export const PUBLISHER_MAX_MINUTES = DOWNLOAD_MAX_TTL_MS / 60_000;
 
@@ -19,7 +20,7 @@ export interface PublisherToken {
 
 export class PublisherTokenError extends Error {}
 
-/** Kanal listesi × {electron, mobil}; kanal biçimsiz, ömür 1–70 dk dışı ya da İNDİRME anahtarı yoksa RED. */
+/** Kanal listesi × ürünler; kanal biçimsiz, ömür 1–70 dk dışı ya da İNDİRME anahtarı yoksa RED. */
 export function publisherTokens(keys: KeyStore, g: { channels: readonly string[]; minutes: number; nowMs: number }): PublisherToken[] {
   if (g.channels.length === 0) throw new PublisherTokenError("En az bir kanal verilmeli (--kanal=a,b)");
   for (const c of g.channels) {

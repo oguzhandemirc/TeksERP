@@ -34,6 +34,22 @@ export async function panelPublished(root: string, code: string): Promise<Publis
   return { surum: /^version:\s*(\S+)\s*$/m.exec(f.text)?.[1] ?? null, degisti: f.mtime };
 }
 
+/**
+ * Backend (Dağıtım v2): `backend/son.json` işaretçisindeki imzalı bildirimin sürümü — İMZASIZ okuma, yalnız
+ * görünüm içindir (kurulumun güncelleyicisi imzayı doğrular).
+ */
+export async function backendPublished(root: string, code: string): Promise<Published | null> {
+  const f = await readSmall(path.join(root, "html", code, "backend", "son.json"), 64 * 1024);
+  if (!f) return null;
+  try {
+    const token = (JSON.parse(f.text) as { bildirim?: unknown }).bildirim;
+    const payload = typeof token === "string" ? JSON.parse(Buffer.from(token.split(".")[1] ?? "", "base64url").toString("utf8")) as { surum?: unknown } : null;
+    return { surum: typeof payload?.surum === "string" ? payload.surum : null, degisti: f.mtime };
+  } catch {
+    return { surum: null, degisti: f.mtime };
+  }
+}
+
 /** OTA manifesti: çok parçalı gövdede `manifest` parçası (ya da düz JSON) → extra.expoClient.version. */
 export function otaVersionOf(body: string): string | null {
   const parts = body.split(/\r?\n?--[A-Za-z0-9'()+_,./:=?-]+(?:--)?\r?\n/);
@@ -79,9 +95,9 @@ export interface LedgerRow {
   readonly not: string | null;
 }
 
-/** Yayın defteri TSV'si (`defter/<kod>-YAYIN-DEFTERI.tsv`): son satırlar, en yeni önce. Büyük dosyanın yalnız kuyruğu okunur. */
-export async function ledgerTail(root: string, code: string, rows = LEDGER_ROWS): Promise<LedgerRow[] | null> {
-  const file = path.join(root, "defter", `${code}-YAYIN-DEFTERI.tsv`);
+/** Yayın defteri TSV'si (`defter/<kod>-YAYIN-DEFTERI.tsv`; backend `<kod>-BACKEND-YAYIN-DEFTERI.tsv`): son satırlar, en yeni önce. */
+export async function ledgerTail(root: string, code: string, rows = LEDGER_ROWS, kind: "" | "BACKEND-" = ""): Promise<LedgerRow[] | null> {
+  const file = path.join(root, "defter", `${code}-${kind}YAYIN-DEFTERI.tsv`);
   let text: string;
   try {
     const s = await stat(file);
@@ -122,9 +138,10 @@ export async function releaseOverview(db: Db, root: string | undefined) {
       kod,
       kayitli: k ? { ad: k.ad, tur: k.tur, guncelSurumler: channelVersionsForLease(k) } : null,
       yayinda: mounted && root
-        ? { panel: await panelPublished(root, kod), tabletOta: await tabletOtaPublished(root, kod), tabletApk: await tabletApkPublished(root, kod) }
+        ? { panel: await panelPublished(root, kod), tabletOta: await tabletOtaPublished(root, kod), tabletApk: await tabletApkPublished(root, kod), backend: await backendPublished(root, kod) }
         : null,
       defter: mounted && root ? await ledgerTail(root, kod) : null,
+      defterBackend: mounted && root ? await ledgerTail(root, kod, LEDGER_ROWS, "BACKEND-") : null,
       bildirimler: await listNotices(db, { channel: kod, limit: 10 }),
     });
   }

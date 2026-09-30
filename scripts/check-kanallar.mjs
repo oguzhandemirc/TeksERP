@@ -366,21 +366,21 @@ function sondalar(taban, tabanYollar) {
   const yeniKanal = (o, kod, tur = 'uretim') => {
     const k = JSON.parse(JSON.stringify(as(o)));
     k.tur = tur;
-    k.terfiKaynagi = null;
+    k.terfiKaynagi = 'testfabrika';
     k.ad = `Kanal ${kod}`;
     for (const a of Object.keys(k.yayin)) k.yayin[a] = k.yayin[a].replaceAll('/adnansahin', `/${kod}`);
     k.panel = { appId: `com.ornek.${kod}`, urunAdi: `Urun ${kod}`, paketAdi: `urun-${kod}`, erpAdresi: `http://10.9.8.${kod.length}:4000` };
     k.tablet = { ...k.tablet, androidPaket: `com.ornek.${kod}`, gorunenAd: `Tablet ${kod}`,
       erpAdresi: `http://10.9.9.${kod.length}:4000/api`, otaSertifika: `keystore/ota-certs-${kod}/certificate.pem` };
     // Backend kimliği de AYRIK (urunAdi/pm2Ad her kanalda benzersiz — Faz 2b).
-    k.backend = { urunAdi: `Urun ${kod} Backend`, pm2Ad: `tekserp-backend-${kod}` };
+    k.backend = { urunAdi: `Urun ${kod} Backend`, pm2Ad: `tekserp-backend-${kod}`, hizmetAdi: `TeksERP-Backend-${kod}` };
     o.kanallar[kod] = k;
   };
   const kayitta = (fn) => (d) => jd(d, KAYIT_REL, fn);
   const S = [
     // [ad, beklenen, mutasyon(d, yollar, beyanlar), iz?]
     ['P0 gerçek ağaç YEŞİL', 'yesil', () => {}],
-    ['P1 üçüncü üretim kanalı (aynasız, terfiKaynagi null) benzersiz kimliklerle YEŞİL (kapı aşırı sert değil)', 'yesil', kayitta((o) => yeniKanal(o, 'yenifabrika'))],
+    ['P1 üçüncü üretim kanalı (aynasız, terfi kaynağı testfabrika) benzersiz kimliklerle YEŞİL (kapı aşırı sert değil)', 'yesil', kayitta((o) => yeniKanal(o, 'yenifabrika'))],
     ['P2 runtimeVersion doğru yükseltme (app.json + her kanalın rv + otaManifest) YEŞİL', 'yesil', (d) => {
       jd(d, 'mobil/app.json', (o) => { o.expo.runtimeVersion = '54.3'; });
       jd(d, KAYIT_REL, (o) => {
@@ -447,6 +447,11 @@ function sondalar(taban, tabanYollar) {
     ['N47 backend yayıncısından terfi kapısı çağrısı silindi → KIRMIZI (§5)', 'kirmizi', (d) => { d['deploy/backend-yayinla.mjs'] = d['deploy/backend-yayinla.mjs'].replaceAll('terfiKapisi(', 'baskaKapi('); }, 'terfi kapısı'],
     ['N48 backend yayıncısı VDS kökünü literal taşıyor → KIRMIZI (§3)', 'kirmizi', (d) => { d['deploy/backend-yayinla.mjs'] += "\nconst ESKI_KOK = '/opt/stack/apps/tekserp-guncelleme/html';\n"; }, 'LİTERAL'],
     ['O5 backend yayıncısı VDS yolunu kayıttan okumuyor (bağ noktası yok) → ÖLÇÜLEMEDİ', 'olculemedi', (d) => { d['deploy/backend-yayinla.mjs'] = d['deploy/backend-yayinla.mjs'].replaceAll('.yayin.vdsBackend', '.yayin.baskaYol'); }],
+    ['N49 üretim kanalının terfiKaynagi null (terfisiz üretim yolu) → KIRMIZI', 'kirmizi', kayitta((o) => { o.kanallar.demofabrika.terfiKaynagi = null; }), 'terfi kaynağı ZORUNLU'],
+    ['N50 iki kanal aynı backend.hizmetAdi → KIRMIZI (ikili fark)', 'kirmizi', kayitta((o) => { o.kanallar.demofabrika.backend.hizmetAdi = tf(o).backend.hizmetAdi; }), 'hizmetAdi'],
+    ['N51 hizmet adları yalnız harf büyüklüğünde ayrışıyor → KIRMIZI (Windows duyarsız)', 'kirmizi', kayitta((o) => { o.kanallar.demofabrika.backend.hizmetAdi = tf(o).backend.hizmetAdi.toUpperCase(); }), 'harf büyüklüğünde'],
+    ['N52 hizmet adında boşluk → KIRMIZI', 'kirmizi', kayitta((o) => { tf(o).backend.hizmetAdi = 'TeksERP Backend'; }), 'hizmetAdi'],
+    ['N53 backend bloğunda hizmetAdi yok → KIRMIZI', 'kirmizi', kayitta((o) => { delete tf(o).backend.hizmetAdi; }), 'eksik anahtar'],
     ['O1 kayıt defteri bozuk JSON → ÖLÇÜLEMEDİ', 'olculemedi', (d) => { d[KAYIT_REL] = d[KAYIT_REL].slice(0, 40); }],
     ['O2 update-feed.ts UPDATE_BASE_URL adı değişti → ÖLÇÜLEMEDİ', 'olculemedi', (d) => { d['Electron/shared/update-feed.ts'] = d['Electron/shared/update-feed.ts'].replace('export const UPDATE_BASE_URL', 'export const YAYIN_KOKU_URL'); }],
     ['O3 main.ts setAppUserModelId çağrısı kalktı → ÖLÇÜLEMEDİ', 'olculemedi', (d) => { d['Electron/electron/main.ts'] = d['Electron/electron/main.ts'].replace('app.setAppUserModelId(APP_ID);', 'void 0;'); }],

@@ -285,7 +285,7 @@ process.exit(97);
   }
   // Geçici depo: kapının kendi dosyaları (KOK = depo) + kayıt defteri.
   const depo = path.join(T, 'depo');
-  for (const rel of ['scripts/kanal-kapisi.mjs', 'scripts/lib/kanallar.mjs', 'scripts/lib/surum.mjs', 'scripts/lib/terfi.mjs', 'scripts/lib/yayin-okuma.mjs', 'deploy/kanallar.json']) {
+  for (const rel of ['scripts/kanal-kapisi.mjs', 'scripts/lib/kanallar.mjs', 'scripts/lib/surum.mjs', 'scripts/lib/terfi.mjs', 'scripts/lib/yayin-okuma.mjs', 'scripts/lib/backend-yayin.mjs', 'deploy/kanallar.json']) {
     fs.mkdirSync(path.dirname(path.join(depo, rel)), { recursive: true });
     fs.copyFileSync(path.join(KOK, rel), path.join(depo, rel));
   }
@@ -395,7 +395,7 @@ process.exit(97);
   const sondaYukle = async (degistir) => {
     const d = path.join(T, `sonda-${Math.random().toString(36).slice(2)}`);
     fs.mkdirSync(d);
-    for (const f of ['kanallar.mjs', 'surum.mjs', 'yayin-okuma.mjs']) fs.copyFileSync(path.join(KOK, 'scripts/lib', f), path.join(d, f));
+    for (const f of ['kanallar.mjs', 'surum.mjs', 'yayin-okuma.mjs', 'backend-yayin.mjs']) fs.copyFileSync(path.join(KOK, 'scripts/lib', f), path.join(d, f));
     const once = fs.readFileSync(path.join(KOK, 'scripts/lib/terfi.mjs'), 'utf8');
     const sonra = degistir(once);
     if (sonra === once) throw new Error('sonda mutasyonu UYGULANMADI');
@@ -405,7 +405,7 @@ process.exit(97);
   const sondalar = [
     ['① HEAD==etiket şartı sökülür → "HEAD ≠ panel-vX" uyumlu olur', (m) => m.replace('else if (git.surumEtiketi !== git.bas)', 'else if (false)'),
       (t) => t.terfiHukmu({ kod: 'adnansahin', urun: 'panel', surum: '1.3.4', kaynak: 'testfabrika', git: { ...gitTam, surumEtiketi: ESKI }, kaynaklar: panelVar('1.3.4') })],
-    ['③ kaynak kıyası sökülür → "kaynak geride" uyumlu olur', (m) => m.replace('karsilastir(k.surum, surum) >= 0', 'true'),
+    ['③ kaynak kıyası sökülür → "kaynak geride" uyumlu olur', (m) => m.replace('return c !== null && c >= 0;', 'return true;'),
       (t) => t.terfiHukmu({ kod: 'adnansahin', urun: 'panel', surum: '1.3.4', kaynak: 'testfabrika', git: gitTam, kaynaklar: panelVar('1.3.3') })],
     ['kaçış cümle denetimi sökülür → boş cümle uyumlu olur', (m) => m.replace('if (!c.gecerli) {\n      return { sonuc: \'ihlal\'', 'if (false) {\n      return { sonuc: \'ihlal\''),
       (t) => t.terfiHukmu({ kod: 'adnansahin', urun: 'panel', surum: '1.3.4', kaynak: 'testfabrika', git: null, kaynaklar: null, atla: '' })],

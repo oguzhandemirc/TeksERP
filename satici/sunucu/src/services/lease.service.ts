@@ -6,6 +6,7 @@ import type { Hak, Kurulum, YaptirimEylemi, ZincirKarari } from "@prisma/client"
 import { z } from "zod";
 import {
   DAY_MS,
+  DOWNLOAD_PRODUCTS,
   IsoTimeSchema,
   LeaseSchema,
   LicenseResponseSchema,
@@ -26,6 +27,7 @@ import type { Db, Tx } from "../lib/prisma";
 import { channelVersionsForLease } from "./channel.service";
 import { leaseCloudFields } from "./cloud-entitlement";
 import { moduleKeyGrants } from "./module-key.service";
+import { leaseUpdatePolicy } from "./update-policy.service";
 import type { VendorContext } from "./context";
 
 export interface SanctionState {
@@ -142,6 +144,7 @@ export async function issueLease(tx: Tx, ctx: VendorContext, g: IssueLeaseInput)
     kanal: { kod: installation.kanalKodu, guncelSurumler: channelVersionsForLease(channel) },
     altSertifika: key.certificate,
     ...(grants.length > 0 ? { modulAnahtarlari: grants } : {}),
+    guncelleme: leaseUpdatePolicy(installation, issuedAt.getTime(), expiresAt.getTime()),
   };
   const token = signDocument({ typ: TYP.KIRA, schema: LeaseSchema, payload, key: { kid: key.kid, privateKey: key.privateKey } });
   await tx.kira.create({
@@ -163,8 +166,8 @@ export async function issueLease(tx: Tx, ctx: VendorContext, g: IssueLeaseInput)
 }
 
 /**
- * İndirme belirteçleri (kanalın electron/ ve mobil/ önekleri). Verilmez: K1 (güncelleme donuk),
- * bakım bitmiş (son hak edilen sürümde kalır), kurulum ETKİN değil, indirme anahtarı yok.
+ * İndirme belirteçleri (kanalın electron/ · mobil/ · backend/ önekleri — `DOWNLOAD_PRODUCTS`). Verilmez: K1
+ * (güncelleme donuk), bakım bitmiş (son hak edilen sürümde kalır), kurulum ETKİN değil, indirme anahtarı yok.
  */
 export function downloadTokens(
   ctx: VendorContext,
@@ -177,7 +180,7 @@ export function downloadTokens(
   const key = ctx.keys.downloadKey(nowMs);
   if (!key) return [];
   const exp = msToIso(nowMs + ctx.config.INDIRME_OMUR_DK * 60_000);
-  return ["electron", "mobil"].map((dir) => {
+  return DOWNLOAD_PRODUCTS.map((dir) => {
     const yolOneki = `/${installation.kanalKodu}/${dir}/`;
     return {
       yolOneki,

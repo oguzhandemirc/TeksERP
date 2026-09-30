@@ -25,6 +25,8 @@ export const PORTAL_PERMISSIONS = {
   "yaptirim:agir": ADMIN,
   /** Taşıma onay/ret, kopya uyarısı kapatma, DR geri alma. */
   "kurulum:yonet": VENDOR,
+  /** Backend güncelleme politikası (kip · pencere · sabitleme — Dağıtım v2); kiraya imzalı gider. */
+  "guncelleme:yaz": VENDOR,
   /** Kurulum iptali ve iptalin geri alınması. */
   "kurulum:iptal": ADMIN,
   /** Kanal ana verisi (kod · ad · tür · güncel sürümler). */

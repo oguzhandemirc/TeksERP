@@ -46,11 +46,13 @@ export const TABLET_ANAHTARLARI = ['androidPaket', 'gorunenAd', 'erpAdresi', 'ru
 /**
  * Backend paketinin (paketle.ps1 -Musteri <kod>) müşteriye özel dağıtım kimliği. Faz 2b:
  *   · urunAdi — /health + PAKET.json'da görünen backend adı (filigran; her kanalda AYRIK);
- *   · pm2Ad   — sunucudaki pm2 süreç adı (TEKSERP_PM2_AD; iki kurulum çakışmasın — her kanalda AYRIK).
+ *   · pm2Ad   — sunucudaki pm2 süreç adı (TEKSERP_PM2_AD; iki kurulum çakışmasın — her kanalda AYRIK);
+ *   · hizmetAdi — backend'in Windows hizmet adı (Dağıtım v2, TEKSERP_HIZMET_AD; aynı makinede iki kanal yan yana —
+ *     her kanalda AYRIK, Windows hizmet adı büyük/küçük harf duyarsız olduğu için duyarsız ölçülür).
  * DAVRANIŞ TAŞIMAZ: bayrak/ayar değil, dağıtım kimliği (feed'ler gibi). Backend YAYIN yolları
  * (feed · son.json · VDS · defter) panel/tablet gibi `yayin` bloğundadır (Dağıtım v2, `deploy/backend-yayinla.mjs`).
  */
-export const BACKEND_ANAHTARLARI = ['urunAdi', 'pm2Ad'];
+export const BACKEND_ANAHTARLARI = ['urunAdi', 'pm2Ad', 'hizmetAdi'];
 
 /**
  * İki kanal arasında AYNI OLAMAYAN alanlar. `runtimeVersion` bilerek YOK: uyum
@@ -62,7 +64,7 @@ export const AYRIK_ALANLAR = [
   ...YAYIN_ANAHTARLARI.map((a) => `yayin.${a}`),
   'panel.appId', 'panel.urunAdi', 'panel.paketAdi', 'panel.erpAdresi',
   'tablet.androidPaket', 'tablet.gorunenAd', 'tablet.erpAdresi', 'tablet.otaSertifika',
-  'backend.urunAdi', 'backend.pm2Ad',
+  'backend.urunAdi', 'backend.pm2Ad', 'backend.hizmetAdi',
 ];
 
 const al = (nesne, yol) => yol.split('.').reduce((o, k) => (o == null ? undefined : o[k]), nesne);
@@ -168,11 +170,12 @@ export function kayitHatalari(kayit) {
         h.push(`${on}: aynası "${k.ayna}" terfiKaynagi "${ayna.terfiKaynagi}" — "${kod}" olmalı (üretim kanalı yalnız hazırlık aynasından terfi alır; K5)`);
       }
     }
-    // terfiKaynagi: null (terfi yok — tek kanallı kurulum) ya da aynası bu kanal olan HAZIRLIK kanalı.
-    if (k.tur === 'uretim' && k.terfiKaynagi !== null) {
+    // terfiKaynagi ZORUNLU (yönetici kararı 2026-10-01; kök kural "üretim kanalına yalnız terfi etiketli commit"):
+    // kayıtlı bir HAZIRLIK kanalı. Bir hazırlık kanalı birden çok üretim kanalının kaynağı olabilir.
+    if (k.tur === 'uretim') {
       const kaynak = typeof k.terfiKaynagi === 'string' ? kanallar[k.terfiKaynagi] : undefined;
-      if (!kaynak || kaynak.tur !== 'hazirlik' || kaynak.ayna !== kod) {
-        h.push(`${on}: terfiKaynagi "${k.terfiKaynagi}" aynası "${kod}" olan kayıtlı bir hazırlık kanalı değil (null ya da hazırlık kanal kodu)`);
+      if (!kaynak || kaynak.tur !== 'hazirlik') {
+        h.push(`${on}: terfiKaynagi "${k.terfiKaynagi}" kayıtlı bir hazırlık kanalı değil — üretim kanalının terfi kaynağı ZORUNLU (K5)`);
       }
     }
 
@@ -190,6 +193,11 @@ export function kayitHatalari(kayit) {
         if (typeof v !== 'string' || !v.trim()) h.push(`${on}: ${blok}.${a} boş ya da metin değil`);
       }
     }
+    // Windows hizmet adı: harfle başlar, boşluk/bölü/kabuk yok (sc.exe ve hizmet konağı argümanı).
+    const hizmet = k.backend?.hizmetAdi;
+    if (typeof hizmet === 'string' && !/^[A-Za-z][A-Za-z0-9._-]{1,59}$/.test(hizmet)) {
+      h.push(`${on}: backend.hizmetAdi "${hizmet}" biçimi tutmuyor (harfle başlar; harf/rakam/nokta/tire/alt çizgi, 2-60)`);
+    }
     // pm2 adı sunucuda süreç/servis kimliğidir: boşluk/ters bölü/kabuk taşıyamaz.
     const pm2 = k.backend?.pm2Ad;
     if (typeof pm2 === 'string' && !/^[a-zA-Z0-9._-]{2,60}$/.test(pm2)) {
@@ -206,6 +214,17 @@ export function kayitHatalari(kayit) {
       h.push(`${on}: panel.erpAdresi "${panelErp}" biçimi tutmuyor (http(s)://<host>[:port], /api yok, sonda / yok)`);
     }
     if (typeof panelErp === 'string' && /(localhost|127\.0\.0\.1)/i.test(panelErp)) h.push(`${on}: panel.erpAdresi localhost olamaz`);
+  }
+
+  // Windows hizmet adları büyük/küçük harf DUYARSIZDIR: ikili fark (tam eşitlik) onları kaçırırdı.
+  const hizmetler = new Map();
+  for (const kod of kodlar) {
+    const v = kanallar[kod]?.backend?.hizmetAdi;
+    if (typeof v !== 'string' || !v) continue;
+    const a = v.toLowerCase();
+    if (hizmetler.has(a) && kanallar[hizmetler.get(a)]?.backend?.hizmetAdi !== v) {
+      h.push(`ÇAKIŞMA: backend.hizmetAdi "${v}" ile "${kanallar[hizmetler.get(a)].backend.hizmetAdi}" (${hizmetler.get(a)}) yalnız harf büyüklüğünde ayrışıyor — Windows'ta AYNI hizmet`);
+    } else hizmetler.set(a, kod);
   }
 
   // İKİLİ FARK — iki kanal hiçbir dağıtım kimliğini paylaşamaz.
@@ -435,6 +454,7 @@ export function backendPaketleAyarlari(kod, kanal) {
   return {
     TEKSERP_PM2_AD: kanal.backend.pm2Ad,
     TEKSERP_BACKEND_URUN: kanal.backend.urunAdi,
+    TEKSERP_HIZMET_AD: kanal.backend.hizmetAdi,
   };
 }
 
