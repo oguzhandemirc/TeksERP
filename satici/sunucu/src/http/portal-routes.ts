@@ -1,5 +1,6 @@
 // SATICI PORTALI JSON API'si — tailnet ve ERİŞİM (Cloudflare Access arkası) dinleyicilerinde, /portal/api
 // altında (web arayüzü 1f). Kök parolası taşıyan rota `kokParolasi: true` beyan eder: yalnız tailnet/geri döngü.
+// ERİŞİM'e yalnız erisim-rotalari.ts listesindeki rotalar bağlanır (opt-in): yeni rota orada ayrıca karar ister.
 // Her rota bir izin beyan eder (roles.ts); her yazma işlem kimliğiyle (clientToken) idempotenttir.
 // Yol parametresi gövde özetine girer (`_yol`): aynı kimlik başka kayıtta kullanılamaz.
 import { DISTRIBUTION_PORTAL_ROUTES } from "./distribution-routes";

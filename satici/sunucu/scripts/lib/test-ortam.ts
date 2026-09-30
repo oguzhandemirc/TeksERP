@@ -33,6 +33,7 @@ import { passwordBuffer, subKeyFileFor, wrapPrivateKey, writeKeyFileExclusive } 
 import { KeyStore } from "../../src/keys/key-store";
 import { ActivationCodeHasher } from "../../src/keys/code-pepper";
 import { loadEnvFile } from "../../src/lib/env";
+import { runAsCli } from "../../src/lib/request-scope";
 import { PortalSecretBox } from "../../src/portal/secret-box";
 import { ModuleKeyVault } from "../../src/keys/module-vault";
 import type { VendorContext } from "../../src/services/context";
@@ -233,7 +234,7 @@ export async function kurulumFiksturu(
     maintenanceUntil: new Date(Date.now() + 365 * DAY_MS),
     actor: "bekci",
   });
-  await svc.issueEntitlementVersion(ctx, { entitlementId: hak.id, password: passwordBuffer(TEST_KOK_PAROLASI), reason: "bekçi fikstürü", actor: "bekci" });
+  await runAsCli(() => svc.issueEntitlementVersion(ctx, { entitlementId: hak.id, password: passwordBuffer(TEST_KOK_PAROLASI), reason: "bekçi fikstürü", actor: "bekci" }));
   const kod = await svc.createActivationCode(ctx, { installationDbId: kurulum.id, actor: "bekci" });
   return { musteriId, tesisId, kurulumDbId: kurulum.id, kurulumId: kurulum.kurulumId, hakId: hak.id, lisansNo: hak.lisansNo, kod: kod.code };
 }

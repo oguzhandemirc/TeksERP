@@ -20,6 +20,7 @@ import path from "node:path";
 import { DAY_MS, EntitlementSchema, TYP, signDocument, verifyEntitlement } from "../src/lisans-protokol";
 import { passwordBuffer, wrapPrivateKey, writeKeyFileExclusive } from "../src/keys/key-files";
 import { PORTAL_MODULE_KEYS } from "../src/portal/module-catalog";
+import { runAsCli } from "../src/lib/request-scope";
 import { MODULE_SETTING_KEYS } from "../../../Teks-Erp/src/constants/module-flags";
 import { hakYuku, sertifikaBas, sertifikaYuku } from "../../../Teks-Erp/scripts/lib/lisans-fikstur";
 import {
@@ -178,7 +179,9 @@ async function main(): Promise<void> {
     kontrol("§6 sertifikada olmayan modül → 409 (protokol BAYI_TAVAN_MODUL), sürüm yazılmadı", dokumali.status === 409 && protokolKodu === "BAYI_TAVAN_MODUL" && hak2.guncelSurum === 2, `${dokumali.status} ${protokolKodu} v${hak2.guncelSurum}`);
 
     console.log("\n§7 imzadan SONRA daralan tavan — kilit altında yeniden denetim");
-    const hazir = await dealerSvc.prepareDealerEntitlementVersion(ctx, { dealerId: bayiId, entitlementId: hakId, changes: { modules: [URETIM, FINANS] }, password: passwordBuffer(BAYI_PAROLASI), reason: "yarış", actor: "bekci" });
+    const hazir = await runAsCli(() =>
+      dealerSvc.prepareDealerEntitlementVersion(ctx, { dealerId: bayiId, entitlementId: hakId, changes: { modules: [URETIM, FINANS] }, password: passwordBuffer(BAYI_PAROLASI), reason: "yarış", actor: "bekci" }),
+    );
     await prisma.$transaction((tx) => dealerSvc.setDealerCeilingTx(tx, { dealerId: bayiId, ceiling: { modules: [URETIM], classes: ["URETIM"], installationCount: 2, channels: [KANAL] }, reason: "imza sırasında daraldı", actor: "bekci" }));
     let yazim = "";
     try {

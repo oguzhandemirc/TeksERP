@@ -3,7 +3,8 @@
 //   (1) istek ERİŞİM dinleyicisinin soketine gelmiş olmalı;
 //   (2) Access yapılandırması var (takım alanı + AUD) ve `Cf-Access-Jwt-Assertion` doğrulanıyor — HER istekte,
 //       statik dosyalar dahil; kaynak IP'ye, Host başlığına, istemci beyanına güvenilmez;
-//   (3) kök parolalı rota bu yolda YOK: tailnet kaynağı ara katmanı (requireTailnet) gövde okunmadan 404 verir.
+//   (3) YALNIZ izin listesindeki rotalar (erisim-rotalari.ts, OPT-IN): kök parolalı ve hassas (kullanıcı yönetimi)
+//       rota listeye giremez, liste dışı istek gövde okunmadan 404; kök imzası ayrıca imza boğazında reddedilir.
 // Arkasında tailnet'le aynı portal (parola + TOTP, oturum ERISIM dinleyicisine bağlı) ve aynı web arayüzü.
 import type { AddressInfo } from "node:net";
 import express, { type Express, type NextFunction, type Request, type Response } from "express";
@@ -13,7 +14,7 @@ import { createDistributionRawRouter } from "./distribution-raw";
 import { accessLog, errorHandler, notFound } from "./error-handler";
 import { createPortalRouter } from "./portal-http";
 import { VENDOR_PORTAL_ROUTES } from "./portal-routes";
-import { arrivedOn, requireTailnet } from "./tailnet-app";
+import { arrivedOn } from "./tailnet-app";
 import { createWebAppRouter } from "./web-static";
 
 type ListenerOf = () => AddressInfo | string | null;
@@ -21,8 +22,6 @@ type ListenerOf = () => AddressInfo | string | null;
 export interface AccessAppDeps {
   /** Bu uygulamanın (ERİŞİM) dinleyicisi. */
   readonly listener: ListenerOf;
-  /** Tailnet dinleyicisi — kök parolalı rota kapısı onun soketini ister (burada hiçbir istek geçemez). */
-  readonly tailnetListener: ListenerOf;
   /** null → Access yapılandırılmamış: genel portal KAPALI, her istek 404. */
   readonly verifier: AccessVerifier | null;
 }
@@ -53,7 +52,7 @@ export function requireOwnListener(listener: ListenerOf) {
   };
 }
 
-/** Access JWT kapısı; geçen isteğin kimliği `res.locals.erisimKimligi`nde (yalnız bilgi, karar vermez). */
+/** Access JWT kapısı; geçen isteğin kimliği `res.locals.erisimKimligi`nde — portal işleyicisi bu kimlik olmadan koşmaz, denetim satırına e-postası yazılır. */
 export function requireAccessJwt(verifier: AccessVerifier | null, log = rejectionLogger()) {
   return (req: Request, res: Response, next: NextFunction): void => {
     if (!verifier) {
@@ -86,9 +85,8 @@ export function createAccessApp(ctx: VendorContext, deps: AccessAppDeps): Expres
   app.use(accessLog);
   app.use(requireOwnListener(deps.listener));
   app.use(requireAccessJwt(deps.verifier));
-  const rootPasswordGate = requireTailnet(deps.tailnetListener, ctx.config.TAILNET_LOOPBACK === "1");
   app.use("/portal/api/ham", createDistributionRawRouter(ctx, "ERISIM"));
-  app.use("/portal/api", createPortalRouter(ctx, "ERISIM", VENDOR_PORTAL_ROUTES, { rootPasswordGate }));
+  app.use("/portal/api", createPortalRouter(ctx, "ERISIM", VENDOR_PORTAL_ROUTES));
   app.get("/", (_req: Request, res: Response) => {
     res.set("Cache-Control", "no-store").redirect(302, "/portal/");
   });

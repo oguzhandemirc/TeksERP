@@ -30,3 +30,14 @@ export type PortalPermission = keyof typeof PORTAL_PERMISSIONS;
 export function roleHas(role: PortalRole | undefined, permission: PortalPermission): boolean {
   return role !== undefined && (PORTAL_PERMISSIONS[permission] as readonly PortalRole[]).includes(role);
 }
+
+/**
+ * Yalnız tailnet/geri döngü oturumunda kullanılabilen izinler (hassas sınıf: hesap açma, TOTP ve parola sıfırlama
+ * sırları Cloudflare'den geçmez). Sunucudaki `TAILNET_ONLY_PERMISSIONS` aynası; ERİŞİM oturumunda ekran çizilmez.
+ */
+export const TAILNET_ONLY_PERMISSIONS: readonly PortalPermission[] = ["kullanici:yonet"];
+
+/** Rol izni + oturumun dinleyicisi: ERİŞİM (Cloudflare Access arkası genel yol) oturumunda hassas izin yok. */
+export function canUse(role: PortalRole | undefined, permission: PortalPermission, listener: "TAILNET" | "GENEL" | "ERISIM" | undefined): boolean {
+  return roleHas(role, permission) && !(listener === "ERISIM" && TAILNET_ONLY_PERMISSIONS.includes(permission));
+}

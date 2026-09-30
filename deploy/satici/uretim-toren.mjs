@@ -12,11 +12,15 @@
 // sorar (TTY yoksa törenin stdin'inde kalan satırlar ona geçer). Alt süreçler yalın ortamla koşar (ANAHTAR_DIZINI,
 // GUVEN_CAPASI_DOSYASI, DATABASE_URL, NODE_OPTIONS geçmez). Ekrana yalnız kid + açık anahtar + parmak izi + sonraki adım.
 // Hedef dizin VARSA dokunulmaz; anahtarlar `<hedef>.yarim-<pid>`de kurulur ve en sonda TEK rename ile hedefe geçer
-// (hepsi ya da hiçbiri — yarım kalan dizin, düz ALT/İNDİRME taşıdığı için silinir).
+// (hepsi ya da hiçbiri — yarım kalan dizin, düz ALT/İNDİRME taşıdığı için silinir). TOCTOU: yol boyunca sembolik bağ
+// RED (lstat; root'a ait sistem bağı hariç), üst dizin bizim ve grup/başkalarına kapalı, yarım dizin recursive OLMADAN
+// yaratılır (varsa RED), hedef rename'den hemen önce yeniden ölçülüp özel mkdir ile sahiplenilir, dosyalar `wx`.
+// Kaynak: ağaç TEMİZ (git status boş) ve HEAD origin/main'de ya da `--etiket=<ad>` etiketinin commit'i; npm ls hatasız —
+// değilse RED (parola sorulmadan). HEAD sha + package-lock özetleri ekrana ve künyeye yazılır.
 //
-// Kullanım (repo kökünden; önkoşul: `cd satici/sunucu && npm ci` ve `cd Teks-Erp && npm ci`):
+// Kullanım (repo kökünden; önkoşul: `git fetch` + origin/main · `cd satici/sunucu && npm ci` · `cd Teks-Erp && npm ci`):
 //   node deploy/satici/uretim-toren.mjs [--dizin=~/.tekserp/satici-uretim] [--yil=<YYYY>] [--alt-gun=180]
-//                                      [--ind-gun=365] [--moduller=<a.b,c.d|yok>] [--usb=<USB kökü>]
+//                                      [--ind-gun=365] [--moduller=<a.b,c.d|yok>] [--usb=<USB kökü>] [--etiket=<git etiketi>]
 //                                      [--paket-komutu="<betik> <argümanlar; {kid} {dizin} yer tutucu>"]
 //   node deploy/satici/uretim-toren.mjs usb-kopyala --usb=/Volumes/<USB> [--dizin=…]
 //       Var olan ŞİFRELİ dosyaları + açık künyeyi + BENIOKU'yu USB'ye kopyalar ve özetleri doğrular; HİÇBİR ŞEY üretmez.
@@ -49,7 +53,7 @@ const SUNUCU_SIRLARI = ["portal-totp.key", "etkinlestirme-kodu.pepper", "modul-k
 const PAKET_KOMUTU = "Teks-Erp/scripts/build-korumali-imza.ts anahtar-uret --kid={kid} --dizin={dizin} --json";
 const PAROLA_ARG = /^--[^=]*(parola|password|sifre|secret)/i;
 const KOMUTLAR = {
-  toren: ["dizin", "yil", "alt-gun", "ind-gun", "moduller", "usb", "paket-komutu"],
+  toren: ["dizin", "yil", "alt-gun", "ind-gun", "moduller", "usb", "etiket", "paket-komutu"],
   "usb-kopyala": ["dizin", "usb"],
   dogrula: ["dizin"],
 };
@@ -286,12 +290,104 @@ function aliciParmakIzi(dosya) {
   return crypto.createHash("sha256").update(ham).digest().subarray(0, 8).toString("hex");
 }
 
-function kaynak() {
-  const git = (args) => spawnSync("git", ["-C", REPO, ...args], { encoding: "utf8" });
-  const sha = git(["rev-parse", "--short=12", "HEAD"]);
-  const durum = git(["status", "--porcelain", "--", "satici/sunucu", "Teks-Erp/scripts", "Teks-Erp/src", "deploy/satici"]);
-  return { commit: sha.status === 0 ? sha.stdout.trim() : "ölçülemedi", kirli: durum.status === 0 ? durum.stdout.trim().length > 0 : null };
+/** Kilit dosyaları: künyeye ve ekrana özetleri (tören hangi bağımlılık ağacıyla koştu). */
+const KILITLER = ["satici/sunucu/package-lock.json", "Teks-Erp/package-lock.json"];
+
+/**
+ * Tören yalnız DONMUŞ kaynaktan koşar (parola sorulmadan önce, RED — uyarı değil): ağaç temiz (izlenen + izlenmeyen),
+ * HEAD origin/main'de ya da `--etiket`in gösterdiği commit; iki projede `npm ls --all` hatasız (npm ci sonrası).
+ */
+function kaynakDenetle(etiket) {
+  const git = (args) => spawnSync("git", ["-C", REPO, ...args], { encoding: "utf8", env: altOrtam() });
+  const bas = git(["rev-parse", "--verify", "HEAD^{commit}"]);
+  if (bas.status !== 0) throw new TorenHatasi(`Kaynak ölçülemedi (git rev-parse HEAD): ${(bas.stderr || "").trim().slice(0, 160)}`, 2);
+  const commit = bas.stdout.trim();
+  const durum = git(["status", "--porcelain", "--untracked-files=all"]);
+  if (durum.status !== 0) throw new TorenHatasi(`Kaynak ölçülemedi (git status): ${(durum.stderr || "").trim().slice(0, 160)}`, 2);
+  const kirli = durum.stdout.split("\n").filter(Boolean);
+  if (kirli.length > 0) {
+    throw new TorenHatasi(`Ağaç KİRLİ (${kirli.length} değişiklik; ilk: ${kirli[0].trim()}) — tören yalnız temiz ağaçta koşar: git status boş olmalı`, 2);
+  }
+  let dayanak;
+  if (etiket !== undefined) {
+    if (!/^[A-Za-z0-9][A-Za-z0-9._/-]{0,100}$/.test(etiket)) throw new TorenHatasi("--etiket biçimsiz", 2);
+    const e = git(["rev-parse", "--verify", "--quiet", `refs/tags/${etiket}^{commit}`]);
+    if (e.status !== 0 || e.stdout.trim() !== commit) throw new TorenHatasi(`--etiket=${etiket} HEAD'i göstermiyor (${e.status === 0 ? e.stdout.trim().slice(0, 12) : "etiket yok"} ≠ ${commit.slice(0, 12)})`, 2);
+    dayanak = `etiket:${etiket}`;
+  } else {
+    const ana = git(["rev-parse", "--verify", "--quiet", "refs/remotes/origin/main^{commit}"]);
+    if (ana.status !== 0) throw new TorenHatasi("origin/main yok — önce git fetch (ya da --etiket=<ad>)", 2);
+    if (git(["merge-base", "--is-ancestor", commit, "refs/remotes/origin/main"]).status !== 0) {
+      throw new TorenHatasi(`HEAD (${commit.slice(0, 12)}) origin/main'de DEĞİL — git fetch && git switch --detach origin/main (ya da açık --etiket=<ad>)`, 2);
+    }
+    dayanak = "origin/main";
+  }
+  const kilitler = Object.fromEntries(KILITLER.map((k) => [k, fs.existsSync(path.join(REPO, k)) ? sha256(path.join(REPO, k)) : "YOK"]));
+  for (const [proje, ad] of [
+    [SATICI, "satici/sunucu"],
+    [TEKS, "Teks-Erp"],
+  ]) {
+    const r = spawnSync("npm", ["ls", "--all"], { cwd: proje, env: altOrtam(), encoding: "utf8", timeout: ALT_SURE_MS });
+    if (r.status !== 0) {
+      const neden = r.error ? r.error.message : (r.stderr || r.stdout || "").trim().split("\n").find((l) => /ERR|missing|invalid|extraneous/i.test(l)) ?? `çıkış ${r.status}`;
+      throw new TorenHatasi(`${ad}: npm ls --all hatalı (${neden.slice(0, 160)}) — bağımlılıklar kilit dosyasıyla aynı değil: (cd ${ad} && npm ci)`, 2);
+    }
+  }
+  return { commit, dayanak, kirli: false, kilitler, npmLs: "hatasız" };
 }
+
+// ---------------------------------------------------------------- yol güvenliği (TOCTOU)
+const lstatYa = (p) => {
+  try {
+    return fs.lstatSync(p);
+  } catch (e) {
+    if (e.code === "ENOENT") return null;
+    throw e;
+  }
+};
+
+/** Kökten `hedef`e her VAR bileşen gerçek dizin; sembolik bağ RED (root'a ait sistem bağı — macOS /var · /tmp — hariç). */
+function yolDenetle(hedef) {
+  let yol = path.parse(hedef).root;
+  for (const parca of path.resolve(hedef).split(path.sep).filter(Boolean)) {
+    yol = path.join(yol, parca);
+    const st = lstatYa(yol);
+    if (st === null) return;
+    if (st.isSymbolicLink()) {
+      if (st.uid === 0) continue;
+      throw new TorenHatasi(`Yolda sembolik bağ: ${yol} — tören bağ izlemez; gerçek yolu ver`, 2);
+    }
+    if (!st.isDirectory() && yol !== path.resolve(hedef)) throw new TorenHatasi(`Yol bileşeni dizin değil: ${yol}`, 2);
+  }
+}
+
+/** Üst dizin: eksik bileşenler TEK TEK (recursive değil) 0700 yaratılır; sonuç bizim, gerçek dizin, grup/başkalarına kapalı. */
+function ustHazirla(ust) {
+  yolDenetle(ust);
+  const eksik = [];
+  for (let p = ust; lstatYa(p) === null; p = path.dirname(p)) eksik.unshift(p);
+  for (const d of eksik) fs.mkdirSync(d, { mode: 0o700 });
+  const st = fs.lstatSync(ust);
+  if (!st.isDirectory() || st.isSymbolicLink()) throw new TorenHatasi(`Üst dizin gerçek dizin değil: ${ust}`, 2);
+  if (typeof process.getuid === "function" && st.uid !== process.getuid()) throw new TorenHatasi(`Üst dizin başka kullanıcının: ${ust}`, 2);
+  if ((st.mode & 0o022) !== 0) throw new TorenHatasi(`Üst dizine grup/başkaları yazabiliyor (${(st.mode & 0o777).toString(8)}): ${ust} — chmod go-w`, 2);
+  yolDenetle(ust);
+}
+
+/** Recursive OLMADAN dizin yaratır; varsa (araya giren dizin ya da bağ) RED. */
+function ozelDizin(p) {
+  try {
+    fs.mkdirSync(p, { mode: 0o700 });
+  } catch (e) {
+    if (e.code === "EEXIST") throw new TorenHatasi(`Araya giren yol: ${p} tören başladıktan sonra doğdu — dokunulmadı`);
+    throw e;
+  }
+  const st = fs.lstatSync(p);
+  if (!st.isDirectory() || st.isSymbolicLink()) throw new TorenHatasi(`Yaratılan dizin gerçek dizin değil: ${p}`);
+}
+
+/** Dosya YALNIZ yoksa yazılır (`wx`, 0600): araya giren dosya/bağ ezilmez. */
+const dosyaYaz = (p, icerik) => fs.writeFileSync(p, icerik, { mode: 0o600, flag: "wx" });
 
 function modulListesi(deger) {
   if (deger === "yok") return [];
@@ -305,7 +401,7 @@ function modulListesi(deger) {
 }
 
 // ---------------------------------------------------------------- tören
-function onkosullar(hedef, usb) {
+function onkosullar(hedef, usb, etiket) {
   if (Number(process.versions.node.split(".")[0]) < 22) throw new TorenHatasi(`Node ≥ 22 gerekli (${process.versions.node})`, 2);
   for (const [proje, ad] of [
     [SATICI, "satici/sunucu"],
@@ -313,13 +409,16 @@ function onkosullar(hedef, usb) {
   ]) {
     if (!fs.existsSync(path.join(proje, "node_modules", "tsx", "package.json"))) throw new TorenHatasi(`Önkoşul: ${ad} bağımlılıkları yok — (cd ${ad} && npm ci)`, 2);
   }
-  if (fs.existsSync(hedef)) throw new TorenHatasi(`Hedef zaten var: ${hedef} — tören var olan anahtarların üstüne YAZMAZ (rotasyon yeni kid ile: docs/ops/URETIM-SATICI-TOREN.md §6)`, 2);
+  const kay = kaynakDenetle(etiket);
+  yolDenetle(hedef);
+  if (lstatYa(hedef) !== null) throw new TorenHatasi(`Hedef zaten var: ${hedef} — tören var olan anahtarların üstüne YAZMAZ (rotasyon yeni kid ile: docs/ops/URETIM-SATICI-TOREN.md §6)`, 2);
   const ust = path.dirname(hedef);
-  const yarimlar = fs.existsSync(ust) ? fs.readdirSync(ust).filter((n) => n.startsWith(`${path.basename(hedef)}.yarim-`)) : [];
+  const yarimlar = lstatYa(ust)?.isDirectory() ? fs.readdirSync(ust).filter((n) => n.startsWith(`${path.basename(hedef)}.yarim-`)) : [];
   if (yarimlar.length > 0) {
     throw new TorenHatasi(`Yarım kalmış tören dizini var: ${path.join(ust, yarimlar[0])} — içinde düz ALT/İNDİRME anahtarı olabilir; sil (rm -rf) ve yeniden başla`, 2);
   }
   if (usb !== undefined) usbHedefiDenetle(usb);
+  return kay;
 }
 
 function usbHedefiDenetle(usb) {
@@ -337,14 +436,14 @@ async function toren(bayraklar) {
   const moduller = modulListesi(bayraklar.get("moduller"));
   const kid = { kok: `kok-${yil}-1`, alt: `alt-${yil}-1`, ind: `ind-${yil}`, paket: `paket-${yil}` };
   const paketSablonu = bayraklar.get("paket-komutu") || PAKET_KOMUTU;
-  onkosullar(hedef, usb);
+  const kay = onkosullar(hedef, usb, bayraklar.get("etiket"));
   paketKomutu(paketSablonu, kid.paket, "{dizin}");
-  const kay = kaynak();
   const toplam = usb ? 11 : 10;
   const adim = (n, baslik) => process.stdout.write(`[${n}/${toplam}] ${baslik}\n`);
 
   console.log("TeksERP üretim satıcısı — anahtar töreni");
-  console.log(`  kaynak : ${kay.commit} (kirli: ${kay.kirli === null ? "ölçülemedi" : kay.kirli ? "EVET — temiz ağaçta koşmalıydın" : "hayır"})`);
+  console.log(`  kaynak : ${kay.commit} (temiz · ${kay.dayanak} · npm ls ${kay.npmLs})`);
+  for (const [k, oz] of Object.entries(kay.kilitler)) console.log(`  kilit  : ${k} sha256 ${oz}`);
   console.log(`  hedef  : ${hedef}`);
   console.log(`  USB    : ${usb ?? "verilmedi — sonra: uretim-toren.mjs usb-kopyala --usb=<yol>"}`);
   console.log(`  kid'ler: ${kid.kok} · ${kid.alt} (${altGun} gün) · ${kid.ind} (${indGun} gün) · ${kid.paket} · modül: ${moduller.join(", ") || "yok"}`);
@@ -354,9 +453,19 @@ async function toren(bayraklar) {
   adim(2, "Kök parolası (kâğıda yazılacak; PAKET parolasını 7. adımda PAKET aracı kendisi sorar)");
   const parolalar = [];
   const yarim = `${hedef}.yarim-${process.pid}`;
+  // Yalnız BİZİM yarattığımız yollar silinir: araya giren dizin/bağ (başkasının) dokunulmadan kalır.
+  let yarimBizim = false;
+  let hedefBizim = false;
   const temizlik = () => {
     for (const p of parolalar) p.fill(0);
-    fs.rmSync(yarim, { recursive: true, force: true });
+    if (yarimBizim) fs.rmSync(yarim, { recursive: true, force: true });
+    if (hedefBizim) {
+      try {
+        fs.rmdirSync(hedef);
+      } catch {
+        // rename sonrası dolu ya da yok — tören tamamlandı ya da zaten temiz
+      }
+    }
   };
   const kesme = () => {
     temizlik();
@@ -369,8 +478,10 @@ async function toren(bayraklar) {
     const kokParola = await yeniParola("Kök parolası");
     parolalar.push(kokParola);
 
-    fs.mkdirSync(path.dirname(hedef), { recursive: true, mode: 0o700 });
-    for (const d of ["anahtarlar", "paket", "modul-anahtarlari", "yedek-alici", "yedek-ozel", "kurtarma"]) fs.mkdirSync(path.join(yarim, d), { recursive: true, mode: 0o700 });
+    ustHazirla(path.dirname(hedef));
+    ozelDizin(yarim);
+    yarimBizim = true;
+    for (const d of ["anahtarlar", "paket", "modul-anahtarlari", "yedek-alici", "yedek-ozel", "kurtarma"]) ozelDizin(path.join(yarim, d));
     const A = path.join(yarim, "anahtarlar");
     const anahtar = (ad, argv, p) => kosVeDenetle(ad, SATICI, "scripts/anahtar.ts", argv, p, parolalar);
 
@@ -423,14 +534,14 @@ async function toren(bayraklar) {
     fs.renameSync(path.join(O, `${ALICI_KURTARMA}.tkpub`), path.join(Y, `${ALICI_KURTARMA}.tkpub`));
     const alicilar = [ALICI_MAC, ALICI_KURTARMA].flatMap((a) => ["--alici", path.join(Y, `${a}.tkpub`)]);
     const sinama = path.join(yarim, "yedek-sinama.txt");
-    fs.writeFileSync(sinama, `TeksERP üretim satıcısı — yedek alıcısı sınaması · ${new Date().toISOString()} · ${crypto.randomBytes(8).toString("hex")}\n`, { mode: 0o600 });
+    dosyaYaz(sinama, `TeksERP üretim satıcısı — yedek alıcısı sınaması · ${new Date().toISOString()} · ${crypto.randomBytes(8).toString("hex")}\n`);
     await yedek("sınama şifreleme", ["sifrele", "--girdi", sinama, "--cikti", `${sinama}.tkenc`, ...alicilar, "--duzu-sil"]);
     await yedek("sınama (Mac anahtarı)", ["dogrula", "--girdi", `${sinama}.tkenc`, "--anahtar", path.join(O, `${ALICI_MAC}.txt`)]);
     await yedek("sınama (kurtarma anahtarı)", ["dogrula", "--girdi", `${sinama}.tkenc`, "--anahtar", path.join(O, `${ALICI_KURTARMA}.tkkey`), "--parola-stdin"], [kokParola]);
 
     adim(10, "Kurtarma arşivi · künye · BENIOKU · izinler · yerine koy");
     const duzTar = path.join(yarim, "kurtarma", ".sirlar.tar");
-    fs.writeFileSync(duzTar, "", { mode: 0o600 });
+    dosyaYaz(duzTar, "");
     const tar = spawnSync("tar", ["-C", yarim, "-cf", duzTar, "anahtarlar", "paket", ...(moduller.length ? ["modul-anahtarlari"] : [])], { env: altOrtam(), encoding: "utf8" });
     if (tar.status !== 0) throw new TorenHatasi(`kurtarma arşivi (tar) başarısız: ${(tar.stderr || "").trim().slice(0, 200)}`);
     const arsiv = path.join(yarim, "kurtarma", "sirlar.tar.tkenc");
@@ -438,15 +549,23 @@ async function toren(bayraklar) {
     await yedek("kurtarma arşivi sınaması", ["dogrula", "--girdi", arsiv, "--anahtar", path.join(O, `${ALICI_MAC}.txt`)]);
 
     const kunye = kunyeKur(yarim, kid, moduller, kay);
-    fs.writeFileSync(path.join(yarim, BENIOKU), beniOku(kunye, hedef), { mode: 0o600 });
+    dosyaYaz(path.join(yarim, BENIOKU), beniOku(kunye, hedef));
     kunye.ozetler = Object.fromEntries(dosyalar(yarim).map((f) => [f, sha256(path.join(yarim, f))]));
-    fs.writeFileSync(path.join(yarim, KUNYE), `${JSON.stringify(kunye, null, 2)}\n`, { mode: 0o600 });
+    dosyaYaz(path.join(yarim, KUNYE), `${JSON.stringify(kunye, null, 2)}\n`);
     for (const d of ["", ...dizinler(yarim)]) fs.chmodSync(path.join(yarim, d), 0o700);
     for (const f of dosyalar(yarim)) fs.chmodSync(path.join(yarim, f), 0o600);
+    // Hedef rename'den HEMEN önce yeniden ölçülür ve özel mkdir ile sahiplenilir: araya giren (boş) dizin ezilmez.
+    yolDenetle(hedef);
+    if (lstatYa(hedef) !== null) throw new TorenHatasi(`Hedef tören sürerken doğdu: ${hedef} — üstüne YAZILMAZ, dokunulmadı`);
+    ozelDizin(hedef);
+    hedefBizim = true;
     fs.renameSync(yarim, hedef);
+    yarimBizim = false;
+    hedefBizim = false;
   } catch (e) {
+    const yarimVardi = yarimBizim;
     temizlik();
-    if (e instanceof TorenHatasi) throw new TorenHatasi(`${e.message}\n  → yarım dizin silindi; hedefe (${hedef}) hiçbir şey yazılmadı`, e.kod);
+    if (e instanceof TorenHatasi) throw new TorenHatasi(`${e.message}\n  → ${yarimVardi ? "yarım dizin silindi" : "yarım dizin yaratılmadı"}; hedefe (${hedef}) hiçbir şey yazılmadı`, e.kod);
     throw e;
   } finally {
     for (const p of parolalar) p.fill(0);

@@ -1,7 +1,7 @@
 // Portal rolleri × izinler × dinleyiciler — TEK KAYNAK. Her portal rotası bir izin beyan eder
 // (bekçi: scripts/test_portal_rol_dinleyici.ts). Dinleyici ayrımı KESKİN: satıcı rolleri yalnız
-// TAILNET'ten ve ERİŞİM'den (Cloudflare Access arkasındaki genel yol; kök parolalı uçlar orada yok),
-// BAYI yalnız GENEL'den girer; oturum doğduğu dinleyiciye bağlıdır.
+// TAILNET'ten ve ERİŞİM'den (Cloudflare Access arkasındaki genel yol; yalnız izin listesindeki rotalar —
+// kök parolalı ve hassas izinli uçlar orada yok), BAYI yalnız GENEL'den girer; oturum doğduğu dinleyiciye bağlıdır.
 import type { PortalDinleyici, PortalRolu } from "@prisma/client";
 
 export const PORTAL_ROLES = ["SATICI_YONETICI", "SATICI_OPERATOR", "BAYI"] as const satisfies readonly PortalRolu[];
@@ -43,6 +43,13 @@ export const PORTAL_PERMISSIONS = {
   "bayi:portal": ["BAYI"],
 } as const satisfies Record<string, readonly PortalRole[]>;
 export type PortalPermission = keyof typeof PORTAL_PERMISSIONS;
+
+/**
+ * HASSAS sınıf (kök parolalı rotalarla aynı): bu izinlerin rotaları gövdede ya da yanıtta TOTP tohumu / başka
+ * kullanıcının parolasını taşır — yalnız tailnet/geri döngüden; ERİŞİM listesine giremez (portal-http.ts
+ * `erisimListesiBulgulari`), arayüz ERİŞİM oturumunda bu ekranları çizmez.
+ */
+export const TAILNET_ONLY_PERMISSIONS: readonly PortalPermission[] = ["kullanici:yonet"];
 
 export const LISTENER_ROLES: Readonly<Record<PortalListener, readonly PortalRole[]>> = {
   TAILNET: VENDOR,
