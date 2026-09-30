@@ -23,6 +23,8 @@
 //   ⭐ motor pes etmez, sağlıkta durum (D5) · gözlem sayacı istek başına · zil fırtınası yok ·
 //      ortam künyesinde makine adı yok · kapalı kalan makineye sahte SAAT_İLERİ yok · taşıma onayı kod bekler (D8)
 //   ⭐ yeni HAK kabul edilince bütünlük HEMEN yeniden koşar (hazırlık anahtarının sınıf kararı, §22)
+//   ⭐ ilk etkinleştirmede sınıf kararı yeniden denetimi beklemez: yanıt · yoklama gövdesi · satıcıya giden
+//      yoklama GECERLI; bütünlük sonucu durumu tik beklemeden değerlendirir (§23)
 //
 // NEGATİF SONDA — dosya DIŞI mutasyon (cp + shasum ile birebir geri alındı; sonuçlar commit
 // mesajında): M1 persistAccumulation bozuk kayıtta sıfırdan başlatır · M2 kabulde kurulum
@@ -274,6 +276,60 @@ async function hakButunlukBolumu(x: Hazir): Promise<void> {
   } finally {
     configureIntegrityForTests(null);
     fs.rmSync(hazirlik, { recursive: true, force: true });
+  }
+}
+
+/**
+ * §22'den SONRA: etkinleşmemiş yeni makinede hazırlık paketi (sınıf bilinmiyor → OLCULEMEDI) ve ilk etkinleştirme.
+ * Arka plandaki yeniden denetim BEKLENMEDEN yanıt, yoklama gövdesi ve satıcıya giden yoklama yeni sınıfın kararını taşır.
+ */
+async function etkinlestirmeButunlukBolumu(x: Hazir): Promise<void> {
+  console.log("\n§23 — ilk etkinleştirmede bütünlük kararı HEMEN yeni HAK'ın sınıfıyla (yanıt · yoklama gövdesi · ayak izi)");
+  const hazirlik = await hazirlikPaketi();
+  const onceki = { kod: x.satici.kod, hakEk: x.satici.hakEk };
+  try {
+    yeniden(path.join(GECICI, "hazirlik-makine"));
+    await refreshLicenseIntegrity();
+    const once = getIntegrityOutcome();
+    x.satici.hakEk = { sinif: "TEST" };
+    x.satici.kod = "TKS-HZRK-4K0D-9QRT-7PVW";
+    const d = await activateLicense(x.satici.kod, null);
+    // Gövde ve yoklama, arka plandaki yeniden denetim başlamadan (aynı tikte) kurulur — sahadaki etkinleştirme + zil yoklaması.
+    const [govde, y] = await Promise.all([buildPollBody(), pollLicenseOnce()]);
+    const nedenler = d.durum.nedenler.map((n) => n.kod);
+    const bayat = ["BUTUNLUK_OLCULEMEDI", "DERLEME_TARIHI_YOK"];
+    check(
+      "§23a ⭐ etkinleştirme yanıtı: sınıfsız OLCULEMEDI kalmaz — bütünlük GECERLI, durum GECERLI, BUTUNLUK_OLCULEMEDI/DERLEME_TARIHI_YOK yok",
+      once?.kod === "BUTUNLUK_SINIF_BILINMIYOR" && d.butunluk.durum === "GECERLI" && d.durum.gecerlilik === "GECERLI" && !nedenler.some((n) => bayat.includes(n)),
+      `önce ${once?.kod} · sonra ${d.butunluk.durum}/${d.durum.gecerlilik} ${nedenler.join(",")}`,
+    );
+    check(
+      "§23b ⭐ yoklama gövdesi taze durumu taşır (satıcıya OLCULEMEDI raporlanmaz)",
+      govde.durum.gecerlilik === "GECERLI" && !govde.durum.nedenler.some((n) => bayat.includes(n)),
+      `${govde.durum.gecerlilik} ${govde.durum.nedenler.join(",")}`,
+    );
+    const alinan = x.satici.yoklamaGovdeleri.at(-1) as { durum?: { gecerlilik?: string; nedenler?: string[] } } | undefined;
+    check(
+      "§23c ⭐ satıcının aldığı ilk yoklama GECERLI (portala OLCULEMEDI düşmez)",
+      y.outcome === "BASARILI" && alinan?.durum?.gecerlilik === "GECERLI" && !(alinan.durum.nedenler ?? []).some((n) => bayat.includes(n)),
+      `${y.outcome} ${alinan?.durum?.gecerlilik} ${(alinan?.durum?.nedenler ?? []).join(",")}`,
+    );
+    await awaitIntegrityRefreshForTests();
+    const iz = olaylar.length;
+    fs.appendFileSync(path.join(hazirlik, "dist", "server.js"), "// yama\n");
+    await refreshLicenseIntegrity();
+    const gecis = olaylar.slice(iz).find((o) => o.action === "LICENSE_STATE_CHANGED")?.payload as { yeni?: { gecerlilik?: string } } | undefined;
+    check(
+      "§23d ⭐ bütünlük sonucu durumu HEMEN değerlendirir: uyuşmazlık ayak izine yoklama/bakım tikini beklemeden düşer",
+      getIntegrityOutcome()?.durum === "GECERSIZ" && gecis?.yeni?.gecerlilik === "GECERSIZ",
+      `${getIntegrityOutcome()?.kod} · geçiş ${gecis?.yeni?.gecerlilik ?? "YOK"}`,
+    );
+  } finally {
+    x.satici.kod = onceki.kod;
+    x.satici.hakEk = onceki.hakEk;
+    configureIntegrityForTests(null);
+    fs.rmSync(hazirlik, { recursive: true, force: true });
+    yeniden(x.dizin);
   }
 }
 
@@ -822,6 +878,7 @@ async function main(): Promise<void> {
     await motorBolumu();
     await tasimaBolumu(hazir);
     await hakButunlukBolumu(hazir);
+    await etkinlestirmeButunlukBolumu(hazir);
     sozlesmeBolumu();
   } catch (e) {
     fail++;

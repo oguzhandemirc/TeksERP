@@ -17,6 +17,8 @@
 //      taban dizinine; sahte `ssh` ile AYNI · FARK · ÖLÇÜLEMEDİ · taban ezilmez. Sondalar N6…N10 kırmızı, P3/P4 yeşil
 //   §6 T4 özeti (lib/gozlem.mjs, ağsız) — etkinleşmemiş kurulumun `gecerlilik≠GECERLI` örneği AYRI sayılır, yanlış
 //      pozitif DEĞİLDİR; etkin örnekte aynı durum IHLAL kalır; hiç etkin örnek yoksa ÖLÇÜLEMEDİ. Sondalar N11/N12, P5
+//   §7 Aşama 7.1 satıcı kıyası (lib/asamalar-c.mjs, ağsız) — detay ucu satıcıyı yalnız HOST olarak döner; 7.1
+//      kökün host'uyla kıyaslar: aynı host UYUMLU, farklı host ya da port IHLAL. Sonda N13, P6
 //
 // Koşum: node scripts/test_lisans_devreye_kuru.mjs     (çıkış 0 yeşil · 1 kırmızı)
 // =============================================================================
@@ -299,6 +301,32 @@ const T4_SONDALAR = [
   ['P5 temiz kopya', null, [], true],
 ];
 
+// ---- §7 Aşama 7.1: detay ucu satıcıyı `new URL(vendorUrl).host` olarak döner (license-view.service); tam kökle
+// kıyas etkin kurulumda YANLIŞ KIRMIZI verir (testfabrika P5 B1) ----
+async function asama7Denetimi(dizin) {
+  const { ASAMA_7 } = await import(path.join(dizin, 'lib/asamalar-c.mjs'));
+  const { VARSAYILAN } = await import(path.join(dizin, 'lib/ortak.mjs'));
+  const k = ASAMA_7.find((x) => x.no === '7.1');
+  const sonuc = [];
+  const ekle = (ad, ok, ayrinti = '') => sonuc.push({ ad, ok, ayrinti });
+  const yuk = (saticiAdresi) => ({ durum: 200, json: { success: true, data: { kurulum: { etkin: true, kurulumId: 'k' }, hak: { sinif: 'TEST', moduller: [] },
+    kira: { kiraId: 'r', bitis: 'b' }, yoklama: { saticiAdresi, sonBasari: '2026-09-30T13:29:56.747Z' } } } });
+  const host = new URL(VARSAYILAN.saticiKok).host;
+  const kisa = (r) => `${r.sonuc} ${r.not}`.trim();
+  const esit = k.degerlendir(yuk(host), { ...VARSAYILAN });
+  ekle('§7a ⭐ 7.1: detayın host biçimi satıcı köküyle eşleşir (UYUMLU)', esit.sonuc === 'UYUMLU', kisa(esit));
+  const farkli = k.degerlendir(yuk('baska.example.com'), { ...VARSAYILAN });
+  ekle('§7b 7.1: farklı host IHLAL (kapı körleşmedi)', farkli.sonuc === 'IHLAL' && farkli.not.includes('baska.example.com'), kisa(farkli));
+  const port = k.degerlendir(yuk(host), { ...VARSAYILAN, saticiKok: `https://${host}:8443` });
+  ekle('§7c 7.1: port da host\'un parçası — farklı port IHLAL', port.sonuc === 'IHLAL', kisa(port));
+  return sonuc;
+}
+
+const A7_SONDALAR = [
+  ['N13 7.1 satıcıyı tam kökle kıyaslar', '§7a', [['lib/asamalar-c.mjs', 'saticiAdresi !== saticiHost)', 'saticiAdresi !== g.saticiKok)']], false],
+  ['P6 temiz kopya', null, [], true],
+];
+
 async function main() {
   console.log('── §1 statik');
   for (const x of statikDenetim(HEDEF)) yaz(x.ok, x.ad, x.ok ? '' : x.ayrinti);
@@ -341,7 +369,16 @@ async function main() {
     const ok = yesilBeklenir ? kotu.length === 0 : kotu.some((x) => x.ad.startsWith(beklenenKirmizi));
     yaz(ok, `${ad} → ${yesilBeklenir ? 'YEŞİL' : `KIRMIZI (${beklenenKirmizi})`} beklenir`, `kırmızı ${kotu.length}${kotu.length ? `: ${kotu.map((x) => x.ad.slice(0, 40)).join(' | ')}` : ''}`);
   }
-  const toplam = SONDALAR.length + VDS_SONDALAR.length + T4_SONDALAR.length;
+  console.log('── §7 aşama 7.1 satıcı kıyası (detay host döner)');
+  for (const x of await asama7Denetimi(HEDEF)) yaz(x.ok, x.ad, x.ayrinti);
+  for (const [ad, beklenenKirmizi, degistir, yesilBeklenir] of A7_SONDALAR) {
+    const { d } = kopyala(`a7-${ad.split(' ')[0]}`, degistir);
+    const kotu = (await asama7Denetimi(d)).filter((x) => !x.ok);
+    if (!yesilBeklenir) negatif += 1;
+    const ok = yesilBeklenir ? kotu.length === 0 : kotu.some((x) => x.ad.startsWith(beklenenKirmizi));
+    yaz(ok, `${ad} → ${yesilBeklenir ? 'YEŞİL' : `KIRMIZI (${beklenenKirmizi})`} beklenir`, `kırmızı ${kotu.length}${kotu.length ? `: ${kotu.map((x) => x.ad.slice(0, 40)).join(' | ')}` : ''}`);
+  }
+  const toplam = SONDALAR.length + VDS_SONDALAR.length + T4_SONDALAR.length + A7_SONDALAR.length;
   console.log(`\n${kirmizi === 0 ? '✅ YEŞİL' : `❌ ${kirmizi} kırmızı`} · ${negatif} negatif + ${toplam - negatif} pozitif sonda`);
   fs.rmSync(TMP, { recursive: true, force: true });
   return kirmizi === 0 ? 0 : 1;

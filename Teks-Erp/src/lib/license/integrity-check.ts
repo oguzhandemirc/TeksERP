@@ -3,7 +3,7 @@
 // (yamalı çekirdek "geçerli" dese de) ve hazırlık PAKET anahtarının sınıf kuralını ekler.
 import { readFile } from "node:fs/promises";
 import path from "node:path";
-import { decodeDocument, parseJws } from "./protocol";
+import { decodeDocument, isoToMs, parseJws } from "./protocol";
 import { IntegrityManifestSchema, readIntegrityList, type IntegrityReport, type PackageKey } from "./integrity";
 import { walkIntegrityScope } from "./integrity-list";
 import type { LicenseCore } from "./license-core";
@@ -98,7 +98,20 @@ export interface IntegrityOutcome {
   readonly fazlaSayisi: number;
   /** Korumalı kipte süreçte görülen enjeksiyon bayrakları (boş = temiz ya da korumasız kip). */
   readonly yukleyiciBayraklari: readonly LoaderInjection[];
+  /** Kararın sınıftan bağımsız girdisi; yeni HAK'ın sınıfıyla karar dosyalar yeniden okunmadan verilir (`decideForClass`). */
+  readonly olcum: PackageMeasurement | null;
   readonly denetlendi: string;
+}
+
+/** İmzası doğrulanmış paketin dosya ölçümü: çekirdek raporu + ikinci katman FAZLA + ölçümdeki filigran. */
+export interface PackageMeasurement {
+  readonly kid: string | null;
+  readonly rapor: IntegrityReport;
+  readonly paket: NonNullable<IntegrityReport["paket"]>;
+  /** İkinci katmanın imzalı kapsamda bulduğu FAZLA girdiler (tavanlı) ve tam sayısı. */
+  readonly ekFazla: readonly string[];
+  readonly ekFazlaSayisi: number;
+  readonly filigran: BuildWatermark | null;
 }
 
 export interface IntegrityCheckInput {
@@ -119,7 +132,7 @@ export interface IntegrityCheckInput {
 }
 
 function outcome(o: Partial<IntegrityOutcome> & Pick<IntegrityOutcome, "durum" | "kod">, nowMs: number): IntegrityOutcome {
-  return { kid: null, kunye: null, rapor: null, fazla: [], fazlaSayisi: 0, yukleyiciBayraklari: [], ...o, denetlendi: new Date(nowMs).toISOString() };
+  return { kid: null, kunye: null, rapor: null, fazla: [], fazlaSayisi: 0, yukleyiciBayraklari: [], olcum: null, ...o, denetlendi: new Date(nowMs).toISOString() };
 }
 
 async function readList(root: string): Promise<string | null> {
@@ -153,9 +166,21 @@ export async function runIntegrityCheck(g: IntegrityCheckInput): Promise<Integri
   const files = await checkPackageFiles(g);
   if (!g.required) return files;
   const flags = g.runtimeFlags ?? { execArgv: process.execArgv, nodeOptions: process.env.NODE_OPTIONS };
-  const injected = detectLoaderInjection(flags.execArgv, flags.nodeOptions);
+  return withLoaderInjection(files, detectLoaderInjection(flags.execArgv, flags.nodeOptions));
+}
+
+function withLoaderInjection(files: IntegrityOutcome, injected: readonly LoaderInjection[]): IntegrityOutcome {
   if (injected.length === 0) return files;
   return { ...files, durum: "GECERSIZ", kod: "BUTUNLUK_YUKLEYICI", yukleyiciBayraklari: injected };
+}
+
+/**
+ * Aynı ölçümün kararı başka bir HAK sınıfıyla — dosyalar yeniden okunmaz, `denetlendi` ölçüm anı kalır.
+ * Ölçümü olmayan sonuçta (liste yok · çekirdek ölçemedi · imza/şema düştü) null: tam denetim beklenir.
+ */
+export function decideForClass(o: IntegrityOutcome, entitlementClass: string | null): IntegrityOutcome | null {
+  if (o.olcum === null) return null;
+  return withLoaderInjection(decidePackage(o.olcum, entitlementClass, isoToMs(o.denetlendi)), o.yukleyiciBayraklari);
 }
 
 /** İnsan okur neden (health lisans bloğu); yalnız bayrak adı ve kaynağı — değer basılmaz. */
@@ -176,18 +201,30 @@ async function checkPackageFiles(g: IntegrityCheckInput): Promise<IntegrityOutco
   if (rapor.paket === null) return outcome({ durum: rapor.durum, kod: rapor.kod, rapor }, now);
 
   const header = parseJws(token);
-  const kid = header.ok ? header.value.header.kid : null;
   const extra = await extraEntries(token, g.root);
-  const shown = extra.length > 0 ? extra : rapor.fazla;
-  const base = { kid, rapor, fazla: shown.slice(0, EXTRA_LIST_CAP), fazlaSayisi: Math.max(extra.length, rapor.fazlaSayisi) };
-  const kunye = { derlemeTarihi: rapor.paket.derlemeTarihi, musteri: rapor.paket.musteri, paketId: rapor.paket.paketId, surum: rapor.paket.surum };
+  const measurement: PackageMeasurement = {
+    kid: header.ok ? header.value.header.kid : null,
+    rapor,
+    paket: rapor.paket,
+    ekFazla: extra.slice(0, EXTRA_LIST_CAP),
+    ekFazlaSayisi: extra.length,
+    filigran: g.watermark === undefined ? BUILD_WATERMARK : g.watermark,
+  };
+  return decidePackage(measurement, g.entitlementClass, now);
+}
+
+/** Ölçümden karar (tek sıra): hazırlık anahtarının sınıf kuralı → filigran → ikinci katman FAZLA → çekirdek raporu. */
+function decidePackage(m: PackageMeasurement, entitlementClass: string | null, now: number): IntegrityOutcome {
+  const { kid, rapor } = m;
+  const shown = m.ekFazlaSayisi > 0 ? m.ekFazla : rapor.fazla;
+  const base = { kid, rapor, olcum: m, fazla: shown.slice(0, EXTRA_LIST_CAP), fazlaSayisi: Math.max(m.ekFazlaSayisi, rapor.fazlaSayisi) };
+  const kunye = { derlemeTarihi: m.paket.derlemeTarihi, musteri: m.paket.musteri, paketId: m.paket.paketId, surum: m.paket.surum };
 
   if (kid !== null && isStagingPackageKid(kid)) {
-    if (g.entitlementClass === null) return outcome({ ...base, durum: "OLCULEMEDI", kod: "BUTUNLUK_SINIF_BILINMIYOR" }, now);
-    if (!STAGING_PACKAGE_CLASSES.includes(g.entitlementClass)) return outcome({ ...base, durum: "GECERSIZ", kod: "BUTUNLUK_HAZIRLIK_ANAHTARI" }, now);
+    if (entitlementClass === null) return outcome({ ...base, durum: "OLCULEMEDI", kod: "BUTUNLUK_SINIF_BILINMIYOR" }, now);
+    if (!STAGING_PACKAGE_CLASSES.includes(entitlementClass)) return outcome({ ...base, durum: "GECERSIZ", kod: "BUTUNLUK_HAZIRLIK_ANAHTARI" }, now);
   }
-  const mark = g.watermark === undefined ? BUILD_WATERMARK : g.watermark;
-  if (!watermarkMatches(mark, kunye)) return outcome({ ...base, durum: "GECERSIZ", kod: "BUTUNLUK_FILIGRAN" }, now);
-  if (rapor.durum === "GECERLI" && extra.length > 0) return outcome({ ...base, kunye, durum: "GECERSIZ", kod: "BUTUNLUK_FAZLA" }, now);
+  if (!watermarkMatches(m.filigran, kunye)) return outcome({ ...base, durum: "GECERSIZ", kod: "BUTUNLUK_FILIGRAN" }, now);
+  if (rapor.durum === "GECERLI" && m.ekFazlaSayisi > 0) return outcome({ ...base, kunye, durum: "GECERSIZ", kod: "BUTUNLUK_FAZLA" }, now);
   return outcome({ ...base, kunye, durum: rapor.durum, kod: rapor.kod }, now);
 }

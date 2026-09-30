@@ -39,7 +39,9 @@ export const ASAMA_7 = [
     if (d.hak?.sinif !== 'TEST') kotu.push(`hak.sinif=${d.hak?.sinif ?? 'yok'}`);
     if ((d.hak?.moduller ?? []).includes('patron-bulut')) kotu.push('HAK patron-bulut taşıyor (TEST sınıfı gönderemez; eklenmez)');
     if (!d.kira?.kiraId) kotu.push('kira yok');
-    if (d.yoklama?.saticiAdresi !== g.saticiKok) kotu.push(`satıcı ${d.yoklama?.saticiAdresi}`);
+    // Detay satıcıyı yalnız ana makine (host) olarak gösterir (license-view.service): kökün host'uyla karşılaştırılır.
+    const saticiHost = new URL(g.saticiKok).host;
+    if (d.yoklama?.saticiAdresi !== saticiHost) kotu.push(`satıcı ${d.yoklama?.saticiAdresi ?? 'yok'} (beklenen ${saticiHost})`);
     if (!d.yoklama?.sonBasari) kotu.push(`başarılı yoklama yok (son hata ${d.yoklama?.sonHataKodu ?? '-'})`);
     return kotu.length ? s(I, kotu.join(', ')) : s(U, `kurulum ${d.kurulum?.kurulumId} · kira bitiş ${d.kira?.bitis}`);
   } },
