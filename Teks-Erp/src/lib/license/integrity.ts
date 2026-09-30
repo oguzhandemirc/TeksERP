@@ -48,6 +48,7 @@ export interface PackageKey {
  */
 export const PACKAGE_PUBLIC_KEYS: readonly PackageKey[] = Object.freeze([
   Object.freeze({ kid: "paket-hazirlik", x: "auFAoNnXZDIWdyLJ5EVsakwMquIa_GHqCyKxZHz16Z8" }),
+  Object.freeze({ kid: "paket-2026", x: "j7xjeBy3BGQu38IZrvaaJJFcQ0OJCp22z8fUNiYwaCM" }),
 ]);
 
 const PACKAGE_KID = /^paket-[a-z0-9-]{1,40}$/;

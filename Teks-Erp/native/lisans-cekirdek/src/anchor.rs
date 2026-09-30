@@ -6,11 +6,14 @@
 use crate::chain::RootKey;
 
 /// `ROOT_PUBLIC_KEYS` aynası (kid, açık anahtar, sınıflar) — `scripts/guven-capasi-ekle.ts` yazar, elle düzenlenmez.
-pub const BUILTIN_ROOTS: &[(&str, &str, &[&str])] =
-    &[("hazirlik-2026-1", "705hChzAL045Gp-XoG6SaUKAW8muK1SFcW0Vpwhf-mo", &["TEST", "DEMO"])];
+pub const BUILTIN_ROOTS: &[(&str, &str, &[&str])] = &[
+    ("hazirlik-2026-1", "705hChzAL045Gp-XoG6SaUKAW8muK1SFcW0Vpwhf-mo", &["TEST", "DEMO"]),
+    ("kok-2026-1", "sPveT3g3QhV8F_-xN2ZF0MVXFX1HHSiYzZ1GHYbPhEY", &["URETIM", "TEST", "DR", "DEMO", "BAYI", "BARINDIRILAN"]),
+];
 
 /// `PACKAGE_PUBLIC_KEYS` aynası (kid, açık anahtar; sınıf kararı TS'te) — `scripts/guven-capasi-ekle.ts` yazar.
-pub const BUILTIN_PACKAGE_KEYS: &[(&str, &str)] = &[("paket-hazirlik", "auFAoNnXZDIWdyLJ5EVsakwMquIa_GHqCyKxZHz16Z8")];
+pub const BUILTIN_PACKAGE_KEYS: &[(&str, &str)] =
+    &[("paket-hazirlik", "auFAoNnXZDIWdyLJ5EVsakwMquIa_GHqCyKxZHz16Z8"), ("paket-2026", "j7xjeBy3BGQu38IZrvaaJJFcQ0OJCp22z8fUNiYwaCM")];
 
 pub fn builtin_roots() -> Vec<RootKey> {
     BUILTIN_ROOTS
