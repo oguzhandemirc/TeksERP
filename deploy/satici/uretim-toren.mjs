@@ -43,9 +43,10 @@ const BENIOKU = "BENIOKU.md";
 const ALICI_MAC = "satici-uretim-mac";
 const ALICI_KURTARMA = "satici-uretim-kurtarma";
 const SUNUCU_SIRLARI = ["portal-totp.key", "etkinlestirme-kodu.pepper", "modul-kasasi.key"];
-// PAKET anahtarı üreticisi: ayrı dilimin CLI'ı (lisans/uretim-gecis). Arayüz kesinleşince YALNIZ bu satır değişir.
-// Betik yolu repo köküne göre; `.ts` ise o projede `node --import tsx` ile koşar. Çıktı: {dizin}/{kid}.paket.json (`kid` + `x`).
-const PAKET_KOMUTU = "Teks-Erp/scripts/build-korumali-imza.ts anahtar-uret --kid={kid} --dizin={dizin}";
+// PAKET anahtarı üreticisi: ayrı dilimin CLI'ı (lisans/uretim-gecis). Arayüz değişirse YALNIZ bu satır değişir.
+// Betik yolu repo köküne göre; `.ts` ise o projede `node --import tsx` ile koşar. Çıktı: {dizin}/{kid}.paket.json (`kid` + `x`,
+// parolalı) + `--json` ile stdout'ta tek satır {"v":1,"kid","x","dosya","parolali":true}.
+const PAKET_KOMUTU = "Teks-Erp/scripts/build-korumali-imza.ts anahtar-uret --kid={kid} --dizin={dizin} --json";
 const PAROLA_ARG = /^--[^=]*(parola|password|sifre|secret)/i;
 const KOMUTLAR = {
   toren: ["dizin", "yil", "alt-gun", "ind-gun", "moduller", "usb", "paket-komutu"],
@@ -394,6 +395,18 @@ async function toren(bayraklar) {
     const pj = fs.existsSync(paketYolu) ? jsonOku(paketYolu) : null;
     if (!pj || pj.kid !== kid.paket || typeof pj.x !== "string") throw new TorenHatasi(`PAKET aracı beklenen dosyayı üretmedi (${kid.paket}.paket.json · kid · x) — PAKET_KOMUTU arayüzünü denetle`);
     if (typeof pj.d === "string") throw new TorenHatasi("PAKET dosyası PAROLASIZ (ham `d` alanı var) — üretim PAKET anahtarı parolalı olmalı");
+    const ozetSatiri = pr.stdout.toString("utf8").trim().split("\n").pop() ?? "";
+    if (paketSablonu.includes("--json") || ozetSatiri.startsWith("{")) {
+      let po = null;
+      try {
+        po = JSON.parse(ozetSatiri);
+      } catch {
+        // aşağıda biçimsiz sayılır
+      }
+      if (!po || po.kid !== kid.paket || po.x !== pj.x || po.parolali !== true || (po.dosya && path.resolve(po.dosya) !== paketYolu)) {
+        throw new TorenHatasi("PAKET aracının --json özeti dosyayla uyuşmuyor ya da parolalı değil (kid · x · dosya · parolali)");
+      }
+    }
 
     adim(8, `Şifreli modül anahtarları: ${moduller.join(", ") || "yok"}`);
     for (const m of moduller) {
@@ -569,7 +582,8 @@ function ozetBas(hedef, k, usbTamam) {
   console.log("\nSonraki adımlar (docs/ops/URETIM-SATICI-TOREN.md):");
   console.log("  1. Kâğıt: YALNIZ kök parolası → kasa. Paket parolası → parola yöneticisi.");
   console.log(`  2. ${usbTamam ? "USB kopyası alındı — USB'yi kasaya koy." : "USB kopyası BEKLİYOR: USB gelince → node deploy/satici/uretim-toren.mjs usb-kopyala --usb=/Volumes/<USB>"}`);
-  console.log(`  3. Güven çapası (kod, ayrı dilim): ${KUNYE} → ROOT_PUBLIC_KEYS + PACKAGE_PUBLIC_KEYS + native anchor.rs`);
+  console.log(`  3. Güven çapası (repo commit'i): cd Teks-Erp && npx tsx scripts/guven-capasi-ekle.ts kok --dosya=${path.join(hedef, k.kok.dosya)}`);
+  console.log(`     ve … paket --dosya=${path.join(hedef, k.paket.dosya)} — önce kuru, sonra --yaz (yalnız kid + x okur)`);
   console.log("  4. VDS: anahtar birimi + üretim satıcısı (docs/ops/SATICI-KURULUM.md §13).");
   console.log(`  5. CF Worker İNDİRME anahtarı: ${k.capaSatirlari.CF_WORKER_INDIRME}`);
 }

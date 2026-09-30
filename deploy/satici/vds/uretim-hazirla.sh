@@ -16,6 +16,8 @@ done
 
 install -d -m 755 -o 0 -g 0 /k/yedek-alici /k/derlemeler
 install -d -m 700 -o 10001 -g 10001 /k/anahtarlar
+# Portal genel erişim örtüsünün JWKS dizini (yan konteyner yazar, satıcı salt okur); örtü açılmadıkça boş kalır.
+install -d -m 755 -o 10001 -g 10001 /k/erisim-jwks
 chown 10001:10001 /y /d
 chmod 700 /y /d
 # 711: sudo'suz `docker compose` (oguzhan) sır dosyası yolunu çözebilsin; içerik yine 0440 root:SIR_GID.

@@ -27,6 +27,16 @@
 //      Ana kipte TAILNET_LOOPBACK ve `portal-tunel` YASAK (iki kip karışmaz).
 //   ⑩ GENEL_KOK_ADRESI'nin makinesi Traefik Host kuralıyla aynı (/d · /y bağlantısı başka ortama gitmesin)
 //   ⑪ satıcı gömülü güven çapasıyla koşar: GUVEN_CAPASI_DOSYASI YOK (yalnız test) · NODE_ENV=production
+//   Ⓞ ÖRTÜLER (ana dosyanın üstüne bindirilen kipler; algı + beklenen servisler + kendi denetimleri, ORTULER listesi):
+//      portal-genel (`docker-compose.portal-genel.yml`: `satici-jwks` servisi ya da satıcıda PORT_ERISIM) → ⑬.
+//      Her kipte: satıcının ağ kümesi tam dört ağ (örtü satıcıya ağ EKLEMEZ); internal olmayan ağ yalnız ana kipte
+//      `tailnet` (üyesi yalnız satıcı) ve örtünün çıkış ağı (üyesi yalnız örtünün yan konteyneri) — ④b/④c.
+//      ⑦ BÜTÜN Traefik yönlendiricilerini ölçer: küme = genel (+ örtününkiler), her biri Host + websecure + tls;
+//      birden çok hizmette her yönlendirici hizmetine AÇIKÇA bağlı, genel → 4610; hizmet portları 4611/4612 OLAMAZ.
+//   ⑬ PORTAL-GENEL: PORT_ERISIM 4613 · ERISIM_BIND = kenar adresi · 4613 yayımlanmaz · Access ayarı biçimli · JWKS bağı
+//      satıcıda salt okunur, yan konteynerde yazılır, create_host_path yok, anahtar/dağıtım birimlerinin dışında ·
+//      `satici-jwks` satıcı imajı + çekici giriş noktası, sırsız/bağsız/portsuz/etiketsiz, yalnız `jwks-cikis`te ·
+//      `jwks-cikis` internal değil, tek üyeli · portal yönlendiricisi 4613'e, ipallowlist = CLOUDFLARE_NETWORKS birebir.
 //   ⑫ İKİ ORTAM YAN YANA (--diger-env <öteki ortamın .env'i>): proje/DB hacmi/Host/genel kök/sır grubu farklı,
 //      köprü alt ağları çakışmaz, host bağları ve sır dosyaları ortak ya da iç içe değil (tek istisna salt
 //      okunur yayın kökü), yayımlı portlar çakışmaz — üretim hazırlığın anahtarını/DB'sini ASLA bağlamasın.
@@ -119,8 +129,26 @@ const servisler = Object.entries(cfg.services ?? {});
 const saticiOrtam = cfg.services?.satici?.environment ?? {};
 const geriDongu = String(saticiOrtam.TAILNET_LOOPBACK ?? "") === "1";
 const tunel = cfg.services?.["portal-tunel"];
-console.log(`kip: ${geriDongu ? "GERİ DÖNGÜ (Tailscale öncesi, portal yalnız VDS içinden)" : "TAILNET"} · dosyalar: ${composeDosyalari.map((f) => path.basename(f)).join(" + ")}\n`);
-const beklenen = geriDongu ? ["satici-db", "satici", "satici-goc", "satici-yedek", "portal-tunel"] : ["satici-db", "satici", "satici-goc", "satici-yedek"];
+
+// Örtüler: her biri kendi algısı, yan konteynerleri, çıkış ağları (ağ → izinli tek üyeler), Traefik yönlendiricileri ve
+// hizmet portlarıyla. Yeni örtü (ör. bildirim) buraya bir girdi + kendi denetim işleviyle eklenir.
+const ORTULER = [
+  {
+    ad: "portal-genel",
+    var: (c) => "satici-jwks" in (c.services ?? {}) || "PORT_ERISIM" in (c.services?.satici?.environment ?? {}),
+    servisler: ["satici-jwks"],
+    cikisAglari: { "jwks-cikis": ["satici-jwks"] },
+    yonlendiriciler: (c) => [`${c.name}-portal`],
+    hizmetPortlari: ["4613"],
+    denetle: (c) => portalGenelDenetle(c),
+  },
+];
+const aktif = ORTULER.filter((o) => o.var(cfg));
+console.log(`kip: ${geriDongu ? "GERİ DÖNGÜ (Tailscale öncesi, portal yalnız VDS içinden)" : "TAILNET"}${aktif.length ? ` · örtü: ${aktif.map((o) => o.ad).join(" + ")}` : ""} · dosyalar: ${composeDosyalari.map((f) => path.basename(f)).join(" + ")}\n`);
+const beklenen = [
+  ...(geriDongu ? ["satici-db", "satici", "satici-goc", "satici-yedek", "portal-tunel"] : ["satici-db", "satici", "satici-goc", "satici-yedek"]),
+  ...aktif.flatMap((o) => o.servisler),
+];
 kontrol(
   `körlük zemini: ${beklenen.length} servis çözüldü (${beklenen.join(" · ")})`,
   servisler.length === beklenen.length && beklenen.every((a) => a in (cfg.services ?? {})),
@@ -181,6 +209,19 @@ for (const anahtar of geriDongu ? ["kenar", "ic", "tailnet", "ic-api"] : ["kenar
 const disAglar = Object.entries(aglar).filter(([, n]) => n.external).map(([a]) => a);
 const disaKatilan = servisler.filter(([, s]) => Object.keys(s.networks ?? {}).some((n) => disAglar.includes(n) || !(n in aglar))).map(([a]) => a);
 kontrol("④ dış (external) ağa katılan servis yok (`web` dahil)", disAglar.length === 0 && disaKatilan.length === 0, [...disAglar, ...disaKatilan].join(", "));
+const saticiAglari = Object.keys(cfg.services?.satici?.networks ?? {}).sort();
+kontrol("④b satıcının ağ kümesi tam dört ağ (kenar · ic · tailnet · ic-api) — örtü satıcıya ağ eklemez", JSON.stringify(saticiAglari) === JSON.stringify(["ic", "ic-api", "kenar", "tailnet"]), saticiAglari.join(", "));
+{
+  const uyeler = (ag) => servisler.filter(([, sv]) => ag in (sv.networks ?? {})).map(([a]) => a).sort();
+  const izinli = { ...(geriDongu ? {} : { tailnet: ["satici"] }), ...Object.assign({}, ...aktif.map((o) => o.cikisAglari)) };
+  const acik = Object.entries(aglar).filter(([, n]) => n.internal !== true && !n.external).map(([a]) => a);
+  const kotu = acik.filter((a) => !(a in izinli) || JSON.stringify(uyeler(a)) !== JSON.stringify([...izinli[a]].sort()));
+  kontrol(
+    `④c internal olmayan ağ yalnız ${geriDongu ? "" : "tailnet (yalnız satıcı) ve "}örtü çıkış ağları (yalnız yan konteyner)`,
+    kotu.length === 0,
+    acik.map((a) => `${a}: ${uyeler(a).join("+") || "boş"}`).join(" · ") || "hepsi internal",
+  );
+}
 
 // ⑤ anahtar birimi
 for (const [ad, s] of servisler) {
@@ -211,7 +252,7 @@ for (const [anahtar, n] of Object.entries(aglar)) {
 }
 
 // ⑦ Traefik + DB
-const traefikli = servisler.filter(([, s]) => String(s.labels?.["traefik.enable"] ?? "") === "true").map(([a]) => a);
+const traefikli = servisler.filter(([, s]) => Object.keys(s.labels ?? {}).some((k) => k.startsWith("traefik."))).map(([a]) => a);
 kontrol("⑦ Traefik etiketi yalnız `satici`de", traefikli.length === 1 && traefikli[0] === "satici", traefikli.join(", ") || "hiçbiri");
 const satici = cfg.services?.satici ?? {};
 kontrol("⑦ Traefik kenar ağını kullanır", satici.labels?.["traefik.docker.network"] === aglar.kenar?.name, `${satici.labels?.["traefik.docker.network"]} ↔ ${aglar.kenar?.name}`);
@@ -219,6 +260,29 @@ kontrol("⑦ Traefik kenar ağını kullanır", satici.labels?.["traefik.docker.
 const genelKural = (c) => c.services?.satici?.labels?.[`traefik.http.routers.${c.name}.rule`] ?? "";
 const kural = genelKural(cfg);
 kontrol("⑦ genel yönlendirici (proje adıyla) Host kuralı taşır", /^Host\(`[a-z0-9.-]+`\)$/.test(kural), kural || "YOK");
+const etiket = satici.labels ?? {};
+const yonlendiriciler = [...new Set(Object.keys(etiket).map((k) => /^traefik\.http\.routers\.([^.]+)\./.exec(k)?.[1]).filter(Boolean))].sort();
+const hizmetPortu = Object.fromEntries(Object.entries(etiket).flatMap(([k, v]) => {
+  const m = /^traefik\.http\.services\.([^.]+)\.loadbalancer\.server\.port$/.exec(k);
+  return m ? [[m[1], String(v)]] : [];
+}));
+{
+  const beklenenY = [cfg.name, ...aktif.flatMap((o) => o.yonlendiriciler(cfg))].sort();
+  kontrol("⑦ yönlendirici kümesi = genel + örtülerinki", JSON.stringify(yonlendiriciler) === JSON.stringify(beklenenY), `${yonlendiriciler.join(", ")} ↔ ${beklenenY.join(", ")}`);
+  const kotuY = yonlendiriciler.filter((r) => !/^Host\(`[a-z0-9.-]+`\)$/.test(etiket[`traefik.http.routers.${r}.rule`] ?? "") || etiket[`traefik.http.routers.${r}.entrypoints`] !== "websecure" || etiket[`traefik.http.routers.${r}.tls`] !== "true");
+  kontrol("⑦ her yönlendirici: tek Host kuralı · websecure · tls", kotuY.length === 0, kotuY.join(", "));
+  const cokHizmet = Object.keys(hizmetPortu).length > 1;
+  const hizmetinPortu = (r) => {
+    const h = etiket[`traefik.http.routers.${r}.service`];
+    if (h) return hizmetPortu[h];
+    return cokHizmet ? undefined : Object.values(hizmetPortu)[0];
+  };
+  const baglanmamis = yonlendiriciler.filter((r) => hizmetinPortu(r) === undefined);
+  kontrol("⑦ her yönlendirici bir hizmete bağlı (birden çok hizmette AÇIKÇA); genel yönlendirici → 4610", baglanmamis.length === 0 && hizmetinPortu(cfg.name) === "4610", `${baglanmamis.join(", ") || "tamam"} · genel → ${hizmetinPortu(cfg.name) ?? "YOK"}`);
+  const izinliPort = ["4610", ...aktif.flatMap((o) => o.hizmetPortlari)];
+  const kotuPort = Object.entries(hizmetPortu).filter(([, pt]) => !izinliPort.includes(pt));
+  kontrol("⑦ Traefik hizmet portları yalnız genel (4610) + örtülerinki — tailnet 4611 / iç API 4612 ASLA", kotuPort.length === 0, kotuPort.map(([h, pt]) => `${h}:${pt}`).join(", ") || Object.values(hizmetPortu).join(", "));
+}
 const db = cfg.services?.["satici-db"] ?? {};
 kontrol("⑦ DB portsuz ve yalnız iç ağda", (db.ports ?? []).length === 0 && JSON.stringify(Object.keys(db.networks ?? {})) === '["ic"]', Object.keys(db.networks ?? {}).join(", "));
 
@@ -267,6 +331,77 @@ kontrol("⑦ DB portsuz ve yalnız iç ağda", (db.ports ?? []).length === 0 && 
   kontrol("⑨e dosya birimi yayın kökü ve anahtar birimiyle iç içe değil", !!src && !icinde(src, bag("/yayin")?.source) && !icinde(src, bag("/anahtarlar")?.source), src || "YOK");
   const baska = servisler.filter(([ad, sv]) => ad !== "satici" && (sv.volumes ?? []).some((v) => ["/dosyalar", "/derlemeler", "/yayin"].includes(v.target))).map(([ad]) => ad);
   kontrol("⑨f dağıtım bağları yalnız satıcıda", baska.length === 0, baska.join(", "));
+}
+
+// ⑬ örtülerin kendi denetimleri
+function portalGenelDenetle(c) {
+  const s = c.services?.satici ?? {};
+  const ortam = s.environment ?? {};
+  const j = c.services?.["satici-jwks"] ?? {};
+  const jOrtam = j.environment ?? {};
+  const kenarIp = s.networks?.kenar?.ipv4_address ?? "";
+  const yayin4613 = Object.entries(c.services ?? {}).flatMap(([a, sv]) => (sv.ports ?? []).filter((pt) => String(pt.target) === "4613").map(() => a));
+  kontrol("⑬a PORT_ERISIM 4613 · ERISIM_BIND = satıcının kenar adresi · 4613 hiçbir yere yayımlanmaz",
+    String(ortam.PORT_ERISIM) === "4613" && kenarIp !== "" && ortam.ERISIM_BIND === kenarIp && yayin4613.length === 0,
+    `PORT_ERISIM=${ortam.PORT_ERISIM ?? "YOK"} · ERISIM_BIND=${ortam.ERISIM_BIND ?? "YOK"} · kenar=${kenarIp || "YOK"} · yayın ${yayin4613.join(", ") || "yok"}`);
+  const alan = String(ortam.CF_ACCESS_TAKIM_ALANI ?? "");
+  const dosya = String(ortam.CF_ACCESS_JWKS_DOSYASI ?? "");
+  kontrol("⑬b Access ayarı: takım alanı <takım>.cloudflareaccess.com · AUD 64 onaltılık · JWKS dosyası /erisim-jwks/ altında · yan konteyner aynı alan ve dosya",
+    /^[a-z0-9-]+\.cloudflareaccess\.com$/.test(alan) && /^[0-9a-f]{64}$/.test(String(ortam.CF_ACCESS_AUD ?? "")) && dosya.startsWith("/erisim-jwks/") &&
+      jOrtam.CF_ACCESS_TAKIM_ALANI === alan && jOrtam.JWKS_DOSYASI === dosya,
+    `alan=${alan || "YOK"} · AUD ${String(ortam.CF_ACCESS_AUD ?? "").length} kr · dosya=${dosya || "YOK"} · yan=${jOrtam.JWKS_DOSYASI ?? "YOK"}`);
+  const sBag = (s.volumes ?? []).find((v) => v.target === "/erisim-jwks");
+  const jBag = (j.volumes ?? []).find((v) => v.target === "/erisim-jwks");
+  const kaynak = sBag?.source ?? "";
+  const icIce = (x, y) => !!x && !!y && (x === y || x.startsWith(`${y.replace(/\/$/, "")}/`) || y.startsWith(`${x.replace(/\/$/, "")}/`));
+  const yasakKaynak = ["/anahtarlar", "/dosyalar", "/derlemeler", "/yayin"].map((h) => (s.volumes ?? []).find((v) => v.target === h)?.source).filter(Boolean);
+  kontrol("⑬c JWKS bağı: satıcıda SALT OKUNUR, yan konteynerde aynı kaynak YAZILIR, ikisinde create_host_path yok, kaynak anahtar/dağıtım birimlerinin dışında",
+    !!sBag && sBag.read_only === true && !!jBag && jBag.read_only !== true && jBag.source === kaynak && sBag.bind?.create_host_path === false && jBag.bind?.create_host_path === false &&
+      !yasakKaynak.some((y) => icIce(kaynak, y)),
+    `${kaynak || "YOK"} · satıcı ro=${sBag?.read_only === true} · yan ro=${jBag?.read_only === true}`);
+  const jBaglar = (j.volumes ?? []).map((v) => v.target);
+  const jEksik = [];
+  if (j.image !== s.image) jEksik.push(`imaj ${j.image ?? "YOK"} ≠ satıcı`);
+  if (JSON.stringify(j.entrypoint) !== JSON.stringify(["node", "/uygulama/dist/jwks-cekici.js"])) jEksik.push(`giriş ${JSON.stringify(j.entrypoint)}`);
+  if ((j.secrets ?? []).length > 0) jEksik.push("sır bağlı");
+  if (JSON.stringify(jBaglar) !== JSON.stringify(["/erisim-jwks"])) jEksik.push(`bağlar ${jBaglar.join(",")}`);
+  if ((j.ports ?? []).length > 0) jEksik.push("port");
+  if (Object.keys(j.labels ?? {}).some((k) => k.startsWith("traefik."))) jEksik.push("Traefik etiketi");
+  if (JSON.stringify(Object.keys(j.networks ?? {})) !== '["jwks-cikis"]') jEksik.push(`ağlar ${Object.keys(j.networks ?? {}).join(",")}`);
+  kontrol("⑬d satici-jwks: satıcı imajı + çekici giriş noktası · sır/anahtar/dağıtım bağı/port/Traefik etiketi YOK · ağı yalnız jwks-cikis", jEksik.length === 0, jEksik.join(" · "));
+  const ca = c.networks?.["jwks-cikis"] ?? {};
+  const uyeler = Object.entries(c.services ?? {}).filter(([, sv]) => "jwks-cikis" in (sv.networks ?? {})).map(([a]) => a);
+  const alt = ca.ipam?.config?.[0]?.subnet ?? "";
+  kontrol("⑬e jwks-cikis: internal değil · external değil · alt ağı 100.64/10 ve 127/8 dışında · tek üyesi satici-jwks",
+    ca.internal !== true && !ca.external && alt !== "" && !cakisir(alt, "100.64.0.0/10") && !cakisir(alt, "127.0.0.0/8") && JSON.stringify(uyeler) === '["satici-jwks"]',
+    `${ca.name ?? "YOK"} · ${alt || "alt ağ YOK"} · üyeler ${uyeler.join(",") || "yok"}`);
+  const e = s.labels ?? {};
+  const r = `${c.name}-portal`;
+  const h = e[`traefik.http.routers.${r}.service`] ?? "";
+  const ara = e[`traefik.http.routers.${r}.middlewares`] ?? "";
+  const kaynaklar = String(e[`traefik.http.middlewares.${ara}.ipallowlist.sourcerange`] ?? "").split(",").map((x) => x.trim()).filter(Boolean).sort();
+  const cf = cloudflareAglari();
+  kontrol("⑬f portal yönlendiricisi: PORTAL_HOST Host kuralı · hizmeti 4613 · ipallowlist kaynakları CLOUDFLARE_NETWORKS ile BİREBİR",
+    /^Host\(`[a-z0-9.-]+`\)$/.test(e[`traefik.http.routers.${r}.rule`] ?? "") && e[`traefik.http.services.${h}.loadbalancer.server.port`] === "4613" &&
+      !ara.includes(",") && cf !== null && JSON.stringify(kaynaklar) === JSON.stringify([...cf].sort()),
+    `${e[`traefik.http.routers.${r}.rule`] ?? "kural YOK"} · hizmet ${h || "YOK"} · ${kaynaklar.length} kaynak ↔ ${cf === null ? "CLOUDFLARE_NETWORKS OKUNAMADI" : `${cf.length} Cloudflare aralığı`}`);
+}
+
+/** CLOUDFLARE_NETWORKS'ün tek kaynağı satıcının `client-address.ts`i; okunamazsa null (⑬f ölçülemez → kırmızı). */
+function cloudflareAglari() {
+  try {
+    const kaynak = readFileSync(path.join(burasi, "..", "..", "satici", "sunucu", "src", "http", "client-address.ts"), "utf8");
+    const govde = /CLOUDFLARE_NETWORKS[^=]*=\s*\[([\s\S]*?)\]/.exec(kaynak)?.[1] ?? "";
+    const liste = [...govde.matchAll(/"([^"]+)"/g)].map((m) => m[1]);
+    return liste.length > 0 ? liste : null;
+  } catch {
+    return null;
+  }
+}
+
+for (const o of aktif) {
+  console.log(`\n⑬ örtü: ${o.ad}`);
+  o.denetle(cfg);
 }
 
 // ⑩ genel kök ↔ Host kuralı

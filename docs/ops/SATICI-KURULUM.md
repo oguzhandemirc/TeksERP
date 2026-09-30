@@ -91,7 +91,7 @@ VDS'te derleme YOK, kaynak VDS'e gitmez. Portal kullanıcı CLI'ı imajda derlen
 node deploy/satici/compose-denetle.mjs --env-file <doldurulmuş .env>   # 0 temiz · 1 ihlal · 2 ölçülemedi
 ```
 
-① port yalnız `satici`de ve yalnız 100.64/10 adresine · ② docker soketi yok · ③ salt okunur/yetenek yok/root değil/sınırlı · ④ kenar + ic internal, dış ağa katılım yok · ⑤ anahtar birimi salt okunur · ⑥ köprü ağları tailnet/geri döngü aralığı dışında · ⑥b kenarda dinamik aralık alt ağda, satıcının sabit adresi onun dışında · ⑦ Traefik yalnız satıcıda ve kenar ağında, DB portsuz · ⑩ `GENEL_KOK_ADRESI` makinesi = Host kuralı · ⑪ `GUVEN_CAPASI_DOSYASI` yok (gömülü çapa) · ⑫ `--diger-env <öteki ortamın .env'i>` ile iki ortam çakışmaz (üretimde ZORUNLU, yoksa çıkış 2; §13.3) · Ⓛ geri döngü kipi (§4a): ① yerine portsuzluk + `TAILNET_BIND=127.0.0.1` + `portal-tunel` satıcının ad alanında, portsuz/birimsiz, köprü adresinde + tailnet internal; ana kipte geri döngü kalıntısı ❌. Denetim `.env`'deki `COMPOSE_FILE`'ı okur (ya da çoklu `-f`). Negatif sondalar (docker soketi · `read_only` yok · anahtar rw · `web` ağı · 0.0.0.0 yayını · kenar internal değil · DB portu) her biri kırmızı verdi.
+① port yalnız `satici`de ve yalnız 100.64/10 adresine · ② docker soketi yok · ③ salt okunur/yetenek yok/root değil/sınırlı · ④ kenar + ic internal, dış ağa katılım yok · ⑤ anahtar birimi salt okunur · ⑥ köprü ağları tailnet/geri döngü aralığı dışında · ⑥b kenarda dinamik aralık alt ağda, satıcının sabit adresi onun dışında · ⑦ Traefik yalnız satıcıda ve kenar ağında, DB portsuz · ⑩ `GENEL_KOK_ADRESI` makinesi = Host kuralı · ⑪ `GUVEN_CAPASI_DOSYASI` yok (gömülü çapa) · ⑫ `--diger-env <öteki ortamın .env'i>` ile iki ortam çakışmaz (üretimde ZORUNLU, yoksa çıkış 2; §13.3) · Ⓞ örtüler (bugün portal-genel): satıcının ağ kümesi tam dört ağ, internal olmayan ağ yalnız ana kipte `tailnet` + örtünün çıkış ağı (tek üyeli), ⑦ BÜTÜN yönlendiricileri ölçer (hizmet portu 4611/4612 olamaz) · ⑬ portal-genel (§13.9) · Ⓛ geri döngü kipi (§4a): ① yerine portsuzluk + `TAILNET_BIND=127.0.0.1` + `portal-tunel` satıcının ad alanında, portsuz/birimsiz, köprü adresinde + tailnet internal; ana kipte geri döngü kalıntısı ❌. Denetim `.env`'deki `COMPOSE_FILE`'ı okur (ya da çoklu `-f`). Negatif sondalar (docker soketi · `read_only` yok · anahtar rw · `web` ağı · 0.0.0.0 yayını · kenar internal değil · DB portu) her biri kırmızı verdi.
 
 ## 3. VDS'i ölç (salt okuma)
 
@@ -328,6 +328,7 @@ Etkinleşmemiş kurulum hiçbir durumda dışarı istek atmaz (`test_lisans_moto
 |---|---|
 | Tören tamam | Mac: `node deploy/satici/uretim-toren.mjs dogrula` → ✅ ([`URETIM-SATICI-TOREN.md`](URETIM-SATICI-TOREN.md)) |
 | Üretim kökü satıcının GÖMÜLÜ çapasında | `git grep -n "kok-2026-1" -- satici/sunucu/src/lisans-protokol/kok-anahtarlar.ts` → satır var (çapa dilimi indi). Yoksa satıcı ALT/İNDİRME'yi kullanmaz (`Kök kok-2026-1 güven çapasında yok`), `altGecerli: 0` |
+| PAKET aracı + portal dalı indi | `git ls-files satici/sunucu/src/jwks-cekici.ts` → var (Dockerfile `test -f dist/jwks-cekici.js` kapısı; yoksa §13.2 imaj derlemesi durur) · PAKET aracı üretim kid'ini tanır ([`URETIM-SATICI-TOREN.md`](URETIM-SATICI-TOREN.md) §1.4) |
 | vds-dogrula tabanı taze | `deploy/vds-dogrula.sh` → ✅ (fark varsa `LISANS-DEVREYE-ALMA-TESTFABRIKA.md` §1.2) |
 | Hazırlığın `.env`'i Mac'te (sır içermez; ⑫ için) | `T=$(mktemp -d); ssh -p 2222 oguzhan@80.253.255.188 'cat /opt/stack/apps/tekserp-satici-hazirlik/.env' > $T/hazirlik-vds.env` |
 
@@ -342,7 +343,7 @@ v 'docker network inspect $(docker network ls -q) --format "{{.Name}} {{range .I
 ```
 
 - `172.31.251.0/24` hiçbir ağ/rotayla çakışmamalı (bugün: 172.17–20 · hazırlık 172.31.252–254 · patron 172.31.250.0/28 + .16/28). Çakışırsa `ornek-uretim.env`'deki üç alt ağ başka bir /24'e taşınır.
-- `free -m` kullanılabilir ≥ 1000 MB (üretim üçlüsü + tünel gerçek kullanımı ~150 MB, tavanları 832 MB — tavanlar toplamı fiziksel belleği aşar; §13.9).
+- `free -m` kullanılabilir ≥ 1000 MB (üretim üçlüsü + tünel gerçek kullanımı ~150 MB, tavanları 832 MB — tavanlar toplamı fiziksel belleği aşar; §13.10).
 - Traefik `StartedAt`/`RestartCount` not edilir: kurulum boyunca DEĞİŞMEZ.
 - Traefik compose'unda hazırlık kenar ağının satırları: bugün iki satır (servis `networks:` listesi + üst düzey tanım `{external: true}`) — §13.4-6 bu biçime göre.
 
@@ -378,7 +379,7 @@ Beklenen: çıkış 0, `0 ihlal` ve **`ölçülmedi` YOK** (`--diger-env`siz ür
         -v /srv/tekserp-satici-dosya/uretim:/d --entrypoint sh $Y -s" < deploy/satici/vds/uretim-hazirla.sh
    ```
 
-   Beklenen: `db-parolasi: üretildi (0440 root:61063)` · `ic-api-belirteci: üretildi …` · `/k`: `anahtarlar` 10001:10001 700 · `derlemeler` 0:0 755 · `sirlar` 0:61063 711 · `yedek-alici` 0:0 755 · `/y` `/d` 10001:10001 700.
+   Beklenen: `db-parolasi: üretildi (0440 root:61063)` · `ic-api-belirteci: üretildi …` · `/k`: `anahtarlar` 10001:10001 700 · `derlemeler` 0:0 755 · `erisim-jwks` 10001:10001 755 (portal örtüsü açılana dek boş) · `sirlar` 0:61063 711 · `yedek-alici` 0:0 755 · `/y` `/d` 10001:10001 700.
 3. **Dosyalar** (compose iki dosyası root 644 · `.env` oguzhan 600 — sudo'suz `docker compose` okusun · iki `.tkpub` 644):
 
    ```bash
@@ -500,9 +501,13 @@ export PATH="/opt/homebrew/opt/libpq/bin:$PATH"; umask 077
 
 Sürüm yükseltme hazırlıkla aynı (§8 "Sürüm yükseltme"), `cd $K` ile.
 
-### 13.9 Portal genel erişimi — uzantı noktası (ayrı dilim)
+### 13.9 Portal genel erişimi — uzantı noktası (ayrı dilimin örtüsü)
 
-Portal bu kurulumda GERİ DÖNGÜ kipindedir (§4a): yayımlanmaz, Mac'ten `portal-baglan.mjs --kopru 172.31.251.18:4611 --yerel-port 14612`. Genel erişim (Cloudflare Access) ayrı dilimin örtü dosyasıyla gelir: `.env`'deki `COMPOSE_FILE` satırına ÜÇÜNCÜ dosya eklenir; ana compose ve bu runbook'un §13.4 adımları değişmez. O dilim yalıtım denetimini kendi kipine genişletir (bugün ⑦/⑩ tek Traefik yönlendiricisi, ① yayın kipini yalnız geri döngü/tailnet olarak tanır).
+Portal bu kurulumda GERİ DÖNGÜ kipindedir (§4a): yayımlanmaz, Mac'ten `portal-baglan.mjs --kopru 172.31.251.18:4611 --yerel-port 14612`. Genel erişim (Cloudflare Access; portal bugün hazırlığa bağlı, `portal.etkiliyazilim.com`'u üretim DEVRALIR) ayrı dilimin örtüsüyle gelir: `docker-compose.portal-genel.yml` (satıcıya ağ EKLEMEZ; Access imza anahtarlarını `satici-jwks` yan konteyneri kendi `jwks-cikis` köprüsünden çekip `erisim-jwks/` dizinine yazar, satıcı o dizini SALT OKUNUR bağlar; ERİŞİM dinleyicisi 4613 kenar adresinde, yayımlanmaz). Açılış (portal diliminin runbook'uyla, kullanıcının "uygula" cümlesiyle):
+
+1. `.env`'de kapalı ayrılmış altı satır açılır (`ornek-uretim.env` § Portal GENEL ERİŞİMİ): `COMPOSE_FILE=…:docker-compose.portal-genel.yml` · `PORTAL_HOST` · `CF_ACCESS_TAKIM_ALANI` · `CF_ACCESS_AUD` · `ERISIM_JWKS_DIZINI_HOST` (§13.4-2'de kuruldu) · `JWKS_CIKIS_AGI` (`172.31.251.48/29`, §13.1 ölçümüyle çakışmadığı doğrulanır); örtü dosyası `$K`e kopyalanır.
+2. Mac'te `node deploy/satici/compose-denetle.mjs --env-file <.env> --diger-env <hazırlığın .env'i>` → kip satırında `örtü: portal-genel`, Ⓞ + ⑬a–f yeşil (PORT_ERISIM 4613 · ERISIM_BIND = kenar adresi · 4613 yayımlanmaz · Access ayarı biçimli · JWKS bağı satıcıda salt okunur / yan konteynerde yazılır, `create_host_path` yok · `satici-jwks` satıcı imajı + çekici giriş noktası, sırsız/bağsız/portsuz · `jwks-cikis` tek üyeli, internal değil · portal yönlendiricisi 4613'e, ipallowlist = `CLOUDFLARE_NETWORKS` birebir). Negatif sondalar (ölçüldü 2026-09-30, portal dalının örtüsüyle; her biri çıkış 1): satıcıya çıkış ağı · `jwks-cikis` internal · 4613 yayını · JWKS bağı yazılır · yan konteynere anahtar birimi · eksik Cloudflare aralığı · portal hizmeti 4611 · genel yönlendirici hizmetsiz · biçimsiz AUD · `jwks-cikis`e ikinci üye · üçüncü yönlendirici · yan konteyner başka imaj · `create_host_path` açık.
+3. `docker compose up -d` (imaj `dist/jwks-cekici.js`'yi taşımalı — Dockerfile `test -f` kapısı) → DNS `portal` kaydının üretime geçişi ve Access uygulaması portal diliminin runbook'unda.
 
 ### 13.10 Açık riskler
 

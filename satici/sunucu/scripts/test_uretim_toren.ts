@@ -37,18 +37,21 @@ const ozet = (s: string) => createHash("sha256").update(s, "utf8").digest("hex")
 
 /**
  * Saplama PAKET aracı: gerçek aracın sözleşmesi — stdin'den iki satır (yeni + tekrar, ≥ 12, eşit), {dizin}/{kid}.paket.json
- * (0600, üstüne yazmaz) `kid` + `x` taşır. Aldığı parolanın ÖZETİNİ yazar: tören hangi satırı geçirdi ölçülsün.
+ * (0600, üstüne yazmaz) `kid` + `x` taşır, `--json` ile stdout'a tek satır özet. Aldığı parolanın ÖZETİNİ yazar: tören hangi
+ * satırı geçirdi ölçülsün.
  */
 const SAPLAMA = `import fs from "node:fs"; import path from "node:path"; import crypto from "node:crypto";
-const a = new Map(process.argv.slice(2).map((x) => { const m = /^--([a-z]+)=(.*)$/.exec(x); return [m[1], m[2]]; }));
+const a = new Map(process.argv.slice(2).map((x) => { const m = /^--([a-z]+)(?:=(.*))?$/.exec(x); return [m[1], m[2] ?? ""]; }));
 const parcalar = []; for await (const p of process.stdin) parcalar.push(p);
 const [p1 = "", p2 = ""] = Buffer.concat(parcalar).toString("utf8").split("\\n");
 if (p1 !== p2 || [...p1].length < 12) { console.error("✖ saplama: parola eşleşmedi ya da kısa"); process.exit(2); }
 const { privateKey } = crypto.generateKeyPairSync("ed25519"); const j = privateKey.export({ format: "jwk" });
 const govde = { tur: "tekserp-paket-anahtar", surum: 2, kid: a.get("kid"), x: j.x, sarili: { ad: a.get("kid"), ozet: crypto.createHash("sha256").update(p1, "utf8").digest("hex") } };
 if (a.get("kip") === "parolasiz") govde.d = j.d;
-if (a.get("kip") !== "dosyasiz") fs.writeFileSync(path.join(a.get("dizin"), a.get("kid") + ".paket.json"), JSON.stringify(govde) + "\\n", { mode: 0o600, flag: "wx" });
-console.log("PACKAGE_PUBLIC_KEYS girdisi: { kid: " + JSON.stringify(a.get("kid")) + ", x: " + JSON.stringify(j.x) + " }");
+const dosya = path.join(a.get("dizin"), a.get("kid") + ".paket.json");
+if (a.get("kip") !== "dosyasiz") fs.writeFileSync(dosya, JSON.stringify(govde) + "\\n", { mode: 0o600, flag: "wx" });
+const ozetX = a.get("kip") === "yalanci" ? crypto.randomBytes(32).toString("base64url") : j.x;
+if (a.has("json")) console.log(JSON.stringify({ v: 1, kid: a.get("kid"), x: ozetX, dosya, parolali: a.get("kip") !== "parolasiz" }));
 `;
 
 interface Kosum {
@@ -120,7 +123,7 @@ async function main(): Promise<void> {
   mkdirSync(ev);
   const saplama = path.join(tmp, "paket-saplama.mjs");
   writeFileSync(saplama, SAPLAMA);
-  const paketBayragi = (kip = "normal") => `--paket-komutu=${saplama} --kid={kid} --dizin={dizin} --kip=${kip}`;
+  const paketBayragi = (kip = "normal") => `--paket-komutu=${saplama} --kid={kid} --dizin={dizin} --kip=${kip} --json`;
   const gercekEv = path.join(os.homedir(), ".tekserp", "satici-uretim");
   const gercekEvOnce = existsSync(gercekEv) ? statSync(gercekEv).mtimeMs : null;
   const D = path.join(tmp, "satici-uretim");
@@ -304,8 +307,11 @@ async function main(): Promise<void> {
     kontrol("§3e eşleşmeyen tekrar → çıkış 2", farkli.status === 2 && /eşleşmedi/.test(farkli.cikti) && temiz());
     const parolasiz = await tore([`--dizin=${H}`, `--yil=${YIL}`, paketBayragi("parolasiz")], iki(KOK_PAROLA, PAKET_PAROLA), {}, ev);
     const dosyasiz = await tore([`--dizin=${H}`, `--yil=${YIL}`, paketBayragi("dosyasiz")], iki(KOK_PAROLA, PAKET_PAROLA), {}, ev);
-    kontrol("§3f PAKET aracı parolasız (ham d) dosya ya da hiç dosya üretmezse → RED, yarım dizin silinir",
-      parolasiz.status === 1 && /PAROLASIZ/.test(parolasiz.cikti) && dosyasiz.status === 1 && /beklenen dosyayı üretmedi/.test(dosyasiz.cikti) && temiz(), `${parolasiz.status}/${dosyasiz.status}`);
+    const yalanci = await tore([`--dizin=${H}`, `--yil=${YIL}`, paketBayragi("yalanci")], iki(KOK_PAROLA, PAKET_PAROLA), {}, ev);
+    kontrol("§3f PAKET aracı parolasız (ham d) dosya üretir, hiç dosya üretmez ya da --json özeti dosyayla uyuşmazsa → RED, yarım dizin silinir",
+      parolasiz.status === 1 && /PAROLASIZ/.test(parolasiz.cikti) && dosyasiz.status === 1 && /beklenen dosyayı üretmedi/.test(dosyasiz.cikti) &&
+        yalanci.status === 1 && /özeti dosyayla uyuşmuyor/.test(yalanci.cikti) && temiz(),
+      `${parolasiz.status}/${dosyasiz.status}/${yalanci.status}`);
     const kalinti = path.join(tmp, "hedef-yok.yarim-12345");
     mkdirSync(kalinti);
     const yarim = await tore([`--dizin=${H}`, `--yil=${YIL}`, paketBayragi()], iki(KOK_PAROLA, PAKET_PAROLA), {}, ev);

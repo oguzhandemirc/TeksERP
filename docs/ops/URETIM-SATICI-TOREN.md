@@ -22,7 +22,7 @@
 | `TOREN-KUNYE.json` · `BENIOKU.md` | açık künye (kid · açık anahtar · parmak izi · dosya özetleri) + ne-nedir/nasıl geri yüklenir | sır YOK | Mac → USB; künye yöneticiye |
 
 - **Kâğıt:** YALNIZ kök parolası. Kurtarma anahtarı da kök parolasıyla sarılıdır → USB + kâğıt, Mac olmadan her şeyi geri getirir (§6).
-- **Paket parolası** kökten FARKLI seçilir: kök parolası portalda (VDS'te) yazılır, paket anahtarı da VDS'te ara kopya olarak durur — biri sızarsa öteki korunsun. Tören kök parolasını PAKET aracına GEÇİRMEZ; PAKET aracı paket parolasını kendi istemiyle sorar. Paket parolası parola yöneticisinde durur; kaybı telafi edilir (§6).
+- **Kök ve paket parolaları AYRI parolalardır:** tören kök parolasını sorar, paket parolasını 7. adımda PAKET aracı kendi istemiyle sorar; tören kök parolasını PAKET aracına GEÇİRMEZ. Paket parolası kökten FARKLI seçilir (araçlar aynı olmasını engellemez; önerilmez): kök parolası portalda (VDS'te) yazılır, paket anahtarı da VDS'te ara kopya olarak durur — biri sızarsa öteki korunsun. Paket parolası parola yöneticisinde durur; kaybı telafi edilir (§6).
 - **Üçüncü yedek alıcısı:** Etkili Yazılım çevrimdışı anahtarı ([`YEDEK-SIFRELEME.md`](YEDEK-SIFRELEME.md) §2, töreni henüz yok) — eklenince açık yarısı VDS `yedek-alici/`ye konur; o güne dek satıcı yedekleri iki alıcılıdır.
 - VDS'e ASLA gitmeyen: `yedek-ozel/`, `kurtarma/`, modül anahtarı dosyaları (yalnız kasaya içe aktarılır).
 
@@ -38,7 +38,7 @@
    ls ~/.tekserp/satici-uretim                                                # "No such file" görülmeli — varsa DUR
    ```
 
-4. **PAKET aracı hazır:** üretim PAKET anahtarını üreten araç ayrı dilimdedir (`lisans/uretim-gecis`); o `main`e inmeden tören 7. adımda durur (yarım dizin silinir, hedefe hiçbir şey yazılmaz). Yönetici "PAKET aracı indi" demeden tören başlatılmaz.
+4. **PAKET aracı hazır:** üretim PAKET anahtarını üreten araç ayrı dilimdedir (`lisans/uretim-gecis`); o `main`e inmeden tören 7. adımda durur (bugünkü araç üretim kid'ini reddeder; yarım dizin silinir, hedefe hiçbir şey yazılmaz). Yönetici "PAKET aracı indi" demeden tören başlatılmaz.
 
 ## 2. Tören — tek komut
 
@@ -95,11 +95,20 @@ node deploy/satici/uretim-toren.mjs usb-kopyala --usb=/Volumes/<USB adı>
 
 ## 5. Sonraki adımlar (sıra)
 
-1. **Güven çapası (kod, ayrı dilim):** künyedeki kök + paket açık anahtarları `ROOT_PUBLIC_KEYS` (Teks-Erp protokolü + satıcı/patron aynaları) · `PACKAGE_PUBLIC_KEYS` · native `anchor.rs`e; yeni backend sürümü. Üretim satıcısının imajı bu commit'ten SONRAKİ HEAD'den derlenir.
+1. **Güven çapası (repo commit'i; yalnız kid + x okunur):**
+
+   ```bash
+   cd Teks-Erp
+   npx tsx scripts/guven-capasi-ekle.ts kok   --dosya=$HOME/.tekserp/satici-uretim/anahtarlar/kok-2026-1.kok.json     # KURU: yazılacak dört yeri basar
+   npx tsx scripts/guven-capasi-ekle.ts paket --dosya=$HOME/.tekserp/satici-uretim/paket/paket-2026.paket.json     # KURU
+   # ikisi de doğruysa aynı komutlar --yaz ile → TS kök/paket çapası + satıcı/patron aynası + native anchor.rs birlikte
+   ```
+
+   Commit yöneticide; yeni backend sürümü (native yeniden derlenir). Üretim satıcısının imajı bu commit'ten SONRAKİ HEAD'den derlenir (satıcının gömülü çapası).
 2. **VDS:** [`SATICI-KURULUM.md`](SATICI-KURULUM.md) §13 — anahtar birimi, ayrı DB, yedek döngüsü, iç API, DNS (`lisans`).
 3. **CF Worker:** İNDİRME açık anahtarı (`capaSatirlari.CF_WORKER_INDIRME`) [`INDIRME-KAPISI-WORKER.md`](INDIRME-KAPISI-WORKER.md) ayarına eklenir (kullanıcı).
 4. **Patron bulutu:** iç API kaynağı hazırlıktan üretime — [`PATRON-BULUTU-KURULUM.md`](PATRON-BULUTU-KURULUM.md) §14.
-5. **Paket imzası (üretim):** PAKET aracının imza komutu (`build-korumali-imza.ts zip --zip=<paket> --anahtar=$HOME/.tekserp/satici-uretim/paket/paket-2026.paket.json`; parolayı araç sorar — kesin arayüz ayrı dilimin runbook'unda). Şifreli modül derlemesi üretim anahtarıyla: `paketle.ps1 -ModulAnahtarDizini` / `build-korumali.mjs --modul-anahtar-dizini=$HOME/.tekserp/satici-uretim/modul-anahtarlari`.
+5. **Paket imzası (üretim):** `cd Teks-Erp && npx tsx scripts/build-korumali-imza.ts zip --zip=<paket> --anahtar=$HOME/.tekserp/satici-uretim/paket/paket-2026.paket.json` (aynı `imzala` · `belge`) → paket parolasını TTY'den (TTY yoksa stdin'in ilk satırı) ister. Şifreli modül derlemesi üretim anahtarıyla: `paketle.ps1 -ModulAnahtarDizini` / `build-korumali.mjs --modul-anahtar-dizini=$HOME/.tekserp/satici-uretim/modul-anahtarlari`.
 
 ## 6. Rotasyon ve kayıp
 
@@ -125,8 +134,8 @@ COPYFILE_DISABLE=1 tar -C "$D" -cf "$T/s.tar" anahtarlar paket modul-anahtarlari
 
 ## Ek A — yönetici için teknik özet
 
-- **Alt süreçler:** kök/ALT/İNDİRME/sırlar `satici/sunucu/scripts/anahtar.ts` (`kok-uret` · `alt-uret` · `indirme-uret` · `sirlar-uret`), PAKET = `PAKET_KOMUTU` (tek satır, törenin başında; bugün `Teks-Erp/scripts/build-korumali-imza.ts anahtar-uret --kid={kid} --dizin={dizin}` — arayüz ayrı dilimde kesinleşince yalnız bu satır değişir; `--paket-komutu="…"` koşum başına ezer ve ekranda `varsayılan DEĞİL` diye görünür), modül `satici/sunucu/scripts/modul-anahtari.ts uret` (DB'siz), yedek alıcıları + sınama + kurtarma arşivi `Teks-Erp/scripts/yedek-sifrele.ts`. Kurtarma alıcısı `--parolali --parola-stdin` ile KÖK parolasına sarılır.
-- **PAKET sözleşmesi:** araç `{dizin}/{kid}.paket.json` üretir (`kid` + `x`; ham `d` alanı OLMAZ — parolasız dosya RED); TTY'de terminali devralıp parolayı kendisi sorar, TTY yoksa törenin stdin'inde kalan satırlar ona geçer; kök parolası ona hiç verilmez.
+- **Alt süreçler:** kök/ALT/İNDİRME/sırlar `satici/sunucu/scripts/anahtar.ts` (`kok-uret` · `alt-uret` · `indirme-uret` · `sirlar-uret`), PAKET = `PAKET_KOMUTU` (tek satır, törenin başında: `Teks-Erp/scripts/build-korumali-imza.ts anahtar-uret --kid={kid} --dizin={dizin} --json` — arayüz değişirse yalnız bu satır; `--paket-komutu="…"` koşum başına ezer ve ekranda `varsayılan DEĞİL` diye görünür), modül `satici/sunucu/scripts/modul-anahtari.ts uret` (DB'siz), yedek alıcıları + sınama + kurtarma arşivi `Teks-Erp/scripts/yedek-sifrele.ts`. Kurtarma alıcısı `--parolali --parola-stdin` ile KÖK parolasına sarılır.
+- **PAKET sözleşmesi:** araç `{dizin}/{kid}.paket.json` üretir (parolalı v2, 0600, `kid` + `x`; ham `d` alanı OLMAZ — parolasız dosya RED) ve `--json` ile stdout'a tek satır `{"v":1,"kid","x","dosya","parolali":true}` basar; tören bu özeti dosyayla karşılaştırır (kid · x · dosya · `parolali`), uyuşmazsa RED. TTY'de terminali devralıp parolayı kendisi sorar (iki kez), TTY yoksa törenin stdin'inde kalan satırlar ona geçer; kök parolası ona hiç verilmez. Ölçüm (2026-09-30): `lisans/uretim-gecis` dalının aracıyla bekçi §4a yeşil (34/0); `expect` ile gerçek terminalde iki parola da ekrana hiç yansımadı; `guven-capasi-ekle.ts` kuru kipte törenin kök ve paket dosyalarını okudu.
 - **Parola yolu:** kök parolası TTY'den gizli (TTY yoksa stdin satırları: kök, kök tekrar, sonra PAKET aracının satırları — yalnız bekçi); alt süreçlere yalnız stdin; alt süreç ortamı yalın (`PATH` · `HOME` · `TMPDIR` · `COPYFILE_DISABLE`) — `ANAHTAR_DIZINI`, `GUVEN_CAPASI_DOSYASI`, `DATABASE_URL`, `NODE_OPTIONS` geçmez. Alt süreç hata çıktısı parola baytı içeriyorsa hiç basılmaz.
 - **Hepsi ya da hiçbiri:** `<hedef>.yarim-<pid>`de kurulur, en sonda tek `rename`; her hata ve Ctrl+C yarım dizini siler. Hedef ya da yarım kalıntı VARSA parola sorulmadan RED.
 - **Künye** (`TOREN-KUNYE.json`, açık): `kok{kid,x,siniflar}` · `alt`/`indirme`{kid,x,baslangic,bitis} · `paket{kid,x}` · `modulAnahtarlari[]{modul,surum,kid}` · `yedekAlicilari[]{ad,parmakIzi}` · `capaSatirlari{ROOT_PUBLIC_KEYS, PACKAGE_PUBLIC_KEYS, CF_WORKER_INDIRME}` · `vds{anahtarBirimi, yedekAlici, kasayaIceAktar}` · `usb[]` · `ozetler{yol: sha256}` · `kaynak{commit, kirli}`. Çapa ekleme betiği bu dosyayı girdi olarak okur.
