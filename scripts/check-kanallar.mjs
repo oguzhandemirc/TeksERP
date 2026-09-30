@@ -11,7 +11,8 @@
 //   §2 DONMUŞ kimlik: sahadaki üretim kanalının kimliği literal olarak burada;
 //      değişimi GÖÇTÜR (yeni uygulama · kayıp userData · kopan güncelleme kanalı)
 //   §3 türetilmiş `yayin` alanları koddaki sabitlerle birebir (yayın kökü, VDS
-//      kökü, feed/manifest/künye yolu biçimi) + kaynak sabitler birbirleriyle aynı
+//      kökü, feed/manifest/künye yolu biçimi) + kaynak sabitler birbirleriyle aynı;
+//      backend yayıncısı (`deploy/backend-yayinla.mjs`) yolları YALNIZ kayıttan okur (kök literali taşımaz)
 //   §4 işaretçiler + sabit kimlik: iki musteri.json, Electron/package.json,
 //      mobil/app.json `varsayilan` kanalla birebir; panel kaynağı (main.ts,
 //      index.html, splash.html, shared/channel.ts, build-channel.ts) kimliği KANALDAN
@@ -92,10 +93,11 @@ const YAYIN_YOLLARI = {
   'mobil/scripts/build-apk.mjs': { sinif: 'kapili', terfi: true },
   'deploy/electron-yayinla.ps1': { sinif: 'saplama' },
   // Backend zip: -Musteri <kod> ile kanal kimliği (pm2Ad/urunAdi) alır → 'kapılı'
-  //   (Faz 2b: müşteri kodu argümandan, kök kuralı backend'e genişledi). TERFİ YOK:
-  //   backend'in HTTP yayın feed'i Faz 3 dağıtım kapısına kadar yok — üretim kanalına
-  //   HTTP terfisi ölçülemez, o yüzden terfi kapısı burada aranmaz.
+  //   (Faz 2b: müşteri kodu argümandan, kök kuralı backend'e genişledi). Paketleme terfi
+  //   ARAMAZ: üretim kanalına çıkış YAYINDA kapılıdır (backend-yayinla.mjs, K5).
   'deploy/paketle.ps1': { sinif: 'kapili' },
+  // Dağıtım v2: backend kanal yayını (imzalı bildirim + paket → VDS, son.json EN SON).
+  'deploy/backend-yayinla.mjs': { sinif: 'kapili', terfi: true },
 };
 const KAPI_IZI = 'scripts/lib/kanallar.mjs';
 /** Kapı izi: .mjs yayıncı kitaplığı import eder, kabuk yayıncı CLI'yi çağırır. */
@@ -157,6 +159,14 @@ function sabitleriOlc(d, kirmizi) {
   yakala(d, 'deploy/electron-yayinla.sh', /DEFTER_DIZIN="\$\(dirname "\$YAYIN_KOK"\)\/defter"/, 'DEFTER_DIZIN biçimi');
   yakala(d, 'deploy/electron-yayinla.sh', /\$DEFTER_DIZIN\/\$musteri-YAYIN-DEFTERI\.tsv/, 'defter dosya adı biçimi');
   const vdsMobil = yakala(d, 'deploy/mobil-yayinla.mjs', /`([^`$]+)\/\$\{MUSTERI\}\/mobil`/, 'mobil uzak kök biçimi');
+  // Backend yayıncısı kök sabiti TAŞIMAZ: hedefler kanal kaydından (ikinci kopya olmasın).
+  for (const bag of ['vdsBackend', 'backendManifest', 'backendDefter']) {
+    yakala(d, 'deploy/backend-yayinla.mjs', new RegExp(`\\.yayin\\.${bag}\\b`), `yayin.${bag} bağ noktası (kayıttan okuma)`);
+  }
+  const beKod = d['deploy/backend-yayinla.mjs'].replace(/^\s*(\*|\/\/).*$/gm, '');
+  if (beKod.includes('guncelleme.etkiliyazilim.com') || beKod.includes(vdsYayinla)) {
+    kirmizi.push('§3 deploy/backend-yayinla.mjs yayın/VDS kökünü LİTERAL taşıyor — hedef kanal kaydından (yayin.backend*) okunur');
+  }
 
   const koklar = { 'update-feed.ts UPDATE_BASE_URL': kokUF, 'feed.cjs YAYIN_KOKU': kokFeed,
     'electron-paketle.sh BASE_URL': kokPaketle, 'electron-yayinla.sh BASE_URL + "/"': `${kokYayinla}/` };
@@ -182,6 +192,10 @@ function turet(kod, rv, s) {
     vdsPanel: `${s.vdsKok}/${kod}/electron`,
     vdsMobil: `${s.vdsKok}/${kod}/mobil`,
     panelDefter: `${s.defterKok}/${kod}-YAYIN-DEFTERI.tsv`,
+    backendFeed: `${s.yayinKoku}${kod}/backend/`,
+    backendManifest: `${s.yayinKoku}${kod}/backend/son.json`,
+    vdsBackend: `${s.vdsKok}/${kod}/backend`,
+    backendDefter: `${s.defterKok}/${kod}-BACKEND-YAYIN-DEFTERI.tsv`,
   };
 }
 
@@ -427,6 +441,12 @@ function sondalar(taban, tabanYollar) {
     ['N41 mjs yayıncıdan terfi yüklemi çağrısı silindi, import kaldı (mobil-yayinla.mjs) → KIRMIZI', 'kirmizi', (d) => { d['deploy/mobil-yayinla.mjs'] = d['deploy/mobil-yayinla.mjs'].replaceAll('terfiKapisi(', 'baskaKapi('); }, 'terfi kapısı'],
     ['N42 build-apk terfi kapısı çağrısı silindi → KIRMIZI', 'kirmizi', (d) => { d['mobil/scripts/build-apk.mjs'] = d['mobil/scripts/build-apk.mjs'].replaceAll('terfiKapisi(', 'baskaKapi('); }, 'terfi kapısı'],
     ['N43 backend paketleyiciden (paketle.ps1) kanal kapısı çağrısı silindi → KIRMIZI', 'kirmizi', (d) => { d['deploy/paketle.ps1'] = d['deploy/paketle.ps1'].replaceAll('kanal-kapisi.mjs', 'baska.mjs'); }],
+    ['N44 testfabrika backendManifest elle bozuldu (türetilmemiş) → KIRMIZI (§3)', 'kirmizi', kayitta((o) => { tf(o).yayin.backendManifest = tf(o).yayin.backendManifest.replace('son.json', 'latest.json'); }), 'backendManifest'],
+    ['N45 iki kanal aynı vdsBackend → KIRMIZI (ikili fark)', 'kirmizi', kayitta((o) => { tf(o).yayin.vdsBackend = as(o).yayin.vdsBackend; }), 'vdsBackend'],
+    ['N46 backend yayıncısından kanal kapısı silindi → KIRMIZI (§5)', 'kirmizi', (d) => { d['deploy/backend-yayinla.mjs'] = d['deploy/backend-yayinla.mjs'].replaceAll(KAPI_IZI, 'scripts/lib/baska.mjs'); }, 'kanal kapısı'],
+    ['N47 backend yayıncısından terfi kapısı çağrısı silindi → KIRMIZI (§5)', 'kirmizi', (d) => { d['deploy/backend-yayinla.mjs'] = d['deploy/backend-yayinla.mjs'].replaceAll('terfiKapisi(', 'baskaKapi('); }, 'terfi kapısı'],
+    ['N48 backend yayıncısı VDS kökünü literal taşıyor → KIRMIZI (§3)', 'kirmizi', (d) => { d['deploy/backend-yayinla.mjs'] += "\nconst ESKI_KOK = '/opt/stack/apps/tekserp-guncelleme/html';\n"; }, 'LİTERAL'],
+    ['O5 backend yayıncısı VDS yolunu kayıttan okumuyor (bağ noktası yok) → ÖLÇÜLEMEDİ', 'olculemedi', (d) => { d['deploy/backend-yayinla.mjs'] = d['deploy/backend-yayinla.mjs'].replaceAll('.yayin.vdsBackend', '.yayin.baskaYol'); }],
     ['O1 kayıt defteri bozuk JSON → ÖLÇÜLEMEDİ', 'olculemedi', (d) => { d[KAYIT_REL] = d[KAYIT_REL].slice(0, 40); }],
     ['O2 update-feed.ts UPDATE_BASE_URL adı değişti → ÖLÇÜLEMEDİ', 'olculemedi', (d) => { d['Electron/shared/update-feed.ts'] = d['Electron/shared/update-feed.ts'].replace('export const UPDATE_BASE_URL', 'export const YAYIN_KOKU_URL'); }],
     ['O3 main.ts setAppUserModelId çağrısı kalktı → ÖLÇÜLEMEDİ', 'olculemedi', (d) => { d['Electron/electron/main.ts'] = d['Electron/electron/main.ts'].replace('app.setAppUserModelId(APP_ID);', 'void 0;'); }],

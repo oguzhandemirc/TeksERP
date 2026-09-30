@@ -1,8 +1,8 @@
 // =============================================================================
 // Cloudflare Worker — İNDİRME KAPISI (güncelleme sunucusu)
 // =============================================================================
-// `/<kanal>/electron/*` ve `/<kanal>/mobil/*` dosyalarını yalnız fabrikanın KENDİ
-// backend'inden alınmış kısa ömürlü İNDİRME belirteciyle verir; adresi bulan
+// `/<kanal>/electron/*` · `/<kanal>/mobil/*` · `/<kanal>/backend/*` dosyalarını yalnız fabrikanın
+// KENDİ backend'inden alınmış kısa ömürlü İNDİRME belirteciyle verir; adresi bulan
 // dışarıdaki biri indiremez. Belirteç JWS + Ed25519 (`typ: tekserp-indirme`) —
 // Worker'da YALNIZ açık anahtar durur, imzalayamaz.
 //
@@ -28,6 +28,9 @@ export const VARSAYILAN_AYAR = Object.freeze({
   /** Değişmez dosyaların (exe · blockmap · apk · OTA varlığı) kenar önbellek süresi. */
   onbellekSn: 604800,
 });
+
+/** Kanal başına ürün dizinleri — kâhin `DOWNLOAD_PRODUCTS` (protocol/belgeler.ts) ile birebir (bekçi §8). */
+export const URUN_DIZINLERI = Object.freeze(["electron", "mobil", "backend"]);
 
 const TYP = "tekserp-indirme";
 const JWS_ALG = "EdDSA";
@@ -146,7 +149,7 @@ function belgeSemasiUyar(y) {
     typeof y.kurulumId === "string" &&
     UUID_BICIMI.test(y.kurulumId) &&
     isoMu(y.exp) &&
-    (y.yolOneki === `/${y.kanal}/electron/` || y.yolOneki === `/${y.kanal}/mobil/`)
+    URUN_DIZINLERI.some((urun) => y.yolOneki === `/${y.kanal}/${urun}/`)
   );
 }
 
@@ -197,10 +200,11 @@ export function yolIzinli(belge, yol) {
   return yol.startsWith(belge.yolOneki) && yol.length > belge.yolOneki.length;
 }
 
-const KAPSAM = /^\/[^/]+\/(electron|mobil)(\/|$)/i;
+const KAPSAM = new RegExp(`^\\/[^/]+\\/(${URUN_DIZINLERI.join("|")})(\\/|$)`, "i");
 const OTA_MANIFEST = /^\/[^/]+\/mobil\/ota\/[^/]+\/manifest(-[0-9]+)?$/;
 const OTA_VARLIK = /^\/[^/]+\/mobil\/ota\/[^/]+\/[0-9]+\/[^?#]+$/;
-const DEGISKEN_DOSYA = /(\.ya?ml|\/manifest(-[0-9]+)?|\/surum\.json)$/i;
+// `son.json` backend kanalının en yeni sürüm işaretçisi: her yayında değişir, kenarda tutulmaz.
+const DEGISKEN_DOSYA = /(\.ya?ml|\/manifest(-[0-9]+)?|\/surum\.json|\/son\.json)$/i;
 
 /**
  * Kapsam kararı, origin'in (nginx) GÖRECEĞİ yolda verilir: yüzde kodu çözülür, ters bölü

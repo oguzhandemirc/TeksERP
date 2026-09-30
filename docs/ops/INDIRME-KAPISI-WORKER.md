@@ -6,10 +6,10 @@
 
 ## 0. Ne yapar, ne yapmaz
 
-- `guncelleme.etkiliyazilim.com` üzerinde `/<kanal>/electron/*` ve `/<kanal>/mobil/*` isteklerini İNDİRME belirteciyle kapılar. Belirteç fabrikanın KENDİ backend'inden gelir (`GET /api/license/indirme-belirteci`), Ed25519 imzalıdır, kanal + ürün önekine ve kuruluma bağlıdır, ömrü ≤ 70 dk.
+- `guncelleme.etkiliyazilim.com` üzerinde `/<kanal>/electron/*`, `/<kanal>/mobil/*` ve `/<kanal>/backend/*` (Dağıtım v2 — backend paketleri ve sürüm işaretçisi, `docs/design/GUNCELLEYICI.md` §1) isteklerini İNDİRME belirteciyle kapılar; ürün kümesi kâhinin `DOWNLOAD_PRODUCTS`ıyla birebir (`URUN_DIZINLERI`, bekçi §8a). Belirteç fabrikanın KENDİ backend'inden gelir (`GET /api/license/indirme-belirteci`), Ed25519 imzalıdır, kanal + ürün önekine ve kuruluma bağlıdır, ömrü ≤ 70 dk.
 - Belirteç üç yoldan okunur, bu sırayla: başlık `X-TKL-Indirme` (panel, electron-updater `requestHeaders`) · tabletin manifest isteğindeki `Expo-Extra-Params` başlığında `tkl` anahtarı (`Updates.setExtraParamAsync`) · sorgu `?t=`. İlk bulunan karar verir.
 - Doğrulanan istek origin'e (VDS nginx) **belirteçsiz** gider: `?t=`, `X-TKL-Indirme` ve `Expo-Extra-Params` düşer, `Range` korunur ⇒ önbellek belirteç başına bölünmez.
-- Önbellek: değişmez dosya (exe · blockmap · apk · OTA varlığı) `cacheEverything` + `cacheTtlByStatus` (200–299 `onbellekSn`, 404 bir saniye, 5xx hiç — bir hafta tutulan 404 dersi, `deploy/guncelleme-sunucusu/README.md` ①); değişken dosya (`*.yml` · `manifest` · `surum.json`) cf seçeneksiz — origin'in `no-cache`i geçerli kalır.
+- Önbellek: değişmez dosya (exe · blockmap · apk · OTA varlığı) `cacheEverything` + `cacheTtlByStatus` (200–299 `onbellekSn`, 404 bir saniye, 5xx hiç — bir hafta tutulan 404 dersi, `deploy/guncelleme-sunucusu/README.md` ①); değişken dosya (`*.yml` · `manifest` · `surum.json` · backend `son.json`) cf seçeneksiz — origin'in `no-cache`i geçerli kalır.
 - Kapsam kararı origin'in GÖRECEĞİ yolda verilir: yüzde kodu çözülür, çoklu bölü katlanır, büyük/küçük harf fark etmez (`/k/%65lectron/…`, `//k/electron/…` kapılıdır). Kapsam DIŞI her istek olduğu gibi geçer.
 - Ret: 403 + kısa Türkçe gövde + `X-TKL-Kod` başlığı, `no-store`. Kodlar §9'da.
 - Worker imzalayamaz (yalnız açık anahtar); satıcıya ya da fabrikaya çağrı yapmaz; durum tutmaz.
@@ -58,6 +58,7 @@ Worker değişkeni (panelde Settings → Variables and Secrets; tür JSON ya da 
    - electron belirteciyle `/testfabrika/mobil/apk/surum.json` → 403 `INDIRME_YOL`; başka kanal yolu → 403 `INDIRME_YOL`;
    - exe'yi İKİ AYRI belirteçle iste: ikincisinde `cf-cache-status: HIT` (önbellek belirteç başına bölünmüyor);
    - `%65lectron` ve `//testfabrika/electron/…` biçimleri → 403;
+   - backend: `GET /api/license/indirme-belirteci?urun=backend` belirteciyle `/testfabrika/backend/son.json` → 200 (`cf-cache-status` DYNAMIC/BYPASS — değişken), sürüm zip'i → 200 ve ikinci belirteçle HIT; electron belirteciyle `/testfabrika/backend/son.json` → 403 `INDIRME_YOL`;
    - panel (thinkpad-1) güncelleme denetimi ve tablet OTA uçtan uca yeşil.
    Bu adım Senaryo L15'in "WebCrypto çalışma zamanı" kısmını kapatır (bekçi Node'un WebCrypto'sunu ölçer, workerd'i değil).
 4. Yeşilse adnansahin için aynı adımlar; sonra rota tek satıra genişler: `guncelleme.etkiliyazilim.com/*` (kapsam dışı yollar Worker'dan aynen geçer).

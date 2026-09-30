@@ -38,6 +38,8 @@ const KANAL_ANAHTARLARI = {
 };
 export const YAYIN_ANAHTARLARI = [
   'panelFeed', 'panelManifest', 'mobilFeed', 'otaManifest', 'apkKunye', 'vdsPanel', 'vdsMobil', 'panelDefter',
+  // Dağıtım v2 — backend kanal yayını (docs/design/GUNCELLEYICI.md §1): feed · en yeni sürüm işaretçisi · VDS · defter.
+  'backendFeed', 'backendManifest', 'vdsBackend', 'backendDefter',
 ];
 export const PANEL_ANAHTARLARI = ['appId', 'urunAdi', 'paketAdi', 'erpAdresi'];
 export const TABLET_ANAHTARLARI = ['androidPaket', 'gorunenAd', 'erpAdresi', 'runtimeVersion', 'otaSertifika'];
@@ -45,8 +47,8 @@ export const TABLET_ANAHTARLARI = ['androidPaket', 'gorunenAd', 'erpAdresi', 'ru
  * Backend paketinin (paketle.ps1 -Musteri <kod>) müşteriye özel dağıtım kimliği. Faz 2b:
  *   · urunAdi — /health + PAKET.json'da görünen backend adı (filigran; her kanalda AYRIK);
  *   · pm2Ad   — sunucudaki pm2 süreç adı (TEKSERP_PM2_AD; iki kurulum çakışmasın — her kanalda AYRIK).
- * DAVRANIŞ TAŞIMAZ: bayrak/ayar değil, dağıtım kimliği (feed'ler gibi). Backend yayın feed'i
- * Faz 3'te bu bloğa girer; o güne dek zip elden/portaldan gider.
+ * DAVRANIŞ TAŞIMAZ: bayrak/ayar değil, dağıtım kimliği (feed'ler gibi). Backend YAYIN yolları
+ * (feed · son.json · VDS · defter) panel/tablet gibi `yayin` bloğundadır (Dağıtım v2, `deploy/backend-yayinla.mjs`).
  */
 export const BACKEND_ANAHTARLARI = ['urunAdi', 'pm2Ad'];
 
@@ -457,7 +459,7 @@ export const KANAL_BEKCI_DOSYALARI = [...new Set([
   ...PANEL_SABIT_DOSYALAR, ...TABLET_SABIT_DOSYALAR,
   'Electron/shared/update-feed.ts', 'mobil/scripts/lib/feed.cjs', 'mobil/scripts/lib/adres.mjs', 'mobil/scripts/lib/zip.mjs',
   'mobil/scripts/lib/manifest.mjs', 'mobil/scripts/lib/apk-kimlik.mjs', 'mobil/scripts/lib/kanal.cjs', 'mobil/app.config.js',
-  'scripts/lib/yayin-bildirim.mjs',
+  'scripts/lib/yayin-bildirim.mjs', 'scripts/lib/backend-yayin.mjs',
 ])];
 /** Bu yola dokunan commit kanal bekçilerini koşar (`scripts/hooks/pre-commit.mjs`). */
 export function kanalBekcisiTetigi(rel) {
