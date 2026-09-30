@@ -72,6 +72,7 @@ import {
   SubcontractorManagementService,
 } from "../src/services/subcontractor-management.service";
 import { hedefDbEngeli } from "./lib/hedef-db-kapisi";
+import { testActorId } from "./fixture-test-user";
 
 let pass = 0,
   fail = 0;
@@ -117,7 +118,8 @@ async function msCreate(
   servis: { create: (data: Record<string, unknown>, userId?: string) => Promise<unknown> },
   data: Record<string, unknown>,
 ): Promise<{ id: string; kod: string } | null> {
-  const r = (await servis.create(data)) as { data?: { id?: string; code?: string } };
+  // Künye: kart doğuşu aktör ister (ürün kartı aktörsüz 401) — fikstür aktörü verilir.
+  const r = (await servis.create(data, await testActorId())) as { data?: { id?: string; code?: string } };
   return r.data?.id && r.data.code ? { id: r.data.id, kod: r.data.code } : null;
 }
 /** Manifest fikstürünün açtığı iş emirleri — teardown (manifest silindikten SONRA). */
@@ -1200,9 +1202,12 @@ async function main(): Promise<void> {
     // ⚠️ CARİ DEFTERİ ÖNCE: fatura · ödeme · çek satırlarının HEPSİ cari harekete
     // yazıyor (`cari_transactions_*_fkey`) — belgeyi önce silmek FK ile düşer.
     // Cari hesap fikstürün müşterisinden ARANIR: ilk parasal belgede lazy açıldı.
-    finans.cariId ??= (await prisma.cariAccount.findFirst({
-      where: { customerId: finans.musteriId ?? "" }, select: { id: true },
-    }))?.id ?? null;
+    // Müşteri hiç doğmadıysa aranmaz: boş kimlik uuid hatasıyla asıl hatayı örterdi.
+    if (finans.musteriId) {
+      finans.cariId ??= (await prisma.cariAccount.findFirst({
+        where: { customerId: finans.musteriId }, select: { id: true },
+      }))?.id ?? null;
+    }
     if (finans.cariId) {
       await prisma.cariTransaction.deleteMany({ where: { cariId: finans.cariId } });
     }

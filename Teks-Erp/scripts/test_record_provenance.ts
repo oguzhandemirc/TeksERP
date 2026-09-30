@@ -20,6 +20,7 @@ import fs from "fs";
 import path from "path";
 import prisma, { pool } from "../src/lib/prisma";
 import { ensureTestAdmin } from "./fixture-test-user";
+import { cleanupTestCustomers } from "./fixture-customer-cleanup";
 import { KUNYE_BORCLARI, judge, scanSource, scanSrc } from "./lib/kunye-yazim-tarama";
 
 let pass = 0;
@@ -187,7 +188,7 @@ async function main(): Promise<void> {
     check("kolon yolunda oluşturan adı çözülür", Boolean(r.data.created?.userName));
   } finally {
     if (prvCustomerId) {
-      await prisma.customer.deleteMany({ where: { id: prvCustomerId } }).catch(() => {});
+      await cleanupTestCustomers([prvCustomerId]);
     }
   }
 
@@ -349,7 +350,7 @@ async function main(): Promise<void> {
       await prisma.order.deleteMany({ where: { id: oId } }).catch(() => {});
     }
     await prisma.item.deleteMany({ where: { id: oItem.id } }).catch(() => {});
-    await prisma.customer.deleteMany({ where: { id: oCust.id } }).catch(() => {});
+    await cleanupTestCustomers([oCust.id]);
   }
 
   // ── 9) CANLI: şube ve ürün kartı doğuşu oluşturanı yazar, aktörsüz doğuş 401 ──
@@ -406,10 +407,9 @@ async function main(): Promise<void> {
     for (const id of kCustIds) {
       const br = await prisma.customerBranch.findMany({ where: { customerId: id }, select: { id: true } });
       await prisma.systemLog.deleteMany({ where: { recordId: { in: [id, ...br.map((x) => x.id)] } } }).catch(() => {});
-      await prisma.customerBranch.deleteMany({ where: { customerId: id } }).catch(() => {});
-      await prisma.cariAccount.deleteMany({ where: { customerId: id } }).catch(() => {});
-      await prisma.customer.deleteMany({ where: { id } }).catch(() => {});
     }
+    // Kart + şube + hesap ortak temizleyiciden: hatayı yutmaz, kalıntı kırmızı verir.
+    await cleanupTestCustomers(kCustIds);
   }
 
   await prisma.workOrder.deleteMany({ where: { id: prvWo.id } }).catch(() => {});
@@ -417,7 +417,7 @@ async function main(): Promise<void> {
   await prisma.systemLog
     .deleteMany({ where: { tableName: "CUSTOMER", recordId: orphanCustomer.id } })
     .catch(() => {});
-  await prisma.customer.deleteMany({ where: { id: orphanCustomer.id } }).catch(() => {});
+  await cleanupTestCustomers([orphanCustomer.id]);
 
   console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
   await prisma.$disconnect();
