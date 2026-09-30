@@ -17,7 +17,7 @@ export const APP_GRANTS: Readonly<Record<string, readonly Privilege[]>> = {
   inbox_messages: ["SELECT", "INSERT", "UPDATE", "DELETE"],
   report_requests: ["SELECT", "INSERT", "UPDATE", "DELETE"],
   report_results: ["SELECT"],
-  push_devices: ["SELECT", "INSERT", "UPDATE"],
+  push_devices: ["SELECT", "INSERT", "UPDATE", "DELETE"],
   notification_defaults: ["SELECT", "INSERT", "UPDATE"],
   notification_preferences: ["SELECT", "INSERT", "UPDATE"],
   notifications: ["SELECT", "INSERT", "UPDATE", "DELETE"],

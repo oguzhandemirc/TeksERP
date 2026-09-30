@@ -2,13 +2,14 @@
 // her satır işi o tesisin kiracı kapsamında (RLS) koşar.
 //   · Tik: süresi dolan claim'ler — gelen kutusu ISLENIYOR → BEKLIYOR (fabrikanın makbuzu tekrarı
 //     idempotent kılar); rapor HESAPLANIYOR → BEKLIYOR (bir kez), ikincide HATA `ZAMAN_ASIMI`; hizmet
-//     bitiş damgası (`service-lifecycle.ts`).
+//     bitiş damgası (`service-lifecycle.ts`); kapanıştan 30 gün geçen hesabın kimlik silmesi.
 //   · Günlük: SAKLAMA (tesis başına 3 · 13 · 25 ay · tümü) + telemetri/ayak izi budaması.
 // Hard delete YALNIZ burada ve YALNIZ `PRUNED_TABLES` beyanındaki tablolarda (bekçi
 // `test_patron_kapilari` ölçer). Budanan hiçbir satır fabrikanın defteri değildir: bulut okuma
 // kopyası + kanal durumu + telemetridir; iş kararı bunlardan okunmaz.
 import { allProjectionNames, ROOT_PROJECTIONS, type RootProjection } from "../catalog/projections";
 import { allReportProjections } from "../catalog/reports";
+import { recordAudit } from "../lib/audit";
 import type { Tx } from "../lib/db";
 import { withMaintenanceList, withTesis } from "../lib/tenant";
 import type { CloudContext } from "./context";
@@ -23,7 +24,8 @@ export const PRUNED_TABLES = {
   report_results: "RAPOR_SONUC_SAKLAMA_GUN",
   report_requests: "sonuçlanmış + RAPOR_SONUC_SAKLAMA_GUN",
   inbox_messages: "sonuçlanmış + tesisin saklama süresi (asıl kayıt fabrikada)",
-  sessions: "kapanmış/bitmiş + OTURUM_SAKLAMA_GUN (telemetri)",
+  sessions: "kapanmış/bitmiş + OTURUM_SAKLAMA_GUN (telemetri) · kimliği silinen (kapanıştan IDENTITY_PURGE_DAYS sonra) hesabın bütün oturumları",
+  push_devices: "kimliği silinen (kapanıştan IDENTITY_PURGE_DAYS sonra) hesabın bildirim cihaz anahtarları (Ek-6/A §2.4)",
   operation_receipts: "ISLEM_SAKLAMA_GUN (işlem kimliği penceresi)",
   account_audit: "ayak izi: başarısız giriş DENETIM_GIRIS_SAKLAMA_GUN · diğerleri DENETIM_SAKLAMA_GUN",
   notifications: "sonuçlanmış (GONDERILDI · BASARISIZ · ATLANDI) + BILDIRIM_SAKLAMA_GUN (telemetri; olay kimliği günlük/olay başına, pencere ondan uzun)",
@@ -31,6 +33,18 @@ export const PRUNED_TABLES = {
 
 const DAY_MS = 86_400_000;
 const TOMBSTONE_DAYS = 7;
+
+/**
+ * Kapanan hesabın KİMLİĞİ bu kadar gün sonra silinir (Ek-6/A §2.5, "30 gün içinde") — metnin sözü, ortamdan
+ * değiştirilemez. Silinen: ad · e-posta · parola özeti · TOTP sırrı + adımı · davet · kilit sayaçları · oturumlar ·
+ * cihaz anahtarları; gelen kutusundaki yazar adı tombstone olur. KALAN: satır ve kimliği (iş kayıtları ona bağlı),
+ * durum, izinler, tarihler. Ayak izi `HESAP_KIMLIGI_SILINDI` (imha kaydı, Ek-6/A §6.1).
+ */
+export const IDENTITY_PURGE_DAYS = 30;
+
+/** Silinmiş hesabın gösterim adı ve e-postası (`.invalid` ayrılmış TLD: gerçek adres olamaz; tekillik kimlikten). */
+export const tombstoneName = (accountId: string): string => `Silinmiş hesap #${accountId.slice(0, 8)}`;
+export const tombstoneEmail = (accountId: string): string => `silinmis-${accountId}@hesap.invalid`;
 const FAILED_LOGIN_EVENTS = ["GIRIS_BASARISIZ", "GIRIS_REDDEDILDI", "HESAP_GECICI_KILIT"];
 
 function monthsBefore(nowMs: number, months: number): Date {
@@ -161,6 +175,47 @@ async function pruneAccountTables(ctx: CloudContext, f: { tesisId: string; reten
   });
 }
 
+// ---------------------------------------------------------------- tik: kapanan hesabın kimliği (Ek-6/A §2.5)
+
+/** Tek tx, `ACCOUNT_ADMIN` kilidi (İLK ifade); hesap başına atomik claim (`PASIF ∧ silinmemiş ∧ kapanış ≤ sınır`). */
+export async function purgeClosedIdentities(ctx: CloudContext, tesisId: string, nowMs: number): Promise<number> {
+  const cutoff = new Date(nowMs - IDENTITY_PURGE_DAYS * DAY_MS);
+  const due = { tesisId, status: "PASIF" as const, identityPurgedAt: null, closedAt: { lte: cutoff } };
+  const ids = await withTesis(ctx.app, { tesisId }, (tx) => tx.account.findMany({ where: due, select: { id: true } }));
+  if (ids.length === 0) return 0;
+  const purged = await withTesis(ctx.app, { tesisId, lock: { name: "ACCOUNT_ADMIN", key: tesisId } }, async (tx) => {
+    const out: { id: string; oturum: number; cihaz: number; gelenKutusu: number }[] = [];
+    for (const { id } of ids) {
+      const claim = await tx.account.updateMany({
+        where: { ...due, id },
+        data: {
+          name: tombstoneName(id),
+          email: tombstoneEmail(id),
+          passwordHash: null,
+          totpSecretSealed: null,
+          totpLastStep: null,
+          inviteTokenHash: null,
+          inviteExpiresAt: null,
+          failedLogins: 0,
+          lockedUntil: null,
+          identityPurgedAt: new Date(nowMs),
+        },
+      });
+      if (claim.count === 0) continue;
+      const oturum = (await tx.session.deleteMany({ where: { tesisId, accountId: id } })).count;
+      const cihaz = (await tx.pushDevice.deleteMany({ where: { tesisId, accountId: id } })).count;
+      const gelenKutusu = (await tx.inboxMessage.updateMany({ where: { tesisId, accountId: id }, data: { accountName: tombstoneName(id) } })).count;
+      out.push({ id, oturum, cihaz, gelenKutusu });
+    }
+    return out;
+  });
+  for (const p of purged) {
+    const summary = { kategoriler: ["ad", "eposta", "parola", "totp", "oturum", "cihaz"], oturum: p.oturum, cihaz: p.cihaz, gelenKutusu: p.gelenKutusu };
+    await recordAudit(ctx.app, { tesisId, actor: "sistem", event: "HESAP_KIMLIGI_SILINDI", entity: "Account", entityId: p.id, summary });
+  }
+  return purged.length;
+}
+
 export async function runDaily(ctx: CloudContext, nowMs: number): Promise<number> {
   let n = 0;
   for (const f of await listFacilities(ctx)) {
@@ -195,6 +250,9 @@ export class MaintenanceScheduler {
     try {
       await expireClaims(this.ctx, nowMs);
       const service = await refreshAllServiceEnds(this.ctx, nowMs);
+      let purged = 0;
+      for (const f of await listFacilities(this.ctx)) purged += await purgeClosedIdentities(this.ctx, f.tesisId, nowMs);
+      if (purged > 0) console.log(`[patron] bakım: ${purged} kapanmış hesabın kimliği silindi (Ek-6/A §2.5)`);
       const day = new Date(nowMs).toISOString().slice(0, 10);
       if (this.lastDailyDay !== day) {
         const n = await runDaily(this.ctx, nowMs);

@@ -188,7 +188,13 @@ export async function updateAccount(ctx: CloudContext, s: SessionContext, id: st
       const target = await loadTarget(tx, s, id);
       const next = { status: target.status, permissions: permissions ?? target.permissions };
       await assertNotLastAdmin(tx, target, next);
-      return tx.account.update({ where: { id }, data: { ...(input.ad ? { name: input.ad } : {}), ...(permissions ? { permissions } : {}) } });
+      // Arşivdeki (PASIF) hesap düzenlenmez: kimliği silinmiş kayıt yeniden tanımlanamasın (Ek-6/A §2.5). Atomik claim.
+      const r = await tx.account.updateMany({
+        where: { id, tesisId: s.tesisId, status: { not: "PASIF" } },
+        data: { ...(input.ad ? { name: input.ad } : {}), ...(permissions ? { permissions } : {}) },
+      });
+      if (r.count === 0) throw stateConflict("Arşivdeki hesap düzenlenemez", { durum: "PASIF" });
+      return tx.account.findUniqueOrThrow({ where: { id } });
     },
     respond: (a) => ({ data: accountView(a) }),
     audit: (a) => [{ actor: accountActor(s.accountId), event: "HESAP_GUNCELLENDI", entity: "Account", entityId: a.id, summary: { izinler: permissions ?? null, adDegisti: input.ad !== undefined } }],
@@ -220,7 +226,8 @@ export async function setAccountStatus(ctx: CloudContext, s: SessionContext, id:
       await assertNotLastAdmin(tx, target, { status: input.durum, permissions: target.permissions });
       const r = await tx.account.updateMany({
         where: { id, tesisId: s.tesisId, status: target.status },
-        data: { status: input.durum, ...(input.durum === "PASIF" ? { inviteTokenHash: null, inviteExpiresAt: null } : {}) },
+        // Kapanış anı PASIF'le AYNI claim'de: kimlik silme işi bu andan 30 gün sayar (CHECK: PASIF ⇔ closed_at).
+        data: { status: input.durum, ...(input.durum === "PASIF" ? { inviteTokenHash: null, inviteExpiresAt: null, closedAt: new Date(nowMs) } : {}) },
       });
       if (r.count === 0) throw stateConflict("Hesap bu arada değişti; listeyi yenileyip tekrar deneyin");
       if (input.durum !== "AKTIF") await closeSessions(tx, id, nowMs, "HESAP_KAPANDI");

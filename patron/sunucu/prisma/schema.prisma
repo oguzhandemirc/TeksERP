@@ -152,7 +152,8 @@ model Installation {
 // HESAPLAR (bulutta BAĞIMSIZ — fabrika kullanıcısına bağlanmaz; hesap başına TEK tesis)
 // -----------------------------------------------------------------------------
 
-/// Bulut hesabı. E-posta küçük harfe normalleşir ve TÜM bulutta tekildir (giriş tesis sormaz).
+/// Bulut hesabı. E-posta küçük harfe normalleşir ve TÜM bulutta tekildir (giriş tesis sormaz). PASIF terminaldir;
+/// kapanıştan 30 gün sonra kimliği silinir (`src/services/maintenance.ts` `purgeClosedIdentities`), satır iş kayıtlarının izi için kalır.
 /// Parola scrypt özeti; TOTP sırrı AES-256-GCM ile sarılı (anahtar ANAHTAR_DIZINI'nde, DB'de değil).
 /// İzinler kod kataloğundan (`src/catalog/permissions.ts`); süper yetki yoktur.
 model Account {
@@ -170,6 +171,10 @@ model Account {
   failedLogins     Int           @default(0) @map("failed_logins")
   lockedUntil      DateTime?     @map("locked_until") @db.Timestamptz
   lastLoginAt      DateTime?     @map("last_login_at") @db.Timestamptz
+  /// Kapanış anı (PASIF geçişiyle aynı claim'de; CHECK: PASIF ⇔ dolu).
+  closedAt         DateTime?     @map("closed_at") @db.Timestamptz
+  /// Kimlik silme anı (Ek-6/A §2.5: kapanıştan 30 gün sonra ad/e-posta/parola/TOTP silinir; satır ve id KALIR).
+  identityPurgedAt DateTime?     @map("identity_purged_at") @db.Timestamptz
   createdById      String?       @map("created_by_id") @db.Uuid
   createdAt        DateTime      @default(now()) @map("created_at") @db.Timestamptz
   updatedAt        DateTime      @updatedAt @map("updated_at") @db.Timestamptz
