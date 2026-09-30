@@ -20,6 +20,7 @@ import { MasterDataMergeService } from "../src/services/master-data-merge.servic
 // patlar (BaseService config zorunlu) ve testin kendi konfigini uydurması
 // üretimdekinden SAPAR (duplicateNameField/uniqueField farklı olabilir).
 import { itemService } from "../src/routes/item.routes";
+import { testActorId } from "./fixture-test-user";
 
 let pass = 0;
 let fail = 0;
@@ -215,7 +216,7 @@ async function main(): Promise<void> {
       name: `${TAG} KAYNAK`,
       itemType: "FABRIC",
       unit: "MT",
-    });
+    }, await testActorId());
     const id = (revived.data as { id: string }).id;
     created.items.push(id);
   } catch (e) {

@@ -21,6 +21,7 @@ import { CustomerBranchService } from "../src/services/customer-branch.service";
 import { branchCreateSchema, branchUpdateSchema } from "../src/routes/customer-branch.routes";
 import { AppError } from "../src/utils/app-error";
 import { cleanupTestCustomers } from "./fixture-customer-cleanup";
+import { testActorId } from "./fixture-test-user";
 
 let pass = 0;
 let fail = 0;
@@ -62,13 +63,13 @@ async function main() {
   createdIds.push(cari.id);
 
   // 2) create
-  const b1 = (await branches.create(cari.id, { name: `TEST ŞY1 ${TS}`, defaultDestination: "EXPORT" })).data as { id: string };
+  const b1 = (await branches.create(cari.id, { name: `TEST ŞY1 ${TS}`, defaultDestination: "EXPORT" }, await testActorId())).data as { id: string };
   check("2a create EXPORT yazıldı", (await yon(b1.id)) === "EXPORT");
-  const b2 = (await branches.create(cari.id, { name: `TEST ŞY2 ${TS}`, defaultDestination: "" })).data as { id: string };
+  const b2 = (await branches.create(cari.id, { name: `TEST ŞY2 ${TS}`, defaultDestination: "" }, await testActorId())).data as { id: string };
   check("2b create '' → null", (await yon(b2.id)) === null);
-  const b3 = (await branches.create(cari.id, { name: `TEST ŞY3 ${TS}` })).data as { id: string };
+  const b3 = (await branches.create(cari.id, { name: `TEST ŞY3 ${TS}` }, await testActorId())).data as { id: string };
   check("2c create alan yok → null (bugünkü davranış)", (await yon(b3.id)) === null);
-  const e2 = await hata(() => branches.create(cari.id, { name: `TEST ŞY4 ${TS}`, defaultDestination: "OVERSEAS" }));
+  const e2 = await hata(async () => branches.create(cari.id, { name: `TEST ŞY4 ${TS}`, defaultDestination: "OVERSEAS" }, await testActorId()));
   check("2d create enum dışı → 400 Türkçe", e2?.statusCode === 400 && e2.message.includes("Şube sevk yönü"), e2?.message ?? "hata yok");
   const sizan = await prisma.customerBranch.count({ where: { customerId: cari.id, name: { contains: "ŞY4" } } });
   check("2e reddedilen şube DOĞMADI", sizan === 0, String(sizan));

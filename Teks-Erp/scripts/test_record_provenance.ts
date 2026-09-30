@@ -14,6 +14,7 @@
 //
 // §7 YAZIM YOLU: listede olmak yalnız BaseService yolunu kapsar; listedeki modelin src'deki HER yaratma
 // çağrısı oluşturanı yazmalı ya da `scripts/lib/kunye-yazim-tarama.ts` KUNYE_BORCLARI'nda açık adla durmalı.
+// §9 CANLI: şube (iki-adım + cari kartıyla iç-içe) ve ürün kartı doğuşu aktörü yazar; aktörsüz doğuş 401.
 // =============================================================================
 import fs from "fs";
 import path from "path";
@@ -349,6 +350,66 @@ async function main(): Promise<void> {
     }
     await prisma.item.deleteMany({ where: { id: oItem.id } }).catch(() => {});
     await prisma.customer.deleteMany({ where: { id: oCust.id } }).catch(() => {});
+  }
+
+  // ── 9) CANLI: şube ve ürün kartı doğuşu oluşturanı yazar, aktörsüz doğuş 401 ──
+  // İki yol 2026-09-30'a kadar KUNYE_BORCLARI'ndaydı; burada canlı ölçülür (statik §7 iç-içe create'i görmez).
+  const kCust = await prisma.customer.create({ data: { code: `TEST-PRV-KC-${ts}`, name: `TEST KUNYE SUBE ${ts}` }, select: { id: true } });
+  const kItemIds: string[] = [];
+  const kCustIds: string[] = [kCust.id];
+  try {
+    const { CustomerBranchService } = await import("../src/services/customer-branch.service");
+    const bsvc = new CustomerBranchService();
+    const b = (await bsvc.create(kCust.id, { name: `TEST KUNYE SUBE ${ts}` }, u1!.id)).data as { id: string };
+    const bRow = await prisma.customerBranch.findUnique({ where: { id: b.id }, select: { createdById: true, updatedById: true } });
+    check("şube create → createdById = aktör", bRow?.createdById === u1!.id, String(bRow?.createdById));
+    check("şube create → updatedById = aktör", bRow?.updatedById === u1!.id, String(bRow?.updatedById));
+    await bsvc.update(kCust.id, b.id, { notes: "künye" }, u2!.id);
+    const bUpd = await prisma.customerBranch.findUnique({ where: { id: b.id }, select: { createdById: true, updatedById: true } });
+    check("şube update → oluşturan KORUNDU, son değiştiren yazıldı",
+      bUpd?.createdById === u1!.id && bUpd?.updatedById === u2!.id, `${bUpd?.createdById} / ${bUpd?.updatedById}`);
+    const bAnon = await bsvc.create(kCust.id, { name: `TEST KUNYE SUBE ANON ${ts}` }, undefined).then(() => null, (e: { statusCode?: number }) => e);
+    check("şube create aktörsüz → 401 (sessiz NULL değil)", bAnon?.statusCode === 401, String(bAnon?.statusCode ?? "hata yok"));
+
+    const { itemService } = await import("../src/routes/item.routes");
+    const it = (await itemService.create({ code: `TEST-PRV-KI-${ts}`, name: `TEST KUNYE KART ${ts}`, itemType: "FABRIC", unit: "MT" }, u1!.id)).data as { id: string };
+    kItemIds.push(it.id);
+    const iRow = await prisma.item.findUnique({ where: { id: it.id }, select: { createdById: true, updatedById: true } });
+    check("ürün kartı create → createdById = aktör", iRow?.createdById === u1!.id, String(iRow?.createdById));
+    check("ürün kartı create → updatedById = aktör", iRow?.updatedById === u1!.id, String(iRow?.updatedById));
+    await itemService.transitionLifecycle(it.id, "ARCHIVED" as never, null, u1!.id);
+    await itemService.create({ code: `TEST-PRV-KI-${ts}`, name: `TEST KUNYE KART ${ts}`, itemType: "FABRIC", unit: "MT" }, u2!.id);
+    const iRev = await prisma.item.findUnique({ where: { id: it.id }, select: { createdById: true, updatedById: true, isActive: true } });
+    check("ürün kartı diriltme → oluşturan KORUNDU, son değiştiren = diriltenin aktörü",
+      iRev?.isActive === true && iRev.createdById === u1!.id && iRev.updatedById === u2!.id,
+      `${iRev?.isActive} ${iRev?.createdById} / ${iRev?.updatedById}`);
+    const iAnon = await itemService.create({ name: `TEST KUNYE ANON ${ts}`, itemType: "FABRIC" }, undefined).then(() => null, (e: { statusCode?: number }) => e);
+    check("ürün kartı create aktörsüz → 401", iAnon?.statusCode === 401, String(iAnon?.statusCode ?? "hata yok"));
+    const q = (await itemService.quickCreateFabric(`TEST KUNYE HIZLI ${ts}`, u1!.id)).data as { id: string };
+    kItemIds.push(q.id);
+    const qRow = await prisma.item.findUnique({ where: { id: q.id }, select: { createdById: true } });
+    check("saha hızlı desen → createdById = aktör", qRow?.createdById === u1!.id, String(qRow?.createdById));
+
+    // Cari kartıyla İÇ-İÇE doğan şube (panel tek adım + bulut gelen kutusu cari yolu aynı createCardInTx).
+    const { customerService } = await import("../src/routes/customer.routes");
+    const c = (await customerService.create({ name: `TEST KUNYE CARI ${ts}`, branches: [{ name: `TEST KUNYE IC SUBE ${ts}` }] }, u1!.id)).data as { id: string };
+    kCustIds.push(c.id);
+    const inl = await prisma.customerBranch.findMany({ where: { customerId: c.id }, select: { createdById: true, updatedById: true } });
+    check("iç-içe şube → createdById/updatedById = aktör",
+      inl.length === 1 && inl[0]!.createdById === u1!.id && inl[0]!.updatedById === u1!.id,
+      inl.map((r) => `${r.createdById}/${r.updatedById}`).join(" · ") || "şube yok");
+  } finally {
+    for (const id of kItemIds) {
+      await prisma.systemLog.deleteMany({ where: { tableName: "ITEM", recordId: id } }).catch(() => {});
+      await prisma.item.deleteMany({ where: { id } }).catch(() => {});
+    }
+    for (const id of kCustIds) {
+      const br = await prisma.customerBranch.findMany({ where: { customerId: id }, select: { id: true } });
+      await prisma.systemLog.deleteMany({ where: { recordId: { in: [id, ...br.map((x) => x.id)] } } }).catch(() => {});
+      await prisma.customerBranch.deleteMany({ where: { customerId: id } }).catch(() => {});
+      await prisma.cariAccount.deleteMany({ where: { customerId: id } }).catch(() => {});
+      await prisma.customer.deleteMany({ where: { id } }).catch(() => {});
+    }
   }
 
   await prisma.workOrder.deleteMany({ where: { id: prvWo.id } }).catch(() => {});

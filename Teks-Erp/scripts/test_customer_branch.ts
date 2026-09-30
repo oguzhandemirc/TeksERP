@@ -6,6 +6,7 @@
 import prisma from "../src/lib/prisma";
 import { CustomerBranchService } from "../src/services/customer-branch.service";
 import { AppError } from "../src/utils/app-error";
+import { testActorId } from "./fixture-test-user";
 
 let pass = 0, fail = 0;
 function check(label: string, ok: boolean, extra = ""): void {
@@ -21,12 +22,12 @@ async function main(): Promise<void> {
   let branchId = "";
   try {
     // 1) create başarılı
-    const r = await svc.create(customer.id, { name: "Merkez Depo", code: "MRK" }, undefined);
+    const r = await svc.create(customer.id, { name: "Merkez Depo", code: "MRK" }, await testActorId());
     branchId = (r.data as { id: string }).id;
     check("create → şube oluştu", !!branchId);
 
     // 2) olmayan müşteri → 404
-    let nf: unknown; try { await svc.create("00000000-0000-0000-0000-000000000000", { name: "X" }, undefined); } catch (e) { nf = e; }
+    let nf: unknown; try { await svc.create("00000000-0000-0000-0000-000000000000", { name: "X" }, await testActorId()); } catch (e) { nf = e; }
     check("olmayan müşteri → 404", hasStatus(nf, 404));
 
     // 3) default liste aktif şubeyi içerir
@@ -49,7 +50,7 @@ async function main(): Promise<void> {
     check("tekrar deactivate → 'zaten pasif'", (again.message ?? "").includes("zaten pasif"));
 
     // 7) M-26: açık siparişli şube deactivate → 409 + sipariş no listelenir
-    const b2 = (await svc.create(customer.id, { name: "Şube 2" }, undefined)).data as { id: string };
+    const b2 = (await svc.create(customer.id, { name: "Şube 2" }, await testActorId())).data as { id: string };
     const ord = await prisma.order.create({ data: { orderNumber: `TEST-CBORD-${stamp}`, customerId: customer.id, branchId: b2.id, status: "APPROVED" } });
     let blocked: unknown; try { await svc.deactivate(customer.id, b2.id, undefined); } catch (e) { blocked = e; }
     check("açık siparişli şube deactivate → 409", hasStatus(blocked, 409));

@@ -13,7 +13,7 @@
 // =============================================================================
 import { ItemLifecycleStatus, OrderStatus, RollStatus, StationType } from "@prisma/client";
 import prisma, { pool } from "../src/lib/prisma";
-import { ensureTestAdmin } from "./fixture-test-user";
+import { ensureTestAdmin, testActorId } from "./fixture-test-user";
 import { colorService } from "../src/routes/color.routes";
 import { fabricPropertyService } from "../src/routes/fabric-property.routes";
 import { customerService } from "../src/routes/customer.routes";
@@ -84,7 +84,7 @@ async function main(): Promise<void> {
   const ST_BOYA = await need("BOYA_FASON");
   const ST_TAMBUR = await need("TAMBUR_1");
   void StationType;
-  const item = (await itemService.create({ name: `${T} KUMAS`, itemType: "FABRIC", unit: "MT" })).data as { id: string; name: string };
+  const item = (await itemService.create({ name: `${T} KUMAS`, itemType: "FABRIC", unit: "MT" }, await testActorId())).data as { id: string; name: string };
   ids.items.push(item.id);
 
   console.log("=== 1) Renk ===");

@@ -76,6 +76,7 @@ import { BaseService } from "../src/services/base.service";
 import { foldCodeForCompare } from "../src/utils/code-format";
 import { foldNameForCompare } from "../src/services/helpers/name-normalize.helper";
 import { CustomerBranchService } from "../src/services/customer-branch.service";
+import { testActorId } from "./fixture-test-user";
 
 let pass = 0;
 let fail = 0;
@@ -169,6 +170,7 @@ function guardMi(e: unknown): boolean {
 }
 
 async function main(): Promise<void> {
+  const actor = await testActorId();
   try {
     // ── [1] KÖRLÜK ZEMİNİ: doğru katlama fonksiyonu kullanılıyor mu ───────────
     console.log("\n[1] Katlama fonksiyonu + fixture zemini");
@@ -259,7 +261,7 @@ async function main(): Promise<void> {
     console.log("\n[2] Item create — harf farkıyla aynı kod reddedilir");
     const baseCode = `TEST-CASE-${TS}`;
     const a1 = trackItem(
-      await itemService.create({ name: `TEST CASE A1 ${TS}`, itemType: "FABRIC", code: baseCode }),
+      await itemService.create({ name: `TEST CASE A1 ${TS}`, itemType: "FABRIC", code: baseCode }, actor),
     );
     check("düz create geçti (kod aynen saklandı)", a1.code === baseCode, a1.code);
 
@@ -271,7 +273,7 @@ async function main(): Promise<void> {
           name: `TEST CASE A2 ${TS}`,
           itemType: "FABRIC",
           code: baseCode.toLowerCase(),
-        }),
+        }, actor),
     );
     await expectConflict(
       "karışık harf düzeni de → 409",
@@ -281,7 +283,7 @@ async function main(): Promise<void> {
           name: `TEST CASE A3 ${TS}`,
           itemType: "FABRIC",
           code: `Test-Case-${TS}`,
-        }),
+        }, actor),
     );
     // Mesaj SOMUT olmalı: operatör hangi kayda çarptığını görmeli.
     let hitMsg = "";
@@ -290,7 +292,7 @@ async function main(): Promise<void> {
         name: `TEST CASE A4 ${TS}`,
         itemType: "FABRIC",
         code: baseCode.toLowerCase(),
-      });
+      }, actor);
     } catch (e) {
       hitMsg = errInfo(e).message;
     }
@@ -306,7 +308,7 @@ async function main(): Promise<void> {
         name: `TEST CASE B1 ${TS}`,
         itemType: "FABRIC",
         code: `TEST-CASE-${TS}-X`,
-      }),
+      }, actor),
     );
     check("gerçekten farklı kod GEÇTİ", other.code === `TEST-CASE-${TS}-X`, other.code);
 
@@ -314,7 +316,7 @@ async function main(): Promise<void> {
     console.log("\n[3] Türkçe i/I tuzağı");
     const iCode = `TEST-SIP-${TS}`; // büyük I
     trackItem(
-      await itemService.create({ name: `TEST SIP ${TS}`, itemType: "FABRIC", code: iCode }),
+      await itemService.create({ name: `TEST SIP ${TS}`, itemType: "FABRIC", code: iCode }, actor),
     );
     await expectConflict(
       "'...SIP...' ↔ '...sip...' çakışması yakalandı (tr-TR katlamasında KAÇARDI)",
@@ -324,7 +326,7 @@ async function main(): Promise<void> {
           name: `TEST SIP LOWER ${TS}`,
           itemType: "FABRIC",
           code: iCode.toLowerCase(),
-        }),
+        }, actor),
     );
 
     // ── [4] Reactivate YALNIZ TAM EŞLEŞMEDE ─────────────────────────────────
@@ -342,7 +344,7 @@ async function main(): Promise<void> {
           name: `TEST CASE A1 WRONGCASE ${TS}`,
           itemType: "FABRIC",
           code: baseCode.toLowerCase(),
-        }),
+        }, actor),
     );
     const stillPassive = await prisma.item.findUnique({
       where: { id: a1.id },
@@ -361,7 +363,7 @@ async function main(): Promise<void> {
       name: `TEST CASE A1 REVIVED ${TS}`,
       itemType: "FABRIC",
       code: baseCode,
-    });
+    }, actor);
     const revived = revivedRes.data as { id: string; code: string; isActive: boolean };
     check("tam eşleşmeli pasif kayıt DİRİLDİ (yeni satır açılmadı)", revived.id === a1.id, revived.id);
     check("dirilen kayıt AKTİF", revived.isActive === true);
@@ -410,7 +412,7 @@ async function main(): Promise<void> {
           name: `TEST TWIN PASSIVE ${TS}`,
           itemType: "FABRIC",
           code: twinCode.toLowerCase(),
-        });
+        }, actor);
         twinRevived = twinRes.data as { id: string; isActive: boolean };
       } catch (e) {
         twinErr = errInfo(e).message;
@@ -425,7 +427,7 @@ async function main(): Promise<void> {
         "aktif kaydın tam kodu → 409 (eski mesaj korunuyor)",
         "aktif ürün zaten var",
         () =>
-          itemService.create({ name: `TEST TWIN X ${TS}`, itemType: "FABRIC", code: twinCode }),
+          itemService.create({ name: `TEST TWIN X ${TS}`, itemType: "FABRIC", code: twinCode }, actor),
       );
 
       // ── [5] Harf farkıyla eşleşen PASİF kayıt(lar) → 409, çıkış yolu söylenir ─
@@ -466,7 +468,7 @@ async function main(): Promise<void> {
           name: `TEST AMB PICK ${TS}`,
           itemType: "FABRIC",
           code: `Test-Amb-${TS}`,
-        });
+        }, actor);
       } catch (e) {
         ambMsg = errInfo(e).message;
       }
@@ -525,7 +527,7 @@ async function main(): Promise<void> {
 
     // ── [7] Otomatik kod yolu etkilenmedi (kapsam dar) ──────────────────────
     console.log("\n[7] Otomatik STK- yolu");
-    const auto = trackItem(await itemService.create({ name: `TEST AUTO ${TS}`, itemType: "FABRIC" }));
+    const auto = trackItem(await itemService.create({ name: `TEST AUTO ${TS}`, itemType: "FABRIC" }, actor));
     check("kod verilmeyince STK- üretildi", /^STK-\d{6,}$/.test(auto.code), auto.code);
 
     // ── [8] BaseService yolu (QualityGrade) — create + update ───────────────
@@ -604,9 +606,9 @@ async function main(): Promise<void> {
     // ⚠️ `Promise.all` burada MEŞRU: bunlar tx'i PAYLAŞMAYAN, beş ayrı istek
     // (perf kuralı 11 tek `tx` client'ını paylaşmaya ilişkindir). Sıralı hale
     // getirilirse bekçi sessizce ölür.
-    const settled = await Promise.allSettled(
+        const settled = await Promise.allSettled(
       variants.map((code, i) =>
-        itemService.create({ name: `TEST RACE ${i} ${TS}`, itemType: "FABRIC", code }),
+        itemService.create({ name: `TEST RACE ${i} ${TS}`, itemType: "FABRIC", code }, actor),
       ),
     );
     for (const r of settled) {
@@ -637,18 +639,18 @@ async function main(): Promise<void> {
       select: { id: true },
     });
     customerIds.push(cust.id);
-    await branchService.create(cust.id, { name: `TEST CB SUBE A ${TS}`, code: "İSTANBUL" });
+    await branchService.create(cust.id, { name: `TEST CB SUBE A ${TS}`, code: "İSTANBUL" }, actor);
     await expectConflict(
       "aynı müşteride 'istanbul' ↔ 'İSTANBUL' → 409 (Türkçe İ)",
       "ihracat kodlu bir şube zaten var",
-      () => branchService.create(cust.id, { name: `TEST CB SUBE B ${TS}`, code: "istanbul" }),
+      () => branchService.create(cust.id, { name: `TEST CB SUBE B ${TS}`, code: "istanbul" }, actor),
     );
     await expectConflict(
       "aynı müşteride 'mrk' ↔ 'MRK' → 409 (ASCII harf farkı)",
       "ihracat kodlu bir şube zaten var",
       async () => {
-        await branchService.create(cust.id, { name: `TEST CB SUBE C ${TS}`, code: "MRK" });
-        await branchService.create(cust.id, { name: `TEST CB SUBE D ${TS}`, code: "mrk" });
+        await branchService.create(cust.id, { name: `TEST CB SUBE C ${TS}`, code: "MRK" }, actor);
+        await branchService.create(cust.id, { name: `TEST CB SUBE D ${TS}`, code: "mrk" }, actor);
       },
     );
     const branchCount = await prisma.customerBranch.count({ where: { customerId: cust.id } });

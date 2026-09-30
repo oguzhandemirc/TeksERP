@@ -18,6 +18,7 @@ import { InventoryService } from "../src/services/inventory.service";
 import { ItemService } from "../src/services/item.service";
 import { ROLL_BARCODE_RE } from "../src/services/helpers/roll-barcode.helper";
 import { AppError } from "../src/utils/app-error";
+import { testActorId } from "./fixture-test-user";
 
 let pass = 0;
 let fail = 0;
@@ -53,7 +54,7 @@ async function main() {
     for (const suf of ["A", "B"]) {
       const r = await itemService.create(
         { code: `TEST-P1B-${suf}-${ts}`, name: `TEST P1B ${suf}`, itemType: "FABRIC", unit: "MT" },
-        undefined,
+        await testActorId(),
       );
       itemIds.push((r.data as { id: string }).id);
     }

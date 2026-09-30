@@ -16,6 +16,7 @@ import { ItemService } from "../src/services/item.service";
 import { InventoryService } from "../src/services/inventory.service";
 import { AppError } from "../src/utils/app-error";
 import { RollStatus } from "@prisma/client";
+import { testActorId } from "./fixture-test-user";
 
 let pass = 0;
 let fail = 0;
@@ -53,7 +54,7 @@ async function main() {
     // ── Fixture: bir ürün + o ürüne bağlı bir Roll ──────────────────────────
     const created = await itemService.create(
       { code: itemCode, name: "TEST P0 URUN", itemType: "FABRIC", unit: "MT" },
-      undefined,
+      await testActorId(),
     );
     itemId = (created.data as { id: string }).id;
     check("fixture: ürün oluştu", !!itemId, itemId);

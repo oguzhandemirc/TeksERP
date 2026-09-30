@@ -13,9 +13,9 @@
 import prisma from "../lib/prisma";
 import { Request } from "express";
 import { parseQueryParams, readIdCondition } from "../utils/query-parser";
-import { ItemLifecycleStatus, ItemUnit } from "@prisma/client";
+import { ItemLifecycleStatus, ItemUnit, Prisma } from "@prisma/client";
 import { AuditService } from "./audit.service";
-import { BaseService } from "./base.service";
+import { BaseService, requireActorId, withActor } from "./base.service";
 import { ApiResponse } from "../types/api.types";
 import { AppError } from "../utils/app-error";
 import { validateName, validateCode } from "../lib/string-validators";
@@ -186,9 +186,11 @@ export class ItemService extends BaseService {
    */
   async create(
     data: Record<string, unknown>,
-    userId?: string,
+    userId: string | undefined,
     opts?: { pendingReview?: boolean },
   ): Promise<ApiResponse<unknown>> {
+    // Oluşturan doğuşta yazılır (künye); BaseController `req.user?.userId` verir, eksikse 401.
+    const actorId = requireActorId(userId, "Ürün kartı");
     const input = data as unknown as ItemCreateInput;
     await assertWarpSpecAssignable(input.itemType, input.warpSpecId);
 
@@ -304,7 +306,7 @@ export class ItemService extends BaseService {
               itemId: target.id,
               to: ItemLifecycleStatus.ACTIVE,
               reason: "Aynı kodla yeniden oluşturuldu",
-              userId,
+              userId: actorId,
             });
             if (tr.idempotent) {
               throw AppError.conflict("Bu kod ile aktif ürün zaten var");
@@ -318,6 +320,8 @@ export class ItemService extends BaseService {
             const revived = await tx.item.update({
               where: { id: target.id },
               data: {
+                // Diriltme bir güncellemedir: son değiştiren yazılır, oluşturan korunur.
+                updatedById: actorId,
                 name: input.name.trim(),
                 unit: (input.unit ?? "MT") as ItemUnit,
                 // Diriltme de yeni gövdeyi uygular (create ile aynı sözleşme).
@@ -342,7 +346,7 @@ export class ItemService extends BaseService {
             return { record: revived, revivedFrom: target };
           }
           const fresh = await tx.item.create({
-            data: {
+            data: withActor({
               code,
               name: input.name.trim(),
               itemType: input.itemType as never,
@@ -365,7 +369,7 @@ export class ItemService extends BaseService {
                 allowedPropertyIds.length > 0
                   ? { create: allowedPropertyIds.map((propertyId) => ({ propertyId })) }
                   : undefined,
-            },
+            }, actorId, "CREATE", "item") as Prisma.ItemUncheckedCreateInput,
             include: {
               allowedColors: { include: { color: true } },
               allowedProperties: { include: { property: true } },
@@ -384,7 +388,7 @@ export class ItemService extends BaseService {
     const revivedFrom = result.revivedFrom;
 
     await AuditService.log({
-      userId,
+      userId: actorId,
       action: revivedFrom ? "UPDATE" : "CREATE",
       tableName: this.config.tableName,
       recordId: created.id,
@@ -416,7 +420,7 @@ export class ItemService extends BaseService {
    */
   async quickCreateFabric(
     name: string,
-    userId?: string,
+    userId: string | undefined,
   ): Promise<ApiResponse<unknown>> {
     return this.create({ name, itemType: "FABRIC" }, userId, {
       pendingReview: true,

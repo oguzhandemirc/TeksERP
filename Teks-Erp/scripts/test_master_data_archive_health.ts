@@ -15,6 +15,7 @@
 import { ItemLifecycleStatus, OrderStatus, RollStatus } from "@prisma/client";
 import prisma, { pool } from "../src/lib/prisma";
 import { itemService } from "../src/routes/item.routes";
+import { testActorId } from "./fixture-test-user";
 import {
   masterDataArchiveHealthSnapshot,
   measureMasterDataArchiveHealth,
@@ -40,7 +41,7 @@ let customerId = "";
 let seq = 0;
 
 async function mkItem(tag: string): Promise<string> {
-  const r = await itemService.create({ name: `${T} ${tag}`, itemType: "FABRIC", unit: "MT" });
+  const r = await itemService.create({ name: `${T} ${tag}`, itemType: "FABRIC", unit: "MT" }, await testActorId());
   const id = (r.data as { id: string }).id;
   itemIds.push(id);
   return id;

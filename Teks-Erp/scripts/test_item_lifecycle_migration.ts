@@ -15,7 +15,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { ItemLifecycleStatus, RollStatus } from "@prisma/client";
 import prisma, { pool } from "../src/lib/prisma";
-import { ensureTestAdmin } from "./fixture-test-user";
+import { ensureTestAdmin, testActorId } from "./fixture-test-user";
 import { itemService } from "../src/routes/item.routes";
 import { InventoryService } from "../src/services/inventory.service";
 import { countItemLiveRefs, totalLiveRefs } from "../src/services/helpers/item-lifecycle.helper";
@@ -52,7 +52,7 @@ async function main(): Promise<void> {
 
   // Fikstür: her kartın canlılığı bilinen biçimde kurulur (SQL ↔ TS iki yönlü sınansın).
   const mk = async (s: string, t: "FABRIC" | "YARN" = "FABRIC") => {
-    const r = await itemService.create({ name: `${TAG} ${s}`, itemType: t, unit: t === "YARN" ? "KG" : "MT" });
+    const r = await itemService.create({ name: `${TAG} ${s}`, itemType: t, unit: t === "YARN" ? "KG" : "MT" }, await testActorId());
     const id = (r.data as { id: string }).id;
     itemIds.push(id);
     return id;

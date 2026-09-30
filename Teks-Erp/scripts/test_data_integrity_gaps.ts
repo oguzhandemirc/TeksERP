@@ -25,6 +25,7 @@ import { RouteService, ROUTE_SERVICE_CONFIG } from "../src/services/route.servic
 import { ItemService } from "../src/services/item.service";
 import { ColorService } from "../src/services/color.service";
 import { cleanupTestCustomers } from "./fixture-customer-cleanup";
+import { testActorId } from "./fixture-test-user";
 
 let pass = 0;
 let fail = 0;
@@ -96,10 +97,10 @@ async function main() {
 
     // --- 5) Şube: salt-boşluk ad + kod mükerrer ---
     await expectReject("Şube: salt-boşluk ad reddi",
-      () => branchSvc.create(cu1id, { name: "   " }, undefined), "zorunlu");
-    await branchSvc.create(cu1id, { name: `TDG Şube ${sfx}`, code: `SB-${sfx}` }, undefined);
+      async () => branchSvc.create(cu1id, { name: "   " }, await testActorId()), "zorunlu");
+    await branchSvc.create(cu1id, { name: `TDG Şube ${sfx}`, code: `SB-${sfx}` }, await testActorId());
     await expectReject("Şube: aynı müşteride mükerrer kod 409",
-      () => branchSvc.create(cu1id, { name: `TDG Şube 2 ${sfx}`, code: `sb-${sfx}` }, undefined), "kodlu");
+      async () => branchSvc.create(cu1id, { name: `TDG Şube 2 ${sfx}`, code: `sb-${sfx}` }, await testActorId()), "kodlu");
 
     // --- Fixtures: item + color (recipe/order için) ---
     const colorInList = await colorSvc.create({ code: `TDG-COL-IN-${sfx}`, name: `TDG Renk İçi ${sfx}` }, undefined);
@@ -108,7 +109,7 @@ async function main() {
     const colorOutId = (colorOut.data as { id: string }).id; made.colorIds.push(colorOutId);
     // İzinli renk listesi SADECE colorIn olan ürün
     const it1 = await itemSvc.create(
-      { name: `TDG Kumaş ${sfx}`, itemType: "FABRIC", unit: "MT", allowedColorIds: [colorInId] }, undefined);
+      { name: `TDG Kumaş ${sfx}`, itemType: "FABRIC", unit: "MT", allowedColorIds: [colorInId] }, await testActorId());
     const it1id = (it1.data as { id: string }).id; made.itemIds.push(it1id);
 
     // --- 6) Sipariş kalemi en (width) ---

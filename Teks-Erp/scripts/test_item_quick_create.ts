@@ -13,6 +13,7 @@
 import prisma from "../src/lib/prisma";
 import { ItemService } from "../src/services/item.service";
 import { AppError } from "../src/utils/app-error";
+import { testActorId } from "./fixture-test-user";
 
 let pass = 0;
 let fail = 0;
@@ -63,7 +64,7 @@ async function main() {
 
   try {
     // 1) quickCreateFabric → tüm alanlar backend'den, pendingReview=true
-    const res = await service.quickCreateFabric(NAME, undefined);
+    const res = await service.quickCreateFabric(NAME, await testActorId());
     const rec = res.data as ItemRec | null;
     if (rec?.id) createdIds.push(rec.id);
     check("quick-create başarılı", res.success === true);
@@ -77,7 +78,7 @@ async function main() {
     // 2) Aynı adla ikinci quick-create → 409
     await expectConflict(
       "aynı adla ikinci quick-create → 409",
-      () => service.quickCreateFabric(NAME.toLocaleLowerCase("tr-TR"), undefined),
+      async () => service.quickCreateFabric(NAME.toLocaleLowerCase("tr-TR"), await testActorId()),
       "zaten var",
     );
 
@@ -85,7 +86,7 @@ async function main() {
     const spoofName = `TEST-DESEN-SPOOF-${ts}`;
     const spoof = await service.create(
       { name: spoofName, itemType: "FABRIC", pendingReview: true } as Record<string, unknown>,
-      undefined,
+      await testActorId(),
     );
     const spoofRec = spoof.data as ItemRec | null;
     if (spoofRec?.id) createdIds.push(spoofRec.id);

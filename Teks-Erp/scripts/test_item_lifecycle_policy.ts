@@ -11,7 +11,7 @@
 // =============================================================================
 import { ItemLifecycleStatus } from "@prisma/client";
 import prisma, { pool } from "../src/lib/prisma";
-import { ensureTestAdmin } from "./fixture-test-user";
+import { ensureTestAdmin, testActorId } from "./fixture-test-user";
 import { itemService } from "../src/routes/item.routes";
 import { InventoryService } from "../src/services/inventory.service";
 import { OrderService } from "../src/services/order.service";
@@ -71,7 +71,7 @@ async function setSetting(key: string, value: string | boolean): Promise<void> {
 }
 
 async function mkItem(suffix: string, itemType: "FABRIC" | "YARN" = "FABRIC"): Promise<string> {
-  const r = await itemService.create({ name: `${TAG} ${suffix}`, itemType, unit: itemType === "YARN" ? "KG" : "MT" });
+  const r = await itemService.create({ name: `${TAG} ${suffix}`, itemType, unit: itemType === "YARN" ? "KG" : "MT" }, await testActorId());
   const id = (r.data as { id: string }).id;
   itemIds.push(id);
   return id;

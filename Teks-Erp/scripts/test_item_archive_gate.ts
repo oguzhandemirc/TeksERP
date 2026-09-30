@@ -10,7 +10,7 @@
 // =============================================================================
 import { ItemLifecycleStatus, RollStatus } from "@prisma/client";
 import prisma, { pool } from "../src/lib/prisma";
-import { ensureTestAdmin } from "./fixture-test-user";
+import { ensureTestAdmin, testActorId } from "./fixture-test-user";
 import { itemService } from "../src/routes/item.routes";
 import { InventoryService } from "../src/services/inventory.service";
 import { MasterDataMergeService } from "../src/services/master-data-merge.service";
@@ -42,7 +42,7 @@ const inventory = new InventoryService();
 const itemIds: string[] = [];
 
 async function mkItem(suffix: string): Promise<string> {
-  const r = await itemService.create({ name: `${TAG} ${suffix}`, itemType: "FABRIC", unit: "MT" });
+  const r = await itemService.create({ name: `${TAG} ${suffix}`, itemType: "FABRIC", unit: "MT" }, await testActorId());
   const id = (r.data as { id: string }).id;
   itemIds.push(id);
   return id;
