@@ -108,6 +108,14 @@ export const SUPPORT_GRANTS: Readonly<Record<string, "*" | readonly string[]>> =
   request_nonces: "*",
 };
 
+/**
+ * Destek rolünün ÇALIŞTIRABİLDİĞİ fonksiyonlar — beyan (`şema.ad(arg tipleri)`, `oidvectortypes` biçimi). PUBLIC'ten
+ * gelen EXECUTE dahil başka her fonksiyon bekçide kırmızıdır; her SECURITY DEFINER fonksiyonun `search_path`i sabit
+ * ve `pg_temp` sonda olmalıdır (çağıranın yolu ad çeviremez). Destek rolü görünüm/başka ilişki OKUYAMAZ (yalnız
+ * `SUPPORT_GRANTS` tabloları).
+ */
+export const SUPPORT_FUNCTIONS: readonly string[] = ["public.destek_ac(uuid, text, text, text, integer)", "public.destek_kapat()", "public.destek_tesisi()"];
+
 /** Destek rolünün adı (göç SQL'i `current_database() || '_destek'` ile AYNI kural). */
 export function supportRoleName(database: string): string {
   return `${database}_destek`;
