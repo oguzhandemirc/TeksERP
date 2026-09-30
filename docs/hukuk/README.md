@@ -48,11 +48,12 @@ Sözleşmeler aşağıdaki değerleri müşteriye TAAHHÜT eder. Koddaki değer 
 | Gelen Kutusu (Ek-6/A §2.4) | tesisin geçmiş seçeneği kadar | tesis `retentionMonths` (`patron/sunucu/src/services/maintenance.ts`) |
 | Web bildirim hizmetleri (Ek-6 §6.1) | Google, Mozilla, Apple, Microsoft | `WEB_PUSH_HOSTS` (`patron/sunucu/src/push/targets.ts`) |
 | Bildirim içeriği (Ek-6 §6.2, Ek-6/C §3) | cari ve kişi adı yok; toplam tutar olabilir | `patron/sunucu/src/services/notification-events.ts` |
-| Hizmet bitişinden sonra erişim (Ek-6/A §4.2) | 90 gün salt okuma + JSON/CSV dışa aktarma | **kod borcu** — ayrı dilim (`UYGULAMA-NOTLARI.md`) |
-| Kapatılan bulut hesabının kimlik verisi (Ek-6/A §2.5, Ek-6/C §3) | 30 gün içinde silinir | **kod borcu** — ayrı dilim |
-| Erişim kayıtları (IP) (Ek-3 D, Ek-6/A §2.4) | 30 gün, zamana göre | **işletim borcu** — bugün boyuta göre dönüyor |
-| Doğrudan veritabanı sorgusu (Ek-6/B §3.2) | ayrı salt okunur destek rolü + oturum kaydı | **işletim borcu** — hizmet açılmadan kurulur |
-| Kabul kaydı olmadan etkinleştirme (Ek-7 §5) | satıcı reddeder; panel önce kabul adımını gösterir | **kod borcu** — satıcı + panel |
+| Hizmet bitişinden sonra erişim (Ek-6/A §4.2) | 90 gün salt okuma + JSON/CSV dışa aktarma, sonra giriş kapanır | `READ_ONLY_DAYS` = 90 (`patron/sunucu/src/services/service-lifecycle.ts`); dışa aktarma `patron/sunucu/src/services/export.service.ts` |
+| Kapatılan bulut hesabının kimlik verisi (Ek-6/A §2.5, Ek-6/C §3) | giriş hemen kapanır, kimlik 30 gün sonra silinir | `IDENTITY_PURGE_DAYS` = 30 (`patron/sunucu/src/services/maintenance.ts`) |
+| Güvenlik kaydındaki IP (Ek-6/A §2.4, Ek-6/B §1.8, Ek-6/C §3) | 30 gün sonra yalnız IP silinir | `IP_RETENTION_DAYS` = 30 (`patron/sunucu/src/services/maintenance.ts`); kenar vekili ölçülmedi (`UYGULAMA-NOTLARI.md` fark 3) |
+| İmhadan sonra yedekten düşme (Ek-6/A §4.4) | imhadan en geç 35 gün | `BACKUP_CLEAR_DAYS` = 35 (`patron/sunucu/src/services/facility-destruction.ts`) |
+| Destek izni (Ek-6/B §3.2) | ayrı salt okunur destek rolü, tek Tesis, en çok 8 saat, silinemeyen kayıt | `destek_ac` en çok 480 dk (göç `patron/sunucu/prisma/migrations/20260930220000_destek_rolu`) |
+| Kabul kaydı olmadan etkinleştirme (Ek-7 §5) | satıcı reddeder; panel önce kabul adımını gösterir | satıcı `KABUL_GEREKLI` (409) · panel Lisans ekranı kabul kartı |
 
 ## Avukata ön not
 
@@ -64,6 +65,7 @@ Bu pakette lisans sözleşmesi, ekleri ve mobil uygulamanın gizlilik politikas�
 - **Şablon alanları:** Köşeli parantez içindeki "[Lisans Alan unvanı]" gibi Lisans Alan alanları ve "[Bakım başlangıç tarihi]" sözleşme imzalanırken, "[Yürürlük tarihi]" ve "[Yayın tarihi]" metin yayımlanırken doldurulur. Aydınlatma Metni'ndeki (Ek-6/C) {…} alanlarını uygulama, ilgili tesisin kaydından doldurur.
 - **Eksik bilgi:** barındırma sağlayıcısının adı teyit edilince alt işleyen listelerine (Ek-3 C, Ek-6 §6.1) yazılacak; metinde bugün "Türkiye'de yerleşik barındırma sağlayıcısı" diye geçiyor.
 - **Patron bulutu ekleri (Ek-6, Ek-6/A–C, Ek-8):** açık nokta yurt dışı alt işleyenlerle standart sözleşmenin imzalanabilirliğidir (Ek-6 §6.4); imzalanamazsa bildirimler içeriksiz "uyandırma" bildirimine iner. Tedbirler eki (Ek-6/B) bir taahhüt listesidir: hizmet satışa açılmadan her tedbirin uygulanmış ve doğrulanmış olması öngörülür.
+- **Destek erişim kayıtları:** Lisans Veren'in Bulut Kopyası'na erişim kayıtları (Ek-6/B §3.2) silinemez ve Tesis'in imhasından sonra da kalır; bu kayıtların süresiz tutulması ölçülü müdür, yoksa bir üst süre mi konmalıdır?
 - **Mobil Gizlilik Politikası (ayrı belge):** metin bugün "Uygulama geliştiricisi bu verilere erişmez" diyor (§1). Lisans yoklaması devreye girince bu metne lisans bağlantısına ilişkin bir satır eklenmesi gerekir.
 
 ## Açık kalanlar (iç)

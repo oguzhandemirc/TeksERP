@@ -48,10 +48,13 @@ fiziksel olarak siler. Kısa seçeneğe geçilirse fazlası bir sonraki günlük
 | Gelen Kutusu talebi ve sonucu | Talep tarihinden itibaren §2.1'deki geçmiş seçeneği kadar ("Tümü" seçiliyse süre sınırı yok) | Silinir; Kurulum'daki makbuz kalır |
 | Rapor istekleri ve sonuçları | 30 gün | Silinir |
 | Bildirim cihaz anahtarı | Cihaz kaldırılana, hesap kapatılana ya da anahtar geçersizleşene kadar | Silinir |
-| Bulut sunucusu ve Cloudflare erişim günlükleri (IP) | 30 gün; Cloudflare kendi süresini uygular | Silinir |
+| Hesap güvenlik kayıtlarındaki IP adresi (giriş ve başarısız giriş) | Kaydın oluşmasından 30 gün | Yalnız IP adresi silinir; kaydın geri kalanı yukarıdaki süreyle kalır |
+| Bulut uygulamasının erişim günlüğü | IP adresi tutulmaz | — |
+| Cloudflare erişim günlükleri (IP) | Cloudflare kendi süresini uygular | Cloudflare siler |
+| Lisans Veren'in Bulut Kopyası'na erişim kayıtları (Teknik ve İdari Tedbirler, Ek-6/B, §3.2) | Silinmez; Tesis'in imhasından sonra da kalır [avukat] | — |
 | Uygulamanın cihazdaki önbelleği | Oturum kapatılana ya da hesap kilitlenene kadar | Uygulama siler |
 
-2.5. **Hesap kapatma.** Tesis Yöneticisi bir Bulut Hesabı'nı kapattığında hesabın girişi hemen kapanır. Ad, e-posta, parola özeti ve TOTP sırrı 30 gün içinde silinir; güvenlik kayıtları §2.4'teki süreyle kalır ve hesap kimliğine bağlıdır [avukat: kapatılan hesabın adının güvenlik kaydında kalması ölçülü mü].
+2.5. **Hesap kapatma.** Tesis Yöneticisi bir Bulut Hesabı'nı kapattığında hesabın girişi hemen kapanır; kapatılan hesap yeniden açılamaz ve düzenlenemez. Kapatmadan 30 gün sonra ad ve e-posta silinir ve hesap her yerde (Gelen Kutusu'ndaki talepler dahil) "Silinmiş hesap" adıyla görünür; parola özeti, TOTP sırrı, oturumlar ve bildirim cihaz anahtarları da aynı anda silinir. Hesabın ad ve e-posta taşımayan iç kimlik numarası, iş kayıtlarının izi olarak kalır; güvenlik kayıtları adı değil bu numarayı taşır ve §2.4'teki süreyle kalır [avukat: kapatılan hesabın iç kimlik numarasının güvenlik kaydında kalması ölçülü mü].
 
 ## 3. Talep üzerine silme
 
@@ -63,15 +66,17 @@ fiziksel olarak siler. Kısa seçeneğe geçilirse fazlası bir sonraki günlük
 
 ## 4. Hizmetin bitmesi: dışa aktarma ve imha
 
-4.1. **Eşitleme durur.** Patron bulutu hizmetinin süresi (Kullanım Onayı'nda yazılı patron bulutu bitiş tarihi) dolduğunda, hizmet feshedildiğinde ya da Lisans Alan kapattığında Kurulum buluta veri göndermeyi bırakır. Bulut da o Kurulum'dan gelen paketi reddeder.
+4.1. **Eşitleme durur.** Patron bulutu hizmetinin süresi (Kullanım Onayı'nda yazılı patron bulutu bitiş tarihi) dolduğunda, hizmet feshedildiğinde ya da Lisans Alan kapattığında Kurulum buluta veri göndermeyi bırakır. Bulut da o Kurulum'dan gelen paketi reddeder. Kurulum'un felaket kurtarma kurulumuna devredilmesi hizmetin bitişi sayılmaz: devir süresince eşitleme durabilir, Bulut Hesapları girmeye ve okumaya devam eder.
 
-4.2. **Dışa aktarma süresi.** Bitişten itibaren 90 gün boyunca:
-- Bulut Hesapları salt-okunur olarak girebilir; Gelen Kutusu'na yeni kayıt girilemez;
-- Tesis Yöneticisi, Bulut Kopyası'nın ve bulutta doğan verinin (Gelen Kutusu, hesap listesi, hesap güvenlik kayıtları) dökümünü makinece okunabilir bir biçimde (JSON ve CSV) alabilir;
+4.2. **Dışa aktarma süresi.** Bitişten itibaren 90 gün boyunca (salt okunur dönem):
+- Bulut Hesapları girebilir ve Bulut Kopyası'nı izinleri ölçüsünde okuyabilir; Tesis Yöneticisi hesap yönetimini (kilitleme, kapatma, izin kaldırma) sürdürebilir;
+- Gelen Kutusu'na yeni kayıt girilemez, rapor istenemez, Kurulum'dan yeni veri alınmaz ve bildirim gönderilmez;
+- Tesis Yöneticisi, makinece okunabilir bir döküm (JSON ve CSV) alabilir. Döküm, Bulut Kopyası'ndan kendi izinleriyle okuyabildiği veriyi ve bulutta doğan veriyi kapsar: Gelen Kutusu talepleri ve sonuçları, hesap listesi (parola ve doğrulama sırları olmadan), hesap güvenlik kayıtları ve Lisans Veren'in erişim kayıtları;
 - Lisans Alan dilerse imhanın bu süreyi beklemeden yapılmasını yazılı olarak isteyebilir.
+Süre dolduğunda Bulut Hesapları'nın girişi kapanır.
 Bulut Kopyası'ndaki iş verisinin aslı Kurulum'da durduğundan, dışa aktarma çoğunlukla bulutta doğan veri için anlamlıdır.
 
-4.3. **İmha.** Süre sonunda Lisans Veren, o Tesis'e ait bütün bulut verisini (Bulut Kopyası, Bulut Hesapları, güvenlik kayıtları, Gelen Kutusu, rapor sonuçları, bildirim anahtarları) canlı veritabanından siler. Ticari bir alacak ya da §3.3 kapsamında bildirilmiş bir saklama gerekçesi imhayı durdurmaz; yalnız gerekçeye konu kayıtlar ayrılır [avukat].
+4.3. **İmha.** Süre sonunda Lisans Veren, o Tesis'e ait bütün bulut verisini (Bulut Kopyası, Bulut Hesapları, güvenlik kayıtları, Gelen Kutusu, rapor sonuçları, bildirim anahtarları) canlı veritabanından siler. Ticari bir alacak ya da §3.3 kapsamında bildirilmiş bir saklama gerekçesi imhayı durdurmaz; yalnız gerekçeye konu kayıtlar ayrılır [avukat]. Lisans Veren'in erişim kayıtları (Teknik ve İdari Tedbirler, Ek-6/B, §3.2) ile imhanın kendi kaydı (§6) imhada silinmez.
 
 4.4. **Yedeklerde imha.** Bulut veritabanının yedekleri günlük alınır ve 30 günlük döngüyle tutulur. Yedekler tek bir Tesis için seçici olarak düzenlenmez; silinen veri, yedek döngüsü tamamlandığında (imhadan en geç 35 gün sonra) son yedekten de düşer. Bu sürede yedekten geri yükleme yapılırsa, imha edilmiş Tesis'in verisi geri yüklemenin hemen ardından yeniden silinir ve bu işlem kayda geçer.
 

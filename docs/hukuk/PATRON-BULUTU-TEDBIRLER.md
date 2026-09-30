@@ -54,7 +54,7 @@
 - Yedekteki imha kuralı: Saklama ve İmha Prosedürü (Ek-6/A) §4.4.
 
 ### 1.8. Kayıt ve izleme
-- Bulut hesap güvenlik kaydı: giriş, başarısız giriş, hesap açma/kapama/kilitleme, izin değişikliği, okundu teyidi. Tesis Yöneticisi kendi Tesis'inin kaydını görür.
+- Bulut hesap güvenlik kaydı: giriş ve başarısız giriş (IP adresiyle; IP adresi 30 gün sonra kayıttan silinir), hesap açma/kapama/kilitleme, izin değişikliği, okundu teyidi. Tesis Yöneticisi kendi Tesis'inin kaydını görür.
 - Eşitleme ve Gelen Kutusu işleme kayıtları: paket kimliği, zaman, sonuç (içerik değil).
 - Sistem sağlığı izlenir (eşitleme gecikmesi, yedek başarısı); aksaklık Tesis Yöneticisi'ne bildirim olarak da gider.
 - Kayıtlar parola, TOTP sırrı ve paket içeriği taşımaz.
@@ -73,9 +73,9 @@
 
 3.1. Lisans Veren çalışanı bir Tesis'in Bulut Kopyası içeriğine **yalnız** şu hâllerde bakar: Lisans Alan'ın destek talebi; bir güvenlik ihlalinin incelenmesi; yetkili makamın hukuken bağlayıcı talebi.
 
-3.2. Her içerik erişimi silinemeyen bir kayda yazılır: kim, ne zaman, hangi Tesis, hangi veri kümesi, gerekçe (destek talebi numarası). Doğrudan veritabanı sorgusu da bu kurala tabidir: yalnız ayrı, salt okunur bir destek rolüyle yapılır ve oturumu kayda geçer.
+3.2. Her içerik erişimi silinemeyen bir kayda yazılır: kim, ne zaman, hangi Tesis, hangi veri kümesi, gerekçe (destek talebi numarası), izin bitişi ve kapanışı. Doğrudan veritabanı sorgusu da bu kurala tabidir: yalnız ayrı bir destek rolüyle yapılır. Bu rol yalnız okuyabilir; Tesis ayrımını (§1.2, satır düzeyi güvenlik) aşamaz; parola özeti, doğrulama sırrı ve oturum anahtarı gibi gizli alanları göremez. İçerik ancak tek bir Tesis için, gerekçe ve destek talebi numarasıyla açılan, en çok 8 saat süren bir izinle görünür; iznin açılışı kayda yazılmadan içerik görünmez. Destek rolünün girişi varsayılan olarak kapalıdır ve her destek işi için açılıp kapatılır. Bulut Kopyası içeriği veritabanı yönetim yetkisiyle okunmaz; içerik okuması yalnız destek rolüyle yapılır. Erişim kaydı Tesis'in imhasından sonra da kalır.
 
-3.3. Lisans Alan, kendi Tesis'ine ait erişim kayıtlarının dökümünü isteyebilir; döküm 10 iş günü içinde verilir.
+3.3. Tesis Yöneticisi, kendi Tesis'ine ait erişim kayıtlarını uygulamadan dökebilir. Lisans Alan ayrıca bu kayıtların dökümünü Lisans Veren'den isteyebilir; döküm 10 iş günü içinde verilir.
 
 3.4. Lisans Veren, destek sırasında Bulut Kopyası'ndan veri dışarı çıkarmaz; istisna ve şartları Bakım ve Destek Sözleşmesi (Ek-4) §6 ile aynıdır (yazılı onay, asgari veri, iş bitince silme).
 
