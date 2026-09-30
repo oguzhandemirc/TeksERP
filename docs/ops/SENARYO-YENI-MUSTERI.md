@@ -21,7 +21,7 @@
 | 0.7 | İlk kurulum dosyaları satıcıda | backend zip + `TeksERP-<X>-Setup.exe` + APK → satıcının derleme dizini (hazırlık: `/opt/stack/apps/tekserp-satici-hazirlik/derlemeler`, salt okunur bağ) | portal §4 bu dizinden okur |
 | 0.8 | Portal kanal kaydı | Portal → "Kanallar" → "Yeni kanal" → "Kod" `demofabrika` · "Ad" · "Tür" **Üretim** → "Kaydet" (izin `kanal:yonet`) | — |
 | 0.9 | İndirme kapısı Worker'ı | yayındaysa rota `…/demofabrika/*` (ya da `…/*`) | **yayında değil** (`docs/ops/INDIRME-KAPISI-WORKER.md`) ⇒ indirmeler bugün anonim, K1 etkisiz |
-| 0.10 | thinkpad-1 temizliği | `Teks-Erp-wt/testfabrika-araclar/thinkpad-temizle.ps1` (repo dışı): KURU → gözden geçir → `-Uygula -Onay <N>` | betik hazır, koşulmadı |
+| 0.10 | thinkpad-1 temizliği | `Teks-Erp-wt/testfabrika-araclar/thinkpad-temizle.ps1` (repo dışı): KURU → gözden geçir → `-Uygula -Onay <N>` | betik hazır, koşulmadı. Salt okuma ölçümü (2026-09-30): makinede İKİ panel var — "TeksERP Test Fabrika" silinir, "Adnan Şahin ERP" varsayılan KORUNUR (sıfırdan müşteri görüntüsü isteniyorsa `-PanelAdlari`/`-PanelPaketAdlari`na eklenir — **KARAR**); PostgreSQL servisinin adı `postgresql-tekserp` (kurulum korunur, ad kalır); `C:\TeksERP-offsite-prova` ve `rclone.conf` silinir, makine dışı yedek hedefindeki kopyalar kapsam dışı |
 | 0.11 | Eski tablet uygulaması | Galaxy Tab'dan `com.teks.erp.mobil.testfabrika` kaldırılır (`adb uninstall …`) | yoksa gömülü eski adresiyle yeni sunucuya ulaşır ve "farklı kurulum" der |
 | 0.12 | Makine önkoşulları | Windows 11 · **PostgreSQL 16 kurulu** (betikler kurmaz, korunur) · Node.js 22+ (pm2 kurulumu için) · Tailscale açık, MagicDNS açık · OpenSSH | temizlik bunları korur |
 
