@@ -2,14 +2,14 @@
 
 > **TASLAK — AVUKAT İNCELEMESİ BEKLİYOR.** Google Play'in zorunlu tuttuğu gizlilik politikası
 > için hazırlanmış bir taslaktır; hukuki görüş değildir. Veri akışları uygulamanın
-> kaynak kodundan çıkarılmıştır ve doğrudur; **`[DOLDURULACAK]`** alanları şirket
-> bilgileriyle tamamlanmalı ve metin yayına çıkmadan bir hukukçu tarafından
-> KVKK / GDPR uyumu açısından gözden geçirilmelidir.
+> kaynak kodundan çıkarılmıştır ve doğrudur; köşeli parantezli alanlar şirket
+> kuruluşu tamamlanınca ve yayın anında doldurulmalı; metin yayına çıkmadan bir
+> hukukçu tarafından KVKK / GDPR uyumu açısından gözden geçirilmelidir.
 
 **Son güncelleme:** [Yayın tarihi]
 **Uygulama:** TeksERP Mobil (`com.teks.erp.mobil`)
-**Veri sorumlusu:** [DOLDURULACAK — şirket ünvanı, adres]
-**İletişim:** [DOLDURULACAK — e-posta]
+**Veri sorumlusu:** Etkili Yazılım — [Lisans Veren ticaret unvanı — kuruluş tamamlanınca], [Lisans Veren adresi — kuruluş tamamlanınca]
+**İletişim:** info@etkiliyazilim.com
 
 ## 1. Uygulamanın niteliği
 
@@ -85,7 +85,7 @@ kuruluşunun yöneticisine ya da aşağıdaki adrese başvurur.
 
 KVKK md. 11 ve (uygulanabildiği yerde) GDPR kapsamında; kişisel verilerinize
 erişme, düzeltilmesini, silinmesini veya işlenmesinin kısıtlanmasını isteme
-haklarına sahipsiniz. Talepler: [DOLDURULACAK — e-posta].
+haklarına sahipsiniz. Talepler: info@etkiliyazilim.com.
 
 ## 10. Çocukların gizliliği
 

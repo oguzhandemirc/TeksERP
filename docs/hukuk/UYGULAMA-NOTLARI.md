@@ -68,7 +68,7 @@ Kullanıcı kararı: "Önerilenleri doldur, gerisini sor." 112 işaret (damga ku
 | (a) öneri | 44 | Önerilen değer metne yazıldı (bağlam korunarak; ör. "30 gün"). Köşeli parantezli öneri değerleri (Ek-2 §5.3, Ek-4 §4.3 tabloları, Ek-8 §3 "[öneri]") de açıldı. |
 | (b) olgu | 17 | Kod ya da işletim belgesinden yazıldı; kaynaklar aşağıda. |
 | (c) şablon alanı | 6 | "[Lisans Alan ünvanı]" · "[Bakım başlangıç tarihi]" · "[Yürürlük tarihi]" · "[Yayın tarihi]" · Ek-5 "Lisans Alan'a özel" · Ek-6/C {…} alanı (işaret kalktı). |
-| (d) karar | 45 | Dokunulmadı; 15 soruya bağlandı (aşağıdaki tablo). |
+| (d) karar | 45 | Dokunulmadı; 15 soru olarak kullanıcıya gitti. Cevaplar üçüncü turda işlendi (aşağıda). |
 
 Damga açıklamaları: işareti kalmayan belgelerde (Ek-2, Ek-6/A) "[DOLDURULACAK] … ticari varsayımdır" cümlesi kalktı; "öneri" kalmayan belgelerde (Lisans Sözleşmesi, Ek-6) "öneri bağlayıcı değildir" yan cümlesi kalktı; Ek-8'de "kişi, kanal ve süre" → "kişi".
 
@@ -92,33 +92,43 @@ Damga açıklamaları: işareti kalmayan belgelerde (Ek-2, Ek-6/A) "[DOLDURULACA
 - Ek-6/A §2.4 Gelen Kutusu: öneri "13 ay ya da seçenek, hangisi uzunsa" → kod tesis seçeneği.
 - Ek-6/A §4.4 ve Ek-6/B §1.7: öneri 35 gün döngü → kod 30 gün. "İmhadan en geç 35 gün" üst sınırı korundu (30 gün döngü + günlük budama).
 
-### Metin ↔ kod farkları (metin kodun önünde; uygulama borcu)
+### Metin ↔ kod farkları (durum 2026-09-30, üçüncü tur sonrası)
 
-1. Ek-6/A §2.5 ve Ek-6/C §3: kapatılan hesabın kimlik bilgileri 30 gün içinde silinir — kodda pasife alınan hesap için kimlik silme yok (`maintenance.ts` budama listesinde hesap tablosu yok).
-2. Ek-6/A §4.2: hizmet bitişinden sonra 90 gün salt okunur giriş ve JSON/CSV dışa aktarma — kodda yok.
-3. Ek-3 D ve Ek-6/A §2.4: sunucu erişim günlükleri (IP) 30 gün — VDS'te Docker günlükleri boyutla döner (20 MB × 5; `docs/ops/SUNUCU-ENVANTERI.md`); gün bazlı saklama ölçülmedi.
-4. Ek-3 D "Lisans Veren'de tutulan uzak yedekler: Lisans Alan'ın belirlediği döngü" — işletimde döngü sabit: günlük arşiv 30 gün, aylık arşiv 12 ay (`docs/ops/SUNUCU-ENVANTERI.md`).
-5. Ek-6 §6.2 ve Ek-6/C §3 "bildirim tutar içermez" — çek/senet vadesi bildirimi vade kovası başına toplam tutar ve döviz taşır; cari ve kişi adı yok (`patron/sunucu/src/services/notification-events.ts`). Soru 10(b).
-6. Ek-6/A §4.4: yedek alınamayan dönemde budama çalışmaz ve son 7 kopya korunur (`deploy/patron/yedek-dongusu.sh`); "imhadan en geç 35 gün" bu arıza durumunda aşılabilir.
-7. Ek-6/B §3.2: doğrudan veritabanı sorgusu için ayrı rol + oturum kaydı yok. Soru 14(a).
-8. Ek-7 §5: satıcı kabul kaydı olmayan etkinleştirmeyi denetlemiyor (protokol v1'de alan yok). Soru 15.
+Kullanıcı kararı "KODU METNE UYDUR": metindeki vaatler kalır, kod ayrı dilimde yazılır.
 
-### (d) karar soruları → metindeki yerler
+1. **Kod borcu** — Ek-6/A §2.5 ve Ek-6/C §3: kapatılan bulut hesabının kimlik bilgileri 30 gün içinde silinir. Bugün pasife alınan hesap için kimlik silme yok (`maintenance.ts` budama listesinde hesap tablosu yok).
+2. **Kod borcu** — Ek-6/A §4.2: hizmet bitişinden sonra 90 gün salt okunur giriş ve JSON/CSV dışa aktarma. Bugün yok.
+3. **İşletim borcu** — Ek-3 D ve Ek-6/A §2.4: sunucu erişim günlükleri (IP) zamana göre 30 gün. Bugün VDS'te Docker günlükleri boyutla döner (20 MB × 5; `docs/ops/SUNUCU-ENVANTERI.md`).
+4. **Kapandı** — Ek-3 D uzak yedek döngüsü metinde gerçeğe çevrildi: günlük 30 gün, aylık 12 ay, sabit (`docs/ops/SUNUCU-ENVANTERI.md`).
+5. **Kapandı** — Ek-6 §6.2 ve Ek-6/C §3 bildirim içeriği metinde düzeltildi: "cari ve kişi adı içermez; toplam tutar içerebilir" (kod aynı: `patron/sunucu/src/services/notification-events.ts`).
+6. **Bilinen sınır** — Ek-6/A §4.4: yedek alınamayan dönemde budama çalışmaz ve son 7 kopya korunur (`deploy/patron/yedek-dongusu.sh`); "imhadan en geç 35 gün" bu arıza durumunda aşılabilir.
+7. **İşletim borcu** — Ek-6/B §3.2: doğrudan veritabanı sorgusu yalnız ayrı salt okunur destek rolüyle ve oturum kaydıyla. Bugün böyle bir rol yok (üç rol: `patron`, `patron_uygulama`, `patron_esitleme`); hizmet açılmadan kurulur.
+8. **Kod borcu** — Ek-7 §5: satıcı kabul kaydı olmayan etkinleştirmeyi reddeder, panel önce kabul adımını gösterir. Bugün protokol v1'de alan yok, satıcı denetlemiyor.
 
-| Soru | Konu | Yerler |
+## 2026-09-30 üçüncü tur — kullanıcı cevapları
+
+Kaynak: kullanıcının 15 cevabı ve yönetici notları. Metinde "[DOLDURULACAK]" kalmadı.
+
+| Soru | Karar | Uygulandığı yer |
 |---|---|---|
-| 1 | Lisans Veren kimliği ve iletişim | Lisans Sözleşmesi §1 · Ek-4 §4.1 (telefon, e-posta) · Ek-6/C §3 · Mobil Gizlilik Politikası başlık ve §9 |
-| 2 | VDS sağlayıcısı, şehir, disk şifrelemesi | Ek-3 C · Ek-6 §5.1, §6.1 · Ek-6/C §3 · Ek-6/B §1.5 |
-| 3 | Fiyatlandırma (bakım oranı, fiyat listesi, ücretli hizmetler, eğitim) | Ek-4 §2.3 · Lisans Sözleşmesi §4.5 · Ek-4 §4.5, §8.2 |
-| 4 | Bakımın otomatik yenilenmesi ve K1 askısı | Ek-4 §2.2, §3.7 |
-| 5 | Sorumluluk tavanı ve KVKK cezası paylaşımı | Lisans Sözleşmesi §11.3 · Ek-4 §9 · Ek-6 §8.3 |
-| 6 | Ceza koşulu | Lisans Sözleşmesi §12.3 |
-| 7 | Bedel iadesi | Lisans Sözleşmesi §13.4 |
-| 8 | Yetkili mahkeme | Lisans Sözleşmesi §15 |
-| 9 | Barındırılan sınıf | Lisans Sözleşmesi §10.6 |
-| 10 | Patron bulutu ticari modeli ve bildirim içeriği | Ek-4 §12.1 · Ek-6 §8.2, §6.2 |
-| 11 | Yurt dışı aktarım yolu | Ek-6 §6.4 · Ek-6/C §3 |
-| 12 | Denetim hakkı | Ek-3 B.6 · Ek-6 §7.3 |
-| 13 | Lisans Veren ekibi ve iç tedbirler | Ek-8 §2 · Ek-6/B §2 · Ek-3 E |
-| 14 | Bulut erişim güvenliği (doğrudan sorgu, yönetici TOTP sıfırlama) | Ek-6/B §3.2, §1.4 |
-| 15 | Kabul kaydı olmayan etkinleştirme | Ek-7 §5 |
+| S1 | Kısa ad "Etkili Yazılım"; resmî kuruluş sürüyor, kimlik alanları şablon; iletişim her yerde info@etkiliyazilim.com | Lisans Sözleşmesi §1 · Ek-4 §4.1 · Ek-6/C §2, §3, §4 · Ek-7 §2 · Mobil Gizlilik Politikası başlık, §9 |
+| S2 | Sağlayıcı adı yazılmaz: "Türkiye'de yerleşik barındırma sağlayıcısı"; disk ayrıca şifrelenmez, yedekler ve TOTP sırları şifreli | Ek-3 C · Ek-6 §5.1, §6.1 · Ek-6/C §3 · Ek-6/B §1.5 |
+| S3 | Bakım bedeli lisans bedelinin %15'i; fiyatlar teklif bazında; ilk kurulumda 2 saat eğitim dahil | Ek-4 §2.3, §4.5, §8.2 · Lisans Sözleşmesi §4.5 |
+| S4 | Bakım kendiliğinden yenilenir (30 gün önce yazılı bildirimle çıkılır); K1 askısı bakımı uzatmaz | Ek-4 §2.2, §3.7 |
+| S5 | Tek tavan: son 12 ayda ödenen lisans + bakım + varsa bulut bedeli; KVKK cezası kusur oranında | Lisans Sözleşmesi §11.3 · Ek-4 §9 · Ek-6 §8.3 |
+| S6 | Ceza koşulu: izinsiz her kurulum için lisans bedelinin 3 katı | Lisans Sözleşmesi §12.3 |
+| S7 | İade yok; bakımın kalan süresi de iade edilmez | Lisans Sözleşmesi §13.4 |
+| S8 | Yetkili mahkeme Lisans Veren'in merkezinin bulunduğu il (il şablon alanı) | Lisans Sözleşmesi §15 |
+| S9 | Barındırılan sınıf kalır; şartları hizmet sunulduğunda ayrı sözleşmeyle | Lisans Sözleşmesi §10.6 |
+| S10 | Patron bulutu ayrı yıllık abonelik, bakımdan bağımsız; bildirimde toplam tutar olabilir, cari ve kişi adı yok, ayrıntılı seçenek yok | Ek-4 §12.1, §12.2 · Ek-6 §6.2, §8.2 · Ek-6/C §3 |
+| S11 | Standart sözleşme imzalanamazsa bildirimler içeriksiz uyandırmaya iner; süreç avukatla sürer | Ek-6 §6.4 · Ek-6/C §3 |
+| S12 | Denetim: 30 gün önceden yazılı bildirim, masraf Lisans Alan'da, denetçi gizlilik taahhüdü verir | Ek-3 B.6 · Ek-6 §7.3 |
+| S13 | Roller yazılır, adlar iç kayıtta; yazılı gizlilik sözleşmesi, yılda bir eğitim, yılda bir bağımsız sızma testi | Ek-8 §2 · Ek-6/B §2 · Ek-3 E |
+| S14 | Doğrudan sorgu ayrı salt okunur rol + oturum kaydıyla (işletim borcu); TOTP kaybında yazılı başvuru yok, kayıtlı telefona geri arama, yeniden kurulum bağlantısı | Ek-6/B §3.2, §1.4 |
+| S15 | Kabul kaydı olmadan etkinleştirme reddedilir; panel önce kabul adımını gösterir (kod borcu) | Ek-7 §5 |
+
+Cevapların zorunlu kıldığı tutarlılık düzeltmeleri: Lisans Sözleşmesi avukat kutusundaki "§12.3 boş bırakıldı" ve Ek-6 avukat kutusundaki "§6.4'teki seçenekler" cümleleri; Ek-4 §2.2 "o yılın fiyat listesiyle" → "§2.3'teki bedelle" (fiyat listesi yok); Ek-4 §12.2 bakıma dahil satış koşulu → abonelik bakımdan bağımsız; Ek-6 §6.1 "şifreli diskte" → disk şifresiz; Lisans Sözleşmesi §1 Lisans Alan alanlarına "irtibat kişisi ve telefonu" eklendi (Ek-8 §2 ve Ek-6/B §1.4 sözleşmedeki kayıtlı telefona dayanır); şablon alanlarında yazım "unvanı" oldu.
+
+- Barındırma sağlayıcısı teyit bekliyor (whois: TEKNOSOS Bilişim, Antalya); teyit gelince Ek-3 C ve Ek-6 §6.1'e ad yazılır.
+- S14 TOTP kurtarma işlemi: `patron/sunucu/scripts/tesis.ts yonetici-yeniden-davet` (yeniden davet; parola ve TOTP sıfırlanır).
+- Kalan şablon alanları — şirket kuruluşuyla dolacaklar: `[Lisans Veren ticaret unvanı — kuruluş tamamlanınca]` · `MERSİS no` · `vergi dairesi / no` · `adresi` · `KEP adresi` · `telefonu` · `merkezinin bulunduğu il`. İmzada dolanlar: `[Lisans Alan unvanı]`, `MERSİS no`, `vergi dairesi / no`, `adresi`, `KEP adresi`, `irtibat kişisi ve telefonu`, `[Bakım başlangıç tarihi]`, Ek-5. Yayında dolanlar: `[Yürürlük tarihi]`, `[Yayın tarihi]`.

@@ -1,6 +1,6 @@
 # TeksERP Patron Bulutu Veri İşleme Eki
 
-> **TASLAK — AVUKAT İNCELEMESİ BEKLİYOR.** Bu metin bir taslaktır; hukuki görüş değildir. Mevzuat atıfları incelemeye yön vermek içindir, doğruluğu ve güncelliği avukatça teyit edilmelidir. `[DOLDURULACAK]` işaretli yerler ticari karar ya da eksik bilgidir.
+> **TASLAK — AVUKAT İNCELEMESİ BEKLİYOR.** Bu metin bir taslaktır; hukuki görüş değildir. Mevzuat atıfları incelemeye yön vermek içindir, doğruluğu ve güncelliği avukatça teyit edilmelidir.
 >
 > Metin kimliği: `PBVIE-2026.1-taslak` · Ek-6 · Lisans sözleşmesi (Son Kullanıcı Lisans Sözleşmesi) ve bakım sözleşmesinden (Bakım ve Destek Sözleşmesi, Ek-4) AYRI imzalanır; patron bulutu hizmeti satın alınmadıkça yürürlüğe girmez.
 >
@@ -10,7 +10,7 @@
 > - **KVKK md. 3 — roller:** Taslak, bulut kopyasındaki bütün kişisel veriler için Lisans Alan'ı (fabrika) veri sorumlusu, Lisans Veren'i (Etkili Yazılım) veri işleyen saydı (§2). Bulut hesaplarının güvenlik kayıtları (giriş denemeleri, IP) için Lisans Veren'in kendi adına veri sorumlusu sayılması gerekir mi?
 > - **KVKK md. 5 — hukuki sebep:** Cari yetkili adı ve telefonunun patronun uzaktan görmesi için işlenmesi md. 5/2-c (sözleşmenin ifası) mı, 5/2-f (meşru menfaat) mı? Açık rıza aranmasın diye kurulan dayanak yeterli mi (§4)?
 > - **KVKK md. 9 — yurt dışına aktarım (7499 sayılı Kanunla değişik; 01.06.2024'ten itibaren):** Cloudflare kenar sunucusunda TLS'nin açılması ve bildirim altyapısının (Expo, Google FCM, Apple APNs) kullanımı "aktarım" sayılır mı? Sayılırsa standart sözleşme türü (işleyenden işleyene), Kurum'a beş iş günü içinde bildirim ve bildirimi kimin yapacağı (§6).
-> - **Kişisel Verilerin Yurt Dışına Aktarılmasına İlişkin Usul ve Esaslar Hakkında Yönetmelik (2024):** Cloudflare'in kendi veri işleme sözleşmesi, Kurul'un ilan ettiği standart sözleşme metnini değiştirmeden imzalanabilir mi? İmzalanamıyorsa §6.4'teki seçenekler.
+> - **Kişisel Verilerin Yurt Dışına Aktarılmasına İlişkin Usul ve Esaslar Hakkında Yönetmelik (2024):** Cloudflare'in kendi veri işleme sözleşmesi, Kurul'un ilan ettiği standart sözleşme metnini değiştirmeden imzalanabilir mi? İmzalanamıyorsa §6.4'teki yol (içeriksiz uyandırma bildirimi) yeterli mi?
 > - **KVKK md. 12 — veri işleyen yükümlülükleri:** Talimat, gizlilik, alt işleyen onayı ve denetim hükümleri (§7) md. 12/2'deki müşterek sorumluluğu yeterince düzenliyor mu?
 > - **KVKK md. 6 — özel nitelikli veri:** Projeksiyonlarda özel nitelikli veri yok; serbest metin alanlarında bulunmaması için yalnız uyarı ve talimat öngörüldü (§3.3). Yeterli mi?
 > - **VERBİS:** Buluttaki işleme ve alt işleyenler Lisans Alan'ın veri envanterine ve (kayıt yükümlüsüyse) VERBİS kaydına eklenmeli mi?
@@ -92,7 +92,7 @@ Açık rızaya dayanan bir işleme öngörülmemiştir. Bulut Kopyası, Lisans A
 
 ## 5. Saklama yeri ve barındırma
 
-5.1. Bulut sunucusu, veritabanı ve yedekleri **Türkiye'deki** bir sanal sunucuda (VDS) tutulur: [DOLDURULACAK — VDS sağlayıcısının ünvanı ve veri merkezi şehri].
+5.1. Bulut sunucusu, veritabanı ve yedekleri **Türkiye'deki** bir sanal sunucuda (VDS) tutulur; sunucuyu Türkiye'de yerleşik bir barındırma sağlayıcısı sağlar.
 
 5.2. Bulut hizmeti, Lisans Veren'in lisans sunucusuyla aynı makinede ama **ayrı konteyner, ayrı ağ, ayrı veritabanı ve ayrı veritabanı rolüyle** çalışır; kaynak kullanımı sınırlandırılmıştır.
 
@@ -104,14 +104,14 @@ Açık rızaya dayanan bir işleme öngörülmemiştir. Bulut Kopyası, Lisans A
 
 | Alt işleyen | Ne için | Nerede | Gördüğü veri |
 |---|---|---|---|
-| [DOLDURULACAK — VDS sağlayıcısı] | Sunucu, veritabanı, yedek | Türkiye | Şifreli diskte duran bütün Bulut Kopyası (sağlayıcının erişimi fiziksel/sanal altyapıyladır) |
+| Türkiye'de yerleşik barındırma sağlayıcısı | Sunucu, veritabanı, yedek | Türkiye | Diskte duran bütün Bulut Kopyası; disk ayrıca şifrelenmez, yedekler ve TOTP sırları şifrelidir (sağlayıcının erişimi fiziksel/sanal altyapıyladır) |
 | Cloudflare, Inc. | Ters vekil, önbellek, saldırı koruması (`patron.` alt alanı) | ABD merkezli; kenar sunucuları dünya geneli | Şifreli bağlantı kenar sunucusunda açılır ve yeniden şifrelenir: uygulama ile bulut arasındaki istek ve yanıtlar, IP adresi |
 | Expo (650 Industries, Inc.) | Mobil bildirim iletimi | ABD | Cihaz bildirim anahtarı ve bildirim metni |
 | Google LLC (Firebase Cloud Messaging) | Android bildirimi | ABD / dünya geneli | Aynı |
 | Apple Inc. (APNs) | iOS bildirimi | ABD / dünya geneli | Aynı |
 | Kullanılan tarayıcının bildirim hizmeti: Google LLC (Chrome), Mozilla Corporation (Firefox), Apple Inc. (Safari), Microsoft Corporation (Edge); sunucu yalnız bu dört hizmete gönderir | Web bildirimi | Tarayıcı üreticisine göre | Aynı |
 
-6.2. **Bildirimde asgari veri.** Bildirim metni varsayılan olarak cari adı, tutar ve kişi adı içermez; yalnız olay türünü ve uygulamada açılacak ekranı söyler ("Yeni sipariş talebiniz işlendi", "Gece yedeği başarısız"). Ayrıntı, uygulama açılınca bulut sunucusundan okunur [DOLDURULACAK — ticari karar: ayrıntılı bildirim seçeneği sunulacak mı; sunulursa §6.3 bu içerik için de geçerlidir].
+6.2. **Bildirimde asgari veri.** Bildirim metni cari adı ve kişi adı içermez; toplam tutar içerebilir (ör. vadesi gelen çek ve senetlerin toplamı). Olay türünü ve uygulamada açılacak ekranı söyler ("Yeni sipariş talebiniz işlendi", "Gece yedeği başarısız"). Ayrıntı, uygulama açılınca bulut sunucusundan okunur; ayrıntılı bildirim seçeneği sunulmaz.
 
 6.3. **Yurt dışına aktarım değerlendirmesi (KVKK md. 9).** 7499 sayılı Kanunla değişik md. 9 ve 2024 tarihli Yurt Dışına Aktarım Yönetmeliği, aktarımı sırasıyla şu dayanaklardan birine bağlar: (a) yeterlilik kararı; (b) uygun güvence — Kurul'un ilan ettiği **standart sözleşme**, bağlayıcı şirket kuralları ya da Kurul izniyle taahhütname; (c) arızi hâllerde sayılan istisnalar. Taslak şu varsayımla yazılmıştır [avukat: her biri teyit]:
 - Cloudflare kenarında TLS'nin açılması ve bildirim hizmetleri kişisel verinin yurt dışındaki bir işleyene **aktarımı** sayılabilir. Bugün ABD için yeterlilik kararı bilinmemektedir.
@@ -119,11 +119,7 @@ Açık rızaya dayanan bir işleme öngörülmemiştir. Bulut Kopyası, Lisans A
 - Standart sözleşme, imzadan itibaren **beş iş günü** içinde Kişisel Verileri Koruma Kurumu'na bildirilir. Taslak, bildirimi sözleşmenin tarafı olan Lisans Veren'e yükledi; Lisans Alan'a bildirimin kopyası verilir.
 - Arızi istisnalar (ör. sözleşmenin ifası için zorunluluk) düzenli ve süreklilik gösteren bu aktarımın dayanağı yapılmaz.
 
-6.4. **Standart sözleşme imzalanamazsa.** Büyük sağlayıcılar kendi veri işleme sözleşmelerini kullanır ve Kurul metnini değiştirmeden imzalamayabilir. Bu durumda seçenekler, avukat ve Lisans Alan ile birlikte değerlendirilir [DOLDURULACAK]:
-- (a) `patron.` alt alanında Cloudflare vekilini kapatıp trafiği doğrudan Türkiye'deki sunucuya almak (saldırı korumasından vazgeçilir; teknik değerlendirme gerekir);
-- (b) bildirimleri içeriksiz "uyandırma" bildirimine indirmek ve yalnız cihaz anahtarının aktarımına dayanak aramak;
-- (c) hizmeti, aktarımın hukuki dayanağı kurulana kadar bildirimsiz ve [DOLDURULACAK] biçimde sunmak.
-Lisans Veren, dayanak kurulmadan yurt dışı alt işleyene kişisel veri akıtan bir özelliği açmaz.
+6.4. **Standart sözleşme imzalanamazsa.** Büyük sağlayıcılar kendi veri işleme sözleşmelerini kullanır ve Kurul metnini değiştirmeden imzalamayabilir. Bu durumda bildirimler içeriksiz "uyandırma" bildirimine indirilir ve yalnız cihaz bildirim anahtarının aktarımına dayanak aranır; standart sözleşme süreci avukatla birlikte sürdürülür. Lisans Veren, dayanak kurulmadan yurt dışı alt işleyene kişisel veri akıtan bir özelliği açmaz.
 
 6.5. **Yeni alt işleyen.** Lisans Veren yeni bir alt işleyen eklemeden en az 30 gün önce Lisans Alan'a bildirir. Lisans Alan haklı sebeple itiraz ederse taraflar çözüm arar; bulunamazsa Lisans Alan patron bulutu hizmetini cezasız feshedebilir [avukat]. Lisans Veren, alt işleyene bu ekteki yükümlülüklerden daha hafif olmayan yükümlülükler yükler (KVKK md. 12/2).
 
@@ -138,7 +134,7 @@ Lisans Veren, dayanak kurulmadan yurt dışı alt işleyene kişisel veri akıta
 
 7.2. **İlgili kişi başvuruları (KVKK md. 11 ve 13).** Lisans Veren'e gelen başvuru, kimliği doğrulanmadan cevaplanmaz ve 3 iş günü içinde Lisans Alan'a iletilir. Başvuruyu cevaplamak (kanuni süre 30 gün) Lisans Alan'ındır; Lisans Veren gereken dökümü ve silme işlemini teknik olarak sağlar. Bulut Kopyası'ndaki bir kaydın düzeltilmesi ya da silinmesi **Kurulum'da** yapılır ve bir sonraki eşitlemeyle buluta yansır; bulutta tek başına düzeltme yapılmaz (fabrika tek yazardır).
 
-7.3. **Denetim.** Lisans Alan, bu eke uyumu yılda bir kez, makul bir önceden bildirimle [DOLDURULACAK] belge isteyerek ya da bağımsız bir denetçiyle denetleyebilir. Denetim başka kiracıların verisine erişim vermez.
+7.3. **Denetim.** Lisans Alan, bu eke uyumu yılda bir kez, 30 gün önceden yazılı bildirimle belge isteyerek ya da bağımsız bir denetçiyle denetleyebilir. Denetim masrafı Lisans Alan'a aittir; denetçi gizlilik taahhüdü verir. Denetim başka kiracıların verisine erişim vermez.
 
 7.4. **Kurul incelemesi.** Kurul'un bir inceleme ya da bilgi talebinde taraflar birbirine gecikmeden bilgi verir.
 
@@ -146,8 +142,8 @@ Lisans Veren, dayanak kurulmadan yurt dışı alt işleyene kişisel veri akıta
 
 8.1. Bu ek, patron bulutu hizmeti sürdükçe ve hizmetin bitiminden sonra imha tamamlanana kadar yürürlükte kalır.
 
-8.2. Hizmet bitince eşitleme durur; dışa aktarma ve imha Saklama ve İmha Prosedürü (Ek-6/A) §4'e göre yapılır. Lisans sözleşmesinin ya da bakım sözleşmesinin sona ermesi patron bulutu hizmetini de sona erdirir [DOLDURULACAK — ticari model: abonelik mi, bakıma dahil mi].
+8.2. Hizmet bitince eşitleme durur; dışa aktarma ve imha Saklama ve İmha Prosedürü (Ek-6/A) §4'e göre yapılır. Patron bulutu ayrı yıllık abonelikle satılır: lisans sözleşmesinin sona ermesi hizmeti de sona erdirir, bakım sözleşmesinin sona ermesi erdirmez.
 
-8.3. Taraflardan her biri, bu eke kendi aykırılığından doğan zarardan sorumludur. Kurul'un idari para cezası kararlarında iç ilişkide paylaşım [DOLDURULACAK — avukat]. Sorumluluk sınırı: [DOLDURULACAK — lisans sözleşmesi §11.3 ile aynı mı, ayrı mı].
+8.3. Taraflardan her biri, bu eke kendi aykırılığından doğan zarardan sorumludur. Kurul'un idari para cezası kararlarında iç ilişkide paylaşım tarafların kusur oranına göredir. Sorumluluk sınırı: Lisans Sözleşmesi §11.3'teki tek tavan.
 
 8.4. Bu ek ile lisans ya da bakım sözleşmesi arasında kişisel verinin işlenmesine ilişkin çelişki olursa bu ek uygulanır.

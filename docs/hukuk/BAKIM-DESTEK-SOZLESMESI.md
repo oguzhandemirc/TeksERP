@@ -1,6 +1,6 @@
 # TeksERP Yıllık Bakım ve Destek Sözleşmesi
 
-> **TASLAK — AVUKAT İNCELEMESİ BEKLİYOR.** Bu metin bir taslaktır; hukuki görüş değildir. Tanımlar Son Kullanıcı Lisans Sözleşmesi (Lisans Sözleşmesi) §2'den alınır. `[DOLDURULACAK]` işaretli süre ve bedeller ticari varsayımdır; "öneri" değerleri bağlayıcı değildir.
+> **TASLAK — AVUKAT İNCELEMESİ BEKLİYOR.** Bu metin bir taslaktır; hukuki görüş değildir. Tanımlar Son Kullanıcı Lisans Sözleşmesi (Lisans Sözleşmesi) §2'den alınır. Köşeli parantezli alanlar şablon alanıdır; sözleşme imzalanırken ya da Lisans Veren'in şirket kuruluşu tamamlanınca doldurulur.
 >
 > Metin kimliği: `BDS-2026.1-taslak` · Ek-4
 
@@ -25,9 +25,9 @@
 
 2.1. Bakım bir yıl sürer. Başlangıç tarihi [Bakım başlangıç tarihi]; bitiş tarihi Lisans Belgesi'ndeki Bakım Bitiş Tarihi'dir.
 
-2.2. Bakım, bitiş tarihinden 30 gün önce yazılı olarak aksi bildirilmezse, o yılın fiyat listesiyle bir yıl daha uzar [DOLDURULACAK — otomatik yenileme istenir mi]. Yenileme bedeli ödenince Lisans Veren yeni Bakım Bitiş Tarihi'ni Lisans Belgesi'ne yazar. Yeni belge Kurulum'a bir sonraki yoklamada kendiliğinden gelir.
+2.2. Bakım, bitiş tarihinden 30 gün önce yazılı olarak aksi bildirilmezse, §2.3'teki bedelle bir yıl daha uzar. Yenileme bedeli ödenince Lisans Veren yeni Bakım Bitiş Tarihi'ni Lisans Belgesi'ne yazar. Yeni belge Kurulum'a bir sonraki yoklamada kendiliğinden gelir.
 
-2.3. Bakım bedeli: [DOLDURULACAK — öneri: lisans bedelinin yıllık %15–20'si].
+2.3. Bakım bedeli: lisans bedelinin yıllık %15'i.
 
 ## 3. Güncelleme hakkı
 
@@ -43,14 +43,14 @@
 
 3.6. **Zorunlu güncelleme.** Sunucu ile eski panel ya da tablet sürümü birbiriyle çalışamaz hâle gelirse, Yazılım eski istemciden güncelleme ister. Lisans Veren bunu yalnız gerçek uyumsuzlukta kullanır.
 
-3.7. K1 kademesi (Yaptırım Maddeleri, Ek-2, §2) uygulanırken güncelleme hakkı askıdadır. Askı süresi Bakım Bitiş Tarihi'ni uzatmaz [DOLDURULACAK].
+3.7. K1 kademesi (Yaptırım Maddeleri, Ek-2, §2) uygulanırken güncelleme hakkı askıdadır. Askı süresi Bakım Bitiş Tarihi'ni uzatmaz.
 
 ## 4. Destek ve yanıt süreleri
 
 4.1. **Kanallar:**
 - Panelden destek talebi: ekran görüntüsü ve sağlık özeti eklenebilir. Gönderilmeden önce kullanıcıya gösterilir (Veri İşleme Eki, Ek-3, Bölüm A.4);
-- telefon: [DOLDURULACAK];
-- e-posta: [DOLDURULACAK].
+- telefon: [Lisans Veren telefonu — kuruluş tamamlanınca];
+- e-posta: info@etkiliyazilim.com.
 
 4.2. **Destek saatleri:** hafta içi 08:30–18:00; Öncelik 1 için 7/24 telefon.
 
@@ -65,7 +65,7 @@
 
 4.4. Süreler, talebin Lisans Veren'e ulaştığı andan başlar. Lisans Alan'ın bilgi vermesi ya da erişim açması beklenirken süre işlemez.
 
-4.5. **Kapsam dışı** (ayrı ücretlendirilir): donanım, işletim sistemi ve ağ arızaları; üçüncü taraf yazılımları; Lisans Alan'ın yaptığı değişiklik ya da müdahaleden doğan hatalar; yerinde destek [DOLDURULACAK — ücret]; özel geliştirme ve rapor; eğitim [DOLDURULACAK — ilk kurulumda X saat dahil].
+4.5. **Kapsam dışı** (ayrı ücretlendirilir): donanım, işletim sistemi ve ağ arızaları; üçüncü taraf yazılımları; Lisans Alan'ın yaptığı değişiklik ya da müdahaleden doğan hatalar; yerinde destek; özel geliştirme ve rapor; eğitim (ilk kurulumda 2 saat eğitim dahildir). Bu hizmetlerin ücreti teklif bazında belirlenir.
 
 ## 5. Sağlık izleme
 
@@ -109,13 +109,13 @@ Her bağlantı başlangıç ve bitiş saatiyle, yapılan işin özetiyle kayda g
 
 8.1. Bakım sona erince güncelleme ve destek durur. Yazılım Son Hak Edilen Sürüm'de çalışmaya devam eder. Lisans denetimi (yoklama) sürer, çünkü kalıcı lisansın geçerliliği için gereklidir.
 
-8.2. Bakım sona erdikten sonra verilen destek, o günün saatlik ücretiyle yapılır [DOLDURULACAK].
+8.2. Bakım sona erdikten sonra verilen destek, teklif bazında, o günün saatlik ücretiyle yapılır.
 
 8.3. Bakım, ara verilen dönemden sonra yeniden başlatılabilir. Bunun için ara verilen döneme ait bakım bedeli ya da yeniden başlatma bedeli ödenir. Bu kural sektörde yaygındır; amacı yalnız ihtiyaç anında bakım alınmasını önlemektir.
 
 ## 9. Sorumluluk
 
-Lisans Veren'in bu sözleşmeden doğan toplam sorumluluğu, zarar anından önceki 12 ayda ödenen bakım bedeliyle sınırlıdır [DOLDURULACAK]. Kâr kaybı ve dolaylı zarar kapsam dışıdır. Kast ve ağır ihmal hâlleri saklıdır (TBK md. 115).
+Lisans Veren'in bu sözleşmeden doğan sorumluluğu, Lisans Sözleşmesi §11.3'teki tek tavana (zarar anından önceki 12 ayda ödenen lisans, bakım ve varsa patron bulutu bedellerinin toplamı) tabidir. Kâr kaybı ve dolaylı zarar kapsam dışıdır. Kast ve ağır ihmal hâlleri saklıdır (TBK md. 115).
 
 ## 10. Fesih
 
@@ -129,8 +129,8 @@ Lisans Sözleşmesi §15 uygulanır.
 
 ## 12. Patron bulutu
 
-12.1. Patron bulutu (fabrika verisinin okuma kopyasının Lisans Veren'in bulut sunucusunda tutulması ve "TeksERP Patron" uygulamasıyla gösterilmesi) bu sözleşmenin konusu değildir. Ayrı hakla (Patron Bulutu hakkı) ve ayrı imzalanan Patron Bulutu Veri İşleme Eki (Ek-6) ile açılır [DOLDURULACAK — ticari model: ayrı abonelik mi, bakıma dahil mi].
+12.1. Patron bulutu (fabrika verisinin okuma kopyasının Lisans Veren'in bulut sunucusunda tutulması ve "TeksERP Patron" uygulamasıyla gösterilmesi) bu sözleşmenin konusu değildir. Ayrı hakla (Patron Bulutu hakkı) ve ayrı imzalanan Patron Bulutu Veri İşleme Eki (Ek-6) ile açılır; ayrı yıllık abonelikle satılır ve bakımdan bağımsızdır.
 
-12.2. Patron bulutu bakıma dahil satılırsa bakımın sona ermesi (§8) patron bulutunu da sona erdirir: eşitleme durur, dışa aktarma ve imha Saklama ve İmha Prosedürü (Ek-6/A) §4'e göre yapılır. Yazılım'ın kendisi Son Hak Edilen Sürüm'de çalışmaya devam eder; fabrika verisi etkilenmez.
+12.2. Bakımın sona ermesi (§8) patron bulutu aboneliğini sona erdirmez. Abonelik sona erince eşitleme durur, dışa aktarma ve imha Saklama ve İmha Prosedürü (Ek-6/A) §4'e göre yapılır. Yazılım'ın kendisi Son Hak Edilen Sürüm'de çalışmaya devam eder; fabrika verisi etkilenmez.
 
 12.3. Patron bulutuna ilişkin destek taleplerinde Lisans Veren'in bulut kopyasına erişimi Teknik ve İdari Tedbirler (Ek-6/B) §3'e, güvenlik ihlali Veri İhlali Bildirim Prosedürü'ne (Ek-8) tabidir.

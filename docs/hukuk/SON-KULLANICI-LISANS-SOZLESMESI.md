@@ -1,6 +1,6 @@
 # TeksERP Son Kullanıcı Lisans Sözleşmesi
 
-> **TASLAK — AVUKAT İNCELEMESİ BEKLİYOR.** Bu metin bir taslaktır; hukuki görüş değildir. Avukat onayı olmadan imzaya, panele ya da müşteriye çıkmaz. `[DOLDURULACAK]` işaretli yerler ticari karar ya da eksik bilgidir.
+> **TASLAK — AVUKAT İNCELEMESİ BEKLİYOR.** Bu metin bir taslaktır; hukuki görüş değildir. Avukat onayı olmadan imzaya, panele ya da müşteriye çıkmaz. Köşeli parantezli alanlar şablon alanıdır: Lisans Alan alanları sözleşme imzalanırken, Lisans Veren alanları şirket kuruluşu tamamlanınca doldurulur.
 >
 > Metin kimliği: `SKLS-2026.1-taslak` · Ana sözleşme; ekleri §16'da · Kabul kaydında bu kimlik ve son metnin SHA-256 özeti tutulur (bkz. Kabul Metni, Ek-7).
 
@@ -8,7 +8,7 @@
 > - **FSEK md. 48 ve 52 — şekil şartı:** mali haklara ilişkin sözleşme yazılı olmalı ve haklar ayrı ayrı gösterilmeli. Panelde "kabul ediyorum" demek (Kabul Metni, Ek-7) bu şartı tek başına karşılar mı? Taslakta asıl sözleşme ıslak ya da güvenli elektronik imzalı (5070 md. 5) varsayıldı, panel kabulü yalnız TEYİT sayıldı. Doğru mu? (§3, §15)
 > - **FSEK md. 38 — emredici istisnalar:** yedek kopya, gözlem/inceleme/test ve birlikte çalışabilirlik için kodun çözülmesi sözleşmeyle kaldırılabilir mi? §5.2'deki "kanunun emredici izinleri saklıdır" cümlesi yeterli mi?
 > - **FSEK md. 72 — koruma önlemleri:** lisans denetimini, filigranı ya da bütünlük denetimini etkisiz kılmayı yasaklayan §5.1(e) ve §9 bu maddeye dayanabilir mi?
-> - **FSEK md. 68 ve TBK md. 179–182 (TTK md. 22 ile birlikte):** lisans ihlalinde ceza koşulu konacak mı, tutarı ne olmalı? §12.3 boş bırakıldı.
+> - **FSEK md. 68 ve TBK md. 179–182 (TTK md. 22 ile birlikte):** §12.3'teki ceza koşulu (izinsiz her kurulum için lisans bedelinin 3 katı) geçerli ve ölçülü mü?
 > - **TBK md. 20–25 — genel işlem koşulları:** bu metin standart sözleşmedir. Yaptırım hükümleri (§8; Yaptırım Maddeleri, Ek-2) karşı tarafın aleyhine "şaşırtıcı" sayılabilir mi? Taslakta bu hükümler için ayrı bilgilendirme ve ayrı kabul kutusu öngörüldü (Kabul Metni, Ek-7, kutu 2).
 > - **TBK md. 115 — sorumsuzluk anlaşması:** §11'deki sorumluluk sınırı ağır kusuru kapsamıyor mu? Tavan ve dolaylı zarar istisnası geçerli mi?
 > - **HMK md. 193 — delil sözleşmesi:** Lisans Veren'in imzalı elektronik kayıtlarını (yoklama, portal defteri, filigran) delil sayan §9.4 geçerli mi, karşı delil hakkı yeterince korunuyor mu?
@@ -20,8 +20,8 @@
 
 ## 1. Taraflar
 
-- **Lisans Veren:** [DOLDURULACAK — Etkili Yazılım ticari ünvanı, MERSİS no, vergi dairesi/no, adres, KEP adresi]
-- **Lisans Alan:** [Lisans Alan ünvanı] · MERSİS no: [Lisans Alan MERSİS no] · Vergi dairesi / no: [Lisans Alan vergi dairesi / no] · Adres: [Lisans Alan adresi] · KEP adresi: [Lisans Alan KEP adresi]
+- **Lisans Veren:** Etkili Yazılım — [Lisans Veren ticaret unvanı — kuruluş tamamlanınca] · MERSİS no: [Lisans Veren MERSİS no — kuruluş tamamlanınca] · Vergi dairesi / no: [Lisans Veren vergi dairesi / no — kuruluş tamamlanınca] · Adres: [Lisans Veren adresi — kuruluş tamamlanınca] · KEP adresi: [Lisans Veren KEP adresi — kuruluş tamamlanınca] · Telefon: [Lisans Veren telefonu — kuruluş tamamlanınca] · E-posta: info@etkiliyazilim.com
+- **Lisans Alan:** [Lisans Alan unvanı] · MERSİS no: [Lisans Alan MERSİS no] · Vergi dairesi / no: [Lisans Alan vergi dairesi / no] · Adres: [Lisans Alan adresi] · KEP adresi: [Lisans Alan KEP adresi] · İrtibat kişisi ve telefonu: [Lisans Alan irtibat kişisi ve telefonu]
 
 Taraflar tacirdir. Bu sözleşme ticari iştir; tüketici mevzuatı uygulanmaz [avukat teyidi].
 
@@ -61,7 +61,7 @@ Taraflar tacirdir. Bu sözleşme ticari iştir; tüketici mevzuatı uygulanmaz [
 
 4.4. **Sayı sınırı yoktur.** Kullanıcı, panel ve tablet cihazı, kayıt sayısı sınırlanmaz. Panel ve saha uygulaması, Tesis'in işi için yalnız lisanslı Kurulum'a bağlanmak üzere sınırsız cihaza kurulabilir.
 
-4.5. **Modüller.** Lisans Alan yalnız Lisans Belgesi'nde yazılı modülleri kullanabilir. Lisansta olmayan bir modül, veritabanında elle açılsa bile yazılım tarafından kapalı tutulur. Yeni modül ek lisansla açılır [DOLDURULACAK: modül fiyat listesi].
+4.5. **Modüller.** Lisans Alan yalnız Lisans Belgesi'nde yazılı modülleri kullanabilir. Lisansta olmayan bir modül, veritabanında elle açılsa bile yazılım tarafından kapalı tutulur. Yeni modül ek lisansla açılır; bedeli Lisans Veren'in teklifiyle belirlenir.
 
 4.6. **Yedek kopya.** Lisans Alan, kendi Kurulum'unun yedeğini ve arşiv kopyasını alabilir. Yedekten geri yükleme aynı Kurulum'da ya da §7 ve §10.3 çerçevesinde yapılır. Yedek kopya ikinci bir çalışan kurulum için kullanılamaz.
 
@@ -143,7 +143,7 @@ Her Lisans Belgesi tek bir sınıf taşır:
 
 10.5. **Bayi / iş ortağı:** Bayi sözleşmesiyle, Lisans Veren'in bayiye tanıdığı modül, sınıf ve adet sınırı içinde verilir. Son kullanıcıya karşı bu sözleşme uygulanır. Bayinin bu sınırı aşan vaadi Lisans Veren'i bağlamaz. Lisans Veren, bayinin verdiği lisansı gerektiğinde geri alabilir ya da doğrudan yönetebilir.
 
-10.6. **Barındırılan:** Yazılım'ın Lisans Veren altyapısında çalıştırıldığı sınıftır. Şartları ayrı sözleşmede düzenlenir [DOLDURULACAK].
+10.6. **Barındırılan:** Yazılım'ın Lisans Veren altyapısında çalıştırıldığı sınıftır. Şartları, hizmet sunulduğunda ayrı sözleşmeyle düzenlenir.
 
 ## 11. Garanti ve sorumluluk
 
@@ -151,7 +151,7 @@ Her Lisans Belgesi tek bir sınıf taşır:
 
 11.2. Lisans Veren; donanım, işletim sistemi, ağ, elektrik, üçüncü taraf yazılımları ve Lisans Alan'ın yedekleme yükümlülüğüne uymamasından doğan zarardan sorumlu değildir.
 
-11.3. Lisans Veren'in bu sözleşmeden doğan toplam sorumluluğu, zarar anından önceki 12 ayda Lisans Alan'ın ödediği lisans ve bakım bedeliyle sınırlıdır [DOLDURULACAK — ticari karar]. Kâr kaybı, iş kaybı ve dolaylı zarar kapsam dışıdır. Kast ve ağır ihmal hâlleri saklıdır (TBK md. 115).
+11.3. Lisans Veren'in bu sözleşmeden doğan toplam sorumluluğu, zarar anından önceki 12 ayda Lisans Alan'ın ödediği lisans, bakım ve (varsa) patron bulutu bedellerinin toplamıyla sınırlıdır; bu tavan Bakım ve Destek Sözleşmesi (Ek-4) ve Patron Bulutu Veri İşleme Eki (Ek-6) dahil bütün ekler için tektir. Kâr kaybı, iş kaybı ve dolaylı zarar kapsam dışıdır. Kast ve ağır ihmal hâlleri saklıdır (TBK md. 115).
 
 ## 12. Fikri mülkiyet
 
@@ -159,7 +159,7 @@ Her Lisans Belgesi tek bir sınıf taşır:
 
 12.2. **İş verisi Lisans Alan'ındır.** Yazılım'a girilen ve Yazılım'ın ürettiği iş verisi (üretim, stok, sipariş, cari, finans, kullanıcı kayıtları) Lisans Alan'a aittir. Lisans Veren bu veriye yalnız Bakım ve Destek Sözleşmesi (Ek-4) §6'daki uzaktan erişimle ve Lisans Alan onayıyla ulaşır. Lisans Alan patron bulutu hizmetini açarsa, seçilmiş verinin okuma kopyası Lisans Veren'in bulut sunucusunda veri işleyen sıfatıyla tutulur; bu kopya da Lisans Alan'ındır ve Patron Bulutu Veri İşleme Eki'ne (Ek-6) göre işlenir, saklanır ve imha edilir.
 
-12.3. **Lisans ihlalinde tazminat:** [DOLDURULACAK — ceza koşulu olacak mı, tutarı; avukat: FSEK md. 68, TBK md. 179–182, TTK md. 22].
+12.3. **Lisans ihlalinde tazminat:** Lisans Alan, bu sözleşmeye aykırı her izinsiz kurulum için lisans bedelinin 3 katı tutarında ceza koşulu öder [avukat: FSEK md. 68, TBK md. 179–182, TTK md. 22].
 
 12.4. **Üçüncü taraf bileşenler.** Yazılım açık kaynak bileşenler içerir (örneğin çalışma zamanı ve veritabanı). Bu bileşenler kendi lisanslarına tabidir. Liste istek üzerine verilir.
 
@@ -174,7 +174,7 @@ Her Lisans Belgesi tek bir sınıf taşır:
 
 13.3. Fesih hâlinde Yazılım Durdurulmuş duruma alınabilir. "Verilerimi al" kapısı fesihten sonra da en az 90 gün açık kalır. Lisans Alan bu sürede verilerini alır.
 
-13.4. Lisans Alan kullanımı istediği zaman bırakabilir. Ödenmiş bedelin iadesi: [DOLDURULACAK].
+13.4. Lisans Alan kullanımı istediği zaman bırakabilir. Ödenmiş bedel iade edilmez; bakımın kalan süresi için de iade yapılmaz.
 
 ## 14. Bildirimler
 
@@ -182,7 +182,7 @@ Resmî bildirimler (ihtar, fesih) KEP ya da noter aracılığıyla yapılır. Ya
 
 ## 15. Uygulanacak hukuk ve yetki
 
-Türk hukuku uygulanır. Uyuşmazlıklarda [DOLDURULACAK] mahkemeleri ve icra daireleri yetkilidir.
+Türk hukuku uygulanır. Uyuşmazlıklarda Lisans Veren'in merkezinin bulunduğu il olan [Lisans Veren merkezinin bulunduğu il — kuruluş tamamlanınca] mahkemeleri ve icra daireleri yetkilidir.
 
 ## 16. Ekler
 
