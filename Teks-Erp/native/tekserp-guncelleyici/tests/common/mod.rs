@@ -178,8 +178,10 @@ pub struct Faults {
     pub license_broken_version: Mutex<Option<String>>,
     /// `migrate deploy` yarıda düşer (bir göç başlar, biter değil).
     pub migrate_fails: AtomicBool,
-    /// PG başladığında sunucu sürümü yanlış bildirilir.
-    pub pg_wrong_version: AtomicBool,
+    /// ImagePath bu parçayı taşırken (ör. yeni PG dizini) sunucu yanlış sürüm bildirir.
+    pub pg_wrong_for: Mutex<Option<String>>,
+    /// ImagePath bu parçayı taşırken ICU yeniden dizinlemesi düşer.
+    pub reindex_fail_for: Mutex<Option<String>>,
     /// Ağ yanıtı bu kadar bayttan sonra kesilir (0 = kesilmez).
     pub cut_after: AtomicU64,
     /// Paket yerine bozuk bayt sunulur.
@@ -353,8 +355,10 @@ impl Procs for FakeProcs {
                 }
                 if sql.contains("SHOW server_version") {
                     let svcs = self.w.svcs.lock().unwrap();
-                    let v = svcs.get(PG).and_then(|s| s.version.clone()).unwrap_or_default();
-                    let v = if self.w.faults.pg_wrong_version.load(Ordering::SeqCst) { "99.9".to_string() } else { v };
+                    let pg = svcs.get(PG).cloned();
+                    let v = pg.as_ref().and_then(|s| s.version.clone()).unwrap_or_default();
+                    let wrong = self.w.faults.pg_wrong_for.lock().unwrap().clone();
+                    let v = if wrong.is_some_and(|t| pg.is_some_and(|p| p.image.contains(&t))) { "99.9".to_string() } else { v };
                     return Ok(ok_out(&format!("{v} (fake)\n")));
                 }
                 if sql.contains("DROP SCHEMA") {
@@ -362,6 +366,10 @@ impl Procs for FakeProcs {
                     return Ok(ok_out("CREATE SCHEMA\n"));
                 }
                 if sql.contains("REINDEX") {
+                    let image = self.w.svcs.lock().unwrap().get(PG).map(|p| p.image.clone()).unwrap_or_default();
+                    if self.w.faults.reindex_fail_for.lock().unwrap().as_ref().is_some_and(|t| image.contains(t.as_str())) {
+                        return Ok(fail_out(1, "psql: ERROR: could not create unique index"));
+                    }
                     self.w.events.lock().unwrap().push("reindex".into());
                     return Ok(ok_out("DO\n"));
                 }
