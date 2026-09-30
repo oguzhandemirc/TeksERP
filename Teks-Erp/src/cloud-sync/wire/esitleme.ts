@@ -19,6 +19,7 @@ export const SYNC_PATHS = {
   INBOX_CLAIM: "/v1/gelen-kutusu/al",
   INBOX_RESULT: "/v1/gelen-kutusu/sonuc",
   ACCOUNTS: "/v1/hesaplar",
+  ACCOUNT_LOCK: "/v1/hesap-kilitle",
   REPORT_CLAIM: "/v1/rapor/al",
   REPORT_RESULT: "/v1/rapor/sonuc",
 } as const;
@@ -50,6 +51,8 @@ export const FACTORY_CHANNEL_ERROR_CODES = [
   "PAKET_KIMLIGI_CAKISTI",
   "DURUM_CAKISMASI",
   "RAPOR_BILINMIYOR",
+  "ISLEM_KIMLIGI_CAKISTI",
+  "SON_YONETICI",
 ] as const;
 export type FactoryChannelErrorCode = (typeof FACTORY_CHANNEL_ERROR_CODES)[number];
 /** `ISTEK_ZAMAN`da `details.sunucuSaati` bulutun saatidir (İMZASIZ, D4): fabrika isteği yalnız BİR KEZ düzeltilmiş zamanla yeniden imzalar. */
@@ -250,6 +253,19 @@ export const CloudAccountSchema = z.object({
 export type CloudAccount = z.infer<typeof CloudAccountSchema>;
 export const AccountsResponseSchema = z.object({ v: z.literal(ENVELOPE_VERSION), hesaplar: z.array(CloudAccountSchema).max(1000) });
 export type AccountsResponse = z.input<typeof AccountsResponseSchema>;
+
+// ---------------------------------------------------------------- fabrikadan hesap kilitleme (B6)
+
+/** Fabrika yöneticisinin "kilitle" isteği: yalnız AKTIF → KILITLI; `islemKimligi` ile idempotent; `isteyen` iz içindir. */
+export const AccountLockRequestSchema = z.strictObject({
+  v: z.literal(ENVELOPE_VERSION),
+  hesapId: Uuid,
+  islemKimligi: Uuid,
+  isteyen: z.string().trim().min(1).max(120),
+});
+export type AccountLockRequest = z.infer<typeof AccountLockRequestSchema>;
+export const AccountLockResponseSchema = z.object({ v: z.literal(ENVELOPE_VERSION), hesap: CloudAccountSchema });
+export type AccountLockResponse = z.input<typeof AccountLockResponseSchema>;
 
 // ---------------------------------------------------------------- rapor isteği (§7, S13, S14)
 

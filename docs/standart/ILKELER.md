@@ -18,7 +18,7 @@ Kural biçimi ve zorlama etiketleri: [`README.md`](README.md).
 ## 2 · Fail-closed
 
 - **[IL-05]** Tanınmayan değer 400'e düşer; yerleşiğe/varsayılana SAPMAZ · zorlama: bekçi · kanıt: `inventory.service.ts:1547` (`rollScope` bilinmeyen kapsam → `AppError.badRequest`)
-- **[IL-06]** Bir kapı yalnız açık bilgiyle açılır: bilgi yoksa kapalıdır. Önbellekte **TTL tazeliktir, geçerlilik değil** — dolmuş TTL bayat listeyi düşürmez (bayat döner + arka planda tazeler), ama önbellek HİÇ dolmadıysa fail-closed kalır · zorlama: bekçi:`test_reason_presets §3b/c/d` · kanıt: `reason-preset.service.ts:176-190`, `remote-access.middleware.ts:212`
+- **[IL-06]** Bir kapı yalnız açık bilgiyle açılır: bilgi yoksa kapalıdır. Önbellekte **TTL tazeliktir, geçerlilik değil** — dolmuş TTL bayat listeyi düşürmez (bayat döner + arka planda tazeler), ama önbellek HİÇ dolmadıysa fail-closed kalır · zorlama: bekçi:`test_reason_presets §3b/c/d` · kanıt: `reason-preset.service.ts:176-190`
 - **[IL-07]** Kapı takarken sor: "bu malın/verinin çıktığı BAŞKA yol var mı?" — kardeş bayrağın kapsam listesine bakılarak cevaplanır · zorlama: insan:kapsam sorusu mekanik değil · kanıt: 2026-09-03 Dilim 2 (fason doğrudan sevk, `block` rejimi)
 
 ## 3 · Sessiz düşme yasağı

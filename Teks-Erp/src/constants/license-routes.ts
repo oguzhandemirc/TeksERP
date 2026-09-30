@@ -114,6 +114,7 @@ export const RESTRICTED_OPEN_ROUTES: readonly LicenseRouteRule[] = [
   { method: "POST", path: "/api/admin/users/:id/reset-password", reason: "parola sıfırlama (güvenlik)" },
   { method: "POST", path: "/api/admin/users/:id/totp/reset", reason: "iki adımlı doğrulama sıfırlama (güvenlik)" },
   { method: "POST", path: "/api/admin/devices/:id/revoke", reason: "cihaz iptali (güvenlik)" },
+  { method: "POST", path: "/api/patron-bulut/hesap/:id/kilitle", reason: "patron bulutu hesabını kilitleme (güvenlik; kullanıcı pasifleştirme emsali)" },
   // Bakım ve çalışma oturumu
   { method: "POST", path: "/api/admin/sessions/purge", reason: "bakım: eski oturum budaması (telemetri)" },
   { method: "POST", path: "/api/admin/system-logs/archive", reason: "bakım: denetim kaydı arşivi" },

@@ -58,7 +58,7 @@ Her adım istasyon kataloğu + rota şablonundan kurulur; **TOPUN rotası için*
 
 ### Kapılar ve sözleşme
 - FAIL-CLOSED varsayılan: tanınmayan kapsam 400, çözülemeyen şablon 400/404 (yerleşiğe sapma yok), izin guard'ı anahtar-kapsamlı ve düz OR'a çevrilmez, önbellekte TTL tazeliktir geçerlilik değil (bayat döner + tazeler; hiç dolmadıysa fail-closed kalır).
-- Hata kodu `details.code` altında (`body.code` hep undefined); kapalı modül 403 `MODULE_DISABLED`; uzakta kapalı yol 404 (403 varlığı doğrular). Uzak/LAN ayrımı soketten, `clientType` güvenlik sınırı değil; tünel dinleyicisi yalnız `127.0.0.1`.
+- Hata kodu `details.code` altında (`body.code` hep undefined); kapalı modül 403 `MODULE_DISABLED`; `clientType` gövdeden gelir, güvenlik sınırı değildir. Fabrika sunucusuna GELEN port açılmaz (eski tünel 2026-09-30'da emekli) — dışarıyla tek bağ fabrikanın ÇIKAN imzalı kanallarıdır.
 - Bir yetenek "VAR" sayılmak için üçü birden: motor + en az bir çıkış yüzeyi + izin ataması. İzin kataloğu koda, atama panele (uzlaştırma getirir, ATAMAZ); SoD üçlüsü (`shipping:invoice`, `shipping:undo-dispatch`, `roll:manual-adjust`) yalnız Muhasebe/Süpervizör; süperadmin rol değil (`["*"]`), panelden atanamaz.
 - Yeni davranış bayrağının varsayılanı = BUGÜNKÜ davranış ve bu cümle ÖLÇÜLMEDEN yazılmaz; çıkışsız kapı üreten bayrak yazılır ama AÇILMAZ; kapı takarken "malın çıktığı başka yol var mı" kardeş bayrağın kapsamına bakılarak sorulur. Rota kapsaması KATEGORİ düzeyinde reddetmez, UYARIR (`ApiResponse.warnings`); özellik-başına kapsama sert kalır (create 400 / replace 409 — `docs/kurallar/rota-renk.md`).
 - **Lisans kapısı fabrikayı aniden durdurmaz:** geçersiz/ölçülemedi → uyarı → imzalı tarihten türeyen ek süre → kısıtlı kip; veri erişimi (okuma, rapor, dışa aktarma, yedek) her kademede açık — `docs/kurallar/lisans.md`.
@@ -71,7 +71,7 @@ Her adım istasyon kataloğu + rota şablonundan kurulur; **TOPUN rotası için*
 - Prisma'nın iki motoru var; şema motoru NATIVE — Windows paketi `PRISMA_CLI_BINARY_TARGETS=windows` + MZ kapısı. Commit edilmemiş migration prod'da sessiz eksiktir. Reçete: `docs/kurallar/deploy-kurulum.md`.
 
 ### Süreç, sır, donanım
-- Backend TEK process: `pkill -f "tsx src/server.ts"` YASAK (yalnız kendi PID'in), ikinci Node süreci yasak (uzak erişim iki dinleyiciyle; tek istisna bekçi koşucusunun 127.0.0.1'deki kendi test sunucusu — `Teks-Erp/scripts/bekci-http.ts`, yalnız `_test` DB). Seri port / donanım polling backend'e girmez; eski "Phase 1: gerçek donanım kodu yazma" yasağı 2026-09-05'te BACKEND'e daraltıldı — istemci sürücüleri (Electron IPC serialport/node-hid, mobil HAL BT-Classic) meşru; simülasyon per-cihaz VERİ bayrağı; uydurulmuş değer `source:'SIMULATED'` beyanıyla gider, kararı backend verir.
+- Backend TEK process: `pkill -f "tsx src/server.ts"` YASAK (yalnız kendi PID'in), ikinci Node süreci yasak (tek istisna bekçi koşucusunun 127.0.0.1'deki kendi test sunucusu — `Teks-Erp/scripts/bekci-http.ts`, yalnız `_test` DB). Seri port / donanım polling backend'e girmez; eski "Phase 1: gerçek donanım kodu yazma" yasağı 2026-09-05'te BACKEND'e daraltıldı — istemci sürücüleri (Electron IPC serialport/node-hid, mobil HAL BT-Classic) meşru; simülasyon per-cihaz VERİ bayrağı; uydurulmuş değer `source:'SIMULATED'` beyanıyla gider, kararı backend verir.
 - Sır hijyeni: süperadmin parolası/PIN/TOTP ve ayar şifresi repoya, log'a, sürüm notuna, audit yüküne GİRMEZ; `.env` uyarısı yalnız anahtar adı basar. `quickPin` düz metin ve tek başına kimliktir — hiçbir yüzeyden sızdırılmaz.
 - Yeni paket eklemeden önce onay; Sonnet/ucuz model yalnız mekanik işte (kullanıcı tercihi).
 
@@ -111,7 +111,7 @@ Her adım istasyon kataloğu + rota şablonundan kurulur; **TOPUN rotası için*
 | Mükerrer · nameFold seddi · ana veri arşivi | `docs/kurallar/mukerrer.md` | Kelime bazlı bulanık eşleme; partial UNIQUE yumuşak kapı; kimlik alanına sed yok; top birleştirilmez iptal edilir; canlı referanslı ana veri pasife alınamaz (ürün üç durumlu: Aktif · Tükenene kadar · Pasif) |
 | **Numaralandırma · numara serisi · ön ek** | `docs/kurallar/numaralandirma.md` | Kimlik katalogda biçim veride; tarih segmenti = sıfırlama dönemi; geçmiş yeniden numaralanmaz, ön ek emekliye ayrılır; çakışma kapısı yalnız tarama uzayında |
 | Sebep katalogları | `docs/kurallar/sebep-katalogu.md` | `ReasonPreset` DB'de; `code` asla değişmez; TTL tazelik; son aktif satır gizlenemez |
-| Keşif · cihaz · ağ · donanım | `docs/kurallar/kesif-cihaz.md` | Bir satır = bir sunucu (`installationId`); kademeli port; yedekte kimlik zorunlu; cihaz doğuşu bayraktan; patron modülü |
+| Keşif · cihaz · ağ · donanım | `docs/kurallar/kesif-cihaz.md` | Bir satır = bir sunucu (`installationId`); kademeli port; yedekte kimlik zorunlu; cihaz doğuşu bayraktan |
 | Sürüm · yayın | `docs/kurallar/surum-yayin.md` | Not kapısı; yama hanesi etiketten; müşteri kodu argümandan; manifest en son; kod imzalama |
 | Deploy · kurulum · migration | `docs/kurallar/deploy-kurulum.md` | `kur.ps1` geri alma; iki Prisma motoru; yumuşak kapı; `apply-migration.ts`; altı sözleşme tetiği |
 | Modül anahtarları · bayraklar · profiller | `docs/kurallar/modul-bayrak.md` | `finance.enabled` kalıbı; kapalı modül 403; profiller TS sabiti; kapalı modülün bayrağı çizilmez; Dilim 2 |
@@ -122,7 +122,7 @@ Her adım istasyon kataloğu + rota şablonundan kurulur; **TOPUN rotası için*
 | Finans · sağlamlık sınıfları | `docs/kurallar/finans.md` | Beş sınıf; iki tarih; ters yol; kilit sırası; çift yüklem; tek kaynak satır; kasa/KDV bayrakları PROFİL |
 | **Patron bulutu · eşitleme · gelen kutusu · bulut sunucusu** | `docs/kurallar/patron-bulutu.md` | Bulut hesap yapmaz, fabrika tek kaynak yardımcıyla hesaplar; katalog opt-in (`src/cloud-sync/projections.ts`); ön koşul fail-closed ve TEK (`cloudEligibility`: URETIM + `patron-bulut` + kira); filigran yalnız bulut onayıyla ilerler; silme tetikleyiciyle (`sync_marks`, telemetri); tek yazma kanalı gelen kutusu (makbuz aynı tx); bulutta `tesis_id` + RLS FORCE, iki rol NOBYPASSRLS |
 | **Lisans · kod koruma · satıcı platformu** | `docs/kurallar/lisans.md` | Gözlem sıfır fark; ek süre imzalı tarihten; KISITLI iki anahtarlı; sunucu kararı ek sürede kalıcı; parmak izi MAC'siz; kök parolası stdin |
-| Genel · uzak erişim · konvansiyon | `docs/kurallar/genel.md` | Soket ayrımı; Access JWT fail-closed; TOTP kurulumu; audit; iki dinleyici tek process |
+| Genel · konvansiyon | `docs/kurallar/genel.md` | Künye başlığı kapı değil; `CLIENT_IP_HEADER` yalnız beyanlı vekilde; TOTP kurulumu; audit; tek process |
 
 Dizin ve arşiv tarihleri: `docs/kurallar/README.md`. Tasarım belgeleri: `docs/design/` (canlı), runbook'lar: `docs/ops/`, harita: `docs/README.md`.
 

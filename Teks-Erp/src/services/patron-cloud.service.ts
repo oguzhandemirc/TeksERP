@@ -16,7 +16,8 @@ import { PermissionManagementService } from "./permission-management.service";
 import { PATRON_CLOUD_USER_SETTING_KEY } from "../constants/reserved-settings";
 import { cloudEligibility, type CloudBlockReason } from "../cloud-sync/eligibility";
 import { getCloudUrl, type CloudUrlSource } from "../cloud-sync/cloud-url";
-import type { CloudAccount } from "../cloud-sync/wire";
+import { cloudPost, egressCloudTransport, type CloudTransport } from "../cloud-sync/cloud-client";
+import { AccountLockResponseSchema, ENVELOPE_VERSION, SYNC_PATHS, type CloudAccount } from "../cloud-sync/wire";
 import { readPatronCloudUserId } from "./helpers/patron-cloud-user.helper";
 
 /** Teknik kullanıcının kullanıcı adı (panel kuralı: yalnız İngilizce harf + rakam). */
@@ -118,6 +119,56 @@ let accounts: { readonly list: readonly CloudAccount[]; readonly fetchedAtMs: nu
 
 export function recordCloudAccounts(list: readonly CloudAccount[], nowMs: number = Date.now()): void {
   accounts = { list: [...list], fetchedAtMs: nowMs };
+}
+
+/** Bulutun kesin retleri → HTTP durumu (kod aynen `details.code`a geçer). Listede olmayan kesin 4xx 409'dur. */
+const LOCK_REJECT_STATUS: Readonly<Record<string, number>> = { BULUNAMADI: 404, SON_YONETICI: 409, DURUM_CAKISMASI: 409, ISLEM_KIMLIGI_CAKISTI: 409 };
+
+/**
+ * Bulut hesabını KİLİTLE (B6): fabrika yöneticisi → buluta kurulum imzalı istek (`/v1/hesap-kilitle`). Bulut tek
+ * yazardır (durum orada değişir); fabrika yalnız ister, sonucu bellekteki listeye yansıtır ve iz bırakır.
+ * `islemKimligi` istemcinin MANTIKSAL deneme kimliğidir: ağ/5xx belirsizliğinde istemci AYNI kimlikle yeniden dener.
+ */
+export async function lockCloudAccount(
+  input: { readonly hesapId: string; readonly islemKimligi: string; readonly actorUserId: string | undefined },
+  transport: CloudTransport = egressCloudTransport,
+): Promise<CloudAccount> {
+  const e = cloudEligibility();
+  if (!e.ok) throw AppError.conflict("Patron bulutu bu kurulumda kullanılamıyor; hesap kilitlenemedi.", { code: "PATRON_BULUT_KAPALI", neden: e.reason });
+  const actor = input.actorUserId
+    ? await prisma.user.findUnique({ where: { id: input.actorUserId }, select: { fullName: true, username: true } })
+    : null;
+  const isteyen = (actor?.fullName || actor?.username || "Fabrika yöneticisi").slice(0, 120);
+  const r = await cloudPost(
+    { baseUrl: e.baseUrl, installationId: e.installationId, transport },
+    SYNC_PATHS.ACCOUNT_LOCK,
+    { v: ENVELOPE_VERSION, hesapId: input.hesapId, islemKimligi: input.islemKimligi, isteyen },
+    { gzip: false },
+  );
+  if (!r.ok) {
+    if (r.status === 0 || r.status >= 500) {
+      throw new AppError("Patron bulutuna ulaşılamadı; aynı işlemi tekrar deneyin.", 503, true, { code: "BULUT_ULASILAMADI", neden: r.code });
+    }
+    const status = LOCK_REJECT_STATUS[r.code] ?? 409;
+    const message = r.code === "SON_YONETICI"
+      ? "Tesisin son aktif bulut yöneticisi kilitlenemez; önce bulutta başka bir yönetici atayın."
+      : r.code === "BULUNAMADI" ? "Bulut hesabı bulunamadı." : "Bulut hesabı kilitlenemedi.";
+    throw new AppError(message, status, true, { code: r.code });
+  }
+  const parsed = AccountLockResponseSchema.safeParse(r.json);
+  if (!parsed.success) throw new AppError("Patron bulutunun yanıtı sözleşmeye uymuyor.", 502, true, { code: "YANIT_GECERSIZ" });
+  const hesap = parsed.data.hesap;
+  if (accounts) {
+    accounts = { list: accounts.list.map((a) => (a.id === hesap.id ? hesap : a)), fetchedAtMs: accounts.fetchedAtMs };
+  }
+  void AuditService.logEvent({
+    category: "SYSTEM",
+    action: "PATRON_CLOUD_ACCOUNT_LOCKED",
+    userId: input.actorUserId ?? null,
+    recordId: hesap.id,
+    payload: { ad: hesap.ad, durum: hesap.durum },
+  });
+  return hesap;
 }
 
 // ── Gelen kutusu son tur özeti (sağlık/panel; iş verisi değil) ────────────────────────────────────────────────

@@ -28,19 +28,13 @@ export interface LoginContext {
   clientType?: LoginClientType;
   deviceId?: string | null;
   confirmKick?: boolean;
-  /**
-   * İstek TÜNEL dinleyicisinden mi geldi (`req.isRemote`). ⚠️ Gövdeden DEĞİL,
-   * `remote-access.middleware` tarafından soket portundan çözülür — istemci
-   * uyduramaz. `true` ise ikinci faktör (TOTP) ZORUNLUDUR.
-   */
-  isRemote?: boolean;
-  /** Uzak girişte TOTP kodu ya da kurtarma kodu. */
+  /** Parolalı girişte ikinci faktör: TOTP kodu ya da kurtarma kodu (ayrımı servis yapar). */
   totpCode?: string;
   /**
    * İstemcinin künye başlığında bildirdiği kendi sürümü — `Session.clientVersion`e
-   * yazılır. ⚠️ `isRemote`in TERSİ bir sınıftır: bu değer İSTEMCİDEN gelir ve
-   * uydurulabilir, o yüzden hiçbir kapıya/politikaya girmez. Yalnız "sahada
-   * hangi sürümler görülüyor" sorusunu cevaplayan bir GÖZLEMdir.
+   * yazılır. ⚠️ Bu değer İSTEMCİDEN gelir ve uydurulabilir, o yüzden hiçbir
+   * kapıya/politikaya girmez. Yalnız "sahada hangi sürümler görülüyor" sorusunu
+   * cevaplayan bir GÖZLEMdir.
    */
   clientVersion?: string | null;
 }
@@ -116,10 +110,9 @@ export class AuthService {
       throw AppError.unauthorized("Geçersiz kullanıcı adı veya şifre");
     }
 
-    // ⚠️ SIRA LOAD-BEARING: ikinci faktör `issueToken`den ÖNCE. `issueToken`
-    // oturum kaydı AÇAR ve `kick` politikasında kullanıcının DİĞER oturumlarını
-    // düşürür — sonraya bırakılsaydı yalnız parolayı ele geçiren biri, TOTP'yi
-    // hiç geçemese bile meşru kullanıcıyı oturumundan atabilirdi.
+    // ⚠️ SIRA: ikinci faktör `issueToken`den ÖNCE — `issueToken` oturum açar ve
+    // `kick` politikasında diğer oturumları düşürür; yalnız parolayı bilen biri
+    // meşru kullanıcıyı oturumundan atamamalı.
     await this.assertSecondFactor(user.id, ctx);
 
     return this.issueToken(
@@ -138,7 +131,6 @@ export class AuthService {
     cardCode: string,
     ctx?: LoginContext
   ): Promise<{ token: string; user: JwtPayload }> {
-    this.assertNotRemote(ctx);
     const methods = await readLoginMethods();
     if (!methods.enabled.includes("card")) {
       throw AppError.forbidden(
@@ -166,7 +158,6 @@ export class AuthService {
     pin: string,
     ctx?: LoginContext
   ): Promise<{ token: string; user: JwtPayload }> {
-    this.assertNotRemote(ctx);
     const methods = await readLoginMethods();
     if (!methods.enabled.includes("pin")) {
       throw AppError.forbidden(
@@ -314,47 +305,27 @@ export class AuthService {
    *  olarak token'a gömer → middleware anlık iptal kontrolü yapabilir. 'notify'
    *  politikası + onaysız çakışma → openLoginSession 409 SESSION_EXISTS fırlatır. */
   /**
-   * UZAK GİRİŞTE İKİNCİ FAKTÖR KAPISI. LAN'da tam no-op.
-   *
-   * Üç sonuç, üçü de FARKLI HTTP kodu — çünkü giriş kilidi yalnız **401**'i
-   * kaba kuvvet sayar (`auth.controller` F49 kuralı):
-   *   • 403 TOTP_ENROLLMENT_REQUIRED → kurulum yok. Kimlik denemesi DEĞİL.
-   *   • 409 TOTP_REQUIRED → kod istendi. Kimlik denemesi DEĞİL (istemci kodu
-   *     ekleyip aynı uca tekrar POST eder).
-   *   • 401 TOTP_INVALID → yanlış kod. Kaba kuvvet SAYILIR ve sayılmalıdır:
-   *     TOTP uzayı yalnız 10^6'dır, kilit olmadan çevrimiçi tahmin edilebilirdi.
+   * İKİNCİ FAKTÖR KAPISI — yalnız PAROLALI giriş, yalnız kullanıcı TOTP'yi AÇTIYSA
+   * (ağdan bağımsız; açmayana hiç sorulmaz). Kart/PIN/cihaz girişleri buradan geçmez.
+   * Kodlar giriş kilidine göre seçildi (yalnız 401 kaba kuvvet sayılır):
+   *   • 409 TOTP_REQUIRED → kod istendi; kimlik denemesi DEĞİL (istemci kodu ekleyip tekrar POST eder).
+   *   • 401 TOTP_INVALID  → yanlış kod; SAYILIR (TOTP uzayı 10^6, kilitsiz tahmin edilirdi).
    */
   private static async assertSecondFactor(userId: string, ctx?: LoginContext): Promise<void> {
-    if (!ctx?.isRemote) return;
-
     const status = await TotpAccountService.getStatus(userId);
-    if (!status.enabled) {
-      throw AppError.forbidden(
-        "Uzaktan erişim için iki adımlı doğrulama kurulmalı. " +
-          "Yöneticinizden kurulum bağlantısı isteyin.",
-        { code: "TOTP_ENROLLMENT_REQUIRED" },
-      );
-    }
+    if (!status.enabled) return;
 
-    const code = (ctx.totpCode ?? "").trim();
+    const code = (ctx?.totpCode ?? "").trim();
     if (!code) {
-      throw AppError.conflict("Doğrulama kodu gerekli.", { code: "TOTP_REQUIRED" });
+      // Tablet uygulamasında kod adımı yok: kullanıcıyı PIN/kart yoluna yönlendir.
+      const message = isDesktopClient(ctx?.clientType)
+        ? "Doğrulama kodu gerekli."
+        : "Bu hesapta iki adımlı doğrulama açık — tablette PIN ya da kartla giriş yapın.";
+      throw AppError.conflict(message, { code: "TOTP_REQUIRED" });
     }
     if (!(await TotpAccountService.verifySecondFactor(userId, code))) {
       throw AppError.unauthorized("Doğrulama kodu geçersiz.", { code: "TOTP_INVALID" });
     }
-  }
-
-  /**
-   * PIN/kart girişini uzakta reddet — `remote-access.middleware`in İKİNCİ HATTI.
-   *
-   * Kenar denylist'i (middleware) birincil kapıdır; burası, o kapı bir refactor
-   * ya da yanlış mount sırası yüzünden düşerse devreye girer. `notFound`
-   * seçilmesi bilinçli: middleware ile AYNI cevabı vererek "bu uç uzakta var mı"
-   * sorusunu cevapsız bırakır.
-   */
-  private static assertNotRemote(ctx?: LoginContext): void {
-    if (ctx?.isRemote) throw AppError.notFound("Kaynak bulunamadı");
   }
 
   private static async issueToken(

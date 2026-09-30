@@ -10,8 +10,6 @@ import {
   TOTP_REQUIRED_CODE,
 } from "@/lib/totp-auth";
 import { buildTotpEnrollUrl, TOTP_ENROLL_PATH } from "@/lib/totp-enroll-url";
-import { ERP_DIS_ADRESI, MUSTERI_KODU } from "@shared/update-feed";
-import { panelChannel, registeredChannelCodes } from "../../build-channel";
 
 /**
  * İKİ ADIMLI DOĞRULAMA — istemci tarafı sözleşmesi.
@@ -152,59 +150,5 @@ describe("2FA kurulum bağlantısı", () => {
     expect(routerSrc).toContain("TOTP_ENROLL_PATH");
     expect(appSrc).toContain("TOTP_ENROLL_PATH");
     expect(routerSrc).not.toMatch(/path:\s*"\/2fa-kurulum"/);
-  });
-});
-
-describe("fabrikanın dış adresi — tek kaynak (kanal kaydı)", () => {
-  it("derlenen kanalın dış adresi kaydın O KANALININ değeri (yanlış müşterinin paketine doğru adres giremez)", () => {
-    // Adres ve kod AYNI kayıt satırından gelir; biri başka kanaldan gelemez.
-    expect(ERP_DIS_ADRESI).toBe(panelChannel(MUSTERI_KODU).publicErpUrl);
-  });
-
-  it("her kanalda dış adres boş ya da http(s)://host[:port]; üretim kanalında https (tünel)", () => {
-    const kayit = JSON.parse(readFileSync(resolve(process.cwd(), "../deploy/kanallar.json"), "utf-8")) as {
-      kanallar: Record<string, { tur: string }>;
-    };
-    for (const kod of registeredChannelCodes()) {
-      const adres = panelChannel(kod).publicErpUrl;
-      if (!adres) continue;
-      expect(adres, kod).toMatch(/^https?:\/\/[a-z0-9.-]+(:\d+)?$/);
-      if (kayit.kanallar[kod]?.tur === "uretim") expect(adres, kod).toMatch(/^https:\/\//);
-    }
-    // Sahadaki fabrika: tünel adresi (DONMUŞ değer scripts/check-kanallar.mjs §2'de de).
-    expect(panelChannel("adnansahin").publicErpUrl).toBe("https://adnansahin-erp.etkiliyazilim.com");
-  });
-
-  it("⚠️ GÜNCELLEME ADRESİNDEN TÜRETİLMEZ", () => {
-    // İkisi ayrı kanal: güncelleme yayın sunucusundan, ERP fabrikanın kendi
-    // tünelinden gelir. Aynı müşteri kodunu paylaşmaları tesadüf; birini
-    // diğerinden üretmek, biri değiştiğinde ötekini sessizce yanlışlar.
-    const cfg = readFileSync(resolve(process.cwd(), "shared/update-feed.ts"), "utf-8");
-    expect(cfg).toContain("export const ERP_DIS_ADRESI: string = PUBLIC_ERP_URL;");
-    // Adres güncelleme kökünden ŞABLONLA kurulmuş olmamalı.
-    expect(cfg).not.toMatch(/ERP_DIS_ADRESI[^\n]*UPDATE_BASE_URL/);
-    for (const kod of registeredChannelCodes()) {
-      const adres = panelChannel(kod).publicErpUrl;
-      if (adres) expect(adres.startsWith("https://guncelleme."), kod).toBe(false);
-    }
-  });
-
-  it("build (web) bu adresi pakete kanal kaydından gömüyor", () => {
-    const vite = readFileSync(resolve(process.cwd(), "vite.config.web.ts"), "utf-8");
-    expect(vite).toContain("VITE_PUBLIC_APP_URL");
-    expect(vite).toContain("channel.publicErpUrl");
-  });
-
-  it("kurulum bağlantısı her kanalın adresiyle üretilince dışarıdan açılabilir olur", () => {
-    for (const kod of registeredChannelCodes()) {
-      const adres = panelChannel(kod).publicErpUrl;
-      if (!adres) continue;
-      const url = buildTotpEnrollUrl("abc", adres);
-      expect(url.startsWith(`${adres}/`), kod).toBe(true);
-      // ⚠️ Asıl arıza buydu: LAN adresiyle üretilen bağlantı kullanıcının
-      // telefonunda AÇILMAZ ve hata da vermez, sadece boş sayfa gelir.
-      expect(url, kod).not.toMatch(/localhost|127\.0\.0\.1|192\.168\./);
-      expect(url).toContain(`#${TOTP_ENROLL_PATH}?token=abc`);
-    }
   });
 });

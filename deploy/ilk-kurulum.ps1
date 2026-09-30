@@ -90,7 +90,7 @@ param(
   [ValidatePattern('^\d{2}:\d{2}$')][string]$YedekSaati = "03:00",
   # Opsiyonel ikinci kopya (ikinci disk). Fabrikada E:\TeksERP-yedek.
   [string]$YedekIkinciHedef,
-  # Paketteki web paneli (app\dist-web) sunulmasin: .env'e WEB_DIST_DIR yazilmaz.
+  # EMEKLI (2026-09-30, B6): paket web panelini tasimaz, .env'e WEB_DIST_DIR hic yazilmaz. Geriye uyum icin kabul edilir.
   [switch]$WebPanelKapali,
   # API (4000) gelen kurali: yalniz bu profiller ve uzak adresler. Public profil ve
   # "Any" adres bilerek varsayilan DEGIL (bkz. Tailscale-In uyarisi, runbook §2.2).
@@ -609,15 +609,8 @@ if (Test-Path $envDosya) {
     "JWT_SECRET=`"$gizli`""
     "PORT=4000"
   )
-  # Paket web panelini (`app\dist-web`) tasir; degisken yoksa backend onu sunmaz ve
-  # kok (/) durum sayfasi olur. Mutlak yol: express.static goreliyi pm2 cwd'sine gore cozer.
-  if (-not $WebPanelKapali) { $satirlar += "WEB_DIST_DIR=`"$(($Kok -creplace '\\', '/').TrimEnd('/'))/app/dist-web`"" }
   $satirlar | Set-Content $envDosya -Encoding UTF8
-  Ok "olusturuldu: $envDosya  (JWT_SECRET bu makinede uretildi$(if (-not $WebPanelKapali) { '; web paneli: WEB_DIST_DIR' }))"
-}
-if ((Test-Path $envDosya) -and -not $WebPanelKapali -and -not (Select-String -Path $envDosya -Pattern '^\s*WEB_DIST_DIR\s*=' -CaseSensitive -Quiet)) {
-  Uyar "mevcut .env'de WEB_DIST_DIR yok - paketteki web paneli SUNULMUYOR (bilincliyse yok say)."
-  Uyar "  acmak icin .env'e ekle:  WEB_DIST_DIR=`"$(($Kok -creplace '\\', '/').TrimEnd('/'))/app/dist-web`"  (sonra pm2 restart)"
+  Ok "olusturuldu: $envDosya  (JWT_SECRET bu makinede uretildi)"
 }
 
 # --- Bakim rolu (istege bagli) ------------------------------------------------

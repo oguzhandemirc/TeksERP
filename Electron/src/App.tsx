@@ -7,7 +7,6 @@ import { CopyContextMenu } from "@/components/CopyContextMenu";
 import { MotionProvider } from "@/components/motion";
 import { PreferencesProvider } from "@/providers/PreferencesProvider";
 import { AppShell } from "@/components/layout/AppShell";
-import { BossShell } from "@/components/layout/BossShell";
 import { UpdateGate } from "@/components/layout/UpdateGate";
 import { LicenseLockGate } from "@/components/layout/LicenseLockGate";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
@@ -20,7 +19,6 @@ import { tokenStore } from "@/lib/secure-token";
 import { decodeJwt, jwtPayloadExpiryMs } from "@/lib/jwt";
 import { canEnterApp } from "@/types/auth";
 import { TOTP_ENROLL_PATH } from "@/lib/totp-enroll-url";
-import { BOSS_PATH } from "@/lib/boss-path";
 import { useHashPath } from "@/lib/use-hash-path";
 import { loadScanSeries } from "@/lib/scanner/barcode-kind";
 import { DEFAULT_STALE_MS, applyQueryFreshness } from "@/lib/query-freshness";
@@ -145,12 +143,6 @@ function Root() {
   let kabuk;
   if (oturumDisi) {
     kabuk = <RouterProvider router={authRouter} />;
-  } else if (hashPath === BOSS_PATH || hashPath.startsWith(`${BOSS_PATH}/`)) {
-    // PATRON KABUĞU — `#/boss` ile açılır. `AppShell`in sekme şeridi + sidebar'ı
-    // telefonda kullanılamıyor; patron ekranı tek iş yaptığı için ince kabuk
-    // yeterli. Kabuk `content-routes`u AYNI router altyapısıyla çalıştırır, yani
-    // detaya iniş bugünkü ekranlarla sorunsuz çalışır (bkz. BossShell başlığı).
-    kabuk = <BossShell />;
   } else {
     kabuk = <AppShell />;
   }

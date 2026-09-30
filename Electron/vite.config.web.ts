@@ -27,7 +27,7 @@ import { buildChannelCode, channelPlugin, panelChannel } from "./build-channel";
 /** Renderer sürümü — `X-Client-Version` başlığına gömülür (`src/lib/client-info.ts`); dev ve build'de aynı. */
 const APP_VERSION = (JSON.parse(readFileSync(new URL("./package.json", import.meta.url), "utf-8")) as { version: string }).version;
 
-/** Kanal kimliği (başlık · dış adres) kayıttan — `TEKSERP_KANAL` yoksa dinlenme işaretçisi; bkz. build-channel.ts. */
+/** Kanal kimliği (başlık) kayıttan — `TEKSERP_KANAL` yoksa dinlenme işaretçisi; bkz. build-channel.ts. */
 const channel = panelChannel(buildChannelCode(process.env));
 
 export default defineConfig(({ command }) => ({
@@ -45,14 +45,9 @@ export default defineConfig(({ command }) => ({
           "import.meta.env.VITE_API_BASE_URL": JSON.stringify(
             process.env.VITE_WEB_API_BASE_URL ?? "",
           ),
-          // Fabrikanın DIŞ adresi — iki adımlı doğrulama kurulum bağlantısı
-          // bununla üretilir. Kanal kaydı (`deploy/kanallar.json` → panel.erpDisAdresi)
-          // TEK KAYNAK; komut satırından yazdırmak, bir yazım hatasının sessizce
-          // çalışmayan bir bağlantı üretmesi demekti (yönetici bağlantıyı gönderir,
-          // kullanıcıda açılmaz).
-          "import.meta.env.VITE_PUBLIC_APP_URL": JSON.stringify(
-            process.env.VITE_PUBLIC_APP_URL ?? channel.publicErpUrl,
-          ),
+          // 2FA kurulum bağlantısının kökü: verilmezse sayfanın kendi origin'i (web paneli
+          // yalnız demo imajında yaşar; fabrika dış adresi tünelle birlikte emekli, B6).
+          "import.meta.env.VITE_PUBLIC_APP_URL": JSON.stringify(process.env.VITE_PUBLIC_APP_URL ?? ""),
         }
       : {}),
   },

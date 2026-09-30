@@ -17,8 +17,6 @@ import {
 } from "@/lib/permissions";
 import { ForbiddenPage } from "@/pages/Forbidden/ForbiddenPage";
 import { DashboardPage } from "@/pages/Dashboard/DashboardPage";
-import { BossPage } from "@/pages/Boss/BossPage";
-import { BOSS_PATH } from "@/lib/boss-path";
 import { SettingsPage } from "@/pages/Settings/SettingsPage";
 import { ReleaseNotesPage } from "@/pages/ReleaseNotes/ReleaseNotesPage";
 import { DefinitionsHubPage } from "@/pages/Definitions/DefinitionsHubPage";
@@ -181,15 +179,6 @@ export const contentRoutes: RouteObject[] = [
   { path: "settings", element: <SettingsPage /> },
   // Kapısız: sürüm notlarını operatör de okur (`system/*` altı `admin:settings` ister).
   { path: "release-notes", element: <ReleaseNotesPage /> },
-  // PATRON ÖZETİ — `BossShell`in açılış sayfası, ama içerik rotası olarak
-  // burada yaşıyor ki detaya iniş (Envanter/Karşılanma/Kanban) AYNI router'da
-  // kalsın ve geri oku çalışsın.
-  //
-  // ⚠️ `ProtectedRoute` YOK ve bu bilinçli: özet BEŞ bölümlüdür ve her biri
-  // kendi iznine bakar (süzme sunucuda). Tek bir izin koymak ya bölümü hak
-  // eden kullanıcıyı dışarıda bırakırdı ya da hiçbir şeyi kapılamazdı. Yetkisi
-  // hiç olmayan kullanıcı boş ekran değil, SEBEBİNİ yazan bir kutu görür.
-  { path: BOSS_PATH.slice(1), element: <BossPage /> },
   { path: "forbidden", element: <ForbiddenPage /> },
 
   // Tanımlar — hub sayfası ve alt sayfalar.

@@ -18,8 +18,6 @@ router.get("/mobile-users", AuthController.mobileUsers);
 
 // İki adımlı doğrulama KURULUMU — public, korumanın kaynağı tek kullanımlık
 // token'dır (yalnız `admin:users` üretebilir; bkz. TotpAccountService başlığı).
-// ⚠️ Uzaktan erişim kapısı bu iki ucu KAPATMAZ ve kapatmamalıdır: kurulumu
-// yapacak kişi tanımı gereği henüz uzaktan giriş YAPAMIYOR olan kişidir.
 router.get("/totp/enroll", AuthController.totpEnrollRead);
 router.post("/totp/enroll", AuthController.totpEnrollConsume);
 

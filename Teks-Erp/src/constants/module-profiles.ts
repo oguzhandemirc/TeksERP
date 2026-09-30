@@ -7,7 +7,7 @@
 //
 // ⚠️ NEDEN TS SABİTİ, `deploy/profiller/*.json` DEĞİL (ölçüldü 2026-09-03):
 // `deploy/paketle.ps1`in kopya listesi (dist · prisma · public · assets ·
-// dist-web · package*.json · ecosystem.config.js · prisma.config.js) repo
+// package*.json · ecosystem.config.js · prisma.config.js) repo
 // kökündeki `deploy/`i pakete SOKMAZ ve `kur.ps1` yalnız paketin içindekini
 // açar. JSON yolu seçilseydi job üretimde dosyayı bulamaz, taze müşteri
 // kurulumu sessizce profilsiz doğardı. TS sabiti `dist/`e derlenir — paketleme

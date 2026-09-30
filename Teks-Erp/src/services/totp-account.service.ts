@@ -38,20 +38,41 @@ export type TotpStatus = {
 };
 
 export class TotpAccountService {
+  /**
+   * TOTP AÇIK MI — tek kaynak (panel sekmesi, giriş kapısı, ikinci faktör doğrulaması).
+   *
+   * Açık = kullanıcının ŞU ANKİ sırrı bir kurulum penceresinde ilk kodla KANITLANMIŞ
+   * (tüketilmiş `TotpEnrollment.secret` eşleşir). Kurulumda tohumlanan sır (satıcı
+   * hesabı) "açtı" sayılmaz: iki adımlı giriş kimseye zorunlu değildir.
+   */
+  private static async readActive(userId: string): Promise<{
+    secret: string;
+    enabledAt: Date;
+    lastStep: number | null;
+  } | null> {
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { totpSecret: true, totpEnabledAt: true, totpLastStep: true },
+    });
+    // Sır yazılı ama `totpEnabledAt` boşsa kurulum YARIM kalmıştır → kapalı.
+    if (!user?.totpSecret || !user.totpEnabledAt) return null;
+    const proven = await prisma.totpEnrollment.findFirst({
+      where: { userId, consumedAt: { not: null }, secret: user.totpSecret },
+      select: { id: true },
+    });
+    if (!proven) return null;
+    return { secret: user.totpSecret, enabledAt: user.totpEnabledAt, lastStep: user.totpLastStep };
+  }
+
   /** Kullanıcının TOTP durumu (panel + giriş akışı ortak kullanır). */
   static async getStatus(userId: string): Promise<TotpStatus> {
-    const [user, remaining] = await Promise.all([
-      prisma.user.findUnique({
-        where: { id: userId },
-        select: { totpSecret: true, totpEnabledAt: true },
-      }),
-      prisma.userRecoveryCode.count({ where: { userId, usedAt: null } }),
-    ]);
+    const active = await this.readActive(userId);
+    const remaining = active
+      ? await prisma.userRecoveryCode.count({ where: { userId, usedAt: null } })
+      : 0;
     return {
-      // ⚠️ İKİ ALAN BİRDEN aranır: sır yazılı ama `totpEnabledAt` boşsa kurulum
-      // YARIM kalmıştır ve o kullanıcıyı kilitlememek gerekir.
-      enabled: Boolean(user?.totpSecret && user.totpEnabledAt),
-      enabledAt: user?.totpEnabledAt ?? null,
+      enabled: active !== null,
+      enabledAt: active?.enabledAt ?? null,
       remainingRecoveryCodes: remaining,
     };
   }
@@ -228,13 +249,10 @@ export class TotpAccountService {
    * eşzamanlı iki deneme aynı kodu iki kez geçirebilirdi.
    */
   static async verifySecondFactor(userId: string, code: string): Promise<boolean> {
-    const user = await prisma.user.findUnique({
-      where: { id: userId },
-      select: { totpSecret: true, totpEnabledAt: true, totpLastStep: true },
-    });
-    if (!user?.totpSecret || !user.totpEnabledAt) return false;
+    const active = await this.readActive(userId);
+    if (!active) return false;
 
-    const result = verifyTotp(user.totpSecret, code, { lastUsedStep: user.totpLastStep });
+    const result = verifyTotp(active.secret, code, { lastUsedStep: active.lastStep });
     if (result.ok) {
       // Replay kilidi: kabul edilen adım kaydedilir. `lte` koşulu YARIŞ içindir —
       // iki eşzamanlı istek aynı kodu kullanırsa yalnız biri adımı ilerletir.

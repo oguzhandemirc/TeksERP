@@ -88,13 +88,13 @@ export function ServerOfflineBanner() {
         </span>
         {/*
           ⚠️ İKİ DÜĞME DE YALNIZ MASAÜSTÜNDE (2026-09-04, ölçüldü). Tarayıcıda
-          (uzaktan erişim / `dist-web`) ikisi de ZARARLI:
+          (`dist-web`) ikisi de ZARARLI:
            • "Sunucuyu Ara" mDNS/alt ağ taramasıdır ve `window.api` olmadan HİÇ
              çalışmaz — her tıkta "Ağda sunucu bulunamadı" + *"bu bilgisayar farklı
-             bir ağda olabilir"* der. Telefonda, tünelin arkasındaki birine
-             verilen bu tavsiye yalnızca yanlış değil, teşhisi de saptırır.
+             bir ağda olabilir"* der — tarayıcıdaki kullanıcıya bu tavsiye yanlıştır
+             ve teşhisi saptırır.
            • "Adresi Değiştir" API adresini `localStorage`a yazar; web'de API
-             zaten sayfanın origin'idir. Yanlış bir adres yazan uzak kullanıcı
+             zaten sayfanın origin'idir. Yanlış bir adres yazan tarayıcı kullanıcısı
              KENDİ PANELİNİ kilitler ve bir daha açamaz (`runtime-env.ts`te
              yazılı tuzak) — üstelik tam da bir şeylerin bozuk olduğu anda.
           `LoginPage` bu kapıyı zaten uyguluyordu; şerit atlanmıştı.

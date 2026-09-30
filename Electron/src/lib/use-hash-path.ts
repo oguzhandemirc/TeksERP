@@ -4,11 +4,9 @@ import { useSyncExternalStore } from "react";
  * Adres çubuğundaki hash yolu — DEĞİŞİNCE YENİDEN RENDER EDER.
  *
  * ⚠️ NEDEN GEREKLİ: `App.tsx`teki `Root` kapısı hangi kabuğun (AppShell /
- * BossShell / authRouter) çizileceğini hash'e bakarak seçiyor. Düz
+ * authRouter) çizileceğini hash'e bakarak seçiyor (`#/2fa-kurulum`). Düz
  * `window.location.hash` okumak React'e HİÇBİR ŞEY söylemez: hash değişir,
- * bileşen render olmaz, ekran eski kabukta ASILI KALIR. İlk yazımda tam bu
- * oldu — "Tam panele geç" düğmesi adresi değiştiriyor ama ekran patron
- * kabuğunda kalıyordu; hata yok, log yok, yalnız tepkisiz bir düğme.
+ * bileşen render olmaz, ekran eski kabukta ASILI KALIR (hata yok, log yok).
  *
  * `hashchange` HEM tarayıcı gezinmesini HEM programatik atamayı yakalar.
  * `popstate` de dinlenir: react-router'ın hash router'ı `history.pushState`
@@ -23,7 +21,7 @@ function subscribe(onChange: () => void): () => void {
   };
 }
 
-/** `#/boss?x=1` → `/boss`. Hash yoksa `/`. */
+/** `#/2fa-kurulum?x=1` → `/2fa-kurulum`. Hash yoksa `/`. */
 export function readHashPath(hash: string): string {
   const raw = hash.startsWith("#") ? hash.slice(1) : hash;
   const path = raw.split("?")[0]?.split("#")[0] ?? "";

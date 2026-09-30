@@ -267,7 +267,7 @@ async function main(): Promise<void> {
   process.once("SIGINT", () => void temizle(130));
   process.once("SIGTERM", () => void temizle(143));
 
-  // Boş dize dotenv'in .env'den doldurmasını da keser: uzak dinleyici, mDNS ilanı,
+  // Boş dize dotenv'in .env'den doldurmasını da keser: emekli tünel anahtarı, mDNS ilanı,
   // yedek zamanlayıcısı ve kurulum profili test sunucusunda KAPALI kalır.
   const sunucuOrtami: NodeJS.ProcessEnv = {
     ...process.env,
@@ -276,7 +276,6 @@ async function main(): Promise<void> {
     PORT: String(port),
     HOST: "127.0.0.1",
     REMOTE_PORT: "",
-    CF_ACCESS_ENABLED: "",
     DISCOVERY_MDNS_ENABLED: "false",
     BACKUP_SCHEDULE_ENABLED: "false",
     BACKUP_DIR: yedekDizini,

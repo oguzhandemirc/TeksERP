@@ -13,7 +13,7 @@ import { CloudError, forbidden, notFound, stateConflict } from "../lib/errors";
 import { executeWrite, type WriteResult } from "../lib/idempotency";
 import { uniqueViolationOn } from "../lib/prisma-errors";
 import { withTesis } from "../lib/tenant";
-import type { AccountsResponse } from "../wire/esitleme";
+import type { AccountLockRequest, AccountLockResponse, AccountsResponse } from "../wire/esitleme";
 import type { Account as AccountWire } from "../wire/api";
 import type { CloudContext } from "./context";
 
@@ -69,6 +69,15 @@ export async function listAccounts(ctx: CloudContext, s: SessionContext) {
   return rows.map(accountView);
 }
 
+/** Fabrika kanalının hesap görünümü — yalnız açık alanlar (sır/izin/davet yok). */
+const factoryAccountView = (a: Pick<Account, "id" | "name" | "email" | "status" | "lastLoginAt">): AccountLockResponse["hesap"] => ({
+  id: a.id,
+  ad: a.name,
+  eposta: a.email,
+  durum: a.status,
+  sonGiris: a.lastLoginAt?.toISOString() ?? null,
+});
+
 /**
  * Fabrika kanalı `POST /v1/hesaplar` (S29): tesisin hesap listesi — fabrika panelinde salt okunur gösterilir.
  * Eşitleme rolü `accounts`ı OKUYAMAZ (mühürlü sırlar aynı satırda) ⇒ uygulama rolüyle, yalnız açık kolonlar seçilir.
@@ -84,8 +93,39 @@ export async function listAccountsForFactory(ctx: CloudContext, caller: { readon
   );
   return {
     v: 1,
-    hesaplar: rows.map((a) => ({ id: a.id, ad: a.name, eposta: a.email, durum: a.status, sonGiris: a.lastLoginAt?.toISOString() ?? null })),
+    hesaplar: rows.map(factoryAccountView),
   };
+}
+
+/**
+ * Fabrika kanalı `POST /v1/hesap-kilitle` (B6): fabrika panelinden "kilitle" — kurulumun kendi tesisinde,
+ * yalnız AKTIF → KILITLI (zaten KILITLI ise değişmeden döner), oturumlar kapanır, son aktif yönetici
+ * kilitlenemez. İşlem kimliği makbuzu aktör olarak KURULUMU taşır (hesap oturumu yok).
+ */
+export async function lockAccountFromFactory(ctx: CloudContext, caller: { readonly tesisId: string; readonly installation: { readonly installationId: string } }, input: AccountLockRequest): Promise<WriteResult> {
+  const nowMs = ctx.now();
+  return executeWrite(ctx.app, {
+    tesisId: caller.tesisId,
+    accountId: caller.installation.installationId,
+    action: "FABRIKA_HESAP_KILIT",
+    clientToken: input.islemKimligi,
+    body: { hesapId: input.hesapId, isteyen: input.isteyen },
+    lock: { name: "ACCOUNT_ADMIN", key: caller.tesisId },
+    run: async (tx) => {
+      const target = await tx.account.findFirst({ where: { id: input.hesapId, tesisId: caller.tesisId } });
+      if (!target) throw notFound("Hesap");
+      if (target.status === "KILITLI") return { hesap: target, degisti: false };
+      if (target.status !== "AKTIF") throw stateConflict(`Hesap ${target.status} durumunda; yalnız AKTIF hesap kilitlenir`, { durum: target.status });
+      await assertNotLastAdmin(tx, target, { status: "KILITLI", permissions: target.permissions });
+      const r = await tx.account.updateMany({ where: { id: target.id, tesisId: caller.tesisId, status: "AKTIF" }, data: { status: "KILITLI" } });
+      if (r.count === 0) throw stateConflict("Hesap bu arada değişti; listeyi yenileyip tekrar deneyin");
+      await closeSessions(tx, target.id, nowMs, "HESAP_KAPANDI");
+      return { hesap: await tx.account.findUniqueOrThrow({ where: { id: target.id } }), degisti: true };
+    },
+    respond: (r) => ({ data: { v: 1, hesap: factoryAccountView(r.hesap) } }),
+    // Değişmeyen (zaten KILITLI) istek iz bırakmaz: denetim olanı yazar, isteneni değil.
+    audit: (r) => (r.degisti ? [{ actor: `fabrika:${caller.installation.installationId}`, event: "HESAP_KILITLI", entity: "Account", entityId: r.hesap.id, summary: { kaynak: "fabrika", isteyen: input.isteyen } }] : []),
+  });
 }
 
 export interface CreateAccountInput {

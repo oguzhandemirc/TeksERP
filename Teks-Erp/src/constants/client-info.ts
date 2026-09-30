@@ -12,8 +12,8 @@
 //
 // Bu depoda tam olarak bu sınıf bir hata bir kez ısırdı: `CLIENT_IP_HEADER`
 // app-wide okunduğunda LAN'daki biri `CF-Connecting-IP` uydurup giriş kilidini
-// ve hız sınırını etkisizleştirebiliyordu (2026-09-01, patron modülü) —
-// düzeltme başlığın kapsamını daraltmaktı. Buradaki kural daha da katı:
+// ve hız sınırını etkisizleştirebiliyordu (2026-09-01) — düzeltme başlığın
+// kapsamını daraltmaktı. Buradaki kural daha da katı:
 // KAPSAM YOK, yalnız gösterim.
 //
 // Bekçi: `scripts/test_client_registry.ts` §1 — bu başlık adlarının

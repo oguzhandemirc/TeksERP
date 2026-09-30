@@ -92,20 +92,15 @@ export const ELECTRON_VERSION_POLICY: ClientVersionPolicy = {
 };
 
 /**
- * WEB PANELİ (2026-09-01, patron modülü) — Electron renderer'ının tarayıcıda
- * koşan ikizi (`npm run build:web` → `dist-web`, `WEB_DIST_DIR` ile aynı
- * origin'den servis edilir).
+ * WEB PANELİ — Electron renderer'ının tarayıcıda koşan ikizi (`npm run build:web`
+ * → `dist-web`, `WEB_DIST_DIR` ile aynı origin'den servis edilir). Bugün yalnız
+ * DEMO imajında yaşar (`Dockerfile`: panel ve backend AYNI imajda derlenir);
+ * fabrika paketi web panelini taşımaz (uzaktan erişim tüneli B6'da kalktı).
  *
- * ⚠️ ELECTRON POLİTİKASININ TAKMASI DEĞİL, AYRI BİR EKSEN. Aynı kaynak koddan
- * doğsalar da SÜRÜMLERİ birlikte hareket etmez: panel kendi güncelleyicisiyle
- * (`latest.yml`) gelir, web paneli ise backend paketiyle BİRLİKTE deploy edilir
- * (`deploy/paketle.ps1` → `kur.ps1`). Ortak bir politika, bir kanaldaki
- * gecikmeyi diğerine kilit olarak yansıtırdı.
- *
- * Bugün pratikte drift İMKÂNSIZ (SPA backend'in yanında gidiyor), o yüzden
- * `minVersion` en düşük değerde duruyor. Eksen yine de burada: Faz 2'de mobil
- * patron uygulaması gelirse ya da SPA ayrı bir kanaldan yayınlanırsa
- * yükseltilecek yer burasıdır.
+ * ⚠️ ELECTRON POLİTİKASININ TAKMASI DEĞİL, AYRI BİR EKSEN: panel kendi
+ * güncelleyicisiyle gelir, web paneli backend'le aynı imajda. Drift bu yüzden
+ * İMKÂNSIZ ve `minVersion` en düşük değerde duruyor; SPA ayrı bir kanaldan
+ * yayınlanırsa yükseltilecek yer burasıdır.
  */
 export const WEB_VERSION_POLICY: ClientVersionPolicy = {
   minVersion: "1.0.0",
@@ -288,15 +283,11 @@ export function compareClientVersions(a: string, b: string): number {
  * ⚠️ İKİ EKSEN BİRDEN: okutma hem panelde hem tablette yapılıyor; birini
  * güncelleyip ötekini unutmak tam da bu kapının engellediği şeydir.
  *
- * ⚠️ `web` ekseni MUAF ve gerekçesi ÖLÇÜLDÜ — ama "web okutma yapmıyor" DEĞİL:
- * özet kabuğu `operations` yollarını açıyor ve orada okutan yedi yüzey var
- * (`RollsPage` · `RollScanBar` · `KartelaTabs` · `SwatchesPanel` ·
- * `SacksListView` · `ReturnsPage` · `useReturnEntry`). Gerçek gerekçe
- * DRIFT'İN İMKÂNSIZ olmasıdır: web paketi backend'in İÇİNDE gider
- * (`deploy/paketle.ps1` → `dist-web`, `WEB_DIST_DIR` ile aynı origin'den
- * servis edilir), yani Faz B'yi taşıyan bir backend zorunlu olarak Faz B'yi
- * taşıyan bir web paketi servis eder. `minVersion`ın 1.0.0'da durmasının sebebi
- * de zaten budur (bu dosyanın `WEB_VERSION_POLICY` gerekçesi).
+ * ⚠️ `web` ekseni MUAF ve gerekçesi ÖLÇÜLDÜ — "web okutma yapmıyor" DEĞİL (web
+ * paneli tam paneldir, okutan yüzeyleri taşır). Gerçek gerekçe DRIFT'İN İMKÂNSIZ
+ * olmasıdır: web paneli yalnız demo imajında backend'le AYNI imajda derlenir
+ * (`Dockerfile`), yani Faz B'yi taşıyan bir backend zorunlu olarak Faz B'yi
+ * taşıyan bir web paketi servis eder (`WEB_VERSION_POLICY` gerekçesi).
  */
 export function scanningClientsCarryFazB(): boolean {
   return (

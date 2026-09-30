@@ -13,7 +13,6 @@ import { IS_ELECTRON } from "@/lib/runtime-env";
  * Bu yüzden düğmeler uygulamanın ZATEN VAR OLAN başlıklarının içine gömülür:
  *   · `Topbar`      — uygulama içi (zaten `app-drag`, yani sürükleme şeridi o)
  *   · `LoginPage`   — giriş ekranının sağ üst düğme kümesi
- *   · `BossShell`   — patron ekranının kendi başlığı
  * İçerik ekranın en üstüne kadar gelir; işletim sisteminden görünen hiçbir şey
  * kalmaz.
  *

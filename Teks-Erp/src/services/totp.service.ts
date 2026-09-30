@@ -1,7 +1,7 @@
 // =============================================================================
 // TeksERP — TOTP (RFC 6238) · SAF FONKSİYONLAR
 // =============================================================================
-// Uzaktan erişimin ikinci faktörü. Bu dosya DB'ye dokunmaz ve Express bilmez —
+// İkinci faktör çekirdeği (süperadmin kurulumu + kullanıcı 2FA kaydı). DB'ye dokunmaz, Express bilmez —
 // yalnız kriptografi + kodlama. Böylece bekçi RFC 6238'in resmî test
 // vektörlerini doğrudan koşturabilir (`scripts/test_totp.ts`).
 //

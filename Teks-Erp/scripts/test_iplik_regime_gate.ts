@@ -89,13 +89,6 @@ const MUAF: ReadonlyArray<{ dosya: string; neden: string }> = [
       "403 döner, yazma yüzeyi SIFIRDIR.",
   },
   {
-    dosya: "routes/boss.routes.ts",
-    neden:
-      "PATRON ÖZETİ. İplik modeline dokunuş GEÇİŞLİ ve YANILTICI; router'da tek bir GET var, " +
-      "hiçbir tabloya INSERT/UPDATE üretmez. Rejim kapısı KONULAMAZ: özet, iplik kullanmayan " +
-      "üretici fabrikada çalışmak zorundadır.",
-  },
-  {
     dosya: "routes/inventory.routes.ts",
     neden:
       "Envanter FABRİKANIN ana router'ıdır → rejim kapısı KONULAMAZ. İplik izi geçişlidir " +

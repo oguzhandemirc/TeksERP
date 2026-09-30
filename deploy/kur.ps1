@@ -1151,18 +1151,13 @@ foreach ($y in @($backupDir, (Split-Path $credFile -Parent))) {
   }
 }
 
-# Web paneli: paket dist-web tasir; .env'de WEB_DIST_DIR yoksa panel sunulmaz, varsa ve
-# yol index.html tasimiyorsa kok (/) SESSIZCE durum sayfasi olur.
+# Emekli anahtarlar (2026-09-30, B6): paket web panelini TASIMAZ ve uzaktan erisim tuneli kalkti.
+# Eski .env'deki WEB_DIST_DIR var olmayan klasoru gosterir, kok (/) durum sayfasi olur - SOYLENIR (.env'e dokunulmaz).
 $envMetin = [System.Text.Encoding]::UTF8.GetString($envBayt).TrimStart([char]0xFEFF)   # 5.1 Set-Content BOM yazar
-$wm = [regex]::Match($envMetin, '(?m)^\s*WEB_DIST_DIR\s*=\s*"?([^"\r\n]*)"?')
-if ($wm.Success) {
-  $wd = $wm.Groups[1].Value.Trim()
-  if (-not [System.IO.Path]::IsPathRooted($wd)) { $wd = Join-Path $appDir $wd }
-  if (-not (Test-Path (Join-Path $wd "index.html"))) {
-    Uyar "WEB_DIST_DIR ($wd) index.html tasimiyor - web paneli yerine durum sayfasi acilir."
+foreach ($emekli in @('WEB_DIST_DIR', 'REMOTE_PORT', 'CF_ACCESS_ENABLED', 'CF_ACCESS_TEAM_DOMAIN', 'CF_ACCESS_AUD')) {
+  if ([regex]::IsMatch($envMetin, "(?m)^\s*$emekli\s*=")) {
+    Uyar "$emekli emekli (fabrika web paneli + uzaktan erisim tuneli kaldirildi) - satiri .env'den silin."
   }
-} elseif (Test-Path (Join-Path $appDir "dist-web\index.html")) {
-  Write-Host "     (web paneli pakette ama .env'de WEB_DIST_DIR yok - sunulmuyor. Acmak icin .env: WEB_DIST_DIR=`"$($appDir -replace '\\', '/')/dist-web`")" -ForegroundColor DarkGray
 }
 # Panel yedegi / DB kopyasi super kullanici istemez; postgres parolasi .env'de ise soylenir (dokunulmaz).
 $bk = [regex]::Match($envMetin, '(?m)^\s*BACKUP_PG_USER\s*=\s*"?([^"\r\n]*)"?')

@@ -10,7 +10,11 @@
 //
 // KULLANIM (fabrika sunucusunda, `Teks-Erp/` içinden):
 //     npm run superadmin:kur                # kurulum (idempotent)
-//     npm run superadmin:kur -- --rotate    # parola + PIN + TOTP yenile
+//     npm run superadmin:kur -- --rotate    # parola + PIN yenile, 2FA kapatılır
+//
+// İKİ ADIMLI GİRİŞ TOHUMLANMAZ: TOTP kimseye zorunlu değildir; satıcı isterse panelde
+// kendi hesabının 2FA sekmesinden açar. Rotasyon açık 2FA'yı KAPATIR (konsol erişimi =
+// yönetici sıfırlaması; telefonu kaybeden satıcının tek kurtarma yolu).
 //
 // ⚠️ GERÇEK TERMİNAL ŞART. Script parolayı maskeleyerek okur; girdi boru/dosya
 // olduğunda readline soruları sırayla cevaplayamaz. Uzaktan koşulacaksa
@@ -27,11 +31,11 @@
 //      geçmişi, oturumları ve audit satırları maskeli hesaba TAŞINAMAZ (audit
 //      maskesi satır düzeyindedir — geçmiş satırlar bir anda "Sistem Bakımı"
 //      adına geçer ve fabrikanın kendi kayıtları yalanlanır).
-//   ③ SIR DİSKE YAZILMAZ. Ham parola/PIN/TOTP sırrı hiçbir dosyaya, log'a ya da
+//   ③ SIR DİSKE YAZILMAZ. Ham parola/PIN hiçbir dosyaya, log'a ya da
 //      audit yüküne düşmez; yalnız `provisionSuperadmin`ın DÖNÜŞ değerinde
 //      yaşar ve interaktif katman onu bir kez ekrana basar.
 //
-// TEST EDİLEBİLİRLİK: girdi okuma (TTY, maskeli parola, QR) ile karar verme
+// TEST EDİLEBİLİRLİK: girdi okuma (TTY, maskeli parola) ile karar verme
 // AYRI katmanlardır. Bekçi (`scripts/test_superadmin_provision.ts`)
 // `provisionSuperadmin(input, deps)`i DOĞRUDAN çağırır — TTY sondası yazmaz.
 // Bu yüzden çekirdek HİÇBİR ŞEY YAZDIRMAZ (stdout sessizdir) ve bekçi bunu
@@ -40,20 +44,15 @@
 
 import { Writable } from "node:stream";
 import { createInterface } from "node:readline/promises";
-import bwipjs from "bwip-js";
 
 import prisma, { pool } from "../src/lib/prisma";
 import { AuthService } from "../src/services/auth.service";
-import { buildOtpauthUri, generateTotpSecret } from "../src/services/totp.service";
 import {
   SYSTEM_ACCOUNT_FULLNAME,
   logSuperadminLifecycleEvent,
 } from "../src/jobs/superadmin.job";
 import { setSystemAccountExists } from "../src/services/helpers/system-account.registry";
 import { p2002Mentions } from "../src/utils/p2002";
-
-/** Authenticator uygulamasında görünen ad — `totp-account.service` ile AYNI. */
-const TOTP_ISSUER = "TeksERP";
 
 /** `quickPin` sözleşmesi: TAM 6 hane (`auth.service.loginWithQuickPin` ile aynı). */
 const PIN_RE = /^\d{6}$/;
@@ -76,19 +75,18 @@ export interface ProvisionInput {
   password: string;
   /** 6 hane; `null` ise ÜRETİLİR. */
   pin: string | null;
-  /** `true` → mevcut hesabın parola/PIN/TOTP'si yenilenir + `tokenVersion++`. */
+  /** `true` → mevcut hesabın parola/PIN'i yenilenir, 2FA kapatılır + `tokenVersion++`. */
   rotate: boolean;
 }
 
 export interface ProvisionDeps {
   hashPassword(plain: string): Promise<string>;
   randomPin(): string;
-  generateTotpSecret(): string;
   now(): Date;
   logLifecycle(params: {
     rotated: boolean;
     userId: string;
-    totp: "seeded" | "cleared";
+    totp: "none" | "cleared";
   }): Promise<void>;
 }
 
@@ -107,8 +105,6 @@ export interface ProvisionSecrets {
   username: string;
   /** Ekrana BİR KEZ basılır; hiçbir yere kaydedilmez. */
   pin: string;
-  totpSecret: string;
-  otpauthUri: string;
 }
 
 export type ProvisionResult =
@@ -123,7 +119,6 @@ export const defaultProvisionDeps: ProvisionDeps = {
   // 6 hane — baştaki sıfır da meşru (PIN bir SAYI değil, bir dizidir).
   randomPin: () =>
     String(Math.floor(Math.random() * 1_000_000)).padStart(6, "0"),
-  generateTotpSecret,
   now: () => new Date(),
   logLifecycle: logSuperadminLifecycleEvent,
 };
@@ -217,24 +212,32 @@ export async function provisionSuperadmin(
     const pinSonuc = await pinCoz(input.pin, deps, mevcut.id);
     if (!("pin" in pinSonuc)) return hata(pinSonuc.code, pinSonuc.message);
 
-    const secret = deps.generateTotpSecret();
     const passwordHash = await deps.hashPassword(input.password);
     try {
-      await prisma.user.update({
-        where: { id: mevcut.id },
-        data: {
-          passwordHash,
-          quickPin: pinSonuc.pin,
-          totpSecret: secret,
-          totpEnabledAt: deps.now(),
-          totpLastStep: null,
-          isActive: true,
-          // ⚠️ Eski oturumlar ANINDA düşer (parola/PIN değişiminin her yerdeki
-          // sözleşmesi). Aksi halde rotasyon "sızmış oturumu" kapatmazdı.
-          tokenVersion: { increment: 1 },
-          // ⚠️ KULLANICI ADI DEĞİŞTİRİLMEZ: ad GİRİŞ KİMLİĞİdir ve sessizce
-          // değiştirmek satıcıyı bir sonraki girişte dışarıda bırakır.
-        },
+      await prisma.$transaction(async (tx) => {
+        await tx.user.update({
+          where: { id: mevcut.id },
+          data: {
+            passwordHash,
+            quickPin: pinSonuc.pin,
+            // 2FA KAPANIR (yönetici sıfırlamasıyla aynı üçlü): satıcı isterse panelden yeniden açar.
+            totpSecret: null,
+            totpEnabledAt: null,
+            totpLastStep: null,
+            isActive: true,
+            // ⚠️ Eski oturumlar ANINDA düşer (parola/PIN değişiminin her yerdeki
+            // sözleşmesi). Aksi halde rotasyon "sızmış oturumu" kapatmazdı.
+            tokenVersion: { increment: 1 },
+            // ⚠️ KULLANICI ADI DEĞİŞTİRİLMEZ: ad GİRİŞ KİMLİĞİdir ve sessizce
+            // değiştirmek satıcıyı bir sonraki girişte dışarıda bırakır.
+          },
+        });
+        // Kalan kurtarma kodları sır kapalıyken işlemez (`readActive` null); yeni kurulum onları siler.
+        // Açık kurulum penceresi kapanır: rotasyon bir ele geçirme cevabıdır.
+        await tx.totpEnrollment.updateMany({
+          where: { userId: mevcut.id, consumedAt: null },
+          data: { expiresAt: deps.now() },
+        });
       });
     } catch (err) {
       if (p2002Mentions(err, /users_(username_key|username_lower_uq|quickPin_key)/)) {
@@ -243,19 +246,8 @@ export async function provisionSuperadmin(
       throw err;
     }
     setSystemAccountExists(true);
-    await deps.logLifecycle({ rotated: true, userId: mevcut.id, totp: "seeded" });
-    return {
-      kind: "rotated",
-      id: mevcut.id,
-      username: mevcut.username,
-      pin: pinSonuc.pin,
-      totpSecret: secret,
-      otpauthUri: buildOtpauthUri({
-        username: mevcut.username,
-        secretBase32: secret,
-        issuer: TOTP_ISSUER,
-      }),
-    };
+    await deps.logLifecycle({ rotated: true, userId: mevcut.id, totp: "cleared" });
+    return { kind: "rotated", id: mevcut.id, username: mevcut.username, pin: pinSonuc.pin };
   }
 
   // ── İDEMPOTENT DAL ────────────────────────────────────────────────────────
@@ -297,7 +289,6 @@ export async function provisionSuperadmin(
   const pinSonuc = await pinCoz(input.pin, deps, null);
   if (!("pin" in pinSonuc)) return hata(pinSonuc.code, pinSonuc.message);
 
-  const secret = deps.generateTotpSecret();
   const passwordHash = await deps.hashPassword(input.password);
   let created: { id: string };
   try {
@@ -309,9 +300,6 @@ export async function provisionSuperadmin(
         fullName: SYSTEM_ACCOUNT_FULLNAME,
         passwordHash,
         quickPin: pinSonuc.pin,
-        totpSecret: secret,
-        // ⚠️ İKİ ALAN BİRDEN: `getStatus` yalnız ikisi de doluyken "kurulu" der.
-        totpEnabledAt: deps.now(),
         isSystemAccount: true,
         isActive: true,
       },
@@ -330,57 +318,8 @@ export async function provisionSuperadmin(
   }
 
   setSystemAccountExists(true);
-  await deps.logLifecycle({ rotated: false, userId: created.id, totp: "seeded" });
-  return {
-    kind: "created",
-    id: created.id,
-    username,
-    pin: pinSonuc.pin,
-    totpSecret: secret,
-    otpauthUri: buildOtpauthUri({ username, secretBase32: secret, issuer: TOTP_ISSUER }),
-  };
-}
-
-// -----------------------------------------------------------------------------
-// TERMİNAL QR — bwip-js `raw()` matrisi + yarım blok karakterleri
-// -----------------------------------------------------------------------------
-/**
- * QR'ı 1 modül = 1 sütun, 2 modül = 1 satır olacak şekilde basar (yarım blok).
- * Tam blok kullanılsaydı modül başına 2 sütun gerekirdi (~106 karakter) ve 80
- * sütunluk bir terminalde satır SARAR — sarmış QR okunmaz.
- *
- * Renkler AÇIKÇA verilir (siyah üzerine beyaz DEĞİL, ANSI 30/47): terminal
- * teması koyu ise varsayılan renklerle QR ters çıkar ve telefon okumaz.
- */
-export function qrTerminalMetni(text: string, quiet = 4): string {
-  const raw = bwipjs.raw({ bcid: "qrcode", text }) as Array<{
-    pixs?: ArrayLike<number>;
-    pixx?: number;
-    pixy?: number;
-  }>;
-  const m = raw[0];
-  if (!m?.pixs || !m.pixx || !m.pixy) throw new Error("QR matrisi okunamadı");
-  const w = m.pixx;
-  const h = m.pixy;
-  const dolu = (x: number, y: number): boolean => {
-    const mx = x - quiet;
-    const my = y - quiet;
-    if (mx < 0 || my < 0 || mx >= w || my >= h) return false; // sessiz bölge
-    return m.pixs![my * w + mx] !== 0;
-  };
-  const genislik = w + quiet * 2;
-  const yukseklik = h + quiet * 2;
-  const satirlar: string[] = [];
-  for (let y = 0; y < yukseklik; y += 2) {
-    let s = "\x1b[30;47m";
-    for (let x = 0; x < genislik; x++) {
-      const ust = dolu(x, y);
-      const alt = y + 1 < yukseklik ? dolu(x, y + 1) : false;
-      s += ust && alt ? "\u2588" : ust ? "\u2580" : alt ? "\u2584" : " ";
-    }
-    satirlar.push(s + "\x1b[0m");
-  }
-  return satirlar.join("\n");
+  await deps.logLifecycle({ rotated: false, userId: created.id, totp: "none" });
+  return { kind: "created", id: created.id, username, pin: pinSonuc.pin };
 }
 
 // -----------------------------------------------------------------------------
@@ -414,7 +353,7 @@ async function interaktif(): Promise<number> {
     console.log(
       "Kullanım:\n" +
         "  npm run superadmin:kur              satıcı hesabını kurar (idempotent)\n" +
-        "  npm run superadmin:kur -- --rotate  parola + PIN + TOTP'yi yeniler\n" +
+        "  npm run superadmin:kur -- --rotate  parola + PIN'i yeniler, 2FA'yı kapatır\n" +
         "\n  ⚠️ Gerçek terminal ister (`ssh -t` / `docker exec -it`).\n",
     );
     return 0;
@@ -476,7 +415,7 @@ async function interaktif(): Promise<number> {
     if (mevcut && !rotate) {
       console.log(
         `\nSatıcı hesabı ZATEN KURULU (${mevcut.username}). Hiçbir şey değiştirilmedi.\n` +
-          "Parola/PIN/TOTP yenilemek için: npm run superadmin:kur -- --rotate\n",
+          "Parola/PIN yenilemek için: npm run superadmin:kur -- --rotate\n",
       );
       return 0;
     }
@@ -535,18 +474,11 @@ async function interaktif(): Promise<number> {
     console.log("  │  AŞAĞIDAKİLER BİR DAHA GÖSTERİLMEZ — şimdi kaydedin.        │");
     console.log("  └──────────────────────────────────────────────────────────────┘\n");
     console.log(`  Kullanıcı adı : ${sonuc.username}`);
-    console.log(`  Hızlı PIN     : ${sonuc.pin}`);
-    console.log(`  TOTP sırrı    : ${sonuc.totpSecret}`);
-    console.log(`  otpauth URI   : ${sonuc.otpauthUri}\n`);
-    try {
-      console.log(qrTerminalMetni(sonuc.otpauthUri));
-    } catch (e) {
-      // QR bir KOLAYLIKTIR; basılamazsa sırrı elle girmek yeterlidir. Kurulumu
-      // bir çizim hatası yüzünden düşürmek, sahayı hesapsız bırakırdı.
-      console.warn(
-        `\n⚠️ QR çizilemedi (${e instanceof Error ? e.message : e}) — TOTP sırrını ELLE girin.`,
-      );
-    }
+    console.log(`  Hızlı PIN     : ${sonuc.pin}\n`);
+    console.log(
+      "  İki adımlı giriş (TOTP) isteğe bağlıdır: panelde kendi hesabınızın 2FA sekmesinden açın" +
+        (sonuc.kind === "rotated" ? " (rotasyon açık 2FA'yı kapattı)." : "."),
+    );
     console.log(
       "\n  ⚠️ Bu değerler parola yöneticisinde tutulur, FABRİKAYA VERİLMEZ.\n" +
         "  ⚠️ Değişikliğin yürürlüğe girmesi için sunucuyu yeniden başlatmak GEREKMEZ;\n" +

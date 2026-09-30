@@ -28,18 +28,13 @@
 | Port | Ne | Kim erişir |
 |---|---|---|
 | **4000** | ERP backend (HTTP) | Fabrika LAN'ı — panel + tabletler |
-| **4001** | ERP backend, **tünel dinleyicisi** | ⚠️ **YALNIZ `127.0.0.1`** — yalnız aynı makinedeki `cloudflared` (tünel kuruluysa) |
 | 5432 | PostgreSQL | `listen_addresses='127.0.0.1'` — yalnız yerel |
 
 ⚠️ **GELEN PORT AÇILMAZ.** Uzaktan erişim **dışarı doğru** bağlanan bir ajanla
 sağlanır; güvenlik duvarında hiçbir kural değişmez. **SAHINSRV'de bu ajan
 Tailscale'dir** — `cloudflared` hizmeti YOK ve 4001 dinlemiyor (ölçüldü 2026-09-29).
-Patron tüneli (`UZAK-ERISIM-KURULUM.md`) bu fabrikada kurulu değil.
-
-⚠️ **4001 `0.0.0.0`a AÇILAMAZ.** Uzak/LAN ayrımının tamamı bu porta LAN'dan
-erişilememesine dayanıyor (`req.socket.localPort` → `req.isRemote`). Açılırsa
-fabrikadaki herhangi biri kendini "uzak" gösterebilir ya da tersi olur; iki
-yönde de kural seti sessizce yanlış uygulanır.
+Eski patron tüneli (cloudflared + 4001) 2026-09-30'da koddan kaldırıldı (B6); patron
+patron bulutundan izler, fabrika buluta yalnız DIŞARI doğru imzalı istek atar.
 
 ### Fabrika sunucusundaki servisler
 
@@ -169,7 +164,7 @@ Yedek şifreleme parolası **sunucuda YOK** — fabrikada ve parola yöneticisin
 
 ## İlgili reçeteler
 
-- [`UZAK-ERISIM-KURULUM.md`](UZAK-ERISIM-KURULUM.md) — patron modülü tüneli (Cloudflare Tunnel + Access)
+- [`SUPERADMIN-KURULUM.md`](SUPERADMIN-KURULUM.md) — satıcı hesabı (süperadmin) ve ayar şifresi
 - [`YEDEK-VPS-KURULUM.md`](YEDEK-VPS-KURULUM.md) — yedek mimarisi, ölçülen tuzaklar
 - [`VDS-TASIMA.md`](VDS-TASIMA.md) — taşıma sırası ve geri dönüş
 - [`ELECTRON-OTOMATIK-GUNCELLEME.md`](ELECTRON-OTOMATIK-GUNCELLEME.md) — panel güncellemesi

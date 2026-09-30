@@ -15,8 +15,8 @@ import type { JwtPayload } from "@/types/auth";
  * `install()` çağırmadı; `autoInstallOnAppQuit=false` olduğundan kapatıp açmak
  * da kurmadı.
  *
- * ⭐ İDDİA: kapı `App` kökünde TEK kez çizilir; giriş ekranında, tam panelde ve
- * patron kabuğunda paket hazırsa açılır ve süre dolunca `install()` çağrılır.
+ * ⭐ İDDİA: kapı `App` kökünde TEK kez çizilir; giriş ekranında ve tam panelde
+ * paket hazırsa açılır ve süre dolunca `install()` çağrılır.
  */
 
 vi.mock("@/lib/secure-token", () => ({
@@ -26,9 +26,6 @@ vi.mock("@/lib/scanner/barcode-kind", () => ({ loadScanSeries: async () => {} })
 vi.mock("@/hooks/useClientPolicy", () => ({ useClientPolicy: () => null }));
 vi.mock("@/components/layout/AppShell", () => ({
   AppShell: () => <div data-testid="kabuk-app" />,
-}));
-vi.mock("@/components/layout/BossShell", () => ({
-  BossShell: () => <div data-testid="kabuk-boss" />,
 }));
 vi.mock("@/components/settings/SettingsPasswordDialog", () => ({
   SettingsPasswordDialog: () => null,
@@ -134,17 +131,6 @@ describe("kurulum tetiği — her ekranda", () => {
       vi.advanceTimersByTime(60_000);
     });
     expect(install).not.toHaveBeenCalled();
-  });
-
-  it("patron kabuğunda da kapı açılır", async () => {
-    updater("ready");
-    window.location.hash = "#/boss";
-    render(<App />);
-    await bosalt();
-    act(() => oturumAc());
-    await bosalt();
-    expect(screen.getByTestId("kabuk-boss")).toBeInTheDocument();
-    expect(kapi()).toBeInTheDocument();
   });
 
   it("paket hazır değilse giriş ekranında kapı yok", async () => {

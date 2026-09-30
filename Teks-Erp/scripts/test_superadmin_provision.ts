@@ -55,7 +55,6 @@ import { createHash } from "node:crypto";
 import {
   provisionSuperadmin,
   defaultProvisionDeps,
-  type ProvisionDeps,
   type ProvisionResult,
 } from "./superadmin-olustur";
 import { SYSTEM_ACCOUNT_FULLNAME, ensureSuperadminAccount } from "../src/jobs/superadmin.job";
@@ -197,7 +196,7 @@ async function ciktiyiYakala<T>(f: () => Promise<T>): Promise<{ sonuc: T; cikti:
 
 function sirlariTopla(r: ProvisionResult): void {
   if (r.kind === "created" || r.kind === "rotated") {
-    sirlar.push(r.pin, r.totpSecret);
+    sirlar.push(r.pin);
   }
 }
 
@@ -356,19 +355,16 @@ async function main(): Promise<void> {
     check("hesap aktif", satir?.isActive === true);
     check("PIN yazıldı ve dönüş değeriyle AYNI", satir?.quickPin === ilk.pin);
     check("PIN 6 hane", /^\d{6}$/.test(ilk.pin), ilk.pin.replace(/\d/g, "•"));
+    // ⭐ 2FA kimseye zorunlu değil (kullanıcı kararı 2026-09-30): doğuşta TOHUMLANMAZ,
+    // satıcı isterse panelde kendi 2FA sekmesinden açar.
     check(
-      "TOTP sırrı + `totpEnabledAt` İKİSİ BİRDEN yazıldı (getStatus 'kurulu' der)",
-      satir?.totpSecret === ilk.totpSecret && satir?.totpEnabledAt !== null,
+      "TOTP TOHUMLANMADI (sır + `totpEnabledAt` boş → girişte kod sorulmaz)",
+      satir?.totpSecret === null && satir?.totpEnabledAt === null,
     );
-    check("körlük zemini: TOTP sırrı ≥ 16 karakter", ilk.totpSecret.length >= 16, `${ilk.totpSecret.length}`);
     check(
       "parola HAM DEĞİL, bcrypt hash olarak yazıldı",
       /^\$2[aby]\$\d{2}\$/.test(satir?.passwordHash ?? "") &&
         (await bcrypt.compare(PAROLA_1, satir?.passwordHash ?? "")),
-    );
-    check(
-      "otpauth URI issuer + sır taşıyor",
-      ilk.otpauthUri.startsWith("otpauth://totp/") && ilk.otpauthUri.includes(ilk.totpSecret),
     );
     const grant = await prisma.userPermission.count({ where: { userId: ilk.id } });
     check("GRANT satırı YOK (yetki koddan gelir, panelden atanamaz)", grant === 0, `${grant} satır`);
@@ -430,18 +426,20 @@ async function main(): Promise<void> {
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
-  console.log("\n=== 4) ROTASYON — parola + PIN + TOTP yenilenir, oturumlar düşer ===");
+  console.log("\n=== 4) ROTASYON — parola + PIN yenilenir, 2FA kapanır, oturumlar düşer ===");
   if (ilk.kind === "created") {
+    // Satıcı 2FA'yı panelden AÇMIŞ gibi: rotasyon onu kapatmalı (konsol = yönetici sıfırlaması).
+    await prisma.user.update({
+      where: { id: ilk.id },
+      data: { totpSecret: "JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP", totpEnabledAt: new Date(), totpLastStep: 1 },
+    });
     const once = await prisma.user.findUnique({
       where: { id: ilk.id },
       select: { passwordHash: true, quickPin: true, totpSecret: true, tokenVersion: true, username: true },
     });
-    // Deterministik deps: PIN'i biz veriyoruz ki "değişti mi" ölçümü şansa kalmasın.
-    const sabitSir = "JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP";
-    const deps: ProvisionDeps = { ...defaultProvisionDeps, generateTotpSecret: () => sabitSir };
     const rot = await provisionSuperadmin(
       { username: "yok-sayilir", password: PAROLA_2, pin: null, rotate: true },
-      deps,
+      defaultProvisionDeps,
     );
     sirlariTopla(rot);
     check("rotasyon → 'rotated'", rot.kind === "rotated", rot.kind);
@@ -451,6 +449,7 @@ async function main(): Promise<void> {
         passwordHash: true,
         quickPin: true,
         totpSecret: true,
+        totpEnabledAt: true,
         totpLastStep: true,
         tokenVersion: true,
         username: true,
@@ -462,8 +461,11 @@ async function main(): Promise<void> {
       await bcrypt.compare(PAROLA_2, sonra?.passwordHash ?? ""),
     );
     check("PIN DEĞİŞTİ", once?.quickPin !== sonra?.quickPin, `${once?.quickPin} → ${sonra?.quickPin}`);
-    check("TOTP sırrı DEĞİŞTİ", once?.totpSecret !== sonra?.totpSecret && sonra?.totpSecret === sabitSir);
-    check("`totpLastStep` sıfırlandı (eski kod tekrar kullanılamaz)", sonra?.totpLastStep === null);
+    check(
+      "2FA KAPANDI (sır + `totpEnabledAt` + `totpLastStep` boş)",
+      once?.totpSecret !== null && sonra?.totpSecret === null && sonra?.totpEnabledAt === null &&
+        sonra?.totpLastStep === null,
+    );
     check(
       "`tokenVersion` ARTTI (açık oturumlar düştü)",
       (sonra?.tokenVersion ?? 0) === (once?.tokenVersion ?? 0) + 1,
@@ -483,7 +485,8 @@ async function main(): Promise<void> {
   // ═══════════════════════════════════════════════════════════════════════════
   console.log("\n=== 5) SIR SIZINTISI — audit · DB · dosya sistemi ===");
   {
-    check("körlük zemini: aranacak sır toplandı", sirlar.length >= 3, `${sirlar.length} değer`);
+    // İki PIN (doğuş + rotasyon); TOTP sırrı artık tohumlanmaz, aranacak sır yok.
+    check("körlük zemini: aranacak sır toplandı", sirlar.length >= 2, `${sirlar.length} değer`);
     // Audit best-effort ve tx dışında — yazılma penceresi verilir.
     await new Promise((r) => setTimeout(r, 400));
 
@@ -504,7 +507,7 @@ async function main(): Promise<void> {
         !yuk.includes(PAROLA_1) && !yuk.includes(PAROLA_2),
       );
       check(
-        "audit yükünde PIN / TOTP sırrı yok",
+        "audit yükünde PIN yok",
         sirlar.every((s) => !yuk.includes(s)),
       );
       check(

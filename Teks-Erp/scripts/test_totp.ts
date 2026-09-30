@@ -10,6 +10,9 @@
 //
 // İkinci iddia: replay penceresi gerçekten kapalı. TOTP kodu 30 sn geçerlidir;
 // kabul edilen adım saklanmazsa aynı kod ikinci kez kullanılabilir.
+//
+// Üçüncü iddia (§7): iki adımlı giriş İSTEĞE BAĞLI — açan kullanıcıya her parolalı
+// girişte sorulur, açmayana ve PIN/kart girişine sorulmaz, tohumlanan sır sayılmaz.
 // =============================================================================
 
 import prisma, { pool } from "../src/lib/prisma";
@@ -28,6 +31,8 @@ import {
   TOTP_STEP_SEC,
 } from "../src/services/totp.service";
 import { TotpAccountService } from "../src/services/totp-account.service";
+import { AuthService } from "../src/services/auth.service";
+import { SETTING_KEYS } from "../src/services/system-setting.service";
 
 let pass = 0;
 let fail = 0;
@@ -353,6 +358,134 @@ async function sectionEnrollment(): Promise<void> {
 }
 
 // -----------------------------------------------------------------------------
+// 7) GİRİŞ KAPISI — iki adımlı giriş İSTEĞE BAĞLI (kullanıcı kararı 2026-09-30)
+// -----------------------------------------------------------------------------
+// Açan kullanıcıya AĞDAN BAĞIMSIZ her PAROLALI girişte sorulur; açmayana hiç
+// sorulmaz; PIN/kart girişi etkilenmez; kurulumda tohumlanan sır "açtı" sayılmaz.
+async function girisHatasi(fn: () => Promise<unknown>): Promise<{ status?: number; code?: string; message: string }> {
+  try {
+    await fn();
+    return { message: "hata YOK" };
+  } catch (e) {
+    const err = e as { statusCode?: number; details?: { code?: string }; message?: string };
+    return { status: err.statusCode, code: err.details?.code, message: err.message ?? String(e) };
+  }
+}
+
+/** Başarılı girişin kullanıcı id'si; hata ise "HATA <kod>" — kırmızı kontrol olur, koşum düşmez. */
+async function girenId(fn: () => Promise<{ user: { userId: string } }>): Promise<string> {
+  try {
+    return (await fn()).user.userId;
+  } catch (e) {
+    const err = e as { statusCode?: number; details?: { code?: string } };
+    return `HATA ${err.statusCode ?? "?"} ${err.details?.code ?? ""}`;
+  }
+}
+
+async function temizleGirisKullanicilari(ids: string[], prevMethods: { value: unknown } | null): Promise<void> {
+  if (prevMethods) {
+    await prisma.systemSetting
+      .update({ where: { key: SETTING_KEYS.AUTH_LOGIN_METHODS }, data: { value: prevMethods.value as never } })
+      .catch(() => undefined);
+  } else {
+    await prisma.systemSetting.deleteMany({ where: { key: SETTING_KEYS.AUTH_LOGIN_METHODS } }).catch(() => undefined);
+  }
+  await prisma.session.deleteMany({ where: { userId: { in: ids } } });
+  await prisma.userRecoveryCode.deleteMany({ where: { userId: { in: ids } } });
+  await prisma.totpEnrollment.deleteMany({ where: { OR: [{ userId: { in: ids } }, { openedById: { in: ids } }] } });
+  await prisma.systemLog.deleteMany({ where: { userId: { in: ids } } });
+  await prisma.user.deleteMany({ where: { id: { in: ids } } });
+}
+
+async function sectionLoginGate(): Promise<void> {
+  console.log("\n[7] Giriş kapısı (parolalı giriş · PIN/kart · tohum)");
+  const PAROLA = "test123";
+  const hash = await bcrypt.hash(PAROLA, 10);
+  const mk = (sonek: string) =>
+    prisma.user.create({
+      data: { username: `${TAG}-g${sonek}`, passwordHash: hash, fullName: `Totp Giriş ${sonek}` },
+      select: { id: true, username: true },
+    });
+  const acik = await mk("a");
+  const kapali = await mk("k");
+  const tohum = await mk("t");
+  const admin = await mk("y");
+  const ids = [acik.id, kapali.id, tohum.id, admin.id];
+  const prevMethods = await prisma.systemSetting.findUnique({
+    where: { key: SETTING_KEYS.AUTH_LOGIN_METHODS },
+    select: { value: true },
+  });
+  const mobil = { clientType: "mobile" as const };
+
+  try {
+    // ── Kapalı kullanıcı: kod sorulmaz ──────────────────────────────────────
+    const k = await girenId(() => AuthService.login(kapali.username, PAROLA, mobil));
+    check("TOTP KAPALI kullanıcı kodsuz girer (sorulmaz)", k === kapali.id, k);
+
+    // ── Açık kullanıcı: pencereden kur ──────────────────────────────────────
+    const w = await TotpAccountService.openWindow({ userId: acik.id, openedById: admin.id });
+    const out = await TotpAccountService.consumeWindow(w.token, totpCodeForStep(w.secret, totpStep()));
+
+    const e1 = await girisHatasi(() => AuthService.login(acik.username, PAROLA, { clientType: "electron" }));
+    check("TOTP AÇIK kullanıcı kodsuz → 409 TOTP_REQUIRED (panel)", e1.status === 409 && e1.code === "TOTP_REQUIRED", `${e1.status} ${e1.code}`);
+    const e2 = await girisHatasi(() => AuthService.login(acik.username, PAROLA, mobil));
+    check(
+      "tablet parolalı girişte de sorulur, mesaj PIN/karta yönlendirir",
+      e2.status === 409 && e2.code === "TOTP_REQUIRED" && /PIN/.test(e2.message),
+      e2.message,
+    );
+    const e3 = await girisHatasi(() => AuthService.login(acik.username, "yanlis-parola", mobil));
+    check("yanlış parola TOTP'den ÖNCE 401 (kod adımı parolayı doğrulamaz)", e3.status === 401 && e3.code !== "TOTP_INVALID", `${e3.status} ${e3.code}`);
+    const e4 = await girisHatasi(() => AuthService.login(acik.username, PAROLA, { ...mobil, totpCode: "000000" }));
+    check("yanlış kod → 401 TOTP_INVALID (giriş kilidi sayar)", e4.status === 401 && e4.code === "TOTP_INVALID", `${e4.status} ${e4.code}`);
+    const oturumOnce = await prisma.session.count({ where: { userId: acik.id } });
+    check("reddedilen denemeler oturum AÇMADI (kapı issueToken'dan önce)", oturumOnce === 0, `${oturumOnce}`);
+
+    const kod = totpCodeForStep(w.secret, totpStep() + 1);
+    const ok1 = await girenId(() => AuthService.login(acik.username, PAROLA, { ...mobil, totpCode: kod }));
+    check("doğru kodla giriş başarılı", ok1 === acik.id, ok1);
+    const ok2 = await girenId(() =>
+      AuthService.login(acik.username, PAROLA, { ...mobil, totpCode: out.recoveryCodes[0] }),
+    );
+    check("kurtarma koduyla giriş başarılı", ok2 === acik.id, ok2);
+
+    // ── PIN / kart girişi etkilenmez (onaylı cihaz ayrı güvence) ────────────
+    await prisma.systemSetting.upsert({
+      where: { key: SETTING_KEYS.AUTH_LOGIN_METHODS },
+      create: { key: SETTING_KEYS.AUTH_LOGIN_METHODS, value: { enabled: ["list", "pin", "card"], primary: "list" } },
+      update: { value: { enabled: ["list", "pin", "card"], primary: "list" } },
+    });
+    let pin = "";
+    for (let i = 0; i < 20 && !pin; i++) {
+      const aday = String(100000 + Math.floor(Math.random() * 899999));
+      if (!(await prisma.user.findFirst({ where: { quickPin: aday }, select: { id: true } }))) pin = aday;
+    }
+    await prisma.user.update({ where: { id: acik.id }, data: { quickPin: pin } });
+    const p = await girenId(() => AuthService.loginWithQuickPin(pin, mobil));
+    check("TOTP AÇIK kullanıcı PIN ile kodsuz girer", p === acik.id, p);
+    const kart = await AuthService.rotateCardToken(acik.id, admin.id);
+    const c = await girenId(() => AuthService.loginWithCard(kart.cardCode, mobil));
+    check("TOTP AÇIK kullanıcı kartla kodsuz girer", c === acik.id, c);
+
+    // ── Tohumlanan sır "açtı" sayılmaz (satıcı hesabı emsali) ───────────────
+    await prisma.user.update({
+      where: { id: tohum.id },
+      data: { totpSecret: generateTotpSecret(), totpEnabledAt: new Date() },
+    });
+    check("tohumlanmış sır → durum KAPALI", !(await TotpAccountService.getStatus(tohum.id)).enabled);
+    const t = await girenId(() => AuthService.login(tohum.username, PAROLA, mobil));
+    check("tohumlanmış sırlı kullanıcı kodsuz girer", t === tohum.id, t);
+
+    // ── Sıfırlama sonrası sorulmaz ──────────────────────────────────────────
+    await TotpAccountService.reset({ userId: acik.id, byId: admin.id });
+    const r = await girenId(() => AuthService.login(acik.username, PAROLA, mobil));
+    check("2FA sıfırlanınca kodsuz girer", r === acik.id, r);
+  } finally {
+    await temizleGirisKullanicilari(ids, prevMethods);
+  }
+}
+
+// -----------------------------------------------------------------------------
 async function main(): Promise<void> {
   console.log("=== TOTP (RFC 6238) ===");
   sectionBase32();
@@ -361,6 +494,7 @@ async function main(): Promise<void> {
   sectionVerify();
   sectionUriAndRecovery();
   await sectionEnrollment();
+  await sectionLoginGate();
   console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
   await prisma.$disconnect();
   await pool.end();

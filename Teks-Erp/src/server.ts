@@ -27,7 +27,6 @@ import { flushLatencyNow } from './services/latency-persist.service';
 import { assertBaseServiceGuards } from './services/base.service';
 import { logProcessWarnings } from './lib/process-warnings';
 import { readWebHardeningConfig, isWebHardeningDeclared } from './middlewares/web-hardening';
-import { readRemoteAccessConfig } from './middlewares/remote-access.middleware';
 import { hata, uyari, bilgi, satir } from "./lib/logger";
 import type { Server } from "node:http";
 import { bootFactoryTimezone } from "./services/factory-timezone.service";
@@ -49,16 +48,7 @@ const HOST = process.env.HOST || "0.0.0.0";
 // Yatay ölçeklenirse taşıma katmanı gerekir: presence/cache → Redis (pub/sub
 // invalidation), scheduler → DB advisory lock veya ayrı tek worker. Bu varsayım
 // LAN-only tek-sunucu kurulumda kasıtlıdır (ARCHITECTURE.md "Single-process").
-//
-// ⚠️ İKİ DİNLEYİCİ ≠ İKİ PROCESS (2026-09-01, uzaktan erişim). `REMOTE_PORT`
-// verildiğinde AYNI `app` bir kez daha `listen` edilir (127.0.0.1). Bu invariantı
-// BOZMAZ: yukarıdaki mekanizmaların hepsi PROCESS-local'dir (Map, cache, zamanlayıcı
-// bayrağı) ve tek process içinde ikinci bir soket açmak onların hiçbirini
-// çoğaltmaz. Bozulan şey ikinci bir NODE SÜRECİ olurdu — o hâlâ YASAK.
 // =============================================================================
-
-// Uzaktan erişim (Cloudflare Tunnel) dinleyicisi. `REMOTE_PORT` yoksa null.
-const remoteAccess = readRemoteAccessConfig();
 
 // LİSANS DEPOSU dinlemeden ÖNCE ve SENKRON yüklenir: ilk istek geldiğinde kurulum anahtarı,
 // HAK/kira ve proxy bellekte olsun. Hata sunucuyu düşürmez (motor gözlemde "ölçülemedi" kalır).
@@ -160,20 +150,6 @@ function startLanListener(): Server {
             ? `açık (${rl.windowMs / 1000}sn · yazma ${rl.writeMax} · giriş ${rl.loginMax})`
             : "kapalı"}`);
     }
-    if (remoteAccess.remotePort !== null) {
-        satir("--------------------------------------------------------");
-        satir(`  Uzaktan erişim: 127.0.0.1:${remoteAccess.remotePort} (cloudflared)`);
-        if (remoteAccess.accessWallDisabled) {
-            // ⚠️ Kapalı bir kimlik duvarı SESSİZ KALMAZ. Bu satır, "acaba Access
-            // çalışıyor mu" sorusunun pm2 log'undan tek bakışta cevaplanabildiği
-            // yerdir; aksi halde duvarın olmadığı bir kurulum, olduğu sanılan bir
-            // kurulumdan ayırt edilemezdi.
-            satir("                  Access: ⚠️ KAPALI (CF_ACCESS_ENABLED=false)");
-            satir("                  → uzak girişi koruyan tek katman: parola + TOTP");
-        } else {
-            satir(`                  Access: ${remoteAccess.accessTeamDomain}`);
-        }
-    }
     satir("========================================================");
     satir("");
 
@@ -256,39 +232,15 @@ function startLanListener(): Server {
 });
 }
 
-/**
- * TÜNEL DİNLEYİCİSİ — YALNIZ `127.0.0.1`.
- *
- * ⚠️ HOST SABİT VE LOAD-BEARING. `0.0.0.0`a açılsaydı bu port LAN'dan da
- * erişilebilir olurdu ve `req.socket.localPort`e dayanan tüm uzak/LAN ayrımı
- * çökerdi: fabrikadaki herhangi biri `<lan-ip>:4001`e bağlanıp "uzak" sayılırdı
- * (ya da tersi — LAN'daki bir istemci kendini uzak gösterip Access JWT kapısına
- * takılırdı). `cloudflared` aynı makinede koştuğu için 127.0.0.1 yeterlidir.
- *
- * `HOST` env'i BİLEREK onurlandırılmaz — o LAN dinleyicisinin ayarıdır.
- */
-function startRemoteListener(): Server | null {
-  return remoteAccess.remotePort === null
-    ? null
-    : app.listen(remoteAccess.remotePort, "127.0.0.1", () => {
-        bilgi(
-          "remote-access",
-          `tünel dinleyicisi hazır: 127.0.0.1:${remoteAccess.remotePort}`,
-        );
-      });
-}
-
 // Fabrika saat dilimi dinleyiciden ÖNCE yüklenir: ilk istek de ilk zamanlayıcı da doğru günü görür.
 // Geçersiz kayıtlı dilim → varsayılanla açılır + sağlık/panel uyarısı; DB'ye ulaşılamazsa bugünkü gibi açılır.
 let lanListener: Server | null = null;
-let remoteServer: Server | null = null;
 void bootFactoryTimezone({
   info: (m) => bilgi("saat-dilimi", m),
   warn: (m, e) => uyari("saat-dilimi", m, e),
 }).then(
   () => {
     lanListener = startLanListener();
-    remoteServer = startRemoteListener();
   },
   (err: unknown) => {
     hata("saat-dilimi", err instanceof Error ? err.message : String(err));
@@ -355,9 +307,6 @@ function gracefulShutdown(signal: string, exitCode = 0): void {
         new Promise((resolve) => setTimeout(resolve, 2000).unref()),
     ]).finally(() => {
         shutdownPhase = "dinleyiciler kapatılıyor";
-        // Tünel dinleyicisi ÖNCE kapanır: yeni uzak istek kabul edilmesin ama
-        // LAN'daki uçuştaki istekler normal akışında bitsin.
-        remoteServer?.close();
         server.close(() => {
             shutdownPhase = "DB kapatılıyor";
             bilgi("shutdown", "Sunucu kapandı.");

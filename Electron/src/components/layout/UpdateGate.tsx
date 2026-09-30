@@ -77,7 +77,7 @@ export function UpdateDownloadStrip() {
 
 /**
  * Güncelleme kapısı — kurulumu tetikleyen TEK bileşen, `App.tsx` `Root`
- * düzeyinde bir kez çizilir: giriş ekranında, `AppShell`de ve `BossShell`de.
+ * düzeyinde bir kez çizilir: giriş ekranında ve `AppShell`de.
  * Yalnız kabukta çizildiği günlerde giriş ekranında inen paket hiç kurulmadı
  * (`autoInstallOnAppQuit=false`, kapatıp açmak kurmaz).
  *

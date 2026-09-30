@@ -25,7 +25,7 @@ import { canEnterApp, type ExistingSessionInfo } from "@/types/auth";
  * Dört çıkış yolu var ve üçü hata değil AKIŞ ADIMI:
  *   ① başarı           → token + yönlendirme
  *   ② 409 SESSION_EXISTS → "hesap başka yerde açık" onayı
- *   ③ 409/401 TOTP     → ikinci faktör adımı (yalnız uzak girişte)
+ *   ③ 409/401 TOTP     → ikinci faktör adımı (hesabında 2FA açık kullanıcıda)
  *   ④ 403 TOTP_ENROLLMENT → "yöneticinden kurulum iste" ekranı
  */
 const schema = z.object({
@@ -42,9 +42,9 @@ export function useLoginFlow() {
   const [submitting, setSubmitting] = useState(false);
   // 409 SESSION_EXISTS ('notify' politikası) — onay bekleyen çakışma bilgisi.
   const [conflict, setConflict] = useState<{ values: LoginFormValues; existing: ExistingSessionInfo } | null>(null);
-  // İkinci faktör — YALNIZ uzak (tünel) girişte doldurulur. `pending` kod
+  // İkinci faktör — yalnız sunucu isterse (hesapta 2FA açık) doldurulur. `pending` kod
   // adımını açar; `invalid` son denemenin yanlış olduğunu söyler; `enrollment`
-  // hiç kurulmamış hesabın ekranını açar. LAN'da üçü de hep null/false kalır.
+  // hiç kurulmamış hesabın ekranını açar.
   const [totp, setTotp] = useState<{ values: LoginFormValues; invalid: boolean } | null>(null);
   const [enrollmentNeeded, setEnrollmentNeeded] = useState(false);
 

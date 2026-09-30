@@ -315,6 +315,9 @@ export const EVENT_ACTION_LABELS: Record<string, string> = {
   LICENSE_SANCTION_CHANGED: "Lisans yaptırımı değişti",
   LICENSE_OBSERVATION_SUMMARY: "Lisans gözlem özeti",
   LICENSE_ADMIN_ACTION: "Lisans işlemi",
+
+  // ── SYSTEM · patron bulutu ──
+  PATRON_CLOUD_ACCOUNT_LOCKED: "Bulut hesabı kilitlendi",
 };
 
 /** Sistem olayının Türkçe adı; bilinmeyen → ham değer (fail-open). */

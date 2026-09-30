@@ -5,7 +5,7 @@
 import { z } from "zod";
 import prisma from "../lib/prisma";
 import { backupHealth } from "../lib/health-snapshot";
-import { FLOW_COLUMNS, getBossOverview, bossShippingSection, bossSubcontractSection } from "../services/boss/overview.service";
+import { FLOW_COLUMNS, getFactoryOverview, shippingSection, subcontractSection } from "./overview";
 import { getStockScorecard } from "../services/reports/stock-scorecard.report.service";
 import { getOpenOrderCoverage } from "../services/reports/open-order-coverage.report.service";
 import { getShipmentScorecard } from "../services/reports/shipment-scorecard.report.service";
@@ -95,23 +95,20 @@ function seal(projection: string, raw: unknown): BuiltSnapshot {
 }
 
 async function buildOverview(now: Date, productionOn: boolean): Promise<BuiltSnapshot[]> {
-  // İzin süzmesiz çekirdek: bulutta izin sınırı bölüm adıdır (§3.3), fabrika izinleri taşınmaz.
-  const o = await getBossOverview({ permissions: ["*"], range: periodRange("son-30-gun", now) });
-  const out: BuiltSnapshot[] = [];
-  if (o.stock) {
-    out.push(seal("ozet.stok", {
+  // Bulutta izin sınırı bölüm adıdır (§3.3), fabrika izinleri taşınmaz.
+  const o = await getFactoryOverview(periodRange("son-30-gun", now));
+  const out: BuiltSnapshot[] = [
+    seal("ozet.stok", {
       hamMiktar: o.stock.rawQty, yariMamulMiktar: o.stock.semiQty, bitmisMiktar: o.stock.finishedQty,
       oluMiktar: o.stock.deadQty, oluStokGun: o.stock.deadStockDays,
       enCokUrun: o.stock.topItems.map((t) => ({ etiket: t.label, miktar: t.qty })),
-    }));
-  }
-  if (o.orders) {
-    out.push(seal("ozet.siparis", {
+    }),
+    seal("ozet.siparis", {
       acikKalem: o.orders.openLineCount, acikMiktar: o.orders.openQty, karsilanmayanMiktar: o.orders.uncoveredQty,
       karsilanmaYuzde: o.orders.coveragePct, gecikenKalem: o.orders.overdueLines, gecikenMiktar: o.orders.overdueQty,
       enCokCari: o.orders.topCustomers.map((t) => ({ etiket: t.label, miktar: t.qty })),
-    }));
-  }
+    }),
+  ];
   if (o.production && productionOn) {
     out.push(seal("ozet.uretim", {
       // Toplamı fabrika hesaplar (bulut yalnız eşikle karşılaştırır — patron bildirimi 'gunluk-uretim').
@@ -124,9 +121,9 @@ async function buildOverview(now: Date, productionOn: boolean): Promise<BuiltSna
   const subcontract: Record<string, unknown> = {};
   for (const p of STANDARD_PERIODS) {
     const range = periodRange(p, now);
-    const s = bossShippingSection(await getShipmentScorecard(range));
+    const s = shippingSection(await getShipmentScorecard(range));
     shipping[PERIOD_KEY[p]] = { sevkMiktari: s.shippedQty, sevkTopSayisi: s.shippedRollCount, zamanindaYuzde: s.onTimePct, tamamlananSiparis: s.completedOrders, ortGecikmeGun: s.avgLateDays };
-    const f = bossSubcontractSection(await getSubcontractScorecard(range));
+    const f = subcontractSection(await getSubcontractScorecard(range));
     subcontract[PERIOD_KEY[p]] = { acikMiktar: f.openQty, acikKalem: f.openItems, fireYuzde: f.firePct, ortDonusGun: f.avgTurnaroundDays, enEskiAcikGun: f.oldestOpenDays };
   }
   out.push(seal("ozet.sevkiyat", shipping));

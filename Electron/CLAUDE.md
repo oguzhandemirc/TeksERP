@@ -8,7 +8,7 @@ Electron 42 + React 19 + TypeScript + Vite. Yönetim paneli; saha akışı yok; 
 
 ```bash
 npm run dev          # electron-vite dev (renderer 5174 + main + preload)
-npm run dev:web / build:web   # web paneli (dist-web → backend paketine girer; BossShell / patron modülü)
+npm run dev:web / build:web   # web paneli (dist-web → yalnız DEMO imajı, Dockerfile; fabrika paketine girmez)
 npm run build · build:mac · build:win   # ⚠️ ham build:win KULLANMA — deploy/electron-paketle.sh <müşteri>
 npm run typecheck · lint · test (vitest, 211 dosya / 2.283 vaka / ~27 sn — commit kapısında)
 # ⚠️ tip denetimi `npm run typecheck:plain` (= tsc -p tsconfig.node.json + -p tsconfig.web.json); düz `npx tsc --noEmit` / `-p .` HİÇBİR şey denetlemez (kök tsconfig `files: []`, TD-21)

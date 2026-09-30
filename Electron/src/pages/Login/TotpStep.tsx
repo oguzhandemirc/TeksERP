@@ -4,7 +4,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 
 /**
- * İKİNCİ FAKTÖR ADIMI — yalnız UZAKTAN (tünel) girişte görünür.
+ * İKİNCİ FAKTÖR ADIMI — yalnız sunucu `409 TOTP_REQUIRED` derse görünür: hesabında 2FA
+ * AÇIK kullanıcının her parolalı girişinde (ağdan bağımsız; 2FA isteğe bağlıdır).
  *
  * ⚠️ Bu ekran ASLA KENDİLİĞİNDEN AÇILMAZ. İstemci önce kodsuz dener; sunucu
  * `409 TOTP_REQUIRED` dediğinde açılır. "Her ihtimale karşı sor" yaklaşımı,

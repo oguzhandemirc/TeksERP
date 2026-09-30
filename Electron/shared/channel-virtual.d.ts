@@ -6,7 +6,6 @@ declare module "virtual:tekserp-channel" {
   export const appId: string;
   export const productName: string;
   export const packageName: string;
-  export const publicErpUrl: string;
   export const erpUrl: string;
   export const updateFeedUrl: string;
   export const windowTitle: string;

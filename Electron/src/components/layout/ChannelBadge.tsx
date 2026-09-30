@@ -2,7 +2,7 @@ import { CHANNEL_LABEL, CHANNEL_NAME } from "@shared/channel";
 
 /**
  * Hazırlık kanalının görünür işareti ("TEST FABRİKA") — pencerenin kendi başlığında
- * (`Topbar` · `LoginPage` · `BossShell`), pencere düğmelerinin yanında.
+ * (`Topbar` · `LoginPage`), pencere düğmelerinin yanında.
  *
  * ⚠️ NEDEN VAR: hazırlık kanalı gerçek fabrika verisinin KOPYASINA bağlanır ve ekranları
  * fabrikayla birebir aynıdır; işaret olmadan kullanıcı hangi programda olduğunu ayırt
