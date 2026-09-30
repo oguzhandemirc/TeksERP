@@ -1,6 +1,6 @@
 # Sunucu envanteri — hangi makine ne yapıyor
 
-> Son güncelleme: **2026-09-29** (fabrika satırları SAHINSRV salt-okuma envanterinden). Yeni bir makine, kullanıcı, port ya da zamanlanmış
+> Son güncelleme: **2026-10-01** (üretim satıcısı tekserp-vds'te; fabrika satırları 2026-09-29 SAHINSRV salt-okuma envanterinden). Yeni bir makine, kullanıcı, port ya da zamanlanmış
 > iş eklendiğinde **buraya da yazılır** — aksi hâlde "bu port neden açık" sorusunun
 > cevabı kimsede kalmaz.
 
@@ -99,6 +99,8 @@ Kurulum günü ölçüm: **11 saatte 1193 başarısız giriş denemesi**, ilk sa
 
 Docker günlükleri: `json-file`, 20 MB × 5 dosya (sınırsız büyümeye karşı).
 
+Ayrı compose projeleri (ayrıntı, sınırlar, ağlar kendi runbook'larında): `tekserp-satici-hazirlik-*` (`lisans-test`, [`SATICI-KURULUM.md`](SATICI-KURULUM.md) §12) · **`tekserp-satici-uretim-*`** (`lisans` + `portal`, 2026-10-01: satıcı · db · yedek · portal-tunel · jwks · bildirim — §13.11) · `tekserp-patron-uretim-*` (`patron`, [`PATRON-BULUTU-KURULUM.md`](PATRON-BULUTU-KURULUM.md)). Satıcı yan konteynerlerinin çıkışı host kuralıyla daralır: `tekserp-satici-{jwks,bildirim}-cikis@uretim` birimleri (DOCKER-USER + INPUT; sudo betiğiyle kurulur — §13.11).
+
 ⚠️ ACME (Let's Encrypt) **bilerek yok**. Sertifika Cloudflare Origin CA;
 Cloudflare API anahtarı bu makinede **durmuyor**. Servis etmediğimiz bir özellik
 için fazladan bir sır tutmamak.
@@ -170,7 +172,7 @@ Yedek şifreleme parolası **sunucuda YOK** — fabrikada ve parola yöneticisin
 - [`ELECTRON-OTOMATIK-GUNCELLEME.md`](ELECTRON-OTOMATIK-GUNCELLEME.md) — panel güncellemesi
 - [`MOBIL-UZAKTAN-GUNCELLEME.md`](MOBIL-UZAKTAN-GUNCELLEME.md) — tablet güncellemesi
 - [`YEDEK-GERI-YUKLEME-TATBIKATI.md`](YEDEK-GERI-YUKLEME-TATBIKATI.md) — geri yükleme provası
-- [`SATICI-KURULUM.md`](SATICI-KURULUM.md) — satıcı (lisans) sunucusu: ayrı compose projesi, tailnet portalı, şifreli yedek (hazırlık; VDS'e henüz kurulmadı)
+- [`SATICI-KURULUM.md`](SATICI-KURULUM.md) — satıcı (lisans) sunucusu: ayrı compose projesi, tailnet portalı, şifreli yedek (hazırlık 2026-09-29 · üretim 2026-10-01 kurulu)
 - [`PORTAL-GENEL-ERISIM.md`](PORTAL-GENEL-ERISIM.md) — satıcı portalının internetten yolu (`portal.etkiliyazilim.com`): Cloudflare Access + parola + TOTP, kök parolası yalnız tailnet/geri döngü; Cloudflare API sırası, DNS, doğrulama
 - [`LISANS-DEVREYE-ALMA-TESTFABRIKA.md`](LISANS-DEVREYE-ALMA-TESTFABRIKA.md) — lisansı testfabrika'da devreye alma sırası (satıcı A2 imajı → yayıncı → korumalı backend → yayın → portal → gözlem kipinde etkinleştirme → Senaryo T); salt-okuma aşama doğrulayıcısı
 

@@ -27,6 +27,8 @@ Kök parolası, TOTP tohumu ve başka kullanıcının parolası Cloudflare'den (
 | Köken sertifikası | Cloudflare Origin CA `*.etkiliyazilim.com` → `portal.` kapsanır | `SATICI-KURULUM.md` §1 |
 | Satıcının dış bağlantısı | **YOK ve öyle KALIR** (yönetici kararı B, 2026-09-30: anahtar tutan konteynere çıkış açılmaz) → Access imza anahtarlarını `satici-jwks` yan konteyneri çeker, satıcı dosyayı salt okunur okur (§4, §5) | `deploy/satici/docker-compose*.yml` |
 
+**Uygulama 2026-10-01 (ÜRETİM satıcısı, kayıt [`SATICI-KURULUM.md`](SATICI-KURULUM.md) §13.11):** One-time PIN giriş yöntemi eklendi · uygulama `portal.etkiliyazilim.com` (12 sa, yalnız OTP, SameSite lax) + politika yalnız `oguzhandemirco@gmail.com` · DNS `portal` A proxied · portal ÜRETİM satıcısına bağlı (hazırlıkta örtü hiç açılmadı). Access'siz istek 302 (Access girişi), köken CF dışından 403.
+
 ## 2. Cloudflare — API ile (sıralı; yönetici koşturur)
 
 Belirteç yöneticide (`~/.tekserp/sirlar/cloudflare-token.txt`): repoya, loga, komut satırına (argv) GİRMEZ — başlık 0600 geçici dosyadan okunur. Gereken izinler: Hesap → *Access: Organizations, Identity Providers, and Groups* (Edit) · *Access: Apps and Policies* (Edit); Bölge → *DNS* (Edit). İzinli e-posta listesi dağıtımda verilir ve yalnız ortam değişkeninde yaşar (dosyaya/runbook'a yazılmaz).
@@ -130,7 +132,7 @@ sudo iptables -I DOCKER-USER 1 -s <JWKS_CIKIS_AGI> -m conntrack --ctstate NEW -j
 sudo iptables -I DOCKER-USER 1 -s <JWKS_CIKIS_AGI> -p udp --dport 53 -m conntrack --ctstate NEW -j RETURN
 sudo iptables -I DOCKER-USER 1 -s <JWKS_CIKIS_AGI> -p tcp -m multiport --dports 53,443 -m conntrack --ctstate NEW -j RETURN
 ```
-Kural yalnız IPv4'ü ve yalnız `<JWKS_CIKIS_AGI>`yi daraltır: `sudo docker network inspect tekserp-satici-<ortam>-jwks-cikis --format '{{.EnableIPv6}} {{range .IPAM.Config}}{{.Subnet}} {{end}}'` → `false <JWKS_CIKIS_AGI>` (compose denetimi ⑬h/⑥c bunu dosyada ölçer; daemon varsayılanını yalnız bu komut görür). Kuraldan sonra ölç: yan konteyner günlüğünde yeni `[jwks] yazıldı` (en geç 10 dk; `sudo docker compose restart satici-jwks` hemen dener) ve §4.8. Kalıcılık: kurallar yeniden başlatmada kaybolur — ana kipte `tekserp-satici-tailnet@` biriminin yaptığı gibi birime alınır (sudo, ayrı adım).
+Kural yalnız IPv4'ü ve yalnız `<JWKS_CIKIS_AGI>`yi daraltır: `sudo docker network inspect tekserp-satici-<ortam>-jwks-cikis --format '{{.EnableIPv6}} {{range .IPAM.Config}}{{.Subnet}} {{end}}'` → `false <JWKS_CIKIS_AGI>` (compose denetimi ⑬h/⑥c bunu dosyada ölçer; daemon varsayılanını yalnız bu komut görür). Kuraldan sonra ölç: yan konteyner günlüğünde yeni `[jwks] yazıldı` (en geç 10 dk; `sudo docker compose restart satici-jwks` hemen dener) ve §4.8. Kalıcılık: kurallar yeniden başlatmada kaybolur → birim [`vds/jwks-cikis.sh`](../../deploy/satici/vds/jwks-cikis.sh) + [`vds/tekserp-satici-jwks-cikis@.service`](../../deploy/satici/vds/tekserp-satici-jwks-cikis@.service) (bildirim çıkışının kalıbı; yukarıdaki üç kurala ek olarak özel ağlara DROP ve VDS'in kendisine INPUT DROP, DNS durumsuz RETURN — idempotent sil/koy): `sudo install -m 644 $K/tekserp-satici-jwks-cikis@.service /etc/systemd/system/ && sudo systemctl daemon-reload && sudo systemctl enable --now tekserp-satici-jwks-cikis@<ortam>` → `sudo iptables -S DOCKER-USER | grep -F <JWKS_CIKIS_AGI>` 9 satır, INPUT 1 satır. Ölçüm `satici-jwks`e `docker exec` ile yapılmaz (`pids_limit` 20, ikinci node süreci sığmaz) — aynı ağa geçici sonda konteyneri katılır ([`SATICI-KURULUM.md`](SATICI-KURULUM.md) §13.10).
 
 ## 6. Doğrulama
 
@@ -152,7 +154,7 @@ Kural yalnız IPv4'ü ve yalnız `<JWKS_CIKIS_AGI>`yi daraltır: `sudo docker ne
 ## 6b. Bilinen davranış
 
 - **İki ayrı oturum, iki ayrı saat:** Access oturumu (12 sa, e-posta kodundan itibaren) ve portal oturumu (12 sa mutlak, 30 dk boşta — parola + TOTP'den itibaren) bağımsızdır. Access oturumu dolunca arayüzün API çağrıları Cloudflare giriş sayfasına yönlenir ve ekran ağ hatası gösterir: sayfayı yenilemek e-posta koduna götürür, portal oturumu sürüyorsa kaldığı yerden devam eder.
-- **Tek ad, tek ortam:** `portal.etkiliyazilim.com` bir anda YALNIZ bir satıcı ortamına (bugün `hazirlik`) bağlanır — `PORTAL_HOST` o ortamın `.env`'indedir. Üretim satıcısı kurulunca ad ona taşınır (hazırlıkta satır kaldırılır, üretimde eklenir) ya da hazırlığa ayrı ad verilir; iki ortam aynı adı taşıyamaz (Traefik iki yönlendiriciyi çakıştırır).
+- **Tek ad, tek ortam:** `portal.etkiliyazilim.com` bir anda YALNIZ bir satıcı ortamına (2026-10-01'den beri `uretim`) bağlanır — `PORTAL_HOST` o ortamın `.env`'indedir. Üretim satıcısı kurulunca ad ona taşınır (hazırlıkta satır kaldırılır, üretimde eklenir) ya da hazırlığa ayrı ad verilir; iki ortam aynı adı taşıyamaz (Traefik iki yönlendiriciyi çakıştırır).
 - Portal arayüzünün statik dosyaları (`/portal/assets/*`, içerik özetli, `immutable`) Cloudflare kenarında önbelleğe girebilir; Access denetimi önbellekten ÖNCE koşar ve bu dosyalar sır taşımaz. API ve giriş HTML'i `no-store`.
 
 ## 7. Ana (Tailscale) kipe geçerken

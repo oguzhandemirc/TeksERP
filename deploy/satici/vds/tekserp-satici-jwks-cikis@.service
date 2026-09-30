@@ -1,0 +1,16 @@
+# /etc/systemd/system/tekserp-satici-jwks-cikis@.service — örnek: tekserp-satici-jwks-cikis@uretim
+# Açılışta Docker'dan SONRA portal JWKS yan konteynerinin çıkış kurallarını (DOCKER-USER + INPUT) koyar
+# (jwks-cikis.sh; runbook PORTAL-GENEL-ERISIM §5). Satıcıyı ve Docker'ı BEKLETMEZ; kural yoksa yalnız JWKS çıkışı geniştir.
+[Unit]
+Description=TeksERP satıcı (%i) — portal JWKS çıkışı DOCKER-USER kuralları
+After=docker.service network-online.target
+Wants=docker.service network-online.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/opt/stack/apps/tekserp-satici-%i/jwks-cikis.sh /opt/stack/apps/tekserp-satici-%i
+ExecStop=/opt/stack/apps/tekserp-satici-%i/jwks-cikis.sh /opt/stack/apps/tekserp-satici-%i kaldir
+
+[Install]
+WantedBy=multi-user.target
