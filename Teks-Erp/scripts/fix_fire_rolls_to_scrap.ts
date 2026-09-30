@@ -58,7 +58,7 @@
 import prisma, { pool } from "../src/lib/prisma";
 import { RollStatus } from "@prisma/client";
 import { AuditService } from "../src/services/audit.service";
-import { FACTORY_TIMEZONE } from "../src/constants/time";
+import { getFactoryTimezone } from "../src/constants/time";
 import { hedefDbAdi } from "./lib/hedef-db-kapisi";
 
 const argv = process.argv.slice(2);
@@ -76,7 +76,7 @@ const SELLABLE: RollStatus[] = [RollStatus.WAREHOUSE, RollStatus.A1_STOCK, RollS
 
 const fmt = (d: Date | null | undefined): string =>
   d
-    ? d.toLocaleString("tr-TR", { timeZone: FACTORY_TIMEZONE, dateStyle: "short", timeStyle: "short" })
+    ? d.toLocaleString("tr-TR", { timeZone: getFactoryTimezone(), dateStyle: "short", timeStyle: "short" })
     : "—";
 
 async function main(): Promise<void> {

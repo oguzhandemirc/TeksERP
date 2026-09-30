@@ -35,7 +35,8 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import prisma from "../src/lib/prisma";
 import {
-  FACTORY_TIMEZONE,
+  DEFAULT_FACTORY_TIMEZONE,
+  getFactoryTimezone,
   factoryDaySql,
   factoryDayStart,
   factoryDayKeyUtcMidnight,
@@ -89,7 +90,7 @@ function baslikCepheSayisi(): number {
 
 async function main(): Promise<void> {
   console.log("\n=== Rapor gün sınırı (fabrika takvim günü) bekçisi ===");
-  console.log(`FACTORY_TIMEZONE = ${FACTORY_TIMEZONE}\n`);
+  console.log(`fabrika saat dilimi = ${getFactoryTimezone()} (varsayılan ${DEFAULT_FACTORY_TIMEZONE})\n`);
 
   // ── 0) Başlık kendini ölçer — bayat "üç cephe" cümlesi burada kırmızıya düşer
   const baslikta = baslikCepheSayisi();
@@ -262,7 +263,7 @@ async function main(): Promise<void> {
   const def = statRows[0]?.def ?? "";
   check(
     "istatistik nesnesi VAR ve fabrika saat dilimini içeriyor",
-    def.includes(`AT TIME ZONE '${FACTORY_TIMEZONE}'`),
+    def.includes(`AT TIME ZONE '${DEFAULT_FACTORY_TIMEZONE}'`),
     def || "nesne yok"
   );
   check(

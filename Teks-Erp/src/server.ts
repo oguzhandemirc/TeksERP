@@ -29,6 +29,8 @@ import { logProcessWarnings } from './lib/process-warnings';
 import { readWebHardeningConfig, isWebHardeningDeclared } from './middlewares/web-hardening';
 import { readRemoteAccessConfig } from './middlewares/remote-access.middleware';
 import { hata, uyari, bilgi, satir } from "./lib/logger";
+import type { Server } from "node:http";
+import { bootFactoryTimezone } from "./services/factory-timezone.service";
 
 const PORT = process.env.PORT || 4000;
 // 0.0.0.0 = tüm ağ arayüzlerinden dinle (tablet/diğer cihazlar LAN üzerinden erişebilsin).
@@ -118,7 +120,8 @@ async function warnIfAuditGuardDisabled(): Promise<void> {
     }
 }
 
-const server = app.listen(Number(PORT), HOST, () => {
+function startLanListener(): Server {
+  return app.listen(Number(PORT), HOST, () => {
     const lan = getLanAddresses();
 
     satir("");
@@ -251,6 +254,7 @@ const server = app.listen(Number(PORT), HOST, () => {
         },
     });
 });
+}
 
 /**
  * TÜNEL DİNLEYİCİSİ — YALNIZ `127.0.0.1`.
@@ -263,8 +267,8 @@ const server = app.listen(Number(PORT), HOST, () => {
  *
  * `HOST` env'i BİLEREK onurlandırılmaz — o LAN dinleyicisinin ayarıdır.
  */
-const remoteServer =
-  remoteAccess.remotePort === null
+function startRemoteListener(): Server | null {
+  return remoteAccess.remotePort === null
     ? null
     : app.listen(remoteAccess.remotePort, "127.0.0.1", () => {
         bilgi(
@@ -272,6 +276,25 @@ const remoteServer =
           `tünel dinleyicisi hazır: 127.0.0.1:${remoteAccess.remotePort}`,
         );
       });
+}
+
+// Fabrika saat dilimi dinleyiciden ÖNCE yüklenir: ilk istek de ilk zamanlayıcı da doğru günü görür.
+// Geçersiz kayıtlı dilim → açılmaz (fail-closed); DB'ye ulaşılamazsa bugünkü gibi açılır.
+let server: Server | null = null;
+let remoteServer: Server | null = null;
+void bootFactoryTimezone({
+  info: (m) => bilgi("saat-dilimi", m),
+  warn: (m, e) => uyari("saat-dilimi", m, e),
+}).then(
+  () => {
+    server = startLanListener();
+    remoteServer = startRemoteListener();
+  },
+  (err: unknown) => {
+    hata("saat-dilimi", err instanceof Error ? err.message : String(err));
+    process.exit(1);
+  },
+);
 
 // L (düşük bulgu): graceful shutdown — eskiden hiç handler yoktu, restart'ta
 // (pm2 restart/deploy, Ctrl+C) uçuştaki istekler TCP düzeyinde kopuyordu.
@@ -281,6 +304,12 @@ let shuttingDown = false;
 function gracefulShutdown(signal: string, exitCode = 0): void {
     if (shuttingDown) return;
     shuttingDown = true;
+    const lanServer = server;
+    if (!lanServer) {
+        // Dinleyici henüz açılmadı (saat dilimi yükleniyor) — boşaltılacak istek yok.
+        process.exit(exitCode);
+        return;
+    }
     satir("");
     bilgi("shutdown", `${signal} alındı — sunucu kapatılıyor (uçuştaki istekler bitiriliyor)...`);
     // ⚠️ TEŞHİS (2026-09-10): zorla-çıkış eskiden TEK cümle basıyordu ve sebep
@@ -301,7 +330,7 @@ function gracefulShutdown(signal: string, exitCode = 0): void {
         // `getConnections` geri çağrısı da gelmeyebilir (kapanan dinleyici) —
         // 250ms sonra sayı OLMADAN çıkılır; teşhis için faz tek başına da değerli.
         setTimeout(() => bailOut(""), 250).unref();
-        server.getConnections((_err, count) => bailOut(`, açık bağlantı: ${count}`));
+        lanServer.getConnections((_err, count) => bailOut(`, açık bağlantı: ${count}`));
     }, 5000);
     forceTimer.unref();
     // Son gecikme delta'ları kaybolmasın (dev'de nodemon her kayıtta restart eder!)
@@ -329,7 +358,7 @@ function gracefulShutdown(signal: string, exitCode = 0): void {
         // Tünel dinleyicisi ÖNCE kapanır: yeni uzak istek kabul edilmesin ama
         // LAN'daki uçuştaki istekler normal akışında bitsin.
         remoteServer?.close();
-        server.close(() => {
+        lanServer.close(() => {
             shutdownPhase = "DB kapatılıyor";
             bilgi("shutdown", "Sunucu kapandı.");
             // O3-3: DB kaynaklarını temiz bırak (eski lib/prisma.ts shutdown handler'ından

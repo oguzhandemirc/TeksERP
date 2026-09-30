@@ -37,6 +37,7 @@ import {
 } from "./system-setting.service";
 import { readSackSeqFormat, type SackSeqFormat } from "./helpers/sack-seq.helper";
 import { ApiResponse } from "../types/api.types";
+import { factoryDateTimeTr } from "../constants/time";
 import { SAMPLE_PRINTED_DOCS } from "./document-render/sample-data";
 import type { DocTablesPayload } from "./document-render/doc-model";
 import { NUMBER_ROUNDING_HALF_UP, type NumberRounding } from "./document-render/fmt-num";
@@ -347,9 +348,7 @@ async function resolveLogoDataUrl(snapshot: PrintedDocSnapshot): Promise<string 
 
 /** dd.MM.yyyy HH:mm (Basım damgası). */
 function fmtStampNow(): string {
-  const d = new Date();
-  const p = (x: number) => String(x).padStart(2, "0");
-  return `${p(d.getDate())}.${p(d.getMonth() + 1)}.${d.getFullYear()} ${p(d.getHours())}:${p(d.getMinutes())}`;
+  return factoryDateTimeTr(new Date());
 }
 
 /**

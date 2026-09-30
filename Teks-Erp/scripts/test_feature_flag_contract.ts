@@ -1301,7 +1301,19 @@ async function main() {
     companyName: "serbest METİN — kapalı değer kümesi yok; panel Şirket Bilgileri kartı yazar",
     shippingSackSeqPrefix: "serbest METİN (≤8, zod regex) — panel `freeText` satırı; belgeye HTML kaçışıyla girer (2026-09-22)",
   };
-  const aEnum = A.filter((k) => typeof flags[k] === "string" && !FREE_TEXT_FLAGS[k]);
+  // ÖZEL UÇTAN yazılan salt-okunur alanlar: PATCH şemasında OLMAMALI (kurulum değeri; önizlemeli tek yazma yolu).
+  const DEDICATED_ENDPOINT_FLAGS: Record<string, string> = {
+    factoryTimezone: "fabrika saat dilimi — yalnız PUT /api/feature-flags/factory-timezone yazar (önizleme + atomik + audit)",
+  };
+  const dedicatedInPatch = Object.keys(DEDICATED_ENDPOINT_FLAGS).filter((k) => B.includes(k) || C.includes(k));
+  check(
+    "özel uçlu salt-okunur alan PATCH şemasında/yazma dalında YOK",
+    dedicatedInPatch.length === 0,
+    `PATCH'ten yazılabiliyor: ${dedicatedInPatch.join(", ")} — önizleme/claim kapısı dolanılır`,
+  );
+  const dedicatedMissing = Object.keys(DEDICATED_ENDPOINT_FLAGS).filter((k) => typeof flags[k] !== "string");
+  check("özel uçlu alan API yanıtında metin olarak VAR", dedicatedMissing.length === 0, `yok: ${dedicatedMissing.join(", ")}`);
+  const aEnum = A.filter((k) => typeof flags[k] === "string" && !FREE_TEXT_FLAGS[k] && !DEDICATED_ENDPOINT_FLAGS[k]);
 
   // Panelde enum satırı `enumKey:` ile yazılır — `key:` DEĞİL. Ad bilinçli farklı:
   // aynı adla yazılsaydı enum anahtarı D (boolean) kümesine sızar ve §5

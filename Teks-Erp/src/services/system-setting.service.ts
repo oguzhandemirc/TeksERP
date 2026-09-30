@@ -33,6 +33,13 @@ import {
 } from "./document-render/doc-style";
 import { REPORT_BY_KEY } from "../constants/report-catalog";
 import { DEFAULT_COMPANY_NAME } from "../constants/company";
+import { uyari } from "../lib/logger";
+import {
+  DEFAULT_FACTORY_TIMEZONE,
+  applyFactoryTimezone,
+  getFactoryTimezone,
+  isValidFactoryTimezone,
+} from "../constants/time";
 import { SECURITY_SETTING_PREFIX } from "../constants/reserved-settings";
 import { resolveConfigPageSize } from "./document-render/traveler-card.density";
 import {
@@ -526,6 +533,9 @@ export const SETTING_KEYS = {
   /** ERP'nin kurulduğu firmanın adı — panel başlığı + uygulama genelinde gösterilir.
    *  Refakat kartının kendi firma adından bağımsızdır (kart snapshot'ı ayrı tutulur). */
   COMPANY_NAME: "company.name",
+  /** Fabrikanın saat dilimi (IANA adı; yoksa `DEFAULT_FACTORY_TIMEZONE`). KURULUM DEĞERİ: gün anahtarlarını
+   *  kaydırır → ham ayar ucundan ve PATCH'ten YAZILAMAZ, tek yazıcı `factory-timezone.service`. */
+  COMPANY_TIMEZONE: "company.timezone",
   /** Belge künyesi: irsaliye/çeki başına basılan firma adresi/telefon/vergi bilgisi.
    *  Firma adı ayrı (COMPANY_NAME); burada sadece ek künye satırları. */
   COMPANY_LETTERHEAD: "company.letterhead",
@@ -1515,6 +1525,9 @@ export type DocumentsConfig = Record<string, DocumentConfig>;
 export interface FeatureFlags {
   /** ERP'nin kurulduğu firmanın adı (panel başlığı + uygulama geneli). */
   companyName: string;
+  /** Fabrikanın saat dilimi (IANA) — fabrika günü ve bütün görüntü/basım saatleri bundan; istemci
+   *  kendi bilgisayar dilimini KULLANMAZ. Salt-okunur: yalnız `PUT /api/feature-flags/factory-timezone` yazar. */
+  factoryTimezone: string;
   pricingEnabled: boolean;
   /** Ön muhasebe modülü (cari · fatura · tahsilat · kasa/banka) açık mı.
    *  Varsayılan KAPALI — üretici fabrika bu modülü kullanmıyor ve kapalıyken
@@ -2062,6 +2075,7 @@ export class SystemSettingService {
     const reportsClosedRead = await readReportsClosedKeys(cacheClient);
     const flags: CachedFeatureFlags = {
       companyName: await readCompanyName(cacheClient),
+      factoryTimezone: syncFactoryTimezone(await readFactoryTimezoneSetting(cacheClient)),
       pricingEnabled: await readPricingEnabled(cacheClient),
       financeEnabled: await readFinanceEnabledRaw(cacheClient),
       financeBlockNegativeCashEnabled: await readFinanceBlockNegativeCashEnabled(cacheClient),
@@ -6010,6 +6024,32 @@ export async function readCompanyName(
   });
   const v = setting?.value;
   return typeof v === "string" && v.trim() ? v : DEFAULT_COMPANY_NAME;
+}
+
+/**
+ * `company.timezone` satırı: yoksa varsayılan, GEÇERSİZSE `null` (çağıran son geçerli değerde kalır —
+ * yanlış güne yazmaktansa bayat ama bilinen dilim).
+ */
+export async function readFactoryTimezoneSetting(
+  tx?: Pick<typeof prisma, "systemSetting">,
+): Promise<string | null> {
+  const client = tx ?? prisma;
+  const row = await client.systemSetting.findUnique({
+    where: { key: SETTING_KEYS.COMPANY_TIMEZONE },
+    select: { value: true },
+  });
+  if (!row) return DEFAULT_FACTORY_TIMEZONE;
+  return isValidFactoryTimezone(row.value) ? row.value : null;
+}
+
+/** Ayar önbelleği tazelenirken süreç içi dilimi DB ile hizalar; sonuçta KULLANILAN dilimi döner. */
+function syncFactoryTimezone(fromDb: string | null): string {
+  if (fromDb === null) {
+    uyari("saat-dilimi", `company.timezone geçersiz — son geçerli dilimde kalındı (${getFactoryTimezone()})`);
+  } else if (fromDb !== getFactoryTimezone()) {
+    applyFactoryTimezone(fromDb);
+  }
+  return getFactoryTimezone();
 }
 
 /**

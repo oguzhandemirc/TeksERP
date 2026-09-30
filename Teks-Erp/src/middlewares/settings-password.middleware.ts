@@ -7,12 +7,13 @@
 // olan kişiden, o anda klavyenin başında GERÇEKTEN o kişinin olduğunu ispatlaması
 // istenir. Bu yüzden izin zincirinin YERİNE geçmez, ARDINA takılır.
 //
-// KAPSAM — BEŞ YAZMA YÜZEYİ (spec A2 üç sayıyordu; D2 turu ikisini daha buldu):
+// KAPSAM — ALTI YAZMA YÜZEYİ (spec A2 üç sayıyordu; D2 turu ikisini daha buldu):
 //   • `PATCH /api/feature-flags`                 (davranış bayrakları + ayarlar)
 //   • `PUT   /api/feature-flags/documents-logo`  (firma kimliği)
 //   • `PUT   /api/admin/settings/:key`           (yapılandırılmış ham ayarlar)
 //   • `PATCH /api/admin/backups/offsite`         (yedek hedefi — 2026-09-03)
 //   • `POST  /api/admin/backups/offsite/authorize` (Drive token — 2026-09-03)
+//   • `PUT   /api/feature-flags/factory-timezone`  (fabrika saat dilimi — 2026-09-30)
 //
 // ⚠️ KAPSAMIN YÜKLEMİ "AYAR EKRANI" DEĞİL, "`system_settings`e YAZIYOR MU"dur.
 //    Son ikisi tam da bu yüzden kaçmıştı: onlar "yedek" ekranında yaşıyor ama

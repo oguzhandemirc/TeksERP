@@ -33,7 +33,7 @@ import { assertCashBalanceCoversTx } from "./helpers/cash-balance-guard.helper";
 // uuid kolonuna giderse P2007 → 400; CLAUDE.md 2026-08-06).
 import { buildTurkishSearch, isEnumMember, readFilterList, readIdCondition } from "../utils/query-parser";
 import { tokenReplay } from "./helpers/token-replay.helper";
-import { factoryYmd } from "../constants/time";
+import { factoryDateTr, factoryYmd } from "../constants/time";
 import { resolvePartyToCardTx } from "./helpers/party-card.helper";
 import type { ApiResponse } from "../types/api.types";
 import { applyCashTxTx, cancelCashTxTx, moveAccountBalanceTx } from "./helpers/cash-ledger.helper";
@@ -236,7 +236,7 @@ export class PaymentService {
           input.exchangeRate != null ? D(input.exchangeRate) : await resolveExchangeRateTx(tx, currency, paymentDate);
         if (rate == null) {
           throw AppError.badRequest(
-            `${currency} için ${paymentDate.toLocaleDateString("tr-TR")} tarihli kur bulunamadı — Kurlar ekranından girin veya elle belirtin.`,
+            `${currency} için ${factoryDateTr(paymentDate)} tarihli kur bulunamadı — Kurlar ekranından girin veya elle belirtin.`,
           );
         }
         if (rate.lte(0)) throw AppError.badRequest("Kur sıfır veya negatif olamaz.");

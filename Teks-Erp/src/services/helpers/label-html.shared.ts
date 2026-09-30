@@ -6,6 +6,8 @@
 // import olmaması için ortak parça burada durur.
 // =============================================================================
 
+import { factoryDateTimeTr } from "../../constants/time";
+
 export interface TemplateField {
   key: string;
   label: string;
@@ -130,15 +132,11 @@ export function formatNumber(n: number | string | null | undefined): string {
   return (num as number).toLocaleString("tr-TR", { maximumFractionDigits: 2, useGrouping: false });
 }
 
+/** `GG.AA.YYYY SS:DD` — FABRİKA saat diliminden (süreç dilimi değil; tek kaynak constants/time). */
 export function formatDate(iso: string): string {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return "—";
-  const dd = String(d.getDate()).padStart(2, "0");
-  const mm = String(d.getMonth() + 1).padStart(2, "0");
-  const yy = d.getFullYear();
-  const hh = String(d.getHours()).padStart(2, "0");
-  const mn = String(d.getMinutes()).padStart(2, "0");
-  return `${dd}.${mm}.${yy} ${hh}:${mn}`;
+  return factoryDateTimeTr(d);
 }
 
 /**

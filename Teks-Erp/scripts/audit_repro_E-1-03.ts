@@ -33,7 +33,7 @@ function devDbGuard(): void {
 devDbGuard();
 
 // ÜRETİM KODU — fabrika günü tek kaynağı (kopya değil, import).
-import { factoryDayStart, factoryYmd, FACTORY_TIMEZONE } from "../src/constants/time";
+import { factoryDayStart, factoryYmd, getFactoryTimezone } from "../src/constants/time";
 
 let fail = 0;
 let pass = 0;
@@ -43,7 +43,7 @@ const check = (ok: boolean, label: string) => {
 };
 const tr = (d: Date) =>
   new Intl.DateTimeFormat("tr-TR", {
-    timeZone: FACTORY_TIMEZONE,
+    timeZone: getFactoryTimezone(),
     dateStyle: "short",
     timeStyle: "medium",
   }).format(d);

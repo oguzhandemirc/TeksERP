@@ -10,15 +10,15 @@
 // çalışıyordu: kolon UTC taşır, süreç/oturum saat dilimi neyse gün sınırı
 // oradan çıkar. Kimse hangi saat diliminde gün kestiğimizi YAZMADI. timestamptz
 // ile bu belirsizlik artık ölçülebilir bir farka dönüşüyor: aynı satır, gün
-// sınırını UTC'de mi Europe/Istanbul'da mı çizdiğine göre FARKLI güne düşer.
+// sınırını UTC'de mi fabrikanın diliminde mi çizdiğine göre FARKLI güne düşer.
 //
-// ── CEVAP: FABRİKA GÜNÜ = Europe/Istanbul TAKVİM GÜNÜ ────────────────────────
-// Fabrika tek lokasyonda (Türkiye) ve vardiyalar gece yarısını GEÇER. Operatör
+// ── CEVAP: FABRİKA GÜNÜ = FABRİKANIN SAAT DİLİMİNDEKİ TAKVİM GÜNÜ ────────────
+// Vardiyalar gece yarısını GEÇER. Operatör
 // "bugün 40 top çıktı" derken kendi duvar saatini kastediyor; saat 01:30'da
 // okutulan top onun için BUGÜNDÜR. UTC'de kesilen gün o topu DÜNE yazar
-// (Türkiye kalıcı UTC+3 → her gece 00:00–03:00 arası, yani vardiyanın tam
-// ortası, bir önceki güne kayar). Bu yüzden takvim günü soran her sorgu
-// açıkça `AT TIME ZONE 'Europe/Istanbul'` yazar.
+// (UTC+3'te her gece 00:00–03:00 arası, yani vardiyanın tam ortası, bir
+// önceki güne kayar). Bu yüzden takvim günü soran her sorgu `factoryDaySql`
+// üzerinden fabrikanın dilimini açıkça yazar.
 //
 // ── TAKVİM GÜNÜ mü, MUTLAK PENCERE mi? ───────────────────────────────────────
 // İki farklı soru vardır ve karıştırılmamalıdır:
@@ -29,24 +29,61 @@
 //                    saat diliminden BAĞIMSIZDIR → dokunma, yalnız yorumla
 //                    belirt (örn. rulo yaşlandırma kovaları, geciken sipariş).
 //
-// ── ÇOK ŞUBELİ / ÇOK SAAT DİLİMLİ GELECEK ────────────────────────────────────
-// Bugün tek saat dilimi var. İleride şube bazlı saat dilimi gerekirse çözüm
-// TEK NOKTADADIR: `FACTORY_TIMEZONE` sabiti yerine şubeden çözülen bir değer
-// geçirilir (`factoryDaySql` zaten parametre alacak şekilde yazıldı) ve
-// çağıranlar aynı kalır. Kod içine dağıtılmış `'Europe/Istanbul'` literalleri
-// bu geçişi imkânsız kılardı — bu yüzden literal YALNIZ burada bulunur.
+// ── FABRİKAYA GÖRE SEÇİLEBİLİR (kullanıcı kararı 2026-09-30) ─────────────────
+// Saat dilimi PROFİL değeridir: `company.timezone` ayarı (IANA adı), varsayılan
+// `DEFAULT_FACTORY_TIMEZONE` = bugünkü davranış. Kural ÇEKİRDEK: gün anahtarı ve
+// her görüntü/basım saati bu dosyadan okunur — literal YALNIZ burada durur.
+// Süreç içi değer açılışta `listen`den ÖNCE yüklenir (factory-timezone.service),
+// yazma ucu ve ayar önbelleği tazelemesi `applyFactoryTimezone` ile günceller.
+// Tasarım: docs/design/FABRIKA-SAAT-DILIMI.md.
 // =============================================================================
 
 import { Prisma } from "@prisma/client";
 
 /**
- * Fabrikanın takvim günü hangi saat diliminde kesilir.
- * Türkiye 2016'dan beri KALICI UTC+3'tür (yaz saati uygulaması yok) → gün
- * sınırı yıl boyu sabit, "olmayan saat" (DST ileri atlama) riski yoktur.
- * Yine de aşağıdaki JS yardımcıları DST'ye dayanıklı yazıldı: sabit +3 varsaymak
- * ileride başka bir saat dilimine geçilirse sessizce yanlışlanırdı.
+ * Kurulumun saat dilimi ayarı yoksa kullanılan değer — bugünkü davranış.
+ * Türkiye 2016'dan beri kalıcı UTC+3; yardımcılar yine de DST'ye dayanıklıdır
+ * çünkü başka bir fabrika DST'li bir dilim seçebilir.
  */
-export const FACTORY_TIMEZONE = "Europe/Istanbul";
+export const DEFAULT_FACTORY_TIMEZONE = "Europe/Istanbul";
+
+// SQL metnine gömüldüğü için (Prisma.raw) yalnız IANA ad karakterleri kabul edilir.
+const IANA_NAME_RE = /^[A-Za-z][A-Za-z0-9_+-]*(\/[A-Za-z0-9_+-]+){0,2}$/;
+
+let supportedZones: ReadonlySet<string> | null = null;
+function supportedTimeZones(): ReadonlySet<string> {
+  if (!supportedZones) {
+    const intl = Intl as unknown as { supportedValuesOf?: (key: string) => string[] };
+    supportedZones = new Set(intl.supportedValuesOf ? intl.supportedValuesOf("timeZone") : []);
+  }
+  return supportedZones;
+}
+
+/** IANA saat dilimi adı mı — `Intl.supportedValuesOf('timeZone')` listesinde (ya da UTC) ve güvenli karakterli. */
+export function isValidFactoryTimezone(value: unknown): value is string {
+  if (typeof value !== "string" || !IANA_NAME_RE.test(value)) return false;
+  return value === "UTC" || supportedTimeZones().has(value);
+}
+
+let currentTimezone: string = DEFAULT_FACTORY_TIMEZONE;
+
+/** Fabrikanın ŞU ANKİ saat dilimi — senkron, tx içinde güvenli (bellek içi değer). */
+export function getFactoryTimezone(): string {
+  return currentTimezone;
+}
+
+/**
+ * Süreç içi değeri günceller. Geçersiz ad FIRLATIR (fail-closed: yanlış güne yazmaktansa
+ * dur); çağıran önbellek tazelemesiyse hatayı yakalayıp son geçerli değerde kalır.
+ */
+export function applyFactoryTimezone(value: string): void {
+  if (!isValidFactoryTimezone(value)) throw new Error(`Geçersiz fabrika saat dilimi: ${String(value)}`);
+  currentTimezone = value;
+}
+
+function assertSqlZone(timeZone: string): void {
+  if (!isValidFactoryTimezone(timeZone)) throw new Error(`SQL'e geçersiz saat dilimi verilemez: ${timeZone}`);
+}
 
 /**
  * Günlük gruplama/etiketleme için SQL ifadesi: `<kolon>` mutlak anını FABRİKA
@@ -56,9 +93,9 @@ export const FACTORY_TIMEZONE = "Europe/Istanbul";
  * o zaman ifade planner için sabit olmaktan çıkar ve
  * `20260801050000_system_log_daily_stats_tz` ile kurulan İFADE İSTATİSTİĞİ
  * eşleşmez (audit raporu sessizce yavaş plana düşer). Bu yüzden saat dilimi
- * SQL metnine gömülür. Enjeksiyon riski yok: hem `FACTORY_TIMEZONE` hem
- * `columnExpr` derleme zamanı sabitleridir — bu fonksiyona ASLA kullanıcı
- * girdisi geçirme.
+ * SQL metnine gömülür. Saat dilimi `assertSqlZone` ile IANA listesine karşı
+ * doğrulanır; `columnExpr` derleme zamanı sabitidir — ASLA kullanıcı girdisi geçirme.
+ * Varsayılan dışı dilimde metin istatistikle eşleşmez: sonuç doğru, plan yavaş olabilir.
  *
  * ⚠️ Üretilen metin `system_logs` istatistik nesnesiyle BİREBİR eşleşmelidir.
  *    Buradaki ifadeyi değiştirirsen migration'ı da güncelle
@@ -67,7 +104,8 @@ export const FACTORY_TIMEZONE = "Europe/Istanbul";
  *
  * @param columnExpr Tırnaklanmış kolon ifadesi, örn. `rm."enteredAt"`.
  */
-export function factoryDaySql(columnExpr: string, timeZone: string = FACTORY_TIMEZONE): Prisma.Sql {
+export function factoryDaySql(columnExpr: string, timeZone: string = getFactoryTimezone()): Prisma.Sql {
+  assertSqlZone(timeZone);
   return Prisma.raw(`DATE_TRUNC('day', ${columnExpr} AT TIME ZONE '${timeZone}')::date`);
 }
 
@@ -80,13 +118,14 @@ export function factoryDaySql(columnExpr: string, timeZone: string = FACTORY_TIM
  * gecesindeki siparişleri bir önceki aya yazar ve mevsimsellik serisi sessizce
  * kayar.
  *
- * ⚠️ `'Europe/Istanbul'` literalini çağıran tarafa KOPYALAMA — bu dosya
+ * ⚠️ Saat dilimi literalini çağıran tarafa KOPYALAMA — bu dosya
  * `test_report_day_boundary.ts` taramasının tek meşru muafıdır; başka bir
  * dosyada yazılan `DATE_TRUNC('month'…)` bekçiyi KIRMIZI yapar (ve haklıdır).
  *
  * @param columnExpr Tırnaklanmış kolon ifadesi, örn. `o."orderDate"`.
  */
-export function factoryMonthSql(columnExpr: string, timeZone: string = FACTORY_TIMEZONE): Prisma.Sql {
+export function factoryMonthSql(columnExpr: string, timeZone: string = getFactoryTimezone()): Prisma.Sql {
+  assertSqlZone(timeZone);
   return Prisma.raw(`DATE_TRUNC('month', ${columnExpr} AT TIME ZONE '${timeZone}')::date`);
 }
 
@@ -94,32 +133,35 @@ export function factoryMonthSql(columnExpr: string, timeZone: string = FACTORY_T
  * Verilen anın FABRİKA saat dilimindeki duvar-saati parçaları.
  * `Intl` kullanılır (izinli paket listesinde date kütüphanesi yok) — süreç
  * saat diliminden (`TZ` env) BAĞIMSIZ çalışır. `new Date().setHours(0,0,0,0)`
- * deseni sunucu Europe/Istanbul iken doğru sonuç verir ama bunu HİÇBİR YERDE
+ * deseni süreç dilimi fabrikanınkiyle aynıyken doğru sonuç verir ama bunu HİÇBİR YERDE
  * yazmaz; konteynere alınan ya da UTC kurulan bir sunucuda sessizce 3 saat kayar.
  */
+const formatterCache = new Map<string, Intl.DateTimeFormat>();
+function zoneFormatter(kind: "day" | "clock" | "hm", timeZone: string): Intl.DateTimeFormat {
+  const cacheKey = `${kind}|${timeZone}`;
+  let f = formatterCache.get(cacheKey);
+  if (!f) {
+    const opts: Intl.DateTimeFormatOptions =
+      kind === "day"
+        ? { timeZone, year: "numeric", month: "2-digit", day: "2-digit" }
+        : kind === "clock"
+          ? { timeZone, hourCycle: "h23", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", second: "2-digit" }
+          : { timeZone, hour: "2-digit", minute: "2-digit", hourCycle: "h23" };
+    f = new Intl.DateTimeFormat(kind === "hm" ? "en-GB" : "en-CA", opts);
+    formatterCache.set(cacheKey, f);
+  }
+  return f;
+}
+
 function factoryParts(at: Date): { y: number; m: number; d: number } {
-  const parts = new Intl.DateTimeFormat("en-CA", {
-    timeZone: FACTORY_TIMEZONE,
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  }).formatToParts(at);
+  const parts = zoneFormatter("day", getFactoryTimezone()).formatToParts(at);
   const get = (type: string): number => Number(parts.find((p) => p.type === type)?.value ?? "0");
   return { y: get("year"), m: get("month"), d: get("day") };
 }
 
 /** Bir anın fabrika saat dilimindeki UTC ofseti (ms). DST'de değişebilir. */
 function factoryOffsetMs(at: Date): number {
-  const parts = new Intl.DateTimeFormat("en-CA", {
-    timeZone: FACTORY_TIMEZONE,
-    hourCycle: "h23",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-  }).formatToParts(at);
+  const parts = zoneFormatter("clock", getFactoryTimezone()).formatToParts(at);
   const get = (type: string): number => Number(parts.find((p) => p.type === type)?.value ?? "0");
   const asIfUtc = Date.UTC(get("year"), get("month") - 1, get("day"), get("hour"), get("minute"), get("second"));
   // Milisaniye kırpılır: formatToParts ms taşımaz, ofset her zaman dakika katıdır.
@@ -184,12 +226,7 @@ export function factoryDateTr(at: Date): string {
  * dilimindendir — `getHours()` süreç dilimini okur ve UTC sunucuda 3 saat kayar.
  */
 export function factoryDateTimeTr(at: Date): string {
-  const parts = new Intl.DateTimeFormat("en-GB", {
-    timeZone: FACTORY_TIMEZONE,
-    hour: "2-digit",
-    minute: "2-digit",
-    hourCycle: "h23",
-  }).formatToParts(at);
+  const parts = zoneFormatter("hm", getFactoryTimezone()).formatToParts(at);
   const get = (type: string): string => parts.find((p) => p.type === type)?.value ?? "00";
   return `${factoryDateTr(at)} ${get("hour")}:${get("minute")}`;
 }

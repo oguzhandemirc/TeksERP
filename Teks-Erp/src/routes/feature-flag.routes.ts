@@ -30,6 +30,7 @@ import {
   refreshSystemAccountRegistry,
 } from "../services/helpers/system-account.registry";
 import { AuditService } from "../services/audit.service";
+import { previewFactoryTimezone, setFactoryTimezone } from "../services/factory-timezone.service";
 import { AppError } from "../utils/app-error";
 import "../types/express-augment";
 import { manualNumberModes } from "../services/helpers/manual-number.helper";
@@ -59,6 +60,12 @@ const router = Router();
  * değerlere değil — bu yüzden `__proto__` gibi tuhaf anahtarlar da yabancı
  * sayılır ve dar yolu açmaz).
  */
+const factoryTimezonePreviewQuery = z.object({ timeZone: z.string().trim().min(1).max(64) });
+export const factoryTimezoneUpdateSchema = z.strictObject({
+  timeZone: z.string().trim().min(1).max(64),
+  expectedCurrent: z.string().trim().min(1).max(64),
+});
+
 const flagWriteGuard = (req: Request, res: Response, next: NextFunction): void => {
   const keys = Object.keys((req.body ?? {}) as Record<string, unknown>);
 
@@ -836,6 +843,72 @@ router.put(
         req.user?.userId
       );
       res.status(200).json(result);
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+/**
+ * @openapi
+ * /api/feature-flags/factory-timezone/preview:
+ *   get:
+ *     tags: [FeatureFlags]
+ *     summary: Fabrika saat dilimi değişikliğinin önizlemesi (hiçbir şey yazmaz)
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - { in: query, name: timeZone, required: true, schema: { type: string }, description: "IANA adı, ör. Europe/Berlin" }
+ *     responses:
+ *       200: { description: "{ current, proposed, changed, currentOffset, proposedOffset, todayCurrent, todayProposed, recentRollsShifted, recentShipmentsShifted, windowDays, warnings[] }" }
+ *       400: { description: "FACTORY_TIMEZONE_INVALID" }
+ */
+// Saat dilimi KURULUM DEĞERİ: gün anahtarlarını kaydırır → yalnız `admin:settings` (settings:company AÇMAZ).
+router.get(
+  "/factory-timezone/preview",
+  verifyToken,
+  requirePermission("admin:settings"),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { timeZone } = factoryTimezonePreviewQuery.parse(req.query);
+      res.status(200).json({ success: true, data: await previewFactoryTimezone(timeZone) });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+/**
+ * @openapi
+ * /api/feature-flags/factory-timezone:
+ *   put:
+ *     tags: [FeatureFlags]
+ *     summary: Fabrika saat dilimini değiştir (tek yazma yolu; atomik, audit'li)
+ *     security: [{ bearerAuth: [] }]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [timeZone, expectedCurrent]
+ *             properties:
+ *               timeZone: { type: string }
+ *               expectedCurrent: { type: string, description: "Önizlemede görülen mevcut dilim" }
+ *     responses:
+ *       200: { description: "{ timeZone, changed }" }
+ *       400: { description: "FACTORY_TIMEZONE_INVALID" }
+ *       409: { description: "FACTORY_TIMEZONE_CHANGED — arada başka biri değiştirdi" }
+ */
+router.put(
+  "/factory-timezone",
+  verifyToken,
+  requirePermission("admin:settings"),
+  requireSettingsPassword,
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const body = factoryTimezoneUpdateSchema.parse(req.body);
+      const data = await setFactoryTimezone(body, req.user?.userId);
+      res.status(200).json({ success: true, data, message: data.changed ? "Fabrika saat dilimi güncellendi" : "Saat dilimi zaten bu" });
     } catch (error) {
       next(error);
     }

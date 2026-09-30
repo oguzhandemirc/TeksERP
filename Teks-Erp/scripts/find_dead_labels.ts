@@ -28,7 +28,7 @@
 
 import { RollStatus } from "@prisma/client";
 import prisma, { pool } from "../src/lib/prisma";
-import { FACTORY_TIMEZONE } from "../src/constants/time";
+import { getFactoryTimezone } from "../src/constants/time";
 
 function numArg(name: string, dflt: number): number {
   const hit = process.argv.find((a) => a.startsWith(`--${name}=`));
@@ -64,7 +64,7 @@ const DEAD_STATUSES: RollStatus[] = [
 function fmt(d: Date | null): string {
   if (!d) return "—";
   return d.toLocaleString("tr-TR", {
-    timeZone: FACTORY_TIMEZONE,
+    timeZone: getFactoryTimezone(),
     day: "2-digit",
     month: "2-digit",
     year: "2-digit",

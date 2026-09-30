@@ -11,6 +11,7 @@ import { AppError } from "../utils/app-error";
 import { AuditService } from "./audit.service";
 import { ApiResponse } from "../types/api.types";
 import { withBarcodeRetry } from "../utils/barcode-retry";
+import { factoryDateTimeTr } from "../constants/time";
 import { nextSeriesNo } from "./number-series.service";
 import {
   readCompanyName,
@@ -131,7 +132,6 @@ export class FreeDocumentService {
     const [companyName, letterhead, logo] = [await readCompanyName(prisma), await readCompanyLetterhead(prisma), await readDocumentsLogo(prisma)];
     const cfg = sanitizeConfig(doc.config);
     const now = new Date();
-    const p = (x: number) => String(x).padStart(2, "0");
     const html = renderFreeDocumentHtml(
       {
         company: { name: companyName, letterhead, logoHash: logo.current },
@@ -140,7 +140,7 @@ export class FreeDocumentService {
       },
       {
         logoDataUrl: logo.current ? (logo.items[logo.current] ?? null) : null,
-        printedAtText: `${p(now.getDate())}.${p(now.getMonth() + 1)}.${now.getFullYear()} ${p(now.getHours())}:${p(now.getMinutes())}`,
+        printedAtText: factoryDateTimeTr(now),
         printedBy: opts?.printedBy ?? null,
         printNote: opts?.printNote?.trim().slice(0, 300) || null,
       },

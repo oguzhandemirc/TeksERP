@@ -49,6 +49,7 @@ import {
   receiptMatchTx,
   toInvoiceReceiptDto,
 } from "./helpers/invoice-receipts.helper";
+import { factoryDateTr } from "../constants/time";
 
 /** n irsaliye → 1 fatura — TEK YAZAR: pivot REPLACE + `goodsReceiptId` kolonu (n=1 → o fiş; n≠1 → null). Pivot audit'i
  *  ebeveyn fatura eyleminde (bu dosya audit'lidir); helper yalnız doğrular/okur. */
@@ -387,7 +388,7 @@ export class InvoiceService {
       let rate = input.exchangeRate != null ? D(input.exchangeRate) : await resolveExchangeRateTx(tx, currency, issueDate);
       if (rate == null) {
         throw AppError.badRequest(
-          `${currency} için ${issueDate.toLocaleDateString("tr-TR")} tarihli kur bulunamadı — Kurlar ekranından girin veya faturada elle belirtin.`,
+          `${currency} için ${factoryDateTr(issueDate)} tarihli kur bulunamadı — Kurlar ekranından girin veya faturada elle belirtin.`,
         );
       }
       if (rate.lte(0)) throw AppError.badRequest("Kur sıfır veya negatif olamaz.");
