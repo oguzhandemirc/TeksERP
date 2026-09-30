@@ -171,6 +171,7 @@ Yedek şifreleme parolası **sunucuda YOK** — fabrikada ve parola yöneticisin
 - [`MOBIL-UZAKTAN-GUNCELLEME.md`](MOBIL-UZAKTAN-GUNCELLEME.md) — tablet güncellemesi
 - [`YEDEK-GERI-YUKLEME-TATBIKATI.md`](YEDEK-GERI-YUKLEME-TATBIKATI.md) — geri yükleme provası
 - [`SATICI-KURULUM.md`](SATICI-KURULUM.md) — satıcı (lisans) sunucusu: ayrı compose projesi, tailnet portalı, şifreli yedek (hazırlık; VDS'e henüz kurulmadı)
+- [`PORTAL-GENEL-ERISIM.md`](PORTAL-GENEL-ERISIM.md) — satıcı portalının internetten yolu (`portal.etkiliyazilim.com`): Cloudflare Access + parola + TOTP, kök parolası yalnız tailnet/geri döngü; Cloudflare API sırası, DNS, doğrulama
 - [`LISANS-DEVREYE-ALMA-TESTFABRIKA.md`](LISANS-DEVREYE-ALMA-TESTFABRIKA.md) — lisansı testfabrika'da devreye alma sırası (satıcı A2 imajı → yayıncı → korumalı backend → yayın → portal → gözlem kipinde etkinleştirme → Senaryo T); salt-okuma aşama doğrulayıcısı
 
 ## Açık iş
@@ -181,6 +182,7 @@ Yedek şifreleme parolası **sunucuda YOK** — fabrikada ve parola yöneticisin
       eşleşmeyen bir çift TLS'i tamamen düşürür.
 - [x] ~~DNS: `guncelleme` A kaydı → `80.253.255.188`~~ — **çevrildi ve doğrulandı**
       (işaretli istek yeni sunucunun erişim kaydında görüldü)
+- [ ] **Köken Cloudflare'e kapalı DEĞİL** — 2026-09-30 ölçüldü: CF dışı IP'den `curl -sk --resolve lisans-test.etkiliyazilim.com:443:80.253.255.188 …/saglik` → 200. Satıcı portalının genel yönlendiricisi CF `ipallowlist` taşır ([`PORTAL-GENEL-ERISIM.md`](PORTAL-GENEL-ERISIM.md)); diğer yönlendiriciler için daraltma ayrı karar.
 - [ ] **Cloudflare SSL kipi → "Full (strict)"** — şu an "Full": CF↔origin bacağı
       şifreli ama kimliği doğrulanmıyor. Gerçek Origin CA sertifikası artık
       yerinde olduğu için sıkılaştırılabilir.

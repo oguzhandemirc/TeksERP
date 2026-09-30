@@ -1,5 +1,6 @@
-// SATICI SUNUCUSU — tek süreç, üç dinleyici: GENEL (/v1/*, /q) + TAILNET (portal; kök parolası) + İÇ
-// (patron bulutunun iç API'si; yalnız ortak sır dosyası geçerliyse açılır). Açılış: yapılandırma
+// SATICI SUNUCUSU — tek süreç, dört dinleyici: GENEL (/v1/*, /q) + TAILNET (portal; kök parolası) + İÇ
+// (patron bulutunun iç API'si; yalnız ortak sır dosyası geçerliyse açılır) + ERİŞİM (portalın Cloudflare Access
+// arkasındaki genel yolu; yalnız PORT_ERISIM verilirse açılır, Access ayarı yoksa her isteğe 404). Açılış: yapılandırma
 // (fail-closed) → anahtar deposu → anahtar künyesi → zil (PG LISTEN) → dinleyiciler → bakım işi. Kapanış: SIGTERM/SIGINT'te akışlar ve bağlantılar düzgün kapanır.
 import http from "node:http";
 import type { AddressInfo } from "node:net";
@@ -11,6 +12,8 @@ import { pool, prisma } from "./lib/prisma";
 import { createPublicApp } from "./http/public-app";
 import { createInternalApp } from "./http/internal-app";
 import { createTailnetApp } from "./http/tailnet-app";
+import { createAccessApp } from "./http/access-app";
+import { createAccessVerifier, missingAccessSettings } from "./http/access-jwt";
 import { loadInternalBearer } from "./lib/internal-bearer";
 import { loadServerSecrets } from "./keys/server-secrets";
 import type { VendorContext } from "./services/context";
@@ -45,11 +48,27 @@ async function main(): Promise<void> {
   const hub = new DoorbellHub(config.DATABASE_URL, config.ZIL_KALP_SN, config.ZIL_AZAMI_ABONE);
   await hub.start();
 
+  // ERİŞİM: doğrulayıcı yalnız dinleyici açılacaksa kurulur; JWKS yan konteynerin dosyasından (satıcı ağa çıkmaz),
+  // açılışta ısıtılır (dosya henüz yoksa uyarıdır, istek RED alır).
+  const accessVerifier = config.PORT_ERISIM !== undefined ? createAccessVerifier(config) : null;
   const publicServer = http.createServer(createPublicApp(ctx, hub));
   let tailnetAddress: AddressInfo | null = null;
-  const tailnetServer = http.createServer(createTailnetApp(ctx, hub, () => tailnetAddress));
+  const tailnetServer = http.createServer(createTailnetApp(ctx, hub, () => tailnetAddress, accessVerifier));
   const publicAddress = await listen(publicServer, config.PORT_GENEL, config.GENEL_BIND);
   tailnetAddress = await listen(tailnetServer, config.PORT_TAILNET, config.TAILNET_BIND);
+
+  let accessAddress: AddressInfo | null = null;
+  let accessServer: http.Server | null = null;
+  if (config.PORT_ERISIM !== undefined) {
+    accessServer = http.createServer(createAccessApp(ctx, { listener: () => accessAddress, tailnetListener: () => tailnetAddress, verifier: accessVerifier }));
+    accessAddress = await listen(accessServer, config.PORT_ERISIM, config.ERISIM_BIND);
+    if (accessVerifier) {
+      void accessVerifier.jwks.warm();
+      console.log(`[satici] erisim: Cloudflare Access kapısı AÇIK (takım ${accessVerifier.settings.teamDomain}, JWKS dosyası ${accessVerifier.settings.jwksFile})`);
+    } else {
+      console.warn(`[satici] erisim: ${missingAccessSettings(config).join(", ")} yok — genel portal KAPALI, ERİŞİM dinleyicisi her isteğe 404`);
+    }
+  }
 
   const internalCounters = new InternalApiCounters();
   const bearer = loadInternalBearer(config.IC_API_BELIRTEC_DOSYASI);
@@ -63,7 +82,9 @@ async function main(): Promise<void> {
   }
   const counterTimer = setInterval(() => void internalCounters.flush(), config.IC_SAYAC_DK * 60_000);
   counterTimer.unref();
-  console.log(`SATICI_DINLIYOR genel=${publicAddress.port} tailnet=${tailnetAddress.port} ic=${internalAddress ? internalAddress.port : "kapali"}`);
+  console.log(
+    `SATICI_DINLIYOR genel=${publicAddress.port} tailnet=${tailnetAddress.port} ic=${internalAddress ? internalAddress.port : "kapali"} erisim=${accessAddress ? accessAddress.port : "kapali"}`,
+  );
 
   const maintenance = new MaintenanceScheduler(ctx);
   maintenance.start();
@@ -81,6 +102,7 @@ async function main(): Promise<void> {
       new Promise<void>((r) => publicServer.close(() => r())),
       new Promise<void>((r) => tailnetServer.close(() => r())),
       new Promise<void>((r) => (internalServer ? internalServer.close(() => r()) : r())),
+      new Promise<void>((r) => (accessServer ? accessServer.close(() => r()) : r())),
     ]);
     await internalCounters.flush();
     await prisma.$disconnect().catch(() => undefined);

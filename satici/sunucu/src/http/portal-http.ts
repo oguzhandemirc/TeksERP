@@ -1,9 +1,11 @@
-// PORTAL HTTP ORTAK KATMANI — satıcı portalı (TAILNET, /portal/api) ve bayi alt-portalı (GENEL,
-// /bayi/api) aynı yapıdan doğar: oturum (çerez httpOnly + SameSite=Strict), rota başına BEYANLI
+// PORTAL HTTP ORTAK KATMANI — satıcı portalı (TAILNET ve ERİŞİM, /portal/api) ve bayi alt-portalı
+// (GENEL, /bayi/api) aynı yapıdan doğar: oturum (çerez httpOnly + SameSite=Strict), rota başına BEYANLI
 // izin, yazma rotalarında işlem kimliği (clientToken) ile idempotent eylem. Rota tabloları
 // (portal-routes.ts · dealer-routes.ts) veridir: bekçi her rotanın iznini ve kimlik beyanını ölçer.
+// Kök parolalı rota (`kokParolasi: true`) kapısıyla bağlanır (tailnet kaynağı ara katmanı); kapı verilmeyen
+// yönlendirici o rotayı bağlamaz, AÇILIŞTA düşer (fail-closed).
 // CSRF: SameSite=Strict + yazmada yalnız application/json (tarayıcı formu bu türü gönderemez) + CORS yok.
-import express, { Router, type NextFunction, type Request, type Response } from "express";
+import express, { Router, type NextFunction, type Request, type RequestHandler, type Response } from "express";
 import { z } from "zod";
 import { VendorError, notFoundError } from "../lib/errors";
 import { login, logout, resolveSession, SESSION_COOKIE, SESSION_COOKIE_PATH, type PortalSession } from "../portal/auth.service";
@@ -39,7 +41,14 @@ export interface PortalRouteDef {
   readonly path: string;
   readonly permission: PortalPermission;
   readonly kimlik: "OKUMA" | "ISLEM_KIMLIGI" | { readonly muaf: string };
+  /** Gövdede kök parolası taşır: yalnız tailnet/geri döngüden (genel yolda 404, parola CF'den geçmesin). */
+  readonly kokParolasi?: true;
   readonly handler: (c: PortalRequestContext) => Promise<PortalRouteResult>;
+}
+
+export interface PortalRouterOptions {
+  /** Kök parolalı rotaların önündeki kapı (tailnet kaynağı ara katmanı); gövde okunmadan önce koşar. */
+  readonly rootPasswordGate?: RequestHandler;
 }
 
 export const ClientTokenSchema = z.uuid();
@@ -109,7 +118,8 @@ export function readCookie(req: Request, name: string): string | undefined {
 }
 
 function cookieHeader(ctx: VendorContext, listener: PortalListener, value: string, maxAgeSec: number): string {
-  const secure = listener === "GENEL" || ctx.config.TAILNET_CEREZ_GUVENLI === "1";
+  // GENEL ve ERİŞİM yalnız HTTPS'ten (Cloudflare) gelir: çerez her zaman Secure.
+  const secure = listener !== "TAILNET" || ctx.config.TAILNET_CEREZ_GUVENLI === "1";
   return [
     `${SESSION_COOKIE[listener]}=${value}`,
     `Path=${SESSION_COOKIE_PATH[listener]}`,
@@ -162,13 +172,18 @@ export async function requirePortalSession(ctx: VendorContext, listener: PortalL
   return session;
 }
 
-export function createPortalRouter(ctx: VendorContext, listener: PortalListener, routes: readonly PortalRouteDef[]): Router {
+export function createPortalRouter(ctx: VendorContext, listener: PortalListener, routes: readonly PortalRouteDef[], options: PortalRouterOptions = {}): Router {
   const router = express.Router();
+  // Kök parolalı rota kapısı EN ÖNDE: reddedilen isteğin gövdesi (parola) hiç ayrıştırılmaz.
+  for (const def of routes.filter((d) => d.kokParolasi)) {
+    if (!options.rootPasswordGate) throw new Error(`${def.method.toUpperCase()} ${def.path}: kök parolalı rota kapısız bağlanamaz`);
+    router[def.method](def.path, options.rootPasswordGate);
+  }
   router.use(noStore);
   router.use(jsonOnlyWrites);
   router.use(express.json({ limit: "64kb", strict: true }));
-  // Vekil başlığı yalnız genel dinleyicide ve yalnız güvenilen vekilden gelen bağlantıda okunur.
-  const trust = listener === "GENEL" ? proxyTrustFrom(ctx.config) : proxyTrustFrom({ VEKIL_IP_BASLIGI: undefined, GUVENILIR_VEKIL_AGLARI: [], IC_VEKIL_AGLARI: [] });
+  // Vekil başlığı yalnız Cloudflare arkasındaki dinleyicilerde (GENEL · ERİŞİM) ve yalnız güvenilen vekilden gelen bağlantıda okunur.
+  const trust = listener === "TAILNET" ? proxyTrustFrom({ VEKIL_IP_BASLIGI: undefined, GUVENILIR_VEKIL_AGLARI: [], IC_VEKIL_AGLARI: [] }) : proxyTrustFrom(ctx.config);
 
   router.post("/oturum/ac", rateLimit({ perMinute: ctx.config.PORTAL_GIRIS_HIZ_DK, trust }), async (req: Request, res: Response) => {
     const body = parseStrict(LoginSchema, req.body ?? {});

@@ -781,10 +781,12 @@ enum PortalRolu {
   BAYI
 }
 
-/// Oturumun doğduğu dinleyici — oturum yalnız orada geçerlidir (satıcı rolleri tailnet, bayi genel).
+/// Oturumun doğduğu dinleyici — oturum yalnız orada geçerlidir (satıcı rolleri tailnet ve erişim, bayi genel).
+/// ERISIM: satıcı portalının Cloudflare Access arkasındaki genel yolu (kök parolalı uçlar orada yok).
 enum PortalDinleyici {
   GENEL
   TAILNET
+  ERISIM
 }
 
 model PortalKullanici {

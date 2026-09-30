@@ -23,6 +23,8 @@ export interface EntitlementPolicy {
   readonly maxMaintenanceMonths?: number;
   /** Kod yalnız hiç etkinleşmemiş kuruluma (bayi — D8; etkin kurulumun makine değişimi satıcı onaylı taşımadır). */
   readonly codeOnlyUnactivated?: boolean;
+  /** Doluysa imza formu HİÇ açılmaz, yerine bu açıklama (ör. genel yolda kök parolası Cloudflare'den geçmez). */
+  readonly signingBlocked?: string;
 }
 
 export function EntitlementPanel({ detail, policy, onChanged }: { detail: InstallationDetail; policy: EntitlementPolicy; onChanged: () => void }) {
@@ -43,9 +45,11 @@ export function EntitlementPanel({ detail, policy, onChanged }: { detail: Instal
         actions={
           canWrite && !closed ? (
             hak ? (
-              <Button variant="primary" onClick={() => setDialog("version")}>
-                {hak.guncelSurum === 0 ? "Lisansı imzala" : "Lisansı yenile"}
-              </Button>
+              policy.signingBlocked ? null : (
+                <Button variant="primary" onClick={() => setDialog("version")}>
+                  {hak.guncelSurum === 0 ? "Lisansı imzala" : "Lisansı yenile"}
+                </Button>
+              )
             ) : (
               <Button variant="primary" onClick={() => setDialog("create")} disabled={!policy.modules}>
                 Lisans hakkı oluştur
@@ -54,6 +58,11 @@ export function EntitlementPanel({ detail, policy, onChanged }: { detail: Instal
           ) : null
         }
       >
+        {hak && canWrite && !closed && policy.signingBlocked ? (
+          <p className="muted small" role="note">
+            {policy.signingBlocked}
+          </p>
+        ) : null}
         {hak ? (
           <KeyValues
             items={[
@@ -113,7 +122,7 @@ export function EntitlementPanel({ detail, policy, onChanged }: { detail: Instal
           onSaved={done}
         />
       ) : null}
-      {dialog === "version" && hak ? (
+      {dialog === "version" && hak && !policy.signingBlocked ? (
         <EntitlementVersionModal
           entitlement={hak}
           modules={policy.modules ?? hak.moduller}

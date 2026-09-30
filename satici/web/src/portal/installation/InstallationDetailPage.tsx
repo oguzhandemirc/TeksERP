@@ -9,7 +9,7 @@ import { fmtDateTime } from "../../shared/format";
 import { InstallationFormModal } from "../../shared/forms";
 import { useChannels, useGet } from "../../shared/hooks";
 import { CLASS_LABEL, INSTALLATION_STATUS_LABEL, label } from "../../shared/labels";
-import { useApi, useCan } from "../../shared/session";
+import { useApi, useCan, useListener } from "../../shared/session";
 import { installationName, type Catalog, type InstallationDetail } from "../../shared/types";
 import { Badge, Button, KeyValues, PageTitle, QueryState, Section } from "../../shared/ui";
 import { statusTone } from "../pages/Installations";
@@ -18,6 +18,10 @@ import { HealthPanel, IncidentsPanel, RecordsPanel } from "./IncidentPanels";
 import { InstallHistoryPanel } from "./InstallHistoryPanel";
 import { InstallmentPanel, PlannedPanel } from "./PlanPanels";
 import { SanctionPanel } from "./SanctionPanel";
+
+/** Genel yolda (Cloudflare Access) kök parolası istenmez: parola Cloudflare'den geçmesin, sunucu o ucu orada 404'ler. */
+const ROOT_SIGNING_OFF_PUBLIC =
+  "Lisans imzası kök parolası ister ve bu bağlantıdan yapılamaz (parola Cloudflare'den geçmez). İmza için portala tailnet ya da geri döngü tüneliyle (portal-baglan) bağlanın.";
 
 const TABS = [
   ["lisans", "Lisans"],
@@ -40,6 +44,7 @@ export function InstallationDetailPage() {
   const canCancel = useCan("kurulum:iptal");
   const canManage = useCan("kurulum:yonet");
   const canEntitle = useCan("hak:yaz");
+  const listener = useListener();
   const canCode = useCan("kod:uret");
   const q = useGet<InstallationDetail>(["kurulum", id], `/kurulumlar/${id}`);
   const catalog = useGet<Catalog>(["katalog"], "/katalog");
@@ -118,6 +123,7 @@ export function InstallationDetailPage() {
             passwordField: "kokParolasi",
             passwordLabel: "Kök anahtar parolası",
             allowPerpetual: true,
+            signingBlocked: listener === "ERISIM" ? ROOT_SIGNING_OFF_PUBLIC : undefined,
           }}
           onChanged={refresh}
         />

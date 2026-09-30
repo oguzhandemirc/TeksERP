@@ -8,9 +8,9 @@
 
 | Kurulur | Kurulmaz |
 |---|---|
-| `ORTAM=hazirlik` — `lisans-test.etkiliyazilim.com` (genel) + tailnet portalı | Üretim kökü (`kok-<yıl>-<n>`, kullanıcı töreni) ve `lisans.etkiliyazilim.com` — ileride **aynı** compose, `ORTAM=uretim` `.env`'iyle ayrı proje |
+| `ORTAM=hazirlik` — `lisans-test.etkiliyazilim.com` (genel) + tailnet portalı (+ isteğe bağlı genel portal `portal.<alan>`, Cloudflare Access — [`PORTAL-GENEL-ERISIM.md`](PORTAL-GENEL-ERISIM.md)) | Üretim kökü (`kok-<yıl>-<n>`, kullanıcı töreni) ve `lisans.etkiliyazilim.com` — ileride **aynı** compose, `ORTAM=uretim` `.env`'iyle ayrı proje |
 | Hazırlık kökü `hazirlik-2026-1` (yalnız TEST/DEMO imzalar), ALT `alt-hazirlik-2026-1`, İNDİRME `ind-hazirlik-2026` | CF Worker (Faz 3a) |
-| Portal web arayüzü (1f): satıcı arayüzü `/portal` (tailnet) · bayi arayüzü `/bayi` (genel) — imajın içinde (`/uygulama/web`, §2.2) | Fabrika verisi — satıcı DB'si yalnız lisans kayıtlarını taşır |
+| Portal web arayüzü (1f): satıcı arayüzü `/portal` (tailnet; genel portal kipinde ERİŞİM dinleyicisinde de, Access arkasında — kök parolalı imza formu orada açılmaz) · bayi arayüzü `/bayi` (genel) — imajın içinde (`/uygulama/web`, §2.2) | Fabrika verisi — satıcı DB'si yalnız lisans kayıtlarını taşır |
 | Satıcının kendi PG16'sı + şifreli yedek döngüsü | |
 
 Dokunulmayan: `tekserp-guncelleme` (compose · nginx · `html/` · `defter/`), `/srv/tekserp-yedek`, `/srv/tekserp-arsiv`. Traefik'e yalnız **bir ağ bağlantısı** eklenir (yeniden başlatmasız, §5.5).
@@ -23,6 +23,7 @@ Cloudflare (proxy AÇIK) ─443─► Traefik (websecure, Origin CA *.etkiliyazi
                                   ▼  ağ: tekserp-satici-hazirlik-kenar (internal)
                             satici :4610 GENEL  (/v1/* · /q · /bayi/api · /saglik)
 Mac (tailnet) ─► 100.x.y.z:4611 (tailscale0) ─DNAT─► ağ: …-tailnet ─► satici :4611 TAILNET (/portal/*)
+Tarayıcı ─► Cloudflare Access ─► Traefik Host(`portal.<alan>`) + ipallowlist(CF) ─► satici :4613 ERİŞİM (/portal/*, her istekte Access JWT; kök parolalı uç 404) — yalnız portal-genel üst dosyasıyla
                             satici ◄─ ağ: …-ic (internal) ─► satici-db (PG16) ◄─ satici-yedek
 patron (ayrı compose, PATRON_IC_IP) ─ ağ: …-ic-api (internal) ─► satici :4612 İÇ (/ic/v1/* · Bearer)
 ```
@@ -302,6 +303,7 @@ Etkinleşmemiş kurulum hiçbir durumda dışarı istek atmaz (`test_lisans_moto
 - Geri döngü kipinde portal erişimi SSH oturumu + VDS'te `nc` ile (sshd TCP yönlendirmeyi kapatır) — kabuk erişimi olan her VDS hesabı köprü adresine zaten ulaşır; kapı parola + TOTP'tir. Tailscale ana kipi bunu kaldırır (§4a).
 - **İç API ortak sırrı iki yerde** (satıcı secret dosyası root:SIR_GID 0440 · patronun kopyası root:<patron SIR_GID> 0440): VDS'te root her ikisini okur (kabul edilen — kök/konteyner kaçışı her şeyi açar). Sızarsa açığa çıkan yalnız allowlist'tir (kurulumların açık anahtarı + kid, durum, sınıf, patron bulutu hakkı/bitişi, tesis adı) ve zil çalınabilir (içerik taşımaz, kurulum başına hız sınırlı); kişisel/ticari veri yoktur. Çare rotasyon (§5b.6).
 - Kök anahtar VDS'te (parolalı) — konteyner kaçışı kök dosyasını okur ama parolasız işe yaramaz; parola yalnız imza anında formdan alt sürece gider (plan §12).
+- **Genel portal (isteğe bağlı, [`PORTAL-GENEL-ERISIM.md`](PORTAL-GENEL-ERISIM.md)):** portal internetten Cloudflare Access + parola + TOTP ile açılır; kökende her istekte Access JWT'si doğrulanır (köken 2026-09-30'da Cloudflare dışından doğrudan 200 veriyordu — ölçüldü; portal yönlendiricisine CF `ipallowlist` bağlanır). Satıcı dış bağlantısız KALIR: Access imza anahtarlarını yalnız çıkışlı `satici-jwks` yan konteyneri çeker ve paylaşılan dizine atomik yazar, satıcı salt okunur okur; kök parolası isteyen uçlar yalnız tailnet/geri döngüde kalır.
 
 ## 12. Kurulum kaydı — 2026-09-29 (hazırlık, geri döngü kipi)
 
