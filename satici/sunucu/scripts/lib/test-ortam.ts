@@ -338,7 +338,8 @@ export async function temizleKurulumlar(kurulumDbIdleri: readonly string[], kidl
     const w = { kurulumId: { in: ids } };
     // Denetim ayak izi varlık id'siyle bağlı: kurulum · hak · tesis · müşteri · taşıma talebi · kalem.
     const denetimIdleri = new Set<string>(ids);
-    for (const t of await tx.tasimaTalebi.findMany({ where: w, select: { id: true } })) denetimIdleri.add(t.id);
+    const tasimaIdleri = (await tx.tasimaTalebi.findMany({ where: w, select: { id: true } })).map((t) => t.id);
+    for (const t of tasimaIdleri) denetimIdleri.add(t);
     for (const h of await tx.hak.findMany({ where: w, select: { id: true } })) denetimIdleri.add(h.id);
     for (const p of await tx.planliEylem.findMany({ where: w, select: { id: true } })) denetimIdleri.add(p.id);
     const planlar = await tx.taksitPlani.findMany({ where: w, select: { id: true } });
@@ -362,6 +363,9 @@ export async function temizleKurulumlar(kurulumDbIdleri: readonly string[], kidl
     for (const t of talepler) denetimIdleri.add(t.id);
     await tx.destekOlayi.deleteMany({ where: { talepId: { in: talepler.map((t) => t.id) } } });
     await tx.destekTalebi.deleteMany({ where: w });
+    // Bildirim giden kutusu (kuruluma FK'lı; iletim kaydı, defter değil). Kimliksiz doğup sonra bu kuruluma
+    // bağlanan taşıma talebinin bildirimi kurulumsuzdur → talep kimliğiyle.
+    await tx.bildirim.deleteMany({ where: { OR: [w, { ilgiliKayit: { in: tasimaIdleri } }] } });
     await tx.kurulumKaydi.deleteMany({ where: w });
     await tx.kurulum.updateMany({ where: { id: { in: ids } }, data: { sonKiraId: null } });
     await tx.kira.deleteMany({ where: w });
@@ -388,6 +392,7 @@ export async function temizleBagsizTalepler(anahtarKimlikleri: readonly string[]
   await prisma.$transaction(async (tx) => {
     await tx.$executeRawUnsafe(`SET LOCAL satici.defter_temizlik = 'test'`);
     const talepler = await tx.tasimaTalebi.findMany({ where: { yeniAnahtarKimligi: { in: kidler }, kurulumId: null }, select: { id: true } });
+    await tx.bildirim.deleteMany({ where: { ilgiliKayit: { in: talepler.map((t) => t.id) }, kurulumId: null } });
     await tx.tasimaTalebi.deleteMany({ where: { id: { in: talepler.map((t) => t.id) } } });
     await tx.nonceDefteri.deleteMany({ where: { kapsam: { in: kidler.map((k) => `kid:${k}`) } } });
     await tx.denetim.deleteMany({ where: { varlikId: { in: talepler.map((t) => t.id) } } });

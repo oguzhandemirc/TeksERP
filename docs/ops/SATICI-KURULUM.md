@@ -35,6 +35,7 @@ patron (ayrı compose, PATRON_IC_IP) ─ ağ: …-ic-api (internal) ─► satic
 | `tekserp-satici-hazirlik-db` | `postgres:16-alpine` (özetle sabit) | 70 | 256 MB · 0,5 · 100 | ic |
 | `tekserp-satici-hazirlik-yedek` | `tekserp-satici-yedek:<sha>` (pg_dump 16 + `yedek-sifrele.cjs`) | 10001 | 128 MB · 0,25 · 50 | ic |
 | `satici-goc` (profil `goc`, tek seferlik) | `tekserp-satici:<sha>` | 10001 | 384 MB · 0,5 · 100 | ic |
+| `tekserp-satici-hazirlik-bildirim` (örtü `docker-compose.bildirim.yml`, §5c) | `tekserp-satici:<sha>` (aynı imaj, `node dist/notifications/sender-main.js`) | 10001 | 128 MB · 0,25 · 50 | ic · bildirim-cikis (TEK dış çıkış: yalnız tcp/443 + sabit DNS) |
 
 **İç API (patron bulutu → satıcı, §5b):** satıcının üçüncü dinleyicisi `IC_API_IP:4612` yalnız `ic-api` köprüsünde (internal, port yayını YOK). Uygulama kapısı fail-closed: istek o soketten gelmeli VE kaynak adres `PATRON_IC_IP/32` olmalı (soket adresi; başlık okunmaz) → değilse 404; ardından ortak Bearer (docker secret `ic_api_belirteci`, sabit zamanlı) → yanlışsa 401. Sır dosyası yoksa/herkese açıksa/zayıfsa iç dinleyici hiç açılmaz (günlük: `iç API KAPALI`). Köprünün ağ geçidi (.1 = VDS'in kendisi) ve dinamik aralık kaynak sayılmaz — host kabuğu da, sonradan ağa katılan bir konteyner de iç API'ye ulaşamaz.
 
@@ -218,6 +219,69 @@ VDS YAZIMIDIR (kullanıcının "uygula" cümlesiyle); S1 diliminde yazıldı, UY
 6. **Sır rotasyonu:** yeni sır dosyaya → `sudo docker compose up -d --force-recreate satici` + patronun `.env`i + patron yeniden başlatılır. Arada patron 401 alır: bulut bayat kayıtla sürer, zil kaçar (fabrika her turda yine yoklar).
 7. **İç API'yi kapatmak (ağ kalır):** `sudo truncate -s 0 $K/sirlar/ic-api-belirteci && sudo docker compose up -d --force-recreate satici` → `ic=kapali`; patron bayat kayıtla sürer.
 
+## 5c. Bildirimler (satıcı → e-posta + Telegram) — yan konteyner
+
+VDS YAZIMIDIR (kullanıcının "uygula" cümlesiyle); `lisans/bildirim` dilimi yazdı, UYGULANMADI. Yapıtlar: [`docker-compose.bildirim.yml`](../../deploy/satici/docker-compose.bildirim.yml) (örtü) · [`vds/bildirim-cikis.sh`](../../deploy/satici/vds/bildirim-cikis.sh) + [`vds/tekserp-satici-bildirim-cikis@.service`](../../deploy/satici/vds/tekserp-satici-bildirim-cikis@.service) (çıkış kuralları) · kod `satici/sunucu/src/notifications/`.
+
+**Model:** satıcı anahtar tuttuğu için DIŞ BAĞLANTISIZ kalır. Olay — yeni destek talebi · kopya şüphesi (ve ikinci pencerede kira reddi) · taşıma talebi · DR devri · ses vermeyen kurulum (`BILDIRIM_SESSIZ_SAAT`, 24) · yaklaşan kira bitişi / lisans geçerlilik bitişi / taksit vadesi (`BILDIRIM_VADE_GUN`, 7) · planlı eylemin ve taksit gecikmesinin uygulanması · portaldan deneme — satıcının KENDİ tx'inde `bildirim` giden kutusuna kanal başına (EPOSTA · TELEGRAM) satır yazar; zamana bağlı olayları bakım işi `BILDIRIM_TARAMA_DK`da (15) bir tarar, tekillik anahtarı dönemi taşır (spam yok). Gönderimi `satici-bildirim` yapar: DB'ye YALNIZ `satici_bildirim` rolüyle (göç: `bildirim` SELECT + durum kolonlarında UPDATE; başka tablo YOK), satırı atomik claim eder, Resend HTTP API / Telegram Bot API'ye yalnız çıkış ağından gider; geçici hatada üstel geri çekilme (1 · 4 · 16 · 64 · 256 dk), 6 denemede HATA; 72 saatten eski bekleyen gönderilmez. **İçerik ALLOWLIST'tir** (kod + DB seddi): olay türü · müşteri › tesis › kurulum adı · lisans no/sınıf · (destekte) konu + talep no · tarih · portal bağlantısı — talep metni, ekran görüntüsü, sağlık ayrıntısı, açan kişinin adı GİTMEZ.
+
+1. **Resend alan doğrulaması** (kullanıcı — Resend paneli + Cloudflare DNS): Resend → Domains → Add Domain → `etkiliyazilim.com` (bölge seçimi MX değerini belirler; ör. EU `eu-west-1`). Panelin verdiği ÜÇ kayıt Cloudflare'de **DNS only** (gri bulut) eklenir:
+
+   | Tür | Ad | Değer | Ne için |
+   |---|---|---|---|
+   | TXT | `resend._domainkey` | panelin verdiği `p=MIGf…` | DKIM (imza `d=etkiliyazilim.com`) |
+   | MX | `send` | `feedback-smtp.<bölge>.amazonses.com`, öncelik 10 | geri dönen posta (Return-Path) |
+   | TXT | `send` | `v=spf1 include:amazonses.com ~all` | SPF — YALNIZ `send.` alt alanında |
+
+   Posta kutusu **Zoho**'dadır (kök MX · SPF · DKIM · DMARC kurulu): Resend'in kayıtları yalnız `resend._domainkey` ve `send.` alt adlarındadır — **kök MX, kök SPF (`v=spf1 include:zoho… `) ve Zoho DKIM DEĞİŞMEZ**; Resend'in bounce alt alanı `send.` kök SPF'e dokunmaz. DMARC hizası DKIM'den gelir (`d=etkiliyazilim.com`). Panelde "Verify" → üçü yeşil. API Keys → **Sending access**, alan `etkiliyazilim.com` → `re_…` anahtarı BİR KEZ görünür: doğrudan 3. adımdaki sır dosyasına yazılır, Mac'te kopya tutulmaz. Gönderen `TeksERP Bildirim <bildirim@etkiliyazilim.com>` (posta kutusu gerekmez), alıcı `info@etkiliyazilim.com`.
+2. **Telegram botu + grup + grup kimliği** (kullanıcı; değerler YALNIZ 3. adımdaki dosyalara yazılır): @BotFather → `/newbot` → ad + `…_bot` kullanıcı adı → bot belirteci (bir kez görünür). Hedef **sıradan grup**tur: grubu aç, botu ekle; gizlilik kipi açık bot yalnız komutu görür → grupta `/start@<bot_adı>` yaz. Grup kimliği (belirteç ekrana/geçmişe düşmeden): `read -rs T; curl -s "https://api.telegram.org/bot$T/getUpdates" | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{for(const u of JSON.parse(s).result||[]){const c=(u.message||u.my_chat_member||{}).chat;if(c)console.log(c.id,c.type,c.title)}})'; unset T` → `group` türündeki satırın kimliği (negatif tam sayı). **Süper gruba yükseltme** (yönetici ayarı/üye sınırı) kimliği DEĞİŞTİRİR: Bot API 400 + `migrate_to_chat_id` döner → gönderici satırı İLK denemede kalıcı HATA yapar (`TELEGRAM_SOHBET_TASINDI`, deneme tavanı tüketilmez) ve YENİ kimliği (yalnız sayı, sır değil) hata satırına, nabza (`docker inspect` sağlık çıktısı) ve portal Bildirimler kartına yazar; otomatik geçiş YOK — yeni kimlik grup kimliği dosyasına yazılır, `sudo docker compose up -d --force-recreate satici-bildirim`. Hız sınırında (429) gönderici `retry_after` süresince o kanala istek atmaz (deneme hakkı yanmaz).
+3. **Sırlar ve kanal değerleri** (VDS; DOSYADA — `.env`e, koda, bu runbook'a değer YAZILMAZ; ekrana/geçmişe BASILMAZ; boş dosya = o kanal KAPALI):
+
+   ```bash
+   K=/opt/stack/apps/tekserp-satici-hazirlik
+   openssl rand -hex 32 | sudo tee $K/sirlar/bildirim-db-parolasi >/dev/null
+   for f in telegram-bot-belirteci telegram-grup-kimligi resend-api-anahtari; do sudo install -m 440 -o root -g 61061 /dev/null $K/sirlar/$f; done
+   sudo chown root:61061 $K/sirlar/bildirim-db-parolasi && sudo chmod 440 $K/sirlar/bildirim-db-parolasi
+   read -rs T && printf '%s' "$T" | sudo tee $K/sirlar/telegram-bot-belirteci >/dev/null; unset T
+   read -rs G && printf '%s' "$G" | sudo tee $K/sirlar/telegram-grup-kimligi >/dev/null; unset G
+   read -rs R && printf '%s' "$R" | sudo tee $K/sirlar/resend-api-anahtari >/dev/null; unset R
+   ```
+
+   Gönderici herkese okunur (o+r), biçimsiz (grup kimliği tam sayı değilse) ya da ikisi birden (ortam + dosya) verilmiş değeri kabul ETMEZ: o kanal kapalı kalır, günlük/nabız gerekçeyi değişken ADIYLA söyler (değeri değil).
+4. **`.env`** ([`ornek.env`](../../deploy/satici/ornek.env) § Bildirim): `COMPOSE_FILE` sonuna `:docker-compose.bildirim.yml` · `BILDIRIM_CIKIS_AGI` (§3'teki gibi çakışma ölçülür; 100.64/10 ve satıcının/patronun ağları dışında) · dört DOSYA yolu (DB parolası · bot belirteci · grup kimliği · Resend anahtarı) · `BILDIRIM_EPOSTA_ALICI=info@etkiliyazilim.com` · `BILDIRIM_EPOSTA_GONDEREN="TeksERP Bildirim <bildirim@etkiliyazilim.com>"` (**tırnaklı** — `.env` kabukla da okunur, `<` yönlendirmedir) · `BILDIRIM_PORTAL_ADRESI` (tailnet `http://<tailnet-adı>:4611/portal`; geri döngü kipinde `http://127.0.0.1:14611/portal`) · isteğe bağlı `BILDIRIM_DNS_1/2` (1.1.1.1 · 9.9.9.9). Satıcının eşikleri (`BILDIRIM_SESSIZ_SAAT` · `BILDIRIM_VADE_GUN` · `BILDIRIM_TARAMA_DK` · `BILDIRIM_SESSIZ_SINIFLAR`) varsayılanla kodda; değiştirmek satıcı konteynerinin ortamına ekleme ister. Mac'te `node deploy/satici/compose-denetle.mjs --env-file <.env>` yeşil olmadan geçilmez (örtünün denetim maddeleri o betiğe eklenince).
+5. **Göç + rol girişi** (göç yeni imajla §5.6'daki gibi; ardından TEK SEFER, parola stdin'den):
+
+   ```bash
+   sudo cat $K/sirlar/bildirim-db-parolasi | sudo docker compose --profile goc run --rm -T satici-goc node dist/notifications/role-cli.js
+   # → ✅ satici_bildirim: giriş açık · N tablo ölçüldü · yetki: YALNIZ bildirim SELECT + durum kolonlarında UPDATE
+   ```
+
+   Araç yetki kümesini önce ÖLÇER (her tablo × her yetki · kolon · dizi): fazladan tek yetki varsa girişi AÇMAZ ve yetkiyi adıyla basar. SCRAM doğrulayıcısı istemcide kurulur (düz parola sunucuya/sorgu günlüğüne gitmez). Parola döndürme: dosyayı yenile → aynı komut → `sudo docker compose up -d --force-recreate satici-bildirim`.
+6. **Çıkış kuralları** (DOCKER-USER + INPUT; Docker köprü trafiğinde ufw'yi ATLAR):
+
+   ```bash
+   sudo install -m 755 -o root -g root bildirim-cikis.sh $K/          # Mac'ten kopyalanan
+   sudo cp tekserp-satici-bildirim-cikis@.service /etc/systemd/system/
+   sudo systemctl daemon-reload && sudo systemctl enable --now tekserp-satici-bildirim-cikis@hazirlik
+   sudo iptables -S DOCKER-USER | grep -F "<BILDIRIM_CIKIS_AGI>"      # DNS RETURN ×4 · özel ağ DROP ×5 · tcp/443 RETURN · NEW DROP
+   sudo iptables -S INPUT | grep -F "<BILDIRIM_CIKIS_AGI>"            # VDS'in kendisine NEW DROP
+   ```
+
+7. **Başlat:** `sudo docker compose up -d satici-bildirim` → günlük `BILDIRIM_GONDERICI_HAZIR eposta=acik telegram=acik`; `sudo docker inspect --format '{{json .State.Health}}' tekserp-satici-hazirlik-bildirim` → `healthy`, çıktıda kanal durumu. Sahip rolle (yanlış `DB_KULLANICI`) kalkan gönderici `FAZLA yetkili` diyerek DURUR.
+8. **Doğrulama:**
+
+   | Ölçüm | Beklenen |
+   |---|---|
+   | Portal → Bildirimler → **Deneme bildirimi gönder** (yalnız yönetici) | `info@` kutusuna e-posta + Telegram grubuna ileti; iki satır `Gönderildi`, kanal kartları `Çalışıyor` |
+   | Bir sır dosyası boşken aynı deneme | o kanalın satırı `Kanal kapalı`, kartı `Kanal yapılandırılmamış`; diğer kanal gönderir |
+   | Grup süper gruba yükseltildiyse deneme | Telegram satırı `Hata · TELEGRAM_SOHBET_TASINDI → <yeni kimlik>`, kart `Telegram sohbeti süper gruba taşındı` + yeni kimlik; nabızda aynı cümle — kimlik dosyası güncellenip servis yeniden yaratılınca deneme `Gönderildi` |
+   | `sudo docker compose exec satici-bildirim node -e "fetch('http://1.1.1.1',{signal:AbortSignal.timeout(5000)}).then(()=>console.log('ACIK'),()=>console.log('KAPALI'))"` | `KAPALI` (443 dışı) |
+   | aynı komut `http://<KENAR_IP>:4610/saglik` | `KAPALI` (satıcının dinleyicilerine ulaşamaz) |
+   | `sudo docker compose exec satici node -e "fetch('https://api.telegram.org',{signal:AbortSignal.timeout(5000)}).then(()=>console.log('ACIK'),()=>console.log('KAPALI'))"` | `KAPALI` (satıcının kendisi DIŞARI ÇIKAMAZ) |
+   | `sudo docker compose exec satici-db psql -U satici -d satici -Atc "SELECT has_table_privilege('satici_bildirim','kurulum','SELECT')"` | `f` |
+
+9. **Geri alma:** `sudo docker compose rm -sf satici-bildirim` · `.env`den örtü eki çıkar · `sudo systemctl disable --now tekserp-satici-bildirim-cikis@hazirlik` (kuralları kaldırır) · girişi kapat: `sudo docker compose exec satici-db psql -U satici -d satici -c 'ALTER ROLE satici_bildirim NOLOGIN'`. Satıcı giden kutusuna yazmayı SÜRDÜRÜR (satırlar bekler; portal kanal kartı "Gönderici yanıt vermiyor"); göç geri alınmaz.
+
 ## 6. DNS (kullanıcı — Cloudflare)
 
 
@@ -318,6 +382,7 @@ Etkinleşmemiş kurulum hiçbir durumda dışarı istek atmaz (`test_lisans_moto
 - **İç API ortak sırrı iki yerde** (satıcı secret dosyası root:SIR_GID 0440 · patronun kopyası root:<patron SIR_GID> 0440): VDS'te root her ikisini okur (kabul edilen — kök/konteyner kaçışı her şeyi açar). Sızarsa açığa çıkan yalnız allowlist'tir (kurulumların açık anahtarı + kid, durum, sınıf, patron bulutu hakkı/bitişi, tesis adı) ve zil çalınabilir (içerik taşımaz, kurulum başına hız sınırlı); kişisel/ticari veri yoktur. Çare rotasyon (§5b.6).
 - Kök anahtar VDS'te (parolalı) — konteyner kaçışı kök dosyasını okur ama parolasız işe yaramaz; parola yalnız imza anında formdan alt sürece gider (plan §12).
 - **Genel portal (isteğe bağlı, [`PORTAL-GENEL-ERISIM.md`](PORTAL-GENEL-ERISIM.md)):** portal internetten Cloudflare Access + parola + TOTP ile açılır; kökende her istekte Access JWT'si doğrulanır (köken 2026-09-30'da Cloudflare dışından doğrudan 200 veriyordu — ölçüldü; portal yönlendiricisine CF `ipallowlist` bağlanır). Satıcı dış bağlantısız KALIR: Access imza anahtarlarını yalnız çıkışlı `satici-jwks` yan konteyneri çeker ve paylaşılan dizine atomik yazar, satıcı salt okunur okur; kök parolası isteyen uçlar yalnız tailnet/geri döngüde kalır.
+- **Bildirim göndericisi (§5c):** açılışta Docker `satici-bildirim`i çıkış birimi kuralları koymadan birkaç saniye önce başlatabilir — o pencerede çıkış tcp/443 ile sınırlı DEĞİLDİR (taşıdığı yalnız kendi DB rolü + iki kanal sırrıdır). PostgreSQL `NOTIFY`/`LISTEN`'i rol başına kısıtlamaz: gönderici rolü `satici_zil` kanalını dinleyip kurulum kimliği + konu (lisans/destek) görebilir ya da içeriksiz "şimdi yokla" zili çalabilir (kurulum başına hız sınırlı). Telegram'da `Idempotency-Key` yok: kilit süresi (2 dk) içinde çöken gönderici bir iletiyi ikinci kez yollayabilir (e-posta Resend anahtarıyla tekildir).
 
 ## 12. Kurulum kaydı — 2026-09-29 (hazırlık, geri döngü kipi)
 

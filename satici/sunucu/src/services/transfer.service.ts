@@ -11,6 +11,7 @@ import { VendorError, notFoundError, stateConflict } from "../lib/errors";
 import { lockInstallation, lockTransferKey } from "../lib/locks";
 import { prisma, type Tx } from "../lib/prisma";
 import { isUniqueViolation } from "../lib/prisma-errors";
+import { enqueueNotificationTx } from "../notifications/outbox";
 import type { VendorContext } from "./context";
 import { issueActivationCodeUnderLock, type IssuedActivationCode } from "./entitlement.service";
 import { installationCancelled, recordRequestNonce, requestScope, verifySignedRequest } from "./installation-auth";
@@ -51,6 +52,15 @@ async function openOrReturn(
         ortam: g.body.ortam,
         gerekce: g.body.gerekce,
       },
+    });
+    // Bildirim AYNI tx'te; gerekçe ve ortam GİTMEZ. Kimliksiz talepte kurulum bilinmez (etiketler boş).
+    await enqueueNotificationTx(tx, {
+      event: "TASIMA_TALEBI",
+      keyParts: [created.id],
+      installationDbId: g.installationDbId,
+      relatedId: created.id,
+      portalPath: "/tasima-talepleri",
+      referans: g.installationDbId ? null : "Kimliksiz talep — hedef kurulumu onaylarken seçin",
     });
     return { talep: created, created: true };
   } catch (err) {

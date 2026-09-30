@@ -22,6 +22,8 @@ export const PORTAL_PERMISSIONS = {
   "yayinci:yonet": ADMIN,
   "destek:yanitla": VENDOR,
   "anahtar:oku": VENDOR,
+  "bildirim:oku": VENDOR,
+  "bildirim:yonet": ADMIN,
   "bayi:portal": ["BAYI"],
 } as const satisfies Record<string, readonly PortalRole[]>;
 

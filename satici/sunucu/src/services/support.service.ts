@@ -12,6 +12,7 @@ import { recordAudit } from "../lib/audit";
 import { VendorError } from "../lib/errors";
 import { lockInstallation } from "../lib/locks";
 import { prisma, type Db, type Tx } from "../lib/prisma";
+import { enqueueNotificationTx } from "../notifications/outbox";
 import type { AuthenticatedRequest } from "./installation-auth";
 
 /** Yoklama yanıtı son bu kadar günde hareket görmüş talepleri taşır. */
@@ -77,6 +78,8 @@ export async function openSupportTicket(auth: AuthenticatedRequest, body: Suppor
       select: { id: true, talepNo: true, durum: true },
     });
     await tx.destekOlayi.create({ data: { talepId: row.id, tur: "ACILDI", metin: body.aciklama, yapan: SUPPORT_ACTOR } });
+    // Bildirim AYNI tx'te: yalnız konu + talep no (açıklama, açan, ek, sağlık GİTMEZ — allowlist).
+    await enqueueNotificationTx(tx, { event: "DESTEK_TALEBI", keyParts: [row.id], installationDbId: kurulumId, relatedId: row.id, portalPath: `/destek/${row.id}`, konu: body.konu, referans: row.talepNo });
     return { created: true, row };
   });
   if (r.created) {
