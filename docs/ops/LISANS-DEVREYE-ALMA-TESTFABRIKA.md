@@ -215,6 +215,7 @@ Yayın betikleri yayından SONRA satıcı portalına yayıncı imzalı bildirim 
 - **Komut:** `umask 077 && printf '%s\n' '{"tur":"yerel","dizin":"~/.tekserp/satici-hazirlik"}' > ~/.tekserp/yayin-belirteci-kaynagi.json`
 - **Beklenen:** yayın betikleri her adres öneki için `anahtar.ts indirme-belirteci --kanal=testfabrika --dk=60` ile TAZE belirteç üretir (İNDİRME anahtarı Mac'te); kaynak bozuk/gevşek izinliyse betik DURUR, anonime düşmez. Aşama 3.2 ✅.
 - **Geri alma:** dosyayı kaldır → eski `~/.tekserp/yayin-belirteci` düzeni (dosya yoksa betik ilk ssh'tan önce durur).
+- **Önkoşul (ölçüldü 2026-09-30 O3'):** `yerel` kaynak `satici/sunucu`'da `node --import tsx scripts/anahtar.ts` koşar → yayını koşturan ÇALIŞMA AĞACINDA `cd satici/sunucu && npm ci` yapılmış olmalı; yoksa betik `YAYIN BELİRTECİ üretilemedi (yerel; çıkış 1)` ile ilk ssh'tan önce durur (hiçbir şey yüklenmez).
 
 ## 4. testfabrika backend — korumalı paket (thinkpad-1)
 
@@ -434,6 +435,15 @@ Traefik hiçbir geri almada yeniden başlatılmaz; kenar ağı satırı yerinde 
 - **§4.5:** aşama 4 → 4.1–4.3 ✅, 4.4 ⚠️ ÖLÇÜLEMEDİ (ölçüm hesabı ve `~/.tekserp/testfabrika-gozlem.jwt` yok). Motor `CALISIYOR` açılış günlüğünden (`yoklama zamanlayıcısı aktif — satıcı: lisans-test…`); çekirdek/bütünlük/kip yalnız kimlikli uçtan okunur. 4.4 ⚠️ ile §5'e geçiş kararı yöneticide.
 - **Geri dönüş noktası:** `app.eski-20260930_055943` + `premigrate_20260930_055943.dump.tkenc` (`-GeriAl`). O2 kalıntıları (`app.basarisiz-20260930_050608`, klis2'deki iki eski zip) silindi.
 - **Araç notu:** `uzaktan-kos.ps1` izleme süreci üçüncü kez çıkmadı (SSH çıktısı `[1/9]`da dondu, görev `Ready`/0); ilerleme `C:\TeksERP\logs\uzaktan-<damga>.log`'dan okundu, yerel ssh ve uzak izleme süreci PID'le kapatıldı, görev kaydı elle silindi.
+
+## 10e. Uygulama kaydı — 2026-09-30 (O3': §5 yayın)
+
+- **Önce:** backend thinkpad-1 `/health` `2.12.0-prova.05b962e` (backend ÖNCE sağlandı) · aşama 5.1 ❌ yayında `1.3.7` (beklenen) · `vds-dogrula` ✅ AYNI (420).
+- **§5.2 panel 1.4.0:** ilk deneme belirteç kaynağında durdu (yayın ağacında `satici/sunucu/node_modules` yoktu — §3.3 önkoşulu); `npm ci` sonrası `electron-yayinla.sh --musteri=testfabrika` ✅: Setup.exe sha16 `ba26e42d144774c4` (143452181 B), `latest.yml` EN SON, sha512 ✓, belirteçli kenar boyut doğrulaması ✓, defter satırı `2026-09-30T06:25:29+03:00 1.4.0`, etiket `panel-v1.4.0`. `--dogrula` ✅.
+- **§5.3 tablet 1.0.13 (OTA, rv 54.2, damga `1790729819552`):** manifest EN SON, dış ölçüm 200 `multipart/mixed` protokol 1, bundle 8405395 B eşleşti, manifest `version 1.0.13`; etiket `tablet-v1.0.13`. `--dogrula=<manifest adresi>` ✅ (dizin adresi 403 verir — `--dogrula` DOSYA adresi ister).
+- **İlk sınamalar:** §3.3 belirteç kaynağı (`yerel`) iki önek için taze belirteç üretti, iki betik de kenarı yalnız belirteçle okudu ✅ · §3.1 yayın bildirimi: satıcı `yayin_bildirimi`nde iki satır (`YAYIN panel testfabrika 1.4.0` · `YAYIN tablet testfabrika 1.0.13`, kid `yayinci-hazirlik-2026`; satır yalnız imza doğrulanınca yazılır) ✅. Portal görünümünden okuma bu turda yapılamadı (paralel oturumla TOTP adım yarışı, `GIRIS_BASARISIZ`); ölçüm satıcı DB'sinden salt-okuma SELECT'le.
+- **Sonra:** aşama 5 ✅✅ · aşama 3 ✅✅✅ · `vds-dogrula` ✅ AYNI (420) her yazım öncesi/sonrası; adnansahin kanalında hiçbir betik koşmadı.
+- **Geri alma:** electron-updater sürüm düşürmez → ileri yayın `1.4.1`; tablet önceki OTA (`1.0.12`) ileri yayınla.
 
 ## 11. A2 önkoşul borçları (ölçüldü 2026-09-30 · G1–G3 + G5 iniş A2 I7'de KAPANDI)
 
