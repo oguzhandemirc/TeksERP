@@ -93,6 +93,10 @@ export const ERISIM_PORTAL_ROTALARI: ReadonlySet<string> = new Set([
   "GET /destek/:id/ek",
   "POST /destek/:id/yanitla",
   "POST /destek/:id/kapat",
+  // bildirimler — kanal durumu + son bildirimler (bildirim:oku) · deneme bildirimi (bildirim:yonet); kanal sırrı taşımaz
+  "GET /bildirimler",
+  "GET /bildirimler/durum",
+  "POST /bildirimler/deneme",
 ]);
 
 /** /portal/api/ham — ham gövdeli dağıtım uçları (distribution-raw.ts). */

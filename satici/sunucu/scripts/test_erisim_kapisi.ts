@@ -524,8 +524,11 @@ async function main(): Promise<void> {
     `${kokluler.length} kök · ${hassaslar.length} hassas`,
   );
   kontrol(
-    "§4c liste giriş/çıkış/oturum/parola değişimi uçlarını ve temel okumayı taşır (boş liste yeşil vermez)",
-    SESSION_ROUTE_KEYS.every((k) => ERISIM_PORTAL_ROTALARI.has(k)) && ["GET /pano", "POST /kurulumlar/:id/yaptirim", "POST /kurulumlar/:id/etkinlestirme-kodu"].every((k) => ERISIM_PORTAL_ROTALARI.has(k)),
+    "§4c liste giriş/çıkış/oturum/parola değişimi uçlarını, temel okumayı ve bildirimleri (bilinçli satır) taşır (boş liste yeşil vermez)",
+    SESSION_ROUTE_KEYS.every((k) => ERISIM_PORTAL_ROTALARI.has(k)) &&
+      ["GET /pano", "POST /kurulumlar/:id/yaptirim", "POST /kurulumlar/:id/etkinlestirme-kodu", "GET /bildirimler", "GET /bildirimler/durum", "POST /bildirimler/deneme"].every((k) =>
+        ERISIM_PORTAL_ROTALARI.has(k),
+      ),
     `${liste.length} satır`,
   );
   const sentetikListe = new Set([...ERISIM_PORTAL_ROTALARI, "POST /haklar/:id/surum", "POST /kullanicilar/:id/totp-sifirla", "GET /olmayan-rota"]);
