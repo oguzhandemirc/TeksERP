@@ -1,6 +1,7 @@
 import apiClient from "./apiClient";
 import type { ApiResponse } from "@/types/api";
 import type {
+  LicenseAcceptanceView,
   LicenseDataExportManifest,
   LicenseDetail,
   LicenseOfflineRequest,
@@ -9,6 +10,7 @@ import type {
   LicenseTransferResult,
   OfflinePurpose,
   PollOutcome,
+  RecordLicenseAcceptanceInput,
 } from "@/types/license";
 
 const BASE = "/api/license";
@@ -42,6 +44,10 @@ export const licenseService = {
   /** Herkes — başlık varsa tam doğrulama; kimliksize `{ ayrinti: false }`. */
   status: () => data(apiClient.get<ApiResponse<LicenseStatusResponse>>(`${BASE}/durum`, QUIET)),
   detail: () => data(apiClient.get<ApiResponse<LicenseDetail>>(`${BASE}/detay`, QUIET)),
+  /** Sözleşme kabul metni (Ek-7) + bu kurulumun kabul durumu; eski backend 404 döner (uç yok). */
+  acceptance: () => data(apiClient.get<ApiResponse<LicenseAcceptanceView>>(`${BASE}/kabul`, QUIET)),
+  accept: (input: RecordLicenseAcceptanceInput) =>
+    data(apiClient.post<ApiResponse<LicenseAcceptanceView>>(`${BASE}/kabul`, input, QUIET)),
   activate: (kod: string) =>
     data(apiClient.post<ApiResponse<LicenseDetail>>(`${BASE}/etkinlestir`, { kod }, QUIET)),
   pollNow: () =>

@@ -140,8 +140,8 @@ async function main(): Promise<void> {
     kontrol("§4a kurulum ETKİN, anahtar + parmak izi + zincir ucu yazıldı", kurulum.durum === "ETKIN" && kurulum.anahtarKimligi === f.kurulum.kid && kurulum.sonKiraId === kira.kiraId);
     const kod2 = await prisma.etkinlestirmeKodu.findFirstOrThrow({ where: { kurulumId: k.kurulumDbId } });
     kontrol("§4b kod KULLANILDI (anahtar + kira bağlı)", kod2.durum === "KULLANILDI" && kod2.kullananAnahtarKimligi === f.kurulum.kid && kod2.kiraId === kira.kiraId);
-    const kayit = await prisma.kurulumKaydi.findMany({ where: { kurulumId: k.kurulumDbId } });
-    kontrol("§4c kurulum kaydı: ETKINLESTI", kayit.length === 1 && kayit[0]!.olay === "ETKINLESTI");
+    const kayit = await prisma.kurulumKaydi.findMany({ where: { kurulumId: k.kurulumDbId }, orderBy: [{ createdAt: "asc" }, { id: "asc" }] });
+    kontrol("§4c kurulum kaydı: sözleşme kabulü → ETKINLESTI (Ek-7, aynı tx)", kayit.length === 2 && kayit[0]!.olay === "SOZLESME_KABUL_EDILDI" && kayit[1]!.olay === "ETKINLESTI", kayit.map((r) => r.olay).join(","));
     const kiraSatiri = await prisma.kira.findUniqueOrThrow({ where: { id: kira.kiraId } });
     kontrol("§4d kira defterde (zincir kökü)", kiraSatiri.karar === "ETKINLESTIRME" && kiraSatiri.oncekiKiraId === null);
     const kunye = await prisma.anahtarKaydi.findMany();

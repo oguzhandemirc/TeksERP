@@ -12,6 +12,7 @@
 // =============================================================================
 import { Router, type NextFunction, type Request, type Response } from "express";
 import { z } from "zod";
+import { readClientVersionHeader } from "../constants/client-info";
 import { verifyToken } from "../middlewares/auth.middleware";
 import { requireAnyPermission, requirePermission } from "../middlewares/rbac.middleware";
 import { AppError } from "../utils/app-error";
@@ -29,6 +30,7 @@ import {
   requestTransfer,
   updateProxySettings,
 } from "../services/license.service";
+import { RecordLicenseAcceptanceSchema, getLicenseAcceptanceView, recordLicenseAcceptance } from "../services/license-acceptance.service";
 
 const router = Router();
 
@@ -136,6 +138,58 @@ router.get("/detay", canView, (_req: Request, res: Response) => {
 
 /**
  * @openapi
+ * /api/license/kabul:
+ *   get:
+ *     tags: [Lisans]
+ *     summary: İlk kurulum sözleşme kabul metni (Ek-7) + bu kurulumun kabul durumu ve kabul defteri
+ *     security: [{ bearerAuth: [] }]
+ *     responses:
+ *       200: { description: "{ metin: { kimlik, ozet, taslak, bloklar, kutular }, durum, gecerli, kayitlar, anahtarKimligi, oneri: { adSoyad } }" }
+ *   post:
+ *     tags: [Lisans]
+ *     summary: Sözleşmeyi kabul et (etkinleştirmenin ön şartı; clientToken ile idempotent)
+ *     security: [{ bearerAuth: [] }]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [clientToken, metinKimligi, metinOzeti, kutular, adSoyad, unvan]
+ *             properties:
+ *               clientToken: { type: string, format: uuid }
+ *               metinKimligi: { type: string }
+ *               metinOzeti: { type: string, description: gösterilen metnin sha256'sı }
+ *               kutular: { type: array, items: { type: string } }
+ *               adSoyad: { type: string, maxLength: 120 }
+ *               unvan: { type: string, maxLength: 120 }
+ *     responses:
+ *       201: { description: Kabul kaydedildi — güncel kabul görünümü }
+ *       400: { description: Eksik kutu (LICENSE_ACCEPTANCE_BOXES) ya da geçersiz gövde }
+ *       409: { description: Metin değişti (LICENSE_ACCEPTANCE_TEXT_CHANGED) · depo hazır değil · işlem kimliği çakıştı }
+ */
+router.get("/kabul", canView, async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    res.status(200).json({ success: true, data: await getLicenseAcceptanceView(req.user?.userId ?? null) });
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.post("/kabul", canManage, async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const input = RecordLicenseAcceptanceSchema.parse(req.body ?? {});
+    const userId = req.user?.userId;
+    if (!userId) throw AppError.unauthorized("Oturum gerekli.");
+    const data = await recordLicenseAcceptance({ userId, input, panelVersion: readClientVersionHeader(req.headers) });
+    res.status(201).json({ success: true, data });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * @openapi
  * /api/license/etkinlestir:
  *   post:
  *     tags: [Lisans]
@@ -148,7 +202,7 @@ router.get("/detay", canView, (_req: Request, res: Response) => {
  *           schema: { type: object, required: [kod], properties: { kod: { type: string } } }
  *     responses:
  *       200: { description: Etkinleşti — güncel ayrıntı }
- *       409: { description: Satıcı reddetti / zaten etkin / yapılandırılmamış }
+ *       409: { description: Sözleşme kabul edilmemiş (LICENSE_ACCEPTANCE_REQUIRED) / satıcı reddetti / zaten etkin / yapılandırılmamış }
  *       502: { description: Satıcıya ulaşılamadı }
  */
 router.post("/etkinlestir", canManage, async (req: Request, res: Response, next: NextFunction) => {

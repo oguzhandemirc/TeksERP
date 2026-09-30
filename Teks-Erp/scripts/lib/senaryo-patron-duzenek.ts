@@ -194,6 +194,8 @@ export async function duzenekKur(): Promise<Duzenek> {
   const g = await istemci.giris();
   if (g.status !== 200) throw new Error(`fabrika girişi ${g.status} ${g.kod ?? ""}`);
   if ((await istemci.bekle((d) => d.hazir, 30_000)).ms === null) throw new Error("lisans motoru hazır olmadı");
+  const kb = await istemci.sozlesmeyiKabulEt();
+  if (kb.status !== 201) throw new Error(`sözleşme kabulü ${kb.status} ${kb.kod ?? ""}`);
   const e = await istemci.istek("POST", "/api/license/etkinlestir", { kod: satici.kod });
   if (e.status !== 200) throw new Error(`etkinleştirme ${e.status} ${e.kod ?? ""}`);
   const lisansId = f.kurulumId;

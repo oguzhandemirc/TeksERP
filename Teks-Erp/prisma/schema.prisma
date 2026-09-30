@@ -617,6 +617,8 @@ model User {
   mergedSubcontractors            Subcontractor[]           @relation("SubcontractorMergedBy")
   /// Destek talebi künyesi (kim açtı).
   supportTickets                  SupportTicket[]           @relation("SupportTicketCreatedBy")
+  /// İlk kurulum sözleşme kabulleri (kim kabul etti — Ek-7).
+  licenseAcceptances              LicenseAcceptance[]       @relation("LicenseAcceptanceAcceptedBy")
 
   @@map("users")
 }
@@ -10807,4 +10809,36 @@ model SupportTicketReply {
 
   @@index([ticketId, repliedAt])
   @@map("support_ticket_replies")
+}
+
+/// İLK KURULUM SÖZLEŞME KABULÜ (Ek-7) — ekleme-yalnız: satır değişmez, silinmez; yeni kabul yeni satırdır.
+/// Kurulum ANAHTARINA (`installationKeyId`) bağlıdır: anahtar değişince (taşıma · yeni makine · DB kopyası) eski
+/// kabul geçmez. Geçerli kabul = bu anahtarın EN SON satırı ∧ güncel metin. `document` KURULUM imzalı kabul belgesi
+/// (`tekserp-kabul`): etkinleştirme isteği onu taşır, satıcı kurulum kaydına yazar (hukuki "ne oldu"nun sahibi orası).
+/// `id` belgedeki `kabulId`dir (servis üretir). `createdAt` belgenin `zaman`ıyla AYNI andır (tek saat).
+model LicenseAcceptance {
+  id                String   @id @default(uuid()) @db.Uuid
+  clientToken       String?  @unique @db.Uuid
+  /// Hukuk belgesinin "Metin kimliği" (`KM-2026.1`) — değer kümesi büyür: VarChar.
+  textId            String   @db.VarChar(40)
+  /// Gösterilen tam metnin sha256'sı (onaltılık).
+  textDigest        String   @db.VarChar(64)
+  /// İşaretlenen onay kutuları (metindeki numaralar).
+  boxes             String[]
+  acceptorName      String   @db.VarChar(120)
+  acceptorTitle     String   @db.VarChar(120)
+  /// Kabul eden oturum kullanıcısı — kabul oturumsuz doğamaz (NOT NULL; tablo boş doğar).
+  acceptedById      String   @db.Uuid
+  installationKeyId String   @db.VarChar(64)
+  /// Kabul anında lisans kimliği (etkinleşmemişte NULL) — bilgi.
+  licenseId         String?  @db.Uuid
+  clientVersion     String?  @db.VarChar(60)
+  serverVersion     String   @db.VarChar(60)
+  document          String
+  createdAt         DateTime @default(now()) @db.Timestamptz
+
+  acceptedBy User @relation("LicenseAcceptanceAcceptedBy", fields: [acceptedById], references: [id], onDelete: Restrict)
+
+  @@index([installationKeyId, createdAt])
+  @@map("license_acceptances")
 }

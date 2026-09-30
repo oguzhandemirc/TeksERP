@@ -20,6 +20,7 @@
 | `protocol/istek.ts` | İSTEK imzala/doğrula · `readRequestIdentity` · `bodyDigest` · `generateNonce` · `NonceLedger` · çevrimdışı `zarf` |
 | `protocol/parmak-izi.ts` | etken normalleştirme · tuzlu özet · eşleşme kararı (üç sonuç) |
 | `protocol/anahtar-sarma.ts` | anahtar dosyası SARMASI — tek uygulama: `sealPrivateKey` · `openSealedKey` (scrypt → AES-256-GCM, AAD tür + kid + açık yarı + sınıflar) · `KeyFileError` · `passwordBuffer` · `assertPasswordStrength` (≥ 12) · ham ↔ Ed25519 özel yarı; satıcının kök/bayi dosyaları (`keys/key-files.ts`) ve imza aracının üretim PAKET anahtarı (`scripts/lib/butunluk-imza.ts`) kullanır, fabrika çalışma zamanı kullanmaz (`index.ts`e girmez) |
+| `protocol/kabul.ts` + `kabul-katalogu.ts` | ilk kurulum sözleşme kabulü (Ek-7): kabul belgesi şeması (`AcceptanceDocSchema`) · `signAcceptance` · `verifyAcceptance` (YOK · IMZA · SEMA · METIN · KUTU) · `acceptanceTextDigest`; katalog (kimlik · sha256 · kutular) hukuk belgesinden ÜRETİLİR (`Teks-Erp/scripts/kabul-metni-uret.ts`), elle düzenlenmez |
 | `protocol/uclar.ts` | satıcı uç yolları, istek/yanıt gövde şemaları, sağlık özeti allowlist'i, zil konuları, satıcı hata kodları, durum/kademe/kip kelime dağarcığı, etkinleştirme kodu biçimi + TEK üreticisi |
 | `state.ts` + `state-rules.ts` + `state-rules-trust.ts` | SAF lisans durumu (fabrika tarafı; aynaya girmez) — güven kuralları (geri alma pini, okunamayan dosya, satıcı saati) ayrı dosyada |
 | `saat.ts` | güvenilir saat hesabı + imzalı `durum.json` belgesi (fabrika tarafı) |
@@ -45,6 +46,7 @@
 | `tekserp-istek` | KURULUM | satıcı |
 | `tekserp-indirme` | İNDİRME | CF Worker (kâhin: `indirme.ts`) |
 | `tekserp-durum` | KURULUM | fabrika (yerel, ağa çıkmaz) |
+| `tekserp-kabul` | KURULUM | satıcı (ilk kurulum sözleşme kabulü, Ek-7 — `protocol/kabul.ts`; etkinleştirme gövdesinde taşınır, satıcı kurulum kaydında saklar) |
 
 ## 2. Anahtar hiyerarşisi ve güven zinciri
 
@@ -133,7 +135,7 @@
 
 | Uç | Amaç | İstek gövdesi | Yanıt |
 |---|---|---|---|
-| `POST /v1/etkinlestir` | `etkinlestir` | `ActivateRequestSchema` `{v, kod: TKS-XXXX-XXXX-XXXX-XXXX, kurulumId?, acikAnahtar, sifrelemeAnahtari?, parmakIzi, ortam}` (`sifrelemeAnahtari` = kurulumun X25519 açık yarısı, Faz 2d; KATI gövde → satıcı fabrikadan ÖNCE yayınlanır) — `kurulumId` yok/`""`/`null` = yok (kurulumu kod belirler) | `LicenseResponseSchema` (+ `kurulumId`, `kodTuru`) |
+| `POST /v1/etkinlestir` | `etkinlestir` | `ActivateRequestSchema` `{v, kod: TKS-XXXX-XXXX-XXXX-XXXX, kurulumId?, acikAnahtar, sifrelemeAnahtari?, parmakIzi, ortam, kabul?}` (`sifrelemeAnahtari` = kurulumun X25519 açık yarısı, Faz 2d; `kabul` = KURULUM imzalı sözleşme kabul belgesi `tekserp-kabul`, Ek-7 — şemada opsiyonel, satıcı kodu TÜKETECEK istekte ZORUNLU tutar → 409 `KABUL_GEREKLI`; KATI gövde → satıcı fabrikadan ÖNCE yayınlanır) — `kurulumId` yok/`""`/`null` = yok (kurulumu kod belirler) | `LicenseResponseSchema` (+ `kurulumId`, `kodTuru`) |
 | `POST /v1/yokla` | `yokla` | `PollRequestSchema` (aşağıda) | `LicenseResponseSchema` |
 | `GET /v1/zil` (SSE) | `zil` | — | `event: zil` / `data: {konu}`; 25 sn'de bir yorum satırı |
 | `POST /v1/cevrimdisi` | zarfın içindeki | `OfflineRequestSchema` `{v, zarf}` | `LicenseResponseSchema` |
@@ -165,6 +167,7 @@
 | `ETKINLESTIRME_KODU_GECERSIZ` / `_KULLANILMIS` | 404 / 409 | kod yok / atomik claim kaybedildi |
 | `TASIMA_ONAYI_BEKLIYOR` | 409 | ikinci anahtar onay bekliyor (kurulum ek sürede çalışır) |
 | `TASIMA_KODU_GEREKLI` | 409 | kurulum başka anahtarla ETKİN — yeni makine yalnız onaylı taşıma koduyla etkinleşir, `ilk` kod yetmez (D8) |
+| `KABUL_GEREKLI` | 409 | kodu tüketecek etkinleştirme geçerli bir sözleşme kabul belgesi taşımıyor (Ek-7 §5) — `details.neden`: `YOK` · `IMZA` (gövdenin anahtarıyla doğrulanmadı/başka typ) · `SEMA` · `METIN` (kimlik + özet katalogda yok) · `KUTU` (metnin kutuları eksik/fazla); ucuz ön denetim: kod ve nonce tüketilmez; tüketilmiş kodun ağ tekrarı kabul istemez; çevrimdışı zarf da aynı kapıdan |
 | `KIRA_VERILMEDI` | 403 | kopya şüphesinin ikinci penceresi |
 | `DR_ANA_BELIRSIZ` | 409 | kimliksiz DR devralımında tesiste tek etkin ÜRETİM kurulumu yok (0 ya da birden çok) — ana kimliği portaldan/ana Lisans ekranından verilir |
 | `HIZ_SINIRI` | 429 | istemci IP'si başına ya da (imza doğrulandıktan sonra) kurulum başına dakikalık sınır aşıldı (`Retry-After`); vekil başlığı yalnız güvenilen kenardan okunur |
@@ -318,7 +321,9 @@ Yanıt zarfı backend'in genel biçimidir: başarı `{ success: true, data: T }`
 | `GET /detay` | `license:view` ∨ `license:manage` | — | `LicenseDetail` |
 | `GET /proxy` | `license:view` ∨ `license:manage` | — | `LicenseProxySettings` |
 | `PUT /proxy` | `license:manage` | `{ adres: string \| null, atla?: string \| null }` (null = kaldır; yeniden başlatma YOK) | `LicenseProxySettings` |
-| `POST /etkinlestir` | `license:manage` | `{ kod }` (elle yazım normalleşir: büyük harf, O→0, I/L→1, tire) | `LicenseDetail` |
+| `GET /kabul` | `license:view` ∨ `license:manage` | — | `LicenseAcceptanceView` (sözleşme kabul metni + durum + defter, Ek-7) |
+| `POST /kabul` | `license:manage` | `{ clientToken, metinKimligi, metinOzeti, kutular[], adSoyad, unvan }` — metin güncel olmalı (409 `LICENSE_ACCEPTANCE_TEXT_CHANGED`), bütün kutular (400 `LICENSE_ACCEPTANCE_BOXES`); clientToken ile idempotent | `LicenseAcceptanceView` (201) |
+| `POST /etkinlestir` | `license:manage` | `{ kod }` (elle yazım normalleşir: büyük harf, O→0, I/L→1, tire) — geçerli sözleşme kabulü yoksa satıcıya GİTMEDEN 409 `LICENSE_ACCEPTANCE_REQUIRED` (`kabulDurumu`); `cevrimdisi-istek` / `aktarma-istegi` `amac: etkinlestir` aynı kapıdan | `LicenseDetail` |
 | `POST /yokla` | `license:manage` | — | `{ outcome: PollOutcome, code?: string }` |
 | `POST /cevrimdisi-istek` | `license:manage` | `{ amac?: "yokla" \| "etkinlestir", kod?: string }` — kod GÖVDEDE (URL'de değil) | `LicenseOfflineRequest` (QR: `qrAdresi`) |
 | `GET /cevrimdisi-istek` (ESKİ) | `license:manage` | `?amac=…&kod=` — bir sürüm geçiş; `Deprecation: true`, günlükte kod maskeli | aynı |
@@ -395,6 +400,15 @@ interface LicenseEffect {
 }
 interface LicenseProxySettings { kaynak: "panel" | "ortam" | "yok"; adres: string | null /* kimlik maskeli: http://***@host:port */; atla: string | null; destekleniyor: boolean }
 interface LicenseDownloadToken { yolOneki: string; belirtec: string; gecerlilikSonu: string | null }
+// GET|POST /kabul — sözleşme kabulü (Ek-7). Metin backend'in pakette taşıdığı güncel metindir (hukuk belgesinden üretilir).
+type AcceptanceBlock = { tur: "paragraf"; satirlar: string[] } | { tur: "liste"; maddeler: string[] } | { tur: "kutu"; no: string; metin: string } | { tur: "alanlar" } | { tur: "dugmeler" };
+interface LicenseAcceptanceRecord { kabulId: string; metinKimligi: string; metinOzeti: string; kutular: string[]; adSoyad: string; unvan: string;
+  kabulEden: { id: string; ad: string }; anahtarKimligi: string; lisansKimligi: string | null; istemciSurum: string | null; sunucuSurum: string; zaman: string }
+interface LicenseAcceptanceView {
+  metin: { kimlik: string; ozet: string /* sha256 hex */; taslak: boolean; bloklar: AcceptanceBlock[]; kutular: string[] };
+  durum: "GECERLI" | "YOK" | "METIN_DEGISTI" | "ANAHTAR_DEGISTI";  // geçerli = bu kurulum ANAHTARININ en son kabulü ∧ güncel metin
+  gecerli: LicenseAcceptanceRecord | null; kayitlar: LicenseAcceptanceRecord[] /* son 20 */; anahtarKimligi: string | null; oneri: { adSoyad: string | null };
+}
 interface LicenseOfflineRequest {
   amac: "yokla" | "etkinlestir"; zarf: string; gecerlilikSonu: string /* +10 dk */; hedefYol: "/v1/cevrimdisi";
   hedefUrl: string | null; istekGovdesi: { v: 1; zarf: string }; qrAdresi: string | null /* <satıcı>/q#<zarf> */;
@@ -409,13 +423,14 @@ interface LicenseDataExportManifest {
 type PollOutcome = "YAPILANDIRILMAMIS" | "HAZIR_DEGIL" | "ETKIN_DEGIL" | "BASARILI" | "BASARISIZ";
 ```
 
-**Hata kodları (`details.code`):** `LICENSE_STORE_UNAVAILABLE` 409 (depo `app\`/`BACKUP_DIR` içinde ya da yazılamıyor) · `LICENSE_IDENTITY_NOT_READY` 409 · `LICENSE_NOT_CONFIGURED` 409 (satıcı adresi yok: `LICENSE_SERVER_URL=kapali` ya da biçimsiz) · `LICENSE_NOT_ACTIVE` 409 · `LICENSE_ALREADY_ACTIVE` 409 · `LICENSE_CODE_INVALID` 400 · `LICENSE_VENDOR_UNREACHABLE` 502 (+ `egressCode`) · `LICENSE_VENDOR_REJECTED` 409 (+ `vendorCode` ∈ §5 satıcı kodları, HER kodun kendi TR mesajı — tablo `license-wire.helper.ts` `VENDOR_MESSAGES`, `VendorErrorCode` üstünde tam; + `tekrarDenenebilir`: `TEKRAR_DENEYIN` · `HIZ_SINIRI` · `ISTEK_TEKRAR` · `SUNUCU_HATASI` için `true`) · `LICENSE_RESPONSE_INVALID` 400 (+ `protocolCode`; imzasız/kurcalı/başka kuruluma ait yanıt) · `LICENSE_LEASE_STALE` 409 · `LICENSE_UPDATES_FROZEN` 403 · `LICENSE_DOWNLOAD_TOKEN_UNAVAILABLE` 404 · `LICENSE_PROXY_INVALID` 400 · `LICENSE_PROXY_UNSUPPORTED` 409 (Node < 22.21 / 24.5) · `DEVICE_OR_SESSION_REQUIRED` 401. Kapı kodları (`LICENSE_RESTRICTED` · `LICENSE_SUSPENDED` · `LICENSE_MODULE` · `LICENSE_GATE`) §14a'da.
+**Hata kodları (`details.code`):** `LICENSE_ACCEPTANCE_REQUIRED` 409 (+ `kabulDurumu`; etkinleştirme sözleşme kabulü ister) · `LICENSE_ACCEPTANCE_TEXT_CHANGED` 409 · `LICENSE_ACCEPTANCE_BOXES` 400 · `LICENSE_ACCEPTANCE_TEXT_UNPUBLISHED` 409 (paketin metni katalogda yok) · `LICENSE_STORE_UNAVAILABLE` 409 (depo `app\`/`BACKUP_DIR` içinde ya da yazılamıyor) · `LICENSE_IDENTITY_NOT_READY` 409 · `LICENSE_NOT_CONFIGURED` 409 (satıcı adresi yok: `LICENSE_SERVER_URL=kapali` ya da biçimsiz) · `LICENSE_NOT_ACTIVE` 409 · `LICENSE_ALREADY_ACTIVE` 409 · `LICENSE_CODE_INVALID` 400 · `LICENSE_VENDOR_UNREACHABLE` 502 (+ `egressCode`) · `LICENSE_VENDOR_REJECTED` 409 (+ `vendorCode` ∈ §5 satıcı kodları, HER kodun kendi TR mesajı — tablo `license-wire.helper.ts` `VENDOR_MESSAGES`, `VendorErrorCode` üstünde tam; + `tekrarDenenebilir`: `TEKRAR_DENEYIN` · `HIZ_SINIRI` · `ISTEK_TEKRAR` · `SUNUCU_HATASI` için `true`) · `LICENSE_RESPONSE_INVALID` 400 (+ `protocolCode`; imzasız/kurcalı/başka kuruluma ait yanıt) · `LICENSE_LEASE_STALE` 409 · `LICENSE_UPDATES_FROZEN` 403 · `LICENSE_DOWNLOAD_TOKEN_UNAVAILABLE` 404 · `LICENSE_PROXY_INVALID` 400 · `LICENSE_PROXY_UNSUPPORTED` 409 (Node < 22.21 / 24.5) · `DEVICE_OR_SESSION_REQUIRED` 401. Kapı kodları (`LICENSE_RESTRICTED` · `LICENSE_SUSPENDED` · `LICENSE_MODULE` · `LICENSE_GATE`) §14a'da.
 
 **Davranış sözleşmesi:**
 - **Gözlem = sıfır fark:** `durum.kademe` NORMAL, `bant` null, `guncellemeIzni` true — istemci bant/kilit ÇİZMEZ; yalnız Lisans ekranı `detay.durum.hesaplanan*` alanlarını gösterir.
 - **Satıcı adresi:** tek çözüm `lib/license/vendor-url.ts` (`resolveVendorUrl`, `STARTUP_VENDOR`) — `LICENSE_SERVER_URL` verilmezse `https://lisans.etkiliyazilim.com` (üretim), hazırlık kurulumunda `https://lisans-test.etkiliyazilim.com`, `kapali` dışarı çıkışı kapatır; yalnız köken (`https://host[:port]`; düz HTTP yalnız döngü adresi) kabul, biçimsiz değer = adres yok + açılış uyarısı (bekçi `test_lisans_satici_adresi`).
 - **Dışarı çıkış:** kurulum etkinleşmemişse ya da satıcı adresi yoksa (`kapali`/biçimsiz) backend satıcıya HİÇ istek atmaz (yoklama, zil). Yoklama saatlik (kiradaki `yoklamaAraligiDk`) + ±%10 jitter; başarısız yoklamadan sonra 2 · 4 · 8… dk (olağan aralıkla tavanlı, F1a); zil (`/v1/zil`, SSE, 60 sn sessizlik = kopuk, üstel geri çekilme ≤ 5 dk — yalnız ≥ 1 dk yaşamış bağlantı sırayı sıfırlar) `lisans` konusunda hemen yoklatır. `ISTEK_ZAMAN` + `sunucuSaati`de yoklama/etkinleştirme/taşıma/DR ve zil BİR KEZ düzeltilmiş damgayla yeniden imzalanır (§4). Taşıma onayı lisans taşımıyorsa `/yokla` `{ outcome: "BASARISIZ", code: "TASIMA_KODU_BEKLENIYOR" }` döner, talep `tasima.durum = "ONAYLANDI"` kalır ve yoklanmaz (kod portaldan gelir). Motor başlatması pes etmez (DB kimliği/olguları gelmezse aralıkla yeniden).
 - **Ayak izi:** `LICENSE_STATE_CHANGED` (geçerlilik/kademe/kip değişimi; açılıştaki ilk ölçüm taban, satır yazmaz) · `LICENSE_LEASE_ACCEPTED` · `LICENSE_SANCTION_CHANGED` · `LICENSE_OBSERVATION_SUMMARY` (gözlemde günde bir, etkin kurulumda) · `LICENSE_ADMIN_ACTION` (`eylem` ∈ etkinlestir · cevrimdisi-yanit · aktarma-yaniti · tasima-talebi · dr-devral · proxy · veri-disari). Başarısız yoklama DEFTERE YAZILMAZ (bellek + `detay.yoklama`). Proxy kimlik bilgisi yüke girmez.
+- **Sözleşme kabulü (Ek-7, 2026-09-30):** eski panel (1.4.1) kabul adımını göstermez → `POST /etkinlestir` 409 `LICENSE_ACCEPTANCE_REQUIRED` (TR cümle "panel güncellenmeli" der); eski backend + yeni satıcı → 409 `KABUL_GEREKLI`, eski backend genel "reddetti" der; etkin kurulumun yoklaması etkilenmez.
 - **Eski istemci ne yapar:** bütün uçlar YENİ; mevcut uç/alan değişmedi → eski panel/tablet etkilenmez. `/api/admin/health` yüküne yalnız EK `license` bloğu geldi (public `/health` DONMUŞ); blok F1a'da `motor` (`BASLAMADI` · `BASLIYOR` · `CALISIYOR` · `DURDU`) + `motorNeden` (`KIMLIK_YOK` · `DB_OLGULARI`) taşır. `detay.kurulum.veritabaniKimligi` ve `detay.tasima.durum` EK alanlardır; `detay.kurulum.kurulumId` artık lisans kimliğidir (etkinleşmemişte null — önceden DB kimliğiydi, sahada lisanslı kurulum yok). `detay.depo.sorun = "OKUNAMADI"` tek bir belge okunamadığında da görünür. `PUT /api/admin/settings/system.installationId` artık 400 `SETTING_KEY_RESERVED` (panelde bu anahtarın yüzeyi yoktu).
 - **Parmak izi yükü:** `detay.parmakIzi.olculen` yalnız etken başına boolean; ham değer ve tuzlu özet uca GİRMEZ.
 - **Bütünlük yükü (2e-S):** `detay.butunluk` EK alandır (eski panel görmezden gelir, yeni panel alan yoksa "eski sürüm" yazar); dosya adı taşımaz.

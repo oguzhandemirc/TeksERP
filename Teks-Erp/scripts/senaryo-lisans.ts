@@ -461,6 +461,10 @@ async function main(): Promise<number> {
 
     // ============================================================ L2
     await adim("L2", "etkinleştirme → hak + kira, kademe NORMAL", async (a) => {
+      const kabulsuz = await A.istemci.istek("POST", "/api/license/etkinlestir", { kod: S.kod });
+      a.kontrol("sözleşme kabul edilmeden etkinleştirme → 409 LICENSE_ACCEPTANCE_REQUIRED (satıcıya gitmez, Ek-7)", kabulsuz.status === 409 && kabulsuz.kod === "LICENSE_ACCEPTANCE_REQUIRED", ozet(kabulsuz));
+      const kb = await A.istemci.sozlesmeyiKabulEt();
+      a.kontrol("panelin kabul adımı: POST /api/license/kabul → 201", kb.status === 201, ozet(kb));
       const y = await A.istemci.istek("POST", "/api/license/etkinlestir", { kod: S.kod.toLowerCase().replace(/-/g, " ") });
       a.kontrol("POST /api/license/etkinlestir (küçük harf + boşluklu elle yazım) → 200", y.status === 200, ozet(y));
       const d = await A.istemci.detay();
@@ -732,6 +736,8 @@ async function main(): Promise<number> {
         yb.code === "TASIMA_KODU_BEKLENIYOR" && cb.tasima?.durum === "ONAYLANDI" && cb.kira === null,
         `${yb.outcome} ${yb.code ?? ""} tasima=${cb.tasima?.durum ?? "yok"}`,
       );
+      const kbC = await C.istemci.sozlesmeyiKabulEt();
+      a.kontrol("C (yeni makine = yeni anahtar): sözleşme yeniden kabul → 201", kbC.status === 201, ozet(kbC));
       const e = await C.istemci.istek("POST", "/api/license/etkinlestir", { kod: tasimaKodu });
       const d = await C.istemci.detay();
       a.kontrol(
@@ -757,6 +763,8 @@ async function main(): Promise<number> {
       const s = await portal.istek("POST", `/haklar/${String(h.veri.id)}/surum`, { kokParolasi: hz.kokParolasi, sebep: "DR ilk imza" });
       const kod = await portal.istek("POST", `/kurulumlar/${S.drDbId}/etkinlestirme-kodu`, {});
       a.kontrol("portal: DR kurulumu + hak + kod", k.status === 201 && h.status === 201 && s.status === 201 && kod.status === 201, `${ozet(k)}/${ozet(h)}/${ozet(s)}/${ozet(kod)}`);
+      const kbD = await D.istemci.sozlesmeyiKabulEt();
+      a.kontrol("D: sözleşme kabulü → 201", kbD.status === 201, ozet(kbD));
       const e = await D.istemci.istek("POST", "/api/license/etkinlestir", { kod: String(kod.veri.kod) });
       const de = await D.istemci.detay();
       a.kontrol(
@@ -954,6 +962,8 @@ async function main(): Promise<number> {
       const s = await bayi.istek("POST", `/haklar/${String(h.veri.id)}/surum`, { bayiParolasi: BAYI_PAROLASI, sebep: "bayi ilk imza" });
       a.kontrol("bayi (genel dinleyici): müşteri · tesis · kurulum · hak · bayi imzası → 201", [m, t, k, h, s].every((x) => x.status === 201), [m, t, k, h, s].map(ozet).join("/"));
       const kod = await bayi.istek("POST", `/kurulumlar/${String(k.veri.id)}/etkinlestirme-kodu`, {});
+      const kbE = await E.istemci.sozlesmeyiKabulEt();
+      a.kontrol("E: sözleşme kabulü → 201", kbE.status === 201, ozet(kbE));
       const e = await E.istemci.istek("POST", "/api/license/etkinlestir", { kod: String(kod.veri.kod) });
       const d = await E.istemci.detay();
       a.kontrol("fabrika (E) bayi imzalı HAK'la etkinleşti → GECERLI, hak.bayiId = bayi", e.status === 200 && d.durum.gecerlilik === "GECERLI" && d.hak?.bayiId === bayiId, `${ozet(e)} ${d.durum.gecerlilik} bayiId=${d.hak?.bayiId}`);

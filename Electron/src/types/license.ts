@@ -189,3 +189,48 @@ export interface LicenseDataExportManifest {
   yedekler: Array<{ ad: string; boyutBayt: number; zaman: string; sifreli: boolean; indirmeYolu: string }>;
   yollar: Record<"yedekAl" | "yedekListesi" | "yedekIndir" | "varliklar" | "disariAktar", string>;
 }
+
+// ── Sözleşme kabulü (Ek-7) — backend `services/license-acceptance.service.ts` aynası ──
+/** Kabul metninin ekran blokları; metin backend'den gelir, panel KOPYALAMAZ. */
+export type AcceptanceBlock =
+  | { tur: "paragraf"; satirlar: string[] }
+  | { tur: "liste"; maddeler: string[] }
+  | { tur: "kutu"; no: string; metin: string }
+  | { tur: "alanlar" }
+  | { tur: "dugmeler" };
+
+/** GECERLI: bu sunucu anahtarının son kabulü güncel metni kapsıyor. */
+export type LicenseAcceptanceState = "GECERLI" | "YOK" | "METIN_DEGISTI" | "ANAHTAR_DEGISTI";
+
+export interface LicenseAcceptanceRecord {
+  kabulId: string;
+  metinKimligi: string;
+  metinOzeti: string;
+  kutular: string[];
+  adSoyad: string;
+  unvan: string;
+  kabulEden: { id: string; ad: string };
+  anahtarKimligi: string;
+  lisansKimligi: string | null;
+  istemciSurum: string | null;
+  sunucuSurum: string;
+  zaman: string;
+}
+
+export interface LicenseAcceptanceView {
+  metin: { kimlik: string; ozet: string; taslak: boolean; bloklar: AcceptanceBlock[]; kutular: string[] };
+  durum: LicenseAcceptanceState;
+  gecerli: LicenseAcceptanceRecord | null;
+  kayitlar: LicenseAcceptanceRecord[];
+  anahtarKimligi: string | null;
+  oneri: { adSoyad: string | null };
+}
+
+export interface RecordLicenseAcceptanceInput {
+  clientToken: string;
+  metinKimligi: string;
+  metinOzeti: string;
+  kutular: string[];
+  adSoyad: string;
+  unvan: string;
+}

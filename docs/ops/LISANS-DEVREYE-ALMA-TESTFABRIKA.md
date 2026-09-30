@@ -65,7 +65,7 @@ thinkpad-1 bir dizüstü: "Dengeli" planda pilde 60 dk girdisizlikte modern bekl
 
 ## 2. VDS satıcı (`lisans-test`) — A2 imajıyla yeniden kurulum · SATICI FABRİKADAN ÖNCE
 
-**Neden önce satıcı:** fabrika yoklama/etkinleştirme gövdesi KATI şemayla (`PollRequestSchema` · `z.strictObject`) doğrulanır ve A2 fabrikası yeni anahtarlar gönderir (2d `sifrelemeAnahtari` — kurulumun X25519 açık yarısı · 3d-2 `kurulumKayitlari`). Eski satıcı bunları `GOVDE_GECERSIZ` ile reddeder → yeni fabrika eski satıcıya etkinleşemez/yoklayamaz. Ters sıra (yeni satıcı + eski fabrika) güvenlidir: alanlar isteğe bağlıdır.
+**Neden önce satıcı:** fabrika yoklama/etkinleştirme gövdesi KATI şemayla (`PollRequestSchema` · `z.strictObject`) doğrulanır ve A2 fabrikası yeni anahtarlar gönderir (2d `sifrelemeAnahtari` — kurulumun X25519 açık yarısı · 3d-2 `kurulumKayitlari`). Eski satıcı bunları `GOVDE_GECERSIZ` ile reddeder → yeni fabrika eski satıcıya etkinleşemez/yoklayamaz. Ters sıra (yeni satıcı + eski fabrika) yoklama için güvenlidir: alanlar isteğe bağlıdır. **Etkinleştirme istisnası (Ek-7, 2026-09-30):** sözleşme kabulünü taşıyan satıcı, kabul belgesi (`kabul`) olmayan etkinleştirmeyi 409 `KABUL_GEREKLI` ile reddeder ⇒ henüz etkinleşmemiş kurulum için sıra: satıcı → backend + panel (kabul adımlı sürüm) → etkinleştirme; zaten etkin kurulumun yoklaması etkilenmez.
 
 `K=/opt/stack/apps/tekserp-satici-hazirlik` · VDS komutları `ssh -p 2222 oguzhan@80.253.255.188 '<komut>'` ile · `<sha>` = A2 HEAD'inin 12 haneli kısa sha'sı. **Doğrulama:** `asama-dogrula.mjs --asama=2 --olc --satici-sha=<sha>` → on iki satır ✅.
 
@@ -345,8 +345,8 @@ Bayt kodu (`.jsc`) OS + mimari + V8'e kilitlidir → korumalı paket HEDEFTE ür
 
 ### 7.1 Etkinleştir
 
-- **Komut:** testfabrika kanalının paneli (§5.2 sürümü) → **Sistem → Lisans** (`system/license`; gözlem kipinde yalnız lisans izni olan hesap görür) → **Etkinleştirme** kartı → kod → Etkinleştir. Backend satıcıya ulaşamazsa kart panel aktarmasını önerir (T5, §8).
-- **Beklenen:** 200; kart: etkin · HAK TEST · kira bitişi ~30 gün · kip GÖZLEM · kademe NORMAL; `C:\TeksERP\lisans\` altında HAK/kira dosyaları (lisans kimliği `LICENSE_DIR`'de, DB'de değil); portalda kurulum ETKİN, ilk yoklama ve (3d-2) backend kurulum geçmişi satırı; A2 fabrikası X25519 açık yarısını (`sifrelemeAnahtari`) etkinleştirme gövdesinde yollar.
+- **Komut:** testfabrika kanalının paneli (§5.2 sürümü) → **Sistem → Lisans** (`system/license`; gözlem kipinde yalnız lisans izni olan hesap görür) → ÖNCE **Lisans sözleşmesi** kartı (Ek-7 kabul adımı: metni oku · dört kutuyu işaretle · Ad Soyad + Unvan fabrika yetkilisinin · "Kabul ediyorum ve devam et") → sonra **Etkinleştirme** kartı → kod → Etkinleştir (kabul yokken düğmeler pasif; backend kabulsüz isteği 409 `LICENSE_ACCEPTANCE_REQUIRED` ile keser). Backend satıcıya ulaşamazsa kart panel aktarmasını önerir (T5, §8); QR ve aktarma zarfı da kabulü taşır. Betikle etkinleştirme (`kullanici-etkinlestir.mjs`, repo dışı) önce `GET /api/license/kabul` → `POST /api/license/kabul` yapmalı.
+- **Beklenen:** kabul kartı "Kabul edildi"; 200; kart: etkin · HAK TEST · kira bitişi ~30 gün · kip GÖZLEM · kademe NORMAL; portalda kurulum → Kayıt → "Sözleşme kabulleri"nde satır (kabul eden · metin kimliği · kutular); `C:\TeksERP\lisans\` altında HAK/kira dosyaları (lisans kimliği `LICENSE_DIR`'de, DB'de değil); portalda kurulum ETKİN, ilk yoklama ve (3d-2) backend kurulum geçmişi satırı; A2 fabrikası X25519 açık yarısını (`sifrelemeAnahtari`) etkinleştirme gövdesinde yollar.
 - **Geri alma:** gözlem kipi hiçbir şeyi KISITLAMAZ (yazma yine 201 — Senaryo L5). Kimliği geri almak = portalda kurulumu iptal/pasif; fabrikada `C:\TeksERP\lisans\` SİLİNMEZ. Dışarı çıkışı kesmek: `.env` `LICENSE_SERVER_URL=kapali` + SYSTEM göreviyle pm2 yeniden başlatma.
 
 ### 7.2 Durum ölçümü

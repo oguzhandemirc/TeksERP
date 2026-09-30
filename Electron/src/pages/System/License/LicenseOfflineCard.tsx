@@ -5,6 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { licenseService } from "@/services/licenseService";
 import { copyText } from "@/lib/clipboard";
+import type { AcceptanceGate } from "@/lib/license/acceptance";
 import { offlineRequestQrValues } from "@/lib/license/offline-qr";
 import type { LicenseDetail, LicenseOfflineRequest } from "@/types/license";
 import { InfoRow, LicenseCard, when } from "./LicenseParts";
@@ -14,8 +15,9 @@ import { useLicenseAction } from "./hooks";
  * TAM ÇEVRİMDIŞI yol: sunucu da bu bilgisayar da internete çıkamıyorsa istek QR ile telefona
  * taşınır; telefonun gösterdiği yanıt tablette QR'la okutulur ya da metni buraya yapıştırılır.
  * Büyük istek sıralı QR parçalarına bölünür (`offlineRequestQrValues`). İstek 10 dk geçerlidir.
+ * Etkinleştirme isteği sözleşme kabulünü zarfın içinde taşır (Ek-7): kabul yoksa istek oluşturulmaz.
  */
-export function LicenseOfflineCard({ d }: { d: LicenseDetail }) {
+export function LicenseOfflineCard({ d, gate }: { d: LicenseDetail; gate: AcceptanceGate }) {
   const [req, setReq] = useState<LicenseOfflineRequest | null>(null);
   const [kod, setKod] = useState("");
   const [yanit, setYanit] = useState("");
@@ -41,10 +43,11 @@ export function LicenseOfflineCard({ d }: { d: LicenseDetail }) {
         {amac === "etkinlestir" && (
           <Input value={kod} onChange={(e) => setKod(e.target.value)} placeholder="Etkinleştirme kodu (TKS-XXXX-XXXX-XXXX-XXXX)" maxLength={32} className="max-w-xs font-mono uppercase" />
         )}
-        <Button variant="outline" disabled={busy !== null || (amac === "etkinlestir" && !kod.trim())} onClick={() => void create()}>
+        <Button variant="outline" disabled={busy !== null || (amac === "etkinlestir" && (!kod.trim() || !gate.ready))} onClick={() => void create()}>
           {amac === "etkinlestir" ? "Etkinleştirme isteği oluştur" : "Yenileme isteği oluştur"}
         </Button>
       </div>
+      {amac === "etkinlestir" && !gate.ready && gate.reason && <p className="text-xs text-amber-700 dark:text-amber-400">{gate.reason}</p>}
       {req && (
         <div className="flex flex-wrap items-start gap-4 rounded-md border p-3">
           {qrValues && <RequestQrSequence key={req.zarf} values={qrValues} />}

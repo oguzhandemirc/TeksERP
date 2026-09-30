@@ -15,6 +15,7 @@ import { Badge, Button, KeyValues, PageTitle, QueryState, Section } from "../../
 import { statusTone } from "../pages/Installations";
 import { FirstInstallPanel } from "../distribution/FirstInstallPanel";
 import { HealthPanel, IncidentsPanel, RecordsPanel } from "./IncidentPanels";
+import { AcceptancePanel } from "./AcceptancePanel";
 import { InstallHistoryPanel } from "./InstallHistoryPanel";
 import { InstallmentPanel, PlannedPanel } from "./PlanPanels";
 import { SanctionPanel } from "./SanctionPanel";
@@ -139,6 +140,7 @@ export function InstallationDetailPage() {
       {tab === "olaylar" ? <IncidentsPanel detail={d} onChanged={refresh} /> : null}
       {tab === "kayit" ? (
         <>
+          <AcceptancePanel detail={d} />
           <InstallHistoryPanel detail={d} />
           <RecordsPanel detail={d} />
         </>

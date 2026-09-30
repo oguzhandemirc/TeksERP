@@ -18,6 +18,7 @@ import {
 import { loadLicenseStoreSync, saveProxy } from "../lib/license/store";
 import { getLicenseConfig, getLicenseSnapshot, getMeasuredFingerprint, invalidateLicenseSnapshot } from "../lib/license/runtime";
 import { adminAction } from "./license-trail.service";
+import { activationAcceptance } from "./license-acceptance.service";
 import { DATA_EXPORT_PATHS } from "../constants/license-routes";
 import { acceptLicenseResponse, buildPollBody, pollLicenseOnce, refreshLicenseFingerprint, runLeaseExchange, sendTransfer, type PollOutcome } from "./license-sync.service";
 import { getLicenseDetail, getProxySettings, type LicenseDetail, type LicenseProxySettings } from "./license-view.service";
@@ -89,8 +90,11 @@ export function initLicenseEngine(): void {
 }
 
 // ── API: etkinleştirme ──────────────────────────────────────────────────────────
-/** Etkinleştirme kimlik TAŞIMAZ: kurulumu satıcıda kod belirler, lisans kimliği yanıtla gelir (D14). */
-function buildActivateBody(ctx: ReadyContext, code: string): ReturnType<typeof ActivateRequestSchema.parse> {
+/**
+ * Etkinleştirme kimlik TAŞIMAZ: kurulumu satıcıda kod belirler, lisans kimliği yanıtla gelir (D14). Gövde bu
+ * anahtarın geçerli sözleşme kabul belgesini taşır (Ek-7; satıcı kabulsüz etkinleştirmeyi reddeder).
+ */
+function buildActivateBody(ctx: ReadyContext, code: string, acceptanceDoc: string): ReturnType<typeof ActivateRequestSchema.parse> {
   return ActivateRequestSchema.parse({
     v: 1,
     kod: code,
@@ -98,6 +102,7 @@ function buildActivateBody(ctx: ReadyContext, code: string): ReturnType<typeof A
     ...encryptionKeyField(),
     parmakIzi: currentFingerprintDigest(),
     ortam: buildEnvironment(),
+    kabul: acceptanceDoc,
   });
 }
 
@@ -118,8 +123,9 @@ export async function activateLicense(rawCode: string, userId: string | null, tr
     if (getLicenseSnapshot().lease) {
       throw licenseError(409, "LICENSE_ALREADY_ACTIVE", "Bu kurulumun geçerli bir lisansı var; yeniden etkinleştirme gerekmez.");
     }
-    const r = await vendorPost(ENDPOINTS.ACTIVATE, "etkinlestir", buildActivateBody(ctx, code), transport);
-    adminAction(userId, "etkinlestir", { sonuc: r.ok ? "yanit" : r.code });
+    const acceptance = await activationAcceptance(ctx.key.kid);
+    const r = await vendorPost(ENDPOINTS.ACTIVATE, "etkinlestir", buildActivateBody(ctx, code, acceptance.belge), transport);
+    adminAction(userId, "etkinlestir", { sonuc: r.ok ? "yanit" : r.code, kabulId: acceptance.kabulId });
     if (!r.ok) throw vendorFailureToError(r);
     await acceptLicenseResponse(r.json, "etkinlestirme", userId);
   });
@@ -141,8 +147,11 @@ export async function buildOfflineRequest(g: { amac: OfflinePurpose; kod?: strin
   let body: unknown;
   if (g.amac === "etkinlestir") {
     if (!g.kod) throw licenseError(400, "LICENSE_CODE_INVALID", "Çevrimdışı etkinleştirme için kod gerekli.");
+    const code = normalizeCodeOrThrow(g.kod);
+    // QR ve panel aktarması da kabulü zarfın içinde taşır: kabulsüz zarf üretilmez.
+    const acceptance = await activationAcceptance(ctx.key.kid);
     if (!getMeasuredFingerprint()) await refreshLicenseFingerprint();
-    body = buildActivateBody(ctx, normalizeCodeOrThrow(g.kod));
+    body = buildActivateBody(ctx, code, acceptance.belge);
   } else {
     if (!getLicenseSnapshot().activated || !ctx.licenseId) {
       throw licenseError(409, "LICENSE_NOT_ACTIVE", "Kurulum etkinleşmemiş; önce etkinleştirme isteği oluşturun.");
