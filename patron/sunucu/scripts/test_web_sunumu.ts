@@ -8,13 +8,17 @@
 //   §6 eksik varlık · GET/HEAD dışı yöntem · noktalı bölüm → 404
 //   §7 web dizini verilmezse yalnız API (kök 404) · dizin boşsa açılış DURUR (fail-closed)
 //   §8 ⭐ Traefik kuralı (deploy/patron/docker-compose.yml) dışarıda tuttuğu önekler = IC_ONEKLER
+//   §9 ⭐ fazla eğik çizgi (`//`, `\`) tek '/'ye 301 (expo-router "Invalid URL" boş sayfası); hedef aynı köken
+//   §10 tarayıcı dumanının beyanlı CSP istisnası (yalnız Cloudflare beacon'ı) öz sınaması
 // Koşum: npx tsx scripts/test_web_sunumu.ts
 // =============================================================================
+import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
+import http from "node:http";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { API_ONEKLER, BOS_STIL_OZETI, IC_ONEKLER, TAZE, UZUN_ONBELLEK, createWebRouter } from "../src/http/web-static";
+import { API_ONEKLER, BOS_STIL_OZETI, IC_ONEKLER, TAZE, UZUN_ONBELLEK, createWebRouter, tekEgik } from "../src/http/web-static";
 import { PATRON_KOKU, kontrol, ortamKur, sonuc } from "./lib/test-ortam";
 
 const STIL = "\n      html, body { height: 100%; }\n      #root { display: flex; }\n    ";
@@ -43,6 +47,17 @@ async function al(adres: string, yol: string, yontem = "GET"): Promise<{ status:
   }
   const h = (n: string): string => r.headers.get(n) ?? "";
   return { status: r.status, tip: h("content-type"), cc: h("cache-control"), csp: h("content-security-policy"), xfo: h("x-frame-options"), govde, kod };
+}
+
+/** Ham istek: fetch `\\`i `/`ye çevirir; ters eğik çizgili yol yalnız çıplak http ile gönderilir. */
+function ham(adres: string, yol: string): Promise<{ status: number; konum: string }> {
+  const u = new URL(adres);
+  return new Promise((ok, red) => {
+    http.get({ host: u.hostname, port: u.port, path: yol }, (r) => {
+      r.resume();
+      ok({ status: r.statusCode ?? 0, konum: String(r.headers.location ?? "") });
+    }).on("error", red);
+  });
 }
 
 async function main(): Promise<void> {
@@ -125,6 +140,29 @@ async function main(): Promise<void> {
     kontrol("§8a tek yönlendirici, Host kuralı + iç önek dışlaması taşır", kurallar.length === 1 && /^Host\(`\$\{PATRON_HOST[^}]*\}`\) && /.test(kurallar[0]!) && disarida[0] !== null, kurallar.join(" | ") || "YOK");
     const dis = [...(disarida[0] ?? [])].sort().join(",");
     kontrol("§8b ⭐ Traefik'in dışarıda tuttuğu önekler = IC_ONEKLER (kod ↔ kenar tek liste)", dis === [...IC_ONEKLER].sort().join(","), `traefik: ${dis || "YOK"} · kod: ${[...IC_ONEKLER].join(",")}`);
+
+    console.log("\n§9 fazla eğik çizgi");
+    for (const [yol, hedef] of [["//", "/"], ["///", "/"], ["//cariler//5f1c", "/cariler/5f1c"], ["//siparisler?a=1&b=%2F", "/siparisler?a=1&b=%2F"], ["//evil.example/x", "/evil.example/x"]] as const) {
+      const r = await ham(o.adres, yol);
+      kontrol(`§9a ⭐ ${yol} → 301 ${hedef}`, r.status === 301 && r.konum === hedef, `${r.status} ${r.konum}`);
+    }
+    for (const yol of ["/\\evil.example", "/a\\b"]) {
+      const r = await ham(o.adres, yol);
+      kontrol(`§9b ters eğik çizgi (${yol}) katlanır, hedef tek '/' ile başlar (başka köken yok)`, r.status === 301 && /^\/[^/\\]/.test(r.konum), `${r.status} ${r.konum}`);
+    }
+    for (const yol of ["//api/oturum", "//v1/esitle", "//ic/v1/kurulum/x"]) {
+      const r = await ham(o.adres, yol);
+      kontrol(`§9c ${yol} → 404 (API/iç ad alanı yönlendirilmez, HTML'e düşmez)`, r.status === 404, `${r.status} ${r.konum}`);
+    }
+    const tekPost = await al(o.adres, "//siparisler", "POST");
+    kontrol("§9d GET/HEAD dışı yöntem yönlendirilmez (404)", tekPost.status === 404, `${tekPost.status}`);
+    const tekKok = await al(o.adres, "/");
+    kontrol("§9e tek eğik çizgili yol yönlendirilmez (200)", tekKok.status === 200);
+    kontrol("§9f tekEgik saf: başta çoklu '/' → tek, arada katlanır", tekEgik("//a///b\\c") === "/a/b/c" && tekEgik("") === "/" && tekEgik("\\\\x") === "/x");
+
+    console.log("\n§10 tarayıcı dumanı beyanlı istisna");
+    const duman = spawnSync(process.execPath, [path.join(PATRON_KOKU, "..", "..", "deploy", "patron", "tarayici-duman.cjs"), "--oz-sinama"], { encoding: "utf8" });
+    kontrol("§10 ⭐ yalnız Cloudflare beacon'ı istisna; başka dış betik/konsol hatası sayılır", duman.status === 0, `${duman.status} ${(duman.stdout + duman.stderr).trim().slice(0, 300)}`);
   } finally {
     await o.kapat();
     await yalnizApi.kapat();

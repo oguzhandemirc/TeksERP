@@ -23,6 +23,14 @@ const onekDeseni = (onekler: readonly string[]): RegExp => new RegExp(`^/(${onek
 const API_YOLU = onekDeseni(API_ONEKLER);
 const IC_YOLU = onekDeseni(IC_ONEKLER);
 
+/** Ardışık eğik çizgi ya da ters eğik çizgi (tarayıcı `\\`i `/` okur). */
+const FAZLA_EGIK = /\/\/|\\/;
+
+/** Yolu tek eğik çizgili biçime katlar: `//a///b` → `/a/b`; sonuç daima tek `/` ile başlar. */
+export function tekEgik(yol: string): string {
+  return `/${yol.replace(/[/\\]+/g, "/").replace(/^\/+/, "")}`;
+}
+
 function sha256(metin: string): string {
   return `'sha256-${createHash("sha256").update(metin, "utf8").digest("base64")}'`;
 }
@@ -76,6 +84,19 @@ export function createWebRouter(dizin: string): Router {
   const router = express.Router();
 
   router.use((req: Request, res: Response, next: NextFunction) => {
+    // `https://alan//` expo-router'da "Invalid URL" ile boş sayfa çizer: fazla eğik çizgi tek '/'ye 301.
+    // Hedef hep TEK '/' ile başlar (ters eğik çizgi de katlanır) ⇒ başka kökene yönlendirme doğamaz.
+    if (FAZLA_EGIK.test(req.path)) {
+      const hedef = tekEgik(req.path);
+      if (API_YOLU.test(hedef) || IC_YOLU.test(hedef) || (req.method !== "GET" && req.method !== "HEAD")) {
+        notFoundHandler(req, res);
+        return;
+      }
+      const sorgu = req.originalUrl.indexOf("?");
+      res.set("Cache-Control", TAZE);
+      res.redirect(301, hedef + (sorgu >= 0 ? req.originalUrl.slice(sorgu) : ""));
+      return;
+    }
     if (API_YOLU.test(req.path)) return next("router");
     // İç ad alanı, GET/HEAD dışı yöntem ve nokta ile başlayan bölüm (".env", ".git") web'e hiç düşmez.
     if (IC_YOLU.test(req.path) || (req.method !== "GET" && req.method !== "HEAD") || req.path.split("/").some((b) => b.startsWith("."))) {
