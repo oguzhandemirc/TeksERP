@@ -2,13 +2,14 @@
 
 > **Durum (2026-09-29):** hazırlık satıcısı tekserp-vds'te **KURULU** — `ORTAM=hazirlik`, **geri döngü kipinde** (§4a; Tailscale kullanıcı onayı bekliyor), imaj `tekserp-satici:0ca31403525a`, `https://lisans-test.etkiliyazilim.com` yanıt veriyor, portal Mac'ten `portal-baglan.mjs` ile. Kurulum kaydı ve ölçümler §12. Kullanıcıya kalan: Tailscale onayı (§4) ve ana kipe geçiş (§4a), sudo gerektiren adımlar (§12 "sudo'suz kurulum").
 > Yapıtlar: [`deploy/satici/`](../../deploy/satici/) (compose · Dockerfile · imaj derleme · yalıtım denetimi · VDS birimi). Protokol: [`LISANS-PROTOKOLU.md`](../design/LISANS-PROTOKOLU.md). Alan kuralları: [`kurallar/lisans.md`](../kurallar/lisans.md). Sunucu envanteri: [`SUNUCU-ENVANTERI.md`](SUNUCU-ENVANTERI.md).
+> **Üretim (2026-09-30):** `ORTAM=uretim` · `lisans.etkiliyazilim.com` — §13'te HAZIRLANDI, UYGULANMADI; anahtarlar törenden ([`URETIM-SATICI-TOREN.md`](URETIM-SATICI-TOREN.md)).
 > **Değişmez:** her VDS yazımından ÖNCE ve SONRA `deploy/vds-dogrula.sh` → *adnansahin baytları AYNI* (salt okuma, çıkış 0). Fark çıkarsa dur.
 
 ## 0. Kapsam
 
 | Kurulur | Kurulmaz |
 |---|---|
-| `ORTAM=hazirlik` — `lisans-test.etkiliyazilim.com` (genel) + tailnet portalı | Üretim kökü (`kok-<yıl>-<n>`, kullanıcı töreni) ve `lisans.etkiliyazilim.com` — ileride **aynı** compose, `ORTAM=uretim` `.env`'iyle ayrı proje |
+| `ORTAM=hazirlik` — `lisans-test.etkiliyazilim.com` (genel) + tailnet portalı | Üretim kökü (`kok-<yıl>-<n>`, kullanıcı töreni) ve `lisans.etkiliyazilim.com` — **aynı** compose, `ORTAM=uretim` `.env`'iyle (`ornek-uretim.env`) ayrı proje: §13 |
 | Hazırlık kökü `hazirlik-2026-1` (yalnız TEST/DEMO imzalar), ALT `alt-hazirlik-2026-1`, İNDİRME `ind-hazirlik-2026` | CF Worker (Faz 3a) |
 | Portal web arayüzü (1f): satıcı arayüzü `/portal` (tailnet) · bayi arayüzü `/bayi` (genel) — imajın içinde (`/uygulama/web`, §2.2) | Fabrika verisi — satıcı DB'si yalnız lisans kayıtlarını taşır |
 | Satıcının kendi PG16'sı + şifreli yedek döngüsü | |
@@ -90,7 +91,7 @@ VDS'te derleme YOK, kaynak VDS'e gitmez. Portal kullanıcı CLI'ı imajda derlen
 node deploy/satici/compose-denetle.mjs --env-file <doldurulmuş .env>   # 0 temiz · 1 ihlal · 2 ölçülemedi
 ```
 
-① port yalnız `satici`de ve yalnız 100.64/10 adresine · ② docker soketi yok · ③ salt okunur/yetenek yok/root değil/sınırlı · ④ kenar + ic internal, dış ağa katılım yok · ⑤ anahtar birimi salt okunur · ⑥ köprü ağları tailnet/geri döngü aralığı dışında · ⑥b kenarda dinamik aralık alt ağda, satıcının sabit adresi onun dışında · ⑦ Traefik yalnız satıcıda ve kenar ağında, DB portsuz · Ⓛ geri döngü kipi (§4a): ① yerine portsuzluk + `TAILNET_BIND=127.0.0.1` + `portal-tunel` satıcının ad alanında, portsuz/birimsiz, köprü adresinde + tailnet internal; ana kipte geri döngü kalıntısı ❌. Denetim `.env`'deki `COMPOSE_FILE`'ı okur (ya da çoklu `-f`). Negatif sondalar (docker soketi · `read_only` yok · anahtar rw · `web` ağı · 0.0.0.0 yayını · kenar internal değil · DB portu) her biri kırmızı verdi.
+① port yalnız `satici`de ve yalnız 100.64/10 adresine · ② docker soketi yok · ③ salt okunur/yetenek yok/root değil/sınırlı · ④ kenar + ic internal, dış ağa katılım yok · ⑤ anahtar birimi salt okunur · ⑥ köprü ağları tailnet/geri döngü aralığı dışında · ⑥b kenarda dinamik aralık alt ağda, satıcının sabit adresi onun dışında · ⑦ Traefik yalnız satıcıda ve kenar ağında, DB portsuz · ⑩ `GENEL_KOK_ADRESI` makinesi = Host kuralı · ⑪ `GUVEN_CAPASI_DOSYASI` yok (gömülü çapa) · ⑫ `--diger-env <öteki ortamın .env'i>` ile iki ortam çakışmaz (üretimde ZORUNLU, yoksa çıkış 2; §13.3) · Ⓛ geri döngü kipi (§4a): ① yerine portsuzluk + `TAILNET_BIND=127.0.0.1` + `portal-tunel` satıcının ad alanında, portsuz/birimsiz, köprü adresinde + tailnet internal; ana kipte geri döngü kalıntısı ❌. Denetim `.env`'deki `COMPOSE_FILE`'ı okur (ya da çoklu `-f`). Negatif sondalar (docker soketi · `read_only` yok · anahtar rw · `web` ağı · 0.0.0.0 yayını · kenar internal değil · DB portu) her biri kırmızı verdi.
 
 ## 3. VDS'i ölç (salt okuma)
 
@@ -315,3 +316,197 @@ Etkinleşmemiş kurulum hiçbir durumda dışarı istek atmaz (`test_lisans_moto
 - **Doğrulama (internet):** `/saglik` 200 · `/v1/yokla` imzasız 401 `ISTEK_GECERSIZ` · `/v1/etkinlestir` boş 400 `GOVDE_GECERSIZ` · `/q` 200 · `/bayi/` 200 · `/portal`, `/portal/`, `/portal/saglik`, `/portal/api/oturum` 404 · köken `:4610`/`:4611` doğrudan ulaşılamaz. **Tünelden:** `/portal/saglik` 200 (`capa: gomulu · altGecerli: 1 · indirmeVar: true · uyariSayisi: 0 · denetimYazmaHatasi: 0`) · `/portal/` 200 + CSP · varlık 200 · oturumsuz API 401 · `/bayi/` 404. VDS host'undan kenar `/portal/saglik` 404 (genel dinleyici portalı sunmaz).
 - **Kaynak:** satıcı 85 / 384 MB · DB 37 / 256 · yedek 1,4 / 128 · tünel 11 / 64; portal yayını yok (`ports` boş), host'ta 4610/4611 dinleyicisi yok; dördü de salt okunur kök FS, `cap_drop ALL`, 10001 (DB 70).
 - **Yedek:** döngü açılışta ilk yedeği aldı + elle `tek`; `satici_20260929_164008.dump.tkenc` + `anahtarlar_20260929_164008.tar.tkenc` Mac'e (`~/.tekserp/satici-hazirlik-yedek/`, 0600) bayt-eşit çekildi ve özel yarıyla açıldı: 25 tablo verisi (`kanal`, `portal_kullanici` dahil), anahtar arşivi dört dosya kaynakla bayt-eşit.
+
+## 13. Üretim satıcısı — `ORTAM=uretim` · `lisans.etkiliyazilim.com`
+
+> **Durum:** HAZIRLANDI, UYGULANMADI (2026-09-30). Aynı `docker-compose.yml` (+ geri döngü örtüsü), ayrı proje: `tekserp-satici-uretim` — konteyner/ağ/DB hacmi adları `ORTAM`'dan, host yolları · alt ağlar · sır grubu `.env`'den ([`deploy/satici/ornek-uretim.env`](../../deploy/satici/ornek-uretim.env)). Hazırlık satıcısı yerinde kalır; ikisi yan yana koşar.
+> **adnansahin ETKİLENMEZ:** SAHINSRV'ye ve adnansahin kanalına hiçbir yazım yok; VDS'te `html/adnansahin/**` yalnız salt okunur `/yayin` bağıyla görünür (hazırlıkla aynı); DNS kaydı açılsa da etkinleşmemiş kurulum satıcıya istek atmaz (§9). Her VDS yazımından ÖNCE ve SONRA `deploy/vds-dogrula.sh` ✅; Traefik **yeniden başlatılmaz**.
+
+### 13.0 Önkoşullar (kapı — biri yoksa DURULUR)
+
+| Kapı | Ölçüm |
+|---|---|
+| Tören tamam | Mac: `node deploy/satici/uretim-toren.mjs dogrula` → ✅ ([`URETIM-SATICI-TOREN.md`](URETIM-SATICI-TOREN.md)) |
+| Üretim kökü satıcının GÖMÜLÜ çapasında | `git grep -n "kok-2026-1" -- satici/sunucu/src/lisans-protokol/kok-anahtarlar.ts` → satır var (çapa dilimi indi). Yoksa satıcı ALT/İNDİRME'yi kullanmaz (`Kök kok-2026-1 güven çapasında yok`), `altGecerli: 0` |
+| vds-dogrula tabanı taze | `deploy/vds-dogrula.sh` → ✅ (fark varsa `LISANS-DEVREYE-ALMA-TESTFABRIKA.md` §1.2) |
+| Hazırlığın `.env`'i Mac'te (sır içermez; ⑫ için) | `T=$(mktemp -d); ssh -p 2222 oguzhan@80.253.255.188 'cat /opt/stack/apps/tekserp-satici-hazirlik/.env' > $T/hazirlik-vds.env` |
+
+Aşağıda (bash ve zsh'de aynı çalışır): `v() { ssh -p 2222 oguzhan@80.253.255.188 "$@"; }` · `K=/opt/stack/apps/tekserp-satici-uretim` · `SHA=<imaj sha>` · `Y=tekserp-satici-yedek:$SHA` (yardımcı konteyner imajı). Uzak betikler tırnaklı heredoc'la gider (`<<'UZAK'`): Mac'te hiçbir şey genişlemez, `K`/`Y`/`SHA` komut satırında verilir.
+
+### 13.1 VDS'i ölç (salt okuma)
+
+```bash
+v 'docker network inspect $(docker network ls -q) --format "{{.Name}} {{range .IPAM.Config}}{{.Subnet}} {{end}}"; ip -4 route;
+    free -m; df -h /; ls /opt/stack/apps; docker inspect traefik --format "{{.State.StartedAt}} {{.RestartCount}}";
+    grep -n -A1 "tekserp-satici-hazirlik-kenar" /opt/stack/traefik/docker-compose.yml'
+```
+
+- `172.31.251.0/24` hiçbir ağ/rotayla çakışmamalı (bugün: 172.17–20 · hazırlık 172.31.252–254 · patron 172.31.250.0/28 + .16/28). Çakışırsa `ornek-uretim.env`'deki üç alt ağ başka bir /24'e taşınır.
+- `free -m` kullanılabilir ≥ 1000 MB (üretim üçlüsü + tünel gerçek kullanımı ~150 MB, tavanları 832 MB — tavanlar toplamı fiziksel belleği aşar; §13.9).
+- Traefik `StartedAt`/`RestartCount` not edilir: kurulum boyunca DEĞİŞMEZ.
+- Traefik compose'unda hazırlık kenar ağının satırları: bugün iki satır (servis `networks:` listesi + üst düzey tanım `{external: true}`) — §13.4-6 bu biçime göre.
+
+### 13.2 İmaj (Mac)
+
+Çapa commit'i `main`e indikten SONRA, temiz ağaçta: `deploy/satici/imaj-derle.sh` → `~/.tekserp/satici-imaj/tekserp-satici-<sha>.tar.gz` + `.sha256`, `SATICI_IMAJ` / `SATICI_YEDEK_IMAJ` satırları.
+
+### 13.3 `.env` + yalıtım denetimi (Mac)
+
+```bash
+install -m 600 deploy/satici/ornek-uretim.env ~/.tekserp/satici-uretim-vds.env    # iki imaj satırını <sha> ile doldur
+node deploy/satici/compose-denetle.mjs --env-file ~/.tekserp/satici-uretim-vds.env --diger-env $T/hazirlik-vds.env
+```
+
+Beklenen: çıkış 0, `0 ihlal` ve **`ölçülmedi` YOK** (`--diger-env`siz üretim denetimi çıkış 2 verir): geri döngü kipi Ⓛ · ⑩ genel kök = Host · ⑪ gömülü çapa · ⑫a–f proje/DB hacmi/Host/sır grubu farklı, alt ağlar çakışmaz, anahtar/yedek/dosya/derleme/sır yolları ortak ya da iç içe değil (yalnız salt okunur `/yayin` ortak), portlar çakışmaz. Negatif sondalar (ölçüldü 2026-09-30, her biri çıkış 1): anahtar birimi hazırlığınki ⑫d · kenar ağı çakışık ⑫c · aynı `SIR_GID` ⑫a · genel kök hazırlığa ⑩ · ortak DB parola dosyası ⑫e · `ORTAM=hazirlik` kopyası ⑫a+⑫b · iç içe yedek dizini ⑫d · `GUVEN_CAPASI_DOSYASI` örtüsü ⑪.
+
+### 13.4 Kurulum (VDS YAZIMI — kullanıcının "uygula" cümlesiyle)
+
+0. **Önce:** `deploy/vds-dogrula.sh` → ✅.
+1. **İmaj yükle** (başka konteynere dokunmaz):
+
+   ```bash
+   scp -P 2222 ~/.tekserp/satici-imaj/tekserp-satici-$SHA.tar.gz* oguzhan@80.253.255.188:/tmp/
+   v "SHA=$SHA sh -s" <<'UZAK'
+   cd /tmp && sha256sum -c "tekserp-satici-$SHA.tar.gz.sha256" && gunzip -c "tekserp-satici-$SHA.tar.gz" | docker load && rm "tekserp-satici-$SHA.tar.gz"*
+   UZAK
+   ```
+
+2. **Dizinler + iki sır** (yardımcı konteyner, yalnız üç hedef yol bağlı; betik idempotent, var olan sırrı ezmez, sır basmaz):
+
+   ```bash
+   v "docker run --rm -i --network none --user 0 -e SIR_GID=61063 -v $K:/k -v /srv/tekserp-satici-yedek/uretim:/y \
+        -v /srv/tekserp-satici-dosya/uretim:/d --entrypoint sh $Y -s" < deploy/satici/vds/uretim-hazirla.sh
+   ```
+
+   Beklenen: `db-parolasi: üretildi (0440 root:61063)` · `ic-api-belirteci: üretildi …` · `/k`: `anahtarlar` 10001:10001 700 · `derlemeler` 0:0 755 · `sirlar` 0:61063 711 · `yedek-alici` 0:0 755 · `/y` `/d` 10001:10001 700.
+3. **Dosyalar** (compose iki dosyası root 644 · `.env` oguzhan 600 — sudo'suz `docker compose` okusun · iki `.tkpub` 644):
+
+   ```bash
+   v 'install -d -m 700 ~/satici-uretim-gecici'
+   scp -P 2222 deploy/satici/docker-compose.yml deploy/satici/docker-compose.loopback.yml ~/.tekserp/satici-uretim-vds.env \
+     ~/.tekserp/satici-uretim/yedek-alici/*.tkpub oguzhan@80.253.255.188:satici-uretim-gecici/
+   v "K=$K Y=$Y sh -s" <<'UZAK'
+   set -eu
+   docker run --rm --network none --user 0 -v "$HOME/satici-uretim-gecici:/g:ro" -v "$K:/k" --entrypoint sh "$Y" -c "
+     install -m 644 -o 0 -g 0 /g/docker-compose.yml /g/docker-compose.loopback.yml /k/ &&
+     install -m 644 -o 0 -g 0 /g/*.tkpub /k/yedek-alici/ &&
+     install -m 600 -o $(id -u) -g $(id -g) /g/satici-uretim-vds.env /k/.env"
+   rm -rf "$HOME/satici-uretim-gecici"
+   cd "$K" && docker compose config -q && ls -lna "$K" "$K/yedek-alici"
+   UZAK
+   ```
+
+4. **Anahtar birimi** — törenin `anahtarlar/` altı dosyası + PAKET ara kopyası (USB gelene dek; kullanıcı kararı; parolalı, satıcı okumaz, yedek döngüsü şifreli arşive alır). ALT/İNDİRME düz metin → geçici kopya shred'lenir:
+
+   ```bash
+   v 'install -d -m 700 ~/satici-anahtar-gecici'
+   scp -P 2222 -p ~/.tekserp/satici-uretim/anahtarlar/* ~/.tekserp/satici-uretim/paket/paket-2026.paket.json \
+     oguzhan@80.253.255.188:satici-anahtar-gecici/
+   v "K=$K Y=$Y sh -s" <<'UZAK'
+   set -eu
+   docker run --rm --network none --user 0 -v "$HOME/satici-anahtar-gecici:/g:ro" -v "$K/anahtarlar:/a" --entrypoint sh "$Y" \
+     -c 'install -m 600 -o 10001 -g 10001 /g/* /a/'
+   shred -u "$HOME"/satici-anahtar-gecici/* && rmdir "$HOME/satici-anahtar-gecici"
+   UZAK
+   # Bayt eşitliği (iki taraf aynı biçimde: özet + ad, ada göre sıralı):
+   v "docker run --rm --network none --user 0 -v $K/anahtarlar:/a:ro --entrypoint sh $Y -c 'cd /a && sha256sum * | sort -k2'" > $T/vds-anahtar.sha
+   (cd ~/.tekserp/satici-uretim && for f in anahtarlar/* paket/paket-2026.paket.json; do echo "$(shasum -a 256 "$f" | cut -d' ' -f1)  $(basename "$f")"; done | sort -k2) | diff - $T/vds-anahtar.sha && echo "✅ anahtar birimi Mac ile bayt-eşit (7 dosya)"
+   ```
+
+   USB kopyası alındıktan sonra PAKET ara kopyasını kaldırmak (kullanıcı kararı): `v "docker run --rm --network none --user 0 -v $K/anahtarlar:/a --entrypoint rm $Y /a/paket-2026.paket.json"`.
+5. **Ağlar + konteynerler (başlatmadan):** `v "cd $K && docker compose up --no-start"` → dört ağ (`tekserp-satici-uretim-kenar` · `-ic` · `-tailnet` · `-ic-api`), DB hacmi `tekserp-satici-uretim-pg`, konteynerler yaratılır, hiçbiri başlamaz.
+6. **Traefik bağlantısı (yeniden başlatmasız) + kalıcı satır:**
+
+   ```bash
+   v 'docker network connect tekserp-satici-uretim-kenar traefik'
+   v "Y=$Y sh -s" <<'UZAK'
+   set -eu
+   D=/opt/stack/traefik; DAMGA=$(date +%Y%m%d_%H%M)
+   docker run --rm --network none --user 0 -v "$D:/t" --entrypoint sh "$Y" -c "
+     cp -p /t/docker-compose.yml /t/docker-compose.yml.yedek-$DAMGA-satici-uretim &&
+     sed -e '/tekserp-satici-hazirlik-kenar/{p;s/tekserp-satici-hazirlik-kenar/tekserp-satici-uretim-kenar/}' /t/docker-compose.yml > /t/docker-compose.yml.yeni"
+   diff "$D/docker-compose.yml" "$D/docker-compose.yml.yeni" || true      # BEKLENEN: yalnız iki eklenen satır (hazırlık satırlarının 'uretim' kopyası)
+   docker compose --project-directory "$D" -f "$D/docker-compose.yml.yeni" config | grep -A2 -E '^  tekserp-satici-(hazirlik|uretim)-kenar:'   # ikisi de external: true
+   UZAK
+   ```
+
+   Fark iki satırdan başkaysa ya da `external: true` ikisinde birden yoksa DUR, `.yeni`yi sil (tanım iki satırlıysa sed'in tek satır kopyası YAML'ı bozar — elle ekle). Uygunsa içerik yerinde yazılır (sahip/izin/inode korunur): `v "docker run --rm --network none --user 0 -v /opt/stack/traefik:/t --entrypoint sh $Y -c 'cat /t/docker-compose.yml.yeni > /t/docker-compose.yml && rm /t/docker-compose.yml.yeni'"`. Traefik bu satırları bir sonraki yeniden yaratılışında okur.
+7. **Göç** (geri alınamaz eşik; boş DB): `v "cd $K && docker compose --profile goc run --rm satici-goc"` → "All migrations have been successfully applied".
+8. **Başlat:** `v "cd $K && docker compose up -d"` → `satici` · `satici-db` · `satici-yedek` · `portal-tunel`; günlük `v "cd $K && docker compose logs satici | grep SATICI_DINLIYOR"` → `genel=4610 tailnet=4611 ic=4612`.
+9. **Modül kasası** (anahtar SSH stdin'iyle konteynerin tmpfs `/tmp`'ine — VDS diskine düşmez — içe aktarılır, silinir; `compose run` KULLANILMAZ, sabit adresler çakışır):
+
+   ```bash
+   v 'docker exec -i tekserp-satici-uretim sh -c "umask 077; cat > /tmp/mk.json"' < ~/.tekserp/satici-uretim/modul-anahtarlari/depo.multiEnabled.1.json
+   v 'docker exec tekserp-satici-uretim satici-baslat node dist-cli/scripts/modul-anahtari.js ice-aktar --dosya=/tmp/mk.json; docker exec tekserp-satici-uretim shred -u /tmp/mk.json'
+   ```
+
+   Beklenen: `✅ kasaya alındı: depo.multiEnabled 1. sürüm · mk-…` (künyedeki kid).
+10. **İlk portal yöneticisi** (parola Mac'teki 0600 dosyadan stdin'e; TOTP sırrı ekrana değil 0600 dosyaya — authenticator'a oradan girilir):
+
+    ```bash
+    umask 077; P=~/.tekserp/sirlar/portal-yonetici-uretim.parola; openssl rand -base64 24 > $P
+    { cat $P; cat $P; } | v 'docker exec -i tekserp-satici-uretim satici-baslat node dist-cli/scripts/portal-kullanici.js ekle --kullanici=<ad> --ad-soyad="<Ad Soyad>" --rol=SATICI_YONETICI' \
+      > ~/.tekserp/sirlar/portal-yonetici-uretim.totp
+    ```
+
+    Kanal/müşteri/kurulum kayıtları bu runbook'un dışındadır (geçiş dilimi); adnansahin için HİÇBİR kayıt açılmaz.
+11. **İlk yedek + Mac'e çekme + açma** (§13.7).
+12. **Sonra:** `deploy/vds-dogrula.sh` → ✅ · Traefik `StartedAt`/`RestartCount` §13.1'deki gibi.
+
+### 13.5 DNS (kullanıcı — Cloudflare)
+
+`lisans` A → `80.253.255.188`, **proxy AÇIK** (Origin CA `*.etkiliyazilim.com`). Kayıttan ÖNCE kökenden ölçülebilir (sertifika yalnız CF'ye güvenilir → `-k`): `curl -sk --resolve lisans.etkiliyazilim.com:443:80.253.255.188 https://lisans.etkiliyazilim.com/saglik` → `{"success":true}`. Kayıt açılınca fabrikaların varsayılan satıcı adresi (`DEFAULT_LICENSE_SERVER_URL`) yanıt vermeye başlar; etkinleşmemiş kurulum yine hiç istek atmaz (adnansahin dahil).
+
+### 13.6 Doğrulama
+
+| Ölçüm | Nereden | Beklenen |
+|---|---|---|
+| `curl -s https://lisans.etkiliyazilim.com/saglik` | internet | `{"success":true}` |
+| aynı kökte `/portal/saglik` · `/portal/` · `/ic/v1/zil` | internet | `404` (portal ve iç API genelde YOK) |
+| `/v1/yokla` imzasız · `/v1/etkinlestir` boş gövde | internet | `401 ISTEK_GECERSIZ` · `400 GOVDE_GECERSIZ` |
+| `/q` · `/bayi/` | internet | `200` |
+| `/d/olmayan-belirtec` | internet | `404` + satıcının `Cache-Control: no-store` başlığı (Traefik'in kendi 404'ü değil) |
+| `node deploy/satici/portal-baglan.mjs --kopru 172.31.251.18:4611 --yerel-port 14612` açıkken `curl -s http://127.0.0.1:14612/portal/saglik` | Mac | `200` · `capa: gomulu` · **`altGecerli: 1`** · `indirmeVar: true` · `uyariSayisi: 0` |
+| aynı tünelden `/portal/` | Mac | giriş sayfası `200` + CSP; §13.4-10 kullanıcısıyla giriş (parola + TOTP) |
+| `v "cd $K && docker compose ps"` · `docker stats --no-stream` | VDS | dördü `healthy`/`Up`; sınırlar compose'daki gibi |
+| `curl -s https://lisans-test.etkiliyazilim.com/saglik` | internet | `{"success":true}` — hazırlık etkilenmedi |
+| `curl -sI https://guncelleme.etkiliyazilim.com/adnansahin/electron/latest.yml` + `deploy/vds-dogrula.sh` | Mac | kurulum öncesiyle aynı durum kodu · adnansahin AYNI |
+| İç API kapısı (§7'deki geçici konteyner, `--network tekserp-satici-uretim-ic-api --ip 172.31.251.35`, `<IC_API_IP>` = `172.31.251.34`) | VDS | Bearer'lı `404 BULUNAMADI` · Bearer'sız `401 IC_KIMLIK_GECERSIZ`; `--ip`siz ikisi de `404` |
+| Yedek açılır mı (§13.7) | Mac | `pg_restore --list` dolu; anahtar arşivi `anahtarlar/` ile bayt-eşit |
+
+### 13.7 Yedek döngüsü — iki alıcı (üçüncüsü Etkili Yazılım çevrimdışı anahtarı, töreni gelince)
+
+Döngü hazırlıkla aynıdır (`yedek-dongusu.sh`: günde bir DB dökümü + anahtar birimi arşivi, ikisi de `.tkenc`; 30 gün, en az 7 kopya). Alıcılar `$K/yedek-alici/`: `satici-uretim-mac` (özel yarı yalnız Mac, rutin açma) · `satici-uretim-kurtarma` (özel yarı KÖK parolasıyla sarılı; Mac → USB). VDS kendi yedeğini AÇAMAZ ("Yerel anahtar (yerel.tkkey) yok" uyarısı BEKLENİR). Üçüncü alıcı (Etkili Yazılım çevrimdışı, [`YEDEK-SIFRELEME.md`](YEDEK-SIFRELEME.md) §2): açık yarısı `$K/yedek-alici/etkili.tkpub` olarak konunca bir sonraki yedekten itibaren alıcıdır (eskiler yeniden şifrelenmez).
+
+```bash
+v "cd $K && docker compose exec -T satici-yedek /arac/yedek-dongusu.sh tek && docker compose exec -T satici-yedek ls -1 /yedek"
+install -d -m 700 ~/.tekserp/satici-uretim-yedek
+for f in satici_<damga>.dump.tkenc anahtarlar_<damga>.tar.tkenc; do
+  v "cd $K && docker compose exec -T satici-yedek cat /yedek/$f" > ~/.tekserp/satici-uretim-yedek/$f
+done
+export PATH="/opt/homebrew/opt/libpq/bin:$PATH"; umask 077
+(cd Teks-Erp && npx tsx scripts/yedek-sifrele.ts coz --girdi ~/.tekserp/satici-uretim-yedek/satici_<damga>.dump.tkenc \
+  --cikti /tmp/satici-uretim.dump --anahtar ~/.tekserp/satici-uretim/yedek-ozel/satici-uretim-mac.txt) && pg_restore --list /tmp/satici-uretim.dump | head && rm -P /tmp/satici-uretim.dump
+```
+
+**Düzenli çekim:** yedekler VDS'te durur; VDS kaybında işe yaramazlar → haftada bir en yeni ikili Mac'e çekilir (yukarıdaki döngü, özetler iki uçta `sha256sum`/`shasum -a 256`).
+
+### 13.8 Geri alma (ters sıra)
+
+1. Patron üretime bağlandıysa ÖNCE hazırlığa geri döner ([`PATRON-BULUTU-KURULUM.md`](PATRON-BULUTU-KURULUM.md) §14.8) — patron bağlıyken `ic-api` ağı silinemez.
+2. Traefik compose'u yedeğinden (ağ silinmeden ÖNCE — dosya dış ağı andığı sürece Traefik yeniden yaratılamaz): `v "docker run --rm --network none --user 0 -v /opt/stack/traefik:/t --entrypoint sh $Y -c 'cat /t/docker-compose.yml.yedek-<damga>-satici-uretim > /t/docker-compose.yml'"`.
+3. `v "docker network disconnect tekserp-satici-uretim-kenar traefik; cd $K && docker compose down"` — DB hacmi `tekserp-satici-uretim-pg` ve dizinler KALIR (silmek kullanıcı kararı).
+4. DNS kaydı (kullanıcı) · `v "docker rmi tekserp-satici:$SHA tekserp-satici-yedek:$SHA"` (hazırlık başka etiket kullanıyorsa) · sonunda `deploy/vds-dogrula.sh` → ✅.
+
+Sürüm yükseltme hazırlıkla aynı (§8 "Sürüm yükseltme"), `cd $K` ile.
+
+### 13.9 Portal genel erişimi — uzantı noktası (ayrı dilim)
+
+Portal bu kurulumda GERİ DÖNGÜ kipindedir (§4a): yayımlanmaz, Mac'ten `portal-baglan.mjs --kopru 172.31.251.18:4611 --yerel-port 14612`. Genel erişim (Cloudflare Access) ayrı dilimin örtü dosyasıyla gelir: `.env`'deki `COMPOSE_FILE` satırına ÜÇÜNCÜ dosya eklenir; ana compose ve bu runbook'un §13.4 adımları değişmez. O dilim yalıtım denetimini kendi kipine genişletir (bugün ⑦/⑩ tek Traefik yönlendiricisi, ① yayın kipini yalnız geri döngü/tailnet olarak tanır).
+
+### 13.10 Açık riskler
+
+- **Bellek tavanları:** hazırlık + üretim satıcısı + patron + güncelleme tavanları toplamı (~3 GB) fiziksel belleği (2972 MB) aşar; gerçek kullanım düşüktür (§12, patron §13). Yük altında sorun görülürse hazırlık satıcısı durdurulabilir (kullanıcı kararı; testfabrika üretime geçtikten sonra).
+- **PAKET ara kopyası VDS'te:** parolalı (paket parolası ≠ kök parolası); USB kopyası alınınca kaldırılabilir (§13.4-4). Kök parolası portalda yazıldığı için iki parola ayrıdır — portal ele geçse paket anahtarı açılmaz.
+- **ALT sertifikası 180 gün:** bitişten önce rotasyon ([`URETIM-SATICI-TOREN.md`](URETIM-SATICI-TOREN.md) §6); satıcı anahtar birimini dakikada bir yeniden okur.
+- `cf-connecting-ip` taklidi ve kök anahtarın VDS'te (parolalı) durması §11'deki gibi.

@@ -25,8 +25,14 @@
 //      ① yerine: HİÇBİR port yayımlanmaz · satıcının tailnet dinleyicisi 127.0.0.1'de · tailnet ağı
 //      internal · `portal-tunel` satıcının ağ ad alanında, portsuz/birimsiz, tailnet köprü adresini dinler.
 //      Ana kipte TAILNET_LOOPBACK ve `portal-tunel` YASAK (iki kip karışmaz).
+//   ⑩ GENEL_KOK_ADRESI'nin makinesi Traefik Host kuralıyla aynı (/d · /y bağlantısı başka ortama gitmesin)
+//   ⑪ satıcı gömülü güven çapasıyla koşar: GUVEN_CAPASI_DOSYASI YOK (yalnız test) · NODE_ENV=production
+//   ⑫ İKİ ORTAM YAN YANA (--diger-env <öteki ortamın .env'i>): proje/DB hacmi/Host/genel kök/sır grubu farklı,
+//      köprü alt ağları çakışmaz, host bağları ve sır dosyaları ortak ya da iç içe değil (tek istisna salt
+//      okunur yayın kökü), yayımlı portlar çakışmaz — üretim hazırlığın anahtarını/DB'sini ASLA bağlamasın.
+//      Verilmezse ⑫ ÖLÇÜLMEDİ diye basılır (geçti sayılmaz); ORTAM=uretim'de çıkış 2 (hazırlığın yanına kurulur).
 //
-// Kullanım: node deploy/satici/compose-denetle.mjs --env-file <.env> [-f <compose> ...]
+// Kullanım: node deploy/satici/compose-denetle.mjs --env-file <.env> [-f <compose> ...] [--diger-env <.env>]
 //   -f verilmezse .env'deki COMPOSE_FILE (":" ayrık, bu dizine göre) — yoksa docker-compose.yml.
 // Çıkış: 0 temiz · 1 ihlal · 2 ölçülemedi (docker yok / config çözülemedi).
 // =============================================================================
@@ -42,40 +48,45 @@ const al = (ad) => {
   return i >= 0 ? args[i + 1] : undefined;
 };
 const envDosyasi = al("--env-file");
-if (!envDosyasi) {
-  console.error("kullanım: compose-denetle.mjs --env-file <.env> [-f <compose> ...]");
+const digerEnv = al("--diger-env");
+if (!envDosyasi || (args.includes("--diger-env") && !digerEnv)) {
+  console.error("kullanım: compose-denetle.mjs --env-file <.env> [-f <compose> ...] [--diger-env <.env>]");
   process.exit(2);
 }
-let envMetni;
-try {
-  envMetni = readFileSync(envDosyasi, "utf8");
-} catch (err) {
-  console.error(`ÖLÇÜLEMEDİ: .env okunamadı — ${err.message}`);
-  process.exit(2);
-}
-const composeFileSatiri = envMetni
-  .split(/\r?\n/)
-  .map((l) => l.match(/^\s*COMPOSE_FILE\s*=\s*(.*?)\s*$/)?.[1])
-  .filter((v) => v !== undefined)
-  .pop();
 const acikF = args.flatMap((a, i) => (a === "-f" && args[i + 1] ? [args[i + 1]] : []));
-const composeDosyalari =
-  acikF.length > 0
-    ? acikF
-    : composeFileSatiri
-      ? composeFileSatiri.replace(/^["']|["']$/g, "").split(":").filter(Boolean).map((f) => path.resolve(burasi, f))
-      : [path.join(burasi, "docker-compose.yml")];
 
-const r = spawnSync(
-  "docker",
-  ["compose", "--env-file", envDosyasi, ...composeDosyalari.flatMap((f) => ["-f", f]), "--profile", "goc", "config", "--format", "json"],
-  { encoding: "utf8" },
-);
-if (r.status !== 0) {
-  console.error(`ÖLÇÜLEMEDİ: docker compose config — ${(r.stderr || r.error?.message || "").trim()}`);
-  process.exit(2);
+/** .env'in çözülmüş compose yapılandırması (COMPOSE_FILE ya da -f); okunamazsa ÖLÇÜLEMEDİ (çıkış 2). */
+function coz(env, fDosyalari) {
+  let envMetni;
+  try {
+    envMetni = readFileSync(env, "utf8");
+  } catch (err) {
+    console.error(`ÖLÇÜLEMEDİ: .env okunamadı (${env}) — ${err.message}`);
+    process.exit(2);
+  }
+  const composeFileSatiri = envMetni
+    .split(/\r?\n/)
+    .map((l) => l.match(/^\s*COMPOSE_FILE\s*=\s*(.*?)\s*$/)?.[1])
+    .filter((v) => v !== undefined)
+    .pop();
+  const dosyalar =
+    fDosyalari.length > 0
+      ? fDosyalari
+      : composeFileSatiri
+        ? composeFileSatiri.replace(/^["']|["']$/g, "").split(":").filter(Boolean).map((f) => path.resolve(burasi, f))
+        : [path.join(burasi, "docker-compose.yml")];
+  const r = spawnSync(
+    "docker",
+    ["compose", "--env-file", env, ...dosyalar.flatMap((f) => ["-f", f]), "--profile", "goc", "config", "--format", "json"],
+    { encoding: "utf8" },
+  );
+  if (r.status !== 0) {
+    console.error(`ÖLÇÜLEMEDİ: docker compose config (${env}) — ${(r.stderr || r.error?.message || "").trim()}`);
+    process.exit(2);
+  }
+  return { cfg: JSON.parse(r.stdout), dosyalar };
 }
-const cfg = JSON.parse(r.stdout);
+const { cfg, dosyalar: composeDosyalari } = coz(envDosyasi, acikF);
 
 let ihlal = 0;
 let gecti = 0;
@@ -204,8 +215,10 @@ const traefikli = servisler.filter(([, s]) => String(s.labels?.["traefik.enable"
 kontrol("⑦ Traefik etiketi yalnız `satici`de", traefikli.length === 1 && traefikli[0] === "satici", traefikli.join(", ") || "hiçbiri");
 const satici = cfg.services?.satici ?? {};
 kontrol("⑦ Traefik kenar ağını kullanır", satici.labels?.["traefik.docker.network"] === aglar.kenar?.name, `${satici.labels?.["traefik.docker.network"]} ↔ ${aglar.kenar?.name}`);
-const kural = Object.entries(satici.labels ?? {}).find(([k]) => /^traefik\.http\.routers\..+\.rule$/.test(k))?.[1] ?? "";
-kontrol("⑦ yönlendirici Host kuralı taşır", /^Host\(`[a-z0-9.-]+`\)$/.test(kural), kural || "YOK");
+// Genel yönlendirici ADIYLA (= proje adı) seçilir: bir örtü ikinci yönlendirici eklerse (portal) sıralama onu öne almasın.
+const genelKural = (c) => c.services?.satici?.labels?.[`traefik.http.routers.${c.name}.rule`] ?? "";
+const kural = genelKural(cfg);
+kontrol("⑦ genel yönlendirici (proje adıyla) Host kuralı taşır", /^Host\(`[a-z0-9.-]+`\)$/.test(kural), kural || "YOK");
 const db = cfg.services?.["satici-db"] ?? {};
 kontrol("⑦ DB portsuz ve yalnız iç ağda", (db.ports ?? []).length === 0 && JSON.stringify(Object.keys(db.networks ?? {})) === '["ic"]', Object.keys(db.networks ?? {}).join(", "));
 
@@ -256,5 +269,57 @@ kontrol("⑦ DB portsuz ve yalnız iç ağda", (db.ports ?? []).length === 0 && 
   kontrol("⑨f dağıtım bağları yalnız satıcıda", baska.length === 0, baska.join(", "));
 }
 
-console.log(`\n=== ${gecti} geçti, ${ihlal} ihlal ===`);
-process.exit(ihlal > 0 ? 1 : 0);
+// ⑩ genel kök ↔ Host kuralı
+{
+  const host = /^Host\(`([a-z0-9.-]+)`\)$/.exec(kural)?.[1] ?? "";
+  const kokHost = /^https:\/\/([a-z0-9.-]+)\/?$/.exec(String(satici.environment?.GENEL_KOK_ADRESI ?? ""))?.[1] ?? "";
+  kontrol("⑩ GENEL_KOK_ADRESI'nin makinesi Traefik Host kuralıyla aynı", host !== "" && host === kokHost, `Host=${host || "YOK"} · genel kök=${kokHost || "YOK"}`);
+}
+
+// ⑪ gömülü güven çapası
+{
+  const ortam = satici.environment ?? {};
+  kontrol("⑪ GUVEN_CAPASI_DOSYASI YOK (gömülü ROOT_PUBLIC_KEYS; dosya çapası yalnız test) · NODE_ENV=production",
+    !("GUVEN_CAPASI_DOSYASI" in ortam) && ortam.NODE_ENV === "production", `GUVEN_CAPASI_DOSYASI=${ortam.GUVEN_CAPASI_DOSYASI ?? "yok"} · NODE_ENV=${ortam.NODE_ENV ?? "YOK"}`);
+}
+
+// ⑫ iki ortam yan yana
+let olculmedi = 0;
+const uretim = cfg.name === "tekserp-satici-uretim";
+if (!digerEnv) {
+  olculmedi++;
+  console.log(`⏭ ⑫ ortamlar arası çakışma ÖLÇÜLMEDİ (--diger-env verilmedi) — geçti SAYILMAZ${uretim ? "; ÜRETİM hazırlığın yanına kurulur → ZORUNLU (çıkış 2)" : ""}`);
+} else {
+  const o = coz(digerEnv, []).cfg;
+  const bu = (c) => ({
+    proje: c.name,
+    pg: c.volumes?.["satici-pg"]?.name,
+    host: genelKural(c),
+    kokAdres: String(c.services?.satici?.environment?.GENEL_KOK_ADRESI ?? ""),
+    gid: JSON.stringify(c.services?.satici?.group_add ?? []),
+    agAdlari: Object.values(c.networks ?? {}).map((n) => n.name),
+    altAglar: Object.values(c.networks ?? {}).flatMap((n) => (n.ipam?.config ?? []).map((x) => x.subnet).filter(Boolean)),
+    baglar: Object.values(c.services ?? {}).flatMap((sv) => (sv.volumes ?? []).filter((v) => v.type === "bind").map((v) => ({ kaynak: v.source, hedef: v.target }))),
+    sirlar: Object.values(c.secrets ?? {}).map((x) => x.file).filter(Boolean),
+    portlar: Object.values(c.services ?? {}).flatMap((sv) => (sv.ports ?? []).map((p) => `${p.host_ip ?? "0.0.0.0"}:${p.published}`)),
+  });
+  const a = bu(cfg);
+  const b = bu(o);
+  console.log(`\n⑫ öteki ortam: ${b.proje} (${path.basename(digerEnv)})`);
+  kontrol("⑫a proje · DB hacmi · Traefik Host · genel kök · sır grubu FARKLI", a.proje !== b.proje && a.pg !== b.pg && a.host !== b.host && a.kokAdres !== b.kokAdres && a.gid !== b.gid,
+    `${a.proje}/${b.proje} · ${a.pg}/${b.pg} · ${a.host}/${b.host} · gid ${a.gid}/${b.gid}`);
+  const ortakAg = a.agAdlari.filter((n) => b.agAdlari.includes(n));
+  kontrol("⑫b ağ adları ortak değil", ortakAg.length === 0, ortakAg.join(", "));
+  const cakisan = a.altAglar.flatMap((x) => b.altAglar.filter((y) => cakisir(x, y)).map((y) => `${x}↔${y}`));
+  kontrol("⑫c köprü alt ağları çakışmaz", cakisan.length === 0, cakisan.join(", ") || `${a.altAglar.join(" ")} | ${b.altAglar.join(" ")}`);
+  const icIce = (x, y) => x === y || x.startsWith(`${y.replace(/\/$/, "")}/`) || y.startsWith(`${x.replace(/\/$/, "")}/`);
+  const ortakBag = a.baglar.flatMap((x) => b.baglar.filter((y) => icIce(x.kaynak, y.kaynak) && !(x.hedef === "/yayin" && y.hedef === "/yayin")).map((y) => `${x.kaynak}→${x.hedef} ↔ ${y.kaynak}→${y.hedef}`));
+  kontrol("⑫d host bağları ortak/iç içe değil (anahtar · yedek · alıcı · dosya · derleme; yalnız /yayin ortak)", ortakBag.length === 0, ortakBag.join(" | "));
+  const ortakSir = a.sirlar.filter((x) => b.sirlar.some((y) => icIce(x, y)));
+  kontrol("⑫e sır dosyaları (DB parolası · iç API belirteci) ortak değil", ortakSir.length === 0, ortakSir.join(", "));
+  const ortakPort = a.portlar.filter((x) => b.portlar.includes(x));
+  kontrol("⑫f yayımlı portlar çakışmaz", ortakPort.length === 0, ortakPort.join(", "));
+}
+
+console.log(`\n=== ${gecti} geçti, ${ihlal} ihlal${olculmedi ? `, ${olculmedi} ölçülmedi` : ""} ===`);
+process.exit(ihlal > 0 ? 1 : olculmedi > 0 && uretim ? 2 : 0);
