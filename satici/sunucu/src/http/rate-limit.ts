@@ -25,6 +25,31 @@ export class FixedWindowLimiter {
   }
 }
 
+/**
+ * Anahtar başına pencerede TEK kullanım (ör. kullanıcı başına 5 dk'da bir deneme bildirimi). `take` yer ayırır; iş düşerse
+ * `refund` ayrılan yeri geri verir (başarısız deneme kullanıcıyı pencere boyunca kilitlemesin). Bellek içi, süreç başına.
+ */
+export class CooldownLimiter {
+  private readonly last = new Map<string, number>();
+
+  constructor(private readonly windowMs: number) {}
+
+  take(key: string, nowMs: number = Date.now()): { readonly ok: true; readonly refund: () => void } | { readonly ok: false; readonly retryAfterSec: number } {
+    if (this.last.size > MAX_KEYS) for (const [k, t] of this.last) if (nowMs - t >= this.windowMs) this.last.delete(k);
+    const prev = this.last.get(key);
+    if (prev !== undefined && nowMs - prev < this.windowMs) return { ok: false, retryAfterSec: Math.max(1, Math.ceil((prev + this.windowMs - nowMs) / 1000)) };
+    this.last.set(key, nowMs);
+    return {
+      ok: true,
+      refund: () => {
+        if (this.last.get(key) !== nowMs) return;
+        if (prev === undefined) this.last.delete(key);
+        else this.last.set(key, prev);
+      },
+    };
+  }
+}
+
 export const rateLimited = (retryAfterSec: number): VendorError =>
   new VendorError(429, "HIZ_SINIRI", "Çok fazla istek; biraz sonra deneyin", { tekrarSn: retryAfterSec });
 

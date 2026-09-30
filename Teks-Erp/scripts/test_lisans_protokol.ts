@@ -223,7 +223,7 @@ function jwsBolumu(): void {
   const imza = Buffer.from(s, "base64url");
   imza[5] ^= 0x01;
   beklenen("§1j imza kurcalı (tek bit) RED", verifyEntitlement(`${b}.${y}.${b64uEncode(imza)}`, f.kokler), "JWS_IMZA");
-  beklenen("§1k aynı kid başka anahtar RED", verifyEntitlement(hakBas(f, {}, anahtarUret("kok-2026-1")), f.kokler), "JWS_IMZA");
+  beklenen("§1k aynı kid başka anahtar RED", verifyEntitlement(hakBas(f, {}, anahtarUret(f.kok.kid)), f.kokler), "JWS_IMZA");
   beklenen("§1l kanonik olmayan base64 (dolgu) RED", verifyEntitlement(`${b}=.${y}.${s}`, f.kokler), "JWS_BICIM");
   beklenen("§1m uzunluk tavanı (33 KB) RED", verifyEntitlement(`${b}.${"A".repeat(33 * 1024)}.${s}`, f.kokler), "JWS_BICIM");
   beklenen("§1n dört parça RED", verifyEntitlement(`${hak}.x`, f.kokler), "JWS_BICIM");
@@ -536,7 +536,7 @@ function zamanTutarliligi(): void {
   const { privateKey } = generateKeyPairSync("ed448");
   let ed448 = false;
   try {
-    hamImzala(TYP.HAK, { kid: "kok-2026-1", privateKey, acik: privateKey, x: "" }, hakYuku(f));
+    hamImzala(TYP.HAK, { kid: f.kok.kid, privateKey, acik: privateKey, x: "" }, hakYuku(f));
   } catch {
     ed448 = true;
   }

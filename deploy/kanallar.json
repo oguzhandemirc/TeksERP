@@ -7,7 +7,8 @@
     "Üretim kanalının kimliği DONMUŞTUR: değişimi sahadaki kurulumlar için bir GÖÇTÜR (yeni uygulama · kayıp userData · kopan güncelleme kanalı).",
     "Commit edilen işaretçiler (Electron/shared/musteri.json · mobil/musteri.json · Electron/package.json · mobil/app.json) 'varsayilan' kanalı gösterir.",
     "Panel kimliği ağaca YAZILMAZ: electron-paketle.sh <kod> onu derleme ANINDA enjekte eder (electron-builder -c.* + Vite sanal modülü, Electron/build-channel.ts); panel.erpAdresi = keşif sonuç vermezse panelin bağlandığı varsayılan sunucu.",
-    "terfiKaynagi (üretim kanalında ZORUNLU — yönetici kararı 2026-10-01): kayıtlı bir HAZIRLIK kanalı; bu kanala yalnız o hazırlık kanalında yayınlanmış ve kullanıcının terfi etiketiyle onayladığı commit çıkar (K5, scripts/lib/terfi.mjs). Bir hazırlık kanalı birden çok üretim kanalının kaynağı olabilir; hazırlığın aynası onu terfiKaynagi olarak göstermek ZORUNDADIR.",
+    "terfiKaynagi (üretim kanalında ZORUNLU — yönetici kararı 2026-10-01): kayıtlı AYNALI bir HAZIRLIK kanalı; bu kanala yalnız o hazırlık kanalında yayınlanmış ve kullanıcının terfi etiketiyle onayladığı commit çıkar (K5, scripts/lib/terfi.mjs). Aynalı bir hazırlık kanalı birden çok üretim kanalının kaynağı olabilir; hazırlığın aynası onu terfiKaynagi olarak göstermek ZORUNDADIR.",
+    "ayna: null = AYNASIZ hazırlık kanalı — demo/deneme müşterisi (satış provası): hiçbir üretim kanalının terfi kaynağı değildir, ona yayın terfi istemez, görünür etiket taşır. Demo/test müşterisi üretim türünde kaydedilmez.",
     "backend.hizmetAdi: backend'in Windows hizmet adı (Dağıtım v2) — aynı makinede iki kanal yan yana kurulabildiği için kanallar arası AYRIK (büyük/küçük harf duyarsız).",
     "runtimeVersion kanal kimliği DEĞİLDİR (JS↔native uyum kimliği): çakışma denetimine girmez, mobil/app.json ile eşit olmak zorundadır.",
     "Bekçi: node scripts/check-kanallar.mjs (+ --sonda) · yayın kapıları: node scripts/test_kanal_yayin_kapisi.mjs. Kural: docs/kurallar/surum-yayin.md; karar: docs/history/CLAUDE-NOT-ARSIVI.md 2026-09-27 testfabrika D1."
@@ -91,10 +92,10 @@
       }
     },
     "demofabrika": {
-      "tur": "uretim",
-      "terfiKaynagi": "testfabrika",
+      "tur": "hazirlik",
+      "ayna": null,
       "ad": "Demo Fabrika (sıfırdan satış provası)",
-      "gorunurEtiket": null,
+      "gorunurEtiket": "DEMO FABRİKA",
       "yayin": {
         "panelFeed": "https://guncelleme.etkiliyazilim.com/demofabrika/electron/",
         "panelManifest": "https://guncelleme.etkiliyazilim.com/demofabrika/electron/latest.yml",

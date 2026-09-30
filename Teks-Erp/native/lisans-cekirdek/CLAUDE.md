@@ -32,4 +32,4 @@
 | `npm run denetle` | `cargo fmt --check` + clippy (uyarı = hata, iki özellik kümesi) — commit kapısının tip adımı |
 | `npm test` | `cargo test` (birim + TS vektörleri) — commit kapısının test adımı |
 
-Kâhin bekçisi: `cd Teks-Erp && npx tsx scripts/test_lisans_native_kahin.ts` (native yoksa "⏭ ATLANDI — native yok", `TEKSERP_STRICT=1`de kırmızı). Commit kapısı bu projeyi `Teks-Erp/`den ayrı sayar (dosya en özgül projeye aittir); cargo yoksa ⏭ beyanla geçer, ölçüm CI "Native lisans çekirdeği" job'ında.
+Kâhin bekçisi: `cd Teks-Erp && npx tsx scripts/test_lisans_native_kahin.ts` (native yoksa "⏭ ATLANDI — native yok", `TEKSERP_STRICT=1`de kırmızı). Çapa değişince (`guven-capasi-ekle.ts`) `dist/` ve `dist-uretim/` YENİDEN derlenir: kâhin §3d derlenmiş her ikilinin `builtinAnchor()`ını TS çapasıyla kıyaslar, bayat ikili kırmızıdır. Commit kapısı bu projeyi `Teks-Erp/`den ayrı sayar (dosya en özgül projeye aittir); cargo yoksa ⏭ beyanla geçer, ölçüm CI "Native lisans çekirdeği" job'ında.

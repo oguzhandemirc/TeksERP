@@ -363,6 +363,7 @@ function sondalar(taban, tabanYollar) {
   };
   const tf = (o) => o.kanallar.testfabrika;
   const as = (o) => o.kanallar.adnansahin;
+  const df = (o) => o.kanallar.demofabrika;
   const yeniKanal = (o, kod, tur = 'uretim') => {
     const k = JSON.parse(JSON.stringify(as(o)));
     k.tur = tur;
@@ -441,17 +442,21 @@ function sondalar(taban, tabanYollar) {
     ['N41 mjs yayıncıdan terfi yüklemi çağrısı silindi, import kaldı (mobil-yayinla.mjs) → KIRMIZI', 'kirmizi', (d) => { d['deploy/mobil-yayinla.mjs'] = d['deploy/mobil-yayinla.mjs'].replaceAll('terfiKapisi(', 'baskaKapi('); }, 'terfi kapısı'],
     ['N42 build-apk terfi kapısı çağrısı silindi → KIRMIZI', 'kirmizi', (d) => { d['mobil/scripts/build-apk.mjs'] = d['mobil/scripts/build-apk.mjs'].replaceAll('terfiKapisi(', 'baskaKapi('); }, 'terfi kapısı'],
     ['N43 backend paketleyiciden (paketle.ps1) kanal kapısı çağrısı silindi → KIRMIZI', 'kirmizi', (d) => { d['deploy/paketle.ps1'] = d['deploy/paketle.ps1'].replaceAll('kanal-kapisi.mjs', 'baska.mjs'); }],
-    ['N44 testfabrika backendManifest elle bozuldu (türetilmemiş) → KIRMIZI (§3)', 'kirmizi', kayitta((o) => { tf(o).yayin.backendManifest = tf(o).yayin.backendManifest.replace('son.json', 'latest.json'); }), 'backendManifest'],
-    ['N45 iki kanal aynı vdsBackend → KIRMIZI (ikili fark)', 'kirmizi', kayitta((o) => { tf(o).yayin.vdsBackend = as(o).yayin.vdsBackend; }), 'vdsBackend'],
-    ['N46 backend yayıncısından kanal kapısı silindi → KIRMIZI (§5)', 'kirmizi', (d) => { d['deploy/backend-yayinla.mjs'] = d['deploy/backend-yayinla.mjs'].replaceAll(KAPI_IZI, 'scripts/lib/baska.mjs'); }, 'kanal kapısı'],
-    ['N47 backend yayıncısından terfi kapısı çağrısı silindi → KIRMIZI (§5)', 'kirmizi', (d) => { d['deploy/backend-yayinla.mjs'] = d['deploy/backend-yayinla.mjs'].replaceAll('terfiKapisi(', 'baskaKapi('); }, 'terfi kapısı'],
-    ['N48 backend yayıncısı VDS kökünü literal taşıyor → KIRMIZI (§3)', 'kirmizi', (d) => { d['deploy/backend-yayinla.mjs'] += "\nconst ESKI_KOK = '/opt/stack/apps/tekserp-guncelleme/html';\n"; }, 'LİTERAL'],
+    ['N44 AYNASIZ hazırlık kanalında (demofabrika) görünür etiket yok → KIRMIZI (S9 aynasızda da geçerli)', 'kirmizi', kayitta((o) => { df(o).gorunurEtiket = null; }), 'görünür etiket'],
+    ['N45 üretim kanalının terfiKaynagi AYNASIZ hazırlık kanalını gösteriyor → KIRMIZI', 'kirmizi', kayitta((o) => { as(o).terfiKaynagi = 'demofabrika'; }), 'terfiKaynagi'],
+    ['N46 aynasız hazırlık kanalına terfiKaynagi anahtarı → KIRMIZI (şema kapalı)', 'kirmizi', kayitta((o) => { df(o).terfiKaynagi = null; }), 'tanınmayan anahtar'],
+    ['N47 hazırlık kanalında ayna anahtarı YOK (null değil) → KIRMIZI (şema kapalı: aynasızlık açıkça null yazılır)', 'kirmizi', kayitta((o) => { delete df(o).ayna; }), 'eksik anahtar'],
+    ['N48 testfabrika backendManifest elle bozuldu (türetilmemiş) → KIRMIZI (§3)', 'kirmizi', kayitta((o) => { tf(o).yayin.backendManifest = tf(o).yayin.backendManifest.replace('son.json', 'latest.json'); }), 'backendManifest'],
+    ['N49 iki kanal aynı vdsBackend → KIRMIZI (ikili fark)', 'kirmizi', kayitta((o) => { tf(o).yayin.vdsBackend = as(o).yayin.vdsBackend; }), 'vdsBackend'],
+    ['N50 backend yayıncısından kanal kapısı silindi → KIRMIZI (§5)', 'kirmizi', (d) => { d['deploy/backend-yayinla.mjs'] = d['deploy/backend-yayinla.mjs'].replaceAll(KAPI_IZI, 'scripts/lib/baska.mjs'); }, 'kanal kapısı'],
+    ['N51 backend yayıncısından terfi kapısı çağrısı silindi → KIRMIZI (§5)', 'kirmizi', (d) => { d['deploy/backend-yayinla.mjs'] = d['deploy/backend-yayinla.mjs'].replaceAll('terfiKapisi(', 'baskaKapi('); }, 'terfi kapısı'],
+    ['N52 backend yayıncısı VDS kökünü literal taşıyor → KIRMIZI (§3)', 'kirmizi', (d) => { d['deploy/backend-yayinla.mjs'] += "\nconst ESKI_KOK = '/opt/stack/apps/tekserp-guncelleme/html';\n"; }, 'LİTERAL'],
     ['O5 backend yayıncısı VDS yolunu kayıttan okumuyor (bağ noktası yok) → ÖLÇÜLEMEDİ', 'olculemedi', (d) => { d['deploy/backend-yayinla.mjs'] = d['deploy/backend-yayinla.mjs'].replaceAll('.yayin.vdsBackend', '.yayin.baskaYol'); }],
-    ['N49 üretim kanalının terfiKaynagi null (terfisiz üretim yolu) → KIRMIZI', 'kirmizi', kayitta((o) => { o.kanallar.demofabrika.terfiKaynagi = null; }), 'terfi kaynağı ZORUNLU'],
-    ['N50 iki kanal aynı backend.hizmetAdi → KIRMIZI (ikili fark)', 'kirmizi', kayitta((o) => { o.kanallar.demofabrika.backend.hizmetAdi = tf(o).backend.hizmetAdi; }), 'hizmetAdi'],
-    ['N51 hizmet adları yalnız harf büyüklüğünde ayrışıyor → KIRMIZI (Windows duyarsız)', 'kirmizi', kayitta((o) => { o.kanallar.demofabrika.backend.hizmetAdi = tf(o).backend.hizmetAdi.toUpperCase(); }), 'harf büyüklüğünde'],
-    ['N52 hizmet adında boşluk → KIRMIZI', 'kirmizi', kayitta((o) => { tf(o).backend.hizmetAdi = 'TeksERP Backend'; }), 'hizmetAdi'],
-    ['N53 backend bloğunda hizmetAdi yok → KIRMIZI', 'kirmizi', kayitta((o) => { delete tf(o).backend.hizmetAdi; }), 'eksik anahtar'],
+    ['N53 üretim kanalının (adnansahin) terfiKaynagi null (terfisiz üretim yolu) → KIRMIZI', 'kirmizi', kayitta((o) => { as(o).terfiKaynagi = null; }), 'terfi kaynağı ZORUNLU'],
+    ['N54 iki kanal aynı backend.hizmetAdi → KIRMIZI (ikili fark)', 'kirmizi', kayitta((o) => { o.kanallar.demofabrika.backend.hizmetAdi = tf(o).backend.hizmetAdi; }), 'hizmetAdi'],
+    ['N55 hizmet adları yalnız harf büyüklüğünde ayrışıyor → KIRMIZI (Windows duyarsız)', 'kirmizi', kayitta((o) => { o.kanallar.demofabrika.backend.hizmetAdi = tf(o).backend.hizmetAdi.toUpperCase(); }), 'harf büyüklüğünde'],
+    ['N56 hizmet adında boşluk → KIRMIZI', 'kirmizi', kayitta((o) => { tf(o).backend.hizmetAdi = 'TeksERP Backend'; }), 'hizmetAdi'],
+    ['N57 backend bloğunda hizmetAdi yok → KIRMIZI', 'kirmizi', kayitta((o) => { delete tf(o).backend.hizmetAdi; }), 'eksik anahtar'],
     ['O1 kayıt defteri bozuk JSON → ÖLÇÜLEMEDİ', 'olculemedi', (d) => { d[KAYIT_REL] = d[KAYIT_REL].slice(0, 40); }],
     ['O2 update-feed.ts UPDATE_BASE_URL adı değişti → ÖLÇÜLEMEDİ', 'olculemedi', (d) => { d['Electron/shared/update-feed.ts'] = d['Electron/shared/update-feed.ts'].replace('export const UPDATE_BASE_URL', 'export const YAYIN_KOKU_URL'); }],
     ['O3 main.ts setAppUserModelId çağrısı kalktı → ÖLÇÜLEMEDİ', 'olculemedi', (d) => { d['Electron/electron/main.ts'] = d['Electron/electron/main.ts'].replace('app.setAppUserModelId(APP_ID);', 'void 0;'); }],

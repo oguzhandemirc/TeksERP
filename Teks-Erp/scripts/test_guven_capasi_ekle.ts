@@ -6,7 +6,8 @@
 // bayt-eşit yeniden ürettiğini ölçer ve davranışını geçici bir KOPYADA sınar (gerçek ağaca yazmaz).
 //   §0 gerçek ağaç: ayrıştırma + aynalar eşit + anchor.rs = TS; çapadaki her kid üretim/hazırlık biçiminde;
 //      gömülü çapa vektörlerinin fikstür kid'leri (`kok-fikstur-1` · `paket-fikstur`) bu biçimin DIŞINDA —
-//      tören günü çapaya giren gerçek anahtar vektör dosyasını kaydıramaz
+//      tören günü çapaya giren gerçek anahtar vektör dosyasını kaydıramaz · fikstür köklerinin kid'leri (`kok-fikstur-1` ·
+//      `hazirlik-fikstur-1`) gerçek çapada yok ve biçim dışı (§0g)
 //   §1 kuru koşum dosyaya dokunmaz · §2 kök ekleme: sona eklenir, aynalar bayt-eşit, anchor.rs kâhin
 //      deseniyle TS'e eşit, TS modülü derin donuk ve `prepareTrustAnchor` geçer · §3 aynı anahtar ikinci
 //      kez → değişiklik yok · §4 PAKET ekleme · §5 RET dalları (dosyaya dokunmaz) · §6 elle bozulmuş
@@ -20,6 +21,7 @@ import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync,
 import os from "node:os";
 import path from "node:path";
 import { atlamaDefteri } from "./lib/atlama";
+import { fiksturKur } from "./lib/lisans-fikstur";
 import { main as ekle } from "./guven-capasi-ekle";
 import {
   CAPA_DOSYALARI,
@@ -100,6 +102,14 @@ function bolum0(): CapaDurumu | null {
   const yalnizHazirlik: CapaDurumu = { ...d, kokler: d.kokler.filter((r) => r.kid.startsWith("hazirlik-")), paketler: d.paketler.filter((k) => k.kid.startsWith("paket-hazirlik")) };
   const sahte = kaymaAdaylari([{ ad: "sahte", tur: "hak", kid: "kok-2099-1" }, { ad: "sahte-paket", tur: "butunluk", kid: "paket-2099" }, { ad: "hazirlik", tur: "hak", kid: "hazirlik-2026-1" }], yalnizHazirlik);
   check("§0f ✓K sınıflandırıcı üretim biçimli, çapada olmayan imzacıyı yakalar (kök + PAKET)", sahte.length === 2, sahte.join(" · "));
+  const f = fiksturKur(0);
+  const capaKidleri = new Set(d.kokler.map((r) => r.kid));
+  const fiksturKokleri = [f.kok.kid, f.hazirlik.kid];
+  check(
+    "§0g ⭐ fikstür köklerinin kid'leri gerçek çapada YOK ve üretim biçimi DIŞINDA (gömülü çapayla koşan doğrulamada çarpışmaz, çapaya giremez)",
+    fiksturKokleri.every((k) => !capaKidleri.has(k) && !KOK_KID_BICIMI.test(k)) && f.hazirlik.kid.startsWith("hazirlik-"),
+    fiksturKokleri.join(", "),
+  );
   return d;
 }
 

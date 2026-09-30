@@ -14,7 +14,7 @@
 | `protocol/ortak.ts` | `Result<T>` (doğrulama istisna değil değer döner), sabit hata kodları, katı base64url, ISO↔ms, `CLOCK_SKEW_MS` (±10 dk) |
 | `protocol/jws.ts` | JWS compact + EdDSA: `signJws` · `parseJws` (imzasız, yalnız anahtar bulmak için) · `verifyJws` · `publicKeyFromX(x)` · `publicKeyX` · `installationKeyId` |
 | `protocol/belgeler.ts` | `TYP` kayıt defteri, sınıf/kademe/amaç kümeleri, belge şemaları (Zod), `decodeDocument` · `signDocument` |
-| `protocol/kok-anahtarlar.ts` | `ROOT_PUBLIC_KEYS` (bugün yalnız hazırlık kökü `hazirlik-2026-1`, derin donuk) · `STAGING_ROOT_CLASSES` |
+| `protocol/kok-anahtarlar.ts` | `ROOT_PUBLIC_KEYS` (hazırlık kökü `hazirlik-2026-1` TEST/DEMO + üretim kökü `kok-2026-1` bütün sınıflar — 2026-09-30 töreni; derin donuk; satır yalnız `scripts/guven-capasi-ekle.ts` ile) · `STAGING_ROOT_CLASSES` |
 | `protocol/anahtar-zinciri.ts` | `prepareTrustAnchor` · `verifyCertificate` · `verifyEntitlement` · `verifyLease` · `checkLeaseBinding` |
 | `protocol/indirme.ts` | İNDİRME belirteci imzala/doğrula + `isDownloadPathAllowed` (CF Worker'ın kâhini) |
 | `protocol/istek.ts` | İSTEK imzala/doğrula · `readRequestIdentity` · `bodyDigest` · `generateNonce` · `NonceLedger` · çevrimdışı `zarf` |
@@ -26,7 +26,7 @@
 | `saat.ts` | güvenilir saat hesabı + imzalı `durum.json` belgesi (fabrika tarafı) |
 | `store.ts` (+ `store-files.ts`) · `runtime.ts` (+ `license-signals.ts` · `accumulation.ts`) · `fingerprint.ts` | fabrika motoru (Faz 1c/F1a): `LICENSE_DIR` deposu (atomik yazım, yalnız ENOENT "yok", lisans kimliği dosyası, senkron yükleme) · bellek çekirdeği + senkron `getLicenseSnapshot()` · bellek sinyalleri (yoklama/zil/motor durumu, satıcı saati sapması, gözlem sayaçları) · durum kaydı katmanı (birikim, son kira/HAK izi, kapalı süre kredisi) · parmak izi toplayıcı — aynaya GİRMEZ |
 
-**Güven çapası PARAMETREDİR.** Doğrulama fonksiyonları kök listesini argüman alır; modül düzeyinde değiştirilebilir bir çapa yoktur. Üretim çağıranı `ROOT_PUBLIC_KEYS`ı verir; bu listede bugün **yalnız hazırlık kökü** `hazirlik-2026-1` (TEST/DEMO) vardır ⇒ ÜRETİM · DR · BAYI · BARINDIRILAN sınıfında hiçbir HAK geçerli olamaz (`KOK_SINIF_YETKISIZ`, fail-closed). Üretim kökü kullanıcı töreniyle ayrı bir sürümde eklenir; boş çapa `GUVEN_CAPASI_BOS` verir (bekçi §2l). Hazırlık kökünün özel yarısı repo DIŞINDADIR (satıcı anahtar dizini, parolalı; kurulum `docs/ops/SATICI-KURULUM.md`). Test anahtarları src'ye girmez; bekçiler çalışma anında üretir (`Teks-Erp/scripts/lib/lisans-fikstur.ts`).
+**Güven çapası PARAMETREDİR.** Doğrulama fonksiyonları kök listesini argüman alır; modül düzeyinde değiştirilebilir bir çapa yoktur. Üretim çağıranı `ROOT_PUBLIC_KEYS`ı verir; bu listede iki kök vardır: hazırlık kökü `hazirlik-2026-1` (yalnız TEST/DEMO) ve üretim kökü `kok-2026-1` (bütün sınıflar; 2026-09-30 töreniyle eklendi — `docs/ops/URETIM-SATICI-TOREN.md` §7) ⇒ ÜRETİM · DR · BAYI · BARINDIRILAN HAK'ı yalnız üretim kökünün zinciriyle geçer, hazırlık kökü o sınıflarda `KOK_SINIF_YETKISIZ` alır (fail-closed). Yeni kök yalnız törenle ve yeni kid'le eklenir (rotasyonda eskisi örtüşme penceresinde kalır); boş çapa `GUVEN_CAPASI_BOS` verir (bekçi §2l). Köklerin özel yarıları repo DIŞINDADIR (parolalı; hazırlık: satıcı anahtar dizini, `docs/ops/SATICI-KURULUM.md` · üretim: tören dizini + VDS anahtar birimi). Test anahtarları src'ye girmez; bekçiler çalışma anında üretir (`Teks-Erp/scripts/lib/lisans-fikstur.ts`).
 
 ## 1. Biçim — JWS compact (RFC 7515) + EdDSA/Ed25519 (RFC 8037)
 

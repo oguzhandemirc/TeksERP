@@ -17,6 +17,32 @@
   ],
   "yayinlar": [
     {
+      "id": "2026-10-01",
+      "durum": "TASLAK — terfide kullanıcı onayı",
+      "baslik": "Lisans etkinleştirmeden önce sözleşme kabulü",
+      "surumler": {
+        "panel": "1.4.2",
+        "tablet": "1.0.15"
+      },
+      "maddeler": [
+        {
+          "kapsam": "panel",
+          "tip": "yeni",
+          "metin": "Sistem → Lisans ekranında, kurulum henüz etkinleştirilmemişse en üstte “Lisans sözleşmesi” kartı çıkar: sözleşme metni ekranda okunur, metindeki bütün onay kutuları işaretlenir, “Ad Soyad” ve “Unvan” yazılır ve “Kabul ediyorum ve devam et” düğmesine basılır. Sözleşme kabul edilmeden “Etkinleştir”, “Bu bilgisayar üzerinden etkinleştir” ve “Etkinleştirme isteği oluştur” düğmeleri çalışmaz. Kabulü, lisansı yönetme yetkisi olan kullanıcı yapar."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "yeni",
+          "metin": "Sözleşme kabulü o sunucuya ve o sözleşme metnine bağlıdır: metin güncellenirse ya da program başka bir sunucuya taşınırsa, sonraki etkinleştirmeden önce yeniden kabul istenir. Kabul edilmiş kurulumda kart kabul edenin adını, unvanını ve kabul zamanını gösterir; “Metni göster” ile kabul edilen metin okunur, altında bütün kabul kayıtları listelenir. Kabul Sistem → Aktivite Günlüğü'nde de “Lisans Sözleşmesi Kabulü” olarak görünür. Sözleşme metni şimdilik taslaktır ve kartta “Taslak metin” etiketiyle görünür. Lisansı henüz devrede olmayan (gözlemde çalışan) kurulumlarda Lisans ekranı yalnız satıcı hesabına görünür; bu kurulumlarda fabrika kullanıcıları bir fark görmez."
+        },
+        {
+          "kapsam": "tablet",
+          "tip": "iyilestirme",
+          "metin": "Tablette görünür bir değişiklik yok; bu sürüm, tabletin panelle aynı turda güncellenmesi için çıkarıldı."
+        }
+      ]
+    },
+    {
       "id": "2026-09-30b",
       "durum": "TASLAK — terfide kullanıcı onayı",
       "baslik": "Fabrika saat dilimi ayarı; iki adımlı giriş isteğe bağlı; eski uzaktan takip ekranı kalktı",

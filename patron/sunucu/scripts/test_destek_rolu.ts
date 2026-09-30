@@ -2,7 +2,9 @@
 // DESTEK ROLÜ BEKÇİSİ (Ek-6/B §3.2) — ham `pg` bağlantısıyla (uygulama katmanı yok), gerçek destek rolüyle:
 //   §1 rol + yetki: NOSUPERUSER NOBYPASSRLS, varsayılan NOLOGIN · hiçbir tabloda yazma yetkisi yok · okunabilir
 //      tablo kümesi = SUPPORT_GRANTS = `destek_kapisi` politikalı tablolar (İKİ YÖNLÜ) · sır kolonu okunamaz ·
-//      erişim kaydı + imha kaydı okunamaz · kapı fonksiyonları yalnız destek rolüne açık
+//      erişim kaydı + imha kaydı okunamaz · kapı fonksiyonları yalnız destek rolüne açık · bütün kullanıcı
+//      şemalarında okunabilir İLİŞKİ (görünüm dahil — sahibinin yetkisiyle koşar, RLS'i atlayabilir) = beyan ·
+//      ÇALIŞTIRILABİLİR fonksiyon (PUBLIC'ten gelen dahil) = SUPPORT_FUNCTIONS · SECURITY DEFINER'da search_path sabit
 //   §2 RLS atlanamaz: izinsiz sorgu HATA · `app.tesis_id` elle yazılsa da 0 satır · izin açıkken başka tesise
 //      geçilemez · başka oturum izni devralamaz · süresi dolan izin 0 satır · kapatınca HATA (fail-closed)
 //   §3 salt okunur: yazma/silme/boşaltma ve kendi erişim kaydını okuma/değiştirme `permission denied`
@@ -13,7 +15,7 @@
 // =============================================================================
 import { randomBytes, randomUUID } from "node:crypto";
 import { Client } from "pg";
-import { CLOUD_TABLES, SUPPORT_GRANTS, supportRoleName } from "../src/lib/db-grants";
+import { CLOUD_TABLES, SUPPORT_FUNCTIONS, SUPPORT_GRANTS, supportRoleName } from "../src/lib/db-grants";
 import { withTesis } from "../src/lib/tenant";
 import { hesapKur, girdi, imzali, kontrol, ortamKur, paket, sonuc, temizleTesis, tesisKur, type Ortam, type TestKurulumu } from "./lib/test-ortam";
 
@@ -42,7 +44,7 @@ async function fikstur(o: Ortam, k: TestKurulumu, etiket: string): Promise<void>
   if (r.status !== 200) throw new Error(`fikstür: ${r.status}`);
 }
 
-async function rolBolumu(goc: Client, rol: string, uygulamaRolu: string): Promise<void> {
+async function rolBolumu(goc: Client, rol: string, uygulamaRolu: string, esitlemeRolu: string): Promise<void> {
   console.log("\n§1 rol + yetki");
   const r = await goc.query<{ rolsuper: boolean; rolbypassrls: boolean; rolcanlogin: boolean }>("SELECT rolsuper, rolbypassrls, rolcanlogin FROM pg_roles WHERE rolname = $1", [rol]);
   kontrol("§1a rol var: NOSUPERUSER NOBYPASSRLS, varsayılan NOLOGIN (giriş runbook'la açılır)", r.rows[0]?.rolsuper === false && r.rows[0].rolbypassrls === false && r.rows[0].rolcanlogin === false, JSON.stringify(r.rows[0]));
@@ -68,10 +70,60 @@ async function rolBolumu(goc: Client, rol: string, uygulamaRolu: string): Promis
   kontrol("§1e erişim kaydı ve imha kaydı destek rolüne KAPALI", kayit.rows[0]?.ok === false);
   const fn = await goc.query<{ f: string; pub: boolean; app: boolean; destek: boolean }>(
     `SELECT f, has_function_privilege('public', f, 'EXECUTE') AS pub, has_function_privilege($1, f, 'EXECUTE') AS app, has_function_privilege($2, f, 'EXECUTE') AS destek
-       FROM unnest(ARRAY['public.destek_ac(uuid,text,text,text,integer)', 'public.destek_kapat()', 'public.destek_tesisi()']) f`,
-    [uygulamaRolu, rol],
+       FROM unnest($3::text[]) f`,
+    [uygulamaRolu, rol, [...SUPPORT_FUNCTIONS]],
   );
   kontrol("§1f kapı fonksiyonları yalnız destek rolüne açık (PUBLIC ve uygulama rolü çalıştıramaz)", fn.rows.length === 3 && fn.rows.every((x) => !x.pub && !x.app && x.destek));
+
+  // Kullanıcı şemaları (sistem kataloğu dışı HER şema): tablo listesinin dışında kalan ilişki ve fonksiyon da ölçülür.
+  const KULLANICI_SEMASI = "n.nspname NOT IN ('pg_catalog', 'information_schema') AND n.nspname NOT LIKE 'pg\\_toast%' AND n.nspname NOT LIKE 'pg\\_temp%'";
+  const iliski = await goc.query<{ ad: string }>(
+    `SELECT n.nspname || '.' || c.relname || ' (' || c.relkind::text || ')' AS ad FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+      WHERE ${KULLANICI_SEMASI} AND c.relkind IN ('r', 'p', 'v', 'm', 'f', 'S')
+        AND CASE WHEN c.relkind = 'S' THEN has_sequence_privilege($1, c.oid, 'SELECT') ELSE has_any_column_privilege($1, c.oid, 'SELECT') END
+      ORDER BY 1`,
+    [rol],
+  );
+  const beyanIliski = beyan.map((t) => `public.${t} (r)`).sort();
+  const fazlaIliski = iliski.rows.map((x) => x.ad).filter((x) => !beyanIliski.includes(x));
+  kontrol(
+    "§1g ⭐ okunabilir İLİŞKİLER (görünüm · somut görünüm · yabancı tablo · dizi dahil, bütün kullanıcı şemaları) = SUPPORT_GRANTS tabloları — beyansız ilişki KIRMIZI",
+    JSON.stringify(iliski.rows.map((x) => x.ad)) === JSON.stringify(beyanIliski),
+    fazlaIliski.length ? `beyansız: ${fazlaIliski.join(", ")}` : `${iliski.rowCount} ilişki`,
+  );
+  const calisir = await goc.query<{ f: string }>(
+    `SELECT n.nspname || '.' || p.proname || '(' || oidvectortypes(p.proargtypes) || ')' AS f FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
+      WHERE ${KULLANICI_SEMASI} AND has_function_privilege($1, p.oid, 'EXECUTE') ORDER BY 1`,
+    [rol],
+  );
+  const beyanFn = [...SUPPORT_FUNCTIONS].sort();
+  const fazlaFn = calisir.rows.map((x) => x.f).filter((x) => !beyanFn.includes(x));
+  kontrol(
+    "§1h ⭐ destek rolünün ÇALIŞTIRABİLDİĞİ fonksiyonlar (PUBLIC'ten gelen dahil) = SUPPORT_FUNCTIONS (iki yönlü)",
+    JSON.stringify(calisir.rows.map((x) => x.f)) === JSON.stringify(beyanFn),
+    fazlaFn.length ? `beyansız: ${fazlaFn.join(", ")}` : `${calisir.rowCount}/${beyanFn.length}`,
+  );
+  const tanimci = await goc.query<{ f: string; yol: string | null }>(
+    `SELECT n.nspname || '.' || p.proname || '(' || oidvectortypes(p.proargtypes) || ')' AS f,
+            (SELECT substr(x, length('search_path=') + 1) FROM unnest(p.proconfig) x WHERE x LIKE 'search\\_path=%') AS yol
+       FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
+      WHERE ${KULLANICI_SEMASI} AND p.prosecdef ORDER BY 1`,
+  );
+  const yazilabilir = await goc.query<{ s: string }>(
+    `SELECT n.nspname AS s FROM pg_namespace n
+      WHERE has_schema_privilege('public', n.oid, 'CREATE') OR EXISTS (SELECT 1 FROM unnest($1::text[]) r WHERE has_schema_privilege(r, n.oid, 'CREATE'))`,
+    [[rol, uygulamaRolu, esitlemeRolu]],
+  );
+  const acikSema = new Set(yazilabilir.rows.map((x) => x.s));
+  const gevsek = tanimci.rows.filter((x) => {
+    const yol = (x.yol ?? "").split(",").map((s) => s.trim().replace(/^"|"$/g, "")).filter(Boolean);
+    return yol.length === 0 || yol.at(-1) !== "pg_temp" || yol.some((s) => s === "$user" || acikSema.has(s));
+  });
+  kontrol(
+    "§1i SECURITY DEFINER fonksiyonların search_path'i SABİT: tanımlı · `pg_temp` sonda · çağıranın/PUBLIC'in yazabildiği şema yok",
+    (tanimci.rowCount ?? 0) >= 3 && gevsek.length === 0,
+    gevsek.map((x) => `${x.f} → ${x.yol ?? "sabit değil"}`).join(" · ") || `${tanimci.rowCount} tanımcı fonksiyon`,
+  );
 }
 
 async function main(): Promise<void> {
@@ -94,7 +146,7 @@ async function main(): Promise<void> {
     const hB = await hesapKur(o, b.tesisId, ["bulut:hesap:yonet"]);
     await fikstur(o, a, "A");
     await fikstur(o, b, "B");
-    await rolBolumu(goc, rol, decodeURIComponent(new URL(o.ctx.config.DATABASE_URL).username));
+    await rolBolumu(goc, rol, decodeURIComponent(new URL(o.ctx.config.DATABASE_URL).username), decodeURIComponent(new URL(o.ctx.config.ESITLEME_DATABASE_URL).username));
 
     await goc.query(`ALTER ROLE "${rol}" LOGIN PASSWORD '${parola}'`);
     const d = await istemci(destekUrl);

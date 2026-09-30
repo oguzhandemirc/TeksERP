@@ -9,7 +9,17 @@
 // =============================================================================
 import { Client } from "pg";
 import { loadEnvFile } from "../src/lib/env";
-import { APP_GRANTS, CLOUD_TABLES, SUPPORT_GRANTS, SYNC_GRANTS, supportRoleName, type Privilege } from "../src/lib/db-grants";
+import {
+  APP_COLUMN_GRANTS,
+  APP_GRANTS,
+  CLOUD_TABLES,
+  SUPPORT_GRANTS,
+  SYNC_COLUMN_GRANTS,
+  SYNC_GRANTS,
+  supportRoleName,
+  type ColumnGrants,
+  type Privilege,
+} from "../src/lib/db-grants";
 
 const ROLE_NAME = /^[a-z_][a-z0-9_]{0,62}$/;
 
@@ -41,12 +51,21 @@ async function ensureRole(client: Client, role: RoleSpec): Promise<void> {
   await client.query(`${verb} ROLE ${ident(role.name)} WITH ${attrs} PASSWORD ${literal(role.password)}`);
 }
 
-async function grantAll(client: Client, role: string, grants: Readonly<Record<string, readonly Privilege[]>>): Promise<void> {
+/** Tablo REVOKE'u kolon yetkilerini de geri alır (PG) ⇒ beyandan düşen kolon yetkisi DB'de kalmaz. */
+async function grantAll(client: Client, role: string, grants: Readonly<Record<string, readonly Privilege[]>>, columnGrants: ColumnGrants): Promise<void> {
   await client.query(`REVOKE ALL ON ALL TABLES IN SCHEMA public FROM ${ident(role)}`);
   await client.query(`GRANT USAGE ON SCHEMA public TO ${ident(role)}`);
   for (const [table, privileges] of Object.entries(grants)) {
     if (!CLOUD_TABLES.includes(table)) throw new Error(`Yetki listesinde bilinmeyen tablo: ${table}`);
     await client.query(`GRANT ${privileges.join(", ")} ON ${ident(table)} TO ${ident(role)}`);
+  }
+  for (const [table, byPrivilege] of Object.entries(columnGrants)) {
+    if (!CLOUD_TABLES.includes(table)) throw new Error(`Kolon yetki listesinde bilinmeyen tablo: ${table}`);
+    for (const [privilege, columns] of Object.entries(byPrivilege)) {
+      if (!columns || columns.length === 0) continue;
+      if (grants[table]?.includes(privilege as Privilege)) throw new Error(`${table}: ${privilege} hem tablo hem kolon düzeyinde beyanlı`);
+      await client.query(`GRANT ${privilege} (${columns.map(ident).join(", ")}) ON ${ident(table)} TO ${ident(role)}`);
+    }
   }
 }
 
@@ -89,8 +108,8 @@ export async function applyRoles(env: NodeJS.ProcessEnv = process.env): Promise<
     await ensureRole(client, sync);
     await client.query(`REVOKE CONNECT ON DATABASE ${ident(database)} FROM PUBLIC`);
     await client.query(`GRANT CONNECT ON DATABASE ${ident(database)} TO ${ident(app.name)}, ${ident(sync.name)}`);
-    await grantAll(client, app.name, APP_GRANTS);
-    await grantAll(client, sync.name, SYNC_GRANTS);
+    await grantAll(client, app.name, APP_GRANTS, APP_COLUMN_GRANTS);
+    await grantAll(client, sync.name, SYNC_GRANTS, SYNC_COLUMN_GRANTS);
     await applySupportRole(client, database);
   } finally {
     await client.end();

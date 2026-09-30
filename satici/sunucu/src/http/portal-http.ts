@@ -12,7 +12,7 @@ import express, { Router, type NextFunction, type Request, type RequestHandler, 
 import { z } from "zod";
 import { recordAudit } from "../lib/audit";
 import { VendorError, notFoundError } from "../lib/errors";
-import { currentScope, runInScope } from "../lib/request-scope";
+import { currentScope, runInListenerScope } from "../lib/request-scope";
 import { login, logout, resolveSession, SESSION_COOKIE, SESSION_COOKIE_PATH, type PortalSession } from "../portal/auth.service";
 import { executePortalAction, type PortalActionResult, type PortalActionSpec } from "../portal/idempotency";
 import { TAILNET_ONLY_PERMISSIONS, roleHas, type PortalListener, type PortalPermission } from "../portal/roles";
@@ -256,7 +256,7 @@ export function scopedHandler(listener: PortalListener, key: string, fn: (req: R
       notFound(req, res);
       return;
     }
-    await runInScope(
+    await runInListenerScope(
       listener,
       async () => {
         await fn(req, res);

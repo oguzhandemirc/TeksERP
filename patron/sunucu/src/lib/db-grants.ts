@@ -6,14 +6,16 @@
 //     hesap/oturum/parola satırına ulaşamaz.
 // Migration yeni tablo eklerse buraya satırı AYNI dilimde girer (girmezse iki rol de erişemez: fail-closed).
 export type Privilege = "SELECT" | "INSERT" | "UPDATE" | "DELETE";
+/** Kolon düzeyi yetki: tablo düzeyindekine EK, yalnız adı geçen kolonlarda (aynı yetki iki düzeyde birden verilmez). */
+export type ColumnGrants = Readonly<Record<string, Readonly<Partial<Record<"UPDATE", readonly string[]>>>>>;
 
 export const APP_GRANTS: Readonly<Record<string, readonly Privilege[]>> = {
   facilities: ["SELECT"],
   installations: ["SELECT"],
   accounts: ["SELECT", "INSERT", "UPDATE"],
   sessions: ["SELECT", "INSERT", "UPDATE", "DELETE"],
-  // UPDATE yalnız bakım işinin IP alanı silmesi için (`maintenance.ts` `AGED_FIELDS`; bekçi başka yazanı ısırır).
-  account_audit: ["SELECT", "INSERT", "UPDATE", "DELETE"],
+  // UPDATE tablo düzeyinde YOK: yalnız `summary` kolonunda (APP_COLUMN_GRANTS) — bakımın IP alanı silmesi.
+  account_audit: ["SELECT", "INSERT", "DELETE"],
   operation_receipts: ["SELECT", "INSERT", "DELETE"],
   inbox_messages: ["SELECT", "INSERT", "UPDATE", "DELETE"],
   report_requests: ["SELECT", "INSERT", "UPDATE", "DELETE"],
@@ -26,6 +28,16 @@ export const APP_GRANTS: Readonly<Record<string, readonly Privilege[]>> = {
   sync_state: ["SELECT"],
   support_access: ["SELECT"],
 };
+
+export const APP_COLUMN_GRANTS: ColumnGrants = {
+  // Yaşa göre silinen alan (`maintenance.ts` `AGED_FIELDS`: giriş olayının IP'si); olay, aktör, zaman yazılamaz.
+  account_audit: { UPDATE: ["summary"] },
+  // Kimlik silmesi makbuz yanıtındaki ad/e-postayı tombstone'a çevirir (`maintenance.ts` `purgeClosedIdentities`);
+  // makbuzun kimliği, eylemi ve gövde özeti yazılamaz (tekrar kapısı onlara dayanır).
+  operation_receipts: { UPDATE: ["response"] },
+};
+
+export const SYNC_COLUMN_GRANTS: ColumnGrants = {};
 
 export const SYNC_GRANTS: Readonly<Record<string, readonly Privilege[]>> = {
   facilities: ["SELECT", "INSERT", "UPDATE"],
@@ -97,6 +109,14 @@ export const SUPPORT_GRANTS: Readonly<Record<string, "*" | readonly string[]>> =
   full_sync_runs: "*",
   request_nonces: "*",
 };
+
+/**
+ * Destek rolünün ÇALIŞTIRABİLDİĞİ fonksiyonlar — beyan (`şema.ad(arg tipleri)`, `oidvectortypes` biçimi). PUBLIC'ten
+ * gelen EXECUTE dahil başka her fonksiyon bekçide kırmızıdır; her SECURITY DEFINER fonksiyonun `search_path`i sabit
+ * ve `pg_temp` sonda olmalıdır (çağıranın yolu ad çeviremez). Destek rolü görünüm/başka ilişki OKUYAMAZ (yalnız
+ * `SUPPORT_GRANTS` tabloları).
+ */
+export const SUPPORT_FUNCTIONS: readonly string[] = ["public.destek_ac(uuid, text, text, text, integer)", "public.destek_kapat()", "public.destek_tesisi()"];
 
 /** Destek rolünün adı (göç SQL'i `current_database() || '_destek'` ile AYNI kural). */
 export function supportRoleName(database: string): string {

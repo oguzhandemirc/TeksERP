@@ -1,10 +1,14 @@
 // İSTEK KAPSAMI — isteğin hangi dinleyiciden geldiği (ERİŞİM'de Access kimliği de) işleyici boyunca taşınır.
-// Kapsamı portal yönlendiricileri kurar (portal-http.ts `scopedHandler`; gövde ayrıştırıldıktan SONRA); CLI kapsamı
-// yalnız scripts/'ten (`runAsCli`). Okuyucular: imza boğazı (keys/signing-scope.ts — kapsamsız imza RED) ve denetim
-// (lib/audit.ts — ERİŞİM'den gelen her satıra Access e-postası).
+// Sunucu kodu (src/) kapsamı YALNIZ `runInListenerScope` ile kurar (portal-http.ts `scopedHandler`; gövde ayrıştırıldıktan
+// SONRA) — o yol CLI kapsamı AÇAMAZ. `runAsCli` (anahtar töreni, sertifika imzası) ve serbest kökenli `runInScope`
+// yalnız scripts/ ve bekçiler içindir: src/ içinde anılmaları bekçi `test_imza_parolasi` §8'de kırmızıdır.
+// Okuyucular: imza boğazı (keys/signing-scope.ts — kapsamsız imza RED) ve denetim (lib/audit.ts — ERİŞİM satırına e-posta).
 import { AsyncLocalStorage } from "node:async_hooks";
 
 export type ScopeOrigin = "TAILNET" | "ERISIM" | "GENEL" | "CLI";
+/** Dinleyici kökenleri — sunucu kodunun kurabildiği TEK kapsamlar (CLI hariç). */
+export type ListenerOrigin = Exclude<ScopeOrigin, "CLI">;
+const LISTENER_ORIGINS: readonly ListenerOrigin[] = ["TAILNET", "ERISIM", "GENEL"];
 
 export interface RequestScope {
   readonly origin: ScopeOrigin;
@@ -18,13 +22,24 @@ export interface RequestScope {
 
 const storage = new AsyncLocalStorage<RequestScope>();
 
-export function runInScope<T>(origin: ScopeOrigin, fn: () => T, accessEmail?: string): T {
+function enter<T>(origin: ScopeOrigin, fn: () => T, accessEmail?: string): T {
   return storage.run({ origin, accessEmail, actor: undefined, audits: 0 }, fn);
 }
 
-/** Satıcı CLI'ı (scripts/): anahtar töreni, sertifika imzası, bekçi fikstürü — sunucu kodu bunu ÇAĞIRMAZ. */
+/** Portal yönlendiricilerinin kapsamı: yalnız dinleyici kökeni (çalışma anında da denetlenir — CLI buradan açılmaz). */
+export function runInListenerScope<T>(origin: ListenerOrigin, fn: () => T, accessEmail?: string): T {
+  if (!LISTENER_ORIGINS.includes(origin)) throw new Error(`Dinleyici kapsamı değil: ${String(origin)}`);
+  return enter(origin, fn, accessEmail);
+}
+
+/** YALNIZ scripts/ ve bekçiler: serbest kökenli kapsam (bekçi sondası). Sunucu kodu çağırmaz (bekçi ölçer). */
+export function runInScope<T>(origin: ScopeOrigin, fn: () => T, accessEmail?: string): T {
+  return enter(origin, fn, accessEmail);
+}
+
+/** YALNIZ scripts/: anahtar töreni, sertifika imzası, bekçi fikstürü — sunucu kodu bunu ÇAĞIRMAZ (bekçi ölçer). */
 export function runAsCli<T>(fn: () => T): T {
-  return runInScope("CLI", fn);
+  return enter("CLI", fn);
 }
 
 export function currentScope(): RequestScope | undefined {
