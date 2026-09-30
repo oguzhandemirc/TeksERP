@@ -42,7 +42,7 @@ ister, APK kabul etmez) + `autoIncrement: versionCode`. Yerel derleme şart olur
 
 | Form | Durum | Not |
 |---|---|---|
-| **Gizlilik Politikası URL'i** | 🟡 taslak var | `docs/legal/GIZLILIK-POLITIKASI.md` — `[DOLDUR]` alanları (şirket ünvanı, e-posta, demo adresi) tamamlanıp herkese açık bir URL'de barındırılacak. |
+| **Gizlilik Politikası URL'i** | 🟡 taslak var | `docs/legal/GIZLILIK-POLITIKASI.md` — `[DOLDURULACAK]` alanları (şirket ünvanı, e-posta, demo adresi) tamamlanıp herkese açık bir URL'de barındırılacak. |
 | **Data safety** (Veri Güvenliği) | ❌ | Toplanan veri: hesap (kullanıcı adı), cihaz kimliği (UUID, `devices/announce`), kamera (barkod — cihazda işlenir, gönderilmez). Konum **toplanmıyor** (yalnız BT taraması izni). |
 | **App access** | ❌ | Uygulama login-gated ve **kendi sunucunuza** bağlanıyor → "All or some functionality is restricted" seç, incelemeciye erişilebilir bir sunucu adresi + test hesabı ver. Bu adım atlanırsa ret gelir. |
 | İçerik derecelendirme (IARC) | ❌ | Anket; iş/üretkenlik uygulaması. |
@@ -130,7 +130,7 @@ Play Console kayıt ücreti tek seferlik 25 USD.
 ## 5. Sıra
 
 1. **Play Console hesabı** aç (kişisel, 25 USD) + uygulamayı oluştur
-2. **Gizlilik politikası:** `docs/legal/GIZLILIK-POLITIKASI.md` `[DOLDUR]`'larını
+2. **Gizlilik politikası:** `docs/legal/GIZLILIK-POLITIKASI.md` `[DOLDURULACAK]`'larını
    tamamla → herkese açık URL'de yayınla
 3. **Demo sunucu** (§1.3): HTTPS, izole instance, demo hesabı
 4. `eas credentials` → upload keystore; `production.env.EXPO_PUBLIC_API_URL` =

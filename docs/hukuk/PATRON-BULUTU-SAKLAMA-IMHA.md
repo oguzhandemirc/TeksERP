@@ -1,8 +1,8 @@
 # Patron Bulutu Saklama ve İmha Prosedürü
 
-> **TASLAK — AVUKAT ONAYI BEKLİYOR.** Claude tarafından, 2026-09-29 patron bulutu kararlarına ve eşitleme sözleşmesi v1 tasarımına (`docs/design/PATRON-BULUTU-ESITLEME.md` §9.5) göre hazırlanmıştır; hukuki görüş değildir. `[DOLDURULACAK]` işaretli süreler ticari karardır; "öneri" bağlayıcı değildir.
+> **TASLAK — AVUKAT İNCELEMESİ BEKLİYOR.** Bu metin bir taslaktır; hukuki görüş değildir.
 >
-> Metin kimliği: `PBSI-2026.1-taslak` · `PATRON-BULUTU-VERI-ISLEME-EKI.md`'nin ekidir.
+> Metin kimliği: `PBSI-2026.1-taslak` · Ek-6/A · Patron Bulutu Veri İşleme Eki'nin (Ek-6) ekidir.
 
 > **Avukat şu maddelere özellikle baksın**
 > - **Kişisel Verilerin Silinmesi, Yok Edilmesi veya Anonim Hale Getirilmesi Hakkında Yönetmelik (2017):** Bu prosedür, Lisans Alan'ın kişisel veri saklama ve imha politikasına eklenecek bölüm olarak yeterli mi? Periyodik imha aralığı (Yönetmelik en çok 6 ay öngörür) burada günlük otomatik budamayla karşılanıyor; ayrıca 6 aylık gözden geçirme gerekir mi (§5)?
@@ -18,7 +18,7 @@
 
 1.2. **Fabrikada silinen, bulutta da silinir.** Kurulum'da silinen ya da buluta gönderilme kapsamından çıkan bir kayıt, bir sonraki eşitlemede bulutta "silindi" işaretlenir ve §2.3'teki süre sonunda fiziksel olarak silinir.
 
-1.3. **İmha yöntemi.** Bulut veritabanındaki satırlar fiziksel silme ile silinir. Silinen verinin veritabanı dosyalarında ve yedeklerde kalan izleri §4.4'teki yedek döngüsüyle düşer. Anonimleştirme yalnız kimliksiz toplam ölçümler için kullanılır (`PATRON-BULUTU-VERI-ISLEME-EKI.md` §2.4).
+1.3. **İmha yöntemi.** Bulut veritabanındaki satırlar fiziksel silme ile silinir. Silinen verinin veritabanı dosyalarında ve yedeklerde kalan izleri §4.4'teki yedek döngüsüyle düşer. Anonimleştirme yalnız kimliksiz toplam ölçümler için kullanılır (Patron Bulutu Veri İşleme Eki, Ek-6, §2.4).
 
 ## 2. Hizmet sürerken saklama
 
@@ -45,17 +45,17 @@ fiziksel olarak siler. Kısa seçeneğe geçilirse fazlası bir sonraki günlük
 | Bulut Hesabı | Hesap kapatılana ya da hizmet bitene kadar | §4'e göre silinir |
 | Başarısız giriş kayıtları | 90 gün | Silinir |
 | Diğer hesap güvenlik kayıtları (giriş, hesap/izin değişikliği, kilitleme) | 2 yıl | Silinir |
-| Gelen Kutusu talebi ve sonucu | [DOLDURULACAK — öneri: işlendikten sonra 13 ay ya da §2.1 seçeneği, hangisi uzunsa] | Silinir; Kurulum'daki makbuz kalır |
-| Rapor istekleri ve sonuçları | [DOLDURULACAK — öneri: 30 gün] | Silinir |
+| Gelen Kutusu talebi ve sonucu | Talep tarihinden itibaren §2.1'deki geçmiş seçeneği kadar ("Tümü" seçiliyse süre sınırı yok) | Silinir; Kurulum'daki makbuz kalır |
+| Rapor istekleri ve sonuçları | 30 gün | Silinir |
 | Bildirim cihaz anahtarı | Cihaz kaldırılana, hesap kapatılana ya da anahtar geçersizleşene kadar | Silinir |
-| Bulut sunucusu ve Cloudflare erişim günlükleri (IP) | [DOLDURULACAK — öneri: 30 gün]; Cloudflare kendi süresini uygular | Silinir |
+| Bulut sunucusu ve Cloudflare erişim günlükleri (IP) | 30 gün; Cloudflare kendi süresini uygular | Silinir |
 | Uygulamanın cihazdaki önbelleği | Oturum kapatılana ya da hesap kilitlenene kadar | Uygulama siler |
 
-2.5. **Hesap kapatma.** Tesis Yöneticisi bir Bulut Hesabı'nı kapattığında hesabın girişi hemen kapanır. Ad, e-posta, parola özeti ve TOTP sırrı [DOLDURULACAK — öneri: 30 gün] içinde silinir; güvenlik kayıtları §2.4'teki süreyle kalır ve hesap kimliğine bağlıdır [avukat: kapatılan hesabın adının güvenlik kaydında kalması ölçülü mü].
+2.5. **Hesap kapatma.** Tesis Yöneticisi bir Bulut Hesabı'nı kapattığında hesabın girişi hemen kapanır. Ad, e-posta, parola özeti ve TOTP sırrı 30 gün içinde silinir; güvenlik kayıtları §2.4'teki süreyle kalır ve hesap kimliğine bağlıdır [avukat: kapatılan hesabın adının güvenlik kaydında kalması ölçülü mü].
 
 ## 3. Talep üzerine silme
 
-3.1. **İlgili kişinin silme talebi.** Lisans Alan, bir ilgili kişinin talebini kabul ederse kaydı **Kurulum'da** siler ya da anonimleştirir; bulut kopyası §1.2 ile en geç bir sonraki eşitleme + 7 gün içinde düşer. Lisans Alan daha hızlı silme isterse Lisans Veren, yazılı talep üzerine ilgili bulut kayıtlarını [DOLDURULACAK — öneri: 3 iş günü] içinde elle siler ve Lisans Alan'a bildirir.
+3.1. **İlgili kişinin silme talebi.** Lisans Alan, bir ilgili kişinin talebini kabul ederse kaydı **Kurulum'da** siler ya da anonimleştirir; bulut kopyası §1.2 ile en geç bir sonraki eşitleme + 7 gün içinde düşer. Lisans Alan daha hızlı silme isterse Lisans Veren, yazılı talep üzerine ilgili bulut kayıtlarını 3 iş günü içinde elle siler ve Lisans Alan'a bildirir.
 
 3.2. **Hizmeti erken kapatma.** Lisans Alan hizmet süresi dolmadan eşitlemeyi kapatabilir. Kapatma eşitlemeyi durdurur; buluttaki veri §4'teki bitiş akışına girer.
 
@@ -63,17 +63,17 @@ fiziksel olarak siler. Kısa seçeneğe geçilirse fazlası bir sonraki günlük
 
 ## 4. Hizmetin bitmesi: dışa aktarma ve imha
 
-4.1. **Eşitleme durur.** Patron bulutu hizmetinin süresi (`patronBulutBitis`) dolduğunda, hizmet feshedildiğinde ya da Lisans Alan kapattığında Kurulum buluta veri göndermeyi bırakır. Bulut da o Kurulum'dan gelen paketi reddeder.
+4.1. **Eşitleme durur.** Patron bulutu hizmetinin süresi (Kullanım Onayı'nda yazılı patron bulutu bitiş tarihi) dolduğunda, hizmet feshedildiğinde ya da Lisans Alan kapattığında Kurulum buluta veri göndermeyi bırakır. Bulut da o Kurulum'dan gelen paketi reddeder.
 
-4.2. **Dışa aktarma süresi.** Bitişten itibaren [DOLDURULACAK — öneri: 90 gün] boyunca:
+4.2. **Dışa aktarma süresi.** Bitişten itibaren 90 gün boyunca:
 - Bulut Hesapları salt-okunur olarak girebilir; Gelen Kutusu'na yeni kayıt girilemez;
-- Tesis Yöneticisi, Bulut Kopyası'nın ve bulutta doğan verinin (Gelen Kutusu, hesap listesi, hesap güvenlik kayıtları) dökümünü makinece okunabilir bir biçimde [DOLDURULACAK — öneri: JSON ve CSV] alabilir;
+- Tesis Yöneticisi, Bulut Kopyası'nın ve bulutta doğan verinin (Gelen Kutusu, hesap listesi, hesap güvenlik kayıtları) dökümünü makinece okunabilir bir biçimde (JSON ve CSV) alabilir;
 - Lisans Alan dilerse imhanın bu süreyi beklemeden yapılmasını yazılı olarak isteyebilir.
 Bulut Kopyası'ndaki iş verisinin aslı Kurulum'da durduğundan, dışa aktarma çoğunlukla bulutta doğan veri için anlamlıdır.
 
 4.3. **İmha.** Süre sonunda Lisans Veren, o Tesis'e ait bütün bulut verisini (Bulut Kopyası, Bulut Hesapları, güvenlik kayıtları, Gelen Kutusu, rapor sonuçları, bildirim anahtarları) canlı veritabanından siler. Ticari bir alacak ya da §3.3 kapsamında bildirilmiş bir saklama gerekçesi imhayı durdurmaz; yalnız gerekçeye konu kayıtlar ayrılır [avukat].
 
-4.4. **Yedeklerde imha.** Bulut veritabanının yedekleri [DOLDURULACAK — öneri: günlük, 35 gün döngü] ile tutulur. Yedekler tek bir Tesis için seçici olarak düzenlenmez; silinen veri, yedek döngüsü tamamlandığında (imhadan en geç [DOLDURULACAK — öneri: 35 gün] sonra) son yedekten de düşer. Bu sürede yedekten geri yükleme yapılırsa, imha edilmiş Tesis'in verisi geri yüklemenin hemen ardından yeniden silinir ve bu işlem kayda geçer.
+4.4. **Yedeklerde imha.** Bulut veritabanının yedekleri günlük alınır ve 30 günlük döngüyle tutulur. Yedekler tek bir Tesis için seçici olarak düzenlenmez; silinen veri, yedek döngüsü tamamlandığında (imhadan en geç 35 gün sonra) son yedekten de düşer. Bu sürede yedekten geri yükleme yapılırsa, imha edilmiş Tesis'in verisi geri yüklemenin hemen ardından yeniden silinir ve bu işlem kayda geçer.
 
 4.5. **İmha tutanağı.** İmha tamamlanınca Lisans Veren, Lisans Alan'a imha tarihini, silinen veri kategorilerini ve yedeklerden düşeceği son tarihi gösteren bir tutanak verir.
 
@@ -83,10 +83,10 @@ Bulut Kopyası'ndaki iş verisinin aslı Kurulum'da durduğundan, dışa aktarma
 
 5.1. Günlük budama işi (§2.3) otomatik imhadır ve her koşumu bulut sunucusunun işletme kaydına düşer (silinen satır sayısı, tesis, tür; kaydın içeriği değil).
 
-5.2. Lisans Veren [DOLDURULACAK — öneri: 6 ayda bir] şunları gözden geçirir ve sonucu kayda geçirir: budama işinin her Tesis için çalıştığı; §2.4 sürelerinin uygulandığı; bitmiş hizmetlerin imhasının tamamlandığı; yedek döngüsünün §4.4'e uyduğu.
+5.2. Lisans Veren 6 ayda bir şunları gözden geçirir ve sonucu kayda geçirir: budama işinin her Tesis için çalıştığı; §2.4 sürelerinin uygulandığı; bitmiş hizmetlerin imhasının tamamlandığı; yedek döngüsünün §4.4'e uyduğu.
 
 ## 6. Kayıtlar
 
 6.1. Her imha (günlük budama özeti, talep üzerine silme, hizmet bitişi imhası, yedekten düşme teyidi) şu bilgilerle kayda geçer: tarih, Tesis, veri kategorisi, yöntem (fiziksel silme), işlemi yapan (otomatik iş ya da Lisans Veren çalışanı), gerekçe.
 
-6.2. İmha kayıtları en az [DOLDURULACAK — öneri: 3 yıl] saklanır [avukat: Yönetmelik]. Bu kayıtlar silinen verinin içeriğini taşımaz.
+6.2. İmha kayıtları en az 3 yıl saklanır [avukat: Yönetmelik]. Bu kayıtlar silinen verinin içeriğini taşımaz.

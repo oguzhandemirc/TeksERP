@@ -1,10 +1,10 @@
 # TeksERP Patron Bulutu Veri İşleme Eki
 
-> **TASLAK — AVUKAT ONAYI BEKLİYOR.** Bu metin, kullanıcının 2026-09-29 patron bulutu kararlarına ve eşitleme sözleşmesi v1 tasarımına göre Claude tarafından hazırlanmıştır; hukuki görüş değildir. Mevzuat atıfları incelemeye yön vermek içindir, doğruluğu ve güncelliği avukatça teyit edilmelidir. `[DOLDURULACAK]` işaretli yerler ticari karar ya da eksik bilgidir; "öneri" diye verilen değerler bağlayıcı değildir.
+> **TASLAK — AVUKAT İNCELEMESİ BEKLİYOR.** Bu metin bir taslaktır; hukuki görüş değildir. Mevzuat atıfları incelemeye yön vermek içindir, doğruluğu ve güncelliği avukatça teyit edilmelidir. `[DOLDURULACAK]` işaretli yerler ticari karar ya da eksik bilgidir.
 >
-> Metin kimliği: `PBVIE-2026.1-taslak` · Bu ek, `VERI-ISLEME-EKI.md` Bölüm P iskeletinin yerini alır. Lisans sözleşmesi (`SON-KULLANICI-LISANS-SOZLESMESI.md`) ve bakım sözleşmesinden (`BAKIM-DESTEK-SOZLESMESI.md`) AYRI imzalanır; patron bulutu hizmeti satın alınmadıkça yürürlüğe girmez.
+> Metin kimliği: `PBVIE-2026.1-taslak` · Ek-6 · Lisans sözleşmesi (Son Kullanıcı Lisans Sözleşmesi) ve bakım sözleşmesinden (Bakım ve Destek Sözleşmesi, Ek-4) AYRI imzalanır; patron bulutu hizmeti satın alınmadıkça yürürlüğe girmez.
 >
-> Ekin ekleri: `PATRON-BULUTU-SAKLAMA-IMHA.md` (saklama ve imha) · `PATRON-BULUTU-TEDBIRLER.md` (teknik ve idari tedbirler) · `VERI-IHLALI-BILDIRIM-PROSEDURU.md` (ihlal bildirimi) · `PATRON-BULUTU-AYDINLATMA-METNI.md` (uygulamada gösterilecek aydınlatma metni).
+> Ekin ekleri: Saklama ve İmha Prosedürü (Ek-6/A) · Teknik ve İdari Tedbirler (Ek-6/B) · Veri İhlali Bildirim Prosedürü (Ek-8) · Aydınlatma Metni (Ek-6/C; uygulamada gösterilecek aydınlatma metni).
 
 > **KVKK ve ilgili mevzuat açısından avukat şu maddelere özellikle baksın**
 > - **KVKK md. 3 — roller:** Taslak, bulut kopyasındaki bütün kişisel veriler için Lisans Alan'ı (fabrika) veri sorumlusu, Lisans Veren'i (Etkili Yazılım) veri işleyen saydı (§2). Bulut hesaplarının güvenlik kayıtları (giriş denemeleri, IP) için Lisans Veren'in kendi adına veri sorumlusu sayılması gerekir mi?
@@ -33,7 +33,7 @@
 
 1.3. **Fabrika tek yazardır.** Bulut hesap yapmaz ve Kurulum'daki hiçbir kaydı değiştirmez. Gelen Kutusu'ndaki kayıt yalnız bir taleptir; Kurulum onu kendi kurallarıyla işler ya da reddeder.
 
-1.4. **Açılış şartları.** Hizmet varsayılan olarak kapalıdır. Yalnız şu dördü birden sağlanınca veri gönderilir: Lisans Belgesi'nin sınıfı **Üretim**; Lisans Belgesi'nde `patron-bulut` hakkı; hizmet süresinin bitmemiş olması; Kurulum'un bir felaket kurtarma sunucusuna devredilmemiş olması. Test, demo ve felaket kurtarma sınıfındaki kurulumlar veri göndermez (`SON-KULLANICI-LISANS-SOZLESMESI.md` §10.1). Şartlardan biri belirsizse veri gitmez.
+1.4. **Açılış şartları.** Hizmet varsayılan olarak kapalıdır. Yalnız şu dördü birden sağlanınca veri gönderilir: Lisans Belgesi'nin sınıfı **Üretim**; Lisans Belgesi'nde Patron Bulutu hakkı; hizmet süresinin bitmemiş olması; Kurulum'un bir felaket kurtarma sunucusuna devredilmemiş olması. Test, demo ve felaket kurtarma sınıfındaki kurulumlar veri göndermez (Lisans Sözleşmesi §10.1). Şartlardan biri belirsizse veri gitmez.
 
 ## 2. Roller
 
@@ -47,7 +47,7 @@
 
 ## 3. İşlenen veri kategorileri
 
-3.1. Buluta giden her alan, eşitleme sözleşmesinin projeksiyon kataloğunda tek tek yazılıdır ve bir **veri sınıfı** taşır: İŞLEM, FİNANS ya da KİŞİSEL (teknik kaynak: `docs/design/PATRON-BULUTU-ESITLEME.md` §3 ve §11). Aşağıdaki tablo o sınıflardan üretilmiştir. Kataloğa yeni bir KİŞİSEL alan eklemek bu ekin yeni bir sürümünü gerektirir.
+3.1. Buluta giden her alan, yazılımın projeksiyon kataloğunda tek tek yazılıdır ve bir **veri sınıfı** taşır: İŞLEM, FİNANS ya da KİŞİSEL. Aşağıdaki tablo o sınıflardan üretilmiştir. Kataloğa yeni bir KİŞİSEL alan eklemek bu ekin yeni bir sürümünü gerektirir.
 
 3.2. **Bulut Kopyası (Kurulum'dan gelen veri)**
 
@@ -74,7 +74,7 @@
 
 3.4. **Serbest metin.** Açıklama gibi serbest alanlara kişisel veri, özellikle **özel nitelikli kişisel veri** (KVKK md. 6: sağlık, din, sendika üyeliği, ceza mahkûmiyeti vb.) yazılmamalıdır. Lisans Alan bunu kendi kullanıcılarına talimat olarak verir. Kurulum'daki `notlar` alanlarının hiçbiri buluta gitmez.
 
-3.5. **Buluta gitmeyenler.** Denetim (audit) kayıtları; fabrika kullanıcılarının adları, kimlikleri, parolaları, PIN'leri ve kartları; kullanıcı izinleri ve oturumları; sistem ayarları ve şifre özetleri; cari kartların vergi/TC kimlik numarası, adresi, e-postası ve notları; sevkiyatların plaka, sürücü ve taşıyıcı bilgisi; top düzeyi stok ve stok hareket defterleri; kişi adı taşıyan performans raporları [DOLDURULACAK — v1 kararı: operatör performans raporu bulutta sunulmaz]. Liste teknik olarak kataloğun "dışarıda" listesiyle ölçülür.
+3.5. **Buluta gitmeyenler.** Denetim (audit) kayıtları; fabrika kullanıcılarının adları, kimlikleri, parolaları, PIN'leri ve kartları; kullanıcı izinleri ve oturumları; sistem ayarları ve şifre özetleri; cari kartların vergi/TC kimlik numarası, adresi, e-postası ve notları; sevkiyatların plaka, sürücü ve taşıyıcı bilgisi; top düzeyi stok ve stok hareket defterleri; kişi adı taşıyan performans raporları (operatör performans raporu bulutta sunulmaz).
 
 3.6. **Kurulum'a dönen veri.** Gelen Kutusu'ndan işlenen her kayıt için Kurulum, talebi giren Bulut Hesabı'nın **kimliğini ve adını** bir makbuz tablosunda saklar (kaydın nereden geldiğinin kanıtı). Bu bilgi Lisans Alan'ın kendi sistemindedir.
 
@@ -96,7 +96,7 @@ Açık rızaya dayanan bir işleme öngörülmemiştir. Bulut Kopyası, Lisans A
 
 5.2. Bulut hizmeti, Lisans Veren'in lisans sunucusuyla aynı makinede ama **ayrı konteyner, ayrı ağ, ayrı veritabanı ve ayrı veritabanı rolüyle** çalışır; kaynak kullanımı sınırlandırılmıştır.
 
-5.3. Saklama süreleri ve imha: `PATRON-BULUTU-SAKLAMA-IMHA.md`.
+5.3. Saklama süreleri ve imha: Saklama ve İmha Prosedürü (Ek-6/A).
 
 ## 6. Alt işleyenler ve yurt dışına aktarım
 
@@ -109,7 +109,7 @@ Açık rızaya dayanan bir işleme öngörülmemiştir. Bulut Kopyası, Lisans A
 | Expo (650 Industries, Inc.) | Mobil bildirim iletimi | ABD | Cihaz bildirim anahtarı ve bildirim metni |
 | Google LLC (Firebase Cloud Messaging) | Android bildirimi | ABD / dünya geneli | Aynı |
 | Apple Inc. (APNs) | iOS bildirimi | ABD / dünya geneli | Aynı |
-| [DOLDURULACAK — web bildirimi için tarayıcının bildirim hizmeti] | Web bildirimi | Tarayıcı üreticisine göre | Aynı |
+| Kullanılan tarayıcının bildirim hizmeti: Google LLC (Chrome), Mozilla Corporation (Firefox), Apple Inc. (Safari), Microsoft Corporation (Edge); sunucu yalnız bu dört hizmete gönderir | Web bildirimi | Tarayıcı üreticisine göre | Aynı |
 
 6.2. **Bildirimde asgari veri.** Bildirim metni varsayılan olarak cari adı, tutar ve kişi adı içermez; yalnız olay türünü ve uygulamada açılacak ekranı söyler ("Yeni sipariş talebiniz işlendi", "Gece yedeği başarısız"). Ayrıntı, uygulama açılınca bulut sunucusundan okunur [DOLDURULACAK — ticari karar: ayrıntılı bildirim seçeneği sunulacak mı; sunulursa §6.3 bu içerik için de geçerlidir].
 
@@ -125,18 +125,18 @@ Açık rızaya dayanan bir işleme öngörülmemiştir. Bulut Kopyası, Lisans A
 - (c) hizmeti, aktarımın hukuki dayanağı kurulana kadar bildirimsiz ve [DOLDURULACAK] biçimde sunmak.
 Lisans Veren, dayanak kurulmadan yurt dışı alt işleyene kişisel veri akıtan bir özelliği açmaz.
 
-6.5. **Yeni alt işleyen.** Lisans Veren yeni bir alt işleyen eklemeden en az [DOLDURULACAK — öneri: 30 gün] önce Lisans Alan'a bildirir. Lisans Alan haklı sebeple itiraz ederse taraflar çözüm arar; bulunamazsa Lisans Alan patron bulutu hizmetini cezasız feshedebilir [avukat]. Lisans Veren, alt işleyene bu ekteki yükümlülüklerden daha hafif olmayan yükümlülükler yükler (KVKK md. 12/2).
+6.5. **Yeni alt işleyen.** Lisans Veren yeni bir alt işleyen eklemeden en az 30 gün önce Lisans Alan'a bildirir. Lisans Alan haklı sebeple itiraz ederse taraflar çözüm arar; bulunamazsa Lisans Alan patron bulutu hizmetini cezasız feshedebilir [avukat]. Lisans Veren, alt işleyene bu ekteki yükümlülüklerden daha hafif olmayan yükümlülükler yükler (KVKK md. 12/2).
 
 ## 7. Lisans Veren'in veri işleyen yükümlülükleri
 
 7.1. Lisans Veren Bulut Kopyası'nı:
 - (a) yalnız bu ekteki amaçlarla ve Lisans Alan'ın talimatıyla işler (§2.3);
-- (b) yalnız görevli, yazılı gizlilik yükümlülüğü altındaki çalışanlarına gösterir; destek için Bulut Kopyası'na erişim yalnız Lisans Alan'ın talebiyle olur ve kayda geçer (`PATRON-BULUTU-TEDBIRLER.md` §3);
+- (b) yalnız görevli, yazılı gizlilik yükümlülüğü altındaki çalışanlarına gösterir; destek için Bulut Kopyası'na erişim yalnız Lisans Alan'ın talebiyle olur ve kayda geçer (Teknik ve İdari Tedbirler, Ek-6/B, §3);
 - (c) Bulut Hesapları'nın içeriğine giriş yapmaz; bir hesabı yalnız Lisans Alan'ın talebiyle ya da güvenlik gereği **kilitleyebilir** ve bunu Lisans Alan'a bildirir;
-- (d) `PATRON-BULUTU-TEDBIRLER.md`'deki tedbirleri uygular ve esaslı bir tedbiri zayıflatmadan önce Lisans Alan'a bildirir;
-- (e) güvenlik ihlalini `VERI-IHLALI-BILDIRIM-PROSEDURU.md`'ye göre bildirir.
+- (d) Teknik ve İdari Tedbirler ekindeki (Ek-6/B) tedbirleri uygular ve esaslı bir tedbiri zayıflatmadan önce Lisans Alan'a bildirir;
+- (e) güvenlik ihlalini Veri İhlali Bildirim Prosedürü'ne (Ek-8) göre bildirir.
 
-7.2. **İlgili kişi başvuruları (KVKK md. 11 ve 13).** Lisans Veren'e gelen başvuru, kimliği doğrulanmadan cevaplanmaz ve [DOLDURULACAK — öneri: 3 iş günü] içinde Lisans Alan'a iletilir. Başvuruyu cevaplamak (kanuni süre 30 gün) Lisans Alan'ındır; Lisans Veren gereken dökümü ve silme işlemini teknik olarak sağlar. Bulut Kopyası'ndaki bir kaydın düzeltilmesi ya da silinmesi **Kurulum'da** yapılır ve bir sonraki eşitlemeyle buluta yansır; bulutta tek başına düzeltme yapılmaz (fabrika tek yazardır).
+7.2. **İlgili kişi başvuruları (KVKK md. 11 ve 13).** Lisans Veren'e gelen başvuru, kimliği doğrulanmadan cevaplanmaz ve 3 iş günü içinde Lisans Alan'a iletilir. Başvuruyu cevaplamak (kanuni süre 30 gün) Lisans Alan'ındır; Lisans Veren gereken dökümü ve silme işlemini teknik olarak sağlar. Bulut Kopyası'ndaki bir kaydın düzeltilmesi ya da silinmesi **Kurulum'da** yapılır ve bir sonraki eşitlemeyle buluta yansır; bulutta tek başına düzeltme yapılmaz (fabrika tek yazardır).
 
 7.3. **Denetim.** Lisans Alan, bu eke uyumu yılda bir kez, makul bir önceden bildirimle [DOLDURULACAK] belge isteyerek ya da bağımsız bir denetçiyle denetleyebilir. Denetim başka kiracıların verisine erişim vermez.
 
@@ -146,7 +146,7 @@ Lisans Veren, dayanak kurulmadan yurt dışı alt işleyene kişisel veri akıta
 
 8.1. Bu ek, patron bulutu hizmeti sürdükçe ve hizmetin bitiminden sonra imha tamamlanana kadar yürürlükte kalır.
 
-8.2. Hizmet bitince eşitleme durur; dışa aktarma ve imha `PATRON-BULUTU-SAKLAMA-IMHA.md` §4'e göre yapılır. Lisans sözleşmesinin ya da bakım sözleşmesinin sona ermesi patron bulutu hizmetini de sona erdirir [DOLDURULACAK — ticari model: abonelik mi, bakıma dahil mi].
+8.2. Hizmet bitince eşitleme durur; dışa aktarma ve imha Saklama ve İmha Prosedürü (Ek-6/A) §4'e göre yapılır. Lisans sözleşmesinin ya da bakım sözleşmesinin sona ermesi patron bulutu hizmetini de sona erdirir [DOLDURULACAK — ticari model: abonelik mi, bakıma dahil mi].
 
 8.3. Taraflardan her biri, bu eke kendi aykırılığından doğan zarardan sorumludur. Kurul'un idari para cezası kararlarında iç ilişkide paylaşım [DOLDURULACAK — avukat]. Sorumluluk sınırı: [DOLDURULACAK — lisans sözleşmesi §11.3 ile aynı mı, ayrı mı].
 

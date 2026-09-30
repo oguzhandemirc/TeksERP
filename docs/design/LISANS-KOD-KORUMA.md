@@ -185,7 +185,7 @@ Ayrı belge: `docs/design/PATRON-BULUTU.md` (A'nın Faz 1 temeli üstüne: kurul
 
 ## 7. Hukuk (Faz 1 ile paralel, belge işi)
 
-Claude taslak → avukat kontrol (FSEK, TBK, KVKK, TCK 244): EULA (kopyalama/tersine mühendislik/devir yasağı, kurulum-tesis sınırı, bakım bitince son hak edilen sürüm), bakım-destek sözleşmesi, veri işleme eki (yoklama asgari+sağlık; patron bulutu ayrı ek), yaptırım maddeleri (K0–K5, veri erişimi her kademede açık), ilk kurulumda panelde "kabul ediyorum" adımı (kabul kaydı kurulum geçmişine). Taslaklar `docs/hukuk/` altında, "avukat onayı bekliyor" damgasıyla.
+Claude taslak → avukat kontrol (FSEK, TBK, KVKK, TCK 244): EULA (kopyalama/tersine mühendislik/devir yasağı, kurulum-tesis sınırı, bakım bitince son hak edilen sürüm), bakım-destek sözleşmesi, veri işleme eki (yoklama asgari+sağlık; patron bulutu ayrı ek), yaptırım maddeleri (K0–K5, veri erişimi her kademede açık), ilk kurulumda panelde "kabul ediyorum" adımı (kabul kaydı kurulum geçmişine). Taslaklar `docs/hukuk/` altında, "avukat incelemesi bekliyor" damgasıyla; teknik notlar `docs/hukuk/UYGULAMA-NOTLARI.md`'de.
 
 ## 8. Doğrulama — test senaryoları (sadık kalınacak tek ölçü; dalga sonunda entegrasyon dalında, faz inişinde tam paketle birlikte)
 

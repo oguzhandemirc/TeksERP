@@ -1,8 +1,8 @@
 # Kişisel Veri İhlali Bildirim Prosedürü
 
-> **TASLAK — AVUKAT ONAYI BEKLİYOR.** Claude tarafından hazırlanmıştır; hukuki görüş değildir. Mevzuat atıfları incelemeye yön vermek içindir. `[DOLDURULACAK]` işaretli yerler kişi, kanal ve süre bilgisidir.
+> **TASLAK — AVUKAT İNCELEMESİ BEKLİYOR.** Bu metin bir taslaktır; hukuki görüş değildir. Mevzuat atıfları incelemeye yön vermek içindir. `[DOLDURULACAK]` işaretli yerler kişi bilgisidir.
 >
-> Metin kimliği: `VIBP-2026.1-taslak` · Kapsam: Lisans Veren'in veri işleyen olduğu iki alan — **patron bulutu** (`PATRON-BULUTU-VERI-ISLEME-EKI.md`) ve **destek / uzaktan erişim / lisans kanalı** (`VERI-ISLEME-EKI.md` Bölüm B.4). Lisans Alan'ın kendi sunucusundaki bir ihlalde bu prosedür, Lisans Veren'in Lisans Alan'a vereceği desteği düzenler (§7).
+> Metin kimliği: `VIBP-2026.1-taslak` · Ek-8 · Kapsam: Lisans Veren'in veri işleyen olduğu iki alan — **patron bulutu** (Patron Bulutu Veri İşleme Eki, Ek-6) ve **destek / uzaktan erişim / lisans kanalı** (Veri İşleme Eki, Ek-3, Bölüm B.4). Lisans Alan'ın kendi sunucusundaki bir ihlalde bu prosedür, Lisans Veren'in Lisans Alan'a vereceği desteği düzenler (§7).
 
 > **Avukat şu maddelere özellikle baksın**
 > - **KVKK md. 12/5 ve Kurul'un 24.01.2019 tarihli, 2019/10 sayılı kararı (Kişisel Veri İhlali Bildirim Usul ve Esasları):** Kurul'a bildirim süresi 72 saat, ilgili kişiye bildirim "makul en kısa süre" olarak anlaşıldı. Güncel mi?
@@ -23,7 +23,7 @@
 | İhlal sorumlusu (Lisans Veren) | [DOLDURULACAK — ad, yedek kişi] | Değerlendirme, kayıt, Lisans Alan'a bildirim, müdahale koordinasyonu |
 | Teknik müdahale | [DOLDURULACAK] | Sınırlama, kanıt koruma, kök neden, düzeltme |
 | Hukuk danışmanı | [DOLDURULACAK] | Bildirim metinleri ve gecikme gerekçesi |
-| Lisans Alan irtibat kişisi | Her Lisans Alan'ın sözleşmede bildirdiği kişi ve kanal [DOLDURULACAK — KEP + telefon] | Bildirimi alır; Kurul'a ve ilgili kişilere bildirimi yapar |
+| Lisans Alan irtibat kişisi | Her Lisans Alan'ın sözleşmede bildirdiği kişi ve kanal (KEP adresi ve telefon) | Bildirimi alır; Kurul'a ve ilgili kişilere bildirimi yapar |
 
 ## 3. Zaman çizelgesi
 
@@ -32,8 +32,8 @@ Saat, Lisans Veren'in ihlali **öğrendiği** andan (ihlal adayının ilk tespit
 | Süre | Adım |
 |---|---|
 | Hemen | Tespit kaydı açılır (§6); ihlal sorumlusuna haber verilir |
-| İlk 4 saat [öneri] | Sınırlama (§4.1); etkilenen Tesis'lerin ve veri kategorilerinin ilk tahmini |
-| **En geç 24 saat** [DOLDURULACAK — öneri; `VERI-ISLEME-EKI.md` B.4 ile aynı] | Etkilenen her Lisans Alan'a ilk bildirim (§5), eldeki bilgi eksik olsa bile |
+| İlk 4 saat | Sınırlama (§4.1); etkilenen Tesis'lerin ve veri kategorilerinin ilk tahmini |
+| **En geç 24 saat** (Veri İşleme Eki, Ek-3, B.4 ile aynı) | Etkilenen her Lisans Alan'a ilk bildirim (§5), eldeki bilgi eksik olsa bile |
 | Lisans Alan için **72 saat** | Lisans Alan (veri sorumlusu) Kurul'a bildirir. Lisans Veren bu süre içinde bildirimin doldurulması için gereken bilgiyi verir |
 | Makul en kısa süre | Lisans Alan, etkilenen ilgili kişilere bildirir; Lisans Veren iletişim listesini çıkarmaya yardım eder |
 | Sonraki günler | Ek bilgi geldikçe güncel bildirim; kapanış raporu (§5.3) |
@@ -42,7 +42,7 @@ Saat, Lisans Veren'in ihlali **öğrendiği** andan (ihlal adayının ilk tespit
 
 4.1. **Sınırlama.** Etkilenen erişim yolunu kapatmak: hesabı kilitlemek, oturumları düşürmek, gerekirse o Tesis'in eşitlemesini ya da tüm bulut hizmetini geçici durdurmak, sızan anahtarı ya da parolayı değiştirmek. Durdurma fabrikanın çalışmasını etkilemez; fabrika tek yazardır ve kendi sunucusunda çalışmaya devam eder.
 
-4.2. **Kanıtı koruma.** İlgili günlükler, erişim kayıtları ve paket kayıtları silme ve budamadan ayrılır (`PATRON-BULUTU-SAKLAMA-IMHA.md` §3.3).
+4.2. **Kanıtı koruma.** İlgili günlükler, erişim kayıtları ve paket kayıtları silme ve budamadan ayrılır (Saklama ve İmha Prosedürü, Ek-6/A, §3.3).
 
 4.3. **Değerlendirme.** Hangi Tesis'ler, hangi veri kategorileri (katalog sınıflarından: İŞLEM, FİNANS, KİŞİSEL, serbest metin, hesap verisi), yaklaşık kaç kayıt ve kaç kişi; veri şifreli miydi, anahtar da ele geçti mi; ilgili kişiler için olası sonuçlar.
 
@@ -50,7 +50,7 @@ Saat, Lisans Veren'in ihlali **öğrendiği** andan (ihlal adayının ilk tespit
 
 ## 5. Lisans Alan'a bildirim
 
-5.1. **Kanal:** sözleşmede bildirilen irtibat kişisine telefon + yazılı bildirim (KEP ya da e-posta) [DOLDURULACAK]. Patron uygulamasındaki sistem bildirimi tek başına yeterli sayılmaz.
+5.1. **Kanal:** sözleşmede bildirilen irtibat kişisine telefon + yazılı bildirim (KEP ya da e-posta). Patron uygulamasındaki sistem bildirimi tek başına yeterli sayılmaz.
 
 5.2. **İçerik** (Kurul'un bildirim formundaki başlıklarla uyumlu [avukat]): ihlalin tarihi ve tespit tarihi; nasıl gerçekleştiği; etkilenen veri kategorileri ve ilgili kişi grupları; yaklaşık kayıt ve kişi sayısı; olası sonuçlar; alınan ve alınacak önlemler; Lisans Veren'deki irtibat kişisi; bilinmeyenler ve ne zaman öğrenileceği.
 
@@ -60,12 +60,12 @@ Saat, Lisans Veren'in ihlali **öğrendiği** andan (ihlal adayının ilk tespit
 
 ## 6. Kayıt
 
-Her ihlal adayı — bildirim gerektirmediğine karar verilenler dahil — kayda geçer: tespit zamanı, tespit eden, olay özeti, değerlendirme, karar ve gerekçesi, bildirim zamanları, müdahale adımları. Kayıtlar [DOLDURULACAK — öneri: en az 5 yıl] saklanır ve kişisel verinin içeriğini taşımaz [avukat].
+Her ihlal adayı — bildirim gerektirmediğine karar verilenler dahil — kayda geçer: tespit zamanı, tespit eden, olay özeti, değerlendirme, karar ve gerekçesi, bildirim zamanları, müdahale adımları. Kayıtlar en az 5 yıl saklanır ve kişisel verinin içeriğini taşımaz [avukat].
 
 ## 7. Lisans Alan'ın kendi sunucusundaki ihlal
 
-Kurulum Lisans Alan'ın kendi sunucusunda çalışır; oradaki bir ihlalde (ör. sunucunun ele geçirilmesi, yedeğin çalınması) veri sorumlusu ve bildirim yükümlüsü Lisans Alan'dır. Lisans Veren, bakım sözleşmesi kapsamında (`BAKIM-DESTEK-SOZLESMESI.md` §6) teknik inceleme ve kayıt dökümü desteği verir. Patron bulutu açıksa ve ihlal eşitleme anahtarını (Kurulum anahtarı) etkilediyse Lisans Veren o Kurulum'un eşitlemesini durdurur ve anahtar yenilenene kadar paket kabul etmez.
+Kurulum Lisans Alan'ın kendi sunucusunda çalışır; oradaki bir ihlalde (ör. sunucunun ele geçirilmesi, yedeğin çalınması) veri sorumlusu ve bildirim yükümlüsü Lisans Alan'dır. Lisans Veren, bakım sözleşmesi kapsamında (Bakım ve Destek Sözleşmesi, Ek-4, §6) teknik inceleme ve kayıt dökümü desteği verir. Patron bulutu açıksa ve ihlal eşitleme anahtarını (Kurulum anahtarı) etkilediyse Lisans Veren o Kurulum'un eşitlemesini durdurur ve anahtar yenilenene kadar paket kabul etmez.
 
 ## 8. Tatbikat
 
-İhlal müdahalesi [DOLDURULACAK — öneri: yılda bir] masa başı tatbikatla denenir; sonuç kayda geçer.
+İhlal müdahalesi yılda bir masa başı tatbikatla denenir; sonuç kayda geçer.

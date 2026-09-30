@@ -1,12 +1,12 @@
 # Patron Bulutu Teknik ve İdari Tedbirler
 
-> **TASLAK — AVUKAT ONAYI BEKLİYOR.** Claude tarafından, patron bulutu tasarımına (`docs/design/PATRON-BULUTU.md`, `docs/design/PATRON-BULUTU-ESITLEME.md` §1, §9–§11) göre hazırlanmıştır; hukuki görüş değildir. **Bu ek bir taahhüt listesidir: her tedbir hizmet satışa açılmadan önce uygulanmış ve doğrulanmış olmalıdır.** Uygulanmamış bir tedbir metinden çıkarılır ya da [DOLDURULACAK] olarak işaretlenir; metin kodun önüne geçemez.
+> **TASLAK — AVUKAT İNCELEMESİ BEKLİYOR.** Bu metin bir taslaktır; hukuki görüş değildir. **Bu ek bir taahhüt listesidir: her tedbir hizmet satışa açılmadan önce uygulanmış ve doğrulanmış olmalıdır.**
 >
-> Metin kimliği: `PBTT-2026.1-taslak` · `PATRON-BULUTU-VERI-ISLEME-EKI.md`'nin ekidir.
+> Metin kimliği: `PBTT-2026.1-taslak` · Ek-6/B · Patron Bulutu Veri İşleme Eki'nin (Ek-6) ekidir.
 
 > **Avukat şu maddelere özellikle baksın**
 > - **KVKK md. 12/1 ve Kurul'un "Kişisel Veri Güvenliği Rehberi (Teknik ve İdari Tedbirler)":** Aşağıdaki liste rehberdeki başlıklarla karşılaştırıldığında eksik bir başlık var mı?
-> - **Sözleşmesel taahhüt düzeyi:** Tedbirlerin sözleşmeye ek olarak girmesi Lisans Veren için bir garanti mi doğurur? "Esaslı bir tedbiri zayıflatmadan önce bildirim" (veri işleme eki §7.1-d) yeterli bir değişiklik mekanizması mı?
+> - **Sözleşmesel taahhüt düzeyi:** Tedbirlerin sözleşmeye ek olarak girmesi Lisans Veren için bir garanti mi doğurur? "Esaslı bir tedbiri zayıflatmadan önce bildirim" (Patron Bulutu Veri İşleme Eki, Ek-6, §7.1-d) yeterli bir değişiklik mekanizması mı?
 
 ---
 
@@ -16,7 +16,7 @@
 - Buluta giden her alan bir katalogda **tek tek** listelenir (opt-in). Katalogda olmayan alan gitmez; yeni bir kolon kendiliğinden buluta sızmaz.
 - Kişisel ve finansal alanlar ana kayıttan ayrı alt kayıtlara bölünür; bu alt kayıtları yalnız ilgili izni olan hesap okuyabilir (§1.3).
 - Denetim kayıtları, fabrika kullanıcılarının adları ve kimlikleri, parolalar, PIN'ler, kartlar, sistem ayarları ve `notlar` alanları buluta hiç gitmez.
-- Hizmet varsayılan olarak kapalıdır; yalnız Üretim sınıfı, `patron-bulut` hakkı olan, süresi bitmemiş Kurulum gönderir. Belirsizlikte gönderilmez.
+- Hizmet varsayılan olarak kapalıdır; yalnız Üretim sınıfı, Patron Bulutu hakkı olan, süresi bitmemiş Kurulum gönderir. Belirsizlikte gönderilmez.
 
 ### 1.2. Kiracı yalıtımı (tesis ayrımı)
 - Bütün Tesis'ler tek bulut veritabanını paylaşır; her satır bir Tesis kimliği taşır.
@@ -33,25 +33,25 @@
 ### 1.4. Kimlik doğrulama
 - Giriş: e-posta + parola + **iki aşamalı doğrulama (TOTP)**, her hesap için zorunlu.
 - Parolalar geri döndürülemez biçimde (scrypt) özetlenir. TOTP sırları veritabanında şifreli durur.
-- Başarısız girişler sınırlanır ve kaydedilir [DOLDURULACAK — deneme sayısı ve kilit süresi].
+- Başarısız girişler sınırlanır ve kaydedilir: art arda 5 hatalı denemede hesap 15 dakika kilitlenir; giriş istekleri ayrıca IP adresi başına dakikada 20 ile sınırlıdır.
 - Kurtarma kodu yoktur: TOTP kaybında Tesis Yöneticisi sıfırlar; yöneticinin kendisi için Lisans Veren kimlik doğrulaması yaparak sıfırlar [DOLDURULACAK — doğrulama yöntemi].
 
 ### 1.5. Şifreleme ve bütünlük
 - Bütün bağlantılar TLS ile şifrelidir.
 - Kurulum'dan buluta giden her paket Kurulum anahtarıyla **imzalıdır** (Ed25519) ve gövde özeti taşır; yolda değiştirilen ya da tekrar oynatılan paket reddedilir. Bulut, fabrika verisine yazamaz; tek yazma kanalı Gelen Kutusu'dur ve Kurulum onu normal iş kurallarıyla, tekrar güvenli (idempotent) biçimde işler.
 - Sunucu diski: [DOLDURULACAK — VDS disk şifrelemesi var mı].
-- Yedekler şifrelenir [DOLDURULACAK — yöntem ve anahtarın yeri; fabrika yedeğiyle aynı yöntem öngörülür].
-- Uygulamanın cihazdaki önbelleği işletim sisteminin güvenli depolamasında ya da uygulama korumalı alanında tutulur [DOLDURULACAK — B4 dilimi yöntemi].
+- Yedekler, fabrika yedekleriyle aynı yöntemle şifrelenir (X25519 + AES-256-GCM, açık anahtarla); açan özel anahtar sunucuda durmaz, Lisans Veren'in sunucu dışındaki ortamında (yönetim bilgisayarı ve USB) tutulur.
+- Uygulamanın cihazdaki önbelleği uygulamanın korumalı alanında tutulur (mobilde uygulamaya ayrılmış depolama alanı, web sürümünde tarayıcının bu siteye ayırdığı depolama); uygulama önbelleği ayrıca şifrelemez. Oturum anahtarı işletim sisteminin güvenli depolamasında (iOS Keychain, Android Keystore) tutulur; web sürümünde yalnız tarayıcı sekmesi açıkken saklanır. Önbellek oturum kapatılınca, oturum geçersiz sayılınca ve her yeni girişte silinir; izni kaldırılan verinin önbellekteki kopyası bir sonraki okumada silinir.
 
 ### 1.6. Barındırma ve ağ
 - Türkiye'deki VDS; lisans sunucusundan **ayrı konteyner, ayrı ağ, ayrı veritabanı ve ayrı veritabanı rolü**; kaynak kullanımı sınırlı.
 - İnternete yalnız Cloudflare üzerinden HTTPS açıktır; yönetim erişimi yalnız Lisans Veren'in özel ağından (Tailscale) yapılır.
-- İşletim sistemi ve bileşen güncellemeleri [DOLDURULACAK — sıklık].
+- İşletim sistemi güvenlik yamaları her gün otomatik uygulanır; uygulama bileşenleri sürüm yükseltmesiyle, her yükseltmeden önce yedek alınarak güncellenir.
 
 ### 1.7. Yedek ve süreklilik
-- Bulut veritabanı [DOLDURULACAK — öneri: günlük] yedeklenir, [DOLDURULACAK — öneri: 35 gün] döngüyle tutulur, en az [DOLDURULACAK — öneri: 3 ayda bir] geri yükleme provası yapılır.
+- Bulut veritabanı günlük yedeklenir, 30 gün döngüyle tutulur, en az 3 ayda bir geri yükleme provası yapılır.
 - Bulut kaybında veri Kurulum'dan **yeniden eşitlenebilir** (asıl kayıt fabrikadadır); bulutta doğan veri (hesaplar, Gelen Kutusu) yedekten döner.
-- Yedekteki imha kuralı: `PATRON-BULUTU-SAKLAMA-IMHA.md` §4.4.
+- Yedekteki imha kuralı: Saklama ve İmha Prosedürü (Ek-6/A) §4.4.
 
 ### 1.8. Kayıt ve izleme
 - Bulut hesap güvenlik kaydı: giriş, başarısız giriş, hesap açma/kapama/kilitleme, izin değişikliği, okundu teyidi. Tesis Yöneticisi kendi Tesis'inin kaydını görür.
@@ -64,9 +64,9 @@
 - Bulut sunucusuna ve veritabanına erişebilen Lisans Veren çalışanları adıyla belirlidir [DOLDURULACAK — liste ve rol]; her biri yazılı gizlilik taahhüdü altındadır.
 - En az yetki: çalışanlar günlük işte Bulut Kopyası içeriğini görmez; işletme ekranları sayı ve durum gösterir.
 - Yılda bir kez [DOLDURULACAK] çalışanlara kişisel veri ve güvenlik eğitimi verilir, kayda geçer.
-- Alt işleyenlerle yazılı sözleşme (`PATRON-BULUTU-VERI-ISLEME-EKI.md` §6).
-- Güvenlik ihlali prosedürü: `VERI-IHLALI-BILDIRIM-PROSEDURU.md`.
-- Tedbirler [DOLDURULACAK — öneri: yılda bir] gözden geçirilir; sızma testi [DOLDURULACAK].
+- Alt işleyenlerle yazılı sözleşme (Patron Bulutu Veri İşleme Eki, Ek-6, §6).
+- Güvenlik ihlali prosedürü: Veri İhlali Bildirim Prosedürü (Ek-8).
+- Tedbirler yılda bir gözden geçirilir; sızma testi [DOLDURULACAK].
 - İşten ayrılan çalışanın erişimi ayrıldığı gün kapatılır.
 
 ## 3. Lisans Veren'in Bulut Kopyası'na erişimi ve erişim kaydı
@@ -75,10 +75,10 @@
 
 3.2. Her içerik erişimi silinemeyen bir kayda yazılır: kim, ne zaman, hangi Tesis, hangi veri kümesi, gerekçe (destek talebi numarası). Doğrudan veritabanı sorgusu da bu kurala tabidir [DOLDURULACAK — teknik zorlama: ayrı rol + oturum kaydı].
 
-3.3. Lisans Alan, kendi Tesis'ine ait erişim kayıtlarının dökümünü isteyebilir; döküm [DOLDURULACAK — öneri: 10 iş günü] içinde verilir.
+3.3. Lisans Alan, kendi Tesis'ine ait erişim kayıtlarının dökümünü isteyebilir; döküm 10 iş günü içinde verilir.
 
-3.4. Lisans Veren, destek sırasında Bulut Kopyası'ndan veri dışarı çıkarmaz; istisna ve şartları `BAKIM-DESTEK-SOZLESMESI.md` §6 ile aynıdır (yazılı onay, asgari veri, iş bitince silme).
+3.4. Lisans Veren, destek sırasında Bulut Kopyası'ndan veri dışarı çıkarmaz; istisna ve şartları Bakım ve Destek Sözleşmesi (Ek-4) §6 ile aynıdır (yazılı onay, asgari veri, iş bitince silme).
 
 ## 4. Doğrulama
 
-Tedbirlerin teknik ayağı patron bulutu kabul senaryosuyla (Senaryo P — `docs/design/PATRON-BULUTU.md`) ölçülür: finans izni olmayan hesabın finansı göremediği (API ve RLS), Tesis kimliği ayarlanmamış bağlantının satır döndürmediği, Test sınıfı kurulumun gönderemediği, saklama budamasının çalıştığı, abonelik bitince eşitlemenin durduğu. Hizmet satışa açılmadan bu adımların kanıtı bu eke iliştirilir [DOLDURULACAK].
+Tedbirlerin teknik ayağı patron bulutu kabul senaryosuyla ölçülür: finans izni olmayan hesabın finansı göremediği (API ve RLS), Tesis kimliği ayarlanmamış bağlantının satır döndürmediği, Test sınıfı kurulumun gönderemediği, saklama budamasının çalıştığı, abonelik bitince eşitlemenin durduğu. Hizmet satışa açılmadan bu adımların kanıtı bu eke iliştirilir.
