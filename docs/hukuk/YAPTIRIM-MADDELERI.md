@@ -1,6 +1,6 @@
 # TeksERP Lisans Yaptırım Maddeleri
 
-> **TASLAK — AVUKAT İNCELEMESİ BEKLİYOR.** Bu metin Son Kullanıcı Lisans Sözleşmesi'nin (Sözleşme) ayrılmaz ekidir ve ayrıca kabul edilir (Kabul Metni, Ek-7, kutu 2); taslaktır, hukuki görüş değildir. `[DOLDURULACAK]` işaretli süre ve tutarlar ticari varsayımdır.
+> **TASLAK — AVUKAT İNCELEMESİ BEKLİYOR.** Bu metin Son Kullanıcı Lisans Sözleşmesi'nin (Sözleşme) ayrılmaz ekidir ve ayrıca kabul edilir (Kabul Metni, Ek-7, kutu 2); taslaktır, hukuki görüş değildir.
 >
 > Metin kimliği: `YM-2026.1-taslak` · Ek-2
 
@@ -71,7 +71,7 @@ Aşağıdakiler Lisans Veren'in bir kararı değildir, Yazılım'ın kendi kural
 
 4.3. **K5** yalnız şu hallerde uygulanabilir:
 - (a) Sözleşme'nin Sözleşme §13.2'ye göre feshedilmiş olması;
-- (b) §4.1(b)'deki ihlalin sürmesi ve Lisans Alan'a gönderilen yazılı bildirime [DOLDURULACAK — öneri: 3 iş günü] içinde son verilmemesi;
+- (b) §4.1(b)'deki ihlalin sürmesi ve Lisans Alan'a gönderilen yazılı bildirime 3 iş günü içinde son verilmemesi;
 - (c) §4.2'deki olağan dışı hallerin ağır ve süren biçimi.
 
 4.4. **İki onay:** K4 ve K5, Lisans Portalı'nda sebep yazılarak ve ikinci bir onayla (kararı veren kişinin kademeyi elle yazması) uygulanır.
@@ -84,14 +84,14 @@ Aşağıdakiler Lisans Veren'in bir kararı değildir, Yazılım'ın kendi kural
 
 5.2. **Lisans Veren'in esneklik hakları.** Lisans Veren her an ve tek taraflı olarak Lisans Alan **lehine** şunları yapabilir: süreyi belirli bir gün sayısı ya da tarih kadar uzatmak, vadeli lisansı kalıcıya çevirmek, taksit takvimini değiştirmek, uygulanmış bir kademeyi kaldırmak. Bunlar için Lisans Alan'ın onayı gerekmez.
 
-5.3. **Ödeme merdiveni** (öneri, bütün süreler [DOLDURULACAK]):
+5.3. **Ödeme merdiveni:**
 
 | Aşama | Ne zaman | Ne olur |
 |---|---|---|
 | 1 | Vade günü | Hatırlatma (e-posta). İsteğe bağlı K0 bandı. |
-| 2 | Vade + [7] gün | Yazılı ihtar (KEP): borcun ödenmesi için [15] günlük süre verilir; bu sürenin sonunda uygulanacak kademe ihtarda yazılır. K0 bandı. |
-| 3 | İhtar süresi doldu | K1 ve/veya K3; K3 geri sayımı en az [7] gün. |
-| 4 | K3 başladıktan [30] gün sonra hâlâ ödeme yok | K4 |
+| 2 | Vade + 7 gün | Yazılı ihtar (KEP): borcun ödenmesi için 15 günlük süre verilir; bu sürenin sonunda uygulanacak kademe ihtarda yazılır. K0 bandı. |
+| 3 | İhtar süresi doldu | K1 ve/veya K3; K3 geri sayımı en az 7 gün. |
+| 4 | K3 başladıktan 30 gün sonra hâlâ ödeme yok | K4 |
 | 5 | Fesih bildirimi (Sözleşme §13.2) | K5 |
 
 Ödeme gecikmesi nedeniyle Lisans Veren aşamaları atlayarak daha ağır kademeye geçemez. Daha hafif kademede kalabilir ya da hiç uygulamayabilir. §4'teki gerekçeler (ihlal, olağan dışı hal) bu merdivene bağlı değildir. [Ticari karar: bu cümle, ödeme gecikmesinde lisansı dondurma hakkını merdivendeki sıraya bağlar ve hukuki riski azaltmak için önerildi; avukat ve Lisans Veren birlikte karar verir.]
@@ -116,7 +116,7 @@ Aşağıdakiler Lisans Veren'in bir kararı değildir, Yazılım'ın kendi kural
 
 | Durum | Önceden bildirim |
 |---|---|
-| Gözlem kipinden zorlama kipine geçiş | [DOLDURULACAK — öneri: 30 gün], yazılı |
+| Gözlem kipinden zorlama kipine geçiş | 30 gün, yazılı |
 | K0, K1 | Gerekmez (Yazılım'daki bant yeter) |
 | K2, K3 (ödeme nedeniyle) | §5.3'teki ihtar; K3'te ayrıca geri sayım |
 | K4 | §4.1'deki gerekçe; aynı gün yazılı bildirim |

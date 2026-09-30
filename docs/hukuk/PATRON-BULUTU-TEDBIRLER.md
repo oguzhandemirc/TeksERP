@@ -33,23 +33,23 @@
 ### 1.4. Kimlik doğrulama
 - Giriş: e-posta + parola + **iki aşamalı doğrulama (TOTP)**, her hesap için zorunlu.
 - Parolalar geri döndürülemez biçimde (scrypt) özetlenir. TOTP sırları veritabanında şifreli durur.
-- Başarısız girişler sınırlanır ve kaydedilir [DOLDURULACAK — deneme sayısı ve kilit süresi].
+- Başarısız girişler sınırlanır ve kaydedilir: art arda 5 hatalı denemede hesap 15 dakika kilitlenir; giriş istekleri ayrıca IP adresi başına dakikada 20 ile sınırlıdır.
 - Kurtarma kodu yoktur: TOTP kaybında Tesis Yöneticisi sıfırlar; yöneticinin kendisi için Lisans Veren kimlik doğrulaması yaparak sıfırlar [DOLDURULACAK — doğrulama yöntemi].
 
 ### 1.5. Şifreleme ve bütünlük
 - Bütün bağlantılar TLS ile şifrelidir.
 - Kurulum'dan buluta giden her paket Kurulum anahtarıyla **imzalıdır** (Ed25519) ve gövde özeti taşır; yolda değiştirilen ya da tekrar oynatılan paket reddedilir. Bulut, fabrika verisine yazamaz; tek yazma kanalı Gelen Kutusu'dur ve Kurulum onu normal iş kurallarıyla, tekrar güvenli (idempotent) biçimde işler.
 - Sunucu diski: [DOLDURULACAK — VDS disk şifrelemesi var mı].
-- Yedekler şifrelenir [DOLDURULACAK — yöntem ve anahtarın yeri; fabrika yedeğiyle aynı yöntem öngörülür].
+- Yedekler, fabrika yedekleriyle aynı yöntemle şifrelenir (X25519 + AES-256-GCM, açık anahtarla); açan özel anahtar sunucuda durmaz, Lisans Veren'in sunucu dışındaki ortamında (yönetim bilgisayarı ve USB) tutulur.
 - Uygulamanın cihazdaki önbelleği uygulamanın korumalı alanında tutulur (mobilde uygulamaya ayrılmış depolama alanı, web sürümünde tarayıcının bu siteye ayırdığı depolama); uygulama önbelleği ayrıca şifrelemez. Oturum anahtarı işletim sisteminin güvenli depolamasında (iOS Keychain, Android Keystore) tutulur; web sürümünde yalnız tarayıcı sekmesi açıkken saklanır. Önbellek oturum kapatılınca, oturum geçersiz sayılınca ve her yeni girişte silinir; izni kaldırılan verinin önbellekteki kopyası bir sonraki okumada silinir.
 
 ### 1.6. Barındırma ve ağ
 - Türkiye'deki VDS; lisans sunucusundan **ayrı konteyner, ayrı ağ, ayrı veritabanı ve ayrı veritabanı rolü**; kaynak kullanımı sınırlı.
 - İnternete yalnız Cloudflare üzerinden HTTPS açıktır; yönetim erişimi yalnız Lisans Veren'in özel ağından (Tailscale) yapılır.
-- İşletim sistemi ve bileşen güncellemeleri [DOLDURULACAK — sıklık].
+- İşletim sistemi güvenlik yamaları her gün otomatik uygulanır; uygulama bileşenleri sürüm yükseltmesiyle, her yükseltmeden önce yedek alınarak güncellenir.
 
 ### 1.7. Yedek ve süreklilik
-- Bulut veritabanı [DOLDURULACAK — öneri: günlük] yedeklenir, [DOLDURULACAK — öneri: 35 gün] döngüyle tutulur, en az [DOLDURULACAK — öneri: 3 ayda bir] geri yükleme provası yapılır.
+- Bulut veritabanı günlük yedeklenir, 30 gün döngüyle tutulur, en az 3 ayda bir geri yükleme provası yapılır.
 - Bulut kaybında veri Kurulum'dan **yeniden eşitlenebilir** (asıl kayıt fabrikadadır); bulutta doğan veri (hesaplar, Gelen Kutusu) yedekten döner.
 - Yedekteki imha kuralı: Saklama ve İmha Prosedürü (Ek-6/A) §4.4.
 
@@ -66,7 +66,7 @@
 - Yılda bir kez [DOLDURULACAK] çalışanlara kişisel veri ve güvenlik eğitimi verilir, kayda geçer.
 - Alt işleyenlerle yazılı sözleşme (Patron Bulutu Veri İşleme Eki, Ek-6, §6).
 - Güvenlik ihlali prosedürü: Veri İhlali Bildirim Prosedürü (Ek-8).
-- Tedbirler [DOLDURULACAK — öneri: yılda bir] gözden geçirilir; sızma testi [DOLDURULACAK].
+- Tedbirler yılda bir gözden geçirilir; sızma testi [DOLDURULACAK].
 - İşten ayrılan çalışanın erişimi ayrıldığı gün kapatılır.
 
 ## 3. Lisans Veren'in Bulut Kopyası'na erişimi ve erişim kaydı
@@ -75,10 +75,10 @@
 
 3.2. Her içerik erişimi silinemeyen bir kayda yazılır: kim, ne zaman, hangi Tesis, hangi veri kümesi, gerekçe (destek talebi numarası). Doğrudan veritabanı sorgusu da bu kurala tabidir [DOLDURULACAK — teknik zorlama: ayrı rol + oturum kaydı].
 
-3.3. Lisans Alan, kendi Tesis'ine ait erişim kayıtlarının dökümünü isteyebilir; döküm [DOLDURULACAK — öneri: 10 iş günü] içinde verilir.
+3.3. Lisans Alan, kendi Tesis'ine ait erişim kayıtlarının dökümünü isteyebilir; döküm 10 iş günü içinde verilir.
 
 3.4. Lisans Veren, destek sırasında Bulut Kopyası'ndan veri dışarı çıkarmaz; istisna ve şartları Bakım ve Destek Sözleşmesi (Ek-4) §6 ile aynıdır (yazılı onay, asgari veri, iş bitince silme).
 
 ## 4. Doğrulama
 
-Tedbirlerin teknik ayağı patron bulutu kabul senaryosuyla ölçülür: finans izni olmayan hesabın finansı göremediği (API ve RLS), Tesis kimliği ayarlanmamış bağlantının satır döndürmediği, Test sınıfı kurulumun gönderemediği, saklama budamasının çalıştığı, abonelik bitince eşitlemenin durduğu. Hizmet satışa açılmadan bu adımların kanıtı bu eke iliştirilir [DOLDURULACAK].
+Tedbirlerin teknik ayağı patron bulutu kabul senaryosuyla ölçülür: finans izni olmayan hesabın finansı göremediği (API ve RLS), Tesis kimliği ayarlanmamış bağlantının satır döndürmediği, Test sınıfı kurulumun gönderemediği, saklama budamasının çalıştığı, abonelik bitince eşitlemenin durduğu. Hizmet satışa açılmadan bu adımların kanıtı bu eke iliştirilir.

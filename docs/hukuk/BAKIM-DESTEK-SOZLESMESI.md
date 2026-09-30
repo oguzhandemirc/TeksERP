@@ -23,9 +23,9 @@
 
 ## 2. Süre ve yenileme
 
-2.1. Bakım bir yıl sürer. Başlangıç tarihi [DOLDURULACAK]; bitiş tarihi Lisans Belgesi'ndeki Bakım Bitiş Tarihi'dir.
+2.1. Bakım bir yıl sürer. Başlangıç tarihi [Bakım başlangıç tarihi]; bitiş tarihi Lisans Belgesi'ndeki Bakım Bitiş Tarihi'dir.
 
-2.2. Bakım, bitiş tarihinden [DOLDURULACAK — öneri: 30 gün] önce yazılı olarak aksi bildirilmezse, o yılın fiyat listesiyle bir yıl daha uzar [DOLDURULACAK — otomatik yenileme istenir mi]. Yenileme bedeli ödenince Lisans Veren yeni Bakım Bitiş Tarihi'ni Lisans Belgesi'ne yazar. Yeni belge Kurulum'a bir sonraki yoklamada kendiliğinden gelir.
+2.2. Bakım, bitiş tarihinden 30 gün önce yazılı olarak aksi bildirilmezse, o yılın fiyat listesiyle bir yıl daha uzar [DOLDURULACAK — otomatik yenileme istenir mi]. Yenileme bedeli ödenince Lisans Veren yeni Bakım Bitiş Tarihi'ni Lisans Belgesi'ne yazar. Yeni belge Kurulum'a bir sonraki yoklamada kendiliğinden gelir.
 
 2.3. Bakım bedeli: [DOLDURULACAK — öneri: lisans bedelinin yıllık %15–20'si].
 
@@ -52,16 +52,16 @@
 - telefon: [DOLDURULACAK];
 - e-posta: [DOLDURULACAK].
 
-4.2. **Destek saatleri:** [DOLDURULACAK — öneri: hafta içi 08:30–18:00; Öncelik 1 için 7/24 telefon].
+4.2. **Destek saatleri:** hafta içi 08:30–18:00; Öncelik 1 için 7/24 telefon.
 
-4.3. **Öncelikler ve süreler** (hepsi [DOLDURULACAK]; öneri değerleri köşeli parantezde):
+4.3. **Öncelikler ve süreler:**
 
 | Öncelik | Tanım | İlk yanıt | Çözüm ya da geçici çözüm hedefi |
 |---|---|---|---|
-| 1 — Üretim durdu | Sunucuya erişilemiyor; tabletten üretim girişi ya da sevkiyat yapılamıyor | [1 saat] | [8 saat] |
-| 2 — Önemli işlev bozuk | Bir modül çalışmıyor ama üretim sürüyor | [4 iş saati] | [3 iş günü] |
-| 3 — Küçük hata | Ekran hatası, geçici çözümü olan sorun | [1 iş günü] | [sonraki sürüm] |
-| 4 — Soru, istek | Kullanım sorusu, geliştirme isteği | [2 iş günü] | [değerlendirme] |
+| 1 — Üretim durdu | Sunucuya erişilemiyor; tabletten üretim girişi ya da sevkiyat yapılamıyor | 1 saat | 8 saat |
+| 2 — Önemli işlev bozuk | Bir modül çalışmıyor ama üretim sürüyor | 4 iş saati | 3 iş günü |
+| 3 — Küçük hata | Ekran hatası, geçici çözümü olan sorun | 1 iş günü | sonraki sürüm |
+| 4 — Soru, istek | Kullanım sorusu, geliştirme isteği | 2 iş günü | değerlendirme |
 
 4.4. Süreler, talebin Lisans Veren'e ulaştığı andan başlar. Lisans Alan'ın bilgi vermesi ya da erişim açması beklenirken süre işlemez.
 
@@ -75,7 +75,7 @@
 
 ## 6. Uzaktan erişim
 
-6.1. **Araç.** Uzaktan erişim Tailscale ile kurulan şifreli özel ağ üzerinden yapılır. Lisans Alan, Lisans Veren cihazlarının bu ağa katılmasına onay verir; onayı her zaman geri çekebilir. Başka bir araç [DOLDURULACAK] ancak iki tarafın yazılı mutabakatıyla kullanılır.
+6.1. **Araç.** Uzaktan erişim Tailscale ile kurulan şifreli özel ağ üzerinden yapılır. Lisans Alan, Lisans Veren cihazlarının bu ağa katılmasına onay verir; onayı her zaman geri çekebilir. Başka bir araç ancak iki tarafın yazılı mutabakatıyla kullanılır.
 
 6.2. **Onay.** Lisans Veren sunucuya yalnız şu durumlarda bağlanır:
 - (a) Lisans Alan'ın açtığı bir destek talebi ya da onayladığı planlı iş için;
@@ -93,10 +93,10 @@ Her bağlantı başlangıç ve bitiş saatiyle, yapılan işin özetiyle kayda g
 7.1. **Yazılım'ın sağladığı:** otomatik gece yedeği; her sunucu güncellemesinden önce yedek; isteğe bağlı uzak (makine dışı) yedek; yedek şifreleme. Şifreli yedek en fazla üç alıcıyla açılabilir: sunucudaki yerel anahtar (yedek parolasıyla), Lisans Alan anahtarı (USB ve kâğıt) ve Lisans Veren anahtarı (çevrimdışı). Panelde yedek durumu ve uyarılar görünür.
 
 7.2. **Lisans Alan'ın yükümlülükleri:**
-- (a) Sunucu donanımını, diskleri ve uzak yedek hedefini (bulut hesabı, ikinci disk ya da Lisans Veren'in uzak yedek hizmeti) sağlamak [DOLDURULACAK — uzak yedek hedefi kimin hesabında];
+- (a) Sunucu donanımını, diskleri ve uzak yedek hedefini (bulut hesabı, ikinci disk ya da Lisans Veren'in uzak yedek hizmeti) sağlamak; Lisans Veren'in uzak yedek hizmeti seçilirse hedef, Lisans Veren'in sunucusunda Lisans Alan'a ayrılmış yedek alanıdır ve dosyalar oraya şifreli gider;
 - (b) yedek parolasını ve Lisans Alan anahtarını güvenli iki ayrı yerde saklamak;
 - (c) panelde ve sağlık uyarılarında görülen yedek sorunlarını gidermek ya da Lisans Veren'e bildirmek;
-- (d) [DOLDURULACAK — öneri: yılda bir] Lisans Veren'le birlikte bir test geri yüklemesi yapmak.
+- (d) yılda bir Lisans Veren'le birlikte bir test geri yüklemesi yapmak.
 
 7.3. **Lisans Veren'in yükümlülükleri:**
 - (a) Yedek mekanizmasını çalışır tutmak ve kurulumda doğrulamak;
@@ -111,7 +111,7 @@ Her bağlantı başlangıç ve bitiş saatiyle, yapılan işin özetiyle kayda g
 
 8.2. Bakım sona erdikten sonra verilen destek, o günün saatlik ücretiyle yapılır [DOLDURULACAK].
 
-8.3. Bakım, ara verilen dönemden sonra yeniden başlatılabilir. Bunun için ara verilen döneme ait bakım bedeli ya da [DOLDURULACAK — öneri: yeniden başlatma bedeli] ödenir. Bu kural sektörde yaygındır; amacı yalnız ihtiyaç anında bakım alınmasını önlemektir.
+8.3. Bakım, ara verilen dönemden sonra yeniden başlatılabilir. Bunun için ara verilen döneme ait bakım bedeli ya da yeniden başlatma bedeli ödenir. Bu kural sektörde yaygındır; amacı yalnız ihtiyaç anında bakım alınmasını önlemektir.
 
 ## 9. Sorumluluk
 
@@ -119,7 +119,7 @@ Lisans Veren'in bu sözleşmeden doğan toplam sorumluluğu, zarar anından önc
 
 ## 10. Fesih
 
-10.1. Taraflardan biri, esaslı ihlalde yazılı bildirim ve [DOLDURULACAK — öneri: 30 gün] giderme süresinden sonra bu sözleşmeyi feshedebilir.
+10.1. Taraflardan biri, esaslı ihlalde yazılı bildirim ve 30 gün giderme süresinden sonra bu sözleşmeyi feshedebilir.
 
 10.2. Bu sözleşmenin sona ermesi Lisans Sözleşmesi'ni sona erdirmez.
 

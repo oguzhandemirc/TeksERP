@@ -1,6 +1,6 @@
 # TeksERP Son Kullanıcı Lisans Sözleşmesi
 
-> **TASLAK — AVUKAT İNCELEMESİ BEKLİYOR.** Bu metin bir taslaktır; hukuki görüş değildir. Avukat onayı olmadan imzaya, panele ya da müşteriye çıkmaz. `[DOLDURULACAK]` işaretli yerler ticari varsayım ya da eksik bilgidir; "öneri" diye verilen değerler bağlayıcı değildir.
+> **TASLAK — AVUKAT İNCELEMESİ BEKLİYOR.** Bu metin bir taslaktır; hukuki görüş değildir. Avukat onayı olmadan imzaya, panele ya da müşteriye çıkmaz. `[DOLDURULACAK]` işaretli yerler ticari karar ya da eksik bilgidir.
 >
 > Metin kimliği: `SKLS-2026.1-taslak` · Ana sözleşme; ekleri §16'da · Kabul kaydında bu kimlik ve son metnin SHA-256 özeti tutulur (bkz. Kabul Metni, Ek-7).
 
@@ -21,7 +21,7 @@
 ## 1. Taraflar
 
 - **Lisans Veren:** [DOLDURULACAK — Etkili Yazılım ticari ünvanı, MERSİS no, vergi dairesi/no, adres, KEP adresi]
-- **Lisans Alan:** [DOLDURULACAK — müşteri ünvanı, MERSİS no, vergi dairesi/no, adres, KEP adresi]
+- **Lisans Alan:** [Lisans Alan ünvanı] · MERSİS no: [Lisans Alan MERSİS no] · Vergi dairesi / no: [Lisans Alan vergi dairesi / no] · Adres: [Lisans Alan adresi] · KEP adresi: [Lisans Alan KEP adresi]
 
 Taraflar tacirdir. Bu sözleşme ticari iştir; tüketici mevzuatı uygulanmaz [avukat teyidi].
 
@@ -87,7 +87,7 @@ Taraflar tacirdir. Bu sözleşme ticari iştir; tüketici mevzuatı uygulanmaz [
 
 6.3. Bakım bitiş tarihinden sonra derlenmiş bir sürüm herhangi bir yolla kurulmuşsa Yazılım uyarı gösterir. Derleme tarihinden itibaren 30 gün Ek Süre işler; sonunda Kısıtlı Kip'e geçilir (Yaptırım Maddeleri, Ek-2, §3.3). Veritabanı yapısı yeni sürümle değiştiği için eski sürüme dönüş yalnız yedekten geri yüklemeyle mümkündür. Bu durumdan doğan veri kaybında Lisans Veren sorumlu değildir.
 
-6.4. Lisans Veren, Son Hak Edilen Sürüm'ün kurulum dosyasını Bakım Bitiş Tarihi'nden sonra [DOLDURULACAK — öneri: 3 yıl] Lisans Portalı'ndan Lisans Alan'a özel bağlantıyla indirilebilir tutar.
+6.4. Lisans Veren, Son Hak Edilen Sürüm'ün kurulum dosyasını Bakım Bitiş Tarihi'nden sonra 3 yıl Lisans Portalı'ndan Lisans Alan'a özel bağlantıyla indirilebilir tutar.
 
 6.5. Bakımın sonradan yeniden başlatılması Bakım ve Destek Sözleşmesi (Ek-4) §8'e tabidir.
 
@@ -99,9 +99,9 @@ Taraflar tacirdir. Bu sözleşme ticari iştir; tüketici mevzuatı uygulanmaz [
 
 7.3. **İnternetsiz çalışma.** Bağlantı kesilirse Yazılım, son Kullanım Onayı'nın süresi ve ardından 30 günlük Ek Süre boyunca tam işlevle çalışır (varsayılan ayarlarla yaklaşık 60 gün). Bu sürede bağlantı kurulamazsa Lisans Alan, Kullanım Onayı'nı **panel bilgisayarı üzerinden aktarma** ya da **telefonla QR** yoluyla yenileyebilir. İnternet varken Yazılım zamanın geçmesi yüzünden kendiliğinden kısıtlanmaz; bu durumda kısıtlama yalnız Lisans Veren'in kararıyla olur.
 
-7.4. **Lisans Alan'ın yükümlülüğü.** Lisans Alan, Kurulum'un en az [DOLDURULACAK — öneri: 30 günde bir] Lisans Veren sunucusuna ulaşabilmesini ya da §7.3'teki çevrimdışı yolların kullanılabilmesini sağlar.
+7.4. **Lisans Alan'ın yükümlülüğü.** Lisans Alan, Kurulum'un en az 30 günde bir Lisans Veren sunucusuna ulaşabilmesini ya da §7.3'teki çevrimdışı yolların kullanılabilmesini sağlar.
 
-7.5. **Taşıma.** Kurulum'un başka bir makineye taşınması (sunucu değişimi, disk ya da anakart değişimi dahil) **Lisans Veren'in onayıyla** yapılır. Talep panelden ya da Lisans Portalı'ndan açılır. Onay beklenirken yeni makine Ek Süre içinde çalışır. Onayla eski Kurulum'un Kullanım Onayı iptal olur. Lisans Veren makul bir taşıma talebini haklı sebep olmadan reddetmez ve talebi [DOLDURULACAK — öneri: 1 iş günü] içinde sonuçlandırır. Taşıma bedeli: [DOLDURULACAK — öneri: bakım süresinde yılda 2 taşıma ücretsiz].
+7.5. **Taşıma.** Kurulum'un başka bir makineye taşınması (sunucu değişimi, disk ya da anakart değişimi dahil) **Lisans Veren'in onayıyla** yapılır. Talep panelden ya da Lisans Portalı'ndan açılır. Onay beklenirken yeni makine Ek Süre içinde çalışır. Onayla eski Kurulum'un Kullanım Onayı iptal olur. Lisans Veren makul bir taşıma talebini haklı sebep olmadan reddetmez ve talebi 1 iş günü içinde sonuçlandırır. Taşıma bedeli: bakım süresinde yılda 2 taşıma ücretsizdir.
 
 7.6. **Aynı anda iki üretim kurulumu yasaktır.** Aynı lisansın iki Kurulum'da ileri taşındığı tespit edilirse (§9.3), eşleşmeyen tarafa yeni Kullanım Onayı verilmez ve o taraf Ek Süre'ye düşer. Kopya tespiti Yazılım'ı **anında durdurmaz**.
 
@@ -113,7 +113,7 @@ Taraflar tacirdir. Bu sözleşme ticari iştir; tüketici mevzuatı uygulanmaz [
 
 8.3. **Veri erişimi her kademede açıktır.** Hiçbir kademe Lisans Alan'ın kendi verisini okumasını, yedeğini almasını ve dışa aktarmasını engellemez. Durdurulmuş durumda bile giriş ekranındaki "verilerimi al" kapısı, yönetici parolasıyla tam yedek ve dışa aktarma verir (Yaptırım Maddeleri, Ek-2, §6).
 
-8.4. **Geçiş dönemi (gözlem kipi).** Lisans denetimi önce gözlem kipinde çalışır: durum hesaplanır ve Lisans Veren'e raporlanır, ama hiçbir istek engellenmez, uyarı bandı gösterilmez. Zorlama kipine geçiş Lisans Alan'a en az [DOLDURULACAK — öneri: 30 gün] önceden yazılı bildirilir.
+8.4. **Geçiş dönemi (gözlem kipi).** Lisans denetimi önce gözlem kipinde çalışır: durum hesaplanır ve Lisans Veren'e raporlanır, ama hiçbir istek engellenmez, uyarı bandı gösterilmez. Zorlama kipine geçiş Lisans Alan'a en az 30 gün önceden yazılı bildirilir.
 
 ## 9. Filigran, bütünlük ve kopya tespiti — beyan
 
@@ -147,7 +147,7 @@ Her Lisans Belgesi tek bir sınıf taşır:
 
 ## 11. Garanti ve sorumluluk
 
-11.1. Lisans Veren, Yazılım'ın teslimden itibaren [DOLDURULACAK — öneri: 90 gün] boyunca belgelerinde anlatılan temel işlevleri esas olarak yerine getireceğini taahhüt eder. Bu süredeki tek çare hatanın giderilmesi ya da ilgili parçanın yenilenmesidir. Sonrası Bakım kapsamındadır.
+11.1. Lisans Veren, Yazılım'ın teslimden itibaren 90 gün boyunca belgelerinde anlatılan temel işlevleri esas olarak yerine getireceğini taahhüt eder. Bu süredeki tek çare hatanın giderilmesi ya da ilgili parçanın yenilenmesidir. Sonrası Bakım kapsamındadır.
 
 11.2. Lisans Veren; donanım, işletim sistemi, ağ, elektrik, üçüncü taraf yazılımları ve Lisans Alan'ın yedekleme yükümlülüğüne uymamasından doğan zarardan sorumlu değildir.
 
@@ -170,9 +170,9 @@ Her Lisans Belgesi tek bir sınıf taşır:
 13.2. Lisans Veren sözleşmeyi aşağıdaki hallerde feshedebilir:
 - §5'teki yasakların ihlali: yazılı bildirimle, hemen;
 - ödeme temerrüdü: Yaptırım Maddeleri (Ek-2) §5'teki ihtar süreleri dolduktan sonra;
-- diğer esaslı ihlaller: yazılı bildirim ve [DOLDURULACAK — öneri: 30 gün] giderme süresinden sonra.
+- diğer esaslı ihlaller: yazılı bildirim ve 30 gün giderme süresinden sonra.
 
-13.3. Fesih hâlinde Yazılım Durdurulmuş duruma alınabilir. "Verilerimi al" kapısı fesihten sonra da [DOLDURULACAK — öneri: en az 90 gün] açık kalır. Lisans Alan bu sürede verilerini alır.
+13.3. Fesih hâlinde Yazılım Durdurulmuş duruma alınabilir. "Verilerimi al" kapısı fesihten sonra da en az 90 gün açık kalır. Lisans Alan bu sürede verilerini alır.
 
 13.4. Lisans Alan kullanımı istediği zaman bırakabilir. Ödenmiş bedelin iadesi: [DOLDURULACAK].
 
@@ -190,7 +190,7 @@ Türk hukuku uygulanır. Uyuşmazlıklarda [DOLDURULACAK] mahkemeleri ve icra da
 - Ek-2: Lisans Yaptırım Maddeleri
 - Ek-3: Veri İşleme Eki
 - Ek-4: Yıllık Bakım ve Destek Sözleşmesi (bakım satın alınmışsa)
-- Ek-5: Fiyat ve ödeme planı [DOLDURULACAK]
+- Ek-5: Fiyat ve ödeme planı (Lisans Alan'a özel; sözleşme anında eklenir)
 - Ek-6: Patron Bulutu Veri İşleme Eki ve ekleri — Ek-6/A Saklama ve İmha Prosedürü, Ek-6/B Teknik ve İdari Tedbirler, Ek-6/C Aydınlatma Metni (yalnız patron bulutu hizmeti satın alınmışsa; ayrı imzalanır)
 - Ek-7: İlk Kurulum Kabul Metni
 - Ek-8: Kişisel Veri İhlali Bildirim Prosedürü (Ek-3 ve Ek-6 için ortak)

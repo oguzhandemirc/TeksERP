@@ -35,7 +35,7 @@
 
 ## 3. Tam metin
 
-**Veri sorumlusu:** {Tesis ünvanı}, {Tesis adresi}, {MERSİS no / vergi no}. İletişim: {Tesis KVKK iletişim adresi} [DOLDURULACAK — fabrikadan].
+**Veri sorumlusu:** {Tesis ünvanı}, {Tesis adresi}, {MERSİS no / vergi no}. İletişim: {Tesis KVKK iletişim adresi}.
 
 **Veri işleyen:** {Lisans Veren ünvanı} [DOLDURULACAK], {adres}. Uygulamayı ve bulut sunucusunu {Tesis ünvanı}'nın talimatıyla işletir; verilerinizi kendi amaçları için kullanmaz.
 
@@ -63,13 +63,13 @@
 
 **Toplama yöntemi:** Uygulamaya girdiğiniz bilgiler, uygulamanın ve sunucunun otomatik oluşturduğu kayıtlar ve hesabınızı açan tesis yöneticisinin girdiği bilgiler yoluyla, elektronik ortamda.
 
-**Saklama:** Hesabınız açık kaldığı sürece. Başarısız giriş kayıtları 90 gün, diğer güvenlik kayıtları 2 yıl saklanır. Hesabınız kapatılınca kimlik bilgileriniz [DOLDURULACAK — öneri: 30 gün] içinde silinir. Ayrıntı: {saklama ve imha prosedürü bağlantısı}.
+**Saklama:** Hesabınız açık kaldığı sürece. Başarısız giriş kayıtları 90 gün, diğer güvenlik kayıtları 2 yıl saklanır. Hesabınız kapatılınca kimlik bilgileriniz 30 gün içinde silinir. Ayrıntı: {saklama ve imha prosedürü bağlantısı}.
 
 **Haklarınız (KVKK md. 11):** verinizin işlenip işlenmediğini öğrenme; işlenmişse bilgi isteme; amacını ve amacına uygun kullanılıp kullanılmadığını öğrenme; aktarıldığı üçüncü kişileri bilme; eksik ya da yanlışsa düzeltilmesini, şartları oluşmuşsa silinmesini ya da yok edilmesini isteme ve bunun aktarılanlara bildirilmesini isteme; münhasıran otomatik sistemlerle analiz sonucu aleyhinize bir sonuç çıkmasına itiraz; kanuna aykırı işleme nedeniyle zarara uğrarsanız zararın giderilmesini isteme.
 
 **Başvuru:** {Tesis ünvanı}'na {başvuru adresi / KEP / e-posta} yoluyla, Veri Sorumlusuna Başvuru Usul ve Esasları Hakkında Tebliğ'e uygun olarak başvurabilirsiniz. Başvurunuz en geç 30 gün içinde sonuçlandırılır. {Lisans Veren ünvanı}'na gelen başvurular {Tesis ünvanı}'na iletilir.
 
-Metin sürümü: `PBAM-2026.1` · Yürürlük: [DOLDURULACAK]
+Metin sürümü: `PBAM-2026.1` · Yürürlük: [Yürürlük tarihi]
 
 ## 4. Fabrikanın kendi aydınlatma metnine eklenecek cümle (öneri)
 

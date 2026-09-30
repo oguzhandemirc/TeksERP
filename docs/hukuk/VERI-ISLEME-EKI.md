@@ -104,7 +104,7 @@ B.2. Lisans Veren bu verileri:
 
 B.3. **Yedek anahtarları.** Lisans Veren'in kasasında tutulan yedek parolası ve Lisans Veren yedek anahtarı, Lisans Alan'ın bütün geçmiş yedeklerini açabilir. Bunlar yalnız Bakım ve Destek Sözleşmesi (Ek-4) §7'deki hallerde kullanılır ve her kullanım Lisans Alan'a bildirilir.
 
-B.4. **İhlal bildirimi.** Lisans Veren, Lisans Alan verisini etkileyen bir güvenlik ihlalini öğrendiğinde Lisans Alan'a gecikmeden, en geç [DOLDURULACAK — öneri: 24 saat] içinde bildirir. Kurul'a bildirim (72 saat) veri sorumlusu olan Lisans Alan'ındır; Lisans Veren bunun için gereken bilgiyi verir. Adımlar ve içerik: Veri İhlali Bildirim Prosedürü (Ek-8).
+B.4. **İhlal bildirimi.** Lisans Veren, Lisans Alan verisini etkileyen bir güvenlik ihlalini öğrendiğinde Lisans Alan'a gecikmeden, en geç 24 saat içinde bildirir. Kurul'a bildirim (72 saat) veri sorumlusu olan Lisans Alan'ındır; Lisans Veren bunun için gereken bilgiyi verir. Adımlar ve içerik: Veri İhlali Bildirim Prosedürü (Ek-8).
 
 B.5. **İlgili kişi başvuruları.** Lisans Veren'e gelen bir ilgili kişi başvurusu Lisans Alan'a yönlendirilir. Lisans Veren, Lisans Alan'ın cevap vermesi için gereken teknik desteği verir.
 
@@ -117,25 +117,25 @@ B.6. **Denetim.** Lisans Alan, bu bölüme uyumu makul bir önceden bildirimle, 
 | [DOLDURULACAK — VDS sağlayıcısının ünvanı] | Lisans sunucusu, Lisans Portalı, güncelleme dosyaları, (varsa) uzak yedek | **Türkiye** | Sunucu Lisans Veren'in yönetimindedir |
 | Cloudflare, Inc. | Lisans ve güncelleme trafiği için ters vekil, önbellek ve saldırı koruması | ABD merkezli; kenar sunucuları dünya geneli | Şifreli bağlantı Cloudflare'de açılır ve yeniden şifrelenir [avukat: KVKK md. 9] |
 | Tailscale Inc. | Uzaktan erişim ağının koordinasyonu | ABD | Trafik uçtan uca şifrelidir; Tailscale yalnız cihaz adı, IP ve bağlantı meta verisini görür [avukat: KVKK md. 9] |
-| [DOLDURULACAK — uzak yedek hedefi Lisans Veren hesabındaysa bulut depolama sağlayıcısı] | Uzak yedek | [DOLDURULACAK] | Yalnız şifreli yedek dosyası gider |
+| Ayrı alt işleyen yok: Lisans Veren'in uzak yedek hizmeti, yukarıdaki VDS sağlayıcısının sunucusunda çalışır | Uzak yedek | Türkiye | Yalnız şifreli yedek dosyası gider |
 
-Lisans Veren yeni bir alt işleyen eklemeden en az [DOLDURULACAK — öneri: 30 gün] önce Lisans Alan'a bildirir. Lisans Alan haklı sebeple itiraz edebilir.
+Lisans Veren yeni bir alt işleyen eklemeden en az 30 gün önce Lisans Alan'a bildirir. Lisans Alan haklı sebeple itiraz edebilir.
 
 ## D. Saklama süreleri
 
 | Kayıt | Süre | Sonra |
 |---|---|---|
 | Tekrar oynatma kaydı (`nonce`) | İsteğin zamanından 10 dakika sonra | Silinir |
-| Yoklama kayıtları ve sağlık özetleri | [DOLDURULACAK — öneri: 13 ay] | Silinir; yalnız kimliksiz toplam istatistik kalabilir |
+| Yoklama kayıtları ve sağlık özetleri | 90 gün | Silinir; yalnız kimliksiz toplam istatistik kalabilir |
 | Verilen Kullanım Onayları | 13 ay | Silinir |
 | Lisans Belgesi sürümleri, yaptırım defteri, taşıma ve felaket kurtarma kayıtları, kurulum geçmişi, kabul kayıtları | Sözleşme süresi + 10 yıl [avukat] | Silinir ya da anonimleştirilir |
-| Destek talebi metni | Kapanıştan [DOLDURULACAK — öneri: 2 yıl] | Silinir |
-| Destek ekran görüntüleri ve iki yönlü dosya paylaşımındaki dosyalar | [DOLDURULACAK — öneri: talep kapanışından ya da bağlantının bitişinden 30 gün] | Silinir |
-| Uzaktan erişim kayıtları | [DOLDURULACAK — öneri: 2 yıl] | Silinir |
-| Sunucu ve Cloudflare erişim günlükleri (IP) | [DOLDURULACAK — öneri: 30 gün]; Cloudflare kendi süresini uygular | Silinir |
-| Lisans Veren'de tutulan uzak yedekler (varsa) | Lisans Alan'ın belirlediği döngü; sözleşme bitiminden [DOLDURULACAK — öneri: 30 gün] sonra | İmha edilir, tutanak verilir |
+| Destek talebi metni | Kapanıştan 2 yıl | Silinir |
+| Destek ekran görüntüleri ve iki yönlü dosya paylaşımındaki dosyalar | Talep kapanışından ya da bağlantının bitişinden 30 gün | Silinir |
+| Uzaktan erişim kayıtları | 2 yıl | Silinir |
+| Sunucu ve Cloudflare erişim günlükleri (IP) | 30 gün; Cloudflare kendi süresini uygular | Silinir |
+| Lisans Veren'de tutulan uzak yedekler (varsa) | Lisans Alan'ın belirlediği döngü; sözleşme bitiminden 30 gün sonra | İmha edilir, tutanak verilir |
 
-Periyodik imha [DOLDURULACAK — öneri: 6 ayda bir] yapılır ve kayda geçer [avukat: Yönetmelik].
+Periyodik imha 6 ayda bir yapılır ve kayda geçer [avukat: Yönetmelik].
 
 ## E. Güvenlik önlemleri
 

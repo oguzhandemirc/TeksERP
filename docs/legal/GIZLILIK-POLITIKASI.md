@@ -6,7 +6,7 @@
 > bilgileriyle tamamlanmalı ve metin yayına çıkmadan bir hukukçu tarafından
 > KVKK / GDPR uyumu açısından gözden geçirilmelidir.
 
-**Son güncelleme:** [DOLDURULACAK — yayın tarihi]
+**Son güncelleme:** [Yayın tarihi]
 **Uygulama:** TeksERP Mobil (`com.teks.erp.mobil`)
 **Veri sorumlusu:** [DOLDURULACAK — şirket ünvanı, adres]
 **İletişim:** [DOLDURULACAK — e-posta]
@@ -60,7 +60,7 @@ Demo sunucusuna girilen veriler **test verisidir**, gerçek üretim verisi
 niteliğinde değildir, üçüncü taraflarla paylaşılmaz ve düzenli olarak silinir.
 Demo sunucusuna hassas veya kişisel veri girilmemelidir.
 
-Demo adresi: [DOLDURULACAK]
+Demo adresi: https://demo.etkiliyazilim.com
 
 ## 6. Veri paylaşımı
 
@@ -73,7 +73,7 @@ gönderilmez.
 - Oturum anahtarı cihazın güvenli deposunda (Android Keystore) tutulur.
 - Çevrimdışı kuyruk ve önbellek, oturum kapatıldığında cihazdan temizlenir.
 - Sunucu tarafı saklama süresi ve yedekleme politikası, sunucuyu işleten
-  kuruluşun sorumluluğundadır: [DOLDURULACAK — kuruluş politikasına atıf].
+  kuruluşun sorumluluğundadır.
 
 ## 8. Hesaplar
 

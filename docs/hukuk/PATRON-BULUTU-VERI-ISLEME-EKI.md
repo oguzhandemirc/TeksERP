@@ -1,6 +1,6 @@
 # TeksERP Patron Bulutu Veri İşleme Eki
 
-> **TASLAK — AVUKAT İNCELEMESİ BEKLİYOR.** Bu metin bir taslaktır; hukuki görüş değildir. Mevzuat atıfları incelemeye yön vermek içindir, doğruluğu ve güncelliği avukatça teyit edilmelidir. `[DOLDURULACAK]` işaretli yerler ticari karar ya da eksik bilgidir; "öneri" diye verilen değerler bağlayıcı değildir.
+> **TASLAK — AVUKAT İNCELEMESİ BEKLİYOR.** Bu metin bir taslaktır; hukuki görüş değildir. Mevzuat atıfları incelemeye yön vermek içindir, doğruluğu ve güncelliği avukatça teyit edilmelidir. `[DOLDURULACAK]` işaretli yerler ticari karar ya da eksik bilgidir.
 >
 > Metin kimliği: `PBVIE-2026.1-taslak` · Ek-6 · Lisans sözleşmesi (Son Kullanıcı Lisans Sözleşmesi) ve bakım sözleşmesinden (Bakım ve Destek Sözleşmesi, Ek-4) AYRI imzalanır; patron bulutu hizmeti satın alınmadıkça yürürlüğe girmez.
 >
@@ -109,7 +109,7 @@ Açık rızaya dayanan bir işleme öngörülmemiştir. Bulut Kopyası, Lisans A
 | Expo (650 Industries, Inc.) | Mobil bildirim iletimi | ABD | Cihaz bildirim anahtarı ve bildirim metni |
 | Google LLC (Firebase Cloud Messaging) | Android bildirimi | ABD / dünya geneli | Aynı |
 | Apple Inc. (APNs) | iOS bildirimi | ABD / dünya geneli | Aynı |
-| [DOLDURULACAK — web bildirimi için tarayıcının bildirim hizmeti] | Web bildirimi | Tarayıcı üreticisine göre | Aynı |
+| Kullanılan tarayıcının bildirim hizmeti: Google LLC (Chrome), Mozilla Corporation (Firefox), Apple Inc. (Safari), Microsoft Corporation (Edge); sunucu yalnız bu dört hizmete gönderir | Web bildirimi | Tarayıcı üreticisine göre | Aynı |
 
 6.2. **Bildirimde asgari veri.** Bildirim metni varsayılan olarak cari adı, tutar ve kişi adı içermez; yalnız olay türünü ve uygulamada açılacak ekranı söyler ("Yeni sipariş talebiniz işlendi", "Gece yedeği başarısız"). Ayrıntı, uygulama açılınca bulut sunucusundan okunur [DOLDURULACAK — ticari karar: ayrıntılı bildirim seçeneği sunulacak mı; sunulursa §6.3 bu içerik için de geçerlidir].
 
@@ -125,7 +125,7 @@ Açık rızaya dayanan bir işleme öngörülmemiştir. Bulut Kopyası, Lisans A
 - (c) hizmeti, aktarımın hukuki dayanağı kurulana kadar bildirimsiz ve [DOLDURULACAK] biçimde sunmak.
 Lisans Veren, dayanak kurulmadan yurt dışı alt işleyene kişisel veri akıtan bir özelliği açmaz.
 
-6.5. **Yeni alt işleyen.** Lisans Veren yeni bir alt işleyen eklemeden en az [DOLDURULACAK — öneri: 30 gün] önce Lisans Alan'a bildirir. Lisans Alan haklı sebeple itiraz ederse taraflar çözüm arar; bulunamazsa Lisans Alan patron bulutu hizmetini cezasız feshedebilir [avukat]. Lisans Veren, alt işleyene bu ekteki yükümlülüklerden daha hafif olmayan yükümlülükler yükler (KVKK md. 12/2).
+6.5. **Yeni alt işleyen.** Lisans Veren yeni bir alt işleyen eklemeden en az 30 gün önce Lisans Alan'a bildirir. Lisans Alan haklı sebeple itiraz ederse taraflar çözüm arar; bulunamazsa Lisans Alan patron bulutu hizmetini cezasız feshedebilir [avukat]. Lisans Veren, alt işleyene bu ekteki yükümlülüklerden daha hafif olmayan yükümlülükler yükler (KVKK md. 12/2).
 
 ## 7. Lisans Veren'in veri işleyen yükümlülükleri
 
@@ -136,7 +136,7 @@ Lisans Veren, dayanak kurulmadan yurt dışı alt işleyene kişisel veri akıta
 - (d) Teknik ve İdari Tedbirler ekindeki (Ek-6/B) tedbirleri uygular ve esaslı bir tedbiri zayıflatmadan önce Lisans Alan'a bildirir;
 - (e) güvenlik ihlalini Veri İhlali Bildirim Prosedürü'ne (Ek-8) göre bildirir.
 
-7.2. **İlgili kişi başvuruları (KVKK md. 11 ve 13).** Lisans Veren'e gelen başvuru, kimliği doğrulanmadan cevaplanmaz ve [DOLDURULACAK — öneri: 3 iş günü] içinde Lisans Alan'a iletilir. Başvuruyu cevaplamak (kanuni süre 30 gün) Lisans Alan'ındır; Lisans Veren gereken dökümü ve silme işlemini teknik olarak sağlar. Bulut Kopyası'ndaki bir kaydın düzeltilmesi ya da silinmesi **Kurulum'da** yapılır ve bir sonraki eşitlemeyle buluta yansır; bulutta tek başına düzeltme yapılmaz (fabrika tek yazardır).
+7.2. **İlgili kişi başvuruları (KVKK md. 11 ve 13).** Lisans Veren'e gelen başvuru, kimliği doğrulanmadan cevaplanmaz ve 3 iş günü içinde Lisans Alan'a iletilir. Başvuruyu cevaplamak (kanuni süre 30 gün) Lisans Alan'ındır; Lisans Veren gereken dökümü ve silme işlemini teknik olarak sağlar. Bulut Kopyası'ndaki bir kaydın düzeltilmesi ya da silinmesi **Kurulum'da** yapılır ve bir sonraki eşitlemeyle buluta yansır; bulutta tek başına düzeltme yapılmaz (fabrika tek yazardır).
 
 7.3. **Denetim.** Lisans Alan, bu eke uyumu yılda bir kez, makul bir önceden bildirimle [DOLDURULACAK] belge isteyerek ya da bağımsız bir denetçiyle denetleyebilir. Denetim başka kiracıların verisine erişim vermez.
 
