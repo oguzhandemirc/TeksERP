@@ -1,0 +1,34 @@
+{
+  "_aciklama": [
+    "ALTIN VEKTORLER - pg-ornegi.json + sablonlari okuyan HER uygulama (Node motoru, setup, Rust guncelleyici) bu vektorleri gecmek ZORUNDADIR; baska dilde yazan taraf bunlari kendi birim testine koyar.",
+    "bellek: KAHIN ilk-kurulum.ps1 MbDeger + runbook 6 formuludur (pwsh ile 9/9 esit olculdu); motordan uretilmedi. port: kural metninden elle yazildi ('mesgul': 'aralik' = pg-ornegi.json port araliginin tamami).",
+    "uretim: doldurulmus tekserp.conf ve pg_hba.conf'un SHA256'si (UTF-8, LF). Sablon degisince bu ozetler bilerek guncellenir (bekci gercek ozeti basar) - sessiz sablon degisimi olmasin diye."
+  ],
+  "bellek": [
+    { "ramMB": 1024, "beklenen": { "SHARED_BUFFERS": "256MB", "EFFECTIVE_CACHE_SIZE": "614MB", "MAINTENANCE_WORK_MEM": "64MB" } },
+    { "ramMB": 2048, "beklenen": { "SHARED_BUFFERS": "512MB", "EFFECTIVE_CACHE_SIZE": "1228MB", "MAINTENANCE_WORK_MEM": "102MB" } },
+    { "ramMB": 4096, "beklenen": { "SHARED_BUFFERS": "1GB", "EFFECTIVE_CACHE_SIZE": "2457MB", "MAINTENANCE_WORK_MEM": "204MB" } },
+    { "ramMB": 8192, "beklenen": { "SHARED_BUFFERS": "2GB", "EFFECTIVE_CACHE_SIZE": "4915MB", "MAINTENANCE_WORK_MEM": "409MB" } },
+    { "ramMB": 16255, "beklenen": { "SHARED_BUFFERS": "4063MB", "EFFECTIVE_CACHE_SIZE": "9753MB", "MAINTENANCE_WORK_MEM": "512MB" } },
+    { "ramMB": 16384, "beklenen": { "SHARED_BUFFERS": "4GB", "EFFECTIVE_CACHE_SIZE": "9830MB", "MAINTENANCE_WORK_MEM": "512MB" } },
+    { "ramMB": 32768, "beklenen": { "SHARED_BUFFERS": "8GB", "EFFECTIVE_CACHE_SIZE": "19660MB", "MAINTENANCE_WORK_MEM": "512MB" } },
+    { "ramMB": 65536, "beklenen": { "SHARED_BUFFERS": "8GB", "EFFECTIVE_CACHE_SIZE": "39321MB", "MAINTENANCE_WORK_MEM": "512MB" } },
+    { "ramMB": 131072, "beklenen": { "SHARED_BUFFERS": "8GB", "EFFECTIVE_CACHE_SIZE": "78643MB", "MAINTENANCE_WORK_MEM": "512MB" } }
+  ],
+  "port": [
+    { "ad": "bos makine", "girdi": { "mesgul": [] }, "beklenen": { "port": 5432 } },
+    { "ad": "baska PostgreSQL 5432'de", "girdi": { "mesgul": [5432] }, "beklenen": { "port": 5433 } },
+    { "ad": "uc port dolu", "girdi": { "mesgul": [5432, 5433, 5434] }, "beklenen": { "port": 5435 } },
+    { "ad": "delikli doluluk ilk boslugu alir", "girdi": { "mesgul": [5432, 5434] }, "beklenen": { "port": 5433 } },
+    { "ad": "onarim: kayitli port (dinleyen biziz)", "girdi": { "mesgul": [5432, 5440], "onceki": 5440 }, "beklenen": { "port": 5440 } },
+    { "ad": "istenen port bos", "girdi": { "mesgul": [5432], "istenen": 5450 }, "beklenen": { "port": 5450 } },
+    { "ad": "istenen port mesgul: HATA, sessiz baska port yok", "girdi": { "mesgul": [5432], "istenen": 5432 }, "beklenen": { "hata": true } },
+    { "ad": "istenen port ayricalikli aralikta", "girdi": { "mesgul": [], "istenen": 80 }, "beklenen": { "hata": true } },
+    { "ad": "sozlesme araliginin tamami dolu", "girdi": { "mesgul": "aralik" }, "beklenen": { "hata": true } }
+  ],
+  "uretim": [
+    { "ramMB": 2048, "port": 5432, "confSha256": "bb4e84e276876e73be321894b2a6482250fbe8c9453edef0865dcd45426ac80e", "hbaSha256": "f7def0e315f36f8a49f9c66af36548ec0be353f24917aa8ac4629996ae3b76f6" },
+    { "ramMB": 16255, "port": 5432, "confSha256": "fd0facaf98de531890fa3086dcbb3341d8cd1a893f85e2340fad76443ecfd4c7", "hbaSha256": "f7def0e315f36f8a49f9c66af36548ec0be353f24917aa8ac4629996ae3b76f6" },
+    { "ramMB": 65536, "port": 5433, "confSha256": "843a2cb51c32625887b127fe5d775eae0ad105c421808c5e1d04ce9f8c3326ed", "hbaSha256": "f7def0e315f36f8a49f9c66af36548ec0be353f24917aa8ac4629996ae3b76f6" }
+  ]
+}

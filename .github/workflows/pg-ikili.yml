@@ -1,0 +1,72 @@
+name: PostgreSQL ikilisi (kendi örnek)
+
+# =============================================================================
+# KENDİ PostgreSQL ÖRNEĞİNİN İKİLİSİ — resmî EDB zip'ini İKİNCİ BİR AĞDAN doğrular
+# =============================================================================
+# deploy/pg/pg-surumu.json'daki boyut + SHA256 sabitleyen makinede ölçüldü; bu iş
+# GitHub'ın ağından yeniden indirir ve AYNI özeti bekler (tek ağdan ölçülen özet o
+# ağdaki bir araya girmeyi göremez). Ardından içerik denetimi (zorunlu ikililer ·
+# ICU · pg_trgm · imza durumu · gömülü sürüm dizgesi) ve sahne manifestosu.
+#
+# Tetik: kayıt/araç/şablon değişince (deploy/pg/**) + elle. Her push'ta KOŞMAZ (371 MB).
+# Windows dumanı (initdb + hizmet + bağlantı yasakları) D2/D5'in Windows işine
+# birleşir — iş tanımı docs/design/KENDI-POSTGRESQL.md §9.
+# İMZA ANAHTARI CI'A GİRMEZ; bu iş hiçbir sır kullanmaz.
+# =============================================================================
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - "deploy/pg/**"
+      - ".github/workflows/pg-ikili.yml"
+  pull_request:
+    branches: [main]
+    paths:
+      - "deploy/pg/**"
+      - ".github/workflows/pg-ikili.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  ikili:
+    name: EDB zip — indir + SHA256 + içerik (ikinci ağ)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      # Ağsız: kayıt + sözleşme + şablon yasakları + altın vektörler + kalıcı sondalar.
+      - name: Kayıt ve şablon bekçisi
+        run: node scripts/test_pg_ornegi.mjs && node scripts/test_pg_ornegi.mjs --sonda
+
+      # Resmî kaynak HEAD + postgresql.org'da yeni küçük sürüm var mı (bildirim; kırmızı değil).
+      - name: Resmî kaynak yoklaması
+        run: node scripts/test_pg_ornegi.mjs --ag
+
+      # Önbellek anahtarı kayıttaki özettir: önbellekten gelen dosya da aynı doğrulamadan geçer.
+      - name: Önbellek anahtarı (kayıttaki SHA256)
+        id: anahtar
+        run: echo "sha=$(node -e "process.stdout.write(require('./deploy/pg/pg-surumu.json').yayin['win-x64'].sha256)")" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/tekserp-pg
+          key: pg-zip-${{ steps.anahtar.outputs.sha }}
+
+      - name: İndir + boyut/SHA256 + içerik + sahne
+        run: node deploy/pg/pg-ikili-dogrula.mjs --indir --onbellek "$RUNNER_TEMP/tekserp-pg" --sahne "$RUNNER_TEMP/pg-sahne"
+
+      # Manifesto (sha256sum -c biçimi): setup ve güncelleyici kurulu ikiliyi buna karşı doğrular.
+      - name: Sahne manifestosu (yapıt)
+        uses: actions/upload-artifact@v4
+        with:
+          name: pg-sahne-manifestosu
+          path: ${{ runner.temp }}/pg-sahne/*/TEKSERP-ICERIK.sha256
+          if-no-files-found: error
+          retention-days: 14

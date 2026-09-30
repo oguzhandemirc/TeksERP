@@ -1,0 +1,12 @@
+# =============================================================================
+# TeksERP - KENDI PostgreSQL ORNEGI - istemci kimlik dogrulamasi (pg_hba.conf)
+# =============================================================================
+# URETILIR, ELLE DUZENLENMEZ. Kaynak: deploy/pg/pg_hba.conf.sablon
+# initdb'nin yazdigi pg_hba.conf bu dosyayla DEGISTIRILIR.
+# Yalniz bu makineden (127.0.0.1), yalniz SCRAM-SHA-256 parolasiyla. Ag erisimi,
+# trust, md5, replication ve include satiri YOK. Eslesmeyen baglanti reddedilir.
+# Tasarim: docs/design/KENDI-POSTGRESQL.md  -  Bekci: node scripts/test_pg_ornegi.mjs
+# =============================================================================
+
+# TYPE  DATABASE  USER  ADDRESS        METHOD
+host    all       all   127.0.0.1/32   scram-sha-256

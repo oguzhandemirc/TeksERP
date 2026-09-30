@@ -1,0 +1,65 @@
+{
+  "_aciklama": [
+    "KENDI PostgreSQL ORNEGININ IKILISI - tek surum, tek yerde. Kurulum (setup.exe), guncelleyici, CI ve bekci bu kaydi okur; ikinci kopya yoktur.",
+    "Neden sabit: sahada tek bilinen PG surumu (sahadaki derleme 16.9); yeni kurulum makinedeki PG'den bagimsiz KENDI orneginin ikilisini tasir (kullanici karari 2026-09-30). Cizgi 16 = gelistirme/test/patron bulutu ile ayni ana surum.",
+    "Kaynak: EDB'nin resmi indirme sayfasi (download-postgresql-binaries) Windows x86-64 baglantisi -> get.enterprisedb.com. Zip IMZASIZ (sunucu ikililerinde Authenticode YOK - olculdu); guven: resmi HTTPS + buradaki boyut/SHA256 (sabitleyen makine + CI iki ayri agdan olcer) + icerik denetimi; sahaya bizim PAKET imzamizla gider.",
+    "surum/derleme degisimi bir KARARDIR (recete docs/design/KENDI-POSTGRESQL.md 'Surum yukseltme'): once `node deploy/pg/pg-ikili-dogrula.mjs --olc --surum X.Y --derleme N` olcer, sonra bu dosya elle guncellenir, PG surum notu okunup ek adim varsa guncellemeSonrasi'na yazilir. Ana surum (cizgi) degisimi otomatik DEGILDIR - runbook docs/ops/PG-BUYUK-SURUM-GECISI.md.",
+    "sahne = sahaya giden sunucu alt kumesi (pgAdmin 4 / StackBuilder / doc / include / regresyon araclari / .lib ATILIR). icerikSha256 = TEKSERP-ICERIK.sha256 manifestosunun ozeti ('<sha256>  <yol>' satirlari, yola gore bayt sirasi, LF).",
+    "Bekci: node scripts/test_pg_ornegi.mjs (ag'siz; --ag resmi kaynagi HEAD ile yoklar). Tam dogrulama (indir + SHA256 + icerik): node deploy/pg/pg-ikili-dogrula.mjs --indir."
+  ],
+  "surum": "16.15",
+  "cizgi": "16",
+  "derleme": "4",
+  "yayinTarihi": "2026-08-13",
+  "destekSonu": "2028-11-09",
+  "yayin": {
+    "win-x64": {
+      "dosya": "postgresql-16.15-4-windows-x64-binaries.zip",
+      "url": "https://get.enterprisedb.com/postgresql/postgresql-16.15-4-windows-x64-binaries.zip",
+      "boyut": 371449528,
+      "sha256": "f5f55b03bd54ce0dd1c51d524b54c7e015abd4d620af27d6971288a2dbe4a8f8",
+      "arsivKok": "pgsql",
+      "icuSurum": "67",
+      "imza": "yok",
+      "olcum": {
+        "tarih": "2026-09-30",
+        "kaynakSayfa": "https://www.enterprisedb.com/download-postgresql-binaries -> 16.15 Windows x86-64 -> sbp.enterprisedb.com/getfile.jsp?fileid=1260572 -> url",
+        "lastModified": "Fri, 18 Sep 2026 10:33:13 GMT",
+        "etag": "\"604db21cae11c92e0c70012503191600-45\""
+      }
+    }
+  },
+  "sahne": {
+    "dahil": ["bin/", "lib/", "share/", "server_license.txt", "commandlinetools_3rd_party_licenses.txt"],
+    "haric": [
+      "^bin/stackbuilder\\.exe$",
+      "^bin/wx[^/]*\\.dll$",
+      "^bin/(isolationtester|pg_isolation_regress|pg_regress|pg_regress_ecpg|libpq_pipeline|libpq_testclient|libpq_uri_regress|test_cloexec)\\.exe$",
+      "^bin/testplug\\.dll$",
+      "^(bin|lib)/[^/]*\\.lib$"
+    ],
+    "dosyaSayisi": 1593,
+    "boyut": 92549610,
+    "icerikSha256": "83c58952c8556b11330b048384bf7aa27d7aa343bab4ada0cc2fb859d0376ebd"
+  },
+  "zorunlu": {
+    "ikililer": [
+      "bin/postgres.exe",
+      "bin/pg_ctl.exe",
+      "bin/initdb.exe",
+      "bin/psql.exe",
+      "bin/pg_dump.exe",
+      "bin/pg_dumpall.exe",
+      "bin/pg_restore.exe",
+      "bin/pg_upgrade.exe",
+      "bin/pg_isready.exe",
+      "bin/pg_controldata.exe",
+      "bin/reindexdb.exe",
+      "bin/vacuumdb.exe",
+      "bin/libpq.dll"
+    ],
+    "uzantilar": ["pg_trgm"],
+    "icu": true
+  },
+  "guncellemeSonrasi": []
+}
