@@ -60,3 +60,12 @@ export function recordTitle(kayit: unknown): string {
   }
   return "Kayıt";
 }
+
+/** Seçici satırının ikinci satırı: kod · il (varsa); başlıkta zaten gösterilen değer tekrar edilmez. */
+export function recordSubtitle(kayit: unknown): string {
+  const o = (typeof kayit === "object" && kayit !== null ? kayit : {}) as Record<string, unknown>;
+  const title = recordTitle(kayit);
+  const parts = ["kod", "il"].map((k) => o[k]).filter((v): v is string => typeof v === "string" && v !== "" && v !== title);
+  if (o.aktif === false) parts.push("Pasif");
+  return parts.join(" · ");
+}

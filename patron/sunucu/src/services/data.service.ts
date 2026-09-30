@@ -6,8 +6,9 @@ import { Prisma } from "@prisma/client";
 import type { SessionContext } from "../auth/session.service";
 import { projectionDef, type ProjectionDef } from "../catalog/projections";
 import { badRequest, forbidden, notFound } from "../lib/errors";
+import { searchCondition } from "../lib/search";
 import { NO_TENANT, withTesis } from "../lib/tenant";
-import type { FacilityStatus, Page, ProjectionRecord, Snapshot } from "../wire/api";
+import { ARAMA_AZAMI, LIST_SEARCH, type FacilityStatus, type Page, type ProjectionRecord, type Snapshot } from "../wire/api";
 import type { CloudContext } from "./context";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -31,6 +32,27 @@ export interface ListQuery {
   readonly limit: number;
   readonly durum?: string;
   readonly cariKartId?: string;
+  /** Seçici araması (`LIST_SEARCH`teki projeksiyonlar); imleç aynı terimle devam eder. */
+  readonly ara?: string;
+  readonly suzgec?: string;
+}
+
+/** `ara`/`suzgec` koşulları: arama beyanı olmayan listede ya da tanınmayan süzgeçte 400 (fail-closed). */
+function searchFilters(name: string, q: ListQuery): Prisma.Sql[] {
+  if (q.ara === undefined && q.suzgec === undefined) return [];
+  const spec = Object.hasOwn(LIST_SEARCH, name) ? LIST_SEARCH[name] : undefined;
+  if (!spec) throw badRequest("Bu listede arama yok");
+  const out: Prisma.Sql[] = [];
+  if (q.ara !== undefined) {
+    if (q.ara.length > ARAMA_AZAMI) throw badRequest(`Arama en çok ${ARAMA_AZAMI} karakter`);
+    out.push(searchCondition(spec.alanlar, q.ara));
+  }
+  if (q.suzgec !== undefined) {
+    const opt = spec.suzgec?.secenekler.find((o) => o.deger === q.suzgec);
+    if (!opt) throw badRequest(`Tanınmayan süzgeç: ${q.suzgec}`);
+    out.push(Prisma.sql`AND (r.data->${opt.alan}) = ${JSON.stringify(opt.esit)}::jsonb`);
+  }
+  return out;
 }
 
 function decodeCursor(cursor: string): { sortAt: Date; id: string } {
@@ -80,7 +102,7 @@ export async function listProjection(ctx: CloudContext, s: SessionContext, name:
   const def = readableDef(s, name, "KAYIT");
   if (q.durum !== undefined && !/^[A-Z][A-Z0-9_]{0,39}$/.test(q.durum)) throw badRequest("durum biçimsiz");
   if (q.cariKartId !== undefined && !UUID.test(q.cariKartId)) throw badRequest("cariKartId biçimsiz");
-  const filters: Prisma.Sql[] = [];
+  const filters: Prisma.Sql[] = searchFilters(def.name, q);
   if (q.durum) filters.push(Prisma.sql`AND r.data->>'durum' = ${q.durum}`);
   if (q.cariKartId) filters.push(Prisma.sql`AND r.data->>'cariKartId' = ${q.cariKartId.toLowerCase()}`);
   if (q.cursor) {

@@ -1,10 +1,10 @@
 // Jenerik veri görünümleri: kayıt alanları, anlık özet, imleçli liste. Şekil fabrikadan gelir.
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Text, View } from "react-native";
 import { errorMessage } from "../api/client";
 import type { ProjectionRecord } from "../api/wire";
 import { formatAgo, syncIsLate } from "../lib/format";
-import { nestedEntries, recordTitle, scalarEntries } from "../lib/present";
+import { nestedEntries, recordSubtitle, recordTitle, scalarEntries } from "../lib/present";
 import { useSession } from "../state/session";
 import { Banner, Body, Button, Card, Loading, Muted, Row, Stat, Title } from "./kit";
 import { space } from "./theme";
@@ -78,35 +78,47 @@ export function ErrorBox({ text, onRetry }: { text: string; onRetry?: () => void
   );
 }
 
-/** İmleçli projeksiyon listesi (sunucu süzer; "Daha fazla" sonraki sayfayı ekler). */
-export function ProjectionList(p: { projection: string; filter?: { durum?: string; cariKartId?: string }; onOpen?: (r: ProjectionRecord) => void; empty?: string }) {
+export interface ListFilter {
+  readonly durum?: string;
+  readonly cariKartId?: string;
+  readonly ara?: string;
+  readonly suzgec?: string;
+}
+
+/** İmleçli projeksiyon listesi (sunucu süzer ve arar; "Daha fazla" sonraki sayfayı aynı süzgeçle ekler). */
+export function ProjectionList(p: { projection: string; filter?: ListFilter; onOpen?: (r: ProjectionRecord) => void; empty?: string; compact?: boolean }) {
   const { api, cache, markOnline } = useSession();
   const [items, setItems] = useState<ProjectionRecord[]>([]);
   const [next, setNext] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
-  const durum = p.filter?.durum;
-  const cariKartId = p.filter?.cariKartId;
-  const key = `liste:${p.projection}:${durum ?? ""}:${cariKartId ?? ""}`;
+  const seq = useRef(0); // hızlı yazımda geç dönen eski arama yeni sonucu ezmesin
+  const { durum, cariKartId, ara, suzgec } = p.filter ?? {};
+  const key = `liste:${p.projection}:${durum ?? ""}:${cariKartId ?? ""}:${suzgec ?? ""}`;
 
   const load = useCallback(
     async (cursor: string | null) => {
       if (!cache) return;
+      const mine = ++seq.current;
       setLoading(true);
       setError(null);
       try {
-        const fetch = () => api.list(p.projection, { imlec: cursor ?? undefined, limit: 50, durum, cariKartId });
-        const r = cursor ? { data: await fetch(), offline: false, savedAt: "" } : await cache.load(key, fetch);
-        if (!cursor) markOnline(!r.offline, r.savedAt);
+        const fetch = () => api.list(p.projection, { imlec: cursor ?? undefined, limit: 50, durum, cariKartId, ara, suzgec });
+        // Arama sonucu çevrimdışı saklanmaz (her tuş ayrı anahtar doğururdu); ilk sayfa aramasızsa saklanır.
+        const r = cursor || ara ? { data: await fetch(), offline: false, savedAt: "" } : await cache.load(key, fetch);
+        if (mine !== seq.current) return;
+        if (!cursor && !ara) markOnline(!r.offline, r.savedAt);
         setItems((old) => (cursor ? [...old, ...r.data.kayitlar] : [...r.data.kayitlar]));
         setNext(r.offline ? null : r.data.sonraki);
       } catch (err) {
+        if (mine !== seq.current) return;
+        if (!cursor) setItems([]);
         setError(errorMessage(err));
       } finally {
-        setLoading(false);
+        if (mine === seq.current) setLoading(false);
       }
     },
-    [api, cache, key, markOnline, durum, cariKartId, p.projection],
+    [api, cache, key, markOnline, durum, cariKartId, ara, suzgec, p.projection],
   );
 
   useEffect(() => {
@@ -119,7 +131,7 @@ export function ProjectionList(p: { projection: string; filter?: { durum?: strin
       {items.map((r) => (
         <Card key={r.id} onPress={p.onOpen ? () => p.onOpen?.(r) : undefined} testID={`kayit-${r.id}`}>
           <Title>{recordTitle(r.kayit)}</Title>
-          <Fields value={r.kayit} />
+          {p.compact ? <Muted>{recordSubtitle(r.kayit)}</Muted> : <Fields value={r.kayit} />}
         </Card>
       ))}
       {!loading && !error && items.length === 0 ? <Muted>{p.empty ?? "Kayıt yok"}</Muted> : null}

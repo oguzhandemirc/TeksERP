@@ -60,6 +60,62 @@ export interface ProjectionRecord {
   readonly surum: string;
 }
 
+// ---------------------------------------------------------------- liste araması (seçiciler)
+/** Tek süzgeç seçeneği: `?suzgec=<deger>` ⇒ kayıttaki `alan` = `esit` (jsonb eşitliği). */
+export interface ListFilterOption {
+  readonly deger: string;
+  readonly etiket: string;
+  readonly alan: string;
+  readonly esit: string | boolean;
+}
+
+/** Sunucuda aranabilir liste: `?ara=` `alanlar`da Türkçe katlamalı parça eşleşme; en çok BİR açılır süzgeç. */
+export interface ListSearchSpec {
+  readonly alanlar: readonly string[];
+  readonly suzgec: { readonly etiket: string; readonly varsayilan: string | null; readonly secenekler: readonly ListFilterOption[] } | null;
+}
+
+export const ARAMA_AZAMI = 60;
+
+/** `GET /veri/:projeksiyon?ara=&suzgec=` — yalnız burada adı geçen projeksiyonlar aranır; diğerinde 400. */
+export const LIST_SEARCH: Readonly<Record<string, ListSearchSpec>> = {
+  "cari-kart": {
+    alanlar: ["ad", "kod"],
+    suzgec: {
+      etiket: "Rol",
+      varsayilan: "MUSTERI",
+      secenekler: [
+        { deger: "MUSTERI", etiket: "Müşteri", alan: "musteriRolu", esit: true },
+        { deger: "TEDARIKCI", etiket: "Tedarikçi", alan: "tedarikciRolu", esit: true },
+        { deger: "FASON", etiket: "Fason", alan: "fasonRolu", esit: true },
+      ],
+    },
+  },
+  urun: {
+    alanlar: ["ad", "kod"],
+    suzgec: {
+      etiket: "Tür",
+      varsayilan: null,
+      secenekler: [
+        { deger: "FABRIC", etiket: "Kumaş", alan: "tur", esit: "FABRIC" },
+        { deger: "YARN", etiket: "İplik", alan: "tur", esit: "YARN" },
+        { deger: "CONSUMABLE", etiket: "Sarf", alan: "tur", esit: "CONSUMABLE" },
+      ],
+    },
+  },
+  renk: {
+    alanlar: ["ad", "kod"],
+    suzgec: {
+      etiket: "Durum",
+      varsayilan: "AKTIF",
+      secenekler: [
+        { deger: "AKTIF", etiket: "Aktif", alan: "aktif", esit: true },
+        { deger: "PASIF", etiket: "Pasif", alan: "aktif", esit: false },
+      ],
+    },
+  },
+};
+
 /** `GET /anlik/:projeksiyon`. */
 export interface Snapshot {
   readonly projeksiyon: string;
