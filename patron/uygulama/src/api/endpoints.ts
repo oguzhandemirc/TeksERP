@@ -1,11 +1,13 @@
 // Uygulamanın çağırdığı HER uç burada (yol şablonu + yöntem). Ayna bekçisi bu tabloyu sunucunun
 // `API_ROUTES`uyla karşılaştırır — sunucuda olmayan uca istek yazılamaz.
-import type { ApiClient, Query } from "./client";
+import type { ApiClient, DownloadedFile, Query } from "./client";
 import type {
   Account,
   AccountInviteResult,
   Device,
   CustomerMessageBody,
+  ExportFormat,
+  ExportManifest,
   FacilityStatus,
   InboxItemKind,
   InboxItem,
@@ -62,6 +64,8 @@ export const ENDPOINTS = {
   notificationFacilityDefaults: ["post", "/bildirim/tesis-varsayilani"],
   notificationHistory: ["get", "/bildirimler"],
   notificationTest: ["post", "/bildirim/deneme"],
+  exportManifest: ["get", "/disa-aktar"],
+  exportDownload: ["get", "/disa-aktar/:kume"],
 } as const satisfies Record<string, readonly ["get" | "post" | "patch", string]>;
 
 type Name = keyof typeof ENDPOINTS;
@@ -124,6 +128,8 @@ export function createApi(c: ApiClient) {
     notificationFacilityDefaults: (ayarlar: NotificationSettings) => c.post<NotificationSettingsView>(pathOf("notificationFacilityDefaults"), { ayarlar }),
     notificationHistory: (p: { imlec?: string; limit?: number } = {}) => c.get<Page<NotificationItem>>(pathOf("notificationHistory"), p),
     notificationTest: () => c.post<TestNotificationResult>(pathOf("notificationTest"), {}),
+    exportManifest: () => c.get<ExportManifest>(pathOf("exportManifest")),
+    exportDownload: (kume: string, bicim: ExportFormat): Promise<DownloadedFile> => c.download(pathOf("exportDownload", { kume }), { bicim }),
   };
 }
 

@@ -20,6 +20,7 @@ export const CLOUD_ERROR_CODES = [
   "DAVET_GECERSIZ",
   "IZIN_BILINMIYOR",
   "RAPOR_BULUTTA_YOK",
+  "HIZMET_KAPANDI",
 ] as const;
 export type CloudErrorCode = (typeof CLOUD_ERROR_CODES)[number];
 

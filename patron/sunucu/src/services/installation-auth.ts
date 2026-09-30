@@ -1,7 +1,8 @@
 // FABRİKA KANALI KAPISI — imzalı İSTEK (protokol LISANS-PROTOKOLU.md §4 sırası, amaç `esitle`):
 //   ① readRequestIdentity (imzasız) → kurulum dizini (açık anahtar + hak) ② verifyRequest (typ ·
 //   imza · kurulum · amaç · ±10 dk · HAM gövde özeti) ③ nonce ATOMİK (tesis kapsamında UNIQUE) ④ hak
-//   kapısı: yalnız URETIM sınıfı + `patron-bulut` modülü + bitmemiş abonelik + DEVREDİLMEMİŞ.
+//   kapısı: yalnız URETIM sınıfı + `patron-bulut` modülü + bitmemiş abonelik + DEVREDİLMEMİŞ ⑤ tesisin
+//   hizmet aşaması ACIK (tesis kapatıldıysa kanal da kapalı — `service-lifecycle.ts`).
 // Kiracı İSTEKTEN değil kurulumdan çözülür (`tesisId` gövdeden ALINMAZ — sözleşme §9.2).
 import { CLOCK_SKEW_MS, UuidSchema, isoToMs, readRequestIdentity, verifyRequest, type RequestDoc } from "../lisans-protokol";
 import { CloudError, requestRejected } from "../lib/errors";
@@ -9,8 +10,9 @@ import { isUniqueViolation } from "../lib/prisma-errors";
 import { withTesis } from "../lib/tenant";
 import type { CloudContext } from "./context";
 import { safeKeyId, type InstallationRecord } from "./installation-directory";
+import { CLOUD_MODULE_KEY, facilityServiceState } from "./service-lifecycle";
 
-export const CLOUD_MODULE_KEY = "patron-bulut";
+export { CLOUD_MODULE_KEY };
 
 export interface FactoryCaller {
   readonly installation: InstallationRecord;
@@ -72,5 +74,7 @@ export async function authenticateFactory(ctx: CloudContext, g: { header: unknow
   if (!inst.active) throw new CloudError(403, "KURULUM_IPTAL", "Bu kurulumun kaydı pasif; patron bulutu kanalı kapalı");
   const denied = cloudEntitlementError(inst, g.nowMs);
   if (denied) throw denied;
+  const service = await facilityServiceState(ctx, inst.tesisId, g.nowMs);
+  if (service?.phase !== "ACIK") throw new CloudError(403, "PATRON_BULUT_KAPALI", "Tesisin patron bulutu hizmeti kapalı (tesis kapatıldı ya da hizmet sona erdi)");
   return { installation: inst, tesisId: inst.tesisId, request: verified.value };
 }

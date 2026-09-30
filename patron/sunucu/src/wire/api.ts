@@ -43,12 +43,42 @@ export interface SyncStatus {
   readonly fabrikaSurumu: string | null;
 }
 
+/** Hizmet aşaması (Ek-6/A §4): hizmet bitince 90 gün SALT_OKUNUR (okuma + dışa aktarma açık, yazma kapalı); sonra KAPALI (giriş yok). */
+export type ServicePhase = "ACIK" | "SALT_OKUNUR" | "KAPALI";
+
+export interface ServiceStatus {
+  readonly asama: ServicePhase;
+  /** Hizmetin bittiği an (ACIK'ta null). */
+  readonly bitis: string | null;
+  /** Salt okuma ve dışa aktarmanın son anı (ACIK'ta null). */
+  readonly saltOkunurBitis: string | null;
+}
+
 /** `GET /oturum` — ekranın üst şeridi. */
 export interface FacilityStatus {
   readonly tesis: { readonly id: string; readonly ad: string | null; readonly saklamaAy: number | null };
   readonly hesap: AccountSummary;
   readonly projeksiyonlar: readonly string[];
   readonly esitleme: SyncStatus | null;
+  readonly hizmet: ServiceStatus;
+}
+
+// ---------------------------------------------------------------- dışa aktarma (Ek-6/A §4.2)
+export const EXPORT_FORMATS = ["json", "csv"] as const;
+export type ExportFormat = (typeof EXPORT_FORMATS)[number];
+
+/** Dışa aktarılabilir küme: KAYIT (projeksiyon satırları) · ANLIK (özet; yalnız JSON) · BULUT (bulutta doğan veri). */
+export interface ExportDataset {
+  readonly ad: string;
+  readonly tur: "KAYIT" | "ANLIK" | "BULUT";
+  readonly adet: number;
+  readonly bicimler: readonly ExportFormat[];
+}
+
+/** `GET /disa-aktar` (yalnız hesap yöneticisi) — küme listesi; dosya `GET /disa-aktar/:kume?bicim=json|csv`. */
+export interface ExportManifest {
+  readonly hizmet: ServiceStatus;
+  readonly kumeler: readonly ExportDataset[];
 }
 
 /** `GET /veri/:projeksiyon[/:id]` — satır fabrikanın hesapladığı hâliyle; alt satır yalnız izinliyse anahtar olarak var. */

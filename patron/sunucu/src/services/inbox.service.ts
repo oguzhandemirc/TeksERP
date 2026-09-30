@@ -25,7 +25,7 @@ export interface InboxCreateInput {
   readonly govde: unknown;
 }
 
-function messageView(m: InboxMessage): InboxItemWire {
+export function messageView(m: InboxMessage): InboxItemWire {
   return {
     mesajId: m.messageId,
     tur: m.kind,

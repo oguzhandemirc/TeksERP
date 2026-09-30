@@ -16,9 +16,10 @@ import { deactivateDevice, listDevices, registerDevice } from "../services/devic
 import { requestSnapshotRefresh } from "../services/doorbell";
 import { cancelInbox, createInboxMessage, getInbox, listInbox } from "../services/inbox.service";
 import { cancelReportRequest, createReportRequest, getReportRequest, listReportRequests } from "../services/report.service";
-import { PermissionList, Template, Token, body, page, param, s, text, uuidCursor, written, type ApiCall, type ApiRouteDef } from "./api-route-kit";
+import { PermissionList, Template, Token, body, page, param, s, sendFile, text, uuidCursor, written, type ApiCall, type ApiRouteDef } from "./api-route-kit";
+import { EXPORT_ROUTES } from "./export-routes";
 import { NOTIFICATION_ROUTES } from "./notification-routes";
-import { rateLimit } from "./rate-limit";
+import { clientAddress, rateLimit } from "./rate-limit";
 
 export type { ApiCall, ApiRouteDef } from "./api-route-kit";
 
@@ -33,7 +34,7 @@ export const API_ROUTES: readonly ApiRouteDef[] = [
     kimlik: { muaf: "oturum doğumu; tekrar yeni oturum açar (eski oturum süresiyle kapanır)" },
     handler: async (c) => {
       const b = body(c, z.strictObject({ eposta: z.string().min(3).max(254), parola: z.string().min(1).max(200), totp: z.string().min(1).max(12), istemci: z.enum(["mobil", "web"]).optional() }));
-      const r = await login(c.ctx, { email: b.eposta, password: b.parola, totp: b.totp, client: b.istemci ?? null });
+      const r = await login(c.ctx, { email: b.eposta, password: b.parola, totp: b.totp, client: b.istemci ?? null, ip: clientAddress(c.req, c.ctx.config.VEKIL_IP_BASLIGI) });
       const data: LoginResponse = { belirtec: r.token, bitis: r.expiresAt.toISOString(), hesap: { id: r.session.accountId, ad: r.session.accountName, eposta: r.session.email, izinler: [...r.session.permissions].sort() }, tesisId: r.session.tesisId };
       return { data };
     },
@@ -84,7 +85,7 @@ export const API_ROUTES: readonly ApiRouteDef[] = [
     kimlik: { muaf: "TOTP adımı tekrar oynatmayı keser (aynı kod ikinci kez geçmez)" },
     handler: async (c) => {
       const b = body(c, z.strictObject({ mevcutParola: z.string().min(1).max(200), yeniParola: z.string().min(1).max(200), totp: z.string().min(1).max(12) }));
-      await changeOwnPassword(c.ctx, s(c), { current: b.mevcutParola, next: b.yeniParola, totp: b.totp });
+      await changeOwnPassword(c.ctx, s(c), { current: b.mevcutParola, next: b.yeniParola, totp: b.totp, ip: clientAddress(c.req, c.ctx.config.VEKIL_IP_BASLIGI) });
       return { data: null };
     },
   },
@@ -185,6 +186,7 @@ export const API_ROUTES: readonly ApiRouteDef[] = [
     handler: async (c) => ({ data: await deactivateDevice(c.ctx, s(c), param(c, "id")) }),
   },
   ...NOTIFICATION_ROUTES,
+  ...EXPORT_ROUTES,
   // ---- hesap yönetimi (bulut:hesap:yonet) ----
   { method: "get", path: "/hesaplar", auth: "OTURUM", kimlik: "OKUMA", handler: async (c) => ({ data: await listAccounts(c.ctx, s(c)) }) },
   {
@@ -267,6 +269,7 @@ export function createApiRouter(ctx: CloudContext): Router {
         if (!session) throw new CloudError(401, "OTURUM_YOK", "Oturum yok ya da süresi doldu; yeniden giriş yapın");
       }
       const r = await def.handler({ ctx, req, session });
+      if ("file" in r) return sendFile(res, r.file);
       if (r.replayed) res.set("Idempotent-Replay", "true");
       res.status(r.status ?? 200).json({ success: true, data: r.data });
     });

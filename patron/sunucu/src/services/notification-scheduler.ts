@@ -1,4 +1,4 @@
-// BİLDİRİM İŞİ — süreç içi zamanlayıcı (bakım işinin eşi): her turda AKTİF tesisler için önce olay üretimi, sonra
+// BİLDİRİM İŞİ — süreç içi zamanlayıcı (bakım işinin eşi): her turda hizmeti AÇIK tesisler için önce olay üretimi, sonra
 // gönderim, sonra makbuz yoklaması. `BILDIRIM_KIPI=kapali` (varsayılan = bugünkü davranış) iken iş KURULMAZ. Taşıyıcı kipten seçilir:
 // `sahte` → kayıtlı sahte gönderici (ağ yok) · `gercek` → Expo + web push (VAPID). Canlı deneme mağaza hesapları ve
 // patron VDS kurulumu sonrasına bırakıldı (runbook notu); yerelde gerçek gönderim DENENMEZ.
@@ -10,6 +10,7 @@ import type { CloudContext } from "./context";
 import { generateForFacility } from "./notification-events";
 import { checkReceipts, type ReceiptTotals } from "./notification-receipts";
 import { deliverDue, type DeliveryTotals } from "./notification-sender";
+import { facilityServiceState } from "./service-lifecycle";
 
 export interface NotificationRuntime {
   readonly transport: PushTransport;
@@ -30,6 +31,8 @@ export async function runNotificationRound(ctx: CloudContext, transport: PushTra
   const facilities = await withMaintenanceList(ctx.app, (tx) => tx.facility.findMany({ where: { status: "AKTIF" }, select: { tesisId: true }, orderBy: { tesisId: "asc" } }));
   const total = { created: 0, sent: 0, skipped: 0, deferred: 0, retried: 0, failed: 0, checked: 0, invalid: 0 };
   for (const f of facilities) {
+    // Hizmet bitince (salt okuma) bildirim üretilmez ve gönderilmez: eşitleme durdu, "veri gelmiyor" yanıltır.
+    if ((await facilityServiceState(ctx, f.tesisId, nowMs))?.phase !== "ACIK") continue;
     total.created += await generateForFacility(ctx, f.tesisId, nowMs);
     const d = await deliverDue(ctx, transport, f.tesisId, nowMs);
     total.sent += d.sent;

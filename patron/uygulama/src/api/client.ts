@@ -42,10 +42,18 @@ export interface ClientOptions {
 
 export type Query = Readonly<Record<string, string | number | undefined>>;
 
+/** İndirilen dosya (dışa aktarma): ad sunucunun `Content-Disposition`ından, içerik ham bayt. */
+export interface DownloadedFile {
+  readonly fileName: string;
+  readonly contentType: string;
+  readonly data: ArrayBuffer;
+}
+
 export interface ApiClient {
   get<T>(path: string, query?: Query): Promise<T>;
   post<T>(path: string, body: unknown): Promise<T>;
   patch<T>(path: string, body: unknown): Promise<T>;
+  download(path: string, query?: Query): Promise<DownloadedFile>;
 }
 
 function queryString(q: Query | undefined): string {
@@ -62,23 +70,28 @@ function isErrorBody(x: unknown): x is ApiErrorBody {
   return b.success === false && typeof b.details === "object" && b.details !== null;
 }
 
+/** `attachment; filename="x.csv"` → `x.csv`; yoksa yedek ad. Yol ayırıcı ve tırnak ad dışında kalır. */
+export function attachmentName(header: string | null, fallback: string): string {
+  const m = header ? /filename="([^"/\\]+)"/.exec(header) : null;
+  return m?.[1] ?? fallback;
+}
+
 export function createClient(opts: ClientOptions): ApiClient {
   const doFetch = opts.fetchImpl ?? fetch;
   const base = opts.baseUrl.replace(/\/+$/, "");
 
-  async function request<T>(method: string, path: string, body?: unknown, query?: Query): Promise<T> {
-    const headers: Record<string, string> = { Accept: "application/json" };
+  async function send(method: string, path: string, g: { body?: unknown; query?: Query; accept: string; timeoutMs?: number }): Promise<Response> {
+    const headers: Record<string, string> = { Accept: g.accept };
     const token = opts.getToken();
     if (token) headers.Authorization = `Bearer ${token}`;
-    if (body !== undefined) headers["Content-Type"] = "application/json";
+    if (g.body !== undefined) headers["Content-Type"] = "application/json";
     const ctrl = new AbortController();
-    const timer = setTimeout(() => ctrl.abort(), opts.timeoutMs ?? 20_000);
-    let res: Response;
+    const timer = setTimeout(() => ctrl.abort(), g.timeoutMs ?? opts.timeoutMs ?? 20_000);
     try {
-      res = await doFetch(`${base}/api${path}${queryString(query)}`, {
+      return await doFetch(`${base}/api${path}${queryString(g.query)}`, {
         method,
         headers,
-        body: body === undefined ? undefined : JSON.stringify(body),
+        body: g.body === undefined ? undefined : JSON.stringify(g.body),
         signal: ctrl.signal,
       });
     } catch {
@@ -86,6 +99,18 @@ export function createClient(opts: ClientOptions): ApiClient {
     } finally {
       clearTimeout(timer);
     }
+  }
+
+  async function fail(res: Response, parsed: unknown): Promise<never> {
+    const err = isErrorBody(parsed)
+      ? new ApiError(res.status, String(parsed.details.code ?? "BILINMIYOR"), parsed.message || "İstek reddedildi", parsed.details)
+      : new ApiError(res.status >= 400 ? res.status : 502, "SUNUCU_HATASI", "Sunucudan beklenmeyen yanıt");
+    if (err.status === 401) opts.onUnauthorized?.();
+    throw err;
+  }
+
+  async function request<T>(method: string, path: string, body?: unknown, query?: Query): Promise<T> {
+    const res = await send(method, path, { body, query, accept: "application/json" });
     let parsed: unknown = null;
     try {
       parsed = await res.json();
@@ -95,17 +120,27 @@ export function createClient(opts: ClientOptions): ApiClient {
     if (res.ok && typeof parsed === "object" && parsed !== null && (parsed as ApiOk<T>).success === true) {
       return (parsed as ApiOk<T>).data;
     }
-    const err = isErrorBody(parsed)
-      ? new ApiError(res.status, String(parsed.details.code ?? "BILINMIYOR"), parsed.message || "İstek reddedildi", parsed.details)
-      : new ApiError(res.status >= 400 ? res.status : 502, "SUNUCU_HATASI", "Sunucudan beklenmeyen yanıt");
-    if (err.status === 401) opts.onUnauthorized?.();
-    throw err;
+    return fail(res, parsed);
+  }
+
+  /** Dosya indirme: başarıda ham bayt; hata yanıtı JSON zarfıdır (aynı `details.code` okuması). Büyük döküm için uzun süre. */
+  async function download(path: string, query?: Query): Promise<DownloadedFile> {
+    const res = await send("GET", path, { query, accept: "*/*", timeoutMs: 300_000 });
+    if (!res.ok) return fail(res, await res.json().catch(() => null));
+    let data: ArrayBuffer;
+    try {
+      data = await res.arrayBuffer();
+    } catch {
+      throw new ApiError(0, "AG_HATASI", "Dosya indirilirken bağlantı koptu; tekrar deneyin");
+    }
+    return { fileName: attachmentName(res.headers.get("content-disposition"), "disa-aktarma"), contentType: res.headers.get("content-type") ?? "application/octet-stream", data };
   }
 
   return {
     get: (path, query) => request("GET", path, undefined, query),
     post: (path, body) => request("POST", path, body ?? {}),
     patch: (path, body) => request("PATCH", path, body ?? {}),
+    download,
   };
 }
 
