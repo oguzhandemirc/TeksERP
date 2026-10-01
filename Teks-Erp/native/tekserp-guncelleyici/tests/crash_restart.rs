@@ -434,3 +434,26 @@ fn unfinished_operation_is_not_resumed_under_untrusted_permissions() {
     w.run_to_rest(2);
     assert_invariants(&w, "izin düzelince yarım işlem");
 }
+
+/// DAGK-3: hazır (doğrulanmış + işaretli) sürüm dizini onay beklerken değiştirilirse UYGULAMA ANINDA
+/// yeniden doğrulamada yakalanır: işlem başlamaz, işaret düşer; sonraki tur paketi yeniden hazırlayıp kurar.
+#[test]
+fn prepared_version_is_reverified_at_apply_time() {
+    let lease = LeaseOpts { update: Some(policy("ONAYLI", &open_window(), None)), ..LeaseOpts::default() };
+    let w = World::new("yeniden-dogrula", Setup { lease, ..Setup::default() });
+    w.run(1).unwrap();
+    assert_eq!(w.state(), Some(State::Ready), "{:?}", w.status().map(|s| (s.error_code, s.message)));
+    let server = w.layout.version_dir(NEW).join("dist").join("server.js");
+    std::fs::write(&server, "// hazirdan sonra degisti").unwrap();
+    w.write_intent(&intent(Some(approval("onay-1", NEW, "HEMEN"))));
+    w.run(1).unwrap();
+    let st = w.status().unwrap();
+    assert_eq!((st.state, st.error_code.as_deref()), (State::Waiting, Some("BUTUNLUK_GECERSIZ")), "{:?}", st.message);
+    assert!(st.message.as_deref().is_some_and(|m| m.contains("uygulama anında")), "{:?}", st.message);
+    assert_eq!(w.backend().starts, 0, "işlem başlamadı");
+    assert_eq!(w.current().as_deref(), Some(OLD));
+    w.run_to_rest(0);
+    assert_eq!(w.state(), Some(State::Succeeded));
+    assert_invariants(&w, "yeniden hazırlanıp kuruldu");
+    assert!(std::fs::read_to_string(&server).unwrap().contains("sunucu"), "kurcalı dosya kurulumda kaldı");
+}

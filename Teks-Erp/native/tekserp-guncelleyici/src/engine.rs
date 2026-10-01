@@ -287,7 +287,7 @@ impl Engine {
         if let Some(v) = journal.unfinished() {
             self.log.warn(&format!("yarım işlem bulundu ({}) — sürdürülüyor", v.op));
             let outcome = self.resume(&inputs, &mut journal, v.plan().cloned().unwrap_or(Value::Null));
-            return self.after_op(&journal, outcome, tick_s);
+            return self.after_op(&inputs, &journal, outcome, tick_s);
         }
         self.cycle(&inputs, &mut journal, stop, tick_s)
     }
@@ -386,7 +386,7 @@ impl Engine {
         })
     }
 
-    fn after_op(&self, journal: &Journal, outcome: OpOutcome, tick_s: u64) -> TickResult {
+    fn after_op(&self, inputs: &Inputs, journal: &Journal, outcome: OpOutcome, tick_s: u64) -> TickResult {
         let mut f = self.bare_frame(tick_s);
         if let Some(prev) = self.previous_status() {
             f.policy = prev.policy;
@@ -408,17 +408,19 @@ impl Engine {
         let state = if outcome == OpOutcome::Succeeded && product == "pg" { State::Waiting } else { state };
         self.write_status(self.doc(&f, state, code, &message));
         if outcome == OpOutcome::Succeeded && product == "backend" {
-            if let Some(t) = self.maybe_self_update() {
+            if let Some(t) = self.maybe_self_update(inputs) {
                 return t;
             }
         }
         TickResult::Idle(Duration::from_secs(tick_s.min(60)))
     }
 
-    fn maybe_self_update(&self) -> Option<TickResult> {
+    fn maybe_self_update(&self, inputs: &Inputs) -> Option<TickResult> {
         let own = self.own_exe.as_ref()?;
         let (_, current_dir) = self.installed_version()?;
-        match selfupdate::stage(&self.env, &self.layout, own, &current_dir) {
+        let lic = policy::load(self.env.fs.as_ref(), &inputs.backend.license_dir, &self.anchor);
+        let keys = policy::package_keys(&self.anchor, lic.class.as_deref());
+        match selfupdate::stage(&self.env, &self.layout, own, &current_dir, &keys) {
             Ok(true) => {
                 self.log.info("güncelleyicinin yeni ikilisi yerleştirildi — yeniden başlatılıyor");
                 Some(TickResult::RestartForSelfUpdate)
@@ -657,16 +659,21 @@ impl Engine {
             self.write_status(self.doc(&f, State::Waiting, Some(code), &msg));
             return idle;
         }
+        if let Err((code, msg)) = self.reverify_prepared(&keys, &m.doc, pg_target.as_ref()) {
+            self.log.warn(&msg);
+            self.write_status(self.doc(&f, State::Waiting, Some(code), &msg));
+            return idle;
+        }
         let approval_id = used_approval.map(|a| a.id.clone());
         if let (Some(target), Some(inst)) = (&pg_target, instance.as_ref()) {
             let outcome = self.run_pg(inputs, journal, inst, target, &m.doc, &current_dir, &installed, approval_id.clone());
             if outcome != OpOutcome::Succeeded {
                 // PG adımı düştüyse backend'e dokunulmaz (D4 §5).
-                return self.after_op(journal, outcome, tick_s);
+                return self.after_op(inputs, journal, outcome, tick_s);
             }
         }
         let outcome = self.run_backend(inputs, journal, &m.doc, &installed, &current_dir, approval_id, used_approval.cloned());
-        self.after_op(journal, outcome, tick_s)
+        self.after_op(inputs, journal, outcome, tick_s)
     }
 
     /// Yapılacak iş yokken gösterilen durum: son deneme bu kurulumun sürümüne BAŞARILI geçtiyse ya da
@@ -989,6 +996,29 @@ impl Engine {
         fs.rename(&staging, &dir).map_err(|x| fail(codes::PG_PAKET, x.to_string()))?;
         fs.write_atomic(&marker, json!({ "surum": tag }).to_string().as_bytes()).map_err(|x| fail(codes::PG_PAKET, x.to_string()))?;
         let _ = fs.remove_file(&zip);
+        Ok(())
+    }
+
+    /// DAGK-3: hazır işareti saatler/günler önce konmuş olabilir — UYGULAMADAN HEMEN ÖNCE sürüm dizini
+    /// (imza + bütünlük listesi + her dosya + bildirim bağı) ve PG güncellemesi varsa PG dizini (içerik
+    /// manifestosu) yeniden doğrulanır; tutmazsa hazır işareti düşer, işlem başlamaz, sonraki tur yeniden
+    /// hazırlar. Doğrulama ile kullanım arasındaki pencere izin ölçümüyle (`trusted_paths_ok`) kapanır.
+    fn reverify_prepared(&self, keys: &[(String, String)], m: &ReleaseManifest, pg: Option<&PgTarget>) -> Result<(), Fail> {
+        let fs = self.env.fs.as_ref();
+        let backend = package::verify_dir(&self.layout.version_dir(&m.surum), fs, keys)
+            .map_err(|e| (e.code, e.message))
+            .and_then(|id| release::check_package_binding(m, &id).map_err(|e| (e.code, e.message)));
+        if let Err((code, why)) = backend {
+            let _ = fs.remove_file(&self.ready_marker(&m.surum));
+            return Err((code, format!("{} uygulama anında yeniden doğrulanamadı — yeniden hazırlanacak: {why}", m.surum)));
+        }
+        if let Some(t) = pg {
+            let tag = t.tag();
+            if let Err(why) = pgminor::verify_content(&self.env, &self.layout.pg_version_dir(&tag), &t.content_sha256) {
+                let _ = fs.remove_file(&self.layout.ready_markers().join(format!("pg-{tag}.json")));
+                return Err((codes::PG_PAKET, format!("PG {tag} uygulama anında yeniden doğrulanamadı — yeniden hazırlanacak: {why}")));
+            }
+        }
         Ok(())
     }
 

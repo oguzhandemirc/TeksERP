@@ -89,6 +89,8 @@ pub struct CrashFs {
     pub foreign: Mutex<Vec<PathBuf>>,
     /// İzni ölçülemeyen yollar (ölçüm hatası).
     pub unmeasurable: Mutex<Vec<PathBuf>>,
+    /// Kopya, doğrulama ile kopyalama arasında değişmiş gibi bir bayt fazla yazılır.
+    pub corrupt_copy: AtomicBool,
 }
 
 impl Fs for CrashFs {
@@ -168,7 +170,13 @@ impl Fs for CrashFs {
     }
     fn copy(&self, from: &Path, to: &Path) -> std::io::Result<()> {
         self.crash.point(&format!("kopyala {}", name(from)));
-        self.inner.copy(from, to)
+        self.inner.copy(from, to)?;
+        if self.corrupt_copy.load(Ordering::SeqCst) {
+            let mut b = std::fs::read(to)?;
+            b.push(b' ');
+            std::fs::write(to, b)?;
+        }
+        Ok(())
     }
     fn extract_zip(&self, archive: &Path, dest: &Path, limits: &ExtractLimits) -> Result<ExtractStats, String> {
         self.crash.point(&format!("ac {}", name(archive)));
@@ -210,6 +218,8 @@ pub struct Faults {
     pub cut_after: AtomicU64,
     /// Paket yerine bozuk bayt sunulur.
     pub serve_tampered: AtomicBool,
+    /// GÖZLEM: künyesi alınmak için koşturulan güncelleyici ikilileri (hangi kopya çalıştı).
+    pub executed: Mutex<Vec<PathBuf>>,
 }
 
 #[derive(Debug, Clone)]
@@ -479,6 +489,7 @@ impl Procs for FakeProcs {
                 Ok(fail_out(1, "bilinmeyen betik"))
             }
             "tekserp-guncelleyici" | "tekserp-guncelleyici.yeni" => {
+                self.w.faults.executed.lock().unwrap().push(c.program.clone());
                 let text = std::fs::read_to_string(&c.program).unwrap_or_default();
                 Ok(ok_out(&text))
             }
@@ -933,6 +944,7 @@ impl World {
                 free: AtomicU64::new(u64::MAX),
                 foreign: Mutex::new(vec![]),
                 unmeasurable: Mutex::new(vec![]),
+                corrupt_copy: AtomicBool::new(false),
             }),
             dir,
             layout,
