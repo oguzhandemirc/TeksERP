@@ -7,9 +7,7 @@ import { describe, expect, it, vi } from "vitest";
 // İddia 1 (davranış): `handleTrusted`/`onTrusted` isteği YALNIZ uygulama belgesinin ana
 // çerçevesinden işler; giriş adresi yazılmadıysa her istek reddedilir (fail-closed).
 // İddia 2 (MANDAL): electron/ altında her `ipcMain.*` kaydı bu tek geçitten geçer.
-// BEYANLI İSTİSNA (iki yönlü): `electron/ipc/updater.ipc.ts` — G1 diliminin (panel
-// güncelleme imzası) sahipliğinde; İNİŞTE G1 çevirir. Dosya çıplak kaydı bırakınca
-// istisna ÖLÜR ve bu bekçi kırmızı verir → satır o commit'te silinir.
+// İstisna listesi BOŞ; yeni istisna iki yönlü beyanlanır (dosya çevrilince satır ölür → kırmızı).
 // =============================================================================
 
 type Listener = (...args: unknown[]) => unknown;
@@ -28,9 +26,7 @@ const ENTRY = "file:///C:/Program%20Files/TeksERP/resources/app.asar/out/rendere
 const appEvent = { senderFrame: { url: `${ENTRY}#/x`, parent: null } };
 
 /** Çıplak `ipcMain.*` kaydı istisnası — dosya → gerekçe. */
-const RAW_IPC_EXCEPTIONS: Record<string, string> = {
-  "electron/ipc/updater.ipc.ts": "G1 (panel güncelleme imzası) sahipliği — inişte G1 trusted-ipc'ye çevirir",
-};
+const RAW_IPC_EXCEPTIONS: Record<string, string> = {};
 const GATE_FILE = "electron/security/trusted-ipc.ts";
 const RAW_IPC_RE = /\bipcMain\.(?:handle|handleOnce|on|once|addListener)\s*\(/g;
 

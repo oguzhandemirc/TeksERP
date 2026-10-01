@@ -106,11 +106,15 @@ describe("updater.ipc — her denetimde belirteç", () => {
 
   it("oturum varken denetim başlıklı, belirteç alınamayınca başlıksız", async () => {
     const { registerUpdaterIpc } = await import("../../electron/ipc/updater.ipc");
+    const { setTrustedAppEntry } = await import("../../electron/security/trusted-ipc");
+    const giris = "file:///C:/Program%20Files/TeksERP/resources/app.asar/out/renderer/index.html";
+    setTrustedAppEntry(giris);
+    const uygulama = { senderFrame: { url: giris, parent: null } };
     h.store.set(API_BASE_URL_STORE_KEY, "http://10.0.0.5:4000");
     h.store.set(AUTH_TOKEN_STORE_KEY, "jwt");
     h.fetchMock.mockResolvedValue(ok(TOKEN));
     registerUpdaterIpc();
-    const check = h.handlers.get("updater:check")!;
+    const check = () => h.handlers.get("updater:check")!(uygulama);
     await check();
     const son = () => h.updater.setFeedURL.mock.calls.at(-1)?.[0] as { requestHeaders?: Record<string, string> };
     expect(son().requestHeaders).toEqual({ [DOWNLOAD_TOKEN_HEADER]: TOKEN });

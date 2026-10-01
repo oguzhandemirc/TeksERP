@@ -1,5 +1,5 @@
 import { unlink } from "node:fs/promises";
-import { app, BrowserWindow, ipcMain, net } from "electron";
+import { app, BrowserWindow, net } from "electron";
 import electronUpdater from "electron-updater";
 import log from "electron-log/main.js";
 import type { UpdateStatus } from "@shared/ipc-contract";
@@ -12,6 +12,7 @@ import {
   UPDATE_FIRST_CHECK_DELAY_MS,
 } from "@shared/update-schedule";
 import { deleteSecureValue, readSecureValue, writeSecureValue } from "./secure-store.ipc.js";
+import { handleTrusted, onTrusted } from "../security/trusted-ipc.js";
 
 // electron-updater CommonJS'tir; main ESM olarak derlendiği için named import
 // çalışmaz (`externalizeDepsPlugin` paketi dışarıda bıraktığından Node'un CJS
@@ -255,10 +256,10 @@ export function registerUpdaterIpc(): void {
     currentVersion: app.getVersion(),
   });
 
-  ipcMain.handle("updater:status", () => status);
-  ipcMain.handle("updater:check", () => check());
-  ipcMain.handle("updater:set-feed-url", (_e, next: string | null) => setFeedOverride(next));
-  ipcMain.on("updater:install", () => void installVerified());
+  handleTrusted("updater:status", () => status);
+  handleTrusted("updater:check", () => check());
+  handleTrusted("updater:set-feed-url", (_e, next: string | null) => setFeedOverride(next));
+  onTrusted("updater:install", () => void installVerified());
 
   if (!packaged) {
     // Dev'de electron-updater "application is not packed" ile hata fırlatır;
