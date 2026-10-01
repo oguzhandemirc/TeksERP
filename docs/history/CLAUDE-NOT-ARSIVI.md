@@ -14530,3 +14530,15 @@ Negatif sondalar (tetik md5(prosrc) ve dosya md5 ile geri alındı):
 **Eski istemci.** Eski patron uygulaması aile eşlemesiyle süzer; izni olmayan raporu isterse 403 alır (yanlış izin vermez). Kilit anında 429 yerine genel 401 görür. Tel tipleri değişmedi; fabrika kodu değişmedi (yalnız bekçi + yorum).
 
 **Açık.** (a) Satıcı CLI'si zorlama kaydı `account_audit`te (730 gün budanır); silinemez `support_access` benzeri kayda taşımak ayrı karar. (b) Tesis yöneticisinin `resetAccount` yanıtındaki davet kodu yöneticiye döner (yönetici başka hesabın kimliğine bürünebilir) — davetin doğrudan kişiye iletimi ayrı dilim. (c) Yönetici başkasının BEKLIYOR mesajını iptal edemez (yalnız yazar). (d) E-posta sahipliği doğrulanmadığından davet belirtecini elinde tutan yönetici başka bir kişinin e-postasıyla hesabı etkinleştirebilir (davet e-postayla teslim edilmez). (e) Süresi dolmuş DAVETLI satırlar kalır (artık e-posta tutmaz; bakım adımı isteğe bağlı).
+
+## 2026-10-01 — Lisans v2 L2-9: yalnız klasör geri alımı geride kalmış uç değildir; makine anlık görüntüsü "yakala" alır; tasarım §1.5 DB izi [ÇEKİRDEK]
+
+**Bağlam.** L2-9 entegrasyonunda Senaryo L v2 düzeneğine uyarlandı (L2-6 DB izi: `license.trace`, durum kaydının imzalı kopyası). L27(a) kuralın saydığı iki biçimi ayrı ölçtü: makine anlık görüntüsü (lisans klasörü + DB izi birlikte geri) → yoklama BAŞARILI, karar YAKALA, yeni uyarı yok; yalnız lisans klasörü geri → yoklama BAŞARILI, karar NORMAL, yeni uyarı yok. Kural (a) "eski lisans klasörü"nü de "yakala" sayıyordu — v1 düzeninde DB kopyası yoktu, klasör tek izdi.
+
+**Karar (yönetici onayı).** [ÇEKİRDEK] Kod değil kural metni değişir. v2'de iki kopyadan en yeni sıralı olan esastır (lisans.md DB izi satırı): yalnız klasör geri alınırsa fabrika DB izindeki en yeni kirayı sunar, satıcı zinciri olağan sürdürür — geride kalmış uç yoktur, uyarı gerekmez. Makine anlık görüntüsü eski ucu sunar → "yakala" kirası, uyarı YOK (değişmedi).
+
+**Tasarım düzeltmesi.** [ÇEKİRDEK] `LISANS-V2-CEVRIMDISI-KIRA.md` §1.5 "Durum kaydı silinirse" cümlesi DB izi gerçeğine çekildi: DB izi duruyorsa tek iz kaybıdır (`LISANS_IZI_KAYIP`, saat ve süre izden sürer); iki kopya birden yoksa `DURUM_DOSYASI` doğar ve saat yüksek suya düşer (Senaryo L10 ölçümü; lisans.md tek iz ve DB izi satırlarıyla tutarlı).
+
+**Kural satırı.** `docs/kurallar/lisans.md` Kararlar · "Kira zinciri ÜÇ hâli ayırır" (a).
+
+**Senaryo.** L27(a) iki ayrı alt kontrol: yalnız klasör → karar NORMAL, uyarısız, yeni kira zincir ucunun çocuğu · klasör + DB izi → YAKALA, uyarısız. L10'daki "yalnız dosya silinince DURUM_DOSYASI yok" notu §1.5 atıflı kontrole çevrildi. Bekçi değil (uçtan uca ölçüm); kural satırının bekçisi `satici test_kira_zinciri` aynen.

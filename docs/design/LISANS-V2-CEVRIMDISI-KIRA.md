@@ -101,7 +101,7 @@ P, güvenilir saat T ile karşılaştırılır (`Teks-Erp/src/lib/license/saat.t
 - **Üst eşik:** alt sınır + kapalı süre kredisi + yoklama aralığı + tolerans. Kredi yalnız tutarlı saatle yazılmış kayıttan gelir; aylarca kapalı kalan fabrika sahte `SAAT_ILERI` görmez.
 - **Saat ileri ya da geri:** erken bitiş yoktur. Güvenilir saat alt sınıra tutturulur, yani yalnız çalışma süresi sayılır. `SAAT_ILERI` ve `SAAT_GERI` ÖLÇÜLEMEDİ bulgusudur ve belirsizlik merdivenine girer (§3.1-3). Bugün bu bulgular yalnız UYARI'da takılıyordu.
 - **Yüksek su:** zehirli yüksek su (tahmini aşan değer) alt sınır sayılmaz; bu kural aynen kalır.
-- **Durum kaydı silinirse:** aynı kira için sıfırdan başlatılmaz (bugünkü kural). İnternetsiz kurulumda `DURUM_DOSYASI` bulgusu yeni kira gelene dek sürer ve merdivene girer. Dürüst arızanın çaresi tek bir QR ya da dosya yenilemesidir.
+- **Durum kaydı silinirse:** aynı kira için sıfırdan başlatılmaz (bugünkü kural). DB izi kopyası (§3.1) duruyorsa bu tek iz kaybıdır: saat ve süre izden sürer, `LISANS_IZI_KAYIP` yeni kira gelene dek kalır ve merdivene girer. İki kopya birden (dosya + DB izi) yoksa `DURUM_DOSYASI` bulgusu da doğar ve saat yüksek suya düşer. Dürüst arızanın çaresi tek bir QR ya da dosya yenilemesidir.
 - **Bağlanınca:** aylarca kaymış saat satıcıda `ISTEK_ZAMAN` ve `saticiSapmaSn` olarak görünür; bu, yerel müdahale şüphesi girdisidir.
 
 ### 1.6 Bilinen sınırlar (bilinçli kabul)

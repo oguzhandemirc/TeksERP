@@ -701,7 +701,7 @@ async function main(): Promise<number> {
       const d1b = await A.istemci.detay();
       const b1b = d1b.durum.nedenler.map((n) => n.kod);
       a.kontrol("yalnız durum dosyası silindi: DB izi kopyası köprüler (kaynak MONOTONIK, lisans.md:66) + SAAT_GERI + LISANS_IZI_KAYIP (tek iz, lisans.md:67)", d1b.durum.saat.kaynak === "MONOTONIK" && d1b.durum.saat.bulgu === "SAAT_GERI" && b1b.includes("LISANS_IZI_KAYIP"), `${d1b.durum.saat.kaynak} ${nedenOzeti(d1b)}`);
-      a.not(`yalnız dosya silinince DURUM_DOSYASI ${b1b.includes("DURUM_DOSYASI") ? "VAR" : "YOK"} (tasarım §1.5 "durum kaydı silinirse DURUM_DOSYASI" — DB kopyası varken ölçülen)`);
+      a.kontrol("yalnız durum dosyası silindi: DURUM_DOSYASI YOK (DB izi kopyası duruyor — tasarım §1.5)", !b1b.includes("DURUM_DOSYASI"), nedenOzeti(d1b));
       await durdur(A);
       fs.rmSync(path.join(A.lisansDizini, "durum.json"), { force: true });
       await db(anaUrl).query(`DELETE FROM system_settings WHERE key = 'license.trace'`);
@@ -1176,19 +1176,27 @@ async function main(): Promise<number> {
     });
 
     // ============================================================ L27
-    await adim("L27", "kira zinciri: snapshot geri alma → yakala; ağ tekrarı → aynı kira; iki parmak izi → uyarı, ikinci pencerede kopyaya kapanış kirası", async (a) => {
-      // (a) snapshot geri alma. Kural lisans.md:30 (a) iki biçim sayar: "eski lisans klasörü" (yalnız klasör) ve makine
-      // anlık görüntüsü — v2'de ikincisi DB izini de geri alır (lisans.md:66: DB izi durum kaydının kopyası, DB'de).
+    await adim("L27", "kira zinciri: anlık görüntü geri alma → yakala, yalnız klasör → zincir sürer; ağ tekrarı → aynı kira; iki parmak izi → uyarı, ikinci pencerede kopyaya kapanış kirası", async (a) => {
+      // (a) geri alma, lisans.md:30(a) iki ayrı hâl: makine anlık görüntüsü (klasör + DB izi) eski ucu sunar → YAKALA;
+      // yalnız klasör geri alınırsa DB izindeki en yeni kira sunulur → zincir olağan sürer (NORMAL), geride kalmış uç yok.
       const izSatiri = async (): Promise<string | null> =>
         (await db(anaUrl).query<{ v: string }>(`SELECT value::text AS v FROM system_settings WHERE key = 'license.trace'`)).rows[0]?.v ?? null;
-      const yakalaOlc = async (etiket: string): Promise<void> => {
+      const geriAlmaOlc = async (etiket: string, beklenen: "NORMAL" | "YAKALA", uc: string | undefined): Promise<void> => {
         const acik0 = ((await detayKurulum(S.anaDbId)).kopyaUyarilari as Array<{ durum: string }>).filter((u) => u.durum === "ACIK").length;
         await baslat(C);
         const py = await C.istemci.yokla();
         const pk = await detayKurulum(S.anaDbId);
-        const karar = (pk.kiralar as Array<{ karar: string }>)[0]?.karar;
+        const satirlar = pk.kiralar as Array<{ id: string; karar: string; oncekiKiraId: string | null }>;
         const acik1 = (pk.kopyaUyarilari as Array<{ durum: string }>).filter((u) => u.durum === "ACIK").length;
-        a.kontrol(`(a) ${etiket} (aynı parmak izi, eski uç) → YAKALA kirası, yeni uyarı YOK`, py.outcome === "BASARILI" && karar === "YAKALA" && acik1 === acik0, `${py.outcome} karar=${karar} acikUyari ${acik0}→${acik1}`);
+        // NORMAL: uçtan sonra doğan her kira (açılış yoklaması dahil) NORMAL ve ilki ucun çocuğu; YAKALA: son kira.
+        const ucIdx = uc ? satirlar.findIndex((k) => k.id === uc) : -1;
+        const yeni = ucIdx > 0 ? satirlar.slice(0, ucIdx) : satirlar.slice(0, 1);
+        const ok = beklenen === "NORMAL" ? ucIdx > 0 && yeni.every((k) => k.karar === "NORMAL") && yeni.some((k) => k.oncekiKiraId === uc) : satirlar[0]?.karar === "YAKALA";
+        a.kontrol(
+          `(a) ${etiket} → ${beklenen} kirası${beklenen === "NORMAL" ? " (zincir ucunun çocuğu)" : ""}, yeni uyarı YOK — lisans.md:30(a)`,
+          py.outcome === "BASARILI" && ok && acik1 === acik0,
+          `${py.outcome} kararlar=${yeni.map((k) => k.karar).join(",")} uç=${uc?.slice(0, 8) ?? "-"} acikUyari ${acik0}→${acik1}`,
+        );
       };
       const snap = path.join(kok, "snapshot-C");
       fs.cpSync(C.lisansDizini, snap, { recursive: true });
@@ -1198,14 +1206,15 @@ async function main(): Promise<number> {
       const klasoruGeriAl = (): void => {
         for (const ad of ["kira.jws", "hak.jws", "durum.json"]) fs.copyFileSync(path.join(snap, ad), path.join(C.lisansDizini, ad));
       };
+      const uc = (await C.istemci.detay()).kira?.kiraId;
       await durdur(C);
       klasoruGeriAl();
-      await yakalaOlc("eski lisans klasörü (yalnız klasör geri)");
+      await geriAlmaOlc("yalnız lisans klasörü geri (DB izi güncel)", "NORMAL", uc);
       await durdur(C);
       klasoruGeriAl();
       if (snapIz === null) await db(anaUrl).query(`DELETE FROM system_settings WHERE key = 'license.trace'`);
       else await db(anaUrl).query(`UPDATE system_settings SET value = $1::jsonb, "updatedAt" = now() WHERE key = 'license.trace'`, [snapIz]);
-      await yakalaOlc("makine anlık görüntüsü (klasör + DB izi geri)");
+      await geriAlmaOlc("makine anlık görüntüsü (klasör + DB izi birlikte geri)", "YAKALA", undefined);
       // (b) ağ tekrarı: yanıt yolda kaybolur, fabrika aynı uçla yeniden dener
       await bekle(5500);
       C.aktarici.kipAyarla("yut");
