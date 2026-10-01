@@ -3,6 +3,7 @@
 // bugünkü davranıştır (sıfır fark) — iki alan ayrı tutulur ki gözlem ölçülebilsin.
 import {
   STATE_TIERS,
+  isoToMs,
   type VerifiedEntitlement,
   type VerifiedLease,
   type StateTier,
@@ -36,6 +37,7 @@ import {
   isAccumulating,
   type FingerprintLadderResult,
 } from "./state-rules-trace";
+import { evaluateRevocation } from "./state-rules-revocation";
 import { moduleAllowedByCeiling } from "./module-rules";
 import type { ClockResult, SanctionSnapshot, TraceKind } from "./saat";
 
@@ -111,17 +113,27 @@ export function toDocResult<T>(s: CoreResult<T> | null): DocResult<T> {
 
 /**
  * Diskten okunan HAK ve kirayı çapaya karşı LİSANS ÇEKİRDEĞİNDE doğrular (üretimde native; dosya
- * yoksa `null` verilir). `core` yalnız testlerden verilir.
+ * yoksa `null` verilir). `core` yalnız testlerden verilir. G4: önce kira (iptalle), sonra HAK iptal ve
+ * "şimdi" ile — şimdi = taban (duvar ∨ yüksek sular) ∨ doğrulanmış kiranın sunucu saati, ki saati geri
+ * fabrika taze HAK'ı ileri tarihli saymasın. İkisi de verilmezse eski çağrı.
  */
 export function verifyLicenseDocuments(g: {
   readonly entitlementJws: string | null;
   readonly leaseJws: string | null;
   readonly roots: readonly RootKey[];
   readonly core?: LicenseCore;
+  /** Çekirdekte doğrulanmış etkin iptal belgesi metni; null = iptal yok. */
+  readonly revocation?: string | null;
+  readonly nowFloorMs?: number;
 }): { readonly hak: DocResult<VerifiedEntitlement>; readonly kira: DocResult<VerifiedLease> } {
+  const chain = g.revocation === undefined ? undefined : { revocation: g.revocation };
+  const lease = g.leaseJws === null ? null : coreVerifyLease(g.leaseJws, g.roots, g.core, chain);
+  const leaseTime = lease?.ok ? isoToMs(lease.value.document.sunucuSaati) : Number.NEGATIVE_INFINITY;
+  const nowMs = g.nowFloorMs === undefined ? undefined : Math.max(g.nowFloorMs, leaseTime);
+  const options = chain === undefined && nowMs === undefined ? undefined : { ...chain, ...(nowMs === undefined ? {} : { nowMs }) };
   return {
-    hak: toDocResult(g.entitlementJws === null ? null : coreVerifyEntitlement(g.entitlementJws, g.roots, g.core)),
-    kira: toDocResult(g.leaseJws === null ? null : coreVerifyLease(g.leaseJws, g.roots, g.core)),
+    hak: toDocResult(g.entitlementJws === null ? null : coreVerifyEntitlement(g.entitlementJws, g.roots, g.core, options)),
+    kira: toDocResult(lease),
   };
 }
 
@@ -209,6 +221,7 @@ export function computeLicenseState(g: LicenseStateInput): LicenseState {
   const lease = evaluateRollback(g, entitlement, evaluateLease(g, entitlement, findings), findings);
   const entitlementUsable = entitlement !== null && !(g.sonHak && entitlementPinBroken(entitlement, g.sonHak));
   const traces = evaluateTraces(g, lease, findings);
+  evaluateRevocation(g, lease, findings);
   const clock = computeClock(g, lease?.document ?? null, findings);
   evaluateVendorClock(g, findings);
   const now = clock.trustedMs;

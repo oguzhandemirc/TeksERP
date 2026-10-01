@@ -44,7 +44,7 @@ export function persistAccumulation(nowMs: number = Date.now()): boolean {
   if (!a || !getLicenseStore()?.key || !snap.licenseId || !snap.activated) return false;
   const lease = snap.lease?.document ?? null;
   const prev = snap.view.record;
-  const common = { skewSeconds: skewSecondsForRecord(), ladder: ladderFields(snap), nowMs };
+  const common = { skewSeconds: skewSecondsForRecord(), ladder: ladderFields(snap), nowMs, iptalSira: snap.iptal.sira };
   const highWaterMs = highWaterOf(prev, lease, getLedgerHighWaterMs());
   if (!prev) {
     writeRecord(orphanRecord({ ...common, licenseId: snap.licenseId, lease, entitlement: snap.entitlement, highWaterMs }));
@@ -74,6 +74,8 @@ export function startAccumulationForLease(g: {
   readonly entitlement: VerifiedEntitlement;
   readonly licenseId: string;
   readonly nowMs?: number;
+  /** Kabulde benimsenen (ya da elde tutulan) iptal belgesinin sırası — pine girer. */
+  readonly iptalSira?: number | null;
 }): void {
   const view = recordView(currentAccumulation(), g.licenseId);
   writeRecord(

@@ -37,6 +37,10 @@ export interface SahteSatici {
   kiraEk: Partial<LeaseDoc>;
   /** Sonraki HAK belgelerinin ek alanları (sınıf, modüller — patron bulutu senaryosu). */
   hakEk: Partial<EntitlementDoc>;
+  /** Verilirse HAK yerine bu metin döner (ara imzalı HAK senaryosu); null = `hakBas(f, hakEk)`. */
+  hakMetni: string | null;
+  /** Her lisans yanıtına konan iptal belgesi (G4 `iptal` alanı); null = alan yok (eski satıcı). */
+  iptal: string | null;
   /** >0 ise SIRADAKİ yoklamanın kirası hemen basılır ama yanıtı bu kadar ms bekletilir (yarış sondası). */
   sonrakiYanitGecikmesiMs: number;
   /** Satıcının saati = duvar + bu kayma (D4: ±10 dk dışı istek ISTEK_ZAMAN alır). */
@@ -131,6 +135,8 @@ export async function sahteSaticiBaslat(f: Fikstur): Promise<SahteSatici> {
     kod: "TKS-0000-0000-0000",
     kiraEk: {},
     hakEk: {},
+    hakMetni: null,
+    iptal: null,
     sonrakiYanitGecikmesiMs: 0,
     saatKaymasiMs: 0,
     sunucuSaatiDondur: true,
@@ -158,7 +164,8 @@ export async function sahteSaticiBaslat(f: Fikstur): Promise<SahteSatici> {
       zorlama: false,
       ...s.kiraEk,
     });
-    return JSON.stringify({ v: 1, hak: hakBas(f, s.hakEk), kira, indirmeBelirtecleri: [], sunucuSaati: msToIso(simdi), ...ek });
+    const iptal = s.iptal === null ? {} : { iptal: s.iptal };
+    return JSON.stringify({ v: 1, hak: s.hakMetni ?? hakBas(f, s.hakEk), kira, indirmeBelirtecleri: [], sunucuSaati: msToIso(simdi), ...iptal, ...ek });
   };
   /** Doğrulanamayan istek: zaman reddinde (D4) satıcı kendi saatini İMZASIZ döner. */
   const reddet = (res: http.ServerResponse, d: { kod: string | null }, simdi: number): void => {

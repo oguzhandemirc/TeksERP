@@ -31,6 +31,10 @@
 //   ⭐ G12 (L2-6): DB izi kopya (§26) · K7 kirasız kayıt, tespit anı sonraki yazımlarda da kalıcı (§27) · anahtar
 //      okunamaz (§28) · parmak izi v2 merdiveni (§29) · DB okunamazsa iz BİLİNMİYOR, son bilinen tavan uçtan uca
 //      (durum kaydı pini → DB izi), saatlik yazım parmak izi önbellek kopyasını taşır (§30)
+//   ⭐ G4 iptal belgesi (L2-7, §31): kabul + DB kopyası · düşük/eşit sıra RED · dosya ↔ DB onarımı · iki kopya silinip pin
+//      varken IPTAL_BELGESI_KAYIP (birikime girer) · ARA'sı iptal edilen HAK gözlemde sıfır fark, kira yaşar · reddedilen
+//      yanıtta ALT-iptali ertelenir · saati geri fabrika taze HAK'ı kabul eder · biçimsiz iptal kirayı düşürmez · eski satıcı
+//      yanıtı sıfır fark · detay zinciri
 //
 // NEGATİF SONDA — dosya DIŞI mutasyon (cp + shasum ile birebir geri alındı; sonuçlar commit
 // mesajında): M1 persistAccumulation bozuk kayıtta sıfırdan başlatır · M2 kabulde kurulum
@@ -53,6 +57,12 @@
 // saymaz (§13a/§13a2) — dördü de kırmızı, geri alınınca yeşil (sha ile ölçüldü).
 // L2-10 (donanım bildirimi): N11 ONAYLANDI yanıtının kirası kabul edilmedi (§25e) · N12 bildirim yeniden ölçmedi (§25c)
 // — ikisi de kırmızı, geri alınınca yeşil (sha ile ölçüldü).
+// L2-7 (G4 iptal belgesi, §31; KAYNAK dosyada mutasyon, sha eşit geri alındı): S2 yeni kirada benimseme yok (§31b/c/d/d2/e3/j)
+// · S3 aynı-kira tekrarında benimseme yok (§31k) · S4 düşük/eşit sıra kapısı kalktı (§31c/d/d2) · S5 onarım yok (§31d/d2) ·
+// S6 pin yazılmaz (§31b/e/e3/j) · S7 değerlendirici susar (§31e/e2) · S8 birikime girmez (§31e) · S9 retteki ALT-iptali de
+// benimsenir (§31g/i) · S10 retteki belge hiç benimsenmez (§31f) · S11 kabulde kira saati şimdiye girmez (§31h) · S12 durumda
+// kira saati şimdiye girmez (§31h) · S13 doğrulanmamış iptal çekirdeğe geçer (§31i) · S14 eski satıcıya da bulgu (§31a + 8
+// eski bölüm) · S15 detay KAYIP göstermez (§31e) · S16 durum iptalsiz doğrular (§31f) — 15'i de kırmızı, geri alınınca yeşil.
 // ⭐ KALICI SONDA ✓K1 (her koşumda): bilinmeyen kod genel mesaja düşer — §8a'nın "her kodun kendi
 // mesajı var" karşılaştırıcısı kör değil.
 // =============================================================================
@@ -66,7 +76,7 @@ import { hedefDbEngeli } from "./lib/hedef-db-kapisi";
 import { AuditService } from "../src/services/audit.service";
 import { ensureInstallationIdentity, identityRetryDelayMs, __resetInstallationIdentityForTests } from "../src/jobs/installation-identity.job";
 import { SETTING_KEYS } from "../src/services/system-setting.service";
-import { INSTALLATION_ID_SETTING_KEY, LICENSE_TRACE_SETTING_KEY, isReservedSettingKey } from "../src/constants/reserved-settings";
+import { INSTALLATION_ID_SETTING_KEY, LICENSE_REVOCATION_SETTING_KEY, LICENSE_TRACE_SETTING_KEY, isReservedSettingKey } from "../src/constants/reserved-settings";
 import { getLicenseStore, loadLicenseStoreSync, resolveLicenseDir, writeFileAtomicSync, LICENSE_FILES } from "../src/lib/license/store";
 import {
   configureLicenseRuntimeForTests,
@@ -82,13 +92,16 @@ import { licenseHealthBlock } from "../src/lib/license/license-health";
 import { applyModuleCeiling } from "../src/lib/license/module-ceiling";
 import { runWithRequestContext } from "../src/lib/request-context";
 import { setEgressTrustForTests } from "../src/lib/http-egress";
-import { DAY_MS, VENDOR_ERROR_CODES, msToIso, openEnvelope, parseJws, verifyRequest, type Fingerprint } from "../src/lib/license/protocol";
+import { DAY_MS, LicenseResponseSchema, VENDOR_ERROR_CODES, msToIso, openEnvelope, parseJws, verifyRequest, type Fingerprint } from "../src/lib/license/protocol";
 import { buildEnvironment, currentFingerprintDigest, describeOperatingSystem, requireReady, vendorFailureToError } from "../src/services/helpers/license-wire.helper";
 import { signStateRecord, type StateRecord } from "../src/lib/license/saat";
 import { flushLicenseTraceWrites, lastKnownCeiling, type RecordView } from "../src/lib/license/accumulation";
 import { persistAccumulation, setFingerprintCacheCopy } from "../src/lib/license/record-writer";
 import { markLicenseTraceUnknown } from "../src/lib/license/trace-row";
-import { ceilingAllows } from "../src/lib/license/state";
+import { ceilingAllows, verifyLicenseDocuments } from "../src/lib/license/state";
+import { adoptRevocation, flushRevocationWrites } from "../src/lib/license/revocation-store";
+import { refreshLicenseRevocation } from "../src/services/license-revocation.service";
+import { verifyResponseDocuments } from "../src/services/helpers/license-accept.helper";
 import { __resetLadderCountersForTests, __setLadderClockForTests } from "../src/lib/license/ladder-counters";
 import {
   activateLicense,
@@ -119,7 +132,7 @@ import {
   startLicenseDoorbell,
   __resetLicenseDoorbellForTests,
 } from "../src/jobs/license-doorbell.job";
-import { fiksturKur, kiraBas, hakBas, anahtarUret, type Fikstur } from "./lib/lisans-fikstur";
+import { fiksturKur, kiraBas, hakBas, anahtarUret, araHakBas, araSertifikasi, iptalBas, iptalYuku, type Fikstur } from "./lib/lisans-fikstur";
 import { sahteSaticiBaslat, sahteProxyBaslat, type SahteSatici } from "./lib/lisans-sahte-satici";
 import { scanLicenseIdentitySeam } from "./lib/lisans-kimlik-dikisi";
 import { kabulEt, temizleKabuller } from "./lib/lisans-kabul-fikstur";
@@ -1084,6 +1097,163 @@ async function sonBilinenBolumu(x: Hazir): Promise<void> {
   check("§30f HAK geri gelince yeni kira iz kaybını kapatır (NORMAL)", p.outcome === "BASARILI" && getLicenseSnapshot().state.hesaplananKademe === "NORMAL", p.outcome);
 }
 
+// ── §31 G4 iptal belgesi (L2-7) ─────────────────────────────────────────────────
+async function iptalSatiri(): Promise<{ v?: number; jws?: string } | null> {
+  const r = await prisma.systemSetting.findUnique({ where: { key: LICENSE_REVOCATION_SETTING_KEY }, select: { value: true } });
+  return (r?.value as { v?: number; jws?: string } | undefined) ?? null;
+}
+function iptalDosyasi(dizin: string): string | null {
+  const yol = path.join(dizin, LICENSE_FILES.REVOCATION);
+  return fs.existsSync(yol) ? fs.readFileSync(yol, "utf8").trim() : null;
+}
+function iptalBelgesi(f: Fikstur, sira: number, kayit: { kid: string; kullanim: "ALT" | "HAK" | "INDIRME"; sertifikaId?: string }): string {
+  const tarih = msToIso(Date.now() - DAY_MS);
+  return iptalBas(f.kok, iptalYuku(f, { sira, iptaller: [{ kid: kayit.kid, sertifikaId: kayit.sertifikaId ?? randomUUID(), kullanim: kayit.kullanim, tarih, neden: "bekci" }] }));
+}
+const benimsemeler = (): Array<{ sira?: number; kayitSayisi?: number }> =>
+  olaylar.filter((o) => o.action === "LICENSE_REVOCATION_ADOPTED").map((o) => o.payload as { sira?: number; kayitSayisi?: number });
+
+async function iptalKabulBolumu(x: Hazir): Promise<void> {
+  console.log("\n§31 — iptal belgesi (G4): kabul + DB kopyası · düşük sıra RED · onarım · pin + kayıp · ARA iptali gözlemde sıfır fark · ret erteleme · saat · biçimsiz");
+  await prisma.systemSetting.deleteMany({ where: { key: LICENSE_REVOCATION_SETTING_KEY } });
+  Object.assign(x.satici, { kiraEk: {}, hakEk: {}, hakMetni: null, iptal: null });
+  await refreshLicenseRevocation();
+  const eski = await pollLicenseOnce();
+  const s0 = getLicenseSnapshot();
+  const kayit0 = durumKaydiAlani(x.dizin);
+  check(
+    "§31a ⭐ ESKİ satıcı yanıtı (iptal yok, iptalSira yok) sıfır fark: kabul, HAK + kira yaşar, NORMAL, iptal dosyası/satırı ve kayıtta pin alanı YOK",
+    eski.outcome === "BASARILI" && s0.entitlement !== null && s0.lease !== null && s0.state.hesaplananKademe === "NORMAL" &&
+      !nedenVar(s0.state, "IPTAL_BELGESI_KAYIP") && iptalDosyasi(x.dizin) === null && (await iptalSatiri()) === null && !("iptalSira" in kayit0),
+    `${eski.outcome} ${s0.state.nedenler.map((n) => n.kod).join(",")}`,
+  );
+  const iptal2 = iptalBelgesi(x.f, 2, { kid: "ind-eski-1", kullanim: "INDIRME" });
+  Object.assign(x.satici, { iptal: iptal2, kiraEk: { iptalSira: 2 } });
+  const ilk = benimsemeler().length;
+  const p2 = await pollLicenseOnce();
+  await flushRevocationWrites();
+  const s2 = getLicenseSnapshot();
+  check(
+    "§31b ⭐ yanıttaki iptal (sıra 2) doğrulanıp BENİMSENİR: dosya + DB kopyası aynı metin, ayak izi (sıra · kayıt sayısı), kayıtta pin 2, bulgu yok",
+    p2.outcome === "BASARILI" && iptalDosyasi(x.dizin) === iptal2 && (await iptalSatiri())?.jws === iptal2 && s2.iptal.sira === 2 &&
+      benimsemeler().length === ilk + 1 && benimsemeler().at(-1)?.sira === 2 && benimsemeler().at(-1)?.kayitSayisi === 1 &&
+      durumKaydiAlani(x.dizin).iptalSira === 2 && !nedenVar(s2.state, "IPTAL_BELGESI_KAYIP"),
+    `${p2.outcome} sira=${String(s2.iptal.sira)} pin=${String(durumKaydiAlani(x.dizin).iptalSira)}`,
+  );
+  check("§31b2 DB kopyası ayrılmış ayar: ham ayar ucundan yazılamaz", isReservedSettingKey(LICENSE_REVOCATION_SETTING_KEY));
+  x.satici.iptal = iptalBelgesi(x.f, 1, { kid: "ind-eski-2", kullanim: "INDIRME" });
+  const p1 = await pollLicenseOnce();
+  const dusukDogrudan = adoptRevocation(iptalBelgesi(x.f, 2, { kid: "ind-eski-3", kullanim: "INDIRME" }), x.f.kokler);
+  check(
+    "§31c ⭐ düşük (1) ve eşit (2) sıralı belge RED: kira kabul edilir ama belge benimsenmez, dosya sıra 2'de kalır",
+    p1.outcome === "BASARILI" && iptalDosyasi(x.dizin) === iptal2 && !dusukDogrudan.adopted && benimsemeler().length === ilk + 1,
+    `${p1.outcome} benimsendi=${String(dusukDogrudan.adopted)}`,
+  );
+  x.satici.iptal = iptal2;
+}
+
+async function iptalOnarimBolumu(x: Hazir): Promise<void> {
+  const iptal2 = x.satici.iptal;
+  fs.rmSync(path.join(x.dizin, LICENSE_FILES.REVOCATION), { force: true });
+  invalidateLicenseSnapshot();
+  await refreshLicenseRevocation();
+  check("§31d ⭐ dosya silinince DB kopyasından GERİ YAZILIR (sessiz onarım), etkin belge sürer", iptalDosyasi(x.dizin) === iptal2 && getLicenseSnapshot().iptal.sira === 2);
+  await prisma.systemSetting.deleteMany({ where: { key: LICENSE_REVOCATION_SETTING_KEY } });
+  await refreshLicenseRevocation();
+  await flushRevocationWrites();
+  check("§31d2 DB satırı silinince dosyadan geri yazılır", (await iptalSatiri())?.jws === iptal2);
+  Object.assign(x.satici, { iptal: null, kiraEk: {} });
+  await pollLicenseOnce();
+  fs.rmSync(path.join(x.dizin, LICENSE_FILES.REVOCATION), { force: true });
+  await prisma.systemSetting.deleteMany({ where: { key: LICENSE_REVOCATION_SETTING_KEY } });
+  await refreshLicenseRevocation();
+  const s = getLicenseSnapshot();
+  check(
+    "§31e ⭐ iki kopya silinip kayıtta pin (2) varken → IPTAL_BELGESI_KAYIP (PIN) · ÖLÇÜLEMEDİ · birikime girer; gözlemde uygulanan NORMAL, HAK + kira yaşar",
+    nedenAyrinti(s.state, "IPTAL_BELGESI_KAYIP") === "PIN" && s.state.gecerlilik === "OLCULEMEDI" && s.state.belirsizlik.suruyor &&
+      s.state.uygulananKademe === "NORMAL" && s.entitlement !== null && s.lease !== null && getLicenseDetail().zincir.iptal.durum === "KAYIP",
+    s.state.nedenler.map((n) => `${n.kod}:${n.ayrinti ?? ""}`).join(","),
+  );
+  x.satici.kiraEk = { iptalSira: 3 };
+  const pk = await pollLicenseOnce();
+  check("§31e2 kira sıra 3 beyan edip belge GELMEZSE kabul + kayıp (KIRA)", pk.outcome === "BASARILI" && nedenAyrinti(getLicenseSnapshot().state, "IPTAL_BELGESI_KAYIP") === "KIRA", pk.outcome);
+  x.satici.iptal = iptalBelgesi(x.f, 3, { kid: "ind-eski-4", kullanim: "INDIRME" });
+  await pollLicenseOnce();
+  const t = getLicenseSnapshot();
+  check("§31e3 belge (sıra 3) gelince kayıp kapanır, pin 3", !nedenVar(t.state, "IPTAL_BELGESI_KAYIP") && t.iptal.sira === 3 && durumKaydiAlani(x.dizin).iptalSira === 3);
+}
+
+async function iptalAraBolumu(x: Hazir): Promise<void> {
+  const araId = randomUUID();
+  Object.assign(x.satici, { hakMetni: araHakBas(x.f, {}, { sertifika: araSertifikasi(x.f, { sertifikaId: araId }) }), kiraEk: {} });
+  const pa = await pollLicenseOnce();
+  const z = getLicenseDetail().zincir;
+  check(
+    "§31j ⭐ detay zinciri: ara imzalı HAK → imzacı ARA + gömülü sertifika künyesi, kira ALT'ı, iptal (sıra 3 · 1 kayıt · pin · GUNCEL)",
+    pa.outcome === "BASARILI" && z.hakImzacisi?.kind === "ARA" && z.hakImzacisi.sertifika?.sertifikaId === araId && z.kiraAlt?.kid === x.f.alt.kid &&
+      z.iptal.sira === 3 && z.iptal.kayitSayisi === 1 && (z.iptal.pin ?? 0) >= 3 && z.iptal.durum === "GUNCEL",
+    JSON.stringify(z.iptal),
+  );
+  const iptalAra = iptalBelgesi(x.f, 4, { kid: x.f.ara.kid, kullanim: "HAK", sertifikaId: araId });
+  x.satici.iptal = iptalAra;
+  const kiraOnce = getLicenseSnapshot().lease?.document.kiraId;
+  const pr = await pollLicenseOnce();
+  const s = getLicenseSnapshot();
+  check(
+    "§31f ⭐ reddedilen yanıttaki ALT'a dokunmayan iptal BENİMSENİR; ARA'sı iptal edilen HAK → hesaplanan UYARI (HAK_GECERSIZ SERTIFIKA_IPTAL), gözlemde uygulanan NORMAL, kira YAŞAR",
+    pr.outcome === "BASARISIZ" && iptalDosyasi(x.dizin) === iptalAra && nedenAyrinti(s.state, "HAK_GECERSIZ") === "SERTIFIKA_IPTAL" &&
+      s.state.hesaplananKademe === "UYARI" && s.state.uygulananKademe === "NORMAL" && s.lease?.document.kiraId === kiraOnce,
+    `${pr.outcome}/${pr.code ?? ""} ${s.state.nedenler.map((n) => `${n.kod}:${n.ayrinti ?? ""}`).join(",")}`,
+  );
+  x.satici.hakMetni = null;
+  const geri = await pollLicenseOnce();
+  check("§31f2 kök imzalı HAK'la yeni yanıt kabul edilir, durum NORMAL", geri.outcome === "BASARILI" && getLicenseSnapshot().state.hesaplananKademe === "NORMAL", geri.outcome);
+  x.satici.iptal = iptalBelgesi(x.f, 5, { kid: x.f.alt.kid, kullanim: "ALT" });
+  const kiraAlt = getLicenseSnapshot().lease?.document.kiraId;
+  const pd = await pollLicenseOnce();
+  const d = getLicenseSnapshot();
+  check(
+    "§31g ⭐ eldeki kiranın ALT'ını iptal eden belge reddedilen yanıttan BENİMSENMEZ (ertelenir): dosya sıra 4'te, kira yaşar, NORMAL",
+    pd.outcome === "BASARISIZ" && iptalDosyasi(x.dizin) === iptalAra && d.lease?.document.kiraId === kiraAlt && d.state.hesaplananKademe === "NORMAL",
+    `${pd.outcome}/${pd.code ?? ""}`,
+  );
+  x.satici.iptal = iptalAra;
+}
+
+async function iptalSaatBolumu(x: Hazir): Promise<void> {
+  for (const govde of ["bozuk-metin", bozuk(iptalBelgesi(x.f, 9, { kid: "ind-eski-5", kullanim: "INDIRME" }))]) {
+    x.satici.iptal = govde;
+    const p = await pollLicenseOnce();
+    check(`§31i ⭐ biçimsiz/imzası bozuk iptal (${govde.length} karakter) kirayı DÜŞÜRMEZ ve benimsenmez`, p.outcome === "BASARILI" && getLicenseSnapshot().iptal.sira === 4, p.outcome);
+  }
+  x.satici.iptal = null;
+  const ileri = Date.now() + 2 * 60 * 60 * 1000;
+  const hak = hakBas(x.f, { verilis: msToIso(ileri) });
+  const kira = kiraBas(x.f, { kurulumAnahtarKimligi: getLicenseStore()?.key?.kid ?? "", verilis: msToIso(ileri), sunucuSaati: msToIso(ileri + 60_000) });
+  const yanit = LicenseResponseSchema.parse({ v: 1, hak, kira, indirmeBelirtecleri: [], sunucuSaati: msToIso(ileri + 60_000) });
+  let kabul = "HATA_YOK";
+  try {
+    verifyResponseDocuments(yanit, requireReady(), null);
+  } catch (e) {
+    kabul = String((e as { details?: { protocolCode?: string } }).details?.protocolCode ?? e);
+  }
+  const kirasiz = verifyLicenseDocuments({ entitlementJws: hak, leaseJws: null, roots: x.f.kokler, revocation: null, nowFloorMs: Date.now() });
+  const kirali = verifyLicenseDocuments({ entitlementJws: hak, leaseJws: kira, roots: x.f.kokler, revocation: null, nowFloorMs: Date.now() });
+  check(
+    "§31h ⭐ saati 2 sa GERİ fabrika: taze HAK kabulde ve durumda geçerli (şimdi ⊇ kiranın imzalı sunucu saati); kirasız kontrol BELGE_ILERI_TARIHLI",
+    kabul === "HATA_YOK" && kirali.hak.status === "GECERLI" && kirasiz.hak.status === "GECERSIZ" && kirasiz.hak.code === "BELGE_ILERI_TARIHLI",
+    `kabul=${kabul} kirali=${kirali.hak.status} kirasiz=${kirasiz.hak.status}`,
+  );
+  const iptal6 = iptalBelgesi(x.f, 6, { kid: "ind-eski-6", kullanim: "INDIRME" });
+  await acceptOfflineResponse({ v: 1, hak: null, kira: getLicenseStore()?.leaseJws, indirmeBelirtecleri: [], sunucuSaati: msToIso(Date.now()), iptal: iptal6 }, "aktarma", null);
+  const sonuc = (olaylar.filter((o) => o.action === "LICENSE_ADMIN_ACTION").at(-1)?.payload as { sonuc?: string } | undefined)?.sonuc;
+  check(
+    "§31k ⭐ AYNI kiranın tekrarı (yeni kira değil) da yanıttaki yüksek sıralı iptali benimser",
+    sonuc === "ayni-kira" && iptalDosyasi(x.dizin) === iptal6 && getLicenseSnapshot().iptal.sira === 6,
+    String(sonuc),
+  );
+}
+
 async function donanimBildirimiBolumu(x: Hazir): Promise<void> {
   console.log("\n§25 — donanım değişikliği bildirimi (K8): imzalı `donanim` isteği · BEKLIYOR · ONAYLANDI yeni kira · eski satıcı · etkinleşmemiş");
   const olcum = getMeasuredFingerprint();
@@ -1325,6 +1495,8 @@ function saticiKodlariBolumu(): void {
 async function temizleLisansIzi(): Promise<void> {
   await flushLicenseTraceWrites();
   await prisma.systemSetting.deleteMany({ where: { key: LICENSE_TRACE_SETTING_KEY } });
+  await flushRevocationWrites();
+  await prisma.systemSetting.deleteMany({ where: { key: LICENSE_REVOCATION_SETTING_KEY } });
 }
 
 async function main(): Promise<void> {
@@ -1351,6 +1523,10 @@ async function main(): Promise<void> {
     await anahtarOkunamazBolumu(hazir);
     await parmakIziMerdiveniBolumu(hazir);
     await sonBilinenBolumu(hazir);
+    await iptalKabulBolumu(hazir);
+    await iptalOnarimBolumu(hazir);
+    await iptalAraBolumu(hazir);
+    await iptalSaatBolumu(hazir);
     await uzatmaDosyasiBolumu(hazir);
     await donanimBildirimiBolumu(hazir);
     gozlemSayaciBolumu();

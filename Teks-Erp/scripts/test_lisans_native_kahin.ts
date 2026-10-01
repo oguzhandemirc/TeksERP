@@ -49,12 +49,17 @@
 //      çapa blokları üç rustfmt düzeninde de okunur (ikinci anahtar `&[`i alt satıra taşır) · kip süzgeci
 //      öteki kipin kaydını atlar · §8k v2 bayatlık mutasyonu yakalar · §8l tek yönlü tür denetimi · §8m v2 çekirdek
 //      karşılaştırıcısı mutasyonu yakalar · §8n v2 sabit aynası değişmiş/eksik sabiti yakalar, eşitte susar
+//   §10 ⭐ KÖPRÜ SONDASI (L2-7): motorun köprüsü (`core-bridge.ts`) iptal metnini ve "şimdi"yi çekirdeğe AYNEN geçirir —
+//      ARA'sı iptal edilen HAK SERTIFIKA_IPTAL, geçmiş "şimdi" BELGE_ILERI_TARIHLI, ALT'ı iptal edilen kira SERTIFIKA_IPTAL;
+//      TS ve (test çapalı) native aynı kararı verir (native yoksa yalnız TS kolu, native kolu ATLANDI) · L2-7 S1 köprü
+//      seçenekleri çekirdeğe geçirmedi → §10a · §10b ❌ (kaynakta mutasyon, sha eşit geri alındı)
 //   L2-1 negatif sondaları (dosya dışı, sha eşit geri alındı): bayi ufuk tavanı · güçlü şartı · iptal denetimi
 //   (protokolde) → §2''b · v2 dosya biçimi → §2''a · v2 dosyasından istek ailesi silindi → §2''c/d/e
 //
 // NEGATİF SONDA — dosya DIŞI mutasyonlar (commit mesajında sayılarla; her biri geri alındı, sha eşit):
 //   bkz. Teks-Erp/docs/BEKCI-HARITASI.md `## lisans` satırı.
 // =============================================================================
+import { randomUUID } from "node:crypto";
 import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -118,6 +123,8 @@ import {
   type VektorToplamaKaydi,
 } from "./lib/lisans-cekirdek-vektor-toplama";
 import { atlamaDefteri } from "./lib/atlama";
+import { coreVerifyEntitlement, coreVerifyLease } from "../src/lib/license/core-bridge";
+import { araHakBas, araSertifikasi, fiksturKur, iptalBas, iptalYuku, kiraBas } from "./lib/lisans-fikstur";
 import {
   VEKTOR_BICIMI,
   VEKTOR_SIMDI,
@@ -1104,6 +1111,51 @@ async function bolum9(dosya: VektorDosyasi | null, dosyaV2: VektorV2Dosyasi | nu
   }
 }
 
+type KopruSonucu = { readonly ok: true } | { readonly ok: false; readonly code: string };
+const kod = (r: KopruSonucu): string => (r.ok ? "ok" : r.code);
+
+/** Köprünün kararları (fikstür belgeleriyle): iptalsiz · ARA iptali · geçmiş "şimdi" · ALT iptali (HAK'a dokunmaz) · kira. */
+function kopruKararlari(core: LicenseCore): Record<string, string> {
+  const f = fiksturKur(Date.now());
+  const araId = randomUUID();
+  const hak = araHakBas(f, {}, { sertifika: araSertifikasi(f, { sertifikaId: araId }) });
+  const kira = kiraBas(f);
+  const tarih = new Date(f.simdi - 86_400_000).toISOString();
+  const iptalAra = iptalBas(f.kok, iptalYuku(f, { sira: 2, iptaller: [{ kid: f.ara.kid, sertifikaId: araId, kullanim: "HAK", tarih, neden: "kopru" }] }));
+  const iptalAlt = iptalBas(f.kok, iptalYuku(f, { sira: 3, iptaller: [{ kid: f.alt.kid, sertifikaId: randomUUID(), kullanim: "ALT", tarih, neden: "kopru" }] }));
+  return {
+    hakDuz: kod(coreVerifyEntitlement(hak, f.kokler, core)),
+    hakAraIptal: kod(coreVerifyEntitlement(hak, f.kokler, core, { revocation: iptalAra })),
+    hakGecmisSimdi: kod(coreVerifyEntitlement(hak, f.kokler, core, { nowMs: f.simdi - 30 * 86_400_000 })),
+    hakAltIptalSimdi: kod(coreVerifyEntitlement(hak, f.kokler, core, { revocation: iptalAlt, nowMs: f.simdi })),
+    kiraDuz: kod(coreVerifyLease(kira, f.kokler, core)),
+    kiraAltIptal: kod(coreVerifyLease(kira, f.kokler, core, { revocation: iptalAlt })),
+  };
+}
+
+const KOPRU_BEKLENEN: Readonly<Record<string, string>> = {
+  hakDuz: "ok",
+  hakAraIptal: "SERTIFIKA_IPTAL",
+  hakGecmisSimdi: "BELGE_ILERI_TARIHLI",
+  hakAltIptalSimdi: "ok",
+  kiraDuz: "ok",
+  kiraAltIptal: "SERTIFIKA_IPTAL",
+};
+
+function bolum10kopru(): void {
+  console.log("\n§10 ⭐ köprü sondası (iptal + nowMs çekirdeğe geçer; TS = native)");
+  const ts = kopruKararlari(tsLicenseCore);
+  check("§10a ⭐ TS çekirdeğinde köprü kararları beklenen (iptal ve şimdi geçiyor)", jsonEsit(ts, KOPRU_BEKLENEN), JSON.stringify(ts));
+  const secenek0: LoaderOptions = { required: false, cwd: TEKS, env: process.env, platform: process.platform, arch: process.arch };
+  const y = loadLicenseCoreFrom({ ...secenek0, anchorMode: adayKipi(secenek0) });
+  if (y.status.kaynak !== "native" || !y.status.kunye.testCapasi) {
+    ATLAMA.atla("§10b native köprü kolu", "test çapalı native yok — derle: cd native/lisans-cekirdek && npm run derle", 1);
+    return;
+  }
+  const native = kopruKararlari(y.core);
+  check("§10b ⭐ native çekirdekte köprü kararları TS ile AYNI (iptal + nowMs native'e geçiyor)", jsonEsit(native, ts) && jsonEsit(native, KOPRU_BEKLENEN), JSON.stringify(native));
+}
+
 async function main(): Promise<void> {
   if (process.argv.includes("--vektor-yaz")) {
     await vektorYaz();
@@ -1124,6 +1176,7 @@ async function main(): Promise<void> {
   bolum8v2(dosyaV2);
   bolum8toplama(dosyaToplama);
   await bolum9(dosya, dosyaV2);
+  bolum10kopru();
   console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız${ATLAMA.ozetEki()} ===`);
   process.exit(fail > 0 ? 1 : 0);
 }

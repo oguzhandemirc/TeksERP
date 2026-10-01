@@ -44,6 +44,10 @@
 //   S11 bütünlük merdiveni eski anahtar                         → 1 ❌ (§4h)
 //   S12 "7 gün internetsiz" yerine 24 saat                      → 1 ❌ (§18d)
 //   S13 v1'de kira çapası kalktı                                → 29 ❌ (§19a kâhini dahil)
+//   L2-7 (G4 iptal belgesi, §28):
+//   S7 değerlendirici susar                                     → 5 ❌ (§28b/c/e/f/h)
+//   S8 IPTAL_BELGESI_KAYIP birikime girmez                       → 1 ❌ (§28b)
+//   S14 gereken sıra ≥ 1 (eski girdiye de bulgu)                 → 1 ❌ (§28g)
 //   Her mutasyonun UYGULANDIĞI (sha farkı) ve geri alındığı (sha eşitliği) ayrıca ölçüldü.
 //   Doğuşta ısıran GERÇEK kusur: §5e — zehirli yüksek suyu üst eşikte tavanlamak güvenilir
 //   saati duvarın ilerisine itip sahte SAAT_GERİ üretiyordu; `saat.ts` bu dilimde düzeltildi.
@@ -78,6 +82,7 @@ import {
   type RememberedAnchor,
 } from "../src/lib/license/saat";
 import type { TraceInput } from "../src/lib/license/state-rules-trace";
+import { revocationPin } from "../src/lib/license/state-rules-revocation";
 import { fiksturKur, hakBas, kiraBas, sertifikaBas, sertifikaYuku } from "./lib/lisans-fikstur";
 
 let pass = 0;
@@ -898,6 +903,40 @@ function gozlemSifirFarkBolumu(): void {
   check(`§27b aynı dallar HESAPLANIR (raporlanır): ${hesaplandi.length}/${vakalar.length} hesaplanan kademe NORMAL değil`, hesaplandi.length === vakalar.length, vakalar.map(([ad, d]) => `${ad}=${d.hesaplananKademe}`).join(", "));
 }
 
+function iptalBolumu(): void {
+  console.log("\n§28 — iptal belgesi (G4): kira/pin bir sıra istiyor, elde o sırada belge yoksa IPTAL_BELGESI_KAYIP (ölçülemedi, birikime girer)");
+  const iptal = (sira: number | null, okunamadi = false): Partial<LicenseStateInput> => ({ iptal: { sira, okunamadi } });
+  const eski = durum({ kira: { iptalSira: 3 } });
+  check("§28a alan verilmezse (eski girdi) iptal kuralı İŞLEMEZ: kira sıra istese de bulgu yok", !nedenVar(eski, "IPTAL_BELGESI_KAYIP") && eski.hesaplananKademe === "NORMAL", ozet(eski));
+  const kira = durum({ kira: { iptalSira: 3 }, girdi: iptal(null) });
+  check(
+    "§28b ⭐ kira sıra 3 istiyor, elde belge yok → IPTAL_BELGESI_KAYIP (KIRA) · ÖLÇÜLEMEDİ · UYARI · belirsizlik sürüyor",
+    nedenVar(kira, "IPTAL_BELGESI_KAYIP") && nedenAyrinti(kira, "IPTAL_BELGESI_KAYIP") === "KIRA" && kira.gecerlilik === "OLCULEMEDI" && kira.hesaplananKademe === "UYARI" && kira.belirsizlik.suruyor,
+    ozet(kira),
+  );
+  const dusuk = durum({ kira: { iptalSira: 3 }, girdi: iptal(2) });
+  check("§28c ⭐ elde DÜŞÜK sıralı belge (2 < 3) → yine kayıp (KIRA)", nedenAyrinti(dusuk, "IPTAL_BELGESI_KAYIP") === "KIRA", ozet(dusuk));
+  const tamam = durum({ kira: { iptalSira: 3 }, girdi: iptal(3) });
+  check("§28d karşı: elde gereken sırada belge → bulgu yok, NORMAL", !nedenVar(tamam, "IPTAL_BELGESI_KAYIP") && tamam.hesaplananKademe === "NORMAL", ozet(tamam));
+  const pin = durum({ girdi: { ...iptal(3), iptalPini: 5 } });
+  check("§28e ⭐ kira sıra istemese de durum kaydı pini (5) > eldeki (3) → kayıp (PIN): silmek pini geri almaz", nedenAyrinti(pin, "IPTAL_BELGESI_KAYIP") === "PIN", ozet(pin));
+  const okunamadi = durum({ girdi: { ...iptal(null, true), iptalPini: 2 } });
+  check("§28f kopya okunamadı + pin 2 → kayıp (OKUNAMADI)", nedenAyrinti(okunamadi, "IPTAL_BELGESI_KAYIP") === "OKUNAMADI", ozet(okunamadi));
+  const gerekmez = durum({ girdi: { ...iptal(null, true), iptalPini: null } });
+  check("§28g karşı: ne pin ne kira sıra istiyor → belge yokluğu (okunamasa da) bulgu DEĞİL", !nedenVar(gerekmez, "IPTAL_BELGESI_KAYIP") && gerekmez.hesaplananKademe === "NORMAL", ozet(gerekmez));
+  const gozlem = durum({ kira: { iptalSira: 3, zorlama: false }, girdi: iptal(null) });
+  check(
+    "§28h ⭐ gözlem kipinde yalnız hesaplanır: uygulanan NORMAL + OBSERVE_EFFECT (sıfır fark), kira yaşar",
+    nedenVar(gozlem, "IPTAL_BELGESI_KAYIP") && gozlem.uygulananKademe === "NORMAL" && gozlem.uygulanan === OBSERVE_EFFECT && gozlem.baglanti.sonAlisverisMs !== null,
+    ozet(gozlem),
+  );
+  check(
+    "§28i pin yardımcısı: en büyük pozitif tam sayı; null/0/undefined/kesirli yok sayılır, hiçbiri yoksa null",
+    revocationPin(2, null, 5, undefined) === 5 && revocationPin(null, undefined, 0) === null && revocationPin(1.5) === null && revocationPin() === null,
+  );
+  check("§28j kod kataloğunda ve geçerlilik etkisi ÖLÇÜLEMEDİ", (REASON_CODES as readonly string[]).includes("IPTAL_BELGESI_KAYIP") && REASON_VALIDITY.IPTAL_BELGESI_KAYIP === "OLCULEMEDI");
+}
+
 normalBolumu();
 gozlemBolumu();
 ekSureBolumu();
@@ -925,6 +964,7 @@ tavanBolumu();
 kipBolumu();
 capaBolumu();
 gozlemSifirFarkBolumu();
+iptalBolumu();
 safBolumu();
 console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
 process.exit(fail > 0 ? 1 : 0);

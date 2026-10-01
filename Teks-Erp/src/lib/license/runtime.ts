@@ -32,6 +32,7 @@ import {
 import {
   currentAccumulation,
   downtimeCreditOf,
+  verificationFloorOf,
   elapsedOf,
   epochOf,
   highWaterOf,
@@ -47,6 +48,8 @@ import {
   type RecordView,
 } from "./accumulation";
 import { installationKeyId } from "./protocol";
+import { revocationHolding, __resetRevocationStoreForTests, type HeldRevocation, type RevocationHolding } from "./revocation-store";
+import { revocationPin } from "./state-rules-revocation";
 import {
   bumpLicenseSnapshotVersion,
   licenseSnapshotVersion,
@@ -187,6 +190,8 @@ export interface LicenseSnapshot {
   readonly view: RecordView;
   /** Bu paketin ilk bütünlük uyuşmazlığı (durum kaydı + süreç; yalnız yeni paket sıfırlar). */
   readonly integrityFirstMismatchMs: number | null;
+  /** G4 iptal belgesi: elde tutulan etkin belge, durum kaydı pini, kopya okunamadı mı. */
+  readonly iptal: { readonly belge: HeldRevocation | null; readonly sira: number | null; readonly pin: number | null; readonly okunamadi: boolean };
   readonly computedAtMs: number;
 }
 
@@ -207,6 +212,7 @@ interface BuiltInput {
   readonly decision: FingerprintDecision | null;
   readonly view: RecordView;
   readonly licenseId: { id: string | null; source: LicenseIdSource | null };
+  readonly revocation: RevocationHolding;
 }
 
 /** Lisans izlerinin hâli (G12): durum kaydı dosyası, DB izi ve kalıcı iz kaybı bayrağı. */
@@ -224,9 +230,11 @@ function traceInput(store: LicenseStoreSnapshot | null, licenseId: string | null
 
 function buildInput(nowMs: number): BuiltInput {
   const store = getLicenseStore();
-  const docs = verifyLicenseDocuments({ entitlementJws: store?.entitlementJws ?? null, leaseJws: store?.leaseJws ?? null, roots: config.roots });
-  const kira = docStatus(docs.kira, LICENSE_FILES.LEASE, store);
   const a = currentAccumulation();
+  const revocation = revocationHolding(config.roots);
+  const paths = { entitlementJws: store?.entitlementJws ?? null, leaseJws: store?.leaseJws ?? null, roots: config.roots };
+  const docs = verifyLicenseDocuments({ ...paths, revocation: revocation.effective?.jws ?? null, nowFloorMs: verificationFloorOf(nowMs, facts.ledgerHighWaterMs, a) });
+  const kira = docStatus(docs.kira, LICENSE_FILES.LEASE, store);
   const x = installationPublicX();
   const kid = x === null ? null : installationKeyId(x);
   const licenseId = resolveLicenseId(store, kira, a, kid);
@@ -263,6 +271,9 @@ function buildInput(nowMs: number): BuiltInput {
     sonBilinenTavan: lastKnownCeiling(view),
     imzaYok: store?.problem === "OKUNAMADI",
     ekSureCapasiMs: record?.ekSureCapasi ? isoToMs(record.ekSureCapasi) : null,
+    // DB kopyası bilinmiyorsa (okunamadı) eksik belge "kayıp" değil "okunamadı"dır.
+    iptal: { sira: revocation.effective?.view.document.sira ?? null, okunamadi: revocation.fileUnreadable || !revocation.dbKnown },
+    iptalPini: revocationPin(...view.copies.map((c) => c.iptalSira)),
   };
   // Kullanılabilirlik kararı durumun KENDİ kurallarından (tek kaynak); bulgular burada atılır.
   const scratch: Finding[] = [];
@@ -280,7 +291,7 @@ function buildInput(nowMs: number): BuiltInput {
     parmakIziEslesme: decision?.result ?? "OLCULEMEDI",
     ...(decision ? { parmakIziKurali: decision.rule } : {}),
   };
-  return { input, entitlement, lease, decision, view, licenseId };
+  return { input, entitlement, lease, decision, view, licenseId, revocation };
 }
 
 function isActivated(store: LicenseStoreSnapshot | null, licenseId: string | null, record: StateRecord | null): boolean {
@@ -317,7 +328,7 @@ export function getLicenseSnapshot(nowMs: number = Date.now()): LicenseSnapshot 
   if (cached && cached.version === version && nowMs - cached.snap.computedAtMs < SNAPSHOT_TTL_MS && nowMs >= cached.snap.computedAtMs) {
     return cached.snap;
   }
-  const { input, entitlement, lease, decision, view, licenseId } = buildInput(nowMs);
+  const { input, entitlement, lease, decision, view, licenseId, revocation } = buildInput(nowMs);
   const store = getLicenseStore();
   const state = computeLicenseState(input);
   const signingReady = Boolean(store && !store.problem && store.key && facts.installationId);
@@ -336,6 +347,7 @@ export function getLicenseSnapshot(nowMs: number = Date.now()): LicenseSnapshot 
     durumKaydi: { gecerli: view.record !== null, sira: view.record?.sira ?? null },
     view,
     integrityFirstMismatchMs: integrityStampMs(view.record),
+    iptal: { belge: revocation.effective, sira: input.iptal?.sira ?? null, pin: input.iptalPini ?? null, okunamadi: input.iptal?.okunamadi ?? false },
     computedAtMs: nowMs,
   };
   if (snap.activated) driveLadders(state);
@@ -352,5 +364,6 @@ export function __resetLicenseRuntimeForTests(): void {
   __resetAccumulationForTests();
   __resetLadderCountersForTests();
   __resetLicenseTraceRowForTests();
+  __resetRevocationStoreForTests();
   cached = null;
 }

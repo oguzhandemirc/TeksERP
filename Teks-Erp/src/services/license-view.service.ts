@@ -32,6 +32,7 @@ import { licenseError } from "./helpers/license-wire.helper";
 import { fingerprintSection } from "./helpers/license-fingerprint-view.helper";
 import type { FactorReport } from "../lib/license/fingerprint";
 import { integritySection } from "./helpers/license-integrity-view.helper";
+import { chainSection, type LicenseChainView } from "./helpers/license-chain-view.helper";
 import type { IntegrityStatus } from "../lib/license/state-rules";
 
 // ── Durum özeti (herkes) ────────────────────────────────────────────────────────
@@ -176,6 +177,8 @@ export interface LicenseDetail {
     sayilar: { dosya: number; eksik: number; degisik: number; fazla: number; okunamayan: number } | null;
     ilkUyusmazlik: string | null;
   };
+  /** G4 güven zinciri: HAK imzacısı (+ ara sertifikası), kiranın ALT'ı, iptal belgesinin hâli. */
+  readonly zincir: LicenseChainView;
 }
 
 function isoOrNull(ms: number | null): string | null {
@@ -275,6 +278,7 @@ export function getLicenseDetail(): LicenseDetail {
     gozlem: peekObservationCounters(),
     proxy: getProxySettings(),
     butunluk: integritySection(snap),
+    zincir: chainSection(snap),
   };
 }
 

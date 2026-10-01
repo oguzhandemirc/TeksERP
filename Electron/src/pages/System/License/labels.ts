@@ -77,6 +77,7 @@ const REASON_LABEL: Record<string, string> = {
   LISANS_IZI_KAYIP: "Lisans izlerinden biri kayıp (kira, durum kaydı ya da veritabanı izi)",
   LISANS_IZI_CELISKI: "Lisans izleri birbiriyle çelişiyor (farklı süre)",
   BELIRSIZLIK_SURUYOR: "Lisans durumu uzun süredir ölçülemiyor",
+  IPTAL_BELGESI_KAYIP: "İptal belgesi kayıp",
 };
 
 export const reasonLabel = (kod: string): string => REASON_LABEL[kod] ?? kod;

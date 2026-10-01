@@ -120,6 +120,8 @@ const LICENSE_EVENTS = {
   LICENSE_LEASE_ACCEPTED: "LICENSE_LEASE_ACCEPTED",
   /** Kiradaki sunucu kararı (K0–K5, dondurulan modül, devir) değişti. */
   LICENSE_SANCTION_CHANGED: "LICENSE_SANCTION_CHANGED",
+  /** Daha yüksek sıralı iptal belgesi (G4) doğrulanıp benimsendi (sıra + kayıt sayısı; belge metni yüke GİRMEZ). */
+  LICENSE_REVOCATION_ADOPTED: "LICENSE_REVOCATION_ADOPTED",
   /** Gözlem kipinin günlük özeti (hesaplanan kademe + "reddederdim" sayaçları). */
   LICENSE_OBSERVATION_SUMMARY: "LICENSE_OBSERVATION_SUMMARY",
   /** Yöneticinin lisans eylemi (etkinleştir, çevrimdışı yanıt, taşıma, DR, proxy, veri dışarı). */
