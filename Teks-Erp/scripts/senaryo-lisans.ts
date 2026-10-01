@@ -37,6 +37,7 @@ import { fixtureHedefEngeli, hacimHedefEngeli } from "./lib/hedef-db-kapisi";
 import { FabrikaIstemcisi, PortalIstemcisi, type LisansDetayi, type Yanit } from "./lib/senaryo-lisans-istemci";
 import { l18KunyeOlc } from "./lib/senaryo-lisans-kunye";
 import { l30ModulOlc } from "./lib/senaryo-lisans-modul";
+import { etkinlestirZayifOnayli, kiraSatiri, nedenOzeti, rolDbHazirla } from "./lib/senaryo-lisans-v2-duzenek";
 import {
   Aktarici,
   ConnectVekili,
@@ -301,6 +302,13 @@ async function main(): Promise<number> {
     return r.rows[0]?.id ?? null;
   };
 
+  /** Yalıtılmış rol DB'si (`<ana>_<rol>_test`): kopya makine kendi DB'sini taşır — v2 DB izi paylaşılmaz. */
+  const rolDb = async (rol: string): Promise<string> => {
+    const r = await rolDbHazirla({ havuz: db, anaUrl, rol, kapi: (u) => fabrikaHedefKapisi(u, `rol ${rol}`) });
+    if (r.yeni) console.log(`🆕 rol DB'si açıldı: ${r.ad} (boş + migrate deploy + seed) — DROP listesine yazın`);
+    return r.url;
+  };
+
   // Önceki koşumun artığı (çökmüş koşum) — LİSANS kimliğiyle (D14; eski köklerden), D14 öncesi satırlar
   // için DB kimliğiyle de; ana DB'deki senaryo renkleri (saat kaydırmasında gelecek tarihli doğmuş olabilir).
   const eskiKimlikler = [
@@ -465,7 +473,7 @@ async function main(): Promise<number> {
       a.kontrol("sözleşme kabul edilmeden etkinleştirme → 409 LICENSE_ACCEPTANCE_REQUIRED (satıcıya gitmez, Ek-7)", kabulsuz.status === 409 && kabulsuz.kod === "LICENSE_ACCEPTANCE_REQUIRED", ozet(kabulsuz));
       const kb = await A.istemci.sozlesmeyiKabulEt();
       a.kontrol("panelin kabul adımı: POST /api/license/kabul → 201", kb.status === 201, ozet(kb));
-      const y = await A.istemci.istek("POST", "/api/license/etkinlestir", { kod: S.kod.toLowerCase().replace(/-/g, " ") });
+      const y = await etkinlestirZayifOnayli({ fabrika: A.istemci, portal, kurulumDbId: S.anaDbId, kod: S.kod.toLowerCase().replace(/-/g, " "), kontrol: a.kontrol.bind(a), etiket: "A" });
       a.kontrol("POST /api/license/etkinlestir (küçük harf + boşluklu elle yazım) → 200", y.status === 200, ozet(y));
       const d = await A.istemci.detay();
       a.kontrol("hak + kira yerelde, lisans no eşleşir", d.hak?.lisansNo === S.lisansNo && Boolean(d.kira?.kiraId), `${d.hak?.lisansNo} kira=${d.kira?.kiraId.slice(0, 8)}`);
@@ -638,13 +646,25 @@ async function main(): Promise<number> {
     });
 
     // ============================================================ L9
-    await adim("L9", "saat ileri (gerçek süre): kira biter → EK_SURE (gün sayacı) → +30 gün KISITLI → yeni kira NORMAL", async (a) => {
+    // v2 (tasarım §1.1 · §1.3 · K1; lisans.md:12 · :31): kira bitişi yalnız tazeliktir, süre çapası ödenmiş tarih P. P'yi sözleşme sonuyla
+    // yakına çekip (portal geçerlilik bitişi) zaman çizelgesi yürütülür; sonda sözleşme sonu kaldırılır (P = ufuk).
+    await adim("L9", "saat ileri (gerçek süre), dışarı kesik: P−30 bilgi bandı → P sonrası EK_SURE (gün sayacı) → P+30 KISITLI → P uzar, yeni kira NORMAL", async (a) => {
+      const g0 = await portal.istek("POST", `/kurulumlar/${S.anaDbId}/gecerlilik`, { tarih: msToIso(saticiSimdi() + 29 * DAY_MS), sebep: "Senaryo L9 sözleşme sonu" });
+      const p0 = await A.istemci.yokla();
+      const d0 = await A.istemci.detay();
+      const pTarih = d0.durum.odenmisTarih?.tarih ? Date.parse(d0.durum.odenmisTarih.tarih) : NaN;
+      a.kontrol(
+        "sözleşme sonu P = +29 gün → yeni kira P'yi taşır: NORMAL + bilgi bandı ODEME_YAKLASIYOR (P sözleşme sonu, K1)",
+        g0.status < 300 && p0.outcome === "BASARILI" && Math.abs(pTarih - (saticiSimdi() + 29 * DAY_MS)) < DAY_MS && d0.durum.odenmisTarih?.sozlesmeSonu === true &&
+          d0.durum.hesaplananKademe === "NORMAL" && d0.durum.nedenler.some((n) => n.kod === "ODEME_YAKLASIYOR") && d0.durum.hesaplanan.bant?.ton === "bilgi",
+        `${ozet(g0)} ${p0.outcome} P=${d0.durum.odenmisTarih?.tarih ?? "yok"} ${d0.durum.hesaplananKademe} bant=${d0.durum.hesaplanan.bant?.ton ?? "yok"}`,
+      );
       A.aktarici.kipAyarla("kesik");
       await dunyayiIlerlet(31 * DAY_MS);
       const p1 = await A.istemci.yokla();
       a.kontrol("dışarı kesik: yoklama BASARISIZ", p1.outcome === "BASARISIZ", `${p1.outcome} ${p1.code ?? ""}`);
       const d1 = await A.istemci.detay();
-      a.kontrol("+31 gün: EK_SURE, gün sayacı ~29", d1.durum.hesaplananKademe === "EK_SURE" && d1.durum.uygulananKademe === "EK_SURE" && d1.durum.ekSureKalanGun !== null && d1.durum.ekSureKalanGun >= 28 && d1.durum.ekSureKalanGun <= 30, `${d1.durum.hesaplananKademe} ekSureKalanGun=${d1.durum.ekSureKalanGun} saat=${d1.durum.saat.kaynak}`);
+      a.kontrol("+31 gün (P+2): EK_SURE, gün sayacı ~28", d1.durum.hesaplananKademe === "EK_SURE" && d1.durum.uygulananKademe === "EK_SURE" && d1.durum.ekSureKalanGun !== null && d1.durum.ekSureKalanGun >= 27 && d1.durum.ekSureKalanGun <= 29, `${d1.durum.hesaplananKademe} ekSureKalanGun=${d1.durum.ekSureKalanGun} saat=${d1.durum.saat.kaynak}`);
       const durum = await A.istemci.istek("GET", "/api/license/durum");
       a.kontrol("/durum ekSureKalanGun + uyarı bandı (zorla)", durum.veri.ekSureKalanGun === d1.durum.ekSureKalanGun && (durum.veri.bant as { ton?: string } | null)?.ton === "uyari", JSON.stringify({ k: durum.veri.kademe, g: durum.veri.ekSureKalanGun }));
       const yaz = await renkYarat(A);
@@ -652,13 +672,15 @@ async function main(): Promise<number> {
       await dunyayiIlerlet(30 * DAY_MS + 3 * 60 * 60 * 1000);
       const p2 = await A.istemci.yokla();
       const d2 = await A.istemci.detay();
-      a.kontrol("+61 gün + başarısız yoklama (iki anahtar) → KISITLI", p2.outcome === "BASARISIZ" && d2.durum.hesaplananKademe === "KISITLI" && d2.durum.uygulananKademe === "KISITLI", `${p2.outcome}/${d2.durum.hesaplananKademe}`);
+      a.kontrol("+61 gün (P+32) + başarılı alışveriş yok (iki anahtar) → KISITLI", p2.outcome === "BASARISIZ" && d2.durum.hesaplananKademe === "KISITLI" && d2.durum.uygulananKademe === "KISITLI", `${p2.outcome}/${d2.durum.hesaplananKademe}`);
       const s = await A.istemci.istek("POST", "/api/orders", {});
       a.kontrol("KISITLI: POST /api/orders → 403 LICENSE_RESTRICTED", s.status === 403 && s.kod === "LICENSE_RESTRICTED", ozet(s));
       A.aktarici.kipAyarla("acik");
+      const g1 = await portal.istek("POST", `/kurulumlar/${S.anaDbId}/gecerlilik`, { tarih: null, sebep: "Senaryo L9 ödeme: sözleşme sonu kaldırıldı" });
       const p3 = await A.istemci.yokla();
       const d3 = await A.istemci.detay();
-      a.kontrol("dışarı açık: yeni kira → NORMAL", p3.outcome === "BASARILI" && d3.durum.hesaplananKademe === "NORMAL" && d3.durum.uygulananKademe === "NORMAL", `${p3.outcome}/${d3.durum.hesaplananKademe}`);
+      a.kontrol(`portal: sözleşme sonu kaldırıldı (${ozet(g1)}) → P = ufuk`, g1.status < 300 && d3.durum.odenmisTarih?.sozlesmeSonu === false, JSON.stringify(d3.durum.odenmisTarih));
+      a.kontrol("dışarı açık: yeni kira (P uzadı) → NORMAL", p3.outcome === "BASARILI" && d3.durum.hesaplananKademe === "NORMAL" && d3.durum.uygulananKademe === "NORMAL", `${p3.outcome}/${d3.durum.hesaplananKademe}`);
     });
 
     // ============================================================ L10
@@ -671,12 +693,22 @@ async function main(): Promise<number> {
       const guvenilir = Date.parse(d1.durum.saat.guvenilir);
       a.kontrol("güvenilir saat dünya saatinde (duvar değil)", Math.abs(guvenilir - saticiSimdi()) < 60 * 60 * 1000, `${d1.durum.saat.guvenilir}`);
       a.kontrol("kademe düşmedi (UYARI; erken bitiş/uzatma yok)", d1.durum.hesaplananKademe === "UYARI", d1.durum.hesaplananKademe);
+      // v2: DB izi durum kaydının imzalı kopyasıdır (lisans.md:66) — yalnız dosya silinirse çalışma süresi izden sürer,
+      // tek iz kaybı LISANS_IZI_KAYIP (lisans.md:67); yüksek su yoluna iki kopya birden (dosya + DB izi) silinince düşülür.
       await durdur(A);
       fs.rmSync(path.join(A.lisansDizini, "durum.json"), { force: true });
       await baslat(A);
+      const d1b = await A.istemci.detay();
+      const b1b = d1b.durum.nedenler.map((n) => n.kod);
+      a.kontrol("yalnız durum dosyası silindi: DB izi kopyası köprüler (kaynak MONOTONIK, lisans.md:66) + SAAT_GERI + LISANS_IZI_KAYIP (tek iz, lisans.md:67)", d1b.durum.saat.kaynak === "MONOTONIK" && d1b.durum.saat.bulgu === "SAAT_GERI" && b1b.includes("LISANS_IZI_KAYIP"), `${d1b.durum.saat.kaynak} ${nedenOzeti(d1b)}`);
+      a.not(`yalnız dosya silinince DURUM_DOSYASI ${b1b.includes("DURUM_DOSYASI") ? "VAR" : "YOK"} (tasarım §1.5 "durum kaydı silinirse DURUM_DOSYASI" — DB kopyası varken ölçülen)`);
+      await durdur(A);
+      fs.rmSync(path.join(A.lisansDizini, "durum.json"), { force: true });
+      await db(anaUrl).query(`DELETE FROM system_settings WHERE key = 'license.trace'`);
+      await baslat(A);
       const d2 = await A.istemci.detay();
       const b2 = d2.durum.nedenler.map((n) => n.kod);
-      a.kontrol("durum kaydı silinip yeniden açılış: kaynak YUKSEK_SU + SAAT_GERI (+ DURUM_DOSYASI)", d2.durum.saat.kaynak === "YUKSEK_SU" && d2.durum.saat.bulgu === "SAAT_GERI" && b2.includes("DURUM_DOSYASI"), `${d2.durum.saat.kaynak} ${b2.join(",")}`);
+      a.kontrol("durum dosyası + DB izi silinip yeniden açılış: kaynak YUKSEK_SU + SAAT_GERI + DURUM_DOSYASI + LISANS_IZI_KAYIP", d2.durum.saat.kaynak === "YUKSEK_SU" && d2.durum.saat.bulgu === "SAAT_GERI" && b2.includes("DURUM_DOSYASI") && b2.includes("LISANS_IZI_KAYIP"), `${d2.durum.saat.kaynak} ${nedenOzeti(d2)}`);
       a.kontrol("yüksek su = son kiranın sunucu saati (dünya), duvarın ilerisinde", Date.parse(d2.durum.saat.guvenilir) > saticiSimdi() - 2 * DAY_MS, d2.durum.saat.guvenilir);
       A.ekDuvarMs = 0;
       await saatUygula(A);
@@ -686,13 +718,13 @@ async function main(): Promise<number> {
     });
 
     // ============================================================ L11
-    const B = await yeniFabrika("B", anaUrl, PARMAK_IZLERI.B);
+    const B = await yeniFabrika("B", await rolDb("B"), PARMAK_IZLERI.B);
     await adim("L11", "LICENSE_DIR farklı parmak izli ikinci backend'e kopyalanır → GECERSIZ + portalda kopya uyarısı", async (a) => {
       fs.cpSync(A.lisansDizini, B.lisansDizini, { recursive: true });
       const uyari0 = ((await detayKurulum(S.anaDbId)).kopyaUyarilari as unknown[] | undefined)?.length ?? 0;
       await baslat(B);
       const d = await B.istemci.detay();
-      a.kontrol("kopya (B): parmak izi ESLESMEDI → GECERSIZ", d.parmakIzi.karar === "ESLESMEDI" && d.durum.gecerlilik === "GECERSIZ", `${d.parmakIzi.karar} ${d.parmakIzi.uyusmayan.join(",")} ${d.durum.nedenler.map((n) => n.kod).join(",")}`);
+      a.kontrol("kopya (B): parmak izi ESLESMEDI → GECERSIZ", d.parmakIzi.karar === "ESLESMEDI" && d.durum.gecerlilik === "GECERSIZ", `${d.parmakIzi.karar} ${d.parmakIzi.uyusmayan.join(",")} ${nedenOzeti(d)}`);
       const p = await B.istemci.yokla();
       a.kontrol("B yoklaması (ilk pencere: yalnız uyarı, kira verilir)", p.outcome === "BASARILI" || p.outcome === "BASARISIZ", `${p.outcome} ${p.code ?? ""}`);
       const pk = await detayKurulum(S.anaDbId);
@@ -738,16 +770,25 @@ async function main(): Promise<number> {
       );
       const kbC = await C.istemci.sozlesmeyiKabulEt();
       a.kontrol("C (yeni makine = yeni anahtar): sözleşme yeniden kabul → 201", kbC.status === 201, ozet(kbC));
-      const e = await C.istemci.istek("POST", "/api/license/etkinlestir", { kod: tasimaKodu });
+      const e = await etkinlestirZayifOnayli({ fabrika: C.istemci, portal, kurulumDbId: S.anaDbId, kod: tasimaKodu, kontrol: a.kontrol.bind(a), etiket: "C" });
       const d = await C.istemci.detay();
       a.kontrol(
         "C: taşıma koduyla etkinleşme → GECERLI, parmak izi ESLESTI, lisans kimliği aynı",
         e.status === 200 && d.durum.gecerlilik === "GECERLI" && d.parmakIzi.karar === "ESLESTI" && d.kurulum.kurulumId === S.anaLisansId,
         `${ozet(e)} ${d.durum.gecerlilik} ${d.parmakIzi.karar} ${d.kurulum.kurulumId}`,
       );
+      // v2 (tasarım §1.2 K6; lisans.md:30 (c)): taşınan eski anahtar imzasız 403 yerine imzalı KAPANIŞ kirası alır —
+      // K3, kısıtlama = olayın ilk kapanış kirası + ek süre; asla anında durdurma.
       const pa = await A.istemci.yokla();
-      a.kontrol("A (eski anahtar): yoklama → KURULUM_IPTAL", pa.outcome === "BASARISIZ" && pa.code === "KURULUM_IPTAL", `${pa.outcome} ${pa.code ?? ""}`);
+      const dA = await A.istemci.detay();
       const pk = await detayKurulum(S.anaDbId);
+      const kA = kiraSatiri(pk, dA.kira?.kiraId);
+      a.kontrol(
+        "A (taşınan eski anahtar): elindeki kira KAPANIŞ (neden TASIMA; K3, kısıtlamaya ~30 gün), anında KISITLI değil",
+        kA?.karar === "KAPANIS" && kA.kapanisNedeni === "TASIMA" && dA.kira?.yaptirim.kademe === "K3" && dA.durum.kisitlamaKalanGun !== null &&
+          dA.durum.kisitlamaKalanGun >= 29 && dA.durum.kisitlamaKalanGun <= 30 && dA.durum.uygulananKademe !== "KISITLI",
+        `yoklama=${pa.outcome} ${pa.code ?? ""} karar=${kA?.karar} neden=${kA?.kapanisNedeni} yaptirim=${dA.kira?.yaptirim.kademe} kisitlamaKalanGun=${dA.durum.kisitlamaKalanGun} ${dA.durum.uygulananKademe}`,
+      );
       a.kontrol("portal: kurulumun anahtarı artık C'ninki", (pk.kurulum as { anahtarKimligi?: string }).anahtarKimligi === d.kurulum.anahtarKimligi);
       await durdur(A);
       a.kontrol("C zile bağlanır", (await zilBekle(C, 30_000)) || (await C.istemci.yokla(), await zilBekle(C, 15_000)));
@@ -765,7 +806,7 @@ async function main(): Promise<number> {
       a.kontrol("portal: DR kurulumu + hak + kod", k.status === 201 && h.status === 201 && s.status === 201 && kod.status === 201, `${ozet(k)}/${ozet(h)}/${ozet(s)}/${ozet(kod)}`);
       const kbD = await D.istemci.sozlesmeyiKabulEt();
       a.kontrol("D: sözleşme kabulü → 201", kbD.status === 201, ozet(kbD));
-      const e = await D.istemci.istek("POST", "/api/license/etkinlestir", { kod: String(kod.veri.kod) });
+      const e = await etkinlestirZayifOnayli({ fabrika: D.istemci, portal, kurulumDbId: S.drDbId, kod: String(kod.veri.kod), kontrol: a.kontrol.bind(a), etiket: "D" });
       const de = await D.istemci.detay();
       a.kontrol(
         "D kimliksiz etkinleşti; lisans kimliği portalda doğan DR kimliği (yanıttan), ananınkinden ve DB kimliğinden ayrı",
@@ -964,7 +1005,7 @@ async function main(): Promise<number> {
       const kod = await bayi.istek("POST", `/kurulumlar/${String(k.veri.id)}/etkinlestirme-kodu`, {});
       const kbE = await E.istemci.sozlesmeyiKabulEt();
       a.kontrol("E: sözleşme kabulü → 201", kbE.status === 201, ozet(kbE));
-      const e = await E.istemci.istek("POST", "/api/license/etkinlestir", { kod: String(kod.veri.kod) });
+      const e = await etkinlestirZayifOnayli({ fabrika: E.istemci, portal, kurulumDbId: String(k.veri.id), kod: String(kod.veri.kod), kontrol: a.kontrol.bind(a), etiket: "E" });
       const d = await E.istemci.detay();
       a.kontrol("fabrika (E) bayi imzalı HAK'la etkinleşti → GECERLI, hak.bayiId = bayi", e.status === 200 && d.durum.gecerlilik === "GECERLI" && d.hak?.bayiId === bayiId, `${ozet(e)} ${d.durum.gecerlilik} bayiId=${d.hak?.bayiId}`);
       const asim = await bayi.istek("POST", `/haklar/${String(h.veri.id)}/surum`, { bayiParolasi: BAYI_PAROLASI, sebep: "tavan dışı", moduller: [...HAK_MODULLERI, "ticaret.enabled"] });
@@ -1102,22 +1143,30 @@ async function main(): Promise<number> {
     });
 
     // ============================================================ L26
-    await adim("L26", "OLCULEMEDI'de production açık kalır", async (a) => {
+    // v2 (tasarım §3.1-2; lisans.md:15): üretim çekirdektir (HAK'ta olmasa da açık); HAK doğrulanabildikçe modül tavanı
+    // belirsizlikte (OLCULEMEDI) de sürer — v1'deki "ölçülemedide tavan kalkar" kuralı kalktı.
+    await adim("L26", "OLCULEMEDI'de production açık kalır (çekirdek); modül tavanı belirsizlikte sürer", async (a) => {
       C.ekDuvarMs = 0;
       await saatUygula(C);
       const s = await hakSurum({ moduller: ["finance.enabled"], uretimModuluCikarilsin: true, sebep: "Senaryo L üretimsiz hak" });
       a.kontrol("portal: üretimsiz HAK sürümü (açık onayla) → 201", s.status === 201, ozet(s));
+      const kapaliModuller = async (): Promise<string[]> =>
+        ((await C.istemci.istek("GET", "/api/feature-flags")).veri.license as { kapaliModuller?: string[] } | undefined)?.kapaliModuller ?? [];
       const p = await C.istemci.yokla();
       const w1 = await C.istemci.istek("GET", "/api/work-orders");
-      a.kontrol("GECERLI + HAK'ta üretim yok: GET /api/work-orders → 403 LICENSE_MODULE (tavan uygulanıyor)", p.outcome === "BASARILI" && w1.status === 403 && w1.kod === "LICENSE_MODULE", `${p.outcome} ${ozet(w1)}`);
+      const k1 = await kapaliModuller();
+      a.kontrol(
+        "GECERLI + HAK'ta üretim yok: GET /api/work-orders 200 (üretim çekirdek); tavan uygulanıyor (kapalı modül var, üretim değil)",
+        p.outcome === "BASARILI" && w1.status === 200 && k1.length > 0 && !k1.includes("production.enabled"),
+        `${p.outcome} ${ozet(w1)} kapalı=${k1.length}`,
+      );
       C.ekDuvarMs = 40 * DAY_MS;
       await saatUygula(C);
       const d = await C.istemci.detay();
       const w2 = await C.istemci.istek("GET", "/api/work-orders");
-      a.kontrol("OLCULEMEDI (saat ileri): tavan uygulanmaz → GET /api/work-orders 200", d.durum.gecerlilik === "OLCULEMEDI" && w2.status === 200, `${d.durum.gecerlilik} ${ozet(w2)}`);
-      const ff = await C.istemci.istek("GET", "/api/feature-flags");
-      const kapali = ((ff.veri.license as { kapaliModuller?: unknown[] } | undefined)?.kapaliModuller ?? []).length;
-      a.kontrol("panel bloğu: kapalı modül yok", kapali === 0, `adet=${kapali}`);
+      a.kontrol("OLCULEMEDI (saat ileri): üretim açık → GET /api/work-orders 200", d.durum.gecerlilik === "OLCULEMEDI" && w2.status === 200, `${d.durum.gecerlilik} ${ozet(w2)}`);
+      const k2 = await kapaliModuller();
+      a.kontrol("OLCULEMEDI: modül tavanı sürer (aynı kapalı modüller, üretim değil)", k2.length === k1.length && !k2.includes("production.enabled"), `adet=${k2.length}`);
       C.ekDuvarMs = 0;
       await saatUygula(C);
       const g = await hakSurum({ moduller: HAK_MODULLERI, sebep: "Senaryo L üretim geri" });
@@ -1127,21 +1176,36 @@ async function main(): Promise<number> {
     });
 
     // ============================================================ L27
-    await adim("L27", "kira zinciri: snapshot geri alma → yakala; ağ tekrarı → aynı kira; iki parmak izi → uyarı, ikinci pencerede çatal ek süreye", async (a) => {
-      // (a) snapshot geri alma
+    await adim("L27", "kira zinciri: snapshot geri alma → yakala; ağ tekrarı → aynı kira; iki parmak izi → uyarı, ikinci pencerede kopyaya kapanış kirası", async (a) => {
+      // (a) snapshot geri alma. Kural lisans.md:30 (a) iki biçim sayar: "eski lisans klasörü" (yalnız klasör) ve makine
+      // anlık görüntüsü — v2'de ikincisi DB izini de geri alır (lisans.md:66: DB izi durum kaydının kopyası, DB'de).
+      const izSatiri = async (): Promise<string | null> =>
+        (await db(anaUrl).query<{ v: string }>(`SELECT value::text AS v FROM system_settings WHERE key = 'license.trace'`)).rows[0]?.v ?? null;
+      const yakalaOlc = async (etiket: string): Promise<void> => {
+        const acik0 = ((await detayKurulum(S.anaDbId)).kopyaUyarilari as Array<{ durum: string }>).filter((u) => u.durum === "ACIK").length;
+        await baslat(C);
+        const py = await C.istemci.yokla();
+        const pk = await detayKurulum(S.anaDbId);
+        const karar = (pk.kiralar as Array<{ karar: string }>)[0]?.karar;
+        const acik1 = (pk.kopyaUyarilari as Array<{ durum: string }>).filter((u) => u.durum === "ACIK").length;
+        a.kontrol(`(a) ${etiket} (aynı parmak izi, eski uç) → YAKALA kirası, yeni uyarı YOK`, py.outcome === "BASARILI" && karar === "YAKALA" && acik1 === acik0, `${py.outcome} karar=${karar} acikUyari ${acik0}→${acik1}`);
+      };
       const snap = path.join(kok, "snapshot-C");
       fs.cpSync(C.lisansDizini, snap, { recursive: true });
+      const snapIz = await izSatiri();
       await C.istemci.yokla();
       await C.istemci.yokla();
-      const acik0 = ((await detayKurulum(S.anaDbId)).kopyaUyarilari as Array<{ durum: string }>).filter((u) => u.durum === "ACIK").length;
+      const klasoruGeriAl = (): void => {
+        for (const ad of ["kira.jws", "hak.jws", "durum.json"]) fs.copyFileSync(path.join(snap, ad), path.join(C.lisansDizini, ad));
+      };
       await durdur(C);
-      for (const ad of ["kira.jws", "hak.jws", "durum.json"]) fs.copyFileSync(path.join(snap, ad), path.join(C.lisansDizini, ad));
-      await baslat(C);
-      const py = await C.istemci.yokla();
-      const pk = await detayKurulum(S.anaDbId);
-      const karar = (pk.kiralar as Array<{ karar: string }>)[0]?.karar;
-      const acik1 = (pk.kopyaUyarilari as Array<{ durum: string }>).filter((u) => u.durum === "ACIK").length;
-      a.kontrol("(a) snapshot geri alma (aynı parmak izi, eski uç) → YAKALA kirası, yeni uyarı YOK", py.outcome === "BASARILI" && karar === "YAKALA" && acik1 === acik0, `${py.outcome} karar=${karar} acikUyari ${acik0}→${acik1}`);
+      klasoruGeriAl();
+      await yakalaOlc("eski lisans klasörü (yalnız klasör geri)");
+      await durdur(C);
+      klasoruGeriAl();
+      if (snapIz === null) await db(anaUrl).query(`DELETE FROM system_settings WHERE key = 'license.trace'`);
+      else await db(anaUrl).query(`UPDATE system_settings SET value = $1::jsonb, "updatedAt" = now() WHERE key = 'license.trace'`, [snapIz]);
+      await yakalaOlc("makine anlık görüntüsü (klasör + DB izi geri)");
       // (b) ağ tekrarı: yanıt yolda kaybolur, fabrika aynı uçla yeniden dener
       await bekle(5500);
       C.aktarici.kipAyarla("yut");
@@ -1155,7 +1219,7 @@ async function main(): Promise<number> {
       const son = (pk2.yoklamalar as Array<{ sonuc: string; kiraId: string | null }>)[0];
       a.kontrol("(b) yeniden deneme → satıcı AYNI kirayı döndürür (TEKRAR), fabrika onu kabul eder", k2.outcome === "BASARILI" && d2.kira?.kiraId === yutulanKira && son?.sonuc === "TEKRAR", `${k2.outcome} ${d2.kira?.kiraId.slice(0, 8)} sonuc=${son?.sonuc}`);
       // (c) iki farklı parmak izi aynı ucu ilerletir
-      const B2 = await yeniFabrika("B2", anaUrl, PARMAK_IZLERI.B2);
+      const B2 = await yeniFabrika("B2", await rolDb("B2"), PARMAK_IZLERI.B2);
       fs.cpSync(C.lisansDizini, B2.lisansDizini, { recursive: true });
       await baslat(B2);
       const b1 = await B2.istemci.yokla();
@@ -1164,15 +1228,22 @@ async function main(): Promise<number> {
       const acik = (pk3.kopyaUyarilari as Array<{ tur: string; durum: string; redZamani: string | null }>).filter((u) => u.durum === "ACIK");
       a.kontrol("(c) ilk pencere: kopyaya da kira verilir, yalnız portal uyarısı; sahip (C) etkilenmez", b1.outcome === "BASARILI" && c1.outcome === "BASARILI" && acik.length > 0, `B2=${b1.outcome} C=${c1.outcome} uyari=${acik.map((u) => u.tur).join(",")}`);
       await bekle(21_000); // KOPYA_PENCERE_SN=20
+      // v2 (tasarım §1.2 K6; lisans.md:30 (c)): ikinci pencerede kopyaya imzalı KAPANIŞ kirası (K3 + ek süre) gider.
       const b2 = await B2.istemci.yokla();
       const c2 = await C.istemci.yokla();
-      a.kontrol("(c) ikinci pencere: kopyaya KIRA_VERILMEDI, sahip yine BASARILI", b2.outcome === "BASARISIZ" && b2.code === "KIRA_VERILMEDI" && c2.outcome === "BASARILI", `B2=${b2.outcome} ${b2.code ?? ""} C=${c2.outcome}`);
+      const dk = await B2.istemci.detay();
+      const kB2 = kiraSatiri(await detayKurulum(S.anaDbId), dk.kira?.kiraId);
+      a.kontrol(
+        "(c) ikinci pencere: kopyanın elindeki kira KAPANIŞ (neden KOPYA; K3, kısıtlamaya ~30 gün, anında KISITLI değil), sahip yine BASARILI",
+        kB2?.karar === "KAPANIS" && kB2.kapanisNedeni === "KOPYA" && dk.kira?.yaptirim.kademe === "K3" && dk.durum.kisitlamaKalanGun !== null &&
+          dk.durum.kisitlamaKalanGun >= 29 && dk.durum.kisitlamaKalanGun <= 30 && dk.durum.hesaplananKademe !== "KISITLI" && c2.outcome === "BASARILI",
+        `B2 yoklama=${b2.outcome} ${b2.code ?? ""} karar=${kB2?.karar} neden=${kB2?.kapanisNedeni} yaptirim=${dk.kira?.yaptirim.kademe} kisitlamaKalanGun=${dk.durum.kisitlamaKalanGun} ${dk.durum.hesaplananKademe} C=${c2.outcome}`,
+      );
       B2.ekDuvarMs = 31 * DAY_MS;
       B2.ekMonoMs = 31 * DAY_MS;
       await saatUygula(B2);
       const db2 = await B2.istemci.detay();
-      a.kontrol("(c) kopya kira bitişinde EK_SURE'ye düşer (asla anında durdurma)", db2.durum.hesaplananKademe === "EK_SURE" || db2.durum.hesaplananKademe === "KISITLI", `${db2.durum.hesaplananKademe} ekSure=${db2.durum.ekSureKalanGun}`);
-      a.not(`B2 anında durdurulmadı: ${db2.durum.hesaplananKademe}; iki anahtar olmadan KISITLI yok`);
+      a.kontrol("(c) kopya: kapanış kirasının kısıtlama tarihi (+30 gün) geçince KISITLI — yalnız ek süre sonunda", db2.durum.hesaplananKademe === "KISITLI", `${db2.durum.hesaplananKademe} kisitlamaKalanGun=${db2.durum.kisitlamaKalanGun}`);
       await durdur(B2);
       for (const u of ((await detayKurulum(S.anaDbId)).kopyaUyarilari as Array<{ id: string; durum: string }>).filter((x) => x.durum === "ACIK")) {
         await portal.istek("POST", `/kopya-uyarilari/${u.id}/kapat`, { sebep: "Senaryo L27 incelendi", digerParmakIziniKabulEt: false });
