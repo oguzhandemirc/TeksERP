@@ -9,6 +9,7 @@ import {
   OFFLINE_HORIZON_MAX_DAYS,
   hasCapability,
   offlineHorizonCeilingDays,
+  type EntitlementDoc,
   type EntitlementSignerKind,
   type LicenseClass,
 } from "../lisans-protokol";
@@ -101,6 +102,33 @@ export function planEntitlementSigner(keys: KeyStore, licenseClass: LicenseClass
   const root = keys.rootFileFor(licenseClass);
   if (root) return { kind: "KOK", kid: root.kid, keyFile: root.path };
   return { kind: "KUYRUK", reason: capable ? "ARA_IMZACI_YOK" : "YETENEK_YOK" };
+}
+
+// ---------------------------------------------------------------- genişlik kapısı (yetenek düşüşü)
+
+/** HAK belgesinin genişlik ölçüsüne giren alanları. */
+export type EntitlementBreadth = Pick<EntitlementDoc, "sinif" | "moduller" | "kalici" | "bakimBitis" | "cevrimdisiUfukGun" | "kipAltSiniri">;
+
+/** Ufkun genişlik sırası: alan yok (P modeli işlemez, eski çapa) < gün < süresiz. */
+function horizonRank(days: number | null | undefined): number {
+  if (days === undefined) return -1;
+  return days === null ? Number.POSITIVE_INFINITY : days;
+}
+
+/**
+ * Genişlik kapısı (SAF): `older` güncel sürümden GENİŞ DEĞİL mi — aynı sınıf · modüller ⊆ · kalıcı yalnız güncel
+ * kalıcıysa · bakım sonu ≤ · çevrimdışı ufuk ≤ · güncelin kip alt sınırı korunur. Yeteneksiz alıcıya eski kök imzalı
+ * sürüm yalnız bu doğruysa teslim edilir: aksi hâlde sonradan daraltılmış hak (çıkarılmış modül, kısaltılmış ufuk,
+ * kaldırılmış kalıcılık) yeteneği bildirmeyen kuruluma geri dönerdi.
+ */
+export function isEntitlementWithin(older: EntitlementBreadth, current: EntitlementBreadth): boolean {
+  if (older.sinif !== current.sinif) return false;
+  const allowed = new Set(current.moduller);
+  if (!older.moduller.every((m) => allowed.has(m))) return false;
+  if (older.kalici && !current.kalici) return false;
+  if (Date.parse(older.bakimBitis) > Date.parse(current.bakimBitis)) return false;
+  if (horizonRank(older.cevrimdisiUfukGun) > horizonRank(current.cevrimdisiUfukGun)) return false;
+  return !(current.kipAltSiniri === "zorla" && older.kipAltSiniri !== "zorla");
 }
 
 /** Uzun ufku VERMEK (K2): yalnız yönetici, kurulumun lisans numarası yazılarak — parola alt sürece gitmeden ÖNCE. */

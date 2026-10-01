@@ -7,6 +7,7 @@ import {
   ActivateRequestSchema,
   DrTakeoverRequestSchema,
   ENDPOINTS,
+  HardwareReportRequestSchema,
   OfflineRequestSchema,
   PollRequestSchema,
   REQUEST_HEADER,
@@ -14,6 +15,7 @@ import {
   TransferRequestSchema,
   isPlainObject,
   openEnvelope,
+  parseJws,
 } from "../lisans-protokol";
 import { VendorError } from "../lib/errors";
 import { handleActivation } from "../services/activation.service";
@@ -21,6 +23,7 @@ import { acceptsClosingLease } from "../services/closing-lease";
 import type { VendorContext } from "../services/context";
 import type { DoorbellHub } from "../services/doorbell";
 import { drTakeoverTarget, processDrTakeover } from "../services/dr.service";
+import { handleHardwareReport } from "../services/hardware.service";
 import { authenticateRequest } from "../services/installation-auth";
 import { processPoll } from "../services/poll.service";
 import { openSupportTicket } from "../services/support.service";
@@ -77,6 +80,31 @@ async function poll(c: SignedCall & { readonly purposes: ("yokla" | "cevrimdisi"
   return processPoll(c.ctx, auth, body, c.nowMs);
 }
 
+async function hardwareReport(c: SignedCall) {
+  const body = parseStrict(HardwareReportRequestSchema, parseJsonBody(c.raw));
+  return handleHardwareReport(c.ctx, { header: c.header, rawBody: c.raw, body, nowMs: c.nowMs, limit: c.limit, path: c.path });
+}
+
+/** Zarfın yönlendirmesi: imzasız okunan amaç yalnız UCU seçer — imza doğrulaması aynı amacı yeniden şart koşar. */
+function envelopePurpose(request: string): string | null {
+  const p = parseJws(request);
+  const amac = p.ok ? (p.value.payload as { amac?: unknown }).amac : undefined;
+  return typeof amac === "string" ? amac : null;
+}
+
+// Çevrimdışı/aktarma: dış istek imzasızdır (panel ya da telefon taşır); güven zarfın içindeki kurulum imzalı istekten
+// gelir — yanıt imzalı belgeler taşıdığından taşıyıcı onu taklit edemez. Donanım bildirimi (K8) de zarfla gelir: aynı
+// gövde, aynı yanıt (`HardwareReportResponse`).
+async function offline(ctx: VendorContext, raw: Buffer, limit: ScopeLimit) {
+  const outer = parseStrict(OfflineRequestSchema, parseJsonBody(raw));
+  const opened = openEnvelope(outer.zarf);
+  if (!opened.ok) throw new VendorError(400, "ZARF_BICIM", opened.message);
+  const inner = parseJsonBody(opened.value.body);
+  const call: SignedCall = { ctx, header: opened.value.request, raw: opened.value.body, nowMs: Date.now(), limit, path: ENDPOINTS.OFFLINE };
+  if (envelopePurpose(opened.value.request) === "donanim") return hardwareReport(call);
+  return isPlainObject(inner) && "kod" in inner ? activation(call) : poll({ ...call, purposes: ["yokla", "cevrimdisi"] });
+}
+
 export function createPublicApp(ctx: VendorContext, hub: DoorbellHub | null): Express {
   const app = express();
   app.disable("x-powered-by");
@@ -101,17 +129,12 @@ export function createPublicApp(ctx: VendorContext, hub: DoorbellHub | null): Ex
     res.json(await poll({ ctx, header: req.get(REQUEST_HEADER), raw: rawBodyOf(req.body), nowMs: Date.now(), limit, purposes: ["yokla"], path: ENDPOINTS.POLL }));
   });
 
-  // Çevrimdışı/aktarma: dış istek imzasızdır (panel ya da telefon taşır); güven zarfın içindeki
-  // kurulum imzalı istekten gelir — yanıt imzalı belgeler taşıdığından taşıyıcı onu taklit edemez.
   app.post(ENDPOINTS.OFFLINE, raw, async (req: Request, res: Response) => {
-    const nowMs = Date.now();
-    const outer = parseStrict(OfflineRequestSchema, parseJsonBody(rawBodyOf(req.body)));
-    const opened = openEnvelope(outer.zarf);
-    if (!opened.ok) throw new VendorError(400, "ZARF_BICIM", opened.message);
-    const inner = parseJsonBody(opened.value.body);
-    const isActivation = isPlainObject(inner) && "kod" in inner;
-    const call: SignedCall = { ctx, header: opened.value.request, raw: opened.value.body, nowMs, limit, path: ENDPOINTS.OFFLINE };
-    res.json(isActivation ? await activation(call) : await poll({ ...call, purposes: ["yokla", "cevrimdisi"] }));
+    res.json(await offline(ctx, rawBodyOf(req.body), limit));
+  });
+
+  app.post(ENDPOINTS.HARDWARE, raw, async (req: Request, res: Response) => {
+    res.json(await hardwareReport({ ctx, header: req.get(REQUEST_HEADER), raw: rawBodyOf(req.body), nowMs: Date.now(), limit, path: ENDPOINTS.HARDWARE }));
   });
 
   app.post(ENDPOINTS.TRANSFER, raw, async (req: Request, res: Response) => {

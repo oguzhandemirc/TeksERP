@@ -73,6 +73,8 @@ export interface Installation {
   readonly yetenekler?: readonly string[];
   /** İmzalı durum kaydının son bildirilen sırası (gerilemesi yerel müdahale şüphesi). */
   readonly sonDurumSirasi?: number | null;
+  /** Parmak izi v2: zincir sahibinin son yoklamasının kayıp etkenleri (24 saattir okunamayan). */
+  readonly sonKayipEtkenler?: readonly string[];
   readonly tesis: { readonly id: string; readonly ad: string; readonly musteri: { readonly id: string; readonly ad: string; readonly bayiId: string | null } };
   readonly haklar: EntitlementSummary[];
   readonly _count: { readonly kopyaUyarilari: number; readonly tasimalar: number };
@@ -192,6 +194,52 @@ export interface TransferRequest {
   readonly kararSebebi: string | null;
   readonly createdAt: string;
   readonly kurulum?: InstallationRef;
+}
+
+/** Donanım değişikliği / zayıf tanıma onay talebi (`GET /donanim-talepleri`) — tuzlu özet değil etken etken karşılaştırma. */
+export interface HardwareRequest {
+  readonly id: string;
+  readonly kurulumId: string;
+  readonly kurulum: { readonly kurulumId: string; readonly ad: string | null; readonly sinif: string; readonly tesis: { readonly ad: string; readonly musteri: { readonly ad: string } } };
+  readonly tur: "DONANIM" | "ZAYIF_TANIMA";
+  readonly durum: "BEKLIYOR" | "ONAYLANDI" | "REDDEDILDI";
+  readonly anahtarKimligi: string;
+  readonly kayip: readonly string[];
+  readonly gerekce: string | null;
+  readonly otomatik: boolean;
+  readonly bildirimSayisi: number;
+  readonly sonBildirim: string;
+  readonly kararZamani: string | null;
+  readonly kararVeren: string | null;
+  readonly kararSebebi: string | null;
+  readonly createdAt: string;
+  readonly karsilastirma: {
+    readonly etkenler: Readonly<Record<string, string>>;
+    readonly guclu: readonly string[];
+    readonly tutanGuclu: number;
+    readonly kural: "standart" | "zayif";
+    readonly ogrenilebilir: boolean;
+    readonly zayif: boolean;
+  };
+}
+
+/** Kök imzası bekleyen HAK talebi (`GET /kok-kuyrugu`). `acil`: yetenek düşüşünde fabrika kira alamadı. */
+export interface RootRequest {
+  readonly id: string;
+  readonly hakId: string;
+  readonly lisansNo: string;
+  readonly kurulumId: string;
+  readonly kurulum: { readonly kurulumId: string; readonly ad: string | null; readonly sinif: string };
+  readonly tabanSurum: number;
+  readonly surum: number;
+  readonly uzunUfuk: boolean;
+  readonly acil: boolean;
+  readonly durum: "BEKLIYOR" | "IMZALANDI" | "IPTAL" | "ESKIDI";
+  readonly sebep: string;
+  readonly yapan: string;
+  readonly kapanisZamani: string | null;
+  readonly kapanisSebebi: string | null;
+  readonly createdAt: string;
 }
 
 export interface PlannedAction {

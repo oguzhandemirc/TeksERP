@@ -155,6 +155,9 @@ async function main(): Promise<void> {
     const imzaPlani = await s("get", "/haklar/:id/imza-plani", `/haklar/${hakId}/imza-plani`, 200);
     await s("get", "/kok-kuyrugu", "/kok-kuyrugu?durum=BEKLIYOR", 200);
     await s("post", "/kok-kuyrugu/:id/iptal", `/kok-kuyrugu/${randomUUID()}/iptal`, 404, { sebep: "olmayan talep" });
+    await s("get", "/donanim-talepleri", "/donanim-talepleri?durum=BEKLIYOR&tur=DONANIM", 200);
+    await s("post", "/donanim-talepleri/:id/onayla", `/donanim-talepleri/${randomUUID()}/onayla`, 404, { sebep: "olmayan talep" });
+    await s("post", "/donanim-talepleri/:id/reddet", `/donanim-talepleri/${randomUUID()}/reddet`, 404, { sebep: "olmayan talep" });
     await s("get", "/iptal-belgeleri", "/iptal-belgeleri", 200);
     const toplu = await s("post", "/haklar/toplu-yeniden-bas", "/haklar/toplu-yeniden-bas", 201, { imzaParolasi: "kullanilmayan-ara-parolasi", sebep: "uçlar kapsamı", hakIdleri: [hakId] });
     kontrol("§1d2 imza planı KOK (yeteneksiz kurulum, kök VDS'te); toplu ara basımı yeteneksizi ATLAR (sürüm değişmez)", imzaPlani.veri.imzaci === "KOK" && (toplu.veri.sonuclar as { durum: string }[])[0]?.durum === "ATLANDI");

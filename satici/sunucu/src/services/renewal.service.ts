@@ -3,14 +3,17 @@
 // Reddin kendisi de kayıttır: kopya uyarısı ve yoklama satırı COMMIT olur, sonra 403 döner — kapanış kirasını anlayan
 // (P modeli) istemciye 403 yerine İMZALI kapanış kirası gider (K6, `closing-lease.ts`).
 // Lisans v2 ekleri ayrı işlevlerde: yabancı HAK · yerel müdahale (`local-intervention.ts`) · yetenek ve durum kaydı sırası.
-import type { KopyaUyariTuru, KopyaUyarisi, Prisma } from "@prisma/client";
-import { compareFingerprints, jwsDigest, parseJws, type Fingerprint, type LicenseResponse, type PollRequest } from "../lisans-protokol";
+import type { KopyaUyarisi, Prisma } from "@prisma/client";
+import { compareFingerprints, hasCapability, jwsDigest, parseJws, type Fingerprint, type LicenseResponse, type PollRequest } from "../lisans-protokol";
 import { VendorError, retryConflict } from "../lib/errors";
 import { lockInstallation } from "../lib/locks";
 import { prisma, type Tx } from "../lib/prisma";
 import { enqueueNotificationTx } from "../notifications/outbox";
 import { acceptsClosingLease, copyEpisodeStart, issueOrReuseClosingLease } from "./closing-lease";
 import type { VendorContext } from "./context";
+import { inSecondWindow, upsertCopyAlert } from "./copy-alert";
+import { FINGERPRINT_V2_CAPABILITY, canLearnFingerprint } from "./fingerprint-policy";
+import { listLegacyWeakInstallationTx } from "./hardware.service";
 import { decideChain, driftAccepted, forkSide, readFingerprint, type ChainDecision } from "./lease-chain";
 import {
   activeEntitlement,
@@ -25,6 +28,7 @@ import {
 } from "./lease.service";
 import { isForeignEntitlement, type PollV2Report } from "./local-intervention";
 import { applyOwnerReportTx } from "./poll-report";
+import { queueCurrentTermsUnderLock } from "./root-queue.service";
 
 export interface PollTelemetry {
   readonly durum: PollRequest["durum"];
@@ -67,42 +71,10 @@ function leaseEnforcement(token: string): boolean | null {
   return typeof value === "boolean" ? value : null;
 }
 
-async function upsertCopyAlert(
-  tx: Tx,
-  installationDbId: string,
-  type: KopyaUyariTuru,
-  sides: { owner: Fingerprint | null; other: Fingerprint },
-  nowMs: number,
-): Promise<KopyaUyarisi> {
-  const open = await tx.kopyaUyarisi.findFirst({ where: { kurulumId: installationDbId, tur: type, durum: "ACIK" } });
-  if (open) {
-    return tx.kopyaUyarisi.update({
-      where: { id: open.id },
-      data: { sonGorulme: new Date(nowMs), gorulmeSayisi: { increment: 1 }, digerParmakIzi: sides.other },
-    });
-  }
-  const created = await tx.kopyaUyarisi.create({
-    data: {
-      kurulumId: installationDbId,
-      tur: type,
-      ilkGorulme: new Date(nowMs),
-      sonGorulme: new Date(nowMs),
-      ...(sides.owner ? { sahipParmakIzi: sides.owner } : {}),
-      digerParmakIzi: sides.other,
-    },
-  });
-  // Yeni uyarı bildirimi AYNI tx'te (sürmekte olan uyarının tekrar görülmesi bildirim DOĞURMAZ).
-  await enqueueNotificationTx(tx, { event: "KOPYA_SUPHESI", keyParts: [created.id], installationDbId, relatedId: created.id, portalPath: "/kopya-uyarilari", referans: type });
-  return created;
-}
-
-function inSecondWindow(ctx: VendorContext, alert: KopyaUyarisi, nowMs: number): boolean {
-  return nowMs - alert.ilkGorulme.getTime() >= ctx.config.KOPYA_PENCERE_SN * 1000;
-}
-
 type RenewOutcome =
   | { readonly kind: "LEASE"; readonly response: LicenseResponse; readonly decision: ChainDecision }
   | { readonly kind: "DENIED" }
+  | { readonly kind: "WITHHELD" }
   | { readonly kind: "KEY_CHANGED" };
 
 async function renewInTx(tx: Tx, ctx: VendorContext, g: RenewInput): Promise<RenewOutcome> {
@@ -114,7 +86,7 @@ async function renewInTx(tx: Tx, ctx: VendorContext, g: RenewInput): Promise<Ren
   // Teslim edilecek HAK'ın biçimi yanıtı ALACAK tarafın bu istekte bildirdiği yeteneklerden (DR devri gibi raporsuz
   // istekte kurulum kaydından): eski sürüme dönen fabrika ara imzalı HAK'ı bu yanıtta almaz.
   const receiverCapabilities = g.report ? [...g.report.capabilities] : undefined;
-  const delivered = await entitlementForDelivery(tx, inst, hak, receiverCapabilities);
+  const delivered = await entitlementForDelivery(tx, inst, hak, { capabilities: receiverCapabilities, held: g.clientEntitlement });
   const tipRow = inst.sonKiraId ? await tx.kira.findUnique({ where: { id: inst.sonKiraId } }) : null;
   const tip = tipRow
     ? {
@@ -138,6 +110,8 @@ async function renewInTx(tx: Tx, ctx: VendorContext, g: RenewInput): Promise<Ren
           repeatWindowMs: ctx.config.TEKRAR_PENCERE_SN * 1000,
         });
   const vsAccepted = compareFingerprints(accepted, measured, { excludeF5: inst.sinif === "DR" });
+  // Meşru donanım değişikliği (K8): güçlü etkenlerden ≥ 2 tutuyorsa (zayıf kümede zayıf kural) uyuşmazlık değil öğrenmedir.
+  const learnable = g.measured !== null && canLearnFingerprint(accepted, measured, inst.sinif);
 
   let deny = false;
   const alerts: KopyaUyarisi[] = [];
@@ -155,7 +129,7 @@ async function renewInTx(tx: Tx, ctx: VendorContext, g: RenewInput): Promise<Ren
     alerts.push(alert);
     if (side === "REQUESTER_IS_OTHER" && inSecondWindow(ctx, alert, g.nowMs)) deny = true;
   }
-  if (vsAccepted.result === "ESLESMEDI") {
+  if (vsAccepted.result === "ESLESMEDI" && !learnable) {
     const alert = await upsertCopyAlert(tx, inst.id, "PARMAK_IZI_UYUSMAZ", { owner: accepted, other: measured }, g.nowMs);
     alerts.push(alert);
     if (inSecondWindow(ctx, alert, g.nowMs)) deny = true;
@@ -223,6 +197,7 @@ async function renewInTx(tx: Tx, ctx: VendorContext, g: RenewInput): Promise<Ren
         presentedLeaseId: g.presentedLeaseId,
         measured,
         capabilities: g.report?.capabilities ?? [],
+        held: g.clientEntitlement,
         nowMs: g.nowMs,
       });
       await recordPoll("KAPANIS_KOPYA", closing.id);
@@ -265,8 +240,8 @@ async function renewInTx(tx: Tx, ctx: VendorContext, g: RenewInput): Promise<Ren
       kind: "LEASE",
       decision,
       response: licenseResponse({
-        // Tekrar AYNI kirayı verir: HAK da o kiranın bağlı olduğu sürümdür (`hakOzeti` tutsun).
-        hak: entitlementToDeliver(g.clientEntitlement, await leaseEntitlement(tx, tipRow)),
+        // Tekrar AYNI kirayı verir: HAK da o kiranın bağlı olduğu sürümdür (`hakOzeti` tutsun); genişlik kapısında HAK yok.
+        hak: delivered.withheld ? null : entitlementToDeliver(g.clientEntitlement, await leaseEntitlement(tx, tipRow)),
         kira: tipRow.belge,
         tokens: downloadTokens(ctx, inst, hak, sanction, g.nowMs),
         nowMs: g.nowMs,
@@ -275,17 +250,44 @@ async function renewInTx(tx: Tx, ctx: VendorContext, g: RenewInput): Promise<Ren
     };
   }
 
+  // Genişlik kapısı (yetenek düşüşü): zincir sahibinde güncel şartların kök imzası kuyruğa girer; fabrika kirayı
+  // bağlayamayacaksa (elinde güncelden geniş olmayan HAK yok) talep ACİL olur.
+  const withheld = decision !== "FORK" ? delivered.withheld : undefined;
+  if (withheld) await queueCurrentTermsUnderLock(tx, { entitlementId: hak.id, urgent: !withheld.heldBound, nowMs: g.nowMs });
+
   // Yetenek, durum kaydı sırası ve yerel müdahale yalnız zincir sahibinden okunur (çatalda iki tarafın sırası karışır).
   const ownerReport =
     decision !== "FORK" && g.telemetry
-      ? await applyOwnerReportTx(tx, { installation: inst, kid: g.kid, report: g.report, status: g.telemetry.durum, clock: g.telemetry.saat, sides: { owner: accepted, other: measured }, nowMs: g.nowMs })
+      ? await applyOwnerReportTx(tx, {
+          installation: inst,
+          kid: g.kid,
+          report: g.report,
+          status: g.telemetry.durum,
+          clock: g.telemetry.saat,
+          sides: { owner: accepted, other: measured },
+          capabilityDowngrade: withheld !== undefined,
+          nowMs: g.nowMs,
+        })
       : {};
 
-  // Kabul edilen küme yalnız sakin yenilemede kayar: tek etkenlik değişim (parça değişimi), çatal
-  // uyarısı açıkken ASLA (kopya kendini "sahip" yapamasın).
+  // v1'den gelen zayıf kurulum durmaz (zayıf kuralla sürer) ve onay listesine düşer (K8).
+  if (decision !== "FORK" && hasCapability(g.report?.capabilities, FINGERPRINT_V2_CAPABILITY)) await listLegacyWeakInstallationTx(tx, { inst, kid: g.kid, nowMs: g.nowMs });
+
+  // Fabrika bu kirayı bağlayamaz (elindeki HAK güncelden geniş ya da yok; güncel ara imzalıyı tanımaz): kira VERİLMEZ —
+  // kayıtlar (uyarı · acil kök talebi · yetenek · yoklama) commit olur, sonra 403. Fabrika elindeki kirayla sürer.
+  if (withheld && !withheld.heldBound && g.report) {
+    const seen: Prisma.KurulumUncheckedUpdateManyInput = { ...ownerReport };
+    if (g.telemetry) Object.assign(seen, { sonYoklamaZamani: new Date(g.nowMs), sonSaglik: g.telemetry.saglik, sonOrtam: g.telemetry.ortam, platform: g.telemetry.ortam.platform });
+    const claim = await tx.kurulum.updateMany({ where: { id: inst.id, sonKiraId: inst.sonKiraId }, data: seen });
+    if (claim.count === 0) throw retryConflict();
+    await recordPoll("RED_KOK_IMZASI_BEKLIYOR", null);
+    return { kind: "WITHHELD" };
+  }
+
+  // Kabul edilen küme yalnız öğrenilebilir değişimde kayar (K8: güçlülerden ≥ 2 tutuyor; ölçülemeyen etken eski değerini
+  // korur), çatalda ve çatal uyarısı açıkken ASLA (kopya kendini "sahip" yapamasın).
   const openFork = await tx.kopyaUyarisi.findFirst({ where: { kurulumId: inst.id, tur: "ZINCIR_CATALI", durum: "ACIK" } });
-  const canDrift =
-    decision !== "FORK" && vsAccepted.result === "ESLESTI" && vsAccepted.mismatched.length <= 1 && !openFork && g.measured !== null;
+  const canDrift = decision !== "FORK" && learnable && !openFork;
   const nextAccepted = canDrift ? driftAccepted(accepted, measured) : accepted;
 
   const lease = await issueLease(tx, ctx, {
@@ -296,6 +298,7 @@ async function renewInTx(tx: Tx, ctx: VendorContext, g: RenewInput): Promise<Ren
     clientFingerprint: measured,
     acceptedFingerprint: nextAccepted,
     nowMs: g.nowMs,
+    held: g.clientEntitlement,
     ...(receiverCapabilities ? { capabilities: receiverCapabilities } : {}),
   });
   const stateUpdate: Prisma.KurulumUncheckedUpdateManyInput = {
@@ -326,13 +329,19 @@ async function renewInTx(tx: Tx, ctx: VendorContext, g: RenewInput): Promise<Ren
 }
 
 /**
- * Yanıta HAK konur mu: fabrikada HAK yok, başka kimlik/sürüm, ya da bildirdiği bayt özeti teslim edilenle tutmuyor
- * (yabancı ya da eski biçimli HAK — kira `hakOzeti` ile teslim edilene bağlıdır, fabrika onu almadan kirayı bağlayamaz).
+ * Yanıta HAK konur mu: genişlik kapısı tuttuysa ASLA (HAK değişikliği teslim edilmez); fabrikada HAK yok, başka
+ * kimlik/sürüm, ya da bildirdiği bayt özeti teslim edilenle tutmuyor (yabancı ya da eski biçimli HAK — kira `hakOzeti` ile
+ * teslim edilene bağlıdır, fabrika onu almadan kirayı bağlayamaz).
  */
 function entitlementToDeliver(client: RenewInput["clientEntitlement"], delivered: DeliveredEntitlement): string | null {
+  if (delivered.withheld) return null;
   if (client === null || client.hakId !== delivered.hakId || client.surum !== delivered.surum) return delivered.belge;
   return client.ozet !== undefined && client.ozet !== jwsDigest(delivered.belge) ? delivered.belge : null;
 }
+
+/** Genişlik kapısının reddi: fabrika elindeki kirayla çalışmayı sürdürür (imzasız 403 hiçbir süreyi kısaltmaz). */
+export const capabilityDowngradeRefusal = (): VendorError =>
+  new VendorError(403, "KIRA_VERILMEDI", "Bu derlemenin tanıyacağı güncel lisans (HAK) satıcının kök imzasını bekliyor; kurulum elindeki kirayla çalışmaya devam eder");
 
 /** Kira yeniler; kopya şüphesinin ikinci penceresinde 403 KIRA_VERILMEDI (kayıtlar yine de yazılır). */
 export async function renewLease(ctx: VendorContext, g: RenewInput): Promise<{ response: LicenseResponse; decision: ChainDecision }> {
@@ -343,5 +352,6 @@ export async function renewLease(ctx: VendorContext, g: RenewInput): Promise<{ r
   if (outcome.kind === "DENIED") {
     throw new VendorError(403, "KIRA_VERILMEDI", "Kopya şüphesi sürüyor: bu makineye kira verilmedi (lisans sahibiyle görüşün)");
   }
+  if (outcome.kind === "WITHHELD") throw capabilityDowngradeRefusal();
   return { response: outcome.response, decision: outcome.decision };
 }

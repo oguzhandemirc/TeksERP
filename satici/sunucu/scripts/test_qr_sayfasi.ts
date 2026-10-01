@@ -186,6 +186,15 @@ async function akis(): Promise<void> {
     String(kapanis.ozet),
   );
   check("§4k eski kira (P alanı yok) ya da çözülemeyen yük → özet satırı GİZLİ", tek.ozet === null && (await sayfayiAc({ hash: "eyJabc", depo: new Map(), fetchYaniti: { ok: true, text: yanitla({ kiraId: "x" }) } })).ozet === null);
+  // K8: zarfla gelen donanım bildiriminin yanıtı `{talepId, durum, lisans}` — sonuç satırı, onaylıysa kiranın özeti.
+  const donanim = (durum: string, lisans: string | null) => JSON.stringify({ v: 1, talepId: "4d0c8c8e-2b8a-4c5e-9a43-3d7f4a1b2c3d", durum, lisans: lisans === null ? null : JSON.parse(lisans) as unknown });
+  const bekliyor = await sayfayiAc({ hash: "eyJabc", depo: new Map(), fetchYaniti: { ok: true, text: donanim("BEKLIYOR", null) } });
+  const onayli = await sayfayiAc({ hash: "eyJabc", depo: new Map(), fetchYaniti: { ok: true, text: donanim("ONAYLANDI", yanitla({ odenmisTarih: p })) } });
+  check(
+    "§4l donanım bildirimi yanıtı: bekleyen talep tek satır (QR yine çizilir), onaylıda sonuç + kiradaki ödenmiş tarih",
+    bekliyor.ozet === "Donanım bildirimi satıcı onayı bekliyor (lisans değişmedi)" && bekliyor.qrSvgSayisi === 1 && onayli.ozet === `Donanım değişikliği kabul edildi · Ödenmiş tarih: ${gun(p)}`,
+    `${String(bekliyor.ozet)} | ${String(onayli.ozet)}`,
+  );
 }
 
 function sondalar(): void {

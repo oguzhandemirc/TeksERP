@@ -23,6 +23,11 @@ import {
   NOTIFICATION_EVENT_LABEL,
   NOTIFICATION_STATUS_LABEL,
   PAID_THROUGH_KIND_LABEL,
+  ROOT_REQUEST_STATUS_LABEL,
+  FACTOR_STATE_LABEL,
+  FINGERPRINT_FACTOR_LABEL,
+  HARDWARE_REQUEST_KIND_LABEL,
+  HARDWARE_REQUEST_STATUS_LABEL,
 } from "../shared/labels";
 import { PORTAL_PERMISSIONS, TAILNET_ONLY_PERMISSIONS } from "../shared/permissions";
 import { HEAVY_K3_MIN_DAYS, INSTALLMENT_DEFAULT_RESTRICTION_DAYS } from "../shared/sanctions";
@@ -215,6 +220,27 @@ describe("lisans v2 — enum ve küme ekran adları (sunucu kaynağı, iki yönl
     twoWay(listStrings(read("services/local-intervention.ts"), "export const LOCAL_INTERVENTION_CAUSES"), LOCAL_INTERVENTION_CAUSE_LABEL);
   });
 
+  it("kök imzası talebi durumları = Prisma HakKokTalebiDurumu ve portal süzgeci (key-routes.ts ROOT_REQUEST_STATES)", () => {
+    const values = prismaEnum("HakKokTalebiDurumu");
+    twoWay(values, ROOT_REQUEST_STATUS_LABEL);
+    expect(listStrings(read("http/key-routes.ts"), "const ROOT_REQUEST_STATES")).toEqual(values);
+  });
+
+  it("donanım talebi türü/durumu = Prisma DonanimTalebiTuru/DonanimTalebiDurumu ve portal süzgeci (hardware-routes.ts)", () => {
+    const kinds = prismaEnum("DonanimTalebiTuru");
+    const states = prismaEnum("DonanimTalebiDurumu");
+    twoWay(kinds, HARDWARE_REQUEST_KIND_LABEL);
+    twoWay(states, HARDWARE_REQUEST_STATUS_LABEL);
+    const src = read("http/hardware-routes.ts");
+    expect(listStrings(src, "const HARDWARE_REQUEST_KINDS")).toEqual(kinds);
+    expect(listStrings(src, "const HARDWARE_REQUEST_STATES")).toEqual(states);
+  });
+
+  it("parmak izi etkenleri = protokol FINGERPRINT_FACTORS · karşılaştırma durumları = FACTOR_STATES (fingerprint-policy.ts)", () => {
+    twoWay(listStrings(read("lisans-protokol/parmak-izi.ts"), "export const FINGERPRINT_FACTORS"), FINGERPRINT_FACTOR_LABEL);
+    twoWay(listStrings(read("services/fingerprint-policy.ts"), "export const FACTOR_STATES"), FACTOR_STATE_LABEL);
+  });
+
   it("kapanış kirası nedenleri = protokol CLOSING_LEASE_REASONS", () => {
     twoWay(listStrings(read("lisans-protokol/belgeler.ts"), "export const CLOSING_LEASE_REASONS"), CLOSING_REASON_LABEL);
   });
@@ -286,7 +312,7 @@ describe("eşikler ve biçim desenleri aynası", () => {
 
 describe("arayüzün çağırdığı her uç sunucuda var", () => {
   // Satıcı tablosu başka dosyadan yayılan parçaları da taşır (`...SUPPORT_PORTAL_ROUTES`): her yayılan tablo bu listede.
-  const VENDOR_ROUTE_FILES = ["http/portal-routes.ts", "http/key-routes.ts", "http/distribution-routes.ts", "http/support-routes.ts", "http/notification-routes.ts"];
+  const VENDOR_ROUTE_FILES = ["http/portal-routes.ts", "http/key-routes.ts", "http/hardware-routes.ts", "http/distribution-routes.ts", "http/support-routes.ts", "http/notification-routes.ts"];
   const vendor = [...VENDOR_ROUTE_FILES.flatMap(serverRoutes), ...sessionRoutes()];
   const dealer = [...serverRoutes("http/dealer-routes.ts"), ...sessionRoutes()];
   const calls = clientCalls();

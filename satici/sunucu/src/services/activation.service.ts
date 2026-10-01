@@ -17,7 +17,10 @@ import { prisma, type Tx } from "../lib/prisma";
 import type { VendorContext } from "./context";
 import { notifyDoorbell } from "./doorbell";
 import { bodyKeyRole, installationCancelled, recordRequestNonce, verifySignedRequest, type KeyRole } from "./installation-auth";
+import { deliverableEntitlement } from "./entitlement-issue.service";
+import { assertIdentificationOnActivation } from "./hardware.service";
 import { storableSequence } from "./local-intervention";
+import { queueCurrentTermsUnderLock } from "./root-queue.service";
 import {
   activeEntitlement,
   computeSanctionState,
@@ -30,6 +33,30 @@ import {
 
 const codeInvalid = (reason: string): VendorError => new VendorError(404, "ETKINLESTIRME_KODU_GECERSIZ", reason);
 const codeUsed = (): VendorError => new VendorError(409, "ETKINLESTIRME_KODU_KULLANILMIS", "Bu etkinleştirme kodu daha önce kullanıldı");
+/** Genişlik kapısı (yetenek düşüşü): kod TÜKETİLMEZ; güncel şartların kök imzası acil kuyruğa girer. */
+const activationWithheld = (): VendorError =>
+  new VendorError(
+    403,
+    "KIRA_VERILMEDI",
+    "Bu derlemenin tanıyacağı güncel lisans (HAK) satıcının kök imzasını bekliyor; imzalandıktan sonra aynı kodla yeniden deneyin (kod kullanılmadı)",
+  );
+
+/**
+ * Ucuz ön denetim (kodu tüketecek istekte, nonce'tan önce): `hak-ara` bildirmeyen derlemeye teslim edilebilecek HAK yoksa
+ * (en yeni kök sürüm güncelden geniş — genişlik kapısı) etkinleştirme kod tüketmeden durur; talep acil kuyruğa girer.
+ */
+async function assertDeliverableOnActivation(inst: Kurulum, body: ActivateRequest, nowMs: number): Promise<void> {
+  const hak = await prisma.hak.findFirst({ where: { kurulumId: inst.id, aktif: true } });
+  if (!hak || hak.guncelSurum < 1) return;
+  const deliverable = await deliverableEntitlement(prisma, hak, body.yetenekler ?? []);
+  if (!deliverable?.withheld) return;
+  await prisma.$transaction(async (tx) => {
+    await lockInstallation(tx, inst.id);
+    await queueCurrentTermsUnderLock(tx, { entitlementId: hak.id, urgent: true, nowMs });
+  });
+  throw activationWithheld();
+}
+
 const transferCodeRequired = (): VendorError =>
   new VendorError(409, "TASIMA_KODU_GEREKLI", "Bu kurulum başka bir makinede etkin: yeni makine yalnız onaylı taşıma koduyla etkinleşir (portaldan taşıma talebi)");
 
@@ -185,6 +212,8 @@ export async function activateInTx(
     acceptedFingerprint: g.body.parmakIzi,
     nowMs: g.nowMs,
   });
+  // Ön denetimle bu tx arasında HAK değiştiyse: kod tüketilmeden geri alınır (kuyruğu ön denetim yazar).
+  if (lease.entitlement.withheld) throw activationWithheld();
   const tip = await tx.kurulum.updateMany({ where: { id: inst.id, sonKiraId: null }, data: { sonKiraId: lease.id } });
   if (tip.count === 0) throw retryConflict();
   await tx.etkinlestirmeKodu.update({ where: { id: code.id }, data: { kiraId: lease.id } });
@@ -275,6 +304,10 @@ export async function handleActivation(
   // Yalnız kodu TÜKETECEK istek kabul ister: tüketilmiş kodun ağ tekrarı önceki sonucu alır (kabul o gün yazıldı).
   const acceptance = code.durum === "AKTIF" ? requireAcceptance(body) : null;
   g.limit?.(inst.id);
+  if (acceptance) {
+    await assertIdentificationOnActivation(inst, verified.kid, body, g.nowMs);
+    await assertDeliverableOnActivation(inst, body, g.nowMs);
+  }
   await recordRequestNonce({ installationDbId: inst.id, kid: verified.kid, request: verified.request, nowMs: g.nowMs });
   const result = await prisma.$transaction((tx) =>
     activateInTx(tx, ctx, { codeId: code.id, installationDbId: inst.id, kid: verified.kid, body, acceptance, nowMs: g.nowMs }),

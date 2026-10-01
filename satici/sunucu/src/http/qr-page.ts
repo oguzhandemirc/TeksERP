@@ -3,7 +3,8 @@
 // giremez); sayfa zarfı tarayıcıda okuyup `/v1/cevrimdisi`e gönderir ve YANITI çok parçalı QR olarak
 // gösterir — fabrikadaki tablet parçaları okutup birleştirir. İstek parçaları sekmeler arasında
 // yalnız bu kökenin yerel deposunda en çok 15 dk bekler, küme tamamlanınca silinir. Yanıttaki kiranın (kendi imzalı
-// belgemiz; burada yalnız OKUNUR) ödenmiş tarihi (P) ve kapanış uyarısı kullanıcıya tek satırda gösterilir.
+// belgemiz; burada yalnız OKUNUR) ödenmiş tarihi (P) ve kapanış uyarısı kullanıcıya tek satırda gösterilir; donanım
+// bildirimi yanıtında (`{talepId, durum, lisans}`) önce bildirimin sonucu, varsa kiranın özeti.
 // Biçim ve kodlayıcı: `qr-page-lib.ts` + `qr-page-matrix.ts` (bekçi `test_qr_sayfasi`).
 import type { Request, Response } from "express";
 import { ENDPOINTS } from "../lisans-protokol";
@@ -33,11 +34,16 @@ const CONTROLLER_JS = String.raw`(function () {
     return decodeURIComponent(s);
   }
   function day(iso) { return new Date(iso).toLocaleDateString("tr-TR"); }
+  function hardwareLine(j) {
+    if (!j || typeof j.talepId !== "string") return null;
+    return j.durum === "ONAYLANDI" ? "Donanım değişikliği kabul edildi" : j.durum === "BEKLIYOR" ? "Donanım bildirimi satıcı onayı bekliyor (lisans değişmedi)" : "Donanım bildirimi reddedildi; satıcıyla görüşün";
+  }
   function leaseSummary(text) {
     try {
-      var bytes = b64uBytes(String(JSON.parse(text).kira).split(".")[1] || "");
-      if (!bytes) return null;
-      var k = JSON.parse(utf8Text(bytes)), out = [];
+      var j = JSON.parse(text), hw = hardwareLine(j), lic = j && j.lisans ? j.lisans : j;
+      var bytes = lic && lic.kira ? b64uBytes(String(lic.kira).split(".")[1] || "") : null;
+      if (!bytes) return hw;
+      var k = JSON.parse(utf8Text(bytes)), out = hw ? [hw] : [];
       if (k.odenmisTarih === null) out.push("Ödenmiş tarih: süresiz");
       else if (typeof k.odenmisTarih === "string") out.push("Ödenmiş tarih: " + day(k.odenmisTarih));
       if (k.kapanis) {

@@ -304,6 +304,7 @@ export function yoklamaGovdesi(g: {
     belirsizlik?: { birikenMs: number; ilk: string | null };
     nedenler?: string[];
     saticiSapmaSn?: number;
+    parmakIziKayip?: ("f1" | "f2" | "f3" | "f4" | "f5")[];
   };
 }) {
   const simdi = new Date().toISOString();
@@ -332,6 +333,7 @@ export function yoklamaGovdesi(g: {
     ...(v2.yetenekler === undefined ? {} : { yetenekler: v2.yetenekler }),
     ...(v2.durumKaydi === undefined ? {} : { durumKaydi: v2.durumKaydi }),
     ...(v2.belirsizlik === undefined ? {} : { belirsizlik: v2.belirsizlik }),
+    ...(v2.parmakIziKayip === undefined ? {} : { parmakIziKayip: v2.parmakIziKayip }),
   };
 }
 
@@ -444,6 +446,9 @@ export async function temizleKurulumlar(kurulumDbIdleri: readonly string[], kidl
     await tx.yoklama.deleteMany({ where: w });
     await tx.kopyaUyarisi.deleteMany({ where: w });
     await tx.tasimaTalebi.deleteMany({ where: w });
+    // Donanım / zayıf tanıma onay talepleri (K8): denetim ayak izi talep id'siyle.
+    for (const d of await tx.donanimTalebi.findMany({ where: w, select: { id: true } })) denetimIdleri.add(d.id);
+    await tx.donanimTalebi.deleteMany({ where: w });
     // Destek talepleri (3d-2): defter satırları önce, talep sonra; denetim ayak izi talep id'siyle.
     const talepler = await tx.destekTalebi.findMany({ where: w, select: { id: true } });
     for (const t of talepler) denetimIdleri.add(t.id);

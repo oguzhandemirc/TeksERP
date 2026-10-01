@@ -21,6 +21,7 @@ import { lockInstallation } from "../lib/locks";
 import { prisma, type Tx } from "../lib/prisma";
 import type { VendorContext } from "./context";
 import { installationCancelled, type AuthenticatedRequest } from "./installation-auth";
+import type { HeldEntitlement } from "./entitlement-issue.service";
 import { entitlementForDelivery, issueLease, leaseEntitlement, leaseRevocation, licenseResponse, type LeaseRevocation } from "./lease.service";
 import type { PollTelemetry } from "./renewal.service";
 
@@ -56,7 +57,8 @@ const leaseRevocationSequence = (belge: string): number | null => {
 export interface ClosingLease {
   readonly id: string;
   readonly token: string;
-  readonly entitlementToken: string;
+  /** null: genişlik kapısı tuttu — HAK teslim edilmez. */
+  readonly entitlementToken: string | null;
   readonly revocation: LeaseRevocation | null;
   readonly reused: boolean;
 }
@@ -92,17 +94,19 @@ export async function issueOrReuseClosingLease(
     readonly measured: Fingerprint;
     /** Kapanış kirasını alan tarafın imzalı gövdede bildirdiği yetenekler (teslim edilecek HAK biçimi). */
     readonly capabilities: readonly string[];
+    /** Alan tarafın elindeki HAK (genişlik kapısı); bilinmiyorsa null. */
+    readonly held?: HeldEntitlement | null;
     readonly nowMs: number;
   },
 ): Promise<ClosingLease> {
   const revocation = await leaseRevocation(tx, ctx.keys);
-  const deliverable = await entitlementForDelivery(tx, g.installation, g.entitlement, g.capabilities);
+  const deliverable = await entitlementForDelivery(tx, g.installation, g.entitlement, { capabilities: g.capabilities, held: g.held });
   const episode = { kurulumId: g.installation.id, anahtarKimligi: g.keyId, karar: "KAPANIS" as const, kapanisNedeni: g.reason, verilis: { gte: g.episodeStart } };
   const first = await tx.kira.findFirst({ where: episode, orderBy: [{ verilis: "asc" }, { id: "asc" }], select: { verilis: true } });
   const anchorMs = first ? first.verilis.getTime() : g.nowMs;
   const last = await tx.kira.findFirst({ where: episode, orderBy: [{ createdAt: "desc" }, { id: "desc" }] });
   if (last && (await reusable(tx, last, { installationDbId: g.installation.id, entitlementId: g.entitlement.id, deliverableVersion: deliverable.surum, revocation, nowMs: g.nowMs }))) {
-    return { id: last.id, token: last.belge, entitlementToken: (await leaseEntitlement(tx, last)).belge, revocation, reused: true };
+    return { id: last.id, token: last.belge, entitlementToken: deliverable.withheld ? null : (await leaseEntitlement(tx, last)).belge, revocation, reused: true };
   }
   // Önceki kira yalnız bu kurulumun defterindeyse zincire bağlanır (yabancı kimlik FK'yı kırmasın).
   const previous = g.presentedLeaseId ? await tx.kira.findFirst({ where: { id: g.presentedLeaseId, kurulumId: g.installation.id }, select: { id: true } }) : null;
@@ -116,9 +120,11 @@ export async function issueOrReuseClosingLease(
     acceptedFingerprint: g.measured,
     nowMs: g.nowMs,
     capabilities: g.capabilities,
+    held: g.held ?? null,
     closing: { reason: g.reason, keyId: g.keyId, restrictAt: new Date(anchorMs + ctx.config.EK_SURE_GUN * DAY_MS) },
   });
-  return { id: lease.id, token: lease.token, entitlementToken: lease.entitlement.belge, revocation: lease.revocation, reused: false };
+  // Genişlik kapısında HAK teslim edilmez (kira alan tarafın elindeki güvenli sürüme ya da güncele bağlı).
+  return { id: lease.id, token: lease.token, entitlementToken: lease.entitlement.withheld ? null : lease.entitlement.belge, revocation: lease.revocation, reused: false };
 }
 
 /**
@@ -133,6 +139,7 @@ export async function closeEndedKey(
     readonly presentedLeaseId: string | null;
     readonly measured: Fingerprint;
     readonly capabilities: readonly string[];
+    readonly held?: HeldEntitlement | null;
     readonly telemetry: PollTelemetry;
     readonly nowMs: number;
   },
@@ -154,6 +161,7 @@ export async function closeEndedKey(
       presentedLeaseId: g.presentedLeaseId,
       measured: g.measured,
       capabilities: g.capabilities,
+      held: g.held ?? null,
       nowMs: g.nowMs,
     });
     await tx.yoklama.create({
