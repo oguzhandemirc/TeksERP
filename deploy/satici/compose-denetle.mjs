@@ -67,7 +67,8 @@
 // Çıkış: 0 temiz · 1 ihlal · 2 ölçülemedi (docker yok / config çözülemedi).
 // =============================================================================
 import { spawnSync } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -518,6 +519,34 @@ kontrol("⑦ DB portsuz ve yalnız iç ağda", (db.ports ?? []).length === 0 && 
   kontrol("⑨f dağıtım bağları yalnız satıcıda", baska.length === 0, baska.join(", "));
 }
 
+// create_host_path'in JSON izi compose sürümüne göre TERS anlam taşır (biri false'u, öteki true'yu düşürür; ikisinde de
+// `bind: {}` kalır) — anlam iki açık değerli kalibrasyon bağının izinden ölçülür; ayırt edilemezse ÖLÇÜLEMEDİ (çıkış 2).
+const hostYoluIzi = (v) => (v?.bind === undefined ? "bind yok" : Object.hasOwn(v.bind, "create_host_path") ? `create_host_path=${v.bind.create_host_path}` : "bind {}");
+function hostYoluYaratmazIzi() {
+  const dizin = mkdtempSync(path.join(os.tmpdir(), "compose-denetle-kalibrasyon-"));
+  let r;
+  try {
+    const f = path.join(dizin, "kalibrasyon.yml");
+    writeFileSync(
+      f,
+      "services:\n  k:\n    image: kalibrasyon\n    volumes:\n" +
+        "      - { type: bind, source: /kalibrasyon-false, target: /false, bind: { create_host_path: false } }\n" +
+        "      - { type: bind, source: /kalibrasyon-true, target: /true, bind: { create_host_path: true } }\n",
+    );
+    r = spawnSync("docker", ["compose", "-p", "kalibrasyon", "-f", f, "config", "--format", "json"], { encoding: "utf8" });
+  } finally {
+    rmSync(dizin, { recursive: true, force: true });
+  }
+  const baglar = r.status === 0 ? (JSON.parse(r.stdout).services?.k?.volumes ?? []) : [];
+  const yanlis = hostYoluIzi(baglar.find((v) => v.target === "/false"));
+  const dogru = hostYoluIzi(baglar.find((v) => v.target === "/true"));
+  if (r.status !== 0 || yanlis === dogru) {
+    console.error(`ÖLÇÜLEMEDİ: create_host_path kalibrasyonu — ${r.status !== 0 ? (r.stderr || r.error?.message || "").trim() : `false ve true aynı izi bırakıyor (${yanlis})`}`);
+    process.exit(2);
+  }
+  return yanlis;
+}
+
 // ⑬ örtülerin kendi denetimleri
 function portalGenelDenetle(c) {
   const s = c.services?.satici ?? {};
@@ -540,10 +569,12 @@ function portalGenelDenetle(c) {
   const kaynak = sBag?.source ?? "";
   const icIce = (x, y) => !!x && !!y && (x === y || x.startsWith(`${y.replace(/\/$/, "")}/`) || y.startsWith(`${x.replace(/\/$/, "")}/`));
   const yasakKaynak = ["/anahtarlar", "/dosyalar", "/derlemeler", "/yayin"].map((h) => (s.volumes ?? []).find((v) => v.target === h)?.source).filter(Boolean);
+  const yaratmazIzi = hostYoluYaratmazIzi();
+  const yaratmaz = (v) => !!v && hostYoluIzi(v) === yaratmazIzi;
   kontrol("⑬c JWKS bağı: satıcıda SALT OKUNUR, yan konteynerde aynı kaynak YAZILIR, ikisinde create_host_path yok, kaynak anahtar/dağıtım birimlerinin dışında",
-    !!sBag && sBag.read_only === true && !!jBag && jBag.read_only !== true && jBag.source === kaynak && sBag.bind?.create_host_path === false && jBag.bind?.create_host_path === false &&
+    !!sBag && sBag.read_only === true && !!jBag && jBag.read_only !== true && jBag.source === kaynak && yaratmaz(sBag) && yaratmaz(jBag) &&
       !yasakKaynak.some((y) => icIce(kaynak, y)),
-    `${kaynak || "YOK"} · satıcı ro=${sBag?.read_only === true} · yan ro=${jBag?.read_only === true}`);
+    `${kaynak || "YOK"} · satıcı ro=${sBag?.read_only === true} · yan ro=${jBag?.read_only === true} · host yolu yaratmaz: satıcı=${yaratmaz(sBag)} yan=${yaratmaz(jBag)}`);
   const jBaglar = (j.volumes ?? []).map((v) => v.target);
   const jEksik = [];
   if (j.image !== s.image) jEksik.push(`imaj ${j.image ?? "YOK"} ≠ satıcı`);
