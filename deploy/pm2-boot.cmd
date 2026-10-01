@@ -9,5 +9,7 @@ rem PM2_HOME kur.ps1 ile AYNI olmali (dump.pm2 orada); cikti <kok>\logs\pm2-boot
 setlocal
 set "KOK=%~dp0"
 set "PM2_HOME=%KOK%pm2-home"
-"%KOK%pm2\node_modules\.bin\pm2.cmd" resurrect >> "%KOK%logs\pm2-boot.log" 2>&1
+rem `call` sart: call'siz .cmd cagrisi bu dosyanin baglamini bitirir, setlocal ortami (PM2_HOME) duser
+rem ve pm2 SYSTEM profilindeki bos .pm2 ile dogar - dump bulunamaz, backend kalkmaz.
+call "%KOK%pm2\node_modules\.bin\pm2.cmd" resurrect >> "%KOK%logs\pm2-boot.log" 2>&1
 exit /b %ERRORLEVEL%
