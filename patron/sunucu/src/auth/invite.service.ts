@@ -6,6 +6,7 @@
 // yönetici sıfırlar, yönetici yoksa satıcı CLI'si).
 import { accountActor, recordAudit } from "../lib/audit";
 import { CloudError } from "../lib/errors";
+import { uniqueViolationOn } from "../lib/prisma-errors";
 import { withLookup, withTesis } from "../lib/tenant";
 import type { InviteAccepted, InviteConfirmed, InviteInfo } from "../wire/api";
 import type { CloudContext } from "../services/context";
@@ -71,12 +72,20 @@ export async function confirmInvite(ctx: CloudContext, g: { token: string; totp:
   const secret = ctx.secrets.open(account.totpSecretSealed, account.id);
   const totp = secret ? verifyTotp(secret, g.totp, { atMs: nowMs, lastUsedStep: null }) : null;
   if (!totp?.ok) throw new CloudError(400, "GIRIS_BASARISIZ", "Doğrulama kodu hatalı; kimlik doğrulayıcı uygulamadaki güncel kodu girin");
-  const claimed = await withTesis(ctx.app, { tesisId: account.tesisId, lock: { name: "ACCOUNT_ADMIN", key: account.tesisId } }, (tx) =>
-    tx.account.updateMany({
-      where: { id: account.id, status: "DAVETLI", inviteTokenHash: digest, totpSecretSealed: account.totpSecretSealed },
-      data: { status: "AKTIF", inviteTokenHash: null, inviteExpiresAt: null, totpLastStep: totp.step, failedLogins: 0, lockedUntil: null },
-    }),
-  );
+  let claimed: { count: number };
+  try {
+    claimed = await withTesis(ctx.app, { tesisId: account.tesisId, lock: { name: "ACCOUNT_ADMIN", key: account.tesisId } }, (tx) =>
+      tx.account.updateMany({
+        where: { id: account.id, status: "DAVETLI", inviteTokenHash: digest, totpSecretSealed: account.totpSecretSealed },
+        data: { status: "AKTIF", inviteTokenHash: null, inviteExpiresAt: null, totpLastStep: totp.step, failedLogins: 0, lockedUntil: null },
+      }),
+    );
+  } catch (err) {
+    // E-posta başka bir ETKİN hesapta: hangi tesiste olduğu (ve var olduğu) söylenmez, ayak izi sebepsiz.
+    if (!uniqueViolationOn(err, "email_etkin")) throw err;
+    await recordAudit(ctx.app, { tesisId: account.tesisId, actor: accountActor(account.id), event: "DAVET_ETKINLESTIRILEMEDI", entity: "Account", entityId: account.id });
+    throw new CloudError(409, "DAVET_ETKINLESTIRILEMEDI", "Davet etkinleştirilemedi; tesis yöneticinize başvurun (farklı bir e-posta adresiyle yeniden davet gerekebilir)");
+  }
   if (claimed.count === 0) throw invalidInvite();
   await recordAudit(ctx.app, { tesisId: account.tesisId, actor: accountActor(account.id), event: "HESAP_ETKINLESTI", entity: "Account", entityId: account.id });
   return { eposta: account.email, durum: "AKTIF" as const };

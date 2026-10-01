@@ -56,6 +56,9 @@ services:
       JWT_SECRET: ${JWT_SECRET:?JWT_SECRET .env'de tanımlı olmalı}
       # Seed yalnız şema BOŞ ve bu değer 1 iken (entrypoint §2); yalnız ilk `up`ta verilir.
       SEED_ON_EMPTY: ${SEED_ON_EMPTY:-0}
+      # İlk yöneticinin parolası (yalnız ilk `up`ta). Boşsa seed rastgele üretip loga bir kez
+      # basar; iki durumda da ilk girişte parola değişimi zorunlu.
+      ILK_YONETICI_PAROLASI: ${ILK_YONETICI_PAROLASI:-}
       LICENSE_SERVER_URL: ${LICENSE_SERVER_URL:-}
     ports:
       # Varsayılan YALNIZ bu makine (kapalı doğar); fabrika ağına açmak bilinçli karar:

@@ -62,6 +62,8 @@
 - **[ÇEKİRDEK]** Şema değişikliği sonrası `npm run prisma:generate` ZORUNLU (Prisma 7). Aynı kural Commands, Pull-sonrası ve Version Gotchas'ta üç kez yazılı — tek satır yeter. <sub>(CLAUDE.md:400, CLAUDE.md:56, CLAUDE.md:101)</sub>
 - **[ÇEKİRDEK]** Kök tsconfig yalnız `src/` (lint kapsamı 2026-09-05'te GENİŞLEDİ: `eslint src scripts prisma`) → `npm test` ÖN KOŞUL olarak `tsconfig.scripts.json` (scripts/+prisma/+src/, noEmit) geçidini koşar; tek test koşarken atlanır, acil kaçış `SKIP_TYPECHECK=1`. Build kök tsconfig ile; çıktıyı grepleyeceksen `typecheck:plain`. · bekçi: `Teks-Erp/scripts/run-all-tests.ts:176` <sub>(CLAUDE.md:86, CLAUDE.md:56)</sub>
 - **[ÇEKİRDEK]** DB performans kuralları (14 madde): FK index zorunlu (audit FK'ları istisna) · composite'te eşitlik önce range sonra · sık birlikte filtre = tek composite · yüksek hacimde cursor + MAX_OFFSET=10000 · JSON sorgusuna GIN önce · include yerine select · aggregation $queryRaw · createMany · EXPLAIN. · bekçi: `yok (MAX_OFFSET guard runtime 400)` · Kapanır: KÜME olarak, tek cümleyle DEĞİL — 14 madde 14 ayrı yüklemdir ve *"mandalın tabanı ihlali ADIYLA söyleyebiliyorsa sayı değil KÜME olmalıdır"* burada da geçerli. Kapanma ölçüsü **N/14**; bugün N ÖLÇÜLMEMİŞ (anahtar kelime taraması sınırsız eşleşir — `GIN` 139 dosyada geçiyor, hiçbiri bekçi değil). İlk ölçülebilir adım: 14 maddeyi ayrı satıra bölüp her birine `bekçi:` yazmak; o satır inince bu küme satırı SİLİNİR. <sub>(CLAUDE.md:248)</sub>
+- **[ÇEKİRDEK]** `JWT_SECRET` tek yüklemden geçer (`checkJwtSecret`, `src/lib/jwt-secret.ts`; ret listesi DEĞER değil SHA-256 özeti): yok/kısa açılışı DURDURUR; bilinen/zayıf sır MEVCUT kurulumu DURDURMAZ — yüksek sesli uyarı + `/api/admin/health` `jwtSecret.rotationRequired`, döndürme vardiya dışında `docs/ops/JWT-SIR-ROTASYONU.md` ile; YENİ kurulum yolu (geliştirme dışı seed) reddeder; örnek dosyalar değer taşımaz. · bekçi: `scripts/test_jwt_sir_kapisi.ts` <sub>(arşiv:2026-10-01)</sub>
+- **[ÇEKİRDEK]** İlk kurulum yöneticisi sabit parolayla DOĞMAZ: `admin / 123123` yalnız `--gelistirme` seed'indedir (`npm run seed`); Docker seed'i `ILK_YONETICI_PAROLASI` (politikaya uymalı, dosyaya yazılmaz) ya da bir kez gösterilen rastgele parola + `mustChangePassword` kullanır; paketli Windows kurulumu seed koşmaz. · bekçi: `scripts/test_parola_degisimi_zorunlu.ts §4 §5d §5e §5f` <sub>(arşiv:2026-10-01)</sub>
 
 ### Yasaklar
 
@@ -162,6 +164,7 @@ Native (cargo, `cd Teks-Erp/native && npm test`; commit kapısında koşar, carg
 
 ## Arşiv notları (tam metin, gerekçe ve ölçüm)
 
+- 2026-10-01 · 2026-10-01 — Güvenlik dilimi G20: fabrika JWT sırrı ret listesi (uyarır, durdurmaz), istek yetkisi DB'den, token daima süreli, ilk kurulum parolası ve zorunlu parola değişimi [ÇEKİRDEK] — `CLAUDE-NOT-ARSIVI.md` §2026-10-01 G20
 - 2026-08-26 · 2026-08-26 (akşam) — Sebep listesi büyüyünce Kaydet ekran dışında kalıyordu + sıra artık sürüklenerek KALICI — `CLAUDE-NOT-ARSIVI.md:1377-1444`
 - 2026-09-04 · 2026-09-04 — [ÇEKİRDEK] Prisma'nın İKİ motoru var ve yalnız biri platformdan bağımsız — `CLAUDE-NOT-ARSIVI.md:2639-2681`
 - 2026-09-30 · Lisans + patron entegrasyonu 5 (I6): Docker teslim künyesi 2e-S biçiminde, müşteri paketinden üretici kimliği çıktı

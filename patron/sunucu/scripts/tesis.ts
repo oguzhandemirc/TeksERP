@@ -6,6 +6,8 @@
 //        --sinif=URETIM --moduller=patron-bulut,production.enabled --bitis=<ISO|yok> [--pasif]
 //   npx tsx scripts/tesis.ts yonetici-davet --tesis=<uuid> --eposta=<e-posta> --ad="Ad Soyad" [--saat=72]
 //   npx tsx scripts/tesis.ts yonetici-yeniden-davet --tesis=<uuid> --eposta=<e-posta> [--saat=72]
+//        (ikisi de tesiste AKTİF hesap yöneticisi varken REDDEDİLİR; zorunluysa yalnız
+//        `--zorla --talep=<talep no> --gerekce="…"` ile — talep ve gerekçe bulut denetimine yazılır)
 //   npx tsx scripts/tesis.ts imha --tesis=<uuid> --isleyen="Ad Soyad" [--erken-talep=<talep no>] [--uygula]
 //        (Ek-6/A §4.3: KURU KOŞUM varsayılan — tablo başına silinecek satır; `--uygula` tek tx'te siler ve imha
 //        kaydını yazar. Hizmet açıkken ASLA; salt okuma süresi dolmadan yalnız yazılı erken talep numarasıyla.)
@@ -19,7 +21,7 @@ import { z } from "zod";
 import { closeDatabase, createDatabase } from "../src/lib/db";
 import { loadEnvFile } from "../src/lib/env";
 import { destroyFacility, sweepAfterDestruction } from "../src/services/facility-destruction";
-import { inviteFacilityAdmin, openFacility, registerInstallation, reinviteAdmin, setFacilityStatus } from "../src/services/vendor-admin.service";
+import { inviteFacilityAdmin, openFacility, overrideFromArgs, registerInstallation, reinviteAdmin, setFacilityStatus } from "../src/services/vendor-admin.service";
 
 function args(argv: readonly string[]): Record<string, string> {
   const out: Record<string, string> = {};
@@ -83,7 +85,8 @@ async function main(): Promise<void> {
       }
       case "yonetici-davet":
       case "yonetici-yeniden-davet": {
-        const g = { tesisId: uuidArg(a, "tesis"), email: need(a, "eposta"), validHours: Number(a.saat ?? "72") };
+        const zorla = overrideFromArgs(a);
+        const g = { tesisId: uuidArg(a, "tesis"), email: need(a, "eposta"), validHours: Number(a.saat ?? "72"), ...(zorla ? { zorla } : {}) };
         const r = komut === "yonetici-davet" ? await inviteFacilityAdmin(db.prisma, { ...g, name: need(a, "ad") }) : await reinviteAdmin(db.prisma, g);
         console.log(`✅ davet hazır — hesap ${r.accountId}, bitiş ${r.expiresAt.toISOString()}`);
         console.log(`   Davet belirteci (BİR KEZ gösterilir; yöneticiye güvenli kanaldan iletin): ${r.token}`);

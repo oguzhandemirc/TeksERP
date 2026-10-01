@@ -110,10 +110,11 @@ async function main() {
     await prisma.user.update({ where: { id: u1.id }, data: { isActive: false } });
     await expectErr("pasif kullanıcı PIN'i 401", "tanınmadı", () => AuthService.loginWithQuickPin("515151"));
 
-    // 10) getUserCredentials — panel okuması (PIN + kart kodu geri okunabilir)
+    // 10) getUserCredentials — panel okuması: düz PIN YALNIZ basım penceresinde (bellek), DB'de özet
     const cred = await AuthService.getUserCredentials(u1.id);
-    check("getUserCredentials → mevcut PIN okunur", cred.quickPin === "515151");
-    check("getUserCredentials → kart kodu (kart yoksa null)", cred.cardCode === null);
+    check("getUserCredentials → yeni verilen PIN basım penceresinde okunur", cred.quickPin === "515151" && cred.quickPinRevealed);
+    check("getUserCredentials → PIN özetli saklanıyor (OZET)", cred.quickPinSet && cred.quickPinStorage === "OZET");
+    check("getUserCredentials → kart kodu (kart yoksa null)", cred.cardCode === null && !cred.cardSet);
 
     // 11) createUser YALNIZ etkin yöntemlerin kimliğini üretir — pin+card etkin yap.
     await systemSettingService.setFeatureFlags(

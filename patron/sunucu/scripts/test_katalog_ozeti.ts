@@ -4,17 +4,20 @@
 // içe aktarmaz, sunucunun `node_modules`üne uzanmaz (katalog zod'lu tel sözleşmesine bağlı; içe aktaran fabrika
 // bekçisi ile uygulama tip denetimi, sunucu bağımlılığı kurulu olmayan CI işlerinde `Cannot find module 'zod'` verdi).
 //   §1 özet var ve canlı katalogdan üretilenle BAYT-EŞİT (bayatsa: `npx tsx scripts/test_katalog_ozeti.ts --yaz`)
-//   §2 özet boş değil (izin ≥ 10 · kök projeksiyon ≥ 20 · projeksiyon izni ≥ kök sayısı · rapor ailesi ≥ 1)
+//   §2 özet boş değil (izin ≥ 10 · kök projeksiyon ≥ 20 · projeksiyon izni ≥ kök sayısı · rapor anahtarı ≥ 1) · rapor
+//      sonucu RLS adları (rapor başına + geçiş aile adı) TEKİL ve her anahtar katalogda geçerli, izni katalogdan
 //   §3 okuyucular özeti okur, sunucu kataloğunu İÇE AKTARMAZ (fabrika `test_bulut_tel_aynasi` · uygulama `mirror.test`)
 // ⭐ KALICI SONDA (her koşumda): tek izni düşmüş özet §1 karşılaştırıcısında ısırır, özdeş susar · katalog içe
-//   aktaran satır §3 yükleminde ısırır, özeti `readFileSync` ile okuyan satır susar.
+//   aktaran satır §3 yükleminde ısırır, özeti `readFileSync` ile okuyan satır susar · rapor adı tekrarı §2b
+//   yükleminde ısırır, tekil susar.
 // Koşum: npx tsx scripts/test_katalog_ozeti.ts [--yaz]   (DB GEREKMEZ)
 // =============================================================================
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { CLOUD_PERMISSIONS } from "../src/catalog/permissions";
 import { PROJECTION_CATALOG, ROOT_PROJECTIONS } from "../src/catalog/projections";
-import { REPORT_FAMILY_PERMISSION, REPORTS_NOT_IN_CLOUD } from "../src/catalog/reports";
+import { CLOUD_PERMISSIONS as IZINLER } from "../src/catalog/permissions";
+import { REPORT_KEY_PERMISSION, REPORTS_NOT_IN_CLOUD, allReportProjections, reportVerdict } from "../src/catalog/reports";
 
 const KOK = path.resolve(__dirname, "..", "..", "..");
 export const OZET = "patron/sunucu/src/catalog/katalog-ozeti.json";
@@ -33,7 +36,7 @@ export interface KatalogOzeti {
   readonly CLOUD_PERMISSIONS: readonly string[];
   readonly ROOT_PROJECTIONS: readonly unknown[];
   readonly PROJECTION_PERMISSIONS: Readonly<Record<string, readonly string[]>>;
-  readonly REPORT_FAMILY_PERMISSION: Readonly<Record<string, string>>;
+  readonly REPORT_KEY_PERMISSION: Readonly<Record<string, string>>;
   readonly REPORTS_NOT_IN_CLOUD: readonly string[];
 }
 
@@ -43,7 +46,7 @@ function canliOzet(): KatalogOzeti {
     CLOUD_PERMISSIONS: [...CLOUD_PERMISSIONS],
     ROOT_PROJECTIONS,
     PROJECTION_PERMISSIONS: Object.fromEntries([...PROJECTION_CATALOG].map(([ad, d]) => [ad, [...d.permissions]])),
-    REPORT_FAMILY_PERMISSION,
+    REPORT_KEY_PERMISSION,
     REPORTS_NOT_IN_CLOUD: [...REPORTS_NOT_IN_CLOUD],
   };
 }
@@ -76,10 +79,19 @@ console.log("\n§2 özet boş değil");
 const o = canliOzet();
 const izinli = Object.keys(o.PROJECTION_PERMISSIONS).length;
 kontrol(
-  "§2a izin ≥ 10 · kök projeksiyon ≥ 20 · projeksiyon izni ≥ kök · rapor ailesi ≥ 1",
-  o.CLOUD_PERMISSIONS.length >= 10 && o.ROOT_PROJECTIONS.length >= 20 && izinli >= o.ROOT_PROJECTIONS.length && Object.keys(o.REPORT_FAMILY_PERMISSION).length >= 1,
+  "§2a izin ≥ 10 · kök projeksiyon ≥ 20 · projeksiyon izni ≥ kök · rapor anahtarı ≥ 1",
+  o.CLOUD_PERMISSIONS.length >= 10 && o.ROOT_PROJECTIONS.length >= 20 && izinli >= o.ROOT_PROJECTIONS.length && Object.keys(o.REPORT_KEY_PERMISSION).length >= 1,
   `${o.CLOUD_PERMISSIONS.length} · ${o.ROOT_PROJECTIONS.length} · ${izinli}`,
 );
+
+/** Rapor sonucu RLS adlarında tekrar (iki anahtar aynı ada düşerse sonuçlar ayrışmaz) — saf. */
+export function adTekrari(adlar: readonly string[]): string[] {
+  return adlar.filter((a, i) => adlar.indexOf(a) !== i);
+}
+const raporAdlari = allReportProjections();
+kontrol("§2b ⭐ rapor sonucu RLS adları (rapor başına + geçiş aile adı) TEKİL", adTekrari(raporAdlari).length === 0 && raporAdlari.length > Object.keys(o.REPORT_KEY_PERMISSION).length, adTekrari(raporAdlari).join(",") || `${raporAdlari.length} ad`);
+const gecersiz = Object.entries(REPORT_KEY_PERMISSION).filter(([k, p]) => !reportVerdict(k).ok || !(IZINLER as readonly string[]).includes(p)).map(([k]) => k);
+kontrol("§2c her rapor anahtarı bulutta geçerli ve izni katalogda", gecersiz.length === 0, gecersiz.join(","));
 
 console.log("\n§3 okuyucular özeti okur, kataloğu içe aktarmaz");
 for (const r of OKUYUCULAR) {
@@ -99,6 +111,8 @@ kontrol(
     katalogIceAktarimi('await import(path.join(KOK, "patron/sunucu/src/catalog/projections.ts"));').length === 1 &&
     katalogIceAktarimi('JSON.parse(readFileSync(path.join(KOK, "patron/sunucu/src/catalog/katalog-ozeti.json"), "utf8"));').length === 0,
 );
+
+kontrol("✓K3 ad tekrarı ısırır (`a-b/c` ile `a/b-c` aynı ada düşer) · tekil susar", adTekrari(["rapor.a-b-c", "rapor.x", "rapor.a-b-c"]).length === 1 && adTekrari(["rapor.a-b-c", "rapor.x"]).length === 0);
 
 console.log(`\n=== Sonuç: ${gecti} geçti, ${kaldi} başarısız ===`);
 process.exit(kaldi > 0 ? 1 : 0);

@@ -418,16 +418,30 @@ model User {
   // JWT iptal sayacı: yetki grant/revoke/set + şifre sıfırlamada artar. verifyToken
   // her istekte token'daki sürümle karşılaştırır → eski oturum anında düşer.
   tokenVersion  Int       @default(1)
-  /// QR personel kartı sırrı (32-hex, düz saklanır — fiziksel kart taşıyıcı sır;
-  /// bcrypt login sıcak yolunda gereksiz). Kart içeriği "TEKSU:<userId>:<cardToken>".
-  /// Kart kaybolursa admin ROTASYON yapar → eski kart anında ölür. NULL = kart yok.
-  /// Kartla giriş yalnız auth.loginMethods "card" içerirken çalışır.
+  /// İlk kurulum yöneticisi (seed) bilinen/üretilmiş parolayla doğar: true iken verifyToken
+  /// yalnız /auth/me · /auth/logout · /auth/change-password'e izin verir. Kendi parolasını
+  /// değiştirince iner. Mevcut kullanıcılar false (kilitlenmez).
+  mustChangePassword Boolean @default(false)
+  /// ESKİ düz kart sırrı: YENİ DEĞER YAZILMAZ. Başarılı girişte ya da `kisa-kimlik donustur`
+  /// ile `cardTokenDigest`e çevrilip NULL'lanır; kolon SİLİNMEZ (geri alma = yedekten restore).
+  /// Dönüşüme dek giriş SALT okur. Kart içeriği "TEKSU:<userId>:<sır>".
   cardToken     String?   @unique @db.VarChar(64)
-  /// Salt-PIN girişi için HIZLI PIN (6 hane) — şifreden AYRI ve sistem genelinde
-  /// BENZERSİZ (PIN tek başına kimliği belirler; findUnique ile giriş). Düz saklanır
-  /// (LAN-only + kısa ömür/rotasyon admin'den; cardToken emsali). NULL = tanımsız.
-  /// Salt-PIN girişi yalnız auth.loginMethods "pin" içerirken çalışır.
+  /// ESKİ düz hızlı PIN: YENİ DEĞER YAZILMAZ; `quickPinDigest`e dönüştürülüp NULL'lanır,
+  /// kolon silinmez. Dönüşüme dek giriş salt okur.
   quickPin      String?   @unique @db.VarChar(12)
+  /// Hızlı PIN ÖZETİ "<kid>:<HMAC-SHA256(anahtar, "pin:"+PIN)>" — anahtar LICENSE_DIR'de, DB kopyası
+  /// tek başına PIN vermez; deterministik → @unique "PIN benzersiz" kuralını korur. `kid` öneki
+  /// başka makineden gelen DB'deki anahtar uyuşmazlığını ölçülebilir kılar.
+  quickPinDigest  String?   @unique @db.VarChar(96)
+  /// Hızlı PIN'in son atandığı an. NULL = dönüşümle gelmiş (atanma anı bilinmiyor) ya da PIN yok.
+  quickPinSetAt   DateTime? @db.Timestamptz
+  /// Kart sırrı ÖZETİ: "<kid>:<hex>" — HMAC-SHA256(anahtar, "card:"+userId+":"+sır).
+  cardTokenDigest String?   @unique @db.VarChar(96)
+  /// Kartın son basıldığı (sırrın üretildiği) an. NULL = dönüşümle gelmiş ya da kart yok.
+  cardIssuedAt    DateTime? @db.Timestamptz
+  /// Kart düz metin döneminde basıldı (128 bit, sırrı eski dökümlerde düz durur) —
+  /// çalışmaya devam eder, panel "yeniden bas" önerir. Yeni basımda false.
+  cardTokenLegacy Boolean   @default(false)
   /// TOTP (RFC 6238) sırrı — base32. NULL = iki adımlı doğrulama KURULU DEĞİL.
   /// ⚠️ Kurulumun TEK yolu `TotpEnrollment` penceresidir; kullanıcı kendi başına
   /// yazamaz (bkz. o modelin notu). Düz saklanır — HMAC anahtarı olduğu için
@@ -678,6 +692,41 @@ model Session {
 
   @@index([userId])
   @@map("sessions")
+}
+
+/// KISA KİMLİK ANAHTARI EMANETİ: LICENSE_DIR'deki HMAC anahtarı yedek alıcılarına (BACKUP_KEY_DIR
+/// `*.tkpub`) `.tkenc` MÜHÜRLÜ — her döküm anahtarı şifreli taşır, yeni makineye dönüşte yedek
+/// parolası ya da kâğıt anahtarla geri konur. Yedek şifrelemesi kapalıysa satır doğmaz. DURUM tablosu
+/// (boot ve gece yedeği öncesi senkron yazar; iş kararı/rapor okumaz).
+model ShortCredentialKeyEscrow {
+  id        String   @id @default(uuid()) @db.Uuid
+  /// Anahtar kimliği (16 hex) — özetlerin "<kid>:" önekiyle aynı.
+  kid       String   @unique @db.VarChar(16)
+  /// `.tkenc` mühürlü 32 bayt anahtar, base64url.
+  sealed    String
+  /// Mühürlendiği alıcıların parmak izleri (sıralı, virgüllü) — alıcı kümesi değişince yeniden mühür.
+  recipientFingerprints String @db.VarChar(400)
+  createdAt DateTime @default(now()) @db.Timestamptz
+  updatedAt DateTime @updatedAt @db.Timestamptz
+
+  @@map("short_credential_key_escrows")
+}
+
+/// GİRİŞ DENEME KİLİDİ kovasının KALICI kopyası — yeniden başlatma kilidi sıfırlamasın; bellekteki
+/// harita otoritedir. Anahtar SHA-256 (IP/kullanıcı adı/cihaz kimliği düz yazılmaz). DURUM (defter
+/// değil): boşta kalan satır yaşa göre budanır (`services/helpers/login-lockout-store.helper.ts`).
+model LoginLockoutBucket {
+  id            String    @id @default(uuid()) @db.Uuid
+  keyHash       String    @unique @db.VarChar(64)
+  fails         Int       @default(0)
+  penaltyRounds Int       @default(0)
+  blockedUntil  DateTime? @db.Timestamptz
+  lastFailAt    DateTime? @db.Timestamptz
+  createdAt     DateTime  @default(now()) @db.Timestamptz
+  updatedAt     DateTime  @updatedAt @db.Timestamptz
+
+  @@index([lastFailAt])
+  @@map("login_lockout_buckets")
 }
 
 /// İKİ ADIMLI DOĞRULAMA KURULUM PENCERESİ (2026-09-01, uzaktan erişim).

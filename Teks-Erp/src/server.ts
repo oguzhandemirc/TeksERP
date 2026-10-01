@@ -7,6 +7,8 @@ import prisma, { pool } from './lib/prisma';
 import { getLanAddresses } from './lib/lan-addresses';
 import { startInstallationIdentity } from './jobs/installation-identity.job';
 import { startSuperadminAccount } from './jobs/superadmin.job';
+import { startShortCredentialJob } from './jobs/short-credential.job';
+import { flushLoginLockoutPersistence } from './middlewares/login-lockout';
 import { startModuleProfileJob } from './jobs/module-profile.job';
 import { warnStaleReportKeys } from './jobs/report-catalog.job';
 import { refreshDiscoveryCache } from './services/discovery.service';
@@ -189,6 +191,8 @@ function startLanListener(): Server {
     // anahtarı kapısı devre dışı kalır (emniyet supabı), yani bu satır olmadan
     // yeni bir kurulumda modülleri KİMSE açamazdı.
     startSuperadminAccount();
+    // Kısa kimlik (PIN/kart) anahtar halkası + yedek emaneti + düz/uyuşmayan uyarısı. Veri DÖNÜŞTÜRMEZ.
+    startShortCredentialJob();
     // KURULUM PROFİLİ — taze kurulumda modül anahtarlarını `.env`deki
     // `TEKSERP_PROFIL` profilinden yazar. Mevcut kurulumda grandfathering
     // damgası (migration 20260902230000) EN AZ BİR anahtar getirdiği için job
@@ -317,7 +321,11 @@ function gracefulShutdown(signal: string, exitCode = 0): void {
     }
     shutdownPhase = "gecikme flush + mDNS";
     void Promise.race([
-        Promise.allSettled([flushLatencyNow().catch(() => {}), stopMdnsAdvertiser()]),
+        Promise.allSettled([
+            flushLatencyNow().catch(() => {}),
+            stopMdnsAdvertiser(),
+            flushLoginLockoutPersistence().catch(() => {}),
+        ]),
         new Promise((resolve) => setTimeout(resolve, 2000).unref()),
     ]).finally(() => {
         shutdownPhase = "dinleyiciler kapatılıyor";

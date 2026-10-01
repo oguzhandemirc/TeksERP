@@ -54,6 +54,8 @@ export const ALWAYS_OPEN_ROUTES: readonly LicenseRouteRule[] = [
   { method: "POST", path: "/api/auth/login-card", reason: "kartla giriş" },
   { method: "POST", path: "/api/auth/login-quick-pin", reason: "PIN ile giriş" },
   { method: "POST", path: "/api/auth/logout", reason: "oturum kapatma daima mümkün" },
+  // Giriş akışının parçası: parola değişimi bekleyen yönetici değiştirmeden K5'te "verilerimi al"a giremez.
+  { method: "POST", path: "/api/auth/change-password", reason: "zorunlu parola değişimi (giriş akışı; yalnız kendi parolası, iş verisi yazmaz)" },
   // Giriş akışının parçası: sıfırlanan yönetici TOTP'yi kuramazsa K5'te "verilerimi al" için giremez.
   { method: "GET", path: "/api/auth/totp/enroll", reason: "iki adımlı doğrulama kurulumu (giriş akışı; K5'te veri erişimi için)" },
   { method: "POST", path: "/api/auth/totp/enroll", reason: "iki adımlı doğrulama kurulumu (giriş akışı; K5'te veri erişimi için)" },

@@ -83,7 +83,7 @@ export function NewUserCredentialsDialog({ user, password, onOpenChange, onManag
             {showPin && (
               <div className={`w-full ${showCard ? "border-t pt-3" : ""}`}>
                 <div className="text-xs text-neutral-500">Hızlı PIN</div>
-                {cred?.quickPin ? (
+                {cred?.quickPin && cred.quickPinRevealed ? (
                   <div className="font-mono text-3xl font-bold tracking-[0.3em]">{cred.quickPin}</div>
                 ) : (
                   <div className="text-sm italic text-neutral-500">üretilmedi</div>
@@ -109,8 +109,8 @@ export function NewUserCredentialsDialog({ user, password, onOpenChange, onManag
 
         <div className="rounded-md border bg-muted/20 p-2 text-center text-xs text-muted-foreground">
           <KeySquare className="mr-1 inline h-3 w-3" />
-          Bu kimlikleri istediğiniz zaman Kullanıcı → Hızlı PIN / Personel Kartı
-          sekmelerinden görebilir ve yenileyebilirsiniz.
+          Hızlı PIN ve kart kodu güvenlik gereği <b>sonradan gösterilmez</b> — şimdi yazdırın.
+          Kaybolursa Kullanıcı → Hızlı PIN / Personel Kartı sekmelerinden yenilenir.
         </div>
 
         <DialogFooter className="flex-col-reverse gap-2 sm:flex-row sm:justify-between">

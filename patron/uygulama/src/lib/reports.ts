@@ -1,17 +1,17 @@
-// Rapor isteği: istenebilir liste fabrikanın `rapor-katalogu` anlık kaydından okunur; aile → izin
+// Rapor isteği: istenebilir liste fabrikanın `rapor-katalogu` anlık kaydından okunur; anahtar → izin
 // eşlemesi bulut kataloğunun aynasıdır (ayna bekçisi `patron/sunucu/src/catalog/reports.ts` ile ölçer).
 // Parametreler fabrikanın kendi şemasıyla yeniden doğrulanır; uygulama yalnız tarih aralığı + ek alan toplar.
 import { trDateToIso } from "./forms";
 
-export const REPORT_FAMILY_PERMISSION: Readonly<Record<string, string>> = {
-  sales: "bulut:siparis:oku",
-  customer: "bulut:siparis:oku",
-  inventory: "bulut:stok:oku",
-  production: "bulut:uretim:oku",
-  quality: "bulut:uretim:oku",
-  dokuma: "bulut:uretim:oku",
-  subcontract: "bulut:uretim:oku",
-  finance: "bulut:cari-bakiye:oku",
+export const REPORT_KEY_PERMISSION: Readonly<Record<string, string>> = {
+  "sales/order-intake": "bulut:siparis:oku",
+  "sales/shipment-scorecard": "bulut:sevkiyat:oku",
+  "customer/scorecard": "bulut:siparis:oku",
+  "quality/scorecard": "bulut:uretim:oku",
+  "subcontract/scorecard": "bulut:uretim:oku",
+  "inventory/scorecard": "bulut:stok:oku",
+  "finance/aging": "bulut:cari-bakiye:oku",
+  "finance/cheque-due": "bulut:cek:oku",
 };
 
 export const REPORTS_NOT_IN_CLOUD: readonly string[] = ["audit/*", "production/operator-performance"];
@@ -29,12 +29,12 @@ export function catalogEntries(veri: unknown): CatalogEntry[] {
   return list.filter((e): e is CatalogEntry => typeof e?.anahtar === "string" && typeof e?.baslik === "string");
 }
 
-/** Hesap bu raporu isteyebilir mi (fail-closed: bilinmeyen aile = hayır). */
+/** Hesap bu raporu isteyebilir mi — izin RAPOR BAŞINA (fail-closed: bilinmeyen anahtar = hayır). */
 export function requestable(key: string, perms: readonly string[]): boolean {
   if (!perms.includes("bulut:rapor:oku")) return false;
   const family = key.split("/")[0] ?? "";
   if (REPORTS_NOT_IN_CLOUD.includes(key) || REPORTS_NOT_IN_CLOUD.includes(`${family}/*`)) return false;
-  const p = REPORT_FAMILY_PERMISSION[family];
+  const p = Object.prototype.hasOwnProperty.call(REPORT_KEY_PERMISSION, key) ? REPORT_KEY_PERMISSION[key] : undefined;
   return p !== undefined && perms.includes(p);
 }
 

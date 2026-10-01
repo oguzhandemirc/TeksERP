@@ -366,6 +366,9 @@ export interface FeatureFlags {
   /** Mobil cihaz eşleştirmesi zorunlu mu (true=aktif) yoksa pasif mi (false=default).
    *  Pasifken eşleşmemiş tabletler de sisteme girer (makine atfı NULL kalır). ENFORCE edilir. */
   devicePairingRequired: boolean;
+  /** Hızlı PIN / QR kartla giriş yalnız onaylı cihazdan mı (false=default; barındırılan
+   *  kurulumda backend hep true döner ve kapatılamaz). Açıkken eşleştirme de etkin zorunludur. */
+  shortCredentialApprovedDeviceOnly: boolean;
   /** Sevk onayı adımı zorunlu mu (false=default). Kapalıyken çuvallar seçilir seçilmez
    *  DOĞRUDAN sevk edilir (createShipment → DISPATCHED, stok o an düşer); açıkken önce
    *  PLANNED sevkiyat kurulur, çıkış ayrıca "Sevk Kapısı" ekranından onaylanır. */
@@ -548,7 +551,7 @@ export interface FeatureFlags {
   /** Mobil uygulama arka plana geçince (operatör çıkınca) anında kilitlensin mi
    *  (default true). Idle kilitten bağımsız. Client ENFORCE (yalnız mobil). */
   mobileLockOnBackground: boolean;
-  /** Mutlak oturum tavanı — gün (default 30, 0..365; 0 = süresiz). Zaman aşımı kapalı
+  /** Mutlak oturum tavanı — gün (default 30, 0..365; 0 = en fazla 365 gün). Zaman aşımı kapalı
    *  olsa bile token en fazla bu kadar gün yaşar (sızan token sonsuza kadar geçerli
    *  kalmasın). Backend ENFORCE eder (issueToken). */
   absoluteSessionCapDays: number;

@@ -72,7 +72,7 @@ Her adım istasyon kataloğu + rota şablonundan kurulur; **TOPUN rotası için*
 
 ### Süreç, sır, donanım
 - Backend TEK process: `pkill -f "tsx src/server.ts"` YASAK (yalnız kendi PID'in), ikinci Node süreci yasak (tek istisna bekçi koşucusunun 127.0.0.1'deki kendi test sunucusu — `Teks-Erp/scripts/bekci-http.ts`, yalnız `_test` DB). Seri port / donanım polling backend'e girmez; eski "Phase 1: gerçek donanım kodu yazma" yasağı 2026-09-05'te BACKEND'e daraltıldı — istemci sürücüleri (Electron IPC serialport/node-hid, mobil HAL BT-Classic) meşru; simülasyon per-cihaz VERİ bayrağı; uydurulmuş değer `source:'SIMULATED'` beyanıyla gider, kararı backend verir.
-- Sır hijyeni: süperadmin parolası/PIN/TOTP ve ayar şifresi repoya, log'a, sürüm notuna, audit yüküne GİRMEZ; `.env` uyarısı yalnız anahtar adı basar. `quickPin` düz metin ve tek başına kimliktir — hiçbir yüzeyden sızdırılmaz.
+- Sır hijyeni: süperadmin parolası/PIN/TOTP ve ayar şifresi repoya, log'a, sürüm notuna, audit yüküne GİRMEZ; `.env` uyarısı yalnız anahtar adı basar. `quickPin` ve kart kodu DB'de yalnız geri çevrilemez HMAC özetidir (anahtar `LICENSE_DIR`de, emaneti şifreli yedekte); PIN tek başına kimliktir — düz değer yalnız verildiği an döner, hiçbir yüzeyden sızdırılmaz.
 - Yeni paket eklemeden önce onay; Sonnet/ucuz model yalnız mekanik işte (kullanıcı tercihi).
 
 ### Belge ve not disiplini

@@ -98,6 +98,7 @@ import adminRoutes from "./routes/admin.routes";
 import { verifyToken } from "./middlewares/auth.middleware";
 import { requireAnyPermission } from "./middlewares/rbac.middleware";
 import dbCopyRoutes from "./routes/db-copy.routes";
+import shortCredentialRoutes from "./routes/short-credential.routes";
 import dashboardRoutes from "./routes/dashboard.routes";
 import reportsRoutes from "./routes/reports.routes";
 import { devicePublicRouter, deviceAdminRouter } from "./routes/device.routes";
@@ -563,6 +564,7 @@ app.use("/api/config-bundle", configBundleRoutes);
 // db-copies GENEL admin router'ından ÖNCE: Express 5 prefix eşleşmesinde daha
 // spesifik olan önce gelmeli, yoksa admin.routes içindeki bir yakalayıcı öne geçebilir.
 app.use("/api/admin/db-copies", dbCopyRoutes);
+app.use("/api/admin/short-credentials", shortCredentialRoutes);
 // ZENGİN sağlık yükü — `/health`ten AYRILDI (F-CORE-GUV-002). adminRoutes'tan
 // ÖNCE kaydedilir ki aynı prefix altında bu özel yol önce eşleşsin. Guard'lar
 // route satırında açık: kimlik + `admin:settings` (Sunucu Durumu ekranı zaten

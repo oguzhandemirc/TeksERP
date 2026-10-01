@@ -3,11 +3,11 @@
 // =============================================================================
 
 import prisma from "../lib/prisma";
-import { Prisma, ClientType } from "@prisma/client";
+import { ClientType } from "@prisma/client";
 import bcrypt from "bcryptjs";
 import { readPatronCloudUserId } from "./helpers/patron-cloud-user.helper";
 import jwt from "jsonwebtoken";
-import { randomBytes, randomInt, randomUUID } from "crypto";
+import { randomBytes, randomUUID, timingSafeEqual } from "crypto";
 import { JwtPayload } from "../types/api.types";
 import { AppError } from "../utils/app-error";
 import { AuditService } from "./audit.service";
@@ -17,9 +17,29 @@ import {
   readLoginMethods,
   readSameTypeSessionPolicy,
   readAbsoluteSessionCapDays,
+  MAX_ABSOLUTE_SESSION_CAP_DAYS,
 } from "./system-setting.service";
+import { loadJwtSecretAtBoot } from "../lib/jwt-secret";
+import { uyari } from "../lib/logger";
+import { passwordPolicyViolation } from "../constants/password-policy";
 import { SessionRegistryService } from "./session-registry.service";
 import { TotpAccountService } from "./totp-account.service";
+import { getShortCredentialKeyRing, ringKeyByKid } from "../lib/short-credential/keyring";
+import {
+  CARD_SECRET_BYTES,
+  digestCardSecret,
+  digestKid,
+  digestQuickPin,
+  digestsEqual,
+  parseCardCode,
+} from "../lib/short-credential/digest";
+import { countForeignDigests, requireKeyRing, ShortCredentialService } from "./short-credential.service";
+import {
+  forgetIssuedPin,
+  readIssued,
+  rememberIssuedCard,
+  rememberIssuedPin,
+} from "./helpers/credential-reveal.helper";
 
 /** Login çağrılarının istemci bağlamı — Session registry + aynı-tip politika için.
  *  clientType body'den (default 'mobile'); deviceId x-device-id/req.device'den;
@@ -42,6 +62,16 @@ export interface LoginContext {
 /** Gövdeden gelen istemci türü. `undefined` = mobil (tarihsel varsayılan). */
 export type LoginClientType = "electron" | "mobile" | "web";
 
+/** Giriş çıktısı. `mustChangePassword` yalnız panel girişinde true olabilir (tablete 403). */
+export type LoginResult = { token: string; user: JwtPayload; mustChangePassword: boolean };
+
+export const PASSWORD_CHANGE_REQUIRED_CODE = "PASSWORD_CHANGE_REQUIRED";
+export const PASSWORD_CHANGE_REQUIRED_MESSAGE =
+  "Parolanızı değiştirmeniz gerekiyor. Yeni parola belirlemeden devam edilemez.";
+export const CURRENT_PASSWORD_INVALID_CODE = "CURRENT_PASSWORD_INVALID";
+const PASSWORD_CHANGE_REQUIRED_MESSAGE_MOBILE =
+  "Bu hesabın parolası değiştirilmeli. Önce yönetim panelinden giriş yapıp yeni parola belirleyin.";
+
 /**
  * MASAÜSTÜ SINIFI istemci mi (Electron paneli ya da tarayıcıdaki web paneli)?
  *
@@ -63,21 +93,54 @@ function resolveDeviceType(clientType: LoginClientType | undefined): ClientType 
   return ClientType.MOBILE;
 }
 
-/** Personel kartı QR içeriği: TEKSU:<userId>:<32-hex token>. Makine QR'ı ham
- *  makine kodu (MAK-...) taşıdığından prefix çakışması yok. */
-const CARD_CODE_RE = /^TEKSU:([0-9a-fA-F-]{36}):([0-9a-fA-F]{32})$/;
+/** Eski panel için "PIN tanımlı ama gösterilemez" yer tutucusu (düz değer DB'de yok). */
+export const HIDDEN_PIN_PLACEHOLDER = "••••••";
+
+/** Anahtar uyuşmazlığı: özet, bu sunucunun anahtar halkasında olmayan bir anahtarla yazılmış. */
+function keyMismatchError(kind: "pin" | "card"): AppError {
+  const ne = kind === "pin" ? "hızlı PIN" : "personel kartı";
+  return AppError.unauthorized(
+    `Bu ${ne} doğrulanamıyor: kısa kimlik anahtarı bu veritabanıyla uyuşmuyor (yedek başka bir sunucudan geri yüklenmiş). ` +
+      "Yönetici: Kullanıcılar → Kısa Kimlikler'den anahtarı yedek parolasıyla geri yükleyin ya da PIN'leri toplu sıfırlayın. " +
+      "Şimdilik kullanıcı adı ve şifreyle giriş yapın.",
+    { code: "SHORT_CREDENTIAL_KEY_MISMATCH" },
+  );
+}
+
+function plainEquals(a: string, b: string): boolean {
+  const ab = Buffer.from(a, "utf8");
+  const bb = Buffer.from(b, "utf8");
+  return ab.length === bb.length && timingSafeEqual(ab, bb);
+}
 
 function loadJwtSecret(): string {
-  const secret = process.env.JWT_SECRET;
-  if (!secret || secret.length < 32) {
-    throw new Error(
-      "JWT_SECRET environment variable zorunlu ve en az 32 karakter olmalı. " +
-        ".env dosyanızı kontrol edin."
-    );
-  }
-  return secret;
+  // Yok/kısa sır açılışı durdurur (bugünkü gibi); bilinen/zayıf sır mevcut kurulumu
+  // DURDURMAZ — yüksek sesli uyarı + `/api/admin/health` jwtSecret bayrağı.
+  return loadJwtSecretAtBoot(process.env.JWT_SECRET, (mesaj) =>
+    uyari(
+      "guvenlik",
+      `JWT_SECRET DÖNDÜRÜLMELİ — ${mesaj} Backend açıldı; sır döndürülene dek token sahteleme riski sürer.`,
+    ),
+  );
 }
 const JWT_SECRET: string = loadJwtSecret();
+
+/** İstek başına izin kümesi önbelleği — anahtar (tokenVersion, isSystemAccount): her izin
+ *  yazımı tokenVersion'ı artırdığından eski giriş kendiliğinden ıskalanır. */
+const REQUEST_PERMISSION_TTL_MS = 30_000;
+const REQUEST_PERMISSION_CACHE_MAX = 5000;
+type RequestPermissionEntry = {
+  tokenVersion: number;
+  isSystemAccount: boolean;
+  permissions: string[];
+  fetchedAt: number;
+};
+const requestPermissionCache = new Map<string, RequestPermissionEntry>();
+
+/** YALNIZ BEKÇİ — istek izin önbelleğini sıfırla. */
+export function resetRequestPermissionCacheForTest(): void {
+  requestPermissionCache.clear();
+}
 
 export class AuthService {
   /**
@@ -89,7 +152,7 @@ export class AuthService {
     username: string,
     password: string,
     ctx?: LoginContext
-  ): Promise<{ token: string; user: JwtPayload }> {
+  ): Promise<LoginResult> {
     const user = await prisma.user.findUnique({
       where: { username },
       select: {
@@ -130,21 +193,42 @@ export class AuthService {
   static async loginWithCard(
     cardCode: string,
     ctx?: LoginContext
-  ): Promise<{ token: string; user: JwtPayload }> {
+  ): Promise<LoginResult> {
     const methods = await readLoginMethods();
     if (!methods.enabled.includes("card")) {
       throw AppError.forbidden(
         "Kartla giriş kapalı — Genel Ayarlar'dan giriş yöntemlerine 'QR kart' eklenebilir"
       );
     }
-    const m = CARD_CODE_RE.exec((cardCode ?? "").trim());
-    if (!m) throw AppError.unauthorized("Geçersiz personel kartı");
-    const user = await prisma.user.findFirst({
-      where: { id: m[1], cardToken: m[2].toLowerCase(), isActive: true },
-      select: { id: true, username: true, tokenVersion: true },
+    const parsed = parseCardCode(cardCode);
+    if (!parsed) throw AppError.unauthorized("Geçersiz personel kartı");
+    const row = await prisma.user.findUnique({
+      where: { id: parsed.userId },
+      select: {
+        id: true, username: true, tokenVersion: true, isActive: true,
+        cardTokenDigest: true, cardToken: true,
+      },
     });
-    if (!user) {
+    const user = row && row.isActive ? { id: row.id, username: row.username, tokenVersion: row.tokenVersion } : null;
+    let ok = false;
+    if (row && row.isActive && row.cardTokenDigest) {
+      const ring = getShortCredentialKeyRing();
+      const kid = digestKid(row.cardTokenDigest);
+      const key = ring.ok && kid ? ringKeyByKid(ring.ring, kid) : null;
+      if (!key) throw keyMismatchError("card");
+      ok = digestsEqual(row.cardTokenDigest, digestCardSecret(key, row.id, parsed.secret));
+    } else if (row && row.isActive && row.cardToken) {
+      // Dönüşüm koşulana dek düz kolon SALT OKUNUR (geçiş yedeği); yazılmaz.
+      ok = plainEquals(row.cardToken.toLowerCase(), parsed.secret);
+    }
+    if (!ok || !user) {
       throw AppError.unauthorized("Kart geçersiz veya iptal edilmiş — yöneticiden yeni kart isteyin");
+    }
+    const legacyCard = row?.cardTokenDigest ? null : (row?.cardToken ?? null);
+    if (legacyCard) {
+      const result = await this.issueToken(user, ctx);
+      await ShortCredentialService.convertOnLogin(user.id, "card", legacyCard).catch(() => false);
+      return result;
     }
     return this.issueToken(user, ctx);
   }
@@ -157,7 +241,7 @@ export class AuthService {
   static async loginWithQuickPin(
     pin: string,
     ctx?: LoginContext
-  ): Promise<{ token: string; user: JwtPayload }> {
+  ): Promise<LoginResult> {
     const methods = await readLoginMethods();
     if (!methods.enabled.includes("pin")) {
       throw AppError.forbidden(
@@ -168,19 +252,43 @@ export class AuthService {
     if (!/^\d{6}$/.test(normalized)) {
       throw AppError.unauthorized("Geçersiz PIN");
     }
-    const user = await prisma.user.findFirst({
+    const ring = getShortCredentialKeyRing();
+    const candidates = ring.ok ? ring.ring.keys.map((k) => digestQuickPin(k, normalized)) : [];
+    if (candidates.length > 0) {
+      const hit = await prisma.user.findFirst({
+        where: { quickPinDigest: { in: candidates }, isActive: true },
+        select: { id: true, username: true, tokenVersion: true, quickPinDigest: true },
+      });
+      if (hit && candidates.some((c) => digestsEqual(c, hit.quickPinDigest ?? ""))) {
+        return this.issueToken({ id: hit.id, username: hit.username, tokenVersion: hit.tokenVersion }, ctx);
+      }
+    }
+    // Dönüşüm koşulana dek düz kolon SALT OKUNUR (geçiş yedeği); yazılmaz.
+    const legacy = await prisma.user.findFirst({
       where: { quickPin: normalized, isActive: true },
       select: { id: true, username: true, tokenVersion: true },
     });
-    if (!user) throw AppError.unauthorized("PIN tanınmadı — yöneticinizden hızlı PIN isteyin");
-    return this.issueToken(user, ctx);
+    if (legacy) {
+      const result = await this.issueToken(legacy, ctx);
+      await ShortCredentialService.convertOnLogin(legacy.id, "pin", normalized).catch(() => false);
+      return result;
+    }
+    if (ring.ok && (await countForeignDigests("quickPinDigest", ring.ring.keys.map((k) => k.kid))) > 0) {
+      throw keyMismatchError("pin");
+    }
+    if (!ring.ok && (await prisma.user.count({ where: { quickPinDigest: { not: null } } })) > 0) {
+      throw AppError.unauthorized(
+        "Hızlı PIN şu an doğrulanamıyor: kısa kimlik anahtarı okunamadı. Kullanıcı adı ve şifreyle giriş yapın; yöneticiye haber verin.",
+        { code: "SHORT_CREDENTIAL_KEY_UNAVAILABLE" },
+      );
+    }
+    throw AppError.unauthorized("PIN tanınmadı — yöneticinizden hızlı PIN isteyin");
   }
 
   /**
-   * Admin: kullanıcıya hızlı PIN ata. `pin` verilirse (6 hane) o kullanılır —
-   * BAŞKASINDA varsa 409 (benzersizlik kimliğin temeli); verilmezse çakışmayan
-   * rastgele 6 hane üretilir. Düz döner (admin operatöre iletir). Açık oturumlar
-   * etkilenmez. `clear=true` → PIN kaldırılır (salt-PIN girişi kapanır).
+   * Admin: kullanıcıya hızlı PIN ata. `pin` verilirse (6 hane) o kullanılır — BAŞKASINDA varsa
+   * 409; verilmezse çakışmayan rastgele 6 hane. DB'ye yalnız ÖZET yazılır; düz PIN bu cevapta
+   * ve kısa basım penceresinde (`credential-reveal`) döner. `clear=true` → PIN kaldırılır.
    */
   static async setQuickPin(
     userId: string,
@@ -189,12 +297,17 @@ export class AuthService {
   ): Promise<{ pin: string | null }> {
     const user = await prisma.user.findUnique({
       where: { id: userId },
-      select: { id: true, username: true, isActive: true, quickPin: true },
+      select: { id: true, username: true, isActive: true, quickPin: true, quickPinDigest: true },
     });
     if (!user || !user.isActive) throw AppError.notFound("Kullanıcı bulunamadı veya pasif");
+    const hadPin = user.quickPin != null || user.quickPinDigest != null;
 
     if (input.clear) {
-      await prisma.user.update({ where: { id: userId }, data: { quickPin: null } });
+      await prisma.user.update({
+        where: { id: userId },
+        data: { quickPin: null, quickPinDigest: null, quickPinSetAt: null },
+      });
+      forgetIssuedPin(userId);
       await AuditService.log({
         userId: actorUserId, action: "UPDATE", tableName: "USER_QUICK_PIN",
         recordId: userId, newData: { username: user.username, cleared: true },
@@ -202,48 +315,22 @@ export class AuthService {
       return { pin: null };
     }
 
-    if (input.pin !== undefined) {
-      const manual = input.pin.trim();
-      if (!/^\d{6}$/.test(manual)) throw AppError.badRequest("Hızlı PIN 6 haneli rakam olmalı");
-      try {
-        await prisma.user.update({ where: { id: userId }, data: { quickPin: manual } });
-      } catch (e) {
-        if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002") {
-          throw AppError.conflict(
-            "Bu PIN başka bir kullanıcıda tanımlı — hızlı PIN benzersiz olmalı (farklı bir PIN girin veya rastgele üretin)"
-          );
-        }
-        throw e;
-      }
-      await AuditService.log({
-        userId: actorUserId, action: "UPDATE", tableName: "USER_QUICK_PIN",
-        recordId: userId, newData: { username: user.username, rotated: user.quickPin != null },
-      }).catch(() => undefined);
-      return { pin: manual };
-    }
-
-    // Rastgele üret — P2002'de yeniden dene (1M kombinasyonda çakışma nadir).
-    for (let attempt = 0; attempt < 10; attempt++) {
-      const candidate = String(randomInt(0, 1_000_000)).padStart(6, "0");
-      try {
-        await prisma.user.update({ where: { id: userId }, data: { quickPin: candidate } });
-        await AuditService.log({
-          userId: actorUserId, action: "UPDATE", tableName: "USER_QUICK_PIN",
-          recordId: userId, newData: { username: user.username, rotated: user.quickPin != null },
-        }).catch(() => undefined);
-        return { pin: candidate };
-      } catch (e) {
-        if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002") continue;
-        throw e;
-      }
-    }
-    throw AppError.internal("Benzersiz PIN üretilemedi — tekrar deneyin");
+    const pin = await ShortCredentialService.assignQuickPin(
+      userId,
+      input.pin !== undefined ? input.pin.trim() : null,
+    );
+    rememberIssuedPin(userId, pin);
+    await AuditService.log({
+      userId: actorUserId, action: "UPDATE", tableName: "USER_QUICK_PIN",
+      recordId: userId, newData: { username: user.username, rotated: hadPin },
+    }).catch(() => undefined);
+    return { pin };
   }
 
   /**
-   * Admin: personel kartı sırrını üret/YENİLE (rotasyon). Yeni 32-hex token yazılır;
-   * dönen cardCode QR olarak basılır. Eski kart anında geçersiz. Açık JWT oturumları
-   * ETKİLENMEZ (tokenVersion bump yok — yalnız kart kimliği değişir).
+   * Admin: personel kartı sırrını üret/YENİLE (rotasyon). 256 bit yeni sır; DB'ye yalnız ÖZETİ
+   * yazılır, dönen cardCode QR olarak basılır (kısa basım penceresinde yeniden okunabilir).
+   * Eski kart anında geçersiz. Açık JWT oturumları ETKİLENMEZ.
    */
   static async rotateCardToken(
     userId: string,
@@ -251,19 +338,31 @@ export class AuthService {
   ): Promise<{ cardCode: string; rotated: boolean }> {
     const user = await prisma.user.findUnique({
       where: { id: userId },
-      select: { id: true, username: true, isActive: true, cardToken: true },
+      select: { id: true, username: true, isActive: true, cardToken: true, cardTokenDigest: true },
     });
     if (!user || !user.isActive) throw AppError.notFound("Kullanıcı bulunamadı veya pasif");
-    const token = randomBytes(16).toString("hex"); // 32-hex
-    await prisma.user.update({ where: { id: userId }, data: { cardToken: token } });
+    const ring = requireKeyRing();
+    const secret = randomBytes(CARD_SECRET_BYTES).toString("hex");
+    await prisma.user.update({
+      where: { id: userId },
+      data: {
+        cardTokenDigest: digestCardSecret(ring.active, user.id, secret),
+        cardIssuedAt: new Date(),
+        cardTokenLegacy: false,
+        cardToken: null,
+      },
+    });
+    const rotated = user.cardToken != null || user.cardTokenDigest != null;
+    const cardCode = `TEKSU:${user.id}:${secret}`;
+    rememberIssuedCard(userId, cardCode);
     await AuditService.log({
       userId: actorUserId,
       action: "UPDATE",
       tableName: "USER_CARD_TOKEN",
       recordId: userId,
-      newData: { username: user.username, rotated: user.cardToken != null },
+      newData: { username: user.username, rotated },
     }).catch(() => undefined);
-    return { cardCode: `TEKSU:${user.id}:${token}`, rotated: user.cardToken != null };
+    return { cardCode, rotated };
   }
 
   /**
@@ -281,22 +380,44 @@ export class AuthService {
   }
 
   /**
-   * Admin: kullanıcının mobil kimlik bilgilerini OKU — hızlı PIN + QR kart kodu.
-   * Panel bunları HER ZAMAN gösterir (kart QR sürekli görünür, mevcut PIN görünür).
-   * GÜVENLİK: her ikisi de düz saklandığından geri okunabilir; bu uç yalnız
-   * admin:users yetkisiyle çağrılır ("bu ekranı yalnız yönetici görür" kararı).
+   * Admin: kullanıcının mobil kimlik DURUMU. Düz değer YALNIZ yeni verildiyse (kısa basım
+   * penceresi) ya da henüz dönüştürülmemiş düz kolondan döner; özetli PIN için yer tutucu
+   * (eski panel "tanımlı" görsün), özetli kart için null. Yeni alanlar durumu taşır.
    */
-  static async getUserCredentials(
-    userId: string
-  ): Promise<{ quickPin: string | null; cardCode: string | null }> {
+  static async getUserCredentials(userId: string) {
     const user = await prisma.user.findUnique({
       where: { id: userId },
-      select: { id: true, quickPin: true, cardToken: true },
+      select: {
+        id: true, quickPin: true, cardToken: true,
+        quickPinDigest: true, quickPinSetAt: true,
+        cardTokenDigest: true, cardIssuedAt: true, cardTokenLegacy: true,
+      },
     });
     if (!user) throw AppError.notFound("Kullanıcı bulunamadı");
+    const issued = readIssued(userId);
+    const ring = getShortCredentialKeyRing();
+    const ringKids = ring.ok ? ring.ring.keys.map((k) => k.kid) : [];
+    const keyOk = (d: string | null) => d === null || ringKids.includes(digestKid(d) ?? "");
+    const quickPinSet = user.quickPinDigest !== null || user.quickPin !== null;
+    const cardSet = user.cardTokenDigest !== null || user.cardToken !== null;
+    const legacyCardCode = user.cardToken ? `TEKSU:${user.id}:${user.cardToken}` : null;
     return {
-      quickPin: user.quickPin,
-      cardCode: user.cardToken ? `TEKSU:${user.id}:${user.cardToken}` : null,
+      quickPin: issued.pin?.value ?? user.quickPin ?? (quickPinSet ? HIDDEN_PIN_PLACEHOLDER : null),
+      cardCode: issued.card?.value ?? legacyCardCode,
+      quickPinSet,
+      quickPinSetAt: user.quickPinSetAt,
+      quickPinRevealed: issued.pin !== null,
+      quickPinKeyOk: keyOk(user.quickPinDigest),
+      quickPinStorage: user.quickPinDigest !== null ? ("OZET" as const) : user.quickPin !== null ? ("DUZ" as const) : null,
+      cardSet,
+      cardIssuedAt: user.cardIssuedAt,
+      cardRevealed: issued.card !== null,
+      cardKeyOk: keyOk(user.cardTokenDigest),
+      cardLegacy: user.cardToken !== null || (user.cardTokenDigest !== null && user.cardTokenLegacy),
+      revealExpiresAt: (() => {
+        const t = Math.max(issued.pin?.until ?? 0, issued.card?.until ?? 0);
+        return t > 0 ? new Date(t).toISOString() : null;
+      })(),
     };
   }
 
@@ -335,13 +456,26 @@ export class AuthService {
       tokenVersion: number;
     },
     ctx?: LoginContext
-  ): Promise<{ token: string; user: JwtPayload }> {
+  ): Promise<LoginResult> {
     // Patron bulutu teknik kullanıcısının GİRİŞ YÖNTEMİ YOKTUR: parolası panelden sıfırlansa ya da PIN/kart verilse
     // bile oturum açılmaz (tek token üreticisi burası; mesaj genel — hesabın varlığını doğrulamaz).
     if (user.id === (await readPatronCloudUserId())) {
       throw AppError.unauthorized("Geçersiz kullanıcı adı veya şifre");
     }
     const permissions = await this.getEffectivePermissions(user.id);
+
+    // Zorunlu parola değişimi yalnız panelde yapılabilir: tablete token verilseydi her istek
+    // 403 alırdı. Panel token'ı alır ama verifyToken onu parola değiştirme ucuna daraltır.
+    const flags = await prisma.user.findUnique({
+      where: { id: user.id },
+      select: { mustChangePassword: true },
+    });
+    const mustChangePassword = flags?.mustChangePassword === true;
+    if (mustChangePassword && !isDesktopClient(ctx?.clientType)) {
+      throw AppError.forbidden(PASSWORD_CHANGE_REQUIRED_MESSAGE_MOBILE, {
+        code: PASSWORD_CHANGE_REQUIRED_CODE,
+      });
+    }
 
     // Masaüstü (Electron VE web paneli) girişi: kullanıcının en az bir MASAÜSTÜ
     // (mobil-olmayan) izni olmalı. Yalnız mobil izinli (mobile:*) hesap panele
@@ -362,8 +496,8 @@ export class AuthService {
     //    süre bitince client otomatik çıkar, sunucu da 401 verir.
     //  • Kapalı: token yine de MUTLAK oturum tavanına (auth.absoluteSessionCapDays,
     //    default 30 gün) kadar geçerlidir — sızan token sonsuza kadar yaşamasın.
-    //    Tavan 0 ise gerçekten SÜRESİZ imzalanır (exp claim YOK). Oturum yine
-    //    tokenVersion / session iptali / logout ile sonlandırılabilir.
+    //    Tavan 0 ise en uzun tavan (MAX_ABSOLUTE_SESSION_CAP_DAYS) uygulanır; exp'siz
+    //    token üretilmez.
     // (Dakika ayarı yoksa reader eski saat ayarına ×60 düşer — geriye-uyum.)
     const timeoutEnabled = await readAutoLogoutOnExpiry();
     const sessionMinutes = await readSessionDurationMinutes();
@@ -372,22 +506,13 @@ export class AuthService {
     // jti = Session satırı anahtarı. Taban (mutlak) son-kullanma:
     //   • zaman aşımı açık → now + oturum süresi (dakika)
     //   • kapalı + cap>0 → now + cap gün (arka plan tavanı)
-    //   • kapalı + cap=0 → uzak gelecek (gerçekten süresiz; exp claim yok)
+    //   • kapalı + cap=0 → now + en uzun tavan (gün)
     const jti = randomUUID();
     const nowMs = Date.now();
-    const FAR_FUTURE = new Date("9999-12-31T23:59:59.000Z");
-    let hasExp: boolean;
-    let effectiveExpiresAt: Date;
-    if (timeoutEnabled) {
-      hasExp = true;
-      effectiveExpiresAt = new Date(nowMs + sessionMinutes * 60 * 1000);
-    } else if (capDays > 0) {
-      hasExp = true;
-      effectiveExpiresAt = new Date(nowMs + capDays * 24 * 60 * 60 * 1000);
-    } else {
-      hasExp = false;
-      effectiveExpiresAt = FAR_FUTURE;
-    }
+    const effectiveCapDays = capDays > 0 ? capDays : MAX_ABSOLUTE_SESSION_CAP_DAYS;
+    let effectiveExpiresAt: Date = timeoutEnabled
+      ? new Date(nowMs + sessionMinutes * 60 * 1000)
+      : new Date(nowMs + effectiveCapDays * 24 * 60 * 60 * 1000);
 
     // Part C — süreli izinler: kullanıcının EN YAKIN gelecekteki validUntil'i tabanla
     // min'lenir. Süreli izin verilmişse (grant tokenVersion++ ile re-login zorlar)
@@ -417,14 +542,12 @@ export class AuthService {
       }),
     ]);
     for (const boundary of [nearestExpiry?.validUntil, nearestOpening?.validFrom]) {
-      if (boundary && (!hasExp || boundary.getTime() < effectiveExpiresAt.getTime())) {
+      if (boundary && boundary.getTime() < effectiveExpiresAt.getTime()) {
         effectiveExpiresAt = boundary;
-        hasExp = true;
       }
     }
 
-    // Session expiresAt: JWT exp ile HİZALI (kapalı+cap=0 → uzak gelecek; notify
-    // 'aktif oturum' kontrolü expiresAt>now'a bakar).
+    // Session expiresAt: JWT exp ile HİZALI (notify 'aktif oturum' kontrolü expiresAt>now'a bakar).
     const expiresAt = effectiveExpiresAt;
     // ⚠️ WEB kendi yuvasını alır — ELECTRON'a katlanmaz. Katlansaydı aynı kişinin
     // telefon tarayıcısındaki oturumu masaüstü panelini düşürürdü (politika
@@ -446,25 +569,25 @@ export class AuthService {
 
     // jti token'a jwt.sign jwtid ile eklenir — sign payload'ında jti TUTMUYORUZ
     // (jsonwebtoken "jti already present" hatası verir). Dönen JwtPayload jti taşır.
+    // Giriş, istek izin önbelleğini tazeler: tokenVersion artırmayan değişiklik (süreli iznin açılışı)
+    // yeni token'la bayat kümeden okunmasın.
+    requestPermissionCache.delete(user.id);
     const signPayload = {
       userId: user.id,
       username: user.username,
       permissions,
       tokenVersion: user.tokenVersion,
     };
-    const signOptions: jwt.SignOptions = { jwtid: jti };
     // exp claim = effectiveExpiresAt'a göre saniye (aynı nowMs tabanı → Session.expiresAt
-    // ile birebir hizalı). hasExp=false ise exp claim konmaz (gerçekten süresiz).
-    if (hasExp) {
-      signOptions.expiresIn = Math.max(
-        1,
-        Math.floor((effectiveExpiresAt.getTime() - nowMs) / 1000),
-      );
-    }
+    // ile birebir hizalı).
+    const signOptions: jwt.SignOptions = {
+      jwtid: jti,
+      expiresIn: Math.max(1, Math.floor((effectiveExpiresAt.getTime() - nowMs) / 1000)),
+    };
     const token = jwt.sign(signPayload, JWT_SECRET, signOptions);
 
     const payload: JwtPayload = { ...signPayload, jti };
-    return { token, user: payload };
+    return { token, user: payload, mustChangePassword };
   }
 
   /**
@@ -540,6 +663,91 @@ export class AuthService {
   }
 
   /**
+   * İstek başına yetki kümesi — token'daki `permissions` claim'i DEĞİL, DB'deki atama.
+   * Sızan JWT sırrıyla kendi token'ını genişletilmiş izinle yeniden imzalayan kullanıcı
+   * böylece yetki kazanmaz. TTL tazeliktir: tazeleme düşerse aynı anahtarlı bayat giriş
+   * döner, giriş hiç yoksa hata yukarı çıkar (fail-closed).
+   */
+  static async resolveRequestPermissions(
+    userId: string,
+    tokenVersion: number,
+    isSystemAccount: boolean,
+  ): Promise<string[]> {
+    const now = Date.now();
+    const hit = requestPermissionCache.get(userId);
+    const sameKey =
+      hit !== undefined && hit.tokenVersion === tokenVersion && hit.isSystemAccount === isSystemAccount;
+    if (sameKey && now - hit.fetchedAt < REQUEST_PERMISSION_TTL_MS) return hit.permissions;
+    try {
+      const permissions = await this.getEffectivePermissions(userId);
+      if (requestPermissionCache.size >= REQUEST_PERMISSION_CACHE_MAX) requestPermissionCache.clear();
+      requestPermissionCache.set(userId, { tokenVersion, isSystemAccount, permissions, fetchedAt: now });
+      return permissions;
+    } catch (err) {
+      if (sameKey) return hit.permissions;
+      throw err;
+    }
+  }
+
+  /**
+   * Kullanıcının KENDİ parolasını değiştirmesi (zorunlu ilk değişim dahil). Başarıda bayrak
+   * iner, tokenVersion artar ve bütün oturumlar düşer — istemci yeni parolayla yeniden girer.
+   * Yanlış mevcut parola `CURRENT_PASSWORD_INVALID` (400): 401 panelin oturum-bitti dalını açardı.
+   */
+  static async changeOwnPassword(
+    userId: string,
+    currentPassword: string,
+    newPassword: string,
+  ): Promise<void> {
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: {
+        username: true,
+        passwordHash: true,
+        isActive: true,
+        isSystemAccount: true,
+        tokenVersion: true,
+        mustChangePassword: true,
+      },
+    });
+    if (!user || !user.isActive) {
+      throw AppError.unauthorized("Hesap pasif veya bulunamadı. Tekrar giriş yapın.");
+    }
+    if (user.isSystemAccount) {
+      throw AppError.forbidden("Satıcı hesabının parolası yalnız kurulum aracından değiştirilir.", {
+        code: "SYSTEM_ACCOUNT_PASSWORD",
+      });
+    }
+    if (!(await bcrypt.compare(currentPassword, user.passwordHash))) {
+      throw AppError.badRequest("Mevcut parola yanlış.", { code: CURRENT_PASSWORD_INVALID_CODE });
+    }
+    const violation = passwordPolicyViolation(newPassword);
+    if (violation) throw AppError.badRequest(violation, { code: "PASSWORD_POLICY" });
+    if (await bcrypt.compare(newPassword, user.passwordHash)) {
+      throw AppError.badRequest("Yeni parola mevcut parolayla aynı olamaz.", { code: "PASSWORD_UNCHANGED" });
+    }
+
+    const passwordHash = await bcrypt.hash(newPassword, 10);
+    const claimed = await prisma.user.updateMany({
+      where: { id: userId, isActive: true, tokenVersion: user.tokenVersion },
+      data: { passwordHash, mustChangePassword: false, tokenVersion: { increment: 1 } },
+    });
+    if (claimed.count === 0) {
+      throw AppError.conflict("Hesap bu sırada değişti. Tekrar giriş yapıp yeniden deneyin.", {
+        code: "PASSWORD_CHANGE_CONFLICT",
+      });
+    }
+    await SessionRegistryService.revokeAllForUser(userId, "PASSWORD_RESET").catch(() => undefined);
+    await AuditService.log({
+      userId,
+      action: "UPDATE",
+      tableName: "USER_PASSWORD",
+      recordId: userId,
+      newData: { username: user.username, selfService: true, requiredChange: user.mustChangePassword },
+    });
+  }
+
+  /**
    * Bir kullanıcının şu an geçerli efektif permission code'larını döner.
    * validFrom/validUntil pencereleri filtrelenir.
    */
@@ -553,7 +761,7 @@ export class AuthService {
     // Erken dönüş grant sorgusundan ÖNCE: DB'ye hiç satır yazılmaz, okunmaz.
     // `matchesPermission` (`rbac.middleware.ts`) `*`i ZATEN ilk satırda tanır →
     // bütün `requirePermission`/`requireAnyPermission` kapıları maliyetsiz geçer.
-    // Tek çağıran `issueToken` olduğu için bu bir GİRİŞ başına maliyettir.
+    // Çağıranlar `issueToken` (giriş) ve `resolveRequestPermissions` (TTL'li istek önbelleği).
     const owner = await prisma.user.findUnique({
       where: { id: userId },
       select: { isSystemAccount: true },

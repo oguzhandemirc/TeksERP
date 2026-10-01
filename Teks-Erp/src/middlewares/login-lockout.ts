@@ -1,19 +1,18 @@
 // =============================================================================
-// TeksERP - Login Deneme Kilidi (hızlı PIN + kart) — bellek-içi throttle
+// TeksERP - Login Deneme Kilidi (şifre + hızlı PIN + kart + ayar/yedek parolası)
 // =============================================================================
-// Salt hızlı-PIN (6 hane, sistem-genelinde benzersiz) + QR kart girişleri
-// LAN'da parola sormadan tek istekte kimlik belirler → throttle olmadan
-// brute-force ile hesap düşürülebilir. Bu modül IP (yoksa cihaz kimliği)
-// başına ardışık yanlış denemeleri sayar, eşik aşılınca artan ceza uygular.
-//
-// auth.middleware.ts:11-43 `lastSeenWrites` desenini aynalar: modül-seviye Map,
-// tek-process invariant (yerel tek-sunucu kurulum), restart'ta sıfırlanır
-// (kalıcı defter değil — LAN brute-force'a karşı yeterli). Boyut-cap sweep ile
-// sınırsız büyüme engellenir. Ayarlar readPinLockout* ile CANLI okunur (cache'siz).
+// Kova başına ardışık yanlış denemeyi sayar, eşik aşılınca artan ceza uygular.
+// Bellekteki harita tek süreçte otoritedir (F20 atomik rezervasyon senkron bölgede);
+// her değişiklik `login-lockout-store`a yazılır ve açılışta geri yüklenir — yeniden
+// başlatma kilidi/ceza merdivenini SIFIRLAMAZ. Anahtar SHA-256'lıdır: IP, kullanıcı adı,
+// cihaz kimliği ne bellekte düz anahtar ne DB'de düz değer olarak durur.
 // =============================================================================
 
+import { createHash } from "node:crypto";
 import type { Request } from "express";
 import { readPinLockoutConfig } from "../services/system-setting.service";
+import { loadActiveBuckets, pruneIdleBuckets, saveBucket } from "../services/helpers/login-lockout-store.helper";
+import { uyari } from "../lib/logger";
 import { readWebHardeningConfig, resolveClientIp } from "./web-hardening";
 import "../types/express-augment";
 
@@ -25,6 +24,86 @@ type FailEntry = { fails: number; penaltyRounds: number; blockedUntil: number; l
 const failCounts = new Map<string, FailEntry>();
 /** Bellek tavanı — bu sayının üstünde sweep ile bayat girişler budanır. */
 const MAX_ENTRIES = 5000;
+
+function hashKey(key: string): string {
+  return createHash("sha256").update(key, "utf8").digest("hex");
+}
+
+// ── Kalıcılık: açılışta bir kez yükle, değişeni arkadan yaz, saatte bir buda ──────────
+let hydration: Promise<void> | null = null;
+const dirty = new Set<string>();
+let pendingFlush: Promise<void> | null = null;
+let lastPruneMs = 0;
+let lastPersistWarnMs = 0;
+const PRUNE_EVERY_MS = 60 * 60 * 1000;
+
+function warnPersist(err: unknown): void {
+  // Kalıcılık düşerse kilit BELLEKTE çalışmaya devam eder; log'u boğmadan bildir.
+  if (Date.now() - lastPersistWarnMs < 5 * 60 * 1000) return;
+  lastPersistWarnMs = Date.now();
+  uyari("login-lockout", "kilit kalıcı kopyası yazılamadı/okunamadı (bellekte sürüyor):", err instanceof Error ? err.message : err);
+}
+
+function ensureHydrated(): Promise<void> {
+  if (!hydration) {
+    hydration = loadActiveBuckets(MAX_ENTRIES)
+      .then((rows) => {
+        for (const r of rows) {
+          if (!failCounts.has(r.keyHash)) {
+            failCounts.set(r.keyHash, {
+              fails: r.fails,
+              penaltyRounds: r.penaltyRounds,
+              blockedUntil: r.blockedUntil,
+              lastFailAt: r.lastFailAt,
+            });
+          }
+        }
+      })
+      .catch(warnPersist);
+  }
+  return hydration;
+}
+
+async function flushDirty(): Promise<void> {
+  const keys = [...dirty];
+  dirty.clear();
+  for (const h of keys) {
+    const e = failCounts.get(h);
+    if (!e) continue;
+    await saveBucket({ keyHash: h, ...e });
+  }
+  if (Date.now() - lastPruneMs > PRUNE_EVERY_MS) {
+    lastPruneMs = Date.now();
+    await pruneIdleBuckets();
+  }
+}
+
+function markDirty(h: string): void {
+  dirty.add(h);
+  if (pendingFlush) return;
+  pendingFlush = new Promise<void>((resolve) => setImmediate(resolve))
+    .then(flushDirty)
+    .catch(warnPersist)
+    .finally(() => {
+      pendingFlush = null;
+      if (dirty.size > 0) markDirty([...dirty][0]!);
+    });
+}
+
+/** Bekleyen yazımları bitirir — kapanışta ve bekçide ölçüm öncesi. */
+export async function flushLoginLockoutPersistence(): Promise<void> {
+  while (pendingFlush || dirty.size > 0) {
+    if (!pendingFlush) markDirty([...dirty][0]!);
+    await pendingFlush;
+  }
+}
+
+/** Yalnız bekçi: süreç yeniden başlamış gibi belleği boşaltır (sonraki rezervasyon DB'den yükler). */
+export async function simulateLockoutRestartForTests(): Promise<void> {
+  await flushLoginLockoutPersistence();
+  failCounts.clear();
+  hydration = null;
+}
 
 /**
  * Login isteğinden kilit anahtarını çöz: IP öncelikli (LAN brute-force'a karşı
@@ -120,9 +199,10 @@ export function resolveLoginLockoutKeys(
   ];
 }
 
-/** `string` (eski sözleşme) ya da kova listesi → kova listesi. */
-function toSpecs(key: string | LockoutKeySpec[]): LockoutKeySpec[] {
-  return typeof key === "string" ? [{ key, budgetMultiplier: 1 }] : key;
+/** `string` (eski sözleşme) ya da kova listesi → kova listesi (+ SHA-256 anahtar). */
+function toSpecs(key: string | LockoutKeySpec[]): Array<LockoutKeySpec & { hash: string }> {
+  const specs = typeof key === "string" ? [{ key, budgetMultiplier: 1 }] : key;
+  return specs.map((s) => ({ ...s, hash: hashKey(s.key) }));
 }
 
 /**
@@ -160,6 +240,7 @@ export async function reserveLoginAttempt(
   // interleaving noktası kalır.
   const { enabled, attempts, penaltySec, escalateAfter, longPenaltyMin } = await readPinLockoutConfig();
   if (!enabled) return { blocked: false, retryAfterSec: 0, justLocked: false };
+  await ensureHydrated();
 
   // --- SENKRON BÖLGE: buradan sonra await YOK → paralel N istek seri işlenir. ---
   const now = Date.now();
@@ -171,7 +252,7 @@ export async function reserveLoginAttempt(
   //    doldurmaya devam eder ve cezayı sonsuza uzatırdı.
   let blockedForMs = 0;
   for (const spec of specs) {
-    const e = failCounts.get(spec.key);
+    const e = failCounts.get(spec.hash);
     if (e && e.blockedUntil > now) blockedForMs = Math.max(blockedForMs, e.blockedUntil - now);
   }
   if (blockedForMs > 0) {
@@ -182,7 +263,7 @@ export async function reserveLoginAttempt(
   let justLocked = false;
   let newBlockMs = 0;
   for (const spec of specs) {
-    const entry = failCounts.get(spec.key)
+    const entry = failCounts.get(spec.hash)
       ?? { fails: 0, penaltyRounds: 0, blockedUntil: 0, lastFailAt: 0 };
     // F48: escalation ladder (penaltyRounds) idle sürede çürür — meşru kullanıcı
     // kalıcı olarak uzun-cezaya yapışmasın. Pencere = longPenaltyMin (yeni ayar YOK).
@@ -207,7 +288,8 @@ export async function reserveLoginAttempt(
       justLocked = true;
       newBlockMs = Math.max(newBlockMs, entry.blockedUntil - now);
     }
-    failCounts.set(spec.key, entry);
+    failCounts.set(spec.hash, entry);
+    markDirty(spec.hash);
   }
 
   // Sınırsız büyümeyi önle: tavan aşılınca aktif olmayan (blok bitmiş + fails=0 +
@@ -242,10 +324,11 @@ export function resetLoginLockout(key: string | LockoutKeySpec[]): void {
   // içeridedir. Bu, `penaltyRounds`ın bilinçli olarak SIFIRLANMAMASI kuralıyla
   // (aşağıdaki F48 notu) aynı dengeye dayanır.
   for (const spec of toSpecs(key)) {
-    const e = failCounts.get(spec.key);
+    const e = failCounts.get(spec.hash);
     if (!e) continue;
     e.fails = 0;
     e.blockedUntil = 0;
+    markDirty(spec.hash);
   }
 }
 
@@ -258,8 +341,9 @@ export function resetLoginLockout(key: string | LockoutKeySpec[]): void {
  */
 export function releaseLoginAttempt(key: string | LockoutKeySpec[]): void {
   for (const spec of toSpecs(key)) {
-    const e = failCounts.get(spec.key);
+    const e = failCounts.get(spec.hash);
     if (!e) continue;
     if (e.fails > 0) e.fails -= 1;
+    markDirty(spec.hash);
   }
 }

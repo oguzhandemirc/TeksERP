@@ -11,7 +11,7 @@
 //      (tesis imhası; hedef kümesi = CLOUD_TABLES − RETAINED_TABLES İKİ YÖNLÜ — yeni tablo imhadan kaçamaz)
 //   §5 rota tablosu: yöntem+yol tekil · her yazma rotası işlem kimliği ya da GEREKÇELİ muafiyet beyan
 //      eder, her okuma rotası OKUMA · muafiyet gerekçesi boş olamaz
-//   §6 katalog: izin kodları tekil · her okuma izni en az bir projeksiyon/rapor ailesi açar · yazma ve
+//   §6 katalog: izin kodları tekil · her okuma izni en az bir projeksiyon/rapor açar · yazma ve
 //      yönetim izinleri kodda kullanılır (ölü izin yok) · hata kodları tekil
 //   §7 protokol aynası: `src/lisans-protokol/` ↔ `Teks-Erp/src/lib/license/protocol/` bayt-eşit
 //   §8 yaşa göre silinen ALAN beyanı (`AGED_FIELDS`, IP 30 gün): denetim satırı YALNIZ `maintenance.ts`te güncellenir
@@ -26,7 +26,7 @@ import { readdirSync, readFileSync, statSync } from "node:fs";
 import path from "node:path";
 import { CLOUD_PERMISSIONS } from "../src/catalog/permissions";
 import { PROJECTION_CATALOG } from "../src/catalog/projections";
-import { REPORT_FAMILY_PERMISSION } from "../src/catalog/reports";
+import { REPORT_KEY_PERMISSION } from "../src/catalog/reports";
 import { API_ROUTES, type ApiRouteDef } from "../src/http/api-routes";
 import { CLOUD_ERROR_CODES } from "../src/lib/errors";
 import { APP_COLUMN_GRANTS, APP_GRANTS, CLOUD_TABLES } from "../src/lib/db-grants";
@@ -183,11 +183,11 @@ function katalog(): void {
   kontrol("§6a izin kodları tekil", new Set(CLOUD_PERMISSIONS).size === CLOUD_PERMISSIONS.length);
   const acilan = new Set<string>();
   for (const d of PROJECTION_CATALOG.values()) for (const p of d.permissions) acilan.add(p);
-  for (const p of Object.values(REPORT_FAMILY_PERMISSION)) acilan.add(p);
+  for (const p of Object.values(REPORT_KEY_PERMISSION)) acilan.add(p);
   acilan.add("bulut:rapor:oku");
   const tumKod = kaynaklar.filter((f) => !f.endsWith(path.join("catalog", "permissions.ts"))).map((f) => readFileSync(f, "utf8")).join("\n");
   const olu = CLOUD_PERMISSIONS.filter((p) => !acilan.has(p) && !tumKod.includes(`"${p}"`));
-  kontrol("§6b her izin bir projeksiyon/rapor ailesi açar ya da kodda kapı olarak kullanılır (ölü izin yok)", olu.length === 0, olu.join(",") || "temiz");
+  kontrol("§6b her izin bir projeksiyon/rapor açar ya da kodda kapı olarak kullanılır (ölü izin yok)", olu.length === 0, olu.join(",") || "temiz");
   kontrol("§6c hata kodları tekil", new Set(CLOUD_ERROR_CODES).size === CLOUD_ERROR_CODES.length);
 }
 

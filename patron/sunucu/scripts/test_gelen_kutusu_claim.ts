@@ -9,9 +9,14 @@
 //   §4 `sonuc`: yalnız sahibi kurulum; aynı sonucun tekrarı kabul (ağ tekrarı), farklı sonuç RET;
 //      REDDEDILDI kod + TR mesaj ister
 //   §5 claim süresi: bakım işi ISLENIYOR → BEKLIYOR; yeniden alınır
+//   §7 (G19) claim yazarın GÜNCEL durumunu sorar: kilitlenen · izni daraltılan · arşivlenen · sıfırlanan hesabın
+//      bekleyen mesajı fabrikaya GİTMEZ, REDDEDILDI `YAZAR_YETKISIZ` (TR ileti) olur ve ayak izi düşer · izni kalan
+//      türü alınır · daha önce alınmış (claim süresi dolmuş) mesaj yine alınır (fabrika işlemiş olabilir) · ret
+//      kalıcıdır (sonraki `al` getirmez, fabrikanın sonucu RET)
 // Koşum: npx tsx scripts/test_gelen_kutusu_claim.ts
 // =============================================================================
 import { randomUUID } from "node:crypto";
+import { withTesis } from "../src/lib/tenant";
 import { expireClaims } from "../src/services/maintenance";
 import { AccountsResponseSchema } from "../src/wire/esitleme";
 import { api, ekKurulum, hesapKur, imzali, kanonik, kontrol, ortamKur, sonuc, temizleTesis, tesisKur, type Ortam, type TestHesabi, type TestKurulumu } from "./lib/test-ortam";
@@ -152,6 +157,67 @@ async function hesaplarBolumu(o: Ortam, k: TestKurulumu, hesaplar: readonly Test
   kontrol("§6d gövdede tanınmayan anahtar → 400 GOVDE_GECERSIZ", fazla.status === 400 && fazla.json.details?.code === "GOVDE_GECERSIZ");
 }
 
+async function yazarBolumu(o: Ortam): Promise<void> {
+  console.log("\n§7 claim yazarın güncel durumunu sorar");
+  const y = await tesisKur(o);
+  try {
+    const yon = await hesapKur(o, y.tesisId, ["bulut:hesap:yonet", "bulut:siparis:oku"]);
+    const yazar = (izin: string[]) => hesapKur(o, y.tesisId, izin);
+    const gecikmeli = await yazar(["bulut:siparis:yaz"]);
+    const m7 = randomUUID();
+    await yaz(o, gecikmeli, m7);
+    const ilk = await imzali(o, y, "/v1/gelen-kutusu/al", { govde: { v: 1, enFazla: 1 } });
+    await expireClaims(o.ctx, o.saat.simdi() + (o.ctx.config.GELEN_KUTUSU_CLAIM_DK + 1) * 60_000);
+    const kilitli = await yazar(["bulut:siparis:yaz"]);
+    const daraltilan = await yazar(["bulut:siparis:yaz", "bulut:cari:yaz"]);
+    const arsiv = await yazar(["bulut:siparis:yaz"]);
+    const sifir = await yazar(["bulut:siparis:yaz"]);
+    const uygun = await yazar(["bulut:siparis:yaz"]);
+    const [m1, m2, m3, m4, m5, m6] = [randomUUID(), randomUUID(), randomUUID(), randomUUID(), randomUUID(), randomUUID()];
+    await yaz(o, kilitli, m1);
+    await yaz(o, daraltilan, m2);
+    await yaz(o, daraltilan, m3, { ad: "Daraltılan Cari", roller: { musteri: true, tedarikci: false } }, "CARI");
+    await yaz(o, arsiv, m4);
+    await yaz(o, sifir, m5);
+    await yaz(o, uygun, m6);
+    const yonet = (yol: string, govde: Record<string, unknown>, method = "POST") => api(o, method, yol, { belirtec: yon.belirtec, govde: { clientToken: randomUUID(), ...govde } });
+    const degisim = [
+      await yonet(`/api/hesaplar/${kilitli.accountId}/durum`, { durum: "KILITLI" }),
+      await yonet(`/api/hesaplar/${daraltilan.accountId}`, { izinler: ["bulut:cari:yaz"] }, "PATCH"),
+      await yonet(`/api/hesaplar/${arsiv.accountId}/durum`, { durum: "PASIF" }),
+      await yonet(`/api/hesaplar/${sifir.accountId}/sifirla`, {}),
+      await yonet(`/api/hesaplar/${gecikmeli.accountId}/durum`, { durum: "KILITLI" }),
+    ].map((r) => r.status);
+    const al = await imzali(o, y, "/v1/gelen-kutusu/al", { govde: { v: 1, enFazla: 20 } });
+    const alinan = (al.json as unknown as Alinan).kayitlar.map((x) => x.mesajId).sort();
+    kontrol("§7a hazırlık: ilk alım + beş hesap değişikliği", (ilk.json as unknown as Alinan).kayitlar[0]?.mesajId === m7 && degisim.every((x) => x === 200), degisim.join(","));
+    kontrol(
+      "§7b ⭐ yalnız UYGUN yazarın mesajı + izni kalan türü + daha önce alınmış mesaj alınır; kilitli · daraltılan türü · arşiv · sıfırlanan GİTMEZ",
+      JSON.stringify(alinan) === JSON.stringify([m3, m6, m7].sort()),
+      `${alinan.length} alındı`,
+    );
+    const durumlar = await withTesis(o.goc.prisma, { tesisId: y.tesisId }, (tx) => tx.inboxMessage.findMany({ where: { tesisId: y.tesisId, messageId: { in: [m1, m2, m4, m5] } } }));
+    kontrol(
+      "§7c ⭐ dört mesaj REDDEDILDI · kod YAZAR_YETKISIZ · işlenme anı dolu · sahip kurulum yok",
+      durumlar.length === 4 && durumlar.every((m) => m.status === "REDDEDILDI" && (m.result as { kod?: string } | null)?.kod === "YAZAR_YETKISIZ" && m.processedAt !== null && m.ownerInstallationId === null),
+      durumlar.map((m) => m.status).join(","),
+    );
+    const gor = await api(o, "GET", `/api/gelen-kutusu/${m1}`, { belirtec: yon.belirtec });
+    const gv = gor.json.data as { durum?: string; sonuc?: { mesaj?: string } };
+    kontrol("§7d ret yöneticiye TR iletiyle görünür", gv.durum === "REDDEDILDI" && /fabrikaya iletilmedi/.test(gv.sonuc?.mesaj ?? ""), gv.sonuc?.mesaj ?? "");
+    const iz = await withTesis(o.goc.prisma, { tesisId: y.tesisId }, (tx) => tx.accountAudit.findMany({ where: { tesisId: y.tesisId, event: "GELEN_KUTUSU_REDDEDILDI" } }));
+    kontrol("§7e ayak izi: dört GELEN_KUTUSU_REDDEDILDI (aktör bulut)", iz.length === 4 && iz.every((x) => x.actor === "bulut"), String(iz.length));
+    const tekrar = await imzali(o, y, "/v1/gelen-kutusu/al", { govde: { v: 1, enFazla: 20 } });
+    const sonucRet = await imzali(o, y, "/v1/gelen-kutusu/sonuc", { govde: { v: 1, sonuclar: [{ mesajId: m1, durum: "ISLENDI", varlikId: randomUUID() }] } });
+    kontrol(
+      "§7f ret kalıcı: sonraki `al` getirmez · fabrikanın sonucu RET (DURUM_CAKISMASI)",
+      (tekrar.json as unknown as Alinan).kayitlar.length === 0 && (sonucRet.json as unknown as { ret: { mesajId: string; kod: string }[] }).ret.some((r) => r.mesajId === m1 && r.kod === "DURUM_CAKISMASI"),
+    );
+  } finally {
+    await temizleTesis(o, y.tesisId);
+  }
+}
+
 async function main(): Promise<void> {
   const o = await ortamKur();
   const k = await tesisKur(o);
@@ -169,6 +235,7 @@ async function main(): Promise<void> {
     await sonucBolumu(o, k, satis, alinan);
     await sureBolumu(o, k, satis, alinan[2]!);
     await hesaplarBolumu(o, k, [satis, okur, baska], kapaliHesap);
+    await yazarBolumu(o);
   } finally {
     await temizleTesis(o, k.tesisId);
     await temizleTesis(o, kapali.tesisId);

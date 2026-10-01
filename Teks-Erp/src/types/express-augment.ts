@@ -36,6 +36,8 @@ declare module "express-serve-static-core" {
      * dolana kadar süperadmin kalırdı. Modül anahtarı kapısı buna bakar.
      */
     isSystemAccount?: boolean;
+    /** Hesap zorunlu parola değişimi bekliyor mu — `verifyToken` ailesi DB'den doldurur. */
+    mustChangePassword?: boolean;
   }
 }
 

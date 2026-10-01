@@ -105,9 +105,19 @@ switch ($Action) {
         if (-not (Test-Path $BackupDir)) { New-Item -ItemType Directory -Path $BackupDir -Force | Out-Null }
         Say "Container'lar build edilip baslatiliyor (ilk seferde 2-4 dk)..."
         # Seed yalniz bos semada ve yalniz ilk kurulumun `up`inda istenir (entrypoint.sh adim 2).
-        if ($ilkKurulum) { $env:SEED_ON_EMPTY = '1' }
+        # Ilk yonetici parolasi burada uretilir, yalniz bu `up`a verilir (.env.docker'a YAZILMAZ)
+        # ve asagida bir kez gosterilir; ilk giriste degistirmek zorunlu.
+        $ilkParola = $null
+        if ($ilkKurulum) {
+            $env:SEED_ON_EMPTY = '1'
+            $ilkParola = New-Secret 8
+            $env:ILK_YONETICI_PAROLASI = $ilkParola
+        }
         try { Compose up -d --build }
-        finally { Remove-Item Env:SEED_ON_EMPTY -ErrorAction SilentlyContinue }
+        finally {
+            Remove-Item Env:SEED_ON_EMPTY -ErrorAction SilentlyContinue
+            Remove-Item Env:ILK_YONETICI_PAROLASI -ErrorAction SilentlyContinue
+        }
         Say "Backend saglik kontrolu..."
         $healthy = Test-Health
         $ip = Get-LanIp
@@ -120,7 +130,12 @@ switch ($Action) {
         Write-Host "  Bu sunucuda:    http://localhost:$ApiPort"
         Write-Host "  Fabrika aginda: http://${ip}:$ApiPort" -ForegroundColor Green
         Write-Host "  Swagger:        http://${ip}:$ApiPort/api-docs"
-        Write-Host "  Test girisi:    admin / 123123"
+        if ($ilkParola) {
+            Write-Host "  Ilk giris:      admin / $ilkParola" -ForegroundColor Yellow
+            Write-Host "                  (bir kez gosterilir - ilk giriste yeni parola istenir)"
+        } else {
+            Write-Host "  Giris:          panelde tanimli kullanicilarla"
+        }
         Write-Host ""
         Write-Host "  Migration her acilista, seed yalniz bos semada ilk kurulumda calisir (entrypoint.sh)."
         Write-Host "  Log:  .\yonet.ps1 logs    Durum: .\yonet.ps1 status    Durdur: .\yonet.ps1 down"

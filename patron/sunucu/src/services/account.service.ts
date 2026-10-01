@@ -136,7 +136,15 @@ export interface CreateAccountInput {
   readonly sablon?: RoleTemplate;
 }
 
-/** Davet: hesap DAVETLI doğar; davet belirteci YALNIZ canlı yanıtta (tekrar yanıtı "gösterilemez"). */
+/** Aynı tesiste PASİF olmayan hesap aynı e-postayı taşıyamaz (DB'de kısmi UNIQUE de seddeder). Başka tesis SORULMAZ. */
+export const emailInUseHere = (): CloudError => new CloudError(409, "EPOSTA_KULLANIMDA", "Bu e-posta adresi bu tesiste zaten bir hesapta kayıtlı");
+
+export async function assertEmailFreeInFacility(tx: Tx, tesisId: string, email: string): Promise<void> {
+  if (await tx.account.findFirst({ where: { tesisId, email, status: { not: "PASIF" } }, select: { id: true } })) throw emailInUseHere();
+}
+
+/** Davet: hesap DAVETLI doğar; davet belirteci YALNIZ canlı yanıtta (tekrar yanıtı "gösterilemez"). E-postanın başka tesiste
+ *  etkin olup olmadığı burada SORULMAZ (davet e-postayı tutmaz); çakışma yalnız onayda, genel bir iletiyle reddedilir. */
 export async function createAccount(ctx: CloudContext, s: SessionContext, input: CreateAccountInput): Promise<WriteResult> {
   requireAdmin(s);
   const email = normalizeEmail(input.eposta);
@@ -150,10 +158,12 @@ export async function createAccount(ctx: CloudContext, s: SessionContext, input:
       clientToken: input.clientToken,
       body: { eposta: email, ad: input.ad, izinler: permissions },
       lock: { name: "ACCOUNT_ADMIN", key: s.tesisId },
-      run: (tx) =>
-        tx.account.create({
+      run: async (tx) => {
+        await assertEmailFreeInFacility(tx, s.tesisId, email);
+        return tx.account.create({
           data: { tesisId: s.tesisId, email, name: input.ad, permissions, status: "DAVETLI", inviteTokenHash: invite.digest, inviteExpiresAt: invite.expiresAt, createdById: s.accountId },
-        }),
+        });
+      },
       respond: (a) => ({
         status: 201,
         data: { hesap: accountView(a), davet: invite.token, davetBitis: invite.expiresAt.toISOString() },
@@ -162,7 +172,7 @@ export async function createAccount(ctx: CloudContext, s: SessionContext, input:
       audit: (a) => [{ actor: accountActor(s.accountId), event: "HESAP_DAVET", entity: "Account", entityId: a.id, summary: { izinler: permissions } }],
     });
   } catch (err) {
-    if (uniqueViolationOn(err, "email")) throw new CloudError(409, "EPOSTA_KULLANIMDA", "Bu e-posta adresiyle bir bulut hesabı zaten var");
+    if (uniqueViolationOn(err, "tesis_email")) throw emailInUseHere();
     throw err;
   }
 }
