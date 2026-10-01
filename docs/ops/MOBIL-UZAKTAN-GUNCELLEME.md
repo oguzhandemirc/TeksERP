@@ -206,10 +206,12 @@ operatörün "Yükle" dokunuşudur.
 
 **Çapa:** `mobil/src/lib/apk-imza-capasi.json` — JS paketine girer (OTA kod imzasıyla korunur, OTA ile değişebilir).
 Satır yalnız `cd Teks-Erp && npx tsx scripts/guven-capasi-ekle.ts tablet …` ile girer (KURU; sonra `--yaz`).
-Anahtar kararı panelle ORTAKTIR (aynı kid ailesi `paket-<yıl>` / `panel-<yıl>`):
-- (a) `guven-capasi-ekle.ts tablet --paket-kid=paket-2026 --yaz`
-- (b) `guven-capasi-ekle.ts tablet --dosya=~/.tekserp/panel-uretim/panel-2026.panel.json --yaz` (anahtar panel
-  töreninde üretilen dosya; `panel-imza.ts anahtar-uret`).
+Anahtar kararı (kullanıcı, 2026-10-01) panelle ORTAKTIR: ayrı istemci yayın anahtarı `panel-2026` + çevrimdışı yedek
+`panel-2026-2`; ikisi de tablet çapasına girer (PAKET anahtarı künye imzalamaz). Üretim ve çapa komut sırası tek yerde:
+`docs/ops/ELECTRON-OTOMATIK-GUNCELLEME.md` §İmzalı künye → "Anahtar kararı" (döngü `for c in panel tablet` iki çapayı
+birlikte yazar). APK yayınında anahtar: `--anahtar=$HOME/.tekserp/panel-uretim/panel-2026.panel.json` ya da
+`TEKSERP_TABLET_IMZA_ANAHTARI`; yedek yalnız birincil kaybolursa (rotasyon kilidi geçer — yayındaki künyenin
+`capa`sında).
 
 Boş çapa: tablet hiçbir APK künyesini doğrulayamaz → APK güncellemesi DURUR (OTA kanalı ayrıdır, etkilenmez).
 Bu yüzden yayın kapısı boş çapada **APK yayınını durdurur, OTA yayınını UYARIR** (panelden farkı: panelin
@@ -233,7 +235,8 @@ Bu yüzden yayın kapısı boş çapada **APK yayınını durdurur, OTA yayını
 (künyenin `capa`sı yeni kid'i taşır); ancak sonra yeni anahtarla imzalanır (kapı aksi hâlde durur).
 
 **Geçiş sırası — "eski tablet ne yapar":**
-1. Anahtar kararı + tablet çapası satırı (panelle aynı karar; çapa boşken APK yayını durur).
+1. Anahtar üretimi + tablet çapası satırları (`panel-2026` + yedek `panel-2026-2`, panelle aynı sıra; çapa boşken APK
+   yayını durur, OTA uyarır).
 2. **OTA ile yeter, yeni APK GEREKMEZ:** doğrulayıcı saf JS'tir; parça parça okuma `expo-file-system` 19'un
    yeni API'si (`File.open().readBytes`) — native yarısı aynı paketin ikinci modülü, OTA destekli her APK'da
    (2026-08-27'den beri) var; kripto saf JS `@noble/*`. Çapalı OTA önce testfabrika, sonra terfi — bu İLK OTA

@@ -598,11 +598,33 @@ panel eski sürümle çalışmaya devam eder.
 çapalı panel PAKETLENMEZ (`kanal-kapisi.mjs panel-capa`, derlemeden önce ve sonra) — hiçbir güncellemeyi
 doğrulayamayan panel çıkışsız kapıdır.
 
-**Anahtar kararı (kullanıcıda):**
-- (a) mevcut PAKET anahtarı `paket-2026` künyeyi de imzalar (farklı `typ`): `guven-capasi-ekle.ts panel
-  --paket-kid=paket-2026 --yaz`. Tören yok, ama tek anahtar ele geçerse hem backend paketleri hem panel düşer.
-- (b) ayrı panel yayın anahtarı: `npx tsx scripts/panel-imza.ts anahtar-uret --kid=panel-2026` (parolalı, depo
-  DIŞINA, kopyası Mac dışında) → `guven-capasi-ekle.ts panel --dosya=<kid>.panel.json --yaz`. Tören var, etki alanı ayrık.
+**Anahtar kararı (kullanıcı, 2026-10-01): AYRI istemci yayın anahtarı `panel-2026` + çevrimdışı yedek `panel-2026-2`.**
+Panel ve tablet künyesini AYNI anahtar imzalar (aynı kid ailesi; `typ`ler ayrı). PAKET anahtarı (`paket-2026`) künye
+İMZALAMAZ — biri ele geçerse öteki (backend paketleri ↔ istemci güncellemeleri) korunsun. Yedek anahtar iki çapada da
+durur ama imzalamaz: birincil kaybolur/sızarsa sahadaki bütün paneller ve tabletler onu zaten tanır (çıkışsız kapı yok).
+Anahtar üretimini KULLANICI yapar (parolalar TTY'den; hiçbir sır repoya/log'a girmez). Sıra:
+
+```bash
+cd Teks-Erp
+# 1) Birincil (Mac, parolalı) — her panel/tablet yayınında imzalar
+npx tsx scripts/panel-imza.ts anahtar-uret --kid=panel-2026
+#    → ~/.tekserp/panel-uretim/panel-2026.panel.json (0600)
+# 2) Çevrimdışı yedek — AYRI parola, AYRI dizin; çapaya eklendikten sonra Mac'ten USB'ye TAŞINIR
+npx tsx scripts/panel-imza.ts anahtar-uret --kid=panel-2026-2 --dizin=~/.tekserp/panel-yedek
+# 3) Çapalar: iki anahtar × iki çapa (panel + tablet). Önce KURU (yazılacak dosyayı ve x'i basar), x'ler
+#    anahtar-uret çıktısıyla birebirse aynı komutlar --yaz ile. Sıra korunur: önce birincil, sonra yedek.
+for c in panel tablet; do
+  npx tsx scripts/guven-capasi-ekle.ts $c --dosya=$HOME/.tekserp/panel-uretim/panel-2026.panel.json
+  npx tsx scripts/guven-capasi-ekle.ts $c --dosya=$HOME/.tekserp/panel-yedek/panel-2026-2.panel.json
+done
+# 4) Yedek dosyayı Mac'ten kaldır: ~/.tekserp/panel-yedek/ → USB; parolası kâğıtta, birincilinkinden AYRI.
+#    Birincilin parolalı kopyası da USB'ye (Mac kaybına karşı); parolası parola yöneticisinde.
+```
+
+Çapa commit'i (iki JSON dosyası) yöneticide; sonra paketleme açılır. Yayında anahtar:
+`./deploy/electron-yayinla.sh --musteri=<kod> --anahtar=$HOME/.tekserp/panel-uretim/panel-2026.panel.json`
+(ya da `TEKSERP_PANEL_IMZA_ANAHTARI`). `guven-capasi-ekle.ts panel --paket-kid=…` yolu kodda durur ama bu kararla
+KULLANILMAZ.
 
 **Yayın:** `electron-paketle.sh` künyeyi İMZALAMAZ (anahtar istemez). `electron-yayinla.sh`: ① `panel-imza` kapısı
 (çapa · pakete gömülü mü · imza · kanal · latest.yml bağı · exe boy + sha512 · `capa` = çapa); imzasızsa imza
@@ -615,9 +637,13 @@ yayın uyarı — imza öncesi sürüm). Bekçi: `scripts/test_kanal_yayin_kapis
 **Rotasyon:** yeni kid ÖNCE çapaya eklenir ve ESKİ anahtarla imzalanmış bir sürümle sahaya çıkar; ancak o sürüm
 yayındayken yeni anahtarla imzalanır (kapı aksi hâlde durur). Eski kid, onu tanıyan son panel güncellenene dek
 çapada kalır. Geride kalmış (yayındakinden eski) makineler için örtüşme penceresi geniş tutulur.
+**Birincil kaybolursa/sızarsa:** yedek `panel-2026-2` USB'den alınır ve sonraki sürümü O imzalar (yayındaki künyenin
+`capa`sında olduğu için rotasyon kilidi geçer); aynı sürümde çapadan sızan kid ÇIKARILMAZ (sahadakiler eskisiyle
+gelir) ama yeni bir yedek (`panel-2026-3`) eklenir; sızan anahtar, onu tanıyan son istemci güncellenince çapadan düşer.
 
 **Geçiş sırası — "eski istemci ne yapar":**
-1. Anahtar kararı + çapa satırı (yukarıda) — karar verilmeden yeni panel paketlenemez.
+1. Anahtar üretimi + çapa satırları (yukarıdaki sıra; karar 2026-10-01: `panel-2026` + yedek `panel-2026-2`) — çapa
+   commit'i inmeden yeni panel paketlenemez.
 2. İlk imzalı sürüm (doğrulayıcıyı taşıyan panel) önce testfabrika'ya: yayın betiği künyeyi imzalar.
    **Eski paneller (≤ 1.4.2) künyeyi bilmez → `tekserp:` bloğunu yok sayar ve bu sürüme BUGÜNKÜ GİBİ güncellenir.**
 3. Bu sürümden sonra her panel künyesiz/geçersiz `latest.yml`i REDDEDER — bu yüzden yayın betiği imzasız künye
