@@ -6,6 +6,7 @@ import { INTEGRITY_TYP, type PackageKey } from "../../src/lib/license/integrity"
 import { INTEGRITY_LIST_FILE, formatIntegrityList, type IntegrityListEntry } from "../../src/lib/license/integrity-list";
 import { anahtarUret, hamImzala, type Fikstur, type TestAnahtari } from "./lisans-fikstur";
 import type { DosyaGirdisi, Vektor } from "./lisans-cekirdek-vektor";
+import { kipPaketKidi, kiplere } from "./lisans-vektor-kip";
 
 interface Dosya {
   readonly yol: string;
@@ -110,7 +111,9 @@ export function butunlukVektorleri(f: Fikstur): Vektor[] {
     v("kök dizin yok", imzali(), { kok: "yok" }),
     v("çapa boş", imzali(), { keys: [] }),
     // Kid üretim/hazırlık biçiminde DEĞİL (test_lisans_butunluk §2a): çapaya giren gerçek anahtar bu vektörü kaydıramaz.
-    v("gömülü çapa: test paket anahtarı tanınmıyor", imzali({}, { imzalayan: anahtarUret("paket-fikstur") }), { keys: null }),
+    ...kiplere(v("gömülü çapa: test paket anahtarı tanınmıyor", imzali({}, { imzalayan: anahtarUret("paket-fikstur") }), { keys: null })),
+    ...kiplere(v("gömülü çapa: hazırlık PAKET kid'i, yabancı imza", imzali({}, { imzalayan: anahtarUret(kipPaketKidi("hazirlik")) }), { keys: null })),
+    ...kiplere(v("gömülü çapa: üretim PAKET kid'i, yabancı imza", imzali({}, { imzalayan: anahtarUret(kipPaketKidi("uretim")) }), { keys: null })),
     v("çapa kid biçimsiz", imzali(), { keys: [{ kid: "PAKET-1", x: paket.x }] }),
     v("çapa kid tekrarlı", imzali(), { keys: [...keys, ...keys] }),
     v("çapa anahtarı biçimsiz", imzali(), { keys: [{ kid: paket.kid, x: "abc" }] }),

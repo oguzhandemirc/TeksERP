@@ -8,26 +8,34 @@
 // NE ÖLÇER: native çekirdek (`native/lisans-cekirdek` + ortak `native/tekserp-dogrulama`, Rust + napi-rs) TS protokolünün AYNASIDIR;
 // ayrışırsa fabrika aynı belgeyi iki yolda farklı doğrular ve hata sessizdir.
 //   §0 STATİK aynalar (native gerekmez): Rust kod kümeleri ⊆/= TS · yer tutucu listesi · Windows
-//      sondası satır satır · gömülü çapa = ROOT_PUBLIC_KEYS / PACKAGE_PUBLIC_KEYS · arayüz sürümü ·
+//      sondası satır satır · gömülü çapanın DÖRT listesi = TS üretim/hazırlık kök + PAKET listeleri ve her
+//      liste kendi kipinin `cfg`siyle kapılı (öteki kipin baytı ikiliye girmez) · arayüz sürümü ·
 //      HKDF öneki · Rust'taki HER regex TS kaynağında (ya da canlı Zod deseninde) birebir var ·
-//      derleme sabiti geliştirmede kapalı · Rust'taki her belge türü (TYP_*) protokolün TYP kayıt
-//      defterinde aynı ad/değerle (bütünlük türü dahil) · aynanın kaynağı iki crate'tedir (`lisans-cekirdek` +
-//      ORTAK `tekserp-dogrulama`) ve dosya adları ikisinde tekildir (§0l)
+//      iki derleme sabiti geliştirmede kapalı (native zorunlu değil · çapa kipi üretim) · Rust'taki her
+//      belge türü (TYP_*) protokolün TYP kayıt defterinde aynı ad/değerle (bütünlük türü dahil) · aynanın
+//      kaynağı iki crate'tedir (`lisans-cekirdek` + ORTAK `tekserp-dogrulama`) ve dosya adları ikisinde tekildir (§0l)
 //   §1 yükleyici: dosya yok → TS (zorunlu değil) / "yok" + her doğrulama CEKIRDEK_YOK + bütünlük
 //      GEÇERSİZ, istisna yok (zorunlu) · desteklenmeyen platform · bozuk .node · zorunlu kip ortam
 //      yolunu okumaz · aday sırası
 //   §2 vektör dosyası (`native/lisans-cekirdek/test-vektorleri/protokol.json`, `cargo test` de okur):
 //      her kaydın beklenen sonucu BUGÜNKÜ TS protokolüyle aynı (bayat vektör yok) · native'in
-//      üretebildiği her kod en az bir beklenende geçiyor (kapsam) · her türde geçer + kalır
+//      üretebildiği her kod en az bir beklenende geçiyor (kapsam) · her türde geçer + kalır · her gömülü
+//      çapa vektörü iki kipte de kayıtlı ve kipler ayrışıyor (aynı belge iki kipte farklı sonuç)
 //   §3–§7 NATIVE (yoksa "⏭ ATLANDI — native yok", sayıyla; canlı çapa ÖLÇÜLMEDİ, yeşil sayılmaz): künye/ayna
 //      listeleri canlı · ⭐ gömülü çapa CANLI (§3d: derlenmiş her .node'un `builtinAnchor()`ı — yüklenen · `dist` ·
-//      `dist-uretim` · paket yolu — TS çapasıyla birebir; bayat ikili kırmızı) · kayıtlı vektörler native'de beklenenle aynı · CANLI (taze anahtarlı) vektörlerde
-//      TS = native · bu makinede parmak izi toplama TS = native · zorunlu kip test derlemesini
+//      `dist-uretim` · `dist-hazirlik` · paket yolu — KENDİ kipinin TS çapasıyla birebir, dizin kipi doğru; bayat
+//      ikili kırmızı) · kayıtlı vektörler native'de beklenenle aynı (kendi kipininkiler) · CANLI (taze anahtarlı)
+//      vektörlerde TS = native · bu makinede parmak izi toplama TS = native · zorunlu kip test derlemesini
 //      reddeder / üretim derlemesi çapa enjeksiyonunu reddeder
+//   §9 ⭐ KİP ÇAPRAZ SONDASI (gerçek `dist-uretim` + `dist-hazirlik` ikilileri; yoksa ATLANDI, STRICT'te kırmızı):
+//      her ikili kendi kipinin gömülü çapa vektörlerini beklenen sonuçla verir — üretim ikilisi hazırlık kid'iyle
+//      imzalı belgeyi TANIMAZ, hazırlık ikilisi üretim kid'iyle imzalıyı tanımaz · dışarıdan çapayı reddeder ·
+//      TS yükleyicisi öteki kipin ikilisini açmaz (CAPA_UYUSMAZ)
 //   §8 ⭐ KALICI SONDA ✓K (her koşumda): karşılaştırıcı farkı ısırır, eşitte susar · bayatlık
 //      denetimi mutasyona uğramış beklenenle kırmızı · kapsam denetimi eksik kodu yakalar ·
-//      regex aynası değişmiş deseni yakalar · TYP aynası değişmiş/kayıtsız türü yakalar · gömülü paket
-//      çapası üç rustfmt düzeninde de okunur (ikinci anahtar `&[`i alt satıra taşır)
+//      regex aynası değişmiş deseni yakalar · TYP aynası değişmiş/kayıtsız türü yakalar · gömülü
+//      çapa blokları üç rustfmt düzeninde de okunur (ikinci anahtar `&[`i alt satıra taşır) · kip süzgeci
+//      öteki kipin kaydını atlar
 //
 // NEGATİF SONDA — dosya DIŞI mutasyonlar (commit mesajında sayılarla; her biri geri alındı, sha eşit):
 //   bkz. Teks-Erp/docs/BEKCI-HARITASI.md `## lisans` satırı.
@@ -36,7 +44,19 @@ import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSy
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { z } from "zod";
-import { MODULE_KEY_KID_PREFIX, PROTOCOL_ERROR_CODES, ROOT_PUBLIC_KEYS, TYP, b64uDecode, b64uEncode } from "../src/lib/license/protocol";
+import {
+  MODULE_KEY_KID_PREFIX,
+  PRODUCTION_ROOT_PUBLIC_KEYS,
+  PROTOCOL_ERROR_CODES,
+  STAGING_ROOT_PUBLIC_KEYS,
+  TRUST_ANCHOR_MODES,
+  TYP,
+  b64uDecode,
+  b64uEncode,
+  isTrustAnchorMode,
+  rootPublicKeysFor,
+  type TrustAnchorMode,
+} from "../src/lib/license/protocol";
 import { CORE_ERROR_CODES, CORE_UNAVAILABLE_CODE, tsLicenseCore, type LicenseCore } from "../src/lib/license/license-core";
 import { INTEGRITY_LIST_FILE, INTEGRITY_MAX_FILES, INTEGRITY_MAX_LIST_BYTES } from "../src/lib/license/integrity-list";
 import {
@@ -50,7 +70,14 @@ import {
   nativeFileName,
   type LoaderOptions,
 } from "../src/lib/license/native";
-import { INTEGRITY_TYP, PACKAGE_PUBLIC_KEYS } from "../src/lib/license/integrity";
+import {
+  INTEGRITY_TYP,
+  PACKAGE_PUBLIC_KEYS,
+  PRODUCTION_PACKAGE_PUBLIC_KEYS,
+  STAGING_PACKAGE_PUBLIC_KEYS,
+  packagePublicKeysFor,
+} from "../src/lib/license/integrity";
+import { BUILD_ANCHOR_MODE, ROOT_PUBLIC_KEYS } from "../src/lib/license/trust-anchor";
 import { MODULE_KEY_HKDF_PREFIX } from "../src/lib/license/module-key";
 import { WINDOWS_PROBE_LINES } from "../src/lib/license/fingerprint-os";
 import { atlamaDefteri } from "./lib/atlama";
@@ -59,6 +86,7 @@ import {
   VEKTOR_SIMDI,
   degerlendir,
   jsonEsit,
+  kipteKosar,
   vektorDosyasiYolu,
   vektorDosyasiUret,
   vektorleriKur,
@@ -204,19 +232,52 @@ async function vektorYaz(): Promise<void> {
   console.log(`✍️  ${path.relative(TEKS, VEKTOR_DOSYASI)} yazıldı — ${dosya.kayitlar.length} kayıt, ${metin.length} bayt`);
 }
 
+/** `anchor.rs`te kipin blok adları ve blokların önündeki `cfg` kapısı (öteki kipin baytı ikiliye girmesin). */
+const RS_BLOKLAR: Readonly<Record<TrustAnchorMode, { readonly kok: string; readonly paket: string; readonly kapi: string }>> = {
+  uretim: { kok: "PRODUCTION_ROOTS", paket: "PRODUCTION_PACKAGE_KEYS", kapi: '#[cfg(not(feature = "hazirlik-capasi"))]' },
+  hazirlik: { kok: "STAGING_ROOTS", paket: "STAGING_PACKAGE_KEYS", kapi: '#[cfg(feature = "hazirlik-capasi")]' },
+};
+
+interface RsBlok<T> {
+  readonly ogeler: T[];
+  /** Bloğun hemen önündeki `#[cfg(...)]` satırı (yoksa null). */
+  readonly kapi: string | null;
+}
+
 /**
- * `anchor.rs` gömülü çapası; rustfmt düzeninden BAĞIMSIZ (tek satır · `=` sonrası · dikey). İkinci anahtar
+ * `anchor.rs`teki bir çapa bloğu; rustfmt düzeninden BAĞIMSIZ (tek satır · `=` sonrası · dikey). İkinci anahtar
  * rustfmt'i `&[`i alt satıra taşımaya iter — düzene bağlı desen o gün çapayı "yok" okurdu (§8h).
  */
-function gomuluCapa(anchor: string): { kokler: Array<{ kid: string; x: string; classes: string[] }>; paketler: Array<{ kid: string; x: string }> | null } {
-  const kokler = [...anchor.matchAll(/\("([^"]+)", "([^"]+)", &\[([^\]]*)\]\)/g)].map((m) => ({
-    kid: m[1],
-    x: m[2],
-    classes: [...m[3].matchAll(/"([^"]+)"/g)].map((c) => c[1]),
-  }));
-  const paketBlok = /BUILTIN_PACKAGE_KEYS: &\[\(&str, &str\)\] =\s*&\[([\s\S]*?)\];/.exec(anchor);
-  const paketler = paketBlok ? [...paketBlok[1].matchAll(/\("([^"]+)", "([^"]+)"\)/g)].map((m) => ({ kid: m[1], x: m[2] })) : null;
-  return { kokler, paketler };
+function rsBlok<T>(anchor: string, ad: string, tur: "kok" | "paket", uret: (m: RegExpMatchArray) => T): RsBlok<T> | null {
+  const tip = tur === "kok" ? "&\\[\\(&str, &str, &\\[&str\\]\\)\\]" : "&\\[\\(&str, &str\\)\\]";
+  const b = new RegExp(`(#\\[cfg\\([^\\n]*\\)\\]\\n)?pub const ${ad}: ${tip} =\\s*&\\[([\\s\\S]*?)\\];`).exec(anchor);
+  if (!b) return null;
+  const oge = tur === "kok" ? /\("([^"]+)", "([^"]+)", &\[([^\]]*)\]\)/g : /\("([^"]+)", "([^"]+)"\)/g;
+  return { ogeler: [...b[2].matchAll(oge)].map(uret), kapi: b[1]?.trim() ?? null };
+}
+
+const rsKok = (m: RegExpMatchArray) => ({ kid: m[1], x: m[2], classes: [...m[3].matchAll(/"([^"]+)"/g)].map((c) => c[1]) });
+const rsPaket = (m: RegExpMatchArray) => ({ kid: m[1], x: m[2] });
+
+/** Gömülü çapanın dört bloğu (kip → kök + PAKET); bulunamayan blok null. */
+export function gomuluCapa(anchor: string): Record<TrustAnchorMode, { kok: RsBlok<ReturnType<typeof rsKok>> | null; paket: RsBlok<ReturnType<typeof rsPaket>> | null }> {
+  const kip = (k: TrustAnchorMode) => ({ kok: rsBlok(anchor, RS_BLOKLAR[k].kok, "kok", rsKok), paket: rsBlok(anchor, RS_BLOKLAR[k].paket, "paket", rsPaket) });
+  return { uretim: kip("uretim"), hazirlik: kip("hazirlik") };
+}
+
+/** `anchor.rs` kip sabitleri: MODE ve kullanılan liste her kipte kendi bloğuna bağlı (cfg kapısıyla). */
+function kipBaglari(anchor: string): string[] {
+  const eksik: string[] = [];
+  for (const k of TRUST_ANCHOR_MODES) {
+    const { kok, paket, kapi } = RS_BLOKLAR[k];
+    const beklenen = [
+      `${kapi}\npub const MODE: &str = "${k}";`,
+      `${kapi}\nconst ROOTS: &[(&str, &str, &[&str])] = ${kok};`,
+      `${kapi}\nconst PACKAGE_KEYS: &[(&str, &str)] = ${paket};`,
+    ];
+    for (const b of beklenen) if (!anchor.includes(b)) eksik.push(b.replace("\n", " "));
+  }
+  return eksik;
 }
 
 // ── Bölümler ─────────────────────────────────────────────────────────────────
@@ -238,10 +299,21 @@ function bolum0(): void {
   check("§0d Windows parmak izi sondası satır satır aynı", WINDOWS_PROBE_LINES.length >= 5 && jsonEsit(rustSonda, [...WINDOWS_PROBE_LINES]), `${WINDOWS_PROBE_LINES.length} satır`);
 
   const anchor = rustKaynak("anchor.rs");
-  const { kokler: rustKokler, paketler: rustPaket } = gomuluCapa(anchor);
-  const tsKokler = ROOT_PUBLIC_KEYS.map((r) => ({ kid: r.kid, x: r.x, classes: [...r.classes] }));
-  check("§0e gömülü kök çapası = ROOT_PUBLIC_KEYS", rustKokler.length === tsKokler.length && jsonEsit(rustKokler, tsKokler), `${tsKokler.length} kök`);
-  check("§0e' gömülü paket çapası = PACKAGE_PUBLIC_KEYS", !!rustPaket && jsonEsit(rustPaket, PACKAGE_PUBLIC_KEYS.map((k) => ({ ...k }))), `${PACKAGE_PUBLIC_KEYS.length} anahtar`);
+  const capa = gomuluCapa(anchor);
+  for (const kip of TRUST_ANCHOR_MODES) {
+    const tsKokler = rootPublicKeysFor(kip).map((r) => ({ kid: r.kid, x: r.x, classes: [...r.classes] }));
+    const tsPaket = packagePublicKeysFor(kip).map((k) => ({ kid: k.kid, x: k.x }));
+    const { kok, paket } = capa[kip];
+    check(`§0e gömülü ${kip} kök çapası (${RS_BLOKLAR[kip].kok}) = TS ${kip} listesi`, !!kok && tsKokler.length > 0 && jsonEsit(kok.ogeler, tsKokler), `${tsKokler.length} kök`);
+    check(`§0e' gömülü ${kip} PAKET çapası (${RS_BLOKLAR[kip].paket}) = TS ${kip} listesi`, !!paket && tsPaket.length > 0 && jsonEsit(paket.ogeler, tsPaket), `${tsPaket.length} anahtar`);
+    check(
+      `§0e'' ⭐ ${kip} blokları yalnız ${kip} derlemesinde var (\`${RS_BLOKLAR[kip].kapi}\`)`,
+      kok?.kapi === RS_BLOKLAR[kip].kapi && paket?.kapi === RS_BLOKLAR[kip].kapi,
+      `kök ${kok?.kapi ?? "kapısız"} · PAKET ${paket?.kapi ?? "kapısız"}`,
+    );
+  }
+  const baglar = kipBaglari(anchor);
+  check("§0e''' kip sabitleri: MODE · ROOTS · PACKAGE_KEYS her kipte kendi bloğuna bağlı", baglar.length === 0, baglar.join(" | ") || "6 bağ");
 
   const abi = /pub const ABI: u32 = (\d+);/.exec(rustKaynak("api.rs"));
   check("§0f arayüz sürümü Rust = NATIVE_ABI", Number(abi?.[1]) === NATIVE_ABI, `rust ${abi?.[1]} · ts ${NATIVE_ABI}`);
@@ -265,6 +337,16 @@ function bolum0(): void {
   const yetim = rust.filter((d) => !tsKume.has(desenNormal(d)));
   check("§0h Rust'taki HER regex TS kaynağında ya da canlı Zod deseninde birebir", rust.length >= 12 && yetim.length === 0, yetim.length ? `yetim: ${yetim.join(" · ")}` : `${rust.length} desen`);
   check("§0i derleme sabiti geliştirmede KAPALI (native zorunlu değil)", NATIVE_REQUIRED === false);
+  check(
+    "§0i' çapa kipi sabiti geliştirmede TANIMSIZ → üretim; derlemenin çapası üretim listeleri (hazırlık yok)",
+    BUILD_ANCHOR_MODE === "uretim" && ROOT_PUBLIC_KEYS === PRODUCTION_ROOT_PUBLIC_KEYS && PACKAGE_PUBLIC_KEYS === PRODUCTION_PACKAGE_PUBLIC_KEYS,
+    `${BUILD_ANCHOR_MODE} · ${ROOT_PUBLIC_KEYS.map((r) => r.kid).join(",")} · ${PACKAGE_PUBLIC_KEYS.map((k) => k.kid).join(",")}`,
+  );
+  check(
+    "§0i'' iki kipin listeleri AYRIK (ortak kid ya da açık anahtar yok)",
+    PRODUCTION_ROOT_PUBLIC_KEYS.every((p) => STAGING_ROOT_PUBLIC_KEYS.every((s) => s.kid !== p.kid && s.x !== p.x)) &&
+      PRODUCTION_PACKAGE_PUBLIC_KEYS.every((p) => STAGING_PACKAGE_PUBLIC_KEYS.every((s) => s.kid !== p.kid && s.x !== p.x)),
+  );
 
   const yollar = rustDosyaYollari().sort();
   // Crate kökü (`lib.rs`) her crate'te vardır ve adıyla okunmaz; tekillik modül dosyaları içindir.
@@ -333,7 +415,7 @@ async function bolum1(): Promise<void> {
     const zorunluAday = nativeCandidates(secenek({ cwd: bos, required: true, env: { [NATIVE_PATH_ENV]: sahte } }));
     check("§1e ZORUNLU kip ortam yolunu okumaz (yalnız paket yolu)", zorunluAday.length === 1 && !zorunluAday.includes(sahte) && zorunluAday[0] === path.join(bos, "native", path.basename(zorunluAday[0])));
 
-    const id = { abi: NATIVE_ABI, platform: process.platform, arch: process.arch, testCapasi: false };
+    const id = { abi: NATIVE_ABI, platform: process.platform, arch: process.arch, testCapasi: false, capaKipi: "uretim" as const };
     const zorunlu = { required: true, platform: process.platform, arch: process.arch };
     const gelistirme = { ...zorunlu, required: false };
     check(
@@ -344,6 +426,13 @@ async function bolum1(): Promise<void> {
         identityRejection({ ...id, abi: NATIVE_ABI + 1 }, gelistirme)?.neden === "KUNYE_UYUSMAZ" &&
         identityRejection({ ...id, platform: "freebsd" }, gelistirme)?.neden === "KUNYE_UYUSMAZ" &&
         identityRejection({ ...id, arch: "ia32" }, gelistirme)?.neden === "KUNYE_UYUSMAZ",
+    );
+    check(
+      "§1g' ⭐ çapa kipi: üretim derlemesi (varsayılan) hazırlık çapalı native'i AÇMAZ (zorunlu da geliştirme de CAPA_UYUSMAZ) · hazırlık derlemesi üretim çapalıyı açmaz · aynı kip kabul",
+      identityRejection({ ...id, capaKipi: "hazirlik" }, zorunlu)?.neden === "CAPA_UYUSMAZ" &&
+        identityRejection({ ...id, capaKipi: "hazirlik" }, gelistirme)?.neden === "CAPA_UYUSMAZ" &&
+        identityRejection(id, { ...zorunlu, anchorMode: "hazirlik" })?.neden === "CAPA_UYUSMAZ" &&
+        identityRejection({ ...id, capaKipi: "hazirlik" }, { ...zorunlu, anchorMode: "hazirlik" }) === null,
     );
 
     const aday = nativeCandidates(secenek({ cwd: bos, env: { [NATIVE_PATH_ENV]: sahte } }));
@@ -381,10 +470,73 @@ async function bolum2(dosya: VektorDosyasi | null): Promise<void> {
     return gecen === 0 || gecen === k.length;
   });
   check("§2d her doğrulama türünde hem GEÇER hem KALIR vektör var", eksikTur.length === 0, eksikTur.join(", ") || "6 tür");
+
+  // Gömülü çapa vektörleri: her biri bir kip taşır, iki kipte de kayıtlı; aynı belge iki kipte AYRIŞIR.
+  const gomulu = dosya.kayitlar.filter((k) => gomuluMu(k.vektor));
+  const kipsiz = gomulu.filter((k) => !("kip" in k.vektor) || !isTrustAnchorMode(k.vektor.kip));
+  const kipli = (kip: TrustAnchorMode) =>
+    new Map(gomulu.filter((k) => "kip" in k.vektor && k.vektor.kip === kip).map((k) => [`${k.vektor.tur} · ${k.vektor.ad.replace(/ \[[a-z]+\]$/, "")}`, k.beklenen]));
+  const u = kipli("uretim");
+  const h = kipli("hazirlik");
+  const ayniAdlar = u.size === h.size && [...u.keys()].every((a) => h.has(a));
+  check("§2e her gömülü çapa vektörü kip taşır ve İKİ kipte de kayıtlı", kipsiz.length === 0 && ayniAdlar && u.size >= 8, `${kipsiz.length} kipsiz · üretim ${u.size} · hazırlık ${h.size}`);
+  const kod = (b: unknown): string | undefined => {
+    const r = z.object({ ok: z.literal(false), code: z.string() }).safeParse(b);
+    if (r.success) return r.data.code;
+    return z.object({ ok: z.literal(true), value: z.object({ kod: z.string().nullable() }) }).safeParse(b).data?.value.kod ?? undefined;
+  };
+  // Kendi kipinde kid tanınır ama imza yabancı (JWS_IMZA); öteki kipte kid HİÇ tanınmaz — hazırlık anahtarının
+  // sahibi bile üretim derlemesine belge geçiremez (ve tersi).
+  const beklenenler: ReadonlyArray<readonly [string, string, string]> = [
+    ["hak · gömülü çapa: hazırlık kökü kid'iyle TEST HAK, yabancı imza", "KOK_BILINMIYOR", "JWS_IMZA"],
+    ["hak · gömülü çapa: üretim kökü kid'iyle ÜRETİM HAK, yabancı imza", "JWS_IMZA", "KOK_BILINMIYOR"],
+    ["sertifika · gömülü çapa: hazırlık kökü kid'i, yabancı imza", "KOK_BILINMIYOR", "JWS_IMZA"],
+    ["sertifika · gömülü çapa: üretim kökü kid'i, yabancı imza", "JWS_IMZA", "KOK_BILINMIYOR"],
+    ["kira · gömülü çapa: alt sertifikası hazırlık kökü kid'li, yabancı imza", "KOK_BILINMIYOR", "JWS_IMZA"],
+    ["butunluk · gömülü çapa: hazırlık PAKET kid'i, yabancı imza", "JWS_KID", "JWS_IMZA"],
+    ["butunluk · gömülü çapa: üretim PAKET kid'i, yabancı imza", "JWS_IMZA", "JWS_KID"],
+  ];
+  const sapan = beklenenler.filter(([ad, uk, hk]) => kod(u.get(ad)) !== uk || kod(h.get(ad)) !== hk).map(([ad]) => `${ad}: üretim ${kod(u.get(ad))} · hazırlık ${kod(h.get(ad))}`);
+  check(
+    "§2f ⭐ kipler ayrışıyor: üretim kipinde hazırlık kid'i tanınmaz (KOK_BILINMIYOR/JWS_KID), hazırlık kipinde üretim kid'i tanınmaz; kendi kipinde yalnız imza düşer",
+    sapan.length === 0,
+    sapan.join(" | ") || `${beklenenler.length} çift`,
+  );
+}
+
+/** Gömülü çapayla koşan vektör (`roots`/`keys` null). */
+function gomuluMu(v: Vektor): boolean {
+  if (v.tur === "butunluk") return v.keys === null;
+  return (v.tur === "sertifika" || v.tur === "hak" || v.tur === "kira" || v.tur === "bag" || v.tur === "kiraModul") && v.roots === null;
+}
+
+/** Native adayının gömülü çapa kipi (açılamazsa ya da eski ABI ise undefined; yükleyici zaten reddeder). */
+function adayKipi(o: LoaderOptions): TrustAnchorMode | undefined {
+  const dosya = nativeCandidates(o).find((f) => existsSync(f));
+  if (!dosya) return undefined;
+  try {
+    const kip = (nativeBuiltinAnchor(dosya) as { kip?: unknown }).kip;
+    return isTrustAnchorMode(kip) ? kip : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/** Dizin adının söylediği kip — derleme betiği `--uretim`i `dist-uretim/`e, `--hazirlik`i `dist-hazirlik/`e yazar. */
+const DIZIN_KIPI: Readonly<Record<string, TrustAnchorMode>> = { "dist-uretim": "uretim", "dist-hazirlik": "hazirlik" };
+
+function tsCapasi(kip: TrustAnchorMode): unknown {
+  return {
+    kip,
+    roots: rootPublicKeysFor(kip).map((r) => ({ kid: r.kid, x: r.x, classes: [...r.classes] })),
+    packageKeys: packagePublicKeysFor(kip).map((k) => ({ kid: k.kid, x: k.x })),
+  };
 }
 
 async function bolum3ile7(dosya: VektorDosyasi | null): Promise<void> {
-  const yukle = loadLicenseCoreFrom({ required: false, cwd: TEKS, env: process.env, platform: process.platform, arch: process.arch });
+  // Kâhin hangi kipte derlenmiş native verilirse onu sınar: beklenen kip adayın kendi künyesinden.
+  const secenek0: LoaderOptions = { required: false, cwd: TEKS, env: process.env, platform: process.platform, arch: process.arch };
+  const yukle = loadLicenseCoreFrom({ ...secenek0, anchorMode: adayKipi(secenek0) });
   const canliSayi = vektorleriKur(VEKTOR_SIMDI).filter((v) => v.tur !== "tarih").length;
   const kayitSayi = dosya?.kayitlar.filter((k) => k.vektor.tur !== "tarih").length ?? 0;
   if (yukle.status.kaynak !== "native") {
@@ -401,7 +553,7 @@ async function bolum3ile7(dosya: VektorDosyasi | null): Promise<void> {
   }
   const native = yukle.core;
   const kunye = yukle.status.kunye;
-  console.log(`\n§3 native künyesi — ${path.relative(TEKS, yukle.status.dosya)} · ${kunye.hedef} · ${kunye.profil} · test çapası ${kunye.testCapasi ? "VAR" : "yok"}`);
+  console.log(`\n§3 native künyesi — ${path.relative(TEKS, yukle.status.dosya)} · ${kunye.hedef} · ${kunye.profil} · test çapası ${kunye.testCapasi ? "VAR" : "yok"} · çapa ${kunye.capaKipi}`);
   check("§3a künye: arayüz sürümü + platform + mimari bu süreçle aynı", kunye.abi === NATIVE_ABI && kunye.platform === process.platform && kunye.arch === process.arch);
   check(
     "§3b canlı ayna listeleri TS ile aynı (kodlar · yer tutucular · Windows sondası · HKDF öneki)",
@@ -411,26 +563,32 @@ async function bolum3ile7(dosya: VektorDosyasi | null): Promise<void> {
       kunye.modulHkdfOneki === MODULE_KEY_HKDF_PREFIX &&
       kunye.modulKidOneki === MODULE_KEY_KID_PREFIX,
   );
-  // §3d CANLI çapa: yüklenen ikili + geliştirme dizinlerindeki öteki derlemeler (test çapalı `dist` · üretim `dist-uretim`
-  // · paket yolu) — hangisi varsa hepsi. Kaynak metin (§0e) güncel olsa da eski çapayla derlenmiş ikili ayrışır.
-  const tsCapa = {
-    roots: ROOT_PUBLIC_KEYS.map((r) => ({ kid: r.kid, x: r.x, classes: [...r.classes] })),
-    packageKeys: PACKAGE_PUBLIC_KEYS.map((k) => ({ kid: k.kid, x: k.x })),
-  };
+  // §3d CANLI çapa: yüklenen ikili + geliştirme dizinlerindeki öteki derlemeler (test çapalı `dist` · üretim `dist-uretim` ·
+  // hazırlık `dist-hazirlik` · paket yolu) — hangisi varsa hepsi, her biri KENDİ kipinin TS çapasıyla; kip dizinle tutmalı.
   const dosyaAdi = nativeFileName(process.platform, process.arch) ?? "";
-  const derlemeler = [...new Set([yukle.status.dosya, path.join(NATIVE_DIZIN, "dist", dosyaAdi), path.join(NATIVE_DIZIN, "dist-uretim", dosyaAdi), path.join(TEKS, "native", dosyaAdi)])].filter((f) => existsSync(f));
+  const derlemeler = [
+    ...new Set([
+      yukle.status.dosya,
+      ...["dist", "dist-uretim", "dist-hazirlik"].map((d) => path.join(NATIVE_DIZIN, d, dosyaAdi)),
+      path.join(TEKS, "native", dosyaAdi),
+    ]),
+  ].filter((f) => existsSync(f));
   const capaFarki = derlemeler.flatMap((f) => {
     try {
-      const canli = nativeBuiltinAnchor(f);
-      return jsonEsit(canli, tsCapa) ? [] : [`${path.relative(TEKS, f)} → ${JSON.stringify(canli).slice(0, 160)}`];
+      const canli = nativeBuiltinAnchor(f) as { kip?: unknown };
+      const kip = isTrustAnchorMode(canli.kip) ? canli.kip : null;
+      if (!kip) return [`${path.relative(TEKS, f)} çapa kipi taşımıyor (eski ABI?)`];
+      const dizinKipi = DIZIN_KIPI[path.basename(path.dirname(f))];
+      if (dizinKipi && dizinKipi !== kip) return [`${path.relative(TEKS, f)} ${kip} çapalı, dizini ${dizinKipi} ister`];
+      return jsonEsit(canli, tsCapasi(kip)) ? [] : [`${path.relative(TEKS, f)} → ${JSON.stringify(canli).slice(0, 160)}`];
     } catch (e) {
       return [`${path.relative(TEKS, f)} açılamadı: ${e instanceof Error ? e.message : String(e)}`];
     }
   });
   check(
-    "§3d ⭐ CANLI çapa: derlenmiş her .node'un builtinAnchor() = ROOT_PUBLIC_KEYS + PACKAGE_PUBLIC_KEYS (birebir)",
+    "§3d ⭐ CANLI çapa: derlenmiş her .node'un builtinAnchor() = KENDİ kipinin TS kök + PAKET listeleri (birebir), kip dizinle tutarlı",
     derlemeler.length >= 1 && capaFarki.length === 0,
-    capaFarki.length ? `BAYAT/AYRIŞIK (yeniden derle: npm run derle · derle:uretim): ${capaFarki.join(" | ")}` : derlemeler.map((f) => path.relative(TEKS, f)).join(" · "),
+    capaFarki.length ? `BAYAT/AYRIŞIK (yeniden derle: npm run derle · derle:uretim · derle:hazirlik): ${capaFarki.join(" | ")}` : derlemeler.map((f) => path.relative(TEKS, f)).join(" · "),
   );
   // §3c yerel koruma (Faz 2d önbelleği): Windows'ta DPAPI gidiş-dönüş, başka platformda KORUMA_YOK (TS de).
   const koruma = native.protectLocal(b64uEncode(Buffer.from("tekserp-onbellek-sondasi")));
@@ -469,7 +627,7 @@ async function bolum3ile7(dosya: VektorDosyasi | null): Promise<void> {
 
   if (!kunye.testCapasi) {
     // Üretim derlemesi: dışarıdan çapa verilemez → kıyas vektörleri koşamaz, ama enjeksiyon reddi ölçülür.
-    const r = native.verifyEntitlement("a.b.c", ROOT_PUBLIC_KEYS);
+    const r = native.verifyEntitlement("a.b.c", rootPublicKeysFor(kunye.capaKipi));
     check("§7b üretim derlemesi dışarıdan çapayı reddeder (CAPA_ENJEKSIYONU_KAPALI)", !r.ok && r.code === "CAPA_ENJEKSIYONU_KAPALI");
     const g = native.verifyEntitlement("a.b.c");
     check("§7c üretim derlemesi gömülü çapayla doğrular (çapasız çağrı JWS katmanına iner)", !g.ok && g.code === "JWS_BICIM");
@@ -481,14 +639,15 @@ async function bolum3ile7(dosya: VektorDosyasi | null): Promise<void> {
     return;
   }
 
-  console.log("\n§4 kayıtlı vektörler native'de");
+  console.log(`\n§4 kayıtlı vektörler native'de (${kunye.capaKipi} kipinin gömülü çapa kayıtları dahil, öteki kipinki hariç)`);
   if (dosya) {
-    const farklar = await kayitlariKarsilastir(native, dosya.kayitlar.filter((k) => k.vektor.tur !== "tarih"));
-    check("§4a her kayıtlı vektörde native = beklenen (TS kâhini)", farklar.length === 0, farklar.length ? `${farklar.length} fark — ${farkOzeti(farklar)}` : `${kayitSayi} vektör`);
+    const kayitlar = dosya.kayitlar.filter((k) => k.vektor.tur !== "tarih" && kipteKosar(k.vektor, kunye.capaKipi));
+    const farklar = await kayitlariKarsilastir(native, kayitlar);
+    check("§4a her kayıtlı vektörde native = beklenen (TS kâhini)", farklar.length === 0, farklar.length ? `${farklar.length} fark — ${farkOzeti(farklar)}` : `${kayitlar.length} vektör`);
   }
 
   console.log("\n§5 CANLI vektörler (taze anahtar, şimdi): TS = native");
-  const canli = vektorleriKur(Date.now()).filter((v) => v.tur !== "tarih");
+  const canli = vektorleriKur(Date.now()).filter((v) => v.tur !== "tarih" && kipteKosar(v, kunye.capaKipi));
   const farklar: Fark[] = [];
   for (const v of canli) {
     const [t, n] = [await degerlendir(tsLicenseCore, v), await degerlendir(native, v)];
@@ -515,16 +674,68 @@ async function bolum8(dosya: VektorDosyasi | null): Promise<void> {
   const sentetik = rustTypSabitleri([`pub const TYP_HAK: &str = "tekserp-hak";\npub const TYP_BUTUNLUK: &str = "tekserp-butunlukx";\npub const TYP_YENI: &str = "tekserp-yeni";`]);
   const sentetikFark = typFarklari(sentetik, { HAK: "tekserp-hak", BUTUNLUK: "tekserp-butunluk" });
   check("§8g TYP aynası değişmiş değeri ve kayıt defterinde olmayan türü yakalar, eşitte susar", sentetik.length === 3 && sentetikFark.length === 2 && typFarklari(sentetik.slice(0, 1), { HAK: "tekserp-hak" }).length === 0, sentetikFark.join(" · "));
-  const iki = [{ kid: "paket-hazirlik", x: "a" }, { kid: "paket-2026", x: "b" }];
+  const iki = [{ kid: "paket-2026", x: "a" }, { kid: "paket-2027", x: "b" }];
+  const kapi = RS_BLOKLAR.uretim.kapi;
   const duzenler = [
-    `pub const BUILTIN_PACKAGE_KEYS: &[(&str, &str)] = &[("paket-hazirlik", "a")];`,
-    `pub const BUILTIN_PACKAGE_KEYS: &[(&str, &str)] =\n    &[("paket-hazirlik", "a"), ("paket-2026", "b")];`,
-    `pub const BUILTIN_PACKAGE_KEYS: &[(&str, &str)] = &[\n    ("paket-hazirlik", "a"),\n    ("paket-2026", "b"),\n];`,
-  ].map((d) => gomuluCapa(d).paketler);
+    `${kapi}\npub const PRODUCTION_PACKAGE_KEYS: &[(&str, &str)] = &[("paket-2026", "a")];`,
+    `${kapi}\npub const PRODUCTION_PACKAGE_KEYS: &[(&str, &str)] =\n    &[("paket-2026", "a"), ("paket-2027", "b")];`,
+    `${kapi}\npub const PRODUCTION_PACKAGE_KEYS: &[(&str, &str)] = &[\n    ("paket-2026", "a"),\n    ("paket-2027", "b"),\n];`,
+  ].map((d) => gomuluCapa(d).uretim.paket);
   check(
-    "§8h gömülü paket çapası üç rustfmt düzeninde de okunur (tek satır · `=` sonrası · dikey); blok yoksa null",
-    jsonEsit(duzenler[0], iki.slice(0, 1)) && jsonEsit(duzenler[1], iki) && jsonEsit(duzenler[2], iki) && gomuluCapa("pub const X: u8 = 1;").paketler === null,
+    "§8h gömülü PAKET bloğu üç rustfmt düzeninde de okunur (tek satır · `=` sonrası · dikey), cfg kapısıyla; blok yoksa null",
+    jsonEsit(duzenler[0]?.ogeler, iki.slice(0, 1)) &&
+      jsonEsit(duzenler[1]?.ogeler, iki) &&
+      jsonEsit(duzenler[2]?.ogeler, iki) &&
+      duzenler.every((d) => d?.kapi === kapi) &&
+      gomuluCapa("pub const X: u8 = 1;").uretim.paket === null,
   );
+  const kapisiz = gomuluCapa(`pub const STAGING_ROOTS: &[(&str, &str, &[&str])] = &[("hazirlik-2026-1", "a", &["TEST"])];`).hazirlik.kok;
+  check("§8i cfg kapısı olmayan blok kapısız okunur (§0e'' onu kırmızı sayar)", kapisiz?.kapi === null && kapisiz.ogeler.length === 1);
+  const suzgec = { tur: "hak", ad: "x", token: "a.b.c", roots: null, kip: "hazirlik" } as const;
+  check(
+    "§8j kip süzgeci: kayıt yalnız kendi kipinde koşar, kipsiz kayıt her kipte",
+    kipteKosar(suzgec, "hazirlik") && !kipteKosar(suzgec, "uretim") && kipteKosar({ tur: "hak", ad: "y", token: "a.b.c", roots: [] }, "uretim"),
+  );
+}
+
+/**
+ * §9 KİP ÇAPRAZ SONDASI: gerçek üretim ve hazırlık ikilileri (paketin taşıdığı derlemeler) kendi kiplerinin gömülü
+ * çapa vektörlerini koşar; dışarıdan çapa veremediğimiz için ölçüm yalnız gömülü çapayladır — sorulan da tam olarak o.
+ */
+async function bolum9(dosya: VektorDosyasi | null): Promise<void> {
+  console.log("\n§9 ⭐ kip çapraz sondası (gerçek dist-uretim + dist-hazirlik ikilileri)");
+  const ad = nativeFileName(process.platform, process.arch);
+  for (const kip of TRUST_ANCHOR_MODES) {
+    const dizin = kip === "uretim" ? "dist-uretim" : "dist-hazirlik";
+    const ikili = ad ? path.join(NATIVE_DIZIN, dizin, ad) : null;
+    if (!ikili || !existsSync(ikili) || !dosya) {
+      ATLAMA.atla(`§9 ${kip} ikilisi`, `${dizin}/${ad ?? "?"} yok — derle: cd native/lisans-cekirdek && npm run derle:${kip}`, 4);
+      continue;
+    }
+    const secenek: LoaderOptions = { required: false, cwd: TEKS, env: { [NATIVE_PATH_ENV]: ikili }, platform: process.platform, arch: process.arch };
+    const y = loadLicenseCoreFrom({ ...secenek, anchorMode: kip });
+    if (y.status.kaynak !== "native") {
+      check(`§9a ${dizin} ikilisi yüklenir`, false, "neden" in y.status ? `${y.status.neden}: ${y.status.ayrinti}` : "");
+      continue;
+    }
+    check(`§9a ${dizin} ikilisi ${kip} çapalı ve test çapasız`, y.status.kunye.capaKipi === kip && !y.status.kunye.testCapasi, `${y.status.kunye.capaKipi} · test ${y.status.kunye.testCapasi}`);
+    const kayitlar = dosya.kayitlar.filter((k) => "kip" in k.vektor && k.vektor.kip === kip);
+    const farklar = await kayitlariKarsilastir(y.core, kayitlar);
+    const oteki: TrustAnchorMode = kip === "uretim" ? "hazirlik" : "uretim";
+    check(
+      `§9b ⭐ ${kip} ikilisi kendi kipinin ${kayitlar.length} gömülü çapa vektöründe beklenen sonucu verir (${oteki} kid'iyle imzalı belge TANINMAZ)`,
+      kayitlar.length >= 8 && farklar.length === 0,
+      farklar.length ? `${farklar.length} fark — ${farkOzeti(farklar)}` : "",
+    );
+    const r = y.core.verifyEntitlement("a.b.c", rootPublicKeysFor(kip));
+    check(`§9c ${kip} ikilisi dışarıdan çapayı reddeder (CAPA_ENJEKSIYONU_KAPALI)`, !r.ok && r.code === "CAPA_ENJEKSIYONU_KAPALI");
+    const ters = loadLicenseCoreFrom({ ...secenek, anchorMode: oteki });
+    check(
+      `§9d ⭐ ${oteki} derlemesinin yükleyicisi ${kip} ikilisini AÇMAZ (CAPA_UYUSMAZ)`,
+      ters.status.kaynak !== "native" && "neden" in ters.status && ters.status.neden === "CAPA_UYUSMAZ",
+      "neden" in ters.status ? ters.status.neden : ters.status.kaynak,
+    );
+  }
 }
 
 async function main(): Promise<void> {
@@ -539,6 +750,7 @@ async function main(): Promise<void> {
   await bolum2(dosya);
   await bolum3ile7(dosya);
   await bolum8(dosya);
+  await bolum9(dosya);
   console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız${ATLAMA.ozetEki()} ===`);
   process.exit(fail > 0 ? 1 : 0);
 }

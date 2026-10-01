@@ -2,7 +2,6 @@
 // Senkron okunur (kapı ve modül okuyucuları istek/tx içinde çağıracak) ve sistem ayarı
 // servisini İMPORT ETMEZ — modül okuyucusu buna bağlandığında döngü doğmasın.
 import {
-  ROOT_PUBLIC_KEYS,
   compareFingerprints,
   isoToMs,
   type FingerprintDecision,
@@ -18,6 +17,7 @@ import { evaluateRollback } from "./state-rules-trust";
 import type { StateRecord } from "./saat";
 import { LICENSE_FILES, getLicenseStore, type LicenseStoreSnapshot } from "./store";
 import { STARTUP_VENDOR } from "./vendor-url";
+import { ROOT_PUBLIC_KEYS } from "./trust-anchor";
 import type { MeasuredFingerprint } from "./fingerprint";
 import {
   __resetIntegrityStateForTests,
@@ -62,7 +62,7 @@ const SNAPSHOT_TTL_MS = 30_000;
 export interface LicenseRuntimeConfig {
   /** Satıcı lisans sunucusu kökü (`vendor-url.ts`); null ise dışarı hiç çıkılmaz. */
   readonly vendorUrl: string | null;
-  /** Güven çapası — üretimde `ROOT_PUBLIC_KEYS` (ÜRETİM sınıfları yalnız üretim kökünün zinciriyle; hazırlık kökü TEST/DEMO). */
+  /** Güven çapası — derlemenin kipinden `ROOT_PUBLIC_KEYS` (`trust-anchor.ts`; üretim derlemesinde hazırlık kökü YOK). */
   readonly roots: readonly RootKey[];
 }
 

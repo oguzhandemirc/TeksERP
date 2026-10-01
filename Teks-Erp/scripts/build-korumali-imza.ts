@@ -16,6 +16,9 @@
 // imzalar, `butunluk.jws` + `butunluk-liste.txt`i ekler ve PAKET.json'daki dosya sayısını iki artırır
 // (kur.ps1 sayım kapısı).
 // Hazırlık anahtarı (`paket-hazirlik`) yalnız TEST/DEMO paketleri içindir: ÜRETİM kurulumu onu reddeder.
+// Anahtar AİLESİ derlemenin çapa kipine uymalı (G3, `dist/server-kunye.json` `guvenCapasi`): üretim çapalı pakete
+// yalnız `paket-<yıl>`, hazırlık çapalıya yalnız `paket-hazirlik*` — uymazsa parola sorulmadan RED (paket açılışta
+// imzalı listeyi tanımaz, çekirdeksiz kalırdı).
 // Parolalı anahtarla imzada (`imzala` · `zip` · `belge`) parola TTY'den ya da stdin'in satırından sorulur;
 // parola argümandan/ortamdan ASLA alınmaz (`--parola…` biçimli argüman çıkış 2 ile reddedilir).
 // =============================================================================
@@ -108,10 +111,23 @@ interface DirOptions {
   readonly musteri: string | null;
 }
 
+/** Derlemenin çapa kipi ile anahtarın ailesi uyuşmalı; künyede kip yoksa (G3 öncesi derleme) uyarı. */
+function anahtarAilesiDenetle(kunye: Record<string, unknown>, keyFile: string): void {
+  const kip = kunye.guvenCapasi;
+  const kid = packageKeyInfo(keyFile).kid;
+  if (kip === undefined) {
+    console.warn(`⚠ künyede çapa kipi yok (G3 öncesi derleme) — ${kid} anahtar ailesi denetlenmedi`);
+    return;
+  }
+  const uyar = kip === "uretim" ? isProductionPackageKid(kid) : kip === "hazirlik" ? isStagingPackageKid(kid) : false;
+  if (!uyar) throw new Error(`anahtar ailesi derlemenin çapa kipine uymuyor: paket ${String(kip)} çapalı, anahtar ${kid} — ${kip === "uretim" ? "paket-<yıl>" : "paket-hazirlik"} anahtarıyla imzala`);
+}
+
 async function signDir(o: DirOptions): Promise<string> {
-  const key = await openPackageKey(o.keyFile, paketParolasi);
   const kunyeFile = path.join(o.root, "dist", "server-kunye.json");
   const kunye = fs.existsSync(kunyeFile) ? readJson(kunyeFile) : {};
+  anahtarAilesiDenetle(kunye, o.keyFile);
+  const key = await openPackageKey(o.keyFile, paketParolasi);
   const derlemeTarihi = arg("derleme-tarihi") ?? (typeof kunye.zaman === "string" ? kunye.zaman : null);
   if (!derlemeTarihi) throw new Error("derleme tarihi yok: dist/server-kunye.json `zaman` ya da --derleme-tarihi");
   const r = await signPackageDirectory({

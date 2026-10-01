@@ -35,7 +35,8 @@
 //      internal · `portal-tunel` satıcının ağ ad alanında, portsuz/birimsiz, tailnet köprü adresini dinler.
 //      Ana kipte TAILNET_LOOPBACK ve `portal-tunel` YASAK (iki kip karışmaz).
 //   ⑩ GENEL_KOK_ADRESI'nin makinesi Traefik Host kuralıyla aynı (/d · /y bağlantısı başka ortama gitmesin)
-//   ⑪ satıcı gömülü güven çapasıyla koşar: GUVEN_CAPASI_DOSYASI YOK (yalnız test) · NODE_ENV=production
+//   ⑪ satıcı gömülü güven çapasıyla koşar: GUVEN_CAPASI_DOSYASI YOK (yalnız test) · NODE_ENV=production ·
+//      GUVEN_CAPASI = projenin ORTAMI (üretim satıcısı hazırlık köküne güvenmez)
 //   Ⓞ ÖRTÜLER (ana dosyanın üstüne bindirilen kipler; algı + beklenen servisler + kendi denetimleri, ORTULER listesi):
 //      portal-genel (`docker-compose.portal-genel.yml`: `satici-jwks` servisi ya da satıcıda PORT_ERISIM) → ⑬.
 //      Her kipte: satıcının ağ kümesi tam dört ağ (örtü satıcıya ağ EKLEMEZ); internal olmayan ağ yalnız ana kipte
@@ -745,8 +746,10 @@ for (const o of aktif) {
 // ⑪ gömülü güven çapası
 {
   const ortam = satici.environment ?? {};
-  kontrol("⑪ GUVEN_CAPASI_DOSYASI YOK (gömülü ROOT_PUBLIC_KEYS; dosya çapası yalnız test) · NODE_ENV=production",
-    !("GUVEN_CAPASI_DOSYASI" in ortam) && ortam.NODE_ENV === "production", `GUVEN_CAPASI_DOSYASI=${ortam.GUVEN_CAPASI_DOSYASI ?? "yok"} · NODE_ENV=${ortam.NODE_ENV ?? "YOK"}`);
+  const projeOrtami = /^tekserp-satici-(uretim|hazirlik)$/.exec(String(cfg.name ?? ""))?.[1] ?? null;
+  kontrol("⑪ GUVEN_CAPASI_DOSYASI YOK (gömülü çapa; dosya çapası yalnız test) · NODE_ENV=production · GUVEN_CAPASI = projenin ORTAMI",
+    !("GUVEN_CAPASI_DOSYASI" in ortam) && ortam.NODE_ENV === "production" && projeOrtami !== null && ortam.GUVEN_CAPASI === projeOrtami,
+    `GUVEN_CAPASI_DOSYASI=${ortam.GUVEN_CAPASI_DOSYASI ?? "yok"} · NODE_ENV=${ortam.NODE_ENV ?? "YOK"} · GUVEN_CAPASI=${ortam.GUVEN_CAPASI ?? "YOK"} · proje ${projeOrtami ?? cfg.name}`);
 }
 
 // ⑫ iki ortam yan yana

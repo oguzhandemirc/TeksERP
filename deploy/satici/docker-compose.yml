@@ -83,6 +83,8 @@ services:
       PORT_TAILNET: "4611"
       TAILNET_BIND: ${TAILNET_KONTEYNER_IP:?TAILNET_KONTEYNER_IP gerekli}
       ANAHTAR_DIZINI: /anahtarlar
+      # Gömülü güven çapası kipi = ortam: üretim satıcısı yalnız üretim köklerine, hazırlık yalnız hazırlık köklerine güvenir.
+      GUVEN_CAPASI: ${ORTAM}
       # İstemci IP'si Cloudflare başlığından (hız sınırı). Başlık YALNIZ güvenilen kenardan gelen bağlantıda okunur:
       # soket Traefik'tir (kenar ağı) → güven kararı Traefik'in X-Forwarded-For'a yazdığı son halka CF aralığındaysa.
       VEKIL_IP_BASLIGI: cf-connecting-ip
