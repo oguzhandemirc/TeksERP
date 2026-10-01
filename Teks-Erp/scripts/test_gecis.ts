@@ -553,6 +553,9 @@ function senaryolar(): void {
     check("§3d gecis sonrası parametresiz koşum: DURUM ölçümü (hizmet · sağlık · kimlik · pm2 yok · açılış kapalı · lisans dizini yerinde · gece yedeği betiği = kurulu sürüm)",
       k4.kod === 0 && /DURUM \(olcum\)/.test(k4.cikti) && /kurulum kimligi ayni/.test(k4.cikti) && /acilis gorevi kapali/.test(k4.cikti) &&
         /lisans dizini yerinde \(1 dosya/.test(k4.cikti) && /gece yedegi betigi = kurulu surumunku/.test(k4.cikti), `kod ${k4.kod}`);
+    const olc4 = cagrilar(a).filter((x) => /^betik backend-hizmeti\.ps1 /.test(x) && !/-Uygula/.test(x)).at(-1) ?? "";
+    check("§3d durum ölçümü kaydın KENDİ PostgreSQL bağımlılığıyla (-PgHizmeti postgresql-tekserp) — parametresiz betik harici PG'de yanlış UYUMSUZ diyordu",
+      /-PgHizmeti=postgresql-tekserp/.test(olc4), olc4 || "ölçüm çağrısı yok");
     const k5 = harness(a, "gerial-kuru");
     const p5 = /GERI ALMA PLANI \((\d+) kalem/.exec(k5.cikti);
     const k6 = harness(a, "gerial", ["-Onay", p5?.[1] ?? "0"]);

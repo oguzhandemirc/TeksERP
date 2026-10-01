@@ -1201,7 +1201,7 @@ function UygulaKip {
   AnlikGoruntu $E
   # Lisans dizininin dosya ADLARI (icerik degil): gecis sonrasi "yerinde mi" olcumu bununla.
   $lisansAdlari = @(Get-ChildItem -LiteralPath (Join-Path $E.Kok "lisans") -File -Force -ErrorAction SilentlyContinue | ForEach-Object { $_.Name })
-  GunlukYaz "PLAN" $null @{ damga = $script:damga; kok = $E.Kok; surum = $E.Surum; paket = @{ ad = [System.IO.Path]::GetFileName($E.Zip); sha256 = $E.ZipOzet; derleme = [string]$E.Paket.derlemeKimligi }; hizmet = $E.HizmetAdi; guncelleyici = $GuncelleyiciAdi; port = $E.Port; kimlik = $E.Kimlik; lisans = $lisansAdlari; kalemler = @($plan | ForEach-Object { $_.Adim }); ozet = $oz }
+  GunlukYaz "PLAN" $null @{ damga = $script:damga; kok = $E.Kok; surum = $E.Surum; paket = @{ ad = [System.IO.Path]::GetFileName($E.Zip); sha256 = $E.ZipOzet; derleme = [string]$E.Paket.derlemeKimligi }; hizmet = $E.HizmetAdi; guncelleyici = $GuncelleyiciAdi; pg = $E.PgHizmeti; port = $E.Port; kimlik = $E.Kimlik; lisans = $lisansAdlari; kalemler = @($plan | ForEach-Object { $_.Adim }); ozet = $oz }
   $E.SurumDizini = Join-Path (Join-Path $E.Kok "surumler") $E.Surum
   $E.NodeKurulu = Join-Path $E.SurumDizini "runtime\node.exe"
   $E.YardimciKurulu = $E.Yardimci
@@ -1296,7 +1296,10 @@ function DurumRaporu($E) {
   $acl = Join-Path $PSScriptRoot "..\hizmet\backend-hizmeti.ps1"
   if (Test-Path -LiteralPath (Join-Path $kok "current\hizmet\backend-hizmeti.ps1")) { $acl = Join-Path $kok "current\hizmet\backend-hizmeti.ps1" }
   if (Test-Path -LiteralPath $acl) {
-    $kod = OsBetik $acl @{ Kok = $kok; HizmetAdi = $ad }
+    # Olcum kaydin KENDI PostgreSQL bagimliligiyla: parametresiz betik yalniz TeksERP-PostgreSQL'i bekler, harici PG'de yanlis UYUMSUZ der.
+    $olcArg = @{ Kok = $kok; HizmetAdi = $ad }
+    if ($plan -and ($plan.PSObject.Properties.Name -ccontains "pg")) { if ($plan.pg) { $olcArg.PgHizmeti = [string]$plan.pg } else { $olcArg.PgYok = $true } }
+    $kod = OsBetik $acl $olcArg
     if ($kod -eq 0) { Ok "izin + kayit olcumu: UYUMLU" } else { Uyar "izin + kayit olcumu: UYUMSUZ (cikis $kod) - ayrinti yukarida" }
   }
 }
