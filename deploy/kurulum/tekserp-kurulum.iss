@@ -172,6 +172,12 @@ function WinCloseHandle(Tutamak: LongWord): Integer;
   external 'CloseHandle@kernel32.dll stdcall';
 function WinGetDriveType(KokYolu: String): LongWord;
   external 'GetDriveTypeW@kernel32.dll stdcall';
+function WinGetTickCount: LongWord;
+  external 'GetTickCount@kernel32.dll stdcall';
+function WinGetCurrentProcess: LongWord;
+  external 'GetCurrentProcess@kernel32.dll stdcall';
+function WinIsWow64Process(Surec: LongWord; var Wow64: Integer): Integer;
+  external 'IsWow64Process@kernel32.dll stdcall';
 function WinPeekMessage(var Ileti: TIleti; Pen: LongWord; FiltreAlt: LongWord; FiltreUst: LongWord; Kaldir: LongWord): Integer;
   external 'PeekMessageW@user32.dll stdcall';
 function WinTranslateMessage(var Ileti: TIleti): Integer;
@@ -224,6 +230,17 @@ function PowerShellYolu: String;
 begin
   // 64-bit kipte {sys} gerçek System32; Exec yönlendirmesiz koşar (64-bit PowerShell).
   Result := ExpandConstant('{sys}\WindowsPowerShell\v1.0\powershell.exe');
+end;
+
+// Doğrudan CreateProcessW (BoruIleKos) Inno'nun yönlendirme kapatmasından geçmez: 32-bit kurulum süreci
+// System32 yolunu SysWOW64'e (32-bit PowerShell) çevirir. WOW64 altında Sysnative gerçek System32'dir.
+function BoruPowerShellYolu: String;
+var Wow64: Integer;
+begin
+  Result := PowerShellYolu;
+  Wow64 := 0;
+  if WinIsWow64Process(WinGetCurrentProcess, Wow64) <> 0 then
+    if Wow64 <> 0 then Result := ExpandConstant('{win}\Sysnative\WindowsPowerShell\v1.0\powershell.exe');
 end;
 
 // Komut satırı yolu: tırnaklı; sondaki ters bölü kapanış tırnağını kaçırmasın diye '.' eklenir (E:\ -> "E:\.").
@@ -468,7 +485,7 @@ begin
       Result := 'STDIN yazilamadi (' + IntToStr(DLLGetLastError) + ')';
   WinCloseHandle(GirdiYaz);
 
-  Bas := GetTickCount;
+  Bas := WinGetTickCount;
   Bitis := 0;
   Bitti := False;
   Cikti0 := False;
@@ -491,12 +508,12 @@ begin
       if not Cikti0 and (WinWaitForSingleObject(Sb.hProcess, 50) = C_BEKLEME_TAMAM) then
       begin
         Cikti0 := True;
-        Bitis := GetTickCount;
+        Bitis := WinGetTickCount;
       end;
       // Süreç bitti ama boru torunda açık kaldıysa 3 sn boşaltıp çık.
-      if Cikti0 and (GetTickCount - Bitis > 3000) then Bitti := True;
+      if Cikti0 and (WinGetTickCount - Bitis > 3000) then Bitti := True;
       IletileriIsle;
-      if not Cikti0 and (GetTickCount - Bas > LongWord(ZamanAsimiSn) * 1000) then
+      if not Cikti0 and (WinGetTickCount - Bas > LongWord(ZamanAsimiSn) * 1000) then
       begin
         WinTerminateProcess(Sb.hProcess, 1);
         Result := 'zaman asimi (' + IntToStr(ZamanAsimiSn) + ' sn) - surec sonlandirildi';
@@ -647,7 +664,7 @@ begin
     'Write-Output "SIR:son-satir=tamam"' + #13#10 +
     'exit 7' + #13#10, False);
   // Parola: Türkçe harf + tırnak + ters bölü (JSON kaçışı ve kod sayfası ölçülür); 4000 satır > 64 KB boru tamponu.
-  Hatasi := BoruIleKos(PowerShellYolu, PS_ARGS + ArgYol(Betik),
+  Hatasi := BoruIleKos(BoruPowerShellYolu, PS_ARGS + ArgYol(Betik),
     '{"parola":' + JsonMetin('Ğüşİöç"\x') + '}', 120, Cikti, Kod);
   Sonuc := 'BORU_HATA=' + Hatasi + #13#10 + 'KOD=' + IntToStr(Kod) + #13#10 + 'CIKTI_BAYT=' + IntToStr(Length(Cikti)) + #13#10 +
     'X64=' + SatirDegeri(Cikti, 'SIR:x64=') + #13#10 + 'UZUNLUK=' + SatirDegeri(Cikti, 'SIR:uzunluk=') + #13#10 +
@@ -1072,7 +1089,7 @@ begin
   Ekran := YedekSecimSayfasi.SelectedValueIndex = 1;
   Girdi := '{"saticiParolasi":' + JsonYaDaNull(SaticiSayfasi.Values[1]) + ',"saticiPin":' + JsonYaDaNull(SaticiSayfasi.Values[3]) +
     ',"yedekParolasi":' + JsonYaDaNull(YedekSayfasi.Values[1]) + ',"musteriAnahtariEkrana":' + JsonMantik(Ekran) + '}';
-  Hatasi := BoruIleKos(PowerShellYolu, PS_ARGS + ArgYol(Betik) + ' -Asama Sirlar -Cevap ' + ArgYol(KurulumCevabi) + ' -Sonuc ' + ArgYol(Ini), Girdi, 600, Cikti, Kod);
+  Hatasi := BoruIleKos(BoruPowerShellYolu, PS_ARGS + ArgYol(Betik) + ' -Asama Sirlar -Cevap ' + ArgYol(KurulumCevabi) + ' -Sonuc ' + ArgYol(Ini), Girdi, 600, Cikti, Kod);
   Girdi := '';
   if Hatasi <> '' then
   begin

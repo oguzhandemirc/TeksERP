@@ -281,8 +281,8 @@ function AsamaOnKosul {
   } elseif ($yarim) { $onceki = [int]$yarim.portlar.pg }
   $mesgul = @()
   try { $mesgul += @(Get-NetTCPConnection -State Listen -ErrorAction SilentlyContinue | ForEach-Object { [int]$_.LocalPort }) } catch { }
-  $mesgul += @(PgHizmetPortlari)
-  $mesgul += @(HaricPortlar ([int]$pgOrnek.port.baslangic) ([int]$pgOrnek.port.bitis))
+  $mesgul += (PgHizmetPortlari)
+  $mesgul += (HaricPortlar ([int]$pgOrnek.port.baslangic) ([int]$pgOrnek.port.bitis))
   $sec = $null
   for ($i = 0; $i -lt 5; $i++) {
     $sec = PortSec $mesgul ([int]$pgOrnek.port.baslangic) ([int]$pgOrnek.port.bitis) $onceki $C["pg.port"]

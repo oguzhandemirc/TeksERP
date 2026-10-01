@@ -31,6 +31,7 @@
 //      için ve özet satırı GEREKÇESİYLE aynı commit'te güncellenerek yapılır (yeni özellik pm2 yoluna eklenmez).
 //   §25 hizmet betikleri (backend-hizmeti.ps1 ↔ guncelleyici-hizmeti.ps1) ortak yardımcıları birebir ikiz.
 //   §12d uzaktan-kos.ps1 geçiş kipi (D6): gecis.ps1 -Uygula görevde yalnız kuru koşumun -Onay <N>'iyle; çıktı logs\ dışında.
+//   §26 VİRGÜLLÜ DÖNÜŞ (`return , $x`) yapan fonksiyonun çağrısı `@()` ile sarılmaz, boruya verilmez (iç içe dizi).
 // Kaynak ölçülür, davranış değil: pwsh her ortamda yok, 5.1 hiç yok.
 // =============================================================================
 import { readFileSync, existsSync, readdirSync, mkdtempSync, mkdirSync, writeFileSync, rmSync, realpathSync } from "node:fs";
@@ -954,6 +955,32 @@ function donmusIhlalleri(dosya: string, metin: string, beklenen: string): string
     check(`§25 ⭐ \`${ad}\` ikizi birebir (backend-hizmeti.ps1 ↔ guncelleyici-hizmeti.ps1)`, a !== null && a.length > 20 && a === b,
       `${a ? a.length : "YOK"} · ${b ? b.length : "YOK"} bayt`);
   }
+}
+
+// §26 — VİRGÜLLÜ DÖNÜŞ (thinkpad-1 D8 2026-10-01): `return , $x` diziyi TEK nesne olarak verir. `@(F)` onu İÇ İÇE
+//   diziye çevirir (Count hep 1; `[int[]]` bağlamada "Object[] → Int32" — ön ölçüm PG portunda düştü) ve
+//   `F | Where-Object` öğeleri değil BÜTÜN diziyi süzer. Doğru çağrı `$x = F` ya da `(F)`.
+{
+  const taranan = SUNUCU_PS1.filter((y) => existsSync(join(KOK, y))).map((y) => ({ yol: y, t: psTara(readFileSync(join(KOK, y), "utf8")) }));
+  const virgullu = new Set<string>();
+  for (const { t } of taranan) {
+    for (const f of t.fonksiyonlar) {
+      if (t.satirlar.some((x) => x.no >= f.bas && x.no <= f.son && /\breturn\s*,/.test(x.ciplak))) virgullu.add(f.ad);
+    }
+  }
+  const ihlal: string[] = [];
+  for (const { yol, t } of taranan) {
+    for (const x of t.satirlar) {
+      for (const ad of virgullu) {
+        const e = ad.replace(/[-]/g, "\\-");
+        const sarili = new RegExp(`@\\(\\s*${e}\\b`).test(x.ciplak);
+        const borulu = new RegExp(`(?:^|[=;{]\\s*|\\bin\\s+)${e}\\b[^|()]*\\|`).test(x.ciplak.trim());
+        if (sarili || borulu) ihlal.push(`${yol}:${x.no} ${ad}`);
+      }
+    }
+  }
+  check(`§26 ⭐ virgüllü dönüşlü fonksiyon @() ile sarılmıyor, boruya verilmiyor`, virgullu.size >= 3 && ihlal.length === 0,
+    ihlal.length ? ihlal.slice(0, 8).join(" · ") : `${virgullu.size} fonksiyon, çağrıları temiz`);
 }
 
 console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);

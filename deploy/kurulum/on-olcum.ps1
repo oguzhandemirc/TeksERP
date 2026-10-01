@@ -118,8 +118,8 @@ try {
   # PG portu (D4 portSec): kayitli > 5432..5499 ilk bos.
   $mesgul = @()
   try { $mesgul += @(Get-NetTCPConnection -State Listen -ErrorAction SilentlyContinue | ForEach-Object { [int]$_.LocalPort }) } catch { }
-  $mesgul += @(PgHizmetPortlari)
-  $mesgul += @(HaricPortlar ([int]$pgOrnek.port.baslangic) ([int]$pgOrnek.port.bitis))
+  $mesgul += (PgHizmetPortlari)
+  $mesgul += (HaricPortlar ([int]$pgOrnek.port.baslangic) ([int]$pgOrnek.port.bitis))
   $sec = PortSec $mesgul ([int]$pgOrnek.port.baslangic) ([int]$pgOrnek.port.bitis) $onceki $null
   if ($sec.hata) { $o["pgPortHata"] = $sec.hata } else { $o["pgPort"] = $sec.port; $o["pgPortNeden"] = $sec.neden }
 

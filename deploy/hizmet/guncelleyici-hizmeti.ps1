@@ -157,7 +157,7 @@ function HizmetFarki($ad, $ikili, $kok, $veri) {
   $v = Get-ItemProperty -Path $k
   $fark = @()
   if ([string]$v.ObjectName -cne "LocalSystem") { $fark += "hesap '$($v.ObjectName)' (beklenen 'LocalSystem')" }
-  $p = @(KomutParcala ([string]$v.ImagePath))
+  $p = KomutParcala ([string]$v.ImagePath)
   $bek = @("hizmet", "--kok", $kok)
   if ($veri) { $bek += @("--veri", $veri) }
   $bek += @("--ad", $ad)

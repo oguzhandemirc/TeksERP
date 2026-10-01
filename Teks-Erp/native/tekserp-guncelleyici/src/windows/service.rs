@@ -70,16 +70,22 @@ fn service_main(_arguments: Vec<OsString>) {
         });
     };
     report(ServiceState::StartPending, 0);
-    let code = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| body(&layout, &log, &stop, &|| report(ServiceState::Running, 0))))
-        .unwrap_or_else(|_| {
-            log.error("güncelleyici paniğe düştü — hata koduyla çıkılıyor (SCM yeniden başlatır; yarım işlem açılışta sürdürülür)");
-            eventlog::write(name(), Level::Error, "Güncelleyici iç hatası (panik); SCM kurtarması yeniden başlatacak.");
-            1
-        });
+    // İş tutamacı Stopped bildiriminden SONRA kapanır: kapanış işteki her süreci (bu süreç dahil) sonlandırır;
+    // önce kapansaydı SCM durmayı bildirimsiz sonlanma (1067) görür, kurtarma da yanlış dalı seçerdi.
+    let mut job: Option<job::KillOnCloseJob> = None;
+    let code = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        body(&layout, &log, &stop, &|| report(ServiceState::Running, 0), &mut job)
+    }))
+    .unwrap_or_else(|_| {
+        log.error("güncelleyici paniğe düştü — hata koduyla çıkılıyor (SCM yeniden başlatır; yarım işlem açılışta sürdürülür)");
+        eventlog::write(name(), Level::Error, "Güncelleyici iç hatası (panik); SCM kurtarması yeniden başlatacak.");
+        1
+    });
     report(ServiceState::Stopped, code);
+    drop(job);
 }
 
-fn body(layout: &Layout, log: &Arc<RotatingLog>, stop: &AtomicBool, running: &dyn Fn()) -> u32 {
+fn body(layout: &Layout, log: &Arc<RotatingLog>, stop: &AtomicBool, running: &dyn Fn(), job_slot: &mut Option<job::KillOnCloseJob>) -> u32 {
     let own = std::env::current_exe().ok();
     let settings = crate::settings::read_settings(&crate::env::RealFs, layout).unwrap_or_default();
     let env = match crate::env::real(settings.proxy.as_deref(), name()) {
@@ -96,13 +102,10 @@ fn body(layout: &Layout, log: &Arc<RotatingLog>, stop: &AtomicBool, running: &dy
             return codes::EXIT_SELF_UPDATE;
         }
     }
-    let _job = match job::enter_self() {
-        Ok(j) => Some(j),
-        Err(e) => {
-            log.warn(&format!("iş nesnesi kurulamadı ({e}) — araç çocukları güncelleyiciyle birlikte sonlanmayabilir"));
-            None
-        }
-    };
+    match job::enter_self() {
+        Ok(j) => *job_slot = Some(j),
+        Err(e) => log.warn(&format!("iş nesnesi kurulamadı ({e}) — araç çocukları güncelleyiciyle birlikte sonlanmayabilir")),
+    }
     let anchor = match TrustAnchor::for_process() {
         Ok(a) => a,
         Err(e) => {
