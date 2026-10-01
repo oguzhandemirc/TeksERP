@@ -30,6 +30,7 @@
 //      ecosystem.config.js içeriği aşağıdaki özetlere bağlı + DONDURULDU başlığı taşır. Değişiklik yalnız düzeltme
 //      için ve özet satırı GEREKÇESİYLE aynı commit'te güncellenerek yapılır (yeni özellik pm2 yoluna eklenmez).
 //   §25 hizmet betikleri (backend-hizmeti.ps1 ↔ guncelleyici-hizmeti.ps1) ortak yardımcıları birebir ikiz.
+//   §12d uzaktan-kos.ps1 geçiş kipi (D6): gecis.ps1 -Uygula görevde yalnız kuru koşumun -Onay <N>'iyle; çıktı logs\ dışında.
 // Kaynak ölçülür, davranış değil: pwsh her ortamda yok, 5.1 hiç yok.
 // =============================================================================
 import { readFileSync, existsSync, readdirSync, mkdtempSync, mkdirSync, writeFileSync, rmSync, realpathSync } from "node:fs";
@@ -51,7 +52,7 @@ function check(label: string, ok: boolean, detay = ""): void {
 
 /** Fabrika/müşteri sunucusunda koşan PowerShell betikleri (geliştirme makinesinde koşan `paketle.ps1` hariç; setup.exe'nin
  *  `deploy/kurulum/` betikleri de sunucuda YÖNETİCİ olarak koşar — D5). */
-const SUNUCU_PS1 = ["deploy/kur.ps1", "deploy/ilk-kurulum.ps1", "deploy/yedekle.ps1", "deploy/uzaktan-kos.ps1", "deploy/bakim-rolu.ps1", "deploy/hizmet/backend-hizmeti.ps1", "deploy/hizmet/guncelleyici-hizmeti.ps1", "deploy/kurulum/kurulum.ps1", "deploy/kurulum/kurulum-ortak.ps1", "deploy/kurulum/on-olcum.ps1", "deploy/kurulum/kaldir.ps1"];
+const SUNUCU_PS1 = ["deploy/kur.ps1", "deploy/ilk-kurulum.ps1", "deploy/yedekle.ps1", "deploy/uzaktan-kos.ps1", "deploy/bakim-rolu.ps1", "deploy/hizmet/backend-hizmeti.ps1", "deploy/hizmet/guncelleyici-hizmeti.ps1", "deploy/gecis/gecis.ps1", "deploy/kurulum/kurulum.ps1", "deploy/kurulum/kurulum-ortak.ps1", "deploy/kurulum/on-olcum.ps1", "deploy/kurulum/kaldir.ps1"];
 
 const YONLENDIRME = /(?:^|\s)2>(?:&1|\$null)/;
 const CIPLAK_NPM = /(?:^|[\s&(;|])npm(?=\s|$)/;
@@ -376,6 +377,20 @@ for (const yol of SUNUCU_PS1) {
   check("§12c uzaktan-kos.ps1 kur.ps1'i -Zorla/-GeriAl olmadan göreve vermez (onay sorusu görevde cevaplanamaz; kültür-bağımsız)",
     uz.some((k) => k.includes("[regex]::IsMatch($Argumanlar, '(^|\\s)-(Zorla|GeriAl)\\b', 'IgnoreCase, CultureInvariant')")) &&
       uz.some((k) => /-and -not \$onayli\)/.test(k)));
+  // §12d (D6): geçiş de görevde etkileşimsiz — `-Uygula` kuru koşumun bastığı `-Onay <N>`sız göreve verilmez; çıktısı
+  //   backend'in YAZABİLDİĞİ logs\ yerine betiğin klasöründe (görev SYSTEM'dir, D3 güvenilmez dizin kuralı).
+  const uzIhlal = (u: string[]): string[] => {
+    const ih: string[] = [];
+    if (!u.some((k) => k.includes('$gecisMi = [string]::Equals((Split-Path $betikTam -Leaf), "gecis.ps1", [System.StringComparison]::OrdinalIgnoreCase)'))) ih.push("geçiş betiği kültür-bağımsız tanınmıyor");
+    if (!u.some((k) => /if \(\$gecisMi -and \$uygulaMi -and -not \[regex\]::IsMatch\(\$Argumanlar, '\(\^\|\\s\)-Onay\\s\+\\d\+\\b', 'IgnoreCase, CultureInvariant'\)\) \{/.test(k))) ih.push("geçiş -Onay'sız göreve veriliyor");
+    if (!u.some((k) => /\$dizin = if \(-not \$gecisMi -and \(Test-Path \$varsayilan\)\)/.test(k))) ih.push("geçişin çıktısı logs\\'e yazılıyor");
+    return ih;
+  };
+  check("§12d ⭐ uzaktan-kos.ps1 geçiş kipi: gecis.ps1 -Uygula yalnız -Onay <N> ile, çıktı logs\\ DIŞINDA; kur.ps1 dalı aynen", uzIhlal(uz).length === 0, uzIhlal(uz).join(" | ") || "temiz");
+  for (const [ad, u2] of [
+    ["-Onay kapısı silindi", uz.filter((k) => !/if \(\$gecisMi -and \$uygulaMi/.test(k))],
+    ["çıktı logs\\'e", uz.map((k) => k.replace("if (-not $gecisMi -and (Test-Path $varsayilan))", "if (Test-Path $varsayilan)"))],
+  ] as const) check(`§12d sonda: ${ad} → kırmızı`, uzIhlal([...u2]).length > 0);
 }
 
 // §13 — yedek şifreleme niyeti tek kaynak (D13) + ilk kurulumun sır ve soru kapıları.

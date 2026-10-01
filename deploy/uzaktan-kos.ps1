@@ -9,9 +9,14 @@
 #
 #   powershell -NoProfile -ExecutionPolicy Bypass -File .\uzaktan-kos.ps1 `
 #     -Betik C:\TeksERP\kur.ps1 -Argumanlar '-Kok C:\TeksERP -Paket "D:\indir\tekserp-backend-....zip" -Zorla'
+#   pm2 -> hizmet GECISI (Dagitim v2; gecis kesintisi sirasinda SSH kopsa da gorev surer):
+#     -Betik D:\indir\tekserp-backend-...\gecis\gecis.ps1 -Argumanlar '-Kok C:\TeksERP -Paket "D:\indir\tekserp-backend-....zip" -Uygula -Onay <N> -PlanOzeti <ozet>'
 #
 # ⚠ Gorev ETKILESIMSIZDIR: kur.ps1 -Zorla ister (onay sorusu cevaplanamaz); ilk-kurulum
-#   parolalari DOSYADAN ister (-DbParolaDosyasi / -PostgresParolaDosyasi).
+#   parolalari DOSYADAN ister (-DbParolaDosyasi / -PostgresParolaDosyasi); gecis.ps1 -Uygula,
+#   kuru kosumun bastigi -Onay <N> ister (gorevde plan gosterilip onay alinamaz).
+# ⚠ gecis.ps1'in varsayilan cikti dosyasi betigin KENDI klasorundedir: hizmet duzeninde <kok>\logs\
+#   backend hesabinin yazabildigi dizindir ve bu gorev SYSTEM'dir (D3 guvenilmez dizin kurali).
 # Recete ve elle karsiligi: docs/ops/DEPLOY-RUNBOOK.md §3b.
 # =============================================================================
 param(
@@ -36,11 +41,16 @@ $onayli = [regex]::IsMatch($Argumanlar, '(^|\s)-(Zorla|GeriAl)\b', 'IgnoreCase, 
 if ((Split-Path $betikTam -Leaf) -ieq "kur.ps1" -and -not $onayli) {
   Dur "kur.ps1 gorevde etkilesimsiz kosar - onay sorusu cevaplanamaz: -Argumanlar icine -Zorla ekle."
 }
+$gecisMi = [string]::Equals((Split-Path $betikTam -Leaf), "gecis.ps1", [System.StringComparison]::OrdinalIgnoreCase)
+$uygulaMi = [regex]::IsMatch($Argumanlar, '(^|\s)-Uygula\b', 'IgnoreCase, CultureInvariant')
+if ($gecisMi -and $uygulaMi -and -not [regex]::IsMatch($Argumanlar, '(^|\s)-Onay\s+\d+\b', 'IgnoreCase, CultureInvariant')) {
+  Dur "gecis.ps1 -Uygula gorevde etkilesimsiz kosar: once KURU kosun, bastigi '-Onay <N> -PlanOzeti <ozet>'i -Argumanlar'a ekleyin."
+}
 
 $damga = Get-Date -Format "yyyyMMdd_HHmmss"
 if (-not $Log) {
   $varsayilan = Join-Path $env:SystemDrive "TeksERP\logs"
-  $dizin = if (Test-Path $varsayilan) { $varsayilan } else { Split-Path $betikTam -Parent }
+  $dizin = if (-not $gecisMi -and (Test-Path $varsayilan)) { $varsayilan } else { Split-Path $betikTam -Parent }
   $Log = Join-Path $dizin "uzaktan-$damga.log"
 }
 $gorevAd = "TeksERP-Uzaktan-$damga"
