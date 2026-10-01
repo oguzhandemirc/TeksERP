@@ -2,8 +2,9 @@
 //   *.kok.json     — KÖK / hazırlık kökü (parolalı; burada yalnız AÇIK yarısı okunur)
 //   *.bayi.json    — BAYİ (bayinin parolasıyla sarılı; yalnız açık yarı + sertifika)
 //   *.anahtar.json — ALT (kira) / İNDİRME (parolasız 0600 + kök imzalı sertifika)
-// Çapa: gömülü ROOT_PUBLIC_KEYS (fabrikanın güvendiği küme — ayna); yalnız hazırlık/test için
-// GUVEN_CAPASI_DOSYASI. Çapada olmayan kökle imza yapılmaz (fabrika reddederdi) — fail-closed.
+// Çapa: ortamın kipine göre gömülü liste (GUVEN_CAPASI=uretim → üretim kökleri, hazirlik → hazırlık kökleri;
+// fabrikanın o kipteki derlemesinin güvendiği küme — ayna); yalnız hazırlık/test için GUVEN_CAPASI_DOSYASI.
+// Çapada olmayan kökle imza yapılmaz (fabrika reddederdi); kip yok ya da çapa geçersizse yükleme DURUR (fail-closed).
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import path from "node:path";
 import type { KeyObject } from "node:crypto";
@@ -11,15 +12,16 @@ import { z } from "zod";
 import {
   CLOCK_SKEW_MS,
   LICENSE_CLASSES,
-  ROOT_PUBLIC_KEYS,
   STAGING_ROOT_CLASSES,
   isoToMs,
   prepareTrustAnchor,
+  rootPublicKeysFor,
   verifyCertificate,
   type CertificateDoc,
   type CertUsage,
   type LicenseClass,
   type RootKey,
+  type TrustAnchorMode,
 } from "../lisans-protokol";
 import type { VendorConfig } from "../config";
 import { readSubKeyFile, readWrappedKeyFile, subKeyPrivate } from "./key-files";
@@ -78,6 +80,27 @@ function listFiles(dir: string, suffix: string): string[] {
     .map((n) => path.join(dir, n));
 }
 
+/**
+ * Anahtar dizinindeki köklerin TEK ailesi (`kok-*` → uretim, `hazirlik-*` → hazirlik); karışık ya da kök yoksa null.
+ * Yalnız ortamı olmayan CLI kolaylığıdır (yerel anahtar dizini); sunucu kipi yapılandırmadan alır.
+ */
+export function anchorModeOfKeyDir(dir: string): TrustAnchorMode | null {
+  const kids = listFiles(dir, ".kok.json").map((f) => path.basename(f, ".kok.json"));
+  const modes = new Set(kids.map((k) => (k.startsWith("hazirlik-") ? "hazirlik" : k.startsWith("kok-") ? "uretim" : "?")));
+  if (modes.size !== 1 || modes.has("?")) return null;
+  return modes.has("hazirlik") ? "hazirlik" : "uretim";
+}
+
+/** Çapa ve kaynağı: dosya çapası yalnız üretim DIŞINDA; gömülü çapa ortamın kipinden; kip yoksa RED. */
+function resolveAnchor(config: Pick<VendorConfig, "GUVEN_CAPASI" | "GUVEN_CAPASI_DOSYASI">): { anchor: readonly RootKey[]; anchorSource: "gomulu" | "dosya" } {
+  if (config.GUVEN_CAPASI_DOSYASI) {
+    if (config.GUVEN_CAPASI === "uretim") throw new Error("Üretim satıcısı (GUVEN_CAPASI=uretim) dosyadan güven çapası kabul etmez");
+    return { anchor: AnchorFileSchema.parse(JSON.parse(readFileSync(config.GUVEN_CAPASI_DOSYASI, "utf8"))), anchorSource: "dosya" };
+  }
+  if (!config.GUVEN_CAPASI) throw new Error("Güven çapası kipi yok: GUVEN_CAPASI=uretim|hazirlik (compose ORTAM'dan) ya da yalnız test için GUVEN_CAPASI_DOSYASI");
+  return { anchor: rootPublicKeysFor(config.GUVEN_CAPASI), anchorSource: "gomulu" };
+}
+
 function certValidAt(doc: CertificateDoc, atMs: number): boolean {
   return atMs >= isoToMs(doc.baslangic) - CLOCK_SKEW_MS && atMs <= isoToMs(doc.bitis) + CLOCK_SKEW_MS;
 }
@@ -91,17 +114,12 @@ export class KeyStore {
     readonly warnings: readonly string[],
   ) {}
 
-  static load(config: Pick<VendorConfig, "ANAHTAR_DIZINI" | "GUVEN_CAPASI_DOSYASI">, nowMs: number = Date.now()): KeyStore {
+  static load(config: Pick<VendorConfig, "ANAHTAR_DIZINI" | "GUVEN_CAPASI" | "GUVEN_CAPASI_DOSYASI">, nowMs: number = Date.now()): KeyStore {
     const warnings: string[] = [];
-    let anchor: readonly RootKey[] = ROOT_PUBLIC_KEYS;
-    let anchorSource: "gomulu" | "dosya" = "gomulu";
-    if (config.GUVEN_CAPASI_DOSYASI) {
-      anchor = AnchorFileSchema.parse(JSON.parse(readFileSync(config.GUVEN_CAPASI_DOSYASI, "utf8")));
-      anchorSource = "dosya";
-      warnings.push("Güven çapası DOSYADAN (hazırlık/test) — gömülü ROOT_PUBLIC_KEYS değil");
-    }
+    const { anchor, anchorSource } = resolveAnchor(config);
+    if (anchorSource === "dosya") warnings.push("Güven çapası DOSYADAN (hazırlık/test) — gömülü çapa değil");
     const prepared = prepareTrustAnchor(anchor);
-    if (!prepared.ok) warnings.push(`Güven çapası kullanılamıyor (${prepared.code}): ${prepared.message}`);
+    if (!prepared.ok) throw new Error(`Güven çapası kullanılamıyor (${prepared.code}): ${prepared.message}`);
 
     const wrapped: WrappedKeyInfo[] = [];
     const dir = config.ANAHTAR_DIZINI;

@@ -63,11 +63,14 @@ jobs:
         run: node scripts/koruma-runtime-indir.mjs ${{ matrix.hedef }} koruma-cikti
 
       # Kaynak haritası REPO DIŞI — pakete girmez, yığın çözümü için ayrı artefakt.
+      # Kanal verilirse güven çapası kipi kanal kaydından bayt koduna girer (G3); boşsa kanal-dışı → üretim.
       - name: Korumalı derleme (esbuild minify → bytenode .jsc)
         working-directory: Teks-Erp
+        shell: bash
         env:
           KORUMA_ARSIV_DIZINI: ${{ runner.temp }}/koruma-arsiv
-        run: node scripts/build-korumali.mjs --hedef=${{ matrix.hedef }} --cikti=../koruma-cikti/dist
+          MUSTERI: ${{ inputs.musteri }}
+        run: node scripts/build-korumali.mjs --hedef=${{ matrix.hedef }} --cikti=../koruma-cikti/dist ${MUSTERI:+--musteri=$MUSTERI}
 
       # .jsc GERÇEKTEN üretildi mi (host==hedef): künyeden ölç, üretilmediyse DUR.
       - name: .jsc üretimini doğrula

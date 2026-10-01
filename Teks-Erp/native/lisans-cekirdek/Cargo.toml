@@ -19,6 +19,9 @@ napi = ["dep:napi", "dep:napi-derive"]
 # Üretim derlemesi (2b) bu özelliksiz çıkar: yamalı JS kendi kökünü veremez; yükleyici zorunlu
 # kipte test çapalı derlemeyi reddeder.
 test-anchor = []
+# Gömülü çapa kipi: özelliksiz derleme ÜRETİM köklerini/PAKET anahtarlarını, bu özellik YALNIZ hazırlık
+# olanları gömer (`src/anchor.rs`). Hazırlık kanalının paketi bununla derlenir; iki liste tek ikilide birleşmez.
+hazirlik-capasi = []
 
 [dependencies]
 napi = { version = "3", default-features = false, features = ["napi4"], optional = true }

@@ -14,8 +14,8 @@ use crate::module_key;
 use crate::outcome::{code, Fail, Outcome};
 use serde_json::{json, Value};
 
-/// Arayüz sürümü: istek/yanıt biçimi kırılınca artar; yükleyici eşit değilse native'i KULLANMAZ.
-pub const ABI: u32 = 2;
+/// Arayüz sürümü: istek/yanıt biçimi kırılınca artar; yükleyici eşit değilse native'i KULLANMAZ (3: künyede çapa kipi).
+pub const ABI: u32 = 3;
 pub const TEST_ANCHOR: bool = cfg!(feature = "test-anchor");
 
 fn ok(value: Value) -> Value {
@@ -58,6 +58,7 @@ pub fn identity() -> Value {
         "hedef": env!("LISANS_CEKIRDEK_HEDEF"),
         "profil": if cfg!(debug_assertions) { "debug" } else { "release" },
         "testCapasi": TEST_ANCHOR,
+        "capaKipi": anchor::MODE,
         "protokolKodlari": code::PROTOCOL,
         "cekirdekKodlari": code::CORE,
         "yerTutucular": PLACEHOLDER_VALUES,
@@ -71,7 +72,7 @@ pub fn identity() -> Value {
 pub fn builtin_anchor() -> Value {
     let roots: Vec<Value> = anchor::builtin_roots().iter().map(|r| json!({ "kid": r.kid, "x": r.x, "classes": r.classes })).collect();
     let package: Vec<Value> = anchor::builtin_package_keys().iter().map(|(kid, x)| json!({ "kid": kid, "x": x })).collect();
-    json!({ "roots": roots, "packageKeys": package })
+    json!({ "kip": anchor::MODE, "roots": roots, "packageKeys": package })
 }
 
 /// İstekteki çapa: yoksa GÖMÜLÜ çapa; varsa yalnız test derlemesi kabul eder.

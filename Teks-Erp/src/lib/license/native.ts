@@ -1,15 +1,16 @@
 // Native lisans çekirdeği YÜKLEYİCİSİ. Native `.node` varsa ve künyesi (arayüz sürümü · platform ·
-// mimari) uyuyorsa onu kullanır; yoksa TS yoluna düşer (geliştirme ve test). Üretim paketinde (2b)
+// mimari · gömülü çapa kipi) uyuyorsa onu kullanır; yoksa TS yoluna düşer (geliştirme ve test). Üretim paketinde (2b)
 // native ZORUNLUDUR: derleme sabiti `__TEKSERP_NATIVE_REQUIRED__` (esbuild `define`) açıkken TS'e
 // DÜŞÜLMEZ — silinen/uymayan çekirdek, her doğrulamayı `CEKIRDEK_YOK` ile düşüren ve bütünlüğü
 // GEÇERSİZ sayan bir çekirdeğe çevrilir (lisans merdiveni: uyarı → ek süre → kısıtlı; süreç düşmez).
 // Adaptör (sözleşme şemaları, native ve "yok" çekirdekleri): `native-adapter.ts`.
 import path from "node:path";
-import { createHash, type KeyObject } from "node:crypto";
+import { createHash } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
 import { z } from "zod";
-import { b64uEncode, decodeDocument, publicKeyFromX, verifyJws } from "./protocol";
-import { INTEGRITY_TYP, IntegrityManifestSchema, PACKAGE_PUBLIC_KEYS, type PackageKey } from "./integrity";
+import { TRUST_ANCHOR_MODES, b64uEncode, type TrustAnchorMode } from "./protocol";
+import { PACKAGE_PUBLIC_KEYS, verifySignedManifest, type PackageKey } from "./integrity";
+import { BUILD_ANCHOR_MODE } from "./trust-anchor";
 import { INTEGRITY_FILE } from "./integrity-scope";
 import { INTEGRITY_LIST_FILE, parseIntegrityList } from "./integrity-list";
 import { tsLicenseCore, type LicenseCore } from "./license-core";
@@ -19,8 +20,8 @@ import { isNativeBinding, nativeCore, unavailableCore, type NativeBinding } from
 declare const __TEKSERP_NATIVE_REQUIRED__: boolean | undefined;
 export const NATIVE_REQUIRED: boolean = typeof __TEKSERP_NATIVE_REQUIRED__ !== "undefined" && __TEKSERP_NATIVE_REQUIRED__ === true;
 
-/** Native `api::ABI` ile eşit olmalı: istek/yanıt biçimi kırılınca ikisi birlikte artar. */
-export const NATIVE_ABI = 2;
+/** Native `api::ABI` ile eşit olmalı: istek/yanıt biçimi kırılınca ikisi birlikte artar (3: künyede çapa kipi). */
+export const NATIVE_ABI = 3;
 /** Açık dosya yolu (geliştirme/test); ZORUNLU kipte OKUNMAZ — yamalı çekirdek enjekte edilemesin. */
 export const NATIVE_PATH_ENV = "TEKSERP_LISANS_CEKIRDEK";
 
@@ -29,6 +30,7 @@ export type FallbackReason =
   | "DOSYA_YOK"
   | "YUKLENEMEDI"
   | "KUNYE_UYUSMAZ"
+  | "CAPA_UYUSMAZ"
   | "TEST_DERLEMESI"
   | "LISTE_YOK"
   | "LISTE_GECERSIZ"
@@ -43,6 +45,8 @@ export interface NativeIdentity {
   readonly hedef: string;
   readonly profil: string;
   readonly testCapasi: boolean;
+  /** Gömülü çapanın kipi (`hazirlik-capasi` özelliği → hazirlik). */
+  readonly capaKipi: TrustAnchorMode;
   readonly protokolKodlari: readonly string[];
   readonly cekirdekKodlari: readonly string[];
   readonly yerTutucular: readonly string[];
@@ -70,6 +74,8 @@ export interface LoaderOptions {
   readonly arch: string;
   /** Zorunlu kipte `.node`u imzalı listeye karşı denetleyen PAKET anahtarları (yalnız testler değiştirir). */
   readonly packageKeys?: readonly PackageKey[];
+  /** Beklenen gömülü çapa kipi; verilmezse bu derlemeninki (yalnız testler değiştirir). */
+  readonly anchorMode?: TrustAnchorMode;
 }
 
 /** napi-rs adlandırması: `lisans-cekirdek.<platform>-<arch>[-<abi>].node`; desteklenmeyen hedef `null`. */
@@ -102,6 +108,7 @@ const NativeIdentitySchema = z.object({
   hedef: z.string(),
   profil: z.string(),
   testCapasi: z.boolean(),
+  capaKipi: z.enum(TRUST_ANCHOR_MODES),
   protokolKodlari: z.array(z.string()),
   cekirdekKodlari: z.array(z.string()),
   yerTutucular: z.array(z.string()),
@@ -129,14 +136,19 @@ export interface LoadedCore {
   readonly status: CoreLoadStatus;
 }
 
-/** Künye kabul kararı (saf): arayüz sürümü + platform + mimari eşit olmalı; zorunlu kipte test çapalı derleme RED. */
+/**
+ * Künye kabul kararı (saf): arayüz sürümü + platform + mimari eşit olmalı; gömülü çapa kipi bu derlemeninkiyle aynı
+ * olmalı (üretim derlemesi hazırlık çapalı native'i açmaz, tersi de); zorunlu kipte test çapalı derleme RED.
+ */
 export function identityRejection(
-  id: Pick<NativeIdentity, "abi" | "platform" | "arch" | "testCapasi">,
-  o: Pick<LoaderOptions, "required" | "platform" | "arch">,
+  id: Pick<NativeIdentity, "abi" | "platform" | "arch" | "testCapasi" | "capaKipi">,
+  o: Pick<LoaderOptions, "required" | "platform" | "arch" | "anchorMode">,
 ): { readonly neden: FallbackReason; readonly ayrinti: string } | null {
   if (id.abi !== NATIVE_ABI || id.platform !== o.platform || id.arch !== o.arch) {
     return { neden: "KUNYE_UYUSMAZ", ayrinti: `native abi ${id.abi} ${id.platform}-${id.arch}, beklenen abi ${NATIVE_ABI} ${o.platform}-${o.arch}` };
   }
+  const mode = o.anchorMode ?? BUILD_ANCHOR_MODE;
+  if (id.capaKipi !== mode) return { neden: "CAPA_UYUSMAZ", ayrinti: `native ${id.capaKipi} çapalı, bu derleme ${mode} çapalı` };
   if (o.required && id.testCapasi) return { neden: "TEST_DERLEMESI", ayrinti: "üretimde test çapalı native derlemesi kabul edilmez" };
   return null;
 }
@@ -144,7 +156,8 @@ export function identityRejection(
 /**
  * İKİNCİ DENETİM NOKTASI: native kendi bütünlüğünü doğrulayamaz (yamalı `.node` her şeyi "geçerli"
  * diyebilir). Zorunlu kipte `.node` AÇILMADAN ÖNCE (dlopen yamalı kodu çalıştırır) paket kökündeki
- * imzalı listeye karşı TS protokolüyle denetlenir; liste yok/geçersiz/uyuşmaz → çekirdek YOK.
+ * imzalı listeye karşı bu derlemenin PAKET çapasıyla (üretim derlemesinde hazırlık anahtarı YOK) TS
+ * protokolüyle denetlenir; liste yok/geçersiz/uyuşmaz → çekirdek YOK.
  */
 export function packagedNativeRejection(
   file: string,
@@ -157,15 +170,9 @@ export function packagedNativeRejection(
   } catch {
     return { neden: "LISTE_YOK", ayrinti: `${INTEGRITY_FILE} okunamadı` };
   }
-  const usable = new Map<string, KeyObject>();
-  for (const k of keys) {
-    const key = publicKeyFromX(k.x);
-    if (key) usable.set(k.kid, key);
-  }
-  const j = verifyJws(token, { typ: INTEGRITY_TYP, findKey: (kid) => usable.get(kid) });
-  if (!j.ok) return { neden: "LISTE_GECERSIZ", ayrinti: j.code };
-  const m = decodeDocument(IntegrityManifestSchema, j.value.payload);
-  if (!m.ok) return { neden: "LISTE_GECERSIZ", ayrinti: m.code };
+  const signed = verifySignedManifest(token, keys);
+  if (!signed.ok) return { neden: "LISTE_GECERSIZ", ayrinti: signed.code };
+  const { liste } = signed.manifest;
   let listBytes: Buffer;
   try {
     listBytes = readFileSync(path.join(root, INTEGRITY_LIST_FILE));
@@ -173,7 +180,7 @@ export function packagedNativeRejection(
     return { neden: "LISTE_YOK", ayrinti: `${INTEGRITY_LIST_FILE} okunamadı` };
   }
   const listDigest = b64uEncode(createHash("sha256").update(listBytes).digest());
-  const entries = listBytes.length === m.value.liste.boyut && listDigest === m.value.liste.sha256 ? parseIntegrityList(listBytes, m.value.liste.dosyaSayisi) : null;
+  const entries = listBytes.length === liste.boyut && listDigest === liste.sha256 ? parseIntegrityList(listBytes, liste.dosyaSayisi) : null;
   if (!entries) return { neden: "LISTE_GECERSIZ", ayrinti: `${INTEGRITY_LIST_FILE} imzalı özetle uyuşmuyor ya da biçimsiz` };
   const rel = `native/${path.basename(file)}`;
   const entry = entries.find((f) => f.yol === rel);

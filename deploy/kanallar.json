@@ -10,6 +10,7 @@
     "terfiKaynagi (yalnız üretim kanalında): bu kanala yalnız o hazırlık kanalında yayınlanmış ve kullanıcının terfi etiketiyle onayladığı commit çıkar (K5, scripts/lib/terfi.mjs); null = terfi yok. Hazırlık kanalının aynası onu terfiKaynagi olarak göstermek ZORUNDADIR.",
     "ayna: null = AYNASIZ hazırlık kanalı — demo/deneme müşterisi (satış provası): hiçbir üretim kanalının terfi kaynağı değildir, ona yayın terfi istemez, görünür etiket taşır. Demo/test müşterisi üretim türünde kaydedilmez.",
     "runtimeVersion kanal kimliği DEĞİLDİR (JS↔native uyum kimliği): çakışma denetimine girmez, mobil/app.json ile eşit olmak zorundadır.",
+    "backend.guvenCapasi = kanalın lisans SATICISI/kök bağı (uretim | hazirlik): backend paketi YALNIZ o kipin kök + PAKET anahtarlarına güvenir (derleme sabiti + native özelliği; paketle.ps1 -Musteri ile). Üretim kanalı daima uretim; demo/deneme müşterisi üretim satıcısından lisans alıyorsa uretim. Değişimi yeniden derleme + satıcı değişimidir, davranış bayrağı değil.",
     "Bekçi: node scripts/check-kanallar.mjs (+ --sonda) · yayın kapıları: node scripts/test_kanal_yayin_kapisi.mjs. Kural: docs/kurallar/surum-yayin.md; karar: docs/history/CLAUDE-NOT-ARSIVI.md 2026-09-27 testfabrika D1."
   ],
   "varsayilan": "adnansahin",
@@ -44,7 +45,8 @@
       },
       "backend": {
         "urunAdi": "Adnan Şahin ERP Backend",
-        "pm2Ad": "tekserp-backend-yeni"
+        "pm2Ad": "tekserp-backend-yeni",
+        "guvenCapasi": "uretim"
       }
     },
     "testfabrika": {
@@ -77,7 +79,8 @@
       },
       "backend": {
         "urunAdi": "TeksERP Test Fabrika Backend",
-        "pm2Ad": "tekserp-backend-testfabrika"
+        "pm2Ad": "tekserp-backend-testfabrika",
+        "guvenCapasi": "hazirlik"
       }
     },
     "demofabrika": {
@@ -110,7 +113,8 @@
       },
       "backend": {
         "urunAdi": "TeksERP Demo Fabrika Backend",
-        "pm2Ad": "tekserp-backend-demofabrika"
+        "pm2Ad": "tekserp-backend-demofabrika",
+        "guvenCapasi": "uretim"
       }
     }
   }

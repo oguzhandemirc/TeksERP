@@ -72,7 +72,7 @@ npx tsx scripts/anahtar.ts sirlar-uret --dizin="$D"   # portal-totp.key + etkinl
 
 - **VDS dışı kopya (kullanıcı):** `hazirlik-2026-1.kok.json` + parolası USB'ye ve kâğıda (parola ayrı kâğıtta). Mac tek kopya olarak kalmamalı.
 - **ALT rotasyonu:** sertifika `2027-03-28`'de biter → ondan önce Mac'te `alt-hazirlik-2026-2` üretilir, VDS'teki `anahtarlar/`a kopyalanır; satıcı anahtar deposunu bakım işinde (dakikada bir) yeniden okur, yeniden başlatma gerekmez. Eskisi örtüşme süresince kalır.
-- Hazırlık kökü fabrika programının güven çapasındadır (`ROOT_PUBLIC_KEYS`, yalnız TEST/DEMO) — satıcı gömülü çapayı kullanır, `GUVEN_CAPASI_DOSYASI` **verilmez**.
+- Hazırlık kökü yalnız fabrika programının HAZIRLIK derlemesinin çapasındadır (`STAGING_ROOT_PUBLIC_KEYS`, yalnız TEST/DEMO; üretim derlemesi onu tanımaz — G3) — satıcı gömülü çapayı ortamının kipiyle kullanır: compose `GUVEN_CAPASI: ${ORTAM}` verir (`compose-denetle` ⑪ ölçer), `GUVEN_CAPASI_DOSYASI` **verilmez** (üretimde açılışı durdurur). Konteyner içi CLI'lar (`portal-kullanici` · `modul-anahtari ice-aktar` · `anahtar.ts indirme-belirteci`) kipi aynı ortamdan alır.
 
 ### 2.2 İmaj
 

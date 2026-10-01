@@ -382,6 +382,10 @@ if ($Korumali) {
   }
   New-Item -ItemType Directory -Force (Join-Path $stage "native") | Out-Null
   Copy-Item $natKaynak (Join-Path $stage "native\$natAd")
+  # G3: native'in gomulu capa kipi bayt kodunun kipiyle (build-korumali kanaldan yazar) AYNI olmali;
+  # uyusmazsa paket acilista cekirdeksiz kalirdi. Paketin kendi Node'u .node'u yukleyip kunyesini okur.
+  & $runtimeNode (Join-Path (Join-Path $proj "scripts") "native-capa-kipi.mjs") (Join-Path (Join-Path $stage "native") $natAd) (Join-Path (Join-Path $proj "dist") "server-kunye.json")
+  if ($LASTEXITCODE -ne 0) { Fail "native lisans cekirdeginin guven capasi kipi paketinkiyle uyusmuyor (yukarida). Hazirlik kanali: npm run derle:win:hazirlik + -NativeYol." }
   Write-Host "  native      : native\$natAd (lisans cekirdegi - zorunlu kip)"
 }
 

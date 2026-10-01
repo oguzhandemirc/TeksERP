@@ -1,7 +1,9 @@
 #!/usr/bin/env node
-// Native lisans çekirdeğini derler: `node scripts/derle.mjs <yerel|win-x64|linux-x64> [--uretim]`.
-//   varsayılan  → `dist/` , `test-anchor` özellikli (kâhin bekçisi dışarıdan test çapası verebilsin)
-//   --uretim    → `dist-uretim/`, özelliksiz (gömülü çapa; paket bu çıktıyı taşır — Faz 2b)
+// Native lisans çekirdeğini derler: `node scripts/derle.mjs <yerel|win-x64|linux-x64> [--uretim | --hazirlik]`.
+//   varsayılan  → `dist/` , `test-anchor` özellikli, ÜRETİM gömülü çapalı (kâhin bekçisi dışarıdan test çapası verebilsin)
+//   --uretim    → `dist-uretim/`, özelliksiz: YALNIZ üretim kökleri + PAKET anahtarları gömülü (üretim kanalının paketi)
+//   --hazirlik  → `dist-hazirlik/`, `hazirlik-capasi`: YALNIZ hazırlık kökleri + PAKET anahtarları gömülü (hazırlık
+//                 kanalının paketi); iki kip tek ikilide birleşmez, TS yükleyicisi kendi kipinden farklısını açmaz
 // win-x64   Mac/Linux'tan `napi build -x` (cargo-xwin; CRT statik — `.cargo/config.toml`).
 // linux-x64 `cargo zigbuild` ile glibc 2.28 tabanı (zig PATH'te olmalı); çıktıdaki en yüksek
 //           GLIBC sembol sürümü ÖLÇÜLÜR, 2.28'i aşarsa derleme BAŞARISIZ sayılır.
@@ -14,8 +16,14 @@ import { fileURLToPath } from "node:url";
 const DIZIN = join(dirname(fileURLToPath(import.meta.url)), "..");
 const hedef = process.argv[2] ?? "yerel";
 const uretim = process.argv.includes("--uretim");
-const cikti = join(DIZIN, uretim ? "dist-uretim" : "dist");
-const ozellik = uretim ? [] : ["--features", "test-anchor"];
+const hazirlik = process.argv.includes("--hazirlik");
+if (uretim && hazirlik) {
+  console.error("--uretim ve --hazirlik birlikte verilemez: bir ikili TEK kipin çapasını taşır");
+  process.exit(2);
+}
+const kip = uretim ? "uretim" : hazirlik ? "hazirlik" : null;
+const cikti = join(DIZIN, kip ? `dist-${kip}` : "dist");
+const ozellik = uretim ? [] : hazirlik ? ["--features", "hazirlik-capasi"] : ["--features", "test-anchor"];
 const GLIBC_TAVANI = [2, 28];
 const env = { ...process.env, PATH: [join(homedir(), ".cargo", "bin"), process.env.PATH ?? ""].join(delimiter) };
 
@@ -54,7 +62,7 @@ if (hedef === "yerel") {
   console.log(`${asti ? "❌" : "✅"} en yüksek GLIBC sembolü ${g ? g.join(".") : "bulunamadı"} (tavan ${GLIBC_TAVANI.join(".")})`);
   if (asti) process.exit(1);
 } else {
-  console.error("kullanım: node scripts/derle.mjs <yerel|win-x64|linux-x64> [--uretim]");
+  console.error("kullanım: node scripts/derle.mjs <yerel|win-x64|linux-x64> [--uretim | --hazirlik]");
   process.exit(2);
 }
-console.log(`✅ ${hedef}${uretim ? " (üretim)" : " (test çapalı)"} → ${cikti}`);
+console.log(`✅ ${hedef}${kip ? ` (${kip} çapalı)` : " (test çapalı, üretim gömülü)"} → ${cikti}`);

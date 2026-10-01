@@ -16,15 +16,18 @@ import {
   b64uDecode,
   b64uEncode,
   msToIso,
+  rootPublicKeysFor,
   type CertUsage,
   type FingerprintFactor,
   type LeaseDoc,
   type RawFingerprint,
   type RootKey,
+  type TrustAnchorMode,
 } from "../../src/lib/license/protocol";
 import type { CoreResult, JwsKey, LicenseCore } from "../../src/lib/license/license-core";
-import type { PackageKey } from "../../src/lib/license/integrity";
+import { packagePublicKeysFor, type PackageKey } from "../../src/lib/license/integrity";
 import { butunlukVektorleri } from "./lisans-butunluk-vektor";
+import { kipKokKidi, kiplere } from "./lisans-vektor-kip";
 import { moduleKeyId, wrapModuleKey } from "../../src/lib/license/module-key";
 import {
   HAM_PARMAK_IZI,
@@ -49,12 +52,13 @@ function capaDisiKok(): TestAnahtari {
   return anahtarUret("kok-fikstur-1");
 }
 
+
 /** `Teks-Erp/` köküne göre (paketlenmiş koşumda `__dirname` tek olduğundan kök çağırandan gelir). */
 export function vektorDosyasiYolu(teksKok: string): string {
   return path.join(teksKok, "native", "lisans-cekirdek", "test-vektorleri", "protokol.json");
 }
-/** Dosya biçimi sürümü (vektör şekli kırılınca artar; Rust testi de okur). */
-export const VEKTOR_BICIMI = 1;
+/** Dosya biçimi sürümü (vektör şekli kırılınca artar; Rust testi de okur). 2: gömülü çapa vektörü `kip` taşır. */
+export const VEKTOR_BICIMI = 2;
 /** Kayıtlı dosyanın "şimdi"si — belgeler zamana göre değil kendi imza anlarına göre doğrulanır. */
 export const VEKTOR_SIMDI = Date.parse("2026-09-29T00:00:00.000Z");
 
@@ -64,24 +68,32 @@ export interface DosyaGirdisi {
   readonly icerik: string | null;
 }
 
+/**
+ * Gömülü çapayla (`roots`/`keys` null) koşan vektörün kipi: beklenen sonuç O kipin çapasıyladır. TS kâhini kipin
+ * listesini açıkça verir; native yalnız kendi kipindeki kaydı koşar (Rust testi ve kâhin süzer).
+ */
+interface GomuluKip {
+  readonly kip?: TrustAnchorMode;
+}
+
 export type Vektor =
   | { readonly tur: "jws"; readonly ad: string; readonly token: unknown; readonly typ: string; readonly keys: JwsKey[] }
-  | { readonly tur: "sertifika"; readonly ad: string; readonly token: unknown; readonly usage: CertUsage; readonly atMs: number | null; readonly roots: RootKey[] | null }
-  | { readonly tur: "hak"; readonly ad: string; readonly token: unknown; readonly roots: RootKey[] | null }
-  | { readonly tur: "kira"; readonly ad: string; readonly token: unknown; readonly roots: RootKey[] | null }
-  | { readonly tur: "bag"; readonly ad: string; readonly lease: unknown; readonly entitlement: unknown; readonly roots: RootKey[] | null }
+  | ({ readonly tur: "sertifika"; readonly ad: string; readonly token: unknown; readonly usage: CertUsage; readonly atMs: number | null; readonly roots: RootKey[] | null } & GomuluKip)
+  | ({ readonly tur: "hak"; readonly ad: string; readonly token: unknown; readonly roots: RootKey[] | null } & GomuluKip)
+  | ({ readonly tur: "kira"; readonly ad: string; readonly token: unknown; readonly roots: RootKey[] | null } & GomuluKip)
+  | ({ readonly tur: "bag"; readonly ad: string; readonly lease: unknown; readonly entitlement: unknown; readonly roots: RootKey[] | null } & GomuluKip)
   | { readonly tur: "normalize"; readonly ad: string; readonly factor: FingerprintFactor; readonly raw: string | null }
   | { readonly tur: "ozet"; readonly ad: string; readonly raw: RawFingerprint; readonly salt: string }
-  | {
+  | ({
       readonly tur: "butunluk";
       readonly ad: string;
       readonly manifest: unknown;
       readonly keys: PackageKey[] | null;
       readonly dosyalar: DosyaGirdisi[];
       readonly kok: "var" | "yok";
-    }
+    } & GomuluKip)
   | { readonly tur: "modul"; readonly ad: string; readonly wrap: unknown; readonly privateKey: string; readonly modul: string }
-  | {
+  | ({
       readonly tur: "kiraModul";
       readonly ad: string;
       readonly lease: unknown;
@@ -90,7 +102,7 @@ export type Vektor =
       readonly modul: string;
       readonly kid: string;
       readonly roots: RootKey[] | null;
-    }
+    } & GomuluKip)
   | { readonly tur: "tarih"; readonly ad: string; readonly metin: string };
 
 export interface VektorKaydi {
@@ -145,19 +157,37 @@ function dosyalariKur(dosyalar: readonly DosyaGirdisi[]): string {
   return dir;
 }
 
+/** Kayıt bu kipte derlenmiş native'de koşar mı (kipsiz kayıt her derlemede). */
+export function kipteKosar(v: Vektor, kip: TrustAnchorMode): boolean {
+  return !("kip" in v) || v.kip === undefined || v.kip === kip;
+}
+
+/** Gömülü çapa vektörü: TS kâhini kipin listesini AÇIKÇA verir (kendi derleme kipine bakmaz); native gömülü çapasıyla koşar. */
+function kokCapasi(core: LicenseCore, roots: RootKey[] | null, kip: TrustAnchorMode | undefined): readonly RootKey[] | undefined {
+  if (roots) return roots;
+  return kip !== undefined && core.source === "ts" ? rootPublicKeysFor(kip) : undefined;
+}
+
+function paketCapasi(core: LicenseCore, keys: PackageKey[] | null, kip: TrustAnchorMode | undefined): readonly PackageKey[] | undefined {
+  if (keys) return keys;
+  return kip !== undefined && core.source === "ts" ? packagePublicKeysFor(kip) : undefined;
+}
+
 /** Vektörü verilen çekirdekte değerlendirir; `tarih` yalnız TS'te (native'in tarih ucu yok, Rust testi ölçer). */
 export async function degerlendir(core: LicenseCore, v: Vektor): Promise<unknown> {
   switch (v.tur) {
     case "jws":
       return sonuc(core.verifyJws(v.token, v.typ, v.keys));
-    case "sertifika":
-      return sonuc(core.verifyCertificate(v.token, { usage: v.usage, atMs: v.atMs ?? Number.NaN, ...(v.roots ? { roots: v.roots } : {}) }));
+    case "sertifika": {
+      const roots = kokCapasi(core, v.roots, v.kip);
+      return sonuc(core.verifyCertificate(v.token, { usage: v.usage, atMs: v.atMs ?? Number.NaN, ...(roots ? { roots } : {}) }));
+    }
     case "hak":
-      return sonuc(core.verifyEntitlement(v.token, v.roots ?? undefined));
+      return sonuc(core.verifyEntitlement(v.token, kokCapasi(core, v.roots, v.kip)));
     case "kira":
-      return sonuc(core.verifyLease(v.token, v.roots ?? undefined));
+      return sonuc(core.verifyLease(v.token, kokCapasi(core, v.roots, v.kip)));
     case "bag":
-      return sonuc(core.checkLeaseBinding(v.lease, v.entitlement, v.roots ?? undefined));
+      return sonuc(core.checkLeaseBinding(v.lease, v.entitlement, kokCapasi(core, v.roots, v.kip)));
     case "normalize":
       return { deger: core.normalizeFactor(v.factor, v.raw) };
     case "ozet":
@@ -170,14 +200,15 @@ export async function degerlendir(core: LicenseCore, v: Vektor): Promise<unknown
       const dir = dosyalariKur(v.dosyalar);
       try {
         const kok = v.kok === "yok" ? path.join(dir, "olmayan-kok") : dir;
-        return sonuc(await core.verifyIntegrity(v.manifest, kok, v.keys ?? undefined));
+        return sonuc(await core.verifyIntegrity(v.manifest, kok, paketCapasi(core, v.keys, v.kip)));
       } finally {
         rmSync(dir, { recursive: true, force: true });
       }
     }
     case "modul":
       return sonuc(core.unwrapModuleKey(v.wrap, v.privateKey, v.modul));
-    case "kiraModul":
+    case "kiraModul": {
+      const roots = kokCapasi(core, v.roots, v.kip);
       return sonuc(
         core.unwrapLeaseModuleKey({
           lease: v.lease,
@@ -185,9 +216,10 @@ export async function degerlendir(core: LicenseCore, v: Vektor): Promise<unknown
           privateKeyX: v.privateKey,
           modul: v.modul,
           kid: v.kid,
-          ...(v.roots ? { roots: v.roots } : {}),
+          ...(roots ? { roots } : {}),
         }),
       );
+    }
     case "tarih": {
       const ms = Date.parse(v.metin);
       return { ms: Number.isNaN(ms) ? null : ms };
@@ -331,8 +363,9 @@ function sertifikaVektorleri(f: Fikstur): Vektor[] {
     v("çapa sınıfsız", alt, { roots: [kokAnahtari(f.kok, [])] }),
     v("çapada hazırlık kökü ÜRETİM'e genişletilmiş", alt, { roots: [kokAnahtari(f.hazirlik, ["TEST", "URETIM"])] }),
     v("çapa anahtarı biçimsiz", alt, { roots: [{ kid: f.kok.kid, x: "abc", classes: ["URETIM"] }] }),
-    v("gömülü çapa: kök tanınmıyor", sertifikaBas(capaDisiKok(), sertifikaYuku(f, f.alt, "ALT")), { roots: null }),
-    v("gömülü çapa: hazırlık kid'i, yabancı imza", sertifikaBas(anahtarUret("hazirlik-2026-1"), sertifikaYuku(f, f.alt, "ALT", { siniflar: ["TEST"] })), { roots: null }),
+    ...kiplere(v("gömülü çapa: kök tanınmıyor", sertifikaBas(capaDisiKok(), sertifikaYuku(f, f.alt, "ALT")), { roots: null })),
+    ...kiplere(v("gömülü çapa: hazırlık kökü kid'i, yabancı imza", sertifikaBas(anahtarUret(kipKokKidi("hazirlik")), sertifikaYuku(f, f.alt, "ALT", { siniflar: ["TEST"] })), { roots: null })),
+    ...kiplere(v("gömülü çapa: üretim kökü kid'i, yabancı imza", sertifikaBas(anahtarUret(kipKokKidi("uretim")), sertifikaYuku(f, f.alt, "ALT")), { roots: null })),
   ];
 }
 
@@ -398,7 +431,9 @@ function hakVektorleri(f: Fikstur): Vektor[] {
     v("kira belgesi HAK yerine", kiraBas(f)),
     v("çapa boş", hakBas(f), []),
     v("çözümsüz metin", "a.b.c"),
-    v("gömülü çapa: kök tanınmıyor", hakBas(f, {}, capaDisiKok()), null),
+    ...kiplere(v("gömülü çapa: kök tanınmıyor", hakBas(f, {}, capaDisiKok()), null)),
+    ...kiplere(v("gömülü çapa: hazırlık kökü kid'iyle TEST HAK, yabancı imza", hakBas(f, { sinif: "TEST" }, anahtarUret(kipKokKidi("hazirlik"))), null)),
+    ...kiplere(v("gömülü çapa: üretim kökü kid'iyle ÜRETİM HAK, yabancı imza", hakBas(f, {}, anahtarUret(kipKokKidi("uretim"))), null)),
   ];
 }
 
@@ -453,7 +488,14 @@ function kiraVektorleri(f: Fikstur): Vektor[] {
     v("HAK belgesi kira yerine", hakBas(f)),
     v("çapa boş (önce ayrıştırma, sonra çapa)", kiraBas(f), []),
     v("çapa boş, biçimsiz metin", "x", []),
-    v("gömülü çapa: alt sertifikanın kökü tanınmıyor", kiraBas(f, { altSertifika: sertifikaBas(capaDisiKok(), sertifikaYuku(f, f.alt, "ALT")) }), null),
+    ...kiplere(v("gömülü çapa: alt sertifikanın kökü tanınmıyor", kiraBas(f, { altSertifika: sertifikaBas(capaDisiKok(), sertifikaYuku(f, f.alt, "ALT")) }), null)),
+    ...kiplere(
+      v(
+        "gömülü çapa: alt sertifikası hazırlık kökü kid'li, yabancı imza",
+        kiraBas(f, { altSertifika: sertifikaBas(anahtarUret(kipKokKidi("hazirlik")), sertifikaYuku(f, f.alt, "ALT", { siniflar: ["TEST"] })) }),
+        null,
+      ),
+    ),
   ];
 }
 

@@ -8,7 +8,7 @@
 - Doğrulama/şema/parmak izi kuralı önce TS'te değişir; sonra bu crate ve vektör dosyası AYNI commit'te: `cd Teks-Erp && npx tsx scripts/test_lisans_native_kahin.ts --vektor-yaz` → `npm test` (burada) → kâhin bekçisi. Vektör dosyası (`test-vektorleri/protokol.json`) elle düzenlenmez.
 - Denetim SIRASI da aynadır (hata kodu eşliği) — yeni bir denetimi TS'teki yerine koy.
 - Rust'a yeni regex yazılırsa TS kaynağında birebir karşılığı olmalı (`\d` yerine `[0-9]`: Rust'ta `\d` Unicode'dur); bekçi §0h ölçer.
-- `test-anchor` özelliği (dışarıdan güven çapası) YALNIZ geliştirme/test derlemesinde; üretim derlemesi özelliksiz çıkar (`npm run derle:*:uretim`). Gömülü çapa `src/anchor.rs` = TS `ROOT_PUBLIC_KEYS` / `PACKAGE_PUBLIC_KEYS`.
+- `test-anchor` özelliği (dışarıdan güven çapası) YALNIZ geliştirme/test derlemesinde. Gömülü çapa İKİ kiptir ve bir ikili TEK kipi taşır: özelliksiz derleme ÜRETİM kökleri + PAKET anahtarları (`npm run derle:*:uretim` → `dist-uretim/`), `hazirlik-capasi` HAZIRLIK olanları (`npm run derle:*:hazirlik` → `dist-hazirlik/`). `src/anchor.rs`in dört bloğu TS `PRODUCTION_`/`STAGING_ROOT_PUBLIC_KEYS` + `…_PACKAGE_PUBLIC_KEYS` aynasıdır ve her blok kendi kipinin `cfg`siyle kapılıdır (öteki kipin baytı ikiliye girmez); künye `capaKipi` taşır, TS yükleyicisi kendi kipinden farklı ikiliyi açmaz. Paketin native'i kanalın kipiyle derlenir (`deploy/kanallar.json` `backend.guvenCapasi`).
 - Windows parmak izi sondası (`src/collect.rs` `WINDOWS_PROBE_LINES`) TS `fingerprint-os.ts` ile satır satır aynıdır; birini değiştiren ikisini değiştirir.
 - C bağımlılığı yok (saf Rust kripto: ed25519-dalek, x25519-dalek, RustCrypto) — çapraz derleme basit kalsın; yeni crate eklemeden önce onay.
 - `panic = "unwind"` bilerek (napi `catch_unwind` → JS istisnası; abort backend'i düşürürdü). Yapıştırıcı (`src/napi_api.rs`) ince kalır: JSON al → `api.rs` → JSON ver.
@@ -26,10 +26,11 @@
 | Komut | Ne |
 |---|---|
 | `npm run derle` | yerel hedef, test çapalı → `dist/` (kâhin bekçisi buradan yükler) |
-| `npm run derle:uretim` | yerel hedef, özelliksiz → `dist-uretim/` |
-| `npm run derle:win` · `derle:win:uretim` | win-x64 (cargo-xwin, CRT statik) |
-| `npm run derle:linux` · `derle:linux:uretim` | linux-x64-gnu, glibc 2.28 tabanı (zigbuild; GLIBC tavanını betik ölçer) |
-| `npm run denetle` | `cargo fmt --check` + clippy (uyarı = hata, iki özellik kümesi) — commit kapısının tip adımı |
-| `npm test` | `cargo test` (birim + TS vektörleri) — commit kapısının test adımı |
+| `npm run derle:uretim` | yerel hedef, özelliksiz (ÜRETİM çapası) → `dist-uretim/` |
+| `npm run derle:hazirlik` | yerel hedef, `hazirlik-capasi` (HAZIRLIK çapası) → `dist-hazirlik/` |
+| `npm run derle:win` · `derle:win:uretim` · `derle:win:hazirlik` | win-x64 (cargo-xwin, CRT statik) |
+| `npm run derle:linux` · `derle:linux:uretim` · `derle:linux:hazirlik` | linux-x64-gnu, glibc 2.28 tabanı (zigbuild; GLIBC tavanını betik ölçer) |
+| `npm run denetle` | `cargo fmt --check` + clippy (uyarı = hata, dört özellik kümesi: napi/çıplak × üretim/hazırlık) — commit kapısının tip adımı |
+| `npm test` | `cargo test` (birim + TS vektörleri) İKİ kipte (üretim + `hazirlik-capasi`) — commit kapısının test adımı |
 
-Kâhin bekçisi: `cd Teks-Erp && npx tsx scripts/test_lisans_native_kahin.ts` (native yoksa "⏭ ATLANDI — native yok", `TEKSERP_STRICT=1`de kırmızı). Çapa değişince (`guven-capasi-ekle.ts`) `dist/` ve `dist-uretim/` YENİDEN derlenir: kâhin §3d derlenmiş her ikilinin `builtinAnchor()`ını TS çapasıyla kıyaslar, bayat ikili kırmızıdır. Commit kapısı bu projeyi `Teks-Erp/`den ayrı sayar (dosya en özgül projeye aittir); cargo yoksa ⏭ beyanla geçer, ölçüm CI "Native lisans çekirdeği" job'ında.
+Kâhin bekçisi: `cd Teks-Erp && npx tsx scripts/test_lisans_native_kahin.ts` (native yoksa "⏭ ATLANDI — native yok", `TEKSERP_STRICT=1`de kırmızı). Çapa değişince (`guven-capasi-ekle.ts`) `dist/`, `dist-uretim/` ve `dist-hazirlik/` YENİDEN derlenir: kâhin §3d derlenmiş her ikilinin `builtinAnchor()`ını KENDİ kipinin TS çapasıyla kıyaslar (bayat ikili kırmızı), §9 iki kip ikilisini gömülü çapa vektörleriyle sınar. Commit kapısı bu projeyi `Teks-Erp/`den ayrı sayar (dosya en özgül projeye aittir); cargo yoksa ⏭ beyanla geçer, ölçüm CI "Native lisans çekirdeği" job'ında.
