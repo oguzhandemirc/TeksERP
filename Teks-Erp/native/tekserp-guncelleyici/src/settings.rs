@@ -1,6 +1,8 @@
 //! Güncelleyicinin kendi ayarı (`<KOK>\guncelleyici\ayar.json`, yalnız SYSTEM/Administrators yazar,
-//! §6.1) ve backend ortamından (`<KOK>\ayar\backend.env`) okunan değerler. Sırlar (DATABASE_URL
-//! parolası) yalnız çocuk sürecin ORTAMINA gider; günlüğe/duruma yazılmaz.
+//! §6.1) ve backend ortamından (`<KOK>\yapilandirma\.env`, backend'in okuyucusunun aynasıyla —
+//! `tekserp_hizmet::envfile`) okunan değerler. Sırlar (DATABASE_URL parolası) yalnız çocuk sürecin
+//! ORTAMINA gider; günlüğe/duruma yazılmaz.
+use crate::codes;
 use crate::env::Fs;
 use crate::layout::Layout;
 use serde::Deserialize;
@@ -175,26 +177,49 @@ pub struct BackendEnv {
     pub backup_key_dir: PathBuf,
     pub pg_bin_dir: PathBuf,
     /// pg_dump/pg_restore/psql kimliği: `BACKUP_PG_USER/PASSWORD` varsa onlar, yoksa DATABASE_URL.
-    pub db: Option<DbUrl>,
+    pub db: DbUrl,
     pub env_file: PathBuf,
 }
 
-pub fn read_backend_env(fs: &dyn Fs, layout: &Layout) -> Result<BackendEnv, String> {
-    let bytes = fs.read_untrusted(&layout.backend_env(), 256 * 1024).map_err(|e| format!("yapilandirma\\.env okunamadı: {e}"))?;
-    let text = String::from_utf8(bytes).map_err(|_| "yapilandirma\\.env UTF-8 değil".to_string())?;
-    let file = envfile::parse(&text)?;
-    let port = file.get("PORT").map_or(Ok(4000), |p| p.parse::<u16>()).map_err(|_| ".env PORT sayı değil".to_string())?;
+/// Güncelleyicinin kendisi için ZORUNLU `.env` anahtarları. Okuyucu biçimsiz satırı backend gibi
+/// sessizce atlar; bu liste o sessizliğin bir zorunlu ayarı yutmasını engeller (yok/boş → `AYAR_EKSIK`).
+pub const REQUIRED_BACKEND_KEYS: [&str; 1] = ["DATABASE_URL"];
+
+/// Okuma hatası: `durum.json` `hataKodu` + sırsız ileti.
+pub type EnvFail = (&'static str, String);
+
+pub fn read_backend_env(fs: &dyn Fs, layout: &Layout) -> Result<BackendEnv, EnvFail> {
+    let bytes = fs
+        .read_untrusted(&layout.backend_env(), 256 * 1024)
+        .map_err(|e| (codes::AYAR_BICIMSIZ, format!("yapilandirma\\.env okunamadı: {e}")))?;
+    backend_env_from_bytes(&bytes, layout)
+}
+
+/// `.env` baytlarından güncelleyicinin değerleri: önce zorunlu anahtarlar (`AYAR_EKSIK`), sonra biçim
+/// (`AYAR_BICIMSIZ`). İletiler yalnız anahtar ADI taşır.
+pub fn backend_env_from_bytes(bytes: &[u8], layout: &Layout) -> Result<BackendEnv, EnvFail> {
+    let file = envfile::parse_bytes(bytes);
+    let missing: Vec<&str> = REQUIRED_BACKEND_KEYS.into_iter().filter(|k| file.get(k).is_none()).collect();
+    if !missing.is_empty() {
+        return Err((
+            codes::AYAR_EKSIK,
+            format!("yapilandirma\\.env zorunlu anahtar yok ya da boş: {} (biçimsiz satırı backend de yok sayar)", missing.join(", ")),
+        ));
+    }
+    let port =
+        file.get("PORT").map_or(Ok(4000), |p| p.parse::<u16>()).map_err(|_| (codes::AYAR_BICIMSIZ, ".env PORT sayı değil".to_string()))?;
     let license_dir = file.get("LICENSE_DIR").map_or_else(|| layout.default_license_dir(), PathBuf::from);
     let backup_key_dir = file.get("BACKUP_KEY_DIR").map_or_else(|| layout.default_backup_keys(), PathBuf::from);
     // D4: `PG_BIN_DIR` = `<KOK>\pgsql\bin` junction'ı (kendi örnekte etkin sürüm, harici kipte o PG'nin bin'i).
     let pg_bin_dir = file.get("PG_BIN_DIR").map_or_else(|| layout.pg_bin_link(), PathBuf::from);
-    let db = file.get("DATABASE_URL").and_then(parse_db_url).map(|mut d| {
-        if let Some(u) = file.get("BACKUP_PG_USER") {
-            d.user = u.to_string();
-            d.password = file.get("BACKUP_PG_PASSWORD").unwrap_or_default().to_string();
-        }
-        d
-    });
+    let mut db = file
+        .get("DATABASE_URL")
+        .and_then(parse_db_url)
+        .ok_or_else(|| (codes::AYAR_BICIMSIZ, ".env DATABASE_URL postgres adresi olarak çözülemedi".to_string()))?;
+    if let Some(u) = file.get("BACKUP_PG_USER") {
+        db.user = u.to_string();
+        db.password = file.get("BACKUP_PG_PASSWORD").unwrap_or_default().to_string();
+    }
     Ok(BackendEnv { file, port, license_dir, backup_key_dir, pg_bin_dir, db, env_file: layout.backend_env() })
 }
 

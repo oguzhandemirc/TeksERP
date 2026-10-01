@@ -215,6 +215,24 @@ fn backend_service_name_comes_from_settings() {
     assert_eq!(w.backend().starts, 0);
 }
 
+/// `.env` okuyucusu biçimsiz satırı backend gibi sessizce atlar (D2b); atlanan satır güncelleyicinin
+/// ZORUNLU anahtarıysa hiçbir şey yapılmaz, durum `AYAR_EKSIK` — ileti anahtar adı taşır, değer değil.
+#[test]
+fn silently_skipped_required_env_key_stops_updater() {
+    let w = world("env-zorunlu");
+    std::fs::write(
+        w.layout.backend_env(),
+        "PORT=4999\nDATABASE_URL postgresql://tekserp:gizli-parola@127.0.0.1:5432/tekserp\nPG_BIN_DIR=/fake/pgbin\n",
+    )
+    .unwrap();
+    w.run(1).unwrap();
+    let st = w.status().unwrap();
+    assert_eq!((st.state, st.error_code.as_deref()), (State::Waiting, Some("AYAR_EKSIK")));
+    assert!(st.message.as_deref().is_some_and(|m| m.contains("DATABASE_URL") && !m.contains("gizli-parola")), "{:?}", st.message);
+    assert_eq!(w.backend().starts, 0);
+    assert_eq!(w.current().as_deref(), Some(OLD));
+}
+
 /// Kalp atışı (§5.2): her tur `sonCanlilik`i tazeler — değişen bir şey olmasa da; eşik duruma göre.
 #[test]
 fn heartbeat_is_refreshed_every_tick() {
