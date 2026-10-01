@@ -433,6 +433,19 @@ impl Engine {
         }
     }
 
+    /// DAGK-9: kira (satıcı imzalı, kısa ömürlü) kanalın güncel backend sürümünü taşır
+    /// (`kanal.guncelSurumler.backend`); güncelleme sunucusunun adayı ondan ESKİYSE sunucu geride
+    /// (dondurulmuş/yeniden oynatılan `son.json`) — sessiz kalmasın. Kira bir sürüme sabitlediyse
+    /// (`hedefSurum`) aday bilerek eskidir, uyarı yok. Karar değişmez, yalnız görünür kılınır.
+    fn server_behind(lic: &LicenseView, m: &ReleaseManifest, pinned: bool) -> Option<String> {
+        if pinned {
+            return None;
+        }
+        let current = lic.lease.as_ref()?.get("kanal")?.get("guncelSurumler")?.get("backend")?.as_str()?;
+        (version::compare(current, &m.surum) == Some(std::cmp::Ordering::Greater))
+            .then(|| format!("kiradaki kanal güncel sürümü {current}, güncelleme sunucusunun adayı {} — sunucu geride", m.surum))
+    }
+
     fn policy_view(lic: &LicenseView, pol: Option<&(UpdatePolicy, PolicySource)>) -> Option<PolicyView> {
         pol.map(|(p, src)| PolicyView {
             mode: p.kip.label().into(),
@@ -586,6 +599,12 @@ impl Engine {
             let message =
                 format!("{} {}{}", m.doc.surum, d.karar.label(), d.neden.as_deref().map(|n| format!(" / {n}")).unwrap_or_default());
             let state = self.resting_state(last.as_ref(), &installed, None);
+            // DAGK-9: yapılacak iş yok görünürken güncelleme sunucusu geride olabilir (eski `son.json`).
+            let pinned = pol.as_ref().is_some_and(|p| p.0.target.is_some());
+            if let Some(why) = Self::server_behind(&lic, &m.doc, pinned) {
+                self.write_status(self.doc(&f, state, Some(codes::SURUM_GERIDE), &format!("{message} — {why}")));
+                return idle;
+            }
             self.write_status(self.doc(&f, state, None, &message));
             return idle;
         }

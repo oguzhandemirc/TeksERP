@@ -457,3 +457,36 @@ fn prepared_version_is_reverified_at_apply_time() {
     assert_invariants(&w, "yeniden hazırlanıp kuruldu");
     assert!(std::fs::read_to_string(&server).unwrap().contains("sunucu"), "kurcalı dosya kurulumda kaldı");
 }
+
+fn rest_code(w: &World) -> (State, Option<String>, String) {
+    w.run_to_rest(0);
+    assert_eq!(w.state(), Some(State::Succeeded), "{:?}", w.status().map(|s| (s.error_code, s.message)));
+    w.run(1).unwrap();
+    let st = w.status().unwrap();
+    (st.state, st.error_code, st.message.unwrap_or_default())
+}
+
+/// DAGK-9: kira kanalın güncel sürümünü (2.14.0) söylerken güncelleme sunucusu hâlâ 2.13.0 sunuyorsa
+/// "iş yok" sessiz kalmaz: `SURUM_GERIDE` (karar değişmez). Kira adayla eşitse ya da kira bir sürüme
+/// sabitlediyse (`hedefSurum`, aday bilerek eski) uyarı yok.
+#[test]
+fn stale_update_server_is_made_visible() {
+    let behind = LeaseOpts { channel_backend: Some("2.14.0"), ..LeaseOpts::default() };
+    let (state, code, message) = rest_code(&World::new("geride", Setup { lease: behind, ..Setup::default() }));
+    assert_eq!((state, code.as_deref()), (State::Succeeded, Some("SURUM_GERIDE")), "{message}");
+    assert!(message.contains("2.14.0") && message.contains("2.13.0"), "{message}");
+    let (_, code, message) = rest_code(&world("kanal-esit"));
+    assert_eq!(code, None, "kira = aday: uyarı yok ({message})");
+    // Aday kurulamıyor (kaynak sürüm eski) ve iş yok görünüyor: sabitlenmemişse sunucu geride uyarısı,
+    // kira sürüme sabitlediyse (hedefSurum) aday bilerek eski — uyarı yok.
+    let blocked = Some(serde_json::json!({ "minKaynakSurum": "2.12.5" }));
+    for (tag, target, want) in [("kaynak-eski", None, Some("SURUM_GERIDE")), ("kaynak-eski-sabit", Some(NEW), None)] {
+        let lease =
+            LeaseOpts { update: Some(policy("OTOMATIK", &open_window(), target)), channel_backend: Some("2.14.0"), ..LeaseOpts::default() };
+        let w = World::new(tag, Setup { lease, manifest_extra: blocked.clone(), ..Setup::default() });
+        w.run(1).unwrap();
+        let st = w.status().unwrap();
+        assert_eq!(w.backend().starts, 0, "{tag}: kurulmamalı");
+        assert_eq!(st.error_code.as_deref(), want, "{tag}: {:?}", st.message);
+    }
+}

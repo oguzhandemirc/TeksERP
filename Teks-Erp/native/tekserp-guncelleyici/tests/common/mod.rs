@@ -719,6 +719,8 @@ pub struct LeaseOpts {
     pub expired: bool,
     /// HAK `bakimBitis` (ms); `None` = HAK dosyası yok.
     pub maintenance_end: Option<i64>,
+    /// Kanalın güncel backend sürümü (`kanal.guncelSurumler.backend`); `None` = alan yok.
+    pub channel_backend: Option<&'static str>,
 }
 
 impl Default for LeaseOpts {
@@ -729,6 +731,7 @@ impl Default for LeaseOpts {
             class: "URETIM",
             expired: false,
             maintenance_end: Some(T0 + 365 * DAY),
+            channel_backend: Some(NEW),
         }
     }
 }
@@ -756,7 +759,7 @@ pub fn lease_and_entitlement(k: &Keys, o: &LeaseOpts, now: i64) -> (String, Opti
         "zorlama": false, "gecerlilikBitis": null,
         "yaptirim": { "kademe": null, "mesaj": null, "kisitlamaTarihi": null, "donmusModuller": [], "guncellemeDonuk": o.frozen_by_sanction },
         "yoklamaAraligiDk": 60, "esitlemeAraligiDk": null, "patronBulutBitis": null, "devredildi": false,
-        "kanal": { "kod": CHANNEL, "guncelSurumler": { "backend": NEW } },
+        "kanal": { "kod": CHANNEL, "guncelSurumler": o.channel_backend.map_or_else(|| json!({}), |v| json!({ "backend": v })) },
         "altSertifika": cert,
     });
     if let Some(u) = &o.update {
