@@ -48,6 +48,8 @@ AllowRootDirectory=no
 AllowUNCPath=no
 AllowNetworkDrive=no
 UsePreviousAppDir=yes
+; AppId kanaldan ({code:}) türer: dil seçimi AppId'den ÖNCE okunurdu - Inno bu ikisini birlikte kabul etmez.
+UsePreviousLanguage=no
 PrivilegesRequired=admin
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
@@ -177,14 +179,15 @@ function WinTranslateMessage(var Ileti: TIleti): Integer;
 function WinDispatchMessage(var Ileti: TIleti): LongWord;
   external 'DispatchMessageW@user32.dll stdcall';
 
+// Win32 sabitleri C_ önekli: Inno'nun hazır tanımlarıyla "Duplicate identifier" çakışması olmasın.
 const
-  HANDLE_FLAG_INHERIT = 1;
-  STARTF_USESHOWWINDOW = $1;
-  STARTF_USESTDHANDLES = $100;
-  CREATE_NO_WINDOW = $08000000;
-  WAIT_OBJECT_0 = 0;
-  PM_REMOVE = 1;
-  DRIVE_REMOVABLE = 2;
+  C_MIRAS = 1;
+  C_PENCERE_GOSTER = $1;
+  C_STD_UCLAR = $100;
+  C_PENCERESIZ = $08000000;
+  C_BEKLEME_TAMAM = 0;
+  C_ILETI_KALDIR = 1;
+  C_SURUCU_CIKARILABILIR = 2;
   PS_ARGS = '-NoProfile -NonInteractive -ExecutionPolicy Bypass -File ';
 
 var
@@ -409,7 +412,7 @@ end;
 procedure IletileriIsle;
 var M: TIleti;
 begin
-  while WinPeekMessage(M, 0, 0, 0, PM_REMOVE) <> 0 do
+  while WinPeekMessage(M, 0, 0, 0, C_ILETI_KALDIR) <> 0 do
   begin
     WinTranslateMessage(M);
     WinDispatchMessage(M);
@@ -441,16 +444,16 @@ begin
     Exit;
   end;
   // Kurulumun uçları çocuğa GEÇMEZ (yalnız çocuğun okuyacağı/yazacağı uçlar miras).
-  WinSetHandleInformation(GirdiYaz, HANDLE_FLAG_INHERIT, 0);
-  WinSetHandleInformation(CiktiOku, HANDLE_FLAG_INHERIT, 0);
+  WinSetHandleInformation(GirdiYaz, C_MIRAS, 0);
+  WinSetHandleInformation(CiktiOku, C_MIRAS, 0);
   Bb.cb := 68; Bb.lpReserved := 0; Bb.lpDesktop := 0; Bb.lpTitle := 0;
   Bb.dwX := 0; Bb.dwY := 0; Bb.dwXSize := 0; Bb.dwYSize := 0; Bb.dwXCountChars := 0; Bb.dwYCountChars := 0;
-  Bb.dwFillAttribute := 0; Bb.dwFlags := STARTF_USESTDHANDLES or STARTF_USESHOWWINDOW;
+  Bb.dwFillAttribute := 0; Bb.dwFlags := C_STD_UCLAR or C_PENCERE_GOSTER;
   Bb.wShowWindow := 0; Bb.cbReserved2 := 0; Bb.lpReserved2 := 0;
   Bb.hStdInput := GirdiOku; Bb.hStdOutput := CiktiYaz; Bb.hStdError := CiktiYaz;
   Sb.hProcess := 0; Sb.hThread := 0; Sb.dwProcessId := 0; Sb.dwThreadId := 0;
   Komut := '"' + Exe + '" ' + Arglar;
-  if WinCreateProcess(0, Komut, 0, 0, 1, CREATE_NO_WINDOW, 0, 0, Bb, Sb) = 0 then
+  if WinCreateProcess(0, Komut, 0, 0, 1, C_PENCERESIZ, 0, 0, Bb, Sb) = 0 then
   begin
     Result := 'CreateProcess ' + IntToStr(DLLGetLastError);
     WinCloseHandle(GirdiOku); WinCloseHandle(GirdiYaz); WinCloseHandle(CiktiOku); WinCloseHandle(CiktiYaz);
@@ -485,7 +488,7 @@ begin
     end
     else
     begin
-      if not Cikti0 and (WinWaitForSingleObject(Sb.hProcess, 50) = WAIT_OBJECT_0) then
+      if not Cikti0 and (WinWaitForSingleObject(Sb.hProcess, 50) = C_BEKLEME_TAMAM) then
       begin
         Cikti0 := True;
         Bitis := GetTickCount;
@@ -513,7 +516,7 @@ function SatirDegeri(const Metin: AnsiString; const Onek: String): String;
 var P, I: Integer; S: String;
 begin
   Result := '';
-  S := String(Metin);
+  S := Metin;
   P := Pos(Onek, S);
   if P = 0 then Exit;
   I := P + Length(Onek);
@@ -808,7 +811,6 @@ begin
   PortSayfasi.Values[1] := Olc('pgPort');
   // Onarım/devam: veri dizini ve portlar KAYITTAN gelir, değiştirilmez.
   VeriSayfasi.Edits[0].Enabled := not (Onarim or Yarim);
-  VeriSayfasi.Buttons[0].Enabled := not (Onarim or Yarim);
   PortSayfasi.Edits[0].Enabled := not (Onarim or Yarim);
   PortSayfasi.Edits[1].Enabled := not (Onarim or Yarim);
 end;
@@ -840,7 +842,9 @@ begin
   else if CurPageID = VeriSayfasi.ID then
   begin
     S := RemoveBackslashUnlessRoot(VeriSayfasi.Values[0]);
-    if not YolGecerli(S) then Result := Hata('Veri dizini yalnız ASCII harf, rakam ve noktalama içerebilir; boşluk ve ".." olmaz.')
+    if (Onarim or Yarim) and (Olc('oncekiVeri') <> '') and (Uppercase(S) <> Uppercase(Olc('oncekiVeri'))) then
+      Result := Hata('Onarım/devam: veri dizini kayıttaki dizindir (' + Olc('oncekiVeri') + '); değiştirilemez.')
+    else if not YolGecerli(S) then Result := Hata('Veri dizini yalnız ASCII harf, rakam ve noktalama içerebilir; boşluk ve ".." olmaz.')
     else if Uppercase(S) = Uppercase(Kok) then Result := Hata('Veri dizini kök klasörün kendisi olamaz (örn. ' + Kok + '\pgveri ya da D:\TeksERP\pgveri).');
   end
   else if CurPageID = PortSayfasi.ID then
@@ -878,7 +882,7 @@ begin
       if not DosyaYoluGecerli(S) then begin Result := Hata('Müşteri anahtarı dosyası X:\... biçiminde tam bir yol olmalı.'); Exit; end;
       if FileExists(S) then begin Result := Hata('Bu dosya zaten var (üzerine yazılmaz): ' + S); Exit; end;
       if not DirExists(ExtractFileDir(S)) then begin Result := Hata('Klasör yok: ' + ExtractFileDir(S)); Exit; end;
-      if WinGetDriveType(Copy(S, 1, 3)) <> DRIVE_REMOVABLE then
+      if WinGetDriveType(Copy(S, 1, 3)) <> C_SURUCU_CIKARILABILIR then
         if MsgBox(Copy(S, 1, 2) + ' çıkarılabilir bir sürücü değil. Özel anahtar sunucuda BIRAKILMAMALI; yine de buraya yazılsın mı?', mbConfirmation, MB_YESNO or MB_DEFBUTTON2) <> IDYES then
         begin Result := False; Exit; end;
     end;

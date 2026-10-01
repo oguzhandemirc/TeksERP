@@ -338,6 +338,8 @@ function olc(k: Kaynaklar): Bulgular {
   if (!/Join-Path \$PSScriptRoot "\.\.\\\.\.\\araclar\\tekserp-guncelleyici\.exe"/.test(k.kurulum)) ekle("§8", "kurulum.ps1 varsayılan doğrulayıcı yolu setup düzeniyle uyuşmuyor");
   for (const [d, v] of [["PrivilegesRequired", "admin"], ["ArchitecturesInstallIn64BitMode", "x64compatible"], ["ArchitecturesAllowed", "x64compatible"], ["UninstallFilesDir", "{app}\\kurulum\\kaldirici"]] as const)
     if (!new RegExp(`^${d}=${v.replace(/[\\{}]/g, "\\$&")}$`, "m").test(k.iss)) ekle("§8", `[Setup] ${d}=${v} değil`);
+  // Inno derleme kuralı (CI ölçtü 2026-10-01: ISCC çıkış 2): AppId sabit içeriyorsa UsePreviousLanguage=no ŞART.
+  if (/^AppId=.*\{/m.test(k.iss) && !/^UsePreviousLanguage=no$/m.test(k.iss)) ekle("§8", "AppId {code:} ile türüyor ama UsePreviousLanguage=no yok (ISCC derlemez)");
   if (!/^\[UninstallRun\]\nFilename: "\{sys\}\\WindowsPowerShell\\v1\.0\\powershell\.exe"; Parameters: "[^"]*""\{app\}\\kurulum\\deploy\\kurulum\\kaldir\.ps1"" -Kok ""\{app\}"""/m.test(k.iss)) ekle("§8", "kaldırıcı kaldir.ps1'i (64-bit PowerShell, -Kok {app}) çağırmıyor");
   for (const s of pas) {
     const ex = /\bExec\(([^,]+),/.exec(s.satir);
@@ -454,6 +456,7 @@ if (eksik.length === 0) {
     { ad: "S18 setup içeriğinden pg_hba şablonu düşmüş", dosya: "iss", eski: `Source: "..\\pg\\pg_hba.conf.sablon"; DestDir: "{app}\\kurulum\\deploy\\pg"; Flags: ignoreversion\n`, yeni: "", bolum: "§8", parca: "pg_hba.conf.sablon" },
     { ad: "S19 kaldırıcı kaldir.ps1'i çağırmıyor", dosya: "iss", eski: `kaldir.ps1"" -Kok ""{app}"""`, yeni: `kaldir.ps1"""`, bolum: "§8", parca: "kaldırıcı" },
     { ad: "S20 yönetici olmadan kurulum", dosya: "iss", eski: "PrivilegesRequired=admin", yeni: "PrivilegesRequired=lowest", bolum: "§8", parca: "PrivilegesRequired" },
+    { ad: "S23 UsePreviousLanguage düştü (AppId {code:} iken ISCC derlemez)", dosya: "iss", eski: "UsePreviousLanguage=no\n", yeni: "", bolum: "§8", parca: "UsePreviousLanguage" },
     { ad: "S21 CI boru sonucunu ölçmüyor", dosya: "is", eski: `if ($r -notmatch "(?m)^BORU=TAMAM\\r?$")`, yeni: `if ($false)`, bolum: "§9", parca: "boru öz-sınaması" },
     { ad: "S22 CI test çapalı doğrulayıcıyı kabul ediyor", dosya: "is", eski: `$k.testCapasi -ne $false`, yeni: `$false`, bolum: "§9", parca: "doğrulayıcı üretim derlemesi" },
   ];
