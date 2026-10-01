@@ -7,7 +7,14 @@ import { FINGERPRINT_FACTORS, msToIso, normalizeFactor, type Fingerprint, type F
 import type { LicenseCore } from "./license-core";
 import { getLicenseCore } from "./native";
 import { selectFactor, type FactorReading, type FactorReadState } from "./fingerprint-paths";
-import { applyFingerprintCache, readFingerprintCache, writeFingerprintCache, type FactorSource } from "./fingerprint-cache";
+import {
+  applyFingerprintCache,
+  readFingerprintCache,
+  writeFingerprintCache,
+  type CachedFactor,
+  type FactorSource,
+  type FingerprintCache,
+} from "./fingerprint-cache";
 import { getLicenseStore } from "./store";
 
 /** Etken başına okuma raporu — değer ve özet YOK; ekran ve yoklama bunu gösterir/taşır. */
@@ -34,6 +41,8 @@ export interface MeasuredFingerprint {
   readonly okuma?: Readonly<Record<FingerprintFactor, FactorReport>>;
   /** Önbellek dosyası bozuk/başka tuzla yazılmış bulundu (yok sayıldı, bu ölçümle yeniden yazıldı). */
   readonly onbellekBozuk?: boolean;
+  /** Bu ölçümden sonraki önbellek (imzalı durum kaydına ve DB izine kopyalanır; L2-6). */
+  readonly onbellek?: FingerprintCache;
 }
 
 const F5_PATHS = [
@@ -75,6 +84,20 @@ export interface MeasureOptions {
   /** Önbellek dizini (varsayılan: kullanılabilir lisans deposu; yoksa önbelleksiz). */
   readonly cacheDir?: string | null;
   readonly nowMs?: number;
+  /** İmzalı durum kaydındaki önbellek kopyası: dosya silinse de son okuma 24 saate dek köprülenir (etken başına en yeni). */
+  readonly recordCache?: FingerprintCache;
+}
+
+/** İki önbellekten etken başına EN YENİ okuma (dosya silinirse kayıt kopyası köprüler; eskisi yeniyi ezmez). */
+export function mergeFingerprintCaches(a: FingerprintCache, b: FingerprintCache | undefined): FingerprintCache {
+  if (!b) return a;
+  const out: Partial<Record<FingerprintFactor, CachedFactor>> = { ...a };
+  for (const f of FINGERPRINT_FACTORS) {
+    const x = b[f];
+    const y = out[f];
+    if (x && (!y || x.an > y.an)) out[f] = x;
+  }
+  return out;
 }
 
 function defaultCacheDir(): string | null {
@@ -91,7 +114,7 @@ export async function measureFingerprint(salt: Uint8Array, core: LicenseCore = g
   const liveYol = Object.fromEntries(FINGERPRINT_FACTORS.map((f) => [f, c.digest[f] === null ? null : readings[f].yol])) as Record<FingerprintFactor, string | null>;
   const dir = options.cacheDir === undefined ? defaultCacheDir() : options.cacheDir;
   const read = dir ? readFingerprintCache(dir, salt) : { cache: {}, durum: "YOK" as const };
-  const d = applyFingerprintCache(c.digest, liveYol, read.cache, nowMs);
+  const d = applyFingerprintCache(c.digest, liveYol, mergeFingerprintCaches(read.cache, options.recordCache), nowMs);
   if (dir && d.changed) {
     try {
       writeFingerprintCache(dir, salt, d.next);
@@ -107,5 +130,12 @@ export async function measureFingerprint(salt: Uint8Array, core: LicenseCore = g
       return [f, { kaynak: d.kaynak[f], durum: r.durum, yol: winningPath, sonOkuma: last === null ? null : msToIso(last), celiski: r.celiski, hatali: r.hatali }];
     }),
   ) as Record<FingerprintFactor, FactorReport>;
-  return { digest: d.effective, measured: c.measured, measuredAt: msToIso(nowMs), okuma: report, ...(read.durum === "BOZUK" ? { onbellekBozuk: true } : {}) };
+  return {
+    digest: d.effective,
+    measured: c.measured,
+    measuredAt: msToIso(nowMs),
+    okuma: report,
+    onbellek: d.next,
+    ...(read.durum === "BOZUK" ? { onbellekBozuk: true } : {}),
+  };
 }

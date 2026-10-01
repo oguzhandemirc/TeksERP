@@ -107,6 +107,20 @@ export function isNativeBinding(x: unknown): x is NativeBinding {
   return BINDING_FUNCTIONS.every((name) => typeof Reflect.get(x, name) === "function");
 }
 
+/**
+ * Native ÇAĞRISI istisna atarsa (panic → JS istisnası, bozuk ikili) sonuç "çekirdek yok"tur — süreç düşmez, belge
+ * doğrulanmamış sayılır, lisans merdiveni işler (G12 §3.3). Yanıt şeması ayrıca `decodeResult`ta denetlenir.
+ */
+function guarded<T>(schema: z.ZodType<CoreResult<T>>, call: () => string, what: string): CoreResult<T> {
+  let text: string;
+  try {
+    text = call();
+  } catch {
+    return { ok: false, code: CORE_UNAVAILABLE_CODE, message: `Lisans çekirdeğinin ${what} çağrısı istisna attı` };
+  }
+  return decodeResult(schema, text, what);
+}
+
 function anchorField(roots: readonly RootKey[] | undefined): { roots?: readonly RootKey[] } {
   return roots === undefined ? {} : { roots };
 }
@@ -131,15 +145,13 @@ function nativeV2(b: NativeBinding): NativeV2Methods {
   const current = resultSchema(z.boolean());
   return {
     verifyRevocation: (token: unknown, roots?: readonly RootKey[]): CoreResult<RevocationView> =>
-      decodeResult(revocation, b.verifyRevocation(JSON.stringify({ token, ...anchorField(roots) })), "iptal"),
+      guarded(revocation, () => b.verifyRevocation(JSON.stringify({ token, ...anchorField(roots) })), "iptal"),
     pickNewerRevocation: (currentJws: unknown, incomingJws: unknown, roots?: readonly RootKey[]): CoreResult<RevocationView | null> =>
-      decodeResult(
-        newerRevocation,
-        b.pickNewerRevocation(JSON.stringify({ current: currentJws ?? null, incoming: incomingJws ?? null, ...anchorField(roots) })),
+      guarded(newerRevocation, () => b.pickNewerRevocation(JSON.stringify({ current: currentJws ?? null, incoming: incomingJws ?? null, ...anchorField(roots) })),
         "iptal seçimi",
       ),
     isRevocationCurrent: (leaseJws: unknown, revocationJws: unknown, roots?: readonly RootKey[]): CoreResult<boolean> =>
-      decodeResult(current, b.isRevocationCurrent(JSON.stringify({ lease: leaseJws, iptal: revocationJws ?? null, ...anchorField(roots) })), "iptal güncelliği"),
+      guarded(current, () => b.isRevocationCurrent(JSON.stringify({ lease: leaseJws, iptal: revocationJws ?? null, ...anchorField(roots) })), "iptal güncelliği"),
     // Saf kararlar: native istisnası ya da sözleşme dışı yanıt kararı SIKILAŞTIRIR (ölçülemedi · zayıf · öğrenmez · en kısa tavan).
     compareFingerprints: (accepted: Fingerprint, measured: Fingerprint, options: FingerprintCompareOptions = {}): FingerprintDecision => {
       const request = { accepted, measured, excludeF5: options.excludeF5 ?? false, ...(options.rule ? { rule: options.rule } : {}) };
@@ -176,24 +188,20 @@ export function nativeCore(b: NativeBinding): LicenseCore {
   return Object.freeze({
     source: "native" as const,
     verifyJws: (token: unknown, typ: string, keys: readonly JwsKey[]): CoreResult<JwsView> =>
-      decodeResult(jws, b.verifyJws(JSON.stringify({ token, typ, keys })), "JWS"),
+      guarded(jws, () => b.verifyJws(JSON.stringify({ token, typ, keys })), "JWS"),
     verifyCertificate: (token: unknown, g: { usage: CertUsage; atMs: number; roots?: readonly RootKey[]; revocation?: unknown }): CoreResult<CertificateView> =>
-      decodeResult(
-        cert,
-        b.verifyCertificate(JSON.stringify({ token, usage: g.usage, atMs: g.atMs, ...anchorField(g.roots), ...chainFields({ revocation: g.revocation }) })),
+      guarded(cert, () => b.verifyCertificate(JSON.stringify({ token, usage: g.usage, atMs: g.atMs, ...anchorField(g.roots), ...chainFields({ revocation: g.revocation }) })),
         "sertifika",
       ),
     verifyEntitlement: (token: unknown, roots?: readonly RootKey[], options?: CoreEntitlementOptions): CoreResult<EntitlementView> =>
-      decodeResult(ent, b.verifyEntitlement(JSON.stringify({ token, ...anchorField(roots), ...chainFields(options) })), "HAK"),
+      guarded(ent, () => b.verifyEntitlement(JSON.stringify({ token, ...anchorField(roots), ...chainFields(options) })), "HAK"),
     verifyLease: (token: unknown, roots?: readonly RootKey[], options?: CoreChainOptions): CoreResult<LeaseView> =>
-      decodeResult(lease, b.verifyLease(JSON.stringify({ token, ...anchorField(roots), ...chainFields(options) })), "kira"),
+      guarded(lease, () => b.verifyLease(JSON.stringify({ token, ...anchorField(roots), ...chainFields(options) })), "kira"),
     checkLeaseBinding: (leaseJws: unknown, entitlementJws: unknown, roots?: readonly RootKey[]): CoreResult<true> =>
-      decodeResult(binding, b.checkLeaseBinding(JSON.stringify({ lease: leaseJws, entitlement: entitlementJws, ...anchorField(roots) })), "kira bağı"),
+      guarded(binding, () => b.checkLeaseBinding(JSON.stringify({ lease: leaseJws, entitlement: entitlementJws, ...anchorField(roots) })), "kira bağı"),
     ...nativeV2(b),
-    normalizeFactor: (factor: FingerprintFactor, raw: string | null | undefined): string | null => {
-      const out = z.object({ value: z.string().nullable() }).safeParse(parseOrNull(b.normalizeFactor(JSON.stringify({ factor, raw: raw ?? null }))));
-      return out.success ? out.data.value : null;
-    },
+    normalizeFactor: (factor: FingerprintFactor, raw: string | null | undefined): string | null =>
+      decide(() => b.normalizeFactor(JSON.stringify({ factor, raw: raw ?? null })), z.object({ value: z.string().nullable() }), { value: null }).value,
     digestFingerprint: (raw: RawFingerprint, salt: Uint8Array): Fingerprint =>
       FingerprintSchema.parse(JSON.parse(b.digestFingerprint(JSON.stringify({ raw, salt: b64uEncode(salt) })))),
     // Sözleşme dışı yanıt ya da native istisnası parmak izini ÖLÇÜLEMEDİ yapar (lisans merdiveni), süreci düşürmez.
@@ -205,23 +213,47 @@ export function nativeCore(b: NativeBinding): LicenseCore {
         return UNMEASURED;
       }
     },
-    verifyIntegrity: async (manifest: unknown, root: string, keys?: readonly PackageKey[]): Promise<CoreResult<IntegrityReport>> =>
-      decodeResult(integrity, await b.verifyIntegrity(JSON.stringify({ manifest, root, ...(keys === undefined ? {} : { keys }) })), "bütünlük"),
+    verifyIntegrity: async (manifest: unknown, root: string, keys?: readonly PackageKey[]): Promise<CoreResult<IntegrityReport>> => {
+      let text: string;
+      try {
+        text = await b.verifyIntegrity(JSON.stringify({ manifest, root, ...(keys === undefined ? {} : { keys }) }));
+      } catch {
+        return UNAVAILABLE_INTEGRITY;
+      }
+      return decodeResult(integrity, text, "bütünlük");
+    },
     unwrapModuleKey: (wrap: unknown, privateKeyX: string, modul: string): CoreResult<{ anahtar: string }> =>
-      decodeResult(moduleKey, b.unwrapModuleKey(JSON.stringify({ wrap, privateKey: privateKeyX, modul })), "modül anahtarı"),
+      guarded(moduleKey, () => b.unwrapModuleKey(JSON.stringify({ wrap, privateKey: privateKeyX, modul })), "modül anahtarı"),
     unwrapLeaseModuleKey: (g: LeaseModuleKeyRequest): CoreResult<{ anahtar: string; surum: number }> =>
-      decodeResult(
-        leaseModuleKey,
-        b.unwrapLeaseModuleKey(
+      guarded(leaseModuleKey, () => b.unwrapLeaseModuleKey(
           JSON.stringify({ lease: g.lease, entitlement: g.entitlement, privateKey: g.privateKeyX, modul: g.modul, kid: g.kid, ...anchorField(g.roots) }),
         ),
         "kiradan modül anahtarı",
       ),
-    protectLocal: (veri: string): CoreResult<{ veri: string }> => decodeResult(protectedData, b.protectLocal(JSON.stringify({ veri })), "yerel koruma"),
-    unprotectLocal: (veri: string): CoreResult<{ veri: string }> => decodeResult(protectedData, b.unprotectLocal(JSON.stringify({ veri })), "yerel koruma"),
+    protectLocal: (veri: string): CoreResult<{ veri: string }> => guarded(protectedData, () => b.protectLocal(JSON.stringify({ veri })), "yerel koruma"),
+    unprotectLocal: (veri: string): CoreResult<{ veri: string }> => guarded(protectedData, () => b.unprotectLocal(JSON.stringify({ veri })), "yerel koruma"),
   });
 }
 
+
+/** Çekirdek yokken (ya da native bütünlük çağrısı istisna atınca) bütünlük GEÇERSİZ — fail-closed, süreç düşmez. */
+const UNAVAILABLE_INTEGRITY: CoreResult<IntegrityReport> = Object.freeze({
+  ok: true as const,
+  value: Object.freeze({
+    durum: "GECERSIZ" as const,
+    kod: CORE_UNAVAILABLE_CODE,
+    dosyaSayisi: 0,
+    eksik: [],
+    eksikSayisi: 0,
+    degisik: [],
+    degisikSayisi: 0,
+    okunamayan: [],
+    okunamayanSayisi: 0,
+    fazla: [],
+    fazlaSayisi: 0,
+    paket: null,
+  }),
+});
 
 /** Zorunlu kipte kullanılamayan çekirdek: her doğrulama düşer, bütünlük GEÇERSİZ — istisna YOK. */
 export function unavailableCore(reason: string): LicenseCore {
@@ -244,23 +276,7 @@ export function unavailableCore(reason: string): LicenseCore {
     normalizeFactor: () => null,
     digestFingerprint: () => EMPTY_FINGERPRINT,
     collectFingerprint: async () => UNMEASURED,
-    verifyIntegrity: async (): Promise<CoreResult<IntegrityReport>> => ({
-      ok: true,
-      value: {
-        durum: "GECERSIZ",
-        kod: CORE_UNAVAILABLE_CODE,
-        dosyaSayisi: 0,
-        eksik: [],
-        eksikSayisi: 0,
-        degisik: [],
-        degisikSayisi: 0,
-        okunamayan: [],
-        okunamayanSayisi: 0,
-        fazla: [],
-        fazlaSayisi: 0,
-        paket: null,
-      },
-    }),
+    verifyIntegrity: async (): Promise<CoreResult<IntegrityReport>> => UNAVAILABLE_INTEGRITY,
     unwrapModuleKey: () => refuse<{ anahtar: string }>(),
     unwrapLeaseModuleKey: () => refuse<{ anahtar: string; surum: number }>(),
     protectLocal: () => refuse<{ veri: string }>(),

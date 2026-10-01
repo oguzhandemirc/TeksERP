@@ -171,11 +171,14 @@ async function bootstrap(): Promise<void> {
   }
   await refreshIntegrityQuietly();
   if (stale()) return;
-  evaluateLicenseTransitions();
+  // Açılışta bir kez yazım: DB izi kurulur, üç iz birden yoksa (K7) çapası hemen kalıcı olur — yeniden başlatmak
+  // ek süreyi tazelemesin.
+  await licenseHousekeeping();
+  if (stale()) return;
   housekeepingTimer = setInterval(() => {
     void refreshFactsNow()
       .catch(() => undefined)
-      .finally(() => licenseHousekeeping());
+      .finally(() => void licenseHousekeeping());
   }, HOUSEKEEPING_INTERVAL_MS);
   housekeepingTimer.unref();
   fingerprintTimer = setInterval(() => {
@@ -234,11 +237,8 @@ export function stopLicensePoll(): void {
   pollTimer = bootTimer = housekeepingTimer = fingerprintTimer = integrityTimer = null;
   engineRunning = false;
   if (started) setLicenseEngineStatus("DURDU");
-  try {
-    licenseHousekeeping();
-  } catch {
-    /* kapanışta best-effort */
-  }
+  // Kapanışta best-effort: dosya senkron yazılır, DB izi kuyruğu süreç kapanmadan bitmeyebilir (bir sonraki açılış tazeler).
+  void licenseHousekeeping().catch(() => undefined);
 }
 
 /** Test-only: başlatma zamanlamasını kısaltır. */

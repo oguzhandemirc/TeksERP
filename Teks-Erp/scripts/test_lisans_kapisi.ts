@@ -257,6 +257,23 @@ async function zorlama(token: string): Promise<void> {
   }
   lisansHazirDegil();
   check("§9j motor hazır değil → fail-open (lisans belirsizliği fabrikayı durdurmaz)", (await kodu(uc("POST", "/api/orders"), null)).rotaya);
+  await anahtarOkunamazKapi(token);
+}
+
+/** G12 §3.1-1 (Z9): kurulum anahtarı okunamazsa YALNIZ imza durur — kapı kararı DB izindeki açık anahtarla sürer. */
+async function anahtarOkunamazKapi(token: string): Promise<void> {
+  if (process.platform === "win32" || process.getuid?.() === 0) {
+    console.log("⏭️  §9k atlandı (Windows ya da root: izin kilidi ölçülemez)");
+    return;
+  }
+  const { snap } = lisansKipKur({ zorlama: true, kademe: "K4", anahtarOkunamaz: true });
+  const k = await kodu(uc("POST", "/api/orders"), token);
+  check(
+    "§9k ⭐ anahtar okunamaz (imzaHazir=false, durumHazir=true) + K4 → kapı kararı SÜRER: LICENSE_RESTRICTED (eskiden fail-open)",
+    !snap.imzaHazir && snap.durumHazir && k.kod === "LICENSE_RESTRICTED",
+    `imza=${snap.imzaHazir} durum=${snap.durumHazir} ${JSON.stringify(k.ayrinti)}`,
+  );
+  check("§9k2 aynı durumda okuma ve yedek AÇIK (veri erişimi her kademede)", (await kodu(uc("GET", "/api/orders"), token)).rotaya && (await kodu(uc("POST", "/api/admin/backup"), token)).rotaya);
 }
 
 function kimliksizUclar(): void {

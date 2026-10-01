@@ -79,6 +79,13 @@ export const PATRON_CLOUD_USER_SETTING_KEY = "patronBulutu.teknikKullaniciId";
 export const FACTORY_TIMEZONE_SETTING_KEY = "company.timezone";
 
 /**
+ * Lisans İZİ (lisans v2 G12, `lib/license/trace-row.ts`): imzalı durum kaydının fabrika DB'sindeki kopyası.
+ * KAYIT, AYAR DEĞİL: ham ayar ucundan yazılabilseydi `admin:settings` taşıyan biri iz kaybını gizleyip belirsizlik
+ * birikimini sıfırlayabilirdi. Tek yazıcı lisans motorudur (`license-trail.service`). Okuması serbest (sır değil).
+ */
+export const LICENSE_TRACE_SETTING_KEY = "license.trace";
+
+/**
  * `PUT /api/admin/settings/:key` ucunun REDDETTİĞİ anahtarlar.
  *
  * Kümeye ek olarak ön ek kuralı da uygulanır (`isReservedSettingKey`) — küme
@@ -91,6 +98,7 @@ export const RESERVED_SETTING_KEYS: ReadonlySet<string> = new Set([
   INSTALLATION_ID_SETTING_KEY,
   PATRON_CLOUD_USER_SETTING_KEY,
   FACTORY_TIMEZONE_SETTING_KEY,
+  LICENSE_TRACE_SETTING_KEY,
 ]);
 
 /** `security.` ile başlıyor mu — liste/dışa-aktarım süzgeçlerinin yüklemi. */

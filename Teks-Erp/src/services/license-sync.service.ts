@@ -18,6 +18,8 @@ import {
 } from "../lib/license/protocol";
 import { getLicenseStore, saveLease, saveLicenseIdentity, saveTransfer } from "../lib/license/store";
 import { measureFingerprint } from "../lib/license/fingerprint";
+import { cacheFromRecordCopy, cacheToRecordCopy } from "../lib/license/fingerprint-cache";
+import { setFingerprintCacheCopy, startAccumulationForLease } from "../lib/license/record-writer";
 import { coreCheckLeaseBinding, coreVerifyEntitlement, coreVerifyLease } from "../lib/license/core-bridge";
 import { acceptNewEntitlement } from "./license-integrity.service";
 import {
@@ -31,10 +33,9 @@ import {
   setDownloadTokens,
   setLicenseDbFacts,
   setMeasuredFingerprint,
-  startAccumulationForLease,
   type LicenseSnapshot,
 } from "../lib/license/runtime";
-import { evaluateLicenseTransitions } from "./license-trail.service";
+import { evaluateLicenseTransitions, refreshLicenseTrace } from "./license-trail.service";
 import { syncSupportAfterPoll } from "./support-sync.service";
 import {
   buildEnvironment,
@@ -43,6 +44,7 @@ import {
   encryptionKeyField,
   installRecordsField,
   invalidResponse,
+  pollV2Fields,
   licenseError,
   requireReady,
   requireVendorUrl,
@@ -58,6 +60,8 @@ import {
  * bilgi — lisans kimliği LICENSE_DIR'dedir; DB kopyası onu taşımaz).
  */
 export async function refreshLicenseDbFacts(installationId: string): Promise<void> {
+  // Lisans izi (G12 DB kopyası) olgularla birlikte okunur: okunamazsa iz BİLİNMİYOR (kayıp sayılmaz).
+  await refreshLicenseTrace();
   // ⚠️ `revokedAt` SÜZÜLMEZ (bilinçli): yüksek su defterde YAZILMIŞ en geç andır — geri alınan işlem
   // de o anda yazılmıştır; süzmek, bir geri almadan sonra saat-geri tespitinin alt sınırını geriletirdi.
   const rows = await prisma.$queryRaw<Array<{ first: Date | null; high: Date | null }>>`
@@ -74,10 +78,14 @@ export async function refreshLicenseDbFacts(installationId: string): Promise<voi
   });
 }
 
+/** Parmak izini ölçer; 24 sa önbelleği dosya ∪ imzalı durum kaydı kopyasından köprüler, sonucu kayda kopyalar (K8). */
 export async function refreshLicenseFingerprint(): Promise<void> {
   const store = getLicenseStore();
   if (!store?.key) return;
-  setMeasuredFingerprint(await measureFingerprint(store.key.salt));
+  const recordCache = cacheFromRecordCopy(getLicenseSnapshot().view.record?.parmakIziOnbellegi);
+  const fp = await measureFingerprint(store.key.salt, undefined, { recordCache });
+  setFingerprintCacheCopy(cacheToRecordCopy(fp.onbellek));
+  setMeasuredFingerprint(fp);
 }
 
 function skewSeconds(): number | undefined {
@@ -94,7 +102,8 @@ export async function buildPollBody(nowMs: number = Date.now()): Promise<ReturnT
     v: 1,
     // Zincir ucu: kira dosyası silinmiş/eskisiyle değiştirilmişse durum kaydının bildiği son kabul.
     sonKiraId: snap.lastKnownLease?.kiraId ?? null,
-    hak: snap.entitlement ? { hakId: snap.entitlement.document.hakId, surum: snap.entitlement.document.surum } : null,
+    // `ozet`: HAK metninin bayt özeti — aynı kimlik ve sürümle basılmış yabancı HAK satıcıda ayrılır (G4 §2.2-6).
+    hak: snap.entitlement ? { hakId: snap.entitlement.document.hakId, surum: snap.entitlement.document.surum, ozet: snap.entitlement.digest } : null,
     ...encryptionKeyField(),
     parmakIzi: currentFingerprintDigest(),
     durum: {
@@ -115,6 +124,7 @@ export async function buildPollBody(nowMs: number = Date.now()): Promise<ReturnT
     gozlem: peekObservationCounters(),
     // Kurulum kaydı yoksa alan hiç gitmez: eski satıcı KATI şemayla tanımadığı anahtarı reddeder.
     ...installRecordsField(),
+    ...pollV2Fields(snap),
   });
 }
 
@@ -255,7 +265,7 @@ export function pollLicenseOnce(transport: VendorTransport = egressTransport): P
 async function pollOnce(transport: VendorTransport): Promise<{ outcome: PollOutcome; code?: string }> {
   const snap = getLicenseSnapshot();
   const store = getLicenseStore();
-  if (!snap.hazir || !store) return { outcome: "HAZIR_DEGIL" };
+  if (!snap.imzaHazir || !store) return { outcome: "HAZIR_DEGIL" };
   if (!getLicenseConfig().vendorUrl) {
     // Etkin bir kurulum adres kaybederse yenileyemez: bu da başarısız yoklamadır.
     if (snap.activated) recordPollOutcome({ ok: false, code: "YAPILANDIRILMAMIS" });

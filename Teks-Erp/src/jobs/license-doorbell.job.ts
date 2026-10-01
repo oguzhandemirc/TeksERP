@@ -116,7 +116,7 @@ export function reconnectAttempt(previous: number, livedMs: number | null): numb
 function canConnect(): boolean {
   if (!getLicenseConfig().vendorUrl) return false;
   const snap = getLicenseSnapshot();
-  return snap.hazir && snap.activated && snap.licenseId !== null;
+  return snap.imzaHazir && snap.activated && snap.licenseId !== null;
 }
 
 function readSmallBody(res: IncomingMessage): Promise<string> {

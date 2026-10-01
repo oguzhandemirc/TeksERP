@@ -37,6 +37,7 @@ import {
   invalidateFeatureFlagsCache,
   readFinanceEnabled,
   readFinanceEnabledRaw,
+  readIplikEnabled,
   readProductionEnabled,
   readTicaretEnabled,
   systemSettingService,
@@ -207,10 +208,18 @@ async function davranisAyagi(): Promise<void> {
   lisansKipKur({ zorlama: true });
   check("§3h lisanstaki modül kapalıysa kod MODULE_DISABLED (lisans suçlanmaz)", (await kapiKodu()) === "MODULE_DISABLED");
 
-  console.log("\n§4 — belirsizlik (ölçülemedi) ham değeri geçirir");
+  console.log("\n§4 — belirsizlik (ölçülemedi) HAK tavanını KALDIRMAZ (G12 §3.1-2); üretim her hâlde açık");
   await bayrakYaz(SETTING_KEYS.FINANCE_ENABLED, true);
   lisansKipKur({ zorlama: true, moduller: ["production.enabled"], parmakIziOlculdu: false });
-  check("§4 ⭐ ÖLÇÜLEMEDİ'de HAK tavanı uygulanmaz", (await readFinanceEnabled()) === true && (await kapiKodu()) === undefined);
+  check("§4 ⭐ ÖLÇÜLEMEDİ'de HAK tavanı SÜRER: lisansta olmayan finans KAPALI, kapı 403 LICENSE_MODULE", (await readFinanceEnabled()) === false && (await kapiKodu()) === "LICENSE_MODULE");
+  lisansKipKur({ zorlama: true, moduller: ["finance.enabled"], parmakIziOlculdu: false });
+  check("§4b ⭐ üretim çekirdek modüldür: HAK'ta olmasa da ÖLÇÜLEMEDİ'de de AÇIK", (await readProductionEnabled()) === true);
+  await bayrakYaz(SETTING_KEYS.IPLIK_ENABLED, true);
+  await bayrakYaz(SETTING_KEYS.TICARET_ENABLED, true);
+  lisansKipKur({ zorlama: true, moduller: ["production.enabled", "iplik.enabled"] });
+  const yalniz = await readIplikEnabled();
+  lisansKipKur({ zorlama: true, moduller: ["production.enabled", "iplik.enabled", "ticaret.enabled"] });
+  check("§4c ⭐ bağımlılık TAVANDA: iplik lisansta ama ön koşulu ticaret değil → iplik okuyucusu KAPALI; ikisi lisansta → açık", yalniz === false && (await readIplikEnabled()) === true, `yalnız iplik=${yalniz}`);
 
   console.log("\n§5 — K2 dondurması ek sürede ve belirsizlikte kalıcı");
   await bayrakYaz(SETTING_KEYS.TICARET_ENABLED, true);
@@ -236,7 +245,7 @@ async function main(): Promise<void> {
   AuditService.logEvent = async () => undefined;
   statikAyak();
   tekBicimAyagi();
-  const izlenen = [SETTING_KEYS.FINANCE_ENABLED, SETTING_KEYS.TICARET_ENABLED];
+  const izlenen = [SETTING_KEYS.FINANCE_ENABLED, SETTING_KEYS.TICARET_ENABLED, SETTING_KEYS.IPLIK_ENABLED];
   const once = await prisma.systemSetting.findMany({ where: { key: { in: izlenen } } });
   const yazan = await prisma.user.create({
     data: { username: `TEST-lisans-tavan-${Date.now()}`, passwordHash: await AuthService.hashPassword("Deneme-12345"), fullName: "TEST Lisans Tavanı" },

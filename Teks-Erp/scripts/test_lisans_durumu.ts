@@ -75,7 +75,9 @@ import {
   signStateRecord,
   monotonicElapsed,
   evaluateClock,
+  type RememberedAnchor,
 } from "../src/lib/license/saat";
+import type { TraceInput } from "../src/lib/license/state-rules-trace";
 import { fiksturKur, hakBas, kiraBas, sertifikaBas, sertifikaYuku } from "./lib/lisans-fikstur";
 
 let pass = 0;
@@ -138,6 +140,9 @@ function durum(s: Senaryo = {}): LicenseState {
 }
 function nedenVar(d: LicenseState, kod: string): boolean {
   return d.nedenler.some((n) => n.kod === kod);
+}
+function nedenAyrinti(d: LicenseState, kod: string): string {
+  return d.nedenler.find((n) => n.kod === kod)?.ayrinti ?? "";
 }
 function ozet(d: LicenseState): string {
   return `${d.gecerlilik}/${d.hesaplananKademe}→${d.uygulananKademe} [${d.nedenler.map((n) => n.kod).join(",")}]`;
@@ -309,16 +314,20 @@ function saatGeriBolumu(): void {
 }
 
 function uretimAcikBolumu(): void {
-  console.log("\n§7 — tavan YALNIZ geçerli HAK'la; ÖLÇÜLEMEDİ'de üretim açık (L26)");
+  console.log("\n§7 — tavan HAK'tan; üretim (çekirdek modül) HER HÂLDE açık (G12 §3.1-2)");
   const hak = { moduller: ["finance.enabled"] };
   const g = durum({ hak });
-  check("§7a karşı: GEÇERLİ + zorla → HAK'ta olmayan production KAPALI", !isModuleLicensed(g, "production.enabled"), ozet(g));
+  check(
+    "§7a ⭐ GEÇERLİ + zorla: HAK'ta olmayan modül (iplik) KAPALI, HAK'ta olmasa da production AÇIK (çekirdek)",
+    !isModuleLicensed(g, "iplik.enabled") && isModuleLicensed(g, "production.enabled"),
+    ozet(g),
+  );
   const o = durum({ hak, saat: { duvarMs: SIMDI + 90 * DAY_MS } });
   check("§7b ⭐ ÖLÇÜLEMEDİ (saat) → production AÇIK", o.gecerlilik === "OLCULEMEDI" && isModuleLicensed(o, "production.enabled"), ozet(o));
   const p = durum({ hak, girdi: { parmakIziEslesme: "OLCULEMEDI" } });
   check("§7c ÖLÇÜLEMEDİ (parmak izi) → production AÇIK", isModuleLicensed(p, "production.enabled"), ozet(p));
   const e = durum({ hak, ...eskiKira(35, 5) });
-  check("§7d karşı: ek süre belirsizlik değil → HAK dışı production KAPALI (yönetici kararı 2)", e.hesaplananKademe === "EK_SURE" && !isModuleLicensed(e, "production.enabled"), ozet(e));
+  check("§7d karşı: ek süre belirsizlik değil → HAK dışı modül (iplik) KAPALI (yönetici kararı 2)", e.hesaplananKademe === "EK_SURE" && !isModuleLicensed(e, "iplik.enabled"), ozet(e));
   const y = durum({ hak: "YOK", kira: "YOK", girdi: { ilkAcilisMs: SIMDI - 10 * DAY_MS, varsayilanKip: "zorla" } });
   check("§7f etkinleşmemiş kurulum (HAK yok) → production AÇIK", isModuleLicensed(y, "production.enabled"), ozet(y));
   const b = durum({ hak: "BOZUK" });
@@ -421,8 +430,8 @@ function kaliciKararBolumu(): void {
   );
   const b = durum({ kira: k2, saat: { duvarMs: SIMDI + 90 * DAY_MS } });
   check(
-    "§14b ⭐ K2 + ÖLÇÜLEMEDİ (saat) → dondurulan KAPALI, HAK tavanı açık (HAK dışı modül açık)",
-    b.gecerlilik === "OLCULEMEDI" && !isModuleLicensed(b, "finance.enabled") && isModuleLicensed(b, "iplik.enabled"),
+    "§14b ⭐ K2 + ÖLÇÜLEMEDİ (saat) → dondurulan KAPALI ve HAK tavanı SÜRER (G12: belirsizlik tavanı kaldırmaz; HAK dışı iplik kapalı)",
+    b.gecerlilik === "OLCULEMEDI" && !isModuleLicensed(b, "finance.enabled") && !isModuleLicensed(b, "iplik.enabled") && isModuleLicensed(b, "production.enabled"),
     ozet(b),
   );
   const son = (kademe: "K2" | "K5" | null, donmus: string[] = []) => ({
@@ -649,6 +658,246 @@ function safBolumu(): void {
   check("§13g tolerans içindeki fark bulgu üretmez", s.finding === null && s.trustedMs === SIMDI);
 }
 
+// ── Lisans v2 G12 (L2-6): iz · belirsizlik · parmak izi merdivenleri ──────────────────────────────────────
+/** Dosya SAĞLAM izler: kira + durum kaydı + DB izi, kalıcı kayıp yok. */
+const SAGLAM: TraceInput = { etkin: true, durumDosyasi: true, dbIzi: "GECERLI", dbIziKurulu: true, kayip: [] };
+const SAAT_ONCE = (saat: number): number => SIMDI - saat * SAAT;
+
+/** İzlerin hatırladığı süre çapası: P = SIMDI + pGun (yoksa P modeli işlemiyordu), eski çapa = SIMDI + eskiGun. */
+function capa(o: { pGun?: number | null; eskiGun: number; kiraId?: string }): RememberedAnchor {
+  return {
+    kiraId: o.kiraId ?? KIRA_ID,
+    ...(o.pGun === undefined ? {} : { odenmis: o.pGun === null ? null : msToIso(SIMDI + o.pGun * DAY_MS) }),
+    eski: msToIso(SIMDI + o.eskiGun * DAY_MS),
+    eskiNeden: "KIRA_SURESI_DOLDU",
+    ekSureGun: 30,
+  };
+}
+
+/**
+ * Kira dosyası YOK, durum kaydı/DB izi ayakta: kip ve yaptırım kayıttan, son alışveriş `sonKiraSaat` saat önce.
+ * `izler` verilmezse durum kaydı dosyası yok, DB izi geçerli (Z4'ün "bozuk, DB izi var" hâli).
+ */
+function kirasiz(o: { sonKiraSaat: number; capalar?: RememberedAnchor[]; izler?: Partial<TraceInput>; girdi?: Partial<LicenseStateInput>; hak?: Senaryo["hak"] }): Senaryo {
+  return {
+    kira: "YOK",
+    ...(o.hak === undefined ? {} : { hak: o.hak }),
+    girdi: {
+      sonKiraZorlamasi: true,
+      sonKira: { kiraId: KIRA_ID, verilisMs: SAAT_ONCE(o.sonKiraSaat) },
+      sonCapalar: o.capalar ?? [capa({ pGun: 300, eskiGun: 20 })],
+      izler: { ...SAGLAM, durumDosyasi: false, ...o.izler },
+      ...o.girdi,
+    },
+  };
+}
+
+function zTablosuBolumuA(): void {
+  console.log("\n§20 — §3.2 durum ve geçiş tablosu Z1–Z4 (zorla; saf durum fonksiyonu)");
+  const z1 = [durum(v2({ pGun: 10 })), durum(v2({ pGun: -5 })), durum(v2({ pGun: -31 }))];
+  check(
+    "§20-Z1 ⭐ internet VAR · sağlam · HAK ✓ · çapa P: NORMAL → EK_SÜRE → EK_SÜRE(0); kısıtlı yalnız satıcı kararıyla",
+    z1[0].hesaplananKademe === "NORMAL" && z1[1].hesaplananKademe === "EK_SURE" && z1[2].hesaplananKademe === "EK_SURE" && z1[2].ekSureKalanGun === 0 &&
+      durum({ ...v2({ pGun: -31 }), girdi: { izler: SAGLAM } }).hesaplananKademe === "EK_SURE",
+    z1.map(ozet).join(" | "),
+  );
+  const z2 = [durum(v2({ pGun: 20, kiraSaat: 10 * 24, vade: 15 })), durum(v2({ pGun: -5, kiraSaat: 50 * 24 })), durum(v2({ pGun: -31, kiraSaat: 50 * 24 }))];
+  check(
+    "§20-Z2 ⭐ internet YOK · sağlam · HAK ✓ · çapa P: NORMAL + bilgi bandı → EK_SÜRE 30 → KISITLI",
+    z2[0].hesaplananKademe === "NORMAL" && z2[0].hesaplanan.bant?.ton === "bilgi" && z2[1].hesaplananKademe === "EK_SURE" && z2[2].hesaplananKademe === "KISITLI",
+    z2.map(ozet).join(" | "),
+  );
+  const z3 = durum(kirasiz({ sonKiraSaat: 2, izler: { durumDosyasi: true }, girdi: { belirsizlikMs: 60 * DAY_MS } }));
+  check(
+    "§20-Z3 ⭐ internet VAR · bozuk (kira yok) · HAK ✓: LISANS_IZI_KAYIP(KIRA); birikim 60 gün olsa da EK_SÜRE(0) — sonraki yoklama Z1'e döndürür",
+    nedenAyrinti(z3, "LISANS_IZI_KAYIP") === "KIRA" && z3.hesaplananKademe === "EK_SURE" && z3.ekSureKalanGun === 0 && z3.baglanti.internetVar,
+    ozet(z3),
+  );
+  const z4 = (gun: number): LicenseState => durum(kirasiz({ sonKiraSaat: 10 * 24, girdi: { belirsizlikMs: gun * DAY_MS } }));
+  const [a, b, c, d] = [z4(13.9), z4(14), z4(43.9), z4(44)];
+  check(
+    "§20-Z4 ⭐ internet YOK · bozuk (kira + durum kaydı yok, DB izi var) · HAK ✓ · çapa birikim: 13,9 g UYARI → 14 g EK_SÜRE 30 → 43,9 g EK_SÜRE 1 → 44 g KISITLI",
+    a.hesaplananKademe === "UYARI" && b.hesaplananKademe === "EK_SURE" && b.ekSureKalanGun === 30 && c.ekSureKalanGun === 1 && d.hesaplananKademe === "KISITLI" &&
+      nedenAyrinti(d, "LISANS_IZI_KAYIP") === "KIRA,DURUM" && nedenVar(d, "BELIRSIZLIK_SURUYOR"),
+    [a, b, c, d].map((x) => `${ozet(x)} kalan=${x.ekSureKalanGun}`).join(" | "),
+  );
+  const z4y = durum(kirasiz({ sonKiraSaat: 10 * 24, girdi: { belirsizlikMs: 15 * DAY_MS, sonYaptirim: { kademe: "K2", mesaj: null, kisitlamaTarihi: null, donmusModuller: ["finance.enabled"], guncellemeDonuk: false, devredildi: false } } }));
+  check(
+    "§20-Z4b yaptırım kaynağı durum kaydı → DB izi: K2 dondurması sürer; tavan HAK'tan (HAK ✓)",
+    !isModuleLicensed(z4y, "finance.enabled") && !isModuleLicensed(z4y, "iplik.enabled") && isModuleLicensed(z4y, "ticaret.enabled"),
+    ozet(z4y),
+  );
+}
+
+function zTablosuBolumuB(): void {
+  console.log("\n§20 — §3.2 durum ve geçiş tablosu Z5–Z9 (zorla; saf durum fonksiyonu)");
+  const tavan = { sonBilinenTavan: ["production.enabled", "finance.enabled"] };
+  const z5 = durum({ ...v2({ pGun: 60 }), hak: "BOZUK", girdi: { izler: SAGLAM, ...tavan } });
+  check(
+    "§20-Z5 ⭐ internet VAR · sağlam · HAK ✗: UYARI, çapa eski (P yok), tavan SON BİLİNEN (finans açık, ticaret kapalı)",
+    z5.hesaplananKademe === "UYARI" && z5.odenmisTarih === null && isModuleLicensed(z5, "finance.enabled") && !isModuleLicensed(z5, "ticaret.enabled"),
+    ozet(z5),
+  );
+  const z6a = durum({ ...eskiKira(35, 5), hak: "BOZUK", girdi: { izler: SAGLAM, ...tavan } });
+  const z6b = durum({ ...eskiKira(70, 35), hak: "BOZUK", girdi: { izler: SAGLAM, ...tavan } });
+  check(
+    "§20-Z6 ⭐ internet YOK · sağlam · HAK ✗ · eski çapa (kira bitişi): EK_SÜRE 25 → KISITLI; tavan son bilinen",
+    z6a.hesaplananKademe === "EK_SURE" && z6a.ekSureKalanGun === 25 && z6b.hesaplananKademe === "KISITLI" && !isModuleLicensed(z6b, "ticaret.enabled"),
+    `${ozet(z6a)} | ${ozet(z6b)}`,
+  );
+  const z7 = durum(kirasiz({ sonKiraSaat: 2, hak: "BOZUK", izler: { durumDosyasi: true }, girdi: { belirsizlikMs: 60 * DAY_MS, ...tavan } }));
+  check(
+    "§20-Z7 internet VAR · bozuk · HAK ✗: EK_SÜRE(0) (yanıt HAK ve kirayı getirir), tavan son bilinen",
+    z7.hesaplananKademe === "EK_SURE" && z7.ekSureKalanGun === 0 && !isModuleLicensed(z7, "ticaret.enabled") && isModuleLicensed(z7, "finance.enabled"),
+    ozet(z7),
+  );
+  const ucYok = { durumDosyasi: false, dbIzi: "YOK" as const, dbIziKurulu: false };
+  const z8 = durum({ kira: "YOK", hak: "BOZUK", girdi: { sonKiraZorlamasi: true, izler: { ...SAGLAM, ...ucYok } } });
+  const z8b = durum({ kira: "YOK", hak: "BOZUK", girdi: { sonKiraZorlamasi: true, belirsizlikMs: 44 * DAY_MS, izler: { ...SAGLAM, ...ucYok } } });
+  const z8h = durum({ kira: "YOK", girdi: { sonKiraZorlamasi: true, izler: { ...SAGLAM, ...ucYok } } });
+  check(
+    "§20-Z8 ⭐ internet YOK · üç iz yok (K7): 14 günlük uyarı ATLANIR → hemen EK_SÜRE 30 → (44 g) KISITLI; HAK ✗ → ham tavan (üretim açık), HAK ✓ → HAK tavanı; yaptırım kaynağı yok",
+    z8.belirsizlik.ucIzYok && z8.hesaplananKademe === "EK_SURE" && z8.ekSureKalanGun === 30 && z8.belirsizlik.birikenMs === 14 * DAY_MS &&
+      nedenAyrinti(z8, "LISANS_IZI_KAYIP") === "KIRA,DURUM,IZ" && z8b.hesaplananKademe === "KISITLI" &&
+      isModuleLicensed(z8, "iplik.enabled") && isModuleLicensed(z8, "production.enabled") && !isModuleLicensed(z8h, "iplik.enabled") && z8.yaptirimKademesi === null,
+    `${ozet(z8)} kalan=${z8.ekSureKalanGun} | ${ozet(z8b)}`,
+  );
+  const z9 = durum({ ...v2({ pGun: -5, kiraSaat: 2 }), girdi: { imzaYok: true, depoOkunamadi: ["kurulum-anahtari.json"], izler: SAGLAM, belirsizlikMs: 15 * DAY_MS } });
+  const z9v = durum({ ...v2({ pGun: -31, kiraSaat: 2 }), girdi: { imzaYok: true, depoOkunamadi: ["kurulum-anahtari.json"], izler: SAGLAM } });
+  check(
+    "§20-Z9 ⭐ anahtar okunamaz (imza yok): DEPO_OKUNAMADI merdivene girer, İnternet YOK sayılır (son kira 2 saat önce olsa da) → P + 30 geçti → KISITLI; tavan/yaptırım aynı",
+    nedenVar(z9, "DEPO_OKUNAMADI") && z9.belirsizlik.suruyor && !z9.baglanti.internetVar && z9.hesaplananKademe === "EK_SURE" && z9v.hesaplananKademe === "KISITLI" && !isModuleLicensed(z9, "iplik.enabled"),
+    `${ozet(z9)} | ${ozet(z9v)}`,
+  );
+}
+
+function belirsizlikBolumu(): void {
+  console.log("\n§21 — belirsizlik birikimi (§3.1-3): çalışma süresiyle, yalnız yeni kira sıfırlar; düzelse de kademe birikimden");
+  const sure = (x: Partial<LicenseStateInput>): LicenseState => durum({ ...v2({ pGun: 200, kiraSaat: 10 * 24 }), girdi: { izler: SAGLAM, ...x } });
+  const a = sure({ belirsizlikMs: 20 * DAY_MS });
+  check("§21a ⭐ ölçülemedi DÜZELDİ ama birikim 20 gün (yeni kira yok) → EK_SÜRE sürer (bulgu ile birikim ayrı eksen)", a.hesaplananKademe === "EK_SURE" && a.ekSureKalanGun === 24 && !a.belirsizlik.suruyor, ozet(a));
+  const b = sure({ belirsizlikMs: 5 * DAY_MS });
+  check("§21b karşı: birikim 5 gün, ölçülemedi yok → NORMAL, bulgu yok (birikim sessizce saklı)", b.hesaplananKademe === "NORMAL" && !nedenVar(b, "BELIRSIZLIK_SURUYOR"), ozet(b));
+  const c = sure({ belirsizlikMs: 5 * DAY_MS, saticiSapmaMs: null, depoOkunamadi: ["kira.jws"] });
+  check("§21c süren ölçülemedi (depo) + 5 gün → BELIRSIZLIK_SURUYOR (UYARI, ayrıntı gün), motor birikimi ilerletir (suruyor)", c.belirsizlik.suruyor && nedenAyrinti(c, "BELIRSIZLIK_SURUYOR") === "5" && c.hesaplananKademe === "UYARI", ozet(c));
+  const saat = durum({ ...v2({ pGun: 200, kiraSaat: 10 * 24 }), saat: { duvarMs: SIMDI + 90 * DAY_MS }, girdi: { izler: SAGLAM } });
+  check("§21d SAAT_İLERİ birikime girer (süren ölçülemedi)", saat.belirsizlik.suruyor && nedenVar(saat, "SAAT_ILERI"), ozet(saat));
+  const butunluk = sure({ butunluk: "OLCULEMEDI" });
+  check("§21e karşı: bütünlük ölçülemedisi kendi merdivenindedir, belirsizlik birikimine girmez", !butunluk.belirsizlik.suruyor, ozet(butunluk));
+  const etkinsiz = durum({ hak: "YOK", kira: "YOK", saat: { duvarMs: SIMDI - 3 * DAY_MS, monotonik: null, durumDosyasiGecerli: false, yuksekSuMs: SIMDI }, girdi: { izler: { ...SAGLAM, etkin: false } } });
+  check("§21f etkinleşmemiş kurulumda birikim yürümez (kendi ilk açılış merdiveni var)", !etkinsiz.belirsizlik.suruyor, ozet(etkinsiz));
+  const g = durum({ ...v2({ pGun: 200, kiraSaat: 2 }), girdi: { izler: SAGLAM, belirsizlikMs: 50 * DAY_MS } });
+  check("§21g internet VAR iken birikim dolsa da KISITLI yok → EK_SÜRE(0)", g.hesaplananKademe === "EK_SURE" && g.ekSureKalanGun === 0, ozet(g));
+}
+
+function izKaybiBolumu(): void {
+  console.log("\n§22 — iz kaybı (§3.1-4): tek iz de kayıptır ve kalıcıdır; DB izinin yokluğu ancak kurulduysa; bilinmiyorsa kayıp yok");
+  const iz = (x: Partial<TraceInput>, ek: Partial<LicenseStateInput> = {}): LicenseState => durum({ ...v2({ pGun: 200, kiraSaat: 2 }), girdi: { izler: { ...SAGLAM, ...x }, ...ek } });
+  const durumYok = iz({ durumDosyasi: false });
+  check("§22a ⭐ yalnız durum kaydı dosyası yok (kira + DB izi var) → LISANS_IZI_KAYIP(DURUM), ÖLÇÜLEMEDİ, birikime girer", nedenAyrinti(durumYok, "LISANS_IZI_KAYIP") === "DURUM" && durumYok.gecerlilik === "OLCULEMEDI" && durumYok.belirsizlik.suruyor, ozet(durumYok));
+  const izYok = iz({ dbIzi: "YOK" });
+  check("§22b ⭐ yalnız DB izi yok (kurulmuştu) → LISANS_IZI_KAYIP(IZ)", nedenAyrinti(izYok, "LISANS_IZI_KAYIP") === "IZ", ozet(izYok));
+  const ilk = iz({ dbIzi: "YOK", dbIziKurulu: false });
+  const bilinmiyor = iz({ dbIzi: "BILINMIYOR" });
+  check("§22c karşı: DB izi hiç kurulmamış (yükseltme sonrası ilk açılış) ya da okunamadı → kayıp YOK", !nedenVar(ilk, "LISANS_IZI_KAYIP") && !nedenVar(bilinmiyor, "LISANS_IZI_KAYIP") && ilk.gecerlilik === "GECERLI", `${ozet(ilk)} | ${ozet(bilinmiyor)}`);
+  const kalici = iz({ kayip: ["DURUM"] });
+  check("§22d ⭐ dosya geri konsa da kayıtlı iz kaybı yeni kiraya dek KALICI (merdiven durmaz)", nedenAyrinti(kalici, "LISANS_IZI_KAYIP") === "DURUM" && kalici.belirsizlik.suruyor, ozet(kalici));
+  const kira = durum(kirasiz({ sonKiraSaat: 30 * 24, izler: { durumDosyasi: true }, capalar: [capa({ pGun: 200, eskiGun: -1 })] }));
+  check("§22e ⭐ yalnız kira dosyası yok → LISANS_IZI_KAYIP(KIRA); süre çapası izlerden (P 200 gün sonra) → kısıtlama yok", nedenAyrinti(kira, "LISANS_IZI_KAYIP") === "KIRA" && kira.hesaplananKademe === "UYARI", ozet(kira));
+  const okunamayan = durum({ ...v2({ pGun: 200, kiraSaat: 2 }), girdi: { izler: SAGLAM, kira: { status: "OKUNAMADI" }, depoOkunamadi: ["kira.jws"] } });
+  check("§22f karşı: okunamayan kira iz KAYBI değildir (DEPO_OKUNAMADI, kalıcı bayrak yok)", !nedenVar(okunamayan, "LISANS_IZI_KAYIP") && nedenVar(okunamayan, "DEPO_OKUNAMADI"), ozet(okunamayan));
+  const etkinsiz = iz({ etkin: false, durumDosyasi: false, dbIzi: "YOK" });
+  check("§22g karşı: etkinleşmemiş kurulumda iz kuralı işlemez", !nedenVar(etkinsiz, "LISANS_IZI_KAYIP") && !etkinsiz.belirsizlik.ucIzYok, ozet(etkinsiz));
+}
+
+function parmakIziBolumu(): void {
+  console.log("\n§23 — parmak izi v2 merdiveni (§3.1-6): kural kiradan; eşiğin altı 14 g UYARI → 30 g EK_SÜRE → KISITLI, eşik tutunca kapanır");
+  const fp = (kural: LicenseStateInput["parmakIziKurali"], sonuc: LicenseStateInput["parmakIziEslesme"], gun: number, kiraSaat = 10 * 24): LicenseState =>
+    durum({ ...v2({ pGun: 200, kiraSaat }), girdi: { izler: SAGLAM, parmakIziKurali: kural, parmakIziEslesme: sonuc, parmakIziUyusmazMs: gun * DAY_MS } });
+  const [a, b, c] = [fp("standart", "ESLESMEDI", 0), fp("standart", "ESLESMEDI", 14), fp("standart", "ESLESMEDI", 44)];
+  check(
+    "§23a ⭐ v2 (standart) eşiğin altı: 0 g UYARI → 14 g EK_SÜRE 30 → 44 g KISITLI (internet yok); merdiven sürüyor",
+    a.hesaplananKademe === "UYARI" && b.hesaplananKademe === "EK_SURE" && b.ekSureKalanGun === 30 && c.hesaplananKademe === "KISITLI" && a.parmakIziMerdiveni.uyusmaz,
+    [a, b, c].map(ozet).join(" | "),
+  );
+  const online = fp("zayif", "ESLESMEDI", 60, 2);
+  check("§23b internet VAR iken satıcı karar verene dek EK_SÜRE(0); zayıf kural da merdivenli", online.hesaplananKademe === "EK_SURE" && online.ekSureKalanGun === 0, ozet(online));
+  const kapandi = fp("standart", "ESLESTI", 40);
+  check("§23c ⭐ eşik yeniden TUTTU → merdiven KAPANIR (birikim sıfır, bulgu yok, GEÇERLİ)", kapandi.parmakIziMerdiveni.eslesti && kapandi.parmakIziMerdiveni.birikenMs === 0 && kapandi.gecerlilik === "GECERLI" && kapandi.hesaplananKademe === "NORMAL", ozet(kapandi));
+  const v1 = fp("v1", "ESLESMEDI", 90);
+  check("§23d ⭐ v1 kira (kural yok): ESKİ karar — uyuşmazlık yalnız UYARI, merdiven YOK (v1 belgeyle sıfır fark)", v1.hesaplananKademe === "UYARI" && !v1.parmakIziMerdiveni.uyusmaz, ozet(v1));
+  const v2olc = fp("zayif", "OLCULEMEDI", 0);
+  const v1olc = fp("v1", "OLCULEMEDI", 0);
+  check("§23e v2'de parmak izi ölçülemedisi belirsizlik birikimine girer, v1'de girmez", v2olc.belirsizlik.suruyor && !v1olc.belirsizlik.suruyor, `${ozet(v2olc)} | ${ozet(v1olc)}`);
+}
+
+function tavanBolumu(): void {
+  console.log("\n§24 — modül tavanı (§3.1-2): HAK doğrulanabildikçe; yoksa son bilinen; ham yalnız tavan bilinmiyorsa; üretim çekirdek; bağımlılık tavanda");
+  const olc = durum({ ...v2({ pGun: 200 }), saat: { duvarMs: SIMDI + 90 * DAY_MS }, girdi: { izler: SAGLAM } });
+  check("§24a ⭐ ÖLÇÜLEMEDİ (saat) + HAK ✓ → HAK tavanı SÜRER (iplik kapalı), üretim açık", olc.gecerlilik === "OLCULEMEDI" && !isModuleLicensed(olc, "iplik.enabled") && isModuleLicensed(olc, "production.enabled"), ozet(olc));
+  const pin = { hakId: f.hakId, surum: 1, sinif: "DEMO" as const, kokTuru: "kok" as const, moduller: ["production.enabled", "iplik.enabled", "ticaret.enabled"] };
+  const geri = durum({ girdi: { sonHak: pin, sonBilinenTavan: pin.moduller, sonKiraZorlamasi: true } });
+  check("§24b ⭐ HAK geri alınmış (pin ters) → diskteki HAK değil SON BİLİNEN tavan (pin modülleri)", nedenVar(geri, "KIRA_GERI_ALINDI") && isModuleLicensed(geri, "iplik.enabled") && !isModuleLicensed(geri, "finance.enabled"), ozet(geri));
+  const ham = durum({ hak: "BOZUK", girdi: { sonBilinenTavan: null } });
+  check("§24c karşı: HAK bozuk ve hiç tavan bilinmiyor → ham (iplik açık)", isModuleLicensed(ham, "iplik.enabled"), ozet(ham));
+  const bag = durum({ hak: { moduller: ["iplik.enabled"] } });
+  const tam = durum({ hak: { moduller: ["iplik.enabled", "ticaret.enabled"] } });
+  check("§24d ⭐ bağımlılık TAVANDA: iplik lisansta ama ön koşulu ticaret değil → iplik KAPALI; ikisi birlikte → açık", !isModuleLicensed(bag, "iplik.enabled") && isModuleLicensed(tam, "iplik.enabled"), `${ozet(bag)} | ${ozet(tam)}`);
+  const k2 = durum({ hak: { moduller: ["iplik.enabled", "ticaret.enabled"] }, kira: { yaptirim: { kademe: "K2", mesaj: null, kisitlamaTarihi: null, donmusModuller: ["ticaret.enabled", "production.enabled"], guncellemeDonuk: false } } });
+  check("§24e ⭐ K2 ticareti dondurdu → bağımlı iplik de kapalı; K2 üretimi dondursa da üretim AÇIK (çekirdek)", !isModuleLicensed(k2, "iplik.enabled") && isModuleLicensed(k2, "production.enabled"), ozet(k2));
+}
+
+function kipBolumu(): void {
+  console.log("\n§25 — kip sırası kira → durum kaydı → DB izi → derleme; HAK'taki `kipAltSiniri: zorla` her zaman alt sınır");
+  const altSinir = durum({ hak: { kipAltSiniri: "zorla" }, kira: { zorlama: false } });
+  check("§25a ⭐ gözlem kirası + HAK alt sınırı zorla → kip ZORLA", altSinir.kip === "zorla", ozet(altSinir));
+  const pin = { hakId: f.hakId, surum: 1, sinif: "URETIM" as const, kokTuru: "kok" as const, kipAltSiniri: "zorla" as const };
+  const hakYok = durum({ hak: "BOZUK", kira: "YOK", girdi: { sonKiraZorlamasi: false, sonHak: pin } });
+  check("§25b ⭐ HAK bozuk + kayıt gözlem diyor → kayıttaki HAK pininin alt sınırı ZORLA (silmek kipi gevşetmez)", hakYok.kip === "zorla", ozet(hakYok));
+  const kayit = durum({ kira: "YOK", girdi: { sonKiraZorlamasi: true } });
+  const derleme = durum({ kira: "YOK", girdi: { sonKiraZorlamasi: null } });
+  check("§25c kira yok → kip kayıttan (zorla); kayıt da yok → derleme varsayılanı (gözlem)", kayit.kip === "zorla" && derleme.kip === "gozlem", `${ozet(kayit)} | ${ozet(derleme)}`);
+  const yeniHak = durum({ hak: { surum: 2 }, kira: { zorlama: false, hakSurum: 2 }, girdi: { sonHak: pin } });
+  check("§25d karşı: geçerli HAK'ta alt sınır yoksa (yeni sürüm kaldırdı) pin uygulanmaz → kiranın gözlemi", yeniHak.kip === "gozlem", ozet(yeniHak));
+}
+
+function capaBolumu(): void {
+  console.log("\n§26 — kira silinince süre çapası ayakta kalan izlerden: en ERKEN olan; izler çelişirse çelişki bulgudur (silmek uzatmaz)");
+  const gecmis = durum(kirasiz({ sonKiraSaat: 40 * 24, hak: { verilis: msToIso(SIMDI - 2 * DAY_MS) }, capalar: [capa({ pGun: -40, eskiGun: -40 })] }));
+  check("§26a ⭐ izlerin çapası 40 gün önce bitmiş → KISITLI (taze HAK verilişi ek süre DOĞURMAZ: silmek uzatmaz)", gecmis.hesaplananKademe === "KISITLI" && nedenVar(gecmis, "ODENMIS_TARIH_DOLDU"), ozet(gecmis));
+  const hakYok = durum(kirasiz({ sonKiraSaat: 40 * 24, hak: "BOZUK", capalar: [capa({ pGun: 300, eskiGun: -10 })] }));
+  check("§26b ⭐ HAK doğrulanamıyor → P okunmaz, izlerin ESKİ çapası (10 gün önce) → EK_SÜRE 20 (HAK silmek P'yi uzatmaz)", hakYok.hesaplananKademe === "EK_SURE" && hakYok.ekSureKalanGun === 20 && nedenVar(hakYok, "KIRA_SURESI_DOLDU"), ozet(hakYok));
+  const celiski = durum(kirasiz({ sonKiraSaat: 40 * 24, capalar: [capa({ pGun: 100, eskiGun: 0 }), capa({ pGun: -5, eskiGun: 0, kiraId: randomUUID() })] }));
+  check("§26c ⭐ iki iz farklı P taşıyor → ERKEN olan (5 gün önce) geçerli: EK_SÜRE 25 + LISANS_IZI_CELISKI (ölçülemedi, birikime girer)", celiski.hesaplananKademe === "EK_SURE" && celiski.ekSureKalanGun === 25 && nedenVar(celiski, "LISANS_IZI_CELISKI") && celiski.belirsizlik.suruyor, ozet(celiski));
+  const ayniKira = durum({ ...v2({ pGun: 200 }), girdi: { izler: SAGLAM, sonCapalar: [capa({ pGun: 100, eskiGun: 0, kiraId: randomUUID() })] } });
+  check("§26d karşı: kira varken BAŞKA kiraya ait (eskimiş) iz kopyası çapayı etkilemez ve çelişki sayılmaz", ayniKira.hesaplananKademe === "NORMAL" && !nedenVar(ayniKira, "LISANS_IZI_CELISKI"), ozet(ayniKira));
+  const yok = durum({ kira: "YOK", hak: { verilis: msToIso(SIMDI - 100 * DAY_MS) }, girdi: { sonKiraZorlamasi: true } });
+  check("§26e karşı: izler çapa hatırlamıyorsa (eski kayıt) bugünkü kural — kirasız HAK verilişi → KISITLI", yok.hesaplananKademe === "KISITLI" && nedenVar(yok, "KIRASIZ_EK_SURE"), ozet(yok));
+  const k7 = durum({ kira: "YOK", hak: { verilis: msToIso(SIMDI - 100 * DAY_MS) }, girdi: { sonKiraZorlamasi: true, ekSureCapasiMs: SIMDI - DAY_MS, belirsizlikMs: 15 * DAY_MS, izler: { ...SAGLAM, durumDosyasi: true, dbIziKurulu: false } } });
+  check("§26f ⭐ kayıtta K7 tespit anı varsa HAK verilişi çapası UYGULANMAZ: merdiven (15 g) → EK_SÜRE 29, KISITLI değil", k7.hesaplananKademe === "EK_SURE" && k7.ekSureKalanGun === 29 && !nedenVar(k7, "KIRASIZ_EK_SURE"), ozet(k7));
+}
+
+function gozlemSifirFarkBolumu(): void {
+  console.log("\n§27 — GÖZLEM kipinde G12'nin HER dalı yalnız hesaplanır: uygulanan etki bugünkü davranış (sıfır fark)");
+  const gozlem: Partial<LicenseStateInput> = { sonKiraZorlamasi: false };
+  const vakalar: Array<[string, LicenseState]> = [
+    ["Z4 birikim 44 g", durum(kirasiz({ sonKiraSaat: 240, girdi: { ...gozlem, belirsizlikMs: 44 * DAY_MS } }))],
+    ["Z8 üç iz yok", durum({ kira: "YOK", girdi: { ...gozlem, izler: { ...SAGLAM, durumDosyasi: false, dbIzi: "YOK", dbIziKurulu: false } } })],
+    ["Z9 anahtar okunamaz", durum({ ...v2({ pGun: -31, kiraSaat: 2 }), kira: { ...(v2({ pGun: -31, kiraSaat: 2 }).kira as Partial<LeaseDoc>), zorlama: false }, girdi: { imzaYok: true, depoOkunamadi: ["kurulum-anahtari.json"] } })],
+    ["parmak izi 44 g", durum({ ...v2({ pGun: 200, kiraSaat: 240 }), kira: { ...(v2({ pGun: 200, kiraSaat: 240 }).kira as Partial<LeaseDoc>), zorlama: false }, girdi: { parmakIziKurali: "standart", parmakIziEslesme: "ESLESMEDI", parmakIziUyusmazMs: 44 * DAY_MS } })],
+    ["ölçülemedi + HAK tavanı", durum({ kira: { zorlama: false }, saat: { duvarMs: SIMDI + 90 * DAY_MS } })],
+    ["iz çelişkisi", durum(kirasiz({ sonKiraSaat: 240, capalar: [capa({ pGun: 100, eskiGun: 0 }), capa({ pGun: -5, eskiGun: 0, kiraId: randomUUID() })], girdi: gozlem }))],
+  ];
+  const sapma = vakalar.filter(([, d]) => d.kip !== "gozlem" || d.uygulananKademe !== "NORMAL" || d.uygulanan !== OBSERVE_EFFECT || !isModuleLicensed(d, "iplik.enabled"));
+  const hesaplandi = vakalar.filter(([, d]) => d.hesaplananKademe !== "NORMAL");
+  check(
+    `§27a ⭐ ${vakalar.length} G12 dalında gözlem kipi: uygulanan NORMAL + OBSERVE_EFFECT, HAK dışı modül açık`,
+    sapma.length === 0,
+    sapma.map(([ad, d]) => `${ad}: ${ozet(d)}`).join(" | "),
+  );
+  check(`§27b aynı dallar HESAPLANIR (raporlanır): ${hesaplandi.length}/${vakalar.length} hesaplanan kademe NORMAL değil`, hesaplandi.length === vakalar.length, vakalar.map(([ad, d]) => `${ad}=${d.hesaplananKademe}`).join(", "));
+}
+
 normalBolumu();
 gozlemBolumu();
 ekSureBolumu();
@@ -667,6 +916,15 @@ depoBolumu();
 odenmisTarihBolumu();
 bantBolumu();
 sifirFarkBolumu();
+zTablosuBolumuA();
+zTablosuBolumuB();
+belirsizlikBolumu();
+izKaybiBolumu();
+parmakIziBolumu();
+tavanBolumu();
+kipBolumu();
+capaBolumu();
+gozlemSifirFarkBolumu();
 safBolumu();
 console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
 process.exit(fail > 0 ? 1 : 0);
