@@ -165,3 +165,4 @@ Yeni patron bulutu bekçisi doğduğu commit'te bu listeye VE haritanın `## pat
 - 2026-09-30 · Patron web `//` boş sayfası (I12): kenar vekili yolu katlayıp iletir, 301 tetiklenmez; katlama istemcide, yönlendiriciden önce
 - 2026-09-30 · Patron bulutu hukuk metnine uyum (PU): hizmet sonu 90 gün salt okuma + dışa aktarma + imha CLI'si, kapanan hesabın kimliği 30 günde silinir, giriş IP'si 30 gün, destek rolü + erişim kaydı
 - 2026-09-30 · Entegrasyon düzeltmeleri (sertleştirme 2 + güven çapası inişi): kimlik silmesi işlem makbuzunu da tombstone'lar, kolon düzeyi yetki (makbuz yanıtı · denetim özeti), destek rolünün görünüm/fonksiyon ölçümü
+- 2026-10-01 · Güvenlik dilimi G19: rapor izni rapor başına + rapor başına RLS adı, giriş kilidi hesap + kaynak (aynı 401, süre tabanı), e-posta tekilliği yalnız etkin hesapta, gelen kutusu yazarı claim anında, uygulama önbelleği oturum ömründe, satıcı CLI'si zorlaması
