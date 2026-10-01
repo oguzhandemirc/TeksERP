@@ -14412,6 +14412,8 @@ Negatif sondalar (tetik md5(prosrc) ve dosya md5 ile geri alındı):
 
 ## 2026-10-01 — Kısa kimlikler (hızlı PIN + QR kart) özetli saklanır: anahtar halkası LICENSE_DIR'de, yedeğe mühürlü emanet, tembel + betikli dönüşüm, kalıcı giriş kilidi, yalnız onaylı cihaz bayrağı (G21-K) [ÇEKİRDEK] + [PROFİL]
 
+> ⚠️ **KISMEN (2026-10-02)** — "Karar — dönüşüm"deki "dönüşümden sonra eski sürüme `-GeriAl` yapılırsa ya premigrate dökümü geri yüklenir ya PIN/kartlar yeniden verilir" seçeneği daraldı. pm2 düzeninde bu sürümden eskisine `kur.ps1 -GeriAl` YALNIZ `premigrate_` geri yüklemesiyle birlikte yapılır. adnansahin'e bu sürüm yalnız pm2 → hizmet geçişinin paketi olarak çıkar. → bkz. 2026-10-02 "Dağıtım v2 D8e runbook" notu.
+
 **Bağlam (soru ve ölçüm).** 2026-10-01 güvenlik denetimi (G21; FAB-1 · FAB-2 · FAB-10 · FAB-11) hızlı PIN ile kart kodunun `users` tablosunda DÜZ METİN durduğunu, PIN'in tek başına kimlik sayıldığını, personel listesinin eşleştirme kapalıyken kimliksiz döndüğünü ve giriş kilidinin bellekte yaşadığını doğruladı. Kullanıcı kararı (2026-10-01, bulut kurulum kararları madde 7): PIN ve kart HER kurulumda geri çevrilemez özet olarak saklanır; mevcut PIN'ler güncellemede kullanıcıdan yeni PIN istemeden dönüştürülür; deneme sınırı/kilit; kart kodu uzun ve tahmin edilemez; "yalnız onaylı cihazdan PIN/kart" bulut (BARINDIRILAN) sınıfında zorunlu, fabrikada bugünkü davranış varsayılan. Yönetici ekleri: (a) anahtar yeni makineye geri yüklemede kaybolmasın — şifreli yedeğe girsin, uyuşmazlıkta açık mesaj + toplu PIN sıfırlama; (b) dönüşüm otomatik güncelleme politikasında elle koşulmayabilir — başarılı girişte tembel dönüşüm de olsun.
 
 **Karar — özet ve anahtar [ÇEKİRDEK].** Özet `"<kid>:<HMAC-SHA256(anahtar, "pin:"+PIN)>"` (kart: `"card:"+userId+":"+sır`). Yavaş özet (bcrypt/scrypt) SEÇİLMEDİ: PIN uzayı 10^6 — anahtarsız yavaş özet DB kopyasında saatler içinde kırılır, üstelik salt-PIN girişi PIN'i tek başına kimlik saydığı için tuzlu özet her girişte bütün kullanıcıları denemeyi gerektirirdi. Koruma özetin yavaşlığından değil anahtarın DB DIŞINDA olmasından gelir: deterministik HMAC `@unique`i (PIN benzersizliği) korur, DB kopyası (yedek, geliştirici makinesi) tek başına PIN vermez. Anahtar LICENSE_DIR'de `kisa-kimlik-anahtarlari.json` HALKASIDIR: yalnız ENOENT'te üretilir (okunamayan dosya ÜRETMEZ), üstüne yazılmaz; başka makineden gelen anahtar halkaya EKLENİR, yeni özet daima etkin anahtarla. `kid` öneki uyuşmazlığı ölçülebilir kılar. Kart sırrı 256 bit (64 hex); eski 128 bit kartlar geçerli kalır, `cardTokenLegacy` ile panel "yeniden bas" önerir. Düz değer yalnız verildiği an döner (POST cevabı + 10 dk bellek-içi basım penceresi — eski panel değeri `credentials` okumasından aldığı için); özetli PIN için `credentials` "••••••" yer tutucusu döner. Doğrulama sabit zamanlı karşılaştırmayla.
@@ -14521,3 +14523,71 @@ Negatif sondalar (tetik md5(prosrc) ve dosya md5 ile geri alındı):
 - PAKET.json alanı yoksa (eski ya da kanal-dışı paket) bugünkü davranış + uyarı. Fail-closed değil, çünkü eski paketler bu alanı hiç taşımadı. Bekçide beyanlıdır.
 
 **Bekçi.** `test_kurulum_betikleri` §1 harness `lisans.*` (9 vektör) · §12 (statik) · S43–S52 + H12–H15 kalıcı sondalar.
+
+## 2026-10-02 — Dağıtım v2 D8e runbook: thinkpad-1 ölçümleri, geçiş kanal kimliği, geçişli kurulumun onarımı (F4-B), PIN özeti sonrası geri alma, elle `current` yasağı [ÇEKİRDEK] + [PROFİL]
+
+**Ölçüm (thinkpad-1).**
+- [ÇEKİRDEK] **Geçiş (D8c Senaryo 4, 2026-10-01, testfabrika pm2 → hizmet):** 4 geçiş ve 2 geri alma koşuldu.
+  - Geçiş #1, 9. kalemde "kurulum kimligi farkli ya da okunamadi" deyip otomatik geri alındı (LAN kesintisi 24 sn).
+  - Geçiş #2 tamamlandı (29 sn), ama DURUM harici PG bağımlılığını bilmediği için yanlış UYUMSUZ verdi.
+  - Geçiş #3 ve #4 tamamlandı (27 sn ve 28 sn).
+  - İlk `-GeriAl` `PM2_DURDUR` ile çıkış 4 verdi. Neden `pm2-boot.cmd`: `setlocal` vardı ve `pm2.cmd` `call`sız çağrılıyordu.
+  - Dosya düzeltildikten sonra ikinci `-GeriAl` GERİ ALINDI, çıkış 0, kesinti 5 sn.
+  - Runbook'un "tahmin 1–2 dk"sı ölçümle değişti: 24–29 sn.
+- [ÇEKİRDEK] **Setup ilk penceresi (D8e-3, ISCC 6.7.3, beş koşu):** ilk görünür pencere ortalama 0,91 sn (en kötü 1,125 sn), sihirbaz ortalama 1,82 sn (en kötü 2,10 sn). Önceden ~60 sn hiç pencere yoktu.
+- [ÇEKİRDEK] **Donmuş `ilk-kurulum.ps1`, `SirIzniDaralt`:** PS 5.1'de `$ek = if ($dizin) { @("/T") }` skalere açılır, `@ek` icacls'e `/` ve `T` verir → icacls 87.
+  - `pg-setup\` · `backups\` · `yedek-anahtar\` hiç daraltılmaz, `C:\` mirası kalır: `db-credentials.json` ve dökümler Authenticated Users = Modify.
+  - Boş DACL oluşmadı. Aynı argümanlar doğrudan verilince DOSYA DACL'i boşalıyordu; ilk D8 gözlemi buydu.
+  - Kalıp yalnız bu betikte. Yeniden koşum dokunmaz, düzeltmez.
+  - Geçişin `-YalnizIskelet`i açığı kapatır; `-GeriAl` geniş mirası geri koyar.
+- [ÇEKİRDEK] **Geçişli kurulumun setup onarımı (D8e-3):** kök `C:\TeksERP`, `kurulum.json` yok. Sihirbaz "Kip: yeni kurulum" gösterir, Sonraki'de "Kök klasör boş değil ve TeksERP kurulumu değil (22 girdi)" ile engeller. Soneksiz güncelleyici de çalışan backend hizmeti de anılmaz.
+- [PROFİL] thinkpad-1 geçişli kurulumunun `.env`inde `LICENSE_SERVER_URL` yok: kurulum üretim satıcısına bakıyor (testfabrika'nın kanal değeri `lisans-test`).
+
+**Ölçüm — `kur.ps1 -GeriAl` premigrate dökümünü bugün nasıl kullanıyor.**
+- [ÇEKİRDEK] **Yalnız kod geri döner:** en yeni geçerli `app.eski-*` → `app\`, pm2 delete + start + save, sağlık, `GERI_ALMA` kaydı (`deploy/kur.ps1` GERI ALMA MODU). DB'ye dokunmaz.
+- **Uyarı:** "DB migration'lari GERI ALINMADI. Eski kod yeni semayla kosuyor" + "Uyumsuzluk varsa yedekten restore gerekir".
+- **`PremigrateCoz`** yalnız en yeni `premigrate_*` dökümü `.tkenc` ise devreye girer:
+  - Çözmeyi önerir; parolayı araç kendisi sorar. `-Zorla` ya da yönlendirilmiş girişte yalnız komutu basar.
+  - `pg_restore … --clean --if-exists` komutunu yalnız BASAR, koşmaz.
+  - Düz dökümde ek bir şey basmaz. Döküm yolu kurulum sonundaki "veri:" satırındadır.
+- **Döküm zamanı:** `[3/9]`da, göçten önce alınır. G21-K'nın düz değerlerini taşır, ama sonrasında yazılan veriyi taşımaz.
+
+**Kararlar (yönetici, 2026-10-02).**
+- [ÇEKİRDEK] **Geçiş kanal kimliği (D8e 2a):** geçiş kanal kimliğini paketin kendisinden çözer.
+  - Adlar ve veri kökü `deploy/hizmet/kanal-adlari.ps1`ten gelir; setup aynı çekirdeği kullanır.
+  - `-GuncelleyiciAdi` kalktı: türetilenle aynı olabilecek ikinci bir kaynaktı. Eski komut parametre bağlamasında hiçbir şeye dokunmadan düşer.
+  - `-HizmetAdi` paketinkinden farklıysa ENGEL.
+  - Lisans satıcısı kanal kaydından (`kanallar.json` `backend.lisansSunucusu` → `PAKET.json`) gelir. Uyuşmazlıkta KURU uyarır, UYGULA durur. Düzeltme `-LisansSunucusuYaz` (plan kalemi, `-GeriAl` geri alır). `kapali` değeri yalnız uyarı verir.
+  - Setup'ın aynı kararı ayrı nottadır (K1=A).
+- [PROFİL] **adnansahin geçişi:** adlar soneksiz kalır (`TeksERP-Backend` · `TeksERP-Guncelleyici` · `%ProgramData%\TeksERP`). Kanal satıcısı derleme varsayılanıyla aynı olduğu için `.env`e satır yazılmaz. Tek fark: güncelleyici kaydı aynı dizini `--veri` ile açıkça alır.
+- [PROFİL] **demofabrika:** kanal satıcısı da üretim, satır gerekmez. Yalnız testfabrika geçişi `-LisansSunucusuYaz` ister.
+- [ÇEKİRDEK] **Basılan komut:** KURU'nun bastığı "Uygulamak icin" komutu bağlı parametrelerin HEPSİNİ taşır. Kopyala-yapıştır aynı planı uygular; prova makinesinde `-ProvaKabul`/`-PaketOzeti` düşüyordu.
+- [ÇEKİRDEK] **Şema hizası:** tek kural, ad kümesine bağlı (`SEMA_ILERIDE` · `SEMA_OLCULEMEDI`, ayrı notlar). Geçişte ikisi de ENGEL'dir.
+- [ÇEKİRDEK] **Donmuş `ilk-kurulum.ps1` DÜZELTİLMEZ.** Açığı geçiş kapatır. Runbook önkoşulu: betik yeniden koşulmaz.
+- [ÇEKİRDEK] **F4-B:** geçişle kurulmuş düzen (`kurulum.json` yok) setup.exe ile ONARILMAZ.
+  - Setup bu kurulumu tanır ve açık mesajla durur; davranış D8e-3b'de iner.
+  - Onarım iki yoldandır: güncelleyici (yeni sürüm) ya da `gecis.ps1 -GeriAl`.
+  - F4-A (geçişin setup-uyumlu kayıt yazması) ileriye kaldı.
+- [ÇEKİRDEK] **`current` elle çevrilmez.** Geri dönüş güncelleyicinin telafisiyle (`GERI_DONDU`) ya da kurulumu kuran aracın geri alma yoluyla yapılır. Neden: `current`, işlem günlüğü · `durum.json` · `kurulum-gecmisi.jsonl` · DB şemasıyla aynı işlemde değişir.
+- **G21-K, geri alma (karma not):**
+  - [ÇEKİRDEK] pm2 düzeninde `20261001120000_kisa_kimlik_ozet`i taşıyan sürümden eskisine `kur.ps1 -GeriAl` YALNIZ `premigrate_` geri yüklemesiyle birlikte yapılır. Gerekçe: eski backend özetli PIN'i okuyamaz, `-GeriAl` ise DB'ye dokunmaz.
+  - [PROFİL] Bu sürüm adnansahin'e YALNIZ v2 geçişinin paketi olarak çıkar, pm2 düzeninde kalacak bağımsız güncelleme olarak çıkmaz.
+  - [ÇEKİRDEK] Hizmet düzeninde aynı risk yapısal olarak kapalıdır. `GERI_DONDU` işlem yedeğini geri yükler. Doğrulama başlatması istemcilere kapalı olduğundan tembel dönüşüm o aşamada başlamaz.
+  - Dağıtım v2'nin ilk paketi bu göçü taşır (ölçüldü: göç dizini 371. sırada).
+- [ÇEKİRDEK] **Paket aracını hizmet düzeninde elle koşmak** (`kisa-kimlik`, `superadmin-olustur`): `DOTENV_CONFIG_PATH` ve `LICENSE_DIR` açıkça verilir.
+  - `resolveLicenseDir` (`src/lib/license/store.ts`), `.env`de satır yoksa yolu çalışma dizininin `..\lisans`ından türetir. Anahtar halkası ENOENT'te dizinle birlikte doğar (`src/lib/short-credential/keyring.ts`).
+  - `current`ten koşan araç doğru dizini bulur. Sürüm dizininden koşan araç `surumler\lisans`ta ikinci bir halka doğurur.
+
+**Belge çapaları.**
+- `docs/ops/GECIS-PM2-HIZMET.md`: Durum, §0, §1 madde 4 · 5 · 10, §2 tablo, §3, §4, §7, §8, §9, §10.
+- `docs/design/GUNCELLEYICI.md` §7, `docs/ops/DEPLOY-RUNBOOK.md` §9.
+- `docs/kurallar/deploy-kurulum.md`: üç kural satırı. G21-K notuna KISMEN işareti kondu.
+
+**Bekçi.** Yeni bekçi yok: dilim yalnız belgedir. G21-K geri alma kuralını ve elle `current` yasağını hiçbir kapı ölçmüyor; donmuş `kur.ps1` göçü görüp premigrate'i zorunlu kılmıyor.
+
+**Üç kapı.** Migration yok, izin yok, APK yok.
+
+**Açık.**
+- (a) Premigrate geri yüklemesi `[3/9]`dan sonra yazılan veriyi kaybettirir. Pencere kapandıktan sonra eski sürüme dönüş gerekirse kural veri kaybı dışında bir yol bırakmıyor: G21-K notundaki "PIN/kartları yeniden ver" seçeneği kapandı. Bu durum için karar yöneticide.
+- (b) F4-A.
+- (c) Setup onarımında kayıttaki Tailscale aralığının sihirbaza dolmaması (`100.64.0.0/10` → "LocalSubnet") ve OnKosul'un hizmet kökü çakışmasını ölçmemesi D8e-3 bulgularıdır, bu notun kapsamı dışında.

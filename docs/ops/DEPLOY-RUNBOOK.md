@@ -853,6 +853,8 @@ dışı). Şema değişen bir sürümden dönüyorsan kodu geri aldıktan SONRA 
 kod eski şemayla, eski kod yeni şemayla uyumsuz olabilir. Restore yolu §5 ("Kopyaya geri
 yükleme" ÖNERİLİR — geri alınabilir).
 
+> ⚠️ **PIN/kart özeti (G21-K) — `-GeriAl` tek başına YASAK.** Kurulan paket `20261001120000_kisa_kimlik_ozet` göçünü taşıyorsa, sonrasında her başarılı PIN/kart girişi düz değeri özete çevirir ve düz kolonu boşaltır; eski backend özetli PIN'i okuyamaz. Bu sürümden eskisine `-GeriAl` YALNIZ aynı kurulumun `premigrate_` dökümünün geri yüklenmesiyle BİRLİKTE yapılır. Döküm `[3/9]`da alınır; sonrasında yazılan her veri geri yüklemede gider, bu yüzden karar pencere kapanmadan verilir. Kural: `docs/kurallar/deploy-kurulum.md`; adnansahin'de bu sürüm yalnız pm2 → hizmet geçişinin paketi olarak çıkar (`docs/ops/GECIS-PM2-HIZMET.md` §1 madde 5).
+
 Birkaç gün sorunsuz çalışınca `app.eski-*` silinebilir; `premigrate_*` dosyaları
 rotasyona girmez, elle temizlenir.
 
