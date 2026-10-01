@@ -20,7 +20,10 @@ import { isNativeBinding, nativeCore, unavailableCore, type NativeBinding } from
 declare const __TEKSERP_NATIVE_REQUIRED__: boolean | undefined;
 export const NATIVE_REQUIRED: boolean = typeof __TEKSERP_NATIVE_REQUIRED__ !== "undefined" && __TEKSERP_NATIVE_REQUIRED__ === true;
 
-/** Native `api::ABI` ile eşit olmalı: istek/yanıt biçimi kırılınca ikisi birlikte artar (3: künyede çapa kipi). */
+/**
+ * Native `api::ABI` ile eşit olmalı: istek/yanıt biçimi kırılınca ikisi birlikte artar (3: künyede çapa kipi). Lisans v2
+ * işlevleri G3 yayınlanmadan indiği için aynı numarada; onları taşımayan eski ABI-3 ikilisini `isNativeBinding` reddeder.
+ */
 export const NATIVE_ABI = 3;
 /** Açık dosya yolu (geliştirme/test); ZORUNLU kipte OKUNMAZ — yamalı çekirdek enjekte edilemesin. */
 export const NATIVE_PATH_ENV = "TEKSERP_LISANS_CEKIRDEK";

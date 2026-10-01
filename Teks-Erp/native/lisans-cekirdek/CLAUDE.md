@@ -1,11 +1,13 @@
 # Native lisans çekirdeği (Rust + napi-rs) — Faz 2c
 
-> **Ne:** fabrikanın lisans doğrulamasının native aynası — JWS/EdDSA + güven zinciri + belge şemaları, parmak izi toplama + tuzlu özet, bütünlük denetimi (2e arayüzü), modül anahtarı açma (2d arayüzü). Node'a `.node` eklentisi olarak yüklenir (`Teks-Erp/src/lib/license/native.ts`).
+> **Ne:** fabrikanın lisans doğrulamasının native aynası — JWS/EdDSA + güven zinciri (lisans v2: ara imzacı · iptal · ufuk · veriliş · bayt bağı) + belge şemaları, parmak izi toplama + tuzlu özet + eşleşme kararı (v1 · v2 standart/zayıf), bütünlük denetimi (2e arayüzü), modül anahtarı açma (2d arayüzü). Node'a `.node` eklentisi olarak yüklenir (`Teks-Erp/src/lib/license/native.ts`).
 > **Tek kaynak TS protokolüdür** (`Teks-Erp/src/lib/license/protocol/`); bu crate onun AYNASIDIR. Tasarım ve sözleşme: `docs/design/LISANS-NATIVE-CEKIRDEK.md`. Kurallar: `docs/kurallar/lisans.md` § Native lisans çekirdeği.
 
 ## Kurallar (bu dizine dokunmadan önce)
 
-- Doğrulama/şema/parmak izi kuralı önce TS'te değişir; sonra bu crate ve vektör dosyası AYNI commit'te: `cd Teks-Erp && npx tsx scripts/test_lisans_native_kahin.ts --vektor-yaz` → `npm test` (burada) → kâhin bekçisi. Vektör dosyası (`test-vektorleri/protokol.json`) elle düzenlenmez.
+- Doğrulama/şema/parmak izi kuralı önce TS'te değişir; sonra bu crate ve vektör dosyası AYNI commit'te: `cd Teks-Erp && npx tsx scripts/test_lisans_native_kahin.ts --vektor-yaz` → `npm test` (burada) → kâhin bekçisi. Vektör dosyaları (`test-vektorleri/protokol.json` + lisans v2 `protokol-v2.json`) elle düzenlenmez; v2'nin `istek` ailesi native dışıdır (fabrika istek doğrulamaz), öteki her v2 türü `tests/vektorler.rs`te en az bir kayıtla koşmalı.
+- Yeni napi işlevi `native-adapter.ts` `BINDING_FUNCTIONS` listesine AYNI commit'te girer: liste eski ikiliyi reddetmenin tek yoludur (aynı ABI'de yayınlanmamış ekleme — kâhin §1h).
+- Native'e iptal belgesi JWS METNİ olarak verilir ve burada aynı çapayla yeniden doğrulanır; JS'ten doğrulanmış görünüm alınmaz.
 - Denetim SIRASI da aynadır (hata kodu eşliği) — yeni bir denetimi TS'teki yerine koy.
 - Rust'a yeni regex yazılırsa TS kaynağında birebir karşılığı olmalı (`\d` yerine `[0-9]`: Rust'ta `\d` Unicode'dur); bekçi §0h ölçer.
 - `test-anchor` özelliği (dışarıdan güven çapası) YALNIZ geliştirme/test derlemesinde. Gömülü çapa İKİ kiptir ve bir ikili TEK kipi taşır: özelliksiz derleme ÜRETİM kökleri + PAKET anahtarları (`npm run derle:*:uretim` → `dist-uretim/`), `hazirlik-capasi` HAZIRLIK olanları (`npm run derle:*:hazirlik` → `dist-hazirlik/`). `src/anchor.rs`in dört bloğu TS `PRODUCTION_`/`STAGING_ROOT_PUBLIC_KEYS` + `…_PACKAGE_PUBLIC_KEYS` aynasıdır ve her blok kendi kipinin `cfg`siyle kapılıdır (öteki kipin baytı ikiliye girmez); künye `capaKipi` taşır, TS yükleyicisi kendi kipinden farklı ikiliyi açmaz. Paketin native'i kanalın kipiyle derlenir (`deploy/kanallar.json` `backend.guvenCapasi`).

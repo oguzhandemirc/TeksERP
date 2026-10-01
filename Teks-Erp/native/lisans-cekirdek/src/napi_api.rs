@@ -55,6 +55,41 @@ pub fn check_lease_binding(request: String) -> Result<String> {
 }
 
 #[napi(catch_unwind)]
+pub fn verify_revocation(request: String) -> Result<String> {
+    call(&request, api::verify_revocation)
+}
+
+#[napi(catch_unwind)]
+pub fn pick_newer_revocation(request: String) -> Result<String> {
+    call(&request, api::pick_newer_revocation)
+}
+
+#[napi(catch_unwind)]
+pub fn is_revocation_current(request: String) -> Result<String> {
+    call(&request, api::is_revocation_current)
+}
+
+#[napi(catch_unwind)]
+pub fn compare_fingerprints(request: String) -> Result<String> {
+    call_fallible(&request, api::compare_fingerprints)
+}
+
+#[napi(catch_unwind)]
+pub fn assess_identification(request: String) -> Result<String> {
+    call_fallible(&request, api::assess_identification)
+}
+
+#[napi(catch_unwind)]
+pub fn can_auto_learn_fingerprint(request: String) -> Result<String> {
+    call_fallible(&request, api::can_auto_learn_fingerprint)
+}
+
+#[napi(catch_unwind)]
+pub fn offline_horizon_ceiling_days(request: String) -> Result<String> {
+    call_fallible(&request, api::offline_horizon_ceiling_days)
+}
+
+#[napi(catch_unwind)]
 pub fn normalize_factor(request: String) -> Result<String> {
     call(&request, api::normalize_factor)
 }

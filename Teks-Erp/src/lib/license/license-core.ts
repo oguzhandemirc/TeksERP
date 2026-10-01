@@ -9,24 +9,38 @@ import {
   verifyEntitlement,
   verifyJws,
   verifyLease,
+  verifyRevocation,
   checkLeaseBinding,
+  pickNewerRevocation,
+  isRevocationCurrent,
+  offlineHorizonCeilingDays,
   normalizeFactor,
   digestFingerprint,
+  compareFingerprints,
+  assessIdentification,
+  canAutoLearnFingerprint,
+  success,
   FINGERPRINT_FACTORS,
   type CertUsage,
   type CertificateDoc,
   type EntitlementDoc,
   type EntitlementSignerKind,
   type Fingerprint,
+  type FingerprintDecision,
   type FingerprintFactor,
+  type FingerprintRule,
+  type IdentificationAssessment,
   type LeaseDoc,
   type LicenseClass,
   type ProtocolErrorCode,
   type RawFingerprint,
+  type Result,
+  type RevocationDoc,
   type RootKey,
   type VerifiedCertificate,
   type VerifiedEntitlement,
   type VerifiedLease,
+  type VerifiedRevocation,
 } from "./protocol";
 import { collectOsFactors } from "./fingerprint-os";
 import { ROOT_PUBLIC_KEYS } from "./trust-anchor";
@@ -94,6 +108,31 @@ export interface LeaseView {
   readonly subCertificate: CertificateView;
 }
 
+export interface RevocationView {
+  readonly document: RevocationDoc;
+  readonly rootKid: string;
+}
+
+/**
+ * Lisans v2 zincir seçenekleri (G4). İptal belgesi JWS METNİ olarak verilir; çekirdek onu AYNI çapayla yeniden
+ * doğrular (doğrulanmış görünüm girdisine güvenilmez). Doğrulanamayan iptal çağıranın hatasıdır: istek onun
+ * koduyla düşer (fail-closed). `null`/yok = iptalsiz.
+ */
+export interface CoreChainOptions {
+  readonly revocation?: unknown;
+}
+
+export interface CoreEntitlementOptions extends CoreChainOptions {
+  /** Doğrulayanın "şimdi"si (duvar ∨ yüksek su); verilirse veriliş sınırı işler, sonlu değilse RED. */
+  readonly nowMs?: number;
+}
+
+export interface FingerprintCompareOptions {
+  readonly excludeF5?: boolean;
+  /** Kiradaki `parmakIziKurali`; yoksa v1 kararı. */
+  readonly rule?: FingerprintRule;
+}
+
 export interface CollectedFingerprint {
   readonly digest: Fingerprint;
   readonly measured: Readonly<Record<FingerprintFactor, boolean>>;
@@ -107,11 +146,26 @@ export interface CollectedFingerprint {
 export interface LicenseCore {
   readonly source: "native" | "ts" | "yok";
   verifyJws(token: unknown, typ: string, keys: readonly JwsKey[]): CoreResult<JwsView>;
-  verifyCertificate(token: unknown, g: { readonly usage: CertUsage; readonly atMs: number; readonly roots?: readonly RootKey[] }): CoreResult<CertificateView>;
-  verifyEntitlement(token: unknown, roots?: readonly RootKey[]): CoreResult<EntitlementView>;
-  verifyLease(token: unknown, roots?: readonly RootKey[]): CoreResult<LeaseView>;
-  /** İki belgeyi DOĞRULAR ve bağlar (doğrulanmış görünüm girdisine güvenilmez). */
+  verifyCertificate(
+    token: unknown,
+    g: { readonly usage: CertUsage; readonly atMs: number; readonly roots?: readonly RootKey[]; readonly revocation?: unknown },
+  ): CoreResult<CertificateView>;
+  verifyEntitlement(token: unknown, roots?: readonly RootKey[], options?: CoreEntitlementOptions): CoreResult<EntitlementView>;
+  verifyLease(token: unknown, roots?: readonly RootKey[], options?: CoreChainOptions): CoreResult<LeaseView>;
+  /** İki belgeyi DOĞRULAR ve bağlar (doğrulanmış görünüm girdisine güvenilmez); kiranın `hakOzeti` bayt bağı dahil. */
   checkLeaseBinding(leaseJws: unknown, entitlementJws: unknown, roots?: readonly RootKey[]): CoreResult<true>;
+  /** İPTAL belgesi (G4 §2.3): yalnız çapadaki bir kök imzalar. */
+  verifyRevocation(token: unknown, roots?: readonly RootKey[]): CoreResult<RevocationView>;
+  /** İkisi de doğrulanır; yüksek `sira` kazanır, eşit/düşük gelen yok sayılır. `null`/yok = belge yok; ikisi de yoksa `null`. */
+  pickNewerRevocation(current: unknown, incoming: unknown, roots?: readonly RootKey[]): CoreResult<RevocationView | null>;
+  /** Kira (önce) ve iptal doğrulanır; kiranın beyan ettiği `iptalSira`ya eldeki belge yetişiyor mu. */
+  isRevocationCurrent(leaseJws: unknown, revocation: unknown, roots?: readonly RootKey[]): CoreResult<boolean>;
+  /** Parmak izi kararı (K8): kural yoksa v1, `standart` (kayıp = uyuşmazlık, güçlü ≥ 2), `zayif`. */
+  compareFingerprints(accepted: Fingerprint, measured: Fingerprint, options?: FingerprintCompareOptions): FingerprintDecision;
+  assessIdentification(fingerprint: Fingerprint, options?: { readonly excludeF5?: boolean }): IdentificationAssessment;
+  canAutoLearnFingerprint(accepted: Fingerprint, measured: Fingerprint, options?: { readonly excludeF5?: boolean }): boolean;
+  /** Sınıf ve imzacıya göre çevrimdışı ufuk tavanı (gün; `null` = tavansız). */
+  offlineHorizonCeilingDays(sinif: LicenseClass, signer: EntitlementSignerKind): number | null;
   normalizeFactor(factor: FingerprintFactor, raw: string | null | undefined): string | null;
   /** Tuz 16 bayttan kısaysa fırlatır (programcı hatası; TS protokolüyle aynı). */
   digestFingerprint(raw: RawFingerprint, salt: Uint8Array): Fingerprint;
@@ -138,6 +192,15 @@ function leaseView(k: VerifiedLease): LeaseView {
   return { document: k.document, subCertificate: certificateView(k.subCertificate) };
 }
 
+function revocationView(r: VerifiedRevocation): RevocationView {
+  return { document: r.document, rootKid: r.rootKid };
+}
+
+/** İsteğe bağlı iptal metni → doğrulanmış belge (`null` = iptalsiz); TS ve native aynı sırayla doğrular. */
+function revocationOf(token: unknown, roots: readonly RootKey[]): Result<VerifiedRevocation | null> {
+  return token === undefined || token === null ? success(null) : verifyRevocation(token, roots);
+}
+
 function measuredOf(digest: Fingerprint): Record<FingerprintFactor, boolean> {
   const out: Record<FingerprintFactor, boolean> = { f1: false, f2: false, f3: false, f4: false, f5: false };
   for (const f of FINGERPRINT_FACTORS) out[f] = digest[f] !== null;
@@ -157,16 +220,25 @@ export const tsLicenseCore: LicenseCore = Object.freeze({
     if (!j.ok) return j;
     return { ok: true, value: { header: { ...j.value.header }, payload: j.value.payload } };
   },
-  verifyCertificate(token: unknown, g: { usage: CertUsage; atMs: number; roots?: readonly RootKey[] }): CoreResult<CertificateView> {
-    const c = verifyCertificate(token, { roots: g.roots ?? ROOT_PUBLIC_KEYS, usage: g.usage, atMs: g.atMs });
+  verifyCertificate(token: unknown, g: { usage: CertUsage; atMs: number; roots?: readonly RootKey[]; revocation?: unknown }): CoreResult<CertificateView> {
+    const anchor = g.roots ?? ROOT_PUBLIC_KEYS;
+    const r = revocationOf(g.revocation, anchor);
+    if (!r.ok) return r;
+    const c = verifyCertificate(token, { roots: anchor, usage: g.usage, atMs: g.atMs, revocation: r.value });
     return c.ok ? { ok: true, value: certificateView(c.value) } : c;
   },
-  verifyEntitlement(token: unknown, roots?: readonly RootKey[]): CoreResult<EntitlementView> {
-    const h = verifyEntitlement(token, roots ?? ROOT_PUBLIC_KEYS);
+  verifyEntitlement(token: unknown, roots?: readonly RootKey[], options: CoreEntitlementOptions = {}): CoreResult<EntitlementView> {
+    const anchor = roots ?? ROOT_PUBLIC_KEYS;
+    const r = revocationOf(options.revocation, anchor);
+    if (!r.ok) return r;
+    const h = verifyEntitlement(token, anchor, { revocation: r.value, ...(options.nowMs !== undefined ? { nowMs: options.nowMs } : {}) });
     return h.ok ? { ok: true, value: entitlementView(h.value) } : h;
   },
-  verifyLease(token: unknown, roots?: readonly RootKey[]): CoreResult<LeaseView> {
-    const k = verifyLease(token, roots ?? ROOT_PUBLIC_KEYS);
+  verifyLease(token: unknown, roots?: readonly RootKey[], options: CoreChainOptions = {}): CoreResult<LeaseView> {
+    const anchor = roots ?? ROOT_PUBLIC_KEYS;
+    const r = revocationOf(options.revocation, anchor);
+    if (!r.ok) return r;
+    const k = verifyLease(token, anchor, { revocation: r.value });
     return k.ok ? { ok: true, value: leaseView(k.value) } : k;
   },
   checkLeaseBinding(leaseJws: unknown, entitlementJws: unknown, roots?: readonly RootKey[]): CoreResult<true> {
@@ -176,6 +248,39 @@ export const tsLicenseCore: LicenseCore = Object.freeze({
     const h = verifyEntitlement(entitlementJws, anchor);
     if (!h.ok) return h;
     return checkLeaseBinding(k.value, h.value);
+  },
+  verifyRevocation(token: unknown, roots?: readonly RootKey[]): CoreResult<RevocationView> {
+    const r = verifyRevocation(token, roots ?? ROOT_PUBLIC_KEYS);
+    return r.ok ? { ok: true, value: revocationView(r.value) } : r;
+  },
+  pickNewerRevocation(current: unknown, incoming: unknown, roots?: readonly RootKey[]): CoreResult<RevocationView | null> {
+    const anchor = roots ?? ROOT_PUBLIC_KEYS;
+    const c = revocationOf(current, anchor);
+    if (!c.ok) return c;
+    const i = revocationOf(incoming, anchor);
+    if (!i.ok) return i;
+    const picked = pickNewerRevocation(c.value, i.value);
+    return { ok: true, value: picked ? revocationView(picked) : null };
+  },
+  isRevocationCurrent(leaseJws: unknown, revocation: unknown, roots?: readonly RootKey[]): CoreResult<boolean> {
+    const anchor = roots ?? ROOT_PUBLIC_KEYS;
+    const k = verifyLease(leaseJws, anchor);
+    if (!k.ok) return k;
+    const r = revocationOf(revocation, anchor);
+    if (!r.ok) return r;
+    return { ok: true, value: isRevocationCurrent(k.value.document, r.value) };
+  },
+  compareFingerprints(accepted: Fingerprint, measured: Fingerprint, options: FingerprintCompareOptions = {}): FingerprintDecision {
+    return compareFingerprints(accepted, measured, options);
+  },
+  assessIdentification(fingerprint: Fingerprint, options: { excludeF5?: boolean } = {}): IdentificationAssessment {
+    return assessIdentification(fingerprint, options);
+  },
+  canAutoLearnFingerprint(accepted: Fingerprint, measured: Fingerprint, options: { excludeF5?: boolean } = {}): boolean {
+    return canAutoLearnFingerprint(accepted, measured, options);
+  },
+  offlineHorizonCeilingDays(sinif: LicenseClass, signer: EntitlementSignerKind): number | null {
+    return offlineHorizonCeilingDays(sinif, signer);
   },
   normalizeFactor(factor: FingerprintFactor, raw: string | null | undefined): string | null {
     return normalizeFactor(factor, raw);
