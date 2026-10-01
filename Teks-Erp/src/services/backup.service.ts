@@ -62,6 +62,7 @@ import {
 } from "./helpers/pg-tool.helper";
 import prisma from "../lib/prisma";
 import { uyari } from "../lib/logger";
+import { ShortCredentialAdminService } from "./short-credential-admin.service";
 
 const BACKUP_DIR = process.env.BACKUP_DIR;
 // Offsite (makine dışı) ikinci kopya hedefi — NAS/UNC/harici disk. Y-4: tek disk
@@ -349,6 +350,11 @@ export async function runBackupJob(trigger: BackupTrigger): Promise<BackupRunRes
   if (compat.result === "unmeasured") {
     uyari("backup", versionCompatMessage(compat, "backup"));
   }
+  // Kısa kimlik anahtarı bu dökümün İÇİNDE yedek alıcılarına mühürlü gitsin (alıcı kümesi
+  // değiştiyse yeniden mühür). Best-effort: başarısızlık yedeği durdurmaz, sağlık uyarır.
+  await ShortCredentialAdminService.syncEscrow().catch((e: unknown) =>
+    uyari("backup", "kısa kimlik anahtar emaneti tazelenemedi:", e instanceof Error ? e.message : e),
+  );
 
   const out = path.join(BACKUP_DIR, `${NIGHTLY_PREFIX}${stamp(new Date())}.dump`);
   // ⚠️ YARIM DOSYA NİHAİ ADI ALMAZ (denetim 2026-08-09, F-CORE-OPS-001).

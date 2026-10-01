@@ -3,11 +3,11 @@
 // =============================================================================
 
 import prisma from "../lib/prisma";
-import { Prisma, ClientType } from "@prisma/client";
+import { ClientType } from "@prisma/client";
 import bcrypt from "bcryptjs";
 import { readPatronCloudUserId } from "./helpers/patron-cloud-user.helper";
 import jwt from "jsonwebtoken";
-import { randomBytes, randomInt, randomUUID } from "crypto";
+import { randomBytes, randomUUID, timingSafeEqual } from "crypto";
 import { JwtPayload } from "../types/api.types";
 import { AppError } from "../utils/app-error";
 import { AuditService } from "./audit.service";
@@ -20,6 +20,22 @@ import {
 } from "./system-setting.service";
 import { SessionRegistryService } from "./session-registry.service";
 import { TotpAccountService } from "./totp-account.service";
+import { getShortCredentialKeyRing, ringKeyByKid } from "../lib/short-credential/keyring";
+import {
+  CARD_SECRET_BYTES,
+  digestCardSecret,
+  digestKid,
+  digestQuickPin,
+  digestsEqual,
+  parseCardCode,
+} from "../lib/short-credential/digest";
+import { countForeignDigests, requireKeyRing, ShortCredentialService } from "./short-credential.service";
+import {
+  forgetIssuedPin,
+  readIssued,
+  rememberIssuedCard,
+  rememberIssuedPin,
+} from "./helpers/credential-reveal.helper";
 
 /** Login çağrılarının istemci bağlamı — Session registry + aynı-tip politika için.
  *  clientType body'den (default 'mobile'); deviceId x-device-id/req.device'den;
@@ -63,9 +79,25 @@ function resolveDeviceType(clientType: LoginClientType | undefined): ClientType 
   return ClientType.MOBILE;
 }
 
-/** Personel kartı QR içeriği: TEKSU:<userId>:<32-hex token>. Makine QR'ı ham
- *  makine kodu (MAK-...) taşıdığından prefix çakışması yok. */
-const CARD_CODE_RE = /^TEKSU:([0-9a-fA-F-]{36}):([0-9a-fA-F]{32})$/;
+/** Eski panel için "PIN tanımlı ama gösterilemez" yer tutucusu (düz değer DB'de yok). */
+export const HIDDEN_PIN_PLACEHOLDER = "••••••";
+
+/** Anahtar uyuşmazlığı: özet, bu sunucunun anahtar halkasında olmayan bir anahtarla yazılmış. */
+function keyMismatchError(kind: "pin" | "card"): AppError {
+  const ne = kind === "pin" ? "hızlı PIN" : "personel kartı";
+  return AppError.unauthorized(
+    `Bu ${ne} doğrulanamıyor: kısa kimlik anahtarı bu veritabanıyla uyuşmuyor (yedek başka bir sunucudan geri yüklenmiş). ` +
+      "Yönetici: Kullanıcılar → Kısa Kimlikler'den anahtarı yedek parolasıyla geri yükleyin ya da PIN'leri toplu sıfırlayın. " +
+      "Şimdilik kullanıcı adı ve şifreyle giriş yapın.",
+    { code: "SHORT_CREDENTIAL_KEY_MISMATCH" },
+  );
+}
+
+function plainEquals(a: string, b: string): boolean {
+  const ab = Buffer.from(a, "utf8");
+  const bb = Buffer.from(b, "utf8");
+  return ab.length === bb.length && timingSafeEqual(ab, bb);
+}
 
 function loadJwtSecret(): string {
   const secret = process.env.JWT_SECRET;
@@ -137,14 +169,35 @@ export class AuthService {
         "Kartla giriş kapalı — Genel Ayarlar'dan giriş yöntemlerine 'QR kart' eklenebilir"
       );
     }
-    const m = CARD_CODE_RE.exec((cardCode ?? "").trim());
-    if (!m) throw AppError.unauthorized("Geçersiz personel kartı");
-    const user = await prisma.user.findFirst({
-      where: { id: m[1], cardToken: m[2].toLowerCase(), isActive: true },
-      select: { id: true, username: true, tokenVersion: true },
+    const parsed = parseCardCode(cardCode);
+    if (!parsed) throw AppError.unauthorized("Geçersiz personel kartı");
+    const row = await prisma.user.findUnique({
+      where: { id: parsed.userId },
+      select: {
+        id: true, username: true, tokenVersion: true, isActive: true,
+        cardTokenDigest: true, cardToken: true,
+      },
     });
-    if (!user) {
+    const user = row && row.isActive ? { id: row.id, username: row.username, tokenVersion: row.tokenVersion } : null;
+    let ok = false;
+    if (row && row.isActive && row.cardTokenDigest) {
+      const ring = getShortCredentialKeyRing();
+      const kid = digestKid(row.cardTokenDigest);
+      const key = ring.ok && kid ? ringKeyByKid(ring.ring, kid) : null;
+      if (!key) throw keyMismatchError("card");
+      ok = digestsEqual(row.cardTokenDigest, digestCardSecret(key, row.id, parsed.secret));
+    } else if (row && row.isActive && row.cardToken) {
+      // Dönüşüm koşulana dek düz kolon SALT OKUNUR (geçiş yedeği); yazılmaz.
+      ok = plainEquals(row.cardToken.toLowerCase(), parsed.secret);
+    }
+    if (!ok || !user) {
       throw AppError.unauthorized("Kart geçersiz veya iptal edilmiş — yöneticiden yeni kart isteyin");
+    }
+    const legacyCard = row?.cardTokenDigest ? null : (row?.cardToken ?? null);
+    if (legacyCard) {
+      const result = await this.issueToken(user, ctx);
+      await ShortCredentialService.convertOnLogin(user.id, "card", legacyCard).catch(() => false);
+      return result;
     }
     return this.issueToken(user, ctx);
   }
@@ -168,19 +221,43 @@ export class AuthService {
     if (!/^\d{6}$/.test(normalized)) {
       throw AppError.unauthorized("Geçersiz PIN");
     }
-    const user = await prisma.user.findFirst({
+    const ring = getShortCredentialKeyRing();
+    const candidates = ring.ok ? ring.ring.keys.map((k) => digestQuickPin(k, normalized)) : [];
+    if (candidates.length > 0) {
+      const hit = await prisma.user.findFirst({
+        where: { quickPinDigest: { in: candidates }, isActive: true },
+        select: { id: true, username: true, tokenVersion: true, quickPinDigest: true },
+      });
+      if (hit && candidates.some((c) => digestsEqual(c, hit.quickPinDigest ?? ""))) {
+        return this.issueToken({ id: hit.id, username: hit.username, tokenVersion: hit.tokenVersion }, ctx);
+      }
+    }
+    // Dönüşüm koşulana dek düz kolon SALT OKUNUR (geçiş yedeği); yazılmaz.
+    const legacy = await prisma.user.findFirst({
       where: { quickPin: normalized, isActive: true },
       select: { id: true, username: true, tokenVersion: true },
     });
-    if (!user) throw AppError.unauthorized("PIN tanınmadı — yöneticinizden hızlı PIN isteyin");
-    return this.issueToken(user, ctx);
+    if (legacy) {
+      const result = await this.issueToken(legacy, ctx);
+      await ShortCredentialService.convertOnLogin(legacy.id, "pin", normalized).catch(() => false);
+      return result;
+    }
+    if (ring.ok && (await countForeignDigests("quickPinDigest", ring.ring.keys.map((k) => k.kid))) > 0) {
+      throw keyMismatchError("pin");
+    }
+    if (!ring.ok && (await prisma.user.count({ where: { quickPinDigest: { not: null } } })) > 0) {
+      throw AppError.unauthorized(
+        "Hızlı PIN şu an doğrulanamıyor: kısa kimlik anahtarı okunamadı. Kullanıcı adı ve şifreyle giriş yapın; yöneticiye haber verin.",
+        { code: "SHORT_CREDENTIAL_KEY_UNAVAILABLE" },
+      );
+    }
+    throw AppError.unauthorized("PIN tanınmadı — yöneticinizden hızlı PIN isteyin");
   }
 
   /**
-   * Admin: kullanıcıya hızlı PIN ata. `pin` verilirse (6 hane) o kullanılır —
-   * BAŞKASINDA varsa 409 (benzersizlik kimliğin temeli); verilmezse çakışmayan
-   * rastgele 6 hane üretilir. Düz döner (admin operatöre iletir). Açık oturumlar
-   * etkilenmez. `clear=true` → PIN kaldırılır (salt-PIN girişi kapanır).
+   * Admin: kullanıcıya hızlı PIN ata. `pin` verilirse (6 hane) o kullanılır — BAŞKASINDA varsa
+   * 409; verilmezse çakışmayan rastgele 6 hane. DB'ye yalnız ÖZET yazılır; düz PIN bu cevapta
+   * ve kısa basım penceresinde (`credential-reveal`) döner. `clear=true` → PIN kaldırılır.
    */
   static async setQuickPin(
     userId: string,
@@ -189,12 +266,17 @@ export class AuthService {
   ): Promise<{ pin: string | null }> {
     const user = await prisma.user.findUnique({
       where: { id: userId },
-      select: { id: true, username: true, isActive: true, quickPin: true },
+      select: { id: true, username: true, isActive: true, quickPin: true, quickPinDigest: true },
     });
     if (!user || !user.isActive) throw AppError.notFound("Kullanıcı bulunamadı veya pasif");
+    const hadPin = user.quickPin != null || user.quickPinDigest != null;
 
     if (input.clear) {
-      await prisma.user.update({ where: { id: userId }, data: { quickPin: null } });
+      await prisma.user.update({
+        where: { id: userId },
+        data: { quickPin: null, quickPinDigest: null, quickPinSetAt: null },
+      });
+      forgetIssuedPin(userId);
       await AuditService.log({
         userId: actorUserId, action: "UPDATE", tableName: "USER_QUICK_PIN",
         recordId: userId, newData: { username: user.username, cleared: true },
@@ -202,48 +284,22 @@ export class AuthService {
       return { pin: null };
     }
 
-    if (input.pin !== undefined) {
-      const manual = input.pin.trim();
-      if (!/^\d{6}$/.test(manual)) throw AppError.badRequest("Hızlı PIN 6 haneli rakam olmalı");
-      try {
-        await prisma.user.update({ where: { id: userId }, data: { quickPin: manual } });
-      } catch (e) {
-        if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002") {
-          throw AppError.conflict(
-            "Bu PIN başka bir kullanıcıda tanımlı — hızlı PIN benzersiz olmalı (farklı bir PIN girin veya rastgele üretin)"
-          );
-        }
-        throw e;
-      }
-      await AuditService.log({
-        userId: actorUserId, action: "UPDATE", tableName: "USER_QUICK_PIN",
-        recordId: userId, newData: { username: user.username, rotated: user.quickPin != null },
-      }).catch(() => undefined);
-      return { pin: manual };
-    }
-
-    // Rastgele üret — P2002'de yeniden dene (1M kombinasyonda çakışma nadir).
-    for (let attempt = 0; attempt < 10; attempt++) {
-      const candidate = String(randomInt(0, 1_000_000)).padStart(6, "0");
-      try {
-        await prisma.user.update({ where: { id: userId }, data: { quickPin: candidate } });
-        await AuditService.log({
-          userId: actorUserId, action: "UPDATE", tableName: "USER_QUICK_PIN",
-          recordId: userId, newData: { username: user.username, rotated: user.quickPin != null },
-        }).catch(() => undefined);
-        return { pin: candidate };
-      } catch (e) {
-        if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002") continue;
-        throw e;
-      }
-    }
-    throw AppError.internal("Benzersiz PIN üretilemedi — tekrar deneyin");
+    const pin = await ShortCredentialService.assignQuickPin(
+      userId,
+      input.pin !== undefined ? input.pin.trim() : null,
+    );
+    rememberIssuedPin(userId, pin);
+    await AuditService.log({
+      userId: actorUserId, action: "UPDATE", tableName: "USER_QUICK_PIN",
+      recordId: userId, newData: { username: user.username, rotated: hadPin },
+    }).catch(() => undefined);
+    return { pin };
   }
 
   /**
-   * Admin: personel kartı sırrını üret/YENİLE (rotasyon). Yeni 32-hex token yazılır;
-   * dönen cardCode QR olarak basılır. Eski kart anında geçersiz. Açık JWT oturumları
-   * ETKİLENMEZ (tokenVersion bump yok — yalnız kart kimliği değişir).
+   * Admin: personel kartı sırrını üret/YENİLE (rotasyon). 256 bit yeni sır; DB'ye yalnız ÖZETİ
+   * yazılır, dönen cardCode QR olarak basılır (kısa basım penceresinde yeniden okunabilir).
+   * Eski kart anında geçersiz. Açık JWT oturumları ETKİLENMEZ.
    */
   static async rotateCardToken(
     userId: string,
@@ -251,19 +307,31 @@ export class AuthService {
   ): Promise<{ cardCode: string; rotated: boolean }> {
     const user = await prisma.user.findUnique({
       where: { id: userId },
-      select: { id: true, username: true, isActive: true, cardToken: true },
+      select: { id: true, username: true, isActive: true, cardToken: true, cardTokenDigest: true },
     });
     if (!user || !user.isActive) throw AppError.notFound("Kullanıcı bulunamadı veya pasif");
-    const token = randomBytes(16).toString("hex"); // 32-hex
-    await prisma.user.update({ where: { id: userId }, data: { cardToken: token } });
+    const ring = requireKeyRing();
+    const secret = randomBytes(CARD_SECRET_BYTES).toString("hex");
+    await prisma.user.update({
+      where: { id: userId },
+      data: {
+        cardTokenDigest: digestCardSecret(ring.active, user.id, secret),
+        cardIssuedAt: new Date(),
+        cardTokenLegacy: false,
+        cardToken: null,
+      },
+    });
+    const rotated = user.cardToken != null || user.cardTokenDigest != null;
+    const cardCode = `TEKSU:${user.id}:${secret}`;
+    rememberIssuedCard(userId, cardCode);
     await AuditService.log({
       userId: actorUserId,
       action: "UPDATE",
       tableName: "USER_CARD_TOKEN",
       recordId: userId,
-      newData: { username: user.username, rotated: user.cardToken != null },
+      newData: { username: user.username, rotated },
     }).catch(() => undefined);
-    return { cardCode: `TEKSU:${user.id}:${token}`, rotated: user.cardToken != null };
+    return { cardCode, rotated };
   }
 
   /**
@@ -281,22 +349,44 @@ export class AuthService {
   }
 
   /**
-   * Admin: kullanıcının mobil kimlik bilgilerini OKU — hızlı PIN + QR kart kodu.
-   * Panel bunları HER ZAMAN gösterir (kart QR sürekli görünür, mevcut PIN görünür).
-   * GÜVENLİK: her ikisi de düz saklandığından geri okunabilir; bu uç yalnız
-   * admin:users yetkisiyle çağrılır ("bu ekranı yalnız yönetici görür" kararı).
+   * Admin: kullanıcının mobil kimlik DURUMU. Düz değer YALNIZ yeni verildiyse (kısa basım
+   * penceresi) ya da henüz dönüştürülmemiş düz kolondan döner; özetli PIN için yer tutucu
+   * (eski panel "tanımlı" görsün), özetli kart için null. Yeni alanlar durumu taşır.
    */
-  static async getUserCredentials(
-    userId: string
-  ): Promise<{ quickPin: string | null; cardCode: string | null }> {
+  static async getUserCredentials(userId: string) {
     const user = await prisma.user.findUnique({
       where: { id: userId },
-      select: { id: true, quickPin: true, cardToken: true },
+      select: {
+        id: true, quickPin: true, cardToken: true,
+        quickPinDigest: true, quickPinSetAt: true,
+        cardTokenDigest: true, cardIssuedAt: true, cardTokenLegacy: true,
+      },
     });
     if (!user) throw AppError.notFound("Kullanıcı bulunamadı");
+    const issued = readIssued(userId);
+    const ring = getShortCredentialKeyRing();
+    const ringKids = ring.ok ? ring.ring.keys.map((k) => k.kid) : [];
+    const keyOk = (d: string | null) => d === null || ringKids.includes(digestKid(d) ?? "");
+    const quickPinSet = user.quickPinDigest !== null || user.quickPin !== null;
+    const cardSet = user.cardTokenDigest !== null || user.cardToken !== null;
+    const legacyCardCode = user.cardToken ? `TEKSU:${user.id}:${user.cardToken}` : null;
     return {
-      quickPin: user.quickPin,
-      cardCode: user.cardToken ? `TEKSU:${user.id}:${user.cardToken}` : null,
+      quickPin: issued.pin?.value ?? user.quickPin ?? (quickPinSet ? HIDDEN_PIN_PLACEHOLDER : null),
+      cardCode: issued.card?.value ?? legacyCardCode,
+      quickPinSet,
+      quickPinSetAt: user.quickPinSetAt,
+      quickPinRevealed: issued.pin !== null,
+      quickPinKeyOk: keyOk(user.quickPinDigest),
+      quickPinStorage: user.quickPinDigest !== null ? ("OZET" as const) : user.quickPin !== null ? ("DUZ" as const) : null,
+      cardSet,
+      cardIssuedAt: user.cardIssuedAt,
+      cardRevealed: issued.card !== null,
+      cardKeyOk: keyOk(user.cardTokenDigest),
+      cardLegacy: user.cardToken !== null || (user.cardTokenDigest !== null && user.cardTokenLegacy),
+      revealExpiresAt: (() => {
+        const t = Math.max(issued.pin?.until ?? 0, issued.card?.until ?? 0);
+        return t > 0 ? new Date(t).toISOString() : null;
+      })(),
     };
   }
 

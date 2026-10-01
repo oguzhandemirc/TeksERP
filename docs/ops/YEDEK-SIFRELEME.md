@@ -74,6 +74,16 @@ Teşhis: şifreli dosyada `pg_restore --list` başarısız olur — bu **bozuk d
 
 Araç çıkış kodları: `0` tamam · `1` kullanım/genel · `2` yanlış anahtar/parola · `3` bozuk/kurcalanmış/yarım.
 
+### 5b. Hızlı PIN / personel kartı anahtarı (yeni makineye dönüş)
+
+PIN ve kart kodları DB'de yalnız özet olarak durur; özetin anahtarı DB'de değil `LICENSE_DIR\kisa-kimlik-anahtarlari.json` halkasındadır ve yedek alıcılarına MÜHÜRLÜ kopyası (`short_credential_key_escrows`) her dökümün içindedir. **Aynı makinede** geri yükleme (panel, kopya, `kur.ps1 -GeriAl`) anahtara dokunmaz — bir şey yapılmaz. **Yeni makinede** (arıza/DR/taşıma) PIN/kart girişi "kısa kimlik anahtarı uyuşmuyor" der; kullanıcı adı + şifre çalışır. Geri koyma:
+
+- **Panel:** Kullanıcılar → **Kısa Kimlikler** → yedek parolası → "Anahtarı yedekten geri koy" (yeni makinede eski `yerel.tkkey` anahtar dizinine konmuş olmalı).
+- **Sunucu konsolu (kâğıt anahtarla):** `node C:\TeksERP\app\dist\tools\kisa-kimlik.cjs anahtar-geri-yukle --anahtar=E:\musteri-yedek-anahtari.txt --canli-onay` (`.tkkey` verilirse parola sorulur; parola argümandan alınmaz). Durum: `… kisa-kimlik.cjs durum`.
+- **Emanet yoksa** (yedek şifrelemesi kapalıydı): Kısa Kimlikler → Toplu hızlı PIN sıfırlama (doğrulanamayanlar), yeni PIN listesini yazdırıp dağıtın; kartlar kullanıcı başına "Yeniden bas".
+
+Güncelleme sonrası düz PIN'lerin özete çevrilmesi: kullanıcı ilk başarılı girişinde otomatik; kalanlar `kisa-kimlik.cjs donustur` (kuru) → onay → `donustur --apply --canli-onay` → ikinci koşum 0. Geri dönüş yalnız `premigrate_` yedeğinden.
+
 ## 6. Kayıp ve kriz senaryoları
 
 | Olay | Sonuç | Yapılacak |
@@ -84,6 +94,7 @@ Araç çıkış kodları: `0` tamam · `1` kullanım/genel · `2` yanlış anaht
 | Müşteri USB'si kayboldu | Yedekler hâlâ yerel + Etkili ile açılır | Yeni müşteri anahtarı üret (`anahtar-uret --ad musteri`), eski `musteri.tkpub`'ı kaldır; eski yedekler eski anahtara bağlı kalır |
 | Anahtar dizini silindi/bozuldu | Backend düz yedeği şifreleyemez; görev **çıkış 3**, düz yedek yerelde kalır, makine dışına ÇIKMAZ; panel "GEÇERSİZ yapılandırma" der | Dizini yedeğinden geri koy ya da yeniden tören; `durum` ile doğrula |
 | Etkili anahtarı henüz yok | Yedekler iki alıcılı | Tören sonrası `etkili.tkpub` ekle |
+| Yeni makinede PIN/kart "anahtar uyuşmuyor" | Kısa kimlik anahtarı LICENSE_DIR'de kaldı | §5b: emanetten geri koy ya da toplu PIN sıfırla |
 
 ## 7. Sınır ve borçlar
 

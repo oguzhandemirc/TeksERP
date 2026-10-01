@@ -102,6 +102,18 @@ const ADMIN_EVENTS = {
   MODULE_PROFILE_APPLIED: "MODULE_PROFILE_APPLIED",
 } as const;
 
+/** Kısa kimlikler (hızlı PIN + QR kart) — özet, anahtar emaneti. Değer ve anahtar yüke GİRMEZ. */
+const SHORT_CREDENTIAL_EVENTS = {
+  /** Düz PIN/kartlar özete çevrildi (`scripts/kisa-kimlik.ts donustur --apply`). */
+  SHORT_CREDENTIAL_CONVERTED: "SHORT_CREDENTIAL_CONVERTED",
+  /** Anahtar yedek alıcılarına mühürlendi (ilk kez ya da alıcı kümesi değişti). */
+  SHORT_CREDENTIAL_ESCROW_SEALED: "SHORT_CREDENTIAL_ESCROW_SEALED",
+  /** Başka makineden gelen özetlerin anahtarı emanetten halkaya geri kondu. */
+  SHORT_CREDENTIAL_KEY_RESTORED: "SHORT_CREDENTIAL_KEY_RESTORED",
+  /** Yönetici toplu hızlı PIN sıfırladı (kişi başı satır ayrıca `USER_QUICK_PIN`). */
+  SHORT_CREDENTIAL_BULK_RESET: "SHORT_CREDENTIAL_BULK_RESET",
+} as const;
+
 /** Kurulum kimliği (servis keşfi). */
 const DISCOVERY_EVENTS = {
   INSTALLATION_ID_CREATED: "INSTALLATION_ID_CREATED",
@@ -197,6 +209,7 @@ export const SYSTEM_EVENT = {
   ...DB_COPY_EVENTS,
   ...IMPORT_EVENTS,
   ...ADMIN_EVENTS,
+  ...SHORT_CREDENTIAL_EVENTS,
   ...DISCOVERY_EVENTS,
   ...LICENSE_EVENTS,
   ...PATRON_CLOUD_EVENTS,

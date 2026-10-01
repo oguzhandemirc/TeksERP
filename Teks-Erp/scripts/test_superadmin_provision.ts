@@ -45,6 +45,8 @@
 // Koşum: npx tsx scripts/test_superadmin_provision.ts
 // =============================================================================
 
+import { getShortCredentialKeyRing } from "../src/lib/short-credential/keyring";
+import { digestQuickPin } from "../src/lib/short-credential/digest";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { spawn } from "node:child_process";
@@ -339,6 +341,7 @@ async function main(): Promise<void> {
         isSystemAccount: true,
         isActive: true,
         quickPin: true,
+        quickPinDigest: true,
         totpSecret: true,
         totpEnabledAt: true,
         passwordHash: true,
@@ -353,7 +356,12 @@ async function main(): Promise<void> {
       satir?.fullName ?? "—",
     );
     check("hesap aktif", satir?.isActive === true);
-    check("PIN yazıldı ve dönüş değeriyle AYNI", satir?.quickPin === ilk.pin);
+    // G21: PIN düz yazılmaz — özet dönüş değerinin özetiyle AYNI olmalı.
+    const halka = getShortCredentialKeyRing();
+    check(
+      "PIN ÖZET olarak yazıldı ve dönüş değerinin özetiyle AYNI (düz kolon boş)",
+      halka.ok && satir?.quickPin === null && satir?.quickPinDigest === digestQuickPin(halka.ring.active, ilk.pin),
+    );
     check("PIN 6 hane", /^\d{6}$/.test(ilk.pin), ilk.pin.replace(/\d/g, "•"));
     // ⭐ 2FA kimseye zorunlu değil (kullanıcı kararı 2026-09-30): doğuşta TOHUMLANMAZ,
     // satıcı isterse panelde kendi 2FA sekmesinden açar.
@@ -393,7 +401,7 @@ async function main(): Promise<void> {
   if (ilk.kind === "created") {
     const once = await prisma.user.findUnique({
       where: { id: ilk.id },
-      select: { passwordHash: true, quickPin: true, totpSecret: true, tokenVersion: true, updatedAt: true },
+      select: { passwordHash: true, quickPinDigest: true, totpSecret: true, tokenVersion: true, updatedAt: true },
     });
     const sayiOnce = await prisma.user.count({ where: { isSystemAccount: true } });
     // Bilerek FARKLI parola/PIN ile: "aynı değeri yazdı" ile "hiç yazmadı"
@@ -407,10 +415,10 @@ async function main(): Promise<void> {
     check("ikinci koşum → 'exists'", ikinci.kind === "exists", ikinci.kind);
     const sonra = await prisma.user.findUnique({
       where: { id: ilk.id },
-      select: { passwordHash: true, quickPin: true, totpSecret: true, tokenVersion: true, updatedAt: true },
+      select: { passwordHash: true, quickPinDigest: true, totpSecret: true, tokenVersion: true, updatedAt: true },
     });
     check("parola hash'i DEĞİŞMEDİ", once?.passwordHash === sonra?.passwordHash);
-    check("PIN DEĞİŞMEDİ", once?.quickPin === sonra?.quickPin);
+    check("PIN DEĞİŞMEDİ", once?.quickPinDigest === sonra?.quickPinDigest);
     check("TOTP sırrı DEĞİŞMEDİ", once?.totpSecret === sonra?.totpSecret);
     check("`tokenVersion` ARTMADI (açık oturumlar düşmedi)", once?.tokenVersion === sonra?.tokenVersion);
     check(
@@ -435,7 +443,7 @@ async function main(): Promise<void> {
     });
     const once = await prisma.user.findUnique({
       where: { id: ilk.id },
-      select: { passwordHash: true, quickPin: true, totpSecret: true, tokenVersion: true, username: true },
+      select: { passwordHash: true, quickPinDigest: true, totpSecret: true, tokenVersion: true, username: true },
     });
     const rot = await provisionSuperadmin(
       { username: "yok-sayilir", password: PAROLA_2, pin: null, rotate: true },
@@ -447,7 +455,7 @@ async function main(): Promise<void> {
       where: { id: ilk.id },
       select: {
         passwordHash: true,
-        quickPin: true,
+        quickPinDigest: true,
         totpSecret: true,
         totpEnabledAt: true,
         totpLastStep: true,
@@ -460,7 +468,7 @@ async function main(): Promise<void> {
       "yeni parola gerçekten geçerli (hash yazıldı, bozulmadı)",
       await bcrypt.compare(PAROLA_2, sonra?.passwordHash ?? ""),
     );
-    check("PIN DEĞİŞTİ", once?.quickPin !== sonra?.quickPin, `${once?.quickPin} → ${sonra?.quickPin}`);
+    check("PIN DEĞİŞTİ (özet farklı)", !!sonra?.quickPinDigest && once?.quickPinDigest !== sonra?.quickPinDigest);
     check(
       "2FA KAPANDI (sır + `totpEnabledAt` + `totpLastStep` boş)",
       once?.totpSecret !== null && sonra?.totpSecret === null && sonra?.totpEnabledAt === null &&

@@ -94,6 +94,13 @@ export function isLoginLocked(err: unknown): boolean {
   return e?.status === 429 && e?.details?.code === 'LOGIN_LOCKED';
 }
 
+/** Hızlı PIN / kart "yalnız onaylı cihaz" kuralına takıldı mı (403 DEVICE_NOT_APPROVED)? Yöntem
+ *  kapalı DEĞİLDİR — giriş ekranı yöntemi sıfırlamaz, sunucunun cümlesini gösterir. */
+export function isDeviceNotApproved(err: unknown): boolean {
+  const e = err as { status?: number; details?: { code?: string } } | null;
+  return e?.status === 403 && e?.details?.code === 'DEVICE_NOT_APPROVED';
+}
+
 // 403 LICENSE_* → kısıtlı kip / kapalı modül uyarısı (aynı metin 10 sn'de bir) ve
 // K5 sinyali. Kimliksiz `LICENSE_GATE` bilinçli olarak ayrıntısızdır: çağıranın
 // kendi hata yolu yeter (giriş öncesi arka plan istekleri toast yağdırmasın).

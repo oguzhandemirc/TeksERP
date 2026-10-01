@@ -2,11 +2,12 @@ import { useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { QRCodeSVG } from "qrcode.react";
-import { IdCard, RefreshCcw } from "lucide-react";
+import { AlertTriangle, IdCard, RefreshCcw, ShieldCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ConfirmDialog } from "@/components/forms/ConfirmDialog";
 import { useEnabledLoginMethods } from "@/hooks/usePricingEnabled";
+import { formatFactory } from "@/lib/factory-time";
 import { printDocumentArea } from "@/lib/print";
 import { adminUserService } from "@/services/adminUserService";
 import { MethodDisabledNotice } from "./MethodDisabledNotice";
@@ -18,31 +19,35 @@ interface Props {
 }
 
 /**
- * QR personel kartı — mobil kartla giriş için ("QR Personel Kartı" yöntemi etkinken).
- * Kart QR'ı HER ZAMAN görünür (yalnız yönetici görür); yenilemek isteyince TEYİT
- * alınır (eski kart anında ölür — kayıp kart senaryosu). Açık JWT oturumları
- * etkilenmez. QR içeriği "TEKSU:<userId>:<token>".
+ * QR personel kartı — mobil kartla giriş için. Kart sırrı sunucuda geri çevrilemez ÖZET olarak
+ * saklanır: QR yalnız basıldığı an (ve kısa basım penceresinde) görünür; kayıp ya da eski kartta
+ * "Yeniden bas" yeni sır üretir, eski kart anında ölür. Açık oturumlar etkilenmez.
  */
 export function CardTokenTab({ userId, username, fullName }: Props) {
   const qc = useQueryClient();
   const methodEnabled = useEnabledLoginMethods().includes("card");
   const areaRef = useRef<HTMLDivElement>(null);
   const [confirmOpen, setConfirmOpen] = useState(false);
+  const [issued, setIssued] = useState<string | null>(null);
 
   const credQ = useQuery({
     queryKey: ["admin-user-credentials", userId],
     queryFn: () => adminUserService.getCredentials(userId),
   });
-  const cardCode = credQ.data?.data.cardCode ?? null;
+  const cred = credQ.data?.data;
+  const cardSet = cred?.cardSet ?? false;
+  // Yazdırılabilir QR yalnız elde düz kod varken: yeni basım ya da henüz dönüştürülmemiş eski kart.
+  const cardCode = issued ?? cred?.cardCode ?? null;
 
   const rotate = useMutation({
     mutationFn: () => adminUserService.rotateCardToken(userId),
     onSuccess: (res) => {
       setConfirmOpen(false);
+      setIssued(res.data.cardCode);
       toast.success(
         res.data.rotated
-          ? "Kart YENİLENDİ — eski kart artık geçersiz, yenisini basıp teslim edin"
-          : "Personel kartı oluşturuldu — yazdırıp teslim edin",
+          ? "Kart YENİLENDİ — eski kart artık geçersiz, yenisini şimdi yazdırıp teslim edin"
+          : "Personel kartı oluşturuldu — şimdi yazdırıp teslim edin",
       );
       void qc.invalidateQueries({ queryKey: ["admin-user-credentials", userId] });
     },
@@ -63,10 +68,27 @@ export function CardTokenTab({ userId, username, fullName }: Props) {
           </p>
           <p className="mt-0.5 text-xs text-muted-foreground">
             Kartla giriş, Sistem → Şirket & Güvenlik → Oturum & Güvenlik'te "QR Personel Kartı" yöntemi
-            etkinken çalışır. Kart kaybolursa "Yenile" — eski kart anında geçersiz olur.
+            etkinken çalışır. Kart kodu sunucuda geri çevrilemez saklanır: QR yalnız basıldığı an
+            görünür. Kart kaybolursa "Yeniden bas" — eski kart anında geçersiz olur.
           </p>
         </div>
       </div>
+
+      {cred && cardSet && cred.cardLegacy && !issued && (
+        <div className="flex items-start gap-2 rounded-md border border-amber-500/30 bg-amber-500/5 px-3 py-2 text-xs">
+          <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-600" />
+          <span>
+            Bu kart eski (kısa kodlu) biçimde basılmış — çalışmaya devam eder, ama kodu eski yedeklerde
+            düz durduğu için <b>yeniden basmanız önerilir</b>.
+          </span>
+        </div>
+      )}
+      {cred && cardSet && !cred.cardKeyOk && (
+        <div className="flex items-start gap-2 rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-xs text-destructive">
+          <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+          Bu kart bu sunucuda doğrulanamıyor (yedek başka sunucudan) — anahtarı geri yükleyin ya da yeniden basın.
+        </div>
+      )}
 
       {cardCode ? (
         <div className="space-y-3">
@@ -90,7 +112,26 @@ export function CardTokenTab({ userId, username, fullName }: Props) {
               className="text-destructive hover:text-destructive"
               onClick={() => setConfirmOpen(true)}
             >
-              <RefreshCcw className="h-3.5 w-3.5" /> Yenile
+              <RefreshCcw className="h-3.5 w-3.5" /> Yeniden bas
+            </Button>
+          </div>
+          {issued && (
+            <p className="text-center text-[11px] text-amber-600 dark:text-amber-400">
+              Bu ekran kapandıktan kısa süre sonra QR bir daha gösterilmez — şimdi yazdırın.
+            </p>
+          )}
+        </div>
+      ) : cardSet ? (
+        <div className="rounded-md border bg-muted/20 p-6 text-center text-sm">
+          <div className="flex items-center justify-center gap-1.5 font-medium">
+            <ShieldCheck className="h-4 w-4 text-emerald-600" /> Kart tanımlı (kod gizli)
+          </div>
+          <div className="mt-1 text-xs text-muted-foreground">
+            {cred?.cardIssuedAt ? `Basım: ${formatFactory(cred.cardIssuedAt, "dd.MM.yyyy HH:mm")}` : "Önceki sürümden aktarıldı"}
+          </div>
+          <div className="mt-3">
+            <Button type="button" size="sm" variant="outline" onClick={() => setConfirmOpen(true)}>
+              <RefreshCcw className="h-3.5 w-3.5" /> Yeniden bas
             </Button>
           </div>
         </div>
@@ -108,9 +149,9 @@ export function CardTokenTab({ userId, username, fullName }: Props) {
       <ConfirmDialog
         open={confirmOpen}
         onOpenChange={setConfirmOpen}
-        title="Personel kartını yenile"
+        title="Personel kartını yeniden bas"
         description={`${fullName} için yeni bir kart üretilecek. Eski kart ANINDA geçersiz olur — kullanıcı yeni kartı almadan kartla giremez. Açık oturumları etkilenmez. Devam edilsin mi?`}
-        confirmLabel="Yenile"
+        confirmLabel="Yeniden bas"
         destructive
         isPending={rotate.isPending}
         onConfirm={() => rotate.mutate()}

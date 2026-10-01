@@ -42,6 +42,9 @@ export const BUDANAN_DEFTER_DISI: Array<{ model: string; sinif: "DURUM" | "TELEM
   { model: "Session", sinif: "DURUM",
     gerekce: "oturum kaydı; iptal `revokedAt` damgası, doğrulama fail-closed (kayıt yoksa geçersiz) ⇒ ÖLÜ oturumun satırı hiçbir sayıya girmez. \"Ne oldu\" sorusunun cevabı audit'in AUTH kategorisindedir",
     silen: ["src/services/session-registry.service.ts"] },
+  { model: "LoginLockoutBucket", sinif: "DURUM",
+    gerekce: "giriş deneme kilidi kovasının kalıcı kopyası; bellekteki harita otoritedir, satır yalnız yeniden başlatmada geri yüklenir. Boşta kalan (bloğu bitmiş, son denemesi saklama süresinden eski) satır hiçbir sayıya ve karara girmez — ceza merdiveni o süre içinde zaten çürür",
+    silen: ["src/services/helpers/login-lockout-store.helper.ts"] },
 ];
 let pass = 0;
 let fail = 0;

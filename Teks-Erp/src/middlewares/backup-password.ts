@@ -46,8 +46,19 @@ function lockKeys(req: Request, userId: string | null): LockoutKeySpec[] {
  */
 export async function unlockBackupForRequest(req: Request, abs: string): Promise<BackupUnlock> {
   if (!(await isEncryptedBackup(abs))) return { encrypted: false };
+  return { encrypted: true, identity: await unlockLocalBackupKeyForRequest(req, "Bu yedek şifreli — yedek parolası gerekli.") };
+}
+
+/**
+ * Dosyadan bağımsız: yerel yedek anahtarını başlıktaki parolayla açar (kısa kimlik anahtar
+ * emanetini açmak gibi). Yerel anahtar yoksa `null`; hata kodları `unlockBackupForRequest`le aynı.
+ */
+export async function unlockLocalBackupKeyForRequest(
+  req: Request,
+  requiredMessage = "Yedek parolası gerekli.",
+): Promise<KeyObject | null> {
   const cfg = await readBackupCryptoConfig();
-  if (!cfg.localKeyPath) return { encrypted: true, identity: null };
+  if (!cfg.localKeyPath) return null;
 
   const userId = req.user?.userId ?? null;
   const keys = lockKeys(req, userId);
@@ -62,12 +73,12 @@ export async function unlockBackupForRequest(req: Request, abs: string): Promise
   const supplied = readHeaderPassword(req);
   if (supplied === null) {
     releaseLoginAttempt(keys);
-    throw AppError.forbidden("Bu yedek şifreli — yedek parolası gerekli.", { code: "BACKUP_PASSWORD_REQUIRED" });
+    throw AppError.forbidden(requiredMessage, { code: "BACKUP_PASSWORD_REQUIRED" });
   }
   try {
     const identity = await unlockLocalKey(cfg, supplied);
     releaseLoginAttempt(keys);
-    return { encrypted: true, identity };
+    return identity;
   } catch (e) {
     if (isBackupCryptoError(e) && e.code === "YANLIS_PAROLA") {
       void AuditService.logEvent({
