@@ -19,7 +19,7 @@
  * Kullanıcının bastığı "Ağda Bul" (`discovery:start`) AÇIK kiptir: bilinen adres
  * cevap verse de alt ağ taranır ve bulunan her sunucu listelenir (`DiscoveryMode`).
  */
-import { ipcMain } from "electron";
+import { handleTrusted } from "../security/trusted-ipc.js";
 import os from "node:os";
 import log from "electron-log";
 import {
@@ -378,9 +378,9 @@ export async function startDiscoveryIfNeeded(): Promise<void> {
 }
 
 export function registerDiscoveryIpc(): void {
-  ipcMain.handle("discovery:state", () => state);
+  handleTrusted("discovery:state", () => state);
 
-  ipcMain.handle("discovery:start", async (_e, opts?: { timeoutMs?: number }) => {
+  handleTrusted("discovery:start", async (_e, opts?: { timeoutMs?: number }) => {
     if (running) return running;
     const timeout = Math.min(30_000, Math.max(2_000, opts?.timeoutMs ?? MANUAL_TIMEOUT_MS));
     // Renderer'daki her çağıran kullanıcının bastığı arama düğmesidir → açık kip.
@@ -390,14 +390,14 @@ export function registerDiscoveryIpc(): void {
     return running;
   });
 
-  ipcMain.handle("discovery:probe", async (_e, baseUrl: string) => {
+  handleTrusted("discovery:probe", async (_e, baseUrl: string) => {
     if (typeof baseUrl !== "string") return null;
     const parts = splitUrl(baseUrl);
     if (!parts) return null;
     return verify(parts.host, parts.port, "stored", readPinnedId(), 5000);
   });
 
-  ipcMain.handle("discovery:pin", (_e, installationId: string | null) => {
+  handleTrusted("discovery:pin", (_e, installationId: string | null) => {
     if (installationId === null) {
       writeSecureValue(PINNED_IDENTITY_KEY, JSON.stringify({}));
       return;

@@ -70,6 +70,12 @@ echo "$musteri" | grep -qE '^[a-z0-9][a-z0-9-]{1,30}$' \
 node "$kok/scripts/kanal-kapisi.mjs" panel-paketle "$musteri" \
   || hata "Kanal kapısı geçilmedi — yukarıdaki satırlara bak (kayıt defteri: deploy/kanallar.json)."
 
+# --- PANEL İMZA ÇAPASI — derlemeden ÖNCE ------------------------------------
+# Panel güncellemeyi yalnız gömülü çapadaki anahtarla imzalanmış künyeyle kurar (Electron/electron/guncelleme/).
+# Çapası boş ya da bozuk panel HİÇBİR güncellemeyi doğrulayamaz (çıkışsız kapı) → paketlenmez.
+node "$kok/scripts/kanal-kapisi.mjs" panel-capa \
+  || hata "Panel imza çapası kullanılamaz — paket üretilmedi (anahtar kararı + guven-capasi-ekle.ts panel)."
+
 cd "$electron_dir"
 
 # Sembolik bağlı node_modules'te electron-builder bağımlılık ağacını eksik toplar ve
@@ -238,6 +244,9 @@ echo "✓ Gömülü adres doğru: $gomulu_url"
 # kimliği YOK mu — yayıncı hedefi bu kimlikten çözer, ağaçtaki musteri.json'dan değil.
 node "$kok/scripts/kanal-kapisi.mjs" panel-yayin "$musteri" "$electron_dir/$rel" \
   || hata "Derlenen paketin kimliği '$musteri' kanalıyla birebir değil — yayınlama."
+# Çapa ve künye doğrulayıcısı ana sürece GERÇEKTEN gömüldü mü (kaynak değil, çıktı okunur).
+node "$kok/scripts/kanal-kapisi.mjs" panel-capa "$musteri" "$electron_dir/$rel" \
+  || hata "Derlenen panel imza çapasını taşımıyor — yayınlama."
 
 setup="$rel/TeksERP-$surum-Setup.exe"
 [ -f "$setup" ] || hata "Kurulum paketi üretilmemiş: $setup"
@@ -246,7 +255,8 @@ setup="$rel/TeksERP-$surum-Setup.exe"
 mb=$(( $(wc -c < "$setup") / 1024 / 1024 ))
 echo ""
 echo "HAZIR — $musteri / $surum (${mb} MB) · $rel"
-echo "Yayınlamak için: ./deploy/electron-yayinla.sh --musteri=$musteri"
+echo "Yayınlamak için: ./deploy/electron-yayinla.sh --musteri=$musteri --anahtar=<panel imza anahtarı>"
+echo "  (künye yayında imzalanır; parola TTY'den sorulur — imzasız latest.yml yüklenmez)"
 if [ "$terfi_atla_verildi" = "1" ]; then
   echo "  (terfi atlandı — yayın komutu da kullanıcının cümlesini ister: --terfi-atla=\"…\")"
 fi

@@ -262,7 +262,7 @@ export function PrintedDocDialog({
           {loading ? (
             <div className="p-4"><Skeleton className="h-64 w-full" /></div>
           ) : html ? (
-            <iframe title={`${title} Önizleme`} srcDoc={html} className="h-full w-full border-0 bg-white" />
+            <iframe title={`${title} Önizleme`} srcDoc={html} sandbox="" className="h-full w-full border-0 bg-white" />
           ) : (
             <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
               Belge henüz hazır değil.

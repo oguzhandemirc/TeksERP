@@ -47,6 +47,8 @@
 | `tekserp-indirme` | İNDİRME | CF Worker (kâhin: `indirme.ts`) |
 | `tekserp-durum` | KURULUM | fabrika (yerel, ağa çıkmaz) |
 | `tekserp-kabul` | KURULUM | satıcı (ilk kurulum sözleşme kabulü, Ek-7 — `protocol/kabul.ts`; etkinleştirme gövdesinde taşınır, satıcı kurulum kaydında saklar) |
+| `tekserp-panel` | ayrı istemci yayın anahtarı `panel-<yıl>` (kullanıcı kararı 2026-10-01: `panel-2026` + çevrimdışı yedek `panel-2026-2`; PAKET künye imzalamaz) | panel ana süreci (latest.yml `tekserp` bloğu; `Electron/electron/guncelleme/panel-kunye.mjs` — bağımlılıksız ayna, kâhin `test_panel_imza`); yayın kapısı (`kanal-kapisi.mjs panel-imza`) |
+| `tekserp-apk` | panelle AYNI anahtar (`panel-2026` + yedek `panel-2026-2`) | tablet (apk/surum.json `tekserp` bloğu; `mobil/src/services/apkKunye.ts` — `@noble/curves` katı kip, kâhin `kripto.test.ts` · `apkKunye.test.ts`); yayın kapısı (`deploy/mobil-yayinla.mjs`, `mobil/scripts/lib/apk-kunye.mjs`) |
 
 ## 2. Anahtar hiyerarşisi ve güven zinciri
 

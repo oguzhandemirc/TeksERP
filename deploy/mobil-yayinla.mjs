@@ -25,13 +25,18 @@
  *
  * Kullanım:
  *   node deploy/mobil-yayinla.mjs --musteri=<kod> --paket=<ota-cikti/<kod>/54.2/1787…>
- *   node deploy/mobil-yayinla.mjs --musteri=<kod> --apk=<yol.apk> --surum=2.9.8 --vc=55
+ *   node deploy/mobil-yayinla.mjs --musteri=<kod> --apk=<yol.apk> --surum=2.9.8 --vc=55 [--anahtar=<imza anahtarı>]
  *   node deploy/mobil-yayinla.mjs … --kuru     # yalnız ne yapacağını yaz (etiket de atılmaz)
  *   node deploy/mobil-yayinla.mjs … --terfi-atla="<kullanıcının cümlesi>"   # K5 acil kaçışı (S4)
  *   node deploy/mobil-yayinla.mjs --dogrula=<url>       # yükleme YOK, yayını denetle
  *
  * ⚠️ TERFİ (K5): `terfiKaynagi` olan kanala (adnansahin) yalnız terfi etiketli commit'ten,
  * hazırlık kanalında yayınlanmış sürüm çıkar — scripts/lib/terfi.mjs.
+ *
+ * ⚠️ İMZA (G6): APK künyesi (`apk/surum.json`) imzalı `tekserp` bloğu taşımadan YÜKLENMEZ — tablet indirdiği APK'yı
+ * bu künyeyle doğrulamadan kurmaz (`mobil/src/services/apkKunye.ts`). İmza aracı burada çağrılır (anahtar
+ * `--anahtar=` ya da TEKSERP_TABLET_IMZA_ANAHTARI, parola TTY'den); rotasyon kilidi yayındaki künyenin çapasına
+ * bakar. APK'nın gömülü OTA sertifikası kanalınkiyle aynı olmalı; imzasız OTA paketi yüklenmez.
  */
 
 import { spawnSync } from 'node:child_process';
@@ -47,6 +52,10 @@ import { zipGirdisiOku } from '../mobil/scripts/lib/zip.mjs';
 import { ApkOlculemedi, apkKimligi } from '../mobil/scripts/lib/apk-kimlik.mjs';
 import { cumleDenetle, istanbulSaati, terfiAtlaKaydi, terfiAtlaMesaji, terfiKapisi, terfiRaporu } from '../scripts/lib/terfi.mjs';
 import { BelirtecYok, belirtecliFetch, belirtecOku } from '../scripts/lib/yayin-okuma.mjs';
+import { sertifikaParmakIzi } from '../mobil/scripts/lib/apk-kimlik.mjs';
+import {
+  APK_CAPA_REL, apkCapaDenetimi, apkCapaGomuluFarki, apkCapasiOku, apkRotasyonDenetimi, verifyApkSurumJson, withApkBlock,
+} from '../mobil/scripts/lib/apk-kunye.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const MOBIL = path.resolve(HERE, '..', 'mobil');
@@ -76,6 +85,8 @@ const arg = (ad) => {
   return d ?? '';
 };
 const KURU = argv.includes('--kuru');
+/** Tablet APK künyesi imza anahtarı (dosya yolu; parola TTY'den) — yalnız APK yayınında gerekir. */
+const TABLET_ANAHTAR = arg('anahtar') || process.env.TEKSERP_TABLET_IMZA_ANAHTARI || '';
 /** S4 kaçışı — yalnız kullanıcının cümlesiyle; verilmediyse undefined (boş verilmesi RED). */
 const TERFI_ATLA = argv.some((a) => a === '--terfi-atla' || a.startsWith('--terfi-atla=')) ? (arg('terfi-atla') ?? '') : undefined;
 
@@ -373,6 +384,131 @@ function erpKapisi(bundleMetni, kaynak, beyan) {
 }
 
 /* ------------------------------------------------------------------ *
+ * Tablet imza çapası + APK künyesi (G6)
+ * ------------------------------------------------------------------ */
+
+const DEPO_KOKU = path.resolve(HERE, '..');
+
+/**
+ * JS paketi tabletin APK künyesi çapasını taşıyor mu? Çapa `mobil/src/lib/apk-imza-capasi.json` → JS paketi.
+ * Boş çapa: OTA'da UYARI (APK güncellemesi bu JS'le doğrulanamaz; çapalı sonraki OTA açar — OTA kanalı ayrı ve
+ * imzalı), APK'da DUR (imzalı künye yazılamaz). Biçimsiz çapa ya da paketin ağacın çapasını taşımaması: DUR.
+ */
+function tabletCapaKapisi(bundleMetni, kaynak, { apk }) {
+  let liste;
+  try {
+    liste = apkCapasiOku(DEPO_KOKU);
+  } catch (e) {
+    dur('ÖLÇÜLEMEDİ — tablet imza çapası okunamadı', `${APK_CAPA_REL}: ${e.message}`);
+  }
+  const d = apkCapaDenetimi(liste);
+  if (d.sonuc === 'ihlal') dur('TABLET İMZA ÇAPASI GEÇERSİZ', ...d.satirlar);
+  if (d.sonuc === 'bos') {
+    if (apk) {
+      dur(
+        'TABLET İMZA ÇAPASI BOŞ — APK yayınlanmaz',
+        ...d.satirlar,
+        'İmzalı künye olmadan tablet APK\'yı kurmaz. Önce anahtar kararı + çapa:',
+        '  cd Teks-Erp && npx tsx scripts/guven-capasi-ekle.ts tablet …   (docs/ops/MOBIL-UZAKTAN-GUNCELLEME.md)',
+      );
+    }
+    uyari(`${d.satirlar[0]}\n     OTA kanalı etkilenmez; çapalı bir sonraki OTA ile APK güncellemesi açılır.`);
+    return liste;
+  }
+  const eksik = apkCapaGomuluFarki(bundleMetni, liste);
+  if (eksik.length) {
+    dur(
+      'PAKET AĞACIN TABLET İMZA ÇAPASINI TAŞIMIYOR',
+      `kaynak : ${kaynak}`,
+      `eksik  : ${eksik.join(', ')}  (${APK_CAPA_REL})`,
+      'Paket çapa eklenmeden ÖNCE derlenmiş (bayat) — yeniden üret.',
+    );
+  }
+  bilgi(`  tablet çapası  : ${liste.map((k) => k.kid).join(', ')} — pakette gömülü`);
+  return liste;
+}
+
+/** DAGY-6: APK'nın gömülü OTA kod imzası sertifikası kanalınki mi (build-apk ile aynı yüklem; ölçülemezse DUR). */
+function apkSertifikaKapisi(sertifikaPem) {
+  const yol = path.join(MOBIL, KANAL.tablet.otaSertifika);
+  let beklenen = null;
+  try {
+    beklenen = sertifikaParmakIzi(fs.readFileSync(yol, 'utf8'));
+  } catch {
+    beklenen = null;
+  }
+  if (!beklenen) {
+    dur('ÖLÇÜLEMEDİ — kanalın OTA sertifikası okunamadı', yol, 'keystore/ git dışıdır — yedekten geri koy. Sertifikası ölçülmeyen APK yüklenmez.');
+  }
+  if (!sertifikaPem || sertifikaParmakIzi(sertifikaPem) !== beklenen) {
+    dur(
+      'APK KANALIN OTA KOD İMZASI SERTİFİKASINI TAŞIMIYOR',
+      `APK içinde: ${sertifikaPem ? 'başka bir sertifika' : '(sertifika YOK — istemci OTA imzasını hiç denetlemez)'}`,
+      `beklenen  : ${KANAL.tablet.otaSertifika}  (${MUSTERI} · ${KAYIT_REL})`,
+      'Bu APK kurulursa tablet imzasız/başka kanalın OTA paketini kabul eder. Yalnız build-apk ile derle:',
+      `  cd mobil && npm run build:apk -- --musteri=${MUSTERI}`,
+    );
+  }
+  bilgi('  OTA sertifikası: kanalınkiyle aynı (parmak izi)');
+}
+
+/** Uzak dosya okuması (rotasyon kilidi): yoksa null; ssh koparsa ÖLÇÜLEMEDİ = DUR. */
+function uzakOku(uzakYol) {
+  const t = spawnSync('ssh', [SSH_HEDEF, `test -f '${uzakYol}'`], { encoding: 'utf8' });
+  if (t.status === 1) return null;
+  if (t.status !== 0) dur('Yayın sunucusuna ulaşılamadı — rotasyon kilidi ÖLÇÜLEMEDİ, yükleme yapılmadı', `ssh çıkış ${t.status}`);
+  const c = spawnSync('ssh', [SSH_HEDEF, `cat '${uzakYol}'`], { encoding: 'utf8' });
+  if (c.status !== 0) dur('Yayındaki APK künyesi okunamadı — rotasyon kilidi ÖLÇÜLEMEDİ, yükleme yapılmadı', uzakYol);
+  return c.stdout;
+}
+
+/**
+ * surum.json'a imzalı künye: yanındaki dosyada BU APK'nın geçerli bloğu varsa korunur (yarım kalan yayının tekrarı),
+ * yoksa imza aracı çağrılır. Dönüş: imzalayan kid (kuru + imzasız: null). İmzasız/geçersiz künye YÜKLENMEZ.
+ */
+function apkKunyesiImzala({ kunye, kunyeYol, apkYol, capa }) {
+  const dogrula = (o) => verifyApkSurumJson(o, { keys: capa, channel: MUSTERI });
+  let yazilacak = kunye;
+  try {
+    const mevcut = JSON.parse(fs.readFileSync(kunyeYol, 'utf8'));
+    const aday = typeof mevcut?.tekserp?.bildirim === 'string' ? withApkBlock(kunye, mevcut.tekserp.bildirim) : null;
+    if (aday && dogrula(aday).ok) yazilacak = aday;
+  } catch {
+    // Yanında künye yok ya da okunamadı: imzasız başlanır.
+  }
+  fs.writeFileSync(kunyeYol, `${JSON.stringify(yazilacak, null, 2)}\n`);
+  let d = dogrula(yazilacak);
+  if (!d.ok && KURU) {
+    bilgi('  [kuru] künye   : İMZASIZ — gerçek yayında imzalanır (--anahtar=<dosya> + parola)');
+    return null;
+  }
+  if (!d.ok) {
+    if (!TABLET_ANAHTAR) {
+      dur(
+        'APK KÜNYESİ İMZASIZ ve imza anahtarı verilmedi — yükleme yapılmadı',
+        '--anahtar=<istemci yayın anahtarı dosyası> (ya da TEKSERP_TABLET_IMZA_ANAHTARI); parola TTY\'den sorulur.',
+        'İmzasız künyeyi yeni tabletler REDDEDER (kurulum yok).',
+      );
+    }
+    const r = spawnSync('npx', ['tsx', 'scripts/panel-imza.ts', 'apk-imzala', `--musteri=${MUSTERI}`, `--apk=${apkYol}`, `--kunye=${kunyeYol}`, `--anahtar=${TABLET_ANAHTAR}`],
+      { cwd: path.join(DEPO_KOKU, 'Teks-Erp'), stdio: 'inherit' });
+    if (r.error || r.status !== 0) dur('APK künyesi imzalanamadı — yükleme yapılmadı', r.error ? r.error.message : `imza aracı çıkış ${r.status}`);
+    let imzali;
+    try {
+      imzali = JSON.parse(fs.readFileSync(kunyeYol, 'utf8'));
+    } catch (e) {
+      dur('İmzalanan künye okunamadı — yükleme yapılmadı', e.message);
+    }
+    const ayrisan = ['versionCode', 'versionName', 'dosya', 'sha256', 'boyut'].filter((k) => imzali?.[k] !== kunye[k]);
+    if (ayrisan.length) dur('İmzalanan künye ölçülen APK\'dan ayrışıyor — yükleme yapılmadı', `alanlar: ${ayrisan.join(', ')}`);
+    d = dogrula(imzali);
+    if (!d.ok) dur('İmzalanan künye kapıdan geçmedi — yükleme yapılmadı', `${d.code}: ${d.message}`);
+  }
+  bilgi(`  künye          : imzalı · kid ${d.value.kid} · ${d.value.doc.paket.ad}`);
+  return d.value.kid;
+}
+
+/* ------------------------------------------------------------------ *
  * OTA paketi
  * ------------------------------------------------------------------ */
 
@@ -399,8 +535,15 @@ async function paketiYayinla(paketDizin) {
       'Elle kopyalanmış/karışmış bir klasör olabilir.',
     );
   }
+  // Her kanalın APK'sı OTA sertifikası taşır (build-apk kapısı): imzasız paketi tabletler REDDEDER — sertifikasız bir
+  // APK sahaya sızmışsa da onu korumasız bırakırdı. Yüklemenin ne faydası ne güvenli bir hâli var.
   if (!kunye.imzali) {
-    uyari('Bu paket İMZASIZ. Kod imzalama açık bir APK onu REDDEDER.');
+    dur(
+      'OTA PAKETİ İMZASIZ — yüklenmez',
+      `künye: ${kunyeYol} (imzali: ${String(kunye.imzali)})`,
+      'Kanalın APK\'sı OTA kod imzası sertifikası taşır; imzasız paketi tabletler reddeder.',
+      `İmzalı üret:  cd mobil && npm run yayinla -- --musteri=${MUSTERI}`,
+    );
   }
 
   // ⚠️ Paketin ÜRETİLDİĞİ müşteri ile yayınlandığı müşteri aynı olmalı: paketin
@@ -453,6 +596,7 @@ async function paketiYayinla(paketDizin) {
     );
   }
   erpKapisi(bundleMetni, bundleYol, kunye.adres);
+  tabletCapaKapisi(bundleMetni, bundleYol, { apk: false });
   // Sürüm paketin DONMUŞ manifestinden (etiketle aynı kaynak) — okunamazsa terfi ÖLÇÜLEMEDİ.
   terfiKapisiUygula(yayinlananPaketSurumu(paketDizin));
 
@@ -580,8 +724,9 @@ async function apkYayinla(apkYol) {
   // PAKET ADI: kanalların APK mührü ORTAKTIR, yani aynı paket adlı başka kanal APK'sı
   // o kanalın uygulamasının ÜSTÜNE sessizce kurulur; tek yapısal ayrım paket adıdır.
   let apkPaket;
+  let apkSertifika;
   try {
-    apkPaket = apkKimligi(apkYol).paket;
+    ({ paket: apkPaket, sertifikaPem: apkSertifika } = apkKimligi(apkYol));
   } catch (e) {
     if (!(e instanceof ApkOlculemedi)) throw e;
     dur('ÖLÇÜLEMEDİ — APK paket adı okunamadı', e.message, 'Paket adı ölçülemeyen APK yüklenmez.');
@@ -621,6 +766,7 @@ async function apkYayinla(apkYol) {
     );
   }
   bilgi(`  APK içindeki adres: ${apkAdres}`);
+  let apkCapa;
   {
     let r;
     try {
@@ -632,6 +778,8 @@ async function apkYayinla(apkYol) {
       dur('ÖLÇÜLEMEDİ — APK içindeki JS bundle okunamadı', r.hata ?? '', 'ERP adresi ölçülemeyen APK yüklenmez.');
     }
     erpKapisi(r.veri.toString('latin1'), `${apkYol} › assets/index.android.bundle`, undefined);
+    apkSertifikaKapisi(apkSertifika);
+    apkCapa = tabletCapaKapisi(r.veri.toString('latin1'), `${apkYol} › assets/index.android.bundle`, { apk: true });
   }
 
   // SÜRÜM NOTU KAPISI — sahaya çıkışın SON adımı da not ister (2026-09-14).
@@ -682,7 +830,21 @@ async function apkYayinla(apkYol) {
   console.log('');
 
   const gecici = path.join(path.dirname(apkYol), 'surum.json');
-  fs.writeFileSync(gecici, JSON.stringify(kunye, null, 2));
+  const imzalayan = apkKunyesiImzala({ kunye, kunyeYol: gecici, apkYol, capa: apkCapa });
+
+  // ROTASYON KİLİDİ — yükleme ÖNCESİ; kuru ağa çıkmaz.
+  if (KURU) {
+    bilgi('  [kuru] rotasyon kilidi ÖLÇÜLMEDİ (yayındaki künye ağdan okunur)');
+  } else {
+    let rot;
+    try {
+      rot = apkRotasyonDenetimi({ yayindaki: uzakOku(`${UZAK_KOK}/apk/surum.json`), yeniKid: imzalayan });
+    } catch (e) {
+      dur('Rotasyon kilidi ÖLÇÜLEMEDİ — yükleme yapılmadı', e.message);
+    }
+    if (rot.sonuc !== 'uyumlu') dur('ROTASYON KİLİDİ — yükleme yapılmadı', ...rot.satirlar);
+    for (const x of rot.satirlar) bilgi(`  ${x}`);
+  }
 
   ssh(`mkdir -p '${UZAK_KOK}/apk'`, '(1/3) uzak klasör hazırlanıyor');
   // ÖNCE apk, SONRA künye — ters sırada künye olmayan bir dosyayı işaret eder.
@@ -692,9 +854,10 @@ async function apkYayinla(apkYol) {
   if (KURU) return;
 
   const y = await iste(apkKunyeUrl(FEED));
-  if (y.durum !== 200 || !y.govde.includes(`"versionCode": ${vc}`)) {
-    dur('Künye yayında değil ya da bayat', `HTTP ${y.durum}`, y.govde.slice(0, 200));
+  if (y.durum !== 200 || y.govde !== fs.readFileSync(gecici, 'utf8')) {
+    dur('Künye yayında değil, bayat ya da yerel imzalı dosyadan farklı', `HTTP ${y.durum}`, y.govde.slice(0, 200));
   }
+  bilgi('  künye      : yayındaki surum.json yerel imzalı dosyayla bayt-eşit');
   await dosyaDogrula(kunye.indirmeUrl, {
     yerelBoyut: icerik.length,
     beklenenTip: 'application/vnd.android.package-archive',

@@ -1,4 +1,4 @@
-import { ipcMain } from "electron";
+import { handleTrusted } from "../security/trusted-ipc.js";
 import { createRequire } from "node:module";
 import type { ScaleReadOpts, ScaleReadResult } from "@shared/ipc-contract.js";
 
@@ -97,7 +97,7 @@ function readScale(opts: ScaleReadOpts): Promise<ScaleReadResult> {
 }
 
 export function registerScaleIpc(): void {
-  ipcMain.handle("scale:read", (_e, opts: ScaleReadOpts): Promise<ScaleReadResult> => {
+  handleTrusted("scale:read", (_e, opts: ScaleReadOpts): Promise<ScaleReadResult> => {
     if (!opts?.path) return Promise.resolve({ ok: false, available: true, error: "COM yolu (path) boş" });
     return readScale(opts);
   });

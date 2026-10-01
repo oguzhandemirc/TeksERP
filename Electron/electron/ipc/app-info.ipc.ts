@@ -1,5 +1,6 @@
-import { app, ipcMain } from "electron";
+import { app } from "electron";
+import { handleTrusted } from "../security/trusted-ipc.js";
 
 export function registerAppInfoIpc(): void {
-  ipcMain.handle("app:version", () => app.getVersion());
+  handleTrusted("app:version", () => app.getVersion());
 }

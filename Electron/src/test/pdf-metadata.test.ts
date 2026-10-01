@@ -42,6 +42,6 @@ describe("PDF lisans filigranı", () => {
   it("main süreç her PDF'i filigrandan geçirir (pdf.ipc.ts bağlama)", () => {
     const src = readFileSync(resolve(__dirname, "../../electron/ipc/pdf.ipc.ts"), "utf8");
     expect(src).toMatch(/return await applyPdfLicenseMeta\(pdf, licenseMeta\)/);
-    expect(src).toMatch(/ipcMain\.handle\("pdf:setLicenseMeta"/);
+    expect(src).toMatch(/handleTrusted\("pdf:setLicenseMeta"/);
   });
 });

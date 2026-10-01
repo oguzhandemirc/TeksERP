@@ -56,6 +56,7 @@ export function FasonCekiDraftDialog({ open, onOpenChange, workOrderId, stepId, 
             <iframe
               title="Çeki Taslağı Önizleme"
               srcDoc={html}
+              sandbox=""
               className="h-full w-full border-0 bg-white"
             />
           ) : (

@@ -257,7 +257,7 @@ export function ChequeBordroDialog({ rows, open, onOpenChange }: Props) {
 
         {preview && (
           <div className="min-h-0 flex-1 overflow-hidden rounded-md border bg-muted/30">
-            <iframe title="Teslim Bordrosu Taslağı" srcDoc={preview.html} className="h-full w-full border-0 bg-white" />
+            <iframe title="Teslim Bordrosu Taslağı" srcDoc={preview.html} sandbox="" className="h-full w-full border-0 bg-white" />
           </div>
         )}
 

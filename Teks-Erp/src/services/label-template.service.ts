@@ -20,6 +20,7 @@ import prisma from "../lib/prisma";
 import { AuditService } from "./audit.service";
 import { AppError } from "../utils/app-error";
 import { ApiResponse } from "../types/api.types";
+import { sanitizeUserHtml } from "./document-render/template-html.sanitize";
 import bwipjs from "bwip-js";
 import {
   LabelTemplate,
@@ -192,7 +193,11 @@ export interface TemplateEnvelope {
 function normalizeRawCode(rc: RawCodeMap): Record<string, string> {
   const out: Record<string, string> = {};
   for (const [k, v] of Object.entries(rc)) {
-    if (typeof v === "string" && v.trim()) out[k] = v;
+    if (typeof v !== "string" || !v.trim()) continue;
+    // HTML ham kodu kayıtta da izin listesinden geçer: DB'de aktif içerik durmasın
+    // (render da ayrıca temizler — elle DB düzenlemesi / eski satır / geri yükleme).
+    const code = k === "RASTER_HTML" ? sanitizeUserHtml(v).html : v;
+    if (code.trim()) out[k] = code;
   }
   return out;
 }

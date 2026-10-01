@@ -1,7 +1,9 @@
 // İNDİRME BELİRTECİ (3b) — panel her güncelleme denetiminden önce fabrikanın backend'inden kısa ömürlü
 // belirteç alır ve electron-updater'a `X-TKL-Indirme` başlığı olarak verir (latest.yml + exe + blockmap).
 // Belirteç alınamazsa denetim BAŞLIKSIZ yapılır (bugünkü davranış): Worker açılana dek sorunsuz, sonra
-// geçiş listesi. Belirteç loglanmaz, diske yazılmaz. Sözleşme: docs/ops/INDIRME-KAPISI-WORKER.md.
+// geçiş listesi. Belirteç loglanmaz, diske yazılmaz, YALNIZ izinli güncelleme adresine gider
+// (`isAllowedUpdateUrl`). Sözleşme: docs/ops/INDIRME-KAPISI-WORKER.md.
+import { isAllowedUpdateUrl } from "./update-feed";
 
 export const DOWNLOAD_TOKEN_HEADER = "X-TKL-Indirme";
 export const DOWNLOAD_TOKEN_PATH = "/api/license/indirme-belirteci?urun=electron";
@@ -57,7 +59,12 @@ export async function fetchDownloadToken(g: DownloadTokenInput): Promise<string 
   }
 }
 
-/** electron-updater `setFeedURL` seçenekleri: belirteç varsa başlıkla, yoksa bugünkü gibi başlıksız. */
+/**
+ * electron-updater `setFeedURL` seçenekleri: belirteç varsa başlıkla, yoksa bugünkü gibi başlıksız. Başlık
+ * YALNIZ izinli güncelleme adresine eklenir — ezilmiş ya da bozuk bir adres belirteci başka sunucuya taşıyamaz.
+ */
 export function feedOptions(url: string, token: string | null): { provider: "generic"; url: string; requestHeaders?: Record<string, string> } {
-  return token ? { provider: "generic", url, requestHeaders: { [DOWNLOAD_TOKEN_HEADER]: token } } : { provider: "generic", url };
+  return token && isAllowedUpdateUrl(url)
+    ? { provider: "generic", url, requestHeaders: { [DOWNLOAD_TOKEN_HEADER]: token } }
+    : { provider: "generic", url };
 }

@@ -12,13 +12,13 @@
 // bir sözdizimi değil, katalogda YENİ ALAN'dır (değer üretimi bizde kalır).
 //
 // GÜVENLİK İKİ KATMANLI, ikisi de gerekli:
-//   1) `sanitizeTemplateHtml` — ŞABLONUN kendisinden aktif içerik ayıklanır
-//      (script/on*/javascript:/dış kaynak). Kayıtta ve render'da koşar.
+//   1) `sanitizeTemplateHtml` — İZİN LİSTESİ temizleyicisi (template-html.sanitize.ts):
+//      kayıtta, render'da ve DOLDURMA SONRASINDA koşar (değer ya da döngü tekrarı
+//      yapıyı değiştiremesin). Sunucu SVG'si (QR) temizlikten SONRA işaretle konur.
 //   2) `escapeHtml` — VERİ değerleri gömülürken kaçırılır. Yalnız katalogda
 //      `raw: true` işaretli (sunucu-üretimi SVG) hariç.
-// Birincisi olmadan admin XSS yazabilirdi; ikincisi olmadan ürün adındaki bir
-// "<" düzeni bozardı. Sanitizasyon ŞABLONA uygulanır, çıktının tamamına DEĞİL —
-// aksi halde kendi ürettiğimiz QR SVG'si de ayıklanırdı.
+// Birincisi olmadan şablon yazan kullanıcı başkasının makinesinde betik çalıştırabilirdi;
+// ikincisi olmadan ürün adındaki bir "<" düzeni bozardı.
 // =============================================================================
 
 import type { TravelerCardSnapshot, TravelerCardMeta, TravelerBatchLine } from "./traveler-card.html";
@@ -29,6 +29,7 @@ import {
   TRAVELER_LOOPS,
 } from "../../config/traveler-card-fields";
 import { fmtCalendarDate, fmtDateTime } from "./fmt-date";
+import { renderUserTemplate, sanitizeUserHtml, stripRawMarkers } from "./template-html.sanitize";
 import { DEFAULT_COMPANY_NAME } from "../../constants/company";
 
 /** Kartın firma adı: snapshot'taki kart adı → kurulumun adı → nötr yedek. */
@@ -48,7 +49,7 @@ const TYPE_LABELS: Record<string, string> = {
 };
 
 function escapeHtml(v: unknown): string {
-  return String(v ?? "")
+  return stripRawMarkers(String(v ?? ""))
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;")
@@ -141,12 +142,12 @@ export function buildRawContext(
 
 const PLACEHOLDER_RE = /\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/g;
 
-/** Tek geçişte {{alan}} ikamesi (kaçırmalı; `raw` anahtarlar ham). */
-function fillFields(tpl: string, values: Record<string, string>): string {
+/** Tek geçişte {{alan}} ikamesi (kaçırmalı; `raw` anahtar → işaret, değeri en son konur). */
+function fillFields(tpl: string, values: Record<string, string>, rawMarker: (key: string) => string): string {
   return tpl.replace(PLACEHOLDER_RE, (_m, key: string) => {
     const v = values[key];
     if (v === undefined) return ""; // bilinmeyen anahtar → boş (baskı durmaz)
-    return TRAVELER_RAW_KEYS.has(key) ? v : escapeHtml(v);
+    return TRAVELER_RAW_KEYS.has(key) ? rawMarker(key) : escapeHtml(v);
   });
 }
 
@@ -157,70 +158,43 @@ function fillFields(tpl: string, values: Record<string, string>): string {
  * `{{notes}}` adımın notudur.
  */
 export function renderRawTemplate(templateHtml: string, ctx: RawContext): string {
-  const safe = sanitizeTemplateHtml(templateHtml);
-  const withLoops = safe.replace(
-    /\{\{#\s*([a-zA-Z0-9_]+)\s*\}\}([\s\S]*?)\{\{\/\s*\1\s*\}\}/g,
-    (_m, key: string, body: string) => {
-      const rows = ctx.loops[key];
-      if (!rows) return ""; // bilinmeyen liste → blok tamamen düşer
-      return rows.map((row) => fillFields(body, { ...ctx.fields, ...row })).join("");
+  const rawValues = Object.fromEntries([...TRAVELER_RAW_KEYS].map((k) => [k, ctx.fields[k] ?? ""]));
+  return renderUserTemplate(
+    templateHtml,
+    (safe, marker) => {
+      const withLoops = safe.replace(
+        /\{\{#\s*([a-zA-Z0-9_]+)\s*\}\}([\s\S]*?)\{\{\/\s*\1\s*\}\}/g,
+        (_m, key: string, body: string) => {
+          const rows = ctx.loops[key];
+          if (!rows) return ""; // bilinmeyen liste → blok tamamen düşer
+          return rows.map((row) => fillFields(body, { ...ctx.fields, ...row }, marker)).join("");
+        },
+      );
+      return fillFields(withLoops, ctx.fields, marker);
     },
+    rawValues,
   );
-  return fillFields(withLoops, ctx.fields);
 }
 
 // =============================================================================
-// Sanitizasyon — ŞABLON metninden aktif içeriği ayıklar
+// Sanitizasyon — İZİN LİSTESİ (etiket + öznitelik + adres şeması), yeniden serileştirme.
+// Eski tek geçişli düzenli ifade kara listesi iç içe yerleştirme, boşluksuz öznitelik
+// ayırıcısı ve varlık kodlu şemayla atlatılabiliyordu (güvenlik denetimi 2026-10-01, IST-4).
+// Kurallar ve gerekçe: template-html.sanitize.ts başlığı · docs/kurallar/belge-etiket.md.
 // =============================================================================
-// Allowlist değil blocklist olmasının sebebi: bu bir sayfa, alan değil — admin
-// istediği etiketi/CSS'i kullanabilmeli. Kesilen şey "kod çalıştıran" ve "dışarı
-// çıkan" yüzeylerdir. Bunlar TEK TEK gerekçelidir; birini kaldırmadan önce
-// hangi saldırıyı açtığını yaz.
-//
-// AŞIRI KESME GÜVENLİ YÖNDÜR: kapanışsız bir `<script src=…>`, metindeki bir
-// sonraki `</script>`e kadar (yoksa sonuna kadar) her şeyi yutar. Meşru bir
-// şablonda `<script` zaten bulunmaz — yani bedeli yalnız saldırgan/hatalı
-// şablon öder. Ters tercih (dar eşleşme) kapanışsız etiketle atlatılabilirdi.
-//
-// BİLİNÇLİ OLARAK KESİLMEYEN: dış `<img src="http…">` ve `<a href="http…">`.
-// Kart bir BELGEDİR, kum havuzu değil — fabrika kendi sunucusundaki logoyu
-// gömebilmeli. Script yürütmesi zaten ayrı bir katmanda kapalı (önizleme ve
-// baskı iframe'lerinde `allow-scripts` YOK), o yüzden dış kaynak en fazla
-// "yüklenemedi" olur. Bunu kapatmak istersen kararı burada gerekçelendir.
-const STRIP_RULES: { re: RegExp; what: string }[] = [
-  // <script>…</script> ve kapanışsız hâli
-  { re: /<script\b[\s\S]*?(?:<\/script\s*>|$)/gi, what: "script etiketi" },
-  // <iframe>/<object>/<embed> — gömülü tarayıcı bağlamı
-  { re: /<\/?(?:iframe|object|embed|applet)\b[^>]*>/gi, what: "gömülü içerik etiketi" },
-  // <link rel=…> / <meta http-equiv=…> — dış kaynak + yönlendirme
-  { re: /<(?:link|meta)\b[^>]*>/gi, what: "link/meta etiketi" },
-  // on* olay öznitelikleri (tırnaklı ve tırnaksız)
-  { re: /\son[a-z]+\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+)/gi, what: "olay özniteliği" },
-  // javascript: / vbscript: / data:text/html şemaları
-  { re: /(?:javascript|vbscript)\s*:/gi, what: "script şeması" },
-  { re: /data\s*:\s*text\/html/gi, what: "data:text/html şeması" },
-];
 
 /**
- * Şablon HTML'inden aktif/dış içeriği ayıklar. Kayıtta VE render'da koşar —
- * ikisi de gerekli: kayıt kullanıcıya ne kesildiğini söyler, render ise
- * kayıt kapısını atlayan yollara (elle DB düzenlemesi, eski satır, geri
- * yükleme) karşı son savunmadır.
+ * Şablon HTML'inden izinsiz içeriği ayıklar. Kayıtta VE render'da koşar — ikisi de
+ * gerekli: kayıt kullanıcıya ne kesildiğini söyler, render ise kayıt kapısını atlayan
+ * yollara (elle DB düzenlemesi, eski satır, geri yükleme) karşı son savunmadır.
  */
 export function sanitizeTemplateHtml(html: string): string {
-  let out = html;
-  for (const r of STRIP_RULES) out = out.replace(r.re, "");
-  return out;
+  return sanitizeUserHtml(html).html;
 }
 
 /** Kayıt kapısı için: neyin kesileceğini SÖYLER (kesmez). Stüdyo bunu uyarı olarak basar. */
 export function describeSanitization(html: string): string[] {
-  const found: string[] = [];
-  for (const r of STRIP_RULES) {
-    // `g` bayraklı regex'lerde lastIndex taşımasın diye her seferinde yeniden kur.
-    if (new RegExp(r.re.source, r.re.flags.replace("g", "")).test(html)) found.push(r.what);
-  }
-  return found;
+  return [...sanitizeUserHtml(html).removed];
 }
 
 /**

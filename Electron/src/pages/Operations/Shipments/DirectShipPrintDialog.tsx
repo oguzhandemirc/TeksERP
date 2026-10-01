@@ -55,6 +55,7 @@ export function DirectShipPrintDialog({ directShipmentId, open, onOpenChange, on
             <iframe
               title="Fasondan Sevk İrsaliyesi Önizleme"
               srcDoc={html}
+              sandbox=""
               className="h-full w-full border-0 bg-white"
             />
           ) : (

@@ -1,8 +1,10 @@
-import { ipcMain, BrowserWindow } from "electron";
+import { BrowserWindow, session } from "electron";
+import type { BrowserWindowConstructorOptions, Session, WebContents } from "electron";
 import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { showSaveDialogFor, showOpenDialogFor } from "./dialog-window.js";
 import { applyPdfLicenseMeta, sanitizePdfLicenseMeta, type PdfLicenseMeta } from "./pdf-metadata.js";
+import { handleTrusted } from "../security/trusted-ipc.js";
 import type {
   PdfSaveOpts,
   PdfSaveResult,
@@ -25,11 +27,65 @@ function safeFileName(name: string): string {
 /** Lisans filigranı (renderer lisans durumundan bildirir); main süreç ömrü boyunca bellekte. */
 let licenseMeta: PdfLicenseMeta | null = null;
 
-async function htmlToPdf(html: string): Promise<Uint8Array> {
-  const win = new BrowserWindow({
-    show: false,
-    webPreferences: { offscreen: true, sandbox: true, contextIsolation: true, nodeIntegration: false },
-  });
+// GÜVENLİK: bu pencere kullanıcı yazımı olabilen belge HTML'ini (uzman şablonu) çizer.
+// Önizleme ve kâğıt baskısı zaten script'siz sandbox iframe'de; PDF de AYNI duruşta:
+// JS kapalı, köprü (preload) yok, ağ yok, gezinme/yeni pencere yok. Belge HTML'leri
+// script'e dayanmaz (logo/QR data-URI); dış kaynak önizleme/baskıda da yüklenmiyordu
+// (panel CSP'si img-src 'self' data: blob:) → PDF = ekran = baskı.
+
+/** Bellek içi ayrık oturum (`persist:` öneki YOK): çerez/önbellek ana pencereyle paylaşılmaz. */
+export const PDF_PARTITION = "tekserp-pdf";
+
+export const PDF_WINDOW_OPTIONS = {
+  show: false,
+  webPreferences: {
+    offscreen: true,
+    javascript: false,
+    sandbox: true,
+    contextIsolation: true,
+    nodeIntegration: false,
+    nodeIntegrationInSubFrames: false,
+    webSecurity: true,
+    allowRunningInsecureContent: false,
+    webviewTag: false,
+    plugins: false,
+    spellcheck: false,
+    navigateOnDragDrop: false,
+    partition: PDF_PARTITION,
+  },
+} satisfies BrowserWindowConstructorOptions;
+
+/** Belgenin kendi gömülü içeriği dışında (data:/blob:/about:) hiçbir istek çıkmaz — dosya/UNC/ağ dahil. */
+export function isPdfResourceAllowed(url: string): boolean {
+  return url.startsWith("data:") || url.startsWith("blob:") || url.startsWith("about:");
+}
+
+let pdfSessionHardened: Session | null = null;
+
+function hardenedPdfSession(): Session {
+  if (pdfSessionHardened) return pdfSessionHardened;
+  const ses = session.fromPartition(PDF_PARTITION);
+  ses.setPermissionRequestHandler((_contents, _permission, callback) => callback(false));
+  ses.setPermissionCheckHandler(() => false);
+  ses.webRequest.onBeforeRequest((details, callback) => callback({ cancel: !isPdfResourceAllowed(details.url) }));
+  pdfSessionHardened = ses;
+  return ses;
+}
+
+/** Gezinme, yönlendirme, webview ve yeni pencere: HEPSİ engelli; işletim sistemine hiçbir şey devredilmez. */
+export function hardenPdfContents(contents: WebContents): void {
+  const block = (event: { preventDefault(): void }): void => event.preventDefault();
+  contents.on("will-navigate", block);
+  contents.on("will-frame-navigate", block);
+  contents.on("will-redirect", block);
+  contents.on("will-attach-webview", block);
+  contents.setWindowOpenHandler(() => ({ action: "deny" }));
+}
+
+export async function htmlToPdf(html: string): Promise<Uint8Array> {
+  hardenedPdfSession();
+  const win = new BrowserWindow(PDF_WINDOW_OPTIONS);
+  hardenPdfContents(win.webContents);
   try {
     await win.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(html)}`);
     // Görsellerin (logo/QR data-uri) yerleşmesi için kısa bekleme.
@@ -46,11 +102,11 @@ async function htmlToPdf(html: string): Promise<Uint8Array> {
 }
 
 export function registerPdfIpc(): void {
-  ipcMain.handle("pdf:setLicenseMeta", (_e, meta: unknown): void => {
+  handleTrusted("pdf:setLicenseMeta", (_e, meta: unknown): void => {
     licenseMeta = sanitizePdfLicenseMeta(meta);
   });
 
-  ipcMain.handle("pdf:save", async (e, opts: PdfSaveOpts): Promise<PdfSaveResult> => {
+  handleTrusted("pdf:save", async (e, opts: PdfSaveOpts): Promise<PdfSaveResult> => {
     try {
       const { canceled, filePath } = await showSaveDialogFor(e, {
         title: "PDF Kaydet",
@@ -68,7 +124,7 @@ export function registerPdfIpc(): void {
 
   // Toplu belge → seçilen KLASÖRE her biri ayrı <name>.pdf. Tek klasör diyaloğu,
   // sonra sırayla üret+yaz (bellek/pencere kontrollü). Ad çakışırsa " (2)" eklenir.
-  ipcMain.handle("pdf:saveBatch", async (e, opts: PdfSaveBatchOpts): Promise<SaveBatchResult> => {
+  handleTrusted("pdf:saveBatch", async (e, opts: PdfSaveBatchOpts): Promise<SaveBatchResult> => {
     try {
       if (!opts.items?.length) return { saved: false, error: "Belge yok" };
       const { canceled, filePaths } = await showOpenDialogFor(e, {

@@ -14,6 +14,7 @@ import { fieldDisplayValue } from "./label-field-values";
 import { renderNativePreviewSvg, svgToPreviewHtml } from "./native-preview";
 import { escapeHtml } from "./label-html.shared";
 import { cleanCtl } from "./native-label.shared";
+import { renderUserTemplate, stripRawMarkers } from "../document-render/template-html.sanitize";
 
 const PLACEHOLDER_RE = /\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/g;
 
@@ -48,6 +49,20 @@ export function applyRawCode(
   language: PrinterLanguage,
   opts?: { barcodeSvg?: string; qrSvg?: string },
 ): string {
+  // HTML ham kodu kullanıcı yazımıdır: izin listesi temizleyicisinden geçer (kayıtta da),
+  // doldurma SONRASI yeniden temizlenir; sistem SVG'si (güvenilir) en son işaretle konur.
+  if (language === PrinterLanguage.RASTER_HTML) {
+    return renderUserTemplate(
+      raw,
+      (safe, marker) =>
+        safe.replace(PLACEHOLDER_RE, (_m, key: string) =>
+          key === "barcodeSvg" || key === "qrSvg"
+            ? marker(key)
+            : stripRawMarkers(sanitizeFieldValue(fieldDisplayValue(payload, key).value, language)),
+        ),
+      { barcodeSvg: opts?.barcodeSvg ?? "", qrSvg: opts?.qrSvg ?? "" },
+    );
+  }
   return raw.replace(PLACEHOLDER_RE, (_m, key: string) => {
     // barcodeSvg/qrSvg = güvenilir sistem SVG'si → HAM bırak (escape SVG'yi bozar).
     if (key === "barcodeSvg") return opts?.barcodeSvg ?? "";

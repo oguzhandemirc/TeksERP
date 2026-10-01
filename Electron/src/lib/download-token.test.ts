@@ -9,6 +9,7 @@ import {
   feedOptions,
   fetchDownloadToken,
 } from "@shared/download-token";
+import { DEFAULT_UPDATE_FEED_URL } from "@shared/update-feed";
 
 // İNDİRME BELİRTECİ (3b) — panel her güncelleme denetiminden önce fabrikanın backend'inden belirteç
 // alır ve electron-updater'a başlık verir; alınamazsa BAŞLIKSIZ (bugünkü davranış). Main süreç
@@ -76,9 +77,15 @@ describe("indirme belirteci (saf)", () => {
   });
 
   it("feed seçenekleri: belirteç varsa başlık, yoksa bugünkü gibi başlıksız", () => {
-    expect(feedOptions("https://g/k/electron/", TOKEN)).toEqual({ provider: "generic", url: "https://g/k/electron/", requestHeaders: { [DOWNLOAD_TOKEN_HEADER]: TOKEN } });
-    expect(feedOptions("https://g/k/electron/", null)).toEqual({ provider: "generic", url: "https://g/k/electron/" });
+    expect(feedOptions(DEFAULT_UPDATE_FEED_URL, TOKEN)).toEqual({ provider: "generic", url: DEFAULT_UPDATE_FEED_URL, requestHeaders: { [DOWNLOAD_TOKEN_HEADER]: TOKEN } });
+    expect(feedOptions(DEFAULT_UPDATE_FEED_URL, null)).toEqual({ provider: "generic", url: DEFAULT_UPDATE_FEED_URL });
     expect(DOWNLOAD_TOKEN_HEADER).toBe("X-TKL-Indirme");
+  });
+
+  it("belirteç YALNIZ izinli güncelleme adresine: yabancı ana makine / http / yanlış yol → başlıksız (SIR-5)", () => {
+    for (const url of ["https://g/k/electron/", DEFAULT_UPDATE_FEED_URL.replace("https:", "http:"), new URL("/x/", DEFAULT_UPDATE_FEED_URL).toString()]) {
+      expect(feedOptions(url, TOKEN), url).toEqual({ provider: "generic", url });
+    }
   });
 
   it("ayna: secure-store anahtarları renderer'ınkiyle aynı", () => {
@@ -99,11 +106,15 @@ describe("updater.ipc — her denetimde belirteç", () => {
 
   it("oturum varken denetim başlıklı, belirteç alınamayınca başlıksız", async () => {
     const { registerUpdaterIpc } = await import("../../electron/ipc/updater.ipc");
+    const { setTrustedAppEntry } = await import("../../electron/security/trusted-ipc");
+    const giris = "file:///C:/Program%20Files/TeksERP/resources/app.asar/out/renderer/index.html";
+    setTrustedAppEntry(giris);
+    const uygulama = { senderFrame: { url: giris, parent: null } };
     h.store.set(API_BASE_URL_STORE_KEY, "http://10.0.0.5:4000");
     h.store.set(AUTH_TOKEN_STORE_KEY, "jwt");
     h.fetchMock.mockResolvedValue(ok(TOKEN));
     registerUpdaterIpc();
-    const check = h.handlers.get("updater:check")!;
+    const check = () => h.handlers.get("updater:check")!(uygulama);
     await check();
     const son = () => h.updater.setFeedURL.mock.calls.at(-1)?.[0] as { requestHeaders?: Record<string, string> };
     expect(son().requestHeaders).toEqual({ [DOWNLOAD_TOKEN_HEADER]: TOKEN });

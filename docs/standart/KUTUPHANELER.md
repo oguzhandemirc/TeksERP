@@ -99,7 +99,15 @@ Ayrıca kayıtta duran iki küçük borç: OFL-1.1 font lisans metninin dağıt�
 
 ## 9 · Kayıt defteri
 
-Yeni **paket** eklenmedi. Bir karar var ve sonucu da "paket YOK"tur:
+### @noble/curves@2.4.0 + @noble/hashes@2.4.0 · mobil · 2026-10-01
+1. Problem      : tablet APK künyesinin Ed25519 imzası + kurulum dosyasının SHA-256 özeti Hermes'te doğrulanmalı (node:crypto YOK); §2.3 "İmza doğrulama · özet" satırı
+2. Alternatifler: elle yazmak (G6'da GEÇİCİ olarak yazıldı — elle imza doğrulaması klasik risk, kullanıcı noble'ı onayladı) · `expo-crypto` (native → APK ister, Ed25519 yok) · `tweetnacl` (S < L denetlemez) · `node-forge` (expo CLI'ın geçişli bağımlılığı, çalışma anı değil)
+3. Boyut/biçim  : saf JS, native modül YOK (autolinking listesinde yok, `android/`/`expo-module.config.json`/kurulum betiği yok); ESM-only; pakete giren yalnız `ed25519.js` + `sha2.js` modülleri
+4. Bakım        : 2.4.0 (2026-08-27); TAM SABİT (ESM-only + kripto: bilinçli yükseltme) — `test_dependency_contract §(a)` korur
+5. Lisans       : MIT (ikisi de)
+6. Dağıtım      : mobilde OTA (native yok); ancak depo parmak izi `dependencies`i saydığı için ilk OTA `--parmak-izini-kabul-et` ister (gerekçe: saf JS) — `docs/ops/MOBIL-UZAKTAN-GUNCELLEME.md` §4d
+
+Önceki tek karar sonucu "paket YOK"tur:
 **backend log kanalı** (2026-09-07) — `pino`/`winston` yerine **elle yazmak**
 seçildi ([KU-07]), çünkü taşımayı pm2 ve rotasyonu `pm2-logrotate` zaten
 yapıyordu; kalan tek eksik seviye + alan etiketiydi. Altı satırlık kayıt, ölçüm
