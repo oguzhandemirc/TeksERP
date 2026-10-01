@@ -289,8 +289,10 @@ export default [
   },
 
   // ── 2) Ana süreç ve paylaşılan sözleşme ────────────────────────────────────
+  // `electron/**/*.mjs`: bağımlılıksız yazılan ana süreç modülleri (panel sürüm künyesi — yayın kapısı onları
+  // düz node ile de koşar); kapsam dışı kalsalar varsayılan yapılandırmayla (node globals YOK) taranırlardı.
   {
-    files: ["electron/**/*.ts", "shared/**/*.ts"],
+    files: ["electron/**/*.ts", "electron/**/*.mjs", "shared/**/*.ts"],
     languageOptions: {
       parser: tsParser,
       parserOptions: { ecmaVersion: "latest", sourceType: "module" },

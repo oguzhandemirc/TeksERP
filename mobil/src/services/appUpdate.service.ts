@@ -19,6 +19,8 @@
 
 import * as Updates from 'expo-updates';
 import * as FileSystem from 'expo-file-system/legacy';
+// Yeni dosya API'si (parça parça okuma) — native yarısı aynı paketin ikinci modülü, 2026-08-27'den beri her APK'da.
+import { File } from 'expo-file-system';
 import * as IntentLauncher from 'expo-intent-launcher';
 import { Platform } from 'react-native';
 import Constants from 'expo-constants';
@@ -26,6 +28,8 @@ import Constants from 'expo-constants';
 import { queryClient } from '../offline/queryClient';
 import { downloadTokenHeaders, refreshOtaDownloadToken } from './downloadToken.service';
 import { formatFactory } from '../lib/factory-time';
+import apkAnchorJson from '../lib/apk-imza-capasi.json';
+import { apkDownloadUrl, feedChannel, verifyApkFile, verifyApkRelease, type AnchorKey, type ApkDoc } from './apkKunye';
 
 /* ------------------------------------------------------------------ *
  * 1) UZAKTAN GÜNCELLEME
@@ -231,7 +235,14 @@ export interface ApkDurum {
   yeniVarMi: boolean;
   kunye: ApkKunye | null;
   kurulu: number;
+  /** İmzası doğrulanmış künye — kurulum YALNIZ bununla yapılır (`indirmeUrl` kullanılmaz). */
+  verified?: ApkDoc | null;
+  /** Daha yeni sürüm sunuldu ama künyesi doğrulanamadı (güvenlik reddi) — ekranda TR uyarı. */
+  rejection?: { code: string; message: string } | null;
 }
+
+/** Tabletin JS paketine gömülü APK künyesi çapası (OTA kod imzasıyla korunur). */
+const APK_ANCHOR: readonly AnchorKey[] = apkAnchorJson.anahtarlar;
 
 /**
  * Sunucudaki kurulum dosyası künyesini okur.
@@ -271,7 +282,14 @@ export async function apkDurumu(): Promise<ApkDurum> {
       const ham = (await yanit.json()) as Partial<ApkKunye>;
       // Statik künyede `varMi` alanı yok — dosyanın VARLIĞI yayının kendisidir.
       const kunye: ApkKunye = { ...ham, varMi: typeof ham.versionCode === 'number' };
-      return { kunye, kurulu, yeniVarMi: apkYeniMi(kunye, kurulu) };
+      if (!apkYeniMi(kunye, kurulu)) return { kunye, kurulu, yeniVarMi: false, verified: null, rejection: null };
+      // Yeni sürüm sunuluyor: kurulum YALNIZ imzası doğrulanan künyeyle (çapa · kanal · surum.json bağı).
+      const d = verifyApkRelease(ham, { keys: APK_ANCHOR, channel: feedChannel(taban) });
+      if (!d.ok) {
+        console.warn(`[apk] güncelleme künyesi REDDEDİLDİ kod=${d.code} vc=${String(kunye.versionCode)}`);
+        return { kunye, kurulu, yeniVarMi: false, verified: null, rejection: { code: d.code, message: d.message } };
+      }
+      return { kunye, kurulu, yeniVarMi: d.value.versionCode > kurulu, verified: d.value, rejection: null };
     } finally {
       clearTimeout(zamanlayici);
     }
@@ -287,8 +305,18 @@ export type ApkKurulumSonuc =
   | { durum: 'desteklenmiyor' }
   | { durum: 'hata'; mesaj: string };
 
+/** İndirilen dosyayı parça parça (256 KB) okuyan okuyucu — belleğe tek seferde alınmaz; parçalar arası ekran nefes alır. */
+function openChunkReader(uri: string): { read: () => Uint8Array; close: () => void } {
+  const handle = new File(uri).open();
+  return { read: () => handle.readBytes(1 << 18), close: () => handle.close() };
+}
+
 /**
- * APK'yı indirir ve Android'in kurulum ekranını açar.
+ * APK'yı indirir, imzalı künyeyle DOĞRULAR ve ancak sonra Android'in kurulum ekranını açar.
+ *
+ * ⚠️ İndirme adresi künyeden DEĞİL, gömülü kanal kökü + imzalı dosya adından türer (belirteç yalnız kanal
+ * sunucusuna gider); inen dosyanın boyu + sha256'sı imzalı künyedekiyle aynı değilse dosya silinir, kurulum
+ * ekranı AÇILMAZ (`apkKunye.ts`).
  *
  * ⚠️ SESSİZ KURULUM DEĞİLDİR ve olamaz: uygulamanın kendisi paket kuramaz,
  * yalnız kurulum ekranını AÇAR — son "Yükle" dokunuşu operatördedir. Her
@@ -300,10 +328,12 @@ export type ApkKurulumSonuc =
  * `expo-file-system/legacy` altında var (SDK 54'te yeni API'de yok).
  */
 export async function apkIndirVeKur(
-  indirmeUrl: string,
-  onIlerleme?: (oran: number) => void,
+  doc: ApkDoc,
+  onIlerleme?: (oran: number, stage?: 'download' | 'verify') => void,
 ): Promise<ApkKurulumSonuc> {
   if (Platform.OS !== 'android') return { durum: 'desteklenmiyor' };
+  const taban = otaKimlik().feedTabani;
+  if (!taban || feedChannel(taban) !== doc.kanal) return { durum: 'hata', mesaj: 'Kurulum dosyası bu tabletin kanalına ait değil; kurulmadı.' };
 
   const hedef = `${FileSystem.cacheDirectory}tekserp-guncelleme.apk`;
   try {
@@ -311,17 +341,34 @@ export async function apkIndirVeKur(
     await FileSystem.deleteAsync(hedef, { idempotent: true });
 
     const indirici = FileSystem.createDownloadResumable(
-      indirmeUrl,
+      apkDownloadUrl(taban, doc),
       hedef,
       { headers: await downloadTokenHeaders() },
       (p) => {
         if (onIlerleme && p.totalBytesExpectedToWrite > 0) {
-          onIlerleme(p.totalBytesWritten / p.totalBytesExpectedToWrite);
+          onIlerleme(p.totalBytesWritten / p.totalBytesExpectedToWrite, 'download');
         }
       },
     );
     const sonuc = await indirici.downloadAsync();
     if (!sonuc?.uri) return { durum: 'hata', mesaj: 'Dosya indirilemedi' };
+
+    let check: Awaited<ReturnType<typeof verifyApkFile>>;
+    try {
+      const reader = openChunkReader(sonuc.uri);
+      try {
+        check = await verifyApkFile(doc, reader.read, (ratio) => onIlerleme?.(ratio, 'verify'));
+      } finally {
+        reader.close();
+      }
+    } catch (e) {
+      check = { ok: false, code: 'DOSYA_OKUNAMADI', message: `İndirilen kurulum dosyası okunamadı; kurulmadı. (${e instanceof Error ? e.message : String(e)})` };
+    }
+    if (!check.ok) {
+      console.warn(`[apk] indirilen dosya REDDEDİLDİ kod=${check.code} vc=${doc.versionCode}`);
+      await FileSystem.deleteAsync(hedef, { idempotent: true });
+      return { durum: 'hata', mesaj: check.message };
+    }
 
     const contentUri = await FileSystem.getContentUriAsync(sonuc.uri);
     await IntentLauncher.startActivityAsync('android.intent.action.INSTALL_PACKAGE', {

@@ -155,8 +155,11 @@ cd mobil
 TEKSERP_KANAL=<kanal> npx expo prebuild --platform android --clean --no-install
 npm run build:apk -- --musteri=<kanal>
 node ../deploy/mobil-yayinla.mjs --musteri=<kanal> --apk=android/app/build/outputs/apk/release/app-release.apk \
-     --surum=<sürüm> --vc=<versionCode>
+     --surum=<sürüm> --vc=<versionCode> --anahtar=<istemci yayın anahtarı dosyası>   # parola TTY'den
 ```
+
+> **İmzalı künye (2026-10-01, G6):** `apk/surum.json` imzalı künye taşımadan YÜKLENMEZ; tablet indirdiği APK'yı
+> bu künyeyle doğrulamadan kurmaz. Ayrıntı: §4d.
 
 `build:apk` APK'nın KENDİ kimliğini derlemeden sonra okur (ikili AndroidManifest: paket adı ·
 güncelleme adresi · OTA sertifikası; `assets/app.config`: çalışma anı yapılandırması) ve hedef
@@ -169,6 +172,99 @@ Tablette: Ayarlar → Güncelleme → **İndir ve kur** → **Yükle**. Her tabl
 
 ⚠️ **APK yalnız arm64 taşır** (113 MB → 49 MB). Sahadaki cihazların mimarisi kurulumdan
 önce doğrulanmalı: `adb shell getprop ro.product.cpu.abi`.
+
+---
+
+## 4d. İmzalı APK künyesi — tablet güncellemesinin bütünlüğü (2026-10-01, G6)
+
+**Neden:** `apk/surum.json` imzasızdı; tablet `indirmeUrl`i koşulsuz izliyor (indirme belirtecini de oraya
+gönderiyor), `sha256`yı hiç ölçmüyordu. Güncelleme sunucusuna yazabilen biri (yayın hesabı, VDS, yanlış `--feed`)
+sahadaki tabletlere güvenilir güncelleme ekranından keyfi APK kurdurabilirdi; farklı paket adlı APK Android'in
+mühür denetimine de takılmaz. OTA paketleri zaten kanalın RSA anahtarıyla imzalı; APK zinciri artık aynı tehdide
+kapalı.
+
+**Biçim:** `surum.json`a panelin `latest.yml` bloğuyla aynı kalıpta blok — eski tablet bilmediği alanı yok sayar:
+
+```json
+"tekserp": { "v": 1, "bildirim": "<JWS — alg EdDSA, typ tekserp-apk, kid çapadan>" }
+```
+
+Yük (v:1): `urun: tablet` · `platform: android-arm64` · `kanal` · `versionCode` · `versionName` · `commit` ·
+`yayinZamani` · `paket {ad, boyut, sha256}` (`ad` = `TeksERP-<versionName>-vc<versionCode>.apk`, yol taşımaz) ·
+`capa`. `typ` protokolün `TYP.APK` kaydıdır; JWS kuralları panel/lisans aynası. Kod: yayın tarafı
+`mobil/scripts/lib/apk-kunye.mjs` (node:crypto), tablet `mobil/src/services/apkKunye.ts` + `mobil/src/lib/kripto/`
+(Hermes'te node:crypto yok → denetlenmiş saf JS `@noble/curves` + `@noble/hashes` sarmalayıcısı — aşağıda "kripto").
+
+**Tablet ne yapar (fail-closed):** ① künyeyi okurken yeni sürüm sunuluyorsa (versionCode > kurulu) künye
+doğrulanır: çapa · imza · typ · kid · kanal (tabletin GÖMÜLÜ güncelleme adresinden; değiştirilemez) ·
+`surum.json`un eski tabletin okuduğu alanları (versionCode · versionName · dosya · sha256 · boyut) künyeyle birebir.
+Geçmezse "yeni sürüm" SAYILMAZ, Ayarlar → Güncelleme'de ve sürüm kilidi şeridinde TR uyarı, log'a
+`[apk] güncelleme künyesi REDDEDİLDİ kod=…`. ② indirme adresi künyedeki `indirmeUrl`den DEĞİL gömülü kanal kökü +
+imzalı dosya adından türer (belirteç yalnız kanal sunucusuna gider). ③ inen dosya 256 KB parçalarla okunup boy +
+sha256 ölçülür ("Doğrulanıyor… %"); tutmazsa dosya silinir, Android kurulum ekranı AÇILMAZ. Kurulum hâlâ
+operatörün "Yükle" dokunuşudur.
+
+**Çapa:** `mobil/src/lib/apk-imza-capasi.json` — JS paketine girer (OTA kod imzasıyla korunur, OTA ile değişebilir).
+Satır yalnız `cd Teks-Erp && npx tsx scripts/guven-capasi-ekle.ts tablet …` ile girer (KURU; sonra `--yaz`).
+Anahtar kararı (kullanıcı, 2026-10-01) panelle ORTAKTIR: ayrı istemci yayın anahtarı `panel-2026` + çevrimdışı yedek
+`panel-2026-2`; ikisi de tablet çapasına girer (PAKET anahtarı künye imzalamaz). Üretim ve çapa komut sırası tek yerde:
+`docs/ops/ELECTRON-OTOMATIK-GUNCELLEME.md` §İmzalı künye → "Anahtar kararı" (döngü `for c in panel tablet` iki çapayı
+birlikte yazar). APK yayınında anahtar: `--anahtar=$HOME/.tekserp/panel-uretim/panel-2026.panel.json` ya da
+`TEKSERP_TABLET_IMZA_ANAHTARI`; yedek yalnız birincil kaybolursa (rotasyon kilidi geçer — yayındaki künyenin
+`capa`sında).
+
+Boş çapa: tablet hiçbir APK künyesini doğrulayamaz → APK güncellemesi DURUR (OTA kanalı ayrıdır, etkilenmez).
+Bu yüzden yayın kapısı boş çapada **APK yayınını durdurur, OTA yayınını UYARIR** (panelden farkı: panelin
+çapasını getirecek ikinci bir kanal yok, tabletinkini OTA getirir).
+
+**Yayın (`deploy/mobil-yayinla.mjs`):**
+- APK: paket adı · güncelleme adresi · ERP adresi · **gömülü OTA sertifikası kanalınki mi** (DAGY-6, `build-apk`
+  ile aynı yüklem; kanal sertifikası okunamazsa ÖLÇÜLEMEDİ = DUR) · **tablet çapası** (boş/bozuk → DUR; APK'nın JS
+  paketi çapayı taşımıyorsa bayat → DUR) → sürüm notu → terfi → künye: yanındaki `surum.json` BU APK'nın geçerli
+  imzalı bloğunu taşıyorsa korunur, yoksa imza aracı çağrılır (`Teks-Erp/scripts/panel-imza.ts apk-imzala`; anahtar
+  `--anahtar=` ya da `TEKSERP_TABLET_IMZA_ANAHTARI`, parola TTY'den) ve sonuç yeniden doğrulanır; imzasız/geçersiz
+  künye YÜKLENMEZ → **rotasyon kilidi** (ssh ile yayındaki `surum.json`: künyeliyse yeni imzalayan onun `capa`sında
+  olmalı; künyesizse ilk imzalı APK normal gelir) → yükleme (APK önce, künye EN SON) → kenardaki `surum.json`
+  yerel imzalı dosyayla bayt-eşit.
+- OTA: `yayin.json` `imzali: false` → DUR (eskiden uyarı; her kanalın APK'sı sertifika taşır, imzasız paketi
+  tabletler zaten reddeder) · tablet çapası biçimsiz → DUR · boş → UYARI · paket ağacın çapasını taşımıyor → DUR.
+- `--kuru` imzalamaz ve ağa çıkmaz: imzasız künyeyi not eder, rotasyonu ölçmez.
+- Elle kontrol: `cd Teks-Erp && npx tsx scripts/panel-imza.ts apk-dogrula --musteri=<kanal> --apk=<apk> --kunye=<surum.json>`.
+
+**Rotasyon:** yeni kid ÖNCE çapaya eklenir → OTA ile sahaya çıkar ve ESKİ anahtarla imzalı bir APK yayınlanır
+(künyenin `capa`sı yeni kid'i taşır); ancak sonra yeni anahtarla imzalanır (kapı aksi hâlde durur).
+
+**Geçiş sırası — "eski tablet ne yapar":**
+1. Anahtar üretimi + tablet çapası satırları (`panel-2026` + yedek `panel-2026-2`, panelle aynı sıra; çapa boşken APK
+   yayını durur, OTA uyarır).
+2. **OTA ile yeter, yeni APK GEREKMEZ:** doğrulayıcı saf JS'tir; parça parça okuma `expo-file-system` 19'un
+   yeni API'si (`File.open().readBytes`) — native yarısı aynı paketin ikinci modülü, OTA destekli her APK'da
+   (2026-08-27'den beri) var; kripto saf JS `@noble/*`. Çapalı OTA önce testfabrika, sonra terfi — bu İLK OTA
+   `--parmak-izini-kabul-et` ister (yukarıda "Kripto": depo parmak izi bağımlılık listesini sayar, native değişmedi).
+3. **Eski tablet (G6 öncesi JS)** blok'u yok sayar, `indirmeUrl` ile BUGÜNKÜ GİBİ indirir — bu yüzden yayın aracı
+   `indirmeUrl`i ve diğer imzasız alanları yazmaya devam eder (imzalı künyeyle birebir olmaları kapıda ölçülür).
+4. **Yeni tablet** künyesiz/geçersiz `surum.json`daki yeni sürümü REDDEDER (TR uyarı); sahada imzasız bir yayın
+   duruyorsa ve sürümü kuruludan yeni değilse hiçbir şey görünmez.
+5. Backend sözleşmesi değişmedi (`minVersion` yükselmez).
+
+**Sorun giderme (kod → anlam):** `KUNYE_YOK` imzasız yayın · `JWS_KID` çapada olmayan anahtar (rotasyon hatası
+ya da sahte) · `JWS_IMZA`/`JWS_*` bozuk/sahte imza · `KUNYE_KANAL` başka kanalın künyesi · `KUNYE_DOSYA`
+`surum.json` alanları künyeyle uyuşmuyor · `BELGE_*` biçim · `DOSYA_OZETI` inen dosya künyede yazan değil (silindi) ·
+`DOSYA_OKUNAMADI` · `CAPA_BOS`/`CAPA_GECERSIZ` çapasız JS. Hepsinde tablet eski sürümde çalışır.
+
+**Kripto (kullanıcı onayı 2026-10-01):** `@noble/curves` 2.4.0 (Ed25519) + `@noble/hashes` 2.4.0 (SHA-256/512) —
+denetlenmiş saf JS, TAM SABİT (ESM-only; `test_dependency_contract §(a)`), yalnız `src/lib/kripto/` sarmalar.
+Kip bizim seçimimiz: RFC 8032 katı kip (`zip215: false` — kanonik A/R, S < L, küçük mertebeli A RED) + küçük
+mertebeli R reddi; kâhinler RFC 8032 + Wycheproof EdDSA 151 vektör + node:crypto rastgele/bozulma (gevşek ZIP-215
+kipi kırmızı verir). Gerçek Hermes VM'inde (RN 0.81 `sdks/hermesc/osx-bin/hermes`, Metro'nun babel ön ayarıyla
+dönüştürülmüş paket) ölçüldü: Wycheproof 151 / node bozulma 40 fark 0, yayın aracının imzaladığı künye KABUL,
+kurcalanmış RED; Ed25519 doğrulaması ≈ 13 ms; SHA-256 ≈ 2,1 MB/s (Mac) ⇒ 49 MB APK Mac'te ≈ 23 sn, tablette daha
+uzun ("Doğrulanıyor… %" görünür; sahada testfabrika'da ölçülecek). Native modül YOK (autolinking listesinde yok,
+`android/`/`expo-module.config.json`/kurulum betiği yok; `expo export` Hermes bayt koduna derlendi) ⇒ OTA ile
+gider. ⚠️ Depo parmak izi (`yayinla-ota.mjs` alg 2) `dependencies` listesini saydığı için bu paketleri taşıyan İLK
+OTA "NATIVE DEĞİŞTİ" der: runtimeVersion ARTIRILMAZ, `npm run yayinla -- --musteri=<kod> --parmak-izini-kabul-et`
+ile bilinçli geçilir (gerekçe: yalnız saf JS paket eklendi; kanıt yukarıda). İniş sonrası ana ağaçta
+`cd mobil && npm ci` (iki yeni paket).
 
 ---
 
@@ -253,6 +349,11 @@ Güncelleme: internet). İkisinin farklı olması normaldir; ekran bunu uyarı o
 | `Teks-Erp/scripts/test_mobile_update.ts` | Donmuş manifest baytları BOZULMADAN servis ediliyor mu · imza sertifikayla doğrulanıyor mu · protokol başlıkları · yol kaçışı · geri alma · **backend ↔ mobil ↔ nginx sınırlayıcı tutarlılığı** (37 kontrol) |
 | `mobil/src/test/update-feed-url.test.ts` | Feed adresi tek kaynak · `enabled` açık · sertifika dosyası gerçekten var · ERP adresinden bağımsızlık (7 kontrol) |
 | `mobil/src/services/appUpdate.service.test.ts` | Yenileme kapısı (bekleyen kayıt) + sürüm karşılaştırması (8 kontrol) |
+| `mobil/src/lib/kripto/kripto.test.ts` | `@noble/*` sarmalayıcısının kâhini: SHA-256/512 + Ed25519 (RFC 8032 · Wycheproof 151 vektör · node:crypto) + katı kip |
+| `mobil/src/services/apkKunye.test.ts` | APK künyesi doğrulayıcısı + yayın aracıyla çapraz kâhin |
+| `mobil/src/services/appUpdate.apk.test.ts` | Akış: imzasız/başka kanal künyesi "yeni sürüm" sayılmaz · indirme gömülü kökten · özeti tutmayan dosya silinir, kurulum ekranı açılmaz |
+| `Teks-Erp/scripts/test_panel_imza.ts` §3h–k · §4 | `guven-capasi-ekle.ts tablet` · `panel-imza.ts apk-imzala/apk-dogrula` uçtan uca |
+| `scripts/test_kanal_yayin_kapisi.mjs` §3G6 | Yayın kapıları: imzasız OTA · OTA sertifikası · tablet çapası · imzasız künye · rotasyon · yükleme sırası |
 | `mobil/scripts/build-apk.mjs` | Manifest'te feed adresi + runtimeVersion + **kod imzalama sertifikası** · APK'nın mührü |
 | `mobil/scripts/yayinla-ota.mjs` | Bundle'daki ERP adresi · native parmak izi ↔ runtimeVersion · imzanın sertifikayla doğrulanması |
 

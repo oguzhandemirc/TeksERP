@@ -11,6 +11,11 @@
 //   node scripts/kanal-kapisi.mjs panel-yayin <kod> <paket dizini> # paket (release/<kod>/<sürüm>) bu kanalın mı
 //   node scripts/kanal-kapisi.mjs terfi <kod> <panel|tablet> <sürüm> [--kuru] [--terfi-atla=<cümle>]  # K5 (scripts/lib/terfi.mjs)
 //   node scripts/kanal-kapisi.mjs terfi-atla-kaydi <kod> <panel|tablet> <sürüm> <cümle>             # kaçışın etiketi (best-effort)
+//   node scripts/kanal-kapisi.mjs panel-capa [<kod> <paket dizini>]  # panel imza çapası dolu/üretim biçiminde (+ pakete gömülü)
+//   node scripts/kanal-kapisi.mjs panel-imza <kod> <paket dizini>    # latest.yml künyesi panelin kabul edeceği künye mi
+//   node scripts/kanal-kapisi.mjs panel-rotasyon <kod> <paket dizini> <yayındaki latest.yml dosyası>  # imzalayan, yayındakinin çapasında
+//   node scripts/kanal-kapisi.mjs panel-imza-uzak <kod> <latest.yml dosyası>                          # kenardan okunan künye
+//   panel-imza · panel-imza-uzak ek çıkış: 3 = İMZASIZ (imza aracıyla imzalanabilir; yüklenmez)
 //
 // ⚠️ AYRI DOSYA ve KOŞULSUZ `main()`: CLI eskiden kitaplığın içindeydi ve "doğrudan
 // mı çalıştırıldım" diye `process.argv[1]`i `import.meta.url` ile kıyaslıyordu.
@@ -33,6 +38,11 @@ import {
   panelSabitKimlikFarki,
 } from './lib/kanallar.mjs';
 import { cumleDenetle, terfiAtlaKaydi, terfiKapisi, terfiRaporu } from './lib/terfi.mjs';
+import fs from 'node:fs';
+
+// Panel künye kapısı GECİKMELİ yüklenir: panel komutları dışındaki her komut (kanal · terfi · backend…) panelin
+// doğrulayıcı modüllerine (Electron/electron/guncelleme/) bağlı kalmasın — o komutları kopyalayan bekçiler de.
+const panelImzaKapisi = () => import('./lib/panel-imza-kapisi.mjs');
 import { yayinBildirVeBas } from './lib/yayin-bildirim.mjs';
 
 function dur(baslik, satirlar, kod) {
@@ -42,8 +52,71 @@ function dur(baslik, satirlar, kod) {
   process.exit(kod);
 }
 
+/** Gömülecek çapa + (paket dizini verilmişse) pakete gerçekten gömülmüş mü — boş çapa paketlenmez/yayınlanmaz. */
+async function panelCapaDenetle(kod, dizin) {
+  const { panelCapaFarki, panelCapaPaketFarki, panelCapasi } = await panelImzaKapisi();
+  const liste = panelCapasi();
+  const f = panelCapaFarki(liste);
+  if (!f.length && kod && dizin) f.push(...panelCapaPaketFarki(panelArtefaktKimligi(dizin).anaSurec, liste));
+  if (f.length) {
+    dur('PANEL İMZA ÇAPASI KULLANILAMAZ — paket hiçbir güncellemeyi doğrulayamaz (çıkışsız kapı)', [
+      ...f,
+      'Anahtar kararı + çapa: cd Teks-Erp && npx tsx scripts/guven-capasi-ekle.ts panel … (docs/ops/ELECTRON-OTOMATIK-GUNCELLEME.md §İmzalı künye).',
+    ], 1);
+  }
+  return liste;
+}
+
+/** Async panel komutları (künye dosya özeti akışla ölçülür). */
+async function panelKomutu(komut, [kod, dizin, ek]) {
+  const { panelCapasi, panelKunyeDenetimi, panelRotasyonDenetimi, panelUzakKunyeDenetimi } = await panelImzaKapisi();
+  if (komut === 'panel-capa') {
+    if (kod) kanalCoz(kod);
+    const liste = await panelCapaDenetle(kod, dizin);
+    return void console.log(`  ✓ panel imza çapası: ${liste.map((k) => k.kid).join(', ')}${dizin ? ' · pakete gömülü' : ''}`);
+  }
+  kanalCoz(kod);
+  if (komut === 'panel-imza') {
+    if (!dizin) dur('panel-imza: paket dizini verilmedi', [], 2);
+    const liste = await panelCapaDenetle(kod, dizin);
+    const h = await panelKunyeDenetimi({ kod, dizin, liste });
+    if (h.sonuc === 'uyumlu') return void console.log(`  ✓ ${h.satirlar[0]}`);
+    dur(h.sonuc === 'imzasiz' ? 'PANEL KÜNYESİ İMZASIZ — yüklenmez' : 'PANEL KÜNYESİ GEÇERSİZ — yüklenmez', [
+      ...h.satirlar,
+      'İmza denetleyen panel bu latest.yml\'i REDDEDER ve güncellemesiz kalır.',
+    ], h.sonuc === 'imzasiz' ? 3 : 1);
+  }
+  if (komut === 'panel-rotasyon') {
+    if (!dizin || !ek) dur('panel-rotasyon: <kod> <paket dizini> <yayındaki latest.yml> gerekli', [], 2);
+    const liste = await panelCapaDenetle(kod, dizin);
+    const yerel = await panelKunyeDenetimi({ kod, dizin, liste });
+    if (yerel.sonuc !== 'uyumlu') dur('panel-rotasyon: paketin künyesi geçerli değil', yerel.satirlar, 1);
+    const h = panelRotasyonDenetimi({ yayindaki: fs.readFileSync(ek, 'utf8'), yeniKid: yerel.kid });
+    if (h.sonuc === 'uyumlu') return void console.log(`  ✓ ${h.satirlar[0]}`);
+    dur('ROTASYON KİLİDİ — sahadaki paneller bu imzayı tanımaz, yüklenmez', h.satirlar, 1);
+  }
+  if (komut === 'panel-imza-uzak') {
+    if (!dizin) dur('panel-imza-uzak: latest.yml dosyası verilmedi', [], 2);
+    const h = panelUzakKunyeDenetimi({ kod, metin: fs.readFileSync(dizin, 'utf8'), liste: panelCapasi() });
+    if (h.sonuc === 'uyumlu') return void console.log(`  ✓ ${h.satirlar[0]}`);
+    dur(h.sonuc === 'imzasiz' ? 'YAYINDAKİ KÜNYE İMZASIZ' : 'YAYINDAKİ KÜNYE GEÇERSİZ', h.satirlar, h.sonuc === 'imzasiz' ? 3 : 1);
+  }
+}
+
+const PANEL_KOMUTLARI = new Set(['panel-capa', 'panel-imza', 'panel-rotasyon', 'panel-imza-uzak']);
+
+function hataDur(e) {
+  if (e instanceof Olculemedi) dur(`ÖLÇÜLEMEDİ — ${e.message}`, ['Ölçülemeyen kapı geçmiş kapı değildir: DUR.'], 2);
+  if (e?.satirlar) dur(e.message, e.satirlar, 1);
+  dur(`beklenmeyen hata: ${e?.stack ?? e}`, [], 2);
+}
+
 function main(argv) {
   const [komut, kod, dizin] = argv;
+  if (PANEL_KOMUTLARI.has(komut)) {
+    panelKomutu(komut, argv.slice(1)).catch(hataDur);
+    return;
+  }
   try {
     if (komut === 'kanal') {
       const { kanal } = kanalCoz(kod);
@@ -131,11 +204,9 @@ function main(argv) {
       void yayinBildirVeBas({ olay: 'TERFI_ATLANDI', urun, kanal: kod, surum, ayrinti: { cumle: c.cumle, etiket: t.ad } });
       return;
     }
-    dur(`bilinmeyen komut: ${komut ?? '(yok)'}`, ['kanal <kod> · panel-paketle <kod> · backend-paketle <kod> · panel-derleme <kod> · panel-yayin <kod> <dizin> · terfi <kod> <ürün> <sürüm> · terfi-atla-kaydi <kod> <ürün> <sürüm> <cümle>'], 2);
+    dur(`bilinmeyen komut: ${komut ?? '(yok)'}`, ['kanal <kod> · panel-paketle <kod> · backend-paketle <kod> · panel-derleme <kod> · panel-yayin <kod> <dizin> · terfi <kod> <ürün> <sürüm> · terfi-atla-kaydi <kod> <ürün> <sürüm> <cümle> · panel-capa [<kod> <dizin>] · panel-imza <kod> <dizin> · panel-rotasyon <kod> <dizin> <dosya> · panel-imza-uzak <kod> <dosya>'], 2);
   } catch (e) {
-    if (e instanceof Olculemedi) dur(`ÖLÇÜLEMEDİ — ${e.message}`, ['Ölçülemeyen kapı geçmiş kapı değildir: DUR.'], 2);
-    if (e?.satirlar) dur(e.message, e.satirlar, 1);
-    dur(`beklenmeyen hata: ${e?.stack ?? e}`, [], 2);
+    hataDur(e);
   }
 }
 

@@ -31,6 +31,7 @@ import {
   guvenliYenile,
   kuruluVersionName,
 } from '../services/appUpdate.service';
+import type { ApkDoc } from '../services/apkKunye';
 import { refreshOtaDownloadToken } from '../services/downloadToken.service';
 import {
   kilitlenmeliMi,
@@ -49,7 +50,9 @@ export default function UpdateGate() {
   const { isUpdatePending } = Updates.useUpdates();
   const [politikaDurum, setPolitikaDurum] = useState<PolitikaDurumu>({ eski: false, sebep: null });
   const [apkHazir, setApkHazir] = useState(false);
-  const [apkUrl, setApkUrl] = useState<string | null>(null);
+  // Kurulum YALNIZ imzası doğrulanmış künyeyle; red/hata metni operatöre gösterilir (kurulum yok).
+  const [apkDoc, setApkDoc] = useState<ApkDoc | null>(null);
+  const [apkWarning, setApkWarning] = useState<string | null>(null);
   const [kuruluyor, setKuruluyor] = useState(false);
   const [yenileniyor, setYenileniyor] = useState(false);
   const sonSorma = useRef(0);
@@ -86,7 +89,8 @@ export default function UpdateGate() {
     if (durum.sebep === 'apk') {
       const a = await apkDurumu();
       setApkHazir(a.yeniVarMi);
-      setApkUrl(a.kunye?.indirmeUrl ?? null);
+      setApkDoc(a.verified ?? null);
+      setApkWarning(a.rejection?.message ?? null);
     }
   }, []);
 
@@ -170,6 +174,7 @@ export default function UpdateGate() {
             ? 'Sunucu daha yeni bir uygulama sürümü bekliyor. Kurulum dosyası hazır.'
             : 'Sunucu daha yeni bir sürüm bekliyor. Güncelleme indirildi, uygulanmayı bekliyor.'}
         </Text>
+        {politikaDurum.sebep === 'apk' && apkWarning ? <Text style={styles.uyari}>{apkWarning}</Text> : null}
         <Button
           mode="contained"
           loading={kuruluyor}
@@ -178,9 +183,12 @@ export default function UpdateGate() {
           style={styles.dugme}
           onPress={() => {
             if (politikaDurum.sebep === 'apk') {
-              if (!apkUrl) return;
+              if (!apkDoc) return;
               setKuruluyor(true);
-              void apkIndirVeKur(apkUrl).finally(() => setKuruluyor(false));
+              setApkWarning(null);
+              void apkIndirVeKur(apkDoc)
+                .then((s) => setApkWarning(s.durum === 'hata' ? s.mesaj : null))
+                .finally(() => setKuruluyor(false));
             } else {
               void guvenliYenile();
             }
@@ -198,9 +206,11 @@ export default function UpdateGate() {
     return (
       <View style={styles.serit} pointerEvents="box-none">
         <Text style={styles.seritMetin}>
-          {bekleyen > 0
-            ? `Sürümünüz eski · ${bekleyen} kayıt gönderilince güncellenecek`
-            : 'Sürümünüz eski · güncelleme indirilir indirilmez uygulanacak'}
+          {politikaDurum.sebep === 'apk' && apkWarning
+            ? `Sürümünüz eski · ${apkWarning}`
+            : bekleyen > 0
+              ? `Sürümünüz eski · ${bekleyen} kayıt gönderilince güncellenecek`
+              : 'Sürümünüz eski · güncelleme indirilir indirilmez uygulanacak'}
         </Text>
       </View>
     );
@@ -221,6 +231,7 @@ const styles = StyleSheet.create({
   },
   baslik: { color: '#fff', fontSize: 20, fontWeight: '700' },
   alt: { color: '#c7cbe0', fontSize: 15, textAlign: 'center', paddingHorizontal: 32 },
+  uyari: { color: colors.dangerContainer, fontSize: 14, textAlign: 'center', paddingHorizontal: 32 },
   dugme: { marginTop: 20, borderRadius: 10, minWidth: 200 },
   // Şerit ekranın ÜSTÜNDE ve dokunmayı geçirir (box-none): operatör çalışmaya
   // devam edebilmeli — bu, kilidin bilinçli olarak yumuşatılmış hâli.

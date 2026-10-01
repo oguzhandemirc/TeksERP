@@ -5,7 +5,10 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Callout } from "@/components/ui/callout";
 import type { UpdateStatus } from "@shared/ipc-contract";
+import { validateFeedOverride } from "@shared/update-feed";
 import { useUpdater } from "@/hooks/useUpdater";
+import { useRoleAccess } from "@/hooks/useRoleAccess";
+import { SETTINGS_ADMIN_PERMISSION } from "./settings-config";
 import { useClientPolicy } from "@/hooks/useClientPolicy";
 import { isBelowMinimum } from "@/lib/version-compare";
 import { factoryDateTimeFormat } from "@/lib/factory-time";
@@ -18,7 +21,10 @@ const dtFmt = () => factoryDateTimeFormat("tr-TR", {
 });
 
 /** Durumun operatöre görünen tek cümlelik karşılığı. */
-function describe(s: UpdateStatus): { text: string; tone: "info" | "success" | "warning" | "muted" } {
+function describe(s: UpdateStatus): {
+  text: string;
+  tone: "info" | "success" | "warning" | "danger" | "muted";
+} {
   if (!s.enabled) {
     return { text: "Geliştirme modunda çalışıyor — otomatik güncelleme kapalı.", tone: "muted" };
   }
@@ -37,7 +43,13 @@ function describe(s: UpdateStatus): { text: string; tone: "info" | "success" | "
         tone: "info",
       };
     case "error":
-      return { text: s.error ?? "Güncelleme kontrolü başarısız oldu.", tone: "warning" };
+      // İmza reddi ağ hatası değildir: kurulmayan güncellemenin güvenlik uyarısı (kod teşhis içindir).
+      return s.imzaReddi
+        ? {
+            text: `${s.error ?? "Güncelleme güvenlik denetiminden geçemedi; kurulmadı."} (${s.imzaReddi.kod})`,
+            tone: "danger",
+          }
+        : { text: s.error ?? "Güncelleme kontrolü başarısız oldu.", tone: "warning" };
     default:
       return { text: "Henüz kontrol edilmedi.", tone: "muted" };
   }
@@ -54,6 +66,10 @@ function describe(s: UpdateStatus): { text: string; tone: "info" | "success" | "
 export function UpdateSection() {
   const { status, check, install, setFeedUrl } = useUpdater();
   const policy = useClientPolicy();
+  // Adres ezmesi YALNIZ `admin:settings`: ekran donanım personeline (`settings:workstation`) de açıktır, ama
+  // güncellemenin nereden indirileceğini değiştirmek onun işi değil. Asıl kural ana süreçte (https + izinli ana
+  // makine + `/<kanal>/electron/`); bu kapı arayüz kapısıdır.
+  const canEditFeed = useRoleAccess().hasPermission(SETTINGS_ADMIN_PERMISSION);
   const [checking, setChecking] = useState(false);
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState("");
@@ -79,11 +95,17 @@ export function UpdateSection() {
 
   const handleSaveUrl = async () => {
     const next = draft.trim();
-    if (next && !/^https?:\/\//i.test(next)) {
-      toast.error("Adres http:// veya https:// ile başlamalı");
+    const v = next ? validateFeedOverride(next) : null;
+    if (v && !v.ok) {
+      toast.error(v.reason);
       return;
     }
-    await setFeedUrl(next || null);
+    try {
+      await setFeedUrl(v ? v.url : null);
+    } catch {
+      toast.error("Güncelleme adresi kabul edilmedi (yalnız izinli https adresi).");
+      return;
+    }
     setEditing(false);
     toast.success(next ? "Güncelleme adresi bu bilgisayar için değiştirildi" : "Varsayılan adrese dönüldü");
   };
@@ -141,12 +163,12 @@ export function UpdateSection() {
 
       <div className="space-y-2 border-t border-border/50 pt-3">
         <div className="text-xs font-medium text-muted-foreground">Güncelleme adresi</div>
-        {editing ? (
+        {editing && canEditFeed ? (
           <div className="flex flex-wrap items-center gap-2">
             <Input
               value={draft}
               onChange={(e) => setDraft(e.target.value)}
-              placeholder="https://…/guncelleme/electron/"
+              placeholder="https://guncelleme…/<kanal>/electron/"
               className="h-8 min-w-[280px] flex-1 font-mono text-xs"
             />
             <Button size="sm" onClick={handleSaveUrl}>
@@ -166,29 +188,26 @@ export function UpdateSection() {
                   : "Varsayılan adres — uygulamayla birlikte gelir."}
               </p>
             </div>
-            <div className="flex items-center gap-2">
-              {status.feedUrlOverridden && (
+            {canEditFeed && (
+              <div className="flex items-center gap-2">
+                {status.feedUrlOverridden && (
+                  <Button size="sm" variant="ghost" className="gap-1.5" onClick={() => void setFeedUrl(null)}>
+                    <RotateCcw className="h-3.5 w-3.5" />
+                    Varsayılana dön
+                  </Button>
+                )}
                 <Button
                   size="sm"
-                  variant="ghost"
-                  className="gap-1.5"
-                  onClick={() => void setFeedUrl(null)}
+                  variant="outline"
+                  onClick={() => {
+                    setDraft(status.feedUrlOverridden ? status.feedUrl : "");
+                    setEditing(true);
+                  }}
                 >
-                  <RotateCcw className="h-3.5 w-3.5" />
-                  Varsayılana dön
+                  Değiştir
                 </Button>
-              )}
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => {
-                  setDraft(status.feedUrlOverridden ? status.feedUrl : "");
-                  setEditing(true);
-                }}
-              >
-                Değiştir
-              </Button>
-            </div>
+              </div>
+            )}
           </div>
         )}
       </div>

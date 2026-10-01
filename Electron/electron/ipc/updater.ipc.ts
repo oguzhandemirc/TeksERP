@@ -1,9 +1,12 @@
+import { unlink } from "node:fs/promises";
 import { app, BrowserWindow, ipcMain, net } from "electron";
 import electronUpdater from "electron-updater";
 import log from "electron-log/main.js";
 import type { UpdateStatus } from "@shared/ipc-contract";
-import { DEFAULT_UPDATE_FEED_URL, UPDATE_FEED_OVERRIDE_KEY } from "@shared/update-feed";
+import { CHANNEL_CODE } from "@shared/channel";
+import { DEFAULT_UPDATE_FEED_URL, UPDATE_FEED_OVERRIDE_KEY, validateFeedOverride } from "@shared/update-feed";
 import { API_BASE_URL_STORE_KEY, AUTH_TOKEN_STORE_KEY, feedOptions, fetchDownloadToken } from "@shared/download-token";
+import { createUpdateVerifier, panelAnchor, type UpdateRejection, type UpdateVerifier } from "../guncelleme/guncelleme-dogrulama";
 import {
   UPDATE_CHECK_INTERVAL_MS,
   UPDATE_FIRST_CHECK_DELAY_MS,
@@ -40,6 +43,7 @@ let status: UpdateStatus = {
   feedUrl: DEFAULT_UPDATE_FEED_URL,
   feedUrlOverridden: false,
   enabled: false,
+  imzaReddi: null,
 };
 
 /** Durum değişimini sakla + AÇIK TÜM pencerelere yayınla. */
@@ -86,23 +90,19 @@ function toTurkishError(err: unknown): string {
   return raw || "Güncelleme kontrolü başarısız oldu.";
 }
 
-/** Ezme adresi geçerliyse onu, değilse derlemeye gömülü varsayılanı döndürür. */
+/**
+ * Ezme adresi geçerliyse onu, değilse derlemeye gömülü varsayılanı döndürür. Kural OKURKEN de uygulanır
+ * (`validateFeedOverride`: https · kanal kaydının ana makinesi · `/<kanal>/electron/`) — kasaya başka bir yoldan
+ * yazılmış ya da eski sürümün kabul ettiği (http, yabancı ana makine) değer sessizce yok sayılır.
+ */
 function resolveFeedUrl(): { url: string; overridden: boolean } {
   const raw = readSecureValue(UPDATE_FEED_OVERRIDE_KEY);
   if (!raw) return { url: DEFAULT_UPDATE_FEED_URL, overridden: false };
-  try {
-    const parsed = new URL(raw);
-    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
-      throw new Error("protokol");
-    }
-    // Sondaki `/` şart: electron-updater adrese `latest.yml` EKLER.
-    return { url: raw.endsWith("/") ? raw : `${raw}/`, overridden: true };
-  } catch {
-    // Bozuk ezme sessizce yok sayılır — makineyi güncellemesiz bırakmaktansa
-    // varsayılana dönmek doğru; yanlış adres Ayarlar ekranında zaten görünür.
-    log.warn("[updater] geçersiz feed URL ezmesi yok sayıldı", raw);
-    return { url: DEFAULT_UPDATE_FEED_URL, overridden: false };
-  }
+  const v = validateFeedOverride(raw);
+  if (v.ok) return { url: v.url, overridden: true };
+  // Makineyi güncellemesiz bırakmaktansa varsayılana dönmek doğru; yanlış adres Ayarlar ekranında görünür.
+  log.warn("[updater] geçersiz feed URL ezmesi yok sayıldı:", v.reason);
+  return { url: DEFAULT_UPDATE_FEED_URL, overridden: false };
 }
 
 /**
@@ -158,6 +158,93 @@ async function check(): Promise<UpdateStatus> {
   }
 }
 
+// ── İMZALI KÜNYE AKIŞI ───────────────────────────────────────────────────────
+// electron-updater'ın sha512'si aynı sunucudaki latest.yml'e bağlıdır (bütünlük kanıtı DEĞİL) ve paket kod
+// imzasızdır (Authenticode denetimi atlanır). Kanıt, yayın makinesinde imzalanan künyedir
+// (`electron/guncelleme/`): doğrulanamayan güncelleme İNDİRİLMEZ ve KURULMAZ.
+let verifier: UpdateVerifier | null = null;
+let installing = false;
+
+/** Güvenlik reddi: kurulum yok, TR uyarı, sağlık/teşhis için tek satır (kod + sürüm — sır yok). */
+function rejectUpdate(r: UpdateRejection): void {
+  log.warn(`[updater] güncelleme REDDEDİLDİ kod=${r.kod} surum=${r.surum ?? "-"}`);
+  const now = new Date().toISOString();
+  publish({
+    state: "error",
+    error: `${r.mesaj} Panel bu sürümle çalışmaya devam ediyor; bilgi işlem sorumlusuna bildirin.`,
+    newVersion: undefined,
+    percent: undefined,
+    lastCheckedAt: now,
+    imzaReddi: { kod: r.kod, surum: r.surum, zaman: now },
+  });
+}
+
+/**
+ * ⚠️ `autoDownload=false` İÇ AYRINTIDIR: indirme künye doğrulanınca BURADA kendiliğinden başlar — kullanıcının
+ * gördüğü akış (available → downloading → ready → geri sayım → kur) bugünküyle aynı; elle denetim de aynı yoldan.
+ */
+function onUpdateAvailable(info: { version?: string } | undefined): void {
+  const v = verifier?.checkInfo(info);
+  if (!v?.ok) {
+    rejectUpdate(v?.rejection ?? { kod: "CAPA_BOS", mesaj: "Güncelleme doğrulayıcısı kurulmamış; kurulmadı.", surum: info?.version ?? null });
+    return;
+  }
+  publish({ state: "available", newVersion: info?.version, lastCheckedAt: new Date().toISOString(), error: undefined, imzaReddi: null });
+  void updater()
+    .downloadUpdate()
+    .catch((err: unknown) => log.warn("[updater] indirme başarısız", err));
+}
+
+async function onUpdateDownloaded(info: { version?: string; downloadedFile?: string } | undefined): Promise<void> {
+  log.info("[updater] indirildi, künyeyle ölçülüyor", info?.version);
+  const v = verifier ? await verifier.checkDownloaded(info) : null;
+  if (!v?.ok) {
+    rejectUpdate(v?.rejection ?? { kod: "KUNYE_YOK", mesaj: "Güncelleme doğrulanmadı; kurulmadı.", surum: info?.version ?? null });
+    return;
+  }
+  publish({ state: "ready", newVersion: info?.version, percent: 100, error: undefined, imzaReddi: null });
+}
+
+/** electron-updater'ın ÇALIŞTIRACAĞI dosya (NSIS: indirme önbelleğindeki kurulum) — doğrulanan dosya olmalı. */
+function installerPath(): unknown {
+  return (updater() as unknown as { installerPath?: unknown }).installerPath;
+}
+
+async function installVerified(): Promise<void> {
+  if (!status.enabled || status.state !== "ready" || installing || !verifier) return;
+  installing = true;
+  try {
+    const v = await verifier.checkBeforeInstall(installerPath());
+    if (!v.ok) {
+      rejectUpdate(v.rejection);
+      return;
+    }
+    log.info("[updater] kurulum başlatılıyor", status.newVersion);
+    // isSilent=true → NSIS sihirbazı açılmaz. Uygulama "Program Files"a kurulu
+    // olduğu için Windows yine de bir kez yönetici izni sorar; kullanıcı "Evet"
+    // dedikten sonrası sessizdir. isForceRunAfter=true → kurulumdan sonra
+    // uygulama kendiliğinden geri açılır (operatör boş ekranla kalmasın).
+    setImmediate(() => updater().quitAndInstall(true, true));
+  } finally {
+    installing = false;
+  }
+}
+
+/** Ezme YAZIMI: kural (`validateFeedOverride`) burada da uygulanır; geçersiz adres yazılmaz, çağırana hata döner. */
+async function setFeedOverride(next: string | null): Promise<UpdateStatus> {
+  if (next && next.trim()) {
+    const v = validateFeedOverride(next);
+    if (!v.ok) throw new Error(v.reason);
+    writeSecureValue(UPDATE_FEED_OVERRIDE_KEY, v.url);
+  } else deleteSecureValue(UPDATE_FEED_OVERRIDE_KEY);
+  if (status.enabled) await applyFeedUrl();
+  else {
+    const r = resolveFeedUrl();
+    publish({ feedUrl: r.url, feedUrlOverridden: r.overridden });
+  }
+  return status;
+}
+
 export function registerUpdaterIpc(): void {
   const packaged = app.isPackaged;
   const { url, overridden } = resolveFeedUrl();
@@ -170,26 +257,8 @@ export function registerUpdaterIpc(): void {
 
   ipcMain.handle("updater:status", () => status);
   ipcMain.handle("updater:check", () => check());
-  ipcMain.handle("updater:set-feed-url", async (_e, next: string | null) => {
-    if (next && next.trim()) writeSecureValue(UPDATE_FEED_OVERRIDE_KEY, next.trim());
-    else deleteSecureValue(UPDATE_FEED_OVERRIDE_KEY);
-    if (status.enabled) await applyFeedUrl();
-    else {
-      const r = resolveFeedUrl();
-      publish({ feedUrl: r.url, feedUrlOverridden: r.overridden });
-    }
-    return status;
-  });
-
-  ipcMain.on("updater:install", () => {
-    if (!status.enabled || status.state !== "ready") return;
-    log.info("[updater] kurulum başlatılıyor", status.newVersion);
-    // isSilent=true → NSIS sihirbazı açılmaz. Uygulama "Program Files"a kurulu
-    // olduğu için Windows yine de bir kez yönetici izni sorar; kullanıcı "Evet"
-    // dedikten sonrası sessizdir. isForceRunAfter=true → kurulumdan sonra
-    // uygulama kendiliğinden geri açılır (operatör boş ekranla kalmasın).
-    setImmediate(() => updater().quitAndInstall(true, true));
-  });
+  ipcMain.handle("updater:set-feed-url", (_e, next: string | null) => setFeedOverride(next));
+  ipcMain.on("updater:install", () => void installVerified());
 
   if (!packaged) {
     // Dev'de electron-updater "application is not packed" ile hata fırlatır;
@@ -198,8 +267,15 @@ export function registerUpdaterIpc(): void {
     return;
   }
 
+  verifier = createUpdateVerifier({
+    keys: panelAnchor,
+    channel: CHANNEL_CODE,
+    installedVersion: app.getVersion(),
+    removeFile: (p) => unlink(p),
+  });
   updater().logger = log;
-  updater().autoDownload = true;
+  // İndirme künye doğrulandıktan SONRA `onUpdateAvailable` başlatır (yukarıda); görünen akış değişmez.
+  updater().autoDownload = false;
   // Kapanışta sessizce kurma KAPALI: uygulama "Program Files"a kurulu olduğu
   // için kurulum yönetici izni ister. Kapanışta tetiklenirse operatör gittikten
   // sonra ekranda cevapsız bir izin penceresi asılı kalır. Kurulum yalnız
@@ -208,14 +284,7 @@ export function registerUpdaterIpc(): void {
   void applyFeedUrl();
 
   updater().on("checking-for-update", () => publish({ state: "checking", error: undefined }));
-  updater().on("update-available", (info) =>
-    publish({
-      state: "available",
-      newVersion: info?.version,
-      lastCheckedAt: new Date().toISOString(),
-      error: undefined,
-    }),
-  );
+  updater().on("update-available", (info) => onUpdateAvailable(info));
   updater().on("update-not-available", () =>
     publish({
       state: "up-to-date",
@@ -223,15 +292,13 @@ export function registerUpdaterIpc(): void {
       percent: undefined,
       lastCheckedAt: new Date().toISOString(),
       error: undefined,
+      imzaReddi: null,
     }),
   );
   updater().on("download-progress", (p) =>
     publish({ state: "downloading", percent: Math.round(p?.percent ?? 0) }),
   );
-  updater().on("update-downloaded", (info) => {
-    log.info("[updater] indirildi", info?.version);
-    publish({ state: "ready", newVersion: info?.version, percent: 100, error: undefined });
-  });
+  updater().on("update-downloaded", (info) => void onUpdateDownloaded(info));
   updater().on("error", (err) => {
     log.error("[updater] hata", err);
     publish({ state: "error", error: toTurkishError(err) });

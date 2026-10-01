@@ -10,6 +10,12 @@
 #   ./deploy/electron-yayinla.sh --musteri=adnansahin --dogrula   # YÜKLEME YOK — yayını denetle
 #   ./deploy/electron-yayinla.sh --musteri=testfabrika --kuru     # AĞ YOK — yerel kapılar + yükleme planı
 #   ./deploy/electron-yayinla.sh --musteri=adnansahin --terfi-atla="<kullanıcının cümlesi>"  # K5 acil kaçışı
+#   ./deploy/electron-yayinla.sh --musteri=adnansahin --anahtar=<panel imza anahtarı>  # künye imzasızsa burada imzalanır
+#
+# ⚠️ İMZALI KÜNYE: latest.yml, panelin gömülü çapasındaki anahtarla imzalanmış künye (`tekserp:` bloğu) taşımadan
+# YÜKLENMEZ — imza denetleyen panel künyesiz/geçersiz sürümü reddeder ve güncellemesiz kalır. Künye imzasızsa betik
+# imza aracını çağırır (`Teks-Erp/scripts/panel-imza.ts`; anahtar `--anahtar=` ya da TEKSERP_PANEL_IMZA_ANAHTARI,
+# parola TTY'den). Rotasyon kilidi: imzalayan, yayındaki sürümün künyesindeki çapada olmalı.
 #
 # ⚠️ TERFİ (K5): `terfiKaynagi` olan kanala (adnansahin) yalnız terfi etiketli commit'ten, hazırlık
 # kanalında yayınlanmış sürüm çıkar (scripts/lib/terfi.mjs); kaçış yalnız kullanıcının cümlesiyle.
@@ -49,9 +55,11 @@ kuru=0
 surum_arg=""
 terfi_atla=""
 terfi_atla_verildi=0
+panel_anahtar="${TEKSERP_PANEL_IMZA_ANAHTARI:-}"
 for a in "$@"; do
   case "$a" in
     --musteri=*) musteri="${a#--musteri=}" ;;
+    --anahtar=*) panel_anahtar="${a#--anahtar=}" ;;
     --dogrula) denetim_kipi=1 ;;
     --kuru) kuru=1 ;;
     --terfi-atla=*) terfi_atla="${a#--terfi-atla=}"; terfi_atla_verildi=1 ;;
@@ -122,6 +130,26 @@ if [ "$denetim_kipi" = "0" ]; then
   else
     node "$kok/scripts/kanal-kapisi.mjs" terfi "$musteri" panel "$surum" \
       || hata "Terfi kapısı geçilmedi — yükleme yapılmadı."
+  fi
+fi
+
+# --- İMZALI KÜNYE KAPISI — ssh'tan ÖNCE ----------------------------------------
+# latest.yml'in künyesi panelin kabul edeceği künye mi (çapa · imza · kanal · dosya boyu + sha512)? İmzasızsa imza
+# aracı burada çağrılır (parola TTY'den); imzasız ya da geçersiz künye hiçbir koşulda YÜKLENMEZ. --kuru imzalamaz.
+if [ "$denetim_kipi" = "0" ]; then
+  imza_durum=0
+  node "$kok/scripts/kanal-kapisi.mjs" panel-imza "$musteri" "$rel" || imza_durum=$?
+  if [ "$imza_durum" = "3" ] && [ "$kuru" = "1" ]; then
+    echo "[kuru] künye     : İMZASIZ — gerçek yayında imzalanır (--anahtar=<dosya> + parola)"
+  elif [ "$imza_durum" = "3" ]; then
+    [ -n "$panel_anahtar" ] || hata "Panel künyesi İMZASIZ ve imza anahtarı verilmedi — yükleme yapılmadı.
+  --anahtar=<panel imza anahtarı dosyası> (ya da TEKSERP_PANEL_IMZA_ANAHTARI); parola TTY'den sorulur."
+    ( cd "$kok/Teks-Erp" && npx tsx scripts/panel-imza.ts imzala --musteri="$musteri" --dizin-paket="$rel" --anahtar="$panel_anahtar" ) \
+      || hata "Künye imzalanamadı — yükleme yapılmadı."
+    node "$kok/scripts/kanal-kapisi.mjs" panel-imza "$musteri" "$rel" \
+      || hata "İmzalanan künye kapıdan geçmedi — yükleme yapılmadı."
+  elif [ "$imza_durum" != "0" ]; then
+    hata "Panel künyesi geçersiz — yükleme yapılmadı (yukarıdaki satırlar)."
   fi
 fi
 
@@ -200,13 +228,34 @@ if [ "$denetim_kipi" = "0" ]; then
     fi
   fi
 
+  # --- ROTASYON KİLİDİ — sahadaki panel bir sonraki sürümü KENDİ gömülü çapasıyla doğrular -------------
+  # Yayındaki latest.yml künyeliyse yeni imzalayan onun `capa`sında olmalı; değilse o paneller bu sürümü KURMAZ.
+  # Okuma ssh ile diskten (3c'); kopuk ssh ÖLÇÜLEMEDİ = dur.
+  yayindaki_yml="$(mktemp "${TMPDIR:-/tmp}/tekserp-yayindaki.XXXXXX")" || hata "Geçici dosya açılamadı."
+  rot_kod=0
+  ssh "$SSH_HEDEF" "test -f '$UZAK_DIZIN/latest.yml'" 2>/dev/null || rot_kod=$?
+  if [ "$rot_kod" = "0" ]; then
+    ssh "$SSH_HEDEF" "cat '$UZAK_DIZIN/latest.yml'" > "$yayindaki_yml" 2>/dev/null \
+      || { rm -f "$yayindaki_yml"; hata "Yayındaki latest.yml okunamadı — rotasyon kilidi ÖLÇÜLEMEDİ, yükleme yapılmadı."; }
+  elif [ "$rot_kod" != "1" ]; then
+    rm -f "$yayindaki_yml"
+    hata "Yayın sunucusuna ulaşılamadı (ssh $rot_kod) — rotasyon kilidi ÖLÇÜLEMEDİ, yükleme yapılmadı."
+  fi
+  node "$kok/scripts/kanal-kapisi.mjs" panel-rotasyon "$musteri" "$rel" "$yayindaki_yml" \
+    || { rm -f "$yayindaki_yml"; hata "Rotasyon kilidi — yükleme yapılmadı."; }
+
   if [ "${atla_yukleme:-0}" != "1" ]; then
   echo "1/2  paket + blockmap..."
   scp "$setup" "$blockmap" "$SSH_HEDEF:$UZAK_DIZIN/"
 
   echo "2/2  latest.yml (en son — sıra önemli)..."
   scp "$latest" "$SSH_HEDEF:$UZAK_DIZIN/"
+  elif ! cmp -s "$yayindaki_yml" "$latest"; then
+    # Paket aynı baytla yayında ama latest.yml (künye) farklı: yarım kalmış yayının tamamlanması — yalnız o gider.
+    echo "2/2  latest.yml (paket zaten yayında; künyeli latest.yml yükleniyor)..."
+    scp "$latest" "$SSH_HEDEF:$UZAK_DIZIN/"
   fi
+  rm -f "$yayindaki_yml"
 
   # --- SAĞLAMA DOĞRULAMASI (boyut YETMEZ) --------------------------------
   # Boyut kıyası yarım yüklemeyi yakalar ama BOZUK yüklemeyi yakalamaz: aynı
@@ -268,6 +317,25 @@ yayindaki=$(belirtecli_curl -fsS "$YAYIN_URL/latest.yml?onbellek-atla=$$" | grep
 [ "$yayindaki" = "$surum" ] || hata "Yayındaki sürüm '$yayindaki', beklenen '$surum'."
 
 dogrula "latest.yml" ""
+
+# --- KENARDAKİ KÜNYE — panelin indireceği latest.yml imzalı mı? ---------------
+# Yayında: kenardaki dosya yerelde imzalanan dosyanın BAYT-EŞİDİ olmalı. --dogrula: künye çapayla doğrulanır;
+# künyesiz yayın (imza öncesi sürüm) uyarıdır — imza denetleyen panel onu KURMAZ.
+uzak_yml="$(mktemp "${TMPDIR:-/tmp}/tekserp-uzak-yml.XXXXXX")" || hata "Geçici dosya açılamadı."
+belirtecli_curl -fsS "$YAYIN_URL/latest.yml?onbellek-atla=$$" > "$uzak_yml" \
+  || { rm -f "$uzak_yml"; hata "Yayındaki latest.yml indirilemedi — künye denetlenemedi."; }
+if [ "$denetim_kipi" = "1" ]; then
+  uzak_kod=0
+  node "$kok/scripts/kanal-kapisi.mjs" panel-imza-uzak "$musteri" "$uzak_yml" || uzak_kod=$?
+  if [ "$uzak_kod" = "3" ]; then echo "  ⚠️ yayındaki latest.yml KÜNYESİZ — imza denetleyen paneller bu sürümü kurmaz";
+  elif [ "$uzak_kod" != "0" ]; then rm -f "$uzak_yml"; hata "Yayındaki künye geçersiz."; fi
+else
+  cmp -s "$uzak_yml" "$latest" \
+    || { rm -f "$uzak_yml"; hata "Kenardaki latest.yml yerelde imzalanan dosya DEĞİL — Cloudflare önbelleği ya da yarım yükleme (Purge by URL: $YAYIN_URL/latest.yml)."; }
+  echo "  ✓ kenardaki latest.yml = imzalı künyeli yerel dosya"
+fi
+rm -f "$uzak_yml"
+
 if [ "$denetim_kipi" = "1" ]; then
   # Yerel paket yoksa boyut kıyası yapılamaz; yalnız erişilebilirlik denetlenir.
   dogrula "TeksERP-$surum-Setup.exe.blockmap" ""

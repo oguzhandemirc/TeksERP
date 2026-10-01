@@ -275,6 +275,20 @@ export interface UpdateStatus {
   feedUrlOverridden: boolean;
   /** Paketlenmiş uygulama mı — false ise güncelleme hiç denenmez. */
   enabled: boolean;
+  /**
+   * Son GÜVENLİK reddi: imzalı künyesi doğrulanamadığı için indirilmeyen/kurulmayan güncelleme (ağ hatası
+   * DEĞİL). Doğrulanan bir güncelleme ya da "güncel" sonucu temizler; arada yapılan denetimler korur.
+   * `kod` kapalı küme (`electron/guncelleme/panel-kunye.mjs` `RELEASE_ERROR_CODES`), metin `error`da.
+   */
+  imzaReddi?: UpdateSignatureRejection | null;
+}
+
+export interface UpdateSignatureRejection {
+  kod: string;
+  /** Reddedilen sürüm (latest.yml'in söylediği; bilinmiyorsa null). */
+  surum: string | null;
+  /** ISO — reddin zamanı. */
+  zaman: string;
 }
 
 export interface UpdaterApi {

@@ -4,7 +4,7 @@ import { Topbar } from "./Topbar";
 import { CommandPalette } from "./CommandPalette";
 import { ShortcutsDialog } from "./ShortcutsDialog";
 import { TabHost } from "./tabs";
-import { UpdateDownloadStrip } from "./UpdateGate";
+import { UpdateStrips } from "./UpdateSecurityStrip";
 import { SurumNotlariDialog } from "./SurumNotlariDialog";
 import { useSurumNotuAcilis } from "@/hooks/useSurumNotuAcilis";
 import { useGirisGuncellemeKontrolu } from "@/hooks/useGirisGuncellemeKontrolu";
@@ -95,8 +95,8 @@ export function AppShell() {
         onOpenCommand={() => setPaletteOpen(true)}
       />
       {/* Kurulum tetiği (`UpdateGate`) burada DEĞİL, `App.tsx` `Root`ta — giriş
-          ekranı ve patron kabuğu da kurabilsin. Burada yalnız indirme şeridi. */}
-      <UpdateDownloadStrip />
+          ekranı ve patron kabuğu da kurabilsin. Burada yalnız şeritler (indirme + imza reddi). */}
+      <UpdateStrips />
       {/* Lisans bandı backend'in uyguladığı karardır; gözlemde hiç çizilmez. */}
       <LicenseBanner />
       <FactoryTimezoneBanner />

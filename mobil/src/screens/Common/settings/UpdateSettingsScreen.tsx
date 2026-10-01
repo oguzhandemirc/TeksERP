@@ -75,6 +75,7 @@ export default function UpdateSettingsScreen() {
   const [apk, setApk] = useState<ApkDurum | null>(null);
   const [apkIsleniyor, setApkIsleniyor] = useState(false);
   const [apkOran, setApkOran] = useState(0);
+  const [apkVerifying, setApkVerifying] = useState(false);
   const [apkHata, setApkHata] = useState<string | null>(null);
   const [yenileniyor, setYenileniyor] = useState(false);
 
@@ -142,17 +143,22 @@ export default function UpdateSettingsScreen() {
   }, []);
 
   const apkKur = useCallback(async () => {
-    const url = apk?.kunye?.indirmeUrl;
-    if (!url) return;
+    // Kurulum YALNIZ imzası doğrulanmış künyeyle (adres de oradan türer, `indirmeUrl` kullanılmaz).
+    const doc = apk?.verified;
+    if (!doc) return;
     setApkIsleniyor(true);
     setApkHata(null);
     setApkOran(0);
-    const s = await apkIndirVeKur(url, setApkOran);
+    setApkVerifying(false);
+    const s = await apkIndirVeKur(doc, (oran, stage) => {
+      setApkOran(oran);
+      setApkVerifying(stage === 'verify');
+    });
     if (s.durum === 'hata') {
       setApkHata(s.mesaj);
       Toast.show({
         type: 'error',
-        text1: 'Kurulum dosyası indirilemedi',
+        text1: 'Kurulum dosyası kurulmadı',
         text2: s.mesaj,
       });
       await apkTemizle();
@@ -249,12 +255,14 @@ export default function UpdateSettingsScreen() {
               tone="primary"
               icon="download"
               label="İndir ve kur"
-              busyLabel={`İndiriliyor… %${Math.round(apkOran * 100)}`}
+              busyLabel={`${apkVerifying ? 'Doğrulanıyor' : 'İndiriliyor'}… %${Math.round(apkOran * 100)}`}
               busy={apkIsleniyor}
               onPress={() => void apkKur()}
               style={styles.dugme}
             />
           </>
+        ) : apk?.rejection ? (
+          <Text style={styles.durumKotu}>{apk.rejection.message}</Text>
         ) : (
           <Text style={styles.durumIyi}>
             {apk === null ? 'Kontrol ediliyor…' : 'Kurulum dosyası güncel.'}
