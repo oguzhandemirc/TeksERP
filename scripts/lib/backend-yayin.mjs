@@ -115,8 +115,9 @@ export function yayinPlani({ vdsBackend, backendDefter, surum, paketAd, pgAd = n
       geciciAc: `mkdir -p ${tirnak(gecici)}`,
       olc: `sha256sum ${tirnak(`${gecici}/${paketAd}`)} | cut -d' ' -f1 && stat -c %s ${tirnak(`${gecici}/${paketAd}`)}` +
         (pgAd ? ` && sha256sum ${tirnak(`${gecici}/${pgAd}`)} | cut -d' ' -f1 && stat -c %s ${tirnak(`${gecici}/${pgAd}`)}` : ''),
-      yayinla: `test ! -e ${tirnak(surumDizini)} && mv ${tirnak(gecici)} ${tirnak(surumDizini)}`,
-      sonJsonYaz: `mv ${tirnak(sonJsonGecici)} ${tirnak(sonJson)}`,
+      // Kip AÇIKÇA yazılır: scp yerel kipi taşır — 0600 bir paket nginx'e 403 olurdu (thinkpad-1 D8b, 2.14.7).
+      yayinla: `chmod -R u=rwX,go=rX ${tirnak(gecici)} && test ! -e ${tirnak(surumDizini)} && mv ${tirnak(gecici)} ${tirnak(surumDizini)}`,
+      sonJsonYaz: `chmod 0644 ${tirnak(sonJsonGecici)} && mv ${tirnak(sonJsonGecici)} ${tirnak(sonJson)}`,
       geciciSil: `rm -rf ${tirnak(gecici)} ${tirnak(sonJsonGecici)}`,
     },
   };
@@ -144,7 +145,7 @@ export function pgYayinPlani({ vdsBackend, surum, derleme, paketAd, damga }) {
       hazirMi: `test -f ${tirnak(`${dizin}/${paketAd}`)} && test -f ${tirnak(`${dizin}/pg.json`)}`,
       geciciAc: `mkdir -p ${tirnak(gecici)}`,
       olc: `sha256sum ${tirnak(`${gecici}/${paketAd}`)} | cut -d' ' -f1 && stat -c %s ${tirnak(`${gecici}/${paketAd}`)}`,
-      yayinla: `test ! -e ${tirnak(dizin)} && mv ${tirnak(gecici)} ${tirnak(dizin)}`,
+      yayinla: `chmod -R u=rwX,go=rX ${tirnak(gecici)} && test ! -e ${tirnak(dizin)} && mv ${tirnak(gecici)} ${tirnak(dizin)}`,
       geciciSil: `rm -rf ${tirnak(gecici)}`,
     },
   };
