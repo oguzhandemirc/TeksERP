@@ -11,6 +11,7 @@
 //   §3 sayfa gövdesi: tek betik, kalmış `${` yok, CSP başlıkları değişmedi.
 //   §4 ⭐ akış: tek zarf → /v1/cevrimdisi POST; üç istek parçası üç ayrı açılışta birikir, üçüncüde
 //      BİRLEŞİK zarf gönderilir ve depo silinir; yanıt parçalı QR olarak çizilir, metin kopyalanabilir.
+//      Lisans v2 (§4h–§4k): yanıttaki kiradan ödenmiş tarih (P) ve kapanış uyarısı tek satırda; eski kirada gizli.
 // ⭐ KALICI SONDA ✓K: eşdeğerlik denetçisi hedef boyu bozulmuş kütüphaneyi, altın denetçisi tek
 //   modülü değişmiş matrisi yakalar; doğru girdide susarlar.
 // =============================================================================
@@ -167,6 +168,24 @@ async function akis(): Promise<void> {
   check("§4f kurcalanmış parça gönderilmez, depoya yazılmaz", bozuk.fetchler.length === 0 && bozukDepo.size === 0 && bozuk.durum.includes("parçası değil"));
   const red = await sayfayiAc({ hash: "eyJabc", depo: new Map(), fetchYaniti: { ok: false, text: JSON.stringify({ success: false, message: "İstek süresi dolmuş.", details: { code: "ISTEK_ZAMAN" } }) } });
   check("§4g satıcı reddi: sebep cümlesi gösterilir, QR çizilmez", red.durum === "Sunucu isteği reddetti: İstek süresi dolmuş." && red.qrSvgSayisi === 0);
+
+  // Lisans v2: yanıttaki kiradan ödenmiş tarih (P) ve kapanış uyarısı okunur (kira bizim imzalı belgemiz; yalnız gösterim).
+  const kiraMetni = (yuk: object) => `eyJ0eXAiOiJ4In0.${Buffer.from(JSON.stringify(yuk), "utf8").toString("base64url")}.imza`;
+  const yanitla = (yuk: object) => JSON.stringify({ v: 1, hak: null, kira: kiraMetni(yuk), indirmeBelirtecleri: [], sunucuSaati: "2026-10-01T10:00:00.000Z" });
+  const gun = (iso: string) => new Date(iso).toLocaleDateString("tr-TR");
+  const p = "2026-12-31T09:00:00.000Z";
+  const odenmis = await sayfayiAc({ hash: "eyJabc", depo: new Map(), fetchYaniti: { ok: true, text: yanitla({ odenmisTarih: p, yaptirim: { kademe: null, mesaj: "Ödeme ğüşıöç" } }) } });
+  check("§4h ⭐ kira P taşıyorsa 'Ödenmiş tarih' tek satırda (UTF-8 yük doğru çözülür), kapanış uyarısı yok", odenmis.ozet === `Ödenmiş tarih: ${gun(p)}`, String(odenmis.ozet));
+  const suresiz = await sayfayiAc({ hash: "eyJabc", depo: new Map(), fetchYaniti: { ok: true, text: yanitla({ odenmisTarih: null }) } });
+  check("§4i P = null → 'süresiz'", suresiz.ozet === "Ödenmiş tarih: süresiz", String(suresiz.ozet));
+  const t = "2026-11-01T10:00:00.000Z";
+  const kapanis = await sayfayiAc({ hash: "eyJabc", depo: new Map(), fetchYaniti: { ok: true, text: yanitla({ odenmisTarih: p, kapanis: "KOPYA", yaptirim: { kademe: "K3", kisitlamaTarihi: t } }) } });
+  check(
+    "§4j ⭐ kapanış kirası: kısıtlama tarihli UYARI satırı (QR yine çizilir — fabrika kirayı alır)",
+    (kapanis.ozet ?? "").includes(`kapanış kirası verildi — lisans ${gun(t)} tarihinde kısıtlı kipe`) && kapanis.qrSvgSayisi === 1,
+    String(kapanis.ozet),
+  );
+  check("§4k eski kira (P alanı yok) ya da çözülemeyen yük → özet satırı GİZLİ", tek.ozet === null && (await sayfayiAc({ hash: "eyJabc", depo: new Map(), fetchYaniti: { ok: true, text: yanitla({ kiraId: "x" }) } })).ozet === null);
 }
 
 function sondalar(): void {

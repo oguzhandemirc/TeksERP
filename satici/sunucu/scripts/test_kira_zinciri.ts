@@ -10,14 +10,22 @@
 // kümeyi kabul edince (meşru donanım değişimi) kira döner · ardışık "yakala" → ayırt edilemeyen
 // kopya uyarısı (yalnız uyarı) · D2s: sunulan kira bu kurulumun kira defterinde yoksa YABANCI_KIRA, raporlanan
 // kip elindeki kiranın zorlamasıyla uyuşmuyorsa KIP_UYUSMAZ — ikisi de yalnız uyarı, kira yine verilir.
+// Lisans v2 (L2-4): §9 K6 kapanış kirası — çatalın ikinci penceresinde kapanış kirasını anlayan (`odenmis-tarih`)
+// eşleşmeyen tarafa 403 yerine İMZALI K3 (çapa = ilk red anı + ek süre; tekrar yoklamada AYNI kira, yeni yaptırımda
+// yeni kira ama AYNI tarih; uç ilerlemez) · §10 taşınmış anahtar ve iptal kurulum kapanışı (çapa kurulum kaydından) ·
+// §11 YABANCI_HAK (kimlik/sürüm defterde yok ya da bayt özeti tutmuyor; doğru özet susar) · §12 YEREL_MUDAHALE
+// (sıra geriledi/sıfırlandı · lisans izi kayıp · belirsizlik · saat sapması; yeni neden başına bildirim; çatal tarafı
+// sırayı yazamaz) + yetenek kaydı · §13 uzatma dosyası ucu (dosya yüklenmeden ebeveynle gelen → tekrar/olağan, yakala değil).
 // Sunucu kısa kopya penceresiyle kalkar (KOPYA_PENCERE_SN=2) — ikinci pencere beklenerek ölçülür.
 // ⭐ KALICI SONDA ✓K4 (her koşumda): sahip taraf ikinci pencerede de 200 alır (kapı "çatalda herkesi
 //    reddet" diye kör olsaydı kırmızı) · pencere dolmadan eşleşmeyen taraf 200 alır (anında red yok) ·
 //    olağan zincirde YABANCI_KIRA/KIP_UYUSMAZ DOĞMAZ · zorlama yeni açıldığında ESKİ kirayla gelen gözlem
-//    kipi uyarı sayılmaz (beklenen kip sunulan kiradan).
+//    kipi uyarı sayılmaz (beklenen kip sunulan kiradan) · kapanışı anlamayan istemci 403'ü alır (eski fabrika sıfır
+//    fark) · sahip kapanıştan sonra da yaptırımsız kira alır · doğru HAK özeti uyarı doğurmaz · artan sıra uyarı
+//    doğurmaz · uzatma dosyası ucu olmayan zincirde ebeveynle gelen YAKALA kalır.
 // Koşum: npx tsx scripts/test_kira_zinciri.ts
 // =============================================================================
-import { ENDPOINTS, digestFingerprint, parseJws, type Fingerprint } from "../src/lisans-protokol";
+import { DAY_MS, ENDPOINTS, digestFingerprint, jwsDigest, parseJws, type Fingerprint } from "../src/lisans-protokol";
 import { HAM_PARMAK_IZI, kurulumAnahtariUret, type TestAnahtari } from "../../../Teks-Erp/scripts/lib/lisans-fikstur";
 import {
   anahtarOrtamiKur,
@@ -25,6 +33,7 @@ import {
   hedefDbKapisi,
   imzaliPost,
   kapat,
+  kiraYuku,
   kontrol,
   kurulumFiksturu,
   sonuc,
@@ -71,7 +80,193 @@ async function main(): Promise<void> {
   };
   const yokla = (kurulumId: string, anahtar: TestAnahtari, sonKiraId: string | null, parmakIzi: Fingerprint) =>
     imzaliPost(sunucu.genel, ENDPOINTS.POLL, { kurulumId, amac: "yokla", anahtar, govde: yoklamaGovdesi({ sonKiraId, parmakIzi }) });
+  type V2 = NonNullable<Parameters<typeof yoklamaGovdesi>[0]["v2"]>;
+  const yoklaV2 = (kurulumId: string, anahtar: TestAnahtari, sonKiraId: string | null, parmakIzi: Fingerprint, v2: V2, hak: { hakId: string; surum: number; ozet?: string } | null = null) =>
+    imzaliPost(sunucu.genel, ENDPOINTS.POLL, { kurulumId, amac: "yokla", anahtar, govde: yoklamaGovdesi({ sonKiraId, parmakIzi, v2, hak }) });
+  const P_YETENEK = { yetenekler: ["odenmis-tarih"] };
   const karar = async (kiraId: string | undefined) => (kiraId ? (await prisma.kira.findUnique({ where: { id: kiraId } }))?.karar : undefined);
+  const ekSureMs = ctx.config.EK_SURE_GUN * DAY_MS;
+  const yaptirimOf = (y: Yanit) => (y.status === 200 ? (kiraYuku(y.json).yaptirim ?? {}) : {}) as { kademe?: string | null; kisitlamaTarihi?: string | null };
+
+  async function kapanisKopya(): Promise<void> {
+    console.log("\n§9 K6 kapanış kirası — çatalın ikinci penceresi");
+    const an = kurulumAnahtariUret();
+    const { k: kk, t0: c0 } = await etkinlestir(an);
+    const c1 = kiraOf(await yokla(kk.kurulumId, an, c0, fpA))!.kiraId;
+    const ilk = await yoklaV2(kk.kurulumId, an, c0, fpB, P_YETENEK);
+    kontrol("§9a ilk pencerede kapanışı anlayan klon da OLAĞAN kira alır (anında kapanış yok)", ilk.status === 200 && kiraYuku(ilk.json).kapanis === undefined && (await karar(kiraOf(ilk)?.kiraId)) === "CATAL");
+    // Sahip yoklar (uç onda): klonun elindeki kira artık geride → çatal sürer.
+    const sahip0 = kiraOf(await yoklaV2(kk.kurulumId, an, c1, fpA, P_YETENEK))!.kiraId;
+    await bekle(PENCERE_SN * 1000 + 300);
+    const ucOnce = (await prisma.kurulum.findUniqueOrThrow({ where: { id: kk.kurulumDbId } })).sonKiraId;
+    const kap = await yoklaV2(kk.kurulumId, an, kiraOf(ilk)!.kiraId, fpB, P_YETENEK);
+    const yuk = kap.status === 200 ? kiraYuku(kap.json) : {};
+    const uyari = await prisma.kopyaUyarisi.findFirstOrThrow({ where: { kurulumId: kk.kurulumDbId, tur: "ZINCIR_CATALI" } });
+    const beklenen = new Date(uyari.redZamani!.getTime() + ekSureMs).toISOString();
+    kontrol(
+      "§9b ⭐ ikinci pencere + `odenmis-tarih` → 200 İMZALI kapanış kirası: kapanis=KOPYA, K3 = ilk red anı + ek süre",
+      kap.status === 200 && yuk.kapanis === "KOPYA" && yaptirimOf(kap).kademe === "K3" && yaptirimOf(kap).kisitlamaTarihi === beklenen,
+      `${kap.status} ${kap.kod ?? ""} ${String(yaptirimOf(kap).kisitlamaTarihi)} ≟ ${beklenen}`,
+    );
+    const satir = typeof yuk.kiraId === "string" ? await prisma.kira.findUnique({ where: { id: yuk.kiraId } }) : null;
+    const ucSonra = (await prisma.kurulum.findUniqueOrThrow({ where: { id: kk.kurulumDbId } })).sonKiraId;
+    kontrol(
+      "§9c kapanış kirası defterde KAPANIS/KOPYA, uç İLERLEMEDİ, klonun ölçtüğü küme, modül anahtarı ve bulut hakkı yok, HAK yanıtta",
+      satir?.karar === "KAPANIS" && satir.kapanisNedeni === "KOPYA" && ucSonra === ucOnce && JSON.stringify(yuk.parmakIzi) === JSON.stringify(fpB) &&
+        yuk.modulAnahtarlari === undefined && yuk.patronBulutBitis === null && typeof kap.json.hak === "string",
+    );
+    const kapId = typeof yuk.kiraId === "string" ? yuk.kiraId : kiraOf(ilk)!.kiraId;
+    const sayi = await prisma.kira.count({ where: { kurulumId: kk.kurulumDbId } });
+    const tekrar = await yoklaV2(kk.kurulumId, an, kapId, fpB, P_YETENEK);
+    kontrol("§9d tekrar yoklama → AYNI kapanış kirası (yeni satır yok, tarih kaymaz)", tekrar.status === 200 && tekrar.json.kira === kap.json.kira && (await prisma.kira.count({ where: { kurulumId: kk.kurulumDbId } })) === sayi);
+    const telemetri = await prisma.yoklama.findFirst({ where: { kurulumId: kk.kurulumDbId, sonuc: "KAPANIS_KOPYA" } });
+    kontrol("§9e yoklama telemetrisi KAPANIS_KOPYA (kira kimliğiyle)", telemetri?.kiraId === yuk.kiraId);
+    const eski = await yokla(kk.kurulumId, an, kapId, fpB);
+    kontrol("§9f ✓K kapanışı anlamayan (eski) klon → bugünkü 403 KIRA_VERILMEDI (sıfır fark)", eski.status === 403 && eski.kod === "KIRA_VERILMEDI", `${eski.status} ${eski.kod}`);
+    const { applySanction } = await import("../src/services/sanction.service");
+    await applySanction({ installationDbId: kk.kurulumDbId, level: "K0", message: "bekçi mesajı", reason: "bekçi", actor: "bekci" });
+    const yeni = await yoklaV2(kk.kurulumId, an, kapId, fpB, P_YETENEK);
+    kontrol(
+      "§9g yaptırım defteri değişti → YENİ kapanış kirası, kısıtlama tarihi AYNI (çapa olayda)",
+      yeni.status === 200 && yeni.json.kira !== kap.json.kira && yaptirimOf(yeni).kisitlamaTarihi === beklenen && kiraYuku(yeni.json).kapanis === "KOPYA",
+    );
+    const sahip = await yoklaV2(kk.kurulumId, an, sahip0, fpA, P_YETENEK);
+    kontrol("§9h ✓K sahip taraf kapanıştan sonra da olağan kira (kapanış K3'ü YOK)", sahip.status === 200 && kiraYuku(sahip.json).kapanis === undefined && yaptirimOf(sahip).kademe === "K0", `${sahip.status} ${String(yaptirimOf(sahip).kademe)}`);
+  }
+
+  async function kapanisTasimaIptal(): Promise<void> {
+    console.log("\n§10 K6 kapanış kirası — taşınmış anahtar · iptal kurulum");
+    const eskiAn = kurulumAnahtariUret();
+    const { k: kt, t0: e0 } = await etkinlestir(eskiAn);
+    const yeniAn = kurulumAnahtariUret();
+    const inst = await prisma.kurulum.findUniqueOrThrow({ where: { id: kt.kurulumDbId } });
+    // Onaylı taşımanın kurulum üzerindeki izi (etkinleştirmenin yazdığıyla aynı): eski anahtar emekli kaydı + anahtar değişimi.
+    const tasindi = await prisma.kurulumKaydi.create({
+      data: { kurulumId: kt.kurulumDbId, olay: "TASINDI", anahtarKimligi: yeniAn.kid, acikAnahtar: yeniAn.x, eskiAnahtarKimligi: inst.anahtarKimligi, eskiAcikAnahtar: inst.acikAnahtar, yapan: "bekci" },
+    });
+    await prisma.kurulum.update({ where: { id: kt.kurulumDbId }, data: { anahtarKimligi: yeniAn.kid, acikAnahtar: yeniAn.x } });
+    const eskiRed = await yokla(kt.kurulumId, eskiAn, e0, fpA);
+    kontrol("§10a ✓K kapanışı anlamayan eski makine → bugünkü 403 KURULUM_IPTAL", eskiRed.status === 403 && eskiRed.kod === "KURULUM_IPTAL", `${eskiRed.status} ${eskiRed.kod}`);
+    const kapT = await yoklaV2(kt.kurulumId, eskiAn, e0, fpA, P_YETENEK);
+    kontrol(
+      "§10b ⭐ taşınmış anahtar + `odenmis-tarih` → kapanış kirası TASIMA, K3 = taşıma kaydı + ek süre, kira ESKİ anahtara bağlı",
+      kapT.status === 200 && kiraYuku(kapT.json).kapanis === "TASIMA" && yaptirimOf(kapT).kisitlamaTarihi === new Date(tasindi.createdAt.getTime() + ekSureMs).toISOString() &&
+        kiraYuku(kapT.json).kurulumAnahtarKimligi === eskiAn.kid,
+      `${kapT.status} ${kapT.kod ?? ""}`,
+    );
+    const tekrarT = await yoklaV2(kt.kurulumId, eskiAn, String(kiraYuku(kapT.json).kiraId), fpA, P_YETENEK);
+    kontrol("§10c tekrar → aynı kapanış kirası", tekrarT.json.kira === kapT.json.kira);
+
+    const an = kurulumAnahtariUret();
+    const { k: ki, t0: i0 } = await etkinlestir(an);
+    const { cancelInstallation, reinstateInstallation } = await import("../src/services/installation-admin.service");
+    await cancelInstallation({ installationDbId: ki.kurulumDbId, reason: "bekçi: sözleşme feshi", actor: "bekci" });
+    const iptalKaydi = await prisma.kurulumKaydi.findFirstOrThrow({ where: { kurulumId: ki.kurulumDbId, olay: "IPTAL" } });
+    const eskiI = await yokla(ki.kurulumId, an, i0, fpA);
+    const kapI = await yoklaV2(ki.kurulumId, an, i0, fpA, P_YETENEK);
+    kontrol(
+      "§10d iptal kurulum: eski istemci 403 KURULUM_IPTAL; `odenmis-tarih` → kapanış IPTAL, K3 = iptal kaydı + ek süre",
+      eskiI.status === 403 && kapI.status === 200 && kiraYuku(kapI.json).kapanis === "IPTAL" && yaptirimOf(kapI).kisitlamaTarihi === new Date(iptalKaydi.createdAt.getTime() + ekSureMs).toISOString(),
+      `${eskiI.status} ${kapI.status} ${kapI.kod ?? ""}`,
+    );
+    await reinstateInstallation({ installationDbId: ki.kurulumDbId, reason: "bekçi: yanlış iptal", actor: "bekci" });
+    const geri = await yoklaV2(ki.kurulumId, an, i0, fpA, P_YETENEK);
+    kontrol("§10e iptal geri alınınca olağan kira döner (kapanış yok)", geri.status === 200 && kiraYuku(geri.json).kapanis === undefined, `${geri.status} ${geri.kod ?? ""}`);
+  }
+
+  async function yabanciHak(): Promise<void> {
+    console.log("\n§11 YABANCI_HAK — satıcı dışında basılmış HAK (yalnız uyarı)");
+    const an = kurulumAnahtariUret();
+    const { k: kh, t0: h0 } = await etkinlestir(an);
+    const hak = await prisma.hak.findUniqueOrThrow({ where: { id: kh.hakId } });
+    const belge = (await prisma.hakSurumu.findUniqueOrThrow({ where: { hakId_surum: { hakId: hak.id, surum: hak.guncelSurum } } })).belge;
+    const say = () => prisma.kopyaUyarisi.count({ where: { kurulumId: kh.kurulumDbId, tur: "YABANCI_HAK" } });
+    const dogru = await yoklaV2(kh.kurulumId, an, h0, fpA, {}, { hakId: hak.id, surum: hak.guncelSurum, ozet: jwsDigest(belge) });
+    const eskiBicim = await yokla(kh.kurulumId, an, kiraOf(dogru)!.kiraId, fpA);
+    kontrol("§11a ✓K doğru HAK (özetli) ve özet bildirmeyen eski fabrika → uyarı YOK, HAK yanıta konmaz", dogru.status === 200 && dogru.json.hak === null && eskiBicim.status === 200 && (await say()) === 0, `${String(dogru.json.hak).slice(0, 8)}`);
+    const sahte = await yoklaV2(kh.kurulumId, an, kiraOf(eskiBicim)!.kiraId, fpA, {}, { hakId: hak.id, surum: hak.guncelSurum, ozet: "A".repeat(43) });
+    kontrol("§11b ⭐ aynı kimlik + sürüm, YABANCI bayt özeti → 200 + YABANCI_HAK + gerçek HAK yanıtta (kira ona bağlı)", sahte.status === 200 && (await say()) === 1 && sahte.json.hak === belge && kiraYuku(sahte.json).hakOzeti === jwsDigest(belge));
+    const bilinmeyen = await yoklaV2(kh.kurulumId, an, kiraOf(sahte)!.kiraId, fpA, {}, { hakId: "00000000-0000-4000-8000-0000000000aa", surum: 7 });
+    const u = await prisma.kopyaUyarisi.findFirstOrThrow({ where: { kurulumId: kh.kurulumDbId, tur: "YABANCI_HAK" } });
+    kontrol("§11c defterde olmayan HAK kimliği → aynı uyarının görülmesi arttı, kira yine verilir", bilinmeyen.status === 200 && u.gorulmeSayisi === 2);
+    const bildirim = await prisma.bildirim.count({ where: { kurulumId: kh.kurulumDbId, olay: "KOPYA_SUPHESI" } });
+    kontrol("§11d yeni uyarı başına KOPYA_SUPHESI bildirimi (iki kanal)", bildirim === 2, `${bildirim}`);
+  }
+
+  async function yerelMudahale(): Promise<void> {
+    console.log("\n§12 YEREL_MUDAHALE — durum kaydı sırası, lisans izi, belirsizlik, saat sapması (yalnız uyarı)");
+    const an = kurulumAnahtariUret();
+    const { k: km, t0: m0 } = await etkinlestir(an);
+    const durum = () => prisma.kurulum.findUniqueOrThrow({ where: { id: km.kurulumDbId }, select: { sonDurumSirasi: true, yetenekler: true } });
+    const uyari = () => prisma.kopyaUyarisi.findFirst({ where: { kurulumId: km.kurulumDbId, tur: "YEREL_MUDAHALE", durum: "ACIK" } });
+    const bildirimler = () => prisma.bildirim.findMany({ where: { kurulumId: km.kurulumDbId, olay: "YEREL_MUDAHALE_SUPHESI" } });
+    const nedenler = async () => ((await uyari())?.ayrinti as { nedenler?: string[] } | null)?.nedenler ?? [];
+    const kayit = { gecerli: true };
+    const m1 = kiraOf(await yoklaV2(km.kurulumId, an, m0, fpA, { ...P_YETENEK, durumKaydi: { ...kayit, sira: 5 } }))!.kiraId;
+    const m2y = await yoklaV2(km.kurulumId, an, m1, fpA, { ...P_YETENEK, durumKaydi: { ...kayit, sira: 9 } });
+    const d9 = await durum();
+    kontrol("§12a ✓K artan sıra uyarı doğurmaz; satıcı son sırayı (9) ve yetenekleri tutar", (await uyari()) === null && d9.sonDurumSirasi === 9 && d9.yetenekler.join() === "odenmis-tarih");
+    const yetKaydi = await prisma.kurulumKaydi.count({ where: { kurulumId: km.kurulumDbId, olay: "YETENEKLER" } });
+    kontrol("§12b yetenek kümesinin değişimi kurulum kaydında (bir kez)", yetKaydi === 1, `${yetKaydi}`);
+    const m3y = await yoklaV2(km.kurulumId, an, kiraOf(m2y)!.kiraId, fpA, { ...P_YETENEK, durumKaydi: { ...kayit, sira: 3 } });
+    const b1 = await bildirimler();
+    kontrol(
+      "§12c ⭐ sıra GERİLEDİ (9 → 3) → 200 + YEREL_MUDAHALE[SIRA_GERILEDI] + iki kanal bildirimi (referans etiketi)",
+      m3y.status === 200 && (await nedenler()).join() === "SIRA_GERILEDI" && b1.length === 2 && b1.every((b) => String((b.govde as { referans?: string }).referans).startsWith("Durum kaydı sırası geriledi")),
+      `${(await nedenler()).join()} · ${b1.length}`,
+    );
+    const m4y = await yoklaV2(km.kurulumId, an, kiraOf(m3y)!.kiraId, fpA, { ...P_YETENEK, durumKaydi: { gecerli: false, sira: null }, nedenler: ["LISANS_IZI_KAYIP"] });
+    kontrol(
+      "§12d K7 izleri silindi: kayıt yok + LISANS_IZI_KAYIP → yeni iki neden, yeni nedenler başına bildirim (2 → 6); kira yine verilir",
+      m4y.status === 200 && (await nedenler()).join() === "SIRA_GERILEDI,SIRA_SIFIRLANDI,LISANS_IZI_KAYIP" && (await bildirimler()).length === 6,
+      `${(await nedenler()).join()} · ${(await bildirimler()).length}`,
+    );
+    const m5y = await yoklaV2(km.kurulumId, an, kiraOf(m4y)!.kiraId, fpA, { ...P_YETENEK, nedenler: ["LISANS_IZI_KAYIP"] });
+    kontrol("§12e süren neden yeni bildirim doğurmaz (6)", m5y.status === 200 && (await bildirimler()).length === 6);
+    const m6y = await yoklaV2(km.kurulumId, an, kiraOf(m5y)!.kiraId, fpA, { ...P_YETENEK, belirsizlik: { birikenMs: 8 * DAY_MS, ilk: new Date().toISOString() }, saticiSapmaSn: 7200 });
+    kontrol("§12f belirsizlik > 7 g ve saat sapması ≥ 1 sa → iki yeni neden (6 → 10)", m6y.status === 200 && (await nedenler()).includes("BELIRSIZLIK") && (await nedenler()).includes("SAAT_SAPMASI") && (await bildirimler()).length === 10);
+    const kisa = await yoklaV2(km.kurulumId, an, kiraOf(m6y)!.kiraId, fpA, { ...P_YETENEK, belirsizlik: { birikenMs: 6 * DAY_MS, ilk: null }, saticiSapmaSn: 3599 });
+    kontrol("§12g ✓K eşik altı belirsizlik (6 g) ve sapma (3599 sn) yeni neden doğurmaz", kisa.status === 200 && (await bildirimler()).length === 10);
+    const eski = await yokla(km.kurulumId, an, kiraOf(kisa)!.kiraId, fpA);
+    kontrol("§12h yeteneği bildirmeyen (eski sürüme dönen) fabrika → yetenekler boşalır (kayıt satırı)", eski.status === 200 && (await durum()).yetenekler.length === 0 && (await prisma.kurulumKaydi.count({ where: { kurulumId: km.kurulumDbId, olay: "YETENEKLER" } })) === 2);
+    await yoklaV2(km.kurulumId, an, kiraOf(eski)!.kiraId, fpA, { ...P_YETENEK, durumKaydi: { ...kayit, sira: 20 } });
+    const once = (await durum()).sonDurumSirasi;
+    const klon = await yoklaV2(km.kurulumId, an, m0, fpB, { ...P_YETENEK, durumKaydi: { ...kayit, sira: 1 } });
+    kontrol(
+      "§12i ✓K çatal tarafı (klon, sıra 1) satıcının sırasını (20) YAZAMAZ ve yerel müdahale nedeni doğurmaz",
+      klon.status === 200 && once === 20 && (await durum()).sonDurumSirasi === 20 && (await bildirimler()).length === 10,
+      `${String(once)} → ${String((await durum()).sonDurumSirasi)}`,
+    );
+  }
+
+  async function uzatmaDosyasiUcu(): Promise<void> {
+    console.log("\n§13 uzatma dosyası ucu");
+    const { decideChain } = await import("../src/services/lease-chain");
+    const simdi = Date.now();
+    const uc = { id: "u", previousId: "p", createdAtMs: simdi - 20 * 60_000, clientFingerprint: fpA };
+    const kararSaf = (fromFile: boolean) => decideChain({ presentedLeaseId: "p", tip: { ...uc, fromFile }, measured: fpA, nowMs: simdi, repeatWindowMs: 900_000 });
+    kontrol("§13a dosya ucu + ebeveynle gelen aynı makine (15 dk sonra) → NORMAL; ✓K dosya olmayan uçta YAKALA kalır", kararSaf(true) === "NORMAL" && kararSaf(false) === "CATCH_UP");
+    const an = kurulumAnahtariUret();
+    const { k: kd, t0: f0 } = await etkinlestir(an);
+    const f1 = kiraOf(await yokla(kd.kurulumId, an, f0, fpA))!.kiraId;
+    const { issueExtensionFileTx } = await import("../src/services/extension-file.service");
+    const dosya = await prisma.$transaction((tx) => issueExtensionFileTx(tx, ctx, { installationDbId: kd.kurulumDbId, actor: "bekci", nowMs: Date.now() }));
+    const dSatir = await prisma.kira.findUniqueOrThrow({ where: { id: dosya.kiraId } });
+    const uc2 = (await prisma.kurulum.findUniqueOrThrow({ where: { id: kd.kurulumDbId } })).sonKiraId;
+    kontrol("§13b dosya kirası uçtaki kiranın çocuğu (DOSYA), uç ilerledi, kurulum kaydında", dSatir.karar === "DOSYA" && dSatir.oncekiKiraId === f1 && uc2 === dosya.kiraId && (await prisma.kurulumKaydi.count({ where: { kurulumId: kd.kurulumDbId, olay: "UZATMA_DOSYASI" } })) === 1);
+    const yuklenmeden = await yokla(kd.kurulumId, an, f1, fpA);
+    kontrol("§13c dosya yüklenmeden 15 dk içinde ebeveynle yoklama → dosyanın kirası (tekrar), yakala yok", yuklenmeden.status === 200 && yuklenmeden.json.kira === dosya.dosya.kira && (await prisma.kira.count({ where: { kurulumId: kd.kurulumDbId, karar: "YAKALA" } })) === 0);
+    const yuklenince = await yokla(kd.kurulumId, an, dosya.kiraId, fpA);
+    kontrol("§13d dosya yüklenip yoklanınca → NORMAL çocuk", yuklenince.status === 200 && (await karar(kiraOf(yuklenince)?.kiraId)) === "NORMAL");
+    await prisma.kopyaUyarisi.create({ data: { kurulumId: kd.kurulumDbId, tur: "ZINCIR_CATALI", ilkGorulme: new Date(), sonGorulme: new Date(), digerParmakIzi: fpB } });
+    let kod = "";
+    try {
+      await prisma.$transaction((tx) => issueExtensionFileTx(tx, ctx, { installationDbId: kd.kurulumDbId, actor: "bekci", nowMs: Date.now() }));
+    } catch (err) {
+      kod = String((err as { code?: string }).code);
+    }
+    kontrol("§13e açık zincir çatalında dosya verilmez → 409 DURUM_CAKISMASI", kod === "DURUM_CAKISMASI", kod);
+  }
 
   try {
     const anahtar = kurulumAnahtariUret();
@@ -196,6 +391,12 @@ async function main(): Promise<void> {
     const w3y = await kipli(kiraOf(w2y)!.kiraId, "gozlem");
     kontrol("§8f elindeki kira ZORLA iken 'gozlem' raporu (kira/durum silinip varsayılana dönülmüş) → KIP_UYUSMAZ, kira yine verilir", w3y.status === 200 && (await acikKip()) === 1, `${w3y.status} açık=${await acikKip()}`);
     void w0;
+
+    await kapanisKopya();
+    await kapanisTasimaIptal();
+    await yabanciHak();
+    await yerelMudahale();
+    await uzatmaDosyasiUcu();
   } finally {
     await sunucu.durdur();
     await temizleKurulumlar(temizlenecek, ortam.kidler);

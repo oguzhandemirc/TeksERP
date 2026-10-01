@@ -32,8 +32,13 @@ export interface VerifiedRequest {
   readonly role: KeyRole;
 }
 
+/** Sonu gelmiş anahtar: taşınmış (emekli) anahtar ya da iptal edilmiş kurulum — kapanış kirası alabilir (K6). */
+export type EndedKeyReason = "TASIMA" | "IPTAL";
+
 export interface AuthenticatedRequest extends VerifiedRequest {
   readonly installation: Kurulum;
+  /** Yalnız `allowEnded` ile doğrulanan istekte: anahtarın sonu geldi; çağıran kapanış kirası verir (403 yerine). */
+  readonly ended?: EndedKeyReason;
 }
 
 export interface VerifyInput {
@@ -151,17 +156,20 @@ export async function authenticateRequest(
     readonly limit?: (scope: string) => void;
     /** Uca özgü ucuz ön denetim (yan etkisiz) — nonce'tan ÖNCE koşar. */
     readonly precheck?: (auth: AuthenticatedRequest) => Promise<void> | void;
+    /** Kapanış kirasını anlayan istemcinin yoklaması: emekli anahtar / iptal kurulum 403 yerine `ended` ile geçer. */
+    readonly allowEnded?: boolean;
   },
 ): Promise<AuthenticatedRequest> {
   if (g.keyFromBody !== undefined) throw new Error("authenticateRequest kayıtlı anahtarlı istek içindir");
   const v = await verifySignedRequest(g);
   const installation = v.installation!;
-  if (installation.durum === "IPTAL" || v.role === "RETIRED") throw installationCancelled();
-  if (v.role === "PENDING_TRANSFER") {
+  const ended: EndedKeyReason | null = installation.durum === "IPTAL" ? "IPTAL" : v.role === "RETIRED" ? "TASIMA" : null;
+  if (ended && !g.allowEnded) throw installationCancelled();
+  if (!ended && v.role === "PENDING_TRANSFER") {
     throw new VendorError(409, "TASIMA_ONAYI_BEKLIYOR", "Bu makinenin taşıma talebi onay bekliyor; kurulum ek sürede çalışır");
   }
-  if (v.role !== "CURRENT") throw new VendorError(401, "ISTEK_KID", "İstek bu kurulumun kayıtlı anahtarıyla imzalanmamış");
-  const auth: AuthenticatedRequest = { ...v, installation };
+  if (!ended && v.role !== "CURRENT") throw new VendorError(401, "ISTEK_KID", "İstek bu kurulumun kayıtlı anahtarıyla imzalanmamış");
+  const auth: AuthenticatedRequest = { ...v, installation, ...(ended ? { ended } : {}) };
   await g.precheck?.(auth);
   g.limit?.(requestScope({ installationDbId: installation.id, kid: v.kid }));
   await recordRequestNonce({ installationDbId: installation.id, kid: v.kid, request: v.request, nowMs: g.nowMs });

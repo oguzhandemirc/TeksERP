@@ -52,6 +52,8 @@ import {
   recordEntitlementVersionTx,
   type EntitlementChanges,
 } from "../services/entitlement.service";
+import { paidThroughView } from "../portal/paid-through-view";
+import { issueExtensionFileTx } from "../services/extension-file.service";
 import { cancelInstallationTx, closeCopyAlertTx, findCopyAlert, reinstateInstallationTx } from "../services/installation-admin.service";
 import {
   changesDealer,
@@ -332,7 +334,17 @@ export const VENDOR_PORTAL_ROUTES: readonly PortalRouteDef[] = [
       }),
     }),
   },
-  { method: "get", path: "/kurulumlar/:id", permission: "portal:oku", kimlik: "OKUMA", handler: async (c) => ({ data: await q.installationDetail(prisma, idParam(c.req, "id", "Kurulum")) }) },
+  {
+    method: "get",
+    path: "/kurulumlar/:id",
+    permission: "portal:oku",
+    kimlik: "OKUMA",
+    handler: async (c) => {
+      const id = idParam(c.req, "id", "Kurulum");
+      // Ödenmiş tarih (P) görünümü yalnız satıcı künyesinde (bayi künyesi aynı sorgudan, bu blok olmadan).
+      return { data: { ...(await q.installationDetail(prisma, id)), odenmisTarih: await paidThroughView(prisma, id, c.nowMs) } };
+    },
+  },
   { method: "get", path: "/haklar/:id", permission: "portal:oku", kimlik: "OKUMA", handler: async (c) => ({ data: await q.entitlementDetail(prisma, idParam(c.req, "id", "Hak")) }) },
   {
     method: "get",
@@ -914,6 +926,26 @@ export const VENDOR_PORTAL_ROUTES: readonly PortalRouteDef[] = [
         run: (tx) => closeCopyAlertTx(tx, { alert, acceptOtherFingerprint: b.digerParmakIziniKabulEt, reason: b.sebep, actor: c.session.actor }),
         respond: (row) => ({ data: row }),
         audit: () => [{ event: "KOPYA_UYARISI_KAPANDI", entity: "Kurulum", entityId: alert.kurulumId, summary: { uyariId: id, kabul: b.digerParmakIziniKabulEt, sebep: b.sebep } }],
+      });
+    },
+  },
+  {
+    // Çevrimdışı uzatma dosyası (lisans v2 §1.4-3): uca bağlı yeni kira + HAK, imzalı yanıt JSON'u. Yeni süre vermez
+    // (P ödeme durumundan türer); işlem kimliği tekrarında AYNI dosya döner.
+    method: "post",
+    path: "/kurulumlar/:id/uzatma-dosyasi",
+    permission: "kurulum:yonet",
+    kimlik: "ISLEM_KIMLIGI",
+    handler: async (c) => {
+      const id = idParam(c.req, "id", "Kurulum");
+      const b = bodyOf(c, TokenOnly);
+      return portalAction(c, {
+        action: "UZATMA_DOSYASI",
+        clientToken: b.clientToken,
+        body: withPath(b, id),
+        run: (tx) => issueExtensionFileTx(tx, c.ctx, { installationDbId: id, actor: c.session.actor, nowMs: c.nowMs }),
+        respond: (file) => ({ data: file }),
+        audit: (file) => [{ event: "UZATMA_DOSYASI", entity: "Kurulum", entityId: id, summary: { kiraId: file.kiraId, odenmisTarih: file.odenmisTarih } }],
       });
     },
   },

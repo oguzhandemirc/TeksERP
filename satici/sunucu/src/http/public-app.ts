@@ -17,6 +17,7 @@ import {
 } from "../lisans-protokol";
 import { VendorError } from "../lib/errors";
 import { handleActivation } from "../services/activation.service";
+import { acceptsClosingLease } from "../services/closing-lease";
 import type { VendorContext } from "../services/context";
 import type { DoorbellHub } from "../services/doorbell";
 import { drTakeoverTarget, processDrTakeover } from "../services/dr.service";
@@ -61,7 +62,15 @@ async function activation(c: SignedCall) {
 
 async function poll(c: SignedCall & { readonly purposes: ("yokla" | "cevrimdisi")[] }) {
   const body = parseStrict(PollRequestSchema, parseJsonBody(c.raw));
-  const auth = await authenticateRequest({ header: c.header, rawBody: c.raw, purposes: c.purposes, nowMs: c.nowMs, limit: c.limit });
+  const auth = await authenticateRequest({
+    header: c.header,
+    rawBody: c.raw,
+    purposes: c.purposes,
+    nowMs: c.nowMs,
+    limit: c.limit,
+    // Yetenek İMZALI gövdeden (gövde özeti imzada): kapanış kirasını anlamayan eski fabrika bugünkü 403'ü alır.
+    allowEnded: acceptsClosingLease(body.yetenekler),
+  });
   return processPoll(c.ctx, auth, body, c.nowMs);
 }
 

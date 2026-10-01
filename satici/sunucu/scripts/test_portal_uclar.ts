@@ -190,6 +190,13 @@ async function main(): Promise<void> {
     });
     await s("get", "/kopya-uyarilari", "/kopya-uyarilari?durum=ACIK", 200);
     await s("post", "/kopya-uyarilari/:id/kapat", `/kopya-uyarilari/${uyari.id}/kapat`, 200, { sebep: "anakart değişti", digerParmakIziniKabulEt: true });
+    const dosya = await s("post", "/kurulumlar/:id/uzatma-dosyasi", `/kurulumlar/${kId}/uzatma-dosyasi`, 200, {});
+    const dosyaYaniti = dosya.veri.dosya as { kira?: string; hak?: string | null } | undefined;
+    kontrol(
+      "§1m çevrimdışı uzatma dosyası: imzalı yanıt (kira + HAK) ve lisans no'lu dosya adı",
+      typeof dosyaYaniti?.kira === "string" && typeof dosyaYaniti.hak === "string" && /^lisans-TKS-\d{4}-\d{4}-\d{8}\.json$/.test(String(dosya.veri.dosyaAdi)),
+      String(dosya.veri.dosyaAdi),
+    );
 
     // Destek kutusu (3d-2): talep fabrikadan `/v1/destek` ile doğar — burada fikstür olarak DB'den.
     const talep = await prisma.destekTalebi.create({

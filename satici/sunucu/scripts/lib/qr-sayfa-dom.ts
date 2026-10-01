@@ -36,10 +36,12 @@ export interface SayfaKosumu {
   qrBilgi: string;
   araclarGizli: boolean;
   yanit: string;
+  /** Kiradan okunan özet satırı (ödenmiş tarih · kapanış uyarısı); gizliyse null. */
+  ozet: string | null;
   kopyala: () => Promise<string | null>;
 }
 
-const IDLER = ["durum", "qr", "qr-bilgi", "araclar", "yanit", "kopyala", "onceki", "dur", "sonraki"];
+const IDLER = ["durum", "lisans-ozet", "qr", "qr-bilgi", "araclar", "yanit", "kopyala", "onceki", "dur", "sonraki"];
 
 /** Sayfayı `#<hash>` ile bir kez açar; `depo` açılışlar arasında paylaşılır (localStorage). */
 export async function sayfayiAc(opts: {
@@ -84,6 +86,7 @@ export async function sayfayiAc(opts: {
     qrBilgi: els["qr-bilgi"]?.textContent ?? "",
     araclarGizli: els.araclar?.hidden ?? true,
     yanit: els.yanit?.value ?? "",
+    ozet: els["lisans-ozet"]?.hidden === false ? (els["lisans-ozet"]?.textContent ?? "") : null,
     kopyala: async () => {
       els.kopyala?.onclick?.();
       for (let i = 0; i < 3; i++) await new Promise((r) => setImmediate(r));
