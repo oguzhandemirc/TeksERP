@@ -316,7 +316,7 @@ export async function keyStatus(ctx: VendorContext, db: Db, nowMs: number) {
     orderBy: [{ tur: "asc" }, { kid: "asc" }],
     select: { kid: true, tur: true, acikAnahtar: true, siniflar: true, baslangic: true, bitis: true, durum: true, createdAt: true, updatedAt: true },
   });
-  const loaded = new Set([...ctx.keys.wrapped.map((w) => w.kid), ...ctx.keys.subKeys.map((k) => k.kid)]);
+  const loaded = new Set([...ctx.keys.wrapped.map((w) => w.kid), ...ctx.keys.subKeys.map((k) => k.kid), ...ctx.keys.intermediates.map((k) => k.kid)]);
   return {
     capa: { kaynak: ctx.keys.anchorSource, kokler: ctx.keys.anchor.map((r) => ({ kid: r.kid, x: r.x, siniflar: r.classes })) },
     anahtarlar: registry.map((r) => ({

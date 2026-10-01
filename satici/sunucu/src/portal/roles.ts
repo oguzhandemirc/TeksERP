@@ -16,8 +16,10 @@ export const PORTAL_PERMISSIONS = {
   "portal:oku": VENDOR,
   /** Müşteri · tesis · kurulum ekle/güncelle/pasif. */
   "musteri:yaz": VENDOR,
-  /** HAK taslağı + kök imzalı sürüm (kök parolası formdan). */
+  /** HAK taslağı + imzalı sürüm (ara imzacı ya da kök parolası formdan; kök VDS'te yoksa kök kuyruğu) + kuyruk iptali. */
   "hak:yaz": VENDOR,
+  /** 400 günü aşan ya da süresiz çevrimdışı ufuk VERMEK (K2) — lisans numarasıyla ikinci onay. */
+  "hak:uzun-ufuk": ADMIN,
   "kod:uret": VENDOR,
   /** K0–K3 (K3 geri sayımı ≥ 7 gün), uzatma, geçerlilik bitişi, planlı eylem, taksit. */
   "yaptirim:yaz": VENDOR,

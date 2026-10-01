@@ -1,5 +1,5 @@
 // Dakikalık bakım işi (tek süreç içinde): telemetri budaması, planlı eylemler, geciken taksitler,
-// zamana bağlı bildirim taraması (giden kutusuna yazar; gönderim yan konteynerde), anahtar deposunun
+// zamana bağlı bildirim taraması (giden kutusuna yazar; gönderim yan konteynerde; imza anahtarı süresi dahil), anahtar deposunun
 // tazelenmesi. `running` koruması üst üste binmeyi engeller; her adım ayrı hata sınırında (biri düşerse
 // diğerleri koşar).
 //
@@ -16,6 +16,7 @@ import { prisma } from "../lib/prisma";
 import type { VendorContext } from "./context";
 import { abandonStaleSessions, pruneExpiredBodies } from "../distribution/retention";
 import { scanTimedNotifications } from "../notifications/scanner";
+import { scanKeyExpiry } from "../notifications/key-expiry";
 import { runDuePlannedActions, runOverdueInstallments } from "./sanction.service";
 
 export const PRUNED_MODELS = ["nonceDefteri", "yoklama", "portalOturumu", "portalIslemi", "denetim"] as const;
@@ -60,7 +61,7 @@ export async function pruneAudit(nowMs: number, g: { failedLoginKeepDays: number
   return { failedLogins: failedLogins.count, other: other.count };
 }
 
-/** Anahtar künyesi: yalnız AÇIK yarı + kid + tür + geçerlilik (özel yarı DB'ye girmez). */
+/** Anahtar künyesi: yalnız AÇIK yarı + kid + tür + geçerlilik (özel yarı DB'ye girmez); emekli anahtar EMEKLI. */
 export async function syncKeyRegistry(keys: KeyStore): Promise<number> {
   let n = 0;
   for (const r of keys.publicRecords()) {
@@ -71,6 +72,7 @@ export async function syncKeyRegistry(keys: KeyStore): Promise<number> {
       sertifika: r.certificate,
       baslangic: r.notBefore,
       bitis: r.notAfter,
+      ...(r.retired ? { durum: "EMEKLI" as const } : {}),
     };
     await prisma.anahtarKaydi.upsert({ where: { kid: r.kid }, create: { kid: r.kid, ...data }, update: data });
     n++;
@@ -108,6 +110,7 @@ export class MaintenanceScheduler {
     const c = this.ctx.config;
     if (this.lastNotificationScanMs !== null && nowMs - this.lastNotificationScanMs < c.BILDIRIM_TARAMA_DK * 60_000) return;
     await scanTimedNotifications({ silentHours: c.BILDIRIM_SESSIZ_SAAT, dueDays: c.BILDIRIM_VADE_GUN, silentClasses: c.BILDIRIM_SESSIZ_SINIFLAR }, nowMs);
+    await scanKeyExpiry(this.ctx.keys, nowMs);
     this.lastNotificationScanMs = nowMs;
   }
 

@@ -156,6 +156,32 @@ Hepsi açık bilgi (künyeden ve çapa betiğinin kuru çıktısından; sır, pa
 | Künye özeti | `TOREN-KUNYE.json` sha256 `39242ad386e301c26f4ffb5eba983e6b322fa7e5f1834b98f54cf02e201fbf8f` (4886 bayt) |
 | Güven çapası | §5.1 — `kok-2026-1` + `paket-2026` dört yerde (TS kök + satıcı/patron aynası · TS PAKET · native `anchor.rs`); iniş yöneticide |
 
+## 8. Dönem töreni — üç ayda bir (lisans v2, G4 · K4)
+
+> **Durum:** araç (`uretim-toren.mjs donem`) + VDS komutları (`anahtar.js kuyruk-disa-aktar · donem-ice-aktar · emekliye-ayir`) + bekçiler (`test_uretim_toren` §6 · `test_ara_imzaci` · `test_iptal_belgesi`) hazır (L2-3). **İlk üretim töreni** tasarımın §5.1 sırasıyla (G3 iniş → satıcı hazırlıkta prova → testfabrika) ve yalnız kullanıcının "uygula" cümlesiyle. Hazırlık ortamı aynı akışı hazırlık köküyle provalar (`--dizin=~/.tekserp/satici-hazirlik --kok=hazirlik-2026-1`).
+
+**Ne zaman:** portal/Telegram `ANAHTAR_SURESI_BITIYOR` — kullanım başına (ALT · ara imzacı · İNDİRME) en yeni sertifikanın bitişine **30 gün** kala (tören günü), 15 · 7 · 1 gün kala tekrar. Atlanırsa 120. günde yeni kira, HAK ve indirme belirteci basılamaz; fabrikalar ödenmiş tarihe (P) dek etkilenmez.
+
+**Ne üretir (Mac, `~/.tekserp/satici-uretim/donemler/<damga>/`):** `vds-paketi/` → `anahtarlar/alt-<yıl>-<n>.anahtar.json` · `ara-<yıl>-<n>.ara.json` (ARA parolasıyla sarılı) · `ind-<yıl>-<n>.anahtar.json` (üçü 120 gün = 90 + 30 örtüşme) · `iptal.json` (ilk dönem sıra 1; `--iptal` verilirse sıra + 1, önceki satırlar taşınır; yoksa önceki belge aynen) · `ice-aktar.json` (iptal belgesi + kökle imzalanmış kuyruk HAK'ları) · `DONEM-KUNYE.json` (kid · açık anahtar · tarih · emekliye listesi · özetler) · `SHA256SUMS`. **Pakette KÖK YOKTUR** (araç ölçer, varsa RED). Paketin dışında `kok-imzali-haklar.json` (Mac arşivi).
+
+**Parolalar:** kök parolası (kâğıttan, tören başında BİR kez) · **yeni ara imzacı parolası** (iki kez; kökünkinden FARKLI olmak ZORUNDA — araç aynısını reddeder; portalda HAK imzalarken VDS'te yazılır → parola yöneticisine "TeksERP ara-<yıl>-<n>"). İkisi de argv/env/log/dosyaya girmez.
+
+| # | Nerede | Komut / iş | Beklenen |
+|---|---|---|---|
+| 1 | VDS (salt okuma) | `v "cd $K && docker compose exec -T satici satici-baslat node dist-cli/scripts/anahtar.js kuyruk-disa-aktar" > ~/kuyruk-$(date +%F).json` | `{"v":1,"tur":"tekserp-kok-kuyrugu",…}` — talep yoksa `talepler: []` (adım 2'de `--kuyruk` verilmez) |
+| 2 | Mac | §1-3'teki gibi temiz ağaç + `npm ci`, sonra `node deploy/satici/uretim-toren.mjs donem [--kuyruk=~/kuyruk-<tarih>.json]` | `[1/8] Önkoşullar ✓` → kök parolası → ara parolası × 2 → `[4/8]…[8/8]` → `✅ Dönem töreni tamam.` + yeni kid'ler, iptal sırası, EMEKLİYE listesi, paket yolu |
+| 3 | Mac → VDS | `scp -P 2222 -rp <paket>/vds-paketi oguzhan@80.253.255.188:donem-paketi && v 'cd ~/donem-paketi && sha256sum -c SHA256SUMS'` | her satır `OK` |
+| 4 | VDS (YAZIM — kullanıcının "uygula" cümlesiyle) | `v "docker run --rm --network none --user 0 -v \$HOME/donem-paketi/anahtarlar:/g:ro -v $K/anahtarlar:/a --entrypoint sh $Y -c 'install -m 600 -o 10001 -g 10001 /g/* /a/'"` | üç yeni dosya anahtar biriminde (0600, 10001) |
+| 5 | VDS | `v "cd $K && docker compose exec -T satici satici-baslat node dist-cli/scripts/anahtar.js donem-ice-aktar" < <paket>/vds-paketi/ice-aktar.json` | `iptal belgesi sıra N: EKLENDI` (tekrarında `VARDI`) + her kuyruk talebi `IMZALANDI` (HAK alanı değiştiyse `ESKIDI`, yeniden talep) |
+| 6 | portal (1 dk sonra — anahtar deposu dakikada bir yenilenir) | Anahtarlar: yeni ALT · ARA · İNDİRME satırları `yuklu: true`, uyarı yok · İptal belgeleri: `dagitilanSira` = paketinki | `bekleyen` doluysa engeller listelenir: HAK → ara imzacıyla yeniden bas · ANAHTAR → adım 7 |
+| 7 | VDS (YAZIM) | `v "docker run --rm --network none --user 10001:10001 -v $K/anahtarlar:/a --entrypoint node $Y dist-cli/scripts/anahtar.js emekliye-ayir --dizin=/a --kid=<EMEKLİYE listesi>"` (kuru) → listeyi oku → aynı komut `--uygula` | her eski ALT/İND/ARA için `özel yarı silinir → <kid>.sertifika.json`; aynı türde yeni anahtar yoksa RED (imza durmasın) |
+| 8 | CF Worker | künyedeki `CF_WORKER_INDIRME` satırı İNDİRME listesine (L2-8 düzeni) | yeni belirteçler Worker'da geçer |
+| 9 | VDS | `v 'shred -u ~/donem-paketi/anahtarlar/* && rm -rf ~/donem-paketi'` · `~/kuyruk-*.json` Mac'te silinebilir | paket kopyası VDS'te kalmaz |
+
+- **Acil durum (VDS ele geçti):** `donem --iptal=<ara/alt/ind kid'leri> --neden="VDS ele geçti"` → temizlenmiş sunucuya adım 4–5 → yetenekli kurulumların HAK'larını yeni ara imzacıyla toplu yeniden bas (`POST /portal/api/haklar/toplu-yeniden-bas`, tailnet) → adım 7. İptal belgesi, onu geçersiz kılacağı HAK yeniden basılıp eski anahtar emekliye ayrılmadan dağıtılmaz (önceki belge dağıtılmaya devam eder); fabrikalara yeni derleme gerekmez.
+- **Geri alma:** adım 5'ten önce: yeni üç dosyayı anahtar biriminden kaldır, başka hiçbir şey değişmedi. Adım 5'ten sonra içe aktarılan iptal belgesi GERİ ALINMAZ (defter; satır düşüren yeni belge reddedilir) — iptali kaldırmak ayrı bir karardır. Emekliye ayrılan özel yarı Mac'teki dönem dizininden geri konabilir.
+- **Mac'te kalan:** `donemler/<damga>/` (700/600; ALT/İND düz, ara parolalı). USB kopyası (`usb-kopyala`) bugün yalnız ilk törenin kümesini kopyalar; dönem paketleri kapsamaz (borç — sonraki dilim).
+
 ## Ek A — yönetici için teknik özet
 
 - **Alt süreçler:** kök/ALT/İNDİRME/sırlar `satici/sunucu/scripts/anahtar.ts` (`kok-uret` · `alt-uret` · `indirme-uret` · `sirlar-uret`), PAKET = `PAKET_KOMUTU` (tek satır, törenin başında: `Teks-Erp/scripts/build-korumali-imza.ts anahtar-uret --kid={kid} --dizin={dizin} --json` — arayüz değişirse yalnız bu satır; `--paket-komutu="…"` koşum başına ezer ve ekranda `varsayılan DEĞİL` diye görünür), modül `satici/sunucu/scripts/modul-anahtari.ts uret` (DB'siz), yedek alıcıları + sınama + kurtarma arşivi `Teks-Erp/scripts/yedek-sifrele.ts`. Kurtarma alıcısı `--parolali --parola-stdin` ile KÖK parolasına sarılır.

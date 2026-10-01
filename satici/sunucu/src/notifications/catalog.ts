@@ -18,6 +18,8 @@ export const NOTIFICATION_EVENTS = [
   "PLANLI_EYLEM_UYGULANDI",
   "TAKSIT_GECIKTI",
   "DENEME",
+  "ANAHTAR_SURESI_BITIYOR",
+  "UZUN_UFUK_VERILDI",
 ] as const satisfies readonly BildirimOlayi[];
 
 export const NOTIFICATION_CHANNELS = ["EPOSTA", "TELEGRAM"] as const satisfies readonly BildirimKanali[];
@@ -38,6 +40,8 @@ export const NOTIFICATION_TITLES: Readonly<Record<BildirimOlayi, string>> = {
   PLANLI_EYLEM_UYGULANDI: "Planlı eylem uygulandı",
   TAKSIT_GECIKTI: "Taksit gecikti — kısıtlama başladı",
   DENEME: "Deneme bildirimi",
+  ANAHTAR_SURESI_BITIYOR: "İmza anahtarının süresi bitiyor — dönem töreni zamanı",
+  UZUN_UFUK_VERILDI: "Uzun çevrimdışı ufuklu lisans verildi",
 };
 
 /** Gövde ALLOWLIST'i — göçteki `bildirim_govde_gecerli` dizisiyle BİREBİR (sıra dahil). */
