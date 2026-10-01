@@ -7,7 +7,7 @@ import { VendorError, badRequest } from "../lib/errors";
 import { lockInstallation, lockInstallations } from "../lib/locks";
 import { prisma, type Db, type Tx } from "../lib/prisma";
 import type { VendorContext } from "./context";
-import { installationCapabilities, isEntitlementWithin, planEntitlementSigner, type EntitlementBreadth, type SignerPlanKind } from "./entitlement-policy";
+import { installationCapabilities, isEntitlementWithin, newestLegacyVersion, planEntitlementSigner, type EntitlementBreadth, type SignerPlanKind } from "./entitlement-policy";
 import {
   entitlementVersionAudit,
   loadEntitlementTree,
@@ -19,7 +19,6 @@ import {
   type ChangeInput,
   type PreparedEntitlementVersion,
 } from "./entitlement-version.service";
-import { isIntermediateSignedToken } from "./revocation.service";
 
 export type IssuedEntitlementChange = { readonly mode: "SIGNED"; readonly row: HakSurumu } | { readonly mode: "QUEUED"; readonly row: HakKokTalebi };
 
@@ -107,7 +106,7 @@ export async function deliverableEntitlement(
   });
   const current = versions[0];
   if (capable || !current) return current ?? null;
-  const legacy = versions.find((v) => !isIntermediateSignedToken(v.belge)) ?? null;
+  const legacy = newestLegacyVersion(versions, entitlement.guncelSurum);
   const currentBreadth = breadthOf(current.belge);
   const within = (v: { belge: string }): boolean => {
     const b = breadthOf(v.belge);

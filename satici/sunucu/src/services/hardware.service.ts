@@ -32,7 +32,8 @@ import { notifyDoorbell } from "./doorbell";
 import { canLearnFingerprint, fingerprintComparison } from "./fingerprint-policy";
 import { authenticateRequest, installationCancelled } from "./installation-auth";
 import { driftAccepted, readFingerprint } from "./lease-chain";
-import { activeEntitlement, downloadTokens, issueLease, licenseResponse } from "./lease.service";
+import { capabilityDowngradeRefusal, holdForRootSignatureTx } from "./lease-binding";
+import { activeEntitlement, downloadTokens, entitlementForDelivery, issueLease, licenseResponse } from "./lease.service";
 import { requireReason } from "./sanction.service";
 
 /** Otomatik öğrenmenin karar vereni (talep satırı ve kurulum kaydı). */
@@ -102,12 +103,13 @@ async function openOrRefreshTx(
 
 // ---------------------------------------------------------------- donanım bildirimi (/v1/donanim · zarf)
 
-interface ReportOutcome {
-  readonly talep: DonanimTalebi;
-  readonly lisans: LicenseResponse | null;
-}
+type ReportOutcome = { readonly talep: DonanimTalebi; readonly lisans: LicenseResponse | null } | { readonly unbindable: true };
 
-/** Kilit ALTINDA: güçlüler tutuyorsa öğren + kira (uç ilerler, atomik); tutmuyorsa onay kuyruğu. */
+/**
+ * Kilit ALTINDA: güçlüler tutuyorsa öğren + kira (uç ilerler, atomik); tutmuyorsa onay kuyruğu. Öğrenme kirası
+ * bağlanamıyorsa (genişlik kapısı; istek elindeki HAK'ı bildirmez — fail-closed) öğrenme de kira da YOK: acil kök
+ * talebi commit olur, uç 403 der (kira bağı kapısı, `lease-binding.ts`); güçlüler tutuyorsa sonraki yoklama kümeyi öğrenir.
+ */
 async function reportInTx(tx: Tx, ctx: VendorContext, g: { installationDbId: string; kid: string; body: HardwareReportRequest; nowMs: number }): Promise<ReportOutcome> {
   await lockInstallation(tx, g.installationDbId);
   const inst = await tx.kurulum.findUniqueOrThrow({ where: { id: g.installationDbId } });
@@ -121,6 +123,9 @@ async function reportInTx(tx: Tx, ctx: VendorContext, g: { installationDbId: str
     const talep = await openOrRefreshTx(tx, { inst, tur: "DONANIM", kid: g.kid, reported: measured, lost: g.body.kayip, reason: g.body.gerekce, nowMs: g.nowMs });
     return { talep, lisans: null };
   }
+  const hak = await activeEntitlement(tx, inst.id);
+  const delivered = await entitlementForDelivery(tx, inst, hak);
+  if (await holdForRootSignatureTx(tx, { entitlementId: hak.id, delivered, nowMs: g.nowMs })) return { unbindable: true };
   const next = driftAccepted(accepted, measured);
   const at = new Date(g.nowMs);
   const decided = { durum: "ONAYLANDI" as const, otomatik: true, kararZamani: at, kararVeren: AUTO_LEARN_ACTOR, kararSebebi: AUTO_LEARN_REASON };
@@ -141,7 +146,6 @@ async function reportInTx(tx: Tx, ctx: VendorContext, g: { installationDbId: str
   await tx.kurulumKaydi.create({
     data: { kurulumId: inst.id, olay: "PARMAK_IZI_OGRENILDI", anahtarKimligi: g.kid, ayrinti: { talepId: talep.id, otomatik: true, eski: accepted, yeni: next }, yapan: AUTO_LEARN_ACTOR },
   });
-  const hak = await activeEntitlement(tx, inst.id);
   const lease = await issueLease(tx, ctx, {
     installation: inst,
     entitlement: hak,
@@ -172,6 +176,7 @@ export async function handleHardwareReport(
 ): Promise<HardwareReportResponse> {
   const auth = await authenticateRequest({ header: g.header, rawBody: g.rawBody, purposes: ["donanim"], nowMs: g.nowMs, limit: g.limit, path: g.path ?? ENDPOINTS.HARDWARE });
   const r = await prisma.$transaction((tx) => reportInTx(tx, ctx, { installationDbId: auth.installation.id, kid: auth.kid, body: g.body, nowMs: g.nowMs }));
+  if ("unbindable" in r) throw capabilityDowngradeRefusal();
   await recordAudit({
     event: r.lisans ? "PARMAK_IZI_OGRENILDI" : "DONANIM_BILDIRIMI",
     entity: "DonanimTalebi",

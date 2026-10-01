@@ -14345,3 +14345,20 @@ Negatif sondalar (tetik md5(prosrc) ve dosya md5 ile geri alındı):
 
 **Bekçi.** Yeni `test_donanim_bildirimi` 21/0 (✓K2 · B6); `test_etkinlestirme` §7 (43/0, B +2); `test_kira_zinciri` §5c–§5e (62/0, B +3); `test_qr_sayfasi` §4l (B +2); `test_portal_uclar` donanım rotalarını kapsar (kapsam denetimi ilk koşumda üç eksik rotayı yakaladı); web `mirrors.test.ts` türü/durumu/etken/karşılaştırma etiketlerini ve rota dosyasını ölçer. Fabrika ucu (`POST /api/license/donanim-bildir`, panel düğmesi, zarfla gelen donanım yanıtının kabulü) L2-10'da.
 
+
+## 2026-10-01 — Lisans v2 kira bağı kapısı: bağlanamayan kira hiçbir yoldan çıkmaz (DR devri · kapanış kirası · donanım öğrenmesi), eski derleme adayı tek seçim [ÇEKİRDEK]
+
+**Bağlam.** L2-11 genişlik kapısını yoklama ve etkinleştirmede kapattı; üç yol açık kaldı: DR devri (raporsuz yenileme, yoklama yolundaki `&& g.report` koşulu onu istisna yapıyordu), kapanış kirası (K6) ve donanım bildiriminin otomatik öğrenmesi. Üçü de kullanılabilir HAK'ı olmayan fabrikaya `hak: null` taşıyan, fabrikanın bağlayamayacağı bir kira basıyordu ve testi yoktu. Ayrıca iptal dağıtım kapısının engel denetimi "eski derlemeye giden aday"ı (en yeni ara imzasız sürüm) teslim seçiminden bağımsız, kendi `find`'ıyla seçiyordu.
+
+**Karar.** [ÇEKİRDEK] Kira bağı kuralı tek yardımcıda: `satici/sunucu/src/services/lease-binding.ts` — `leaseUnbindable` (genişlik kapısı tuttu ve alıcının elinde kirayı bağlayacak sürüm yok ya da bilinmiyor), `holdForRootSignatureTx` (zincir sahibinin yolunda güncel şartlar kök kuyruğuna; bağlanamıyorsa ACİL + `KOK_IMZASI_ACIL`), `assertBindableBeforeLease` (elindeki HAK'ı bildirmeyen istekte ucuz ön denetim: yazmadan ve nonce'tan önce), `capabilityDowngradeRefusal` (403 `KIRA_VERILMEDI`). Her kira basan yol buradan sorar:
+- **Yoklama:** `&& g.report` istisnası kalktı (raporsuz yenileme de bağlanamayan kira almaz); çatal tarafı da bağlanamayan kira almaz (kuyruk yalnız zincir sahibinde).
+- **DR devri:** ön denetim — DR'nin yeni kirası bağlanamayacaksa devir YAZILMAZ (ana kurulum ETKİN kalır, nonce tüketilmez), DR'nin HAK'ı acil kuyruğa girer, 403. DR elindeki kirayla sürer; kök imzasından sonra aynı devir 200. Ön denetim ile tx arasında HAK değişirse yenilemenin kendisi 403 verir (devir yazılmış olur, yeniden deneme idempotent).
+- **Kapanış kirası (K6):** alan taraf bağlayamıyorsa kapanış kirası basılmaz → eski 403 (kopyaya `KIRA_VERILMEDI`, taşınmış/iptal anahtara `KURULUM_IPTAL`); kuyruk açılmaz, çünkü alan taraf zincir sahibi değil (sahibin kendi yoklaması kuyruğa alır).
+- **Donanım öğrenmesi:** istek elindeki HAK'ı bildirmediği için (protokol gövdesi KATI) bağ fail-closed ölçülür: bağlanamıyorsa öğrenme de kira da yazılmaz (kabul edilen küme, talep, kurulum kaydı değişmez), acil talep commit olur, 403; güçlüler tutuyorsa sonraki yoklama kümeyi öğrenir. Yanıt sözleşmesi (`ONAYLANDI` ⟺ lisans) bu yüzden bozulmaz.
+- **Etkinleştirme:** davranış aynı, ön denetim ve tx içi denetim aynı yardımcıdan.
+
+[ÇEKİRDEK] Eski derleme adayı TEK saf yardımcıdan: `newestLegacyVersion` (`entitlement-policy.ts`; en yeni ara imzasız sürüm ≤ güncel, girdi sırasından bağımsız) — teslim seçimi (`deliverableEntitlement`, aday genişlik kapısından geçerse teslim) ve iptal dağıtım kapısının engel denetimi (`revocation.service`) aynı adayı okur; `isIntermediateSignedToken` da oraya taşındı. Davranış korunur (`test_iptal_belgesi` 23 → 25, eski 23 vaka aynen yeşil).
+
+**Uzatma dosyası** bilerek ayrı kalır: dosya HAK'ı her zaman taşır, `withheld`'in kendisi (bağlanabilir olsa da) 409 — kural daha sıkı, bu kapının konusu değil.
+
+**Bekçi.** `test_genislik_kapisi` 21 → 33 (§7 DR · §8 kapanış · §9 donanım · §10 tek kaynak tarayıcısı + saf aday); `test_iptal_belgesi` §6 (iki tarayıcı). Negatif sonda (dosya dışı mutasyon, aslı geri yazıldı, sha eşit) 6/6 ısırdı: DR ön denetimi kaldırıldı → §7a · raporsuz yenileme istisnası geri → §7b · kapanış kirası bağ denetimsiz → §8a · donanım öğrenmesi bağ denetimsiz → §9a · donanımda kopya bağ kararı → §10b · engel denetimi kendi adayını seçer → §6a/§6b.
