@@ -16,7 +16,8 @@
 // kimliği düştü (§1d) · A5 yoklamadan satıcı saati sapması düştü (§1d) · (3d-2) A6 kurulum kaydı şeması
 // gevşetildi (`looseObject`): dosya yolu taşıyan satır gövdeye girdi → §1b · §2c · §4a/b/c kırmızı (5).
 // (L2-1) §1e lisans v2 ekleri: AB1 beyandan `parmakIziKayip` düştü → §1e · AB2 yoklama şemasından aynı alan
-// düştü (KATI şema reddeder) → §1e — şema ile beyan aynı kararı taşımazsa kırmızı.
+// düştü (KATI şema reddeder) → §1e — şema ile beyan aynı kararı taşımazsa kırmızı. (L2-6) §1f gerçek kurucu ekleri
+// üretir: AC1 kurucudan v2 alanları düştü → §1f.
 // =============================================================================
 import os from "node:os";
 import path from "node:path";
@@ -32,6 +33,8 @@ import { loadLicenseStoreSync } from "../src/lib/license/store";
 import { configureLicenseRuntimeForTests, recordVendorClockSkew, setLicenseDbFacts, setMeasuredFingerprint } from "../src/lib/license/runtime";
 import { INSTALL_HISTORY_FILE_NAME, PollRequestSchema, type Fingerprint } from "../src/lib/license/protocol";
 import { acceptLicenseResponse, buildPollBody } from "../src/services/license-sync.service";
+import { flushLicenseTraceWrites } from "../src/lib/license/accumulation";
+import { LICENSE_TRACE_SETTING_KEY } from "../src/constants/reserved-settings";
 import { fiksturKur, hakBas, kiraBas, type Fikstur } from "./lib/lisans-fikstur";
 
 const engel = hedefDbEngeli();
@@ -122,6 +125,12 @@ async function hazirla(): Promise<{ f: Fikstur; dbKimligi: string; ornekler: { i
   return { f, dbKimligi: kimlik.installationId, ornekler };
 }
 
+/** Kabulün yazdığı lisans izi satırı (bekçinin kendi kurulumu) — DB'de artık bırakılmaz. */
+async function temizleLisansIzi(): Promise<void> {
+  await flushLicenseTraceWrites();
+  await prisma.systemSetting.deleteMany({ where: { key: LICENSE_TRACE_SETTING_KEY } });
+}
+
 async function main(): Promise<void> {
   try {
     const { f, dbKimligi, ornekler } = await hazirla();
@@ -144,6 +153,14 @@ async function main(): Promise<void> {
     };
     const v2Disarda = anahtarlar(v2, "", []).filter((y) => !IZINLI_ANAHTARLAR.has(y.split(".").pop()?.replace(/\[\d+\]$/, "") ?? ""));
     check("§1e v2 ekleri (L2-1) şemadan geçer VE her anahtarı beyanlı — şema ile beyan aynı kararı taşır", PollRequestSchema.safeParse(v2).success && v2Disarda.length === 0 && v2.hak !== null, v2Disarda.join(", "));
+    setMeasuredFingerprint({ digest: { ...(f.parmakIzi as Fingerprint), f4: null }, measured: { f1: true, f2: true, f3: true, f4: false, f5: true }, measuredAt: new Date().toISOString() });
+    const gercek = await buildPollBody();
+    const gercekDisarda = anahtarlar(gercek, "", []).filter((y) => !IZINLI_ANAHTARLAR.has(y.split(".").pop()?.replace(/\[\d+\]$/, "") ?? ""));
+    check(
+      "§1f ⭐ GERÇEK kurucu (L2-6) v2 eklerini üretir: durumKaydi (sıra) + hak.ozet + kayıp etken (f4) — beyanlı ve KATI şemadan geçer",
+      typeof gercek.durumKaydi?.sira === "number" && typeof gercek.hak?.ozet === "string" && JSON.stringify(gercek.parmakIziKayip) === '["f4"]' && gercekDisarda.length === 0 && PollRequestSchema.safeParse(gercek).success,
+      `${JSON.stringify(gercek.durumKaydi)} ${JSON.stringify(gercek.parmakIziKayip)} ${gercekDisarda.join(",")}`,
+    );
     check(
       "§1d ortam.installationId = DB kimliği (yalnız bilgi), saat.saticiSapmaSn ölçülen sapma; lisans kimliği gövdede YOK (imzalı başlıkta)",
       govde.ortam.installationId === dbKimligi && govde.saat.saticiSapmaSn === -1200 && dbKimligi !== f.kurulumId && !metin.includes(f.kurulumId),
@@ -190,6 +207,7 @@ async function main(): Promise<void> {
     fail++;
     console.log(`❌ beklenmeyen hata — ${e instanceof Error ? e.stack : String(e)}`);
   } finally {
+    await temizleLisansIzi();
     fs.rmSync(KOK, { recursive: true, force: true });
     await prisma.$disconnect();
     await pool.end();

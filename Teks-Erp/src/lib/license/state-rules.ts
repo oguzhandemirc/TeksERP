@@ -12,9 +12,11 @@ import {
   type Validity,
   type LeaseDoc,
   type LicenseMode,
+  type FingerprintRuleApplied,
 } from "./protocol";
 import type { CoreErrorCode } from "./license-core";
-import { evaluateClock, type ClockResult, type EntitlementPin, type SanctionSnapshot } from "./saat";
+import { evaluateClock, type ClockResult, type EntitlementPin, type RememberedAnchor, type SanctionSnapshot } from "./saat";
+import type { TraceInput } from "./state-rules-trace";
 
 export const REASON_CODES = [
   "HAK_YOK",
@@ -54,6 +56,12 @@ export const REASON_CODES = [
   "BAKIM_BITTI",
   "BAKIM_IHLALI",
   "DERLEME_TARIHI_YOK",
+  /** G12: kira · durum kaydı · DB izinden biri ya da birkaçı kayıp (ayrıntı: hangileri); son kiradan beri kalıcı. */
+  "LISANS_IZI_KAYIP",
+  /** G12: ayakta kalan iki iz farklı süre çapası taşıyor — erken olan geçerli. */
+  "LISANS_IZI_CELISKI",
+  /** G12: süren ölçülemedi birikimi (çalışma süresi) — 14 gün UYARI → 30 gün EK_SURE → KISITLI. */
+  "BELIRSIZLIK_SURUYOR",
 ] as const;
 export type ReasonCode = (typeof REASON_CODES)[number];
 
@@ -93,6 +101,11 @@ export const REASON_VALIDITY: Readonly<Record<ReasonCode, Validity | null>> = {
   BAKIM_BITTI: null,
   BAKIM_IHLALI: null,
   DERLEME_TARIHI_YOK: null,
+  // İz kaybı ve çelişki program kalan süreyi bilemediği hâllerdir: ölçülemedi, merdivene girer.
+  LISANS_IZI_KAYIP: "OLCULEMEDI",
+  LISANS_IZI_CELISKI: "OLCULEMEDI",
+  // Merdivenin kendisi kademe taşır; geçerliliği onu doğuran bulgular belirler.
+  BELIRSIZLIK_SURUYOR: null,
 };
 
 export interface Banner {
@@ -155,6 +168,23 @@ export interface LicenseStateInput {
   readonly saticiSapmaMs?: number | null;
   /** Var olan ama okunamayan depo dosyaları (ad listesi); boşsa sorun yok. */
   readonly depoOkunamadi?: readonly string[];
+  // ── Lisans v2 G12 (L2-6). Hepsi isteğe bağlı: verilmezse bugünkü davranış. ──
+  /** Lisans izlerinin hâli (kira · durum kaydı · DB izi); yoksa iz kuralı işlemez. */
+  readonly izler?: TraceInput;
+  /** Süren ölçülemedi birikimi (çalışma süresi, ms): durum kaydı ile DB izinin BÜYÜĞÜ + bu süreçteki. */
+  readonly belirsizlikMs?: number;
+  /** Parmak izi uyuşmazlık merdiveninin birikimi (çalışma süresi, ms). */
+  readonly parmakIziUyusmazMs?: number;
+  /** Kararın uygulandığı parmak izi kuralı (kiradaki alan; yoksa `v1`); ölçülmediyse verilmez. */
+  readonly parmakIziKurali?: FingerprintRuleApplied;
+  /** Ayakta kalan izlerin (durum kaydı dosyası · DB izi) hatırladığı süre çapaları. */
+  readonly sonCapalar?: readonly RememberedAnchor[];
+  /** HAK doğrulanamazsa uygulanacak son bilinen modül tavanı (durum kaydı pini → DB izi); bilinmiyorsa null. */
+  readonly sonBilinenTavan?: readonly string[] | null;
+  /** Kurulum anahtarı okunamıyor: imza (yoklama, kayıt yazımı) durdu — İnternet YOK sayılır (Z9). */
+  readonly imzaYok?: boolean;
+  /** Üç iz birden yok bulunduğu an (K7, kayıttan): süre çapası budur, HAK verilişi / ilk açılış çapası uygulanmaz. */
+  readonly ekSureCapasiMs?: number | null;
 }
 
 /** Kiradan sunucu kararlarının anlık görüntüsü — `durum.json` bunu saklar, durum onu okur. */
@@ -238,12 +268,6 @@ export function computeClock(g: LicenseStateInput, lease: LeaseDoc | null, out: 
   });
   if (s.finding) out.push({ code: s.finding, detail: s.findingSource ?? undefined, tier: "UYARI", banner: UNMEASURED_BANNER });
   return s;
-}
-
-export function evaluateMeasurements(g: LicenseStateInput, lease: LeaseDoc | null, out: Finding[]): void {
-  // Kabul edilmiş küme kirada; kira yoksa karşılaştıracak bir şey de yok.
-  if (lease && g.parmakIziEslesme === "ESLESMEDI") out.push({ code: "PARMAK_IZI_UYUSMAZ", tier: "UYARI", banner: UNVERIFIED_BANNER });
-  if (lease && g.parmakIziEslesme === "OLCULEMEDI") out.push({ code: "PARMAK_IZI_OLCULEMEDI", tier: "UYARI", banner: UNMEASURED_BANNER });
 }
 
 /** Zamanın getirdiği KISITLI'nın ikinci anahtarı (`state-rules-time.ts` `evaluateExchange` doldurur). */

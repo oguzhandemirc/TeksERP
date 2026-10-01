@@ -9,6 +9,7 @@ import {
   ModuleKeySchema,
   SANCTION_LEVELS,
   CLOCK_SKEW_MS,
+  GRACE_MAX_DAYS,
   TYP,
   UuidSchema,
   publicKeyFromX,
@@ -120,14 +121,38 @@ export const EntitlementPinSchema = z.object({
   surum: z.number().int().min(1),
   sinif: z.enum(LICENSE_CLASSES),
   kokTuru: z.enum(ROOT_KINDS),
+  /** Son bilinen modül tavanı (G12 §3.1-2): HAK doğrulanamazsa bu uygulanır; eski kayıtta yok. */
+  moduller: z.array(ModuleKeySchema).max(64).optional(),
+  /** HAK'ın kip alt sınırı: HAK silinse de kip bunun altına inmez. */
+  kipAltSiniri: z.literal("zorla").optional(),
 });
 export type EntitlementPin = z.infer<typeof EntitlementPinSchema>;
 
-/** `durum.json`: kurulum anahtarıyla imzalı, kiraya bağlı birikim kaydı. */
+/** İz türleri (G12 §3.1-4): kira dosyası · durum kaydı dosyası · fabrika DB'sindeki lisans izi. */
+export const TRACE_KINDS = ["KIRA", "DURUM", "IZ"] as const;
+export type TraceKind = (typeof TRACE_KINDS)[number];
+
+/**
+ * Son kabul edilen kiranın süre çapası — kira silinir ya da bozulursa ayakta kalan izlerden okunur (silmek süreyi
+ * uzatmaz). `odenmis` P'dir (yalnız P modeli işliyorduysa; `null` = süresiz); `eski` v1 çapası min(bitiş, vade).
+ */
+export const RememberedAnchorSchema = z.object({
+  kiraId: UuidSchema,
+  odenmis: IsoTimeSchema.nullable().optional(),
+  eski: IsoTimeSchema,
+  eskiNeden: z.enum(["VADE_DOLDU", "KIRA_SURESI_DOLDU"]),
+  ekSureGun: z.number().int().min(0).max(GRACE_MAX_DAYS),
+});
+export type RememberedAnchor = z.infer<typeof RememberedAnchorSchema>;
+
+const CachedFactorRecordSchema = z.object({ ozet: z.string().regex(/^[A-Za-z0-9_-]{43}$/), an: IsoTimeSchema, yol: z.string().max(64).nullable() });
+
+/** `durum.json`: kurulum anahtarıyla imzalı, kiraya bağlı birikim kaydı. Aynı JWS fabrika DB'sinde lisans izi olarak da durur. */
 export const StateRecordSchema = z.object({
   v: z.literal(1),
   kurulumId: UuidSchema,
-  kiraId: UuidSchema,
+  /** `null` = KİRASIZ kayıt: izler kaybolduktan sonra yazılır, hiçbir kiranın monotonik birikimini taşımaz. */
+  kiraId: UuidSchema.nullable(),
   birikenMs: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER),
   yazildi: IsoTimeSchema,
   yuksekSu: IsoTimeSchema,
@@ -152,6 +177,23 @@ export const StateRecordSchema = z.object({
   butunlukIlk: IsoTimeSchema.nullable().optional(),
   /** Damganın ait olduğu imzalı paket (`butunluk.jws` paketId); farklı paket kurulunca damga düşer. */
   butunlukPaketId: UuidSchema.nullable().optional(),
+  // Lisans v2 G12 (L2-6): belirsizlik ve parmak izi merdivenleri, iz kaybı, son bilinen çapa.
+  /** Son kabul edilen kiranın süre çapası (kira silinince ayakta kalan izden okunur). */
+  sureCapasi: RememberedAnchorSchema.nullable().optional(),
+  /** Süren ölçülemedinin ÇALIŞMA SÜRESİ birikimi; yalnız yeni kira kabulü sıfırlar. */
+  belirsizlik: z.object({ birikenMs: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER), ilk: IsoTimeSchema.nullable() }).optional(),
+  /** Parmak izi eşiğin altındayken biriken çalışma süresi; eşik yeniden tutunca sıfırlanır. */
+  parmakIziUyusmazMs: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER).optional(),
+  /** Son kiradan beri görülen iz kayıpları (kalıcı bayrak; yalnız yeni kira kabulü siler). */
+  izKaybi: z.object({ ilk: IsoTimeSchema, izler: z.array(z.enum(TRACE_KINDS)).min(1).max(3) }).nullable().optional(),
+  /** Üç iz birden yok bulunduğu an (K7: ek süre buradan, 14 günlük uyarı atlanır). */
+  ekSureCapasi: IsoTimeSchema.nullable().optional(),
+  /** Fabrika DB'sindeki lisans izi bu kayıtla en az bir kez yazıldı (izin silinmesi ancak bundan sonra kayıptır). */
+  izKurulu: z.boolean().optional(),
+  /** Parmak izi 24 sa önbelleğinin kopyası (yalnız tuzlu özet; K8). */
+  parmakIziOnbellegi: z
+    .object({ f1: CachedFactorRecordSchema.optional(), f2: CachedFactorRecordSchema.optional(), f3: CachedFactorRecordSchema.optional(), f4: CachedFactorRecordSchema.optional(), f5: CachedFactorRecordSchema.optional() })
+    .optional(),
 });
 export type StateRecord = z.infer<typeof StateRecordSchema>;
 
@@ -182,6 +224,6 @@ export function verifyStateRecord(
 
 /** Durum kaydından bu kiraya ait monotonik birikimi okur; başka kiraya aitse ölçülemedi. */
 export function monotonicElapsed(record: Result<StateRecord> | null, leaseId: string | null): number | null {
-  if (!record || !record.ok || leaseId === null || record.value.kiraId !== leaseId) return null;
+  if (!record || !record.ok || leaseId === null || record.value.kiraId === null || record.value.kiraId !== leaseId) return null;
   return record.value.birikenMs;
 }

@@ -13,6 +13,7 @@ import {
   isoToMs,
   signRequest,
   type FingerprintFactor,
+  type PollRequest,
   type RequestPurpose,
   type VendorErrorCode,
 } from "../../lib/license/protocol";
@@ -26,6 +27,7 @@ import {
   getLicenseSnapshot,
   getMeasuredFingerprint,
   recordVendorClockSkew,
+  type LicenseSnapshot,
 } from "../../lib/license/runtime";
 
 const VENDOR_TIMEOUT_MS = 20_000;
@@ -113,7 +115,7 @@ export function requireStore(): LicenseStoreSnapshot & { key: InstallationKey } 
 export function requireReady(): ReadyContext {
   const store = requireStore();
   const snap = getLicenseSnapshot();
-  if (!snap.hazir) throw licenseError(409, "LICENSE_IDENTITY_NOT_READY", "Kurulum kimliği henüz hazır değil; biraz sonra tekrar deneyin.");
+  if (!snap.imzaHazir) throw licenseError(409, "LICENSE_IDENTITY_NOT_READY", "Kurulum kimliği henüz hazır değil; biraz sonra tekrar deneyin.");
   return { store, key: store.key, licenseId: snap.licenseId };
 }
 
@@ -297,4 +299,18 @@ export function installRecordsField(): { kurulumKayitlari?: ReturnType<typeof re
   if (!dir) return {};
   const records = readInstallHistory(installHistoryPath(dir));
   return records.length > 0 ? { kurulumKayitlari: records } : {};
+}
+
+/**
+ * Lisans v2 G12 raporu (satıcı bununla yerel müdahale şüphesini görür; KARAR değil, yalnız uyarı): durum kaydı sırası,
+ * belirsizlik birikimi ve kayıp parmak izi etkenleri. Birikim ve kayıp yalnız doluysa gider. KATI gövde ⇒ satıcı önce.
+ */
+export function pollV2Fields(snap: LicenseSnapshot): Pick<PollRequest, "durumKaydi" | "belirsizlik" | "parmakIziKayip"> {
+  const birikenMs = Math.round(snap.state.belirsizlik.birikenMs);
+  const kayip = currentLostFactors();
+  return {
+    durumKaydi: { sira: snap.view.record?.sira ?? null, gecerli: snap.view.fileValid },
+    ...(birikenMs > 0 ? { belirsizlik: { birikenMs, ilk: snap.view.record?.belirsizlik?.ilk ?? null } } : {}),
+    ...(kayip.length > 0 ? { parmakIziKayip: kayip } : {}),
+  };
 }

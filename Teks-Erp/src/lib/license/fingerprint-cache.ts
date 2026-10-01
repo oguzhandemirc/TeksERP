@@ -137,3 +137,21 @@ export function writeFingerprintCache(dir: string, salt: Uint8Array, cache: Fing
   const onbellek = canonicalEntries(cache);
   writeFileAtomicSync(path.join(dir, FINGERPRINT_CACHE_FILE), JSON.stringify({ v: 1, onbellek, mac: b64uEncode(macOf(onbellek, salt)) }));
 }
+
+// ── İmzalı durum kaydındaki kopya (L2-6): aynı içerik, an ISO — kayıt kurulum anahtarıyla imzalı, HMAC gerekmez ────
+export type RecordCacheCopy = Partial<Record<FingerprintFactor, { ozet: string; an: string; yol: string | null }>>;
+
+export function cacheToRecordCopy(cache: FingerprintCache | undefined): RecordCacheCopy | undefined {
+  if (!cache) return undefined;
+  const out = canonicalEntries(cache) as RecordCacheCopy;
+  return Object.keys(out).length > 0 ? out : undefined;
+}
+
+export function cacheFromRecordCopy(copy: RecordCacheCopy | undefined): FingerprintCache {
+  const out: Partial<Record<FingerprintFactor, CachedFactor>> = {};
+  for (const f of FINGERPRINT_FACTORS) {
+    const e = copy?.[f];
+    if (e && Number.isFinite(isoToMs(e.an))) out[f] = { ozet: e.ozet, an: isoToMs(e.an), yol: e.yol };
+  }
+  return out;
+}

@@ -96,7 +96,7 @@ import {
   parseNativeIdentity,
   type LoaderOptions,
 } from "../src/lib/license/native";
-import { isNativeBinding } from "../src/lib/license/native-adapter";
+import { isNativeBinding, nativeCore, type NativeBinding } from "../src/lib/license/native-adapter";
 import {
   INTEGRITY_TYP,
   PACKAGE_PUBLIC_KEYS,
@@ -609,6 +609,44 @@ function bolum0(): void {
   check("§0l lisans v2 sabitleri Rust = TS (kullanımlar · kapanış · kurallar · güçlü etkenler · ufuk · iptal tavanı · eşikler)", v2Fark.length === 0, v2Fark.join(" | ") || "12 sabit");
 }
 
+/**
+ * §1j (L2-6, G12 §3.3): native ÇAĞRISI istisna atarsa (panic → JS istisnası) sonuç "çekirdek yok"tur — doğrulamalar
+ * CEKIRDEK_YOK, bütünlük GEÇERSİZ, saf kararlar sıkılaşır; istisna yukarı SIZMAZ (süreç düşmez).
+ */
+async function bolum1Istisna(): Promise<void> {
+  console.log("\n§1j native çağrı istisnası → çekirdek yok (sızmaz)");
+  const patla = (): never => {
+    throw new Error("native panic");
+  };
+  const ad = ["kunye", "builtinAnchor", "verifyJws", "verifyCertificate", "verifyEntitlement", "verifyLease", "checkLeaseBinding", "verifyRevocation", "pickNewerRevocation", "isRevocationCurrent", "compareFingerprints", "assessIdentification", "canAutoLearnFingerprint", "offlineHorizonCeilingDays", "normalizeFactor", "digestFingerprint", "unwrapModuleKey", "unwrapLeaseModuleKey", "protectLocal", "unprotectLocal", "collectFingerprint", "verifyIntegrity"];
+  const sahte = Object.fromEntries(ad.map((n) => [n, n === "verifyIntegrity" || n === "collectFingerprint" ? async () => patla() : patla])) as unknown as NativeBinding;
+  const c = nativeCore(sahte);
+  let sizdi: string | null = null;
+  const dene = async (n: string, f: () => unknown): Promise<unknown> => {
+    try {
+      return await f();
+    } catch {
+      sizdi = n;
+      return null;
+    }
+  };
+  const sonuclar = [
+    await dene("verifyEntitlement", () => c.verifyEntitlement("a.b.c")),
+    await dene("verifyLease", () => c.verifyLease("a.b.c")),
+    await dene("checkLeaseBinding", () => c.checkLeaseBinding("a.b.c", "a.b.c")),
+    await dene("verifyRevocation", () => c.verifyRevocation("a.b.c")),
+    await dene("unwrapModuleKey", () => c.unwrapModuleKey({}, "x", "finance.enabled")),
+  ] as Array<{ ok: boolean; code?: string } | null>;
+  const butunluk = (await dene("verifyIntegrity", () => c.verifyIntegrity("a.b.c", tmpdir()))) as { ok: boolean; value?: { durum: string } } | null;
+  const karar = (await dene("compareFingerprints", () => c.compareFingerprints({ f1: null, f2: null, f3: null, f4: null, f5: null }, { f1: null, f2: null, f3: null, f4: null, f5: null }, { rule: "standart" }))) as { result: string } | null;
+  const normal = await dene("normalizeFactor", () => c.normalizeFactor("f1", "abc"));
+  check(
+    "§1j ⭐ native istisnası SIZMAZ: belge doğrulamaları CEKIRDEK_YOK, bütünlük GEÇERSİZ, parmak izi kararı ÖLÇÜLEMEDİ, normalleştirme null",
+    sizdi === null && sonuclar.every((r) => r !== null && !r.ok && r.code === CORE_UNAVAILABLE_CODE) && butunluk?.ok === true && butunluk.value?.durum === "GECERSIZ" && karar?.result === "OLCULEMEDI" && normal === null,
+    sizdi ? `sızdı: ${sizdi}` : JSON.stringify(sonuclar.map((r) => r?.code)),
+  );
+}
+
 function secenek(g: Partial<LoaderOptions> & { cwd: string }): LoaderOptions {
   return { required: false, env: {}, platform: process.platform, arch: process.arch, ...g };
 }
@@ -1074,6 +1112,7 @@ async function main(): Promise<void> {
   console.log("=== Lisans native çekirdeği kâhini ===");
   bolum0();
   await bolum1();
+  await bolum1Istisna();
   const dosya = vektorDosyasiOku();
   const dosyaV2 = vektorV2DosyasiOku();
   await bolum2(dosya, dosyaV2);

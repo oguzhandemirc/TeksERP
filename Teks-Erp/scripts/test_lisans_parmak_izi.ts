@@ -19,6 +19,9 @@
 //   §6 ⭐ uçtan uca `measureFingerprint` (sahte çekirdek, geçici dizin, denetimli saat): okunamayan f3 1 sa sonra önbellekten, 25 sa
 //      sonra kayıp → v2 kararı `lost` · bozuk önbellek bildirilir · F5 SQL yolundan (gerçek DB)
 //   §7 parmak izi tazeleme aralığı kayıp süresinin en az 12'de biri (24 sa'te ≥ 12 deneme)
+//   §8 ⭐ imzalı durum kaydındaki önbellek KOPYASI (L2-6): birleşim etken başına en yeni okuma (eskisi yeniyi ezmez) ·
+//      kayıt kopyası gidiş-dönüş (an ISO, şemadan geçer) · dosya silinince kayıt kopyası 24 sa'e dek köprüler, sonrası
+//      kayıp · motor bağı (tazeleme kopyayı okur, ölçümün önbelleğini kayda yazar)
 //
 // NEGATİF SONDA — dosya DIŞI mutasyon (uygulandı → kırmızı → geri alındı, sha eşit; sayılar commit mesajında):
 //   bkz. Teks-Erp/docs/BEKCI-HARITASI.md `## lisans` satırı.
@@ -41,11 +44,14 @@ import {
   CACHE_CLOCK_BACK_TOLERANCE_MS,
   FINGERPRINT_CACHE_FILE,
   applyFingerprintCache,
+  cacheFromRecordCopy,
+  cacheToRecordCopy,
   readFingerprintCache,
   writeFingerprintCache,
   type FingerprintCache,
 } from "../src/lib/license/fingerprint-cache";
-import { measureFingerprint } from "../src/lib/license/fingerprint";
+import { measureFingerprint, mergeFingerprintCaches } from "../src/lib/license/fingerprint";
+import { StateRecordSchema } from "../src/lib/license/saat";
 import { tsLicenseCore, type CollectedFingerprint, type LicenseCore } from "../src/lib/license/license-core";
 import { FINGERPRINT_REFRESH_MS } from "../src/jobs/license-poll.job";
 
@@ -241,6 +247,63 @@ function aralikBolumu(): void {
   );
 }
 
+async function kayitKopyasiBolumu(): Promise<void> {
+  console.log("\n§8 — imzalı durum kaydındaki önbellek kopyası (köprü)");
+  const t0 = Date.UTC(2026, 9, 1, 8);
+  const canli = ozetler(TAM);
+  const eski = applyFingerprintCache(canli, yollar("eski"), {}, t0).next;
+  const yeni = applyFingerprintCache(ozetler({ ...TAM, f3: "S4EVNX0N9DEGISTI" }), yollar("yeni"), {}, t0 + HOUR).next;
+  const m1 = mergeFingerprintCaches(eski, yeni);
+  const m2 = mergeFingerprintCaches(yeni, eski);
+  check(
+    "§8a ⭐ birleşim etken başına EN YENİ okuma: kayıt kopyası yeniyse kazanır, eskiyse dosyadakini EZMEZ (sıra fark etmez)",
+    m1.f3?.an === t0 + HOUR && m1.f3.ozet === yeni.f3?.ozet && m2.f3?.an === t0 + HOUR && m2.f3.ozet === yeni.f3?.ozet,
+    `${m1.f3?.an} ${m2.f3?.an}`,
+  );
+  const yalnizKayit = mergeFingerprintCaches({}, { f2: eski.f2 as NonNullable<FingerprintCache["f2"]> });
+  check("§8b yalnız kayıtta olan etken birleşime girer; kopya yoksa dosyanınki aynen", yalnizKayit.f2?.ozet === eski.f2?.ozet && mergeFingerprintCaches(eski, undefined) === eski);
+  const kopya = cacheToRecordCopy(eski);
+  const geri = cacheFromRecordCopy(kopya);
+  check(
+    "§8c kayıt kopyası gidiş-dönüş: an ISO'da, özet/yol aynı, imzalı kayıt şemasından geçer; boş önbellek kopya üretmez",
+    kopya !== undefined &&
+      FACTORS.every((f) => geri[f]?.an === eski[f]?.an && geri[f]?.ozet === eski[f]?.ozet && geri[f]?.yol === eski[f]?.yol) &&
+      StateRecordSchema.shape.parmakIziOnbellegi.safeParse(kopya).success &&
+      cacheToRecordCopy({}) === undefined,
+  );
+  const bozukAn = cacheFromRecordCopy({ f1: { ozet: eski.f1?.ozet ?? "", an: "dun", yol: null } });
+  check("§8d anı okunamayan kopya girdisi köprü kurmaz", bozukAn.f1 === undefined);
+
+  const dizin = path.join(GECICI, "kopru");
+  fs.mkdirSync(dizin);
+  let os: Partial<Record<"f1" | "f2" | "f3" | "f4", string>> = { f1: TAM.f1, f2: TAM.f2, f3: TAM.f3, f4: TAM.f4 };
+  const cekirdek = sahteCekirdek(() => os);
+  const s0 = Date.now();
+  const k0 = await measureFingerprint(TUZ, cekirdek, { cacheDir: dizin, nowMs: s0 });
+  const kayitKopyasi = cacheToRecordCopy(k0.onbellek);
+  fs.rmSync(path.join(dizin, FINGERPRINT_CACHE_FILE));
+  os = { f1: TAM.f1, f2: TAM.f2, f4: TAM.f4 };
+  const kontrol = await measureFingerprint(TUZ, cekirdek, { cacheDir: path.join(GECICI, "kopru-bos"), nowMs: s0 + HOUR });
+  const k1 = await measureFingerprint(TUZ, cekirdek, { cacheDir: dizin, nowMs: s0 + HOUR, recordCache: cacheFromRecordCopy(kayitKopyasi) });
+  check(
+    "§8e ⭐ önbellek DOSYASI silindi, f3 okunamıyor → kayıt kopyası köprüler (özet ilk ölçümün, kaynak önbellek); kopyasız kontrol: kayıp",
+    k1.digest.f3 === k0.digest.f3 && k1.okuma?.f3.kaynak === "onbellek" && kontrol.digest.f3 === null && kontrol.okuma?.f3.kaynak === "yok",
+    `${k1.okuma?.f3.kaynak} / kontrol ${kontrol.okuma?.f3.kaynak}`,
+  );
+  check("§8f köprülenen okuma dosyaya yeniden yazılır (sonraki ölçüm kopyasız da köprüler)", readFingerprintCache(dizin, TUZ).cache.f3?.an === k0.onbellek?.f3?.an);
+  const k2 = await measureFingerprint(TUZ, cekirdek, { cacheDir: path.join(GECICI, "kopru-bos2"), nowMs: s0 + 25 * HOUR, recordCache: cacheFromRecordCopy(kayitKopyasi) });
+  check("§8g kayıt kopyası da 24 saatten sonra köprülemez (kayıp, kopya süreyi uzatmaz)", k2.digest.f3 === null && k2.okuma?.f3.kaynak === "yok");
+  const kaynak = fs.readFileSync(path.join(__dirname, "..", "src", "services", "license-sync.service.ts"), "utf8");
+  const govde = kaynak.slice(kaynak.indexOf("export async function refreshLicenseFingerprint"));
+  const ilk = govde.slice(0, govde.indexOf("\n}\n"));
+  check(
+    "§8h ⭐ motor bağı: tazeleme kayıttaki kopyayı ölçüme verir ve ölçümün önbelleğini kayda yazar",
+    /cacheFromRecordCopy\(getLicenseSnapshot\(\)\.view\.record\?\.parmakIziOnbellegi\)/.test(ilk) &&
+      /measureFingerprint\([^)]*\{\s*recordCache\s*\}\)/.test(ilk) &&
+      /setFingerprintCacheCopy\(cacheToRecordCopy\(fp\.onbellek\)\)/.test(ilk),
+  );
+}
+
 async function main(): Promise<void> {
   try {
     secimBolumu();
@@ -250,6 +313,7 @@ async function main(): Promise<void> {
     dosyaBolumu();
     await olcumBolumu();
     aralikBolumu();
+    await kayitKopyasiBolumu();
   } catch (e) {
     fail++;
     console.log(`❌ beklenmeyen hata — ${e instanceof Error ? e.stack : String(e)}`);

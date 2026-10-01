@@ -17,8 +17,8 @@ import {
   getLicenseSnapshot,
   invalidateLicenseSnapshot,
   setMeasuredFingerprint,
-  startAccumulationForLease,
 } from "../../src/lib/license/runtime";
+import { startAccumulationForLease } from "../../src/lib/license/record-writer";
 import { refreshLicenseDbFacts } from "../../src/services/license-sync.service";
 import {
   DAY_MS,

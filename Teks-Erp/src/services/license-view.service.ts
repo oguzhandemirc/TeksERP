@@ -82,7 +82,7 @@ export function getLicenseStatus(authenticated: boolean): LicenseStatusResponse 
 export function isSuspendedBeforeLogin(): boolean {
   try {
     const snap = getLicenseSnapshot();
-    return snap.hazir && snap.state.kip === "zorla" && snap.state.uygulananKademe === "DURDURULMUS";
+    return snap.durumHazir && snap.state.kip === "zorla" && snap.state.uygulananKademe === "DURDURULMUS";
   } catch {
     return false;
   }
@@ -90,7 +90,10 @@ export function isSuspendedBeforeLogin(): boolean {
 
 // ── Ayrıntı (license:view) ──────────────────────────────────────────────────────
 export interface LicenseDetail {
+  /** İmza hazır (yoklama, etkinleştirme, istek): depo + kurulum anahtarı + DB olguları. */
   readonly hazir: boolean;
+  /** Durum hazır: belgeler doğrulanıyor, kapı ve tavan işliyor (anahtar okunamasa da — G12 §3.1-1). */
+  readonly durumHazir: boolean;
   /**
    * `kurulumId` LİSANS kimliğidir (LICENSE_DIR; etkinleşmemişte null); `veritabaniKimligi` DB'nin
    * `system.installationId`si — yalnız bilgi (DB kopyası taşır, lisans kimliği değildir; D14).
@@ -248,7 +251,8 @@ export function getLicenseDetail(): LicenseDetail {
   const snap = getLicenseSnapshot();
   const facts = getLicenseDbFacts();
   return {
-    hazir: snap.hazir,
+    hazir: snap.imzaHazir,
+    durumHazir: snap.durumHazir,
     kurulum: {
       kurulumId: snap.licenseId,
       veritabaniKimligi: facts.installationId,
