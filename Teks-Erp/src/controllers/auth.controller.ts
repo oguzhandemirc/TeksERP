@@ -8,7 +8,16 @@ import { AuthService } from "../services/auth.service";
 import { resolveSystemAccountLock } from "../services/helpers/system-account.registry";
 import { isSettingsPasswordConfigured } from "../services/settings-password.service";
 import { readClientVersionHeader } from "../constants/client-info";
-import type { LoginContext } from "../services/auth.service";
+import { CURRENT_PASSWORD_INVALID_CODE, type LoginContext } from "../services/auth.service";
+import { passwordPolicyViolation } from "../constants/password-policy";
+
+const changePasswordSchema = z.object({
+  currentPassword: z.string().min(1, "Mevcut parola gerekli"),
+  newPassword: z.string().superRefine((value, ctx) => {
+    const violation = passwordPolicyViolation(value);
+    if (violation) ctx.addIssue({ code: "custom", message: violation });
+  }),
+});
 import { AuditService } from "../services/audit.service";
 import { TotpAccountService } from "../services/totp-account.service";
 import {
@@ -233,6 +242,8 @@ export class AuthController {
         data: {
           token: result.token,
           user: result.user,
+          // Panel bunu görünce uygulamaya girmeden parola değiştirme adımını açar.
+          mustChangePassword: result.mustChangePassword,
         },
         message: "Giriş başarılı",
       });
@@ -327,7 +338,7 @@ export class AuthController {
       });
       res.status(200).json({
         success: true,
-        data: { token: result.token, user: result.user },
+        data: { token: result.token, user: result.user, mustChangePassword: result.mustChangePassword },
         message: "Giriş başarılı",
       });
     } catch (error) {
@@ -412,7 +423,7 @@ export class AuthController {
       });
       res.status(200).json({
         success: true,
-        data: { token: result.token, user: result.user },
+        data: { token: result.token, user: result.user, mustChangePassword: result.mustChangePassword },
         message: "Giriş başarılı",
       });
     } catch (error) {
@@ -558,6 +569,7 @@ export class AuthController {
           // guard'ın emniyet supabının AYNI kaynağıdır — ayrışırsa panel
           // yazılabilir gösterip 403 yerdi (ya da tersi).
           isSystemAccount: req.isSystemAccount === true,
+          mustChangePassword: req.mustChangePassword === true,
           // ⚠️ `systemAccountExistsKnown()` DEĞİL (2026-09-03, D2 bulgusu).
           // Defter üç durumludur ve "bilinmiyor" hâlinde KAPI KİLİTLİDİR
           // (fail-closed). Ham okuma orada `false` derdi → panel supabı AÇIK
@@ -662,4 +674,75 @@ export class AuthController {
     }
   }
 
+
+  /**
+   * @openapi
+   * /api/auth/change-password:
+   *   post:
+   *     tags: [Auth]
+   *     summary: Kendi parolasını değiştir (zorunlu ilk değişim dahil)
+   *     description: >
+   *       Mevcut parola doğrulanır; yeni parola politikası en az 10 karakter. Başarıda bütün
+   *       oturumlar kapanır (PASSWORD_RESET) — istemci yeni parolayla yeniden giriş yapar.
+   *       Zorunlu parola değişimi bekleyen hesap da bu uca erişir.
+   *     security:
+   *       - bearerAuth: []
+   *     requestBody:
+   *       required: true
+   *       content:
+   *         application/json:
+   *           schema:
+   *             type: object
+   *             required: [currentPassword, newPassword]
+   *             properties:
+   *               currentPassword: { type: string }
+   *               newPassword: { type: string, minLength: 10 }
+   *     responses:
+   *       200: { description: Parola değişti, oturumlar kapandı }
+   *       400: { description: Mevcut parola yanlış (CURRENT_PASSWORD_INVALID) ya da politika ihlali }
+   *       429: { description: Çok fazla yanlış mevcut parola denemesi }
+   */
+  static async changePassword(req: Request, res: Response, next: NextFunction): Promise<void> {
+    const userId = req.user?.userId;
+    if (!userId) {
+      next(AppError.unauthorized("Token bulunamadı."));
+      return;
+    }
+    let body: { currentPassword: string; newPassword: string };
+    try {
+      body = changePasswordSchema.parse(req.body);
+    } catch (error) {
+      next(error);
+      return;
+    }
+    // Giriş kilidiyle aynı şalter, ayrı kova: oturumu ele geçiren mevcut parolayı
+    // sınırsız deneyemesin. Rezervasyon bcrypt'ten ÖNCE (giriş yolu emsali).
+    const lockKeys = resolveLoginLockoutKeys(req, `cp:${userId}`).map((spec) => ({
+      ...spec,
+      key: `cp:${spec.key}`,
+    }));
+    const lock = await reserveLoginAttempt(lockKeys);
+    if (lock.blocked) {
+      next(
+        AppError.tooManyRequests(
+          `Çok fazla hatalı parola denemesi. ${lock.retryAfterSec} saniye sonra tekrar deneyin.`,
+          { code: "LOGIN_LOCKED", retryAfterSec: lock.retryAfterSec },
+        ),
+      );
+      return;
+    }
+    try {
+      await AuthService.changeOwnPassword(userId, body.currentPassword, body.newPassword);
+      resetLoginLockout(lockKeys);
+      res.status(200).json({
+        success: true,
+        message: "Parolanız değiştirildi. Yeni parolanızla tekrar giriş yapın.",
+      });
+    } catch (error) {
+      const wrongCurrent =
+        error instanceof AppError && error.details?.code === CURRENT_PASSWORD_INVALID_CODE;
+      if (!wrongCurrent) releaseLoginAttempt(lockKeys);
+      next(error);
+    }
+  }
 }

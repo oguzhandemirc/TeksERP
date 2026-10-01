@@ -46,6 +46,8 @@ const ARACLAR = [
   // Yedek sifreleme (.tkenc): yedekle.ps1, kur.ps1 ve panelin geri yukleme komutu bunu cagirir.
   // Yalniz node:crypto kullanir - paketlenmis sunucuda node_modules olmadan da kosar.
   { giris: "scripts/yedek-sifrele.ts", cikti: "dist/tools/yedek-sifrele.cjs" },
+  // JWT sırrı denetimi + rotasyonu (docs/ops/JWT-SIR-ROTASYONU.md) — backend açılışıyla aynı yüklem.
+  { giris: "scripts/jwt-sir.ts", cikti: "dist/tools/jwt-sir.cjs" },
 ];
 
 // Calisma aninda node_modules'ten cozulecekler. Hepsi URETIM bagimliligidir

@@ -17,7 +17,11 @@ import {
   readLoginMethods,
   readSameTypeSessionPolicy,
   readAbsoluteSessionCapDays,
+  MAX_ABSOLUTE_SESSION_CAP_DAYS,
 } from "./system-setting.service";
+import { loadJwtSecretAtBoot } from "../lib/jwt-secret";
+import { uyari } from "../lib/logger";
+import { passwordPolicyViolation } from "../constants/password-policy";
 import { SessionRegistryService } from "./session-registry.service";
 import { TotpAccountService } from "./totp-account.service";
 import { getShortCredentialKeyRing, ringKeyByKid } from "../lib/short-credential/keyring";
@@ -57,6 +61,16 @@ export interface LoginContext {
 
 /** Gövdeden gelen istemci türü. `undefined` = mobil (tarihsel varsayılan). */
 export type LoginClientType = "electron" | "mobile" | "web";
+
+/** Giriş çıktısı. `mustChangePassword` yalnız panel girişinde true olabilir (tablete 403). */
+export type LoginResult = { token: string; user: JwtPayload; mustChangePassword: boolean };
+
+export const PASSWORD_CHANGE_REQUIRED_CODE = "PASSWORD_CHANGE_REQUIRED";
+export const PASSWORD_CHANGE_REQUIRED_MESSAGE =
+  "Parolanızı değiştirmeniz gerekiyor. Yeni parola belirlemeden devam edilemez.";
+export const CURRENT_PASSWORD_INVALID_CODE = "CURRENT_PASSWORD_INVALID";
+const PASSWORD_CHANGE_REQUIRED_MESSAGE_MOBILE =
+  "Bu hesabın parolası değiştirilmeli. Önce yönetim panelinden giriş yapıp yeni parola belirleyin.";
 
 /**
  * MASAÜSTÜ SINIFI istemci mi (Electron paneli ya da tarayıcıdaki web paneli)?
@@ -100,16 +114,33 @@ function plainEquals(a: string, b: string): boolean {
 }
 
 function loadJwtSecret(): string {
-  const secret = process.env.JWT_SECRET;
-  if (!secret || secret.length < 32) {
-    throw new Error(
-      "JWT_SECRET environment variable zorunlu ve en az 32 karakter olmalı. " +
-        ".env dosyanızı kontrol edin."
-    );
-  }
-  return secret;
+  // Yok/kısa sır açılışı durdurur (bugünkü gibi); bilinen/zayıf sır mevcut kurulumu
+  // DURDURMAZ — yüksek sesli uyarı + `/api/admin/health` jwtSecret bayrağı.
+  return loadJwtSecretAtBoot(process.env.JWT_SECRET, (mesaj) =>
+    uyari(
+      "guvenlik",
+      `JWT_SECRET DÖNDÜRÜLMELİ — ${mesaj} Backend açıldı; sır döndürülene dek token sahteleme riski sürer.`,
+    ),
+  );
 }
 const JWT_SECRET: string = loadJwtSecret();
+
+/** İstek başına izin kümesi önbelleği — anahtar (tokenVersion, isSystemAccount): her izin
+ *  yazımı tokenVersion'ı artırdığından eski giriş kendiliğinden ıskalanır. */
+const REQUEST_PERMISSION_TTL_MS = 30_000;
+const REQUEST_PERMISSION_CACHE_MAX = 5000;
+type RequestPermissionEntry = {
+  tokenVersion: number;
+  isSystemAccount: boolean;
+  permissions: string[];
+  fetchedAt: number;
+};
+const requestPermissionCache = new Map<string, RequestPermissionEntry>();
+
+/** YALNIZ BEKÇİ — istek izin önbelleğini sıfırla. */
+export function resetRequestPermissionCacheForTest(): void {
+  requestPermissionCache.clear();
+}
 
 export class AuthService {
   /**
@@ -121,7 +152,7 @@ export class AuthService {
     username: string,
     password: string,
     ctx?: LoginContext
-  ): Promise<{ token: string; user: JwtPayload }> {
+  ): Promise<LoginResult> {
     const user = await prisma.user.findUnique({
       where: { username },
       select: {
@@ -162,7 +193,7 @@ export class AuthService {
   static async loginWithCard(
     cardCode: string,
     ctx?: LoginContext
-  ): Promise<{ token: string; user: JwtPayload }> {
+  ): Promise<LoginResult> {
     const methods = await readLoginMethods();
     if (!methods.enabled.includes("card")) {
       throw AppError.forbidden(
@@ -210,7 +241,7 @@ export class AuthService {
   static async loginWithQuickPin(
     pin: string,
     ctx?: LoginContext
-  ): Promise<{ token: string; user: JwtPayload }> {
+  ): Promise<LoginResult> {
     const methods = await readLoginMethods();
     if (!methods.enabled.includes("pin")) {
       throw AppError.forbidden(
@@ -425,13 +456,26 @@ export class AuthService {
       tokenVersion: number;
     },
     ctx?: LoginContext
-  ): Promise<{ token: string; user: JwtPayload }> {
+  ): Promise<LoginResult> {
     // Patron bulutu teknik kullanıcısının GİRİŞ YÖNTEMİ YOKTUR: parolası panelden sıfırlansa ya da PIN/kart verilse
     // bile oturum açılmaz (tek token üreticisi burası; mesaj genel — hesabın varlığını doğrulamaz).
     if (user.id === (await readPatronCloudUserId())) {
       throw AppError.unauthorized("Geçersiz kullanıcı adı veya şifre");
     }
     const permissions = await this.getEffectivePermissions(user.id);
+
+    // Zorunlu parola değişimi yalnız panelde yapılabilir: tablete token verilseydi her istek
+    // 403 alırdı. Panel token'ı alır ama verifyToken onu parola değiştirme ucuna daraltır.
+    const flags = await prisma.user.findUnique({
+      where: { id: user.id },
+      select: { mustChangePassword: true },
+    });
+    const mustChangePassword = flags?.mustChangePassword === true;
+    if (mustChangePassword && !isDesktopClient(ctx?.clientType)) {
+      throw AppError.forbidden(PASSWORD_CHANGE_REQUIRED_MESSAGE_MOBILE, {
+        code: PASSWORD_CHANGE_REQUIRED_CODE,
+      });
+    }
 
     // Masaüstü (Electron VE web paneli) girişi: kullanıcının en az bir MASAÜSTÜ
     // (mobil-olmayan) izni olmalı. Yalnız mobil izinli (mobile:*) hesap panele
@@ -452,8 +496,8 @@ export class AuthService {
     //    süre bitince client otomatik çıkar, sunucu da 401 verir.
     //  • Kapalı: token yine de MUTLAK oturum tavanına (auth.absoluteSessionCapDays,
     //    default 30 gün) kadar geçerlidir — sızan token sonsuza kadar yaşamasın.
-    //    Tavan 0 ise gerçekten SÜRESİZ imzalanır (exp claim YOK). Oturum yine
-    //    tokenVersion / session iptali / logout ile sonlandırılabilir.
+    //    Tavan 0 ise en uzun tavan (MAX_ABSOLUTE_SESSION_CAP_DAYS) uygulanır; exp'siz
+    //    token üretilmez.
     // (Dakika ayarı yoksa reader eski saat ayarına ×60 düşer — geriye-uyum.)
     const timeoutEnabled = await readAutoLogoutOnExpiry();
     const sessionMinutes = await readSessionDurationMinutes();
@@ -462,22 +506,13 @@ export class AuthService {
     // jti = Session satırı anahtarı. Taban (mutlak) son-kullanma:
     //   • zaman aşımı açık → now + oturum süresi (dakika)
     //   • kapalı + cap>0 → now + cap gün (arka plan tavanı)
-    //   • kapalı + cap=0 → uzak gelecek (gerçekten süresiz; exp claim yok)
+    //   • kapalı + cap=0 → now + en uzun tavan (gün)
     const jti = randomUUID();
     const nowMs = Date.now();
-    const FAR_FUTURE = new Date("9999-12-31T23:59:59.000Z");
-    let hasExp: boolean;
-    let effectiveExpiresAt: Date;
-    if (timeoutEnabled) {
-      hasExp = true;
-      effectiveExpiresAt = new Date(nowMs + sessionMinutes * 60 * 1000);
-    } else if (capDays > 0) {
-      hasExp = true;
-      effectiveExpiresAt = new Date(nowMs + capDays * 24 * 60 * 60 * 1000);
-    } else {
-      hasExp = false;
-      effectiveExpiresAt = FAR_FUTURE;
-    }
+    const effectiveCapDays = capDays > 0 ? capDays : MAX_ABSOLUTE_SESSION_CAP_DAYS;
+    let effectiveExpiresAt: Date = timeoutEnabled
+      ? new Date(nowMs + sessionMinutes * 60 * 1000)
+      : new Date(nowMs + effectiveCapDays * 24 * 60 * 60 * 1000);
 
     // Part C — süreli izinler: kullanıcının EN YAKIN gelecekteki validUntil'i tabanla
     // min'lenir. Süreli izin verilmişse (grant tokenVersion++ ile re-login zorlar)
@@ -507,14 +542,12 @@ export class AuthService {
       }),
     ]);
     for (const boundary of [nearestExpiry?.validUntil, nearestOpening?.validFrom]) {
-      if (boundary && (!hasExp || boundary.getTime() < effectiveExpiresAt.getTime())) {
+      if (boundary && boundary.getTime() < effectiveExpiresAt.getTime()) {
         effectiveExpiresAt = boundary;
-        hasExp = true;
       }
     }
 
-    // Session expiresAt: JWT exp ile HİZALI (kapalı+cap=0 → uzak gelecek; notify
-    // 'aktif oturum' kontrolü expiresAt>now'a bakar).
+    // Session expiresAt: JWT exp ile HİZALI (notify 'aktif oturum' kontrolü expiresAt>now'a bakar).
     const expiresAt = effectiveExpiresAt;
     // ⚠️ WEB kendi yuvasını alır — ELECTRON'a katlanmaz. Katlansaydı aynı kişinin
     // telefon tarayıcısındaki oturumu masaüstü panelini düşürürdü (politika
@@ -542,19 +575,16 @@ export class AuthService {
       permissions,
       tokenVersion: user.tokenVersion,
     };
-    const signOptions: jwt.SignOptions = { jwtid: jti };
     // exp claim = effectiveExpiresAt'a göre saniye (aynı nowMs tabanı → Session.expiresAt
-    // ile birebir hizalı). hasExp=false ise exp claim konmaz (gerçekten süresiz).
-    if (hasExp) {
-      signOptions.expiresIn = Math.max(
-        1,
-        Math.floor((effectiveExpiresAt.getTime() - nowMs) / 1000),
-      );
-    }
+    // ile birebir hizalı).
+    const signOptions: jwt.SignOptions = {
+      jwtid: jti,
+      expiresIn: Math.max(1, Math.floor((effectiveExpiresAt.getTime() - nowMs) / 1000)),
+    };
     const token = jwt.sign(signPayload, JWT_SECRET, signOptions);
 
     const payload: JwtPayload = { ...signPayload, jti };
-    return { token, user: payload };
+    return { token, user: payload, mustChangePassword };
   }
 
   /**
@@ -627,6 +657,91 @@ export class AuthService {
     });
     if (!user || !user.isActive) return null;
     return { id: user.id, username: user.username, fullName: user.fullName };
+  }
+
+  /**
+   * İstek başına yetki kümesi — token'daki `permissions` claim'i DEĞİL, DB'deki atama.
+   * Sızan JWT sırrıyla kendi token'ını genişletilmiş izinle yeniden imzalayan kullanıcı
+   * böylece yetki kazanmaz. TTL tazeliktir: tazeleme düşerse aynı anahtarlı bayat giriş
+   * döner, giriş hiç yoksa hata yukarı çıkar (fail-closed).
+   */
+  static async resolveRequestPermissions(
+    userId: string,
+    tokenVersion: number,
+    isSystemAccount: boolean,
+  ): Promise<string[]> {
+    const now = Date.now();
+    const hit = requestPermissionCache.get(userId);
+    const sameKey =
+      hit !== undefined && hit.tokenVersion === tokenVersion && hit.isSystemAccount === isSystemAccount;
+    if (sameKey && now - hit.fetchedAt < REQUEST_PERMISSION_TTL_MS) return hit.permissions;
+    try {
+      const permissions = await this.getEffectivePermissions(userId);
+      if (requestPermissionCache.size >= REQUEST_PERMISSION_CACHE_MAX) requestPermissionCache.clear();
+      requestPermissionCache.set(userId, { tokenVersion, isSystemAccount, permissions, fetchedAt: now });
+      return permissions;
+    } catch (err) {
+      if (sameKey) return hit.permissions;
+      throw err;
+    }
+  }
+
+  /**
+   * Kullanıcının KENDİ parolasını değiştirmesi (zorunlu ilk değişim dahil). Başarıda bayrak
+   * iner, tokenVersion artar ve bütün oturumlar düşer — istemci yeni parolayla yeniden girer.
+   * Yanlış mevcut parola `CURRENT_PASSWORD_INVALID` (400): 401 panelin oturum-bitti dalını açardı.
+   */
+  static async changeOwnPassword(
+    userId: string,
+    currentPassword: string,
+    newPassword: string,
+  ): Promise<void> {
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: {
+        username: true,
+        passwordHash: true,
+        isActive: true,
+        isSystemAccount: true,
+        tokenVersion: true,
+        mustChangePassword: true,
+      },
+    });
+    if (!user || !user.isActive) {
+      throw AppError.unauthorized("Hesap pasif veya bulunamadı. Tekrar giriş yapın.");
+    }
+    if (user.isSystemAccount) {
+      throw AppError.forbidden("Satıcı hesabının parolası yalnız kurulum aracından değiştirilir.", {
+        code: "SYSTEM_ACCOUNT_PASSWORD",
+      });
+    }
+    if (!(await bcrypt.compare(currentPassword, user.passwordHash))) {
+      throw AppError.badRequest("Mevcut parola yanlış.", { code: CURRENT_PASSWORD_INVALID_CODE });
+    }
+    const violation = passwordPolicyViolation(newPassword);
+    if (violation) throw AppError.badRequest(violation, { code: "PASSWORD_POLICY" });
+    if (await bcrypt.compare(newPassword, user.passwordHash)) {
+      throw AppError.badRequest("Yeni parola mevcut parolayla aynı olamaz.", { code: "PASSWORD_UNCHANGED" });
+    }
+
+    const passwordHash = await bcrypt.hash(newPassword, 10);
+    const claimed = await prisma.user.updateMany({
+      where: { id: userId, isActive: true, tokenVersion: user.tokenVersion },
+      data: { passwordHash, mustChangePassword: false, tokenVersion: { increment: 1 } },
+    });
+    if (claimed.count === 0) {
+      throw AppError.conflict("Hesap bu sırada değişti. Tekrar giriş yapıp yeniden deneyin.", {
+        code: "PASSWORD_CHANGE_CONFLICT",
+      });
+    }
+    await SessionRegistryService.revokeAllForUser(userId, "PASSWORD_RESET").catch(() => undefined);
+    await AuditService.log({
+      userId,
+      action: "UPDATE",
+      tableName: "USER_PASSWORD",
+      recordId: userId,
+      newData: { username: user.username, selfService: true, requiredChange: user.mustChangePassword },
+    });
   }
 
   /**

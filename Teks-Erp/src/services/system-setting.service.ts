@@ -721,7 +721,7 @@ export const SETTING_KEYS = {
   AUTH_MOBILE_LOCK_ON_BACKGROUND: "auth.mobileLockOnBackground",
   /** Mutlak oturum tavanı, GÜN. Default 30 (0..365). Zaman aşımı KAPALI iken bile
    *  token en fazla bu kadar gün geçerli olur (sızan token sonsuza kadar yaşamasın).
-   *  0 = gerçekten süresiz (exp claim'i yok). Backend ENFORCE eder (issueToken). */
+   *  0 = en uzun tavan (365 gün) — exp'siz token üretilmez. Backend ENFORCE eder (issueToken). */
   AUTH_ABSOLUTE_SESSION_CAP_DAYS: "auth.absoluteSessionCapDays",
   /** Hızlı-PIN + kart giriş deneme kilidi açık mı. Default true. Kapalıyken deneme
    *  kilidi hiç uygulanmaz. Backend ENFORCE eder (login-lockout middleware). */
@@ -1051,9 +1051,9 @@ const MAX_MOBILE_IDLE_LOCK_MINUTES = 120;
 /** Mobil arka-plan kilidi varsayılanı — açık (eski davranış: idle kilit açıkken
  *  arka plana geçince de kilitlenirdi; artık bağımsız bayrak, default korunur). */
 export const DEFAULT_MOBILE_LOCK_ON_BACKGROUND = true;
-/** Mutlak oturum tavanı (gün) varsayılanı + aralık. 0 = gerçekten süresiz (exp yok). */
+/** Mutlak oturum tavanı (gün) varsayılanı + aralık. 0 = en uzun tavan (MAX gün) — exp'siz token yok. */
 export const DEFAULT_ABSOLUTE_SESSION_CAP_DAYS = 30;
-const MAX_ABSOLUTE_SESSION_CAP_DAYS = 365;
+export const MAX_ABSOLUTE_SESSION_CAP_DAYS = 365;
 /** Hızlı-PIN/kart deneme kilidi varsayılanları + aralıkları. */
 export const DEFAULT_PIN_LOCKOUT_ENABLED = true;
 /** Fatura satırı varsayılan KDV oranı (%). 20 = bugünkü hardcode'un birebir
@@ -1819,7 +1819,7 @@ export interface FeatureFlags {
   /** Mobil "uygulama arka plana geçince anında kilitle" açık mı (default true).
    *  Idle kilitten bağımsız. Client (mobil) ENFORCE. */
   mobileLockOnBackground: boolean;
-  /** Mutlak oturum tavanı — gün (default 30, 0..365; 0 = süresiz). Zaman aşımı kapalı
+  /** Mutlak oturum tavanı — gün (default 30, 0..365; 0 = en fazla 365 gün). Zaman aşımı kapalı
    *  olsa bile token en fazla bu kadar gün yaşar. Backend ENFORCE (issueToken). */
   absoluteSessionCapDays: number;
   /** Hızlı-PIN + kart giriş deneme kilidi açık mı (default true). Backend ENFORCE. */
@@ -3750,13 +3750,13 @@ export class SystemSettingService {
         v > MAX_ABSOLUTE_SESSION_CAP_DAYS
       ) {
         throw AppError.badRequest(
-          `Mutlak oturum tavanı 0–${MAX_ABSOLUTE_SESSION_CAP_DAYS} gün aralığında olmalı (0 = süresiz)`
+          `Mutlak oturum tavanı 0–${MAX_ABSOLUTE_SESSION_CAP_DAYS} gün aralığında olmalı (0 = en fazla ${MAX_ABSOLUTE_SESSION_CAP_DAYS} gün)`
         );
       }
       await this.set(
         SETTING_KEYS.AUTH_ABSOLUTE_SESSION_CAP_DAYS,
         Math.floor(v),
-        "Mutlak oturum tavanı, gün — zaman aşımı kapalı olsa bile token en fazla bu kadar gün yaşar (0 = süresiz)",
+        "Mutlak oturum tavanı, gün — zaman aşımı kapalı olsa bile token en fazla bu kadar gün yaşar (0 = en fazla 365 gün)",
         userId
       );
     }
@@ -6343,10 +6343,10 @@ export async function readMobileIdleLockMinutes(
 }
 
 /**
- * Mutlak oturum tavanını GÜN olarak okur. Yoksa/geçersizse 30. 0 = süresiz (KABUL
+ * Mutlak oturum tavanını GÜN olarak okur. Yoksa/geçersizse 30. 0 = en uzun tavan (KABUL
  * edilir — reader 0 döner); negatif → default. Tavan 365'e kırpılır. AuthService
  * .issueToken bunu okur: zaman aşımı kapalıyken bile token en fazla bu kadar gün
- * yaşar (capDays>0 → now+capDays gün exp; capDays=0 → gerçekten süresiz).
+ * yaşar (capDays>0 → now+capDays gün exp; capDays=0 → now+365 gün exp).
  */
 export async function readAbsoluteSessionCapDays(
   tx?: Pick<typeof prisma, "systemSetting">,

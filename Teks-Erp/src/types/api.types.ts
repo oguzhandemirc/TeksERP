@@ -57,4 +57,8 @@ export interface JwtPayload {
    *  iptal edilince eski token 401 alır. Eski (jti'siz) tokenlar deploy sonrası bir
    *  kez re-login gerektirir (fail-closed). */
   jti: string;
+  /** Doğrulanan token'da jsonwebtoken'ın koyduğu zaman claim'leri (saniye). `exp` yalnız
+   *  geçiş dönemindeki eski süresiz token'larda yoktur. */
+  exp?: number;
+  iat?: number;
 }

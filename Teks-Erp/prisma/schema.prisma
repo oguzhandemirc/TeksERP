@@ -418,6 +418,10 @@ model User {
   // JWT iptal sayacı: yetki grant/revoke/set + şifre sıfırlamada artar. verifyToken
   // her istekte token'daki sürümle karşılaştırır → eski oturum anında düşer.
   tokenVersion  Int       @default(1)
+  /// İlk kurulum yöneticisi (seed) bilinen/üretilmiş parolayla doğar: true iken verifyToken
+  /// yalnız /auth/me · /auth/logout · /auth/change-password'e izin verir. Kendi parolasını
+  /// değiştirince iner. Mevcut kullanıcılar false (kilitlenmez).
+  mustChangePassword Boolean @default(false)
   /// ESKİ düz kart sırrı: YENİ DEĞER YAZILMAZ. Başarılı girişte ya da `kisa-kimlik donustur`
   /// ile `cardTokenDigest`e çevrilip NULL'lanır; kolon SİLİNMEZ (geri alma = yedekten restore).
   /// Dönüşüme dek giriş SALT okur. Kart içeriği "TEKSU:<userId>:<sır>".
