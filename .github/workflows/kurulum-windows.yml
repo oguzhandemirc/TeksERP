@@ -117,6 +117,8 @@ jobs:
           if ($j.tamam -ne $false -or "$($j.hata)" -notmatch "backend paketi") { Write-Error "beklenen DUR 'backend paketi' değil: $($j.hata)"; exit 1 }
           if (Test-Path "C:\TeksERP-ci-kuru") { Write-Error "kuru kip kök oluşturdu"; exit 1 }
           Write-Host "kuru koşu: beklenen DUR ($($j.hata)) - hiçbir şey yazılmadı"
+          # Beklenen DUR'un çıkış kodu (1) $LASTEXITCODE'da kalır; Actions powershell kabuğu adımı onunla bitirirdi.
+          exit 0
 
       - name: Yapıt (imzasız kurulum)
         uses: actions/upload-artifact@v4

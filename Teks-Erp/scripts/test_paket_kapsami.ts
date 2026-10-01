@@ -99,7 +99,7 @@ function stageHedefleri(kaynak: string): { satir: number; girdi: string | null; 
     if (!/\bCopy-Item\b/.test(s.ciplak)) continue;
     const kod = s.kod;
     if (!/\$stage/.test(kod)) continue;
-    // Hedef: son argüman. "$stage\x" / (Join-Path $stage "x") / (Join-Path (Join-Path $stage "runtime") $ad) / "$stage\" + kaynak adı.
+    // Hedef: son argüman. "$stage\x" / (Join-Path $stage "x") / (Join-Path (Join-Path $stage "runtime") $ikiliAd) / "$stage\" + kaynak adı.
     let girdi: string | null = null;
     let m: RegExpExecArray | null;
     if ((m = /"\$stage\\([A-Za-z0-9_.-]+)(?:\\[^"]*)?"\s*(?:-Recurse)?\s*$/.exec(kod.trim()))) girdi = m[1]!;
@@ -109,7 +109,7 @@ function stageHedefleri(kaynak: string): { satir: number; girdi: string | null; 
     } else if ((m = /Join-Path\s+\(Join-Path\s+\$stage\s+"([A-Za-z0-9_.-]+)"\)/.exec(kod))) girdi = m[1]!;
     else if ((m = /Join-Path\s+\$stage\s+"([A-Za-z0-9_.-]+)(?:\\[^"]*)?"/.exec(kod))) girdi = m[1]!;
     else if (/Join-Path\s+\$stage\s+\$b\b/.test(kod)) girdi = "$KOK_BETIKLERI";
-    else if (/Copy-Item\s+\$kaynak\s+\$hedef\b/.test(kod)) girdi = "$ALT_BETIKLER";
+    else if (/Copy-Item\s+\$kaynak\s+\$altHedef\b/.test(kod)) girdi = "$ALT_BETIKLER";
     out.push({ satir: s.no, girdi, ham: kod.trim() });
   }
   return out;
@@ -182,8 +182,8 @@ function olc(d: Dosyalar): Olcum {
     ];
     for (const [ad, desen] of iddialar) if (!desen.test(govde)) k("§5", `HizmetIkilisiOlc: ${ad} ölçümü yok`);
   }
-  if (!/HizmetIkilisiOlc \(Join-Path \$ikiliDizin \$ad\) \$HIZMET_IKILILERI\[\$ad\]/.test(paketle)) k("§5", "ikililer HizmetIkilisiOlc'tan geçmeden kopyalanıyor");
-  if (!/HizmetIkilisiOlc \(Join-Path \$ikiliDizin \$ad\) \$HIZMET_IKILILERI\[\$ad\] \$paketCapaKipi/.test(paketle) || !/\$paketCapaKipi = \(Get-Content -Raw \(Join-Path \(Join-Path \$proj "dist"\) "server-kunye\.json"\) \| ConvertFrom-Json\)\.guvenCapasi/.test(paketle)) {
+  if (!/HizmetIkilisiOlc \(Join-Path \$ikiliDizin \$ikiliAd\) \$HIZMET_IKILILERI\[\$ikiliAd\]/.test(paketle)) k("§5", "ikililer HizmetIkilisiOlc'tan geçmeden kopyalanıyor");
+  if (!/HizmetIkilisiOlc \(Join-Path \$ikiliDizin \$ikiliAd\) \$HIZMET_IKILILERI\[\$ikiliAd\] \$paketCapaKipi/.test(paketle) || !/\$paketCapaKipi = \(Get-Content -Raw \(Join-Path \(Join-Path \$proj "dist"\) "server-kunye\.json"\) \| ConvertFrom-Json\)\.guvenCapasi/.test(paketle)) {
     k("§5", "HizmetIkilisiOlc paketin çapa kipini (dist/server-kunye.json guvenCapasi) almıyor (G3)");
   }
   if (!/if \(\$Korumali -and \$Hedef -eq "win-x64"\) \{/.test(paketle)) k("§5", "korumalı win-x64 paketi hizmet ikilisi koşulsuz taşımıyor");
@@ -260,7 +260,7 @@ function sondalar(taban: Dosyalar): void {
     ["N12 CI ikili derlemesi kalktı → KIRMIZI (§7)", "kirmizi", metin(KORUMALI_CI, "cargo build --release --locked -p tekserp-guncelleyici -p tekserp-hizmet", "echo atlandi"), "§7"],
     ["N13 CI test-anchor ile derliyor → KIRMIZI (§7)", "kirmizi", metin(KORUMALI_CI, "cargo build --release --locked -p tekserp-guncelleyici -p tekserp-hizmet", "cargo build --release --locked -p tekserp-guncelleyici -p tekserp-hizmet --features tekserp-guncelleyici/test-anchor"), "§7"],
     ["N14 güncelleyici çapa kipi denetimi gevşedi → KIRMIZI (§5, G3)", "kirmizi", metin(PAKETLE, /(\$j\.capaKipi -cne \$capaKipi\) \{\s*\n\s*)Fail /, "$1Write-Host "), "§5"],
-    ["N15 ikililere paketin çapa kipi verilmiyor → KIRMIZI (§5, G3)", "kirmizi", metin(PAKETLE, "$HIZMET_IKILILERI[$ad] $paketCapaKipi", "$HIZMET_IKILILERI[$ad]"), "§5"],
+    ["N15 ikililere paketin çapa kipi verilmiyor → KIRMIZI (§5, G3)", "kirmizi", metin(PAKETLE, "$HIZMET_IKILILERI[$ikiliAd] $paketCapaKipi", "$HIZMET_IKILILERI[$ikiliAd]"), "§5"],
     ["N16 CI güncelleyicinin capaKipi ölçümü kalktı → KIRMIZI (§7, G3)", "kirmizi", metin(KORUMALI_CI, "$k.capaKipi -cne $kip)", "$false)"), "§7"],
     ["O1 paketle.ps1 okunamadı → ÖLÇÜLEMEDİ", "olculemedi", (d) => { d[PAKETLE] = undefined; }],
     ["O2 $ALT_BETIKLER listesi kayboldu → ÖLÇÜLEMEDİ (§1)", "olculemedi", metin(PAKETLE, "$ALT_BETIKLER = @(", "$ALT_BETIKLER_ESKI = @("), "§1"],

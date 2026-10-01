@@ -172,6 +172,8 @@ export async function recordUpdateReport(
   const son = r.son;
   if (!son) return;
   await db.$transaction(async (tx) => {
+    // Kilit tx'in İLK ifadesi (kural): aynı kurulumun eşzamanlı iki yoklaması defter + bildirimi sırayla yazar.
+    await lockInstallation(tx, g.installationDbId);
     const written = await tx.kurulumKaydi.createMany({
       data: [{
         kurulumId: g.installationDbId,
