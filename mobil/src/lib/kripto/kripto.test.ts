@@ -1,11 +1,11 @@
 // =============================================================================
-// BEKÇİ: saf JS kripto (G6, `lib/kripto`) — node:crypto / RFC 8032 / Wycheproof KÂHİNİ
+// BEKÇİ: saf JS kripto (G6, `lib/kripto` — `@noble/curves` + `@noble/hashes` sarmalayıcısı) — node:crypto /
+// RFC 8032 / Wycheproof KÂHİNİ
 // =============================================================================
-// ⚠️ NEDEN: Hermes'te node:crypto yok ve mobilde denetlenmiş bir kütüphane yok (yeni paket kullanıcı onayında) —
-// tablet APK künyesi elle yazılmış Ed25519 + SHA-2 ile doğrulanıyor. Elle yazılmış imza doğrulaması ancak
-// bağımsız kâhinlerle ölçüldüğü kadar güvenilirdir: SHA'lar node ile parça sınırlarında, Ed25519 RFC vektörleri,
-// Wycheproof'un 151 kabul/ret beklentisi, node ile rastgele anahtar/bozulma ve KATI kurallar (küçük mertebe ·
-// kanonik kodlama · S < L) tek tek.
+// ⚠️ NEDEN: Hermes'te node:crypto yok; tablet APK künyesi denetlenmiş noble ile doğrulanır ama KİPİ bizim
+// seçimimizdir (RFC 8032 katı kip + küçük mertebeli R reddi). Sarmalayıcı bağımsız kâhinlerle ölçülür: SHA'lar node
+// ile parça sınırlarında, Ed25519 RFC vektörleri, Wycheproof'un 151 kabul/ret beklentisi, node ile rastgele
+// anahtar/bozulma ve KATI kurallar (küçük mertebe · kanonik kodlama · S < L) tek tek — gevşek kip (ZIP-215) kırmızı.
 // =============================================================================
 import crypto from 'node:crypto';
 import { Sha256, hex, sha512 } from './sha2';

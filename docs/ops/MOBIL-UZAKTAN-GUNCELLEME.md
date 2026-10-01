@@ -192,15 +192,15 @@ kapalı.
 Yük (v:1): `urun: tablet` · `platform: android-arm64` · `kanal` · `versionCode` · `versionName` · `commit` ·
 `yayinZamani` · `paket {ad, boyut, sha256}` (`ad` = `TeksERP-<versionName>-vc<versionCode>.apk`, yol taşımaz) ·
 `capa`. `typ` protokolün `TYP.APK` kaydıdır; JWS kuralları panel/lisans aynası. Kod: yayın tarafı
-`mobil/scripts/lib/apk-kunye.mjs` (node:crypto), tablet `mobil/src/services/apkKunye.ts` + saf JS kripto
-`mobil/src/lib/kripto/` (Hermes'te node:crypto yok; yeni paket eklenmedi — aşağıda "kripto").
+`mobil/scripts/lib/apk-kunye.mjs` (node:crypto), tablet `mobil/src/services/apkKunye.ts` + `mobil/src/lib/kripto/`
+(Hermes'te node:crypto yok → denetlenmiş saf JS `@noble/curves` + `@noble/hashes` sarmalayıcısı — aşağıda "kripto").
 
 **Tablet ne yapar (fail-closed):** ① künyeyi okurken yeni sürüm sunuluyorsa (versionCode > kurulu) künye
 doğrulanır: çapa · imza · typ · kid · kanal (tabletin GÖMÜLÜ güncelleme adresinden; değiştirilemez) ·
 `surum.json`un eski tabletin okuduğu alanları (versionCode · versionName · dosya · sha256 · boyut) künyeyle birebir.
 Geçmezse "yeni sürüm" SAYILMAZ, Ayarlar → Güncelleme'de ve sürüm kilidi şeridinde TR uyarı, log'a
 `[apk] güncelleme künyesi REDDEDİLDİ kod=…`. ② indirme adresi künyedeki `indirmeUrl`den DEĞİL gömülü kanal kökü +
-imzalı dosya adından türer (belirteç yalnız kanal sunucusuna gider). ③ inen dosya 1 MB parçalarla okunup boy +
+imzalı dosya adından türer (belirteç yalnız kanal sunucusuna gider). ③ inen dosya 256 KB parçalarla okunup boy +
 sha256 ölçülür ("Doğrulanıyor… %"); tutmazsa dosya silinir, Android kurulum ekranı AÇILMAZ. Kurulum hâlâ
 operatörün "Yükle" dokunuşudur.
 
@@ -236,7 +236,8 @@ Bu yüzden yayın kapısı boş çapada **APK yayınını durdurur, OTA yayını
 1. Anahtar kararı + tablet çapası satırı (panelle aynı karar; çapa boşken APK yayını durur).
 2. **OTA ile yeter, yeni APK GEREKMEZ:** doğrulayıcı saf JS'tir; parça parça okuma `expo-file-system` 19'un
    yeni API'si (`File.open().readBytes`) — native yarısı aynı paketin ikinci modülü, OTA destekli her APK'da
-   (2026-08-27'den beri) var. Çapalı OTA önce testfabrika, sonra terfi.
+   (2026-08-27'den beri) var; kripto saf JS `@noble/*`. Çapalı OTA önce testfabrika, sonra terfi — bu İLK OTA
+   `--parmak-izini-kabul-et` ister (yukarıda "Kripto": depo parmak izi bağımlılık listesini sayar, native değişmedi).
 3. **Eski tablet (G6 öncesi JS)** blok'u yok sayar, `indirmeUrl` ile BUGÜNKÜ GİBİ indirir — bu yüzden yayın aracı
    `indirmeUrl`i ve diğer imzasız alanları yazmaya devam eder (imzalı künyeyle birebir olmaları kapıda ölçülür).
 4. **Yeni tablet** künyesiz/geçersiz `surum.json`daki yeni sürümü REDDEDER (TR uyarı); sahada imzasız bir yayın
@@ -248,13 +249,19 @@ ya da sahte) · `JWS_IMZA`/`JWS_*` bozuk/sahte imza · `KUNYE_KANAL` başka kana
 `surum.json` alanları künyeyle uyuşmuyor · `BELGE_*` biçim · `DOSYA_OZETI` inen dosya künyede yazan değil (silindi) ·
 `DOSYA_OKUNAMADI` · `CAPA_BOS`/`CAPA_GECERSIZ` çapasız JS. Hepsinde tablet eski sürümde çalışır.
 
-**Kripto (geçici, kullanıcı kararı bekliyor):** Ed25519 doğrulaması + SHA-256/512 elle yazılmış saf JS'tir —
-mobilde denetlenmiş bir kütüphane yok (ölçüldü: `@noble/*`, `tweetnacl`, `expo-crypto` yok; `node-forge` yalnız
-expo CLI'ın geçişli bağımlılığı, çalışma anı bağımlılığı değil ve TweetNaCl türevi doğrulaması S < L'yi
-denetlemez). Kurallar KATI (libsodium): S < L · A ve R kanonik + çözülebilir · küçük mertebeli A/R RED ·
-kofaktörsüz denklem; kâhinler RFC 8032 + Wycheproof EdDSA 151 vektör + node:crypto rastgele/bozulma. Öneri:
-`@noble/curves` (denetlenmiş, sıfır bağımlılık, saf JS → OTA ile gelir) — kullanıcı onayıyla eklenirse
-`lib/kripto/ed25519.ts` ona bırakılır, testler aynen kalır.
+**Kripto (kullanıcı onayı 2026-10-01):** `@noble/curves` 2.4.0 (Ed25519) + `@noble/hashes` 2.4.0 (SHA-256/512) —
+denetlenmiş saf JS, TAM SABİT (ESM-only; `test_dependency_contract §(a)`), yalnız `src/lib/kripto/` sarmalar.
+Kip bizim seçimimiz: RFC 8032 katı kip (`zip215: false` — kanonik A/R, S < L, küçük mertebeli A RED) + küçük
+mertebeli R reddi; kâhinler RFC 8032 + Wycheproof EdDSA 151 vektör + node:crypto rastgele/bozulma (gevşek ZIP-215
+kipi kırmızı verir). Gerçek Hermes VM'inde (RN 0.81 `sdks/hermesc/osx-bin/hermes`, Metro'nun babel ön ayarıyla
+dönüştürülmüş paket) ölçüldü: Wycheproof 151 / node bozulma 40 fark 0, yayın aracının imzaladığı künye KABUL,
+kurcalanmış RED; Ed25519 doğrulaması ≈ 13 ms; SHA-256 ≈ 2,1 MB/s (Mac) ⇒ 49 MB APK Mac'te ≈ 23 sn, tablette daha
+uzun ("Doğrulanıyor… %" görünür; sahada testfabrika'da ölçülecek). Native modül YOK (autolinking listesinde yok,
+`android/`/`expo-module.config.json`/kurulum betiği yok; `expo export` Hermes bayt koduna derlendi) ⇒ OTA ile
+gider. ⚠️ Depo parmak izi (`yayinla-ota.mjs` alg 2) `dependencies` listesini saydığı için bu paketleri taşıyan İLK
+OTA "NATIVE DEĞİŞTİ" der: runtimeVersion ARTIRILMAZ, `npm run yayinla -- --musteri=<kod> --parmak-izini-kabul-et`
+ile bilinçli geçilir (gerekçe: yalnız saf JS paket eklendi; kanıt yukarıda). İniş sonrası ana ağaçta
+`cd mobil && npm ci` (iki yeni paket).
 
 ---
 
@@ -339,7 +346,7 @@ Güncelleme: internet). İkisinin farklı olması normaldir; ekran bunu uyarı o
 | `Teks-Erp/scripts/test_mobile_update.ts` | Donmuş manifest baytları BOZULMADAN servis ediliyor mu · imza sertifikayla doğrulanıyor mu · protokol başlıkları · yol kaçışı · geri alma · **backend ↔ mobil ↔ nginx sınırlayıcı tutarlılığı** (37 kontrol) |
 | `mobil/src/test/update-feed-url.test.ts` | Feed adresi tek kaynak · `enabled` açık · sertifika dosyası gerçekten var · ERP adresinden bağımsızlık (7 kontrol) |
 | `mobil/src/services/appUpdate.service.test.ts` | Yenileme kapısı (bekleyen kayıt) + sürüm karşılaştırması (8 kontrol) |
-| `mobil/src/lib/kripto/kripto.test.ts` | Saf JS SHA-256/512 + Ed25519 kâhini (RFC 8032 · Wycheproof 151 vektör · node:crypto) + katı kurallar |
+| `mobil/src/lib/kripto/kripto.test.ts` | `@noble/*` sarmalayıcısının kâhini: SHA-256/512 + Ed25519 (RFC 8032 · Wycheproof 151 vektör · node:crypto) + katı kip |
 | `mobil/src/services/apkKunye.test.ts` | APK künyesi doğrulayıcısı + yayın aracıyla çapraz kâhin |
 | `mobil/src/services/appUpdate.apk.test.ts` | Akış: imzasız/başka kanal künyesi "yeni sürüm" sayılmaz · indirme gömülü kökten · özeti tutmayan dosya silinir, kurulum ekranı açılmaz |
 | `Teks-Erp/scripts/test_panel_imza.ts` §3h–k · §4 | `guven-capasi-ekle.ts tablet` · `panel-imza.ts apk-imzala/apk-dogrula` uçtan uca |

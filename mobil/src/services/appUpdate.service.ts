@@ -305,10 +305,10 @@ export type ApkKurulumSonuc =
   | { durum: 'desteklenmiyor' }
   | { durum: 'hata'; mesaj: string };
 
-/** İndirilen dosyayı parça parça (1 MB) okuyan okuyucu — belleğe tek seferde alınmaz. */
+/** İndirilen dosyayı parça parça (256 KB) okuyan okuyucu — belleğe tek seferde alınmaz; parçalar arası ekran nefes alır. */
 function openChunkReader(uri: string): { read: () => Uint8Array; close: () => void } {
   const handle = new File(uri).open();
-  return { read: () => handle.readBytes(1 << 20), close: () => handle.close() };
+  return { read: () => handle.readBytes(1 << 18), close: () => handle.close() };
 }
 
 /**
