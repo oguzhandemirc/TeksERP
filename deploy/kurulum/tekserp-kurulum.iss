@@ -579,12 +579,14 @@ begin
   F := CreateCustomForm(ScaleX(460), ScaleY(128), True, True);
 #else
   F := CreateCustomForm;
-  F.ClientWidth := ScaleX(460);
-  F.ClientHeight := ScaleY(128);
 #endif
   F.Caption := 'TeksERP Sunucu Kurulumu';
   F.BorderStyle := bsDialog;
   F.Position := poScreenCenter;
+  // Boyut EN SON: kenarlık değişimi pencereyi yeniden kurar ve ölçeği bir kez daha uygular
+  // (thinkpad-1: önce verilen boyut 835x275 çıktı, içerik sol 600 px'te kaldı).
+  F.ClientWidth := ScaleX(460);
+  F.ClientHeight := ScaleY(128);
   Baslik := TNewStaticText.Create(F);
   Baslik.Parent := F;
   Baslik.Left := ScaleX(16);
