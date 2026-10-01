@@ -17,6 +17,7 @@ import { FirstInstallPanel } from "../distribution/FirstInstallPanel";
 import { HealthPanel, IncidentsPanel, RecordsPanel } from "./IncidentPanels";
 import { AcceptancePanel } from "./AcceptancePanel";
 import { InstallHistoryPanel } from "./InstallHistoryPanel";
+import { PaidThroughPanel } from "./PaidThroughPanel";
 import { InstallmentPanel, PlannedPanel } from "./PlanPanels";
 import { SanctionPanel } from "./SanctionPanel";
 
@@ -113,6 +114,7 @@ export function InstallationDetailPage() {
           </button>
         ))}
       </div>
+      {tab === "lisans" ? <PaidThroughPanel detail={d} onChanged={refresh} /> : null}
       {tab === "lisans" ? (
         <EntitlementPanel
           detail={d}

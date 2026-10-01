@@ -18,6 +18,7 @@ export const NOTIFICATION_EVENTS = [
   "PLANLI_EYLEM_UYGULANDI",
   "TAKSIT_GECIKTI",
   "DENEME",
+  "YEREL_MUDAHALE_SUPHESI",
   "ANAHTAR_SURESI_BITIYOR",
   "UZUN_UFUK_VERILDI",
 ] as const satisfies readonly BildirimOlayi[];
@@ -40,6 +41,7 @@ export const NOTIFICATION_TITLES: Readonly<Record<BildirimOlayi, string>> = {
   PLANLI_EYLEM_UYGULANDI: "Planlı eylem uygulandı",
   TAKSIT_GECIKTI: "Taksit gecikti — kısıtlama başladı",
   DENEME: "Deneme bildirimi",
+  YEREL_MUDAHALE_SUPHESI: "Yerel müdahale şüphesi (lisans izleri)",
   ANAHTAR_SURESI_BITIYOR: "İmza anahtarının süresi bitiyor — dönem töreni zamanı",
   UZUN_UFUK_VERILDI: "Uzun çevrimdışı ufuklu lisans verildi",
 };

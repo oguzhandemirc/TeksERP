@@ -74,6 +74,10 @@ enum ZincirKarari {
   CATAL
   /// Onaylı taşımadan sonra yeni anahtarın ilk kirası (yeni zincir).
   TASIMA
+  /// Kapanış kirası (K6): eşleşmeyen tarafa (kopya · taşınmış anahtar · iptal) imzalı K3; zincir ucunu İLERLETMEZ.
+  KAPANIS
+  /// Çevrimdışı uzatma dosyası (portal): uçtaki kiranın çocuğu, istek olmadan basılır.
+  DOSYA
 }
 
 enum YaptirimTuru {
@@ -122,6 +126,11 @@ enum KopyaUyariTuru {
   YABANCI_KIRA
   /// Yoklamadaki kip (gözlem/zorla) kurulumun kirasındaki zorlamayla uyuşmuyor (kira/durum silinmiş) — yalnız uyarı.
   KIP_UYUSMAZ
+  /// Sunulan HAK (kimlik · sürüm · bayt özeti) satıcının HAK defterinde yok — satıcı dışında basılmış HAK; yalnız uyarı.
+  YABANCI_HAK
+  /// Yerel müdahale şüphesi (G12): durum kaydı sırası geriledi/sıfırlandı · lisans izi kayıp · uzun belirsizlik ·
+  /// büyük saat sapması · yabancı HAK. Nedenler `ayrinti.nedenler`de; yalnız uyarı.
+  YEREL_MUDAHALE
 }
 
 enum KopyaUyariDurumu {
@@ -255,6 +264,13 @@ model Kurulum {
   /// Kip: false = gözlem (varsayılan; bugünkü davranış), true = zorla. Değişim defteri YaptirimEylemi(ZORLAMA).
   zorlama           Boolean @default(false)
   yoklamaAraligiDk  Int     @default(60)
+  /// Kurulumun son bildirdiği lisans yetenekleri (protokol `LICENSE_CAPABILITIES`; açık biçimli dizge). Yoklama ve
+  /// etkinleştirme yazar; daraltan yeni biçimler (kapanış kirası, ara imzalı HAK) yalnız bildirene gider.
+  yetenekler        String[] @default([])
+  /// İmzalı durum kaydının (fabrika `durum.json`) son bildirilen sırası — tekdüze artar; gerilemesi/sıfırlanması
+  /// yerel müdahale şüphesidir (G12 §3.1-5). Etkinleştirmede taban yeniden kurulur; çatal tarafı YAZAMAZ. INT4: sayaç
+  /// yazım başınadır (2^31 erişilmez); sığmayan bildirim saklanmaz, karşılaştırılmaz (`storableSequence`).
+  sonDurumSirasi    Int?
   /// Patron bulutu eşitleme aralığı (dk, 1–60; CHECK) — kiraya basılır, fabrika eşitleme işi okur.
   esitlemeAraligiDk Int     @default(5)
   /// Buluttaki geçmişin saklama süresi (ay: 3 · 13 · 25; NULL = tüm geçmiş; CHECK) — iç API `saklamaAy`.
@@ -421,6 +437,8 @@ model Kira {
   bitis            DateTime     @db.Timestamptz
   /// İmzalı KİRA (JWS).
   belge            String
+  /// Yalnız `KAPANIS` kirasında dolu (CHECK): KOPYA · TASIMA · IPTAL — protokol `CLOSING_LEASE_REASONS`.
+  kapanisNedeni    String?      @db.VarChar(10)
   createdAt        DateTime     @default(now()) @db.Timestamptz
 
   kurulum           Kurulum             @relation("KurulumKiralari", fields: [kurulumId], references: [id])
@@ -432,6 +450,7 @@ model Kira {
 
   @@index([kurulumId, createdAt])
   @@index([oncekiKiraId])
+  @@index([kurulumId, anahtarKimligi, karar, createdAt])
   @@map("kira")
 }
 
@@ -651,8 +670,10 @@ model KopyaUyarisi {
   /// Kabul edilen kümeye uyan taraf ve uymayan taraf (özetler; ham kimlik yok).
   sahipParmakIzi Json?
   digerParmakIzi Json
-  /// İkinci pencerede kira reddedildi mi (ilk red anı).
+  /// İkinci pencerede kira reddedildi mi (ilk red anı) — kapanış kirasının K3 çapası da budur.
   redZamani      DateTime?        @db.Timestamptz
+  /// Türe özgü ayrıntı (YEREL_MUDAHALE: `{nedenler[], …}` — ham kimlik/iş verisi yok).
+  ayrinti        Json?
   kapanisZamani  DateTime?        @db.Timestamptz
   kapatan        String?          @db.VarChar(120)
   createdAt      DateTime         @default(now()) @db.Timestamptz
@@ -1179,6 +1200,8 @@ enum BildirimOlayi {
   PLANLI_EYLEM_UYGULANDI
   TAKSIT_GECIKTI
   DENEME
+  /// Yerel müdahale şüphesinin YENİ nedeni (uyarı × neden başına bir kez; referans nedeni taşır).
+  YEREL_MUDAHALE_SUPHESI
   /// K4: kullanım başına en yeni sertifikanın (ALT · ara imzacı · İNDİRME) bitişine 30/15/7/1 gün kaldı — tören günü.
   ANAHTAR_SURESI_BITIYOR
   /// K2: 400 günü aşan ya da süresiz çevrimdışı ufuklu HAK verildi (ya da kök kuyruğuna girdi).

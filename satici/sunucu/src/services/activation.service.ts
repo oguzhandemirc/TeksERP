@@ -17,12 +17,14 @@ import { prisma, type Tx } from "../lib/prisma";
 import type { VendorContext } from "./context";
 import { notifyDoorbell } from "./doorbell";
 import { bodyKeyRole, installationCancelled, recordRequestNonce, verifySignedRequest, type KeyRole } from "./installation-auth";
+import { storableSequence } from "./local-intervention";
 import {
   activeEntitlement,
   computeSanctionState,
-  currentEntitlementToken,
   downloadTokens,
+  entitlementTokenFor,
   issueLease,
+  leaseRevocation,
   licenseResponse,
 } from "./lease.service";
 
@@ -84,12 +86,13 @@ async function replayOrConflict(tx: Tx, ctx: VendorContext, code: EtkinlestirmeK
   const hak = await activeEntitlement(tx, inst.id);
   const sanction = await computeSanctionState(tx, inst.id);
   return licenseResponse({
-    hak: await currentEntitlementToken(tx, hak),
+    hak: await entitlementTokenFor(tx, inst, hak),
     kira: lease.belge,
     tokens: downloadTokens(ctx, inst, hak, sanction, nowMs),
     nowMs,
     installationId: inst.kurulumId,
     codeKind: code.tur,
+    revocation: await leaseRevocation(tx),
   });
 }
 
@@ -165,6 +168,9 @@ export async function activateInTx(
       sonOrtam: g.body.ortam,
       etkinlesmeZamani: new Date(g.nowMs),
       sonKiraId: null,
+      // Lisans v2: yetenekler ve durum kaydı sırasının TABANI etkinleştirmede yeniden kurulur (yeni makine sıfırdan sayar).
+      yetenekler: [...(g.body.yetenekler ?? [])],
+      sonDurumSirasi: storableSequence(g.body.durumKaydi) ?? null,
     },
   });
   if (updated.count === 0) throw retryConflict();
@@ -187,12 +193,13 @@ export async function activateInTx(
     kind: "activated",
     activated: {
       response: licenseResponse({
-        hak: await currentEntitlementToken(tx, hak),
+        hak: lease.entitlementToken,
         kira: lease.token,
         tokens: downloadTokens(ctx, fresh, hak, lease.sanction, g.nowMs),
         nowMs: g.nowMs,
         installationId: fresh.kurulumId,
         codeKind: code.tur,
+        revocation: lease.revocation,
       }),
       installationDbId: inst.id,
       codeId: code.id,

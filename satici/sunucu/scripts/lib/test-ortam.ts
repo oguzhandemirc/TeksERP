@@ -14,12 +14,16 @@ import { randomUUID } from "node:crypto";
 import {
   ACCEPTANCE_TEXTS,
   DAY_MS,
+  EntitlementSchema,
   REQUEST_HEADER,
+  TYP,
   generateNonce,
   parseJws,
   signAcceptance,
+  signDocument,
   signRequest,
   type AcceptanceDoc,
+  type EntitlementDoc,
   type Fingerprint,
   type LicenseClass,
   type RequestPurpose,
@@ -242,6 +246,36 @@ export async function kurulumFiksturu(
   return { musteriId, tesisId, kurulumDbId: kurulum.id, kurulumId: kurulum.kurulumId, hakId: hak.id, lisansNo: hak.lisansNo, kod: kod.code };
 }
 
+/**
+ * Lisans v2 fikstürü: aktif HAK'ın YENİ sürümü `cevrimdisiUfukGun` ile (fikstür kökü imzalar) — P modelinin HAK yarısı.
+ * Ufuklu HAK'ı portaldan basan yol L2-3'tedir; bekçi o inene dek sürümü doğrudan defterine yazar (kurulum kilidi altında).
+ */
+export async function ufukluHakSurumu(f: Fikstur, hakId: string, ufukGun: number | null = 400): Promise<number> {
+  const { prisma } = await import("../../src/lib/prisma");
+  const { lockInstallation } = await import("../../src/lib/locks");
+  const hak = await prisma.hak.findUniqueOrThrow({ where: { id: hakId } });
+  const onceki = await prisma.hakSurumu.findUniqueOrThrow({ where: { hakId_surum: { hakId, surum: hak.guncelSurum } } });
+  const p = parseJws(onceki.belge);
+  if (!p.ok) throw new Error("fikstür HAK belgesi okunamadı");
+  const surum = hak.guncelSurum + 1;
+  const simdi = new Date();
+  const payload = { ...(p.value.payload as EntitlementDoc), surum, verilis: simdi.toISOString(), cevrimdisiUfukGun: ufukGun };
+  const belge = signDocument({ typ: TYP.HAK, schema: EntitlementSchema, payload, key: { kid: f.kok.kid, privateKey: f.kok.privateKey } });
+  await prisma.$transaction(async (tx) => {
+    await lockInstallation(tx, hak.kurulumId);
+    await tx.hakSurumu.create({ data: { hakId, surum, belge, imzalayanKid: f.kok.kid, verilis: simdi, sebep: "bekçi: ufuklu HAK (lisans v2)", yapan: "bekci" } });
+    await tx.hak.update({ where: { id: hakId }, data: { guncelSurum: surum } });
+  });
+  return surum;
+}
+
+/** Kiranın yükü (kendi imzalı belgemiz; bekçi yalnız okur). */
+export function kiraYuku(json: Record<string, unknown>): Record<string, unknown> {
+  const p = parseJws(json.kira);
+  if (!p.ok) throw new Error("yanıtta kira yok");
+  return p.value.payload as Record<string, unknown>;
+}
+
 // ---------------------------------------------------------------- fabrika (istemci) tarafı
 export interface Yanit {
   readonly status: number;
@@ -259,15 +293,28 @@ export const ORTAM = {
   konteyner: false,
 };
 
-export function yoklamaGovdesi(g: { sonKiraId: string | null; hak?: { hakId: string; surum: number } | null; parmakIzi: Fingerprint }) {
+export function yoklamaGovdesi(g: {
+  sonKiraId: string | null;
+  hak?: { hakId: string; surum: number; ozet?: string } | null;
+  parmakIzi: Fingerprint;
+  /** Lisans v2 ekleri — yalnız verilirse gövdeye girer (eski fabrika hiçbirini göndermez). */
+  v2?: {
+    yetenekler?: string[];
+    durumKaydi?: { sira: number | null; gecerli: boolean };
+    belirsizlik?: { birikenMs: number; ilk: string | null };
+    nedenler?: string[];
+    saticiSapmaSn?: number;
+  };
+}) {
   const simdi = new Date().toISOString();
+  const v2 = g.v2 ?? {};
   return {
     v: 1,
     sonKiraId: g.sonKiraId,
     hak: g.hak ?? null,
     parmakIzi: g.parmakIzi,
-    durum: { gecerlilik: "GECERLI", nedenler: [], kip: "gozlem", hesaplananKademe: "NORMAL", uygulananKademe: "NORMAL" },
-    saat: { duvar: simdi, guvenilir: simdi, bulgu: null },
+    durum: { gecerlilik: "GECERLI", nedenler: v2.nedenler ?? [], kip: "gozlem", hesaplananKademe: "NORMAL", uygulananKademe: "NORMAL" },
+    saat: { duvar: simdi, guvenilir: simdi, bulgu: null, ...(v2.saticiSapmaSn === undefined ? {} : { saticiSapmaSn: v2.saticiSapmaSn }) },
     ortam: ORTAM,
     saglik: {
       surum: "2.11.2",
@@ -282,6 +329,9 @@ export function yoklamaGovdesi(g: { sonKiraId: string | null; hak?: { hakId: str
       isHatalari: [],
     },
     gozlem: { reddedilecekIstek: 0, reddedilecekModul: 0 },
+    ...(v2.yetenekler === undefined ? {} : { yetenekler: v2.yetenekler }),
+    ...(v2.durumKaydi === undefined ? {} : { durumKaydi: v2.durumKaydi }),
+    ...(v2.belirsizlik === undefined ? {} : { belirsizlik: v2.belirsizlik }),
   };
 }
 

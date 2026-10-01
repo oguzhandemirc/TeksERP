@@ -65,6 +65,7 @@ export const ERISIM_PORTAL_ROTALARI: ReadonlySet<string> = new Set([
   "POST /tasima-talepleri/:id/onayla",
   "POST /tasima-talepleri/:id/reddet",
   "POST /kopya-uyarilari/:id/kapat",
+  "POST /kurulumlar/:id/uzatma-dosyasi",
   "POST /kurulumlar/:id/dr-geri-al",
   "POST /kurulumlar/:id/iptal",
   "POST /kurulumlar/:id/iptal-geri-al",

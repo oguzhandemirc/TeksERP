@@ -69,6 +69,10 @@ export interface Installation {
   readonly aktif: boolean;
   readonly createdAt: string;
   readonly kabulEdilenParmakIzi?: Record<string, string | null> | null;
+  /** Lisans v2: kurulumun son bildirdiği lisans yetenekleri (yoklama/etkinleştirme yazar). */
+  readonly yetenekler?: readonly string[];
+  /** İmzalı durum kaydının son bildirilen sırası (gerilemesi yerel müdahale şüphesi). */
+  readonly sonDurumSirasi?: number | null;
   readonly tesis: { readonly id: string; readonly ad: string; readonly musteri: { readonly id: string; readonly ad: string; readonly bayiId: string | null } };
   readonly haklar: EntitlementSummary[];
   readonly _count: { readonly kopyaUyarilari: number; readonly tasimalar: number };
@@ -117,6 +121,8 @@ export interface SanctionState {
 export interface Lease {
   readonly id: string;
   readonly karar: string;
+  /** Yalnız kapanış kirasında (karar KAPANIS): KOPYA · TASIMA · IPTAL. */
+  readonly kapanisNedeni?: string | null;
   readonly oncekiKiraId: string | null;
   readonly anahtarKimligi: string;
   readonly hakSurum: number;
@@ -146,6 +152,8 @@ export interface CopyAlert {
   readonly redZamani: string | null;
   readonly kapanisZamani: string | null;
   readonly kapatan: string | null;
+  /** Türe özgü ayrıntı (YEREL_MUDAHALE: `nedenler` · `sayac` · son ölçümler). */
+  readonly ayrinti?: { readonly nedenler?: readonly string[]; readonly sayac?: Readonly<Record<string, number>> } | null;
   readonly kurulum?: InstallationRef;
 }
 
@@ -251,6 +259,30 @@ export interface InstallationDetail {
   readonly planliEylemler?: PlannedAction[];
   readonly taksitPlanlari?: InstallmentPlan[];
   readonly kurulumKaydi?: InstallationRecord[];
+  /** Lisans v2 ödenmiş tarih görünümü (satıcı künyesi; `null` = aktif HAK yok). */
+  readonly odenmisTarih?: PaidThroughView | null;
+}
+
+/** P'nin kaynağı — sunucu `PaidThroughKind` aynası (mirrors.test.ts). */
+export type PaidThroughKind = "SOZLESME_SONU" | "TAKSIT" | "SURESIZ";
+
+/** Ödenmiş tarih (P) görünümü: değerler sunucunun tek kaynağından; bant ve internet satıcının TAHMİNİ. */
+export interface PaidThroughView {
+  readonly tarih: string | null;
+  readonly tur: PaidThroughKind;
+  /** Fabrika P modelini işletiyor mu (yetenek + ufuklu HAK + P'li kira); değilse eski çapa (kira bitişi + ek süre). */
+  readonly pModeli: boolean;
+  readonly sonAlisveris: string | null;
+  readonly internetVar: boolean;
+  readonly bantGorunurTahmini: boolean;
+}
+
+/** POST /kurulumlar/:id/uzatma-dosyasi yanıtı: dosya içeriği imzalı `LicenseResponse`'tur (AYNEN kaydedilir). */
+export interface ExtensionFile {
+  readonly dosya: Record<string, unknown>;
+  readonly dosyaAdi: string;
+  readonly kiraId: string;
+  readonly odenmisTarih: string | null;
 }
 
 export interface Ceiling {

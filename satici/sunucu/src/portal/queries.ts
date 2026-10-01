@@ -169,7 +169,7 @@ export async function installationDetail(db: Db, id: string, g: { dealerId?: str
     where: { kurulumId: inst.id },
     orderBy: [{ createdAt: "desc" }, { id: "desc" }],
     take: 20,
-    select: { id: true, karar: true, oncekiKiraId: true, anahtarKimligi: true, hakSurum: true, verilis: true, bitis: true, createdAt: true },
+    select: { id: true, karar: true, kapanisNedeni: true, oncekiKiraId: true, anahtarKimligi: true, hakSurum: true, verilis: true, bitis: true, createdAt: true },
   });
   const polls = await db.yoklama.findMany({
     where: { kurulumId: inst.id },

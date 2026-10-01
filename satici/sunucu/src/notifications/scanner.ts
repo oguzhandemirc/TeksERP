@@ -1,11 +1,14 @@
 // ZAMANA BAĞLI BİLDİRİMLER — dakikalık bakım işinin içinde `BILDIRIM_TARAMA_DK`da bir koşar: kurulum ses vermiyor ·
-// kira bitişi yaklaşıyor · lisans geçerlilik bitişi yaklaşıyor · taksit vadesi yaklaşıyor. Aday kilitsiz okunur, her
+// kira bitişi yaklaşıyor (yalnız eski çapalı kurulum; P modelinde kira bitişi tazeliktir) · lisans geçerlilik bitişi
+// yaklaşıyor · taksit vadesi yaklaşıyor (bu ikisi ödenmiş tarih P'nin iki kaynağıdır — `paid-through.ts`). Aday kilitsiz okunur, her
 // aday kendi tx'inde kurulum kilidi ALTINDA TAZE okunup yeniden doğrulanır (TOCTOU: arada yoklayan kurulum "sessiz"
 // bildirimi almaz). Tekillik anahtarı dönemi taşır (son yoklama anı · kira kimliği · bitiş/vade anı): aynı dönem
 // ikinci satır doğurmaz, iki zamanlayıcı yarışsa da UNIQUE tek satır bırakır — spam yok.
 import type { LisansSinifi } from "@prisma/client";
 import { lockInstallation } from "../lib/locks";
 import { prisma, type Tx } from "../lib/prisma";
+import { entitlementTokenFor } from "../services/lease.service";
+import { paidThroughModelActive } from "../services/paid-through";
 import { enqueueNotificationTx } from "./outbox";
 
 const HOUR_MS = 3_600_000;
@@ -65,7 +68,18 @@ async function scanSilent(cfg: ScanConfig, nowMs: number): Promise<number> {
   return n;
 }
 
-/** Kira bitişi yaklaşıyor: uçtaki kiranın bitişi ufukta (kurulum yoklamıyor → ek süreye düşecek). Kira başına bir kez. */
+/**
+ * Uçtaki kira fabrikada P modelini mi işletiyor (lisans v2)? O zaman kira bitişi yalnız TAZELİK bilgisidir, ek süreye
+ * düşürmez: süre P'ye bağlıdır ve P'nin yaklaşması geçerlilik/taksit taramasında zaten bildirilir.
+ */
+async function tipUsesPaidThrough(tx: Tx, installationDbId: string, leaseToken: string): Promise<boolean> {
+  const inst = await tx.kurulum.findUnique({ where: { id: installationDbId }, select: { id: true, yetenekler: true } });
+  const hak = await tx.hak.findFirst({ where: { kurulumId: installationDbId, aktif: true } });
+  if (!inst || !hak || hak.guncelSurum < 1) return false;
+  return paidThroughModelActive({ capabilities: inst.yetenekler, entitlementToken: await entitlementTokenFor(tx, inst, hak), leaseToken });
+}
+
+/** Kira bitişi yaklaşıyor: uçtaki kiranın bitişi ufukta (kurulum yoklamıyor → ek süreye düşecek). Kira başına bir kez; P modelinde yok. */
 async function scanLeaseEnd(cfg: ScanConfig, nowMs: number): Promise<number> {
   const now = new Date(nowMs);
   const horizon = new Date(nowMs + cfg.dueDays * DAY_MS);
@@ -78,9 +92,10 @@ async function scanLeaseEnd(cfg: ScanConfig, nowMs: number): Promise<number> {
   let n = 0;
   for (const r of rows) {
     n += await underLock(r.id, async (tx) => {
-      const k = await tx.kurulum.findUnique({ where: { id: r.id }, select: { durum: true, aktif: true, sonKira: { select: { id: true, bitis: true } } } });
+      const k = await tx.kurulum.findUnique({ where: { id: r.id }, select: { durum: true, aktif: true, sonKira: { select: { id: true, bitis: true, belge: true } } } });
       const lease = k?.sonKira;
       if (!k || k.durum !== "ETKIN" || !k.aktif || !lease || lease.bitis <= now || lease.bitis > horizon) return 0;
+      if (await tipUsesPaidThrough(tx, r.id, lease.belge)) return 0;
       return enqueueNotificationTx(tx, { event: "KIRA_BITISI_YAKLASIYOR", keyParts: [lease.id], installationDbId: r.id, relatedId: r.id, portalPath: `/kurulumlar/${r.id}`, tarih: lease.bitis });
     });
   }

@@ -2,7 +2,8 @@
 // parça için `…/q#<TKLQ1 parçası>`) açar. `#parça` tarayıcıdan sunucuya HİÇ gitmez (günlüğe de
 // giremez); sayfa zarfı tarayıcıda okuyup `/v1/cevrimdisi`e gönderir ve YANITI çok parçalı QR olarak
 // gösterir — fabrikadaki tablet parçaları okutup birleştirir. İstek parçaları sekmeler arasında
-// yalnız bu kökenin yerel deposunda en çok 15 dk bekler, küme tamamlanınca silinir.
+// yalnız bu kökenin yerel deposunda en çok 15 dk bekler, küme tamamlanınca silinir. Yanıttaki kiranın (kendi imzalı
+// belgemiz; burada yalnız OKUNUR) ödenmiş tarihi (P) ve kapanış uyarısı kullanıcıya tek satırda gösterilir.
 // Biçim ve kodlayıcı: `qr-page-lib.ts` + `qr-page-matrix.ts` (bekçi `test_qr_sayfasi`).
 import type { Request, Response } from "express";
 import { ENDPOINTS } from "../lisans-protokol";
@@ -14,8 +15,38 @@ const CONTROLLER_JS = String.raw`(function () {
   var OFFLINE = ${JSON.stringify(ENDPOINTS.OFFLINE)}, STORE_KEY = "tklq-istek", STORE_TTL_MS = 15 * 60 * 1000, CYCLE_MS = 2500;
   var byId = function (id) { return document.getElementById(id); };
   var durum = byId("durum"), qrKutu = byId("qr"), qrBilgi = byId("qr-bilgi"), araclar = byId("araclar");
-  var yanit = byId("yanit"), kopyala = byId("kopyala");
+  var yanit = byId("yanit"), kopyala = byId("kopyala"), ozet = byId("lisans-ozet");
   function say(metin) { durum.textContent = metin; }
+  function b64uBytes(s) {
+    var abc = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_", out = [], acc = 0, bits = 0;
+    for (var i = 0; i < s.length; i++) {
+      var v = abc.indexOf(s.charAt(i));
+      if (v < 0) return null;
+      acc = ((acc << 6) | v) & 0xffffff; bits += 6;
+      if (bits >= 8) { bits -= 8; out.push((acc >>> bits) & 255); }
+    }
+    return out;
+  }
+  function utf8Text(bytes) {
+    var s = "";
+    for (var i = 0; i < bytes.length; i++) s += "%" + ("0" + bytes[i].toString(16)).slice(-2);
+    return decodeURIComponent(s);
+  }
+  function day(iso) { return new Date(iso).toLocaleDateString("tr-TR"); }
+  function leaseSummary(text) {
+    try {
+      var bytes = b64uBytes(String(JSON.parse(text).kira).split(".")[1] || "");
+      if (!bytes) return null;
+      var k = JSON.parse(utf8Text(bytes)), out = [];
+      if (k.odenmisTarih === null) out.push("Ödenmiş tarih: süresiz");
+      else if (typeof k.odenmisTarih === "string") out.push("Ödenmiş tarih: " + day(k.odenmisTarih));
+      if (k.kapanis) {
+        var t = k.yaptirim && k.yaptirim.kisitlamaTarihi;
+        out.push("UYARI: bu makineye kapanış kirası verildi — lisans " + (t ? day(t) + " tarihinde" : "yakında") + " kısıtlı kipe geçer; satıcıyla görüşün");
+      }
+      return out.length ? out.join(" · ") : null;
+    } catch (e) { return null; }
+  }
   function readStore() {
     try {
       var v = JSON.parse(localStorage.getItem(STORE_KEY) || "null");
@@ -76,8 +107,9 @@ const CONTROLLER_JS = String.raw`(function () {
       .then(function (r) { return r.text().then(function (t) { return { ok: r.ok, t: t }; }); })
       .then(function (x) {
         if (!x.ok) { say("Sunucu isteği reddetti: " + message(x.t)); showText(x.t); return; }
-        var parts = TKLQ.split(x.t);
+        var parts = TKLQ.split(x.t), summary = leaseSummary(x.t);
         showText(x.t);
+        if (summary) { ozet.hidden = false; ozet.textContent = summary; }
         if (!parts) { say("Yanıt QR'a sığmıyor — metni kopyalayıp fabrika paneline yapıştırın."); return; }
         say("Yanıt hazır. Fabrikadaki tablette Ayarlar → Lisans → “Yanıt QR'ını okut” ile QR'ların hepsini okutun; tablet yoksa metni kopyalayıp panele yapıştırın.");
         showParts(parts);
@@ -117,6 +149,7 @@ const PAGE = `<!doctype html>
 body{font-family:system-ui,sans-serif;margin:1rem;max-width:40rem;color:#1b1b1b;background:#fafafa}
 textarea{width:100%;min-height:8rem;font-family:ui-monospace,monospace;font-size:.75rem;margin-top:1rem}
 .durum{padding:.5rem;border-radius:.25rem;background:#eef}
+.ozet{padding:.5rem;border-radius:.25rem;background:#efe;font-weight:600}
 .qr svg{display:block;width:min(92vw,68vh);height:auto;margin:1rem auto 0}
 .bilgi{text-align:center;font-weight:600}
 .araclar{display:flex;gap:.5rem;justify-content:center}
@@ -126,6 +159,7 @@ button{font-size:1rem;padding:.5rem .9rem}
 <body>
 <h1>TeksERP lisans aktarma</h1>
 <p class="durum" id="durum">Hazırlanıyor…</p>
+<p class="ozet" id="lisans-ozet" hidden></p>
 <div class="qr" id="qr" hidden></div>
 <p class="bilgi" id="qr-bilgi" hidden></p>
 <div class="araclar" id="araclar" hidden><button id="onceki" type="button">‹ Önceki</button><button id="dur" type="button">Durdur</button><button id="sonraki" type="button">Sonraki ›</button></div>

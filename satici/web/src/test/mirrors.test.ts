@@ -11,7 +11,19 @@ import { describe, expect, it } from "vitest";
 import { RETRY_CONFLICT_CODE } from "../shared/api";
 import { LOGIN_RATE_LIMIT_CODE } from "../shared/LoginPage";
 import { DEFAULT_MAINTENANCE_MONTHS, MAX_MAINTENANCE_MONTHS } from "../shared/CeilingFields";
-import { CHANNEL_HEALTH_LABEL, CLASS_LABEL, MODULE_LABEL, NOTIFICATION_CHANNEL_LABEL, NOTIFICATION_EVENT_LABEL, NOTIFICATION_STATUS_LABEL } from "../shared/labels";
+import {
+  CHANNEL_HEALTH_LABEL,
+  CLASS_LABEL,
+  CLOSING_REASON_LABEL,
+  COPY_ALERT_LABEL,
+  LEASE_DECISION_LABEL,
+  LOCAL_INTERVENTION_CAUSE_LABEL,
+  MODULE_LABEL,
+  NOTIFICATION_CHANNEL_LABEL,
+  NOTIFICATION_EVENT_LABEL,
+  NOTIFICATION_STATUS_LABEL,
+  PAID_THROUGH_KIND_LABEL,
+} from "../shared/labels";
 import { PORTAL_PERMISSIONS, TAILNET_ONLY_PERMISSIONS } from "../shared/permissions";
 import { HEAVY_K3_MIN_DAYS, INSTALLMENT_DEFAULT_RESTRICTION_DAYS } from "../shared/sanctions";
 import { CHANNEL_CODE_PATTERN, CHANNEL_KIND_LABEL, VERSION_PATTERN } from "../portal/pages/Channels";
@@ -168,6 +180,56 @@ describe("katalog ekran adları", () => {
     const kinds = listStrings(read("services/channel.service.ts"), "export const CHANNEL_KINDS");
     expect(kinds.length).toBeGreaterThan(0);
     expect(kinds.filter((k) => !(k in CHANNEL_KIND_LABEL))).toEqual([]);
+  });
+});
+
+/** Prisma şemasındaki bir enum'un değerleri (belge yorumları `///` atlanır). */
+function prismaEnum(name: string): string[] {
+  const schema = readFileSync(path.resolve(SERVER_SRC, "../prisma/schema.prisma"), "utf8");
+  const m = new RegExp(`\\nenum ${name} \\{([\\s\\S]*?)\\n\\}`).exec(schema);
+  if (!m) throw new Error(`enum ${name} bulunamadı`);
+  return m[1]!.split("\n").map((l) => l.trim()).filter((l) => /^[A-Za-z_]+$/.test(l));
+}
+
+/** Ekran adı haritası sunucu kümesiyle İKİ YÖNLÜ birebir (eksik değer ham kod basar, fazla anahtar ölü etikettir). */
+function twoWay(values: readonly string[], map: Record<string, string>): void {
+  expect(values.length).toBeGreaterThan(1);
+  expect(values.filter((v) => !map[v])).toEqual([]);
+  expect(Object.keys(map).filter((k) => !values.includes(k))).toEqual([]);
+}
+
+describe("lisans v2 — enum ve küme ekran adları (sunucu kaynağı, iki yönlü)", () => {
+  it("kopya uyarısı türleri = Prisma KopyaUyariTuru (YABANCI_HAK · YEREL_MUDAHALE dahil)", () => {
+    const values = prismaEnum("KopyaUyariTuru");
+    expect(values).toEqual(expect.arrayContaining(["YABANCI_HAK", "YEREL_MUDAHALE"]));
+    twoWay(values, COPY_ALERT_LABEL);
+  });
+
+  it("kira zinciri kararları = Prisma ZincirKarari (KAPANIS · DOSYA dahil)", () => {
+    const values = prismaEnum("ZincirKarari");
+    expect(values).toEqual(expect.arrayContaining(["KAPANIS", "DOSYA"]));
+    twoWay(values, LEASE_DECISION_LABEL);
+  });
+
+  it("yerel müdahale nedenleri = LOCAL_INTERVENTION_CAUSES (services/local-intervention.ts)", () => {
+    twoWay(listStrings(read("services/local-intervention.ts"), "export const LOCAL_INTERVENTION_CAUSES"), LOCAL_INTERVENTION_CAUSE_LABEL);
+  });
+
+  it("kapanış kirası nedenleri = protokol CLOSING_LEASE_REASONS", () => {
+    twoWay(listStrings(read("lisans-protokol/belgeler.ts"), "export const CLOSING_LEASE_REASONS"), CLOSING_REASON_LABEL);
+  });
+
+  it("ödenmiş tarih kaynağı = PaidThroughKind (services/paid-through.ts)", () => {
+    const m = /export type PaidThroughKind = ([^;]+);/.exec(read("services/paid-through.ts"));
+    expect(m, "PaidThroughKind bulunamadı").not.toBeNull();
+    twoWay([...m![1]!.matchAll(/"([A-Z_]+)"/g)].map((x) => x[1]!), PAID_THROUGH_KIND_LABEL);
+  });
+
+  it("✓K ayna denetçisi ısırır: eksik ve fazla anahtar ayrı ayrı yakalanır", () => {
+    const missing = { A: "a" };
+    const extra = { A: "a", B: "b", C: "c" };
+    expect(() => twoWay(["A", "B"], missing)).toThrow();
+    expect(() => twoWay(["A", "B"], extra)).toThrow();
   });
 });
 

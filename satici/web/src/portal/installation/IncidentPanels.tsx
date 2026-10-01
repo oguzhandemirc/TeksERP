@@ -4,10 +4,16 @@ import { useState } from "react";
 import { ConfirmAction } from "../../shared/ConfirmAction";
 import { OnceSecretModal } from "../../shared/OnceSecret";
 import { fmtBytes, fmtDate, fmtDateTime, fmtDuration, shortId } from "../../shared/format";
-import { COPY_ALERT_LABEL, LEASE_DECISION_LABEL, TRANSFER_STATUS_LABEL, label } from "../../shared/labels";
+import { CLOSING_REASON_LABEL, COPY_ALERT_LABEL, LEASE_DECISION_LABEL, LOCAL_INTERVENTION_CAUSE_LABEL, TRANSFER_STATUS_LABEL, label } from "../../shared/labels";
 import { useApi, useCan } from "../../shared/session";
 import { installationName, type CopyAlert, type InstallationDetail, type InstallationRef, type TransferApproved, type TransferRequest } from "../../shared/types";
 import { Badge, Button, Field, KeyValues, Section, Table } from "../../shared/ui";
+
+/** YEREL_MUDAHALE uyarısının nedenleri (ekran adıyla, görülme sayısıyla); diğer türlerde boş. */
+export function alertCauses(alert: CopyAlert): string {
+  const causes = alert.ayrinti?.nedenler ?? [];
+  return causes.map((c) => `${label(LOCAL_INTERVENTION_CAUSE_LABEL, c)}${alert.ayrinti?.sayac?.[c] ? ` ×${alert.ayrinti.sayac[c]}` : ""}`).join(" · ");
+}
 
 function refName(r: InstallationRef | undefined, fallback: string): string {
   return r ? `${r.tesis.musteri.ad} › ${r.tesis.ad} › ${r.ad ?? r.kurulumId.slice(0, 8)}` : fallback;
@@ -131,6 +137,7 @@ export function IncidentsPanel({ detail, onChanged }: { detail: InstallationDeta
           empty="Kopya uyarısı yok"
           columns={[
             { header: "Tür", render: (r) => label(COPY_ALERT_LABEL, r.tur) },
+            { header: "Neden", render: (r) => alertCauses(r) || "—" },
             { header: "İlk / son", render: (r) => `${fmtDateTime(r.ilkGorulme)} / ${fmtDateTime(r.sonGorulme)}` },
             { header: "Sayı", render: (r) => r.gorulmeSayisi, className: "num-col" },
             { header: "Kira reddi", render: (r) => fmtDateTime(r.redZamani) },
@@ -234,7 +241,7 @@ export function HealthPanel({ detail }: { detail: InstallationDetail }) {
           columns={[
             { header: "Veriliş", render: (r) => fmtDateTime(r.verilis) },
             { header: "Bitiş", render: (r) => fmtDateTime(r.bitis) },
-            { header: "Karar", render: (r) => label(LEASE_DECISION_LABEL, r.karar) },
+            { header: "Karar", render: (r) => label(LEASE_DECISION_LABEL, r.karar) + (r.kapanisNedeni ? ` — ${label(CLOSING_REASON_LABEL, r.kapanisNedeni)}` : "") },
             { header: "HAK sürümü", render: (r) => r.hakSurum },
             { header: "Anahtar", render: (r) => <code>{r.anahtarKimligi}</code> },
           ]}
