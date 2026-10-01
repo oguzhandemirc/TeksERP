@@ -24,6 +24,9 @@
 //   §7 YÜKLEYİCİ HEDEFİ EZİLEMEZ: `yukler` beyanlı her yayıncı hedefi kanal kaydından çözer
 //      (`kanal-kapisi.mjs yayin-hedefi` / `yayinHedefi(`), ezmeyi reddeder (`yayinEzmeleri(`), ortam/argüman
 //      ezme deseni (`${UZAK_DIZIN:-…}` · `process.env.SSH_HEDEF` · `arg('feed')` …) ve yayın/VDS kökü LİTERALİ taşımaz
+//   §8 DERLEME BAĞI (G22): `derleme: 'paketle'` beyanlı yol temiz ağaç ister ve derleme künyesi yazar
+//      (`temiz-agac` + `panel-derleme-kunyesi` / `temizAgacDenetimi(` + `derlemeKunyesiYaz(`); `derleme: 'yayin'` beyanlı
+//      yol yüklemeden önce künyeyi artefakta, HEAD'e ve terfi etiketine bağlar (`panel-derleme-bagi` / `derlemeBagiDenetimi(`)
 //
 // ÜÇ SONUÇ: 0 yeşil · 1 kırmızı · 2 ÖLÇÜLEMEDİ (okunamayan dosya, yeri değişmiş
 // sabit). Ölçülemeyen kapı geçmiş kapı değildir — 2 de sıfır-dışıdır.
@@ -89,11 +92,11 @@ const DONMUS = {
  *   borc       — kapısız, gerekçe + kapanma koşulu beyanlı; kapı gelirse beyan KIRMIZI
  */
 const YAYIN_YOLLARI = {
-  'deploy/electron-paketle.sh': { sinif: 'kapili', terfi: true },
-  'deploy/electron-yayinla.sh': { sinif: 'kapili', terfi: true, yukler: true },
-  'deploy/mobil-yayinla.mjs': { sinif: 'kapili', terfi: true, yukler: true },
-  'mobil/scripts/yayinla-ota.mjs': { sinif: 'kapili', terfi: true },
-  'mobil/scripts/build-apk.mjs': { sinif: 'kapili', terfi: true },
+  'deploy/electron-paketle.sh': { sinif: 'kapili', terfi: true, derleme: 'paketle' },
+  'deploy/electron-yayinla.sh': { sinif: 'kapili', terfi: true, yukler: true, derleme: 'yayin' },
+  'deploy/mobil-yayinla.mjs': { sinif: 'kapili', terfi: true, yukler: true, derleme: 'yayin' },
+  'mobil/scripts/yayinla-ota.mjs': { sinif: 'kapili', terfi: true, derleme: 'paketle' },
+  'mobil/scripts/build-apk.mjs': { sinif: 'kapili', terfi: true, derleme: 'paketle' },
   'deploy/electron-yayinla.ps1': { sinif: 'saplama' },
   // Backend zip: -Musteri <kod> ile kanal kimliği (pm2Ad/urunAdi) alır → 'kapılı'
   //   (Faz 2b: müşteri kodu argümandan, kök kuralı backend'e genişledi). Paketleme terfi
@@ -122,6 +125,14 @@ const EZME_DESENLERI = {
     new RegExp(`\\barg\\(\\s*['"\`](${YAYIN_EZME_ARGUMANLARI.join('|')})['"\`]\\s*\\)`),
     new RegExp(`['"\`]--(${YAYIN_EZME_ARGUMANLARI.join('|')})(=|['"\`])`),
   ],
+};
+/** §8 — derleme bağı izleri: paketleme temiz ağaç + künye yazar, yayın künyeyi bağlar (kabuk: CLI · mjs: yüklem). */
+const DERLEME_DESENLERI = {
+  paketle: {
+    sh: [[/kanal-kapisi\.mjs"? temiz-agac\b/, 'kanal-kapisi.mjs temiz-agac'], [/kanal-kapisi\.mjs"? panel-derleme-kunyesi /, 'kanal-kapisi.mjs panel-derleme-kunyesi']],
+    mjs: [[/\btemizAgacDenetimi\(/, 'temizAgacDenetimi('], [/\bderlemeKunyesiYaz\(/, 'derlemeKunyesiYaz(']],
+  },
+  yayin: { sh: [[/kanal-kapisi\.mjs"? panel-derleme-bagi /, 'kanal-kapisi.mjs panel-derleme-bagi']], mjs: [[/\bderlemeBagiDenetimi\(/, 'derlemeBagiDenetimi(']] },
 };
 /** Yorum satırları ölçülmez (kabuk `#`, JS `//` · ` *`): belgeleme ezme adını anabilir. */
 const kodSatirlari = (rel, m) => m.replace(rel.endsWith('.sh') ? /^\s*#.*$/gm : /^\s*(\/\/|\*|\/\*).*$/gm, '');
@@ -376,6 +387,22 @@ function olc(d, yayinDosyalari, yayinYollari = YAYIN_YOLLARI) {
     }
   }
 
+  // §8 — derleme bağı (G22): paketleme temiz ağaç + künye, yayın künye bağı.
+  for (const [f, beyan] of Object.entries(yayinYollari)) {
+    if (!beyan.derleme) continue;
+    if (typeof d[f] !== 'string') {
+      olculemedi.push(`${f} okunamadı`);
+      continue;
+    }
+    const tur = f.endsWith('.sh') ? 'sh' : 'mjs';
+    const kod = kodSatirlari(f, d[f]);
+    for (const [desen, ad] of DERLEME_DESENLERI[beyan.derleme][tur]) {
+      if (!desen.test(kod)) {
+        kirmizi.push(`§8 ${f} derleme bağı (${beyan.derleme}) izi YOK: ${ad} — ${beyan.derleme === 'paketle' ? 'kirli ağaçtan/künyesiz paket' : 'onaylanmamış commit\'in baytı'} sahaya çıkabilirdi`);
+      }
+    }
+  }
+
   return { kirmizi, olculemedi, bilgi };
 }
 
@@ -508,6 +535,12 @@ function sondalar(taban, tabanYollar) {
     }],
     ['N61 VDS kökü (vds-dogrula.sh K=) kayıttan ayrıştı → KIRMIZI (§3 türetim)', 'kirmizi', (d) => { d['deploy/vds-dogrula.sh'] = d['deploy/vds-dogrula.sh'].replace('K=/opt/stack/apps/tekserp-guncelleme', 'K=/opt/stack/apps/baska-guncelleme'); }, 'vdsPanel'],
     ['O6 vds-dogrula.sh K= satırı yok → ÖLÇÜLEMEDİ (kök ölçülemez)', 'olculemedi', (d) => { d['deploy/vds-dogrula.sh'] = d['deploy/vds-dogrula.sh'].replace('\nK=/', '\nKOK=/'); }],
+    // §8 — derleme bağı (G22/DAGY-5): kapı çağrısı sökülürse KIRMIZI.
+    ['D1 electron-paketle.sh temiz ağaç kapısı söküldü → KIRMIZI (§8)', 'kirmizi', (d) => { d['deploy/electron-paketle.sh'] = d['deploy/electron-paketle.sh'].replaceAll('kanal-kapisi.mjs" temiz-agac', 'kanal-kapisi.mjs" kanal "$musteri"'); }, '§8'],
+    ['D2 electron-yayinla.sh derleme bağı çağrısı söküldü → KIRMIZI (§8)', 'kirmizi', (d) => { d['deploy/electron-yayinla.sh'] = d['deploy/electron-yayinla.sh'].replaceAll('kanal-kapisi.mjs" panel-derleme-bagi ', 'kanal-kapisi.mjs" kanal '); }, '§8'],
+    ['D3 mobil-yayinla.mjs derleme bağı yüklemi söküldü → KIRMIZI (§8)', 'kirmizi', (d) => { d['deploy/mobil-yayinla.mjs'] = d['deploy/mobil-yayinla.mjs'].replaceAll('derlemeBagiDenetimi(', 'baskaDenetim('); }, '§8'],
+    ['D4 build-apk.mjs künye yazımı söküldü → KIRMIZI (§8)', 'kirmizi', (d) => { d['mobil/scripts/build-apk.mjs'] = d['mobil/scripts/build-apk.mjs'].replaceAll('derlemeKunyesiYaz(', 'baskaYazim('); }, '§8'],
+    ['D5 yayinla-ota.mjs temiz ağaç yüklemi söküldü → KIRMIZI (§8)', 'kirmizi', (d) => { d['mobil/scripts/yayinla-ota.mjs'] = d['mobil/scripts/yayinla-ota.mjs'].replaceAll('temizAgacDenetimi(', 'baskaDenetim('); }, '§8'],
   ];
 
   let gecti = 0;

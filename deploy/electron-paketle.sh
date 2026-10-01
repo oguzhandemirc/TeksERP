@@ -76,6 +76,13 @@ node "$kok/scripts/kanal-kapisi.mjs" panel-paketle "$musteri" \
 node "$kok/scripts/kanal-kapisi.mjs" panel-capa \
   || hata "Panel imza çapası kullanılamaz — paket üretilmedi (anahtar kararı + guven-capasi-ekle.ts panel)."
 
+# --- TEMİZ AĞAÇ (G22) — derlemeden ve dosya yazmadan ÖNCE -----------------------
+# Paket commit'lenmemiş/izlenmeyen içerik taşımaz: derleme commit'i pakete (asar package.json `gitCommit`) ve yanındaki
+# derleme künyesine (derleme.json) yazılır; yayıncı onu HEAD'e ve terfi etiketine bağlar. Tek istisna paketlemenin
+# kendi yazdığı sürüm alanı (Electron/package.json version). Çıkış 1 kirli, 2 ölçülemedi — ikisi de DURDURUR.
+derleme_commit=$(node "$kok/scripts/kanal-kapisi.mjs" temiz-agac) \
+  || hata "Çalışma ağacı temiz değil ya da okunamadı — paket üretilmedi (yukarıdaki satırlar)."
+
 cd "$electron_dir"
 
 # Sembolik bağlı node_modules'te electron-builder bağımlılık ağacını eksik toplar ve
@@ -185,6 +192,8 @@ while IFS= read -r satir; do
   if [ -n "$satir" ]; then derleme_argumanlari+=("$satir"); fi
 done <<< "$derleme_satirlari"
 [ "${#derleme_argumanlari[@]}" -gt 0 ] || hata "Kanal kimliği boş çıktı — derleme yapılmadı."
+# Derleme commit'i paketin İÇİNE (asar package.json) — yayıncı künyeyle ve HEAD'le kıyaslar.
+derleme_argumanlari+=("-c.extraMetadata.gitCommit=$derleme_commit")
 
 echo "Müşteri: $musteri · Sürüm: $surum"
 echo "Yayın adresi: $beklenen_url"
@@ -251,6 +260,13 @@ node "$kok/scripts/kanal-kapisi.mjs" panel-capa "$musteri" "$electron_dir/$rel" 
 setup="$rel/TeksERP-$surum-Setup.exe"
 [ -f "$setup" ] || hata "Kurulum paketi üretilmemiş: $setup"
 [ -f "$rel/latest.yml" ] || hata "latest.yml üretilmemiş — package.json > build.publish eksik olabilir."
+
+# --- DERLEME KÜNYESİ (G22) — derleme sırasında ağaç/HEAD değişmediyse ----------------
+son_commit=$(node "$kok/scripts/kanal-kapisi.mjs" temiz-agac) \
+  || hata "Derleme sırasında çalışma ağacı değişti — paket güvenilmez, yayınlama."
+[ "$son_commit" = "$derleme_commit" ] || hata "Derleme sırasında HEAD değişti ($derleme_commit → $son_commit) — paket güvenilmez, yayınlama."
+node "$kok/scripts/kanal-kapisi.mjs" panel-derleme-kunyesi "$musteri" "$electron_dir/$rel" "$surum" "$derleme_commit" \
+  || hata "Derleme künyesi yazılamadı — yayınlama."
 
 mb=$(( $(wc -c < "$setup") / 1024 / 1024 ))
 echo ""

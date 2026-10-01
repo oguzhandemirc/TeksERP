@@ -75,6 +75,7 @@ import {
 } from '../../scripts/lib/kanallar.mjs';
 import { KANAL_ORTAM, otaImzaYollari, tabletYapilandirmaFarki } from './lib/kanal.cjs';
 import { terfiKapisi, terfiRaporu } from '../../scripts/lib/terfi.mjs';
+import { PANEL_KUNYE_ADI, derlemeKunyesiYaz, temizAgacDenetimi } from '../../scripts/lib/derleme-bagi.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const require = createRequire(import.meta.url);
@@ -610,6 +611,18 @@ async function main() {
     }
     for (const s of satirlar) bilgi(s);
   }
+  // --- TEMİZ AĞAÇ (G22) — app.json'a yazılmadan ve derlemeden ÖNCE ----------------
+  // Paket commit'lenmemiş/izlenmeyen içerik taşımaz; derleme commit'i paketin derleme künyesine (derleme.json)
+  // yazılır, yayıncı onu HEAD'e ve terfi etiketine bağlar. İstisna yalnız sürüm alanları (app.json expo.version ·
+  // android.versionCode). --check yan etkisizdir: kirli ağaç orada UYARI, gerçek turda DUR.
+  const agac = temizAgacDenetimi();
+  if (agac.sonuc !== 'temiz') {
+    if (SADECE_KONTROL) uyari(`${agac.satirlar.join('\n     ')}\n     (--check: uyarı — gerçek turda paket ÜRETİLMEZ)`);
+    else dur(agac.sonuc === 'kirli' ? 'PAKETLENEMEZ — çalışma ağacı temiz değil' : 'ÖLÇÜLEMEDİ — çalışma ağacı okunamadı', ...agac.satirlar);
+  } else {
+    bilgi(agac.satirlar[0]);
+  }
+  const derlemeCommit = agac.commit;
   // ⚠️ `--check` YAN ETKİSİZ OLMALI. Ön kontrol, dosyayı değiştirmeden "bu tur
   // ne olurdu"yu göstermek içindir; app.json'a yazsaydı yalnız bakmak için
   // koşan biri sürümü sessizce ilerletir ve fark etmezdi. Aşağıdaki kapılar
@@ -795,6 +808,19 @@ async function main() {
       2,
     ),
   );
+
+  // DERLEME KÜNYESİ (G22): imzalı manifest (varlıkları özetleriyle bağlar) ↔ derleme commit'i. Derleme sırasında
+  // ağaç/HEAD değiştiyse künye yazılmaz → yayıncı paketi reddeder.
+  {
+    const son = temizAgacDenetimi();
+    if (son.sonuc !== 'temiz' || son.commit !== derlemeCommit) {
+      dur('Derleme sırasında çalışma ağacı ya da HEAD değişti — paket güvenilmez, künye YAZILMADI', ...son.satirlar);
+    }
+    const k = derlemeKunyesiYaz(path.join(hedefDizin, PANEL_KUNYE_ADI), {
+      urun: 'tablet-ota', kanal: musteri, surum: e.version, commit: derlemeCommit, dosyaYolu: path.join(hedefDizin, 'manifest'),
+    });
+    bilgi(`✔ Derleme künyesi: ${PANEL_KUNYE_ADI} · commit ${k.commit.slice(0, 12)} · manifest sha256 ${k.sha256.slice(0, 16)}…`);
+  }
 
   fs.writeFileSync(
     PARMAK_IZI_DOSYA,

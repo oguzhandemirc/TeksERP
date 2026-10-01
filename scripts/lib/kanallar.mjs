@@ -489,7 +489,7 @@ export const YAYIN_YOLU_DESENLERI = [
 export const KANAL_BEKCI_DOSYALARI = [...new Set([
   KAYIT_REL, 'scripts/lib/kanallar.mjs', 'scripts/kanal-kapisi.mjs', 'scripts/check-kanallar.mjs',
   'scripts/test_kanal_yayin_kapisi.mjs', 'scripts/lib/surum.mjs', 'scripts/lib/surum-notu-tavan.mjs', 'scripts/lib/terfi.mjs',
-  'scripts/lib/yayin-okuma.mjs', 'scripts/lib/yayin-hedefi.mjs', 'deploy/vds-dogrula.sh',
+  'scripts/lib/yayin-okuma.mjs', 'scripts/lib/yayin-hedefi.mjs', 'scripts/lib/derleme-bagi.mjs', 'deploy/vds-dogrula.sh',
   'scripts/check-surum-notlari.mjs', 'scripts/hooks/pre-commit.mjs',
   ...PANEL_SABIT_DOSYALAR, ...TABLET_SABIT_DOSYALAR,
   'Electron/shared/update-feed.ts', 'mobil/scripts/lib/feed.cjs', 'mobil/scripts/lib/adres.mjs', 'mobil/scripts/lib/zip.mjs',
@@ -616,7 +616,8 @@ export function panelArtefaktKimligi(dizin) {
     url,
     updaterCacheDirName,
     exeler,
-    paket: { name: paket.name, productName: paket.productName },
+    // gitCommit: paketlemenin `-c.extraMetadata.gitCommit` ile gömdüğü derleme commit'i (G22 derleme bağı).
+    paket: { name: paket.name, productName: paket.productName, gitCommit: typeof paket.gitCommit === 'string' ? paket.gitCommit : null },
     anaSurec: icerik['out/main/main.js'].toString('utf8'),
     arayuz: arayuzJs.map((p) => icerik[p].toString('utf8')).join('\n'),
     arayuzBasligi: /<title>([^<]*)<\/title>/.exec(icerik['out/renderer/index.html'].toString('utf8'))?.[1] ?? null,

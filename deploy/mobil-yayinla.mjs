@@ -25,7 +25,8 @@
  *
  * Kullanım:
  *   node deploy/mobil-yayinla.mjs --musteri=<kod> --paket=<ota-cikti/<kod>/54.2/1787…>
- *   node deploy/mobil-yayinla.mjs --musteri=<kod> --apk=<yol.apk> --surum=2.9.8 --vc=55 [--anahtar=<imza anahtarı>]
+ *   node deploy/mobil-yayinla.mjs --musteri=<kod> --apk=<yol.apk> [--anahtar=<imza anahtarı>]
+ *        # sürüm ve versionCode APK'NIN KENDİSİNDEN okunur; --surum/--vc verilirse onlarla EŞİT olmalı
  *   node deploy/mobil-yayinla.mjs … --kuru     # yalnız ne yapacağını yaz (etiket de atılmaz)
  *   node deploy/mobil-yayinla.mjs … --terfi-atla="<kullanıcının cümlesi>"   # K5 acil kaçışı (S4)
  *   node deploy/mobil-yayinla.mjs --dogrula=<url>       # yükleme YOK, yayını denetle
@@ -37,6 +38,10 @@
  * bu künyeyle doğrulamadan kurmaz (`mobil/src/services/apkKunye.ts`). İmza aracı burada çağrılır (anahtar
  * `--anahtar=` ya da TEKSERP_TABLET_IMZA_ANAHTARI, parola TTY'den); rotasyon kilidi yayındaki künyenin çapasına
  * bakar. APK'nın gömülü OTA sertifikası kanalınkiyle aynı olmalı; imzasız OTA paketi yüklenmez.
+ *
+ * ⚠️ DERLEME BAĞI (G22): artefaktın yanındaki derleme künyesi (`<apk>.derleme.json` · OTA `derleme.json`) commit +
+ * özet taşır; künye yoksa, özet tutmazsa, commit HEAD değilse ya da üretim kanalında terfi etiketinin commit'i
+ * değilse yüklenmez (`scripts/lib/derleme-bagi.mjs`).
  */
 
 import { spawnSync } from 'node:child_process';
@@ -50,9 +55,10 @@ import { KAYIT_REL, Olculemedi, erpAdresiEsit, kanalCoz } from '../scripts/lib/k
 import { bundleAdresOlcumu } from '../mobil/scripts/lib/adres.mjs';
 import { zipGirdisiOku } from '../mobil/scripts/lib/zip.mjs';
 import { ApkOlculemedi, apkKimligi } from '../mobil/scripts/lib/apk-kimlik.mjs';
-import { cumleDenetle, istanbulSaati, terfiAtlaKaydi, terfiAtlaMesaji, terfiKapisi, terfiRaporu } from '../scripts/lib/terfi.mjs';
+import { cumleDenetle, istanbulSaati, terfiAtlaKaydi, terfiAtlaMesaji, terfiKapisi, terfiKaynagi, terfiRaporu } from '../scripts/lib/terfi.mjs';
 import { BelirtecYok, belirtecliFetch, belirtecOku, sshOku } from '../scripts/lib/yayin-okuma.mjs';
-import { DAMGA_BICIMI, RV_BICIMI, ezmeSatirlari, uzakDegerDenetle, yayinEzmeleri, yayinHedefi } from '../scripts/lib/yayin-hedefi.mjs';
+import { DAMGA_BICIMI, RV_BICIMI, SURUM_BICIMI, ezmeSatirlari, uzakDegerDenetle, yayinEzmeleri, yayinHedefi } from '../scripts/lib/yayin-hedefi.mjs';
+import { PANEL_KUNYE_ADI, apkKunyeYolu, derlemeBagiDenetimi, derlemeKunyesiOku, dosyaOzeti } from '../scripts/lib/derleme-bagi.mjs';
 import { sertifikaParmakIzi } from '../mobil/scripts/lib/apk-kimlik.mjs';
 import {
   APK_CAPA_REL, apkCapaDenetimi, apkCapaGomuluFarki, apkCapasiOku, apkRotasyonDenetimi, verifyApkSurumJson, withApkBlock,
@@ -224,6 +230,30 @@ function terfiKapisiUygula(surum) {
   dur(satirlar[0].replace(/^✖ /, ''), ...satirlar.slice(1).map((s) => s.trim()),
     h.sonuc === 'ihlal' ? 'Acil kaçış yalnız kullanıcının cümlesiyle: --terfi-atla="<cümle>"' : 'Ölçülemeyen şart geçmiş şart değildir.');
   return h;
+}
+
+/**
+ * DERLEME BAĞI (G22) — artefakt ↔ derleme künyesi ↔ HEAD ↔ (üretim kanalında, kaçış yoksa) terfi etiketi.
+ * `ek`: künyede artefaktla birebir olması gereken ek alanlar (APK'da versionCode). Ölçülemeyen bağ = DUR.
+ */
+function derlemeBagiUygula({ kunyeYolu, beklenen, dosyaYolu, ek = {} }) {
+  let h;
+  try {
+    const kunye = derlemeKunyesiOku(kunyeYolu);
+    h = derlemeBagiDenetimi({
+      kunye, kunyeYolu, beklenen, ozet: dosyaOzeti(dosyaYolu),
+      terfiUrunu: terfiKaynagi(KAYIT, MUSTERI) && TERFI_ATLA === undefined ? 'tablet' : null,
+    });
+    const ekFark = kunye ? Object.entries(ek).filter(([a, v]) => kunye[a] !== v).map(([a, v]) => `künye ${a} ${kunye[a]} — artefakt ${v}`) : [];
+    if (ekFark.length && h.sonuc !== 'olculemedi') h = { sonuc: 'ihlal', satirlar: [...(h.sonuc === 'ihlal' ? h.satirlar : []), ...ekFark] };
+  } catch (e) {
+    if (!(e instanceof Olculemedi)) throw e;
+    h = { sonuc: 'olculemedi', satirlar: [e.message] };
+  }
+  if (h.sonuc !== 'uyumlu') {
+    dur(h.sonuc === 'olculemedi' ? 'ÖLÇÜLEMEDİ — derleme bağı' : "DERLEME BAĞI KOPUK — yüklenen bayt onaylanan commit'e bağlanmıyor", ...h.satirlar);
+  }
+  bilgi(`  ${h.satirlar[0]}`);
 }
 
 /** Terfi atlandıysa: kanal yayın defterine satır (kullanıcının cümlesi) — yayından SONRA, best-effort. */
@@ -628,6 +658,11 @@ async function paketiYayinla(paketDizin) {
   tabletCapaKapisi(bundleMetni, bundleYol, { apk: false });
   // Sürüm paketin DONMUŞ manifestinden (etiketle aynı kaynak) — okunamazsa terfi ÖLÇÜLEMEDİ.
   terfiKapisiUygula(yayinlananPaketSurumu(paketDizin));
+  derlemeBagiUygula({
+    kunyeYolu: path.join(paketDizin, PANEL_KUNYE_ADI),
+    beklenen: { urun: 'tablet-ota', kanal: MUSTERI, surum: yayinlananPaketSurumu(paketDizin) },
+    dosyaYolu: manifestYol,
+  });
 
   baslik('OTA PAKETİ YAYINLANIYOR');
   bilgi(`Müşteri: ${MUSTERI}`);
@@ -643,7 +678,8 @@ async function paketiYayinla(paketDizin) {
   // (2) ÖNCE varlıklar — manifest onlara işaret ediyor.
   const icerik = fs
     .readdirSync(paketDizin)
-    .filter((ad) => !ad.startsWith('manifest'))
+    // Derleme künyesi yerel kanıttır, yayına gitmez (uzak düzen değişmez).
+    .filter((ad) => !ad.startsWith('manifest') && ad !== PANEL_KUNYE_ADI)
     .map((ad) => path.join(paketDizin, ad));
   scp(icerik, `${uzakSurum}/${damga}/`, '(2/4) paket dosyaları yükleniyor');
 
@@ -741,11 +777,6 @@ function apkicindekiAdres(apkYol) {
 
 async function apkYayinla(apkYol) {
   if (!fs.existsSync(apkYol)) dur('APK bulunamadı', apkYol);
-  const surum = arg('surum');
-  const vc = Number(arg('vc'));
-  if (!surum || !Number.isFinite(vc)) {
-    dur('APK yayını için --surum ve --vc gerekli', 'Örnek: --surum=2.9.8 --vc=55');
-  }
 
   // ⚠️ ARTEFAKT KİMLİĞİ ÖNCE (ucuz, ağsız) ve FAIL-CLOSED: okunamayan adres
   // "kapı atlandı" değil ÖLÇÜLEMEDİ'dir — adresi ölçülmemiş APK yüklenmez.
@@ -754,8 +785,10 @@ async function apkYayinla(apkYol) {
   // o kanalın uygulamasının ÜSTÜNE sessizce kurulur; tek yapısal ayrım paket adıdır.
   let apkPaket;
   let apkSertifika;
+  let apkSurumAdi;
+  let apkSurumKodu;
   try {
-    ({ paket: apkPaket, sertifikaPem: apkSertifika } = apkKimligi(apkYol));
+    ({ paket: apkPaket, sertifikaPem: apkSertifika, surumAdi: apkSurumAdi, surumKodu: apkSurumKodu } = apkKimligi(apkYol));
   } catch (e) {
     if (!(e instanceof ApkOlculemedi)) throw e;
     dur('ÖLÇÜLEMEDİ — APK paket adı okunamadı', e.message, 'Paket adı ölçülemeyen APK yüklenmez.');
@@ -773,6 +806,20 @@ async function apkYayinla(apkYol) {
     );
   }
   bilgi(`  APK paket adı     : ${apkPaket}`);
+  // SÜRÜM APK'NIN KENDİSİNDEN (G22/DAGY-5): künye, etiket ve terfi kapısı APK'nın taşıdığı versionName/versionCode'u
+  // ölçer. Argüman yalnız geriye uyum içindir ve APK'dan FARKLIYSA durulur (yanlış --vc tabletlere kurulamayan
+  // güncelleme teklif ettirirdi).
+  if (!apkSurumAdi || !SURUM_BICIMI.test(apkSurumAdi) || !Number.isInteger(apkSurumKodu) || apkSurumKodu < 1) {
+    dur('ÖLÇÜLEMEDİ — APK sürümü okunamadı', `versionName: ${apkSurumAdi ?? '(yok)'} · versionCode: ${apkSurumKodu ?? '(yok)'}`, 'Sürümü ölçülemeyen APK yüklenmez.');
+  }
+  for (const [ad, verilen, apkta] of [['surum', arg('surum'), apkSurumAdi], ['vc', arg('vc'), String(apkSurumKodu)]]) {
+    if (verilen !== undefined && verilen !== apkta) {
+      dur(`--${ad}=${verilen} APK'NIN KENDİ SÜRÜMÜ DEĞİL (APK: ${apkta})`, 'Sürüm APK dosyasından okunur; argümanı kaldır ya da doğru APK\'yı ver.');
+    }
+  }
+  const surum = apkSurumAdi;
+  const vc = apkSurumKodu;
+  bilgi(`  APK sürümü        : ${surum} (versionCode ${vc}) — APK dosyasından`);
   const { adres: apkAdres, hata: adresHatasi } = apkicindekiAdres(apkYol);
   if (!apkAdres) {
     dur(
@@ -833,6 +880,7 @@ async function apkYayinla(apkYol) {
   }
 
   terfiKapisiUygula(surum);
+  derlemeBagiUygula({ kunyeYolu: apkKunyeYolu(apkYol), beklenen: { urun: 'tablet-apk', kanal: MUSTERI, surum }, dosyaYolu: apkYol, ek: { versionCode: vc } });
 
   const ad = `TeksERP-${surum}-vc${vc}.apk`;
   if (!/^[\x20-\x7E]+$/.test(ad) || /\s/.test(ad)) {
@@ -880,7 +928,7 @@ async function apkYayinla(apkYol) {
   kos('scp', ['-s', apkYol, `${SSH_HEDEF}:${uzakDeger('scp hedefi', `${UZAK_KOK}/apk/${ad}`)}`], '(2/3) APK yükleniyor');
   scp([gecici], `${UZAK_KOK}/apk/`, '(3/3) künye yükleniyor (yayını AÇAN adım)');
 
-  if (KURU) return;
+  if (KURU) return { surum, vc };
 
   const y = await iste(apkKunyeUrl(FEED));
   if (y.durum !== 200 || y.govde !== fs.readFileSync(gecici, 'utf8')) {
@@ -893,6 +941,7 @@ async function apkYayinla(apkYol) {
   });
   bilgi(`  APK        : ${icerik.length} bayt — yayındaki boyutla eşleşti`);
   bilgi('\n  ✔ Kurulum dosyası yayında.');
+  return { surum, vc };
 }
 
 /* ------------------------------------------------------------------ */
@@ -920,14 +969,14 @@ if (!paket && !apk) {
   dur(
     'Ne yayınlanacağı belirtilmedi',
     'OTA paketi : node deploy/mobil-yayinla.mjs --paket=mobil/ota-cikti/54.2/<damga>',
-    'Kurulum    : node deploy/mobil-yayinla.mjs --apk=<yol> --surum=2.9.8 --vc=55',
+    'Kurulum    : node deploy/mobil-yayinla.mjs --apk=<yol>   (sürüm APK\'dan okunur)',
   );
 }
 // Belirteç yükleme ÖNCESİ ölçülür: yoksa hiçbir şey yüklenmez (kenar doğrulaması yapılamayan
 // yayın açılmaz). --kuru ağa çıkmadığı için belirteç istemez.
 if (!KURU) belirtecGerekli(FEED);
 if (paket) await paketiYayinla(path.resolve(paket));
-if (apk) await apkYayinla(path.resolve(apk));
+const apkSonuc = apk ? await apkYayinla(path.resolve(apk)) : null;
 
 /* ------------------------------------------------------------------ *
  * Sürüm etiketi
@@ -947,7 +996,7 @@ if (apk) await apkYayinla(path.resolve(apk));
 // bir koda kayardı.
 // ⚠️ TERFİ ATLANDIYSA (S4) kullanıcının cümlesi yayın defterine ve etiket MESAJINA girer: yeni
 // atılan sürüm etiketi + `terfi/<kanal>/tablet-vX` kaçış etiketi (scripts/lib/terfi.mjs).
-const yayinSurumu = paket ? yayinlananPaketSurumu(path.resolve(paket)) : arg('surum');
+const yayinSurumu = paket ? yayinlananPaketSurumu(path.resolve(paket)) : apkSonuc?.surum;
 if (TERFI_ATLA !== undefined && yayinSurumu) terfiAtlaDefteri(yayinSurumu);
 if (KURU) {
   bilgi('\n  [kuru] sürüm etiketi atılmadı (yayın yok).');
@@ -977,7 +1026,7 @@ if (KURU) {
     console.log('');
     if (paket) await yayinSonrasiBildir({ urun: 'tablet', kanal: MUSTERI, surum: etiketSurumu, ayrinti: { tur: 'ota' }, terfiAtla: TERFI_ATLA });
     if (apk) {
-      let ayrinti = { tur: 'apk', vc: arg('vc') };
+      let ayrinti = { tur: 'apk', vc: String(apkSonuc?.vc ?? '') };
       try {
         const icerik = fs.readFileSync(path.resolve(apk));
         ayrinti = { ...ayrinti, sha16: crypto.createHash('sha256').update(icerik).digest('hex').slice(0, 16), boyut: icerik.length };

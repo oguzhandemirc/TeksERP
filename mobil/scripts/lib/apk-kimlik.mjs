@@ -108,7 +108,8 @@ const UPD = 'expo.modules.updates.';
 /**
  * APK dosyasının kimliği.
  * @returns {{ paket: string, guncellemeAdresi: string|null, sertifikaPem: string|null,
- *             guncellemeAcik: string|null, appConfig: object|null }}
+ *             guncellemeAcik: string|null, appConfig: object|null, surumAdi: string|null, surumKodu: number|null }}
+ * `surumAdi`/`surumKodu` `<manifest android:versionName/versionCode>`dan — yayıncı sürümü ARGÜMANDAN değil buradan alır.
  */
 export function apkKimligi(apkYolu) {
   let r;
@@ -141,5 +142,7 @@ export function apkKimligi(apkYolu) {
     sertifikaPem: meta[`${UPD}CODE_SIGNING_CERTIFICATE`] ?? null,
     guncellemeAcik: meta[`${UPD}ENABLED`] ?? null,
     appConfig,
+    surumAdi: typeof kok.oznitelik.versionName === 'string' ? kok.oznitelik.versionName : null,
+    surumKodu: /^\d+$/.test(String(kok.oznitelik.versionCode ?? '')) ? Number(kok.oznitelik.versionCode) : null,
   };
 }

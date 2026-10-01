@@ -155,8 +155,13 @@ cd mobil
 TEKSERP_KANAL=<kanal> npx expo prebuild --platform android --clean --no-install
 npm run build:apk -- --musteri=<kanal>
 node ../deploy/mobil-yayinla.mjs --musteri=<kanal> --apk=android/app/build/outputs/apk/release/app-release.apk \
-     --surum=<sürüm> --vc=<versionCode> --anahtar=<istemci yayın anahtarı dosyası>   # parola TTY'den
+     --anahtar=<istemci yayın anahtarı dosyası>   # parola TTY'den
 ```
+
+> **Derleme bağı (G22):** sürüm ve versionCode APK'nın KENDİSİNDEN okunur (`--surum`/`--vc` artık gerekmez; verilirse
+> APK'dakiyle eşit olmalı). `build:apk` yalnız TEMİZ ağaçta derler ve APK'nın yanına `app-release.apk.derleme.json`
+> (commit + sha256 + sürüm) bırakır; yayın bu künyeyi APK'ya, HEAD'e ve üretim kanalında terfi etiketine bağlar —
+> APK başka yere taşınırsa künyesiyle BİRLİKTE taşınır.
 
 > **İmzalı künye (2026-10-01, G6):** `apk/surum.json` imzalı künye taşımadan YÜKLENMEZ; tablet indirdiği APK'yı
 > bu künyeyle doğrulamadan kurmaz. Ayrıntı: §4d.

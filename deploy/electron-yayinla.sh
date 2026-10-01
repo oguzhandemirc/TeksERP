@@ -157,6 +157,15 @@ if [ "$denetim_kipi" = "0" ]; then
     node "$kok/scripts/kanal-kapisi.mjs" terfi "$musteri" panel "$surum" \
       || hata "Terfi kapısı geçilmedi — yükleme yapılmadı."
   fi
+  # DERLEME BAĞI (G22) — yüklenecek Setup.exe künyedeki commit'ten mi; o commit HEAD mi (sürüm etiketi HEAD'e
+  # atılır) ve üretim kanalında terfi etiketinin onayladığı commit mi? Paketin İÇİNDEKİ commit de aynı olmalı.
+  if [ "$terfi_atla_verildi" = "1" ]; then
+    node "$kok/scripts/kanal-kapisi.mjs" panel-derleme-bagi "$musteri" "$rel" "$surum" --terfi-atla \
+      || hata "Derleme bağı kopuk — yükleme yapılmadı."
+  else
+    node "$kok/scripts/kanal-kapisi.mjs" panel-derleme-bagi "$musteri" "$rel" "$surum" \
+      || hata "Derleme bağı kopuk — yükleme yapılmadı."
+  fi
 fi
 
 # --- İMZALI KÜNYE KAPISI — ssh'tan ÖNCE ----------------------------------------
