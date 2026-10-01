@@ -66,7 +66,7 @@ export function LicensePage() {
             {!d.kurulum.etkin && <div className="xl:col-span-2">{acceptanceCard}</div>}
             <LicenseStatusCard d={d} />
             <LicenseEntitlementCard d={d} />
-            <LicenseLeaseCard d={d} />
+            <LicenseLeaseCard d={d} canManage={canManage} />
             <LicenseMachineCard d={d} />
             <LicenseIntegrityCard b={d.butunluk} />
             {canManage && <LicenseActivateCard d={d} gate={gate} />}
