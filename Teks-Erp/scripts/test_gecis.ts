@@ -370,7 +370,9 @@ function gecisIhlalleri(metin: string): string[] {
   const iskMetin = isk ? t.satirlar.filter((x) => x.no >= isk.bas && x.no <= isk.son).map((x) => x.kod).join("\n") : "";
   if (!/if \(-not \(& \$kokIci \$y\)\) \{[\s\S]*?Move-Item[\s\S]*?continue/.test(iskMetin)) ih.push("kök dışı dizin silinmeden önce ayrılmıyor (yeniden adlandır)");
   // (e) veritabanı salt OKUNUR: yalnız SELECT/SHOW, göç yok, pg_restore yalnız --list.
-  for (const m of metin.matchAll(/\bPsql "([^"]*)"/g)) if (!/^(SELECT|SHOW) /.test(m[1]!) || /\b(DROP|ALTER|INSERT|UPDATE|DELETE|TRUNCATE|CREATE)\b/i.test(m[1]!)) ih.push(`yazan SQL: ${m[1]!.slice(0, 40)}`);
+  // `TRUNCAT[E]`: bu bir ARAMA deseni (gecis.ps1'in metninde); düz yazılsaydı test_script_guards §1 bu dosyayı
+  // tablo boşaltan betik sanardı (CI 2026-10-01, PR #66).
+  for (const m of metin.matchAll(/\bPsql "([^"]*)"/g)) if (!/^(SELECT|SHOW) /.test(m[1]!) || /\b(DROP|ALTER|INSERT|UPDATE|DELETE|TRUNCAT[E]|CREATE)\b/i.test(m[1]!)) ih.push(`yazan SQL: ${m[1]!.slice(0, 40)}`);
   if (/migrate (deploy|reset|dev)/.test(metin.split("\n").filter((l) => !l.trim().startsWith("#")).join("\n"))) ih.push("göç komutu var");
   if (!/function OsPgListe\(\$dosya\) \{ return NativeKos \(Join-Path \$script:db\.Bin "pg_restore\.exe"\) @\("--list", \$dosya\) \}/.test(metin)) ih.push("pg_restore yalnız --list değil");
   // (f) onay ilk değişiklikten ÖNCE.

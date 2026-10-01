@@ -169,11 +169,16 @@ check(
   "⭐ `kur.ps1` başlatmadan ÖNCE o adı env'e yazıyor ([4/9] sildiği ile [8/9] başlattığı aynı olsun)",
   kurKomut.some((l) => /^\$env:TEKSERP_PM2_AD\s*=\s*\$uygulama/.test(l)),
 );
-check(
-  "⭐ `kur.ps1` pakete giriyor (paket ile onu kuran script ayrışamaz)",
-  readFileSync(join(KOK, "deploy", "paketle.ps1"), "utf8")
-    .split("\n").some((l) => /^\s*Copy-Item\s+"\$repo\\deploy\\kur\.ps1"/.test(l)),
-);
+// D5'ten (c91a1e6f) beri kök betikleri TEK LİSTEDEN kopyalanır (`$KOK_BETIKLERI` → `$stage\<ad>`); tek tek Copy-Item kalktı.
+{
+  const paketle = readFileSync(join(KOK, "deploy", "paketle.ps1"), "utf8");
+  const liste = /^\$KOK_BETIKLERI = @\(([^)]*)\)/m.exec(paketle)?.[1] ?? "";
+  check(
+    "⭐ `kur.ps1` pakete giriyor (paket ile onu kuran script ayrışamaz)",
+    /"kur\.ps1"/.test(liste) &&
+      /foreach \(\$b in \$KOK_BETIKLERI\) \{[\s\S]{0,400}?Copy-Item \$kaynak \(Join-Path \$stage \$b\)/.test(paketle),
+  );
+}
 
 // ── §6 NATIVE ÇAĞRIDA YÖNLENDİRME YOK ────────────────────────────────────────
 // ⭐ Fabrika sunucusunda ÖLÇÜLDÜ (2026-09-07, PowerShell 5.1): `$ErrorActionPreference
