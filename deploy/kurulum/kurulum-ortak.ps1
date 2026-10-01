@@ -315,6 +315,91 @@ function JunctionKur([string]$baglanti, [string]$hedef) {
   if (-not $olc -or ([IO.Path]::GetFullPath($olc).TrimEnd('\') -cne [IO.Path]::GetFullPath($hedef).TrimEnd('\'))) { Dur "baglanti olculemedi: $baglanti" }
 }
 
+# --- Surum onceligi (guncelleyici version.rs / TS compareVersions AYNASI; vektorler test-vektorleri/
+#     guncelleme-karar.json "surum-karsilastir", harness olcer) -------------------------------------
+function SurumCoz([string]$s) {
+  if (-not ($s -cmatch '^([0-9]{1,4})\.([0-9]{1,4})\.([0-9]{1,6})(?:-([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?(?:\+[0-9A-Za-z.-]+)?$')) { return $null }
+  $on = @()
+  if ($Matches[4]) { $on = @($Matches[4] -csplit '\.') }
+  return @{ cekirdek = @([long]$Matches[1], [long]$Matches[2], [long]$Matches[3]); on = $on }
+}
+
+# -1 / 0 / 1; biri bicimsizse $null (cagiran fail-closed davranir).
+function SurumKarsilastir([string]$a, [string]$b) {
+  $x = SurumCoz $a
+  $y = SurumCoz $b
+  if ($null -eq $x -or $null -eq $y) { return $null }
+  for ($i = 0; $i -lt 3; $i++) {
+    if ($x.cekirdek[$i] -ne $y.cekirdek[$i]) { if ($x.cekirdek[$i] -lt $y.cekirdek[$i]) { return -1 } else { return 1 } }
+  }
+  $xk = $x.on.Count -eq 0
+  $yk = $y.on.Count -eq 0
+  if ($xk -and $yk) { return 0 }
+  if ($xk) { return 1 }
+  if ($yk) { return -1 }
+  $n = [Math]::Min($x.on.Count, $y.on.Count)
+  for ($i = 0; $i -lt $n; $i++) {
+    $p = [string]$x.on[$i]; $q = [string]$y.on[$i]
+    $ps = $p -cmatch '^[0-9]+$'; $qs = $q -cmatch '^[0-9]+$'
+    if ($ps -and $qs) { $c = ([double]$p).CompareTo([double]$q) }
+    elseif ($ps) { $c = -1 }
+    elseif ($qs) { $c = 1 }
+    else { $c = [string]::CompareOrdinal($p, $q) }
+    if ($c -lt 0) { return -1 }
+    if ($c -gt 0) { return 1 }
+  }
+  if ($x.on.Count -lt $y.on.Count) { return -1 }
+  if ($x.on.Count -gt $y.on.Count) { return 1 }
+  return 0
+}
+
+# Kokte GERCEKTEN kurulu surumun adaylari. kurulum\kurulum.json paket.surum KURULUM ANININ surumudur; guncelleyici
+# sonra tasir ve kaldirma surumler\ ile current'i siler ama kok\kurulum-gecmisi.jsonl ile %ProgramData% durumunu
+# korur. Doner: @(@{ surum; kaynak }) - okunamayan kaynak atlanir.
+function KuruluSurumAdaylari([string]$kok, [string]$veriKoku) {
+  $a = @()
+  $h = JunctionHedefi (Join-Path $kok "current")
+  if ($h) { $a += @{ surum = (Split-Path -Leaf ($h.TrimEnd('\', '/'))); kaynak = "current baglantisi" } }
+  $g = Join-Path $kok "kurulum-gecmisi.jsonl"
+  if (Test-Path -LiteralPath $g -PathType Leaf) {
+    try {
+      $son = @([IO.File]::ReadAllLines($g) | Where-Object { $_.Trim() }) | Select-Object -Last 1
+      if ($son) { $j = $son | ConvertFrom-Json; if ($j.yeniSurum) { $a += @{ surum = "$($j.yeniSurum)"; kaynak = "kurulum-gecmisi.jsonl" } } }
+    } catch { }
+  }
+  if ($veriKoku) {
+    $d = Join-Path $veriKoku "guncelleme\durum\durum.json"
+    if (Test-Path -LiteralPath $d -PathType Leaf) {
+      try { $j = JsonOku $d; if ($j.kuruluSurum) { $a += @{ surum = "$($j.kuruluSurum)"; kaynak = "guncelleyici durum.json" } } } catch { }
+    }
+  }
+  $k = Join-Path $kok "kurulum\kurulum.json"
+  if (Test-Path -LiteralPath $k -PathType Leaf) {
+    try { $j = JsonOku $k; if ($j.paket.surum) { $a += @{ surum = "$($j.paket.surum)"; kaynak = "kurulum.json" } } } catch { }
+  }
+  return , $a
+}
+
+# Adaylarin EN YENI bicimli olani (yoksa $null).
+function EnYeniSurum($adaylar) {
+  $en = $null
+  foreach ($x in @($adaylar)) {
+    if ($null -eq (SurumCoz $x.surum)) { continue }
+    if ($null -eq $en -or (SurumKarsilastir $x.surum $en.surum) -gt 0) { $en = $x }
+  }
+  return $en
+}
+
+# Eski paket engeli: kurulu surum paketten YENIYSE DUR metni; degilse $null. Eski kod yeni semali veritabanina
+# kurulmaz (kaldirip ilk USB ile yeniden kurma). Paket surumu karsilastirilamazsa da DUR (fail-closed).
+function EskiPaketEngeli($kurulu, [string]$paketSurum) {
+  if ($null -eq $kurulu) { return $null }
+  $c = SurumKarsilastir $kurulu.surum $paketSurum
+  if ($null -eq $c) { return "paket surumu '$paketSurum' kurulu surumle ($($kurulu.surum)) karsilastirilamadi - hicbir sey degistirilmedi" }
+  if ($c -gt 0) { return "bu kokte kurulu surum $($kurulu.surum) ($($kurulu.kaynak)) bu paketten ($paketSurum) YENI - eski paket kurulmaz, veritabani yeni surumun semasinda. $($kurulu.surum) ya da daha yeni bir kurulum paketi kullanin; hicbir sey degistirilmedi." }
+  return $null
+}
+
 # --- Portlar (D4 b.4.5: kural deploy/pg/lib/pg-ornegi.mjs portSec ile AYNI; vektorler bekcide) ----
 # Doner: @{ port = <int> ; neden = "..." } ya da @{ hata = "..." }.
 function PortSec([int[]]$mesgul, [int]$baslangic, [int]$bitis, $onceki, $istenen) {

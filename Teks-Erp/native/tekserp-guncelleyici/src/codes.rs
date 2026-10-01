@@ -40,6 +40,9 @@ pub const HIZMET_DURMADI: &str = "HIZMET_DURMADI";
 pub const HIZMET_BASLAMADI: &str = "HIZMET_BASLAMADI";
 pub const YEDEK_HATASI: &str = "YEDEK_HATASI";
 pub const GECIS_HATASI: &str = "GECIS_HATASI";
+/// Hazırlık/sürüm dizini başka bir süreçte açık (erişim engellendi · paylaşım/kilit ihlali): indirme değil,
+/// kilit — kilit kalkınca bir sonraki turda kendiliğinden sürer, paket yeniden indirilmez, ertelenmez.
+pub const DOSYA_KILITLI: &str = "DOSYA_KILITLI";
 pub const GOC_HATASI: &str = "GOC_HATASI";
 pub const GOC_ZAMAN_ASIMI: &str = "GOC_ZAMAN_ASIMI";
 pub const SAGLIK_ZAMAN_ASIMI: &str = "SAGLIK_ZAMAN_ASIMI";
@@ -68,7 +71,7 @@ pub fn report_code(internal: &str) -> &'static str {
         "PAKET_BAGI" | "PG_BAGI" => "PAKET_BAGI",
         BUTUNLUK_GECERSIZ | PAKET_YOL => "BUTUNLUK_GECERSIZ",
         DISK_DOLU => "DISK_DOLU",
-        GECIS_HATASI => "DOSYA_KILITLI",
+        GECIS_HATASI | DOSYA_KILITLI => "DOSYA_KILITLI",
         YEDEK_HATASI => "YEDEK_HATASI",
         HIZMET_YOK | HIZMET_DURMADI => "DURDURMA_HATASI",
         c if c.starts_with("PG_") => "PG_GUNCELLEME_HATASI",
@@ -124,5 +127,6 @@ mod tests {
         assert_eq!(report_code(PG_SURUM_UYUSMAZ), "PG_GUNCELLEME_HATASI");
         assert_eq!(report_code(SAGLIK_ZAMAN_ASIMI), "SAGLIK_HATASI");
         assert_eq!(report_code(SAGLIK_HIZMET_DUSTU), "SAGLIK_HATASI");
+        assert_eq!(report_code(DOSYA_KILITLI), "DOSYA_KILITLI");
     }
 }

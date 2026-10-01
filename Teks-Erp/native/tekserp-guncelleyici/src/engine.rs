@@ -95,6 +95,20 @@ struct LastOp {
 
 type Fail = (&'static str, String);
 
+/// Hazırlık dizini işlemi düştü: kilit (erişim engellendi · Windows paylaşım/kilit ihlali 32/33) `DOSYA_KILITLI`,
+/// diğerleri verilen kod. Kilit bir indirme hatası değildir ve paketi ertelemeye sokmaz.
+fn staging_fail(otherwise: &'static str, path: &std::path::Path, e: &std::io::Error) -> Fail {
+    let locked = e.kind() == std::io::ErrorKind::PermissionDenied || (cfg!(windows) && matches!(e.raw_os_error(), Some(32 | 33)));
+    if locked {
+        fail(
+            codes::DOSYA_KILITLI,
+            format!("{} başka bir program tarafından kullanılıyor ({e}) — virüs tarayıcı, yedek ya da açık bir Gezgin penceresi olabilir; kilit kalkınca kendiliğinden sürer", path.display()),
+        )
+    } else {
+        fail(otherwise, format!("{}: {e}", path.display()))
+    }
+}
+
 fn fail(code: &'static str, m: impl Into<String>) -> Fail {
     (code, m.into())
 }
@@ -843,7 +857,7 @@ impl Engine {
                 Err(e) if f.installed.as_deref() == Some(m.surum.as_str()) => return Err(e),
                 Err((_, why)) => {
                     self.log.warn(&format!("{} doğrulanamadı ({why}), yeniden açılacak", dir.display()));
-                    fs.remove_dir_all(&dir).map_err(|x| fail(codes::INDIRME_HATASI, x.to_string()))?;
+                    fs.remove_dir_all(&dir).map_err(|x| staging_fail(codes::INDIRME_HATASI, &dir, &x))?;
                 }
             }
         }
@@ -865,8 +879,8 @@ impl Engine {
         let mut progress = |done: u64, total: u64| self.download_progress(f, done, total);
         download::download(&self.env, &spec, &mut progress, stop).map_err(|e| (e.code, e.message))?;
         let staging = self.layout.staging_dir(&m.surum);
-        fs.remove_dir_all(&staging).map_err(|x| fail(codes::INDIRME_HATASI, x.to_string()))?;
-        fs.create_dir_all(&self.layout.versions()).map_err(|x| fail(codes::INDIRME_HATASI, x.to_string()))?;
+        fs.remove_dir_all(&staging).map_err(|x| staging_fail(codes::INDIRME_HATASI, &staging, &x))?;
+        fs.create_dir_all(&self.layout.versions()).map_err(|x| staging_fail(codes::INDIRME_HATASI, &self.layout.versions(), &x))?;
         if let Err(e) = fs.extract_zip(&zip, &staging, &ExtractLimits::default()) {
             let _ = fs.remove_dir_all(&staging);
             let _ = fs.remove_file(&zip);
@@ -881,7 +895,7 @@ impl Engine {
             let _ = fs.remove_file(&zip);
             return Err(e);
         }
-        fs.rename(&staging, &dir).map_err(|x| fail(codes::INDIRME_HATASI, x.to_string()))?;
+        fs.rename(&staging, &dir).map_err(|x| staging_fail(codes::INDIRME_HATASI, &staging, &x))?;
         place_marker()?;
         let _ = fs.remove_file(&zip);
         self.log.info(&format!("{} hazır: indirildi, sha256 + PAKET imzası + bütünlük listesi + bildirim bağı doğrulandı", m.surum));
@@ -979,9 +993,9 @@ impl Engine {
         let mut noop = |_: u64, _: u64| {};
         download::download(&self.env, &spec, &mut noop, stop).map_err(|e| (e.code, e.message))?;
         let staging = self.layout.pg_staging_dir(&tag);
-        fs.remove_dir_all(&staging).map_err(|x| fail(codes::PG_PAKET, x.to_string()))?;
+        fs.remove_dir_all(&staging).map_err(|x| staging_fail(codes::PG_PAKET, &staging, &x))?;
         if fs.is_dir(&dir) {
-            fs.remove_dir_all(&dir).map_err(|x| fail(codes::PG_PAKET, x.to_string()))?;
+            fs.remove_dir_all(&dir).map_err(|x| staging_fail(codes::PG_PAKET, &dir, &x))?;
         }
         let checked = fs
             .extract_zip(&zip, &staging, &ExtractLimits::default())
@@ -1012,7 +1026,7 @@ impl Engine {
             let _ = fs.remove_file(&zip);
             return Err(fail(codes::PG_PAKET, e));
         }
-        fs.rename(&staging, &dir).map_err(|x| fail(codes::PG_PAKET, x.to_string()))?;
+        fs.rename(&staging, &dir).map_err(|x| staging_fail(codes::PG_PAKET, &staging, &x))?;
         fs.write_atomic(&marker, json!({ "surum": tag }).to_string().as_bytes()).map_err(|x| fail(codes::PG_PAKET, x.to_string()))?;
         let _ = fs.remove_file(&zip);
         Ok(())

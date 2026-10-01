@@ -64,6 +64,7 @@ export function UpdaterCard({ s }: { s: UpdateStatus }) {
       {s.canlilik?.sonCanlilik && <InfoRow label="Son sinyal">{when(s.canlilik.sonCanlilik)}</InfoRow>}
       {g.surum && <InfoRow label="Güncelleyici sürümü">{g.surum}</InfoRow>}
       {y && <InfoRow label="İş">{localStateLabel(y.durum)}</InfoRow>}
+      {y?.hataKodu && <InfoRow label="Sorun">{resultCodeLabel(y.hataKodu)}</InfoRow>}
       {y?.adim && <InfoRow label="Adım">{y.adim}</InfoRow>}
       {pct !== null && <InfoRow label="İndirme">{`%${pct}`}</InfoRow>}
       {y?.mesaj && <p className="pt-1 text-xs text-muted-foreground">{y.mesaj}</p>}

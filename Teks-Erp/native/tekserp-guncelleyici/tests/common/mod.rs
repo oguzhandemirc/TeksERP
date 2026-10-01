@@ -91,6 +91,17 @@ pub struct CrashFs {
     pub unmeasurable: Mutex<Vec<PathBuf>>,
     /// Kopya, doğrulama ile kopyalama arasında değişmiş gibi bir bayt fazla yazılır.
     pub corrupt_copy: AtomicBool,
+    /// Başka süreçte açık sayılan adlar: silme/yeniden adlandırma "erişim engellendi" ile düşer (thinkpad-1 D8b 3I).
+    pub locked: Mutex<Vec<String>>,
+}
+
+impl CrashFs {
+    fn check_lock(&self, p: &Path) -> std::io::Result<()> {
+        if self.locked.lock().unwrap().iter().any(|n| *n == name(p)) {
+            return Err(std::io::Error::from(std::io::ErrorKind::PermissionDenied));
+        }
+        Ok(())
+    }
 }
 
 impl Fs for CrashFs {
@@ -133,10 +144,12 @@ impl Fs for CrashFs {
     }
     fn remove_dir_all(&self, p: &Path) -> std::io::Result<()> {
         self.crash.point(&format!("dizinsil {}", name(p)));
+        self.check_lock(p)?;
         self.inner.remove_dir_all(p)
     }
     fn rename(&self, from: &Path, to: &Path) -> std::io::Result<()> {
         self.crash.point(&format!("adlandir {}→{}", name(from), name(to)));
+        self.check_lock(from)?;
         self.inner.rename(from, to)
     }
     fn list(&self, p: &Path) -> std::io::Result<Vec<String>> {
@@ -1040,6 +1053,7 @@ impl World {
                 foreign: Mutex::new(vec![]),
                 unmeasurable: Mutex::new(vec![]),
                 corrupt_copy: AtomicBool::new(false),
+                locked: Mutex::new(vec![]),
             }),
             dir,
             layout,

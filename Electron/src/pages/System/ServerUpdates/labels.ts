@@ -39,7 +39,7 @@ const RESULT_CODES: Record<string, string> = {
   PAKET_BAGI: "Paket, sürüm bildirimiyle eşleşmedi",
   BUTUNLUK_GECERSIZ: "Paket bütünlüğü geçersiz",
   DISK_DOLU: "Disk dolu",
-  DOSYA_KILITLI: "Sürüm geçişi yapılamadı (dosya kilitli)",
+  DOSYA_KILITLI: "Dosya kilitli — başka bir program kullanıyor (kilit kalkınca kendiliğinden sürer)",
   YEDEK_HATASI: "Güncelleme öncesi yedek alınamadı",
   DURDURMA_HATASI: "Sunucu hizmeti durdurulamadı",
   PG_GUNCELLEME_HATASI: "PostgreSQL güncellemesi başarısız",

@@ -166,6 +166,20 @@ describe("sunucu güncellemesi — sonuç ve uyarılar", () => {
     expect(screen.getByTestId("geri-donus-ayrinti").textContent).toBe("SAGLIK_ZAMAN_ASIMI: status UP olmadı");
   });
 
+  it("hazırlık dizini kilitliyken: iş Bekliyor + sorun 'Dosya kilitli' (indirme hatası DEĞİL) + onaylı sürümün bekleyiş nedeni", async () => {
+    perms.push("license:view");
+    status.mockResolvedValue(
+      durum({
+        yerel: { ...durum().yerel!, durum: "BEKLIYOR", hataKodu: "DOSYA_KILITLI", mesaj: "C:\\TeksERP\\surumler\\.hazirlik-2.13.0 başka bir program tarafından kullanılıyor" },
+        eylemler: { hemen: false, pencere: false, geriAl: false, hedefSurum: null, neden: "2.13.0 onaylandı; bir dosya başka bir program tarafından kullanıldığı için bekliyor — kilit kalkınca kendiliğinden sürer." },
+      }),
+    );
+    renderWithProviders(<ServerUpdatesPage />);
+    expect(await screen.findByText("Dosya kilitli — başka bir program kullanıyor (kilit kalkınca kendiliğinden sürer)")).toBeTruthy();
+    expect(screen.queryByText("Paket indirilemedi")).toBeNull();
+    expect(screen.getByText("Bekliyor")).toBeTruthy();
+  });
+
   it("güncelleyici yanıt vermiyor → uyarı + son sinyal; kurulu değil → sade not", async () => {
     perms.push("license:view");
     status.mockResolvedValueOnce(durum({ guncelleyici: { durum: "OLCULEMEDI", surum: null }, canlilik: { sonCanlilik: "2026-10-01T09:00:00.000Z", esikSn: 180, gecikmeSn: 3600, yanitVermiyor: true } }));

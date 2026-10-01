@@ -265,6 +265,14 @@ function AsamaOnKosul {
     if ("$($yarim.adlar.backend)" -cne $ad.backend -or "$($yarim.paket.surum)" -cne "$($k.uygulamaSurumu)") { Dur "yarim kurulum ($($yarim.adlar.backend) $($yarim.paket.surum)) bu paketle ($($ad.backend) $($k.uygulamaSurumu)) surdurulmez - ayni paketi verin ya da once kaldirin (kaldir.ps1 veriyi korur)" }
     Uyar "YARIM KURULUM bulundu ($($yarim.paket.surum)) - kaldigi yerden devam ediliyor (asamalar yeniden olcer)"
   }
+  # Gercek kurulu surum: kurulum.json KURULUM ANININ surumudur. Kaldirilip ESKI kitle yeniden kurulumda eski kod
+  # yeni semali veritabanina inmez - hicbir sey degismeden DUR.
+  if ($onarim -or $yarim) {
+    $kurulu = EnYeniSurum (KuruluSurumAdaylari $kok $ad.veriKoku)
+    $engel = EskiPaketEngeli $kurulu "$($k.uygulamaSurumu)"
+    if ($engel) { Dur $engel }
+    if ($kurulu) { Bilgi "kurulu surum $($kurulu.surum) ($($kurulu.kaynak)) - paket $($k.uygulamaSurumu)" }
+  }
 
   # API portu: istemcilerin varsayilan adresi - mesgulse DUR (onarimda dinleyen kendi backend'imiz olabilir).
   $apiPort = [int]$C["api.port"]
@@ -822,7 +830,11 @@ function AsamaDogrulama {
   $kg = GuncelleyiciHizmetBetigi $kok $d $C @()
   if ($kg -ne 0) { Uyar "guncelleyici-hizmeti.ps1 olcumu uyumsuz (cikis $kg) - gunlukte ayrinti" } else { Ok "guncelleyici-hizmeti.ps1 olcumu: uyumlu" }
   $acik = @()
-  if (-not $C["saticiHesabi.kullaniciAdi"] -or -not $d.asamalar.PSObject.Properties["Sirlar"]) {
+  # Yapilacaklar OLCULUR (onarimda hesap/lisans zaten var): olculemezse eski kural (fail-closed: listede kalir).
+  $q = PsqlStdin (Join-Path $kok "pgsql\bin") $port $rol $uyParola $vt 'SELECT count(*) FROM users WHERE "isSystemAccount" AND "isActive" AND "deletedAt" IS NULL;'
+  $saticiVar = ($q.kod -eq 0 -and "$($q.cikti)".Trim() -cmatch '^[1-9][0-9]*$')
+  if ($saticiVar) { Ok "satici (superadmin) hesabi var" }
+  elseif (-not $C["saticiHesabi.kullaniciAdi"] -or -not $d.asamalar.PSObject.Properties["Sirlar"]) {
     $acik += "satici (superadmin) hesabi: yonetici konsolunda `"$kok\current\runtime\node.exe`" `"$kok\current\dist\tools\superadmin-olustur.cjs`" (once: `$env:DOTENV_CONFIG_PATH='$kok\yapilandirma\.env'; cd $kok\current) - gercek terminal"
   }
   $ad = Join-Path $kok "yedek-anahtar"
@@ -831,7 +843,9 @@ function AsamaDogrulama {
     if (-not (Test-Path -LiteralPath (Join-Path $ad "yerel.tkkey"))) { $acik += "yerel yedek anahtari yok (panelden geri yukleme musteri anahtari ister): yedek-sifrele.cjs anahtar-uret --ad yerel --dizin $ad --parolali" }
     if (-not (Test-Path -LiteralPath (Join-Path $ad "etkili.tkpub"))) { $acik += "Etkili Yazilim yedek alicisi yok: acik anahtari $ad\etkili.tkpub olarak koy" }
   }
-  $acik += "lisans: panelden Sistem > Lisans > etkinlestirme kodu (kurulum anahtari backend ilk acilista uretti)"
+  $lis = Join-Path $kok "lisans"
+  if ((Test-Path -LiteralPath (Join-Path $lis "hak.jws") -PathType Leaf) -and (Test-Path -LiteralPath (Join-Path $lis "kurulum-kimligi.json") -PathType Leaf)) { Ok "lisans etkin (lisans\hak.jws + kurulum-kimligi.json)" }
+  else { $acik += "lisans: panelden Sistem > Lisans > etkinlestirme kodu (kurulum anahtari backend ilk acilista uretti)" }
   $kayit = [ordered]@{
     v = $KURULUM_BICIMI; zaman = (Get-Date).ToUniversalTime().ToString("o"); kok = $kok
     paket = $d.paket; adlar = $d.adlar; portlar = $d.portlar
