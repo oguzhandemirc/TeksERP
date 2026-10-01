@@ -23,6 +23,7 @@ on:
     paths:
       - "deploy/kurulum/**"
       - "deploy/hizmet/kanal-adlari.ps1"
+      - "deploy/hizmet/sema-hizasi.ps1"
       - "deploy/pg/**"
       - "deploy/test/kurulum.harness.ps1"
       - "Teks-Erp/native/**"
@@ -32,6 +33,7 @@ on:
     paths:
       - "deploy/kurulum/**"
       - "deploy/hizmet/kanal-adlari.ps1"
+      - "deploy/hizmet/sema-hizasi.ps1"
       - "deploy/pg/**"
       - "deploy/test/kurulum.harness.ps1"
       - "Teks-Erp/native/**"

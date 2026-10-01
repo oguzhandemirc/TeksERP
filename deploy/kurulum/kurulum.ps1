@@ -13,7 +13,8 @@
 #                initdb (parola ACL'li gecici dosyadan) - tekserp.conf + pg_hba.conf (pg-sablon.mjs) -
 #                pg_ctl register (sanal hesap) - veri dizini ACL (KAYITTAN SONRA) - baslat + olcum - roller
 #                + DB + DB ayarlari - .env + db-credentials.json - ornek.json (postgres parolasi DPAPI initdb'den once)
-#     Backend    prisma migrate deploy (paketin kendi Node'u) + goc sayisi - bakim rolu (bakim-rolu.ps1) -
+#     Backend    sema hizasi (goc ONCESI, hizmet\sema-hizasi.ps1) + prisma migrate deploy (paketin kendi Node'u) +
+#                goc adlari = paket - bakim rolu (bakim-rolu.ps1) -
 #                yedek sifreleme (musteri anahtari dosyaya)
 #     Hizmetler  hizmet\backend-hizmeti.ps1 -Uygula (kayit -> ACL) - hizmet\guncelleyici-hizmeti.ps1 -Uygula -
 #                gece yedegi gorevi (<KOK>\yedekle.ps1) - guvenlik duvari (API yalniz LocalSubnet [+Tailscale],
@@ -51,6 +52,8 @@ $ErrorActionPreference = "Stop"
 . (Join-Path $PSScriptRoot "kurulum-ortak.ps1")
 # Kanal adlari TEK kaynaktan (gecis.ps1 ayni dosyayi paketten okur): kitte ..\hizmet\kanal-adlari.ps1.
 . (Join-Path $PSScriptRoot "..\hizmet\kanal-adlari.ps1")
+# Sema hizasi TEK kural (guncelleyici Rust aynasi, gecis paketten okur): kitte ..\hizmet\sema-hizasi.ps1.
+. (Join-Path $PSScriptRoot "..\hizmet\sema-hizasi.ps1")
 
 $KURULUM_BICIMI = 1
 $PG_DIZINI = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot "..\pg"))
@@ -184,6 +187,13 @@ function PsqlStdin([string]$bin, [int]$port, [string]$kullanici, [string]$parola
     $env:PGPASSWORD = ""
     $ErrorActionPreference = $eskiEAP
   }
+}
+
+# Bitmis goc adlari (hizmet\sema-hizasi.ps1 $SEMA_BITMIS_GOC_SQL - guncelleyiciyle bayt-esit); okunamazsa DUR.
+function BitmisGoclar([string]$bin, [int]$port, [string]$kullanici, [string]$parola, [string]$vt) {
+  $r = PsqlStdin $bin $port $kullanici $parola $vt "$($script:SEMA_BITMIS_GOC_SQL);"
+  if ($r.kod -ne 0) { Dur "goc listesi okunamadi: $($r.cikti)" }
+  return @(($r.cikti -csplit "`n") | ForEach-Object { $_.Trim() } | Where-Object { $_ })
 }
 
 # .env yapilandirma\ dizininin MIRASINI alir (iskelet SYSTEM + Administrators; backend-hizmeti.ps1 -Uygula
@@ -634,12 +644,26 @@ function AsamaBackend {
   SirEkle $uyParola
   $bin = Join-Path $kok "pgsql\bin"
 
+  # Sema hizasi (hizmet\sema-hizasi.ps1, guncelleyiciyle TEK kural): veritabaninda paketin tasimadigi bitmis goc
+  # varsa paket semanin GERISINDE - goc KOSMADAN, hicbir sey degismeden DUR (geri indirme yok).
+  $paketGoclari = @(SurumGocAdlari (JunctionHedefi $cur))
+  if ($paketGoclari.Count -ne [int]$d.paket.gocSayisi) { Dur "paketin goc dizini $($paketGoclari.Count) goc tasiyor - PAKET.json $($d.paket.gocSayisi)" }
+  $tablo = PsqlStdin $bin $port $rol $uyParola $vt "SELECT to_regclass('_prisma_migrations') IS NOT NULL;"
+  if ($tablo.kod -ne 0) { Dur "veritabani olculemedi (goc tablosu): $($tablo.cikti)" }
+  if ($tablo.cikti -ceq "t") {
+    $once = BitmisGoclar $bin $port $rol $uyParola $vt
+    $ileri = @(SemaIleride $once $paketGoclari)
+    if ($ileri.Count) { Dur "sema ileride: veritabaninda paketin ($($d.paket.surum)) tasimadigi $($ileri.Count) bitmis goc var (ilk: $($ileri[0])) - paket kurulu semadan ESKI, geri indirme yapilmaz; bu goclari tasiyan surumle kurun" }
+  }
+
   $g = NodeKos $node @("node_modules\prisma\build\index.js", "migrate", "deploy") (JunctionHedefi $cur) @{ DOTENV_CONFIG_PATH = $envYolu; NODE_ENV = "production" } $null
   [void](GunlugeYaz "GOC" ($g.stdout + "`n" + $g.stderr))
   if ($g.kod -ne 0) { Dur "prisma migrate deploy cikis $($g.kod) - gunlukte ayrinti (veritabani BOS kurulumda; tekrar denemek guvenli)" }
-  $say = PsqlStdin $bin $port $rol $uyParola $vt "SELECT count(*) FROM _prisma_migrations WHERE finished_at IS NOT NULL AND rolled_back_at IS NULL;"
-  if ($say.kod -ne 0 -or [int]$say.cikti -ne [int]$d.paket.gocSayisi) { Dur "goc sayisi $($say.cikti) - paket $($d.paket.gocSayisi)" }
-  Ok "goc: $($say.cikti) migration uygulandi (paketin kendi Node'u ve prisma'si)"
+  $sonra = BitmisGoclar $bin $port $rol $uyParola $vt
+  $eksik = @(GocFarki $paketGoclari $sonra)
+  $ileri = @(SemaIleride $sonra $paketGoclari)
+  if ($eksik.Count -or $ileri.Count) { Dur "goc sonrasi veritabani paketle esit degil: eksik $($eksik.Count)$(if ($eksik.Count) { " (ilk: $($eksik[0]))" }) - fazla $($ileri.Count)$(if ($ileri.Count) { " (ilk: $($ileri[0]))" })" }
+  Ok "goc: $($sonra.Count) migration uygulandi = paket (paketin kendi Node'u ve prisma'si)"
 
   $pgOrnek = JsonOku (Join-Path $PG_DIZINI "pg-ornegi.json")
   $suParola = DpapiCoz ([IO.File]::ReadAllBytes((Join-Path $kok "pg-setup\pg-yonetici.dpapi")))

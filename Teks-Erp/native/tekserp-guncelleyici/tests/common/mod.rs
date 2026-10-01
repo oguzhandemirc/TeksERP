@@ -228,6 +228,8 @@ pub struct Faults {
     pub public_health_has_license: AtomicBool,
     /// Bu sürüm çalışırken lisans bütünlüğü GEÇERSİZ.
     pub license_broken_version: Mutex<Option<String>>,
+    /// Veritabanının SON bitmiş göçünün adı bu (paketin bilmediği, sayı aynı): şema hizası ad ölçer, sayı değil.
+    pub foreign_migration: Mutex<Option<String>>,
     /// `migrate deploy` yarıda düşer (bir göç başlar, biter değil).
     pub migrate_fails: AtomicBool,
     /// ImagePath bu parçayı taşırken (ör. yeni PG dizini) sunucu yanlış sürüm bildirir.
@@ -462,6 +464,15 @@ impl Procs for FakeProcs {
                     return Ok(fail_out(2, "psql: error: connection refused"));
                 }
                 let sql = args.last().cloned().unwrap_or_default();
+                if sql == tekserp_guncelleyici::sema::FINISHED_MIGRATIONS_SQL {
+                    // Bitmiş göç adları: paketin adlandırmasıyla (`{i:04}_goc`); yabancı göç SON adın yerine geçer.
+                    let d = self.w.db.lock().unwrap();
+                    let mut names: Vec<String> = (1..=d.finished).map(|i| format!("{i:04}_goc")).collect();
+                    if let (Some(last), Some(foreign)) = (names.last_mut(), self.w.faults.foreign_migration.lock().unwrap().clone()) {
+                        *last = foreign;
+                    }
+                    return Ok(ok_out(&names.iter().map(|n| format!("{n}\n")).collect::<String>()));
+                }
                 if sql.contains("_prisma_migrations") {
                     let d = self.w.db.lock().unwrap();
                     return Ok(ok_out(&format!("{} {}\n", d.finished, d.total)));

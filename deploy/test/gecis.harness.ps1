@@ -54,6 +54,7 @@ if ($Kip -ceq "kur-ortam") {
   Copy-Item (Join-Path $repo "deploy/hizmet/backend-hizmeti.ps1") (Join-Path $pk "hizmet/backend-hizmeti.ps1")
   Copy-Item (Join-Path $repo "deploy/hizmet/guncelleyici-hizmeti.ps1") (Join-Path $pk "hizmet/guncelleyici-hizmeti.ps1")
   Copy-Item (Join-Path $repo "deploy/hizmet/kanal-adlari.ps1") (Join-Path $pk "hizmet/kanal-adlari.ps1")
+  Copy-Item (Join-Path $repo "deploy/hizmet/sema-hizasi.ps1") (Join-Path $pk "hizmet/sema-hizasi.ps1")
   $sayi = @(Get-ChildItem $pk -Recurse -File -Force).Count
   $paketJson = [ordered]@{ commit = "abc1234"; derlemeKimligi = "derleme-1"; uygulamaSurumu = "2.14.0"; dosyaSayisi = $sayi; korumali = $true; backendKanal = "adnansahin"; backendPm2Ad = "tekserp-backend-yeni"; backendHizmetAdi = "TeksERP-Backend"; backendLisansSunucusu = "https://lisans.etkiliyazilim.com"; lisansSunucusuVarsayilan = "https://lisans.etkiliyazilim.com"; prova = $false }
   if ($Degisiklik -ceq "testfabrika") { $paketJson.backendKanal = "testfabrika"; $paketJson.backendHizmetAdi = "TeksERP-Backend-testfabrika"; $paketJson.backendLisansSunucusu = "https://lisans-test.etkiliyazilim.com" }

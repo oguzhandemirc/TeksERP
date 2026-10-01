@@ -78,6 +78,10 @@ foreach ($k in $PSBoundParameters.Keys) { $script:BAGLI[$k] = $PSBoundParameters
 $script:KANAL_ADLARI = Join-Path (Join-Path (Split-Path $PSScriptRoot -Parent) "hizmet") "kanal-adlari.ps1"
 if (-not (Test-Path -LiteralPath $script:KANAL_ADLARI)) { Write-Host "  X kanal adlari yardimcisi yok: $($script:KANAL_ADLARI) - gecis paketin icinden (gecis\gecis.ps1) kosulur" -ForegroundColor Red; exit 1 }
 . $script:KANAL_ADLARI
+# Sema hizasi TEK kural (setup kitten okur, guncelleyici Rust aynasi): paketteki komsu hizmet\sema-hizasi.ps1.
+$script:SEMA_HIZASI = Join-Path (Split-Path $script:KANAL_ADLARI -Parent) "sema-hizasi.ps1"
+if (-not (Test-Path -LiteralPath $script:SEMA_HIZASI)) { Write-Host "  X sema hizasi yardimcisi yok: $($script:SEMA_HIZASI) - gecis paketin icinden (gecis\gecis.ps1) kosulur" -ForegroundColor Red; exit 1 }
+. $script:SEMA_HIZASI
 
 # =============================================================================
 # CIKTI
@@ -468,7 +472,7 @@ function PaketEnvanteri($E) {
     "node_modules/prisma/build/index.js", "butunluk.jws", "butunluk-liste.txt", "yedekle.ps1")
   foreach ($z in $zorunlu) { if ($adlar -notcontains $z) { Engel "pakette yok: $z" } }
   if (-not @($adlar | Where-Object { $_.StartsWith("node_modules/.prisma/client/") }).Count) { Engel "pakette yok: node_modules/.prisma/client" }
-  $E.PaketGoclari = @($adlar | Where-Object { $_ -cmatch '^prisma/migrations/[^/]+/migration\.sql$' } | ForEach-Object { ($_ -csplit '/')[2] } | Sort-Object -Unique)
+  $E.PaketGoclari = @(PaketGocAdlari $adlar)
   $gecici = Join-Path ([System.IO.Path]::GetTempPath()) ("tekserp-gecis-" + [guid]::NewGuid().ToString("N"))
   New-Item -ItemType Directory -Path $gecici -Force | Out-Null
   $E.Gecici = $gecici
@@ -620,8 +624,9 @@ function DbEnvanteri($E) {
   $E.DbGoclari = $uyg
   if ($yarim.Count) { Engel "veritabaninda BITMEMIS goc var: $($yarim -join ', ') - once kur.ps1/migrate status ile cozulmeli" }
   if ($E.PaketGoclari) {
-    $bekleyen = @($E.PaketGoclari | Where-Object { $uyg -notcontains $_ })
-    $fazla = @($uyg | Where-Object { $E.PaketGoclari -notcontains $_ })
+    # hizmet\sema-hizasi.ps1 (setup + guncelleyiciyle TEK kural; ad bayt-esit): fazla = SEMA ILERIDE.
+    $bekleyen = @(GocFarki $E.PaketGoclari $uyg)
+    $fazla = @(SemaIleride $uyg $E.PaketGoclari)
     if ($bekleyen.Count) { Engel "paketin $($bekleyen.Count) goc'u veritabaninda UYGULANMAMIS ($($bekleyen[0])...) - gecis veritabanina DOKUNMAZ; once pm2 duzeninde kur.ps1 -Paket <bu zip>" }
     if ($fazla.Count) { Engel "veritabaninda paketin bilmedigi $($fazla.Count) goc var ($($fazla[0])...) - paket kurulu semadan ESKI" }
     if (-not $bekleyen.Count -and -not $fazla.Count) { Ok "veritabani: $($E.Db.Ad) @ localhost:$($E.Db.Port) | PostgreSQL $($E.PgSurum) | $($uyg.Count) goc = paket (bekleyen yok)" }

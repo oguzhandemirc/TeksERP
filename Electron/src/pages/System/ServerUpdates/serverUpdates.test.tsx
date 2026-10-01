@@ -180,6 +180,19 @@ describe("sunucu güncellemesi — sonuç ve uyarılar", () => {
     expect(screen.getByText("Bekliyor")).toBeTruthy();
   });
 
+  it("paket şemanın gerisindeyken: iş Bekliyor + sorun 'Şema ileride' (geri indirme yok) + onaylı sürümün bekleyiş nedeni", async () => {
+    perms.push("license:view");
+    status.mockResolvedValue(
+      durum({
+        yerel: { ...durum().yerel!, durum: "BEKLIYOR", hataKodu: "SEMA_ILERIDE", mesaj: "2.13.0 kurulmaz: veritabanında paketin taşımadığı 1 bitmiş göç var (ilk: 20261001_x)" },
+        eylemler: { hemen: false, pencere: false, geriAl: false, hedefSurum: null, neden: "2.13.0 onaylandı; veritabanı bu sürümün tanımadığı göçler taşıdığı için kurulmuyor." },
+      }),
+    );
+    renderWithProviders(<ServerUpdatesPage />);
+    expect(await screen.findByText("Şema ileride — veritabanında bu paketin tanımadığı göçler var; geri indirme yapılmaz (daha yeni sürüm gerekir)")).toBeTruthy();
+    expect(screen.getByText("Bekliyor")).toBeTruthy();
+  });
+
   it("güncelleyici yanıt vermiyor → uyarı + son sinyal; kurulu değil → sade not", async () => {
     perms.push("license:view");
     status.mockResolvedValueOnce(durum({ guncelleyici: { durum: "OLCULEMEDI", surum: null }, canlilik: { sonCanlilik: "2026-10-01T09:00:00.000Z", esikSn: 180, gecikmeSn: 3600, yanitVermiyor: true } }));

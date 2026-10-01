@@ -51,6 +51,7 @@ export interface ApprovalActionInput {
 function installWaitingReason(surum: string, onayli: boolean, yerelDurum: string | null, hataKodu: string | null): string {
   const bas = `${surum} ${onayli ? "onaylandı" : "kurulacak"};`;
   if (hataKodu === "DISK_DOLU") return `${bas} diskte yer olmadığı için bekliyor — yer açılınca kendiliğinden kurulur.`;
+  if (hataKodu === "SEMA_ILERIDE") return `${bas} veritabanı bu sürümün tanımadığı göçler taşıdığı için kurulmuyor (paket şemanın gerisinde, geri indirme yapılmaz) — bu göçleri taşıyan daha yeni bir sürüm gerekir.`;
   if (hataKodu === "DOSYA_KILITLI") return `${bas} bir dosya başka bir program tarafından kullanıldığı için bekliyor — kilit kalkınca kendiliğinden sürer.`;
   if (hataKodu) return `${bas} güncelleyici bekliyor (${hataKodu}) — sorun giderilince kendiliğinden kurulur.`;
   if (yerelDurum === "INDIRILIYOR") return `${bas} paket indiriliyor.`;

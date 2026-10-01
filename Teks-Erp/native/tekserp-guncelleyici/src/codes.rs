@@ -43,6 +43,9 @@ pub const GECIS_HATASI: &str = "GECIS_HATASI";
 /// Hazırlık/sürüm dizini başka bir süreçte açık (erişim engellendi · paylaşım/kilit ihlali): indirme değil,
 /// kilit — kilit kalkınca bir sonraki turda kendiliğinden sürer, paket yeniden indirilmez, ertelenmez.
 pub const DOSYA_KILITLI: &str = "DOSYA_KILITLI";
+/// Paket şemanın GERİSİNDE (`sema::ahead`, setup ve geçişle TEK kural): veritabanında paketin taşımadığı bitmiş
+/// göç var — geri indirme yapılmaz, hiçbir şey değişmeden BEKLİYOR (bu göçleri taşıyan sürüm gelince sürer).
+pub const SEMA_ILERIDE: &str = "SEMA_ILERIDE";
 pub const GOC_HATASI: &str = "GOC_HATASI";
 pub const GOC_ZAMAN_ASIMI: &str = "GOC_ZAMAN_ASIMI";
 pub const SAGLIK_ZAMAN_ASIMI: &str = "SAGLIK_ZAMAN_ASIMI";

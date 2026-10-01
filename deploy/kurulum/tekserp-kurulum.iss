@@ -88,6 +88,7 @@ Source: "{#DogrulayiciExe}"; DestDir: "{app}\kurulum\araclar"; DestName: "tekser
 Source: "kurulum.ps1"; DestDir: "{app}\kurulum\deploy\kurulum"; Flags: ignoreversion
 Source: "kurulum-ortak.ps1"; DestDir: "{app}\kurulum\deploy\kurulum"; Flags: ignoreversion
 Source: "..\hizmet\kanal-adlari.ps1"; DestDir: "{app}\kurulum\deploy\hizmet"; Flags: ignoreversion
+Source: "..\hizmet\sema-hizasi.ps1"; DestDir: "{app}\kurulum\deploy\hizmet"; Flags: ignoreversion
 Source: "on-olcum.ps1"; DestDir: "{app}\kurulum\deploy\kurulum"; Flags: ignoreversion
 Source: "kaldir.ps1"; DestDir: "{app}\kurulum\deploy\kurulum"; Flags: ignoreversion
 Source: "cevap-semasi.json"; DestDir: "{app}\kurulum\deploy\kurulum"; Flags: ignoreversion

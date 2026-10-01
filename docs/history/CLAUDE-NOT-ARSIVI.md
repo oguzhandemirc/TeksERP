@@ -14477,3 +14477,21 @@ Negatif sondalar (tetik md5(prosrc) ve dosya md5 ile geri alındı):
 **Eski istemci.** Eski panel login yanıtındaki `mustChangePassword`i yok sayar; mevcut kullanıcılarda bayrak false → fark yok. Yalnız YENİ Docker kurulumunun ilk yöneticisi eski panelle girerse her uç 403 "parolanızı değiştirmeniz gerekiyor" alır (yeni kurulum yeni panelle gelir). Eski tablet değişim bekleyen hesapta 403 + Türkçe mesaj görür, PIN/kart seçimini sıfırlayıp yöntem listesini tazeler (zararsız yanlış sınıflandırma; yeni tablet seçimi korur). Token sözleşmesi aynı; exp'siz eski token'lar kabul. Panel 6–9 karakterlik yeni parola gönderirse 400 + Türkçe politika mesajı.
 
 **Açık.** (a) CI hâlâ bilinen test sırrıyla koşar (backend açılır + uyarır); rastgele CI sırrı G22 CI dilimine bırakıldı. (b) `createUser` servisinde politika yok (yalnız HTTP Zod). (c) adnansahin rotasyonu: ölçüm salt okuma, rotasyon kullanıcının kararıyla vardiya dışında.
+
+## 2026-10-02 — Dağıtım v2 D8e: şema ileride — güncelleyici de durur (SEMA_ILERIDE), setup ve geçişle tek kural (yönetici kararı) [ÇEKİRDEK]
+
+**Neden.** thinkpad-1 D8c ölçümü: veritabanında 371 bitmiş göç, paket 370 göç taşıyordu (pakette olmayan bir göç). Güncelleyici 2.14.5 → 2.14.7'yi yine de uyguladı (`migrate deploy` fazla göçe hata vermez). Aynı durumda setup "goc sayisi 371 - paket 370" ile DURUYORDU, ama göçü koştuktan SONRA ve SAYI karşılaştırarak. Geçiş (`gecis.ps1`) ise doğru ölçütü (ad kümesi) kendi kopyasında, büyük/küçük harf duyarsız taşıyordu. Üç yol, üç ölçüt.
+
+**Karar (yönetici, 2026-10-02).** Tek kural, ad kümesine bağlı. Veritabanındaki BİTMİŞ göç adları (`finished_at IS NOT NULL AND rolled_back_at IS NULL`) paketin göç adlarının (`prisma/migrations/<ad>/migration.sql`) alt kümesi değilse şema İLERİDEDİR. Bu durumda paket geri indirir ve hiçbir yol onu uygulamaz. Sayı karşılaştırması bunu ölçmez (sayı eşit, ad farklı olabilir).
+- Güncelleyici hazırlıktan (paket + PG) SONRA ve HAZIR/uygulamadan ÖNCE ölçer; hizmet durdurulmaz. Şema ileriyse durum `BEKLIYOR` olur ve açık kod `SEMA_ILERIDE` yazılır. Paket HAZIR denmez; onaylı sürüm de beklemede kalır. Yalnız bu göçleri taşıyan daha yeni bir sürüm açar.
+- Ölçülemezse (psql ya da göç dizini) bugünkü yol sürer: uyarı düşer, göç adımı ölçülemeyen öncesini "değişti" sayar, geri dönüşte DB yedekten gelir.
+- Setup göçten ÖNCE durur (hiçbir şey değişmeden). Göçten sonra sayı yerine ad eşitliğini (eksik + fazla) ölçer.
+- Geçiş fazla ve bekleyen göçü ortak işlevle hesaplar.
+- Panel "Sorun" satırı ile onay kuralının bekleyiş nedeni ("daha yeni sürüm gerekir") aynı kodu okur.
+- Güncelleyici 0.1.3'e çıktı.
+
+**Tek tanım, iki dil.** Rust ile PS kod paylaşamaz. Tanım, `test_sema_hizasi.ts`teki tablodan `--vektor-yaz` ile doğan `native/test-vektorleri/sema-hizasi.json`dur (SQL + kural + 10 kayıt). Rust tarafı `sema.rs` (`tests/sema_hizasi.rs`, cargo), PS tarafı `deploy/hizmet/sema-hizasi.ps1` (bekçinin §2'si, pwsh); ikisi aynı vektörlere ölçülür, SQL iki literalde bayt-eşittir. PS işlevleri tek elemanlı sonucu boru hattında açar, bu yüzden her çağrı `@( )` ile sarılır (bekçi ölçer).
+
+**Satıcı.** Yoklama raporu bekleyiş kodu taşımaz (`bekleyen.neden` karar nedenidir, `son.kod` tamamlanmış denemenin sonucudur). Bu yüzden satıcı metni eklenmedi; satıcının bu bekleyişi görmesi ayrı bir protokol kararıdır.
+
+**Bekçi.** `test_sema_hizasi` (§1–§5 + 14 kalıcı sonda) · `tests/sema_hizasi.rs` (vektörler + dünya: ileride bekler/dokunmaz, sayı eşit yabancı ad, onaylı sürüm bekler, eşit/geride sürer) · `test_guncelleme_durumu` §7l · `serverUpdates.test.tsx`.

@@ -20,6 +20,7 @@
 //   §6 panel görünümü: kira yok/kiradaki politika/K1/varsayılan · geçmiş (backend + PG satırı) en yeni önce ·
 //      yerel ayrıntı · karar · onayın kullanıldığı
 //   §7 ⭐ eylemler (`approvalActions` — panel düğmeleri ve POST kapısı AYNI yüklem); §7k onaylı ama bekleyen sürümün nedeni
+//      (§7l şema ileride: daha yeni sürüm gerekir, "kendiliğinden" denmez)
 //   §8 bağlantı (statik): uçlar izinli ve bağlı · yoklama gövdesi raporu yayar · yoklama niyeti tazeler
 // NEGATİF SONDA (elle, geri alındı; commit mesajında).
 // =============================================================================
@@ -333,6 +334,13 @@ function eylemler(): void {
   check("§7k onaylı sürüm kilit beklerken / indirilirken / sorunsuz beklerken de bekleyiş metni",
     dogruBekleyis(kurBekliyor("DOSYA_KILITLI"), /kilit/i) && dogruBekleyis(kurBekliyor(null, "INDIRILIYOR"), /indiriliyor/) && dogruBekleyis(kurBekliyor(null, "HAZIR"), /birazdan/),
     [kurBekliyor("DOSYA_KILITLI"), kurBekliyor(null, "INDIRILIYOR"), kurBekliyor(null, "HAZIR")].join(" | "));
+  // §7l (D8e): paket şemanın gerisinde (SEMA_ILERIDE) — sorun kendiliğinden geçmez, daha yeni sürüm gerekir; genel
+  // "kendiliğinden kurulur" metni YANLIŞTIR (sonda: genel dalın metni yüklemde kırmızı).
+  const semaBekleyis = (n: string | null): boolean => dogruBekleyis(n, /geri indirme/) && /daha yeni/.test(n ?? "") && !/kendiliğinden/.test(n ?? "");
+  check("§7l sonda: genel dalın metni ('… sorun giderilince kendiliğinden kurulur.') yüklemde KIRMIZI",
+    !semaBekleyis("2.15.0 onaylandı; güncelleyici bekliyor (SEMA_ILERIDE) — sorun giderilince kendiliğinden kurulur."));
+  check("§7l ⭐ onaylı sürüm SEMA_ILERIDE beklerken neden şemanın ileride olduğunu ve daha yeni sürüm gerektiğini söyler",
+    semaBekleyis(kurBekliyor("SEMA_ILERIDE")), kurBekliyor("SEMA_ILERIDE") ?? "-");
   const pencereKur = e({ politika: { kip: "OTOMATIK" }, yerelDurum: "BEKLIYOR", yerelHataKodu: "DISK_DOLU", bekleyen: { surum: "2.15.0", karar: "KUR", neden: null } }).neden;
   check("§7k onaysız (OTOMATİK pencere) KUR beklerken 'onaylandı' denmez", dogruBekleyis(pencereKur, /disk/i, /kurulacak/) && !/onaylandı/.test(pencereKur ?? ""), pencereKur ?? "-");
 }

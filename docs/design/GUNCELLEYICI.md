@@ -348,7 +348,7 @@ Backend'in yazabildiği ya da okuyabildiği dizinlerden okunan her dosya (`lisan
 
 ## §8 Tur ve backend güncellemesinin adımları
 
-**§8.0 Tur** (`turSn`, varsayılan 60 sn): yarım işlem varsa ÖNCE o sürdürülür → kira + HAK (§6.2) → adaysız karar (`DONDURULDU` · `KURULU_SURUM_BICIMSIZ` · `HEDEF_ULASILDI` ağa çıkmadan biter) → aday (§6.3) → karar (PG yalnız karar ona gelirse ölçülür) → `KUR` · `ONAY_BEKLIYOR` · `PENCERE_BEKLIYOR` ise disk + hazırlık (§6.4; PG gerekiyorsa §9 hazırlığı) → `HAZIR` → karar `KUR` ise aday tazelenir ve uygulanır (önce PG, sonra backend). Başlamış uygulama pencere kapansa da biter ya da geri döner (sözleşme §3 madde 5).
+**§8.0 Tur** (`turSn`, varsayılan 60 sn): yarım işlem varsa ÖNCE o sürdürülür → kira + HAK (§6.2) → adaysız karar (`DONDURULDU` · `KURULU_SURUM_BICIMSIZ` · `HEDEF_ULASILDI` ağa çıkmadan biter) → aday (§6.3) → karar (PG yalnız karar ona gelirse ölçülür) → `KUR` · `ONAY_BEKLIYOR` · `PENCERE_BEKLIYOR` ise disk + hazırlık (§6.4; PG gerekiyorsa §9 hazırlığı) → **şema hizası** (veritabanındaki BİTMİŞ göç adları paketin `prisma/migrations/<ad>/migration.sql` adlarının alt kümesi değilse paket şemanın GERİSİNDEdir: `SEMA_ILERIDE`, `BEKLIYOR`, hizmet durdurulmaz; setup ve geçişle TEK kural — Rust `sema.rs` = PS `deploy/hizmet/sema-hizasi.ps1`, ortak vektörler `test-vektorleri/sema-hizasi.json`; ölçülemezse bugünkü yol, §8.5) → `HAZIR` → karar `KUR` ise aday tazelenir ve uygulanır (önce PG, sonra backend). Başlamış uygulama pencere kapansa da biter ya da geri döner (sözleşme §3 madde 5).
 
 | # | Adım (`adim`) | İş | Telafi (GERİ AL) | Yarımda (açılış) |
 |---|---|---|---|---|
@@ -398,7 +398,7 @@ Paket `runtime\tekserp-guncelleyici.exe` taşır. Backend işlemi `BASARILI` olu
 
 ## §12 Kodlar
 
-**`durum.hataKodu` (şu anki sorun):** `NIYET_BICIMSIZ` · `BELIRTEC_YOK` · `BELIRTEC_SURESI_DOLDU` · `KILIT_DOLU` · `AYAR_BICIMSIZ` · `AYAR_EKSIK` · `KURULU_SURUM_YOK` · `KIRA_YOK` · `KIRA_GECERSIZ` · `INSAN_GEREKIYOR` · `MANIFEST_INDIRILEMEDI` · `INDIRME_REDDEDILDI` · `INDIRME_HATASI` · `INDIRME_ERTELENDI` · `DOSYA_KILITLI` · `DISK_DOLU` · `PAKET_OZETI` · `PAKET_YOL` · `BUTUNLUK_GECERSIZ` · `PG_BUYUK_SURUM` · `PG_PAKET` · sözleşmenin kodları olduğu gibi (`SURUM_ISARETCI` · `SURUM_KANAL` · `SURUM_ANAHTAR` · `PAKET_BAGI` · `PG_BAGI` · `JWS_*` · `BELGE_SURUM` · `BELGE_SEMA`) · işlem sonrası o işlemin iç kodu. Karar nedenleri `karar.neden`de (sözleşme §3 madde 3), `hataKodu`na girmez.
+**`durum.hataKodu` (şu anki sorun):** `NIYET_BICIMSIZ` · `BELIRTEC_YOK` · `BELIRTEC_SURESI_DOLDU` · `KILIT_DOLU` · `AYAR_BICIMSIZ` · `AYAR_EKSIK` · `KURULU_SURUM_YOK` · `KIRA_YOK` · `KIRA_GECERSIZ` · `INSAN_GEREKIYOR` · `MANIFEST_INDIRILEMEDI` · `INDIRME_REDDEDILDI` · `INDIRME_HATASI` · `INDIRME_ERTELENDI` · `DOSYA_KILITLI` · `DISK_DOLU` · `SEMA_ILERIDE` (paket şemanın gerisinde: veritabanında paketin taşımadığı bitmiş göç; hiçbir şey değişmeden bekler, yalnız bu göçleri taşıyan sürüm açar) · `PAKET_OZETI` · `PAKET_YOL` · `BUTUNLUK_GECERSIZ` · `PG_BUYUK_SURUM` · `PG_PAKET` · sözleşmenin kodları olduğu gibi (`SURUM_ISARETCI` · `SURUM_KANAL` · `SURUM_ANAHTAR` · `PAKET_BAGI` · `PG_BAGI` · `JWS_*` · `BELGE_SURUM` · `BELGE_SEMA`) · işlem sonrası o işlemin iç kodu. Karar nedenleri `karar.neden`de (sözleşme §3 madde 3), `hataKodu`na girmez.
 
 **İşlem iç kodları (`sonAyrinti.hataKodu` · `gecmis.ayrintiKodu`) → rapor kodu (`son.kod` · `gecmis.hataKodu`, TS `UPDATE_RESULT_CODES`):**
 

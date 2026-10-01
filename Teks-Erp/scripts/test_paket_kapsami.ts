@@ -47,7 +47,7 @@ function check(label: string, ok: boolean, detay = ""): void {
 }
 
 /** D6'nın paket için ZORUNLU tuttuğu alt dizin betikleri (yönetici kararı 2026-10-01). */
-const D6_ZORUNLU = ["hizmet/backend-hizmeti.ps1", "hizmet/guncelleyici-hizmeti.ps1", "hizmet/kanal-adlari.ps1", "gecis/gecis.ps1", "gecis/gecis-yardimci.cjs"];
+const D6_ZORUNLU = ["hizmet/backend-hizmeti.ps1", "hizmet/guncelleyici-hizmeti.ps1", "hizmet/kanal-adlari.ps1", "hizmet/sema-hizasi.ps1", "gecis/gecis.ps1", "gecis/gecis-yardimci.cjs"];
 /** $stage'e kopyalanan ve listelerin DIŞINDA kalan bilinen girdiler (paketin kendi derlemesi). */
 const BILINEN_GIRDILER = ["dist", "prisma", "runtime", "native", "public", "assets", "package.json", "package-lock.json", "ecosystem.config.js", "prisma.config.js"];
 /**

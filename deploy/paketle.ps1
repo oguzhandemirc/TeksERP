@@ -112,7 +112,7 @@ $ErrorActionPreference = "Stop"
 $KOK_BETIKLERI = @("kur.ps1", "ilk-kurulum.ps1", "yedekle.ps1", "pm2-boot.cmd", "uzaktan-kos.ps1", "bakim-rolu.ps1")
 # Alt dizindeki betikler: repo `deploy/<yol>` -> paket `<yol>`; goreli yollar ikisinde AYNI
 # (gecis\..\hizmet\ , gecis\..\yedekle.ps1). hizmet\ ve gecis\ imzali kapsamdadir.
-$ALT_BETIKLER = @("hizmet/backend-hizmeti.ps1", "hizmet/guncelleyici-hizmeti.ps1", "hizmet/kanal-adlari.ps1", "gecis/gecis.ps1", "gecis/gecis-yardimci.cjs")
+$ALT_BETIKLER = @("hizmet/backend-hizmeti.ps1", "hizmet/guncelleyici-hizmeti.ps1", "hizmet/kanal-adlari.ps1", "hizmet/sema-hizasi.ps1", "gecis/gecis.ps1", "gecis/gecis-yardimci.cjs")
 # runtime\ altina giren Rust hizmet ikilileri (yalniz KORUMALI pakette; yoksa paketleme DURUR).
 $HIZMET_IKILILERI = [ordered]@{ "tekserp-hizmet.exe" = "tekserp-hizmet"; "tekserp-guncelleyici.exe" = "tekserp-guncelleyici" }
 

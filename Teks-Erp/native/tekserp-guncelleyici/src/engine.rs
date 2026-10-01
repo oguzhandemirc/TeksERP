@@ -1,6 +1,7 @@
 //! Motor — hizmetin her turu (§5–§8): yarım işlem varsa ÖNCE onu sonuçlandır; yoksa kira (yetki) →
 //! aday (işaretçi → PAKET imzalı sürüm bildirimi) → TEK karar (`decision::decide`, TS aynası) →
-//! paket (indir · sha256 · aç · bütünlük · bağ) → HAZIR → karar KUR ise (PG küçük sürümü önce) uygula.
+//! paket (indir · sha256 · aç · bütünlük · bağ) → şema hizası (`sema`) → HAZIR → karar KUR ise (PG küçük sürümü
+//! önce) uygula.
 //! Her turun sonunda `durum.json` yazılır (canlılık). Hiçbir karar niyetten YETKİ almaz: niyet yalnız
 //! panel onayı ve indirme belirtecidir; kurulabilirlik imzalı kira + bildirim + paketten gelir.
 use crate::codes;
@@ -17,6 +18,7 @@ use crate::pgminor::{self, PgOp, PgPlan};
 use crate::policy::{self, LicenseView};
 use crate::release::{self, Checked, PgTarget, ReleaseManifest};
 use crate::selfupdate;
+use crate::sema;
 use crate::settings::{self, BackendEnv, UpdaterSettings};
 use crate::tools::{self, Runtime};
 use crate::trust::TrustAnchor;
@@ -665,6 +667,11 @@ impl Engine {
                 return idle;
             }
         }
+        // Şema hizası: paket şemanın gerisindeyse (geri indirme) HAZIR denmez, uygulanmaz — hiçbir şey değişmeden bekler.
+        if let Err((code, msg)) = self.schema_check(inputs, &m.doc) {
+            self.write_status(self.doc(&f, State::Waiting, Some(code), &msg));
+            return idle;
+        }
         if d.karar != Kind::Install {
             let mut doc = self.doc(&f, State::Ready, None, &format!("{} hazır; {}", m.doc.surum, d.karar.label()));
             doc.planned = d.aralik.as_ref().filter(|_| d.karar == Kind::AwaitingWindow).map(|a| a.baslangic.clone());
@@ -1053,6 +1060,36 @@ impl Engine {
             }
         }
         Ok(())
+    }
+
+    /// Şema hizası (`sema::ahead`, setup ve geçişle TEK kural): veritabanında paketin taşımadığı bitmiş göç varsa
+    /// paket şemanın GERİSİNDEdir ve güncelleme uygulanmaz. Hazırlıktan sonra, hizmet durdurulmadan ölçülür.
+    /// Ölçülemezse bugünkü yol sürer (uyarı; göç adımı ölçülemeyen öncesini "değişti" sayar, geri dönüşte DB yedekten).
+    fn schema_check(&self, inputs: &Inputs, m: &ReleaseManifest) -> Result<(), Fail> {
+        let unmeasured = |why: String| {
+            self.log.warn(&format!("şema hizası ölçülemedi ({why}) — güncelleme bu ölçüm yüzünden durdurulmadı"));
+            Ok(())
+        };
+        let package = match sema::package_migrations(self.env.fs.as_ref(), &self.layout.version_dir(&m.surum)) {
+            Ok(p) => p,
+            Err(e) => return unmeasured(format!("paketin göç dizini: {e}")),
+        };
+        let db = match tools::finished_migrations(&self.env, &inputs.backend) {
+            Ok(d) => d,
+            Err(e) => return unmeasured(e),
+        };
+        let extra = sema::ahead(&db, &package);
+        match extra.first() {
+            None => Ok(()),
+            Some(first) => Err(fail(
+                codes::SEMA_ILERIDE,
+                format!(
+                    "{} kurulmaz: veritabanında paketin taşımadığı {} bitmiş göç var (ilk: {first}) — paket şemanın gerisinde, geri indirme yapılmaz; bu göçleri taşıyan daha yeni bir sürüm gerekir",
+                    m.surum,
+                    extra.len()
+                ),
+            )),
+        }
     }
 
     fn disk_check(&self, m: &ReleaseManifest) -> Result<(), Fail> {
