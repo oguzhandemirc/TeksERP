@@ -463,11 +463,11 @@ if ($Korumali -and $Hedef -eq "win-x64") {
   $ikiliDizin = if ($HizmetIkiliDizini) { $HizmetIkiliDizini } else { Join-Path (Join-Path (Join-Path $proj "native") "target") "release" }
   $hizmetIkilileri = [ordered]@{}
   $paketCapaKipi = (Get-Content -Raw (Join-Path (Join-Path $proj "dist") "server-kunye.json") | ConvertFrom-Json).guvenCapasi
-  foreach ($ad in $HIZMET_IKILILERI.Keys) {
-    $olcu = HizmetIkilisiOlc (Join-Path $ikiliDizin $ad) $HIZMET_IKILILERI[$ad] $paketCapaKipi
-    Copy-Item (Join-Path $ikiliDizin $ad) (Join-Path (Join-Path $stage "runtime") $ad)
-    $hizmetIkilileri[$ad] = $olcu
-    Write-Host "  runtime     : runtime\$ad ($($olcu.surum), $([math]::Round($olcu.boyut / 1MB, 1)) MB, sha256 $($olcu.sha256.Substring(0, 16))...)"
+  foreach ($ikiliAd in $HIZMET_IKILILERI.Keys) {
+    $olcu = HizmetIkilisiOlc (Join-Path $ikiliDizin $ikiliAd) $HIZMET_IKILILERI[$ikiliAd] $paketCapaKipi
+    Copy-Item (Join-Path $ikiliDizin $ikiliAd) (Join-Path (Join-Path $stage "runtime") $ikiliAd)
+    $hizmetIkilileri[$ikiliAd] = $olcu
+    Write-Host "  runtime     : runtime\$ikiliAd ($($olcu.surum), $([math]::Round($olcu.boyut / 1MB, 1)) MB, sha256 $($olcu.sha256.Substring(0, 16))...)"
   }
 } elseif ($Korumali) {
   Write-Host "  ! $Hedef paketi Windows hizmet ikilisi TASIMAZ (hizmet duzeni yalniz win-x64)." -ForegroundColor Yellow

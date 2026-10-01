@@ -33,6 +33,7 @@
 //   §12d uzaktan-kos.ps1 geçiş kipi (D6): gecis.ps1 -Uygula görevde yalnız kuru koşumun -Onay <N>'iyle; çıktı logs\ dışında.
 //   §26 VİRGÜLLÜ DÖNÜŞ (`return , $x`) yapan fonksiyonun çağrısı `@()` ile sarılmaz, boruya verilmez (iç içe dizi).
 //   §27 `[Validate*]` öznitelikli parametrenin adı gövdede yerel değişken olarak ATANMAZ (ad büyük/küçük harf duyarsız).
+//   §28 betik kapsamındaki `foreach ($x in …)` daha önce ATANMIŞ ve döngüden SONRA okunan bir değişkeni gölgelemez.
 // Kaynak ölçülür, davranış değil: pwsh her ortamda yok, 5.1 hiç yok.
 // =============================================================================
 import { readFileSync, existsSync, readdirSync, mkdtempSync, mkdirSync, writeFileSync, rmSync, realpathSync } from "node:fs";
@@ -1025,6 +1026,56 @@ function donmusIhlalleri(dosya: string, metin: string, beklenen: string): string
   }
   check(`§27 ⭐ [Validate*] parametresinin adı gövdede atanmıyor (${yollar.length} betik)`, yollar.length >= 15 && parametreSayisi >= 3 && ihlal.length === 0,
     ihlal.length ? ihlal.slice(0, 8).join(" · ") : `${parametreSayisi} doğrulamalı parametre, atama yok`);
+}
+
+// §28 — DÖNGÜ DEĞİŞKENİ GÖLGESİ (thinkpad-1 D8 2026-10-01): PowerShell'de `foreach` blok kapsamı açmaz; betik
+//   kapsamındaki `foreach ($ad in …)` önceki `$ad = <paket adı>`ı EZER. `paketle.ps1` hizmet ikilisi döngüsü paket adını
+//   "tekserp-guncelleyici.exe" yaptı (zip adı + PAKET.json `ad` + derleme kaydı). Ölçü: fonksiyon DIŞI satırlarda, daha
+//   önce `=` ile atanmış bir ad döngü değişkeni olur VE döngü kapandıktan sonra okunursa ihlal (yalnız döngüde kullanılan
+//   yeniden kullanım serbest — kaldir.ps1 `$k` gibi).
+{
+  const yollar: string[] = [];
+  const gez = (d: string): void => {
+    for (const g of readdirSync(join(KOK, d), { withFileTypes: true })) {
+      const r = `${d}/${g.name}`;
+      if (g.isDirectory()) gez(r);
+      else if (g.name.endsWith(".ps1")) yollar.push(r);
+    }
+  };
+  gez("deploy");
+  const ihlal: string[] = [];
+  let donguSayisi = 0;
+  for (const yol of yollar) {
+    const t = psTara(readFileSync(join(KOK, yol), "utf8"));
+    const icFonk = (no: number): boolean => t.fonksiyonlar.some((f) => no >= f.bas && no <= f.son);
+    const satir = t.satirlar.filter((x) => !icFonk(x.no));
+    const atanan = new Map<string, number>();
+    for (let i = 0; i < satir.length; i++) {
+      const x = satir[i];
+      for (const m of x.ciplak.matchAll(/foreach\s*\(\s*\$(\w+)\s+in\b/gi)) {
+        donguSayisi++;
+        const ad = m[1].toLowerCase();
+        if (!atanan.has(ad)) continue;
+        let son = x.no;
+        const acik = (x.ciplak.match(/\{/g) ?? []).length - (x.ciplak.match(/\}/g) ?? []).length;
+        if (acik > 0) {
+          for (let j = i + 1; j < satir.length; j++) {
+            if (satir[j].derinlik <= x.derinlik && /\}/.test(satir[j].ciplak)) { son = satir[j].no; break; }
+          }
+        }
+        const okuma = new RegExp(`\\$${m[1]}\\b`, "i");
+        const yeniAtama = new RegExp(`(?:^|[;{(\\s])\\$${m[1]}\\s*=(?!=)`, "i");
+        const sonra = satir.filter((y) => y.no > son && okuma.test(y.ciplak) && !yeniAtama.test(y.ciplak));
+        if (sonra.length) ihlal.push(`${yol}:${x.no} $${m[1]} (atama ${atanan.get(ad)}, döngüden sonra okuma ${sonra[0].no})`);
+      }
+      for (const m of x.ciplak.matchAll(/(?:^|[;{(\s])\$(\w+)\s*=(?!=)/g)) {
+        const ad = m[1].toLowerCase();
+        if (!atanan.has(ad)) atanan.set(ad, x.no);
+      }
+    }
+  }
+  check(`§28 ⭐ betik kapsamında foreach değişkeni atanmış + sonradan okunan adı gölgelemiyor (${yollar.length} betik)`,
+    donguSayisi >= 20 && ihlal.length === 0, ihlal.length ? ihlal.slice(0, 6).join(" · ") : `${donguSayisi} döngü temiz`);
 }
 
 console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
