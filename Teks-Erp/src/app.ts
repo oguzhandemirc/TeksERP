@@ -12,6 +12,7 @@ import { installDecimalNumberSerializer } from "./utils/json-replacer";
 import { redactSecretQueryParams } from "./utils/url-redaction";
 import prisma from "./lib/prisma";
 import { buildRichHealth } from "./lib/health-snapshot";
+import { isDirectLoopback, localLicenseHealth } from "./lib/yerel-saglik";
 
 // Tüm res.json() çıktısında Prisma Decimal → number çevirir
 // (Decimal.prototype.toJSON override'ı). Aksi halde Decimal'ler client'a string
@@ -387,6 +388,27 @@ app.get("/health", async (_req: Request, res: Response) => {
     version: appVersion,
     time: new Date().toISOString(),
   });
+});
+
+/**
+ * YEREL sağlık — güncelleyicinin sondası (docs/design/GUNCELLEYICI.md §8.7). Public `/health`in DONMUŞ alan
+ * kümesine lisans eklenmez; bu uç yalnız döngü adresinden DOĞRUDAN gelen isteğe cevap verir (dışarıya 404) ve
+ * `lisans{kip,butunluk,cekirdek}`ı motor yerel ölçümünü bitirince taşır (`lib/yerel-saglik.ts`).
+ */
+app.get("/health/yerel", async (req: Request, res: Response) => {
+  if (!isDirectLoopback(req.socket.remoteAddress, req.headers)) {
+    res.status(404).json({ success: false, message: `Endpoint bulunamadı: ${req.method} ${req.originalUrl}` });
+    return;
+  }
+  let db: "UP" | "DOWN" = "DOWN";
+  try {
+    await prisma.$queryRaw`SELECT 1`;
+    db = "UP";
+  } catch {
+    db = "DOWN";
+  }
+  const lisans = localLicenseHealth();
+  res.status(200).json({ status: "UP", db, version: appVersion, time: new Date().toISOString(), ...(lisans ? { lisans } : {}) });
 });
 
 // =============================================================================

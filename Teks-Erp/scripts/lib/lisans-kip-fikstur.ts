@@ -34,7 +34,7 @@ export interface KipSecenegi {
   /** true → kira 10 gün önce bitti (EK_SURE; ek süre 30 gün). */
   readonly kiraBitti?: boolean;
   /** Kiranın ek alanları (ör. patron bulutu: `esitlemeAraligiDk`, `patronBulutBitis`, `devredildi`). */
-  readonly kiraEk?: Partial<Pick<LeaseDoc, "esitlemeAraligiDk" | "patronBulutBitis" | "devredildi">>;
+  readonly kiraEk?: Partial<Pick<LeaseDoc, "esitlemeAraligiDk" | "patronBulutBitis" | "devredildi" | "guncelleme">>;
 }
 
 let kokDizin: string | null = null;

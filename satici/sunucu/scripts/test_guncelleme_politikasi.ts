@@ -9,11 +9,16 @@
 //      ucu (200, defter satırı, işlem kimliği tekrarı aynı yanıt/tek satır, geçersiz gövde 400, izin) · sonraki kira
 //      OTOMATİK + pencere + aralıklar · rapor → dilim/durum, sonuç defteri idempotent · sonraki kira fabrikanın dilimiyle
 //      · filo ve kurulum ayrıntısı · DB CHECK ham yazımı reddeder
+//   §3 BİLDİRİM (D7): tamamlanan deneme defter satırıyla AYNI tx'te bildirilir — geri dönüş (sebep + veri) ·
+//      başarı · başarısızlık (müdahale) olayları kanal başına BİR satır; tekrar yoklama yeni satır doğurmaz; gövde
+//      allowlist'te, raporun kodlu alanlarından (serbest metin yok); bildirim yazılamazsa defter satırı da yok,
+//      sonraki yoklama ikisini birlikte yazar
 // Koşum: npx tsx scripts/test_guncelleme_politikasi.ts   (yalnız *_test DB)
 // =============================================================================
 import { DOWNLOAD_PRODUCTS, ENDPOINTS, LeaseSchema, isoToMs, parseJws, type LeaseDoc } from "../src/lisans-protokol";
 import { kurulumAnahtariUret } from "../../../Teks-Erp/scripts/lib/lisans-fikstur";
 import { FACTORY_DEFAULT_TIME_ZONE, leaseUpdatePolicy, policyOf, validatePolicy } from "../src/services/update-policy.service";
+import { NOTIFICATION_BODY_KEYS } from "../src/notifications/catalog";
 import {
   anahtarOrtamiKur,
   etkinlestirmeGovdesi,
@@ -103,6 +108,61 @@ const RAPOR_SON = {
   veriGeriYuklendi: true,
 };
 
+type Prisma = (typeof import("../src/lib/prisma"))["prisma"];
+type Rapor = { saatDilimi: string; guncelleyici: unknown; bekleyen: unknown; son: typeof RAPOR_SON };
+
+/** Bu kurulumun güncelleme bildirimi yazımını DÜŞÜRÜR (yalnız _test DB'si; adı bu bekçiye özgü). */
+async function bildirimiPatlat(prisma: Prisma, kurulumDbId: string | null): Promise<void> {
+  await prisma.$executeRawUnsafe(`DROP TRIGGER IF EXISTS "bekci_gnc_bildirim_patlat" ON "bildirim"`);
+  await prisma.$executeRawUnsafe(`DROP FUNCTION IF EXISTS "bekci_gnc_bildirim_patlat"()`);
+  if (kurulumDbId === null) return;
+  await prisma.$executeRawUnsafe(`CREATE FUNCTION "bekci_gnc_bildirim_patlat"() RETURNS trigger LANGUAGE plpgsql AS $f$
+    BEGIN
+      IF NEW."kurulumId" = '${kurulumDbId}'::uuid AND NEW."olay"::text LIKE 'GUNCELLEME_%' THEN
+        RAISE EXCEPTION 'bekci: guncelleme bildirimi dusuruldu';
+      END IF;
+      RETURN NEW;
+    END $f$`);
+  await prisma.$executeRawUnsafe(`CREATE TRIGGER "bekci_gnc_bildirim_patlat" BEFORE INSERT ON "bildirim" FOR EACH ROW EXECUTE FUNCTION "bekci_gnc_bildirim_patlat"()`);
+}
+
+async function bildirimler(prisma: Prisma, kurulumDbId: string, rapor: Rapor, yokla: (ek?: Record<string, unknown>) => Promise<unknown>): Promise<void> {
+  console.log("\n§3 bildirim — tamamlanan deneme bir kez, defterle aynı tx'te");
+  const satirlar = (olay: "GUNCELLEME_TAMAMLANDI" | "GUNCELLEME_GERI_DONDU" | "GUNCELLEME_BASARISIZ") =>
+    prisma.bildirim.findMany({ where: { kurulumId: kurulumDbId, olay }, select: { kanal: true, govde: true, tekillikAnahtari: true, ilgiliKayit: true } });
+  const geri = await satirlar("GUNCELLEME_GERI_DONDU");
+  const g0 = (geri[0]?.govde ?? {}) as Record<string, string | null>;
+  kontrol("§3a ⭐ geri dönüş → kanal başına BİR satır (iki yoklamaya rağmen), tekillik = kurulum + kayitId",
+    geri.length === 2 && new Set(geri.map((x) => x.kanal)).size === 2 && geri.every((x) => x.tekillikAnahtari === `GUNCELLEME_GERI_DONDU:${kurulumDbId}:${RAPOR_SON.kayitId}` && x.ilgiliKayit === RAPOR_SON.kayitId), `${geri.length} satır`);
+  kontrol("§3b ⭐ gövde: sürüm geçişi + sebep kodu + veri bayrağı; anahtarlar allowlist'te",
+    g0.konu === "2.11.2 → 2.12.1" && (g0.referans ?? "").startsWith("SAGLIK_HATASI — ") && (g0.referans ?? "").includes("yedekten geri yüklendi") &&
+      Object.keys(g0).every((key) => (NOTIFICATION_BODY_KEYS as readonly string[]).includes(key)), JSON.stringify(g0));
+
+  const basarili = { ...RAPOR_SON, kayitId: crypto.randomUUID(), sonuc: "BASARILI", kod: null, veriGeriYuklendi: false, kaynakSurum: "2.11.2", hedefSurum: "2.12.2" };
+  await yokla({ guncelleme: { ...rapor, son: basarili } });
+  await yokla({ guncelleme: { ...rapor, son: basarili } });
+  const tamam = await satirlar("GUNCELLEME_TAMAMLANDI");
+  const t0 = (tamam[0]?.govde ?? {}) as Record<string, string | null>;
+  kontrol("§3c başarı → 'Sunucu güncellendi' kanal başına bir satır, ayrıntı yok", tamam.length === 2 && t0.konu === "2.11.2 → 2.12.2" && t0.referans === null, `${tamam.length} satır`);
+
+  const basarisiz = { ...RAPOR_SON, kayitId: crypto.randomUUID(), sonuc: "BASARISIZ", kod: "GERI_DONUS_HATASI", veriGeriYuklendi: false };
+  await bildirimiPatlat(prisma, kurulumDbId);
+  try {
+    await yokla({ guncelleme: { ...rapor, son: basarisiz } });
+  } finally {
+    await bildirimiPatlat(prisma, null);
+  }
+  const defterYok = await prisma.kurulumKaydi.count({ where: { kurulumId: kurulumDbId, kaynakKayitId: basarisiz.kayitId } });
+  kontrol("§3d ⭐ bildirim yazılamadı → defter satırı da YOK (aynı tx; yoklama yine de kira aldı)", defterYok === 0, `${defterYok} satır`);
+  await yokla({ guncelleme: { ...rapor, son: basarisiz } });
+  const hata = await satirlar("GUNCELLEME_BASARISIZ");
+  const defterVar = await prisma.kurulumKaydi.count({ where: { kurulumId: kurulumDbId, kaynakKayitId: basarisiz.kayitId } });
+  kontrol("§3e sonraki yoklama defter + bildirimi BİRLİKTE yazar; başarısızlık 'müdahale gerekiyor' der",
+    defterVar === 1 && hata.length === 2 && ((hata[0]?.govde as Record<string, string | null>).referans ?? "").includes("müdahale gerekiyor"), `${defterVar} defter · ${hata.length} bildirim`);
+  const metin = JSON.stringify(await prisma.bildirim.findMany({ where: { kurulumId: kurulumDbId }, select: { govde: true } }));
+  kontrol("§3f gövdelerde serbest metin / yol yok (rapor yalnız kodlu alan taşır)", !metin.includes("serbest") && !metin.includes("C:\\") && !metin.includes("Europe/Berlin"));
+}
+
 async function uctanUca(temizlenecek: { kurulumlar: string[]; kidler: string[]; kullanicilar: string[] }): Promise<void> {
   const { prisma } = await import("../src/lib/prisma");
   const ortam = await anahtarOrtamiKur();
@@ -187,6 +247,7 @@ async function uctanUca(temizlenecek: { kurulumlar: string[]; kidler: string[]; 
     const dondur = await portalIstek(portal.tailnet, yol, { govde: { clientToken: crypto.randomUUID(), kip: "DONDUR", pencere: null, hedefSurum: "2.11.2", sebep: "bekçi: dondur" }, cerez });
     kira = await yokla();
     kontrol("§2p DONDUR + sabitleme kiraya gider; pencere/aralık yok", dondur.status === 200 && kira?.guncelleme?.kip === "DONDUR" && kira.guncelleme.hedefSurum === "2.11.2" && kira.guncelleme.araliklar.length === 0);
+    await bildirimler(prisma, k.kurulumDbId, rapor, yokla);
   } finally {
     await portal.kapat();
     await sunucu.durdur();

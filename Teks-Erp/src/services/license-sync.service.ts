@@ -37,6 +37,7 @@ import {
 import { evaluateLicenseTransitions } from "./license-trail.service";
 import { syncSupportAfterPoll } from "./support-sync.service";
 import { updateReportField } from "./update-status.service";
+import { refreshUpdaterIntentQuietly } from "./update-intent.service";
 import {
   buildEnvironment,
   currentFingerprintDigest,
@@ -188,6 +189,7 @@ export async function acceptLicenseResponse(
     if (before.lease?.document.kiraId !== leaseDoc.kiraId) saveLease(resp.kira);
     setDownloadTokens(resp.indirmeBelirtecleri);
     invalidateLicenseSnapshot();
+    refreshUpdaterIntentQuietly(); // yeni belirteç güncelleyicinin niyetine (§5.1)
     return { yeniKira: false, kiraId: leaseDoc.kiraId };
   }
   if (known && isoToMs(leaseDoc.verilis) < known.verilisMs) {
@@ -204,6 +206,7 @@ export async function acceptLicenseResponse(
   if (getLicenseStore()?.transfer) saveTransfer(null);
   recordPollOutcome({ ok: true });
   invalidateLicenseSnapshot();
+  refreshUpdaterIntentQuietly();
 
   const after = getLicenseSnapshot();
   void AuditService.logEvent({

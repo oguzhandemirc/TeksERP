@@ -1,0 +1,36 @@
+{
+  "v": 1,
+  "zaman": "2026-09-30T23:30:00.000Z",
+  "sonCanlilik": "2026-09-30T23:30:00.000Z",
+  "canlilikEsigiSn": 180,
+  "turSn": 60,
+  "guncelleyiciSurum": "0.1.0",
+  "kuruluSurum": "2.12.0",
+  "durum": "BEKLIYOR",
+  "surum": null,
+  "kaynakSurum": "2.12.0",
+  "urun": null,
+  "islemId": null,
+  "adim": null,
+  "hataKodu": null,
+  "mesaj": "DONDURULDU / POLITIKA",
+  "ilerleme": null,
+  "planlanan": null,
+  "politika": {
+    "kip": "DONDUR",
+    "izin": false,
+    "neden": "POLITIKA_DONDUR",
+    "kaynak": "KIRA",
+    "hedefSurum": null,
+    "donuk": false
+  },
+  "karar": {
+    "karar": "DONDURULDU",
+    "neden": "POLITIKA",
+    "aralik": null,
+    "pgGuncellemesi": false
+  },
+  "bekleyen": null,
+  "son": null,
+  "sonAyrinti": null
+}

@@ -91,6 +91,7 @@ import { FeatureFlagsPage } from "@/pages/GeneralSettings/FeatureFlagsPage";
 import { NumberingPage } from "@/pages/GeneralSettings/Numbering/NumberingPage";
 import { UpdatePage } from "@/pages/System/UpdatePage";
 import { LicensePage } from "@/pages/System/License/LicensePage";
+import { ServerUpdatesPage } from "@/pages/System/ServerUpdates/ServerUpdatesPage";
 import { SupportPage } from "@/pages/System/Support/SupportPage";
 import { AboutPage } from "@/pages/System/About/AboutPage";
 import {
@@ -835,6 +836,15 @@ export const contentRoutes: RouteObject[] = [
     element: (
       <ProtectedRoute requireAnyPermission={LICENSE_ACCESS}>
         <LicensePage />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    // Sunucu güncellemeleri (Dağıtım v2) — karo ile AYNI küme (`LICENSE_ACCESS`); `system/server-updates` manifestosu.
+    path: "system/server-updates",
+    element: (
+      <ProtectedRoute requireAnyPermission={LICENSE_ACCESS}>
+        <ServerUpdatesPage />
       </ProtectedRoute>
     ),
   },
