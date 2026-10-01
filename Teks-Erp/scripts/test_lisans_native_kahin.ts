@@ -25,6 +25,11 @@
 //      protokol kodu beklenende · parmak izi kurallarında sonuç çeşitliliği · gömülü çapa v2 vektörleri iki kipte ·
 //      §2''h TS ÇEKİRDEĞİ (LicenseCore v2 yüzeyi: iptal · nowMs · parmak izi kuralı) protokolle aynı karar.
 //      §2c kapsamı iki dosyanın birleşimidir (v2 kodları yalnız v2 dosyasında). Yeniden üret: `--vektor-yaz [--yalniz-v2]`
+//   §0d' · §0d'' · §1i · §2''' PARMAK İZİ ÇOK YOLLU TOPLAYICI (L2-10): yol tablosu TS `FINGERPRINT_PATH_LINES` = Rust
+//      `PATHS` satır satır · Windows sondası tablodaki her win32 yolunu basar, fazlasını basmaz · tabloyu künyesinde
+//      taşımayan eski ABI-3 ikilisi açılmaz · `test-vektorleri/toplama.json` (seçim + özet · Windows sonda çıktısı ·
+//      SMBIOS yapısı; `cargo test` `tests/toplama.rs` de okur) bugünkü TS ile aynı, RAID → UniqueId sabit.
+//      Yeniden üret: `--vektor-yaz --yalniz-toplama`. ✓K §8o (dizge okuyucu `];` taşıyan sonda satırında kesilmez) · §8p
 //   §0l lisans v2 sabitleri Rust = TS (kullanımlar · kapanış nedenleri · parmak izi kuralları · güçlü etkenler ·
 //      ufuk sınırları · iptal satır tavanı · v1/v2 eşikleri)
 //   §3–§7 NATIVE (yoksa "⏭ ATLANDI — native yok", sayıyla; canlı çapa ÖLÇÜLMEDİ, yeşil sayılmaz): künye/ayna
@@ -88,6 +93,7 @@ import {
   nativeBuiltinAnchor,
   nativeCandidates,
   nativeFileName,
+  parseNativeIdentity,
   type LoaderOptions,
 } from "../src/lib/license/native";
 import { isNativeBinding } from "../src/lib/license/native-adapter";
@@ -101,6 +107,16 @@ import {
 import { BUILD_ANCHOR_MODE, ROOT_PUBLIC_KEYS } from "../src/lib/license/trust-anchor";
 import { MODULE_KEY_HKDF_PREFIX } from "../src/lib/license/module-key";
 import { WINDOWS_PROBE_LINES } from "../src/lib/license/fingerprint-os";
+import { FINGERPRINT_PATH_LINES } from "../src/lib/license/fingerprint-paths";
+import {
+  VEKTOR_TOPLAMA_BICIMI,
+  degerlendirToplama,
+  vektorToplamaDosyasiUret,
+  vektorToplamaDosyasiYolu,
+  type VektorToplama,
+  type VektorToplamaDosyasi,
+  type VektorToplamaKaydi,
+} from "./lib/lisans-cekirdek-vektor-toplama";
 import { atlamaDefteri } from "./lib/atlama";
 import {
   VEKTOR_BICIMI,
@@ -144,6 +160,7 @@ const TEKS = path.resolve(__dirname, "..");
 const NATIVE_DIZIN = path.join(TEKS, "native", "lisans-cekirdek");
 const VEKTOR_DOSYASI = vektorDosyasiYolu(TEKS);
 const VEKTOR_V2_DOSYASI = vektorV2DosyasiYolu(TEKS);
+const VEKTOR_TOPLAMA_DOSYASI = vektorToplamaDosyasiYolu(TEKS);
 const oku = (p: string) => readFileSync(p, "utf8");
 const rustKaynak = (ad: string) => oku(path.join(NATIVE_DIZIN, "src", ad));
 
@@ -152,11 +169,28 @@ function rustDizge(ham: string): string {
   return ham.replace(/\\(["\\])/g, "$1");
 }
 
-/** `pub const AD: [&str; N] = [ "a", "b" ];` ya da `&[&str] = &[ … ]` içindeki dizgeler. */
+/**
+ * `pub const AD: [&str; N] = [ "a", "b" ];` ya da `&[&str] = &[ … ]` içindeki dizgeler. Dizinin sonu dizge DIŞINDAKİ
+ * ilk `]`dir: Windows sondası satırları `$r[1];` gibi `];` taşır (yalın `\];` deseni orada keserdi, §8o).
+ */
 export function rustDizgeListesi(kaynak: string, ad: string): string[] | null {
-  const m = new RegExp(`pub const ${ad}: [^=]+= &?\\[([\\s\\S]*?)\\];`).exec(kaynak);
+  const m = new RegExp(`pub const ${ad}: [^=]+= &?\\[`).exec(kaynak);
   if (!m) return null;
-  return [...m[1].matchAll(/"((?:[^"\\]|\\.)*)"/g)].map((x) => rustDizge(x[1]));
+  const out: string[] = [];
+  let i = m.index + m[0].length;
+  while (i < kaynak.length) {
+    const c = kaynak[i];
+    if (c === "]") return out;
+    if (c !== '"') {
+      i++;
+      continue;
+    }
+    let j = i + 1;
+    while (j < kaynak.length && kaynak[j] !== '"') j += kaynak[j] === "\\" ? 2 : 1;
+    out.push(rustDizge(kaynak.slice(i + 1, j)));
+    i = j + 1;
+  }
+  return null;
 }
 
 /** `outcome.rs` kod kümesi (sabit ADLARI → değerleri). */
@@ -291,6 +325,12 @@ function dosyaMetni(dosya: { bicim: number; not: string; kayitlar: readonly unkn
 
 /** İki dosyayı da yazar; `--yalniz-v2` v1 dosyasına dokunmaz (L2-1: v1 vektörleri değişmedi, yeniden üretmek gürültü). */
 async function vektorYaz(): Promise<void> {
+  const toplama = vektorToplamaDosyasiUret();
+  const metinToplama = `{"bicim":${toplama.bicim},"not":${JSON.stringify(toplama.not)},"tuz":${JSON.stringify(toplama.tuz)},"kayitlar":[\n${toplama.kayitlar.map((k) => JSON.stringify(k)).join(",\n")}\n]}\n`;
+  writeFileSync(VEKTOR_TOPLAMA_DOSYASI, metinToplama);
+  console.log(`✍️  ${path.relative(TEKS, VEKTOR_TOPLAMA_DOSYASI)} yazıldı — ${toplama.kayitlar.length} kayıt, ${metinToplama.length} bayt`);
+  // `--yalniz-toplama`: L2-10 parmak izi toplama vektörleri; v1/v2 dosyalarına dokunmaz.
+  if (process.argv.includes("--yalniz-toplama")) return;
   if (!process.argv.includes("--yalniz-v2")) {
     const dosya = await vektorDosyasiUret(tsLicenseCore, VEKTOR_SIMDI);
     const metin = dosyaMetni(dosya);
@@ -308,6 +348,47 @@ const VektorV2DosyasiSchema = z.object({
   not: z.string(),
   kayitlar: z.array(z.object({ vektor: z.custom<VektorV2>((x) => typeof x === "object" && x !== null && "tur" in x), beklenen: z.unknown() })),
 });
+
+const VektorToplamaDosyasiSchema = z.object({
+  bicim: z.number(),
+  not: z.string(),
+  tuz: z.string(),
+  kayitlar: z.array(z.object({ vektor: z.custom<VektorToplama>((x) => typeof x === "object" && x !== null && "tur" in x), beklenen: z.unknown() })),
+});
+
+function vektorToplamaDosyasiOku(): VektorToplamaDosyasi | null {
+  if (!existsSync(VEKTOR_TOPLAMA_DOSYASI)) return null;
+  const p = VektorToplamaDosyasiSchema.safeParse(JSON.parse(oku(VEKTOR_TOPLAMA_DOSYASI)));
+  return p.success ? p.data : null;
+}
+
+/** Toplama bayatlığı: dosyadaki beklenen ≠ bugünkü TS değerlendirmesi olan kayıtlar. */
+export function toplamaFarklari(kayitlar: readonly VektorToplamaKaydi[]): Fark[] {
+  return kayitlar
+    .map((k) => ({ ad: `${k.vektor.tur} · ${k.vektor.ad}`, beklenen: k.beklenen, gelen: degerlendirToplama(k.vektor) }))
+    .filter((x) => !jsonEsit(x.beklenen, x.gelen));
+}
+
+function bolum2toplama(dosya: VektorToplamaDosyasi | null): void {
+  console.log("\n§2''' parmak izi toplama vektörleri (toplama.json, L2-10) ↔ TS (native: cargo tests/toplama.rs)");
+  check("§2'''a toplama vektör dosyası var ve biçimi güncel", !!dosya && dosya.bicim === VEKTOR_TOPLAMA_BICIMI, path.relative(TEKS, VEKTOR_TOPLAMA_DOSYASI));
+  if (!dosya) return;
+  const farklar = toplamaFarklari(dosya.kayitlar);
+  check(
+    "§2'''b ⭐ her toplama kaydının beklenen sonucu BUGÜNKÜ TS seçimiyle aynı (bayat vektör yok)",
+    dosya.kayitlar.length >= 40 && farklar.length === 0,
+    farklar.length ? `${farklar.length} fark — ${farkOzeti(farklar)} · yeniden üret: --vektor-yaz --yalniz-toplama` : `${dosya.kayitlar.length} kayıt`,
+  );
+  const durumlar = new Set(
+    dosya.kayitlar.flatMap((k) => (k.vektor.tur === "toplama" ? Object.values((k.beklenen as { okuma: Record<string, { durum: string }> }).okuma).map((o) => o.durum) : [])),
+  );
+  check("§2'''c seçim üç durumu da kapsar (OKUNDU · DEGER_YOK · OKUNAMADI)", durumlar.size === 3, [...durumlar].join(", "));
+  const platformlar = new Set(dosya.kayitlar.flatMap((k) => (k.vektor.tur === "toplama" ? [String(k.vektor.platform)] : [])));
+  check("§2'''d üç platform + tabloda olmayan platform kayıtlı", ["win32", "linux", "darwin", "null"].every((p) => platformlar.has(p)), [...platformlar].join(", "));
+  const raid = dosya.kayitlar.find((k) => k.vektor.ad.includes("RAID (SAHINSRV"));
+  const raidYol = (raid?.beklenen as { okuma?: { f3?: { yol?: string } } } | undefined)?.okuma?.f3?.yol;
+  check("§2'''e ⭐ RAID (seri genel desende) vektörü UniqueId türünü devreye sokar", raidYol === "f3.disk-kimlik", String(raidYol));
+}
 
 function vektorV2DosyasiOku(): VektorV2Dosyasi | null {
   if (!existsSync(VEKTOR_V2_DOSYASI)) return null;
@@ -443,6 +524,19 @@ function bolum0(): void {
 
   const rustSonda = rustDizgeListesi(rustKaynak("collect.rs"), "WINDOWS_PROBE_LINES");
   check("§0d Windows parmak izi sondası satır satır aynı", WINDOWS_PROBE_LINES.length >= 5 && jsonEsit(rustSonda, [...WINDOWS_PROBE_LINES]), `${WINDOWS_PROBE_LINES.length} satır`);
+  const rustYollar = rustDizgeListesi(rustKaynak("paths.rs"), "PATHS");
+  check(
+    "§0d' parmak izi yol tablosu (platform · etken · tür · kimlik, öncelik sırası) TS = Rust satır satır",
+    FINGERPRINT_PATH_LINES.length >= 25 && jsonEsit(rustYollar, [...FINGERPRINT_PATH_LINES]),
+    rustYollar ? `${FINGERPRINT_PATH_LINES.length} yol` : "paths.rs PATHS bulunamadı",
+  );
+  const sondaYollari = new Set([...WINDOWS_PROBE_LINES.join("\n").matchAll(/Tk(?:Val|Err) '([a-z0-9.-]+)'/g)].map((m) => m[1]));
+  const tabloWin = FINGERPRINT_PATH_LINES.filter((l) => l.startsWith("win32|")).map((l) => l.split("|")[3]);
+  check(
+    "§0d'' Windows sondası tablodaki HER win32 yolunu basar, tabloda olmayan yol basmaz",
+    tabloWin.length > 0 && jsonEsit([...sondaYollari].sort(), [...tabloWin].sort()),
+    `${sondaYollari.size} yol sondada · ${tabloWin.length} tabloda`,
+  );
 
   const anchor = rustKaynak("anchor.rs");
   const capa = gomuluCapa(anchor);
@@ -588,6 +682,17 @@ async function bolum1(): Promise<void> {
       `${v2Islevleri.length} v2 işlevi`,
     );
 
+    const kunyeTam = {
+      ad: "lisans-cekirdek", surum: "0.1.0", abi: NATIVE_ABI, platform: process.platform, arch: process.arch, hedef: "x", profil: "release",
+      testCapasi: true, capaKipi: "uretim", protokolKodlari: [], cekirdekKodlari: [], yerTutucular: [], windowsSondasi: [...WINDOWS_PROBE_LINES],
+      parmakIziYollari: [...FINGERPRINT_PATH_LINES], modulHkdfOneki: "x", modulKidOneki: "x", korumaEntropisi: "x",
+    };
+    const { parmakIziYollari: _yollar, ...kunyeEski } = kunyeTam;
+    check(
+      "§1i ⭐ parmak izi yol tablosunu künyesinde taşımayan eski ABI-3 ikilisi açılmaz (künye sözleşme dışı → YUKLENEMEDI), tam künye açılır",
+      parseNativeIdentity(JSON.stringify(kunyeEski)) === null && parseNativeIdentity(JSON.stringify(kunyeTam)) !== null,
+    );
+
     const aday = nativeCandidates(secenek({ cwd: bos, env: { [NATIVE_PATH_ENV]: sahte } }));
     check("§1f aday sırası: ortam → paket (app/native) → geliştirme (native/lisans-cekirdek/dist)", aday.length === 3 && aday[0] === sahte && aday[1].includes(`${path.sep}native${path.sep}lisans-cekirdek.`) && aday[2].includes(`${path.sep}dist${path.sep}`));
   } finally {
@@ -716,10 +821,11 @@ async function bolum3ile7(dosya: VektorDosyasi | null, dosyaV2: VektorV2Dosyasi 
   console.log(`\n§3 native künyesi — ${path.relative(TEKS, yukle.status.dosya)} · ${kunye.hedef} · ${kunye.profil} · test çapası ${kunye.testCapasi ? "VAR" : "yok"} · çapa ${kunye.capaKipi}`);
   check("§3a künye: arayüz sürümü + platform + mimari bu süreçle aynı", kunye.abi === NATIVE_ABI && kunye.platform === process.platform && kunye.arch === process.arch);
   check(
-    "§3b canlı ayna listeleri TS ile aynı (kodlar · yer tutucular · Windows sondası · HKDF öneki)",
+    "§3b canlı ayna listeleri TS ile aynı (kodlar · yer tutucular · Windows sondası · parmak izi yol tablosu · HKDF öneki)",
     kunye.protokolKodlari.every((c) => (PROTOCOL_ERROR_CODES as readonly string[]).includes(c)) &&
       jsonEsit(kunye.cekirdekKodlari, [...CORE_ERROR_CODES]) &&
       jsonEsit(kunye.windowsSondasi, [...WINDOWS_PROBE_LINES]) &&
+      jsonEsit(kunye.parmakIziYollari, [...FINGERPRINT_PATH_LINES]) &&
       kunye.modulHkdfOneki === MODULE_KEY_HKDF_PREFIX &&
       kunye.modulKidOneki === MODULE_KEY_KID_PREFIX,
   );
@@ -876,6 +982,19 @@ async function bolum8(dosya: VektorDosyasi | null): Promise<void> {
   );
 }
 
+function bolum8toplama(dosya: VektorToplamaDosyasi | null): void {
+  console.log("\n§8 ⭐ KALICI SONDALAR ✓K — parmak izi toplama (L2-10)");
+  const sentetik = 'pub const PATHS: [&str; 2] = [\n    "a $r[1]; b",\n    "c \\" ]; d",\n];\npub const SONRAKI: [&str; 1] = ["x"];';
+  check("§8o ✓K dizge listesi `];` taşıyan dizgede kesilmez, kaçışlı tırnağı aşar", jsonEsit(rustDizgeListesi(sentetik, "PATHS"), ["a $r[1]; b", 'c " ]; d']));
+  if (!dosya || dosya.kayitlar.length === 0) {
+    check("§8p ✓K toplama sondaları için toplama.json gerekli", false);
+    return;
+  }
+  const ilk = dosya.kayitlar.find((k) => k.vektor.tur === "toplama") ?? dosya.kayitlar[0];
+  const bozuk: VektorToplamaKaydi = { vektor: ilk.vektor, beklenen: { ...(ilk.beklenen as object), okuma: null } };
+  check("§8p ✓K toplama bayatlık denetimi mutasyona uğramış beklenenle kırmızı, eşitte susar", toplamaFarklari([bozuk]).length === 1 && toplamaFarklari([ilk]).length === 0);
+}
+
 function bolum8v2(dosya: VektorV2Dosyasi | null): void {
   if (!dosya || dosya.kayitlar.length === 0) {
     check("§8k ✓K v2 sondaları için v2 dosyası gerekli", false);
@@ -959,9 +1078,12 @@ async function main(): Promise<void> {
   const dosyaV2 = vektorV2DosyasiOku();
   await bolum2(dosya, dosyaV2);
   bolum2v2(dosyaV2);
+  const dosyaToplama = vektorToplamaDosyasiOku();
+  bolum2toplama(dosyaToplama);
   await bolum3ile7(dosya, dosyaV2);
   await bolum8(dosya);
   bolum8v2(dosyaV2);
+  bolum8toplama(dosyaToplama);
   await bolum9(dosya, dosyaV2);
   console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız${ATLAMA.ozetEki()} ===`);
   process.exit(fail > 0 ? 1 : 0);

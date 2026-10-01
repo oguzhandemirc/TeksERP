@@ -12,9 +12,11 @@ import {
   isInstallationIdOptional,
   isoToMs,
   signRequest,
+  type FingerprintFactor,
   type RequestPurpose,
   type VendorErrorCode,
 } from "../../lib/license/protocol";
+import { getLicenseCore } from "../../lib/license/native";
 import { installHistoryPath, readInstallHistory } from "../../lib/license/install-history";
 import { ensureInstallationX25519, getLicenseStore, type InstallationKey, type LicenseStoreSnapshot } from "../../lib/license/store";
 import { requestClockSkewMs } from "../../lib/license/request-clock";
@@ -263,6 +265,19 @@ export function buildEnvironment(): {
 
 export function currentFingerprintDigest(): { f1: string | null; f2: string | null; f3: string | null; f4: string | null; f5: string | null } {
   return getMeasuredFingerprint()?.digest ?? { f1: null, f2: null, f3: null, f4: null, f5: null };
+}
+
+/**
+ * Kayıp etkenler (K8): kiranın kabul ettiği kümede değeri olup ölçümde — ≤ 24 sa önbellek dahil — olmayanlar; DR
+ * sınıfında f5 hariç. Karar lisans çekirdeğinden (kural `standart`); kira ya da ölçüm yoksa boş.
+ */
+export function currentLostFactors(): FingerprintFactor[] {
+  const snap = getLicenseSnapshot();
+  const fp = getMeasuredFingerprint();
+  const accepted = snap.lease?.document.parmakIzi;
+  if (!accepted || !fp) return [];
+  const excludeF5 = snap.entitlement?.document.sinif === "DR";
+  return [...getLicenseCore().compareFingerprints(accepted, fp.digest, { rule: "standart", excludeF5 }).lost];
 }
 
 

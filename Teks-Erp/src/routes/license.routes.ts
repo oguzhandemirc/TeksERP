@@ -13,6 +13,7 @@
 import { Router, type NextFunction, type Request, type Response } from "express";
 import { z } from "zod";
 import { readClientVersionHeader } from "../constants/client-info";
+import { HARDWARE_REPORT_REASON_MAX } from "../lib/license/protocol";
 import { verifyToken } from "../middlewares/auth.middleware";
 import { requireAnyPermission, requirePermission } from "../middlewares/rbac.middleware";
 import { AppError } from "../utils/app-error";
@@ -31,6 +32,7 @@ import {
   updateProxySettings,
 } from "../services/license.service";
 import { RecordLicenseAcceptanceSchema, getLicenseAcceptanceView, recordLicenseAcceptance } from "../services/license-acceptance.service";
+import { reportHardwareChange } from "../services/license-hardware.service";
 
 const router = Router();
 
@@ -70,6 +72,7 @@ const ResponseBody = z.object({
 // `kaynak: dosya` — Lisans ekranının "Lisans dosyası yükle"si (portalın uzatma dosyası); yalnız ayak izini ayırır.
 const OfflineResponseBody = ResponseBody.extend({ kaynak: z.enum(["qr", "dosya"]).optional() });
 const TransferBody = z.object({ gerekce: z.string().trim().max(500).nullable().optional() });
+const HardwareReportBody = z.object({ gerekce: z.string().trim().max(HARDWARE_REPORT_REASON_MAX).nullable().optional() });
 // `anaKurulumId` isteğe bağlı: verilmezse satıcı tesisin tek etkin ÜRETİM kurulumunu çıkarır (belirsizse 409 DR_ANA_BELIRSIZ).
 const DrBody = z.object({
   anaKurulumId: z.preprocess((v) => (v === "" || v === null ? undefined : v), z.uuid().optional()),
@@ -373,6 +376,33 @@ router.post("/tasima-talebi", canManage, async (req: Request, res: Response, nex
   try {
     const { gerekce } = TransferBody.parse(req.body ?? {});
     res.status(200).json({ success: true, data: await requestTransfer(gerekce ?? null, req.user?.userId ?? null) });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * @openapi
+ * /api/license/donanim-bildir:
+ *   post:
+ *     tags: [Lisans]
+ *     summary: Donanım değişikliğini bildir (parmak izi yeniden ölçülür, satıcıya imzalı `donanim` isteği)
+ *     description: Güçlü etkenler (F2 · F3 · F4) tutuyorsa satıcı yeni kümeyi kendiliğinden öğrenir ve yeni kira döner; tutmuyorsa talep portal onayına düşer. Her lisans kademesinde açık.
+ *     security: [{ bearerAuth: [] }]
+ *     requestBody:
+ *       required: false
+ *       content:
+ *         application/json:
+ *           schema: { type: object, properties: { gerekce: { type: string, maxLength: 500, nullable: true } } }
+ *     responses:
+ *       200: { description: "{ talepId, durum: BEKLIYOR|ONAYLANDI|REDDEDILDI, kayip, lisans }" }
+ *       409: { description: Etkinleşmemiş kurulum (LICENSE_NOT_ACTIVE) · satıcı reddetti (LICENSE_VENDOR_REJECTED; eski satıcıda vendorCode BULUNAMADI) · yapılandırılmamış }
+ *       502: { description: Satıcıya ulaşılamadı }
+ */
+router.post("/donanim-bildir", canManage, async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { gerekce } = HardwareReportBody.parse(req.body ?? {});
+    res.status(200).json({ success: true, data: await reportHardwareChange(gerekce || null, req.user?.userId ?? null) });
   } catch (err) {
     next(err);
   }

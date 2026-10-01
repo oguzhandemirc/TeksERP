@@ -19,6 +19,7 @@ pub mod jws;
 pub mod local_protect;
 pub mod module_key;
 pub mod outcome;
+pub mod paths;
 pub mod schema;
 
 // Test derlemesinde napi makrosu kayıt kodu üretmez; yapıştırıcı yalnız eklenti derlemesinde.
