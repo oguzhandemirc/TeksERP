@@ -20,6 +20,10 @@
 //      her kaydın beklenen sonucu BUGÜNKÜ TS protokolüyle aynı (bayat vektör yok) · native'in
 //      üretebildiği her kod en az bir beklenende geçiyor (kapsam) · her türde geçer + kalır · her gömülü
 //      çapa vektörü iki kipte de kayıtlı ve kipler ayrışıyor (aynı belge iki kipte farklı sonuç)
+//   §2'' LİSANS v2 vektörleri (`test-vektorleri/protokol-v2.json`, L2-1; native L2-2'de tüketir — o güne dek
+//      `cargo test` yalnız v1 dosyasını okur): biçim · her kaydın beklenen sonucu BUGÜNKÜ TS protokolüyle aynı ·
+//      11 tür · sonuç türlerinde geçer + kalır · yeni beş protokol kodu beklenende · parmak izi kurallarında
+//      sonuç çeşitliliği · gömülü çapa v2 vektörleri iki kipte. Yeniden üret: `--vektor-yaz [--yalniz-v2]`
 //   §3–§7 NATIVE (yoksa "⏭ ATLANDI — native yok", sayıyla; canlı çapa ÖLÇÜLMEDİ, yeşil sayılmaz): künye/ayna
 //      listeleri canlı · ⭐ gömülü çapa CANLI (§3d: derlenmiş her .node'un `builtinAnchor()`ı — yüklenen · `dist` ·
 //      `dist-uretim` · `dist-hazirlik` · paket yolu — KENDİ kipinin TS çapasıyla birebir, dizin kipi doğru; bayat
@@ -34,7 +38,9 @@
 //      denetimi mutasyona uğramış beklenenle kırmızı · kapsam denetimi eksik kodu yakalar ·
 //      regex aynası değişmiş deseni yakalar · TYP aynası değişmiş/kayıtsız türü yakalar · gömülü
 //      çapa blokları üç rustfmt düzeninde de okunur (ikinci anahtar `&[`i alt satıra taşır) · kip süzgeci
-//      öteki kipin kaydını atlar
+//      öteki kipin kaydını atlar · §8k v2 bayatlık mutasyonu yakalar · §8l tek yönlü tür denetimi
+//   L2-1 negatif sondaları (dosya dışı, sha eşit geri alındı): bayi ufuk tavanı · güçlü şartı · iptal denetimi
+//   (protokolde) → §2''b · v2 dosya biçimi → §2''a · v2 dosyasından istek ailesi silindi → §2''c/d/e
 //
 // NEGATİF SONDA — dosya DIŞI mutasyonlar (commit mesajında sayılarla; her biri geri alındı, sha eşit):
 //   bkz. Teks-Erp/docs/BEKCI-HARITASI.md `## lisans` satırı.
@@ -93,6 +99,15 @@ import {
   type VektorDosyasi,
   type VektorKaydi,
 } from "./lib/lisans-cekirdek-vektor";
+import {
+  VEKTOR_V2_BICIMI,
+  degerlendirV2,
+  vektorV2DosyasiUret,
+  vektorV2DosyasiYolu,
+  type VektorV2,
+  type VektorV2Dosyasi,
+  type VektorV2Kaydi,
+} from "./lib/lisans-cekirdek-vektor-v2";
 
 let pass = 0;
 let fail = 0;
@@ -108,6 +123,7 @@ const ATLAMA = atlamaDefteri(() => {
 const TEKS = path.resolve(__dirname, "..");
 const NATIVE_DIZIN = path.join(TEKS, "native", "lisans-cekirdek");
 const VEKTOR_DOSYASI = vektorDosyasiYolu(TEKS);
+const VEKTOR_V2_DOSYASI = vektorV2DosyasiYolu(TEKS);
 const oku = (p: string) => readFileSync(p, "utf8");
 const rustKaynak = (ad: string) => oku(path.join(NATIVE_DIZIN, "src", ad));
 
@@ -212,12 +228,80 @@ function vektorDosyasiOku(): VektorDosyasi | null {
   return p.success ? p.data : null;
 }
 
-async function vektorYaz(): Promise<void> {
-  const dosya = await vektorDosyasiUret(tsLicenseCore, VEKTOR_SIMDI);
+function dosyaMetni(dosya: { bicim: number; not: string; kayitlar: readonly unknown[] }): string {
   const satirlar = dosya.kayitlar.map((k) => JSON.stringify(k));
-  const metin = `{"bicim":${dosya.bicim},"not":${JSON.stringify(dosya.not)},"kayitlar":[\n${satirlar.join(",\n")}\n]}\n`;
-  writeFileSync(VEKTOR_DOSYASI, metin);
-  console.log(`✍️  ${path.relative(TEKS, VEKTOR_DOSYASI)} yazıldı — ${dosya.kayitlar.length} kayıt, ${metin.length} bayt`);
+  return `{"bicim":${dosya.bicim},"not":${JSON.stringify(dosya.not)},"kayitlar":[\n${satirlar.join(",\n")}\n]}\n`;
+}
+
+/** İki dosyayı da yazar; `--yalniz-v2` v1 dosyasına dokunmaz (L2-1: v1 vektörleri değişmedi, yeniden üretmek gürültü). */
+async function vektorYaz(): Promise<void> {
+  if (!process.argv.includes("--yalniz-v2")) {
+    const dosya = await vektorDosyasiUret(tsLicenseCore, VEKTOR_SIMDI);
+    const metin = dosyaMetni(dosya);
+    writeFileSync(VEKTOR_DOSYASI, metin);
+    console.log(`✍️  ${path.relative(TEKS, VEKTOR_DOSYASI)} yazıldı — ${dosya.kayitlar.length} kayıt, ${metin.length} bayt`);
+  }
+  const v2 = vektorV2DosyasiUret(VEKTOR_SIMDI);
+  const metinV2 = dosyaMetni(v2);
+  writeFileSync(VEKTOR_V2_DOSYASI, metinV2);
+  console.log(`✍️  ${path.relative(TEKS, VEKTOR_V2_DOSYASI)} yazıldı — ${v2.kayitlar.length} kayıt, ${metinV2.length} bayt`);
+}
+
+const VektorV2DosyasiSchema = z.object({
+  bicim: z.number(),
+  not: z.string(),
+  kayitlar: z.array(z.object({ vektor: z.custom<VektorV2>((x) => typeof x === "object" && x !== null && "tur" in x), beklenen: z.unknown() })),
+});
+
+function vektorV2DosyasiOku(): VektorV2Dosyasi | null {
+  if (!existsSync(VEKTOR_V2_DOSYASI)) return null;
+  const p = VektorV2DosyasiSchema.safeParse(JSON.parse(oku(VEKTOR_V2_DOSYASI)));
+  return p.success ? p.data : null;
+}
+
+/** v2 bayatlık: dosyadaki beklenen ≠ bugünkü TS değerlendirmesi olan kayıtlar. */
+export function v2Farklari(kayitlar: readonly VektorV2Kaydi[]): Fark[] {
+  return kayitlar
+    .map((k) => ({ ad: `${k.vektor.tur} · ${k.vektor.ad}`, beklenen: k.beklenen, gelen: degerlendirV2(k.vektor) }))
+    .filter((x) => !jsonEsit(x.beklenen, x.gelen));
+}
+
+const V2_YENI_KODLAR = ["SERTIFIKA_IPTAL", "BELGE_ILERI_TARIHLI", "UFUK_TAVANI_ASIMI", "IMZACI_KIMLIK", "ISTEK_YOL"] as const;
+const V2_SONUC_TURLERI = ["hak2", "kira2", "bag2", "iptal", "istek"] as const;
+const V2_TUM_TURLER = [...V2_SONUC_TURLERI, "iptalSec", "iptalGuncel", "parmakIziKarar", "tanima", "ogrenme", "ufukTavani"] as const;
+
+/** Sonuç biçimli türlerde (ok/kod) hem GEÇER hem KALIR kaydı olmayan tür adları. */
+export function v2TekYonluTurler(kayitlar: readonly VektorV2Kaydi[]): string[] {
+  return V2_SONUC_TURLERI.filter((t) => {
+    const k = kayitlar.filter((x) => x.vektor.tur === t);
+    const gecen = k.filter((x) => z.object({ ok: z.literal(true) }).safeParse(x.beklenen).success).length;
+    return gecen === 0 || gecen === k.length;
+  });
+}
+
+function bolum2v2(dosya: VektorV2Dosyasi | null): void {
+  console.log("\n§2'' lisans v2 vektör dosyası (protokol-v2.json) ↔ TS kâhini — native L2-2'de tüketir");
+  check("§2''a v2 vektör dosyası var ve biçimi güncel", !!dosya && dosya.bicim === VEKTOR_V2_BICIMI, path.relative(TEKS, VEKTOR_V2_DOSYASI));
+  if (!dosya) return;
+  const farklar = v2Farklari(dosya.kayitlar);
+  check(
+    "§2''b ⭐ her v2 kaydının beklenen sonucu BUGÜNKÜ TS protokolüyle aynı (bayat vektör yok)",
+    dosya.kayitlar.length >= 120 && farklar.length === 0,
+    farklar.length ? `${farklar.length} fark — ${farkOzeti(farklar)} · yeniden üret: --vektor-yaz --yalniz-v2` : `${dosya.kayitlar.length} kayıt`,
+  );
+  const turler = new Set(dosya.kayitlar.map((k) => k.vektor.tur));
+  const eksikTur = V2_TUM_TURLER.filter((t) => !turler.has(t));
+  check("§2''c her v2 ailesi dosyada (11 tür)", eksikTur.length === 0, eksikTur.join(", ") || `${turler.size} tür`);
+  const tekYonlu = v2TekYonluTurler(dosya.kayitlar);
+  check("§2''d her sonuç türünde hem GEÇER hem KALIR kayıt", tekYonlu.length === 0, tekYonlu.join(", ") || `${V2_SONUC_TURLERI.length} tür`);
+  const kodlar = new Set(dosya.kayitlar.map((k) => z.object({ code: z.string() }).safeParse(k.beklenen).data?.code).filter((c): c is string => !!c));
+  const eksikKod = V2_YENI_KODLAR.filter((c) => !kodlar.has(c));
+  check("§2''e yeni protokol kodlarının her biri en az bir beklenende", eksikKod.length === 0, eksikKod.join(", ") || `${kodlar.size} kod`);
+  const karar = (kural: string) => new Set(dosya.kayitlar.filter((k) => k.vektor.tur === "parmakIziKarar" && JSON.stringify(k.beklenen).includes(`"rule":"${kural}"`)).map((k) => z.object({ result: z.string() }).safeParse(k.beklenen).data?.result));
+  check("§2''f parmak izi: standart kuralda ESLESTI+ESLESMEDI, zayıf kuralda üç sonuç, v1 satırları da var", karar("standart").size === 2 && karar("zayif").size === 3 && karar("v1").size >= 2);
+  const kipli = dosya.kayitlar.filter((k) => "kip" in k.vektor && k.vektor.kip !== undefined);
+  const kipler = new Set(kipli.map((k) => ("kip" in k.vektor ? k.vektor.kip : undefined)));
+  check("§2''g gömülü çapa v2 vektörleri iki kipte de kayıtlı", kipli.length >= 4 && kipler.size === 2, `${kipli.length} kayıt`);
 }
 
 /** `anchor.rs`te kipin blok adları ve blokların önündeki `cfg` kapısı (öteki kipin baytı ikiliye girmesin). */
@@ -681,6 +765,17 @@ async function bolum8(dosya: VektorDosyasi | null): Promise<void> {
   );
 }
 
+function bolum8v2(dosya: VektorV2Dosyasi | null): void {
+  if (!dosya || dosya.kayitlar.length === 0) {
+    check("§8k ✓K v2 sondaları için v2 dosyası gerekli", false);
+    return;
+  }
+  const ilk = dosya.kayitlar[0];
+  check("§8k ✓K v2 bayatlık denetimi mutasyona uğramış beklenenle kırmızı verir", v2Farklari([{ vektor: ilk.vektor, beklenen: { ok: false, code: "SAHTE_KOD" } }]).length === 1);
+  const tekGecer = dosya.kayitlar.filter((k) => k.vektor.tur !== "bag2" || z.object({ ok: z.literal(true) }).safeParse(k.beklenen).success);
+  check("§8l ✓K tek yönlü tür denetimi KALIR kaydı olmayan türü yakalar (bag2 retleri çıkarılınca)", v2TekYonluTurler(tekGecer).includes("bag2") && !v2TekYonluTurler(dosya.kayitlar).includes("bag2"));
+}
+
 /**
  * §9 KİP ÇAPRAZ SONDASI: gerçek üretim ve hazırlık ikilileri (paketin taşıdığı derlemeler) kendi kiplerinin gömülü
  * çapa vektörlerini koşar; dışarıdan çapa veremediğimiz için ölçüm yalnız gömülü çapayladır — sorulan da tam olarak o.
@@ -731,8 +826,11 @@ async function main(): Promise<void> {
   await bolum1();
   const dosya = vektorDosyasiOku();
   await bolum2(dosya);
+  const dosyaV2 = vektorV2DosyasiOku();
+  bolum2v2(dosyaV2);
   await bolum3ile7(dosya);
   await bolum8(dosya);
+  bolum8v2(dosyaV2);
   await bolum9(dosya);
   console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız${ATLAMA.ozetEki()} ===`);
   process.exit(fail > 0 ? 1 : 0);
