@@ -154,12 +154,15 @@ export async function sahteBulutBaslat(x: string): Promise<SahteBulut> {
   const gorulenPaket = new Map<string, unknown>();
   const mod: SahteBulut["mod"] = { ret: new Set(), istenenTam: new Set(), hata500: 0, bekleyenRaporlar: [], ufukTarihi: {}, saatFarkiMs: 0, bildirilenSaatFarkiMs: null };
 
-  /** null = imza geçerli; aksi hâlde protokol kodu (bulut `ISTEK_*` kodunu olduğu gibi geçirir). */
-  const dogrula = (req: http.IncomingMessage, govde: Buffer): string | null => {
+  /**
+   * null = imza geçerli; aksi hâlde protokol kodu (bulut `ISTEK_*` kodunu olduğu gibi geçirir). `yol`: isteği alan uç —
+   * gerçek bulut gibi verilir (`authenticateFactory` `SYNC_PATHS` sabiti), imzalı `yol` başka uca aitse ISTEK_YOL.
+   */
+  const dogrula = (req: http.IncomingMessage, govde: Buffer, yol: string): string | null => {
     const token = req.headers[REQUEST_HEADER.toLowerCase()];
     const kimlik = readRequestIdentity(token);
     if (!kimlik.ok) return kimlik.code;
-    const v = verifyRequest(token, { publicKeyX: x, body: govde, nowMs: Date.now() + mod.saatFarkiMs, purposes: ["esitle"], installationId: kimlik.value.installationId });
+    const v = verifyRequest(token, { publicKeyX: x, body: govde, nowMs: Date.now() + mod.saatFarkiMs, purposes: ["esitle"], installationId: kimlik.value.installationId, path: yol });
     return v.ok ? null : v.code;
   };
 
@@ -222,7 +225,7 @@ export async function sahteBulutBaslat(x: string): Promise<SahteBulut> {
       const govde = await govdeOku(req);
       const yol = req.url ?? "";
       const gzip = req.headers["content-encoding"] === "gzip";
-      const red = dogrula(req, govde);
+      const red = dogrula(req, govde, yol.split("?")[0]);
       const imza = red === null;
       const kaydet = (durum: number, paketId: string | null = null): void => {
         istekler.push({ yol, imza, gzip, paketId, durum });

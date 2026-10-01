@@ -180,7 +180,7 @@ async function consume(res: IncomingMessage, signal: AbortSignal): Promise<void>
 async function openStream(base: string, licenseId: string, signal: AbortSignal, nowMs: number): Promise<IncomingMessage> {
   const store = getLicenseStore();
   if (!store?.key) throw new EgressError("EGRESS_NETWORK", "lisans deposu hazır değil");
-  const token = signRequest({ installationId: licenseId, purpose: "zil", body: "", key: { privateKey: store.key.privateKey, nowMs } });
+  const token = signRequest({ installationId: licenseId, purpose: "zil", body: "", key: { privateKey: store.key.privateKey, nowMs }, path: ENDPOINTS.DOORBELL });
   return egressStream(`${base}${ENDPOINTS.DOORBELL}`, {
     method: "GET",
     headers: { accept: "text/event-stream", "cache-control": "no-cache", [REQUEST_HEADER]: token },

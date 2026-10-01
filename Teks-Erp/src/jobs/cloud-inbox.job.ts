@@ -14,7 +14,7 @@ import { egressTransport, requireReady, signedHeaders, type VendorTransport } fr
 import { cloudEligibility, inboxWritesAllowed } from "../cloud-sync/eligibility";
 import { getCloudUrl } from "../cloud-sync/cloud-url";
 import { INBOX_PULL_MAX } from "../cloud-sync/inbox-wire";
-import { AccountsResponseSchema, ENVELOPE_VERSION, InboxClaimResponseSchema, SYNC_PATHS, type InboxOutcome } from "../cloud-sync/wire";
+import { AccountsResponseSchema, ENVELOPE_VERSION, InboxClaimResponseSchema, SYNC_PATHS, type InboxOutcome, type SyncPath } from "../cloud-sync/wire";
 import { processInboxMessage } from "../services/cloud-inbox.service";
 import { recordCloudAccounts, recordInboxRun, resolveActivePatronCloudUserId } from "../services/patron-cloud.service";
 
@@ -52,12 +52,12 @@ let lastRunAt = 0;
 
 type CloudCall = { ok: true; json: unknown } | { ok: false; code: string };
 
-async function cloudPost(base: string, path: string, body: unknown, transport: VendorTransport): Promise<CloudCall> {
+async function cloudPost(base: string, path: SyncPath, body: unknown, transport: VendorTransport): Promise<CloudCall> {
   const ctx = requireReady();
   const text = JSON.stringify(body);
   let res: { status: number; body: string };
   try {
-    res = await transport({ url: `${base}${path}`, method: "POST", headers: signedHeaders(ctx, "esitle", text), body: text });
+    res = await transport({ url: `${base}${path}`, method: "POST", headers: signedHeaders(ctx, "esitle", text, { path }), body: text });
   } catch (err) {
     return { ok: false, code: (err as { code?: string }).code ?? "EGRESS_NETWORK" };
   }

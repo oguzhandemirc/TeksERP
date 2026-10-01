@@ -15,6 +15,7 @@ import {
   type LicenseResponse,
 } from "../lib/license/protocol";
 import { getLicenseStore, saveLease, saveLicenseIdentity, saveTransfer } from "../lib/license/store";
+import { capabilitiesField } from "../lib/license/capabilities";
 import { measureFingerprint } from "../lib/license/fingerprint";
 import { cacheFromRecordCopy, cacheToRecordCopy } from "../lib/license/fingerprint-cache";
 import { setFingerprintCacheCopy, startAccumulationForLease } from "../lib/license/record-writer";
@@ -125,6 +126,7 @@ export async function buildPollBody(nowMs: number = Date.now()): Promise<ReturnT
     gozlem: peekObservationCounters(),
     // Kurulum kaydı yoksa alan hiç gitmez: eski satıcı KATI şemayla tanımadığı anahtarı reddeder.
     ...installRecordsField(),
+    ...capabilitiesField(),
     ...pollV2Fields(snap),
   });
 }

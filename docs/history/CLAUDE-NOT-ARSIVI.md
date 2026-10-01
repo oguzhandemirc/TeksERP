@@ -14413,7 +14413,7 @@ Negatif sondalar (tetik md5(prosrc) ve dosya md5 ile geri alındı):
 
 ## 2026-10-01 — L2-7 G4 tüketimi (fabrika): iptal belgesi deposu + DB kopyası, kabulde iptal seçimi ve ret erteleme, iptal pini + IPTAL_BELGESI_KAYIP, HAK "şimdi"si imzalı kira saatini kapsar, köprü iptal/şimdi geçirir, detay zinciri [ÇEKİRDEK]
 
-**Bağlam.** Protokol ve çekirdek (TS + native) G4 zincirini L2-1/L2-2'de taşıyordu (`verifyEntitlement(…,{revocation,nowMs})`, `verifyLease(…,{revocation})`, `verifyRevocation`); satıcı L2-4'ten beri iptal belgesini HER yanıta koyuyor ve kiraya `iptalSira` basıyor. Fabrika bunları TÜKETMİYORDU: köprü (`core-bridge.ts`) seçenek geçirmiyor, durum ve kabul iptalsiz/şimdisiz doğruluyordu. Dilim iki parça: A motor (bu not), B tel (yetenekler · istek yolu · donanım zarfı — sonraki ajan bu nota ekler).
+**Bağlam.** Protokol ve çekirdek (TS + native) G4 zincirini L2-1/L2-2'de taşıyordu (`verifyEntitlement(…,{revocation,nowMs})`, `verifyLease(…,{revocation})`, `verifyRevocation`); satıcı L2-4'ten beri iptal belgesini HER yanıta koyuyor ve kiraya `iptalSira` basıyor. Fabrika bunları TÜKETMİYORDU: köprü (`core-bridge.ts`) seçenek geçirmiyor, durum ve kabul iptalsiz/şimdisiz doğruluyordu. Dilim iki parça: A motor (aşağıda ilk kararlar), B tel (yetenekler · istek yolu · donanım zarfı — notun sonundaki B bölümleri).
 
 **Karar — iptal belgesinin iki kopyası.** [ÇEKİRDEK] `LICENSE_DIR/iptal.jws` (tembel okunur, yol + mtime + boyut önbelleği; yalnız ENOENT "yok", başka hata OKUNAMADI) ve ayrılmış sistem ayarı `license.revocation` = `{v:1, jws}` (ham ayar ucundan yazılamaz; tek yazıcı `license-revocation.service`, `license.trace` satırına girilmedi). Etkin belge iki kopyanın çekirdekte doğrulanmış en yüksek sıralısı; doğrulanamayan kopya yok sayılır. Eksik/düşük kopya ötekinden sessizce onarılır (açılış + saatlik DB okumasında; okunamayan dosyaya ve okunamayan DB'ye dokunulmaz). Benimseme yalnız eldekinden YÜKSEK sıralı doğrulanmış belgede; insana görünen ayak izi `LICENSE_REVOCATION_ADOPTED` (sıra · kayıt sayısı · kaynak) yalnız gerçek benimsemede — onarımda yazılmaz, karar kaynağı değildir.
 
@@ -14429,4 +14429,56 @@ Negatif sondalar (tetik md5(prosrc) ve dosya md5 ile geri alındı):
 
 **Ölçüm.** Bekçiler (`tekserp_l27_test`): `test_lisans_motoru` 172/0 (yeni §31a–§31k) · `test_lisans_durumu` 180/0 (yeni §28a–j) · `test_lisans_native_kahin` 93/0 (yeni §10a–b; native test çapalı ikiliyle TS = native) · `lisans` paketinin 17 dosyası 17/17 · `bulut` 9/9 · `test_audit_muafiyeti` 19/0 · `test_audit_labels` 22/0 · `test_settings_password` 134/0 · tarayıcılar (`type_assertion_ratchet` · `ortam_bagimliligi_tavani` · `devralinan_tavan` · `audit_okuma_kaynagi` · `harita_sonda_atfi` · `kural_bekci_atfi`) yeşil · tsc Teks-Erp (src + scripts) ve Electron temiz · Electron lisans vitest 30/30. Negatif sonda 19 (hepsi KAYNAK dosyada mutasyon, `git hash-object` ile uygulandı/geri alındı, geri alınınca yeşil): S1 köprü seçenek geçirmez → kâhin §10a/b · S2–S16 motor/durum (tablo `Teks-Erp/docs/BEKCI-HARITASI.md` `## lisans`) · E1–E3 panel kartı. S14 (gereken sıra ≥ 1) eski satıcı yanıtının sıfır farkını §31a ile ve dokuz eski motor bölümüyle birlikte ısırdı.
 
-**Açık (B ajanına).** Yetenek bildirimi (`capabilities.ts`, `iptal` + `hak-ara` yalnız canlı çekirdek sondasıyla) · istek yolunun imzaya girmesi · çevrimdışı donanım zarfı. A'nın B için hazır API'leri: `revocation-store.ts` (`revocationHolding` · `verifyHeldRevocation` · `adoptRevocation` · `revokesCertificate`), `license-revocation.service.ts` (`revocationOffer` · `adoptOffered` · `adoptFromRejected` · `refreshLicenseRevocation`), köprü `coreVerifyEntitlement/Lease(token, roots, core?, options?)`, `helpers/license-accept.helper.ts` `verifyResponseDocuments`.
+**B (tel) — bağlam.** A'nın motoru iptal belgesini ve şimdiyi tüketiyordu ama tel katmanı eksikti: hiçbir gövde `yetenekler` taşımıyordu (satıcı bu yüzden ara imzalı HAK'ı ve kapanış kirasını bu kuruluma hiç vermiyordu), `signRequest({path})` destekliyken hiçbir çağrı yol imzalamıyordu, çevrimdışı zarf donanım amacını tanımıyordu (L2-11 devri).
+
+**Karar — yetenek bildirimi.** [ÇEKİRDEK] (yönetici kararı) Tek kurucu `lib/license/capabilities.ts`: `odenmis-tarih` + `parmak-izi-v2` HER ZAMAN — `parmak-izi-v2` için ölçüldü: L2-6 `runtime.ts` (kira `parmakIziKurali` → `getLicenseCore().compareFingerprints(…, { rule })`, kararın kuralı `LicenseStateInput.parmakIziKurali` → `state-rules-trace.ts` merdiveni) kiradaki kuralı çekirdeğe veriyor; `odenmis-tarih` için P `state-rules-time.ts`te tüketiliyor (satıcıda aynı yetenek kapanış kirasını da açar — fabrika onu K3 yaptırımlı sıradan kira olarak işler, ayrı `kapanis` dalı yok). `hak-ara` + `iptal` YALNIZ çekirdek canlıysa: kaynağı `yok` değil VE `verifyRevocation("x")` ile `verifyEntitlement("x")` biçimsiz belgeyi KENDİ protokol koduyla reddediyor (`CEKIRDEK_YOK` değil). Sıra `LICENSE_CAPABILITIES` sırası. Küme süreç başına BİR KEZ hesaplanır ve dondurulur: çekirdek süreç içinde düşse de liste değişmez (yoklamadan yoklamaya düşen yetenek satıcıda `YETENEK_DUSUSU` açardı). Alan yalnız protokolde `yetenekler` taşıyan iki gövdeye girer (yoklama + etkinleştirme; DR · taşıma · donanım şemasında alan yok, satıcı kurulum kaydını okur), liste boşsa alan hiç gitmez. Eski satıcıya geriye uyum: yeteneği yok sayan satıcının yanıtı (kök HAK, iptalsiz) aynen kabul; KATI şemalı eski satıcı alanı reddeder — yayın sırası L2-6'dan beri "satıcı önce".
+
+**Karar — istek yolu imzada.** [ÇEKİRDEK] `signedHeaders(ctx, amac, gövde, { path, nowMs })` yolu imzaya koyar (`vendorPost` kendi `ENDPOINTS` yolunu verir), zil `/v1/zil`, zarf HER amaçta `/v1/cevrimdisi` (QR sayfası ve panel aktarması yalnız oraya gönderir). Patron bulutu kanalı ÖLÇÜLDÜ: `patron/sunucu` `authenticateFactory` `verifyRequest`e `path: SYNC_PATHS.X` verir (`factory-routes.ts` her uçta `authenticated(ctx, req, SYNC_PATHS.X)`, router `/v1` altında), fabrika `cloudPost` ve gelen kutusu işi aynı sabiti (bayt-eşit ayna `cloud-sync/wire/esitleme.ts`) URL'ye ve şimdi imzaya koyar → eşleşiyor, yol bu kanala da kondu (`cloudPost` yolu `SyncPath` tipinde). İstek şeması gevşek (`z.object`): `yol` tanımayan eski satıcı/bulut alanı yok sayar, geriye uyum bozulmaz.
+
+**Karar — çevrimdışı donanım zarfı (L2-11 devri).** [ÇEKİRDEK] Satıcının `/v1/cevrimdisi` biçimi ÖLÇÜLDÜ (`public-app.ts offline`): zarftaki imzalı isteğin amacı `donanim` ise `handleHardwareReport` (yol `/v1/cevrimdisi`), yanıt doğrudan `HardwareReportResponse` (`{v, talepId, durum, lisans}`; `hardware.service.ts`). Fabrika: `buildOfflineRequest({amac: "donanim", gerekce})` etkin kurulum ister, parmak izini YENİDEN ölçer ve çevrimiçi bildirimle aynı kurucudan (`buildHardwareReportBody`, kayıp etkenler `currentLostFactors`) imzalı `donanim` isteği üretir; rota Zod enum'u `donanim` + `gerekce`. `acceptOfflineResponse` önce `HardwareReportResponseSchema` dener: `ONAYLANDI` → içteki lisans `acceptLicenseResponse(…, "donanim")`; `BEKLIYOR` → 409 `LICENSE_HARDWARE_PENDING`, `REDDEDILDI` → 409 `LICENSE_HARDWARE_REJECTED` (açık Türkçe cümle, lisansa dokunulmaz); ayak izine `donanimTalebi`. Tablet süzgeci JSON yanıtı olduğu gibi iletir (değişiklik gerekmedi). Panel: Çevrimdışı (QR) kartında etkin kurulumda "Donanım değişikliği isteği oluştur" (gerekçe alanıyla), aynı QR/yanıt kalıbı; yoklama hata etiketlerine `ISTEK_YOL`. Panel aktarması (relay) bu dilimde donanım amacını sunmaz.
+
+**Ölçüm (B).** Bekçiler (`tekserp_l27_test`): `test_lisans_motoru` 183/0 (yeni §32a–§32k) · `test_lisans_yoklama_allowlist` 22/0 (yeni §1g) · `test_lisans_native_kahin` 95/0 (yeni §11a–b; native ikiliyle TS = native) · `test_lisans_kapisi` 90/0 (yeni §11g) · `lisans` paketi 17/17 dosya · `bulut` paketi 9/9 · tsc Teks-Erp (src + scripts) ve Electron temiz · Electron lisans vitest 15 dosya 85/85 (yeni `LicenseOfflineCard.test.tsx` 4/4). Sahte satıcı artık `verifyRequest`e isteği alan ucun yolunu verir, gerçek satıcı gibi `ISTEK_*`/`JWS_*` kodunu geçirir ve `/v1/cevrimdisi` zarfını amaca göre yönlendirir; bulut sahteleri de yolu doğrular ve "geçerli imza"yı imzada ucun yolu olmasına bağlar.
+
+**Negatif sonda (B).** 18 (hepsi KAYNAK dosyada mutasyon, `git hash-object` ile uygulandı/geri alındı, sha eşit, geri alınınca yeşil; çöken koşum 0 — S24/S28 ilk turda §32'yi istisnayla kesiyordu, §32j kabul hatasını kodla ölçecek biçimde sıkılaştırılıp yeniden ölçüldü): S17 canlı sonda kalktı → motor §32b + kâhin §11a · S18 küme kararsız → §32c · S19 yoklamada yetenek yok → §32a + allowlist §1g · S20 etkinleştirmede yok → §32a · S21 `parmak-izi-v2` her zaman bildirilmez → §32a/b + §1g · S22 satıcı isteği yolsuz → §32e/f · S23 zil yolsuz → §32e · S24 zarf donanım ucuna imzalı → §32g/h/i/j · S25 `cloudPost` yolsuz → `test_bulut_hesap_kilitle` §2a · S26 gelen kutusu başka ucun yolunu imzalar → `test_bulut_gelen_kutusu` "sıra" + 3 · S27 rota amaç listesinden `donanim` düştü → kapı §11g ×2 · S28 donanım yanıtı tanınmaz → §32h/i/j · S29 onaylı kiranın kaynağı `donanim` değil → §32j · S30 zarf yeniden ölçmez → §32g · S31 BEKLIYOR yanlış kodla → §32h · E4 panel donanım düğmesi çizilmez → vitest 2 ❌ · E5 gerekçe gönderilmez → 1 ❌ · E6 `ISTEK_YOL` etiketi silindi → 1 ❌. Tablo `Teks-Erp/docs/BEKCI-HARITASI.md` `## lisans`.
+
+**Sonda tablosu (A + B).** Her satır: kaynak dosyada mutasyon → bekçi KIRMIZI → özgün bayt geri yazıldı → `git hash-object` eşit → yeşil.
+
+| Sonda | Kaynak | Mutasyon | Kırmızı | sha eşit |
+|---|---|---|---|---|
+| S1 | `core-bridge.ts` | köprü iptal/şimdi seçeneklerini çekirdeğe geçirmez | kâhin §10a/b | ✓ |
+| S2 | `license-sync.service.ts` | yeni kirada belge benimsenmez | motor §31b/c/d/d2/e3/j | ✓ |
+| S3 | `license-sync.service.ts` | aynı-kira tekrarında benimsenmez | §31k | ✓ |
+| S4 | `revocation-store.ts` | düşük/eşit sıra kapısı kalktı | §31c/d/d2 | ✓ |
+| S5 | `revocation-store.ts` | eksik/düşük kopya onarılmaz | §31d/d2 | ✓ |
+| S6 | `record-builder.ts` | pin yazılmaz | §31b/e/e3/j | ✓ |
+| S7 | `state-rules-revocation.ts` | değerlendirici susar | durum §28b/c/e/f/h + §31e/e2 | ✓ |
+| S8 | `state-rules-trace.ts` | IPTAL_BELGESI_KAYIP birikime girmez | durum §28b + §31e | ✓ |
+| S9 | `license-revocation.service.ts` | retteki ALT-iptali de benimsenir | §31g/i | ✓ |
+| S10 | `license-revocation.service.ts` | retteki belge hiç benimsenmez | §31f | ✓ |
+| S11 | `license-accept.helper.ts` | kabulde kira saati şimdiye girmez | §31h | ✓ |
+| S12 | `state.ts` | durumda kira saati şimdiye girmez | §31h | ✓ |
+| S13 | `license-sync.service.ts` | doğrulanmamış iptal çekirdeğe geçer | §31i | ✓ |
+| S14 | `state-rules-revocation.ts` | gereken sıra ≥ 1 (eski satıcıya da bulgu) | durum §28g + §31a + §2d/§12e/§26j/§27g/§28e/§29e/§30a/§30f | ✓ |
+| S15 | `license-chain-view.helper.ts` | detay KAYIP göstermez | §31e | ✓ |
+| S16 | `runtime.ts` | durum iptalsiz doğrular | §31f | ✓ |
+| E1 | `labels.ts` (panel) | IPTAL_BELGESI_KAYIP etiketi silindi | LicenseEntitlementCard 1 ❌ | ✓ |
+| E2 | `LicenseEntitlementCard.tsx` | imzacı satırı kalktı | 1 ❌ | ✓ |
+| E3 | `LicenseEntitlementCard.tsx` | zincir yokken satır "—" ile çizildi | 1 ❌ | ✓ |
+| S17 | `capabilities.ts` | canlı çekirdek sondası kalktı | motor §32b + kâhin §11a | ✓ |
+| S18 | `capabilities.ts` | küme her çağrıda yeniden hesaplanır | §32c | ✓ |
+| S19 | `license-sync.service.ts` | yoklama gövdesine yetenek girmez | §32a + allowlist §1g | ✓ |
+| S20 | `license.service.ts` | etkinleştirme gövdesine yetenek girmez | §32a | ✓ |
+| S21 | `capabilities.ts` | `parmak-izi-v2` her zaman bildirilmez | §32a/b + §1g | ✓ |
+| S22 | `license-wire.helper.ts` | satıcı isteği yolu imzalamaz | §32e/f | ✓ |
+| S23 | `license-doorbell.job.ts` | zil yolu imzalamaz | §32e | ✓ |
+| S24 | `license.service.ts` | zarf `/v1/donanim` yoluyla imzalanır | §32g/h/i/j | ✓ |
+| S25 | `cloud-client.ts` | bulut isteği yolu imzalamaz | bulut_hesap_kilitle §2a | ✓ |
+| S26 | `cloud-inbox.job.ts` | gelen kutusu başka ucun yolunu imzalar | bulut_gelen_kutusu "sıra" + 3 | ✓ |
+| S27 | `license.routes.ts` | amaç listesinden `donanim` düşer | kapı §11g ×2 | ✓ |
+| S28 | `license.service.ts` | donanım yanıtı tanınmaz | §32h/i/j | ✓ |
+| S29 | `license.service.ts` | onaylı kiranın kaynağı `donanim` değil | §32j | ✓ |
+| S30 | `license.service.ts` | zarf parmak izini yeniden ölçmez | §32g | ✓ |
+| S31 | `license.service.ts` | BEKLIYOR yanlış kodla düşer | §32h | ✓ |
+| E4 | `LicenseOfflineCard.tsx` | donanım düğmesi çizilmez | LicenseOfflineCard 2 ❌ | ✓ |
+| E5 | `LicenseOfflineCard.tsx` | gerekçe gönderilmez | 1 ❌ | ✓ |
+| E6 | `labels.ts` (panel) | `ISTEK_YOL` etiketi silindi | 1 ❌ | ✓ |

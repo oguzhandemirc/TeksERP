@@ -62,9 +62,11 @@ const canView = requireAnyPermission("license:view", "license:manage");
 const canManage = requirePermission("license:manage");
 
 const ActivateBody = z.object({ kod: z.string().trim().min(12).max(40) });
+// `donanim`: donanım değişikliği bildirimi (K8) zarfla — internetsiz kurulum da donanımını QR/dosya yolundan bildirir.
 const OfflineRequestInput = z.object({
-  amac: z.enum(["yokla", "etkinlestir"]).default("yokla"),
+  amac: z.enum(["yokla", "etkinlestir", "donanim"]).default("yokla"),
   kod: z.string().trim().max(40).optional(),
+  gerekce: z.string().trim().max(HARDWARE_REPORT_REASON_MAX).nullable().optional(),
 });
 const ResponseBody = z.object({
   yanit: z.union([z.string().min(10).max(64 * 1024), z.record(z.string(), z.unknown())]),
@@ -247,7 +249,7 @@ function offlineRequestHandler(source: "body" | "query") {
     try {
       const input = OfflineRequestInput.parse((source === "body" ? req.body : req.query) ?? {});
       if (source === "query") res.setHeader("Deprecation", "true");
-      res.status(200).json({ success: true, data: await buildOfflineRequest({ amac: input.amac, kod: input.kod ?? null }) });
+      res.status(200).json({ success: true, data: await buildOfflineRequest({ amac: input.amac, kod: input.kod ?? null, gerekce: input.gerekce || null }) });
     } catch (err) {
       next(err);
     }
@@ -265,7 +267,7 @@ function offlineRequestHandler(source: "body" | "query") {
  *       required: false
  *       content:
  *         application/json:
- *           schema: { type: object, properties: { amac: { type: string, enum: [yokla, etkinlestir] }, kod: { type: string } } }
+ *           schema: { type: object, properties: { amac: { type: string, enum: [yokla, etkinlestir, donanim] }, kod: { type: string }, gerekce: { type: string, maxLength: 500, nullable: true } } }
  *     responses:
  *       200: { description: "{ zarf, gecerlilikSonu, qrAdresi, istekGovdesi, hedefUrl }" }
  *   get:
@@ -274,7 +276,7 @@ function offlineRequestHandler(source: "body" | "query") {
  *     summary: "ESKİ biçim — kod URL'de; POST'a geçildikten bir sürüm sonra kaldırılır"
  *     security: [{ bearerAuth: [] }]
  *     parameters:
- *       - { in: query, name: amac, required: false, schema: { type: string, enum: [yokla, etkinlestir] } }
+ *       - { in: query, name: amac, required: false, schema: { type: string, enum: [yokla, etkinlestir, donanim] } }
  *       - { in: query, name: kod, required: false, schema: { type: string } }
  *     responses:
  *       200: { description: "{ zarf, gecerlilikSonu, qrAdresi, istekGovdesi, hedefUrl }" }
@@ -303,6 +305,7 @@ router.get("/cevrimdisi-istek", canManage, offlineRequestHandler("query"));
  *     responses:
  *       200: { description: Kabul edildi — güncel ayrıntı }
  *       400: { description: İmza/bağ doğrulanamadı (LICENSE_RESPONSE_INVALID) }
+ *       409: { description: "Donanım bildirimi yanıtı onay bekliyor (LICENSE_HARDWARE_PENDING) ya da reddedildi (LICENSE_HARDWARE_REJECTED)" }
  */
 router.post("/cevrimdisi-yanit", canManage, async (req: Request, res: Response, next: NextFunction) => {
   try {
@@ -325,7 +328,7 @@ router.post("/cevrimdisi-yanit", canManage, async (req: Request, res: Response, 
  *       required: false
  *       content:
  *         application/json:
- *           schema: { type: object, properties: { amac: { type: string, enum: [yokla, etkinlestir] }, kod: { type: string } } }
+ *           schema: { type: object, properties: { amac: { type: string, enum: [yokla, etkinlestir, donanim] }, kod: { type: string }, gerekce: { type: string, maxLength: 500, nullable: true } } }
  *     responses:
  *       200: { description: "{ istekGovdesi, hedefUrl, gecerlilikSonu }" }
  *   get:
@@ -334,7 +337,7 @@ router.post("/cevrimdisi-yanit", canManage, async (req: Request, res: Response, 
  *     summary: "ESKİ biçim — kod URL'de; POST'a geçildikten bir sürüm sonra kaldırılır"
  *     security: [{ bearerAuth: [] }]
  *     parameters:
- *       - { in: query, name: amac, required: false, schema: { type: string, enum: [yokla, etkinlestir] } }
+ *       - { in: query, name: amac, required: false, schema: { type: string, enum: [yokla, etkinlestir, donanim] } }
  *       - { in: query, name: kod, required: false, schema: { type: string } }
  *     responses:
  *       200: { description: "{ istekGovdesi, hedefUrl, gecerlilikSonu }" }

@@ -35,6 +35,10 @@
 //      varken IPTAL_BELGESI_KAYIP (birikime girer) · ARA'sı iptal edilen HAK gözlemde sıfır fark, kira yaşar · reddedilen
 //      yanıtta ALT-iptali ertelenir · saati geri fabrika taze HAK'ı kabul eder · biçimsiz iptal kirayı düşürmez · eski satıcı
 //      yanıtı sıfır fark · detay zinciri
+//   ⭐ tel (L2-7 B, §32): yetenekler yoklama + etkinleştirme gövdesinde · çekirdek yokken yalnız iki · küme süreçte kararlı ·
+//      eski satıcı yeteneği yok sayar · her imzalı istek kendi ucunun yolunu imzalar, yanlış uca 401 ISTEK_YOL · çevrimdışı
+//      donanım zarfı (parmak izi yeniden okunur, /v1/cevrimdisi): BEKLIYOR ve REDDEDILDI reddedilir, ONAYLANDI kira kabulü ·
+//      etkinleşmemiş kurulum zarf üretmez
 //
 // NEGATİF SONDA — dosya DIŞI mutasyon (cp + shasum ile birebir geri alındı; sonuçlar commit
 // mesajında): M1 persistAccumulation bozuk kayıtta sıfırdan başlatır · M2 kabulde kurulum
@@ -63,6 +67,10 @@
 // benimsenir (§31g/i) · S10 retteki belge hiç benimsenmez (§31f) · S11 kabulde kira saati şimdiye girmez (§31h) · S12 durumda
 // kira saati şimdiye girmez (§31h) · S13 doğrulanmamış iptal çekirdeğe geçer (§31i) · S14 eski satıcıya da bulgu (§31a + 8
 // eski bölüm) · S15 detay KAYIP göstermez (§31e) · S16 durum iptalsiz doğrular (§31f) — 15'i de kırmızı, geri alınınca yeşil.
+// L2-7 B (§32; KAYNAK dosyada mutasyon, sha eşit geri alındı): S17 canlı sonda kalktı (§32b) · S18 küme kararsız (§32c) ·
+// S19 yoklamada yetenek yok (§32a) · S20 etkinleştirmede yok (§32a) · S21 parmak-izi-v2 düştü (§32a/b) · S22 satıcı isteği
+// yolsuz (§32e/f) · S23 zil yolsuz (§32e) · S24 zarf donanım ucuna imzalı (§32g/h/i/j) · S28 donanım yanıtı tanınmaz
+// (§32h/i/j) · S29 onaylı kiranın kaynağı (§32j) · S30 zarf yeniden ölçmez (§32g) · S31 BEKLIYOR kodu (§32h) — 12'si kırmızı.
 // ⭐ KALICI SONDA ✓K1 (her koşumda): bilinmeyen kod genel mesaja düşer — §8a'nın "her kodun kendi
 // mesajı var" karşılaştırıcısı kör değil.
 // =============================================================================
@@ -92,8 +100,31 @@ import { licenseHealthBlock } from "../src/lib/license/license-health";
 import { applyModuleCeiling } from "../src/lib/license/module-ceiling";
 import { runWithRequestContext } from "../src/lib/request-context";
 import { setEgressTrustForTests } from "../src/lib/http-egress";
-import { DAY_MS, LicenseResponseSchema, VENDOR_ERROR_CODES, msToIso, openEnvelope, parseJws, verifyRequest, type Fingerprint } from "../src/lib/license/protocol";
-import { buildEnvironment, currentFingerprintDigest, describeOperatingSystem, requireReady, vendorFailureToError } from "../src/services/helpers/license-wire.helper";
+import {
+  DAY_MS,
+  ENDPOINTS,
+  HardwareReportRequestSchema,
+  LicenseResponseSchema,
+  VENDOR_ERROR_CODES,
+  msToIso,
+  openEnvelope,
+  parseJws,
+  verifyRequest,
+  type Fingerprint,
+} from "../src/lib/license/protocol";
+import {
+  buildEnvironment,
+  currentFingerprintDigest,
+  describeOperatingSystem,
+  egressTransport,
+  requireReady,
+  vendorFailureToError,
+  vendorPost,
+} from "../src/services/helpers/license-wire.helper";
+import { capabilitiesFor, licenseCapabilities } from "../src/lib/license/capabilities";
+import { tsLicenseCore, type LicenseCore } from "../src/lib/license/license-core";
+import { unavailableCore } from "../src/lib/license/native-adapter";
+import { configureLicenseCoreForTests, getLicenseCore } from "../src/lib/license/native";
 import { signStateRecord, type StateRecord } from "../src/lib/license/saat";
 import { flushLicenseTraceWrites, lastKnownCeiling, type RecordView } from "../src/lib/license/accumulation";
 import { persistAccumulation, setFingerprintCacheCopy } from "../src/lib/license/record-writer";
@@ -114,7 +145,7 @@ import {
   updateProxySettings,
 } from "../src/services/license.service";
 import { buildPollBody, pollLicenseOnce, refreshLicenseDbFacts } from "../src/services/license-sync.service";
-import { reportHardwareChange } from "../src/services/license-hardware.service";
+import { buildHardwareReportBody, reportHardwareChange } from "../src/services/license-hardware.service";
 import { awaitIntegrityRefreshForTests, refreshLicenseIntegrity } from "../src/services/license-integrity.service";
 import { configureIntegrityForTests, getIntegrityOutcome } from "../src/lib/license/integrity-state";
 import { generatePackageKey, signPackageDirectory } from "./lib/butunluk-imza";
@@ -1313,6 +1344,115 @@ async function donanimBildirimiBolumu(x: Hazir): Promise<void> {
   }
 }
 
+// ── §32 tel: yetenekler · istek yolu · çevrimdışı donanım zarfı (L2-7 B) ───────────
+const TUM_YETENEKLER = ["hak-ara", "odenmis-tarih", "iptal", "parmak-izi-v2"];
+const IKI_YETENEK = ["odenmis-tarih", "parmak-izi-v2"];
+const yetenekleri = (g: unknown): string => JSON.stringify((g as { yetenekler?: unknown } | undefined)?.yetenekler ?? null);
+
+/** Zarfı sahte satıcının `/v1/cevrimdisi`ine taşır (QR sayfasının yaptığı) — yanıt metni ya da hata kodu. */
+async function zarfiTasi(x: Hazir, istekGovdesi: { v: 1; zarf: string }): Promise<{ status: number; body: string }> {
+  return egressTransport({ url: `${x.satici.url}${ENDPOINTS.OFFLINE}`, method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(istekGovdesi) });
+}
+
+async function telBolumu(x: Hazir): Promise<void> {
+  console.log("\n§32 — tel (L2-7 B): yetenekler gövdede · çekirdek yokken iki yetenek · eski satıcı · imzada yol + ISTEK_YOL · çevrimdışı donanım zarfı");
+  Object.assign(x.satici, { kiraEk: {}, hakEk: {}, hakMetni: null, iptal: null });
+  const p = await pollLicenseOnce();
+  const beklenen = JSON.stringify(capabilitiesFor(getLicenseCore()));
+  const canli = getLicenseCore().source !== "yok";
+  check(
+    "§32a ⭐ yetenekler satıcıya giden yoklama VE etkinleştirme gövdesinde (canlı çekirdekte dördü, LICENSE_CAPABILITIES sırası)",
+    p.outcome === "BASARILI" && canli && beklenen === JSON.stringify(TUM_YETENEKLER) &&
+      yetenekleri(x.satici.yoklamaGovdeleri.at(-1)) === beklenen && yetenekleri(x.satici.etkinlestirmeGovdeleri.at(-1)) === beklenen,
+    `${p.outcome} yoklama=${yetenekleri(x.satici.yoklamaGovdeleri.at(-1))} etkinleştirme=${yetenekleri(x.satici.etkinlestirmeGovdeleri.at(-1))}`,
+  );
+  const sagir: LicenseCore = { ...tsLicenseCore, verifyRevocation: () => ({ ok: false, code: "CEKIRDEK_YOK", message: "bekçi" }) };
+  check(
+    "§32b ⭐ çekirdek YOK (ya da canlı sondaya CEKIRDEK_YOK diyor) → yalnız odenmis-tarih + parmak-izi-v2; hak-ara/iptal bildirilmez",
+    JSON.stringify(capabilitiesFor(unavailableCore("bekçi"))) === JSON.stringify(IKI_YETENEK) && JSON.stringify(capabilitiesFor(sagir)) === JSON.stringify(IKI_YETENEK),
+    `${JSON.stringify(capabilitiesFor(unavailableCore("bekçi")))} ${JSON.stringify(capabilitiesFor(sagir))}`,
+  );
+  const once = licenseCapabilities();
+  configureLicenseCoreForTests(unavailableCore("bekçi"));
+  const sonra = licenseCapabilities();
+  configureLicenseCoreForTests(null);
+  invalidateLicenseSnapshot();
+  check("§32c küme süreç içinde KARARLI: çekirdek sonradan düşse de yetenek listesi değişmez (satıcıda YETENEK_DUSUSU doğmaz)", once === sonra && JSON.stringify(sonra) === beklenen);
+  check(
+    "§32d eski satıcı yeteneği yok sayar (kök HAK, iptalsiz, iptalSira'sız yanıt): yoklama BAŞARILI, NORMAL — gövdede yetenek olması yolu bozmaz",
+    p.outcome === "BASARILI" && getLicenseSnapshot().state.hesaplananKademe === "NORMAL" && getLicenseSnapshot().entitlement !== null,
+    getLicenseSnapshot().state.nedenler.map((n) => n.kod).join(","),
+  );
+
+  const uyusmaz = x.satici.istekler.filter((i) => i.imzaliYol !== i.uc);
+  const turler = new Set(x.satici.istekler.map((i) => i.amac));
+  check(
+    "§32e ⭐ her imzalı istek KENDİ ucunun yolunu imzalar (yokla · etkinleştir · zil · donanım); sahte satıcı yolu doğrular",
+    uyusmaz.length === 0 && (["yokla", "etkinlestir", "zil", "donanim"] as const).every((a) => turler.has(a)),
+    `${uyusmaz.length} uyuşmaz ${uyusmaz.slice(0, 3).map((i) => `${i.amac}:${String(i.imzaliYol)}→${i.uc}`).join(" ")} · türler ${[...turler].join(",")}`,
+  );
+  const yanlisUc = await vendorPost(ENDPOINTS.POLL, "donanim", buildHardwareReportBody(null), (req) =>
+    egressTransport({ ...req, url: req.url.replace(ENDPOINTS.POLL, ENDPOINTS.HARDWARE) }),
+  );
+  check(
+    "§32f ⭐ yanlış uca imzalı istek (yol /v1/yokla, gönderildiği uç /v1/donanim) → 401 ISTEK_YOL",
+    !yanlisUc.ok && yanlisUc.status === 401 && yanlisUc.code === "ISTEK_YOL" && x.satici.sonRedKodu === "ISTEK_YOL",
+    yanlisUc.ok ? "kabul edildi" : `${yanlisUc.status} ${yanlisUc.code}`,
+  );
+
+  const olcum = getMeasuredFingerprint();
+  try {
+    // Eski ölçüm damgası: zarf parmak izini YENİDEN ölçmeli (çevrimiçi bildirimle aynı, §25c).
+    setMeasuredFingerprint({ digest: x.f.parmakIzi as Fingerprint, measured: { f1: true, f2: true, f3: true, f4: true, f5: true }, measuredAt: new Date(0).toISOString() });
+    const cv = await buildOfflineRequest({ amac: "donanim", gerekce: "disk değişti" });
+    const yeniOlcum = getMeasuredFingerprint();
+    const z = openEnvelope(cv.zarf);
+    const istek = z.ok ? parseJws(z.value.request) : null;
+    const yuk = (istek?.ok ? istek.value.payload : {}) as { amac?: string; yol?: string; kurulumId?: string };
+    const govde = z.ok ? HardwareReportRequestSchema.safeParse(JSON.parse(z.value.body.toString("utf8"))) : null;
+    check(
+      "§32g ⭐ çevrimdışı donanım zarfı: imzalı `donanim` isteği, yol /v1/cevrimdisi, lisans kimliğiyle, KATI donanım gövdesi (YENİDEN ölçülen küme + kayıp + gerekçe)",
+      cv.amac === "donanim" && cv.hedefYol === ENDPOINTS.OFFLINE && yuk.amac === "donanim" && yuk.yol === ENDPOINTS.OFFLINE && yuk.kurulumId === x.f.kurulumId &&
+        govde?.success === true && govde.data.gerekce === "disk değişti" && ayniKume(govde.data.parmakIzi, currentFingerprintDigest()) &&
+        !!yeniOlcum?.okuma && yeniOlcum.measuredAt !== new Date(0).toISOString(),
+      `${cv.amac} ${String(yuk.amac)} ${String(yuk.yol)} gövde=${String(govde?.success)} ölçüm=${yeniOlcum?.measuredAt ?? "yok"}`,
+    );
+    const kira0 = getLicenseSnapshot().lease?.document.kiraId;
+    x.satici.donanimDurumu = "BEKLIYOR";
+    const sayac0 = x.satici.sayac.cevrimdisi;
+    const bekleyen = await zarfiTasi(x, cv.istekGovdesi);
+    check(
+      "§32h ⭐ satıcı zarfı /v1/cevrimdisi'den donanım bildirimine yönlendirir; BEKLIYOR yanıtı → 409 LICENSE_HARDWARE_PENDING, kira değişmez",
+      bekleyen.status === 200 && x.satici.sayac.cevrimdisi === sayac0 + 1 && (await hataKodu(acceptOfflineResponse(bekleyen.body, "cevrimdisi", null))) === "LICENSE_HARDWARE_PENDING" &&
+        getLicenseSnapshot().lease?.document.kiraId === kira0,
+      `${bekleyen.status} ${bekleyen.body.slice(0, 120)}`,
+    );
+    x.satici.donanimDurumu = "REDDEDILDI";
+    const ret = await zarfiTasi(x, (await buildOfflineRequest({ amac: "donanim" })).istekGovdesi);
+    check("§32i REDDEDILDI yanıtı → 409 LICENSE_HARDWARE_REJECTED, kira değişmez", (await hataKodu(acceptOfflineResponse(ret.body, "cevrimdisi", null))) === "LICENSE_HARDWARE_REJECTED" && getLicenseSnapshot().lease?.document.kiraId === kira0);
+    x.satici.donanimDurumu = "ONAYLANDI";
+    const onay = await zarfiTasi(x, (await buildOfflineRequest({ amac: "donanim" })).istekGovdesi);
+    const iz = olaylar.length;
+    const qrMetni = Buffer.from(onay.body, "utf8").toString("base64url");
+    // Ret bölümü düşürmesin (sonraki bölümler koşsun): kabul hatası kodla ölçülür.
+    const onayHatasi = await hataKodu(acceptOfflineResponse(qrMetni, "cevrimdisi", null));
+    const kabul = olaylar.slice(iz).find((e) => e.action === "LICENSE_LEASE_ACCEPTED")?.payload as { kaynak?: string } | undefined;
+    const eylem = olaylar.slice(iz).find((e) => e.action === "LICENSE_ADMIN_ACTION")?.payload as { sonuc?: string; donanimTalebi?: string } | undefined;
+    check(
+      "§32j ⭐ ONAYLANDI yanıtı (QR metni) → içteki kira doğrulanıp kabul edilir (kaynak 'donanim'), ayak izinde talep",
+      onayHatasi === "HATA_YOK" && getLicenseSnapshot().lease?.document.kiraId !== kira0 && kabul?.kaynak === "donanim" && eylem?.sonuc === "kabul" && typeof eylem.donanimTalebi === "string",
+      `${onayHatasi} ${String(kabul?.kaynak)} ${JSON.stringify(eylem)}`,
+    );
+    yeniden(path.join(GECICI, "zarf-etkin-degil"));
+    check("§32k etkinleşmemiş kurulum donanım zarfı üretmez → 409 LICENSE_NOT_ACTIVE", (await hataKodu(buildOfflineRequest({ amac: "donanim" }))) === "LICENSE_NOT_ACTIVE");
+  } finally {
+    yeniden(x.dizin);
+    x.satici.donanimDurumu = "BEKLIYOR";
+    if (olcum) setMeasuredFingerprint(olcum);
+    await pollLicenseOnce();
+  }
+}
+
 async function motorBolumu(): Promise<void> {
   console.log("\n§15 — motor dayanıklılığı (D5): kimlik gelmezse pes etmez; sağlıkta başlamadı/çalışıyor");
   const olcum = getMeasuredFingerprint();
@@ -1529,6 +1669,7 @@ async function main(): Promise<void> {
     await iptalSaatBolumu(hazir);
     await uzatmaDosyasiBolumu(hazir);
     await donanimBildirimiBolumu(hazir);
+    await telBolumu(hazir);
     gozlemSayaciBolumu();
     await zilGeriCekilmeBolumu(hazir);
     ortamBolumu();

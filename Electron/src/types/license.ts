@@ -194,7 +194,8 @@ export interface LicenseIntegrity {
   ilkUyusmazlik: string | null;
 }
 
-export type OfflinePurpose = "yokla" | "etkinlestir";
+/** `donanim`: donanım değişikliği bildirimi zarfla (K8) — eski backend 400 döner (amaç tanınmaz). */
+export type OfflinePurpose = "yokla" | "etkinlestir" | "donanim";
 
 export interface LicenseOfflineRequest {
   amac: OfflinePurpose;

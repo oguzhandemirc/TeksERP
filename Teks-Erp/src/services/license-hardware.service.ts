@@ -9,6 +9,7 @@ import {
   HardwareReportRequestSchema,
   HardwareReportResponseSchema,
   type FingerprintFactor,
+  type HardwareReportRequest,
   type HardwareReportState,
 } from "../lib/license/protocol";
 import { adminAction } from "./license-trail.service";
@@ -35,13 +36,18 @@ export interface LicenseHardwareReportResult {
   readonly lisans: LicenseDetail;
 }
 
+/** Bildirim gövdesi — çevrimiçi uç ve çevrimdışı zarf AYNI kurucudan: ölçülen küme + kayıp etkenler + gerekçe. */
+export function buildHardwareReportBody(gerekce: string | null): HardwareReportRequest {
+  return HardwareReportRequestSchema.parse({ v: 1, parmakIzi: currentFingerprintDigest(), kayip: currentLostFactors(), gerekce });
+}
+
 export async function sendHardwareReport(
   gerekce: string | null,
   transport: VendorTransport,
   userId: string | null = null,
 ): Promise<{ durum: HardwareReportState; talepId: string; kayip: FingerprintFactor[] }> {
-  const lostFactors = currentLostFactors();
-  const body = HardwareReportRequestSchema.parse({ v: 1, parmakIzi: currentFingerprintDigest(), kayip: lostFactors, gerekce });
+  const body = buildHardwareReportBody(gerekce);
+  const lostFactors = [...body.kayip];
   const r = await vendorPost(ENDPOINTS.HARDWARE, "donanim", body, transport);
   if (!r.ok) throw vendorFailureToError(r);
   const parsed = HardwareReportResponseSchema.safeParse(r.json);

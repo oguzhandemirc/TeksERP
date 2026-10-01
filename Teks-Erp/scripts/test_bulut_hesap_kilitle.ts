@@ -9,6 +9,8 @@
 //      bellekteki listeye yansır; iz `PATRON_CLOUD_ACCOUNT_LOCKED` (kim, hangi hesap)
 //   §3 bulutun kesin reddi kodu aynen taşır (SON_YONETICI 409 · BULUNAMADI 404); ağ hatası 503
 //      BULUT_ULASILAMADI (istemci aynı işlem kimliğiyle tekrar dener); sözleşmesiz yanıt 502
+//   (L2-7 B) imzalı istek ucun yolunu (`SYNC_PATHS`) taşır, sahte bulut yolu doğrular — S25 `cloudPost` yolu imzalamaz → §2a ❌
+//   (kaynakta mutasyon, sha eşit geri alındı)
 // =============================================================================
 import { randomUUID } from "node:crypto";
 import prisma, { pool } from "../src/lib/prisma";
@@ -48,9 +50,10 @@ function sahteBulut(kurulumX: string, kurulumId: string, cevap: (govde: Record<s
   const cagrilar: Cagri[] = [];
   const tasiyici: CloudTransport = async (req: CloudHttpRequest) => {
     const yol = new URL(req.url).pathname;
-    const v = verifyRequest(req.headers[REQUEST_HEADER], { publicKeyX: kurulumX, body: req.body, nowMs: Date.now(), purposes: ["esitle"], installationId: kurulumId });
+    const v = verifyRequest(req.headers[REQUEST_HEADER], { publicKeyX: kurulumX, body: req.body, nowMs: Date.now(), purposes: ["esitle"], installationId: kurulumId, path: yol });
     const govde = JSON.parse(req.body.toString("utf8")) as Record<string, unknown>;
-    cagrilar.push({ yol, govde, imzaGecerli: v.ok });
+    // L2-7 B: geçerli = imza tutar VE imzalı `yol` bu uç (eski, yolsuz imza da reddedilmez ama burada geçerli sayılmaz).
+    cagrilar.push({ yol, govde, imzaGecerli: v.ok && v.value.yol === yol });
     const c = cevap(govde);
     if (c === "AG_HATASI") throw new Error("ECONNRESET");
     return c;
@@ -92,7 +95,7 @@ async function main(): Promise<void> {
     const islem = randomUUID();
     const h = await lockCloudAccount({ hesapId, islemKimligi: islem, actorUserId: admin.id }, b.tasiyici);
     const c = b.cagrilar[0];
-    check("§2a ⭐ tek imzalı istek `/v1/hesap-kilitle`", b.cagrilar.length === 1 && c?.yol === SYNC_PATHS.ACCOUNT_LOCK && c.imzaGecerli, b.cagrilar.map((x) => x.yol).join(","));
+    check("§2a ⭐ tek imzalı istek `/v1/hesap-kilitle` (imzada ucun yolu)", b.cagrilar.length === 1 && c?.yol === SYNC_PATHS.ACCOUNT_LOCK && c.imzaGecerli, b.cagrilar.map((x) => x.yol).join(","));
     check(
       "§2b gövde {v, hesapId, islemKimligi, isteyen} — başka alan yok",
       c !== undefined && c.govde.v === 1 && c.govde.hesapId === hesapId && c.govde.islemKimligi === islem && typeof c.govde.isteyen === "string" && Object.keys(c.govde).sort().join(",") === "hesapId,islemKimligi,isteyen,v",
