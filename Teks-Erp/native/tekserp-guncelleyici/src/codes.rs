@@ -47,6 +47,8 @@ pub const SAGLIK_SURUM: &str = "SAGLIK_SURUM";
 pub const SAGLIK_DB: &str = "SAGLIK_DB";
 pub const SAGLIK_LISANS: &str = "SAGLIK_LISANS";
 pub const SAGLIK_LISANS_OLCULEMEDI: &str = "SAGLIK_LISANS_OLCULEMEDI";
+/// Yeni sürüm açılışta düştü: konak node'un çıkışını hizmete özgü kodla bildirdi (zaman aşımı beklenmez).
+pub const SAGLIK_HIZMET_DUSTU: &str = "SAGLIK_HIZMET_DUSTU";
 pub const GERI_YUKLEME_HATASI: &str = "GERI_YUKLEME_HATASI";
 pub const GERI_DONUS_SAGLIKSIZ: &str = "GERI_DONUS_SAGLIKSIZ";
 pub const KESINTI: &str = "KESINTI";
@@ -121,5 +123,6 @@ mod tests {
         }
         assert_eq!(report_code(PG_SURUM_UYUSMAZ), "PG_GUNCELLEME_HATASI");
         assert_eq!(report_code(SAGLIK_ZAMAN_ASIMI), "SAGLIK_HATASI");
+        assert_eq!(report_code(SAGLIK_HIZMET_DUSTU), "SAGLIK_HATASI");
     }
 }

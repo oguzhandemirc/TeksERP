@@ -6,7 +6,7 @@ use std::ffi::{OsStr, OsString};
 use std::path::PathBuf;
 use std::time::Duration;
 use windows_service::service::{
-    ServiceAccess, ServiceAction, ServiceActionType, ServiceDependency, ServiceErrorControl, ServiceFailureActions,
+    ServiceAccess, ServiceAction, ServiceActionType, ServiceDependency, ServiceErrorControl, ServiceExitCode, ServiceFailureActions,
     ServiceFailureResetPeriod, ServiceInfo, ServiceSidType, ServiceStartType, ServiceState, ServiceType,
 };
 use windows_service::service_manager::{ServiceManager, ServiceManagerAccess};
@@ -140,6 +140,20 @@ pub fn status(name: &str) -> Result<Status, String> {
         ServiceState::Running => Status::Running,
         ServiceState::StopPending => Status::Stopping,
         _ => Status::Other,
+    })
+}
+
+/// DURMUŞ hizmetin hizmete özgü sıfır-dışı çıkış kodu (konak sözleşmesi `exit`: 10 node beklenmedik çıktı …) —
+/// SCM kurtarması onu yeniden başlatacak demektir. Çalışıyorsa, yoksa ya da temiz durduysa `None`.
+pub fn crash_exit_code(name: &str) -> Result<Option<u32>, String> {
+    let m = manager(ServiceManagerAccess::CONNECT)?;
+    let Ok(h) = m.open_service(name, ServiceAccess::QUERY_STATUS) else {
+        return Ok(None);
+    };
+    let s = h.query_status().map_err(|e| format!("{name}: durum okunamadı: {e}"))?;
+    Ok(match (s.current_state, s.exit_code) {
+        (ServiceState::Stopped, ServiceExitCode::ServiceSpecific(c)) if c != 0 => Some(c),
+        _ => None,
     })
 }
 

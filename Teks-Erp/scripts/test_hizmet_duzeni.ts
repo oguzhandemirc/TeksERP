@@ -21,7 +21,8 @@
 //      `-Uygula` dalında) · kayıt TEK kaynak (`tekserp-hizmet.exe hizmet-kur`; New-Service/sc.exe/WMI yok) ·
 //      SIRA iyi bilinen SID'li iskelet → hizmet-kur → sanal hesaplı izin (kayıttan önce icacls 1332) ·
 //      hizmeti başlatmaz/durdurmaz · SeImpersonate yok · kurtarma ölçülür ve §9h Rust kaydıyla aynı ·
-//      sanal hesap SID algoritması (pwsh varsa koşar)
+//      sanal hesap SID algoritması (pwsh varsa koşar) · §9i güncelleyici kaydının kurtarması (10/10/30) =
+//      `guncelleyici-hizmeti.ps1` ölçümünün beklediği
 //   §10 geri yükleme listesi/etkisi süreç bilgisini taşır (panel hizmet bloğunu kurar)
 // NEGATİF SONDA: §5 ve §9'un yüklemleri dosya içinde bozulmuş kopyalara da koşar ("sonda:"
 //   satırları, her koşumda). Dosya dışı zincir bu commit'te ölçüldü (başlık altı liste).
@@ -336,6 +337,13 @@ function rustKayitIhlalleri(mainRs: string, contractRs: string): string[] {
   if (!/executable:\s*root\.join\(path::CURRENT\)\.join\(path::RUNTIME\)\.join\(path::HOST_EXE\)/.test(mainRs)) ih.push("Rust kayıt ImagePath'i current\\runtime\\tekserp-hizmet.exe değil (ps1 ölçümü onu bekler)");
   return ih;
 }
+/** Güncelleyicinin kaydı da TEK kaynakta (tekserp-guncelleyici `hizmet-kur`); ps1 ölçümü aynı kurtarmayı beklemeli. */
+function guncelleyiciKurtarmaIhlalleri(mainRs: string, ps1: string): string[] {
+  const ih: string[] = [];
+  if (!/restart_delays:\s*\[10,\s*10,\s*30\]/.test(mainRs)) ih.push("Rust güncelleyici hizmet-kur kurtarma gecikmeleri 10/10/30 değil");
+  if (!/"1\/10000,1\/10000,1\/30000"/.test(ps1) || !/\$sifirla -eq 86400/.test(ps1)) ih.push("guncelleyici-hizmeti.ps1 kurtarma ölçümü 1/10000,1/10000,1/30000 + 86400 değil");
+  return ih;
+}
 function ps1Ihlalleri(metin: string): string[] {
   const ih: string[] = [];
   const tablo = new Map<string, string>();
@@ -409,6 +417,14 @@ function hizmetBetigi(): void {
   }
   const rMut = mainRs.replace(/restart_delays:\s*\[5,\s*5,\s*30\]/, "restart_delays: [5, 5, 60]");
   check("§9h sonda: Rust kurtarma gecikmesi değişti → kırmızı", rMut !== mainRs && rustKayitIhlalleri(rMut, contractRs).length > 0, rMut !== mainRs ? "" : "MUTASYON UYGULANMADI");
+  const gMain = readFileSync(join(TEKS, "native", "tekserp-guncelleyici", "src", "main.rs"), "utf8");
+  const gPs1 = readFileSync(join(KOK, "deploy", "hizmet", "guncelleyici-hizmeti.ps1"), "utf8").replace(/\r\n/g, "\n");
+  const gih = guncelleyiciKurtarmaIhlalleri(gMain, gPs1);
+  check("§9i ⭐ güncelleyici kaydının kurtarması (Rust hizmet-kur 10/10/30) = guncelleyici-hizmeti.ps1 ölçümünün beklediği", gih.length === 0, gih.join(" | ") || "aynı");
+  const gRMut = gMain.replace(/restart_delays:\s*\[10,\s*10,\s*30\]/, "restart_delays: [10, 30, 60]");
+  const gPMut = gPs1.replace('"1/10000,1/10000,1/30000"', '"1/10000,1/30000,1/60000"');
+  check("§9i sonda: Rust gecikmesi eskiye döndü → kırmızı", gRMut !== gMain && guncelleyiciKurtarmaIhlalleri(gRMut, gPs1).length > 0, gRMut !== gMain ? "" : "MUTASYON UYGULANMADI");
+  check("§9i sonda: ps1 beklentisi eskiye döndü → kırmızı", gPMut !== gPs1 && guncelleyiciKurtarmaIhlalleri(gMain, gPMut).length > 0, gPMut !== gPs1 ? "" : "MUTASYON UYGULANMADI");
   // Sanal hesap SID'i: TrustedInstaller bilinen vektör; betikteki gövde pwsh'ta koşar.
   const tsSid = (ad: string): string => {
     const h = createHash("sha1").update(Buffer.from(ad.toUpperCase(), "utf16le")).digest();

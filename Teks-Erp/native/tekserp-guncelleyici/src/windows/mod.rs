@@ -320,6 +320,9 @@ impl Services for WinServices {
     fn stop(&self, name: &str) -> EnvResult<()> {
         scm::stop(name).map_err(EnvError)
     }
+    fn crash_exit_code(&self, name: &str) -> EnvResult<Option<u32>> {
+        scm::crash_exit_code(name).map_err(EnvError)
+    }
     fn image_path(&self, name: &str) -> EnvResult<String> {
         scm::image_path(name).map_err(EnvError)
     }

@@ -109,6 +109,42 @@ fn kill_at_every_point_of_a_rollback() {
     }
 }
 
+/// Açılışta düşen sürüm (D8b, thinkpad-1 G: 195 sn kesinti): konak çıkış 10'u bildirince sağlık zaman aşımı
+/// BEKLENMEZ — `SAGLIK_HIZMET_DUSTU` ile geri dönülür. SCM kurtarması düşen sürümü 5 sn sonra yeniden açar: geri
+/// dönüş o başlatmayı yatıştırmadan DB'yi geri yüklerse backend geri yükleme sırasında çalışır (değişmez ihlali).
+#[test]
+fn startup_crash_rolls_back_early_and_settles_scm_recovery() {
+    let elapsed = |w: &World| {
+        let t0 = w.clock.load(Ordering::SeqCst);
+        w.run_to_rest(0);
+        w.clock.load(Ordering::SeqCst) - t0
+    };
+    let timeout_world = world("zaman-asimi");
+    *timeout_world.faults.unhealthy_version.lock().unwrap() = Some(NEW.into());
+    let slow = elapsed(&timeout_world);
+
+    let w = world("erken");
+    *w.faults.crash_on_start_version.lock().unwrap() = Some(NEW.into());
+    w.faults.scm_recovery.store(true, Ordering::SeqCst);
+    w.faults.slow_restore.store(true, Ordering::SeqCst);
+    let fast = elapsed(&w);
+    let st = w.status().unwrap();
+    assert_eq!(st.state, State::RolledBack, "{:?}", st.message);
+    assert_eq!(st.error_code.as_deref(), Some("SAGLIK_HIZMET_DUSTU"), "{:?}", st.message);
+    let son = st.last.clone().expect("son");
+    assert_eq!((son.result.as_str(), son.kod.as_deref(), son.data_restored), ("GERI_DONDU", Some("SAGLIK_HATASI"), true));
+    assert_invariants(&w, "açılışta düşen sürüm");
+    let ev = w.events.lock().unwrap().clone();
+    assert!(!ev.iter().any(|e| e.starts_with("IHLAL")), "geri yükleme sırasında backend çalıştı: {ev:?}");
+    assert!(ev.iter().any(|e| e.starts_with("scm-kurtarma")), "sonda kurgusu: kurtarma hiç tetiklenmedi (yatıştırma ölçülmedi): {ev:?}");
+    assert_eq!(
+        (w.backend().state, w.backend().version.as_deref()),
+        (tekserp_guncelleyici::env::SvcState::Running, Some(OLD)),
+        "önceki sürüm çalışmalı"
+    );
+    assert!(fast + 100_000 < slow, "erken dönüş zaman aşımından en az 100 sn kısa olmalı: erken {fast} ms · zaman aşımı {slow} ms");
+}
+
 /// İki ölüm: ilk koşumda k1'de, kurtarma koşumunda k2'de (seyreltilmiş ızgara).
 #[test]
 fn double_kill_during_recovery() {

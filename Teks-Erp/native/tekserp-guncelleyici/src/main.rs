@@ -124,7 +124,8 @@ fn windows_command(command: &str, args: &[String]) -> Result<u32, String> {
                 arguments,
                 account: None,
                 dependencies: vec![],
-                restart_delays: [10, 30, 60].map(std::time::Duration::from_secs).to_vec(),
+                // 10/10/30: düşen güncelleyici ikinci denemede de 10 sn'de döner (eskiden 30 → 60).
+                restart_delays: [10, 10, 30].map(std::time::Duration::from_secs).to_vec(),
                 required_privileges: vec![],
             })?;
             println!("{name} kaydedildi (kök {})", root.display());

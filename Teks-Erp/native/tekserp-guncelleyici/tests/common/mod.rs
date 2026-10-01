@@ -200,6 +200,13 @@ pub struct Db {
 pub struct Faults {
     /// Bu sürüm çalışırken sağlık `status: DOWN`.
     pub unhealthy_version: Mutex<Option<String>>,
+    /// Bu sürüm AÇILIŞTA düşer: ilk sağlık sondasında konak çıkış 10 ile durur (SCM kurtarması açıksa 5 sn sonra
+    /// `current` ne gösteriyorsa onu yeniden başlatır).
+    pub crash_on_start_version: Mutex<Option<String>>,
+    /// SCM kurtarması: çökerek duran hizmet 5 sn sonra yeniden başlar (gerçek kayıt 5/5/30).
+    pub scm_recovery: AtomicBool,
+    /// Geri yükleme (DROP SCHEMA + pg_restore) saat ilerletir (8 sn) — kurtarmanın arada hizmeti açması ölçülür.
+    pub slow_restore: AtomicBool,
     /// Her sürüm sağlıksız (geri dönüş de düşer → HATA).
     pub unhealthy_all: AtomicBool,
     /// Bu sürüm sözleşme 4 öncesi: `/health/yerel` → 404 (yalnız public `/health` var).
@@ -229,6 +236,10 @@ pub struct Svc {
     pub version: Option<String>,
     pub image: String,
     pub starts: u64,
+    /// Çökerek durduysa konağın kodu (temiz durdurmada `None`).
+    pub crash: Option<u32>,
+    /// SCM kurtarmasının bekleyen yeniden başlatması (saat ms).
+    pub restart_at: Option<i64>,
 }
 
 pub struct World {
@@ -309,6 +320,27 @@ pub struct WorldRefs {
     pub backend_name: Arc<Mutex<String>>,
 }
 
+impl WorldRefs {
+    /// SCM kurtarması: zamanı gelen bekleyen yeniden başlatmayı uygular (sahte saatle).
+    pub fn scm_tick(&self) {
+        let now = self.clock.load(Ordering::SeqCst);
+        let backend = self.backend_name.lock().unwrap().clone();
+        let mut svcs = self.svcs.lock().unwrap();
+        for (name, s) in svcs.iter_mut() {
+            if s.state == SvcState::Stopped && s.restart_at.is_some_and(|t| now >= t) {
+                s.state = SvcState::Running;
+                s.crash = None;
+                s.restart_at = None;
+                s.starts += 1;
+                if *name == backend {
+                    s.version = current_version(&self.root);
+                }
+                self.events.lock().unwrap().push(format!("scm-kurtarma {name} {:?}", s.version));
+            }
+        }
+    }
+}
+
 fn current_version(root: &Path) -> Option<String> {
     RealFs.link_target(&root.join("current")).ok().flatten().and_then(|t| t.file_name().map(|n| n.to_string_lossy().into_owned()))
 }
@@ -323,7 +355,12 @@ fn pg_version_of_image(image: &str) -> Option<String> {
 
 impl Services for FakeServices {
     fn state(&self, name: &str) -> EnvResult<SvcState> {
+        self.w.scm_tick();
         Ok(self.w.svcs.lock().unwrap().get(name).map_or(SvcState::Missing, |s| s.state))
+    }
+    fn crash_exit_code(&self, name: &str) -> EnvResult<Option<u32>> {
+        self.w.scm_tick();
+        Ok(self.w.svcs.lock().unwrap().get(name).filter(|s| s.state == SvcState::Stopped).and_then(|s| s.crash))
     }
     fn start(&self, name: &str, args: &[&str]) -> EnvResult<()> {
         self.w.crash.point(&format!("baslat {name}"));
@@ -333,6 +370,8 @@ impl Services for FakeServices {
             return Ok(());
         }
         s.state = SvcState::Running;
+        s.crash = None;
+        s.restart_at = None;
         s.args = args.iter().map(|a| a.to_string()).collect();
         s.starts += 1;
         let is_backend = *self.w.backend_name.lock().unwrap() == name;
@@ -343,6 +382,11 @@ impl Services for FakeServices {
         self.w.crash.point(&format!("durdur {name}"));
         let mut svcs = self.w.svcs.lock().unwrap();
         let Some(s) = svcs.get_mut(name) else { return Err(EnvError(format!("{name} yok"))) };
+        if s.state != SvcState::Stopped {
+            // Temiz durdurma: çıkış 0, kurtarma yok. (Zaten durmuş hizmete durdurma kurtarmayı İPTAL ETMEZ.)
+            s.crash = None;
+            s.restart_at = None;
+        }
         s.state = SvcState::Stopped;
         s.args.clear();
         Ok(())
@@ -375,6 +419,20 @@ fn fail_out(code: i32, stderr: &str) -> CmdOut {
     CmdOut { code: Some(code), stdout: vec![], stderr: stderr.as_bytes().to_vec(), timed_out: false }
 }
 
+impl FakeProcs {
+    /// Geri yükleme süresi (isteğe bağlı) + değişmez: DB geri yüklenirken backend ÇALIŞMAZ.
+    fn restore_window(&self) {
+        if self.w.faults.slow_restore.load(Ordering::SeqCst) {
+            self.w.clock.fetch_add(8_000, Ordering::SeqCst);
+        }
+        self.w.scm_tick();
+        let backend = self.w.backend_name.lock().unwrap().clone();
+        if self.w.svcs.lock().unwrap().get(&backend).is_some_and(|s| s.state != SvcState::Stopped) {
+            self.w.events.lock().unwrap().push("IHLAL: geri yükleme sırasında backend çalışıyor".into());
+        }
+    }
+}
+
 impl Procs for FakeProcs {
     fn run(&self, c: &Cmd) -> EnvResult<CmdOut> {
         let prog = c.program_name();
@@ -404,6 +462,7 @@ impl Procs for FakeProcs {
                     return Ok(ok_out(&format!("{v} (fake)\n")));
                 }
                 if sql.contains("DROP SCHEMA") {
+                    self.restore_window();
                     *self.w.db.lock().unwrap() = Db { finished: 0, total: 0, data: 0 };
                     return Ok(ok_out("CREATE SCHEMA\n"));
                 }
@@ -433,6 +492,7 @@ impl Procs for FakeProcs {
                 if args.iter().any(|a| a == "--list") {
                     return Ok(ok_out(";\n; Archive created\n"));
                 }
+                self.restore_window();
                 *self.w.db.lock().unwrap() = d;
                 Ok(ok_out(""))
             }
@@ -532,8 +592,24 @@ impl Net for FakeNet {
             url.strip_prefix("http://127.0.0.1:").and_then(|r| r.split_once('/')).filter(|(_, p)| matches!(*p, "health" | "health/yerel"));
         if let Some((port, path)) = health {
             assert_eq!(port, "4999");
-            let svcs = self.w.svcs.lock().unwrap();
+            self.w.scm_tick();
             let backend = self.w.backend_name.lock().unwrap().clone();
+            {
+                let mut svcs = self.w.svcs.lock().unwrap();
+                let crash_v = self.w.faults.crash_on_start_version.lock().unwrap().clone();
+                if let Some(b) =
+                    svcs.get_mut(&backend).filter(|s| s.state == SvcState::Running && s.version.is_some() && s.version == crash_v)
+                {
+                    b.state = SvcState::Stopped;
+                    b.crash = Some(10);
+                    b.args.clear();
+                    if self.w.faults.scm_recovery.load(Ordering::SeqCst) {
+                        b.restart_at = Some(self.w.clock.load(Ordering::SeqCst) + 5_000);
+                    }
+                    return Err(EnvError("bağlantı reddedildi (açılışta düştü)".into()));
+                }
+            }
+            let svcs = self.w.svcs.lock().unwrap();
             let Some(b) = svcs.get(&backend).filter(|s| s.state == SvcState::Running) else {
                 return Err(EnvError("bağlantı reddedildi".into()));
             };
@@ -933,11 +1009,27 @@ impl World {
         let mut svcs = HashMap::new();
         svcs.insert(
             BACKEND.to_string(),
-            Svc { state: SvcState::Running, args: vec![], version: Some(OLD.into()), image: "konak".into(), starts: 0 },
+            Svc {
+                state: SvcState::Running,
+                args: vec![],
+                version: Some(OLD.into()),
+                image: "konak".into(),
+                starts: 0,
+                crash: None,
+                restart_at: None,
+            },
         );
         svcs.insert(
             PG.to_string(),
-            Svc { state: SvcState::Running, args: vec![], version: Some("16.9".into()), image: String::new(), starts: 0 },
+            Svc {
+                state: SvcState::Running,
+                args: vec![],
+                version: Some("16.9".into()),
+                image: String::new(),
+                starts: 0,
+                crash: None,
+                restart_at: None,
+            },
         );
         let crash = Arc::new(Crash::default());
         World {

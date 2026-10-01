@@ -225,7 +225,7 @@ impl PgOp {
 
     fn backend_health(&self, ctx: &Ctx) -> Result<(), StepError> {
         let c = crate::health::Criteria { version: self.plan.backend_version.clone(), require_license: false, baseline: None };
-        crate::health::wait_healthy(ctx.env, ctx.backend.port, &c, ctx.settings.health_timeout())
+        crate::health::wait_healthy(ctx.env, ctx.backend.port, &c, ctx.settings.health_timeout(), Some(ctx.settings.backend_service()))
             .map(|_| ())
             .map_err(|(code, m)| step_err(code, m))
     }
@@ -324,7 +324,9 @@ impl Operation for PgOp {
         let p = &self.plan;
         let done = |r: Result<(), StepError>| r.map(|()| Value::Null);
         match step {
-            "BACKEND_BASLAT" => done(stop_service(ctx, ctx.settings.backend_service(), codes::HIZMET_YOK, codes::HIZMET_DURMADI)),
+            "BACKEND_BASLAT" => {
+                done(operation::stop_and_settle(ctx, ctx.settings.backend_service(), codes::HIZMET_YOK, codes::HIZMET_DURMADI))
+            }
             "PG_BASLAT" => done(stop_service(ctx, &p.service, codes::HIZMET_YOK, codes::PG_DURMADI)),
             "PG_BAGLANTI" => done(switch_link(ctx, &ctx.layout.pg_bin_link(), &p.old_dir.join("bin"), codes::PG_YOL_HATASI)),
             "PG_YOL" => done(self.set_image_path(ctx, &p.old_image_path)),
