@@ -3,7 +3,8 @@
 # =============================================================================
 # Olculen: cevap semasi (CevapDogrula: KATI, SIRSIZ, tur/desen/secenek) - portSec (D4 altin vektorleri,
 # deploy/pg/pg-sablon-vektorleri.json) - .env satiri (sade bicim) - sir adi - JSON ASCII kacisi - maske -
-# surum onceligi (guncelleyicinin vektorleri) + gercek kurulu surum + eski paket engeli (D8d).
+# surum onceligi (guncelleyicinin vektorleri) + gercek kurulu surum + eski paket engeli (D8d) + lisans saticisi
+# karari (D8e: bos alan = paketin kanali, farkli deger UYARI, onarimda kayit korunur, eski paket beyanli).
 # Iki kultur: degismez + tr-TR ('I' tuzagi: (?i) ve ToLower() 'I'yi 'i'ye indirmez).
 # Kosucular: Teks-Erp/scripts/test_kurulum_betikleri.ts (pwsh 7; mutasyon sondalari -Ortak ile) ve
 #   .github/workflows/kurulum-windows.yml (Windows PowerShell 5.1 - asil hedef).
@@ -175,6 +176,31 @@ try {
   $e5 = EskiPaketEngeli $en "bicimsiz"
   Olc "kurulu.eski-paket-DUR" ($e1 -and $e1.Contains("2.14.5") -and $e1.Contains("2.14.0") -and $null -eq $e2 -and $null -eq $e3 -and $null -eq $e4 -and $e5) ("eski: '$e1' esit: '$e2' yeni: '$e3' kayitsiz: '$e4' bicimsiz: '$e5'")
 } finally { Remove-Item -LiteralPath $gk -Recurse -Force -ErrorAction SilentlyContinue }
+
+# --- Lisans saticisi kanal kaydindan (D8e: bos alan = paketin kanali; farkli deger UYARI, engel degil) ------
+# Eski paket (PAKET.json alani yok) BEYANLI istisna: bugunku davranis + uyari, fail-closed degil.
+$T = "https://lisans-test.etkiliyazilim.com"; $P = "https://lisans.etkiliyazilim.com"; $X = "https://x.ornek.com:8443"
+function LisOz($r) { return "etkili=$($r.etkili) kaynak=$($r.kaynak) yaz=$($r.yaz) uyari=$(@($r.uyarilar).Count): $(@($r.uyarilar) -join ' || ')" }
+$r = LisansSunucusuKarari $T $P "" $null "testfabrika"
+Olc "lisans.bos-alan-kanaldan" ($r.etkili -ceq $T -and $r.kaynak -ceq "kanal" -and $r.yaz -and @($r.uyarilar).Count -eq 0) (LisOz $r)
+$r = LisansSunucusuKarari $P $P "" $null "demofabrika"
+Olc "lisans.uretim-kanali-satir-yazmaz" ($r.etkili -ceq $P -and -not $r.yaz -and @($r.uyarilar).Count -eq 0) (LisOz $r)
+$r = LisansSunucusuKarari $T $P "https://LISANS-TEST.etkiliyazilim.com/" $null "testfabrika"
+Olc "lisans.esit-elle-uyarisiz" ($r.etkili -ceq $T -and $r.kaynak -ceq "kanal" -and $r.yaz -and @($r.uyarilar).Count -eq 0) (LisOz $r)
+$r = LisansSunucusuKarari $T $P $P $null "testfabrika"
+$u = "$(@($r.uyarilar) -join ' ')"
+Olc "lisans.farkli-elle-UYARI" ($r.etkili -ceq $P -and $r.kaynak -ceq "cevap" -and -not $r.yaz -and $u.Contains("FARKLI") -and $u.Contains("beklenen $T") -and $u.Contains("girilen $P")) (LisOz $r)
+$r = LisansSunucusuKarari $P $P $X $null "demofabrika"
+Olc "lisans.farkli-elle-yazilir" ($r.etkili -ceq $X -and $r.yaz -and "$(@($r.uyarilar))".Contains("beklenen $P")) (LisOz $r)
+$r = LisansSunucusuKarari "" "" "" $null ""
+$r2 = LisansSunucusuKarari "" "" $X $null ""
+Olc "lisans.eski-paket-uyarir-durmaz" ($null -eq $r.etkili -and -not $r.yaz -and "$(@($r.uyarilar))".Contains("kanal degerini tasimiyor") -and $r2.etkili -ceq $X -and $r2.yaz -and "$(@($r2.uyarilar))".Contains("kanal degerini tasimiyor")) ((LisOz $r) + " / " + (LisOz $r2))
+$r = LisansSunucusuKarari $T $P "" $T "testfabrika"
+Olc "lisans.onarim-kayit-korunur" ($r.etkili -ceq $T -and $r.kaynak -ceq "kayit" -and -not $r.yaz -and @($r.uyarilar).Count -eq 0) (LisOz $r)
+$r = LisansSunucusuKarari $T $P "" "" "testfabrika"
+Olc "lisans.onarim-satirsiz-varsayilan-UYARI" ($r.etkili -ceq $P -and $r.kaynak -ceq "kayit-varsayilan" -and -not $r.yaz -and "$(@($r.uyarilar))".Contains("beklenen $T")) (LisOz $r)
+$r = LisansSunucusuKarari $T $P $P $T "testfabrika"
+Olc "lisans.onarim-cevap-uygulanmaz" ($r.etkili -ceq $T -and -not $r.yaz -and "$(@($r.uyarilar))".Contains("UYGULANMADI")) (LisOz $r)
 
 Write-Output "=== Sonuc: $($script:gecti) gecti, $($script:kaldi) basarisiz ==="
 if ($script:kaldi -gt 0) { exit 1 }

@@ -10,6 +10,7 @@
 #   olcumu YOK - sihirbaz hemen acilir, tam olcum kok secilince "Sistem denetleniyor" penceresiyle kosar.
 # Onarim/devamda gercek kurulu surum (kurulum.json'daki DEGIL: current - kurulum-gecmisi.jsonl - guncelleyici durumu)
 #   paketten YENIYSE "eskiPaket" engeli; gelismis ayarlar (guncelleme sunucusu, vekil, lisans sunucusu) kayittan.
+# Lisans sunucusu: paketin kanal degeri (paketLisans = PAKET.json backendLisansSunucusu) + derleme varsayilani.
 # CIKTI: UTF-16 INI ([olcum] bolumu) - Inno GetIniString okur. Cikis 0 (olcum hatasi INI'de "hata=").
 # =============================================================================
 [CmdletBinding()]
@@ -71,6 +72,9 @@ try {
         $o["paketHizmet"] = "$($k.backendHizmetAdi)"
         $o["paketKorumali"] = [int]($k.korumali -eq $true -and "$($k.korumaHedef)" -ceq "win-x64")
         $o["paketProva"] = [int]($k.prova -eq $true)
+        # Lisans saticisi kanal kaydindan: sihirbaz gelismis alani bununla doldurur, ozet farki UYARIR (karar kurulum.ps1'de).
+        $o["paketLisans"] = "$($k.backendLisansSunucusu)"
+        $o["paketLisansVarsayilan"] = "$($k.lisansSunucusuVarsayilan)"
       } else { $o["paketHata"] = "PAKET.json yok" }
     } finally { $a.Dispose() }
   }

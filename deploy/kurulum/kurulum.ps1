@@ -4,7 +4,8 @@
 # NE YAPAR: fabrika sunucusuna Windows hizmeti duzeninde (Dagitim v2) SIFIRDAN kurulum ya da AYNI
 #   surumun ONARIMI. Asamalar sirayla, her biri olcerek ilerler; olculemeyen adim DURUR (tahmin yok):
 #     OnKosul    yonetici - Windows x64 - cevap dosyasi (cevap-semasi.json, KATI, sirsiz) - kok/veri
-#                dizini kurallari - paket girdileri - portlar (API mesgulse DUR; PG portSec) - RAM/disk
+#                dizini kurallari - paket girdileri - portlar (API mesgulse DUR; PG portSec) - RAM/disk -
+#                lisans saticisi (bos = paketin kanali PAKET.json backendLisansSunucusu; farkli deger UYARI)
 #     Paket      kok ACL (genis grup yok) - backend paketi KURULUMUN KENDI dogrulayicisiyla (tekserp-
 #                guncelleyici kurulum-paket: imza + imzali listedeki her dosya) surumler\<surum>'e -
 #                current baglantisi - hizmet\backend-hizmeti.ps1 -Uygula -YalnizIskelet (SIRDAN ONCE)
@@ -325,6 +326,15 @@ function AsamaOnKosul {
   $ramMB = [int][math]::Floor((Get-CimInstance Win32_ComputerSystem).TotalPhysicalMemory / 1MB)
   if ($ramMB -lt 2048) { Uyar "RAM $ramMB MB (< 2 GB) - PostgreSQL bellek formulu tabana iner, yavas olabilir" }
 
+  # Lisans saticisi kanal kaydindan (kurulum-ortak.ps1 LisansSunucusuKarari): bos alan = kanal; farkli deger UYARI
+  # (engel degil). Var olan .env (onarim/devam) yeniden yazilmaz: karar ondan, kanaldan farkliysa uyari.
+  $envYolu = Join-Path $kok "yapilandirma\.env"
+  $lisKayit = $null
+  if (Test-Path -LiteralPath $envYolu -PathType Leaf) { $lisKayit = "$(EnvDeger ([IO.File]::ReadAllLines($envYolu)) 'LICENSE_SERVER_URL')" }
+  $lis = LisansSunucusuKarari ([string]$k.backendLisansSunucusu) ([string]$k.lisansSunucusuVarsayilan) ([string]$C["lisans.saticiAdresi"]) $lisKayit ([string]$k.backendKanal)
+  foreach ($x in $lis.uyarilar) { Uyar $x }
+  Ok "lisans sunucusu: $(if ($lis.etkili) { $lis.etkili } else { 'derleme varsayilani' }) ($($lis.kaynakMetni))$(if ($lis.yaz) { ' - .env satiri yazilacak' })"
+
   $plan = [ordered]@{
     v = $KURULUM_BICIMI; mod = $(if ($onarim) { "onarim" } elseif ($yarim) { "devam" } else { "kurulum" }); kok = $kok
     girdiler = [ordered]@{ backend = $zip; pg = $pgZip; pgKunye = $pgKunye }
@@ -332,6 +342,7 @@ function AsamaOnKosul {
     adlar = $ad
     portlar = [ordered]@{ api = $apiPort; pg = [int]$sec.port }
     pg = [ordered]@{ veriDizini = $veri; surum = "$($pgSurum.surum)"; derleme = "$($pgSurum.derleme)"; cizgi = "$($pgSurum.cizgi)"; icu = "$($pgSurum.yayin.'win-x64'.icuSurum)"; ramMB = $ramMB }
+    lisans = [ordered]@{ etkili = $lis.etkili; kaynak = $lis.kaynak; yaz = $lis.yaz; kanal = $lis.kanal; varsayilan = $lis.varsayilan }
     asamalar = [ordered]@{}
   }
   if ($Kuru) {
@@ -601,7 +612,8 @@ function AsamaPostgreSQL {
     SirEkle $jwt
     $satirlar = @("DATABASE_URL=$dbUrl", "JWT_SECRET=$jwt", "PORT=$($d.portlar.api)")
     if ($d.adlar.sonek) { $satirlar += "TEKSERP_GUNCELLEME_DIZINI=$((Join-Path "$($d.adlar.veriKoku)" 'guncelleme') -creplace '\\', '/')" }
-    if ($C["lisans.saticiAdresi"]) { $satirlar += "LICENSE_SERVER_URL=$($C['lisans.saticiAdresi'])" }
+    if (-not $d.PSObject.Properties["lisans"]) { Dur "durum.json lisans saticisi kararini tasimiyor - once OnKosul (ayni kurulum kiti)" }
+    if ($d.lisans.yaz -eq $true) { $satirlar += "LICENSE_SERVER_URL=$($d.lisans.etkili)" }
     if ($C["profil"]) { $satirlar += "TEKSERP_PROFIL=$($C['profil'])" }
     if ($C["yedek.sifreleme"] -eq $true) { $satirlar += "BACKUP_KEY_DIR=$((Join-Path $kok 'yedek-anahtar') -creplace '\\', '/')" }
     EnvYaz $envYolu (($satirlar -join "`n") + "`n")
@@ -827,7 +839,15 @@ function AsamaDogrulama {
   if (-not (Test-Path -LiteralPath $niyet -PathType Container)) { Dur "guncelleme\niyet\ yok: $niyet (backend-hizmeti.ps1 -Uygula kurar)" }
   if (ReparseMi $niyet) { Dur "guncelleme\niyet\ bir baglanti noktasi - niyet yazicisi reddeder: $niyet" }
   $envYolu = Join-Path $kok "yapilandirma\.env"
-  $url = EnvDeger ([IO.File]::ReadAllLines($envYolu)) "DATABASE_URL"
+  $envSatirlari = [IO.File]::ReadAllLines($envYolu)
+  $url = EnvDeger $envSatirlari "DATABASE_URL"
+  # Lisans saticisi yazilan .env'den OLCULUR (ayni islev): karardan sapma ya da kanaldan fark sonuca/kurulum.json'a duser.
+  if ($d.PSObject.Properties["lisans"]) {
+    $lm = LisansSunucusuKarari "$($d.lisans.kanal)" "$($d.lisans.varsayilan)" ([string]$C["lisans.saticiAdresi"]) "$(EnvDeger $envSatirlari 'LICENSE_SERVER_URL')" "$($d.paket.kanal)"
+    foreach ($x in $lm.uyarilar) { Uyar $x }
+    if ("$($lm.etkili)" -cne "$($d.lisans.etkili)") { Uyar "etkin lisans sunucusu ($($lm.etkili), yapilandirma\.env) kurulumun kararindan ($($d.lisans.etkili)) FARKLI" }
+    else { Ok "lisans sunucusu: $(if ($lm.etkili) { $lm.etkili } else { 'derleme varsayilani' }) ($($lm.kaynakMetni))" }
+  } else { Uyar "lisans sunucusu olculmedi: durum.json kurulum kararini tasimiyor" }
   [void]($url -cmatch '^postgresql://([^:]+):([^@]+)@127\.0\.0\.1:([0-9]+)/([^?]+)')
   $rol = [uri]::UnescapeDataString($Matches[1]); $uyParola = [uri]::UnescapeDataString($Matches[2]); $port = [int]$Matches[3]; $vt = $Matches[4]
   SirEkle $uyParola

@@ -14495,3 +14495,16 @@ Negatif sondalar (tetik md5(prosrc) ve dosya md5 ile geri alındı):
 **Satıcı.** Yoklama raporu bekleyiş kodu taşımaz (`bekleyen.neden` karar nedenidir, `son.kod` tamamlanmış denemenin sonucudur). Bu yüzden satıcı metni eklenmedi; satıcının bu bekleyişi görmesi ayrı bir protokol kararıdır.
 
 **Bekçi.** `test_sema_hizasi` (§1–§5 + 14 kalıcı sonda) · `tests/sema_hizasi.rs` (vektörler + dünya: ileride bekler/dokunmaz, sayı eşit yabancı ad, onaylı sürüm bekler, eşit/geride sürer) · `test_guncelleme_durumu` §7l · `serverUpdates.test.tsx`.
+
+## 2026-10-02 — Dağıtım v2 D8e: kurulum lisans satıcısını kanaldan alır, farklı değer uyarır (yönetici kararı K1=A) [ÇEKİRDEK]
+
+**Neden.** 2a geçişi lisans satıcısını kanal kaydından (`deploy/kanallar.json` `backend.lisansSunucusu` → PAKET.json `backendLisansSunucusu`) ölçüyordu, setup ise ölçmüyordu: Gelişmiş sayfasındaki `lisans.saticiAdresi` boşsa `.env`e satır yazılmıyor, backend derleme varsayılanına (üretim satıcısı) bağlanıyordu. testfabrika'nın setup kurulumu bu yüzden üretim satıcısına gidiyordu.
+
+**Karar (yönetici, 2026-10-02, K1=A).** Boş alan = paketin kanalı. Elle girilen değer kanaldan farklıysa kurulum DURMAZ, açık Türkçe UYARI verir (beklenen/girilen); sessiz kipte aynı türetme ve aynı uyarı günlüğe ve sonuca düşer.
+- Karar tek işlevde: `kurulum-ortak.ps1` `LisansSunucusuKarari`. OnKosul kararı plana yazar, PostgreSQL `.env` satırını karardan yazar (ham cevaptan değil), Dogrulama yazılan `.env`ten ölçüp uyarıyı `kurulum.json`a ve sihirbazın sonuç sayfasına taşır.
+- Satır yalnız etkin değer derlemenin varsayılanından (`lisansSunucusuVarsayilan`, `vendor-url.ts`) farklıysa yazılır. Bu geçişin kuralıdır: üretim çapalı kanalda (adnansahin, demofabrika) satır yok, testfabrika'da kanal değeri.
+- Onarım `.env`i yeniden yazmaz: kayıttaki değer korunur, kanaldan farklıysa uyarır; cevaptaki farklı değer "uygulanmadı" diye uyarılır.
+- Sihirbaz alanı paketin kanalıyla ön doldurur (`on-olcum.ps1` `paketLisans`); özet etkili değeri yazar, farkta UYARI satırı basar.
+- PAKET.json alanı yoksa (eski ya da kanal-dışı paket) bugünkü davranış + uyarı. Fail-closed değil, çünkü eski paketler bu alanı hiç taşımadı. Bekçide beyanlıdır.
+
+**Bekçi.** `test_kurulum_betikleri` §1 harness `lisans.*` (9 vektör) · §12 (statik) · S43–S52 + H12–H15 kalıcı sondalar.

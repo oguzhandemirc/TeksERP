@@ -881,7 +881,7 @@ begin
     'Varsayılanlar çoğu kurulum için doğrudur. Güncelleyici yalnız güncelleme sunucusuna (ve verilirse vekile) çıkar.');
   GelismisSayfasi.Add('Güncelleme sunucusu (https://):', False);
   GelismisSayfasi.Add('HTTP vekili (isteğe bağlı; http://ad:port):', False);
-  GelismisSayfasi.Add('Lisans sunucusu (isteğe bağlı; https://):', False);
+  GelismisSayfasi.Add('Lisans sunucusu (boş = paketin kanalı; https://):', False);
   GelismisSayfasi.Values[0] := VARSAYILAN_GUNCELLEME;
   ProfilSayfasi := CreateInputOptionPage(GelismisSayfasi.ID, 'Modül profili', 'Kurulum profili (TEKSERP_PROFIL)',
     'Profil ilk açılışta modül bayraklarını belirler.', True, False);
@@ -934,11 +934,13 @@ begin
   PortSayfasi.Edits[1].Enabled := not (Onarim or Yarim);
   // Gelişmiş ayarlar kayıttan (güncelleyicinin ayar.json'u + .env'deki lisans sunucusu). Onarım .env'i yeniden
   // yazmaz: lisans sunucusu orada korunur, alan kilitli. Yeni köke dönülürse varsayılanlar geri gelir.
+  // Lisans sunucusu yoksa paketin kanalından (paketLisans; boş = kanal), kullanıcının girdiği değer ezilmez.
   if Onarim or Yarim then
   begin
     if Olc('oncekiGuncellemeSunucusu') <> '' then GelismisSayfasi.Values[0] := Olc('oncekiGuncellemeSunucusu');
     if Olc('oncekiVekil') <> '' then GelismisSayfasi.Values[1] := Olc('oncekiVekil');
-    if Olc('oncekiLisansOkundu') = '1' then GelismisSayfasi.Values[2] := Olc('oncekiLisansSunucusu');
+    if Olc('oncekiLisansOkundu') = '1' then GelismisSayfasi.Values[2] := Olc('oncekiLisansSunucusu')
+    else if GelismisSayfasi.Values[2] = '' then GelismisSayfasi.Values[2] := Olc('paketLisans');
     GelismisSayfasi.Edits[2].Enabled := Olc('oncekiLisansOkundu') <> '1';
     GelismisKayittan := True;
   end
@@ -946,10 +948,11 @@ begin
   begin
     GelismisSayfasi.Values[0] := VARSAYILAN_GUNCELLEME;
     GelismisSayfasi.Values[1] := '';
-    GelismisSayfasi.Values[2] := '';
+    GelismisSayfasi.Values[2] := Olc('paketLisans');
     GelismisSayfasi.Edits[2].Enabled := True;
     GelismisKayittan := False;
-  end;
+  end
+  else if GelismisSayfasi.Values[2] = '' then GelismisSayfasi.Values[2] := Olc('paketLisans');
 end;
 
 function NextButtonClick(CurPageID: Integer): Boolean;
@@ -1080,6 +1083,31 @@ begin
   end;
 end;
 
+// Özet: etkili lisans sunucusu + paketin kanalından farklıysa UYARI (engel değil). Karar kurulum.ps1'de
+// (kurulum-ortak.ps1 LisansSunucusuKarari; sonuç sayfası onun uyarısını gösterir): boş = kanal, onarımda kayıttaki .env.
+function LisansOzeti(const NewLine: String): String;
+var Kanal, Etkili, Ad, Duzelt: String;
+begin
+  Kanal := Olc('paketLisans');
+  Etkili := GelismisSayfasi.Values[2];
+  Ad := 'girilen';
+  Duzelt := 'yanlışsa Geri ile düzeltin (boş = kanal)';
+  if (Onarim or Yarim) and (Olc('oncekiLisansOkundu') = '1') then
+  begin
+    Ad := 'kayıttaki .env';
+    Duzelt := 'onarım .env dosyasını değiştirmez; yapilandirma\.env LICENSE_SERVER_URL satırını elle düzeltin';
+    if Etkili = '' then Etkili := Olc('paketLisansVarsayilan');
+  end
+  else if Etkili = '' then Etkili := Kanal;
+  if Etkili = '' then Result := 'Lisans sunucusu: derleme varsayılanı' + NewLine
+  else Result := 'Lisans sunucusu: ' + Etkili + NewLine;
+  if Kanal = '' then
+    Result := Result + 'UYARI: paket lisans sunucusunun kanal değerini taşımıyor (eski ya da kanal dışı paket); kanal kaydıyla karşılaştırılamadı.' + NewLine
+  else if Lowercase(Etkili) <> Lowercase(Kanal) then
+    Result := Result + 'UYARI: lisans sunucusu paketin kanalından FARKLI - beklenen ' + Kanal + ' (kanal ' + Olc('paketKanal') + '), ' +
+      Ad + ' ' + Etkili + '. Kurulum sürer; ' + Duzelt + '.' + NewLine;
+end;
+
 function UpdateReadyMemo(Space, NewLine, MemoUserInfoInfo, MemoDirInfo, MemoTypeInfo, MemoComponentsInfo, MemoGroupInfo, MemoTasksInfo: String): String;
 var S, Ag: String;
 begin
@@ -1100,8 +1128,7 @@ begin
   end;
   S := S + 'Gece yedeği: ' + YedekSayfasi.Values[3] + NewLine + 'Güncelleme sunucusu: ' + GelismisSayfasi.Values[0] + NewLine;
   if GelismisSayfasi.Values[1] <> '' then S := S + 'HTTP vekili: ' + GelismisSayfasi.Values[1] + NewLine;
-  if GelismisSayfasi.Values[2] <> '' then S := S + 'Lisans sunucusu: ' + GelismisSayfasi.Values[2] + NewLine
-  else S := S + 'Lisans sunucusu: varsayılan' + NewLine;
+  S := S + LisansOzeti(NewLine);
   if ProfilDegeri <> '' then S := S + 'Profil: ' + ProfilDegeri + NewLine;
   Result := S;
 end;

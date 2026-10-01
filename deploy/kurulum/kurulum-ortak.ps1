@@ -400,6 +400,52 @@ function EskiPaketEngeli($kurulu, [string]$paketSurum) {
   return $null
 }
 
+# --- Lisans saticisi (backend LICENSE_SERVER_URL): kanal kaydindan, TEK karar ---------------------
+# Kanal degeri PAKET.json backendLisansSunucusu (paketle.ps1: deploy/kanallar.json backend.lisansSunucusu), derlemenin
+# varsayilani lisansSunucusuVarsayilan (vendor-url.ts). kurulum.ps1 OnKosul karari, .env satiri ve Dogrulama olcumu bu
+# islevden; sihirbaz ozeti ayni kurali gosterir. Bos alan = kanal; farkli elle deger ve kayittaki farkli deger ENGELLEMEZ,
+# UYARIR. Satir yalniz etkin deger derleme varsayilanindan FARKLIYSA yazilir (gecis.ps1 ile ayni kural).
+# Eski paket (alan yok): bugunku davranis (girilen yazilir, yoksa derleme varsayilani) + UYARI - fail-closed DEGIL,
+# eski paketler bu alani hic tasimadi. $kayit: $null = .env yok (karar cevaptan) | "" = .env var, satir yok | satir degeri.
+function LisansKoken([string]$v) {
+  if ("$v".Trim() -cmatch '^https://([A-Za-z0-9](?:[A-Za-z0-9.-]{0,251}[A-Za-z0-9])?)(:[0-9]{1,5})?/?$') { return "https://" + $Matches[1].ToLowerInvariant() + "$($Matches[2])" }
+  return $null
+}
+function LisansSunucusuKarari([string]$kanal, [string]$varsayilan, [string]$girilen, $kayit, [string]$kanalAdi) {
+  $kan = LisansKoken $kanal
+  $vars = LisansKoken $varsayilan
+  $gir = LisansKoken $girilen
+  $u = @()
+  if ($null -ne $kayit) {
+    $ham = "$kayit".Trim()
+    if ($ham -ceq "") { $etkili = $vars; $kaynak = "kayit-varsayilan" }
+    elseif ($ham.ToLowerInvariant() -ceq "kapali") { $etkili = "kapali"; $kaynak = "kayit" }
+    else { $etkili = LisansKoken $ham; if (-not $etkili) { $etkili = "(bicim disi)" }; $kaynak = "kayit" }
+    if ($gir -and $gir -cne $etkili) { $u += "cevaptaki lisans sunucusu ($gir) UYGULANMADI: kayittaki yapilandirma\.env korunur (onarim .env'i yeniden yazmaz)" }
+  } elseif ("$girilen".Trim()) {
+    $etkili = $gir; if (-not $etkili) { $etkili = "(bicim disi)" }
+    $kaynak = $(if ($kan -and $gir -ceq $kan) { "kanal" } else { "cevap" })
+  } elseif ($kan) { $etkili = $kan; $kaynak = "kanal" }
+  else { $etkili = $vars; $kaynak = "varsayilan" }
+  $metin = switch ($kaynak) {
+    "kanal" { "kanal kaydi" }
+    "cevap" { "elle girildi" }
+    "kayit" { "kayittaki yapilandirma\.env" }
+    "kayit-varsayilan" { "kayittaki .env'de satir yok: derleme varsayilani" }
+    default { "derleme varsayilani" }
+  }
+  $goster = $(if ($etkili) { "$etkili ($metin)" } else { "derleme varsayilani" })
+  if (-not $kan) {
+    $u += "paket lisans saticisinin kanal degerini tasimiyor (eski ya da kanal-disi paket: PAKET.json backendLisansSunucusu yok) - etkin $goster; kanal kaydiyla karsilastirilamadi"
+  } elseif ($etkili -cne $kan) {
+    $ad = $(if ($kaynak -ceq "cevap") { "girilen" } elseif ($kaynak -cmatch '^kayit') { "kayittaki" } else { "etkin" })
+    $duzelt = $(if ($kaynak -cmatch '^kayit') { "duzeltmek icin yapilandirma\.env'e LICENSE_SERVER_URL=$kan yazip backend hizmetini yeniden baslatin" } else { "yanlissa lisans sunucusu alanini bos birakin (bos = kanal)" })
+    $u += "lisans sunucusu kanal kaydindan FARKLI: beklenen $kan (kanal $kanalAdi, deploy/kanallar.json), $ad $goster - kurulum surer; $duzelt"
+  }
+  $yaz = ($kaynak -ceq "cevap" -or $kaynak -ceq "kanal") -and [bool](LisansKoken $etkili) -and ($etkili -cne $vars)
+  return [ordered]@{ etkili = $etkili; kaynak = $kaynak; kaynakMetni = $metin; yaz = [bool]$yaz; kanal = $kanal; varsayilan = $varsayilan; uyarilar = @($u) }
+}
+
 # --- Portlar (D4 b.4.5: kural deploy/pg/lib/pg-ornegi.mjs portSec ile AYNI; vektorler bekcide) ----
 # Doner: @{ port = <int> ; neden = "..." } ya da @{ hata = "..." }.
 function PortSec([int[]]$mesgul, [int]$baslangic, [int]$bitis, $onceki, $istenen) {
