@@ -4,7 +4,9 @@
 //   §2 davet: incele → kabul (TOTP sırrı YALNIZ canlı yanıtta) → onaysız giriş YOK → yanlış kod RED →
 //      doğru kod AKTİF → davet tek kullanımlık (tekrar 404)
 //   §3 giriş: totp alanı yoksa 400 · yanlış kod ve yanlış parola AYNI 401 iletisi · aynı kod ikinci
-//      kez GEÇMEZ (adım kilidi) · eşik aşımında 429 GIRIS_KILITLI · kilit bitince doğru üçlü girer
+//      kez GEÇMEZ (adım kilidi) · eşik aşımı yalnız O KAYNAĞI kilitler: kilitli kaynaktan doğru üçlü bilinmeyen
+//      hesapla AYNI 401 (kod + ileti) ve süre tabanında · başka kaynaktan doğru üçlü GİRER (hesap süresiz
+//      kilitlenemez) · kilit bitince doğru üçlü girer · kilit ve red denetime kapsamıyla yazılır
 //   §4 yönetici: davet (belirteç bir kez; tekrar yanıtı "gösterilemez") · kilitle → oturum düşer,
 //      giriş YOK · sıfırla → DAVETLI, eski oturum 401 · SON AKTİF YÖNETİCİ düşürülemez (409) · kişi
 //      kendi hesabını kilitleyemez · bilinmeyen izin 400 · yönetici olmayan 403
@@ -12,6 +14,7 @@
 // Koşum: npx tsx scripts/test_totp_zorunlu.ts
 // =============================================================================
 import { randomUUID } from "node:crypto";
+import { LOGIN_FAILURE_FLOOR_MS } from "../src/auth/session.service";
 import { withTesis } from "../src/lib/tenant";
 import { inviteFacilityAdmin } from "../src/services/vendor-admin.service";
 import { TEST_PAROLASI, api, girisYap, hesapKur, kontrol, ortamKur, sonuc, temizleTesis, tesisKur, totpKodu, type Ortam, type TestHesabi } from "./lib/test-ortam";
@@ -54,7 +57,18 @@ async function davetBolumu(o: Ortam, tesisId: string): Promise<void> {
   kontrol("§2h uydurma davet 404", sahte.status === 404);
 }
 
-async function girisBolumu(o: Ortam, h: TestHesabi): Promise<void> {
+const IP_BASLIGI = "x-bekci-ip";
+
+/** Vekil başlığıyla giriş (kaynak adresi bekçinin seçtiği) + gerçek saatle süre. */
+type GirisYaniti = { message?: string; details?: { code?: string }; data?: { belirtec?: string } };
+async function kaynaktan(o: Ortam, ip: string, govde: Record<string, unknown>): Promise<{ status: number; json: GirisYaniti; ms: number }> {
+  const t0 = Date.now();
+  const res = await fetch(`${o.adres}/api/oturum/ac`, { method: "POST", headers: { "Content-Type": "application/json", [IP_BASLIGI]: ip }, body: JSON.stringify(govde) });
+  const json = (await res.json()) as GirisYaniti;
+  return { status: res.status, json, ms: Date.now() - t0 };
+}
+
+async function girisBolumu(o: Ortam, tesisId: string, h: TestHesabi): Promise<void> {
   console.log("\n§3 giriş: TOTP zorunlu");
   const totpsuz = await api(o, "POST", "/api/oturum/ac", { govde: { eposta: h.eposta, parola: TEST_PAROLASI } });
   kontrol("§3a totp alanı yok → 400 (TOTP'siz oturum YOK)", totpsuz.status === 400);
@@ -70,17 +84,37 @@ async function girisBolumu(o: Ortam, h: TestHesabi): Promise<void> {
   const ayniKod = await api(o, "POST", "/api/oturum/ac", { govde: { eposta: h.eposta, parola: TEST_PAROLASI, totp: kod } });
   kontrol("§3c doğru üçlü 200 + belirteç", ok.status === 200 && typeof (ok.json.data as { belirtec?: string }).belirtec === "string");
   kontrol("§3d aynı TOTP kodu ikinci kez GEÇMEZ (adım kilidi)", ayniKod.status === 401);
+  const A = "198.51.100.10";
+  const B = "198.51.100.20";
   for (let i = 0; i < o.ctx.config.GIRIS_ESIGI; i++) {
     o.saat.ilerlet(31_000);
-    await api(o, "POST", "/api/oturum/ac", { govde: { eposta: h.eposta, parola: TEST_PAROLASI, totp: "000001" } });
+    await kaynaktan(o, A, { eposta: h.eposta, parola: TEST_PAROLASI, totp: "000001" });
   }
   o.saat.ilerlet(31_000);
-  const kilitli = await api(o, "POST", "/api/oturum/ac", { govde: { eposta: h.eposta, parola: TEST_PAROLASI, totp: totpKodu(h.sir, o.saat.simdi()) } });
-  kontrol("§3e eşik aşımı → 429 GIRIS_KILITLI (doğru üçlü de girmez)", kilitli.status === 429 && kilitli.json.details?.code === "GIRIS_KILITLI");
+  const kilitli = await kaynaktan(o, A, { eposta: h.eposta, parola: TEST_PAROLASI, totp: totpKodu(h.sir, o.saat.simdi()) });
+  const bilinmeyen = await kaynaktan(o, A, { eposta: "hic-olmayan@ornek.test", parola: TEST_PAROLASI, totp: "123456" });
+  kontrol(
+    "§3e ⭐ eşik aşan KAYNAKTAN doğru üçlü girmez ve yanıt bilinmeyen hesapla AYNI (401 · kod · ileti)",
+    kilitli.status === 401 && kilitli.json.details?.code === "GIRIS_BASARISIZ" && kilitli.status === bilinmeyen.status && kilitli.json.details?.code === bilinmeyen.json.details?.code && kilitli.json.message === bilinmeyen.json.message,
+    `${kilitli.status} ${kilitli.json.details?.code}`,
+  );
+  kontrol(`§3f kilitli ve bilinmeyen hesap yanıtı süre tabanında (≥ ${LOGIN_FAILURE_FLOOR_MS} ms; eşit maliyet)`, kilitli.ms >= LOGIN_FAILURE_FLOOR_MS - 5 && bilinmeyen.ms >= LOGIN_FAILURE_FLOOR_MS - 5, `${kilitli.ms} / ${bilinmeyen.ms} ms`);
+  o.saat.ilerlet(31_000);
+  const baskaKaynak = await kaynaktan(o, B, { eposta: h.eposta, parola: TEST_PAROLASI, totp: totpKodu(h.sir, o.saat.simdi()) });
+  kontrol("§3g ⭐ BAŞKA kaynaktan doğru üçlü girer (kilit hesap + kaynak ikilisine bağlı; hesap süresiz kilitlenemez)", baskaKaynak.status === 200, `${baskaKaynak.status}`);
+  o.saat.ilerlet(31_000);
+  const halaKilitli = await kaynaktan(o, A, { eposta: h.eposta, parola: TEST_PAROLASI, totp: totpKodu(h.sir, o.saat.simdi()) });
+  kontrol("§3h başka kaynağın başarısı kilitli kaynağı AÇMAZ", halaKilitli.status === 401);
   o.saat.ilerlet((o.ctx.config.KILIT_DK + 1) * 60_000);
-  const acildi = await api(o, "POST", "/api/oturum/ac", { govde: { eposta: h.eposta, parola: TEST_PAROLASI, totp: totpKodu(h.sir, o.saat.simdi()) } });
-  kontrol("§3f kilit bitince doğru üçlü girer", acildi.status === 200);
-  h.belirtec = (acildi.json.data as { belirtec: string }).belirtec;
+  const acildi = await kaynaktan(o, A, { eposta: h.eposta, parola: TEST_PAROLASI, totp: totpKodu(h.sir, o.saat.simdi()) });
+  kontrol("§3i kilit bitince aynı kaynaktan doğru üçlü girer", acildi.status === 200);
+  const olaylar = await withTesis(o.goc.prisma, { tesisId }, (tx) =>
+    tx.accountAudit.findMany({ where: { tesisId, entityId: h.accountId, event: { in: ["HESAP_GECICI_KILIT", "GIRIS_REDDEDILDI"] } } }),
+  );
+  const kilitOlayi = olaylar.find((x) => x.event === "HESAP_GECICI_KILIT")?.summary as { kapsam?: string; ip?: string } | undefined;
+  const redOlayi = olaylar.find((x) => x.event === "GIRIS_REDDEDILDI")?.summary as { sebep?: string } | undefined;
+  kontrol("§3j kilit denetimde kapsamıyla (KAYNAK + adres) · kilitli kaynaktan deneme GIRIS_REDDEDILDI (KAYNAK_KILITLI)", kilitOlayi?.kapsam === "KAYNAK" && kilitOlayi.ip === A && redOlayi?.sebep === "KAYNAK_KILITLI", JSON.stringify([kilitOlayi, redOlayi]));
+  h.belirtec = acildi.json.data?.belirtec ?? "";
 }
 
 async function yonetimBolumu(o: Ortam, tesisId: string, yonetici: TestHesabi, uye: TestHesabi): Promise<void> {
@@ -139,7 +173,7 @@ async function parolaBolumu(o: Ortam, h: TestHesabi): Promise<void> {
 
 async function main(): Promise<void> {
   // Giriş hız sınırı (IP başına, gerçek saat) bu bekçinin onlarca girişini kesmesin — kilit ölçülüyor.
-  const o = await ortamKur({ GIRIS_HIZ_DK: "1000" });
+  const o = await ortamKur({ GIRIS_HIZ_DK: "1000", VEKIL_IP_BASLIGI: IP_BASLIGI });
   const k = await tesisKur(o);
   try {
     await dbSeddi(o, k.tesisId);
@@ -147,7 +181,7 @@ async function main(): Promise<void> {
     const yonetici = await hesapKur(o, k.tesisId, ["bulut:hesap:yonet", "bulut:siparis:oku"]);
     const uye = await hesapKur(o, k.tesisId, ["bulut:siparis:oku"]);
     const girisci = await hesapKur(o, k.tesisId, ["bulut:siparis:oku"]);
-    await girisBolumu(o, girisci);
+    await girisBolumu(o, k.tesisId, girisci);
     await yonetimBolumu(o, k.tesisId, yonetici, uye);
     await parolaBolumu(o, girisci);
   } finally {
