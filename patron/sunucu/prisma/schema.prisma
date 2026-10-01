@@ -68,7 +68,8 @@ enum InboxKind {
 }
 
 /// Gelen kutusu durum makinesi (hepsi atomik claim): BEKLIYOR → ISLENIYOR → ISLENDI | REDDEDILDI;
-/// BEKLIYOR → IPTAL (yalnız yazar); ISLENIYOR → BEKLIYOR (claim süresi dolunca, bakım işi).
+/// BEKLIYOR → IPTAL (yalnız yazar); ISLENIYOR → BEKLIYOR (claim süresi dolunca, bakım işi);
+/// BEKLIYOR → REDDEDILDI `YAZAR_YETKISIZ` (fabrika alırken yazar artık AKTİF değil ya da izni yok; hiç alınmamış mesaj).
 enum InboxStatus {
   BEKLIYOR
   ISLENIYOR

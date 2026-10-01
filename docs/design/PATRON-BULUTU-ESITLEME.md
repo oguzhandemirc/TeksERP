@@ -418,7 +418,7 @@ ISLENIYOR ──(claimBitis geçti, bulut işi)──► BEKLIYOR        (fabrik
 ```
 
 ### 8.2 Akış
-Hesap kaydı yazar → zil `gelen-kutusu` → fabrika `POST /v1/gelen-kutusu/al {enFazla: 20}` → bulut claim (`claimBitis = now()+10dk`) → fabrika kayıtları `createdAt` sırasıyla, TEK SÜREÇTE işler (bir kaydın hatası diğerlerini durdurmaz) → `POST /v1/gelen-kutusu/sonuc [{mesajId, durum, varlikId, belgeNo, kod, mesaj}]` → bulut `ISLENIYOR→ISLENDI|REDDEDILDI` (WHERE durum='ISLENIYOR' AND sahipKurulumId eşleşir) + push kaydı (B5). Zil kaçarsa her eşitleme turu `al`ı yoklar.
+Hesap kaydı yazar → zil `gelen-kutusu` → fabrika `POST /v1/gelen-kutusu/al {enFazla: 20}` → bulut claim (`claimBitis = now()+10dk`; G19: yazar claim anında da sorulur — hiç alınmamış mesajın yazarı artık AKTİF değilse ya da türün yazma iznini taşımıyorsa mesaj fabrikaya gitmez, `BEKLIYOR→REDDEDILDI` `YAZAR_YETKISIZ`) → fabrika kayıtları `createdAt` sırasıyla, TEK SÜREÇTE işler (bir kaydın hatası diğerlerini durdurmaz) → `POST /v1/gelen-kutusu/sonuc [{mesajId, durum, varlikId, belgeNo, kod, mesaj}]` → bulut `ISLENIYOR→ISLENDI|REDDEDILDI` (WHERE durum='ISLENIYOR' AND sahipKurulumId eşleşir) + push kaydı (B5). Zil kaçarsa her eşitleme turu `al`ı yoklar.
 
 ### 8.3 Fabrikada işleme — idempotency ve makbuz
 - `cloud_inbox_receipts {id, messageId @unique, kind, entityId, cloudAccountId, cloudAccountName, result jsonb, createdAt}` — ekleme-yalnız, DEFTER sınıfı (hangi bulut mesajının hangi varlığı doğurduğunun tek kaydı; silinmez).
