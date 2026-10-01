@@ -569,6 +569,9 @@ export class AuthService {
 
     // jti token'a jwt.sign jwtid ile eklenir — sign payload'ında jti TUTMUYORUZ
     // (jsonwebtoken "jti already present" hatası verir). Dönen JwtPayload jti taşır.
+    // Giriş, istek izin önbelleğini tazeler: tokenVersion artırmayan değişiklik (süreli iznin açılışı)
+    // yeni token'la bayat kümeden okunmasın.
+    requestPermissionCache.delete(user.id);
     const signPayload = {
       userId: user.id,
       username: user.username,

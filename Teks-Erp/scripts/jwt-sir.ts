@@ -11,6 +11,7 @@
 // =============================================================================
 
 import fs from "node:fs";
+import path from "node:path";
 import { randomBytes } from "node:crypto";
 import { parse } from "dotenv";
 import { checkJwtSecret, type JwtSecretVerdict } from "../src/lib/jwt-secret";
@@ -66,6 +67,8 @@ function main(argv: string[]): number {
     console.error(`X .env okunamadi: ${envYolu}`);
     return CIKIS_OLCULEMEDI;
   }
+  // Operatör hangi dosyayı ölçtüğünü/yazdığını görür (yan yana kurulumda iki `.env` vardır).
+  console.log(`Hedef dosya: ${path.resolve(envYolu)}`);
   const karar = envMetniniDenetle(metin);
 
   if (komut === "denetle") {

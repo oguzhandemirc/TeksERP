@@ -29,7 +29,7 @@ Yollar `C:\TeksERP` köküyle yazıldı; kurulum başka kökteyse onu kullan.
    cd C:\TeksERP\app
    node dist\tools\jwt-sir.cjs denetle --env .env
    ```
-   Çıkış: `0` kabul · `2` UYARI (döndürülmeli) · `3` RET (backend açılmaz) · `1` ölçülemedi. Sır değeri hiçbir çıktıya basılmaz.
+   İlk satır ölçülen dosyayı söyler (`Hedef dosya: …` — yan yana kurulumda doğru `.env` mi?). Çıkış: `0` kabul · `2` UYARI (döndürülmeli) · `3` RET (backend açılmaz) · `1` ölçülemedi. Sır değeri hiçbir çıktıya basılmaz.
 2. **Hazırlık:** vardiya bitti, tabletlerde açık iş yok. `.env`in kopyası alınır (geri alma için; sır taşır):
    ```powershell
    Copy-Item .env .env.jwt-oncesi

@@ -6,7 +6,7 @@
 //      kendi jti'si) yetki KAZANMAZ: req.user.permissions = DB kümesi, kullanıcı adı DB'den,
 //      `requirePermission("admin:users")` 403; başkasının userId'siyle kendi jti'si 401.
 //   §2 Önbellek TTL tazeliktir: DB'de bump'sız değişen izin TTL içinde önbellekten,
-//      önbellek sıfırlanınca taze kümeden okunur.
+//      önbellek sıfırlanınca ya da yeni girişte taze kümeden okunur.
 //   §3 İzin yazıcısı (PermissionManagementService.grantPermission) tokenVersion'ı artırır →
 //      eski token 401; yeni giriş yeni izni taşır.
 //   §4 Mutlak tavan 0 + zaman aşımı kapalı → yeni token EXP'Lİ (en uzun tavan, 365 gün).
@@ -188,10 +188,17 @@ async function main(): Promise<void> {
       where: { userId, permissionId: rollRead.id },
       data: { validUntil: null },
     });
+    const girisTaze = await AuthService.login(username, password);
+    const r2c = await kimlikDogrula(girisTaze.token);
+    check(
+      "§2c yeni giriş önbelleği tazeler (bump'sız değişiklik TTL beklemeden görünür)",
+      r2c.err === null && (r2c.req.user?.permissions ?? []).includes("roll:read"),
+      JSON.stringify(r2c.req.user?.permissions),
+    );
 
     // ── §3 izin yazıcısı tokenVersion'ı artırır ────────────────────────────────
     await PermissionManagementService.grantPermission(userId, { permissionId: orderRead.id }, undefined);
-    const r3a = await kimlikDogrula(giris.token);
+    const r3a = await kimlikDogrula(girisTaze.token);
     check("§3a grant sonrası eski token 401 (tokenVersion arttı)", r3a.err?.statusCode === 401, JSON.stringify(r3a.err));
     const giris2 = await AuthService.login(username, password);
     const r3b = await kimlikDogrula(giris2.token);
