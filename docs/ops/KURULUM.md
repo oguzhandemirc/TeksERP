@@ -118,7 +118,7 @@ SHOW teks.audit_guard;   -- 'on' dönmeli
    - **`DATABASE_URL` yedeklemenin de kaynağıdır** — `backup.service.ts` host/port/user/db/şifreyi buradan çözer.
    - Eski `secret.json` **artık yok**; tek sır kaynağı `.env` → **yedekle**.
    - `DATABASE_URL` set değilse açılışta throw (`src/lib/prisma.ts`).
-   - `JWT_SECRET` yok veya <32 karakter ise **backend AÇILMAZ** (`auth.service.ts`, modül-yükleme anında throw). `example-env.txt`'teki demo değeri prod'da kullanma — rastgele ≥32 hex üret.
+   - `JWT_SECRET` yok veya <32 karakter ise **backend AÇILMAZ** (`src/lib/jwt-secret.ts`, modül-yükleme anında throw). Depoda/örnek dosyada geçmiş BİLİNEN ya da zayıf bir değerse backend açılır ama yüksek sesle uyarır ve `/api/admin/health` → `jwtSecret.rotationRequired: true` der — döndürme reçetesi `JWT-SIR-ROTASYONU.md`. Rastgele ≥32 karakter üret (`ilk-kurulum.ps1` kendisi üretir).
    - `PORT` (default 4000) ve `HOST` (default `0.0.0.0` = tüm LAN) opsiyonel.
    - **`TEKSERP_PROFIL` — müşteri hangi profili aldı** (`basit | standart | perde | dokuma | tam`).
      İlk açılışta modül anahtarlarını (Üretim / Ön muhasebe / Ticaret / İplik / Çoklu depo /
@@ -232,8 +232,8 @@ Ayrıntı: [`SUPERADMIN-KURULUM.md`](./SUPERADMIN-KURULUM.md).
 
 ## B. İlk Admin + Temel Sistem Ayarları
 
-13. **İlk giriş:** `admin` / `123123` (tam yetki). Uygulamaya giriş için en az 1 izin şart (`canEnterApp`).
-14. **Admin şifresini değiştir** — demo değer, prod'da değiştirilmeli. (Kesin menü yolu: doğrulamak gerek.)
+13. **İlk giriş:** A4 kaynak-kodu seed'iyle kurulduysa `admin` / `123123` (tam yetki) — bu GELİŞTİRME parolasıdır (`prisma.config.ts` seed'i `--gelistirme` ile koşar) ve zorunlu değişim taşımaz. Paketli Windows kurulumu seed koşmaz (ilk hesap satıcı hesabı, aşağıda); Docker'ın ilk yöneticisi bir kez gösterilen parolayla ve ilk girişte zorunlu değişimle doğar (`LINUX-DOCKER-KURULUM.md`). Uygulamaya giriş için en az 1 izin şart (`canEnterApp`).
+14. **Admin şifresini değiştir** — demo değer, prod'da değiştirilmeli; yeni parola en az 10 karakter (tek kaynak `src/constants/password-policy.ts`). (Kesin menü yolu: doğrulamak gerek.)
 15. **Firma adı:** Genel Ayarlar → "Şirket Bilgileri" → `company.name`.
 16. **Künye + belge içeriği:** Tanımlar → Sistem → Belge Şablonları (irsaliye + refakat kartı bölüm aç-kapa, başlık/künye/imza, canlı önizleme).
 17. **Etiket dili = PPLA (cihaz bazlı):** Global "etiket yazıcı dili" ayarı **YOK** — dil her yazıcıda ayrı (`PeripheralDevice.languageOverride`, Tanımlar → Cihazlar / ADIM 8). Seed'lenen tüm yazıcılar PPLA geldiğinden ekstra gerekmez; farklı firmware'de (Zebra=ZPL) cihaz kaydından değiştir.
@@ -350,7 +350,7 @@ Ayrıntı: [`SUPERADMIN-KURULUM.md`](./SUPERADMIN-KURULUM.md).
 - **electron:rebuild:** COM cihazlı her PC'de ZORUNLU; atlanırsa cihaz **sessizce** devre dışı. Electron yükseltme + `npm install` sonrası tekrar.
 - **Yazıcı dili:** Cihaz Kaydı'nda dil ZORUNLU — fiziksel yazıcının firmware diliyle (PPLA/PPLB/ZPL) eşleşmeli. En sık hata: yanlış dil seçmek.
 - **DEMO seed:** bootstrap + demo birlikte yazılır (guard yok). Gerçek fabrikada demo satırlarını temizle. Tam reset = `DROP SCHEMA public CASCADE` → migrate → seed. **Eskiden installer `.seeded` bayrağıyla ikinci seed'i otomatik engelliyordu; pm2 yolunda bu koruma YOK** — güncellemede `npm run seed` çalıştırmamak operatör disiplinine bağlı.
-- **JWT_SECRET <32:** Backend açılmaz; rastgele ≥32 üret.
+- **JWT_SECRET <32:** Backend açılmaz; rastgele ≥32 üret. Bilinen/zayıf sır açılır ama uyarır → `JWT-SIR-ROTASYONU.md`.
 - **TEK-PROCESS:** cluster/2. replica EKLEME — presence + cache + scheduler bozulur. Fork modu.
 - **/health (alias yok):** `GET /health`.
 - **`.env` yedekle:** Tek sır kaynağı (`DATABASE_URL` + `JWT_SECRET`); kaybolursa DB'ye bağlanılamaz ve geri yükleme yapılamaz. Eski `secret.json` **kaldırıldı**. DB `127.0.0.1` dinler (installer **5433** kullanıyordu — sunucudaki gerçek portu `.env`'den teyit et).

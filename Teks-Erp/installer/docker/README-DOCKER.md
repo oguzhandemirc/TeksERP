@@ -62,7 +62,9 @@ build edip başlatır → migration + seed otomatik çalışır → erişim adre
 **Erişim:**
 - Bu sunucuda: `http://localhost:4000`
 - Fabrika ağında: `http://<sunucu-ip>:4000`
-- Giriş: **admin / 123123**
+- Giriş: **admin** + `baslat.sh`'ın ilk kurulumda BİR KEZ gösterdiği parola (`.env.docker`a yazılmaz;
+  kendi parolanı vermek için `ILK_YONETICI_PAROLASI='<en az 10 karakter>' ./baslat.sh`). İlk girişte
+  panel yeni parola ister; değiştirilmeden tablet girişi 403 alır.
 
 > Swagger (`/api-docs`) **üretimde kapalıdır** (`NODE_ENV=production`); yalnız
 > geliştirme ortamında açık.
