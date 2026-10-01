@@ -1,4 +1,4 @@
-import { Activity, Archive, ScrollText, Hash, Blocks, Cpu, DatabaseBackup, DatabaseZap, Download, FileCode2, Gauge, Info, KeyRound, LifeBuoy, MapPin, Search, Building2, Monitor, Printer, SlidersHorizontal, Upload, type LucideIcon, Merge, MonitorSmartphone } from "lucide-react";
+import { Activity, Archive, ScrollText, Hash, Blocks, Cpu, DatabaseBackup, DatabaseZap, Download, FileCode2, Gauge, Info, KeyRound, LifeBuoy, MapPin, Search, Building2, Monitor, Printer, ServerCog, SlidersHorizontal, Upload, type LucideIcon, Merge, MonitorSmartphone } from "lucide-react";
 import {
   LICENSE_ACCESS,
   SETTINGS_COMPANY_ACCESS,
@@ -302,6 +302,18 @@ export const systemTiles: SystemTile[] = [
     // ⚠️ content-routes.tsx'teki ProtectedRoute ile AYNI küme.
     permissionAny: LICENSE_ACCESS,
     licenseObservationGate: true,
+  },
+  {
+    // Sunucu (backend) güncellemesi — "Güncelleme" karosu BU BİLGİSAYARIN panelidir, bu karo sunucunun.
+    // Gözlem kipinde de görünür: ONAYLI politikada onayı fabrikanın yetkilisi verir.
+    key: "server-updates",
+    title: "Sunucu Güncellemeleri",
+    description: "Sunucu sürümü, güncelleme politikası ve onayı, güncelleyici durumu, geçmiş",
+    icon: ServerCog,
+    to: "/system/server-updates",
+    group: "config",
+    // ⚠️ content-routes.tsx'teki ProtectedRoute ile AYNI küme.
+    permissionAny: LICENSE_ACCESS,
   },
   {
     key: "support",

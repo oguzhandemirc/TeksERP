@@ -185,7 +185,7 @@ Satıcı web (vitest, `cd satici/web && npx vitest run`; commit kapısında koş
 
 Devreye alma betikleri (kök, zero-dep, ağsız): `node scripts/test_lisans_devreye_kuru.mjs` (runbook `docs/ops/LISANS-DEVREYE-ALMA-TESTFABRIKA.md`)
 
-Panel (vitest, `cd Electron && npx vitest run <yol>`): `src/lib/download-token.test.ts` (indirme belirteci, 3b) · `src/lib/license/acceptance.test.ts` · `src/pages/System/License/LicenseAcceptanceCard.test.tsx` · `src/pages/System/License/LicenseActivationGate.test.tsx` (sözleşme kabulü, Ek-7)
+Panel (vitest, `cd Electron && npx vitest run <yol>`): `src/lib/download-token.test.ts` (indirme belirteci, 3b) · `src/lib/license/acceptance.test.ts` · `src/pages/System/License/LicenseAcceptanceCard.test.tsx` · `src/pages/System/License/LicenseActivationGate.test.tsx` (sözleşme kabulü, Ek-7) · `src/pages/System/ServerUpdates/serverUpdates.test.tsx` (sunucu güncellemeleri: durum, onay, deneme token'ı — Dağıtım v2)
 
 Tablet (jest, `cd mobil && npx jest <yol>`): `src/services/downloadToken.service.test.ts` (indirme belirteci, 3c)
 
