@@ -1,7 +1,7 @@
 # Bulut kurulum — müşteriye özel VDS (lisans sınıfı BARINDIRILAN)
 
 > **Durum:** TASARIM (2026-10-01). Kod yazılmadı. Uygulama, bugünkü işler (Dağıtım v2, lisans v2, demofabrika) bittikten sonra başlar; dilim planı §9'da.
-> **Bağlayıcı kararlar:** kullanıcı, 2026-10-01 (§0.1). Bu belge onları uygular, değiştirmez. Önerdiği teknik kararlar §0.2'de, yönetici onayına.
+> **Bağlayıcı kararlar:** kullanıcı, 2026-10-01 (§0.1; açık soruların cevapları K-B10…K-B15, ayrıntı §10). Bu belge onları uygular, değiştirmez. Teknik kararlar §0.2'de; T2 ve T3 yönetici onaylıdır. Açık kalan tek konu avukata giden H3'tür (§7.1).
 > **Dayanak:** `docs/design/LISANS-KOD-KORUMA.md` §2 ve Faz 2f (Linux Docker yapıtı) · `docs/design/LISANS-PROTOKOLU.md` · `docs/design/LISANS-V2-CEVRIMDISI-KIRA.md` · `docs/design/PATRON-BULUTU.md` · Dağıtım v2 sözleşmesi `GUNCELLEYICI.md` (dal `dagitim/w2-taban`; bu belge yazılırken `main`de değil) · `docs/ops/LINUX-DOCKER-KURULUM.md` · `docs/ops/SATICI-KURULUM.md` · `docs/ops/PATRON-BULUTU-KURULUM.md` · `docs/ops/PORTAL-GENEL-ERISIM.md` · `docs/ops/YEDEK-SIFRELEME.md` · `docs/ops/YEDEK-VPS-KURULUM.md` · `docs/ops/SUNUCU-ENVANTERI.md` · 2026-10-01 güvenlik denetimi (repo dışı; burada yalnız G-numaraları ve gereksinim olarak anılır).
 > **İlişki:** `docs/design/SAAS-TASARIM.md` çok kiracılı (tek API, DB-per-tenant) bir taslaktır ve uygulanmıyor. Bu belge onun yerine geçmez. Burada model **tek kiracılıdır**: müşteri başına bir VDS, aynı fabrika backend'i. SaaS taslağından yalnız SLA dürüstlüğü (§A3), sözleşme çerçevesi (§A4) ve fidye dirençli yedek (§C7) alındı.
 
@@ -22,17 +22,23 @@ Bulut kurulum, fabrika kurulumunun aynısıdır. Tek fark, backend ile PostgreSQ
 | K-B7 | Yedek | Şifreli gece yedeği ve başka sağlayıcıda kopya |
 | K-B8 | Güncelleme | Fabrikadakiyle aynı politika (OTOMATIK · ONAYLI · DONDUR, müşteri başına). Güncelleyici imzalı Docker imajı çeker, sorunda geri döner |
 | K-B9 | Patron bulutu | Bulut kurulum da fabrika kurulumuyla aynı eşitleme yolunu kullanır |
+| K-B10 | Yönetim erişimi (S1) | SSH internetten **port 2222'de, yalnız anahtarla** açılır (tailnet önerisi seçilmedi): `PasswordAuthentication no` · `AllowUsers` · `MaxAuthTries` · fail2ban. Gerekçe: 2026-10-01 sabahı bizim VDS'te parola girişi kapatıldı; öncesinde 30 günde ~12.700 başarısız parola denemesi ölçülmüştü. Parola girişi kapalıyken kaba kuvvetin işe yarayacağı bir yol kalmaz |
+| K-B11 | Yedek kopyası (S2) | Farklı bir TR sağlayıcıda, bütün bulut müşterilerine ortak yedek deposu VDS'i. Her müşteri yalnız kendi dizinine yazar |
+| K-B12 | Dış izleme (S3) | Kendi gözcümüz (`satici-gozcu`, satıcı VDS'inde) |
+| K-B13 | VDS paketi (S4) | **Müşteri seçer, iki paket vardır:** "Standart" (ekonomik TR sağlayıcı, ~150–250 TL/ay) ve "Kurumsal" (SLA'lı TR sağlayıcı, ~600–1.200 TL/ay). Kurulum betiği sağlayıcıdan bağımsızdır |
+| K-B14 | Güncelleme varsayılanı (S5) | ONAYLI (fabrikadakiyle aynı varsayılan) |
+| K-B15 | İki adımlı giriş (S6) | Bulutta da **isteğe bağlı** kalır (2026-09-30 kararı aynen). Açığı hız sınırı, kalıcı giriş kilidi ve onaylı cihaz kapatır (R4–R6) |
 
-### 0.2 Bu belgenin önerdiği kararlar (yönetici onayına)
+### 0.2 Teknik kararlar
 
-| # | Öneri | Gerekçe |
-|---|---|---|
-| T1 | Alt alan **kanal kodudur** (`<kanal>.etkiliyazilim.com`). Ayrılmış adlar listesi kurulumu durdurur (`lisans` · `lisans-test` · `portal` · `patron` · `guncelleme` · `www` · `mail` · `send` · `api` · `demo` …) | Müşteri kimliği tek kaynaktan gelir (`deploy/kanallar.json`). Birinci düzey alt alanı Cloudflare'in ücretsiz Universal SSL sertifikası kapsar, `x.y.etkiliyazilim.com` ise ücretli sertifika ister |
-| T2 | Güncelleyici, **yan konteyner değil, konakta systemd hizmeti** olarak çalışır (Dağıtım v2'nin Rust güncelleyicisinin Linux arka ucu) | Docker API'ye erişim kök yetkisine eşdeğerdir. Soketi bir konteynere bağlamak, kök yüzeyini konteyner ağına açar. Konak hizmeti, Windows'taki SYSTEM hizmetinin birebir karşılığıdır (§4) |
-| T3 | TLS'i `nginx-unprivileged` (özetle sabit imaj) sonlandırır. Traefik kullanılmaz | Tek arka uç için etiket keşfi gerekmez. Traefik'in istediği soket vekili ortadan kalkar. mTLS (AOP) ve gerçek IP çözümü nginx'te yerleşiktir |
-| T4 | SSH genel internete kapalıdır. Yalnız tailnet ve anahtar kabul edilir. Acil durum kapısı sağlayıcının konsoludur (soru S1) | 2026-10-01 denetiminin kritik bulgusu (G1) internete açık SSH idi |
-| T5 | Bütün imajlar (backend, PostgreSQL, nginx) **bizim CDN'imizden ve imzalı bildirimdeki özetle** gelir. Docker Hub'a çıkılmaz | Tek çıkış hedefi, tek güven zinciri. Kapı İndirme Worker'ıdır |
-| T6 | Dış izleme, satıcı VDS'inde **yeni bir en az yetkili yan konteynerle** (`satici-gozcu`) yapılır. Uyarılar mevcut bildirim kanalından (e-posta + Telegram) gider (soru S3) | Bildirim altyapısı zaten var. Üçüncü taraf ve yurt dışı bağımlılık eklenmez |
+| # | Karar | Gerekçe | Durum |
+|---|---|---|---|
+| T1 | Alt alan **kanal kodudur** (`<kanal>.etkiliyazilim.com`). Ayrılmış adlar listesi kurulumu durdurur (`lisans` · `lisans-test` · `portal` · `patron` · `guncelleme` · `www` · `mail` · `send` · `api` · `demo` …) | Müşteri kimliği tek kaynaktan gelir (`deploy/kanallar.json`). Birinci düzey alt alanı Cloudflare'in ücretsiz Universal SSL sertifikası kapsar, `x.y.etkiliyazilim.com` ise ücretli sertifika ister | öneri |
+| T2 | Güncelleyici, **yan konteyner değil, konakta systemd hizmeti** olarak çalışır (Dağıtım v2'nin Rust güncelleyicisinin Linux arka ucu) | Docker API'ye erişim kök yetkisine eşdeğerdir. Soketi bir konteynere bağlamak, kök yüzeyini konteyner ağına açar. Konak hizmeti, Windows'taki SYSTEM hizmetinin birebir karşılığıdır (§4) | **✅ yönetici onayladı (2026-10-01)** |
+| T3 | TLS'i `nginx-unprivileged` (özetle sabit imaj) sonlandırır. Traefik kullanılmaz | Tek arka uç için etiket keşfi gerekmez. Traefik'in istediği soket vekili ortadan kalkar. mTLS (AOP) ve gerçek IP çözümü nginx'te yerleşiktir | **✅ yönetici onayladı (2026-10-01)** |
+| T4 | SSH erişimi K-B10'a göre kurulur (2222, yalnız anahtar). Tailnet önerisi kullanıcı tarafından seçilmedi | Denetimin kritik bulgusu (G1) parolayla açık SSH idi; anahtar zorunluluğu onu kapatır | kullanıcı kararı (K-B10) |
+| T5 | Bütün imajlar (backend, PostgreSQL, nginx) **bizim CDN'imizden ve imzalı bildirimdeki özetle** gelir. Docker Hub'a çıkılmaz | Tek çıkış hedefi, tek güven zinciri. Kapı İndirme Worker'ıdır | öneri |
+| T6 | Dış izleme, satıcı VDS'inde **yeni bir en az yetkili yan konteynerle** (`satici-gozcu`) yapılır. Uyarılar mevcut bildirim kanalından (e-posta + Telegram) gider | Bildirim altyapısı zaten var. Üçüncü taraf ve yurt dışı bağımlılık eklenmez | kullanıcı kararı (K-B12) |
 
 ### 0.3 Kapsam dışı
 
@@ -53,7 +59,7 @@ Bulut kurulum, fabrika kurulumunun aynısıdır. Tek fark, backend ile PostgreSQ
   satıcı · patron · güncelleme · satici-gozcu ── /health (CF üzerinden, 60 sn) ──────────────► │  postgres 16 · yedek (gece .tkenc)           │
                                                                                               │  konak: tekserp-guncelleyici (systemd)      │
  Yedek deposu (BAŞKA TR sağlayıcı) ◄── SFTP yalnız ekle (gece) ─────────────────────────────── │  konak: yedek-kopya · canlılık zamanlayıcısı │
-                                                                                              │  SSH yalnız tailnet (genel 22/2222 KAPALI)   │
+                                                                                              │  SSH 2222, yalnız anahtar (22 KAPALI)        │
                                                                                               └─────────────────────────────────────────────┘
 ```
 
@@ -75,10 +81,11 @@ Bulut kurulum, fabrika kurulumunun aynısıdır. Tek fark, backend ile PostgreSQ
 |---|---|---|
 | Gelen 443 | Yalnız Cloudflare IPv4/IPv6 aralıkları. Liste günlük tazelenir, boş ya da biçimsiz gelen liste uygulanmaz (eski liste kalır, uyarı düşer) | `DOCKER-USER` + `ipset` (Docker yayımlı portlarda ufw'yi atlar). `docs/ops/SATICI-KURULUM.md` §1 kalıbı |
 | Gelen 443, TLS | Cloudflare'in istemci sertifikası (AOP) yoksa el sıkışma reddedilir. Bölge SSL kipi **Full (strict)** | nginx `ssl_verify_client on` |
-| Gelen diğer | 80, 22, 2222, 4000, 5432 kapalı. SSH yalnız `tailscale0` | ufw varsayılan RED, sshd `ListenAddress` tailnet |
+| Gelen 2222 (SSH) | Her yerden, yalnız anahtarla (K-B10). fail2ban: 3 hata / 10 dk → 1 sa yasak; tekrarlayana (`recidive`) 1 hafta | ufw (sshd konakta koşar, Docker'ın yayımladığı bir port değildir; ufw burada geçerlidir) |
+| Gelen diğer | 80, 22, 4000, 5432 kapalı | ufw varsayılan RED |
 | Çıkan, backend | Yalnız tcp/443 ve sabit iki DNS. Özel aralıklar (RFC 1918, 100.64/10, 169.254/16, VDS'in kendisi) **DROP** | `DOCKER-USER`, `cikis` ağının alt ağı. `deploy/satici/vds/bildirim-cikis.sh` kalıbı |
 | Çıkan, postgres / yedek / kenar | YOK (internal ağlar) | compose |
-| Çıkan, konak | apt, tailscale, CDN (güncelleyici), depo (SFTP) | — |
+| Çıkan, konak | apt, CDN (güncelleyici), depo (SFTP) | — |
 
 Backend'in dışarıya çıkan bütün istekleri kurulum anahtarıyla imzalıdır ve bugünkü kanallardan gider: lisans yoklaması ve zil (`lisans.`), patron eşitlemesi (`patron.`, `Teks-Erp/src/cloud-sync/cloud-url.ts`), indirme belirteci, döviz kuru işi.
 
@@ -87,10 +94,10 @@ Backend'in dışarıya çıkan bütün istekleri kurulum anahtarıyla imzalıdı
 | Alan | Ayar |
 |---|---|
 | Hesaplar | Tek yönetim hesabı (`etkili`): anahtarla girer, `sudo` parola ister, **`docker` grubunda değildir** (G2). Müşteriye kabuk verilmez. `root` doğrudan giremez. Yedek kopya hesabı kabuksuzdur |
-| SSH | `PasswordAuthentication no` · `KbdInteractiveAuthentication no` · `PermitRootLogin no` · `AllowUsers etkili` · yalnız tailnet. Tailnet ACL'si: yalnız yönetici cihazları VDS'e; VDS tailnet'te hiçbir yere bağlanamaz (`tag:bulut-vds`) |
+| SSH (K-B10) | `Port 2222` (22 kapalı) · `PasswordAuthentication no` · `KbdInteractiveAuthentication no` · `PubkeyAuthentication yes` · `PermitRootLogin no` · `AllowUsers etkili` · `MaxAuthTries 3` · `LoginGraceTime 30`. Yalnız Ed25519 anahtar. Acil durum kapısı sağlayıcının web konsoludur |
 | Güncelleme | `unattended-upgrades` yalnız güvenlik yamaları. Yeniden başlatma gerekirse 04:30'da (gece yedeğinden sonra). Yeniden başlatma yoklama sağlık özetiyle görünür |
 | Docker | Resmî depodan, sürümü sabit (`deploy/bulut/surumler.json`). `daemon.json`: `json-file` 20 MB × 5 · `ipv6: false` · `userland-proxy: false` · `no-new-privileges: true` · `live-restore: true` |
-| Diğer | `fail2ban` (sshd, tailnet'te de ucuz) · `chrony` · `journald` 500 MB tavan · 2 GB swap · `/etc/machine-id` kurulumda tazelenir (sağlayıcı şablonundan kopya kimlik taşımasın, etkinleştirmeden önce) |
+| Diğer | `fail2ban` (`sshd` + `recidive`; anahtar zorunluyken bile gürültüyü ve günlük şişmesini keser) · `chrony` · `journald` 500 MB tavan · 2 GB swap · `/etc/machine-id` kurulumda tazelenir (sağlayıcı şablonundan kopya kimlik taşımasın, etkinleştirmeden önce) |
 
 Bütün compose servislerinde yalıtım gevşetmesi yoktur. Bunu `deploy/satici/compose-denetle.mjs`'in bulut kipi ölçer (B5): salt okunur kök, yetenek yok, root değil, port yalnız `kenar`'da, soket bağlı değil, internal ağlar, IPv6 kapalı, çıkış alt ağı kuralla aynı.
 
@@ -114,9 +121,9 @@ Komut Mac'te (yönetici makinesi) koşar. **Varsayılanı kuru koşumdur:** her 
 
 | # | Adım | İş | Doğrulama (geçmezse DUR) |
 |---|---|---|---|
-| 0 | Ön koşul | Kanal kaydında `bulut` bloğu var (alt alan = kanal, VDS IP, sağlayıcı, platform `linux-x64-oci`) ve `check-kanallar` yeşil. Portalda kurulum **BARINDIRILAN** sınıfında, kanala bağlı, etkinleştirme kodu hazır. Kanalda imzalı Linux sürümü yayında. Cloudflare belirteci `~/.tekserp/sirlar/` altında; yetkileri yalnız `etkiliyazilim.com` bölgesinde *DNS Edit* + *SSL and Certificates Edit*. Alt alan ayrılmış değil ve DNS'te kaydı yok | Herhangi biri yoksa DUR (fail-closed) |
-| 1 | VDS'i ölç | Sağlayıcının ilk erişimiyle salt okuma: Ubuntu 24.04 LTS · x86_64 · ≥ 2 vCPU · ≥ 4 GB · ≥ 60 GB · saat senkronu · makine kimliği | Eşik altı → DUR |
-| 2 | Sertleştir | §1.4: hesap ve anahtar → Tailscale (etiketli, tek kullanımlık auth anahtarıyla) → **önce tailnet üzerinden SSH ölçülür, sonra genel SSH kapanır** (kilitlenme önlemi) → ufw · fail2ban · unattended-upgrades · machine-id tazeleme | `sshd -T` beklenen değerler · dışarıdan 22/2222 kapalı |
+| 0 | Ön koşul | Kanal kaydında `bulut` bloğu var (alt alan = kanal, VDS IP, paket `standart` · `kurumsal`, sağlayıcı, platform `linux-x64-oci`) ve `check-kanallar` yeşil. Sağlayıcı, yedek deposunun sağlayıcısıyla aynı değil (§5.1). Portalda kurulum **BARINDIRILAN** sınıfında, kanala bağlı, etkinleştirme kodu hazır. Kanalda imzalı Linux sürümü yayında. Cloudflare belirteci `~/.tekserp/sirlar/` altında; yetkileri yalnız `etkiliyazilim.com` bölgesinde *DNS Edit* + *SSL and Certificates Edit*. Alt alan ayrılmış değil ve DNS'te kaydı yok | Herhangi biri yoksa DUR (fail-closed) |
+| 1 | VDS'i ölç | **Sağlayıcıdan bağımsız:** betik yalnız temiz Ubuntu 24.04 LTS, sabit IPv4 ve sağlayıcının verdiği ilk SSH erişimini ister; sağlayıcı API'si kullanılmaz, paket yalnız kayıttır. Salt okuma: x86_64 · ≥ 2 vCPU · ≥ 4 GB · ≥ 40 GB · saat senkronu · makine kimliği | Eşik altı → DUR |
+| 2 | Sertleştir | §1.4: hesap ve anahtar → sshd ek dosyası (2222, yalnız anahtar) → **yeni porttan anahtarla giriş ayrı bir oturumda ölçülür, ancak ondan sonra 22 ve parola girişi kapanır** (kilitlenme önlemi) → ufw · fail2ban · unattended-upgrades · machine-id tazeleme | `sshd -T` beklenen değerler · dışarıdan 22 kapalı · 2222'de parola denemesi reddediliyor |
 | 3 | Docker ve kenar kuralları | Docker CE (sabit sürüm), `daemon.json`, ipset + `DOCKER-USER` kuralları (systemd birimi), CF IP tazeleyicisi | `iptables -S DOCKER-USER` beklenen kurallar · liste boş değil |
 | 4 | Cloudflare | **a)** CSR VDS'te üretilir, özel anahtar VDS'ten çıkmaz → Origin CA sertifikası (1095 gün) VDS'e döner · **b)** AOP istemci sertifikası (bizim CA'mız, host ya da bölge düzeyinde; plan kapsamı B5'te ölçülür) · **c)** bölge Full (strict) değilse host için Configuration Rule · **d)** host için önbellek BYPASS kuralı · **e)** DNS A kaydı, proxy açık, **EN SONA** (adım 9'dan önce, 7 yeşilken) | API yanıtları + sertifika zinciri |
 | 5 | Sırlar | VDS'te üretilir (`openssl rand`), Mac'e gelmez: PostgreSQL parolası · JWT sırrı (64 bayt) · kimlik özeti anahtarı (PIN/kart, G21-K) · yerel yedek anahtarı (parolası bizim kasada). `musteri.tkpub` ve `etkili.tkpub` açık yarıları yüklenir. `.env` root 0600 | Ret listesi denetimi (G20) · dosya izinleri |
@@ -148,17 +155,17 @@ Komut Mac'te (yönetici makinesi) koşar. **Varsayılanı kuru koşumdur:** her 
 | R10 | Backend'in yerel ağ çıkışı kapalıdır (§1.3). Arka uçtan ağ yazıcısına RAW TCP (`label.nativeSendEnabled`, `Teks-Erp/src/services/helpers/printer-transport.ts`) ve ağ kantarı/metre bulutta **yazılamaz ve çizilmez**. Etiket panelden ya da tabletten basılır. Yazıcı IP'si özel aralık denetiminden geçer (SSRF) | Opt-in açık | — |
 | R11 | Panelde ve tablette sunucu adresi kanal kaydından gömülü `https` adresidir. Değişiklik kullanıcı onayı ister | Keşif + elle adres | G21 |
 | R12 | API yanıtlarında `Cache-Control: no-store`. Cloudflare'de host için önbellek BYPASS kuralı | Gerek yok | — |
-| R13 | Yönetim erişimi yalnız tailnet ve anahtarla yapılır. Müşteriye kabuk yoktur. Destek amaçlı veri erişimi yalnız müşteri talebiyle olur ve kayda geçer (patron destek kalıbı) | Tailscale (bugün) | G1 · G2 |
+| R13 | Yönetim erişimi yalnız 2222'den ve yalnız anahtarla yapılır (parola girişi kapalı, `MaxAuthTries 3`, `AllowUsers` tek hesap, fail2ban; K-B10). Müşteriye kabuk yoktur. Destek amaçlı veri erişimi yalnız müşteri talebiyle olur ve kayda geçer (patron destek kalıbı) | Tailscale (bugün) | G1 · G2 |
 | R14 | Gece şifreli yedek ve başka sağlayıcıdaki kopya **zorunludur**. Yapılandırılmamışsa kurulum bitmiş sayılmaz ve sağlık özeti kırmızı olur | İsteğe bağlı | — |
 | R15 | Sırlar VDS'te doğar. `.env` root 0600'dür. Origin CA özel anahtarı VDS'ten çıkmaz. Hiçbir sır Mac'e, loga ya da kurulum durum dosyasına girmez | Sır hijyeni (çekirdek, aynı) | G22 |
 
-Bulut sınıfının **değiştirmediği** çekirdek kurallar: lisans kapısı aniden durdurmaz ve veri erişimi her kademede açıktır · internet kesintisi lisansı kısaltmaz · iki adımlı giriş herkes için isteğe bağlıdır (2026-09-30 kararı; bulutta yeniden sorulacak, soru S6) · audit yalnız ayak izidir · tek backend süreci vardır.
+Bulut sınıfının **değiştirmediği** çekirdek kurallar: lisans kapısı aniden durdurmaz ve veri erişimi her kademede açıktır · internet kesintisi lisansı kısaltmaz · iki adımlı giriş bulutta da isteğe bağlıdır (2026-09-30 kararı, bulut için K-B15 ile teyit edildi; açığı R4–R6 kapatır) · audit yalnız ayak izidir · tek backend süreci vardır.
 
 ## 4. Docker güncelleyicisi
 
 ### 4.1 Ortak sözleşme (Dağıtım v2)
 
-Bulut güncelleyicisi, Dağıtım v2'nin **aynı sözleşmesine** bağlanır: `tekserp-surum` bildirimi (PAKET imzalı) · kanal bağı · kiranın `guncelleme` politikası (OTOMATIK · ONAYLI · DONDUR, pencere, sabitleme; K1 her şeyi ezer) · tek karar fonksiyonu `decideUpdate` · yoklamadaki güncelleme raporu · panelin "Sistem → Sunucu Güncellemeleri" ekranı · onay ucu ve niyet dosyası (yetki DEĞİL) · ortak test vektörleri. Satıcı ve portal tarafında yeni bir şey gerekmez, kurulum geçmişi ve filo görünümü aynen çalışır. Politika müşteri başına portalda ayarlanır, varsayılanı bugünkü `defaultUpdatePolicy()` (ONAYLI) kalır (soru S5).
+Bulut güncelleyicisi, Dağıtım v2'nin **aynı sözleşmesine** bağlanır: `tekserp-surum` bildirimi (PAKET imzalı) · kanal bağı · kiranın `guncelleme` politikası (OTOMATIK · ONAYLI · DONDUR, pencere, sabitleme; K1 her şeyi ezer) · tek karar fonksiyonu `decideUpdate` · yoklamadaki güncelleme raporu · panelin "Sistem → Sunucu Güncellemeleri" ekranı · onay ucu ve niyet dosyası (yetki DEĞİL) · ortak test vektörleri. Satıcı ve portal tarafında yeni bir şey gerekmez, kurulum geçmişi ve filo görünümü aynen çalışır. Politika müşteri başına portalda ayarlanır, varsayılanı bugünkü `defaultUpdatePolicy()` (ONAYLI) kalır (K-B14).
 
 ### 4.2 Sözleşme eki (sürüm 5, yalnız ekler)
 
@@ -196,7 +203,7 @@ Tek kaynak yine `protocol/guncelleme*.ts` dosyalarıdır (w2). Rust aynası ve v
 
 ### 4.5 Konum ve kendini güncelleme
 
-Güncelleyici konakta systemd hizmeti olarak çalışır (`Restart=always`), aynı Rust crate'in Linux arka ucudur (T2). Dosya düzeni ve IPC Windows'takinin aynısıdır: `/var/lib/tekserp/guncelleme/{durum,niyet,is}`. Backend `durum/`u salt okunur bağlar, `niyet/`e yazar. Dosya adları ve biçimleri w2 §5 ile aynıdır. Güncelleyici ikilisi paketin içinde gelir; kendini güncelleme w2 §10'daki A/B şemasını izler (`.eski` ikili, 3 açılış sayacı). İşletim sistemi yamaları güncelleyicinin işi değildir (§1.4).
+Güncelleyici konakta systemd hizmeti olarak çalışır (`Restart=always`), aynı Rust crate'in Linux arka ucudur (T2, yönetici onaylı). Dosya düzeni ve IPC Windows'takinin aynısıdır: `/var/lib/tekserp/guncelleme/{durum,niyet,is}`. Backend `durum/`u salt okunur bağlar, `niyet/`e yazar. Dosya adları ve biçimleri w2 §5 ile aynıdır. Güncelleyici ikilisi paketin içinde gelir; kendini güncelleme w2 §10'daki A/B şemasını izler (`.eski` ikili, 3 açılış sayacı). İşletim sistemi yamaları güncelleyicinin işi değildir (§1.4).
 
 ## 5. Yedek, başka sağlayıcıda kopya ve geri yükleme tatbikatı
 
@@ -207,9 +214,11 @@ Güncelleyici konakta systemd hizmeti olarak çalışır (`Restart=always`), ayn
 | Canlı | PostgreSQL birimi | Müşteri VDS'i | — |
 | Gece yedeği | `pg_dump -Fc` → `pg_restore --list` doğrulaması → `.tkenc` (`docs/ops/YEDEK-SIFRELEME.md` biçimi) | VDS, `yedek` birimi | 30 gün, en yeni 3 kopya asla silinmez |
 | Güncelleme öncesi | §4.4 adım 2 | VDS, güncelleyici dizini | Son 3 |
-| Başka sağlayıcı | Aynı `.tkenc` dosyası, `rclone copy` (sync değil) ile SFTP | **Yedek deposu VDS'i** (Türkiye, müşteri VDS'lerinden farklı sağlayıcı, bütün bulut müşterilerine ortak) | 30 gün günlük + 12 ay aylık (`docs/ops/YEDEK-VPS-KURULUM.md` kalıbı) |
+| Başka sağlayıcı | Aynı `.tkenc` dosyası, `rclone copy` (sync değil) ile SFTP | **Yedek deposu VDS'i** (Türkiye, müşteri VDS'lerinden farklı sağlayıcı, bütün bulut müşterilerine ortak; K-B11) | 30 gün günlük + 12 ay aylık (`docs/ops/YEDEK-VPS-KURULUM.md` kalıbı) |
 
 **Fidye yazılımına karşı direnç:** müşteri VDS'inin depodaki hesabı kabuksuz ve chroot'ludur, yalnız kendi `gelen/` dizinine yazabilir. Silemez ve arşivi göremez. Arşivi depodaki root zamanlayıcısı **kopyalar** (taşımaz). Depo ele geçirilirse içerik yine şifrelidir, çünkü çözme anahtarları depoda durmaz. Depo da §1.4 sertleştirmesinden geçer ve gözcünün listesine girer.
+
+**Sağlayıcı kuralı:** iki paket iki ayrı sağlayıcı anlamına gelebilir. Deponun sağlayıcısı, müşteri VDS'lerinin **hiçbirinin** sağlayıcısı olamaz. Kurulum betiği adım 0'da kanal kaydındaki sağlayıcıyı deponunkiyle karşılaştırır; aynıysa DURUR.
 
 **Alıcılar (üç):** `musteri` (özel yarı müşteride, kâğıt + USB; "verilerimi al" hakkı) · `etkili` (bizim çevrimdışı anahtarımız; VDS kaybında geri yükleme bununla yapılır) · `yerel` (VDS'te, bizim kasadaki parolayla sarılı; rutin önizleme ve tatbikat için).
 
@@ -231,13 +240,15 @@ Yedek yaşı ve makine dışı kopyanın durumu zaten sağlık özetindedir (`ye
 |---|---|---|
 | RPO | ≤ 24 saat | Gece yedeği. Güncelleme öncesi yedek ek bir geri dönüş noktasıdır |
 | RTO, DB bozulması (VDS sağlam) | 30–60 dk | Yerel yedekten restore |
-| RTO, VDS kaybı | 2–4 saat | Yeni VDS + betik + depodan döküm + lisans taşıma (yeni parmak izi; satıcı taşıma akışı) + DNS |
+| RTO, VDS kaybı | 2–4 saat | Yeni VDS + betik + depodan döküm + lisans taşıma (yeni parmak izi; satıcı taşıma akışı) + DNS. Yeni VDS'in teslim süresi pakete ve sağlayıcıya göre değişir |
 
 ## 6. Kök CLAUDE.md istisna cümlesi (öneri)
 
 **Bugün** (Kapılar ve sözleşme): "Fabrika sunucusuna GELEN port açılmaz (eski tünel 2026-09-30'da emekli) — dışarıyla tek bağ fabrikanın ÇIKAN imzalı kanallarıdır."
 
-**Öneri:** "Fabrika sunucusuna GELEN port açılmaz; dışarıyla tek bağ fabrikanın ÇIKAN imzalı kanallarıdır. **Tek beyanlı istisna BARINDIRILAN sınıfıdır (bulut kurulum):** bizim yönettiğimiz VDS'te yalnız 443, yalnız Cloudflare kaynak adreslerinden ve Cloudflare istemci sertifikasıyla açılır; sınıfın sert kuralları sınıftan türer, kapatılamaz, SSH genel internete açılmaz — `docs/kurallar/<bulut alanı>`."
+**Öneri:** "Fabrika sunucusuna GELEN port açılmaz; dışarıyla tek bağ fabrikanın ÇIKAN imzalı kanallarıdır. **Tek beyanlı istisna BARINDIRILAN sınıfıdır (bulut kurulum):** bizim yönettiğimiz VDS'te yalnız 443, yalnız Cloudflare kaynak adreslerinden ve Cloudflare istemci sertifikasıyla açılır; sınıfın sert kuralları sınıftan türer, kapatılamaz; yönetim SSH'ı yalnız 2222'de ve yalnız anahtarla açılır — `docs/kurallar/<bulut alanı>`."
+
+Avukat H3'te Cloudflare'siz yolu gerektirirse, cümlenin "yalnız Cloudflare kaynak adreslerinden…" kısmı §7.1'deki kipe göre yeniden yazılır.
 
 Aynı iniş commit'inde gelecekler (B0): `docs/kurallar` altında yeni alan dosyası `bulut-kurulum` (§3 tablosundaki her satır tek kural cümlesine ve bekçi adına dönüşür) · alan dizinine satır · arşive tarihli `[ÇEKİRDEK]` (sınıf yüklemi, istisna) ve `[PROFİL]` (eşik sayıları, sağlayıcı) etiketli not · `docs/kurallar/kesif-cihaz.md` ve `docs/kurallar/genel.md` içindeki ilgili cümlelere bulut ayrımı.
 
@@ -248,8 +259,8 @@ Taslaklar `docs/hukuk/` altında "avukat onayı bekliyor" damgasıyla yazılır 
 | # | Madde | Taslağın varsayımı | Avukata soru |
 |---|---|---|---|
 | H1 | İnternet kesintisi | Müşteri tarafındaki internet kesintisi hizmet kesintisi sayılmaz, S1 olmaz. Yedek internet tavsiye edilir. Kesintisiz üretim isteyene fabrika kurulumu önerilir (K-B2) | İfade sorumluluğu yeterince sınırlıyor mu? Kesinti yüzünden üretim kaybı talebine karşı dayanak |
-| H2 | Erişilebilirlik | Tek VDS için dürüst hedef: ayda %99,5. Planlı bakım penceresi önceden duyurulur. Acil güvenlik yamasında plansız pencere hakkı saklıdır. Kademeli telafi uygulanır | Telafi kademeleri ve üst sınır |
-| H3 | Veri konumu ve **Cloudflare** | VDS ve yedek deposu Türkiye'dedir. **Ancak bütün ERP trafiği Cloudflare kenarında açılıp yeniden şifrelenir** (ABD merkezli şirket). Bu, patron bulutu ekindeki §6.3 sorusunun aynısıdır, ama burada kapsam bütün iş verisi ve çalışan adlarıdır | KVKK md. 9 kapsamında aktarım sayılır mı? Standart sözleşme yeterli mi? K-B3 ile çelişki var mı? (Cevap olumsuzsa teknik seçenek: Cloudflare'siz doğrudan TLS; bedeli DDoS koruması ve köken gizliliğinin kaybı) |
+| H2 | Erişilebilirlik | Hedef pakete göre ayrı yazılır (K-B13): **Kurumsal** ayda %99,5, kademeli telafiyle · **Standart** sağlayıcı SLA'sı olmadığı için "en iyi çaba", düşük kademeli ya da telafisiz. Planlı bakım penceresi önceden duyurulur. Acil güvenlik yamasında plansız pencere hakkı saklıdır | Telafi kademeleri ve üst sınır; iki paketin farkı sözleşmede nasıl yazılır |
+| H3 | Veri konumu ve **Cloudflare** | VDS ve yedek deposu Türkiye'dedir. **Ancak bütün ERP trafiği Cloudflare kenarında açılıp yeniden şifrelenir** (ABD merkezli şirket). Bu, patron bulutu ekindeki §6.3 sorusunun aynısıdır, ama burada kapsam bütün iş verisi ve çalışan adlarıdır | KVKK md. 9 kapsamında aktarım sayılır mı? Standart sözleşme yeterli mi? K-B3 ile çelişki var mı? Dayanak kurulamazsa §7.1 |
 | H4 | Roller | Müşteri veri sorumlusu, biz veri işleyeniz. VDS sağlayıcısı, yedek deposu sağlayıcısı ve Cloudflare alt işleyendir (adlı liste, değişiklikte 30 gün önce bildirim) | Sağlayıcı sözleşmelerinin KVKK yeterliliği |
 | H5 | İşleten sorumluluğu | İşletim sistemi, yama, yedek ve izleme bizdedir. Sorumluluk son 12 ayın ücretiyle sınırlıdır, dolaylı zarar hariçtir. Veri kaybı RPO ile sınırlıdır | Sağlayıcı arızası mücbir sebep sayılır mı? |
 | H6 | Erişim ve gizlilik | Personelimiz veriye yalnız talep ya da olay üzerine erişir, erişim kayda geçer, yazılı gizlilik yükümlülüğü vardır | — |
@@ -258,38 +269,55 @@ Taslaklar `docs/hukuk/` altında "avukat onayı bekliyor" damgasıyla yazılır 
 | H9 | İhlal bildirimi | 72 saat (`docs/hukuk/VERI-IHLALI-BILDIRIM-PROSEDURU.md`) | — |
 | H10 | Lisans metni | "Kurulum ve tesis" kavramı bulutta VDS'e karşılık gelir. Kabul metninde sınıf listesine "Barındırılan" eklenir. "Saatte bir bağlanır" cümlesi bulutta "5 dakikada bir" olur | Metin farkının kabul kaydına etkisi |
 
+### 7.1 H3'e bağlı alternatif: Cloudflare'siz doğrudan TLS
+
+Yalnız avukat, Cloudflare kenarındaki TLS açılımını dayanağı kurulamayan bir yurt dışı aktarımı sayarsa devreye girer. Kod değişmez; değişen yalnız kenarın kipi ve Cloudflare ayarlarıdır (kenar yapılandırmasında ikinci kip `dogrudan`). B5 bu kipi tasarım olarak taşır, uygulanması ~1 gün sürer, ek para gerektirmez.
+
+| Konu | Cloudflare kipi (bugünkü tasarım) | Doğrudan kip |
+|---|---|---|
+| DNS | A kaydı, proxy açık | A kaydı, **yalnız DNS** (gri bulut). Köken IP'si herkese görünür |
+| Sertifika | Cloudflare Origin CA | Let's Encrypt, ACME **HTTP-01**. Port 80 yalnız `/.well-known/acme-challenge/` için açılır, gerisi 443'e yönlenir. Yenileme konakta zamanlayıcıyla yapılır. DNS-01 seçilmez, çünkü Cloudflare API belirtecinin VDS'te durması gerekirdi |
+| Gelen 443 | Yalnız CF IP'leri + AOP | Herkese açık. AOP ve IP listesi kalkar |
+| Hız sınırı / bot | Cloudflare + köken | Yalnız köken: nginx `limit_req` + backend R4. İstemci IP'si doğrudan soketten okunur (R3'ün değeri değişir) |
+| DDoS | Cloudflare | Yalnız sağlayıcının temel koruması. **Kabul edilen risk** |
+| HSTS / TLS sürümü | Cloudflare | nginx |
+| İstemciler | Değişmez | Değişmez (genel CA sertifikası, aynı adres) |
+| Kurallar | R1 · R3 · R12 bugünkü hâliyle | R1 "yalnız 443 (+ ACME için 80)", R3 soket adresi, R12 yalnız `no-store` olur. §6'daki istisna cümlesi buna göre yeniden yazılır |
+
 ## 8. Maliyet
 
 Kural: kalıcı işletim yükü getiren seçenekte para (tek sefer + aylık), iş (gün) ve işletim (saat) sayıyla yazılır, ölçeğe göre hesaplanır. Fiyatlar KDV hariçtir ve 2026-10 sağlayıcı sayfalarından alınmıştır; **teklif alınarak doğrulanacak** (kaynaklar: https://www.vulut.com/blog/vds-fiyatlari-ve-satin-alma-rehberi · https://www.karekod.org/blog/vds-fiyatlari/ · https://www.natro.com/sunucu-kiralama/vds-sunucu · https://www.whtop.com/plans/turhost.com/135431).
 
-### 8.1 Müşteri başına
+### 8.1 Müşteri başına, iki paket (K-B13)
 
-| Kalem | Tek sefer | Aylık | Not |
+| Kalem | Standart | Kurumsal | Not |
 |---|---|---|---|
-| VDS, 2 vCPU · 4 GB · 60–80 GB NVMe | — | Ekonomik TR sağlayıcı 145–195 TL · kurumsal TR sağlayıcı (8 GB sınıfı 25–37 USD) ≈ **600–1.200 TL** (planlama değeri **800 TL**) | En büyük sahamızda DB 33 MB, döküm ~10 MB; 4 GB yeterli. Büyük müşteri için 4 vCPU · 8 GB, 250–1.450 TL |
-| Yedek deposu payı | — | 15–40 TL (10 müşteri paylaşırsa) | Müşteri başına ~0,5–1 GB (30 günlük + 12 aylık) |
+| VDS, 2 vCPU · 4 GB · 40–80 GB NVMe (aylık) | 145–250 TL (planlama **200 TL**) | 600–1.200 TL (planlama **800 TL**) | En büyük sahamızda DB 33 MB, döküm ~10 MB; 4 GB yeterli. Büyük müşteri (4 vCPU · 8 GB): standart ~250 TL, kurumsal 25–37 USD |
+| Sağlayıcı SLA'sı ve desteği | Yok ya da sınırlı | Var (destek hattı, yedekli altyapı) | Bizim erişilebilirlik taahhüdümüz pakete göre yazılır (H2) |
+| Yedek deposu payı (aylık) | 15–40 TL | 15–40 TL | Müşteri başına ~0,5–1 GB (30 günlük + 12 aylık); 10 müşteri paylaşırsa |
 | Cloudflare | 0 | 0 | Ücretsiz plan: Origin CA, Universal SSL (birinci düzey alt alan), AOP, önbellek ve yapılandırma kuralları. Pro gerekirse bölge başına 20–25 USD, bütün müşteriler için tek |
 | İzleme ve bildirim | 0 | 0 | Mevcut altyapı (Resend ücretsiz katmanı, Telegram) |
-| Kurulum işçiliği | 1,5–2 sa | — | Betikle. Teslim ve eğitim hariç |
-| İşletim işçiliği | — | **1,5–2,5 sa** | Uyarı inceleme, aylık tatbikat kaydı, güncelleme penceresi takibi, olay payı (yılda ~2 olay × 2 sa) |
+| Kurulum işçiliği (tek sefer) | 1,5–2 sa | 1,5–2 sa | Betik aynı ve sağlayıcıdan bağımsız. Teslim ve eğitim hariç |
+| İşletim işçiliği (aylık) | 2–3 sa | 1,5–2,5 sa | Uyarı inceleme, aylık tatbikat kaydı, güncelleme penceresi takibi, olay payı. Ekonomik sağlayıcıda arıza ve destek bekleme payı daha yüksek (tahmin) |
+| **Doğrudan aylık** | **≈ 215–240 TL + 2–3 sa** | **≈ 815–840 TL + 1,5–2,5 sa** | |
 
-**Doğrudan aylık maliyet ≈ 815–840 TL + 1,5–2,5 saat işçilik.** Fiyatlama tabanı için bilgi: aylık bulut bedeli ≥ VDS + depo payı + işletme saati + %20 risk payı.
+Fiyatlama tabanı için bilgi: aylık bulut bedeli ≥ VDS + depo payı + işletme saati + %20 risk payı. İki paket arasındaki fark yalnız sağlayıcıdır; yazılım, kurulum ve güvenlik kuralları aynıdır.
 
 ### 8.2 Ortak ve ölçek
 
 | Kalem | Aylık | Not |
 |---|---|---|
 | Yedek deposu VDS'i (başka TR sağlayıcı, 2 GB · 100–200 GB) | 150–400 TL | ~50 müşteriye kadar tek depo yeter |
-| Tailscale | 0 ya da ~6 USD/kullanıcı | Ücretsiz Personal planı ticari kullanıma uygun değilse Starter (1–2 kullanıcı). Bugün SAHINSRV erişiminde de aynı soru açıktır |
-| Test VDS'i (prova, §9 B11) | ~800 TL, 1 ay | Prova bitince kapatılır |
+| Test VDS'i (prova, §9 B11) | ~200 TL, 1 ay | Standart paket sağlayıcısında; prova bitince kapatılır |
+| Tailscale | 0 | Bulut VDS'leri için gerekmez (K-B10) |
 
-| Ölçek | Doğrudan aylık | İşletim | Yorum |
-|---|---|---|---|
-| 1 müşteri | ~1.200 TL (depo dahil) | 2 sa | Depo maliyeti tek müşteriye düşer |
-| 10 müşteri | ~8.300 TL | 15–25 sa | Doğrusal |
-| 50 müşteri | ~41.000 TL | 75–125 sa (≈ yarım kişi) | Bu eşikte çok kiracılı model (`docs/design/SAAS-TASARIM.md`) ve işletim otomasyonu yeniden tartılır |
+| Ölçek | Hepsi standart (aylık) | Hepsi kurumsal (aylık) | İşletim | Yorum |
+|---|---|---|---|---|
+| 1 müşteri | ~600 TL (depo dahil) | ~1.200 TL (depo dahil) | 2–3 sa | Depo maliyeti tek müşteriye düşer |
+| 10 müşteri | ~2.300 TL | ~8.300 TL | 15–30 sa | Doğrusal |
+| 50 müşteri | ~10.800 TL | ~41.000 TL | 75–150 sa (≈ yarım kişi) | Bu eşikte çok kiracılı model (`docs/design/SAAS-TASARIM.md`) ve işletim otomasyonu yeniden tartılır |
 
-**Geliştirme (tek sefer):** §9 toplamı ≈ 28–34 iş günü; paralel ajanlarla takvimde 2,5–3 hafta. **Maliyetsiz alternatif** diğer satış modelidir: fabrika kurulumunda donanım ve internet müşteridedir, bizim aylık doğrudan maliyetimiz 0'dır. Dış izleme için üçüncü taraf hizmet (0–10 USD/ay, kod 0, ama yurt dışı bağımlılık) ile kendi gözcümüz (~1 gün iş, 0 TL) arasındaki seçim soru S3'tedir.
+**Geliştirme (tek sefer):** §9 toplamı ≈ 28–34 iş günü; paralel ajanlarla takvimde 2,5–3 hafta. **Maliyetsiz alternatif** diğer satış modelidir: fabrika kurulumunda donanım ve internet müşteridedir, bizim aylık doğrudan maliyetimiz 0'dır. Dış izlemede kendi gözcümüz seçildi (K-B12; ~1 gün iş, 0 TL). Üçüncü taraf hizmet (0–10 USD/ay) yurt dışı bağımlılık getirdiği için seçilmedi.
 
 ## 9. Uygulama dilimleri
 
@@ -304,24 +332,25 @@ Bağımlılık: Dağıtım v2 (w2 iniş + D8) · lisans v2 (L2-10 parmak izi, G1
 | B3 | Arka uç LAN özellikleri | R10: ağ yazıcısı/kantar bayrakları bulutta çizilmez ve yazılamaz · yazıcı IP'si için özel aralık denetimi (kod katmanı; konak katmanı B5'te) | B1 | `printer-transport` · bayrak kataloğu · panel ayar ekranı | `test_bulut_lan_kapali` · bayrak reçetesi bekçileri | 1 g | yüksek |
 | B4 | Linux güncelleyici | Sözleşme 5 (§4.2) + vektörler · Rust Linux arka ucu (compose, imaj yükleme, geçici anahtar) · `backend-yayinla.mjs --platform` · backend IPC kökü Linux yolu · Worker kapsamına Linux paketi | w2 iniş, D8 | w2 `native/tekserp-guncelleyici` · `protocol/guncelleme*` · `deploy/backend-yayinla.mjs` · `deploy/guncelleme-sunucusu/worker` | `test_guncelleme_protokol` (vektör) · cargo testleri (+ Linux senaryoları) · `test_backend_yayin` · `test_indirme_kapisi` | 5–7 g | çok yüksek |
 | B5 | Bulut compose + kenar + konak | `deploy/bulut/`: compose, nginx (mTLS + gerçek IP), ipset/DOCKER-USER betiği + CF IP tazeleyicisi, çıkış kuralları, canlılık zamanlayıcısı, `surumler.json` · `compose-denetle` bulut kipi · AOP plan kapsamının ölçümü | B1 | `deploy/bulut/*` · `deploy/satici/compose-denetle.mjs` (ya da bulut kardeşi) | compose denetimi negatif sondalar · `test_compose_yalitimi` · `test_korumali_imaj` | 3 g | yüksek |
-| B6 | Kurulum betiği | `deploy/bulut/kur.mjs`: kuru varsayılan, adım durumu, CF API istemcisi (belirteç 0600 dosyadan), ayrılmış adlar, `--devam`, `--geri-yukle`, geri alma · kanal kaydına `bulut` bloğu + `check-kanallar` şeması | B5, B4 (imaj yolu) | `deploy/bulut/kur.mjs` · `deploy/kanallar.json` · `scripts/lib/kanallar.mjs` · `scripts/check-kanallar.mjs` | yeni `test_bulut_kur` (sahte CF + sahte SSH ile kuru koşum, her DUR kapısına sonda) · `check-kanallar` | 3–4 g | yüksek |
+| B6 | Kurulum betiği | `deploy/bulut/kur.mjs`: kuru varsayılan, adım durumu, **sağlayıcıdan bağımsız** (yalnız SSH + temiz Ubuntu), SSH'ın 2222'ye kilitlenmeden geçişi, CF API istemcisi (belirteç 0600 dosyadan), ayrılmış adlar, depo sağlayıcısı kapısı, `--devam`, `--geri-yukle`, geri alma · kanal kaydına `bulut` bloğu (paket dahil) + `check-kanallar` şeması | B5, B4 (imaj yolu) | `deploy/bulut/kur.mjs` · `deploy/kanallar.json` · `scripts/lib/kanallar.mjs` · `scripts/check-kanallar.mjs` | yeni `test_bulut_kur` (sahte CF + sahte SSH ile kuru koşum, her DUR kapısına sonda) · `check-kanallar` | 3–4 g | yüksek |
 | B7 | Yedek deposu ve tatbikat | Depo runbook'u (YEDEK-VPS kalıbı, başka sağlayıcı) · konakta kopya zamanlayıcısı · aylık otomatik tatbikat aracı + sağlık özetine sayaç (isteğe bağlı alan, satıcı önce yayınlanır) | B5 | `docs/ops` yeni runbook · `yedek-zamanlayici.sh` · `protocol/uclar.ts` | `test_yedek_sifreleme` · yeni `test_tatbikat_araci` · `test_lisans_yoklama_allowlist` | 2 g | yüksek |
 | B8 | İzleme | Satıcıda sınıf başına eşikler + yeni olaylar (`BULUT_ULASILAMIYOR` · `BULUT_DUZELDI` · sertifika vadesi · tatbikat yaşı) · `satici-gozcu` yan konteyneri + `satici_gozcu` rolü (yetki ölçümlü açılış, bildirim rolü kalıbı) · compose denetimine gözcü maddeleri · portal kurulum kartında bulut bilgileri | B1 | `satici/sunucu/src/notifications/*` · `deploy/satici/docker-compose.gozcu.yml` · `deploy/satici/compose-denetle.mjs` · satıcı web | satıcı `test_bildirim_tarama` · yeni `test_gozcu_rolu` · compose denetimi | 3 g | yüksek |
 | B9 | Kanal, yayın, belgeler | `docs/ops` bulut runbook'u (kurulum, güncelleme, geri yükleme, VDS kaybı, imha) · SUNUCU-ENVANTERI şablonu · panel/tablet bulut kanal profili | B6 | runbook + envanter | `check-docs` · `check-kanallar` | 1,5 g | orta |
 | B10 | Hukuk taslakları | Barındırma Hizmet Eki + SLA · DPA ek maddeleri · kabul metni sınıf satırı (`kabul-metni-uret` ile yeniden üretim) | — | `docs/hukuk/*` | `test_lisans_kabul_metni` | 1 g + avukat | orta |
-| B11 | Uçtan uca prova | Kısa süreli test VDS'imizde ("önce kendi sunucumuz"): kurulum → panel + gerçek tablet → güncelleme → zorla geri dönüş → yedek kopyası → üç tatbikat → VDS kaybı. En uzun rapor ve dışa aktarma süresi Cloudflare'in 100 sn sınırının altında mı ölçülür. Senaryo "BULUT" (adım başına yeşil/kırmızı + kanıt) | Hepsi | senaryo belgesi | senaryo + tam paket (faz inişi) | 2–3 g | yüksek |
+| B11 | Uçtan uca prova | Kısa süreli test VDS'imizde ("önce kendi sunucumuz"; standart paket sağlayıcısında, ~200 TL): kurulum → panel + gerçek tablet → güncelleme → zorla geri dönüş → yedek kopyası → üç tatbikat → VDS kaybı. En uzun rapor ve dışa aktarma süresi Cloudflare'in 100 sn sınırının altında mı ölçülür. Senaryo "BULUT" (adım başına yeşil/kırmızı + kanıt) | Hepsi | senaryo belgesi | senaryo + tam paket (faz inişi) | 2–3 g | yüksek |
 
 **Kritik yol:** B0 → B1 → B5 → B6 → B11, paralelinde B4 (en uzun parça) ile B2a → B2b. B3, B7, B8, B9 ve B10 B1'den sonra paralel yürür. İlk müşteri B11 yeşil olmadan kurulmaz.
 
-## 10. Kullanıcıya sorulacak açık sorular (yönetici sohbette şıklı sorar)
+## 10. Kararlar (açık soruların cevapları, kullanıcı 2026-10-01)
 
-| # | Soru | Şıklar (önerilen ilk) |
-|---|---|---|
-| S1 | Bulut VDS'ine yönetim erişimi | **(A) Yalnız tailnet + anahtar, acil durumda sağlayıcı konsolu** · (B) genel 2222 portu, anahtar + fail2ban (tekserp-vds gibi) |
-| S2 | Başka sağlayıcıdaki yedek kopyasının yeri | **(A) Türkiye'de farklı sağlayıcıda ortak bir yedek deposu VDS'i (150–400 TL/ay, toplam)** · (B) bizim tekserp-vds (yalnız sağlayıcısı müşteri VDS'lerinden farklıysa) · (C) yurt dışı nesne deposu, şifreli (KVKK sorusu avukata gider) |
-| S3 | Dış izleme | **(A) Kendi gözcümüz, satıcı VDS'inde (~1 gün iş, 0 TL)** · (B) üçüncü taraf izleme hizmeti (0–10 USD/ay, yurt dışı) |
-| S4 | VDS sağlayıcı sınıfı | **(A) Kurumsal TR sağlayıcı (~600–1.200 TL/ay, destek ve SLA'sı var)** · (B) ekonomik TR sağlayıcı (~150–250 TL/ay) |
-| S5 | Bulut müşterisinde varsayılan güncelleme politikası | **(A) ONAYLI (fabrikayla aynı varsayılan)** · (B) OTOMATIK + Pazar gecesi penceresi |
-| S6 | Bulutta yönetici ve satıcı hesabında iki adımlı giriş | (A) İsteğe bağlı kalsın (2026-09-30 kararı) · (B) Bulut sınıfında yönetici ve satıcı hesabına zorunlu olsun (internete açık sunucu; önceki kararı bu sınıf için değiştirir) |
+| # | Soru | Karar | Belgede |
+|---|---|---|---|
+| S1 | Yönetim erişimi | **İnternetten port 2222, yalnız anahtar** (tailnet önerisi yerine). fail2ban · `PasswordAuthentication no` · `AllowUsers` · `MaxAuthTries`. Gerekçe: bizim VDS'te parola girişi 2026-10-01 sabahı kapatıldı (30 günde ~12.700 başarısız deneme) | K-B10 · §1.3 · §1.4 · §2 adım 2 · R13 · §6 |
+| S2 | Yedek kopyasının yeri | (A) Farklı TR sağlayıcıda ortak yedek deposu VDS'i, her müşteri yalnız kendi dizinine yazar | K-B11 · §5.1 |
+| S3 | Dış izleme | (A) Kendi gözcümüz | K-B12 · §1.5 · B8 |
+| S4 | VDS sağlayıcı sınıfı | **Müşteri seçer: "Standart" (~150–250 TL/ay) ve "Kurumsal" (SLA'lı, ~600–1.200 TL/ay).** Kurulum betiği sağlayıcıdan bağımsız | K-B13 · §2 · §5.1 · §7 H2 · §8 |
+| S5 | Varsayılan güncelleme politikası | (A) ONAYLI | K-B14 · §4.1 |
+| S6 | Bulutta iki adımlı giriş | **İsteğe bağlı** (2026-09-30 kararı aynen); yerine hız sınırı, kalıcı kilit, onaylı cihaz | K-B15 · §3 |
+| — | Teknik sapmalar T2 (güncelleyici konakta) · T3 (TLS için nginx) | Yönetici onayladı | §0.2 |
 
-Avukatın H3 cevabına bağlı bir karar daha var: Cloudflare kenarı aktarım sayılır ve dayanak kurulamazsa, Cloudflare'siz doğrudan TLS seçeneği (K-B4'ün yeniden açılması) o zaman sorulur.
+**Açık kalan tek konu:** H3 (Cloudflare kenarı, KVKK md. 9) avukattadır. Dayanak kurulamazsa §7.1'deki doğrudan TLS kipine geçilir ve kullanıcıya K-B4'ün yeniden açılması sorulur.
