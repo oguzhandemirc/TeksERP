@@ -161,12 +161,36 @@ export function isaretciYuku(govde) {
   }
 }
 
-/** Yayın defteri satırı (TSV): zaman · sürüm · yayıncı · sha16 · boyut [· terfi kaçışı]. Sekme/satır sızmaz. */
-export function defterSatiri({ zaman, surum, kim, sha16, boyut, terfiAtla, urun = 'backend' }) {
+/**
+ * Yayın defteri satırı (TSV): zaman · sürüm · yayıncı · sha16 · boyut [· terfi kaçışı] [· CI kaçışı]. Kaçış
+ * kolonları etiketlidir (`terfi-atlandi:` · `ci-atlandi:`), sırası sabit; sekme/satır sızmaz.
+ */
+export function defterSatiri({ zaman, surum, kim, sha16, boyut, terfiAtla, ciAtla, urun = 'backend' }) {
   const temiz = (x) => String(x ?? '-').replace(/[\t\r\n]/g, ' ');
   const alanlar = [zaman, `${urun}-${surum}`, kim, sha16, boyut];
   if (terfiAtla) alanlar.push(`terfi-atlandi: ${terfiAtla}`);
+  if (ciAtla) alanlar.push(`ci-atlandi: ${ciAtla}`);
   return alanlar.map(temiz).join('\t');
+}
+
+/**
+ * İmzalı bütünlük yükündeki CI kökeni kaydı (`butunluk.jws` → `ciKokeni`; G22). İmza burada DOĞRULANMAZ —
+ * çağıran paketi önce `backend-bildirim.ts` ile tam denetler. Kayıt yoksa ya da biçimsizse null.
+ */
+export function ciKokeniOku(jws) {
+  try {
+    const yuk = JSON.parse(Buffer.from(String(jws ?? '').trim().split('.')[1] ?? '', 'base64url').toString('utf8'));
+    const k = yuk?.ciKokeni;
+    return k && typeof k === 'object' && (k.kip === 'kosu' || k.kip === 'atlandi') ? k : null;
+  } catch {
+    return null;
+  }
+}
+
+/** CI kaçışı kaydının defter/uyarı metni: cümle · saat · makine · HEAD; kaçış değilse null. */
+export function ciAtlaMetni(kayit) {
+  if (kayit?.kip !== 'atlandi') return null;
+  return `"${kayit.cumle}" · ${kayit.saat} · ${kayit.makine} · HEAD ${String(kayit.head ?? '').slice(0, 12)}`;
 }
 
 /** Defter satırını uzakta ekleyen komut (printf %s — içerik biçim dizesine girmez). */

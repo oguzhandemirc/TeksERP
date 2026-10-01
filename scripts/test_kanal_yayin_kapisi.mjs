@@ -399,7 +399,8 @@ const gitGoster = (ref, rel) =>
 
 const ORTAK_KAYNAK = [
   'deploy/kanallar.json', 'scripts/lib/kanallar.mjs', 'scripts/kanal-kapisi.mjs', 'scripts/lib/surum.mjs', 'scripts/lib/surum-notu-tavan.mjs',
-  'scripts/lib/terfi.mjs', 'scripts/lib/yayin-okuma.mjs', 'scripts/lib/yayin-hedefi.mjs', 'scripts/lib/derleme-bagi.mjs', 'scripts/lib/backend-yayin.mjs',
+  'scripts/lib/terfi.mjs', 'scripts/lib/kullanici-cumlesi.mjs', 'scripts/lib/yayin-okuma.mjs', 'scripts/lib/yayin-hedefi.mjs', 'scripts/lib/derleme-bagi.mjs',
+  'scripts/lib/backend-yayin.mjs',
   ...PANEL_SABIT_DOSYALAR,
   'scripts/lib/yayin-bildirim.mjs',
   'scripts/lib/panel-imza-kapisi.mjs', 'Electron/electron/guncelleme/kunye-jws.mjs', 'Electron/electron/guncelleme/panel-kunye.mjs',
@@ -1615,7 +1616,9 @@ const parmakIzi = (cikti) => /Native parmak izi : ([0-9a-f]+)/.exec(cikti)?.[1] 
   const tf = otaCheckKanal(o, 'testfabrika', ['--terfi-atla=fabrika çöktü, test turu beklemeden düzeltmeyi çıkar']);
   ol('4p testfabrika + --terfi-atla → DUR (terfi istemeyen kanalda kaçış anlamsız)', tf.kod !== 0 && /terfi istemiyor/.test(tf.cikti), tf.cikti.slice(-400));
   const tf2 = otaCheckKanal(o, 'testfabrika');
-  ol('4q testfabrika (terfiKaynagi yok) terfi satırı BASMAZ — davranışı değişmedi', tf2.kod === 0 && !/terfi/i.test(tf2.cikti), tf2.cikti.slice(-400));
+  // Kirli ağaç listesindeki dosya yolu (`·M scripts/lib/terfi.mjs`, derleme-bagi biçimi) terfi SATIRI değildir.
+  const terfiSatiri = tf2.cikti.split('\n').filter((l) => !/^\s*[MADRCUT?!·]{2} \S/.test(l)).join('\n');
+  ol('4q testfabrika (terfiKaynagi yok) terfi satırı BASMAZ — davranışı değişmedi', tf2.kod === 0 && !/terfi/i.test(terfiSatiri), tf2.cikti.slice(-400));
 }
 
 /* ------------------------------------------------------------------ *

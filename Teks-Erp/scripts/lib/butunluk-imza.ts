@@ -166,6 +166,8 @@ export interface SignInput {
   readonly paketId?: string;
   /** Filigran: kurulum kimliği (varsa). v1 şeması bu ek anahtarı DOĞRULAMADA atar; imzalı içerikte durur. */
   readonly kurulumId?: string | null;
+  /** CI kökeni kaydı (`ci-kokeni.ts`): ek anahtar olarak imzalı yükte durur, v1 şeması doğrulamada atar. */
+  readonly ciKokeni?: Readonly<Record<string, unknown>> | null;
 }
 
 export interface SignResult {
@@ -196,7 +198,7 @@ export async function signPackageDirectory(g: SignInput): Promise<SignResult> {
     liste: { sha256: b64uEncode(createHash("sha256").update(listBytes).digest()), boyut: listBytes.length, dosyaSayisi: entries.length },
     kapsam,
   });
-  const payload: Record<string, unknown> = { ...manifest, ...(g.kurulumId ? { kurulumId: g.kurulumId } : {}) };
+  const payload: Record<string, unknown> = { ...manifest, ...(g.kurulumId ? { kurulumId: g.kurulumId } : {}), ...(g.ciKokeni ? { ciKokeni: g.ciKokeni } : {}) };
   const token = signJws({ typ: INTEGRITY_TYP, kid: g.key.kid, payload, privateKey: g.key.privateKey });
   if (token.length > JWS_MAX_LENGTH) throw new Error(`imzalı yük ${token.length} bayt > ${JWS_MAX_LENGTH}`);
   const file = path.join(g.root, INTEGRITY_FILE);

@@ -23,6 +23,8 @@
 //      kaydın sürüm/derleme/ICU'su olmayan künye (backend hedefi ya da --pg-yayinla) DUR; zip'te tek ICU ·
 //      §3G (G3) bildirim aracının PAKET çapası kanalın kipinden: kip zorunlu · tanınmayan kip · üretim kanalı hazırlık
 //      kipiyle DUR · üretim kipinin gerçek çapası hazırlık ailesi imzalı paketi REDDEDER (kontrol: test çapasıyla geçer)
+//   §1l/§3ci (G22) CI KAÇIŞI: imzalı künyede `ciKokeni.kip = "atlandi"` → yayın DURMAZ, uyarı basılır, defterde
+//      `ci-atlandi:` kolonu (cümle · saat · makine · HEAD); kaçışsız pakette kolon YOK
 //
 //   node scripts/test_backend_yayin.mjs
 // =============================================================================
@@ -37,6 +39,8 @@ import {
   PAKET_ADI_DESENI,
   SURUM_DESENI,
   defterKomutu,
+  ciAtlaMetni,
+  ciKokeniOku,
   defterSatiri,
   isaretciSurumu,
   ozetCikar,
@@ -95,6 +99,16 @@ function bolum1() {
     atar({ paketAd: "a'b.zip" }) && atar({ paketAd: '../x.zip' }) && atar({ pgAd: 'pg;.zip' }) && atar({ damga: 'a b' }) && !atar({}));
   const satir = defterSatiri({ zaman: 'z', surum: '2.11.0', kim: 'a@b', sha16: 's', boyut: 1, terfiAtla: "kullanıcı\tdedi\n'x'" });
   ol('§1j defter satırı sekme/satır sızdırmaz, altı kolon', satir.split('\t').length === 6 && !/[\r\n]/.test(satir));
+  const KACIS = { kip: 'atlandi', cumle: 'CI kırık, kullanıcı\tonayladı: imzala', saat: '2026-10-01T20:00:00+03:00', makine: 'mac', head: 'a'.repeat(40) };
+  const jws = (yuk) => `e30.${Buffer.from(JSON.stringify(yuk)).toString('base64url')}.imza`;
+  ol('§1l ciKokeniOku: imzalı yükten kayıt; yoksa/biçimsizse null', ciKokeniOku(jws({ v: 1, ciKokeni: KACIS }))?.kip === 'atlandi' &&
+    ciKokeniOku(jws({ v: 1, ciKokeni: { kip: 'kosu', kosu: 1 } }))?.kip === 'kosu' && ciKokeniOku(jws({ v: 1 })) === null &&
+    ciKokeniOku(jws({ v: 1, ciKokeni: { kip: 'baska' } })) === null && ciKokeniOku('bozuk') === null && ciKokeniOku(undefined) === null);
+  const iki = defterSatiri({ zaman: 'z', surum: '2.11.0', kim: 'a@b', sha16: 's', boyut: 1, terfiAtla: 'kullanıcı dedi ki yayınla', ciAtla: ciAtlaMetni(KACIS) });
+  const yalnizCi = defterSatiri({ zaman: 'z', surum: '2.11.0', kim: 'a@b', sha16: 's', boyut: 1, ciAtla: ciAtlaMetni(KACIS) });
+  ol('§1l2 defter: CI kaçışı etiketli kolon (cümle · saat · makine · HEAD12), terfi kolonundan SONRA; sekme sızmaz; kaçış değilse metin yok',
+    iki.split('\t').length === 7 && iki.split('\t')[5].startsWith('terfi-atlandi: ') && /^ci-atlandi: "CI kırık, kullanıcı onayladı: imzala" · 2026-10-01T20:00:00\+03:00 · mac · HEAD a{12}$/.test(iki.split('\t')[6]) &&
+    yalnizCi.split('\t').length === 6 && yalnizCi.split('\t')[5].startsWith('ci-atlandi: ') && ciAtlaMetni({ kip: 'kosu' }) === null && ciAtlaMetni(null) === null, iki);
   ol("§1k defter komutu tek tırnağı kaçırır (içerik biçim dizesine girmez)", defterKomutu('/opt/v/defter/k.tsv', "a'b").includes("'a'\\''b'") && defterKomutu('/opt/v/defter/k.tsv', 'x').includes("printf '%s\\n'"));
 }
 
@@ -182,7 +196,7 @@ function anahtarKur() {
 }
 
 /** İmzalı test paketi: künye + birkaç kapsam dosyası, gerçek imza aracıyla; zip kökünde PAKET.json. */
-function paketKur(ad, { surum, kanal, prova = false, anahtar, kurcala = false }) {
+function paketKur(ad, { surum, kanal, prova = false, anahtar, kurcala = false, ciKokeni = null }) {
   const kok = path.join(GECICI, `paket-${ad}`);
   fs.mkdirSync(path.join(kok, 'dist'), { recursive: true });
   fs.mkdirSync(path.join(kok, 'prisma/migrations/20260101000000_ilk'), { recursive: true });
@@ -193,8 +207,19 @@ function paketKur(ad, { surum, kanal, prova = false, anahtar, kurcala = false })
     ad, commit: '91c79ebd', backendKanal: kanal, korumali: true, korumaHedef: 'win-x64', runtimeNodeSurumu: '24.18.0',
     uygulamaSurumu: surum, prova, migrationSayisi: 1, dosyaSayisi: 4,
   }, null, 2)}\n`);
-  tsx(['scripts/build-korumali-imza.ts', 'imzala', `--kok=${kok}`, `--anahtar=${anahtar}`, `--surum=${surum}`, '--urun=backend',
-    `--musteri=${kanal}`, '--derleme-tarihi=2026-09-30T10:00:00.000Z']);
+  if (ciKokeni) {
+    // CI kaçışı yalnız üretim anahtarıyla atılır (CLI hazırlıkta RED); yayıncının okuması için kayıt doğrudan imzalı yüke.
+    const betik = path.join(GECICI, `imza-${ad}.ts`);
+    fs.writeFileSync(betik, `import { readPackageKey, signPackageDirectory } from ${JSON.stringify(path.join(TEKS, 'scripts/lib/butunluk-imza.ts'))};
+signPackageDirectory({ root: ${JSON.stringify(kok)}, key: readPackageKey(${JSON.stringify(anahtar)}), urun: 'backend', surum: ${JSON.stringify(surum)},
+  derlemeTarihi: '2026-09-30T10:00:00.000Z', musteri: ${JSON.stringify(kanal)}, ciKokeni: ${JSON.stringify(ciKokeni)} })
+  .catch((e) => { console.error(e); process.exit(1); });
+`);
+    tsx([betik]);
+  } else {
+    tsx(['scripts/build-korumali-imza.ts', 'imzala', `--kok=${kok}`, `--anahtar=${anahtar}`, `--surum=${surum}`, '--urun=backend',
+      `--musteri=${kanal}`, '--derleme-tarihi=2026-09-30T10:00:00.000Z']);
+  }
   if (kurcala) fs.appendFileSync(path.join(kok, 'dist/server.js'), '// sonradan eklendi\n');
   const zip = path.join(GECICI, `${ad}.zip`);
   execFileSync('zip', ['-q', '-r', '-X', zip, '.'], { cwd: kok });
@@ -307,6 +332,22 @@ function bolum3() {
     kb?.pg?.cizgi === Number(PG_KAYDI.cizgi) && kb?.pg?.enAz === PG_KAYDI.backendEnAz, rkayit.cikti.slice(-400));
   bolum3pg(ortak);
   bolum3capa(p1);
+  bolum3ci(ortak);
+}
+
+/** G22 — CI kaçışlı imza: yayın DURMAZ, uyarır, defterine `ci-atlandi:` yazar; kaçışsız yayında kolon yok. */
+function bolum3ci(ortak) {
+  const defterYolu = path.join(UZAK, 'defter', 'testfabrika-BACKEND-YAYIN-DEFTERI.tsv');
+  const onceki = fs.readFileSync(defterYolu, 'utf8');
+  ol('§3ci0 kaçışsız yayınların defter satırlarında ci-atlandi kolonu YOK', onceki.trim().length > 0 && !onceki.includes('ci-atlandi:'));
+  const kayit = { kip: 'atlandi', cumle: 'CI koşusu kırık, kullanıcı onayladı: imzala', saat: '2026-10-01T20:00:00+03:00', makine: 'bekci-mac', head: 'b'.repeat(40) };
+  const p10 = paketKur('p10', { surum: '9.9.9-prova.10', kanal: 'testfabrika', prova: true, anahtar: ORTAK.dosya, ciKokeni: kayit });
+  const r = yayinla(ortak(p10));
+  const yeni = fs.readFileSync(defterYolu, 'utf8').slice(onceki.length);
+  ol('§3ci ⭐ CI kaçışlı paket: yayın DURMAZ (çıkış 0, son.json ilerler), uyarı basılır, defter satırı cümle · saat · makine · HEAD taşır',
+    r.kod === 0 && isaretciSurumu(fs.readFileSync(uzakDosya('testfabrika/backend/son.json'), 'utf8')) === '9.9.9-prova.10' &&
+    /⚠ CI KAÇIŞI[^\n]*"CI koşusu kırık, kullanıcı onayladı: imzala" · 2026-10-01T20:00:00\+03:00 · bekci-mac · HEAD b{12}/.test(r.cikti) &&
+    /⚠ CI KAÇIŞLI imza/.test(r.cikti) && /\tbackend-9\.9\.9-prova\.10\t.*\tci-atlandi: "CI koşusu kırık/.test(yeni), `${r.cikti.slice(-500)}\n--- defter:\n${yeni}`);
 }
 
 /** G3 — bildirim aracının PAKET çapası kanalın çapa KİPİNDEN (kanal kaydı backend.guvenCapasi, yayıncı geçirir). */

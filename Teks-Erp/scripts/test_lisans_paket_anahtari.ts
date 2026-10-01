@@ -15,7 +15,10 @@
 //   §4 (G3) anahtar AİLESİ = derlemenin çapa kipi (`dist/server-kunye.json` `guvenCapasi`): üretim çapalı pakete
 //      hazırlık anahtarı · hazırlık çapalıya üretim anahtarı → parola SORULMADAN RED, imza yok; uyan aile imzalar
 //   §5 (G22/ALT-9) CI KÖKENİ: üretim anahtarıyla imza `--ci-kosu` ister; koşu `korumali-paket.yml` · başarılı · `main`
-//      · commit = yapıtın künyesi değilse ya da okunamazsa parola sorulmadan RED (sahte `gh` PATH'te, ağ yok)
+//      · commit = yapıtın künyesi değilse ya da okunamazsa parola sorulmadan RED (sahte `gh` PATH'te, ağ yok);
+//      KAÇIŞ (kullanıcı kararı 2026-10-01) `--ci-atla="<cümle>"`: boş/kısa/kalıp dışı · `--ci-kosu` ile birlikte ·
+//      hazırlık anahtarında → RED; geçerli cümle + saat + makine + HEAD imzalı yüke (`ciKokeni`) girer, imza GEÇERLİ;
+//      koşulu imzada koşu kaydı (`ciKokeni.kip = "kosu"`) yüke girer
 // ⭐ KALICI SONDA ✓K: §0c tek-uygulama tarayıcısı sentetik kripto satırını yakalar; §2 ret dalları her koşumda.
 // Koşum: node ../scripts/agir-is.mjs -- npx tsx scripts/test_lisans_paket_anahtari.ts
 // =============================================================================
@@ -28,10 +31,11 @@ import { LICENSE_CLASSES } from "../src/lib/license/protocol";
 import { PACKAGE_PUBLIC_KEYS, verifyIntegrity } from "../src/lib/license/integrity";
 import { INTEGRITY_FILE } from "../src/lib/license/integrity-scope";
 import { INTEGRITY_LIST_FILE } from "../src/lib/license/integrity-list";
-import { generatePackageKey, writePackageKey } from "./lib/butunluk-imza";
+import { generatePackageKey, packageKeyInfo, writePackageKey } from "./lib/butunluk-imza";
 import { CAPA_DOSYALARI, capaDurumuOku } from "./lib/guven-capasi";
 import { main as capaEkle } from "./guven-capasi-ekle";
 import { ciKokeniHukmu } from "./lib/ci-kokeni";
+import { git } from "./lib/git";
 
 let pass = 0;
 let fail = 0;
@@ -315,7 +319,7 @@ function bolum4(): void {
 }
 
 // ── §5 ───────────────────────────────────────────────────────────────────────
-function bolum5(): void {
+async function bolum5(): Promise<void> {
   console.log("\n§5 CI kökeni (G22/ALT-9) — ✓K");
   const kip = (o: Partial<typeof UYAN_KOSU>, uretim = true, paketCommit: string | null = KUNYE_COMMIT.slice(0, 8)) =>
     ciKokeniHukmu({ kosu: { ...UYAN_KOSU, ...o }, kunyeCommit: KUNYE_COMMIT, paketCommit, uretim }).sonuc;
@@ -354,7 +358,55 @@ function bolum5(): void {
     const kok = paket();
     const r = imzala(kok, hazirlik, "", []);
     check("§5f hazırlık anahtarı --ci-kosu'suz: UYARI basar, imzalar (bugünkü hazırlık akışı)", r.kod === 0 && /CI kökeni ÖLÇÜLMEDİ/.test(r.hata) && existsSync(path.join(kok, INTEGRITY_FILE)), `çıkış ${r.kod} ${r.hata.trim().slice(0, 80)}`);
+    const kok2 = paket();
+    const r2 = imzala(kok2, hazirlik, "", ["--ci-atla=CI kırık ama kullanıcı imzalamamı istedi"]);
+    check("§5g ⭐ hazırlık anahtarında --ci-atla → çıkış 1, imza YOK (kaçış gerekmez)", r2.kod === 1 && /kaçış gerekmez/.test(r2.hata) && !existsSync(path.join(kok2, INTEGRITY_FILE)), `çıkış ${r2.kod} ${r2.hata.trim().slice(0, 120)}`);
   }
+  await bolum5Kacis(dosya);
+}
+
+/** İmzalı yük (`butunluk.jws` orta parça) — `ciKokeni` ek anahtarı buradan okunur. */
+function imzaliYuk(kok: string): Record<string, unknown> {
+  const jws = readFileSync(path.join(kok, INTEGRITY_FILE), "utf8").trim();
+  return JSON.parse(Buffer.from(jws.split(".")[1] ?? "", "base64url").toString("utf8")) as Record<string, unknown>;
+}
+
+/** G22 — CI kaçışı yalnız kullanıcının cümlesiyle; kayıt imzalı yükte. */
+async function bolum5Kacis(dosya: string): Promise<void> {
+  const CUMLE = "CI koşusu kırık,   kullanıcı onayladı: imzala";
+  const red = (ad: string, ek: readonly string[], desen: RegExp): void => {
+    const kok = paket();
+    const r = imzala(kok, dosya, `${PAROLA}\n`, ek);
+    check(`§5h ⭐ ${ad} → çıkış 1, imza YOK`, r.kod === 1 && desen.test(r.hata) && !existsSync(path.join(kok, INTEGRITY_FILE)), `çıkış ${r.kod} ${r.hata.trim().slice(0, 140)}`);
+  };
+  red("--ci-atla= boş", ["--ci-atla="], /CI KAÇIŞI REDDEDİLDİ[\s\S]*BOŞ/);
+  red("--ci-atla çıplak (değersiz)", ["--ci-atla"], /CI KAÇIŞI REDDEDİLDİ[\s\S]*BOŞ/);
+  red("--ci-atla kısa cümle", ["--ci-atla=acil imzala"], /CI KAÇIŞI REDDEDİLDİ[\s\S]*KISA/);
+  red("--ci-atla yer tutucu kopyalandı", ["--ci-atla=<kullanıcının onay cümlesi>"], /CI KAÇIŞI REDDEDİLDİ[\s\S]*KALIP DIŞI/);
+  red("--ci-atla tekrarlanan kelime", ["--ci-atla=imzala imzala imzala imzala"], /CI KAÇIŞI REDDEDİLDİ[\s\S]*KALIP DIŞI/);
+  red("--ci-atla bayrak gibi (yutulmuş argüman)", ["--ci-atla=--kurulum=x yanlışlıkla cümleye yapışan argüman"], /CI KAÇIŞI REDDEDİLDİ[\s\S]*KALIP DIŞI/);
+  red("--ci-atla + --ci-kosu birlikte", [`--ci-atla=${CUMLE}`, "--ci-kosu=4242"], /CI KAÇIŞI REDDEDİLDİ[\s\S]*birlikte/);
+
+  const kok = paket();
+  const r = imzala(kok, dosya, `${PAROLA}\n`, [`--ci-atla=${CUMLE}`]);
+  const k = existsSync(path.join(kok, INTEGRITY_FILE)) ? (imzaliYuk(kok).ciKokeni as Record<string, unknown> | undefined) : undefined;
+  const head = git(["-C", DEPO, "rev-parse", "HEAD"]).trim();
+  check(
+    "§5i ⭐ geçerli cümle + üretim anahtarı + parola → imzalar; yük ciKokeni = {atlandi · cümle (tekilleşmiş) · ofsetli ISO saat · makine · HEAD}; UYARI basıldı",
+    r.kod === 0 && k?.kip === "atlandi" && k.cumle === "CI koşusu kırık, kullanıcı onayladı: imzala" &&
+      /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}[+-]\d{2}:\d{2}$/.test(String(k.saat)) && k.makine === (os.hostname().split(".")[0] || "?") &&
+      /^[0-9a-f]{40}$/.test(head) && k.head === head && /CI KAÇIŞI/.test(r.hata),
+    `çıkış ${r.kod} ${r.hata.trim().slice(0, 120)} · ${JSON.stringify(k)}`,
+  );
+  if (existsSync(path.join(kok, INTEGRITY_FILE))) {
+    const info = packageKeyInfo(dosya);
+    const v = await verifyIntegrity(readFileSync(path.join(kok, INTEGRITY_FILE), "utf8").trim(), kok, [{ kid: info.kid, x: info.x }]);
+    check("§5j ek anahtar (ciKokeni) imzayı bozmaz: bütünlük GEÇERLİ", v.durum === "GECERLI", `${v.durum} ${v.kod ?? ""}`);
+  }
+  const kok2 = paket();
+  const r2 = imzala(kok2, dosya, `${PAROLA}\n`);
+  const k2 = existsSync(path.join(kok2, INTEGRITY_FILE)) ? (imzaliYuk(kok2).ciKokeni as Record<string, unknown> | undefined) : undefined;
+  check("§5k koşulu imza: yük ciKokeni = {kosu · 4242 · main · künye commit'i}", r2.kod === 0 && k2?.kip === "kosu" && k2.kosu === 4242 && k2.dal === "main" && k2.commit === KUNYE_COMMIT, JSON.stringify(k2));
 }
 
 async function main(): Promise<void> {
@@ -364,7 +416,7 @@ async function main(): Promise<void> {
     bolum2();
     bolum3();
     bolum4();
-    bolum5();
+    await bolum5();
   } finally {
     rmSync(TEMP, { recursive: true, force: true });
   }

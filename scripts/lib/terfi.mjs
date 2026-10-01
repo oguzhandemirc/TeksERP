@@ -28,44 +28,17 @@ import { KOK, kanalCoz, Olculemedi } from './kanallar.mjs';
 import { ayristir, etiketAdi, karsilastir, manifestGovdesindenSurum, terfiEtiketAdi } from './surum.mjs';
 import { yayinOku } from './yayin-okuma.mjs';
 import { isaretciSurumu } from './backend-yayin.mjs';
+import { cumleDenetle, istanbulSaati } from './kullanici-cumlesi.mjs';
+
+/** Cümle yüklemi `kullanici-cumlesi.mjs`te (PAKET `--ci-atla` da kullanır); eski tüketiciler buradan alır. */
+export { CUMLE_ASGARI_KARAKTER, CUMLE_ASGARI_KELIME, cumleDenetle, istanbulSaati } from './kullanici-cumlesi.mjs';
 
 export const TERFI_URUNLERI = ['panel', 'tablet', 'backend'];
-/** Kullanıcı cümlesi — onay (etiket mesajı) ve kaçış (`--terfi-atla`) için aynı asgari. */
-export const CUMLE_ASGARI_KARAKTER = 20;
-export const CUMLE_ASGARI_KELIME = 3;
-
-/** Kaçış/onay cümlesi: boşluklar tekilleşir (defter TSV'sine sekme/satır sızmaz). */
-export function cumleDenetle(ham) {
-  const cumle = String(ham ?? '').replace(/\s+/g, ' ').trim();
-  const kelime = cumle ? cumle.split(' ').filter((k) => /[\p{L}\p{N}]/u.test(k)).length : 0;
-  if (!cumle) return { gecerli: false, cumle, sebep: 'cümle BOŞ' };
-  if (cumle.length < CUMLE_ASGARI_KARAKTER || kelime < CUMLE_ASGARI_KELIME) {
-    return {
-      gecerli: false,
-      cumle,
-      sebep: `cümle KISA ("${cumle}": ${cumle.length} karakter, ${kelime} kelime — en az ${CUMLE_ASGARI_KARAKTER} karakter ve ${CUMLE_ASGARI_KELIME} kelime)`,
-    };
-  }
-  return { gecerli: true, cumle, sebep: null };
-}
 
 /** `terfiKaynagi` — yoksa null (kanal terfi istemez: hazırlık kanalı ya da tek kanallı kurulum). */
 export function terfiKaynagi(kayit, kod) {
   const v = kayit?.kanallar?.[kod]?.terfiKaynagi;
   return typeof v === 'string' && v ? v : null;
-}
-
-/** Europe/Istanbul yerel saati, ofsetli ISO (fabrika günü tek kaynak: Istanbul). */
-export function istanbulSaati(t = new Date()) {
-  const p = Object.fromEntries(new Intl.DateTimeFormat('en-GB', {
-    timeZone: 'Europe/Istanbul', year: 'numeric', month: '2-digit', day: '2-digit',
-    hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23',
-  }).formatToParts(t).map((x) => [x.type, x.value]));
-  const yerel = Date.UTC(+p.year, +p.month - 1, +p.day, +p.hour, +p.minute, +p.second);
-  const dk = Math.round((yerel - Math.floor(t.getTime() / 1000) * 1000) / 60000);
-  const isaret = dk >= 0 ? '+' : '-';
-  const o = Math.abs(dk);
-  return `${p.year}-${p.month}-${p.day}T${p.hour}:${p.minute}:${p.second}${isaret}${String(Math.floor(o / 60)).padStart(2, '0')}:${String(o % 60).padStart(2, '0')}`;
 }
 
 /** Kaçışın etiket mesajı — terfi etiketinde ve (yeni atılıyorsa) sürüm etiketinde aynı metin. */

@@ -6,8 +6,12 @@
 // koşu `korumali-paket.yml` iş akışının, başarıyla bitmiş, (üretim anahtarında) `main` dalının koşusu
 // olmalı ve commit'i yapıtın künyesindeki (`dist/server-kunye.json`) ve paketin (PAKET.json) commit'i olmalı.
 // Üç sonuç: uyumlu · ihlal · ÖLÇÜLEMEDİ (okunamayan koşu geçmiş kapı değildir).
+// KAÇIŞ (kullanıcı kararı 2026-10-01) yalnız KULLANICININ CÜMLESİYLE: CI koşusu yokken üretim imzası
+// `--ci-atla="<cümle>"` ister; boş/kısa/kalıp dışı cümle RED, `--ci-kosu` ile birlikte RED, hazırlık anahtarında RED.
+// Cümle + saat + makine + HEAD imzalı künyeye (`ciKokeni` ek anahtarı) girer; yayıncı görünce uyarır, defterine yazar.
 // =============================================================================
 import { execFileSync } from "node:child_process";
+import { kacisCumlesiDenetle } from "../../../scripts/lib/kullanici-cumlesi.mjs";
 
 export const KORUMALI_IS_AKISI = Object.freeze({ yol: ".github/workflows/korumali-paket.yml", ad: "Korumalı paket (.jsc)" });
 /** Üretim PAKET imzası yalnız bu dalın koşusundan gelen yapıta atılır. */
@@ -67,4 +71,27 @@ export function ciKokeniHukmu(o: { kosu: CiKosusu; kunyeCommit: unknown; paketCo
   }
   if (ih.length) return { sonuc: "ihlal", satirlar: ih };
   return { sonuc: "uyumlu", satirlar: [`CI kökeni: "${KORUMALI_IS_AKISI.ad}" koşu ${kosu.id ?? "?"} · ${kosu.head_branch} · ${kunyeCommit.slice(0, 12)} · başarılı`] };
+}
+
+/**
+ * İmzalı künyeye giren köken kaydı (imzalı yükte `ciKokeni` ek anahtarı; v1 şeması doğrulamada atar, imzada durur).
+ * `kosu`: ölçülmüş CI koşusu · `atlandi`: koşusuz, kullanıcının cümlesiyle (yayıncı uyarır, defterine yazar).
+ */
+export type CiKokeniKaydi =
+  | { readonly kip: "kosu"; readonly kosu: number; readonly dal: string; readonly commit: string }
+  | { readonly kip: "atlandi"; readonly cumle: string; readonly saat: string; readonly makine: string; readonly head: string };
+
+/** `--ci-atla` hükmü — kaçış yalnız üretim anahtarında, koşu verilmemişken ve kullanıcının geçerli cümlesiyle. */
+export function ciAtlaHukmu(o: { ham: string; uretim: boolean; kosuVar: boolean }): { sonuc: "uyumlu" | "ihlal"; cumle: string; satirlar: string[] } {
+  if (!o.uretim) {
+    return { sonuc: "ihlal", cumle: "", satirlar: ["hazırlık anahtarında kaçış gerekmez (CI kökeni isteğe bağlı) — --ci-atla bu anahtarla verilemez"] };
+  }
+  if (o.kosuVar) {
+    return { sonuc: "ihlal", cumle: "", satirlar: ["--ci-kosu ile --ci-atla birlikte verilemez — koşu varsa ölçülür, kaçış yalnız koşu YOKKEN"] };
+  }
+  const c = kacisCumlesiDenetle(o.ham);
+  if (!c.gecerli) {
+    return { sonuc: "ihlal", cumle: c.cumle, satirlar: [`--ci-atla REDDEDİLDİ: ${String(c.sebep)}`, "Kaçış yalnız KULLANICININ cümlesiyle verilir; cümle imzalı künyeye ve yayın defterine yazılır."] };
+  }
+  return { sonuc: "uyumlu", cumle: c.cumle, satirlar: [`CI KAÇIŞI — üretim imzası CI koşusu OLMADAN, kullanıcının cümlesiyle: "${c.cumle}"`] };
 }

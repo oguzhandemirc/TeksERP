@@ -488,7 +488,7 @@ export const YAYIN_YOLU_DESENLERI = [
  */
 export const KANAL_BEKCI_DOSYALARI = [...new Set([
   KAYIT_REL, 'scripts/lib/kanallar.mjs', 'scripts/kanal-kapisi.mjs', 'scripts/check-kanallar.mjs',
-  'scripts/test_kanal_yayin_kapisi.mjs', 'scripts/lib/surum.mjs', 'scripts/lib/surum-notu-tavan.mjs', 'scripts/lib/terfi.mjs',
+  'scripts/test_kanal_yayin_kapisi.mjs', 'scripts/lib/surum.mjs', 'scripts/lib/surum-notu-tavan.mjs', 'scripts/lib/terfi.mjs', 'scripts/lib/kullanici-cumlesi.mjs',
   'scripts/lib/yayin-okuma.mjs', 'scripts/lib/yayin-hedefi.mjs', 'scripts/lib/derleme-bagi.mjs', 'deploy/vds-dogrula.sh',
   'scripts/check-surum-notlari.mjs', 'scripts/hooks/pre-commit.mjs',
   ...PANEL_SABIT_DOSYALAR, ...TABLET_SABIT_DOSYALAR,

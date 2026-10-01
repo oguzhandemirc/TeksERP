@@ -14,6 +14,9 @@
  * ⚠️ DEĞİŞMEZ SÜRÜM: var olan `<sürüm>/` EZİLMEZ; yeni sürüm kanalda yayındaki sürümden BÜYÜK olmalı (geri inme yok).
  * ⚠️ TERFİ (K5): `terfiKaynagi` olan kanala yalnız terfi etiketli commit ve hazırlık kanalında yayınlanmış sürüm.
  * ⚠️ SÜRÜM NOTU: prova olmayan pakette `docs/surumler/backend-<sürüm>.md` ZORUNLU; bildirimin özeti onun "Özet"i.
+ * ⚠️ CI KAÇIŞI (G22): paketin imzalı künyesinde `ciKokeni.kip = "atlandi"` (üretim imzası CI koşusu OLMADAN,
+ *    kullanıcının cümlesiyle — `build-korumali-imza.ts --ci-atla`) görülürse yayın DURMAZ: uyarı basılır, cümle ·
+ *    saat · makine · HEAD yayın defterine `ci-atlandi:` kolonu olarak yazılır.
  * ⚠️ KENAR DOĞRULAMASI: yayın belirteci (Worker) yoksa HİÇBİR ŞEY yüklenmeden DUR; yayından sonra `son.json`
  *    kenardan belirteçle okunur ve yüklenenle bayt bayt kıyaslanır.
  *
@@ -46,6 +49,8 @@ import { Olculemedi as PgOlculemedi, SURUM_REL as PG_KAYIT_REL, jsonOku as pgJso
 import {
   SURUM_DESENI,
   cekirdekSurum,
+  ciAtlaMetni,
+  ciKokeniOku,
   defterKomutu,
   defterSatiri,
   isaretciSurumu,
@@ -304,6 +309,17 @@ const B = sonuc.bildirim;
 if (B.surum !== SURUM || B.kanal !== MUSTERI) dur('Bildirim künyeyle bağlanmıyor', `${B.surum}/${B.kanal} ≠ ${SURUM}/${MUSTERI}`);
 const sha16 = B.paket.sha256.slice(0, 16);
 bilgi(`✓ paket ${B.paket.ad} · ${B.paket.boyut} B · sha256 ${sha16}… · kid ${B.paketImzaKid} · PG ${B.pg.cizgi} ≥ ${B.pg.enAz}${B.pg.hedef ? ` · hedef ${B.pg.hedef.surum}-${B.pg.hedef.derleme}` : ''}`);
+// CI kökeni imzalı künyeden (bütünlük yukarıda TAM denetlendi); kaçış DURDURMAZ, uyarır ve deftere girer.
+let ciKokeni = null;
+try {
+  ciKokeni = ciKokeniOku(execFileSync('unzip', ['-p', PAKET, 'butunluk.jws'], { encoding: 'utf8', maxBuffer: 1024 * 1024 }));
+} catch {
+  ciKokeni = null;
+}
+const CI_ATLA = ciAtlaMetni(ciKokeni);
+if (CI_ATLA) bilgi(`⚠ CI KAÇIŞI: bu paketin üretim imzası CI koşusu OLMADAN atıldı — kullanıcının cümlesi ${CI_ATLA}`);
+else if (ciKokeni?.kip === 'kosu') bilgi(`✓ CI kökeni: koşu ${ciKokeni.kosu} · ${ciKokeni.dal} · ${String(ciKokeni.commit).slice(0, 12)}`);
+else bilgi('ℹ CI kökeni künyede yok (hazırlık imzası ya da G22 öncesi paket)');
 
 const plan = yayinPlani({
   vdsBackend: KANAL.yayin.vdsBackend,
@@ -376,6 +392,7 @@ const satir = defterSatiri({
   sha16,
   boyut: B.paket.boyut,
   terfiAtla: TERFI_ATLA !== undefined ? cumleDenetle(TERFI_ATLA).cumle : null,
+  ciAtla: CI_ATLA,
 });
 const defter = uzak(defterKomutu(plan.defter, satir), 'yayın defteri');
 if (!KURU && defter.status !== 0) bilgi('⚠ yayın defteri yazılamadı (yayın etkilenmedi)');
@@ -401,4 +418,4 @@ if (terfi.atlandi) {
   bilgi(k.durum === 'basarisiz' ? `⚠ terfi atlama etiketi atılamadı: ${k.not}` : `✓ terfi atlama etiketi: ${k.ad}`);
 }
 fs.rmSync(CIKTI, { recursive: true, force: true });
-console.log(`\n${BAR}\n  ✔ backend ${SURUM} "${MUSTERI}" kanalında yayında — kurulumlar politikalarına göre alır\n${BAR}\n`);
+console.log(`\n${BAR}\n  ✔ backend ${SURUM} "${MUSTERI}" kanalında yayında — kurulumlar politikalarına göre alır${CI_ATLA ? `\n  ⚠ CI KAÇIŞLI imza: ${CI_ATLA}` : ''}\n${BAR}\n`);
