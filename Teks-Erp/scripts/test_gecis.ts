@@ -5,8 +5,9 @@
 // `deploy/gecis/gecis.ps1` mevcut kurulumu (pm2 + harici PostgreSQL) güncelleyici + Windows hizmeti
 // düzenine BİR KEZ taşır; `deploy/gecis/gecis-yardimci.cjs` saf hesapları yapar. Ölçülen sözleşmeler:
 //   §1 yardımcı: ikiz kaynaklar (hizmet varsayılanları/yol ayarları = hizmet-duzeni.ts · dotenv okuyucusu =
-//      gerçek dotenv · Rust .env okuyucusu = envfile.rs vektörleri) · yapilandirma\.env birleştirmesi (pm2
-//      ecosystem env'i .env'i EZER → yeni dosyada etkin; iki okuyucu AYNI haritayı görür; etkin ayar değişmez;
+//      gerçek dotenv · TEK okuyucu = ortak .env vektörleri native/test-vektorleri/env-dosyasi.json — D2b'den
+//      beri güncelleyici = backend) · yapilandirma\.env birleştirmesi (pm2 ecosystem env'i .env'i EZER → yeni
+//      dosyada etkin; değişmeyen satır bayt bayt korunur; yazılan değer okuyucuda aynen; etkin ayar değişmez;
 //      sır çıktıya girmez; BOM/CRLF korunur) · pm2 sınıflaması (yalnız bu kökün backend'i) · kira gösterimi
 //   §2 gecis.ps1 statik: yalnız TeksERP-Backend-Boot görevi ve bu kökün pm2 uygulaması değişir · PostgreSQL
 //      hizmetine dokunulmaz · silme yalnız izinli biçimlerde (kök dışı silme yok) · veritabanı salt OKUNUR ·
@@ -45,7 +46,6 @@ const defter = atlamaDefteri(() => fail++);
 type Esleme = Record<string, string>;
 interface Yardimci {
   dotenvCozumle(s: string): Esleme;
-  rustEnvCozumle(s: string): { ciftler: Array<[string, string]>; tekrar: string[] };
   hizmetVarsayilanlari(kok: string): Esleme;
   YOL_AYARLARI: readonly string[];
   ortam(g: Record<string, unknown>): OrtamSonuc;
@@ -106,23 +106,83 @@ function dotenvIhlalleri(y: Yardimci): string[] {
   return ih;
 }
 
-// --- §1c ikiz: Rust .env okuyucusu (envfile.rs testleri) -----------------------------------------
-function rustIhlalleri(y: Yardimci): string[] {
+// --- §1c ortak .env vektörleri (D2b): backend (dotenv) ve güncelleyici (envfile.rs) AYNI okuyucu ------
+// Yardımcının tek okuyucusu bu vektörlerin beklenenini vermeli; eski KATI Rust ikizi geri konursa kırmızı.
+interface EnvVektor { vektor: { ad: string; metin?: string; baytHex?: string }; beklenen: Esleme }
+const ENV_VEKTOR = JSON.parse(readFileSync(join(TEKS, "native", "test-vektorleri", "env-dosyasi.json"), "utf8")) as { okuyucu: string; kayitlar: EnvVektor[] };
+function ortakVektorIhlalleri(y: Yardimci): string[] {
   const ih: string[] = [];
-  const d = y.rustEnvCozumle("\uFEFF# yorum\r\nPORT=4000\r\nexport HOST = 0.0.0.0 \nDATABASE_URL=\"postgresql://u:p%40@127.0.0.1:5432/db?schema=public\"\nA='düz \\n'\nB=\"x\\ny\" \nC=deger # yorum\nPORT=4001\n\n");
-  const m = Object.fromEntries(d.ciftler);
-  const bek: Esleme = { PORT: "4001", HOST: "0.0.0.0", DATABASE_URL: "postgresql://u:p%40@127.0.0.1:5432/db?schema=public", A: "düz \\n", B: "x\ny", C: "deger" };
-  for (const [k, v] of Object.entries(bek)) if (m[k] !== v) ih.push(`envfile.rs dotenv_subset: ${k}`);
-  if (JSON.stringify(d.tekrar) !== '["PORT"]' || d.ciftler.length !== 6 || d.ciftler[5]?.[0] !== "PORT") ih.push("envfile.rs dotenv_subset: tekrar/sıra");
-  const hataMi = (s: string, bek2: RegExp, sir?: string): boolean => {
-    try { y.rustEnvCozumle(s); return false; } catch (e) { const t = String((e as Error).message); return bek2.test(t) && (!sir || !t.includes(sir)); }
-  };
-  if (!hataMi('GIZLI="sir-degeri', /satir 1/, "sir-degeri")) ih.push("kapanmayan tırnak hatası değeri sızdırıyor ya da yok");
-  if (!hataMi("1ABC=x", /gecersiz anahtar/)) ih.push("geçersiz anahtar kabul edildi");
-  if (!hataMi('Q="C:\\TeksERP"', /kacis/)) ih.push("çift tırnakta tanınmayan kaçış kabul edildi (envfile.rs reddeder)");
-  if (!hataMi("K: v", /ANAHTAR=DEGER/)) ih.push("iki nokta sözdizimi kabul edildi (envfile.rs reddeder)");
+  const kurulu = `dotenv@${(req("dotenv/package.json") as { version: string }).version}`;
+  if (ENV_VEKTOR.okuyucu !== kurulu) ih.push(`vektör okuyucusu ${ENV_VEKTOR.okuyucu} ≠ kurulu ${kurulu}`);
+  if (ENV_VEKTOR.kayitlar.length < 60) ih.push(`körlük: ${ENV_VEKTOR.kayitlar.length} vektör`);
+  const sirali = (o: Esleme): string => JSON.stringify(Object.entries(o).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)));
+  for (const k of ENV_VEKTOR.kayitlar) {
+    const metin = k.vektor.metin ?? Buffer.from(k.vektor.baytHex ?? "", "hex").toString("utf8");
+    let gorulen: Esleme;
+    try { gorulen = y.dotenvCozumle(metin); } catch { ih.push(`${k.vektor.ad}: okuyucu hata attı (gerçek okuyucu atmaz)`); continue; }
+    if (sirali(gorulen) !== sirali(k.beklenen)) ih.push(k.vektor.ad);
+  }
   return ih;
 }
+/** "Eski ikiz geri kondu" sondası: D2b öncesi KATI envfile.rs ikizi — yardımcının D6 sürümünde taşıdığı kod AYNEN. */
+const ESKI_KATI_IKIZ = String.raw`
+function rustAnahtarMi(k) {
+  return /^[_A-Za-z][_A-Za-z0-9]*$/.test(k);
+}
+function rustCiftTirnak(ic, no) {
+  let out = "";
+  for (let i = 0; i < ic.length; i++) {
+    const c = ic[i];
+    if (c !== "\\") { out += c; continue; }
+    const s = ic[++i];
+    if (s === "n") out += "\n";
+    else if (s === "r") out += "\r";
+    else if (s === "t") out += "\t";
+    else if (s === '"') out += '"';
+    else if (s === "\\") out += "\\";
+    else throw new Error("satir " + no + ": taninmayan kacis dizisi");
+  }
+  return out;
+}
+// Rust str::trim Unicode White_Space'i atar; JS trim BOM'u da atar - BOM satir basinda zaten soyuldu.
+function rustTrim(s) { return s.replace(/^[\s]+|[\s]+$/g, ""); }
+function rustDeger(ham, no) {
+  const d = rustTrim(ham);
+  for (const q of ['"', "'"]) {
+    if (d.startsWith(q)) {
+      const ic = d.slice(1);
+      if (!ic.endsWith(q) || ic.length === 0) throw new Error("satir " + no + ": kapanmayan tirnak");
+      const govde = ic.slice(0, -1);
+      return q === '"' ? rustCiftTirnak(govde, no) : govde;
+    }
+  }
+  const i = d.indexOf(" #");
+  const v = i >= 0 ? d.slice(0, i) : d;
+  return v.replace(/[\s]+$/, "");
+}
+function rustEnvCozumle(metin) {
+  let t = String(metin);
+  if (t.charCodeAt(0) === 0xfeff) t = t.slice(1);
+  const ciftler = [];
+  const tekrar = [];
+  t.split("\n").forEach((ham, i) => {
+    const no = i + 1;
+    let s = rustTrim(ham.endsWith("\r") ? ham.slice(0, -1) : ham);
+    if (s === "" || s.startsWith("#")) return;
+    if (s.startsWith("export ")) s = s.slice(7).replace(/^[\s]+/, "");
+    const e = s.indexOf("=");
+    if (e < 0) throw new Error("satir " + no + ": ANAHTAR=DEGER biciminde degil");
+    const k = rustTrim(s.slice(0, e));
+    if (!rustAnahtarMi(k)) throw new Error("satir " + no + ": gecersiz anahtar adi");
+    const v = rustDeger(s.slice(e + 1), no);
+    const j = ciftler.findIndex((p) => p[0] === k);
+    if (j >= 0) { ciftler.splice(j, 1); if (!tekrar.includes(k)) tekrar.push(k); }
+    ciftler.push([k, v]);
+  });
+  return { ciftler, tekrar };
+}
+dotenvCozumle = (m) => Object.fromEntries(rustEnvCozumle(m).ciftler);
+`;
 
 // --- §1d yapilandirma birleştirmesi ----------------------------------------------------------------
 const SIRLAR = ["gizli-parola", "jwt-gizli", "gizli-belirtec"];
@@ -150,8 +210,7 @@ function ortamIhlalleri(y: Yardimci): string[] {
     if (g.sonuc.karar !== "TAMAM" || !g.sonuc.yazildi || !g.cikti) ih.push(`gerçekçi: ${g.sonuc.karar} ${g.sonuc.engeller.join("; ")}`);
     else {
       const d = y.dotenvCozumle(g.cikti);
-      const r = Object.fromEntries(y.rustEnvCozumle(g.cikti).ciftler);
-      if (JSON.stringify(Object.entries(d).sort()) !== JSON.stringify(Object.entries(r).sort())) ih.push("gerçekçi: iki okuyucu farklı harita görüyor");
+      if (!g.cikti.startsWith(GERCEKCI)) ih.push("gerçekçi: değişmeyen .env satırları bayt bayt korunmadı");
       for (const [k, v] of Object.entries({ HOST: "0.0.0.0", BACKUP_RETENTION_DAYS: "30", BACKUP_HOUR: "3", BACKUP_OFFSITE_DIR: "", BACKUP_RCLONE_REMOTE: "", PORT: "4000" })) if (d[k] !== v) ih.push(`gerçekçi: ${k} yeni dosyada etkin değil`);
       for (const k of ["NODE_ENV", "NODE_USE_SYSTEM_CA", "LICENSE_DIR", "PG_BIN_DIR", "BACKUP_DIR", "BACKUP_SCHEDULE_ENABLED"]) if (k in d) ih.push(`gerçekçi: ${k} yazıldı (konak/varsayılan sağlar)`);
       if (karar(g.sonuc, "BACKUP_RCLONE_CONFIG") !== "VARSAYILAN_VERI" || !g.sonuc.rclone || !/\/rclone\.conf$/.test(g.sonuc.rclone.eskiYol) || !/\/veri\/rclone\.conf$/.test(g.sonuc.rclone.yeniYol)) ih.push("gerçekçi: rclone.conf veri\\'ye taşınmıyor");
@@ -167,14 +226,16 @@ function ortamIhlalleri(y: Yardimci): string[] {
     if (karar(e.sonuc, "HOST") !== "ECO_DEGER" || ed.HOST !== "0.0.0.0") ih.push(`ecosystem'in ezdiği HOST yeni dosyada etkin değil (${karar(e.sonuc, "HOST")})`);
     if (karar(e.sonuc, "PG_BIN_DIR") !== "ECO_DEGER" || !/\/pgsql\/bin$/.test(ed.PG_BIN_DIR ?? "")) ih.push("ecosystem'in ezdiği PG_BIN_DIR yeni dosyada etkin değil");
     if (karar(e.sonuc, "BACKUP_KEY_DIR") !== "MUTLAK" || ed.BACKUP_KEY_DIR !== `${e.kok}/yedek-anahtar`) ih.push(`göreli BACKUP_KEY_DIR mutlaklaşmadı (${ed.BACKUP_KEY_DIR})`);
-    // (3) ecosystem'siz, satır biçimleri: ters bölü çift tırnak · '#' kesmesi · BOM
-    const b = ortamKos(y, '\uFEFFQ="C:\\x\\y"\nZ=abc#123\nK: iki nokta\n', {}, null);
+    // (3) ecosystem'siz: tek okuyucu (D2b) ⇒ ters bölü çift tırnak · '#' · `K: v` · bozuk satır · BOM DOKUNULMADAN kalır
+    const ham3 = '\uFEFFQ="C:\\x\\y"\nZ=abc#123\nK: iki nokta\nbozuk satir\n1ABC=3\n';
+    const b = ortamKos(y, ham3, {}, null);
     temizle.push(b.dizin);
-    const bd = b.cikti ? y.dotenvCozumle(b.cikti) : {};
-    const br = b.cikti ? Object.fromEntries(y.rustEnvCozumle(b.cikti).ciftler) : {};
-    if (b.sonuc.karar !== "TAMAM" || bd.Q !== "C:\\x\\y" || br.Q !== "C:\\x\\y" || bd.Z !== "abc" || br.Z !== "abc" || br.K !== "iki nokta") ih.push(`satır biçimleri iki okuyucuda aynı değere getirilmedi (${JSON.stringify(br)})`);
-    if (!b.sonuc.uyarilar.some((u) => /'#'/.test(u))) ih.push("'#' kesmesi söylenmedi");
-    if (!b.cikti?.startsWith("\uFEFF")) ih.push("BOM korunmadı");
+    if (b.sonuc.karar !== "TAMAM" || b.cikti !== ham3) ih.push(`değişmeyen satırlar bayt bayt korunmadı (${b.sonuc.karar})`);
+    // (6) ecosystem'den YAZILAN değer okuyucuda aynen: ters bölü + `\n` dizisi + '#' + boşluk
+    const w = ortamKos(y, "X=1\n", {}, 'module.exports = { apps: [{ name: "x", env: { WIN_YOL: "C:\\\\veri\\\\nobet", KARE: "abc#1", BOSLUK: "a b" } }] };');
+    temizle.push(w.dizin);
+    const wd = w.cikti ? y.dotenvCozumle(w.cikti) : {};
+    if (w.sonuc.karar !== "TAMAM" || wd.WIN_YOL !== "C:\\veri\\nobet" || wd.KARE !== "abc#1" || wd.BOSLUK !== "a b") ih.push(`yazılan değer okuyucuda farklı (${JSON.stringify(wd)})`);
     // (4) engeller: çok satırlı değer · app\ içini gösteren yol · nesne değerli ecosystem anahtarı
     const c = ortamKos(y, 'COK="a\nb"\n', {}, null);
     temizle.push(c.dizin);
@@ -245,9 +306,9 @@ function yardimci(): void {
       [["rclone yolu ayrıştı", '"rclone.exe"', '"rclone2.exe"']]],
     ["§1b ⭐ ikiz: dotenv okuyucusu = gerçek dotenv (backend .env'i bununla okur)", dotenvIhlalleri,
       [["\\r genişletmesi silindi", 'deger = deger.replace(/\\\\r/g, "\\r");', ""]]],
-    ["§1c ⭐ ikiz: Rust okuyucusu = envfile.rs testleri (güncelleyici yapilandirma\\.env'i bununla okur)", rustIhlalleri,
-      [["tanınmayan kaçış kabul", 'else throw new Error("satir " + no + ": taninmayan kacis dizisi");', 'else out += s;']]],
-    ["§1d ⭐ yapilandirma\\.env: ecosystem ezer · iki okuyucu aynı · etkin ayar aynı · sır yok · BOM/CRLF · engeller", ortamIhlalleri,
+    ["§1c ⭐ ortak .env vektörleri (env-dosyasi.json; backend dotenv = güncelleyici envfile.rs, D2b): yardımcının okuyucusu beklenenle birebir", ortakVektorIhlalleri,
+      [["eski KATI Rust ikizi geri kondu", "module.exports = { dotenvCozumle,", `${ESKI_KATI_IKIZ}module.exports = { dotenvCozumle,`]]],
+    ["§1d ⭐ yapilandirma\\.env: ecosystem ezer · değişmeyen satır bayt bayt korunur · yazılan değer okuyucuda aynen · etkin ayar aynı · sır yok · BOM/CRLF · engeller", ortamIhlalleri,
       [["ecosystem ezmez (sıra ters)", "const eskiEtkin = Object.assign({}, dot, eco.env);", "const eskiEtkin = Object.assign({}, eco.env, dot);"],
         ["kanonik satır hep çift tırnak", 'if (/^[^\\s#\'"`\\\\]*$/.test(v)) return k + "=" + v;', 'return k + \'="\' + v + \'"\';'],
         ["göreli yol mutlaklaşmaz", 'islem = islem === "ECO_DEGER" ? "ECO_DEGER+MUTLAK" : "MUTLAK";', "hedef = d.v;"]]],

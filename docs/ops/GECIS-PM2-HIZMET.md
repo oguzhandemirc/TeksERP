@@ -149,5 +149,5 @@ Açılış görevi silinir (XML geçiş dizininde); `app\` · `app.eski-*` · `p
 
 - Mantık sahte-Windows harness'iyle ölçüldü (`test_gecis` §3); gerçek SCM · icacls · junction · pm2 · güvenlik duvarı davranışı W3'te (D8, thinkpad-1) ölçülür.
 - Doğrulama başlatmasında backend yalnız 127.0.0.1'i dinler (istemci yazısı yok) ama arka plan işleri bugün yine koşar (`TEKSERP_DOGRULAMA_KIPI`, D3 açığı); `/health` lisans alanı yok (D3 açığı) — lisans ölçümü panelden ve günlükten.
-- Güncelleyicinin `.env` okuyucusu dotenv'den katıdır (D2b düzeltiyor); geçiş satırları iki okuyucuda aynı okunacak biçime getirir, sonradan elle düzenlemede dikkat.
+- `yapilandirma\.env`i backend (dotenv) ve güncelleyici (D2b'den beri dotenv'in birebir aynası) AYNI okur; geçiş yalnız değeri değişen satırı (ecosystem'in ezdiği değer, mutlaklaşan göreli yol) yeniden yazar, diğer satırlar bayt bayt kalır. Tırnaksız değerdeki `#` eskisi gibi yorumu başlatır (parola/adreste `#` varsa değeri tek tırnağa alın).
 - Program kuralına dayanan güvenlik duvarı (node.exe'nin eski yolu) sayılmaz; plan PORT kuralı ekler.

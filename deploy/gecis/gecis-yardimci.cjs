@@ -12,9 +12,10 @@
 //
 // Ikiz kaynaklar (bekci test_gecis olcer):
 //   HIZMET_VARSAYILANLARI / YOL_AYARLARI  = Teks-Erp/src/lib/hizmet-duzeni.ts serviceDefaults / PATH_SETTINGS
-//   dotenvCozumle                         = dotenv 17 `parse` (backend .env'i bununla okur)
-//   rustEnvCozumle                        = Teks-Erp/native/tekserp-hizmet/src/envfile.rs `parse`
-//                                           (guncelleyici yapilandirma\.env'i bununla okur - dotenv'den KATI)
+//   dotenvCozumle                         = dotenv 17.4.2 `parse` - yapilandirma\.env'i okuyan IKI surec de
+//                                           bu anlami gorur: backend (dotenv) ve guncelleyici (envfile.rs, D2b'den
+//                                           beri dotenv'in birebir aynasi). Ortak vektorler:
+//                                           Teks-Erp/native/test-vektorleri/env-dosyasi.json (test_env_okuyucu uretir)
 // =============================================================================
 "use strict";
 const fs = require("fs");
@@ -83,63 +84,6 @@ function dotenvCozumle(kaynak) {
   return nesne;
 }
 
-// --- Ikiz: envfile.rs parse (guncelleyicinin .env okuyucusu) -----------------------
-function rustAnahtarMi(k) {
-  return /^[_A-Za-z][_A-Za-z0-9]*$/.test(k);
-}
-function rustCiftTirnak(ic, no) {
-  let out = "";
-  for (let i = 0; i < ic.length; i++) {
-    const c = ic[i];
-    if (c !== "\\") { out += c; continue; }
-    const s = ic[++i];
-    if (s === "n") out += "\n";
-    else if (s === "r") out += "\r";
-    else if (s === "t") out += "\t";
-    else if (s === '"') out += '"';
-    else if (s === "\\") out += "\\";
-    else throw new Error("satir " + no + ": taninmayan kacis dizisi");
-  }
-  return out;
-}
-// Rust str::trim Unicode White_Space'i atar; JS trim BOM'u da atar - BOM satir basinda zaten soyuldu.
-function rustTrim(s) { return s.replace(/^[\s]+|[\s]+$/g, ""); }
-function rustDeger(ham, no) {
-  const d = rustTrim(ham);
-  for (const q of ['"', "'"]) {
-    if (d.startsWith(q)) {
-      const ic = d.slice(1);
-      if (!ic.endsWith(q) || ic.length === 0) throw new Error("satir " + no + ": kapanmayan tirnak");
-      const govde = ic.slice(0, -1);
-      return q === '"' ? rustCiftTirnak(govde, no) : govde;
-    }
-  }
-  const i = d.indexOf(" #");
-  const v = i >= 0 ? d.slice(0, i) : d;
-  return v.replace(/[\s]+$/, "");
-}
-function rustEnvCozumle(metin) {
-  let t = String(metin);
-  if (t.charCodeAt(0) === 0xfeff) t = t.slice(1);
-  const ciftler = [];
-  const tekrar = [];
-  t.split("\n").forEach((ham, i) => {
-    const no = i + 1;
-    let s = rustTrim(ham.endsWith("\r") ? ham.slice(0, -1) : ham);
-    if (s === "" || s.startsWith("#")) return;
-    if (s.startsWith("export ")) s = s.slice(7).replace(/^[\s]+/, "");
-    const e = s.indexOf("=");
-    if (e < 0) throw new Error("satir " + no + ": ANAHTAR=DEGER biciminde degil");
-    const k = rustTrim(s.slice(0, e));
-    if (!rustAnahtarMi(k)) throw new Error("satir " + no + ": gecersiz anahtar adi");
-    const v = rustDeger(s.slice(e + 1), no);
-    const j = ciftler.findIndex((p) => p[0] === k);
-    if (j >= 0) { ciftler.splice(j, 1); if (!tekrar.includes(k)) tekrar.push(k); }
-    ciftler.push([k, v]);
-  });
-  return { ciftler, tekrar };
-}
-
 // --- Satir duzeyi --------------------------------------------------------------------
 function satirlaraBol(metin) {
   const out = [];
@@ -152,7 +96,7 @@ function satirlaraBol(metin) {
   }
   return out;
 }
-/** Iki okuyucunun da AYNI degeri gordugu satir; temsil edilemiyorsa null. */
+/** dotenv'in (backend ve guncelleyici ayni anlamla okur) TAM bu degeri gordugu satir; temsil edilemiyorsa null. */
 function kanonikSatir(k, v) {
   if (/^[^\s#'"`\\]*$/.test(v)) return k + "=" + v;
   if (!/['\r\n]/.test(v)) return k + "='" + v + "'";
@@ -163,14 +107,6 @@ function satirDeger(satir) {
   const d = dotenvCozumle(satir);
   const a = Object.keys(d);
   return a.length ? { k: a[a.length - 1], v: d[a[a.length - 1]] } : null;
-}
-function rustSatir(satir) {
-  try {
-    const r = rustEnvCozumle(satir);
-    return { tamam: true, cift: r.ciftler[0] || null };
-  } catch (e) {
-    return { tamam: false, hata: String(e && e.message || e) };
-  }
 }
 
 // --- ecosystem.config.js ---------------------------------------------------------------
@@ -234,24 +170,11 @@ function ortam(g) {
   for (let i = 0; i < satirlar.length; i++) {
     const s = satirlar[i];
     const d = satirDeger(s.metin);
-    if (!d) {
-      const r = rustSatir(s.metin);
-      if (!r.tamam) { s.metin = "# gecis: okunamayan satir yoruma alindi: " + s.metin; uyarilar.push("satir " + (i + 1) + " dotenv'e gore bos/yorum, guncelleyici okuyamazdi - yoruma alindi"); }
-      continue;
-    }
+    // Okuyucunun yok saydigi satir (yorum, bicimsiz) ve tekrar eden anahtarin onceki satirlari AYNEN kalir:
+    // iki surec de ayni okuyucu anlamini gorur, tekrar edende SONUNCUSU gecerli.
+    if (!d) continue;
     const k = d.k;
-    if (!rustAnahtarMi(k)) {
-      s.metin = "# gecis: gecersiz anahtar adi yoruma alindi: " + s.metin;
-      uyarilar.push(k + ": anahtar adi guncelleyicinin okuyucusunda gecersiz (yalniz harf/rakam/_) - satir yoruma alindi");
-      not(k, "YORUMA_ALINDI", "gecersiz ad");
-      continue;
-    }
-    if (sonSatir[k] !== i) {
-      // Tekrar eden anahtarin SONUNCUSU gecerli (iki okuyucu da); onceki satir guncelleyicinin okuyucusunu
-      // dusurecekse (kacis/bicim) yoruma alinir - etkin deger degismez.
-      if (!rustSatir(s.metin).tamam) { s.metin = "# gecis: tekrar eden eski satir yoruma alindi: " + s.metin; uyarilar.push(k + ": tekrar eden onceki satir guncelleyicinin okuyucusunda acilmiyordu - yoruma alindi"); }
-      continue;
-    }
+    if (sonSatir[k] !== i) continue;
     let hedef = d.v;
     let islem = "KORUNDU";
     if (konakAnahtariMi(k)) {
@@ -268,16 +191,11 @@ function ortam(g) {
       islem = islem === "ECO_DEGER" ? "ECO_DEGER+MUTLAK" : "MUTLAK";
     }
     istenen[k] = hedef;
-    const r = rustSatir(s.metin);
-    const ayni = r.tamam && r.cift && r.cift[0] === k && r.cift[1] === hedef && hedef === d.v;
-    if (!ayni) {
+    // Yalniz degeri DEGISEN satir yeniden yazilir; digerleri bayt bayt korunur.
+    if (hedef !== d.v) {
       const yeni = kanonikSatir(k, hedef);
-      if (yeni === null) { engeller.push(k + ": deger iki okuyucuda ayni bicimde yazilamiyor (tirnak + ters bolu/satir sonu) - elle duzeltilmeli"); continue; }
-      // dotenv tirnaksiz degeri ilk '#'te keser; satir o etkin degerle yeniden yazilir - fark gorunur olsun.
-      const ham = s.metin.slice(s.metin.indexOf(d.k) + d.k.length).replace(/^\s*[=:]\s*/, "");
-      if (islem === "KORUNDU" && /^[^'"`]/.test(ham) && ham.includes("#")) uyarilar.push(k + ": tirnaksiz degerde '#' vardi - dotenv oradan kesiyordu, satir o (etkin) degerle yazildi; parola/adres ise kontrol edin");
+      if (yeni === null) { engeller.push(k + ": deger okuyucunun ayni okuyacagi bicimde yazilamiyor (tirnak + ters bolu/satir sonu) - elle duzeltilmeli"); continue; }
       s.metin = yeni;
-      if (islem === "KORUNDU") islem = "SATIR_DUZELTILDI";
     }
     not(k, islem);
   }
@@ -305,7 +223,7 @@ function ortam(g) {
     let hedef = v;
     if (YOL_AYARLARI.includes(k) && v.trim() !== "" && !mutlakMi(v.trim())) hedef = ileriBolu(path.posix.normalize(eskiApp + "/" + ileriBolu(v.trim())));
     const satir = kanonikSatir(k, hedef);
-    if (satir === null) { engeller.push(k + ": ecosystem degeri .env'e iki okuyucuda ayni bicimde yazilamiyor - elle"); continue; }
+    if (satir === null) { engeller.push(k + ": ecosystem degeri .env'e okuyucunun ayni okuyacagi bicimde yazilamiyor - elle"); continue; }
     ekler.push(satir);
     istenen[k] = hedef;
     not(k, hedef === v ? "ECO_EKLENDI" : "ECO_EKLENDI+MUTLAK");
@@ -330,15 +248,8 @@ function ortam(g) {
     govde += "# --- gecis.ps1 " + String(g.damga || "") + ": pm2 ecosystem.config.js env blogundan (hizmet duzeninde pm2 yok) ---" + eol;
     govde += ekler.map((x) => x + eol).join("");
   }
-  // Denetim: iki okuyucu ayni haritayi gormeli; istenen degerler etkin olmali.
-  let rust = null;
-  try { rust = rustEnvCozumle(govde); } catch (e) { engeller.push("birlesik .env guncelleyicinin okuyucusunda acilmiyor: " + String(e && e.message || e)); }
+  // Denetim: istenen degerler birlesik dosyada (okuyucunun gozunden) etkin olmali.
   const dotYeni = dotenvCozumle(govde);
-  if (rust) {
-    const rm = Object.fromEntries(rust.ciftler);
-    const fark = Object.keys(Object.assign({}, rm, dotYeni)).filter((k) => rm[k] !== dotYeni[k]);
-    if (fark.length) engeller.push("iki okuyucu farkli okuyor: " + fark.join(", "));
-  }
   for (const [k, v] of Object.entries(istenen)) if (dotYeni[k] !== v) engeller.push(k + ": birlesik dosyada istenen deger etkin degil (ic hata)");
 
   // Etkin ayar karsilastirmasi (anahtar adi). Izinli farklar: konak sabitleri, rclone.conf -> veri\, mutlaklastirma.
@@ -473,7 +384,7 @@ function kira(g) {
 }
 
 const KOMUTLAR = { ortam, pm2, kira };
-module.exports = { dotenvCozumle, rustEnvCozumle, kanonikSatir, hizmetVarsayilanlari, YOL_AYARLARI, KONAK_SABIT, ortam, pm2, kira, jlistCoz };
+module.exports = { dotenvCozumle, kanonikSatir, hizmetVarsayilanlari, YOL_AYARLARI, KONAK_SABIT, ortam, pm2, kira, jlistCoz };
 
 if (require.main === module) {
   const komut = process.argv[2];
