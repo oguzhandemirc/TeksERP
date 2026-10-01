@@ -11,5 +11,11 @@ for ($i = 0; $i -lt $Kalan.Count; $i++) {
   }
 }
 $PSNativeCommandArgumentPassing = $Kip
+# macOS/Linux provasi: Windows hizmet sorgulari (Get-CimInstance Win32_Service, Get-Service) yok - betigin hizmet
+# duzeni kapisi "kayitli TeksERP hizmeti yok" gorsun (Windows'ta bu kapi gercek SCM'i olcer).
+if (-not $IsWindows) {
+  function global:Get-CimInstance { param([Parameter(Position = 0)]$ClassName, $Filter, $ErrorAction) return @() }
+  function global:Get-Service { param($Name, $ErrorAction) return $null }
+}
 & $Betik @h
 exit $LASTEXITCODE

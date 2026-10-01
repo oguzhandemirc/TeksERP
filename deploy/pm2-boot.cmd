@@ -1,5 +1,7 @@
 @echo off
 rem TeksERP - acilista pm2 surec listesini geri yukler (pm2 resurrect).
+rem DONDURULDU (Dagitim v2, 2026-10-01): yalniz pm2 duzenindeki kurulumlar icin; hizmet duzeninde
+rem acilis gorevi KAPATILIR (deploy\gecis\gecis.ps1). Yeni ozellik eklenmez (test_sunucu_betikleri bolum 24).
 rem Gorev Zamanlayici: TeksERP-Backend-Boot, SYSTEM, sistem acilisinda (ilk-kurulum.ps1 kurar).
 rem Bu dosya <kok>\pm2-boot.cmd olarak durur; kok bu dosyanin klasorudur. `pm2 startup`
 rem Windows'u desteklemez, `pm2 save` listeyi yazar ama geri yukleyecek bir tetik ister.

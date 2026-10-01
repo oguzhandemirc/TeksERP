@@ -25,7 +25,8 @@ export const SERVICE_DIRS = Object.freeze({
   rclone: "rclone",
   pgsql: "pgsql",
   pgCredentials: "pg-setup",
-  host: "hizmet",
+  // Güncelleyicinin kendi dizini (ikili + ayar.json + günlük): backend ERİŞEMEZ. Konak `current\runtime\`te koşar.
+  updater: "guncelleyici",
 } as const);
 
 export const ENV_FILE_NAME = ".env";
