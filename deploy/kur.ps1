@@ -1,6 +1,10 @@
 # =============================================================================
 # TeksERP Backend - SURUM KURULUMU (paket tabanli)
 # =============================================================================
+# DONDURULDU (Dagitim v2, 2026-10-01): pm2 duzeni yalniz GECIS DONEMI icin yasar (pm2'de kosan kurulumlar
+#   hizmet duzenine deploy\gecis\gecis.ps1 ile tasinana dek). Yeni ozellik EKLENMEZ; yalniz duzeltme - o da
+#   bekcinin DONMUS ozet tablosu (test_sunucu_betikleri bolum 24) gerekcesiyle birlikte guncellenerek.
+#   Kaldirma kosulu (olculebilir): filoda (portal filo gorunumu / yoklama raporu) pm2 duzeninde kurulum kalmamasi.
 # NEREDE CALISIR: SUNUCUDA, YONETICI PowerShell'de.
 #   C:\TeksERP\kur.ps1 -Paket D:\tekserp-backend-20260801_120000-abc1234.zip
 #   C:\TeksERP\kur.ps1 -GeriAl          # son kuruluma geri don
@@ -621,6 +625,26 @@ function Pm2AdiDogrula($port) {
   else { Fail "pm2 ad kapisi ($karar): $([string]$r.neden)" }
 }
 
+# HIZMET DUZENI IZI (Dagitim v2) - kur.ps1 ve ilk-kurulum.ps1'de AYNI govde (bekci ikizligi olcer).
+# Bu kok hizmet duzenindeyse (surumler\ / current / yapilandirma\.env) ya da bu koku kullanan bir TeksERP
+# hizmeti kayitliysa pm2 yolu HICBIR SEYE dokunmaz: guncellemeyi guncelleyici, geri donusu gecis.ps1 yapar.
+# Hizmet listesi okunamazsa iz sayilir (fail-closed).
+function HizmetDuzeniIzi($kokYolu) {
+  $iz = @(@("surumler", "current", "yapilandirma\.env") | Where-Object { Test-Path -LiteralPath (Join-Path $kokYolu $_) } | ForEach-Object { "$kokYolu\$_" })
+  $hizmetler = $null
+  try {
+    $hizmetler = @(Get-CimInstance Win32_Service -ErrorAction Stop | Where-Object {
+      ([string]$_.Name).StartsWith("TeksERP-Backend", [System.StringComparison]::OrdinalIgnoreCase) -or ([string]$_.Name).StartsWith("TeksERP-Guncelleyici", [System.StringComparison]::OrdinalIgnoreCase) })
+  } catch { $hizmetler = $null }
+  if ($null -eq $hizmetler) { return ,($iz + @("TeksERP hizmetleri OLCULEMEDI (Win32_Service)")) }
+  $kokMetni = ([string]$kokYolu).TrimEnd('\')
+  foreach ($h in $hizmetler) {
+    $yol = [string]$h.PathName
+    if ($yol.IndexOf("--kok", [System.StringComparison]::OrdinalIgnoreCase) -ge 0 -and $yol.IndexOf($kokMetni, [System.StringComparison]::OrdinalIgnoreCase) -ge 0) { $iz += "hizmet $($h.Name) bu koku kullaniyor" }
+  }
+  return ,$iz
+}
+
 # --- Yonetici kontrolu ------------------------------------------------------
 $admin = (New-Object Security.Principal.WindowsPrincipal(
   [Security.Principal.WindowsIdentity]::GetCurrent())
@@ -632,8 +656,8 @@ if (-not $admin) { Fail "YONETICI PowerShell gerekir (pm2 daemon SYSTEM olarak k
 # current + yapilandirma\) gecmisse guncellemeyi guncelleyici yapar; burada pm2 AYNI PORTA ikinci
 # backend dogurur ve [9/9] saglik hizmetin backend'ini "API UP" okurdu (sessiz yalanci gecis).
 # Hicbir seye dokunmadan, -GeriAl dahil her kolda once olculur.
-$hizmetIzi = @(@("surumler", "current", "yapilandirma\.env") | Where-Object { Test-Path (Join-Path $kok $_) } | ForEach-Object { "$kok\$_" })
-if ($hizmetIzi.Count) { Fail "Bu kok Windows hizmeti duzeninde ($($hizmetIzi -join ', ')) - kur.ps1 pm2 duzeni icindir, guncellemeyi guncelleyici yapar." }
+$hizmetIzi = HizmetDuzeniIzi $kok
+if ($hizmetIzi.Count) { Fail "Bu kok Windows hizmeti duzeninde ($($hizmetIzi -join ', ')) - kur.ps1 pm2 duzeni icindir: guncellemeyi guncelleyici yapar, pm2'ye donus gecis.ps1 -GeriAl ile." }
 $hizmetBackend = Get-CimInstance Win32_Service -Filter "Name='TeksERP-Backend'" -ErrorAction SilentlyContinue
 if ($hizmetBackend -and "$($hizmetBackend.State)" -ceq "Running" -and -not $HizmetYanYana) {
   Fail "TeksERP-Backend Windows hizmeti CALISIYOR ($($hizmetBackend.PathName)) - pm2 ile ikinci backend ayni portu isterdi. Bilerek yan yana (farkli PORT) kuruyorsan: -HizmetYanYana"

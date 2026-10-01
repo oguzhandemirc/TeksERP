@@ -6,8 +6,9 @@
 //   npx tsx scripts/backend-bildirim.ts dogrula --zip=<paket.zip> --kanal=<kod> --kanal-turu=<uretim|hazirlik>
 //       --pg-cizgi=<16> --pg-en-az=<16.9> [--pg-kunye=<pg.json>] --ozet-dosyasi=<txt> --cikti=<dizin> [--min-kaynak=<sürüm>] [--zorunlu]
 //   npx tsx scripts/backend-bildirim.ts imzala  … aynı … --anahtar=<PAKET anahtar dosyası>
-//   npx tsx scripts/backend-bildirim.ts pg-imzala --zip=<PG sahne zip> --cizgi=<16> --surum=<16.15> --derleme=<4> --icu=<67>
-//       --anahtar=<PAKET anahtar dosyası> --cikti=<dizin>
+//   npx tsx scripts/backend-bildirim.ts pg-imzala --zip=<PG sahne zip> --anahtar=<PAKET anahtar dosyası> --cikti=<dizin>
+//       [--cizgi --surum --derleme --icu]: künye alanları deploy/pg/pg-surumu.json'dan (TEK KAYNAK); verilen argüman
+//       kayıttan farklıysa DUR. Zip'te TEK `bin/icuuc<N>.dll` olmalı ve N = kaydın icuSurum'u.
 //   npx tsx scripts/backend-bildirim.ts pg-dogrula --kunye=<pg.json> --zip=<PG sahne zip> --cikti=<dizin>
 //
 // dogrula/imzala: zip'i geçici dizine açar, imzalı dosya listesini (`butunluk.jws`) PAKET çapasıyla TAM denetler
@@ -201,14 +202,41 @@ async function backend(komut: "dogrula" | "imzala", f: Bayraklar): Promise<void>
 }
 
 // ── PG paketi künyesi ───────────────────────────────────────────────────────
+/** PG sürüm kaydı (TEK KAYNAK `deploy/pg/pg-surumu.json`): künye alanları buradan, argüman yalnız teyit. */
+function pgKaydi(): { cizgi: string; surum: string; derleme: string; icu: string } {
+  const yol = path.join(__dirname, "..", "..", "deploy", "pg", "pg-surumu.json");
+  let k: { cizgi?: unknown; surum?: unknown; derleme?: unknown; yayin?: { "win-x64"?: { icuSurum?: unknown } } };
+  try {
+    k = JSON.parse(fs.readFileSync(yol, "utf8")) as typeof k;
+  } catch (e) {
+    throw new CliError(`PG sürüm kaydı okunamadı (${yol}): ${e instanceof Error ? e.message : String(e)}`);
+  }
+  const icu = k.yayin?.["win-x64"]?.icuSurum;
+  if (typeof k.cizgi !== "string" || typeof k.surum !== "string" || typeof k.derleme !== "string" || typeof icu !== "string") {
+    throw new CliError("PG sürüm kaydı eksik (cizgi · surum · derleme · yayin.win-x64.icuSurum) — önce: node scripts/test_pg_ornegi.mjs");
+  }
+  return { cizgi: k.cizgi, surum: k.surum, derleme: k.derleme, icu };
+}
+
+/** Argüman verildiyse kayıttakiyle AYNI olmalı; verilmediyse kayıttaki (sessiz sapma yok). */
+function kayittan(f: Bayraklar, ad: string, kayitta: string): string {
+  const v = f.get(ad);
+  if (v !== undefined && v !== kayitta) throw new CliError(`--${ad}=${v} kayıttaki değerden (${kayitta}) farklı — tek kaynak deploy/pg/pg-surumu.json`);
+  return kayitta;
+}
+
 async function pgImzala(f: Bayraklar): Promise<void> {
   const zip = path.resolve(gerek(f, "zip"));
-  const cizgi = PgMajorSchema.parse(Number(gerek(f, "cizgi")));
-  const surum = PgVersionSchema.parse(gerek(f, "surum"));
-  const derleme = PgBuildSchema.parse(Number(gerek(f, "derleme")));
-  const icu = IcuVersionSchema.parse(gerek(f, "icu"));
+  const kayit = pgKaydi();
+  const cizgi = PgMajorSchema.parse(Number(kayittan(f, "cizgi", kayit.cizgi)));
+  const surum = PgVersionSchema.parse(kayittan(f, "surum", kayit.surum));
+  const derleme = PgBuildSchema.parse(Number(kayittan(f, "derleme", kayit.derleme)));
+  const icu = IcuVersionSchema.parse(kayittan(f, "icu", kayit.icu));
   const liste = execFileSync("unzip", ["-Z1", zip], { encoding: "utf8", maxBuffer: 16 * 1024 * 1024 }).split("\n");
-  if (!liste.includes(`bin/icuuc${icu}.dll`)) throw new CliError(`zip'te bin/icuuc${icu}.dll yok — ICU sürümü paketle uyuşmuyor`);
+  // Tek ICU: güncelleyici ve setup `bin\icuuc<N>.dll`in N'ini künyenin icuSurum'uyla karşılaştırır (D4 U2/U9).
+  const icular = liste.filter((g) => /^bin\/icuuc\d+\.dll$/.test(g));
+  if (!liste.includes(`bin/icuuc${icu}.dll`)) throw new CliError(`zip'te bin/icuuc${icu}.dll yok (bulunan: ${icular.join(", ") || "hiç"}) — ICU sürümü paketle uyuşmuyor`);
+  if (icular.length !== 1) throw new CliError(`zip'te birden çok ICU var (${icular.join(", ")}) — künyenin icuSurum'u tek olmalı`);
   const icerik = execFileSync("unzip", ["-p", zip, "TEKSERP-ICERIK.sha256"], { maxBuffer: 16 * 1024 * 1024 });
   if (icerik.length === 0) throw new CliError("zip'te TEKSERP-ICERIK.sha256 yok ya da boş (içerik manifestosu)");
   const yuk: PgPackageManifest = {

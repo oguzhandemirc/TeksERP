@@ -7,8 +7,9 @@ name: Korumalı paket (.jsc)
 # docs/design/KOD-KORUMA-OLCUM.md): macOS'ta win/linux .jsc ÜRETİLEMEZ. Bu iş
 # akışı windows-latest + ubuntu-latest koşucularında, `deploy/node-surumu.json`in
 # pinlediği AYNI Node 24 ile derler; yapıtlar (server.jsc + yükleyici + künye +
-# runtime node ikilisi) indirilir ve Mac YALNIZ birleştirir + PAKET anahtarıyla
-# imzalar.
+# runtime node ikilisi; win-x64 kolunda ayrıca Dağıtım v2'nin iki Rust hizmet
+# ikilisi `runtime/tekserp-hizmet.exe` + `runtime/tekserp-guncelleyici.exe`)
+# indirilir ve Mac YALNIZ birleştirir + PAKET anahtarıyla imzalar.
 #
 # ⚠ İMZA ANAHTARI CI'A GİRMEZ. Bu iş akışı hiçbir sır (PAKET imza anahtarı, .env,
 #   DB kimliği) kullanmaz; yalnız açık kaynaktan derler. Nihai imza Mac'te.
@@ -75,6 +76,26 @@ jobs:
         run: |
           node -e "const k=require('./koruma-cikti/dist/server-kunye.json'); if(!k.jscUretildi){console.error('server.jsc üretilmedi (host hedefe uymadı) — bu koşucu ${{ matrix.hedef }} üretmeli'); process.exit(1)} console.log('jsc',k.jscSha256.slice(0,16),'v8',k.v8Taban)"
           test -f koruma-cikti/dist/server.jsc || { echo "server.jsc yok"; exit 1; }
+
+      # Dağıtım v2: paket runtime\ altına iki Rust hizmet ikilisini taşır (paketle.ps1 -HizmetIkiliDizini
+      # <bu yapıtın runtime\ dizini>). ÜRETİM derlemesi: özelliksiz (test-anchor YOK — güven çapası gömülü);
+      # künye bunu ölçer. Yalnız win-x64 kolu (hizmet düzeni Windows'tadır).
+      - name: Rust hizmet ikilileri (güncelleyici + konak, üretim çapası)
+        if: matrix.hedef == 'win-x64'
+        shell: pwsh
+        working-directory: Teks-Erp/native
+        run: |
+          rustup toolchain install stable --profile minimal
+          rustup default stable
+          cargo build --release --locked -p tekserp-guncelleyici -p tekserp-hizmet
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+          $k = (& target/release/tekserp-guncelleyici.exe kunye | Out-String) | ConvertFrom-Json
+          if ($k.ad -ne "tekserp-guncelleyici" -or $k.testCapasi -ne $false) { Write-Error "güncelleyici üretim derlemesi değil (testCapasi): $($k | ConvertTo-Json -Compress)"; exit 1 }
+          $h = (& target/release/tekserp-hizmet.exe kunye | Out-String) | ConvertFrom-Json
+          if ($h.ad -ne "tekserp-hizmet") { Write-Error "konak künyesi beklenen değil"; exit 1 }
+          Copy-Item target/release/tekserp-guncelleyici.exe ../../koruma-cikti/runtime/tekserp-guncelleyici.exe
+          Copy-Item target/release/tekserp-hizmet.exe ../../koruma-cikti/runtime/tekserp-hizmet.exe
+          Get-FileHash ../../koruma-cikti/runtime/tekserp-*.exe -Algorithm SHA256 | ForEach-Object { "$($_.Hash.ToLower())  $(Split-Path $_.Path -Leaf)" }
 
       - name: Yapıtları yükle (.jsc + yükleyici + künye + runtime)
         uses: actions/upload-artifact@v4

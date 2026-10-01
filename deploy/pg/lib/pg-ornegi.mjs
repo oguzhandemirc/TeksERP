@@ -71,6 +71,13 @@ export function surumKaydiHatalari(k) {
   if (typeof k.cizgi !== 'string' || !/^\d+$/.test(k.cizgi)) h.push(`cizgi "${k.cizgi}" sayı değil`);
   else if (typeof k.surum === 'string' && k.surum.split('.')[0] !== k.cizgi) h.push(`cizgi "${k.cizgi}" surum "${k.surum}" ile uyuşmuyor (ana sürüm değişimi otomatik değildir — runbook)`);
   if (typeof k.derleme !== 'string' || !/^\d+$/.test(k.derleme)) h.push(`derleme "${k.derleme}" sayı değil (EDB -N)`);
+  // Backend bildiriminin `pg.enAz`ı (harici örneğin kabul edilen en eski küçük sürümü) — yayıncı buradan okur.
+  if (typeof k.backendEnAz !== 'string' || !/^\d+\.\d+$/.test(k.backendEnAz)) h.push(`backendEnAz "${k.backendEnAz}" <ana>.<küçük> değil (bildirimin pg.enAz'ı)`);
+  else {
+    const [enAna, enKucuk] = k.backendEnAz.split('.').map(Number);
+    if (String(enAna) !== k.cizgi) h.push(`backendEnAz "${k.backendEnAz}" çizginin (${k.cizgi}) ana sürümünde değil — ana sürüm geçişi otomatik değildir`);
+    else if (typeof k.surum === 'string' && /^\d+\.\d+$/.test(k.surum) && enKucuk > Number(k.surum.split('.')[1])) h.push(`backendEnAz "${k.backendEnAz}" sabitlenen sürümden (${k.surum}) yeni — kendi örnek kendi kaydının altında kalır`);
+  }
   for (const alan of ['yayinTarihi', 'destekSonu']) {
     if (typeof k[alan] !== 'string' || !TARIH_DESENI.test(k[alan])) h.push(`${alan} "${k[alan]}" YYYY-AA-GG değil`);
   }

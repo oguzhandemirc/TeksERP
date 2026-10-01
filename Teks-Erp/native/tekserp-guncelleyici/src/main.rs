@@ -10,6 +10,9 @@
 //! kendi veri kökünü (`--veri`; backend'in `TEKSERP_GUNCELLEME_DIZINI` = `<veri>\guncelleme`) alır; yönettiği
 //! backend hizmetinin adı `ayar.json` `backendHizmeti`dir (kanal kaydı `backend.hizmetAdi`).
 //!   kunye                           {ad, surum, hedef, testCapasi} JSON (kendini güncellemede sınanır)
+//!   kurulum-paket --zip <z> --hedef <d>                 setup.exe: backend paketini aç + doğrula (§1.5)
+//!   kurulum-pg --kunye <pg.json> --zip <z> --hedef <d>  setup.exe: PG paketini aç + doğrula (§1.6)
+//!   kurulum-dizin --dizin <d>                         setup.exe onarımı: açılmış sürüm dizinini yeniden ölç
 //!
 //! Sözleşme: docs/design/GUNCELLEYICI.md §4–§13.
 use std::path::PathBuf;
@@ -147,10 +150,11 @@ fn main() -> ExitCode {
         "tur" | "onar" => one_tick(&args),
         "durum" => show_status(&args),
         "hizmet" | "hizmet-kur" | "hizmet-kaldir" => windows_command(&command, &args),
-        _ => {
-            Err("kullanım: tekserp-guncelleyici <hizmet|tur|onar|durum|hizmet-kur|hizmet-kaldir|kunye> [--kok <dizin>] [--veri <dizin>] [--ad <hizmet adı>]"
-                .into())
-        }
+        "kurulum-paket" | "kurulum-pg" | "kurulum-dizin" => tekserp_guncelleyici::kurulum::komut(&command, &args),
+        _ => Err(
+            "kullanım: tekserp-guncelleyici <hizmet|tur|onar|durum|hizmet-kur|hizmet-kaldir|kunye|kurulum-paket|kurulum-pg|kurulum-dizin> [--kok <dizin>] [--veri <dizin>] [--ad <hizmet adı>]"
+                .into(),
+        ),
     };
     match result {
         Ok(code) => ExitCode::from(u8::try_from(code).unwrap_or(1)),

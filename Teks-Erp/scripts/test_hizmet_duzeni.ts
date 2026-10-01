@@ -16,9 +16,12 @@
 //   §5 server.ts kablolaması: üç import sırası, SIGBREAK, stdin kanalı, dotenv'i başka modül yüklemez
 //   §6 LICENSE_DIR hizmette program dizininde RED · §7 yedek şifreleme niyeti hizmet kipinde
 //   §8 takas komutu hizmet kipi (Stop/Start-Service guard'lı, pm2 yok, npx yok, paketin Node'u)
-//   §9 `deploy/hizmet/backend-hizmeti.ps1`: dizin tablosu = TS tablosu (iki yönlü) · sınıflar ·
-//      varsayılan ÖLÇÜM (değişiklik yalnız `-Uygula` dalında) · hizmeti başlatmaz/durdurmaz ·
-//      SeImpersonate yok · kurtarma eylemleri · sanal hesap SID algoritması (pwsh varsa koşar)
+//   §9 `deploy/hizmet/backend-hizmeti.ps1`: dizin + güncelleme kanalı tablosu = TS tablosu (iki yönlü) ·
+//      sınıflar (guncelleyici\ ve guncelleme\is\ yasak, durum\ okunur) · varsayılan ÖLÇÜM (değişiklik yalnız
+//      `-Uygula` dalında) · kayıt TEK kaynak (`tekserp-hizmet.exe hizmet-kur`; New-Service/sc.exe/WMI yok) ·
+//      SIRA iyi bilinen SID'li iskelet → hizmet-kur → sanal hesaplı izin (kayıttan önce icacls 1332) ·
+//      hizmeti başlatmaz/durdurmaz · SeImpersonate yok · kurtarma ölçülür ve §9h Rust kaydıyla aynı ·
+//      sanal hesap SID algoritması (pwsh varsa koşar)
 //   §10 geri yükleme listesi/etkisi süreç bilgisini taşır (panel hizmet bloğunu kurar)
 // NEGATİF SONDA: §5 ve §9'un yüklemleri dosya içinde bozulmuş kopyalara da koşar ("sonda:"
 //   satırları, her koşumda). Dosya dışı zincir bu commit'te ölçüldü (başlık altı liste).
@@ -26,6 +29,8 @@
 //   silindi → §5 KIRMIZI · ③ ps1'de lisans sınıfı `oku` yapıldı → §9b KIRMIZI · ④ `-Uygula`
 //   dalı dışına `IzinYaz` kondu → §9c KIRMIZI · ⑤ kapanış kanalı ikinci tetiği yuttu değil
 //   iki kez çağırdı → §4 KIRMIZI. Hepsi geri alındı, yeşil.
+//   D6 (2026-10-01): §9 sırası/kaydı ve §11 ikiz kapı (`HizmetDuzeniIzi`, kur.ps1 ↔ ilk-kurulum.ps1) dosya
+//   içi sondalarla ölçülür (21 kalıcı sonda); her sondanın kırmızısı KENDİ ihlaliyle doğrulandı.
 // GEREKLİ Mİ: kapı bugün var olan bir kusuru yakalamadı (yeni düzen); gerekçesi ölçülmemiş —
 //   pm2 düzeninin env bloğu 18 anahtarı taşıyor ve ikisi (rclone.conf, zamanlayıcı) hizmette
 //   farklı olmak ZORUNDA; sınıflanmamış anahtar sessizce yanlış yola yazar.
@@ -316,11 +321,21 @@ function lisansVeNiyet(): void {
 
 // --- §9 backend-hizmeti.ps1 --------------------------------------------------------------
 const BEKLENEN_SINIF: Record<string, string> = {
-  surumler: "oku", hizmet: "oku", "mobil-guncelleme": "oku", rclone: "oku",
+  surumler: "oku", "mobil-guncelleme": "oku", rclone: "oku",
   yapilandirma: "sir", "yedek-anahtar": "sir",
   lisans: "yaz", backups: "yaz", logs: "yaz", veri: "yaz",
-  "pg-setup": "yasak",
+  "pg-setup": "yasak", guncelleyici: "yasak",
 };
+/** Güncelleme kanalı (GUNCELLEYICI.md §4.4): üst yasak · kanal oku · niyet yaz · durum oku · is yasak. */
+const BEKLENEN_KANAL: Record<string, string> = { $programData: "yasak", $GuncellemeDizini: "oku", niyet: "yaz", durum: "oku", is: "yasak" };
+/** Kayıt TEK kaynakta: konağın Rust kaydı (tekserp-hizmet) — ölçümün beklediği değerler onunla aynı olmalı. */
+function rustKayitIhlalleri(mainRs: string, contractRs: string): string[] {
+  const ih: string[] = [];
+  if (!/restart_delays:\s*\[5,\s*5,\s*30\]/.test(mainRs)) ih.push("Rust hizmet-kur kurtarma gecikmeleri 5/5/30 değil (ps1 ölçümü 1/5000,1/5000,1/30000 bekliyor)");
+  if (!/BACKEND_PRIVILEGES:\s*\[&str;\s*2\]\s*=\s*\["SeChangeNotifyPrivilege",\s*"SeCreateGlobalPrivilege"\]/.test(contractRs)) ih.push("Rust BACKEND_PRIVILEGES ps1 $Ayricaliklar ile aynı değil");
+  if (!/executable:\s*root\.join\(path::CURRENT\)\.join\(path::RUNTIME\)\.join\(path::HOST_EXE\)/.test(mainRs)) ih.push("Rust kayıt ImagePath'i current\\runtime\\tekserp-hizmet.exe değil (ps1 ölçümü onu bekler)");
+  return ih;
+}
 function ps1Ihlalleri(metin: string): string[] {
   const ih: string[] = [];
   const tablo = new Map<string, string>();
@@ -332,41 +347,68 @@ function ps1Ihlalleri(metin: string): string[] {
   const fazla = [...ps].filter((d) => !ts.has(d));
   if (eksik.length || fazla.length) ih.push(`tablo ↔ TS: eksik ${eksik.join(",") || "-"} fazla ${fazla.join(",") || "-"}`);
   for (const [ad, sinif] of Object.entries(BEKLENEN_SINIF)) if (tablo.get(ad) !== sinif) ih.push(`${ad} sınıfı ${tablo.get(ad) ?? "YOK"} (beklenen ${sinif})`);
+  const kanal = new Map<string, string>();
+  for (const m of metin.matchAll(/@\{\s*Yol\s*=\s*(\$\w+|\(Join-Path \$GuncellemeDizini "(\w+)"\));\s*Sinif\s*=\s*"([^"]+)"\s*\}/g)) kanal.set(m[2] ?? m[1]!, m[3]!);
+  for (const [ad, sinif] of Object.entries(BEKLENEN_KANAL)) if (kanal.get(ad) !== sinif) ih.push(`kanal ${ad} sınıfı ${kanal.get(ad) ?? "YOK"} (beklenen ${sinif})`);
+  if (!/DosyaOlc \(Join-Path \(Join-Path \$GuncellemeDizini "durum"\) "durum\.json"\)/.test(metin)) ih.push("durum.json guncelleme\\durum\\ altında ölçülmüyor");
   const t = psTara(metin);
   const uygulaBas = t.satirlar.find((s) => /^if \(\$Uygula\) \{\s*$/.test(s.ciplak.trim()) && s.derinlik === 0);
   // Blok, başlıktan sonra derinliğin yeniden 0'a indiği ilk satırda biter (kapanış satırı derinlik 1'de başlar).
   let uygulaSon = -1;
   if (uygulaBas) uygulaSon = t.satirlar.find((s) => s.no > uygulaBas.no && s.derinlik === 0)?.no ?? -1;
   if (!uygulaBas || uygulaSon < 0) ih.push("`if ($Uygula) {` bloğu bulunamadı");
-  const degistiren = /\b(IzinYaz|HizmetKur|New-Item|New-Service|icacls\.exe|Invoke-CimMethod|ScKos)\b/;
+  const degistiren = /\b(IzinYaz|KonakKos|New-Item|New-Service|icacls\.exe|Invoke-CimMethod|Set-Service)\b/;
   const fonk = (no: number) => t.fonksiyonlar.find((f) => no >= f.bas && no <= f.son);
   const disarida = t.satirlar.filter((s) => degistiren.test(s.ciplak) && !fonk(s.no) && !(uygulaBas && s.no > uygulaBas.no && s.no < uygulaSon));
   if (disarida.length) ih.push(`değiştiren çağrı -Uygula dışında: satır ${disarida.map((s) => s.no).join(",")}`);
   if (t.satirlar.some((s) => /\b(Start|Stop|Restart)-Service\b/.test(s.ciplak))) ih.push("hizmeti başlatıyor/durduruyor (çağıranın işi)");
+  // Kayıt TEK kaynaktan (konağın `hizmet-kur`u); PowerShell'de ikinci bir kayıt yazıcısı ayrışırdı.
+  if (t.satirlar.some((s) => /\bNew-Service\b|\bsc\.exe\b|Invoke-CimMethod/.test(s.ciplak))) ih.push("kayıt PowerShell'de yazılıyor (New-Service/sc.exe/WMI) — tek kaynak hizmet-kur");
+  // SIRA (§4.2): iyi bilinen SID'li iskelet → hizmet-kur → sanal hesaplı izin. Kayıttan ÖNCE sanal hesaba izin icacls 1332 ile düşer.
+  const blok = t.satirlar.filter((s) => uygulaBas && s.no > uygulaBas.no && s.no < uygulaSon);
+  const kurSatir = blok.find((s) => /KonakKos @kurArg/.test(s.ciplak))?.no ?? -1;
+  const sidliIzin = blok.filter((s) => /\bIzinYaz\b.*\$sid\b/.test(s.ciplak)).map((s) => s.no);
+  const iskeletIzin = blok.filter((s) => /\bIzinYaz\b.*\$null\b/.test(s.ciplak)).map((s) => s.no);
+  const iskeletCikis = blok.find((s) => /if \(\$YalnizIskelet\) \{/.test(s.ciplak))?.no ?? -1;
+  if (kurSatir < 0) ih.push("-Uygula bloğunda `hizmet-kur` çağrısı yok");
+  if (!sidliIzin.length || sidliIzin.some((n) => n < kurSatir)) ih.push(`sanal hesaplı izin hizmet-kur'dan ÖNCE (izin ${sidliIzin.join(",") || "-"} · kayıt ${kurSatir})`);
+  if (!iskeletIzin.length || iskeletIzin.some((n) => n > kurSatir)) ih.push(`iskelet izni (iyi bilinen SID) kayıttan sonra ya da yok (${iskeletIzin.join(",") || "-"})`);
+  if (iskeletCikis < 0 || iskeletCikis > kurSatir || iskeletIzin.some((n) => n > iskeletCikis)) ih.push("-YalnizIskelet çıkışı iskeletten sonra ve kayıttan önce değil");
   if (/SeImpersonatePrivilege/.test(metin.split("\n").filter((l) => !l.trim().startsWith("#")).join("\n"))) ih.push("SeImpersonatePrivilege ayrıcalık listesinde");
-  if (!/\$Ayricaliklar = @\("SeChangeNotifyPrivilege", "SeCreateGlobalPrivilege"\)/.test(metin)) ih.push("ayrıcalık varsayılanı değişti");
-  if (!/actions= restart\/5000\/restart\/5000\/restart\/30000/.test(metin) || !/failureflag \$ad 1/.test(metin)) ih.push("kurtarma eylemleri / failureflag yok");
+  if (!/\$Ayricaliklar = @\("SeChangeNotifyPrivilege", "SeCreateGlobalPrivilege"\)/.test(metin)) ih.push("ayrıcalık beklentisi değişti");
+  if (!/"1\/5000,1\/5000,1\/30000"/.test(metin) || !/\$sifirla -eq 86400/.test(metin) || !/FailureActionsOnNonCrashFailures -ne 1/.test(metin)) ih.push("kurtarma eylemleri ölçülmüyor");
   if (!/\/inheritance:r/.test(metin) || !/"S-1-5-32-545", "S-1-5-11", "S-1-1-0"/.test(metin)) ih.push("miras kesme / geniş grupların silinmesi yok");
   return ih;
 }
 function hizmetBetigi(): void {
   console.log("\n§9 deploy/hizmet/backend-hizmeti.ps1");
-  const metin = readFileSync(join(KOK, "deploy", "hizmet", "backend-hizmeti.ps1"), "utf8");
+  // Satır sonu LF'ye normalize: `.gitattributes` *.ps1'i CRLF checkout eder (CI dahil) — sondalar "\n" arar.
+  const metin = readFileSync(join(KOK, "deploy", "hizmet", "backend-hizmeti.ps1"), "utf8").replace(/\r\n/g, "\n");
+  const mainRs = readFileSync(join(TEKS, "native", "tekserp-hizmet", "src", "main.rs"), "utf8");
+  const contractRs = readFileSync(join(TEKS, "native", "tekserp-hizmet", "src", "contract.rs"), "utf8");
   const ih = ps1Ihlalleri(metin);
-  check("§9 körlük zemini: tablo satırları okundu", (metin.match(/@\{\s*Ad\s*=/g) ?? []).length >= 10);
-  check("§9a-f ⭐ dizin tablosu = TS (iki yönlü) · sınıflar · değişiklik yalnız -Uygula'da · başlat/durdur yok · en az ayrıcalık · kurtarma · miras kesik",
+  check("§9 körlük zemini: tablo satırları okundu", (metin.match(/@\{\s*Ad\s*=/g) ?? []).length >= 10 && (metin.match(/@\{\s*Yol\s*=/g) ?? []).length === 5);
+  check("§9a-f ⭐ dizin + kanal tablosu = TS (iki yönlü) · sınıflar · değişiklik yalnız -Uygula'da · kayıt TEK kaynak (hizmet-kur) · SIRA iskelet → kayıt → sanal hesap izni · başlat/durdur yok · en az ayrıcalık · kurtarma ölçülür · miras kesik",
     ih.length === 0, ih.join(" | ") || "temiz");
+  const rih = rustKayitIhlalleri(mainRs, contractRs);
+  check("§9h ⭐ ps1 ölçümünün beklediği kayıt = konağın Rust kaydı (kurtarma 5/5/30 · ayrıcalıklar · ImagePath current\\runtime)", rih.length === 0, rih.join(" | ") || "aynı");
   const sondalar: Array<[string, string]> = [
     ["lisans sınıfı oku", metin.replace('@{ Ad = "lisans";           Sinif = "yaz"   }', '@{ Ad = "lisans";           Sinif = "oku"   }')],
-    ["tabloya TS'de olmayan dizin", metin.replace('@{ Ad = "veri";', '@{ Ad = "gecici"; Sinif = "yaz" },\n  @{ Ad = "veri";')],
-    ["IzinYaz -Uygula dışında", metin.replace('Write-Host ""\nWrite-Host "OLCUM', 'IzinYaz $kokTam "oku" $sid\nWrite-Host ""\nWrite-Host "OLCUM')],
+    ["tabloya TS'de olmayan dizin (hizmet\\ geri geldi)", metin.replace('@{ Ad = "veri";', '@{ Ad = "hizmet"; Sinif = "oku" },\n  @{ Ad = "veri";')],
+    ["IzinYaz -Uygula dışında", metin.replace('Write-Host ""\nWrite-Host "OLCUM (hizmet', 'IzinYaz $kokTam "oku" $sid\nWrite-Host ""\nWrite-Host "OLCUM (hizmet')],
     ["SeImpersonate eklendi", metin.replace('@("SeChangeNotifyPrivilege", "SeCreateGlobalPrivilege")', '@("SeChangeNotifyPrivilege", "SeImpersonatePrivilege")')],
     ["Start-Service eklendi", metin.replace("exit 2\n", "Start-Service $HizmetAdi\nexit 2\n")],
+    ["sanal hesap izni kayıttan ÖNCE", metin.replace('IzinYaz $kokTam "oku" $null\n', 'IzinYaz $kokTam "oku" $null\n  IzinYaz $kokTam "oku" $sid\n')],
+    ["kayıt New-Service ile", metin.replace("    $kod = KonakKos @kurArg\n", "    New-Service -Name $HizmetAdi -BinaryPathName $KonakYolu | Out-Null\n    $kod = KonakKos @kurArg\n")],
+    ["is\\ backend'e okunur", metin.replace('(Join-Path $GuncellemeDizini "is");        Sinif = "yasak"', '(Join-Path $GuncellemeDizini "is");        Sinif = "oku"')],
+    ["durum.json düz kanal dizininde ölçülüyor", metin.replace('DosyaOlc (Join-Path (Join-Path $GuncellemeDizini "durum") "durum.json")', 'DosyaOlc (Join-Path $GuncellemeDizini "durum.json")')],
   ];
   for (const [ad, mutasyon] of sondalar) {
     const uygulandi = mutasyon !== metin;
     check(`§9 sonda: ${ad} → kırmızı`, uygulandi && ps1Ihlalleri(mutasyon).length > 0, uygulandi ? "" : "MUTASYON UYGULANMADI");
   }
+  const rMut = mainRs.replace(/restart_delays:\s*\[5,\s*5,\s*30\]/, "restart_delays: [5, 5, 60]");
+  check("§9h sonda: Rust kurtarma gecikmesi değişti → kırmızı", rMut !== mainRs && rustKayitIhlalleri(rMut, contractRs).length > 0, rMut !== mainRs ? "" : "MUTASYON UYGULANMADI");
   // Sanal hesap SID'i: TrustedInstaller bilinen vektör; betikteki gövde pwsh'ta koşar.
   const tsSid = (ad: string): string => {
     const h = createHash("sha1").update(Buffer.from(ad.toUpperCase(), "utf16le")).digest();
@@ -396,10 +438,19 @@ function geriYukleme(): void {
 }
 
 // --- §11 pm2 betikleri hizmet düzenine dokunmaz · §12 gece yedeği hizmet düzenini tanır ---------------
+function izFonksiyonu(metin: string): string {
+  return /function HizmetDuzeniIzi\(\$kokYolu\) \{[\s\S]*?\n\}/.exec(metin.replace(/\r\n/g, "\n"))?.[0] ?? "";
+}
 function izIhlalleri(metin: string, ad: "kur" | "ilk"): string[] {
   const ih: string[] = [];
   const satirlar = metin.replace(/\r\n/g, "\n").split("\n");
-  const iz = satirlar.findIndex((l) => /\$hizmetIzi = @\(@\("surumler", "current", "yapilandirma\\\.env"\)/.test(l));
+  const fn = izFonksiyonu(metin);
+  if (!/@\("surumler", "current", "yapilandirma\\\.env"\)/.test(fn)) ih.push("iz fonksiyonu üç kök işaretini ölçmüyor");
+  // Önek eşleşmesi: ikinci kanalın adı (TeksERP-Backend-demofabrika) da yakalanmalı.
+  if (!/Get-CimInstance Win32_Service/.test(fn) || !/\.StartsWith\("TeksERP-Backend", \[System\.StringComparison\]::OrdinalIgnoreCase\)/.test(fn) ||
+    !/\.StartsWith\("TeksERP-Guncelleyici", \[System\.StringComparison\]::OrdinalIgnoreCase\)/.test(fn) || !/"--kok"/.test(fn)) ih.push("iz fonksiyonu bu kökü kullanan TeksERP hizmetini (backend/güncelleyici, her ad — önek) ölçmüyor");
+  if (!/OLCULEMEDI/.test(fn)) ih.push("hizmet listesi okunamazsa iz sayılmıyor (fail-closed değil)");
+  const iz = satirlar.findIndex((l) => /^\$hizmetIzi = HizmetDuzeniIzi \$[Kk]ok\s*$/.test(l));
   const dur = satirlar.findIndex((l, i) => i > iz && /^if \(\$hizmetIzi\.Count\) \{ (Fail|Dur) /.test(l));
   if (iz < 0 || dur < 0) ih.push("hizmet izi kapısı yok");
   const ilkDegisen = satirlar.findIndex((l) =>
@@ -413,14 +464,23 @@ function pm2Betikleri(): void {
   console.log("\n§11 kur.ps1 / ilk-kurulum.ps1 hizmet düzenine pm2 kurmaz · §12 yedekle.ps1");
   check("§11 işaretler TS tablosundan (surumler · current · yapilandirma)",
     SERVICE_DIRS.versions === "surumler" && SERVICE_DIRS.current === "current" && SERVICE_DIRS.config === "yapilandirma");
+  const metinler: Record<string, string> = {};
   for (const [dosya, ad] of [["kur.ps1", "kur"], ["ilk-kurulum.ps1", "ilk"]] as const) {
-    const metin = readFileSync(join(KOK, "deploy", dosya), "utf8");
+    const metin = readFileSync(join(KOK, "deploy", dosya), "utf8").replace(/\r\n/g, "\n");
+    metinler[ad] = metin;
     const ih = izIhlalleri(metin, ad);
-    check(`§11 ⭐ ${dosya}: hizmet düzeni izi (kökte surumler/current/yapilandirma\\.env) ya da hizmet varsa HİÇBİR ŞEYE DOKUNMADAN durur`,
+    check(`§11 ⭐ ${dosya}: hizmet düzeni izi (kökte surumler/current/yapilandirma\\.env ya da bu kökü kullanan TeksERP hizmeti; liste okunamazsa iz) varsa HİÇBİR ŞEYE DOKUNMADAN durur`,
       ih.length === 0, ih.join(" | ") || "temiz");
-    const sonda = metin.replace(/^if \(\$hizmetIzi\.Count\) \{ (Fail|Dur) .*$/m, "");
-    check(`§11 sonda: ${dosya} kapı satırı silindi → kırmızı`, sonda !== metin && izIhlalleri(sonda, ad).length > 0);
+    const sondalar: Array<[string, string]> = [
+      ["kapı satırı silindi", metin.replace(/^if \(\$hizmetIzi\.Count\) \{ (Fail|Dur) .*$/m, "")],
+      ["current işareti düştü", metin.replace('@("surumler", "current", "yapilandirma\\.env")', '@("surumler", "yapilandirma\\.env")')],
+      ["hizmet ölçümü yalnız varsayılan ad", metin.replace('StartsWith("TeksERP-Guncelleyici"', 'Equals("TeksERP-Guncelleyici"')],
+      ["liste okunamazsa geç (fail-open)", metin.replace('return ,($iz + @("TeksERP hizmetleri OLCULEMEDI (Win32_Service)"))', "return ,$iz")],
+    ];
+    for (const [sAd, sonda] of sondalar) check(`§11 sonda: ${dosya} ${sAd} → kırmızı`, sonda !== metin && izIhlalleri(sonda, ad).length > 0, sonda !== metin ? "" : "MUTASYON UYGULANMADI");
   }
+  const fk = izFonksiyonu(metinler.kur ?? ""), fi = izFonksiyonu(metinler.ilk ?? "");
+  check("§11 ⭐ HizmetDuzeniIzi ikizleri birebir aynı (kur.ps1 ↔ ilk-kurulum.ps1)", fk.length > 200 && fk === fi, `${fk.length} · ${fi.length} bayt`);
   const yed = readFileSync(join(KOK, "deploy", "yedekle.ps1"), "utf8");
   check("§12a ⭐ yedekle.ps1: hizmet düzeni .env'in yerinden anlaşılır; kod current\\, .env yapilandirma\\, Node paketin runtime'ı",
     /\$hizmetEnv = Join-Path \(Join-Path \$Kok "yapilandirma"\) "\.env"/.test(yed) &&

@@ -5,11 +5,13 @@
     "Kaynak: EDB'nin resmi indirme sayfasi (download-postgresql-binaries) Windows x86-64 baglantisi -> get.enterprisedb.com. Zip IMZASIZ (sunucu ikililerinde Authenticode YOK - olculdu); guven: resmi HTTPS + buradaki boyut/SHA256 (sabitleyen makine + CI iki ayri agdan olcer) + icerik denetimi; sahaya bizim PAKET imzamizla gider.",
     "surum/derleme degisimi bir KARARDIR (recete docs/design/KENDI-POSTGRESQL.md 'Surum yukseltme'): once `node deploy/pg/pg-ikili-dogrula.mjs --olc --surum X.Y --derleme N` olcer, sonra bu dosya elle guncellenir, PG surum notu okunup ek adim varsa guncellemeSonrasi'na yazilir. Ana surum (cizgi) degisimi otomatik DEGILDIR - runbook docs/ops/PG-BUYUK-SURUM-GECISI.md.",
     "sahne = sahaya giden sunucu alt kumesi (pgAdmin 4 / StackBuilder / doc / include / regresyon araclari / .lib ATILIR). icerikSha256 = TEKSERP-ICERIK.sha256 manifestosunun ozeti ('<sha256>  <yol>' satirlari, yola gore bayt sirasi, LF).",
-    "Bekci: node scripts/test_pg_ornegi.mjs (ag'siz; --ag resmi kaynagi HEAD ile yoklar). Tam dogrulama (indir + SHA256 + icerik): node deploy/pg/pg-ikili-dogrula.mjs --indir."
+    "Bekci: node scripts/test_pg_ornegi.mjs (ag'siz; --ag resmi kaynagi HEAD ile yoklar). Tam dogrulama (indir + SHA256 + icerik): node deploy/pg/pg-ikili-dogrula.mjs --indir.",
+    "backendEnAz = backend surum bildiriminin pg.enAz'i: HARICI ornekte (bugunku kurulumlar) kabul edilen en eski kucuk surum (sahadaki en eski olculen 16.9); cizgi ile ayni ana surumde ve surum'den buyuk olamaz. Yayinci (deploy/backend-yayinla.mjs) pg.cizgi + pg.enAz'i ve hedef PG paketinin (surum, derleme, ICU) kimligini YALNIZ bu kayittan alir (sozlesme docs/design/GUNCELLEYICI.md bolum 1.6)."
   ],
   "surum": "16.15",
   "cizgi": "16",
   "derleme": "4",
+  "backendEnAz": "16.9",
   "yayinTarihi": "2026-08-13",
   "destekSonu": "2028-11-09",
   "yayin": {

@@ -11,6 +11,14 @@
 // KULLANIM (fabrika sunucusunda, `Teks-Erp/` içinden):
 //     npm run superadmin:kur                # kurulum (idempotent)
 //     npm run superadmin:kur -- --rotate    # parola + PIN yenile, 2FA kapatılır
+//     node dist\tools\superadmin-olustur.cjs --kurulum-stdin   # YALNIZ setup.exe sihirbazı (aşağıda)
+//
+// KURULUM KİPİ (`--kurulum-stdin`, Dağıtım v2 D5 — kullanıcının onayladığı plan: "parola sihirbazdan
+// araca STDIN ile, log'a GİRMEZ"): sihirbaz `{kullaniciAdi, parola, pin}` TEK JSON nesnesini BORUYLA
+// verir (argv/ortam/günlük YOK). readline YOKTUR — etkileşimli kipin TTY kapısının önlediği donma bu
+// kipte doğmaz: bayt tavanı + zaman aşımı + KATI şema, her sapma GÜRÜLTÜLÜ (çıkış kodu). PIN zorunlu
+// (üretilmez: üretilen PIN bir sır olarak geri dönmek zorunda kalırdı); rotasyon yok; çıktı TEK JSON
+// satırı ve SIR TAŞIMAZ. Etkileşimli kip ve TTY kapısı DEĞİŞMEDİ.
 //
 // İKİ ADIMLI GİRİŞ TOHUMLANMAZ: TOTP kimseye zorunlu değildir; satıcı isterse panelde
 // kendi hesabının 2FA sekmesinden açar. Rotasyon açık 2FA'yı KAPATIR (konsol erişimi =
@@ -53,6 +61,7 @@ import {
 } from "../src/jobs/superadmin.job";
 import { setSystemAccountExists } from "../src/services/helpers/system-account.registry";
 import { p2002Mentions } from "../src/utils/p2002";
+import { KurulumGirdiHatasi, kurulumGirdisiOku, type KurulumGirdisi } from "./lib/kurulum-girdisi";
 
 /** `quickPin` sözleşmesi: TAM 6 hane (`auth.service.loginWithQuickPin` ile aynı). */
 const PIN_RE = /^\d{6}$/;
@@ -339,6 +348,64 @@ class SessizCikis extends Writable {
   }
 }
 
+/** Kurulum kipinin bayrağı (setup.exe sihirbazı parolayı BORUYLA verir). */
+export const KURULUM_STDIN_BAYRAGI = "--kurulum-stdin";
+
+/** Kurulum kipinin çıkış kodları — sihirbaz bunlarla Türkçe ileti seçer (stdout sır taşımaz). */
+export const KURULUM_CIKIS: Readonly<Record<string, number>> = Object.freeze({
+  OLUSTURULDU: 0,
+  ZATEN_KURULU: 0,
+  USERNAME_INVALID: 10,
+  USERNAME_TAKEN: 11,
+  PASSWORD_INVALID: 12,
+  PIN_INVALID: 13,
+  PIN_TAKEN: 14,
+  PIN_EXHAUSTED: 15,
+  RACE: 16,
+  NOT_PROVISIONED: 17,
+  GIRDI_BICIMSIZ: 20,
+  GIRDI_TAVAN: 20,
+  GIRDI_YOK: 20,
+  ZAMAN_ASIMI: 21,
+  KIP: 22,
+});
+
+/**
+ * Kurulum kipi: tek JSON nesnesi stdin'den → `provisionSuperadmin` (rotasyonsuz) → stdout'a TEK satır
+ * `{sonuc, kullaniciAdi | kod+mesaj}`. Parola/PIN hiçbir çıktıya, hata iletisine, günlüğe girmez.
+ */
+async function kurulumKipi(argv: string[]): Promise<number> {
+  const yaz = (o: Record<string, string>): void => void process.stdout.write(`${JSON.stringify(o)}\n`);
+  if (argv.includes("--rotate")) {
+    yaz({ sonuc: "HATA", kod: "KIP", mesaj: "rotasyon kurulum kipinde yapılmaz — etkileşimli kip: npm run superadmin:kur -- --rotate" });
+    return KURULUM_CIKIS.KIP!;
+  }
+  if (process.stdin.isTTY) {
+    yaz({ sonuc: "HATA", kod: "KIP", mesaj: "kurulum kipi boru girdisi ister (sihirbaz verir) — elle kurulum için bayraksız çalıştırın" });
+    return KURULUM_CIKIS.KIP!;
+  }
+  let g: KurulumGirdisi;
+  try {
+    g = await kurulumGirdisiOku(process.stdin);
+  } catch (e) {
+    const kod = e instanceof KurulumGirdiHatasi ? e.kod : "GIRDI_BICIMSIZ";
+    yaz({ sonuc: "HATA", kod, mesaj: e instanceof KurulumGirdiHatasi ? e.message : "standart girdi okunamadı" });
+    return KURULUM_CIKIS[kod] ?? 20;
+  } finally {
+    process.stdin.destroy();
+  }
+  const sonuc = await provisionSuperadmin({ username: g.kullaniciAdi, password: g.parola, pin: g.pin, rotate: false });
+  g.parola = "";
+  g.pin = "";
+  if (sonuc.kind === "error") {
+    yaz({ sonuc: "HATA", kod: sonuc.code, mesaj: sonuc.message });
+    return KURULUM_CIKIS[sonuc.code] ?? 1;
+  }
+  // PIN çıktıya GİRMEZ: sihirbaz kullanıcının girdiği PIN'i zaten bilir; mevcut hesap DEĞİŞMEZ.
+  yaz({ sonuc: sonuc.kind === "exists" ? "ZATEN_KURULU" : "OLUSTURULDU", kullaniciAdi: sonuc.username });
+  return 0;
+}
+
 /** Kapının metni — bekçi (non-TTY sondası) bunu ARAR. */
 export const TTY_GEREKLI_MESAJI =
   "Bu script etkileşimli terminal ister — `ssh -t`, `docker exec -it` ya da " +
@@ -354,10 +421,14 @@ async function interaktif(): Promise<number> {
       "Kullanım:\n" +
         "  npm run superadmin:kur              satıcı hesabını kurar (idempotent)\n" +
         "  npm run superadmin:kur -- --rotate  parola + PIN'i yeniler, 2FA'yı kapatır\n" +
-        "\n  ⚠️ Gerçek terminal ister (`ssh -t` / `docker exec -it`).\n",
+        "  --kurulum-stdin                     YALNIZ setup.exe sihirbazı: {kullaniciAdi, parola, pin} JSON'u boruyla\n" +
+        "\n  ⚠️ Gerçek terminal ister (`ssh -t` / `docker exec -it`) — kurulum kipi hariç.\n",
     );
     return 0;
   }
+
+  // ── KURULUM KİPİ — soru SORMAZ (readline yok), TTY kapısından önce ayrılır ────
+  if (argv.includes(KURULUM_STDIN_BAYRAGI)) return kurulumKipi(argv);
 
   // ── TTY KAPISI — FAIL-LOUD (2026-09-03, P8-D bulgusu) ─────────────────────
   // ⚠️ BORU/DOSYA GİRDİSİ DESTEKLENMİYOR ve bu kapı olmadan bunu KİMSE
