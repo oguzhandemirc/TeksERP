@@ -484,7 +484,9 @@ function senaryolar(): void {
         existsSync(join(a, "kok", "app", "dist", "server.js")) && existsSync(join(a, "kok", "pm2-home")));
     check("§3c uygula: günlük her kalemi BASLADI/BITTI ile tutar, SONUC BASARILI*", g3.filter((x) => x.olay === "BASLADI").length === 13 && g3.filter((x) => x.olay === "BITTI").length === 13 && /^BASARILI/.test(String(sonuc3)));
     const k4 = harness(a, "kuru");
-    check("§3d gecis sonrası parametresiz koşum: DURUM ölçümü (hizmet · sağlık · kimlik · pm2 yok · açılış kapalı)", k4.kod === 0 && /DURUM \(olcum\)/.test(k4.cikti) && /kurulum kimligi ayni/.test(k4.cikti) && /acilis gorevi kapali/.test(k4.cikti), `kod ${k4.kod}`);
+    check("§3d gecis sonrası parametresiz koşum: DURUM ölçümü (hizmet · sağlık · kimlik · pm2 yok · açılış kapalı · lisans dizini yerinde · gece yedeği betiği = kurulu sürüm)",
+      k4.kod === 0 && /DURUM \(olcum\)/.test(k4.cikti) && /kurulum kimligi ayni/.test(k4.cikti) && /acilis gorevi kapali/.test(k4.cikti) &&
+        /lisans dizini yerinde \(1 dosya/.test(k4.cikti) && /gece yedegi betigi = kurulu surumunku/.test(k4.cikti), `kod ${k4.kod}`);
     const k5 = harness(a, "gerial-kuru");
     const p5 = /GERI ALMA PLANI \((\d+) kalem/.exec(k5.cikti);
     const k6 = harness(a, "gerial", ["-Onay", p5?.[1] ?? "0"]);
