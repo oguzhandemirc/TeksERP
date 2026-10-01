@@ -3,7 +3,7 @@
 // (`kurulum.saatDilimi`, yoksa fabrika varsayılanı) kiranın ömrü boyunca MUTLAK aralıklara çevrilir — güncelleyici
 // dilim hesabı yapmaz. Politika değişimi `kurulum_kaydi`na satır + `guncelleme` zili; yoklamanın güncelleme
 // raporu kurulumun durum kolonlarına, tamamlanan denemenin sonucu deftere (`kayitId` ile idempotent).
-import type { Kurulum, Prisma } from "@prisma/client";
+import type { BildirimOlayi, Kurulum, Prisma, PrismaClient } from "@prisma/client";
 import { z } from "zod";
 import {
   LeaseUpdatePolicySchema,
@@ -14,7 +14,9 @@ import {
   windowIntervals,
   type LeaseUpdatePolicy,
   type UpdateReport,
+  type UpdateResult,
 } from "../lisans-protokol";
+import { enqueueNotificationTx } from "../notifications/outbox";
 import { VendorError, notFoundError } from "../lib/errors";
 import { lockInstallation } from "../lib/locks";
 import type { Db, Tx } from "../lib/prisma";
@@ -31,6 +33,46 @@ export const UPDATE_RESULT_EVENTS = {
   BASARISIZ: "GUNCELLEME_BASARISIZ",
 } as const;
 export const UPDATE_POLICY_EVENT = "GUNCELLEME_POLITIKASI";
+
+/** Tamamlanan denemenin BİLDİRİMİ (sonuç → `bildirim.olay`) — defter satırıyla AYNI tx'te, satır ilk yazıldığında bir kez. */
+export const UPDATE_NOTIFICATION_EVENTS = {
+  BASARILI: "GUNCELLEME_TAMAMLANDI",
+  GERI_DONDU: "GUNCELLEME_GERI_DONDU",
+  BASARISIZ: "GUNCELLEME_BASARISIZ",
+} as const satisfies Record<UpdateResult["sonuc"], BildirimOlayi>;
+
+/** Raporun belgeli sonuç kodları (`UPDATE_RESULT_CODES`) — bildirimde kodun yanına kısa Türkçe karşılık. */
+const RESULT_CODE_TEXT: Readonly<Record<string, string>> = {
+  INDIRME_HATASI: "paket indirilemedi",
+  IMZA_GECERSIZ: "imza doğrulanamadı",
+  PAKET_OZETI: "paket özeti uyuşmadı",
+  PAKET_BAGI: "paket bildirimle eşleşmedi",
+  BUTUNLUK_GECERSIZ: "paket bütünlüğü geçersiz",
+  DISK_DOLU: "disk dolu",
+  DOSYA_KILITLI: "sürüm geçişi yapılamadı",
+  YEDEK_HATASI: "güncelleme öncesi yedek alınamadı",
+  DURDURMA_HATASI: "hizmet durdurulamadı",
+  PG_GUNCELLEME_HATASI: "PostgreSQL güncellemesi başarısız",
+  GOC_HATASI: "veritabanı göçü başarısız",
+  BASLATMA_HATASI: "yeni sürüm başlatılamadı",
+  SAGLIK_HATASI: "yeni sürüm sağlık denetiminden geçemedi",
+  KESINTI: "işlem yarıda kesildi",
+  GERI_DONUS_HATASI: "geri dönüş tamamlanamadı",
+  BILINMEYEN: "bilinmeyen hata",
+};
+
+/**
+ * Bildirimin konu/ayrıntısı YALNIZ raporun kodlu alanlarından (sürümler, sonuç kodu, veri bayrağı): rapor şeması
+ * serbest metin taşımaz, gövde allowlist'i de başka alan almaz — fabrikanın iletisi, yolu, onaylayanı bildirime giremez.
+ */
+export function updateNotificationText(son: UpdateResult): { konu: string; referans: string | null } {
+  const konu = son.kaynakSurum ? `${son.kaynakSurum} → ${son.hedefSurum}` : son.hedefSurum;
+  if (son.sonuc === "BASARILI") return { konu, referans: null };
+  const code = son.kod ?? "BILINMEYEN";
+  const cause = RESULT_CODE_TEXT[code] ? `${code} — ${RESULT_CODE_TEXT[code]}` : code;
+  const tail = son.sonuc === "BASARISIZ" ? "geri dönüş tamamlanamadı, müdahale gerekiyor" : son.veriGeriYuklendi ? "veri güncelleme öncesi yedekten geri yüklendi" : "veri değişmedi";
+  return { konu, referans: `${cause}; ${tail}` };
+}
 
 /** Portal girdisi: pencere dilimsiz (dilim fabrikadan gelir). Kural protokolün pencere şemasıyla doğrulanır. */
 export const UpdatePolicyInputSchema = z.strictObject({
@@ -117,7 +159,7 @@ export async function setUpdatePolicyTx(
  * karar kurulumun DURUM kolonlarına; tamamlanan deneme `kurulum_kaydi` DEFTERİNE `(kurulum, kayitId)` ile bir kez.
  */
 export async function recordUpdateReport(
-  db: Db,
+  db: PrismaClient,
   g: { installationDbId: string; kid: string; report: UpdateReport | undefined; nowMs: number },
 ): Promise<void> {
   if (!g.report) return;
@@ -127,16 +169,32 @@ export async function recordUpdateReport(
     where: { id: g.installationDbId },
     data: { saatDilimi: r.saatDilimi, sonGuncellemeRaporu: summary, sonGuncellemeRaporuZamani: new Date(g.nowMs) },
   });
-  if (!r.son) return;
-  await db.kurulumKaydi.createMany({
-    data: [{
-      kurulumId: g.installationDbId,
-      olay: UPDATE_RESULT_EVENTS[r.son.sonuc],
-      anahtarKimligi: g.kid,
-      ayrinti: r.son as unknown as Prisma.InputJsonObject,
-      yapan: "guncelleyici",
-      kaynakKayitId: r.son.kayitId,
-    }],
-    skipDuplicates: true,
+  const son = r.son;
+  if (!son) return;
+  await db.$transaction(async (tx) => {
+    const written = await tx.kurulumKaydi.createMany({
+      data: [{
+        kurulumId: g.installationDbId,
+        olay: UPDATE_RESULT_EVENTS[son.sonuc],
+        anahtarKimligi: g.kid,
+        ayrinti: son as unknown as Prisma.InputJsonObject,
+        yapan: "guncelleyici",
+        kaynakKayitId: son.kayitId,
+      }],
+      skipDuplicates: true,
+    });
+    // Aynı rapor her yoklamada gelir: bildirim yalnız defter satırı İLK kez yazıldığında (tekillik anahtarı ikinci sigorta).
+    if (written.count === 0) return;
+    const text = updateNotificationText(son);
+    await enqueueNotificationTx(tx, {
+      event: UPDATE_NOTIFICATION_EVENTS[son.sonuc],
+      keyParts: [g.installationDbId, son.kayitId],
+      installationDbId: g.installationDbId,
+      relatedId: son.kayitId,
+      portalPath: `/kurulumlar/${g.installationDbId}`,
+      konu: text.konu,
+      referans: text.referans,
+      tarih: new Date(son.bitis),
+    });
   });
 }

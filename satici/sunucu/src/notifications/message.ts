@@ -27,6 +27,9 @@ const DATE_LABEL: Partial<Record<BildirimOlayi, string>> = {
   TAKSIT_VADESI_YAKLASIYOR: "Vade",
   TAKSIT_GECIKTI: "Vade",
   PLANLI_EYLEM_UYGULANDI: "Planlanan vade",
+  GUNCELLEME_TAMAMLANDI: "Bitiş",
+  GUNCELLEME_GERI_DONDU: "Bitiş",
+  GUNCELLEME_BASARISIZ: "Bitiş",
 };
 
 const htmlEscape = (s: string): string => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");

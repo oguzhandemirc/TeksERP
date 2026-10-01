@@ -82,6 +82,9 @@ export const NOTIFICATION_EVENT_LABEL: Record<string, string> = {
   PLANLI_EYLEM_UYGULANDI: "Planlı eylem uygulandı",
   TAKSIT_GECIKTI: "Taksit gecikti",
   DENEME: "Deneme bildirimi",
+  GUNCELLEME_TAMAMLANDI: "Sunucu güncellendi",
+  GUNCELLEME_GERI_DONDU: "Sunucu güncellemesi geri döndü",
+  GUNCELLEME_BASARISIZ: "Sunucu güncellemesi başarısız",
 };
 export const NOTIFICATION_CHANNEL_LABEL: Record<string, string> = { EPOSTA: "E-posta", TELEGRAM: "Telegram" };
 export const NOTIFICATION_STATUS_LABEL: Record<string, string> = {
