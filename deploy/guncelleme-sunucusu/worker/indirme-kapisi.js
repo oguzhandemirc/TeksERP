@@ -4,7 +4,8 @@
 // `/<kanal>/electron/*` ve `/<kanal>/mobil/*` dosyalarını yalnız fabrikanın KENDİ
 // backend'inden alınmış kısa ömürlü İNDİRME belirteciyle verir; adresi bulan
 // dışarıdaki biri indiremez. Belirteç JWS + Ed25519 (`typ: tekserp-indirme`) —
-// Worker'da YALNIZ açık anahtar durur, imzalayamaz.
+// Worker'da YALNIZ açık anahtar durur, imzalayamaz. Anahtarlar İNDİRME LİSTESİNDEN gelir (L2-8): çapa kipi başına
+// ayrı liste (üretim · hazırlık), satır başına izinli kanal kümesi ve geçerlilik penceresi (sertifikanınki).
 //
 // KÂHİN: `Teks-Erp/src/lib/license/protocol/indirme.ts`. Sınırlar birebir aynıdır;
 // ayrışırsa kâhin kazanır. Bekçi: `Teks-Erp/scripts/test_indirme_kapisi.ts`.
@@ -19,8 +20,18 @@
  * satırı ayarı GEÇERSİZ kılar ⇒ kapsamdaki her istek 503 (sessiz gevşeme yok).
  */
 export const VARSAYILAN_AYAR = Object.freeze({
-  /** İNDİRME sertifikalarının açık yarıları: [{ kid: "ind-…", x: "<base64url, 32 bayt>" }]. */
+  /**
+   * ESKİ BİÇİM (L2-8 öncesi): [{ kid: "ind-…", x: "<base64url, 32 bayt>" }] — kanal ve pencere KISITSIZ.
+   * Bir Worker sürümü daha tanınır (tasarım v2 §4.2); yeni anahtar buraya YAZILMAZ, `indirmeListesi`ne yazılır.
+   */
   anahtarlar: [],
+  /**
+   * İNDİRME listesi — çapa kipi başına AYRI (G3): üretim satıcısının anahtarları `uretim`e, hazırlığınki `hazirlik`e.
+   * Satır: { kid, x, kanallar: ["<kanal>", …], baslangic: ISO Z, bitis: ISO Z } (pencere = sertifikanınki).
+   * Belirteç yalnız kid listedeyse, kanalı satırın kümesindeyse ve şimdi pencerede (±10 dk) ise geçer.
+   * Bir kanal iki listede birden olamaz; kid ve açık anahtar bütün satırlarda (eski biçim dahil) tekildir.
+   */
+  indirmeListesi: Object.freeze({ uretim: Object.freeze([]), hazirlik: Object.freeze([]) }),
   /** Süreli anonim geçiş — yalnız BUGÜNKÜ sürüm dosyaları: [{ yol | onek, bitis: ISO Z }]. */
   gecisListesi: [],
   /** true: manifest yanıtına varlık belirteci yazılır ve OTA varlıkları da kapılanır. */
@@ -38,6 +49,11 @@ const OMUR_TAVANI_MS = 70 * 60 * 1000;
 const SAAT_TOLERANSI_MS = 10 * 60 * 1000;
 const GECIS_AZAMI_MS = 90 * 24 * 60 * 60 * 1000;
 const ONBELLEK_AZAMI_SN = 365 * 24 * 60 * 60;
+// Sertifika ömrünün tavanı (`satici/sunucu/scripts/anahtar.ts` `--gun` ≤ 730): daha uzun pencere yazım hatasıdır.
+const PENCERE_AZAMI_MS = 730 * 24 * 60 * 60 * 1000;
+const KANAL_AZAMI = 64;
+const LISTE_ADLARI = ["uretim", "hazirlik"];
+const LISTE_SATIRI_ALANLARI = new Set(["kid", "x", "kanallar", "baslangic", "bitis"]);
 const BASLIK_ALANLARI = new Set(["alg", "typ", "kid"]);
 const AYAR_ALANLARI = new Set(Object.keys(VARSAYILAN_AYAR));
 
@@ -97,14 +113,20 @@ export function ayarCoz(ham, simdiMs) {
   const gecersiz = (neden) => ({ ok: false, neden });
   if (!duzNesne(ham)) return gecersiz("ayar bir nesne değil");
   for (const alan of Object.keys(ham)) if (!AYAR_ALANLARI.has(alan)) return gecersiz(`tanınmayan alan: ${alan}`);
-  const { anahtarlar, gecisListesi, varlikBelirteci, onbellekSn } = ham;
+  const { anahtarlar, indirmeListesi, gecisListesi, varlikBelirteci, onbellekSn } = ham;
   if (!Array.isArray(anahtarlar)) return gecersiz("anahtarlar dizi değil");
   const kidler = new Set();
+  const xler = new Set();
   for (const a of anahtarlar) {
     if (!duzNesne(a) || !INDIRME_KID.test(String(a.kid)) || !X_BICIMI.test(String(a.x))) return gecersiz("anahtar biçimsiz");
+    // Kanal/pencere taşıyan satır eski listeye düşerse liste ayrımı (G3) denetlenmeden geçerdi.
+    if (Object.keys(a).some((alan) => alan !== "kid" && alan !== "x")) return gecersiz(`eski biçim satırı yalnız kid + x taşır: ${a.kid}`);
     if (kidler.has(a.kid)) return gecersiz(`kid iki kez: ${a.kid}`);
     kidler.add(a.kid);
+    xler.add(a.x);
   }
+  const liste = listeCoz(indirmeListesi, kidler, xler);
+  if (!liste.ok) return gecersiz(liste.neden);
   if (!Array.isArray(gecisListesi)) return gecersiz("gecisListesi dizi değil");
   for (const g of gecisListesi) {
     if (!duzNesne(g) || !isoMu(g.bitis)) return gecersiz("geçiş satırında bitiş yok ya da biçimsiz");
@@ -119,7 +141,46 @@ export function ayarCoz(ham, simdiMs) {
   }
   if (typeof varlikBelirteci !== "boolean") return gecersiz("varlikBelirteci boolean değil");
   if (!Number.isInteger(onbellekSn) || onbellekSn < 0 || onbellekSn > ONBELLEK_AZAMI_SN) return gecersiz("onbellekSn aralık dışı");
-  return { ok: true, ayar: { anahtarlar, gecisListesi, varlikBelirteci, onbellekSn } };
+  const dogrulamaAnahtarlari = [...anahtarlar, ...liste.satirlar];
+  return { ok: true, ayar: { anahtarlar, indirmeListesi, dogrulamaAnahtarlari, gecisListesi, varlikBelirteci, onbellekSn } };
+}
+
+/**
+ * İNDİRME listesini doğrular. Döner `{ ok: true, satirlar }` (iki listenin satırları, kopya) ya da `{ ok: false, neden }`.
+ * `kidler`/`xler` eski biçimin kümeleridir; satırlar onlara eklenir (tekillik bütün kaynaklarda).
+ */
+function listeCoz(ham, kidler, xler) {
+  const gecersiz = (neden) => ({ ok: false, neden });
+  if (!duzNesne(ham)) return gecersiz("indirmeListesi nesne değil");
+  for (const ad of Object.keys(ham)) if (!LISTE_ADLARI.includes(ad)) return gecersiz(`indirmeListesi: tanınmayan liste: ${ad}`);
+  const listeKanallari = new Map(LISTE_ADLARI.map((ad) => [ad, new Set()]));
+  const satirlar = [];
+  for (const ad of LISTE_ADLARI) {
+    const liste = ham[ad];
+    if (!Array.isArray(liste)) return gecersiz(`indirmeListesi.${ad} dizi değil`);
+    for (const s of liste) {
+      if (!duzNesne(s)) return gecersiz(`${ad}: satır nesne değil`);
+      for (const alan of Object.keys(s)) if (!LISTE_SATIRI_ALANLARI.has(alan)) return gecersiz(`${ad}: tanınmayan alan: ${alan}`);
+      if (!INDIRME_KID.test(String(s.kid)) || !X_BICIMI.test(String(s.x))) return gecersiz(`${ad}: anahtar biçimsiz`);
+      if (kidler.has(s.kid)) return gecersiz(`kid iki kez: ${s.kid}`);
+      if (xler.has(s.x)) return gecersiz(`açık anahtar iki satırda: ${s.kid}`);
+      const k = s.kanallar;
+      if (!Array.isArray(k) || k.length === 0 || k.length > KANAL_AZAMI) return gecersiz(`${s.kid}: kanallar 1–${KANAL_AZAMI} elemanlı dizi olmalı`);
+      if (!k.every((x) => typeof x === "string" && KANAL_BICIMI.test(x))) return gecersiz(`${s.kid}: kanal biçimsiz`);
+      if (new Set(k).size !== k.length) return gecersiz(`${s.kid}: kanal iki kez`);
+      if (!isoMu(s.baslangic) || !isoMu(s.bitis)) return gecersiz(`${s.kid}: baslangic/bitis ISO (Z) olmalı`);
+      const sure = Date.parse(s.bitis) - Date.parse(s.baslangic);
+      if (!(sure > 0) || sure > PENCERE_AZAMI_MS) return gecersiz(`${s.kid}: pencere boş, ters ya da 730 günden uzun`);
+      kidler.add(s.kid);
+      xler.add(s.x);
+      for (const kanal of k) listeKanallari.get(ad).add(kanal);
+      satirlar.push({ kid: s.kid, x: s.x, kanallar: [...k], baslangic: s.baslangic, bitis: s.bitis });
+    }
+  }
+  const [uretim, hazirlik] = LISTE_ADLARI.map((ad) => listeKanallari.get(ad));
+  const ortak = [...uretim].find((kanal) => hazirlik.has(kanal));
+  if (ortak !== undefined) return gecersiz(`kanal iki listede (uretim + hazirlik): ${ortak}`);
+  return { ok: true, satirlar };
 }
 
 // Anahtar içe aktarımı pahalı değil ama her istekte tekrarlanmasın; küme ayardan gelir, sınırlıdır.
@@ -150,8 +211,22 @@ function belgeSemasiUyar(y) {
   );
 }
 
+/** Satırın penceresi şimdi açık mı (±tolerans)? Pencere yoksa eski biçim (kısıtsız); yarım/biçimsiz KAPALI — kâhin `downloadKeyWindowOpen`. */
+export function pencereAcik(kayit, simdiMs) {
+  if (kayit.baslangic === undefined && kayit.bitis === undefined) return true;
+  if (!isoMu(kayit.baslangic) || !isoMu(kayit.bitis)) return false;
+  return simdiMs >= Date.parse(kayit.baslangic) - SAAT_TOLERANSI_MS && simdiMs <= Date.parse(kayit.bitis) + SAAT_TOLERANSI_MS;
+}
+
+/** Satır bu kanala izin veriyor mu? Küme yoksa eski biçim (kısıtsız); dizi değilse izin YOK — kâhin `downloadKeyAllowsChannel`. */
+export function kanalIzinli(kayit, kanal) {
+  if (kayit.kanallar === undefined) return true;
+  return Array.isArray(kayit.kanallar) && kayit.kanallar.includes(kanal);
+}
+
 /**
  * İNDİRME belirtecini doğrular — kâhin `verifyDownloadToken` ile aynı sıra ve aynı kodlar.
+ * `anahtarlar`: eski biçim `{kid, x}` ya da liste satırı `{kid, x, kanallar, baslangic, bitis}`; aynı kid'de ilk satır kazanır.
  * Döner: `{ ok: true, belge }` ya da `{ ok: false, kod }`.
  */
 export async function belirteciDogrula(belirtec, { anahtarlar, simdiMs }) {
@@ -187,6 +262,8 @@ export async function belirteciDogrula(belirtec, { anahtarlar, simdiMs }) {
   const exp = Date.parse(yuk.exp);
   if (simdiMs > exp + SAAT_TOLERANSI_MS) return red("BELGE_SURESI_DOLDU");
   if (exp - simdiMs > OMUR_TAVANI_MS + SAAT_TOLERANSI_MS) return red("INDIRME_OMUR");
+  if (!pencereAcik(kayit, simdiMs)) return red("INDIRME_PENCERE");
+  if (!kanalIzinli(kayit, yuk.kanal)) return red("INDIRME_KANAL");
   const { kanal, yolOneki, kurulumId } = yuk;
   return { ok: true, belge: { v: 1, kanal, yolOneki, kurulumId, exp: yuk.exp } };
 }
@@ -426,7 +503,7 @@ export function kapiOlustur({ ayar: hamAyar, fetchImpl = (r, i) => fetch(r, i), 
     const belirtec = belirteciBul(request, url);
     let kod = "INDIRME_BELIRTEC_YOK";
     if (belirtec) {
-      const d = await belirteciDogrula(belirtec, { anahtarlar: ayar.anahtarlar, simdiMs });
+      const d = await belirteciDogrula(belirtec, { anahtarlar: ayar.dogrulamaAnahtarlari, simdiMs });
       if (d.ok && yolIzinli(d.belge, yol)) return teslim(belirtec);
       kod = d.ok ? "INDIRME_YOL" : d.kod;
     }

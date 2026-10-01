@@ -278,7 +278,7 @@ const PERIOD_DAYS = 120;
  */
 async function generateIntermediate(flags: Map<string, string>): Promise<void> {
   const kid = required(flags, "kid");
-  if (!/^ara-\d{4}-\d{1,3}$/.test(kid)) throw new CliError("Ara imzacı kid biçimi: ara-<yıl>-<n>");
+  if (!/^ara-(?:hazirlik-)?\d{4}-\d{1,3}$/.test(kid)) throw new CliError("Ara imzacı kid biçimi: ara-<yıl>-<n> (hazırlık kökünde ara-hazirlik-<yıl>-<n>)");
   const rootKid = required(flags, "kok");
   const dir = keyDir(flags);
   const target = path.join(dir, `${kid}.ara.json`);
