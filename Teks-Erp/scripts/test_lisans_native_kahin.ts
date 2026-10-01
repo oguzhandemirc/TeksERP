@@ -13,7 +13,8 @@
 //      HKDF öneki · Rust'taki HER regex TS kaynağında (ya da canlı Zod deseninde) birebir var ·
 //      iki derleme sabiti geliştirmede kapalı (native zorunlu değil · çapa kipi üretim) · Rust'taki her
 //      belge türü (TYP_*) protokolün TYP kayıt defterinde aynı ad/değerle (bütünlük türü dahil) · aynanın
-//      kaynağı iki crate'tedir (`lisans-cekirdek` + ORTAK `tekserp-dogrulama`) ve dosya adları ikisinde tekildir (§0l)
+//      kaynağı iki crate'tedir (`lisans-cekirdek` + ORTAK `tekserp-dogrulama`) ve dosya adları ikisinde tekildir (§0l) ·
+//      çapanın açık anahtarları native ağacında YALNIZ ortak `anchor.rs`te — güncelleyici kopya taşımaz (§0m)
 //   §1 yükleyici: dosya yok → TS (zorunlu değil) / "yok" + her doğrulama CEKIRDEK_YOK + bütünlük
 //      GEÇERSİZ, istisna yok (zorunlu) · desteklenmeyen platform · bozuk .node · zorunlu kip ortam
 //      yolunu okumaz · aday sırası
@@ -117,6 +118,24 @@ const RUST_KAYNAK_DIZINLERI = [path.join(NATIVE_DIZIN, "src"), path.join(TEKS, "
 const VEKTOR_DOSYASI = vektorDosyasiYolu(TEKS);
 const oku = (p: string) => readFileSync(p, "utf8");
 const rustDosyaYollari = (): string[] => RUST_KAYNAK_DIZINLERI.flatMap((d) => readdirSync(d).filter((f) => f.endsWith(".rs")).map((f) => path.join(d, f)));
+/**
+ * §0m: gömülü çapanın açık anahtarları native ağacında YALNIZ ortak `tekserp-dogrulama/src/anchor.rs`te durur —
+ * lisans çekirdeği ve güncelleyici aynı listeyi BAĞLAR, kopya taşımaz (kopya kipten ve TS aynasından kopar).
+ */
+export function capaKopyalari(nativeKok: string, xler: readonly string[]): string[] {
+  const tek = path.join("tekserp-dogrulama", "src", "anchor.rs");
+  const out: string[] = [];
+  const gez = (d: string): void => {
+    for (const e of readdirSync(d, { withFileTypes: true })) {
+      if (e.name === "target" || e.name === "node_modules" || e.name.startsWith(".") || e.name.startsWith("dist")) continue;
+      const p = path.join(d, e.name);
+      if (e.isDirectory()) gez(p);
+      else if (e.name.endsWith(".rs") && path.relative(nativeKok, p) !== tek && xler.some((x) => oku(p).includes(x))) out.push(path.relative(nativeKok, p));
+    }
+  };
+  gez(nativeKok);
+  return out.sort();
+}
 function rustKaynak(ad: string): string {
   const dizin = RUST_KAYNAK_DIZINLERI.find((d) => existsSync(path.join(d, ad)));
   if (!dizin) throw new Error(`Rust kaynağı bulunamadı: ${ad} (${RUST_KAYNAK_DIZINLERI.map((d) => path.relative(TEKS, d)).join(" · ")})`);
@@ -353,6 +372,14 @@ function bolum0(): void {
   const adlar = yollar.map((y) => path.basename(y)).filter((a) => a !== "lib.rs");
   const tekrarli = adlar.filter((a, i) => adlar.indexOf(a) !== i);
   check("§0l Rust modül dosya adları iki crate'te tekil (lisans-cekirdek · tekserp-dogrulama)", adlar.length >= 15 && tekrarli.length === 0, tekrarli.join(",") || `${adlar.length} dosya`);
+  const capaX = [...PRODUCTION_ROOT_PUBLIC_KEYS, ...STAGING_ROOT_PUBLIC_KEYS, ...PRODUCTION_PACKAGE_PUBLIC_KEYS, ...STAGING_PACKAGE_PUBLIC_KEYS].map((k) => k.x);
+  const ortakCapa = rustKaynak("anchor.rs");
+  const kopyalar = capaKopyalari(path.join(TEKS, "native"), capaX);
+  check(
+    "§0m ⭐ çapa TEK KAYNAK: dört listenin açık anahtarları native ağacında yalnız `tekserp-dogrulama/src/anchor.rs`te (güncelleyici/çekirdek kopyası yok)",
+    capaX.length >= 4 && capaX.every((x) => ortakCapa.includes(x)) && kopyalar.length === 0,
+    kopyalar.length ? `kopya: ${kopyalar.join(" · ")}` : `${capaX.length} anahtar`,
+  );
   const tumRust = yollar.map(oku);
   const rustTyp = rustTypSabitleri(tumRust);
   const typFark = typFarklari(rustTyp, TYP);

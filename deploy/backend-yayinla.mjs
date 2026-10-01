@@ -192,7 +192,7 @@ if (argv.includes('--pg-yayinla')) {
   const y = pgKunyeYukuOku();
   console.log(`\n${BAR}\n  PostgreSQL ${y.surum}-${y.derleme} → ${MUSTERI}${KURU ? ' — KURU' : ''}\n${BAR}`);
   const pgCikti = fs.mkdtempSync(path.join(os.tmpdir(), 'tekserp-pg-yayin-'));
-  const k = tsArac('pg-dogrula', [`--kunye=${PG_KUNYE}`, `--zip=${pgZip}`], pgCikti).kunye;
+  const k = tsArac('pg-dogrula', [`--kunye=${PG_KUNYE}`, `--zip=${pgZip}`, `--guven-capasi=${KANAL.backend.guvenCapasi}`], pgCikti).kunye;
   const pgPlan = pgYayinPlani({ vdsBackend: KANAL.yayin.vdsBackend, surum: k.surum, derleme: k.derleme, paketAd: k.paket.ad, damga: crypto.randomBytes(6).toString('hex') });
   if (!KURU && uzak(pgPlan.komut.varMi, 'PG sürüm dizini var mı?', { sessiz: true }).status === 0) dur(`${pgPlan.dizin} ZATEN VAR — yayınlanmış PG paketi EZİLMEZ`);
   uzakZorunlu(pgPlan.komut.geciciAc, `geçici dizin: ${pgPlan.gecici}`);
@@ -279,7 +279,7 @@ const ozetDosyasi = path.join(CIKTI, 'ozet.txt');
 fs.writeFileSync(ozetDosyasi, ozet);
 const aracArg = [
   '--import', 'tsx', 'scripts/backend-bildirim.ts', KURU ? 'dogrula' : 'imzala',
-  `--zip=${PAKET}`, `--kanal=${MUSTERI}`, `--kanal-turu=${KANAL.tur}`, `--pg-cizgi=${PG_CIZGI}`, `--pg-en-az=${PG_EN_AZ}`,
+  `--zip=${PAKET}`, `--kanal=${MUSTERI}`, `--kanal-turu=${KANAL.tur}`, `--guven-capasi=${KANAL.backend.guvenCapasi}`, `--pg-cizgi=${PG_CIZGI}`, `--pg-en-az=${PG_EN_AZ}`,
   `--ozet-dosyasi=${ozetDosyasi}`, `--cikti=${CIKTI}`,
   ...(PG_KUNYE ? [`--pg-kunye=${PG_KUNYE}`] : []),
   ...(arg('min-kaynak') ? [`--min-kaynak=${arg('min-kaynak')}`] : []),

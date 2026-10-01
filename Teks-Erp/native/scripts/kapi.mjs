@@ -6,7 +6,7 @@
 //             bağlama yok — Mac'ten de ölçülür; hedef std'si kurulu değilse ⏭ beyanla, CI Windows job'ı ölçer)
 //             — alan ve napi'siz çekirdek İKİ çapa kipinde (özelliksiz üretim · `hazirlik-capasi`)
 //   test    — `cargo test`: alanın napi'siz üyeleri + lisans çekirdeği (TS kâhininin vektör dosyası, test çapası);
-//             hazırlık kipinde ortak crate + lisans çekirdeği (gömülü çapa vektörleri
+//             hazırlık kipinde ortak crate + güncelleyicinin çapa testi + lisans çekirdeği (gömülü çapa vektörleri
 //             yalnız kendi kipinde koşar). Kip SEÇİMDİR: her kip AYRI cargo çağrısı (özellik birleşmesi kipi bozmasın)
 // ÜÇ SONUÇ: 0 temiz · 1 ihlal · cargo YOKSA ⏭ beyanla 0 — Rust araç zinciri olmayan oturum kapıyı
 // ölçemez; ölçüm CI'daki "Native" job'larındadır (sessiz yeşil değil, beyanlı atlama).
@@ -61,6 +61,7 @@ const ADIMLAR = {
     ["test", "--workspace", "--exclude", "lisans-cekirdek"],
     ["test", "-p", "lisans-cekirdek", "--no-default-features", "--features", "test-anchor"],
     ["test", "-p", "tekserp-dogrulama", "--features", "hazirlik-capasi"],
+    ["test", "-p", "tekserp-guncelleyici", "--features", "hazirlik-capasi", "--test", "capa_kipi", "--test", "self_update"],
     ["test", "-p", "lisans-cekirdek", "--no-default-features", "--features", "test-anchor,hazirlik-capasi"],
   ],
 };

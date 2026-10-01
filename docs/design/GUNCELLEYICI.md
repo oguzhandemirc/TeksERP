@@ -312,7 +312,7 @@ Her SONUÇLANAN işlem için bir satır: `{v:1, islemId, onayId, urun: backend|p
 
 ## §6 Güven modeli — güncelleyici neye güvenir
 
-Güncelleyici SYSTEM'dir; backend düşük yetkilidir. Yetki yalnız satıcı imzalı veriden gelir (sözleşme §3 madde 1); her doğrulama lisans çekirdeğiyle AYNI koddur (`tekserp-dogrulama`) ve sözleşmenin TS aynası `tekserp-guncelleyici/src/{release,decision}.rs` D1'in vektörleriyle ölçülür (`tests/sozlesme_vektorleri.rs`; kiranın `guncelleme` şeması `tekserp-dogrulama/tests/guncelleme_kira.rs`).
+Güncelleyici SYSTEM'dir; backend düşük yetkilidir. Yetki yalnız satıcı imzalı veriden gelir (sözleşme §3 madde 1); her doğrulama lisans çekirdeğiyle AYNI koddur (`tekserp-dogrulama`) ve gömülü çapa da aynıdır: ikili TEK kipin kök + PAKET anahtarlarını taşır (G3 — özelliksiz derleme ÜRETİM, `hazirlik-capasi` HAZIRLIK; künye `capaKipi`), öteki kipin imzalı kirası/bildirimi/paketi `KOK_BILINMIYOR`/`JWS_KID` alır (`tests/capa_kipi.rs`, iki kipte). Paket güncelleyiciyi paketin (bayt kodunun) kipinde taşır: `paketle.ps1` künyeyi kıyaslar, CI kipi bayt kodu künyesinden seçer ve sözleşmenin TS aynası `tekserp-guncelleyici/src/{release,decision}.rs` D1'in vektörleriyle ölçülür (`tests/sozlesme_vektorleri.rs`; kiranın `guncelleme` şeması `tekserp-dogrulama/tests/guncelleme_kira.rs`).
 
 ### §6.1 Kendi ayarı — `<KOK>\guncelleyici\ayar.json` (yalnız SYSTEM/Administrators yazar)
 
@@ -389,7 +389,7 @@ Küçük sürüm veri dizinini değiştirmez: telafide DB geri yüklemesi YOKTUR
 
 ## §10 Kendini güncelleme
 
-Paket `runtime\tekserp-guncelleyici.exe` taşır. Backend işlemi `BASARILI` olunca, paketteki ikilinin sürümü çalışanınkinden büyükse: `guncelleyici\tekserp-guncelleyici.yeni.exe`ye kopyalanır → `.yeni.exe kunye` çalıştırılır (0 ve beklenen ad/sürüm dönmeli) → çalışan ikili `.eski.exe`ye, `.yeni.exe` asıl ada yeniden adlandırılır (çalışan exe yeniden adlandırılabilir) → hizmet `KENDI_GUNCELLEME` koduyla (20) çıkar, SCM kurtarması yeni ikiliyle başlatır. Yeni ikili İLK iş olarak bir açılış sayacı tutar (`is\kendi.json`): doğrulanmadan 3 açılışı aşarsa `.eski.exe`yi geri koyar ve çıkar (A/B); ilk sağlıklı turdan sonra `.eski.exe`yi siler. İki yeniden adlandırma arasında ölüm: eski ikili asıl adda kalır, yarım `.yeni.exe` sonraki açılışta silinir.
+Paket `runtime\tekserp-guncelleyici.exe` taşır. Backend işlemi `BASARILI` olunca, paketteki ikilinin sürümü çalışanınkinden büyükse: `guncelleyici\tekserp-guncelleyici.yeni.exe`ye kopyalanır → `.yeni.exe kunye` çalıştırılır (0 ve beklenen ad/sürüm dönmeli; çapa kipi (`capaKipi`) çalışanınkiyle AYNI olmalı — kendini güncelleme hazırlık ↔ üretim arasında GEÇMEZ, öteki kipli ya da kipsiz aday yerleşmez, G3) → çalışan ikili `.eski.exe`ye, `.yeni.exe` asıl ada yeniden adlandırılır (çalışan exe yeniden adlandırılabilir) → hizmet `KENDI_GUNCELLEME` koduyla (20) çıkar, SCM kurtarması yeni ikiliyle başlatır. Yeni ikili İLK iş olarak bir açılış sayacı tutar (`is\kendi.json`): doğrulanmadan 3 açılışı aşarsa `.eski.exe`yi geri koyar ve çıkar (A/B); ilk sağlıklı turdan sonra `.eski.exe`yi siler. İki yeniden adlandırma arasında ölüm: eski ikili asıl adda kalır, yarım `.yeni.exe` sonraki açılışta silinir.
 
 ## §11 Günlük
 

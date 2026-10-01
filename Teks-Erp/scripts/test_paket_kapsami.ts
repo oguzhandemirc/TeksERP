@@ -12,9 +12,11 @@
 //   §3 alt dizin betikleri + runtime\ ⊆ INTEGRITY_SCOPE_DIRS; D6'nın zorunlu dört betiği listede
 //   §4 paketle.ps1'de $stage'e giden HER kopya bilinen bir girdiye iner (listeyi atlayan kopya yok);
 //      çalıştırılabilir her girdi imzalı kapsamda — beyanlı istisnalar dışında
-//   §5 hizmet ikilileri OLÇÜLEREK girer: yoksa DUR · MZ/PE · x64 · TEST çapası (test-anchor) RED · künye
+//   §5 hizmet ikilileri OLÇÜLEREK girer: yoksa DUR · MZ/PE · x64 · TEST çapası (test-anchor) RED · künye ·
+//      güncelleyicinin çapa kipi = paketin (bayt kodu künyesi `guvenCapasi`, G3)
 //   §6 PAKET.json `backendHizmetAdi` kanal kaydından (kanal-kapisi TEKSERP_HIZMET_ADI) · `hizmetIkilileri`
-//   §7 CI (korumali-paket.yml) win-x64 kolunda iki ikiliyi üretim çapasıyla derler ve yapıta koyar
+//   §7 CI (korumali-paket.yml) win-x64 kolunda iki ikiliyi test çapasız, bayt kodunun çapa KİPİYLE derler (G3:
+//      hazırlık → `hazirlik-capasi`, künye `capaKipi` ölçülür) ve yapıta koyar
 //   §8 gerçek imza kapsamı işlevi (`packageScope` + `listScopedFiles`) sahte bir paket ağacında
 //      hizmet\ · gecis\ · runtime\*.exe dosyalarını LİSTEYE alır
 // NEGATİF SONDA (✓K, her koşumda): §2–§7 yüklemleri bellekte bozulmuş kopyalara koşar; her sonda
@@ -176,10 +178,14 @@ function olc(d: Dosyalar): Olcum {
       ["TEST çapası (test-anchor) RED", /Contains\("TEKSERP_TEST_CAPASI"\)\) \{\s*\n\s*Fail /],
       ["künye adı ölçülür", /& \$yol kunye/],
       ["künye testCapasi RED", /testCapasi -ne \$false\)\) \{\s*\n\s*Fail /],
+      ["güncelleyici çapa kipi = paket kipi (G3)", /\$beklenenAd -eq "tekserp-guncelleyici" -and \$j\.capaKipi -cne \$capaKipi\) \{\s*\n\s*Fail /],
     ];
     for (const [ad, desen] of iddialar) if (!desen.test(govde)) k("§5", `HizmetIkilisiOlc: ${ad} ölçümü yok`);
   }
   if (!/HizmetIkilisiOlc \(Join-Path \$ikiliDizin \$ad\) \$HIZMET_IKILILERI\[\$ad\]/.test(paketle)) k("§5", "ikililer HizmetIkilisiOlc'tan geçmeden kopyalanıyor");
+  if (!/HizmetIkilisiOlc \(Join-Path \$ikiliDizin \$ad\) \$HIZMET_IKILILERI\[\$ad\] \$paketCapaKipi/.test(paketle) || !/\$paketCapaKipi = \(Get-Content -Raw \(Join-Path \(Join-Path \$proj "dist"\) "server-kunye\.json"\) \| ConvertFrom-Json\)\.guvenCapasi/.test(paketle)) {
+    k("§5", "HizmetIkilisiOlc paketin çapa kipini (dist/server-kunye.json guvenCapasi) almıyor (G3)");
+  }
   if (!/if \(\$Korumali -and \$Hedef -eq "win-x64"\) \{/.test(paketle)) k("§5", "korumalı win-x64 paketi hizmet ikilisi koşulsuz taşımıyor");
 
   // §6
@@ -195,6 +201,9 @@ function olc(d: Dosyalar): Olcum {
   if (!/testCapasi/.test(ci)) k("§7", "CI güncelleyicinin künyesinde testCapasi=false ölçmüyor");
   if (!/koruma-cikti\/runtime\/tekserp-guncelleyici\.exe/.test(ci) || !/koruma-cikti\/runtime\/tekserp-hizmet\.exe/.test(ci)) k("§7", "iki ikili yapıtın runtime\\ dizinine konmuyor");
   if (/--features[^\n]*test-anchor/.test(ci)) k("§7", "korumalı paket iş akışı test-anchor özelliğiyle derliyor");
+  if (!/\.guvenCapasi/.test(ci) || !/"tekserp-guncelleyici\/hazirlik-capasi"/.test(ci) || !/\$k\.capaKipi -cne \$kip\)/.test(ci)) {
+    k("§7", "CI güncelleyiciyi bayt kodunun çapa kipiyle derleyip künyesinde capaKipi ölçmüyor (G3)");
+  }
   return { kirmizi, olculemedi };
 }
 
@@ -250,6 +259,9 @@ function sondalar(taban: Dosyalar): void {
     ["N11 PAKET.json backendHizmetAdi silindi → KIRMIZI (§6)", "kirmizi", metin(PAKETLE, /^\s*backendHizmetAdi\s*=\s*\$backendHizmet\s*$/m, ""), "§6"],
     ["N12 CI ikili derlemesi kalktı → KIRMIZI (§7)", "kirmizi", metin(KORUMALI_CI, "cargo build --release --locked -p tekserp-guncelleyici -p tekserp-hizmet", "echo atlandi"), "§7"],
     ["N13 CI test-anchor ile derliyor → KIRMIZI (§7)", "kirmizi", metin(KORUMALI_CI, "cargo build --release --locked -p tekserp-guncelleyici -p tekserp-hizmet", "cargo build --release --locked -p tekserp-guncelleyici -p tekserp-hizmet --features tekserp-guncelleyici/test-anchor"), "§7"],
+    ["N14 güncelleyici çapa kipi denetimi gevşedi → KIRMIZI (§5, G3)", "kirmizi", metin(PAKETLE, /(\$j\.capaKipi -cne \$capaKipi\) \{\s*\n\s*)Fail /, "$1Write-Host "), "§5"],
+    ["N15 ikililere paketin çapa kipi verilmiyor → KIRMIZI (§5, G3)", "kirmizi", metin(PAKETLE, "$HIZMET_IKILILERI[$ad] $paketCapaKipi", "$HIZMET_IKILILERI[$ad]"), "§5"],
+    ["N16 CI güncelleyicinin capaKipi ölçümü kalktı → KIRMIZI (§7, G3)", "kirmizi", metin(KORUMALI_CI, "$k.capaKipi -cne $kip)", "$false)"), "§7"],
     ["O1 paketle.ps1 okunamadı → ÖLÇÜLEMEDİ", "olculemedi", (d) => { d[PAKETLE] = undefined; }],
     ["O2 $ALT_BETIKLER listesi kayboldu → ÖLÇÜLEMEDİ (§1)", "olculemedi", metin(PAKETLE, "$ALT_BETIKLER = @(", "$ALT_BETIKLER_ESKI = @("), "§1"],
   ];
@@ -272,7 +284,7 @@ async function main(): Promise<void> {
   const o = olc(d);
   for (const x of o.olculemedi) check(`ÖLÇÜLEMEDİ — ${x}`, false);
   for (const x of o.kirmizi) check(x, false);
-  if (hukum(o) === "yesil") check("§1–§7 paket içeriği imzalı kapsamda, ikililer ölçülerek giriyor, CI üretim çapasıyla derliyor", true);
+  if (hukum(o) === "yesil") check("§1–§7 paket içeriği imzalı kapsamda, ikililer ölçülerek giriyor, CI test çapasız ve paketin çapa kipiyle derliyor", true);
   await gercekKapsam();
   sondalar(d);
   console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);

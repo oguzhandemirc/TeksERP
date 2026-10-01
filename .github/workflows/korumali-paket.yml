@@ -81,19 +81,24 @@ jobs:
           test -f koruma-cikti/dist/server.jsc || { echo "server.jsc yok"; exit 1; }
 
       # Dağıtım v2: paket runtime\ altına iki Rust hizmet ikilisini taşır (paketle.ps1 -HizmetIkiliDizini
-      # <bu yapıtın runtime\ dizini>). ÜRETİM derlemesi: özelliksiz (test-anchor YOK — güven çapası gömülü);
-      # künye bunu ölçer. Yalnız win-x64 kolu (hizmet düzeni Windows'tadır).
-      - name: Rust hizmet ikilileri (güncelleyici + konak, üretim çapası)
+      # <bu yapıtın runtime\ dizini>). Sürüm derlemesi: test-anchor YOK — güven çapası gömülü; çapa KİPİ (G3)
+      # bayt kodunun kipidir (künye `guvenCapasi`, kanaldan): hazırlık → `hazirlik-capasi`. Künye ikisini ölçer.
+      # Yalnız win-x64 kolu (hizmet düzeni Windows'tadır).
+      - name: Rust hizmet ikilileri (güncelleyici + konak, kanalın çapa kipi)
         if: matrix.hedef == 'win-x64'
         shell: pwsh
         working-directory: Teks-Erp/native
         run: |
           rustup toolchain install stable --profile minimal
           rustup default stable
-          cargo build --release --locked -p tekserp-guncelleyici -p tekserp-hizmet
+          $kip = (Get-Content -Raw ../../koruma-cikti/dist/server-kunye.json | ConvertFrom-Json).guvenCapasi
+          if ($kip -cne "uretim" -and $kip -cne "hazirlik") { Write-Error "bayt kodu künyesinde çapa kipi yok/tanınmıyor: '$kip'"; exit 1 }
+          $ozellik = if ($kip -eq "hazirlik") { @("--features", "tekserp-guncelleyici/hazirlik-capasi") } else { @() }
+          cargo build --release --locked -p tekserp-guncelleyici -p tekserp-hizmet @ozellik
           if ($LASTEXITCODE -ne 0) { exit 1 }
           $k = (& target/release/tekserp-guncelleyici.exe kunye | Out-String) | ConvertFrom-Json
-          if ($k.ad -ne "tekserp-guncelleyici" -or $k.testCapasi -ne $false) { Write-Error "güncelleyici üretim derlemesi değil (testCapasi): $($k | ConvertTo-Json -Compress)"; exit 1 }
+          if ($k.ad -ne "tekserp-guncelleyici" -or $k.testCapasi -ne $false) { Write-Error "güncelleyici sürüm derlemesi değil (testCapasi): $($k | ConvertTo-Json -Compress)"; exit 1 }
+          if ($k.capaKipi -cne $kip) { Write-Error "güncelleyici çapa kipi '$($k.capaKipi)', bayt kodu '$kip'"; exit 1 }
           $h = (& target/release/tekserp-hizmet.exe kunye | Out-String) | ConvertFrom-Json
           if ($h.ad -ne "tekserp-hizmet") { Write-Error "konak künyesi beklenen değil"; exit 1 }
           Copy-Item target/release/tekserp-guncelleyici.exe ../../koruma-cikti/runtime/tekserp-guncelleyici.exe

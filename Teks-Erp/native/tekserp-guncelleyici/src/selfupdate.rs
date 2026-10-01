@@ -6,6 +6,7 @@
 use crate::env::Env;
 use crate::layout::Layout;
 use crate::tools;
+use crate::trust;
 use crate::version;
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
@@ -110,10 +111,21 @@ pub fn stage_with_version(env: &Env, layout: &Layout, own_exe: &Path, current_di
     if version::compare(&new_version, own_version) != Some(std::cmp::Ordering::Greater) {
         return Ok(false);
     }
+    // Güven çapası kurulumun kimliğidir: paket yanlış kipte güncelleyici taşısa da SYSTEM ikilisi kipi değiştirmez.
+    let mode = id.get("capaKipi").and_then(|v| v.as_str());
+    if mode != Some(trust::ANCHOR_MODE) {
+        return Err(format!(
+            "paketteki güncelleyici {} çapalı, kurulu olan {} — kendini güncelleme çapa kipini DEĞİŞTİRMEZ",
+            mode.unwrap_or("kipsiz"),
+            trust::ANCHOR_MODE
+        ));
+    }
     let fresh = sibling(own_exe, "yeni");
     env.fs.copy(&candidate, &fresh).map_err(|e| format!("yeni ikili kopyalanamadı: {e}"))?;
     let check = tools::identity_of(env, &fresh)?;
-    if check.get("surum").and_then(|v| v.as_str()) != Some(new_version.as_str()) {
+    if check.get("surum").and_then(|v| v.as_str()) != Some(new_version.as_str())
+        || check.get("capaKipi").and_then(|v| v.as_str()) != Some(trust::ANCHOR_MODE)
+    {
         let _ = env.fs.remove_file(&fresh);
         return Err("kopyalanan ikilinin künyesi tutmuyor".into());
     }

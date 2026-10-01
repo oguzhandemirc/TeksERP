@@ -4,12 +4,15 @@
 // Satıcı Mac'inde koşar; imza anahtarı CI'a ve pakete GİRMEZ. Yayıncı `deploy/backend-yayinla.mjs` çağırır.
 //
 //   npx tsx scripts/backend-bildirim.ts dogrula --zip=<paket.zip> --kanal=<kod> --kanal-turu=<uretim|hazirlik>
-//       --pg-cizgi=<16> --pg-en-az=<16.9> [--pg-kunye=<pg.json>] --ozet-dosyasi=<txt> --cikti=<dizin> [--min-kaynak=<sürüm>] [--zorunlu]
+//       --guven-capasi=<uretim|hazirlik> --pg-cizgi=<16> --pg-en-az=<16.9> [--pg-kunye=<pg.json>] --ozet-dosyasi=<txt> --cikti=<dizin> [--min-kaynak=<sürüm>] [--zorunlu]
 //   npx tsx scripts/backend-bildirim.ts imzala  … aynı … --anahtar=<PAKET anahtar dosyası>
 //   npx tsx scripts/backend-bildirim.ts pg-imzala --zip=<PG sahne zip> --anahtar=<PAKET anahtar dosyası> --cikti=<dizin>
 //       [--cizgi --surum --derleme --icu]: künye alanları deploy/pg/pg-surumu.json'dan (TEK KAYNAK); verilen argüman
 //       kayıttan farklıysa DUR. Zip'te TEK `bin/icuuc<N>.dll` olmalı ve N = kaydın icuSurum'u.
-//   npx tsx scripts/backend-bildirim.ts pg-dogrula --kunye=<pg.json> --zip=<PG sahne zip> --cikti=<dizin>
+//   npx tsx scripts/backend-bildirim.ts pg-dogrula --kunye=<pg.json> --zip=<PG sahne zip> --guven-capasi=<kip> --cikti=<dizin>
+//
+// PAKET çapası kanalın çapa KİPİNDEN (G3; yayıncı kanal kaydının `backend.guvenCapasi`sını verir): o kanalın
+// kurulumları yalnız o kipin PAKET anahtarlarına güvenir — öteki kipin imzalı paketi/PG künyesi burada DURUR.
 //
 // dogrula/imzala: zip'i geçici dizine açar, imzalı dosya listesini (`butunluk.jws`) PAKET çapasıyla TAM denetler
 //   (GEÇERLİ değilse DUR), künyeyi `PAKET.json`la ve kanalla bağlar, bildirimi kurar; imzada paketi imzalayan
@@ -20,7 +23,7 @@
 //   yazılmaz), `bin/icuuc<icu>.dll` aranır; künye imzalanır → `<cikti>/pg.json` + `<cikti>/sonuc.json`.
 // pg-dogrula: künyenin imzası (PAKET çapası) + zip'in boyu/özeti künyeyle birebir → `<cikti>/sonuc.json` (yayıncı okur).
 // Test çapası (`--capa=<json>` ya da ortam `TEKSERP_TEST_PAKET_CAPASI`) YALNIZ bekçiler içindir ve backend
-// bildiriminde YALNIZ hazırlık kanalında kabul edilir; gerçek çapa `PACKAGE_PUBLIC_KEYS`.
+// bildiriminde YALNIZ hazırlık kanalında kabul edilir; gerçek çapa `packagePublicKeysFor(<kanalın kipi>)`.
 // =============================================================================
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
@@ -45,8 +48,10 @@ import {
   type PgPackageManifest,
   type PgRequirement,
   type ReleaseManifest,
+  type TrustAnchorMode,
+  isTrustAnchorMode,
 } from "../src/lib/license/protocol";
-import { PACKAGE_PUBLIC_KEYS, verifyIntegrity, type PackageKey } from "../src/lib/license/integrity";
+import { packagePublicKeysFor, verifyIntegrity, type PackageKey } from "../src/lib/license/integrity";
 import { INTEGRITY_FILE, isStagingPackageKid } from "../src/lib/license/integrity-scope";
 import { openPackageKey } from "./lib/butunluk-imza";
 import { CliError, args, askPassword } from "./lib/cli-girdi";
@@ -63,9 +68,18 @@ function gerek(f: Bayraklar, ad: string): string {
   return v;
 }
 
+/** Kanalın çapa kipi (zorunlu; tanınmayan kip RED — örtük üretim/birleşik çapa yok). Üretim kanalı yalnız üretim. */
+function capaKipi(f: Bayraklar, kanalTuru: string | null): TrustAnchorMode {
+  const kip = gerek(f, "guven-capasi");
+  if (!isTrustAnchorMode(kip)) throw new CliError(`--guven-capasi uretim | hazirlik (gelen: ${kip})`);
+  if (kanalTuru === "uretim" && kip !== "uretim") throw new CliError("üretim kanalı yalnız ÜRETİM çapasıyla yayınlanır (kanal kaydı backend.guvenCapasi)");
+  return kip;
+}
+
 function capaOku(f: Bayraklar, kanalTuru: string | null): readonly PackageKey[] {
+  const kip = capaKipi(f, kanalTuru);
   const dosya = f.get("capa") ?? process.env.TEKSERP_TEST_PAKET_CAPASI;
-  if (!dosya) return PACKAGE_PUBLIC_KEYS;
+  if (!dosya) return packagePublicKeysFor(kip);
   if (kanalTuru !== null && kanalTuru !== "hazirlik") throw new CliError("test çapası yalnız hazırlık kanalında kabul edilir");
   console.error("⚠ TEST ÇAPASI kullanılıyor — yalnız bekçi içindir");
   return JSON.parse(fs.readFileSync(dosya, "utf8")) as PackageKey[];
