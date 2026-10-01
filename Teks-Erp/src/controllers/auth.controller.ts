@@ -9,15 +9,6 @@ import { resolveSystemAccountLock } from "../services/helpers/system-account.reg
 import { isSettingsPasswordConfigured } from "../services/settings-password.service";
 import { readClientVersionHeader } from "../constants/client-info";
 import { CURRENT_PASSWORD_INVALID_CODE, type LoginContext } from "../services/auth.service";
-import { passwordPolicyViolation } from "../constants/password-policy";
-
-const changePasswordSchema = z.object({
-  currentPassword: z.string().min(1, "Mevcut parola gerekli"),
-  newPassword: z.string().superRefine((value, ctx) => {
-    const violation = passwordPolicyViolation(value);
-    if (violation) ctx.addIssue({ code: "custom", message: violation });
-  }),
-});
 import { AuditService } from "../services/audit.service";
 import { TotpAccountService } from "../services/totp-account.service";
 import {
@@ -37,7 +28,16 @@ import {
   releaseLoginAttempt,
   type LockoutKeySpec,
 } from "../middlewares/login-lockout";
+import { passwordPolicyViolation } from "../constants/password-policy";
 import "../types/express-augment";
+
+const changePasswordSchema = z.object({
+  currentPassword: z.string().min(1, "Mevcut parola gerekli"),
+  newPassword: z.string().superRefine((value, ctx) => {
+    const violation = passwordPolicyViolation(value);
+    if (violation) ctx.addIssue({ code: "custom", message: violation });
+  }),
+});
 
 // Session/eşzamanlılık: her login yolu clientType (electron|mobile, default mobile) +
 // confirmKick ('notify' politikasında "ikisi de açık kalsın" onayı) taşır. deviceId

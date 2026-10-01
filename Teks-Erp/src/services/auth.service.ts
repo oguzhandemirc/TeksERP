@@ -758,7 +758,7 @@ export class AuthService {
     // Erken dönüş grant sorgusundan ÖNCE: DB'ye hiç satır yazılmaz, okunmaz.
     // `matchesPermission` (`rbac.middleware.ts`) `*`i ZATEN ilk satırda tanır →
     // bütün `requirePermission`/`requireAnyPermission` kapıları maliyetsiz geçer.
-    // Tek çağıran `issueToken` olduğu için bu bir GİRİŞ başına maliyettir.
+    // Çağıranlar `issueToken` (giriş) ve `resolveRequestPermissions` (TTL'li istek önbelleği).
     const owner = await prisma.user.findUnique({
       where: { id: userId },
       select: { isSystemAccount: true },
