@@ -16,7 +16,14 @@
 //   §3 sahte-Windows harness (pwsh varsa): kuru → yanlış onay → uygula → durum → geri al · doğrulama/başlatma
 //      hatasında OTOMATİK geri alma · engeller (göç · derleme · yabancı pm2 · yabancı görev) · güvenlik
 //      duvarı kuralı ekle/geri al · tamamla (pm2 kalıntıları arşive, sonra geri alma reddi) · sır taraması
-// NEGATİF SONDA: §1/§2 yüklemleri dosya içinde bozulmuş kopyalara her koşumda koşar ("sonda:" satırları).
+//   §4 kanal kimliği (D8e): ① adlar TEK kaynaktan — geçiş ve setup (kurulum.ps1 AdlariCoz + on-olcum.ps1) aynı
+//      `deploy/hizmet/kanal-adlari.ps1` KanalAdlariCoz'u çağırır, geçişte elle ad/veri kökü yok, güncelleyiciye veri
+//      kökü + backend'e güncelleme dizini verilir; harness: testfabrika soneki → TeksERP-Guncelleyici-testfabrika +
+//      %ProgramData%\TeksERP-testfabrika · ② lisans satıcısı kanal kaydından (PAKET.json backendLisansSunucusu):
+//      uyuşmazlıkta kuru UYARIR, uygula DURUR, -LisansSunucusuYaz yapilandirma\.env'e yazar, -GeriAl geri alır ·
+//      ③ kurunun bastığı komut parametreleri AYNEN taşır (-ProvaKabul/-PaketOzeti/-PgHizmeti): kopyala-yapıştır ENGEL'siz uygular
+// NEGATİF SONDA: §1/§2/§4 yüklemleri dosya içinde bozulmuş kopyalara her koşumda koşar ("sonda:" satırları);
+//   §4 harness sondaları bozulmuş gecis.ps1 kopyasını gerçek akışta koşar (uyuşmazlıkta uygula durmuyor · komut parametre düşürüyor).
 // ÖLÇÜLMEYEN (Windows'ta W3/D8): gerçek SCM, icacls/ACL, junction, pm2, PostgreSQL, güvenlik duvarı.
 // =============================================================================
 import { readFileSync, mkdtempSync, mkdirSync, writeFileSync, rmSync, existsSync, readdirSync, lstatSync } from "node:fs";
@@ -24,6 +31,7 @@ import { tmpdir } from "node:os";
 import path, { join } from "node:path";
 import Module, { createRequire } from "node:module";
 import { spawnSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import { PATH_SETTINGS, serviceDefaults } from "../src/lib/hizmet-duzeni";
 import { psTara } from "./lib/ps-tarama";
 import { atlamaDefteri } from "./lib/atlama";
@@ -391,7 +399,7 @@ function gecisIhlalleri(metin: string): string[] {
   // (g) plan sırası: iskelet (iyi bilinen SID) → ... → hizmet kaydı + ACL (backend-hizmeti.ps1) → sağlık.
   const sira = [...metin.matchAll(/& \$ekle "([A-Z0-9_]+)"/g)].map((m) => m[1]!);
   if (JSON.stringify(sira) !== JSON.stringify(PLAN_SIRASI)) ih.push(`plan sırası ${sira.join(">")}`);
-  if (!/function Is_ISKELET\(\$E\) \{\s*\n\s*\$kod = OsBetik \$E\.AclBetigi @\{ Kok = \$E\.Kok; HizmetAdi = \$E\.HizmetAdi; Uygula = \$true; YalnizIskelet = \$true \}/.test(metin)) ih.push("iskelet -YalnizIskelet ile çağrılmıyor");
+  if (!/function Is_ISKELET\(\$E\) \{\s*\n\s*\$kod = OsBetik \$E\.AclBetigi @\{ Kok = \$E\.Kok; HizmetAdi = \$E\.HizmetAdi; Uygula = \$true; YalnizIskelet = \$true(; GuncellemeDizini = \$E\.GuncellemeDizini)? \}/.test(metin)) ih.push("iskelet -YalnizIskelet ile çağrılmıyor");
   const kayit = /function Is_HIZMET_KAYIT\(\$E\) \{[\s\S]*?\n\}/.exec(metin)?.[0] ?? "";
   if (!/OsBetik \$E\.AclBetigi \$arg/.test(kayit) || /YalnizIskelet/.test(kayit)) ih.push("hizmet kaydı backend-hizmeti.ps1 -Uygula ile değil");
   for (const s of t.satirlar) if (/icacls/.test(s.kod) && /S-1-5-80|NT SERVICE/.test(s.kod)) ih.push(`gecis.ps1 sanal hesaba kendisi izin yazıyor (satır ${s.no})`);
@@ -449,10 +457,72 @@ function gecisStatik(): void {
   }
 }
 
+// --- §4 kanal kimliği (statik): adlar tek kaynaktan, geçişte elle ad yok ------------------------------------
+const KANAL_ADLARI = join(KOK, "deploy", "hizmet", "kanal-adlari.ps1");
+const KURULUM = join(KOK, "deploy", "kurulum", "kurulum.ps1");
+const ON_OLCUM = join(KOK, "deploy", "kurulum", "on-olcum.ps1");
+const PAKETLE = join(KOK, "deploy", "paketle.ps1");
+interface KanalMetinleri { gecis: string; kurulum: string; onOlcum: string; adlar: string; paketle: string }
+function kanalIhlalleri(m: KanalMetinleri): string[] {
+  const ih: string[] = [];
+  const kod = (metin: string) => psTara(metin).satirlar;
+  const DOT = /^\s*\. .*kanal-adlari\.ps1|^\s*\. \$script:KANAL_ADLARI\s*$/;
+  // (a) çekirdek: tek tanım + son ek her ada geçer
+  if (!/^function KanalAdlariCoz\(\[string\]\$backendAdi, \[string\]\$kanal, \[string\]\$pgTaban, \[string\]\$programData\) \{/m.test(m.adlar) ||
+    !m.adlar.includes('guncelleyici = "TeksERP-Guncelleyici$sonek"') || !m.adlar.includes('Join-Path $programData "TeksERP$sonek"')) ih.push("kanal-adlari.ps1 KanalAdlariCoz çekirdeği yok/eksik");
+  if (/\bexit\b/.test(kod(m.adlar).map((x) => x.ciplak).join("\n"))) ih.push("kanal-adlari.ps1 exit kullanıyor (nokta-kaynak edeni öldürür)");
+  // (b) geçiş: çekirdeği yükler ve çağırır; elle ad, son ek, veri kökü YOK
+  if (!/KANAL_ADLARI = Join-Path \(Join-Path \(Split-Path \$PSScriptRoot -Parent\) "hizmet"\) "kanal-adlari\.ps1"/.test(m.gecis) || !kod(m.gecis).some((x) => DOT.test(x.kod))) ih.push("gecis.ps1 kanal-adlari.ps1'i paketteki komşusundan yüklemiyor");
+  if (!/\$E\.Adlar = KanalAdlariCoz /.test(m.gecis)) ih.push("gecis.ps1 adları KanalAdlariCoz'dan almıyor");
+  if (/\[string\]\$GuncelleyiciAdi\b/.test(m.gecis)) ih.push("gecis.ps1 -GuncelleyiciAdi parametresi geri geldi (ikinci kaynak)");
+  for (const x of kod(m.gecis)) {
+    if (/TeksERP-Guncelleyici/.test(x.kod)) ih.push(`gecis.ps1 elle güncelleyici adı (satır ${x.no})`);
+    if (/\$sonek\b|"TeksERP(\\[^"]*)?"\s*\)?\s*$|Join-Path [^\n]*"TeksERP(\\|")/.test(x.kod)) ih.push(`gecis.ps1 elle son ek/veri kökü türetimi (satır ${x.no})`);
+    if (/OsProgramData|\$E\.ProgramData/.test(x.ciplak) && !/^function OsProgramData/.test(x.ciplak.trim()) && !/KanalAdlariCoz/.test(x.ciplak)) ih.push(`gecis.ps1 ProgramData'yı çekirdek dışında kullanıyor (satır ${x.no})`);
+  }
+  if (!/function Is_HIZMET_KAYIT\(\$E\) \{\s*\n\s*\$arg = @\{[^}]*GuncellemeDizini = \$E\.GuncellemeDizini/.test(m.gecis)) ih.push("hizmet kaydına kanalın güncelleme dizini verilmiyor");
+  if (!/function Is_GUNCELLEYICI\(\$E\) \{\s*\n\s*\$arg = @\{ Kok = \$E\.Kok; HizmetAdi = \$E\.GuncelleyiciAdi; VeriDizini = \$E\.VeriKoku;/.test(m.gecis)) ih.push("güncelleyiciye kanal adı + veri kökü verilmiyor");
+  // (c)(d) setup: aynı çekirdek; kopya türetim yok
+  for (const [ad, metin] of [["kurulum.ps1", m.kurulum], ["on-olcum.ps1", m.onOlcum]] as const) {
+    if (!/^\. \(Join-Path \$PSScriptRoot "\.\.\\hizmet\\kanal-adlari\.ps1"\)\s*$/m.test(metin)) ih.push(`${ad} kanal-adlari.ps1'i yüklemiyor`);
+    if (!/KanalAdlariCoz /.test(metin)) ih.push(`${ad} KanalAdlariCoz'u çağırmıyor`);
+    for (const x of kod(metin)) if (/Guncelleyici\$sonek|DB-Backup\$sonek|mDNS\$sonek|"TeksERP-Guncelleyici|Substring\("TeksERP-Backend"\.Length\)/.test(x.kod)) ih.push(`${ad} kopya ad türetimi (satır ${x.no})`);
+  }
+  if (!/function AdlariCoz\([^)]*\) \{\s*\n\s*try \{ return \(KanalAdlariCoz /.test(m.kurulum)) ih.push("kurulum.ps1 AdlariCoz çekirdeğe delege etmiyor");
+  // (e) iki çalışma anı kapsamı: paket ($ALT_BETIKLER) — setup kiti test_kurulum_betikleri §8'de
+  if (!/\$ALT_BETIKLER = @\([^)]*"hizmet\/kanal-adlari\.ps1"/.test(m.paketle)) ih.push("paketle.ps1 $ALT_BETIKLER hizmet/kanal-adlari.ps1 taşımıyor (geçiş çalışma anında bulamaz)");
+  // (f) lisans + basılan komut bağları
+  if (!/^\s*LisansDegerlendir \$E \$r\.lisans\s*$/m.test(m.gecis) || (m.gecis.match(/OrtamGirdisi \$E/g) ?? []).length < 2) ih.push("lisans değerlendirmesi/ortak ortam girdisi bağlı değil");
+  if (!/foreach \(\$k in \$PSBoundParameters\.Keys\) \{ \$script:BAGLI\[\$k\] = \$PSBoundParameters\[\$k\] \}/.test(m.gecis) || !/UygulaKomutu \(\[ordered\]@\{ Kok = \$E\.Kok; Paket = \$E\.Zip \}\)/.test(m.gecis)) ih.push("kurunun bastığı komut bağlı parametrelerden üretilmiyor");
+  return ih;
+}
+function kanalStatik(): void {
+  console.log("\n§4 kanal kimliği (statik): adlar tek kaynak · lisans · basılan komut");
+  const m: KanalMetinleri = { gecis: readFileSync(GECIS, "utf8"), kurulum: readFileSync(KURULUM, "utf8"), onOlcum: readFileSync(ON_OLCUM, "utf8"), adlar: readFileSync(KANAL_ADLARI, "utf8"), paketle: readFileSync(PAKETLE, "utf8") };
+  for (const k of Object.keys(m) as Array<keyof KanalMetinleri>) m[k] = m[k].replace(/\r\n/g, "\n");
+  const ih = kanalIhlalleri(m);
+  check("§4a ⭐ geçiş ve setup adları AYNI çekirdekten (kanal-adlari.ps1 KanalAdlariCoz): geçişte elle ad/son ek/veri kökü yok, -GuncelleyiciAdi yok, güncelleyiciye veri kökü + hizmete güncelleme dizini, paket kapsamında",
+    ih.length === 0, ih.join(" | ") || "temiz");
+  const sondalar: Array<[string, keyof KanalMetinleri, string, string]> = [
+    ["geçişe elle 'TeksERP-Guncelleyici' literali", "gecis", "$E.GuncelleyiciAdi = [string]$E.Adlar.guncelleyici", '$E.GuncelleyiciAdi = "TeksERP-Guncelleyici"'],
+    ["geçişte veri kökü elle (ProgramData\\TeksERP)", "gecis", "  $pd = $E.VeriKoku\n", '  $pd = Join-Path (OsProgramData) "TeksERP"\n'],
+    ["-GuncelleyiciAdi parametresi geri geldi", "gecis", "  [string]$HizmetAdi,\n", '  [string]$HizmetAdi,\n  [string]$GuncelleyiciAdi = "TeksERP-Guncelleyici",\n'],
+    ["güncelleyiciye veri kökü verilmiyor", "gecis", "VeriDizini = $E.VeriKoku; ", ""],
+    ["setup AdlariCoz kopya türetime döndü", "kurulum", "  try { return (KanalAdlariCoz ", '  $x = "TeksERP-Guncelleyici$sonek"\n  try { return (KanalAdlariCoz '],
+    ["paket kanal-adlari.ps1 taşımıyor", "paketle", '"hizmet/kanal-adlari.ps1", ', ""],
+  ];
+  for (const [ad, alan, eski, yeni] of sondalar) {
+    const kopya = { ...m, [alan]: m[alan].replace(eski, yeni) };
+    const uygulandi = kopya[alan] !== m[alan];
+    const ih2 = uygulandi ? kanalIhlalleri(kopya) : [];
+    check(`§4 sonda: ${ad} → kırmızı`, uygulandi && ih2.length > 0, uygulandi ? ih2.slice(0, 2).join(" | ") : "MUTASYON UYGULANMADI");
+  }
+}
+
 // --- §3 harness ---------------------------------------------------------------------------------------
 interface Kos { kod: number | null; cikti: string }
-function harness(taban: string, kip: string, ek: string[] = []): Kos {
-  const r = spawnSync("pwsh", ["-NoProfile", "-NonInteractive", "-File", HARNESS, "-Script", GECIS, "-Taban", taban, "-Kip", kip, ...ek], { encoding: "utf8", timeout: 180_000 });
+function harness(taban: string, kip: string, ek: string[] = [], betik = GECIS): Kos {
+  const r = spawnSync("pwsh", ["-NoProfile", "-NonInteractive", "-File", HARNESS, "-Script", betik, "-Taban", taban, "-Kip", kip, ...ek], { encoding: "utf8", timeout: 180_000 });
   return { kod: r.status, cikti: `${r.stdout ?? ""}${r.stderr ?? ""}` };
 }
 function sahte(taban: string): {
@@ -507,6 +577,42 @@ function pm2LayoutGeriMi(taban: string): string[] {
   if (!existsSync(join(kok, "app", "dist", "server.js")) || !existsSync(join(kok, "rclone.conf"))) ih.push("app\\ ya da rclone.conf yerinde değil");
   return ih;
 }
+/** Kurunun bastığı "Uygulamak icin" komutunu (-File "<betik>" sonrası) parametre nesnesine ayırır; yoksa null. */
+function komutAyristir(cikti: string): Record<string, string | boolean> | null {
+  const satir = cikti.split("\n").map((x) => x.trim()).find((x) => /^powershell .* -File "[^"]+" .*-Uygula -Onay \d+ -PlanOzeti [0-9a-f]{12}$/.test(x));
+  if (!satir) return null;
+  const parca = [...satir.replace(/^.*? -File "[^"]+" /, "").matchAll(/"([^"]*)"|(\S+)/g)].map((m) => m[1] ?? m[2]!);
+  const p: Record<string, string | boolean> = {};
+  for (let i = 0; i < parca.length; i++) {
+    const t = parca[i]!;
+    if (!t.startsWith("-")) return null;
+    const sonraki = parca[i + 1];
+    if (sonraki !== undefined && !sonraki.startsWith("-")) { p[t.slice(1)] = sonraki; i++; } else p[t.slice(1)] = true;
+  }
+  return p;
+}
+/** ② uyuşmazlık: testfabrika paketi (hazırlık satıcısı) + satırsız .env (varsayılan = üretim) → kuru uyarır, uygula DURUR. */
+function lisansDurdurIhlalleri(taban: string, betik = GECIS): string[] {
+  const ih: string[] = [];
+  const k = harness(taban, "kuru", [], betik);
+  const p = planOku(k.cikti);
+  if (k.kod !== 0 || !p || !/lisans sunucusu kanal kaydiyla UYUSMUYOR: beklenen https:\/\/lisans-test\.etkiliyazilim\.com/.test(k.cikti) || !/UYGULA bu haliyle DURUR/.test(k.cikti)) ih.push(`kuru uyarmadı (kod ${k.kod})`);
+  const u = harness(taban, "uygula", ["-Onay", String(p?.n ?? 0), "-PlanOzeti", p?.ozet ?? ""], betik);
+  if (u.kod !== 1 || existsSync(join(taban, "kok", "gecis")) || existsSync(join(taban, "kok", "surumler")) || !/ENGELLER - HICBIR SEYE DOKUNULMADI/.test(u.cikti)) ih.push(`uygula durmadı (kod ${u.kod})`);
+  return ih;
+}
+/** ③ prova makinesi: kuru -ProvaKabul -PaketOzeti -PgHizmeti → basılan komut aynen → uygula ENGEL'siz. */
+function komutIhlalleri(taban: string, betik = GECIS): string[] {
+  const ih: string[] = [];
+  const oz = createHash("sha256").update(readFileSync(join(taban, "tekserp-backend-2.14.0.zip"))).digest("hex");
+  const k = harness(taban, "kuru", ["-EkJson", JSON.stringify({ ProvaKabul: true, PaketOzeti: oz, PgHizmeti: "postgresql-tekserp" })], betik);
+  const p = komutAyristir(k.cikti);
+  if (k.kod !== 0 || !p) return [`kuru plan/komut basmadı (kod ${k.kod})`];
+  for (const a of ["ProvaKabul", "PaketOzeti", "PgHizmeti", "Kok", "Paket", "Uygula", "Onay", "PlanOzeti"]) if (!(a in p)) ih.push(`basılan komutta -${a} yok`);
+  const u = harness(taban, "ham", ["-EkJson", JSON.stringify(p)], betik);
+  if ((u.kod !== 0 && u.kod !== 3) || /ENGEL|HICBIR SEYE DOKUNULMADI/.test(u.cikti) || !/^BASARILI/.test(String(gunluk(taban).find((x) => x.olay === "SONUC")?.veri?.sonuc))) ih.push(`basılan komut uygulanamadı (kod ${u.kod})`);
+  return ih;
+}
 function senaryolar(): void {
   console.log("\n§3 sahte-Windows harness (gerçek akış, Os* sarmalayıcıları sahte)");
   const pw = spawnSync("pwsh", ["-NoProfile", "-NonInteractive", "-Command", "$PSVersionTable.PSVersion.Major"], { encoding: "utf8", timeout: 60_000 });
@@ -533,7 +639,7 @@ function senaryolar(): void {
     const c3 = cagrilar(a);
     const idx = (re: RegExp) => c3.findIndex((x) => re.test(x));
     const sira = [idx(/^betik backend-hizmeti\.ps1 .*-YalnizIskelet/), idx(/^pm2 stop tekserp-backend-yeni$/), idx(/^pg_dump$/), idx(/^gorev kapat TeksERP-Backend-Boot$/),
-      idx(/^betik backend-hizmeti\.ps1 .*-PgHizmeti=postgresql-tekserp -Uygula$/), idx(/^hizmet baslat TeksERP-Backend --dogrulama$/), idx(/^hizmet baslat TeksERP-Backend $/), idx(/^pm2 kill$/), idx(/^betik guncelleyici-hizmeti\.ps1 .*-Uygula$/)];
+      idx(/^betik backend-hizmeti\.ps1 .*-PgHizmeti=postgresql-tekserp -Uygula$/), idx(/^hizmet baslat TeksERP-Backend --dogrulama$/), idx(/^hizmet baslat TeksERP-Backend $/), idx(/^pm2 kill$/), idx(/^betik guncelleyici-hizmeti\.ps1 .*-Uygula( |$)/)];
     const g3 = gunluk(a);
     const sonuc3 = g3.find((x) => x.olay === "SONUC")?.veri?.sonuc;
     check("§3c ⭐ uygula: kalem sırası (iskelet → pm2 stop → yedek → açılış kapat → kayıt+ACL → doğrulama → başlat → pm2 kill → güncelleyici)",
@@ -623,6 +729,55 @@ function senaryolar(): void {
       tu.kod === 0 && !!arsiv && ["app", "pm2", "pm2-home", "pm2-boot.cmd"].every((x) => existsSync(join(arsiv, x))) && !existsSync(join(e, "kok", "app")) &&
         !sahte(e).gorevler.some((g) => g.Ad === "TeksERP-Backend-Boot") && ge.kod === 1 && /TAMAMLANMIS/.test(ge.cikti),
       `kod ${tu.kod} · arşiv ${arsiv ? "var" : "yok"} · geri al ${ge.kod}`);
+    // F — §4 kanal kimliği: adnansahin (A) soneksiz + lisans varsayılan = kanal → .env'e satır YOK
+    const envA = readFileSync(join(a, "kok", "app", ".env"), "utf8");
+    check("§4b adnansahin (A): adlar soneksiz (TeksERP-Guncelleyici, %ProgramData%\\TeksERP), lisans satıcısı = varsayılan → yapilandirma\\.env'e LICENSE_SERVER_URL / TEKSERP_GUNCELLEME_DIZINI YAZILMADI",
+      /adlar \(kanal adnansahin\): backend TeksERP-Backend \| guncelleyici TeksERP-Guncelleyici \| veri .*programdata[\\/]TeksERP$/m.test(k1.cikti) && /lisans sunucusu: https:\/\/lisans\.etkiliyazilim\.com \(varsayilan\) = kanal adnansahin kaydi/.test(k1.cikti) &&
+        !/LICENSE_SERVER_URL|TEKSERP_GUNCELLEME_DIZINI/.test(env3) && !/LICENSE_SERVER_URL/.test(envA) && cagrilar(a).some((x) => /^betik guncelleyici-hizmeti\.ps1 .*-VeriDizini=.*programdata[\\/]TeksERP$/.test(x)));
+    // G — testfabrika soneki: adlar + veri kökü + lisans uyuşmazlığı (kuru uyarır, uygula durur, -LisansSunucusuYaz yazar, -GeriAl geri alır)
+    const tf = yeni("testfabrika", "testfabrika");
+    const ihL = lisansDurdurIhlalleri(tf);
+    check("§4c ⭐ lisans satıcısı kanal kaydıyla UYUŞMUYOR (testfabrika: beklenen lisans-test, .env'de satır yok → varsayılan üretim): kuru UYARIR (çıkış 0), uygula DURUR (çıkış 1, hiçbir şeye dokunulmadı)", ihL.length === 0, ihL.join(" | ") || "temiz");
+    const kt = harness(tf, "kuru", ["-EkJson", JSON.stringify({ LisansSunucusuYaz: true })]);
+    const ptf = komutAyristir(kt.cikti);
+    const ut = ptf ? harness(tf, "ham", ["-EkJson", JSON.stringify(ptf)]) : { kod: -1, cikti: "" };
+    const st = sahte(tf);
+    const envT = existsSync(join(tf, "kok", "yapilandirma", ".env")) ? readFileSync(join(tf, "kok", "yapilandirma", ".env"), "utf8") : "";
+    const pdt = join(tf, "programdata");
+    const ct = cagrilar(tf);
+    check("§4d ⭐ testfabrika soneki (kanal-adlari.ps1): TeksERP-Backend-testfabrika + TeksERP-Guncelleyici-testfabrika çalışıyor, güncelleyici veri kökü %ProgramData%\\TeksERP-testfabrika (durum.json orada), backend'e aynı güncelleme dizini (.env + kayıt), soneksiz TeksERP-Guncelleyici YOK",
+      (ut.kod === 0 || ut.kod === 3) && !!ptf?.LisansSunucusuYaz && st.hizmetler.find((h) => h.Ad === "TeksERP-Backend-testfabrika")?.Durum === "Running" &&
+        st.hizmetler.find((h) => h.Ad === "TeksERP-Guncelleyici-testfabrika")?.Durum === "Running" && !st.hizmetler.some((h) => h.Ad === "TeksERP-Guncelleyici") &&
+        existsSync(join(pdt, "TeksERP-testfabrika", "guncelleme", "durum", "durum.json")) && !existsSync(join(pdt, "TeksERP")) &&
+        envT.includes(`TEKSERP_GUNCELLEME_DIZINI=${join(pdt, "TeksERP-testfabrika", "guncelleme")}`) &&
+        ct.some((x) => /^betik guncelleyici-hizmeti\.ps1 .*-HizmetAdi=TeksERP-Guncelleyici-testfabrika .*-VeriDizini=.*TeksERP-testfabrika$/.test(x)) &&
+        ct.some((x) => /^betik backend-hizmeti\.ps1 .*-GuncellemeDizini=.*TeksERP-testfabrika[\\/]guncelleme .*-YalnizIskelet/.test(x)),
+      `kod ${ut.kod} · komut ${ptf ? "ayrıştı" : "YOK"}`);
+    check("§4e ⭐ -LisansSunucusuYaz: plan kalemi + yapilandirma\\.env LICENSE_SERVER_URL=https://lisans-test.etkiliyazilim.com; app\\.env DOKUNULMADI",
+      /LICENSE_SERVER_URL=https:\/\/lisans-test\.etkiliyazilim\.com \(kanal kaydi\)/.test(kt.cikti) && /^LICENSE_SERVER_URL=https:\/\/lisans-test\.etkiliyazilim\.com$/m.test(envT) &&
+        !/LICENSE_SERVER_URL/.test(readFileSync(join(tf, "kok", "app", ".env"), "utf8")), envT ? "" : "yapilandirma\\.env yok");
+    const pgt = /GERI ALMA PLANI \((\d+) kalem/.exec(harness(tf, "gerial-kuru").cikti);
+    const gt = harness(tf, "gerial", ["-Onay", pgt?.[1] ?? "0"]);
+    check("§4f -GeriAl (testfabrika): yazılan lisans satırı ve kanal güncelleyicisi gider — yapilandirma\\.env karantinada, TeksERP-Guncelleyici-testfabrika kaldırıldı",
+      gt.kod === 0 && !existsSync(join(tf, "kok", "yapilandirma")) && !sahte(tf).hizmetler.some((h) => h.Ad.startsWith("TeksERP-")), `kod ${gt.kod}`);
+    // H — basılan komut (prova makinesi): kopyala-yapıştır aynı planı ENGEL'siz uygular
+    const pv = yeni("prova", "prova");
+    const ihK = komutIhlalleri(pv);
+    check("§4g ⭐ kurunun bastığı komut -ProvaKabul · -PaketOzeti · -PgHizmeti'yi AYNEN taşır; ayrıştırılıp verilince uygula ENGEL'siz BASARILI", ihK.length === 0, ihK.join(" | ") || "temiz");
+    // §4 harness sondaları: bozulmuş gecis.ps1 kopyası gerçek akışta
+    const gecisMetin = readFileSync(GECIS, "utf8");
+    const hSondalar: Array<[string, string, string, string, (t: string, b: string) => string[]]> = [
+      ["uyuşmazlıkta uygula durmuyor", 'if ($Uygula) { Engel $m } else { Uyar "$m. UYGULA bu haliyle DURUR." }', 'Uyar "$m. UYGULA bu haliyle DURUR."', "testfabrika", lisansDurdurIhlalleri],
+      ["basılan komut -ProvaKabul'ü düşürüyor", '$script:KIP_ANAHTARLARI = @("Uygula", "Onay", "PlanOzeti", "GeriAl", "Tamamla")', '$script:KIP_ANAHTARLARI = @("Uygula", "Onay", "PlanOzeti", "GeriAl", "Tamamla", "ProvaKabul")', "prova", komutIhlalleri],
+    ];
+    for (const [ad, eski, yeni2, deg, fn] of hSondalar) {
+      const bozuk = gecisMetin.replace(eski, yeni2);
+      const t = yeni(`sonda-${deg}`, deg);
+      const b = join(t, "gecis-bozuk.ps1");
+      writeFileSync(b, bozuk);
+      const ih2 = bozuk !== gecisMetin ? fn(t, b) : [];
+      check(`§4 sonda (harness): ${ad} → kırmızı`, bozuk !== gecisMetin && ih2.length > 0, bozuk !== gecisMetin ? ih2.join(" | ") : "MUTASYON UYGULANMADI");
+    }
   } catch (err) {
     check("§3 harness koşturulabildi", false, String((err as Error).message).slice(0, 300));
   } finally {
@@ -634,6 +789,7 @@ function main(): void {
   console.log("=== pm2 → Windows hizmeti geçişi (D6) ===\n");
   yardimci();
   gecisStatik();
+  kanalStatik();
   senaryolar();
   console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız${defter.ozetEki()} ===`);
   process.exit(fail > 0 ? 1 : 0);

@@ -14,7 +14,8 @@
 //      çalıştırılabilir her girdi imzalı kapsamda — beyanlı istisnalar dışında
 //   §5 hizmet ikilileri OLÇÜLEREK girer: yoksa DUR · MZ/PE · x64 · TEST çapası (test-anchor) RED · künye ·
 //      güncelleyicinin çapa kipi = paketin (bayt kodu künyesi `guvenCapasi`, G3)
-//   §6 PAKET.json `backendHizmetAdi` kanal kaydından (kanal-kapisi TEKSERP_HIZMET_ADI) · `hizmetIkilileri`
+//   §6 PAKET.json `backendHizmetAdi` kanal kaydından (kanal-kapisi TEKSERP_HIZMET_ADI) · `backendLisansSunucusu` +
+//      `lisansSunucusuVarsayilan` (TEKSERP_LISANS_*; yoksa Fail) · `hizmetIkilileri`
 //   §7 CI (korumali-paket.yml) win-x64 kolunda iki ikiliyi test çapasız, bayt kodunun çapa KİPİYLE derler (G3:
 //      hazırlık → `hazirlik-capasi`, künye `capaKipi` ölçülür) ve yapıta koyar
 //   §8 gerçek imza kapsamı işlevi (`packageScope` + `listScopedFiles`) sahte bir paket ağacında
@@ -46,7 +47,7 @@ function check(label: string, ok: boolean, detay = ""): void {
 }
 
 /** D6'nın paket için ZORUNLU tuttuğu alt dizin betikleri (yönetici kararı 2026-10-01). */
-const D6_ZORUNLU = ["hizmet/backend-hizmeti.ps1", "hizmet/guncelleyici-hizmeti.ps1", "gecis/gecis.ps1", "gecis/gecis-yardimci.cjs"];
+const D6_ZORUNLU = ["hizmet/backend-hizmeti.ps1", "hizmet/guncelleyici-hizmeti.ps1", "hizmet/kanal-adlari.ps1", "gecis/gecis.ps1", "gecis/gecis-yardimci.cjs"];
 /** $stage'e kopyalanan ve listelerin DIŞINDA kalan bilinen girdiler (paketin kendi derlemesi). */
 const BILINEN_GIRDILER = ["dist", "prisma", "runtime", "native", "public", "assets", "package.json", "package-lock.json", "ecosystem.config.js", "prisma.config.js"];
 /**
@@ -192,6 +193,10 @@ function olc(d: Dosyalar): Olcum {
   if (!/^\s*backendHizmetAdi\s*=\s*\$backendHizmet\s*$/m.test(paketle)) k("§6", "PAKET.json backendHizmetAdi yazılmıyor");
   if (!/\$satir -cmatch '\^TEKSERP_HIZMET_ADI=\(\.\+\)\$'\) \{ \$backendHizmet = \$Matches\[1\] \}/.test(paketle)) k("§6", "backendHizmetAdi kanal kapısının TEKSERP_HIZMET_ADI çıktısından okunmuyor");
   if (!/^\s*hizmetIkilileri\s*=\s*\$hizmetIkilileri\s*$/m.test(paketle)) k("§6", "PAKET.json hizmetIkilileri yazılmıyor");
+  // Lisans satıcısı kanal kaydından + derlemenin varsayılanı (geçiş kurulumun etkin LICENSE_SERVER_URL'sini bunlarla ölçer).
+  if (!/^\s*backendLisansSunucusu\s*=\s*\$backendLisans\s*$/m.test(paketle) || !/^\s*lisansSunucusuVarsayilan\s*=\s*\$lisansVarsayilan\s*$/m.test(paketle)) k("§6", "PAKET.json lisans satıcısı (backendLisansSunucusu/lisansSunucusuVarsayilan) yazılmıyor");
+  if (!/\$satir -cmatch '\^TEKSERP_LISANS_SUNUCUSU=\(\.\+\)\$'\) \{ \$backendLisans = \$Matches\[1\] \}/.test(paketle) || !/\$satir -cmatch '\^TEKSERP_LISANS_VARSAYILAN=\(\.\+\)\$'\) \{ \$lisansVarsayilan = \$Matches\[1\] \}/.test(paketle) ||
+    !/if \(-not \$backendLisans -or -not \$lisansVarsayilan\) \{ Fail /.test(paketle)) k("§6", "lisans satıcısı kanal kapısının TEKSERP_LISANS_* çıktısından okunmuyor ya da yoksa paketleme durmuyor");
   if (!/TEKSERP_HIZMET_ADI:\s*kanal\.backend\.hizmetAdi/.test(d[KANALLAR_LIB]!)) k("§6", "kanal-kapisi backend-paketle TEKSERP_HIZMET_ADI vermiyor (scripts/lib/kanallar.mjs)");
 
   // §7
@@ -256,6 +261,8 @@ function sondalar(taban: Dosyalar): void {
     ["N8 TEST çapası kapısı silindi → KIRMIZI (§5)", "kirmizi", metin(PAKETLE, 'Contains("TEKSERP_TEST_CAPASI")', 'Contains("YOK_BOYLE_BIR_SEY")'), "§5"],
     ["N9 ikili yoksa DUR kapısı gevşedi → KIRMIZI (§5)", "kirmizi", metin(PAKETLE, /if \(-not \(Test-Path -LiteralPath \$yol\)\) \{\s*\n(\s*)Fail /, "if (-not (Test-Path -LiteralPath $yol)) {\n$1Write-Host "), "§5"],
     ["N10 x64 ölçümü silindi → KIRMIZI (§5)", "kirmizi", metin(PAKETLE, "-ne 0x8664) { Fail ", "-ne 0x8664) { Write-Host "), "§5"],
+    ["N11b PAKET.json backendLisansSunucusu silindi → KIRMIZI (§6)", "kirmizi", metin(PAKETLE, /^\s*backendLisansSunucusu\s*=\s*\$backendLisans\s*$/m, ""), "§6"],
+    ["N11c kanal kapısı lisans satıcısını vermeyince paketleme sürüyor → KIRMIZI (§6)", "kirmizi", metin(PAKETLE, "if (-not $backendLisans -or -not $lisansVarsayilan) { Fail ", "if ($false) { Fail "), "§6"],
     ["N11 PAKET.json backendHizmetAdi silindi → KIRMIZI (§6)", "kirmizi", metin(PAKETLE, /^\s*backendHizmetAdi\s*=\s*\$backendHizmet\s*$/m, ""), "§6"],
     ["N12 CI ikili derlemesi kalktı → KIRMIZI (§7)", "kirmizi", metin(KORUMALI_CI, "cargo build --release --locked -p tekserp-guncelleyici -p tekserp-hizmet", "echo atlandi"), "§7"],
     ["N13 CI test-anchor ile derliyor → KIRMIZI (§7)", "kirmizi", metin(KORUMALI_CI, "cargo build --release --locked -p tekserp-guncelleyici -p tekserp-hizmet", "cargo build --release --locked -p tekserp-guncelleyici -p tekserp-hizmet --features tekserp-guncelleyici/test-anchor"), "§7"],

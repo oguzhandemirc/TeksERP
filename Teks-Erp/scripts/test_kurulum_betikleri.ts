@@ -332,6 +332,8 @@ function olc(k: Kaynaklar): Bulgular {
   const kaynaklar = [...k.iss.matchAll(/^Source: "([^"]+)"; DestDir: "([^"]+)"/gm)].map((m) => ({ src: m[1]!, dst: m[2]! }));
   const gerekli = new Set<string>(["kurulum.ps1", "kurulum-ortak.ps1", "on-olcum.ps1", "kaldir.ps1", "cevap-semasi.json", "ornek-cevap.json", "..\\pg\\pg-sablon.mjs"]);
   for (const t of [k.kurulum, k.onOlcum]) for (const m of t.matchAll(/Join-Path \$PG_DIZINI "([^"]+)"/g)) gerekli.add(`..\\pg\\${m[1]}`);
+  // Nokta-kaynak edilen komşu betikler (kanal adları TEK kaynak hizmet\kanal-adlari.ps1 - geçiş aynısını paketten okur).
+  for (const t of [k.kurulum, k.onOlcum]) for (const m of t.matchAll(/^\. \(Join-Path \$PSScriptRoot "\.\.\\(hizmet\\[^"]+)"\)/gm)) gerekli.add(`..\\${m[1]}`);
   try {
     const pgo = JSON.parse(k.pgOrnegi) as { yapilandirma: { confSablonu: string; hbaSablonu: string } };
     for (const r of [pgo.yapilandirma.confSablonu, pgo.yapilandirma.hbaSablonu]) gerekli.add(`..\\pg\\${r.replace(/^deploy\/pg\//, "").replace(/\//g, "\\")}`);
@@ -342,7 +344,7 @@ function olc(k: Kaynaklar): Bulgular {
   for (const g of gerekli) if (!kaynaklar.some((x) => x.src === g)) ekle("§8", `setup.exe içeriğinde yok: ${g}`);
   for (const x of kaynaklar) {
     if (x.src.startsWith("{#")) continue;
-    const bek = x.src.startsWith("..\\pg\\lib\\") ? "{app}\\kurulum\\deploy\\pg\\lib" : x.src.startsWith("..\\pg\\") ? "{app}\\kurulum\\deploy\\pg" : "{app}\\kurulum\\deploy\\kurulum";
+    const bek = x.src.startsWith("..\\pg\\lib\\") ? "{app}\\kurulum\\deploy\\pg\\lib" : x.src.startsWith("..\\pg\\") ? "{app}\\kurulum\\deploy\\pg" : x.src.startsWith("..\\hizmet\\") ? "{app}\\kurulum\\deploy\\hizmet" : "{app}\\kurulum\\deploy\\kurulum";
     if (x.dst !== bek) ekle("§8", `${x.src} → ${x.dst} (depo düzeninin aynası ${bek} olmalı: pg-sablon.mjs KOK'u ve $PSScriptRoot\\..\\pg buna bağlı)`);
   }
   if (!/^Source: "\{#DogrulayiciExe\}"; DestDir: "\{app\}\\kurulum\\araclar"; DestName: "tekserp-guncelleyici\.exe"/m.test(k.iss)) ekle("§8", "kurulumun KENDİ doğrulayıcısı {app}\\kurulum\\araclar\\tekserp-guncelleyici.exe değil");
@@ -548,6 +550,7 @@ if (eksik.length === 0) {
     { ad: "S39 satıcı hesabı yapılacağı ölçülmeden", dosya: "kurulum", eski: '  if ($saticiVar) { Ok "satici (superadmin) hesabi var" }\n  elseif (', yeni: "  if (", bolum: "§11", parca: "satıcı hesabı 'yapılacak'" },
     { ad: "S40 lisans yapılacağı etkinlik ölçülmeden", dosya: "kurulum", eski: '  else { $acik += "lisans:', yeni: '  $acik += "lisans:', bolum: "§11", parca: "lisans 'yapılacak'" },
     { ad: "S41 satıcı hesabı aracı lisans deposunu ortamdan almıyor (PIN başka anahtarla özetlenir)", dosya: "kurulum", eski: `; LICENSE_DIR = (Join-Path $kok "lisans") }`, yeni: " }", bolum: "§3", parca: "lisans deposunu hizmetle aynı yerden" },
+    { ad: "S42 setup içeriğinden kanal-adlari.ps1 düşmüş (AdlariCoz çekirdeği)", dosya: "iss", eski: `Source: "..\\hizmet\\kanal-adlari.ps1"; DestDir: "{app}\\kurulum\\deploy\\hizmet"; Flags: ignoreversion\n`, yeni: "", bolum: "§8", parca: "kanal-adlari.ps1" },
     { ad: "S21 CI boru sonucunu ölçmüyor", dosya: "is", eski: `if ($r -notmatch "(?m)^BORU=TAMAM\\r?$")`, yeni: `if ($false)`, bolum: "§9", parca: "boru öz-sınaması" },
     { ad: "S22 CI test çapalı doğrulayıcıyı kabul ediyor", dosya: "is", eski: `$k.testCapasi -ne $false`, yeni: `$false`, bolum: "§9", parca: "doğrulayıcı üretim derlemesi" },
   ];

@@ -8,6 +8,7 @@
 // NE ÖLÇER (hepsi DİNLENME durumu, yani commit edilen ağaç):
 //   §1 kayıt defteri: kapalı şema · kod biçimi + önek-bağımsızlık · İKİLİ FARK
 //      (iki kanal hiçbir dağıtım kimliğini paylaşamaz) · S9 görünür etiket
+//   §1b üretim güven çapalı kanalın backend.lisansSunucusu = backend varsayılanı (vendor-url.ts DEFAULT_LICENSE_SERVER_URL)
 //   §2 DONMUŞ kimlik: sahadaki üretim kanalının kimliği literal olarak burada;
 //      değişimi GÖÇTÜR (yeni uygulama · kayıp userData · kopan güncelleme kanalı)
 //   §3 türetilmiş `yayin` alanları koddaki sabitlerle birebir (yayın kökü, VDS
@@ -44,6 +45,7 @@ import {
   Olculemedi,
   PANEL_SABIT_DOSYALAR,
   TABLET_SABIT_DOSYALAR,
+  VENDOR_URL_REL,
   YAYIN_ANAHTARLARI,
   YAYIN_YOLU_DESENLERI,
   dosyalariOku,
@@ -55,6 +57,7 @@ import {
   panelSabitKimlikFarki,
   tabletIsaretciFarki,
   tabletSabitKimlikFarki,
+  varsayilanLisansSunucusu,
 } from './lib/kanallar.mjs';
 
 /**
@@ -117,7 +120,7 @@ const KOD_KAYNAKLARI = [
   'deploy/mobil-yayinla.mjs',
 ];
 const KAPI_KANCASI = 'scripts/hooks/pre-commit.mjs';
-const OKUNAN = [...new Set([KAYIT_REL, KAPI_CLI, KAPI_KANCASI, ...PANEL_SABIT_DOSYALAR, ...TABLET_SABIT_DOSYALAR, ...KOD_KAYNAKLARI, ...Object.keys(YAYIN_YOLLARI)])];
+const OKUNAN = [...new Set([KAYIT_REL, KAPI_CLI, KAPI_KANCASI, VENDOR_URL_REL, ...PANEL_SABIT_DOSYALAR, ...TABLET_SABIT_DOSYALAR, ...KOD_KAYNAKLARI, ...Object.keys(YAYIN_YOLLARI)])];
 
 /** Diskte yayın yolu keşfi — desen: deploy/ kökünde yayinla|paketle · mobil/scripts'te yayinla|apk. */
 function yayinDosyalariniBul(kok = KOK) {
@@ -226,6 +229,18 @@ function olc(d, yayinDosyalari, yayinYollari = YAYIN_YOLLARI) {
   // §1
   kirmizi.push(...kayitHatalari(kayit).map((h) => `§1 ${h}`));
   const kanallar = kayit && typeof kayit.kanallar === 'object' && kayit.kanallar ? kayit.kanallar : {};
+  // §1b üretim çapası = backend'in VARSAYILAN satıcısı (vendor-url.ts TEK kaynak): satırı olmayan üretim kurulumu
+  // kanalın satıcısına gider; hazırlık satıcısı varsayılan olamaz (kayitHatalari iki çapayı ayırır).
+  const lisansVarsayilan = varsayilanLisansSunucusu(d[VENDOR_URL_REL]);
+  if (!lisansVarsayilan) olculemedi.push(`${VENDOR_URL_REL} DEFAULT_LICENSE_SERVER_URL okunamadı (ad/biçim değişti?)`);
+  else {
+    for (const [kod, k] of Object.entries(kanallar)) {
+      const b = k?.backend;
+      if (b?.guvenCapasi === 'uretim' && typeof b.lisansSunucusu === 'string' && b.lisansSunucusu !== lisansVarsayilan) {
+        kirmizi.push(`§1b ${kod}: üretim çapalı kanalın lisans satıcısı "${b.lisansSunucusu}" backend varsayılanı ("${lisansVarsayilan}", ${VENDOR_URL_REL}) değil`);
+      }
+    }
+  }
 
   // §2
   for (const [kod, alanlar] of Object.entries(DONMUS)) {
@@ -374,7 +389,8 @@ function sondalar(taban, tabanYollar) {
     k.tablet = { ...k.tablet, androidPaket: `com.ornek.${kod}`, gorunenAd: `Tablet ${kod}`,
       erpAdresi: `http://10.9.9.${kod.length}:4000/api`, otaSertifika: `keystore/ota-certs-${kod}/certificate.pem` };
     // Backend kimliği de AYRIK (urunAdi/pm2Ad her kanalda benzersiz — Faz 2b).
-    k.backend = { urunAdi: `Urun ${kod} Backend`, pm2Ad: `tekserp-backend-${kod}`, hizmetAdi: `TeksERP-Backend-${kod}`, guvenCapasi: tur === 'uretim' ? 'uretim' : 'hazirlik' };
+    k.backend = { urunAdi: `Urun ${kod} Backend`, pm2Ad: `tekserp-backend-${kod}`, hizmetAdi: `TeksERP-Backend-${kod}`, guvenCapasi: tur === 'uretim' ? 'uretim' : 'hazirlik',
+      lisansSunucusu: o.kanallar[tur === 'uretim' ? 'adnansahin' : 'testfabrika'].backend.lisansSunucusu };
     o.kanallar[kod] = k;
   };
   const kayitta = (fn) => (d) => jd(d, KAYIT_REL, fn);
@@ -460,7 +476,13 @@ function sondalar(taban, tabanYollar) {
     ['N58 üretim kanalı hazırlık güven çapasına bağlandı → KIRMIZI (hazırlık kökü üretim paketine giremez)', 'kirmizi', kayitta((o) => { as(o).backend.guvenCapasi = 'hazirlik'; }), 'guvenCapasi'],
     ['N59 tanınmayan güven çapası kipi (test) → KIRMIZI (fail-closed)', 'kirmizi', kayitta((o) => { tf(o).backend.guvenCapasi = 'test'; }), 'guvenCapasi'],
     ['N60 backend bloğunda guvenCapasi YOK → KIRMIZI (kip örtük kalmaz)', 'kirmizi', kayitta((o) => { delete df(o).backend.guvenCapasi; }), 'eksik anahtar'],
-    ['P3 aynasız hazırlık kanalı (demofabrika) HAZIRLIK satıcısına bağlanabilir → YEŞİL (hazırlık kanalında iki kip de meşru)', 'yesil', kayitta((o) => { df(o).backend.guvenCapasi = 'hazirlik'; })],
+    ['P3 aynasız hazırlık kanalı (demofabrika) HAZIRLIK satıcısına bağlanabilir → YEŞİL (hazırlık kanalında iki kip de meşru)', 'yesil', kayitta((o) => { df(o).backend.guvenCapasi = 'hazirlik'; df(o).backend.lisansSunucusu = tf(o).backend.lisansSunucusu; })],
+    ['N61 hazırlık çapalı kanal (testfabrika) ÜRETİM satıcısını gösteriyor → KIRMIZI (satıcı çapanın aynası)', 'kirmizi', kayitta((o) => { tf(o).backend.lisansSunucusu = as(o).backend.lisansSunucusu; }), 'AYNI lisans satıcısını'],
+    ['N62 üretim çapalı kanalların satıcısı backend varsayılanı değil → KIRMIZI (§1b)', 'kirmizi', kayitta((o) => { as(o).backend.lisansSunucusu = 'https://lisans2.etkiliyazilim.com'; df(o).backend.lisansSunucusu = 'https://lisans2.etkiliyazilim.com'; }), '§1b'],
+    ['N63 aynı çapada iki farklı satıcı (demofabrika) → KIRMIZI', 'kirmizi', kayitta((o) => { df(o).backend.lisansSunucusu = 'https://lisans2.etkiliyazilim.com'; }), 'farklı lisans satıcısı'],
+    ['N64 lisans satıcısı sonda / ile → KIRMIZI (biçim)', 'kirmizi', kayitta((o) => { tf(o).backend.lisansSunucusu += '/'; }), 'lisansSunucusu'],
+    ['N65 backend bloğunda lisansSunucusu YOK → KIRMIZI', 'kirmizi', kayitta((o) => { delete tf(o).backend.lisansSunucusu; }), 'eksik anahtar'],
+    ['O6 vendor-url.ts varsayılan sabitinin adı değişti → ÖLÇÜLEMEDİ', 'olculemedi', (d) => { d[VENDOR_URL_REL] = d[VENDOR_URL_REL].replace('DEFAULT_LICENSE_SERVER_URL', 'VARSAYILAN_SATICI'); }],
     ['O1 kayıt defteri bozuk JSON → ÖLÇÜLEMEDİ', 'olculemedi', (d) => { d[KAYIT_REL] = d[KAYIT_REL].slice(0, 40); }],
     ['O2 update-feed.ts UPDATE_BASE_URL adı değişti → ÖLÇÜLEMEDİ', 'olculemedi', (d) => { d['Electron/shared/update-feed.ts'] = d['Electron/shared/update-feed.ts'].replace('export const UPDATE_BASE_URL', 'export const YAYIN_KOKU_URL'); }],
     ['O3 main.ts setAppUserModelId çağrısı kalktı → ÖLÇÜLEMEDİ', 'olculemedi', (d) => { d['Electron/electron/main.ts'] = d['Electron/electron/main.ts'].replace('app.setAppUserModelId(APP_ID);', 'void 0;'); }],

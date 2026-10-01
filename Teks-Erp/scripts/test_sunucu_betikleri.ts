@@ -58,7 +58,10 @@ function check(label: string, ok: boolean, detay = ""): void {
 
 /** Fabrika/müşteri sunucusunda koşan PowerShell betikleri (geliştirme makinesinde koşan `paketle.ps1` hariç; setup.exe'nin
  *  `deploy/kurulum/` betikleri de sunucuda YÖNETİCİ olarak koşar — D5). */
-const SUNUCU_PS1 = ["deploy/kur.ps1", "deploy/ilk-kurulum.ps1", "deploy/yedekle.ps1", "deploy/uzaktan-kos.ps1", "deploy/bakim-rolu.ps1", "deploy/hizmet/backend-hizmeti.ps1", "deploy/hizmet/guncelleyici-hizmeti.ps1", "deploy/gecis/gecis.ps1", "deploy/kurulum/kurulum.ps1", "deploy/kurulum/kurulum-ortak.ps1", "deploy/kurulum/on-olcum.ps1", "deploy/kurulum/kaldir.ps1"];
+const SUNUCU_PS1 = ["deploy/kur.ps1", "deploy/ilk-kurulum.ps1", "deploy/yedekle.ps1", "deploy/uzaktan-kos.ps1", "deploy/bakim-rolu.ps1", "deploy/hizmet/backend-hizmeti.ps1", "deploy/hizmet/guncelleyici-hizmeti.ps1", "deploy/hizmet/kanal-adlari.ps1", "deploy/gecis/gecis.ps1", "deploy/kurulum/kurulum.ps1", "deploy/kurulum/kurulum-ortak.ps1", "deploy/kurulum/on-olcum.ps1", "deploy/kurulum/kaldir.ps1"];
+
+/** Körlük zemini satır alt sınırı: varsayılan 60; bilerek küçük tek-işlevli kütüphane kendi sınırını taşır. */
+const KORLUK_SATIR: Record<string, number> = { "deploy/hizmet/kanal-adlari.ps1": 25 };
 
 const YONLENDIRME = /(?:^|\s)2>(?:&1|\$null)/;
 const CIPLAK_NPM = /(?:^|[\s&(;|])npm(?=\s|$)/;
@@ -72,7 +75,7 @@ for (const yol of SUNUCU_PS1) {
   const t = psTara(readFileSync(tam, "utf8"));
   const son = t.satirlar[t.satirlar.length - 1];
   check(`§0 ${yol} tarandı (körlük zemini: satır + fonksiyon + dengeli parantez)`,
-    t.satirlar.length > 60 && t.fonksiyonlar.length >= 1 && son?.derinlik === 0,
+    t.satirlar.length > (KORLUK_SATIR[yol] ?? 60) && t.fonksiyonlar.length >= 1 && son?.derinlik === 0,
     `${t.satirlar.length} satır · ${t.fonksiyonlar.length} fonksiyon · son derinlik ${son?.derinlik}`);
 
   // §1 — yönlendirme yalnız EAP=Continue + finally'de geri koyan yardımcıda

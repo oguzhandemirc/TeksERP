@@ -23,6 +23,7 @@ param(
 )
 $ErrorActionPreference = "Stop"
 . (Join-Path $PSScriptRoot "kurulum-ortak.ps1")
+. (Join-Path $PSScriptRoot "..\hizmet\kanal-adlari.ps1")
 $PG_DIZINI = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot "..\pg"))
 $o = [ordered]@{}
 
@@ -80,13 +81,15 @@ try {
   if ($o["pgKunyeVar"] -eq 1) { $o["pgKunyeDosya"] = [IO.Path]::GetFullPath((Join-Path $Kaynak "pg.json")) }
   $o["etkiliAnahtar"] = $(if (Test-Path -LiteralPath (Join-Path $Kaynak "etkili.tkpub") -PathType Leaf) { [IO.Path]::GetFullPath((Join-Path $Kaynak "etkili.tkpub")) } else { "" })
 
-  # Adlar (kurulum.ps1 AdlariCoz ile ayni kural; burada yalniz gosterim + AppId).
-  $hizmet = if ($o["paketHizmet"]) { $o["paketHizmet"] } else { "TeksERP-Backend" }
-  $sonek = if ($hizmet -cmatch '^TeksERP-Backend(-[A-Za-z0-9][A-Za-z0-9._-]{0,63})?$') { $hizmet.Substring("TeksERP-Backend".Length) } else { "" }
+  # Adlar: hizmet\kanal-adlari.ps1 (kurulum.ps1 AdlariCoz ve gecis.ps1 ile TEK kaynak); burada yalniz gosterim + AppId.
+  # Kurala uymayan ad burada DURMAZ (kurulum.ps1 OnKosul durdurur): gosterim soneksiz adlarla.
+  try { $adlar = KanalAdlariCoz ([string]$o["paketHizmet"]) "" ([string]$pgOrnek.hizmet.ad) $env:ProgramData }
+  catch { $adlar = KanalAdlariCoz "" "" ([string]$pgOrnek.hizmet.ad) $env:ProgramData }
+  $sonek = $adlar.sonek
   $o["sonek"] = $sonek
-  $o["backendHizmeti"] = $hizmet
-  $o["guncelleyiciHizmeti"] = "TeksERP-Guncelleyici$sonek"
-  $o["pgHizmeti"] = "$($pgOrnek.hizmet.ad)$sonek"
+  $o["backendHizmeti"] = $(if ($o["paketHizmet"]) { $o["paketHizmet"] } else { $adlar.backend })
+  $o["guncelleyiciHizmeti"] = $adlar.guncelleyici
+  $o["pgHizmeti"] = $adlar.pg
 
   # Hafif kip (sihirbaz acilisi): kok, port, surucu olcumu YOK.
   if ($Hafif) { $o["hafif"] = 1 } else {
@@ -108,7 +111,7 @@ try {
       $o["oncekiHizmet"] = "$($k.adlar.backend)"
       $ApiPort = [int]$k.portlar.api
       # Gercek kurulu surum (kayit KURULUM ANININ surumudur) - eski paketle onarim degisiklikten ONCE durur.
-      $veriKoku = if ($env:ProgramData) { Join-Path $env:ProgramData "TeksERP$sonek" } else { $null }
+      $veriKoku = $adlar.veriKoku
       $ku = EnYeniSurum (KuruluSurumAdaylari $kok $veriKoku)
       if ($ku) { $o["kuruluSurum"] = $ku.surum; $o["kuruluKaynak"] = $ku.kaynak }
       # eskiPaket: "eski" = kurulu surum paketten YENI; "olculemedi" = karsilastirilamadi (ikisi de engel, sihirbaz metni).

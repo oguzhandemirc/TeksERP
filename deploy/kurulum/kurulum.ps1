@@ -49,6 +49,8 @@ param(
 )
 $ErrorActionPreference = "Stop"
 . (Join-Path $PSScriptRoot "kurulum-ortak.ps1")
+# Kanal adlari TEK kaynaktan (gecis.ps1 ayni dosyayi paketten okur): kitte ..\hizmet\kanal-adlari.ps1.
+. (Join-Path $PSScriptRoot "..\hizmet\kanal-adlari.ps1")
 
 $KURULUM_BICIMI = 1
 $PG_DIZINI = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot "..\pg"))
@@ -71,23 +73,11 @@ function CevabiYukle {
   return $r.deger
 }
 
-# Hizmet adlari kanaldan (paketin backendHizmetAdi = kanal kaydi backend.hizmetAdi): varsayilan ad ya da
-# "TeksERP-Backend-<kanal>". Son ek (-<kanal>) ikinci kanalin HER adina gecer: guncelleyici, PG, veri koku,
-# gorev, AppId (GUNCELLEYICI.md b.4.2: ayni makinede iki kanal ne hizmet ne IPC paylasir).
+# Hizmet adlari kanaldan (paketin backendHizmetAdi = kanal kaydi backend.hizmetAdi): kural ve turetim
+# TEK yerde - hizmet\kanal-adlari.ps1 KanalAdlariCoz (gecis.ps1 de onu cagirir; GUNCELLEYICI.md b.4.2).
 function AdlariCoz([string]$backendAdi, $musteri, $pgOrnek) {
-  if (-not $backendAdi) { $backendAdi = "TeksERP-Backend" }
-  if ($backendAdi -cnotmatch '^TeksERP-Backend(-[A-Za-z0-9][A-Za-z0-9._-]{0,63})?$') { Dur "backend hizmet adi kanal kuralina uymuyor: $backendAdi" }
-  $sonek = $backendAdi.Substring("TeksERP-Backend".Length)
-  if ($sonek -and $musteri -and ($sonek -cne "-$musteri")) { Dur "hizmet adi ($backendAdi) paketin imzali kanalina ($musteri) ait degil" }
-  return [ordered]@{
-    backend      = $backendAdi
-    sonek        = $sonek
-    guncelleyici = "TeksERP-Guncelleyici$sonek"
-    pg           = "$($pgOrnek.hizmet.ad)$sonek"
-    veriKoku     = Join-Path $env:ProgramData "TeksERP$sonek"
-    gorev        = "TeksERP-DB-Backup$sonek"
-    mdnsKurali   = "TeksERP mDNS$sonek"
-  }
+  try { return (KanalAdlariCoz $backendAdi ([string]$musteri) ([string]$pgOrnek.hizmet.ad) $env:ProgramData) }
+  catch { Dur $_.Exception.Message }
 }
 
 # --- Durum (asamalar arasi, SIRSIZ) ---------------------------------------------------------------

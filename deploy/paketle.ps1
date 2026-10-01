@@ -112,7 +112,7 @@ $ErrorActionPreference = "Stop"
 $KOK_BETIKLERI = @("kur.ps1", "ilk-kurulum.ps1", "yedekle.ps1", "pm2-boot.cmd", "uzaktan-kos.ps1", "bakim-rolu.ps1")
 # Alt dizindeki betikler: repo `deploy/<yol>` -> paket `<yol>`; goreli yollar ikisinde AYNI
 # (gecis\..\hizmet\ , gecis\..\yedekle.ps1). hizmet\ ve gecis\ imzali kapsamdadir.
-$ALT_BETIKLER = @("hizmet/backend-hizmeti.ps1", "hizmet/guncelleyici-hizmeti.ps1", "gecis/gecis.ps1", "gecis/gecis-yardimci.cjs")
+$ALT_BETIKLER = @("hizmet/backend-hizmeti.ps1", "hizmet/guncelleyici-hizmeti.ps1", "hizmet/kanal-adlari.ps1", "gecis/gecis.ps1", "gecis/gecis-yardimci.cjs")
 # runtime\ altina giren Rust hizmet ikilileri (yalniz KORUMALI pakette; yoksa paketleme DURUR).
 $HIZMET_IKILILERI = [ordered]@{ "tekserp-hizmet.exe" = "tekserp-hizmet"; "tekserp-guncelleyici.exe" = "tekserp-guncelleyici" }
 
@@ -218,6 +218,8 @@ Write-Host "  dal=$dal  commit=$commit"
 $backendPm2 = $null
 $backendUrun = $null
 $backendHizmet = $null
+$backendLisans = $null
+$lisansVarsayilan = $null
 if ($Musteri) {
   Write-Host ""
   Write-Host "  musteri=$Musteri (kanal kimligi kanallar.json backend blogundan)"
@@ -227,7 +229,10 @@ if ($Musteri) {
     if ($satir -cmatch '^TEKSERP_PM2_AD=(.+)$') { $backendPm2 = $Matches[1] }
     elseif ($satir -cmatch '^TEKSERP_BACKEND_URUN=(.+)$') { $backendUrun = $Matches[1] }
     elseif ($satir -cmatch '^TEKSERP_HIZMET_ADI=(.+)$') { $backendHizmet = $Matches[1] }
+    elseif ($satir -cmatch '^TEKSERP_LISANS_SUNUCUSU=(.+)$') { $backendLisans = $Matches[1] }
+    elseif ($satir -cmatch '^TEKSERP_LISANS_VARSAYILAN=(.+)$') { $lisansVarsayilan = $Matches[1] }
   }
+  if (-not $backendLisans -or -not $lisansVarsayilan) { Fail "kanal kapisi lisans satici kimligini (lisansSunucusu/varsayilan) vermedi." }
   if (-not $backendPm2 -or -not $backendUrun -or -not $backendHizmet) { Fail "kanal kapisi backend kimligini (pm2Ad/urunAdi/hizmetAdi) vermedi." }
   # Hizmet adi setup.exe'de SCM adi, olay kaynagi ve NT SERVICE\<ad> olur (GUNCELLEYICI.md §4.2 ad kurali).
   if ($backendHizmet -cnotmatch '^[A-Za-z0-9][A-Za-z0-9._-]{0,79}$') { Fail "kanal kaydinin backend.hizmetAdi gecersiz: $backendHizmet" }
@@ -654,6 +659,10 @@ $manifest = [ordered]@{
   backendPm2Ad    = $backendPm2
   # Hizmet duzeni (Dagitim v2): setup.exe backend hizmetini bu adla kaydeder (kanal kaydi backend.hizmetAdi).
   backendHizmetAdi = $backendHizmet
+  # Kanalin lisans saticisi (kanal kaydi backend.lisansSunucusu) + bu derlemenin varsayilani (vendor-url.ts):
+  # gecis.ps1 kurulumun etkin LICENSE_SERVER_URL'sini bunlarla olcer. Kanal-disi pakette null.
+  backendLisansSunucusu = $backendLisans
+  lisansSunucusuVarsayilan = $lisansVarsayilan
   # runtime\ altindaki Rust hizmet ikilileri {surum, boyut, sha256}; korumali olmayan pakette null.
   hizmetIkilileri = $hizmetIkilileri
   # Korumali paket bicimi: .jsc + runtime\node.exe tasir; kur.ps1 [1/9] onu denetler.
