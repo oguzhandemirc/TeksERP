@@ -1,10 +1,13 @@
 //! Kendini güncelleme (§10): paket `runtime\tekserp-guncelleyici.exe` taşır; backend işlemi BAŞARILI
-//! olunca daha yeni ise yan dosyaya (`.yeni.exe`) kopyalanır, künyesi sınanır, çalışan ikili
+//! olunca kurulu sürüm dizini imzalı listeyle doğrulanır, ikili yan dosyaya (`.yeni.exe`) kopyalanır ve
+//! KOPYANIN özeti imzalı listedekiyle tutmadan HİÇBİR ikili çalıştırılmaz (DAGK-3); künye kopyadan
+//! alınır, daha yeni değilse kopya silinir. Çalışan ikili
 //! `.eski.exe`ye ve yeni ikili asıl ada yeniden adlandırılır (çalışan exe yeniden adlandırılabilir),
 //! hizmet `EXIT_SELF_UPDATE` ile çıkar, SCM kurtarması yeni ikiliyle başlatır. Yeni ikili İLK iş
 //! olarak açılış sayacını artırır: doğrulanmadan 3. açılışı aşarsa `.eski.exe`yi geri koyar (A/B).
 use crate::env::Env;
 use crate::layout::Layout;
+use crate::package;
 use crate::tools;
 use crate::trust;
 use crate::version;
@@ -93,41 +96,59 @@ pub fn mark_healthy(env: &Env, layout: &Layout, own_exe: &Path, own_version: &st
     }
 }
 
-/// Paketteki ikili daha yeniyse yerleştirir; `true` = hizmet yeniden başlamalı.
-pub fn stage(env: &Env, layout: &Layout, own_exe: &Path, current_dir: &Path) -> Result<bool, String> {
-    stage_with_version(env, layout, own_exe, current_dir, env!("CARGO_PKG_VERSION"))
+/// Paketteki ikili daha yeniyse yerleştirir; `true` = hizmet yeniden başlamalı. `keys` = kurulumun
+/// PAKET anahtar kümesi (backend paketini doğrulayanla aynı).
+pub fn stage(env: &Env, layout: &Layout, own_exe: &Path, current_dir: &Path, keys: &[(String, String)]) -> Result<bool, String> {
+    stage_with_version(env, layout, own_exe, current_dir, env!("CARGO_PKG_VERSION"), keys)
 }
 
-pub fn stage_with_version(env: &Env, layout: &Layout, own_exe: &Path, current_dir: &Path, own_version: &str) -> Result<bool, String> {
+pub fn stage_with_version(
+    env: &Env,
+    layout: &Layout,
+    own_exe: &Path,
+    current_dir: &Path,
+    own_version: &str,
+    keys: &[(String, String)],
+) -> Result<bool, String> {
     let candidate = current_dir.join(contract::path::RUNTIME).join(contract::path::UPDATER_EXE);
     if !env.fs.exists(&candidate) {
         return Ok(false);
     }
-    let id = tools::identity_of(env, &candidate)?;
-    let new_version = id.get("surum").and_then(|v| v.as_str()).ok_or("künyede sürüm yok")?.to_string();
-    if id.get("ad").and_then(|v| v.as_str()) != Some("tekserp-guncelleyici") {
-        return Err("paketteki ikili güncelleyici değil".into());
+    let rel = format!("{}/{}", contract::path::RUNTIME, contract::path::UPDATER_EXE);
+    let want = package::signed_file_digest(current_dir, env.fs.as_ref(), keys, &rel)
+        .map_err(|e| format!("paketteki ikili imzalı listeyle doğrulanamadı ({}): {}", e.code, e.message))?;
+    if package::file_digest(env.fs.as_ref(), own_exe).is_ok_and(|own| own == want) {
+        return Ok(false);
     }
+    let fresh = sibling(own_exe, "yeni");
+    env.fs.copy(&candidate, &fresh).map_err(|e| format!("yeni ikili kopyalanamadı: {e}"))?;
+    // Çalıştırılacak olan KOPYA: özeti imzalı listeyle tutmadan künyesi bile alınmaz.
+    if package::file_digest(env.fs.as_ref(), &fresh).map_err(|e| e.to_string())? != want {
+        let _ = env.fs.remove_file(&fresh);
+        return Err("kopyalanan ikili imzalı listeyle uyuşmuyor".into());
+    }
+    let id = tools::identity_of(env, &fresh)?;
+    let new_version = id.get("surum").and_then(|v| v.as_str()).map(str::to_string);
+    let discard = |why: &str| -> Result<bool, String> {
+        let _ = env.fs.remove_file(&fresh);
+        Err(why.to_string())
+    };
+    if id.get("ad").and_then(|v| v.as_str()) != Some("tekserp-guncelleyici") {
+        return discard("paketteki ikili güncelleyici değil");
+    }
+    let Some(new_version) = new_version else { return discard("künyede sürüm yok") };
     if version::compare(&new_version, own_version) != Some(std::cmp::Ordering::Greater) {
+        let _ = env.fs.remove_file(&fresh);
         return Ok(false);
     }
     // Güven çapası kurulumun kimliğidir: paket yanlış kipte güncelleyici taşısa da SYSTEM ikilisi kipi değiştirmez.
     let mode = id.get("capaKipi").and_then(|v| v.as_str());
     if mode != Some(trust::ANCHOR_MODE) {
-        return Err(format!(
+        return discard(&format!(
             "paketteki güncelleyici {} çapalı, kurulu olan {} — kendini güncelleme çapa kipini DEĞİŞTİRMEZ",
             mode.unwrap_or("kipsiz"),
             trust::ANCHOR_MODE
         ));
-    }
-    let fresh = sibling(own_exe, "yeni");
-    env.fs.copy(&candidate, &fresh).map_err(|e| format!("yeni ikili kopyalanamadı: {e}"))?;
-    let check = tools::identity_of(env, &fresh)?;
-    if check.get("surum").and_then(|v| v.as_str()) != Some(new_version.as_str())
-        || check.get("capaKipi").and_then(|v| v.as_str()) != Some(trust::ANCHOR_MODE)
-    {
-        let _ = env.fs.remove_file(&fresh);
-        return Err("kopyalanan ikilinin künyesi tutmuyor".into());
     }
     let mut s = SelfState {
         durum: "HAZIRLANDI".into(),

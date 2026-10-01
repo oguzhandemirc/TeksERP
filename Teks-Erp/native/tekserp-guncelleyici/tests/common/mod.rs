@@ -84,6 +84,13 @@ pub struct CrashFs {
     pub inner: RealFs,
     pub crash: Arc<Crash>,
     pub free: AtomicU64,
+    /// Yabancı yazara açık sayılan yollar (izin ölçümü testte BENZETİLİR: Windows CI'nın geçici
+    /// dizin ACL'i ölçüme karışmasın; gerçek DACL ölçümünün kendi Windows testi var).
+    pub foreign: Mutex<Vec<PathBuf>>,
+    /// İzni ölçülemeyen yollar (ölçüm hatası).
+    pub unmeasurable: Mutex<Vec<PathBuf>>,
+    /// Kopya, doğrulama ile kopyalama arasında değişmiş gibi bir bayt fazla yazılır.
+    pub corrupt_copy: AtomicBool,
 }
 
 impl Fs for CrashFs {
@@ -145,6 +152,12 @@ impl Fs for CrashFs {
     fn free_space(&self, _p: &Path) -> std::io::Result<u64> {
         Ok(self.free.load(Ordering::SeqCst))
     }
+    fn foreign_writers(&self, p: &Path) -> std::io::Result<Vec<String>> {
+        if self.unmeasurable.lock().unwrap().iter().any(|f| f == p) {
+            return Err(std::io::Error::other("erişim reddedildi (test)"));
+        }
+        Ok(if self.foreign.lock().unwrap().iter().any(|f| f == p) { vec!["S-1-5-11 yazabilir (test)".into()] } else { vec![] })
+    }
     fn file_len(&self, p: &Path) -> std::io::Result<u64> {
         self.inner.file_len(p)
     }
@@ -157,7 +170,13 @@ impl Fs for CrashFs {
     }
     fn copy(&self, from: &Path, to: &Path) -> std::io::Result<()> {
         self.crash.point(&format!("kopyala {}", name(from)));
-        self.inner.copy(from, to)
+        self.inner.copy(from, to)?;
+        if self.corrupt_copy.load(Ordering::SeqCst) {
+            let mut b = std::fs::read(to)?;
+            b.push(b' ');
+            std::fs::write(to, b)?;
+        }
+        Ok(())
     }
     fn extract_zip(&self, archive: &Path, dest: &Path, limits: &ExtractLimits) -> Result<ExtractStats, String> {
         self.crash.point(&format!("ac {}", name(archive)));
@@ -199,6 +218,8 @@ pub struct Faults {
     pub cut_after: AtomicU64,
     /// Paket yerine bozuk bayt sunulur.
     pub serve_tampered: AtomicBool,
+    /// GÖZLEM: künyesi alınmak için koşturulan güncelleyici ikilileri (hangi kopya çalıştı).
+    pub executed: Mutex<Vec<PathBuf>>,
 }
 
 #[derive(Debug, Clone)]
@@ -468,6 +489,7 @@ impl Procs for FakeProcs {
                 Ok(fail_out(1, "bilinmeyen betik"))
             }
             "tekserp-guncelleyici" | "tekserp-guncelleyici.yeni" => {
+                self.w.faults.executed.lock().unwrap().push(c.program.clone());
                 let text = std::fs::read_to_string(&c.program).unwrap_or_default();
                 Ok(ok_out(&text))
             }
@@ -697,6 +719,8 @@ pub struct LeaseOpts {
     pub expired: bool,
     /// HAK `bakimBitis` (ms); `None` = HAK dosyası yok.
     pub maintenance_end: Option<i64>,
+    /// Kanalın güncel backend sürümü (`kanal.guncelSurumler.backend`); `None` = alan yok.
+    pub channel_backend: Option<&'static str>,
 }
 
 impl Default for LeaseOpts {
@@ -707,6 +731,7 @@ impl Default for LeaseOpts {
             class: "URETIM",
             expired: false,
             maintenance_end: Some(T0 + 365 * DAY),
+            channel_backend: Some(NEW),
         }
     }
 }
@@ -734,7 +759,7 @@ pub fn lease_and_entitlement(k: &Keys, o: &LeaseOpts, now: i64) -> (String, Opti
         "zorlama": false, "gecerlilikBitis": null,
         "yaptirim": { "kademe": null, "mesaj": null, "kisitlamaTarihi": null, "donmusModuller": [], "guncellemeDonuk": o.frozen_by_sanction },
         "yoklamaAraligiDk": 60, "esitlemeAraligiDk": null, "patronBulutBitis": null, "devredildi": false,
-        "kanal": { "kod": CHANNEL, "guncelSurumler": { "backend": NEW } },
+        "kanal": { "kod": CHANNEL, "guncelSurumler": o.channel_backend.map_or_else(|| json!({}), |v| json!({ "backend": v })) },
         "altSertifika": cert,
     });
     if let Some(u) = &o.update {
@@ -916,7 +941,14 @@ impl World {
         );
         let crash = Arc::new(Crash::default());
         World {
-            fs: Arc::new(CrashFs { inner: RealFs, crash: Arc::clone(&crash), free: AtomicU64::new(u64::MAX) }),
+            fs: Arc::new(CrashFs {
+                inner: RealFs,
+                crash: Arc::clone(&crash),
+                free: AtomicU64::new(u64::MAX),
+                foreign: Mutex::new(vec![]),
+                unmeasurable: Mutex::new(vec![]),
+                corrupt_copy: AtomicBool::new(false),
+            }),
             dir,
             layout,
             crash,

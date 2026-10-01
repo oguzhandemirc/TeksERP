@@ -7,6 +7,10 @@ pub const KILIT_DOLU: &str = "KILIT_DOLU";
 pub const AYAR_BICIMSIZ: &str = "AYAR_BICIMSIZ";
 /// `yapilandirma\.env`de güncelleyicinin zorunlu anahtarı yok ya da boş (`settings::REQUIRED_BACKEND_KEYS`).
 pub const AYAR_EKSIK: &str = "AYAR_EKSIK";
+/// SYSTEM'in çalıştıracağı/güveneceği dizin ya da araç yabancı yazmaya açık (DAGK-3/4) ya da izni ölçülemedi.
+pub const IZIN_GUVENSIZ: &str = "IZIN_GUVENSIZ";
+/// Uyarı (DAGK-9): kiradaki kanal güncel sürümü güncelleme sunucusunun adayından YENİ — sunucu geride.
+pub const SURUM_GERIDE: &str = "SURUM_GERIDE";
 pub const KURULU_SURUM_YOK: &str = "KURULU_SURUM_YOK";
 pub const KIRA_YOK: &str = "KIRA_YOK";
 pub const KIRA_GECERSIZ: &str = "KIRA_GECERSIZ";

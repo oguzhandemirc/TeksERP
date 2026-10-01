@@ -6,6 +6,8 @@
 //   §2 yalıtım gevşetmesi — her örtü çıkış 1 ve KENDİ servisinin ③b/③c satırıyla: volumes_from (incelemenin örtüsü
 //      `satici-jwks: volumes_from: ["satici:ro"]`) · privileged · cap_add · pid service: · security_opt seccomp=unconfined ·
 //      network_mode service: · userns host · devices · tanınmayan anahtar (ulimits) · ana kipte portal-tunel ağ kipi
+//   §2b ⑬c host yolu yaratma (create_host_path: true · kısa sözdizimi) her compose sürümünde kendi satırıyla ❌ — JSON izi
+//      sürüme göre ters anlam taşır (2.x false'u, 5.x true'yu düşürür); denetim kalibrasyonla okur
 //   §3 BİLDİRİM örtüsü (Ⓑ0–Ⓑ8): gerçek örtüyle üç kurgu 0 ihlal (hazırlık geri döngü + portal-genel + bildirim ·
 //      ana kip + portal-genel + bildirim · üretim + geri döngü + portal-genel + bildirim, --diger-env hazırlık) ve her
 //      Ⓑ satırı ✅ basılır; --patron-env yoksa Ⓑ7'nin patron ayağı ÖLÇÜLMEDİ (hazırlıkta çıkış 0, üretimde 2) · her Ⓑ
@@ -106,7 +108,8 @@ function main(): void {
       ["privileged", "services:\n  satici:\n    privileged: true\n", /^❌ ③b satici yalıtım gevşetmesi yok — privileged=true/m],
       ["cap_add NET_ADMIN (cap_drop ALL'ı ezer)", "services:\n  satici-yedek:\n    cap_add: [NET_ADMIN]\n", /^❌ ③b satici-yedek yalıtım gevşetmesi yok — cap_add=\["NET_ADMIN"\]/m],
       ["pid service:satici", "services:\n  satici-jwks:\n    pid: \"service:satici\"\n", /^❌ ③b satici-jwks yalıtım gevşetmesi yok — pid="service:satici"/m],
-      ["security_opt seccomp=unconfined", "services:\n  satici-db:\n    security_opt: [\"no-new-privileges:true\", \"seccomp=unconfined\"]\n", /^❌ ③b satici-db yalıtım gevşetmesi yok — security_opt=/m],
+      // !override: liste birleştirmesi sürüme bağlı (eski compose tekrarı tekilleştirmez, şema uniqueItems ile reddeder).
+      ["security_opt seccomp=unconfined", "services:\n  satici-db:\n    security_opt: !override [\"no-new-privileges:true\", \"seccomp=unconfined\"]\n", /^❌ ③b satici-db yalıtım gevşetmesi yok — security_opt=/m],
       ["network_mode service:satici (beyansız)", "services:\n  satici-yedek:\n    network_mode: \"service:satici\"\n    networks: !reset []\n", /^❌ ③b satici-yedek yalıtım gevşetmesi yok — network_mode="service:satici"/m],
       ["userns_mode host", "services:\n  satici:\n    userns_mode: host\n", /^❌ ③b satici yalıtım gevşetmesi yok — userns_mode="host"/m],
       ["devices", "services:\n  satici-jwks:\n    devices: [\"/dev/fuse:/dev/fuse\"]\n", /^❌ ③b satici-jwks yalıtım gevşetmesi yok — devices=/m],
@@ -127,6 +130,26 @@ function main(): void {
       anaTunel.status === 1 && /^❌ ③b portal-tunel yalıtım gevşetmesi yok — network_mode="service:satici"/m.test(anaTunel.cikti),
       `${anaTunel.status} · ${kirmizi(anaTunel).join(" | ").slice(0, 200)}`,
     );
+
+    // create_host_path'in JSON izi compose sürümüne göre ters anlam taşır: açık true her iki yönde de ❌ kalmalı.
+    console.log("\n§2b ⑬c host yolu yaratma — compose sürümünden bağımsız kırmızı (çıkış 1)");
+    const yaratmaSondalari: [string, string, RegExp][] = [
+      [
+        "satıcıda create_host_path: true",
+        "services:\n  satici:\n    volumes:\n      - { type: bind, source: \"${ERISIM_JWKS_DIZINI_HOST}\", target: /erisim-jwks, read_only: true, bind: { create_host_path: true } }\n",
+        /^❌ ⑬c JWKS bağı[^\n]* host yolu yaratmaz: satıcı=false yan=true$/m,
+      ],
+      [
+        "yan konteynerde kısa sözdizimi (host yolunu yaratır)",
+        "services:\n  satici-jwks:\n    volumes:\n      - \"${ERISIM_JWKS_DIZINI_HOST}:/erisim-jwks\"\n",
+        /^❌ ⑬c JWKS bağı[^\n]* host yolu yaratmaz: satıcı=true yan=false$/m,
+      ],
+    ];
+    for (const [ad, ortu, desen] of yaratmaSondalari) {
+      const f = yaz(`sonda-yaratma-${ad.replace(/[^a-z0-9]+/gi, "-")}.yml`, ortu);
+      const k = denetle(hazirlikPortal, { dosyalar: [...temel, f] });
+      kontrol(`§2b ${ad} → çıkış 1, ⑬c ❌`, k.status === 1 && desen.test(k.cikti), `${k.status} · ${kirmizi(k).join(" | ").slice(0, 200) || ozet(k)}`);
+    }
 
     console.log("\n§3 bildirim örtüsü (Ⓑ0–Ⓑ8) — gerçek örtü 0 ihlal, her bozuk örtü kendi satırıyla kırmızı");
     const PATRON = path.join(D, "..", "patron", "ornek.env");

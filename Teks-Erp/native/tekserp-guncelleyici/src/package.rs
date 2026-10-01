@@ -120,3 +120,35 @@ pub fn verify_dir(dir: &Path, fs: &dyn crate::env::Fs, keys: &[(String, String)]
 pub fn integrity_file() -> &'static str {
     "butunluk.jws"
 }
+
+/// Dosyanın sha256'sı, bütünlük listesinin yazımıyla (base64url, dolgusuz).
+pub fn file_digest(fs: &dyn crate::env::Fs, p: &Path) -> std::io::Result<String> {
+    use sha2::{Digest, Sha256};
+    let mut f = fs.open_read(p)?;
+    let mut h = Sha256::new();
+    let mut buf = vec![0u8; 1 << 16];
+    loop {
+        let n = f.read(&mut buf)?;
+        if n == 0 {
+            break;
+        }
+        h.update(&buf[..n]);
+    }
+    Ok(tekserp_dogrulama::b64::encode(&h.finalize()))
+}
+
+/// İmzalı listedeki bir dosyanın beklenen özeti (`rel` POSIX göreli yol). Dizin ÖNCE bütünüyle
+/// doğrulanır (imza + liste özeti + her dosya); listede olmayan dosya RED.
+pub fn signed_file_digest(dir: &Path, fs: &dyn crate::env::Fs, keys: &[(String, String)], rel: &str) -> Result<String, PkgError> {
+    use tekserp_dogrulama::integrity_list as list;
+    verify_dir(dir, fs, keys)?;
+    let bytes =
+        fs.read(&dir.join(list::LIST_FILE)).map_err(|e| perr(codes::BUTUNLUK_GECERSIZ, format!("{} okunamadı: {e}", list::LIST_FILE)))?;
+    let count = bytes.iter().filter(|b| **b == b'\n').count();
+    let entries = list::parse(&bytes, count).ok_or_else(|| perr(codes::BUTUNLUK_GECERSIZ, format!("{} biçimsiz", list::LIST_FILE)))?;
+    entries
+        .into_iter()
+        .find(|e| e.path == rel)
+        .map(|e| e.sha256)
+        .ok_or_else(|| perr(codes::BUTUNLUK_GECERSIZ, format!("{rel} imzalı listede yok")))
+}
