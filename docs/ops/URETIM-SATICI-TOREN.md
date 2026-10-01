@@ -165,6 +165,8 @@ Hepsi açık bilgi (künyeden ve çapa betiğinin kuru çıktısından; sır, pa
 
 **Ne üretir (Mac, `~/.tekserp/satici-uretim/donemler/<damga>/`):** `vds-paketi/` → `anahtarlar/alt-<yıl>-<n>.anahtar.json` · `ara-<yıl>-<n>.ara.json` (ARA parolasıyla sarılı) · `ind-<yıl>-<n>.anahtar.json` (üçü 120 gün = 90 + 30 örtüşme) · `iptal.json` (ilk dönem sıra 1; `--iptal` verilirse sıra + 1, önceki satırlar taşınır; yoksa önceki belge aynen) · `ice-aktar.json` (iptal belgesi + kökle imzalanmış kuyruk HAK'ları) · `DONEM-KUNYE.json` (kid · açık anahtar · tarih · emekliye listesi · özetler) · `SHA256SUMS`. **Pakette KÖK YOKTUR** (araç ölçer, varsa RED). Paketin dışında `kok-imzali-haklar.json` (Mac arşivi).
 
+**Ortam ve kid'ler:** ortam kök dosyasının KENDİ kimliğinden çözülür (`kok-*` üretim · `hazirlik-*` hazırlık, sınıfları yalnız TEST/DEMO), bayrakla seçilmez. Hazırlık kökünün dönemi `alt-hazirlik-<yıl>-<n>` · `ara-hazirlik-<yıl>-<n>` · `ind-hazirlik-<yıl>-<n>` basar (numara, önekli ilk anahtarlar `alt-hazirlik-2026-1` · `ind-hazirlik-2026` dahil iki biçimden de ilerler); üretiminki öneksizdir — iki satıcı aynı kid'i asla basmaz (aynı kid CF Worker'ın iki listesinde olursa bütün indirmeler 503 olur). Tören, yeni kid'ler karşı ortamın kalıbındaysa ya da anahtar kümesindeyse (`--karsi-dizin`, varsayılan öteki ortamın Mac dizini: `~/.tekserp/satici-hazirlik` ↔ `~/.tekserp/satici-uretim`; dizin yoksa yalnız kalıp ölçülür) parola sormadan durur.
+
 **Parolalar:** kök parolası (kâğıttan, tören başında BİR kez) · **yeni ara imzacı parolası** (iki kez; kökünkinden FARKLI olmak ZORUNDA — araç aynısını reddeder; portalda HAK imzalarken VDS'te yazılır → parola yöneticisine "TeksERP ara-<yıl>-<n>"). İkisi de argv/env/log/dosyaya girmez.
 
 | # | Nerede | Komut / iş | Beklenen |
