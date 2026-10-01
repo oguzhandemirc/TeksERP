@@ -85,6 +85,7 @@ const ACCUMULATING: ReadonlySet<ReasonCode> = new Set<ReasonCode>([
   "SAAT_GERI",
   "LISANS_IZI_KAYIP",
   "LISANS_IZI_CELISKI",
+  "IPTAL_BELGESI_KAYIP",
 ]);
 
 export function isAccumulating(findings: readonly Finding[], rule: FingerprintRuleApplied | null): boolean {

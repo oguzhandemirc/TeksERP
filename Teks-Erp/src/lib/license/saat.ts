@@ -194,6 +194,9 @@ export const StateRecordSchema = z.object({
   parmakIziOnbellegi: z
     .object({ f1: CachedFactorRecordSchema.optional(), f2: CachedFactorRecordSchema.optional(), f3: CachedFactorRecordSchema.optional(), f4: CachedFactorRecordSchema.optional(), f5: CachedFactorRecordSchema.optional() })
     .optional(),
+  // Lisans v2 G4 (L2-7).
+  /** İptal pini: görülen en yüksek iptal sırası (kira beyanı ∨ elde tutulan belge); elde daha düşüğü kalırsa belge kayıptır. */
+  iptalSira: z.number().int().min(1).max(Number.MAX_SAFE_INTEGER).optional(),
 });
 export type StateRecord = z.infer<typeof StateRecordSchema>;
 

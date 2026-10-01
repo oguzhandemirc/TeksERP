@@ -17,7 +17,8 @@
 // gevşetildi (`looseObject`): dosya yolu taşıyan satır gövdeye girdi → §1b · §2c · §4a/b/c kırmızı (5).
 // (L2-1) §1e lisans v2 ekleri: AB1 beyandan `parmakIziKayip` düştü → §1e · AB2 yoklama şemasından aynı alan
 // düştü (KATI şema reddeder) → §1e — şema ile beyan aynı kararı taşımazsa kırmızı. (L2-6) §1f gerçek kurucu ekleri
-// üretir: AC1 kurucudan v2 alanları düştü → §1f.
+// üretir: AC1 kurucudan v2 alanları düştü → §1f. (L2-7) §1g gerçek kurucu yetenek listesini taşır: AD1 yoklama gövdesine
+// yetenek alanı girmedi (S19) → §1g · AD2 `parmak-izi-v2` her zaman bildirilmedi (S21) → §1g.
 // =============================================================================
 import os from "node:os";
 import path from "node:path";
@@ -31,7 +32,7 @@ import { reportJobFailure } from "../src/jobs/job-failure";
 import { touchClient } from "../src/lib/client-registry";
 import { loadLicenseStoreSync } from "../src/lib/license/store";
 import { configureLicenseRuntimeForTests, recordVendorClockSkew, setLicenseDbFacts, setMeasuredFingerprint } from "../src/lib/license/runtime";
-import { INSTALL_HISTORY_FILE_NAME, PollRequestSchema, type Fingerprint } from "../src/lib/license/protocol";
+import { INSTALL_HISTORY_FILE_NAME, LICENSE_CAPABILITIES, PollRequestSchema, type Fingerprint } from "../src/lib/license/protocol";
 import { acceptLicenseResponse, buildPollBody } from "../src/services/license-sync.service";
 import { flushLicenseTraceWrites } from "../src/lib/license/accumulation";
 import { LICENSE_TRACE_SETTING_KEY } from "../src/constants/reserved-settings";
@@ -160,6 +161,13 @@ async function main(): Promise<void> {
       "§1f ⭐ GERÇEK kurucu (L2-6) v2 eklerini üretir: durumKaydi (sıra) + hak.ozet + kayıp etken (f4) — beyanlı ve KATI şemadan geçer",
       typeof gercek.durumKaydi?.sira === "number" && typeof gercek.hak?.ozet === "string" && JSON.stringify(gercek.parmakIziKayip) === '["f4"]' && gercekDisarda.length === 0 && PollRequestSchema.safeParse(gercek).success,
       `${JSON.stringify(gercek.durumKaydi)} ${JSON.stringify(gercek.parmakIziKayip)} ${gercekDisarda.join(",")}`,
+    );
+    const yetenek = gercek.yetenekler ?? [];
+    check(
+      "§1g ⭐ GERÇEK kurucu (L2-7) yetenek listesini taşır: odenmis-tarih + parmak-izi-v2 HER ZAMAN, liste LICENSE_CAPABILITIES'in alt kümesi ve sırası, değerleri beyanlı anahtar değil (alan adı `yetenekler` beyanlı)",
+      yetenek.includes("odenmis-tarih") && yetenek.includes("parmak-izi-v2") &&
+        JSON.stringify(yetenek) === JSON.stringify(LICENSE_CAPABILITIES.filter((c) => yetenek.includes(c))) && IZINLI_ANAHTARLAR.has("yetenekler"),
+      JSON.stringify(gercek.yetenekler ?? null),
     );
     check(
       "§1d ortam.installationId = DB kimliği (yalnız bilgi), saat.saticiSapmaSn ölçülen sapma; lisans kimliği gövdede YOK (imzalı başlıkta)",

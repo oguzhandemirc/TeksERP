@@ -145,6 +145,15 @@ export function downtimeCreditOf(a: Accumulation | null, record: StateRecord | n
   return a && record ? (record.kapaliMs ?? 0) + a.creditMs : 0;
 }
 
+/**
+ * HAK veriliş sınırının "şimdi" tabanı: duvar ∨ defter yüksek suyu ∨ durum kaydı kopyalarının yüksek suyu (bu kurulum
+ * anahtarıyla imzalı; hepsi geçmişte gözlenmiş anlar) — saati geri alınmış fabrika taze HAK'ı ileri tarihli saymasın.
+ */
+export function verificationFloorOf(wallMs: number, ledgerHighWaterMs: number | null, a: Accumulation | null): number {
+  const records = [a?.file, a?.trace].map((r) => (r ? isoToMs(r.yuksekSu) : 0));
+  return Math.max(wallMs, ledgerHighWaterMs ?? 0, ...records);
+}
+
 export function highWaterOf(record: StateRecord | null, lease: LeaseDoc | null, ledgerHighWaterMs: number | null): number {
   return Math.max(ledgerHighWaterMs ?? 0, record ? isoToMs(record.yuksekSu) : 0, lease ? isoToMs(lease.sunucuSaati) : 0);
 }

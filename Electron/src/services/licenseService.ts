@@ -31,8 +31,8 @@ const isRouteMissing = (err: unknown): boolean =>
  * GÖVDEYLE gider (D12): kod URL'ye, dolayısıyla erişim günlüğüne ve vekil kayıtlarına girmez.
  * POST ucu olmayan eski backend 404 döner → bir kez eski GET yoluna düşülür (geçiş; backend önce iner).
  */
-async function envelope(path: "cevrimdisi-istek" | "aktarma-istegi", amac: OfflinePurpose, kod?: string): Promise<LicenseOfflineRequest> {
-  const body = kod ? { amac, kod } : { amac };
+async function envelope(path: "cevrimdisi-istek" | "aktarma-istegi", amac: OfflinePurpose, kod?: string, gerekce?: string | null): Promise<LicenseOfflineRequest> {
+  const body = { amac, ...(kod ? { kod } : {}), ...(gerekce ? { gerekce } : {}) };
   try {
     return await data(apiClient.post<ApiResponse<LicenseOfflineRequest>>(`${BASE}/${path}`, body, QUIET));
   } catch (err) {
@@ -70,7 +70,8 @@ export const licenseService = {
     data(apiClient.post<ApiResponse<LicenseDetail>>(`${BASE}/etkinlestir`, { kod }, QUIET)),
   pollNow: () =>
     data(apiClient.post<ApiResponse<{ outcome: PollOutcome; code?: string }>>(`${BASE}/yokla`, {}, QUIET)),
-  offlineRequest: (amac: OfflinePurpose, kod?: string) => envelope("cevrimdisi-istek", amac, kod),
+  /** `donanim` (K8): donanım değişikliği bildirimi zarfla — internetsiz kurulum QR/dosya yolundan bildirir; `gerekce` isteğe bağlı. */
+  offlineRequest: (amac: OfflinePurpose, kod?: string, gerekce?: string | null) => envelope("cevrimdisi-istek", amac, kod, gerekce),
   offlineResponse: (yanit: string) =>
     data(apiClient.post<ApiResponse<LicenseDetail>>(`${BASE}/cevrimdisi-yanit`, { yanit }, QUIET)),
   /** Çevrimdışı yanıtla AYNI uç; `kaynak: dosya` yalnız ayak izini ayırır (eski backend alanı yok sayar, yine kabul eder). */

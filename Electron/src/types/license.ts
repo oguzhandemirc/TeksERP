@@ -160,6 +160,20 @@ export interface LicenseDetail {
   proxy: LicenseProxySettings;
   /** Lisans çekirdeği + imzalı paket bütünlüğü (yalnız sayılar, dosya adı yok). Eski backend göndermez. */
   butunluk?: LicenseIntegrity;
+  /** G4 güven zinciri (HAK imzacısı · kira ALT'ı · iptal belgesi). Eski backend göndermez. */
+  zincir?: LicenseChain;
+}
+
+/** Backend `LicenseChainView` aynası (`license-chain-view.helper.ts`). */
+export interface LicenseChain {
+  hakImzacisi: {
+    kind: "KOK" | "BAYI" | "ARA";
+    kid: string;
+    rootKid: string;
+    sertifika: { sertifikaId: string; siniflar: string[]; baslangic: string; bitis: string } | null;
+  } | null;
+  kiraAlt: { kid: string; baslangic: string; bitis: string } | null;
+  iptal: { sira: number | null; verilis: string | null; kayitSayisi: number | null; pin: number | null; durum: "GUNCEL" | "KAYIP" | "YOK" };
 }
 
 export type IntegrityStatus = "GECERLI" | "GECERSIZ" | "OLCULEMEDI" | "KAPSAM_DISI";
@@ -180,7 +194,8 @@ export interface LicenseIntegrity {
   ilkUyusmazlik: string | null;
 }
 
-export type OfflinePurpose = "yokla" | "etkinlestir";
+/** `donanim`: donanım değişikliği bildirimi zarfla (K8) — eski backend 400 döner (amaç tanınmaz). */
+export type OfflinePurpose = "yokla" | "etkinlestir" | "donanim";
 
 export interface LicenseOfflineRequest {
   amac: OfflinePurpose;

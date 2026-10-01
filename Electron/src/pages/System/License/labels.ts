@@ -77,6 +77,7 @@ const REASON_LABEL: Record<string, string> = {
   LISANS_IZI_KAYIP: "Lisans izlerinden biri kayıp (kira, durum kaydı ya da veritabanı izi)",
   LISANS_IZI_CELISKI: "Lisans izleri birbiriyle çelişiyor (farklı süre)",
   BELIRSIZLIK_SURUYOR: "Lisans durumu uzun süredir ölçülemiyor",
+  IPTAL_BELGESI_KAYIP: "İptal belgesi kayıp",
 };
 
 export const reasonLabel = (kod: string): string => REASON_LABEL[kod] ?? kod;
@@ -89,6 +90,7 @@ const FAILURE_LABEL: Record<string, string> = {
   TASIMA_REDDEDILDI: "Taşıma reddedildi",
   TASIMA_KODU_BEKLENIYOR: "Taşıma onaylandı — taşıma kodu bekleniyor",
   TASIMA_HATASI: "Taşıma talebi sorgulanamadı",
+  ISTEK_YOL: "İstek başka bir lisans sunucusu ucu için imzalanmış (adres ya da vekil yönlendirmesi)",
   EGRESS_NETWORK: "Ağ hatası (internet/proxy)",
   EGRESS_TIMEOUT: "Zaman aşımı",
   EGRESS_PROXY_UNSUPPORTED: "Bu Node sürümü proxy desteklemiyor",

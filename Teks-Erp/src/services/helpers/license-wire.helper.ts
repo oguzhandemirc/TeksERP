@@ -142,8 +142,13 @@ export function requestIdentityFor(ctx: ReadyContext, purpose: RequestPurpose): 
   return requireLicenseId(ctx);
 }
 
-export function signedHeaders(ctx: ReadyContext, purpose: RequestPurpose, bodyText: string, nowMs: number = Date.now()): Record<string, string> {
-  const token = signRequest({ installationId: requestIdentityFor(ctx, purpose), purpose, body: bodyText, key: { privateKey: ctx.key.privateKey, nowMs } });
+/**
+ * `path`: isteğin gittiği uç (`ENDPOINTS` / `SYNC_PATHS` sabiti, alan karşı tarafın doğruladığıyla AYNI) imzaya girer —
+ * imzalı istek başka uca yeniden oynatılamaz (`ISTEK_YOL`); `yol` tanımayan eski doğrulayıcı alanı yok sayar.
+ */
+export function signedHeaders(ctx: ReadyContext, purpose: RequestPurpose, bodyText: string, to: { readonly path: string; readonly nowMs?: number }): Record<string, string> {
+  const key = { privateKey: ctx.key.privateKey, nowMs: to.nowMs ?? Date.now() };
+  const token = signRequest({ installationId: requestIdentityFor(ctx, purpose), purpose, body: bodyText, key, path: to.path });
   return { "content-type": "application/json", accept: "application/json", [REQUEST_HEADER]: token };
 }
 
@@ -183,7 +188,7 @@ export async function vendorPost(path: string, purpose: RequestPurpose, body: Ve
     const text = JSON.stringify(typeof body === "function" ? await (body as () => unknown)() : body);
     let res: VendorHttpResponse;
     try {
-      res = await transport({ url: `${base}${path}`, method: "POST", headers: signedHeaders(ctx, purpose, text, nowMs), body: text });
+      res = await transport({ url: `${base}${path}`, method: "POST", headers: signedHeaders(ctx, purpose, text, { path, nowMs }), body: text });
     } catch (err) {
       return { ok: false, status: 0, code: err instanceof EgressError ? err.code : "EGRESS_NETWORK" };
     }

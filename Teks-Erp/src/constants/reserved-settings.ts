@@ -86,6 +86,13 @@ export const FACTORY_TIMEZONE_SETTING_KEY = "company.timezone";
 export const LICENSE_TRACE_SETTING_KEY = "license.trace";
 
 /**
+ * Lisans İPTAL BELGESİ kopyası (lisans v2 G4, `lib/license/revocation-store.ts`): kök imzalı iptal belgesinin fabrika
+ * DB'sindeki kopyası (`LICENSE_DIR/iptal.jws`in eşi). KAYIT, AYAR DEĞİL: ham uçtan silinip eskisiyle değiştirilebilseydi
+ * iptal edilmiş anahtarın belgeleri yeniden geçerli görünürdü. Tek yazıcı lisans motorudur (`license-revocation.service`).
+ */
+export const LICENSE_REVOCATION_SETTING_KEY = "license.revocation";
+
+/**
  * `PUT /api/admin/settings/:key` ucunun REDDETTİĞİ anahtarlar.
  *
  * Kümeye ek olarak ön ek kuralı da uygulanır (`isReservedSettingKey`) — küme
@@ -99,6 +106,7 @@ export const RESERVED_SETTING_KEYS: ReadonlySet<string> = new Set([
   PATRON_CLOUD_USER_SETTING_KEY,
   FACTORY_TIMEZONE_SETTING_KEY,
   LICENSE_TRACE_SETTING_KEY,
+  LICENSE_REVOCATION_SETTING_KEY,
 ]);
 
 /** `security.` ile başlıyor mu — liste/dışa-aktarım süzgeçlerinin yüklemi. */

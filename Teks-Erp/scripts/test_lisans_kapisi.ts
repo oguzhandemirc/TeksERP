@@ -31,7 +31,7 @@
 // yerine hesaplanan kademe · N6 ölü desen (olmayan yol) listeye · (2026-09-29 F1b) D1 kapı
 // oturumsuza yeniden 403 · D2 `PUBLIC_ROUTES`tan bir satır düşer · D3 K5 listesinden `auth/me`
 // düşer · D4 morgan `url` jetonu maskesiz · D5 imzası geçerli ama oturumsuz token'a kademe · (L2-10) N10 donanım
-// bildirimi rotası yok → §5b.
+// bildirimi rotası yok → §5b. (L2-7 B) N11 çevrimdışı istek rotasının amaç listesinden `donanim` düşer → §11g.
 // =============================================================================
 import prisma from "../src/lib/prisma";
 import app from "../src/app";
@@ -331,6 +331,31 @@ function istek(port: number, yontem: string, yol: string, token: string | null, 
   });
 }
 
+/**
+ * L2-7 B: donanım bildirimi zarfla da gider — K5'te bile `license:manage` sahibi istek oluşturabilmeli: gövde doğrulamasından
+ * geçer (400 değil), kapıda düşmez (403 değil). Ölçülen kapı ve şemadır; cevap deponun hâline göre zarf (200) ya da 409.
+ */
+async function donanimZarfiK5(port: number): Promise<void> {
+  const izin = await prisma.permission.findUnique({ where: { code: "license:manage" }, select: { id: true } });
+  if (!izin) {
+    check("§11g license:manage izni katalogda (DB'de) var", false);
+    return;
+  }
+  const ad = `TEST-lisans-yonetici-${Date.now()}`;
+  const u = await prisma.user.create({ data: { username: ad, passwordHash: await AuthService.hashPassword("Deneme-12345"), fullName: "TEST Lisans Yöneticisi" }, select: { id: true } });
+  try {
+    await prisma.userPermission.create({ data: { userId: u.id, permissionId: izin.id } });
+    const { token } = await AuthService.login(ad, "Deneme-12345");
+    for (const yol of ["/api/license/cevrimdisi-istek", "/api/license/aktarma-istegi"]) {
+      const d = await istek(port, "POST", yol, token, { amac: "donanim", gerekce: "disk değişti" });
+      const kod = String(d.json?.details?.code ?? "");
+      check(`§11g ⭐ K5 POST ${yol} amac=donanim (license:manage): gövde doğrulamasından geçer (400 değil), kapıda düşmez (403 değil)`, d.status !== 400 && d.status !== 403, `${d.status} ${kod}`);
+    }
+  } finally {
+    await temizlikKullanici(u.id);
+  }
+}
+
 async function httpAyagi(port: number, token: string): Promise<void> {
   console.log("\n§11 — HTTP: kimlik önce (rotanın 401'i), kademe sonra (kapının 403'ü)");
   const sahte = sahteTokenlar(token);
@@ -354,6 +379,7 @@ async function httpAyagi(port: number, token: string): Promise<void> {
     const y = await istek(port, "POST", yol, null, { amac: "etkinlestir", kod: "TKS-0000-0000-0000-0000" });
     check(`§11f ⭐ etkinleştirme kodu gövdeyle: POST ${yol} var (GET geçiş için duruyor), kimlik ister`, post && get && y.status === 401, `post=${post} get=${get} kimliksiz=${y.status}`);
   }
+  await donanimZarfiK5(port);
   lisansHazirDegil();
 }
 

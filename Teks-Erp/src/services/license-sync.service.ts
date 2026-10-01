@@ -2,7 +2,6 @@
 // doğrulanıp KABULÜ ve yoklama/taşıma turu. Yoklama işi ve API servisi bunu çağırır.
 import prisma from "../lib/prisma";
 import { AppError } from "../utils/app-error";
-import { AuditService } from "./audit.service";
 import { buildPollHealthSummary } from "../lib/poll-health-summary";
 import { INSTALLATION_ID_SETTING_KEY } from "../constants/reserved-settings";
 import {
@@ -14,13 +13,12 @@ import {
   isoToMs,
   msToIso,
   type LicenseResponse,
-  type SanctionLevel,
 } from "../lib/license/protocol";
 import { getLicenseStore, saveLease, saveLicenseIdentity, saveTransfer } from "../lib/license/store";
+import { capabilitiesField } from "../lib/license/capabilities";
 import { measureFingerprint } from "../lib/license/fingerprint";
 import { cacheFromRecordCopy, cacheToRecordCopy } from "../lib/license/fingerprint-cache";
 import { setFingerprintCacheCopy, startAccumulationForLease } from "../lib/license/record-writer";
-import { coreCheckLeaseBinding, coreVerifyEntitlement, coreVerifyLease } from "../lib/license/core-bridge";
 import { acceptNewEntitlement } from "./license-integrity.service";
 import {
   getLicenseConfig,
@@ -33,9 +31,10 @@ import {
   setDownloadTokens,
   setLicenseDbFacts,
   setMeasuredFingerprint,
-  type LicenseSnapshot,
 } from "../lib/license/runtime";
 import { evaluateLicenseTransitions, refreshLicenseTrace } from "./license-trail.service";
+import { adoptFromRejected, adoptOffered, refreshLicenseRevocation, revocationOffer, type RevocationOffer } from "./license-revocation.service";
+import { logLeaseAccepted, sanctionView, verifyResponseDocuments } from "./helpers/license-accept.helper";
 import { syncSupportAfterPoll } from "./support-sync.service";
 import {
   buildEnvironment,
@@ -50,6 +49,7 @@ import {
   requireVendorUrl,
   vendorFailureToError,
   vendorPost,
+  type ReadyContext,
   type VendorResult,
   type VendorTransport,
 } from "./helpers/license-wire.helper";
@@ -62,6 +62,8 @@ import {
 export async function refreshLicenseDbFacts(installationId: string): Promise<void> {
   // Lisans izi (G12 DB kopyası) olgularla birlikte okunur: okunamazsa iz BİLİNMİYOR (kayıp sayılmaz).
   await refreshLicenseTrace();
+  // İptal belgesinin DB kopyası da (okunur + eksik/düşük kopya onarılır; okunamazsa BİLİNMİYOR).
+  await refreshLicenseRevocation();
   // ⚠️ `revokedAt` SÜZÜLMEZ (bilinçli): yüksek su defterde YAZILMIŞ en geç andır — geri alınan işlem
   // de o anda yazılmıştır; süzmek, bir geri almadan sonra saat-geri tespitinin alt sınırını geriletirdi.
   const rows = await prisma.$queryRaw<Array<{ first: Date | null; high: Date | null }>>`
@@ -124,6 +126,7 @@ export async function buildPollBody(nowMs: number = Date.now()): Promise<ReturnT
     gozlem: peekObservationCounters(),
     // Kurulum kaydı yoksa alan hiç gitmez: eski satıcı KATI şemayla tanımadığı anahtarı reddeder.
     ...installRecordsField(),
+    ...capabilitiesField(),
     ...pollV2Fields(snap),
   });
 }
@@ -131,19 +134,6 @@ export async function buildPollBody(nowMs: number = Date.now()): Promise<ReturnT
 // ── Kira kabulü ─────────────────────────────────────────────────────────────────
 /** `dosya`: portalın istek gerektirmeyen uzatma dosyası (çevrimdışı yanıtla aynı uç, ayrı ayak izi). */
 export type LeaseSource = "yoklama" | "etkinlestirme" | "cevrimdisi" | "aktarma" | "dosya" | "tasima" | "dr-devral" | "donanim";
-
-interface SanctionView {
-  readonly kademe: SanctionLevel | null;
-  readonly donmusModuller: readonly string[];
-  readonly guncellemeDonuk: boolean;
-  readonly devredildi: boolean;
-}
-
-function sanctionView(snap: LicenseSnapshot): SanctionView | null {
-  const l = snap.lease?.document;
-  if (!l) return null;
-  return { kademe: l.yaptirim.kademe, donmusModuller: [...l.yaptirim.donmusModuller].sort(), guncellemeDonuk: l.yaptirim.guncellemeDonuk, devredildi: l.devredildi };
-}
 
 let doorbellKick: (() => void) | null = null;
 /** Zil işi kendini kaydeder; ilk etkinleştirmede bağlantı beklemeden kurulur. */
@@ -159,6 +149,8 @@ export function onLicenseActivated(fn: () => void): void {
  * BU anahtara bağlı imzalı kiradan öğrenilip LICENSE_DIR'e yazılır; yanıttaki `kurulumId` yalnız
  * kirayla aynıysa kabul (otorite imzalı kira). Yazım sırası kimlik → durum → HAK → kira (yarım kalan
  * yazım bir sonraki yoklamada kendini onarır). İmza doğrulaması BURADA — panel/telefon yanıtı taklit edemez.
+ * G4: kira ve HAK eldeki ile gelen iptal belgesinin yenisiyle doğrulanır; kabulde o belge benimsenir, rette
+ * yalnız eldeki kiranın ALT'ına dokunmuyorsa (`adoptFromRejected`).
  */
 export async function acceptLicenseResponse(
   raw: unknown,
@@ -168,29 +160,28 @@ export async function acceptLicenseResponse(
   const ctx = requireReady();
   const parsed = LicenseResponseSchema.safeParse(raw);
   if (!parsed.success) throw invalidResponse("Lisans yanıtı biçimsiz.");
-  const resp: LicenseResponse = parsed.data;
-  const roots = getLicenseConfig().roots;
-  const lease = coreVerifyLease(resp.kira, roots);
-  if (!lease.ok) throw invalidResponse(`Kira doğrulanamadı: ${lease.message}`, lease.code);
-  const leaseDoc = lease.value.document;
-  if (leaseDoc.kurulumAnahtarKimligi !== ctx.key.kid) throw invalidResponse("Kira bu kurulum anahtarına ait değil.");
-  if (resp.kurulumId !== undefined && resp.kurulumId !== leaseDoc.kurulumId) {
-    throw invalidResponse("Yanıttaki kurulum kimliği imzalı kirayla uyuşmuyor.");
+  const offer = revocationOffer(parsed.data.iptal);
+  try {
+    return acceptVerifiedResponse(parsed.data, ctx, offer, { source, userId });
+  } catch (err) {
+    adoptFromRejected(offer, source);
+    throw err;
   }
-  if (ctx.licenseId !== null && leaseDoc.kurulumId !== ctx.licenseId) throw invalidResponse("Kira bu kuruluma ait değil.");
-  const licenseId = leaseDoc.kurulumId;
-  const entitlementJws = resp.hak ?? ctx.store.entitlementJws;
-  if (!entitlementJws) throw invalidResponse("Yanıt HAK belgesi taşımıyor ve kurulumda HAK yok.");
-  const entitlement = coreVerifyEntitlement(entitlementJws, roots);
-  if (!entitlement.ok) throw invalidResponse(`HAK doğrulanamadı: ${entitlement.message}`, entitlement.code);
-  if (entitlement.value.document.kurulumId !== licenseId) throw invalidResponse("HAK bu kuruluma ait değil.");
-  const binding = coreCheckLeaseBinding(resp.kira, entitlementJws, roots);
-  if (!binding.ok) throw invalidResponse(`Kira HAK'a bağlı değil: ${binding.message}`, binding.code);
+}
 
+function acceptVerifiedResponse(
+  resp: LicenseResponse,
+  ctx: ReadyContext,
+  offer: RevocationOffer,
+  who: { readonly source: LeaseSource; readonly userId: string | null },
+): { yeniKira: boolean; kiraId: string } {
+  const { lease, entitlement, licenseId } = verifyResponseDocuments(resp, ctx, offer.picked?.jws ?? null);
+  const leaseDoc = lease.document;
   const before = getLicenseSnapshot();
   const known = before.lastKnownLease;
   if (known && known.kiraId === leaseDoc.kiraId) {
     // Aynı kira (ağ tekrarı): yeni değil. Silinen ya da eskisiyle değiştirilen dosyalar imzalı yanıttan onarılır.
+    adoptOffered(offer, who.source);
     if (!getLicenseStore()?.identity) saveLicenseIdentity(licenseId);
     if (resp.hak && resp.hak !== getLicenseStore()?.entitlementJws) acceptNewEntitlement(resp.hak);
     if (before.lease?.document.kiraId !== leaseDoc.kiraId) saveLease(resp.kira);
@@ -204,40 +195,16 @@ export async function acceptLicenseResponse(
   const priorSanction = sanctionView(before);
   const firstActivation = ctx.licenseId === null || !before.activated;
 
+  adoptOffered(offer, who.source);
   if (getLicenseStore()?.identity?.kurulumId !== licenseId) saveLicenseIdentity(licenseId);
-  startAccumulationForLease({ lease: leaseDoc, entitlement: entitlement.value, licenseId });
+  startAccumulationForLease({ lease: leaseDoc, entitlement, licenseId, iptalSira: offer.picked?.view.document.sira ?? null });
   if (resp.hak && resp.hak !== ctx.store.entitlementJws) acceptNewEntitlement(resp.hak);
   saveLease(resp.kira);
   setDownloadTokens(resp.indirmeBelirtecleri);
   if (getLicenseStore()?.transfer) saveTransfer(null);
   recordPollOutcome({ ok: true });
   invalidateLicenseSnapshot();
-
-  const after = getLicenseSnapshot();
-  void AuditService.logEvent({
-    category: "SYSTEM",
-    action: "LICENSE_LEASE_ACCEPTED",
-    userId,
-    recordId: leaseDoc.kiraId,
-    payload: {
-      kaynak: source,
-      kodTuru: resp.kodTuru ?? null,
-      hakSurum: leaseDoc.hakSurum,
-      bitis: leaseDoc.bitis,
-      zorlama: leaseDoc.zorlama,
-      yaptirimKademesi: leaseDoc.yaptirim.kademe,
-      ilkEtkinlestirme: firstActivation,
-    },
-  });
-  const nextSanction = sanctionView(after);
-  if (JSON.stringify(priorSanction) !== JSON.stringify(nextSanction)) {
-    void AuditService.logEvent({
-      category: "SYSTEM",
-      action: "LICENSE_SANCTION_CHANGED",
-      recordId: leaseDoc.kiraId,
-      payload: { onceki: priorSanction, yeni: nextSanction },
-    });
-  }
+  logLeaseAccepted({ resp, leaseDoc, ...who, firstActivation, priorSanction });
   evaluateLicenseTransitions();
   if (firstActivation) doorbellKick?.();
   return { yeniKira: true, kiraId: leaseDoc.kiraId };

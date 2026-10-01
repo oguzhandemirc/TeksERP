@@ -32,6 +32,8 @@ export const LICENSE_FILES = {
   TRANSFER: "tasima.json",
   /** Parmak izi 24 sa önbelleği (K8) — yalnız tuzlu özet; HMAC'li, bozuksa yok sayılır (`fingerprint-cache.ts`). */
   FINGERPRINT_CACHE: "parmak-izi-onbellek.json",
+  /** Etkin iptal belgesi (G4, kök imzalı JWS) — DB kopyası `license.revocation`; tembel okunur (`revocation-store.ts`). */
+  REVOCATION: "iptal.jws",
 } as const;
 
 /** Depo kullanılamıyorsa nedeni (kapı/ekran TR metni ayrıca üretir). */

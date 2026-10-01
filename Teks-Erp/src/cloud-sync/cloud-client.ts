@@ -6,7 +6,7 @@ import { EgressError, egressRequest } from "../lib/http-egress";
 import { getLicenseStore } from "../lib/license/store";
 import { REQUEST_HEADER, isoToMs, signRequest } from "../lib/license/protocol";
 import { requestClockSkewMs } from "../lib/license/request-clock";
-import { CloudErrorResponseSchema } from "./wire";
+import { CloudErrorResponseSchema, type SyncPath } from "./wire";
 
 const CLOUD_TIMEOUT_MS = 60_000;
 const RESPONSE_MAX_BYTES = 8 * 1024 * 1024;
@@ -51,12 +51,12 @@ const NETWORK_RETRIES = 2;
 type Attempt = CloudResult | { readonly ok: false; readonly status: number; readonly code: string; readonly serverTimeMs?: number };
 
 /** Ağ tekrarlı gönderim; imza damgası `nowMs()`ten (D4 düzeltmesinde duvar − pay). */
-async function sendWithRetries(ctx: CloudCallContext, req: { url: string; raw: Buffer; gzip: boolean }, nowMs: () => number): Promise<Attempt> {
+async function sendWithRetries(ctx: CloudCallContext, req: { url: string; path: SyncPath; raw: Buffer; gzip: boolean }, nowMs: () => number): Promise<Attempt> {
   const store = getLicenseStore();
   if (!store?.key || store.problem) return { ok: false, status: 0, code: "LISANS_DEPOSU_YOK" };
   let last: Attempt = { ok: false, status: 0, code: "EGRESS_NETWORK" };
   for (let attempt = 0; attempt <= NETWORK_RETRIES; attempt++) {
-    const token = signRequest({ installationId: ctx.installationId, purpose: "esitle", body: req.raw, key: { privateKey: store.key.privateKey, nowMs: nowMs() } });
+    const token = signRequest({ installationId: ctx.installationId, purpose: "esitle", body: req.raw, key: { privateKey: store.key.privateKey, nowMs: nowMs() }, path: req.path });
     const headers: Record<string, string> = {
       "content-type": "application/json",
       accept: "application/json",
@@ -89,12 +89,13 @@ async function sendWithRetries(ctx: CloudCallContext, req: { url: string; raw: B
 /**
  * İmzalı POST. `gzip` açıkken `govdeOzeti` SIKIŞTIRILMIŞ ham baytların özetidir (§6.1 — sunucu açmadan önce
  * özetler). Bulut saati kayıkken (`ISTEK_ZAMAN` + `sunucuSaati`) istek BİR KEZ düzeltilmiş damgayla, yeni nonce'la
- * yeniden imzalanır (D4, lisans kanalıyla aynı yardımcı); ikinci `ISTEK_ZAMAN`da durulur.
+ * yeniden imzalanır (D4, lisans kanalıyla aynı yardımcı); ikinci `ISTEK_ZAMAN`da durulur. `path` imzaya girer: bulut
+ * doğrulayıcısı (`authenticateFactory`) AYNI `SYNC_PATHS` sabitini verir — adresin önekinden bağımsız.
  */
-export async function cloudPost(ctx: CloudCallContext, path: string, body: unknown, opts: { gzip: boolean }): Promise<CloudResult> {
+export async function cloudPost(ctx: CloudCallContext, path: SyncPath, body: unknown, opts: { gzip: boolean }): Promise<CloudResult> {
   const text = JSON.stringify(body);
   const raw = opts.gzip ? gzipSync(Buffer.from(text, "utf8")) : Buffer.from(text, "utf8");
-  const req = { url: `${ctx.baseUrl}${path}`, raw, gzip: opts.gzip };
+  const req = { url: `${ctx.baseUrl}${path}`, path, raw, gzip: opts.gzip };
   const first = await sendWithRetries(ctx, req, Date.now);
   if (first.ok) return first;
   const skewMs = requestClockSkewMs(first.code, "serverTimeMs" in first ? first.serverTimeMs : undefined, Date.now());

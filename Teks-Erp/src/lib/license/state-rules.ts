@@ -62,6 +62,8 @@ export const REASON_CODES = [
   "LISANS_IZI_CELISKI",
   /** G12: süren ölçülemedi birikimi (çalışma süresi) — 14 gün UYARI → 30 gün EK_SURE → KISITLI. */
   "BELIRSIZLIK_SURUYOR",
+  /** G4: kira ya da durum kaydı pini bir iptal sırası istiyor, elde o sırada belge yok (iki kopya da) — zincir ölçülemez. */
+  "IPTAL_BELGESI_KAYIP",
 ] as const;
 export type ReasonCode = (typeof REASON_CODES)[number];
 
@@ -106,6 +108,8 @@ export const REASON_VALIDITY: Readonly<Record<ReasonCode, Validity | null>> = {
   LISANS_IZI_CELISKI: "OLCULEMEDI",
   // Merdivenin kendisi kademe taşır; geçerliliği onu doğuran bulgular belirler.
   BELIRSIZLIK_SURUYOR: null,
+  // İptal belgesi olmadan iptal edilmiş anahtar ayırt edilemez: ölçülemedi, merdivene girer.
+  IPTAL_BELGESI_KAYIP: "OLCULEMEDI",
 };
 
 export interface Banner {
@@ -185,6 +189,11 @@ export interface LicenseStateInput {
   readonly imzaYok?: boolean;
   /** Üç iz birden yok bulunduğu an (K7, kayıttan): süre çapası budur, HAK verilişi / ilk açılış çapası uygulanmaz. */
   readonly ekSureCapasiMs?: number | null;
+  // ── Lisans v2 G4 (L2-7). İsteğe bağlı: verilmezse iptal kuralı işlemez (bugünkü davranış). ──
+  /** Elde tutulan etkin iptal belgesinin sırası (yoksa null) ve bir kopyanın okunamaması (dosya izni · DB bilinmiyor). */
+  readonly iptal?: { readonly sira: number | null; readonly okunamadi: boolean };
+  /** Durum kaydı kopyalarının iptal pini (en büyüğü): bir kez görülen sıra geri inmez. */
+  readonly iptalPini?: number | null;
 }
 
 /** Kiradan sunucu kararlarının anlık görüntüsü — `durum.json` bunu saklar, durum onu okur. */

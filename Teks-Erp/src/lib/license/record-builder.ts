@@ -4,6 +4,7 @@
 import { CLOCK_SKEW_MS, isoToMs, msToIso, type LeaseDoc, type VerifiedEntitlement } from "./protocol";
 import { sanctionSnapshotOf } from "./state-rules";
 import { rememberAnchor } from "./state-rules-time";
+import { revocationPin } from "./state-rules-revocation";
 import { rootKindOf, type EntitlementPin, type StateRecord, type TraceKind } from "./saat";
 import type { IntegrityRecordPatch } from "./integrity-state";
 
@@ -44,6 +45,12 @@ function ladderPatch(prev: StateRecord | null, l: LadderFields, nowIso: string):
   };
 }
 
+/** İptal pini (G4): önceki pin ∨ kiranın beyanı ∨ elde tutulan belge; hiçbiri yoksa alan YAZILMAZ (eski kayıtla bayt farkı yok). */
+function revocationPinField(prev: StateRecord | null, lease: LeaseDoc | null, held: number | null | undefined): Pick<StateRecord, "iptalSira"> {
+  const pin = revocationPin(prev?.iptalSira, lease?.iptalSira, held);
+  return pin === null ? {} : { iptalSira: pin };
+}
+
 /** Bütünlük çapası alanları: yama verilmediyse önceki kayıttakiler aynen taşınır. */
 function integrityFields(patch: IntegrityRecordPatch | undefined, prev: StateRecord | null): IntegrityRecordPatch {
   return patch ?? { butunlukIlk: prev?.butunlukIlk ?? null, butunlukPaketId: prev?.butunlukPaketId ?? null };
@@ -63,6 +70,8 @@ export interface HourlyInput {
   readonly integrity?: IntegrityRecordPatch;
   readonly ladder: LadderFields;
   readonly nowMs: number;
+  /** Elde tutulan etkin iptal belgesinin sırası (pine girer). */
+  readonly iptalSira?: number | null;
 }
 
 /**
@@ -88,6 +97,7 @@ export function nextHourlyRecord(g: HourlyInput): StateRecord {
     saticiSapmaSn: g.skewSeconds,
     ...integrityFields(g.integrity, r),
     ...ladderPatch(r, g.ladder, nowIso),
+    ...revocationPinField(r, g.lease, g.iptalSira),
   };
 }
 
@@ -101,6 +111,7 @@ export interface LeaseRecordInput {
   readonly integrity?: IntegrityRecordPatch;
   readonly ladder: Pick<LadderFields, "parmakIziUyusmazMs" | "izDogrulandi" | "parmakIziOnbellegi">;
   readonly nowMs: number;
+  readonly iptalSira?: number | null;
 }
 
 /**
@@ -135,6 +146,7 @@ export function leaseRecord(g: LeaseRecordInput): StateRecord {
     ekSureCapasi: null,
     izKurulu: prev?.izKurulu === true || g.ladder.izDogrulandi,
     ...(g.ladder.parmakIziOnbellegi ?? prev?.parmakIziOnbellegi ? { parmakIziOnbellegi: g.ladder.parmakIziOnbellegi ?? prev?.parmakIziOnbellegi } : {}),
+    ...revocationPinField(prev, g.lease, g.iptalSira),
   };
 }
 
@@ -147,6 +159,7 @@ export interface OrphanInput {
   readonly integrity?: IntegrityRecordPatch;
   readonly ladder: LadderFields;
   readonly nowMs: number;
+  readonly iptalSira?: number | null;
 }
 
 /**
@@ -174,5 +187,6 @@ export function orphanRecord(g: OrphanInput): StateRecord {
     ...integrityFields(g.integrity, null),
     sureCapasi: g.lease ? rememberAnchor(g.entitlement, g.lease) : null,
     ...ladderPatch(null, g.ladder, nowIso),
+    ...revocationPinField(null, g.lease, g.iptalSira),
   };
 }
