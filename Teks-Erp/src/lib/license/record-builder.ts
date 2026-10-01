@@ -5,7 +5,7 @@ import { CLOCK_SKEW_MS, isoToMs, msToIso, type LeaseDoc, type VerifiedEntitlemen
 import { sanctionSnapshotOf } from "./state-rules";
 import { rememberAnchor } from "./state-rules-time";
 import { revocationPin } from "./state-rules-revocation";
-import { rootKindOf, type EntitlementPin, type StateRecord, type TraceKind } from "./saat";
+import { rootKindOf, type EntitlementPin, type LeaseClockAnchor, type StateRecord, type TraceKind } from "./saat";
 import type { IntegrityRecordPatch } from "./integrity-state";
 
 export function entitlementPinOf(entitlement: VerifiedEntitlement): EntitlementPin {
@@ -112,6 +112,8 @@ export interface LeaseRecordInput {
   readonly ladder: Pick<LadderFields, "parmakIziUyusmazMs" | "izDogrulandi" | "parmakIziOnbellegi">;
   readonly nowMs: number;
   readonly iptalSira?: number | null;
+  /** Kabulde saat sürekliliği (`leaseClockAnchor`); yoksa taban kiranın sunucu saati, kredi sıfır. */
+  readonly clock?: LeaseClockAnchor;
 }
 
 /**
@@ -121,6 +123,8 @@ export interface LeaseRecordInput {
  */
 export function leaseRecord(g: LeaseRecordInput): StateRecord {
   const prev = g.prev;
+  const baseMs = g.clock?.baseMs ?? null;
+  const creditMs = g.clock?.creditMs ?? 0;
   return {
     v: 1,
     kurulumId: g.licenseId,
@@ -133,9 +137,9 @@ export function leaseRecord(g: LeaseRecordInput): StateRecord {
     sira: prev ? prev.sira + 1 : 0,
     sonKira: { kiraId: g.lease.kiraId, verilis: g.lease.verilis },
     sonHak: entitlementPinOf(g.entitlement),
-    kapaliMs: 0,
-    // Kabul anında duvar saati satıcının İMZALI saatinden ileri kaçmışsa kayıt kredi vermez.
-    duvarTutarli: g.nowMs - isoToMs(g.lease.sunucuSaati) <= CLOCK_SKEW_MS,
+    kapaliMs: creditMs,
+    // Kabul anında duvar saati tahminden (taban + devreden kredi) ileri kaçmışsa kayıt kredi vermez.
+    duvarTutarli: g.nowMs - ((baseMs ?? isoToMs(g.lease.sunucuSaati)) + creditMs) <= CLOCK_SKEW_MS,
     saticiSapmaSn: g.skewSeconds,
     // Yeni kira bütünlük çapasını SIFIRLAMAZ (kira yenilemek ek süreyi uzatmasın).
     ...integrityFields(g.integrity, prev),
@@ -147,6 +151,7 @@ export function leaseRecord(g: LeaseRecordInput): StateRecord {
     izKurulu: prev?.izKurulu === true || g.ladder.izDogrulandi,
     ...(g.ladder.parmakIziOnbellegi ?? prev?.parmakIziOnbellegi ? { parmakIziOnbellegi: g.ladder.parmakIziOnbellegi ?? prev?.parmakIziOnbellegi } : {}),
     ...revocationPinField(prev, g.lease, g.iptalSira),
+    ...(baseMs !== null ? { saatTabani: msToIso(baseMs) } : {}),
   };
 }
 

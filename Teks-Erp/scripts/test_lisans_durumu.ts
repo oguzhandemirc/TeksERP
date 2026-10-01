@@ -48,6 +48,10 @@
 //   S7 değerlendirici susar                                     → 5 ❌ (§28b/c/e/f/h)
 //   S8 IPTAL_BELGESI_KAYIP birikime girmez                       → 1 ❌ (§28b)
 //   S14 gereken sıra ≥ 1 (eski girdiye de bulgu)                 → 1 ❌ (§28g)
+//   L2-9 (kabulde saat sürekliliği, §29; `saat.ts` mutasyonu):
+//   N1 max kaldırıldı (taban = kira sunucu saati)               → 3 ❌ (§29d/e/f)
+//   N2 kabul anında duvar tabana girdi                          → 2 ❌ (§29e/f)
+//   N3 kapalı süre kredisi devretmez                            → 1 ❌ (§29f)
 //   Her mutasyonun UYGULANDIĞI (sha farkı) ve geri alındığı (sha eşitliği) ayrıca ölçüldü.
 //   Doğuşta ısıran GERÇEK kusur: §5e — zehirli yüksek suyu üst eşikte tavanlamak güvenilir
 //   saati duvarın ilerisine itip sahte SAAT_GERİ üretiyordu; `saat.ts` bu dilimde düzeltildi.
@@ -79,6 +83,7 @@ import {
   signStateRecord,
   monotonicElapsed,
   evaluateClock,
+  leaseClockAnchor,
   type RememberedAnchor,
 } from "../src/lib/license/saat";
 import type { TraceInput } from "../src/lib/license/state-rules-trace";
@@ -937,6 +942,53 @@ function iptalBolumu(): void {
   check("§28j kod kataloğunda ve geçerlilik etkisi ÖLÇÜLEMEDİ", (REASON_CODES as readonly string[]).includes("IPTAL_BELGESI_KAYIP") && REASON_VALIDITY.IPTAL_BELGESI_KAYIP === "OLCULEMEDI");
 }
 
+// ── L2-9: kabulde saat sürekliliği (§29) — taşınmış kira tahmini geri çekemez, duvar tabana girmez ─────────
+function saatSurekliligiBolumu(): void {
+  console.log("\n§29 — kabulde saat sürekliliği (saf): taban = max(kira sunucu saati, kabul anındaki ölçülmüş tahmin); duvar tabana girmez");
+  const ucGunOnce = msToIso(SIMDI - 3 * DAY_MS);
+  const tasinmis: Senaryo = { kira: { sunucuSaati: ucGunOnce, verilis: ucGunOnce } };
+  const eski = durum({ ...tasinmis, saat: { monotonik: { kiraId: KIRA_ID, gecenMs: 0 } } });
+  const eskiNull = durum({ ...tasinmis, saat: { monotonik: { kiraId: KIRA_ID, gecenMs: 0, tabanMs: null } } });
+  check(
+    "§29a ⭐ eski kayıt (taban YOK): 3 gün önceki sunucu saatli kira az önce kabul → bugünkü sonuç SAAT_İLERİ(DUVAR), güvenilir = sunucu saati; taban null ile BAYT-EŞİT",
+    eski.saat.finding === "SAAT_ILERI" && eski.saat.findingSource === "DUVAR" && eski.saat.trustedMs === SIMDI - 3 * DAY_MS && JSON.stringify(eski) === JSON.stringify(eskiNull),
+    ozet(eski),
+  );
+  const tabanli = durum({ ...tasinmis, saat: { monotonik: { kiraId: KIRA_ID, gecenMs: 0, tabanMs: SIMDI } } });
+  check("§29b ⭐ aynı kira, taban = kabul anındaki tahmin → bulgu yok, güvenilir = duvar", tabanli.saat.finding === null && tabanli.saat.trustedMs === SIMDI && tabanli.saat.estimateMs === SIMDI, ozet(tabanli));
+  const geride = durum({ saat: { monotonik: { kiraId: KIRA_ID, gecenMs: SAAT, tabanMs: SIMDI - 10 * DAY_MS } } });
+  check("§29c sunucu saatinin GERİSİNDEKİ taban yok sayılır (max): tahmin geri çekilmez", JSON.stringify(geride.saat) === JSON.stringify(durum().saat), `${geride.saat.estimateMs} vs ${durum().saat.estimateMs}`);
+  const olcum = (wallMs: number, mono: number, credit = 0): ReturnType<typeof evaluateClock> =>
+    evaluateClock({ wallMs, highWaterMs: 0, leaseServerTimeMs: SIMDI - 31 * DAY_MS, monotonicElapsedMs: mono, pollIntervalMs: 5 * 60_000, downtimeCreditMs: credit });
+  const surekli = olcum(SIMDI, 31 * DAY_MS);
+  const t = leaseClockAnchor(surekli, { leaseServerTimeMs: SIMDI - 3 * DAY_MS, wallMs: SIMDI });
+  const taze = leaseClockAnchor(surekli, { leaseServerTimeMs: SIMDI - 5 * 60_000, wallMs: SIMDI });
+  const ileriTaze = leaseClockAnchor(surekli, { leaseServerTimeMs: SIMDI + 60_000, wallMs: SIMDI });
+  check(
+    "§29d çapa: ölçülemedi → taban yok · taşınmış (3 g) → taban = tahmin · saat payı içinde (5 dk) ya da ileride → taban yok (alan yazılmaz)",
+    JSON.stringify(leaseClockAnchor({ estimateMs: null, creditMs: 0 }, { leaseServerTimeMs: SIMDI - 3 * DAY_MS, wallMs: SIMDI })) === JSON.stringify({ baseMs: null, creditMs: 0 }) &&
+      t.baseMs === SIMDI && t.creditMs === 0 && taze.baseMs === null && taze.creditMs === 0 && ileriTaze.baseMs === null && ileriTaze.creditMs === 0,
+    JSON.stringify({ t, taze, ileriTaze }),
+  );
+  const ileri = olcum(SIMDI + 2 * DAY_MS, 31 * DAY_MS);
+  const ia = leaseClockAnchor(ileri, { leaseServerTimeMs: SIMDI - 16 * 60_000, wallMs: SIMDI + 2 * DAY_MS });
+  const sonra = evaluateClock({ wallMs: SIMDI + 2 * DAY_MS, highWaterMs: 0, leaseServerTimeMs: SIMDI - 16 * 60_000, baseMs: ia.baseMs, monotonicElapsedMs: 0, pollIntervalMs: 5 * 60_000, downtimeCreditMs: ia.creditMs });
+  check(
+    "§29e ⭐ kabul anında duvar 2 gün ileri (SAAT_İLERİ): taban duvar DEĞİL tahmin, kredi yok → kabulden sonra SAAT_İLERİ sürer, güvenilir = tahmin",
+    ileri.finding === "SAAT_ILERI" && ia.baseMs === SIMDI && ia.creditMs === 0 && sonra.finding === "SAAT_ILERI" && sonra.trustedMs === SIMDI,
+    `${JSON.stringify(ia)} → ${sonra.finding} ${sonra.trustedMs - SIMDI}`,
+  );
+  const kapali = olcum(SIMDI, 29 * DAY_MS, 2 * DAY_MS);
+  const ka = leaseClockAnchor(kapali, { leaseServerTimeMs: SIMDI - 2 * DAY_MS - SAAT, wallMs: SIMDI });
+  const kaSonra = evaluateClock({ wallMs: SIMDI, highWaterMs: 0, leaseServerTimeMs: SIMDI - 2 * DAY_MS - SAAT, baseMs: ka.baseMs, monotonicElapsedMs: 0, pollIntervalMs: 5 * 60_000, downtimeCreditMs: ka.creditMs });
+  const asan = leaseClockAnchor(olcum(SIMDI + 5 * DAY_MS, 29 * DAY_MS, 2 * DAY_MS), { leaseServerTimeMs: SIMDI - 2 * DAY_MS - SAAT, wallMs: SIMDI + 5 * DAY_MS });
+  check(
+    "§29f ⭐ 2 gün kapalı (kredili) + kapanmadan önce üretilmiş kira: duvarın kredili kısmı devreder (2 g) → bulgu yok; krediyi aşan duvar devretmez (yalnız 2 g, sürünme yok)",
+    kapali.finding === null && ka.baseMs === SIMDI - 2 * DAY_MS && ka.creditMs === 2 * DAY_MS && kaSonra.finding === null && kaSonra.trustedMs === SIMDI && asan.creditMs === 2 * DAY_MS,
+    `${JSON.stringify(ka)} → ${kaSonra.finding} · aşan ${JSON.stringify(asan)}`,
+  );
+}
+
 normalBolumu();
 gozlemBolumu();
 ekSureBolumu();
@@ -965,6 +1017,7 @@ kipBolumu();
 capaBolumu();
 gozlemSifirFarkBolumu();
 iptalBolumu();
+saatSurekliligiBolumu();
 safBolumu();
 console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
 process.exit(fail > 0 ? 1 : 0);

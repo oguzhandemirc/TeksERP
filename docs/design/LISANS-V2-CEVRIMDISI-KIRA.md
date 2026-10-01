@@ -95,10 +95,10 @@ Bakım sonu ve bütünlük merdiveni değişmez; ikisi de aynı ikinci anahtarı
 
 ### 1.5 Saat modeliyle etkileşim
 
-P, güvenilir saat T ile karşılaştırılır (`Teks-Erp/src/lib/license/saat.ts`; saat modeli değişmez).
+P, güvenilir saat T ile karşılaştırılır (`Teks-Erp/src/lib/license/saat.ts`; saat modeli değişmez, L2-9'da kabulde süreklilik eklendi).
 
-- **Alt sınır:** kira `sunucuSaati` + o kiradan beri biriken çalışma süresi (imzalı `durum.json`). v2'de tek kira aylarca kullanılabilir, birikim de aylarca büyür.
-- **Üst eşik:** alt sınır + kapalı süre kredisi + yoklama aralığı + tolerans. Kredi yalnız tutarlı saatle yazılmış kayıttan gelir; aylarca kapalı kalan fabrika sahte `SAAT_ILERI` görmez.
+- **Alt sınır:** max(kira `sunucuSaati`, kabul anındaki ölçülmüş tahmin) + o kiradan beri biriken çalışma süresi (imzalı `durum.json`, taban alanı `saatTabani`; alan yoksa taban kiranın sunucu saatidir). v2'de tek kira aylarca kullanılabilir, birikim de aylarca büyür. §1.4'teki taşınan kira (dosya e-posta/USB ile, QR) doğası gereği eski tarihlidir: tahmini kendi saatine geri çekseydi her internetsiz yenileme `SAAT_ILERI` → belirsizlik birikimi → EK_SURE doğurur ve K1'i ("internetsiz fabrika ödenmiş tarihe kadar çalışır") kırardı (Senaryo L34). Tabana duvar ve yüksek su girmez: kabulden önce ileri alınmış saat aklanmaz, `SAAT_ILERI` sürer. Saat payı (10 dk) içindeki fark ölçüm gürültüsüdür; taze kiranın tabanı kendi saatidir.
+- **Üst eşik:** alt sınır + kapalı süre kredisi + yoklama aralığı + tolerans. Kredi yalnız tutarlı saatle yazılmış kayıttan gelir; aylarca kapalı kalan fabrika sahte `SAAT_ILERI` görmez. Kabulde duvarın kredili kısmı yeni kiraya devreder (kapanmadan önce üretilmiş dosya hafta sonundan sonra yüklenince de).
 - **Saat ileri ya da geri:** erken bitiş yoktur. Güvenilir saat alt sınıra tutturulur, yani yalnız çalışma süresi sayılır. `SAAT_ILERI` ve `SAAT_GERI` ÖLÇÜLEMEDİ bulgusudur ve belirsizlik merdivenine girer (§3.1-3). Bugün bu bulgular yalnız UYARI'da takılıyordu.
 - **Yüksek su:** zehirli yüksek su (tahmini aşan değer) alt sınır sayılmaz; bu kural aynen kalır.
 - **Durum kaydı silinirse:** aynı kira için sıfırdan başlatılmaz (bugünkü kural). DB izi kopyası (§3.1) duruyorsa bu tek iz kaybıdır: saat ve süre izden sürer, `LISANS_IZI_KAYIP` yeni kira gelene dek kalır ve merdivene girer. İki kopya birden (dosya + DB izi) yoksa `DURUM_DOSYASI` bulgusu da doğar ve saat yüksek suya düşer. Dürüst arızanın çaresi tek bir QR ya da dosya yenilemesidir.

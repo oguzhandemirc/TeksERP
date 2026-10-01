@@ -144,8 +144,8 @@ export interface LicenseStateInput {
   readonly saat: {
     readonly duvarMs: number;
     readonly yuksekSuMs: number;
-    /** İmzalı durum kaydındaki birikim ve ait olduğu kira; yoksa null. */
-    readonly monotonik: { readonly kiraId: string; readonly gecenMs: number } | null;
+    /** İmzalı durum kaydındaki birikim, ait olduğu kira ve kabulde süreklilik tabanı (`saatTabani`); yoksa null. */
+    readonly monotonik: { readonly kiraId: string; readonly gecenMs: number; readonly tabanMs?: number | null } | null;
     readonly durumDosyasiGecerli: boolean;
     /** Duvar saatiyle gözlenmiş kapalı kalma süresi (üst eşik kredisi; `evaluateClock`). */
     readonly kapaliKrediMs?: number;
@@ -265,12 +265,14 @@ export function evaluateLease(g: LicenseStateInput, entitlement: VerifiedEntitle
 
 export function computeClock(g: LicenseStateInput, lease: LeaseDoc | null, out: Finding[]): ClockResult {
   const m = g.saat.monotonik;
-  const elapsed = lease && g.saat.durumDosyasiGecerli && m && m.kiraId === lease.kiraId ? m.gecenMs : null;
+  const measured = lease && g.saat.durumDosyasiGecerli && m && m.kiraId === lease.kiraId ? m : null;
+  const elapsed = measured ? measured.gecenMs : null;
   if (lease && elapsed === null) out.push({ code: "DURUM_DOSYASI", tier: "UYARI", banner: UNMEASURED_BANNER });
   const s = evaluateClock({
     wallMs: g.saat.duvarMs,
     highWaterMs: g.saat.yuksekSuMs,
     leaseServerTimeMs: lease ? isoToMs(lease.sunucuSaati) : null,
+    baseMs: measured?.tabanMs ?? null,
     monotonicElapsedMs: elapsed,
     pollIntervalMs: (lease?.yoklamaAraligiDk ?? POLL_DEFAULT_MINUTES) * 60_000,
     downtimeCreditMs: g.saat.kapaliKrediMs ?? 0,

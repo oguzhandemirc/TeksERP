@@ -39,6 +39,8 @@
 //      eski satıcı yeteneği yok sayar · her imzalı istek kendi ucunun yolunu imzalar, yanlış uca 401 ISTEK_YOL · çevrimdışı
 //      donanım zarfı (parmak izi yeniden okunur, /v1/cevrimdisi): BEKLIYOR ve REDDEDILDI reddedilir, ONAYLANDI kira kabulü ·
 //      etkinleşmemiş kurulum zarf üretmez
+//   ⭐ kabulde saat sürekliliği (L2-9, §33): taşınmış (dosya · QR · donanım zarfı) kira tahmini geri çekemez → SAAT_İLERİ yok,
+//      P ileri, EK_SURE kalkar · kabulden önceki ileri sıçrama aklanmaz · kapalı süre kredisi devreder · eski kayıt bugünkü
 //
 // NEGATİF SONDA — dosya DIŞI mutasyon (cp + shasum ile birebir geri alındı; sonuçlar commit
 // mesajında): M1 persistAccumulation bozuk kayıtta sıfırdan başlatır · M2 kabulde kurulum
@@ -71,6 +73,8 @@
 // S19 yoklamada yetenek yok (§32a) · S20 etkinleştirmede yok (§32a) · S21 parmak-izi-v2 düştü (§32a/b) · S22 satıcı isteği
 // yolsuz (§32e/f) · S23 zil yolsuz (§32e) · S24 zarf donanım ucuna imzalı (§32g/h/i/j) · S28 donanım yanıtı tanınmaz
 // (§32h/i/j) · S29 onaylı kiranın kaynağı (§32j) · S30 zarf yeniden ölçmez (§32g) · S31 BEKLIYOR kodu (§32h) — 12'si kırmızı.
+// L2-9 (§33; `saat.ts` mutasyonu, sha eşit geri alındı): N1 max kaldırıldı → 8 ❌ (§33a ×3 · a2 · b · c · c2 · e) · N2 kabul
+// anında duvar tabana girdi → 2 ❌ (§33b · e) · N3 kredi devri yok → 1 ❌ (§33e).
 // ⭐ KALICI SONDA ✓K1 (her koşumda): bilinmeyen kod genel mesaja düşer — §8a'nın "her kodun kendi
 // mesajı var" karşılaştırıcısı kör değil.
 // =============================================================================
@@ -125,7 +129,7 @@ import { capabilitiesFor, licenseCapabilities } from "../src/lib/license/capabil
 import { tsLicenseCore, type LicenseCore } from "../src/lib/license/license-core";
 import { unavailableCore } from "../src/lib/license/native-adapter";
 import { configureLicenseCoreForTests, getLicenseCore } from "../src/lib/license/native";
-import { signStateRecord, type StateRecord } from "../src/lib/license/saat";
+import { signStateRecord, type EntitlementPin, type StateRecord } from "../src/lib/license/saat";
 import { flushLicenseTraceWrites, lastKnownCeiling, type RecordView } from "../src/lib/license/accumulation";
 import { persistAccumulation, setFingerprintCacheCopy } from "../src/lib/license/record-writer";
 import { markLicenseTraceUnknown } from "../src/lib/license/trace-row";
@@ -163,7 +167,7 @@ import {
   startLicenseDoorbell,
   __resetLicenseDoorbellForTests,
 } from "../src/jobs/license-doorbell.job";
-import { fiksturKur, kiraBas, hakBas, anahtarUret, araHakBas, araSertifikasi, iptalBas, iptalYuku, type Fikstur } from "./lib/lisans-fikstur";
+import { fiksturKur, kiraBas, hakBas, anahtarUret, araHakBas, araSertifikasi, iptalBas, iptalYuku, sertifikaBas, sertifikaYuku, type Fikstur } from "./lib/lisans-fikstur";
 import { sahteSaticiBaslat, sahteProxyBaslat, type SahteSatici } from "./lib/lisans-sahte-satici";
 import { scanLicenseIdentitySeam } from "./lib/lisans-kimlik-dikisi";
 import { kabulEt, temizleKabuller } from "./lib/lisans-kabul-fikstur";
@@ -836,6 +840,128 @@ async function uzatmaDosyasiBolumu(x: Hazir): Promise<void> {
   const r = await pollLicenseOnce();
   const s = getLicenseSnapshot().state;
   check("§24h karşı: satıcı P taşımayan kira verince eski çapaya döner (v1 belgeyle sıfır fark)", r.outcome === "BASARILI" && s.odenmisTarih === null && s.hesaplananKademe === "NORMAL", `${r.outcome} ${JSON.stringify(s.odenmisTarih)}`);
+}
+
+// ── L2-9 kabulde saat sürekliliği (§33): taşınmış (dosya/QR) kira tahmini geri çekemez, ileri sıçrama aklanmaz ──
+const DAKIKA = 60_000;
+
+/** Taşınmış kiralar fikstürün ALT penceresinden (−10 g) eski: ALT 400 gün geriden başlar. */
+const uzunAlt = (f: Fikstur): string => sertifikaBas(f.kok, sertifikaYuku(f, f.alt, "ALT", { baslangic: msToIso(f.simdi - 400 * DAY_MS), bitis: msToIso(f.simdi + 170 * DAY_MS) }));
+
+/** Fabrika durumu: kira L0 `calisan` boyunca çalıştı, son yazımdan beri `kapali` kapalı, duvar gerçeğin `ileri` önünde; P geçti. */
+interface SaatDurumu {
+  readonly calisan: number;
+  readonly kapali?: number;
+  readonly ileri?: number;
+  /** L0'ın sunucu saati (yoksa gerçek − kapalı − çalışan) ve kayda yazılacak süreklilik tabanı. */
+  readonly sunucu?: number;
+  readonly taban?: number;
+}
+
+async function saatDurumuKur(x: Hazir, ent: Pick<EntitlementPin, "hakId" | "surum" | "sinif">, d: SaatDurumu): Promise<number> {
+  const key = getLicenseStore()?.key;
+  if (!key) throw new Error("depo anahtarı yok");
+  const simdi = Date.now();
+  const gercek = simdi - (d.ileri ?? 0);
+  const s0 = d.sunucu ?? gercek - (d.kapali ?? 0) - d.calisan;
+  const kiraId = randomUUID();
+  const P0 = msToIso(gercek - 2 * DAY_MS);
+  const kira = kiraBas(x.f, { kiraId, altSertifika: uzunAlt(x.f), parmakIzi: currentFingerprintDigest(), verilis: msToIso(s0), sunucuSaati: msToIso(s0), bitis: msToIso(s0 + 44 * DAY_MS), zorlama: false, odenmisTarih: P0, gecerlilikBitis: P0, yoklamaAraligiDk: 5 });
+  const kayit: StateRecord = {
+    v: 1, kurulumId: x.f.kurulumId, kiraId, birikenMs: d.calisan, yazildi: msToIso(simdi - (d.kapali ?? 0)), yuksekSu: msToIso(s0),
+    sonKiraZorlamasi: false, sonYaptirim: null, sira: 900, sonKira: { kiraId, verilis: msToIso(s0) },
+    sonHak: { hakId: ent.hakId, surum: ent.surum, sinif: ent.sinif, kokTuru: "kok" }, kapaliMs: 0, duvarTutarli: true,
+    ...(d.taban === undefined ? {} : { saatTabani: msToIso(d.taban) }),
+  };
+  await flushLicenseTraceWrites();
+  const jws = signStateRecord(kayit, key.privateKey, key.x);
+  fs.writeFileSync(path.join(x.dizin, LICENSE_FILES.LEASE), kira);
+  fs.writeFileSync(path.join(x.dizin, LICENSE_FILES.STATE), JSON.stringify({ v: 1, jws }));
+  await prisma.systemSetting.update({ where: { key: LICENSE_TRACE_SETTING_KEY }, data: { value: { v: 1, kurulumId: x.f.kurulumId, anahtar: key.x, durum: jws } } });
+  await yenidenBaslat(x.dizin);
+  return gercek;
+}
+
+async function saatSurekliligiBolumu(x: Hazir): Promise<void> {
+  console.log("\n§33 — kabulde saat sürekliliği: taşınmış (dosya/QR) kira SAAT_İLERİ doğurmaz · ileri sıçrama yine yakalanır · eski kayıt bugünkü");
+  const hak = hakBas(x.f, { cevrimdisiUfukGun: 400 });
+  const alt = uzunAlt(x.f);
+  const P = Date.now() + 200 * DAY_MS;
+  const yanit = (verilisMs: number): Record<string, unknown> => ({
+    v: 1,
+    hak,
+    kira: kiraBas(x.f, {
+      altSertifika: alt, parmakIzi: currentFingerprintDigest(), zorlama: false, verilis: msToIso(verilisMs), sunucuSaati: msToIso(verilisMs), bitis: msToIso(verilisMs + 44 * DAY_MS),
+      odenmisTarih: msToIso(P), gecerlilikBitis: msToIso(P), yoklamaAraligiDk: 5,
+    }),
+    indirmeBelirtecleri: [],
+    sunucuSaati: msToIso(verilisMs),
+  });
+  await acceptOfflineResponse(yanit(Date.now()), "dosya", null);
+  const e = getLicenseSnapshot().entitlement?.document;
+  if (!e) {
+    check("§33 ön koşul: HAK (ufuk 400 g)", false);
+    return;
+  }
+  const ent = { hakId: e.hakId, surum: e.surum, sinif: e.sinif };
+  const ozetle = (st: ReturnType<typeof getLicenseSnapshot>["state"]): string =>
+    `${st.saat.finding ?? "-"}/${st.saat.source} ${st.hesaplananKademe} P=${st.odenmisTarih?.tarihMs ? msToIso(st.odenmisTarih.tarihMs) : null} [${st.nedenler.map((n) => n.kod).join(",")}]`;
+  const tasinmis = async (etiket: string, d: SaatDurumu, yasMs: number, gonder: (y: Record<string, unknown>) => Promise<unknown>): Promise<{ once: ReturnType<typeof getLicenseSnapshot>["state"]; sonra: ReturnType<typeof getLicenseSnapshot>["state"]; gercek: number; kod: string }> => {
+    const gercek = await saatDurumuKur(x, ent, d);
+    const once = getLicenseSnapshot().state;
+    const kod = await hataKodu(Promise.resolve(gonder(yanit(gercek - yasMs))));
+    const sonra = getLicenseSnapshot().state;
+    console.log(`   · ${etiket}: önce ${ozetle(once)} → ${kod} → sonra ${ozetle(sonra)}`);
+    return { once, sonra, gercek, kod };
+  };
+  const dosya = (y: Record<string, unknown>): Promise<unknown> => acceptOfflineResponse(JSON.stringify(y), "dosya", null);
+  const qr = (y: Record<string, unknown>): Promise<unknown> => acceptOfflineResponse(Buffer.from(JSON.stringify(y), "utf8").toString("base64url"), "cevrimdisi", null);
+  // Tahmin (alt sınır) dosyanın saatine GERİ ÇEKİLMEZ: kabul anındaki ölçülmüş tahminden sürer (kapalı süre hariç).
+  const tamam = (r: { once: { hesaplananKademe: string; saat: { finding: string | null } }; sonra: ReturnType<typeof getLicenseSnapshot>["state"]; kod: string; gercek: number }, kapaliMs = 0): boolean =>
+    r.kod === "HATA_YOK" && r.once.hesaplananKademe === "EK_SURE" && r.once.saat.finding === null && r.sonra.saat.finding === null &&
+    r.sonra.odenmisTarih?.tarihMs === P && r.sonra.hesaplananKademe === "NORMAL" && Math.abs(r.sonra.saat.trustedMs - Date.now()) < DAKIKA &&
+    r.sonra.saat.estimateMs !== null && Math.abs(r.sonra.saat.estimateMs - (r.gercek - kapaliMs)) < DAKIKA;
+  for (const [ad, yas] of [["30 gün", 30 * DAY_MS], ["3 gün", 3 * DAY_MS], ["16 dk (yoklama 5 dk + 10 dk payın ötesi)", 16 * DAKIKA]] as const) {
+    const r = await tasinmis(`dosya ${ad}`, { calisan: 31 * DAY_MS }, yas, dosya);
+    check(
+      `§33a ⭐ ${ad} önce üretilmiş uzatma DOSYASI (fabrika sürekli çalışıyor) → SAAT_İLERİ YOK, P ileri, EK_SURE kalkar, tahmin dosyanın saatine geri çekilmez`,
+      tamam(r),
+      `${r.kod} ${ozetle(r.once)} → ${ozetle(r.sonra)} tahmin−gerçek=${Math.round(((r.sonra.saat.estimateMs ?? 0) - r.gercek) / 1000)} sn`,
+    );
+  }
+  const taban = Number(Date.parse(String(durumKaydiAlani(x.dizin).saatTabani)));
+  check("§33a2 kabul kaydı süreklilik tabanını taşır (≈ kabul anındaki ölçülmüş tahmin, dosyanın saati değil)", Math.abs(taban - Date.now()) < DAKIKA, String(durumKaydiAlani(x.dizin).saatTabani));
+  const ileri = await tasinmis("duvar 2 gün ileri + 16 dk'lık dosya", { calisan: 31 * DAY_MS, ileri: 2 * DAY_MS }, 16 * DAKIKA, dosya);
+  check(
+    "§33b ⭐ dosyayı yüklemeden ÖNCE duvarı 2 gün ileri alan fabrika → kabul edilir ama SAAT_İLERİ(DUVAR) SÜRER, güvenilir saat duvar değil tahmin (kabul aklamaz)",
+    ileri.kod === "HATA_YOK" && ileri.once.saat.finding === "SAAT_ILERI" && ileri.sonra.saat.finding === "SAAT_ILERI" && ileri.sonra.saat.findingSource === "DUVAR" &&
+      Math.abs(ileri.sonra.saat.trustedMs - ileri.gercek) < DAKIKA && ileri.sonra.odenmisTarih?.tarihMs === P,
+    `${ileri.kod} ${ozetle(ileri.once)} → ${ozetle(ileri.sonra)} güvenilir−gerçek=${Math.round((ileri.sonra.saat.trustedMs - ileri.gercek) / 1000)} sn`,
+  );
+  const q = await tasinmis("QR 3 gün", { calisan: 31 * DAY_MS }, 3 * DAY_MS, qr);
+  check("§33c ⭐ QR yolu (base64url metin, kaynak 'cevrimdisi') aynı sınıf: 3 gün önceki yanıt → SAAT_İLERİ YOK, P ileri, EK_SURE kalkar", tamam(q), `${q.kod} ${ozetle(q.once)} → ${ozetle(q.sonra)}`);
+  const zarf = await tasinmis("donanım zarfı (ONAYLANDI) QR 3 gün", { calisan: 31 * DAY_MS }, 3 * DAY_MS, (y) => qr({ v: 1, talepId: randomUUID(), durum: "ONAYLANDI", lisans: y }));
+  check("§33c2 donanım zarfı (ONAYLANDI, QR) aynı kabul noktası: SAAT_İLERİ YOK, EK_SURE kalkar", tamam(zarf), `${zarf.kod} ${ozetle(zarf.once)} → ${ozetle(zarf.sonra)}`);
+  const kapali = await tasinmis("2 gün kapalı + kapanmadan önce üretilmiş dosya", { calisan: 31 * DAY_MS, kapali: 2 * DAY_MS }, 2 * DAY_MS + 60 * DAKIKA, dosya);
+  const devreden = Number(durumKaydiAlani(x.dizin).kapaliMs);
+  check(
+    "§33e ⭐ hafta sonu kapalı (2 gün, kredili) fabrikaya kapanmadan önce üretilmiş dosya → SAAT_İLERİ YOK; duvarın kredili kısmı yeni kiraya devreder (kapaliMs ≈ 2 gün)",
+    tamam(kapali, 2 * DAY_MS) && Math.abs(devreden - 2 * DAY_MS) < DAKIKA,
+    `${kapali.kod} ${ozetle(kapali.once)} → ${ozetle(kapali.sonra)} kapaliMs=${devreden}`,
+  );
+  // Eski kayıt (taban alanı yok): kira 3 gün önceki sunucu saatiyle az önce kabul edilmiş → bugünkü sonuç SAAT_İLERİ.
+  await saatDurumuKur(x, ent, { calisan: 0, sunucu: Date.now() - 3 * DAY_MS });
+  const eski = getLicenseSnapshot().state;
+  await saatDurumuKur(x, ent, { calisan: 0, sunucu: Date.now() - 3 * DAY_MS, taban: Date.now() });
+  const tabanli = getLicenseSnapshot().state;
+  check(
+    "§33d ⭐ eski kayıt (saatTabani YOK) → bugünkü sonuç: taban = kiranın sunucu saati, SAAT_İLERİ(DUVAR); aynı kayıt tabanla → bulgu yok (tek anahtar alan)",
+    eski.saat.finding === "SAAT_ILERI" && eski.saat.findingSource === "DUVAR" && Math.abs(eski.saat.trustedMs - (Date.now() - 3 * DAY_MS)) < DAKIKA && tabanli.saat.finding === null,
+    `${ozetle(eski)} · tabanlı ${ozetle(tabanli)}`,
+  );
+  const p = await pollLicenseOnce();
+  const alan = durumKaydiAlani(x.dizin);
+  check("§33d2 taze çevrimiçi kira (sunucu saati ≥ tahmin) → kayıtta saatTabani YOK (eski biçimle aynı alan kümesi)", p.outcome === "BASARILI" && !("saatTabani" in alan) && getLicenseSnapshot().state.saat.finding === null, `${p.outcome} ${Object.keys(alan).includes("saatTabani")}`);
 }
 
 const ayniKume = (a: Fingerprint | undefined, b: Fingerprint): boolean => !!a && (["f1", "f2", "f3", "f4", "f5"] as const).every((k) => a[k] === b[k]);
@@ -1668,6 +1794,7 @@ async function main(): Promise<void> {
     await iptalAraBolumu(hazir);
     await iptalSaatBolumu(hazir);
     await uzatmaDosyasiBolumu(hazir);
+    await saatSurekliligiBolumu(hazir);
     await donanimBildirimiBolumu(hazir);
     await telBolumu(hazir);
     gozlemSayaciBolumu();

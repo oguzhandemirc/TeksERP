@@ -248,7 +248,10 @@ function buildInput(nowMs: number): BuiltInput {
     saat: {
       duvarMs: nowMs,
       yuksekSuMs: 0,
-      monotonik: a && record && record.kiraId !== null ? { kiraId: record.kiraId, gecenMs: elapsedOf(a, record) } : null,
+      monotonik:
+        a && record && record.kiraId !== null
+          ? { kiraId: record.kiraId, gecenMs: elapsedOf(a, record), tabanMs: record.saatTabani ? isoToMs(record.saatTabani) : null }
+          : null,
       durumDosyasiGecerli: record !== null,
       kapaliKrediMs: downtimeCreditOf(a, record),
     },

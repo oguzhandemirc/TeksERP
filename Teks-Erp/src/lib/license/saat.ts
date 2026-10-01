@@ -32,6 +32,8 @@ export interface ClockInput {
   readonly highWaterMs: number;
   /** Geçerli kiranın `sunucuSaati`; kira yoksa null. */
   readonly leaseServerTimeMs: number | null;
+  /** Kabulde süreklilik tabanı (`leaseClockAnchor`); yoksa ya da kiranın sunucu saatinden gerideyse taban o saattir. */
+  readonly baseMs?: number | null;
   /** Bu kira kabul edildiğinden beri biriken monotonik süre; ölçülemiyorsa null. */
   readonly monotonicElapsedMs: number | null;
   readonly pollIntervalMs: number;
@@ -49,6 +51,10 @@ export interface ClockResult {
   readonly finding: ClockFinding | null;
   /** Bulgu yüksek sudan mı duvar saatinden mi doğdu (portala rapor için). */
   readonly findingSource: "DUVAR" | "YUKSEK_SU" | null;
+  /** Ölçülmüş tahmin (taban + kiradan beri monotonik): yalnız imzalı sunucu saatinden ve monotonik süreden türer; ölçülemediyse null. */
+  readonly estimateMs: number | null;
+  /** Üst eşiğe giren kapalı süre kredisi. */
+  readonly creditMs: number;
 }
 
 /**
@@ -61,27 +67,51 @@ export interface ClockResult {
 export function evaluateClock(g: ClockInput): ClockResult {
   const floor = Math.max(g.highWaterMs, g.leaseServerTimeMs ?? Number.NEGATIVE_INFINITY);
   if (g.leaseServerTimeMs === null || g.monotonicElapsedMs === null) {
+    const unmeasured = { estimateMs: null, creditMs: 0 } as const;
     if (g.wallMs < floor - CLOCK_SKEW_MS) {
-      return { trustedMs: floor, source: "YUKSEK_SU", finding: "SAAT_GERI", findingSource: "DUVAR" };
+      return { trustedMs: floor, source: "YUKSEK_SU", finding: "SAAT_GERI", findingSource: "DUVAR", ...unmeasured };
     }
-    return { trustedMs: Math.max(g.wallMs, floor), source: "DUVAR", finding: null, findingSource: null };
+    return { trustedMs: Math.max(g.wallMs, floor), source: "DUVAR", finding: null, findingSource: null, ...unmeasured };
   }
-  const estimate = g.leaseServerTimeMs + Math.max(0, g.monotonicElapsedMs);
-  const upperBound = estimate + Math.max(0, g.downtimeCreditMs ?? 0) + g.pollIntervalMs + CLOCK_SKEW_MS;
+  const estimate = Math.max(g.leaseServerTimeMs, g.baseMs ?? g.leaseServerTimeMs) + Math.max(0, g.monotonicElapsedMs);
+  const creditMs = Math.max(0, g.downtimeCreditMs ?? 0);
+  const upperBound = estimate + creditMs + g.pollIntervalMs + CLOCK_SKEW_MS;
+  const measured = { estimateMs: estimate, creditMs } as const;
   // Tahminin ötesindeki yüksek su alt sınır olarak HİÇ kullanılmaz: eşikte tavanlamak bile
   // güvenilir saati duvarın ilerisine iter ve sahte SAAT_GERİ üretir.
   const highWaterTrusted = floor <= upperBound;
   const lower = highWaterTrusted ? Math.max(estimate, floor) : estimate;
   const lowerSource: ClockSource = lower === estimate ? "MONOTONIK" : "YUKSEK_SU";
   if (g.wallMs < lower - CLOCK_SKEW_MS) {
-    return { trustedMs: lower, source: lowerSource, finding: "SAAT_GERI", findingSource: "DUVAR" };
+    return { trustedMs: lower, source: lowerSource, finding: "SAAT_GERI", findingSource: "DUVAR", ...measured };
   }
   if (g.wallMs > upperBound) {
-    return { trustedMs: lower, source: lowerSource, finding: "SAAT_ILERI", findingSource: "DUVAR" };
+    return { trustedMs: lower, source: lowerSource, finding: "SAAT_ILERI", findingSource: "DUVAR", ...measured };
   }
   const trustedMs = Math.max(g.wallMs, lower);
-  if (!highWaterTrusted) return { trustedMs, source: "DUVAR", finding: "SAAT_ILERI", findingSource: "YUKSEK_SU" };
-  return { trustedMs, source: "DUVAR", finding: null, findingSource: null };
+  if (!highWaterTrusted) return { trustedMs, source: "DUVAR", finding: "SAAT_ILERI", findingSource: "YUKSEK_SU", ...measured };
+  return { trustedMs, source: "DUVAR", finding: null, findingSource: null, ...measured };
+}
+
+/** Yeni kiranın saat çapası: tahmin tabanı (sunucu saatini aşmıyorsa null — alan yazılmaz) + devreden üst eşik kredisi. */
+export interface LeaseClockAnchor {
+  readonly baseMs: number | null;
+  readonly creditMs: number;
+}
+
+/**
+ * Kabulde süreklilik: yeni kiranın tahmini = max(kiranın sunucu saati, kabul anındaki ÖLÇÜLMÜŞ tahmin) + kabulden beri
+ * monotonik — taşınmış (eski tarihli) kira tahmini geri çekemez. Tabana duvar ve yüksek su girmez (ileri sıçrama
+ * aklanmaz); duvarın kapalı süre kredisiyle örtülen kısmı yeni kiraya kredi olarak devreder. Saat payı içindeki fark
+ * ölçüm gürültüsüdür: taze kiranın tabanı kendi saatidir (alan yazılmaz).
+ */
+export function leaseClockAnchor(prev: Pick<ClockResult, "estimateMs" | "creditMs">, g: { readonly leaseServerTimeMs: number; readonly wallMs: number }): LeaseClockAnchor {
+  if (prev.estimateMs === null) return { baseMs: null, creditMs: 0 };
+  const top = Math.max(g.leaseServerTimeMs, prev.estimateMs);
+  return {
+    baseMs: top - g.leaseServerTimeMs > CLOCK_SKEW_MS ? Math.round(top) : null,
+    creditMs: Math.max(0, Math.round(Math.min(g.wallMs, prev.estimateMs + prev.creditMs) - top)),
+  };
 }
 
 /**
@@ -167,7 +197,7 @@ export const StateRecordSchema = z.object({
   sonKira: z.object({ kiraId: UuidSchema, verilis: IsoTimeSchema }).nullable().optional(),
   /** Kabul edilen son HAK'ın sürüm/sınıf/kök pini. */
   sonHak: EntitlementPinSchema.nullable().optional(),
-  /** Bu kira boyunca biriken, duvar saatiyle gözlenmiş kapalı kalma süresi (üst eşik kredisi). */
+  /** Bu kira boyunca biriken, duvar saatiyle gözlenmiş kapalı kalma süresi (üst eşik kredisi; kabulde önceki kiradan devreden dahil). */
   kapaliMs: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER).optional(),
   /** Yazım anında duvar saati tahminle tutarlı mıydı; değilse `yazildi` kapalı süreye kredi VERMEZ. */
   duvarTutarli: z.boolean().optional(),
@@ -197,6 +227,8 @@ export const StateRecordSchema = z.object({
   // Lisans v2 G4 (L2-7).
   /** İptal pini: görülen en yüksek iptal sırası (kira beyanı ∨ elde tutulan belge); elde daha düşüğü kalırsa belge kayıptır. */
   iptalSira: z.number().int().min(1).max(Number.MAX_SAFE_INTEGER).optional(),
+  /** Kabulde süreklilik tabanı (`leaseClockAnchor`): bu kiranın tahmini buradan sayılır; yoksa kiranın sunucu saatinden. */
+  saatTabani: IsoTimeSchema.optional(),
 });
 export type StateRecord = z.infer<typeof StateRecordSchema>;
 

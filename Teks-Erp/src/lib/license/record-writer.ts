@@ -1,8 +1,8 @@
 // Durum kaydının YAZIMI (saatlik · açılış · kapanış · yeni kira): motorun anlık görüntüsünden sonraki kaydı kurar
 // (`record-builder.ts`) ve iki kopyaya yazar (`accumulation.ts`: durum.json + DB izi). Anlık görüntüyü okur, motor
 // (`runtime.ts`) bu modülü içe aktarmaz — döngü yok.
-import type { LeaseDoc, VerifiedEntitlement } from "./protocol";
-import type { StateRecord } from "./saat";
+import { isoToMs, type LeaseDoc, type VerifiedEntitlement } from "./protocol";
+import { leaseClockAnchor, type StateRecord } from "./saat";
 import { entitlementPinBroken } from "./state-rules-trust";
 import { integrityRecordPatch } from "./integrity-state";
 import { ladderValue } from "./ladder-counters";
@@ -77,6 +77,9 @@ export function startAccumulationForLease(g: {
   /** Kabulde benimsenen (ya da elde tutulan) iptal belgesinin sırası — pine girer. */
   readonly iptalSira?: number | null;
 }): void {
+  const nowMs = g.nowMs ?? Date.now();
+  // Saat sürekliliği kabul ÖNCESİ ölçülmüş tahminden (eldeki kira + birikim); hangi yoldan gelirse gelsin tek nokta.
+  const clock = leaseClockAnchor(getLicenseSnapshot(nowMs).state.saat, { leaseServerTimeMs: isoToMs(g.lease.sunucuSaati), wallMs: nowMs });
   const view = recordView(currentAccumulation(), g.licenseId);
   writeRecord(
     leaseRecord({
@@ -86,7 +89,8 @@ export function startAccumulationForLease(g: {
       skewSeconds: skewSecondsForRecord(),
       integrity: integrityRecordPatch(view.record),
       ladder: { parmakIziUyusmazMs: ladderValue("parmakIzi"), izDogrulandi: view.traceValid, parmakIziOnbellegi: fingerprintCacheCopy },
-      nowMs: g.nowMs ?? Date.now(),
+      nowMs,
+      clock,
     }),
   );
 }
