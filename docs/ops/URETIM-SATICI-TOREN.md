@@ -116,7 +116,7 @@ node deploy/satici/uretim-toren.mjs usb-kopyala --usb=/Volumes/<USB adı>
 2. **VDS:** [`SATICI-KURULUM.md`](SATICI-KURULUM.md) §13 — anahtar birimi, ayrı DB, yedek döngüsü, iç API, DNS (`lisans`).
 3. **CF Worker:** İNDİRME açık anahtarı (`capaSatirlari.CF_WORKER_INDIRME`) [`INDIRME-KAPISI-WORKER.md`](INDIRME-KAPISI-WORKER.md) ayarına eklenir (kullanıcı).
 4. **Patron bulutu:** iç API kaynağı hazırlıktan üretime — [`PATRON-BULUTU-KURULUM.md`](PATRON-BULUTU-KURULUM.md) §14.
-5. **Paket imzası (üretim):** `cd Teks-Erp && npx tsx scripts/build-korumali-imza.ts zip --zip=<paket> --anahtar=$HOME/.tekserp/satici-uretim/paket/paket-2026.paket.json` (aynı `imzala` · `belge`) → paket parolasını TTY'den (TTY yoksa stdin'in ilk satırı) ister. Şifreli modül derlemesi üretim anahtarıyla: `paketle.ps1 -ModulAnahtarDizini` / `build-korumali.mjs --modul-anahtar-dizini=$HOME/.tekserp/satici-uretim/modul-anahtarlari`.
+5. **Paket imzası (üretim):** `cd Teks-Erp && npx tsx scripts/build-korumali-imza.ts zip --zip=<paket> --anahtar=$HOME/.tekserp/satici-uretim/paket/paket-2026.paket.json --ci-kosu=<id>` (aynı `imzala` · `belge`) → paket parolasını TTY'den (TTY yoksa stdin'in ilk satırı) ister. `--ci-kosu` (G22/ALT-9) yapıtı üreten `korumali-paket.yml` koşusunun numarasıdır (`gh run list --workflow=korumali-paket.yml`): koşu başarıyla bitmiş, `main` dalından ve commit'i yapıtın `dist/server-kunye.json`ı ile PAKET.json'unkiyle aynı değilse ya da `gh` okuyamazsa imza parola sorulmadan reddedilir. Şifreli modül derlemesi üretim anahtarıyla: `paketle.ps1 -ModulAnahtarDizini` / `build-korumali.mjs --modul-anahtar-dizini=$HOME/.tekserp/satici-uretim/modul-anahtarlari`.
 
 ## 6. Rotasyon ve kayıp
 

@@ -10,6 +10,7 @@
 //   npx tsx scripts/build-korumali-imza.ts imzala --kok=<paket dizini> --anahtar=<dosya> --surum=<x.y.z>
 //       [--urun=backend] [--musteri=<kod>] [--kurulum=<uuid>] [--derleme-tarihi=<ISO>]
 //   npx tsx scripts/build-korumali-imza.ts zip --zip=<paket.zip> --anahtar=<dosya> [--kurulum=<uuid>] [--surum-belgesi=<md>]
+//       [--ci-kosu=<korumali-paket.yml koşu numarası>]   (ÜRETİM anahtarında ZORUNLU — aşağıda CI kökeni)
 //   npx tsx scripts/build-korumali-imza.ts belge --belge=<PAKET-DOCKER.json> --anahtar=<dosya>   (Docker teslim künyesi → <belge>.jws)
 //
 // `zip` kipi: zip'i açar, sürüm/müşteri/derleme künyesini PAKET.json + dist/server-kunye.json'dan okur,
@@ -19,6 +20,10 @@
 // Anahtar AİLESİ derlemenin çapa kipine uymalı (G3, `dist/server-kunye.json` `guvenCapasi`): üretim çapalı pakete
 // yalnız `paket-<yıl>`, hazırlık çapalıya yalnız `paket-hazirlik*` — uymazsa parola sorulmadan RED (paket açılışta
 // imzalı listeyi tanımaz, çekirdeksiz kalırdı).
+// CI KÖKENİ (G22/ALT-9): `.jsc` CI'da derlenir, Mac gözle denetleyemez — üretim anahtarıyla (`paket-<yıl>`) imza
+// `--ci-kosu=<id>` ister ve parola sorulmadan ÖNCE koşu ölçülür: `korumali-paket.yml`, başarıyla bitmiş, `main`
+// dalı, commit'i yapıtın künyesindeki (`dist/server-kunye.json`) ve PAKET.json'unki (`scripts/lib/ci-kokeni.ts`).
+// Hazırlık anahtarında koşu verilirse ölçülür (dal serbest), verilmezse uyarı basılır.
 // Parolalı anahtarla imzada (`imzala` · `zip` · `belge`) parola TTY'den ya da stdin'in satırından sorulur;
 // parola argümandan/ortamdan ASLA alınmaz (`--parola…` biçimli argüman çıkış 2 ile reddedilir).
 // =============================================================================
@@ -38,6 +43,7 @@ import {
   writePackageKey,
 } from "./lib/butunluk-imza";
 import { CliError, args, askPassword } from "./lib/cli-girdi";
+import { ciKokeniHukmu, ciKosusuOku } from "./lib/ci-kokeni";
 import { STAGING_PACKAGE_CLASSES, STAGING_PACKAGE_KID_PREFIX, isProductionPackageKid, isStagingPackageKid } from "../src/lib/license/integrity-scope";
 import { INTEGRITY_LIST_FILE } from "../src/lib/license/integrity-list";
 
@@ -109,6 +115,27 @@ interface DirOptions {
   readonly keyFile: string;
   readonly surum: string;
   readonly musteri: string | null;
+  /** PAKET.json `commit` (zip kipinde); dizin imzasında null. */
+  readonly paketCommit?: string | null;
+}
+
+/** ALT-9 — yapıtın CI kökeni; üretim anahtarında `--ci-kosu` zorunlu, parola sorulmadan ÖNCE ölçülür. */
+function ciKokeniDenetle(kunye: Record<string, unknown>, keyFile: string, paketCommit: string | null): void {
+  const kid = packageKeyInfo(keyFile).kid;
+  const uretim = isProductionPackageKid(kid);
+  const id = arg("ci-kosu");
+  if (!id) {
+    if (uretim) {
+      throw new Error(`üretim PAKET imzası (${kid}) CI kökeni ister: --ci-kosu=<korumali-paket.yml koşu numarası> (gh run list --workflow=korumali-paket.yml) — imza atılmadı`);
+    }
+    console.warn(`⚠ CI kökeni ÖLÇÜLMEDİ (hazırlık anahtarı ${kid}, --ci-kosu verilmedi)`);
+    return;
+  }
+  const h = ciKokeniHukmu({ kosu: ciKosusuOku(id), kunyeCommit: kunye.commit, paketCommit, uretim });
+  if (h.sonuc !== "uyumlu") {
+    throw new Error(`CI KÖKENİ ${h.sonuc === "olculemedi" ? "ÖLÇÜLEMEDİ" : "TUTMUYOR"} — imza atılmadı:\n  ${h.satirlar.join("\n  ")}`);
+  }
+  console.log(`✓ ${h.satirlar[0]}`);
 }
 
 /** Derlemenin çapa kipi ile anahtarın ailesi uyuşmalı; künyede kip yoksa (G3 öncesi derleme) uyarı. */
@@ -127,6 +154,7 @@ async function signDir(o: DirOptions): Promise<string> {
   const kunyeFile = path.join(o.root, "dist", "server-kunye.json");
   const kunye = fs.existsSync(kunyeFile) ? readJson(kunyeFile) : {};
   anahtarAilesiDenetle(kunye, o.keyFile);
+  ciKokeniDenetle(kunye, o.keyFile, o.paketCommit ?? null);
   const key = await openPackageKey(o.keyFile, paketParolasi);
   const derlemeTarihi = arg("derleme-tarihi") ?? (typeof kunye.zaman === "string" ? kunye.zaman : null);
   if (!derlemeTarihi) throw new Error("derleme tarihi yok: dist/server-kunye.json `zaman` ya da --derleme-tarihi");
@@ -158,7 +186,7 @@ async function signZip(): Promise<void> {
     const surum = paket.uygulamaSurumu;
     if (typeof surum !== "string") throw new Error("PAKET.json uygulamaSurumu yok");
     const kanal = typeof paket.backendKanal === "string" ? paket.backendKanal : null;
-    const kid = await signDir({ root: tmp, keyFile, surum, musteri: arg("musteri") ?? kanal });
+    const kid = await signDir({ root: tmp, keyFile, surum, musteri: arg("musteri") ?? kanal, paketCommit: typeof paket.commit === "string" ? paket.commit : null });
     const updated = { ...paket, dosyaSayisi: Number(paket.dosyaSayisi) + 2, butunlukKid: kid };
     fs.writeFileSync(path.join(tmp, "PAKET.json"), `${JSON.stringify(updated, null, 2)}\n`);
     execFileSync("zip", ["-q", "-X", zip, "butunluk.jws", INTEGRITY_LIST_FILE, "PAKET.json"], { cwd: tmp });

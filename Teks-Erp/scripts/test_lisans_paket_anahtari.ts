@@ -14,6 +14,8 @@
 //   §3 hazırlık akışı DEĞİŞMEDİ: kid'siz `anahtar-uret` parolasız dosya yazar, imza parola sormaz
 //   §4 (G3) anahtar AİLESİ = derlemenin çapa kipi (`dist/server-kunye.json` `guvenCapasi`): üretim çapalı pakete
 //      hazırlık anahtarı · hazırlık çapalıya üretim anahtarı → parola SORULMADAN RED, imza yok; uyan aile imzalar
+//   §5 (G22/ALT-9) CI KÖKENİ: üretim anahtarıyla imza `--ci-kosu` ister; koşu `korumali-paket.yml` · başarılı · `main`
+//      · commit = yapıtın künyesi değilse ya da okunamazsa parola sorulmadan RED (sahte `gh` PATH'te, ağ yok)
 // ⭐ KALICI SONDA ✓K: §0c tek-uygulama tarayıcısı sentetik kripto satırını yakalar; §2 ret dalları her koşumda.
 // Koşum: node ../scripts/agir-is.mjs -- npx tsx scripts/test_lisans_paket_anahtari.ts
 // =============================================================================
@@ -29,6 +31,7 @@ import { INTEGRITY_LIST_FILE } from "../src/lib/license/integrity-list";
 import { generatePackageKey, writePackageKey } from "./lib/butunluk-imza";
 import { CAPA_DOSYALARI, capaDurumuOku } from "./lib/guven-capasi";
 import { main as capaEkle } from "./guven-capasi-ekle";
+import { ciKokeniHukmu } from "./lib/ci-kokeni";
 
 let pass = 0;
 let fail = 0;
@@ -43,6 +46,12 @@ const DEPO = path.resolve(TEKS, "..");
 const TEMP = mkdtempSync(path.join(os.tmpdir(), "lisans-paket-anahtari-"));
 const PAROLA = "bekci-paket-parolasi-2026";
 const KID = "paket-2099";
+/** Yapıtın künyesindeki (CI'daki derleme) commit'i ve sahte `gh`nin döndürdüğü uyan koşu (§5). */
+const KUNYE_COMMIT = "0123456789abcdef0123456789abcdef01234567";
+const UYAN_KOSU = { id: 4242, head_sha: KUNYE_COMMIT, head_branch: "main", path: ".github/workflows/korumali-paket.yml", name: "Korumalı paket (.jsc)", status: "completed", conclusion: "success" };
+const SAHTE_BIN = path.join(TEMP, "bin");
+mkdirSync(SAHTE_BIN, { recursive: true });
+writeFileSync(path.join(SAHTE_BIN, "gh"), `#!/bin/sh\nif [ -n "$SAHTE_GH_HATA" ]; then echo "gh: HTTP 404" >&2; exit 1; fi\nprintf '%s' "$SAHTE_GH_KOSU"\n`, { mode: 0o755 });
 
 interface Kosum {
   readonly kod: number | null;
@@ -50,14 +59,14 @@ interface Kosum {
   readonly hata: string;
 }
 
-/** Gerçek CLI; stdin boru (TTY değil) → parola stdin satırlarından. HOME geçici dizin. */
-function cli(argv: readonly string[], input = ""): Kosum {
+/** Gerçek CLI; stdin boru (TTY değil) → parola stdin satırlarından. HOME geçici dizin; `gh` sahte (ağ yok). */
+function cli(argv: readonly string[], input = "", ortam: Record<string, string> = {}): Kosum {
   const r = spawnSync(process.execPath, ["--import", "tsx", "scripts/build-korumali-imza.ts", ...argv], {
     cwd: TEKS,
     input,
     encoding: "utf8",
     timeout: 120_000,
-    env: { ...process.env, HOME: path.join(TEMP, "ev") },
+    env: { ...process.env, HOME: path.join(TEMP, "ev"), PATH: `${SAHTE_BIN}${path.delimiter}${process.env.PATH ?? ""}`, SAHTE_GH_KOSU: JSON.stringify(UYAN_KOSU), ...ortam },
   });
   return { kod: r.status, cikti: r.stdout ?? "", hata: r.stderr ?? "" };
 }
@@ -69,17 +78,19 @@ function dizin(ad: string): string {
   return d;
 }
 
-/** Küçük paket kökü: dist/ + kökte package.json (imzalı kapsam). */
+/** Küçük paket kökü: dist/ + kökte package.json (imzalı kapsam) + CI derlemesinin künyesi (commit). */
 function paket(): string {
   const kok = dizin("paket");
   mkdirSync(path.join(kok, "dist"));
   writeFileSync(path.join(kok, "dist", "a.js"), "console.log('a');\n");
+  writeFileSync(path.join(kok, "dist", "server-kunye.json"), `${JSON.stringify({ commit: KUNYE_COMMIT })}\n`);
   writeFileSync(path.join(kok, "package.json"), '{"name":"p"}\n');
   return kok;
 }
 
-const imzala = (kok: string, anahtar: string, input: string): Kosum =>
-  cli(["imzala", `--kok=${kok}`, `--anahtar=${anahtar}`, "--surum=2.12.1", "--derleme-tarihi=2026-09-30T00:00:00.000Z"], input);
+/** İmza — CI kökeni (§5) varsayılan olarak UYAN koşuyla verilir; `ek`/`ortam` sondalar içindir. */
+const imzala = (kok: string, anahtar: string, input: string, ek: readonly string[] = ["--ci-kosu=4242"], ortam: Record<string, string> = {}): Kosum =>
+  cli(["imzala", `--kok=${kok}`, `--anahtar=${anahtar}`, "--surum=2.12.1", "--derleme-tarihi=2026-09-30T00:00:00.000Z", ...ek], input, ortam);
 
 /** Parolalı üretim anahtarı (gerçek CLI). */
 function uretimAnahtari(kid = KID): { dosya: string; kosum: Kosum } {
@@ -270,7 +281,7 @@ function bolum3(): void {
 /** Künyeli paket kökü: build-korumali'nin yazdığı `dist/server-kunye.json` (çapa kipiyle). */
 function kunyeliPaket(kip: "uretim" | "hazirlik"): string {
   const kok = paket();
-  writeFileSync(path.join(kok, "dist", "server-kunye.json"), `${JSON.stringify({ zaman: "2026-10-01T00:00:00.000Z", guvenCapasi: kip })}\n`);
+  writeFileSync(path.join(kok, "dist", "server-kunye.json"), `${JSON.stringify({ zaman: "2026-10-01T00:00:00.000Z", guvenCapasi: kip, commit: KUNYE_COMMIT })}\n`);
   return kok;
 }
 
@@ -303,6 +314,49 @@ function bolum4(): void {
   );
 }
 
+// ── §5 ───────────────────────────────────────────────────────────────────────
+function bolum5(): void {
+  console.log("\n§5 CI kökeni (G22/ALT-9) — ✓K");
+  const kip = (o: Partial<typeof UYAN_KOSU>, uretim = true, paketCommit: string | null = KUNYE_COMMIT.slice(0, 8)) =>
+    ciKokeniHukmu({ kosu: { ...UYAN_KOSU, ...o }, kunyeCommit: KUNYE_COMMIT, paketCommit, uretim }).sonuc;
+  check("§5a pozitif: korumali-paket.yml · başarılı · main · commit = künye = PAKET.json → uyumlu", kip({}) === "uyumlu");
+  const sondalar: Array<[string, Partial<typeof UYAN_KOSU>, boolean, string | null]> = [
+    ["başka iş akışı (ci.yml)", { path: ".github/workflows/ci.yml" }, true, KUNYE_COMMIT.slice(0, 8)],
+    ["iş akışı adı farklı", { name: "Korumali" }, true, KUNYE_COMMIT.slice(0, 8)],
+    ["koşu başarısız", { conclusion: "failure" }, true, KUNYE_COMMIT.slice(0, 8)],
+    ["koşu bitmemiş", { status: "in_progress" }, true, KUNYE_COMMIT.slice(0, 8)],
+    ["üretim imzası feature dalının yapıtına", { head_branch: "dagitim/w2-taban" }, true, KUNYE_COMMIT.slice(0, 8)],
+    ["koşunun commit'i yapıtınki değil", { head_sha: "f".repeat(40) }, true, KUNYE_COMMIT.slice(0, 8)],
+    ["paket başka commit'te birleştirilmiş", {}, true, "deadbeef"],
+  ];
+  for (const [ad, o, uretim, pc] of sondalar) check(`§5b ⭐ ${ad} → ihlal`, kip(o, uretim, pc) === "ihlal");
+  check("§5c hazırlık anahtarında dal serbest (feature dalı yapıtı imzalanabilir)", kip({ head_branch: "dagitim/w2-taban" }, false) === "uyumlu");
+  check("§5d künyede commit yok → ÖLÇÜLEMEDİ", ciKokeniHukmu({ kosu: UYAN_KOSU, kunyeCommit: undefined, paketCommit: null, uretim: true }).sonuc === "olculemedi");
+
+  // CLI — kapı parola sorulmadan ÖNCE durur (stdin'deki parola okunmaz, imza yazılmaz).
+  const { dosya } = uretimAnahtari("paket-2097");
+  if (!existsSync(dosya)) {
+    check("§5 körlük zemini: üretim anahtarı üretildi", false);
+    return;
+  }
+  const red = (ad: string, ek: readonly string[], ortam: Record<string, string>, desen: RegExp): void => {
+    const kok = paket();
+    const r = imzala(kok, dosya, `${PAROLA}\n`, ek, ortam);
+    check(`§5e ⭐ ${ad} → çıkış 1, imza YOK`, r.kod === 1 && desen.test(r.hata) && !existsSync(path.join(kok, INTEGRITY_FILE)), `çıkış ${r.kod} ${r.hata.trim().slice(0, 120)}`);
+  };
+  red("üretim anahtarı, --ci-kosu YOK", [], {}, /CI kökeni ister/);
+  red("koşu feature dalından", ["--ci-kosu=4242"], { SAHTE_GH_KOSU: JSON.stringify({ ...UYAN_KOSU, head_branch: "feature/x" }) }, /TUTMUYOR[\s\S]*main/);
+  red("koşu başka commit'ten", ["--ci-kosu=4242"], { SAHTE_GH_KOSU: JSON.stringify({ ...UYAN_KOSU, head_sha: "e".repeat(40) }) }, /TUTMUYOR/);
+  red("koşu okunamıyor (gh hata)", ["--ci-kosu=4242"], { SAHTE_GH_HATA: "1" }, /ÖLÇÜLEMEDİ/);
+  red("--ci-kosu biçimsiz", ["--ci-kosu=12;id"], {}, /biçimsiz/);
+  const hazirlik = path.join(TEMP, "ev", ".tekserp", "satici-hazirlik", "paket-hazirlik.paket.json");
+  if (existsSync(hazirlik)) {
+    const kok = paket();
+    const r = imzala(kok, hazirlik, "", []);
+    check("§5f hazırlık anahtarı --ci-kosu'suz: UYARI basar, imzalar (bugünkü hazırlık akışı)", r.kod === 0 && /CI kökeni ÖLÇÜLMEDİ/.test(r.hata) && existsSync(path.join(kok, INTEGRITY_FILE)), `çıkış ${r.kod} ${r.hata.trim().slice(0, 80)}`);
+  }
+}
+
 async function main(): Promise<void> {
   try {
     bolum0();
@@ -310,6 +364,7 @@ async function main(): Promise<void> {
     bolum2();
     bolum3();
     bolum4();
+    bolum5();
   } finally {
     rmSync(TEMP, { recursive: true, force: true });
   }
