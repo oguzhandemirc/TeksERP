@@ -1,11 +1,11 @@
-// AYNA BEKÇİSİ: tel tipleri, uç tablosu, izin literalleri ve rapor aile eşlemesi bulut sunucusuyla
+// AYNA BEKÇİSİ: tel tipleri, uç tablosu, izin literalleri ve rapor anahtarı → izin eşlemesi bulut sunucusuyla
 // aynı mı. Sunucu YALNIZ DOSYA olarak okunur (kaynak metni + üretilmiş `catalog/katalog-ozeti.json`); içe aktarılmaz —
 // sunucunun bağımlılıkları bu işte kurulu değil, tip denetimi ve jest sunucu kaynağına uzanamaz.
 import { readFileSync, readdirSync, statSync } from "fs";
 import { dirname, join, relative, resolve } from "path";
 import { ENDPOINTS } from "../src/api/endpoints";
 import { DASHBOARD_CARDS, MODULES } from "../src/lib/access";
-import { REPORT_FAMILY_PERMISSION, REPORTS_NOT_IN_CLOUD } from "../src/lib/reports";
+import { REPORT_KEY_PERMISSION, REPORTS_NOT_IN_CLOUD } from "../src/lib/reports";
 
 const ROOT = join(__dirname, "..");
 const SERVER = join(ROOT, "..", "sunucu", "src");
@@ -14,7 +14,7 @@ const SERVER = join(ROOT, "..", "sunucu", "src");
 interface KatalogOzeti {
   readonly CLOUD_PERMISSIONS: readonly string[];
   readonly PROJECTION_PERMISSIONS: Readonly<Record<string, readonly string[]>>;
-  readonly REPORT_FAMILY_PERMISSION: Readonly<Record<string, string>>;
+  readonly REPORT_KEY_PERMISSION: Readonly<Record<string, string>>;
   readonly REPORTS_NOT_IN_CLOUD: readonly string[];
 }
 const OZET = JSON.parse(readFileSync(join(SERVER, "catalog/katalog-ozeti.json"), "utf8")) as KatalogOzeti;
@@ -69,9 +69,9 @@ describe("ayna: patron/sunucu ↔ patron/uygulama", () => {
     }
   });
 
-  it("rapor aile → izin eşlemesi ve buluta gitmeyenler aynı", () => {
-    expect(Object.keys(OZET.REPORT_FAMILY_PERMISSION).length).toBeGreaterThan(0);
-    expect(REPORT_FAMILY_PERMISSION).toEqual(OZET.REPORT_FAMILY_PERMISSION);
+  it("rapor anahtarı → izin eşlemesi ve buluta gitmeyenler aynı", () => {
+    expect(Object.keys(OZET.REPORT_KEY_PERMISSION).length).toBeGreaterThan(0);
+    expect(REPORT_KEY_PERMISSION).toEqual(OZET.REPORT_KEY_PERMISSION);
     expect(REPORTS_NOT_IN_CLOUD).toEqual(OZET.REPORTS_NOT_IN_CLOUD);
   });
 

@@ -2,11 +2,13 @@
 // Hesap isteği yazar (BEKLIYOR) → zil `rapor` → fabrika `POST /v1/rapor/al` ile ATOMİK claim eder
 // (HESAPLANIYOR, claim süresi) → kendi rapor servisi + kendi Zod'uyla yeniden doğrular → `POST
 // /v1/rapor/sonuc` (HAZIR | HATA). Aynı parametreyle 5 dk içindeki ikinci istek mevcut sonuçtan
-// cevaplanır. Yetki: `bulut:rapor:oku` + ailenin okuma izni; sonuç `rapor.<aile>` RLS'iyle korunur.
+// cevaplanır. Yetki RAPOR BAŞINA: `bulut:rapor:oku` + anahtarın izni (+ fabrikanın beyanı daha darsa o da);
+// sonuç rapor başına RLS adıyla (`rapor.<aile>-<ad>`) korunur.
 import type { Prisma, ReportRequest } from "@prisma/client";
 import type { z } from "zod";
 import type { SessionContext } from "../auth/session.service";
-import { reportVerdict } from "../catalog/reports";
+import type { CloudPermission } from "../catalog/permissions";
+import { reportProjectionName, reportVerdict, requiredReportPermissions } from "../catalog/reports";
 import { accountActor, recordAudit } from "../lib/audit";
 import { CloudError, badRequest, forbidden, notFound, stateConflict } from "../lib/errors";
 import { bodyDigestOf, executeWrite, toPlainJson, type WriteResult } from "../lib/idempotency";
@@ -33,14 +35,18 @@ function requestView(r: ReportRequest): ReportRequestWire {
   };
 }
 
-/** Anahtar fabrikanın gönderdiği rapor kataloğunda mı (`rapor-katalogu` anlık kaydı: `{raporlar: [{anahtar}]}`). */
-async function catalogHasKey(ctx: CloudContext, tesisId: string, key: string): Promise<boolean> {
+/** Fabrikanın gönderdiği rapor kataloğundaki girdi (`rapor-katalogu` anlık kaydı: `{raporlar: [{anahtar, izin}]}`); yoksa null. */
+async function catalogEntry(ctx: CloudContext, tesisId: string, key: string): Promise<{ readonly izin?: unknown } | null> {
   const row = await withTesis(ctx.app, { tesisId, projections: ["rapor-katalogu"] }, (tx) =>
     tx.projectionRow.findUnique({ where: { tesisId_projection_recordId: { tesisId, projection: "rapor-katalogu", recordId: NO_TENANT } } }),
   );
   const list = (row?.data as { raporlar?: unknown } | null)?.raporlar;
-  return Array.isArray(list) && list.some((r) => typeof r === "object" && r !== null && (r as { anahtar?: unknown }).anahtar === key);
+  if (!Array.isArray(list)) return null;
+  const hit: unknown = list.find((r) => typeof r === "object" && r !== null && (r as { anahtar?: unknown }).anahtar === key);
+  return hit && typeof hit === "object" ? (hit as { izin?: unknown }) : null;
 }
+
+const hasAll = (s: SessionContext, required: readonly CloudPermission[] | null): boolean => required !== null && required.every((p) => s.permissions.has(p));
 
 export interface ReportCreateInput {
   readonly clientToken: string;
@@ -53,15 +59,15 @@ export async function createReportRequest(ctx: CloudContext, s: SessionContext, 
   if (!verdict.ok) {
     if (verdict.reason === "BICIM") throw badRequest("Rapor anahtarı biçimsiz");
     if (verdict.reason === "BULUTTA_YOK") throw new CloudError(404, "RAPOR_BULUTTA_YOK", "Bu rapor patron bulutunda sunulmuyor");
-    throw new CloudError(404, "RAPOR_BILINMIYOR", "Rapor ailesi tanınmıyor");
+    throw new CloudError(404, "RAPOR_BILINMIYOR", "Rapor patron bulutunda tanınmıyor");
   }
-  if (!s.permissions.has("bulut:rapor:oku") || !s.permissions.has(verdict.permission)) throw forbidden("Bu raporu isteme yetkiniz yok");
+  if (!hasAll(s, requiredReportPermissions(verdict.permission, undefined))) throw forbidden("Bu raporu isteme yetkiniz yok");
   if (Buffer.byteLength(JSON.stringify(input.parametreler), "utf8") > MAX_PARAMS_BYTES) throw badRequest("Rapor parametreleri çok büyük");
   const nowMs = ctx.now();
   await assertFacilityCloudOpen(ctx, s.tesisId, nowMs);
-  if (!(await catalogHasKey(ctx, s.tesisId, input.raporAnahtari))) {
-    throw new CloudError(404, "RAPOR_BILINMIYOR", "Rapor fabrikanın rapor kataloğunda yok (katalog henüz eşitlenmemiş olabilir)");
-  }
+  const entry = await catalogEntry(ctx, s.tesisId, input.raporAnahtari);
+  if (!entry) throw new CloudError(404, "RAPOR_BILINMIYOR", "Rapor fabrikanın rapor kataloğunda yok (katalog henüz eşitlenmemiş olabilir)");
+  if (!hasAll(s, requiredReportPermissions(verdict.permission, entry.izin))) throw forbidden("Bu raporu isteme yetkiniz yok");
   const paramsDigest = bodyDigestOf(input.parametreler);
   const params = toPlainJson(input.parametreler);
   const result = await executeWrite(ctx.app, {
@@ -108,7 +114,7 @@ export async function listReportRequests(ctx: CloudContext, s: SessionContext, q
   return { kayitlar: page.map(requestView), sonraki: rows.length > q.limit ? page[page.length - 1]!.id : null };
 }
 
-/** İstek + (HAZIR ise) sonuç. Sonuç RLS'le korunur: ailenin izni yoksa satır görünmez. */
+/** İstek + (HAZIR ise) sonuç. Sonuç RLS'le korunur: raporun izni yoksa satır görünmez; karar da rapor başınadır. */
 export async function getReportRequest(ctx: CloudContext, s: SessionContext, id: string): Promise<ReportRequestDetail> {
   const out = await withTesis(ctx.app, { tesisId: s.tesisId, projections: s.projections }, async (tx) => {
     const r = await tx.reportRequest.findFirst({ where: { ...visibility(s), id } });
@@ -117,7 +123,8 @@ export async function getReportRequest(ctx: CloudContext, s: SessionContext, id:
     return { r, result };
   });
   if (!out) throw notFound("Rapor isteği");
-  const allowed = s.projections.includes(`rapor.${out.r.family}`);
+  const verdict = reportVerdict(out.r.reportKey);
+  const allowed = verdict.ok && hasAll(s, requiredReportPermissions(verdict.permission, (await catalogEntry(ctx, s.tesisId, out.r.reportKey))?.izin));
   return {
     ...requestView(out.r),
     sonuc: allowed && out.result ? { veri: out.result.data, hesaplandi: out.result.computedAt.toISOString(), kaynakUfuk: out.result.sourceHorizon?.toISOString() ?? null } : null,
@@ -206,7 +213,7 @@ export async function recordReportResult(ctx: CloudContext, caller: FactoryCalle
     if (mine && (request.status === "HAZIR" || request.status === "HATA")) return { v: 1 as const, kabul: true, durum: request.status };
     throw stateConflict("Rapor isteği hesaplanmayı beklemiyor", { durum: request.status });
   }
-  const projection = `rapor.${request.family}`;
+  const projection = reportProjectionName(request.reportKey);
   const status = await withTesis(ctx.sync, { ...scope, projections: [projection] }, async (tx) => {
     const resultId =
       req.durum === "HAZIR"

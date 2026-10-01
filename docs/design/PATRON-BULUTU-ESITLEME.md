@@ -402,7 +402,7 @@ Yanıt (GEVŞEK şema):
 - **Bulut tablosu** `report_requests {id, tesisId, hesapId, raporAnahtari, parametreler jsonb, durum BEKLIYOR→HESAPLANIYOR→HAZIR|HATA|IPTAL, sahipKurulumId, claimBitis, sonucId, hataKodu, createdAt, updatedAt}`; sonuç `report_results {id, tesisId, raporAnahtari, parametreOzeti, veri jsonb, hesaplandi, kaynakUfuk}` — aynı parametre özetiyle 5 dk içindeki ikinci istek mevcut sonuçtan cevaplanır.
 - **Akış:** hesap isteği yazar (BEKLIYOR) → zil `rapor` → fabrika `POST /v1/rapor/al {enFazla: 3}` (imzalı, `amac: esitle`) → bulut ATOMİK CLAIM (`UPDATE … SET durum='HESAPLANIYOR', sahipKurulumId, claimBitis = now()+5dk WHERE durum='BEKLIYOR' … RETURNING`) → fabrika her isteği kendi rapor servisiyle ve **kendi Zod parametre şemasıyla** yeniden doğrular (bulut doğrulaması yetmez; tanınmayan anahtar → `HATA: RAPOR_BILINMIYOR`, geçersiz parametre → `HATA: PARAMETRE_GECERSIZ`) → `POST /v1/rapor/sonuc {istekId, durum, veri (gzip, ≤ 4 MB), hesaplandi, kaynakUfuk}` → bulut `HESAPLANIYOR→HAZIR` (WHERE durum='HESAPLANIYOR' AND sahipKurulumId eşleşir).
 - **Zaman:** fabrika tarafı rapor başına 60 sn (`statement_timeout` ile); `claimBitis` geçen istek bulut işiyle BEKLIYOR'a döner (bir kez), ikincide `HATA: ZAMAN_ASIMI`. Zil kaçarsa her eşitleme turu `rapor/al`ı da yoklar (en geç aralık kadar gecikme).
-- **Yetki:** istek için `bulut:rapor:oku` + raporun ailesine düşen okuma izni (finans raporları finans izni; eşleme §10). Sonuç kaydı da aynı projeksiyon-adı RLS'iyle korunur (`rapor.<aile>`).
+- **Yetki:** istek için `bulut:rapor:oku` + RAPORUN okuma izni (rapor anahtarı başına — `patron/sunucu/src/catalog/reports.ts` `REPORT_KEY_PERMISSION`, fabrikanın `REMOTE_REPORTS`iyle birebir; aile düzeyi izin aynı ailedeki dar raporu açıyordu, G19). Fabrikanın katalogda beyan ettiği izin bulutunkinden darsa o da istenir. Sonuç kaydı rapor başına projeksiyon-adı RLS'iyle korunur (`rapor.<aile>-<ad>`; eski `rapor.<aile>` satırı yalnız ailenin bütün raporlarını okuyabilene açık, budanınca söner).
 - Rapor sonucu fabrikada hesaplanır ⇒ "bulut hesap yapmaz" korunur; rapor içeriği yine opt-in'dir: rapor servisinin çıktısı raporun tel şemasından geçer (kullanıcı adı taşıyan alan — ör. `production/operator-performance` operatör adı — `KISISEL` alt kayda ayrılır ya da rapor listeden çıkarılır; B1-kod her rapor için bu kararı katalogda beyan eder).
 
 ## 8. Gelen kutusu protokolü (B3)
@@ -502,7 +502,7 @@ Portal ayarı `saklamaAy ∈ {3, 13, 25, null=tümü}` (varsayılan 13). Saklama
 | `bulut:fatura:oku` | `fatura`, `fatura-kalemi` |
 | `bulut:tahsilat:oku` | `tahsilat-odeme` |
 | `bulut:fiyat:oku` | `fiyat` + finans DIŞI projeksiyonların `.finans` alt satırları (sipariş tutarı, kalem birim fiyatı) |
-| `bulut:rapor:oku` | rapor isteği/sonucu — raporun ailesinin okuma izniyle birlikte |
+| `bulut:rapor:oku` | rapor isteği/sonucu — raporun kendi okuma izniyle birlikte (rapor başına eşleme, §7) |
 | `bulut:siparis:yaz` | gelen kutusu `SIPARIS` |
 | `bulut:cari:yaz` | gelen kutusu `CARI` |
 | `bulut:hesap:yonet` | hesap aç/kilitle/izin ata, bulut denetimini gör |
@@ -635,5 +635,5 @@ Koşum: `cd Teks-Erp && node ../scripts/agir-is.mjs -- npx tsx scripts/olcum/<be
 - `POST /ic/v1/zil {v: 1, tesisId, konu: gelen-kutusu|rapor|ozet}` → satıcı tesisin ÜRETİM kurulumlarının SSE zilini çalar; içerik taşımaz, best-effort (fabrika her turda yine yoklar).
 - **Satıcı tarafı (S1, `satici/sunucu/src/http/internal-app.ts`):** üçüncü dinleyici (`PORT_IC` 4612), soket + kaynak ağı kapısı (`IC_KAYNAK_AGLARI`; değilse 404) + dosyadan okunan Bearer (`IC_API_BELIRTEC_DOSYASI`; sır yoksa dinleyici açılmaz). Yanıt yukarıdaki alanlara EK olarak `anahtarKimligi` + `durum` (ETKINLESMEDI|ETKIN|DEVREDILDI|IPTAL) taşır (bulutun şeması fazlasını yok sayar); `moduller` yalnız `["patron-bulut"]` ya da `[]`; `patronBulutBitis` = HAK `patron-bulut` taşıyor ve donmamışsa bakım/geçerlilik bitişinin erkeni (`cloudEntitlementUntil`); `saklamaAy` gönderilmez (satıcıda alan yok). Yanlış/eksik Bearer 401 `IC_KIMLIK_GECERSIZ`, biçimsiz kimlik 400 — ikisi de bulutta "ulaşılamadı" (bayat kayıt), yalnız gerçek "kurulum yok" 404. Zil `{v: 1, calinan: n}` döner; hedef tesisin ETKİN aktif ÜRETİM kurulumları, kurulum başına dakikalık tavan (429 `HIZ_SINIRI`). Bekçi `satici/sunucu/scripts/test_ic_api.ts`.
 
-**`rapor-katalogu` anlık verisi:** `{raporlar: [{anahtar, baslik, aile, parametreler}]}` — bulut yalnız `anahtar` kümesini okur (istenebilir liste); aile ve izin kararı buluttadır (S36).
+**`rapor-katalogu` anlık verisi:** `{raporlar: [{anahtar, baslik, aile, izin, parametreler}]}` — bulut `anahtar` kümesini (istenebilir liste) ve `izin`i okur; izin kararı buluttadır ve rapor başınadır, fabrikanın `izin` beyanı yalnız DARALTIR (S36, G19).
 
