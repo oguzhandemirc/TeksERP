@@ -1338,7 +1338,7 @@ async function main(): Promise<number> {
 
     // ============================================================ L31…L34 (lisans v2: P + iz merdiveni)
     // Her biri kendi rolünde, saat yalnız o fabrikada kayar (dünya ve C değişmez); sonda rol fabrikası durur.
-    const merdiven = { portal, kokParolasi: hz.kokParolasi, kanal: KANAL, hakModulleri: HAK_MODULLERI, saticiSimdi, yeniFabrika, rolDb, baslat, durdur, saatUygula, db, detayKurulum };
+    const merdiven = { portal, kokParolasi: hz.kokParolasi, kanal: KANAL, hakModulleri: HAK_MODULLERI, saticiSimdi, yeniFabrika, rolDb, baslat, durdur, saatUygula, db, detayKurulum, saticiDbUrl: saticiUrl };
     await adim("L31", "internetsiz 400 gün: P−30'a dek NORMAL → bilgi bandı → P sonrası EK_SURE → P+30 KISITLI (okuma/dışa aktarma/yedek açık)", (a) => l31Internetsiz400(merdiven, a));
     await adim("L32", "üç iz birden silinir (kira + durum kaydı + DB izi) → hemen EK_SURE; portalda sıra sıfırlanması + LISANS_IZI_KAYIP", (a) => l32UcIzSilme(merdiven, a));
     await adim("L33", "tek iz silinir → UYARI → 14 g → EK_SURE → KISITLI; başarılı yoklama izi onarır", (a) => l33TekIzSilme(merdiven, a));

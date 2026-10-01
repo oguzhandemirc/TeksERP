@@ -44,6 +44,8 @@ export interface MerdivenBaglami<F extends RolFabrika> {
   readonly saatUygula: (f: F) => Promise<void>;
   readonly db: (url: string) => Pool;
   readonly detayKurulum: (dbId: string) => Promise<Record<string, unknown>>;
+  /** Satıcı DB'si (`_test`): portalın göstermediği son bildirilen durum kaydı sırası buradan okunur. */
+  readonly saticiDbUrl: string;
 }
 
 const PARMAK_IZLERI = {
@@ -82,6 +84,17 @@ async function izleriSil<F extends RolFabrika>(b: MerdivenBaglami<F>, f: F, izle
   if (izler.includes("durum")) fs.rmSync(path.join(f.lisansDizini, LICENSE_FILES.STATE), { force: true });
   if (izler.includes("db")) await b.db(f.databaseUrl).query(`DELETE FROM system_settings WHERE key = 'license.trace'`);
   await b.baslat(f);
+}
+
+/** Satıcının bu kurulum için son gördüğü durum kaydı sırası; `ms` boyunca ≥ 1 olmasını bekler. */
+async function saticiSirasi<F extends RolFabrika>(b: MerdivenBaglami<F>, dbId: string, ms: number): Promise<number | null> {
+  const t0 = Date.now();
+  for (;;) {
+    const r = await b.db(b.saticiDbUrl).query<{ s: number | null }>(`SELECT "sonDurumSirasi" AS s FROM kurulum WHERE id = $1`, [dbId]);
+    const s = r.rows[0]?.s ?? null;
+    if ((s ?? 0) >= 1 || Date.now() - t0 >= ms) return s;
+    await new Promise((res) => setTimeout(res, 250));
+  }
 }
 
 async function dbIziVar<F extends RolFabrika>(b: MerdivenBaglami<F>, f: F, ms = 0): Promise<boolean> {
@@ -215,12 +228,17 @@ export async function l32UcIzSilme<F extends RolFabrika>(b: MerdivenBaglami<F>, 
   if (!k) return;
   const { f, dbId } = k;
   await f.istemci.yokla();
+  // Sıfırlanma ancak satıcı bir sıra (≥ 1) görmüşse ayırt edilir; ilk yoklama kabul ÖNCESİ sırayı (0) taşır, zil ikinci
+  // yoklamayı yapmayabilir: fabrika sırası ≥ 1 olunca bir yoklama daha, satıcının gördüğü sıra DB'den ölçülür.
+  await f.istemci.bekle((d) => (d.depo.durumKaydi.sira ?? 0) >= 1, 10_000);
+  await f.istemci.yokla();
+  const saticiSira = await saticiSirasi(b, dbId, 5_000);
   const d0 = await f.istemci.detay();
   const dosyaVar = (ad: string): boolean => fs.existsSync(path.join(f.lisansDizini, ad));
   a.kontrol(
-    "başlangıç: kip zorla (HAK alt sınırı), NORMAL; üç iz yerinde (kira · durum kaydı · DB izi) — §3.1-4 · lisans.md:66",
-    d0.durum.kip === "zorla" && kademe(d0) === "NORMAL/NORMAL" && dosyaVar(LICENSE_FILES.LEASE) && dosyaVar(LICENSE_FILES.STATE) && (await dbIziVar(b, f)),
-    `${durumOzeti(d0)} sira=${d0.depo.durumKaydi.sira}`,
+    "başlangıç: kip zorla (HAK alt sınırı), NORMAL; üç iz yerinde (kira · durum kaydı · DB izi); satıcı sıra ≥ 1 gördü — §3.1-4 · §3.1-5 · lisans.md:66",
+    d0.durum.kip === "zorla" && kademe(d0) === "NORMAL/NORMAL" && dosyaVar(LICENSE_FILES.LEASE) && dosyaVar(LICENSE_FILES.STATE) && (await dbIziVar(b, f)) && (saticiSira ?? 0) >= 1,
+    `${durumOzeti(d0)} sira=${d0.depo.durumKaydi.sira} satıcıSıra=${saticiSira}`,
   );
   f.aktarici.kipAyarla("kesik");
   await izleriSil(b, f, ["kira", "durum", "db"]);
@@ -396,15 +414,12 @@ export async function l34UzatmaDosyasi<F extends RolFabrika>(b: MerdivenBaglami<
     r3.status === 200 && d3.kira?.kiraId === u2.y.veri.kiraId && Math.abs(pMs(d3) - pYeni) < DAY_MS && d3.durum.hesaplananKademe !== "EK_SURE",
     `${ozet(r3)} kira=${d3.kira?.kiraId.slice(0, 8)} P=${d3.durum.odenmisTarih?.tarih}`,
   );
-  const normal = d3.durum.gecerlilik === "GECERLI" && kademe(d3) === "NORMAL/NORMAL" && d3.durum.uygulanan.bant === null;
-  if (normal || !(bulgular(d3).includes("SAAT_ILERI") && kademe(d3) === "UYARI/UYARI")) {
-    a.kontrol("taşınmış dosya sonrası GECERLI + NORMAL, bant yok — §1.4 · §1.3 · K1", normal, durumOzeti(d3));
-  } else {
-    // Tasarım §1.4 (dosya e-posta/USB ile TAŞINIR → yenilenir) ile §1.5 (saat modeli değişmez: alt sınır = kira sunucu
-    // saati + kabulden beri monotonik, üst eşik + yoklama aralığı + 10 dk) çelişir: taşıma gecikmesi SAAT_ILERI doğurur.
-    a.not(`taşınmış dosya (fabrika saatine göre 22 g önce üretildi) sonrası ${durumOzeti(d3)} — aynı gün yüklenen dosya GECERLI + NORMAL (yukarıda)`);
-    a.kismi("§1.4 ↔ §1.5: taşınan uzatma dosyası (yükleme − üretim > yoklama aralığı + 10 dk) kabulden sonra SAAT_ILERI(DUVAR) → ÖLÇÜLEMEDİ/UYARI ve belirsizlik birikimi; karar gerekli");
-  }
+  // Kabulde süreklilik: taşınan kira tahmini geri çekemez (tasarım §1.5 alt sınır, lisans.md güvenilir saat satırı).
+  a.kontrol(
+    "taşınmış dosya (fabrika saatine göre 22 g önce üretildi) sonrası SAAT_ILERI YOK, GECERLI + NORMAL, bant yok — §1.4 · §1.5 kabulde süreklilik · K1",
+    !bulgular(d3).includes("SAAT_ILERI") && d3.durum.gecerlilik === "GECERLI" && kademe(d3) === "NORMAL/NORMAL" && d3.durum.uygulanan.bant === null,
+    durumOzeti(d3),
+  );
   const r4 = await yukle(u1.dosya);
   const r5 = await yukle(u0.dosya);
   a.kontrol("eski dosyalar (önce üretilen ikisi) → 409 LICENSE_LEASE_STALE — §1.4 · lisans.md:31", r4.status === 409 && r4.kod === "LICENSE_LEASE_STALE" && r5.status === 409 && r5.kod === "LICENSE_LEASE_STALE", `${ozet(r4)} · ${ozet(r5)}`);
