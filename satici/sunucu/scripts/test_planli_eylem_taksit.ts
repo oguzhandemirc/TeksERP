@@ -4,7 +4,8 @@
 // vadesi gelmeyen dokunulmaz; iptal edilen uygulanmaz; K4/K5 planlanamaz.
 // Taksit: plan geçerlilik bitişini ilk vade + uzatma gününe koyar; vade + gecikme günü ödemesiz →
 // GECIKTI + K3 (geri sayım); ödeme → ODENDI, K3 ters kayıtla kalkar, bitiş sonraki vadeye uzar;
-// son taksit ödenince süre sınırı kalkar (null).
+// son taksit ödenince süre sınırı kalkar (null). Lisans v2: ödenmiş tarih (P) GECIKTI kalemde geçmişte kalır, ödemede
+// SIRADAKİ ödenmemiş vadeye ilerler, son ödemede null (§2i).
 // ⭐ KALICI SONDA ✓K2 (her koşumda): iş ikinci kez koşunca 0 uygular (claim gerçek) · gecikme günü
 //    dolmamış kalem K3 ALMAZ (eşik okunuyor).
 // Koşum: npx tsx scripts/test_planli_eylem_taksit.ts
@@ -19,6 +20,7 @@ async function main(): Promise<void> {
   const { prisma } = await import("../src/lib/prisma");
   const svc = await import("../src/services/sanction.service");
   const { computeSanctionState } = await import("../src/services/lease.service");
+  const { paidThroughOf } = await import("../src/services/paid-through");
   const temizlenecek: string[] = [];
   try {
     const simdi = Date.now();
@@ -79,15 +81,22 @@ async function main(): Promise<void> {
     const d1 = await computeSanctionState(prisma, t.kurulumDbId);
     kontrol("§2c kademe K3 + mesaj 'Taksit 1 ödenmedi'", d1.kademe === "K3" && d1.mesaj === "Taksit 1 ödenmedi");
     kontrol("§2d ✓K iş ikinci kez koşunca yeni K3 yok", (await svc.runOverdueInstallments(simdi)) === 0);
+    const p = async () => {
+      const h = await prisma.hak.findFirstOrThrow({ where: { kurulumId: t.kurulumDbId } });
+      return (await paidThroughOf(prisma, t.kurulumDbId, h)).tarih?.getTime() ?? null;
+    };
+    const pGecikti = await p();
     await svc.recordInstallmentPayment({ itemId: kalemler[0]!.id, actor: "bekci", nowMs: simdi });
     const d2 = await computeSanctionState(prisma, t.kurulumDbId);
     const hak1 = await prisma.hak.findFirstOrThrow({ where: { kurulumId: t.kurulumDbId } });
     const ters = await prisma.yaptirimEylemi.findFirst({ where: { geriAlinanEylemId: kalemler[0]!.yaptirimEylemiId } });
     kontrol("§2e ödeme → K3 ters kayıtla kalktı, bitiş sonraki bekleyen vade + 15", d2.kademe === null && ters?.tur === "GERI_AL" && hak1.gecerlilikBitis?.getTime() === v2.getTime() + 15 * DAY_MS);
+    kontrol("§2e2 ödeme → P SIRADAKİ ödenmemiş vadeye (v2) ilerledi", (await p()) === v2.getTime());
     await svc.recordInstallmentPayment({ itemId: kalemler[1]!.id, actor: "bekci", nowMs: simdi });
     await svc.recordInstallmentPayment({ itemId: kalemler[2]!.id, actor: "bekci", nowMs: simdi });
     const hak2 = await prisma.hak.findFirstOrThrow({ where: { kurulumId: t.kurulumDbId } });
     kontrol("§2f son taksit ödendi → süre sınırı kalktı (null)", hak2.gecerlilikBitis === null);
+    kontrol("§2i P: GECIKTI kalem geçmişte kalır (v1), son ödemeden sonra null", pGecikti === v1.getTime() && (await p()) === null, `${String(pGecikti)}`);
     let tekrarOdeme = "";
     try {
       await svc.recordInstallmentPayment({ itemId: kalemler[2]!.id, actor: "bekci" });
