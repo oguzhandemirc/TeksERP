@@ -382,7 +382,8 @@ function ps1Ihlalleri(metin: string): string[] {
 }
 function hizmetBetigi(): void {
   console.log("\n§9 deploy/hizmet/backend-hizmeti.ps1");
-  const metin = readFileSync(join(KOK, "deploy", "hizmet", "backend-hizmeti.ps1"), "utf8");
+  // Satır sonu LF'ye normalize: `.gitattributes` *.ps1'i CRLF checkout eder (CI dahil) — sondalar "\n" arar.
+  const metin = readFileSync(join(KOK, "deploy", "hizmet", "backend-hizmeti.ps1"), "utf8").replace(/\r\n/g, "\n");
   const mainRs = readFileSync(join(TEKS, "native", "tekserp-hizmet", "src", "main.rs"), "utf8");
   const contractRs = readFileSync(join(TEKS, "native", "tekserp-hizmet", "src", "contract.rs"), "utf8");
   const ih = ps1Ihlalleri(metin);
@@ -465,7 +466,7 @@ function pm2Betikleri(): void {
     SERVICE_DIRS.versions === "surumler" && SERVICE_DIRS.current === "current" && SERVICE_DIRS.config === "yapilandirma");
   const metinler: Record<string, string> = {};
   for (const [dosya, ad] of [["kur.ps1", "kur"], ["ilk-kurulum.ps1", "ilk"]] as const) {
-    const metin = readFileSync(join(KOK, "deploy", dosya), "utf8");
+    const metin = readFileSync(join(KOK, "deploy", dosya), "utf8").replace(/\r\n/g, "\n");
     metinler[ad] = metin;
     const ih = izIhlalleri(metin, ad);
     check(`§11 ⭐ ${dosya}: hizmet düzeni izi (kökte surumler/current/yapilandirma\\.env ya da bu kökü kullanan TeksERP hizmeti; liste okunamazsa iz) varsa HİÇBİR ŞEYE DOKUNMADAN durur`,
