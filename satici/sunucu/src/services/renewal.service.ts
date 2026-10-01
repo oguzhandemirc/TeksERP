@@ -26,9 +26,9 @@ import {
   licenseResponse,
   type DeliveredEntitlement,
 } from "./lease.service";
+import { capabilityDowngradeRefusal, holdForRootSignatureTx, leaseUnbindable } from "./lease-binding";
 import { isForeignEntitlement, type PollV2Report } from "./local-intervention";
 import { applyOwnerReportTx } from "./poll-report";
-import { queueCurrentTermsUnderLock } from "./root-queue.service";
 
 export interface PollTelemetry {
   readonly durum: PollRequest["durum"];
@@ -187,19 +187,22 @@ async function renewInTx(tx: Tx, ctx: VendorContext, g: RenewInput): Promise<Ren
         await enqueueNotificationTx(tx, { event: "KOPYA_KIRA_REDDI", keyParts: [alert.id], installationDbId: inst.id, relatedId: alert.id, portalPath: "/kopya-uyarilari", referans: alert.tur });
       } else denying.push(alert);
     }
-    if (acceptsClosingLease(g.report?.capabilities)) {
-      const closing = await issueOrReuseClosingLease(tx, ctx, {
-        installation: inst,
-        entitlement: hak,
-        reason: "KOPYA",
-        keyId: g.kid,
-        episodeStart: copyEpisodeStart(denying, g.nowMs),
-        presentedLeaseId: g.presentedLeaseId,
-        measured,
-        capabilities: g.report?.capabilities ?? [],
-        held: g.clientEntitlement,
-        nowMs: g.nowMs,
-      });
+    // Kapanış kirası bağlanamıyorsa (genişlik kapısı) basılmaz: eski 403 (kira bağı kapısı, `lease-binding.ts`).
+    const closing = acceptsClosingLease(g.report?.capabilities)
+      ? await issueOrReuseClosingLease(tx, ctx, {
+          installation: inst,
+          entitlement: hak,
+          reason: "KOPYA",
+          keyId: g.kid,
+          episodeStart: copyEpisodeStart(denying, g.nowMs),
+          presentedLeaseId: g.presentedLeaseId,
+          measured,
+          capabilities: g.report?.capabilities ?? [],
+          held: g.clientEntitlement,
+          nowMs: g.nowMs,
+        })
+      : null;
+    if (closing) {
       await recordPoll("KAPANIS_KOPYA", closing.id);
       return {
         kind: "LEASE",
@@ -251,9 +254,8 @@ async function renewInTx(tx: Tx, ctx: VendorContext, g: RenewInput): Promise<Ren
   }
 
   // Genişlik kapısı (yetenek düşüşü): zincir sahibinde güncel şartların kök imzası kuyruğa girer; fabrika kirayı
-  // bağlayamayacaksa (elinde güncelden geniş olmayan HAK yok) talep ACİL olur.
-  const withheld = decision !== "FORK" ? delivered.withheld : undefined;
-  if (withheld) await queueCurrentTermsUnderLock(tx, { entitlementId: hak.id, urgent: !withheld.heldBound, nowMs: g.nowMs });
+  // bağlayamayacaksa (elinde güncelden geniş olmayan HAK yok) talep ACİL olur. Kira bağı kuralı TEK yerde (`lease-binding.ts`).
+  if (decision !== "FORK") await holdForRootSignatureTx(tx, { entitlementId: hak.id, delivered, nowMs: g.nowMs });
 
   // Yetenek, durum kaydı sırası ve yerel müdahale yalnız zincir sahibinden okunur (çatalda iki tarafın sırası karışır).
   const ownerReport =
@@ -265,7 +267,7 @@ async function renewInTx(tx: Tx, ctx: VendorContext, g: RenewInput): Promise<Ren
           status: g.telemetry.durum,
           clock: g.telemetry.saat,
           sides: { owner: accepted, other: measured },
-          capabilityDowngrade: withheld !== undefined,
+          capabilityDowngrade: delivered.withheld !== undefined,
           nowMs: g.nowMs,
         })
       : {};
@@ -274,12 +276,15 @@ async function renewInTx(tx: Tx, ctx: VendorContext, g: RenewInput): Promise<Ren
   if (decision !== "FORK" && hasCapability(g.report?.capabilities, FINGERPRINT_V2_CAPABILITY)) await listLegacyWeakInstallationTx(tx, { inst, kid: g.kid, nowMs: g.nowMs });
 
   // Fabrika bu kirayı bağlayamaz (elindeki HAK güncelden geniş ya da yok; güncel ara imzalıyı tanımaz): kira VERİLMEZ —
-  // kayıtlar (uyarı · acil kök talebi · yetenek · yoklama) commit olur, sonra 403. Fabrika elindeki kirayla sürer.
-  if (withheld && !withheld.heldBound && g.report) {
+  // kayıtlar (uyarı · acil kök talebi · yetenek · yoklama) commit olur, sonra 403. Fabrika elindeki kirayla sürer. DR devri
+  // gibi raporsuz istek de istisna değildir (bağlanamayan kira hiçbir yoldan çıkmaz).
+  if (leaseUnbindable(delivered)) {
     const seen: Prisma.KurulumUncheckedUpdateManyInput = { ...ownerReport };
     if (g.telemetry) Object.assign(seen, { sonYoklamaZamani: new Date(g.nowMs), sonSaglik: g.telemetry.saglik, sonOrtam: g.telemetry.ortam, platform: g.telemetry.ortam.platform });
-    const claim = await tx.kurulum.updateMany({ where: { id: inst.id, sonKiraId: inst.sonKiraId }, data: seen });
-    if (claim.count === 0) throw retryConflict();
+    if (Object.keys(seen).length > 0) {
+      const claim = await tx.kurulum.updateMany({ where: { id: inst.id, sonKiraId: inst.sonKiraId }, data: seen });
+      if (claim.count === 0) throw retryConflict();
+    }
     await recordPoll("RED_KOK_IMZASI_BEKLIYOR", null);
     return { kind: "WITHHELD" };
   }
@@ -338,10 +343,6 @@ function entitlementToDeliver(client: RenewInput["clientEntitlement"], delivered
   if (client === null || client.hakId !== delivered.hakId || client.surum !== delivered.surum) return delivered.belge;
   return client.ozet !== undefined && client.ozet !== jwsDigest(delivered.belge) ? delivered.belge : null;
 }
-
-/** Genişlik kapısının reddi: fabrika elindeki kirayla çalışmayı sürdürür (imzasız 403 hiçbir süreyi kısaltmaz). */
-export const capabilityDowngradeRefusal = (): VendorError =>
-  new VendorError(403, "KIRA_VERILMEDI", "Bu derlemenin tanıyacağı güncel lisans (HAK) satıcının kök imzasını bekliyor; kurulum elindeki kirayla çalışmaya devam eder");
 
 /** Kira yeniler; kopya şüphesinin ikinci penceresinde 403 KIRA_VERILMEDI (kayıtlar yine de yazılır). */
 export async function renewLease(ctx: VendorContext, g: RenewInput): Promise<{ response: LicenseResponse; decision: ChainDecision }> {

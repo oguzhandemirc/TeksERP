@@ -1,7 +1,8 @@
 // YEREL MÜDAHALE ŞÜPHESİ + YABANCI HAK (lisans v2 §3.1-5, §2.2-3) — yalnız UYARI: kira yine verilir, hiçbir neden
 // tek başına süre kısaltmaz (fabrika aniden durmaz). Nedenler yoklamanın imzalı gövdesinden türer:
 //   SIRA_GERILEDI / SIRA_SIFIRLANDI — imzalı durum kaydının sırası satıcının son gördüğünden küçük / kayıt yok (K7: üç
-//   iz silinince fabrika hemen ek süreye geçer, satıcıda görünen yüzü budur) · LISANS_IZI_KAYIP — fabrika bulgusu ·
+//   iz silinince fabrika hemen ek süreye geçer, satıcıda görünen yüzü budur) · LISANS_IZI_KAYIP — fabrika bulgusu (tek
+//   iz kaybı da: kira, durum kaydı ya da DB izinden biri) ·
 //   BELIRSIZLIK — süren ölçülemedi birikimi 7 günü aştı · SAAT_SAPMASI — fabrikanın ölçtüğü satıcı sapması büyük ·
 //   YETENEK_DUSUSU — `hak-ara` bildirmeyen yoklamaya genişlik kapısı tuttu (eski kök sürüm güncelden geniş; meşru olabilir:
 //   eski derlemeye geri dönüş — yalnız bilgi, kök imzası kuyruğa girer).
@@ -19,7 +20,7 @@ export type LocalInterventionCause = (typeof LOCAL_INTERVENTION_CAUSES)[number];
 export const LOCAL_INTERVENTION_CAUSE_LABELS: Readonly<Record<LocalInterventionCause, string>> = {
   SIRA_GERILEDI: "Durum kaydı sırası geriledi (eski kopya geri yüklenmiş)",
   SIRA_SIFIRLANDI: "Durum kaydı sıfırlandı (lisans izleri silinmiş)",
-  LISANS_IZI_KAYIP: "Lisans izi kayıp (kira ve durum kaydı birlikte yok)",
+  LISANS_IZI_KAYIP: "Lisans izi kayıp (kira, durum kaydı ya da DB izinden en az biri yok)",
   BELIRSIZLIK: "Süren ölçülemedi 7 günü aştı",
   SAAT_SAPMASI: "Fabrika saati satıcıdan çok sapmış",
   YETENEK_DUSUSU: "Yetenek düşüşü: eski kök sürüm güncelden geniş, HAK teslim edilmedi (kök imzası kuyrukta)",

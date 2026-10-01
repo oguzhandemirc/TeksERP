@@ -16,14 +16,15 @@ import { statusTone } from "../pages/Installations";
 import { FirstInstallPanel } from "../distribution/FirstInstallPanel";
 import { HealthPanel, IncidentsPanel, RecordsPanel } from "./IncidentPanels";
 import { AcceptancePanel } from "./AcceptancePanel";
+import { SigningPlanNote, VendorEntitlementVersionModal } from "./EntitlementSigning";
 import { InstallHistoryPanel } from "./InstallHistoryPanel";
 import { PaidThroughPanel } from "./PaidThroughPanel";
 import { InstallmentPanel, PlannedPanel } from "./PlanPanels";
 import { SanctionPanel } from "./SanctionPanel";
 
-/** Genel yolda (Cloudflare Access) kök parolası istenmez: parola Cloudflare'den geçmesin, sunucu o ucu orada 404'ler. */
+/** Genel yolda (Cloudflare Access) imza parolası (ara/kök) istenmez: parola Cloudflare'den geçmesin, sunucu o ucu orada 404'ler. */
 const ROOT_SIGNING_OFF_PUBLIC =
-  "Lisans imzası kök parolası ister ve bu bağlantıdan yapılamaz (parola Cloudflare'den geçmez). İmza için portala tailnet ya da geri döngü tüneliyle (portal-baglan) bağlanın.";
+  "Lisans imzası imza parolası (ara imzacı ya da kök) ister ve bu bağlantıdan yapılamaz (parola Cloudflare'den geçmez). İmza için portala tailnet ya da geri döngü tüneliyle (portal-baglan) bağlanın.";
 
 const TABS = [
   ["lisans", "Lisans"],
@@ -127,6 +128,10 @@ export function InstallationDetailPage() {
             passwordLabel: "Kök anahtar parolası",
             allowPerpetual: true,
             signingBlocked: listener === "ERISIM" ? ROOT_SIGNING_OFF_PUBLIC : undefined,
+            signerPlan: d.hak ? <SigningPlanNote entitlementId={d.hak.id} /> : undefined,
+            versionModal: d.hak
+              ? (p) => <VendorEntitlementVersionModal entitlement={d.hak!} installationClass={inst.sinif} modules={catalog.data?.moduller ?? d.hak!.moduller} {...p} />
+              : undefined,
           }}
           onChanged={refresh}
         />

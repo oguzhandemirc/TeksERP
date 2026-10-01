@@ -22,7 +22,7 @@ import { handleActivation } from "../services/activation.service";
 import { acceptsClosingLease } from "../services/closing-lease";
 import type { VendorContext } from "../services/context";
 import type { DoorbellHub } from "../services/doorbell";
-import { drTakeoverTarget, processDrTakeover } from "../services/dr.service";
+import { drTakeoverPrecheck, processDrTakeover } from "../services/dr.service";
 import { handleHardwareReport } from "../services/hardware.service";
 import { authenticateRequest } from "../services/installation-auth";
 import { processPoll } from "../services/poll.service";
@@ -154,7 +154,7 @@ export function createPublicApp(ctx: VendorContext, hub: DoorbellHub | null): Ex
       nowMs,
       limit,
       path: ENDPOINTS.DR_TAKEOVER,
-      precheck: async (a) => void (await drTakeoverTarget(a.installation, parsed)),
+      precheck: (a) => drTakeoverPrecheck(a.installation, parsed, nowMs),
     });
     res.json(await processDrTakeover(ctx, auth, parsed, nowMs));
   });

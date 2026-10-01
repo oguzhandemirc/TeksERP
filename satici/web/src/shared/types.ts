@@ -44,6 +44,11 @@ export interface EntitlementSummary {
   readonly kalici: boolean;
   readonly bakimBitis: string;
   readonly gecerlilikBitis: string | null;
+  /** Lisans v2 (satıcı künyesi): çevrimdışı ufuk (gün) — null + süresiz değil = v1 HAK (alan basılmadı). */
+  readonly cevrimdisiUfukGun?: number | null;
+  readonly cevrimdisiUfukSuresiz?: boolean;
+  /** HAK `kipAltSiniri: "zorla"` — fabrika gözlem kipine inemez. */
+  readonly kipAltSiniriZorla?: boolean;
 }
 
 export interface Installation {
@@ -85,6 +90,8 @@ export interface EntitlementVersion {
   readonly surum: number;
   readonly imzalayanKid: string;
   readonly verilis: string;
+  /** Uzun çevrimdışı ufuk (400 günü aşan ya da süresiz) bu sürümle verildi (yalnız satıcı künyesi). */
+  readonly uzunUfuk?: boolean;
   readonly sebep: string;
   readonly yapan: string;
   readonly createdAt: string;
@@ -240,6 +247,45 @@ export interface RootRequest {
   readonly kapanisZamani: string | null;
   readonly kapanisSebebi: string | null;
   readonly createdAt: string;
+}
+
+/** HAK imza planı (`GET /haklar/:id/imza-plani`): hangi imzacı, KUYRUK'ta neden, bekleyen kök talebi. */
+export interface SigningPlan {
+  readonly imzaci: "ARA" | "KOK" | "KUYRUK";
+  readonly kid: string | null;
+  readonly neden: string | null;
+  readonly bekleyenTalep: string | null;
+}
+
+/** HAK sürüm ucunun iki başarılı yanıtı: imzalı sürüm (201) ya da kök kuyruğu talebi (202). */
+export type EntitlementVersionResult =
+  | { readonly kuyruk: true; readonly talepId: string; readonly hakId: string; readonly surum: number; readonly durum: string }
+  | { readonly kuyruk?: undefined; readonly id: string; readonly hakId: string; readonly surum: number; readonly imzalayanKid: string; readonly uzunUfuk: boolean };
+
+export type RevocationBlocker =
+  | { readonly tur: "HAK"; readonly hakId: string; readonly lisansNo: string; readonly surum: number; readonly kid: string }
+  | { readonly tur: "ANAHTAR"; readonly kid: string };
+
+/** İptal belgesi defteri + dağıtım kapısı (`GET /iptal-belgeleri`). */
+export interface RevocationStatus {
+  readonly belgeler: {
+    readonly id: string;
+    readonly iptalId: string;
+    readonly sira: number;
+    readonly imzalayanKid: string;
+    readonly verilis: string;
+    readonly kidler: string[];
+    readonly yukleyen: string;
+    readonly createdAt: string;
+  }[];
+  readonly dagitilanSira: number | null;
+  readonly bekleyen: { readonly sira: number; readonly engeller: RevocationBlocker[] } | null;
+}
+
+/** Ara imzacıyla toplu yeniden basım (`POST /haklar/toplu-yeniden-bas`). */
+export interface ReissueResponse {
+  readonly basilan: { readonly hakId: string; readonly surum: number; readonly imzalayanKid: string }[];
+  readonly sonuclar: { readonly hakId: string; readonly durum: "IMZALANACAK" | "ATLANDI"; readonly neden: string | null }[];
 }
 
 export interface PlannedAction {
@@ -443,6 +489,8 @@ export interface KeyStatus {
     readonly yuklu: boolean;
     readonly suresiDoldu: boolean;
     readonly capada: boolean | null;
+    /** Sertifikayı imzalayan kökün kid'i (kökler ve bayi sertifikasızsa null). */
+    readonly sertifikaVeren?: string | null;
     readonly updatedAt: string;
   }[];
   readonly kiraImzalayabilir: boolean;

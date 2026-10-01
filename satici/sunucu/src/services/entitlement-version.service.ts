@@ -154,6 +154,14 @@ export interface ChangeInput {
   readonly longHorizonApproval?: LongHorizonApproval;
 }
 
+/** Plan uyuşmazlığının açıklaması: kök VDS'ten kalkınca eski arayüz (`imzaci`sız → KÖK beklentisi) buraya düşer. */
+const PLAN_CHANGED_MESSAGE: Readonly<Record<SignerPlanKind, string>> = {
+  ARA: "İmza planı değişti: kök anahtarı satıcı sunucusunda değil, bu HAK ara imzacıyla imzalanır — sayfayı yenileyip ara imzacı parolasıyla yeniden deneyin (parola kullanılmadı)",
+  KOK: "İmza planı değişti: bu HAK kök anahtarla imzalanır — sayfayı yenileyip kök parolasıyla yeniden deneyin (parola kullanılmadı)",
+  KUYRUK:
+    "İmza planı değişti: kök anahtarı satıcı sunucusunda değil ve kurulumun derlemesi ara imzalı HAK'ı tanımıyor — değişiklik kök imzası kuyruğuna girer; sayfayı yenileyip parolasız gönderin (parola kullanılmadı)",
+};
+
 /** Ortak ön adım: HAK + plan + bekleyen kuyruk + yük + uzun ufuk onayı (parola KULLANILMADAN). */
 async function prepareChange(ctx: VendorContext, g: ChangeInput) {
   const reason = requireReason(g.reason, "HAK sürümü");
@@ -162,7 +170,7 @@ async function prepareChange(ctx: VendorContext, g: ChangeInput) {
   const nowMs = g.nowMs ?? Date.now();
   const plan = planEntitlementSigner(ctx.keys, hak.kurulum.sinif, g.capabilities ?? installationCapabilities(hak.kurulum), nowMs);
   if (g.expectedSigner !== undefined && g.expectedSigner !== plan.kind) {
-    throw new VendorError(409, "DURUM_CAKISMASI", `İmza planı değişti (${plan.kind}); formu yenileyip yeniden deneyin`, { imzaci: plan.kind });
+    throw new VendorError(409, "DURUM_CAKISMASI", PLAN_CHANGED_MESSAGE[plan.kind], { imzaci: plan.kind });
   }
   const pending = await prisma.hakKokTalebi.findFirst({ where: { hakId: hak.id, durum: "BEKLIYOR" }, select: { id: true } });
   if (pending) throw stateConflict("Bu HAK için kök imzası bekleyen bir talep var; önce o talep iptal edilmeli");

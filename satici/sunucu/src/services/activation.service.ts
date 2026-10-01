@@ -17,10 +17,9 @@ import { prisma, type Tx } from "../lib/prisma";
 import type { VendorContext } from "./context";
 import { notifyDoorbell } from "./doorbell";
 import { bodyKeyRole, installationCancelled, recordRequestNonce, verifySignedRequest, type KeyRole } from "./installation-auth";
-import { deliverableEntitlement } from "./entitlement-issue.service";
 import { assertIdentificationOnActivation } from "./hardware.service";
+import { assertBindableBeforeLease, leaseUnbindable } from "./lease-binding";
 import { storableSequence } from "./local-intervention";
-import { queueCurrentTermsUnderLock } from "./root-queue.service";
 import {
   activeEntitlement,
   computeSanctionState,
@@ -43,18 +42,11 @@ const activationWithheld = (): VendorError =>
 
 /**
  * Ucuz ön denetim (kodu tüketecek istekte, nonce'tan önce): `hak-ara` bildirmeyen derlemeye teslim edilebilecek HAK yoksa
- * (en yeni kök sürüm güncelden geniş — genişlik kapısı) etkinleştirme kod tüketmeden durur; talep acil kuyruğa girer.
+ * (en yeni kök sürüm güncelden geniş — genişlik kapısı; yeni makinenin elinde HAK yok) etkinleştirme kod tüketmeden
+ * durur; talep acil kuyruğa girer (kira bağı kapısı, `lease-binding.ts`).
  */
 async function assertDeliverableOnActivation(inst: Kurulum, body: ActivateRequest, nowMs: number): Promise<void> {
-  const hak = await prisma.hak.findFirst({ where: { kurulumId: inst.id, aktif: true } });
-  if (!hak || hak.guncelSurum < 1) return;
-  const deliverable = await deliverableEntitlement(prisma, hak, body.yetenekler ?? []);
-  if (!deliverable?.withheld) return;
-  await prisma.$transaction(async (tx) => {
-    await lockInstallation(tx, inst.id);
-    await queueCurrentTermsUnderLock(tx, { entitlementId: hak.id, urgent: true, nowMs });
-  });
-  throw activationWithheld();
+  await assertBindableBeforeLease({ installation: inst, capabilities: body.yetenekler ?? [], nowMs, refusal: activationWithheld });
 }
 
 const transferCodeRequired = (): VendorError =>
@@ -213,7 +205,7 @@ export async function activateInTx(
     nowMs: g.nowMs,
   });
   // Ön denetimle bu tx arasında HAK değiştiyse: kod tüketilmeden geri alınır (kuyruğu ön denetim yazar).
-  if (lease.entitlement.withheld) throw activationWithheld();
+  if (leaseUnbindable(lease.entitlement)) throw activationWithheld();
   const tip = await tx.kurulum.updateMany({ where: { id: inst.id, sonKiraId: null }, data: { sonKiraId: lease.id } });
   if (tip.count === 0) throw retryConflict();
   await tx.etkinlestirmeKodu.update({ where: { id: code.id }, data: { kiraId: lease.id } });

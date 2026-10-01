@@ -9,6 +9,7 @@ import {
   OFFLINE_HORIZON_MAX_DAYS,
   hasCapability,
   offlineHorizonCeilingDays,
+  parseJws,
   type EntitlementDoc,
   type EntitlementSignerKind,
   type LicenseClass,
@@ -105,6 +106,26 @@ export function planEntitlementSigner(keys: KeyStore, licenseClass: LicenseClass
 }
 
 // ---------------------------------------------------------------- genişlik kapısı (yetenek düşüşü)
+
+/** HAK belgesinin imzacısı ara imzacı mı (gömülü `imzaciSertifikasi`)? İmza burada doğrulanmaz — yalnız yük okunur. */
+export function isIntermediateSignedToken(token: string): boolean {
+  const p = parseJws(token);
+  return p.ok && typeof p.value.payload.imzaciSertifikasi === "string";
+}
+
+/**
+ * Eski (yetenek bildirmeyen) derlemeye gidebilecek ADAY — en yeni ARA İMZASIZ sürüm (≤ güncel), girdi sırasından bağımsız.
+ * TEK seçim: teslim seçimi (`deliverableEntitlement`, aday genişlik kapısından geçerse teslim edilir) ve iptal dağıtım
+ * kapısının engel denetimi (`revocation.service`, adayın imzacısı iptal ediliyorsa belge bekler) aynı adayı okur.
+ */
+export function newestLegacyVersion<T extends { readonly surum: number; readonly belge: string }>(versions: readonly T[], currentVersion: number): T | null {
+  let best: T | null = null;
+  for (const v of versions) {
+    if (v.surum > currentVersion || isIntermediateSignedToken(v.belge)) continue;
+    if (best === null || v.surum > best.surum) best = v;
+  }
+  return best;
+}
 
 /** HAK belgesinin genişlik ölçüsüne giren alanları. */
 export type EntitlementBreadth = Pick<EntitlementDoc, "sinif" | "moduller" | "kalici" | "bakimBitis" | "cevrimdisiUfukGun" | "kipAltSiniri">;

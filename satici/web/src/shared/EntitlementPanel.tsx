@@ -2,7 +2,7 @@
 // uzatma · modül tavanı). Satıcıda KÖK, bayide BAYİ parolası (bayi yalnız tavanı içinde). Etkinleştirme
 // kodu imzalı hakkı olan kurulum için üretilir ve yalnız bir kez gösterilir. Sürümler ve kodlar
 // EKLEME-YALNIZ defterdir.
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { ActivationCodeAction, EntitlementCreateModal, EntitlementVersionModal } from "./forms";
 import { fmtDate, fmtDateTime } from "./format";
 import { CODE_STATUS_LABEL, MODULE_LABEL, label } from "./labels";
@@ -25,6 +25,17 @@ export interface EntitlementPolicy {
   readonly codeOnlyUnactivated?: boolean;
   /** Doluysa imza formu HİÇ açılmaz, yerine bu açıklama (ör. genel yolda kök parolası Cloudflare'den geçmez). */
   readonly signingBlocked?: string;
+  /** Satıcı: hakkın imza planı satırı (ara imzacı · kök · kök kuyruğu); bayide yok. */
+  readonly signerPlan?: ReactNode;
+  /** Satıcı: plana göre parola soran sürüm formu; yoksa ortak form (bayi parolası). */
+  readonly versionModal?: (p: { readonly onClose: () => void; readonly onSaved: () => void }) => ReactNode;
+}
+
+/** Çevrimdışı ufuk satırı (yalnız alan gelen görünümde): süresiz · gün · v1 HAK. */
+function horizonRow(hak: NonNullable<InstallationDetail["hak"]>): readonly [string, ReactNode][] {
+  if (hak.cevrimdisiUfukGun === undefined && hak.cevrimdisiUfukSuresiz === undefined) return [];
+  const text = hak.cevrimdisiUfukSuresiz ? "Süresiz (uzun ufuk)" : hak.cevrimdisiUfukGun ? `${hak.cevrimdisiUfukGun} gün` : "— (v1 HAK)";
+  return [["Çevrimdışı ufuk", text]];
 }
 
 export function EntitlementPanel({ detail, policy, onChanged }: { detail: InstallationDetail; policy: EntitlementPolicy; onChanged: () => void }) {
@@ -72,11 +83,13 @@ export function EntitlementPanel({ detail, policy, onChanged }: { detail: Instal
               ["Bakım bitişi", fmtDate(hak.bakimBitis)],
               ["Geçerlilik bitişi", hak.gecerlilikBitis ? fmtDate(hak.gecerlilikBitis) : "Süresiz"],
               ["Modüller", hak.moduller.map((m) => label(MODULE_LABEL, m)).join(", ") || "—"],
+              ...horizonRow(hak),
             ]}
           />
         ) : (
           <p className="muted">Bu kurulumun lisans hakkı yok.</p>
         )}
+        {hak ? policy.signerPlan : null}
       </Section>
       <Section title="İmzalı sürümler">
         <Table
@@ -84,7 +97,7 @@ export function EntitlementPanel({ detail, policy, onChanged }: { detail: Instal
           rowKey={(r) => r.id}
           empty="Henüz imzalı sürüm yok"
           columns={[
-            { header: "Sürüm", render: (r) => r.surum },
+            { header: "Sürüm", render: (r) => (r.uzunUfuk ? `${r.surum} · uzun ufuk` : r.surum) },
             { header: "Veriliş", render: (r) => fmtDateTime(r.verilis) },
             { header: "İmzalayan anahtar", render: (r) => <code>{r.imzalayanKid}</code> },
             { header: "Sebep", render: (r) => r.sebep },
@@ -122,7 +135,8 @@ export function EntitlementPanel({ detail, policy, onChanged }: { detail: Instal
           onSaved={done}
         />
       ) : null}
-      {dialog === "version" && hak && !policy.signingBlocked ? (
+      {dialog === "version" && hak && !policy.signingBlocked && policy.versionModal ? policy.versionModal({ onClose: () => setDialog(null), onSaved: done }) : null}
+      {dialog === "version" && hak && !policy.signingBlocked && !policy.versionModal ? (
         <EntitlementVersionModal
           entitlement={hak}
           modules={policy.modules ?? hak.moduller}

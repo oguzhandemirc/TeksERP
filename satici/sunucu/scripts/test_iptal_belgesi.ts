@@ -12,6 +12,8 @@
 //   §4 `emekliye-ayir`: varsayılan KURU (değişiklik yok); aynı türde daha yeni anahtar yoksa RED; `--uygula` özel yarıyı
 //      siler, açık yarı + sertifika `.sertifika.json` kalır (künyede EMEKLI); tekrar → "zaten emekli"
 //   §5 `donem-ice-aktar` (konteyner CLI'ı): iptal belgesi + kök imzalı HAK tek dosyadan; biçimsiz dosya RED
+//   §6 tek seçim: dağıtım kapısının engel denetimi "eski derlemeye giden aday"ı (en yeni ara imzasız sürüm) KENDİ seçmez —
+//      teslim seçimiyle (genişlik kapısı) aynı saf yardımcıyı (`newestLegacyVersion`) okur; ara imza yüklemi başka yerde yok
 // ⭐ KALICI SONDA ✓K (her koşumda): §2a geçerli belge GERÇEKTEN eklenir · §3c engeller kalkınca belge GERÇEKTEN dağıtılır
 //    (her şeyi bekleten kör kapı yeşil veremez) · §4c `--uygula` GERÇEKTEN siler.
 // Koşum: node ../../scripts/agir-is.mjs -- npx tsx scripts/test_iptal_belgesi.ts   (kendi _test DB'si)
@@ -66,8 +68,26 @@ function satir(konu: TestAnahtari, kullanim: CertificateDoc["kullanim"], sertifi
   return { kid: konu.kid, sertifikaId, kullanim, tarih: msToIso(Date.now()), neden: "bekçi" };
 }
 
+/** §6 — yorum dışı kaynakta desen taşıyan src/services dosyaları (göreli ad, sıralı). */
+function servisTasiyanlar(desen: RegExp): string[] {
+  const dir = path.join(SATICI_KOKU, "src", "services");
+  return readdirSync(dir)
+    .filter((n) => n.endsWith(".ts") && desen.test(readFileSync(path.join(dir, n), "utf8").replace(/\/\*[\s\S]*?\*\//g, "").replace(/(^|[^:])\/\/.*$/gm, "$1")))
+    .sort();
+}
+
+function tekSecim(): void {
+  console.log("\n§6 eski derleme adayı tek seçim (engel denetimi ↔ teslim seçimi)");
+  const okuyan = servisTasiyanlar(/\bnewestLegacyVersion\(/);
+  kontrol("§6a engel denetimi (revocation) ve teslim seçimi (entitlement-issue) adayı AYNI saf yardımcıdan okur",
+    ["entitlement-issue.service.ts", "revocation.service.ts"].every((f) => okuyan.includes(f)), okuyan.join(", "));
+  const yuklem = servisTasiyanlar(/\bisIntermediateSignedToken\(/);
+  kontrol("§6b ara imza yüklemi yalnız seçimin içinde (entitlement-policy) — kopya seçim yok", JSON.stringify(yuklem) === JSON.stringify(["entitlement-policy.ts"]), yuklem.join(", "));
+}
+
 async function main(): Promise<void> {
   hedefDbKapisi();
+  tekSecim();
   const ortam = await anahtarOrtamiKur();
   const { f, ctx } = ortam;
   const { prisma } = await import("../src/lib/prisma");

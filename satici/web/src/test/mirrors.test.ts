@@ -28,7 +28,20 @@ import {
   FINGERPRINT_FACTOR_LABEL,
   HARDWARE_REQUEST_KIND_LABEL,
   HARDWARE_REQUEST_STATUS_LABEL,
+  KEY_KIND_LABEL,
+  KEY_STATUS_LABEL,
+  REISSUE_STATUS_LABEL,
+  REVOCATION_BLOCKER_LABEL,
+  SIGNER_PLAN_LABEL,
+  SIGNER_PLAN_REASON_LABEL,
 } from "../shared/labels";
+import {
+  OFFLINE_HORIZON_DEFAULT_DAYS,
+  OFFLINE_HORIZON_MAX_DAYS,
+  OFFLINE_HORIZON_SHORT_CLASS_DAYS,
+  SHORT_HORIZON_CLASSES,
+  UNBOUNDED_HORIZON_CLASSES,
+} from "../portal/installation/EntitlementSigning";
 import { PORTAL_PERMISSIONS, TAILNET_ONLY_PERMISSIONS } from "../shared/permissions";
 import { HEAVY_K3_MIN_DAYS, INSTALLMENT_DEFAULT_RESTRICTION_DAYS } from "../shared/sanctions";
 import { CHANNEL_CODE_PATTERN, CHANNEL_KIND_LABEL, VERSION_PATTERN } from "../portal/pages/Channels";
@@ -251,6 +264,37 @@ describe("lisans v2 — enum ve küme ekran adları (sunucu kaynağı, iki yönl
     twoWay([...m![1]!.matchAll(/"([A-Z_]+)"/g)].map((x) => x[1]!), PAID_THROUGH_KIND_LABEL);
   });
 
+  it("imza planı ve KUYRUK nedeni = SignerPlanKind · EntitlementSignerPlan reason (entitlement-policy.ts)", () => {
+    const src = read("services/entitlement-policy.ts");
+    const kinds = /export type SignerPlanKind = ([^;]+);/.exec(src);
+    const reasons = /readonly reason: ([^}]+) \}/.exec(src);
+    expect(kinds, "SignerPlanKind bulunamadı").not.toBeNull();
+    expect(reasons, "KUYRUK reason bulunamadı").not.toBeNull();
+    twoWay([...kinds![1]!.matchAll(/"([A-Z_]+)"/g)].map((x) => x[1]!), SIGNER_PLAN_LABEL);
+    twoWay([...reasons![1]!.matchAll(/"([A-Z_]+)"/g)].map((x) => x[1]!), SIGNER_PLAN_REASON_LABEL);
+  });
+
+  it("plan değişikliği 409'u `details.imzaci` taşır (arayüz formu yeni plana göre yeniler)", () => {
+    expect(read("services/entitlement-version.service.ts")).toMatch(/new VendorError\(409, "DURUM_CAKISMASI", [^)]*\{ imzaci: plan\.kind \}\)/);
+    expect(listStrings(read("lib/errors.ts"), "export const PORTAL_ERROR_CODES")).toContain("DURUM_CAKISMASI");
+  });
+
+  it("anahtar türü/durumu = Prisma AnahtarTuru/AnahtarDurumu (ARA dahil)", () => {
+    const kinds = prismaEnum("AnahtarTuru");
+    expect(kinds).toContain("ARA");
+    twoWay(kinds, KEY_KIND_LABEL);
+    twoWay(prismaEnum("AnahtarDurumu"), KEY_STATUS_LABEL);
+  });
+
+  it("iptal engeli türleri = RevocationBlocker (revocation.service.ts) · toplu basım sonucu = ReissueResult (entitlement-issue.service.ts)", () => {
+    const blocker = /export type RevocationBlocker =([\s\S]*?);\n/.exec(read("services/revocation.service.ts"));
+    expect(blocker, "RevocationBlocker bulunamadı").not.toBeNull();
+    twoWay([...blocker![1]!.matchAll(/tur: "([A-Z_]+)"/g)].map((x) => x[1]!), REVOCATION_BLOCKER_LABEL);
+    const reissue = /readonly durum: ([^;]+);/.exec(/export interface ReissueResult \{([\s\S]*?)\n\}/.exec(read("services/entitlement-issue.service.ts"))?.[1] ?? "");
+    expect(reissue, "ReissueResult.durum bulunamadı").not.toBeNull();
+    twoWay([...reissue![1]!.matchAll(/"([A-Z_]+)"/g)].map((x) => x[1]!), REISSUE_STATUS_LABEL);
+  });
+
   it("✓K ayna denetçisi ısırır: eksik ve fazla anahtar ayrı ayrı yakalanır", () => {
     const missing = { A: "a" };
     const extra = { A: "a", B: "b", C: "c" };
@@ -295,6 +339,16 @@ describe("eşikler ve biçim desenleri aynası", () => {
     const src = read("services/dealer.service.ts");
     expect(DEFAULT_MAINTENANCE_MONTHS).toBe(numberConst(src, /export const DEFAULT_MAINTENANCE_MONTHS = (\d+);/));
     expect(MAX_MAINTENANCE_MONTHS).toBe(numberConst(src, /export const MAX_MAINTENANCE_MONTHS = (\d+);/));
+  });
+
+  it("çevrimdışı ufuk sınırları ve sınıf kümeleri (lisans-protokol belgeler.ts · anahtar-zinciri.ts)", () => {
+    const docs = read("lisans-protokol/belgeler.ts");
+    expect(OFFLINE_HORIZON_DEFAULT_DAYS).toBe(numberConst(docs, /export const OFFLINE_HORIZON_DEALER_DAYS = (\d+);/));
+    expect(OFFLINE_HORIZON_SHORT_CLASS_DAYS).toBe(numberConst(docs, /export const OFFLINE_HORIZON_SHORT_CLASS_DAYS = (\d+);/));
+    expect(OFFLINE_HORIZON_MAX_DAYS).toBe(numberConst(docs, /export const OFFLINE_HORIZON_MAX_DAYS = (\d+);/));
+    const chain = read("lisans-protokol/anahtar-zinciri.ts");
+    expect([...SHORT_HORIZON_CLASSES]).toEqual(listStrings(chain, "const SHORT_HORIZON_CLASSES: readonly LicenseClass\\[\\]"));
+    expect([...UNBOUNDED_HORIZON_CLASSES]).toEqual(listStrings(chain, "const UNBOUNDED_HORIZON_CLASSES: readonly LicenseClass\\[\\]"));
   });
 
   it("sözleşme kabulünün kurulum kaydı olay adı (activation.service.ts ACCEPTANCE_EVENT)", () => {

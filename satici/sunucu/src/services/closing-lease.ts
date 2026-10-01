@@ -5,7 +5,8 @@
 // kendi defterinden: kopya → reddi doğuran uyarının ilk görülmesi · taşıma → anahtarın emekli olduğu kurulum kaydı · iptal
 // → son IPTAL kaydı. Yalnız `odenmis-tarih` yeteneğini bildiren istemciye gider; eski fabrika bugünkü 403'ü alır (sıfır
 // fark). Kapanış kirası zincir ucunu İLERLETMEZ, modül anahtarı/bulut hakkı taşımaz; aynı olayda tekrar yoklama koşullar
-// değişmediyse AYNI kirayı alır (defter şişmez).
+// değişmediyse AYNI kirayı alır (defter şişmez). Alan tarafın kirayı bağlayabileceği HAK yoksa (genişlik kapısı) kapanış
+// kirası basılmaz, eski 403 sürer; kuyruk açılmaz — alan taraf zincir sahibi değil (kira bağı kapısı, `lease-binding.ts`).
 import type { Hak, Kira, KopyaUyarisi, Kurulum } from "@prisma/client";
 import {
   DAY_MS,
@@ -22,6 +23,7 @@ import { prisma, type Tx } from "../lib/prisma";
 import type { VendorContext } from "./context";
 import { installationCancelled, type AuthenticatedRequest } from "./installation-auth";
 import type { HeldEntitlement } from "./entitlement-issue.service";
+import { leaseUnbindable } from "./lease-binding";
 import { entitlementForDelivery, issueLease, leaseEntitlement, leaseRevocation, licenseResponse, type LeaseRevocation } from "./lease.service";
 import type { PollTelemetry } from "./renewal.service";
 
@@ -79,7 +81,10 @@ async function reusable(
   return changed === 0;
 }
 
-/** Kapanış kirası basar ya da aynı olayın geçerli kapanış kirasını yeniden verir (kurulum kilidi altında çağrılır). */
+/**
+ * Kapanış kirası basar ya da aynı olayın geçerli kapanış kirasını yeniden verir (kurulum kilidi altında çağrılır). Kira
+ * alan tarafa bağlanamıyorsa null: çağıran eski 403'ü verir.
+ */
 export async function issueOrReuseClosingLease(
   tx: Tx,
   ctx: VendorContext,
@@ -98,9 +103,10 @@ export async function issueOrReuseClosingLease(
     readonly held?: HeldEntitlement | null;
     readonly nowMs: number;
   },
-): Promise<ClosingLease> {
+): Promise<ClosingLease | null> {
   const revocation = await leaseRevocation(tx, ctx.keys);
   const deliverable = await entitlementForDelivery(tx, g.installation, g.entitlement, { capabilities: g.capabilities, held: g.held });
+  if (leaseUnbindable(deliverable)) return null;
   const episode = { kurulumId: g.installation.id, anahtarKimligi: g.keyId, karar: "KAPANIS" as const, kapanisNedeni: g.reason, verilis: { gte: g.episodeStart } };
   const first = await tx.kira.findFirst({ where: episode, orderBy: [{ verilis: "asc" }, { id: "asc" }], select: { verilis: true } });
   const anchorMs = first ? first.verilis.getTime() : g.nowMs;
@@ -129,7 +135,7 @@ export async function issueOrReuseClosingLease(
 
 /**
  * Sonu gelmiş anahtarın yoklaması (taşınmış eski makine · iptal edilmiş kurulum): kilit altında durum TAZE okunur; kapanış
- * kirası + yoklama satırı aynı tx'te. Kapanış basılamıyorsa (HAK yok, olay kaydı yok) eski 403 sürer. Durum arada
+ * kirası + yoklama satırı aynı tx'te. Kapanış basılamıyorsa (HAK yok, olay kaydı yok, kira bağlanamaz) eski 403 sürer. Durum arada
  * değiştiyse (iptal geri alındı) 409 TEKRAR_DENEYIN: yeniden deneme olağan yoldan geçer.
  */
 export async function closeEndedKey(
@@ -164,6 +170,7 @@ export async function closeEndedKey(
       held: g.held ?? null,
       nowMs: g.nowMs,
     });
+    if (!closing) return null;
     await tx.yoklama.create({
       data: {
         kurulumId: inst.id,

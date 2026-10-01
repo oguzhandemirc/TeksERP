@@ -5,6 +5,7 @@
 // belge, HAK yeniden basılıp anahtar emekliye ayrılmadan dağıtılmaz; o güne dek bir önceki belge dağıtılır.
 import type { IptalBelgesi } from "@prisma/client";
 import { parseJws, verifyRevocation, type RootKey, type VerifiedRevocation } from "../lisans-protokol";
+import { newestLegacyVersion } from "./entitlement-policy";
 import type { KeyStore } from "../keys/key-store";
 import { recordAudit } from "../lib/audit";
 import { VendorError, stateConflict } from "../lib/errors";
@@ -71,12 +72,6 @@ export interface DistributableRevocation {
   readonly bekleyen: { readonly sira: number; readonly engeller: readonly RevocationBlocker[] } | null;
 }
 
-/** HAK belgesinin imzacısı ara imzacı mı (gömülü `imzaciSertifikasi`)? İmza burada doğrulanmaz — yalnız yük okunur. */
-export function isIntermediateSignedToken(token: string): boolean {
-  const p = parseJws(token);
-  return p.ok && typeof p.value.payload.imzaciSertifikasi === "string";
-}
-
 /**
  * Belgenin engelleri: etkin bir HAK'ın DAĞITILABİLİR sürümü (güncel sürüm + eski derlemeye giden en yeni ara-dışı
  * sürüm) iptal edilen bir anahtarla imzalıysa ya da iptal edilen bir anahtar hâlâ anahtar dizininde yüklüyse.
@@ -91,7 +86,7 @@ async function blockersOf(db: Db, keys: KeyStore, doc: VerifiedRevocation["docum
   });
   for (const hak of signedByRevoked) {
     const current = hak.surumler.find((v) => v.surum === hak.guncelSurum);
-    const legacy = hak.surumler.find((v) => v.surum <= hak.guncelSurum && !isIntermediateSignedToken(v.belge));
+    const legacy = newestLegacyVersion(hak.surumler, hak.guncelSurum);
     for (const v of [current, legacy]) {
       if (v && kids.includes(v.imzalayanKid) && !out.some((b) => b.tur === "HAK" && b.hakId === hak.id && b.surum === v.surum)) {
         out.push({ tur: "HAK", hakId: hak.id, lisansNo: hak.lisansNo, surum: v.surum, kid: v.imzalayanKid });

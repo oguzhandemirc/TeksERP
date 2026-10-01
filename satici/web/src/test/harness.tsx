@@ -14,7 +14,7 @@ export interface Recorded {
   readonly body: Record<string, unknown> | undefined;
 }
 
-export type Reply = { readonly status?: number; readonly data?: unknown; readonly code?: string; readonly message?: string };
+export type Reply = { readonly status?: number; readonly data?: unknown; readonly code?: string; readonly message?: string; readonly details?: Readonly<Record<string, unknown>> };
 export type Handler = (req: Recorded, calls: readonly Recorded[]) => Reply | Promise<Reply>;
 
 export function sessionFor(role: PortalRole, over: Partial<SessionInfo["kullanici"]> = {}): SessionInfo {
@@ -40,7 +40,7 @@ export function fakeServer(base: ApiBase, handlers: Record<string, Handler>) {
     if (!handler) throw new Error(`Sahte sunucuda tanımsız uç: ${key}`);
     const r = await handler(rec, calls);
     const status = r.status ?? 200;
-    const payload = status >= 400 ? { success: false, message: r.message ?? "Hata", details: { code: r.code ?? "BILINMEYEN" } } : { success: true, data: r.data ?? null };
+    const payload = status >= 400 ? { success: false, message: r.message ?? "Hata", details: { ...r.details, code: r.code ?? "BILINMEYEN" } } : { success: true, data: r.data ?? null };
     return new Response(JSON.stringify(payload), { status, headers: { "Content-Type": "application/json" } });
   }) as typeof fetch;
   return { calls, fetchImpl };

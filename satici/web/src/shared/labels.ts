@@ -66,7 +66,7 @@ export const COPY_ALERT_LABEL: Record<string, string> = {
 export const LOCAL_INTERVENTION_CAUSE_LABEL: Record<string, string> = {
   SIRA_GERILEDI: "Durum kaydı sırası geriledi",
   SIRA_SIFIRLANDI: "Durum kaydı sıfırlandı (izler silinmiş)",
-  LISANS_IZI_KAYIP: "Lisans izi kayıp",
+  LISANS_IZI_KAYIP: "Lisans izi kayıp — kira, durum kaydı ya da DB izinden en az biri yok",
   BELIRSIZLIK: "Süren ölçülemedi > 7 gün",
   SAAT_SAPMASI: "Saat sapması ≥ 1 saat",
   YETENEK_DUSUSU: "Yetenek düşüşü (HAK teslim edilmedi, kök imzası kuyrukta)",
@@ -125,6 +125,34 @@ export const ROOT_REQUEST_STATUS_LABEL: Record<string, string> = {
   IPTAL: "İptal",
   ESKIDI: "Eskidi (HAK başka sürüme geçti)",
 };
+/** HAK imza planı (yetenek kapısı) — sunucu `SignerPlanKind` aynası (entitlement-policy.ts; mirrors.test.ts, iki yönlü). */
+export const SIGNER_PLAN_LABEL: Record<string, string> = {
+  ARA: "Ara imzacı",
+  KOK: "Kök anahtar",
+  KUYRUK: "Kök imzası kuyruğu",
+};
+/** Planın KUYRUK nedeni — sunucu `EntitlementSignerPlan` KUYRUK `reason` aynası. */
+export const SIGNER_PLAN_REASON_LABEL: Record<string, string> = {
+  YETENEK_YOK: "kurulumun derlemesi ara imzalı HAK'ı tanımıyor (hak-ara yeteneği bildirmedi)",
+  ARA_IMZACI_YOK: "bu sınıf için geçerli ara imzacı yüklü değil",
+};
+/** Satıcı imza anahtarının türü / künye durumu — Prisma `AnahtarTuru` / `AnahtarDurumu` aynası. */
+export const KEY_KIND_LABEL: Record<string, string> = {
+  KOK: "Kök",
+  HAZIRLIK_KOK: "Hazırlık kökü",
+  ALT: "Alt (kira imzası)",
+  INDIRME: "İndirme belirteci",
+  BAYI: "Bayi",
+  ARA: "Ara imzacı (HAK)",
+};
+export const KEY_STATUS_LABEL: Record<string, string> = { AKTIF: "Aktif", EMEKLI: "Emekli", IPTAL: "İptal" };
+/** İptal belgesinin dağıtım engeli — sunucu `RevocationBlocker["tur"]` aynası (revocation.service.ts). */
+export const REVOCATION_BLOCKER_LABEL: Record<string, string> = {
+  HAK: "HAK sürümü iptal edilen anahtarla imzalı — ara imzacıyla yeniden basılmalı",
+  ANAHTAR: "İptal edilen anahtar hâlâ yüklü — emekliye ayrılmalı",
+};
+/** Toplu yeniden basımın satır sonucu — sunucu `ReissueResult["durum"]` aynası (entitlement-issue.service.ts). */
+export const REISSUE_STATUS_LABEL: Record<string, string> = { IMZALANACAK: "Yeniden basıldı", ATLANDI: "Atlandı" };
 /** Bildirim olayları — sunucunun `NOTIFICATION_EVENTS` listesinin HER değeri (ayna: src/test/mirrors.test.ts). */
 export const NOTIFICATION_EVENT_LABEL: Record<string, string> = {
   DESTEK_TALEBI: "Yeni destek talebi",

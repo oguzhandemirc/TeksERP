@@ -15,18 +15,47 @@
 //      fabrikanın elindeki kira + HAK fabrika durum makinesinde P'ye dek NORMAL, P'den sonra EK_SURE (aniden durmaz)
 //   §5 kök imzası içe aktarılınca eski derleme güncel şartlı kök imzalı v3'ü alır (200, talep IMZALANDI)
 //   §6 etkinleştirme: yeteneksiz derleme kod TÜKETMEDEN 403 (acil talep); aynı kod yetenekli derlemeyle 200
+//   KİRA BAĞI KAPISI (`lease-binding.ts`) — bağlanamayan kira (`hak: null`, alıcının elinde bağlayacak HAK yok) HİÇBİR
+//   yoldan çıkmaz; kural tek yardımcıda:
+//   §7 DR devri (yeteneksiz DR, istek elindeki HAK'ı bildirmez): ön denetim 403 — devir YAZILMAZ (ana ETKİN), nonce ve
+//      kira yok, DR'nin HAK'ı acil kuyrukta; raporsuz yenileme (`renewLease`) de istisna değil (403); kök imzasından sonra 200
+//   §8 kapanış kirası (iptal kurulum): alan taraf bağlayamıyorsa kapanış kirası YOK → eski 403 KURULUM_IPTAL, kuyruk
+//      açılmaz (alan taraf zincir sahibi değil); elinde güvenli sürüm olan alıcı kapanış kirasını alır
+//   §9 donanım öğrenmesi (güçlüler tutuyor ama kira bağlanamaz): 403 — öğrenme de kira da yok (küme, talep, kurulum kaydı
+//      değişmez), acil talep + bildirim; kök imzasından sonra aynı bildirim ONAYLANDI + kira
+//   §10 tek kaynak: eski derleme adayı (`newestLegacyVersion`, saf) · kira bağı kararı yalnız `lease-binding.ts`te
+//      (heldBound okuması + kuyruk çağrısı tek dosyada — kopya yok)
 // ⭐ KALICI SONDA ✓K (her koşumda): §2d genişlemeyen ara sürümde eski kök sürüm GERÇEKTEN teslim edilir (kapı her
-//    yeteneksize ret veren kör bir ret değil) · §5a kök imzası gelince eski derleme GERÇEKTEN kira alır.
+//    yeteneksize ret veren kör bir ret değil) · §5a kök imzası gelince eski derleme GERÇEKTEN kira alır · §7d · §8b · §9b
+//    bağlanabilen yol GERÇEKTEN kira alır (kapı her şeyi reddeden kör kapı değil) · §10c tarayıcı GERÇEKTEN ölçüyor.
 // Koşum: node ../../scripts/agir-is.mjs -- npx tsx scripts/test_genislik_kapisi.ts   (kendi _test DB'si)
 // =============================================================================
+import { createHash } from "node:crypto";
+import { readFileSync, readdirSync, statSync } from "node:fs";
 import path from "node:path";
-import { DAY_MS, EntitlementSchema, ENDPOINTS, TYP, jwsDigest, parseJws, signDocument, verifyEntitlement, verifyLease, type EntitlementDoc, type LicenseClass } from "../src/lisans-protokol";
+import {
+  DAY_MS,
+  EntitlementSchema,
+  ENDPOINTS,
+  HardwareReportResponseSchema,
+  TYP,
+  b64uEncode,
+  jwsDigest,
+  parseJws,
+  signDocument,
+  verifyEntitlement,
+  verifyLease,
+  type EntitlementDoc,
+  type Fingerprint,
+  type LicenseClass,
+} from "../src/lisans-protokol";
 import { kurulumAnahtariUret, sertifikaBas, sertifikaYuku, type TestAnahtari } from "../../../Teks-Erp/scripts/lib/lisans-fikstur";
 import { computeLicenseState, toDocResult } from "../../../Teks-Erp/src/lib/license/state";
 import { passwordBuffer, wrapPrivateKey, writeKeyFileExclusive } from "../src/keys/key-files";
 import { KeyStore } from "../src/keys/key-store";
 import { runAsCli } from "../src/lib/request-scope";
-import { isEntitlementWithin, type EntitlementBreadth } from "../src/services/entitlement-policy";
+import { isEntitlementWithin, newestLegacyVersion, type EntitlementBreadth } from "../src/services/entitlement-policy";
+import { VendorError } from "../src/lib/errors";
 import {
   anahtarOrtamiKur,
   etkinlestirmeGovdesi,
@@ -73,9 +102,43 @@ function saf(): void {
     ic({ cevrimdisiUfukGun: undefined }) && ic({ cevrimdisiUfukGun: 3650 }, { cevrimdisiUfukGun: null }) && !ic({ cevrimdisiUfukGun: 45 }, { cevrimdisiUfukGun: undefined }));
 }
 
+/** Yorumları atılmış kaynak (tarayıcı yalnız kodu ölçer). */
+function kodOf(file: string): string {
+  return readFileSync(file, "utf8").replace(/\/\*[\s\S]*?\*\//g, "").replace(/(^|[^:])\/\/.*$/gm, "$1");
+}
+
+function tsDosyalari(dir: string): string[] {
+  return readdirSync(dir).flatMap((n) => {
+    const p = path.join(dir, n);
+    return statSync(p).isDirectory() ? (n === "lisans-protokol" ? [] : tsDosyalari(p)) : n.endsWith(".ts") ? [p] : [];
+  });
+}
+
+/** Deseni taşıyan src dosyaları (göreli yol, sıralı). */
+function tasiyanlar(desen: RegExp): string[] {
+  const kok = path.resolve(__dirname, "..", "src");
+  return tsDosyalari(kok)
+    .filter((f) => desen.test(kodOf(f)))
+    .map((f) => path.relative(kok, f))
+    .sort();
+}
+
+function tekKaynak(): void {
+  console.log("\n§10b tek kaynak tarayıcısı (src, yorum dışı)");
+  const bagOkuyan = tasiyanlar(/\bheldBound\b/);
+  kontrol("§10b kira bağı kararı (`heldBound` okuması) yalnız üreticide (entitlement-issue) ve kira bağı kapısında (lease-binding)",
+    JSON.stringify(bagOkuyan) === JSON.stringify(["services/entitlement-issue.service.ts", "services/lease-binding.ts"]), bagOkuyan.join(", "));
+  const kuyrukCagiran = tasiyanlar(/(?<!function )\bqueueCurrentTermsUnderLock\(/);
+  kontrol("§10b' güncel şartların kuyruğa alınması yalnız kira bağı kapısından (kopya yok)", JSON.stringify(kuyrukCagiran) === JSON.stringify(["services/lease-binding.ts"]), kuyrukCagiran.join(", "));
+  const yuklemci = tasiyanlar(/\bleaseUnbindable\(/);
+  kontrol("§10c ✓K tarayıcı ölçüyor: kira bağı yüklemi her kira basan yolda (yoklama · kapanış · etkinleştirme) ve kapıda görünür",
+    ["services/lease-binding.ts", "services/renewal.service.ts", "services/closing-lease.ts", "services/activation.service.ts"].every((f) => yuklemci.includes(f)), yuklemci.join(", "));
+}
+
 async function main(): Promise<void> {
   hedefDbKapisi();
   saf();
+  tekKaynak();
   const ortam = await anahtarOrtamiKur();
   const { f, ctx } = ortam;
   const { prisma } = await import("../src/lib/prisma");
@@ -92,8 +155,8 @@ async function main(): Promise<void> {
     ctx.keys = KeyStore.load(ctx.config);
     kontrol("§0 ara imzacı yüklü", ctx.keys.intermediateFor("URETIM", Date.now())?.kid === f.ara.kid, ctx.keys.warnings.join(" | "));
 
-    const yeni = async (): Promise<KurulumFiksturu> => {
-      const k = await kurulumFiksturu(ctx);
+    const yeni = async (g: Parameters<typeof kurulumFiksturu>[1] = {}): Promise<KurulumFiksturu> => {
+      const k = await kurulumFiksturu(ctx, g);
       temizlenecek.push(k.kurulumDbId);
       return k;
     };
@@ -125,6 +188,10 @@ async function main(): Promise<void> {
     kontrol("§2d ✓K genişleyen ara v2 (modül eklendi) → yeteneksize eski kök v1 GERÇEKTEN teslim edilir (withheld yok) · yeteneklıya güncel",
       genis?.surum === 1 && genis.withheld === undefined && yetenekli?.surum === 2 && yetenekli.withheld === undefined,
       `${genis?.surum}/${String(genis?.withheld)}`);
+    const surumler = [{ surum: 2, belge: v2D.belge }, { surum: 1, belge: v1D }];
+    kontrol("§10a eski derleme adayı (saf, tek seçim): en yeni ARA İMZASIZ sürüm ≤ güncel, sıradan bağımsız; yalnız ara → yok",
+      newestLegacyVersion(surumler, 2)?.surum === 1 && newestLegacyVersion([...surumler].reverse(), 2)?.surum === 1 && newestLegacyVersion(surumler, 1)?.surum === 1 &&
+        newestLegacyVersion([surumler[0]!], 2) === null && newestLegacyVersion(surumler, 0) === null);
 
     sunucu = await sunucuBaslat(ortam);
     const genel = sunucu.genel;
@@ -248,6 +315,8 @@ async function main(): Promise<void> {
       `${red.status} ${red.kod ?? ""} kod=${kod.durum}`);
     const ok = await etkinlestir(kE, aE, YETENEKLER);
     kontrol("§6b aynı kod yetenekli derlemeyle 200 ve ara imzalı güncel v2", ok.status === 200 && ok.json.hak === v2E.belge && kiraYuku(ok.json).hakSurum === 2, `${ok.status} ${ok.kod ?? ""}`);
+
+    await kiraBagiYollari({ ctx, prisma, genel, yeni, araSurum, acikTalep, bildirimSay, importRootSignedEntitlement, kokImzala: (yuk) => signDocument({ typ: TYP.HAK, schema: EntitlementSchema, payload: yuk, key: { kid: f.kok.kid, privateKey: f.kok.privateKey } }), parmakIzi: f.parmakIzi });
   } finally {
     await sunucu?.durdur();
     await temizleKurulumlar(temizlenecek, [...ortam.kidler, f.ara.kid]);
@@ -255,6 +324,116 @@ async function main(): Promise<void> {
     await kapat();
   }
   sonuc();
+}
+
+// ---------------------------------------------------------------- §7–§9 kira bağı kapısı (DR · kapanış · donanım)
+
+const ozetOf = (etiket: string): string => b64uEncode(createHash("sha256").update(etiket).digest());
+
+interface BagOrtami {
+  readonly ctx: Awaited<ReturnType<typeof anahtarOrtamiKur>>["ctx"];
+  readonly prisma: (typeof import("../src/lib/prisma"))["prisma"];
+  readonly genel: string;
+  readonly yeni: (g?: Parameters<typeof kurulumFiksturu>[1]) => Promise<KurulumFiksturu>;
+  readonly araSurum: (k: KurulumFiksturu, moduller: string[]) => Promise<{ belge: string }>;
+  readonly acikTalep: (hakId: string) => Promise<{ id: string; acil: boolean; yuk: unknown }[]>;
+  readonly bildirimSay: (kurulumDbId: string, olay: "KOK_IMZASI_ACIL" | "YEREL_MUDAHALE_SUPHESI") => Promise<number>;
+  readonly importRootSignedEntitlement: (typeof import("../src/services/root-queue.service"))["importRootSignedEntitlement"];
+  readonly kokImzala: (yuk: EntitlementDoc) => string;
+  readonly parmakIzi: Fingerprint;
+}
+
+async function kiraBagiYollari(o: BagOrtami): Promise<void> {
+  const { prisma, genel } = o;
+  const etkinlestir = (k: KurulumFiksturu, a: TestAnahtari, yetenekler?: string[]) =>
+    imzaliPost(genel, ENDPOINTS.ACTIVATE, {
+      kurulumId: k.kurulumId,
+      amac: "etkinlestir",
+      anahtar: a,
+      govde: { ...etkinlestirmeGovdesi({ kod: k.kod, kurulumId: k.kurulumId, anahtar: a, parmakIzi: o.parmakIzi }), ...(yetenekler ? { yetenekler } : {}) },
+    });
+  const kiraSay = (k: KurulumFiksturu) => prisma.kira.count({ where: { kurulumId: k.kurulumDbId } });
+  const kokuIceAktar = async (k: KurulumFiksturu) => {
+    const t = (await o.acikTalep(k.hakId))[0]!;
+    return o.importRootSignedEntitlement(o.ctx, { talepId: t.id, belge: o.kokImzala(t.yuk as EntitlementDoc), actor: "bekci" });
+  };
+
+  console.log("\n§7 DR devri — yeteneksiz DR, güncel HAK'ı dar ara imzalı (elindeki HAK bildirilmez → bağlanamaz)");
+  const ana = await o.yeni({ sinif: "URETIM" });
+  const anaA = kurulumAnahtariUret();
+  await etkinlestir(ana, anaA, YETENEKLER);
+  const dr = await o.yeni({ sinif: "DR", tesisId: ana.tesisId, musteriId: ana.musteriId });
+  const drA = kurulumAnahtariUret();
+  const drE = await etkinlestir(dr, drA);
+  await o.araSurum(dr, ["production.enabled"]);
+  const devral = () =>
+    imzaliPost(genel, ENDPOINTS.DR_TAKEOVER, { kurulumId: dr.kurulumId, amac: "dr-devral", anahtar: drA, govde: { v: 1, anaKurulumId: ana.kurulumId, gerekce: "ana sunucu arızalı" } });
+  const drKira0 = await kiraSay(dr);
+  const drNonce0 = await prisma.nonceDefteri.count({ where: { kurulumId: dr.kurulumDbId } });
+  const red = await devral();
+  const anaDurum = (await prisma.kurulum.findUniqueOrThrow({ where: { id: ana.kurulumDbId } })).durum;
+  const talepDr = await o.acikTalep(dr.hakId);
+  kontrol("§7a ⭐ 403 KIRA_VERILMEDI; devir YAZILMADI (ana ETKİN, DEVREDILDI kaydı yok); DR'ye kira yok; nonce tüketilmedi",
+    drE.status === 200 && red.status === 403 && red.kod === "KIRA_VERILMEDI" && anaDurum === "ETKIN" &&
+      (await prisma.kurulumKaydi.count({ where: { kurulumId: ana.kurulumDbId, olay: "DEVREDILDI" } })) === 0 && (await kiraSay(dr)) === drKira0 &&
+      (await prisma.nonceDefteri.count({ where: { kurulumId: dr.kurulumDbId } })) === drNonce0,
+    `${drE.status} ${red.status} ${red.kod ?? ""} ana=${anaDurum}`);
+  kontrol("§7a' DR'nin HAK'ı ACİL kuyrukta + KOK_IMZASI_ACIL (e-posta + Telegram)", talepDr.length === 1 && talepDr[0]!.acil && (await o.bildirimSay(dr.kurulumDbId, "KOK_IMZASI_ACIL")) === 2);
+  const { renewLease } = await import("../src/services/renewal.service");
+  let yenile: unknown = null;
+  try {
+    await renewLease(o.ctx, { installationDbId: dr.kurulumDbId, kid: drA.kid, presentedLeaseId: null, assumeAtTip: true, measured: null, clientEntitlement: null, telemetry: null, nowMs: Date.now() });
+  } catch (err) {
+    yenile = err;
+  }
+  kontrol("§7b raporsuz yenileme (DR devrinin kira adımı) istisna DEĞİL: 403 KIRA_VERILMEDI, kira defteri değişmedi",
+    yenile instanceof VendorError && yenile.status === 403 && yenile.code === "KIRA_VERILMEDI" && (await kiraSay(dr)) === drKira0,
+    yenile instanceof VendorError ? `${yenile.status} ${yenile.code}` : String(yenile));
+  const ice7 = await kokuIceAktar(dr);
+  const ok7 = await devral();
+  kontrol("§7d ✓K kök imzası içe aktarılınca aynı DR devri 200 (kira kök imzalı güncel sürüme bağlı), ana DEVREDILDI",
+    ice7.durum === "IMZALANDI" && ok7.status === 200 && kiraYuku(ok7.json).hakSurum === ice7.surum &&
+      (await prisma.kurulum.findUniqueOrThrow({ where: { id: ana.kurulumDbId } })).durum === "DEVREDILDI",
+    `${ice7.durum} ${ok7.status} ${ok7.kod ?? ""}`);
+
+  console.log("\n§8 kapanış kirası — iptal kurulum, alan taraf yeteneksiz (yalnız `odenmis-tarih`)");
+  const k8 = await o.yeni();
+  const a8 = kurulumAnahtariUret();
+  const e8 = await etkinlestir(k8, a8, ["odenmis-tarih", "iptal"]);
+  const v1 = (await prisma.hakSurumu.findUniqueOrThrow({ where: { hakId_surum: { hakId: k8.hakId, surum: 1 } } })).belge;
+  const v2 = await o.araSurum(k8, ["production.enabled"]);
+  const { cancelInstallation } = await import("../src/services/installation-admin.service");
+  await cancelInstallation({ installationDbId: k8.kurulumDbId, reason: "bekçi: sözleşme feshi", actor: "bekci" });
+  const kapanisSay = () => prisma.kira.count({ where: { kurulumId: k8.kurulumDbId, karar: "KAPANIS" } });
+  const yokla8 = (hak: { hakId: string; surum: number; ozet: string }) =>
+    imzaliPost(genel, ENDPOINTS.POLL, { kurulumId: k8.kurulumId, amac: "yokla", anahtar: a8, govde: yoklamaGovdesi({ sonKiraId: kiraIdOf(e8.json), hak, parmakIzi: o.parmakIzi, v2: { yetenekler: ["odenmis-tarih"] } }) });
+  const red8 = await yokla8({ hakId: k8.hakId, surum: 1, ozet: jwsDigest(v1) });
+  kontrol("§8a ⭐ elinde GENİŞ v1 → kapanış kirası YOK, eski 403 KURULUM_IPTAL; kuyruk AÇILMADI (alan taraf zincir sahibi değil)",
+    red8.status === 403 && red8.kod === "KURULUM_IPTAL" && (await kapanisSay()) === 0 && (await o.acikTalep(k8.hakId)).length === 0, `${red8.status} ${red8.kod ?? ""}`);
+  const ok8 = await yokla8({ hakId: k8.hakId, surum: 2, ozet: jwsDigest(v2.belge) });
+  kontrol("§8b ✓K elinde güvenli v2 → 200 kapanış kirası IPTAL, v2'ye bağlı, HAK yanıtta yok",
+    ok8.status === 200 && kiraYuku(ok8.json).kapanis === "IPTAL" && kiraYuku(ok8.json).hakSurum === 2 && ok8.json.hak === null && (await kapanisSay()) === 1, `${ok8.status} ${ok8.kod ?? ""}`);
+
+  console.log("\n§9 donanım öğrenmesi — güçlüler tutuyor ama yeteneksiz kurulumun kirası bağlanamaz");
+  const k9 = await o.yeni();
+  const a9 = kurulumAnahtariUret();
+  await etkinlestir(k9, a9);
+  await o.araSurum(k9, ["production.enabled"]);
+  const yeniF4: Fingerprint = { ...o.parmakIzi, f4: ozetOf("yeni-anakart") };
+  const bildir = () => imzaliPost(genel, ENDPOINTS.HARDWARE, { kurulumId: k9.kurulumId, amac: "donanim", anahtar: a9, govde: { v: 1, parmakIzi: yeniF4, kayip: [], gerekce: "anakart değişti" }, imzaYolu: ENDPOINTS.HARDWARE });
+  const kabul = async () => ((await prisma.kurulum.findUniqueOrThrow({ where: { id: k9.kurulumDbId } })).kabulEdilenParmakIzi as Fingerprint).f4;
+  const kira9 = await kiraSay(k9);
+  const red9 = await bildir();
+  kontrol("§9a ⭐ 403 KIRA_VERILMEDI; öğrenme YOK (kabul edilen küme, talep, kurulum kaydı değişmedi), kira yok; ACİL talep + bildirim",
+    red9.status === 403 && red9.kod === "KIRA_VERILMEDI" && (await kabul()) === o.parmakIzi.f4 && (await prisma.donanimTalebi.count({ where: { kurulumId: k9.kurulumDbId } })) === 0 &&
+      (await prisma.kurulumKaydi.count({ where: { kurulumId: k9.kurulumDbId, olay: "PARMAK_IZI_OGRENILDI" } })) === 0 && (await kiraSay(k9)) === kira9 &&
+      (await o.acikTalep(k9.hakId))[0]?.acil === true && (await o.bildirimSay(k9.kurulumDbId, "KOK_IMZASI_ACIL")) === 2,
+    `${red9.status} ${red9.kod ?? ""}`);
+  await kokuIceAktar(k9);
+  const ok9 = await bildir();
+  const y9 = HardwareReportResponseSchema.safeParse(ok9.json);
+  kontrol("§9b ✓K kök imzasından sonra aynı bildirim 200 ONAYLANDI + kira (kök imzalı HAK yanıtta), küme öğrenildi",
+    ok9.status === 200 && y9.success && y9.data.durum === "ONAYLANDI" && typeof y9.data.lisans?.hak === "string" && (await kabul()) === yeniF4.f4, `${ok9.status} ${ok9.kod ?? ""}`);
 }
 
 main().catch(async (err: Error) => {
