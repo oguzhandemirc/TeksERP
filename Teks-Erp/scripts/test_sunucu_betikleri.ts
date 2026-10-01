@@ -49,8 +49,9 @@ function check(label: string, ok: boolean, detay = ""): void {
   console.log(`${ok ? "✅" : "❌"} ${label}${detay ? ` — ${detay}` : ""}`);
 }
 
-/** Fabrika/müşteri sunucusunda koşan PowerShell betikleri (geliştirme makinesinde koşan `paketle.ps1` hariç). */
-const SUNUCU_PS1 = ["deploy/kur.ps1", "deploy/ilk-kurulum.ps1", "deploy/yedekle.ps1", "deploy/uzaktan-kos.ps1", "deploy/bakim-rolu.ps1", "deploy/hizmet/backend-hizmeti.ps1", "deploy/hizmet/guncelleyici-hizmeti.ps1"];
+/** Fabrika/müşteri sunucusunda koşan PowerShell betikleri (geliştirme makinesinde koşan `paketle.ps1` hariç; setup.exe'nin
+ *  `deploy/kurulum/` betikleri de sunucuda YÖNETİCİ olarak koşar — D5). */
+const SUNUCU_PS1 = ["deploy/kur.ps1", "deploy/ilk-kurulum.ps1", "deploy/yedekle.ps1", "deploy/uzaktan-kos.ps1", "deploy/bakim-rolu.ps1", "deploy/hizmet/backend-hizmeti.ps1", "deploy/hizmet/guncelleyici-hizmeti.ps1", "deploy/kurulum/kurulum.ps1", "deploy/kurulum/kurulum-ortak.ps1", "deploy/kurulum/on-olcum.ps1", "deploy/kurulum/kaldir.ps1"];
 
 const YONLENDIRME = /(?:^|\s)2>(?:&1|\$null)/;
 const CIPLAK_NPM = /(?:^|[\s&(;|])npm(?=\s|$)/;
@@ -386,6 +387,8 @@ for (const yol of SUNUCU_PS1) {
   const ilkT = tara("deploy/ilk-kurulum.ps1");
   const yedT = tara("deploy/yedekle.ps1");
   const bakT = tara("deploy/bakim-rolu.ps1");
+  const ortT = tara("deploy/kurulum/kurulum-ortak.ps1"); // setup.exe (D5) aynı SCRAM gövdesini taşır
+  const kurT = tara("deploy/kurulum/kurulum.ps1"); // setup.exe (D5) aynı .env okuyucusunu taşır
   const ilk = ilkT.satirlar.map((x) => x.kod);
   const yed = yedT.satirlar.map((x) => x.kod);
   const envOku = yed.findIndex((k) => /EnvDeger \(Get-Content \$envDosya -Encoding UTF8\) "BACKUP_KEY_DIR"/.test(k));
@@ -416,10 +419,10 @@ for (const yol of SUNUCU_PS1) {
     return f ? t.satirlar.filter((x) => x.no >= f.bas && x.no <= f.son).map((x) => x.kod.trim()).filter(Boolean).join("\n") : null;
   };
   for (const [ad, dosyalar] of [
-    ["ScramDogrulayici", [ilkT, bakT]],
-    ["Pbkdf2Sha256", [ilkT, bakT]],
+    ["ScramDogrulayici", [ilkT, bakT, ortT]],
+    ["Pbkdf2Sha256", [ilkT, bakT, ortT]],
     ["SoruSorabilir", [ilkT, bakT]],
-    ["EnvDeger", [ilkT, bakT, yedT]],
+    ["EnvDeger", [ilkT, bakT, yedT, kurT]],
   ] as const) {
     const g = dosyalar.map((t) => govde(t, ad));
     check(`§13d ⭐ \`${ad}\` ikizleri birebir aynı (${dosyalar.length} betik; biri düzelip öteki kalmasın)`,

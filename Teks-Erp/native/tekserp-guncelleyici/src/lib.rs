@@ -17,6 +17,7 @@ pub mod history;
 pub mod ids;
 pub mod ipc;
 pub mod journal;
+pub mod kurulum;
 pub mod layout;
 pub mod lock;
 pub mod operation;

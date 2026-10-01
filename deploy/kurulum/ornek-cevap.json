@@ -1,0 +1,39 @@
+{
+  "v": 1,
+  "kok": "C:\\TeksERP",
+  "paket": {
+    "backend": null,
+    "pg": null,
+    "pgKunye": null
+  },
+  "pg": {
+    "veriDizini": "D:\\TeksERP\\pgveri",
+    "port": null,
+    "defenderDislamasi": true
+  },
+  "api": {
+    "port": 4000,
+    "izinliAdresler": ["LocalSubnet", "100.64.0.0/10"],
+    "agProfilleri": ["Domain", "Private"],
+    "mdns": true
+  },
+  "guncelleme": {
+    "sunucu": "https://guncelleme.etkiliyazilim.com",
+    "vekil": null
+  },
+  "lisans": {
+    "saticiAdresi": null
+  },
+  "profil": null,
+  "yedek": {
+    "saat": "03:00",
+    "ikinciHedef": null,
+    "sifreleme": true,
+    "musteriAnahtariCikti": "E:\\musteri-yedek-anahtari.txt",
+    "etkiliAcikAnahtar": null
+  },
+  "saticiHesabi": {
+    "kullaniciAdi": null
+  },
+  "provaKabul": false
+}
