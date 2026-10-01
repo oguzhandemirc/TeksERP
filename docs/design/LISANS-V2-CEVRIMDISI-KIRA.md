@@ -147,6 +147,7 @@ HAK, sertifikayı `imzaciSertifikasi` alanında gömülü taşır (bayi yolundak
 3. **Satıcı dışında basılan HAK'ın tespiti.** Fabrika bağlandığında sunduğu HAK satıcının defterinde yoksa `YABANCI_HAK` uyarısı açılır (`YABANCI_KIRA` emsali).
 4. **İptal kirayla yayılır** (§2.3). Çevrimiçi kurulumdaki sahte HAK ilk yoklamada düşer.
 5. **Kısa ömür ve özel yarının silinmesi.** Ara imzacı 120 gün geçerlidir; törende yenisi gelince eskisinin özel yarısı VDS'ten silinir.
+6. **Bayt bağları (L2-1, yönetici onayı 2026-10-01).** Yoklama HAK'ı özetiyle bildirir (`hak.ozet`), kira HAK'ın özetine (`hakOzeti`) ve iptal sırasına (`iptalSira`) bağlanır: aynı kimlik ve sürümle basılan sahte HAK `YABANCI_HAK` olarak kesin görünür ve yeni kiraya bağlanmaz; yanıttan iptal ayıklamak merdivene girer ([protokol §12 madde 15](LISANS-PROTOKOLU.md)).
 
 Kalan risk: çalınan ara imzacının internetsiz kuruluma bastığı süresiz HAK (§1.6).
 
