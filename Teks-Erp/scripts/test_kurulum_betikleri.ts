@@ -339,7 +339,13 @@ function olc(k: Kaynaklar): Bulgular {
   const gerekli = new Set<string>(["kurulum.ps1", "kurulum-ortak.ps1", "on-olcum.ps1", "kaldir.ps1", "cevap-semasi.json", "ornek-cevap.json", "..\\pg\\pg-sablon.mjs"]);
   for (const t of [k.kurulum, k.onOlcum]) for (const m of t.matchAll(/Join-Path \$PG_DIZINI "([^"]+)"/g)) gerekli.add(`..\\pg\\${m[1]}`);
   // Nokta-kaynak edilen komşu betikler (kanal adları TEK kaynak hizmet\kanal-adlari.ps1 - geçiş aynısını paketten okur).
-  for (const t of [k.kurulum, k.onOlcum]) for (const m of t.matchAll(/^\. \(Join-Path \$PSScriptRoot "\.\.\\(hizmet\\[^"]+)"\)/gm)) gerekli.add(`..\\${m[1]}`);
+  const noktaKaynak = new Set<string>();
+  for (const t of [k.kurulum, k.onOlcum]) for (const m of t.matchAll(/^\. \(Join-Path \$PSScriptRoot "\.\.\\(hizmet\\[^"]+)"\)/gm)) { gerekli.add(`..\\${m[1]}`); noktaKaynak.add(m[1]!.split("\\")[0]!); }
+  // on-olcum ve OnKosul {tmp} kopyasından koşar: nokta-kaynak edilen komşu dizin GeciciDosyalariAc'ta da açılmalı
+  // (thinkpad-1 D8e: hizmet\ açılmadı → on-olcum çıkış 1, sihirbaz hiç açılmadı).
+  const gecici = pasGovde(k.iss, "GeciciDosyalariAc") ?? "";
+  if (noktaKaynak.size === 0) ekle("§8", "kurulum.ps1/on-olcum.ps1'de ..\\hizmet\\ nokta-kaynağı bulunamadı (ölçüm deseni bayat)");
+  for (const d of noktaKaynak) if (!gecici.includes(`ExtractTemporaryFiles('{app}\\kurulum\\deploy\\${d}\\*');`)) ekle("§8", `GeciciDosyalariAc ${d}\\ dizinini {tmp}'e açmıyor — on-olcum/OnKosul onu nokta-kaynak eder`);
   try {
     const pgo = JSON.parse(k.pgOrnegi) as { yapilandirma: { confSablonu: string; hbaSablonu: string } };
     for (const r of [pgo.yapilandirma.confSablonu, pgo.yapilandirma.hbaSablonu]) gerekli.add(`..\\pg\\${r.replace(/^deploy\/pg\//, "").replace(/\//g, "\\")}`);
@@ -591,6 +597,7 @@ if (eksik.length === 0) {
     { ad: "S49 sihirbaz yeni kurulumda alanı kanalla doldurmuyor", dosya: "iss", eski: "  else if GelismisSayfasi.Values[2] = '' then GelismisSayfasi.Values[2] := Olc('paketLisans');\nend;", yeni: "end;", bolum: "§12", parca: "doldurmuyor" },
     { ad: "S50 özet farklı değeri uyarmıyor", dosya: "iss", eski: "  else if Lowercase(Etkili) <> Lowercase(Kanal) then", yeni: "  else if False then", bolum: "§12", parca: "UYARMIYOR" },
     { ad: "S51 özet boş alanı kanal saymıyor", dosya: "iss", eski: "  else if Etkili = '' then Etkili := Kanal;", yeni: "  else if False then Etkili := Kanal;", bolum: "§12", parca: "boş alanı" },
+    { ad: "S53 {tmp}'e hizmet\\ açılmıyor (ön ölçüm kanal-adlari.ps1'i bulamaz)", dosya: "iss", eski: "    ExtractTemporaryFiles('{app}\\kurulum\\deploy\\hizmet\\*');\n", yeni: "", bolum: "§8", parca: "{tmp}'e açmıyor" },
     { ad: "S52 özet LisansOzeti'ni çağırmıyor (eski 'varsayılan' metni)", dosya: "iss", eski: "  S := S + LisansOzeti(NewLine);", yeni: "  S := S + 'Lisans sunucusu: varsayılan' + NewLine;", bolum: "§12", parca: "LisansOzeti" },
     { ad: "S21 CI boru sonucunu ölçmüyor", dosya: "is", eski: `if ($r -notmatch "(?m)^BORU=TAMAM\\r?$")`, yeni: `if ($false)`, bolum: "§9", parca: "boru öz-sınaması" },
     { ad: "S22 CI test çapalı doğrulayıcıyı kabul ediyor", dosya: "is", eski: `$k.testCapasi -ne $false`, yeni: `$false`, bolum: "§9", parca: "doğrulayıcı üretim derlemesi" },

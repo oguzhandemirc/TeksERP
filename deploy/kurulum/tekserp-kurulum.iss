@@ -561,6 +561,8 @@ begin
   Result := True;
   try
     ExtractTemporaryFiles('{app}\kurulum\deploy\kurulum\*');
+    // on-olcum.ps1 ve OnKosul (kurulum.ps1) {tmp}'ten koşar ve ..\hizmet\ komşularını nokta-kaynak eder.
+    ExtractTemporaryFiles('{app}\kurulum\deploy\hizmet\*');
     ExtractTemporaryFiles('{app}\kurulum\deploy\pg\*');
   except
     Result := Hata('Kurulum dosyaları açılamadı: ' + GetExceptionMessage);
@@ -572,33 +574,38 @@ end;
 function DenetimPenceresiAc(const Ayrinti: String): TSetupForm;
 var F: TSetupForm; Baslik, Metin: TNewStaticText; Cubuk: TNewProgressBar;
 begin
-  F := TSetupForm.CreateNew(nil);
+  // CreateCustomForm imzası Inno 6.6'da değişti (boyut + KeepSize); TSetupForm.CreateNew 6.7.3'te derlenmez.
+#if Ver >= EncodeVer(6, 6, 0, 0)
+  F := CreateCustomForm(ScaleX(460), ScaleY(128), True, True);
+#else
+  F := CreateCustomForm;
+  F.ClientWidth := ScaleX(460);
+  F.ClientHeight := ScaleY(128);
+#endif
   F.Caption := 'TeksERP Sunucu Kurulumu';
   F.BorderStyle := bsDialog;
   F.Position := poScreenCenter;
-  F.ClientWidth := 460;
-  F.ClientHeight := 128;
   Baslik := TNewStaticText.Create(F);
   Baslik.Parent := F;
-  Baslik.Left := 16;
-  Baslik.Top := 14;
+  Baslik.Left := ScaleX(16);
+  Baslik.Top := ScaleY(14);
   Baslik.Font.Style := [fsBold];
   Baslik.Caption := 'Sistem denetleniyor...';
   Metin := TNewStaticText.Create(F);
   Metin.Parent := F;
   Metin.AutoSize := False;
   Metin.WordWrap := True;
-  Metin.Left := 16;
-  Metin.Top := 38;
-  Metin.Width := 428;
-  Metin.Height := 46;
+  Metin.Left := ScaleX(16);
+  Metin.Top := ScaleY(38);
+  Metin.Width := ScaleX(428);
+  Metin.Height := ScaleY(46);
   Metin.Caption := Ayrinti;
   Cubuk := TNewProgressBar.Create(F);
   Cubuk.Parent := F;
-  Cubuk.Left := 16;
-  Cubuk.Top := 94;
-  Cubuk.Width := 428;
-  Cubuk.Height := 18;
+  Cubuk.Left := ScaleX(16);
+  Cubuk.Top := ScaleY(94);
+  Cubuk.Width := ScaleX(428);
+  Cubuk.Height := ScaleY(18);
   Cubuk.Style := npbstMarquee;
   F.Show;
   IletileriIsle;
