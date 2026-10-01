@@ -48,6 +48,7 @@
 | `tekserp-durum` | KURULUM | fabrika (yerel, ağa çıkmaz) |
 | `tekserp-kabul` | KURULUM | satıcı (ilk kurulum sözleşme kabulü, Ek-7 — `protocol/kabul.ts`; etkinleştirme gövdesinde taşınır, satıcı kurulum kaydında saklar) |
 | `tekserp-panel` | PAKET ya da ayrı panel yayın anahtarı (`panel-<yıl>`; karar kullanıcıda) | panel ana süreci (latest.yml `tekserp` bloğu; `Electron/electron/guncelleme/panel-kunye.mjs` — bağımlılıksız ayna, kâhin `test_panel_imza`); yayın kapısı (`kanal-kapisi.mjs panel-imza`) |
+| `tekserp-apk` | panelle AYNI anahtar kararı (PAKET ya da `panel-<yıl>`) | tablet (apk/surum.json `tekserp` bloğu; `mobil/src/services/apkKunye.ts` — saf JS Ed25519, kâhin `apkKunye.test.ts`); yayın kapısı (`deploy/mobil-yayinla.mjs`, `mobil/scripts/lib/apk-kunye.mjs`) |
 
 ## 2. Anahtar hiyerarşisi ve güven zinciri
 
