@@ -74,6 +74,9 @@ const REASON_LABEL: Record<string, string> = {
   KIRA_GERI_ALINDI: "Lisans dosyaları eski bir kopyayla değiştirilmiş (geri alma)",
   DEPO_OKUNAMADI: "Lisans dosyası okunamadı",
   SAAT_KAYIK: "Sistem saati lisans sunucusundan kayık",
+  LISANS_IZI_KAYIP: "Lisans izlerinden biri kayıp (kira, durum kaydı ya da veritabanı izi)",
+  LISANS_IZI_CELISKI: "Lisans izleri birbiriyle çelişiyor (farklı süre)",
+  BELIRSIZLIK_SURUYOR: "Lisans durumu uzun süredir ölçülemiyor",
 };
 
 export const reasonLabel = (kod: string): string => REASON_LABEL[kod] ?? kod;

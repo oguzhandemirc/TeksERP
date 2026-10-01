@@ -28,6 +28,9 @@
 //   ⭐ yeni HAK kabul edilince bütünlük HEMEN yeniden koşar (hazırlık anahtarının sınıf kararı, §22)
 //   ⭐ ilk etkinleştirmede sınıf kararı yeniden denetimi beklemez: yanıt · yoklama gövdesi · satıcıya giden
 //      yoklama GECERLI; bütünlük sonucu durumu tik beklemeden değerlendirir (§23)
+//   ⭐ G12 (L2-6): DB izi kopya (§26) · K7 kirasız kayıt, tespit anı sonraki yazımlarda da kalıcı (§27) · anahtar
+//      okunamaz (§28) · parmak izi v2 merdiveni (§29) · DB okunamazsa iz BİLİNMİYOR, son bilinen tavan uçtan uca
+//      (durum kaydı pini → DB izi), saatlik yazım parmak izi önbellek kopyasını taşır (§30)
 //
 // NEGATİF SONDA — dosya DIŞI mutasyon (cp + shasum ile birebir geri alındı; sonuçlar commit
 // mesajında): M1 persistAccumulation bozuk kayıtta sıfırdan başlatır · M2 kabulde kurulum
@@ -82,8 +85,10 @@ import { setEgressTrustForTests } from "../src/lib/http-egress";
 import { DAY_MS, VENDOR_ERROR_CODES, msToIso, openEnvelope, parseJws, verifyRequest, type Fingerprint } from "../src/lib/license/protocol";
 import { buildEnvironment, currentFingerprintDigest, describeOperatingSystem, requireReady, vendorFailureToError } from "../src/services/helpers/license-wire.helper";
 import { signStateRecord, type StateRecord } from "../src/lib/license/saat";
-import { flushLicenseTraceWrites } from "../src/lib/license/accumulation";
-import { persistAccumulation } from "../src/lib/license/record-writer";
+import { flushLicenseTraceWrites, lastKnownCeiling, type RecordView } from "../src/lib/license/accumulation";
+import { persistAccumulation, setFingerprintCacheCopy } from "../src/lib/license/record-writer";
+import { markLicenseTraceUnknown } from "../src/lib/license/trace-row";
+import { ceilingAllows } from "../src/lib/license/state";
 import { __resetLadderCountersForTests, __setLadderClockForTests } from "../src/lib/license/ladder-counters";
 import {
   activateLicense,
@@ -912,6 +917,16 @@ async function ucIzBolumu(x: Hazir): Promise<void> {
     check("§27e ⭐ yeniden başlatma ek süreyi YENİDEN BAŞLATMAZ: kalan 25 gün (HAK verilişi çapası da uygulanmaz)", b.hesaplananKademe === "EK_SURE" && b.ekSureKalanGun === 25 && !b.belirsizlik.ucIzYok && !nedenVar(b, "KIRASIZ_EK_SURE"), `${b.hesaplananKademe} kalan=${b.ekSureKalanGun} ${b.nedenler.map((n) => n.kod).join(",")}`);
     const govde = await buildPollBody();
     check("§27f yoklama sıra 0 bildirir (satıcıda SIRA_GERILEDI/SIFIRLANDI) ve LISANS_IZI_KAYIP nedenini taşır", govde.durumKaydi?.sira === 0 && govde.durum.nedenler.includes("LISANS_IZI_KAYIP"));
+    persistAccumulation();
+    await flushLicenseTraceWrites();
+    await yenidenBaslat(x.dizin);
+    const k2 = durumKaydiAlani(x.dizin);
+    const b2 = getLicenseSnapshot().state;
+    check(
+      "§27f2 ⭐ tespit anı SONRAKİ yazımlarda da kalıcı (üç iz artık yokken yazılan kayıt da aynı ekSureCapasi'yı taşır): yeniden başlatma yine tazelemez",
+      k2.ekSureCapasi === k.ekSureCapasi && b2.hesaplananKademe === "EK_SURE" && b2.ekSureKalanGun === 25 && !nedenVar(b2, "KIRASIZ_EK_SURE"),
+      `${String(k2.ekSureCapasi)} / ${String(k.ekSureCapasi)} kalan=${b2.ekSureKalanGun}`,
+    );
     const p = await pollLicenseOnce();
     const y = getLicenseSnapshot().state;
     check("§27g yeni kira → kayıt kiraya bağlanır, merdiven kapanır (NORMAL)", p.outcome === "BASARILI" && y.hesaplananKademe === "NORMAL" && getLicenseSnapshot().view.record?.kiraId !== null, `${p.outcome} ${y.hesaplananKademe}`);
@@ -997,6 +1012,76 @@ async function parmakIziMerdiveniBolumu(x: Hazir): Promise<void> {
     setMeasuredFingerprint(asil);
   }
   await pollLicenseOnce();
+}
+
+/** G12 §3.1-1/§3.1-2 motorda: DB okunamazsa iz BİLİNMİYOR; HAK doğrulanamazsa son bilinen tavan; önbellek kopyası taşınır. */
+async function sonBilinenBolumu(x: Hazir): Promise<void> {
+  console.log("\n§30 — DB okunamazsa iz BİLİNMİYOR · HAK doğrulanamazsa SON BİLİNEN tavan (durum kaydı pini → DB izi) · önbellek kopyası taşınır");
+  await pollLicenseOnce();
+  await flushLicenseTraceWrites();
+  persistAccumulation();
+  await flushLicenseTraceWrites();
+  await refreshLicenseTrace();
+  invalidateLicenseSnapshot();
+  markLicenseTraceUnknown();
+  invalidateLicenseSnapshot();
+  const a = getLicenseSnapshot();
+  check(
+    "§30a ⭐ DB izi kurulmuşken DB okunamadı → iz BİLİNMİYOR: LISANS_IZI_KAYIP YOK, birikim akmaz (kayıp yalnız okunup YOK bulunan iz)",
+    a.view.record?.izKurulu === true && !nedenVar(a.state, "LISANS_IZI_KAYIP") && !a.state.belirsizlik.suruyor,
+    `izKurulu=${String(a.view.record?.izKurulu)} ${a.state.nedenler.map((n) => n.kod).join(",")}`,
+  );
+  await refreshLicenseTrace();
+  invalidateLicenseSnapshot();
+
+  const kopya = { f3: { ozet: BASKA("C"), an: new Date().toISOString(), yol: "f3.sahte" } };
+  setFingerprintCacheCopy(kopya);
+  persistAccumulation();
+  setFingerprintCacheCopy(undefined);
+  persistAccumulation();
+  await flushLicenseTraceWrites();
+  const dbKayit = kayitAlani((await izSatiri())?.durum);
+  check(
+    "§30b ⭐ saatlik yazım parmak izi önbellek kopyasını imzalı kayda ve DB izine yazar; yeni ölçüm yokken önceki kopyayı TAŞIR (düşürmez)",
+    JSON.stringify(durumKaydiAlani(x.dizin).parmakIziOnbellegi) === JSON.stringify(kopya) && JSON.stringify(dbKayit.parmakIziOnbellegi) === JSON.stringify(kopya),
+  );
+
+  const hakYolu = path.join(x.dizin, LICENSE_FILES.ENTITLEMENT);
+  const asilHak = fs.readFileSync(hakYolu);
+  const pinModulleri = (durumKaydiAlani(x.dizin).sonHak as { moduller?: string[] } | undefined)?.moduller ?? [];
+  try {
+    fs.writeFileSync(hakYolu, "bozuk");
+    yeniden(x.dizin);
+    const b = getLicenseSnapshot();
+    const tb = b.state.hesaplanan.modulTavani;
+    check(
+      "§30c ⭐ HAK bozuk → durum kaydı pininin modülleri: pindeki finans AÇIK, pinde olmayan iplik KAPALI (ham bayrağa düşülmez), üretim açık",
+      b.entitlement === null && pinModulleri.includes("finance.enabled") && !pinModulleri.includes("iplik.enabled") &&
+        ceilingAllows(tb, "finance.enabled") && !ceilingAllows(tb, "iplik.enabled") && ceilingAllows(tb, "production.enabled"),
+      JSON.stringify(tb),
+    );
+    fs.rmSync(path.join(x.dizin, LICENSE_FILES.STATE));
+    yeniden(x.dizin);
+    const c = getLicenseSnapshot();
+    const tc = c.state.hesaplanan.modulTavani;
+    check(
+      "§30d ⭐ durum.json da yok → DB izindeki pinin modülleri (iplik KAPALI, finans açık)",
+      !c.view.fileValid && c.view.traceValid && ceilingAllows(tc, "finance.enabled") && !ceilingAllows(tc, "iplik.enabled"),
+      JSON.stringify(tc),
+    );
+  } finally {
+    fs.writeFileSync(hakYolu, asilHak);
+    yeniden(x.dizin);
+  }
+  const pinsiz = { sonHak: null } as unknown as StateRecord;
+  const pinli = { sonHak: { moduller: ["production.enabled", "finance.enabled"] } } as unknown as StateRecord;
+  const gorunum = { record: pinsiz, copies: [pinsiz, pinli] } as unknown as RecordView;
+  check(
+    "§30e son bilinen tavan: en yeni kopyada pin yoksa ÖTEKİ kopyanınki (durum kaydı → DB izi yedeği)",
+    JSON.stringify(lastKnownCeiling(gorunum)) === JSON.stringify(["production.enabled", "finance.enabled"]),
+  );
+  const p = await pollLicenseOnce();
+  check("§30f HAK geri gelince yeni kira iz kaybını kapatır (NORMAL)", p.outcome === "BASARILI" && getLicenseSnapshot().state.hesaplananKademe === "NORMAL", p.outcome);
 }
 
 async function donanimBildirimiBolumu(x: Hazir): Promise<void> {
@@ -1265,6 +1350,7 @@ async function main(): Promise<void> {
     await ucIzBolumu(hazir);
     await anahtarOkunamazBolumu(hazir);
     await parmakIziMerdiveniBolumu(hazir);
+    await sonBilinenBolumu(hazir);
     await uzatmaDosyasiBolumu(hazir);
     await donanimBildirimiBolumu(hazir);
     gozlemSayaciBolumu();

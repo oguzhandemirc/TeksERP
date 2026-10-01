@@ -22,6 +22,8 @@ const CODE_LABEL: Readonly<Record<string, string | undefined>> = {
   BUTUNLUK_LISTE_BOZUK: "İmzalı dosya listesi bozuk ya da eksik",
   BUTUNLUK_LISTE_YOK: "İmzalı dosya listesi yok",
   BUTUNLUK_OKUNAMADI: "Paket dosyaları okunamadı",
+  BUTUNLUK_OKUNAMAYAN: "Listedeki dosyalar okunamıyor (korumalı pakette değişmiş sayılır)",
+  BUTUNLUK_IMZA: "İmzalı dosya listesinin imzası doğrulanamadı",
   BUTUNLUK_CAPA_BOS: "Paket imza anahtarı yok",
   BUTUNLUK_HAZIRLIK_ANAHTARI: "Hazırlık imzası üretim kurulumunda geçersiz",
   BUTUNLUK_SINIF_BILINMIYOR: "Kurulum sınıfı bilinmiyor (etkinleştirme bekleniyor)",
