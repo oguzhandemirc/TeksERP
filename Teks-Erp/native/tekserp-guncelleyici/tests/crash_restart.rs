@@ -153,6 +153,36 @@ fn license_regression_rolls_back() {
     assert_invariants(&w, "lisans kötüleşti");
 }
 
+/// Sözleşme 4 öncesi bir backend'e (`/health/yerel` yok) geri dönüş: canlılık public `/health`ten okunur,
+/// geri dönüş başarılı biter (HATA'ya düşmez); işlem öncesi lisans görüntüsü de yoktur.
+#[test]
+fn rollback_reaches_legacy_backend_without_local_health() {
+    let w = world("eski-saglik");
+    *w.faults.legacy_health_version.lock().unwrap() = Some(OLD.into());
+    *w.faults.unhealthy_version.lock().unwrap() = Some(NEW.into());
+    w.run_to_rest(0);
+    let st = w.status().unwrap();
+    assert_eq!((st.state, st.error_code.as_deref()), (State::RolledBack, Some("SAGLIK_ZAMAN_ASIMI")), "{:?}", st.message);
+    assert_eq!(w.current().as_deref(), Some(OLD));
+    assert_invariants(&w, "eski backend'e geri dönüş");
+}
+
+/// Yeni sürüm `/health/yerel`i tanımıyorsa lisans ölçülemez: beklemeden `SAGLIK_LISANS_OLCULEMEDI`, geri
+/// dönülür — public `/health` (kurala aykırı olarak) lisans taşısa bile oradan alınmaz.
+#[test]
+fn new_version_without_local_health_is_not_accepted() {
+    let w = world("yerelsiz");
+    *w.faults.legacy_health_version.lock().unwrap() = Some(NEW.into());
+    w.faults.public_health_has_license.store(true, Ordering::SeqCst);
+    w.run_to_rest(0);
+    let st = w.status().unwrap();
+    assert_eq!((st.state, st.error_code.as_deref()), (State::RolledBack, Some("SAGLIK_LISANS_OLCULEMEDI")), "{:?}", st.message);
+    let detail = st.last_detail.clone().and_then(|d| d.message);
+    assert!(detail.as_deref().is_some_and(|m| m.contains("/health/yerel ucunu tanımıyor")), "beklemeden düşmeli: {detail:?}");
+    assert_eq!(w.current().as_deref(), Some(OLD));
+    assert_invariants(&w, "yerel sağlıksız yeni sürüm");
+}
+
 #[test]
 fn rolled_back_version_is_not_retried_until_a_fresh_approval() {
     let w = world("tekrar");
