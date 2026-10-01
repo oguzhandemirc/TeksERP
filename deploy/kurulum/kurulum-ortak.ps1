@@ -254,10 +254,15 @@ function AclKoru([string]$yol, [string[]]$ek, [switch]$Agac) {
   # Ek ACE'lerde ACIKCA verilen genis grup (or. D4: ikililere Users RX) kaldirilmaz; digerleri kaldirilir.
   $izinli = @(@($ek) | ForEach-Object { if ($_ -cmatch '^\*(S-[0-9-]+):') { $Matches[1] } })
   $a += @("/remove:g") + @($script:SID_GENIS | Where-Object { $izinli -cnotcontains $_ } | ForEach-Object { "*" + $_ })
-  if ($Agac) { $a += "/T" }
+  # (OI)(CI) izni ve miras kesme YALNIZ dizine (/T YOK): dosyaya uygulaninca (OI)(CI) gecersiz, miras da kesildigi
+  # icin dosyanin DACL'i BOS kalir (thinkpad-1 D8 olcumu). Agacta alt ogeler mirasi bu dizinden alir (/reset).
   $a += "/Q"
   $r = NativeKos "icacls.exe" $a
   if ($r.kod -ne 0) { Dur "izin yazilamadi (icacls $($r.kod)): $yol" }
+  if ($Agac) {
+    $r = NativeKos "icacls.exe" @((Join-Path $yol "*"), "/reset", "/T", "/C", "/Q")
+    if ($r.kod -ne 0) { Dur "alt ogelerin izni sifirlanamadi (icacls $($r.kod)): $yol" }
+  }
 }
 
 # Dosya icin korumali DACL (dizinsiz hak bicimi); ek: "*<SID>:R" gibi.

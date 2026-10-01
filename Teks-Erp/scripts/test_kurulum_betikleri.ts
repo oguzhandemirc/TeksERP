@@ -354,6 +354,11 @@ function olc(k: Kaynaklar): Bulgular {
   if (!sessizDal || !/\bExit;/.test(sessizDal[1]!) || /MsgBox/.test(sessizDal[1]!)) ekle("§8", "NextButtonClick sessiz kipte kısa devre yapmıyor (ilk deyim if Sessiz then begin … Exit; end;) — MsgBox sessiz kurulumu asar");
   else if (!/SayfalariOlcumleDoldur/.test(sessizDal[1]!)) ekle("§8", "sessiz kısa devre sayfaları ölçümle doldurmuyor — boş veri dizini sayfası Inno yol denetiminde kurulumu durdurur");
   for (const s of pas) if (/(?<!Suppressible)MsgBox\(/.test(s.satir) && s.islev !== "NextButtonClick") ekle("§8", `çıplak MsgBox NextButtonClick dışında (${s.islev}:${s.no}) — sessiz kipte bastırılmaz`);
+  // Ağaç kilidi (thinkpad-1 D8, ölçüldü): (OI)(CI) izni /T ile dosyalara giderse dosyanın DACL'i BOŞ kalır.
+  const kil = pasGovde(k.iss, "Kilitle") ?? "";
+  const kilGrant = kil.split("\n").find((l) => /inheritance:r/.test(l)) ?? "";
+  if (!kilGrant || /\+ Ek \+|\/T\b/.test(kilGrant)) ekle("§8", "Kilitle (OI)(CI) iznini /T ile ağaca veriyor — dosyaların DACL'i boş kalır");
+  if (!/'\\\*'\) \+ ' \/reset \/T/.test(kil)) ekle("§8", "Kilitle ağaçta alt öğeleri /reset ile mirasa bağlamıyor");
   // Sınıf kuralı (yönetici 2026-10-01): sessiz kipte HİÇBİR kutu kullanıcı beklemez — her MsgBox/SuppressibleMsgBox ya
   // aynı satırda `not WizardSilent`/`not Sessiz` koşulunda ya da işlevinde ondan ÖNCE sessiz kısa devre (Exit) altında.
   for (const s of pas) {
@@ -476,6 +481,7 @@ if (eksik.length === 0) {
     { ad: "S24 NextButtonClick sessiz kısa devresi düştü (prova sorusu sessiz kurulumu asar)", dosya: "iss", eski: "    Exit;\n  end;\n  if CurPageID = wpSelectDir then", yeni: "  end;\n  if CurPageID = wpSelectDir then", bolum: "§8", parca: "sessiz kipte kısa devre" },
     { ad: "S26 sessiz kısa devre sayfaları doldurmuyor (boş veri dizini Inno yol denetiminde durdurur)", dosya: "iss", eski: "    if CurPageID = wpSelectDir then SayfalariOlcumleDoldur;\n", yeni: "", bolum: "§8", parca: "sayfaları ölçümle doldurmuyor" },
     { ad: "S27 hata kutusu sessiz kipte de gösteriliyor (sessiz dal düştü)", dosya: "iss", eski: "  if not WizardSilent then SuppressibleMsgBox(Metin, mbCriticalError, MB_OK, IDOK);", yeni: "  SuppressibleMsgBox(Metin, mbCriticalError, MB_OK, IDOK);", bolum: "§8", parca: "sessiz dalı olmayan kutu (Hata" },
+    { ad: "S28 Kilitle (OI)(CI) iznini /T ile ağaca veriyor (dosya DACL'i boş)", dosya: "iss", eski: "*S-1-5-32-544:(OI)(CI)F /Q', '', SW_HIDE", yeni: "*S-1-5-32-544:(OI)(CI)F' + Ek + ' /Q', '', SW_HIDE", bolum: "§8", parca: "Kilitle (OI)(CI) iznini /T" },
     { ad: "S25 çıplak MsgBox sihirbaz dışı işlevde", dosya: "iss", eski: "function Kok: String;\nbegin\n", yeni: "function Kok: String;\nbegin\n  MsgBox('x', mbInformation, MB_OK);\n", bolum: "§8", parca: "çıplak MsgBox NextButtonClick dışında" },
     { ad: "S21 CI boru sonucunu ölçmüyor", dosya: "is", eski: `if ($r -notmatch "(?m)^BORU=TAMAM\\r?$")`, yeni: `if ($false)`, bolum: "§9", parca: "boru öz-sınaması" },
     { ad: "S22 CI test çapalı doğrulayıcıyı kabul ediyor", dosya: "is", eski: `$k.testCapasi -ne $false`, yeni: `$false`, bolum: "§9", parca: "doğrulayıcı üretim derlemesi" },

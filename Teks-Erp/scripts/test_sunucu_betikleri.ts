@@ -36,6 +36,7 @@
 //   §28 betik kapsamındaki `foreach ($x in …)` daha önce ATANMIŞ ve döngüden SONRA okunan bir değişkeni gölgelemez.
 //   §29 `paketle.ps1` hata yolunda (Fail + betik kapsamı trap) yarım sahneyi (%TEMP%\tekserp-backend-*) siler.
 //   §30 tür kısıtlı parametre (`[string]$Sonuc`) betik kapsamında (`$Sonuc` / `$script:Sonuc`) sözlük/dizi değeriyle ATANMAZ.
+//   §31 bir icacls çağrısı `(OI)(CI)` izniyle `/T`yi BİRLİKTE taşımaz (dosyalarda DACL boş kalır); ağaç `/reset` ile.
 // Kaynak ölçülür, davranış değil: pwsh her ortamda yok, 5.1 hiç yok.
 // =============================================================================
 import { readFileSync, existsSync, readdirSync, mkdtempSync, mkdirSync, writeFileSync, rmSync, realpathSync } from "node:fs";
@@ -1142,6 +1143,64 @@ function donmusIhlalleri(dosya: string, metin: string, beklenen: string): string
   }
   check(`§30 ⭐ tür kısıtlı parametreye sözlük/dizi atanmıyor (${yollar.length} betik)`, parametre >= 20 && ihlal.length === 0,
     ihlal.length ? ihlal.slice(0, 6).join(" · ") : `${parametre} tür kısıtlı parametre temiz`);
+}
+
+// §31 — AĞAÇ İZNİ (thinkpad-1 D8 2026-10-01, ÖLÇÜLDÜ): `icacls <dizin> /inheritance:r /grant:r *SID:(OI)(CI)F … /T` dizinlere
+//   doğru uygulanır ama DOSYALARDA (OI)(CI) geçersizdir ve miras da kesildiği için dosyanın DACL'i BOŞ kalır — SYSTEM dahil
+//   kimse okuyamaz (yarım kurulumun durum.json'u; AclKoru -Agac ile PG ikili/veri dizinlerinin dosyaları). Doğrusu: izin
+//   dizine /T'siz, alt öğeler `icacls <dizin>\* /reset /T` ile mirası alır. Ölçü: aynı işlev gövdesinde (betik kapsamında
+//   aynı satırda) "(OI)(CI)" ve "/T" birlikte → ihlal. DONMUŞ pm2 dosyasındaki borç beyanlı ve ölçülür (kapanınca çıkarılır).
+{
+  const BORC: ReadonlyArray<{ yol: string; islev: string; neden: string }> = [
+    { yol: "deploy/ilk-kurulum.ps1", islev: "SirIzniDaralt", neden: "DONMUŞ pm2 dosyası (§24); D8 Senaryo 4'te pm2 kurulumunda ölçülüp düzeltilecek" },
+  ];
+  const yollar: string[] = [];
+  const gez = (d: string): void => {
+    for (const g of readdirSync(join(KOK, d), { withFileTypes: true })) {
+      const r = `${d}/${g.name}`;
+      if (g.isDirectory()) gez(r);
+      else if (g.name.endsWith(".ps1")) yollar.push(r);
+    }
+  };
+  gez("deploy");
+  const ihlal: string[] = [];
+  const borcGorulen = new Set<string>();
+  // Çağrı düzeyinde: icacls satırı (OI)(CI)'yi doğrudan ya da onu taşıyan bir değişkenle, /T'yi doğrudan ya da onu
+  // taşıyan bir değişkenle BİRLİKTE alıyorsa ihlal (ayrı /reset çağrısındaki /T serbest).
+  const OICI = /\(OI\)\(CI\)/;
+  const TBAYRAK = /(["'\s(,])\/T(["'\s),]|$)/;
+  const cagriIhlali = (satirlar: string[], icacls: string): boolean => {
+    const oiciVar = new Set<string>();
+    const tVar = new Set<string>();
+    for (const l of satirlar) {
+      for (const m of l.matchAll(/\$(\w+)\s*\+?=\s*(.*)$/g)) {
+        if (/icacls/i.test(m[2]!)) continue; // çağrının SONUCU (`$r = NativeKos "icacls.exe" …`) argüman değildir
+        if (OICI.test(m[2]!)) oiciVar.add(m[1]!.toLowerCase());
+        if (TBAYRAK.test(m[2]!)) tVar.add(m[1]!.toLowerCase());
+      }
+    }
+    const argumanlar = icacls.slice(icacls.search(/icacls/i));
+    const kullanilan = [...argumanlar.matchAll(/[$@](\w+)/g)].map((m) => m[1]!.toLowerCase());
+    const oici = OICI.test(argumanlar) || kullanilan.some((v) => oiciVar.has(v));
+    const tt = TBAYRAK.test(argumanlar) || kullanilan.some((v) => tVar.has(v));
+    return oici && tt;
+  };
+  for (const yol of yollar) {
+    const t = psTara(readFileSync(join(KOK, yol), "utf8"));
+    const bolgeler: Array<{ ad: string; satirlar: typeof t.satirlar }> = t.fonksiyonlar.map((f) => ({ ad: f.ad, satirlar: t.satirlar.filter((x) => x.no >= f.bas && x.no <= f.son) }));
+    bolgeler.push({ ad: "(betik kapsamı)", satirlar: t.satirlar.filter((x) => !t.fonksiyonlar.some((f) => x.no >= f.bas && x.no <= f.son)) });
+    for (const b of bolgeler) {
+      const kodlar = b.satirlar.map((x) => x.kod);
+      for (const x of b.satirlar) {
+        if (!/icacls/i.test(x.kod) || !cagriIhlali(kodlar, x.kod)) continue;
+        if (BORC.some((r) => r.yol === yol && r.islev === b.ad)) { borcGorulen.add(`${yol}:${b.ad}`); continue; }
+        ihlal.push(`${yol}:${x.no} (${b.ad})`);
+      }
+    }
+  }
+  const kapanan = BORC.filter((b) => !borcGorulen.has(`${b.yol}:${b.islev}`)).map((b) => `${b.yol}:${b.islev}`);
+  check(`§31 ⭐ icacls (OI)(CI) izni /T ile birlikte verilmiyor (${yollar.length} betik; beyanlı borç ${borcGorulen.size})`, ihlal.length === 0 && kapanan.length === 0,
+    [...ihlal.map((v) => `ihlal ${v}`), ...kapanan.map((v) => `borç kapanmış, BORC listesinden çıkar: ${v}`)].join(" · "));
 }
 
 console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);

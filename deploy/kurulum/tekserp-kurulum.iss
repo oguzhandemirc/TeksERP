@@ -1031,8 +1031,13 @@ begin
   Ek := '';
   if Agac then Ek := ' /T';
   Result := Exec(ExpandConstant('{sys}\icacls.exe'), ArgYol(Yol) + ' /setowner *S-1-5-32-544' + Ek + ' /Q', '', SW_HIDE, ewWaitUntilTerminated, Kod) and (Kod = 0);
+  // Miras kesme + (OI)(CI) izni YALNIZ dizine: /T ile dosyalara uygulanınca (OI)(CI) dosyada geçersiz, miras da
+  // kesildiği için dosyanın DACL'i BOŞ kalır (thinkpad-1 D8: yarım kurulumun durum.json'u okunamadı). Alt öğeler
+  // mirası bu dizinden alır (/reset).
   if Result then
-    Result := Exec(ExpandConstant('{sys}\icacls.exe'), ArgYol(Yol) + ' /inheritance:r /grant:r *S-1-5-18:(OI)(CI)F *S-1-5-32-544:(OI)(CI)F' + Ek + ' /Q', '', SW_HIDE, ewWaitUntilTerminated, Kod) and (Kod = 0);
+    Result := Exec(ExpandConstant('{sys}\icacls.exe'), ArgYol(Yol) + ' /inheritance:r /grant:r *S-1-5-18:(OI)(CI)F *S-1-5-32-544:(OI)(CI)F /Q', '', SW_HIDE, ewWaitUntilTerminated, Kod) and (Kod = 0);
+  if Result and Agac then
+    Result := Exec(ExpandConstant('{sys}\icacls.exe'), ArgYol(Yol + '\*') + ' /reset /T /C /Q', '', SW_HIDE, ewWaitUntilTerminated, Kod) and (Kod = 0);
   Log('kilit ' + Yol + ' -> ' + IntToStr(Kod));
 end;
 
