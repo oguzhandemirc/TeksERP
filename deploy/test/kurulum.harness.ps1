@@ -2,14 +2,15 @@
 # KURULUM HARNESS (Dagitim v2 D5) - kurulum-ortak.ps1'in SAF islevleri GERCEK kabukta
 # =============================================================================
 # Olculen: cevap semasi (CevapDogrula: KATI, SIRSIZ, tur/desen/secenek) - portSec (D4 altin vektorleri,
-# deploy/pg/pg-sablon-vektorleri.json) - .env satiri (sade bicim) - sir adi - JSON ASCII kacisi - maske.
+# deploy/pg/pg-sablon-vektorleri.json) - .env satiri (sade bicim) - sir adi - JSON ASCII kacisi - maske -
+# surum onceligi (guncelleyicinin vektorleri) + gercek kurulu surum + eski paket engeli (D8d).
 # Iki kultur: degismez + tr-TR ('I' tuzagi: (?i) ve ToLower() 'I'yi 'i'ye indirmez).
 # Kosucular: Teks-Erp/scripts/test_kurulum_betikleri.ts (pwsh 7; mutasyon sondalari -Ortak ile) ve
 #   .github/workflows/kurulum-windows.yml (Windows PowerShell 5.1 - asil hedef).
 # CIKTI: "OK <ad>" / "HATA <ad>: <ayrinti>" / "ATLA <ad>: <sebep>" + "=== Sonuc: N gecti, M basarisiz ===".
 # Cikis: 0 hepsi gecti - 1 en az bir HATA.
 # =============================================================================
-param([string]$Ortak, [string]$Sema, [string]$Ornek, [string]$Vektor, [string]$PgOrnek)
+param([string]$Ortak, [string]$Sema, [string]$Ornek, [string]$Vektor, [string]$PgOrnek, [string]$SurumVektor)
 $ErrorActionPreference = "Stop"
 $depo = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
 if (-not $Ortak) { $Ortak = Join-Path $depo "deploy\kurulum\kurulum-ortak.ps1" }
@@ -17,6 +18,7 @@ if (-not $Sema) { $Sema = Join-Path $depo "deploy\kurulum\cevap-semasi.json" }
 if (-not $Ornek) { $Ornek = Join-Path $depo "deploy\kurulum\ornek-cevap.json" }
 if (-not $Vektor) { $Vektor = Join-Path $depo "deploy\pg\pg-sablon-vektorleri.json" }
 if (-not $PgOrnek) { $PgOrnek = Join-Path $depo "deploy\pg\pg-ornegi.json" }
+if (-not $SurumVektor) { $SurumVektor = Join-Path $depo "Teks-Erp\native\test-vektorleri\guncelleme-karar.json" }
 . $Ortak
 
 $script:gecti = 0
@@ -132,6 +134,47 @@ $m1 = Maskele "baglanti gizli-Parola-42 ile"
 $m2 = Maskele "postgresql://tekserp:p4ss@127.0.0.1:5433/x"
 Olc "maske.kayitli-sir" ($m1 -ceq "baglanti *** ile") $m1
 Olc "maske.url-kimligi" ($m2 -ceq "postgresql://***@127.0.0.1:5433/x") $m2
+
+# --- Surum onceligi: guncelleyicinin vektorleri (version.rs ile AYNI kural) -----------------------
+$sv = @((Oku $SurumVektor).kayitlar | Where-Object { "$($_.vektor.tur)" -ceq "surum-karsilastir" })
+foreach ($v in $sv) {
+  $c = SurumKarsilastir "$($v.vektor.a)" "$($v.vektor.b)"
+  $tamam = if ($null -eq $v.beklenen) { $null -eq $c } else { $null -ne $c -and [int]$c -eq [int]$v.beklenen }
+  Olc "surum.$($v.vektor.ad)" $tamam ("sonuc: " + $(if ($null -eq $c) { "null" } else { "$c" }) + " beklenen: " + $(if ($null -eq $v.beklenen) { "null" } else { "$($v.beklenen)" }))
+}
+Olc "surum.vektor-kumesi-bos-degil" ($sv.Count -ge 5) "vektor sayisi $($sv.Count)"
+
+# --- Gercek kurulu surum + eski paket engeli (D8d: kaldirilip ESKI kitle yeniden kurulum) ----------
+$gk = Join-Path ([IO.Path]::GetTempPath()) ("kurulum-harness-" + [guid]::NewGuid().ToString("N"))
+try {
+  $kk = Join-Path $gk "kok"; $vk = Join-Path $gk "veri"
+  New-Item -ItemType Directory -Force -Path (Join-Path $kk "kurulum"), (Join-Path $vk "guncelleme\durum") | Out-Null
+  [IO.File]::WriteAllText((Join-Path $kk "kurulum\kurulum.json"), '{"paket": {"surum": "2.14.0"}}')
+  $ad = KuruluSurumAdaylari $kk $vk
+  $en = EnYeniSurum $ad
+  Olc "kurulu.yalniz-kayit" ($ad.Count -eq 1 -and $en.surum -ceq "2.14.0" -and $en.kaynak -ceq "kurulum.json") ("en yeni: $($en.surum) ($($en.kaynak)) aday $($ad.Count)")
+  [IO.File]::WriteAllText((Join-Path $kk "kurulum-gecmisi.jsonl"), ('{"tur": "KURULUM", "yeniSurum": "2.14.5"}' + "`n" + '{"tur": "GERI_ALMA", "yeniSurum": "2.14.3"}' + "`n"))
+  [IO.File]::WriteAllText((Join-Path $vk "guncelleme\durum\durum.json"), '{"kuruluSurum": "2.14.3"}')
+  $en = EnYeniSurum (KuruluSurumAdaylari $kk $vk)
+  Olc "kurulu.gecmisin-SON-satiri" ($en.surum -ceq "2.14.3") ("en yeni: $($en.surum) ($($en.kaynak)) - geri alinmis 2.14.5 sayilmamali")
+  [IO.File]::WriteAllText((Join-Path $vk "guncelleme\durum\durum.json"), '{"kuruluSurum": "2.14.5"}')
+  [IO.File]::WriteAllText((Join-Path $kk "kurulum-gecmisi.jsonl"), "bozuk satir`n")
+  $en = EnYeniSurum (KuruluSurumAdaylari $kk $vk)
+  Olc "kurulu.bayat-kayit-yerine-guncelleyici" ($en.surum -ceq "2.14.5" -and $en.kaynak -ceq "guncelleyici durum.json") ("en yeni: $($en.surum) ($($en.kaynak))")
+  New-Item -ItemType Directory -Force -Path (Join-Path $kk "surumler\2.14.7") | Out-Null
+  $cur = Join-Path $kk "current"; $hedef = Join-Path $kk "surumler\2.14.7"
+  if ($env:OS -ceq "Windows_NT") { [void](NativeKos "cmd.exe" @("/c", "mklink", "/J", $cur, $hedef)) }
+  else { New-Item -ItemType SymbolicLink -Path $cur -Target $hedef | Out-Null }
+  $en7 = EnYeniSurum (KuruluSurumAdaylari $kk $vk)
+  Olc "kurulu.current-baglantisi" ($en7.surum -ceq "2.14.7" -and $en7.kaynak -ceq "current baglantisi") ("en yeni: $($en7.surum) ($($en7.kaynak))")
+  if (ReparseMi $cur) { [IO.Directory]::Delete($cur) }
+  $e1 = EskiPaketEngeli $en "2.14.0"
+  $e2 = EskiPaketEngeli $en "2.14.5"
+  $e3 = EskiPaketEngeli $en "2.14.9"
+  $e4 = EskiPaketEngeli $null "2.14.0"
+  $e5 = EskiPaketEngeli $en "bicimsiz"
+  Olc "kurulu.eski-paket-DUR" ($e1 -and $e1.Contains("2.14.5") -and $e1.Contains("2.14.0") -and $null -eq $e2 -and $null -eq $e3 -and $null -eq $e4 -and $e5) ("eski: '$e1' esit: '$e2' yeni: '$e3' kayitsiz: '$e4' bicimsiz: '$e5'")
+} finally { Remove-Item -LiteralPath $gk -Recurse -Force -ErrorAction SilentlyContinue }
 
 Write-Output "=== Sonuc: $($script:gecti) gecti, $($script:kaldi) basarisiz ==="
 if ($script:kaldi -gt 0) { exit 1 }

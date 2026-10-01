@@ -62,6 +62,9 @@ pub const ENV_REMOVED: [&str; 1] = ["NODE_OPTIONS"];
 /// Düzgün kapanış isteği: node'un stdin'ine bu satır yazılır (boru kapanması da aynı anlam).
 pub const SHUTDOWN_LINE: &str = "kapat\n";
 
+/// SCM kurtarma sayacının sıfırlanma süresi (sn): art arda hata sayımı bir günde sıfırlanır (iki hizmet).
+pub const RECOVERY_RESET_S: u64 = 86_400;
+
 /// Konağın hizmete özgü çıkış kodları (SCM kurtarmasını tetikler; 0 = istenen durdurma).
 pub mod exit {
     pub const OK: u32 = 0;

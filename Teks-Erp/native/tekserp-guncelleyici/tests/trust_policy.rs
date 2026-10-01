@@ -346,6 +346,25 @@ fn disk_full_blocks_before_touching_anything() {
     assert!(!w.layout.downloads().join(format!("{NEW}.zip.part")).exists(), "yer yokken indirme başlamaz");
 }
 
+#[test]
+fn locked_staging_dir_is_a_locked_file_not_a_download_error() {
+    // thinkpad-1 D8b 3I: hazırlık dizininde paylaşımsız açık dosya INDIRME_HATASI diye raporlanıyordu.
+    let w = World::new("hazirlik-kilit", Setup::default());
+    let staging = format!(".hazirlik-{NEW}");
+    w.fs.locked.lock().unwrap().push(staging.clone());
+    w.run(1).unwrap();
+    let (state, c) = code(&w);
+    assert_eq!(c.as_deref(), Some("DOSYA_KILITLI"), "kilit indirme hatası değil");
+    assert_eq!(state, State::Waiting, "kilit beklenir (İNDİRİLİYOR değil)");
+    assert_eq!(tekserp_guncelleyici::codes::report_code("DOSYA_KILITLI"), "DOSYA_KILITLI");
+    assert!(w.layout.downloads().join(format!("{NEW}.zip")).exists(), "tam zip korunur (yeniden indirilmez)");
+    untouched(&w, "hazırlık kilidi");
+    // Kilit kalkınca kendiliğinden sürer (erteleme yok).
+    w.fs.locked.lock().unwrap().clear();
+    w.run_to_rest(0);
+    assert_eq!(w.state(), Some(State::Succeeded));
+}
+
 #[cfg(unix)]
 #[test]
 fn links_in_untrusted_dirs_are_not_followed() {

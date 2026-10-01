@@ -289,6 +289,7 @@ export function updateStatusFrom(g: {
       donuk: frozen,
       bekleyen: pending,
       yerelDurum: d?.durum ?? null,
+      yerelHataKodu: d ? code(d.hataKodu) : null,
       son: last,
       sonrakiPencere: nextWindow,
       onay: approval,

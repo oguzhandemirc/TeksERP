@@ -398,7 +398,7 @@ Paket `runtime\tekserp-guncelleyici.exe` taşır. Backend işlemi `BASARILI` olu
 
 ## §12 Kodlar
 
-**`durum.hataKodu` (şu anki sorun):** `NIYET_BICIMSIZ` · `BELIRTEC_YOK` · `BELIRTEC_SURESI_DOLDU` · `KILIT_DOLU` · `AYAR_BICIMSIZ` · `AYAR_EKSIK` · `KURULU_SURUM_YOK` · `KIRA_YOK` · `KIRA_GECERSIZ` · `INSAN_GEREKIYOR` · `MANIFEST_INDIRILEMEDI` · `INDIRME_REDDEDILDI` · `INDIRME_HATASI` · `INDIRME_ERTELENDI` · `DISK_DOLU` · `PAKET_OZETI` · `PAKET_YOL` · `BUTUNLUK_GECERSIZ` · `PG_BUYUK_SURUM` · `PG_PAKET` · sözleşmenin kodları olduğu gibi (`SURUM_ISARETCI` · `SURUM_KANAL` · `SURUM_ANAHTAR` · `PAKET_BAGI` · `PG_BAGI` · `JWS_*` · `BELGE_SURUM` · `BELGE_SEMA`) · işlem sonrası o işlemin iç kodu. Karar nedenleri `karar.neden`de (sözleşme §3 madde 3), `hataKodu`na girmez.
+**`durum.hataKodu` (şu anki sorun):** `NIYET_BICIMSIZ` · `BELIRTEC_YOK` · `BELIRTEC_SURESI_DOLDU` · `KILIT_DOLU` · `AYAR_BICIMSIZ` · `AYAR_EKSIK` · `KURULU_SURUM_YOK` · `KIRA_YOK` · `KIRA_GECERSIZ` · `INSAN_GEREKIYOR` · `MANIFEST_INDIRILEMEDI` · `INDIRME_REDDEDILDI` · `INDIRME_HATASI` · `INDIRME_ERTELENDI` · `DOSYA_KILITLI` · `DISK_DOLU` · `PAKET_OZETI` · `PAKET_YOL` · `BUTUNLUK_GECERSIZ` · `PG_BUYUK_SURUM` · `PG_PAKET` · sözleşmenin kodları olduğu gibi (`SURUM_ISARETCI` · `SURUM_KANAL` · `SURUM_ANAHTAR` · `PAKET_BAGI` · `PG_BAGI` · `JWS_*` · `BELGE_SURUM` · `BELGE_SEMA`) · işlem sonrası o işlemin iç kodu. Karar nedenleri `karar.neden`de (sözleşme §3 madde 3), `hataKodu`na girmez.
 
 **İşlem iç kodları (`sonAyrinti.hataKodu` · `gecmis.ayrintiKodu`) → rapor kodu (`son.kod` · `gecmis.hataKodu`, TS `UPDATE_RESULT_CODES`):**
 
@@ -406,7 +406,7 @@ Paket `runtime\tekserp-guncelleyici.exe` taşır. Backend işlemi `BASARILI` olu
 |---|---|
 | `HIZMET_YOK` · `HIZMET_DURMADI` | `DURDURMA_HATASI` |
 | `YEDEK_HATASI` | `YEDEK_HATASI` |
-| `GECIS_HATASI` | `DOSYA_KILITLI` |
+| `GECIS_HATASI` · `DOSYA_KILITLI` (hazırlık/sürüm dizini başka süreçte açık; kilit kalkınca kendiliğinden sürer, erteleme yok) | `DOSYA_KILITLI` |
 | `GOC_HATASI` · `GOC_ZAMAN_ASIMI` | `GOC_HATASI` |
 | `HIZMET_BASLAMADI` | `BASLATMA_HATASI` |
 | `SAGLIK_ZAMAN_ASIMI` · `SAGLIK_HIZMET_DUSTU` · `SAGLIK_SURUM` · `SAGLIK_DB` · `SAGLIK_LISANS` · `SAGLIK_LISANS_OLCULEMEDI` | `SAGLIK_HATASI` |
