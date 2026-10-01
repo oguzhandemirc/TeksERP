@@ -153,6 +153,36 @@ fn license_regression_rolls_back() {
     assert_invariants(&w, "lisans kötüleşti");
 }
 
+/// Sözleşme 4 öncesi bir backend'e (`/health/yerel` yok) geri dönüş: canlılık public `/health`ten okunur,
+/// geri dönüş başarılı biter (HATA'ya düşmez); işlem öncesi lisans görüntüsü de yoktur.
+#[test]
+fn rollback_reaches_legacy_backend_without_local_health() {
+    let w = world("eski-saglik");
+    *w.faults.legacy_health_version.lock().unwrap() = Some(OLD.into());
+    *w.faults.unhealthy_version.lock().unwrap() = Some(NEW.into());
+    w.run_to_rest(0);
+    let st = w.status().unwrap();
+    assert_eq!((st.state, st.error_code.as_deref()), (State::RolledBack, Some("SAGLIK_ZAMAN_ASIMI")), "{:?}", st.message);
+    assert_eq!(w.current().as_deref(), Some(OLD));
+    assert_invariants(&w, "eski backend'e geri dönüş");
+}
+
+/// Yeni sürüm `/health/yerel`i tanımıyorsa lisans ölçülemez: beklemeden `SAGLIK_LISANS_OLCULEMEDI`, geri
+/// dönülür — public `/health` (kurala aykırı olarak) lisans taşısa bile oradan alınmaz.
+#[test]
+fn new_version_without_local_health_is_not_accepted() {
+    let w = world("yerelsiz");
+    *w.faults.legacy_health_version.lock().unwrap() = Some(NEW.into());
+    w.faults.public_health_has_license.store(true, Ordering::SeqCst);
+    w.run_to_rest(0);
+    let st = w.status().unwrap();
+    assert_eq!((st.state, st.error_code.as_deref()), (State::RolledBack, Some("SAGLIK_LISANS_OLCULEMEDI")), "{:?}", st.message);
+    let detail = st.last_detail.clone().and_then(|d| d.message);
+    assert!(detail.as_deref().is_some_and(|m| m.contains("/health/yerel ucunu tanımıyor")), "beklemeden düşmeli: {detail:?}");
+    assert_eq!(w.current().as_deref(), Some(OLD));
+    assert_invariants(&w, "yerel sağlıksız yeni sürüm");
+}
+
 #[test]
 fn rolled_back_version_is_not_retried_until_a_fresh_approval() {
     let w = world("tekrar");
@@ -213,6 +243,24 @@ fn backend_service_name_comes_from_settings() {
     let st = w.status().unwrap();
     assert_eq!(st.error_code.as_deref(), Some("AYAR_BICIMSIZ"));
     assert_eq!(w.backend().starts, 0);
+}
+
+/// `.env` okuyucusu biçimsiz satırı backend gibi sessizce atlar (D2b); atlanan satır güncelleyicinin
+/// ZORUNLU anahtarıysa hiçbir şey yapılmaz, durum `AYAR_EKSIK` — ileti anahtar adı taşır, değer değil.
+#[test]
+fn silently_skipped_required_env_key_stops_updater() {
+    let w = world("env-zorunlu");
+    std::fs::write(
+        w.layout.backend_env(),
+        "PORT=4999\nDATABASE_URL postgresql://tekserp:gizli-parola@127.0.0.1:5432/tekserp\nPG_BIN_DIR=/fake/pgbin\n",
+    )
+    .unwrap();
+    w.run(1).unwrap();
+    let st = w.status().unwrap();
+    assert_eq!((st.state, st.error_code.as_deref()), (State::Waiting, Some("AYAR_EKSIK")));
+    assert!(st.message.as_deref().is_some_and(|m| m.contains("DATABASE_URL") && !m.contains("gizli-parola")), "{:?}", st.message);
+    assert_eq!(w.backend().starts, 0);
+    assert_eq!(w.current().as_deref(), Some(OLD));
 }
 
 /// Kalp atışı (§5.2): her tur `sonCanlilik`i tazeler — değişen bir şey olmasa da; eşik duruma göre.

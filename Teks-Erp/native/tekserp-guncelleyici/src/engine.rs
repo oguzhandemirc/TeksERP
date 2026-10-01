@@ -172,7 +172,7 @@ impl Engine {
 
     fn inputs(&self) -> Result<Inputs, Fail> {
         let settings = settings::read_settings(self.env.fs.as_ref(), &self.layout).map_err(|e| fail(codes::AYAR_BICIMSIZ, e))?;
-        let backend = settings::read_backend_env(self.env.fs.as_ref(), &self.layout).map_err(|e| fail(codes::AYAR_BICIMSIZ, e))?;
+        let backend = settings::read_backend_env(self.env.fs.as_ref(), &self.layout)?;
         Ok(Inputs { settings, backend })
     }
 

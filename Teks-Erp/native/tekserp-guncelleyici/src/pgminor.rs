@@ -179,7 +179,7 @@ impl PgOp {
 
     /// ICU collation'a bağlı index'ler katalogdan bulunup yeniden kurulur, collation sürümleri tazelenir.
     fn reindex_icu(&self, ctx: &Ctx, bin_dir: &Path) -> Result<(), StepError> {
-        let db = ctx.backend.db.as_ref().ok_or_else(|| step_err(codes::PG_ICU_HATASI, "DATABASE_URL yok"))?;
+        let db = &ctx.backend.db;
         let sql = "SET statement_timeout = 0; DO $$ DECLARE r record; BEGIN \
             FOR r IN SELECT DISTINCT i.indexrelid::regclass AS ix FROM pg_index i JOIN pg_depend d ON d.classid = 'pg_class'::regclass AND d.objid = i.indexrelid AND d.refclassid = 'pg_collation'::regclass JOIN pg_collation c ON c.oid = d.refobjid WHERE c.collprovider = 'i' LOOP EXECUTE 'REINDEX INDEX ' || r.ix; END LOOP; \
             FOR r IN SELECT c.oid::regcollation AS co FROM pg_collation c JOIN pg_namespace n ON n.oid = c.collnamespace WHERE c.collprovider = 'i' AND n.nspname NOT IN ('pg_catalog', 'information_schema') LOOP EXECUTE 'ALTER COLLATION ' || r.co || ' REFRESH VERSION'; END LOOP; END $$;";

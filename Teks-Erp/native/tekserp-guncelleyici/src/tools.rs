@@ -71,7 +71,7 @@ pub struct MigrationCount {
 
 /// `_prisma_migrations`: bitmiş (kur.ps1'in sorgusu) + toplam satır — başlamış-bitmemiş göç de ölçülsün.
 pub fn migration_count(env: &Env, be: &BackendEnv) -> Result<MigrationCount, String> {
-    let db = be.db.as_ref().ok_or("DATABASE_URL yok ya da biçimsiz")?;
+    let db = &be.db;
     let sql = "SELECT (SELECT count(*) FROM _prisma_migrations WHERE finished_at IS NOT NULL AND rolled_back_at IS NULL) || ' ' || (SELECT count(*) FROM _prisma_migrations)";
     let c = pg_cmd(be, "psql", db)
         .args(["-X", "-w"])
@@ -89,7 +89,7 @@ pub fn migration_count(env: &Env, be: &BackendEnv) -> Result<MigrationCount, Str
 
 /// Özel biçimli döküm (`-Fc`), backend DURMUŞKEN.
 pub fn pg_dump(env: &Env, be: &BackendEnv, out_file: &Path, timeout: Duration) -> Result<(), String> {
-    let db = be.db.as_ref().ok_or("DATABASE_URL yok ya da biçimsiz")?;
+    let db = &be.db;
     let c = pg_cmd(be, "pg_dump", db).arg("-w").args(conn_args(db)).args(["-Fc", "-f"]).arg(out_file.as_os_str()).timeout(timeout);
     run(env, &c, "pg_dump").map(|_| ())
 }
@@ -117,7 +117,7 @@ pub fn restore_errors(stderr: &str) -> Vec<String> {
 /// düzeyindeki ayarlar KORUNUR) → döküm aynı rolle geri yüklenir. Backend DURMUŞ olmalı; kilit
 /// beklemesi 30 sn. Başarının asıl ölçüsü çağıranın göç sayısı denetimidir.
 pub fn restore_db(env: &Env, be: &BackendEnv, dump: &Path, timeout: Duration) -> Result<(), String> {
-    let db = be.db.as_ref().ok_or("DATABASE_URL yok ya da biçimsiz")?;
+    let db = &be.db;
     let reset = "SET lock_timeout = '30s'; DROP SCHEMA IF EXISTS public CASCADE; CREATE SCHEMA public AUTHORIZATION pg_database_owner;";
     let c = pg_cmd(be, "psql", db)
         .args(["-X", "-w"])
@@ -141,7 +141,7 @@ pub fn restore_db(env: &Env, be: &BackendEnv, dump: &Path, timeout: Duration) ->
 
 /// `SHOW server_version` (PG küçük sürüm doğrulaması; harici kipte `pg.enAz`).
 pub fn server_version(env: &Env, be: &BackendEnv, bin: &Path) -> Result<String, String> {
-    let db = be.db.as_ref().ok_or("DATABASE_URL yok ya da biçimsiz")?;
+    let db = &be.db;
     let exe = bin.join(if cfg!(windows) { "psql.exe" } else { "psql" });
     let c = Cmd::new(&exe)
         .env("PGPASSWORD", &db.password)

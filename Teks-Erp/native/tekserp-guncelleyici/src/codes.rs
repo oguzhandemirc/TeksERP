@@ -5,6 +5,8 @@ pub const NIYET_BICIMSIZ: &str = "NIYET_BICIMSIZ";
 pub const BELIRTEC_YOK: &str = "BELIRTEC_YOK";
 pub const KILIT_DOLU: &str = "KILIT_DOLU";
 pub const AYAR_BICIMSIZ: &str = "AYAR_BICIMSIZ";
+/// `yapilandirma\.env`de güncelleyicinin zorunlu anahtarı yok ya da boş (`settings::REQUIRED_BACKEND_KEYS`).
+pub const AYAR_EKSIK: &str = "AYAR_EKSIK";
 pub const KURULU_SURUM_YOK: &str = "KURULU_SURUM_YOK";
 pub const KIRA_YOK: &str = "KIRA_YOK";
 pub const KIRA_GECERSIZ: &str = "KIRA_GECERSIZ";

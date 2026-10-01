@@ -179,8 +179,12 @@ pub struct Db {
 
 #[derive(Default)]
 pub struct Faults {
-    /// Bu sürüm çalışırken /health `status: DOWN`.
+    /// Bu sürüm çalışırken sağlık `status: DOWN`.
     pub unhealthy_version: Mutex<Option<String>>,
+    /// Bu sürüm sözleşme 4 öncesi: `/health/yerel` → 404 (yalnız public `/health` var).
+    pub legacy_health_version: Mutex<Option<String>>,
+    /// Public `/health` (kurala aykırı) `lisans` da taşır — güncelleyici onu yine de KULLANMAMALI.
+    pub public_health_has_license: AtomicBool,
     /// Bu sürüm çalışırken lisans bütünlüğü GEÇERSİZ.
     pub license_broken_version: Mutex<Option<String>>,
     /// `migrate deploy` yarıda düşer (bir göç başlar, biter değil).
@@ -498,7 +502,11 @@ impl Read for CutReader {
 
 impl Net for FakeNet {
     fn get(&self, url: &str, headers: &[(String, String)], _timeout: Duration) -> EnvResult<HttpResponse> {
-        if let Some(port) = url.strip_prefix("http://127.0.0.1:").and_then(|r| r.strip_suffix("/health")) {
+        // Backend'in iki sağlık ucu (D7, `app.ts`): `/health/yerel` yalnız döngüye, lisanslı; `/health` public,
+        // DONMUŞ alan kümesi (lisans YOK).
+        let health =
+            url.strip_prefix("http://127.0.0.1:").and_then(|r| r.split_once('/')).filter(|(_, p)| matches!(*p, "health" | "health/yerel"));
+        if let Some((port, path)) = health {
             assert_eq!(port, "4999");
             let svcs = self.w.svcs.lock().unwrap();
             let backend = self.w.backend_name.lock().unwrap().clone();
@@ -508,12 +516,25 @@ impl Net for FakeNet {
             let v = b.version.clone().unwrap_or_default();
             let down = self.w.faults.unhealthy_version.lock().unwrap().as_deref() == Some(v.as_str());
             let broken = self.w.faults.license_broken_version.lock().unwrap().as_deref() == Some(v.as_str());
-            let body = json!({
-                "status": if down { "DOWN" } else { "UP" },
-                "db": "UP",
-                "version": v,
-                "lisans": { "kip": "NORMAL", "butunluk": if broken { "GECERSIZ" } else { "GECERLI" }, "cekirdek": "native" },
-            });
+            let legacy = self.w.faults.legacy_health_version.lock().unwrap().as_deref() == Some(v.as_str());
+            let status = if down { "DOWN" } else { "UP" };
+            let lisans = json!({ "kip": "NORMAL", "butunluk": if broken { "GECERSIZ" } else { "GECERLI" }, "cekirdek": "native" });
+            let body = if path == "health/yerel" {
+                if legacy {
+                    let m = json!({ "success": false, "message": "Endpoint bulunamadı: GET /health/yerel" });
+                    return Ok(resp(404, vec![], m.to_string().into_bytes()));
+                }
+                json!({ "status": status, "db": "UP", "version": v, "time": "2026-10-01T00:00:00.000Z", "lisans": lisans })
+            } else {
+                let mut b = json!({
+                    "status": status, "message": "TeksERP API is running.", "api": "UP", "db": "UP", "version": v,
+                    "time": "2026-10-01T00:00:00.000Z",
+                });
+                if self.w.faults.public_health_has_license.load(Ordering::SeqCst) {
+                    b["lisans"] = lisans;
+                }
+                b
+            };
             return Ok(resp(200, vec![], body.to_string().into_bytes()));
         }
         self.w.crash.point(&format!("ag {url}"));
