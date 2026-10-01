@@ -32,6 +32,7 @@
 //   §25 hizmet betikleri (backend-hizmeti.ps1 ↔ guncelleyici-hizmeti.ps1) ortak yardımcıları birebir ikiz.
 //   §12d uzaktan-kos.ps1 geçiş kipi (D6): gecis.ps1 -Uygula görevde yalnız kuru koşumun -Onay <N>'iyle; çıktı logs\ dışında.
 //   §26 VİRGÜLLÜ DÖNÜŞ (`return , $x`) yapan fonksiyonun çağrısı `@()` ile sarılmaz, boruya verilmez (iç içe dizi).
+//   §27 `[Validate*]` öznitelikli parametrenin adı gövdede yerel değişken olarak ATANMAZ (ad büyük/küçük harf duyarsız).
 // Kaynak ölçülür, davranış değil: pwsh her ortamda yok, 5.1 hiç yok.
 // =============================================================================
 import { readFileSync, existsSync, readdirSync, mkdtempSync, mkdirSync, writeFileSync, rmSync, realpathSync } from "node:fs";
@@ -981,6 +982,49 @@ function donmusIhlalleri(dosya: string, metin: string, beklenen: string): string
   }
   check(`§26 ⭐ virgüllü dönüşlü fonksiyon @() ile sarılmıyor, boruya verilmiyor`, virgullu.size >= 3 && ihlal.length === 0,
     ihlal.length ? ihlal.slice(0, 8).join(" · ") : `${virgullu.size} fonksiyon, çağrıları temiz`);
+}
+
+// §27 — DOĞRULAMALI PARAMETRE ADI (thinkpad-1 D8 2026-10-01): PowerShell değişken adı büyük/küçük harf DUYARSIZDIR;
+//   `[ValidateSet(...)]$Hedef` parametresi olan betikte döngü değişkeni `$hedef = <yol>` öznitelik doğrulamasından
+//   geçer ve betik orada düşer (`paketle.ps1` [3/6]: korumalı paket hiç üretilemiyordu). deploy/ altındaki BÜTÜN
+//   betikler (geliştirme makinesinde koşan paketle.ps1 dahil).
+{
+  const yollar: string[] = [];
+  const gez = (d: string): void => {
+    for (const g of readdirSync(join(KOK, d), { withFileTypes: true })) {
+      const r = `${d}/${g.name}`;
+      if (g.isDirectory()) gez(r);
+      else if (g.name.endsWith(".ps1")) yollar.push(r);
+    }
+  };
+  gez("deploy");
+  const ihlal: string[] = [];
+  let parametreSayisi = 0;
+  for (const yol of yollar) {
+    const t = psTara(readFileSync(join(KOK, yol), "utf8"));
+    const metin = t.satirlar.map((x) => x.ciplak).join("\n");
+    const m = /(?:^|\n)\s*(?:\[CmdletBinding\([^)]*\)\]\s*)?param\s*\(/i.exec(metin);
+    if (!m) continue;
+    let i = m.index + m[0].length;
+    let d = 1;
+    while (i < metin.length && d > 0) {
+      if (metin[i] === "(") d++;
+      else if (metin[i] === ")") d--;
+      i++;
+    }
+    const blok = metin.slice(m.index + m[0].length, i);
+    const govde = metin.slice(i);
+    for (const p of blok.matchAll(/\[Validate\w+\([^\]]*\)\][^$,]*\$(\w+)/g)) {
+      parametreSayisi++;
+      const ad = p[1];
+      for (const a of govde.matchAll(new RegExp(`\\$${ad}\\s*=(?!=)`, "gi"))) {
+        const satirNo = metin.slice(0, i + (a.index ?? 0)).split("\n").length;
+        ihlal.push(`${yol}:${satirNo} $${ad}`);
+      }
+    }
+  }
+  check(`§27 ⭐ [Validate*] parametresinin adı gövdede atanmıyor (${yollar.length} betik)`, yollar.length >= 15 && parametreSayisi >= 3 && ihlal.length === 0,
+    ihlal.length ? ihlal.slice(0, 8).join(" · ") : `${parametreSayisi} doğrulamalı parametre, atama yok`);
 }
 
 console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);

@@ -516,9 +516,11 @@ foreach ($b in $ALT_BETIKLER) {
   $parca = $b -csplit '/'
   $kaynak = Join-Path (Join-Path $repo "deploy") ($parca -join [IO.Path]::DirectorySeparatorChar)
   if (-not (Test-Path -LiteralPath $kaynak)) { Fail "paket betigi yok: deploy/$b (hizmet duzeni/gecis betikleri pakette ZORUNLU)" }
-  $hedef = Join-Path $stage ($parca -join [IO.Path]::DirectorySeparatorChar)
-  New-Item -ItemType Directory -Force (Split-Path $hedef -Parent) | Out-Null
-  Copy-Item $kaynak $hedef
+  # Ad `$hedef` OLAMAZ: PowerShell degisken adi buyuk/kucuk harf duyarsiz, -Hedef parametresinin ValidateSet'i
+  # atamayi dogrular ve paketleme burada duser (thinkpad-1 D8 2026-10-01).
+  $altHedef = Join-Path $stage ($parca -join [IO.Path]::DirectorySeparatorChar)
+  New-Item -ItemType Directory -Force (Split-Path $altHedef -Parent) | Out-Null
+  Copy-Item $kaynak $altHedef
 }
 Write-Host "  betikler    : $($KOK_BETIKLERI.Count) kok (pm2 gecis donemi dahil) + $($ALT_BETIKLER -join ', ')"
 
