@@ -4,6 +4,7 @@ import { sessionPolicyLabel } from "@/lib/session-auth";
 import { minutesToLabel } from "@/lib/duration";
 import { ReadOnlyLine } from "./SettingRow";
 import { METHOD_LABELS } from "./LoginMethodsField";
+import { MAX_ABSOLUTE_CAP_DAYS } from "./useSessionSettingsForm";
 
 /** Oturum & Güvenlik ayarlarının yetkisiz (admin:settings yok) salt-okunur özeti. */
 export function SessionSettingsReadOnly({
@@ -65,7 +66,7 @@ export function SessionSettingsReadOnly({
       />
       <ReadOnlyLine
         label="Mutlak oturum tavanı"
-        value={absoluteCapDays > 0 ? `${absoluteCapDays} gün` : "Süresiz"}
+        value={absoluteCapDays > 0 ? `${absoluteCapDays} gün` : `En fazla ${MAX_ABSOLUTE_CAP_DAYS} gün`}
       />
       <ReadOnlyLine
         label="Hızlı PIN / kart deneme kilidi"

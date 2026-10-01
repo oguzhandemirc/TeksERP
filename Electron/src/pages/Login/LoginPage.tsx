@@ -11,6 +11,7 @@ import { connectToDiscoveredServer } from "@/lib/server-identity";
 import { useLoginFlow, type LoginFormValues } from "./useLoginFlow";
 import { LoginForm } from "./LoginForm";
 import { TotpStep } from "./TotpStep";
+import { PasswordChangeStep } from "./PasswordChangeStep";
 import { TotpEnrollmentNotice } from "./TotpEnrollmentNotice";
 import { ServerNotFoundPanel } from "./ServerNotFoundPanel";
 import { ServerIdentityMismatchDialog } from "@/components/settings/ServerIdentityMismatchDialog";
@@ -54,6 +55,7 @@ export function LoginPage() {
     setTotp,
     enrollmentNeeded,
     setEnrollmentNeeded,
+    passwordChange,
     performLogin,
   } = useLoginFlow();
   const [apiDialogOpen, setApiDialogOpen] = useState(false);
@@ -134,6 +136,13 @@ export function LoginPage() {
             onResolved={() => void reach.recheck()}
             onOpenAddressDialog={() => setApiDialogOpen(true)}
             onMismatch={setMismatch}
+          />
+        ) : passwordChange.pending ? (
+          <PasswordChangeStep
+            submitting={passwordChange.submitting || submitting}
+            serverError={passwordChange.pending.error}
+            onSubmit={(newPassword) => void passwordChange.submit(newPassword)}
+            onCancel={passwordChange.cancel}
           />
         ) : enrollmentNeeded ? (
           <TotpEnrollmentNotice

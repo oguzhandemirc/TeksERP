@@ -336,7 +336,7 @@ export function useMobileIdleLockMinutes(): number {
   return q.data?.data?.mobileIdleLockMinutes ?? 10;
 }
 
-/** Mutlak oturum tavanı, gün. Yüklenene kadar 30 (default). 0 = süresiz. */
+/** Mutlak oturum tavanı, gün. Yüklenene kadar 30 (default). 0 = en fazla 365 gün. */
 export function useAbsoluteSessionCapDays(): number {
   const q = useFeatureFlags();
   return q.data?.data?.absoluteSessionCapDays ?? 30;

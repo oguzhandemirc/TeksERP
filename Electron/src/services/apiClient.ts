@@ -10,6 +10,7 @@ import { presentLiveReferences } from "@/lib/live-references";
 import { notifyLicenseGate } from "@/lib/license/signal";
 import { useLicenseSuspension } from "@/lib/license/suspension";
 import { licenseModuleKey, licenseModuleLabel } from "@/lib/license/ceiling";
+import { PASSWORD_CHANGE_REQUIRED_CODE } from "@/types/auth";
 
 /**
  * KURULUM KARARI olan 403'ler yetki sorunu değildir — "yetkiniz yok" kullanıcıyı rolünü
@@ -115,6 +116,31 @@ apiClient.interceptors.request.use(async (config) => {
 
 let lastSessionExpiredToastAt = 0;
 
+/**
+ * Oturumu istemcide kapat — auth store temizlenir, `Root` kapısı oturum-dışı router'a
+ * (giriş ekranına) geçer. 401 ve 403 PASSWORD_CHANGE_REQUIRED'ın ORTAK çıkışı.
+ */
+async function endClientSession(message: string): Promise<void> {
+  // Tek-uçuş guard'ı (Faz 2 §E4): 401 yağmurunda her istek ayrı IPC/disk
+  // temizliği koşturuyordu; oturum zaten kapalıysa (manuel logout sonrası
+  // arka plan istekleri dahil) temizliği VE toast'ı atla. setUser(null)
+  // SENKRON önce → sonraki handler'lar kapıyı kapalı görür.
+  if (!useAuthStore.getState().user) return;
+  useAuthStore.getState().setUser(null);
+  try {
+    await tokenStore.clear();
+  } catch {
+    // Bellek cache'i clear'ın ilk satırında null'landı (istekler token'ı
+    // bıraktı); disk silme hatası oturum-doldu bildirimini engellemesin.
+  }
+  // L fix: oturum düşerken uçuştaki paralel istekler hata yağmuru üretir —
+  // 5sn tekilleştirme ile tek toast.
+  if (Date.now() - lastSessionExpiredToastAt > 5000) {
+    lastSessionExpiredToastAt = Date.now();
+    toast.error(message);
+  }
+}
+
 interface ApiErrorBody {
   message?: string;
   errors?: Array<{ field: string; message: string }>;
@@ -201,29 +227,9 @@ apiClient.interceptors.response.use(
           toast.error(buildErrorMessage(body));
           return Promise.reject(error);
         }
-        // Tek-uçuş guard'ı (Faz 2 §E4): 401 yağmurunda her istek ayrı IPC/disk
-        // temizliği koşturuyordu; oturum zaten kapalıysa (manuel logout sonrası
-        // arka plan istekleri dahil) temizliği VE toast'ı atla. setUser(null)
-        // SENKRON önce → sonraki 401 handler'ları kapıyı kapalı görür.
-        const hadUser = Boolean(useAuthStore.getState().user);
-        if (hadUser) {
-          // Auth store'u temizle → App.tsx `Root` kapısı oturum-dışı router'a geçer.
-          useAuthStore.getState().setUser(null);
-          try {
-            await tokenStore.clear();
-          } catch {
-            // Bellek cache'i clear'ın ilk satırında null'landı (istekler token'ı
-            // bıraktı); disk silme hatası oturum-doldu bildirimini engellemesin.
-          }
-          // L fix: oturum düşerken uçuştaki paralel istekler 401 yağmuru üretir —
-          // 5sn tekilleştirme ile tek toast.
-          if (Date.now() - lastSessionExpiredToastAt > 5000) {
-            lastSessionExpiredToastAt = Date.now();
-            // Sebebe göre backend NET mesaj döndürür (başka cihazdan giriş / şifre /
-            // pasif); yoksa generic "süresi doldu". Yanlış bildirim vermeyelim.
-            toast.error(body?.message || "Oturum süreniz doldu. Lütfen tekrar giriş yapın.");
-          }
-        }
+        // Sebebe göre backend NET mesaj döndürür (başka cihazdan giriş / şifre /
+        // pasif); yoksa generic "süresi doldu". Yanlış bildirim vermeyelim.
+        await endClientSession(body?.message || "Oturum süreniz doldu. Lütfen tekrar giriş yapın.");
         return Promise.reject(error);
       }
 
@@ -233,6 +239,12 @@ apiClient.interceptors.response.use(
           // Login-403 (ör. yalnız-mobil hesap masaüstü paneline giremez) →
           // backend'in NET mesajını göster (401 ile simetrik, suppress'e bağlı değil).
           toast.error(buildErrorMessage(body));
+          return Promise.reject(error);
+        }
+        // Kayıtlı (bayat) token'ın hesabı zorunlu parola değişimi bekliyor: uygulamada
+        // kalınamaz — giriş ekranına dön; değişim adımı orada açılır.
+        if (body?.details?.code === PASSWORD_CHANGE_REQUIRED_CODE) {
+          await endClientSession("Parolanızı değiştirmeniz gerekiyor — tekrar giriş yapın.");
           return Promise.reject(error);
         }
         // Kapalı modül ve lisans kapısı yetki sorunu DEĞİLDİR (bkz. `handleInstallationGate`).
