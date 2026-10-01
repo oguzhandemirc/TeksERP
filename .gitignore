@@ -43,3 +43,5 @@ Teks-Erp/siklik-defteri.jsonl
 
 # Lisans deposu (geliştirmede backend varsayılanı: <kök>/lisans) — kurulum anahtarı taşır
 /lisans/
+# Sunucu kurulumu (Inno) yerel derleme çıktısı — CI /O ile koşucunun geçici dizinine yazar
+deploy/kurulum/cikti/

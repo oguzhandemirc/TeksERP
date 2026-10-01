@@ -72,9 +72,10 @@ function JsonOku([string]$yol) {
 }
 
 # BOM'suz UTF-8 + LF; yazilan once .tmp'ye, sonra yerine (yarim dosya gorulmez).
-function MetinYaz([string]$yol, [string]$metin) {
+function MetinYaz([string]$yol, [string]$metin, [Text.Encoding]$kod) {
+  if (-not $kod) { $kod = New-Object Text.UTF8Encoding $false }
   $tmp = "$yol.tmp"
-  [IO.File]::WriteAllText($tmp, $metin, (New-Object Text.UTF8Encoding $false))
+  [IO.File]::WriteAllText($tmp, $metin, $kod)
   Move-Item -LiteralPath $tmp -Destination $yol -Force
 }
 
@@ -92,6 +93,11 @@ function JsonAscii([string]$s) {
   [void]$sb.Append('"')
   return $sb.ToString()
 }
+
+# --- .env satiri: SADE BICIM (iki okuyucu - dotenv ve guncelleyicinin envfile.rs'i - ayni okusun) -----
+# KEY=deger; tirnak YOK, deger bosluksuz, '#' ve ters bolu YOK (yollar '/' ile). Kurulumun yazdigi her satir.
+$script:ENV_SATIRI = '^[A-Z_][A-Z0-9_]*=[^\s"''#\\]*$'
+function EnvSatiriGecerli([string]$satir) { return ($satir -cmatch $script:ENV_SATIRI) }
 
 # --- Cevap dosyasi (sema: deploy/kurulum/cevap-semasi.json) ------------------------------------
 # Sema duz anahtarli (nokta yolu): her alanin turu, varsayilani, deseni. Cevapta SEMADA OLMAYAN
@@ -166,7 +172,8 @@ function CevapDogrula($cevap, $sema) {
     $t = $alanlar[$ad]
     $var = $duz.ContainsKey($ad)
     if (-not $var -and $t.zorunlu -eq $true) { $hatalar += "zorunlu alan yok: '$ad'"; continue }
-    $d = if ($var) { $duz[$ad] } else { $t.varsayilan }
+    # Dallarda ATAMA (if ifadesinin ciktisi degil): bos dizi boru hattinda $null'a acilirdi.
+    if ($var) { $d = $duz[$ad] } else { $d = $t.varsayilan }
     $h = AlanDogrula $ad $d $t
     if ($h) { $hatalar += $h } else { $deger[$ad] = $d }
   }

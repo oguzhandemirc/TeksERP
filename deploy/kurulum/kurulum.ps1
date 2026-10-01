@@ -12,7 +12,7 @@
 #                ozeti + icerik manifestosu + tek ICU) pgsql\<surum>-<derleme>'ye - pgsql\bin baglantisi -
 #                initdb (parola ACL'li gecici dosyadan) - tekserp.conf + pg_hba.conf (pg-sablon.mjs) -
 #                pg_ctl register (sanal hesap) - veri dizini ACL (KAYITTAN SONRA) - baslat + olcum - roller
-#                + DB + DB ayarlari - .env + db-credentials.json - postgres parolasi DPAPI - ornek.json
+#                + DB + DB ayarlari - .env + db-credentials.json - ornek.json (postgres parolasi DPAPI initdb'den once)
 #     Backend    prisma migrate deploy (paketin kendi Node'u) + goc sayisi - bakim rolu (bakim-rolu.ps1) -
 #                yedek sifreleme (musteri anahtari dosyaya)
 #     Hizmetler  hizmet\backend-hizmeti.ps1 -Uygula (kayit -> ACL) - hizmet\guncelleyici-hizmeti.ps1 -Uygula -
@@ -25,10 +25,14 @@
 #
 # KULLANIM (YONETICI; 5.1 yurutme ilkesi icin -ExecutionPolicy Bypass):
 #   powershell -NoProfile -ExecutionPolicy Bypass -File <KOK>\kurulum\deploy\kurulum\kurulum.ps1 `
-#     -Asama Hepsi -Cevap <cevap.json> -Kaynak <paketlerin klasoru> [-Dogrulayici <exe>] [-Kuru]
+#     -Asama Hepsi -Cevap <cevap.json> -Kaynak <paketlerin klasoru> [-Dogrulayici <exe>] [-Sonuc <ini>] [-Kuru]
 #   -Kuru: yalniz OnKosul olcer ve PLANI basar; hicbir sey yazmaz.
+#   -Sonuc: sonucu UTF-16 INI'ye de yazar ([sonuc] bolumu; sihirbaz GetIniString ile okur) - SIRSIZ.
 # CIKIS: 0 tamam - 1 DUR (gunlukte sebep) - 2 cevap dosyasi gecersiz.
-# SON SATIR: "SONUC:{json}" (sihirbaz okur; sir yalniz Sirlar asamasinda ve yalniz musteri anahtari).
+# SON SATIR: "SONUC:{json}" - SIR TASIMAZ. Tek sir satiri "SIR:musteriAnahtari=<anahtar>": yalniz Sirlar
+#   asamasinda, yalniz ekranda gosterim istendiyse, yalniz STDOUT'a (boruya) - INI'ye, gunluge YAZILMAZ.
+# YARIM KURULUM: onceki kosu Dogrulama'ya varmadan durduysa (kurulum\durum.json var, kurulum.json yok)
+#   AYNI paket ve AYNI veri dizini/portlarla yeniden kosmak kaldigi yerden DEVAM eder (asamalar olcerek gecer).
 # ASCII + PS 5.1: Teks-Erp/scripts/test_sunucu_betikleri.ts ve test_kurulum_betikleri.ts olcer.
 # =============================================================================
 [CmdletBinding()]
@@ -40,6 +44,7 @@ param(
   [string]$Kaynak,
   [string]$Dogrulayici,
   [string]$Gunluk,
+  [string]$Sonuc,
   [switch]$Kuru
 )
 $ErrorActionPreference = "Stop"
@@ -125,6 +130,15 @@ function PaketKunyesiOku([string]$zip) {
   } finally { $a.Dispose() }
 }
 
+# Yarida kalmis acma dizinleri (.kurulum-<12 hex>; yalniz bu betigin verdigi ad, baglanti DEGILSE) silinir.
+function GeciciTemizle([string]$ust) {
+  foreach ($g in @(Get-ChildItem -LiteralPath $ust -Directory -Force -ErrorAction SilentlyContinue | Where-Object { $_.Name -cmatch '^\.kurulum-[0-9a-f]{12}$' })) {
+    if (ReparseMi $g.FullName) { Uyar "gecici ad tasiyan baglanti noktasi DOKUNULMADI: $($g.FullName)"; continue }
+    Remove-Item -LiteralPath $g.FullName -Recurse -Force
+    Bilgi "yarida kalmis acma dizini silindi: $($g.FullName)"
+  }
+}
+
 # Kurulumun KENDI dogrulayicisi (setup.exe icinden; paketin ikilisi kendini dogrulayamaz).
 function Dogrula([string[]]$arglar) {
   if (-not (Test-Path -LiteralPath $Dogrulayici -PathType Leaf)) { Dur "kurulum dogrulayicisi yok: $Dogrulayici" }
@@ -183,12 +197,11 @@ function PsqlStdin([string]$bin, [int]$port, [string]$kullanici, [string]$parola
 # .env yapilandirma\ dizininin MIRASINI alir (iskelet SYSTEM + Administrators; backend-hizmeti.ps1 -Uygula
 # hizmet hesabina okuma verir). Korumali DACL KONMAZ: konursa hizmet hesabi .env'i okuyamaz. Dizin genis
 # gruplara aciksa (iskelet kurulmamis) sir YAZILMAZ; yazilan dosya da olculur.
-# SADE BICIM (iki okuyucu - dotenv ve guncelleyicinin envfile.rs'i - ayni okusun): KEY=deger, tirnak YOK,
-# deger bosluksuz, '#' ve ters bolu YOK (yollar '/' ile). Kurulumun yazdigi her satir bu kalibi gecer.
-$script:ENV_SATIRI = '^[A-Z_][A-Z0-9_]*=[^\s"''#\\]*$'
+# Her satir EnvSatiriGecerli'den (kurulum-ortak.ps1: sade bicim KEY=deger) gecer; tek istisna onarimda
+# korunan bakim-rolu.ps1 satirlari (BACKUP_PG_*), onlari kurulum yazmaz.
 function EnvYaz([string]$yol, [string]$metin) {
   foreach ($satir in ($metin -csplit "`n")) {
-    if ($satir -and $satir -cnotmatch $script:ENV_SATIRI -and $satir -cnotmatch '^BACKUP_PG_(USER|PASSWORD)=') { Dur ".env satiri sade bicimde degil (tirnak/bosluk/#/ters bolu): $(($satir -csplit '=', 2)[0])=..." }
+    if ($satir -and -not (EnvSatiriGecerli $satir) -and $satir -cnotmatch '^BACKUP_PG_(USER|PASSWORD)=') { Dur ".env satiri sade bicimde degil (tirnak/bosluk/#/ters bolu): $(($satir -csplit '=', 2)[0])=..." }
   }
   $dizin = Split-Path -Parent $yol
   if ((GenisAceler $dizin @()).Count) { Dur "yapilandirma\ genis gruplara acik - sir yazilmadi (once backend-hizmeti.ps1 -Uygula -YalnizIskelet)" }
@@ -225,7 +238,10 @@ function AsamaOnKosul {
   if (ReparseMi $kok) { Dur "kok bir baglanti noktasi (junction) olamaz: $kok" }
   $kayit = Join-Path $kok "kurulum\kurulum.json"
   $onarim = Test-Path -LiteralPath $kayit
-  if (-not $onarim -and (Test-Path -LiteralPath $kok)) {
+  # Yarim kurulum: onceki kosu OnKosul'u gecip Dogrulama'ya varmadan durdu (durum.json var, kurulum.json yok).
+  $yarim = $null
+  if (-not $onarim -and (Test-Path -LiteralPath (DurumYolu $kok))) { $yarim = DurumOku $kok }
+  if (-not $onarim -and -not $yarim -and (Test-Path -LiteralPath $kok)) {
     $yabanci = @(Get-ChildItem -LiteralPath $kok -Force | Where-Object { $_.Name -cnotmatch '^(kurulum|unins[0-9]{3}\.(exe|dat|msg))$' })
     if ($yabanci.Count) { Dur "kok bos degil ve TeksERP kurulumu degil ($($yabanci.Count) girdi, or. $($yabanci[0].Name)) - baska bir kok secin; var olan veri ezilmez" }
   }
@@ -243,11 +259,15 @@ function AsamaOnKosul {
     $eski = JsonOku $kayit
     if ("$($eski.adlar.backend)" -cne $ad.backend) { Dur "onarim: kayitli kurulum '$($eski.adlar.backend)' - bu paket '$($ad.backend)' (baska kanal ayri kok ister)" }
   }
+  if ($yarim) {
+    if ("$($yarim.adlar.backend)" -cne $ad.backend -or "$($yarim.paket.surum)" -cne "$($k.uygulamaSurumu)") { Dur "yarim kurulum ($($yarim.adlar.backend) $($yarim.paket.surum)) bu paketle ($($ad.backend) $($k.uygulamaSurumu)) surdurulmez - ayni paketi verin ya da once kaldirin (kaldir.ps1 veriyi korur)" }
+    Uyar "YARIM KURULUM bulundu ($($yarim.paket.surum)) - kaldigi yerden devam ediliyor (asamalar yeniden olcer)"
+  }
 
   # API portu: istemcilerin varsayilan adresi - mesgulse DUR (onarimda dinleyen kendi backend'imiz olabilir).
   $apiPort = [int]$C["api.port"]
   if (PortDinleniyorMu $apiPort) {
-    $bizim = $onarim -and ((Get-Service -Name $ad.backend -ErrorAction SilentlyContinue).Status -ceq "Running")
+    $bizim = ($onarim -or $yarim) -and ((Get-Service -Name $ad.backend -ErrorAction SilentlyContinue).Status -ceq "Running")
     if (-not $bizim) { Dur "API portu $apiPort MESGUL - cevap dosyasinda api.port ile bos bir port verin (panel/tablet adresi de o porta ayarlanir)" }
   }
 
@@ -258,7 +278,7 @@ function AsamaOnKosul {
     $o = JsonOku $ornekYolu
     if ("$($o.kip)" -ceq "harici") { Dur "bu kok HARICI PostgreSQL kipinde (pm2 donemi kurulumu) - setup onarmaz; gecis: gecis\gecis.ps1 (D6)" }
     $onceki = [int]$o.port
-  }
+  } elseif ($yarim) { $onceki = [int]$yarim.portlar.pg }
   $mesgul = @()
   try { $mesgul += @(Get-NetTCPConnection -State Listen -ErrorAction SilentlyContinue | ForEach-Object { [int]$_.LocalPort }) } catch { }
   $mesgul += @(PgHizmetPortlari)
@@ -274,6 +294,7 @@ function AsamaOnKosul {
 
   # Veri dizini (D4 b.4.2): yerel sabit NTFS, ASCII, program/gecici/yedek dizinlerinin disinda, YOK ya da BOS.
   $veri = if ($C["pg.veriDizini"]) { [IO.Path]::GetFullPath($C["pg.veriDizini"]).TrimEnd('\') } else { Join-Path $kok "pgveri" }
+  if ($yarim -and ($veri -cne "$($yarim.pg.veriDizini)")) { Dur "yarim kurulumun veri dizini $($yarim.pg.veriDizini) - ayni dizin verilmeli (baska dizin yeni kurulum ister)" }
   $yasak = @($env:ProgramFiles, ${env:ProgramFiles(x86)}, $env:TEMP, (Join-Path $kok "app"), (Join-Path $kok "pgsql"), (Join-Path $kok "backups"), (Join-Path $kok "surumler"), (Join-Path $kok "current")) | Where-Object { $_ }
   foreach ($y in $yasak) {
     $yy = [IO.Path]::GetFullPath($y).TrimEnd('\').ToLowerInvariant()
@@ -286,7 +307,7 @@ function AsamaOnKosul {
   if (Test-Path -LiteralPath $veri) {
     $dolu = @(Get-ChildItem -LiteralPath $veri -Force -ErrorAction SilentlyContinue).Count
     $pgVar = Test-Path -LiteralPath (Join-Path $veri "PG_VERSION")
-    if ($dolu -and -not ($onarim -and $pgVar)) { Dur "veri dizini BOS degil ($veri) - dolu dizinde initdb KOSMAZ, veri silinmez; bos bir dizin verin" }
+    if ($dolu -and -not (($onarim -or $yarim) -and $pgVar)) { Dur "veri dizini BOS degil ($veri) - dolu dizinde initdb KOSMAZ, veri silinmez; bos bir dizin verin" }
   }
   if ([double]$disk.FreeSpace -lt 2GB) { Uyar "veri surucusunde 2 GB'tan az bos alan ($surucu)" }
   $kokDisk = Get-CimInstance Win32_LogicalDisk -Filter "DeviceID='$($kok.Substring(0, 2))'" -ErrorAction SilentlyContinue
@@ -295,7 +316,7 @@ function AsamaOnKosul {
   if ($ramMB -lt 2048) { Uyar "RAM $ramMB MB (< 2 GB) - PostgreSQL bellek formulu tabana iner, yavas olabilir" }
 
   $plan = [ordered]@{
-    v = $KURULUM_BICIMI; mod = $(if ($onarim) { "onarim" } else { "kurulum" }); kok = $kok
+    v = $KURULUM_BICIMI; mod = $(if ($onarim) { "onarim" } elseif ($yarim) { "devam" } else { "kurulum" }); kok = $kok
     girdiler = [ordered]@{ backend = $zip; pg = $pgZip; pgKunye = $pgKunye }
     paket = [ordered]@{ surum = "$($k.uygulamaSurumu)"; kanal = $k.backendKanal; gocSayisi = [int]$k.migrationSayisi }
     adlar = $ad
@@ -309,6 +330,10 @@ function AsamaOnKosul {
     Write-Host ($plan | ConvertTo-Json -Depth 6)
     $script:Sonuc["plan"] = $plan
     return
+  }
+  if ($yarim -and $yarim.PSObject.Properties["asamalar"]) {
+    foreach ($p in $yarim.asamalar.PSObject.Properties) { if ($p.Name -cne "OnKosul") { $plan.asamalar[$p.Name] = $p.Value } }
+    foreach ($a in @("paketId", "kid", "hazirlikAnahtari")) { if ($yarim.paket.PSObject.Properties[$a]) { $plan.paket[$a] = $yarim.paket.$a } }
   }
   DurumYaz $kok $plan
   $d = DurumOku $kok
@@ -329,6 +354,7 @@ function AsamaPaket {
   }
   $surumler = Join-Path $kok "surumler"
   if (-not (Test-Path -LiteralPath $surumler)) { New-Item -ItemType Directory -Path $surumler | Out-Null }
+  GeciciTemizle $surumler
   $surum = "$($d.paket.surum)"
   if ($surum -cnotmatch '^[0-9]{1,4}\.[0-9]{1,4}\.[0-9]{1,6}(-[0-9A-Za-z.]{1,40})?$') { Dur "paket surumu bicimsiz: $surum" }
   $hedef = Join-Path $surumler $surum
@@ -359,13 +385,14 @@ function AsamaPaket {
   $d.paket | Add-Member -NotePropertyName kid -NotePropertyValue "$($j.kid)" -Force
   $d.paket | Add-Member -NotePropertyName hazirlikAnahtari -NotePropertyValue ($j.hazirlikAnahtari -eq $true) -Force
   # Dizin iskeleti + iyi bilinen SID'lerle korumali ACL - SIR (.env, parola) YAZILMADAN ONCE (D6 sozlesmesi).
-  BackendHizmetBetigi $kok $d @("-Uygula", "-YalnizIskelet")
+  [void](BackendHizmetBetigi $kok $d @("-Uygula", "-YalnizIskelet"))
   AsamaBitti $d "Paket"
   DurumYaz $kok $d
 }
 
 # TEK CAGRI NOKTASI (yonetici karari): backend hizmetinin kaydi + ACL'si yalniz bu betikte
 # (hizmet\backend-hizmeti.ps1, D6). Imza: -Kok -HizmetAdi -PgHizmeti|-PgYok -GuncellemeDizini [-YalnizIskelet] [-Uygula].
+# -Uygula yoksa OLCUM kipidir (degisiklik yok): cikis kodu doner, DURMAZ (Dogrulama uyarir).
 function BackendHizmetBetigi([string]$kok, $d, [string[]]$ek) {
   $betik = Join-Path $kok "current\hizmet\backend-hizmeti.ps1"
   $arg = @{ Kok = $kok; HizmetAdi = "$($d.adlar.backend)"; PgHizmeti = "$($d.adlar.pg)"; GuncellemeDizini = (Join-Path "$($d.adlar.veriKoku)" "guncelleme") }
@@ -375,8 +402,10 @@ function BackendHizmetBetigi([string]$kok, $d, [string[]]$ek) {
   $global:LASTEXITCODE = 0
   & $betik @arg 6>&1 | ForEach-Object { [void](GunlugeYaz "BETIK" "$_") }
   $kod = $LASTEXITCODE
+  if (-not $arg.ContainsKey("Uygula")) { return $kod }
   if ($kod -ne 0) { Dur "backend-hizmeti.ps1 $($ek -join ' ') cikis $kod (0 uyumlu - 2 uyumsuz - 1 hata) - gunlukte ayrinti" }
   Ok "backend-hizmeti.ps1 $($ek -join ' '): uyumlu"
+  return $kod
 }
 
 # TEK CAGRI NOKTASI: guncelleyici hizmetinin ikilisi + ayar.json + kaydi (hizmet\guncelleyici-hizmeti.ps1, D6).
@@ -389,8 +418,10 @@ function GuncelleyiciHizmetBetigi([string]$kok, $d, $C, [string[]]$ek) {
   $global:LASTEXITCODE = 0
   & $betik @arg 6>&1 | ForEach-Object { [void](GunlugeYaz "BETIK" "$_") }
   $kod = $LASTEXITCODE
+  if (-not $arg.ContainsKey("Uygula")) { return $kod }
   if ($kod -ne 0) { Dur "guncelleyici-hizmeti.ps1 $($ek -join ' ') cikis $kod - gunlukte ayrinti" }
   Ok "guncelleyici-hizmeti.ps1 $($ek -join ' '): uyumlu"
+  return $kod
 }
 
 function AsamaPostgreSQL {
@@ -407,6 +438,7 @@ function AsamaPostgreSQL {
   $port = [int]$d.portlar.pg
   $hz = "$($d.adlar.pg)"
   if (-not (Test-Path -LiteralPath $pgsql)) { New-Item -ItemType Directory -Path $pgsql | Out-Null }
+  GeciciTemizle $pgsql
 
   # 1) Ikililer: kunye imzasi + zip ozeti + icerik manifestosu + tek ICU; kayitla (pg-surumu.json) birebir.
   if (-not (Test-Path -LiteralPath $ikili)) {
@@ -429,11 +461,19 @@ function AsamaPostgreSQL {
   Ok "pgsql\bin -> $tag\bin (PG_BIN_DIR)"
 
   # 2) Parolalar: postgres (DPAPI'de saklanir), uygulama rolu (.env'de). Onarimda var olanlar okunur.
+  #    postgres parolasi initdb'DEN ONCE diske (DPAPI) iner: yarida kalan kurulum parolayi kaybederse veri
+  #    dizini bir daha acilamazdi (devam/onarim ayni parolayla baglanir).
   $pgSetup = Join-Path $kok "pg-setup"
   if (-not (Test-Path -LiteralPath $pgSetup)) { New-Item -ItemType Directory -Path $pgSetup | Out-Null; AclKoru $pgSetup @() }
   $dpapi = Join-Path $pgSetup "pg-yonetici.dpapi"
   $alfabe = "$($pgOrnek.parola.alfabe)"; $uzunluk = [int]$pgOrnek.parola.uzunluk
-  $suParola = if (Test-Path -LiteralPath $dpapi) { DpapiCoz ([IO.File]::ReadAllBytes($dpapi)) } else { YeniParolaUret $alfabe $uzunluk }
+  if (Test-Path -LiteralPath $dpapi) { $suParola = DpapiCoz ([IO.File]::ReadAllBytes($dpapi)) }
+  else {
+    if (Test-Path -LiteralPath (Join-Path $veri "PG_VERSION")) { Dur "veri dizini dolu ama postgres parolasi (pg-setup\pg-yonetici.dpapi) yok - bu kurulumun veri dizini degil; bos bir veri dizini verin" }
+    $suParola = YeniParolaUret $alfabe $uzunluk
+    SirDosyasiYaz $dpapi (DpapiKoru $suParola) @()
+    Ok "postgres parolasi uretildi -> pg-setup\pg-yonetici.dpapi (DPAPI, yalniz SYSTEM + Administrators) - initdb'den ONCE"
+  }
   SirEkle $suParola
   $kullaniciSid = KullaniciSid
 
@@ -565,8 +605,7 @@ function AsamaPostgreSQL {
   $cred = Join-Path $pgSetup "db-credentials.json"
   $credJson = "{`"db`": $(JsonAscii $vt), `"port`": $port, `"user`": $(JsonAscii $rol), `"pass`": $(JsonAscii $uyParola)}`n"
   SirDosyasiYaz $cred ([Text.Encoding]::ASCII.GetBytes($credJson)) @()
-  SirDosyasiYaz $dpapi (DpapiKoru $suParola) @()
-  Ok "db-credentials.json + pg-yonetici.dpapi (yalniz SYSTEM + Administrators)"
+  Ok "db-credentials.json (yalniz SYSTEM + Administrators)"
 
   # 9) Ornek kaydi (D4 b.6): guncelleyici kendi ornegi bundan tanir (yoksa HARICI sayar).
   $ornekYolu = Join-Path $pgsql "ornek.json"
@@ -637,8 +676,8 @@ function AsamaHizmetler {
   $kok = [IO.Path]::GetFullPath($C["kok"]).TrimEnd('\')
   $d = DurumOku $kok
   $cur = Join-Path $kok "current"
-  BackendHizmetBetigi $kok $d @("-Uygula")
-  GuncelleyiciHizmetBetigi $kok $d $C @("-Uygula")
+  [void](BackendHizmetBetigi $kok $d @("-Uygula"))
+  [void](GuncelleyiciHizmetBetigi $kok $d $C @("-Uygula"))
 
   # Gece yedegi: <KOK>\yedekle.ps1 (paketin hizmet-farkinda surumu) + SYSTEM gorevi (ilk-kurulum ile ayni tarif).
   $yedekle = Join-Path $kok "yedekle.ps1"
@@ -695,8 +734,8 @@ function AsamaHizmetler {
 }
 
 # YALNIZ sihirbaz: STDIN'den {saticiParolasi, saticiPin, yedekParolasi, musteriAnahtariEkrana}. Sir argv'ye,
-# ortama, gunluge GIRMEZ; araclara STDIN'den gider. SONUC satiri sir tasimaz - TEK istisna musteri anahtari
-# (ekranda bir kez gosterilmesi istendiyse; sihirbaz gunluge YAZMAZ).
+# ortama, gunluge GIRMEZ; araclara STDIN'den gider. SONUC satiri ve INI sir TASIMAZ - musteri anahtari
+# (ekranda bir kez gosterilmesi istendiyse) yalniz "SIR:" satiriyla STDOUT'a (sihirbazin borusuna) gider.
 function AsamaSirlar {
   Baslik "Sirlar - satici hesabi + yedek anahtarlari (STDIN)"
   $C = CevabiYukle
@@ -734,9 +773,12 @@ function AsamaSirlar {
     if ($g.musteriAnahtariEkrana -eq $true -and -not (Test-Path -LiteralPath (Join-Path $ad "musteri.tkpub"))) {
       $r = NodeKos $node @($arac, "anahtar-uret", "--ad", "musteri", "--dizin", $ad) $kok @{} $null
       if ($r.kod -ne 0) { Dur "musteri anahtari uretilemedi (cikis $($r.kod))" }
-      $anahtarSatiri = @($r.stdout -csplit "`n" | Where-Object { $_.Trim() }) | Select-Object -Last 1
-      $sonuc["musteriAnahtari"] = "$anahtarSatiri".Trim()
-      Ok "musteri yedek anahtari uretildi - OZEL YARISI sihirbazda BIR KEZ gosterilir (gunluge yazilmadi)"
+      $anahtarSatiri = "$(@($r.stdout -csplit "`n" | Where-Object { $_.Trim() }) | Select-Object -Last 1)".Trim()
+      if ($anahtarSatiri -cnotmatch '^[\x21-\x7E]{16,512}$') { Dur "musteri anahtari beklenen bicimde degil (arac ciktisi)" }
+      SirEkle $anahtarSatiri
+      $script:SirSatiri = "SIR:musteriAnahtari=" + $anahtarSatiri
+      $sonuc["musteriAnahtari"] = $true
+      Ok "musteri yedek anahtari uretildi - OZEL YARISI yalniz boruya (sihirbaz BIR KEZ gosterir; gunluge/INI'ye yazilmadi)"
     }
   }
   $script:Sonuc["sirlar"] = $sonuc
@@ -772,14 +814,11 @@ function AsamaDogrulama {
   }
   if ($izin -lt 1) { Dur "izin katalogu uzlastirilmadi (permissions bos) - backend acilis isi; logs\backend-out.log" }
   Ok "izin katalogu: $izin izin (acilis uzlastirmasi)"
-  # Olcum kipinde (degisiklik yok) iki hizmet betigi: kayit + ACL + ayar sozlesmesi uyumlu mu.
-  foreach ($b in @("backend", "guncelleyici")) {
-    $betik = Join-Path $kok "current\hizmet\$b-hizmeti.ps1"
-    $global:LASTEXITCODE = 0
-    if ($b -ceq "backend") { & $betik -Kok $kok -HizmetAdi "$($d.adlar.backend)" -PgHizmeti "$($d.adlar.pg)" -GuncellemeDizini (Join-Path "$($d.adlar.veriKoku)" "guncelleme") 6>&1 | ForEach-Object { [void](GunlugeYaz "BETIK" "$_") } }
-    else { & $betik -Kok $kok -HizmetAdi "$($d.adlar.guncelleyici)" -VeriDizini "$($d.adlar.veriKoku)" -BackendHizmeti "$($d.adlar.backend)" -GuncellemeSunucusu $C["guncelleme.sunucu"] 6>&1 | ForEach-Object { [void](GunlugeYaz "BETIK" "$_") } }
-    if ($LASTEXITCODE -ne 0) { Uyar "$b-hizmeti.ps1 olcumu uyumsuz (cikis $LASTEXITCODE) - gunlukte ayrinti" } else { Ok "$b-hizmeti.ps1 olcumu: uyumlu" }
-  }
+  # Olcum kipinde (degisiklik yok) iki hizmet betigi - AYNI tek cagri noktalarindan: kayit + ACL + ayar uyumlu mu.
+  $kb = BackendHizmetBetigi $kok $d @()
+  if ($kb -ne 0) { Uyar "backend-hizmeti.ps1 olcumu uyumsuz (cikis $kb) - gunlukte ayrinti" } else { Ok "backend-hizmeti.ps1 olcumu: uyumlu" }
+  $kg = GuncelleyiciHizmetBetigi $kok $d $C @()
+  if ($kg -ne 0) { Uyar "guncelleyici-hizmeti.ps1 olcumu uyumsuz (cikis $kg) - gunlukte ayrinti" } else { Ok "guncelleyici-hizmeti.ps1 olcumu: uyumlu" }
   $acik = @()
   if (-not $C["saticiHesabi.kullaniciAdi"] -or -not $d.asamalar.PSObject.Properties["Sirlar"]) {
     $acik += "satici (superadmin) hesabi: yonetici konsolunda `"$kok\current\runtime\node.exe`" `"$kok\current\dist\tools\superadmin-olustur.cjs`" (once: `$env:DOTENV_CONFIG_PATH='$kok\yapilandirma\.env'; cd $kok\current) - gercek terminal"
@@ -808,6 +847,31 @@ function AsamaDogrulama {
   foreach ($a in $acik) { Write-Host "    - ACIK: $a" -ForegroundColor Yellow }
 }
 
+# Sihirbazin okudugu sonuc (UTF-16 INI, [sonuc]): duz anahtarlar + numarali listeler (uyari1.., acik1..).
+# SIRSIZ: yalniz $script:Sonuc'tan; Sirlar'in musteri anahtari orada yalniz "uretildi" bayragidir.
+function SonucIniYaz([string]$yol, $s) {
+  $l = New-Object Collections.Generic.List[string]
+  $l.Add("[sonuc]")
+  $tek = { param($k, $v) $l.Add("$k=" + (Maskele ("$v" -creplace '[\r\n]+', ' '))) }
+  & $tek "asama" $s["asama"]
+  & $tek "tamam" $(if ($s["tamam"] -eq $true) { 1 } else { 0 })
+  if ($s.Contains("hata")) { & $tek "hata" $s["hata"] }
+  & $tek "gunluk" $s["gunluk"]
+  $u = @($s["uyarilar"] | Where-Object { $_ })
+  & $tek "uyariSayisi" $u.Count
+  for ($i = 0; $i -lt $u.Count; $i++) { & $tek "uyari$($i + 1)" $u[$i] }
+  if ($s.Contains("acik")) { $a = @($s["acik"] | Where-Object { $_ }); & $tek "acikSayisi" $a.Count; for ($i = 0; $i -lt $a.Count; $i++) { & $tek "acik$($i + 1)" $a[$i] } }
+  if ($s.Contains("kurulum")) { foreach ($k in @($s["kurulum"].Keys)) { & $tek "kurulum.$k" $s["kurulum"][$k] } }
+  if ($s.Contains("plan")) { & $tek "plan.mod" $s["plan"].mod; & $tek "plan.surum" $s["plan"].paket.surum }
+  if ($s.Contains("sirlar")) {
+    $r = $s["sirlar"]
+    if ($r.Contains("satici")) { foreach ($k in @("kod", "sonuc", "hata", "kullaniciAdi")) { & $tek "satici.$k" $r["satici"][$k] } }
+    if ($r.Contains("yerelAnahtar")) { & $tek "yerelAnahtar" $(if ($r["yerelAnahtar"]) { 1 } else { 0 }) }
+    if ($r.Contains("musteriAnahtari")) { & $tek "musteriAnahtari" $(if ($r["musteriAnahtari"] -eq $true) { 1 } else { 0 }) }
+  }
+  MetinYaz $yol (($l -join "`r`n") + "`r`n") ([Text.Encoding]::Unicode)
+}
+
 # =============================================================================
 # KOSU
 # =============================================================================
@@ -822,6 +886,8 @@ try {
   }
   $script:GunlukYolu = $Gunluk
   [void](GunlugeYaz "BASLA" "asama $Asama - cevap $Cevap - kaynak $Kaynak$(if ($Kuru) { ' - KURU' })")
+  # 32-bit kabuk (SysWOW64) yanlis kayit defteri/yol gorunumu verir: hizmet, ACL ve PG olcumleri 64-bit ister.
+  if ([Environment]::Is64BitOperatingSystem -and -not [Environment]::Is64BitProcess) { Dur "64-bit PowerShell gerekir (32-bit kabuktan cagrildi): %SystemRoot%\System32\WindowsPowerShell\v1.0\powershell.exe" }
   if ($Kuru -and $Asama -cne "OnKosul" -and $Asama -cne "Hepsi") { Dur "-Kuru yalniz OnKosul/Hepsi ile (plan olcumu)" }
   switch ($Asama) {
     "OnKosul" { AsamaOnKosul }
@@ -848,6 +914,8 @@ try {
 }
 $script:Sonuc["uyarilar"] = @($script:Uyarilar)
 $script:Sonuc["gunluk"] = $Gunluk
-# SONUC satiri: musteri anahtari (yalniz Sirlar) disinda sir TASIMAZ; o da gunluge yazilmaz.
+if ($Sonuc) { try { SonucIniYaz $Sonuc $script:Sonuc } catch { Write-Host ("  X  sonuc dosyasi yazilamadi: " + $_.Exception.Message) -ForegroundColor Red; $cikis = 1 } }
+# Tek sir satiri (yalniz Sirlar, yalniz istendiyse): boruya; SONUC satiri ve INI SIRSIZDIR.
+if ($script:SirSatiri) { Write-Output $script:SirSatiri; $script:SirSatiri = $null }
 Write-Output ("SONUC:" + ($script:Sonuc | ConvertTo-Json -Depth 6 -Compress))
 exit $cikis
