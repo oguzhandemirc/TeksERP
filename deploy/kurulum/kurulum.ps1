@@ -755,6 +755,10 @@ function AsamaDogrulama {
   }
   $s = SaglikBekle ([int]$d.portlar.api) "$($d.paket.surum)" 60
   if (-not $s.tamam) { Dur "backend saglik olcumu dustu: $($s.son)" }
+  # Niyet dizini (backend'in TEK yazabildigi kanal dizini, D7): var, baglanti DEGIL (niyet yazicisi bagi reddeder).
+  $niyet = Join-Path "$($d.adlar.veriKoku)" "guncelleme\niyet"
+  if (-not (Test-Path -LiteralPath $niyet -PathType Container)) { Dur "guncelleme\niyet\ yok: $niyet (backend-hizmeti.ps1 -Uygula kurar)" }
+  if (ReparseMi $niyet) { Dur "guncelleme\niyet\ bir baglanti noktasi - niyet yazicisi reddeder: $niyet" }
   $envYolu = Join-Path $kok "yapilandirma\.env"
   $url = EnvDeger ([IO.File]::ReadAllLines($envYolu)) "DATABASE_URL"
   [void]($url -cmatch '^postgresql://([^:]+):([^@]+)@127\.0\.0\.1:([0-9]+)/([^?]+)')

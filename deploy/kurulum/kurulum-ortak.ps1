@@ -403,16 +403,37 @@ function HizmetBekle([string]$ad, [string]$durum, [int]$sn) {
   try { $s.WaitForStatus($durum, [TimeSpan]::FromSeconds($sn)); return $true } catch { return $false }
 }
 
-# GET /health: 200 + status UP + db UP + version = beklenen (GUNCELLEYICI.md b.8.7 ile ayni olcut).
+# Saglik: once YEREL uc (GET /health/yerel - yalniz dongu adresinden DOGRUDAN istege cevap verir; guncelleyicinin
+# sondasi, GUNCELLEYICI.md b.8.7), uc yoksa (404 - eski backend) /health. Olcut ikisinde AYNI: 200 + status UP +
+# db UP + version = beklenen. Vekil KAPALI: sistem vekili istegi dongu disindan iletirse /health/yerel 404 dondururdu.
+function SaglikOku([int]$port, [string]$yol) {
+  $r = [Net.HttpWebRequest]::Create("http://127.0.0.1:$port$yol")
+  $r.Proxy = $null
+  $r.Timeout = 5000
+  $r.ReadWriteTimeout = 5000
+  try {
+    $y = $r.GetResponse()
+    try { $o = New-Object IO.StreamReader($y.GetResponseStream()); return @{ kod = [int]$y.StatusCode; govde = $o.ReadToEnd() } } finally { $y.Close() }
+  } catch [Net.WebException] {
+    $h = $_.Exception.Response
+    if ($h) { $k = [int]$h.StatusCode; $h.Close(); return @{ kod = $k; govde = "" } }
+    return @{ kod = 0; govde = "" }
+  }
+}
+
 function SaglikBekle([int]$port, [string]$surum, [int]$sn) {
   $son = $null
   $bitis = (Get-Date).AddSeconds($sn)
   while ((Get-Date) -lt $bitis) {
-    try {
-      $r = Invoke-RestMethod -Uri "http://127.0.0.1:$port/health" -TimeoutSec 5 -UseBasicParsing
-      $son = "status=$($r.status) db=$($r.db) version=$($r.version)"
-      if ("$($r.status)" -ceq "UP" -and "$($r.db)" -ceq "UP" -and "$($r.version)" -ceq $surum) { return @{ tamam = $true; son = $son } }
-    } catch { $son = "yanit yok" }
+    $c = SaglikOku $port "/health/yerel"
+    if ($c.kod -eq 404) { $c = SaglikOku $port "/health" }
+    if ($c.kod -eq 200) {
+      try {
+        $j = $c.govde | ConvertFrom-Json
+        $son = "status=$($j.status) db=$($j.db) version=$($j.version)"
+        if ("$($j.status)" -ceq "UP" -and "$($j.db)" -ceq "UP" -and "$($j.version)" -ceq $surum) { return @{ tamam = $true; son = $son } }
+      } catch { $son = "yanit JSON degil" }
+    } else { $son = "HTTP $($c.kod)" }
     Start-Sleep -Seconds 2
   }
   return @{ tamam = $false; son = $son }
