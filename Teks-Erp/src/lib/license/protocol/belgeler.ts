@@ -19,6 +19,11 @@ export const TYP = {
    * Doğrulayan panelin kendisi (`Electron/electron/guncelleme/panel-kunye.mjs`, bağımlılıksız ayna; kâhin test_panel_imza).
    */
   PANEL: "tekserp-panel",
+  /**
+   * Tablet APK sürüm künyesi — `apk/surum.json`daki imzalı `tekserp` bloğu (panelle aynı anahtar kararı).
+   * Doğrulayan tablet (`mobil/src/services/apkKunye.ts`, saf JS); yayın tarafı `mobil/scripts/lib/apk-kunye.mjs`.
+   */
+  APK: "tekserp-apk",
   SERTIFIKA: "tekserp-sertifika",
   DURUM: "tekserp-durum",
   /** Paket bütünlük listesi (PAKET anahtarıyla imzalı) — doğrulayan `lib/license/integrity.ts` + native çekirdek. */

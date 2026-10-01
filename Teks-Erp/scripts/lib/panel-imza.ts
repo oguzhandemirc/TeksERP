@@ -127,9 +127,9 @@ export function readPanelAnchor(file: string = PANEL_ANCHOR_FILE, { test = false
   const list = Array.isArray(j.anahtarlar) ? (j.anahtarlar as AnchorKey[]) : [];
   if (!test) {
     const c = checkProductionAnchor(list);
-    if (!c.ok) throw new Error(`panel imza çapası kullanılamaz (${c.code}): ${c.message}`);
+    if (!c.ok) throw new Error(`istemci imza çapası kullanılamaz (${c.code}): ${c.message} — ${path.relative(DEPO_KOKU, file)}`);
   } else if (!list.every((k) => isSignerKid(k.kid))) {
-    throw new Error("test çapasında panel künyesi imzalayamayacak kid var");
+    throw new Error("test çapasında künye imzalayamayacak kid var");
   }
   return list;
 }

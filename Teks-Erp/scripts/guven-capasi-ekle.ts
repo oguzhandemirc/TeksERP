@@ -12,8 +12,10 @@
 //   npx tsx scripts/guven-capasi-ekle.ts panel --paket-kid=paket-<yıl> [--yaz]        (a: PAKET anahtarı panel künyesini de imzalar)
 //   npx tsx scripts/guven-capasi-ekle.ts panel --dosya=<kid>.panel.json [--yaz]       (b: ayrı panel yayın anahtarı, panel-imza.ts anahtar-uret)
 //   npx tsx scripts/guven-capasi-ekle.ts panel --kid=panel-<yıl> --x=<base64url> [--yaz]
+//   npx tsx scripts/guven-capasi-ekle.ts tablet …                                    (aynı seçenekler — tablet APK künyesi çapası)
 //   Ortak: [--kok=<depo kökü>] (varsayılan bu deponun kökü)
-// `panel` beşinci yerdir: panelin gömülü güncelleme imza çapası (Electron/electron/guncelleme/imza-capasi.json).
+// `panel` beşinci yerdir: panelin gömülü güncelleme imza çapası (Electron/electron/guncelleme/imza-capasi.json);
+// `tablet` altıncı: tabletin APK künyesi imza çapası (mobil/src/lib/apk-imza-capasi.json). İkisi aynı kid ailesi.
 //
 // Varsayılan KURU: planı basar, dosya yazmaz; `--yaz` yazar. Aynı kid + aynı anahtar zaten çapadaysa
 // değişiklik yok (idempotent); aynı kid başka anahtar/sınıf ya da aynı anahtar başka kid → RED
@@ -29,6 +31,7 @@ import type { LicenseClass } from "../src/lib/license/protocol";
 import {
   CapaHatasi,
   PANEL_CAPA_DOSYASI,
+  TABLET_CAPA_DOSYASI,
   capaDurumuOku,
   kokEklePlani,
   paketEklePlani,
@@ -69,15 +72,16 @@ function acikAlanlar(dosya: string, beklenenTur: string): { kid: string; x: stri
 function planla(argv: readonly string[], d: CapaDurumu, kok: string): { plan: EklemePlani; ozet: string } {
   const komut = argv[0];
   const dosya = arg(argv, "dosya");
-  if (komut === "panel") {
+  if (komut === "panel" || komut === "tablet") {
+    const hedef = komut === "panel" ? PANEL_CAPA_DOSYASI : TABLET_CAPA_DOSYASI;
     const ac = dosya ? acikAlanlar(dosya, "tekserp-panel-anahtar") : null;
     const paketKid = arg(argv, "paket-kid");
     const kaynak = paketKid ? d.paketler.find((k) => k.kid === paketKid) : null;
     if (paketKid && !kaynak) throw new CapaHatasi("GECERSIZ", `${paketKid} PAKET çapasında yok`);
     const kid = ac?.kid ?? kaynak?.kid ?? arg(argv, "kid");
     const x = ac?.x ?? kaynak?.x ?? arg(argv, "x");
-    if (!kid || !x) throw new KullanimHatasi("panel: --paket-kid=paket-<yıl> (a) · --dosya=<kid>.panel.json (b) · --kid + --x gerekli");
-    return { plan: panelEklePlani(d, panelCapasiOku(kok), { kid, x }), ozet: `PANEL ${kid} x=${x}` };
+    if (!kid || !x) throw new KullanimHatasi(`${komut}: --paket-kid=paket-<yıl> (a) · --dosya=<kid>.panel.json (b) · --kid + --x gerekli`);
+    return { plan: panelEklePlani(d, panelCapasiOku(kok, hedef), { kid, x }), ozet: `${komut.toUpperCase()} ${kid} x=${x}` };
   }
   if (komut === "kok") {
     const ac = dosya ? acikAlanlar(dosya, "tekserp-kok-anahtar") : null;
@@ -94,7 +98,7 @@ function planla(argv: readonly string[], d: CapaDurumu, kok: string): { plan: Ek
     if (!kid || !x) throw new KullanimHatasi("paket: --dosya=<kid>.paket.json ya da --kid + --x gerekli");
     return { plan: paketEklePlani(d, { kid, x }), ozet: `PAKET ${kid} x=${x}` };
   }
-  throw new KullanimHatasi("komut: kok | paket | panel");
+  throw new KullanimHatasi("komut: kok | paket | panel | tablet");
 }
 
 const PANEL_SONRAKI_ADIMLAR = [
@@ -103,6 +107,14 @@ const PANEL_SONRAKI_ADIMLAR = [
   "  cd Electron && node ../scripts/agir-is.mjs -- npx vitest run src/test/panel-kunye.test.ts src/test/updater-imza-akisi.test.ts",
   "  node scripts/agir-is.mjs -- node scripts/test_kanal_yayin_kapisi.mjs   (§8 panel imzalı künye)",
   "Sonra: YENİ panel sürümü (çapa derlemede gömülür) — önce testfabrika; imzalı ilk sürüm eski panellere NORMAL gelir.",
+];
+
+const TABLET_SONRAKI_ADIMLAR = [
+  "Sonraki adımlar (tablet çapası):",
+  "  cd Teks-Erp && node ../scripts/agir-is.mjs -- npx tsx scripts/run-all-tests.ts panel_imza   (§4 tablet kâhini)",
+  "  cd mobil && node ../scripts/agir-is.mjs -- npx jest src/services/apkKunye.test.ts src/services/appUpdate.apk.test.ts",
+  "  node scripts/agir-is.mjs -- node scripts/test_kanal_yayin_kapisi.mjs   (§3 tablet imzalı künye)",
+  "Sonra: OTA (çapa JS paketinde) — önce testfabrika; APK yayını ancak çapalı OTA sahadayken imzalı künyeyle.",
 ];
 
 const SONRAKI_ADIMLAR = [
@@ -136,6 +148,11 @@ export function main(argv: readonly string[]): number {
     if (plan.dosyalar.has(PANEL_CAPA_DOSYASI)) {
       panelCapasiOku(kok);
       console.log(PANEL_SONRAKI_ADIMLAR.join("\n"));
+      return CIKIS.TAMAM;
+    }
+    if (plan.dosyalar.has(TABLET_CAPA_DOSYASI)) {
+      panelCapasiOku(kok, TABLET_CAPA_DOSYASI);
+      console.log(TABLET_SONRAKI_ADIMLAR.join("\n"));
       return CIKIS.TAMAM;
     }
     console.log(SONRAKI_ADIMLAR.join("\n"));

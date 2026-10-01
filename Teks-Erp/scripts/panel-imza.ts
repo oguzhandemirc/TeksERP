@@ -1,5 +1,6 @@
 // =============================================================================
-// PANEL SÜRÜM KÜNYESİ İMZASI — latest.yml'e imzalı künye (`tekserp: {v, bildirim}`, typ `tekserp-panel`)
+// İSTEMCİ SÜRÜM KÜNYESİ İMZASI — panel latest.yml'e (`typ tekserp-panel`) · tablet apk/surum.json'a (`typ tekserp-apk`)
+// imzalı künye (`tekserp: {v, bildirim}`)
 // =============================================================================
 // Satıcı Mac'inde koşar; özel anahtar CI'a, pakete ve VDS'e GİRMEZ. Panel kod imzası (Authenticode) yokken
 // güncellemenin bütünlük kanıtı budur: künyesi doğrulanamayan güncelleme panelde İNDİRİLMEZ ve KURULMAZ.
@@ -8,6 +9,9 @@
 //   npx tsx scripts/panel-imza.ts imzala --musteri=<kod> [--surum=<x.y.z>] --anahtar=<dosya>
 //   npx tsx scripts/panel-imza.ts dogrula --musteri=<kod> [--surum=<x.y.z>]
 //   npx tsx scripts/panel-imza.ts anahtar-uret --kid=panel-<yıl>[-<n>] [--dizin=~/.tekserp/panel-uretim] [--json]
+//   npx tsx scripts/panel-imza.ts apk-imzala --musteri=<kod> --apk=<yol.apk> --kunye=<surum.json> --anahtar=<dosya>
+//   npx tsx scripts/panel-imza.ts apk-dogrula --musteri=<kod> --apk=<yol.apk> --kunye=<surum.json>
+//   (apk-*: surum.json'u `deploy/mobil-yayinla.mjs` yazar ve bu komutu kendisi çağırır; çapa mobil/src/lib/apk-imza-capasi.json)
 //   Ortak: [--dizin-paket=<release/<kod>/<sürüm> dizini>] (varsayılan Electron/release/<kod>/<sürüm>)
 //          [--capa=<çapa json>]  YALNIZ bekçi — gerçek çapa Electron/electron/guncelleme/imza-capasi.json
 //
@@ -31,6 +35,7 @@ import {
   verifyPanelPackageText,
   writePanelKey,
 } from "./lib/panel-imza";
+import { TABLET_ANCHOR_FILE, signApkPackage, verifyApkPackage } from "./lib/apk-imza";
 
 const evYolu = (p: string): string => (p.startsWith("~/") ? path.join(os.homedir(), p.slice(2)) : p);
 
@@ -101,13 +106,38 @@ async function anahtarUret(f: ReadonlyMap<string, string>): Promise<void> {
   console.log("  ⚠ Parolalı dosyanın kopyası Mac DIŞINDA saklanır (USB + kâğıt; parola ayrı kâğıtta).");
 }
 
+function apkGirdisi(f: ReadonlyMap<string, string>) {
+  const kanal = gerek(f, "musteri");
+  if (!/^[a-z0-9][a-z0-9-]{1,30}$/.test(kanal)) throw new CliError(`--musteri kanal kodu biçiminde değil: ${kanal}`);
+  const test = f.get("capa");
+  if (test) console.error("⚠ TEST ÇAPASI kullanılıyor — yalnız bekçi içindir; yayın kapısı gerçek çapayla yeniden doğrular");
+  const anchor = test ? readPanelAnchor(path.resolve(test), { test: true }) : readPanelAnchor(TABLET_ANCHOR_FILE);
+  return { kanal, apk: path.resolve(gerek(f, "apk")), kunye: path.resolve(gerek(f, "kunye")), anchor };
+}
+
+async function apkImzala(f: ReadonlyMap<string, string>): Promise<void> {
+  const { kanal, apk, kunye, anchor } = apkGirdisi(f);
+  const key = await openPanelSigningKey(evYolu(gerek(f, "anahtar")), (kid) => askPassword(`Tablet APK künyesi imza anahtarı (${kid}) parolası: `));
+  const r = await signApkPackage({ apk, kunye, kanal, key, anchor });
+  console.log(`✓ APK künyesi imzalandı · ${kanal} ${r.doc.versionName} (vc ${r.doc.versionCode}) · ${r.doc.paket.ad} (${r.doc.paket.boyut} B, sha256 ${r.doc.paket.sha256.slice(0, 16)}…) · kid ${key.kid}`);
+}
+
+async function apkDogrula(f: ReadonlyMap<string, string>): Promise<void> {
+  const { kanal, apk, kunye, anchor } = apkGirdisi(f);
+  const r = await verifyApkPackage(JSON.parse(fs.readFileSync(kunye, "utf8")) as unknown, apk, { kanal, anchor });
+  if (!r.ok) throw new Error(`APK künyesi GEÇERSİZ (${r.code}): ${r.message}`);
+  console.log(`✓ APK künyesi geçerli · ${kanal} ${r.doc.versionName} (vc ${r.doc.versionCode}) · kid ${r.kid}`);
+}
+
 async function main(): Promise<void> {
   // Parola taşıyan argüman (`--parola=…` · `--password` …) değerine bakılmadan reddedilir.
   const { command, flags } = args(process.argv.slice(2));
   if (command === "imzala") return imzala(flags);
   if (command === "dogrula") return dogrula(flags);
   if (command === "anahtar-uret") return anahtarUret(flags);
-  throw new CliError("komut: imzala | dogrula | anahtar-uret");
+  if (command === "apk-imzala") return apkImzala(flags);
+  if (command === "apk-dogrula") return apkDogrula(flags);
+  throw new CliError("komut: imzala | dogrula | anahtar-uret | apk-imzala | apk-dogrula");
 }
 
 main().catch((e: unknown) => {

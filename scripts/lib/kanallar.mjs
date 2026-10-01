@@ -461,6 +461,7 @@ export const KANAL_BEKCI_DOSYALARI = [...new Set([
   'scripts/lib/yayin-bildirim.mjs',
   'scripts/lib/panel-imza-kapisi.mjs', 'Electron/electron/guncelleme/kunye-jws.mjs', 'Electron/electron/guncelleme/panel-kunye.mjs',
   'Electron/electron/guncelleme/latest-yml.mjs',
+  'mobil/scripts/lib/apk-kunye.mjs', 'mobil/src/lib/apk-imza-capasi.json',
 ])];
 /** Bu yola dokunan commit kanal bekçilerini koşar (`scripts/hooks/pre-commit.mjs`). */
 export function kanalBekcisiTetigi(rel) {

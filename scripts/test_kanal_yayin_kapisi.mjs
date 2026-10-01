@@ -63,6 +63,7 @@ import { apkKimligi, axmlOgeleri } from '../mobil/scripts/lib/apk-kimlik.mjs';
 import { imzaBasligi, imzayiKabulEdenler, multipartKur } from '../mobil/scripts/lib/manifest.mjs';
 import { buildReleaseDoc, signReleaseDoc } from '../Electron/electron/guncelleme/panel-kunye.mjs';
 import { withReleaseBlock } from '../Electron/electron/guncelleme/latest-yml.mjs';
+import { apkDosyaAdi, buildApkDoc, signApkDoc, withApkBlock } from '../mobil/scripts/lib/apk-kunye.mjs';
 
 const KOK = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const ESKI = (process.argv.find((a) => a.startsWith('--eski=')) ?? '').slice('--eski='.length) || null;
@@ -90,6 +91,7 @@ const GERCEK_GIT = execFileSync('/usr/bin/env', ['sh', '-c', 'command -v git'], 
 // geçici ağaçtaki `git init` GERÇEK depoya yazar (pre-commit.mjs `gitEnvSil` gerekçesi).
 const TEMIZ_ENV = { ...Object.fromEntries(Object.entries(process.env).filter(([k]) => !k.startsWith('GIT_'))), TEKSERP_YAYIN_BILDIRIMI: '0' };
 delete TEMIZ_ENV.TEKSERP_PANEL_IMZA_ANAHTARI;
+delete TEMIZ_ENV.TEKSERP_TABLET_IMZA_ANAHTARI;
 
 // Panel künye imzası (§8): bekçinin TEST anahtarları — geçici ağacın çapası bunlardır, gerçek çapaya dokunulmaz.
 const imzaAnahtari = (kid) => {
@@ -102,6 +104,33 @@ const IMZA_YABANCI = imzaAnahtari('panel-2097');
 const TEST_CAPA = [{ kid: IMZA.kid, x: IMZA.x }];
 const PANEL_CAPA_REL = 'Electron/electron/guncelleme/imza-capasi.json';
 const capaMetni = (liste) => `${JSON.stringify({ _aciklama: ['bekçi çapası (geçici ağaç)'], anahtarlar: liste }, null, 2)}\n`;
+// Tablet APK künyesi (G6): geçici mobil ağacın çapası aynı TEST anahtarıdır; paket/APK bundle'ı çapa dizelerini taşır.
+const TABLET_CAPA_REL = 'mobil/src/lib/apk-imza-capasi.json';
+const capaDizeleri = (liste) => liste.map((k) => `\u0000${k.kid}\u0000${k.x}`).join('');
+// Bekçinin SAHTE OTA kod imzası sertifikaları (yalnız açık sertifika; özel yarı üretimde atıldı) — geçici ağaçta
+// kanalın `otaSertifika` yoluna SERT_KANAL yazılır; SERT_YABANCI başka bir kanalın/elle derlemenin sertifikasıdır.
+const SERT_KANAL = `-----BEGIN CERTIFICATE-----
+MIIBlzCCAT2gAwIBAgIUflh7ucW2BFPsCatHKIKPJkPevBswCgYIKoZIzj0EAwIw
+IDEeMBwGA1UEAwwVdGVrc2VycC1iZWtjaS1zYWh0ZS0xMCAXDTI2MTAwMTA0NTAz
+M1oYDzIxMjYwOTA3MDQ1MDMzWjAgMR4wHAYDVQQDDBV0ZWtzZXJwLWJla2NpLXNh
+aHRlLTEwWTATBgcqhkjOPQIBBggqhkjOPQMBBwNCAARTZhs6Ki1buTYtoq0PSkcW
+d+6GLQOhtKd4fpXs2HqRg6uE2Ig+bzRD8LKeZq69fQAAwycx1exOgYsEP0KhN/BP
+o1MwUTAdBgNVHQ4EFgQUbhn1aseIZJPE31mOfQPJ93zxJFowHwYDVR0jBBgwFoAU
+bhn1aseIZJPE31mOfQPJ93zxJFowDwYDVR0TAQH/BAUwAwEB/zAKBggqhkjOPQQD
+AgNIADBFAiAwCh7GhiovwejsCV29+3eg4cSMaz6p9UhuXgtuTSoSowIhAK030NKN
+qLvA5jkZDdfpFiK0fV5ugAjzgFTm59VZ4Bp3
+-----END CERTIFICATE-----\n`;
+const SERT_YABANCI = `-----BEGIN CERTIFICATE-----
+MIIBlzCCAT2gAwIBAgIUSuhn5eU2yQWa431DeUZotX3i554wCgYIKoZIzj0EAwIw
+IDEeMBwGA1UEAwwVdGVrc2VycC1iZWtjaS1zYWh0ZS0yMCAXDTI2MTAwMTA0NTAz
+M1oYDzIxMjYwOTA3MDQ1MDMzWjAgMR4wHAYDVQQDDBV0ZWtzZXJwLWJla2NpLXNh
+aHRlLTIwWTATBgcqhkjOPQIBBggqhkjOPQMBBwNCAAR6dd49sLhWkopLDiCLcBx2
+nQUcWI/ABS78q26RBtNhG5T4Whxcwt+1nVOUuvOVUHjLWSNXCZeomQOfhzBHLTBM
+o1MwUTAdBgNVHQ4EFgQUpmXR20hhG3KeUHZ+5t6IJXgO1gIwHwYDVR0jBBgwFoAU
+pmXR20hhG3KeUHZ+5t6IJXgO1gIwDwYDVR0TAQH/BAUwAwEB/zAKBggqhkjOPQQD
+AgNIADBFAiBZaAQAn94UOeYS86lmJlv+EDkl71vcPEUAl8ejfSvC7QIhAI7EPfcN
+eJLdB4D4AGuTFs7CcX2bwKbS+Y4nwQ3iY6F5
+-----END CERTIFICATE-----\n`;
 /** latest.yml'e künye: imzalayan anahtar, künyenin kanalı ve `capa` (pakete gömülü çapanın kid'leri) seçilebilir. */
 function kunyeYaz(dizin, { surum, kanal, anahtar = IMZA, capa = TEST_CAPA.map((k) => k.kid) }) {
   const yml = path.join(dizin, 'latest.yml');
@@ -385,12 +414,20 @@ function agacKur(o, { ref = null, capa = TEST_CAPA } = {}) {
  * Mobil yayın betiklerinin koştuğu asgari ağaç kopyası (app.json değiştirilebilir) — gerçek ağaca
  * dokunulmadan "ağaç şöyle olsaydı" sorusu için. Sürüm notu kapısı beyanlı saplama.
  */
-function mobilAgaci(o, appJsonDegistir = null) {
+function mobilAgaci(o, appJsonDegistir = null, { tabletCapa = TEST_CAPA } = {}) {
   sayac += 1;
   const agac = path.join(o.d, `mobil-agac-${sayac}`);
   fs.cpSync(path.join(KOK, 'scripts/lib'), path.join(agac, 'scripts/lib'), { recursive: true });
   fs.cpSync(path.join(KOK, 'mobil/scripts'), path.join(agac, 'mobil/scripts'), { recursive: true });
-  for (const rel of ['deploy/kanallar.json', 'deploy/mobil-yayinla.mjs', 'mobil/app.config.js', 'mobil/musteri.json', 'mobil/package.json', 'surum-notlari.json']) kopyala(agac, rel);
+  for (const rel of ['deploy/kanallar.json', 'deploy/mobil-yayinla.mjs', 'mobil/app.config.js', 'mobil/musteri.json', 'mobil/package.json', 'surum-notlari.json',
+    'Electron/electron/guncelleme/kunye-jws.mjs']) kopyala(agac, rel);
+  // Tablet imza çapası (gerçeği karar bekliyor olabilir) yerine TEST çapası; kanalların OTA sertifikası yerine SAHTE.
+  kopyala(agac, TABLET_CAPA_REL, capaMetni(tabletCapa));
+  // İmza aracının çağrıldığı dizin boş durur — sahte `npx` onu koşmaz, kapı imzanın gerçekten yazıldığını ölçer.
+  fs.mkdirSync(path.join(agac, 'Teks-Erp'), { recursive: true });
+  for (const k of Object.values(JSON.parse(fs.readFileSync(path.join(KOK, 'deploy/kanallar.json'), 'utf8')).kanallar)) {
+    kopyala(agac, path.join('mobil', k.tablet.otaSertifika), SERT_KANAL);
+  }
   const aj = JSON.parse(fs.readFileSync(path.join(KOK, 'mobil/app.json'), 'utf8'));
   if (appJsonDegistir) appJsonDegistir(aj);
   kopyala(agac, 'mobil/app.json', `${JSON.stringify(aj, null, 2)}\n`);
@@ -866,13 +903,14 @@ const npmCagrisi = (o) => o.cagrilar().find((c) => c.arac === 'npm' && /^run bui
 
 console.log('\n§3 — mobil-yayinla.mjs: ERP adresi kanalın adresi mi (OTA + APK)');
 
-function otaPaketi(o, { adres = FABRIKA_ERP, bundleAdres = FABRIKA_ERP, kanal = 'adnansahin', bundleYok = false, ekAdres = null } = {}) {
+function otaPaketi(o, { adres = FABRIKA_ERP, bundleAdres = FABRIKA_ERP, kanal = 'adnansahin', bundleYok = false, ekAdres = null, imzali = true,
+  capaGomulu = TEST_CAPA } = {}) {
   const damga = '1790000000000';
   const d = path.join(o.d, 'ota', kanal, '54.2', damga);
   const bundle = '_expo/static/js/android/index-sahte.hbc';
   fs.mkdirSync(path.join(d, path.dirname(bundle)), { recursive: true });
-  if (!bundleYok) fs.writeFileSync(path.join(d, bundle), `\x00\x01hermes${bundleAdres}\x00${ekAdres ?? ''}\x00son`, 'latin1');
-  const kunye = { musteri: kanal, runtimeVersion: '54.2', damga, bundle, manifestId: 'sahte-id', imzali: true };
+  if (!bundleYok) fs.writeFileSync(path.join(d, bundle), `\x00\x01hermes${bundleAdres}\x00${ekAdres ?? ''}${capaDizeleri(capaGomulu)}\x00son`, 'latin1');
+  const kunye = { musteri: kanal, runtimeVersion: '54.2', damga, bundle, manifestId: 'sahte-id', imzali };
   if (adres !== undefined) kunye.adres = adres;
   fs.writeFileSync(path.join(d, 'yayin.json'), JSON.stringify(kunye));
   // extra.expoClient.version: yayıncı paketin sürümünü (terfi + etiket) donmuş manifestten okur.
@@ -883,8 +921,8 @@ function otaPaketi(o, { adres = FABRIKA_ERP, bundleAdres = FABRIKA_ERP, kanal = 
 }
 const mobilYayinla = (o, args, agac = KOK) => kos(o, process.execPath, [path.join(agac, 'deploy/mobil-yayinla.mjs'), ...args, '--kuru'], { cwd: agac });
 /** adnansahin tablet yayını terfi şartı ister: şartları kurulmuş kopya ağaç (gerçek ağacın etiketlerine dokunulmaz). */
-function tabletTerfiAgaci(o, secenek = {}) {
-  const agac = mobilAgaci(o);
+function tabletTerfiAgaci(o, { tabletCapa, ...secenek } = {}) {
+  const agac = mobilAgaci(o, null, tabletCapa ? { tabletCapa } : {});
   terfiHazirla(o, agac, { urun: 'tablet', surum: tabletSurum, ...secenek });
   return agac;
 }
@@ -1025,7 +1063,7 @@ function axmlYaz({ paket, meta = {} }) {
   return Buffer.concat([bas, govde]);
 }
 function apk(o, { feed = `${YAYIN_HOST}adnansahin/mobil/`, erp = FABRIKA_ERP, bundleYok = false, manifestUrlYok = false,
-  paket = 'com.teks.erp.mobil', manifestBozuk = false, sertifikaPem = null, appConfig = null } = {}) {
+  paket = 'com.teks.erp.mobil', manifestBozuk = false, sertifikaPem = null, appConfig = null, capaGomulu = TEST_CAPA } = {}) {
   sayac += 1;
   const y = path.join(o.d, `sahte-${sayac}.apk`);
   const meta = { 'expo.modules.updates.ENABLED': 'true' };
@@ -1033,18 +1071,20 @@ function apk(o, { feed = `${YAYIN_HOST}adnansahin/mobil/`, erp = FABRIKA_ERP, bu
   if (sertifikaPem) meta['expo.modules.updates.CODE_SIGNING_CERTIFICATE'] = sertifikaPem;
   const man = manifestBozuk ? Buffer.from('<manifest>duz metin</manifest>') : axmlYaz({ paket, meta });
   const g = [{ ad: 'AndroidManifest.xml', veri: man, yontem: 8 }];
-  if (!bundleYok) g.push({ ad: 'assets/index.android.bundle', veri: Buffer.from(`hermes\u0000${erp}\u0000son`, 'latin1'), yontem: 0 });
+  if (!bundleYok) g.push({ ad: 'assets/index.android.bundle', veri: Buffer.from(`hermes\u0000${erp}${capaDizeleri(capaGomulu)}\u0000son`, 'latin1'), yontem: 0 });
   if (appConfig) g.push({ ad: 'assets/app.config', veri: Buffer.from(JSON.stringify(appConfig)), yontem: 8 });
   zipYaz(y, g);
   return y;
 }
 {
   const o = ortam();
-  const r = mobilYayinla(o, ['--musteri=adnansahin', `--apk=${apk(o)}`, `--surum=${tabletSurum}`, '--vc=57'], tabletTerfiAgaci(o));
+  const r = mobilYayinla(o, ['--musteri=adnansahin', `--apk=${apk(o, { sertifikaPem: SERT_KANAL })}`, `--surum=${tabletSurum}`, '--vc=57'], tabletTerfiAgaci(o));
   ol(`3g adnansahin APK (manifest + bundle fabrika, terfi etiketli ağaç) --kuru --surum=${tabletSurum} → çıkış 0, etiket yok`,
     r.kod === 0 && /APK içindeki adres: https:\/\/guncelleme\.etkiliyazilim\.com\/adnansahin\/mobil\/ota\/54\.2\/manifest/.test(r.cikti) &&
-      /✓ terfi kapısı: tablet/.test(r.cikti) && !etiketGirisimi(o) && agText(o).length === 0, r.cikti.slice(-700));
-  const r2 = mobilYayinla(o, ['--musteri=adnansahin', `--apk=${apk(o)}`, `--surum=${tabletSurum}`, '--vc=57'], tabletTerfiAgaci(o, { terfiEtiketi: 'hafif' }));
+      /✓ terfi kapısı: tablet/.test(r.cikti) && !etiketGirisimi(o) && agText(o).length === 0 &&
+      /OTA sertifikası: kanalınkiyle aynı/.test(r.cikti) && /tablet çapası {2}: panel-2099 — pakette gömülü/.test(r.cikti) &&
+      /\[kuru\] künye {3}: İMZASIZ — gerçek yayında imzalanır/.test(r.cikti), r.cikti.slice(-900));
+  const r2 = mobilYayinla(o, ['--musteri=adnansahin', `--apk=${apk(o, { sertifikaPem: SERT_KANAL })}`, `--surum=${tabletSurum}`, '--vc=57'], tabletTerfiAgaci(o, { terfiEtiketi: 'hafif' }));
   ol('3g2 adnansahin APK, terfi etiketi HAFİF (onay cümlesi/saat taşımaz) → DUR', r2.kod !== 0 && /AÇIKLAMALI değil/.test(r2.cikti) && agText(o).length === 0, r2.cikti.slice(-500));
 }
 {
@@ -1084,6 +1124,113 @@ function apk(o, { feed = `${YAYIN_HOST}adnansahin/mobil/`, erp = FABRIKA_ERP, bu
   const r = mobilYayinla(o, ['--musteri=testfabrika', `--apk=${apk(o, { paket: 'com.teks.erp.mobil', feed: `${YAYIN_HOST}testfabrika/mobil/`, erp: TEST_ERP })}`, `--surum=${tabletSurum}`, '--vc=57']);
   ol('3n fabrika paket adlı APK (adres + bundle testfabrika) + --musteri=testfabrika → DUR (fabrika uygulamasının ÜSTÜNE yazardı)',
     r.kod !== 0 && /APK BAŞKA BİR UYGULAMANIN PAKETİ/.test(r.cikti) && /"adnansahin" kanalının/.test(r.cikti), r.cikti.slice(-500));
+}
+
+/* ------------------------------------------------------------------ *
+ * §3G6 — tablet APK künyesi: imzasız künye/OTA yüklenmez, sertifika + çapa + rotasyon kapıları
+ * ------------------------------------------------------------------ */
+console.log('\n§3G6 — tablet APK künyesi (G6) + DAGY-6 kapıları');
+
+/** APK'nın yanına (mobil-yayinla'nın künye yolu) imzalı surum.json — bekçinin TEST anahtarıyla. */
+function apkKunyesi(apkYol, { anahtar = IMZA, kanal = 'adnansahin', vc = 57, surum = tabletSurum, capa = TEST_CAPA.map((k) => k.kid) } = {}) {
+  const govde = fs.readFileSync(apkYol);
+  const sha256 = crypto.createHash('sha256').update(govde).digest('hex');
+  const ad = apkDosyaAdi(surum, vc);
+  const doc = buildApkDoc({ kanal, versionCode: vc, versionName: surum, commit: 'abcdef0', yayinZamani: '2026-10-01T01:00:00.000Z',
+    paket: { ad, boyut: govde.length, sha256 }, capa });
+  const s = withApkBlock({ versionCode: vc, versionName: surum, dosya: ad, sha256, boyut: govde.length }, signApkDoc({ doc, kid: anahtar.kid, privateKey: anahtar.privateKey }));
+  const yol = path.join(path.dirname(apkYol), 'surum.json');
+  fs.writeFileSync(yol, JSON.stringify(s, null, 2));
+  return yol;
+}
+/** Kuru OLMAYAN yayın (yalnız yüklemeden önce duran kapılar ölçülür; doğrulama adresi bağlantı reddi). */
+const mobilYayinlaGercek = (o, args, agac) =>
+  kos(o, process.execPath, [path.join(agac, 'deploy/mobil-yayinla.mjs'), ...args, '--feed=http://127.0.0.1:9/adnansahin/mobil/'], { cwd: agac });
+const apkArg = (o, sec = {}) => [`--apk=${apk(o, { sertifikaPem: SERT_KANAL, ...sec })}`, `--surum=${tabletSurum}`, '--vc=57'];
+
+{
+  const o = ortam();
+  const r = mobilYayinla(o, ['--musteri=adnansahin', `--paket=${otaPaketi(o, { imzali: false })}`], tabletTerfiAgaci(o));
+  ol('3u ⭐ İMZASIZ OTA paketi (yayin.json imzali:false) → DUR (eskiden yalnız uyarı), ssh/scp SIFIR',
+    r.kod !== 0 && /OTA PAKETİ İMZASIZ — yüklenmez/.test(r.cikti) && agText(o).length === 0, r.cikti.slice(-500));
+}
+{
+  const o = ortam();
+  const r = mobilYayinla(o, ['--musteri=adnansahin', `--paket=${otaPaketi(o, { capaGomulu: [] })}`], tabletTerfiAgaci(o));
+  ol('3v OTA bundle ağacın tablet çapasını taşımıyor (bayat paket) → DUR', r.kod !== 0 && /PAKET AĞACIN TABLET İMZA ÇAPASINI TAŞIMIYOR/.test(r.cikti) && /eksik {2}: panel-2099/.test(r.cikti), r.cikti.slice(-500));
+  const r2 = mobilYayinla(o, ['--musteri=adnansahin', `--paket=${otaPaketi(o, { capaGomulu: [] })}`], tabletTerfiAgaci(o, { tabletCapa: [] }));
+  ol('3w ağacın tablet çapası BOŞ (anahtar kararı bekliyor) → OTA UYARI ile geçer (OTA kanalı ayrı; APK güncellemesi çapalı OTA ile açılır)',
+    r2.kod === 0 && /apk-imza-capasi\.json BOŞ/.test(r2.cikti) && /OTA kanalı etkilenmez/.test(r2.cikti), r2.cikti.slice(-600));
+  const r3 = mobilYayinla(o, ['--musteri=adnansahin', `--paket=${otaPaketi(o)}`], tabletTerfiAgaci(o, { tabletCapa: [{ kid: 'paket-hazirlik-1', x: IMZA.x }] }));
+  ol('3x tablet çapasında hazırlık anahtarı → DUR (GEÇERSİZ)', r3.kod !== 0 && /TABLET İMZA ÇAPASI GEÇERSİZ/.test(r3.cikti), r3.cikti.slice(-500));
+}
+{
+  const o = ortam();
+  const agac = tabletTerfiAgaci(o);
+  const yok = mobilYayinla(o, ['--musteri=adnansahin', `--apk=${apk(o)}`, `--surum=${tabletSurum}`, '--vc=57'], agac);
+  ol('3y ⭐ APK OTA kod imzası sertifikası TAŞIMIYOR (elle derleme) → DUR (DAGY-6), ssh/scp SIFIR',
+    yok.kod !== 0 && /SERTİFİKASINI TAŞIMIYOR/.test(yok.cikti) && /sertifika YOK/.test(yok.cikti) && agText(o).length === 0, yok.cikti.slice(-500));
+  const yabanci = mobilYayinla(o, ['--musteri=adnansahin', ...apkArg(o, { sertifikaPem: SERT_YABANCI })], agac);
+  ol('3y2 APK BAŞKA bir sertifika taşıyor → DUR', yabanci.kod !== 0 && /SERTİFİKASINI TAŞIMIYOR/.test(yabanci.cikti) && /başka bir sertifika/.test(yabanci.cikti), yabanci.cikti.slice(-500));
+  const crlf = mobilYayinla(o, ['--musteri=adnansahin', ...apkArg(o, { sertifikaPem: SERT_KANAL.replaceAll('\n', '\r\n') })], agac);
+  ol('3y3 pozitif: aynı sertifika farklı satır sonuyla (CRLF) → kimlik farkı DEĞİL, geçer', crlf.kod === 0 && /OTA sertifikası: kanalınkiyle aynı/.test(crlf.cikti), crlf.cikti.slice(-500));
+}
+{
+  const o = ortam();
+  const bos = mobilYayinla(o, ['--musteri=adnansahin', ...apkArg(o)], tabletTerfiAgaci(o, { tabletCapa: [] }));
+  ol('3z ⭐ tablet çapası BOŞ → APK yayınlanmaz (imzalı künye yazılamaz), ssh/scp SIFIR',
+    bos.kod !== 0 && /TABLET İMZA ÇAPASI BOŞ — APK yayınlanmaz/.test(bos.cikti) && agText(o).length === 0, bos.cikti.slice(-500));
+  const bayat = mobilYayinla(o, ['--musteri=adnansahin', ...apkArg(o, { capaGomulu: [] })], tabletTerfiAgaci(o));
+  ol('3z2 APK bundle ağacın tablet çapasını taşımıyor → DUR', bayat.kod !== 0 && /TABLET İMZA ÇAPASINI TAŞIMIYOR/.test(bayat.cikti), bayat.cikti.slice(-500));
+}
+{
+  const o = ortam();
+  const agac = tabletTerfiAgaci(o);
+  const a = apkArg(o);
+  apkKunyesi(a[0].slice('--apk='.length));
+  const r = mobilYayinla(o, ['--musteri=adnansahin', ...a], agac);
+  ol('3G1 APK yanında BU APK\'nın geçerli imzalı künyesi → kuru: "imzalı · kid panel-2099", ssh/scp SIFIR',
+    r.kod === 0 && /künye {10}: imzalı · kid panel-2099/.test(r.cikti) && agText(o).length === 0, r.cikti.slice(-600));
+  const b = apkArg(o);
+  apkKunyesi(b[0].slice('--apk='.length), { kanal: 'testfabrika' });
+  const r2 = mobilYayinla(o, ['--musteri=adnansahin', ...b], agac);
+  ol('3G2 yanındaki künye BAŞKA kanalın → bu yayın için geçersiz sayılır (yeniden imza gerekir; kuru: İMZASIZ)',
+    r2.kod === 0 && /\[kuru\] künye {3}: İMZASIZ/.test(r2.cikti), r2.cikti.slice(-500));
+}
+{
+  // Kuru OLMAYAN: imzasız künye hiçbir koşulda yüklenmez (yükleme öncesi DUR).
+  const o = ortam();
+  const agac = tabletTerfiAgaci(o);
+  const r = mobilYayinlaGercek(o, ['--musteri=adnansahin', ...apkArg(o)], agac);
+  ol('3G3 ⭐ kuru DEĞİL, künye İMZASIZ ve anahtar yok → DUR, uzağı değiştiren çağrı SIFIR',
+    r.kod !== 0 && /APK KÜNYESİ İMZASIZ ve imza anahtarı verilmedi/.test(r.cikti) && yazanAg(o).length === 0, r.cikti.slice(-600));
+  const r2 = mobilYayinlaGercek(o, ['--musteri=adnansahin', ...apkArg(o), `--anahtar=${path.join(o.d, 'anahtar.json')}`], agac);
+  const imzaci = o.cagrilar().find((c) => c.arac === 'npx' && /panel-imza\.ts apk-imzala --musteri=adnansahin/.test(c.args ?? ''));
+  ol('3G4 ⭐ anahtar verildi ama imza aracı imzalamadı (sahte npx) → "kapıdan geçmedi" DUR, uzağı değiştiren çağrı SIFIR',
+    r2.kod !== 0 && !!imzaci && /İmzalanan künye kapıdan geçmedi/.test(r2.cikti) && yazanAg(o).length === 0, r2.cikti.slice(-600));
+}
+{
+  // Rotasyon kilidi: yayındaki künye yalnız panel-2098'i tanıyor; panel-2099 ile imzalı APK yüklenmez.
+  const o = ortam();
+  const agac = tabletTerfiAgaci(o, { tabletCapa: [...TEST_CAPA, { kid: IMZA_ONCEKI.kid, x: IMZA_ONCEKI.x }] });
+  const uzakApk = path.join(o.uzak, VDS, 'html/adnansahin/mobil/apk');
+  fs.mkdirSync(uzakApk, { recursive: true });
+  const eski = apk(o, { sertifikaPem: SERT_KANAL });
+  fs.copyFileSync(apkKunyesi(eski, { anahtar: IMZA_ONCEKI, vc: 56, capa: [IMZA_ONCEKI.kid] }), path.join(uzakApk, 'surum.json'));
+  const a = apkArg(o, { capaGomulu: [...TEST_CAPA, { kid: IMZA_ONCEKI.kid, x: IMZA_ONCEKI.x }] });
+  apkKunyesi(a[0].slice('--apk='.length), { capa: [IMZA.kid, IMZA_ONCEKI.kid] });
+  const r = mobilYayinlaGercek(o, ['--musteri=adnansahin', ...a], agac);
+  ol('3G5 ⭐ ROTASYON: yayındaki tabletler yalnız panel-2098\'i tanır, yeni APK panel-2099 imzalı → DUR, scp SIFIR',
+    r.kod !== 0 && /ROTASYON KİLİDİ/.test(r.cikti) && /panel-2099 ile imzalanan APK'yı KURMAZLAR/.test(r.cikti) && o.cagrilar().every((c) => c.arac !== 'scp'), r.cikti.slice(-600));
+  // Yayındaki künyesiz (geçiş: eski tablet) → ilk imzalı APK yüklenir; sıra APK → surum.json (EN SON) ve yüklenen künye imzalı.
+  fs.writeFileSync(path.join(uzakApk, 'surum.json'), JSON.stringify({ versionCode: 56, versionName: '1.0.0', dosya: 'TeksERP-1.0.0-vc56.apk' }));
+  const o2Oncesi = o.cagrilar().length;
+  const r2 = mobilYayinlaGercek(o, ['--musteri=adnansahin', ...a], agac);
+  const scpler = o.cagrilar().slice(o2Oncesi).filter((c) => c.arac === 'scp').map((c) => c.kaynaklar.join(','));
+  const yuklenen = JSON.parse(fs.readFileSync(path.join(uzakApk, 'surum.json'), 'utf8'));
+  ol('3G6 ⭐ yayındaki künyesiz (eski tablet) → ilk imzalı APK YÜKLENİR: önce APK, EN SON imzalı surum.json',
+    /künyesiz \(imza denetlemeyen tablet\)/.test(r2.cikti) && scpler.length === 2 && /\.apk$/.test(scpler[0]) && scpler[1] === 'surum.json' &&
+      typeof yuklenen.tekserp?.bildirim === 'string' && yuklenen.versionCode === 57, `${scpler.join(' → ')}\n${r2.cikti.slice(-500)}`);
 }
 
 /* ------------------------------------------------------------------ *

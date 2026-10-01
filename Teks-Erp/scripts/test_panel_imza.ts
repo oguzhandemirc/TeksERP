@@ -1,5 +1,5 @@
 // =============================================================================
-// BEKÇİ — panel sürüm künyesi İMZA tarafı (`scripts/panel-imza.ts` · `guven-capasi-ekle.ts panel`) + kâhin
+// BEKÇİ — istemci sürüm künyesi İMZA tarafı (`scripts/panel-imza.ts` · `guven-capasi-ekle.ts panel|tablet`) + kâhin
 // =============================================================================
 // DB'siz, ağsız. Her şey GEÇİCİ dizinde; HOME geçici dizine çevrilir (~/.tekserp'e yazılmaz), gerçek çapalara
 // dokunulmaz (çapa denemesi geçici KOPYADA). Panel doğrulayıcısı bağımlılıksız JS (Electron/electron/guncelleme/);
@@ -14,7 +14,12 @@
 //      latest.yml DEĞİŞMEZ; imzadan sonra kurcalanan latest.yml → dogrula RED; yeniden imza tek blok
 //   §3 çapa aracı (`guven-capasi-ekle.ts panel`, geçici kopyada) — (a) `--paket-kid` PAKET çapasındaki anahtarı
 //      ekler, ikinci kez değişiklik yok · (b) `--dosya` panel anahtarını ekler · PAKET çapasında olmayan paket-
-//      kid'i · biçim dışı kid · elle bozulmuş dosya → RED, yazım yok · gerçek ağacın çapa dosyası biçimde
+//      kid'i · biçim dışı kid · elle bozulmuş dosya → RED, yazım yok · gerçek ağacın çapa dosyası biçimde ·
+//      `tablet` aynı kurallarla YALNIZ tablet çapasına yazar
+//   §4 tablet APK künyesi (`apk-imzala` · `apk-dogrula`, gerçek CLI) — `TYP.APK` tekil · imzala → surum.json künyeli,
+//      eski tabletin alanları korunur, yayın kapısının doğrulayıcısı KABUL eder; çapada olmayan anahtar · APK ≠
+//      surum.json · gerçek (boş) çapa → RED, dosya DEĞİŞMEZ; imzadan sonra kurcalanan alan / değiştirilen APK /
+//      başka kanal → apk-dogrula RED. (Tabletin saf JS doğrulayıcısıyla eşdeğerlik: mobil `apkKunye.test.ts` kâhini.)
 // ⭐ KALICI SONDA ✓K: §0c bozulma tablosu, §1/§2/§3 ret dalları her koşumda ısırır.
 // Koşum: node ../scripts/agir-is.mjs -- npx tsx scripts/test_panel_imza.ts
 // =============================================================================
@@ -25,12 +30,13 @@ import os from "node:os";
 import path from "node:path";
 import { TYP, b64uEncode, signJws, verifyJws } from "../src/lib/license/protocol";
 import { generatePackageKey, generateWrappedPackageKey, writePackageKey } from "./lib/butunluk-imza";
-import { CAPA_DOSYALARI, PANEL_CAPA_DOSYASI, panelCapasiOku } from "./lib/guven-capasi";
+import { CAPA_DOSYALARI, PANEL_CAPA_DOSYASI, TABLET_CAPA_DOSYASI, panelCapasiOku } from "./lib/guven-capasi";
 import { DEPO_KOKU, generatePanelKey, openPanelSigningKey, writePanelKey } from "./lib/panel-imza";
 import { main as capaEkle } from "./guven-capasi-ekle";
 import { checkProductionAnchor, publicKeyFromX, verifyJwsWithAnchor } from "../../Electron/electron/guncelleme/kunye-jws.mjs";
 import { PANEL_RELEASE_TYP, buildReleaseDoc, signReleaseDoc, verifyUpdateInfo } from "../../Electron/electron/guncelleme/panel-kunye.mjs";
 import { parseLatestYml } from "../../Electron/electron/guncelleme/latest-yml.mjs";
+import { APK_RELEASE_TYP, verifyApkSurumJson } from "../../mobil/scripts/lib/apk-kunye.mjs";
 
 let pass = 0;
 let fail = 0;
@@ -220,13 +226,15 @@ function bolum2(anahtar: { panelDosyasi: string; panelX: string }): void {
 // ── §3 çapa aracı ─────────────────────────────────────────────────────────────
 function kopyaKok(): string {
   const kok = dizin("depo-kopyasi");
-  for (const y of [CAPA_DOSYALARI.kokTs, ...CAPA_DOSYALARI.kokAynalari, CAPA_DOSYALARI.paketTs, CAPA_DOSYALARI.anchorRs, PANEL_CAPA_DOSYASI]) {
+  for (const y of [CAPA_DOSYALARI.kokTs, ...CAPA_DOSYALARI.kokAynalari, CAPA_DOSYALARI.paketTs, CAPA_DOSYALARI.anchorRs, PANEL_CAPA_DOSYASI, TABLET_CAPA_DOSYASI]) {
     mkdirSync(path.dirname(path.join(kok, y)), { recursive: true });
     copyFileSync(path.join(DEPO_KOKU, y), path.join(kok, y));
   }
   // Boş çapalı başlangıç (gerçek dosya karar sonrası dolu olabilir): biçim aynı, yalnız liste boş.
-  const j = JSON.parse(readFileSync(path.join(kok, PANEL_CAPA_DOSYASI), "utf8")) as Record<string, unknown>;
-  writeFileSync(path.join(kok, PANEL_CAPA_DOSYASI), `${JSON.stringify({ ...j, anahtarlar: [] }, null, 2)}\n`);
+  for (const y of [PANEL_CAPA_DOSYASI, TABLET_CAPA_DOSYASI]) {
+    const j = JSON.parse(readFileSync(path.join(kok, y), "utf8")) as Record<string, unknown>;
+    writeFileSync(path.join(kok, y), `${JSON.stringify({ ...j, anahtarlar: [] }, null, 2)}\n`);
+  }
   return kok;
 }
 
@@ -275,6 +283,84 @@ function bolum3(anahtar: { panelDosyasi: string; panelX: string }): void {
   }
   writeFileSync(path.join(kok, PANEL_CAPA_DOSYASI), once.replace('"anahtarlar": [', '"anahtarlar":  ['));
   check("§3g elle bozulmuş biçim → çıkış 2 (BICIM), yazım yok", yaz(["panel", "--kid=panel-2097", `--x=${anahtar.panelX}`, "--yaz"]) === 2);
+
+  const tablet = panelCapasiOku(DEPO_KOKU, TABLET_CAPA_DOSYASI);
+  const tUretim = tablet.liste.length === 0 ? null : checkProductionAnchor([...tablet.liste]);
+  check("§3h gerçek ağacın TABLET çapası biçimde; doluysa üretim biçiminde", tUretim === null || tUretim.ok, tablet.liste.map((k) => k.kid).join(", ") || "BOŞ — anahtar kararı bekleniyor (APK yayını durur)");
+  const panelOnce = oku();
+  const tOku = (): string => readFileSync(path.join(kok, TABLET_CAPA_DOSYASI), "utf8");
+  const r3 = yaz(["tablet", `--dosya=${anahtar.panelDosyasi}`, "--yaz"]);
+  const t1 = panelCapasiOku(kok, TABLET_CAPA_DOSYASI).liste;
+  check("§3i tablet --dosya: anahtar YALNIZ tablet çapasına girer (panel çapası aynı)", r3 === 0 && t1.length === 1 && t1[0]!.kid === "panel-2099" && oku() === panelOnce, JSON.stringify(t1));
+  const r4 = yaz(["tablet", `--paket-kid=${paket2026[1]}`, "--yaz"]);
+  check("§3j tablet --paket-kid: PAKET çapasındaki aynı açık yarı tablet çapasına SONA eklenir", r4 === 0 && panelCapasiOku(kok, TABLET_CAPA_DOSYASI).liste[1]?.x === paket2026[2]);
+  const tOnce = tOku();
+  check("§3k tablet: biçim dışı kid → çıkış 1, dosya aynı", yaz(["tablet", "--kid=tablet-2099", `--x=${anahtar.panelX}`, "--yaz"]) === 1 && tOku() === tOnce);
+}
+
+// ── §4 tablet APK künyesi ─────────────────────────────────────────────────────
+function apkDizini(): { apk: string; kunye: string; govde: Buffer } {
+  const d = dizin("apk");
+  const govde = randomBytes(20_000);
+  const apk = path.join(d, "TeksERP-1.0.16-vc57.apk");
+  writeFileSync(apk, govde);
+  const kunye = path.join(d, "surum.json");
+  writeFileSync(kunye, JSON.stringify({
+    versionCode: 57, versionName: "1.0.16", dosya: "TeksERP-1.0.16-vc57.apk", sha256: createHash("sha256").update(govde).digest("hex"),
+    boyut: govde.length, zorunlu: false, notlar: null, yayinTarihi: "2026-10-01T01:00:00.000Z",
+    indirmeUrl: "https://guncelleme.etkiliyazilim.com/adnansahin/mobil/apk/TeksERP-1.0.16-vc57.apk",
+  }, null, 2));
+  return { apk, kunye, govde };
+}
+
+function bolum4(anahtar: { panelDosyasi: string; panelX: string }): void {
+  console.log("\n§4 tablet APK künyesi (apk-imzala · apk-dogrula, gerçek CLI)");
+  const typlar = Object.values(TYP);
+  check("§4a TYP.APK = tabletin typ'i (tekserp-apk) ve kayıt defterinde TEKİL", TYP.APK === APK_RELEASE_TYP && typlar.filter((t) => t === TYP.APK).length === 1, TYP.APK);
+  const keys = [{ kid: "panel-2099", x: anahtar.panelX }];
+  const capa = capaDosyasi(keys);
+  const imzala = (p: { apk: string; kunye: string }, kanal = "adnansahin", capaYolu: string | null = capa): Kosum =>
+    cli(["apk-imzala", `--musteri=${kanal}`, `--apk=${p.apk}`, `--kunye=${p.kunye}`, `--anahtar=${anahtar.panelDosyasi}`, ...(capaYolu ? [`--capa=${capaYolu}`] : [])], `${PAROLA}\n`);
+  const dogrula = (p: { apk: string; kunye: string }, kanal = "adnansahin"): Kosum =>
+    cli(["apk-dogrula", `--musteri=${kanal}`, `--apk=${p.apk}`, `--kunye=${p.kunye}`, `--capa=${capa}`]);
+  const p = apkDizini();
+  const once = JSON.parse(readFileSync(p.kunye, "utf8")) as Record<string, unknown>;
+  const r = imzala(p);
+  const sonra = JSON.parse(readFileSync(p.kunye, "utf8")) as Record<string, unknown>;
+  const v = verifyApkSurumJson(sonra, { keys, channel: "adnansahin" });
+  const korundu = Object.keys(once).every((k) => JSON.stringify(once[k]) === JSON.stringify(sonra[k]));
+  check("§4b apk-imzala → çıkış 0, surum.json künyeli, eski tabletin alanları AYNEN, yayın kapısının doğrulayıcısı KABUL eder",
+    r.kod === 0 && v.ok && korundu && v.ok && v.value.doc.paket.boyut === p.govde.length, r.cikti.trim().slice(-200));
+  check("§4c apk-dogrula → çıkış 0", dogrula(p).kod === 0);
+
+  const reddet = (ad: string, q: { apk: string; kunye: string }, kosum: () => Kosum, desen: RegExp): void => {
+    const bas = readFileSync(q.kunye);
+    const k = kosum();
+    check(`${ad} → RED, surum.json DEĞİŞMEDİ`, k.kod !== 0 && desen.test(k.cikti) && readFileSync(q.kunye).equals(bas), `çıkış ${k.kod} ${k.cikti.trim().slice(-160)}`);
+  };
+  const a = apkDizini();
+  reddet("§4d çapada olmayan anahtar", a, () => imzala(a, "adnansahin", capaDosyasi([{ kid: "panel-2098", x: xOf(generateKeyPairSync("ed25519").privateKey) }])), /çapasında YOK/);
+  const b = apkDizini();
+  writeFileSync(b.apk, randomBytes(20_000));
+  reddet("§4e APK surum.json'un söylediği dosya değil", b, () => imzala(b), /uyuşmuyor/);
+  const c = apkDizini();
+  reddet("§4f gerçek üretim tablet çapası (test anahtarı orada YOK ya da çapa boş)", c, () => imzala(c, "adnansahin", null), /CAPA_BOS|çapasında YOK|kullanılamaz/);
+  const d = apkDizini();
+  reddet("§4g argv'de parola", d, () => cli(["apk-imzala", "--musteri=adnansahin", `--apk=${d.apk}`, `--kunye=${d.kunye}`, `--anahtar=${anahtar.panelDosyasi}`, `--capa=${capa}`, "--parola=x"]), /Parola argümandan ALINMAZ/);
+
+  const t = apkDizini();
+  imzala(t);
+  const tj = JSON.parse(readFileSync(t.kunye, "utf8")) as Record<string, unknown>;
+  writeFileSync(t.kunye, JSON.stringify({ ...tj, sha256: "0".repeat(64) }));
+  const dk = dogrula(t);
+  check("§4h imzadan SONRA kurcalanan surum.json alanı (eski tablet başka dosya indirirdi) → apk-dogrula RED (KUNYE_DOSYA)", dk.kod !== 0 && /KUNYE_DOSYA/.test(dk.cikti), dk.cikti.trim().slice(-160));
+  const u = apkDizini();
+  imzala(u);
+  writeFileSync(u.apk, randomBytes(20_000));
+  const du = dogrula(u);
+  check("§4i imzadan SONRA değiştirilen APK → apk-dogrula RED (DOSYA_OZETI)", du.kod !== 0 && /DOSYA_OZETI/.test(du.cikti), du.cikti.trim().slice(-160));
+  const dk2 = dogrula(p, "testfabrika");
+  check("§4j başka kanal adına doğrulama → RED (KUNYE_KANAL)", dk2.kod !== 0 && /KUNYE_KANAL/.test(dk2.cikti), dk2.cikti.trim().slice(-160));
 }
 
 async function main(): Promise<void> {
@@ -283,6 +369,7 @@ async function main(): Promise<void> {
     const anahtar = await bolum1();
     bolum2(anahtar);
     bolum3(anahtar);
+    bolum4(anahtar);
   } finally {
     rmSync(TEMP, { recursive: true, force: true });
     if (existsSync(path.join(DEPO_KOKU, "tmp-panel-anahtari"))) rmSync(path.join(DEPO_KOKU, "tmp-panel-anahtari"), { recursive: true, force: true });
