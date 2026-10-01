@@ -201,6 +201,40 @@ impl Engine {
         Ok(())
     }
 
+    /// SYSTEM'in ÇALIŞTIRDIĞI ya da güvendiği her yol (DAGK-3/4): kök · `surumler\` · kurulu sürüm dizini ·
+    /// `guncelleyici\` · `pgsql\` · bağlantısı çözülmüş `PG_BIN_DIR` ve PG araç ikilileri yabancı yazmaya
+    /// kapalı olmalı; değilse ya da ölçülemezse hiçbir şey yapılmaz. İzni kurulum betiği yazar
+    /// (`backend-hizmeti.ps1 -Uygula`), güncelleyici yalnız ÖLÇER.
+    fn trusted_paths_ok(&self, inputs: &Inputs) -> Result<(), String> {
+        let fs = self.env.fs.as_ref();
+        let mut paths = vec![self.layout.root.clone(), self.layout.versions(), self.layout.updater_dir(), self.layout.pgsql()];
+        if let Ok(Some(current)) = fs.link_target(&self.layout.current()) {
+            paths.push(current);
+        }
+        let bin = match fs.link_target(&inputs.backend.pg_bin_dir) {
+            Ok(Some(target)) => Some(target),
+            Ok(None) => None,
+            Err(_) => Some(inputs.backend.pg_bin_dir.clone()),
+        };
+        if let Some(bin) = bin {
+            for tool in ["pg_dump", "pg_restore", "psql", "postgres"] {
+                paths.push(bin.join(if cfg!(windows) { format!("{tool}.exe") } else { tool.to_string() }));
+            }
+            paths.push(bin);
+        }
+        for p in paths.into_iter().filter(|p| fs.exists(p)) {
+            let foreign = fs.foreign_writers(&p).map_err(|e| format!("{} izinleri ölçülemedi: {e}", p.display()))?;
+            if !foreign.is_empty() {
+                return Err(format!(
+                    "{}: güvenilmez izin ({}) — SYSTEM bunu çalıştırmaz; kurulumun izin betiği gerekir (backend-hizmeti.ps1 -Uygula)",
+                    p.display(),
+                    foreign.join(" · ")
+                ));
+            }
+        }
+        Ok(())
+    }
+
     fn bare_frame(&self, tick_s: u64) -> Frame {
         let prev = self.previous_status();
         Frame {
@@ -232,6 +266,13 @@ impl Engine {
                 return idle(300);
             }
         };
+        // Yarım işlem sürdürülmeden de ÖNCE: SYSTEM'in çalıştıracağı hiçbir şey yabancı yazılabilir dizinden gelmez.
+        if let Err(m) = self.trusted_paths_ok(&inputs) {
+            self.log.error(&m);
+            self.env.events.event(tekserp_hizmet::logfile::Level::Error, &m);
+            self.write_status(self.doc(&self.bare_frame(300), State::Waiting, Some(codes::IZIN_GUVENSIZ), &m));
+            return idle(300);
+        }
         let tick_s = inputs.settings.tick_s.clamp(10, 3600);
         let mut journal = match Journal::open(self.env.fs.as_ref(), &self.layout.journal_file()) {
             Ok(j) => j,

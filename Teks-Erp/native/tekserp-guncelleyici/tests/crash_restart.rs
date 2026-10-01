@@ -360,3 +360,77 @@ fn failed_state_is_not_left_by_an_older_signed_candidate() {
     w.write_intent(&intent(Some(approval("onay-eski-aday", OLDER, "HEMEN"))));
     assert_still_failed(&w, "ONAY_REDDEDILDI", starts, "başarısız denemeden eski imzalı aday");
 }
+
+fn izin_guvensiz(w: &World, needle: &str, ctx: &str) {
+    let st = w.status().unwrap();
+    assert_eq!((st.state, st.error_code.as_deref()), (State::Waiting, Some("IZIN_GUVENSIZ")), "{ctx}: {:?}", st.message);
+    assert!(st.message.as_deref().is_some_and(|m| m.contains(needle)), "{ctx}: {:?}", st.message);
+}
+
+/// DAGK-3: SYSTEM'in çalıştıracağı/güveneceği dizin yabancı yazmaya açıksa ya da izni ölçülemiyorsa
+/// hiçbir şey yapılmaz (`IZIN_GUVENSIZ`); düzelince güncelleme olağan biçimde sürer.
+#[test]
+fn untrusted_directory_permissions_stop_everything() {
+    let w = world("izin");
+    for (dir, needle) in
+        [(w.layout.versions(), "surumler"), (w.layout.root.clone(), "güvenilmez izin"), (w.layout.updater_dir(), "guncelleyici")]
+    {
+        *w.fs.foreign.lock().unwrap() = vec![dir];
+        w.run(1).unwrap();
+        izin_guvensiz(&w, needle, "yabancı yazar");
+    }
+    w.fs.foreign.lock().unwrap().clear();
+    *w.fs.unmeasurable.lock().unwrap() = vec![w.layout.updater_dir()];
+    w.run(1).unwrap();
+    izin_guvensiz(&w, "ölçülemedi", "ölçülemeyen izin");
+    assert_eq!(w.backend().starts, 0, "hiçbir şey başlamadı");
+    assert!(!w.layout.version_dir(NEW).exists() && !w.layout.staging_dir(NEW).exists(), "paket açılmadı");
+    w.fs.unmeasurable.lock().unwrap().clear();
+    w.run_to_rest(0);
+    assert_eq!(w.state(), Some(State::Succeeded));
+    assert_invariants(&w, "izin düzelince");
+}
+
+/// DAGK-4: PG araçları (çözülmüş `PG_BIN_DIR` + ikililer) SYSTEM olarak koşar — biri yabancı yazmaya
+/// açıksa güncelleme öncesi yedek dahil hiçbir şey yapılmaz.
+#[test]
+fn untrusted_pg_tools_stop_everything() {
+    let w = world("izin-pg");
+    let bin = w.layout.root.join("harici-pg").join("bin");
+    std::fs::create_dir_all(&bin).unwrap();
+    let dump = bin.join(if cfg!(windows) { "pg_dump.exe" } else { "pg_dump" });
+    std::fs::write(&dump, "sahte").unwrap();
+    std::fs::write(
+        w.layout.backend_env(),
+        format!(
+            "PORT=4999\nDATABASE_URL=\"postgresql://tekserp:gizli-parola@127.0.0.1:5432/tekserp?schema=public\"\nPG_BIN_DIR='{}'\n",
+            bin.display()
+        ),
+    )
+    .unwrap();
+    *w.fs.foreign.lock().unwrap() = vec![dump];
+    w.run(1).unwrap();
+    izin_guvensiz(&w, "pg_dump", "yabancı yazılabilir pg_dump");
+    *w.fs.foreign.lock().unwrap() = vec![bin.clone()];
+    w.run(1).unwrap();
+    izin_guvensiz(&w, "harici-pg", "yabancı yazılabilir PG bin dizini");
+    assert_eq!(w.backend().starts, 0);
+}
+
+/// Yarım kalmış işlem de güvenilmez izinle SÜRDÜRÜLMEZ (geri alma da SYSTEM olarak araç koşturur).
+#[test]
+fn unfinished_operation_is_not_resumed_under_untrusted_permissions() {
+    let points = world("izin-sayac").count_points();
+    let w = world("izin-yarim");
+    w.crash.arm(points / 2, false);
+    assert!(w.run(3).is_err(), "ölüm yok");
+    w.crash.disarm();
+    assert!(w.unfinished(), "işlem yarımda kalmalı");
+    *w.fs.foreign.lock().unwrap() = vec![w.layout.versions()];
+    w.run(1).unwrap();
+    izin_guvensiz(&w, "surumler", "yarım işlem");
+    assert!(w.unfinished(), "güvenilmez izinle sürdürüldü");
+    w.fs.foreign.lock().unwrap().clear();
+    w.run_to_rest(2);
+    assert_invariants(&w, "izin düzelince yarım işlem");
+}

@@ -84,6 +84,11 @@ pub struct CrashFs {
     pub inner: RealFs,
     pub crash: Arc<Crash>,
     pub free: AtomicU64,
+    /// Yabancı yazara açık sayılan yollar (izin ölçümü testte BENZETİLİR: Windows CI'nın geçici
+    /// dizin ACL'i ölçüme karışmasın; gerçek DACL ölçümünün kendi Windows testi var).
+    pub foreign: Mutex<Vec<PathBuf>>,
+    /// İzni ölçülemeyen yollar (ölçüm hatası).
+    pub unmeasurable: Mutex<Vec<PathBuf>>,
 }
 
 impl Fs for CrashFs {
@@ -144,6 +149,12 @@ impl Fs for CrashFs {
     }
     fn free_space(&self, _p: &Path) -> std::io::Result<u64> {
         Ok(self.free.load(Ordering::SeqCst))
+    }
+    fn foreign_writers(&self, p: &Path) -> std::io::Result<Vec<String>> {
+        if self.unmeasurable.lock().unwrap().iter().any(|f| f == p) {
+            return Err(std::io::Error::other("erişim reddedildi (test)"));
+        }
+        Ok(if self.foreign.lock().unwrap().iter().any(|f| f == p) { vec!["S-1-5-11 yazabilir (test)".into()] } else { vec![] })
     }
     fn file_len(&self, p: &Path) -> std::io::Result<u64> {
         self.inner.file_len(p)
@@ -916,7 +927,13 @@ impl World {
         );
         let crash = Arc::new(Crash::default());
         World {
-            fs: Arc::new(CrashFs { inner: RealFs, crash: Arc::clone(&crash), free: AtomicU64::new(u64::MAX) }),
+            fs: Arc::new(CrashFs {
+                inner: RealFs,
+                crash: Arc::clone(&crash),
+                free: AtomicU64::new(u64::MAX),
+                foreign: Mutex::new(vec![]),
+                unmeasurable: Mutex::new(vec![]),
+            }),
             dir,
             layout,
             crash,
