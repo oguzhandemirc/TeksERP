@@ -3,7 +3,6 @@
 // test kâhini olarak kalır; native onun aynasıdır. Eşlik `test_lisans_native_kahin` ile ölçülür.
 // Görünümler (view) yalnız VERİ taşır — anahtar nesnesi, imza baytı dışarı çıkmaz.
 import {
-  ROOT_PUBLIC_KEYS,
   PROTOCOL_ERROR_CODES,
   publicKeyFromX,
   verifyCertificate,
@@ -29,6 +28,7 @@ import {
   type VerifiedLease,
 } from "./protocol";
 import { collectOsFactors } from "./fingerprint-os";
+import { ROOT_PUBLIC_KEYS } from "./trust-anchor";
 import { verifyIntegrity, type IntegrityReport, type PackageKey } from "./integrity";
 import {
   unwrapModuleKey,

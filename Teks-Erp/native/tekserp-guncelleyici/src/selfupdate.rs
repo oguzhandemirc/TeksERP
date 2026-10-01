@@ -9,6 +9,7 @@ use crate::env::Env;
 use crate::layout::Layout;
 use crate::package;
 use crate::tools;
+use crate::trust;
 use crate::version;
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
@@ -139,6 +140,15 @@ pub fn stage_with_version(
     if version::compare(&new_version, own_version) != Some(std::cmp::Ordering::Greater) {
         let _ = env.fs.remove_file(&fresh);
         return Ok(false);
+    }
+    // Güven çapası kurulumun kimliğidir: paket yanlış kipte güncelleyici taşısa da SYSTEM ikilisi kipi değiştirmez.
+    let mode = id.get("capaKipi").and_then(|v| v.as_str());
+    if mode != Some(trust::ANCHOR_MODE) {
+        return discard(&format!(
+            "paketteki güncelleyici {} çapalı, kurulu olan {} — kendini güncelleme çapa kipini DEĞİŞTİRMEZ",
+            mode.unwrap_or("kipsiz"),
+            trust::ANCHOR_MODE
+        ));
     }
     let mut s = SelfState {
         durum: "HAZIRLANDI".into(),

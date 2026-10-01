@@ -1,10 +1,18 @@
 // Çalışan backend'in BÜTÜNLÜK DENETİMİ (açılışta + günlük). İmza, dosya özeti ve FAZLA dosya lisans
-// çekirdeğinde (üretimde native); bu dosya ikinci katmandır: FAZLA'yı imzalı kapsamda YENİDEN arar
-// (yamalı çekirdek "geçerli" dese de) ve hazırlık PAKET anahtarının sınıf kuralını ekler.
+// çekirdeğinde (üretimde native); bu dosya ikinci katmandır: imzayı bu derlemenin PAKET çapasıyla YENİDEN
+// doğrular, FAZLA'yı imzalı kapsamda yeniden arar (yamalı çekirdek "geçerli" dese de) ve hazırlık PAKET
+// anahtarının sınıf kuralını ekler.
 import { readFile } from "node:fs/promises";
 import path from "node:path";
-import { decodeDocument, isoToMs, parseJws } from "./protocol";
-import { IntegrityManifestSchema, readIntegrityList, type IntegrityReport, type PackageKey } from "./integrity";
+import { isoToMs } from "./protocol";
+import {
+  PACKAGE_PUBLIC_KEYS,
+  readIntegrityList,
+  verifySignedManifest,
+  type IntegrityManifest,
+  type IntegrityReport,
+  type PackageKey,
+} from "./integrity";
 import { walkIntegrityScope } from "./integrity-list";
 import type { LicenseCore } from "./license-core";
 import type { IntegrityStatus } from "./state-rules";
@@ -14,6 +22,7 @@ import { BUILD_WATERMARK, watermarkMatches, type BuildWatermark } from "./waterm
 /** Çekirdeğin dışındaki (TS ikinci katman) bütünlük kodları. */
 export const INTEGRITY_GUARD_CODES = [
   "BUTUNLUK_LISTE_YOK",
+  "BUTUNLUK_IMZA",
   "BUTUNLUK_FAZLA",
   "BUTUNLUK_HAZIRLIK_ANAHTARI",
   "BUTUNLUK_SINIF_BILINMIYOR",
@@ -120,7 +129,7 @@ export interface IntegrityCheckInput {
   /** Zorunlu kip (korumalı paket): liste yoksa GEÇERSİZ; değilse KAPSAM DIŞI (geliştirme). */
   readonly required: boolean;
   readonly core: LicenseCore;
-  /** Verilmezse çekirdeğin GÖMÜLÜ PAKET çapası (üretim yolu); yalnız testler verir. */
+  /** Verilmezse çekirdeğin GÖMÜLÜ PAKET çapası ve ikinci katmanda bu derlemenin `PACKAGE_PUBLIC_KEYS`i; yalnız testler verir. */
   readonly keys?: readonly PackageKey[];
   /** Doğrulanmış HAK'ın sınıfı; HAK yoksa null. */
   readonly entitlementClass: string | null;
@@ -144,17 +153,14 @@ async function readList(root: string): Promise<string | null> {
 }
 
 /**
- * İkinci katman: imzası çekirdekte doğrulanmış yükün kapsamında listede olmayan girdiler. Yük burada
- * yeniden ayrıştırılır (imza kararı çekirdeğindir); liste okunamazsa ölçülmez (çekirdek raporu karar verir).
+ * İkinci katman: imzası TS'te de doğrulanmış yükün kapsamında listede olmayan girdiler; liste okunamazsa
+ * ölçülmez (çekirdek raporu karar verir).
  */
-async function extraEntries(token: string, root: string): Promise<string[]> {
-  const p = parseJws(token);
-  const m = p.ok ? decodeDocument(IntegrityManifestSchema, p.value.payload) : null;
-  if (!m?.ok) return [];
-  const list = await readIntegrityList(root, m.value.liste);
+async function extraEntries(m: IntegrityManifest, root: string): Promise<string[]> {
+  const list = await readIntegrityList(root, m.liste);
   if (!list.ok) return [];
   const expectedPaths = new Set(list.entries.map((f) => f.yol));
-  return (await walkIntegrityScope(root, m.value.kapsam)).entries.filter((e) => !expectedPaths.has(e));
+  return (await walkIntegrityScope(root, m.kapsam)).entries.filter((e) => !expectedPaths.has(e));
 }
 
 /**
@@ -200,10 +206,12 @@ async function checkPackageFiles(g: IntegrityCheckInput): Promise<IntegrityOutco
   const rapor = r.value;
   if (rapor.paket === null) return outcome({ durum: rapor.durum, kod: rapor.kod, rapor }, now);
 
-  const header = parseJws(token);
-  const extra = await extraEntries(token, g.root);
+  // Çekirdeğin "imza geçerli"sine ve imzasız başlık okumasına güvenilmez: kid ve kapsam yalnız TS'te doğrulanmış yükten.
+  const signed = verifySignedManifest(token, g.keys ?? PACKAGE_PUBLIC_KEYS);
+  if (!signed.ok) return outcome({ durum: "GECERSIZ", kod: "BUTUNLUK_IMZA", rapor }, now);
+  const extra = await extraEntries(signed.manifest, g.root);
   const measurement: PackageMeasurement = {
-    kid: header.ok ? header.value.header.kid : null,
+    kid: signed.kid,
     rapor,
     paket: rapor.paket,
     ekFazla: extra.slice(0, EXTRA_LIST_CAP),

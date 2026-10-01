@@ -1,17 +1,21 @@
 // Güven çapası dosyalarının AYRIŞTIRICISI + ÜRETİCİSİ — `scripts/guven-capasi-ekle.ts` (CLI) ve bekçisi
-// (`test_guven_capasi_ekle.ts`) ortak kullanır. Dört yer TEK listeden yazılır: TS kök çapası (+ satıcı ve
-// patron bayt-eşit aynası), TS PAKET çapası, native gömülü çapa (`anchor.rs`, rustfmt düzeniyle).
-// Biçim beklenenden saparsa (elle düzenleme) ayrıştırıcı DURUR: metne tahminle ekleme yapılmaz.
+// (`test_guven_capasi_ekle.ts`) ortak kullanır. Çapa İKİ kiptir (üretim · hazırlık) ve her kipin kök + PAKET listesi
+// dört yerden TEK listeyle yazılır: TS kök çapası (+ satıcı ve patron bayt-eşit aynası), TS PAKET çapası, native
+// gömülü çapa (`anchor.rs`, rustfmt düzeniyle; her kipin bloğu kendi `cfg`siyle kapılı). Anahtarın kipi kid'inden
+// çıkar — `kok-*`/`paket-<yıl>` üretim, `hazirlik-*`/`paket-hazirlik*` hazırlık; iki liste hiçbir kid ya da anahtarı
+// paylaşamaz. Biçim beklenenden saparsa (elle düzenleme) ayrıştırıcı DURUR: metne tahminle ekleme yapılmaz.
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import {
   LICENSE_CLASSES,
   STAGING_ROOT_CLASSES,
+  TRUST_ANCHOR_MODES,
   prepareTrustAnchor,
   publicKeyFromX,
   publicKeyX,
   type LicenseClass,
   type RootKey,
+  type TrustAnchorMode,
 } from "../../src/lib/license/protocol";
 import { isProductionPackageKid, isStagingPackageKid } from "../../src/lib/license/integrity-scope";
 import type { PackageKey } from "../../src/lib/license/integrity";
@@ -23,6 +27,13 @@ export const CAPA_DOSYALARI = Object.freeze({
   paketTs: "Teks-Erp/src/lib/license/integrity.ts",
   anchorRs: "Teks-Erp/native/tekserp-dogrulama/src/anchor.rs",
 });
+
+/** Kipin dört yerdeki blok adları. */
+export const CAPA_BLOKLARI: Readonly<Record<TrustAnchorMode, { readonly kokTs: string; readonly paketTs: string; readonly kokRs: string; readonly paketRs: string }>> =
+  Object.freeze({
+    uretim: { kokTs: "PRODUCTION_ROOT_PUBLIC_KEYS", paketTs: "PRODUCTION_PACKAGE_PUBLIC_KEYS", kokRs: "PRODUCTION_ROOTS", paketRs: "PRODUCTION_PACKAGE_KEYS" },
+    hazirlik: { kokTs: "STAGING_ROOT_PUBLIC_KEYS", paketTs: "STAGING_PACKAGE_PUBLIC_KEYS", kokRs: "STAGING_ROOTS", paketRs: "STAGING_PACKAGE_KEYS" },
+  });
 
 /** Kök kid'i: üretim `kok-<yıl>-<n>` · hazırlık `hazirlik-<yıl>-<n>` (satıcı `anahtar.ts kok-uret` ile aynı biçim). */
 export const KOK_KID_BICIMI = /^(?:kok|hazirlik)-\d{4}-\d{1,3}$/;
@@ -36,6 +47,18 @@ export function paketKidGecerli(kid: string): boolean {
   return PAKET_KID_ZEMIN.test(kid) && (isProductionPackageKid(kid) || isStagingPackageKid(kid));
 }
 
+/** Kök kid'inin kipi (biçim dışıysa null). */
+export function kokKipi(kid: string): TrustAnchorMode | null {
+  if (!KOK_KID_BICIMI.test(kid)) return null;
+  return kid.startsWith("hazirlik-") ? "hazirlik" : "uretim";
+}
+
+/** PAKET kid'inin kipi (biçim dışıysa null). */
+export function paketKipi(kid: string): TrustAnchorMode | null {
+  if (!paketKidGecerli(kid)) return null;
+  return isStagingPackageKid(kid) ? "hazirlik" : "uretim";
+}
+
 export class CapaHatasi extends Error {
   constructor(
     readonly tur: "BICIM" | "GECERSIZ" | "CAKISMA",
@@ -45,15 +68,17 @@ export class CapaHatasi extends Error {
   }
 }
 
+type KipListesi<T> = Readonly<Record<TrustAnchorMode, readonly T[]>>;
+
 export interface CapaDurumu {
-  readonly kokler: readonly RootKey[];
-  readonly paketler: readonly PackageKey[];
+  readonly kokler: KipListesi<RootKey>;
+  readonly paketler: KipListesi<PackageKey>;
   /** Ham metinler (yeniden yazım bu metinlerin içinde yalnız blokları değiştirir). */
   readonly metin: { readonly kokTs: string; readonly paketTs: string; readonly anchorRs: string };
 }
 
 // ── TS kök çapası ────────────────────────────────────────────────────────────
-const KOK_BLOK = /^export const ROOT_PUBLIC_KEYS: readonly RootKey\[\] = Object\.freeze\(\[\n([\s\S]*?)^\]\);$/m;
+const tsBlok = (ad: string, tip: string): RegExp => new RegExp(`^export const ${ad}: readonly ${tip}\\[\\] = Object\\.freeze\\(\\[\\n([\\s\\S]*?)^\\]\\);$`, "m");
 const KOK_GIRDI = /^ {2}Object\.freeze\(\{\n {4}kid: "([^"\n]+)",\n {4}x: "([^"\n]+)",\n {4}classes: Object\.freeze<LicenseClass\[\]>\(\[([^\]\n]*)\]\),\n {2}\}\),\n/gm;
 
 function kokTsGirdisi(r: RootKey): string {
@@ -88,15 +113,14 @@ function bloktanGirdiler<T>(metin: string, blok: RegExp, girdi: RegExp, uret: (m
 }
 
 // ── TS PAKET çapası ──────────────────────────────────────────────────────────
-const PAKET_BLOK = /^export const PACKAGE_PUBLIC_KEYS: readonly PackageKey\[\] = Object\.freeze\(\[\n([\s\S]*?)^\]\);$/m;
 const PAKET_GIRDI = /^ {2}Object\.freeze\(\{ kid: "([^"\n]+)", x: "([^"\n]+)" \}\),\n/gm;
 const paketTsGirdisi = (k: PackageKey): string => `  Object.freeze({ kid: ${JSON.stringify(k.kid)}, x: ${JSON.stringify(k.x)} }),\n`;
 
 // ── native gömülü çapa (anchor.rs) ───────────────────────────────────────────
-const RS_KOK_BAS = "pub const BUILTIN_ROOTS: &[(&str, &str, &[&str])] =";
-const RS_PAKET_BAS = "pub const BUILTIN_PACKAGE_KEYS: &[(&str, &str)] =";
-const RS_KOK_BLOK = /^pub const BUILTIN_ROOTS: &\[\(&str, &str, &\[&str\]\)\] =[\s\S]*?\];$/m;
-const RS_PAKET_BLOK = /^pub const BUILTIN_PACKAGE_KEYS: &\[\(&str, &str\)\] =[\s\S]*?\];$/m;
+const rsKokBas = (ad: string): string => `pub const ${ad}: &[(&str, &str, &[&str])] =`;
+const rsPaketBas = (ad: string): string => `pub const ${ad}: &[(&str, &str)] =`;
+const rsKokBlok = (ad: string): RegExp => new RegExp(`^pub const ${ad}: &\\[\\(&str, &str, &\\[&str\\]\\)\\] =[\\s\\S]*?\\];$`, "m");
+const rsPaketBlok = (ad: string): RegExp => new RegExp(`^pub const ${ad}: &\\[\\(&str, &str\\)\\] =[\\s\\S]*?\\];$`, "m");
 /** Kâhin §0e ile aynı desen (`test_lisans_native_kahin`). */
 const RS_KOK_OGE = /\("([^"]+)", "([^"]+)", &\[([^\]]*)\]\)/g;
 const RS_PAKET_OGE = /\("([^"]+)", "([^"]+)"\)/g;
@@ -140,8 +164,9 @@ function ayniListe(a: readonly (RootKey | PackageKey)[], b: readonly (RootKey | 
 }
 
 /**
- * Depo kökündeki dört yeri ayrıştırır ve birbirine karşı DENETLER: aynalar kaynakla bayt-eşit, native
- * çapa TS çapasıyla aynı sırada aynı. Tutarsız başlangıçta ekleme yapılmaz (önce bekçiler).
+ * Depo kökündeki dört yeri ayrıştırır ve birbirine karşı DENETLER: aynalar kaynakla bayt-eşit, native çapa her
+ * kipte TS listesiyle aynı sırada aynı, her liste yalnız kendi kipinin kid'lerini taşır. Tutarsız başlangıçta ekleme
+ * yapılmaz (önce bekçiler).
  */
 export function capaDurumuOku(kok: string): CapaDurumu {
   const kokTs = oku(kok, CAPA_DOSYALARI.kokTs);
@@ -150,27 +175,34 @@ export function capaDurumuOku(kok: string): CapaDurumu {
   }
   const paketTs = oku(kok, CAPA_DOSYALARI.paketTs);
   const anchorRs = oku(kok, CAPA_DOSYALARI.anchorRs);
-  const kokler = bloktanGirdiler<RootKey>(
-    kokTs,
-    KOK_BLOK,
-    KOK_GIRDI,
-    (m) => ({ kid: m[1], x: m[2], classes: siniflariAyristir(m[3], `ROOT_PUBLIC_KEYS ${m[1]}`) }),
-    kokTsGirdisi,
-    "ROOT_PUBLIC_KEYS",
-  );
-  const paketler = bloktanGirdiler<PackageKey>(paketTs, PAKET_BLOK, PAKET_GIRDI, (m) => ({ kid: m[1], x: m[2] }), paketTsGirdisi, "PACKAGE_PUBLIC_KEYS");
-  const rsKokler = rsBlok<RootKey>(
-    anchorRs,
-    RS_KOK_BLOK,
-    RS_KOK_OGE,
-    RS_KOK_BAS,
-    (m) => ({ kid: m[1], x: m[2], classes: [...m[3].matchAll(/"([^"]+)"/g)].map((c) => c[1] as LicenseClass) }),
-    rsKokOgesi,
-    "BUILTIN_ROOTS",
-  );
-  const rsPaketler = rsBlok<PackageKey>(anchorRs, RS_PAKET_BLOK, RS_PAKET_OGE, RS_PAKET_BAS, (m) => ({ kid: m[1], x: m[2] }), rsPaketOgesi, "BUILTIN_PACKAGE_KEYS");
-  if (!ayniListe(rsKokler, kokler)) throw new CapaHatasi("BICIM", "anchor.rs BUILTIN_ROOTS ≠ ROOT_PUBLIC_KEYS — önce test_lisans_native_kahin §0e");
-  if (!ayniListe(rsPaketler, paketler)) throw new CapaHatasi("BICIM", "anchor.rs BUILTIN_PACKAGE_KEYS ≠ PACKAGE_PUBLIC_KEYS — önce test_lisans_native_kahin §0e'");
+  const kokler = {} as Record<TrustAnchorMode, RootKey[]>;
+  const paketler = {} as Record<TrustAnchorMode, PackageKey[]>;
+  for (const kip of TRUST_ANCHOR_MODES) {
+    const ad = CAPA_BLOKLARI[kip];
+    kokler[kip] = bloktanGirdiler<RootKey>(
+      kokTs,
+      tsBlok(ad.kokTs, "RootKey"),
+      KOK_GIRDI,
+      (m) => ({ kid: m[1], x: m[2], classes: siniflariAyristir(m[3], `${ad.kokTs} ${m[1]}`) }),
+      kokTsGirdisi,
+      ad.kokTs,
+    );
+    paketler[kip] = bloktanGirdiler<PackageKey>(paketTs, tsBlok(ad.paketTs, "PackageKey"), PAKET_GIRDI, (m) => ({ kid: m[1], x: m[2] }), paketTsGirdisi, ad.paketTs);
+    const rsKokler = rsBlok<RootKey>(
+      anchorRs,
+      rsKokBlok(ad.kokRs),
+      RS_KOK_OGE,
+      rsKokBas(ad.kokRs),
+      (m) => ({ kid: m[1], x: m[2], classes: [...m[3].matchAll(/"([^"]+)"/g)].map((c) => c[1] as LicenseClass) }),
+      rsKokOgesi,
+      ad.kokRs,
+    );
+    const rsPaketler = rsBlok<PackageKey>(anchorRs, rsPaketBlok(ad.paketRs), RS_PAKET_OGE, rsPaketBas(ad.paketRs), (m) => ({ kid: m[1], x: m[2] }), rsPaketOgesi, ad.paketRs);
+    if (!ayniListe(rsKokler, kokler[kip])) throw new CapaHatasi("BICIM", `anchor.rs ${ad.kokRs} ≠ ${ad.kokTs} — önce test_lisans_native_kahin §0e`);
+    if (!ayniListe(rsPaketler, paketler[kip])) throw new CapaHatasi("BICIM", `anchor.rs ${ad.paketRs} ≠ ${ad.paketTs} — önce test_lisans_native_kahin §0e'`);
+    const yabanci = [...kokler[kip].filter((r) => kokKipi(r.kid) !== kip), ...paketler[kip].filter((k) => paketKipi(k.kid) !== kip)].map((k) => k.kid);
+    if (yabanci.length) throw new CapaHatasi("BICIM", `${kip} listesinde başka kipin kid'i: ${yabanci.join(", ")} (elle düzenlenmiş?)`);
+  }
   return { kokler, paketler, metin: { kokTs, paketTs, anchorRs } };
 }
 
@@ -207,40 +239,50 @@ export function paketDogrula(k: PackageKey): void {
 export interface EklemePlani {
   /** false: aynı kid + aynı anahtar zaten çapada (idempotent — yazılacak bir şey yok). */
   readonly degisir: boolean;
+  /** Girdinin yazıldığı (ya da zaten bulunduğu) kip listesi. */
+  readonly kip: TrustAnchorMode;
   /** Depo köküne göre yol → yeni içerik (yalnız değişenler). */
   readonly dosyalar: ReadonlyMap<string, string>;
 }
 
-function ayniAnahtarVar<T extends { kid: string; x: string }>(liste: readonly T[], yeni: T, esit: (a: T, b: T) => boolean): boolean {
-  const kid = liste.find((k) => k.kid === yeni.kid);
+/** İki kipin BİRLEŞİMİNDE arar: kid ya da anahtar iki listeyi paylaşamaz (bir anahtar tek kid, tek kip). */
+function ayniAnahtarVar<T extends { kid: string; x: string }>(listeler: KipListesi<T>, yeni: T, esit: (a: T, b: T) => boolean): boolean {
+  const tum = TRUST_ANCHOR_MODES.flatMap((k) => listeler[k]);
+  const kid = tum.find((k) => k.kid === yeni.kid);
   if (kid) {
     if (esit(kid, yeni)) return true;
     throw new CapaHatasi("CAKISMA", `${yeni.kid} çapada BAŞKA anahtar/sınıfla var — rotasyon yeni kid ile yapılır, satır değiştirilmez`);
   }
-  const x = liste.find((k) => k.x === yeni.x);
+  const x = tum.find((k) => k.x === yeni.x);
   if (x) throw new CapaHatasi("CAKISMA", `bu açık anahtar çapada ${x.kid} adıyla zaten var — bir anahtar tek kid taşır`);
   return false;
 }
 
-/** Kök ekleme: TS kaynağı + iki ayna (aynı bayt) + anchor.rs BUILTIN_ROOTS. Yeni satır SONA. */
+/** Kök ekleme: kid'in kipinin listesi — TS kaynağı + iki ayna (aynı bayt) + anchor.rs. Yeni satır SONA. */
 export function kokEklePlani(d: CapaDurumu, yeni: RootKey): EklemePlani {
   kokDogrula(yeni);
-  if (ayniAnahtarVar(d.kokler, yeni, (a, b) => a.x === b.x && JSON.stringify(a.classes) === JSON.stringify(b.classes))) return { degisir: false, dosyalar: new Map() };
-  const liste = [...d.kokler, { kid: yeni.kid, x: yeni.x, classes: [...yeni.classes] }];
+  const kip = kokKipi(yeni.kid);
+  if (!kip) throw new CapaHatasi("GECERSIZ", `kök kid'inin kipi çıkarılamadı: ${yeni.kid}`);
+  if (ayniAnahtarVar(d.kokler, yeni, (a, b) => a.x === b.x && JSON.stringify(a.classes) === JSON.stringify(b.classes))) return { degisir: false, kip, dosyalar: new Map() };
+  const liste = [...d.kokler[kip], { kid: yeni.kid, x: yeni.x, classes: [...yeni.classes] }];
   const hazir = prepareTrustAnchor(liste);
-  if (!hazir.ok) throw new CapaHatasi("GECERSIZ", `yeni çapa geçersiz (${hazir.code}): ${hazir.message}`);
-  const kokTs = d.metin.kokTs.replace(KOK_BLOK, () => `export const ROOT_PUBLIC_KEYS: readonly RootKey[] = Object.freeze([\n${liste.map(kokTsGirdisi).join("")}]);`);
-  const anchorRs = d.metin.anchorRs.replace(RS_KOK_BLOK, () => rsSabiti(RS_KOK_BAS, liste.map(rsKokOgesi)));
+  if (!hazir.ok) throw new CapaHatasi("GECERSIZ", `yeni ${kip} çapası geçersiz (${hazir.code}): ${hazir.message}`);
+  const ad = CAPA_BLOKLARI[kip];
+  const kokTs = d.metin.kokTs.replace(tsBlok(ad.kokTs, "RootKey"), () => `export const ${ad.kokTs}: readonly RootKey[] = Object.freeze([\n${liste.map(kokTsGirdisi).join("")}]);`);
+  const anchorRs = d.metin.anchorRs.replace(rsKokBlok(ad.kokRs), () => rsSabiti(rsKokBas(ad.kokRs), liste.map(rsKokOgesi)));
   const dosyalar = new Map<string, string>([[CAPA_DOSYALARI.kokTs, kokTs], ...CAPA_DOSYALARI.kokAynalari.map((a): [string, string] => [a, kokTs]), [CAPA_DOSYALARI.anchorRs, anchorRs]]);
-  return { degisir: true, dosyalar };
+  return { degisir: true, kip, dosyalar };
 }
 
-/** PAKET anahtarı ekleme: integrity.ts `PACKAGE_PUBLIC_KEYS` + anchor.rs BUILTIN_PACKAGE_KEYS. Yeni satır SONA. */
+/** PAKET anahtarı ekleme: kid'in kipinin listesi — integrity.ts + anchor.rs. Yeni satır SONA. */
 export function paketEklePlani(d: CapaDurumu, yeni: PackageKey): EklemePlani {
   paketDogrula(yeni);
-  if (ayniAnahtarVar(d.paketler, yeni, (a, b) => a.x === b.x)) return { degisir: false, dosyalar: new Map() };
-  const liste = [...d.paketler, { kid: yeni.kid, x: yeni.x }];
-  const paketTs = d.metin.paketTs.replace(PAKET_BLOK, () => `export const PACKAGE_PUBLIC_KEYS: readonly PackageKey[] = Object.freeze([\n${liste.map(paketTsGirdisi).join("")}]);`);
-  const anchorRs = d.metin.anchorRs.replace(RS_PAKET_BLOK, () => rsSabiti(RS_PAKET_BAS, liste.map(rsPaketOgesi)));
-  return { degisir: true, dosyalar: new Map([[CAPA_DOSYALARI.paketTs, paketTs], [CAPA_DOSYALARI.anchorRs, anchorRs]]) };
+  const kip = paketKipi(yeni.kid);
+  if (!kip) throw new CapaHatasi("GECERSIZ", `PAKET kid'inin kipi çıkarılamadı: ${yeni.kid}`);
+  if (ayniAnahtarVar(d.paketler, yeni, (a, b) => a.x === b.x)) return { degisir: false, kip, dosyalar: new Map() };
+  const liste = [...d.paketler[kip], { kid: yeni.kid, x: yeni.x }];
+  const ad = CAPA_BLOKLARI[kip];
+  const paketTs = d.metin.paketTs.replace(tsBlok(ad.paketTs, "PackageKey"), () => `export const ${ad.paketTs}: readonly PackageKey[] = Object.freeze([\n${liste.map(paketTsGirdisi).join("")}]);`);
+  const anchorRs = d.metin.anchorRs.replace(rsPaketBlok(ad.paketRs), () => rsSabiti(rsPaketBas(ad.paketRs), liste.map(rsPaketOgesi)));
+  return { degisir: true, kip, dosyalar: new Map([[CAPA_DOSYALARI.paketTs, paketTs], [CAPA_DOSYALARI.anchorRs, anchorRs]]) };
 }

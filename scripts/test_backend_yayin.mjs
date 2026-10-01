@@ -20,7 +20,9 @@
 //      değişmez dizine yazar, son.json'a dokunmaz, ikinci kez DUR · bildirim PG hedefini künyeden alır (içerik
 //      özeti zip'teki manifestodan ölçülür) · künyeyle tutmayan zip / yanlış ICU → DUR · PG TEK KAYNAK
 //      (`deploy/pg/pg-surumu.json`): --pg-* argümanı kayıttan farklıysa DUR, verilmezse pg bloğu kayıttan;
-//      kaydın sürüm/derleme/ICU'su olmayan künye (backend hedefi ya da --pg-yayinla) DUR; zip'te tek ICU
+//      kaydın sürüm/derleme/ICU'su olmayan künye (backend hedefi ya da --pg-yayinla) DUR; zip'te tek ICU ·
+//      §3G (G3) bildirim aracının PAKET çapası kanalın kipinden: kip zorunlu · tanınmayan kip · üretim kanalı hazırlık
+//      kipiyle DUR · üretim kipinin gerçek çapası hazırlık ailesi imzalı paketi REDDEDER (kontrol: test çapasıyla geçer)
 //
 //   node scripts/test_backend_yayin.mjs
 // =============================================================================
@@ -298,6 +300,38 @@ function bolum3() {
   ol("§3r' --pg-* verilmeden → bildirimin pg bloğu KAYITTAN (cizgi · backendEnAz), uzağa yazma SIFIR", rkayit.kod === 0 && rkayit.yazma.length === 0 &&
     kb?.pg?.cizgi === Number(PG_KAYDI.cizgi) && kb?.pg?.enAz === PG_KAYDI.backendEnAz, rkayit.cikti.slice(-400));
   bolum3pg(ortak);
+  bolum3capa(p1);
+}
+
+/** G3 — bildirim aracının PAKET çapası kanalın çapa KİPİNDEN (kanal kaydı backend.guvenCapasi, yayıncı geçirir). */
+function bolum3capa(zip) {
+  console.log('\n§3G — kanalın güven çapası kipi (G3)');
+  const ozet = path.join(GECICI, 'capa-ozet.txt');
+  fs.writeFileSync(ozet, 'G3 çapa sondası');
+  const dogrula = (ek, ortam = {}) => spawnSync(process.execPath, ['--import', 'tsx', 'scripts/backend-bildirim.ts', 'dogrula', `--zip=${zip}`, '--kanal=testfabrika',
+    '--pg-cizgi=16', '--pg-en-az=16.9', `--ozet-dosyasi=${ozet}`, `--cikti=${path.join(GECICI, `capa-${Math.random().toString(36).slice(2)}`)}`, ...ek],
+  { cwd: TEKS, encoding: 'utf8', env: { ...process.env, ...ortam } });
+  const kipsiz = dogrula(['--kanal-turu=hazirlik'], { TEKSERP_TEST_PAKET_CAPASI: ORTAK.capa });
+  ol('§3G1 kip verilmeden → DUR (örtük çapa yok)', kipsiz.status !== 0 && /--guven-capasi/.test(kipsiz.stderr), kipsiz.stderr.slice(-200));
+  const taninmayan = dogrula(['--kanal-turu=hazirlik', '--guven-capasi=test'], { TEKSERP_TEST_PAKET_CAPASI: ORTAK.capa });
+  ol('§3G2 tanınmayan kip → DUR', taninmayan.status !== 0 && /uretim \| hazirlik/.test(taninmayan.stderr), taninmayan.stderr.slice(-200));
+  const uretimHazirlik = dogrula(['--kanal-turu=uretim', '--guven-capasi=hazirlik']);
+  ol('§3G3 üretim kanalı hazırlık çapasıyla → DUR', uretimHazirlik.status !== 0 && /yalnız ÜRETİM çapasıyla/.test(uretimHazirlik.stderr), uretimHazirlik.stderr.slice(-200));
+  // Gerçek hazırlık kid'iyle (`paket-hazirlik`) atılık anahtar: gerçek çapalar kid'i ya TANIMAZ (öteki kip) ya
+  // tanıyıp imzayı düşürür (kendi kipi) — iki hüküm ayrışınca aracın kipin listesini kullandığı ölçülür.
+  const dizin = path.join(GECICI, 'anahtar-gercek-kid');
+  tsx(['scripts/build-korumali-imza.ts', 'anahtar-uret', '--kid=paket-hazirlik', `--dizin=${dizin}`]);
+  const gercekKid = paketKur('pg3', { surum: '9.9.9-prova.9', kanal: 'testfabrika', prova: true, anahtar: path.join(dizin, 'paket-hazirlik.paket.json') });
+  const dogrulaZip = (z, ek) => spawnSync(process.execPath, ['--import', 'tsx', 'scripts/backend-bildirim.ts', 'dogrula', `--zip=${z}`, '--kanal=testfabrika',
+    '--pg-cizgi=16', '--pg-en-az=16.9', `--ozet-dosyasi=${ozet}`, `--cikti=${path.join(GECICI, `capa-${Math.random().toString(36).slice(2)}`)}`, ...ek], { cwd: TEKS, encoding: 'utf8' });
+  const uretimCapasi = dogrulaZip(gercekKid, ['--kanal-turu=hazirlik', '--guven-capasi=uretim']);
+  ol('§3G4 ⭐ üretim kipinin GERÇEK PAKET çapası hazırlık kid\'iyle (paket-hazirlik) imzalı paketi REDDEDER — kid TANINMAZ',
+    uretimCapasi.status !== 0 && /bütünlüğü GECERSIZ \(JWS_KID\)/.test(uretimCapasi.stderr), uretimCapasi.stderr.slice(-200));
+  const hazirlikCapasi = dogrulaZip(gercekKid, ['--kanal-turu=hazirlik', '--guven-capasi=hazirlik']);
+  ol("§3G4' hazırlık kipinin gerçek çapası aynı kid'i TANIR, yalnız imza düşer (JWS_IMZA) — araç kipin listesini kullanıyor",
+    hazirlikCapasi.status !== 0 && /bütünlüğü GECERSIZ \(JWS_IMZA\)/.test(hazirlikCapasi.stderr), hazirlikCapasi.stderr.slice(-200));
+  const kontrol = dogrula(['--kanal-turu=hazirlik', '--guven-capasi=hazirlik'], { TEKSERP_TEST_PAKET_CAPASI: ORTAK.capa });
+  ol('§3G5 kontrol: aynı paket kipin (test) çapasıyla GEÇER — §3G4\'ün reddi çapadan', kontrol.status === 0, kontrol.stderr.slice(-200));
 }
 
 /** PG paketi (sözleşme sürümü 2): ayrı değişmez dizin, ayrı künye; backend bildirimi hedefi künyeden alır. */

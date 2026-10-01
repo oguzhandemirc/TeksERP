@@ -122,7 +122,7 @@ function Adim($m) { Write-Host ""; Write-Host "$m" -ForegroundColor Cyan }
 # Hizmet ikilisi pakete OLCULEREK girer: Windows PE32+ x64, uretim derlemesi (test capasi YOK: capayi
 # ortamdan okuyan `test-anchor` derlemesi SYSTEM guncelleyicisinde guven kokunu disariya acardi) ve
 # kunye adi beklenen. Kunye (ikiliyi calistirmak) yalniz Windows'ta; korumali paket zaten Windows'ta uretilir.
-function HizmetIkilisiOlc([string]$yol, [string]$beklenenAd) {
+function HizmetIkilisiOlc([string]$yol, [string]$beklenenAd, [string]$capaKipi) {
   if (-not (Test-Path -LiteralPath $yol)) {
     Fail "hizmet ikilisi yok: $yol  (-HizmetIkiliDizini ver: CI korumali-paket.yml win-x64 yapitinin runtime\ dizini ya da cargo build --release)"
   }
@@ -145,6 +145,10 @@ function HizmetIkilisiOlc([string]$yol, [string]$beklenenAd) {
     if ($j.ad -cne $beklenenAd -or $j.hedef -cne "windows") { Fail "$beklenenAd kunye beklenen degil: $k" }
     if (($j.PSObject.Properties.Name -contains "testCapasi") -and ($j.testCapasi -ne $false)) {
       Fail "$beklenenAd kunye testCapasi=$($j.testCapasi) - uretim paketine GIRMEZ"
+    }
+    # G3: guncelleyicinin gomulu capa kipi paketin (bayt kodu, kanaldan) kipiyle AYNI olmali (konak capa tasimaz).
+    if ($beklenenAd -eq "tekserp-guncelleyici" -and $j.capaKipi -cne $capaKipi) {
+      Fail "$beklenenAd capa kipi '$($j.capaKipi)', paket '$capaKipi' (hazirlik kanali: npm run derle:hizmetler:win:hazirlik + -HizmetIkiliDizini)"
     }
     $surum = [string]$j.surum
   }
@@ -445,6 +449,10 @@ if ($Korumali) {
   }
   New-Item -ItemType Directory -Force (Join-Path $stage "native") | Out-Null
   Copy-Item $natKaynak (Join-Path $stage "native\$natAd")
+  # G3: native'in gomulu capa kipi bayt kodunun kipiyle (build-korumali kanaldan yazar) AYNI olmali;
+  # uyusmazsa paket acilista cekirdeksiz kalirdi. Paketin kendi Node'u .node'u yukleyip kunyesini okur.
+  & $runtimeNode (Join-Path (Join-Path $proj "scripts") "native-capa-kipi.mjs") (Join-Path (Join-Path $stage "native") $natAd) (Join-Path (Join-Path $proj "dist") "server-kunye.json")
+  if ($LASTEXITCODE -ne 0) { Fail "native lisans cekirdeginin guven capasi kipi paketinkiyle uyusmuyor (yukarida). Hazirlik kanali: npm run derle:win:hazirlik + -NativeYol." }
   Write-Host "  native      : native\$natAd (lisans cekirdegi - zorunlu kip)"
 }
 
@@ -454,8 +462,9 @@ $hizmetIkilileri = $null
 if ($Korumali -and $Hedef -eq "win-x64") {
   $ikiliDizin = if ($HizmetIkiliDizini) { $HizmetIkiliDizini } else { Join-Path (Join-Path (Join-Path $proj "native") "target") "release" }
   $hizmetIkilileri = [ordered]@{}
+  $paketCapaKipi = (Get-Content -Raw (Join-Path (Join-Path $proj "dist") "server-kunye.json") | ConvertFrom-Json).guvenCapasi
   foreach ($ad in $HIZMET_IKILILERI.Keys) {
-    $olcu = HizmetIkilisiOlc (Join-Path $ikiliDizin $ad) $HIZMET_IKILILERI[$ad]
+    $olcu = HizmetIkilisiOlc (Join-Path $ikiliDizin $ad) $HIZMET_IKILILERI[$ad] $paketCapaKipi
     Copy-Item (Join-Path $ikiliDizin $ad) (Join-Path (Join-Path $stage "runtime") $ad)
     $hizmetIkilileri[$ad] = $olcu
     Write-Host "  runtime     : runtime\$ad ($($olcu.surum), $([math]::Round($olcu.boyut / 1MB, 1)) MB, sha256 $($olcu.sha256.Substring(0, 16))...)"

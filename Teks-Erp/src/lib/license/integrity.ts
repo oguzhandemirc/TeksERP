@@ -17,6 +17,7 @@ import {
   decodeDocument,
   publicKeyFromX,
   verifyJws,
+  type TrustAnchorMode,
 } from "./protocol";
 import {
   INTEGRITY_LIST_FILE,
@@ -27,6 +28,7 @@ import {
   walkIntegrityScope,
   type IntegrityListEntry,
 } from "./integrity-list";
+import { BUILD_ANCHOR_MODE } from "./trust-anchor";
 
 export const INTEGRITY_TYP = TYP.BUTUNLUK;
 export { INTEGRITY_MAX_FILES };
@@ -41,15 +43,29 @@ export interface PackageKey {
 }
 
 /**
- * PAKET anahtarının açık yarısı — native çekirdeğe GÖMÜLÜ çapanın (`anchor.rs`) kaynağı. Hazırlık
- * anahtarı (`paket-hazirlik*`) yalnız TEST/DEMO kurulumunda kabul, ÜRETİM'de red (`integrity-scope.ts`
- * `STAGING_PACKAGE_*`); üretim anahtarı (`paket-<yıl>`) törenle girer. Satır yalnız
- * `scripts/guven-capasi-ekle.ts paket` ile eklenir (`anchor.rs` ile birlikte), elle düzenlenmez.
+ * Üretim PAKET anahtarları (`paket-<yıl>[-<n>]`, parolalı tören) — native çekirdeğe GÖMÜLÜ çapanın (`anchor.rs`) kaynağı.
+ * Satır yalnız `scripts/guven-capasi-ekle.ts paket` ile eklenir (`anchor.rs` ile birlikte), elle düzenlenmez.
  */
-export const PACKAGE_PUBLIC_KEYS: readonly PackageKey[] = Object.freeze([
-  Object.freeze({ kid: "paket-hazirlik", x: "auFAoNnXZDIWdyLJ5EVsakwMquIa_GHqCyKxZHz16Z8" }),
+export const PRODUCTION_PACKAGE_PUBLIC_KEYS: readonly PackageKey[] = Object.freeze([
   Object.freeze({ kid: "paket-2026", x: "j7xjeBy3BGQu38IZrvaaJJFcQ0OJCp22z8fUNiYwaCM" }),
 ]);
+
+/** Hazırlık PAKET anahtarları (`paket-hazirlik*`, parolasız) — yalnız hazırlık derlemesinde ve TEST/DEMO kurulumunda. */
+export const STAGING_PACKAGE_PUBLIC_KEYS: readonly PackageKey[] = Object.freeze([
+  Object.freeze({ kid: "paket-hazirlik", x: "auFAoNnXZDIWdyLJ5EVsakwMquIa_GHqCyKxZHz16Z8" }),
+]);
+
+const NO_PACKAGE_KEYS: readonly PackageKey[] = Object.freeze([]);
+
+/** Kipin PAKET çapası; tanınmayan kip boş çapadır (fail-closed). */
+export function packagePublicKeysFor(mode: TrustAnchorMode): readonly PackageKey[] {
+  if (mode === "uretim") return PRODUCTION_PACKAGE_PUBLIC_KEYS;
+  if (mode === "hazirlik") return STAGING_PACKAGE_PUBLIC_KEYS;
+  return NO_PACKAGE_KEYS;
+}
+
+/** Bu derlemenin PAKET çapası (kip `trust-anchor.ts`): üretim derlemesi hazırlık anahtarıyla imzalı listeyi tanımaz. */
+export const PACKAGE_PUBLIC_KEYS: readonly PackageKey[] = packagePublicKeysFor(BUILD_ANCHOR_MODE);
 
 const PACKAGE_KID = /^paket-[a-z0-9-]{1,40}$/;
 const SAFE_PATH = /^(?:[A-Za-z0-9_.@+-]+\/)*[A-Za-z0-9_.@+-]+$/;
@@ -226,19 +242,33 @@ export async function readIntegrityList(root: string, liste: IntegrityManifest["
   return entries ? { ok: true, entries } : { ok: false, bucket: "changed" };
 }
 
-/** İmzalı yüke karşı `root` altındaki dosyalar. `keys` verilmezse gömülü `PACKAGE_PUBLIC_KEYS`. */
-export async function verifyIntegrity(manifest: unknown, root: string, keys: readonly PackageKey[] = PACKAGE_PUBLIC_KEYS): Promise<IntegrityReport> {
+export type SignedManifest =
+  | { readonly ok: true; readonly kid: string; readonly manifest: IntegrityManifest }
+  | { readonly ok: false; readonly durum: "GECERSIZ" | "OLCULEMEDI"; readonly code: string };
+
+/**
+ * İmzalı yükü verilen PAKET çapasıyla doğrular ve çözer — TS çekirdeği, `.node` yükleyicisi ve ikinci katman AYNI
+ * kuralı kullanır (biçimsiz çapa ölçülemedi; imza/şema düşerse geçersiz).
+ */
+export function verifySignedManifest(manifest: unknown, keys: readonly PackageKey[]): SignedManifest {
   const usable = new Map<string, KeyObject>();
   for (const k of keys) {
     const key = PACKAGE_KID.test(k.kid) ? publicKeyFromX(k.x) : null;
     if (key) usable.set(k.kid, key);
   }
-  if (usable.size === 0 || usable.size !== keys.length) return report({ durum: "OLCULEMEDI", kod: "BUTUNLUK_CAPA_BOS" });
+  if (usable.size === 0 || usable.size !== keys.length) return { ok: false, durum: "OLCULEMEDI", code: "BUTUNLUK_CAPA_BOS" };
   const j = verifyJws(manifest, { typ: INTEGRITY_TYP, findKey: (kid) => usable.get(kid) });
-  if (!j.ok) return report({ durum: "GECERSIZ", kod: j.code });
+  if (!j.ok) return { ok: false, durum: "GECERSIZ", code: j.code };
   const d = decodeDocument(IntegrityManifestSchema, j.value.payload);
-  if (!d.ok) return report({ durum: "GECERSIZ", kod: d.code });
-  const m = d.value;
+  if (!d.ok) return { ok: false, durum: "GECERSIZ", code: d.code };
+  return { ok: true, kid: j.value.header.kid, manifest: d.value };
+}
+
+/** İmzalı yüke karşı `root` altındaki dosyalar. `keys` verilmezse bu derlemenin `PACKAGE_PUBLIC_KEYS`i. */
+export async function verifyIntegrity(manifest: unknown, root: string, keys: readonly PackageKey[] = PACKAGE_PUBLIC_KEYS): Promise<IntegrityReport> {
+  const signed = verifySignedManifest(manifest, keys);
+  if (!signed.ok) return report({ durum: signed.durum, kod: signed.code });
+  const m = signed.manifest;
   const paket = { paketId: m.paketId, urun: m.urun, surum: m.surum, derlemeTarihi: m.derlemeTarihi, musteri: m.musteri };
   const total = m.liste.dosyaSayisi;
   if (!(await isDirectory(root))) return report({ durum: "OLCULEMEDI", kod: "BUTUNLUK_OKUNAMADI", total, paket });

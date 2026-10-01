@@ -7,7 +7,6 @@
 import crypto, { type KeyObject } from "node:crypto";
 import {
   ModuleKeySchema,
-  ROOT_PUBLIC_KEYS,
   b64uDecode,
   b64uEncode,
   checkLeaseBinding,
@@ -20,6 +19,7 @@ import {
   type ProtocolErrorCode,
   type RootKey,
 } from "./protocol";
+import { ROOT_PUBLIC_KEYS } from "./trust-anchor";
 
 export {
   MODULE_KEY_HKDF_PREFIX,

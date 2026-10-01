@@ -33,6 +33,10 @@ impl TrustAnchor {
 
 pub const TEST_ANCHOR: bool = cfg!(feature = "test-anchor");
 
+/// Gömülü çapanın kipi (`uretim` | `hazirlik`, ortak crate'in `hazirlik-capasi` özelliğinden): künyede `capaKipi`;
+/// kendini güncelleme kipi DEĞİŞTİRMEZ, paketleme paketin kipiyle kıyaslar.
+pub const ANCHOR_MODE: &str = anchor::MODE;
+
 /// `{roots:[{kid,x,classes}], packageKeys:[{kid,x}]}` — lisans çekirdeğinin `builtinAnchor` biçimi.
 #[cfg(feature = "test-anchor")]
 fn from_json_file(p: &std::path::Path) -> Result<TrustAnchor, String> {

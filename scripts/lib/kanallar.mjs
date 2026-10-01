@@ -48,11 +48,16 @@ export const TABLET_ANAHTARLARI = ['androidPaket', 'gorunenAd', 'erpAdresi', 'ru
  *   · urunAdi — /health + PAKET.json'da görünen backend adı (filigran; her kanalda AYRIK);
  *   · pm2Ad   — sunucudaki pm2 süreç adı (TEKSERP_PM2_AD; iki kurulum çakışmasın — her kanalda AYRIK);
  *   · hizmetAdi — backend'in Windows hizmet adı (Dağıtım v2, TEKSERP_HIZMET_ADI — hizmet konağının ortam adıyla aynı; aynı makinede iki kanal yan yana —
- *     her kanalda AYRIK, Windows hizmet adı büyük/küçük harf duyarsız olduğu için duyarsız ölçülür).
+ *     her kanalda AYRIK, Windows hizmet adı büyük/küçük harf duyarsız olduğu için duyarsız ölçülür);
+ *   · guvenCapasi — kanalın lisans satıcısı/kök bağı (`uretim` | `hazirlik`): paket YALNIZ o kipin kök + PAKET
+ *     anahtarlarına güvenir (build-korumali derleme sabiti + native/güncelleyici `hazirlik-capasi` özelliği). Üretim
+ *     kanalı daima `uretim`. OTA sertifikası gibi bir güven BAĞIDIR, çalışma anı bayrağı değil.
  * DAVRANIŞ TAŞIMAZ: bayrak/ayar değil, dağıtım kimliği (feed'ler gibi). Backend YAYIN yolları
  * (feed · son.json · VDS · defter) panel/tablet gibi `yayin` bloğundadır (Dağıtım v2, `deploy/backend-yayinla.mjs`).
  */
-export const BACKEND_ANAHTARLARI = ['urunAdi', 'pm2Ad', 'hizmetAdi'];
+export const BACKEND_ANAHTARLARI = ['urunAdi', 'pm2Ad', 'hizmetAdi', 'guvenCapasi'];
+/** Backend güven çapası kipleri — Teks-Erp `protocol/kok-anahtarlar.ts` `TRUST_ANCHOR_MODES` ile aynı küme. */
+export const GUVEN_CAPASI_KIPLERI = ['uretim', 'hazirlik'];
 
 /**
  * İki kanal arasında AYNI OLAMAYAN alanlar. `runtimeVersion` bilerek YOK: uyum
@@ -202,6 +207,11 @@ export function kayitHatalari(kayit) {
     if (typeof hizmet === 'string' && !/^[A-Za-z][A-Za-z0-9._-]{1,59}$/.test(hizmet)) {
       h.push(`${on}: backend.hizmetAdi "${hizmet}" biçimi tutmuyor (harfle başlar; harf/rakam/nokta/tire/alt çizgi, 2-60)`);
     }
+    // Güven çapası: tanınmayan kip fail-closed RED; üretim kanalı hazırlık köküne bağlanamaz (hazırlık kökü
+    // ÜRETİM sınıfını imzalayamaz ve daha az korunur — üretim paketi ona hiç güvenmemeli).
+    const capa = k.backend?.guvenCapasi;
+    if (typeof capa === 'string' && !GUVEN_CAPASI_KIPLERI.includes(capa)) h.push(`${on}: backend.guvenCapasi "${capa}" tanınmıyor (${GUVEN_CAPASI_KIPLERI.join(' | ')})`);
+    if (k.tur === 'uretim' && typeof capa === 'string' && capa !== 'uretim') h.push(`${on}: üretim kanalı backend.guvenCapasi "${capa}" — yalnız uretim (hazırlık çapası üretim paketine giremez)`);
     // pm2 adı sunucuda süreç/servis kimliğidir: boşluk/ters bölü/kabuk taşıyamaz.
     const pm2 = k.backend?.pm2Ad;
     if (typeof pm2 === 'string' && !/^[a-zA-Z0-9._-]{2,60}$/.test(pm2)) {
@@ -459,6 +469,7 @@ export function backendPaketleAyarlari(kod, kanal) {
     TEKSERP_PM2_AD: kanal.backend.pm2Ad,
     TEKSERP_BACKEND_URUN: kanal.backend.urunAdi,
     TEKSERP_HIZMET_ADI: kanal.backend.hizmetAdi,
+    TEKSERP_GUVEN_CAPASI: kanal.backend.guvenCapasi,
   };
 }
 

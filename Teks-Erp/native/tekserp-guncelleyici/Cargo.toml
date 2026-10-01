@@ -19,6 +19,9 @@ path = "src/main.rs"
 # Dışarıdan güven çapası (`TEKSERP_TEST_CAPASI` = JSON dosyası) — YALNIZ test/duman derlemesi.
 # Üretim ikilisi özelliksiz çıkar: çapa derlemeye gömülüdür (`tekserp_dogrulama::anchor`).
 test-anchor = []
+# Gömülü çapa kipi (ortak `tekserp-dogrulama/src/anchor.rs`): özelliksiz ÜRETİM, bu özellik YALNIZ hazırlık kökleri +
+# PAKET anahtarları. Hazırlık kanalının paketi bu güncelleyiciyi taşır; künye `capaKipi`, paketleme kipi kıyaslar.
+hazirlik-capasi = ["tekserp-dogrulama/hazirlik-capasi"]
 
 [dependencies]
 tekserp-dogrulama.workspace = true

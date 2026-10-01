@@ -6,9 +6,18 @@ mod common;
 use common::*;
 use std::path::PathBuf;
 use tekserp_guncelleyici::selfupdate::{self, Startup};
+use tekserp_guncelleyici::trust::ANCHOR_MODE;
 
 fn exe_json(name: &str, version: &str) -> String {
-    format!("{{\"ad\":\"{name}\",\"surum\":\"{version}\",\"hedef\":\"windows\",\"testCapasi\":false}}")
+    exe_json_mode(name, version, Some(ANCHOR_MODE))
+}
+
+fn exe_json_mode(name: &str, version: &str, mode: Option<&str>) -> String {
+    let mut k = serde_json::json!({ "ad": name, "surum": version, "hedef": "windows", "testCapasi": false });
+    if let Some(m) = mode {
+        k["capaKipi"] = m.into();
+    }
+    k.to_string()
 }
 
 /// Kurulu ikili 0.1.0 (guncelleyici\), paket (current\runtime\) 9.9.9 taşır; kurulu sürüm dizini
@@ -144,4 +153,19 @@ fn copy_changed_after_verification_is_never_executed() {
     assert!(w.faults.executed.lock().unwrap().is_empty(), "değişmiş kopya çalıştırıldı");
     assert!(!own.with_file_name("tekserp-guncelleyici.yeni.exe").exists());
     assert!(read(&own).contains("0.1.0"));
+}
+
+/// G3: güven çapası kurulumun kimliğidir — paketteki daha yeni güncelleyici öteki kipte (ya da kipsiz) ise
+/// yerleşmez; SYSTEM ikilisi kendini güncellemeyle hazırlık ↔ üretim arasında geçemez.
+#[test]
+fn other_anchor_mode_binary_is_refused() {
+    let other = if ANCHOR_MODE == "uretim" { "hazirlik" } else { "uretim" };
+    for (tag, mode) in [("oteki-kip", Some(other)), ("kipsiz", None)] {
+        let (w, own) = setup(tag, Some(exe_json_mode("tekserp-guncelleyici", "9.9.9", mode)));
+        let r = stage(&w, &own, "0.1.0");
+        assert!(r.as_ref().is_err_and(|e| e.contains("çapa kipini")), "{tag}: {r:?}");
+        assert!(read(&own).contains("0.1.0"), "{tag}: kurulu ikili yerinde");
+        assert!(!own.with_file_name("tekserp-guncelleyici.yeni.exe").exists(), "{tag}: yan dosya açılmadı");
+        assert!(!w.layout.self_update_file().exists(), "{tag}: kendini güncelleme durumu yazılmadı");
+    }
 }

@@ -21,7 +21,7 @@ use std::sync::Arc;
 use tekserp_guncelleyici::engine::{Engine, TickResult};
 use tekserp_guncelleyici::journal::Journal;
 use tekserp_guncelleyici::layout::Layout;
-use tekserp_guncelleyici::trust::{TrustAnchor, TEST_ANCHOR};
+use tekserp_guncelleyici::trust::{TrustAnchor, ANCHOR_MODE, TEST_ANCHOR};
 use tekserp_guncelleyici::{env, lock, settings};
 use tekserp_hizmet::logfile::{LogSpec, RotatingLog};
 
@@ -49,7 +49,14 @@ fn data_arg(args: &[String], root: &std::path::Path) -> PathBuf {
 }
 
 fn identity() -> String {
-    serde_json::json!({ "ad": "tekserp-guncelleyici", "surum": env!("CARGO_PKG_VERSION"), "hedef": std::env::consts::OS, "testCapasi": TEST_ANCHOR }).to_string()
+    serde_json::json!({
+        "ad": "tekserp-guncelleyici",
+        "surum": env!("CARGO_PKG_VERSION"),
+        "hedef": std::env::consts::OS,
+        "testCapasi": TEST_ANCHOR,
+        "capaKipi": ANCHOR_MODE,
+    })
+    .to_string()
 }
 
 fn one_tick(args: &[String]) -> Result<u32, String> {

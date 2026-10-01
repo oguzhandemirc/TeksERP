@@ -3,15 +3,23 @@
 //! her sonuç TS'in beklenen sonucuna EŞİT olmalıdır. İstek biçimi `src/lib/license/native.ts`
 //! adaptörünün kurduğuyla aynıdır — ölçülen yüzey, Node'un gördüğü yüzey.
 //!
-//! Koşum: `cargo test --no-default-features --features test-anchor` (vektörler test çapası ister).
+//! Koşum: `cargo test --no-default-features --features test-anchor` (vektörler test çapası ister) ve aynı komut
+//! `hazirlik-capasi` ile — gömülü çapa vektörleri (`kip`) yalnız kendi kipiyle derlenmiş çekirdekte koşar.
 #![cfg(feature = "test-anchor")]
 
-use lisans_cekirdek::{api, b64, iso, jsonx};
+use lisans_cekirdek::{anchor, api, b64, iso, jsonx};
 use serde_json::{json, Map, Value};
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicU64, Ordering};
 
-const VEKTOR_BICIMI: u64 = 1;
+const VEKTOR_BICIMI: u64 = 2;
+/// Bir kipin gömülü çapa vektörü bundan azsa kip koşumu kanıt sayılmaz (boş küme yeşil vermesin).
+const MIN_MODE_VECTORS: usize = 8;
+
+/// Gömülü çapa vektörü öteki kipin çapasıyla beklenmiştir; bu derlemede koşmaz.
+fn applies_to_this_build(v: &Value) -> bool {
+    v.get("kip").and_then(Value::as_str).is_none_or(|k| k == anchor::MODE)
+}
 
 fn vector_file() -> Value {
     let path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("test-vektorleri").join("protokol.json");
@@ -137,7 +145,14 @@ fn every_vector_matches_ts_oracle() {
     let records = file["kayitlar"].as_array().expect("kayitlar");
     assert!(records.len() >= 200, "vektör sayısı beklenenden az: {}", records.len());
     let mut mismatches = Vec::new();
+    let mut mode_vectors = 0usize;
     for r in records {
+        if !applies_to_this_build(&r["vektor"]) {
+            continue;
+        }
+        if r["vektor"].get("kip").is_some() {
+            mode_vectors += 1;
+        }
         let got = evaluate(&r["vektor"]);
         if !jsonx::deep_equal(&got, &r["beklenen"]) {
             mismatches.push(format!(
@@ -150,11 +165,13 @@ fn every_vector_matches_ts_oracle() {
         }
     }
     assert!(mismatches.is_empty(), "{} vektör TS kâhininden ayrıştı:\n{}", mismatches.len(), mismatches.join("\n"));
+    assert!(mode_vectors >= MIN_MODE_VECTORS, "{} kipinin gömülü çapa vektörü {mode_vectors} (en az {MIN_MODE_VECTORS})", anchor::MODE);
 }
 
 #[test]
 fn builtin_anchor_is_the_ts_constant_shape() {
     let a = api::builtin_anchor();
-    assert!(a["roots"].as_array().is_some_and(|r| !r.is_empty()), "gömülü kök çapası boş olamaz (hazırlık kökü)");
-    assert!(a["packageKeys"].is_array());
+    assert_eq!(a["kip"].as_str(), Some(anchor::MODE));
+    assert!(a["roots"].as_array().is_some_and(|r| !r.is_empty()), "gömülü kök çapası boş olamaz");
+    assert!(a["packageKeys"].as_array().is_some_and(|k| !k.is_empty()), "gömülü PAKET çapası boş olamaz");
 }

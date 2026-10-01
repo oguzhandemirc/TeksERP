@@ -213,7 +213,8 @@ async function main(): Promise<void> {
         cwd: SATICI_KOKU,
         input: stdin,
         encoding: "utf8",
-        env: { ...process.env, ANAHTAR_DIZINI: ortam.dizin },
+        // CLI de sunucu gibi çapa kipi ister (konteynerde compose verir); bekçi fikstür çapasını dosyadan verir.
+        env: { ...process.env, ANAHTAR_DIZINI: ortam.dizin, GUVEN_CAPASI_DOSYASI: ortam.capaDosyasi },
         timeout: 60_000,
       });
     const argvParola = cli(["ekle", `--kullanici=${cliAd}`, "--ad-soyad=CLI Yönetici", "--rol=SATICI_YONETICI", `--parola=${cliParola}`], "");

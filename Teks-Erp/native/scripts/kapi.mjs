@@ -4,7 +4,10 @@
 //   denetle — `cargo fmt --all --check` + clippy (uyarı = hata): bütün alan (lisans çekirdeği test
 //             çapalı) · lisans çekirdeği napi'siz · hizmet ikilileri Windows hedefinde (yalnız `check`,
 //             bağlama yok — Mac'ten de ölçülür; hedef std'si kurulu değilse ⏭ beyanla, CI Windows job'ı ölçer)
-//   test    — `cargo test`: alanın napi'siz üyeleri + lisans çekirdeği (TS kâhininin vektör dosyası, test çapası)
+//             — alan ve napi'siz çekirdek İKİ çapa kipinde (özelliksiz üretim · `hazirlik-capasi`)
+//   test    — `cargo test`: alanın napi'siz üyeleri + lisans çekirdeği (TS kâhininin vektör dosyası, test çapası);
+//             hazırlık kipinde ortak crate + güncelleyicinin çapa testi + lisans çekirdeği (gömülü çapa vektörleri
+//             yalnız kendi kipinde koşar). Kip SEÇİMDİR: her kip AYRI cargo çağrısı (özellik birleşmesi kipi bozmasın)
 // ÜÇ SONUÇ: 0 temiz · 1 ihlal · cargo YOKSA ⏭ beyanla 0 — Rust araç zinciri olmayan oturum kapıyı
 // ölçemez; ölçüm CI'daki "Native" job'larındadır (sessiz yeşil değil, beyanlı atlama).
 import { spawnSync } from "node:child_process";
@@ -50,11 +53,16 @@ const ADIMLAR = {
     ["fmt", "--all", "--check"],
     ["clippy", "--release", "--workspace", "--all-targets", "--features", "lisans-cekirdek/test-anchor", "--", "-D", "warnings"],
     ["clippy", "--release", "-p", "lisans-cekirdek", "--all-targets", "--no-default-features", "--features", "test-anchor", "--", "-D", "warnings"],
+    ["clippy", "--release", "--workspace", "--all-targets", "--features", "lisans-cekirdek/test-anchor,tekserp-dogrulama/hazirlik-capasi", "--", "-D", "warnings"],
+    ["clippy", "--release", "-p", "lisans-cekirdek", "--all-targets", "--no-default-features", "--features", "test-anchor,hazirlik-capasi", "--", "-D", "warnings"],
     { windows: ["clippy", "--release", "--target", WINDOWS_HEDEFI, ...HIZMETLER, "--all-targets", "--", "-D", "warnings"] },
   ],
   test: [
     ["test", "--workspace", "--exclude", "lisans-cekirdek"],
     ["test", "-p", "lisans-cekirdek", "--no-default-features", "--features", "test-anchor"],
+    ["test", "-p", "tekserp-dogrulama", "--features", "hazirlik-capasi"],
+    ["test", "-p", "tekserp-guncelleyici", "--features", "hazirlik-capasi", "--test", "capa_kipi", "--test", "self_update"],
+    ["test", "-p", "lisans-cekirdek", "--no-default-features", "--features", "test-anchor,hazirlik-capasi"],
   ],
 };
 

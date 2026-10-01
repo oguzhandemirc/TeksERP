@@ -110,7 +110,7 @@ node deploy/satici/uretim-toren.mjs usb-kopyala --usb=/Volumes/<USB adı>
    # ikisi de doğruysa aynı komutlar --yaz ile → TS kök/paket çapası + satıcı/patron aynası + native anchor.rs birlikte
    ```
 
-   Commit yöneticide; yeni backend sürümü (native yeniden derlenir). Üretim satıcısının imajı bu commit'ten SONRAKİ HEAD'den derlenir (satıcının gömülü çapası).
+   Commit yöneticide; yeni backend sürümü (native yeniden derlenir). Üretim satıcısının imajı bu commit'ten SONRAKİ HEAD'den derlenir (satıcının gömülü çapası). G3'ten (2026-10-01) beri çapa İKİ kiptir: betik `kok-*`/`paket-<yıl>`ı ÜRETİM, `hazirlik-*`/`paket-hazirlik*`ı HAZIRLIK listesine yazar; üretim paketinin native'i `derle:*:uretim`, satıcı `GUVEN_CAPASI=uretim` (compose `ORTAM`).
    **YAPILDI (2026-09-30, dal `lisans/capa`):** iki kuru koşumun `x`i yöneticinin aktardığı değerle birebir → `--yaz`; dört yer yazıldı, ikinci koşum "zaten çapada" (kayıt §7). Kalan: iniş · yeni backend sürümü (native `derle:win:uretim` / `derle:linux:uretim`) · satıcı imajı (SATICI-KURULUM §13.2).
 2. **VDS:** [`SATICI-KURULUM.md`](SATICI-KURULUM.md) §13 — anahtar birimi, ayrı DB, yedek döngüsü, iç API, DNS (`lisans`).
 3. **CF Worker:** İNDİRME açık anahtarı (`capaSatirlari.CF_WORKER_INDIRME`) [`INDIRME-KAPISI-WORKER.md`](INDIRME-KAPISI-WORKER.md) ayarına eklenir (kullanıcı).
