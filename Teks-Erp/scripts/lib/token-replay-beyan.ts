@@ -39,6 +39,8 @@ export const TOKEN_YOLLARI: Record<string, TokenYolu> = {
   [`${S}support.service.ts::createSupportTicket`]: { giris: { [`${S}support.service.ts::createSupportTicket`]: "R" } },
   // Lisans sözleşmesi kabulü (Ek-7): kabul satırı panelden clientToken ile doğar; kimliği (kabulId) imzalı belgeye girer.
   [`${S}license-acceptance.service.ts::recordLicenseAcceptance`]: { giris: { [`${S}license-acceptance.service.ts::recordLicenseAcceptance`]: "R" } },
+  // Backend güncelleme onayı (Dağıtım v2): karar satırı panelden clientToken ile doğar; kimliği (onayId) niyet dosyasına girer.
+  [`${S}update-approval.service.ts::recordUpdateApproval`]: { giris: { [`${S}update-approval.service.ts::recordUpdateApproval`]: "R" } },
   // Patron bulutu gelen kutusu: clientToken = mesajId; 8036 mesajId üzerinde, makbuz replay'i tx'in ilk ifadesi (K).
   [`${S}order.service.ts::prepareOrderCreate`]: { giris: { [`${S}order.service.ts::create`]: "R", [`${S}order.service.ts::quickOrderTx`]: "K", [`${S}cloud-inbox.service.ts::createOrderFromMessage`]: "K" } },
   [`${S}order.service.ts::quickOrderFromRolls`]: { giris: { [`${S}order.service.ts::quickOrderTx`]: "K" } },
@@ -141,6 +143,7 @@ export const KIMLIK_BEYANI: Record<string, readonly string[]> = {
   [`${S}warp-beam-consume.service.ts::consumeReplay`]: ["beamId", "kind", "lengthM"],
   [`${S}support.service.ts::replayFor`]: ["konu", "aciklama"],
   [`${S}license-acceptance.service.ts::replayFor`]: ["adSoyad", "unvan", "metinOzeti"],
+  [`${S}update-approval.service.ts::replayFor`]: ["surum", "zamanlama", "onaylayan"],
   [`${S}warp-beam-mount.service.ts::mountReplay`]: ["beamId", "kind", "machineId", "mountPosition"],
   [`${S}warp-beam-wind.service.ts::windReplay`]: ["beamId", "kind", "lengthM"],
   [`${S}warp-beam.service.ts::warpBeamReplay`]: ["warpSpecId", "originKind", "plannedLengthM", "subcontractorId", "supplierId", "ownerCustomerId", "weavingOrderId", "physicalBeamNo"],

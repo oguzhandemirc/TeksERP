@@ -55,6 +55,10 @@ const EXEMPT: Record<string, string> = {
   // 2026-08-09'dan beri YALNIZ canlılık döndürür; zengin panel
   // /api/admin/health arkasına alındı (F-CORE-GUV-002). Alan kümesi aşağıda kilitli.
   "GET /health": "canlılık ucu; login öncesi erişilebilir olmak zorunda",
+  // Güncelleyicinin sağlık sondası (Dağıtım v2, GUNCELLEYICI.md §8.7): SYSTEM hizmeti oturum taşıyamaz. Koruma
+  // kimlik değil ADRESTİR — yalnız döngü adresinden doğrudan (vekil başlıksız) gelen istek cevap alır, dışarıya
+  // 404; `lisans{kip,butunluk,cekirdek}` bu yüzden donmuş public `/health`e girmez. Bekçi: test_yerel_saglik.
+  "GET /health/yerel": "güncelleyicinin yerel sağlık sondası; yalnız döngü adresine cevap verir (dışarıya 404)",
   // Servis keşfi kimlik ucu: istemci HENÜZ HANGİ SUNUCUYA bağlanacağını
   // bilmiyorken çağırır — guard takılamaz (/health ile birebir aynı gerekçe).
   // Yük DB'siz ve minimaldir; sızdırdığı her alan (hostname, firma adı, sürüm)

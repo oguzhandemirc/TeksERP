@@ -92,19 +92,30 @@ function kayit(kayitId: string, ek: Record<string, unknown> = {}): string {
     geriDonus: { damga: "20260929_213000", kod: true, veri: true, veriSifreli: true }, ...ek,
   });
 }
-// Güncelleyicinin durum dizini taklidi (D2 §5): serbest ileti ve onaylayan adı dosyada VAR, gövdede olmamalı.
+// Güncelleyicinin durum dizini taklidi (D2 §5, gerçek biçim): serbest ileti, aday özeti, iç ayrıntı ve onaylayan
+// adı dosyada VAR, gövdede olmamalı. Kalp atışı taze (canlı); kesin bloklar (`bekleyen` · `son`) rapora AYNEN.
 const GUNCELLEYICI = path.join(KOK, "guncelleme");
 const ISLEM = randomUUID();
+const ATIS = new Date().toISOString();
 fs.mkdirSync(path.join(GUNCELLEYICI, "durum"), { recursive: true });
+const SON = {
+  kayitId: ISLEM, hedefSurum: "2.14.0", kaynakSurum: "2.13.1", sonuc: "GERI_DONDU", kod: "SAGLIK_HATASI",
+  baslangic: "2026-09-29T23:00:00.000Z", bitis: "2026-09-29T23:20:00.000Z", veriGeriYuklendi: true,
+};
 fs.writeFileSync(path.join(GUNCELLEYICI, "durum", "durum.json"), JSON.stringify({
-  v: 1, durum: "HAZIR", urun: "backend", surum: "2.15.0", kaynakSurum: "2.14.0", kuruluSurum: "2.14.0", adim: null, hataKodu: null,
-  mesaj: "GIZLI-GUNCELLEYICI-ILETISI C:\\TeksERP\\surumler", niyetId: "n1", islemId: null, ilerleme: null, planlanan: null,
-  politika: { kip: "ONAYLI", izin: true, neden: null }, guncelleyiciSurum: "0.1.0", zaman: "2026-09-30T20:07:12.000Z",
+  v: 1, zaman: ATIS, sonCanlilik: ATIS, canlilikEsigiSn: 180, turSn: 60, guncelleyiciSurum: "0.1.0",
+  kuruluSurum: "2.14.0", durum: "HAZIR", surum: "2.15.0", kaynakSurum: "2.14.0", urun: null, islemId: null, adim: null, hataKodu: null,
+  mesaj: "GIZLI-GUNCELLEYICI-ILETISI C:\\TeksERP\\surumler", ilerleme: null, planlanan: null,
+  politika: { kip: "ONAYLI", izin: true, neden: null, kaynak: "KIRA", hedefSurum: null, donuk: false },
+  karar: { karar: "ONAY_BEKLIYOR", neden: null, aralik: null, pgGuncellemesi: false },
+  bekleyen: { surum: "2.15.0", karar: "ONAY_BEKLIYOR", neden: null, aralik: null, pgGuncellemesi: false, zorunlu: false, ozet: "GIZLI-ADAY-OZETI" },
+  son: SON,
+  sonAyrinti: { urun: "backend", hataKodu: "SAGLIK_ZAMAN_ASIMI", mesaj: "GIZLI-ICERIK-AYRINTISI" },
 }));
 fs.writeFileSync(path.join(GUNCELLEYICI, "durum", "gecmis.jsonl"), JSON.stringify({
-  v: 1, islemId: ISLEM, niyetId: "n0", urun: "backend", kaynakSurum: "2.13.1", surum: "2.14.0", sonuc: "GERI_DONDU", hataKodu: "SAGLIK_ZAMAN_ASIMI",
-  basladi: "2026-09-29T23:00:00.000Z", bitti: "2026-09-29T23:20:00.000Z", gocSayisi: { once: 380, sonra: 384 }, yedek: ISLEM,
-  onay: { kullaniciId: randomUUID(), ad: "Onaylayan-Kisi-Adi", zaman: "2026-09-29T22:58:00Z", planlanan: null },
+  v: 1, islemId: ISLEM, onayId: null, urun: "backend", kaynakSurum: "2.13.1", surum: "2.14.0", sonuc: "GERI_DONDU", hataKodu: "SAGLIK_HATASI",
+  ayrintiKodu: "SAGLIK_ZAMAN_ASIMI", veriGeriYuklendi: true, basladi: SON.baslangic, bitti: SON.bitis, gocSayisi: { once: 380, sonra: 384 }, yedek: ISLEM,
+  onay: { onayId: randomUUID(), surum: "2.14.0", zamanlama: "HEMEN", kullaniciId: randomUUID(), ad: "Onaylayan-Kisi-Adi", zaman: "2026-09-29T22:58:00Z" },
 }) + "\n");
 process.env.TEKSERP_GUNCELLEME_DIZINI = GUNCELLEYICI;
 // BOM + bozuk satır + allowlist dışı alanlı satır (dosya adı taşıyor) + aynı kaydın ikinci hâli.
@@ -196,8 +207,9 @@ async function main(): Promise<void> {
     const g = govde.guncelleme;
     check("§5a ⭐ rapor gövdede: güncelleyici çalışıyor, onay bekleyen 2.15.0, son deneme geri döndü (kodlu)",
       g?.guncelleyici.durum === "CALISIYOR" && g.bekleyen?.surum === "2.15.0" && g.bekleyen.karar === "ONAY_BEKLIYOR" &&
-      g.son?.kayitId === ISLEM && g.son.sonuc === "GERI_DONDU" && g.son.kod === "SAGLIK_ZAMAN_ASIMI", JSON.stringify(g));
-    check("§5b ⭐ güncelleyicinin serbest iletisi ve onaylayanın adı gövdede YOK", !metin.includes("GIZLI-GUNCELLEYICI-ILETISI") && !metin.includes("Onaylayan-Kisi-Adi"));
+      g.son?.kayitId === ISLEM && g.son.sonuc === "GERI_DONDU" && g.son.kod === "SAGLIK_HATASI" && JSON.stringify(g.son) === JSON.stringify(SON), JSON.stringify(g));
+    check("§5b ⭐ güncelleyicinin serbest iletisi, aday özeti, iç ayrıntısı ve onaylayanın adı gövdede YOK",
+      !metin.includes("GIZLI-") && !metin.includes("Onaylayan-Kisi-Adi") && !metin.includes("SAGLIK_ZAMAN_ASIMI"));
     fs.rmSync(GUNCELLEYICI, { recursive: true, force: true });
     const govde3 = await buildPollBody();
     check("§5c güncelleyici yoksa alan HİÇ gitmez (eski satıcı uyumu)", !("guncelleme" in govde3));

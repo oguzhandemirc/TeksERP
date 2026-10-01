@@ -24,6 +24,7 @@ import { egressTransport, type VendorTransport } from "../services/helpers/licen
 import { getLicenseConfig, getLicenseSnapshot, onDownloadTokenStale, setLicenseEngineStatus, setNextPollAt } from "../lib/license/runtime";
 import { STARTUP_VENDOR } from "../lib/license/vendor-url";
 import { POLL_DEFAULT_MINUTES } from "../lib/license/protocol";
+import { isVerificationMode } from "../lib/dogrulama-kipi";
 
 const STARTUP_DELAY_MS = 60 * 1000;
 const HOUSEKEEPING_INTERVAL_MS = 60 * 60 * 1000;
@@ -169,6 +170,13 @@ async function bootstrap(): Promise<void> {
   await refreshIntegrityQuietly();
   if (stale()) return;
   evaluateLicenseTransitions();
+  if (isVerificationMode()) {
+    // Doğrulama kipi: yerel ölçüm tamam (güncelleyicinin sağlık sondası `lisans`ı buradan okur); satıcıya yoklama,
+    // tazeleme zamanlayıcısı ve dürtme YOK — `engineRunning` false kalır, "hemen yokla" no-op.
+    setLicenseEngineStatus("CALISIYOR", "DOGRULAMA_KIPI");
+    bilgi("lisans", "doğrulama kipi — yerel ölçüm tamam; satıcıya yoklama zamanlanmadı");
+    return;
+  }
   housekeepingTimer = setInterval(() => {
     void refreshFactsNow()
       .catch(() => undefined)

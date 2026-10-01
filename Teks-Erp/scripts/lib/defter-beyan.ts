@@ -541,6 +541,8 @@ export const DEFTER_BEYANI: DefterBeyani[] = [
     gerekce: "satıcı destek yanıtının YEREL ÖNBELLEK kopyası (3d-2): \"ne oldu\"nun sahibi satıcının `destek_olayi` defteridir (tetikleyiciyle değişmez), talep satıcıda kapanır; yerelde iş kararı ve raporlanan sayı yok, satır `vendorReplyId` ile tekil, yalnız yoklama eşitlemesi ekler (`services/support-sync.service.ts`)" },
   { model: "LicenseAcceptance", sinif: "DURUM",
     gerekce: "ilk kurulum sözleşme kabulünün YEREL kanıt kopyası (Ek-7): silinse raporlanan hiçbir sayı değişmez; etkinleştirme kapısının girdisidir (bu kurulum anahtarının EN SON satırı ∧ güncel metin) — \"ne oldu\"nun hukuki sahibi satıcının `kurulum_kaydi` defteridir (tetikleyiciyle değişmez, `SOZLESME_KABUL_EDILDI`); satır silinmez, güncellenmez, geri alınmaz — yeni kabul yeni satırdır (`services/license-acceptance.service.ts`)" },
+  { model: "UpdateApproval", sinif: "DURUM",
+    gerekce: "backend güncellemesinin panel ONAYI (Dağıtım v2): güncelleyicinin niyet dosyasına giden TETİK, yetki değil — silinse raporlanan hiçbir sayı değişmez; \"ne oldu\"nun sahibi güncelleyicinin işlem geçmişi (`gecmis.jsonl`, `onayId` ile) ve satıcının `kurulum_kaydi` defteridir; satır silinmez, güncellenmez — geri alma da yeni bir satırdır, yürürlükteki = en son satır (`services/update-approval.service.ts`)" },
   { model: "CloudInboxReceipt", sinif: "DURUM",
     gerekce: "patron bulutu mesajının TEK KULLANIMLIK tüketim kaydı (idempotency makbuzu): iş sonucu varlığın KENDİ defterinde (sipariş/cari), ters yolu da onun ters yoludur (sipariş iptali · kart arşivi); makbuz silinmez, güncellenmez, geri alınmaz — silinse raporlanan sayı değişmez ama aynı mesaj ikinci varlık doğururdu" },
 ];

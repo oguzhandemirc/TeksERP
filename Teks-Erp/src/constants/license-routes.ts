@@ -115,6 +115,8 @@ export const RESTRICTED_OPEN_ROUTES: readonly LicenseRouteRule[] = [
   { method: "POST", path: "/api/admin/users/:id/totp/reset", reason: "iki adımlı doğrulama sıfırlama (güvenlik)" },
   { method: "POST", path: "/api/admin/devices/:id/revoke", reason: "cihaz iptali (güvenlik)" },
   { method: "POST", path: "/api/patron-bulut/hesap/:id/kilitle", reason: "patron bulutu hesabını kilitleme (güvenlik; kullanıcı pasifleştirme emsali)" },
+  // Backend güncellemesi: yeni paket kısıtın kendisini (bütünlük) giderebilir; yetki kiradadır (K1/DONDUR onayı açmaz)
+  { method: "POST", path: "/api/guncelleme/onay", reason: "backend güncelleme onayı — kurtarma yolu; iş verisi yazmaz, K1/DONDUR'u açamaz" },
   // Bakım ve çalışma oturumu
   { method: "POST", path: "/api/admin/sessions/purge", reason: "bakım: eski oturum budaması (telemetri)" },
   { method: "POST", path: "/api/admin/system-logs/archive", reason: "bakım: denetim kaydı arşivi" },
