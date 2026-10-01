@@ -1,5 +1,8 @@
+import { readFileSync } from "fs";
+import { join } from "path";
 import { ApiError } from "../src/api/client";
-import { clearCache, createCache } from "../src/state/cache";
+import { clearCache, createCache, openingCacheHygiene } from "../src/state/cache";
+import { browserStore } from "../src/state/browser-store";
 
 function memStore() {
   const m = new Map<string, string>();
@@ -45,5 +48,58 @@ describe("çevrimdışı salt-okunur önbellek", () => {
     s.m.set("baska", "x");
     await clearCache(s);
     expect([...s.m.keys()]).toEqual(["baska"]);
+  });
+});
+
+describe("açılış hijyeni + web deposu (G19)", () => {
+  /** Bellek içi `Storage` (sessionStorage/localStorage yerine). */
+  function fakeStorage(): Storage {
+    const m = new Map<string, string>();
+    return {
+      get length() {
+        return m.size;
+      },
+      key: (i: number) => [...m.keys()][i] ?? null,
+      getItem: (k: string) => m.get(k) ?? null,
+      setItem: (k: string, v: string) => void m.set(k, v),
+      removeItem: (k: string) => void m.delete(k),
+      clear: () => m.clear(),
+    };
+  }
+  it("browserStore: anahtarları listeler, toplu siler; depo yoksa boş davranır", async () => {
+    const st = fakeStorage();
+    const s = browserStore(st);
+    await s.set("patron:onbellek:t:h:pano", "{}");
+    await s.set("baska", "x");
+    expect([...(await s.keys())].sort()).toEqual(["baska", "patron:onbellek:t:h:pano"]);
+    await clearCache(s);
+    expect(await s.keys()).toEqual(["baska"]);
+    const yok = browserStore(undefined);
+    await expect(yok.get("x")).resolves.toBeNull();
+    await expect(yok.keys()).resolves.toEqual([]);
+  });
+  it("oturum yoksa düz depodaki önbellek silinir; eski kalıcı (localStorage) önbellek her açılışta silinir", async () => {
+    const plain = memStore();
+    const legacy = memStore();
+    plain.m.set("patron:onbellek:t1:h1:pano", "{}");
+    legacy.m.set("patron:onbellek:t1:h1:cari", "{}");
+    legacy.m.set("tercih", "x");
+    await openingCacheHygiene({ plain, legacy, hasSession: true });
+    expect([...plain.m.keys()]).toEqual(["patron:onbellek:t1:h1:pano"]);
+    expect([...legacy.m.keys()]).toEqual(["tercih"]);
+    await openingCacheHygiene({ plain, legacy: null, hasSession: false });
+    expect([...plain.m.keys()]).toEqual([]);
+  });
+  it("web'de önbellek deposu sessionStorage'dır (localStorage yalnız eski önbelleği silmek için okunur)", () => {
+    const src = readFileSync(join(__dirname, "..", "src", "state", "store.ts"), "utf8");
+    const plain = /export const plainStore[^;]*;/s.exec(src)?.[0] ?? "";
+    const legacy = /export const legacyPlainStore[^;]*;/s.exec(src)?.[0] ?? "";
+    expect(plain).toMatch(/web\s*\?\s*browserStore\(browser\.sessionStorage\)/);
+    expect(plain).not.toMatch(/localStorage/);
+    expect(legacy).toMatch(/localStorage/);
+  });
+  it("Android yedeği kapalı (allowBackup: false) — önbellek bulut yedeğine girmez", () => {
+    const app = JSON.parse(readFileSync(join(__dirname, "..", "app.json"), "utf8")) as { expo: { android?: { allowBackup?: unknown } } };
+    expect(app.expo.android?.allowBackup).toBe(false);
   });
 });
