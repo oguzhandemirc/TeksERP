@@ -168,8 +168,12 @@ for (const yol of SUNUCU_PS1) {
   check("§5c ⭐ paketle.ps1 araç listesini (araclar.json) doğruluyor ve eksikte Fail",
     pk.satirlar.some((s) => /araclar\.json/.test(s.kod)) &&
       pk.satirlar.some((s) => /Fail\s+"Arac uretilmedi/.test(s.kod)));
-  const pakete = (ad: string) => pk.satirlar.some((s) =>
-    s.kod.trim() === `Copy-Item "$repo\\deploy\\${ad}" "$stage\\"`);
+  // Paket içeriği TEK LİSTE (`$KOK_BETIKLERI`, D5): listede olan + döngünün kopyaladığı dosya pakettedir.
+  const kokListe = /^\$KOK_BETIKLERI\s*=\s*@\(([^)]*)\)/m.exec(readFileSync(join(KOK, "deploy/paketle.ps1"), "utf8"));
+  const liste = kokListe ? [...kokListe[1]!.matchAll(/"([^"]+)"/g)].map((m) => m[1]!) : [];
+  const dongu = pk.satirlar.some((s) => /foreach \(\$b in \$KOK_BETIKLERI\)/.test(s.kod)) &&
+    pk.satirlar.some((s) => /Copy-Item \$kaynak \(Join-Path \$stage \$b\)/.test(s.kod));
+  const pakete = (ad: string) => dongu && liste.includes(ad);
   const sunucuDosyalari = ["ilk-kurulum.ps1", "yedekle.ps1", "pm2-boot.cmd", "uzaktan-kos.ps1", "bakim-rolu.ps1"];
   const eksikDosya = sunucuDosyalari.filter((a) => !pakete(a));
   check(`§5d paketle.ps1 sunucu dosyalarını pakete koyuyor (${sunucuDosyalari.join(" + ")}) — sunucuya repo ağacı taşınmaz`,

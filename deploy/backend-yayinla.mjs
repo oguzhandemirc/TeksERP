@@ -16,9 +16,14 @@
  * ⚠️ KENAR DOĞRULAMASI: yayın belirteci (Worker) yoksa HİÇBİR ŞEY yüklenmeden DUR; yayından sonra `son.json`
  *    kenardan belirteçle okunur ve yüklenenle bayt bayt kıyaslanır.
  *
+ * ⚠️ PG TEK KAYNAK: bildirimin `pg.cizgi` + `pg.enAz`ı ve hedef PG paketinin kimliği (sürüm · derleme · ICU)
+ *    YALNIZ `deploy/pg/pg-surumu.json`dan (`cizgi` · `backendEnAz` · `surum` · `derleme` · `icuSurum`) gelir.
+ *    `--pg-cizgi`/`--pg-en-az` geriye uyum için kabul edilir ama kayıttan FARKLIYSA DUR; `--pg-kunye`nin ve
+ *    `--pg-yayinla` paketinin künyesi kaydın sürüm/derleme/ICU'su değilse DUR (sessiz sapma yok).
+ *
  * Kullanım:
- *   node deploy/backend-yayinla.mjs --musteri=<kod> --paket=<imzalı zip> --anahtar=<PAKET anahtar dosyası> --pg-cizgi=<16>
- *        --pg-en-az=<16.9> [--pg-kunye=<pg.json>] [--min-kaynak=<sürüm>] [--zorunlu] [--kuru] [--terfi-atla="<cümle>"] [--ssh=<hedef>]
+ *   node deploy/backend-yayinla.mjs --musteri=<kod> --paket=<imzalı zip> --anahtar=<PAKET anahtar dosyası>
+ *        [--pg-kunye=<pg.json>] [--min-kaynak=<sürüm>] [--zorunlu] [--kuru] [--terfi-atla="<cümle>"] [--ssh=<hedef>]
  *   node deploy/backend-yayinla.mjs --musteri=<kod> --pg-yayinla --pg-paket=<PG sahne zip> --pg-kunye=<pg.json> [--kuru]
  *        # PG paketi (sözleşme sürümü 2): `<kanal>/backend/pg/<sürüm>-<derleme>/` DEĞİŞMEZ dizinine; son.json'a dokunmaz
  *   node deploy/backend-yayinla.mjs --musteri=<kod> --dogrula        # yükleme YOK: kenardaki son.json'u oku
@@ -35,6 +40,7 @@ import { KAYIT_REL, Olculemedi, kanalCoz } from '../scripts/lib/kanallar.mjs';
 import { cumleDenetle, istanbulSaati, terfiAtlaKaydi, terfiKapisi, terfiRaporu } from '../scripts/lib/terfi.mjs';
 import { BelirtecYok, SSH_HEDEF_VARSAYILAN, belirtecOku, belirtecliFetch, yayinOku } from '../scripts/lib/yayin-okuma.mjs';
 import { yayinSonrasiBildir } from '../scripts/lib/yayin-bildirim.mjs';
+import { Olculemedi as PgOlculemedi, SURUM_REL as PG_KAYIT_REL, jsonOku as pgJsonOku, surumKaydiHatalari } from './pg/lib/pg-ornegi.mjs';
 import {
   SURUM_DESENI,
   cekirdekSurum,
@@ -140,11 +146,37 @@ if (argv.includes('--dogrula')) {
  * PG paketi (sözleşme sürümü 2) — ayrı, değişmez dizin; kanal kapısından sonra, son.json'a dokunmadan
  * ------------------------------------------------------------------ */
 
+/** PG sürüm kaydı (tek kaynak) — kırmızıysa ya da okunamıyorsa DUR (fail-closed). */
+let pgKayitOnbellek = null;
+function pgKaydi() {
+  if (pgKayitOnbellek) return pgKayitOnbellek;
+  let k;
+  try {
+    k = pgJsonOku(PG_KAYIT_REL);
+  } catch (e) {
+    dur(`PG SÜRÜM KAYDI ÖLÇÜLEMEDİ (${PG_KAYIT_REL})`, e instanceof PgOlculemedi ? e.message : String(e?.message ?? e));
+  }
+  const h = surumKaydiHatalari(k);
+  if (h.length) dur(`PG SÜRÜM KAYDI KIRMIZI (${PG_KAYIT_REL})`, ...h, 'Önce: node scripts/test_pg_ornegi.mjs');
+  pgKayitOnbellek = k;
+  return k;
+}
+
 const PG_KUNYE = arg('pg-kunye') ? path.resolve(arg('pg-kunye')) : null;
 function pgKunyeYukuOku() {
   if (!PG_KUNYE || !fs.existsSync(PG_KUNYE)) dur('PG KÜNYESİ YOK', '`--pg-kunye=<pg.json>` (Teks-Erp/scripts/backend-bildirim.ts pg-imzala çıktısı)');
   const y = isaretciYuku(fs.readFileSync(PG_KUNYE, 'utf8'));
   if (!y || typeof y.surum !== 'string' || !Number.isInteger(y.derleme) || typeof y.paket?.ad !== 'string') dur('PG künyesi çözülemedi', PG_KUNYE);
+  // Hedef PG paketi kaydın sabitlediği ikilidir: çizgi · sürüm · derleme · ICU birebir (imza TS aracında ölçülür).
+  const k = pgKaydi();
+  const fark = [];
+  if (y.cizgi !== Number(k.cizgi)) fark.push(`çizgi ${y.cizgi} ≠ kayıt ${k.cizgi}`);
+  if (y.surum !== k.surum) fark.push(`sürüm ${y.surum} ≠ kayıt ${k.surum}`);
+  if (String(y.derleme) !== k.derleme) fark.push(`derleme ${y.derleme} ≠ kayıt ${k.derleme}`);
+  if (y.icuSurum !== k.yayin['win-x64'].icuSurum) fark.push(`ICU ${y.icuSurum} ≠ kayıt ${k.yayin['win-x64'].icuSurum}`);
+  if (fark.length) {
+    dur('PG KÜNYESİ KAYITLA UYUŞMUYOR — yayınlanmadı', ...fark, `Tek kaynak ${PG_KAYIT_REL}: sürüm değişimi bir KARARDIR (docs/design/KENDI-POSTGRESQL.md §2), künye kayda uyar.`);
+  }
   return y;
 }
 
@@ -189,10 +221,15 @@ const PAKET = arg('paket') ? path.resolve(arg('paket')) : null;
 if (!PAKET || !fs.existsSync(PAKET)) dur('PAKET YOK', '`--paket=<imzalı zip>` (paketle.ps1 -Korumali + build-korumali-imza.ts zip çıktısı)');
 const ANAHTAR = arg('anahtar');
 if (!KURU && !ANAHTAR) dur('PAKET ANAHTARI YOK', '`--anahtar=<PAKET anahtar dosyası>` — bildirim paketi imzalayan anahtarla imzalanır (kuru kip anahtarsız çalışır).');
-const PG_CIZGI = arg('pg-cizgi');
-const PG_EN_AZ = arg('pg-en-az');
-if (!PG_CIZGI || !/^[0-9]{2}$/.test(PG_CIZGI) || !PG_EN_AZ || !/^[0-9]{2}\.[0-9]{1,3}$/.test(PG_EN_AZ)) {
-  dur('PostgreSQL GEREKSİNİMİ YOK', '`--pg-cizgi=<ana sürüm>` + `--pg-en-az=<ana.küçük>` (ör. 16 · 16.9) — bildirimin `pg` bloğu; ana sürüm geçişi otomatik değildir.');
+// Bildirimin `pg` bloğu kayıttan: argüman yalnız geriye uyum içindir ve kayıttan farklıysa DUR.
+const PG_CIZGI = pgKaydi().cizgi;
+const PG_EN_AZ = pgKaydi().backendEnAz;
+for (const [ad, kayitta] of [['pg-cizgi', PG_CIZGI], ['pg-en-az', PG_EN_AZ]]) {
+  const verilen = arg(ad);
+  if (verilen !== undefined && verilen !== kayitta) {
+    dur(`--${ad}=${verilen} kayıttaki değerden (${kayitta}) FARKLI — yayınlanmadı`,
+      `PostgreSQL gereksinimi tek kaynaktan: ${PG_KAYIT_REL} (cizgi · backendEnAz). Argümanı kaldır ya da kaydı bir KARARLA değiştir.`);
+  }
 }
 const PG_HEDEF = PG_KUNYE ? pgKunyeYukuOku() : null;
 

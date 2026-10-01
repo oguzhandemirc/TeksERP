@@ -57,6 +57,7 @@ const TUKETICILER = {
   'deploy/pg/pg-sablon.mjs': { iz: /from '\.\/lib\/pg-ornegi\.mjs'/, ne: 'şablon üretici/denetleyici', kod: true },
   '.github/workflows/pg-ikili.yml': { iz: /node deploy\/pg\/pg-ikili-dogrula\.mjs --indir/, ne: 'CI ikili doğrulama iş akışı' },
   '.github/workflows/ci.yml': { iz: /node scripts\/test_pg_ornegi\.mjs/, ne: 'CI doküman işi (bu bekçi)' },
+  'deploy/backend-yayinla.mjs': { iz: /from '\.\/pg\/lib\/pg-ornegi\.mjs'/, ne: 'backend yayıncısı (bildirimin pg bloğu + hedef PG künyesi)', kod: true },
 };
 
 function okuyabilir(rel) {
@@ -368,6 +369,9 @@ function sondalar(taban) {
     ['N36 CI iş akışı doğrulayıcıyı çağırmıyor → KIRMIZI (§6)', 'kirmizi', (d) => { d['.github/workflows/pg-ikili.yml'] = d['.github/workflows/pg-ikili.yml'].replace(/node deploy\/pg\/pg-ikili-dogrula\.mjs --indir/g, 'echo atlandi'); }, '§6'],
     ['N37 ci.yml bekçi adımı kalktı → KIRMIZI (§6)', 'kirmizi', (d) => { d['.github/workflows/ci.yml'] = d['.github/workflows/ci.yml'].replace(/node scripts\/test_pg_ornegi\.mjs/g, 'true'); }, '§6'],
     ['N38 şablon sürüm literal\'i koda girdi → KIRMIZI (§6)', 'kirmizi', (d) => { d['deploy/pg/pg-sablon.mjs'] += `\nconst SURUM = '${JSON.parse(d[SURUM_REL]).surum}';\n`; }, '§6'],
+    ['N39 backendEnAz başka ana sürümde → KIRMIZI (§1)', 'kirmizi', kayitta((o) => { o.backendEnAz = '15.9'; }), '§1'],
+    ['N40 backendEnAz sabitlenen sürümden yeni → KIRMIZI (§1)', 'kirmizi', kayitta((o) => { o.backendEnAz = '16.99'; }), '§1'],
+    ['N41 yayıncı kaydı yüklemden okumuyor → KIRMIZI (§6)', 'kirmizi', (d) => { d['deploy/backend-yayinla.mjs'] = d['deploy/backend-yayinla.mjs'].replace(/from '\.\/pg\/lib\/pg-ornegi\.mjs'/g, "from './pg/lib/baska.mjs'"); }, '§6'],
     ['O1 kayıt bozuk JSON → ÖLÇÜLEMEDİ', 'olculemedi', (d) => { d[SURUM_REL] = d[SURUM_REL].slice(0, 40); }],
     ['O2 hba şablonu okunamadı → ÖLÇÜLEMEDİ', 'olculemedi', (d) => { d[HBA] = undefined; }],
     ['O3 migration kökü boş → ÖLÇÜLEMEDİ (§7)', 'olculemedi', (d) => { for (const r of Object.keys(d)) if (r.startsWith(`${MIGRASYON_KOKU}/`)) delete d[r]; }, '§7'],

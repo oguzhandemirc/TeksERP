@@ -15,8 +15,10 @@ export const INTEGRITY_FILE = "butunluk.jws";
 /**
  * Altındaki HER dosya listede olmalı; listede olmayan dosya FAZLA sayılır. Pakette olmayan dizin
  * (ör. `-NodeModulesHaric`: node_modules sunucuda `npm ci` ile doğar) imzalı kapsama GİRMEZ.
+ * `hizmet` (dizin/izin + hizmet kaydı betikleri) ve `gecis` (pm2 → hizmet geçişi) YÖNETİCİ/SYSTEM
+ * olarak koşar: `runtime`daki iki Rust hizmet ikilisi gibi imzalı kapsamdadır (bekçi `test_paket_kapsami`).
  */
-export const INTEGRITY_SCOPE_DIRS: readonly string[] = Object.freeze(["dist", "native", "runtime", "node_modules", "prisma/migrations"]);
+export const INTEGRITY_SCOPE_DIRS: readonly string[] = Object.freeze(["dist", "native", "runtime", "node_modules", "prisma/migrations", "hizmet", "gecis"]);
 
 /**
  * Kökteki tek tek dosyalar — varsa listeye girer, yoksa sonradan belirmesi FAZLA'dır.
