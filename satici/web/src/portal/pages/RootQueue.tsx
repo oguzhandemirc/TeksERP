@@ -12,6 +12,33 @@ import { useApi, useCan } from "../../shared/session";
 import type { RootRequest } from "../../shared/types";
 import { Badge, Button, LoadMore, PageTitle, QueryState, Section, Table } from "../../shared/ui";
 
+/** Dönem töreninin runbook'u (repoda; portal dosyayı sunmaz — yol gösterilir). */
+export const CEREMONY_RUNBOOK = "docs/ops/URETIM-SATICI-TOREN.md §8";
+
+/** Töreni anlatan kısa yönerge: kuyruk VDS'ten Mac'e, kök imzası Mac'te, sonuç geri VDS'e. */
+function CeremonyGuide() {
+  return (
+    <Section title="Tören nasıl işler">
+      <ol className="small">
+        <li>
+          VDS: bekleyen talepler dışa aktarılır (<code>anahtar.js kuyruk-disa-aktar</code>) — ACİL olanlar önce.
+        </li>
+        <li>
+          Mac: dönem töreni kökle imzalar (<code>uretim-toren.mjs donem --kuyruk=…</code>); kök parolası yalnız orada yazılır, VDS'e gelmez.
+        </li>
+        <li>
+          VDS: paket içe aktarılır (<code>anahtar.js donem-ice-aktar</code>) — talep İmzalandı olur, fabrika sonraki yoklamada yeni sürümü alır. HAK arada başka
+          sürüme geçtiyse talep Eskidi olur (imza yazılmaz).
+        </li>
+      </ol>
+      <p className="muted small">
+        Ayrıntı ve komutlar: <code>{CEREMONY_RUNBOOK}</code>. ACİL talepte üç aylık töreni beklemeyin: fabrika elindeki kirayla ödenmiş tarihe dek çalışır ama yeni
+        kira alamaz.
+      </p>
+    </Section>
+  );
+}
+
 function requestLabel(r: RootRequest): string {
   return `${r.lisansNo} — sürüm ${r.tabanSurum} → ${r.surum}${r.acil ? " (ACİL)" : ""}`;
 }
@@ -46,6 +73,7 @@ export function RootQueuePage() {
         title="Kök imzası kuyruğu"
         sub="Yetenek bildirmeyen derlemenin HAK değişikliği dönem töreninde Mac'te kökle imzalanır. ACİL talepte fabrika kira alamıyor: töreni beklemeden imzalayın."
       />
+      <CeremonyGuide />
       <Section title="Acil kök imzası gerekiyor">
         <QueryState isLoading={urgent.isLoading} error={urgent.error} />
         <Table rows={urgent.rows} rowKey={(r) => r.id} empty="Acil talep yok" columns={columns} />

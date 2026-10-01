@@ -22,6 +22,7 @@ import { hashPortalPassword } from "../portal/password";
 import { withSigningPasswordGuard } from "../portal/signing-guard";
 import { NOTIFICATION_PORTAL_ROUTES } from "./notification-routes";
 import { SUPPORT_PORTAL_ROUTES } from "./support-routes";
+import { keyStatus } from "../portal/key-status";
 import * as q from "../portal/queries";
 import { PORTAL_ROLES, roleHas } from "../portal/roles";
 import {
@@ -401,7 +402,7 @@ export const VENDOR_PORTAL_ROUTES: readonly PortalRouteDef[] = [
       data: await q.listAudit(prisma, { entity: queryText(c.req, "varlik", 40), entityId: queryText(c.req, "varlikId", 64), event: queryText(c.req, "olay", 60), ...pageQuery(c.req) }),
     }),
   },
-  { method: "get", path: "/anahtarlar", permission: "anahtar:oku", kimlik: "OKUMA", handler: async (c) => ({ data: await q.keyStatus(c.ctx, prisma, c.nowMs) }) },
+  { method: "get", path: "/anahtarlar", permission: "anahtar:oku", kimlik: "OKUMA", handler: async (c) => ({ data: await keyStatus(c.ctx, prisma, c.nowMs) }) },
 
   // ------------------------------------------------------------ müşteri · tesis · kurulum
   {

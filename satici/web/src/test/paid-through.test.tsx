@@ -128,7 +128,7 @@ describe("kopya ve kira sekmeleri — lisans v2 etiketleri", () => {
     );
     await user.click(await screen.findByRole("tab", { name: /Kopya ve taşıma/ }));
     expect(screen.getByText("Yerel müdahale şüphesi (lisans izleri)")).toBeInTheDocument();
-    expect(screen.getByText("Durum kaydı sıfırlandı (izler silinmiş) ×2 · Lisans izi kayıp")).toBeInTheDocument();
+    expect(screen.getByText("Durum kaydı sıfırlandı (izler silinmiş) ×2 · Lisans izi kayıp — kira, durum kaydı ya da DB izinden en az biri yok")).toBeInTheDocument();
     await user.click(screen.getByRole("tab", { name: "Sağlık ve kira" }));
     expect(screen.getByText("Kapanış kirası — kopya (çatal)")).toBeInTheDocument();
   });
