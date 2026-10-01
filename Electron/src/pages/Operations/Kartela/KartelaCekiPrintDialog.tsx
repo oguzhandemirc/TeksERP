@@ -128,6 +128,7 @@ export function KartelaCekiPrintDialog({ dispatchId, open, onOpenChange }: Props
                 <iframe
                   title="Kartela Çeki Önizleme"
                   srcDoc={html}
+                  sandbox=""
                   className="h-full w-full border-0 bg-white"
                 />
               ) : (

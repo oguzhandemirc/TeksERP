@@ -1,4 +1,4 @@
-import { ipcMain } from "electron";
+import { handleTrusted } from "../security/trusted-ipc.js";
 import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { showSaveDialogFor, showOpenDialogFor } from "./dialog-window.js";
@@ -26,7 +26,7 @@ function sanitize(name: string): { base: string; ext: string } {
 export function registerFilesIpc(): void {
   // Tek dosya → kaydet dialoğu (pencereye bağlı: arka plan kararır + kullanıcı
   // onaylayınca döner → toast doğru zamanda). Excel indirmeleri bunu kullanır.
-  ipcMain.handle("files:save", async (e, opts: FileSaveOpts): Promise<FileSaveResult> => {
+  handleTrusted("files:save", async (e, opts: FileSaveOpts): Promise<FileSaveResult> => {
     try {
       const { base, ext } = sanitize(opts.name);
       const finalExt = ext || ".xlsx";
@@ -46,7 +46,7 @@ export function registerFilesIpc(): void {
     }
   });
 
-  ipcMain.handle("files:saveBatch", async (e, opts: FilesSaveBatchOpts): Promise<SaveBatchResult> => {
+  handleTrusted("files:saveBatch", async (e, opts: FilesSaveBatchOpts): Promise<SaveBatchResult> => {
     try {
       if (!opts.items?.length) return { saved: false, error: "Dosya yok" };
       const { canceled, filePaths } = await showOpenDialogFor(e, {

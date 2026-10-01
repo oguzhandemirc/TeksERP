@@ -156,6 +156,7 @@ export function FasonSevkPrintDialog({ dispatchId, open, onOpenChange, onBack }:
                 <iframe
                   title="Fason Çeki Önizleme"
                   srcDoc={html}
+                  sandbox=""
                   className="h-full w-full border-0 bg-white"
                 />
               ) : (

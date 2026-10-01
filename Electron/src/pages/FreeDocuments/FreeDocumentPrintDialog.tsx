@@ -50,7 +50,7 @@ export function FreeDocumentPrintDialog({
           {htmlQuery.isLoading ? (
             <div className="p-4"><Skeleton className="h-64 w-full" /></div>
           ) : html ? (
-            <iframe title="Serbest Belge Önizleme" srcDoc={html} className="h-full w-full border-0 bg-white" />
+            <iframe title="Serbest Belge Önizleme" srcDoc={html} sandbox="" className="h-full w-full border-0 bg-white" />
           ) : (
             <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
               Belge yüklenemedi.
