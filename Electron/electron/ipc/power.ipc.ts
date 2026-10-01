@@ -1,4 +1,5 @@
-import { ipcMain, powerMonitor } from "electron";
+import { powerMonitor } from "electron";
+import { handleTrusted } from "../security/trusted-ipc.js";
 
 /**
  * Sistem-geneli boşta kalma süresi (saniye). `powerMonitor.getSystemIdleTime()`
@@ -8,5 +9,5 @@ import { ipcMain, powerMonitor } from "electron";
  * bilgisayara dokunmadığında düşer.
  */
 export function registerPowerIpc(): void {
-  ipcMain.handle("power:get-system-idle-time", () => powerMonitor.getSystemIdleTime());
+  handleTrusted("power:get-system-idle-time", () => powerMonitor.getSystemIdleTime());
 }

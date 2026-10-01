@@ -1,4 +1,5 @@
-import { app, ipcMain, net } from "electron";
+import { app, net } from "electron";
+import { handleTrusted } from "../security/trusted-ipc.js";
 import {
   LICENSE_RELAY_MAX_RESPONSE_BYTES,
   LICENSE_RELAY_TIMEOUT_MS,
@@ -73,7 +74,7 @@ export async function relayLicenseRequest(target: unknown, body: unknown): Promi
 }
 
 export function registerLicenseIpc(): void {
-  ipcMain.handle("license:relay", (_e, req: { hedefUrl?: unknown; istekGovdesi?: unknown } | undefined) =>
+  handleTrusted("license:relay", (_e, req: { hedefUrl?: unknown; istekGovdesi?: unknown } | undefined) =>
     relayLicenseRequest(req?.hedefUrl, req?.istekGovdesi),
   );
 }

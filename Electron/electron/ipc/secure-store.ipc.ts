@@ -1,5 +1,8 @@
-import { ipcMain, safeStorage } from "electron";
+import { safeStorage } from "electron";
 import Store from "electron-store";
+import log from "electron-log/main.js";
+import { handleTrusted } from "../security/trusted-ipc.js";
+import { createSecureStore } from "./secure-store.core.js";
 
 interface StoreSchema {
   encrypted: Record<string, string>;
@@ -10,33 +13,18 @@ const store: Store<StoreSchema> = new Store<StoreSchema>({
   defaults: { encrypted: {} },
 });
 
-function read(key: string): string | null {
-  const all = store.get("encrypted");
-  const ciphertext = all[key];
-  if (!ciphertext) return null;
-  try {
-    if (!safeStorage.isEncryptionAvailable()) return ciphertext;
-    return safeStorage.decryptString(Buffer.from(ciphertext, "base64"));
-  } catch {
-    return null;
-  }
-}
-
-function write(key: string, value: string): void {
-  const all = { ...store.get("encrypted") };
-  if (safeStorage.isEncryptionAvailable()) {
-    all[key] = safeStorage.encryptString(value).toString("base64");
-  } else {
-    all[key] = value;
-  }
-  store.set("encrypted", all);
-}
-
-function remove(key: string): void {
-  const all = { ...store.get("encrypted") };
-  delete all[key];
-  store.set("encrypted", all);
-}
+const core = createSecureStore({
+  kv: {
+    readAll: () => store.get("encrypted"),
+    writeAll: (all) => store.set("encrypted", all),
+  },
+  cipher: {
+    isEncryptionAvailable: () => safeStorage.isEncryptionAvailable(),
+    encryptString: (plain) => safeStorage.encryptString(plain),
+    decryptString: (cipherText) => safeStorage.decryptString(cipherText),
+  },
+  warn: (message, meta) => log.warn(message, meta),
+});
 
 /**
  * Aynı kasadan main process içinden okuma (renderer'dan geçmeden).
@@ -45,19 +33,19 @@ function remove(key: string): void {
  * gelen adres, `autoUpdater`ın kendi durumuyla birlikte tek yerde yazılsın).
  */
 export function readSecureValue(key: string): string | null {
-  return read(key);
+  return core.read(key);
 }
 
 export function writeSecureValue(key: string, value: string): void {
-  write(key, value);
+  core.write(key, value);
 }
 
 export function deleteSecureValue(key: string): void {
-  remove(key);
+  core.remove(key);
 }
 
 export function registerSecureStoreIpc(): void {
-  ipcMain.handle("secure-store:get", (_e, key: string) => read(key));
-  ipcMain.handle("secure-store:set", (_e, key: string, value: string) => write(key, value));
-  ipcMain.handle("secure-store:delete", (_e, key: string) => remove(key));
+  handleTrusted("secure-store:get", (_e, key: unknown) => core.rendererRead(key));
+  handleTrusted("secure-store:set", (_e, key: unknown, value: unknown) => core.rendererWrite(key, value));
+  handleTrusted("secure-store:delete", (_e, key: unknown) => core.rendererRemove(key));
 }

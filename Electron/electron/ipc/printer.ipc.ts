@@ -1,4 +1,4 @@
-import { ipcMain } from "electron";
+import { handleTrusted } from "../security/trusted-ipc.js";
 import { createRequire } from "node:module";
 import net from "node:net";
 import { spawn } from "node:child_process";
@@ -160,10 +160,10 @@ function listCups(): Promise<ScannerListResult> {
 }
 
 export function registerPrinterIpc(): void {
-  ipcMain.handle("printer:list-serial", () => listSerial());
-  ipcMain.handle("printer:list-cups", () => listCups());
-  ipcMain.handle("printer:list-winspool", () => listWinspool());
-  ipcMain.handle("printer:send", (_e, opts: PrinterSendOpts) => {
+  handleTrusted("printer:list-serial", () => listSerial());
+  handleTrusted("printer:list-cups", () => listCups());
+  handleTrusted("printer:list-winspool", () => listWinspool());
+  handleTrusted("printer:send", (_e, opts: PrinterSendOpts) => {
     // TEK NOKTADA string→Buffer ayrımı: contentB64 (raster/binary) öncelikli, yoksa
     // content (latin1 komut). Aşağıdaki transportlar artık hazır Buffer alır.
     const payload =

@@ -15,6 +15,7 @@ import type {
   UpdateStatus,
 } from "@shared/ipc-contract";
 import type { LicenseRelayRequest } from "@shared/license-relay";
+import { isAppDocumentUrl, readAppEntryArgument } from "@shared/app-origin";
 
 const api: ApiBridge = {
   secureStore: {
@@ -97,4 +98,10 @@ const api: ApiBridge = {
   },
 };
 
-contextBridge.exposeInMainWorld("api", api);
+// Köprü YALNIZ uygulamanın kendi belgesine açılır: giriş adresi ana süreçten
+// (`additionalArguments`) gelir. Splash ve pencereye herhangi bir yoldan yüklenmiş
+// yabancı belge (ör. ağ paylaşımındaki sayfa) `window.api` ALMAZ.
+const appEntry = readAppEntryArgument(process.argv);
+if (isAppDocumentUrl(window.location.href, appEntry, process.platform)) {
+  contextBridge.exposeInMainWorld("api", api);
+}

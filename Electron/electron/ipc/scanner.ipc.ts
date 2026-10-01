@@ -1,4 +1,5 @@
-import { ipcMain, BrowserWindow } from "electron";
+import { BrowserWindow } from "electron";
+import { handleTrusted, onTrusted } from "../security/trusted-ipc.js";
 import { createRequire } from "node:module";
 import { createScanFramer, sanitizeHidChunk, type ScanFramer } from "@shared/scan-framer.js";
 import type {
@@ -212,23 +213,23 @@ function listDevices(transport: ScannerTransport): Promise<ScannerListResult> {
 }
 
 export function registerScannerIpc(): void {
-  ipcMain.handle("scanner:list", (_e, transport: ScannerTransport) => listDevices(transport));
+  handleTrusted("scanner:list", (_e, transport: ScannerTransport) => listDevices(transport));
 
-  ipcMain.handle("scanner:open", (_e, opts: ScannerOpenOpts) => {
+  handleTrusted("scanner:open", (_e, opts: ScannerOpenOpts) => {
     closeActive();
     if (opts.transport === "serial") return openSerial(opts);
     if (opts.transport === "hid") return openHid(opts);
     return openMock(opts);
   });
 
-  ipcMain.handle("scanner:close", () => {
+  handleTrusted("scanner:close", () => {
     closeActive();
     setStatus({ connected: false, transport: null, path: null, error: null });
     return status;
   });
 
-  ipcMain.handle("scanner:status", () => status);
+  handleTrusted("scanner:status", () => status);
 
   // Donanımsız boru hattı testi: sahte tam kod enjekte et (çerçeveleme atlanır).
-  ipcMain.on("scanner:mock-emit", (_e, code: string) => emitCode(String(code)));
+  onTrusted("scanner:mock-emit", (_e, code: string) => emitCode(String(code)));
 }

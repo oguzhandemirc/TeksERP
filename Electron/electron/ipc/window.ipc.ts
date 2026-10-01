@@ -1,24 +1,25 @@
-import { BrowserWindow, ipcMain } from "electron";
+import { BrowserWindow } from "electron";
+import { handleTrusted, onTrusted } from "../security/trusted-ipc.js";
 import { pickScreenshotEncoding, type ScreenshotResult } from "@shared/screenshot";
 
 export function registerWindowIpc(): void {
-  ipcMain.on("window:minimize", (event) =>
+  onTrusted("window:minimize", (event) =>
     BrowserWindow.fromWebContents(event.sender)?.minimize(),
   );
-  ipcMain.on("window:maximize", (event) => {
+  onTrusted("window:maximize", (event) => {
     const win = BrowserWindow.fromWebContents(event.sender);
     if (!win) return;
     if (win.isMaximized()) win.unmaximize();
     else win.maximize();
   });
-  ipcMain.on("window:close", (event) =>
+  onTrusted("window:close", (event) =>
     BrowserWindow.fromWebContents(event.sender)?.close(),
   );
-  ipcMain.handle("window:is-maximized", (event) =>
+  handleTrusted("window:is-maximized", (event) =>
     BrowserWindow.fromWebContents(event.sender)?.isMaximized() ?? false,
   );
   // Destek ekran görüntüsü: yalnız isteyen pencere (masaüstü değil); boyut sınırı saf seçicide.
-  ipcMain.handle("window:capture-screenshot", async (event): Promise<ScreenshotResult | null> => {
+  handleTrusted("window:capture-screenshot", async (event): Promise<ScreenshotResult | null> => {
     const win = BrowserWindow.fromWebContents(event.sender);
     if (!win) return null;
     const image = await win.webContents.capturePage();

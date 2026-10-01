@@ -48,9 +48,9 @@ function preloadDiscovery(src: string): { keys: string[]; channels: string[] } {
   };
 }
 
-/** handler dosyasındaki `ipcMain.handle("...")` kanal adları. */
+/** handler dosyasındaki kanal adları — kayıt gönderen denetimli tek geçitten (`handleTrusted`) ya da çıplak `ipcMain.handle`dan. */
 function handlerChannels(src: string): string[] {
-  return [...src.matchAll(/ipcMain\.handle\(\s*"([^"]+)"/g)].map((m) => m[1]!).sort();
+  return [...src.matchAll(/(?:ipcMain\.handle|handleTrusted)\(\s*"([^"]+)"/g)].map((m) => m[1]!).sort();
 }
 
 describe("keşif IPC zinciri", () => {

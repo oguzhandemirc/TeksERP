@@ -1,11 +1,19 @@
-import { ipcMain, shell } from "electron";
+import { shell } from "electron";
+import log from "electron-log/main.js";
+import { isShowableLocalPath } from "@shared/shell-policy";
+import { handleTrusted, onTrusted } from "../security/trusted-ipc.js";
+import { openExternalSafely } from "../security/external-open.js";
 
 export function registerSystemIpc(): void {
-  ipcMain.handle("system:open-external", async (_e, url: string) => {
-    if (!/^https?:\/\//i.test(url)) throw new Error("Invalid URL");
-    await shell.openExternal(url);
+  // Yalnız beyanlı https listesi (eskiden her http/https adresi açılıyordu).
+  handleTrusted("system:open-external", async (_e, url: unknown) => {
+    if (!(await openExternalSafely(url, "system:open-external"))) throw new Error("Invalid URL");
   });
-  ipcMain.on("system:show-in-folder", (_e, path: string) =>
-    shell.showItemInFolder(path),
-  );
+  onTrusted("system:show-in-folder", (_e, target: unknown) => {
+    if (!isShowableLocalPath(target)) {
+      log.warn("[guvenlik] klasörde gösterme reddedildi (yerel mutlak yol değil)");
+      return;
+    }
+    shell.showItemInFolder(target);
+  });
 }
