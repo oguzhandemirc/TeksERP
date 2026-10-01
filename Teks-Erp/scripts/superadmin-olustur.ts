@@ -368,6 +368,7 @@ export const KURULUM_CIKIS: Readonly<Record<string, number>> = Object.freeze({
   PIN_EXHAUSTED: 15,
   RACE: 16,
   NOT_PROVISIONED: 17,
+  PIN_KEY_UNAVAILABLE: 18,
   GIRDI_BICIMSIZ: 20,
   GIRDI_TAVAN: 20,
   GIRDI_YOK: 20,

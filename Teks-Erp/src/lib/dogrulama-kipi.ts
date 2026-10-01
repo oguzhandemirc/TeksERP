@@ -37,6 +37,8 @@ export const VERIFICATION_KEPT_JOBS = [
   "startPermissionCatalogReconciler",
   "startInstallationIdentity",
   "startSuperadminAccount",
+  // Kısa kimlik anahtar halkası + emanet: tek seferlik, yerel (dışarı çıkmaz); yeni sürüm PIN/kart doğrulayabiliyor mu ölçer.
+  "startShortCredentialJob",
   "startModuleProfileJob",
   "startDefaultWarehouseReconciler",
   "startLicensePoll",

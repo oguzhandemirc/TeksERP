@@ -763,7 +763,8 @@ function AsamaSirlar {
 
   if ($C["saticiHesabi.kullaniciAdi"] -and $g.saticiParolasi) {
     $girdi = "{`"kullaniciAdi`":" + (JsonAscii $C["saticiHesabi.kullaniciAdi"]) + ",`"parola`":" + (JsonAscii "$($g.saticiParolasi)") + ",`"pin`":" + (JsonAscii "$($g.saticiPin)") + "}"
-    $r = NodeKos $node @("dist\tools\superadmin-olustur.cjs", "--kurulum-stdin") (JunctionHedefi $cur) @{ DOTENV_CONFIG_PATH = (Join-Path $kok "yapilandirma\.env") } $girdi
+    # PIN ozeti hizmetin anahtar halkasiyla yazilir: arac surum dizininde kostugu icin varsayilan lisans deposu yanlis yere duser.
+    $r = NodeKos $node @("dist\tools\superadmin-olustur.cjs", "--kurulum-stdin") (JunctionHedefi $cur) @{ DOTENV_CONFIG_PATH = (Join-Path $kok "yapilandirma\.env"); LICENSE_DIR = (Join-Path $kok "lisans") } $girdi
     $girdi = $null
     $satir = @($r.stdout -csplit "`n" | Where-Object { $_.Trim().StartsWith("{") }) | Select-Object -Last 1
     $j = if ($satir) { $satir | ConvertFrom-Json } else { $null }

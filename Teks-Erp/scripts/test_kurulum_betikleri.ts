@@ -265,6 +265,12 @@ function olc(k: Kaynaklar): Bulgular {
     const env = /\$env:(\w+)\s*=/.exec(ort.satirlar[s.no - 1]!.ciplak);
     if (env) ekle("§3", `ortak işlevlerde ortam değişkenine yazım (${env[1]}:${s.no})`);
   }
+  // PIN özeti hizmetin anahtar halkasıyla yazılmalı: araç sürüm dizininde koştuğu için lisans deposu ortamdan verilir.
+  const saticiAraci = kodSatirlari(kur).filter((s) => /NodeKos\s+\$\w+\s+@\("dist\\tools\\superadmin-olustur\.cjs"/.test(s.kod));
+  if (saticiAraci.length === 0) ekle("§3", "satıcı hesabı aracı çağrısı bulunamadı (ölçülemedi)");
+  for (const s of saticiAraci) {
+    if (!/LICENSE_DIR\s*=\s*\(Join-Path \$kok "lisans"\)/.test(s.kod)) ekle("§3", `satıcı hesabı aracı lisans deposunu hizmetle aynı yerden almıyor (LICENSE_DIR, satır ${s.no})`);
+  }
   const ini = psGovde(kur, "SonucIniYaz") ?? "";
   if (!ini) ekle("§3", "SonucIniYaz yok (sihirbazın sonuç INI'si)");
   if (/SirSatiri|\$g\./.test(ini)) ekle("§3", "sonuç INI'si sır satırına/girdisine dokunuyor");
@@ -541,6 +547,7 @@ if (eksik.length === 0) {
     { ad: "S38 özette kip yok", dosya: "iss", eski: "  S := 'Kip: ' + KipMetni + NewLine +\n    'Kök: '", yeni: "  S := 'Kök: '", bolum: "§11", parca: "özette kip" },
     { ad: "S39 satıcı hesabı yapılacağı ölçülmeden", dosya: "kurulum", eski: '  if ($saticiVar) { Ok "satici (superadmin) hesabi var" }\n  elseif (', yeni: "  if (", bolum: "§11", parca: "satıcı hesabı 'yapılacak'" },
     { ad: "S40 lisans yapılacağı etkinlik ölçülmeden", dosya: "kurulum", eski: '  else { $acik += "lisans:', yeni: '  $acik += "lisans:', bolum: "§11", parca: "lisans 'yapılacak'" },
+    { ad: "S41 satıcı hesabı aracı lisans deposunu ortamdan almıyor (PIN başka anahtarla özetlenir)", dosya: "kurulum", eski: `; LICENSE_DIR = (Join-Path $kok "lisans") }`, yeni: " }", bolum: "§3", parca: "lisans deposunu hizmetle aynı yerden" },
     { ad: "S21 CI boru sonucunu ölçmüyor", dosya: "is", eski: `if ($r -notmatch "(?m)^BORU=TAMAM\\r?$")`, yeni: `if ($false)`, bolum: "§9", parca: "boru öz-sınaması" },
     { ad: "S22 CI test çapalı doğrulayıcıyı kabul ediyor", dosya: "is", eski: `$k.testCapasi -ne $false`, yeni: `$false`, bolum: "§9", parca: "doğrulayıcı üretim derlemesi" },
   ];

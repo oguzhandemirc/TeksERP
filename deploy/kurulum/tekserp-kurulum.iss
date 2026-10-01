@@ -856,7 +856,7 @@ begin
   SaticiSayfasi := CreateInputQueryPage(AgSayfasi.ID, 'Satıcı hesabı', 'Destek (süperadmin) hesabı',
     'Parola ve PIN dosyaya, günlüğe, komut satırına yazılmaz; kuruluma kayıt dışı bir boruyla aktarılır. Boş bırakırsanız hesap kurulum sonunda konsoldan kurulur.');
   SaticiSayfasi.Add('Kullanıcı adı (3-50; harf, rakam . _ -):', False);
-  SaticiSayfasi.Add('Parola (en az 8 karakter):', True);
+  SaticiSayfasi.Add('Parola (en az 10 karakter):', True);
   SaticiSayfasi.Add('Parola (tekrar):', True);
   SaticiSayfasi.Add('PIN (6 hane):', True);
   SaticiSayfasi.Add('PIN (tekrar):', True);
@@ -1008,7 +1008,7 @@ begin
     if SaticiSayfasi.Values[0] <> '' then
     begin
       if not KullaniciAdiGecerli(SaticiSayfasi.Values[0]) then Result := Hata('Kullanıcı adı 3-50 karakter; yalnız harf, rakam, nokta, alt çizgi, tire.')
-      else if Length(SaticiSayfasi.Values[1]) < 8 then Result := Hata('Parola en az 8 karakter olmalı.')
+      else if Length(SaticiSayfasi.Values[1]) < 10 then Result := Hata('Parola en az 10 karakter olmalı.')
       else if Utf8Bayt(SaticiSayfasi.Values[1]) > 72 then Result := Hata('Parola 72 baytı aşıyor (Türkçe harfler 2 bayt sayılır).')
       else if SaticiSayfasi.Values[1] <> SaticiSayfasi.Values[2] then Result := Hata('Parolalar aynı değil.')
       else if (Length(SaticiSayfasi.Values[3]) <> 6) or not RakamMi(SaticiSayfasi.Values[3]) then Result := Hata('PIN TAM 6 haneli rakam olmalı.')

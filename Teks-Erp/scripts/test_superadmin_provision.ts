@@ -960,10 +960,13 @@ async function main(): Promise<void> {
     const scriptYolu = path.join(__dirname, "superadmin-olustur.ts");
     const KUR_AD = `${FIXTURE_USERNAME}.k`;
     const KUR_PAROLA = "bekci-p8-kurulum-Parola-çğ";
+    // PIN özetle saklanır: boşluk hem düz kolonda hem etkin anahtarın özetinde aranır.
+    const kurHalka = getShortCredentialKeyRing();
     let KUR_PIN = "";
-    for (let i = 0; i < 50 && !KUR_PIN; i++) {
+    for (let i = 0; i < 50 && !KUR_PIN && kurHalka.ok; i++) {
       const aday = String(100000 + Math.floor(Math.random() * 900000));
-      if ((await prisma.user.count({ where: { quickPin: aday } })) === 0) KUR_PIN = aday;
+      const ozet = digestQuickPin(kurHalka.ring.active, aday);
+      if ((await prisma.user.count({ where: { OR: [{ quickPin: aday }, { quickPinDigest: ozet }] } })) === 0) KUR_PIN = aday;
     }
     sirlar.push(KUR_PIN);
     const girdi = JSON.stringify({ kullaniciAdi: KUR_AD, parola: KUR_PAROLA, pin: KUR_PIN });
@@ -1008,8 +1011,9 @@ async function main(): Promise<void> {
       const r2 = await kos();
       const j2 = satir(r2.out);
       check("hesapsız: çıkış 0 + OLUSTURULDU (istenen ad)", r2.kod === 0 && j2?.sonuc === "OLUSTURULDU" && j2?.kullaniciAdi === KUR_AD, `kod ${r2.kod} · ${JSON.stringify(j2)} · ${r2.err.trim().slice(0, 160)}`);
-      const yeni = await prisma.user.findFirst({ where: { username: KUR_AD }, select: { isSystemAccount: true, quickPin: true, passwordHash: true } });
-      check("hesapsız: hesap DB'de sistem hesabı + verilen PIN", yeni?.isSystemAccount === true && yeni?.quickPin === KUR_PIN, JSON.stringify({ sistem: yeni?.isSystemAccount, pinAyni: yeni?.quickPin === KUR_PIN }));
+      const yeni = await prisma.user.findFirst({ where: { username: KUR_AD }, select: { isSystemAccount: true, quickPin: true, quickPinDigest: true, passwordHash: true } });
+      const pinOzetAyni = kurHalka.ok && yeni?.quickPin === null && yeni?.quickPinDigest === digestQuickPin(kurHalka.ring.active, KUR_PIN);
+      check("hesapsız: hesap DB'de sistem hesabı + verilen PIN'in ÖZETİ (düz kolon boş)", yeni?.isSystemAccount === true && pinOzetAyni, JSON.stringify({ sistem: yeni?.isSystemAccount, pinOzetAyni }));
       check("hesapsız: Türkçe harfli parola boruda BOZULMADAN hash'lendi (bcrypt karşılaştırması)", !!yeni && (await bcrypt.compare(KUR_PAROLA, yeni.passwordHash)));
       check("hesapsız: çıktıda parola/PIN YOK", sirsiz(r2));
 
