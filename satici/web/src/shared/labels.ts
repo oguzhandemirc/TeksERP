@@ -59,6 +59,28 @@ export const COPY_ALERT_LABEL: Record<string, string> = {
   AYNI_PARMAK_IZI_TEKRAR: "Aynı parmak izi tekrarı (tam kopya şüphesi)",
   YABANCI_KIRA: "Yabancı kira (defterde olmayan kira sunuldu)",
   KIP_UYUSMAZ: "Kip uyuşmuyor (kira/durum silinmiş olabilir)",
+  YABANCI_HAK: "Yabancı HAK (satıcı defterinde olmayan lisans belgesi)",
+  YEREL_MUDAHALE: "Yerel müdahale şüphesi (lisans izleri)",
+};
+/** Yerel müdahale nedenleri — sunucu `LOCAL_INTERVENTION_CAUSES` aynası (mirrors.test.ts, iki yönlü). */
+export const LOCAL_INTERVENTION_CAUSE_LABEL: Record<string, string> = {
+  SIRA_GERILEDI: "Durum kaydı sırası geriledi",
+  SIRA_SIFIRLANDI: "Durum kaydı sıfırlandı (izler silinmiş)",
+  LISANS_IZI_KAYIP: "Lisans izi kayıp",
+  BELIRSIZLIK: "Süren ölçülemedi > 7 gün",
+  SAAT_SAPMASI: "Saat sapması ≥ 1 saat",
+};
+/** Kapanış kirası nedeni — protokol `CLOSING_LEASE_REASONS` aynası. */
+export const CLOSING_REASON_LABEL: Record<string, string> = {
+  KOPYA: "kopya (çatal)",
+  TASIMA: "taşınmış eski anahtar",
+  IPTAL: "iptal edilmiş kurulum",
+};
+/** Ödenmiş tarihin (P) kaynağı — sunucu `PaidThroughKind` aynası. */
+export const PAID_THROUGH_KIND_LABEL: Record<string, string> = {
+  SOZLESME_SONU: "sözleşme sonu",
+  TAKSIT: "sıradaki taksit vadesi",
+  SURESIZ: "süresiz",
 };
 export const LEASE_DECISION_LABEL: Record<string, string> = {
   ETKINLESTIRME: "Etkinleştirme",
@@ -66,6 +88,8 @@ export const LEASE_DECISION_LABEL: Record<string, string> = {
   YAKALA: "Yakala (geride kalmış uç)",
   CATAL: "Çatal (kopya şüphesi)",
   TASIMA: "Taşıma",
+  KAPANIS: "Kapanış kirası",
+  DOSYA: "Uzatma dosyası",
 };
 
 /** Bildirim olayları — sunucunun `NOTIFICATION_EVENTS` listesinin HER değeri (ayna: src/test/mirrors.test.ts). */
@@ -82,6 +106,7 @@ export const NOTIFICATION_EVENT_LABEL: Record<string, string> = {
   PLANLI_EYLEM_UYGULANDI: "Planlı eylem uygulandı",
   TAKSIT_GECIKTI: "Taksit gecikti",
   DENEME: "Deneme bildirimi",
+  YEREL_MUDAHALE_SUPHESI: "Yerel müdahale şüphesi",
 };
 export const NOTIFICATION_CHANNEL_LABEL: Record<string, string> = { EPOSTA: "E-posta", TELEGRAM: "Telegram" };
 export const NOTIFICATION_STATUS_LABEL: Record<string, string> = {

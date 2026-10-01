@@ -181,7 +181,7 @@ Backend: `test_lisans_protokol`, `test_lisans_kabul_metni`, `test_lisans_kabul`,
 
 Native çekirdek (cargo, `cd Teks-Erp/native/lisans-cekirdek && npm test`; commit kapısında koşar, cargo yoksa ⏭ beyanla): `tests/vektorler.rs` (TS kâhininin vektör dosyası Rust tarafında, İKİ kipte) · derleme `npm run derle` (kâhinin §3–§7'si için `.node`) + `derle:uretim` + `derle:hazirlik` (kâhinin §9 kip çapraz sondası için).
 
-Satıcı web (vitest, `cd satici/web && npx vitest run`; commit kapısında koşar): `mirrors.test.ts`, `sanction.test.tsx`, `once-secret.test.tsx`, `login.test.tsx`, `app-isolation.test.ts`, `distribution.test.tsx`, `cloud-settings.test.tsx`, `erisim-imza.test.tsx`, `erisim-kullanici.test.tsx`, `erisim-anahtar.test.tsx`, `notifications.test.tsx`, `acceptance.test.tsx`
+Satıcı web (vitest, `cd satici/web && npx vitest run`; commit kapısında koşar): `mirrors.test.ts`, `sanction.test.tsx`, `once-secret.test.tsx`, `login.test.tsx`, `app-isolation.test.ts`, `distribution.test.tsx`, `cloud-settings.test.tsx`, `erisim-imza.test.tsx`, `erisim-kullanici.test.tsx`, `erisim-anahtar.test.tsx`, `notifications.test.tsx`, `acceptance.test.tsx`, `paid-through.test.tsx`
 
 Devreye alma betikleri (kök, zero-dep, ağsız): `node scripts/test_lisans_devreye_kuru.mjs` (runbook `docs/ops/LISANS-DEVREYE-ALMA-TESTFABRIKA.md`)
 
