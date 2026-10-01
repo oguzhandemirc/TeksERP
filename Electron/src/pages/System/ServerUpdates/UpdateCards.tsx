@@ -12,19 +12,22 @@ import {
   windowRuleText,
 } from "./labels";
 
-/** Kurulu sürüm + bekleyen (erişilebilir) sürüm ve güncelleyicinin onun için kararı. */
+/**
+ * Kurulu sürüm + yeni (erişilebilir) sürüm ve güncelleyicinin onun için kararı. Aday çalışan sürümse "yeni sürüm"
+ * yoktur (güncelleyicinin dosyası bir tur geride kalabilir): durum "Güncel" — yalnız durdurma kararı yine gösterilir.
+ */
 export function VersionCard({ s }: { s: UpdateStatus }) {
-  const p = s.bekleyen;
+  const newer = s.bekleyen && s.bekleyen.surum !== s.kuruluSurum ? s.bekleyen : null;
   const k = s.karar;
+  const idle = k?.karar === "DONDURULDU" ? decisionText(k.karar, k.neden) : "Güncel";
   return (
-    <UpdateCard title="Sürüm" action={p?.zorunlu ? <Badge variant="destructive">Kritik güncelleme</Badge> : undefined}>
+    <UpdateCard title="Sürüm" action={newer?.zorunlu ? <Badge variant="destructive">Kritik güncelleme</Badge> : undefined}>
       <InfoRow label="Kurulu sürüm">{s.kuruluSurum}</InfoRow>
-      <InfoRow label="Yeni sürüm">{p && p.surum !== s.kuruluSurum ? p.surum : "Yok"}</InfoRow>
-      {p && <InfoRow label="Durum">{decisionText(p.karar, p.neden)}</InfoRow>}
-      {!p && k && <InfoRow label="Durum">{decisionText(k.karar, k.neden)}</InfoRow>}
-      {p?.aralik && p.karar === "PENCERE_BEKLIYOR" && <InfoRow label="Kurulum">{when(p.aralik.baslangic)}</InfoRow>}
-      {p?.pgGuncellemesi && <InfoRow label="PostgreSQL">Önce küçük sürüm güncellemesi yapılacak</InfoRow>}
-      {p?.ozet && p.surum !== s.kuruluSurum && <p className="whitespace-pre-line pt-1 text-xs text-muted-foreground">{p.ozet}</p>}
+      <InfoRow label="Yeni sürüm">{newer ? newer.surum : "Yok"}</InfoRow>
+      <InfoRow label="Durum">{newer ? decisionText(newer.karar, newer.neden) : idle}</InfoRow>
+      {newer?.aralik && newer.karar === "PENCERE_BEKLIYOR" && <InfoRow label="Kurulum">{when(newer.aralik.baslangic)}</InfoRow>}
+      {newer?.pgGuncellemesi && <InfoRow label="PostgreSQL">Önce küçük sürüm güncellemesi yapılacak</InfoRow>}
+      {newer?.ozet && <p className="whitespace-pre-line pt-1 text-xs text-muted-foreground">{newer.ozet}</p>}
     </UpdateCard>
   );
 }

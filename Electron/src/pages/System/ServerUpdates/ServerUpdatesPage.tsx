@@ -42,6 +42,12 @@ function Notices({ s }: { s: UpdateStatus }) {
   );
 }
 
+/** Onay kartı: verilecek ya da geri alınacak bir şey varsa; kira yok · yaptırım · DONDUR'u Politika kartı zaten söyler. */
+export function showsApproval(s: UpdateStatus): boolean {
+  const e = s.eylemler;
+  return e.hemen || e.pencere || e.geriAl || s.onay !== null || (s.politika !== null && !s.donuk && s.politika.kip !== "DONDUR");
+}
+
 /**
  * SUNUCU GÜNCELLEMELERİ (Dağıtım v2) — kurulu/yeni sürüm, kiradaki politika, güncelleyicinin canlılığı,
  * onay ("Şimdi kur" · "Bu gece kur"), son sonuç ve geçmiş. Okuma `license:view`, onay `license:manage`.
@@ -68,11 +74,9 @@ export function ServerUpdatesPage() {
             <VersionCard s={s} />
             <PolicyCard s={s} />
             <UpdaterCard s={s} />
-            {canManage ? <UpdateApprovalCard s={s} /> : <LastResultCard s={s} />}
-            {canManage && <LastResultCard s={s} />}
-            <div className={canManage ? "" : "xl:col-span-2"}>
-              <UpdateHistoryCard items={s.gecmis} />
-            </div>
+            {canManage && showsApproval(s) && <UpdateApprovalCard s={s} />}
+            <LastResultCard s={s} />
+            <UpdateHistoryCard items={s.gecmis} />
           </div>
         )}
       </PageBody>

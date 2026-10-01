@@ -133,6 +133,24 @@ describe("sunucu güncellemesi — ekran", () => {
 describe("sunucu güncellemesi — sonuç ve uyarılar", () => {
   beforeEach(sifirla);
 
+  it("aday çalışan sürümse 'yeni sürüm' yok, durum Güncel, kritik rozeti yok; kira yoksa onay kartı gizli", async () => {
+    perms.push("license:manage");
+    status.mockResolvedValue(
+      durum({
+        kuruluSurum: "2.13.0",
+        politika: null,
+        sonrakiPencere: null,
+        bekleyen: { ...durum().bekleyen!, surum: "2.13.0", karar: "KUR", zorunlu: true },
+        eylemler: { hemen: false, pencere: false, geriAl: false, hedefSurum: null, neden: "Geçerli kira yok; güncelleme kapalı." },
+      }),
+    );
+    renderWithProviders(<ServerUpdatesPage />);
+    expect(await screen.findByText("Güncel")).toBeTruthy();
+    expect(screen.getByText("Yok")).toBeTruthy();
+    expect(screen.queryByText("Kritik güncelleme")).toBeNull();
+    expect(screen.queryByText("Onay")).toBeNull();
+  });
+
   it("geri dönmüş deneme: sonuç, neden ve iç ayrıntı görünür", async () => {
     perms.push("license:view");
     status.mockResolvedValue(
