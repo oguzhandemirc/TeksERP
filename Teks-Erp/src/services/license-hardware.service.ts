@@ -53,7 +53,7 @@ export async function sendHardwareReport(
   const parsed = HardwareReportResponseSchema.safeParse(r.json);
   if (!parsed.success) throw invalidResponse("Donanım bildirimi yanıtı biçimsiz.");
   const h = parsed.data;
-  if (h.durum === "ONAYLANDI" && h.lisans) await acceptLicenseResponse(h.lisans, "donanim", userId);
+  if (h.durum === "ONAYLANDI" && h.lisans) await acceptLicenseResponse(h.lisans, "donanim", "CANLI", userId);
   return { durum: h.durum, talepId: h.talepId, kayip: lostFactors };
 }
 

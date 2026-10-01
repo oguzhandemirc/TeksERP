@@ -52,6 +52,9 @@
 //   N1 max kaldırıldı (taban = kira sunucu saati)               → 3 ❌ (§29d/e/f)
 //   N2 kabul anında duvar tabana girdi                          → 2 ❌ (§29e/f)
 //   N3 kapalı süre kredisi devretmez                            → 1 ❌ (§29f)
+//   Süreklilik yalnız taşınmış kirada (§29g/h; `saat.ts` mutasyonu):
+//   NA canlı yol da max'a girer                                 → 1 ❌ (§29g)
+//   NB taşınmış yol da sunucu saatine iner                      → 4 ❌ (§29d/e/f/h)
 //   Her mutasyonun UYGULANDIĞI (sha farkı) ve geri alındığı (sha eşitliği) ayrıca ölçüldü.
 //   Doğuşta ısıran GERÇEK kusur: §5e — zehirli yüksek suyu üst eşikte tavanlamak güvenilir
 //   saati duvarın ilerisine itip sahte SAAT_GERİ üretiyordu; `saat.ts` bu dilimde düzeltildi.
@@ -84,6 +87,7 @@ import {
   monotonicElapsed,
   evaluateClock,
   leaseClockAnchor,
+  type LeaseArrival,
   type RememberedAnchor,
 } from "../src/lib/license/saat";
 import type { TraceInput } from "../src/lib/license/state-rules-trace";
@@ -944,7 +948,7 @@ function iptalBolumu(): void {
 
 // ── L2-9: kabulde saat sürekliliği (§29) — taşınmış kira tahmini geri çekemez, duvar tabana girmez ─────────
 function saatSurekliligiBolumu(): void {
-  console.log("\n§29 — kabulde saat sürekliliği (saf): taban = max(kira sunucu saati, kabul anındaki ölçülmüş tahmin); duvar tabana girmez");
+  console.log("\n§29 — kabulde saat sürekliliği (saf): taşınmış kirada taban = max(kira sunucu saati, kabul anındaki ölçülmüş tahmin), canlıda kiranın saati; duvar tabana girmez");
   const ucGunOnce = msToIso(SIMDI - 3 * DAY_MS);
   const tasinmis: Senaryo = { kira: { sunucuSaati: ucGunOnce, verilis: ucGunOnce } };
   const eski = durum({ ...tasinmis, saat: { monotonik: { kiraId: KIRA_ID, gecenMs: 0 } } });
@@ -961,17 +965,17 @@ function saatSurekliligiBolumu(): void {
   const olcum = (wallMs: number, mono: number, credit = 0): ReturnType<typeof evaluateClock> =>
     evaluateClock({ wallMs, highWaterMs: 0, leaseServerTimeMs: SIMDI - 31 * DAY_MS, monotonicElapsedMs: mono, pollIntervalMs: 5 * 60_000, downtimeCreditMs: credit });
   const surekli = olcum(SIMDI, 31 * DAY_MS);
-  const t = leaseClockAnchor(surekli, { leaseServerTimeMs: SIMDI - 3 * DAY_MS, wallMs: SIMDI });
-  const taze = leaseClockAnchor(surekli, { leaseServerTimeMs: SIMDI - 5 * 60_000, wallMs: SIMDI });
-  const ileriTaze = leaseClockAnchor(surekli, { leaseServerTimeMs: SIMDI + 60_000, wallMs: SIMDI });
+  const t = leaseClockAnchor(surekli, { leaseServerTimeMs: SIMDI - 3 * DAY_MS, wallMs: SIMDI, arrival: "TASINMIS" });
+  const taze = leaseClockAnchor(surekli, { leaseServerTimeMs: SIMDI - 5 * 60_000, wallMs: SIMDI, arrival: "TASINMIS" });
+  const ileriTaze = leaseClockAnchor(surekli, { leaseServerTimeMs: SIMDI + 60_000, wallMs: SIMDI, arrival: "TASINMIS" });
   check(
     "§29d çapa: ölçülemedi → taban yok · taşınmış (3 g) → taban = tahmin · saat payı içinde (5 dk) ya da ileride → taban yok (alan yazılmaz)",
-    JSON.stringify(leaseClockAnchor({ estimateMs: null, creditMs: 0 }, { leaseServerTimeMs: SIMDI - 3 * DAY_MS, wallMs: SIMDI })) === JSON.stringify({ baseMs: null, creditMs: 0 }) &&
+    JSON.stringify(leaseClockAnchor({ estimateMs: null, creditMs: 0 }, { leaseServerTimeMs: SIMDI - 3 * DAY_MS, wallMs: SIMDI, arrival: "TASINMIS" })) === JSON.stringify({ baseMs: null, creditMs: 0 }) &&
       t.baseMs === SIMDI && t.creditMs === 0 && taze.baseMs === null && taze.creditMs === 0 && ileriTaze.baseMs === null && ileriTaze.creditMs === 0,
     JSON.stringify({ t, taze, ileriTaze }),
   );
   const ileri = olcum(SIMDI + 2 * DAY_MS, 31 * DAY_MS);
-  const ia = leaseClockAnchor(ileri, { leaseServerTimeMs: SIMDI - 16 * 60_000, wallMs: SIMDI + 2 * DAY_MS });
+  const ia = leaseClockAnchor(ileri, { leaseServerTimeMs: SIMDI - 16 * 60_000, wallMs: SIMDI + 2 * DAY_MS, arrival: "TASINMIS" });
   const sonra = evaluateClock({ wallMs: SIMDI + 2 * DAY_MS, highWaterMs: 0, leaseServerTimeMs: SIMDI - 16 * 60_000, baseMs: ia.baseMs, monotonicElapsedMs: 0, pollIntervalMs: 5 * 60_000, downtimeCreditMs: ia.creditMs });
   check(
     "§29e ⭐ kabul anında duvar 2 gün ileri (SAAT_İLERİ): taban duvar DEĞİL tahmin, kredi yok → kabulden sonra SAAT_İLERİ sürer, güvenilir = tahmin",
@@ -979,13 +983,32 @@ function saatSurekliligiBolumu(): void {
     `${JSON.stringify(ia)} → ${sonra.finding} ${sonra.trustedMs - SIMDI}`,
   );
   const kapali = olcum(SIMDI, 29 * DAY_MS, 2 * DAY_MS);
-  const ka = leaseClockAnchor(kapali, { leaseServerTimeMs: SIMDI - 2 * DAY_MS - SAAT, wallMs: SIMDI });
+  const ka = leaseClockAnchor(kapali, { leaseServerTimeMs: SIMDI - 2 * DAY_MS - SAAT, wallMs: SIMDI, arrival: "TASINMIS" });
   const kaSonra = evaluateClock({ wallMs: SIMDI, highWaterMs: 0, leaseServerTimeMs: SIMDI - 2 * DAY_MS - SAAT, baseMs: ka.baseMs, monotonicElapsedMs: 0, pollIntervalMs: 5 * 60_000, downtimeCreditMs: ka.creditMs });
-  const asan = leaseClockAnchor(olcum(SIMDI + 5 * DAY_MS, 29 * DAY_MS, 2 * DAY_MS), { leaseServerTimeMs: SIMDI - 2 * DAY_MS - SAAT, wallMs: SIMDI + 5 * DAY_MS });
+  const asan = leaseClockAnchor(olcum(SIMDI + 5 * DAY_MS, 29 * DAY_MS, 2 * DAY_MS), { leaseServerTimeMs: SIMDI - 2 * DAY_MS - SAAT, wallMs: SIMDI + 5 * DAY_MS, arrival: "TASINMIS" });
   check(
     "§29f ⭐ 2 gün kapalı (kredili) + kapanmadan önce üretilmiş kira: duvarın kredili kısmı devreder (2 g) → bulgu yok; krediyi aşan duvar devretmez (yalnız 2 g, sürünme yok)",
     kapali.finding === null && ka.baseMs === SIMDI - 2 * DAY_MS && ka.creditMs === 2 * DAY_MS && kaSonra.finding === null && kaSonra.trustedMs === SIMDI && asan.creditMs === 2 * DAY_MS,
     `${JSON.stringify(ka)} → ${kaSonra.finding} · aşan ${JSON.stringify(asan)}`,
+  );
+  // Satıcı saati 1 sa ileri kaçmışken 30 dk önce alınmış kira: tahmin SIMDI + 1 sa → SAAT_GERİ; sonra satıcı saati düzelir.
+  const sisik = evaluateClock({ wallMs: SIMDI, highWaterMs: 0, leaseServerTimeMs: SIMDI + 30 * 60_000, monotonicElapsedMs: 30 * 60_000, pollIntervalMs: 5 * 60_000, downtimeCreditMs: 0 });
+  const sonraki = (arrival: LeaseArrival): { a: ReturnType<typeof leaseClockAnchor>; s: ReturnType<typeof evaluateClock> } => {
+    const a = leaseClockAnchor(sisik, { leaseServerTimeMs: SIMDI, wallMs: SIMDI, arrival });
+    return { a, s: evaluateClock({ wallMs: SIMDI, highWaterMs: 0, leaseServerTimeMs: SIMDI, baseMs: a.baseMs, monotonicElapsedMs: 0, pollIntervalMs: 5 * 60_000, downtimeCreditMs: a.creditMs }) };
+  };
+  const canli = sonraki("CANLI");
+  const canliHepsi = [surekli, ileri, kapali].every((p) => JSON.stringify(leaseClockAnchor(p, { leaseServerTimeMs: SIMDI - 3 * DAY_MS, wallMs: SIMDI, arrival: "CANLI" })) === JSON.stringify({ baseMs: null, creditMs: 0 }));
+  check(
+    "§29g ⭐ şişik taban (satıcı saati 1 sa ileriyken alınmış kira → SAAT_GERİ) + CANLI kira → çapa YOK (taban = kiranın sunucu saati), SAAT_GERİ söner; canlıda çapa ve kredi hiçbir girdide devretmez",
+    sisik.finding === "SAAT_GERI" && canli.a.baseMs === null && canli.a.creditMs === 0 && canli.s.finding === null && canli.s.trustedMs === SIMDI && canliHepsi,
+    `${sisik.finding} → ${JSON.stringify(canli.a)} ${canli.s.finding} · hepsi=${canliHepsi}`,
+  );
+  const tasinan = sonraki("TASINMIS");
+  check(
+    "§29h ⭐ aynı şişik taban + TAŞINMIŞ kira → max korunur (taban = şişik tahmin SIMDI + 1 sa), SAAT_GERİ sürer",
+    tasinan.a.baseMs === SIMDI + SAAT && tasinan.s.finding === "SAAT_GERI" && tasinan.s.trustedMs === SIMDI + SAAT,
+    `${JSON.stringify(tasinan.a)} → ${tasinan.s.finding} ${tasinan.s.trustedMs - SIMDI}`,
   );
 }
 

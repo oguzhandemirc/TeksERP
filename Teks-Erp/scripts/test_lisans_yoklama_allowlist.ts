@@ -116,6 +116,7 @@ async function hazirla(): Promise<{ f: Fikstur; dbKimligi: string; ornekler: { i
   await acceptLicenseResponse(
     { v: 1, hak: hakBas(f), kira: kiraBas(f, { zorlama: false }), indirmeBelirtecleri: [], sunucuSaati: new Date().toISOString(), kurulumId: f.kurulumId },
     "cevrimdisi",
+    "TASINMIS",
   );
   // Satıcı saati sapması ölçülmüş olsun: `saticiSapmaSn` beyanlı anahtar olarak gövdede görünsün.
   recordVendorClockSkew(-20 * 60_000);

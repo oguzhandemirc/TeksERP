@@ -19,6 +19,7 @@ import { capabilitiesField } from "../lib/license/capabilities";
 import { measureFingerprint } from "../lib/license/fingerprint";
 import { cacheFromRecordCopy, cacheToRecordCopy } from "../lib/license/fingerprint-cache";
 import { setFingerprintCacheCopy, startAccumulationForLease } from "../lib/license/record-writer";
+import type { LeaseArrival } from "../lib/license/saat";
 import { acceptNewEntitlement } from "./license-integrity.service";
 import {
   getLicenseConfig,
@@ -155,6 +156,8 @@ export function onLicenseActivated(fn: () => void): void {
 export async function acceptLicenseResponse(
   raw: unknown,
   source: LeaseSource,
+  /** Canlı alışveriş mi, elle taşınan yanıt mı (`LeaseArrival`) — çağıran söyler; kaynak adı tek başına ayırmaz (`donanim` iki yolda). */
+  arrival: LeaseArrival,
   userId: string | null = null,
 ): Promise<{ yeniKira: boolean; kiraId: string }> {
   const ctx = requireReady();
@@ -162,7 +165,7 @@ export async function acceptLicenseResponse(
   if (!parsed.success) throw invalidResponse("Lisans yanıtı biçimsiz.");
   const offer = revocationOffer(parsed.data.iptal);
   try {
-    return acceptVerifiedResponse(parsed.data, ctx, offer, { source, userId });
+    return acceptVerifiedResponse(parsed.data, ctx, offer, { source, userId, arrival });
   } catch (err) {
     adoptFromRejected(offer, source);
     throw err;
@@ -173,7 +176,7 @@ function acceptVerifiedResponse(
   resp: LicenseResponse,
   ctx: ReadyContext,
   offer: RevocationOffer,
-  who: { readonly source: LeaseSource; readonly userId: string | null },
+  who: { readonly source: LeaseSource; readonly userId: string | null; readonly arrival: LeaseArrival },
 ): { yeniKira: boolean; kiraId: string } {
   const { lease, entitlement, licenseId } = verifyResponseDocuments(resp, ctx, offer.picked?.jws ?? null);
   const leaseDoc = lease.document;
@@ -197,7 +200,7 @@ function acceptVerifiedResponse(
 
   adoptOffered(offer, who.source);
   if (getLicenseStore()?.identity?.kurulumId !== licenseId) saveLicenseIdentity(licenseId);
-  startAccumulationForLease({ lease: leaseDoc, entitlement, licenseId, iptalSira: offer.picked?.view.document.sira ?? null });
+  startAccumulationForLease({ lease: leaseDoc, entitlement, licenseId, iptalSira: offer.picked?.view.document.sira ?? null, arrival: who.arrival });
   if (resp.hak && resp.hak !== ctx.store.entitlementJws) acceptNewEntitlement(resp.hak);
   saveLease(resp.kira);
   setDownloadTokens(resp.indirmeBelirtecleri);
@@ -257,7 +260,7 @@ async function pollOnce(transport: VendorTransport): Promise<{ outcome: PollOutc
   // Destek (3d-2): yanıtın `destek` alanı + giden kutusu — kira alışverişi kuyruğunun DIŞINDA, yoklamayı düşürmez.
   void syncSupportAfterPoll(result.json, transport);
   try {
-    const accepted = await acceptLicenseResponse(result.json, "yoklama");
+    const accepted = await acceptLicenseResponse(result.json, "yoklama", "CANLI");
     if (!accepted.yeniKira) {
       recordPollOutcome({ ok: false, code: "KIRA_YENILENMEDI" });
       return { outcome: "BASARISIZ", code: "KIRA_YENILENMEDI" };
@@ -313,7 +316,7 @@ export async function sendTransfer(
   if (!parsed.success) throw invalidResponse("Taşıma yanıtı biçimsiz.");
   const t = parsed.data;
   if (t.durum === "ONAYLANDI" && t.lisans) {
-    await acceptLicenseResponse(t.lisans, "tasima");
+    await acceptLicenseResponse(t.lisans, "tasima", "CANLI");
     return { durum: t.durum, talepId: t.talepId, lisansAlindi: true };
   }
   const istendi = getLicenseStore()?.transfer?.istendi ?? msToIso(Date.now());

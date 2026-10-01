@@ -100,13 +100,23 @@ export interface LeaseClockAnchor {
 }
 
 /**
- * Kabulde süreklilik: yeni kiranın tahmini = max(kiranın sunucu saati, kabul anındaki ÖLÇÜLMÜŞ tahmin) + kabulden beri
- * monotonik — taşınmış (eski tarihli) kira tahmini geri çekemez. Tabana duvar ve yüksek su girmez (ileri sıçrama
- * aklanmaz); duvarın kapalı süre kredisiyle örtülen kısmı yeni kiraya kredi olarak devreder. Saat payı içindeki fark
- * ölçüm gürültüsüdür: taze kiranın tabanı kendi saatidir (alan yazılmaz).
+ * Kiranın fabrikaya geliş yolu. CANLI: satıcıyla o anki alışverişin yanıtı (yoklama · zil · etkinleştirme · taşıma · DR ·
+ * canlı donanım bildirimi) — sunucu saati satıcının ŞİMDİSİdir. TASINMIS: üretildiği andan sonra elle taşınan yanıt
+ * (uzatma dosyası · QR/çevrimdışı yanıt · aktarma · donanım zarfı) — sunucu saati GEÇMİŞtir.
  */
-export function leaseClockAnchor(prev: Pick<ClockResult, "estimateMs" | "creditMs">, g: { readonly leaseServerTimeMs: number; readonly wallMs: number }): LeaseClockAnchor {
-  if (prev.estimateMs === null) return { baseMs: null, creditMs: 0 };
+export type LeaseArrival = "CANLI" | "TASINMIS";
+
+/**
+ * Kabulde süreklilik YALNIZ taşınmış kirada: tahmin = max(kiranın sunucu saati, kabul anındaki ÖLÇÜLMÜŞ tahmin) + kabulden
+ * beri monotonik — eski tarihli kira tahmini geri çekemez. Canlı kirada taban kiranın kendi saatidir (satıcı saati
+ * kaçıkken şişen taban ilk canlı alışverişte söner; max her yolda olsa cırcır olurdu). Tabana duvar ve yüksek su girmez
+ * (ileri sıçrama aklanmaz); duvarın kapalı süre kredisiyle örtülen kısmı devreder. Saat payı içindeki fark gürültüdür.
+ */
+export function leaseClockAnchor(
+  prev: Pick<ClockResult, "estimateMs" | "creditMs">,
+  g: { readonly leaseServerTimeMs: number; readonly wallMs: number; readonly arrival: LeaseArrival },
+): LeaseClockAnchor {
+  if (g.arrival === "CANLI" || prev.estimateMs === null) return { baseMs: null, creditMs: 0 };
   const top = Math.max(g.leaseServerTimeMs, prev.estimateMs);
   return {
     baseMs: top - g.leaseServerTimeMs > CLOCK_SKEW_MS ? Math.round(top) : null,

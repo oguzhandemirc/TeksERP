@@ -132,7 +132,7 @@ export async function activateLicense(rawCode: string, userId: string | null, tr
     const r = await vendorPost(ENDPOINTS.ACTIVATE, "etkinlestir", buildActivateBody(ctx, code, acceptance.belge), transport);
     adminAction(userId, "etkinlestir", { sonuc: r.ok ? "yanit" : r.code, kabulId: acceptance.kabulId });
     if (!r.ok) throw vendorFailureToError(r);
-    await acceptLicenseResponse(r.json, "etkinlestirme", userId);
+    await acceptLicenseResponse(r.json, "etkinlestirme", "CANLI", userId);
   });
   return getLicenseDetail();
 }
@@ -230,12 +230,12 @@ const HARDWARE_REJECTED_TEXT = "Donanım değişikliği bildirimi lisans sunucus
  */
 async function acceptOfflinePayload(payload: unknown, source: OfflineResponseSource, userId: string | null): Promise<{ yeniKira: boolean; talepId?: string }> {
   const hardware = HardwareReportResponseSchema.safeParse(payload);
-  if (!hardware.success) return acceptLicenseResponse(payload, source, userId);
+  if (!hardware.success) return acceptLicenseResponse(payload, source, "TASINMIS", userId);
   const h = hardware.data;
   if (h.durum === "BEKLIYOR") throw licenseError(409, "LICENSE_HARDWARE_PENDING", HARDWARE_PENDING_TEXT, { talepId: h.talepId });
   if (h.durum === "REDDEDILDI") throw licenseError(409, "LICENSE_HARDWARE_REJECTED", HARDWARE_REJECTED_TEXT, { talepId: h.talepId });
   if (!h.lisans) throw invalidResponse("Donanım bildirimi yanıtı biçimsiz.");
-  const r = await acceptLicenseResponse(h.lisans, "donanim", userId);
+  const r = await acceptLicenseResponse(h.lisans, "donanim", "TASINMIS", userId);
   return { ...r, talepId: h.talepId };
 }
 
@@ -271,7 +271,7 @@ export async function drTakeover(anaKurulumId: string | undefined, gerekce: stri
     const r = await vendorPost(ENDPOINTS.DR_TAKEOVER, "dr-devral", body, transport);
     adminAction(userId, "dr-devral", { anaKurulumId: anaKurulumId ?? null, sonuc: r.ok ? "yanit" : r.code });
     if (!r.ok) throw vendorFailureToError(r);
-    await acceptLicenseResponse(r.json, "dr-devral", userId);
+    await acceptLicenseResponse(r.json, "dr-devral", "CANLI", userId);
   });
   return getLicenseDetail();
 }

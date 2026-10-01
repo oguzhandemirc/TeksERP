@@ -77,7 +77,7 @@ export async function bulutLisansKur(): Promise<BulutLisans> {
     invalidateLicenseSnapshot();
     const hakDogru = getLicenseSnapshot().entitlement;
     if (!hakDogru) throw new Error("bulut fikstürü: HAK doğrulanmadı");
-    startAccumulationForLease({ lease: doc, entitlement: hakDogru, licenseId: lisansId });
+    startAccumulationForLease({ lease: doc, entitlement: hakDogru, licenseId: lisansId, arrival: "CANLI" });
     invalidateLicenseSnapshot();
   };
   lisansiYaz();

@@ -2,7 +2,7 @@
 // (`record-builder.ts`) ve iki kopyaya yazar (`accumulation.ts`: durum.json + DB izi). Anlık görüntüyü okur, motor
 // (`runtime.ts`) bu modülü içe aktarmaz — döngü yok.
 import { isoToMs, type LeaseDoc, type VerifiedEntitlement } from "./protocol";
-import { leaseClockAnchor, type StateRecord } from "./saat";
+import { leaseClockAnchor, type LeaseArrival, type StateRecord } from "./saat";
 import { entitlementPinBroken } from "./state-rules-trust";
 import { integrityRecordPatch } from "./integrity-state";
 import { ladderValue } from "./ladder-counters";
@@ -76,10 +76,12 @@ export function startAccumulationForLease(g: {
   readonly nowMs?: number;
   /** Kabulde benimsenen (ya da elde tutulan) iptal belgesinin sırası — pine girer. */
   readonly iptalSira?: number | null;
+  /** Kira canlı alışverişten mi geldi, elle mi taşındı — varsayılanı yok: saat sürekliliği yalnız taşınmışta. */
+  readonly arrival: LeaseArrival;
 }): void {
   const nowMs = g.nowMs ?? Date.now();
-  // Saat sürekliliği kabul ÖNCESİ ölçülmüş tahminden (eldeki kira + birikim); hangi yoldan gelirse gelsin tek nokta.
-  const clock = leaseClockAnchor(getLicenseSnapshot(nowMs).state.saat, { leaseServerTimeMs: isoToMs(g.lease.sunucuSaati), wallMs: nowMs });
+  // Saat sürekliliği kabul ÖNCESİ ölçülmüş tahminden (eldeki kira + birikim); bütün yollar için tek nokta.
+  const clock = leaseClockAnchor(getLicenseSnapshot(nowMs).state.saat, { leaseServerTimeMs: isoToMs(g.lease.sunucuSaati), wallMs: nowMs, arrival: g.arrival });
   const view = recordView(currentAccumulation(), g.licenseId);
   writeRecord(
     leaseRecord({
