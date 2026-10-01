@@ -52,6 +52,11 @@ const RESULT_CODES: Record<string, string> = {
   BILINMEYEN: "Bilinmeyen hata",
 };
 
+/** `yerel.bilgi` — sorun DEĞİL ("Sorun" satırına girmez, `hataKodu` sözlüğünden ayrı). */
+const NOTICES: Record<string, string> = {
+  SEMA_OLCULEMEDI: "Şema hizası ölçülemedi — güncelleme bu yüzden durdurulmadı (göç adımı veritabanını ayrıca denetler)",
+};
+
 const RESULTS: Record<UpdateResultKind, string> = {
   BASARILI: "Başarılı",
   GERI_DONDU: "Geri dönüldü",
@@ -86,6 +91,7 @@ const DAYS = ["Pzt", "Sal", "Çar", "Per", "Cum", "Cmt", "Paz"];
 export const decisionLabel = (k: UpdateDecisionKind): string => DECISIONS[k] ?? k;
 export const reasonLabel = (code: string | null): string | null => (code ? (REASONS[code] ?? code) : null);
 export const resultCodeLabel = (code: string | null): string | null => (code ? (RESULT_CODES[code] ?? code) : null);
+export const noticeLabel = (code: string): string => NOTICES[code] ?? code;
 export const resultLabel = (k: UpdateResultKind): string => RESULTS[k] ?? k;
 export const updaterLabel = (s: UpdaterState): string => UPDATER[s] ?? s;
 export const localStateLabel = (s: string): string => LOCAL_STATES[s] ?? s;

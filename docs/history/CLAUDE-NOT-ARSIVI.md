@@ -14484,7 +14484,7 @@ Negatif sondalar (tetik md5(prosrc) ve dosya md5 ile geri alındı):
 
 **Karar (yönetici, 2026-10-02).** Tek kural, ad kümesine bağlı. Veritabanındaki BİTMİŞ göç adları (`finished_at IS NOT NULL AND rolled_back_at IS NULL`) paketin göç adlarının (`prisma/migrations/<ad>/migration.sql`) alt kümesi değilse şema İLERİDEDİR. Bu durumda paket geri indirir ve hiçbir yol onu uygulamaz. Sayı karşılaştırması bunu ölçmez (sayı eşit, ad farklı olabilir).
 - Güncelleyici hazırlıktan (paket + PG) SONRA ve HAZIR/uygulamadan ÖNCE ölçer; hizmet durdurulmaz. Şema ileriyse durum `BEKLIYOR` olur ve açık kod `SEMA_ILERIDE` yazılır. Paket HAZIR denmez; onaylı sürüm de beklemede kalır. Yalnız bu göçleri taşıyan daha yeni bir sürüm açar.
-- Ölçülemezse (psql ya da göç dizini) bugünkü yol sürer: uyarı düşer, göç adımı ölçülemeyen öncesini "değişti" sayar, geri dönüşte DB yedekten gelir.
+- ~~Ölçülemezse (psql ya da göç dizini) bugünkü yol sürer: uyarı düşer, göç adımı ölçülemeyen öncesini "değişti" sayar, geri dönüşte DB yedekten gelir.~~ GEÇERSİZ → 2026-10-02 (aşağıdaki "şema hizası ölçülemedi" notu: yol sürer ama sessiz geçmez, `SEMA_OLCULEMEDI`).
 - Setup göçten ÖNCE durur (hiçbir şey değişmeden). Göçten sonra sayı yerine ad eşitliğini (eksik + fazla) ölçer.
 - Geçiş fazla ve bekleyen göçü ortak işlevle hesaplar.
 - Panel "Sorun" satırı ile onay kuralının bekleyiş nedeni ("daha yeni sürüm gerekir") aynı kodu okur.
@@ -14495,6 +14495,19 @@ Negatif sondalar (tetik md5(prosrc) ve dosya md5 ile geri alındı):
 **Satıcı.** Yoklama raporu bekleyiş kodu taşımaz (`bekleyen.neden` karar nedenidir, `son.kod` tamamlanmış denemenin sonucudur). Bu yüzden satıcı metni eklenmedi; satıcının bu bekleyişi görmesi ayrı bir protokol kararıdır.
 
 **Bekçi.** `test_sema_hizasi` (§1–§5 + 14 kalıcı sonda) · `tests/sema_hizasi.rs` (vektörler + dünya: ileride bekler/dokunmaz, sayı eşit yabancı ad, onaylı sürüm bekler, eşit/geride sürer) · `test_guncelleme_durumu` §7l · `serverUpdates.test.tsx`.
+
+## 2026-10-02 — Dağıtım v2 D8e ölçülemedi: şema hizasının üçüncü sonucu SEMA_OLCULEMEDI — bilgi, güncelleme sürer, sessiz geçmez (yönetici kararı) [ÇEKİRDEK]
+
+**Neden.** SEMA_ILERIDE kuralı iki sonuç taşıyordu; güncelleyicide okunamayan yan (psql düştü, paketin göç dizini yok) yalnız UYARI satırına düşüyor, durum dosyasında iz bırakmıyordu. Okunamayan yan boş küme sayılsaydı da ileri şema sessizce "uyumlu" görünürdü.
+
+**Karar (yönetici, 2026-10-02).** Ölçülemeyen şema hizası güncellemeyi DURDURMAZ: göç adımı veritabanını zaten ister ve düşerse telafiyle döner; engel acil düzeltme sürümünü de bloklardı. Ama sessiz de geçmez. Sonuç modeli üçtür: uyumlu → sürer · ileride → `SEMA_ILERIDE`, `BEKLIYOR` · ölçülemedi → `SEMA_OLCULEMEDI`, BİLGİ düzeyi (durum hata değil, `BEKLIYOR` değil).
+- Rust `sema::verdict` üç sonucu verir; `null`/okunamayan yan boş küme SAYILMAZ.
+- Kod + neden `guncelleyici.log`a BİLGİ satırı olarak ve `durum.json`un yeni `bilgi {kod, mesaj}` alanına yazılır. `hataKodu`na yazılmaz, çünkü o "şu anki sorun"dur ve onay kuralı onu bekleyiş nedeni sayar. Bilgi turun ölçümüdür: tur başında silinir.
+- Backend `yerel.bilgi` olarak panele geçirir; panel "Bilgi" satırında gösterir ("Sorun" değil). Yoklama raporuna gitmez.
+- Setup ve geçiş aynı sonucu çağıranda DURDURUR (setup `Dur`, geçiş `Engel`); veritabanı onların kendi adımı için de şarttır. Davranışları değişmedi.
+- Güncelleyici 0.1.3'te kaldı (aynı iniş, yayınlanmamış).
+
+**Bekçi.** `test_sema_hizasi` §6 · `tests/sema_hizasi.rs` (ölçülemedi → kurulur + günlük + `durum.bilgi`; HAZIR'da bilgi, sorun değil; ortak vektörlerde iki ölçülemedi kaydı) · `serverUpdates.test.tsx` · `test_lisans_yoklama_allowlist` §5b (bilgi rapora sızmaz).
 
 ## 2026-10-02 — Dağıtım v2 D8e: kurulum lisans satıcısını kanaldan alır, farklı değer uyarır (yönetici kararı K1=A) [ÇEKİRDEK]
 

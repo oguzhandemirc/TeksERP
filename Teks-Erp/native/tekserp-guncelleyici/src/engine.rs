@@ -9,7 +9,9 @@ use crate::decision::{self, Decision, InstalledPg, Kind, PgMode, PolicySource, U
 use crate::download::{self, Spec};
 use crate::env::Env;
 use crate::health;
-use crate::ipc::{self, Approval, IntentRead, LastDetail, Pending, PolicyView, Progress as IpcProgress, State, StatusDoc, UpdateResult};
+use crate::ipc::{
+    self, Approval, IntentRead, LastDetail, Notice, Pending, PolicyView, Progress as IpcProgress, State, StatusDoc, UpdateResult,
+};
 use crate::journal::{Journal, Kind as JKind};
 use crate::layout::Layout;
 use crate::operation::{self, BackendOp, BackendPlan, Ctx, OpOutcome, Progress};
@@ -62,6 +64,8 @@ pub struct Engine {
     last_status: RefCell<Option<StatusDoc>>,
     last_progress_ms: RefCell<i64>,
     candidate: RefCell<Option<Candidate>>,
+    /// Bu turun bilgisi (`durum.bilgi`): turun başında silinir, ölçüm koyar; sonraki her durum yazımı taşır.
+    notice: RefCell<Option<Notice>>,
 }
 
 struct Inputs {
@@ -131,6 +135,7 @@ impl Engine {
             last_status: RefCell::new(None),
             last_progress_ms: RefCell::new(0),
             candidate: RefCell::new(None),
+            notice: RefCell::new(None),
         }
     }
 
@@ -181,6 +186,7 @@ impl Engine {
         d.last_detail = f.last_detail.clone();
         d.error_code = code.map(str::to_string);
         d.message = (!message.is_empty()).then(|| message.to_string());
+        d.notice = self.notice.borrow().clone();
         d
     }
 
@@ -268,6 +274,7 @@ impl Engine {
     /// Bir tur. `stop()` doğru olursa uzun işler (indirme) güvenli noktada bırakılır.
     pub fn tick(&self, stop: &dyn Fn() -> bool) -> TickResult {
         let idle = |s: u64| TickResult::Idle(Duration::from_secs(s));
+        *self.notice.borrow_mut() = None;
         if let Err(m) = self.private_area_ok() {
             self.log.error(&m);
             self.env.events.event(tekserp_hizmet::logfile::Level::Error, &m);
@@ -1062,31 +1069,27 @@ impl Engine {
         Ok(())
     }
 
-    /// Şema hizası (`sema::ahead`, setup ve geçişle TEK kural): veritabanında paketin taşımadığı bitmiş göç varsa
-    /// paket şemanın GERİSİNDEdir ve güncelleme uygulanmaz. Hazırlıktan sonra, hizmet durdurulmadan ölçülür.
-    /// Ölçülemezse bugünkü yol sürer (uyarı; göç adımı ölçülemeyen öncesini "değişti" sayar, geri dönüşte DB yedekten).
+    /// Şema hizası (`sema::verdict`, setup ve geçişle TEK kural), hazırlıktan sonra, hizmet durdurulmadan; ÜÇ sonuç:
+    /// uyumlu → sürer · ileride → `SEMA_ILERIDE`, BEKLİYOR (geri indirme yok) · ölçülemedi → `SEMA_OLCULEMEDI` BİLGİ:
+    /// güncelleme durmaz (göç adımı DB ister, düşerse telafiyle döner) ama kod günlüğe ve `durum.bilgi`ye yazılır.
     fn schema_check(&self, inputs: &Inputs, m: &ReleaseManifest) -> Result<(), Fail> {
-        let unmeasured = |why: String| {
-            self.log.warn(&format!("şema hizası ölçülemedi ({why}) — güncelleme bu ölçüm yüzünden durdurulmadı"));
-            Ok(())
-        };
-        let package = match sema::package_migrations(self.env.fs.as_ref(), &self.layout.version_dir(&m.surum)) {
-            Ok(p) => p,
-            Err(e) => return unmeasured(format!("paketin göç dizini: {e}")),
-        };
-        let db = match tools::finished_migrations(&self.env, &inputs.backend) {
-            Ok(d) => d,
-            Err(e) => return unmeasured(e),
-        };
-        let extra = sema::ahead(&db, &package);
-        match extra.first() {
-            None => Ok(()),
-            Some(first) => Err(fail(
+        let package = sema::package_migrations(self.env.fs.as_ref(), &self.layout.version_dir(&m.surum)).map_err(|e| e.to_string());
+        let db = tools::finished_migrations(&self.env, &inputs.backend);
+        match sema::verdict(db, package) {
+            sema::Verdict::Aligned => Ok(()),
+            sema::Verdict::Unmeasured(why) => {
+                let message = format!("{} için şema hizası ölçülemedi ({why}) — güncelleme bu yüzden durdurulmadı", m.surum);
+                self.log.info(&format!("{}: {message}", codes::SEMA_OLCULEMEDI));
+                *self.notice.borrow_mut() = Some(Notice { code: codes::SEMA_OLCULEMEDI.into(), message });
+                Ok(())
+            }
+            sema::Verdict::Ahead(extra) => Err(fail(
                 codes::SEMA_ILERIDE,
                 format!(
-                    "{} kurulmaz: veritabanında paketin taşımadığı {} bitmiş göç var (ilk: {first}) — paket şemanın gerisinde, geri indirme yapılmaz; bu göçleri taşıyan daha yeni bir sürüm gerekir",
+                    "{} kurulmaz: veritabanında paketin taşımadığı {} bitmiş göç var (ilk: {}) — paket şemanın gerisinde, geri indirme yapılmaz; bu göçleri taşıyan daha yeni bir sürüm gerekir",
                     m.surum,
-                    extra.len()
+                    extra.len(),
+                    extra[0]
                 ),
             )),
         }

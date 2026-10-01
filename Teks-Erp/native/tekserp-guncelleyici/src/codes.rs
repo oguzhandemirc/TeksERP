@@ -46,6 +46,10 @@ pub const DOSYA_KILITLI: &str = "DOSYA_KILITLI";
 /// Paket şemanın GERİSİNDE (`sema::ahead`, setup ve geçişle TEK kural): veritabanında paketin taşımadığı bitmiş
 /// göç var — geri indirme yapılmaz, hiçbir şey değişmeden BEKLİYOR (bu göçleri taşıyan sürüm gelince sürer).
 pub const SEMA_ILERIDE: &str = "SEMA_ILERIDE";
+/// BİLGİ, sorun DEĞİL (`durum.bilgi`, `hataKodu` değil): şema hizası ölçülemedi (veritabanı ya da paketin göç dizini
+/// okunamadı). Güncelleme DURMAZ — göç adımı veritabanını zaten ister, düşerse telafiyle döner; engel acil sürümü de
+/// bloklardı. Sessiz de geçilmez: günlüğe ve durum dosyasına kod + nedenle yazılır.
+pub const SEMA_OLCULEMEDI: &str = "SEMA_OLCULEMEDI";
 pub const GOC_HATASI: &str = "GOC_HATASI";
 pub const GOC_ZAMAN_ASIMI: &str = "GOC_ZAMAN_ASIMI";
 pub const SAGLIK_ZAMAN_ASIMI: &str = "SAGLIK_ZAMAN_ASIMI";

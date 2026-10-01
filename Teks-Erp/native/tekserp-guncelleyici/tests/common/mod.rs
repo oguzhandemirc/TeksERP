@@ -230,6 +230,8 @@ pub struct Faults {
     pub license_broken_version: Mutex<Option<String>>,
     /// Veritabanının SON bitmiş göçünün adı bu (paketin bilmediği, sayı aynı): şema hizası ad ölçer, sayı değil.
     pub foreign_migration: Mutex<Option<String>>,
+    /// Bitmiş göç ADLARI sorgusu düşer (yalnız o; göç sayısı ve göç adımı çalışır): şema hizası ÖLÇÜLEMEDİ.
+    pub finished_migrations_unreadable: AtomicBool,
     /// `migrate deploy` yarıda düşer (bir göç başlar, biter değil).
     pub migrate_fails: AtomicBool,
     /// ImagePath bu parçayı taşırken (ör. yeni PG dizini) sunucu yanlış sürüm bildirir.
@@ -464,6 +466,11 @@ impl Procs for FakeProcs {
                     return Ok(fail_out(2, "psql: error: connection refused"));
                 }
                 let sql = args.last().cloned().unwrap_or_default();
+                if sql == tekserp_guncelleyici::sema::FINISHED_MIGRATIONS_SQL
+                    && self.w.faults.finished_migrations_unreadable.load(Ordering::SeqCst)
+                {
+                    return Ok(fail_out(1, "ERROR:  permission denied for table _prisma_migrations"));
+                }
                 if sql == tekserp_guncelleyici::sema::FINISHED_MIGRATIONS_SQL {
                     // Bitmiş göç adları: paketin adlandırmasıyla (`{i:04}_goc`); yabancı göç SON adın yerine geçer.
                     let d = self.w.db.lock().unwrap();
@@ -1169,6 +1176,16 @@ impl World {
             }
         }
         Ok(out)
+    }
+
+    /// `run` gibi bir süreç ömrü, ama günlük DOSYAYA yazılır (`<dünya>\gunluk\guncelleyici.log`); dönüş: içeriği.
+    pub fn run_logged(&self, ticks: usize) -> String {
+        let log = Arc::new(RotatingLog::open(&self.dir.join("gunluk"), "guncelleyici", tekserp_hizmet::logfile::LogSpec::SERVICE));
+        let engine = Engine::new(self.env(), self.layout.clone(), self.anchor.clone(), Arc::clone(&log), None);
+        for _ in 0..ticks {
+            engine.tick(&|| false);
+        }
+        std::fs::read_to_string(log.path()).unwrap_or_default()
     }
 
     /// Terminal duruma (BAŞARILI/GERİ DÖNDÜ/HATA, yarım işlem yok) varana dek yeniden başlatarak koşar.

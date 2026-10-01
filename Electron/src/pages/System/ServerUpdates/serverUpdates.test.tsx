@@ -216,3 +216,22 @@ describe("sunucu güncellemesi — sonuç ve uyarılar", () => {
     await waitFor(() => expect(approve).toHaveBeenCalledWith(expect.objectContaining({ surum: "2.13.0", zamanlama: "GERI_AL" })));
   });
 });
+
+describe("sunucu güncellemesi — bilgi (sorun değil)", () => {
+  beforeEach(sifirla);
+
+  it("şema hizası ölçülemedi → 'Bilgi' satırı (Sorun DEĞİL), durum Hazır kalır", async () => {
+    perms.push("license:view");
+    status.mockResolvedValue(
+      durum({
+        yerel: { ...durum().yerel!, bilgi: { kod: "SEMA_OLCULEMEDI", mesaj: "2.13.0 için şema hizası ölçülemedi (psql: bağlantı reddedildi)" } },
+      }),
+    );
+    renderWithProviders(<ServerUpdatesPage />);
+    const bilgi = await screen.findByTestId("guncelleyici-bilgi");
+    expect(bilgi.textContent).toBe("Şema hizası ölçülemedi — güncelleme bu yüzden durdurulmadı (göç adımı veritabanını ayrıca denetler)");
+    expect(bilgi.getAttribute("title")).toContain("psql");
+    expect(screen.queryByText("Sorun")).toBeNull();
+    expect(screen.getByText("Hazır")).toBeTruthy();
+  });
+});

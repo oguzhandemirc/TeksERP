@@ -85,6 +85,8 @@ export interface UpdateStatus {
     planlanan: string | null;
     zaman: string | null;
     sonAyrinti: { urun: "backend" | "pg"; hataKodu: string | null; mesaj: string | null } | null;
+    /** Sorun DEĞİL, bilgi (ör. SEMA_OLCULEMEDI); eski backend göndermez. */
+    bilgi?: { kod: string; mesaj: string } | null;
   } | null;
   gecmis: UpdateHistoryItem[];
   karar: { karar: UpdateDecisionKind; neden: string | null } | null;

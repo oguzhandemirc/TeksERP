@@ -32,10 +32,12 @@ import {
   UPDATER_HISTORY_LIMIT,
   UpdaterDecisionBlockSchema,
   UpdaterLastDetailSchema,
+  UpdaterNoticeSchema,
   UpdaterPendingBlockSchema,
   readUpdater,
   type UpdaterHistoryLine,
   type UpdaterLastDetail,
+  type UpdaterNotice,
   type UpdaterRead,
   type UpdaterStatusDoc,
 } from "../lib/license/updater-ipc";
@@ -140,6 +142,12 @@ export function lastDetail(d: UpdaterStatusDoc): UpdaterLastDetail | null {
   return r.success ? r.data : null;
 }
 
+/** `bilgi` (sorun değil): biçimsizse yalnız kendisi düşer. */
+export function updaterNotice(d: UpdaterStatusDoc): UpdaterNotice | null {
+  const r = UpdaterNoticeSchema.safeParse(d.bilgi);
+  return r.success ? r.data : null;
+}
+
 /** Panel geçmişi satırı: sonuç (rapor biçimi) + ürün, iç kod, PG sürümü ve tetikleyen onay. */
 export interface UpdateHistoryItem extends UpdateResult {
   readonly urun: "backend" | "pg";
@@ -219,6 +227,8 @@ export interface UpdateStatus {
     readonly planlanan: string | null;
     readonly zaman: string | null;
     readonly sonAyrinti: UpdaterLastDetail | null;
+    /** Bu turun bilgisi (sorun DEĞİL; ör. `SEMA_OLCULEMEDI` — güncelleme durmadı). */
+    readonly bilgi: UpdaterNotice | null;
   } | null;
   /** Son denemeler (backend + PG adımları), en yeni önce. */
   readonly gecmis: UpdateHistoryItem[];
@@ -277,6 +287,7 @@ export function updateStatusFrom(g: {
           planlanan: valid(IsoTimeSchema, d.planlanan),
           zaman: d.zaman ?? null,
           sonAyrinti: lastDetail(d),
+          bilgi: updaterNotice(d),
         }
       : null,
     gecmis: attempts,

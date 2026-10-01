@@ -32,6 +32,36 @@ pub fn ahead(db_finished: &[String], package: &[String]) -> Vec<String> {
     difference(db_finished, package)
 }
 
+/// Şema hizasının ÜÇ sonucu — ikisi ("uyumlu"/"ileride") yetmez: okunamayan yan boş küme sayılırsa ileri şema
+/// sessizce "uyumlu" görünür.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Verdict {
+    /// Veritabanının bitmiş göçleri paketin alt kümesi: güncelleme sürer.
+    Aligned,
+    /// Veritabanında paketin taşımadığı bitmiş göçler (bayt sıralı): `SEMA_ILERIDE`, BEKLİYOR.
+    Ahead(Vec<String>),
+    /// Bir yan okunamadı (neden): `SEMA_OLCULEMEDI`, BİLGİ — güncelleme durmaz, sessiz de geçmez.
+    Unmeasured(String),
+}
+
+/// Paketin ve veritabanının göç adları (ya da okunamama nedeni) → sonuç. Paket önce: ikisi de okunamazsa neden paketin.
+pub fn verdict(db_finished: Result<Vec<String>, String>, package: Result<Vec<String>, String>) -> Verdict {
+    let package = match package {
+        Ok(p) => p,
+        Err(e) => return Verdict::Unmeasured(format!("paketin göç dizini: {e}")),
+    };
+    let db = match db_finished {
+        Ok(d) => d,
+        Err(e) => return Verdict::Unmeasured(e),
+    };
+    let extra = ahead(&db, &package);
+    if extra.is_empty() {
+        Verdict::Aligned
+    } else {
+        Verdict::Ahead(extra)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -47,5 +77,19 @@ mod tests {
         assert!(ahead(&v(&["0001_a"]), &v(&["0001_a", "0002_b"])).is_empty(), "geride: paket ileri götürür");
         assert!(ahead(&v(&["0001_a", "0002_b"]), &v(&["0002_b", "0001_a"])).is_empty(), "eşit");
         assert_eq!(ahead(&v(&["0001_A"]), &v(&["0001_a"])), v(&["0001_A"]), "ad bayt-eşit");
+    }
+
+    #[test]
+    fn unreadable_side_is_unmeasured_not_empty() {
+        // Okunamayan yan BOŞ KÜME sayılsaydı veritabanı okunamayınca her paket "uyumlu" görünürdü.
+        let ok = |x: &[&str]| -> Result<Vec<String>, String> { Ok(v(x)) };
+        assert_eq!(verdict(ok(&["0001_a"]), ok(&["0001_a", "0002_b"])), Verdict::Aligned);
+        assert_eq!(verdict(ok(&["0001_a", "0003_c"]), ok(&["0001_a"])), Verdict::Ahead(v(&["0003_c"])));
+        assert!(matches!(verdict(Err("psql: bağlantı reddedildi".into()), ok(&["0001_a"])), Verdict::Unmeasured(w) if w.contains("psql")));
+        assert!(matches!(verdict(ok(&["0001_a"]), Err("dizin yok".into())), Verdict::Unmeasured(w) if w.starts_with("paketin göç dizini")));
+        assert!(
+            matches!(verdict(Err("db".into()), Err("dizin yok".into())), Verdict::Unmeasured(w) if w.starts_with("paketin")),
+            "ikisi de okunamazsa neden paketin"
+        );
     }
 }

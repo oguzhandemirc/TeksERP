@@ -111,6 +111,7 @@ fs.writeFileSync(path.join(GUNCELLEYICI, "durum", "durum.json"), JSON.stringify(
   bekleyen: { surum: "2.15.0", karar: "ONAY_BEKLIYOR", neden: null, aralik: null, pgGuncellemesi: false, zorunlu: false, ozet: "GIZLI-ADAY-OZETI" },
   son: SON,
   sonAyrinti: { urun: "backend", hataKodu: "SAGLIK_ZAMAN_ASIMI", mesaj: "GIZLI-ICERIK-AYRINTISI" },
+  bilgi: { kod: "SEMA_OLCULEMEDI", mesaj: "GIZLI-BILGI-NEDENI psql" },
 }));
 fs.writeFileSync(path.join(GUNCELLEYICI, "durum", "gecmis.jsonl"), JSON.stringify({
   v: 1, islemId: ISLEM, onayId: null, urun: "backend", kaynakSurum: "2.13.1", surum: "2.14.0", sonuc: "GERI_DONDU", hataKodu: "SAGLIK_HATASI",
@@ -208,8 +209,8 @@ async function main(): Promise<void> {
     check("§5a ⭐ rapor gövdede: güncelleyici çalışıyor, onay bekleyen 2.15.0, son deneme geri döndü (kodlu)",
       g?.guncelleyici.durum === "CALISIYOR" && g.bekleyen?.surum === "2.15.0" && g.bekleyen.karar === "ONAY_BEKLIYOR" &&
       g.son?.kayitId === ISLEM && g.son.sonuc === "GERI_DONDU" && g.son.kod === "SAGLIK_HATASI" && JSON.stringify(g.son) === JSON.stringify(SON), JSON.stringify(g));
-    check("§5b ⭐ güncelleyicinin serbest iletisi, aday özeti, iç ayrıntısı ve onaylayanın adı gövdede YOK",
-      !metin.includes("GIZLI-") && !metin.includes("Onaylayan-Kisi-Adi") && !metin.includes("SAGLIK_ZAMAN_ASIMI"));
+    check("§5b ⭐ güncelleyicinin serbest iletisi, aday özeti, iç ayrıntısı, bilgisi ve onaylayanın adı gövdede YOK",
+      !metin.includes("GIZLI-") && !metin.includes("Onaylayan-Kisi-Adi") && !metin.includes("SAGLIK_ZAMAN_ASIMI") && !metin.includes("SEMA_OLCULEMEDI"));
     fs.rmSync(GUNCELLEYICI, { recursive: true, force: true });
     const govde3 = await buildPollBody();
     check("§5c güncelleyici yoksa alan HİÇ gitmez (eski satıcı uyumu)", !("guncelleme" in govde3));

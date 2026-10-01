@@ -177,7 +177,7 @@ interface UpdateStatus {                                 // src/services/update-
   canlilik: { sonCanlilik: string | null; esikSn: number | null; gecikmeSn: number | null; yanitVermiyor: boolean } | null;
   onay: { onayId; surum; zamanlama: "HEMEN" | "PENCERE"; onaylayan: {id, ad}; zaman; kullanildi: boolean } | null;
   eylemler: { hemen: boolean; pencere: boolean; geriAl: boolean; hedefSurum: string | null; neden: string | null };
-  // bekleyen'e: zorunlu · ozet · aralik · pgGuncellemesi · yerel'e: urun · sonAyrinti{urun, hataKodu, mesaj}
+  // bekleyen'e: zorunlu · ozet · aralik · pgGuncellemesi · yerel'e: urun · sonAyrinti{urun, hataKodu, mesaj} · bilgi{kod, mesaj}
   // gecmis satırına: urun ("backend" | "pg") · ayrintiKodu · pgSurum · onayId (PG satırında hedefSurum = hedefBackend)
 }
 ```
@@ -295,6 +295,7 @@ Genel: UTF-8 (BOM'suz) JSON; yazan taraf `<ad>.tmp`e yazar, diske boşaltır (`F
 - **Kesin alanlar (tek kaynak — TS aynası):** `karar` = `decideUpdate`in çıktısı (aday olsun olmasın: `DONDURULDU/KIRA_YOK` gibi adaysız kararlar da); `bekleyen` = en yeni adayın kararı (yoklama raporunun `bekleyen`i `{surum, karar, neden}` buradan AYNEN; aday geri dönmüş sürümse ve yeni onay yoksa `karar` ne derse desin `ONAY_BEKLIYOR` — o sürüm ancak yeni onayla denenir); `son` = son TAMAMLANAN deneme, `UpdateResultSchema` ile BİREBİR (KATI; rapora aynen gider — başarısız PG adımı da bir denemenin sonucudur: `hedefSurum` = backend adayı, `kod: PG_GUNCELLEME_HATASI`); `sonAyrinti` = iç kod + ileti (panel/destek).
 - **Geriye uyumlu alanlar** (backend okuyucusu `updater-ipc.ts` `UpdaterStatusDocSchema`, sözleşme sürümü 3): `durum` · `surum` (aday ya da süren işlemin hedefi; PG adımında backend adayı) · `kaynakSurum` · `kuruluSurum` · `adim` (`GERI_DON:<adım>` geri almada) · `hataKodu` · `mesaj` (≤ 400 karakter; okuyucu 500'den uzununu dosyayla birlikte reddeder) · `ilerleme` · `planlanan` · `politika{kip, izin, neden}` (karar DONDURULDU/UYGUN_DEGIL ise `izin: false`, `neden` okuyucunun sözlüğünden: `POLITIKA_DONDUR` · `YAPTIRIM_DONUK` · `KIRA_YOK` · UYGUN_DEGIL'de nedenin kendisi) · `guncelleyiciSurum` · `zaman`. Backend eşlemesi `bekleyen`/`son`u doğrudan okuyabilir (§13 D1).
 - `hataKodu`/`mesaj` ŞU ANKİ sorundur (indirme · doğrulama · kira · ayar); sonuçların kodu `son`da. `mesaj` Türkçe, insan içindir, sır taşımaz.
+- `bilgi` `{kod, mesaj}` (yoksa alan YAZILMAZ): bu turun SORUN OLMAYAN bilgisi (bugün yalnız `SEMA_OLCULEMEDI`, §8.0); turun başında silinir, turun sonraki her yazımı taşır. Backend panele `yerel.bilgi` olarak geçirir ("Bilgi" satırı, "Sorun" değil), onay kuralı ve yoklama raporu OKUMAZ.
 
 | `durum` | Anlamı |
 |---|---|
@@ -348,7 +349,9 @@ Backend'in yazabildiği ya da okuyabildiği dizinlerden okunan her dosya (`lisan
 
 ## §8 Tur ve backend güncellemesinin adımları
 
-**§8.0 Tur** (`turSn`, varsayılan 60 sn): yarım işlem varsa ÖNCE o sürdürülür → kira + HAK (§6.2) → adaysız karar (`DONDURULDU` · `KURULU_SURUM_BICIMSIZ` · `HEDEF_ULASILDI` ağa çıkmadan biter) → aday (§6.3) → karar (PG yalnız karar ona gelirse ölçülür) → `KUR` · `ONAY_BEKLIYOR` · `PENCERE_BEKLIYOR` ise disk + hazırlık (§6.4; PG gerekiyorsa §9 hazırlığı) → **şema hizası** (veritabanındaki BİTMİŞ göç adları paketin `prisma/migrations/<ad>/migration.sql` adlarının alt kümesi değilse paket şemanın GERİSİNDEdir: `SEMA_ILERIDE`, `BEKLIYOR`, hizmet durdurulmaz; setup ve geçişle TEK kural — Rust `sema.rs` = PS `deploy/hizmet/sema-hizasi.ps1`, ortak vektörler `test-vektorleri/sema-hizasi.json`; ölçülemezse bugünkü yol, §8.5) → `HAZIR` → karar `KUR` ise aday tazelenir ve uygulanır (önce PG, sonra backend). Başlamış uygulama pencere kapansa da biter ya da geri döner (sözleşme §3 madde 5).
+**§8.0 Tur** (`turSn`, varsayılan 60 sn): yarım işlem varsa ÖNCE o sürdürülür → kira + HAK (§6.2) → adaysız karar (`DONDURULDU` · `KURULU_SURUM_BICIMSIZ` · `HEDEF_ULASILDI` ağa çıkmadan biter) → aday (§6.3) → karar (PG yalnız karar ona gelirse ölçülür) → `KUR` · `ONAY_BEKLIYOR` · `PENCERE_BEKLIYOR` ise disk + hazırlık (§6.4; PG gerekiyorsa §9 hazırlığı) → **şema hizası** (veritabanındaki BİTMİŞ göç adları paketin `prisma/migrations/<ad>/migration.sql` adlarının alt kümesi değilse paket şemanın GERİSİNDEdir: `SEMA_ILERIDE`, `BEKLIYOR`, hizmet durdurulmaz; setup ve geçişle TEK kural — Rust `sema.rs` = PS `deploy/hizmet/sema-hizasi.ps1`, ortak vektörler `test-vektorleri/sema-hizasi.json`; üç sonuç: uyumlu · ileride · ölçülemedi, aşağıda) → `HAZIR` → karar `KUR` ise aday tazelenir ve uygulanır (önce PG, sonra backend). Başlamış uygulama pencere kapansa da biter ya da geri döner (sözleşme §3 madde 5).
+
+**Şema hizası ölçülemezse** (veritabanı ya da paketin göç dizini okunamadı; okunamayan yan boş küme SAYILMAZ) güncelleme DURMAZ — göç adımı veritabanını zaten ister ve düşerse telafiyle döner (§8.5), engel acil düzeltme sürümünü de bloklardı — ama sessiz de geçmez: `SEMA_OLCULEMEDI` BİLGİ düzeyinde kod + nedenle günlüğe (`guncelleyici.log`) ve `durum.bilgi`ye yazılır (`hataKodu` değil, durum `BEKLIYOR` olmaz); setup ve geçiş aynı sonucu çağıranda DURDURUR (veritabanı onların kendi adımı için de şart).
 
 | # | Adım (`adim`) | İş | Telafi (GERİ AL) | Yarımda (açılış) |
 |---|---|---|---|---|
@@ -399,6 +402,8 @@ Paket `runtime\tekserp-guncelleyici.exe` taşır. Backend işlemi `BASARILI` olu
 ## §12 Kodlar
 
 **`durum.hataKodu` (şu anki sorun):** `NIYET_BICIMSIZ` · `BELIRTEC_YOK` · `BELIRTEC_SURESI_DOLDU` · `KILIT_DOLU` · `AYAR_BICIMSIZ` · `AYAR_EKSIK` · `KURULU_SURUM_YOK` · `KIRA_YOK` · `KIRA_GECERSIZ` · `INSAN_GEREKIYOR` · `MANIFEST_INDIRILEMEDI` · `INDIRME_REDDEDILDI` · `INDIRME_HATASI` · `INDIRME_ERTELENDI` · `DOSYA_KILITLI` · `DISK_DOLU` · `SEMA_ILERIDE` (paket şemanın gerisinde: veritabanında paketin taşımadığı bitmiş göç; hiçbir şey değişmeden bekler, yalnız bu göçleri taşıyan sürüm açar) · `PAKET_OZETI` · `PAKET_YOL` · `BUTUNLUK_GECERSIZ` · `PG_BUYUK_SURUM` · `PG_PAKET` · sözleşmenin kodları olduğu gibi (`SURUM_ISARETCI` · `SURUM_KANAL` · `SURUM_ANAHTAR` · `PAKET_BAGI` · `PG_BAGI` · `JWS_*` · `BELGE_SURUM` · `BELGE_SEMA`) · işlem sonrası o işlemin iç kodu. Karar nedenleri `karar.neden`de (sözleşme §3 madde 3), `hataKodu`na girmez.
+
+**`durum.bilgi.kod` (sorun DEĞİL, iş sürer):** `SEMA_OLCULEMEDI` (şema hizası ölçülemedi — §8.0; günlükte de aynı kod).
 
 **İşlem iç kodları (`sonAyrinti.hataKodu` · `gecmis.ayrintiKodu`) → rapor kodu (`son.kod` · `gecmis.hataKodu`, TS `UPDATE_RESULT_CODES`):**
 
