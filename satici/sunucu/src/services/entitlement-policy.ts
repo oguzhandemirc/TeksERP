@@ -78,10 +78,11 @@ export type EntitlementSignerPlan =
   | { readonly kind: "KUYRUK"; readonly reason: "YETENEK_YOK" | "ARA_IMZACI_YOK" };
 
 /**
- * Kurulumun bildirdiği yetenekler — TEK okuma yeri. Kolon (`Kurulum.yetenekler`) yoklama/etkinleştirme yolunda yazılır;
- * yoksa ya da biçimsizse boş liste (fail-closed: yetenek yok → kök/kuyruk, eski derleme davranışı).
+ * Kurulumun bildirdiği yetenekler — TEK okuma yeri: `Kurulum.yetenekler` kolonu (zincir sahibinin yoklaması ve
+ * etkinleştirme yazar). Alan zorunlu (kolonu seçmeyen okuma derlenmez); biçimsizse boş liste (fail-closed: yetenek yok →
+ * kök/kuyruk, eski derleme davranışı).
  */
-export function installationCapabilities(installation: object): string[] {
+export function installationCapabilities(installation: { readonly yetenekler: unknown }): string[] {
   const parsed = CapabilityListSchema.safeParse((installation as { yetenekler?: unknown }).yetenekler);
   return parsed.success ? parsed.data : [];
 }

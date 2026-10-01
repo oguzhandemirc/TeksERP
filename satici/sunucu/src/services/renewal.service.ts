@@ -16,10 +16,12 @@ import {
   activeEntitlement,
   computeSanctionState,
   downloadTokens,
-  entitlementTokenFor,
+  entitlementForDelivery,
   issueLease,
+  leaseEntitlement,
   leaseRevocation,
   licenseResponse,
+  type DeliveredEntitlement,
 } from "./lease.service";
 import { isForeignEntitlement, type PollV2Report } from "./local-intervention";
 import { applyOwnerReportTx } from "./poll-report";
@@ -109,7 +111,10 @@ async function renewInTx(tx: Tx, ctx: VendorContext, g: RenewInput): Promise<Ren
   if (inst.durum === "IPTAL" || inst.anahtarKimligi !== g.kid) return { kind: "KEY_CHANGED" };
   if (inst.durum === "ETKINLESMEDI") throw new VendorError(401, "KURULUM_BILINMIYOR", "Kurulum henüz etkinleşmedi");
   const hak = await activeEntitlement(tx, inst.id);
-  const delivered = await entitlementTokenFor(tx, inst, hak);
+  // Teslim edilecek HAK'ın biçimi yanıtı ALACAK tarafın bu istekte bildirdiği yeteneklerden (DR devri gibi raporsuz
+  // istekte kurulum kaydından): eski sürüme dönen fabrika ara imzalı HAK'ı bu yanıtta almaz.
+  const receiverCapabilities = g.report ? [...g.report.capabilities] : undefined;
+  const delivered = await entitlementForDelivery(tx, inst, hak, receiverCapabilities);
   const tipRow = inst.sonKiraId ? await tx.kira.findUnique({ where: { id: inst.sonKiraId } }) : null;
   const tip = tipRow
     ? {
@@ -164,7 +169,7 @@ async function renewInTx(tx: Tx, ctx: VendorContext, g: RenewInput): Promise<Ren
   if (g.presentedLeaseId && !presented) {
     await upsertCopyAlert(tx, inst.id, "YABANCI_KIRA", { owner: accepted, other: measured }, g.nowMs);
   }
-  if (await isForeignEntitlement(tx, { installation: inst, delivered: { entitlement: hak, token: delivered }, client: g.clientEntitlement })) {
+  if (await isForeignEntitlement(tx, { installation: inst, delivered, client: g.clientEntitlement })) {
     await upsertCopyAlert(tx, inst.id, "YABANCI_HAK", { owner: accepted, other: measured }, g.nowMs);
   }
   if (g.telemetry) {
@@ -217,6 +222,7 @@ async function renewInTx(tx: Tx, ctx: VendorContext, g: RenewInput): Promise<Ren
         episodeStart: copyEpisodeStart(denying, g.nowMs),
         presentedLeaseId: g.presentedLeaseId,
         measured,
+        capabilities: g.report?.capabilities ?? [],
         nowMs: g.nowMs,
       });
       await recordPoll("KAPANIS_KOPYA", closing.id);
@@ -252,8 +258,6 @@ async function renewInTx(tx: Tx, ctx: VendorContext, g: RenewInput): Promise<Ren
     installation = { ...inst, sifrelemeAnahtari: g.encryptionKey };
   }
 
-  const hakToken = entitlementToDeliver(g.clientEntitlement, hak, delivered);
-
   if (decision === "REPEAT" && tipRow) {
     await recordPoll("TEKRAR", tipRow.id);
     const sanction = await computeSanctionState(tx, inst.id);
@@ -261,11 +265,12 @@ async function renewInTx(tx: Tx, ctx: VendorContext, g: RenewInput): Promise<Ren
       kind: "LEASE",
       decision,
       response: licenseResponse({
-        hak: hakToken,
+        // Tekrar AYNI kirayı verir: HAK da o kiranın bağlı olduğu sürümdür (`hakOzeti` tutsun).
+        hak: entitlementToDeliver(g.clientEntitlement, await leaseEntitlement(tx, tipRow)),
         kira: tipRow.belge,
         tokens: downloadTokens(ctx, inst, hak, sanction, g.nowMs),
         nowMs: g.nowMs,
-        revocation: await leaseRevocation(tx),
+        revocation: await leaseRevocation(tx, ctx.keys),
       }),
     };
   }
@@ -291,6 +296,7 @@ async function renewInTx(tx: Tx, ctx: VendorContext, g: RenewInput): Promise<Ren
     clientFingerprint: measured,
     acceptedFingerprint: nextAccepted,
     nowMs: g.nowMs,
+    ...(receiverCapabilities ? { capabilities: receiverCapabilities } : {}),
   });
   const stateUpdate: Prisma.KurulumUncheckedUpdateManyInput = {
     sonKiraId: lease.id,
@@ -310,7 +316,7 @@ async function renewInTx(tx: Tx, ctx: VendorContext, g: RenewInput): Promise<Ren
     kind: "LEASE",
     decision,
     response: licenseResponse({
-      hak: hakToken,
+      hak: entitlementToDeliver(g.clientEntitlement, lease.entitlement),
       kira: lease.token,
       tokens: downloadTokens(ctx, inst, hak, lease.sanction, g.nowMs),
       nowMs: g.nowMs,
@@ -323,9 +329,9 @@ async function renewInTx(tx: Tx, ctx: VendorContext, g: RenewInput): Promise<Ren
  * Yanıta HAK konur mu: fabrikada HAK yok, başka kimlik/sürüm, ya da bildirdiği bayt özeti teslim edilenle tutmuyor
  * (yabancı ya da eski biçimli HAK — kira `hakOzeti` ile teslim edilene bağlıdır, fabrika onu almadan kirayı bağlayamaz).
  */
-function entitlementToDeliver(client: RenewInput["clientEntitlement"], hak: { id: string; guncelSurum: number }, delivered: string): string | null {
-  if (client === null || client.hakId !== hak.id || client.surum !== hak.guncelSurum) return delivered;
-  return client.ozet !== undefined && client.ozet !== jwsDigest(delivered) ? delivered : null;
+function entitlementToDeliver(client: RenewInput["clientEntitlement"], delivered: DeliveredEntitlement): string | null {
+  if (client === null || client.hakId !== delivered.hakId || client.surum !== delivered.surum) return delivered.belge;
+  return client.ozet !== undefined && client.ozet !== jwsDigest(delivered.belge) ? delivered.belge : null;
 }
 
 /** Kira yeniler; kopya şüphesinin ikinci penceresinde 403 KIRA_VERILMEDI (kayıtlar yine de yazılır). */

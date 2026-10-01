@@ -4,7 +4,7 @@
 // Lisans v2: kiraya `odenmisTarih` (P — `paid-through.ts` tek kaynak), `hakOzeti` (teslim edilen HAK'ın bayt özeti)
 // ve iptal belgesi varsa `iptalSira` girer; eski fabrika bu alanları atar. Kapanış kirası (K6) aynı basımdan geçer.
 import { randomUUID } from "node:crypto";
-import type { Hak, Kurulum, YaptirimEylemi, ZincirKarari } from "@prisma/client";
+import type { Hak, Kira, Kurulum, YaptirimEylemi, ZincirKarari } from "@prisma/client";
 import { z } from "zod";
 import {
   DAY_MS,
@@ -25,13 +25,17 @@ import {
   type LicenseResponse,
   type SanctionLevel,
 } from "../lisans-protokol";
+import type { KeyStore } from "../keys/key-store";
 import { VendorError } from "../lib/errors";
 import type { Db, Tx } from "../lib/prisma";
 import { channelVersionsForLease } from "./channel.service";
 import { leaseCloudFields } from "./cloud-entitlement";
+import { deliverableEntitlement } from "./entitlement-issue.service";
+import { installationCapabilities } from "./entitlement-policy";
 import { moduleKeyGrants } from "./module-key.service";
 import { paidThroughOf, type PaidThrough } from "./paid-through";
 import type { VendorContext } from "./context";
+import { distributableRevocation } from "./revocation.service";
 
 export interface SanctionState {
   readonly kademe: SanctionLevel | null;
@@ -94,7 +98,7 @@ export async function computeSanctionState(db: Db, installationDbId: string): Pr
   return foldSanctions(rows);
 }
 
-// ---------------------------------------------------------------- iki SEÇİM NOKTASI (lisans v2 G4 entegrasyonu)
+// ---------------------------------------------------------------- iki SEÇİM NOKTASI (lisans v2 G4)
 
 /** Yanıtla dağıtılan iptal belgesi (`tekserp-iptal`) ve sırası — kiranın `iptalSira`sı ile yanıtın `iptal`i birlikte. */
 export interface LeaseRevocation {
@@ -103,19 +107,53 @@ export interface LeaseRevocation {
 }
 
 /**
- * Kiraya ve yanıta giden iptal belgesi — TEK seçim noktası (G4 §2.3). Bugün satıcıda iptal defteri yok → null
- * (kira `iptalSira` taşımaz, yanıt `iptal` taşımaz). Entegrasyonda L2-3'ün `distributableRevocation`ı buradan çağrılır.
+ * Kiraya ve yanıta giden iptal belgesi — TEK seçim noktası (G4 §2.3): iptal defterinin dağıtım kapısından geçen
+ * (`distributableRevocation`) en yüksek sıralı belge; defter boşsa ya da her belge kapıda bekliyorsa null.
  */
-export function leaseRevocation(_db: Db): Promise<LeaseRevocation | null> {
-  return Promise.resolve(null);
+export async function leaseRevocation(db: Db, keys: KeyStore): Promise<LeaseRevocation | null> {
+  const gate = await distributableRevocation(db, keys);
+  return gate.dagitilan ? { sira: gate.dagitilan.sira, belge: gate.dagitilan.belge } : null;
+}
+
+/** Teslim edilen HAK sürümü: kiranın `hakSurum`/`hakOzeti`si ile yanıtın `hak`ı bundan türer (bayt bağı tutarlı kalsın). */
+export interface DeliveredEntitlement {
+  readonly hakId: string;
+  readonly surum: number;
+  readonly belge: string;
 }
 
 /**
- * Kuruluma TESLİM edilecek HAK belgesi — TEK seçim noktası: yanıtın `hak`ı ve kiranın `hakOzeti` bundan türer (bayt bağı
- * tutarlı kalsın). Bugün güncel imzalı sürüm; entegrasyonda L2-3'ün `deliverableEntitlement`ı (yeteneğe göre biçim) buradan.
+ * Kuruluma TESLİM edilecek HAK — TEK seçim noktası (`deliverableEntitlement`): `hak-ara` bildirene güncel sürüm, bildirmeyene
+ * en yeni ARA İMZALI OLMAYAN sürüm. Yetenekler verilmezse kurulum kaydından (`installationCapabilities`); yoklamada yanıtı
+ * ALACAK tarafın imzalı gövdede bildirdiği küme verilir (eski sürüme dönen fabrika ara imzalı HAK'ı aynı yanıtta almasın).
  */
-export function entitlementTokenFor(db: Db, _installation: Pick<Kurulum, "id" | "yetenekler">, entitlement: Hak): Promise<string> {
-  return currentEntitlementToken(db, entitlement);
+export async function entitlementForDelivery(
+  db: Db,
+  installation: { readonly yetenekler: unknown },
+  entitlement: Pick<Hak, "id" | "guncelSurum">,
+  capabilities?: readonly string[],
+): Promise<DeliveredEntitlement> {
+  const d = await findEntitlementForDelivery(db, installation, entitlement, capabilities);
+  if (!d) throw new VendorError(500, "SUNUCU_HATASI", "Bu kurulumun derlemesinin tanıyacağı imzalı lisans (HAK) yok");
+  return d;
+}
+
+/** Aynı seçim, bulunamazsa null — salt okuyan görünüm ve taramalar içindir (kira basımı `entitlementForDelivery`). */
+export async function findEntitlementForDelivery(
+  db: Db,
+  installation: { readonly yetenekler: unknown },
+  entitlement: Pick<Hak, "id" | "guncelSurum">,
+  capabilities?: readonly string[],
+): Promise<DeliveredEntitlement | null> {
+  const d = await deliverableEntitlement(db, entitlement, capabilities ?? installationCapabilities(installation));
+  return d ? { hakId: entitlement.id, surum: d.surum, belge: d.belge } : null;
+}
+
+/** Defterdeki bir kiranın BAĞLI olduğu HAK sürümü — aynı kirayı yeniden veren yol (tekrar, yeniden kullanım) bunu teslim eder. */
+export async function leaseEntitlement(db: Db, lease: Pick<Kira, "hakId" | "hakSurum">): Promise<DeliveredEntitlement> {
+  const version = await db.hakSurumu.findUnique({ where: { hakId_surum: { hakId: lease.hakId, surum: lease.hakSurum } }, select: { belge: true } });
+  if (!version) throw new VendorError(500, "SUNUCU_HATASI", "Kiranın bağlı olduğu HAK sürümü defterde yok");
+  return { hakId: lease.hakId, surum: lease.hakSurum, belge: version.belge };
 }
 
 // ---------------------------------------------------------------- basım
@@ -141,14 +179,16 @@ export interface IssueLeaseInput {
   readonly nowMs: number;
   /** Yalnız kapanış kirasında (karar `KAPANIS`). */
   readonly closing?: ClosingLeaseTerms;
+  /** Kirayı ALACAK tarafın yetenekleri (teslim edilecek HAK biçimi); verilmezse kurulum kaydından. */
+  readonly capabilities?: readonly string[];
 }
 
 export interface IssuedLease {
   readonly id: string;
   readonly token: string;
   readonly sanction: SanctionState;
-  /** Kiranın bağlandığı (teslim edilecek) HAK belgesi ve yanıtla gidecek iptal belgesi. */
-  readonly entitlementToken: string;
+  /** Kiranın bağlandığı (teslim edilecek) HAK sürümü ve yanıtla gidecek iptal belgesi. */
+  readonly entitlement: DeliveredEntitlement;
   readonly revocation: LeaseRevocation | null;
   /** Kiraya basılan ödenmiş tarih (P) ve kaynağı. */
   readonly paidThrough: PaidThrough;
@@ -170,8 +210,8 @@ export async function issueLease(tx: Tx, ctx: VendorContext, g: IssueLeaseInput)
   // Faz 2d: yalnız HAK'taki, dondurulmamış modüllerin anahtarları; kurulumun X25519'u yoksa hiçbiri. Kapanışta hiçbiri.
   const grants = closing ? [] : await moduleKeyGrants(tx, ctx, { installation, entitlement, frozen: sanction.donmusModuller });
   const paid = await paidThroughOf(tx, installation.id, entitlement);
-  const entitlementToken = await entitlementTokenFor(tx, installation, entitlement);
-  const revocation = await leaseRevocation(tx);
+  const delivered = await entitlementForDelivery(tx, installation, entitlement, g.capabilities);
+  const revocation = await leaseRevocation(tx, ctx.keys);
   const id = randomUUID();
   const issuedAt = new Date(nowMs);
   const expiresAt = new Date(nowMs + ctx.config.KIRA_GUN * DAY_MS);
@@ -179,7 +219,7 @@ export async function issueLease(tx: Tx, ctx: VendorContext, g: IssueLeaseInput)
     v: 1,
     kiraId: id,
     hakId: entitlement.id,
-    hakSurum: entitlement.guncelSurum,
+    hakSurum: delivered.surum,
     kurulumId: installation.kurulumId,
     kurulumAnahtarKimligi: keyId,
     parmakIzi: g.acceptedFingerprint,
@@ -204,7 +244,7 @@ export async function issueLease(tx: Tx, ctx: VendorContext, g: IssueLeaseInput)
     altSertifika: key.certificate,
     ...(grants.length > 0 ? { modulAnahtarlari: grants } : {}),
     odenmisTarih: paid.tarih ? paid.tarih.toISOString() : null,
-    hakOzeti: jwsDigest(entitlementToken),
+    hakOzeti: jwsDigest(delivered.belge),
     ...(revocation ? { iptalSira: revocation.sira } : {}),
     ...(closing ? { kapanis: closing.reason } : {}),
   };
@@ -215,7 +255,7 @@ export async function issueLease(tx: Tx, ctx: VendorContext, g: IssueLeaseInput)
       kurulumId: installation.id,
       oncekiKiraId: g.previousLeaseId,
       hakId: entitlement.id,
-      hakSurum: entitlement.guncelSurum,
+      hakSurum: delivered.surum,
       anahtarKimligi: keyId,
       karar: g.decision,
       istemciParmakIzi: g.clientFingerprint,
@@ -225,7 +265,7 @@ export async function issueLease(tx: Tx, ctx: VendorContext, g: IssueLeaseInput)
       kapanisNedeni: closing?.reason ?? null,
     },
   });
-  return { id, token, sanction, entitlementToken, revocation, paidThrough: paid };
+  return { id, token, sanction, entitlement: delivered, revocation, paidThrough: paid };
 }
 
 /**
@@ -254,15 +294,6 @@ export function downloadTokens(
       }),
     };
   });
-}
-
-/** Güncel imzalı HAK belgesi. */
-export async function currentEntitlementToken(db: Db, entitlement: Hak): Promise<string> {
-  const version = await db.hakSurumu.findUnique({
-    where: { hakId_surum: { hakId: entitlement.id, surum: entitlement.guncelSurum } },
-  });
-  if (!version) throw new VendorError(500, "SUNUCU_HATASI", "Bu kurulum için imzalı lisans (HAK) yok");
-  return version.belge;
 }
 
 /** Kurulumun aktif hakkı. */

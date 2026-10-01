@@ -5,7 +5,7 @@
 //   BELIRSIZLIK — süren ölçülemedi birikimi 7 günü aştı · SAAT_SAPMASI — fabrikanın ölçtüğü satıcı sapması büyük.
 // YABANCI_HAK kendi uyarısıdır (YABANCI_KIRA emsali): sunulan HAK satıcının defterinde yok ya da bayt özeti tutmuyor.
 // Uyarı × YENİ neden başına bir bildirim (`YEREL_MUDAHALE_SUPHESI`); süren nedenin tekrarı bildirim doğurmaz.
-import type { Hak, KopyaUyarisi, Kurulum, Prisma } from "@prisma/client";
+import type { KopyaUyarisi, Kurulum, Prisma } from "@prisma/client";
 import { DAY_MS, jwsDigest, type Fingerprint, type PollRequest } from "../lisans-protokol";
 import type { Tx } from "../lib/prisma";
 import { enqueueNotificationTx } from "../notifications/outbox";
@@ -153,7 +153,8 @@ export async function isForeignEntitlement(
   tx: Tx,
   g: {
     readonly installation: Pick<Kurulum, "id">;
-    readonly delivered: { readonly entitlement: Pick<Hak, "id" | "guncelSurum">; readonly token: string };
+    /** Bu yanıtla teslim edilecek HAK sürümü (`entitlementForDelivery`). */
+    readonly delivered: { readonly hakId: string; readonly surum: number; readonly belge: string };
     readonly client: { readonly hakId: string; readonly surum: number; readonly ozet?: string } | null;
   },
 ): Promise<boolean> {
@@ -165,6 +166,6 @@ export async function isForeignEntitlement(
   });
   if (!version) return true;
   if (c.ozet === undefined || jwsDigest(version.belge) === c.ozet) return false;
-  const isDeliveredVersion = c.hakId === g.delivered.entitlement.id && c.surum === g.delivered.entitlement.guncelSurum;
-  return !(isDeliveredVersion && jwsDigest(g.delivered.token) === c.ozet);
+  const isDeliveredVersion = c.hakId === g.delivered.hakId && c.surum === g.delivered.surum;
+  return !(isDeliveredVersion && jwsDigest(g.delivered.belge) === c.ozet);
 }

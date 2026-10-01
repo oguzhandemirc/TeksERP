@@ -22,8 +22,8 @@ import {
   activeEntitlement,
   computeSanctionState,
   downloadTokens,
-  entitlementTokenFor,
   issueLease,
+  leaseEntitlement,
   leaseRevocation,
   licenseResponse,
 } from "./lease.service";
@@ -86,13 +86,14 @@ async function replayOrConflict(tx: Tx, ctx: VendorContext, code: EtkinlestirmeK
   const hak = await activeEntitlement(tx, inst.id);
   const sanction = await computeSanctionState(tx, inst.id);
   return licenseResponse({
-    hak: await entitlementTokenFor(tx, inst, hak),
+    // Tekrar AYNI kirayı verir: HAK da o kiranın bağlı olduğu sürümdür (`hakOzeti` tutsun).
+    hak: (await leaseEntitlement(tx, lease)).belge,
     kira: lease.belge,
     tokens: downloadTokens(ctx, inst, hak, sanction, nowMs),
     nowMs,
     installationId: inst.kurulumId,
     codeKind: code.tur,
-    revocation: await leaseRevocation(tx),
+    revocation: await leaseRevocation(tx, ctx.keys),
   });
 }
 
@@ -193,7 +194,7 @@ export async function activateInTx(
     kind: "activated",
     activated: {
       response: licenseResponse({
-        hak: lease.entitlementToken,
+        hak: lease.entitlement.belge,
         kira: lease.token,
         tokens: downloadTokens(ctx, fresh, hak, lease.sanction, g.nowMs),
         nowMs: g.nowMs,

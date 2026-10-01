@@ -221,8 +221,8 @@ async function main(): Promise<void> {
     const hicbiri = KeyStore.load({ ...ctx.config, ANAHTAR_DIZINI: koksuzAraDizin });
     kontrol("§3b plan: hak-ara → ARA · yeteneksiz + kök → KOK · yeteneksiz köksüz → KUYRUK · hak-ara + ara yok + kök yok → KUYRUK · BAYI sınıfı hak-ara olsa da ara değil",
       plan(ctx.keys, "URETIM", ["hak-ara"]) === "ARA" && plan(ctx.keys, "URETIM", []) === "KOK" && plan(koksuz, "URETIM", []) === "KUYRUK" && plan(koksuz, "URETIM", ["hak-ara", "iptal"]) === "ARA" && plan(hicbiri, "URETIM", ["hak-ara"]) === "KUYRUK" && plan(ctx.keys, "BAYI", ["hak-ara"]) === "KOK");
-    kontrol("§3b' yetenek okuyucusu fail-closed: kolon yok/biçimsiz → boş; geçerli liste aynen",
-      hakSvc.installationCapabilities({}).length === 0 && hakSvc.installationCapabilities({ yetenekler: ["Hak Ara"] }).length === 0 && hakSvc.installationCapabilities({ yetenekler: "hak-ara" }).length === 0 && hakSvc.installationCapabilities({ yetenekler: ["hak-ara", "iptal"] }).join() === "hak-ara,iptal");
+    kontrol("§3b' yetenek okuyucusu fail-closed: kolon boş/biçimsiz → boş; geçerli liste aynen",
+      hakSvc.installationCapabilities({ yetenekler: undefined }).length === 0 && hakSvc.installationCapabilities({ yetenekler: ["Hak Ara"] }).length === 0 && hakSvc.installationCapabilities({ yetenekler: "hak-ara" }).length === 0 && hakSvc.installationCapabilities({ yetenekler: ["hak-ara", "iptal"] }).join() === "hak-ara,iptal");
     const v2Sonuc = await dene(() =>
       runAsCli(() =>
         hakSvc.issueEntitlementVersion(ctx, { entitlementId: k1.hakId, changes: { modules: ["production.enabled", "finance.enabled", "depo.multiEnabled"] }, password: passwordBuffer(ARA_PAROLASI), capabilities: ["hak-ara"], reason: "ara imzacı bekçisi", actor: "bekci" }),

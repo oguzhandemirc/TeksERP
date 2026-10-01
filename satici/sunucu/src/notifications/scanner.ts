@@ -7,7 +7,8 @@
 import type { LisansSinifi } from "@prisma/client";
 import { lockInstallation } from "../lib/locks";
 import { prisma, type Tx } from "../lib/prisma";
-import { entitlementTokenFor } from "../services/lease.service";
+import { installationCapabilities } from "../services/entitlement-policy";
+import { findEntitlementForDelivery } from "../services/lease.service";
 import { paidThroughModelActive } from "../services/paid-through";
 import { enqueueNotificationTx } from "./outbox";
 
@@ -76,7 +77,7 @@ async function tipUsesPaidThrough(tx: Tx, installationDbId: string, leaseToken: 
   const inst = await tx.kurulum.findUnique({ where: { id: installationDbId }, select: { id: true, yetenekler: true } });
   const hak = await tx.hak.findFirst({ where: { kurulumId: installationDbId, aktif: true } });
   if (!inst || !hak || hak.guncelSurum < 1) return false;
-  return paidThroughModelActive({ capabilities: inst.yetenekler, entitlementToken: await entitlementTokenFor(tx, inst, hak), leaseToken });
+  return paidThroughModelActive({ capabilities: installationCapabilities(inst), entitlementToken: (await findEntitlementForDelivery(tx, inst, hak))?.belge ?? null, leaseToken });
 }
 
 /** Kira bitişi yaklaşıyor: uçtaki kiranın bitişi ufukta (kurulum yoklamıyor → ek süreye düşecek). Kira başına bir kez; P modelinde yok. */
