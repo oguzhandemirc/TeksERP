@@ -404,6 +404,8 @@ export async function temizleKurulumlar(kurulumDbIdleri: readonly string[], kidl
     await tx.kurulumKaydi.deleteMany({ where: w });
     await tx.kurulum.updateMany({ where: { id: { in: ids } }, data: { sonKiraId: null } });
     await tx.kira.deleteMany({ where: w });
+    // Kök imzası bekleyen HAK kuyruğu (G4): sürüm defteri satırına bağlı → defterden ÖNCE.
+    await tx.hakKokTalebi.deleteMany({ where: w });
     const haklar = await tx.hak.findMany({ where: w, select: { id: true } });
     await tx.hakSurumu.deleteMany({ where: { hakId: { in: haklar.map((h) => h.id) } } });
     await tx.hak.deleteMany({ where: w });
@@ -431,6 +433,17 @@ export async function temizleBagsizTalepler(anahtarKimlikleri: readonly string[]
     await tx.tasimaTalebi.deleteMany({ where: { id: { in: talepler.map((t) => t.id) } } });
     await tx.nonceDefteri.deleteMany({ where: { kapsam: { in: kidler.map((k) => `kid:${k}`) } } });
     await tx.denetim.deleteMany({ where: { varlikId: { in: talepler.map((t) => t.id) } } });
+  });
+}
+
+/** İptal belgesi defteri fikstürü (G4) — yalnız bu bekçinin yükleyen etiketiyle yazdığı satırlar (`_test` beyanıyla). */
+export async function temizleIptalBelgeleri(yukleyen: string): Promise<void> {
+  const { prisma } = await import("../../src/lib/prisma");
+  await prisma.$transaction(async (tx) => {
+    await tx.$executeRawUnsafe(`SET LOCAL satici.defter_temizlik = 'test'`);
+    const rows = await tx.iptalBelgesi.findMany({ where: { yukleyen }, select: { id: true } });
+    await tx.iptalBelgesi.deleteMany({ where: { yukleyen } });
+    await tx.denetim.deleteMany({ where: { varlikId: { in: rows.map((r) => r.id) } } });
   });
 }
 

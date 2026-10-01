@@ -264,7 +264,7 @@ export async function prepareDealerEntitlementVersion(
     const dealer = await findDealer(prisma, g.dealerId);
     if (!dealer.aktif) throw stateConflict("Bayi pasif");
     const key = dealerKeyFor(ctx, dealer, nowMs);
-    const { payload, fields } = buildEntitlementPayload(hak, g.changes ?? {}, nowMs, { dealerId: dealer.id, certificate: key.certificate });
+    const { payload, fields } = buildEntitlementPayload(hak, g.changes ?? {}, nowMs, { kind: "BAYI", dealerId: dealer.id, certificate: key.certificate });
     const ceiling = await currentCeiling(prisma, dealer);
     assertWithinCeiling(ceilingViolations(ceiling, { ...signedFieldsOf(fields, nowMs), usage: await dealerUsage(prisma, dealer.id) }));
     const token = await signEntitlement(key.path, payload, g.password);
@@ -287,6 +287,8 @@ export async function prepareDealerEntitlementVersion(
       dealerId: dealer.id,
       fields,
       clearValidity: g.changes?.perpetual === true && !hak.kalici && hak.gecerlilikBitis !== null,
+      // Bayi tavanı ≤ 400 gün (protokol kısıtı): bayi imzası uzun ufuk VEREMEZ.
+      longHorizonGranted: false,
       issuedAt: new Date(nowMs),
       reason,
       actor: g.actor,

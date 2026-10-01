@@ -11,8 +11,8 @@
 //   §6 aynı kullanıcının EŞZAMANLI denemeleri sıraya girer: 8 paralel yanlış parolanın tam 5'i denetlenir,
 //      kalanı kilide takılır (sıra olmasaydı hepsi kilit denetimini birlikte geçip 8 tahmin yaptırırdı)
 //   §7 imza KAPSAMI (tek boğaz `signWithWrappedKey`, anahtar türü DOSYADAN): kapsamsız kök imzası 500 · ERİŞİM ve
-//      GENEL'den kök imzası 404 · TAILNET ve CLI geçer · bayi anahtarı yalnız GENEL/CLI; reddedilen parola hiçbir
-//      sürece YAZILMAZ ve Buffer'ı sıfırlanır
+//      GENEL'den kök imzası 404 · TAILNET ve CLI geçer · bayi anahtarı yalnız GENEL/CLI · HAK ara imzacısı (G4) kök gibi
+//      yalnız TAILNET/CLI (§7e); reddedilen parola hiçbir sürece YAZILMAZ ve Buffer'ı sıfırlanır
 //   §8 kapsam boğazının kaynağı: `signingKindOf` tanınmayan türde RED (fail-closed; eskiden bayi sayılırdı) · src/ içinde
 //      `runAsCli` / serbest `runInScope` ANILMAZ (içe aktarma · ad alanı · dizgi erişimi dahil; yalnız scripts/ ve bekçiler) ·
 //      sunucu kapsamı yalnız `runInListenerScope` ile ve yalnız portal-http.ts'ten · o yol CLI kapsamı açamaz
@@ -99,8 +99,8 @@ function kapsamKaynagi(): void {
   };
   const bilinmeyen = ["tekserp-alt-anahtar", "tekserp-indirme-anahtar", "__proto__", "toString", "constructor", "", "tekserp-kok-anahtar "].map(tur);
   kontrol(
-    "§8a signingKindOf: kök → KOK · bayi → BAYI · tanınmayan tür (alt · indirme · __proto__ · toString · boş · boşluklu) → RED 500",
-    tur("tekserp-kok-anahtar") === "KOK" && tur("tekserp-bayi-anahtar") === "BAYI" && bilinmeyen.every((x) => x === "RED 500 SUNUCU_HATASI"),
+    "§8a signingKindOf: kök → KOK · bayi → BAYI · ara imzacı → ARA · tanınmayan tür (alt · indirme · __proto__ · toString · boş · boşluklu) → RED 500",
+    tur("tekserp-kok-anahtar") === "KOK" && tur("tekserp-bayi-anahtar") === "BAYI" && tur("tekserp-ara-anahtar") === "ARA" && bilinmeyen.every((x) => x === "RED 500 SUNUCU_HATASI"),
     bilinmeyen.join(" · "),
   );
   const kok = path.join(SATICI_KOKU, "src");
@@ -198,10 +198,10 @@ async function main(): Promise<void> {
     let sarili = 0;
     for (const dosya of readdirSync(httpDizin).filter((d) => d.endsWith(".ts"))) {
       const kaynak = readFileSync(path.join(httpDizin, dosya), "utf8");
-      hazirlik += (kaynak.match(/\bprepare(Dealer)?EntitlementVersion\(/g) ?? []).length;
-      sarili += (kaynak.match(/withSigningPasswordGuard\([^]*?\bprepare(Dealer)?EntitlementVersion\(/g) ?? []).length;
+      hazirlik += (kaynak.match(/\bprepare(Dealer)?EntitlementVersion\(|\bprepareIntermediateReissue\(/g) ?? []).length;
+      sarili += (kaynak.match(/withSigningPasswordGuard\([^]*?\b(prepare(Dealer)?EntitlementVersion|prepareIntermediateReissue)\(/g) ?? []).length;
     }
-    kontrol("§4a rota katmanındaki imza hazırlıklarının hepsi withSigningPasswordGuard içinde (kök + bayi)", hazirlik >= 2 && sarili === hazirlik, `${sarili}/${hazirlik}`);
+    kontrol("§4a rota katmanındaki imza hazırlıklarının hepsi withSigningPasswordGuard içinde (kök + ara + bayi + toplu ara basımı)", hazirlik >= 3 && sarili === hazirlik, `${sarili}/${hazirlik}`);
 
     console.log("\n§5 imza alt süreci semaforu");
     const kokDosyasi = path.join(ortam.dizin, `${f.kok.kid}.kok.json`);
@@ -293,6 +293,17 @@ async function main(): Promise<void> {
       "§7d tür DOSYADAN: bayi anahtarı TAILNET'te 404; GENEL'de kapsamı GEÇER (alt süreç sertifikayı kendi kuralıyla reddeder)",
       bayiTailnet.sonuc === "404 BULUNAMADI" && bayiTailnet.yazilan === 0 && bayiGenel.sonuc.startsWith("HATA İmza reddedildi (YETKISIZ)") && bayiGenel.yazilan > 0,
       `${bayiTailnet.sonuc} / ${bayiGenel.sonuc.slice(0, 60)}`,
+    );
+    const araYolu = path.join(ortam.dizin, "ara-sonda-2099.ara.json");
+    writeKeyFileExclusive(araYolu, await wrapPrivateKey({ tur: "tekserp-ara-anahtar", kid: "ara-sonda-2099", siniflar: ["URETIM"], sertifika: "sonda.sertifika.yok" }, generateKeyPairSync("ed25519").privateKey, passwordBuffer("ara-sonda-parolasi")));
+    const araErisim = await dene(araYolu, "ara-sonda-parolasi", "ERISIM");
+    const araGenel = await dene(araYolu, "ara-sonda-parolasi", "GENEL");
+    const araKapsamsiz = await dene(araYolu, "ara-sonda-parolasi", null);
+    const araTailnet = await dene(araYolu, "ara-sonda-parolasi", "TAILNET");
+    kontrol(
+      "§7e ara imzacı anahtarı (tür DOSYADAN): ERİŞİM ve GENEL 404 · kapsamsız 500 — parola hiçbir sürece yazılmadı; TAILNET'te kapsamı GEÇER (alt süreç kendi kuralıyla reddeder)",
+      araErisim.sonuc === "404 BULUNAMADI" && araGenel.sonuc === "404 BULUNAMADI" && araKapsamsiz.sonuc === "500 SUNUCU_HATASI" && [araErisim, araGenel, araKapsamsiz].every((x) => x.yazilan === 0 && x.sifir) && araTailnet.sonuc.startsWith("HATA İmza reddedildi (YETKISIZ)") && araTailnet.yazilan > 0,
+      `${araErisim.sonuc} / ${araGenel.sonuc} / ${araKapsamsiz.sonuc} / ${araTailnet.sonuc.slice(0, 60)}`,
     );
   } finally {
     setSignerConcurrency(1);

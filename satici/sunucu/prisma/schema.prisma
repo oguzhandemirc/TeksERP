@@ -135,6 +135,21 @@ enum AnahtarTuru {
   ALT
   INDIRME
   BAYI
+  /// HAK ara imzacısı (G4): kök imzalı `HAK` sertifikalı, parolalı; 120 gün, iptal belgesiyle geri alınır.
+  ARA
+}
+
+/// Kök imzası bekleyen HAK sürümü (G4 §2.6): yetenek bildirmeyen (eski) derlemenin HAK değişikliği kök
+/// VDS'te olmadığı için burada bekler ve dönem töreninde Mac'te imzalanır. Durum tablosu — "ne oldu"su
+/// `hak_surumu` (imzalandığında) ve denetimdir.
+enum HakKokTalebiDurumu {
+  BEKLIYOR
+  /// Törende imzalandı, `hak_surumu`na yazıldı.
+  IMZALANDI
+  /// Operatör vazgeçti.
+  IPTAL
+  /// Talep beklerken HAK başka bir sürümle imzalandı — taban tutmuyor, uygulanmaz.
+  ESKIDI
 }
 
 enum AnahtarDurumu {
@@ -271,6 +286,7 @@ model Kurulum {
   ilkKurulumBaglantilari IndirmeBaglantisi[]
   destekTalepleri        DestekTalebi[]
   bildirimler            Bildirim[]
+  hakKokTalepleri        HakKokTalebi[]
 
   @@index([tesisId])
   @@index([kanalKodu])
@@ -279,24 +295,32 @@ model Kurulum {
 
 /// Lisans hakkı (yapısal şartlar). Değişen her şey yeni bir HakSurumu (KÖK imzalı HAK belgesi) doğurur.
 model Hak {
-  id              String    @id @default(uuid()) @db.Uuid
-  kurulumId       String    @db.Uuid
+  id                    String    @id @default(uuid()) @db.Uuid
+  kurulumId             String    @db.Uuid
   /// `TKS-YYYY-NNNN` — doğuşta materyalize edilir, render'da biçimlenmez.
-  lisansNo        String    @unique @db.VarChar(20)
-  moduller        String[]
-  kalici          Boolean   @default(false)
-  bakimBitis      DateTime  @db.Timestamptz
+  lisansNo              String    @unique @db.VarChar(20)
+  moduller              String[]
+  kalici                Boolean   @default(false)
+  bakimBitis            DateTime  @db.Timestamptz
   /// Vadeli/demo/taksit geçerlilik bitişi (kiraya yazılır). Değişim defteri YaptirimEylemi(GECERLILIK).
-  gecerlilikBitis DateTime? @db.Timestamptz
+  gecerlilikBitis       DateTime? @db.Timestamptz
   /// Son imzalı sürüm (0 = henüz imzalanmadı).
-  guncelSurum     Int       @default(0)
-  aktif           Boolean   @default(true)
-  createdAt       DateTime  @default(now()) @db.Timestamptz
-  updatedAt       DateTime  @updatedAt @db.Timestamptz
+  guncelSurum           Int       @default(0)
+  /// Çevrimdışı ufuk (gün, 1–3650; CHECK) — HAK `cevrimdisiUfukGun`. NULL + `cevrimdisiUfukSuresiz` false = v1 HAK
+  /// (alan hiç basılmadı; sonraki sürüm varsayılanı alır). Yalnız yeni imzalı sürümle değişir.
+  cevrimdisiUfukGun     Int?
+  /// Süresiz ufuk (HAK `cevrimdisiUfukGun: null`) — yalnız URETIM/DR, yönetici + ikinci onay (K2).
+  cevrimdisiUfukSuresiz Boolean   @default(false)
+  /// HAK `kipAltSiniri: "zorla"` — kira/durum kaydı/derleme varsayılanı bunun altına inemez.
+  kipAltSiniriZorla     Boolean   @default(false)
+  aktif                 Boolean   @default(true)
+  createdAt             DateTime  @default(now()) @db.Timestamptz
+  updatedAt             DateTime  @updatedAt @db.Timestamptz
 
-  kurulum  Kurulum     @relation(fields: [kurulumId], references: [id])
-  surumler HakSurumu[]
-  kiralar  Kira[]
+  kurulum      Kurulum        @relation(fields: [kurulumId], references: [id])
+  surumler     HakSurumu[]
+  kiralar      Kira[]
+  kokTalepleri HakKokTalebi[]
 
   @@index([kurulumId])
   @@map("hak")
@@ -313,12 +337,68 @@ model HakSurumu {
   verilis      DateTime @db.Timestamptz
   sebep        String   @db.VarChar(500)
   yapan        String   @db.VarChar(120)
+  /// K2: 400 günü aşan ya da süresiz çevrimdışı ufuk — yönetici + lisans numarasıyla ikinci onay (`UZUN_UFUK_VERILDI`).
+  uzunUfuk     Boolean  @default(false)
   createdAt    DateTime @default(now()) @db.Timestamptz
 
-  hak Hak @relation(fields: [hakId], references: [id])
+  hak          Hak            @relation(fields: [hakId], references: [id])
+  kokTalepleri HakKokTalebi[]
 
   @@unique([hakId, surum])
   @@map("hak_surumu")
+}
+
+/// Kök imzası bekleyen HAK sürümü (G4 §2.6) — yük (`yuk`) imzalanacak belgenin TAM içeriğidir; törende bayt
+/// bayt bu yük imzalanır, içe aktarmada imzalı belgenin yükü bununla birebir aynı olmalıdır. HAK başına en çok
+/// bir BEKLIYOR talep (kısmi UNIQUE).
+model HakKokTalebi {
+  id            String             @id @default(uuid()) @db.Uuid
+  hakId         String             @db.Uuid
+  kurulumId     String             @db.Uuid
+  /// Talep anındaki imzalı sürüm; içe aktarmada HAK hâlâ bu sürümdeyse yazılır, değilse ESKIDI.
+  tabanSurum    Int
+  surum         Int
+  yuk           Json
+  uzunUfuk      Boolean            @default(false)
+  durum         HakKokTalebiDurumu @default(BEKLIYOR)
+  sebep         String             @db.VarChar(500)
+  yapan         String             @db.VarChar(120)
+  kapanisZamani DateTime?          @db.Timestamptz
+  kapatan       String?            @db.VarChar(120)
+  kapanisSebebi String?            @db.VarChar(500)
+  /// IMZALANDI: yazılan defter satırı.
+  hakSurumuId   String?            @db.Uuid
+  createdAt     DateTime           @default(now()) @db.Timestamptz
+  updatedAt     DateTime           @updatedAt @db.Timestamptz
+
+  hak       Hak        @relation(fields: [hakId], references: [id])
+  kurulum   Kurulum    @relation(fields: [kurulumId], references: [id])
+  hakSurumu HakSurumu? @relation(fields: [hakSurumuId], references: [id], onDelete: Restrict)
+
+  @@index([durum, createdAt])
+  @@index([hakId])
+  @@index([kurulumId])
+  @@map("hak_kok_talebi")
+}
+
+/// Sertifika İPTAL belgeleri (G4 §2.3) — EKLEME-YALNIZ defter: yalnız KÖK imzalı `tekserp-iptal` belgesi, `sira`
+/// tekdüze artar (UNIQUE + içe aktarmada "eldekinden büyük"). İptal geri alınmaz; bir sertifikayı geri açmak
+/// yeni (daha yüksek sıralı, o satırı taşımayan) belgedir. Dağıtım kapısı `distributableRevocation`.
+model IptalBelgesi {
+  id           String   @id @default(uuid()) @db.Uuid
+  /// Belgedeki `iptalId`.
+  iptalId      String   @unique @db.Uuid
+  sira         Int      @unique
+  /// İmzalı belge (JWS) — açık belge, sır değil.
+  belge        String
+  imzalayanKid String   @db.VarChar(64)
+  verilis      DateTime @db.Timestamptz
+  /// İptal satırlarının kimlikleri (kid) — yalnız arama; otorite belgedir.
+  kidler       String[]
+  yukleyen     String   @db.VarChar(120)
+  createdAt    DateTime @default(now()) @db.Timestamptz
+
+  @@map("iptal_belgesi")
 }
 
 // -----------------------------------------------------------------------------
@@ -1099,6 +1179,10 @@ enum BildirimOlayi {
   PLANLI_EYLEM_UYGULANDI
   TAKSIT_GECIKTI
   DENEME
+  /// K4: kullanım başına en yeni sertifikanın (ALT · ara imzacı · İNDİRME) bitişine 30/15/7/1 gün kaldı — tören günü.
+  ANAHTAR_SURESI_BITIYOR
+  /// K2: 400 günü aşan ya da süresiz çevrimdışı ufuklu HAK verildi (ya da kök kuyruğuna girdi).
+  UZUN_UFUK_VERILDI
 }
 
 enum BildirimKanali {

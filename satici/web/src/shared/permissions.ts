@@ -9,6 +9,7 @@ export const PORTAL_PERMISSIONS = {
   "portal:oku": VENDOR,
   "musteri:yaz": VENDOR,
   "hak:yaz": VENDOR,
+  "hak:uzun-ufuk": ADMIN,
   "kod:uret": VENDOR,
   "yaptirim:yaz": VENDOR,
   "yaptirim:agir": ADMIN,

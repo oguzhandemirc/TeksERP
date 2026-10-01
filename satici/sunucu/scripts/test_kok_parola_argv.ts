@@ -4,7 +4,8 @@
 // kullanıcıya açıktır (/proc/<pid>/environ, `ps eww`). Ölçüm GERÇEK alt süreçte, o stdin'i
 // beklerken yapılır: argv ve env'de parola YOK; sonra aynı süreç imzalar (sertifika köke karşı
 // doğrulanır) ve verilen parola Buffer'ı sıfırlanmış döner. Yanlış parola → YANLIS_PAROLA (mesajda
-// parola yok). CLI `--parola` argümanını reddeder.
+// parola yok). CLI `--parola` argümanını reddeder. HAK ara imzacısının (G4) parolası da aynı kurala tabidir (§5:
+// `ara-uret` stdin'den, ara imzası alt süreçte argv/env'de parola yok).
 // ⭐ KALICI SONDA ✓K2 (her koşumda): ölçüm aracı KÖR DEĞİL — parolayı argv'de taşıyan bir kukla
 //    süreçte argv okuyucusu, env'de taşıyanda env okuyucusu parolayı BULUR.
 // Koşum: npx tsx scripts/test_kok_parola_argv.ts   (DB GEREKMEZ)
@@ -14,8 +15,8 @@ import { generateKeyPairSync, randomBytes, randomUUID } from "node:crypto";
 import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { CertificateSchema, DAY_MS, LICENSE_CLASSES, TYP, publicKeyX, verifyCertificate } from "../src/lisans-protokol";
-import { KeyFileError, passwordBuffer, wrapPrivateKey, writeKeyFileExclusive } from "../src/keys/key-files";
+import { CertificateSchema, DAY_MS, LICENSE_CLASSES, TYP, publicKeyX, verifyCertificate, verifyEntitlement } from "../src/lisans-protokol";
+import { KeyFileError, passwordBuffer, readWrappedKeyFile, wrapPrivateKey, writeKeyFileExclusive } from "../src/keys/key-files";
 import { signWithWrappedKey, spawnSignerProcess } from "../src/keys/signer";
 import { runAsCli } from "../src/lib/request-scope";
 import { SATICI_KOKU, kontrol, sonuc } from "./lib/test-ortam";
@@ -95,6 +96,48 @@ async function main(): Promise<void> {
     });
     const yazilan = path.join(dizin, "kok-2026-9.kok.json");
     kontrol("§3b stdin'den parola → kök yazıldı (0600), dosyada parola yok", stdinCli.status === 0 && existsSync(yazilan) && !readFileSync(yazilan, "utf8").includes(parola), stdinCli.stderr.trim().slice(0, 120));
+
+    console.log("\n§5 HAK ara imzacısı (G4): parolası da yalnız stdin'den");
+    const araParola = `ara-argv-sonda-${randomBytes(12).toString("hex")}`;
+    const araArgv = spawnSync(process.execPath, ["--import", "tsx", "scripts/anahtar.ts", "ara-uret", "--kid=ara-2026-7", "--kok=kok-2026-7", `--kok-dizin=${dizin}`, `--dizin=${dizin}`, `--ara-parolasi=${araParola}`], {
+      cwd: SATICI_KOKU,
+      encoding: "utf8",
+      input: "",
+    });
+    const araDosyasi = path.join(dizin, "ara-2026-7.ara.json");
+    kontrol("§5a ara-uret --ara-parolasi → çıkış 2, dosya yazılmadı", araArgv.status === 2 && /argümandan ALINMAZ/.test(araArgv.stderr) && !existsSync(araDosyasi), `${araArgv.status}`);
+    const araStdin = spawnSync(process.execPath, ["--import", "tsx", "scripts/anahtar.ts", "ara-uret", "--kid=ara-2026-7", "--kok=kok-2026-7", `--kok-dizin=${dizin}`, `--dizin=${dizin}`], {
+      cwd: SATICI_KOKU,
+      encoding: "utf8",
+      input: `${parola}\n${araParola}\n${araParola}\n`,
+    });
+    const araMetin = existsSync(araDosyasi) ? readFileSync(araDosyasi, "utf8") : "";
+    kontrol("§5b stdin'den kök + ara parolası → ara dosyası (sarılı, sertifikalı); dosyada iki parola da yok", araStdin.status === 0 && araMetin.includes("tekserp-ara-anahtar") && !araMetin.includes(araParola) && !araMetin.includes(parola), araStdin.stderr.trim().slice(0, 120));
+    const araCocuk = spawnSignerProcess();
+    await bekle(400);
+    const araYuzey = surecYuzeyleri(araCocuk.pid!);
+    kontrol("§5c ara imza alt süreci stdin'i beklerken argv'de ve env'de ara parolası YOK", /signer-child/.test(araYuzey.argv) && !araYuzey.argv.includes(araParola) && !araYuzey.env.includes(araParola));
+    const araBuf = passwordBuffer(araParola);
+    const simdi2 = Date.now();
+    const hakYuku = {
+      v: 1,
+      hakId: randomUUID(),
+      surum: 1,
+      lisansNo: "TKS-2026-0007",
+      musteri: { id: randomUUID(), ad: "Sonda Tekstil" },
+      tesis: { id: randomUUID(), ad: "Merkez" },
+      kurulumId: randomUUID(),
+      sinif: "URETIM",
+      moduller: ["production.enabled"],
+      kalici: true,
+      bakimBitis: new Date(simdi2 + 365 * DAY_MS).toISOString(),
+      verilis: new Date(simdi2).toISOString(),
+      imzaciSertifikasi: readWrappedKeyFile(araDosyasi).sertifika,
+      cevrimdisiUfukGun: 400,
+    };
+    const hakBelge = await runAsCli(() => signWithWrappedKey({ keyFile: araDosyasi, typ: TYP.HAK, payload: hakYuku, password: araBuf, child: araCocuk }));
+    const hakDogru = verifyEntitlement(hakBelge, [{ kid: kok.kid, x: kok.x, classes: kok.siniflar }]);
+    kontrol("§5d aynı alt süreç ara imzalı HAK'ı imzaladı (kökle zincir doğrulanır, imzacı ARA); ara parola Buffer'ı SIFIRLANDI", hakDogru.ok && hakDogru.value.signer.kind === "ARA" && araBuf.every((b) => b === 0), hakDogru.ok ? "" : hakDogru.code);
 
     console.log("\n§4 ✓K ölçüm aracı kör değil");
     const kuklaArgv = spawn(process.execPath, ["-e", "setTimeout(()=>{},3000)", parola], { stdio: "ignore" });
