@@ -32,7 +32,7 @@
 //      sertifikası → HAK; sınıf · pencere · kid bağı · kök+ara · kullanım · bayi+ara) · çevrimdışı ufuk tavanı
 //      (DEMO/TEST 45 · bayi 400 · süresiz yalnız ÜRETİM/DR; alanlar şema çıktısında korunur) · veriliş sınırı
 //      (nowMs; NaN ve +∞ fail-closed) · iptal belgesi (yalnız kök · şema · kimlik VE kid+kullanım iptali ·
-//      geri tarih atlatamaz · ALT/BAYİ · sıra seçimi · kiranın iptal sırası) · kira alanları (P · kural ·
+//      geri tarih atlatamaz · ALT/BAYİ · sıra seçimi · kiranın iptal sırası · yeni türlerde alg/başlık/kid) · kira alanları (P · kural ·
 //      kapanış K3 · HAK bayt bağı `hakOzeti`) · parmak izi v2 (kayıp = uyuşmazlık · güçlülerden ≥ 2 · zayıf
 //      kural · boş küme ÖLÇÜLEMEDİ · DR · tanıma · öğrenme) · İSTEK yol bağı + donanım amacı/gövdesi/yanıtı ·
 //      gövde ekleri (açık yetenek listesi · KATI ek nesneler · HAK özeti · yanıtta iptal, biçimsizi yok sayılır)
@@ -65,6 +65,8 @@
 //   zayıf boş küme · zayıf tanımada güçlü şartı · yol denetimi · yetenekler kapalı enum · kapanış K3 ·
 //   donanım yanıtı onay↔lisans · iptal kid öneki · yanıtta iptal `.catch`siz · bayi+ara birlikte · kısa
 //   ufuk yalnız ara imzacıda. Geçersiz çıkan iki sonda düzeltildi (biri susan çift savunma, biri çöküş).
+//   + 2: JWS alg denetimi kaldırıldı → §1b · §1c · §11d2 · §11d4 · başlık allowlist'i kaldırıldı → §1g · §1h ·
+//   §11d3 (yeni belge türleri — iptal, ara imzalı HAK — ortak JWS katmanından geçiyor).
 //   Her mutasyonun UYGULANDIĞI (sha farkı) ve geri alındığı (sha eşitliği) ayrıca ölçüldü.
 // ⚠️ Gerekli mi (reçete md. 20): kapı doğduğu gün ağaçta ısırılacak bir kusur YOKTU (klasör
 //   bu dilimde doğdu); gerekçe ÖLÇÜLMEDİ — satıcı/fabrika dilimleri buna karşı yazılacak.
@@ -756,6 +758,12 @@ function iptalBolumu(): void {
   beklenen("§11b ⭐ ara imzacı iptal basamaz (kök değil)", verifyRevocation(iptalBas(f.ara, iptalYuku(f)), f.kokler), "KOK_BILINMIYOR");
   beklenen("§11c typ karışması: sertifika iptal yerine geçemez", verifyRevocation(araSertifikasi(f), f.kokler), "JWS_TYP");
   beklenen("§11d imza kurcalı", verifyRevocation(iptalBas(anahtarUret(f.kok.kid), iptalYuku(f)), f.kokler), "JWS_IMZA");
+  const [, iptalYukMetni, iptalImza] = iptalBas(f.kok, iptalYuku(f)).split(".");
+  beklenen("§11d2 yeni belge türünde de alg none RED (JWS katmanı türden önce)", verifyRevocation(`${parca({ alg: "none", typ: TYP.IPTAL, kid: f.kok.kid })}.${iptalYukMetni}.`, f.kokler), "JWS_ALG");
+  beklenen("§11d3 yeni belge türünde de başlıkta gömülü anahtar RED", verifyRevocation(`${parca({ alg: "EdDSA", typ: TYP.IPTAL, kid: f.kok.kid, jwk: { kty: "OKP" } })}.${iptalYukMetni}.${iptalImza}`, f.kokler), "JWS_BASLIK");
+  const [, araYuk, araImza] = araHakBas(f).split(".");
+  beklenen("§11d4 ara imzalı HAK'ta alg none RED (ara yolu JWS katmanından sonra açılır)", verifyEntitlement(`${parca({ alg: "none", typ: TYP.HAK, kid: f.ara.kid })}.${araYuk}.`, f.kokler), "JWS_ALG");
+  beklenen("§11d5 ara imzalı HAK'ta kid biçimsiz RED", verifyEntitlement(`${parca({ alg: "EdDSA", typ: TYP.HAK, kid: "ARA" })}.${araYuk}.${araImza}`, f.kokler), "JWS_KID");
   const satir = { kid: f.ara.kid, sertifikaId: f.hakId, kullanim: "HAK" as const, tarih: msToIso(SIMDI), neden: "" };
   const sema = (ad: string, ek: Record<string, unknown>) => beklenen(`§11e şema: ${ad}`, verifyRevocation(hamImzala(TYP.IPTAL, f.kok, { ...iptalYuku(f), ...ek }), f.kokler), "BELGE_SEMA");
   sema("tekrarlı sertifika", { iptaller: [satir, satir] });
