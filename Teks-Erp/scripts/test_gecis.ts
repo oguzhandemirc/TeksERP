@@ -65,8 +65,11 @@ interface OrtamSonuc {
 function yukle(kaynak: string): Yardimci {
   const m = new Module(YARDIMCI, undefined);
   m.filename = YARDIMCI;
-  (m as unknown as { paths: string[] }).paths = [];
-  (m as unknown as { _compile(k: string, f: string): void })._compile(kaynak, YARDIMCI);
+  m.paths = [];
+  // `_compile` Node'un belgelenmemiş iç yöntemi (tiplerde yok): tip zorlaması yerine çalışma anında daraltılır.
+  const derle: unknown = Reflect.get(m, "_compile");
+  if (typeof derle !== "function") throw new Error("Module._compile yok — yardımcı metinden yüklenemedi");
+  derle.call(m, kaynak, YARDIMCI);
   return m.exports as Yardimci;
 }
 const KAYNAK = readFileSync(YARDIMCI, "utf8");
