@@ -2,7 +2,9 @@
 // tek başına süre kısaltmaz (fabrika aniden durmaz). Nedenler yoklamanın imzalı gövdesinden türer:
 //   SIRA_GERILEDI / SIRA_SIFIRLANDI — imzalı durum kaydının sırası satıcının son gördüğünden küçük / kayıt yok (K7: üç
 //   iz silinince fabrika hemen ek süreye geçer, satıcıda görünen yüzü budur) · LISANS_IZI_KAYIP — fabrika bulgusu ·
-//   BELIRSIZLIK — süren ölçülemedi birikimi 7 günü aştı · SAAT_SAPMASI — fabrikanın ölçtüğü satıcı sapması büyük.
+//   BELIRSIZLIK — süren ölçülemedi birikimi 7 günü aştı · SAAT_SAPMASI — fabrikanın ölçtüğü satıcı sapması büyük ·
+//   YETENEK_DUSUSU — `hak-ara` bildirmeyen yoklamaya genişlik kapısı tuttu (eski kök sürüm güncelden geniş; meşru olabilir:
+//   eski derlemeye geri dönüş — yalnız bilgi, kök imzası kuyruğa girer).
 // YABANCI_HAK kendi uyarısıdır (YABANCI_KIRA emsali): sunulan HAK satıcının defterinde yok ya da bayt özeti tutmuyor.
 // Uyarı × YENİ neden başına bir bildirim (`YEREL_MUDAHALE_SUPHESI`); süren nedenin tekrarı bildirim doğurmaz.
 import type { KopyaUyarisi, Kurulum, Prisma } from "@prisma/client";
@@ -10,7 +12,7 @@ import { DAY_MS, jwsDigest, type Fingerprint, type PollRequest } from "../lisans
 import type { Tx } from "../lib/prisma";
 import { enqueueNotificationTx } from "../notifications/outbox";
 
-export const LOCAL_INTERVENTION_CAUSES = ["SIRA_GERILEDI", "SIRA_SIFIRLANDI", "LISANS_IZI_KAYIP", "BELIRSIZLIK", "SAAT_SAPMASI"] as const;
+export const LOCAL_INTERVENTION_CAUSES = ["SIRA_GERILEDI", "SIRA_SIFIRLANDI", "LISANS_IZI_KAYIP", "BELIRSIZLIK", "SAAT_SAPMASI", "YETENEK_DUSUSU"] as const;
 export type LocalInterventionCause = (typeof LOCAL_INTERVENTION_CAUSES)[number];
 
 /** Bildirim referansı ve portal etiketi (sunucu tek kaynak; web aynası `mirrors.test.ts`). */
@@ -20,6 +22,7 @@ export const LOCAL_INTERVENTION_CAUSE_LABELS: Readonly<Record<LocalInterventionC
   LISANS_IZI_KAYIP: "Lisans izi kayıp (kira ve durum kaydı birlikte yok)",
   BELIRSIZLIK: "Süren ölçülemedi 7 günü aştı",
   SAAT_SAPMASI: "Fabrika saati satıcıdan çok sapmış",
+  YETENEK_DUSUSU: "Yetenek düşüşü: eski kök sürüm güncelden geniş, HAK teslim edilmedi (kök imzası kuyrukta)",
 };
 
 /** Belirsizlik birikimi bu süreyi aşınca neden doğar (§3.1-5). */
@@ -57,6 +60,8 @@ export function localInterventionCauses(g: {
   readonly report: PollV2Report;
   readonly findings: readonly string[];
   readonly vendorSkewSeconds: number | undefined;
+  /** Genişlik kapısı bu yoklamada tuttu (`deliverableEntitlement` → `withheld`). */
+  readonly capabilityDowngrade?: boolean;
 }): LocalInterventionCause[] {
   const out: LocalInterventionCause[] = [];
   const sequence = storableSequence(g.report.stateRecord);
@@ -67,6 +72,7 @@ export function localInterventionCauses(g: {
   if (g.findings.includes(TRACE_LOST_FINDING)) out.push("LISANS_IZI_KAYIP");
   if (g.report.uncertainty && g.report.uncertainty.birikenMs > UNCERTAINTY_ALERT_MS) out.push("BELIRSIZLIK");
   if (g.vendorSkewSeconds !== undefined && Math.abs(g.vendorSkewSeconds) >= CLOCK_SKEW_ALERT_SECONDS) out.push("SAAT_SAPMASI");
+  if (g.capabilityDowngrade) out.push("YETENEK_DUSUSU");
   return out;
 }
 

@@ -1,13 +1,13 @@
 // HAK SÜRÜMÜ — CLI/fikstür düz biçimi, portal imza planı önizlemesi, eski derlemeye giden HAK seçimi ve ara imzacıyla
 // TOPLU yeniden basım (G4 §2.6-3). Kararlar `entitlement-policy.ts`ten, yazım `entitlement-version.service.ts`ten.
 import type { Hak, HakKokTalebi, HakSurumu, Kurulum } from "@prisma/client";
-import { hasCapability } from "../lisans-protokol";
+import { EntitlementSchema, decodeDocument, hasCapability, jwsDigest, parseJws } from "../lisans-protokol";
 import { recordAudit } from "../lib/audit";
 import { VendorError, badRequest } from "../lib/errors";
 import { lockInstallation, lockInstallations } from "../lib/locks";
 import { prisma, type Db, type Tx } from "../lib/prisma";
 import type { VendorContext } from "./context";
-import { installationCapabilities, planEntitlementSigner, type SignerPlanKind } from "./entitlement-policy";
+import { installationCapabilities, isEntitlementWithin, planEntitlementSigner, type EntitlementBreadth, type SignerPlanKind } from "./entitlement-policy";
 import {
   entitlementVersionAudit,
   loadEntitlementTree,
@@ -60,23 +60,64 @@ export async function previewEntitlementSigner(
   return { imzaci: plan.kind, kid: plan.kind === "KUYRUK" ? null : plan.kid, neden: plan.kind === "KUYRUK" ? plan.reason : null, bekleyenTalep: pending?.id ?? null };
 }
 
+/** Fabrikanın elindeki HAK (yoklamanın `hak` alanı): kimlik + sürüm (+ yeni fabrikada bayt özeti). */
+export interface HeldEntitlement {
+  readonly hakId: string;
+  readonly surum: number;
+  readonly ozet?: string;
+}
+
+export interface DeliverableEntitlement {
+  readonly surum: number;
+  readonly belge: string;
+  readonly imzalayanKid: string;
+  /**
+   * Genişlik kapısı tuttu: yeteneksiz alıcının alabileceği en yeni kök imzalı sürüm güncelden GENİŞ (ya da hiç yok) —
+   * HAK DEĞİŞİKLİĞİ TESLİM EDİLMEZ. Sürüm yalnız kira bağıdır: fabrikanın elindeki sürüm güncelden geniş değilse o
+   * (`heldBound`), değilse güncel sürüm (fabrika bu kirayı bağlayamaz; çağıran kira vermez ya da yanıtta HAK'sız bırakır).
+   */
+  readonly withheld?: { readonly broaderVersion: number | null; readonly heldBound: boolean };
+}
+
+function breadthOf(token: string): EntitlementBreadth | null {
+  const p = parseJws(token);
+  if (!p.ok) return null;
+  const d = decodeDocument(EntitlementSchema, p.value.payload);
+  return d.ok ? d.value : null;
+}
+
 /**
- * Eski derleme yeni biçimi (ara imzalı HAK) TANIMAZ: yanıta giden HAK, kurulum `hak-ara` bildirmiyorsa en yeni ARA
- * İMZALI OLMAYAN sürümdür (kiranın `hakSurum`u bununla AYNI olmalı). Yetenekli kuruluma güncel sürüm gider.
+ * Kuruluma TESLİM edilecek HAK sürümü — TEK seçim. `hak-ara` bildirene güncel sürüm. Bildirmeyen (eski derleme yeni
+ * biçimi TANIMAZ) en yeni ARA İMZALI OLMAYAN sürümü alır — YALNIZ o sürüm güncelden geniş değilse (genişlik kapısı,
+ * `isEntitlementWithin`); genişse ya da yoksa `withheld`: HAK teslim edilmez, kira elindeki güvenli sürüme ya da güncel
+ * sürüme bağlanır. Belge okunamazsa (kendi defterimiz) geniş sayılır — fail-closed.
  */
 export async function deliverableEntitlement(
   db: Db,
   entitlement: Pick<Hak, "id" | "guncelSurum">,
   capabilities: readonly string[],
-): Promise<{ surum: number; belge: string; imzalayanKid: string } | null> {
+  held: HeldEntitlement | null = null,
+): Promise<DeliverableEntitlement | null> {
+  const capable = hasCapability(capabilities, "hak-ara");
   const versions = await db.hakSurumu.findMany({
     where: { hakId: entitlement.id, surum: { lte: entitlement.guncelSurum } },
     orderBy: { surum: "desc" },
     select: { surum: true, belge: true, imzalayanKid: true },
-    take: hasCapability(capabilities, "hak-ara") ? 1 : 64,
+    take: capable ? 1 : 64,
   });
-  if (hasCapability(capabilities, "hak-ara")) return versions[0] ?? null;
-  return versions.find((v) => !isIntermediateSignedToken(v.belge)) ?? null;
+  const current = versions[0];
+  if (capable || !current) return current ?? null;
+  const legacy = versions.find((v) => !isIntermediateSignedToken(v.belge)) ?? null;
+  const currentBreadth = breadthOf(current.belge);
+  const within = (v: { belge: string }): boolean => {
+    const b = breadthOf(v.belge);
+    return b !== null && currentBreadth !== null && isEntitlementWithin(b, currentBreadth);
+  };
+  if (legacy && (legacy.surum === current.surum || within(legacy))) return legacy;
+  const heldVersion =
+    held && held.hakId === entitlement.id ? (versions.find((v) => v.surum === held.surum && (held.ozet === undefined || held.ozet === jwsDigest(v.belge))) ?? null) : null;
+  const bound = heldVersion && (heldVersion.surum === current.surum || within(heldVersion)) ? heldVersion : null;
+  return { ...(bound ?? current), withheld: { broaderVersion: legacy?.surum ?? null, heldBound: bound !== null } };
 }
 
 // ---------------------------------------------------------------- toplu yeniden basım (ara imzacı)

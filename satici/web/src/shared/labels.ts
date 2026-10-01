@@ -69,6 +69,7 @@ export const LOCAL_INTERVENTION_CAUSE_LABEL: Record<string, string> = {
   LISANS_IZI_KAYIP: "Lisans izi kayıp",
   BELIRSIZLIK: "Süren ölçülemedi > 7 gün",
   SAAT_SAPMASI: "Saat sapması ≥ 1 saat",
+  YETENEK_DUSUSU: "Yetenek düşüşü (HAK teslim edilmedi, kök imzası kuyrukta)",
 };
 /** Kapanış kirası nedeni — protokol `CLOSING_LEASE_REASONS` aynası. */
 export const CLOSING_REASON_LABEL: Record<string, string> = {
@@ -92,6 +93,13 @@ export const LEASE_DECISION_LABEL: Record<string, string> = {
   DOSYA: "Uzatma dosyası",
 };
 
+/** Kök imzası talebinin durumu — Prisma `HakKokTalebiDurumu` aynası (mirrors.test.ts, iki yönlü). */
+export const ROOT_REQUEST_STATUS_LABEL: Record<string, string> = {
+  BEKLIYOR: "Kök imzası bekliyor",
+  IMZALANDI: "İmzalandı",
+  IPTAL: "İptal",
+  ESKIDI: "Eskidi (HAK başka sürüme geçti)",
+};
 /** Bildirim olayları — sunucunun `NOTIFICATION_EVENTS` listesinin HER değeri (ayna: src/test/mirrors.test.ts). */
 export const NOTIFICATION_EVENT_LABEL: Record<string, string> = {
   DESTEK_TALEBI: "Yeni destek talebi",
@@ -109,6 +117,7 @@ export const NOTIFICATION_EVENT_LABEL: Record<string, string> = {
   YEREL_MUDAHALE_SUPHESI: "Yerel müdahale şüphesi",
   ANAHTAR_SURESI_BITIYOR: "İmza anahtarının süresi bitiyor",
   UZUN_UFUK_VERILDI: "Uzun çevrimdışı ufuk verildi",
+  KOK_IMZASI_ACIL: "ACİL kök imzası gerekiyor",
 };
 export const NOTIFICATION_CHANNEL_LABEL: Record<string, string> = { EPOSTA: "E-posta", TELEGRAM: "Telegram" };
 export const NOTIFICATION_STATUS_LABEL: Record<string, string> = {

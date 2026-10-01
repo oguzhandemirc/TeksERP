@@ -3,7 +3,7 @@
 // imzalanır (`anahtar.ts kuyruk-imzala`) → içe aktarılır (`donem-ice-aktar`). İçe aktarmada imzalı belgenin yükü
 // kuyruktaki yükle BİREBİR aynı olmalıdır ve HAK hâlâ talebin taban sürümünde durmalıdır; değilse talep ESKİDİ olur
 // (yeni sürüm yazılmaz). Durum geçişleri atomik claim (`updateMany WHERE {id, durum: BEKLIYOR}`).
-import type { HakKokTalebi, HakSurumu } from "@prisma/client";
+import type { HakKokTalebi, HakSurumu, Prisma } from "@prisma/client";
 import { TYP, parseJws, verifyEntitlement, type EntitlementDoc } from "../lisans-protokol";
 import { recordAudit } from "../lib/audit";
 import { VendorError, notFoundError, retryConflict, stateConflict } from "../lib/errors";
@@ -11,7 +11,8 @@ import { lockInstallation } from "../lib/locks";
 import { prisma, type Db, type Tx } from "../lib/prisma";
 import { cursorArgs, page } from "../portal/queries";
 import type { VendorContext } from "./context";
-import { writeEntitlementVersionUnderLock, type PreparedEntitlementVersion } from "./entitlement.service";
+import { enqueueNotificationTx } from "../notifications/outbox";
+import { buildEntitlementPayload, loadEntitlementTree, writeEntitlementVersionUnderLock, type PreparedEntitlementVersion } from "./entitlement.service";
 import { requireReason } from "./sanction.service";
 
 export const ROOT_QUEUE_EXPORT_TYPE = "tekserp-kok-kuyrugu";
@@ -34,15 +35,67 @@ export function canonicalJson(value: unknown): string {
   return JSON.stringify(walk(value));
 }
 
-/** Bekleyen talepler (tören girdisi). Yükler açık belgedir (sır taşımaz); dosya yalnız VDS → Mac yolunda durur. */
+/** Bekleyen talepler (tören girdisi; ACİL olanlar önce). Yükler açık belgedir (sır taşımaz); dosya yalnız VDS → Mac yolunda durur. */
 export async function exportRootQueue(db: Db, nowMs: number = Date.now()): Promise<RootQueueExport> {
-  const rows = await db.hakKokTalebi.findMany({ where: { durum: "BEKLIYOR" }, orderBy: [{ createdAt: "asc" }, { id: "asc" }], include: { hak: { select: { lisansNo: true } } } });
+  const rows = await db.hakKokTalebi.findMany({ where: { durum: "BEKLIYOR" }, orderBy: [{ acil: "desc" }, { createdAt: "asc" }, { id: "asc" }], include: { hak: { select: { lisansNo: true } } } });
   return {
     v: 1,
     tur: ROOT_QUEUE_EXPORT_TYPE,
     uretim: new Date(nowMs).toISOString(),
     talepler: rows.map((r) => ({ talepId: r.id, hakId: r.hakId, lisansNo: r.hak.lisansNo, tabanSurum: r.tabanSurum, surum: r.surum, yuk: r.yuk as unknown as EntitlementDoc })),
   };
+}
+
+/** Genişlik kapısının sistem talebini yazan (denetim ve portal "yapan" sütunu). */
+export const CAPABILITY_DOWNGRADE_ACTOR = "sistem:yetenek-dususu";
+
+/**
+ * Kurulum kilidi ALTINDA (yetenek düşüşü — genişlik kapısı): güncel şartların KÖK imzası kuyruğa İDEMPOTENT girer — HAK
+ * için bekleyen talep varsa yenisi açılmaz (o talep de kök imzalı sürüm doğurur). `urgent`: fabrika kira alamadı; talep
+ * ACİL işaretlenir ve talep başına TEK `KOK_IMZASI_ACIL` bildirimi (e-posta + Telegram) aynı tx'te yazılır.
+ */
+export async function queueCurrentTermsUnderLock(
+  tx: Tx,
+  g: { readonly entitlementId: string; readonly urgent: boolean; readonly nowMs: number },
+): Promise<{ readonly request: HakKokTalebi; readonly created: boolean; readonly escalated: boolean }> {
+  let request = await tx.hakKokTalebi.findFirst({ where: { hakId: g.entitlementId, durum: "BEKLIYOR" } });
+  let created = false;
+  let escalated = false;
+  if (!request) {
+    const hak = await loadEntitlementTree(tx, g.entitlementId);
+    const built = buildEntitlementPayload(hak, {}, g.nowMs, { kind: "KOK" });
+    request = await tx.hakKokTalebi.create({
+      data: {
+        hakId: hak.id,
+        kurulumId: hak.kurulumId,
+        tabanSurum: hak.guncelSurum,
+        surum: hak.guncelSurum + 1,
+        yuk: built.payload as unknown as Prisma.InputJsonObject,
+        uzunUfuk: built.fields.longHorizon,
+        acil: g.urgent,
+        sebep: "Yetenek düşüşü: güncel şartların kök imzası (yeteneksiz derleme güncel ara imzalı HAK'ı tanımaz, eski kök sürüm güncelden geniş)",
+        yapan: CAPABILITY_DOWNGRADE_ACTOR,
+      },
+    });
+    created = true;
+    escalated = g.urgent;
+  } else if (g.urgent && !request.acil) {
+    const claim = await tx.hakKokTalebi.updateMany({ where: { id: request.id, durum: "BEKLIYOR", acil: false }, data: { acil: true } });
+    escalated = claim.count === 1;
+    request = await tx.hakKokTalebi.findUniqueOrThrow({ where: { id: request.id } });
+  }
+  if (escalated) {
+    await enqueueNotificationTx(tx, {
+      event: "KOK_IMZASI_ACIL",
+      keyParts: [request.id],
+      installationDbId: request.kurulumId,
+      relatedId: request.id,
+      portalPath: "/kok-kuyrugu",
+      konu: "kök imzası bekleyen HAK — fabrika kira alamıyor",
+      tarih: new Date(g.nowMs),
+    });
+  }
+  return { request, created, escalated };
 }
 
 export async function findRootRequest(db: Db, id: string): Promise<HakKokTalebi> {
@@ -159,9 +212,9 @@ async function writeRootSignedUnderLock(
 }
 
 /** Portal listesi (süzme sunucuda; sıra `createdAt desc, id desc` — imleç kimlikle). */
-export async function listRootRequests(db: Db, g: { status?: HakKokTalebi["durum"]; cursor?: string; limit: number }) {
+export async function listRootRequests(db: Db, g: { status?: HakKokTalebi["durum"]; urgent?: boolean; cursor?: string; limit: number }) {
   const rows = await db.hakKokTalebi.findMany({
-    where: g.status ? { durum: g.status } : {},
+    where: { ...(g.status ? { durum: g.status } : {}), ...(g.urgent ? { acil: true } : {}) },
     include: { hak: { select: { lisansNo: true } }, kurulum: { select: { kurulumId: true, ad: true, sinif: true } } },
     ...cursorArgs(g.cursor, g.limit),
   });
@@ -174,6 +227,7 @@ export async function listRootRequests(db: Db, g: { status?: HakKokTalebi["durum
       tabanSurum: r.tabanSurum,
       surum: r.surum,
       uzunUfuk: r.uzunUfuk,
+      acil: r.acil,
       durum: r.durum,
       sebep: r.sebep,
       yapan: r.yapan,

@@ -8,7 +8,7 @@ import { withSigningPasswordGuard } from "../portal/signing-guard";
 import { entitlementVersionAudit, prepareIntermediateReissue, recordIntermediateReissueTx } from "../services/entitlement.service";
 import { revocationStatus } from "../services/revocation.service";
 import { cancelRootRequestTx, findRootRequest, listRootRequests } from "../services/root-queue.service";
-import { ClientTokenSchema, ReasonSchema, bodyOf, idParam, pageQuery, portalAction, queryEnum, type PortalRouteDef } from "./portal-http";
+import { ClientTokenSchema, ReasonSchema, bodyOf, idParam, pageQuery, portalAction, queryBool, queryEnum, type PortalRouteDef } from "./portal-http";
 
 const ROOT_REQUEST_STATES = ["BEKLIYOR", "IMZALANDI", "IPTAL", "ESKIDI"] as const;
 const CancelBody = z.strictObject({ clientToken: ClientTokenSchema, sebep: ReasonSchema });
@@ -25,7 +25,9 @@ export const KEY_PORTAL_ROUTES: readonly PortalRouteDef[] = [
     path: "/kok-kuyrugu",
     permission: "portal:oku",
     kimlik: "OKUMA",
-    handler: async (c) => ({ data: await listRootRequests(prisma, { status: queryEnum(c.req, "durum", ROOT_REQUEST_STATES), ...pageQuery(c.req) }) }),
+    handler: async (c) => ({
+      data: await listRootRequests(prisma, { status: queryEnum(c.req, "durum", ROOT_REQUEST_STATES), urgent: queryBool(c.req, "acil"), ...pageQuery(c.req) }),
+    }),
   },
   {
     method: "post",

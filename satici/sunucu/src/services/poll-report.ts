@@ -26,12 +26,20 @@ export async function applyOwnerReportTx(
     readonly status: Pick<PollRequest["durum"], "nedenler">;
     readonly clock: Pick<PollRequest["saat"], "saticiSapmaSn">;
     readonly sides: { readonly owner: Fingerprint; readonly other: Fingerprint };
+    /** Genişlik kapısı bu yoklamada tuttu — YETENEK_DUSUSU nedeni. */
+    readonly capabilityDowngrade?: boolean;
     readonly nowMs: number;
   },
 ): Promise<Prisma.KurulumUncheckedUpdateManyInput> {
   const inst = g.installation;
   const report = g.report ?? EMPTY_REPORT;
-  const causes = localInterventionCauses({ lastSeenSequence: inst.sonDurumSirasi, report, findings: g.status.nedenler, vendorSkewSeconds: g.clock.saticiSapmaSn });
+  const causes = localInterventionCauses({
+    lastSeenSequence: inst.sonDurumSirasi,
+    report,
+    findings: g.status.nedenler,
+    vendorSkewSeconds: g.clock.saticiSapmaSn,
+    capabilityDowngrade: g.capabilityDowngrade ?? false,
+  });
   await recordLocalInterventionTx(tx, {
     installationDbId: inst.id,
     causes,

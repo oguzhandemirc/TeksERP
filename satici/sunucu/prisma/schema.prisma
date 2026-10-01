@@ -376,6 +376,8 @@ model HakKokTalebi {
   surum         Int
   yuk           Json
   uzunUfuk      Boolean            @default(false)
+  /// Yetenek düşüşünde fabrika kira ALAMADI (elinde güncelden geniş olmayan HAK yok): tören beklenmeden imzalanmalı.
+  acil          Boolean            @default(false)
   durum         HakKokTalebiDurumu @default(BEKLIYOR)
   sebep         String             @db.VarChar(500)
   yapan         String             @db.VarChar(120)
@@ -1206,6 +1208,8 @@ enum BildirimOlayi {
   ANAHTAR_SURESI_BITIYOR
   /// K2: 400 günü aşan ya da süresiz çevrimdışı ufuklu HAK verildi (ya da kök kuyruğuna girdi).
   UZUN_UFUK_VERILDI
+  /// Genişlik kapısı: yetenek düşüşünde fabrika kira alamadı — güncel şartların kök imzası ACİL (talep başına bir kez).
+  KOK_IMZASI_ACIL
 }
 
 enum BildirimKanali {

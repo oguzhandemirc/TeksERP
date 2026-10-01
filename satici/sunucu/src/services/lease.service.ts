@@ -30,7 +30,7 @@ import { VendorError } from "../lib/errors";
 import type { Db, Tx } from "../lib/prisma";
 import { channelVersionsForLease } from "./channel.service";
 import { leaseCloudFields } from "./cloud-entitlement";
-import { deliverableEntitlement } from "./entitlement-issue.service";
+import { deliverableEntitlement, type DeliverableEntitlement, type HeldEntitlement } from "./entitlement-issue.service";
 import { installationCapabilities } from "./entitlement-policy";
 import { moduleKeyGrants } from "./module-key.service";
 import { paidThroughOf, type PaidThrough } from "./paid-through";
@@ -120,20 +120,29 @@ export interface DeliveredEntitlement {
   readonly hakId: string;
   readonly surum: number;
   readonly belge: string;
+  /** Genişlik kapısı (`deliverableEntitlement`): HAK teslim EDİLMEZ, sürüm yalnız kira bağıdır. */
+  readonly withheld?: DeliverableEntitlement["withheld"];
 }
 
 /**
  * Kuruluma TESLİM edilecek HAK — TEK seçim noktası (`deliverableEntitlement`): `hak-ara` bildirene güncel sürüm, bildirmeyene
- * en yeni ARA İMZALI OLMAYAN sürüm. Yetenekler verilmezse kurulum kaydından (`installationCapabilities`); yoklamada yanıtı
- * ALACAK tarafın imzalı gövdede bildirdiği küme verilir (eski sürüme dönen fabrika ara imzalı HAK'ı aynı yanıtta almasın).
+ * en yeni ARA İMZALI OLMAYAN sürüm, o sürüm güncelden genişse HİÇBİRİ (genişlik kapısı, `withheld`). Yetenekler verilmezse
+ * kurulum kaydından (`installationCapabilities`); yoklamada yanıtı ALACAK tarafın imzalı gövdede bildirdiği küme ve elindeki
+ * HAK (`held`) verilir (eski sürüme dönen fabrika ara imzalı HAK'ı aynı yanıtta almasın).
  */
+/** Teslim seçiminin alıcıya özgü girdileri: bildirdiği yetenekler (yoksa kurulum kaydı) ve elindeki HAK. */
+export interface DeliveryReceiver {
+  readonly capabilities?: readonly string[];
+  readonly held?: HeldEntitlement | null;
+}
+
 export async function entitlementForDelivery(
   db: Db,
   installation: { readonly yetenekler: unknown },
   entitlement: Pick<Hak, "id" | "guncelSurum">,
-  capabilities?: readonly string[],
+  receiver: DeliveryReceiver = {},
 ): Promise<DeliveredEntitlement> {
-  const d = await findEntitlementForDelivery(db, installation, entitlement, capabilities);
+  const d = await findEntitlementForDelivery(db, installation, entitlement, receiver);
   if (!d) throw new VendorError(500, "SUNUCU_HATASI", "Bu kurulumun derlemesinin tanıyacağı imzalı lisans (HAK) yok");
   return d;
 }
@@ -143,10 +152,10 @@ export async function findEntitlementForDelivery(
   db: Db,
   installation: { readonly yetenekler: unknown },
   entitlement: Pick<Hak, "id" | "guncelSurum">,
-  capabilities?: readonly string[],
+  receiver: DeliveryReceiver = {},
 ): Promise<DeliveredEntitlement | null> {
-  const d = await deliverableEntitlement(db, entitlement, capabilities ?? installationCapabilities(installation));
-  return d ? { hakId: entitlement.id, surum: d.surum, belge: d.belge } : null;
+  const d = await deliverableEntitlement(db, entitlement, receiver.capabilities ?? installationCapabilities(installation), receiver.held ?? null);
+  return d ? { hakId: entitlement.id, surum: d.surum, belge: d.belge, ...(d.withheld ? { withheld: d.withheld } : {}) } : null;
 }
 
 /** Defterdeki bir kiranın BAĞLI olduğu HAK sürümü — aynı kirayı yeniden veren yol (tekrar, yeniden kullanım) bunu teslim eder. */
@@ -181,6 +190,8 @@ export interface IssueLeaseInput {
   readonly closing?: ClosingLeaseTerms;
   /** Kirayı ALACAK tarafın yetenekleri (teslim edilecek HAK biçimi); verilmezse kurulum kaydından. */
   readonly capabilities?: readonly string[];
+  /** Kirayı alacak tarafın elindeki HAK (genişlik kapısında kira buna bağlanabilir). */
+  readonly held?: HeldEntitlement | null;
 }
 
 export interface IssuedLease {
@@ -210,7 +221,7 @@ export async function issueLease(tx: Tx, ctx: VendorContext, g: IssueLeaseInput)
   // Faz 2d: yalnız HAK'taki, dondurulmamış modüllerin anahtarları; kurulumun X25519'u yoksa hiçbiri. Kapanışta hiçbiri.
   const grants = closing ? [] : await moduleKeyGrants(tx, ctx, { installation, entitlement, frozen: sanction.donmusModuller });
   const paid = await paidThroughOf(tx, installation.id, entitlement);
-  const delivered = await entitlementForDelivery(tx, installation, entitlement, g.capabilities);
+  const delivered = await entitlementForDelivery(tx, installation, entitlement, { capabilities: g.capabilities, held: g.held });
   const revocation = await leaseRevocation(tx, ctx.keys);
   const id = randomUUID();
   const issuedAt = new Date(nowMs);

@@ -194,6 +194,25 @@ export interface TransferRequest {
   readonly kurulum?: InstallationRef;
 }
 
+/** Kök imzası bekleyen HAK talebi (`GET /kok-kuyrugu`). `acil`: yetenek düşüşünde fabrika kira alamadı. */
+export interface RootRequest {
+  readonly id: string;
+  readonly hakId: string;
+  readonly lisansNo: string;
+  readonly kurulumId: string;
+  readonly kurulum: { readonly kurulumId: string; readonly ad: string | null; readonly sinif: string };
+  readonly tabanSurum: number;
+  readonly surum: number;
+  readonly uzunUfuk: boolean;
+  readonly acil: boolean;
+  readonly durum: "BEKLIYOR" | "IMZALANDI" | "IPTAL" | "ESKIDI";
+  readonly sebep: string;
+  readonly yapan: string;
+  readonly kapanisZamani: string | null;
+  readonly kapanisSebebi: string | null;
+  readonly createdAt: string;
+}
+
 export interface PlannedAction {
   readonly id: string;
   readonly kurulumId: string;

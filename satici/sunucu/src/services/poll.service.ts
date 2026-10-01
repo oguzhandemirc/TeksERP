@@ -21,7 +21,7 @@ export async function processPoll(
 ): Promise<LicenseResponse & { destek?: SupportTicketUpdate[] }> {
   const telemetry = { durum: body.durum, saat: body.saat, ortam: body.ortam, saglik: body.saglik, gozlem: body.gozlem };
   // K6: sonu gelmiş anahtar (kapanış kirasını anlayan istemci) kapanış kirası alır; kurulum kaydı/destek yazılmaz.
-  if (auth.ended) return closeEndedKey(ctx, auth, { presentedLeaseId: body.sonKiraId, measured: body.parmakIzi, capabilities: body.yetenekler ?? [], telemetry, nowMs });
+  if (auth.ended) return closeEndedKey(ctx, auth, { presentedLeaseId: body.sonKiraId, measured: body.parmakIzi, capabilities: body.yetenekler ?? [], held: body.hak, telemetry, nowMs });
   const { response } = await renewLease(ctx, {
     installationDbId: auth.installation.id,
     kid: auth.kid,

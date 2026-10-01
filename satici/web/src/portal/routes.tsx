@@ -18,6 +18,7 @@ import { SupportPage } from "./pages/Support";
 import { SupportDetailPage } from "./pages/SupportDetail";
 import { CopyAlertsPage, DrPage, PlannedActionsPage, TransfersPage } from "./pages/Queues";
 import { ReleasesPage } from "./pages/Releases";
+import { RootQueuePage } from "./pages/RootQueue";
 import { UsersPage } from "./pages/Users";
 
 export const PORTAL_PRODUCT = "TeksERP Satıcı Portalı";
@@ -29,6 +30,7 @@ export const PORTAL_NAV: readonly NavItem[] = [
   { to: "/planli-eylemler", label: "Planlı eylemler", permission: "portal:oku" },
   { to: "/tasima-talepleri", label: "Taşıma talepleri", permission: "portal:oku" },
   { to: "/kopya-uyarilari", label: "Kopya uyarıları", permission: "portal:oku" },
+  { to: "/kok-kuyrugu", label: "Kök imzası kuyruğu", permission: "portal:oku" },
   { to: "/dr", label: "DR", permission: "portal:oku" },
   { to: "/destek", label: "Destek kutusu", permission: "portal:oku" },
   { to: "/bildirimler", label: "Bildirimler", permission: "bildirim:oku" },
@@ -54,6 +56,7 @@ export const PORTAL_ROUTES: RouteObject[] = [
       { path: "planli-eylemler", element: <PlannedActionsPage /> },
       { path: "tasima-talepleri", element: <TransfersPage /> },
       { path: "kopya-uyarilari", element: <CopyAlertsPage /> },
+      { path: "kok-kuyrugu", element: <RootQueuePage /> },
       { path: "dr", element: <DrPage /> },
       { path: "destek", element: <SupportPage /> },
       { path: "destek/:id", element: <SupportDetailPage /> },

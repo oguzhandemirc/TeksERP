@@ -46,6 +46,8 @@ export async function issueExtensionFileTx(tx: Tx, ctx: VendorContext, g: { inst
     acceptedFingerprint: readFingerprint(inst.kabulEdilenParmakIzi),
     nowMs: g.nowMs,
   });
+  // Genişlik kapısı: kurulumun derlemesinin tanıyacağı güncel HAK yok (kök imzası bekliyor) — dosya HAK'sız işe yaramaz.
+  if (lease.entitlement.withheld) throw stateConflict("Bu kurulumun derlemesinin tanıyacağı güncel lisans (HAK) kök imzası bekliyor (kök kuyruğu); uzatma dosyası imzadan sonra verilir");
   const claim = await tx.kurulum.updateMany({ where: { id: inst.id, sonKiraId: tip.id }, data: { sonKiraId: lease.id } });
   if (claim.count === 0) throw retryConflict();
   const paid = lease.paidThrough.tarih ? lease.paidThrough.tarih.toISOString() : null;

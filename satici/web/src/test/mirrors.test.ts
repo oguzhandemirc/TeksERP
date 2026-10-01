@@ -23,6 +23,7 @@ import {
   NOTIFICATION_EVENT_LABEL,
   NOTIFICATION_STATUS_LABEL,
   PAID_THROUGH_KIND_LABEL,
+  ROOT_REQUEST_STATUS_LABEL,
 } from "../shared/labels";
 import { PORTAL_PERMISSIONS, TAILNET_ONLY_PERMISSIONS } from "../shared/permissions";
 import { HEAVY_K3_MIN_DAYS, INSTALLMENT_DEFAULT_RESTRICTION_DAYS } from "../shared/sanctions";
@@ -213,6 +214,12 @@ describe("lisans v2 — enum ve küme ekran adları (sunucu kaynağı, iki yönl
 
   it("yerel müdahale nedenleri = LOCAL_INTERVENTION_CAUSES (services/local-intervention.ts)", () => {
     twoWay(listStrings(read("services/local-intervention.ts"), "export const LOCAL_INTERVENTION_CAUSES"), LOCAL_INTERVENTION_CAUSE_LABEL);
+  });
+
+  it("kök imzası talebi durumları = Prisma HakKokTalebiDurumu ve portal süzgeci (key-routes.ts ROOT_REQUEST_STATES)", () => {
+    const values = prismaEnum("HakKokTalebiDurumu");
+    twoWay(values, ROOT_REQUEST_STATUS_LABEL);
+    expect(listStrings(read("http/key-routes.ts"), "const ROOT_REQUEST_STATES")).toEqual(values);
   });
 
   it("kapanış kirası nedenleri = protokol CLOSING_LEASE_REASONS", () => {
