@@ -64,5 +64,50 @@ export const DEFAULT_UPDATE_FEED_URL: string = UPDATE_FEED_URL;
  * olurdu — yani tam da kaçınmaya çalıştığımız elle tur. Bu anahtar o çıkmazın
  * kaçış kapısı: Genel Ayarlar → Bu Bilgisayar → Güncelleme'den adres yazılır,
  * uygulama bir sonraki kontrolde oradan arar.
+ *
+ * ⚠️ Ezme YALNIZ `validateFeedOverride`tan geçen değeri taşır — ana süreç hem
+ * YAZARKEN hem OKURKEN denetler (renderer kapısı bir arayüz kapısıdır, sınır değil).
  */
 export const UPDATE_FEED_OVERRIDE_KEY = "config.updateFeedUrl";
+
+/**
+ * Güncelleme adresine izin verilen TEK ana makine — kanal kaydından türer
+ * (`deploy/kanallar.json` → gömülü varsayılan adres; bütün kanallar aynı köke
+ * bağlıdır, `scripts/check-kanallar.mjs` §3). Liste koda yazılmaz.
+ */
+export const ALLOWED_UPDATE_HOST: string = new URL(DEFAULT_UPDATE_FEED_URL).host;
+
+const FEED_PATH_PATTERN = /^\/[a-z0-9][a-z0-9-]{0,39}\/electron\/$/;
+
+export type FeedOverrideCheck = { ok: true; url: string } | { ok: false; reason: string };
+
+/**
+ * Ezme adresinin kuralı: yalnız `https:` · ana makine kanal kaydından türeyen
+ * güncelleme sunucusu · yol `/<kanal>/electron/` · kullanıcı adı/parola, port,
+ * sorgu ve parça YOK. Döndürdüğü `url` normalize edilmiş biçimdir (sonda `/`).
+ *
+ * Neden bu kadar dar: adres electron-updater'ın paketi indirdiği yerdir ve
+ * fabrikanın indirme belirteci de oraya gider. Düz http ağdaki aracıya, başka ana
+ * makine ise belirteci de alan bir sunucuya kapı açardı. Kanal bağını ayrıca
+ * imzalı künye ölçer: başka kanalın yolundan gelen sürüm KURULMAZ.
+ */
+export function validateFeedOverride(raw: string): FeedOverrideCheck {
+  let u: URL;
+  try {
+    u = new URL(raw.trim());
+  } catch {
+    return { ok: false, reason: "Adres çözümlenemedi." };
+  }
+  if (u.protocol !== "https:") return { ok: false, reason: "Güncelleme adresi https:// ile başlamalı (düz http kabul edilmez)." };
+  if (u.username || u.password) return { ok: false, reason: "Adres kullanıcı adı/parola taşıyamaz." };
+  if (u.host !== ALLOWED_UPDATE_HOST) return { ok: false, reason: `Yalnız ${ALLOWED_UPDATE_HOST} adresine izin verilir.` };
+  if (u.search || u.hash) return { ok: false, reason: "Adres sorgu (?) ya da parça (#) taşıyamaz." };
+  const path = u.pathname.endsWith("/") ? u.pathname : `${u.pathname}/`;
+  if (!FEED_PATH_PATTERN.test(path)) return { ok: false, reason: "Yol /<kanal>/electron/ biçiminde olmalı." };
+  return { ok: true, url: `https://${u.host}${path}` };
+}
+
+/** Bu adrese güncelleme isteği (ve indirme belirteci) gidebilir mi? */
+export function isAllowedUpdateUrl(url: string): boolean {
+  return validateFeedOverride(url).ok;
+}

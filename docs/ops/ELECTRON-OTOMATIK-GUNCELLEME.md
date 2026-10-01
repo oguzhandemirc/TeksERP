@@ -57,6 +57,10 @@ release/<sürüm>/           latest.yml              latest.yml'e bakar
   uygulama "Program Files"a kurulu olduğu için Windows izin sorar; kapanışta
   tetiklenseydi operatör gittikten sonra ekranda cevapsız bir izin penceresi
   asılı kalırdı. Kurulum hep operatör başındayken yapılır.
+- **Güncelleme İMZALI KÜNYEYLE kurulur** (2026-10-01, güvenlik dilimi G5): panel
+  `latest.yml`deki imzalı künyeyi (`tekserp:` bloğu) gömülü çapayla doğrulamadan
+  İNDİRMEZ, inen dosyanın boyu + sha512'si künyedekiyle aynı değilse ve kurulumdan
+  hemen önce yeniden ölçülen dosya değişmişse KURMAZ. Ayrıntı: aşağıda §İmzalı künye.
 
 ---
 
@@ -306,8 +310,12 @@ kanal) derler ve hiçbir kapıdan geçmez. Paketleme script'i tam olarak bu hata
 ### 3. Yayınla
 
 ```bash
-./deploy/electron-yayinla.sh --musteri=<kanal>     # macOS/Linux; Windows'ta Git Bash/WSL
+./deploy/electron-yayinla.sh --musteri=<kanal> --anahtar=<panel imza anahtarı>   # macOS/Linux; Windows'ta Git Bash/WSL
 ```
+
+> **İmzalı künye (2026-10-01):** `latest.yml` imzalı künye taşımadan YÜKLENMEZ. Künye imzasızsa betik imza
+> aracını (`Teks-Erp/scripts/panel-imza.ts imzala`) kendisi çağırır; anahtar `--anahtar=` ya da
+> `TEKSERP_PANEL_IMZA_ANAHTARI`, parola TTY'den. Ayrıntı: §İmzalı künye.
 
 `--musteri` NİYETTİR; hedef klasör paketin KENDİ kimliğinden çözülür
 (`release/<kanal>/<sürüm>/win-unpacked/resources/app-update.yml` adresi ·
@@ -529,16 +537,21 @@ yazar ve güncelleyici kurulumu doğrudan `elevate.exe` ile başlatır. Beyansı
 yol da çalışır ama önce kurulumu yetkisiz başlatıp EACCES/740 alır, sonra
 `elevate.exe`ye düşer (bir hata satırı + bir deneme boşa).
 
-**② Paket imzalı değil** (kod imzalama sertifikası yok). Güncelleme akışını
-etkilemez — indirilen dosya `latest.yml` içindeki sha512 ile doğrulanır. Yalnız
-setup dosyası **elle** çalıştırıldığında Windows SmartScreen uyarısı çıkar
-("Daha fazla bilgi → Yine de çalıştır"). Bu, §2'deki son elle turda görülecek,
-sonrasında görülmeyecek.
+**② Paketin Windows kod imzası (Authenticode) yok** (sertifika şirket kuruluşundan sonra alınacak — kullanıcı
+kararı). electron-updater Authenticode'u yalnız `publisherName` varken denetler; `latest.yml`deki sha512 de exe
+ile AYNI sunucudan geldiği için bütünlük kanıtı DEĞİLDİR. Kanıt, yayın makinesinde imzalanan künyedir (§İmzalı
+künye): sunucu, Cloudflare hesabı ya da yayın hesabı ele geçse bile künyesi çapadaki anahtarla doğrulanmayan
+paket panelde kurulmaz. Setup **elle** çalıştırıldığında Windows SmartScreen uyarısı yine çıkar ("Daha fazla
+bilgi → Yine de çalıştır"); bu yalnız sertifikayla kalkar.
 
 **③ Yayın adresi pakete derleme anında gömülür.** Adres sonradan değişirse kurulu
-paneller eski adrese bakmaya devam eder. Kaçış kapısı var: **Bu Bilgisayar →
-Güncelleme → Değiştir** ile o makineye özel adres yazılabilir (yeni setup
-dağıtmaya gerek kalmaz). Kalıcı çözüm elbette `shared/update-feed.ts` +
+paneller eski adrese bakmaya devam eder. Kaçış kapısı var: **Sistem → Güncelleme →
+Değiştir** ile o makineye özel adres yazılabilir — YALNIZ `admin:settings` (ekranı
+gören `settings:workstation` değiştiremez) ve YALNIZ `https://<kanal kaydının güncelleme
+sunucusu>/<kanal>/electron/` biçiminde: düz http, başka ana makine, port, sorgu
+reddedilir; kural ana süreçte hem yazarken hem okurken uygulanır, indirme belirteci
+yalnız bu adrese gider. Başka kanalın yolu yazılsa bile oradan gelen sürüm kurulmaz
+(künye kanala bağlı). Kalıcı çözüm elbette `shared/update-feed.ts` +
 `package.json`u güncelleyip yeni sürüm çıkarmaktır (2026-08-26'da tam olarak bu
 yapıldı: adres `demo…/guncelleme/electron/` iken `guncelleme.…/electron/` oldu).
 
@@ -550,13 +563,83 @@ düzeltilmiş **daha yüksek** bir numara (örn. 2.7.2) çıkarmak gerekir.
 
 ---
 
+## §İmzalı künye — panel güncellemesinin bütünlüğü (2026-10-01, G5)
+
+**Neden:** paket Authenticode imzasız; electron-updater'ın tek denetimi aynı sunucudaki `latest.yml`in sha512'si.
+Güncelleme sunucusunu, Cloudflare hesabını ya da yayın hesabını ele geçiren biri bütün fabrikalardaki panellere
+yönetici yetkisiyle kod kurdurabilirdi. Künye bu zinciri yayın makinesindeki ANAHTARA bağlar.
+
+**Biçim:** `latest.yml`in sonunda Dağıtım v2 işaretçisi biçiminde bir blok — electron-updater onu olduğu gibi
+taşır, künyeyi bilmeyen eski panel yok sayar:
+
+```yaml
+tekserp:
+  v: 1
+  bildirim: <JWS — alg EdDSA, typ tekserp-panel, kid çapadan>
+```
+
+Yük (v:1): `urun: panel` · `platform: win32-x64` · `kanal` · `surum` · `commit` · `yayinZamani` ·
+`paket {ad, boyut, sha512 (hex)}` · `capa` (bu pakete gömülü çapanın kid'leri). Tek kaynak kod:
+`Electron/electron/guncelleme/` (`kunye-jws.mjs` · `panel-kunye.mjs` · `latest-yml.mjs` — bağımlılıksız; panel,
+yayın kapısı ve imza aracı aynı dosyaları kullanır). JWS kuralları lisans protokolünün aynasıdır (kâhin
+`Teks-Erp/scripts/test_panel_imza.ts`); `typ` protokolün `TYP.PANEL` kaydıdır.
+
+**Panel ne yapar (fail-closed, görünen akış değişmedi):** `autoDownload=false` iç ayrıntıdır —
+① `update-available`: künye çapayla doğrulanır (imza · typ · kid · kanal = panelin kanalı · sürüm = latest.yml ·
+tek dosya, aynı ad/boy/sha512 · kurulu sürümden YENİ); geçerse indirme KENDİLİĞİNDEN başlar ("Yeni sürüm
+indiriliyor…" → geri sayım → kur), geçmezse indirme hiç başlamaz. ② `update-downloaded`: inen dosyanın boyu +
+sha512'si künyeyle aynı değilse dosya silinir, `ready` olmaz. ③ kurulumdan hemen önce aynı dosya yeniden
+ölçülür ve electron-updater'ın çalıştıracağı yol doğrulanan yol olmalı. Red: Türkçe uyarı (kabukta kırmızı
+şerit `UpdateSecurityStrip` + Sistem → Güncelleme), `main.log`a `[updater] güncelleme REDDEDİLDİ kod=… surum=…`;
+panel eski sürümle çalışmaya devam eder.
+
+**Çapa:** `Electron/electron/guncelleme/imza-capasi.json` — derlemede ana sürece GÖMÜLÜR. Satır yalnız
+`cd Teks-Erp && npx tsx scripts/guven-capasi-ekle.ts panel …` ile girer (KURU; sonra `--yaz`). Boş ya da bozuk
+çapalı panel PAKETLENMEZ (`kanal-kapisi.mjs panel-capa`, derlemeden önce ve sonra) — hiçbir güncellemeyi
+doğrulayamayan panel çıkışsız kapıdır.
+
+**Anahtar kararı (kullanıcıda):**
+- (a) mevcut PAKET anahtarı `paket-2026` künyeyi de imzalar (farklı `typ`): `guven-capasi-ekle.ts panel
+  --paket-kid=paket-2026 --yaz`. Tören yok, ama tek anahtar ele geçerse hem backend paketleri hem panel düşer.
+- (b) ayrı panel yayın anahtarı: `npx tsx scripts/panel-imza.ts anahtar-uret --kid=panel-2026` (parolalı, depo
+  DIŞINA, kopyası Mac dışında) → `guven-capasi-ekle.ts panel --dosya=<kid>.panel.json --yaz`. Tören var, etki alanı ayrık.
+
+**Yayın:** `electron-paketle.sh` künyeyi İMZALAMAZ (anahtar istemez). `electron-yayinla.sh`: ① `panel-imza` kapısı
+(çapa · pakete gömülü mü · imza · kanal · latest.yml bağı · exe boy + sha512 · `capa` = çapa); imzasızsa imza
+aracı çağrılır, imza sonrası kapı yeniden koşar ② ROTASYON KİLİDİ (ssh okuması): yayındaki latest.yml künyeliyse
+yeni imzalayan onun `capa`sında olmalı — sahadaki panel bir sonraki sürümü KENDİ gömülü çapasıyla doğrular
+③ yükleme sırası aynı (latest.yml EN SON) ④ kenardaki latest.yml yerelde imzalanan dosyayla BAYT-EŞİT.
+`--kuru` imzalamaz (imzasızı not eder, geçersizi durdurur); `--dogrula` kenardaki künyeyi denetler (künyesiz
+yayın uyarı — imza öncesi sürüm). Bekçi: `scripts/test_kanal_yayin_kapisi.mjs` §8.
+
+**Rotasyon:** yeni kid ÖNCE çapaya eklenir ve ESKİ anahtarla imzalanmış bir sürümle sahaya çıkar; ancak o sürüm
+yayındayken yeni anahtarla imzalanır (kapı aksi hâlde durur). Eski kid, onu tanıyan son panel güncellenene dek
+çapada kalır. Geride kalmış (yayındakinden eski) makineler için örtüşme penceresi geniş tutulur.
+
+**Geçiş sırası — "eski istemci ne yapar":**
+1. Anahtar kararı + çapa satırı (yukarıda) — karar verilmeden yeni panel paketlenemez.
+2. İlk imzalı sürüm (doğrulayıcıyı taşıyan panel) önce testfabrika'ya: yayın betiği künyeyi imzalar.
+   **Eski paneller (≤ 1.4.2) künyeyi bilmez → `tekserp:` bloğunu yok sayar ve bu sürüme BUGÜNKÜ GİBİ güncellenir.**
+3. Bu sürümden sonra her panel künyesiz/geçersiz `latest.yml`i REDDEDER — bu yüzden yayın betiği imzasız künye
+   yükleyemez (kapı); elle `scp` zaten yasak.
+4. Terfi: aynı akış üretim kanalına (terfi etiketi). Backend sözleşmesi değişmedi (`minVersion` yükselmez).
+
+**Sorun giderme (kodlar `panel-kunye.mjs` `RELEASE_ERROR_CODES`):** `KUNYE_YOK` imzasız yayın · `JWS_KID` çapada
+olmayan anahtar (rotasyon hatası ya da sahte) · `JWS_IMZA`/`JWS_*` bozuk/sahte imza · `KUNYE_KANAL` başka kanalın
+künyesi · `KUNYE_SURUM`/`KUNYE_DOSYA` latest.yml künyeyle uyuşmuyor · `KUNYE_ESKI` eski imzalı sürüm yeniden
+sunulmuş · `DOSYA_OZETI` inen dosya künyede yazan değil · `CAPA_BOS` çapasız derleme (paketleme kapısı bunu
+önler). Hepsinde panel kurmaz ve eski sürümde çalışır; yayını `--dogrula` ile denetle, sunucu tarafını incele.
+
+---
+
 ## Sorun giderme
 
 | Belirti | Sebep | Çözüm |
 |---|---|---|
 | "Güncelleme sunucusuna ulaşılamadı" | O makinenin interneti yok / güvenlik duvarı | Makineden `curl` ile adresi dene |
 | "Sunucuda sürüm dosyası bulunamadı" | `latest.yml` yüklenmemiş ya da nginx yolu yanlış | §1 doğrulama komutu |
-| "Sertifika kabul edilmedi" | HTTPS sertifikası süresi dolmuş/geçersiz | Sertifikayı yenile ya da adresi `http://` yap |
+| "Sertifika kabul edilmedi" | HTTPS sertifikası süresi dolmuş/geçersiz | Sertifikayı yenile (adres `http://`ye ÇEVRİLMEZ — panel düz http güncelleme adresini kabul etmez) |
+| "…güvenlik nedeniyle kurulmadı" + kırmızı şerit (`KUNYE_*` / `JWS_*` / `DOSYA_OZETI`) | Yayındaki latest.yml'in künyesi çapayla doğrulanmadı | §İmzalı künye → sorun giderme; yayını `--dogrula` ile denetle. Panel bozulmaz, eski sürümde kalır |
 | Şerit hiç çıkmıyor, hata da yok | Sürüm numarası artırılmamış | `package.json > version` |
 | Bir makine güncellenmiyor, ötekiler oluyor | O makinede izin penceresine "Hayır" denmiş | Yönetici hesabıyla tekrar dene (bkz. sınır ①) |
 | Ayrıntı gerekiyor | — | `%APPDATA%\Adnan Şahin ERP\logs\main.log` — `[updater]` satırları |
@@ -628,7 +711,11 @@ Farklıysa önbellek, ikisi de 404 ise dosya gerçekten yok.
 | Dosya | Ne yapar |
 |---|---|
 | `Electron/shared/update-feed.ts` | Yayın adresi — TEK KAYNAK |
-| `Electron/electron/ipc/updater.ipc.ts` | Kontrol/indirme/kurulum + Türkçe hata çevirisi |
+| `Electron/electron/ipc/updater.ipc.ts` | Kontrol/indirme/kurulum + Türkçe hata çevirisi; künye doğrulanmadan indirme/kurulum yok |
+| `Electron/electron/guncelleme/` | İmzalı künye: `kunye-jws.mjs` · `panel-kunye.mjs` · `latest-yml.mjs` (bağımlılıksız tek kaynak) · `guncelleme-dogrulama.ts` (üç an) · `imza-capasi.json` (gömülü çapa) |
+| `Electron/src/components/layout/UpdateSecurityStrip.tsx` | İmza reddi şeridi (kabuk) |
+| `Teks-Erp/scripts/panel-imza.ts` | Künye imza aracı (imzala · dogrula · anahtar-uret) — yayın betiği çağırır |
+| `scripts/lib/panel-imza-kapisi.mjs` + `scripts/kanal-kapisi.mjs panel-capa/panel-imza/panel-rotasyon/panel-imza-uzak` | Paketleme/yayın kapıları |
 | `Electron/src/hooks/useUpdater.ts` | Arayüzün durum aboneliği |
 | `Electron/shared/update-schedule.ts` | Kontrol ritmi (15 dk) — TEK KAYNAK |
 | `Electron/src/lib/updater-durum.ts` | Durum → kısa metin/renk eşlemesi — TEK KAYNAK |
