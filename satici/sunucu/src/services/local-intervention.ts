@@ -1,7 +1,8 @@
 // YEREL MÜDAHALE ŞÜPHESİ + YABANCI HAK (lisans v2 §3.1-5, §2.2-3) — yalnız UYARI: kira yine verilir, hiçbir neden
 // tek başına süre kısaltmaz (fabrika aniden durmaz). Nedenler yoklamanın imzalı gövdesinden türer:
-//   SIRA_GERILEDI / SIRA_SIFIRLANDI — imzalı durum kaydının sırası satıcının son gördüğünden küçük / kayıt yok (K7: üç
-//   iz silinince fabrika hemen ek süreye geçer, satıcıda görünen yüzü budur) · LISANS_IZI_KAYIP — fabrika bulgusu (tek
+//   SIRA_GERILEDI / SIRA_SIFIRLANDI — imzalı durum kaydının sırası satıcının son gördüğünden küçük / kayıt yok ya da
+//   sıra 0'dan yeniden başlamış (K7: üç iz silinince fabrika kirasız kaydı sıra 0'la doğurur ve hemen ek süreye geçer,
+//   satıcıda görünen yüzü budur) · LISANS_IZI_KAYIP — fabrika bulgusu (tek
 //   iz kaybı da: kira, durum kaydı ya da DB izinden biri) ·
 //   BELIRSIZLIK — süren ölçülemedi birikimi 7 günü aştı · SAAT_SAPMASI — fabrikanın ölçtüğü satıcı sapması büyük ·
 //   YETENEK_DUSUSU — `hak-ara` bildirmeyen yoklamaya genişlik kapısı tuttu (eski kök sürüm güncelden geniş; meşru olabilir:
@@ -67,7 +68,8 @@ export function localInterventionCauses(g: {
   const out: LocalInterventionCause[] = [];
   const sequence = storableSequence(g.report.stateRecord);
   if (sequence !== undefined && g.lastSeenSequence !== null) {
-    if (sequence === null) out.push("SIRA_SIFIRLANDI");
+    // K7'de fabrika KİRASIZ kaydı sıra 0'dan başlatır: satıcı sıra görmüşken gelen 0 eski kopya değil, sıfırlanmadır.
+    if (sequence === null || (sequence === 0 && g.lastSeenSequence > 0)) out.push("SIRA_SIFIRLANDI");
     else if (sequence < g.lastSeenSequence) out.push("SIRA_GERILEDI");
   }
   if (g.findings.includes(TRACE_LOST_FINDING)) out.push("LISANS_IZI_KAYIP");

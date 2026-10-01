@@ -251,6 +251,22 @@ async function main(): Promise<void> {
       klon.status === 200 && once === 20 && (await durum()).sonDurumSirasi === 20 && (await bildirimler()).length === 10,
       `${String(once)} → ${String((await durum()).sonDurumSirasi)}`,
     );
+    // K7'de fabrika KİRASIZ kayıt bildirir (geçerli, sıra 0; fabrika kuralı) — "kayıt yok" (null) ile aynı neden: sıfırlandı.
+    const an2 = kurulumAnahtariUret();
+    const { k: k7, t0: k70 } = await etkinlestir(an2);
+    const k7Uyari = async () => ((await prisma.kopyaUyarisi.findFirst({ where: { kurulumId: k7.kurulumDbId, tur: "YEREL_MUDAHALE", durum: "ACIK" } }))?.ayrinti as { nedenler?: string[] } | null)?.nedenler ?? [];
+    const k71 = await yoklaV2(k7.kurulumId, an2, k70, fpA, { ...P_YETENEK, durumKaydi: { gecerli: true, sira: 4 } });
+    const yetim = await yoklaV2(k7.kurulumId, an2, kiraOf(k71)!.kiraId, fpA, { ...P_YETENEK, durumKaydi: { gecerli: true, sira: 0 }, nedenler: ["LISANS_IZI_KAYIP"] });
+    kontrol(
+      "§12j ⭐ K7 kirasız kayıt (sıra 4 → 0, kayıt geçerli) → SIRA_SIFIRLANDI (GERİLEDİ değil: eski kopya değil, izler silinmiş)",
+      yetim.status === 200 && (await k7Uyari()).join() === "SIRA_SIFIRLANDI,LISANS_IZI_KAYIP",
+      (await k7Uyari()).join(),
+    );
+    const an3 = kurulumAnahtariUret();
+    const { k: kIlk, t0: kIlk0 } = await etkinlestir(an3);
+    const ilkY = await yoklaV2(kIlk.kurulumId, an3, kIlk0, fpA, { ...P_YETENEK, durumKaydi: { gecerli: true, sira: 0 } });
+    const ilkUyari = await prisma.kopyaUyarisi.findFirst({ where: { kurulumId: kIlk.kurulumDbId, tur: "YEREL_MUDAHALE" } });
+    kontrol("§12j2 ✓K ilk kayıt (sıra 0, satıcı henüz sıra görmedi) → neden YOK", ilkY.status === 200 && ilkUyari === null, String(ilkUyari?.ayrinti ?? "yok"));
   }
 
   async function uzatmaDosyasiUcu(): Promise<void> {
