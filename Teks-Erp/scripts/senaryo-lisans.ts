@@ -39,6 +39,9 @@ import { FabrikaIstemcisi, PortalIstemcisi, type LisansDetayi, type Yanit } from
 import { l18KunyeOlc } from "./lib/senaryo-lisans-kunye";
 import { l30ModulOlc } from "./lib/senaryo-lisans-modul";
 import { l31Internetsiz400, l32UcIzSilme, l33TekIzSilme, l34UzatmaDosyasi } from "./lib/senaryo-lisans-v2-merdiven";
+import { l35IptalTuru, l36TorenAtlanmasi } from "./lib/senaryo-lisans-v2-g4";
+import { l37KapanisKirasi } from "./lib/senaryo-lisans-v2-kapanis";
+import { l38Donanim } from "./lib/senaryo-lisans-v2-donanim";
 import { etkinlestirZayifOnayli, kiraSatiri, nedenOzeti, rolDbHazirla } from "./lib/senaryo-lisans-v2-duzenek";
 import {
   Aktarici,
@@ -91,7 +94,9 @@ const SON_ADIM = process.argv.find((a) => a.startsWith("--son="))?.slice("--son=
 class DurNoktasi extends Error {}
 
 const KOK_ONEKI = "tekserp-senaryo-l-";
-const ADIM_SAYISI = 34;
+/** L35'in iptal belgesini içe aktaran tören aracının defter etiketi (satıcı temizliği bu etiketle siler). */
+const IPTAL_YUKLEYEN = "cli:donem-ice-aktar";
+const ADIM_SAYISI = 38;
 
 /** Lisans kimliği (D14) fabrikanın LICENSE_DIR'inde doğar; satıcı kurulumu bu kimlikle bulunur. */
 function lisansKimligiOku(dizin: string): string | null {
@@ -320,7 +325,7 @@ async function main(): Promise<number> {
   ];
   const eskiRenk = await db(anaUrl).query(`DELETE FROM colors WHERE name ~* $1`, [RENK_DESENI_SQL]);
   if (eskiRenk.rowCount) console.log(`🧹 önceki koşumdan ${eskiRenk.rowCount} senaryo rengi silindi`);
-  saticiYardimcisi(saticiEnv, ["temizle", `--kurulum-idleri=${eskiKimlikler.join(",")}`, "--bayi-adi-oneki=Senaryo L Bayi", `--kanallar=${KANAL}`]);
+  saticiYardimcisi(saticiEnv, ["temizle", `--kurulum-idleri=${eskiKimlikler.join(",")}`, "--bayi-adi-oneki=Senaryo L Bayi", `--kanallar=${KANAL}`, `--iptal-yukleyen=${IPTAL_YUKLEYEN}`]);
   const hz = saticiYardimcisi<Hazirlik>(saticiEnv, ["hazirla"]);
 
   const dunya = { kaymaMs: 0 };
@@ -410,6 +415,7 @@ async function main(): Promise<number> {
   };
 
   let portal = null as unknown as PortalIstemcisi;
+  const ekKurulumKimlikleri: string[] = [];
   const olusturulanlar = { kullanicilar: [hz.yonetici.id] as string[], bayiler: [] as string[], kidler: [...hz.kidler] as string[] };
   // Senaryonun satıcı tarafındaki kimlikleri
   // anaLisansId: ana kurulumun LİSANS kimliği (portalda doğar, D14) — fabrika DB'sinin installationId'si DEĞİL.
@@ -1337,6 +1343,23 @@ async function main(): Promise<number> {
     await adim("L32", "üç iz birden silinir (kira + durum kaydı + DB izi) → hemen EK_SURE; portalda sıra sıfırlanması + LISANS_IZI_KAYIP", (a) => l32UcIzSilme(merdiven, a));
     await adim("L33", "tek iz silinir → UYARI → 14 g → EK_SURE → KISITLI; başarılı yoklama izi onarır", (a) => l33TekIzSilme(merdiven, a));
     await adim("L34", "uzatma dosyası (internet kesik): portal üretir → panel yükler → P ileri, NORMAL; kurcalı/yabancı/eski dosya RED", (a) => l34UzatmaDosyasi(merdiven, a));
+
+    // ============================================================ L35…L38 (lisans v2: G4 · kapanış kirası · donanım)
+    // L36 dünyayı (satıcı + çalışan fabrikalar) ara imzacının bitişine dek ~60 g ileri alır ve geri alınamaz: SONA konur.
+    const g4 = {
+      ...merdiven,
+      anahtarDizini: hz.dizin,
+      kokKid: hz.kokKid,
+      saticiEnv: { ...saticiEnv, ANAHTAR_DIZINI: hz.dizin, GUVEN_CAPASI_DOSYASI: hz.capaDosyasi },
+      saticiGenel: satici.genel,
+      dunyayiIlerlet,
+      kidEkle: (kid: string) => olusturulanlar.kidler.push(kid),
+      kurulumKimligiEkle: (id: string) => ekKurulumKimlikleri.push(id),
+    };
+    await adim("L35", "iptal turu: ara-1 imzalı HAK → iptal belgesi (kapıda bekler) → ara-2 ile yeniden basım + emekliye → kirayla yayılır; iptal edilmiş arayla imzalı HAK RED; iki kopya da yoksa IPTAL_BELGESI_KAYIP", (a) => l35IptalTuru(g4, a));
+    await adim("L37", "kapanış kirası uçtan uca: kopya (ikinci pencere) + taşınan eski anahtar → K3 + ek süre → kısıtlama tarihinde KISITLI; asıl kurulum etkilenmez", (a) => l37KapanisKirasi(g4, a));
+    await adim("L38", "donanım değişikliği: çevrimiçi bildir → portal onayı → yeni küme; internetsiz zarf → BEKLIYOR (409) → onay → ONAYLANDI kirası kabul", (a) => l38Donanim(g4, a));
+    await adim("L36", "tören atlanması: ara imzacı 30/15/7/1 g uyarı penceresinde — kök işi kuyrukta, kira sürer, NORMAL; süre dolunca HAK değişikliği kuyrukta, kira yine sürer", (a) => l36TorenAtlanmasi(g4, a));
   } catch (err) {
     if (err instanceof DurNoktasi) console.log(`\n⏹  --son=${err.message}: sonraki adımlar koşulmadı`);
     else {
@@ -1356,7 +1379,7 @@ async function main(): Promise<number> {
       ).catch(() => undefined);
     }
     await db(anaUrl).query(`DELETE FROM colors WHERE id = ANY($1::uuid[])`, [senaryoRenkleri]).catch((err: Error) => console.error(`⚠️ renk temizliği: ${err.message}`));
-    const lisansKimlikleri = [S.anaLisansId, ...[...fabrikalar.values()].map((f) => lisansKimligiOku(f.lisansDizini))];
+    const lisansKimlikleri = [S.anaLisansId, ...ekKurulumKimlikleri, ...[...fabrikalar.values()].map((f) => lisansKimligiOku(f.lisansDizini))];
     const dbKimlikleri = await Promise.all([anaUrl, drUrl, bayiUrl].map(kurulumKimligi).map((p) => p.catch(() => null)));
     const kimlikler = [...new Set([...lisansKimlikleri, ...dbKimlikleri].filter((x): x is string => Boolean(x)))];
     try {
@@ -1368,6 +1391,7 @@ async function main(): Promise<number> {
         `--kidler=${olusturulanlar.kidler.join(",")}`,
         "--bayi-adi-oneki=Senaryo L Bayi",
         `--kanallar=${KANAL}`,
+        `--iptal-yukleyen=${IPTAL_YUKLEYEN}`,
       ]);
     } catch (err) {
       console.error(`⚠️ satıcı temizliği: ${(err as Error).message}`);

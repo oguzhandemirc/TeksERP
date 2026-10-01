@@ -68,7 +68,7 @@ const durumOzeti = (d: LisansDetayi): string =>
   `${kademe(d)} ${d.durum.gecerlilik} kip=${d.durum.kip} ekSure=${d.durum.ekSureKalanGun} bant=${d.durum.uygulanan.bant?.ton ?? "yok"} [${nedenOzeti(d)}]`;
 
 /** Yalnız bu fabrikanın saati ilerler (duvar + monotonik: gerçek geçen süre). */
-async function ilerlet<F extends RolFabrika>(b: MerdivenBaglami<F>, f: F, ms: number): Promise<void> {
+export async function ilerlet<F extends RolFabrika>(b: MerdivenBaglami<F>, f: F, ms: number): Promise<void> {
   f.ekDuvarMs += ms;
   f.ekMonoMs += ms;
   await b.saatUygula(f);
@@ -102,12 +102,12 @@ async function yerelMudahale<F extends RolFabrika>(b: MerdivenBaglami<F>, dbId: 
 }
 
 /** Rolün kendi müşteri → tesis → kurulum → HAK → kodu + fabrikası; etkinleşir (Mac = zayıf tanıma onayı, K8). */
-async function kur<F extends RolFabrika>(
+export async function kur<F extends RolFabrika>(
   b: MerdivenBaglami<F>,
   a: AdimYuzu,
-  rol: Rol,
-  o: { bakimGun?: number; kipAltSiniriZorla?: boolean; zorla?: boolean } = {},
-): Promise<{ f: F; dbId: string } | null> {
+  rol: string,
+  o: { bakimGun?: number; kipAltSiniriZorla?: boolean; zorla?: boolean; parmakIzi?: { makine: string; seri: string } } = {},
+): Promise<{ f: F; dbId: string; hakId: string } | null> {
   const p = b.portal;
   const m = await p.istek("POST", "/musteriler", { ad: `Senaryo L Tekstil ${rol} ${randomBytes(3).toString("hex")}` });
   const t = await p.istek("POST", "/tesisler", { musteriId: String(m.veri.id), ad: `Tesis ${rol}` });
@@ -120,20 +120,22 @@ async function kur<F extends RolFabrika>(
   const portalOk = zincir.every((y) => y.status === 201);
   a.kontrol(`${rol}: portal müşteri → tesis → kurulum → hak sürüm 1${o.kipAltSiniriZorla ? " (kip alt sınırı zorla)" : ""} → kod`, portalOk, zincir.map(ozet).join(" "));
   if (!portalOk) return null;
-  const f = await b.yeniFabrika(rol, await b.rolDb(rol), PARMAK_IZLERI[rol]);
+  const parmakIzi = o.parmakIzi ?? (rol in PARMAK_IZLERI ? PARMAK_IZLERI[rol as Rol] : null);
+  if (!parmakIzi) throw new Error(`rol ${rol}: parmak izi verilmedi`);
+  const f = await b.yeniFabrika(rol, await b.rolDb(rol), parmakIzi);
   await b.baslat(f);
   await f.istemci.sozlesmeyiKabulEt();
   const e = await etkinlestirZayifOnayli({ fabrika: f.istemci, portal: p, kurulumDbId: dbId, kod: String(kod.veri.kod), kontrol: (x, ok, ay) => a.kontrol(x, ok, ay), etiket: rol });
   a.kontrol(`${rol}: etkinleşti → 200`, e.status === 200, ozet(e));
   if (e.status !== 200) return null;
-  kurulumlar.set(rol, dbId);
+  if (rol in PARMAK_IZLERI) kurulumlar.set(rol as Rol, dbId);
   if (o.zorla) {
     const z = await p.istek("POST", `/kurulumlar/${dbId}/zorlama`, { zorla: true, sebep: `Senaryo ${rol} zorlama` });
     await f.istemci.yokla();
     const w = await f.istemci.bekle((d) => d.durum.kip === "zorla", 20_000);
     a.kontrol(`${rol}: portal zorlama → kip zorla (uygulanan = hesaplanan)`, z.status === 200 && w.ms !== null, `${ozet(z)} ${w.detay.durum.kip}`);
   }
-  return { f, dbId };
+  return { f, dbId, hakId: String(h.veri.id) };
 }
 
 // ============================================================ L31
@@ -186,7 +188,7 @@ export async function l31Internetsiz400<F extends RolFabrika>(b: MerdivenBaglami
 }
 
 /** KISITLI'da okuma, dışa aktarma ve yedek açık (§1.3 satır 4 · lisans.md:10 · :56). */
-async function veriErisimiAcik(f: RolFabrika, a: AdimYuzu): Promise<void> {
+export async function veriErisimiAcik(f: RolFabrika, a: AdimYuzu): Promise<void> {
   const oku = await f.istemci.istek("GET", "/api/orders");
   const varliklar = await f.istemci.istek("GET", "/api/import/entities");
   const liste = Array.isArray(varliklar.json.data) ? (varliklar.json.data as Array<{ entity: string; canRead: boolean }>) : [];
