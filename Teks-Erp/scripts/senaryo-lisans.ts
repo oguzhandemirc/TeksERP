@@ -1,5 +1,5 @@
 // =============================================================================
-// SENARYO L — lisans uçtan uca (plan §8 "Senaryo L", adımlar L1…L34 SIRAYLA)
+// SENARYO L — lisans uçtan uca (plan §8 "Senaryo L", adımlar L1…L42 + L38b SIRAYLA; L36 en sonda)
 // =============================================================================
 // Koşum (Teks-Erp/ içinden; hedefler YALNIZ `_test` DB — fabrika DB'lerine ASLA):
 //   DATABASE_URL='postgresql://…/<ana>_test?schema=public' \
@@ -11,7 +11,8 @@
 // kimliğini enjekte eder). Aralarında HTTPS aktarıcı (fabrikanın "interneti": açık/kesik/yut),
 // saat her süreçte IPC ile kaydırılır (duvar = saat sıçraması, monotonik = gerçek geçen süre).
 // Rol dağılımı: A ana (L1–L12) → C taşınmış ana (L12–L29) · B/B2 kopya · D DR · E bayi kurulumu ·
-// F/G/H/J lisans v2 P + iz merdiveni (L31–L34, kendi kurulum + rol DB'si; `lib/senaryo-lisans-v2-merdiven.ts`).
+// F/G/H/J lisans v2 P + iz merdiveni (L31–L34, kendi kurulum + rol DB'si; `lib/senaryo-lisans-v2-merdiven.ts`) ·
+// K G4 · M/M2/N kapanış · R donanım (L35–L38) · S/T/U/V güçlü etken + genişlik kapısı (L38b–L40) · W ham v1 istemcisi (L41–L42).
 // Her adım: yeşil/kırmızı/kısmi + kanıt (HTTP durumu, details.code, detay/portal okuması).
 // Çıkış: 0 hepsi yeşil · 1 yeşil olmayan adım var · 2 hedef reddi / düzenek kurulamadı.
 // =============================================================================
@@ -42,6 +43,9 @@ import { l31Internetsiz400, l32UcIzSilme, l33TekIzSilme, l34UzatmaDosyasi } from
 import { l35IptalTuru, l36TorenAtlanmasi } from "./lib/senaryo-lisans-v2-g4";
 import { l37KapanisKirasi } from "./lib/senaryo-lisans-v2-kapanis";
 import { l38Donanim } from "./lib/senaryo-lisans-v2-donanim";
+import { l38bOgrenme, l39ZayifTanima } from "./lib/senaryo-lisans-v2-etken";
+import { l40GenislikKapisi } from "./lib/senaryo-lisans-v2-genislik";
+import { l41EskiFabrika, l42IstekYol } from "./lib/senaryo-lisans-v2-eski";
 import { etkinlestirZayifOnayli, kiraSatiri, nedenOzeti, rolDbHazirla } from "./lib/senaryo-lisans-v2-duzenek";
 import {
   Aktarici,
@@ -53,6 +57,7 @@ import {
   saticiYardimcisi,
   tlsSertifikasiUret,
   type FabrikaSureci,
+  type SahteMakine,
   type SaticiSureci,
 } from "./lib/senaryo-lisans-surec";
 
@@ -96,7 +101,7 @@ class DurNoktasi extends Error {}
 const KOK_ONEKI = "tekserp-senaryo-l-";
 /** L35'in iptal belgesini içe aktaran tören aracının defter etiketi (satıcı temizliği bu etiketle siler). */
 const IPTAL_YUKLEYEN = "cli:donem-ice-aktar";
-const ADIM_SAYISI = 38;
+const ADIM_SAYISI = 43;
 
 /** Lisans kimliği (D14) fabrikanın LICENSE_DIR'inde doğar; satıcı kurulumu bu kimlikle bulunur. */
 function lisansKimligiOku(dizin: string): string | null {
@@ -252,7 +257,7 @@ interface Fabrika {
   readonly databaseUrl: string;
   readonly lisansDizini: string;
   readonly yedekDizini: string;
-  readonly parmakIzi: { makine: string; seri: string };
+  readonly parmakIzi: SahteMakine;
   /** Dünya saatine ek: duvar (saat sıçraması) ve monotonik (yalnız bu makinede geçen süre). */
   ekDuvarMs: number;
   ekMonoMs: number;
@@ -335,7 +340,7 @@ async function main(): Promise<number> {
   let satici: SaticiSureci | null = null;
   const fabrikalar = new Map<string, Fabrika>();
   const jwt = randomBytes(48).toString("hex");
-  const yeniFabrika = async (ad: string, databaseUrl: string, parmakIzi: { makine: string; seri: string }, lisansDizini = path.join(kok, `lisans-${ad}`)): Promise<Fabrika> => {
+  const yeniFabrika = async (ad: string, databaseUrl: string, parmakIzi: SahteMakine, lisansDizini = path.join(kok, `lisans-${ad}`)): Promise<Fabrika> => {
     let f = fabrikalar.get(ad);
     if (!f) {
       const aktarici = new Aktarici(satici!.genel, tls);
@@ -1359,6 +1364,11 @@ async function main(): Promise<number> {
     await adim("L35", "iptal turu: ara-1 imzalı HAK → iptal belgesi (kapıda bekler) → ara-2 ile yeniden basım + emekliye → kirayla yayılır; iptal edilmiş arayla imzalı HAK RED; iki kopya da yoksa IPTAL_BELGESI_KAYIP", (a) => l35IptalTuru(g4, a));
     await adim("L37", "kapanış kirası uçtan uca: kopya (ikinci pencere) + taşınan eski anahtar → K3 + ek süre → kısıtlama tarihinde KISITLI; asıl kurulum etkilenmez", (a) => l37KapanisKirasi(g4, a));
     await adim("L38", "donanım değişikliği: çevrimiçi bildir → portal onayı → yeni küme; internetsiz zarf → BEKLIYOR (409) → onay → ONAYLANDI kirası kabul", (a) => l38Donanim(g4, a));
+    await adim("L38b", "güçlü etkenli makine: onaysız etkinleşir; bir güçlü etken değişir → satıcı kendiliğinden öğrenir (NORMAL); iki güçlü birden → öğrenme yok, PARMAK_IZI_UYUSMAZ UYARI + portal kaydı", (a) => l38bOgrenme(g4, a));
+    await adim("L39", "zayıf tanıma çıplak akış: güçlü < 2 → 409 ZAYIF_TANIMA_ONAY_BEKLIYOR (kod tüketilmez) → portal onayı → aynı kod 200, kira zayif; karşıt: güçlü ≥ 2 ilk denemede 200", (a) => l39ZayifTanima(g4, a));
+    await adim("L40", "genişlik kapısı: yetenekli alıcı ara imzalı dar sürümü alır; hak-ara bildirmeyen alıcıya güncelden geniş eski kök HAK verilmez (200 hak:null bağlı kira / 403 KIRA_VERILMEDI + acil kök talebi)", (a) => l40GenislikKapisi(g4, a));
+    await adim("L41", "eski fabrika (v1 protokol kodu) ↔ yeni satıcı: v1 gövdeli etkinleştirme + yoklama → v1 doğrulayıcısından geçen HAK (kök) + kira, sıfır fark", (a) => l41EskiFabrika(g4, a));
+    await adim("L42", "ISTEK_YOL gerçek satıcıya karşı: başka uç için imzalı istek 401 ISTEK_YOL, iş yapılmaz; kendi ucu 200; yol taşımayan eski istek 200", (a) => l42IstekYol(g4, a));
     await adim("L36", "tören atlanması: ara imzacı 30/15/7/1 g uyarı penceresinde — kök işi kuyrukta, kira sürer, NORMAL; süre dolunca HAK değişikliği kuyrukta, kira yine sürer", (a) => l36TorenAtlanmasi(g4, a));
   } catch (err) {
     if (err instanceof DurNoktasi) console.log(`\n⏹  --son=${err.message}: sonraki adımlar koşulmadı`);

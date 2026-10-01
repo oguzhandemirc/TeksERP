@@ -10,7 +10,7 @@ import type { Pool } from "pg";
 import { DAY_MS, b64uEncode, msToIso } from "../../src/lib/license/protocol";
 import { LICENSE_FILES } from "../../src/lib/license/store";
 import type { FabrikaIstemcisi, LisansDetayi, PortalIstemcisi, Yanit } from "./senaryo-lisans-istemci";
-import type { Aktarici } from "./senaryo-lisans-surec";
+import type { Aktarici, SahteMakine } from "./senaryo-lisans-surec";
 import { etkinlestirZayifOnayli, nedenOzeti } from "./senaryo-lisans-v2-duzenek";
 
 type Kontrol = (ad: string, ok: boolean, ayrinti?: string) => boolean;
@@ -37,7 +37,7 @@ export interface MerdivenBaglami<F extends RolFabrika> {
   readonly kanal: string;
   readonly hakModulleri: readonly string[];
   readonly saticiSimdi: () => number;
-  readonly yeniFabrika: (ad: string, databaseUrl: string, parmakIzi: { makine: string; seri: string }) => Promise<F>;
+  readonly yeniFabrika: (ad: string, databaseUrl: string, parmakIzi: SahteMakine) => Promise<F>;
   readonly rolDb: (rol: string) => Promise<string>;
   readonly baslat: (f: F) => Promise<void>;
   readonly durdur: (f: F) => Promise<void>;
@@ -114,13 +114,13 @@ async function yerelMudahale<F extends RolFabrika>(b: MerdivenBaglami<F>, dbId: 
   return { nedenler: u?.ayrinti?.nedenler ?? [], sira: `${String(u?.ayrinti?.oncekiSira)}→${String(u?.ayrinti?.sonSira)}` };
 }
 
-/** Rolün kendi müşteri → tesis → kurulum → HAK → kodu + fabrikası; etkinleşir (Mac = zayıf tanıma onayı, K8). */
-export async function kur<F extends RolFabrika>(
+/** Rolün portal zinciri: müşteri → tesis → kurulum → HAK sürüm 1 (kök) → etkinleştirme kodu. */
+export async function portalZinciri<F extends RolFabrika>(
   b: MerdivenBaglami<F>,
   a: AdimYuzu,
   rol: string,
-  o: { bakimGun?: number; kipAltSiniriZorla?: boolean; zorla?: boolean; parmakIzi?: { makine: string; seri: string } } = {},
-): Promise<{ f: F; dbId: string; hakId: string } | null> {
+  o: { bakimGun?: number; kipAltSiniriZorla?: boolean } = {},
+): Promise<{ dbId: string; hakId: string; kod: string } | null> {
   const p = b.portal;
   const m = await p.istek("POST", "/musteriler", { ad: `Senaryo L Tekstil ${rol} ${randomBytes(3).toString("hex")}` });
   const t = await p.istek("POST", "/tesisler", { musteriId: String(m.veri.id), ad: `Tesis ${rol}` });
@@ -132,23 +132,36 @@ export async function kur<F extends RolFabrika>(
   const zincir = [m, t, k, h, s, kod];
   const portalOk = zincir.every((y) => y.status === 201);
   a.kontrol(`${rol}: portal müşteri → tesis → kurulum → hak sürüm 1${o.kipAltSiniriZorla ? " (kip alt sınırı zorla)" : ""} → kod`, portalOk, zincir.map(ozet).join(" "));
-  if (!portalOk) return null;
+  return portalOk ? { dbId, hakId: String(h.veri.id), kod: String(kod.veri.kod) } : null;
+}
+
+/** Rolün kendi müşteri → tesis → kurulum → HAK → kodu + fabrikası; etkinleşir (Mac = zayıf tanıma onayı, K8). */
+export async function kur<F extends RolFabrika>(
+  b: MerdivenBaglami<F>,
+  a: AdimYuzu,
+  rol: string,
+  o: { bakimGun?: number; kipAltSiniriZorla?: boolean; zorla?: boolean; parmakIzi?: SahteMakine } = {},
+): Promise<{ f: F; dbId: string; hakId: string } | null> {
+  const p = b.portal;
+  const z = await portalZinciri(b, a, rol, o);
+  if (!z) return null;
+  const { dbId } = z;
   const parmakIzi = o.parmakIzi ?? (rol in PARMAK_IZLERI ? PARMAK_IZLERI[rol as Rol] : null);
   if (!parmakIzi) throw new Error(`rol ${rol}: parmak izi verilmedi`);
   const f = await b.yeniFabrika(rol, await b.rolDb(rol), parmakIzi);
   await b.baslat(f);
   await f.istemci.sozlesmeyiKabulEt();
-  const e = await etkinlestirZayifOnayli({ fabrika: f.istemci, portal: p, kurulumDbId: dbId, kod: String(kod.veri.kod), kontrol: (x, ok, ay) => a.kontrol(x, ok, ay), etiket: rol });
+  const e = await etkinlestirZayifOnayli({ fabrika: f.istemci, portal: p, kurulumDbId: dbId, kod: z.kod, kontrol: (x, ok, ay) => a.kontrol(x, ok, ay), etiket: rol });
   a.kontrol(`${rol}: etkinleşti → 200`, e.status === 200, ozet(e));
   if (e.status !== 200) return null;
   if (rol in PARMAK_IZLERI) kurulumlar.set(rol as Rol, dbId);
   if (o.zorla) {
-    const z = await p.istek("POST", `/kurulumlar/${dbId}/zorlama`, { zorla: true, sebep: `Senaryo ${rol} zorlama` });
+    const zr = await p.istek("POST", `/kurulumlar/${dbId}/zorlama`, { zorla: true, sebep: `Senaryo ${rol} zorlama` });
     await f.istemci.yokla();
     const w = await f.istemci.bekle((d) => d.durum.kip === "zorla", 20_000);
-    a.kontrol(`${rol}: portal zorlama → kip zorla (uygulanan = hesaplanan)`, z.status === 200 && w.ms !== null, `${ozet(z)} ${w.detay.durum.kip}`);
+    a.kontrol(`${rol}: portal zorlama → kip zorla (uygulanan = hesaplanan)`, zr.status === 200 && w.ms !== null, `${ozet(zr)} ${w.detay.durum.kip}`);
   }
-  return { f, dbId, hakId: String(h.veri.id) };
+  return { f, dbId, hakId: z.hakId };
 }
 
 // ============================================================ L31

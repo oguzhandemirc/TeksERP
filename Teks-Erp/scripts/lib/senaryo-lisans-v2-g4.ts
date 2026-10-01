@@ -27,7 +27,7 @@ export interface G4Baglami<F extends RolFabrika> extends MerdivenBaglami<F> {
   readonly kurulumKimligiEkle: (id: string) => void;
 }
 
-interface AraImzaci {
+export interface AraImzaci {
   readonly kid: string;
   readonly parola: string;
   readonly dosya: string;
@@ -40,6 +40,9 @@ interface Zincir {
 const K_PARMAK_IZI = { makine: "5E0A0001-0000-4000-8000-0000000000E1", seri: "SENARYOK01" };
 /** L35'in kurduğu K ve ikinci ara imzacı — L36 (koşumun sonunda) aynı kurulumla devam eder. */
 const durum: { k: { f: RolFabrika; dbId: string; hakId: string } | null; ara: AraImzaci | null } = { k: null, ara: null };
+
+/** L35'in yüklediği güncel ara imzacı (L36'dan önceki adımlar ara imzalı sürüm basmak için okur); L35 koşmadıysa null. */
+export const guncelAraImzaci = (): AraImzaci | null => durum.ara;
 
 const ozet = (y: Yanit): string => `${y.status}${y.kod ? ` ${y.kod}` : ""}`;
 const kademe = (d: LisansDetayi): string => `${d.durum.hesaplananKademe}/${d.durum.uygulananKademe}`;
