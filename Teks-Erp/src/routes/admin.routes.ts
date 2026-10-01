@@ -22,6 +22,7 @@ import {
   MODULE_PROFILE_IDS,
 } from "../constants/module-profiles";
 import { FACTORY_TIMEZONE_SETTING_KEY, isReservedSettingKey, PROFILE_STAMP_SETTING_KEY } from "../constants/reserved-settings";
+import { passwordPolicyViolation } from "../constants/password-policy";
 import { requireSettingsPassword } from "../middlewares/settings-password.middleware";
 import {
   protectSystemAccountTarget,
@@ -284,6 +285,12 @@ router.get(
   }
 );
 
+// Yeni/değişen parola politikası — tek kaynak `constants/password-policy.ts` (girişte uygulanmaz).
+const newPasswordField = z.string().superRefine((value, ctx) => {
+  const violation = passwordPolicyViolation(value);
+  if (violation) ctx.addIssue({ code: "custom", message: violation });
+});
+
 const createUserSchema = z.object({
   // Kullanıcı adı: YALNIZ İngilizce harf ve rakam — özel karakter/boşluk/Türkçe
   // karakter yok (mobil login + benzersizlik + URL güvenliği).
@@ -294,7 +301,7 @@ const createUserSchema = z.object({
     .max(40)
     .regex(/^[a-zA-Z0-9]+$/, "Yalnız İngilizce harf ve rakam kullanılabilir (özel karakter, boşluk ve Türkçe karakter yok)"),
   fullName: z.string().trim().min(1, "Ad-soyad gerekli").max(120),
-  password: z.string().min(6, "Şifre en az 6 karakter"),
+  password: newPasswordField,
   isActive: z.boolean().optional(),
   // Varsayılan üretim istasyon izinlerini (KK1/KK2/Tambur) ver — default true (saha
   // operatörü). Web/admin kullanıcısı açarken false gönderilir (temiz başlar).
@@ -698,7 +705,7 @@ router.delete(
 );
 
 const resetPasswordSchema = z.object({
-  password: z.string().min(6, "Şifre en az 6 karakter olmalı"),
+  password: newPasswordField,
 });
 
 /**

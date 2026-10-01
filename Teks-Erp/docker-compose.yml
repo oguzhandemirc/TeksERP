@@ -45,6 +45,9 @@ services:
       # Seed yalnız boş şemada VE bu değer 1 iken koşar (docker/entrypoint.sh §2);
       # kurulum betikleri onu yalnız ilk `up`ta verir, .env.docker'a yazılmaz.
       SEED_ON_EMPTY: ${SEED_ON_EMPTY:-0}
+      # İlk yöneticinin parolası (yalnız ilk `up`ta, .env.docker'a YAZILMAZ). Boşsa seed rastgele
+      # üretip loga bir kez basar; iki durumda da ilk girişte parola değişimi zorunlu.
+      ILK_YONETICI_PAROLASI: ${ILK_YONETICI_PAROLASI:-}
     ports:
       # Fabrika ağındaki tüm makineler 4000 portundan erişebilir.
       - "4000:4000"

@@ -324,7 +324,7 @@ New-NetFirewallRule -DisplayName "TeksERP mDNS 5353" -Direction Inbound `
 > İlan kurulamasa bile panel sunucuyu ağ taramasıyla bulur; kapatmak için
 > `ecosystem.config.js` → `DISCOVERY_MDNS_ENABLED: "false"`.
 
-Erişim: `http://localhost:4000` / `http://<ip>:4000`, giriş `admin / 123123`.
+Erişim: `http://localhost:4000` / `http://<ip>:4000`. Giriş: yedekten kurulduysa fabrikanın mevcut kullanıcıları; boş kurulumda paket seed koşmaz, ilk hesap satıcı hesabıdır (`node dist\tools\superadmin-olustur.cjs`, gerçek terminal). Sabit `admin / 123123` yalnız kaynak koddan geliştirme seed'inde (`npm run seed`) vardır.
 
 > **`npm run build` çıktısı `dist\server.js`'tir** (`tsconfig.json`: `rootDir=./src`,
 > `outDir=./dist`) — `dist\src\server.js` **değil**. `ecosystem.config.js` bu yolu

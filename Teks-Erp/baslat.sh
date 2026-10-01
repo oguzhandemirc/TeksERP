@@ -48,6 +48,7 @@ echo "✓ Docker hazır."
 # --- 2) .env.docker yoksa otomatik üret ---
 # İlk kurulum onayı yalnız bu koşumun `up`ına gider (seed boş şemada koşar).
 SEED_ON_EMPTY=${SEED_ON_EMPTY:-0}
+ILK_YONETICI_PAROLASI=${ILK_YONETICI_PAROLASI:-}
 if [ ! -f .env.docker ]; then
   SEED_ON_EMPTY=1
   echo ""
@@ -56,9 +57,11 @@ if [ ! -f .env.docker ]; then
   if command -v openssl >/dev/null 2>&1; then
     JWT=$(openssl rand -hex 32)
     PGPASS=$(openssl rand -hex 20)
+    [ -n "$ILK_YONETICI_PAROLASI" ] || ILK_YONETICI_PAROLASI=$(openssl rand -hex 8)
   else
     JWT=$(head -c 32 /dev/urandom | base64 | tr -d '/+=' | head -c 64)
     PGPASS=$(head -c 20 /dev/urandom | base64 | tr -d '/+=' | head -c 32)
+    [ -n "$ILK_YONETICI_PAROLASI" ] || ILK_YONETICI_PAROLASI=$(head -c 12 /dev/urandom | base64 | tr -d '/+=' | head -c 16)
   fi
 
   cat > .env.docker <<EOF
@@ -81,7 +84,9 @@ echo "Container'lar build edilip başlatılıyor..."
 echo "(İlk seferinde 2-4 dakika sürer, sonraki çalıştırmalarda saniyeler.)"
 echo ""
 
-SEED_ON_EMPTY=$SEED_ON_EMPTY docker compose --env-file .env.docker up -d --build
+# İlk yönetici parolası yalnız bu `up`a gider, .env.docker'a yazılmaz (ilk girişte değişimi zorunlu).
+SEED_ON_EMPTY=$SEED_ON_EMPTY ILK_YONETICI_PAROLASI=$ILK_YONETICI_PAROLASI \
+  docker compose --env-file .env.docker up -d --build
 
 # --- 5) Sağlık bekle ---
 echo ""
@@ -115,7 +120,12 @@ echo "  Bu makinede:       http://localhost:4000"
 echo "  Fabrika ağında:    http://${LAN_IP}:4000"
 echo "  Swagger dokümanı:  http://${LAN_IP}:4000/api-docs"
 echo ""
-echo "  Test girişi:       admin / 123123"
+if [ "$SEED_ON_EMPTY" = "1" ] && [ -n "$ILK_YONETICI_PAROLASI" ]; then
+  echo "  İlk giriş:         admin / ${ILK_YONETICI_PAROLASI}"
+  echo "                     (bir kez gösterilir — ilk girişte yeni parola istenir)"
+else
+  echo "  Giriş:             panelde tanımlı kullanıcılarla"
+fi
 echo ""
 echo "  Komutlar:"
 echo "    Log izle:        docker compose logs -f backend"

@@ -17,16 +17,19 @@ import {
 } from "@/lib/totp-auth";
 import { useAuthStore } from "@/store/auth";
 import { canEnterApp, type ExistingSessionInfo } from "@/types/auth";
+import { usePasswordChangeStep } from "./usePasswordChangeStep";
 
 /**
  * GİRİŞ AKIŞI — `LoginPage`ten AYRILDI (sayfa 200 satır kuralını aşıyordu).
  *
  * Sayfa yalnız SUNUM yapar; hangi ekranın çizileceğine dair tüm karar burada.
- * Dört çıkış yolu var ve üçü hata değil AKIŞ ADIMI:
+ * Beş çıkış yolu var ve dördü hata değil AKIŞ ADIMI:
  *   ① başarı           → token + yönlendirme
  *   ② 409 SESSION_EXISTS → "hesap başka yerde açık" onayı
  *   ③ 409/401 TOTP     → ikinci faktör adımı (hesabında 2FA açık kullanıcıda)
  *   ④ 403 TOTP_ENROLLMENT → "yöneticinden kurulum iste" ekranı
+ *   ⑤ 200 + mustChangePassword → zorunlu parola değişimi adımı (`usePasswordChangeStep`);
+ *      token kalıcı depoya YAZILMAZ, değişimden sonra yeni parolayla ① yeniden denenir
  */
 const schema = z.object({
   username: z.string().min(1, "Kullanıcı adı gerekli"),
@@ -34,6 +37,18 @@ const schema = z.object({
 });
 
 export type LoginFormValues = z.infer<typeof schema>;
+const EMPTY_LOGIN: LoginFormValues = { username: "", password: "" };
+
+/** 401 ve login-403 interceptor'da toast'landı (TOTP'ninkiler akış adımı); kalanları göster. */
+function toastUnhandledLoginError(err: unknown): void {
+  const status = axios.isAxiosError(err) ? err.response?.status : undefined;
+  if (status === 401 || status === 403) return;
+  const message = axios.isAxiosError(err)
+    ? ((err.response?.data as { message?: string } | undefined)?.message ??
+      (err.response ? "Giriş yapılamadı." : "Sunucuya ulaşılamıyor."))
+    : "Giriş yapılamadı.";
+  toast.error(message);
+}
 
 export function useLoginFlow() {
   const navigate = useNavigate();
@@ -48,9 +63,11 @@ export function useLoginFlow() {
   const [totp, setTotp] = useState<{ values: LoginFormValues; invalid: boolean } | null>(null);
   const [enrollmentNeeded, setEnrollmentNeeded] = useState(false);
 
-  const form = useForm<LoginFormValues>({
-    resolver: zodResolver(schema),
-    defaultValues: { username: "", password: "" },
+  const form = useForm<LoginFormValues>({ resolver: zodResolver(schema), defaultValues: EMPTY_LOGIN });
+  // `performLogin` aşağıda tanımlı; kapanış yalnız gönderimde çağrılır (render anında değil).
+  const passwordChange = usePasswordChangeStep({
+    relogin: (v) => performLogin(v, false),
+    onClose: () => form.resetField("password"),
   });
 
   /**
@@ -66,6 +83,13 @@ export function useLoginFlow() {
         { ...values, confirmKick: confirmKick || undefined, totpCode },
         { suppressErrorToast: true },
       );
+      if (res.data.mustChangePassword === true) {
+        // ⑤ Token yalnız bellekte: yeni parola belirlenmeden uygulamaya girilmez.
+        setConflict(null);
+        setTotp(null);
+        passwordChange.open(res.data.token, values);
+        return;
+      }
       await tokenStore.set(res.data.token);
       const decoded = decodeJwt(res.data.token) ?? res.data.user;
       if (!canEnterApp(decoded.permissions)) {
@@ -115,16 +139,7 @@ export function useLoginFlow() {
         setConflict({ values, existing });
         return;
       }
-      const status = axios.isAxiosError(err) ? err.response?.status : undefined;
-      // 401 ve login-403 interceptor'da toast'landı; kalanları burada göster.
-      // (TOTP'nin 401/403'leri yukarıda yakalandı — buraya düşmez.)
-      if (status !== 401 && status !== 403) {
-        const message = axios.isAxiosError(err)
-          ? ((err.response?.data as { message?: string } | undefined)?.message ??
-            (err.response ? "Giriş yapılamadı." : "Sunucuya ulaşılamıyor."))
-          : "Giriş yapılamadı.";
-        toast.error(message);
-      }
+      toastUnhandledLoginError(err);
     } finally {
       setSubmitting(false);
     }
@@ -139,6 +154,7 @@ export function useLoginFlow() {
     setTotp,
     enrollmentNeeded,
     setEnrollmentNeeded,
+    passwordChange,
     performLogin,
   };
 }

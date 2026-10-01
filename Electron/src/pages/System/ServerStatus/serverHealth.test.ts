@@ -67,6 +67,17 @@ describe("evaluateAlerts — fabrika saat dilimi", () => {
     expect(msgs(base()).some((m) => m.includes("saat dilimi"))).toBe(false);
   });
 });
+describe("evaluateAlerts — JWT sırrı (G20)", () => {
+  const JWT_MSG =
+    "JWT sırrı döndürülmeli — sunucu bilinen/zayıf bir sırla açıldı. Vardiya dışında rotasyon: " +
+    "docs/ops/JWT-SIR-ROTASYONU.md (bütün oturumlar düşer).";
+  it("⭐ rotationRequired → KRİTİK satır; OK ya da eski backend (alan yok) → sessiz", () => {
+    const alerts = evaluateAlerts(base({ jwtSecret: { status: "BILINEN", rotationRequired: true } }));
+    expect(alerts).toContainEqual({ level: "crit", message: JWT_MSG });
+    expect(msgs(base({ jwtSecret: { status: "OK", rotationRequired: false } }))).not.toContain(JWT_MSG);
+    expect(msgs(base())).not.toContain(JWT_MSG);
+  });
+});
 const poolAlerts = (d: HealthResponse) => evaluateAlerts(d).filter((a) => a.message.includes("havuz"));
 
 describe("evaluateAlerts — bağlantı havuzu", () => {

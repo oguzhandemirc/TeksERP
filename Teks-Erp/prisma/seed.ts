@@ -34,6 +34,8 @@ import { PrismaClient, Prisma } from "@prisma/client";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { Pool } from "pg";
 import * as bcrypt from "bcryptjs";
+import { ilkYoneticiParolasi, type IlkYoneticiParolasi } from "../src/lib/ilk-yonetici-parolasi";
+import { checkJwtSecret } from "../src/lib/jwt-secret";
 import "dotenv/config";
 // Oturumu UTC-ye sabitler — adapter-pg timestamptz-i UTC varsayar (bkz. src/lib/pg-session.ts).
 import { PG_SESSION_OPTIONS } from "../src/lib/pg-session";
@@ -131,16 +133,49 @@ async function main() {
   // her reseed'de tek tek silmek zorunda kalıyordu). Yeni kullanıcılar admin
   // panelinden açılır; HTTP testleri (test_http_api / test_direct_ship_api) kendi
   // geçici 0-izinli kullanıcılarını üretip temizler.
-  const adminUser = await prisma.user.upsert({
-    where: { username: "admin" },
-    update: {},
-    create: {
-      username: "admin",
-      passwordHash: await hashPassword("123123"),
-      fullName: "Sistem Yöneticisi",
-    },
+  //
+  // Parola: `--gelistirme` (yalnız `npm run seed` → prisma.config.ts) bilinen geliştirme
+  // parolasını yazar; başka her koşum (Docker entrypoint'in seed.cjs'i) sabit parola
+  // YAZMAZ — ILK_YONETICI_PAROLASI ya da rastgele + zorunlu ilk değişim.
+  const gelistirme = process.argv.includes("--gelistirme");
+  // YENİ kurulum yolu bilinen/zayıf JWT sırrıyla doğmaz (mevcut kurulumda yalnız uyarı).
+  if (!gelistirme) {
+    const sir = checkJwtSecret(process.env.JWT_SECRET);
+    if (!sir.ok) throw new Error(`İlk kurulum durduruldu — ${sir.mesaj}`);
+  }
+  const ilk: IlkYoneticiParolasi = gelistirme
+    ? { parola: "123123", mustChangePassword: false, uretildi: false }
+    : ilkYoneticiParolasi(process.env.ILK_YONETICI_PAROLASI);
+  const adminOlustu = await prisma.user.createMany({
+    data: [
+      {
+        username: "admin",
+        passwordHash: await hashPassword(ilk.parola),
+        fullName: "Sistem Yöneticisi",
+        mustChangePassword: ilk.mustChangePassword,
+      },
+    ],
+    skipDuplicates: true,
   });
-  console.log("✅ 1 kullanıcı (admin)");
+  const adminUser = await prisma.user.findUniqueOrThrow({
+    where: { username: "admin" },
+    select: { id: true },
+  });
+  if (adminOlustu.count === 0) {
+    console.log("✅ admin zaten var — parolasına dokunulmadı");
+  } else if (gelistirme) {
+    console.log("✅ 1 kullanıcı (admin — geliştirme parolası)");
+  } else if (ilk.uretildi) {
+    console.log("");
+    console.log("════════════════ İLK YÖNETİCİ ════════════════");
+    console.log("  Kullanıcı : admin");
+    console.log(`  Parola    : ${ilk.parola}`);
+    console.log("  Bu parola YALNIZ BİR KEZ gösterilir; ilk girişte yeni parola istenir.");
+    console.log("══════════════════════════════════════════════");
+    console.log("");
+  } else {
+    console.log("✅ admin — parola ILK_YONETICI_PAROLASI'ndan (ilk girişte yeni parola istenir)");
+  }
 
   // ===========================================================================
   // 4. USER PERMISSIONS — sadece admin'e tüm yetkiler
@@ -782,8 +817,11 @@ async function main() {
   console.log("✅ 4 label template (ROLL_RAW + ROLL_FINISHED + SWATCH + SACK kanvas/bağlam-varsayılanı)");
 
   console.log("\n🎉 Seed tamamlandı.\n");
-  console.log("Kullanıcı:");
-  console.log("  admin / 123123          → Tam yetki (tek seed kullanıcısı)\n");
+  console.log(
+    gelistirme
+      ? "Kullanıcı:\n  admin / 123123          → Tam yetki (geliştirme seed'i)\n"
+      : "Kullanıcı: admin → Tam yetki (parola yukarıda; ilk girişte değiştirilir)\n",
+  );
 }
 
 main()

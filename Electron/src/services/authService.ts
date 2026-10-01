@@ -1,7 +1,13 @@
 import type { AxiosRequestConfig } from "axios";
 import apiClient from "./apiClient";
 import type { ApiResponse } from "@/types/api";
-import type { AuthMeResponse, LoginRequest, LoginResponse } from "@/types/auth";
+import type {
+  AuthMeResponse,
+  ChangePasswordRequest,
+  ChangePasswordResponse,
+  LoginRequest,
+  LoginResponse,
+} from "@/types/auth";
 import { IS_ELECTRON } from "@/lib/runtime-env";
 
 /**
@@ -61,6 +67,24 @@ export const authService = {
         },
       )
       .then(() => undefined),
+
+  /**
+   * Kendi parolasını değiştir (zorunlu ilk değişim dahil). Token AÇIKÇA verilir:
+   * zorunlu değişim adımında token kalıcı depoya yazılmamıştır. Başarıda sunucu
+   * kullanıcının bütün oturumlarını kapatır → çağıran yeni parolayla yeniden girer.
+   * Hata UX'ini çağıran yönetir (`suppressErrorToast`, login deseni).
+   */
+  changePassword: (
+    body: ChangePasswordRequest,
+    token: string,
+    config?: AxiosRequestConfig,
+  ): Promise<ChangePasswordResponse> =>
+    apiClient
+      .post<ChangePasswordResponse>("/api/auth/change-password", body, {
+        ...config,
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      .then((r) => r.data),
 
   /**
    * Oturumun SUNUCUDAN çözülen kimliği. Token'da olmayan iki alanı taşır

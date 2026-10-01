@@ -3,11 +3,16 @@
 // =============================================================================
 
 import { Request, Response, NextFunction } from "express";
-import { AuthService } from "../services/auth.service";
+import {
+  AuthService,
+  PASSWORD_CHANGE_REQUIRED_CODE,
+  PASSWORD_CHANGE_REQUIRED_MESSAGE,
+} from "../services/auth.service";
 import { AppError } from "../utils/app-error";
 import { readClientVersionHeader } from "../constants/client-info";
 import { touchUser } from "../lib/presence";
 import prisma from "../lib/prisma";
+import { uyari } from "../lib/logger";
 
 /**
  * Session.lastSeenAt yazımını cihaz başına (jti) kısıtla — her istekte DB update
@@ -28,6 +33,10 @@ const LAST_SEEN_THROTTLE_MS = 60_000;
  * deneme no-op'tur.
  */
 const versionWrites = new Set<string>();
+
+/** exp claim'i OLMAYAN eski token'lar (mutlak tavan 0 + zaman aşımı kapalıyken üretilmiş) —
+ *  geçiş süresince KABUL edilir, oturum başına bir kez uyarılır; bir sonraki giriş exp'li alır. */
+const warnedExpLessJtis = new Set<string>();
 
 /** Session.revokeReason → operatöre gösterilecek NET Türkçe mesaj. Yanlış
  *  "oturum süresi doldu" bildirimini önler (asıl sebep: kick / şifre / pasif). */
@@ -95,16 +104,17 @@ export function resetSessionTouchCacheForTest(): void {
  * Sets `req.user` with decoded JwtPayload on success.
  *
  * İmza/expiry doğrulamasının ardından ANINDA-İPTAL kontrolü:
- *  1. User.tokenVersion + isActive taze okunur (yetki/şifre değişince bump → 401).
+ *  1. User.tokenVersion + isActive taze okunur (yetki/şifre değişince bump → 401);
+ *     yetki kümesi ve kullanıcı adı da DB'den (token claim'i karar kaynağı değil).
  *  2. Session (jti) taze okunur; kayıt yoksa veya revokedAt set ise → 401 (oturum
  *     iptal edildi / logout / başka cihazdan kick). Fail-closed: jti'siz eski token
  *     (deploy öncesi üretilmiş) da 401 alır → bir kez re-login (kabul edilen davranış).
  */
-export const verifyToken = async (
+async function authenticate(
   req: Request,
-  _res: Response,
-  next: NextFunction
-): Promise<void> => {
+  next: NextFunction,
+  allowPasswordChangePending: boolean,
+): Promise<void> {
   const authHeader = req.headers.authorization;
 
   // RFC 6750 §2.1: scheme adı case-insensitive ("Bearer" = "bearer" = "BEARER").
@@ -124,7 +134,13 @@ export const verifyToken = async (
       // ⚠️ `isSystemAccount` BİLEREK burada okunur (JWT claim'i değil): istek
       // başına ZATEN yapılan bir okuma, yani maliyet sıfır; değer DB-taze; ve
       // guard'lar senkron kalabilir (bkz. types/express-augment.ts).
-      select: { tokenVersion: true, isActive: true, isSystemAccount: true },
+      select: {
+        tokenVersion: true,
+        isActive: true,
+        isSystemAccount: true,
+        username: true,
+        mustChangePassword: true,
+      },
     });
     if (!fresh || !fresh.isActive) {
       throw AppError.unauthorized("Hesap pasif veya bulunamadı. Tekrar giriş yapın.");
@@ -169,8 +185,29 @@ export const verifyToken = async (
       const msg = SESSION_REVOKE_MESSAGES[reason] ?? "Oturumunuz sonlandırıldı. Tekrar giriş yapın.";
       throw AppError.unauthorized(msg, { code: "SESSION_REVOKED", reason });
     }
-    req.user = payload;
+    // Zorunlu parola değişimi bekleyen hesap yalnız beyanlı uçlara geçer (oturum denetimlerinden
+    // SONRA: iptal edilmiş oturum önce 401 alır).
+    if (fresh.mustChangePassword && !allowPasswordChangePending) {
+      throw AppError.forbidden(PASSWORD_CHANGE_REQUIRED_MESSAGE, { code: PASSWORD_CHANGE_REQUIRED_CODE });
+    }
+    // Yetki ve kimlik adı DB'den: token'daki `permissions`/`username` claim'leri karar
+    // kaynağı değildir (sızan sırla yeniden imzalanmış token yetki kazanmasın).
+    const permissions = await AuthService.resolveRequestPermissions(
+      payload.userId,
+      fresh.tokenVersion,
+      fresh.isSystemAccount === true,
+    );
+    if (payload.exp === undefined && !warnedExpLessJtis.has(payload.jti)) {
+      if (warnedExpLessJtis.size > 5000) warnedExpLessJtis.clear();
+      warnedExpLessJtis.add(payload.jti);
+      uyari(
+        "oturum",
+        `Süresiz (exp'siz) eski token kabul edildi — kullanıcı ${fresh.username}; bir sonraki girişte süreli token alır.`,
+      );
+    }
+    req.user = { ...payload, username: fresh.username, permissions };
     req.isSystemAccount = fresh.isSystemAccount === true;
+    req.mustChangePassword = fresh.mustChangePassword === true;
     touchUser(payload.userId); // anlık "online" izleme (bellekte, maliyetsiz)
     // ⚠️ Sürüm de burada YAZILIR, yalnız login'de değil: panel künye sürümünü main
     // process'ten ASENKRON okuyor ve İLK istek (login) sürümsüz gidebiliyor
@@ -181,4 +218,18 @@ export const verifyToken = async (
   } catch (error) {
     next(error);
   }
-};
+}
+
+/** Kimliği doğrulanmış her uç; zorunlu parola değişimi bekleyen hesaba 403 PASSWORD_CHANGE_REQUIRED. */
+export const verifyToken = (req: Request, _res: Response, next: NextFunction): Promise<void> =>
+  authenticate(req, next, false);
+
+/**
+ * Parola değişimi bekleyen hesabın da geçebildiği kapı — YALNIZ /auth/me, /auth/logout,
+ * /auth/change-password. Kullanım yeri `test_parola_degisimi_zorunlu` ile sayılır.
+ */
+export const verifyTokenAllowPasswordChange = (
+  req: Request,
+  _res: Response,
+  next: NextFunction,
+): Promise<void> => authenticate(req, next, true);

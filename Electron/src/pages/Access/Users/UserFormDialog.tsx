@@ -2,6 +2,7 @@ import { z } from "zod";
 import { EntityFormDialog } from "@/components/forms/EntityFormDialog";
 import { FormField } from "@/components/forms/FormField";
 import { Input } from "@/components/ui/input";
+import { newPasswordSchema, PASSWORD_MIN_LENGTH } from "@/lib/password-policy";
 
 export const userFormSchema = z.object({
   // YALNIZ İngilizce harf ve rakam — özel karakter/boşluk/Türkçe karakter yok.
@@ -12,7 +13,7 @@ export const userFormSchema = z.object({
     .max(40)
     .regex(/^[a-zA-Z0-9]+$/, "Yalnız İngilizce harf ve rakam (özel karakter/boşluk/Türkçe karakter yok)"),
   fullName: z.string().trim().min(1, "Ad-soyad gerekli").max(120),
-  password: z.string().min(6, "En az 6 karakter"),
+  password: newPasswordSchema,
   // Yeni kullanıcıya üretim istasyon izinlerini (KK1/KK2/Tambur) otomatik ver.
   grantOperatorDefaults: z.boolean(),
 });
@@ -76,7 +77,13 @@ export function UserFormDialog({ open, onOpenChange, onSubmit, isSubmitting }: P
           <FormField label="Ad Soyad" htmlFor="fullName" error={form.formState.errors.fullName} required>
             <Input id="fullName" {...form.register("fullName")} />
           </FormField>
-          <FormField label="Şifre" htmlFor="password" error={form.formState.errors.password} required>
+          <FormField
+            label="Şifre"
+            htmlFor="password"
+            error={form.formState.errors.password}
+            hint={`En az ${PASSWORD_MIN_LENGTH} karakter.`}
+            required
+          >
             <Input id="password" type="password" autoComplete="new-password" {...form.register("password")} />
           </FormField>
           <label className="flex items-start gap-2 rounded-md border bg-muted/20 p-2.5 text-sm">

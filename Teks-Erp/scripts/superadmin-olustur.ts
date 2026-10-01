@@ -47,6 +47,7 @@ import { createInterface } from "node:readline/promises";
 
 import prisma, { pool } from "../src/lib/prisma";
 import { AuthService } from "../src/services/auth.service";
+import { passwordPolicyViolation } from "../src/constants/password-policy";
 import {
   SYSTEM_ACCOUNT_FULLNAME,
   logSuperadminLifecycleEvent,
@@ -68,9 +69,6 @@ function pinOzeti(pin: string): string {
 const PIN_RE = /^\d{6}$/;
 /** Kullanıcı adı: boşluksuz, ASCII, giriş kutusuna elle yazılabilir. */
 const USERNAME_RE = /^[A-Za-z0-9._-]{3,50}$/;
-/** bcrypt 72 BAYT'tan sonrasını sessizce kırpar → sınır BAYT cinsinden. */
-const PASSWORD_MIN = 8;
-const PASSWORD_MAX_BYTES = 72;
 /** PIN üretim denemesi — `quickPin` sistem genelinde `@unique`. */
 const PIN_TRY = 60;
 
@@ -138,18 +136,9 @@ function hata(code: ProvisionErrorCode, message: string): ProvisionResult {
   return { kind: "error", code, message };
 }
 
-/** Parola sözleşmesi — bcrypt'in sessiz kırpması yüzünden ÜST sınır da var. */
+/** Parola sözleşmesi — panel kullanıcılarıyla AYNI politika (alt + bcrypt üst sınırı). */
 function parolaKusuru(password: string): string | null {
-  if (password.length < PASSWORD_MIN) {
-    return `Parola en az ${PASSWORD_MIN} karakter olmalı.`;
-  }
-  if (Buffer.byteLength(password, "utf8") > PASSWORD_MAX_BYTES) {
-    return (
-      `Parola ${PASSWORD_MAX_BYTES} BAYT'ı aşıyor — bcrypt fazlasını SESSİZCE kırpar ` +
-      "(Türkçe harfler 2 bayt sayılır)."
-    );
-  }
-  return null;
+  return passwordPolicyViolation(password);
 }
 
 /**

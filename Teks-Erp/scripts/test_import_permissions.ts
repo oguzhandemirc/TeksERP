@@ -212,7 +212,7 @@ async function liveProbe(): Promise<void> {
     await prisma.userPermission.create({
       data: { userId: user.id, permissionId: perms["property:write"]! },
     });
-    const t2 = await login(); // izinler JWT'de — yeniden giriş ŞART
+    const t2 = await login(); // doğrudan DB yazımı tokenVersion artırmaz — giriş istek izin önbelleğini tazeler
     const bulkOk = t2 ? await post("/api/import/color/preview", t2, { rows: [{ rowNo: 2, cells: { name: "X" } }] }) : 0;
     check(
       "`property:write` eklenince içe aktarım önizlemesi 403 DEĞİL (hiza doğru izne kurulu)",
