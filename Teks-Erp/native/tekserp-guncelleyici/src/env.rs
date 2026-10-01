@@ -377,7 +377,8 @@ impl Fs for RealFs {
     fn copy(&self, from: &Path, to: &Path) -> io::Result<()> {
         let tmp = tmp_sibling(to, "tmp");
         std::fs::copy(from, &tmp)?;
-        std::fs::File::open(&tmp)?.sync_all()?;
+        // Windows: FlushFileBuffers yazma hakkı ister — salt-okunur tutamaçta "Access is denied" (os error 5).
+        std::fs::OpenOptions::new().write(true).open(&tmp)?.sync_all()?;
         durable_rename(&tmp, to)
     }
 
@@ -643,4 +644,40 @@ pub fn real(proxy: Option<&str>, event_source: &str) -> Result<Env, String> {
         (Arc::new(NoServices), Arc::new(NoEvents), Arc::new(NoProtect))
     };
     Ok(Env { fs: Arc::new(RealFs), svc, procs: Arc::new(RealProcs), net, clock: Arc::new(SystemClock), events, protect })
+}
+
+#[cfg(test)]
+mod tests {
+    /// Windows'ta `sync_all` (FlushFileBuffers) salt-okunur tutamaçta "Access is denied" verir; Mac/Linux'ta
+    /// geçer — sınıf yalnız Windows CI'da görünürdü. İki hizmet crate'inde salt-okunur açılıp eşitlenen
+    /// tutamaç kalmasın (aynı deyimde `File::open` + `sync_all`).
+    #[test]
+    fn no_sync_on_read_only_handle() {
+        let open = ["File", "::open("].concat();
+        let sync = [".sync", "_all()"].concat();
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
+        let mut seen = 0;
+        let mut bad = Vec::new();
+        for dir in [root.join("src"), root.join("../tekserp-hizmet/src")] {
+            let mut stack = vec![dir];
+            while let Some(d) = stack.pop() {
+                for e in std::fs::read_dir(&d).expect("src dizini").flatten() {
+                    let p = e.path();
+                    if p.is_dir() {
+                        stack.push(p);
+                    } else if p.extension().is_some_and(|x| x == "rs") {
+                        seen += 1;
+                        let text = std::fs::read_to_string(&p).expect("kaynak");
+                        bad.extend(
+                            text.split(';')
+                                .filter(|st| st.contains(&open) && st.contains(&sync))
+                                .map(|st| format!("{}: {}", p.display(), st.trim())),
+                        );
+                    }
+                }
+            }
+        }
+        assert!(seen >= 20, "kaynak taranmadı: {seen}");
+        assert!(bad.is_empty(), "salt-okunur tutamaçta sync_all:\n{}", bad.join("\n"));
+    }
 }
