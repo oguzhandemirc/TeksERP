@@ -5,7 +5,8 @@
 //   (c) İKİ FARKLI parmak izi aynı ucu ileri taşıyor → ZINCIR_CATALI uyarısı; ilk pencerede yalnız
 //       uyarı (kira verilir), ikinci pencerede sürerse EŞLEŞMEYEN tarafa kira yok (403
 //       KIRA_VERILMEDI); sahip taraf hiç reddedilmez — asla anında durdurma.
-// Ek: kabul edilen küme yalnız tek etkenlik değişimde kayar (çatal açıkken asla) · kabul edilen
+// Ek: kabul edilen küme yalnız güçlü etkenlerden (F2 · F3 · F4) ≥ 2 tutan değişimde kayar (K8 — §5c; f1 + f5 tutup
+// güçlüler tutmayan VM/disk kopyası kaymaz ve uyarı alır §5d; kayıp etken eski değerini korur §5e; çatal açıkken asla) · kabul edilen
 // kümeyle ESLESMEDI (kopyalanan LICENSE_DIR) → uyarı, ikinci pencerede red; satıcı uyarıyı kapatıp
 // kümeyi kabul edince (meşru donanım değişimi) kira döner · ardışık "yakala" → ayırt edilemeyen
 // kopya uyarısı (yalnız uyarı) · D2s: sunulan kira bu kurulumun kira defterinde yoksa YABANCI_KIRA, raporlanan
@@ -337,7 +338,31 @@ async function main(): Promise<void> {
     kontrol("§5a tek etken değişti (disk) → küme kayar, kira yeni kümeyi taşır", JSON.stringify(kabul2) === JSON.stringify(tekEtken) && JSON.stringify(s1?.parmakIzi) === JSON.stringify(tekEtken));
     const s2y = await yokla(k2.kurulumId, anahtar2, s1?.kiraId ?? null, fpB);
     const kabul3 = (await prisma.kurulum.findUniqueOrThrow({ where: { id: k2.kurulumDbId } })).kabulEdilenParmakIzi;
-    kontrol("§5b iki etken birden değişti → küme KAYMAZ (kira yine verilir)", s2y.status === 200 && JSON.stringify(kabul3) === JSON.stringify(tekEtken), `${s2y.status}`);
+    kontrol("§5b iki GÜÇLÜ etken birden değişti (yalnız biri tutar) → küme KAYMAZ (kira yine verilir)", s2y.status === 200 && JSON.stringify(kabul3) === JSON.stringify(tekEtken), `${s2y.status}`);
+    // Lisans v2 (K8): öğrenme güçlü etkenlerle — f1 · f4 · f5 değişti, F2 + F3 tutuyor → küme kayar, uyuşmazlık uyarısı YOK.
+    const anahtarO = kurulumAnahtariUret();
+    const { k: kO, t0: o0 } = await etkinlestir(anahtarO);
+    const ucDegisti = digestFingerprint({ ...HAM_PARMAK_IZI, f1: "{11111111-2222-4333-8444-555555555555}", f4: "YENIANAKART9", f5: "1234500000000000001" }, f.tuz);
+    const o1y = await yokla(kO.kurulumId, anahtarO, o0, ucDegisti);
+    const kabulO = (await prisma.kurulum.findUniqueOrThrow({ where: { id: kO.kurulumDbId } })).kabulEdilenParmakIzi;
+    kontrol("§5c ⭐ üç etken değişti ama güçlülerden ikisi (F2 · F3) tutuyor → küme KAYAR, kira yeni kümeyi taşır, PARMAK_IZI_UYUSMAZ YOK",
+      o1y.status === 200 && JSON.stringify(kabulO) === JSON.stringify(ucDegisti) && JSON.stringify(kiraOf(o1y)?.parmakIzi) === JSON.stringify(ucDegisti) &&
+        (await prisma.kopyaUyarisi.count({ where: { kurulumId: kO.kurulumDbId, tur: "PARMAK_IZI_UYUSMAZ" } })) === 0,
+      `${o1y.status} ${o1y.kod ?? ""}`);
+    const anahtarVm = kurulumAnahtariUret();
+    const { k: kVm, t0: vm0 } = await etkinlestir(anahtarVm);
+    const vmKopya = digestFingerprint({ ...HAM_PARMAK_IZI, f2: "AAAAAAAA-BBBB-4CCC-8DDD-EEEEEEEEEEEE", f3: "VMDISK0001", f4: "VMSERI0001" }, f.tuz);
+    const vm1y = await yokla(kVm.kurulumId, anahtarVm, vm0, vmKopya);
+    kontrol("§5d f1 + f5 tutup güçlülerin hiçbiri tutmuyor (VM/disk kopyası) → küme KAYMAZ + PARMAK_IZI_UYUSMAZ",
+      vm1y.status === 200 && JSON.stringify((await prisma.kurulum.findUniqueOrThrow({ where: { id: kVm.kurulumDbId } })).kabulEdilenParmakIzi) === JSON.stringify(fpA) &&
+        (await prisma.kopyaUyarisi.count({ where: { kurulumId: kVm.kurulumDbId, tur: "PARMAK_IZI_UYUSMAZ" } })) === 1,
+      `${vm1y.status} ${vm1y.kod ?? ""}`);
+    const kayipF4: Fingerprint = { ...ucDegisti, f4: null };
+    const o2y = await yoklaV2(kO.kurulumId, anahtarO, kiraOf(o1y)!.kiraId, kayipF4, { yetenekler: ["parmak-izi-v2"], parmakIziKayip: ["f4"] });
+    const instO = await prisma.kurulum.findUniqueOrThrow({ where: { id: kO.kurulumDbId } });
+    kontrol("§5e kayıp etken (f4 okunamıyor) kümeden SİLİNMEZ (eski değer korunur), kayıp listesi portal notu olarak kurulumda, kira kuralı standart",
+      o2y.status === 200 && (instO.kabulEdilenParmakIzi as Fingerprint).f4 === ucDegisti.f4 && instO.sonKayipEtkenler.join() === "f4" && kiraYuku(o2y.json).parmakIziKurali === "standart",
+      `${o2y.status} ${o2y.kod ?? ""} kayip=${instO.sonKayipEtkenler.join()}`);
 
     console.log("\n§6 kopyalanan LICENSE_DIR — kabul edilen kümeyle ESLESMEDI");
     const anahtar3 = kurulumAnahtariUret();

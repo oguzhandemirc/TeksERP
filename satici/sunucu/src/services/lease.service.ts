@@ -32,6 +32,7 @@ import { channelVersionsForLease } from "./channel.service";
 import { leaseCloudFields } from "./cloud-entitlement";
 import { deliverableEntitlement, type DeliverableEntitlement, type HeldEntitlement } from "./entitlement-issue.service";
 import { installationCapabilities } from "./entitlement-policy";
+import { leaseFingerprintRule } from "./fingerprint-policy";
 import { moduleKeyGrants } from "./module-key.service";
 import { paidThroughOf, type PaidThrough } from "./paid-through";
 import type { VendorContext } from "./context";
@@ -223,6 +224,8 @@ export async function issueLease(tx: Tx, ctx: VendorContext, g: IssueLeaseInput)
   const paid = await paidThroughOf(tx, installation.id, entitlement);
   const delivered = await entitlementForDelivery(tx, installation, entitlement, { capabilities: g.capabilities, held: g.held });
   const revocation = await leaseRevocation(tx, ctx.keys);
+  // K8: kural kiradaki alanla seçilir — yalnız `parmak-izi-v2` bildiren alıcıya (eski fabrika eski kuralı uygular).
+  const fingerprintRule = leaseFingerprintRule(g.acceptedFingerprint, installation.sinif, g.capabilities ?? installationCapabilities(installation));
   const id = randomUUID();
   const issuedAt = new Date(nowMs);
   const expiresAt = new Date(nowMs + ctx.config.KIRA_GUN * DAY_MS);
@@ -255,6 +258,7 @@ export async function issueLease(tx: Tx, ctx: VendorContext, g: IssueLeaseInput)
     altSertifika: key.certificate,
     ...(grants.length > 0 ? { modulAnahtarlari: grants } : {}),
     odenmisTarih: paid.tarih ? paid.tarih.toISOString() : null,
+    ...(fingerprintRule ? { parmakIziKurali: fingerprintRule } : {}),
     hakOzeti: jwsDigest(delivered.belge),
     ...(revocation ? { iptalSira: revocation.sira } : {}),
     ...(closing ? { kapanis: closing.reason } : {}),

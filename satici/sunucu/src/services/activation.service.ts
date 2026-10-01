@@ -18,6 +18,7 @@ import type { VendorContext } from "./context";
 import { notifyDoorbell } from "./doorbell";
 import { bodyKeyRole, installationCancelled, recordRequestNonce, verifySignedRequest, type KeyRole } from "./installation-auth";
 import { deliverableEntitlement } from "./entitlement-issue.service";
+import { assertIdentificationOnActivation } from "./hardware.service";
 import { storableSequence } from "./local-intervention";
 import { queueCurrentTermsUnderLock } from "./root-queue.service";
 import {
@@ -303,7 +304,10 @@ export async function handleActivation(
   // Yalnız kodu TÜKETECEK istek kabul ister: tüketilmiş kodun ağ tekrarı önceki sonucu alır (kabul o gün yazıldı).
   const acceptance = code.durum === "AKTIF" ? requireAcceptance(body) : null;
   g.limit?.(inst.id);
-  if (acceptance) await assertDeliverableOnActivation(inst, body, g.nowMs);
+  if (acceptance) {
+    await assertIdentificationOnActivation(inst, verified.kid, body, g.nowMs);
+    await assertDeliverableOnActivation(inst, body, g.nowMs);
+  }
   await recordRequestNonce({ installationDbId: inst.id, kid: verified.kid, request: verified.request, nowMs: g.nowMs });
   const result = await prisma.$transaction((tx) =>
     activateInTx(tx, ctx, { codeId: code.id, installationDbId: inst.id, kid: verified.kid, body, acceptance, nowMs: g.nowMs }),

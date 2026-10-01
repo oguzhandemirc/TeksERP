@@ -4,6 +4,7 @@
 // Her rota bir izin beyan eder (roles.ts); her yazma işlem kimliğiyle (clientToken) idempotenttir.
 // Yol parametresi gövde özetine girer (`_yol`): aynı kimlik başka kayıtta kullanılamaz.
 import { DISTRIBUTION_PORTAL_ROUTES } from "./distribution-routes";
+import { HARDWARE_PORTAL_ROUTES } from "./hardware-routes";
 import { KEY_PORTAL_ROUTES } from "./key-routes";
 import { z } from "zod";
 import { ChannelCodeSchema, LICENSE_CLASSES, SANCTION_LEVELS } from "../lisans-protokol";
@@ -1244,6 +1245,7 @@ export const VENDOR_PORTAL_ROUTES: readonly PortalRouteDef[] = [
 
   // ------------------------------------------------------------ dağıtım (Faz 3d: distribution-routes.ts)
   ...KEY_PORTAL_ROUTES,
+  ...HARDWARE_PORTAL_ROUTES,
   ...DISTRIBUTION_PORTAL_ROUTES,
 
   // ------------------------------------------------------------ destek kutusu (3d-2)

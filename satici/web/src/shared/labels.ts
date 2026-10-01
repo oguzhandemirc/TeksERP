@@ -93,6 +93,31 @@ export const LEASE_DECISION_LABEL: Record<string, string> = {
   DOSYA: "Uzatma dosyası",
 };
 
+/** Donanım talebinin türü / durumu — Prisma `DonanimTalebiTuru` / `DonanimTalebiDurumu` aynası (mirrors.test.ts, iki yönlü). */
+export const HARDWARE_REQUEST_KIND_LABEL: Record<string, string> = {
+  DONANIM: "Donanım değişikliği",
+  ZAYIF_TANIMA: "Zayıf tanıma (etkinleştirme)",
+};
+export const HARDWARE_REQUEST_STATUS_LABEL: Record<string, string> = {
+  BEKLIYOR: "Onay bekliyor",
+  ONAYLANDI: "Onaylandı",
+  REDDEDILDI: "Reddedildi",
+};
+/** Parmak izi etkenleri (ekran adı) ve karşılaştırma durumu — sunucu `FACTOR_STATES` aynası (fingerprint-policy.ts). */
+export const FINGERPRINT_FACTOR_LABEL: Record<string, string> = {
+  f1: "Makine kimliği",
+  f2: "SMBIOS UUID",
+  f3: "Sistem diski",
+  f4: "Anakart/BIOS seri no",
+  f5: "PostgreSQL kimliği",
+};
+export const FACTOR_STATE_LABEL: Record<string, string> = {
+  AYNI: "aynı",
+  FARKLI: "farklı",
+  KAYIP: "kayıp (okunamıyor)",
+  YENI: "yeni okundu",
+  YOK: "okunamıyor",
+};
 /** Kök imzası talebinin durumu — Prisma `HakKokTalebiDurumu` aynası (mirrors.test.ts, iki yönlü). */
 export const ROOT_REQUEST_STATUS_LABEL: Record<string, string> = {
   BEKLIYOR: "Kök imzası bekliyor",
@@ -118,6 +143,7 @@ export const NOTIFICATION_EVENT_LABEL: Record<string, string> = {
   ANAHTAR_SURESI_BITIYOR: "İmza anahtarının süresi bitiyor",
   UZUN_UFUK_VERILDI: "Uzun çevrimdışı ufuk verildi",
   KOK_IMZASI_ACIL: "ACİL kök imzası gerekiyor",
+  DONANIM_ONAYI_BEKLIYOR: "Donanım / zayıf tanıma onayı bekliyor",
 };
 export const NOTIFICATION_CHANNEL_LABEL: Record<string, string> = { EPOSTA: "E-posta", TELEGRAM: "Telegram" };
 export const NOTIFICATION_STATUS_LABEL: Record<string, string> = {

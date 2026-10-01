@@ -49,5 +49,5 @@ export async function applyOwnerReportTx(
   });
   await recordCapabilityChange(tx, inst, report.capabilities, g.kid);
   const sequence = storableSequence(report.stateRecord);
-  return { yetenekler: [...report.capabilities], ...(sequence === undefined ? {} : { sonDurumSirasi: sequence }) };
+  return { yetenekler: [...report.capabilities], sonKayipEtkenler: [...(report.lostFactors ?? [])], ...(sequence === undefined ? {} : { sonDurumSirasi: sequence }) };
 }

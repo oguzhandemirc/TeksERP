@@ -4,7 +4,7 @@
 // (P modeli) istemciye 403 yerine İMZALI kapanış kirası gider (K6, `closing-lease.ts`).
 // Lisans v2 ekleri ayrı işlevlerde: yabancı HAK · yerel müdahale (`local-intervention.ts`) · yetenek ve durum kaydı sırası.
 import type { KopyaUyarisi, Prisma } from "@prisma/client";
-import { compareFingerprints, jwsDigest, parseJws, type Fingerprint, type LicenseResponse, type PollRequest } from "../lisans-protokol";
+import { compareFingerprints, hasCapability, jwsDigest, parseJws, type Fingerprint, type LicenseResponse, type PollRequest } from "../lisans-protokol";
 import { VendorError, retryConflict } from "../lib/errors";
 import { lockInstallation } from "../lib/locks";
 import { prisma, type Tx } from "../lib/prisma";
@@ -12,6 +12,8 @@ import { enqueueNotificationTx } from "../notifications/outbox";
 import { acceptsClosingLease, copyEpisodeStart, issueOrReuseClosingLease } from "./closing-lease";
 import type { VendorContext } from "./context";
 import { inSecondWindow, upsertCopyAlert } from "./copy-alert";
+import { FINGERPRINT_V2_CAPABILITY, canLearnFingerprint } from "./fingerprint-policy";
+import { listLegacyWeakInstallationTx } from "./hardware.service";
 import { decideChain, driftAccepted, forkSide, readFingerprint, type ChainDecision } from "./lease-chain";
 import {
   activeEntitlement,
@@ -108,6 +110,8 @@ async function renewInTx(tx: Tx, ctx: VendorContext, g: RenewInput): Promise<Ren
           repeatWindowMs: ctx.config.TEKRAR_PENCERE_SN * 1000,
         });
   const vsAccepted = compareFingerprints(accepted, measured, { excludeF5: inst.sinif === "DR" });
+  // Meşru donanım değişikliği (K8): güçlü etkenlerden ≥ 2 tutuyorsa (zayıf kümede zayıf kural) uyuşmazlık değil öğrenmedir.
+  const learnable = g.measured !== null && canLearnFingerprint(accepted, measured, inst.sinif);
 
   let deny = false;
   const alerts: KopyaUyarisi[] = [];
@@ -125,7 +129,7 @@ async function renewInTx(tx: Tx, ctx: VendorContext, g: RenewInput): Promise<Ren
     alerts.push(alert);
     if (side === "REQUESTER_IS_OTHER" && inSecondWindow(ctx, alert, g.nowMs)) deny = true;
   }
-  if (vsAccepted.result === "ESLESMEDI") {
+  if (vsAccepted.result === "ESLESMEDI" && !learnable) {
     const alert = await upsertCopyAlert(tx, inst.id, "PARMAK_IZI_UYUSMAZ", { owner: accepted, other: measured }, g.nowMs);
     alerts.push(alert);
     if (inSecondWindow(ctx, alert, g.nowMs)) deny = true;
@@ -266,6 +270,9 @@ async function renewInTx(tx: Tx, ctx: VendorContext, g: RenewInput): Promise<Ren
         })
       : {};
 
+  // v1'den gelen zayıf kurulum durmaz (zayıf kuralla sürer) ve onay listesine düşer (K8).
+  if (decision !== "FORK" && hasCapability(g.report?.capabilities, FINGERPRINT_V2_CAPABILITY)) await listLegacyWeakInstallationTx(tx, { inst, kid: g.kid, nowMs: g.nowMs });
+
   // Fabrika bu kirayı bağlayamaz (elindeki HAK güncelden geniş ya da yok; güncel ara imzalıyı tanımaz): kira VERİLMEZ —
   // kayıtlar (uyarı · acil kök talebi · yetenek · yoklama) commit olur, sonra 403. Fabrika elindeki kirayla sürer.
   if (withheld && !withheld.heldBound && g.report) {
@@ -277,11 +284,10 @@ async function renewInTx(tx: Tx, ctx: VendorContext, g: RenewInput): Promise<Ren
     return { kind: "WITHHELD" };
   }
 
-  // Kabul edilen küme yalnız sakin yenilemede kayar: tek etkenlik değişim (parça değişimi), çatal
-  // uyarısı açıkken ASLA (kopya kendini "sahip" yapamasın).
+  // Kabul edilen küme yalnız öğrenilebilir değişimde kayar (K8: güçlülerden ≥ 2 tutuyor; ölçülemeyen etken eski değerini
+  // korur), çatalda ve çatal uyarısı açıkken ASLA (kopya kendini "sahip" yapamasın).
   const openFork = await tx.kopyaUyarisi.findFirst({ where: { kurulumId: inst.id, tur: "ZINCIR_CATALI", durum: "ACIK" } });
-  const canDrift =
-    decision !== "FORK" && vsAccepted.result === "ESLESTI" && vsAccepted.mismatched.length <= 1 && !openFork && g.measured !== null;
+  const canDrift = decision !== "FORK" && learnable && !openFork;
   const nextAccepted = canDrift ? driftAccepted(accepted, measured) : accepted;
 
   const lease = await issueLease(tx, ctx, {

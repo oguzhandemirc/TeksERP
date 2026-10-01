@@ -4,7 +4,7 @@
 import { useState } from "react";
 import { ConfirmAction } from "../../shared/ConfirmAction";
 import { fmtDate, fmtDateTime } from "../../shared/format";
-import { PAID_THROUGH_KIND_LABEL, label } from "../../shared/labels";
+import { FINGERPRINT_FACTOR_LABEL, PAID_THROUGH_KIND_LABEL, label } from "../../shared/labels";
 import { useApi, useCan } from "../../shared/session";
 import { installationName, type ExtensionFile, type InstallationDetail } from "../../shared/types";
 import { Badge, Button, KeyValues, Modal, ModalActions, Section } from "../../shared/ui";
@@ -81,6 +81,10 @@ export function PaidThroughPanel({ detail, onChanged }: { detail: InstallationDe
             ["“Ödeme yaklaşıyor” bandı (tahmini)", p.bantGorunurTahmini ? <Badge key="b" tone="info">Görünür</Badge> : "Görünmez"],
             ["Bildirilen yetenekler", inst.yetenekler && inst.yetenekler.length > 0 ? inst.yetenekler.join(", ") : "—"],
             ["Durum kaydı sırası", inst.sonDurumSirasi === null || inst.sonDurumSirasi === undefined ? "—" : String(inst.sonDurumSirasi)],
+            [
+              "Kayıp parmak izi etkenleri",
+              inst.sonKayipEtkenler && inst.sonKayipEtkenler.length > 0 ? inst.sonKayipEtkenler.map((f) => label(FINGERPRINT_FACTOR_LABEL, f)).join(", ") : "—",
+            ],
           ]}
         />
       )}

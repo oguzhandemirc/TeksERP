@@ -271,6 +271,9 @@ model Kurulum {
   /// yerel müdahale şüphesidir (G12 §3.1-5). Etkinleştirmede taban yeniden kurulur; çatal tarafı YAZAMAZ. INT4: sayaç
   /// yazım başınadır (2^31 erişilmez); sığmayan bildirim saklanmaz, karşılaştırılmaz (`storableSequence`).
   sonDurumSirasi    Int?
+  /// Parmak izi v2 (K8): zincir sahibinin son yoklamasının KAYIP etkenleri (kabul kümesinde değeri olup 24 saattir
+  /// okunamayan) — durum kolonu, portala not; karar kabul edilen kümeden ve kuraldan.
+  sonKayipEtkenler  String[] @default([])
   /// Patron bulutu eşitleme aralığı (dk, 1–60; CHECK) — kiraya basılır, fabrika eşitleme işi okur.
   esitlemeAraligiDk Int     @default(5)
   /// Buluttaki geçmişin saklama süresi (ay: 3 · 13 · 25; NULL = tüm geçmiş; CHECK) — iç API `saklamaAy`.
@@ -303,6 +306,7 @@ model Kurulum {
   destekTalepleri        DestekTalebi[]
   bildirimler            Bildirim[]
   hakKokTalepleri        HakKokTalebi[]
+  donanimTalepleri       DonanimTalebi[]
 
   @@index([tesisId])
   @@index([kanalKodu])
@@ -631,6 +635,53 @@ model EtkinlestirmeKodu {
 
   @@index([kurulumId])
   @@map("etkinlestirme_kodu")
+}
+
+enum DonanimTalebiTuru {
+  /// Panelin "Donanım değişikliğini bildir"i (`POST /v1/donanim`, zarfla QR'dan da) — güçlüler tutmadı, onay bekler.
+  DONANIM
+  /// Etkinleştirmede okunabilen etken < 3 ya da güçlü < 2 (K8) — onaydan sonra aynı anahtar aynı kodla etkinleşir;
+  /// v2'ye geçen mevcut zayıf kurulum da (yoklamada) bu listeye düşer.
+  ZAYIF_TANIMA
+}
+
+enum DonanimTalebiDurumu {
+  BEKLIYOR
+  ONAYLANDI
+  REDDEDILDI
+}
+
+/// Parmak izi onay talebi (K8): donanım değişikliği bildirimi ya da zayıf tanıma. Durum makinesi (atomik claim,
+/// sebep zorunlu); kabul edilen kümenin değişimi `kurulum_kaydi`na satırdır. Güçlü etkenler tutan bildirim
+/// kendiliğinden ONAYLANDI doğar (`otomatik`). Bekleyen talep (kurulum · tür · anahtar) başına TEK; sonraki bildirim
+/// onun ölçümünü tazeler (onaylanan küme fabrikanın SON bildirdiğidir).
+model DonanimTalebi {
+  id             String              @id @default(uuid()) @db.Uuid
+  kurulumId      String              @db.Uuid
+  tur            DonanimTalebiTuru
+  durum          DonanimTalebiDurumu @default(BEKLIYOR)
+  /// Bildiren kurulum anahtarı (zayıf tanımada onay bu anahtara bağlıdır).
+  anahtarKimligi String              @db.VarChar(64)
+  /// Bildirilen tuzlu küme (ham kimlik değil) — bekleyen talepte son bildirim.
+  parmakIzi      Json
+  /// Bildirim anındaki kabul edilen küme (karşılaştırma ekranı için).
+  kabulEdilen    Json?
+  kayip          String[]            @default([])
+  gerekce        String?             @db.VarChar(500)
+  otomatik       Boolean             @default(false)
+  bildirimSayisi Int                 @default(1)
+  sonBildirim    DateTime            @default(now()) @db.Timestamptz
+  kararZamani    DateTime?           @db.Timestamptz
+  kararVeren     String?             @db.VarChar(120)
+  kararSebebi    String?             @db.VarChar(500)
+  createdAt      DateTime            @default(now()) @db.Timestamptz
+  updatedAt      DateTime            @updatedAt @db.Timestamptz
+
+  kurulum Kurulum @relation(fields: [kurulumId], references: [id])
+
+  @@index([durum, createdAt])
+  @@index([kurulumId])
+  @@map("donanim_talebi")
 }
 
 /// Taşıma talebi: yeni anahtar + parmak izi, portal onayını bekler (durum makinesi, atomik claim).
@@ -1210,6 +1261,8 @@ enum BildirimOlayi {
   UZUN_UFUK_VERILDI
   /// Genişlik kapısı: yetenek düşüşünde fabrika kira alamadı — güncel şartların kök imzası ACİL (talep başına bir kez).
   KOK_IMZASI_ACIL
+  /// K8: donanım değişikliği ya da zayıf tanıma portal onayı bekliyor (talep başına bir kez).
+  DONANIM_ONAYI_BEKLIYOR
 }
 
 enum BildirimKanali {
