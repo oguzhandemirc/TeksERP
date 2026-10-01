@@ -1,6 +1,10 @@
 # =============================================================================
 # TeksERP Backend - ILK KURULUM (sifirdan iskelet)
 # =============================================================================
+# DONDURULDU (Dagitim v2, 2026-10-01): pm2 duzeni yalniz GECIS DONEMI icin yasar (pm2'de kosan kurulumlar
+#   hizmet duzenine deploy\gecis\gecis.ps1 ile tasinana dek). Yeni kurulum setup (D5) ile yapilir; bu betige yeni ozellik EKLENMEZ; yalniz duzeltme - o da
+#   bekcinin DONMUS ozet tablosu (test_sunucu_betikleri bolum 24) gerekcesiyle birlikte guncellenerek.
+#   Kaldirma kosulu (olculebilir): filoda (portal filo gorunumu / yoklama raporu) pm2 duzeninde kurulum kalmamasi.
 # NEREDE CALISIR: YENI SUNUCUDA, YONETICI PowerShell'de.
 #
 # ⚠ YURUTME ILKESI: Windows 11 istemcide varsayilan `Restricted`, Server'da
@@ -269,6 +273,26 @@ function ScramDogrulayici([string]$parola) {
   return "SCRAM-SHA-256`$4096:" + [Convert]::ToBase64String($tuz) + "`$" + [Convert]::ToBase64String($saklanan) + ":" + [Convert]::ToBase64String($sunucu)
 }
 
+# HIZMET DUZENI IZI (Dagitim v2) - kur.ps1 ve ilk-kurulum.ps1'de AYNI govde (bekci ikizligi olcer).
+# Bu kok hizmet duzenindeyse (surumler\ / current / yapilandirma\.env) ya da bu koku kullanan bir TeksERP
+# hizmeti kayitliysa pm2 yolu HICBIR SEYE dokunmaz: guncellemeyi guncelleyici, geri donusu gecis.ps1 yapar.
+# Hizmet listesi okunamazsa iz sayilir (fail-closed).
+function HizmetDuzeniIzi($kokYolu) {
+  $iz = @(@("surumler", "current", "yapilandirma\.env") | Where-Object { Test-Path -LiteralPath (Join-Path $kokYolu $_) } | ForEach-Object { "$kokYolu\$_" })
+  $hizmetler = $null
+  try {
+    $hizmetler = @(Get-CimInstance Win32_Service -ErrorAction Stop | Where-Object {
+      ([string]$_.Name).StartsWith("TeksERP-Backend", [System.StringComparison]::OrdinalIgnoreCase) -or ([string]$_.Name).StartsWith("TeksERP-Guncelleyici", [System.StringComparison]::OrdinalIgnoreCase) })
+  } catch { $hizmetler = $null }
+  if ($null -eq $hizmetler) { return ,($iz + @("TeksERP hizmetleri OLCULEMEDI (Win32_Service)")) }
+  $kokMetni = ([string]$kokYolu).TrimEnd('\')
+  foreach ($h in $hizmetler) {
+    $yol = [string]$h.PathName
+    if ($yol.IndexOf("--kok", [System.StringComparison]::OrdinalIgnoreCase) -ge 0 -and $yol.IndexOf($kokMetni, [System.StringComparison]::OrdinalIgnoreCase) -ge 0) { $iz += "hizmet $($h.Name) bu koku kullaniyor" }
+  }
+  return ,$iz
+}
+
 Write-Host ""
 Write-Host "================================================================"
 Write-Host "  TeksERP - ILK KURULUM (iskelet)"
@@ -279,7 +303,7 @@ Write-Host "  Rol       : $DbKullanici"
 
 # Hizmet duzeni kapisi (Dagitim v2): bu betik pm2 iskeleti kurar. Kok Windows hizmeti duzenindeyse ya da
 # TeksERP-Backend hizmeti varsa pm2 + acilis gorevi AYNI PORTA ikinci backend dogururdu - durulur.
-$hizmetIzi = @(@("surumler", "current", "yapilandirma\.env") | Where-Object { Test-Path (Join-Path $Kok $_) } | ForEach-Object { "$Kok\$_" })
+$hizmetIzi = HizmetDuzeniIzi $Kok
 if ($hizmetIzi.Count) { Dur "Bu kok Windows hizmeti duzeninde ($($hizmetIzi -join ', ')) - ilk-kurulum.ps1 pm2 iskeleti icindir; yeni kurulum setup ile yapilir." }
 if (Get-Service -Name "TeksERP-Backend" -ErrorAction SilentlyContinue) { Dur "TeksERP-Backend Windows hizmeti kayitli - bu makinede pm2 iskeleti kurulmaz (ayni port, iki backend)." }
 

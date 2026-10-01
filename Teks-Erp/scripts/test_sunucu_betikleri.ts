@@ -26,12 +26,17 @@
 //      §22 aracın DAVRANIŞI (Node birim, sahte `pm2 jlist`).
 //   §23 kurulum kaydının `yeniMigrationSayisi`si DB'de GERÇEKTEN uygulanan sayıdır ([7/9] önü/arkası) ve
 //      [5/9] birleşik ecosystem'de "KORUNDU" başlığı basılmaz.
+//   §24 pm2 yolu DONDURULDU (Dağıtım v2, geçiş dönemi çift yol): kur.ps1 · ilk-kurulum.ps1 · pm2-boot.cmd ·
+//      ecosystem.config.js içeriği aşağıdaki özetlere bağlı + DONDURULDU başlığı taşır. Değişiklik yalnız düzeltme
+//      için ve özet satırı GEREKÇESİYLE aynı commit'te güncellenerek yapılır (yeni özellik pm2 yoluna eklenmez).
+//   §25 hizmet betikleri (backend-hizmeti.ps1 ↔ guncelleyici-hizmeti.ps1) ortak yardımcıları birebir ikiz.
 // Kaynak ölçülür, davranış değil: pwsh her ortamda yok, 5.1 hiç yok.
 // =============================================================================
 import { readFileSync, existsSync, readdirSync, mkdtempSync, mkdirSync, writeFileSync, rmSync, realpathSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { spawnSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import { psTara, kapsayanFonksiyon } from "./lib/ps-tarama";
 import { INSTALL_HISTORY_FILE_NAME, INSTALL_RECORD_KINDS, InstallRecordSchema } from "../src/lib/license/protocol";
 
@@ -45,7 +50,7 @@ function check(label: string, ok: boolean, detay = ""): void {
 }
 
 /** Fabrika/müşteri sunucusunda koşan PowerShell betikleri (geliştirme makinesinde koşan `paketle.ps1` hariç). */
-const SUNUCU_PS1 = ["deploy/kur.ps1", "deploy/ilk-kurulum.ps1", "deploy/yedekle.ps1", "deploy/uzaktan-kos.ps1", "deploy/bakim-rolu.ps1", "deploy/hizmet/backend-hizmeti.ps1"];
+const SUNUCU_PS1 = ["deploy/kur.ps1", "deploy/ilk-kurulum.ps1", "deploy/yedekle.ps1", "deploy/uzaktan-kos.ps1", "deploy/bakim-rolu.ps1", "deploy/hizmet/backend-hizmeti.ps1", "deploy/hizmet/guncelleyici-hizmeti.ps1"];
 
 const YONLENDIRME = /(?:^|\s)2>(?:&1|\$null)/;
 const CIPLAK_NPM = /(?:^|[\s&(;|])npm(?=\s|$)/;
@@ -871,6 +876,61 @@ function kurulumOlcumIhlalleri(kur: string): string[] {
     const uygulandi = k2 !== kr;
     const ih2 = uygulandi ? kurulumOlcumIhlalleri(k2) : [];
     check(`§23 sonda: ${ad} → kırmızı`, ih2.length > 0, uygulandi ? ih2.join(" | ") : "MUTASYON UYGULANMADI");
+  }
+}
+
+// §24 — pm2 yolu DONDURULDU (yönetici kararı 2026-10-01, geçiş dönemi çift yol). adnansahin ve demofabrika
+//   pm2 düzeninde; geçişe kadar acil düzeltme ESKİ yolla (kur.ps1 -Paket) kurulabilmeli — o yüzden dosyalar
+//   KALIR ve ÇALIŞIR, ama yeni özellik almaz. Özet LF'ye normalize içerikten (checkout CRLF'i fark yaratmaz).
+//   Kaldırma koşulu: filoda pm2 düzeninde kurulum kalmaması (portal filo görünümü) — o gün bu tablo da gider.
+const DONMUS: ReadonlyArray<{ dosya: string; sha256: string; gerekce: string }> = [
+  { dosya: "deploy/kur.ps1", sha256: "0c56f34d39594a006e3fc01290ea20a134b6f5f26ffa07542fcc19b7401d68e5", gerekce: "D6 2026-10-01: dondurma başlığı + HizmetDuzeniIzi kapısı (bu kökü kullanan her TeksERP hizmeti)" },
+  { dosya: "deploy/ilk-kurulum.ps1", sha256: "5a1e0803b1e08f7a88e6e71d178cc7053ff04a210703fd3c3f6eaa3831386640", gerekce: "D6 2026-10-01: dondurma başlığı + HizmetDuzeniIzi kapısı" },
+  { dosya: "deploy/pm2-boot.cmd", sha256: "858cb7c73e45af3fc1d8e3ecab566bb44f682358d3006c304d04c3148dea81c6", gerekce: "D6 2026-10-01: dondurma başlığı" },
+  { dosya: "Teks-Erp/ecosystem.config.js", sha256: "aabeb95d3c4baf37b8bc48a6c36e688a8f411e5e4a2cc874ce86c6bcbefbfc3e", gerekce: "D6 2026-10-01: dondurma başlığı" },
+];
+function donmusOzet(metin: string): string {
+  return createHash("sha256").update(metin.replace(/\r\n/g, "\n"), "utf8").digest("hex");
+}
+function donmusIhlalleri(dosya: string, metin: string, beklenen: string): string[] {
+  const ih: string[] = [];
+  if (donmusOzet(metin) !== beklenen) ih.push(`${dosya} donmuş özetten farklı`);
+  if (!/DONDURULDU \(Da[gğ][iı]t[iı]m v2, 2026-10-01\)/.test(metin)) ih.push(`${dosya} DONDURULDU başlığı yok`);
+  return ih;
+}
+{
+  for (const d of DONMUS) {
+    const metin = readFileSync(join(KOK, d.dosya), "utf8");
+    const ih = donmusIhlalleri(d.dosya, metin, d.sha256);
+    check(`§24 ⭐ ${d.dosya} DONMUŞ (özet + başlık) — son gerekçe: ${d.gerekce}`, ih.length === 0,
+      ih.length ? `${ih.join(" | ")} — düzeltmeyse özet satırını gerekçesiyle güncelle (ölçülen ${donmusOzet(metin)}); yeni özellikse pm2 yoluna EKLENMEZ` : "aynı");
+    const sondalar: Array<[string, string]> = [
+      ["satır eklendi", `${metin}\n# yeni ozellik\n`],
+      ["başlık silindi", metin.replace(/DONDURULDU \(Da[gğ][iı]t[iı]m v2, 2026-10-01\)/, "pm2 yolu")],
+    ];
+    for (const [ad, m] of sondalar) {
+      const uygulandi = m !== metin;
+      check(`§24 sonda: ${d.dosya} ${ad} → kırmızı`, uygulandi && donmusIhlalleri(d.dosya, m, d.sha256).length > 0, uygulandi ? "" : "MUTASYON UYGULANMADI");
+    }
+  }
+  // CRLF checkout'u (Windows sunucusu) özeti DEĞİŞTİRMEZ — aksi hâlde kapı satır sonuna bekçilik ederdi.
+  const ilk = readFileSync(join(KOK, DONMUS[0]!.dosya), "utf8");
+  check("§24 körlük zemini: CRLF'li kopya aynı özet", donmusOzet(ilk.replace(/\r?\n/g, "\r\n")) === donmusOzet(ilk));
+}
+
+// §25 — hizmet betiklerinin ortak yardımcıları İKİZ (biri düzelip öteki kalmasın): SID algoritması, etkin
+//   erişim, geniş ACE, bağlantı ölçümü, ImagePath ayrıştırma, yol eşitliği.
+{
+  const t1 = psTara(readFileSync(join(KOK, "deploy/hizmet/backend-hizmeti.ps1"), "utf8"));
+  const t2 = psTara(readFileSync(join(KOK, "deploy/hizmet/guncelleyici-hizmeti.ps1"), "utf8"));
+  const govde = (t: ReturnType<typeof psTara>, ad: string): string | null => {
+    const f = t.fonksiyonlar.find((x) => x.ad === ad);
+    return f ? t.satirlar.filter((x) => x.no >= f.bas && x.no <= f.son).map((x) => x.kod.trim()).filter(Boolean).join("\n") : null;
+  };
+  for (const ad of ["HizmetSid", "Erisim", "GenisAce", "ReparseMi", "KomutParcala", "YolEsit"]) {
+    const a = govde(t1, ad), b = govde(t2, ad);
+    check(`§25 ⭐ \`${ad}\` ikizi birebir (backend-hizmeti.ps1 ↔ guncelleyici-hizmeti.ps1)`, a !== null && a.length > 20 && a === b,
+      `${a ? a.length : "YOK"} · ${b ? b.length : "YOK"} bayt`);
   }
 }
 
