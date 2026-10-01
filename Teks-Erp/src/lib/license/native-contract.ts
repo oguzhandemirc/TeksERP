@@ -18,6 +18,7 @@ import {
   type IdentificationAssessment,
 } from "./protocol";
 import { ALL_CORE_RESULT_CODES, CORE_UNAVAILABLE_CODE, type CollectedFingerprint, type CoreResult, type FingerprintCompareOptions } from "./license-core";
+import { FACTOR_READ_STATES, UNREAD_OS_READINGS } from "./fingerprint-paths";
 
 const CodeSchema = z.enum(ALL_CORE_RESULT_CODES);
 export function resultSchema<T extends z.ZodType>(value: T) {
@@ -52,15 +53,23 @@ export const DecisionSchema = z.object({
 });
 export const AssessmentSchema = z.object({ readable: CountSchema, strongReadable: CountSchema, weak: z.boolean() });
 export const LeaseViewSchema = z.object({ document: LeaseSchema, subCertificate: CertificateViewSchema });
+const FactorReadingSchema = z.strictObject({
+  durum: z.enum(FACTOR_READ_STATES),
+  yol: z.string().nullable(),
+  celiski: z.array(z.string()),
+  hatali: z.array(z.string()),
+});
 export const CollectedSchema = z.object({
   digest: FingerprintSchema,
   measured: z.object({ f1: z.boolean(), f2: z.boolean(), f3: z.boolean(), f4: z.boolean(), f5: z.boolean() }),
+  okuma: z.strictObject({ f1: FactorReadingSchema, f2: FactorReadingSchema, f3: FactorReadingSchema, f4: FactorReadingSchema }),
 });
 
 export const EMPTY_FINGERPRINT: Fingerprint = Object.freeze({ f1: null, f2: null, f3: null, f4: null, f5: null });
 export const UNMEASURED: CollectedFingerprint = Object.freeze({
   digest: EMPTY_FINGERPRINT,
   measured: Object.freeze({ f1: false, f2: false, f3: false, f4: false, f5: false }),
+  okuma: UNREAD_OS_READINGS,
 });
 
 function contractBreach<T>(what: string): CoreResult<T> {

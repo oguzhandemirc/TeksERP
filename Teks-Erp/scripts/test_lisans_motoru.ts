@@ -21,6 +21,8 @@
 //   ⭐ eski kira dosyası / silinip yapıştırılan eski yanıt yaptırımı kaldırmaz (D2)
 //   ⭐ kira dosyası yokluğu "yoklama başarısız" değil; HAK/durum varken yoklanır (D3)
 //   ⭐ uzatma dosyası İSTEK gerektirmez; eski dosya RED; ikinci anahtar imzalı kayıttan (L2-5, §24 · §13a)
+//   ⭐ donanım değişikliği bildirimi (K8, §25): parmak izi yeniden okunur · imzalı KATI `donanim` gövdesi · kayıp listesi
+//      kiradaki kümeye göre · ONAYLANDI kirası doğrulanıp kabul · eski satıcı BULUNAMADI · etkinleşmemiş 409
 //   ⭐ motor pes etmez, sağlıkta durum (D5) · gözlem sayacı istek başına · zil fırtınası yok ·
 //      ortam künyesinde makine adı yok · kapalı kalan makineye sahte SAAT_İLERİ yok · taşıma onayı kod bekler (D8)
 //   ⭐ yeni HAK kabul edilince bütünlük HEMEN yeniden koşar (hazırlık anahtarının sınıf kararı, §22)
@@ -46,6 +48,8 @@
 // L2-5 (uzatma dosyası · ikinci anahtar): L1 dosya yanıtı bekleyen istek ister (§24a) · L2 dosya ayak izi
 // QR'la karışır (§24b) · L3 eski kira kapısı kalktı (§2k · §12d · §24e) · L4 ikinci anahtar durum kaydını
 // saymaz (§13a/§13a2) — dördü de kırmızı, geri alınınca yeşil (sha ile ölçüldü).
+// L2-10 (donanım bildirimi): N11 ONAYLANDI yanıtının kirası kabul edilmedi (§25e) · N12 bildirim yeniden ölçmedi (§25c)
+// — ikisi de kırmızı, geri alınınca yeşil (sha ile ölçüldü).
 // ⭐ KALICI SONDA ✓K1 (her koşumda): bilinmeyen kod genel mesaja düşer — §8a'nın "her kodun kendi
 // mesajı var" karşılaştırıcısı kör değil.
 // =============================================================================
@@ -90,6 +94,7 @@ import {
   updateProxySettings,
 } from "../src/services/license.service";
 import { buildPollBody, pollLicenseOnce, refreshLicenseDbFacts } from "../src/services/license-sync.service";
+import { reportHardwareChange } from "../src/services/license-hardware.service";
 import { awaitIntegrityRefreshForTests, refreshLicenseIntegrity } from "../src/services/license-integrity.service";
 import { configureIntegrityForTests, getIntegrityOutcome } from "../src/lib/license/integrity-state";
 import { generatePackageKey, signPackageDirectory } from "./lib/butunluk-imza";
@@ -762,6 +767,67 @@ async function uzatmaDosyasiBolumu(x: Hazir): Promise<void> {
   check("§24h karşı: satıcı P taşımayan kira verince eski çapaya döner (v1 belgeyle sıfır fark)", r.outcome === "BASARILI" && s.odenmisTarih === null && s.hesaplananKademe === "NORMAL", `${r.outcome} ${JSON.stringify(s.odenmisTarih)}`);
 }
 
+const ayniKume = (a: Fingerprint | undefined, b: Fingerprint): boolean => !!a && (["f1", "f2", "f3", "f4", "f5"] as const).every((k) => a[k] === b[k]);
+
+async function donanimBildirimiBolumu(x: Hazir): Promise<void> {
+  console.log("\n§25 — donanım değişikliği bildirimi (K8): imzalı `donanim` isteği · BEKLIYOR · ONAYLANDI yeni kira · eski satıcı · etkinleşmemiş");
+  const olcum = getMeasuredFingerprint();
+  try {
+    // Kira kümesi = fikstür (beş etken dolu): bildirim GERÇEK ölçümü gönderir, bu makinede okunamayan etken kayıptır.
+    const tum = { f1: true, f2: true, f3: true, f4: true, f5: true };
+    setMeasuredFingerprint({ digest: x.f.parmakIzi as Fingerprint, measured: tum, measuredAt: new Date(0).toISOString() });
+    await pollLicenseOnce();
+    const kabulKumesi = getLicenseSnapshot().lease?.document.parmakIzi as Fingerprint;
+    x.satici.donanimDurumu = "BEKLIYOR";
+    const iz = olaylar.length;
+    const sayac0 = x.satici.sayac.donanim;
+    const r = await reportHardwareChange("anakart değişti", null);
+    const govde = x.satici.donanimGovdeleri.at(-1) as { parmakIzi?: Fingerprint; kayip?: string[]; gerekce?: unknown } | undefined;
+    const son = x.satici.istekler.at(-1);
+    const olculen = currentFingerprintDigest();
+    check(
+      "§25a ⭐ etkin kurulum: imzalı `donanim` isteği KATI gövdeyle (lisans kimliğiyle) gider, gövdedeki küme = ölçülen küme; BEKLIYOR + talep",
+      r.durum === "BEKLIYOR" && x.satici.sayac.donanim === sayac0 + 1 && son?.amac === "donanim" && son.kimlik === x.f.kurulumId && ayniKume(govde?.parmakIzi, olculen) && govde?.gerekce === "anakart değişti" && r.talepId.length === 36,
+      `${r.durum} ${JSON.stringify(son)}`,
+    );
+    const beklenenKayip = (["f1", "f2", "f3", "f4", "f5"] as const).filter((f) => olculen[f] === null && kabulKumesi[f] !== null);
+    check(
+      "§25b kayıp listesi (gövde = yanıt) = kira kümesinde değeri olup ölçümde (önbellek dahil) olmayan etkenler",
+      ayniKume(kabulKumesi, x.f.parmakIzi as Fingerprint) && JSON.stringify(govde?.kayip) === JSON.stringify(r.kayip) && JSON.stringify(r.kayip) === JSON.stringify(beklenenKayip),
+      `kayıp ${JSON.stringify(r.kayip)} · ölçülemeyen ${(["f1", "f2", "f3", "f4", "f5"] as const).filter((f) => olculen[f] === null).join(",") || "yok"} · kira kümesi ${getLicenseSnapshot().lease ? "var" : "YOK"}`,
+    );
+    const yeniOlcum = getMeasuredFingerprint();
+    check("§25c bildirim parmak izini YENİDEN ölçer (çok yollu okuma raporuyla)", !!yeniOlcum?.okuma && yeniOlcum.measuredAt !== new Date(0).toISOString(), yeniOlcum?.measuredAt ?? "");
+    const eylem = olaylar.slice(iz).find((o) => o.action === "LICENSE_ADMIN_ACTION")?.payload as { eylem?: string; sonuc?: string; talepId?: string } | undefined;
+    check("§25d ayak izi: yönetici eylemi 'donanim-bildir' + sonuç + talep", eylem?.eylem === "donanim-bildir" && eylem.sonuc === "BEKLIYOR" && eylem.talepId === r.talepId, JSON.stringify(eylem));
+    x.satici.donanimDurumu = "ONAYLANDI";
+    const once = getLicenseSnapshot().lease?.document.kiraId;
+    const iz2 = olaylar.length;
+    const o = await reportHardwareChange(null, null);
+    const kabul = olaylar.slice(iz2).find((e) => e.action === "LICENSE_LEASE_ACCEPTED")?.payload as { kaynak?: string } | undefined;
+    check(
+      "§25e ⭐ ONAYLANDI: satıcının yeni kirası doğrulanıp kabul edilir (kaynak 'donanim'), yeni kiranın kümesi bildirilen küme",
+      o.durum === "ONAYLANDI" && o.lisans.kira?.kiraId !== once && kabul?.kaynak === "donanim" && ayniKume(getLicenseSnapshot().lease?.document.parmakIzi, currentFingerprintDigest()),
+      `${o.durum} ${String(kabul?.kaynak)}`,
+    );
+    x.satici.donanimDurumu = "YOK";
+    const kira = getLicenseSnapshot().lease?.document.kiraId;
+    check(
+      "§25f eski satıcı (uç yok) → LICENSE_VENDOR_REJECTED/BULUNAMADI, kira değişmez",
+      (await hataKodu(reportHardwareChange(null, null))) === "LICENSE_VENDOR_REJECTED/BULUNAMADI" && getLicenseSnapshot().lease?.document.kiraId === kira,
+    );
+    yeniden(path.join(GECICI, "donanim-etkin-degil"));
+    const istek0 = x.satici.istekler.length;
+    check("§25g etkinleşmemiş kurulum → 409 LICENSE_NOT_ACTIVE, satıcıya istek gitmez", (await hataKodu(reportHardwareChange(null, null))) === "LICENSE_NOT_ACTIVE" && x.satici.istekler.length === istek0);
+  } finally {
+    yeniden(x.dizin);
+    x.satici.donanimDurumu = "BEKLIYOR";
+    if (olcum) setMeasuredFingerprint(olcum);
+    // Kira kümesi fikstüre dönsün (sonraki bölümler fikstür kümesiyle GECERLI bekler).
+    await pollLicenseOnce();
+  }
+}
+
 async function motorBolumu(): Promise<void> {
   console.log("\n§15 — motor dayanıklılığı (D5): kimlik gelmezse pes etmez; sağlıkta başlamadı/çalışıyor");
   const olcum = getMeasuredFingerprint();
@@ -954,6 +1020,7 @@ async function main(): Promise<void> {
     await etkinTanimiBolumu(hazir);
     await depoOkumaBolumu(hazir);
     await uzatmaDosyasiBolumu(hazir);
+    await donanimBildirimiBolumu(hazir);
     gozlemSayaciBolumu();
     await zilGeriCekilmeBolumu(hazir);
     ortamBolumu();

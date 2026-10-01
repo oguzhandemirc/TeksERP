@@ -30,6 +30,8 @@ export const LICENSE_FILES = {
   STATE: "durum.json",
   PROXY: "proxy.json",
   TRANSFER: "tasima.json",
+  /** Parmak izi 24 sa önbelleği (K8) — yalnız tuzlu özet; HMAC'li, bozuksa yok sayılır (`fingerprint-cache.ts`). */
+  FINGERPRINT_CACHE: "parmak-izi-onbellek.json",
 } as const;
 
 /** Depo kullanılamıyorsa nedeni (kapı/ekran TR metni ayrıca üretir). */

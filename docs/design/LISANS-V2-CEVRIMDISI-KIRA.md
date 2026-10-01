@@ -232,13 +232,13 @@ Kalan risk: çalınan ara imzacının internetsiz kuruluma bastığı süresiz H
 
      | Etken | Okuma yolları |
      |---|---|
-     | f1 makine kimliği | iki kayıt defteri görünümü |
+     | f1 makine kimliği | PowerShell kayıt sağlayıcısı · .NET 64 bit kayıt görünümü |
      | f2 SMBIOS UUID | CIM · eski WMI · `HardwareConfig` kaydı |
-     | f3 sistem diski | `Get-Disk` · `Win32_DiskDrive` (önyükleme bölümü ilişkisi) · depolama WMI ad alanı |
-     | f4 anakart/BIOS serisi | `Win32_BIOS` · `Win32_BaseBoard` · CIM |
+     | f3 sistem diski | seri: `Get-Disk` · `MSFT_Disk` (depolama WMI ad alanı) · `Win32_DiskDrive` (C: ilişkisi); seri genel desende/boşsa UniqueId: `Get-Disk` · `MSFT_Disk` |
+     | f4 anakart/BIOS serisi | sistem serisi: CIM · eski WMI · mssmbios kayıt kopyası (tip 1); anlamsızsa anakart serisi: CIM · eski WMI · mssmbios (tip 2) |
      | f5 PG kimliği | `pg_control_system()` · `pg_controldata` |
 
-     Linux'ta her etkenin iki dosya ya da komut karşılığı vardır. İlk başarılı yol kazanır; yollar arası çelişki yalnız bilgi olarak raporlanır. `Get-PhysicalDisk` ve `Get-NetAdapter -IncludeHidden` yasağı sürer, her yol zaman aşımlıdır. TS ve native toplayıcı aynı sondayı aynı sırayla koşar. Kesin yol listesi L2-10'da thinkpad-1 ve VM üzerinde ölçülerek donar.
+     Linux'ta her etkenin iki dosya ya da komut karşılığı vardır. İlk başarılı yol kazanır; yollar arası çelişki yalnız bilgi olarak raporlanır. `Get-PhysicalDisk` ve `Get-NetAdapter -IncludeHidden` yasağı sürer, her yol zaman aşımlıdır. TS ve native toplayıcı aynı sondayı aynı sırayla koşar. **Kesin yol listesi L2-10'da dondu** (thinkpad-1 salt-okuma ölçümü + D8'in dört bağlamlı düşük yetki ölçümü; tablo `Teks-Erp/src/lib/license/fingerprint-paths.ts` ↔ `paths.rs`, arşiv 2026-10-01 L2-10): aynı değeri veren yollar bir "tür"dür; bir tür ancak önceki türün en az bir yolu kesin cevap verip hiçbiri kullanılabilir değer vermediyse denenir, önceki tür yalnız hata verdiyse etken okunamadı kalır (önbellek köprüler). F3 artık seri önce okunur (yönetici kararı B): UniqueId'si kullanılabilen kurulumlarda f3 özeti bir kez değişir; bu değişimi L2-11'in güçlü ≥ 2 öğrenmesi karşılar, gözlem kipinde etkisi sıfırdır. Docker Desktop (LinuxKit, arm64) konteynerinde DMI/SMBIOS hiç yoktur — o sınıf zayıf tanımadır; x86 SMBIOS'lu VM ölçülemedi.
    - **Kayıp:** son başarılı okumanın özeti 24 saate dek kullanılır (önbellek imzalı durum kaydında ve DB izinde). Kabul edilen kümede değeri olan bir etken 24 saat üst üste hiçbir yoldan okunamazsa "kayıp" sayılır. Kayıp etken uyuşmazlıktır ama tek başına iptal sebebi değildir.
    - **Karar:** geçerli = eşleşen ≥ 3 ∧ güçlü etkenlerden (f2 · f3 · f4) eşleşen ≥ 2. f1 ve f5 güçlü sayılmaz, çünkü VM ve disk kopyası bu ikisini taşır. DR'de f5 hariç tutulur (bugünkü kural).
      - Kayıp etken varken eşik tutuyorsa sonuç GEÇERLİ olur ve portala not düşer.

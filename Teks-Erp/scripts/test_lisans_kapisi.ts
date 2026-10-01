@@ -10,7 +10,8 @@
 //   hesapla birebir (listede olmayan açık yol yok) · §3 ölü desen yok; KISITLI ek listesi
 //   yalnız yazma; bilerek kapalı yollar gerçekten kapalı; güvenlik eylemleri (pasifleştir ·
 //   2FA sıfırla · bulut hesabını kilitle) K4'te açık, K5'te kapalı · §4 K5 ⊂ K4 · §5 "verilerimi al"
-//   yolları var ve HER kademede açık · §6 export/excel/pdf/print/backup adlı yazma rotası
+//   yolları var ve HER kademede açık · §5b donanım değişikliği bildirimi (K8) gerçek uç ve HER kademede
+//   açık (§9i: K5'te oturumla kapıdan geçer) · §6 export/excel/pdf/print/backup adlı yazma rotası
 //   açıkça sınıflı · §7 eşleştirici Express'le aynı (harf duyarsız, boş segment yok, HEAD=GET)
 //   · §8 ⭐ gözlemde SIFIR FARK (K5 hesaplanır; her uç kapıdan eşzamanlı geçer, yanıta
 //   dokunulmaz, "reddederdim" sayılır) · §9 ⭐ zorlamada KİMLİK ÖNCE: oturumsuz / bozuk /
@@ -29,7 +30,8 @@
 // yazması · N3 reissue açık listeye · N4 kimliksize kademe ayrıntısı · N5 gözlemde uygulanan
 // yerine hesaplanan kademe · N6 ölü desen (olmayan yol) listeye · (2026-09-29 F1b) D1 kapı
 // oturumsuza yeniden 403 · D2 `PUBLIC_ROUTES`tan bir satır düşer · D3 K5 listesinden `auth/me`
-// düşer · D4 morgan `url` jetonu maskesiz · D5 imzası geçerli ama oturumsuz token'a kademe.
+// düşer · D4 morgan `url` jetonu maskesiz · D5 imzası geçerli ama oturumsuz token'a kademe · (L2-10) N10 donanım
+// bildirimi rotası yok → §5b.
 // =============================================================================
 import prisma from "../src/lib/prisma";
 import app from "../src/app";
@@ -155,6 +157,10 @@ function kapsamaVeDisariAktarim(): void {
     const acik = STATE_TIERS.every((t) => isOpenInTier(t, m, ornekYol(desen)));
     check(`§5 ⭐ verilerimi al '${ad}' (${spec}) gerçek uç ve HER kademede açık`, var_ && acik, `var=${var_} açık=${acik}`);
   }
+  // K8: donanım değişikliği bildirimi kurtarma yoludur — kısıtlı kurulum donanımını bildirip lisansını onarabilmeli.
+  const donanim = uclar.some((u) => u.m === "POST" && u.desen === "/api/license/donanim-bildir");
+  const donanimKapali = STATE_TIERS.filter((t) => !isOpenInTier(t, "POST", "/api/license/donanim-bildir"));
+  check("§5b ⭐ donanım değişikliği bildirimi (POST /api/license/donanim-bildir) gerçek uç ve HER kademede açık", donanim && donanimKapali.length === 0, `var=${donanim} kapalı=${donanimKapali.join(",") || "yok"}`);
   const ADLI = /export|excel|pdf|print|backup|yedek/i;
   const adli = yazmalar.filter((u) => ADLI.test(u.desen));
   const tumListe = [...ALWAYS_OPEN_ROUTES, ...RESTRICTED_OPEN_ROUTES, ...SUSPENDED_OPEN_ROUTES, ...DECLARED_CLOSED_ROUTES];
@@ -243,7 +249,7 @@ async function zorlama(token: string): Promise<void> {
   }
   const g2 = await kodu(uc("GET", "/api/devices/status"), token);
   check("§9h3 kimlik istemeyen uca OTURUMLU çağrı → kademe kodu (kimlik doğrulandı)", g2.kod === "LICENSE_SUSPENDED");
-  for (const [m, yol] of [["GET", "/api/admin/health"], ["GET", "/api/mobile/updates/ota/1/manifest"], ["GET", "/api/license/durum"], ["POST", "/api/auth/login"], ["GET", "/api/auth/me"], ["GET", "/api/admin/backups/a.dump/download"]]) {
+  for (const [m, yol] of [["GET", "/api/admin/health"], ["GET", "/api/mobile/updates/ota/1/manifest"], ["GET", "/api/license/durum"], ["POST", "/api/license/donanim-bildir"], ["POST", "/api/auth/login"], ["GET", "/api/auth/me"], ["GET", "/api/admin/backups/a.dump/download"]]) {
     check(`§9i K5'te açık: ${m} ${yol}`, (await kodu(uc(m, yol), token)).rotaya);
   }
   for (const m of ["GET", "POST"] as const) {

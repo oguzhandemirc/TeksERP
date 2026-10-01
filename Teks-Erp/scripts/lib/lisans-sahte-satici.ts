@@ -12,6 +12,7 @@ import path from "node:path";
 import { randomUUID } from "node:crypto";
 import {
   ActivateRequestSchema,
+  HardwareReportRequestSchema,
   PollRequestSchema,
   REQUEST_HEADER,
   TransferRequestSchema,
@@ -48,7 +49,11 @@ export interface SahteSatici {
   zilOmruMs: number;
   /** Taşıma talebinin yanıt durumu (D8: onayda lisans DÖNMEZ). */
   tasimaDurumu: "BEKLIYOR" | "ONAYLANDI" | "REDDEDILDI";
-  readonly sayac: { etkinlestir: number; yokla: number; zil: number; red: number; zaman: number; tasima: number };
+  /** Donanım bildiriminin yanıtı (K8): ONAYLANDI yeni kirayla gelir; YOK = eski satıcı (uç yok, 404 BULUNAMADI). */
+  donanimDurumu: "BEKLIYOR" | "ONAYLANDI" | "REDDEDILDI" | "YOK";
+  /** KATI şemadan geçmiş donanım bildirimi gövdeleri. */
+  readonly donanimGovdeleri: unknown[];
+  readonly sayac: { etkinlestir: number; yokla: number; zil: number; red: number; zaman: number; tasima: number; donanim: number };
   readonly yoklamaGovdeleri: unknown[];
   /** Her imzalı isteğin amacı + taşıdığı kurulum kimliği (null = kimliksiz) + gövdedeki kurulumId. */
   readonly istekler: Array<{ amac: RequestPurpose; kimlik: string | null; govdeKimligi: string | null }>;
@@ -132,7 +137,9 @@ export async function sahteSaticiBaslat(f: Fikstur): Promise<SahteSatici> {
     sunucuSaatiYalaniMs: 0,
     zilOmruMs: 0,
     tasimaDurumu: "BEKLIYOR",
-    sayac: { etkinlestir: 0, yokla: 0, zil: 0, red: 0, zaman: 0, tasima: 0 },
+    donanimDurumu: "BEKLIYOR",
+    donanimGovdeleri: [],
+    sayac: { etkinlestir: 0, yokla: 0, zil: 0, red: 0, zaman: 0, tasima: 0, donanim: 0 },
     yoklamaGovdeleri: [],
     istekler: [],
     kabuller: [],
@@ -181,7 +188,15 @@ export async function sahteSaticiBaslat(f: Fikstur): Promise<SahteSatici> {
         return;
       }
       const amac: RequestPurpose | null =
-        yol === "/v1/etkinlestir" ? "etkinlestir" : yol === "/v1/yokla" ? "yokla" : yol === "/v1/tasima" ? "tasima" : null;
+        yol === "/v1/etkinlestir"
+          ? "etkinlestir"
+          : yol === "/v1/yokla"
+            ? "yokla"
+            : yol === "/v1/tasima"
+              ? "tasima"
+              : yol === "/v1/donanim"
+                ? "donanim"
+                : null;
       if (req.method !== "POST" || !amac) return hata(res, 404, "YOK");
       const d = dogrula(req, govde, amac, kayitliAnahtar, baglam);
       const json = JSON.parse(govde.toString("utf8")) as { kurulumId?: unknown };
@@ -206,6 +221,16 @@ export async function sahteSaticiBaslat(f: Fikstur): Promise<SahteSatici> {
         s.sayac.tasima++;
         res.writeHead(200, { "content-type": "application/json" });
         return res.end(JSON.stringify({ v: 1, talepId, durum: s.tasimaDurumu, lisans: null }));
+      }
+      if (amac === "donanim") {
+        if (s.donanimDurumu === "YOK") return hata(res, 404, "BULUNAMADI");
+        const b = HardwareReportRequestSchema.safeParse(json);
+        if (!b.success) return hata(res, 400, "GOVDE_GECERSIZ");
+        s.sayac.donanim++;
+        s.donanimGovdeleri.push(json);
+        const lisans = s.donanimDurumu === "ONAYLANDI" ? (JSON.parse(lisansYaniti(b.data.parmakIzi)) as unknown) : null;
+        res.writeHead(200, { "content-type": "application/json" });
+        return res.end(JSON.stringify({ v: 1, talepId: randomUUID(), durum: s.donanimDurumu, lisans }));
       }
       const p = PollRequestSchema.safeParse(json);
       s.yoklamaGovdeleri.push(json);

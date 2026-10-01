@@ -22,7 +22,6 @@ import {
   getLicenseConfig,
   getLicenseDbFacts,
   getLicenseSnapshot,
-  getMeasuredFingerprint,
   getPollStatus,
   peekObservationCounters,
   requestDownloadTokenRefresh,
@@ -30,6 +29,8 @@ import {
 } from "../lib/license/runtime";
 import type { Banner, LicenseEffect, PaidThrough, StateReason } from "../lib/license/state";
 import { licenseError } from "./helpers/license-wire.helper";
+import { fingerprintSection } from "./helpers/license-fingerprint-view.helper";
+import type { FactorReport } from "../lib/license/fingerprint";
 import { integritySection } from "./helpers/license-integrity-view.helper";
 import type { IntegrityStatus } from "../lib/license/state-rules";
 
@@ -138,6 +139,11 @@ export interface LicenseDetail {
     eslesen: number | null;
     olculebilen: number | null;
     uyusmayan: readonly string[];
+    /** Etken başına okuma raporu (K8: çok yollu okuma + 24 sa önbellek) — değer/özet YOK; ölçüm yoksa null. */
+    okuma: Readonly<Record<"f1" | "f2" | "f3" | "f4" | "f5", FactorReport>> | null;
+    /** Kabul edilen kümede değeri olup 24 saattir hiçbir yoldan okunamayan etkenler. */
+    kayip: readonly string[];
+    onbellekBozuk: boolean;
   };
   readonly yoklama: {
     saticiYapilandirildi: boolean;
@@ -241,8 +247,6 @@ export function getLicenseDetail(): LicenseDetail {
   const store = getLicenseStore();
   const snap = getLicenseSnapshot();
   const facts = getLicenseDbFacts();
-  const fp = getMeasuredFingerprint();
-  const d = snap.fingerprintDecision;
   return {
     hazir: snap.hazir,
     kurulum: {
@@ -261,14 +265,7 @@ export function getLicenseDetail(): LicenseDetail {
     },
     durum: stateSection(snap),
     ...documentSections(snap),
-    parmakIzi: {
-      olculdu: fp?.measuredAt ?? null,
-      olculen: fp?.measured ?? null,
-      karar: d?.result ?? null,
-      eslesen: d?.matched ?? null,
-      olculebilen: d?.measurable ?? null,
-      uyusmayan: d?.mismatched ?? [],
-    },
+    parmakIzi: fingerprintSection(snap),
     yoklama: pollingSection(),
     tasima: store?.transfer ?? null,
     gozlem: peekObservationCounters(),

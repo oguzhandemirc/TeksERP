@@ -12,6 +12,7 @@ use crate::jws;
 use crate::local_protect;
 use crate::module_key;
 use crate::outcome::{code, Fail, Outcome};
+use crate::paths;
 use crate::schema::LICENSE_CLASSES;
 use serde_json::{json, Value};
 
@@ -66,6 +67,7 @@ pub fn identity() -> Value {
         "cekirdekKodlari": code::CORE,
         "yerTutucular": PLACEHOLDER_VALUES,
         "windowsSondasi": collect::WINDOWS_PROBE_LINES,
+        "parmakIziYollari": paths::PATHS,
         "modulHkdfOneki": module_key::HKDF_INFO_PREFIX,
         "modulKidOneki": module_key::KID_PREFIX,
         "korumaEntropisi": local_protect::ENTROPY,
@@ -245,12 +247,26 @@ pub fn digest_fingerprint(req: &Value) -> Result<Value, String> {
 /// OS etkenlerini toplar (f5 çağırandan) ve YALNIZ özeti döndürür — ham değer çıkmaz.
 pub fn collect_fingerprint(req: &Value) -> Result<Value, String> {
     let salt = salt_from(req)?;
-    let [f1, f2, f3, f4] = collect::os_factors();
     let f5 = req.get("f5").and_then(Value::as_str).map(str::to_string);
-    let digest = fingerprint::digest_fingerprint(&[f1, f2, f3, f4, f5], &salt).map_err(|f| f.message)?;
+    let (platform, outcomes) = collect::os_outcomes();
+    collected_value(platform, &outcomes, &salt, f5)
+}
+
+/// Yol sonuçlarından çekirdek çıktısına (TS `collectedFrom`): seçim + çağıranın F5'i + tuzlu özet; platform yoksa
+/// dört etken OKUNAMADI. `tests/toplama.rs` TS vektörlerini buradan geçirir.
+pub fn collected_value(platform: Option<&str>, outcomes: &paths::Outcomes, salt: &[u8], f5: Option<String>) -> Result<Value, String> {
+    let ([f1, f2, f3, f4], readings) = match platform {
+        Some(p) => paths::select_os(p, outcomes),
+        None => {
+            (Default::default(), [paths::Reading::unread(), paths::Reading::unread(), paths::Reading::unread(), paths::Reading::unread()])
+        }
+    };
+    let digest = fingerprint::digest_fingerprint(&[f1, f2, f3, f4, f5], salt).map_err(|f| f.message)?;
     let measured: serde_json::Map<String, Value> =
         FACTORS.iter().enumerate().map(|(i, f)| ((*f).to_string(), Value::Bool(digest[i].is_some()))).collect();
-    Ok(json!({ "digest": fingerprint_value(&digest), "measured": measured }))
+    let okuma: serde_json::Map<String, Value> =
+        paths::OS_FACTORS.iter().zip(readings.iter()).map(|(f, r)| ((*f).to_string(), r.to_json())).collect();
+    Ok(json!({ "digest": fingerprint_value(&digest), "measured": measured, "okuma": okuma }))
 }
 
 /// Özet nesnesi (`{f1..f5: özet | null}`); eksik ya da metin/null olmayan etken programcı hatasıdır (`Err`).

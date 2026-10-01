@@ -20,7 +20,6 @@ import {
   assessIdentification,
   canAutoLearnFingerprint,
   success,
-  FINGERPRINT_FACTORS,
   type CertUsage,
   type CertificateDoc,
   type EntitlementDoc,
@@ -42,7 +41,8 @@ import {
   type VerifiedLease,
   type VerifiedRevocation,
 } from "./protocol";
-import { collectOsFactors } from "./fingerprint-os";
+import { collectOsOutcomes } from "./fingerprint-os";
+import { collectedFrom, type OsReadings } from "./fingerprint-paths";
 import { ROOT_PUBLIC_KEYS } from "./trust-anchor";
 import { verifyIntegrity, type IntegrityReport, type PackageKey } from "./integrity";
 import {
@@ -136,6 +136,8 @@ export interface FingerprintCompareOptions {
 export interface CollectedFingerprint {
   readonly digest: Fingerprint;
   readonly measured: Readonly<Record<FingerprintFactor, boolean>>;
+  /** f1..f4 çok yollu okuma raporu (K8): durum · kazanan yol · çelişen ve hata veren yollar — değer YOK. */
+  readonly okuma: OsReadings;
 }
 
 /**
@@ -169,7 +171,7 @@ export interface LicenseCore {
   normalizeFactor(factor: FingerprintFactor, raw: string | null | undefined): string | null;
   /** Tuz 16 bayttan kısaysa fırlatır (programcı hatası; TS protokolüyle aynı). */
   digestFingerprint(raw: RawFingerprint, salt: Uint8Array): Fingerprint;
-  /** OS etkenleri (f1..f4) + çağıranın F5'i → yalnız tuzlu özet. */
+  /** OS etkenleri (f1..f4, çok yollu) + çağıranın F5'i → yalnız tuzlu özet ve okuma raporu. */
   collectFingerprint(salt: Uint8Array, f5: string | null): Promise<CollectedFingerprint>;
   verifyIntegrity(manifest: unknown, root: string, keys?: readonly PackageKey[]): Promise<CoreResult<IntegrityReport>>;
   unwrapModuleKey(wrap: unknown, privateKeyX: string, modul: string): CoreResult<{ readonly anahtar: string }>;
@@ -199,12 +201,6 @@ function revocationView(r: VerifiedRevocation): RevocationView {
 /** İsteğe bağlı iptal metni → doğrulanmış belge (`null` = iptalsiz); TS ve native aynı sırayla doğrular. */
 function revocationOf(token: unknown, roots: readonly RootKey[]): Result<VerifiedRevocation | null> {
   return token === undefined || token === null ? success(null) : verifyRevocation(token, roots);
-}
-
-function measuredOf(digest: Fingerprint): Record<FingerprintFactor, boolean> {
-  const out: Record<FingerprintFactor, boolean> = { f1: false, f2: false, f3: false, f4: false, f5: false };
-  for (const f of FINGERPRINT_FACTORS) out[f] = digest[f] !== null;
-  return out;
 }
 
 const NO_LOCAL_PROTECTION = Object.freeze({ ok: false, code: "KORUMA_YOK", message: "Yerel koruma yalnız native çekirdekte (Windows DPAPI)" } as const);
@@ -289,8 +285,8 @@ export const tsLicenseCore: LicenseCore = Object.freeze({
     return digestFingerprint(raw, salt);
   },
   async collectFingerprint(salt: Uint8Array, f5: string | null): Promise<CollectedFingerprint> {
-    const digest = digestFingerprint({ ...(await collectOsFactors()), f5 }, salt);
-    return { digest, measured: measuredOf(digest) };
+    const os = await collectOsOutcomes();
+    return collectedFrom(os.platform, os.outcomes, salt, f5);
   },
   async verifyIntegrity(manifest: unknown, root: string, keys?: readonly PackageKey[]): Promise<CoreResult<IntegrityReport>> {
     return { ok: true, value: await verifyIntegrity(manifest, root, keys) };

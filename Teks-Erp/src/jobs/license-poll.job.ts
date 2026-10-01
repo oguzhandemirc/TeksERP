@@ -27,7 +27,9 @@ import { POLL_DEFAULT_MINUTES } from "../lib/license/protocol";
 
 const STARTUP_DELAY_MS = 60 * 1000;
 const HOUSEKEEPING_INTERVAL_MS = 60 * 60 * 1000;
-const FINGERPRINT_REFRESH_MS = 24 * 60 * 60 * 1000;
+/** Parmak izi saatte bir ölçülür: okunamayan etken ancak 24 sa üst üste hiçbir yoldan okunamazsa kayıptır (K8). */
+export const FINGERPRINT_REFRESH_MS = 60 * 60 * 1000;
+const INTEGRITY_REFRESH_MS = 24 * 60 * 60 * 1000;
 /** Zil yağmurunda satıcıyı dövmemek için iki yoklama arası en az bu kadar. */
 const MIN_POLL_GAP_MS = 5 * 1000;
 /** Başarısız yoklamadan sonraki ilk yeniden deneme; her ardışık başarısızlıkta ikiye katlanır. */
@@ -55,6 +57,7 @@ let pollTimer: NodeJS.Timeout | null = null;
 let bootTimer: NodeJS.Timeout | null = null;
 let housekeepingTimer: NodeJS.Timeout | null = null;
 let fingerprintTimer: NodeJS.Timeout | null = null;
+let integrityTimer: NodeJS.Timeout | null = null;
 let lastRunAt = 0;
 
 /** ±%10 (en çok 5 dk) — aynı anda açılan fabrikalar satıcıya aynı saniyede gelmesin. */
@@ -164,7 +167,7 @@ async function bootstrap(): Promise<void> {
   try {
     await refreshLicenseFingerprint();
   } catch (err) {
-    uyari("lisans", "parmak izi ölçülemedi (günlük tazelemede yeniden)", err instanceof Error ? err.message : err);
+    uyari("lisans", "parmak izi ölçülemedi (saatlik tazelemede yeniden)", err instanceof Error ? err.message : err);
   }
   await refreshIntegrityQuietly();
   if (stale()) return;
@@ -176,11 +179,11 @@ async function bootstrap(): Promise<void> {
   }, HOUSEKEEPING_INTERVAL_MS);
   housekeepingTimer.unref();
   fingerprintTimer = setInterval(() => {
-    void refreshLicenseFingerprint()
-      .catch(() => undefined)
-      .finally(() => void refreshIntegrityQuietly());
+    void refreshLicenseFingerprint().catch(() => undefined);
   }, FINGERPRINT_REFRESH_MS);
   fingerprintTimer.unref();
+  integrityTimer = setInterval(() => void refreshIntegrityQuietly(), INTEGRITY_REFRESH_MS);
+  integrityTimer.unref();
   engineRunning = true;
   setLicenseEngineStatus("CALISIYOR");
   schedule(withJitter(timing.startupDelayMs));
@@ -190,7 +193,7 @@ async function bootstrap(): Promise<void> {
   bilgi("lisans", `yoklama zamanlayıcısı aktif — satıcı: ${vendor}; etkinleşmemiş kurulum dışarı istek atmaz`);
 }
 
-/** Bütünlük denetimi (açılışta + parmak iziyle aynı günlük tikte); hata ölçümü düşürür, süreci değil. */
+/** Bütünlük denetimi (açılışta + günlük tikte); hata ölçümü düşürür, süreci değil. */
 async function refreshIntegrityQuietly(): Promise<void> {
   try {
     await refreshLicenseIntegrity();
@@ -227,8 +230,8 @@ export function stopLicensePoll(): void {
   offSupportBell?.();
   offSupportBell = null;
   generation++;
-  for (const t of [pollTimer, bootTimer, housekeepingTimer, fingerprintTimer]) if (t) clearTimeout(t);
-  pollTimer = bootTimer = housekeepingTimer = fingerprintTimer = null;
+  for (const t of [pollTimer, bootTimer, housekeepingTimer, fingerprintTimer, integrityTimer]) if (t) clearTimeout(t);
+  pollTimer = bootTimer = housekeepingTimer = fingerprintTimer = integrityTimer = null;
   engineRunning = false;
   if (started) setLicenseEngineStatus("DURDU");
   try {

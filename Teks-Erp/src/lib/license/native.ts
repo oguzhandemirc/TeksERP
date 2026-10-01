@@ -54,6 +54,8 @@ export interface NativeIdentity {
   readonly cekirdekKodlari: readonly string[];
   readonly yerTutucular: readonly string[];
   readonly windowsSondasi: readonly string[];
+  /** Parmak izi yol tablosu (`platform|etken|tür|kimlik`, K8) — eski ABI-3 derlemesi bunu taşımaz, açılmaz. */
+  readonly parmakIziYollari: readonly string[];
   readonly modulHkdfOneki: string;
   readonly modulKidOneki: string;
   readonly korumaEntropisi: string;
@@ -116,10 +118,21 @@ const NativeIdentitySchema = z.object({
   cekirdekKodlari: z.array(z.string()),
   yerTutucular: z.array(z.string()),
   windowsSondasi: z.array(z.string()),
+  parmakIziYollari: z.array(z.string()),
   modulHkdfOneki: z.string(),
   modulKidOneki: z.string(),
   korumaEntropisi: z.string(),
 });
+
+/** Künye metni → kimlik; sözleşmeye uymayan (ör. parmak izi yol tablosu olmayan eski ABI-3) künye `null`. */
+export function parseNativeIdentity(text: string): NativeIdentity | null {
+  try {
+    const p = NativeIdentitySchema.safeParse(JSON.parse(text));
+    return p.success ? p.data : null;
+  } catch {
+    return null;
+  }
+}
 
 // Aynı `.node` bir süreçte BİR KEZ açılır (napi modülünü ikinci kez kaydetmek tanımsız davranıştır).
 const openedBindings = new Map<string, NativeBinding>();
