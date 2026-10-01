@@ -64,6 +64,7 @@ import { imzaBasligi, imzayiKabulEdenler, multipartKur } from '../mobil/scripts/
 import { buildReleaseDoc, signReleaseDoc } from '../Electron/electron/guncelleme/panel-kunye.mjs';
 import { withReleaseBlock } from '../Electron/electron/guncelleme/latest-yml.mjs';
 import { apkDosyaAdi, buildApkDoc, signApkDoc, withApkBlock } from '../mobil/scripts/lib/apk-kunye.mjs';
+import { YAYIN_EZME_ORTAMLARI } from './lib/yayin-hedefi.mjs';
 
 const KOK = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const ESKI = (process.argv.find((a) => a.startsWith('--eski=')) ?? '').slice('--eski='.length) || null;
@@ -90,6 +91,8 @@ const GERCEK_GIT = execFileSync('/usr/bin/env', ['sh', '-c', 'command -v git'], 
 // GIT_* SÖKÜLÜR: bekçi commit kapısından koşarsa hook ortamı GIT_DIR/GIT_INDEX_FILE taşır ve
 // geçici ağaçtaki `git init` GERÇEK depoya yazar (pre-commit.mjs `gitEnvSil` gerekçesi).
 const TEMIZ_ENV = { ...Object.fromEntries(Object.entries(process.env).filter(([k]) => !k.startsWith('GIT_'))), TEKSERP_YAYIN_BILDIRIMI: '0' };
+// Yayın hedefi ezmeleri yükleyiciyi DURDURUR (G22): koşturanın kabuğunda kalmış biri bütün senaryoları düşürmesin.
+for (const ad of YAYIN_EZME_ORTAMLARI) delete TEMIZ_ENV[ad];
 delete TEMIZ_ENV.TEKSERP_PANEL_IMZA_ANAHTARI;
 delete TEMIZ_ENV.TEKSERP_TABLET_IMZA_ANAHTARI;
 
@@ -165,7 +168,19 @@ if (arac === 'ssh') {
   while (k.length && k[0].startsWith('-')) { const o = k.shift(); if (o === '-p' || o === '-o') k.shift(); }
   const host = k.shift();
   const komut = k.join(' ');
-  if (/^bash -s\b/.test(komut)) { stdinOku(); yaz({ host, komut, tur: 'budama' }); process.exit(0); }
+  if (/^bash -s\b/.test(komut)) {
+    // Konumsal argümanlı uzak betik: betik stdin'den, değerler '--'dan sonra. Budama koşturulmaz (uzak ağacı korur).
+    const betik = stdinOku();
+    const i = k.indexOf('--');
+    const argv = i >= 0 ? k.slice(i + 1) : [];
+    if (/ls -1t TeksERP-/.test(betik)) { yaz({ host, komut, tur: 'budama' }); process.exit(0); }
+    yaz({ host, komut, betik, argv });
+    if (process.env.SAHTE_SSH_KOPUK && [komut, betik].some((x) => x.includes(process.env.SAHTE_SSH_KOPUK))) { process.stderr.write('ssh: connect to host: Connection refused\n'); process.exit(255); }
+    const r = spawnSync('bash', ['-s', '--', ...argv.map((x) => x.replaceAll('/opt/stack', UZAK + '/opt/stack'))], { input: betik });
+    if (r.stdout) process.stdout.write(r.stdout);
+    if (r.stderr) process.stderr.write(r.stderr);
+    process.exit(r.status ?? 1);
+  }
   yaz({ host, komut });
   // Kopuk ssh taklidi (bağlantı reddi, çıkış 255): okunamayan kaynak = ÖLÇÜLEMEDİ sondası.
   if (process.env.SAHTE_SSH_KOPUK && komut.includes(process.env.SAHTE_SSH_KOPUK)) { process.stderr.write('ssh: connect to host: Connection refused\n'); process.exit(255); }
@@ -174,7 +189,7 @@ if (arac === 'ssh') {
   process.exit(r.status ?? 1);
 }
 if (arac === 'scp') {
-  const k = a.filter((x, i) => x !== '-r' && x !== '-P' && a[i - 1] !== '-P');
+  const k = a.filter((x, i) => !['-r', '-s', '-q', '-P'].includes(x) && a[i - 1] !== '-P');
   const hedef = k.pop();
   const [host, uzak] = hedef.split(/:(.*)/s);
   yaz({ host, kaynaklar: k.map((x) => path.basename(x)), hedef: uzak });
@@ -348,7 +363,6 @@ function kos(o, komut, argumanlar, { cwd, girdi, ortamEk = {} } = {}) {
       SAHTE_UZAK: o.uzak,
       CAGRI_LOG: o.log,
       GERCEK_GIT,
-      SSH_HEDEF: 'sahte-hedef',
       TEKSERP_YAYIN_BELIRTECI: BELIRTEC,
       // Makinedeki ~/.tekserp/yayin-belirteci-kaynagi.json (CLI kaynağı) dosya belirtecinden ÖNCE okunur;
       // koşum onu görmemeli — yoksa sahte ağaçta gerçek CLI'ı arar (ENOENT) ve 7i–7k düşer.
@@ -365,7 +379,9 @@ function kos(o, komut, argumanlar, { cwd, girdi, ortamEk = {} } = {}) {
 const agText = (o) => o.cagrilar().filter((c) => c.arac === 'ssh' || c.arac === 'scp');
 const yabanciAg = (o) => o.cagrilar().filter((c) => c.YABANCI_AG);
 /** Uzağı DEĞİŞTİREBİLEN çağrılar: scp + okuma olmayan her ssh (terfi/denetim okuması `test -f`/`cat` hariç). */
-const yazanAg = (o) => o.cagrilar().filter((c) => c.arac === 'scp' || (c.arac === 'ssh' && !/^(test -f|cat) '/.test(c.komut)));
+/** Uzak betik okuma mı (yazan komut taşımıyor)? Konumsal argümanlı `bash -s` çağrıları betikten ayırt edilir. */
+const betikOkuma = (c) => typeof c.betik === 'string' && !/\b(mkdir|rm|mv|printf|cp|tee)\b|>/.test(c.betik);
+const yazanAg = (o) => o.cagrilar().filter((c) => c.arac === 'scp' || (c.arac === 'ssh' && !/^(test -f|cat) '/.test(c.komut) && !betikOkuma(c)));
 
 /* ------------------------------------------------------------------ *
  * Geçici ağaç kopyaları
@@ -382,7 +398,7 @@ const gitGoster = (ref, rel) =>
 
 const ORTAK_KAYNAK = [
   'deploy/kanallar.json', 'scripts/lib/kanallar.mjs', 'scripts/kanal-kapisi.mjs', 'scripts/lib/surum.mjs', 'scripts/lib/surum-notu-tavan.mjs',
-  'scripts/lib/terfi.mjs', 'scripts/lib/yayin-okuma.mjs', 'scripts/lib/backend-yayin.mjs',
+  'scripts/lib/terfi.mjs', 'scripts/lib/yayin-okuma.mjs', 'scripts/lib/yayin-hedefi.mjs', 'scripts/lib/backend-yayin.mjs',
   ...PANEL_SABIT_DOSYALAR,
   'scripts/lib/yayin-bildirim.mjs',
   'scripts/lib/panel-imza-kapisi.mjs', 'Electron/electron/guncelleme/kunye-jws.mjs', 'Electron/electron/guncelleme/panel-kunye.mjs',
@@ -497,6 +513,7 @@ function panelArtefakti(dizin, { url, cache, exe, surum, ic = 'adnansahin', icMu
 }
 const ADNANSAHIN_PANEL = { url: `${YAYIN_HOST}adnansahin/electron/`, cache: 'adnan-sahin-erp-admin-updater', exe: 'Adnan Şahin ERP.exe' };
 const TESTFABRIKA_PANEL = { url: `${YAYIN_HOST}testfabrika/electron/`, cache: 'teks-erp-testfabrika-updater', exe: 'TeksERP Test Fabrika.exe', ic: 'testfabrika' };
+const DEMOFABRIKA_PANEL = { url: `${YAYIN_HOST}demofabrika/electron/`, cache: 'teks-erp-demofabrika-updater', exe: 'TeksERP Demo Fabrika.exe', ic: 'demofabrika' };
 
 /** Uzaktaki dosyalar (yol → sha256) — yüklemenin ETKİSİ. */
 function uzakAgaci(o) {
@@ -517,6 +534,15 @@ function iz(o) {
   return o.cagrilar().map((c) => {
     if (c.arac === 'scp') return `scp [${c.kaynaklar.join(', ')}] → ${c.hedef}`;
     if (c.arac === 'ssh' && c.tur === 'budama') return `ssh budama ${c.komut.replace(/^bash -s -- /, '')}`;
+    if (c.arac === 'ssh' && typeof c.betik === 'string') {
+      const a0 = c.argv?.[0];
+      if (/openssl dgst/.test(c.betik)) return `ssh sha512 ${a0}`;
+      if (/sha256sum/.test(c.betik)) return `ssh sha256-sorgu ${a0}`;
+      if (/>> "\$d"/.test(c.betik)) return `ssh defter ${a0}`;
+      if (/mkdir -p -- "\$1"/.test(c.betik)) return `ssh mkdir ${a0}`;
+      if (/^(test -f|cat) /.test(c.betik.trim())) return `ssh oku ${a0}`;
+      return `ssh ?? ${c.betik.slice(0, 60)}`;
+    }
     if (c.arac === 'ssh') {
       if (/sha256sum/.test(c.komut)) return `ssh sha256-sorgu ${/'([^']+)'/.exec(c.komut)?.[1]}`;
       if (/openssl dgst/.test(c.komut)) return `ssh sha512 ${/'([^']+)'/.exec(c.komut)?.[1]}`;
@@ -541,7 +567,7 @@ console.log('\n§1 — electron-yayinla.sh: hedef paketin kimliğinden, ssh\'tan
 const ESKI_KANALLI = ESKI ? gitGoster(ESKI, 'deploy/electron-yayinla.sh').includes('--musteri=') : false;
 
 function yayinSenaryosu({ ref = null, musteriArg = '--musteri=adnansahin', artefakt = ADNANSAHIN_PANEL, dizin = 'adnansahin', surum = '9.9.9', ekArg = [],
-  terfi, mutasyon = null } = {}) {
+  terfi, mutasyon = null, ortamEk = {} } = {}) {
   const o = ortam();
   const agac = agacKur(o, { ref });
   // Bugünden sonra adnansahin'e yayın terfi şartı ister: varsayılan senaryo şartları KURAR (yeni betik, adnansahin);
@@ -558,7 +584,7 @@ function yayinSenaryosu({ ref = null, musteriArg = '--musteri=adnansahin', artef
   const rel = ref && !ESKI_KANALLI ? path.join(agac, 'Electron/release', surum) : path.join(agac, 'Electron/release', dizin, surum);
   if (artefakt) panelArtefakti(rel, { ...artefakt, surum });
   const args = [musteriArg, surum, ...ekArg].filter(Boolean);
-  const r = kos(o, path.join(agac, 'deploy/electron-yayinla.sh'), args, { cwd: agac });
+  const r = kos(o, path.join(agac, 'deploy/electron-yayinla.sh'), args, { cwd: agac, ortamEk });
   return { o, r, agac };
 }
 
@@ -761,6 +787,35 @@ const belirtecSenaryosu = (hazirla, ekArg = []) => {
 {
   const { o, r } = yayinSenaryosu({ artefakt: { ...ADNANSAHIN_PANEL, asarYok: true } });
   ol('1o paket arşivi (app.asar) yok → ÖLÇÜLEMEDİ, ssh/scp SIFIR', r.kod !== 0 && agText(o).length === 0 && /ÖLÇÜLEMEDİ/.test(r.cikti), r.cikti.slice(-300));
+}
+// G22/DAGY-4 — hedef YALNIZ kayıttan: ortamda kalmış her ezme (eski SSH_HEDEF/UZAK_DIZIN/YAYIN_KOK/YAYIN_URL/BASE_URL)
+// testfabrika (terfi istemeyen) yayınını ağdan ÖNCE durdurur — eskiden paket başka kanalın dizinine inerdi.
+for (const [ad, deger] of [['UZAK_DIZIN', `${VDS}/html/adnansahin/electron`], ['SSH_HEDEF', 'baska-sunucu'], ['YAYIN_KOK', `${VDS}/html`],
+  ['YAYIN_URL', `${YAYIN_HOST}adnansahin/electron`], ['BASE_URL', 'https://guncelleme.etkiliyazilim.com']]) {
+  const { o, r } = yayinSenaryosu({ musteriArg: '--musteri=testfabrika', artefakt: TESTFABRIKA_PANEL, dizin: 'testfabrika', ortamEk: { [ad]: deger } });
+  ol(`1y ⭐ ortamda ${ad} ezmesi (testfabrika yayını) → DUR, ssh/scp/curl SIFIR, hiçbir dosya yüklenmez`,
+    r.kod !== 0 && /YAYIN HEDEFİ EZİLEMEZ/.test(r.cikti) && r.cikti.includes(`ortam ${ad}`) && agSifir(o) &&
+      !Object.keys(uzakAgaci(o)).some((k) => /TeksERP-9\.9\.9/.test(k)), r.cikti.slice(-500));
+}
+{
+  // Pozitif ikiz: ezme kaldırılınca aynı paket kayıttaki hedefe yayınlanır (hedef kaydın vdsPanel'i).
+  const { o, r } = yayinSenaryosu({ musteriArg: '--musteri=testfabrika', artefakt: TESTFABRIKA_PANEL, dizin: 'testfabrika', ortamEk: { UZAK_DIZIN: '' } });
+  const hedefler = o.cagrilar().filter((c) => c.arac === 'scp').map((c) => c.hedef);
+  ol('1y2 boş UZAK_DIZIN (ezme yok) → yayın kayıttaki hedefe: yalnız testfabrika vdsPanel/',
+    r.kod === 0 && hedefler.length === 2 && hedefler.every((h) => h === `${KAYIT.kanallar.testfabrika.yayin.vdsPanel}/`), `${r.cikti.slice(-300)}\n${hedefler.join('\n')}`);
+}
+{
+  // Hedef çözümü — kuru, demofabrika (aynasız hazırlık): VDS dizini + defter + doğrulama adresi KAYITTAN.
+  const { o, r } = yayinSenaryosu({ musteriArg: '--musteri=demofabrika', artefakt: DEMOFABRIKA_PANEL, dizin: 'demofabrika', ekArg: ['--kuru'] });
+  const y = KAYIT.kanallar.demofabrika.yayin;
+  ol('1y3 demofabrika --kuru → hedef, defter ve yayın adresi kanal kaydından (vdsPanel · panelDefter · panelFeed), ağ SIFIR',
+    r.kod === 0 && r.cikti.includes(`[kuru] hedef      : tekserp-yayin:${y.vdsPanel}/`) && r.cikti.includes(`[kuru] defter     : ${y.panelDefter}`) &&
+      r.cikti.includes(`[kuru] yayın adresi: ${y.panelFeed}latest.yml`) && agSifir(o), r.cikti.slice(-600));
+}
+{
+  // DAGY-9: sürüm uzak komutlara gider → biçim dışı sürüm (kabuk karakteri) ağdan ÖNCE durur.
+  const { o, r } = yayinSenaryosu({ musteriArg: '--musteri=testfabrika', artefakt: null, dizin: 'testfabrika', surum: "9.9.9';id;'" });
+  ol('1z ⭐ biçimsiz sürüm argümanı (kabuk karakteri) → DUR, ssh/scp/curl SIFIR', r.kod !== 0 && /Sürüm biçimsiz/.test(r.cikti) && agSifir(o), r.cikti.slice(-400));
 }
 
 /* ------------------------------------------------------------------ *
@@ -994,6 +1049,33 @@ const etiketGirisimi = (o) => o.cagrilar().some((c) => c.ENGELLENDI);
   const r = mobilYayinla(o, ['--musteri=testfabirka', `--paket=${otaPaketi(o)}`]);
   ol('3f bilinmeyen kanal → DUR', r.kod !== 0 && /BİLİNMEYEN KANAL/.test(r.cikti), r.cikti.slice(-400));
 }
+// G22/DAGY-4 — tablet yayın hedefi YALNIZ kayıttan: argüman ya da ortam ezmesi HER kipte (kuru · denetim dahil) durur.
+{
+  const tfPaket = (o) => otaPaketi(o, { kanal: 'testfabrika', adres: TEST_ERP, bundleAdres: TEST_ERP });
+  for (const ezme of ['--feed=https://guncelleme.etkiliyazilim.com/adnansahin/mobil/', `--uzak-dizin=${VDS}/html/adnansahin/mobil`, '--ssh=baska-sunucu']) {
+    const o = ortam();
+    const r = mobilYayinla(o, ['--musteri=testfabrika', `--paket=${tfPaket(o)}`, ezme]);
+    ol(`3z ⭐ ${ezme.split('=')[0]} ezmesi (testfabrika OTA) → DUR, ağ SIFIR`, r.kod !== 0 && /YAYIN HEDEFİ EZİLEMEZ/.test(r.cikti) && agSifir(o), r.cikti.slice(-400));
+  }
+  for (const ad of ['UZAK_DIZIN', 'YAYIN_URL', 'SSH_HEDEF']) {
+    const o = ortam();
+    const r = kos(o, process.execPath, [path.join(KOK, 'deploy/mobil-yayinla.mjs'), '--musteri=testfabrika', `--paket=${tfPaket(o)}`, '--kuru'],
+      { cwd: KOK, ortamEk: { [ad]: ad === 'SSH_HEDEF' ? 'baska-sunucu' : `${VDS}/html/adnansahin/mobil` } });
+    ol(`3z2 ortamda ${ad} (testfabrika OTA) → DUR, ağ SIFIR`, r.kod !== 0 && r.cikti.includes(`ortam ${ad}`) && agSifir(o), r.cikti.slice(-400));
+  }
+  const o = ortam();
+  const d = kos(o, process.execPath, [path.join(KOK, 'deploy/mobil-yayinla.mjs'), `--dogrula=${YAYIN_HOST}testfabrika/mobil/apk/surum.json`], { cwd: KOK, ortamEk: { YAYIN_URL: 'https://x.ornek' } });
+  ol('3z3 denetim kipi (--dogrula) de ezmeyi reddeder', d.kod !== 0 && /YAYIN HEDEFİ EZİLEMEZ/.test(d.cikti), d.cikti.slice(-300));
+}
+{
+  // DAGY-9: künyedeki damga uzak yola girer — kabuk karakterli damga hiçbir şey göndermeden durur.
+  const o = ortam();
+  const dz = otaPaketi(o, { kanal: 'testfabrika', adres: TEST_ERP, bundleAdres: TEST_ERP });
+  const k = JSON.parse(fs.readFileSync(path.join(dz, 'yayin.json'), 'utf8'));
+  fs.writeFileSync(path.join(dz, 'yayin.json'), JSON.stringify({ ...k, damga: "1790000000000';id;'" }));
+  const r = mobilYayinla(o, ['--musteri=testfabrika', `--paket=${dz}`]);
+  ol('3z4 ⭐ künye damgası biçimsiz (kabuk karakteri) → DUR, ağ SIFIR', r.kod !== 0 && /Paket künyesi biçimsiz/.test(r.cikti) && agSifir(o), r.cikti.slice(-400));
+}
 
 /** Asgari ZIP (APK biçimi) — merkezî dizinli; biri deflate biri stored. */
 function zipYaz(yol, girdiler) {
@@ -1143,9 +1225,19 @@ function apkKunyesi(apkYol, { anahtar = IMZA, kanal = 'adnansahin', vc = 57, sur
   fs.writeFileSync(yol, JSON.stringify(s, null, 2));
   return yol;
 }
-/** Kuru OLMAYAN yayın (yalnız yüklemeden önce duran kapılar ölçülür; doğrulama adresi bağlantı reddi). */
+/**
+ * Kuru OLMAYAN yayın (yalnız yüklemeden önce duran kapılar ölçülür). Doğrulama okuması ağa ÇIKMAZ: süreç önüne yüklenen
+ * sahte `fetch` bağlantı reddi verir (eskiden `--feed=127.0.0.1:9` ezmesiyle yapılırdı — ezme artık yükleyiciyi durdurur).
+ */
+const SAHTE_FETCH_KOPUK = path.join(GECICI, 'sahte-fetch-kopuk.mjs');
+fs.writeFileSync(SAHTE_FETCH_KOPUK, `import fs from 'node:fs';
+globalThis.fetch = async (u) => {
+  fs.appendFileSync(process.env.CAGRI_LOG, JSON.stringify({ arac: 'fetch', url: String(u).split('?')[0] }) + '\\n');
+  throw new TypeError('fetch failed (sahte: bağlantı reddi)');
+};
+`);
 const mobilYayinlaGercek = (o, args, agac) =>
-  kos(o, process.execPath, [path.join(agac, 'deploy/mobil-yayinla.mjs'), ...args, '--feed=http://127.0.0.1:9/adnansahin/mobil/'], { cwd: agac });
+  kos(o, process.execPath, ['--import', pathToFileURL(SAHTE_FETCH_KOPUK).href, path.join(agac, 'deploy/mobil-yayinla.mjs'), ...args], { cwd: agac });
 const apkArg = (o, sec = {}) => [`--apk=${apk(o, { sertifikaPem: SERT_KANAL, ...sec })}`, `--surum=${tabletSurum}`, '--vc=57'];
 
 {

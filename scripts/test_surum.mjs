@@ -285,7 +285,7 @@ process.exit(97);
   }
   // Geçici depo: kapının kendi dosyaları (KOK = depo) + kayıt defteri.
   const depo = path.join(T, 'depo');
-  for (const rel of ['scripts/kanal-kapisi.mjs', 'scripts/lib/kanallar.mjs', 'scripts/lib/surum.mjs', 'scripts/lib/terfi.mjs', 'scripts/lib/yayin-okuma.mjs', 'scripts/lib/backend-yayin.mjs', 'deploy/kanallar.json']) {
+  for (const rel of ['scripts/kanal-kapisi.mjs', 'scripts/lib/kanallar.mjs', 'scripts/lib/surum.mjs', 'scripts/lib/terfi.mjs', 'scripts/lib/yayin-okuma.mjs', 'scripts/lib/yayin-hedefi.mjs', 'scripts/lib/backend-yayin.mjs', 'deploy/kanallar.json']) {
     fs.mkdirSync(path.dirname(path.join(depo, rel)), { recursive: true });
     fs.copyFileSync(path.join(KOK, rel), path.join(depo, rel));
   }

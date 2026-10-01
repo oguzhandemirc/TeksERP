@@ -51,7 +51,8 @@ import { bundleAdresOlcumu } from '../mobil/scripts/lib/adres.mjs';
 import { zipGirdisiOku } from '../mobil/scripts/lib/zip.mjs';
 import { ApkOlculemedi, apkKimligi } from '../mobil/scripts/lib/apk-kimlik.mjs';
 import { cumleDenetle, istanbulSaati, terfiAtlaKaydi, terfiAtlaMesaji, terfiKapisi, terfiRaporu } from '../scripts/lib/terfi.mjs';
-import { BelirtecYok, belirtecliFetch, belirtecOku } from '../scripts/lib/yayin-okuma.mjs';
+import { BelirtecYok, belirtecliFetch, belirtecOku, sshOku } from '../scripts/lib/yayin-okuma.mjs';
+import { DAMGA_BICIMI, RV_BICIMI, ezmeSatirlari, uzakDegerDenetle, yayinEzmeleri, yayinHedefi } from '../scripts/lib/yayin-hedefi.mjs';
 import { sertifikaParmakIzi } from '../mobil/scripts/lib/apk-kimlik.mjs';
 import {
   APK_CAPA_REL, apkCapaDenetimi, apkCapaGomuluFarki, apkCapasiOku, apkRotasyonDenetimi, verifyApkSurumJson, withApkBlock,
@@ -59,7 +60,7 @@ import {
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const MOBIL = path.resolve(HERE, '..', 'mobil');
-const { MOBIL_FEED_URL, normalizeFeed, manifestUrl, apkKunyeUrl, feedUrl, musteriOku } =
+const { MOBIL_FEED_URL, normalizeFeed, manifestUrl, apkKunyeUrl, musteriOku } =
   await import(
   path.join(MOBIL, 'scripts/lib/feed.cjs')
 ).then((m) => m.default ?? m);
@@ -91,17 +92,15 @@ const TABLET_ANAHTAR = arg('anahtar') || process.env.TEKSERP_TABLET_IMZA_ANAHTAR
 const TERFI_ATLA = argv.some((a) => a === '--terfi-atla' || a.startsWith('--terfi-atla=')) ? (arg('terfi-atla') ?? '') : undefined;
 
 /**
- * Yayın hedefi — `deploy/electron-yayinla.sh` ile AYNI kalıp: ssh takma adı
- * (`~/.ssh/config`te port 2222 tanımlı) + ortam değişkeniyle ezilebilir yollar.
- *
- * ⚠️ Yol düzeni `/<musteri>/<urun>/` — Electron ile aynı standart. Müşteri
- * segmenti alt alan adı yerine YOL olarak ayrılıyor: Cloudflare Origin CA
- * wildcard'ı iki seviyeli alt alan adlarını kapsamıyor.
+ * ⚠️ YAYIN HEDEFİ EZİLEMEZ: ssh takma adı, VDS dizini ve doğrulama adresi YALNIZ kanal kaydından
+ * (`scripts/lib/yayin-hedefi.mjs`). Eskiden `--ssh`/`--uzak-dizin`/`--feed` ve SSH_HEDEF/UZAK_DIZIN/YAYIN_URL
+ * hedefi eziyordu ve kayıtla hiç karşılaştırılmıyordu; biri görülürse HER kipte (denetim dahil) durulur.
+ * Prova gerekiyorsa kayıtta ayrı kanal açılır.
  */
-// ⚠️ 2026-09-01: varsayılan `yenisunucu`dan `tekserp-yayin`e çevrildi — yayın
-// 80.253.255.188'e taşındı ve DNS de oraya döndü. `yenisunucu` artık ESKİ
-// sunucudur; kullanıcı `yayinci` (sudo YOK). Bkz. docs/ops/VDS-TASIMA.md
-const SSH_HEDEF = arg('ssh') || process.env.SSH_HEDEF || 'tekserp-yayin';
+{
+  const ezmeler = yayinEzmeleri({ argv });
+  if (ezmeler.length) dur('YAYIN HEDEFİ EZİLEMEZ — hiçbir şey yüklenmedi', ...ezmeSatirlari(ezmeler));
+}
 
 // ⚠️ MÜŞTERİ KAPISINDAN ÖNCE: bu kip MUTLAK bir URL alır, dolayısıyla müşteri
 // kodunu bilmesine gerek yoktur. Kapının arkasında kalsaydı, "yayını denetle"
@@ -159,11 +158,15 @@ try {
   if (e instanceof Olculemedi) dur(`KANAL KAYIT DEFTERİ ÖLÇÜLEMEDİ (${KAYIT_REL})`, e.message);
   dur(e.message, ...(e.satirlar ?? []));
 }
-const UZAK_KOK =
-  arg('uzak-dizin') ||
-  process.env.UZAK_DIZIN ||
-  `/opt/stack/apps/tekserp-guncelleme/html/${MUSTERI}/mobil`;
-const FEED = normalizeFeed(arg('feed') || process.env.YAYIN_URL || feedUrl(MUSTERI));
+let HEDEF;
+try {
+  HEDEF = yayinHedefi(MUSTERI, 'tablet', { kayit: KAYIT });
+} catch (e) {
+  dur(`YAYIN HEDEFİ ÇÖZÜLEMEDİ (${KAYIT_REL})`, e.message, ...(e.satirlar ?? []));
+}
+const SSH_HEDEF = HEDEF.ssh;
+const UZAK_KOK = HEDEF.vds;
+const FEED = normalizeFeed(HEDEF.feed);
 
 /* ------------------------------------------------------------------ *
  * Kabuk yardımcıları
@@ -180,7 +183,31 @@ function kos(komut, argumanlar, aciklama) {
   if (r.status !== 0) dur(`${aciklama} — başarısız (çıkış ${r.status})`);
 }
 
-const ssh = (uzakKomut, aciklama) => kos('ssh', [SSH_HEDEF, uzakKomut], aciklama);
+/** Değer uzak kabukta tek sözcük kalmalı (konumsal argüman); değilse hiçbir şey gönderilmeden DUR. */
+function uzakDeger(ad, v) {
+  try {
+    return uzakDegerDenetle(ad, v);
+  } catch (e) {
+    return dur('UZAK KOMUT DEĞERİ BİÇİMSİZ — gönderilmedi', e.message);
+  }
+}
+
+/**
+ * Uzak komut: betik stdin'den (`bash -s`), değerler KONUMSAL argüman — betik metnine değer gömülmez.
+ * `--kuru`da yalnız yazılır. Zorunlu adımda sıfır-dışı çıkış DURDURUR.
+ */
+function uzakBetik(betik, degerler, aciklama, { zorunlu = true, onizleme } = {}) {
+  const argumanlar = degerler.map((v, i) => uzakDeger(`${aciklama} (değer ${i + 1})`, v));
+  bilgi(aciklama);
+  if (KURU) {
+    bilgi(`    [kuru] ssh ${SSH_HEDEF} bash -s -- ${argumanlar.join(' ')}${onizleme ? `  (${onizleme})` : ''}`);
+    return { status: 0 };
+  }
+  const r = spawnSync('ssh', ['-T', SSH_HEDEF, 'bash', '-s', '--', ...argumanlar], { input: betik, stdio: ['pipe', 'inherit', 'inherit'] });
+  if (zorunlu && r.error) dur(`${aciklama} — komut çalıştırılamadı`, String(r.error.message));
+  if (zorunlu && r.status !== 0) dur(`${aciklama} — başarısız (çıkış ${r.status})`);
+  return r;
+}
 
 /**
  * TERFİ KAPISI (K5) — üretim kanalına yalnız hazırlık kanalında yayınlanmış ve kullanıcının terfi
@@ -201,21 +228,21 @@ function terfiKapisiUygula(surum) {
 
 /** Terfi atlandıysa: kanal yayın defterine satır (kullanıcının cümlesi) — yayından SONRA, best-effort. */
 function terfiAtlaDefteri(surum) {
-  const cumle = cumleDenetle(TERFI_ATLA).cumle.replace(/'/g, "'\\''");
-  const defter = KANAL.yayin.panelDefter;
-  const satir = [istanbulSaati(), `tablet-${surum}`, `${process.env.USER ?? '?'}@${process.env.HOSTNAME ?? 'yerel'}`, '-', '-', `terfi-atlandi: ${cumle}`]
-    .map((x) => `'${x}'`).join(' ');
-  const komut = `mkdir -p '${path.posix.dirname(defter)}' && printf '%s\\t%s\\t%s\\t%s\\t%s\\t%s\\n' ${satir} >> '${defter}'`;
-  if (KURU) {
-    bilgi(`  [kuru] yayın defteri (terfi atlandı): ssh ${SSH_HEDEF} ${komut}`);
-    return;
-  }
-  const r = spawnSync('ssh', [SSH_HEDEF, komut], { stdio: 'inherit' });
-  bilgi(r.status === 0 ? '  ✓ yayın defterine yazıldı (terfi atlandı)' : '  ⚠️ yayın defteri yazılamadı (yayın etkilenmedi)');
+  const cumle = cumleDenetle(TERFI_ATLA).cumle;
+  const kim = `${process.env.USER ?? '?'}@${process.env.HOSTNAME ?? 'yerel'}`.replace(/[^A-Za-z0-9._@-]/g, '_');
+  const alanlar = [istanbulSaati(), `tablet-${surum}`, kim];
+  // Serbest metin (cümle) uzak kabuğa base64 gider: konumsal argüman tek sözcük kalmalı; uzakta açılır.
+  const r = uzakBetik(`d="$1"; shift
+mkdir -p "$(dirname "$d")" || exit 1
+printf '%s\\t%s\\t%s\\t-\\t-\\t%s\\n' "$1" "$2" "$3" "terfi-atlandi: $(printf '%s' "$4" | base64 -d)" >> "$d"
+`, [HEDEF.defter, ...alanlar, Buffer.from(cumle, 'utf8').toString('base64')], '  yayın defteri (terfi atlandı)',
+  { zorunlu: false, onizleme: `${HEDEF.defter} ⟵ ${[...alanlar, '-', '-', `terfi-atlandi: ${cumle}`].join(' | ')}` });
+  if (!KURU) bilgi(r.status === 0 ? '  ✓ yayın defterine yazıldı (terfi atlandı)' : '  ⚠️ yayın defteri yazılamadı (yayın etkilenmedi)');
 }
 
+// `-s`: SFTP kipi — uzak yol uzak kabukta yorumlanmaz (OpenSSH ≥ 8.7).
 const scp = (kaynaklar, uzakYol, aciklama) =>
-  kos('scp', ['-r', ...kaynaklar, `${SSH_HEDEF}:${uzakYol}`], aciklama);
+  kos('scp', ['-s', '-r', ...kaynaklar, `${SSH_HEDEF}:${uzakDeger('scp hedefi', uzakYol)}`], aciklama);
 
 /**
  * YAYIN BELİRTECİ (3c') — güncelleme sunucusu anonim okumaya kapalıdır (Cloudflare Worker,
@@ -452,14 +479,12 @@ function apkSertifikaKapisi(sertifikaPem) {
   bilgi('  OTA sertifikası: kanalınkiyle aynı (parmak izi)');
 }
 
-/** Uzak dosya okuması (rotasyon kilidi): yoksa null; ssh koparsa ÖLÇÜLEMEDİ = DUR. */
+/** Uzak dosya okuması (rotasyon kilidi; sanksiyonlu okuyucu, yol biçim denetimli): yoksa null; ssh koparsa ÖLÇÜLEMEDİ = DUR. */
 function uzakOku(uzakYol) {
-  const t = spawnSync('ssh', [SSH_HEDEF, `test -f '${uzakYol}'`], { encoding: 'utf8' });
-  if (t.status === 1) return null;
-  if (t.status !== 0) dur('Yayın sunucusuna ulaşılamadı — rotasyon kilidi ÖLÇÜLEMEDİ, yükleme yapılmadı', `ssh çıkış ${t.status}`);
-  const c = spawnSync('ssh', [SSH_HEDEF, `cat '${uzakYol}'`], { encoding: 'utf8' });
-  if (c.status !== 0) dur('Yayındaki APK künyesi okunamadı — rotasyon kilidi ÖLÇÜLEMEDİ, yükleme yapılmadı', uzakYol);
-  return c.stdout;
+  const r = sshOku(uzakYol, { hedef: SSH_HEDEF });
+  if (r.durum === 'yok') return null;
+  if (r.durum !== 'var') dur('Yayındaki APK künyesi okunamadı — rotasyon kilidi ÖLÇÜLEMEDİ, yükleme yapılmadı', r.neden);
+  return r.govde;
 }
 
 /**
@@ -523,6 +548,10 @@ async function paketiYayinla(paketDizin) {
   }
   const kunye = JSON.parse(fs.readFileSync(kunyeYol, 'utf8'));
   const { runtimeVersion, damga } = kunye;
+  // Bu iki değer uzak yolun parçasıdır (DAGY-9): biçim dışıysa hiçbir şey gönderilmez.
+  if (!RV_BICIMI.test(String(runtimeVersion)) || !DAMGA_BICIMI.test(String(damga))) {
+    dur('Paket künyesi biçimsiz — uzak komutlara gidemez', `runtimeVersion: ${runtimeVersion} · damga: ${damga}`, kunyeYol);
+  }
 
   const manifestYol = path.join(paketDizin, 'manifest');
   if (!fs.existsSync(manifestYol)) dur('Pakette `manifest` dosyası yok');
@@ -559,7 +588,7 @@ async function paketiYayinla(paketDizin) {
   // söyler. Kontrol beyana değil artefakta bakmalı.
   const manifestMetni = fs.readFileSync(manifestYol, 'utf8');
   const paketAdresleri = [...new Set(manifestMetni.match(/https?:\/\/[^"\\]+?\/mobil\//g) ?? [])];
-  const beklenenOnEk = normalizeFeed(feedUrl(MUSTERI));
+  const beklenenOnEk = FEED;
   const yabanci = paketAdresleri.filter((u) => !u.startsWith(beklenenOnEk));
 
   if (paketAdresleri.length === 0) {
@@ -609,7 +638,7 @@ async function paketiYayinla(paketDizin) {
   console.log('');
 
   const uzakSurum = `${UZAK_KOK}/ota/${runtimeVersion}`;
-  ssh(`mkdir -p '${uzakSurum}/${damga}'`, '(1/4) uzak klasör hazırlanıyor');
+  uzakBetik('mkdir -p -- "$1"\n', [`${uzakSurum}/${damga}`], '(1/4) uzak klasör hazırlanıyor');
 
   // (2) ÖNCE varlıklar — manifest onlara işaret ediyor.
   const icerik = fs
@@ -752,11 +781,11 @@ async function apkYayinla(apkYol) {
       'Adresi ölçülemeyen APK yüklenmez.',
     );
   }
-  if (!apkAdres.startsWith(normalizeFeed(feedUrl(MUSTERI)))) {
+  if (!apkAdres.startsWith(FEED)) {
     dur(
       'APK YANLIŞ GÜNCELLEME ADRESİNİ TAŞIYOR',
       `APK içinde : ${apkAdres}`,
-      `Beklenen   : ${normalizeFeed(FEED)}ota/<runtimeVersion>/manifest`,
+      `Beklenen   : ${FEED}ota/<runtimeVersion>/manifest`,
       '',
       'Bu APK kurulan tablet güncelleme sorar, 404 alır ve bir daha HİÇ',
       'güncelleme almaz — üstelik bu hiçbir yerde görünmez.',
@@ -846,9 +875,9 @@ async function apkYayinla(apkYol) {
     for (const x of rot.satirlar) bilgi(`  ${x}`);
   }
 
-  ssh(`mkdir -p '${UZAK_KOK}/apk'`, '(1/3) uzak klasör hazırlanıyor');
+  uzakBetik('mkdir -p -- "$1"\n', [`${UZAK_KOK}/apk`], '(1/3) uzak klasör hazırlanıyor');
   // ÖNCE apk, SONRA künye — ters sırada künye olmayan bir dosyayı işaret eder.
-  kos('scp', [apkYol, `${SSH_HEDEF}:${UZAK_KOK}/apk/${ad}`], '(2/3) APK yükleniyor');
+  kos('scp', ['-s', apkYol, `${SSH_HEDEF}:${uzakDeger('scp hedefi', `${UZAK_KOK}/apk/${ad}`)}`], '(2/3) APK yükleniyor');
   scp([gecici], `${UZAK_KOK}/apk/`, '(3/3) künye yükleniyor (yayını AÇAN adım)');
 
   if (KURU) return;

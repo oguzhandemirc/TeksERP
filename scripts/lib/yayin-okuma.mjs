@@ -30,6 +30,7 @@ import { kayitOku, Olculemedi } from './kanallar.mjs';
 export const INDIRME_BASLIGI = 'X-TKL-Indirme';
 /** Belirteç dosyasının yerini ezer (bekçiler ve doğrulama için); verilmezse ev dizinindeki dosya. */
 export const BELIRTEC_ORTAMI = 'TEKSERP_YAYIN_BELIRTECI';
+/** Yayın ağacına yazan tek ssh takma adı (`yayinci`, sudo yok); ezilmez — yükleyiciler `yayin-hedefi.mjs`ten alır. */
 export const SSH_HEDEF_VARSAYILAN = 'tekserp-yayin';
 const BELIRTEC_DESENI = /^[A-Za-z0-9._~+/=-]{16,8192}$/;
 const SSH_ZAMAN_ASIMI_MS = 30_000;
@@ -195,7 +196,7 @@ export function baslikDosyasiYaz(hedef, url) {
   fs.chmodSync(hedef, 0o600);
 }
 
-const GUVENLI_YOL = /^\/[A-Za-z0-9._/-]+$/;
+export const GUVENLI_YOL = /^\/[A-Za-z0-9._/-]+$/;
 
 /**
  * Yayın adresinin VDS dosya yolu — kanal kayıt defterinden (panelFeed↔vdsPanel,
@@ -219,7 +220,7 @@ export function vdsYolu(url, kayit = kayitOku()) {
  * VDS dosya sisteminden SSH ile okur (yayinci; salt okuma).
  * @returns {{durum:'var', govde:string} | {durum:'yok'} | {durum:'olculemedi', neden:string}}
  */
-export function sshOku(yol, { hedef = process.env.SSH_HEDEF || SSH_HEDEF_VARSAYILAN } = {}) {
+export function sshOku(yol, { hedef = SSH_HEDEF_VARSAYILAN } = {}) {
   if (!GUVENLI_YOL.test(String(yol ?? '')) || String(yol).split('/').includes('..')) {
     return { durum: 'olculemedi', neden: `güvensiz yayın yolu: ${yol}` };
   }

@@ -154,7 +154,10 @@ function sanksiyonDenetimi(d, kirmizi) {
     if (say(ey, SANKSIYON['deploy/electron-yayinla.sh']) !== 1) kirmizi.push('electron-yayinla.sh: belirtecli_curl tanımı yok ya da -H "@$BELIRTEC_BASLIK" taşımıyor');
     const bas = ey.indexOf('baslikDosyasiYaz(');
     const ilkScp = ey.search(/^\s*scp /m);
-    const ilkSsh = ey.search(/\bssh "\$SSH_HEDEF"/);
+    // Uzak komutlar `uzak` yardımcısından geçer (`ssh -T "$SSH_HEDEF" bash -s --`): ilk ssh, yardımcının tanımı ya da ilk
+    // doğrudan çağrıdır. Hiç bulunamazsa sıra ölçülemez — kapı sessizce geçmesin diye kırmızı.
+    const ilkSsh = ey.search(/^\s*ssh\b[^\n]*"\$SSH_HEDEF"/m);
+    if (ilkSsh < 0) kirmizi.push('electron-yayinla.sh: ssh çağrısı ("$SSH_HEDEF") bulunamadı — belirteç sırası ölçülemedi (desen değişti, bekçiyi güncelle)');
     if (bas < 0) kirmizi.push('electron-yayinla.sh: belirteç başlık dosyası (baslikDosyasiYaz) üretilmiyor');
     else if ((ilkScp >= 0 && bas > ilkScp) || (ilkSsh >= 0 && bas > ilkSsh)) kirmizi.push('electron-yayinla.sh: belirteç denetimi ilk ssh/scp\'den SONRA — yüklemeden ÖNCE olmalı');
   }
@@ -187,6 +190,12 @@ function sondalar(taban, tabanYollar) {
     ['N10 zorunlu dosya yok (yayin-okuma.mjs) → ÖLÇÜLEMEDİ', 'olculemedi', (d) => { delete d['scripts/lib/yayin-okuma.mjs']; }, 'zorunlu'],
     ['N11 tarama boş (kapsam kırık) → ÖLÇÜLEMEDİ', 'olculemedi', (d, y) => { y.splice(0, y.length); }, 'taban'],
     ['N12 mobil/scripts altına \'curl\' alt süreci → KIRMIZI', 'kirmizi', (d, y) => ekle(d, y, 'mobil/scripts/lib/yeni.mjs', "spawnSync('curl', [u]);\n"), 'yeni.mjs:1'],
+    ['N13 belirteç başlığı ilk ssh\'tan (uzak yardımcısı) SONRA üretiliyor → KIRMIZI', 'kirmizi', (d) => {
+      degis(d, 'deploy/electron-yayinla.sh', '# --- YAYIN BELİRTECİ', 'ssh -T "$SSH_HEDEF" true\n# --- YAYIN BELİRTECİ');
+    }, 'SONRA'],
+    ['N14 ssh çağrısı tanınmaz biçime geçti (sıra ölçülemez) → KIRMIZI', 'kirmizi', (d) => {
+      d['deploy/electron-yayinla.sh'] = (d['deploy/electron-yayinla.sh'] ?? '').replace(/^(\s*)ssh -T "\$SSH_HEDEF"/m, '$1command ssh -T "$HEDEF_X"');
+    }, 'bulunamadı'],
     ['P1 yalnız YORUMDA curl → YEŞİL (yorum çağrı değildir)', 'yesil', (d) => degis(d, 'deploy/electron-yayinla.sh', '# --- YAYIN BELİRTECİ', '# curl -fsS anonim okumaydı\n# --- YAYIN BELİRTECİ')],
     ['P2 N1 ihlali belirteçli yola çevrilince → YEŞİL (düzeltme tabanı düşürür)', 'yesil', (d) => {
       degis(d, 'deploy/electron-yayinla.sh', 'yayindaki=$(belirtecli_curl -fsS', 'yayindaki=$(curl -fsS');

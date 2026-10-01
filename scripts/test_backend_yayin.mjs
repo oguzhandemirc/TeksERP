@@ -45,6 +45,7 @@ import {
 } from './lib/backend-yayin.mjs';
 import { kaynakSurumleri, terfiHukmu } from './lib/terfi.mjs';
 import { kayitOku } from './lib/kanallar.mjs';
+import { YAYIN_EZME_ORTAMLARI } from './lib/yayin-hedefi.mjs';
 
 const KOK = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const TEKS = path.join(KOK, 'Teks-Erp');
@@ -207,14 +208,14 @@ function yayinla(argumanlar, ortam = {}) {
     encoding: 'utf8',
     input: '',
     env: {
-      ...process.env,
+      // Hedef ezmeleri yükleyiciyi durdurur (G22): koşturanın kabuğunda kalmış biri senaryoları düşürmesin.
+      ...Object.fromEntries(Object.entries(process.env).filter(([k]) => !YAYIN_EZME_ORTAMLARI.includes(k))),
       PATH: `${BIN}${path.delimiter}${process.env.PATH}`,
       HOME,
       TEKSERP_YAYIN_BILDIRIMI: '0',
       TEKSERP_YAYIN_BELIRTECI: path.join(HOME, '.tekserp', 'yayin-belirteci'),
       TEKSERP_YAYIN_BELIRTEC_KAYNAGI: path.join(HOME, '.tekserp', 'yok.json'),
       TEKSERP_TEST_PAKET_CAPASI: ORTAK.capa,
-      SSH_HEDEF: 'sahte-yayin',
       ...ortam,
     },
   });
@@ -237,6 +238,11 @@ function bolum3() {
 
   const kuru = yayinla(ortak(p1, ['--kuru']));
   ol('§3a kuru kip: çıkış 0, uzağa YAZMA SIFIR, kenar okuması YOK', kuru.kod === 0 && kuru.yazma.length === 0 && !kuru.log.some(([t]) => t === 'fetch'), kuru.cikti.slice(-600));
+  // G22/DAGY-4: ssh hedefi kayıttan — `--ssh` ya da SSH_HEDEF/UZAK_DIZIN ezmesi ağdan ÖNCE durur (kuru kipte de).
+  for (const [ad, ek, ortam] of [['--ssh', ['--ssh=baska-sunucu'], {}], ['SSH_HEDEF', [], { SSH_HEDEF: 'baska-sunucu' }], ['UZAK_DIZIN', [], { UZAK_DIZIN: '/tmp/baska' }]]) {
+    const r = yayinla(ortak(p1, ['--kuru', ...ek]), ortam);
+    ol(`§3a2 ⭐ ${ad} ezmesi → DUR, ssh/scp SIFIR`, r.kod !== 0 && /YAYIN HEDEFİ EZİLEMEZ/.test(r.cikti) && r.log.length === 0, r.cikti.slice(-400));
+  }
 
   const ilk = yayinla(ortak(p1));
   const sonJson = uzakDosya('testfabrika/backend/son.json');
