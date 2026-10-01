@@ -181,6 +181,8 @@ pub struct Db {
 pub struct Faults {
     /// Bu sürüm çalışırken sağlık `status: DOWN`.
     pub unhealthy_version: Mutex<Option<String>>,
+    /// Her sürüm sağlıksız (geri dönüş de düşer → HATA).
+    pub unhealthy_all: AtomicBool,
     /// Bu sürüm sözleşme 4 öncesi: `/health/yerel` → 404 (yalnız public `/health` var).
     pub legacy_health_version: Mutex<Option<String>>,
     /// Public `/health` (kurala aykırı) `lisans` da taşır — güncelleyici onu yine de KULLANMAMALI.
@@ -514,7 +516,8 @@ impl Net for FakeNet {
                 return Err(EnvError("bağlantı reddedildi".into()));
             };
             let v = b.version.clone().unwrap_or_default();
-            let down = self.w.faults.unhealthy_version.lock().unwrap().as_deref() == Some(v.as_str());
+            let down = self.w.faults.unhealthy_version.lock().unwrap().as_deref() == Some(v.as_str())
+                || self.w.faults.unhealthy_all.load(Ordering::SeqCst);
             let broken = self.w.faults.license_broken_version.lock().unwrap().as_deref() == Some(v.as_str());
             let legacy = self.w.faults.legacy_health_version.lock().unwrap().as_deref() == Some(v.as_str());
             let status = if down { "DOWN" } else { "UP" };

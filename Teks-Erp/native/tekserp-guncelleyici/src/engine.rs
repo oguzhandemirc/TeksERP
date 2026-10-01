@@ -76,6 +76,9 @@ struct Frame {
     last: Option<UpdateResult>,
     last_detail: Option<LastDetail>,
     tick_s: u64,
+    /// HATA'dan çıkış onayı bu turda henüz uygulanmadı: yazılan durum HATA kalır (yalnız onaylanan
+    /// adayın indirilmesi/hazır olması gösterilir).
+    hold_failed: bool,
 }
 
 /// Son tamamlanan işlem (işlem günlüğü tek doğru kaynaktır: `durum.json` yazılmadan ölünse bile sonuç
@@ -94,6 +97,11 @@ type Fail = (&'static str, String);
 
 fn fail(code: &'static str, m: impl Into<String>) -> Fail {
     (code, m.into())
+}
+
+/// HATA'dan çıkış kuralı (ileti): yalnız başarısız denemenin sürümüne ya da ondan YENİ imzalı adaya onay.
+fn failed_exit_rule(failed_target: &str) -> String {
+    format!("HATA'dan çıkış yalnız başarısız denemenin sürümüne ({failed_target}) ya da ondan yeni, imzalı bildirimle gelen adaya verilen YENİ onayla")
 }
 
 impl Engine {
@@ -139,6 +147,7 @@ impl Engine {
     }
 
     fn doc(&self, f: &Frame, state: State, code: Option<&str>, message: &str) -> StatusDoc {
+        let state = if f.hold_failed && !matches!(state, State::Downloading | State::Ready) { State::Failed } else { state };
         let mut d = StatusDoc::new(state);
         d.tick_s = f.tick_s;
         d.installed_version = f.installed.clone();
@@ -202,6 +211,7 @@ impl Engine {
             last: prev.as_ref().and_then(|p| p.last.clone()),
             last_detail: prev.and_then(|p| p.last_detail),
             tick_s,
+            hold_failed: false,
         }
     }
 
@@ -432,10 +442,12 @@ impl Engine {
             f.last = Some(l.result.clone());
             f.last_detail = Some(l.detail.clone());
         }
-        // Geri alınamamış işlem: insan gerekir — yeni bir panel onayı gelene dek hiçbir şey yapılmaz.
+        // Geri alınamamış işlem (HATA): insan gerekir. Kilidi YALNIZ yeni bir panel onayı açar ve o da
+        // (a) başarısız denemenin sürümüne ya da (b) ondan YENİ, imzalı bildirimle gelen adaya verilmişse;
+        // (b) aday çözülünce sınanır. Başka her onay `ONAY_REDDEDILDI` — HATA sürer.
+        let failed_target = last.as_ref().filter(|l| matches!(l.outcome, OpOutcome::Failed(_))).map(|l| l.target.clone());
         if let Some(l) = last.as_ref().filter(|l| matches!(l.outcome, OpOutcome::Failed(_))) {
-            let fresh = approval.as_ref().is_some_and(|a| Some(&a.id) != l.approval_id.as_ref());
-            if !fresh {
+            let Some(a) = approval.as_ref().filter(|a| Some(&a.id) != l.approval_id.as_ref()) else {
                 f.decision = Some(pre);
                 let m = format!(
                     "son işlem geri alınamadı ({}) — yeni bir panel onayı ya da müdahale gerekir",
@@ -443,7 +455,14 @@ impl Engine {
                 );
                 self.write_status(self.doc(&f, State::Failed, Some(codes::INSAN_GEREKIYOR), &m));
                 return idle;
+            };
+            if !matches!(version::compare(&a.version, &l.target), Some(std::cmp::Ordering::Equal | std::cmp::Ordering::Greater)) {
+                f.decision = Some(pre);
+                let m = format!("onay {} reddedildi — {}", a.version, failed_exit_rule(&l.target));
+                self.write_status(self.doc(&f, State::Failed, Some(codes::ONAY_REDDEDILDI), &m));
+                return idle;
             }
+            f.hold_failed = true;
         }
         if !decision::needs_candidate(&pre) {
             let (code, message) = match (&pre.karar, lic.problem.as_ref()) {
@@ -505,6 +524,12 @@ impl Engine {
             d = decision::decide(&input);
         }
         f.decision = Some(d.clone());
+        let used_approval = approval.as_ref().filter(|a| version::compare(&a.version, &m.doc.surum) == Some(std::cmp::Ordering::Equal));
+        if let (Some(target), Some(a), None) = (failed_target.as_deref(), approval.as_ref(), used_approval) {
+            let msg = format!("onay {} reddedildi — imzalı aday {}; {}", a.version, m.doc.surum, failed_exit_rule(target));
+            self.write_status(self.doc(&f, State::Failed, Some(codes::ONAY_REDDEDILDI), &msg));
+            return idle;
+        }
         f.pending = Some(Pending {
             surum: m.doc.surum.clone(),
             karar: d.karar.label().into(),
@@ -522,7 +547,6 @@ impl Engine {
             return idle;
         }
         // Geri dönen sürüm kendiliğinden yeniden denenmez: aynı sürüme YENİ bir panel onayı gerekir.
-        let used_approval = approval.as_ref().filter(|a| version::compare(&a.version, &m.doc.surum) == Some(std::cmp::Ordering::Equal));
         if let Some(l) = last.as_ref().filter(|l| l.attempt_end && l.outcome != OpOutcome::Succeeded && l.target == m.doc.surum) {
             let fresh = used_approval.is_some_and(|a| Some(&a.id) != l.approval_id.as_ref());
             if !fresh {
