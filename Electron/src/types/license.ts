@@ -132,6 +132,11 @@ export interface LicenseDetail {
     eslesen: number | null;
     olculebilen: number | null;
     uyusmayan: string[];
+    /** Etken başına çok yollu okuma raporu (K8: 24 sa önbellek). Eski backend göndermez. */
+    okuma?: Record<FingerprintFactor, FingerprintFactorReport> | null;
+    /** Kabul edilen kümede değeri olup 24 saattir hiçbir yoldan okunamayan etkenler. Eski backend göndermez. */
+    kayip?: string[];
+    onbellekBozuk?: boolean;
   };
   yoklama: {
     saticiYapilandirildi: boolean;
@@ -185,6 +190,24 @@ export interface LicenseOfflineRequest {
   hedefUrl: string | null;
   istekGovdesi: { v: 1; zarf: string };
   qrAdresi: string | null;
+}
+
+/** Etken okuma raporu — değer/özet yok: kaynak (bu ölçüm · ≤ 24 sa önbellek · yok), kazanan yol, son okuma. */
+export interface FingerprintFactorReport {
+  kaynak: "okundu" | "onbellek" | "yok";
+  durum: "OKUNDU" | "DEGER_YOK" | "OKUNAMADI";
+  yol: string | null;
+  sonOkuma: string | null;
+  celiski: string[];
+  hatali: string[];
+}
+
+/** `POST /api/license/donanim-bildir` yanıtı (K8). */
+export interface LicenseHardwareReportResult {
+  talepId: string;
+  durum: "BEKLIYOR" | "ONAYLANDI" | "REDDEDILDI";
+  kayip: string[];
+  lisans: LicenseDetail;
 }
 
 export interface LicenseTransferResult {

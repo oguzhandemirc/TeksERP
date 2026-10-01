@@ -4,6 +4,7 @@ import type {
   LicenseAcceptanceView,
   LicenseDataExportManifest,
   LicenseDetail,
+  LicenseHardwareReportResult,
   LicenseOfflineRequest,
   LicenseProxySettings,
   LicenseStatusResponse,
@@ -80,6 +81,9 @@ export const licenseService = {
     data(apiClient.post<ApiResponse<LicenseDetail>>(`${BASE}/aktarma-yaniti`, { yanit }, QUIET)),
   requestTransfer: (gerekce: string | null) =>
     data(apiClient.post<ApiResponse<LicenseTransferResult>>(`${BASE}/tasima-talebi`, { gerekce }, QUIET)),
+  /** Donanım değişikliğini bildir (K8): backend parmak izini yeniden ölçer ve satıcıya imzalı `donanim` isteği gönderir. */
+  reportHardwareChange: (gerekce: string | null) =>
+    data(apiClient.post<ApiResponse<LicenseHardwareReportResult>>(`${BASE}/donanim-bildir`, { gerekce }, QUIET)),
   /** `anaKurulumId` null → gövdeye girmez: satıcı tesisin tek etkin ÜRETİM kurulumunu kendisi çıkarır. */
   drTakeover: (anaKurulumId: string | null, gerekce: string) =>
     data(apiClient.post<ApiResponse<LicenseDetail>>(`${BASE}/dr-devral`, { ...(anaKurulumId ? { anaKurulumId } : {}), gerekce }, QUIET)),

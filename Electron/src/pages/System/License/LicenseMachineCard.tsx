@@ -5,6 +5,7 @@ import { copyText } from "@/lib/clipboard";
 import type { FingerprintFactor, LicenseDetail } from "@/types/license";
 import { InfoRow, LicenseCard, when } from "./LicenseParts";
 import { FACTOR_LABEL } from "./labels";
+import { LicenseHardwareReport } from "./LicenseHardwareReport";
 
 const FACTORS: FingerprintFactor[] = ["f1", "f2", "f3", "f4", "f5"];
 const DECISION: Record<string, string> = { ESLESTI: "Eşleşti", ESLESMEDI: "Eşleşmedi", OLCULEMEDI: "Ölçülemedi" };
@@ -35,13 +36,22 @@ function CopyableId({ value, label, testId }: { value: string | null; label: str
   );
 }
 
+/** Etken satırının notu: kayıp (24 sa okunamadı) · uyuşmuyor · önbellekten (son okuma) · ölçülemedi. */
+function factorNote(p: LicenseDetail["parmakIzi"], f: FingerprintFactor): string {
+  const o = p.okuma?.[f];
+  if (p.kayip?.includes(f)) return ` · kayıp (son okuma ${when(o?.sonOkuma)})`;
+  if (p.uyusmayan.includes(f)) return " · uyuşmuyor";
+  if (o?.kaynak === "onbellek") return ` · son okuma ${when(o.sonOkuma)} (önbellekten)`;
+  return p.olculen && !p.olculen[f] ? " · ölçülemedi" : "";
+}
+
 /**
- * Kimlikler, lisans deposu ve parmak izi — değer değil, yalnız "ölçülebildi mi".
+ * Kimlikler, lisans deposu ve parmak izi — değer değil, yalnız "okundu mu, nereden".
  * İKİ kimlik ayrı durur (D14): lisans kimliği (`kurulumId`, portalda üretilir, lisans
  * klasöründe) hakkın bağlandığı kimliktir; veritabanı kimliği yalnız bilgidir — veritabanını
  * taşıyan kopya (DR/test) lisansı taşımaz.
  */
-export function LicenseMachineCard({ d }: { d: LicenseDetail }) {
+export function LicenseMachineCard({ d, canManage = false }: { d: LicenseDetail; canManage?: boolean }) {
   const p = d.parmakIzi;
   return (
     <LicenseCard
@@ -68,12 +78,17 @@ export function LicenseMachineCard({ d }: { d: LicenseDetail }) {
       </InfoRow>
       <ul className="grid grid-cols-1 gap-0.5 pt-1 text-xs sm:grid-cols-2">
         {FACTORS.map((f) => (
-          <li key={f} className={p.uyusmayan.includes(f) ? "text-destructive" : "text-muted-foreground"}>
-            {p.olculen?.[f] ? "●" : "○"} {FACTOR_LABEL[f]}
-            {p.uyusmayan.includes(f) ? " · uyuşmuyor" : p.olculen && !p.olculen[f] ? " · ölçülemedi" : ""}
+          <li
+            key={f}
+            data-testid={`lisans-etken-${f}`}
+            className={p.uyusmayan.includes(f) || p.kayip?.includes(f) ? "text-destructive" : "text-muted-foreground"}
+          >
+            {p.olculen?.[f] ? "●" : p.okuma?.[f]?.kaynak === "onbellek" ? "◐" : "○"} {FACTOR_LABEL[f]}
+            {factorNote(p, f)}
           </li>
         ))}
       </ul>
+      {canManage && d.kurulum.etkin && <LicenseHardwareReport />}
     </LicenseCard>
   );
 }
