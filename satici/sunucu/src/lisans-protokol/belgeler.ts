@@ -14,6 +14,11 @@ export const TYP = {
   KIRA: "tekserp-kira",
   ISTEK: "tekserp-istek",
   INDIRME: "tekserp-indirme",
+  /**
+   * Panel (Electron) sürüm künyesi — latest.yml'deki imzalı `tekserp` bloğu (PAKET ya da ayrı panel yayın anahtarı).
+   * Doğrulayan panelin kendisi (`Electron/electron/guncelleme/panel-kunye.mjs`, bağımlılıksız ayna; kâhin test_panel_imza).
+   */
+  PANEL: "tekserp-panel",
   SERTIFIKA: "tekserp-sertifika",
   DURUM: "tekserp-durum",
   /** Paket bütünlük listesi (PAKET anahtarıyla imzalı) — doğrulayan `lib/license/integrity.ts` + native çekirdek. */

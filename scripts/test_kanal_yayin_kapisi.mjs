@@ -34,6 +34,10 @@
 //   §5 yüklemler (lib): zip okuyucu, bundle ölçümü, tablet kimliği, ikili manifest (AXML) okuyucu
 //   §6 build-apk.mjs — kanal ARGÜMANDAN (kapalı küme), ERP adresi kanalın; APK'nın KENDİ paket adı /
 //      güncelleme adresi / OTA sertifikası / çalışma anı yapılandırması hedef kanalın değilse dur
+//   §8 panel İMZALI KÜNYE — imzasız/geçersiz künyeli latest.yml YÜKLENMEZ (anahtarsız imzasız · imza aracı
+//      imzalamadıysa · yabancı anahtar · başka kanal · kurcalanmış exe · boş çapa · çapası gömülmemiş paket ·
+//      rotasyon kilidi · kopuk ssh); --kuru imzalamaz; --dogrula kenardaki künyeyi denetler; paketleme boş
+//      çapada derlemez. Sahte paketler bekçinin TEST anahtarıyla imzalanır (geçici ağacın çapası o anahtar).
 //
 // `--eski=<git-ref>`: §1a/§2c'nin İZİNİ o ref'teki betiklerle de çıkarır ve
 // karşılaştırır (adnansahin için "davranış değişmedi" ölçümü).
@@ -57,6 +61,8 @@ import { bundleAdresOlcumu } from '../mobil/scripts/lib/adres.mjs';
 import { zipGirdisiOku } from '../mobil/scripts/lib/zip.mjs';
 import { apkKimligi, axmlOgeleri } from '../mobil/scripts/lib/apk-kimlik.mjs';
 import { imzaBasligi, imzayiKabulEdenler, multipartKur } from '../mobil/scripts/lib/manifest.mjs';
+import { buildReleaseDoc, signReleaseDoc } from '../Electron/electron/guncelleme/panel-kunye.mjs';
+import { withReleaseBlock } from '../Electron/electron/guncelleme/latest-yml.mjs';
 
 const KOK = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const ESKI = (process.argv.find((a) => a.startsWith('--eski=')) ?? '').slice('--eski='.length) || null;
@@ -83,6 +89,30 @@ const GERCEK_GIT = execFileSync('/usr/bin/env', ['sh', '-c', 'command -v git'], 
 // GIT_* SÖKÜLÜR: bekçi commit kapısından koşarsa hook ortamı GIT_DIR/GIT_INDEX_FILE taşır ve
 // geçici ağaçtaki `git init` GERÇEK depoya yazar (pre-commit.mjs `gitEnvSil` gerekçesi).
 const TEMIZ_ENV = { ...Object.fromEntries(Object.entries(process.env).filter(([k]) => !k.startsWith('GIT_'))), TEKSERP_YAYIN_BILDIRIMI: '0' };
+delete TEMIZ_ENV.TEKSERP_PANEL_IMZA_ANAHTARI;
+
+// Panel künye imzası (§8): bekçinin TEST anahtarları — geçici ağacın çapası bunlardır, gerçek çapaya dokunulmaz.
+const imzaAnahtari = (kid) => {
+  const { privateKey, publicKey } = crypto.generateKeyPairSync('ed25519');
+  return { kid, privateKey, x: publicKey.export({ format: 'jwk' }).x };
+};
+const IMZA = imzaAnahtari('panel-2099');
+const IMZA_ONCEKI = imzaAnahtari('panel-2098');
+const IMZA_YABANCI = imzaAnahtari('panel-2097');
+const TEST_CAPA = [{ kid: IMZA.kid, x: IMZA.x }];
+const PANEL_CAPA_REL = 'Electron/electron/guncelleme/imza-capasi.json';
+const capaMetni = (liste) => `${JSON.stringify({ _aciklama: ['bekçi çapası (geçici ağaç)'], anahtarlar: liste }, null, 2)}\n`;
+/** latest.yml'e künye: imzalayan anahtar, künyenin kanalı ve `capa` (pakete gömülü çapanın kid'leri) seçilebilir. */
+function kunyeYaz(dizin, { surum, kanal, anahtar = IMZA, capa = TEST_CAPA.map((k) => k.kid) }) {
+  const yml = path.join(dizin, 'latest.yml');
+  const ad = `TeksERP-${surum}-Setup.exe`;
+  const govde = fs.readFileSync(path.join(dizin, ad));
+  const doc = buildReleaseDoc({
+    kanal, surum, commit: 'abcdef0', yayinZamani: '2026-10-01T01:00:00.000Z',
+    paket: { ad, boyut: govde.length, sha512: crypto.createHash('sha512').update(govde).digest('hex') }, capa,
+  });
+  fs.writeFileSync(yml, withReleaseBlock(fs.readFileSync(yml, 'utf8'), signReleaseDoc({ doc, kid: anahtar.kid, privateKey: anahtar.privateKey })));
+}
 
 /* ------------------------------------------------------------------ *
  * Sahte araçlar
@@ -191,7 +221,10 @@ if (arac === 'npm') {
   const kayit = JSON.parse(fs.readFileSync(kayitYolu, 'utf8'));
   const kod = process.env.TEKSERP_KANAL || JSON.parse(fs.readFileSync('shared/musteri.json', 'utf8')).kod;
   const { asarYaz, gomuluKimlik } = await import(process.env.ASAR_YAZ);
-  asarYaz(path.join(res, 'app.asar'), gomuluKimlik(kayit.kanallar[kod], meta));
+  // electron-vite çapa JSON'unu ana sürece gömer (guncelleme-dogrulama.ts → imza-capasi.json).
+  const capaYolu = 'electron/guncelleme/imza-capasi.json';
+  const capa = fs.existsSync(capaYolu) ? JSON.parse(fs.readFileSync(capaYolu, 'utf8')).anahtarlar : [];
+  asarYaz(path.join(res, 'app.asar'), gomuluKimlik(kayit.kanallar[kod], meta, capa));
   const exe = 'TeksERP-' + meta.version + '-Setup.exe';
   const govde = Buffer.from('SAHTE-SETUP ' + meta.name + ' ' + meta.version + ' ' + cfg.publish[0].url);
   fs.writeFileSync(path.join(cikti, exe), govde);
@@ -231,12 +264,13 @@ export function asarYaz(yol, dosyalar) {
   bas.writeUInt32LE(tursu.length, 4);
   fs.writeFileSync(yol, Buffer.concat([bas, tursu, ...parcalar]));
 }
-/** Bir kanalla derlenen panelin asar içeriği: paketin package.json'ı + gömülü kimlik dizeleri. */
-export function gomuluKimlik(k, meta) {
+/** Bir kanalla derlenen panelin asar içeriği: paketin package.json'ı + gömülü kimlik dizeleri (+ panel imza çapası). */
+export function gomuluKimlik(k, meta, capa = []) {
   const baslik = k.gorunurEtiket ? k.gorunurEtiket + ' · ' + k.panel.urunAdi : k.panel.urunAdi;
   return {
     'package.json': JSON.stringify(meta),
-    'out/main/main.js': 'const appId = "' + k.panel.appId + '"; const updateFeedUrl = "' + k.yayin.panelFeed + '"; const windowTitle = "' + baslik + '";',
+    'out/main/main.js': 'const appId = "' + k.panel.appId + '"; const updateFeedUrl = "' + k.yayin.panelFeed + '"; const windowTitle = "' + baslik + '";' +
+      (capa.length ? ' const panelKunyeTuru = "tekserp-panel"; const anahtarlar = ' + JSON.stringify(capa) + ';' : ''),
     'out/renderer/index.html': '<title>' + baslik + '</title>',
     'out/renderer/assets/index-sahte.js': 'const erpUrl = "' + k.panel.erpAdresi + '"; const label = ' + JSON.stringify(k.gorunurEtiket) + ';',
   };
@@ -322,8 +356,10 @@ const ORTAK_KAYNAK = [
   'scripts/lib/terfi.mjs', 'scripts/lib/yayin-okuma.mjs',
   ...PANEL_SABIT_DOSYALAR,
   'scripts/lib/yayin-bildirim.mjs',
+  'scripts/lib/panel-imza-kapisi.mjs', 'Electron/electron/guncelleme/kunye-jws.mjs', 'Electron/electron/guncelleme/panel-kunye.mjs',
+  'Electron/electron/guncelleme/latest-yml.mjs',
 ];
-function agacKur(o, { ref = null } = {}) {
+function agacKur(o, { ref = null, capa = TEST_CAPA } = {}) {
   const agac = path.join(o.d, 'agac');
   for (const rel of [...ORTAK_KAYNAK, 'deploy/electron-yayinla.sh', 'deploy/electron-paketle.sh']) {
     if (ref) {
@@ -336,6 +372,12 @@ function agacKur(o, { ref = null } = {}) {
   fs.chmodSync(path.join(agac, 'deploy/electron-paketle.sh'), 0o755);
   // Sürüm notu kapısının kendi bekçisi var; burada ölçülen o değil (beyanlı saplama).
   kopyala(agac, 'scripts/check-surum-notlari.mjs', 'process.exit(0);\n');
+  // Panel imza çapası: gerçek çapa (karar bekliyor olabilir) yerine bekçinin TEST çapası. İmza aracının
+  // çağrıldığı dizin (`Teks-Erp/`) boş durur — sahte `npx` onu koşmaz, kapı imzanın gerçekten yazıldığını ölçer.
+  if (!ref) {
+    kopyala(agac, PANEL_CAPA_REL, capaMetni(capa));
+    fs.mkdirSync(path.join(agac, 'Teks-Erp'), { recursive: true });
+  }
   return agac;
 }
 
@@ -394,14 +436,14 @@ const engellenen = (o) => o.cagrilar().filter((c) => c.ENGELLENDI).map((c) => c.
 /** Sahte panel derlemesi — electron-builder'ın kimlik taşıyan çıktıları. */
 const KAYIT = JSON.parse(fs.readFileSync(path.join(KOK, 'deploy/kanallar.json'), 'utf8'));
 const tabletSurum = JSON.parse(fs.readFileSync(path.join(KOK, 'mobil/app.json'), 'utf8')).expo.version;
-function panelArtefakti(dizin, { url, cache, exe, surum, ic = 'adnansahin', icMutasyon = null, asarYok = false }) {
+function panelArtefakti(dizin, { url, cache, exe, surum, ic = 'adnansahin', icMutasyon = null, asarYok = false, kunye = {}, capaGomulu = TEST_CAPA }) {
   const res = path.join(dizin, 'win-unpacked', 'resources');
   fs.mkdirSync(res, { recursive: true });
   if (url) fs.writeFileSync(path.join(res, 'app-update.yml'), `provider: generic\nurl: ${url}\nchannel: latest\nupdaterCacheDirName: ${cache}\n`);
   // Paketin İÇİ (asar): hangi kanalla derlendiyse onun kimliği; `icMutasyon` karışık kimliği kurar.
   if (!asarYok) {
     const k = KAYIT.kanallar[ic];
-    const icerik = gomuluKimlik(k, { name: k.panel.paketAdi, productName: k.panel.urunAdi, version: surum });
+    const icerik = gomuluKimlik(k, { name: k.panel.paketAdi, productName: k.panel.urunAdi, version: surum }, capaGomulu);
     if (icMutasyon) icMutasyon(icerik);
     asarYaz(path.join(res, 'app.asar'), icerik);
   }
@@ -413,6 +455,8 @@ function panelArtefakti(dizin, { url, cache, exe, surum, ic = 'adnansahin', icMu
   const sha = crypto.createHash('sha512').update(govde).digest('base64');
   fs.writeFileSync(path.join(dizin, 'latest.yml'),
     `version: ${surum}\nfiles:\n  - url: ${ad}\n    sha512: ${sha}\n    size: ${govde.length}\npath: ${ad}\nsha512: ${sha}\n`);
+  // Yayın yolu imzalı künye ister (§8): paket varsayılan olarak kendi kanalı için TEST anahtarıyla imzalı doğar.
+  if (kunye) kunyeYaz(dizin, { surum, kanal: ic, ...kunye });
 }
 const ADNANSAHIN_PANEL = { url: `${YAYIN_HOST}adnansahin/electron/`, cache: 'adnan-sahin-erp-admin-updater', exe: 'Adnan Şahin ERP.exe' };
 const TESTFABRIKA_PANEL = { url: `${YAYIN_HOST}testfabrika/electron/`, cache: 'teks-erp-testfabrika-updater', exe: 'TeksERP Test Fabrika.exe', ic: 'testfabrika' };
@@ -1386,6 +1430,141 @@ console.log('\n§7 — panel terfi kapısı: ssh\'tan ÖNCE, paketlemede derleme
     const m = paketleSenaryosu(['adnansahin', SURUM], { terfi: { terfiEtiketi: null },
       mutasyon: (x) => x.replaceAll('kanal-kapisi.mjs" terfi "$musteri"', 'kanal-kapisi.mjs" kanal "$musteri"') });
     ol('7r ⭐ SONDA: paketleyiciden terfi kapısı sökülünce etiketsiz commit derlenir (7n kapıyı ölçüyor)', Boolean(npmCagrisi(m.o)), m.r.cikti.slice(-400));
+  }
+}
+
+/* ------------------------------------------------------------------ *
+ * §8 panel İMZALI KÜNYE (G5)
+ * ------------------------------------------------------------------ */
+
+console.log('\n§8 — panel imzalı künye: imzasız/geçersiz künyeli latest.yml YÜKLENMEZ, boş çapalı panel paketlenmez');
+{
+  const scpYok = (o) => !o.cagrilar().some((c) => c.arac === 'scp');
+  /** Kapı yüklemeden ÖNCE durdu: ssh/scp'nin tek izi terfi kapısının kaynak kanal OKUMASI (bkz. 1a). */
+  const yalnizTerfiOkumasi = (o) => iz(o).filter((x) => x.startsWith('ssh') || x.startsWith('scp')).every((x) => x === KAYNAK_OKU);
+  {
+    const { o, r } = yayinSenaryosu({ artefakt: { ...ADNANSAHIN_PANEL, kunye: null } });
+    ol('8a imzasız latest.yml + imza anahtarı YOK → DUR, yükleme/ssh yazımı SIFIR, TR hata', r.kod !== 0 && yalnizTerfiOkumasi(o) &&
+      /İMZASIZ ve imza anahtarı verilmedi/.test(r.cikti), r.cikti.slice(-500));
+  }
+  {
+    const { o, r } = yayinSenaryosu({ artefakt: { ...ADNANSAHIN_PANEL, kunye: null }, ekArg: ['--anahtar=/yok/panel-2099.panel.json'] });
+    const npx = o.cagrilar().find((c) => c.arac === 'npx' && /tsx scripts\/panel-imza\.ts imzala --musteri=adnansahin --dizin-paket=\S+ --anahtar=\/yok\/panel-2099\.panel\.json/.test(c.args));
+    ol('8b imzasız + --anahtar → imza aracı ÇAĞRILIR; imzalamadıysa (künye hâlâ yok) DUR, yükleme SIFIR',
+      r.kod !== 0 && Boolean(npx) && yalnizTerfiOkumasi(o) && /İmzalanan künye kapıdan geçmedi/.test(r.cikti), `${JSON.stringify(npx)}\n${r.cikti.slice(-500)}`);
+  }
+  for (const [ad, kunye, desen] of [
+    ['8c çapada olmayan anahtarla imzalı (JWS_KID)', { anahtar: IMZA_YABANCI }, /JWS_KID/],
+    ['8d başka kanalın künyesi (KUNYE_KANAL)', { kanal: 'testfabrika' }, /KUNYE_KANAL/],
+    ['8e künyenin capa listesi pakete gömülü çapa değil', { capa: ['panel-2098'] }, /çapa listesi/],
+  ]) {
+    const { o, r } = yayinSenaryosu({ artefakt: { ...ADNANSAHIN_PANEL, kunye } });
+    ol(`${ad} → DUR, yükleme SIFIR`, r.kod !== 0 && yalnizTerfiOkumasi(o) && /GEÇERSİZ/.test(r.cikti) && desen.test(r.cikti), r.cikti.slice(-500));
+  }
+  {
+    const o = ortam();
+    const agac = agacKur(o);
+    terfiHazirla(o, agac, { surum: '9.9.9' });
+    const rel = path.join(agac, 'Electron/release/adnansahin/9.9.9');
+    panelArtefakti(rel, { ...ADNANSAHIN_PANEL, surum: '9.9.9' });
+    fs.appendFileSync(path.join(rel, 'TeksERP-9.9.9-Setup.exe'), 'kurcalandı');
+    const r = kos(o, path.join(agac, 'deploy/electron-yayinla.sh'), ['--musteri=adnansahin', '9.9.9'], { cwd: agac });
+    ol('8f künyeden SONRA değişmiş kurulum dosyası (DOSYA_OZETI) → DUR, yükleme SIFIR', r.kod !== 0 && yalnizTerfiOkumasi(o) && /DOSYA_OZETI/.test(r.cikti), r.cikti.slice(-400));
+  }
+  {
+    const o = ortam();
+    const agac = agacKur(o, { capa: [] });
+    terfiHazirla(o, agac, { surum: '9.9.9' });
+    panelArtefakti(path.join(agac, 'Electron/release/adnansahin/9.9.9'), { ...ADNANSAHIN_PANEL, surum: '9.9.9' });
+    const r = kos(o, path.join(agac, 'deploy/electron-yayinla.sh'), ['--musteri=adnansahin', '9.9.9'], { cwd: agac });
+    ol('8g ağacın çapası BOŞ → DUR (CAPA_BOS), yükleme SIFIR', r.kod !== 0 && yalnizTerfiOkumasi(o) && /CAPA_BOS/.test(r.cikti), r.cikti.slice(-400));
+  }
+  {
+    const { o, r } = yayinSenaryosu({ artefakt: { ...ADNANSAHIN_PANEL, capaGomulu: [] } });
+    ol('8h paket çapayı/doğrulayıcıyı GÖMMEMİŞ (eski derleme) → DUR, yükleme SIFIR', r.kod !== 0 && yalnizTerfiOkumasi(o) && /çapa anahtarı panel-2099 yok/.test(r.cikti), r.cikti.slice(-400));
+  }
+  /** Kanalda yayındaki (9.9.8) künyeli latest.yml: `capa` = o sürümün panellerinin tanıdığı anahtarlar. */
+  const yayindaki = (o, capa) => panelArtefakti(path.join(o.uzak, VDS, 'html/adnansahin/electron'),
+    { ...ADNANSAHIN_PANEL, surum: '9.9.8', kunye: { anahtar: IMZA_ONCEKI, capa } });
+  const rotasyonSenaryosu = (capa, ek = {}) => {
+    const o = ortam();
+    const agac = agacKur(o);
+    terfiHazirla(o, agac, { surum: '9.9.9' });
+    yayindaki(o, capa);
+    panelArtefakti(path.join(agac, 'Electron/release/adnansahin/9.9.9'), { ...ADNANSAHIN_PANEL, surum: '9.9.9' });
+    if (ek.mutasyon) {
+      const y = path.join(agac, 'deploy/electron-yayinla.sh');
+      const once = fs.readFileSync(y, 'utf8');
+      const sonra = ek.mutasyon(once);
+      if (sonra === once) throw new Error('rotasyon mutasyonu UYGULANMADI — sonda geçersiz');
+      fs.writeFileSync(y, sonra);
+    }
+    return { o, r: kos(o, path.join(agac, 'deploy/electron-yayinla.sh'), ['--musteri=adnansahin', '9.9.9'], { cwd: agac, ortamEk: ek.ortamEk }) };
+  };
+  {
+    const { o, r } = rotasyonSenaryosu(['panel-2098']);
+    ol('8i ⭐ ROTASYON KİLİDİ: yayındaki 9.9.8 yalnız panel-2098 tanır, 9.9.9 panel-2099 ile imzalı → DUR, scp SIFIR',
+      r.kod !== 0 && scpYok(o) && /ROTASYON KİLİDİ/.test(r.cikti) && /KURMAZLAR/.test(r.cikti), r.cikti.slice(-500));
+  }
+  {
+    const { o, r } = rotasyonSenaryosu(['panel-2098', 'panel-2099']);
+    const sirali = iz(o);
+    ol('8j rotasyon geçer (yayındaki çapa yeni imzalayanı tanıyor) → yükler; yayındaki latest.yml ssh ile OKUNDU, yüklemeden ÖNCE',
+      r.kod === 0 && sirali.indexOf(`ssh oku ${VDS}/html/adnansahin/electron/latest.yml`) >= 0 &&
+        sirali.indexOf(`ssh oku ${VDS}/html/adnansahin/electron/latest.yml`) < sirali.findIndex((x) => x.startsWith('scp')) &&
+        /✓ kenardaki latest\.yml = imzalı künyeli yerel dosya/.test(r.cikti), `${r.cikti.slice(-500)}\n${sirali.join('\n')}`);
+  }
+  {
+    const { o, r } = rotasyonSenaryosu(['panel-2098', 'panel-2099'], { ortamEk: { SAHTE_SSH_KOPUK: 'adnansahin/electron/latest.yml' } });
+    ol('8k yayındaki latest.yml okunamıyor (kopuk ssh) → ÖLÇÜLEMEDİ = DUR, scp SIFIR', r.kod !== 0 && scpYok(o) && /ÖLÇÜLEMEDİ/.test(r.cikti), r.cikti.slice(-400));
+  }
+  {
+    const { o, r } = rotasyonSenaryosu(['panel-2098'], {
+      mutasyon: (m) => m.replace('node "$kok/scripts/kanal-kapisi.mjs" panel-rotasyon "$musteri" "$rel" "$yayindaki_yml" \\\n    ||', 'true \\\n    ||'),
+    });
+    ol('8l ⭐ SONDA: rotasyon çağrısı sökülünce 8i\'nin sürümü YÜKLENİR (kilit yük taşıyor)', r.kod === 0 && !scpYok(o), r.cikti.slice(-300));
+  }
+  const kunyeKapisiSokuk = (m) => m.replace('node "$kok/scripts/kanal-kapisi.mjs" panel-imza "$musteri" "$rel" || imza_durum=$?', 'imza_durum=0');
+  const rotasyonSokuk = (m) => m.replace('node "$kok/scripts/kanal-kapisi.mjs" panel-rotasyon "$musteri" "$rel" "$yayindaki_yml" \\\n    ||', 'true \\\n    ||');
+  {
+    // İki kat: künye kapısı sökülse de rotasyon adımı yerel künyeyi yeniden ölçer (savunma derinliği).
+    const { o, r } = yayinSenaryosu({ artefakt: { ...ADNANSAHIN_PANEL, kunye: null }, mutasyon: kunyeKapisiSokuk });
+    ol('8m künye kapısı sökülse de rotasyon adımı imzasız künyeyi DURDURUR (ikinci kat), scp SIFIR',
+      r.kod !== 0 && scpYok(o) && /paketin künyesi geçerli değil/.test(r.cikti), r.cikti.slice(-300));
+    const { o: o2 } = yayinSenaryosu({ artefakt: { ...ADNANSAHIN_PANEL, kunye: null }, mutasyon: (m) => rotasyonSokuk(kunyeKapisiSokuk(m)) });
+    ol('8m ⭐ SONDA: iki kat da sökülünce İMZASIZ latest.yml YÜKLENİR (8a/8m kapıyı ölçüyor)', !scpYok(o2), iz(o2).join('\n'));
+  }
+  {
+    const { o, r } = yayinSenaryosu({ artefakt: { ...ADNANSAHIN_PANEL, kunye: { anahtar: IMZA_YABANCI } }, ekArg: ['--kuru'] });
+    ol('8n1 --kuru geçersiz künye (çapada olmayan anahtar) → DUR, ağ SIFIR (kuru da künyeyi ölçer)', r.kod !== 0 && agSifir(o) && /JWS_KID/.test(r.cikti), r.cikti.slice(-300));
+    const { o: o2, r: r2 } = yayinSenaryosu({ artefakt: { ...ADNANSAHIN_PANEL, kunye: { anahtar: IMZA_YABANCI } }, ekArg: ['--kuru'], mutasyon: kunyeKapisiSokuk });
+    ol('8n2 ⭐ SONDA: künye kapısı sökülünce --kuru geçersiz künyeyi KABUL eder (8n1 kapıyı ölçüyor)', r2.kod === 0 && agSifir(o2), r2.cikti.slice(-300));
+  }
+  {
+    const { o, r } = yayinSenaryosu({ artefakt: { ...ADNANSAHIN_PANEL, kunye: null }, ekArg: ['--kuru'] });
+    ol('8n --kuru imzasız paket → KABUL (imzalamaz, anahtar istemez), ağ SIFIR, "İMZASIZ" notu',
+      r.kod === 0 && agSifir(o) && /\[kuru\] künye\s+: İMZASIZ/.test(r.cikti) && !o.cagrilar().some((c) => c.arac === 'npx'), r.cikti.slice(-500));
+  }
+  {
+    const o = ortam();
+    const agac = agacKur(o);
+    panelArtefakti(path.join(o.uzak, VDS, 'html/adnansahin/electron'), { ...ADNANSAHIN_PANEL, surum: '9.9.8', kunye: null });
+    const r = kos(o, path.join(agac, 'deploy/electron-yayinla.sh'), ['--musteri=adnansahin', '--dogrula'], { cwd: agac });
+    ol('8o --dogrula künyesiz yayın → çıkış 0 + UYARI (imza öncesi sürüm geçişte meşru)', r.kod === 0 && /KÜNYESİZ/.test(r.cikti), r.cikti.slice(-400));
+    const o2 = ortam();
+    const agac2 = agacKur(o2);
+    panelArtefakti(path.join(o2.uzak, VDS, 'html/adnansahin/electron'), { ...ADNANSAHIN_PANEL, surum: '9.9.8', kunye: { anahtar: IMZA_YABANCI } });
+    const r2 = kos(o2, path.join(agac2, 'deploy/electron-yayinla.sh'), ['--musteri=adnansahin', '--dogrula'], { cwd: agac2 });
+    ol('8p --dogrula geçersiz künyeli yayın (çapada olmayan anahtar) → DUR', r2.kod !== 0 && /JWS_KID/.test(r2.cikti), r2.cikti.slice(-400));
+  }
+  {
+    const s = paketleSenaryosu(['testfabrika', SURUM], { agacMutasyon: (agac) => kopyala(agac, PANEL_CAPA_REL, capaMetni([])) });
+    ol('8q paketleme: çapa BOŞ → derleme YOK (çıkışsız kapı paketlenmez), dinlenme dosyaları aynı',
+      s.r.kod !== 0 && !npmCagrisi(s.o) && /CAPA_BOS/.test(s.r.cikti) && s.once === s.sonra, s.r.cikti.slice(-400));
+    const t = paketleSenaryosu(['testfabrika', SURUM]);
+    const d = derlenen(t.agac, 'testfabrika');
+    ol('8r paketleme: çapa derlenen ana sürece GÖMÜLÜ (kapı çıktıyı okur) + yayın komutu --anahtar ister',
+      t.r.kod === 0 && d !== null && d.main.includes(`"${IMZA.x}"`) && /pakete gömülü/.test(t.r.cikti) && /--anahtar=/.test(t.r.cikti), t.r.cikti.slice(-400));
   }
 }
 

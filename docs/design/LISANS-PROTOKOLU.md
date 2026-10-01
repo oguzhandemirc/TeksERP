@@ -47,6 +47,7 @@
 | `tekserp-indirme` | İNDİRME | CF Worker (kâhin: `indirme.ts`) |
 | `tekserp-durum` | KURULUM | fabrika (yerel, ağa çıkmaz) |
 | `tekserp-kabul` | KURULUM | satıcı (ilk kurulum sözleşme kabulü, Ek-7 — `protocol/kabul.ts`; etkinleştirme gövdesinde taşınır, satıcı kurulum kaydında saklar) |
+| `tekserp-panel` | PAKET ya da ayrı panel yayın anahtarı (`panel-<yıl>`; karar kullanıcıda) | panel ana süreci (latest.yml `tekserp` bloğu; `Electron/electron/guncelleme/panel-kunye.mjs` — bağımlılıksız ayna, kâhin `test_panel_imza`); yayın kapısı (`kanal-kapisi.mjs panel-imza`) |
 
 ## 2. Anahtar hiyerarşisi ve güven zinciri
 
