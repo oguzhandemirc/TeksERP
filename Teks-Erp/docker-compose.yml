@@ -33,6 +33,12 @@ services:
       dockerfile: Dockerfile
     container_name: tekserp-backend
     restart: unless-stopped
+    # Sertleştirme (G22; korumalı compose'un x-guvenlik kalıbı): imaj `node` kullanıcısıyla koşar, kök FS salt okunur,
+    # yetki yok, ayrıcalık yükseltme yok. Yazılabilir: /tmp (bellek) + aşağıdaki birimler.
+    read_only: true
+    tmpfs: ["/tmp:size=256m,mode=1777"]
+    cap_drop: ["ALL"]
+    security_opt: ["no-new-privileges:true"]
     depends_on:
       postgres:
         condition: service_healthy
@@ -50,8 +56,14 @@ services:
       - "4000:4000"
     volumes:
       - app_data:/app/data
+      # Lisans deposu (kurulum anahtarı/kira) ve LAN OTA deposu kalıcı birimde — eskiden konteyner katmanındaydı
+      # ve her yeniden yaratmada kayboluyordu; salt okunur kök FS'de tek yazılabilir yerleri bunlar.
+      - lisans:/lisans
+      - mobil_guncelleme:/mobil-guncelleme
       - ./backups:/backups
 
 volumes:
   pg_data:
   app_data:
+  lisans:
+  mobil_guncelleme:

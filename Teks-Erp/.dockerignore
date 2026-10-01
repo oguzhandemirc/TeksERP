@@ -1,22 +1,19 @@
-node_modules
-dist
-.env
-.env.local
-.env.docker
-.env.*.local
-.git
-.gitignore
-.vscode
-.idea
-.DS_Store
-*.log
-npm-debug.log*
-README.md
-ARCHITECTURE.md
-API_TEST_GUIDE.md
-scratch
-test-results
-TEST_BUG_REPORT.md
-backups
-docker-compose.yml
-baslat.sh
+# =============================================================================
+# Teks-Erp/Dockerfile bağlamı — İZİN LİSTESİ (G22): varsayılan HİÇBİR ŞEY girmez.
+# =============================================================================
+# Geliştirme ağacında git'e girmeyen fabrika verisi (dump/, scripts/out/), .env, lisans deposu ve
+# yedekler durur; blocklist yarın eklenen yeni dosyayı sızdırırdı. Yeni girdi = imaja girebilecek yeni
+# içerik — bilinçli eklenir. Bekçi: scripts/test_docker_hijyeni.ts §2e.
+*
+!package.json
+!package-lock.json
+!tsconfig.json
+!prisma.config.ts
+!prisma/**
+!src/**
+!docker/entrypoint.sh
+# İzinli ağaçlarda bile giremeyecekler (sır, döküm, şifreli yedek, derleme artığı).
+**/.env*
+**/*.dump
+**/*.tkenc
+**/node_modules

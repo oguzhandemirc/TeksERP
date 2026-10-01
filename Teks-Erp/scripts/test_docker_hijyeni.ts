@@ -9,7 +9,9 @@
 //      `admin`i bilinen parolayla geri doğuruyordu. DAVRANIŞ ölçülür: betik `sh`
 //      ile, `psql`/`npx`/`node`/`npm` sahteleriyle koşturulur.
 //   §2 Teks-Erp imajı + compose: seed çalışma imajına derlenmiş gider (src yok),
-//      compose'un varsayılanı 0.
+//      compose'un varsayılanı 0. §2e–§2h (G22): bağlam İZİN LİSTESİ (`*` ile başlar; .env/döküm/şifreli yedek
+//      dışlanır, scripts/ girmez) · çalışma aşaması root DEĞİL ve scripts/ kopyalamaz · compose backend'i
+//      salt-okunur kök FS + cap_drop ALL + no-new-privileges ile açar; kalıcı sondalar her koşumda.
 //   §3 kök (demo) Dockerfile: çalışma aşaması src/tsx/seed taşımaz; seed ayrı hedef.
 //   §4 demo aktarımı: izin listesi + `git archive`; yasak desen hem örneklerle hem
 //      gerçek aktarım kümesiyle ölçülür; Dockerfile'ın her COPY kaynağı kümede var.
@@ -160,6 +162,50 @@ const kopyaKaynaklari = (satir: string): string[] => {
     /node dist\/tools\/seed\.cjs/.test(oku("Teks-Erp/docker/entrypoint.sh")) && !/npm run seed/.test(oku("Teks-Erp/docker/entrypoint.sh").split("\n").filter((l) => !/^\s*#/.test(l)).join("\n")));
   const compose = oku("Teks-Erp/docker-compose.yml");
   check("§2d ⭐ compose SEED_ON_EMPTY'i geçirir ve varsayılanı 0", /^\s+SEED_ON_EMPTY:\s*\$\{SEED_ON_EMPTY:-0\}\s*$/m.test(compose));
+}
+
+// §2e–§2h (G22) — Teks-Erp imajı sertleştirmesi DURAĞAN (CI'da docker yokken de ölçülür).
+function teksStatik(dockerfile: string, ignore: string, compose: string): string[] {
+  const ih: string[] = [];
+  const satir = ignore.split("\n").map((l) => l.trim()).filter((l) => l && !l.startsWith("#"));
+  if (satir[0] !== "*") ih.push("Teks-Erp/.dockerignore izin listesi `*` ile başlamıyor (blocklist yeni dosyayı — fabrika dökümünü — sızdırır)");
+  for (const zorunlu of ["**/.env*", "**/*.dump", "**/*.tkenc"]) if (!satir.includes(zorunlu)) ih.push(`.dockerignore ${zorunlu} dışlamıyor`);
+  const izinli = satir.filter((l) => l.startsWith("!")).map((l) => l.slice(1));
+  for (const yasak of izinli.filter((l) => /^(scripts|dump|lisans|backups|\.env)/.test(l))) ih.push(`.dockerignore yasak içeriğe izin veriyor: !${yasak}`);
+  const a = asamalar(dockerfile);
+  const son = a[a.length - 1];
+  const kullanici = [...(son?.satirlar ?? [])].reverse().map((k) => /^USER\s+(\S+)/i.exec(k)?.[1]).find(Boolean) ?? "";
+  if (!kullanici || /^(0|root)(:|$)/.test(kullanici)) ih.push(`çalışma aşaması USER root/boş (${kullanici || "yok"})`);
+  const kaynak = son?.satirlar.flatMap(kopyaKaynaklari) ?? [];
+  if (kaynak.some((k) => /^\.?\/?scripts\/?$/.test(k))) ih.push("çalışma aşaması scripts/ kopyalıyor (yıkıcı bakım betikleri imaja girer)");
+  const backend = compose.slice(compose.indexOf("\n  backend:"), compose.indexOf("\nvolumes:"));
+  if (!/^\s+read_only: true$/m.test(backend)) ih.push("compose backend kök dosya sistemini salt-okunur açmıyor");
+  if (!/cap_drop: \["ALL"\]/.test(backend)) ih.push("compose backend yetkileri düşürmüyor (cap_drop ALL)");
+  if (!/no-new-privileges:true/.test(backend)) ih.push("compose backend no-new-privileges taşımıyor");
+  if (!/tmpfs: \["\/tmp/.test(backend)) ih.push("compose backend /tmp'yi bellekte açmıyor (salt-okunur FS'de entrypoint yazamaz)");
+  return ih;
+}
+{
+  const df = oku("Teks-Erp/Dockerfile");
+  const ig = oku("Teks-Erp/.dockerignore");
+  const dc = oku("Teks-Erp/docker-compose.yml");
+  const gercek = teksStatik(df, ig, dc);
+  check("§2e ⭐ Teks-Erp imajı: izin listesi bağlam · root olmayan çalışma aşaması · scripts/ yok · sertleştirilmiş compose", gercek.length === 0, gercek.join(" | "));
+  const sondalar: Array<[string, string, string, string]> = [
+    ["blocklist .dockerignore", df, ig.replace(/^\*$/m, "node_modules"), dc],
+    ["dump dışlaması söküldü", df, ig.replace(/^\*\*\/\*\.dump$/m, ""), dc],
+    ["scripts/ izni", df, `${ig}\n!scripts/**\n`, dc],
+    ["USER satırı söküldü", df.replace(/^USER node$/m, ""), ig, dc],
+    ["USER root", df.replace(/^USER node$/m, "USER root"), ig, dc],
+    ["scripts/ yeniden kopyalandı", df.replace(/^USER node$/m, "COPY scripts ./scripts\nUSER node"), ig, dc],
+    ["compose read_only kalktı", df, ig, dc.replace("    read_only: true\n", "")],
+    ["compose cap_drop kalktı", df, ig, dc.replace('    cap_drop: ["ALL"]\n', "")],
+    ["compose no-new-privileges kalktı", df, ig, dc.replace('    security_opt: ["no-new-privileges:true"]\n', "")],
+  ];
+  for (const [ad, d, i, c] of sondalar) {
+    const uygulandi = d !== df || i !== ig || c !== dc;
+    check(`§2f sonda: ${ad} → kırmızı`, uygulandi && teksStatik(d, i, c).length > 0, uygulandi ? "" : "MUTASYON UYGULANMADI");
+  }
 }
 
 // -----------------------------------------------------------------------------

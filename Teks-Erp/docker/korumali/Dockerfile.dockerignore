@@ -24,3 +24,8 @@
 **/*.tkenc
 **/node_modules
 Teks-Erp/dist
+# Geliştirme ağacında git'e girmeyen fabrika verisi/anahtar dizinleri izinli ağaçların (scripts/**) altında da olabilir (G22).
+**/scripts/out
+**/dump
+**/lisans
+**/anahtarlar
