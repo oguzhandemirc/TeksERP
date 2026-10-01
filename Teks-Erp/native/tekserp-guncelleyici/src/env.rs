@@ -66,6 +66,10 @@ pub trait Fs: Send + Sync {
     /// Bağlantıyı `target`a kurar ya da değiştirir (yarım kalan değişim sonraki çağrıda toparlanır).
     fn set_link(&self, link: &Path, target: &Path) -> io::Result<()>;
     fn free_space(&self, p: &Path) -> io::Result<u64>;
+    /// Yola (dizin ya da dosya) SYSTEM · Administrators · TrustedInstaller · güncelleyicinin kendi hesabı
+    /// DIŞINDA yazma/silme/izin değiştirme hakkı olan ilkeler (sahip dahil); boş = güvenilir. SYSTEM'in
+    /// çalıştıracağı ya da güveneceği dizinler uygulamadan ÖNCE ölçülür (fail-closed).
+    fn foreign_writers(&self, p: &Path) -> io::Result<Vec<String>>;
     fn file_len(&self, p: &Path) -> io::Result<u64>;
     fn open_read(&self, p: &Path) -> io::Result<Box<dyn ReadSeek>>;
     fn open_append(&self, p: &Path) -> io::Result<Box<dyn SyncWrite>>;
@@ -359,6 +363,10 @@ impl Fs for RealFs {
         free_space_of(p)
     }
 
+    fn foreign_writers(&self, p: &Path) -> io::Result<Vec<String>> {
+        foreign_writers_of(p)
+    }
+
     fn file_len(&self, p: &Path) -> io::Result<u64> {
         std::fs::metadata(p).map(|m| m.len())
     }
@@ -483,6 +491,26 @@ fn free_space_of(_p: &Path) -> io::Result<u64> {
 #[cfg(windows)]
 fn free_space_of(p: &Path) -> io::Result<u64> {
     crate::windows::free_space(p)
+}
+
+/// Geliştirme/test platformu: grup ya da herkes yazabiliyorsa yabancı (üretim ölçümü Windows DACL'i).
+#[cfg(unix)]
+fn foreign_writers_of(p: &Path) -> io::Result<Vec<String>> {
+    use std::os::unix::fs::PermissionsExt;
+    let mode = std::fs::metadata(p)?.permissions().mode();
+    let mut out = Vec::new();
+    if mode & 0o020 != 0 {
+        out.push("grup yazabilir".to_string());
+    }
+    if mode & 0o002 != 0 {
+        out.push("herkes yazabilir".to_string());
+    }
+    Ok(out)
+}
+
+#[cfg(windows)]
+fn foreign_writers_of(p: &Path) -> io::Result<Vec<String>> {
+    crate::windows::foreign_writers(p)
 }
 
 /// Çocuk süreç: stdout/stderr ayrı iş parçacıklarında (1 MB tavanlı) toplanır; süre dolunca süreç
@@ -679,5 +707,23 @@ mod tests {
         }
         assert!(seen >= 20, "kaynak taranmadı: {seen}");
         assert!(bad.is_empty(), "salt-okunur tutamaçta sync_all:\n{}", bad.join("\n"));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn foreign_writers_reads_group_and_world_write_bits() {
+        use super::{Fs, RealFs};
+        use std::os::unix::fs::PermissionsExt;
+        let d = std::env::temp_dir().join(format!("yabanci-yazar-{}", std::process::id()));
+        std::fs::create_dir_all(&d).unwrap();
+        let set = |m: u32| std::fs::set_permissions(&d, std::fs::Permissions::from_mode(m)).unwrap();
+        set(0o755);
+        assert!(RealFs.foreign_writers(&d).unwrap().is_empty());
+        set(0o777);
+        assert_eq!(RealFs.foreign_writers(&d).unwrap().len(), 2);
+        set(0o775);
+        assert_eq!(RealFs.foreign_writers(&d).unwrap(), vec!["grup yazabilir".to_string()]);
+        set(0o755);
+        std::fs::remove_dir_all(&d).unwrap();
     }
 }

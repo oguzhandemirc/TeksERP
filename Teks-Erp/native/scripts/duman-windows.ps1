@@ -12,8 +12,9 @@
 #   3. node olurse konak hata koduyla cikar, SCM kurtarmasi yeniden baslatir (yeni pid)
 #   4. konak olurse is nesnesi node'u da oldurur (yetim node portu tutmaz)
 #   5. guncelleyici: hizmet-kur -> baslat -> .env'de zorunlu anahtar (DATABASE_URL) yokken AYAR_EKSIK
-#      (ileti anahtar adi tasir, deger degil) -> .env tamamlaninca durum.json (kira yok: DONDURULDU/KIRA_YOK
-#      + kalp atisi) -> is\ korumali DACL -> durdur
+#      (ileti anahtar adi tasir, deger degil) -> kok kurulum gibi daraltilir (sahip Administrators, korumali
+#      DACL) ama surumler\ Authenticated Users'a yazilabilir -> IZIN_GUVENSIZ (gercek DACL olcumu, G11) ->
+#      izin kaldirilinca durum.json (kira yok: DONDURULDU/KIRA_YOK + kalp atisi) -> is\ korumali DACL -> durdur
 #   6. hizmet adi parametresi (ayni makinede ikinci kanal): konak --ad ile kendi sanal hesabi ve
 #      TEKSERP_HIZMET_ADI; ACL KAYITTAN SONRA (sanal hesap kayitla dogar); guncelleyici --ad + --veri
 # ASCII: bilerek yalniz ASCII (PS 5.1 BOM'suz UTF-8'i ANSI okur).
@@ -144,6 +145,21 @@ try {
   Stop-Service TeksERP-Guncelleyici
   Bekle "TeksERP-Guncelleyici" "Stopped"
   Set-Content -Encoding ascii "$kok\yapilandirma\.env" "PORT=4999`nDATABASE_URL=`"postgresql://tekserp:duman-parola@127.0.0.1:5432/tekserp`"`n"
+  # Kok kurulumdaki gibi: sahip Administrators, miras kesik, yalniz SYSTEM + Administrators yazar. surumler\
+  # Authenticated Users'a yazilabilirken guncelleyici hicbir sey yapmamali (G11 / DAGK-3).
+  icacls $kok /setowner "*S-1-5-32-544" /T /C /Q | Out-Null
+  if ($LASTEXITCODE -ne 0) { Dur "kok sahibi Administrators yapilamadi ($LASTEXITCODE)" }
+  icacls $kok /inheritance:r /grant:r "*S-1-5-18:(OI)(CI)F" "*S-1-5-32-544:(OI)(CI)F" "*S-1-5-32-545:(OI)(CI)RX" /Q | Out-Null
+  if ($LASTEXITCODE -ne 0) { Dur "kok DACL'i daraltilamadi ($LASTEXITCODE)" }
+  icacls "$kok\surumler" /grant "*S-1-5-11:(OI)(CI)M" /Q | Out-Null
+  Remove-Item -Force $durumYolu
+  Start-Service TeksERP-Guncelleyici
+  Bekle "TeksERP-Guncelleyici" "Running"
+  $d = DurumOku
+  if ($d.hataKodu -ne "IZIN_GUVENSIZ" -or $d.mesaj -notmatch "surumler" -or $d.mesaj -notmatch "S-1-5-11") { Dur "yabanci yazilabilir surumler\ icin IZIN_GUVENSIZ beklenirdi: $($d | ConvertTo-Json -Compress)" }
+  Stop-Service TeksERP-Guncelleyici
+  Bekle "TeksERP-Guncelleyici" "Stopped"
+  icacls "$kok\surumler" /remove:g "*S-1-5-11" /Q | Out-Null
   Remove-Item -Force $durumYolu
   Start-Service TeksERP-Guncelleyici
   Bekle "TeksERP-Guncelleyici" "Running"

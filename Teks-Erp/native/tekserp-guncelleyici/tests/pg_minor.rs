@@ -335,3 +335,27 @@ fn pg_consistent_version(w: &World) -> String {
 
 #[allow(dead_code)]
 fn _unused(_: &dyn Fs) {}
+
+/// DAGK-3: hazır PG dizini onay beklerken değiştirilirse uygulama anında içerik manifestosuyla yeniden
+/// doğrulanır — PG'ye de backend'e de dokunulmaz; sonraki tur yeniden hazırlayıp ikisini de kurar.
+#[test]
+fn prepared_pg_is_reverified_at_apply_time() {
+    let w = pg_world("pg-yeniden", "kendi", "72");
+    let onayli = LeaseOpts { update: Some(policy("ONAYLI", &open_window(), None)), ..LeaseOpts::default() };
+    let (lease, _) = lease_and_entitlement(&w.keys, &onayli, T0);
+    std::fs::write(w.layout.root.join("lisans").join("kira.jws"), lease).unwrap();
+    w.run(1).unwrap();
+    assert_eq!(w.state(), Some(State::Ready), "{:?}", w.status().map(|s| (s.error_code, s.message)));
+    assert!(w.layout.pg_version_dir(NEW_TAG).exists(), "PG hazırlanmalı");
+    std::fs::write(w.layout.pg_version_dir(NEW_TAG).join("bin").join("psql"), b"#!kurcali").unwrap();
+    w.write_intent(&intent(Some(approval("onay-pg", NEW, "HEMEN"))));
+    w.run(1).unwrap();
+    let st = w.status().unwrap();
+    assert_eq!((st.state, st.error_code.as_deref()), (State::Waiting, Some("PG_PAKET")), "{:?}", st.message);
+    assert!(st.message.as_deref().is_some_and(|m| m.contains("uygulama anında")), "{:?}", st.message);
+    assert_eq!(pg_consistent(&w, "kurcalı PG"), OLD_TAG);
+    assert_eq!(w.backend().starts, 0);
+    run_both(&w);
+    assert_eq!(w.state(), Some(State::Succeeded), "{:?}", w.status().map(|s| (s.error_code, s.message)));
+    assert_eq!(pg_consistent(&w, "yeniden hazırlanan PG"), NEW_TAG);
+}
