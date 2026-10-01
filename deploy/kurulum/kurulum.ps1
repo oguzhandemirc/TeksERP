@@ -54,7 +54,9 @@ $KURULUM_BICIMI = 1
 $PG_DIZINI = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot "..\pg"))
 if (-not $Dogrulayici) { $Dogrulayici = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot "..\..\araclar\tekserp-guncelleyici.exe")) }
 if (-not $Kaynak) { $Kaynak = Split-Path -Parent ([IO.Path]::GetFullPath($Cevap)) }
-$script:Sonuc = [ordered]@{ asama = $Asama; tamam = $false }
+# Sonuc kaydi -Sonuc PARAMETRESINDEN AYRI ad: PowerShell'de $script:Sonuc ayni degiskendir ve [string] kisiti
+# sozlugu metne cevirirdi (thinkpad-1 D8: ilk gercek kosum OnKosul sonunda "Unable to index ... String" ile dustu).
+$script:SonucKaydi = [ordered]@{ asama = $Asama; tamam = $false }
 
 # --- Cevap + adlar ------------------------------------------------------------------------------
 function CevabiYukle {
@@ -328,7 +330,7 @@ function AsamaOnKosul {
     Write-Host ""
     Write-Host "KURU KIP - PLAN (hicbir sey yazilmadi):" -ForegroundColor Cyan
     Write-Host ($plan | ConvertTo-Json -Depth 6)
-    $script:Sonuc["plan"] = $plan
+    $script:SonucKaydi["plan"] = $plan
     return
   }
   if ($yarim -and $yarim.PSObject.Properties["asamalar"]) {
@@ -781,7 +783,7 @@ function AsamaSirlar {
       Ok "musteri yedek anahtari uretildi - OZEL YARISI yalniz boruya (sihirbaz BIR KEZ gosterir; gunluge/INI'ye yazilmadi)"
     }
   }
-  $script:Sonuc["sirlar"] = $sonuc
+  $script:SonucKaydi["sirlar"] = $sonuc
   AsamaBitti $d "Sirlar"
   DurumYaz $kok $d
 }
@@ -838,8 +840,8 @@ function AsamaDogrulama {
     uyarilar = @($script:Uyarilar); acik = $acik
   }
   MetinYaz (Join-Path $kok "kurulum\kurulum.json") (($kayit | ConvertTo-Json -Depth 6) + "`n")
-  $script:Sonuc["acik"] = $acik
-  $script:Sonuc["kurulum"] = [ordered]@{ surum = "$($d.paket.surum)"; api = [int]$d.portlar.api; pg = [int]$d.portlar.pg; backend = "$($d.adlar.backend)"; guncelleyici = "$($d.adlar.guncelleyici)"; postgresql = "$($d.adlar.pg)" }
+  $script:SonucKaydi["acik"] = $acik
+  $script:SonucKaydi["kurulum"] = [ordered]@{ surum = "$($d.paket.surum)"; api = [int]$d.portlar.api; pg = [int]$d.portlar.pg; backend = "$($d.adlar.backend)"; guncelleyici = "$($d.adlar.guncelleyici)"; postgresql = "$($d.adlar.pg)" }
   AsamaBitti $d "Dogrulama"
   DurumYaz $kok $d
   Write-Host ""
@@ -848,7 +850,7 @@ function AsamaDogrulama {
 }
 
 # Sihirbazin okudugu sonuc (UTF-16 INI, [sonuc]): duz anahtarlar + numarali listeler (uyari1.., acik1..).
-# SIRSIZ: yalniz $script:Sonuc'tan; Sirlar'in musteri anahtari orada yalniz "uretildi" bayragidir.
+# SIRSIZ: yalniz $script:SonucKaydi'ndan; Sirlar'in musteri anahtari orada yalniz "uretildi" bayragidir.
 function SonucIniYaz([string]$yol, $s) {
   $l = New-Object Collections.Generic.List[string]
   $l.Add("[sonuc]")
@@ -902,20 +904,20 @@ try {
       if (-not $Kuru) { AsamaPaket; AsamaPostgreSQL; AsamaBackend; AsamaHizmetler; AsamaDogrulama }
     }
   }
-  $script:Sonuc["tamam"] = $true
+  $script:SonucKaydi["tamam"] = $true
 } catch {
   $msg = "$($_.Exception.Message)"
   if (-not $msg.StartsWith("KURULUM_DUR:")) {
     [void](GunlugeYaz "HATA" ("beklenmeyen: " + $msg + " @ " + $_.InvocationInfo.PositionMessage))
     Write-Host ("  X  beklenmeyen hata: " + (Maskele $msg)) -ForegroundColor Red
   }
-  $script:Sonuc["hata"] = (Maskele $msg).Replace("KURULUM_DUR: ", "")
+  $script:SonucKaydi["hata"] = (Maskele $msg).Replace("KURULUM_DUR: ", "")
   $cikis = if ($script:CevapGecersiz) { 2 } else { 1 }
 }
-$script:Sonuc["uyarilar"] = @($script:Uyarilar)
-$script:Sonuc["gunluk"] = $Gunluk
-if ($Sonuc) { try { SonucIniYaz $Sonuc $script:Sonuc } catch { Write-Host ("  X  sonuc dosyasi yazilamadi: " + $_.Exception.Message) -ForegroundColor Red; $cikis = 1 } }
+$script:SonucKaydi["uyarilar"] = @($script:Uyarilar)
+$script:SonucKaydi["gunluk"] = $Gunluk
+if ($Sonuc) { try { SonucIniYaz $Sonuc $script:SonucKaydi } catch { Write-Host ("  X  sonuc dosyasi yazilamadi: " + $_.Exception.Message) -ForegroundColor Red; $cikis = 1 } }
 # Tek sir satiri (yalniz Sirlar, yalniz istendiyse): boruya; SONUC satiri ve INI SIRSIZDIR.
 if ($script:SirSatiri) { Write-Output $script:SirSatiri; $script:SirSatiri = $null }
-Write-Output ("SONUC:" + ($script:Sonuc | ConvertTo-Json -Depth 6 -Compress))
+Write-Output ("SONUC:" + ($script:SonucKaydi | ConvertTo-Json -Depth 6 -Compress))
 exit $cikis

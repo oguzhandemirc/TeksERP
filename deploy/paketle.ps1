@@ -116,7 +116,22 @@ $ALT_BETIKLER = @("hizmet/backend-hizmeti.ps1", "hizmet/guncelleyici-hizmeti.ps1
 # runtime\ altina giren Rust hizmet ikilileri (yalniz KORUMALI pakette; yoksa paketleme DURUR).
 $HIZMET_IKILILERI = [ordered]@{ "tekserp-hizmet.exe" = "tekserp-hizmet"; "tekserp-guncelleyici.exe" = "tekserp-guncelleyici" }
 
-function Fail($m) { Write-Host ""; Write-Host "  X $m" -ForegroundColor Red; exit 1 }
+# Dusen derlemenin sahnesi (%TEMP%\tekserp-backend-*, ~500 MB) diskte kalmasin: Fail ve betik kapsamindaki trap
+# sahneyi siler (yalniz GetTempPath altindaysa). thinkpad-1 D8: dusen dort derleme SystemTemp'te 4 sahne birakti.
+$script:SahneYolu = $null
+function SahneyiTemizle {
+  $y = $script:SahneYolu
+  $script:SahneYolu = $null
+  if (-not $y) { return }
+  $tmp = [System.IO.Path]::GetFullPath([System.IO.Path]::GetTempPath())
+  if (-not [System.IO.Path]::GetFullPath($y).StartsWith($tmp, [System.StringComparison]::OrdinalIgnoreCase)) { return }
+  if (Test-Path -LiteralPath $y) {
+    Remove-Item -LiteralPath $y -Recurse -Force -ErrorAction SilentlyContinue
+    Write-Host "  (yarim sahne silindi: $y)" -ForegroundColor DarkGray
+  }
+}
+function Fail($m) { Write-Host ""; Write-Host "  X $m" -ForegroundColor Red; SahneyiTemizle; exit 1 }
+trap { SahneyiTemizle; break }
 function Adim($m) { Write-Host ""; Write-Host "$m" -ForegroundColor Cyan }
 
 # Hizmet ikilisi pakete OLCULEREK girer: Windows PE32+ x64, uretim derlemesi (test capasi YOK: capayi
@@ -284,6 +299,7 @@ $ad    = if ($Prova) { "tekserp-backend-prova-$stamp-$commit" } else { "tekserp-
 $stage = Join-Path ([System.IO.Path]::GetTempPath()) $ad
 if (Test-Path $stage) { Remove-Item $stage -Recurse -Force }
 New-Item -ItemType Directory -Path $stage | Out-Null
+$script:SahneYolu = $stage
 
 Set-Location $proj
 

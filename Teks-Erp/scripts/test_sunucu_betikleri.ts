@@ -34,6 +34,8 @@
 //   §26 VİRGÜLLÜ DÖNÜŞ (`return , $x`) yapan fonksiyonun çağrısı `@()` ile sarılmaz, boruya verilmez (iç içe dizi).
 //   §27 `[Validate*]` öznitelikli parametrenin adı gövdede yerel değişken olarak ATANMAZ (ad büyük/küçük harf duyarsız).
 //   §28 betik kapsamındaki `foreach ($x in …)` daha önce ATANMIŞ ve döngüden SONRA okunan bir değişkeni gölgelemez.
+//   §29 `paketle.ps1` hata yolunda (Fail + betik kapsamı trap) yarım sahneyi (%TEMP%\tekserp-backend-*) siler.
+//   §30 tür kısıtlı parametre (`[string]$Sonuc`) betik kapsamında (`$Sonuc` / `$script:Sonuc`) sözlük/dizi değeriyle ATANMAZ.
 // Kaynak ölçülür, davranış değil: pwsh her ortamda yok, 5.1 hiç yok.
 // =============================================================================
 import { readFileSync, existsSync, readdirSync, mkdtempSync, mkdirSync, writeFileSync, rmSync, realpathSync } from "node:fs";
@@ -1076,6 +1078,70 @@ function donmusIhlalleri(dosya: string, metin: string, beklenen: string): string
   }
   check(`§28 ⭐ betik kapsamında foreach değişkeni atanmış + sonradan okunan adı gölgelemiyor (${yollar.length} betik)`,
     donguSayisi >= 20 && ihlal.length === 0, ihlal.length ? ihlal.slice(0, 6).join(" · ") : `${donguSayisi} döngü temiz`);
+}
+
+// §29 — YARIM SAHNE (thinkpad-1 D8 2026-10-01): düşen dört korumalı derleme SystemTemp'te ~500 MB'lık dört sahne bıraktı.
+//   Fail sahneyi siler, betik kapsamındaki trap da (Fail dışı sonlandırıcı hata); sahne yalnız TEMP altındaysa silinir.
+{
+  const t = psTara(readFileSync(join(KOK, "deploy/paketle.ps1"), "utf8"));
+  const kod = t.satirlar.map((x) => x.ciplak).join("\n");
+  const govdeAl = (ad: string): string => {
+    const f = t.fonksiyonlar.find((x) => x.ad === ad);
+    return f ? t.satirlar.filter((x) => x.no >= f.bas && x.no <= f.son).map((x) => x.ciplak).join("\n") : "";
+  };
+  const eksik: string[] = [];
+  if (!/SahneyiTemizle/.test(govdeAl("Fail"))) eksik.push("Fail sahneyi temizlemiyor");
+  const trapSatiri = t.satirlar.find((x) => /^\s*trap\s*\{/.test(x.ciplak) && !t.fonksiyonlar.some((f) => x.no >= f.bas && x.no <= f.son));
+  if (!trapSatiri || !/SahneyiTemizle/.test(trapSatiri.ciplak)) eksik.push("betik kapsamında `trap { SahneyiTemizle …` yok");
+  if (!/\$script:SahneYolu\s*=\s*\$stage\b/.test(kod)) eksik.push("sahne yolu kaydedilmiyor ($script:SahneYolu = $stage)");
+  if (!/GetTempPath/.test(govdeAl("SahneyiTemizle"))) eksik.push("SahneyiTemizle TEMP sınırını ölçmüyor");
+  check("§29 ⭐ paketle.ps1 hata yolunda yarım sahneyi siler (Fail + trap, yalnız TEMP altı)", eksik.length === 0, eksik.join(" · "));
+}
+
+// §30 — TÜR KISITLI PARAMETRE (thinkpad-1 D8 2026-10-01): `kurulum.ps1`in `-Sonuc` (INI yolu, [string]) parametresi ile
+//   sonuç sözlüğü `$script:Sonuc` AYNI değişkendir; [string] kısıtı sözlüğü metne çevirdi ve ilk gerçek koşum OnKosul
+//   sonunda "Unable to index into an object of type System.String" ile düştü. Ölçü: `[string|int|bool|switch…]$X`
+//   parametresine (adı büyük/küçük harf duyarsız, `$script:` önekli de) `@{` · `[ordered]` · `@(` · `[pscustomobject]` atanmaz.
+{
+  const yollar: string[] = [];
+  const gez = (d: string): void => {
+    for (const g of readdirSync(join(KOK, d), { withFileTypes: true })) {
+      const r = `${d}/${g.name}`;
+      if (g.isDirectory()) gez(r);
+      else if (g.name.endsWith(".ps1")) yollar.push(r);
+    }
+  };
+  gez("deploy");
+  const ihlal: string[] = [];
+  let parametre = 0;
+  for (const yol of yollar) {
+    const t = psTara(readFileSync(join(KOK, yol), "utf8"));
+    const metin = t.satirlar.map((x) => x.ciplak).join("\n");
+    const m = /(?:^|\n)\s*(?:\[CmdletBinding\([^)]*\)\]\s*)?param\s*\(/i.exec(metin);
+    if (!m) continue;
+    let i = m.index + m[0].length;
+    let d = 1;
+    while (i < metin.length && d > 0) {
+      if (metin[i] === "(") d++;
+      else if (metin[i] === ")") d--;
+      i++;
+    }
+    const blok = metin.slice(m.index + m[0].length, i);
+    const govde = metin.slice(i);
+    for (const p of blok.matchAll(/\[(string|int|int64|bool|switch|double|datetime)\]\s*\$(\w+)/gi)) {
+      parametre++;
+      const ad = p[2]!;
+      // Fonksiyon içinde öneksiz `$x =` YEREL değişken doğurur (parametreye dokunmaz); `$script:x =` her yerde parametredir.
+      for (const a of govde.matchAll(new RegExp(`\\$(script:)?${ad}\\s*=\\s*(?:@\\{|\\[ordered\\]|@\\(|\\[pscustomobject\\])`, "gi"))) {
+        const no = metin.slice(0, i + (a.index ?? 0)).split("\n").length;
+        const icFonk = t.fonksiyonlar.some((f) => no >= f.bas && no <= f.son);
+        if (icFonk && !a[1]) continue;
+        ihlal.push(`${yol}:${no} $${a[1] ?? ""}${ad} ([${p[1]}])`);
+      }
+    }
+  }
+  check(`§30 ⭐ tür kısıtlı parametreye sözlük/dizi atanmıyor (${yollar.length} betik)`, parametre >= 20 && ihlal.length === 0,
+    ihlal.length ? ihlal.slice(0, 6).join(" · ") : `${parametre} tür kısıtlı parametre temiz`);
 }
 
 console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);

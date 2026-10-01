@@ -272,7 +272,8 @@ end;
 function Hata(const Metin: String): Boolean;
 begin
   Log('HATA: ' + Metin);
-  SuppressibleMsgBox(Metin, mbCriticalError, MB_OK, IDOK);
+  // Sessiz kipte kutu YOK (karar günlükte + çıkış kodunda); /SUPPRESSMSGBOXES'e de güvenilmez.
+  if not WizardSilent then SuppressibleMsgBox(Metin, mbCriticalError, MB_OK, IDOK);
   Result := False;
 end;
 
@@ -838,8 +839,14 @@ begin
   Result := True;
   // Sessiz kip: Inno her sayfa için yine çağırır, ama karar ve doğrulama cevap dosyasındadır (InitializeSetup
   // ölçtü, OnKosul yeniden ölçer). Buradaki MsgBox /SUPPRESSMSGBOXES'le BASTIRILMAZ - sessiz kurulum soruda
-  // sonsuza dek beklerdi (thinkpad-1 D8: prova sorusu); sayfa varsayılanlarıyla doğrulama da anlamsız.
-  if Sessiz then Exit;
+  // sonsuza dek beklerdi (thinkpad-1 D8: prova sorusu). Sayfalar yine ölçümle DOLDURULUR: veri dizini sayfası
+  // boş kalırsa Inno'nun kendi yol denetimi sessiz kurulumu durdurur.
+  if Sessiz then
+  begin
+    if CurPageID = wpSelectDir then SayfalariOlcumleDoldur;
+    Log('sessiz kip: sayfa ' + IntToStr(CurPageID) + ' sorusuz gecildi (karar cevap dosyasinda)');
+    Exit;
+  end;
   if CurPageID = wpSelectDir then
   begin
     if not YolGecerli(Kok) then

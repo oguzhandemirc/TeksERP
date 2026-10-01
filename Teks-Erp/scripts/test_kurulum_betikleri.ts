@@ -350,8 +350,19 @@ function olc(k: Kaynaklar): Bulgular {
   // Sessiz kip (thinkpad-1 D8): çıplak MsgBox /SUPPRESSMSGBOXES ile bastırılmaz → sessiz kurulum soruda asılı kalır.
   // Çıplak MsgBox yalnız NextButtonClick'te; o da sessiz kipte İLK iş kısa devre yapar.
   const nbc = pasGovde(k.iss, "NextButtonClick") ?? "";
-  if (!/^\s*Result := True;\s*\n(?:\s*\/\/[^\n]*\n)*\s*if Sessiz then Exit;/m.test(nbc.split("begin").slice(1).join("begin"))) ekle("§8", "NextButtonClick sessiz kipte kısa devre yapmıyor (if Sessiz then Exit;) — MsgBox sessiz kurulumu asar");
+  const sessizDal = /^\s*Result := True;\s*\n(?:\s*\/\/[^\n]*\n)*\s*if Sessiz then\s*\n\s*begin\s*\n([\s\S]*?)\n\s*end;/m.exec(nbc.split("begin").slice(1).join("begin"));
+  if (!sessizDal || !/\bExit;/.test(sessizDal[1]!) || /MsgBox/.test(sessizDal[1]!)) ekle("§8", "NextButtonClick sessiz kipte kısa devre yapmıyor (ilk deyim if Sessiz then begin … Exit; end;) — MsgBox sessiz kurulumu asar");
+  else if (!/SayfalariOlcumleDoldur/.test(sessizDal[1]!)) ekle("§8", "sessiz kısa devre sayfaları ölçümle doldurmuyor — boş veri dizini sayfası Inno yol denetiminde kurulumu durdurur");
   for (const s of pas) if (/(?<!Suppressible)MsgBox\(/.test(s.satir) && s.islev !== "NextButtonClick") ekle("§8", `çıplak MsgBox NextButtonClick dışında (${s.islev}:${s.no}) — sessiz kipte bastırılmaz`);
+  // Sınıf kuralı (yönetici 2026-10-01): sessiz kipte HİÇBİR kutu kullanıcı beklemez — her MsgBox/SuppressibleMsgBox ya
+  // aynı satırda `not WizardSilent`/`not Sessiz` koşulunda ya da işlevinde ondan ÖNCE sessiz kısa devre (Exit) altında.
+  for (const s of pas) {
+    if (!/MsgBox\(/.test(s.satir) || !s.islev) continue;
+    if (/\bnot (WizardSilent|Sessiz)\b/.test(s.satir)) continue;
+    const g = pasGovde(k.iss, s.islev) ?? "";
+    const once = g.slice(0, Math.max(0, g.indexOf(s.satir.trim())));
+    if (!/if (Sessiz|WizardSilent) then\s*(?:begin[\s\S]*?\bExit;[\s\S]*?end;|Exit;)/.test(once)) ekle("§8", `sessiz dalı olmayan kutu (${s.islev}:${s.no}) — sessiz kurulum kullanıcı bekler`);
+  }
 
   // §9 — CI
   const is = k.is;
@@ -462,7 +473,9 @@ if (eksik.length === 0) {
     { ad: "S19 kaldırıcı kaldir.ps1'i çağırmıyor", dosya: "iss", eski: `kaldir.ps1"" -Kok ""{app}"""`, yeni: `kaldir.ps1"""`, bolum: "§8", parca: "kaldırıcı" },
     { ad: "S20 yönetici olmadan kurulum", dosya: "iss", eski: "PrivilegesRequired=admin", yeni: "PrivilegesRequired=lowest", bolum: "§8", parca: "PrivilegesRequired" },
     { ad: "S23 UsePreviousLanguage düştü (AppId {code:} iken ISCC derlemez)", dosya: "iss", eski: "UsePreviousLanguage=no\n", yeni: "", bolum: "§8", parca: "UsePreviousLanguage" },
-    { ad: "S24 NextButtonClick sessiz kısa devresi düştü (prova sorusu sessiz kurulumu asar)", dosya: "iss", eski: "  if Sessiz then Exit;\n  if CurPageID = wpSelectDir then", yeni: "  if CurPageID = wpSelectDir then", bolum: "§8", parca: "sessiz kipte kısa devre" },
+    { ad: "S24 NextButtonClick sessiz kısa devresi düştü (prova sorusu sessiz kurulumu asar)", dosya: "iss", eski: "    Exit;\n  end;\n  if CurPageID = wpSelectDir then", yeni: "  end;\n  if CurPageID = wpSelectDir then", bolum: "§8", parca: "sessiz kipte kısa devre" },
+    { ad: "S26 sessiz kısa devre sayfaları doldurmuyor (boş veri dizini Inno yol denetiminde durdurur)", dosya: "iss", eski: "    if CurPageID = wpSelectDir then SayfalariOlcumleDoldur;\n", yeni: "", bolum: "§8", parca: "sayfaları ölçümle doldurmuyor" },
+    { ad: "S27 hata kutusu sessiz kipte de gösteriliyor (sessiz dal düştü)", dosya: "iss", eski: "  if not WizardSilent then SuppressibleMsgBox(Metin, mbCriticalError, MB_OK, IDOK);", yeni: "  SuppressibleMsgBox(Metin, mbCriticalError, MB_OK, IDOK);", bolum: "§8", parca: "sessiz dalı olmayan kutu (Hata" },
     { ad: "S25 çıplak MsgBox sihirbaz dışı işlevde", dosya: "iss", eski: "function Kok: String;\nbegin\n", yeni: "function Kok: String;\nbegin\n  MsgBox('x', mbInformation, MB_OK);\n", bolum: "§8", parca: "çıplak MsgBox NextButtonClick dışında" },
     { ad: "S21 CI boru sonucunu ölçmüyor", dosya: "is", eski: `if ($r -notmatch "(?m)^BORU=TAMAM\\r?$")`, yeni: `if ($false)`, bolum: "§9", parca: "boru öz-sınaması" },
     { ad: "S22 CI test çapalı doğrulayıcıyı kabul ediyor", dosya: "is", eski: `$k.testCapasi -ne $false`, yeni: `$false`, bolum: "§9", parca: "doğrulayıcı üretim derlemesi" },
