@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 // Native lisans çekirdeğinin commit kapısı + CI adımları (zero-dep). Alt komutlar:
-//   denetle — `cargo fmt --check` + `cargo clippy` (uyarı = hata; napi ve test çapası ikisi de)
-//   test    — `cargo test` (TS kâhininin vektör dosyası dahil; test çapası özelliğiyle)
+//   denetle — `cargo fmt --check` + `cargo clippy` (uyarı = hata; napi · test çapası · İKİ çapa kipi)
+//   test    — `cargo test` (TS kâhininin vektör dosyası dahil; test çapası özelliğiyle) İKİ kipte: üretim (özelliksiz
+//             gömülü çapa) ve hazırlık (`hazirlik-capasi`) — gömülü çapa vektörleri yalnız kendi kipinde koşar
 // ÜÇ SONUÇ: 0 temiz · 1 ihlal · cargo YOKSA ⏭ beyanla 0 — Rust araç zinciri olmayan oturum kapıyı
 // ölçemez; ölçüm CI'daki "Native lisans çekirdeği" job'ındadır (sessiz yeşil değil, beyanlı atlama).
 import { spawnSync } from "node:child_process";
@@ -36,8 +37,13 @@ const ADIMLAR = {
     ["fmt", "--check"],
     ["clippy", "--release", "--all-targets", "--features", "test-anchor", "--", "-D", "warnings"],
     ["clippy", "--release", "--all-targets", "--no-default-features", "--features", "test-anchor", "--", "-D", "warnings"],
+    ["clippy", "--release", "--all-targets", "--features", "hazirlik-capasi", "--", "-D", "warnings"],
+    ["clippy", "--release", "--all-targets", "--no-default-features", "--features", "test-anchor,hazirlik-capasi", "--", "-D", "warnings"],
   ],
-  test: [["test", "--no-default-features", "--features", "test-anchor"]],
+  test: [
+    ["test", "--no-default-features", "--features", "test-anchor"],
+    ["test", "--no-default-features", "--features", "test-anchor,hazirlik-capasi"],
+  ],
 };
 
 const adimlar = ADIMLAR[komut];

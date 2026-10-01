@@ -5,6 +5,7 @@ import { getIntegrityOutcome, integrityStatusForState } from "./integrity-state"
 import { integrityReason } from "./integrity-check";
 import { getLicenseCoreStatus } from "./native";
 import { BUILD_WATERMARK } from "./watermark";
+import { BUILD_ANCHOR_MODE } from "./trust-anchor";
 
 /** `/api/admin/health` lisans bloğu — durum ÖZETİ (belge içeriği ve anahtar yok). */
 export function licenseHealthBlock(): Record<string, unknown> {
@@ -26,6 +27,7 @@ export function licenseHealthBlock(): Record<string, unknown> {
       sonBasariliYoklama: iso(pollStatus.lastSuccessAt),
       zilBagli: getDoorbellStatus().connected,
       cekirdek: getLicenseCoreStatus().kaynak,
+      capaKipi: BUILD_ANCHOR_MODE,
       butunluk: integrityStatusForState(),
       butunlukKod: getIntegrityOutcome()?.kod ?? null,
       butunlukNeden: integrityReason(getIntegrityOutcome()),

@@ -2,18 +2,13 @@
 // (üretimde native, geliştirmede TS). Çekirdek görünümleri anahtar nesnesi taşımaz; motorun
 // kuralları (`state-rules.ts`) protokolün doğrulanmış biçimini ister — alt sertifikanın açık
 // anahtarı imzası doğrulanmış belgeden yeniden kurulur.
-import {
-  ROOT_PUBLIC_KEYS,
-  publicKeyFromX,
-  type RootKey,
-  type VerifiedEntitlement,
-  type VerifiedLease,
-} from "./protocol";
+import { publicKeyFromX, type RootKey, type VerifiedEntitlement, type VerifiedLease } from "./protocol";
 import type { CoreResult, EntitlementView, LeaseView, LicenseCore } from "./license-core";
 import { getLicenseCore } from "./native";
+import { ROOT_PUBLIC_KEYS } from "./trust-anchor";
 
 /**
- * Üretim çapası (`ROOT_PUBLIC_KEYS`) çekirdeğe VERİLMEZ — çekirdek gömülü çapasını kullanır (native
+ * Derlemenin çapası (`ROOT_PUBLIC_KEYS`) çekirdeğe VERİLMEZ — çekirdek AYNI kiple gömülü çapasını kullanır (native
  * dışarıdan çapayı yalnız test derlemesinde kabul eder). Başka bir çapa yalnız testlerden gelir.
  */
 export function anchorArgument(roots: readonly RootKey[]): readonly RootKey[] | undefined {

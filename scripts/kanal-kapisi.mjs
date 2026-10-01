@@ -7,7 +7,7 @@
 //   node scripts/kanal-kapisi.mjs kanal <kod>                      # kayıtlı mı
 //   node scripts/kanal-kapisi.mjs panel-paketle <kod>              # kayıtlı mı + ağaç dinlenmede + kimlik kaynağı kanal
 //   node scripts/kanal-kapisi.mjs panel-derleme <kod>              # electron-builder `-c.*` kimlik argümanları (satır başına bir)
-//   node scripts/kanal-kapisi.mjs backend-paketle <kod>          # kayıtlı mı + backend bloğu (pm2Ad/urunAdi) → KEY=VALUE
+//   node scripts/kanal-kapisi.mjs backend-paketle <kod>          # kayıtlı mı + backend bloğu (pm2Ad/urunAdi/guvenCapasi) → KEY=VALUE
 //   node scripts/kanal-kapisi.mjs panel-yayin <kod> <paket dizini> # paket (release/<kod>/<sürüm>) bu kanalın mı
 //   node scripts/kanal-kapisi.mjs terfi <kod> <panel|tablet> <sürüm> [--kuru] [--terfi-atla=<cümle>]  # K5 (scripts/lib/terfi.mjs)
 //   node scripts/kanal-kapisi.mjs terfi-atla-kaydi <kod> <panel|tablet> <sürüm> <cümle>             # kaçışın etiketi (best-effort)

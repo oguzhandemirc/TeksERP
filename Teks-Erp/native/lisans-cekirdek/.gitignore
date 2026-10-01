@@ -1,5 +1,6 @@
 /target/
 /dist/
 /dist-uretim/
+/dist-hazirlik/
 /node_modules/
 *.node

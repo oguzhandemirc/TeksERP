@@ -176,7 +176,8 @@ async function bolum1Capa(dosya: string, kok: string, jws: string): Promise<void
       console.log = log;
       console.error = err;
     }
-    const paketler = capaDurumuOku(kopya).paketler;
+    // Üretim kid'i (paket-<yıl>) ÜRETİM listesine girer; bu derlemenin (geliştirme = üretim kipi) PAKET çapası odur.
+    const paketler = capaDurumuOku(kopya).paketler.uretim;
     const x = (JSON.parse(readFileSync(dosya, "utf8")) as { x: string }).x;
     const kopyada = await verifyIntegrity(jws, kok, paketler);
     const gercekte = await verifyIntegrity(jws, kok, PACKAGE_PUBLIC_KEYS);

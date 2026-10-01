@@ -14,8 +14,9 @@
 //   npx tsx scripts/anahtar.ts bayi-uret --kid=bayi-ornek --bayi-id=<uuid> --moduller=a.enabled,b.enabled
 //                                        --siniflar=URETIM --kok=kok-2026-1 [--gun=365]
 //   npx tsx scripts/anahtar.ts sirlar-uret   (portal TOTP sarma anahtarı + etkinleştirme kodu sırrı + modül kasası anahtarı; VAR olan korunur)
-//   npx tsx scripts/anahtar.ts indirme-belirteci --kanal=testfabrika[,adnansahin] [--dk=60]
+//   npx tsx scripts/anahtar.ts indirme-belirteci --kanal=testfabrika[,adnansahin] [--dk=60] [--capa=uretim|hazirlik]
 //       YAYINCI indirme belirteçleri (kanal × electron/mobil, ≤ 70 dk). Parola istemez (İNDİRME alt anahtarı).
+//       Çapa kipi: --capa > GUVEN_CAPASI (konteyner ortamı) > anahtar dizinindeki köklerin tek ailesi; belirsizse RED.
 //       Çıktı stdout'a TEK satır JSON: {"v":1,"belirtecler":[{kanal,yolOneki,belirtec,exp}]} — yayın betiği
 //       (scripts/lib/yayin-okuma.mjs) okur; çıktıyı dosyaya/loga yönlendirmeyin.
 //   Ortak: [--dizin=<anahtar dizini>] (varsayılan ANAHTAR_DIZINI ya da ./anahtarlar)
@@ -47,7 +48,7 @@ import {
 } from "../src/keys/key-files";
 import { signWithWrappedKey } from "../src/keys/signer";
 import { runAsCli } from "../src/lib/request-scope";
-import { KeyStore } from "../src/keys/key-store";
+import { KeyStore, anchorModeOfKeyDir } from "../src/keys/key-store";
 import { PUBLISHER_DEFAULT_MINUTES, PublisherTokenError, publisherTokens } from "../src/keys/publisher-token";
 import { generateServerSecrets } from "../src/keys/server-secrets";
 import { CliError, args, askPassword } from "./lib/cli-girdi";
@@ -226,7 +227,16 @@ function publisherDownloadTokens(flags: Map<string, string>): void {
   if (!existsSync(dir)) throw new CliError(`Anahtar dizini yok: ${dir}`);
   const channels = required(flags, "kanal").split(",").map((s) => s.trim()).filter(Boolean);
   const minutes = flags.has("dk") ? Number(flags.get("dk")) : PUBLISHER_DEFAULT_MINUTES;
-  const keys = KeyStore.load({ ANAHTAR_DIZINI: dir, GUVEN_CAPASI_DOSYASI: process.env.GUVEN_CAPASI_DOSYASI || undefined });
+  const dosya = process.env.GUVEN_CAPASI_DOSYASI || undefined;
+  const kip = flags.get("capa") ?? process.env.GUVEN_CAPASI ?? anchorModeOfKeyDir(dir) ?? undefined;
+  if (kip !== undefined && kip !== "uretim" && kip !== "hazirlik") throw new CliError(`Güven çapası kipi tanınmıyor: ${kip} (uretim|hazirlik)`);
+  if (kip === undefined && !dosya) throw new CliError("Güven çapası kipi belirsiz: --capa=uretim|hazirlik (anahtar dizininde tek aileden kök yok)");
+  let keys: KeyStore;
+  try {
+    keys = KeyStore.load({ ANAHTAR_DIZINI: dir, GUVEN_CAPASI: kip, GUVEN_CAPASI_DOSYASI: dosya });
+  } catch (err) {
+    throw new CliError((err as Error).message);
+  }
   try {
     const belirtecler = publisherTokens(keys, { channels, minutes, nowMs: Date.now() });
     process.stdout.write(`${JSON.stringify({ v: 1, belirtecler })}\n`);

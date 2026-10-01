@@ -360,7 +360,7 @@ function sondalar(taban, tabanYollar) {
     k.tablet = { ...k.tablet, androidPaket: `com.ornek.${kod}`, gorunenAd: `Tablet ${kod}`,
       erpAdresi: `http://10.9.9.${kod.length}:4000/api`, otaSertifika: `keystore/ota-certs-${kod}/certificate.pem` };
     // Backend kimliği de AYRIK (urunAdi/pm2Ad her kanalda benzersiz — Faz 2b).
-    k.backend = { urunAdi: `Urun ${kod} Backend`, pm2Ad: `tekserp-backend-${kod}` };
+    k.backend = { urunAdi: `Urun ${kod} Backend`, pm2Ad: `tekserp-backend-${kod}`, guvenCapasi: tur === 'uretim' ? 'uretim' : 'hazirlik' };
     o.kanallar[kod] = k;
   };
   const kayitta = (fn) => (d) => jd(d, KAYIT_REL, fn);
@@ -432,6 +432,10 @@ function sondalar(taban, tabanYollar) {
     ['N45 üretim kanalının terfiKaynagi AYNASIZ hazırlık kanalını gösteriyor → KIRMIZI', 'kirmizi', kayitta((o) => { as(o).terfiKaynagi = 'demofabrika'; }), 'terfiKaynagi'],
     ['N46 aynasız hazırlık kanalına terfiKaynagi anahtarı → KIRMIZI (şema kapalı)', 'kirmizi', kayitta((o) => { df(o).terfiKaynagi = null; }), 'tanınmayan anahtar'],
     ['N47 hazırlık kanalında ayna anahtarı YOK (null değil) → KIRMIZI (şema kapalı: aynasızlık açıkça null yazılır)', 'kirmizi', kayitta((o) => { delete df(o).ayna; }), 'eksik anahtar'],
+    ['N48 üretim kanalı hazırlık güven çapasına bağlandı → KIRMIZI (hazırlık kökü üretim paketine giremez)', 'kirmizi', kayitta((o) => { as(o).backend.guvenCapasi = 'hazirlik'; }), 'guvenCapasi'],
+    ['N49 tanınmayan güven çapası kipi (test) → KIRMIZI (fail-closed)', 'kirmizi', kayitta((o) => { tf(o).backend.guvenCapasi = 'test'; }), 'guvenCapasi'],
+    ['N50 backend bloğunda guvenCapasi YOK → KIRMIZI (kip örtük kalmaz)', 'kirmizi', kayitta((o) => { delete df(o).backend.guvenCapasi; }), 'eksik anahtar'],
+    ['P3 aynasız hazırlık kanalı (demofabrika) HAZIRLIK satıcısına bağlanabilir → YEŞİL (hazırlık kanalında iki kip de meşru)', 'yesil', kayitta((o) => { df(o).backend.guvenCapasi = 'hazirlik'; })],
     ['O1 kayıt defteri bozuk JSON → ÖLÇÜLEMEDİ', 'olculemedi', (d) => { d[KAYIT_REL] = d[KAYIT_REL].slice(0, 40); }],
     ['O2 update-feed.ts UPDATE_BASE_URL adı değişti → ÖLÇÜLEMEDİ', 'olculemedi', (d) => { d['Electron/shared/update-feed.ts'] = d['Electron/shared/update-feed.ts'].replace('export const UPDATE_BASE_URL', 'export const YAYIN_KOKU_URL'); }],
     ['O3 main.ts setAppUserModelId çağrısı kalktı → ÖLÇÜLEMEDİ', 'olculemedi', (d) => { d['Electron/electron/main.ts'] = d['Electron/electron/main.ts'].replace('app.setAppUserModelId(APP_ID);', 'void 0;'); }],

@@ -23,6 +23,8 @@
 // KULLANIM (Teks-Erp/ içinden, ağır iş sarmalayıcısıyla):
 //   node ../scripts/agir-is.mjs -- node scripts/build-korumali.mjs [--hedef=win-x64|linux-x64] [--cikti=dist]
 //     [--musteri=<kanal kodu>] [--kurulum=<uuid>]   (filigran; imza ayrı adım: scripts/build-korumali-imza.ts)
+//     Güven çapası kipi KANALDAN (`deploy/kanallar.json` backend.guvenCapasi): --musteri yoksa ÜRETİM. Bayt koduna
+//     sabit olarak girer (`__TEKSERP_GUVEN_CAPASI__`); paketteki native aynı kiple derlenmiş olmalı (derle:*:<kip>).
 //     [--sifrele=hepsi|<paket,…>] [--modul-anahtar-dizini=<yol>]   (Faz 2d şifreli modül; varsayılan ŞİFRESİZ)
 //   Ortam: KORUMA_ARSIV_DIZINI (varsayılan ~/.tekserp/kaynak-haritalari) — REPO DIŞI.
 // =============================================================================
@@ -47,6 +49,17 @@ function arg(ad, varsayilan = null) {
   const p = process.argv.find((a) => a === `--${ad}` || a.startsWith(`--${ad}=`));
   if (!p) return varsayilan;
   return p.includes('=') ? p.slice(p.indexOf('=') + 1) : true;
+}
+
+/**
+ * Kanalın güven çapası kipi (`backend.guvenCapasi`). Kayıt defteri yalnız kanal verilince okunur (Docker sahnesi
+ * kanal-dışı derler ve kaydı taşımaz); okunamayan/kırmızı kayıt ya da bilinmeyen kanal derlemeyi DURDURUR.
+ */
+async function kanalGuvenCapasi(kod) {
+  const { kanalCoz } = await import('../../scripts/lib/kanallar.mjs');
+  const kip = kanalCoz(kod).kanal.backend.guvenCapasi;
+  if (kip !== 'uretim' && kip !== 'hazirlik') throw new Error(`kanal ${kod} backend.guvenCapasi tanınmıyor: ${kip}`);
+  return kip;
 }
 
 /** Host'un ürettiği .jsc hangi hedefe ait — win-x64 · linux-x64; başka her şey null (üretilemez). */
@@ -91,6 +104,9 @@ async function main() {
   if (musteri !== null && !/^[a-z0-9][a-z0-9-]{0,39}$/.test(musteri)) throw new Error(`--musteri biçimsiz: ${musteri}`);
   if (kurulumId !== null && !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(kurulumId)) throw new Error('--kurulum UUID değil');
   const filigran = { musteri, kurulumId, paketId, derlemeTarihi: zaman };
+  // Güven çapası kipi kanalın satıcı/kök bağından; kanal-dışı paket ÜRETİM çapasıyla doğar (hazırlık köküne güvenmez).
+  const guvenCapasi = musteri === null ? 'uretim' : await kanalGuvenCapasi(musteri);
+  console.log(`  güven çapası: ${guvenCapasi}${musteri === null ? ' (kanal-dışı → üretim)' : ` (kanal ${musteri})`}`);
 
   // --- 0b. Şifreli modüller (Faz 2d) — YALNIZ --sifrele ile; varsayılan bugünkü şifresiz paket -----
   // Modül kendi dosyalarıyla ayrı pakete bölünür, hazırlık anahtarıyla (0600, REPO DIŞI) AES-256-GCM
@@ -139,10 +155,11 @@ async function main() {
     legalComments: 'none',
     logLevel: 'warning',
     metafile: true,
-    // Korumalı derlemede native lisans çekirdeği ZORUNLU (TS'e düşülmez) + filigran bayt kodu sabiti.
+    // Korumalı derlemede native lisans çekirdeği ZORUNLU (TS'e düşülmez) + filigran + güven çapası kipi bayt kodu sabiti.
     define: {
       __TEKSERP_NATIVE_REQUIRED__: 'true',
       __TEKSERP_FILIGRAN__: JSON.stringify(JSON.stringify(filigran)),
+      __TEKSERP_GUVEN_CAPASI__: JSON.stringify(guvenCapasi),
     },
     plugins: [cekirdekEklentisi({ proj: PROJ, paketler: sifreliPaketler, ev })],
   });
@@ -179,6 +196,7 @@ async function main() {
     cjsSha256: cjsSha,
     jscUretildi: false,
     nativeZorunlu: true,              // korumalı derlemede native çekirdek her zaman zorunlu (define ile aynı)
+    guvenCapasi,                      // bayt kodunun güvendiği çapa kipi (define ile aynı); imza aracı anahtar ailesini buna göre seçer
     sifreliModuller: sifreliKunye,
   };
 

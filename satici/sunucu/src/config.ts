@@ -4,7 +4,7 @@
 import { isIPv4, isIPv6 } from "node:net";
 import path from "node:path";
 import { z } from "zod";
-import { LICENSE_CLASSES, type LicenseClass } from "./lisans-protokol";
+import { LICENSE_CLASSES, TRUST_ANCHOR_MODES, type LicenseClass } from "./lisans-protokol";
 
 const port = z.coerce.number().int().min(0).max(65535);
 
@@ -62,7 +62,12 @@ const EnvSchema = z.object({
   ANAHTAR_DIZINI: z.string().min(1).default("anahtarlar"),
   /** Derlenmiş web arayüzü (`satici/web` → `dist/portal` · `dist/bayi`); yoksa arayüz 404, API çalışır. */
   PORTAL_WEB_DIZINI: z.string().min(1).default("../web/dist"),
-  /** Yalnız hazırlık/test: gömülü çapa (ROOT_PUBLIC_KEYS) yerine bu dosyadaki kökler. */
+  /**
+   * Gömülü güven çapasının kipi: satıcı YALNIZ kendi ortamının köklerine güvenir (üretim satıcısı hazırlık kökünü
+   * tanımaz — fabrikanın üretim derlemesi gibi). Compose `ORTAM`dan verir; yoksa yalnız dosya çapasıyla (test) açılır.
+   */
+  GUVEN_CAPASI: z.enum(TRUST_ANCHOR_MODES).optional(),
+  /** Yalnız hazırlık/test: gömülü çapa yerine bu dosyadaki kökler. Üretim kipinde (GUVEN_CAPASI=uretim) RED. */
   GUVEN_CAPASI_DOSYASI: z.string().min(1).optional(),
   KIRA_GUN: positiveInt(1, 45).default(30),
   EK_SURE_GUN: positiveInt(0, 60).default(30),
@@ -176,6 +181,11 @@ const EnvSchema = z.object({
   BILDIRIM_TARAMA_DK: positiveInt(1, 24 * 60).default(15),
   /** Sessizlik ve kira bitişi uyarısının sınıfları (TEST · DEMO varsayılanda YOK: kapatılan deneme makinesi gürültüsü). */
   BILDIRIM_SESSIZ_SINIFLAR: classList.default(["URETIM", "DR", "BARINDIRILAN"]),
+}).superRefine((c, ctx) => {
+  // Üretim satıcısının çapası gömülüdür: dosyadan çapa (fabrikanın tanımadığı kök) yalnız hazırlık/test içindir.
+  if (c.GUVEN_CAPASI === "uretim" && c.GUVEN_CAPASI_DOSYASI) {
+    ctx.addIssue({ code: "custom", path: ["GUVEN_CAPASI_DOSYASI"], message: "üretim satıcısı (GUVEN_CAPASI=uretim) dosyadan güven çapası kabul etmez" });
+  }
 });
 
 export type VendorConfig = Readonly<
