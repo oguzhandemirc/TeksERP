@@ -11,7 +11,13 @@ import { readClientVersionHeader } from "../constants/client-info";
 import type { LoginContext } from "../services/auth.service";
 import { AuditService } from "../services/audit.service";
 import { TotpAccountService } from "../services/totp-account.service";
-import { readDevicePairingRequired, readLoginMethods, readCompanyName } from "../services/system-setting.service";
+import {
+  readDevicePairingRequired,
+  readLoginMethods,
+  readCompanyName,
+  readShortCredentialApprovedDeviceOnly,
+} from "../services/system-setting.service";
+import { parseCardCode } from "../lib/short-credential/digest";
 import { SessionRegistryService } from "../services/session-registry.service";
 import { isSuspendedBeforeLogin } from "../services/license-view.service";
 import { AppError } from "../utils/app-error";
@@ -20,6 +26,7 @@ import {
   reserveLoginAttempt,
   resetLoginLockout,
   releaseLoginAttempt,
+  type LockoutKeySpec,
 } from "../middlewares/login-lockout";
 import "../types/express-augment";
 
@@ -69,6 +76,37 @@ function resolveLoginDeviceId(req: Request): string | null {
   const h = req.headers["x-device-id"];
   const v = Array.isArray(h) ? h[0] : h;
   return typeof v === "string" && v.trim() ? v.trim().slice(0, 64) : null;
+}
+
+/**
+ * Kısa kimlik (PIN/kart) yalnız onaylı cihazdan kuralı: açıksa `req.device` (APPROVED + aktif)
+ * şart. Kimlik denemesi DEĞİLDİR → kilit sayacına girmez, 403 döner.
+ */
+async function rejectUnapprovedDevice(req: Request, next: NextFunction): Promise<boolean> {
+  if (req.device || !(await readShortCredentialApprovedDeviceOnly())) return false;
+  next(
+    AppError.forbidden(
+      "Hızlı PIN ve personel kartıyla giriş yalnız onaylı cihazlardan yapılabilir. Bu cihazı yöneticiye onaylatın ya da kullanıcı adı ve şifreyle girin.",
+      { code: "DEVICE_NOT_APPROVED" },
+    ),
+  );
+  return true;
+}
+
+/** Kilit kurulduğu AN bir kez yazılır (şifre yoluyla aynı kural). Kart/PIN değeri yüke GİRMEZ. */
+function auditLockedOnce(
+  lock: { justLocked: boolean; retryAfterSec: number },
+  method: "card" | "quick-pin",
+  req: Request,
+): void {
+  if (!lock.justLocked) return;
+  void AuditService.logEvent({
+    category: "AUTH",
+    action: "LOGIN_LOCKED",
+    recordId: method,
+    ipAddress: req.ip ?? null,
+    payload: { method, retryAfterSec: lock.retryAfterSec, deviceId: resolveLoginDeviceId(req) },
+  });
 }
 
 // K6 (2026-06-12): register endpoint'i + şeması kaldırıldı — kullanıcı
@@ -228,8 +266,8 @@ export class AuthController {
    *     description: Body { cardCode } — "TEKSU:<userId>:<token>". Yöntem kapalıysa 403.
    *     responses:
    *       200: { description: Başarılı giriş }
-   *       401: { description: Kart geçersiz/iptal }
-   *       403: { description: Kartla giriş kapalı }
+   *       401: { description: Kart geçersiz/iptal ya da SHORT_CREDENTIAL_KEY_MISMATCH }
+   *       403: { description: Kartla giriş kapalı ya da DEVICE_NOT_APPROVED }
    */
   static async loginCard(req: Request, res: Response, next: NextFunction): Promise<void> {
     const body = (() => {
@@ -243,6 +281,7 @@ export class AuthController {
     if (!body) return;
 
     const ipAddress = req.ip ?? null;
+    if (await rejectUnapprovedDevice(req, next)) return;
     // Deneme kilidi: IP/cihaz başına ardışık yanlış kartı throttle et (brute-force).
     // ⚠️ KİMLİK = CİHAZ, kart kodu DEĞİL. Kart kodu bir SIRDIR (`TEKSU:<id>:<token>`) —
     // onu kova anahtarına yazmak sırrı bellek-içi bir haritaya taşırdı; üstelik
@@ -250,9 +289,16 @@ export class AuthController {
     // koruma sessizce KAYBOLURDU. Cihaz kimliği ise tabletler arası ayrım için
     // yeterli: ters vekil arkasında aynı IP'yi paylaşan iki tablet birbirini
     // kilitlemez. Cihaz kimliği yoksa "-" ile tek kovaya düşülür (fabrika davranışı).
-    const lockoutKey = resolveLoginLockoutKeys(req, `card:${resolveLoginDeviceId(req) ?? "-"}`);
+    // Kart kodundaki kullanıcı kimliği SIR DEĞİLDİR: aynı kişinin kartına farklı cihaz/IP'lerden
+    // dağıtılmış denemeyi de sayan kullanıcı kovası.
+    const cardUser = parseCardCode(body.cardCode)?.userId ?? null;
+    const lockoutKey: LockoutKeySpec[] = [
+      ...resolveLoginLockoutKeys(req, `card:${resolveLoginDeviceId(req) ?? "-"}`),
+      ...(cardUser ? [{ key: `card-user:${cardUser}`, budgetMultiplier: 1 }] : []),
+    ];
     // F20: rezervasyon = blok kontrolü + (fail varsayımıyla) sayaç artışı tek atomik çağrıda.
     const lock = await reserveLoginAttempt(lockoutKey);
+    auditLockedOnce(lock, "card", req);
     if (lock.blocked) {
       next(
         AppError.tooManyRequests(
@@ -314,8 +360,8 @@ export class AuthController {
    *     description: Body { pin } — kullanıcı seçme yok; PIN benzersiz olduğundan kimliği tek başına belirler.
    *     responses:
    *       200: { description: Başarılı giriş }
-   *       401: { description: PIN tanınmadı }
-   *       403: { description: Hızlı PIN girişi kapalı }
+   *       401: { description: PIN tanınmadı ya da SHORT_CREDENTIAL_KEY_MISMATCH }
+   *       403: { description: Hızlı PIN girişi kapalı ya da DEVICE_NOT_APPROVED }
    */
   static async loginQuickPin(req: Request, res: Response, next: NextFunction): Promise<void> {
     const body = (() => {
@@ -329,6 +375,7 @@ export class AuthController {
     if (!body) return;
 
     const ipAddress = req.ip ?? null;
+    if (await rejectUnapprovedDevice(req, next)) return;
     // Deneme kilidi: IP/cihaz başına ardışık yanlış PIN'i throttle et (brute-force).
     // ⚠️ KİMLİK = CİHAZ, PIN DEĞİL — kart yolundaki gerekçenin aynısı: PIN hem
     // kimlik hem sırdır, anahtara yazılamaz ve her denemede değiştiği için kovayı
@@ -336,6 +383,7 @@ export class AuthController {
     const lockoutKey = resolveLoginLockoutKeys(req, `pin:${resolveLoginDeviceId(req) ?? "-"}`);
     // F20: rezervasyon = blok kontrolü + (fail varsayımıyla) sayaç artışı tek atomik çağrıda.
     const lock = await reserveLoginAttempt(lockoutKey);
+    auditLockedOnce(lock, "quick-pin", req);
     if (lock.blocked) {
       next(
         AppError.tooManyRequests(

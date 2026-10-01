@@ -5,6 +5,7 @@
 // Rol yok; her kullanıcının yetkisi UserPermission tablosunda doğrudan tutulur.
 // =============================================================================
 
+import { forgetIssuedCard, forgetIssuedPin } from "./helpers/credential-reveal.helper";
 import prisma from "../lib/prisma";
 import { Prisma } from "@prisma/client";
 import { randomBytes } from "crypto";
@@ -845,6 +846,11 @@ export class PermissionManagementService {
           username: freedUsername,
           quickPin: null,
           cardToken: null,
+          quickPinDigest: null,
+          quickPinSetAt: null,
+          cardTokenDigest: null,
+          cardIssuedAt: null,
+          cardTokenLegacy: false,
           tokenVersion: { increment: 1 },
         },
         select: USER_SELECT,
@@ -853,6 +859,8 @@ export class PermissionManagementService {
     await SessionRegistryService.revokeAllForUser(id, "DELETED").catch(
       () => undefined,
     );
+    forgetIssuedPin(id);
+    forgetIssuedCard(id);
 
     await AuditService.log({
       userId: actorUserId, action: "DELETE", tableName: "users", recordId: id,

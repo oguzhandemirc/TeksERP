@@ -34,6 +34,7 @@ import {
 import { REPORT_BY_KEY } from "../constants/report-catalog";
 import { DEFAULT_COMPANY_NAME } from "../constants/company";
 import { uyari } from "../lib/logger";
+import { isHostedInstallation } from "./helpers/install-class.helper";
 import { factoryTimezoneWarning, getFactoryTimezone } from "../constants/time";
 import { applyFactoryTimezoneRows } from "./helpers/factory-timezone-state.helper";
 import { SECURITY_SETTING_PREFIX } from "../constants/reserved-settings";
@@ -372,6 +373,10 @@ export const SETTING_KEYS = {
    *  tabletler de giriş yapıp çalışabilir (makine atfı NULL kalır). True iken
    *  eşleşmemiş/pasif cihaz device.middleware'de 401 ile kesilir. ENFORCE edilir. */
   DEVICE_PAIRING_REQUIRED: "device.pairingRequired",
+  /** Hızlı PIN / QR kartla giriş YALNIZ onaylı cihazdan mı. Default false (bugünkü davranış).
+   *  Açıkken eşleştirme de etkin zorunlu olur (otomatik onay kapanır); barındırılan
+   *  kurulumda (BARINDIRILAN) her iki kural ZORUNLUDUR ve kapatılamaz. ENFORCE edilir. */
+  AUTH_SHORT_CREDENTIAL_APPROVED_DEVICE_ONLY: "auth.shortCredentialApprovedDeviceOnly",
   /** Sevk için ayrı onay adımı zorunlu mu. Default false (KAPALI): çuvalları seç → Sevk Et
    *  → DOĞRUDAN sevk edilir (DISPATCHED). AÇIKKEN: Sevk Et yalnız PLANNED sevkiyat kurar;
    *  çıkış ayrıca "Sevk Kapısı" ekranından dispatch edilir. */
@@ -1671,6 +1676,8 @@ export interface FeatureFlags {
   /** Cihaz eşleştirme zorunlu mu (true=aktif) yoksa pasif mi (false=default).
    *  Diğerlerinden farklı olarak ENFORCE edilir (device.middleware). */
   devicePairingRequired: boolean;
+  /** Hızlı PIN / kart girişi yalnız onaylı cihazdan mı (ETKİN değer: barındırılan kurulumda hep true). */
+  shortCredentialApprovedDeviceOnly: boolean;
   /** Sevk için ayrı "ambar aldı / çıkış" onay adımı zorunlu mu (default false). */
   shipmentConfirmationEnabled: boolean;
   shipmentManualSackCountEnabled: boolean;
@@ -2141,6 +2148,7 @@ export class SystemSettingService {
       partyCodeAuto: await readPartyCodeAuto(cacheClient),
       fasonNoteMobileEntry: await readFasonNoteMobileEntry(cacheClient),
       devicePairingRequired: await readDevicePairingRequired(cacheClient),
+      shortCredentialApprovedDeviceOnly: await readShortCredentialApprovedDeviceOnly(cacheClient),
       shipmentConfirmationEnabled: await readShipmentConfirmationEnabled(cacheClient),
       shipmentManualSackCountEnabled: await readShipmentManualSackCountEnabled(cacheClient),
       shipmentUndoSameDayOnly: await readShipmentUndoSameDayOnly(cacheClient),
@@ -2910,9 +2918,35 @@ export class SystemSettingService {
       );
     }
 
+    if (Object.prototype.hasOwnProperty.call(input, "shortCredentialApprovedDeviceOnly")) {
+      if (typeof input.shortCredentialApprovedDeviceOnly !== "boolean") {
+        throw AppError.badRequest("shortCredentialApprovedDeviceOnly boolean olmalı");
+      }
+      if (!input.shortCredentialApprovedDeviceOnly && isHostedInstallation()) {
+        throw AppError.conflict(
+          "Barındırılan (bulut) kurulumda hızlı PIN ve kart yalnız onaylı cihazdan kabul edilir — bu kural kapatılamaz.",
+          { code: "HOSTED_CLASS_FORCED" },
+        );
+      }
+      await this.set(
+        SETTING_KEYS.AUTH_SHORT_CREDENTIAL_APPROVED_DEVICE_ONLY,
+        input.shortCredentialApprovedDeviceOnly,
+        "Hızlı PIN ve QR kartla giriş yalnız onaylı cihazdan (eşleştirmeyi de zorunlu kılar)",
+        userId
+      );
+    }
+
     if (Object.prototype.hasOwnProperty.call(input, "devicePairingRequired")) {
       if (typeof input.devicePairingRequired !== "boolean") {
         throw AppError.badRequest("devicePairingRequired boolean olmalı");
+      }
+      // Kısa kimlik kuralı eşleştirmesiz anlamsızdır (otomatik onaylı cihaz "onaylı" sayılırdı):
+      // kural açıkken eşleştirmeyi kapatmak yazılır ama etkisiz kalırdı — sessiz değil, 409.
+      if (!input.devicePairingRequired && (isHostedInstallation() || (await readStoredShortCredentialApprovedDeviceOnly()))) {
+        throw AppError.conflict(
+          "Hızlı PIN/kart yalnız onaylı cihazdan kuralı açıkken cihaz eşleştirmesi kapatılamaz — önce o kuralı kapatın.",
+          { code: "PAIRING_FORCED" },
+        );
       }
       await this.set(
         SETTING_KEYS.DEVICE_PAIRING_REQUIRED,
@@ -4772,8 +4806,40 @@ export async function readDevicePairingRequired(
   tx?: Pick<typeof prisma, "systemSetting">,
 ): Promise<boolean> {
   const client = tx ?? prisma;
+  // ETKİN değer: kısa kimlik "yalnız onaylı cihaz" kuralı (ya da barındırılan sınıf) eşleştirmeyi
+  // de zorunlu kılar — otomatik onaylanan cihaz o kuralı içi boş bırakırdı.
+  if (isHostedInstallation()) return true;
   const setting = await client.systemSetting.findUnique({
     where: { key: SETTING_KEYS.DEVICE_PAIRING_REQUIRED },
+    select: { value: true },
+  });
+  return asBoolean(setting?.value) || (await readStoredShortCredentialApprovedDeviceOnly(client));
+}
+
+/** Kısa kimlik "yalnız onaylı cihaz" kuralının KAYITLI değeri (barındırılan sınıf hariç). */
+export async function readStoredShortCredentialApprovedDeviceOnly(
+  tx?: Pick<typeof prisma, "systemSetting">,
+): Promise<boolean> {
+  const client = tx ?? prisma;
+  const setting = await client.systemSetting.findUnique({
+    where: { key: SETTING_KEYS.AUTH_SHORT_CREDENTIAL_APPROVED_DEVICE_ONLY },
+    select: { value: true },
+  });
+  return asBoolean(setting?.value);
+}
+
+/**
+ * Hızlı PIN / QR kartla giriş YALNIZ onaylı cihazdan mı — ETKİN değer. Default false
+ * (bugünkü davranış: her istemci PIN/kart deneyebilir). Barındırılan kurulumda daima true.
+ * ENFORCE: `auth.controller` login-quick-pin / login-card 403 `DEVICE_NOT_APPROVED`.
+ */
+export async function readShortCredentialApprovedDeviceOnly(
+  tx?: Pick<typeof prisma, "systemSetting">,
+): Promise<boolean> {
+  if (isHostedInstallation()) return true;
+  const client = tx ?? prisma;
+  const setting = await client.systemSetting.findUnique({
+    where: { key: SETTING_KEYS.AUTH_SHORT_CREDENTIAL_APPROVED_DEVICE_ONLY },
     select: { value: true },
   });
   return asBoolean(setting?.value);

@@ -3,7 +3,7 @@
 // Çalıştır: npx tsx scripts/test_card_login.ts
 // Doğrulananlar:
 //   1. mod "pin" (default) iken login-card 403 (kart altyapısı kapalı)
-//   2. rotateCardToken → TEKSU:<userId>:<32-hex> kart kodu üretir
+//   2. rotateCardToken → TEKSU:<userId>:<64-hex> (256 bit) kart kodu üretir; DB'de yalnız özet
 //   3. mod "card" iken geçerli kartla giriş → JWT + doğru kullanıcı
 //   4. rotasyon sonrası ESKİ kart 401 (anında ölür), yeni kart çalışır
 //   5. bozuk format 401; pasif kullanıcı kartı 401
@@ -64,9 +64,19 @@ async function main() {
     // 2) kart üret
     const issued = await AuthService.rotateCardToken(testUser.id, admin.id);
     check(
-      "kart kodu formatı TEKSU:<uuid>:<32-hex>",
-      new RegExp(`^TEKSU:${testUser.id}:[0-9a-f]{32}$`).test(issued.cardCode),
+      "kart kodu formatı TEKSU:<uuid>:<64-hex> (256 bit)",
+      new RegExp(`^TEKSU:${testUser.id}:[0-9a-f]{64}$`).test(issued.cardCode),
       issued.cardCode.slice(0, 20) + "…",
+    );
+    const satir = await prisma.user.findUnique({
+      where: { id: testUser.id },
+      select: { cardToken: true, cardTokenDigest: true, cardTokenLegacy: true },
+    });
+    const sir = issued.cardCode.split(":")[2]!;
+    check(
+      "DB'de düz kart sırrı YOK, yalnız özet",
+      satir?.cardToken === null && /^[0-9a-f]{16}:[0-9a-f]{64}$/.test(satir?.cardTokenDigest ?? "") &&
+        !(satir?.cardTokenDigest ?? "").includes(sir) && satir?.cardTokenLegacy === false,
     );
     check("ilk üretimde rotated=false", issued.rotated === false);
 

@@ -136,11 +136,11 @@ async function bolum2(adminId: string): Promise<string> {
   check("etkinleştirme idempotent (ikinci çağrı aynı kullanıcı, yeni hesap yok)", a.userId === b.userId && !b.created, JSON.stringify({ a, b }));
   const u = await prisma.user.findUnique({
     where: { id: a.userId },
-    select: { fullName: true, quickPin: true, isActive: true, permissions: { select: { permission: { select: { code: true } } } } },
+    select: { fullName: true, quickPin: true, quickPinDigest: true, isActive: true, permissions: { select: { permission: { select: { code: true } } } } },
   });
   const kodlar = (u?.permissions ?? []).map((p) => p.permission.code).sort();
   check("izinler TAM OLARAK order:write + customer:write", JSON.stringify(kodlar) === JSON.stringify([...PATRON_CLOUD_PERMISSIONS].sort()), kodlar.join(","));
-  check("mobil kimliği yok (hızlı PIN üretilmedi)", u?.quickPin === null || u?.quickPin === undefined);
+  check("mobil kimliği yok (hızlı PIN üretilmedi)", (u?.quickPin ?? null) === null && (u?.quickPinDigest ?? null) === null);
   check("ad 'Patron Bulutu', aktif", u?.fullName === "Patron Bulutu" && u?.isActive === true);
   check("kimlik kaydı ham ayar ucundan yazılamaz (ayrılmış anahtar)", isReservedSettingKey(PATRON_CLOUD_USER_SETTING_KEY));
   check("etkinleştirme audit'li (SYSTEM_SETTING satırı)", auditlar.some((x) => x.tableName === "SYSTEM_SETTING" && x.recordId === PATRON_CLOUD_USER_SETTING_KEY) || !a.created);

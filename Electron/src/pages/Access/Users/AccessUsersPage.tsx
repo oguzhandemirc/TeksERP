@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { foldedIncludes } from "@/lib/search-fold";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Plus, UserCog, Trash2, Power, PowerOff, History } from "lucide-react";
+import { Plus, UserCog, Trash2, Power, PowerOff, History, KeyRound } from "lucide-react";
 import { safeFormat } from "@/lib/format";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/layout/PageHeader";
@@ -26,6 +26,8 @@ import type { ApiResponse } from "@/types/api";
 import { UserFormDialog, type UserFormValues } from "./UserFormDialog";
 import { UserDetailDialog } from "./UserDetailDialog";
 import { NewUserCredentialsDialog } from "./NewUserCredentialsDialog";
+import { ShortCredentialsDialog } from "./ShortCredentialsDialog";
+import { useRoleAccess } from "@/hooks/useRoleAccess";
 import { useEnabledLoginMethods } from "@/hooks/usePricingEnabled";
 
 const QUERY_KEY = "admin-users";
@@ -75,6 +77,10 @@ export function AccessUsersPage() {
   const openTarget = useOpenTarget();
   const [search, setSearch] = useState("");
   const [formOpen, setFormOpen] = useState(false);
+  const [shortCredOpen, setShortCredOpen] = useState(false);
+  const { hasPermission } = useRoleAccess();
+  // Uçlarla aynı eşik: admin:settings + admin:users (toplu sıfırlama düz PIN döndürür).
+  const canManageShortCredentials = hasPermission("admin:settings") && hasPermission("admin:users");
   const [permissionsFor, setPermissionsFor] = useState<AdminUserListItem | null>(null);
   const [detailTab, setDetailTab] = useState<"permissions" | "quick-pin">("permissions");
   const [deletingUser, setDeletingUser] = useState<AdminUserListItem | null>(null);
@@ -175,6 +181,11 @@ export function AccessUsersPage() {
         actions={
           <>
             <RefreshButton queryKey={QUERY_KEY} />
+            {canManageShortCredentials && (
+              <Button size="sm" variant="outline" onClick={() => setShortCredOpen(true)}>
+                <KeyRound className="h-4 w-4" /> Kısa Kimlikler
+              </Button>
+            )}
             <Button size="sm" onClick={() => setFormOpen(true)}>
               <Plus className="h-4 w-4" /> Yeni Kullanıcı
             </Button>
@@ -347,6 +358,8 @@ export function AccessUsersPage() {
           }
         }}
       />
+
+      <ShortCredentialsDialog open={shortCredOpen} onOpenChange={setShortCredOpen} />
 
       <NewUserCredentialsDialog
         user={newCreds?.user ?? null}

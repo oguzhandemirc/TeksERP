@@ -44,6 +44,8 @@ export const AUDIT_EXEMPT_MODELS: AuditMuafiyeti[] = [
     gerekce: "kullanıcının kendi panel tercihi (kolon düzeni, filtre); hiçbir iş kararına ve hiçbir rapora girmez — kökün TEK beyanlı istisnası buydu" },
   { model: "EndpointLatencyDaily", sinif: "TELEMETRI",
     gerekce: "uç gecikme özeti; `defter.md` § Telemetri ≠ defter sınıfı, yaşa göre budanır ve TEK okuyucusu kendi servisidir" },
+  { model: "LoginLockoutBucket", sinif: "KIMLIK_AKISI",
+    gerekce: "giriş deneme kilidi kovasının kalıcı kopyası (anahtar SHA-256); deneme ve kilidin kendisi audit'in AUTH kategorisinde LOGIN_FAILED/LOGIN_LOCKED olarak yazılır, satırın CUD'u ikinci bir iz üretmez" },
   { model: "Session", sinif: "KIMLIK_AKISI",
     gerekce: "oturum kaydı; giriş/çıkış/iptal audit'in AUTH kategorisinde zaten yazılır, satırın kendi CUD'u ikinci bir iz üretmez" },
   { model: "ShipmentEvent", sinif: "EBEVEYN_EYLEMDE",
