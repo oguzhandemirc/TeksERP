@@ -48,3 +48,34 @@ describe("licenseService — kod taşıyan çağrılar", () => {
     expect(get).toHaveBeenCalledTimes(1);
   });
 });
+
+/**
+ * L2-5 uzatma dosyası: çevrimdışı yanıtla AYNI uca gider, `kaynak: dosya` yalnız ayak izini ayırır.
+ * JSON dosyası NESNE olarak gider (backend'in metin sınırı 64 KB; iptal belgeli yanıt aşabilir).
+ */
+describe("licenseService — lisans dosyası yükle", () => {
+  beforeEach(() => post.mockReset());
+
+  it("⭐ JSON dosyası (BOM'lu, satır sonlu) → nesne + kaynak dosya, /cevrimdisi-yanit", async () => {
+    post.mockReturnValue(ok({}));
+    const yanit = { v: 1, hak: "a.b.c", kira: "d.e.f", indirmeBelirtecleri: [], sunucuSaati: "2026-10-01T00:00:00.000Z" };
+    await licenseService.licenseFile(`\uFEFF${JSON.stringify(yanit, null, 2)}\n`);
+    const [url, body] = post.mock.calls[0] as [string, { yanit: unknown; kaynak: string }];
+    expect(url).toBe("/api/license/cevrimdisi-yanit");
+    expect(body).toEqual({ yanit, kaynak: "dosya" });
+  });
+
+  it("QR yanıt metni (base64url) ya da çözülemeyen JSON → düz metin gider, backend karar verir", async () => {
+    post.mockReturnValue(ok({}));
+    await licenseService.licenseFile("  eyJ2IjoxfQ  ");
+    await licenseService.licenseFile("{bozuk");
+    await licenseService.licenseFile("[1,2]");
+    expect(post.mock.calls.map((c) => (c[1] as { yanit: unknown }).yanit)).toEqual(["eyJ2IjoxfQ", "{bozuk", "[1,2]"]);
+  });
+
+  it("QR yanıtı (offlineResponse) gövdesi değişmedi: kaynak alanı YOK", async () => {
+    post.mockReturnValue(ok({}));
+    await licenseService.offlineResponse("eyJ2IjoxfQ");
+    expect(post.mock.calls[0]?.[1]).toEqual({ yanit: "eyJ2IjoxfQ" });
+  });
+});

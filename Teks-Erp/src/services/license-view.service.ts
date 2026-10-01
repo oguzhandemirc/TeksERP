@@ -28,7 +28,7 @@ import {
   requestDownloadTokenRefresh,
   type LicenseSnapshot,
 } from "../lib/license/runtime";
-import type { Banner, LicenseEffect, StateReason } from "../lib/license/state";
+import type { Banner, LicenseEffect, PaidThrough, StateReason } from "../lib/license/state";
 import { licenseError } from "./helpers/license-wire.helper";
 import { integritySection } from "./helpers/license-integrity-view.helper";
 import type { IntegrityStatus } from "../lib/license/state-rules";
@@ -120,11 +120,16 @@ export interface LicenseDetail {
     devredildi: boolean;
     yaptirimKademesi: SanctionLevel | null;
     saat: { guvenilir: string; kaynak: string; bulgu: string | null; bulguKaynagi: string | null };
+    /** v2 süre çapası (ödenmiş tarih P; `tarih` null = süresiz). `null` = belgeler P taşımıyor, eski çapa işler. */
+    odenmisTarih: { tarih: string | null; kaynak: PaidThrough["kaynak"]; sozlesmeSonu: boolean } | null;
+    /** Son başarılı kira alışverişi (imzalı kiradan) ve "internet var" kararı (son 24 saat). */
+    baglanti: { sonAlisveris: string | null; internetVar: boolean };
   };
-  readonly hak: (Omit<EntitlementDoc, "v" | "kurulumId" | "bayiSertifikasi" | "bayiId"> & { bayiId: string | null }) | null;
+  readonly hak: (Omit<EntitlementDoc, "v" | "kurulumId" | "bayiSertifikasi" | "bayiId" | "imzaciSertifikasi" | "kipAltSiniri"> & { bayiId: string | null }) | null;
   readonly kira: Pick<
     LeaseDoc,
-    "kiraId" | "verilis" | "bitis" | "sunucuSaati" | "ekSureGun" | "zorlama" | "gecerlilikBitis" | "yaptirim" | "yoklamaAraligiDk" | "devredildi" | "kanal"
+    | "kiraId" | "verilis" | "bitis" | "sunucuSaati" | "ekSureGun" | "zorlama" | "gecerlilikBitis" | "yaptirim" | "yoklamaAraligiDk" | "devredildi" | "kanal"
+    | "odenmisTarih"
   > | null;
   readonly parmakIzi: {
     olculdu: string | null;
@@ -183,6 +188,8 @@ function stateSection(snap: LicenseSnapshot): LicenseDetail["durum"] {
     devredildi: s.devredildi,
     yaptirimKademesi: s.yaptirimKademesi,
     saat: { guvenilir: msToIso(s.saat.trustedMs), kaynak: s.saat.source, bulgu: s.saat.finding, bulguKaynagi: s.saat.findingSource },
+    odenmisTarih: s.odenmisTarih && { tarih: isoOrNull(s.odenmisTarih.tarihMs), kaynak: s.odenmisTarih.kaynak, sozlesmeSonu: s.odenmisTarih.sozlesmeSonu },
+    baglanti: { sonAlisveris: isoOrNull(s.baglanti.sonAlisverisMs), internetVar: s.baglanti.internetVar },
   };
 }
 
@@ -194,12 +201,15 @@ function documentSections(snap: LicenseSnapshot): Pick<LicenseDetail, "hak" | "k
       ? {
           hakId: ent.hakId, surum: ent.surum, lisansNo: ent.lisansNo, musteri: ent.musteri, tesis: ent.tesis, sinif: ent.sinif,
           moduller: ent.moduller, kalici: ent.kalici, bakimBitis: ent.bakimBitis, verilis: ent.verilis, bayiId: ent.bayiId ?? null,
+          // Ham beyan (v1 HAK taşımaz → alan yok); hesaplanan P `durum.odenmisTarih`te.
+          ...(ent.cevrimdisiUfukGun === undefined ? {} : { cevrimdisiUfukGun: ent.cevrimdisiUfukGun }),
         }
       : null,
     kira: l
       ? {
           kiraId: l.kiraId, verilis: l.verilis, bitis: l.bitis, sunucuSaati: l.sunucuSaati, ekSureGun: l.ekSureGun, zorlama: l.zorlama,
           gecerlilikBitis: l.gecerlilikBitis, yaptirim: l.yaptirim, yoklamaAraligiDk: l.yoklamaAraligiDk, devredildi: l.devredildi, kanal: l.kanal,
+          ...(l.odenmisTarih === undefined ? {} : { odenmisTarih: l.odenmisTarih }),
         }
       : null,
   };

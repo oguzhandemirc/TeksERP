@@ -20,6 +20,7 @@
 //   ⭐ ISTEK_ZAMAN'da BİR KEZ düzeltilmiş damga, SAAT_KAYIK bilgi, kademe düşmez (D4)
 //   ⭐ eski kira dosyası / silinip yapıştırılan eski yanıt yaptırımı kaldırmaz (D2)
 //   ⭐ kira dosyası yokluğu "yoklama başarısız" değil; HAK/durum varken yoklanır (D3)
+//   ⭐ uzatma dosyası İSTEK gerektirmez; eski dosya RED; ikinci anahtar imzalı kayıttan (L2-5, §24 · §13a)
 //   ⭐ motor pes etmez, sağlıkta durum (D5) · gözlem sayacı istek başına · zil fırtınası yok ·
 //      ortam künyesinde makine adı yok · kapalı kalan makineye sahte SAAT_İLERİ yok · taşıma onayı kod bekler (D8)
 //   ⭐ yeni HAK kabul edilince bütünlük HEMEN yeniden koşar (hazırlık anahtarının sınıf kararı, §22)
@@ -35,13 +36,16 @@
 // DB kimliğiyle imzalanır (§2l · §10c) · N3 etkinleştirme gövdesi DB kimliği taşır (§10b) · N4 yeniden
 // imza yok (§11a/b/d/e) · N5 ikinci ISTEK_ZAMAN'da da yeniden (§11e) · N6 zincir ucu durum kaydını
 // yok sayar (§12c/§12d/§13c) · N7 geri alma denetimi kalkar (§12a/b) · N8 kira yokluğu "başarısız"
-// (işlevde §13a, durum girdisinde §13a2) · N9 etkin = kira dosyası var (§12e · §13b/§13a2/§13c · §14 ·
+// (işlevde §13a, durum girdisinde §13a2; L2-5'te bellek işlevi kalktı, §13a imzalı kayıttan ölçer) · N9 etkin = kira dosyası var (§12e · §13b/§13a2/§13c · §14 ·
 // §17b) · N10 her okuma hatası "yok" (§1h–§1l · §14a) ·
 // N11 okunamayan belge YOK sayılır (§14a) · N12 kimlik yoksa motor pes eder (§15c) · N13 sayaç çağrı
 // başına (§16a) · N14 veri gelince geri çekilme sıfırlanır (§17b) · N15 makine adı silinmez (§18a) ·
 // N16 kapalı süre kredisi 0 (§19a/b) · N17 onaylanan taşıma lisans ister (§20c).
 // I3-2 V1: N18 dikiş DB olgusundan okur (§21a/§21b) · N19 uygunluk dosyasına `getLicenseDbFacts`
 // (§21c/§21e) · V6 N20 gözlem özeti kira dosyasına bakar (§13b2) — üçü de kırmızı, geri alınınca yeşil.
+// L2-5 (uzatma dosyası · ikinci anahtar): L1 dosya yanıtı bekleyen istek ister (§24a) · L2 dosya ayak izi
+// QR'la karışır (§24b) · L3 eski kira kapısı kalktı (§2k · §12d · §24e) · L4 ikinci anahtar durum kaydını
+// saymaz (§13a/§13a2) — dördü de kırmızı, geri alınınca yeşil (sha ile ölçüldü).
 // ⭐ KALICI SONDA ✓K1 (her koşumda): bilinmeyen kod genel mesaja düşer — §8a'nın "her kodun kendi
 // mesajı var" karşılaştırıcısı kör değil.
 // =============================================================================
@@ -64,7 +68,6 @@ import {
   getMeasuredFingerprint,
   peekObservationCounters,
   persistAccumulation,
-  pollFailedRecently,
   resetObservationCounters,
   setMeasuredFingerprint,
   invalidateLicenseSnapshot,
@@ -627,7 +630,12 @@ async function etkinTanimiBolumu(x: Hazir): Promise<void> {
   const oncekiKira = getLicenseSnapshot().lease?.document.kiraId;
   fs.rmSync(path.join(x.dizin, LICENSE_FILES.LEASE), { force: true });
   yeniden(x.dizin);
-  check("§13a ⭐ kira dosyası yok diye 'son yoklama başarısız' SAYILMAZ (ikinci anahtar yalnız gerçek denemeyle)", !pollFailedRecently(Date.now()));
+  const bag = getLicenseSnapshot().state.baglanti;
+  check(
+    "§13a ⭐ kira dosyası yok ama durum kaydının son kirası taze → internet VAR (ikinci anahtar imzalı kayıttan, bellekteki yoklama sinyalinden değil)",
+    bag.internetVar && bag.sonAlisverisMs === getLicenseSnapshot().lastKnownLease?.verilisMs,
+    JSON.stringify(bag),
+  );
   check("§13b ⭐ HAK + durum kaydı varken etkin sayılır (kira dosyası yokken de)", getLicenseSnapshot().activated && getLicenseDetail().kurulum.etkin);
   __resetLicenseTrailForTests();
   const gozlemde = getLicenseSnapshot().state.kip === "gozlem";
@@ -641,7 +649,7 @@ async function etkinTanimiBolumu(x: Hazir): Promise<void> {
   yeniden(x.dizin);
   const s = getLicenseSnapshot().state;
   check(
-    "§13a2 ⭐ kira dosyası yok + ek süre bitti ama gerçek yoklama düşmedi → EK_SÜRE (0 gün), KISITLI DEĞİL",
+    "§13a2 ⭐ kira dosyası yok + ek süre bitti ama son kira alışverişi 24 saatten yeni → EK_SÜRE (0 gün), KISITLI DEĞİL",
     s.hesaplananKademe === "EK_SURE" && s.nedenler.some((n) => n.kod === "EK_SURE_BITTI"),
     `${s.hesaplananKademe} ${s.nedenler.map((n) => n.kod).join(",")}`,
   );
@@ -685,6 +693,73 @@ async function depoOkumaBolumu(x: Hazir): Promise<void> {
   }
   yeniden(x.dizin);
   await pollLicenseOnce();
+}
+
+/**
+ * L2-5 (tasarım §1.4): portalın "çevrimdışı uzatma dosyası" imzalı bir LicenseResponse'tur ve İSTEK
+ * gerektirmez — Lisans ekranı onu çevrimdışı yanıtla aynı uca yollar. Ödenmiş tarih (P) belgelerden gelir.
+ */
+async function uzatmaDosyasiBolumu(x: Hazir): Promise<void> {
+  console.log("\n§24 — uzatma dosyası: istek-siz kabul · eski dosya RED · ayak izi 'dosya' · P detayda · adres kapalıyken de");
+  const once = getLicenseSnapshot().lease?.document.kiraId;
+  const simdi = Date.now();
+  const P = simdi + 200 * DAY_MS;
+  const yanit = (verilisMs: number, ek: { odenmisTarih?: string } = {}) => ({
+    v: 1,
+    hak: hakBas(x.f, { cevrimdisiUfukGun: 400 }),
+    kira: kiraBas(x.f, {
+      parmakIzi: x.f.parmakIzi, zorlama: false, verilis: msToIso(verilisMs), sunucuSaati: msToIso(verilisMs),
+      odenmisTarih: msToIso(P), gecerlilikBitis: msToIso(P), ...ek,
+    }),
+    indirmeBelirtecleri: [],
+    sunucuSaati: msToIso(verilisMs),
+  });
+  const ilk = yanit(simdi);
+  const dosya = path.join(GECICI, "uzatma.json");
+  fs.writeFileSync(dosya, `\uFEFF${JSON.stringify(ilk, null, 2)}\n`);
+  const iz = olaylar.length;
+  // Panelin yaptığı: dosya metni (BOM'suz) — bu süreçte bekleyen bir çevrimdışı istek YOK.
+  let d: Awaited<ReturnType<typeof acceptOfflineResponse>> | null = null;
+  const sonuc = await hataKodu(
+    acceptOfflineResponse(fs.readFileSync(dosya, "utf8").replace(/^\uFEFF/, ""), "dosya", null).then((r) => {
+      d = r;
+    }),
+  );
+  const kabulDetay = d as Awaited<ReturnType<typeof acceptOfflineResponse>> | null;
+  check(
+    "§24a ⭐ istek-siz uzatma dosyası KABUL: yeni kira, P detayda (sözleşme sonu), HAK ufku detayda",
+    kabulDetay !== null && kabulDetay.kira?.kiraId !== once && kabulDetay.durum.odenmisTarih?.tarih === msToIso(P) && kabulDetay.durum.odenmisTarih.kaynak === "ODEME" &&
+      kabulDetay.durum.odenmisTarih.sozlesmeSonu && kabulDetay.kira?.odenmisTarih === msToIso(P) && kabulDetay.hak?.cevrimdisiUfukGun === 400,
+    `${sonuc} ${JSON.stringify(kabulDetay?.durum.odenmisTarih ?? null)}`,
+  );
+  if (!kabulDetay) return;
+  const yeni = olaylar.slice(iz);
+  const kabul = yeni.find((o) => o.action === "LICENSE_LEASE_ACCEPTED")?.payload as { kaynak?: string } | undefined;
+  const eylem = yeni.find((o) => o.action === "LICENSE_ADMIN_ACTION")?.payload as { eylem?: string; sonuc?: string } | undefined;
+  check("§24b ayak izi: kira kabulü kaynak 'dosya' + yönetici eylemi 'lisans-dosyasi' kabul", kabul?.kaynak === "dosya" && eylem?.eylem === "lisans-dosyasi" && eylem.sonuc === "kabul", JSON.stringify({ kabul, eylem }));
+  check(
+    "§24c ⭐ dosyayla gelen kira 'internet var' sayılır: son alışveriş = kiranın sunucu saati",
+    kabulDetay.durum.baglanti.internetVar && kabulDetay.durum.baglanti.sonAlisveris === msToIso(simdi),
+    JSON.stringify(kabulDetay.durum.baglanti),
+  );
+  const iz2 = olaylar.length;
+  const tekrar = await hataKodu(acceptOfflineResponse(ilk, "dosya", null).then(() => undefined));
+  check("§24d aynı dosya (JSON nesnesi olarak) ikinci kez → hata yok, 'ayni-kira'", tekrar === "HATA_YOK" && JSON.stringify(olaylar.slice(iz2)).includes("ayni-kira"), tekrar);
+  check("§24e ⭐ ESKİ dosya RED (LICENSE_LEASE_STALE)", (await hataKodu(acceptOfflineResponse(yanit(simdi - 2 * DAY_MS), "dosya", null))) === "LICENSE_LEASE_STALE");
+  const kurcali = { ...ilk, kira: bozuk(yanit(simdi + 1).kira) };
+  check("§24f kurcalı dosya RED (LICENSE_RESPONSE_INVALID)", (await hataKodu(acceptOfflineResponse(JSON.stringify(kurcali), "dosya", null))) === "LICENSE_RESPONSE_INVALID");
+  const adres = x.satici.url;
+  configureLicenseRuntimeForTests({ vendorUrl: null });
+  try {
+    // Bir sonraki yoklamanın kirasından (verilişi "şimdi") eski kalmalı: +1 ms.
+    const k = await acceptOfflineResponse(yanit(simdi + 1, { odenmisTarih: msToIso(P + 30 * DAY_MS) }), "dosya", null);
+    check("§24g ⭐ satıcı adresi KAPALI kurulum da dosyayla uzar (yeni P)", k.durum.odenmisTarih?.tarih === msToIso(P + 30 * DAY_MS), JSON.stringify(k.durum.odenmisTarih));
+  } finally {
+    configureLicenseRuntimeForTests({ vendorUrl: adres });
+  }
+  const r = await pollLicenseOnce();
+  const s = getLicenseSnapshot().state;
+  check("§24h karşı: satıcı P taşımayan kira verince eski çapaya döner (v1 belgeyle sıfır fark)", r.outcome === "BASARILI" && s.odenmisTarih === null && s.hesaplananKademe === "NORMAL", `${r.outcome} ${JSON.stringify(s.odenmisTarih)}`);
 }
 
 async function motorBolumu(): Promise<void> {
@@ -878,6 +953,7 @@ async function main(): Promise<void> {
     await geriAlmaBolumu(hazir);
     await etkinTanimiBolumu(hazir);
     await depoOkumaBolumu(hazir);
+    await uzatmaDosyasiBolumu(hazir);
     gozlemSayaciBolumu();
     await zilGeriCekilmeBolumu(hazir);
     ortamBolumu();

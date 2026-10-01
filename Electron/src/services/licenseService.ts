@@ -40,6 +40,23 @@ async function envelope(path: "cevrimdisi-istek" | "aktarma-istegi", amac: Offli
   }
 }
 
+/**
+ * Lisans dosyası (portalın istek gerektirmeyen uzatma dosyası) içeriği: JSON nesnesiyse NESNE olarak gider —
+ * backend'in metin sınırı 64 KB'tır, iptal belgesi taşıyan yanıt onu aşabilir; değilse QR yanıtı gibi düz metin.
+ */
+export function licenseFilePayload(metin: string): string | Record<string, unknown> {
+  const text = metin.replace(/^\uFEFF/, "").trim();
+  if (text.startsWith("{")) {
+    try {
+      const v: unknown = JSON.parse(text);
+      if (v !== null && typeof v === "object" && !Array.isArray(v)) return v as Record<string, unknown>;
+    } catch {
+      // Çözülemeyen metin olduğu gibi gider; backend kendi cümlesiyle reddeder.
+    }
+  }
+  return text;
+}
+
 export const licenseService = {
   /** Herkes — başlık varsa tam doğrulama; kimliksize `{ ayrinti: false }`. */
   status: () => data(apiClient.get<ApiResponse<LicenseStatusResponse>>(`${BASE}/durum`, QUIET)),
@@ -55,6 +72,9 @@ export const licenseService = {
   offlineRequest: (amac: OfflinePurpose, kod?: string) => envelope("cevrimdisi-istek", amac, kod),
   offlineResponse: (yanit: string) =>
     data(apiClient.post<ApiResponse<LicenseDetail>>(`${BASE}/cevrimdisi-yanit`, { yanit }, QUIET)),
+  /** Çevrimdışı yanıtla AYNI uç; `kaynak: dosya` yalnız ayak izini ayırır (eski backend alanı yok sayar, yine kabul eder). */
+  licenseFile: (metin: string) =>
+    data(apiClient.post<ApiResponse<LicenseDetail>>(`${BASE}/cevrimdisi-yanit`, { yanit: licenseFilePayload(metin), kaynak: "dosya" }, QUIET)),
   relayRequest: (amac: OfflinePurpose, kod?: string) => envelope("aktarma-istegi", amac, kod),
   relayResponse: (yanit: unknown) =>
     data(apiClient.post<ApiResponse<LicenseDetail>>(`${BASE}/aktarma-yaniti`, { yanit }, QUIET)),

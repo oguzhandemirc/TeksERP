@@ -6,8 +6,8 @@
 // NE ÖLÇER: `src/lib/license/state.ts` + `state-rules.ts` + `saat.ts`. Her kural bir
 // POZİTİF (kural tetiklenir) ve bir KARŞI (komşu koşulda tetiklenmez) kontrolle ölçülür;
 // belgeler protokolün gerçek imzalayıcısı + doğrulayıcısından geçer (elle nesne yok).
-//   ⭐ fabrika ASLA aniden durmaz: ek süre İMZALI tarihten · zamanın getirdiği KISITLI iki
-//      anahtarlı · saat ileri/geri erken bitirmez · ÖLÇÜLEMEDİ'de üretim açık · gözlemde
+//   ⭐ fabrika ASLA aniden durmaz: ek süre İMZALI tarihten (v2: ödenmiş tarih P) · zamanın getirdiği
+//      KISITLI iki anahtarlı (ikincisi: son 24 saatte başarılı kira alışverişi YOK) · saat ileri/geri erken bitirmez · ÖLÇÜLEMEDİ'de üretim açık · gözlemde
 //      uygulanan etki bugünkü davranış (sıfır fark)
 //   ⭐ kaçış yok: kirayı/HAK'ı silmek ek süreyi yenilemez, K4'ü kaldırmaz, kipi gevşetmez
 //
@@ -30,6 +30,20 @@
 //   P3 SAAT_KAYIK kademe taşıdı (UYARI)                          → 1 ❌ (§6e)
 //   P4 üst eşik kapalı süre kredisini yok saydı                  → 1 ❌ (§5f)
 //   P5 okunamayan kira YOK sayıldı (KIRA_YOK)                    → 1 ❌ (§16a)
+//   L2-5 (lisans v2: P modeli · K1 bant · K3 ikinci anahtar):
+//   S1 P modeli kapalı (paidThrough hep null)                  → 15 ❌ (§5c · §17 · §18)
+//   S2 ufuk P'yi sınırlamaz                                     → 4 ❌ (§17f/g/i/m)
+//   S3 ufuk sınıf tavanı kırpması kalktı                         → 1 ❌ (§17m)
+//   S4 bant görünürlük koşulu kalktı                            → 3 ❌ (§18c/d/i)
+//   S5 sözleşme sonu yok sayıldı                                → 1 ❌ (§18b)
+//   S6 ikinci anahtar hep "internet var"                        → 15 ❌ (§4 · §5d · §8 · §9 · §12c · §17 · §19a)
+//   S7 durum kaydının son kirası sayılmaz                       → 1 ❌ (§4e)
+//   S8 gelecek tarihli "son kira" süzgeci kalktı                → 1 ❌ (§4g)
+//   S9 tek v2 alanı yeter                                       → 2 ❌ (§17k · §19a)
+//   S10 HAK silinince kiranın P'si sürer                        → 4 ❌ (§17j/k/l · §19a)
+//   S11 bütünlük merdiveni eski anahtar                         → 1 ❌ (§4h)
+//   S12 "7 gün internetsiz" yerine 24 saat                      → 1 ❌ (§18d)
+//   S13 v1'de kira çapası kalktı                                → 29 ❌ (§19a kâhini dahil)
 //   Her mutasyonun UYGULANDIĞI (sha farkı) ve geri alındığı (sha eşitliği) ayrıca ölçüldü.
 //   Doğuşta ısıran GERÇEK kusur: §5e — zehirli yüksek suyu üst eşikte tavanlamak güvenilir
 //   saati duvarın ilerisine itip sahte SAAT_GERİ üretiyordu; `saat.ts` bu dilimde düzeltildi.
@@ -112,7 +126,6 @@ function girdi(s: Senaryo = {}): LicenseStateInput {
     butunluk: "KAPSAM_DISI",
     derlemeTarihiMs: SIMDI - 30 * DAY_MS,
     ilkAcilisMs: SIMDI - 400 * DAY_MS,
-    sonYoklamaBasarisizMi: false,
     varsayilanKip: "gozlem",
     sonKiraZorlamasi: null,
     sonYaptirim: null,
@@ -137,6 +150,40 @@ function eskiKira(gun: number, bitisGun: number, ek: Partial<LeaseDoc> = {}): Se
     kira: { verilis: msToIso(verilis), sunucuSaati: msToIso(verilis), bitis: msToIso(SIMDI - bitisGun * DAY_MS), ...ek },
     saat: { monotonik: { kiraId: KIRA_ID, gecenMs: gun * DAY_MS } },
   };
+}
+
+interface V2 {
+  /** P = SIMDI + pGun gün; null = ödeme beyanı süresiz. */
+  readonly pGun: number | null;
+  /** HAK'ın çevrimdışı ufku (gün; null = süresiz). Varsayılan 400. */
+  readonly ufuk?: number | null;
+  /** Kira (ve son başarılı alışveriş) kaç SAAT önce; varsayılan 1. */
+  readonly kiraSaat?: number;
+  /** Eski vade (`gecerlilikBitis`): "P" = P'ye eşit (sözleşme sonu, varsayılan) · sayı = P + gün (taksit: 15) · null. */
+  readonly vade?: "P" | number | null;
+}
+
+/** v2 belgeleri: HAK ufuk, kira ödenmiş tarih taşır; monotonik birikim kiranın yaşıyla uyumlu. */
+function v2(o: V2): Senaryo {
+  const saat = o.kiraSaat ?? 1;
+  const verilis = SIMDI - saat * SAAT;
+  const p = o.pGun === null ? null : SIMDI + o.pGun * DAY_MS;
+  const vade = o.vade === undefined ? "P" : o.vade;
+  const gecerlilikBitis = vade === null || p === null ? null : msToIso(vade === "P" ? p : p + vade * DAY_MS);
+  return {
+    hak: { cevrimdisiUfukGun: o.ufuk === undefined ? 400 : o.ufuk },
+    kira: { verilis: msToIso(verilis), sunucuSaati: msToIso(verilis), bitis: msToIso(verilis + 29 * DAY_MS), odenmisTarih: p === null ? null : msToIso(p), gecerlilikBitis },
+    saat: { monotonik: { kiraId: KIRA_ID, gecenMs: saat * SAAT } },
+  };
+}
+
+/** Aynı senaryonun v2 alanı çıkarılmış hâli: "hak" (ufuk yok) · "kira" (P yok) · "ikisi" (v1 belge). */
+function alansiz(s: Senaryo, alan: "hak" | "kira" | "ikisi"): Senaryo {
+  const hak: Partial<EntitlementDoc> = typeof s.hak === "object" ? { ...s.hak } : {};
+  const kira: Partial<LeaseDoc> = typeof s.kira === "object" ? { ...s.kira } : {};
+  if (alan !== "kira") delete hak.cevrimdisiUfukGun;
+  if (alan !== "hak") delete kira.odenmisTarih;
+  return { ...s, hak, kira };
 }
 
 function normalBolumu(): void {
@@ -176,14 +223,41 @@ function ekSureBolumu(): void {
   check("§3e ek süre 0 gün: süre biter bitmez iki anahtar sorusu", nedenVar(s, "EK_SURE_BITTI"), ozet(s));
 }
 
+/** Vadesi `vadeGun` gün önce dolmuş, `saat` saat önce verilmiş (dolayısıyla son başarılı alışveriş o an) kira. */
+function vadesiGecmis(saat: number, vadeGun = 61): Senaryo {
+  const verilis = SIMDI - saat * SAAT;
+  return {
+    kira: { verilis: msToIso(verilis), sunucuSaati: msToIso(verilis), bitis: msToIso(verilis + 29 * DAY_MS), gecerlilikBitis: msToIso(SIMDI - vadeGun * DAY_MS) },
+    saat: { monotonik: { kiraId: KIRA_ID, gecenMs: saat * SAAT } },
+  };
+}
+
 function ikiAnahtarBolumu(): void {
-  console.log("\n§4 — zamanın getirdiği KISITLI iki anahtarlıdır");
-  const bitti = eskiKira(75, 31);
-  const a = durum({ ...bitti, girdi: { sonYoklamaBasarisizMi: true } });
-  check("§4a ⭐ süre+ek süre bitti VE yoklama başarısız → KISITLI", a.hesaplananKademe === "KISITLI", ozet(a));
-  const b = durum(bitti);
-  check("§4b ⭐ süre bitti ama yoklama BAŞARILI → EK_SÜRE (0 gün), kısıtlama yok", b.hesaplananKademe === "EK_SURE" && b.ekSureKalanGun === 0, ozet(b));
-  check("§4c neden portala raporlanır (EK_SURE_BITTI)", nedenVar(b, "EK_SURE_BITTI"));
+  console.log("\n§4 — zamanın getirdiği KISITLI iki anahtarlıdır: ikinci anahtar 'son 24 saatte başarılı kira alışverişi YOK' (K3)");
+  const a = durum(vadesiGecmis(25));
+  check("§4a ⭐ vade+ek süre bitti VE son başarılı alışveriş 25 saat önce → KISITLI", a.hesaplananKademe === "KISITLI" && !a.baglanti.internetVar, ozet(a));
+  const b = durum(vadesiGecmis(23));
+  check("§4b ⭐ aynı süre, son alışveriş 23 saat önce (internet VAR) → EK_SÜRE (0 gün), kısıtlama yok", b.hesaplananKademe === "EK_SURE" && b.ekSureKalanGun === 0 && b.baglanti.internetVar, ozet(b));
+  check("§4c neden portala raporlanır (EK_SURE_BITTI); son alışveriş = kiranın sunucu saati", nedenVar(b, "EK_SURE_BITTI") && b.baglanti.sonAlisverisMs === SIMDI - 23 * SAAT);
+  check(
+    "§4d ⭐ bellekteki yoklama sinyali girdi DEĞİL: adresi kapalı / hiç yoklamamış kurulum da merdivene girer (yalnız imzalı kira sayılır)",
+    !("sonYoklamaBasarisizMi" in girdi()) && durum(vadesiGecmis(72)).hesaplananKademe === "KISITLI",
+  );
+  const hakEski = { verilis: msToIso(SIMDI - 100 * DAY_MS) };
+  const taze = durum({ hak: hakEski, kira: "YOK", girdi: { sonKira: { kiraId: randomUUID(), verilisMs: SIMDI - 2 * SAAT } } });
+  check("§4e ⭐ kira dosyası silindi ama durum kaydının son kirası 2 saat önce → internet VAR, EK_SÜRE (0 gün)", taze.hesaplananKademe === "EK_SURE" && taze.ekSureKalanGun === 0, ozet(taze));
+  const bayat = durum({ hak: hakEski, kira: "YOK", girdi: { sonKira: { kiraId: randomUUID(), verilisMs: SIMDI - 2 * DAY_MS } } });
+  check("§4f karşı: durum kaydının son kirası 2 gün önce → KISITLI", bayat.hesaplananKademe === "KISITLI", ozet(bayat));
+  const ileri = durum({ hak: hakEski, kira: "YOK", girdi: { sonKira: { kiraId: randomUUID(), verilisMs: SIMDI + 30 * DAY_MS } } });
+  check("§4g kurcalı kayıt: güvenilir saatin ötesindeki 'son kira' internet sayılmaz → KISITLI", ileri.hesaplananKademe === "KISITLI" && ileri.baglanti.sonAlisverisMs === null, ozet(ileri));
+  const butunluk = { butunluk: "GECERSIZ" as const, butunlukIlkUyusmazlikMs: SIMDI - 31 * DAY_MS };
+  const bk = durum({ ...eskiKira(2, -20), girdi: butunluk });
+  const bv = durum({ girdi: butunluk });
+  check(
+    "§4h bütünlük merdiveni AYNI ikinci anahtarı kullanır: 31. gün + son alışveriş 2 gün önce → KISITLI · 1 saat önce → EK_SÜRE (0)",
+    bk.hesaplananKademe === "KISITLI" && bv.hesaplananKademe === "EK_SURE" && bv.ekSureKalanGun === 0,
+    `${ozet(bk)} | ${ozet(bv)}`,
+  );
 }
 
 function saatIleriBolumu(): void {
@@ -192,10 +266,10 @@ function saatIleriBolumu(): void {
   check("§5a ⭐ monotonik varken 90 gün ileri saat → ÖLÇÜLEMEDİ(SAAT_İLERİ), kademe düşmez", d.saat.finding === "SAAT_ILERI" && d.hesaplananKademe === "UYARI", ozet(d));
   check("§5b güvenilir saat monotonik tahmine sabitlenir", d.saat.trustedMs === SIMDI && d.saat.source === "MONOTONIK");
   const durumsuz = { saat: { duvarMs: SIMDI + 90 * DAY_MS, monotonik: null, durumDosyasiGecerli: false } };
-  const b = durum(durumsuz);
-  check("§5c ⭐ durum kaydı da yok + yoklama BAŞARILI → EK_SÜRE, KISITLI değil (L25)", b.hesaplananKademe === "EK_SURE", ozet(b));
-  const c = durum({ ...durumsuz, girdi: { sonYoklamaBasarisizMi: true } });
-  check("§5d karşı: aynı durumda yoklama da başarısızsa KISITLI (ikinci anahtar budur)", c.hesaplananKademe === "KISITLI", ozet(c));
+  const b = durum({ ...v2({ pGun: 365 }), ...durumsuz });
+  check("§5c ⭐ v2: durum kaydı yok + saat 90 gün ileri → P'ye (1 yıl) dek çalışır, ek süre/kısıtlama YOK", b.hesaplananKademe === "UYARI" && nedenVar(b, "DURUM_DOSYASI"), ozet(b));
+  const c = durum(durumsuz);
+  check("§5d karşı: v1 belge aynı durumda → kira bitişi + ek süre geçti, son alışveriş 90 gün önce → KISITLI (ikinci anahtar budur)", c.hesaplananKademe === "KISITLI", ozet(c));
   const z = durum({ saat: { yuksekSuMs: SIMDI + 200 * DAY_MS } });
   check("§5e zehirli yüksek su (geçmişte ileri giden saat) tavanlanır, ek süre doğmaz", z.saat.finding === "SAAT_ILERI" && z.hesaplananKademe === "UYARI" && z.saat.trustedMs === SIMDI, ozet(z));
   // Makine 3 gün KAPALI kaldı: monotonik tahmin (alt sınır) duvarın 3 gün gerisinde. Tutarlı saatle yazılmış
@@ -255,8 +329,10 @@ function etkinlesmemisBolumu(): void {
   console.log("\n§8 — hiç etkinleşmemiş kurulum: ilk açılıştan 30 gün");
   const a = durum({ hak: "YOK", kira: "YOK", girdi: { ilkAcilisMs: SIMDI - 10 * DAY_MS, varsayilanKip: "zorla" } });
   check("§8a 10. gün → GEÇERSİZ(HAK_YOK) + EK_SÜRE 20 gün", a.gecerlilik === "GECERSIZ" && a.hesaplananKademe === "EK_SURE" && a.ekSureKalanGun === 20, ozet(a));
-  const b = durum({ hak: "YOK", kira: "YOK", girdi: { ilkAcilisMs: SIMDI - 31 * DAY_MS, sonYoklamaBasarisizMi: true, varsayilanKip: "zorla" } });
-  check("§8b 31. gün → KISITLI", b.hesaplananKademe === "KISITLI" && b.uygulananKademe === "KISITLI", ozet(b));
+  const b = durum({ hak: "YOK", kira: "YOK", girdi: { ilkAcilisMs: SIMDI - 31 * DAY_MS, varsayilanKip: "zorla" } });
+  check("§8b ⭐ 31. gün → KISITLI (K3: etkinleşmemiş kurulum hiç alışveriş yapmadı — yoklama sinyali beklenmez)", b.hesaplananKademe === "KISITLI" && b.uygulananKademe === "KISITLI", ozet(b));
+  const g = durum({ hak: "YOK", kira: "YOK", girdi: { ilkAcilisMs: SIMDI - 31 * DAY_MS } });
+  check("§8d gözlem derlemesinde (Faz 4 öncesi) aynı kurulum: hesaplanan KISITLI, uygulanan NORMAL (sıfır fark)", g.hesaplananKademe === "KISITLI" && g.uygulananKademe === "NORMAL" && g.uygulanan === OBSERVE_EFFECT, ozet(g));
   const c = durum({ hak: "YOK", kira: "YOK", girdi: { ilkAcilisMs: null } });
   check("§8c ilk açılış bilinmiyor → ÖLÇÜLEMEDİ nedeni, kısıtlama yok", nedenVar(c, "ILK_ACILIS_BILINMIYOR") && c.hesaplananKademe === "UYARI", ozet(c));
 }
@@ -264,7 +340,7 @@ function etkinlesmemisBolumu(): void {
 function kacisBolumu(): void {
   console.log("\n§9 — silmek kaçış değildir");
   const hakEski = { verilis: msToIso(SIMDI - 100 * DAY_MS) };
-  const a = durum({ hak: hakEski, kira: "YOK", girdi: { sonYoklamaBasarisizMi: true, sonKiraZorlamasi: true } });
+  const a = durum({ hak: hakEski, kira: "YOK", girdi: { sonKiraZorlamasi: true } });
   check("§9a ⭐ kira silindi → çapa HAK verilişi; ek süre YENİLENMEZ → KISITLI", a.hesaplananKademe === "KISITLI" && a.uygulananKademe === "KISITLI", ozet(a));
   check("§9b ⭐ silinen kira kipi gevşetmez (son kiranın zorlaması)", a.kip === "zorla");
   const k4 = durum({ kira: { yaptirim: { kademe: "K4", mesaj: null, kisitlamaTarihi: null, donmusModuller: [], guncellemeDonuk: false } } });
@@ -273,7 +349,7 @@ function kacisBolumu(): void {
   check("§9d karşı: taze HAK + kira yok → EK_SÜRE (29 gün), anında kısıtlama değil", yeni.hesaplananKademe === "EK_SURE" && yeni.ekSureKalanGun === 29, ozet(yeni));
   const h = durum({ hak: "BOZUK", ...eskiKira(20, -10) });
   check("§9e HAK bozuk ama kira kuruluma bağlı → çapa kira, anında kısıtlama yok", h.gecerlilik === "GECERSIZ" && h.hesaplananKademe === "UYARI", ozet(h));
-  const kb = durum({ kira: "BOZUK", hak: hakEski, girdi: { sonYoklamaBasarisizMi: true, sonKiraZorlamasi: true } });
+  const kb = durum({ kira: "BOZUK", hak: hakEski, girdi: { sonKiraZorlamasi: true } });
   check("§9f kira bozuk → silinmiş gibi (HAK verilişinden) KISITLI", kb.hesaplananKademe === "KISITLI" && nedenVar(kb, "KIRA_GECERSIZ"), ozet(kb));
 }
 
@@ -323,8 +399,11 @@ function bakimBolumu(): void {
   check("§12a bakım içinde çıkmış sürüm → NORMAL, yalnız güncelleme kesilir", a.hesaplananKademe === "NORMAL" && !a.uygulanan.guncellemeIzni && nedenVar(a, "BAKIM_BITTI"), ozet(a));
   const b = durum({ hak: bitmis, girdi: { derlemeTarihiMs: SIMDI - 2 * DAY_MS } });
   check("§12b bakım SONRASI çıkmış sürüm → EK_SÜRE (28 gün)", b.hesaplananKademe === "EK_SURE" && b.ekSureKalanGun === 28, ozet(b));
-  const c = durum({ hak: { bakimBitis: msToIso(SIMDI - 60 * DAY_MS) }, girdi: { derlemeTarihiMs: SIMDI - 40 * DAY_MS, sonYoklamaBasarisizMi: true } });
-  check("§12c ihlalde 30 gün geçti + yoklama başarısız → KISITLI", c.hesaplananKademe === "KISITLI" && nedenVar(c, "BAKIM_IHLALI"), ozet(c));
+  const ihlal = { hak: { bakimBitis: msToIso(SIMDI - 60 * DAY_MS) }, girdi: { derlemeTarihiMs: SIMDI - 40 * DAY_MS } };
+  const c = durum({ ...ihlal, kira: eskiKira(2, -20).kira, saat: eskiKira(2, -20).saat });
+  check("§12c ihlalde 30 gün geçti + son alışveriş 2 gün önce → KISITLI", c.hesaplananKademe === "KISITLI" && nedenVar(c, "BAKIM_IHLALI"), ozet(c));
+  const ci = durum(ihlal);
+  check("§12f karşı: aynı ihlal, son alışveriş 1 saat önce (internet VAR) → EK_SÜRE (0 gün)", ci.hesaplananKademe === "EK_SURE" && ci.ekSureKalanGun === 0, ozet(ci));
   const d = durum({ hak: { bakimBitis: msToIso(SIMDI + 10 * DAY_MS) } });
   check("§12d bakıma 10 gün → bilgi nedeni, kademe NORMAL", d.nedenler.some((n) => n.kod === "BAKIM_BITIYOR" && n.ayrinti === "10") && d.hesaplananKademe === "NORMAL", ozet(d));
   const e = durum({ girdi: { derlemeTarihiMs: null } });
@@ -409,6 +488,146 @@ function depoBolumu(): void {
   check("§16c karşı: kira gerçekten YOK → KIRA_YOK (GEÇERSİZ)", nedenVar(y, "KIRA_YOK") && y.gecerlilik === "GECERSIZ", ozet(y));
 }
 
+function odenmisTarihBolumu(): void {
+  console.log("\n§17 — v2 süre çapası: ödenmiş tarih P = min(kira.odenmisTarih, kira.verilis + HAK ufku); kira bitişi yalnız tazelik");
+  const ic = v2({ pGun: 60, kiraSaat: 200 * 24 });
+  const a = durum(ic);
+  check(
+    "§17a ⭐ 200 gün internetsiz: kira bitişi 171 gün önce geçti ama P 60 gün sonra → NORMAL, GEÇERLİ, süre bulgusu yok",
+    a.hesaplananKademe === "NORMAL" && a.gecerlilik === "GECERLI" && !nedenVar(a, "KIRA_SURESI_DOLDU") && a.odenmisTarih?.tarihMs === SIMDI + 60 * DAY_MS && a.odenmisTarih.kaynak === "ODEME",
+    ozet(a),
+  );
+  const v1 = durum(alansiz(ic, "ikisi"));
+  check("§17b karşı: aynı belgeler P alanları olmadan → eski çapa (kira bitişi) → KISITLI", v1.hesaplananKademe === "KISITLI" && nedenVar(v1, "KIRA_SURESI_DOLDU") && v1.odenmisTarih === null, ozet(v1));
+  const c = durum(v2({ pGun: -5, kiraSaat: 50 * 24 }));
+  check(
+    "§17c ⭐ P 5 gün önce geçti (internetsiz) → EK_SÜRE 25 gün (ODENMIS_TARIH_DOLDU), HAK tavanı sürer",
+    c.hesaplananKademe === "EK_SURE" && c.ekSureKalanGun === 25 && nedenVar(c, "ODENMIS_TARIH_DOLDU") && !isModuleLicensed(c, "iplik.enabled") && isModuleLicensed(c, "finance.enabled"),
+    ozet(c),
+  );
+  const d = durum(v2({ pGun: -31, kiraSaat: 50 * 24 }));
+  check("§17d ⭐ P + 30 gün geçti, internetsiz → KISITLI (veri erişimi bandı)", d.hesaplananKademe === "KISITLI" && nedenVar(d, "EK_SURE_BITTI") && d.hesaplanan.bant?.ton === "tehlike", ozet(d));
+  const e = durum(v2({ pGun: -31 }));
+  check("§17e ⭐ P + 30 gün geçti ama internet VAR → EK_SÜRE (0 gün): kısıtlamayı satıcı getirir", e.hesaplananKademe === "EK_SURE" && e.ekSureKalanGun === 0, ozet(e));
+  const f1 = durum(v2({ pGun: 730, ufuk: 200, kiraSaat: 210 * 24 }));
+  check(
+    "§17f ⭐ ufuk P'yi sınırlar (ALT ödeme tarihini uzatamaz): ödeme 2 yıl sonra, ufuk 200 gün, kira 210 gün önce → P 10 gün önce, EK_SÜRE 20",
+    f1.odenmisTarih?.kaynak === "UFUK" && f1.odenmisTarih.tarihMs === SIMDI - 10 * DAY_MS && f1.hesaplananKademe === "EK_SURE" && f1.ekSureKalanGun === 20,
+    ozet(f1),
+  );
+  const g = durum(v2({ pGun: 730, ufuk: 200, kiraSaat: 190 * 24 }));
+  check("§17g karşı: kira 190 gün önce → P 10 gün sonra, NORMAL", g.hesaplananKademe === "NORMAL" && g.odenmisTarih?.tarihMs === SIMDI + 10 * DAY_MS, ozet(g));
+  const h = durum(v2({ pGun: null, ufuk: null, kiraSaat: 300 * 24 }));
+  check("§17h süresiz (ödeme beyanı ve ufuk süresiz): 300 gün internetsiz → NORMAL, P yok", h.hesaplananKademe === "NORMAL" && h.odenmisTarih?.tarihMs === null && h.odenmisTarih.kaynak === "SURESIZ", ozet(h));
+  const i = durum(v2({ pGun: null, ufuk: 200, kiraSaat: 201 * 24 }));
+  check("§17i karşı: ödeme süresiz ama ufuk 200 gün, kira 201 gün önce → EK_SÜRE (P ufuktan)", i.hesaplananKademe === "EK_SURE" && i.odenmisTarih?.kaynak === "UFUK", ozet(i));
+  const silindi = durum({ ...ic, hak: "YOK" });
+  const bozuk = durum({ ...ic, hak: "BOZUK" });
+  check(
+    "§17j ⭐ HAK silinir ya da bozulursa P UZATILMAZ: ufuk bilinmez, eski çapaya (kira bitişi) düşer → KISITLI (silmek yalnız kısaltır)",
+    silindi.odenmisTarih === null && silindi.hesaplananKademe === "KISITLI" && nedenVar(silindi, "KIRA_SURESI_DOLDU") && bozuk.odenmisTarih === null && bozuk.hesaplananKademe === "KISITLI",
+    `${ozet(silindi)} | ${ozet(bozuk)}`,
+  );
+  const ufuksuz = durum(alansiz(ic, "hak"));
+  const odemesiz = durum(alansiz(ic, "kira"));
+  check(
+    "§17k ⭐ iki alandan biri yoksa eski çapa: HAK ufuk taşımıyor / kira P taşımıyor → KIRA_SURESI_DOLDU, P yok",
+    ufuksuz.odenmisTarih === null && nedenVar(ufuksuz, "KIRA_SURESI_DOLDU") && odemesiz.odenmisTarih === null && nedenVar(odemesiz, "KIRA_SURESI_DOLDU"),
+    `${ozet(ufuksuz)} | ${ozet(odemesiz)}`,
+  );
+  const demo = durum({ ...v2({ pGun: 60, kiraSaat: 50 * 24 }), hak: { sinif: "DEMO", cevrimdisiUfukGun: 400 } });
+  check(
+    "§17l DEMO HAK'ı 400 gün ufuk taşıyamaz: doğrulayıcı RED (UFUK_TAVANI_ASIMI) → P yok, eski çapa",
+    demo.nedenler.some((n) => n.kod === "HAK_GECERSIZ" && n.ayrinti === "UFUK_TAVANI_ASIMI") && demo.odenmisTarih === null,
+    ozet(demo),
+  );
+  const gecerli = verifyEntitlement(hakBas(f, { cevrimdisiUfukGun: 400 }), f.kokler);
+  if (!gecerli.ok) throw new Error("fikstür HAK doğrulanmadı");
+  const demoElle = { status: "GECERLI" as const, value: { ...gecerli.value, document: { ...gecerli.value.document, sinif: "DEMO" as const } } };
+  const k = durum({ ...v2({ pGun: 60, kiraSaat: 50 * 24 }), girdi: { hak: demoElle } });
+  check(
+    "§17m savunma derinliği: doğrulayıcıyı atlayan DEMO + 400 gün ufuk yine 45 güne kırpılır → P = kira + 45 (5 gün önce), EK_SÜRE 25",
+    k.odenmisTarih?.kaynak === "UFUK" && k.odenmisTarih.tarihMs === SIMDI - 5 * DAY_MS && k.ekSureKalanGun === 25,
+    ozet(k),
+  );
+}
+
+function bantBolumu(): void {
+  console.log("\n§18 — bilgi bandı (K1): P − 30 gün ≤ T < P, kademe NORMAL; yalnız internetsizken ya da P sözleşme sonuyken");
+  const a = durum(v2({ pGun: 20, kiraSaat: 10 * 24, vade: 15 }));
+  check(
+    "§18a ⭐ internetsiz (son alışveriş 10 gün önce), taksit, P 20 gün sonra → NORMAL + BİLGİ bandı (kalan gün + QR/dosya)",
+    a.hesaplananKademe === "NORMAL" && a.gecerlilik === "GECERLI" && a.hesaplanan.bant?.ton === "bilgi" && /20 gün/.test(a.hesaplanan.bant.metin) && /QR/.test(a.hesaplanan.bant.metin) &&
+      a.nedenler.some((n) => n.kod === "ODEME_YAKLASIYOR" && n.ayrinti === "20"),
+    ozet(a),
+  );
+  const b = durum(v2({ pGun: 20, vade: "P" }));
+  check(
+    "§18b ⭐ sözleşme sonu (vade = P), internet VAR → bant VAR (sözleşme metni)",
+    b.hesaplanan.bant?.ton === "bilgi" && /sözleşmesi 20 gün/.test(b.hesaplanan.bant.metin) && nedenVar(b, "ODEME_YAKLASIYOR"),
+    ozet(b),
+  );
+  const c = durum(v2({ pGun: 20, vade: 15 }));
+  check("§18c ⭐ internetli taksit (vade = P + 15) → bant YOK, neden YOK, NORMAL", c.hesaplanan.bant === null && !nedenVar(c, "ODEME_YAKLASIYOR") && c.hesaplananKademe === "NORMAL", ozet(c));
+  const alti = durum(v2({ pGun: 20, kiraSaat: 6 * 24, vade: 15 }));
+  const sekiz = durum(v2({ pGun: 20, kiraSaat: 8 * 24, vade: 15 }));
+  check("§18d 'internetsiz' = son alışveriş 7 günden eski: taksitte 6 gün → bant yok · 8 gün → var", alti.hesaplanan.bant === null && sekiz.hesaplanan.bant?.ton === "bilgi", `${ozet(alti)} | ${ozet(sekiz)}`);
+  const uzak = durum(v2({ pGun: 31, kiraSaat: 10 * 24 }));
+  const yakin = durum(v2({ pGun: 1, kiraSaat: 10 * 24 }));
+  check("§18e pencere: P 31 gün sonra → bant yok · 1 gün sonra → '1 gün'", uzak.hesaplanan.bant === null && /1 gün/.test(yakin.hesaplanan.bant?.metin ?? ""), `${ozet(uzak)} | ${ozet(yakin)}`);
+  check("§18f bant UYARI kademesi değildir: ek süre sayacı yok, kademe NORMAL", a.ekSureKalanGun === null && a.uygulananKademe === "NORMAL" && a.uygulanan.bant?.ton === "bilgi");
+  const gozlem = durum({ ...v2({ pGun: 20, kiraSaat: 10 * 24 }), kira: { ...(v2({ pGun: 20, kiraSaat: 10 * 24 }).kira as Partial<LeaseDoc>), zorlama: false } });
+  check("§18g gözlem kipinde bant HESAPLANIR ama UYGULANMAZ (sıfır fark)", gozlem.hesaplanan.bant?.ton === "bilgi" && gozlem.uygulanan === OBSERVE_EFFECT, ozet(gozlem));
+  const v1 = durum(alansiz(v2({ pGun: 20, kiraSaat: 10 * 24 }), "ikisi"));
+  check("§18h karşı: v1 belge aynı tarihlerde → bant yok, ODEME_YAKLASIYOR yok", v1.hesaplanan.bant === null && !nedenVar(v1, "ODEME_YAKLASIYOR"), ozet(v1));
+  const vadesiz = durum(v2({ pGun: 20, vade: null }));
+  check("§18i vade yok (gecerlilikBitis null) sözleşme sonu sayılmaz → internetliyken bant yok", vadesiz.hesaplanan.bant === null, ozet(vadesiz));
+  const olcu = durum({ ...v2({ pGun: 20, kiraSaat: 10 * 24 }), saat: { monotonik: null, durumDosyasiGecerli: false } });
+  check("§18j ölçülemedi (UYARI) bandı bilgi bandından önce gelir", olcu.hesaplanan.bant?.ton === "uyari" && nedenVar(olcu, "ODEME_YAKLASIYOR"), ozet(olcu));
+}
+
+/** v1 belgelerinin bugünkü (eski) davranışının BAĞIMSIZ kâhini: çapa min(kira bitişi, vade), ek süre 30, iki anahtar. */
+function v1Kahin(o: { kiraSaat: number; vadeGun: number | null }): { kademe: string; kod: string | null; kalan: number | null; bitti: boolean } {
+  const verilis = SIMDI - o.kiraSaat * SAAT;
+  const bitis = verilis + 29 * DAY_MS;
+  const vade = o.vadeGun === null ? Number.POSITIVE_INFINITY : SIMDI + o.vadeGun * DAY_MS;
+  const capa = Math.min(bitis, vade);
+  const kod = vade < bitis ? "VADE_DOLDU" : "KIRA_SURESI_DOLDU";
+  if (SIMDI < capa) return { kademe: "NORMAL", kod: null, kalan: null, bitti: false };
+  const son = capa + 30 * DAY_MS;
+  if (SIMDI < son) return { kademe: "EK_SURE", kod, kalan: Math.ceil((son - SIMDI) / DAY_MS), bitti: false };
+  return o.kiraSaat <= 24 ? { kademe: "EK_SURE", kod, kalan: 0, bitti: true } : { kademe: "KISITLI", kod, kalan: null, bitti: true };
+}
+
+function sifirFarkBolumu(): void {
+  console.log("\n§19 — eski belge (P alanı yok) ile SIFIR FARK: kâhin tablosu + tek alanlı belge v1 gibi davranır");
+  const sapma: string[] = [];
+  let satir = 0;
+  for (const kiraSaat of [1, 30, 40 * 24]) {
+    for (const vadeGun of [null, -45, -5, 20]) {
+      const verilis = SIMDI - kiraSaat * SAAT;
+      const sen: Senaryo = {
+        kira: { verilis: msToIso(verilis), sunucuSaati: msToIso(verilis), bitis: msToIso(verilis + 29 * DAY_MS), gecerlilikBitis: vadeGun === null ? null : msToIso(SIMDI + vadeGun * DAY_MS) },
+        saat: { monotonik: { kiraId: KIRA_ID, gecenMs: kiraSaat * SAAT } },
+      };
+      const d = durum(sen);
+      const k = v1Kahin({ kiraSaat, vadeGun });
+      const iz = (x: LicenseState) => JSON.stringify([x.hesaplananKademe, x.nedenler, x.hesaplanan.bant, x.ekSureKalanGun, x.odenmisTarih]);
+      const tek = [durum({ ...sen, hak: { cevrimdisiUfukGun: 400 } }), durum({ ...sen, kira: { ...(sen.kira as Partial<LeaseDoc>), odenmisTarih: msToIso(SIMDI + 500 * DAY_MS) } })];
+      const uyar =
+        d.hesaplananKademe === k.kademe &&
+        (k.kod === null ? !nedenVar(d, "KIRA_SURESI_DOLDU") && !nedenVar(d, "VADE_DOLDU") : nedenVar(d, k.kod)) &&
+        nedenVar(d, "EK_SURE_BITTI") === k.bitti &&
+        (k.kalan === null || d.ekSureKalanGun === k.kalan) &&
+        d.odenmisTarih === null && !nedenVar(d, "ODEME_YAKLASIYOR") && !nedenVar(d, "ODENMIS_TARIH_DOLDU") &&
+        tek.every((t) => iz(t) === iz(d));
+      satir++;
+      if (!uyar) sapma.push(`kira ${kiraSaat} sa · vade ${vadeGun}: ${ozet(d)} kalan=${d.ekSureKalanGun} ≠ kâhin ${JSON.stringify(k)}`);
+    }
+  }
+  check(`§19a ⭐ ${satir} satırlık v1 tablosu kâhinle birebir; tek v2 alanı taşıyan belge v1'den ayırt edilemez`, sapma.length === 0, sapma.join(" | "));
+}
+
 function safBolumu(): void {
   console.log("\n§13 — saflık ve saat yardımcıları");
   const g = girdi(eskiKira(35, 5));
@@ -445,6 +664,9 @@ bakimBolumu();
 kaliciKararBolumu();
 geriAlmaBolumu();
 depoBolumu();
+odenmisTarihBolumu();
+bantBolumu();
+sifirFarkBolumu();
 safBolumu();
 console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
 process.exit(fail > 0 ? 1 : 0);

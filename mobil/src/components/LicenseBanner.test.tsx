@@ -45,4 +45,11 @@ describe('LicenseBannerView', () => {
     expect(style.top).toBe(24);
     expect(style.backgroundColor).toBe(colors.warningDark);
   });
+
+  it('lisans v2 bilgi bandı (ödenmiş tarih yaklaşıyor) bilgi tonunda; metin backend\'den aynen', () => {
+    const metin = 'Ödenmiş lisans süresi 20 gün sonra doluyor — Lisans ekranından QR ya da lisans dosyasıyla yenileyin.';
+    renderBand({ metin, ton: 'bilgi' });
+    expect(screen.getByText(metin)).toBeTruthy();
+    expect(flatStyle(screen.getByTestId('lisans-bandi')).backgroundColor).toBe(colors.infoDark);
+  });
 });

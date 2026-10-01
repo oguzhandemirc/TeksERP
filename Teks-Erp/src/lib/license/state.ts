@@ -19,7 +19,6 @@ import {
   evaluateLease,
   evaluateMeasurements,
   computeClock,
-  evaluateGrace,
   evaluateSanction,
   sanctionSnapshotOf,
   type Banner,
@@ -30,10 +29,12 @@ import {
 } from "./state-rules";
 import { evaluateRollback, evaluateStore, evaluateVendorClock } from "./state-rules-trust";
 import { evaluateIntegrity, evaluateMaintenance } from "./state-rules-package";
+import { evaluateExchange, evaluateGrace, paidThrough, type ExchangeStatus, type PaidThrough } from "./state-rules-time";
 import type { ClockResult, SanctionSnapshot } from "./saat";
 
 export type { Banner, DocResult, LicenseStateInput, ReasonCode } from "./state-rules";
 export { REASON_CODES, REASON_VALIDITY, DEFAULT_GRACE_DAYS, sanctionSnapshotOf } from "./state-rules";
+export type { ExchangeStatus, PaidThrough } from "./state-rules-time";
 
 /**
  * `allowed` HAK'ın satın alınmış modül listesidir (null = HAK tavanı uygulanmıyor);
@@ -69,6 +70,10 @@ export interface LicenseState {
   readonly devredildi: boolean;
   readonly yaptirimKademesi: SanctionLevel | null;
   readonly saat: ClockResult;
+  /** v2 süre çapası: ödenmiş tarih P. `null` = belgeler P taşımıyor, eski çapa (kira bitişi/vade) işler. */
+  readonly odenmisTarih: PaidThrough | null;
+  /** Son başarılı kira alışverişi: KISITLI'nın ikinci anahtarı ve bilgi bandının "internetsiz" ölçüsü. */
+  readonly baglanti: ExchangeStatus;
 }
 
 /** Gözlem kipinde uygulanan etki: bugünkü davranış — bant yok, güncelleme serbest, tavan yok. */
@@ -177,12 +182,16 @@ export function computeLicenseState(g: LicenseStateInput): LicenseState {
   const clock = computeClock(g, lease?.document ?? null, findings);
   evaluateVendorClock(g, findings);
   const now = clock.trustedMs;
-  evaluateMeasurements(g, lease?.document ?? null, findings);
-  evaluateIntegrity(g, now, findings);
-  evaluateGrace(g, { entitlement, lease: lease?.document ?? null }, now, findings);
+  const leaseDoc = lease?.document ?? null;
+  const exchange = evaluateExchange(g, leaseDoc, now);
+  const paid = paidThrough(entitlement, leaseDoc);
+  const keyed = { ...g, internetVar: exchange.internetVar };
+  evaluateMeasurements(g, leaseDoc, findings);
+  evaluateIntegrity(keyed, now, findings);
+  evaluateGrace(g, { entitlement, lease: leaseDoc, paid, exchange }, now, findings);
   const sanction = sanctionSource(g, lease);
   const restrictionDaysLeft = sanction ? evaluateSanction(sanction, now, findings) : null;
-  if (entitlement) evaluateMaintenance(g, entitlement.document, now, findings);
+  if (entitlement) evaluateMaintenance(keyed, entitlement.document, now, findings);
 
   const validity = computeValidity(findings);
   const computedTier = computeTier(findings, validity);
@@ -202,6 +211,8 @@ export function computeLicenseState(g: LicenseStateInput): LicenseState {
     devredildi: sanction?.devredildi ?? false,
     yaptirimKademesi: sanction?.kademe ?? null,
     saat: clock,
+    odenmisTarih: paid,
+    baglanti: exchange,
   };
 }
 

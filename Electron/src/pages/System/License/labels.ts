@@ -58,6 +58,8 @@ const REASON_LABEL: Record<string, string> = {
   ILK_ACILIS_BILINMIYOR: "İlk açılış tarihi bilinmiyor",
   KIRA_SURESI_DOLDU: "Kira süresi doldu",
   VADE_DOLDU: "Vade doldu",
+  ODENMIS_TARIH_DOLDU: "Ödenmiş lisans süresi doldu",
+  ODEME_YAKLASIYOR: "Ödenmiş lisans süresi bitiyor",
   KIRASIZ_EK_SURE: "Kirasız ek süre",
   ETKINLESTIRME_EK_SURESI: "Etkinleştirme ek süresi",
   EK_SURE_BITTI: "Ek süre bitti",

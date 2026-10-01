@@ -119,7 +119,8 @@ export async function buildPollBody(nowMs: number = Date.now()): Promise<ReturnT
 }
 
 // ── Kira kabulü ─────────────────────────────────────────────────────────────────
-export type LeaseSource = "yoklama" | "etkinlestirme" | "cevrimdisi" | "aktarma" | "tasima" | "dr-devral";
+/** `dosya`: portalın istek gerektirmeyen uzatma dosyası (çevrimdışı yanıtla aynı uç, ayrı ayak izi). */
+export type LeaseSource = "yoklama" | "etkinlestirme" | "cevrimdisi" | "aktarma" | "dosya" | "tasima" | "dr-devral";
 
 interface SanctionView {
   readonly kademe: SanctionLevel | null;

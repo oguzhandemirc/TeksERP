@@ -80,6 +80,13 @@ export interface LicenseDetail {
     devredildi: boolean;
     yaptirimKademesi: SanctionLevel | null;
     saat: { guvenilir: string; kaynak: string; bulgu: string | null; bulguKaynagi: string | null };
+    /**
+     * Lisans v2 süre çapası — ödenmiş tarih (P; `tarih` null = süresiz). `null` = belgeler P taşımıyor,
+     * eski çapa (kira bitişi/vade) işler. Eski backend göndermez.
+     */
+    odenmisTarih?: { tarih: string | null; kaynak: "ODEME" | "UFUK" | "SURESIZ"; sozlesmeSonu: boolean } | null;
+    /** Son başarılı kira alışverişi (imzalı kiradan) ve "internet var" (son 24 saat). Eski backend göndermez. */
+    baglanti?: { sonAlisveris: string | null; internetVar: boolean };
   };
   hak: {
     hakId: string;
@@ -93,6 +100,8 @@ export interface LicenseDetail {
     bakimBitis: string;
     verilis: string;
     bayiId: string | null;
+    /** HAK'ın çevrimdışı ufku (gün; null = süresiz). v1 HAK taşımaz. */
+    cevrimdisiUfukGun?: number | null;
   } | null;
   kira: {
     kiraId: string;
@@ -112,6 +121,8 @@ export interface LicenseDetail {
     yoklamaAraligiDk: number;
     devredildi: boolean;
     kanal: { kod: string; guncelSurumler: { backend?: string; panel?: string; tablet?: string } };
+    /** Kiradaki ödenmiş tarih beyanı (null = süresiz). v1 kira taşımaz. */
+    odenmisTarih?: string | null;
   } | null;
   parmakIzi: {
     olculdu: string | null;

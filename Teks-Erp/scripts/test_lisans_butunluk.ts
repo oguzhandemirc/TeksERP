@@ -292,7 +292,8 @@ function bolum3(): void {
   console.log("\n§3 merdiven · künye · çapa kalıcılığı (saf)");
   const bul = (o: { butunluk: IntegrityOutcome["durum"]; ilk?: number | null; basarisiz?: boolean }): Finding[] => {
     const out: Finding[] = [];
-    evaluateIntegrity({ butunluk: o.butunluk, butunlukIlkUyusmazlikMs: o.ilk ?? null, sonYoklamaBasarisizMi: o.basarisiz ?? false }, NOW, out);
+    // İkinci anahtar (K3): son 24 saatte başarılı kira alışverişi YOK → `internetVar: false`.
+    evaluateIntegrity({ butunluk: o.butunluk, butunlukIlkUyusmazlikMs: o.ilk ?? null, internetVar: !(o.basarisiz ?? false) }, NOW, out);
     return out;
   };
   const f0 = bul({ butunluk: "GECERSIZ" });
@@ -301,8 +302,8 @@ function bolum3(): void {
   const f3 = bul({ butunluk: "GECERSIZ", ilk: NOW - 31 * DAY, basarisiz: true });
   check("§3a çapa yoksa UYARI (BUTUNLUK_GECERSIZ)", f0.length === 1 && f0[0].code === "BUTUNLUK_GECERSIZ" && f0[0].tier === "UYARI");
   check("§3b ilk görülüşten 1 gün → EK_SURE, 29 gün kaldı", f1[0]?.tier === "EK_SURE" && f1[0]?.daysLeft === 29);
-  check("§3c 30 gün geçti + yoklama sürüyor → EK_SURE (0 gün; iki anahtar)", f2[0]?.tier === "EK_SURE" && f2[0]?.daysLeft === 0);
-  check("§3d 30 gün geçti + yoklama başarısız → KISITLI", f3[0]?.tier === "KISITLI");
+  check("§3c 30 gün geçti + internet VAR (son 24 saatte kira alışverişi) → EK_SURE (0 gün; iki anahtar)", f2[0]?.tier === "EK_SURE" && f2[0]?.daysLeft === 0);
+  check("§3d 30 gün geçti + son 24 saatte başarılı alışveriş YOK → KISITLI", f3[0]?.tier === "KISITLI");
   const olc = bul({ butunluk: "OLCULEMEDI" });
   check("§3e ölçülemedi → UYARI (BUTUNLUK_OLCULEMEDI) · GECERLI/KAPSAM_DISI bulgu yok", olc[0]?.code === "BUTUNLUK_OLCULEMEDI" && bul({ butunluk: "GECERLI" }).length === 0 && bul({ butunluk: "KAPSAM_DISI" }).length === 0);
 
