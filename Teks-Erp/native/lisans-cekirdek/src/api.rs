@@ -3,18 +3,21 @@
 //! `lib/license/native.ts` ile sözleşmedir; yanıt `{ok, value}` | `{ok:false, code, message}`.
 use crate::anchor;
 use crate::b64;
-use crate::chain::{self, RootKey};
+use crate::chain::{self, RootKey, VerifiedRevocation};
 use crate::collect;
-use crate::fingerprint::{self, FACTORS, PLACEHOLDER_VALUES};
+use crate::fingerprint::{self, Fingerprint, Rule, FACTORS, PLACEHOLDER_VALUES};
 use crate::integrity;
 use crate::jsonx::js_number;
 use crate::jws;
 use crate::local_protect;
 use crate::module_key;
 use crate::outcome::{code, Fail, Outcome};
+use crate::schema::LICENSE_CLASSES;
 use serde_json::{json, Value};
 
-/// Arayüz sürümü: istek/yanıt biçimi kırılınca artar; yükleyici eşit değilse native'i KULLANMAZ (3: künyede çapa kipi).
+/// Arayüz sürümü: istek/yanıt biçimi kırılınca artar; yükleyici eşit değilse native'i KULLANMAZ (3: künyede çapa
+/// kipi). Lisans v2 (G4 + parmak izi v2) G3 yayınlanmadan indiği için AYNI numarada: yeni uçları taşımayan eski
+/// ABI-3 derlemesini yükleyici işlev listesinden tanır ve açmaz.
 pub const ABI: u32 = 3;
 pub const TEST_ANCHOR: bool = cfg!(feature = "test-anchor");
 
@@ -107,6 +110,21 @@ fn token(req: &Value, field: &str) -> Value {
     req.get(field).cloned().unwrap_or(Value::Null)
 }
 
+/// İstekteki iptal belgesi (JWS metni): yok ya da `null` → iptalsiz. Varsa AYNI çapayla yeniden doğrulanır (JS'ten
+/// gelen "doğrulanmış" iptale güvenilmez); doğrulanamayan belge çağıranın hatasıdır, istek onun koduyla düşer.
+fn revocation_from(req: &Value, field: &str, roots: &[RootKey]) -> Outcome<Option<VerifiedRevocation>> {
+    match req.get(field) {
+        None | Some(Value::Null) => Ok(None),
+        Some(given) => chain::verify_revocation(given, roots).map(Some),
+    }
+}
+
+/// Doğrulayanın "şimdi"si: alan yoksa veriliş sınırı işlemez; varsa sayı olmayan değer (JSON'da NaN/±∞ `null`
+/// olur) NaN sayılır ve sınır onu reddeder (fail-closed).
+fn now_from(req: &Value) -> Option<f64> {
+    req.get("nowMs").map(|v| js_number(v).unwrap_or(f64::NAN))
+}
+
 pub fn verify_jws(req: &Value) -> Value {
     let typ = req.get("typ").and_then(Value::as_str).unwrap_or_default();
     let keys: Vec<(String, Option<[u8; 32]>)> = req
@@ -128,27 +146,66 @@ pub fn verify_jws(req: &Value) -> Value {
 pub fn verify_certificate(req: &Value) -> Value {
     let run = || -> Outcome<Value> {
         let roots = roots_from(req)?;
+        let revocation = revocation_from(req, "iptal", &roots)?;
         let usage = req.get("usage").and_then(Value::as_str).unwrap_or_default();
         let at_ms = req.get("atMs").and_then(js_number).unwrap_or(f64::NAN);
-        Ok(chain::verify_certificate(&token(req, "token"), &roots, usage, at_ms)?.view())
+        Ok(chain::verify_certificate(&token(req, "token"), &roots, usage, at_ms, revocation.as_ref())?.view())
     };
     outcome(run())
 }
 
+/// HAK (+ isteğe bağlı `nowMs` veriliş sınırı ve `iptal` belgesi).
 pub fn verify_entitlement(req: &Value) -> Value {
-    outcome(roots_from(req).and_then(|roots| Ok(chain::verify_entitlement(&token(req, "token"), &roots)?.view())))
+    let run = || -> Outcome<Value> {
+        let roots = roots_from(req)?;
+        let revocation = revocation_from(req, "iptal", &roots)?;
+        Ok(chain::verify_entitlement(&token(req, "token"), &roots, now_from(req), revocation.as_ref())?.view())
+    };
+    outcome(run())
 }
 
 pub fn verify_lease(req: &Value) -> Value {
-    outcome(roots_from(req).and_then(|roots| Ok(chain::verify_lease(&token(req, "token"), &roots)?.view())))
+    let run = || -> Outcome<Value> {
+        let roots = roots_from(req)?;
+        let revocation = revocation_from(req, "iptal", &roots)?;
+        Ok(chain::verify_lease(&token(req, "token"), &roots, revocation.as_ref())?.view())
+    };
+    outcome(run())
+}
+
+/// İPTAL belgesi (G4 §2.3): yalnız çapadaki bir kök imzalar.
+pub fn verify_revocation(req: &Value) -> Value {
+    outcome(roots_from(req).and_then(|roots| Ok(chain::verify_revocation(&token(req, "token"), &roots)?.view())))
+}
+
+/// Mevcut ile gelen iptal belgesinden yüksek sıralısı (ikisi de doğrulanır); ikisi de yoksa `null`.
+pub fn pick_newer_revocation(req: &Value) -> Value {
+    let run = || -> Outcome<Value> {
+        let roots = roots_from(req)?;
+        let current = revocation_from(req, "current", &roots)?;
+        let incoming = revocation_from(req, "incoming", &roots)?;
+        Ok(chain::pick_newer_revocation(current, incoming).map_or(Value::Null, |r| r.view()))
+    };
+    outcome(run())
+}
+
+/// Kiranın beyan ettiği iptal sırasına eldeki belge yetişiyor mu (kira, sonra iptal doğrulanır).
+pub fn is_revocation_current(req: &Value) -> Value {
+    let run = || -> Outcome<Value> {
+        let roots = roots_from(req)?;
+        let lease = chain::verify_lease(&token(req, "lease"), &roots, None)?;
+        let revocation = revocation_from(req, "iptal", &roots)?;
+        Ok(Value::Bool(chain::is_revocation_current(&lease.document, revocation.as_ref())))
+    };
+    outcome(run())
 }
 
 /// İki belgeyi doğrular ve bağlar — JS'ten gelen "doğrulanmış" görünüme güvenilmez.
 pub fn check_lease_binding(req: &Value) -> Value {
     let run = || -> Outcome<Value> {
         let roots = roots_from(req)?;
-        let lease = chain::verify_lease(&token(req, "lease"), &roots)?;
-        let entitlement = chain::verify_entitlement(&token(req, "entitlement"), &roots)?;
+        let lease = chain::verify_lease(&token(req, "lease"), &roots, None)?;
+        let entitlement = chain::verify_entitlement(&token(req, "entitlement"), &roots, None, None)?;
         chain::check_lease_binding(&lease, &entitlement)?;
         Ok(Value::Bool(true))
     };
@@ -196,6 +253,53 @@ pub fn collect_fingerprint(req: &Value) -> Result<Value, String> {
     Ok(json!({ "digest": fingerprint_value(&digest), "measured": measured }))
 }
 
+/// Özet nesnesi (`{f1..f5: özet | null}`); eksik ya da metin/null olmayan etken programcı hatasıdır (`Err`).
+fn fingerprint_arg(req: &Value, field: &str) -> Result<Fingerprint, String> {
+    let Some(Value::Object(given)) = req.get(field) else {
+        return Err(format!("{field}: parmak izi nesnesi değil"));
+    };
+    let mut out: Fingerprint = Default::default();
+    for (i, factor) in FACTORS.iter().enumerate() {
+        out[i] = match given.get(*factor) {
+            Some(Value::Null) => None,
+            Some(Value::String(s)) => Some(s.clone()),
+            _ => return Err(format!("{field}.{factor}: özet ya da null olmalı")),
+        };
+    }
+    Ok(out)
+}
+
+fn exclude_f5(req: &Value) -> bool {
+    req.get("excludeF5").and_then(Value::as_bool).unwrap_or(false)
+}
+
+/// Parmak izi kararı (v1 · `standart` · `zayif`); kural yoksa v1.
+pub fn compare_fingerprints(req: &Value) -> Result<Value, String> {
+    let rule = match req.get("rule") {
+        None | Some(Value::Null) => Rule::from_lease(None),
+        Some(Value::String(name)) => Rule::from_lease(Some(name)),
+        Some(_) => Err("parmak izi kuralı metin değil".to_string()),
+    }?;
+    let decision = fingerprint::compare(&fingerprint_arg(req, "accepted")?, &fingerprint_arg(req, "measured")?, exclude_f5(req), rule);
+    Ok(decision.view())
+}
+
+pub fn assess_identification(req: &Value) -> Result<Value, String> {
+    Ok(fingerprint::assess_identification(&fingerprint_arg(req, "fingerprint")?, exclude_f5(req)))
+}
+
+pub fn can_auto_learn_fingerprint(req: &Value) -> Result<Value, String> {
+    let learns = fingerprint::can_auto_learn(&fingerprint_arg(req, "accepted")?, &fingerprint_arg(req, "measured")?, exclude_f5(req));
+    Ok(json!({ "value": learns }))
+}
+
+/// Sınıf ve imzacı türüne göre çevrimdışı ufuk tavanı (gün; `null` = tavansız).
+pub fn offline_horizon_ceiling_days(req: &Value) -> Result<Value, String> {
+    let class = req.get("sinif").and_then(Value::as_str).filter(|c| LICENSE_CLASSES.contains(c)).ok_or("sınıf tanınmıyor")?;
+    let signer = req.get("signer").and_then(Value::as_str).filter(|s| chain::SIGNER_KINDS.contains(s)).ok_or("imzacı türü tanınmıyor")?;
+    Ok(json!({ "value": chain::offline_horizon_ceiling_days(class, signer) }))
+}
+
 pub fn verify_integrity(req: &Value) -> Value {
     let root = req.get("root").and_then(Value::as_str).unwrap_or_default();
     let keys: Vec<(String, String)> = match req.get("keys") {
@@ -236,8 +340,8 @@ fn in_list(v: Option<&Value>, module: &str) -> bool {
 pub fn unwrap_lease_module_key(req: &Value) -> Value {
     let run = || -> Outcome<Value> {
         let roots = roots_from(req)?;
-        let lease = chain::verify_lease(&token(req, "lease"), &roots)?;
-        let entitlement = chain::verify_entitlement(&token(req, "entitlement"), &roots)?;
+        let lease = chain::verify_lease(&token(req, "lease"), &roots, None)?;
+        let entitlement = chain::verify_entitlement(&token(req, "entitlement"), &roots, None, None)?;
         chain::check_lease_binding(&lease, &entitlement)?;
         let module = req.get("modul").and_then(Value::as_str).unwrap_or_default();
         let kid = req.get("kid").and_then(Value::as_str).unwrap_or_default();

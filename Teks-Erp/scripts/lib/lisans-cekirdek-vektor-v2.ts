@@ -1,10 +1,9 @@
 // Lisans v2 TEST VEKTÖRLERİ (L2-1) — `protokol-v2.json`. `test_` öneki yok → koşucu bunu bekçi saymaz.
-// v1 dosyasından (`protokol.json`) AYRI: native çekirdek bu aileleri L2-2'de tüketmeye başlar; o güne dek
-// `cargo test` v1 dosyasını okumaya devam eder ve main yeşil kalır (açık borç: iki dosya L2-2 sonrası tek
-// dosyada birleşir, VEKTOR_BICIMI artar). Bugün tüketen tek yer `test_lisans_native_kahin` §2'' (bayatlık).
+// v1 dosyasından (`protokol.json`) AYRI (açık borç: iki dosya tek dosyada birleşir, VEKTOR_BICIMI artar). Tüketenler:
+// `test_lisans_native_kahin` (§2'' bayatlık + TS çekirdeği · §4b/§5b/§9e native) ve `cargo test` (`tests/vektorler.rs`, L2-2).
 //
-// Değerlendirme LicenseCore'dan DEĞİL doğrudan protokol işlevlerinden: v2 parametreleri (`nowMs`, iptal,
-// parmak izi kuralı) çekirdek arayüzünde henüz yok (L2-2). Tür → TS işlevi:
+// İki değerlendirici: `degerlendirV2` KÂHİNDİR — beklenen doğrudan protokol işlevlerinden; `degerlendirV2Cekirdek`
+// aynı vektörü bir LicenseCore'da (TS ya da native, L2-2'de doğan v2 parametreleriyle) koşar. Tür → TS işlevi:
 //   hak2 → verifyEntitlement(token, roots, {nowMs, revocation})      · kira2 → verifyLease(token, roots, {revocation})
 //   bag2 → verifyLease + verifyEntitlement + checkLeaseBinding        · iptal → verifyRevocation(token, roots)
 //   iptalSec → pickNewerRevocation (seçilenin sırası)                 · iptalGuncel → isRevocationCurrent
@@ -49,6 +48,7 @@ import {
   type VerifiedRevocation,
 } from "../../src/lib/license/protocol";
 import { kipKokKidi } from "./lisans-vektor-kip";
+import type { CoreResult, LicenseCore } from "../../src/lib/license/license-core";
 import {
   anahtarUret,
   araHakBas,
@@ -196,6 +196,61 @@ export function degerlendirV2(v: VektorV2): unknown {
       const r = verifyRequest(v.token, { publicKeyX: v.publicKeyX, body: v.body, nowMs: v.nowMs, purposes: v.purposes, installationId: v.installationId, ...(v.path ? { path: v.path } : {}) });
       return sonuc(r, (x) => x);
     }
+  }
+}
+
+// ── Çekirdekte değerlendirme (L2-2) ─────────────────────────────────────────────
+/** Native'in koşmadığı tür: İSTEK doğrulaması satıcı/patron kâhinindedir (fabrika istek doğrulamaz). */
+export const V2_CEKIRDEK_DISI: readonly VektorV2["tur"][] = ["istek"];
+
+function cekirdekSonuc<T>(r: CoreResult<T>, gorunum: (v: T) => unknown): unknown {
+  return r.ok ? { ok: true, value: jsonKopya(gorunum(r.value)) } : { ok: false, code: r.code };
+}
+
+/** Kayıt bu kipte derlenmiş native'de koşar mı (kipsiz kayıt her derlemede). */
+export function kipteKosarV2(v: VektorV2, kip: TrustAnchorMode): boolean {
+  return !("kip" in v) || v.kip === undefined || v.kip === kip;
+}
+
+/**
+ * Vektörü bir lisans çekirdeğinde değerlendirir; çekirdek dışı türde `undefined`. Gömülü çapa vektörü: TS'e kipin
+ * listesi AÇIKÇA verilir, native kendi gömülü çapasıyla koşar. HAK özeti görünümde yok — köprü gibi doğrulanan
+ * metinden kurulur (`core-bridge.ts`).
+ */
+export function degerlendirV2Cekirdek(core: LicenseCore, v: VektorV2): unknown {
+  const kok = (roots: RootKey[] | null, kip: TrustAnchorMode | undefined): readonly RootKey[] | undefined =>
+    roots ?? (kip !== undefined && core.source === "ts" ? rootPublicKeysFor(kip) : undefined);
+  switch (v.tur) {
+    case "hak2": {
+      const nowMs = simdi(v.nowMs);
+      const r = core.verifyEntitlement(v.token, kok(v.roots, v.kip), { ...(v.iptal ? { revocation: v.iptal } : {}), ...(nowMs !== undefined ? { nowMs } : {}) });
+      return cekirdekSonuc(r, (h) => ({ document: h.document, signer: h.signer, digest: typeof v.token === "string" ? jwsDigest(v.token) : null }));
+    }
+    case "kira2":
+      return cekirdekSonuc(core.verifyLease(v.token, kok(v.roots, v.kip), v.iptal ? { revocation: v.iptal } : {}), (k) => k);
+    case "bag2":
+      return cekirdekSonuc(core.checkLeaseBinding(v.lease, v.entitlement, v.roots), (x) => x);
+    case "iptal":
+      return cekirdekSonuc(core.verifyRevocation(v.token, kok(v.roots, v.kip)), (r) => r);
+    case "iptalSec": {
+      const r = core.pickNewerRevocation(v.mevcut, v.gelen, v.roots);
+      if (!r.ok) return { hata: r.code };
+      return { sira: r.value?.document.sira ?? null, iptalId: r.value?.document.iptalId ?? null };
+    }
+    case "iptalGuncel": {
+      const r = core.isRevocationCurrent(v.lease, v.iptal, v.roots);
+      return r.ok ? { guncel: r.value } : { hata: r.code };
+    }
+    case "parmakIziKarar":
+      return jsonKopya(core.compareFingerprints(v.accepted, v.measured, { excludeF5: v.excludeF5, ...(v.rule ? { rule: v.rule } : {}) }));
+    case "tanima":
+      return jsonKopya(core.assessIdentification(v.fingerprint, { excludeF5: v.excludeF5 }));
+    case "ogrenme":
+      return { ogrenir: core.canAutoLearnFingerprint(v.accepted, v.measured, { excludeF5: v.excludeF5 }) };
+    case "ufukTavani":
+      return { gun: core.offlineHorizonCeilingDays(v.sinif, v.signer) };
+    case "istek":
+      return undefined;
   }
 }
 

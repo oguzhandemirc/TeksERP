@@ -15,10 +15,24 @@ pub const PROTOCOL_VERSION: f64 = 1.0;
 pub const LICENSE_CLASSES: [&str; 6] = ["URETIM", "TEST", "DR", "DEMO", "BAYI", "BARINDIRILAN"];
 pub const STAGING_ROOT_CLASSES: [&str; 2] = ["TEST", "DEMO"];
 pub const SANCTION_LEVELS: [&str; 6] = ["K0", "K1", "K2", "K3", "K4", "K5"];
-pub const CERT_USAGES: [&str; 3] = ["ALT", "INDIRME", "BAYI"];
+/// `HAK`: HAK ara imzacısı (G4) — kök → ara sertifika (`ara-`) → HAK.
+pub const CERT_USAGES: [&str; 4] = ["ALT", "INDIRME", "BAYI", "HAK"];
 pub const DAY_MS: f64 = 86_400_000.0;
 pub const LEASE_MAX_DAYS: f64 = 45.0;
 pub const GRACE_MAX_DAYS: f64 = 60.0;
+/// HAK çevrimdışı ufkunun şema sınırı (gün); sınıf/imzacı tavanı zincirde (`chain::offline_horizon_ceiling_days`).
+pub const OFFLINE_HORIZON_MAX_DAYS: u32 = 3650;
+/// Satıcının varsayılan ufku ve bayi tavanı (gün).
+pub const OFFLINE_HORIZON_DEALER_DAYS: u32 = 400;
+/// DEMO ve TEST sınıflarının ufuk tavanı (gün).
+pub const OFFLINE_HORIZON_SHORT_CLASS_DAYS: u32 = 45;
+/// Kapanış kirasının nedeni (K6) — bilgi alanı; kısıtlamayı kiranın K3'ü getirir.
+pub const CLOSING_LEASE_REASONS: [&str; 3] = ["KOPYA", "TASIMA", "IPTAL"];
+/// Kiradaki parmak izi kuralı (K8) — TS `FINGERPRINT_RULES`.
+pub const FINGERPRINT_RULES: [&str; 2] = ["standart", "zayif"];
+/// İptal belgesinin satır tavanı (bağlayıcı sınır yine 32 KB JWS).
+pub const REVOCATION_MAX_ENTRIES: usize = 256;
+const MAX_SAFE: f64 = 9_007_199_254_740_991.0;
 
 struct Patterns {
     uuid: Regex,
@@ -79,7 +93,6 @@ fn is_bool(v: &Value) -> bool {
 /// `z.number().int()` (+ `.min/.max`): sonlu, güvenli tamsayı.
 fn is_int(v: &Value, min: Option<f64>, max: Option<f64>) -> bool {
     let Some(n) = js_number(v) else { return false };
-    const MAX_SAFE: f64 = 9_007_199_254_740_991.0;
     n.is_finite() && n.fract() == 0.0 && n.abs() <= MAX_SAFE && min.is_none_or(|m| n >= m) && max.is_none_or(|m| n <= m)
 }
 
@@ -204,11 +217,17 @@ fn object_with_nested(v: &Value, fields: &[Field], nested_fields: &[(&'static st
     Ok(out)
 }
 
+fn is_one_of(v: &Value, allowed: &[&str]) -> bool {
+    matches!(v, Value::String(s) if allowed.contains(&s.as_str()))
+}
+
 pub fn entitlement(v: &Value) -> Result<Map<String, Value>, String> {
     let is_v = |x: &Value| js_number(x) == Some(PROTOCOL_VERSION);
     let is_surum = |x: &Value| is_int(x, Some(1.0), None);
     let is_license_no = |x: &Value| is_str_matching(x, &patterns().license_no);
     let any_object = |x: &Value| x.is_object();
+    let is_horizon = |x: &Value| is_nullable(x, &|y| is_int(y, Some(1.0), Some(f64::from(OFFLINE_HORIZON_MAX_DAYS))));
+    let is_mode_floor = |x: &Value| is_one_of(x, &["zorla"]);
     let out = object_with_nested(
         v,
         &[
@@ -226,11 +245,17 @@ pub fn entitlement(v: &Value) -> Result<Map<String, Value>, String> {
             req("verilis", &is_iso),
             opt("bayiId", &is_uuid),
             opt("bayiSertifikasi", &is_jws_text),
+            opt("imzaciSertifikasi", &is_jws_text),
+            opt("cevrimdisiUfukGun", &is_horizon),
+            opt("kipAltSiniri", &is_mode_floor),
         ],
         &[("musteri", &named_entity), ("tesis", &named_entity)],
     )?;
     if out.contains_key("bayiSertifikasi") && !out.contains_key("bayiId") {
         return Err("Bayi sertifikalı HAK bayiId taşımalı".into());
+    }
+    if out.contains_key("bayiSertifikasi") && out.contains_key("imzaciSertifikasi") {
+        return Err("HAK hem bayi hem ara imzacı sertifikası taşıyamaz".into());
     }
     Ok(out)
 }
@@ -318,6 +343,9 @@ pub fn lease(v: &Value) -> Result<Map<String, Value>, String> {
     let is_sync = |x: &Value| is_nullable(x, &|y| is_int(y, Some(1.0), Some(1440.0)));
     let any_object = |x: &Value| x.is_object();
     let is_array = |x: &Value| x.is_array();
+    let is_rule = |x: &Value| is_one_of(x, &FINGERPRINT_RULES);
+    let is_closing = |x: &Value| is_one_of(x, &CLOSING_LEASE_REASONS);
+    let is_revocation_seq = |x: &Value| is_int(x, Some(1.0), Some(MAX_SAFE));
     let out = object_with_nested(
         v,
         &[
@@ -342,6 +370,11 @@ pub fn lease(v: &Value) -> Result<Map<String, Value>, String> {
             req("kanal", &any_object),
             req("altSertifika", &is_jws_text),
             opt("modulAnahtarlari", &is_array),
+            opt("odenmisTarih", &is_iso_or_null),
+            opt("parmakIziKurali", &is_rule),
+            opt("kapanis", &is_closing),
+            opt("hakOzeti", &is_digest),
+            opt("iptalSira", &is_revocation_seq),
         ],
         &[("parmakIzi", &fingerprint), ("yaptirim", &sanction), ("kanal", &channel), ("modulAnahtarlari", &module_key_grants)],
     )?;
@@ -352,15 +385,28 @@ pub fn lease(v: &Value) -> Result<Map<String, Value>, String> {
     if !at_most(ends - issued, LEASE_MAX_DAYS * DAY_MS) {
         return Err("Kira ömrü 45 günü aşamaz".into());
     }
+    let k3 = out.get("yaptirim").and_then(|y| y.get("kademe")).and_then(Value::as_str) == Some("K3");
+    if out.contains_key("kapanis") && !k3 {
+        return Err("Kapanış kirası K3 yaptırımı taşımalı".into());
+    }
     Ok(out)
 }
 
-pub fn sub_kid_prefix(usage: &str) -> &'static str {
+/// Kullanımın `kid` öneki; tanınmayan kullanımın öneki yok (hiçbir kid uymaz).
+pub fn sub_kid_prefix(usage: &str) -> Option<&'static str> {
     match usage {
-        "ALT" => "alt-",
-        "INDIRME" => "ind-",
-        _ => "bayi-",
+        "ALT" => Some("alt-"),
+        "INDIRME" => Some("ind-"),
+        "BAYI" => Some("bayi-"),
+        "HAK" => Some("ara-"),
+        _ => None,
     }
+}
+
+fn kid_matches_usage(out: &Map<String, Value>) -> bool {
+    let usage = out.get("kullanim").and_then(Value::as_str).unwrap_or_default();
+    let kid = out.get("kid").and_then(Value::as_str).unwrap_or_default();
+    sub_kid_prefix(usage).is_some_and(|p| kid.starts_with(p))
 }
 
 pub fn certificate(v: &Value) -> Result<Map<String, Value>, String> {
@@ -388,15 +434,51 @@ pub fn certificate(v: &Value) -> Result<Map<String, Value>, String> {
     if !strictly_after(ms(&out, "bitis"), ms(&out, "baslangic")) {
         return Err("Sertifika bitişi başlangıçtan sonra olmalı".into());
     }
-    let usage = out.get("kullanim").and_then(Value::as_str).unwrap_or_default();
-    let kid = out.get("kid").and_then(Value::as_str).unwrap_or_default();
-    if !kid.starts_with(sub_kid_prefix(usage)) {
+    if !kid_matches_usage(&out) {
         return Err("kid öneki kullanımla uyuşmuyor".into());
     }
+    let usage = out.get("kullanim").and_then(Value::as_str).unwrap_or_default();
     if (usage == "BAYI") != !out.get("bayi").is_some_and(Value::is_null) {
         return Err("Bayi tavanı yalnız BAYI sertifikasında".into());
     }
     Ok(out)
+}
+
+/// İptal satırı (`RevocationEntrySchema`, z.object): kid öneki kullanımla uyuşmalı.
+fn revocation_entry(v: &Value) -> Option<Value> {
+    let is_kid = |x: &Value| is_str_matching(x, &patterns().cert_kid);
+    let is_usage = |x: &Value| is_one_of(x, &CERT_USAGES);
+    let is_reason = |x: &Value| is_string_len(x, 0, 200);
+    let out = object(
+        v,
+        &[req("kid", &is_kid), req("sertifikaId", &is_uuid), req("kullanim", &is_usage), req("tarih", &is_iso), req("neden", &is_reason)],
+        false,
+    )
+    .ok()?;
+    kid_matches_usage(&out).then_some(Value::Object(out))
+}
+
+/// `iptaller`: en çok 256 satır, sertifika kimliği tekrarsız; her satır atılmış hâliyle.
+fn revocation_entries(v: &Value) -> Option<Value> {
+    let Value::Array(items) = v else { return None };
+    if items.len() > REVOCATION_MAX_ENTRIES {
+        return None;
+    }
+    let shaped: Vec<Value> = items.iter().map(revocation_entry).collect::<Option<_>>()?;
+    let ids: Vec<Value> = shaped.iter().map(|e| e.get("sertifikaId").cloned().unwrap_or(Value::Null)).collect();
+    unique_strings(&ids).then_some(Value::Array(shaped))
+}
+
+/// İPTAL (G4 §2.3) — TS `RevocationSchema` (z.object: tanınmayan anahtar atılır).
+pub fn revocation(v: &Value) -> Result<Map<String, Value>, String> {
+    let is_v = |x: &Value| js_number(x) == Some(PROTOCOL_VERSION);
+    let is_seq = |x: &Value| is_int(x, Some(1.0), Some(MAX_SAFE));
+    let is_array = |x: &Value| x.is_array();
+    object_with_nested(
+        v,
+        &[req("v", &is_v), req("iptalId", &is_uuid), req("sira", &is_seq), req("verilis", &is_iso), req("iptaller", &is_array)],
+        &[("iptaller", &revocation_entries)],
+    )
 }
 
 /// TS `decodeDocument`: bilinmeyen `v` şema hatasından AYRI kodlanır (yükseltme sinyali).

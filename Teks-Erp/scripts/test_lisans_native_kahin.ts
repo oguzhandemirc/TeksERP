@@ -15,30 +15,35 @@
 //      belge türü (TYP_*) protokolün TYP kayıt defterinde aynı ad/değerle (bütünlük türü dahil)
 //   §1 yükleyici: dosya yok → TS (zorunlu değil) / "yok" + her doğrulama CEKIRDEK_YOK + bütünlük
 //      GEÇERSİZ, istisna yok (zorunlu) · desteklenmeyen platform · bozuk .node · zorunlu kip ortam
-//      yolunu okumaz · aday sırası
+//      yolunu okumaz · aday sırası · §1h lisans v2 işlevlerini taşımayan eski ABI-3 ikilisi bağlama olarak TANINMAZ
 //   §2 vektör dosyası (`native/lisans-cekirdek/test-vektorleri/protokol.json`, `cargo test` de okur):
 //      her kaydın beklenen sonucu BUGÜNKÜ TS protokolüyle aynı (bayat vektör yok) · native'in
 //      üretebildiği her kod en az bir beklenende geçiyor (kapsam) · her türde geçer + kalır · her gömülü
 //      çapa vektörü iki kipte de kayıtlı ve kipler ayrışıyor (aynı belge iki kipte farklı sonuç)
-//   §2'' LİSANS v2 vektörleri (`test-vektorleri/protokol-v2.json`, L2-1; native L2-2'de tüketir — o güne dek
-//      `cargo test` yalnız v1 dosyasını okur): biçim · her kaydın beklenen sonucu BUGÜNKÜ TS protokolüyle aynı ·
-//      11 tür · sonuç türlerinde geçer + kalır · yeni beş protokol kodu beklenende · parmak izi kurallarında
-//      sonuç çeşitliliği · gömülü çapa v2 vektörleri iki kipte. Yeniden üret: `--vektor-yaz [--yalniz-v2]`
+//   §2'' LİSANS v2 vektörleri (`test-vektorleri/protokol-v2.json`, L2-1; `cargo test` de okur, L2-2): biçim · her
+//      kaydın beklenen sonucu BUGÜNKÜ TS protokolüyle aynı · 11 tür · sonuç türlerinde geçer + kalır · yeni beş
+//      protokol kodu beklenende · parmak izi kurallarında sonuç çeşitliliği · gömülü çapa v2 vektörleri iki kipte ·
+//      §2''h TS ÇEKİRDEĞİ (LicenseCore v2 yüzeyi: iptal · nowMs · parmak izi kuralı) protokolle aynı karar.
+//      §2c kapsamı iki dosyanın birleşimidir (v2 kodları yalnız v2 dosyasında). Yeniden üret: `--vektor-yaz [--yalniz-v2]`
+//   §0l lisans v2 sabitleri Rust = TS (kullanımlar · kapanış nedenleri · parmak izi kuralları · güçlü etkenler ·
+//      ufuk sınırları · iptal satır tavanı · v1/v2 eşikleri)
 //   §3–§7 NATIVE (yoksa "⏭ ATLANDI — native yok", sayıyla; canlı çapa ÖLÇÜLMEDİ, yeşil sayılmaz): künye/ayna
 //      listeleri canlı · ⭐ gömülü çapa CANLI (§3d: derlenmiş her .node'un `builtinAnchor()`ı — yüklenen · `dist` ·
 //      `dist-uretim` · `dist-hazirlik` · paket yolu — KENDİ kipinin TS çapasıyla birebir, dizin kipi doğru; bayat
 //      ikili kırmızı) · kayıtlı vektörler native'de beklenenle aynı (kendi kipininkiler) · CANLI (taze anahtarlı)
-//      vektörlerde TS = native · bu makinede parmak izi toplama TS = native · zorunlu kip test derlemesini
-//      reddeder / üretim derlemesi çapa enjeksiyonunu reddeder
+//      vektörlerde TS = native · §4b/§5b aynısı lisans v2 vektörlerinde (istek ailesi hariç: native istek doğrulamaz) ·
+//      bu makinede parmak izi toplama TS = native · zorunlu kip test derlemesini reddeder / üretim derlemesi çapa
+//      enjeksiyonunu reddeder
 //   §9 ⭐ KİP ÇAPRAZ SONDASI (gerçek `dist-uretim` + `dist-hazirlik` ikilileri; yoksa ATLANDI, STRICT'te kırmızı):
 //      her ikili kendi kipinin gömülü çapa vektörlerini beklenen sonuçla verir — üretim ikilisi hazırlık kid'iyle
 //      imzalı belgeyi TANIMAZ, hazırlık ikilisi üretim kid'iyle imzalıyı tanımaz · dışarıdan çapayı reddeder ·
-//      TS yükleyicisi öteki kipin ikilisini açmaz (CAPA_UYUSMAZ)
+//      TS yükleyicisi öteki kipin ikilisini açmaz (CAPA_UYUSMAZ) · §9e kendi kipinin v2 gömülü çapa vektörleri
 //   §8 ⭐ KALICI SONDA ✓K (her koşumda): karşılaştırıcı farkı ısırır, eşitte susar · bayatlık
 //      denetimi mutasyona uğramış beklenenle kırmızı · kapsam denetimi eksik kodu yakalar ·
 //      regex aynası değişmiş deseni yakalar · TYP aynası değişmiş/kayıtsız türü yakalar · gömülü
 //      çapa blokları üç rustfmt düzeninde de okunur (ikinci anahtar `&[`i alt satıra taşır) · kip süzgeci
-//      öteki kipin kaydını atlar · §8k v2 bayatlık mutasyonu yakalar · §8l tek yönlü tür denetimi
+//      öteki kipin kaydını atlar · §8k v2 bayatlık mutasyonu yakalar · §8l tek yönlü tür denetimi · §8m v2 çekirdek
+//      karşılaştırıcısı mutasyonu yakalar · §8n v2 sabit aynası değişmiş/eksik sabiti yakalar, eşitte susar
 //   L2-1 negatif sondaları (dosya dışı, sha eşit geri alındı): bayi ufuk tavanı · güçlü şartı · iptal denetimi
 //   (protokolde) → §2''b · v2 dosya biçimi → §2''a · v2 dosyasından istek ailesi silindi → §2''c/d/e
 //
@@ -50,8 +55,18 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { z } from "zod";
 import {
+  CERT_USAGES,
+  CLOSING_LEASE_REASONS,
+  FINGERPRINT_RULES,
+  FINGERPRINT_THRESHOLD,
+  FINGERPRINT_V2_THRESHOLD,
   MODULE_KEY_KID_PREFIX,
+  OFFLINE_HORIZON_DEALER_DAYS,
+  OFFLINE_HORIZON_MAX_DAYS,
+  OFFLINE_HORIZON_SHORT_CLASS_DAYS,
   PRODUCTION_ROOT_PUBLIC_KEYS,
+  REVOCATION_MAX_ENTRIES,
+  STRONG_FINGERPRINT_FACTORS,
   PROTOCOL_ERROR_CODES,
   STAGING_ROOT_PUBLIC_KEYS,
   TRUST_ANCHOR_MODES,
@@ -75,6 +90,7 @@ import {
   nativeFileName,
   type LoaderOptions,
 } from "../src/lib/license/native";
+import { isNativeBinding } from "../src/lib/license/native-adapter";
 import {
   INTEGRITY_TYP,
   PACKAGE_PUBLIC_KEYS,
@@ -100,8 +116,12 @@ import {
   type VektorKaydi,
 } from "./lib/lisans-cekirdek-vektor";
 import {
+  V2_CEKIRDEK_DISI,
   VEKTOR_V2_BICIMI,
   degerlendirV2,
+  degerlendirV2Cekirdek,
+  kipteKosarV2,
+  vektorleriKurV2,
   vektorV2DosyasiUret,
   vektorV2DosyasiYolu,
   type VektorV2,
@@ -167,6 +187,42 @@ export function rustTypSabitleri(kaynaklar: readonly string[]): [string, string]
 /** Rust TYP_<AD> sabiti TS `TYP.<AD>` ile aynı adda ve aynı değerde değilse fark satırı. */
 export function typFarklari(rust: readonly (readonly [string, string])[], ts: Readonly<Record<string, string>>): string[] {
   return rust.filter(([ad, deger]) => ts[ad] !== deger).map(([ad, deger]) => `TYP_${ad}="${deger}" (TS: ${ts[ad] ?? "yok"})`);
+}
+
+/** `pub const AD: <tip> = <sayı>;` (alt çizgili sayı da) → sayı; yoksa NaN. */
+export function rustSayiSabiti(kaynak: string, ad: string): number {
+  const m = new RegExp(`pub const ${ad}: \\w+ = ([0-9_]+);`).exec(kaynak);
+  return m ? Number(m[1].replace(/_/g, "")) : Number.NaN;
+}
+
+/** Lisans v2 sabitleri (L2-2): Rust (dosya, ad) → TS değeri; uyuşmayan ya da bulunamayan her sabit bir fark satırı. */
+export function v2SabitFarklari(rust: (dosya: string) => string): string[] {
+  const listeler: ReadonlyArray<readonly [string, string, readonly string[]]> = [
+    ["schema.rs", "CERT_USAGES", CERT_USAGES],
+    ["schema.rs", "CLOSING_LEASE_REASONS", CLOSING_LEASE_REASONS],
+    ["schema.rs", "FINGERPRINT_RULES", FINGERPRINT_RULES],
+    ["fingerprint.rs", "STRONG_FACTORS", STRONG_FINGERPRINT_FACTORS],
+  ];
+  const sayilar: ReadonlyArray<readonly [string, string, number]> = [
+    ["schema.rs", "OFFLINE_HORIZON_MAX_DAYS", OFFLINE_HORIZON_MAX_DAYS],
+    ["schema.rs", "OFFLINE_HORIZON_DEALER_DAYS", OFFLINE_HORIZON_DEALER_DAYS],
+    ["schema.rs", "OFFLINE_HORIZON_SHORT_CLASS_DAYS", OFFLINE_HORIZON_SHORT_CLASS_DAYS],
+    ["schema.rs", "REVOCATION_MAX_ENTRIES", REVOCATION_MAX_ENTRIES],
+    ["fingerprint.rs", "V1_MIN_MATCHES", FINGERPRINT_THRESHOLD.minMatches],
+    ["fingerprint.rs", "V1_MIN_MEASURABLE", FINGERPRINT_THRESHOLD.minMeasurable],
+    ["fingerprint.rs", "V2_MIN_MATCHES", FINGERPRINT_V2_THRESHOLD.minMatches],
+    ["fingerprint.rs", "V2_MIN_STRONG_MATCHES", FINGERPRINT_V2_THRESHOLD.minStrongMatches],
+  ];
+  return [
+    ...listeler.flatMap(([dosya, ad, ts]) => {
+      const r = rustDizgeListesi(rust(dosya), ad);
+      return jsonEsit(r, [...ts]) ? [] : [`${ad}: rust ${JSON.stringify(r)} · ts ${JSON.stringify(ts)}`];
+    }),
+    ...sayilar.flatMap(([dosya, ad, ts]) => {
+      const r = rustSayiSabiti(rust(dosya), ad);
+      return r === ts ? [] : [`${ad}: rust ${r} · ts ${ts}`];
+    }),
+  ];
 }
 
 /** JS regex literallerinin kaynağı (`/…/` — satır içi, bayraksız ya da bayraklı). */
@@ -266,6 +322,17 @@ export function v2Farklari(kayitlar: readonly VektorV2Kaydi[]): Fark[] {
     .filter((x) => !jsonEsit(x.beklenen, x.gelen));
 }
 
+/** v2 çekirdek farkları: kaydın beklenen sonucu ≠ verilen çekirdekteki değerlendirme (çekirdek dışı türler süzülmüş olmalı). */
+export function v2CekirdekFarklari(core: LicenseCore, kayitlar: readonly VektorV2Kaydi[]): Fark[] {
+  return kayitlar
+    .map((k) => ({ ad: `${k.vektor.tur} · ${k.vektor.ad}`, beklenen: k.beklenen, gelen: degerlendirV2Cekirdek(core, k.vektor) }))
+    .filter((x) => !jsonEsit(x.beklenen, x.gelen));
+}
+
+function v2CekirdekKayitlari(kayitlar: readonly VektorV2Kaydi[], kip?: TrustAnchorMode): VektorV2Kaydi[] {
+  return kayitlar.filter((k) => !V2_CEKIRDEK_DISI.includes(k.vektor.tur) && (kip === undefined || kipteKosarV2(k.vektor, kip)));
+}
+
 const V2_YENI_KODLAR = ["SERTIFIKA_IPTAL", "BELGE_ILERI_TARIHLI", "UFUK_TAVANI_ASIMI", "IMZACI_KIMLIK", "ISTEK_YOL"] as const;
 const V2_SONUC_TURLERI = ["hak2", "kira2", "bag2", "iptal", "istek"] as const;
 const V2_TUM_TURLER = [...V2_SONUC_TURLERI, "iptalSec", "iptalGuncel", "parmakIziKarar", "tanima", "ogrenme", "ufukTavani"] as const;
@@ -280,7 +347,7 @@ export function v2TekYonluTurler(kayitlar: readonly VektorV2Kaydi[]): string[] {
 }
 
 function bolum2v2(dosya: VektorV2Dosyasi | null): void {
-  console.log("\n§2'' lisans v2 vektör dosyası (protokol-v2.json) ↔ TS kâhini — native L2-2'de tüketir");
+  console.log("\n§2'' lisans v2 vektör dosyası (protokol-v2.json) ↔ TS kâhini + TS çekirdeği (native: §4b · §5b · §9e · cargo)");
   check("§2''a v2 vektör dosyası var ve biçimi güncel", !!dosya && dosya.bicim === VEKTOR_V2_BICIMI, path.relative(TEKS, VEKTOR_V2_DOSYASI));
   if (!dosya) return;
   const farklar = v2Farklari(dosya.kayitlar);
@@ -302,6 +369,13 @@ function bolum2v2(dosya: VektorV2Dosyasi | null): void {
   const kipli = dosya.kayitlar.filter((k) => "kip" in k.vektor && k.vektor.kip !== undefined);
   const kipler = new Set(kipli.map((k) => ("kip" in k.vektor ? k.vektor.kip : undefined)));
   check("§2''g gömülü çapa v2 vektörleri iki kipte de kayıtlı", kipli.length >= 4 && kipler.size === 2, `${kipli.length} kayıt`);
+  const cekirdek = v2CekirdekKayitlari(dosya.kayitlar);
+  const cekirdekFark = v2CekirdekFarklari(tsLicenseCore, cekirdek);
+  check(
+    "§2''h ⭐ TS ÇEKİRDEĞİ (LicenseCore v2: iptal · nowMs · kural · tanıma · öğrenme · ufuk) her çekirdek vektöründe protokolle aynı",
+    cekirdek.length >= 120 && cekirdekFark.length === 0,
+    cekirdekFark.length ? `${cekirdekFark.length} fark — ${farkOzeti(cekirdekFark)}` : `${cekirdek.length} vektör (${dosya.kayitlar.length - cekirdek.length} istek kaydı çekirdek dışı)`,
+  );
 }
 
 /** `anchor.rs`te kipin blok adları ve blokların önündeki `cfg` kapısı (öteki kipin baytı ikiliye girmesin). */
@@ -437,6 +511,8 @@ function bolum0(): void {
     rustListeDosyasi === INTEGRITY_LIST_FILE && Number(rustAzami) === INTEGRITY_MAX_FILES && bayt === INTEGRITY_MAX_LIST_BYTES,
     `rust ${rustListeDosyasi} ${rustAzami} ${bayt}`,
   );
+  const v2Fark = v2SabitFarklari(rustKaynak);
+  check("§0l lisans v2 sabitleri Rust = TS (kullanımlar · kapanış · kurallar · güçlü etkenler · ufuk · iptal tavanı · eşikler)", v2Fark.length === 0, v2Fark.join(" | ") || "12 sabit");
 }
 
 function secenek(g: Partial<LoaderOptions> & { cwd: string }): LoaderOptions {
@@ -502,6 +578,16 @@ async function bolum1(): Promise<void> {
         identityRejection({ ...id, capaKipi: "hazirlik" }, { ...zorunlu, anchorMode: "hazirlik" }) === null,
     );
 
+    const islev = () => "";
+    const v1Islevleri = ["kunye", "builtinAnchor", "verifyJws", "verifyCertificate", "verifyEntitlement", "verifyLease", "checkLeaseBinding", "normalizeFactor", "digestFingerprint", "unwrapModuleKey", "unwrapLeaseModuleKey", "protectLocal", "unprotectLocal", "collectFingerprint", "verifyIntegrity"];
+    const v2Islevleri = ["verifyRevocation", "pickNewerRevocation", "isRevocationCurrent", "compareFingerprints", "assessIdentification", "canAutoLearnFingerprint", "offlineHorizonCeilingDays"];
+    const bagla = (adlar: readonly string[]) => Object.fromEntries(adlar.map((a) => [a, islev]));
+    check(
+      "§1h ⭐ lisans v2 işlevlerini taşımayan eski ABI-3 ikilisi bağlama sayılmaz (yükleyici YUKLENEMEDI), tam küme sayılır",
+      !isNativeBinding(bagla(v1Islevleri)) && isNativeBinding(bagla([...v1Islevleri, ...v2Islevleri])) && v2Islevleri.every((a) => !isNativeBinding(bagla([...v1Islevleri, ...v2Islevleri.filter((x) => x !== a)]))),
+      `${v2Islevleri.length} v2 işlevi`,
+    );
+
     const aday = nativeCandidates(secenek({ cwd: bos, env: { [NATIVE_PATH_ENV]: sahte } }));
     check("§1f aday sırası: ortam → paket (app/native) → geliştirme (native/lisans-cekirdek/dist)", aday.length === 3 && aday[0] === sahte && aday[1].includes(`${path.sep}native${path.sep}lisans-cekirdek.`) && aday[2].includes(`${path.sep}dist${path.sep}`));
   } finally {
@@ -517,7 +603,13 @@ function kapsamGereken(): string[] {
   return [...(rustKodKumesi(outcome, "PROTOCOL") ?? []), ...(rustKodKumesi(outcome, "CORE") ?? [])].filter((c) => !PLATFORM_KODLARI.includes(c));
 }
 
-async function bolum2(dosya: VektorDosyasi | null): Promise<void> {
+/** v2 beklenenlerinde geçen hata kodları (`{ok:false, code}`). */
+function v2BeklenenKodlar(kayitlar: readonly VektorV2Kaydi[]): Set<string> {
+  const R = z.object({ ok: z.literal(false), code: z.string() });
+  return new Set(kayitlar.flatMap((k) => R.safeParse(k.beklenen).data?.code ?? []));
+}
+
+async function bolum2(dosya: VektorDosyasi | null, dosyaV2: VektorV2Dosyasi | null): Promise<void> {
   console.log("\n§2 vektör dosyası ↔ TS kâhini");
   check("§2a vektör dosyası var ve biçimi güncel", !!dosya && dosya.bicim === VEKTOR_BICIMI, path.relative(TEKS, VEKTOR_DOSYASI));
   if (!dosya) return;
@@ -527,9 +619,9 @@ async function bolum2(dosya: VektorDosyasi | null): Promise<void> {
     dosya.kayitlar.length >= 200 && farklar.length === 0,
     farklar.length ? `${farklar.length} fark — ${farkOzeti(farklar)} · yeniden üret: --vektor-yaz` : `${dosya.kayitlar.length} kayıt`,
   );
-  const kodlar = beklenenKodlar(dosya.kayitlar);
+  const kodlar = new Set([...beklenenKodlar(dosya.kayitlar), ...v2BeklenenKodlar(dosyaV2?.kayitlar ?? [])]);
   const eksik = kapsamGereken().filter((c) => !kodlar.has(c));
-  check("§2c native'in üretebildiği her kod en az bir beklenende geçiyor", eksik.length === 0, eksik.length ? `eksik: ${eksik.join(", ")}` : `${kodlar.size} kod`);
+  check("§2c native'in üretebildiği her kod en az bir beklenende geçiyor (v1 ∪ v2)", eksik.length === 0, eksik.length ? `eksik: ${eksik.join(", ")}` : `${kodlar.size} kod`);
   const turler = ["jws", "sertifika", "hak", "kira", "bag", "modul"] as const;
   const eksikTur = turler.filter((t) => {
     const k = dosya.kayitlar.filter((x) => x.vektor.tur === t);
@@ -600,21 +692,22 @@ function tsCapasi(kip: TrustAnchorMode): unknown {
   };
 }
 
-async function bolum3ile7(dosya: VektorDosyasi | null): Promise<void> {
+async function bolum3ile7(dosya: VektorDosyasi | null, dosyaV2: VektorV2Dosyasi | null): Promise<void> {
   // Kâhin hangi kipte derlenmiş native verilirse onu sınar: beklenen kip adayın kendi künyesinden.
   const secenek0: LoaderOptions = { required: false, cwd: TEKS, env: process.env, platform: process.platform, arch: process.arch };
   const yukle = loadLicenseCoreFrom({ ...secenek0, anchorMode: adayKipi(secenek0) });
   const canliSayi = vektorleriKur(VEKTOR_SIMDI).filter((v) => v.tur !== "tarih").length;
-  const kayitSayi = dosya?.kayitlar.filter((k) => k.vektor.tur !== "tarih").length ?? 0;
+  const kayitSayi = (dosya?.kayitlar.filter((k) => k.vektor.tur !== "tarih").length ?? 0) + v2CekirdekKayitlari(dosyaV2?.kayitlar ?? []).length;
+  const canliV2Sayi = v2CekirdekKayitlari(vektorleriKurV2(VEKTOR_SIMDI).map((vektor) => ({ vektor, beklenen: null }))).length;
   if (yukle.status.kaynak !== "native") {
     const neden = "neden" in yukle.status ? `${yukle.status.neden}: ${yukle.status.ayrinti}` : "";
     const denenen = yukle.status.kaynak === "ts" ? yukle.status.denenen.map((d) => path.relative(TEKS, d)).join(" · ") : "";
-    // Adet = koşmayan KONTROL (§3a §3b §3d §4a §5a §6a §6b §7a); kıyaslanmayan vektörler gerekçede. Canlı çapa
+    // Adet = koşmayan KONTROL (§3a §3b §3d §4a §4b §5a §5b §6a §6b §7a); kıyaslanmayan vektörler gerekçede. Canlı çapa
     // (§3d) ÖLÇÜLMEDİ sayılır — yeşil değil: kaynak metin (§0e) güncel olsa da derlenmiş ikili bayat olabilir.
     ATLAMA.atla(
       "native yok: §3–§7 native karşılaştırması (§3d canlı çapa ÖLÇÜLMEDİ)",
-      `${process.platform}-${process.arch}; ${neden}; denenen: ${denenen} — ${kayitSayi} kayıtlı + ${canliSayi} canlı vektör kıyaslanmadı; derle: cd native/lisans-cekirdek && npm run derle`,
-      8,
+      `${process.platform}-${process.arch}; ${neden}; denenen: ${denenen} — ${kayitSayi} kayıtlı + ${canliSayi + canliV2Sayi} canlı vektör kıyaslanmadı; derle: cd native/lisans-cekirdek && npm run derle`,
+      10,
     );
     return;
   }
@@ -700,8 +793,8 @@ async function bolum3ile7(dosya: VektorDosyasi | null): Promise<void> {
     check("§7c üretim derlemesi gömülü çapayla doğrular (çapasız çağrı JWS katmanına iner)", !g.ok && g.code === "JWS_BICIM");
     ATLAMA.atla(
       "§4–§5 vektör kıyası",
-      `yüklenen native üretim derlemesi (test çapası yok) — ${kayitSayi} kayıtlı + ${canliSayi} canlı vektör kıyaslanmadı; kıyas için \`npm run derle\` (test-anchor)`,
-      2,
+      `yüklenen native üretim derlemesi (test çapası yok) — ${kayitSayi} kayıtlı + ${canliSayi + canliV2Sayi} canlı vektör kıyaslanmadı; kıyas için \`npm run derle\` (test-anchor)`,
+      4,
     );
     return;
   }
@@ -712,6 +805,13 @@ async function bolum3ile7(dosya: VektorDosyasi | null): Promise<void> {
     const farklar = await kayitlariKarsilastir(native, kayitlar);
     check("§4a her kayıtlı vektörde native = beklenen (TS kâhini)", farklar.length === 0, farklar.length ? `${farklar.length} fark — ${farkOzeti(farklar)}` : `${kayitlar.length} vektör`);
   }
+  const kayitlarV2 = v2CekirdekKayitlari(dosyaV2?.kayitlar ?? [], kunye.capaKipi);
+  const farklarV2 = v2CekirdekFarklari(native, kayitlarV2);
+  check(
+    "§4b ⭐ her kayıtlı LİSANS v2 vektöründe native = beklenen (ara zincir · iptal · ufuk · veriliş · bayt bağı · parmak izi v2)",
+    kayitlarV2.length >= 120 && farklarV2.length === 0,
+    farklarV2.length ? `${farklarV2.length} fark — ${farkOzeti(farklarV2)}` : `${kayitlarV2.length} vektör`,
+  );
 
   console.log("\n§5 CANLI vektörler (taze anahtar, şimdi): TS = native");
   const canli = vektorleriKur(Date.now()).filter((v) => v.tur !== "tarih" && kipteKosar(v, kunye.capaKipi));
@@ -721,6 +821,17 @@ async function bolum3ile7(dosya: VektorDosyasi | null): Promise<void> {
     if (!jsonEsit(t, n)) farklar.push({ ad: `${v.tur} · ${v.ad}`, beklenen: t, gelen: n });
   }
   check("§5a canlı vektörlerin HER birinde TS = native", farklar.length === 0, farklar.length ? `${farklar.length} fark — ${farkOzeti(farklar)}` : `${canli.length} vektör`);
+  const canliV2 = v2CekirdekKayitlari(vektorleriKurV2(Date.now()).map((vektor) => ({ vektor, beklenen: null })), kunye.capaKipi);
+  const farklarCanliV2: Fark[] = [];
+  for (const { vektor } of canliV2) {
+    const [t, n] = [degerlendirV2Cekirdek(tsLicenseCore, vektor), degerlendirV2Cekirdek(native, vektor)];
+    if (!jsonEsit(t, n)) farklarCanliV2.push({ ad: `${vektor.tur} · ${vektor.ad}`, beklenen: t, gelen: n });
+  }
+  check(
+    "§5b ⭐ CANLI lisans v2 vektörlerinin HER birinde TS çekirdeği = native",
+    canliV2.length >= 120 && farklarCanliV2.length === 0,
+    farklarCanliV2.length ? `${farklarCanliV2.length} fark — ${farkOzeti(farklarCanliV2)}` : `${canliV2.length} vektör`,
+  );
 }
 
 async function bolum8(dosya: VektorDosyasi | null): Promise<void> {
@@ -774,20 +885,33 @@ function bolum8v2(dosya: VektorV2Dosyasi | null): void {
   check("§8k ✓K v2 bayatlık denetimi mutasyona uğramış beklenenle kırmızı verir", v2Farklari([{ vektor: ilk.vektor, beklenen: { ok: false, code: "SAHTE_KOD" } }]).length === 1);
   const tekGecer = dosya.kayitlar.filter((k) => k.vektor.tur !== "bag2" || z.object({ ok: z.literal(true) }).safeParse(k.beklenen).success);
   check("§8l ✓K tek yönlü tür denetimi KALIR kaydı olmayan türü yakalar (bag2 retleri çıkarılınca)", v2TekYonluTurler(tekGecer).includes("bag2") && !v2TekYonluTurler(dosya.kayitlar).includes("bag2"));
+  const karar = v2CekirdekKayitlari(dosya.kayitlar).find((k) => k.vektor.tur === "parmakIziKarar");
+  const bozukKarar = karar ? { vektor: karar.vektor, beklenen: { ...(karar.beklenen as object), result: "ESLESTI_DEGIL" } } : null;
+  check(
+    "§8m ✓K v2 çekirdek karşılaştırıcısı mutasyona uğramış beklenenle kırmızı, eşitte susar; istek ailesi çekirdek dışı süzülür",
+    !!karar && !!bozukKarar && v2CekirdekFarklari(tsLicenseCore, [bozukKarar]).length === 1 && v2CekirdekFarklari(tsLicenseCore, [karar]).length === 0 && v2CekirdekKayitlari(dosya.kayitlar).every((k) => k.vektor.tur !== "istek"),
+  );
+  const gercek = (d: string) => rustKaynak(d);
+  const kaymis = (d: string) => (d === "schema.rs" ? gercek(d).replace("pub const OFFLINE_HORIZON_DEALER_DAYS: u32 = 400;", "pub const OFFLINE_HORIZON_DEALER_DAYS: u32 = 401;") : gercek(d));
+  const eksik = (d: string) => (d === "fingerprint.rs" ? gercek(d).replace(/pub const STRONG_FACTORS/, "pub const GUCLU_ETKENLER") : gercek(d));
+  check(
+    "§8n ✓K v2 sabit aynası değişmiş sayıyı ve bulunamayan listeyi yakalar, eşitte susar",
+    v2SabitFarklari(gercek).length === 0 && v2SabitFarklari(kaymis).length === 1 && v2SabitFarklari(eksik).length === 1,
+  );
 }
 
 /**
  * §9 KİP ÇAPRAZ SONDASI: gerçek üretim ve hazırlık ikilileri (paketin taşıdığı derlemeler) kendi kiplerinin gömülü
  * çapa vektörlerini koşar; dışarıdan çapa veremediğimiz için ölçüm yalnız gömülü çapayladır — sorulan da tam olarak o.
  */
-async function bolum9(dosya: VektorDosyasi | null): Promise<void> {
+async function bolum9(dosya: VektorDosyasi | null, dosyaV2: VektorV2Dosyasi | null): Promise<void> {
   console.log("\n§9 ⭐ kip çapraz sondası (gerçek dist-uretim + dist-hazirlik ikilileri)");
   const ad = nativeFileName(process.platform, process.arch);
   for (const kip of TRUST_ANCHOR_MODES) {
     const dizin = kip === "uretim" ? "dist-uretim" : "dist-hazirlik";
     const ikili = ad ? path.join(NATIVE_DIZIN, dizin, ad) : null;
     if (!ikili || !existsSync(ikili) || !dosya) {
-      ATLAMA.atla(`§9 ${kip} ikilisi`, `${dizin}/${ad ?? "?"} yok — derle: cd native/lisans-cekirdek && npm run derle:${kip}`, 4);
+      ATLAMA.atla(`§9 ${kip} ikilisi`, `${dizin}/${ad ?? "?"} yok — derle: cd native/lisans-cekirdek && npm run derle:${kip}`, 5);
       continue;
     }
     const secenek: LoaderOptions = { required: false, cwd: TEKS, env: { [NATIVE_PATH_ENV]: ikili }, platform: process.platform, arch: process.arch };
@@ -807,6 +931,13 @@ async function bolum9(dosya: VektorDosyasi | null): Promise<void> {
     );
     const r = y.core.verifyEntitlement("a.b.c", rootPublicKeysFor(kip));
     check(`§9c ${kip} ikilisi dışarıdan çapayı reddeder (CAPA_ENJEKSIYONU_KAPALI)`, !r.ok && r.code === "CAPA_ENJEKSIYONU_KAPALI");
+    const kipliV2 = (dosyaV2?.kayitlar ?? []).filter((k) => "kip" in k.vektor && k.vektor.kip === kip);
+    const farkV2 = v2CekirdekFarklari(y.core, kipliV2);
+    check(
+      `§9e ${kip} ikilisi kendi kipinin ${kipliV2.length} v2 gömülü çapa vektöründe (ara sertifika · iptal) beklenen sonucu verir`,
+      kipliV2.length >= 2 && farkV2.length === 0,
+      farkV2.length ? `${farkV2.length} fark — ${farkOzeti(farkV2)}` : "",
+    );
     const ters = loadLicenseCoreFrom({ ...secenek, anchorMode: oteki });
     check(
       `§9d ⭐ ${oteki} derlemesinin yükleyicisi ${kip} ikilisini AÇMAZ (CAPA_UYUSMAZ)`,
@@ -825,13 +956,13 @@ async function main(): Promise<void> {
   bolum0();
   await bolum1();
   const dosya = vektorDosyasiOku();
-  await bolum2(dosya);
   const dosyaV2 = vektorV2DosyasiOku();
+  await bolum2(dosya, dosyaV2);
   bolum2v2(dosyaV2);
-  await bolum3ile7(dosya);
+  await bolum3ile7(dosya, dosyaV2);
   await bolum8(dosya);
   bolum8v2(dosyaV2);
-  await bolum9(dosya);
+  await bolum9(dosya, dosyaV2);
   console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız${ATLAMA.ozetEki()} ===`);
   process.exit(fail > 0 ? 1 : 0);
 }
