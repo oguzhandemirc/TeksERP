@@ -13,7 +13,7 @@ import { useAuthStore } from '../../store/authStore';
 import { authService, type LoginMethod } from '../../services/auth.service';
 import { useAlphaKeyboardPref } from './useAlphaKeyboardPref';
 import { sanitizeAlphaInput, sanitizeNumericInput } from './loginInput';
-import { isLoginLocked } from '../../services/api';
+import { isDeviceNotApproved, isLoginLocked } from '../../services/api';
 import { authActions } from '../../services/authActions';
 import { pinServerIdentityAfterLogin } from '../../services/serverIdentity';
 import { useSessionConflict } from '../../hooks/useSessionConflict';
@@ -246,7 +246,8 @@ export default function LoginScreen({ lock }: { lock?: LoginLockContext } = {}) 
   const handleMethodDisabled = useCallback(
     (e: unknown): boolean => {
       const status = (e as { status?: number })?.status;
-      if (status !== 403) return false;
+      // Cihaz onayı eksikliği yöntem kapanması değildir — seçim korunur, mesaj gösterilir.
+      if (status !== 403 || isDeviceNotApproved(e)) return false;
       setPickedMethod(null);
       setMethodPickerOpen(false);
       void refetchMethods();

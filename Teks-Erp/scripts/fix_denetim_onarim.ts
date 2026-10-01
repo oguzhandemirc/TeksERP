@@ -128,7 +128,7 @@ const KALEMLER: Kalem[] = [
     say: async () => {
       const r = await prisma.$queryRaw<Array<{ u: string }>>`
         SELECT u.username AS u FROM users u
-        WHERE u."isActive" = true AND u."quickPin" IS NOT NULL`;
+        WHERE u."isActive" = true AND (u."quickPin" IS NOT NULL OR u."quickPinDigest" IS NOT NULL)`;
       return { adet: r.length, ornek: r.slice(0, 8).map((x) => x.u) };
     } },
 ];

@@ -3,8 +3,10 @@
 // atomik claim (`updateMany WHERE {…, beklenen durum}` + count 0 → taze okuma):
 //   BEKLIYOR ─(yazar iptal)→ IPTAL · BEKLIYOR ─(fabrika al)→ ISLENIYOR ─(fabrika sonuç)→ ISLENDI|REDDEDILDI
 //   ISLENIYOR ─(claim süresi doldu, bakım)→ BEKLIYOR (fabrikanın makbuzu tekrar işlemeyi idempotent kılar)
+//   BEKLIYOR ─(fabrika al, yazar ARTIK yetkisiz)→ REDDEDILDI `YAZAR_YETKISIZ` — yazma izni ve hesap durumu yalnız
+//   yazımda değil claim anında da sorulur; hiç alınmamış mesaja uygulanır (alınmış olanı fabrika işlemiş olabilir)
 // `mesajId` istemcinin işlem kimliğidir (clientToken) — tekrarı makbuzdan cevaplanır.
-import type { InboxMessage, Prisma } from "@prisma/client";
+import { Prisma, type InboxMessage } from "@prisma/client";
 import { accountActor, recordAudit } from "../lib/audit";
 import { CloudError, forbidden, notFound, stateConflict } from "../lib/errors";
 import { executeWrite, type WriteResult } from "../lib/idempotency";
@@ -18,6 +20,24 @@ import { assertFacilityCloudOpen } from "./facility-gate";
 import type { FactoryCaller } from "./installation-auth";
 
 export const INBOX_WRITE_PERMISSION = { SIPARIS: "bulut:siparis:yaz", CARI: "bulut:cari:yaz" } as const;
+
+/** Yazar artık yetkisizken bulutun verdiği ret sonucu (fabrikaya hiç gitmez). */
+export const AUTHOR_INELIGIBLE_RESULT = {
+  varlikId: null,
+  belgeNo: null,
+  kod: "YAZAR_YETKISIZ",
+  mesaj: "Mesajı yazan hesap artık etkin değil ya da bu türü yazma yetkisi kaldırıldı; mesaj fabrikaya iletilmedi",
+} as const;
+
+/**
+ * Mesajın yazarı ŞU AN uygun mu: hesap AKTİF ve türün yazma iznini taşıyor (izin eşlemesi tek kaynak
+ * `INBOX_WRITE_PERMISSION`; eşlenmeyen tür NULL → uygun değil). Eşitleme rolü `accounts`ta yalnız bu kolonları okur.
+ */
+function authorEligibleSql(): Prisma.Sql {
+  const whens = Object.entries(INBOX_WRITE_PERMISSION).map(([kind, perm]) => Prisma.sql`WHEN ${kind} THEN ${perm}`);
+  return Prisma.sql`EXISTS (SELECT 1 FROM accounts a WHERE a.id = t.account_id AND a.status = 'AKTIF'
+    AND (CASE t.kind::text ${Prisma.join(whens, " ")} END) = ANY (a.permissions))`;
+}
 
 export interface InboxCreateInput {
   readonly mesajId: string;
@@ -131,19 +151,34 @@ interface ClaimedRow {
 
 export async function claimInbox(ctx: CloudContext, caller: FactoryCaller, req: z.infer<typeof InboxClaimRequestSchema>, nowMs: number): Promise<InboxClaimResponse> {
   const until = new Date(nowMs + ctx.config.GELEN_KUTUSU_CLAIM_DK * 60_000);
-  const rows = await withTesis(ctx.sync, { tesisId: caller.tesisId }, (tx) =>
-    tx.$queryRaw<ClaimedRow[]>`
+  const eligible = authorEligibleSql();
+  const { rejected, rows } = await withTesis(ctx.sync, { tesisId: caller.tesisId }, async (tx) => {
+    const rejected = await tx.$queryRaw<{ message_id: string; kind: InboxMessage["kind"] }[]>`
+      WITH bad AS MATERIALIZED (
+        SELECT t.id FROM inbox_messages t
+         WHERE t.tesis_id = ${caller.tesisId}::uuid AND t.status = 'BEKLIYOR' AND t.claim_count = 0 AND NOT ${eligible}
+         FOR UPDATE OF t SKIP LOCKED)
+      UPDATE inbox_messages AS m
+         SET status = 'REDDEDILDI', result = ${JSON.stringify(AUTHOR_INELIGIBLE_RESULT)}::jsonb,
+             processed_at = ${new Date(nowMs)}::timestamptz, updated_at = now()
+        FROM bad WHERE m.id = bad.id
+      RETURNING m.message_id, m.kind`;
+    const rows = await tx.$queryRaw<ClaimedRow[]>`
       WITH picked AS MATERIALIZED (
-        SELECT id FROM inbox_messages
-         WHERE tesis_id = ${caller.tesisId}::uuid AND status = 'BEKLIYOR'
-         ORDER BY created_at, id LIMIT ${req.enFazla}
-         FOR UPDATE SKIP LOCKED)
+        SELECT t.id FROM inbox_messages t
+         WHERE t.tesis_id = ${caller.tesisId}::uuid AND t.status = 'BEKLIYOR' AND (t.claim_count > 0 OR ${eligible})
+         ORDER BY t.created_at, t.id LIMIT ${req.enFazla}
+         FOR UPDATE OF t SKIP LOCKED)
       UPDATE inbox_messages AS t
          SET status = 'ISLENIYOR', owner_installation_id = ${caller.installation.installationId}::uuid,
              claim_until = ${until}::timestamptz, claim_count = t.claim_count + 1, updated_at = now()
         FROM picked WHERE t.id = picked.id
-      RETURNING t.message_id, t.kind, t.body, t.account_id, t.account_name, t.created_at`,
-  );
+      RETURNING t.message_id, t.kind, t.body, t.account_id, t.account_name, t.created_at`;
+    return { rejected, rows };
+  });
+  for (const r of rejected) {
+    await recordAudit(ctx.app, { tesisId: caller.tesisId, actor: "bulut", event: "GELEN_KUTUSU_REDDEDILDI", entity: "InboxMessage", entityId: r.message_id, summary: { tur: r.kind, kod: AUTHOR_INELIGIBLE_RESULT.kod } });
+  }
   rows.sort((a, b) => a.created_at.getTime() - b.created_at.getTime() || a.message_id.localeCompare(b.message_id));
   return {
     v: 1 as const,

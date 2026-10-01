@@ -15,7 +15,9 @@
 //   §7 fabrika projesi patron kaynağını içe aktarmaz (statik/dinamik); bulut kataloğu yalnız ÜRETİLMİŞ özetten
 //      (`patron/sunucu/src/catalog/katalog-ozeti.json`) dosya olarak okunur — özetin canlı katalogla eşitliğini
 //      patron işinde `patron/sunucu/scripts/test_katalog_ozeti.ts` ölçer (sunucu bağımlılığı orada kurulu)
-// ⭐ KALICI SONDA ✓K1–✓K5 (her koşumda): karşılaştırıcılar sentetik girdide ısırır, temiz girdide susar.
+//   §8 uzak rapor eşlemesi: fabrikanın `REMOTE_REPORTS` (anahtar → izin, kaynaktan AST ile okunur — modül yüklenmez,
+//      DB gerekmez) ↔ bulutun `REPORT_KEY_PERMISSION`ı iki yönlü birebir: aynı anahtar kümesi, aynı izin
+// ⭐ KALICI SONDA ✓K1–✓K6 (her koşumda): karşılaştırıcılar sentetik girdide ısırır, temiz girdide susar.
 // NEGATİF SONDA (dosya dışı, cp + shasum geri): T1 bulut `cek-hareketi` bağı elle `cekNo` → özet bayat (patron
 //   `test_katalog_ozeti` §1b), `--yaz` sonrası §6b · T2 fabrika tel alanı `cekId` → `cekNo` → §6a · T3 bulut
 //   kataloğu yeniden dinamik içe aktarıldı → §7a (ve patron bağımlılığı yoksa çöküş).
@@ -25,6 +27,7 @@
 import { createHash } from "node:crypto";
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import path from "node:path";
+import ts from "typescript";
 import { RECORD_PROJECTIONS, SNAPSHOT_PROJECTIONS } from "../src/cloud-sync/projections";
 import { RECONCILE_PARENTS } from "../src/cloud-sync/wire";
 
@@ -40,6 +43,7 @@ const KOK = path.resolve(__dirname, "..", "..");
 export const KAYNAK = "patron/sunucu/src/wire/esitleme.ts";
 export const AYNA = "Teks-Erp/src/cloud-sync/wire/esitleme.ts";
 export const BULUT_OZETI = "patron/sunucu/src/catalog/katalog-ozeti.json";
+export const UZAK_RAPORLAR = "Teks-Erp/src/cloud-sync/report-requests.ts";
 const TARANAN: readonly string[] = ["Teks-Erp/src", "patron/sunucu/src"];
 
 const sha = (p: string): string => createHash("sha256").update(readFileSync(p)).digest("hex");
@@ -159,6 +163,56 @@ function bulutKatalogu(): BulutKaydi[] {
   });
 }
 
+/**
+ * `REMOTE_REPORTS` dizi literalinden anahtar → izin (kaynak metni; modül yüklenmez — rapor servisleri DB ister).
+ * Literal olmayan `key`/`permission` ya da bulunamayan dizi BOŞ eşleme döner: karşılaştırıcı onu kırmızı sayar.
+ */
+export function uzakRaporIzinleri(src: string): Record<string, string> {
+  const out: Record<string, string> = {};
+  const sf = ts.createSourceFile("report-requests.ts", src, ts.ScriptTarget.Latest, true);
+  const ziyaret = (n: ts.Node): void => {
+    if (ts.isVariableDeclaration(n) && ts.isIdentifier(n.name) && n.name.text === "REMOTE_REPORTS" && n.initializer && ts.isArrayLiteralExpression(n.initializer)) {
+      for (const el of n.initializer.elements) {
+        if (!ts.isObjectLiteralExpression(el)) {
+          out["?"] = "literal olmayan girdi";
+          continue;
+        }
+        const alan = (ad: string): string | null => {
+          const p = el.properties.find((x): x is ts.PropertyAssignment => ts.isPropertyAssignment(x) && ts.isIdentifier(x.name) && x.name.text === ad);
+          return p && ts.isStringLiteral(p.initializer) ? p.initializer.text : null;
+        };
+        const key = alan("key");
+        out[key ?? "?"] = alan("permission") ?? "?";
+      }
+      return;
+    }
+    ts.forEachChild(n, ziyaret);
+  };
+  ziyaret(sf);
+  return out;
+}
+
+/** Uzak rapor eşleme farkı (iki yönlü) — saf. Boş eşleme de fark sayılır (ölçülemedi ≠ uyumlu). */
+export function raporIzinFarki(fabrika: Readonly<Record<string, string>>, bulut: Readonly<Record<string, string>>): string[] {
+  const out: string[] = [];
+  if (Object.keys(fabrika).length === 0) out.push("fabrika eşlemesi okunamadı");
+  if (Object.keys(bulut).length === 0) out.push("bulut eşlemesi okunamadı");
+  for (const [k, p] of Object.entries(fabrika)) {
+    if (!(k in bulut)) out.push(`bulutta yok: ${k}`);
+    else if (bulut[k] !== p) out.push(`izin: ${k} fabrika ${p} ↔ bulut ${bulut[k]}`);
+  }
+  for (const k of Object.keys(bulut)) if (!(k in fabrika)) out.push(`fabrikada yok: ${k}`);
+  return out;
+}
+
+/** Bulutun rapor anahtarı → izin eşlemesi, üretilmiş özetten DOSYA olarak. */
+function bulutRaporIzinleri(): Record<string, string> {
+  const p = path.join(KOK, BULUT_OZETI);
+  const ozet: unknown = existsSync(p) ? JSON.parse(readFileSync(p, "utf8")) : undefined;
+  const e = kayit(ozet) ? ozet.REPORT_KEY_PERMISSION : undefined;
+  return kayit(e) ? Object.fromEntries(Object.entries(e).filter((x): x is [string, string] => typeof x[1] === "string")) : {};
+}
+
 /** Patron projesinin kaynağını içe aktaran satırlar (statik `import … from` · `require(` · dinamik `import(`). */
 export function patronIceAktarimi(src: string): string[] {
   return src.split("\n").filter((s) => /\b(import|require)\b[^\n]*patron\/(sunucu|uygulama)\//.test(s) && !/readFileSync/.test(s));
@@ -232,6 +286,14 @@ function main(): void {
   }
   check("§7a ⭐ Teks-Erp/src + scripts patron/sunucu|uygulama kaynağını içe aktarmaz (yalnız dosya okuması)", patronIhlal.length === 0, patronIhlal.slice(0, 3).join(" · "));
 
+  console.log("\n§8 uzak rapor eşlemesi (fabrika REMOTE_REPORTS ↔ bulut REPORT_KEY_PERMISSION)");
+  const uzakYol = path.join(KOK, UZAK_RAPORLAR);
+  const fabrikaRapor = existsSync(uzakYol) ? uzakRaporIzinleri(readFileSync(uzakYol, "utf8")) : {};
+  const bulutRapor = bulutRaporIzinleri();
+  check("§8a iki eşleme de okundu (≥ 1 rapor)", Object.keys(fabrikaRapor).length >= 1 && Object.keys(bulutRapor).length >= 1, `${Object.keys(fabrikaRapor).length} ↔ ${Object.keys(bulutRapor).length}`);
+  const raporFark = raporIzinFarki(fabrikaRapor, bulutRapor);
+  check("§8b ⭐ aynı rapor kümesi, rapor başına aynı izin (iki yönlü)", raporFark.length === 0, raporFark.slice(0, 6).join(" · "));
+
   console.log("\n✓K kalıcı sondalar (sentetik)");
   check("✓K1 zod dışı içe aktarım ısırır · zod susar", iceAktarimlar('import { z } from "zod";\nimport x from "../lib/db";').join() === "zod,../lib/db" && iceAktarimlar('import { z } from "zod";').join() === "zod");
   check("✓K2 tel yolu literali ısırır · SYNC_PATHS kullanımı susar", telYollari('post(base + "/v1/gelen-kutusu/al")').length === 1 && telYollari("post(SYNC_PATHS.INBOX_CLAIM)").length === 0);
@@ -252,6 +314,15 @@ function main(): void {
     patronIceAktarimi('const m = await import(path.join(KOK, "patron/sunucu/src/wire/esitleme.ts"));').length === 1 &&
       patronIceAktarimi('import { x } from "../../patron/uygulama/src/api/wire";').length === 1 &&
       patronIceAktarimi('JSON.parse(readFileSync(path.join(KOK, "patron/sunucu/src/wire/esitleme.ts"), "utf8"));').length === 0,
+  );
+  const ornek = 'export const REMOTE_REPORTS: readonly RemoteReport[] = [\n  { key: "a/b", permission: "bulut:x:oku", run: () => 1 },\n];';
+  check(
+    "✓K6 rapor eşlemesi: AST okur · izin farkı ısırır · eksik/fazla anahtar ısırır · boş eşleme ısırır · özdeş susar",
+    JSON.stringify(uzakRaporIzinleri(ornek)) === JSON.stringify({ "a/b": "bulut:x:oku" }) &&
+      raporIzinFarki({ "a/b": "bulut:x:oku" }, { "a/b": "bulut:y:oku" }).length === 1 &&
+      raporIzinFarki({ "a/b": "bulut:x:oku" }, { "a/b": "bulut:x:oku", "a/c": "bulut:x:oku" }).length === 1 &&
+      raporIzinFarki({}, { "a/b": "bulut:x:oku" }).length > 0 &&
+      raporIzinFarki({ "a/b": "bulut:x:oku" }, { "a/b": "bulut:x:oku" }).length === 0,
   );
 
   console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);

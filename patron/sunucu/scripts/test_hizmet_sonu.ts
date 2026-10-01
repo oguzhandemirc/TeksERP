@@ -93,7 +93,7 @@ async function saltOkunur(o: Ortam, k: TestKurulumu, yonetici: { belirtec: strin
   kontrol("§3b veri okuma AÇIK", oku.status === 200 && (oku.json.data as { kayitlar: unknown[] }).kayitlar.length === 1);
   const yaz = await api(o, "POST", "/api/gelen-kutusu", { belirtec: yonetici.belirtec, govde: { mesajId: randomUUID(), tur: "CARI", govde: { ad: "Yeni Cari", roller: { musteri: true, tedarikci: false } } } });
   kontrol("§3c gelen kutusu yazması 403 PATRON_BULUT_KAPALI (aşama detayda)", yaz.status === 403 && yaz.json.details?.code === "PATRON_BULUT_KAPALI" && yaz.json.details?.asama === "SALT_OKUNUR", JSON.stringify(yaz.json.details));
-  const rapor = await api(o, "POST", "/api/raporlar", { belirtec: yonetici.belirtec, govde: { clientToken: randomUUID(), raporAnahtari: "sales/summary", parametreler: {} } });
+  const rapor = await api(o, "POST", "/api/raporlar", { belirtec: yonetici.belirtec, govde: { clientToken: randomUUID(), raporAnahtari: "sales/order-intake", parametreler: {} } });
   kontrol("§3d rapor isteği 403", rapor.status === 403 && rapor.json.details?.code === "PATRON_BULUT_KAPALI");
   const fabrika = await imzali(o, k, "/v1/esitle", { govde: paket(k, { ufuk: new Date(o.saat.simdi() - 60_000) }) });
   kontrol("§3e fabrika kanalı 403 (eşitleme durdu)", fabrika.status === 403 && fabrika.json.details?.code === "PATRON_BULUT_KAPALI");

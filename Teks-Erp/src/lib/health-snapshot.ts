@@ -3,6 +3,7 @@
 // aktarınca döngü doğmasın (app → routes → service → app).
 // ⚠️ Public `/health` alan kümesi DONMUŞTUR ve `app.ts`'te kalır; buraya eklenen alan
 // yalnız kimlikli yüzeylere gider. Yoklama özeti ayrıca protokolün KATI şemasından geçer.
+import { shortCredentialHealthSnapshot } from "../services/short-credential.service";
 import fs from "fs";
 import os from "os";
 import path from "path";
@@ -397,6 +398,9 @@ export async function buildRichHealth(): Promise<Record<string, unknown>> {
     backupHealth: backupHealth(),
     // Şifreleme niyeti ayrışması: `warning` null değilse bir taraf düz döküm üretiyor.
     backupCryptoIntent: backupCryptoIntent(),
+    // Kısa kimlikler (PIN/kart): düz kalan · anahtarı uyuşmayan · emaneti eksik. Değer TAŞIMAZ;
+    // 60 sn önbellekli, `status: null` = ölçülemedi.
+    shortCredentials: shortCredentialHealthSnapshot(),
     // Havuzun KENDİ durumu + kümülatif zaman aşımı sayacı. Yukarıdaki
     // `dbConnections` `pg_stat_activity` sayımıdır → SUNUCU tarafını sayar
     // (psql/pgAdmin/pg_dump dahil), idle/busy ayırt etmez ve havuzun kaç bağlantı

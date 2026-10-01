@@ -7,8 +7,9 @@
 //   §3 tesis A kapsamında B'nin satırı görünmez (liste, kimlikle doğrudan, projeksiyon) · WITH CHECK:
 //      A kapsamında B'ye yazılamaz · ön-kiracı arama yalnız TEK anahtarlı satırı açar.
 //   §4 alan izni (RESTRICTIVE): izinsiz alt satır (`siparis.finans`) doğrudan SQL'le de 0 satır.
-//   §5 rol ayrımı: uygulama rolü projeksiyona YAZAMAZ; eşitleme rolü hesap tablosunu OKUYAMAZ; uygulama rolü
-//      denetim satırında yalnız `summary`yi (IP alanı silmesi) güncelleyebilir.
+//   §5 rol ayrımı: uygulama rolü projeksiyona YAZAMAZ; eşitleme rolü hesap tablosunu OKUYAMAZ — tek istisna gelen
+//      kutusu claim'inin yazar sorgusu (`accounts`ta yalnız kimlik · tesis · durum · izin; e-posta, ad ve sırlar RED);
+//      uygulama rolü denetim satırında yalnız `summary`yi (IP alanı silmesi) güncelleyebilir.
 //   §6 kapsam yardımcısı: sıfır UUID / biçimsiz tesis / `*` projeksiyon REDDEDİLİR.
 //   §7 açılış kapısı: RLS'i atlayabilen rol (göç rolü = süper kullanıcı) ile sunucu KALKMAZ.
 // Koşum: npx tsx scripts/test_rls_sizinti.ts   (kendi *_test DB'si; roller her koşumda hizalanır)
@@ -184,6 +185,17 @@ async function rolAyrimi(o: Ortam, a: { tesisId: string }): Promise<void> {
     kontrol("§5a uygulama rolü projeksiyona YAZAMAZ (permission denied)", yaz.hata && /permission denied/i.test(yaz.mesaj), yaz.mesaj.slice(0, 60));
     const oku = await kapsamda(sync, { "app.tesis_id": a.tesisId }, () => hataVerir(sync, "SELECT * FROM accounts"));
     kontrol("§5b eşitleme rolü hesap tablosunu OKUYAMAZ", oku.hata && /permission denied/i.test(oku.mesaj), oku.mesaj.slice(0, 60));
+    const yazar = await kapsamda(sync, { "app.tesis_id": a.tesisId }, () => hataVerir(sync, "SELECT id, tesis_id, status, permissions FROM accounts"));
+    const kimlik: string[] = [];
+    for (const kolon of ["email", "name", "password_hash", "totp_secret_sealed", "invite_token_hash", "last_login_at"]) {
+      const r = await kapsamda(sync, { "app.tesis_id": a.tesisId }, () => hataVerir(sync, `SELECT ${kolon} FROM accounts`));
+      if (!(r.hata && /permission denied/i.test(r.mesaj))) kimlik.push(kolon);
+    }
+    kontrol(
+      "§5b2 ⭐ eşitleme rolü `accounts`ta YALNIZ kimlik · tesis · durum · izin okur (gelen kutusu yazar sorgusu); e-posta · ad · sırlar · son giriş RED",
+      !yazar.hata && yazar.satir >= 1 && kimlik.length === 0,
+      yazar.hata ? yazar.mesaj.slice(0, 60) : kimlik.join(",") || `${yazar.satir} satır`,
+    );
     const oturum = await kapsamda(sync, { "app.tesis_id": a.tesisId }, () => hataVerir(sync, "SELECT * FROM sessions"));
     kontrol("§5c eşitleme rolü oturum tablosunu OKUYAMAZ", oturum.hata && /permission denied/i.test(oturum.mesaj));
     // Denetim satırı ayak izidir: uygulama rolü yalnız `summary` kolonunu (IP alanı silmesi) güncelleyebilir.

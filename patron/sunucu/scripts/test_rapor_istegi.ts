@@ -1,15 +1,21 @@
 // =============================================================================
 // RAPOR İSTEĞİ BEKÇİSİ (sözleşme §7) — bulut hesap yapmaz, rapor FABRİKADA hesaplanır:
-//   §1 kapılar: audit ailesi ve kişi adlı rapor buluttan İSTENEMEZ · aile izni + rapor:oku şart ·
-//      fabrikanın rapor kataloğunda olmayan anahtar 404 · istek zili `rapor`
+//   §1 kapılar: audit ailesi ve kişi adlı rapor buluttan İSTENEMEZ · RAPOR BAŞINA izin + rapor:oku şart
+//      (aile izni yetmez: sevkiyat karnesi sevkiyat izni, çek vadesi çek izni ister) · fabrikanın beyanı daha
+//      darsa o da istenir, tanınmayan beyan RED · fabrikanın rapor kataloğunda olmayan anahtar 404 · zil `rapor`
 //   §2 fabrika: `rapor/al` ATOMİK claim (eşzamanlı ikisi ayrık) · `rapor/sonuc` HAZIR → hesap sonucu
 //      görür · tekrar sonuç idempotent · sahibi olmayan kurulum 409
-//   §3 sonuç RLS'i: aileye izni olmayan hesap (yönetici görünürlüğüyle bile) sonucu GÖREMEZ
+//   §3 sonuç RLS'i: rapora izni olmayan hesap (yönetici görünürlüğüyle bile) sonucu GÖREMEZ — RLS adı rapor
+//      başına (aynı ailenin geniş izni dar raporun satırını açmaz); eski aile adlı satır yalnız ailenin BÜTÜN
+//      raporlarını okuyabilene açık (geçiş)
 //   §4 5 dk içinde aynı parametre → yeni istek doğrudan HAZIR (mevcut sonuç), zil YOK · standart görüntü (istekId null)
 //   §5 claim süresi: bir kez BEKLIYOR'a döner, ikincide HATA `ZAMAN_ASIMI` · yazar BEKLIYOR iken iptal
 // Koşum: npx tsx scripts/test_rapor_istegi.ts
 // =============================================================================
 import { randomUUID } from "node:crypto";
+import { sessionProjections } from "../src/auth/session.service";
+import { effectivePermissions } from "../src/catalog/permissions";
+import { withTesis } from "../src/lib/tenant";
 import { expireClaims } from "../src/services/maintenance";
 import { api, hesapKur, imzali, kontrol, ortamKur, paket, sonuc, temizleTesis, tesisKur, type Ortam, type TestHesabi, type TestKurulumu } from "./lib/test-ortam";
 
@@ -17,7 +23,19 @@ type Alinan = { istekler: { istekId: string; raporAnahtari: string }[] };
 
 async function katalog(o: Ortam, k: TestKurulumu): Promise<void> {
   const ufuk = new Date(o.saat.simdi() - 10_000);
-  const veri = { raporlar: [{ anahtar: "sales/order-intake" }, { anahtar: "finance/aging" }, { anahtar: "audit/user-activity" }] };
+  // `izin` fabrikanın beyanıdır: finance/aging beyansız (yalnız bulut kararı), inventory/scorecard bulutunkinden DAR
+  // (fiyat izni de), quality/scorecard TANINMAYAN izin (RED).
+  const veri = {
+    raporlar: [
+      { anahtar: "sales/order-intake", izin: "bulut:siparis:oku" },
+      { anahtar: "finance/aging" },
+      { anahtar: "audit/user-activity" },
+      { anahtar: "sales/shipment-scorecard", izin: "bulut:sevkiyat:oku" },
+      { anahtar: "finance/cheque-due", izin: "bulut:cek:oku" },
+      { anahtar: "inventory/scorecard", izin: "bulut:fiyat:oku" },
+      { anahtar: "quality/scorecard", izin: "bulut:bilinmeyen:oku" },
+    ],
+  };
   const r = await imzali(o, k, "/v1/esitle", { govde: paket(k, { ufuk, anliklar: [{ projeksiyon: "rapor-katalogu", icerikOzeti: "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855", veri }] }) });
   if (r.status !== 200) throw new Error(`katalog: ${r.status}`);
 }
@@ -67,6 +85,21 @@ async function main(): Promise<void> {
     const id2 = (r2.json.data as { id: string }).id;
     kontrol("§1e geçerli istekler 201 BEKLIYOR", r1.status === 201 && r2.status === 201 && (r1.json.data as { durum?: string }).durum === "BEKLIYOR");
     kontrol("§1f zil `rapor` çaldı", o.zil.caldi.slice(zilOnce).filter((z) => z.konu === "rapor").length === 2);
+    const sevkYok = await iste(o, satis, "sales/shipment-scorecard");
+    kontrol("§1g ⭐ sipariş izni var, sevkiyat izni yok → sevkiyat karnesi 403 (aile izni yetmez)", sevkYok.status === 403, `${sevkYok.status}`);
+    const cekYok = await iste(o, muhasebe, "finance/cheque-due");
+    kontrol("§1h ⭐ cari bakiye izni var, çek izni yok → çek vade dökümü 403", cekYok.status === 403, `${cekYok.status}`);
+    const sevkci = await hesapKur(o, k.tesisId, ["bulut:rapor:oku", "bulut:sevkiyat:oku"]);
+    const sevkVar = await iste(o, sevkci, "sales/shipment-scorecard");
+    kontrol("§1i sevkiyat izni (sipariş izni olmadan) → sevkiyat karnesi 201", sevkVar.status === 201, `${sevkVar.status}`);
+    const stokcu = await hesapKur(o, k.tesisId, ["bulut:rapor:oku", "bulut:stok:oku"]);
+    const darBeyan = await iste(o, stokcu, "inventory/scorecard");
+    const stokFiyat = await hesapKur(o, k.tesisId, ["bulut:rapor:oku", "bulut:stok:oku", "bulut:fiyat:oku"]);
+    const darBeyanOk = await iste(o, stokFiyat, "inventory/scorecard");
+    kontrol("§1j fabrikanın beyanı bulutunkinden darsa DAR olan uygulanır (stok → 403, stok + fiyat → 201)", darBeyan.status === 403 && darBeyanOk.status === 201, `${darBeyan.status}/${darBeyanOk.status}`);
+    const uretimci = await hesapKur(o, k.tesisId, ["bulut:rapor:oku", "bulut:uretim:oku"]);
+    const tanimsiz = await iste(o, uretimci, "quality/scorecard");
+    kontrol("§1k fabrikanın beyanı tanınmayan izin → 403 (fail-closed)", tanimsiz.status === 403, `${tanimsiz.status}`);
 
     console.log("\n§2 fabrika claim + sonuç");
     const [a, b] = await Promise.all([imzali(o, k, "/v1/rapor/al", { govde: { v: 1, enFazla: 1 } }), imzali(o, k, "/v1/rapor/al", { govde: { v: 1, enFazla: 1 } })]);
@@ -100,7 +133,28 @@ async function main(): Promise<void> {
     const yonVeri = yon.json.data as { durum?: string; sonuc?: unknown };
     kontrol("§3a yönetici isteği GÖRÜR ama finans ailesi izni yok → sonuc null", yon.status === 200 && yonVeri.durum === "HAZIR" && yonVeri.sonuc === null);
     const muh = await api(o, "GET", `/api/raporlar/${id2}`, { belirtec: muhasebe.belirtec });
-    kontrol("§3b aile izni olan yazar sonucu görür", (muh.json.data as { sonuc?: { veri?: unknown } }).sonuc !== null);
+    kontrol("§3b rapor izni olan yazar sonucu görür", (muh.json.data as { sonuc?: { veri?: unknown } }).sonuc !== null);
+    const idS = (sevkVar.json.data as { id: string }).id;
+    const idStok = (darBeyanOk.json.data as { id: string }).id;
+    const alS = await imzali(o, k, "/v1/rapor/al", { govde: { v: 1, enFazla: 1 } });
+    kontrol("§3c sevkiyat karnesi isteği alındı", (alS.json as unknown as Alinan).istekler.some((x) => x.istekId === idS));
+    await imzali(o, k, "/v1/rapor/sonuc", { govde: sonucGovdesi(idS, "sales/shipment-scorecard", hesap, { veri: { sevk: [{ ay: "2026-09", metre: "800.0" }] } }) });
+    const yonS = (await api(o, "GET", `/api/raporlar/${idS}`, { belirtec: yonetici.belirtec })).json.data as { durum?: string; sonuc?: unknown };
+    const sevkS = (await api(o, "GET", `/api/raporlar/${idS}`, { belirtec: sevkci.belirtec })).json.data as { sonuc?: unknown };
+    kontrol("§3d ⭐ aynı ailenin (sales) sipariş izniyle sevkiyat karnesi sonucu GÖRÜLMEZ; sevkiyat izinli yazar görür", yonS.durum === "HAZIR" && yonS.sonuc === null && sevkS.sonuc !== null && sevkS.sonuc !== undefined);
+    const sonucId = await withTesis(o.goc.prisma, { tesisId: k.tesisId }, async (tx) => (await tx.reportRequest.findUniqueOrThrow({ where: { id: idS } })).resultId!);
+    const goruyor = async (izinler: string[], id: string) =>
+      withTesis(o.ctx.app, { tesisId: k.tesisId, projections: sessionProjections(effectivePermissions(izinler)) }, (tx) => tx.reportResult.findUnique({ where: { id } }));
+    kontrol("§3e ⭐ RLS (uygulama rolü, ham kapsam): sipariş izniyle sevkiyat karnesi satırı 0 · sevkiyat izniyle 1", (await goruyor(["bulut:rapor:oku", "bulut:siparis:oku"], sonucId)) === null && (await goruyor(["bulut:rapor:oku", "bulut:sevkiyat:oku"], sonucId)) !== null);
+    const eskiId = await withTesis(o.goc.prisma, { tesisId: k.tesisId }, async (tx) =>
+      (await tx.reportResult.create({ data: { tesisId: k.tesisId, reportKey: "sales/shipment-scorecard", projection: "rapor.sales", paramsDigest: "x".repeat(64), data: {}, computedAt: new Date(), sourceHorizon: new Date() } })).id,
+    );
+    kontrol(
+      "§3f geçiş: eski aile adlı satır (`rapor.sales`) yalnız ailenin BÜTÜN raporlarını okuyabilene açık",
+      (await goruyor(["bulut:rapor:oku", "bulut:siparis:oku"], eskiId)) === null && (await goruyor(["bulut:rapor:oku", "bulut:siparis:oku", "bulut:sevkiyat:oku"], eskiId)) !== null,
+    );
+    const iptalStok = await api(o, "POST", `/api/raporlar/${idStok}/iptal`, { belirtec: stokFiyat.belirtec, govde: {} });
+    kontrol("§3g kuyruk temiz (stok isteği yazarca iptal)", iptalStok.status === 200);
 
     console.log("\n§4 5 dk içinde aynı parametre");
     const zil2 = o.zil.caldi.length;

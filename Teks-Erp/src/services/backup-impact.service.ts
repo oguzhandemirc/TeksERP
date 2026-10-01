@@ -371,6 +371,22 @@ const COUNT_SPECS: CountSpec[] = [
     note: "Geri yükleme sonrası kullanıcılar yeniden giriş yapar",
     run: (c) => prisma.session.count({ where: { createdAt: { gte: c } } }),
   },
+  {
+    key: "quickPinIssued",
+    label: "Verilen / değiştirilen hızlı PIN",
+    group: "system",
+    timestampField: "quickPinSetAt",
+    note: "Geri yüklemede bu kullanıcıların PIN'i yedekteki eski değere döner — yeniden verilmeli",
+    run: (c) => prisma.user.count({ where: { quickPinSetAt: { gte: c } } }),
+  },
+  {
+    key: "cardIssued",
+    label: "Basılan personel kartı",
+    group: "system",
+    timestampField: "cardIssuedAt",
+    note: "Geri yüklemede bu kartlar geçersizleşir (eski kart döner) — yeniden basılmalı",
+    run: (c) => prisma.user.count({ where: { cardIssuedAt: { gte: c } } }),
+  },
 ];
 
 const GROUP_LABELS: Record<ImpactGroupKey, string> = {

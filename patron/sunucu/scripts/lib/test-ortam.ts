@@ -190,7 +190,9 @@ export function totpKodu(sir: string, ms: number): string {
 /** Hesap: satıcı daveti → kabul → onay → giriş (gerçek servis yolu). İzinler sonradan GÖÇ rolüyle ayarlanır. */
 export async function hesapKur(o: Ortam, tesisId: string, izinler: readonly string[]): Promise<TestHesabi> {
   const eposta = `bekci-${randomUUID().slice(0, 12)}@ornek.test`;
-  const davet = await inviteFacilityAdmin(o.goc.prisma, { tesisId, email: eposta, name: "Bekçi Hesabı", validHours: 24 }, o.saat.simdi());
+  // Fikstür hesabı satıcı yolundan doğar; tesiste aktif yönetici olabileceği için açık zorlamayla (denetime yazılır).
+  const zorla = { talep: "BEKCI-FIKSTUR", gerekce: "bekçi fikstürü: test hesabı" };
+  const davet = await inviteFacilityAdmin(o.goc.prisma, { tesisId, email: eposta, name: "Bekçi Hesabı", validHours: 24, zorla }, o.saat.simdi());
   const kabul = await acceptInvite(o.ctx, { token: davet.token, password: TEST_PAROLASI });
   o.saat.ilerlet(31_000);
   await confirmInvite(o.ctx, { token: davet.token, totp: totpKodu(kabul.totpSirri, o.saat.simdi()) });
