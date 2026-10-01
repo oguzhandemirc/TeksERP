@@ -347,6 +347,11 @@ function olc(k: Kaynaklar): Bulgular {
   }
   if (!/ExpandConstant\('\{sys\}\\WindowsPowerShell\\v1\.0\\powershell\.exe'\)/.test(pasGovde(k.iss, "PowerShellYolu") ?? "")) ekle("§8", "PowerShellYolu 64-bit {sys} değil");
   if (/\{syswow64\}|\{sysnative\}/.test(k.iss)) ekle("§8", "32-bit/sysnative yol kullanılıyor");
+  // Sessiz kip (thinkpad-1 D8): çıplak MsgBox /SUPPRESSMSGBOXES ile bastırılmaz → sessiz kurulum soruda asılı kalır.
+  // Çıplak MsgBox yalnız NextButtonClick'te; o da sessiz kipte İLK iş kısa devre yapar.
+  const nbc = pasGovde(k.iss, "NextButtonClick") ?? "";
+  if (!/^\s*Result := True;\s*\n(?:\s*\/\/[^\n]*\n)*\s*if Sessiz then Exit;/m.test(nbc.split("begin").slice(1).join("begin"))) ekle("§8", "NextButtonClick sessiz kipte kısa devre yapmıyor (if Sessiz then Exit;) — MsgBox sessiz kurulumu asar");
+  for (const s of pas) if (/(?<!Suppressible)MsgBox\(/.test(s.satir) && s.islev !== "NextButtonClick") ekle("§8", `çıplak MsgBox NextButtonClick dışında (${s.islev}:${s.no}) — sessiz kipte bastırılmaz`);
 
   // §9 — CI
   const is = k.is;
@@ -457,6 +462,8 @@ if (eksik.length === 0) {
     { ad: "S19 kaldırıcı kaldir.ps1'i çağırmıyor", dosya: "iss", eski: `kaldir.ps1"" -Kok ""{app}"""`, yeni: `kaldir.ps1"""`, bolum: "§8", parca: "kaldırıcı" },
     { ad: "S20 yönetici olmadan kurulum", dosya: "iss", eski: "PrivilegesRequired=admin", yeni: "PrivilegesRequired=lowest", bolum: "§8", parca: "PrivilegesRequired" },
     { ad: "S23 UsePreviousLanguage düştü (AppId {code:} iken ISCC derlemez)", dosya: "iss", eski: "UsePreviousLanguage=no\n", yeni: "", bolum: "§8", parca: "UsePreviousLanguage" },
+    { ad: "S24 NextButtonClick sessiz kısa devresi düştü (prova sorusu sessiz kurulumu asar)", dosya: "iss", eski: "  if Sessiz then Exit;\n  if CurPageID = wpSelectDir then", yeni: "  if CurPageID = wpSelectDir then", bolum: "§8", parca: "sessiz kipte kısa devre" },
+    { ad: "S25 çıplak MsgBox sihirbaz dışı işlevde", dosya: "iss", eski: "function Kok: String;\nbegin\n", yeni: "function Kok: String;\nbegin\n  MsgBox('x', mbInformation, MB_OK);\n", bolum: "§8", parca: "çıplak MsgBox NextButtonClick dışında" },
     { ad: "S21 CI boru sonucunu ölçmüyor", dosya: "is", eski: `if ($r -notmatch "(?m)^BORU=TAMAM\\r?$")`, yeni: `if ($false)`, bolum: "§9", parca: "boru öz-sınaması" },
     { ad: "S22 CI test çapalı doğrulayıcıyı kabul ediyor", dosya: "is", eski: `$k.testCapasi -ne $false`, yeni: `$false`, bolum: "§9", parca: "doğrulayıcı üretim derlemesi" },
   ];

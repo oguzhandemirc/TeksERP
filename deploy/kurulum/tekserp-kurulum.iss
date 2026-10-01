@@ -836,6 +836,10 @@ function NextButtonClick(CurPageID: Integer): Boolean;
 var Engel, S: String; Api, Pg: Integer;
 begin
   Result := True;
+  // Sessiz kip: Inno her sayfa için yine çağırır, ama karar ve doğrulama cevap dosyasındadır (InitializeSetup
+  // ölçtü, OnKosul yeniden ölçer). Buradaki MsgBox /SUPPRESSMSGBOXES'le BASTIRILMAZ - sessiz kurulum soruda
+  // sonsuza dek beklerdi (thinkpad-1 D8: prova sorusu); sayfa varsayılanlarıyla doğrulama da anlamsız.
+  if Sessiz then Exit;
   if CurPageID = wpSelectDir then
   begin
     if not YolGecerli(Kok) then
