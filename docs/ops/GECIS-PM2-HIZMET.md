@@ -118,6 +118,8 @@ gecis.ps1 -Kok C:\TeksERP -GeriAl                                   # KURU: geri
 gecis.ps1 -Kok C:\TeksERP -GeriAl -Uygula -Onay <N> -PlanOzeti <özet>
 ```
 
+**Yarım kalan geçiş** (elektrik kesintisi, oturum kopması, yeniden başlatma): sonraki her koşum günlükteki yarım işlemi görür ve `-Uygula`yı REDDEDER — önce `-GeriAl` ile kapatılır, sonra KURU + `-Uygula` baştan (ileriye devam bilerek yok: her durumda tek, sınanmış yol). Açılış görevi kalem 7'ye dek açık kaldığı için o noktaya kadar bir yeniden başlatmada eski pm2 backend'i kendiliğinden döner; kalem 7–8 arasında hiçbir backend kalkmaz (operatör pencerededir); kalem 8'den sonra yeni hizmet kalkar (veritabanı aynı, göç yok).
+
 Ters sırada: güncelleyici durur + kaldırılır → `yedekle.ps1` ve `dump.pm2` geçiş öncesine → backend hizmeti durur + kaldırılır → açılış görevi açılır → **pm2 backend'i yeniden başlar + sağlık** → `yapilandirma\.env`, `veri\rclone.conf`, `surumler\` karantinaya (`gecis\<damga>\geri\`) → izinler geçiş öncesine → `current` kalkar. Sonrasında `kur.ps1` yine kullanılabilir. Geri alma da yarım kalırsa (çıkış 4) aynı komut tekrar koşulur — telafiler tekrarlanabilir, bitenler atlanır.
 
 **Betik çalışamazsa (elle, yönetici PowerShell):**

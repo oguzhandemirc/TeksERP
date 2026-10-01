@@ -185,7 +185,11 @@ function OsBaglantiMi($yol) {
 function OsBaglantiHedefi($yol) {
   if (-not (OsBaglantiMi $yol)) { return $null }
   $t = @((Get-Item -LiteralPath $yol -Force).Target | Where-Object { $_ })
-  if ($t.Count) { return [string]$t[0] } else { return $null }
+  if (-not $t.Count) { return $null }
+  # Junction hedefi bazi surumlerde NT onekiyle (\??\C:\...) doner: karsilastirma duz yolla yapilir.
+  $h = [string]$t[0]
+  if ($h.StartsWith("\??\", [System.StringComparison]::Ordinal)) { $h = $h.Substring(4) }
+  return $h
 }
 function OsBaglantiKur($baglanti, $hedef) {
   $r = NativeKos "cmd.exe" @("/c", "mklink", "/J", $baglanti, $hedef)
@@ -1187,7 +1191,9 @@ function UygulaKip {
   GecisDiziniAc $E
   PlanBas $plan "PLAN ($($plan.Count) kalem, ozet $oz) - gecis dizini $($script:gdizin)"
   AnlikGoruntu $E
-  GunlukYaz "PLAN" $null @{ damga = $script:damga; kok = $E.Kok; surum = $E.Surum; paket = @{ ad = [System.IO.Path]::GetFileName($E.Zip); sha256 = $E.ZipOzet; derleme = [string]$E.Paket.derlemeKimligi }; hizmet = $E.HizmetAdi; guncelleyici = $GuncelleyiciAdi; port = $E.Port; kimlik = $E.Kimlik; kalemler = @($plan | ForEach-Object { $_.Adim }); ozet = $oz }
+  # Lisans dizininin dosya ADLARI (icerik degil): gecis sonrasi "yerinde mi" olcumu bununla.
+  $lisansAdlari = @(Get-ChildItem -LiteralPath (Join-Path $E.Kok "lisans") -File -Force -ErrorAction SilentlyContinue | ForEach-Object { $_.Name })
+  GunlukYaz "PLAN" $null @{ damga = $script:damga; kok = $E.Kok; surum = $E.Surum; paket = @{ ad = [System.IO.Path]::GetFileName($E.Zip); sha256 = $E.ZipOzet; derleme = [string]$E.Paket.derlemeKimligi }; hizmet = $E.HizmetAdi; guncelleyici = $GuncelleyiciAdi; port = $E.Port; kimlik = $E.Kimlik; lisans = $lisansAdlari; kalemler = @($plan | ForEach-Object { $_.Adim }); ozet = $oz }
   $E.SurumDizini = Join-Path (Join-Path $E.Kok "surumler") $E.Surum
   $E.NodeKurulu = Join-Path $E.SurumDizini "runtime\node.exe"
   $E.YardimciKurulu = $E.Yardimci
@@ -1263,6 +1269,14 @@ function DurumRaporu($E) {
   if ($hl) { Ok "/health: $($hl.status) / DB $($hl.db) / v$($hl.version)" } else { Uyar "/health cevap vermiyor (port $port)" }
   if ($plan -and $plan.kimlik) { $k = KimlikOku "127.0.0.1" $port 5; if ($k -and [string]$k.installationId -ceq [string]$plan.kimlik) { Ok "kurulum kimligi ayni: $($plan.kimlik)" } else { Uyar "kurulum kimligi okunamadi ya da farkli" } }
   if (@(OsPm2Daemon).Count) { Uyar "pm2 daemon hala calisiyor" } else { Ok "pm2 daemon yok" }
+  if ($plan -and $plan.lisans) {
+    $eksik = @(@($plan.lisans) | Where-Object { -not (Test-Path -LiteralPath (Join-Path (Join-Path $kok "lisans") ([string]$_))) })
+    if ($eksik.Count) { Uyar "lisans dizininde gecis oncesi dosya EKSIK: $($eksik -join ', ')" } else { Ok "lisans dizini yerinde ($(@($plan.lisans).Count) dosya; kira/HAK/kurulum anahtari gecis oncesindeki gibi)" }
+  }
+  $ky = Join-Path $kok "yedekle.ps1"; $cy = Join-Path $kok "current\yedekle.ps1"
+  if ((Test-Path -LiteralPath $ky) -and (Test-Path -LiteralPath $cy)) {
+    if ((OsOzet $ky) -ceq (OsOzet $cy)) { Ok "gece yedegi betigi = kurulu surumunku (hizmet duzenini tanir)" } else { Uyar "$ky kurulu surumunkinden farkli - gece yedegi hizmet duzenini tanimayabilir" }
+  }
   try {
     foreach ($g in @(OsGorevler | Where-Object { $_.Ad.StartsWith("TeksERP", [System.StringComparison]::Ordinal) })) {
       if ($g.Ad -ceq "TeksERP-Backend-Boot") { if ($g.Durum -ceq "Disabled") { Ok "acilis gorevi kapali" } else { Uyar "acilis gorevi ACIK ($($g.Durum)) - pm2 resurrect hizmetle cakisir" } }
