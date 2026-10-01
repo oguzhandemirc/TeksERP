@@ -15,6 +15,8 @@
 // kurulum kimliği eklendi · A3 iş hatası dağılımına hata mesajı eklendi · (F1a) A4 ortamdan DB
 // kimliği düştü (§1d) · A5 yoklamadan satıcı saati sapması düştü (§1d) · (3d-2) A6 kurulum kaydı şeması
 // gevşetildi (`looseObject`): dosya yolu taşıyan satır gövdeye girdi → §1b · §2c · §4a/b/c kırmızı (5).
+// (L2-1) §1e lisans v2 ekleri: AB1 beyandan `parmakIziKayip` düştü → §1e · AB2 yoklama şemasından aynı alan
+// düştü (KATI şema reddeder) → §1e — şema ile beyan aynı kararı taşımazsa kırmızı.
 // =============================================================================
 import os from "node:os";
 import path from "node:path";
@@ -61,6 +63,9 @@ const IZINLI_ANAHTARLAR = new Set([
   "gozlem", "reddedilecekIstek", "reddedilecekModul",
   "kurulumKayitlari", "kayitId", "tarih", "commit", "paketOzeti", "oncekiSurum", "yeniSurum", "migrationSayisi",
   "yeniMigrationSayisi", "geriDonus", "damga", "kod", "veri", "veriSifreli",
+  // Lisans v2 (L2-1 kararı; üretimi L2-6): yetenekler · HAK bayt özeti · belirsizlik birikimi · durum kaydı
+  // sırası · kayıp parmak izi etkenleri — hepsi sayı, kapalı küme ya da özet; iş verisi değil.
+  "yetenekler", "ozet", "belirsizlik", "birikenMs", "ilk", "durumKaydi", "sira", "gecerli", "parmakIziKayip",
 ]);
 
 function anahtarlar(deger: unknown, yol: string, out: string[]): string[] {
@@ -129,6 +134,16 @@ async function main(): Promise<void> {
     check("§1a körlük zemini: gövde dolu (≥ 40 anahtar yolu)", tumu.length >= 40, `${tumu.length}`);
     check("§1b ⭐ beyan DIŞI anahtar YOK", disarda.length === 0, disarda.join(", "));
     check("§1c ⭐ gövde KATI protokol şemasından geçer", PollRequestSchema.safeParse(govde).success);
+    const v2 = {
+      ...govde,
+      hak: govde.hak ? { ...govde.hak, ozet: "A".repeat(43) } : null,
+      yetenekler: ["hak-ara", "parmak-izi-v2"],
+      belirsizlik: { birikenMs: 1000, ilk: new Date().toISOString() },
+      durumKaydi: { sira: 3, gecerli: true },
+      parmakIziKayip: ["f4"],
+    };
+    const v2Disarda = anahtarlar(v2, "", []).filter((y) => !IZINLI_ANAHTARLAR.has(y.split(".").pop()?.replace(/\[\d+\]$/, "") ?? ""));
+    check("§1e v2 ekleri (L2-1) şemadan geçer VE her anahtarı beyanlı — şema ile beyan aynı kararı taşır", PollRequestSchema.safeParse(v2).success && v2Disarda.length === 0 && v2.hak !== null, v2Disarda.join(", "));
     check(
       "§1d ortam.installationId = DB kimliği (yalnız bilgi), saat.saticiSapmaSn ölçülen sapma; lisans kimliği gövdede YOK (imzalı başlıkta)",
       govde.ortam.installationId === dbKimligi && govde.saat.saticiSapmaSn === -1200 && dbKimligi !== f.kurulumId && !metin.includes(f.kurulumId),

@@ -7,12 +7,14 @@ import {
   PublicKeyXSchema,
   IsoTimeSchema,
   JwsTextSchema,
+  DigestSchema,
   FingerprintSchema,
   OptionalInstallationIdSchema,
   PROTOCOL_VERSION,
   VersionTextSchema,
   UuidSchema,
 } from "./belgeler";
+import { FINGERPRINT_FACTORS } from "./parmak-izi";
 import { isPlainObject } from "./ortak";
 
 export const ENDPOINTS = {
@@ -23,6 +25,8 @@ export const ENDPOINTS = {
   TRANSFER: "/v1/tasima",
   DR_TAKEOVER: "/v1/dr-devral",
   SUPPORT: "/v1/destek",
+  /** Donanım değişikliği bildirimi (K8) — gövde `donanim.ts`. */
+  HARDWARE: "/v1/donanim",
 } as const;
 
 export const VALIDITY_VALUES = ["GECERLI", "GECERSIZ", "OLCULEMEDI"] as const;
@@ -122,6 +126,32 @@ export const StateSummarySchema = z.strictObject({
 
 const VersionField = z.literal(PROTOCOL_VERSION);
 
+/**
+ * Kurulumun bildirdiği yetenekler: daraltan yeni biçimler (ara imzacı zinciri, ufuk, kip alt sınırı, parmak izi
+ * kuralı, iptal) YALNIZ bildiren kuruluma gider. Liste AÇIK biçimli dizgedir (kapalı enum değil): tanımadığı
+ * yeteneği satıcı yok sayar, yeni fabrika eski satıcıdan 400 almaz.
+ */
+export const LICENSE_CAPABILITIES = Object.freeze(["hak-ara", "odenmis-tarih", "iptal", "parmak-izi-v2"] as const);
+export type LicenseCapability = (typeof LICENSE_CAPABILITIES)[number];
+const CapabilitySchema = z.string().regex(/^[a-z][a-z0-9-]{1,39}$/);
+export const CapabilityListSchema = z
+  .array(CapabilitySchema)
+  .max(32)
+  .refine((list) => new Set(list).size === list.length, "Yetenek listesinde tekrar var");
+export function hasCapability(list: readonly string[] | undefined, capability: LicenseCapability): boolean {
+  return list?.includes(capability) ?? false;
+}
+
+/** Süren ölçülemedi birikimi (G12): çalışma süresi ms + ilk başlangıç; yerel müdahale şüphesinin girdisi. */
+export const UncertaintySummarySchema = z.strictObject({ birikenMs: CounterSchema, ilk: IsoTimeSchema.nullable() });
+/** İmzalı durum kaydının sırası (`null` = kayıt yok) ve geçerliliği: sıranın gerilemesi satıcıda görünür. */
+export const StateRecordSummarySchema = z.strictObject({ sira: CounterSchema.nullable(), gecerli: z.boolean() });
+/** Kayıp etkenler (K8): kabul kümesinde değeri olup 24 saattir hiçbir yoldan okunamayanlar. */
+export const LostFactorListSchema = z
+  .array(z.enum(FINGERPRINT_FACTORS))
+  .max(FINGERPRINT_FACTORS.length)
+  .refine((list) => new Set(list).size === list.length, "Kayıp etken listesinde tekrar var");
+
 /** Etkinleştirme: kurulum kimliği portalda doğar ve YANITLA gelir — istek onu taşımaz (yok/boş kabul). */
 export const ActivateRequestSchema = z.strictObject({
   v: VersionField,
@@ -132,6 +162,10 @@ export const ActivateRequestSchema = z.strictObject({
   sifrelemeAnahtari: PublicKeyXSchema.optional(),
   parmakIzi: FingerprintSchema,
   ortam: EnvironmentSchema,
+  yetenekler: CapabilityListSchema.optional(),
+  belirsizlik: UncertaintySummarySchema.optional(),
+  durumKaydi: StateRecordSummarySchema.optional(),
+  parmakIziKayip: LostFactorListSchema.optional(),
   /**
    * İlk kurulum kabul belgesi (`tekserp-kabul`, KURULUM imzalı — `kabul.ts`). Şemada opsiyonel (v:1 uyumu, eski
    * gövde anlamlı kodla reddedilsin); satıcı iş kuralıyla ZORUNLU tutar → 409 `KABUL_GEREKLI`. KATI gövde ⇒ satıcı önce.
@@ -168,7 +202,8 @@ export const PollRequestSchema = z.strictObject({
   v: VersionField,
   /** Kira zinciri: sunucu ucu tutar; geride kalmış uç "yakala", iki farklı parmak izi "kopya şüphesi". */
   sonKiraId: UuidSchema.nullable(),
-  hak: z.strictObject({ hakId: UuidSchema, surum: z.number().int().min(1) }).nullable(),
+  /** `ozet`: HAK JWS metninin sha256'sı (`jwsDigest`) — aynı kimlik ve sürümle basılmış yabancı HAK'ı ayırır. */
+  hak: z.strictObject({ hakId: UuidSchema, surum: z.number().int().min(1), ozet: DigestSchema.optional() }).nullable(),
   /** Kurulumun X25519 açık anahtarı (Faz 2d) — eski kurulum ilk yoklamada üretip bildirir. */
   sifrelemeAnahtari: PublicKeyXSchema.optional(),
   parmakIzi: FingerprintSchema,
@@ -186,6 +221,11 @@ export const PollRequestSchema = z.strictObject({
   gozlem: z.strictObject({ reddedilecekIstek: CounterSchema, reddedilecekModul: CounterSchema }),
   /** Son N kurulum kaydı (3d-2) — yoksa alan hiç gönderilmez (eski satıcı KATI şemayla reddederdi). */
   kurulumKayitlari: InstallRecordListSchema.optional(),
+  /** Lisans v2 ekleri — yalnız doluysa gönderilir; eski satıcı KATI şemayla reddeder ⇒ satıcı önce. */
+  yetenekler: CapabilityListSchema.optional(),
+  belirsizlik: UncertaintySummarySchema.optional(),
+  durumKaydi: StateRecordSummarySchema.optional(),
+  parmakIziKayip: LostFactorListSchema.optional(),
 });
 
 /**
@@ -221,6 +261,8 @@ export const LicenseResponseSchema = z.object({
   kurulumId: UuidSchema.optional(),
   /** Etkinleştirmede tüketilen kodun türü (bilgi; tanınmayan değer yok sayılır). */
   kodTuru: z.enum(ACTIVATION_CODE_KINDS).optional().catch(undefined),
+  /** Güncel iptal belgesi (`tekserp-iptal`, G4) — ayrıca doğrulanır; biçimsizse yok sayılır, kirayı düşürmez. */
+  iptal: JwsTextSchema.optional().catch(undefined),
 });
 
 /**
@@ -257,6 +299,8 @@ export const VENDOR_ERROR_CODES = [
   "TEKRAR_DENEYIN",
   /** 404: satıcıda böyle bir yol yok (adres yanlış ya da sunucu sürümü eski). */
   "BULUNAMADI",
+  /** 409: etkinleştirmede okunabilen etken < 3 ya da güçlü < 2 (K8) — portal onayı bekler; kod ve nonce tüketilmez. */
+  "ZAYIF_TANIMA_ONAY_BEKLIYOR",
   "SUNUCU_HATASI",
 ] as const;
 export type VendorErrorCode = (typeof VENDOR_ERROR_CODES)[number];

@@ -16,6 +16,7 @@ import {
   type CertUsage,
   type CertificateDoc,
   type EntitlementDoc,
+  type EntitlementSignerKind,
   type Fingerprint,
   type FingerprintFactor,
   type LeaseDoc,
@@ -85,7 +86,7 @@ export interface CertificateView {
 
 export interface EntitlementView {
   readonly document: EntitlementDoc;
-  readonly signer: { readonly kind: "KOK" | "BAYI"; readonly kid: string; readonly rootKid: string };
+  readonly signer: { readonly kind: EntitlementSignerKind; readonly kid: string; readonly rootKid: string };
 }
 
 export interface LeaseView {

@@ -74,6 +74,7 @@ const VENDOR_MESSAGES = {
   HIZ_SINIRI: "Çok sık denendi; biraz sonra tekrar deneyin.",
   TEKRAR_DENEYIN: "Lisans sunucusunda eşzamanlı bir işlem çakıştı; biraz sonra tekrar deneyin.",
   BULUNAMADI: "Lisans sunucusu bu isteği tanımadı (adres yanlış ya da sunucu sürümü eski olabilir; LICENSE_SERVER_URL ayarını kontrol edin).",
+  ZAYIF_TANIMA_ONAY_BEKLIYOR: "Bu sunucunun donanımı yeterince tanınamadı; etkinleştirme satıcı onayı bekliyor. Onaylanınca aynı kodla yeniden deneyin.",
   SUNUCU_HATASI: "Lisans sunucusunda bir hata oluştu; biraz sonra tekrar deneyin.",
 } as const satisfies Readonly<Record<VendorErrorCode, string>>;
 
