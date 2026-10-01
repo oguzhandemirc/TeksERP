@@ -12,6 +12,8 @@
 //      parola tekrarı uyuşmaz · zayıf parola · stdin boş · depo içine üretim anahtarı · hazırlık/üretim karışması
 //      (parolalı dosyada hazırlık kid'i · parolasız dosyada üretim kid'i · parolalı dosyada düz özel yarı)
 //   §3 hazırlık akışı DEĞİŞMEDİ: kid'siz `anahtar-uret` parolasız dosya yazar, imza parola sormaz
+//   §4 (G3) anahtar AİLESİ = derlemenin çapa kipi (`dist/server-kunye.json` `guvenCapasi`): üretim çapalı pakete
+//      hazırlık anahtarı · hazırlık çapalıya üretim anahtarı → parola SORULMADAN RED, imza yok; uyan aile imzalar
 // ⭐ KALICI SONDA ✓K: §0c tek-uygulama tarayıcısı sentetik kripto satırını yakalar; §2 ret dalları her koşumda.
 // Koşum: node ../scripts/agir-is.mjs -- npx tsx scripts/test_lisans_paket_anahtari.ts
 // =============================================================================
@@ -264,12 +266,50 @@ function bolum3(): void {
   check("§3b hazırlık anahtarıyla imza parola SORMAZ (stdin boş): çıkış 0, butunluk.jws yazıldı", imza.kod === 0 && existsSync(path.join(kok, INTEGRITY_FILE)), `çıkış ${imza.kod} ${imza.hata.trim().slice(0, 60)}`);
 }
 
+// ── §4 ───────────────────────────────────────────────────────────────────────
+/** Künyeli paket kökü: build-korumali'nin yazdığı `dist/server-kunye.json` (çapa kipiyle). */
+function kunyeliPaket(kip: "uretim" | "hazirlik"): string {
+  const kok = paket();
+  writeFileSync(path.join(kok, "dist", "server-kunye.json"), `${JSON.stringify({ zaman: "2026-10-01T00:00:00.000Z", guvenCapasi: kip })}\n`);
+  return kok;
+}
+
+function bolum4(): void {
+  console.log("\n§4 anahtar ailesi = derlemenin çapa kipi (G3)");
+  const hazirlik = path.join(TEMP, "ev", ".tekserp", "satici-hazirlik", "paket-hazirlik.paket.json");
+  const { dosya: uretim } = uretimAnahtari("paket-2098");
+  if (!existsSync(hazirlik) || !existsSync(uretim)) {
+    check("§4 körlük zemini: iki aile anahtarı üretildi", false, `${existsSync(hazirlik)} · ${existsSync(uretim)}`);
+    return;
+  }
+  const k1 = kunyeliPaket("uretim");
+  const r1 = imzala(k1, hazirlik, "");
+  check("§4a ⭐ üretim çapalı pakete HAZIRLIK anahtarı → çıkış 1, imza YOK", r1.kod === 1 && /anahtar ailesi/.test(r1.hata) && !existsSync(path.join(k1, INTEGRITY_FILE)), `çıkış ${r1.kod} ${r1.hata.trim().slice(0, 90)}`);
+  const k2 = kunyeliPaket("hazirlik");
+  const r2 = imzala(k2, uretim, "");
+  check(
+    "§4b ⭐ hazırlık çapalı pakete ÜRETİM anahtarı → parola SORULMADAN çıkış 1 (stdin boş), imza YOK",
+    r2.kod === 1 && /anahtar ailesi/.test(r2.hata) && !/parola/i.test(r2.hata) && !existsSync(path.join(k2, INTEGRITY_FILE)),
+    `çıkış ${r2.kod} ${r2.hata.trim().slice(0, 90)}`,
+  );
+  const k3 = kunyeliPaket("uretim");
+  const r3 = imzala(k3, uretim, `${PAROLA}\n`);
+  const k4 = kunyeliPaket("hazirlik");
+  const r4 = imzala(k4, hazirlik, "");
+  check(
+    "§4c karşı kontrol: uyan aile imzalar (üretim + parola · hazırlık parolasız)",
+    r3.kod === 0 && existsSync(path.join(k3, INTEGRITY_FILE)) && r4.kod === 0 && existsSync(path.join(k4, INTEGRITY_FILE)),
+    `üretim ${r3.kod} ${r3.hata.trim().slice(0, 50)} · hazırlık ${r4.kod} ${r4.hata.trim().slice(0, 50)}`,
+  );
+}
+
 async function main(): Promise<void> {
   try {
     bolum0();
     await bolum1();
     bolum2();
     bolum3();
+    bolum4();
   } finally {
     rmSync(TEMP, { recursive: true, force: true });
   }

@@ -370,6 +370,10 @@ async function bolum4(): Promise<void> {
     "§4d paketle.ps1 native'i app/native'e koyar (yoksa Fail) · kur.ps1 imzasız ya da listesiz korumalı paketi reddeder",
     /Join-Path \$stage "native"/.test(pk) && /native lisans cekirdegi yok/.test(pk) && /Korumali paket IMZASIZ/.test(kur) && /Join-Path \$temp "butunluk-liste\.txt"/.test(kur),
   );
+  // G3: native kopyalandıktan hemen sonra paketin kendi Node'uyla çapa kipi denetimi; sıfır dışı çıkış paketi durdurur.
+  const kipCagri = /& \$runtimeNode \(Join-Path \(Join-Path \$proj "scripts"\) "native-capa-kipi\.mjs"\)[^\n]*server-kunye\.json"\)\r?\n\s*if \(\$LASTEXITCODE -ne 0\) \{ Fail /;
+  const kopya = pk.indexOf('Copy-Item $natKaynak (Join-Path $stage "native\\$natAd")');
+  check("§4d' ⭐ paketle.ps1 -Korumali native'i kopyaladıktan sonra çapa kipini paketin Node'uyla denetler, uyuşmazlıkta Fail", kopya > 0 && kipCagri.test(pk.slice(kopya, kopya + 900)));
 
   const dosya = nativeFileName(process.platform, process.arch);
   const uretim = dosya ? path.join(TEKS, "native", "lisans-cekirdek", "dist-uretim", dosya) : null;
@@ -397,9 +401,28 @@ async function bolum4(): Promise<void> {
 
   const hazirlik = path.join(TEKS, "native", "lisans-cekirdek", "dist-hazirlik", dosya);
   if (!existsSync(hazirlik)) {
-    ATLAMA.atla("§4i hazırlık ikilisi zorunlu kipte", "native hazırlık derlemesi yok — `cd native/lisans-cekirdek && npm run derle:hazirlik`", 1);
+    ATLAMA.atla("§4i–§4j hazırlık ikilisi zorunlu kipte + paketleme kip denetimi", "native hazırlık derlemesi yok — `cd native/lisans-cekirdek && npm run derle:hazirlik`", 2);
     return;
   }
+  const kipDenetimi = (node: string, kunye: unknown): number | null => {
+    const kf = path.join(TEMP, `kunye-${randomUUID()}.json`);
+    writeFileSync(kf, JSON.stringify(kunye));
+    return spawnSync(process.execPath, [path.join(TEKS, "scripts", "native-capa-kipi.mjs"), node, kf], { encoding: "utf8" }).status;
+  };
+  const test = path.join(TEKS, "native", "lisans-cekirdek", "dist", dosya);
+  const sonuclar = [
+    kipDenetimi(uretim, { guvenCapasi: "uretim" }),
+    kipDenetimi(hazirlik, { guvenCapasi: "hazirlik" }),
+    kipDenetimi(uretim, { guvenCapasi: "hazirlik" }),
+    kipDenetimi(hazirlik, { guvenCapasi: "uretim" }),
+    existsSync(test) ? kipDenetimi(test, { guvenCapasi: "uretim" }) : 1,
+    kipDenetimi(uretim, { zaman: "x" }),
+  ];
+  check(
+    "§4j ⭐ paketleme kip denetimi (native-capa-kipi.mjs): aynı kip 0 · üretim baytına hazırlık ikilisi ve tersi 1 · test çapalı ikili 1 · künyede kip yok 2 (ölçülemedi)",
+    JSON.stringify(sonuclar) === JSON.stringify([0, 0, 1, 1, 1, 2]),
+    JSON.stringify(sonuclar),
+  );
   const kh = paket("s4h");
   copyFileSync(hazirlik, path.join(kh, "native", dosya));
   await imzala(kh, A);

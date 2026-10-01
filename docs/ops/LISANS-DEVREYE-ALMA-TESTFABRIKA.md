@@ -221,7 +221,7 @@ Yayın betikleri yayından SONRA satıcı portalına yayıncı imzalı bildirim 
 
 ### 4.1 Native çekirdek (Mac, cargo-xwin)
 
-- **Komut:** `cd Teks-Erp/native/lisans-cekirdek && npm run derle:win:uretim` → `dist-uretim/lisans-cekirdek.win32-x64-msvc.node` (ÜRETİM derlemesi, test çapasız, CRT statik). Sonra kâhin: `cd Teks-Erp && npx tsx scripts/test_lisans_native_kahin.ts` (Mac'te darwin ikilisiyle; Windows ikilisinin Windows'taki ayna ölçümü §4.5'te çekirdek `native` olarak görünür).
+- **Komut:** testfabrika bugün HAZIRLIK satıcısına bağlıdır (kanal `backend.guvenCapasi: hazirlik`, G3) → `cd Teks-Erp/native/lisans-cekirdek && npm run derle:win:hazirlik` → `dist-hazirlik/lisans-cekirdek.win32-x64-msvc.node` (yalnız hazırlık çapası, test çapasız, CRT statik); paket `paketle.ps1 -Korumali -Musteri testfabrika -NativeYol <bu dosya>` (kip bayt koduna kanaldan girer, paketle native kipini denetler), imza `paket-hazirlik`. Üretim satıcısına geçişte (§12) `derle:win:uretim` + kanal kaydı `uretim` + `paket-2026`. Sonra kâhin: `cd Teks-Erp && npx tsx scripts/test_lisans_native_kahin.ts` (Mac'te darwin ikilisiyle; Windows ikilisinin Windows'taki ayna ölçümü §4.5'te çekirdek `native` olarak görünür).
 - **Beklenen:** `file …node` → `PE32+ … DLL … x86-64`; kâhin yeşil.
 - **Geri alma:** yok.
 
@@ -519,6 +519,8 @@ Traefik hiçbir geri almada yeniden başlatılmaz; kenar ağı satırı yerinde 
 - **Geri alma:** kodu iptal · kurulumu iptal/pasif (defter kalır).
 
 ### 12.2 Paket — önce HAZIRLIK lisansıyla (K3 paketi, `kur.ps1`, §4.4)
+
+> **G3 (2026-10-01) sonrası:** K3 paketi ÜRETİM çapalıdır (kanal kaydında `testfabrika` `backend.guvenCapasi: uretim` yapılır — ayrı commit — ve native `derle:win:uretim`); üretim derlemesi hazırlık kökünü TANIMAZ ⇒ 12.2'den 12.3'e kadar mevcut hazırlık TEST HAK'ı bu pakette GEÇERSİZ görünür (gözlem kipinde etkisiz; `zorla` açık değildir). Pencereyi kısa tut: 12.2 ile 12.3 aynı bakım penceresinde.
 
 - **Komut:** §4.4 aynen (SYSTEM görevi, `-UygulamaAdi tekserp-backend-yeni`). Bu adımda satıcı ve lisans DEĞİŞMEZ.
 - **Beklenen:** `asama-dogrula.mjs --asama=4 --olc --backend-surum=<X> --paket-kid=paket-2026 --belirtec-dosyasi=…` → 4.3 `butunlukKid paket-2026`, 4.4 `cekirdek native` · `butunluk GECERLI` (üretim PAKET anahtarının sınıf kısıtı yok; TEST HAK'ıyla da geçerli) · aşama 7 (varsayılan TEST beklentisi) ✅✅.

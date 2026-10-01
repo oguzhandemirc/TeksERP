@@ -55,7 +55,7 @@ Her dışa aktarım JSON metni alır, JSON metni döndürür (napi nesne eşleme
 
 ## 3. Güven çapası
 
-- Çapa native ikiliye **gömülüdür** (`src/anchor.rs` = `ROOT_PUBLIC_KEYS` + `PACKAGE_PUBLIC_KEYS`, bekçi §0e hem kaynak metinden hem çalışan ikiliden ölçer). Üretim çağıranı çapayı native'e VERMEZ.
+- Çapa native ikiliye **gömülüdür** ve ikili TEK kipin listelerini taşır (G3): `src/anchor.rs`in dört bloğu TS `PRODUCTION_`/`STAGING_ROOT_PUBLIC_KEYS` + `…_PACKAGE_PUBLIC_KEYS` aynası, her blok kipinin `cfg`siyle kapılı — özelliksiz derleme üretim, `hazirlik-capasi` hazırlık; künye `capaKipi` (ABI 3), yükleyici kendi kipinden farklı ikiliyi açmaz (`CAPA_UYUSMAZ`). Bekçi §0e kaynak metinden, §3d çalışan ikiliden, §9 iki kip ikilisini gömülü çapa vektörleriyle ölçer. Üretim çağıranı çapayı native'e VERMEZ.
 - Dışarıdan çapa yalnız `test-anchor` cargo özellikli derlemede kabul edilir; özelliksiz (üretim) derleme `CAPA_ENJEKSIYONU_KAPALI` döner (bekçi §7b, ölçüldü darwin + Windows). Paketleme (2b) özelliksiz derlemeyi taşır; yükleyici zorunlu kipte test çapalı derlemeyi reddeder.
 
 ## 4. Eşlik — nerede ve nasıl
@@ -97,7 +97,7 @@ Komutlar `Teks-Erp/native/lisans-cekirdek/` içinde (araç zinciri ve kurulum: o
 
 | Komut | Çıktı | Not |
 |---|---|---|
-| `npm run derle` / `derle:uretim` | `dist/` test çapalı · `dist-uretim/` özelliksiz | yerel hedef (`napi build --platform --release --no-js`) |
+| `npm run derle` / `derle:uretim` / `derle:hazirlik` | `dist/` test çapalı (üretim gömülü) · `dist-uretim/` özelliksiz (üretim çapası) · `dist-hazirlik/` `hazirlik-capasi` (hazırlık çapası) | yerel hedef (`napi build --platform --release --no-js`); `win`/`linux` hedeflerinde de üç kip |
 | `npm run derle:win[:uretim]` | `lisans-cekirdek.win32-x64-msvc.node` | Mac'ten `napi build -x` (cargo-xwin); CRT STATİK (`.cargo/config.toml`) — ölçüldü: statiksiz derleme `VCRUNTIME140.dll` ister, statikle yalnız sistem DLL'leri |
 | `npm run derle:linux[:uretim]` | `lisans-cekirdek.linux-x64-gnu.node` | `cargo zigbuild --target x86_64-unknown-linux-gnu.2.28` (zig PATH'te); betik en yüksek GLIBC sembolünü ölçer, 2.28'i aşarsa DÜŞER (ölçüldü: 2.28) |
 | `npm run denetle` · `npm test` | — | `cargo fmt --check` + clippy (uyarı = hata) · `cargo test` (vektörler) |
