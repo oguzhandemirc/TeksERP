@@ -186,12 +186,24 @@ function decodeOfflinePayload(raw: unknown): unknown {
   }
 }
 
-export async function acceptOfflineResponse(raw: unknown, source: "cevrimdisi" | "aktarma", userId: string | null): Promise<LicenseDetail> {
+export type OfflineResponseSource = "cevrimdisi" | "aktarma" | "dosya";
+
+const OFFLINE_ACTION: Readonly<Record<OfflineResponseSource, string>> = {
+  cevrimdisi: "cevrimdisi-yanit",
+  aktarma: "aktarma-yaniti",
+  dosya: "lisans-dosyasi",
+};
+
+/**
+ * Satıcı yanıtı kendi imzasıyla doğrulanır; bekleyen bir İSTEK aranmaz — portalın istek gerektirmeyen
+ * uzatma dosyası da (`dosya`) bu yoldan kabul edilir. Eski dosyayı geri alma kapısı reddeder (`LICENSE_LEASE_STALE`).
+ */
+export async function acceptOfflineResponse(raw: unknown, source: OfflineResponseSource, userId: string | null): Promise<LicenseDetail> {
   try {
     const r = await runLeaseExchange(() => acceptLicenseResponse(decodeOfflinePayload(raw), source, userId));
-    adminAction(userId, source === "aktarma" ? "aktarma-yaniti" : "cevrimdisi-yanit", { sonuc: r.yeniKira ? "kabul" : "ayni-kira" });
+    adminAction(userId, OFFLINE_ACTION[source], { sonuc: r.yeniKira ? "kabul" : "ayni-kira" });
   } catch (err) {
-    adminAction(userId, source === "aktarma" ? "aktarma-yaniti" : "cevrimdisi-yanit", {
+    adminAction(userId, OFFLINE_ACTION[source], {
       sonuc: err instanceof AppError ? String(err.details?.code ?? "RED") : "RED",
     });
     throw err;

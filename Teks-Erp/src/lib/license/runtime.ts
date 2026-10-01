@@ -42,14 +42,13 @@ import {
   bumpLicenseSnapshotVersion,
   licenseSnapshotVersion,
   peekVendorClockSkew,
-  pollFailedRecently,
   __resetLicenseSignalsForTests,
 } from "./license-signals";
 
 // Sinyaller ayrı modülde yaşar; çağıranlar tarihsel olarak buradan içe aktarır.
 export {
-  POLL_FAILURE_WINDOW_MS, getDoorbellStatus, getDownloadTokens, getLicenseEngineStatus, getPollStatus,
-  peekObservationCounters, pollFailedRecently, recordModuleObservation, recordObservation, recordPollOutcome,
+  getDoorbellStatus, getDownloadTokens, getLicenseEngineStatus, getPollStatus,
+  peekObservationCounters, recordModuleObservation, recordObservation, recordPollOutcome,
   recordVendorClockSkew, resetObservationCounters, setDownloadTokens, setLicenseEngineStatus, setNextPollAt,
   onDownloadTokenStale, requestDownloadTokenRefresh,
   updateDoorbellStatus, type DoorbellStatus, type LicenseEngineState, type LicenseEngineStatus, type PollStatus,
@@ -259,7 +258,6 @@ function buildInput(nowMs: number): BuiltInput {
     butunlukIlkUyusmazlikMs: integrityAnchorMs(record),
     derlemeTarihiMs: buildDateMsForState(),
     ilkAcilisMs: facts.firstOpenMs,
-    sonYoklamaBasarisizMi: pollFailedRecently(nowMs),
     varsayilanKip: DEFAULT_LICENSE_MODE,
     sonKiraZorlamasi: record?.sonKiraZorlamasi ?? null,
     sonYaptirim: record?.sonYaptirim ?? null,

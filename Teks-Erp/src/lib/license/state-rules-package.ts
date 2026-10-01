@@ -11,17 +11,18 @@ import {
   warnBanner,
   type Finding,
   type LicenseStateInput,
+  type SecondKey,
 } from "./state-rules";
 
 const MAINTENANCE_WARNING_DAYS = 30;
 
 /**
  * Bütünlük uyuşmazlığı LİSANS GİBİ işler: ilk görülüşten 30 gün ek süre, sonra (zamanın getirdiği
- * her KISITLI gibi iki anahtarla: süre geçmiş VE yoklama başarısız) kısıtlı kip. Satıcı uyuşmazlığı
- * yoklamadaki nedenlerden görür; bağlantı sürerken kararı yaptırım kataloğundadır.
+ * her KISITLI gibi iki anahtarla: süre geçmiş VE son 24 saatte başarılı kira alışverişi yok) kısıtlı
+ * kip. Satıcı uyuşmazlığı yoklamadaki nedenlerden görür; bağlantı sürerken kararı yaptırım kataloğundadır.
  */
 export function evaluateIntegrity(
-  g: Pick<LicenseStateInput, "butunluk" | "butunlukIlkUyusmazlikMs" | "sonYoklamaBasarisizMi">,
+  g: Pick<LicenseStateInput, "butunluk" | "butunlukIlkUyusmazlikMs"> & SecondKey,
   nowMs: number,
   out: Finding[],
 ): void {
@@ -37,7 +38,7 @@ export function evaluateIntegrity(
   if (nowMs < end) {
     const left = remainingDays(end, nowMs);
     out.push({ code: "BUTUNLUK_GECERSIZ", tier: "EK_SURE", daysLeft: left, banner: warnBanner(`${text} — ${left} gün içinde paket yeniden kurulmazsa program kısıtlı kipe geçecek.`) });
-  } else if (g.sonYoklamaBasarisizMi) {
+  } else if (!g.internetVar) {
     out.push({ code: "BUTUNLUK_GECERSIZ", tier: "KISITLI", banner: dangerBanner(`${text}: program kısıtlı kipte (okuma, rapor, yedek açık).`) });
   } else {
     out.push({ code: "BUTUNLUK_GECERSIZ", tier: "EK_SURE", daysLeft: 0, banner: warnBanner(`${text}; paketi yeniden kurun.`) });
@@ -45,7 +46,12 @@ export function evaluateIntegrity(
 }
 
 /** Bakım sonu: bakım içinde çıkmış sürüm durmaz (yalnız güncelleme kesilir); bakım SONRASI çıkmış sürüm ek süreye düşer. */
-export function evaluateMaintenance(g: LicenseStateInput, entitlement: EntitlementDoc, nowMs: number, out: Finding[]): void {
+export function evaluateMaintenance(
+  g: Pick<LicenseStateInput, "derlemeTarihiMs"> & SecondKey,
+  entitlement: EntitlementDoc,
+  nowMs: number,
+  out: Finding[],
+): void {
   const maintenanceEnd = isoToMs(entitlement.bakimBitis);
   if (g.derlemeTarihiMs === null) out.push({ code: "DERLEME_TARIHI_YOK" });
   else if (g.derlemeTarihiMs > maintenanceEnd) {
@@ -54,7 +60,7 @@ export function evaluateMaintenance(g: LicenseStateInput, entitlement: Entitleme
     if (nowMs < end) {
       const left = remainingDays(end, nowMs);
       out.push({ code: "BAKIM_IHLALI", tier: "EK_SURE", daysLeft: left, banner: warnBanner(`${text}; ${left} gün içinde bakımı yenileyin ya da hak ettiğiniz sürüme dönün.`) });
-    } else if (g.sonYoklamaBasarisizMi) {
+    } else if (!g.internetVar) {
       out.push({ code: "BAKIM_IHLALI", tier: "KISITLI", banner: dangerBanner(`${text}: program kısıtlı kipte.`) });
     } else {
       out.push({ code: "BAKIM_IHLALI", tier: "EK_SURE", daysLeft: 0, banner: warnBanner(`${text}; bakımı yenileyin.`) });

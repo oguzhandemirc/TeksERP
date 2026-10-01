@@ -67,6 +67,8 @@ const OfflineRequestInput = z.object({
 const ResponseBody = z.object({
   yanit: z.union([z.string().min(10).max(64 * 1024), z.record(z.string(), z.unknown())]),
 });
+// `kaynak: dosya` — Lisans ekranının "Lisans dosyası yükle"si (portalın uzatma dosyası); yalnız ayak izini ayırır.
+const OfflineResponseBody = ResponseBody.extend({ kaynak: z.enum(["qr", "dosya"]).optional() });
 const TransferBody = z.object({ gerekce: z.string().trim().max(500).nullable().optional() });
 // `anaKurulumId` isteğe bağlı: verilmezse satıcı tesisin tek etkin ÜRETİM kurulumunu çıkarır (belirsizse 409 DR_ANA_BELIRSIZ).
 const DrBody = z.object({
@@ -282,16 +284,28 @@ router.get("/cevrimdisi-istek", canManage, offlineRequestHandler("query"));
  * /api/license/cevrimdisi-yanit:
  *   post:
  *     tags: [Lisans]
- *     summary: Çevrimdışı yanıtı (QR metni ya da JSON) doğrula ve kabul et
+ *     summary: Çevrimdışı yanıtı (QR metni, JSON ya da portalın uzatma dosyası) doğrula ve kabul et
+ *     description: Bekleyen istek aranmaz; yanıt satıcı imzasıyla doğrulanır. Kurulumdakinden eski kira 409 LICENSE_LEASE_STALE.
  *     security: [{ bearerAuth: [] }]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [yanit]
+ *             properties:
+ *               yanit: { oneOf: [{ type: string }, { type: object }] }
+ *               kaynak: { type: string, enum: [qr, dosya], description: "dosya = Lisans ekranından yüklenen uzatma dosyası (yalnız ayak izi)" }
  *     responses:
  *       200: { description: Kabul edildi — güncel ayrıntı }
  *       400: { description: İmza/bağ doğrulanamadı (LICENSE_RESPONSE_INVALID) }
  */
 router.post("/cevrimdisi-yanit", canManage, async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const { yanit } = ResponseBody.parse(req.body);
-    res.status(200).json({ success: true, data: await acceptOfflineResponse(yanit, "cevrimdisi", req.user?.userId ?? null) });
+    const { yanit, kaynak } = OfflineResponseBody.parse(req.body);
+    const source = kaynak === "dosya" ? "dosya" : "cevrimdisi";
+    res.status(200).json({ success: true, data: await acceptOfflineResponse(yanit, source, req.user?.userId ?? null) });
   } catch (err) {
     next(err);
   }

@@ -39,6 +39,10 @@ export const REASON_CODES = [
   "ILK_ACILIS_BILINMIYOR",
   "KIRA_SURESI_DOLDU",
   "VADE_DOLDU",
+  /** v2: ödenmiş tarih (P) geçti — ek süre P'den sayılır. */
+  "ODENMIS_TARIH_DOLDU",
+  /** v2 bilgi bandı (K1): P'ye ≤ 30 gün; yalnız internetsizken ya da P sözleşme sonuyken. Kademe değiştirmez. */
+  "ODEME_YAKLASIYOR",
   "KIRASIZ_EK_SURE",
   "ETKINLESTIRME_EK_SURESI",
   "EK_SURE_BITTI",
@@ -76,6 +80,8 @@ export const REASON_VALIDITY: Readonly<Record<ReasonCode, Validity | null>> = {
   ILK_ACILIS_BILINMIYOR: "OLCULEMEDI",
   KIRA_SURESI_DOLDU: null,
   VADE_DOLDU: null,
+  ODENMIS_TARIH_DOLDU: null,
+  ODEME_YAKLASIYOR: null,
   KIRASIZ_EK_SURE: null,
   ETKINLESTIRME_EK_SURESI: null,
   EK_SURE_BITTI: null,
@@ -134,13 +140,14 @@ export interface LicenseStateInput {
   readonly derlemeTarihiMs: number | null;
   /** DB'den türeyen (dosya silmekle yenilenemeyen) ilk açılış anı; bilinmiyorsa null. */
   readonly ilkAcilisMs: number | null;
-  /** Son 24 saatte geçerli yeni kira ALINAMAYAN en az bir gerçek yoklama denemesi oldu mu? */
-  readonly sonYoklamaBasarisizMi: boolean;
   readonly varsayilanKip: LicenseMode;
   readonly sonKiraZorlamasi: boolean | null;
   /** Son kullanılabilir kiranın sunucu kararları (`durum.json`); kira kullanılabilirken yok sayılır. */
   readonly sonYaptirim: SanctionSnapshot | null;
-  /** Durum kaydının bildiği son kabul edilen kira (geri alma tespiti); yoksa denetim yok. */
+  /**
+   * Durum kaydının bildiği son kabul edilen kira: geri alma tespiti ve — kira silinmiş/okunamıyorsa —
+   * son başarılı alışverişin zamanı (iki anahtarın ikincisi); yoksa ikisi de kiradan.
+   */
   readonly sonKira?: { readonly kiraId: string; readonly verilisMs: number } | null;
   /** Durum kaydının bildiği son HAK pini (sürüm · sınıf · kök türü). */
   readonly sonHak?: EntitlementPin | null;
@@ -239,55 +246,10 @@ export function evaluateMeasurements(g: LicenseStateInput, lease: LeaseDoc | nul
   if (lease && g.parmakIziEslesme === "OLCULEMEDI") out.push({ code: "PARMAK_IZI_OLCULEMEDI", tier: "UYARI", banner: UNMEASURED_BANNER });
 }
 
-interface TimeAnchor {
-  readonly anchorMs: number;
-  readonly graceDays: number;
-  readonly code: ReasonCode;
-  readonly text: string;
-}
-
-/** Ek süre İMZALI tarihten türer: kira → HAK veriliş → (hiç etkinleşmemişse) DB'deki ilk açılış. */
-function timeAnchor(g: LicenseStateInput, entitlement: VerifiedEntitlement | null, lease: LeaseDoc | null): TimeAnchor | null {
-  if (lease) {
-    const end = isoToMs(lease.bitis);
-    const due = lease.gecerlilikBitis === null ? Number.POSITIVE_INFINITY : isoToMs(lease.gecerlilikBitis);
-    return due < end
-      ? { anchorMs: due, graceDays: lease.ekSureGun, code: "VADE_DOLDU", text: "Lisans vadesi doldu" }
-      : { anchorMs: end, graceDays: lease.ekSureGun, code: "KIRA_SURESI_DOLDU", text: "Lisans süresi doldu" };
-  }
-  if (entitlement) {
-    return { anchorMs: isoToMs(entitlement.document.verilis), graceDays: DEFAULT_GRACE_DAYS, code: "KIRASIZ_EK_SURE", text: "Lisans kirası bulunamadı" };
-  }
-  if (g.ilkAcilisMs === null) return null;
-  return { anchorMs: g.ilkAcilisMs, graceDays: DEFAULT_GRACE_DAYS, code: "ETKINLESTIRME_EK_SURESI", text: "Lisans etkinleştirilmedi" };
-}
-
-/** Zamanın getirdiği KISITLI iki anahtarlıdır: süre geçmiş VE son 24 saatte yoklama gerçekten başarısız. */
-export function evaluateGrace(
-  g: LicenseStateInput,
-  docs: { readonly entitlement: VerifiedEntitlement | null; readonly lease: LeaseDoc | null },
-  nowMs: number,
-  out: Finding[],
-): void {
-  const anchor = timeAnchor(g, docs.entitlement, docs.lease);
-  if (!anchor) {
-    out.push({ code: "ILK_ACILIS_BILINMIYOR", tier: "UYARI", banner: UNMEASURED_BANNER });
-    return;
-  }
-  if (nowMs < anchor.anchorMs) return;
-  const end = anchor.anchorMs + anchor.graceDays * DAY_MS;
-  if (nowMs < end) {
-    const left = remainingDays(end, nowMs);
-    const banner = warnBanner(`${anchor.text} — ${left} gün içinde yenilenmezse program kısıtlı kipe geçecek.`);
-    out.push({ code: anchor.code, tier: "EK_SURE", banner, daysLeft: left });
-    return;
-  }
-  out.push({ code: anchor.code });
-  if (g.sonYoklamaBasarisizMi) {
-    out.push({ code: "EK_SURE_BITTI", tier: "KISITLI", banner: dangerBanner(`${anchor.text} ve ek süre bitti: program kısıtlı kipte (okuma, rapor, yedek açık).`) });
-  } else {
-    out.push({ code: "EK_SURE_BITTI", tier: "EK_SURE", daysLeft: 0, banner: warnBanner(`${anchor.text}; lisans sunucusuyla bağlantı sürdükçe kısıtlama uygulanmaz.`) });
-  }
+/** Zamanın getirdiği KISITLI'nın ikinci anahtarı (`state-rules-time.ts` `evaluateExchange` doldurur). */
+export interface SecondKey {
+  /** Son 24 saatte başarılı kira alışverişi VAR — varken süre dolsa da kademe EK_SURE (0 gün) kalır. */
+  readonly internetVar: boolean;
 }
 
 /**
