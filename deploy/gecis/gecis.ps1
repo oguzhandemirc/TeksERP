@@ -927,8 +927,16 @@ function SaglikBekle($E, [string]$baslik) {
     throw "$baslik saglik $SaglikSn sn icinde gelmedi (son: $(if ($son) { 'API ' + $son.status + ' / DB ' + $son.db + ' / v' + $son.version } else { 'cevap yok' }))"
   }
   if ($E.Kimlik) {
-    $k = KimlikOku "127.0.0.1" $E.Port 5
-    if (-not $k -or [string]$k.installationId -cne $E.Kimlik) { throw "$baslik kurulum kimligi farkli ya da okunamadi" }
+    # Kimlik onbellegi /health'ten SONRA dolar (acilis isi DB'den okur): null = henuz yok, beklenir; dolu ve farkli = hata.
+    $k = $null
+    $kimlikBitis = (Get-Date).AddSeconds($SaglikSn)
+    do {
+      $k = KimlikOku "127.0.0.1" $E.Port 5
+      if ($k -and $k.installationId) { break }
+      OsBekle 2
+    } while ((Get-Date) -lt $kimlikBitis)
+    if (-not $k -or -not $k.installationId) { throw "$baslik kurulum kimligi $SaglikSn sn icinde okunamadi" }
+    if ([string]$k.installationId -cne $E.Kimlik) { throw "$baslik kurulum kimligi farkli: $($k.installationId) (beklenen $($E.Kimlik))" }
   }
   Ok "$($baslik): API UP / DB UP / v$($son.version)$(if ($E.Kimlik) { ' / kimlik ayni' })"
 }

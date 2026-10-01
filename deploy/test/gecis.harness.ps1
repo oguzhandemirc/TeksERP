@@ -125,7 +125,7 @@ function OsSshMi { return $false }
 function OsHizmetler { return @($global:S.hizmetler | ForEach-Object { [pscustomobject]@{ Ad = $_.Ad; Durum = $_.Durum; Baslatma = $_.Baslatma; Yol = $_.Yol; Hesap = $_.Hesap; Cikis = 0; OzelCikis = 0 } }) }
 function OsHizmetBaslat($ad, [string[]]$ek) {
   $h = Hizmet $ad; if (-not $h) { throw "sahte: hizmet yok $ad" }
-  $h.Durum = "Running"; $h.Kip = (@($ek) -join " "); Kaydet; Cagri "hizmet baslat $ad $($h.Kip)"
+  $h.Durum = "Running"; $h.Kip = (@($ek) -join " "); $global:S | Add-Member -NotePropertyName kimlikBos -NotePropertyValue 0 -Force; Kaydet; Cagri "hizmet baslat $ad $($h.Kip)"
   if ($ad -ceq "TeksERP-Guncelleyici") { Yaz (Join-Path $Taban "programdata/TeksERP/guncelleme/durum/durum.json") '{"durum":"BEKLIYOR","hataKodu":"BELIRTEC_YOK","sonCanlilik":"2026-10-01T03:00:00Z"}' }
 }
 function OsHizmetDurdur($ad) { $h = Hizmet $ad; if ($h) { $h.Durum = "Stopped"; $h.Kip = ""; Kaydet; Cagri "hizmet durdur $ad" } }
@@ -182,7 +182,13 @@ function OsHttp($url, [int]$sn) {
   } elseif (Pm2Online) { $surum = "2.14.0" }
   if (-not $surum) { return [pscustomobject]@{ Kod = 0; Govde = $null } }
   if ($url -cmatch '/health$') { return [pscustomobject]@{ Kod = 200; Govde = (@{ status = "UP"; db = $db; version = $surum } | ConvertTo-Json -Compress) } }
-  if ($url -cmatch '/api/discovery/identity$') { return [pscustomobject]@{ Kod = 200; Govde = (@{ installationId = "kurulum-kimligi-1"; companyName = "Sahte Tekstil" } | ConvertTo-Json -Compress) } }
+  if ($url -cmatch '/api/discovery/identity$') {
+    # KIMLIK_GEC: gercek backend'de kimlik onbellegi /health'ten sonra dolar (thinkpad-1 D8c) - her baslatmadan sonra ilk 3 okuma null.
+    $id = "kurulum-kimligi-1"
+    if ($b -and $global:S.hata -ceq "KIMLIK_GEC" -and [int]$global:S.kimlikBos -lt 3) { $global:S.kimlikBos = [int]$global:S.kimlikBos + 1; Kaydet; $id = $null }
+    if ($b -and $global:S.hata -ceq "KIMLIK_FARKLI" -and $b.Kip -cmatch 'dogrulama') { $id = "baska-kurulum" }
+    return [pscustomobject]@{ Kod = 200; Govde = (@{ installationId = $id; companyName = "Sahte Tekstil" } | ConvertTo-Json -Compress) }
+  }
   return [pscustomobject]@{ Kod = 404; Govde = $null }
 }
 function OsBetik($betik, [hashtable]$arg) {

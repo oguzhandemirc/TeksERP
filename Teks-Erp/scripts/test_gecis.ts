@@ -576,6 +576,23 @@ function senaryolar(): void {
         kb.kod === 1 && ihb.length === 0 && gb.some((x) => x.olay === "HATA" && x.adim === hata) && gb.at(-1)?.veri?.sonuc === "GERI_ALINDI" && gb.at(-1)?.veri?.otomatik === true,
         `kod ${kb.kod} · ${ihb.join(", ") || "temiz"}`);
     }
+    // B2 — kimlik önbelleği /health'ten SONRA dolar (gerçek Windows, thinkpad-1 D8c): null beklenir, dolu ve farklı kimlik geri alır
+    {
+      const b = yeni("kimlik-gec");
+      const p = planOku(harness(b, "kuru").cikti);
+      const kb = harness(b, "uygula", ["-Onay", String(p?.n ?? 0), "-Hata", "KIMLIK_GEC"]);
+      const sb = gunluk(b).at(-1)?.veri?.sonuc;
+      check("§3f2 ⭐ kimlik önbelleği geç dolar (her başlatmadan sonra ilk okumalar null): doğrulama ve başlatma BEKLER, geçiş BAŞARILI — tek atışlık okuma geçişi geri alıyordu",
+        (kb.kod === 0 || kb.kod === 3) && /^BASARILI/.test(String(sb)), `kod ${kb.kod} · sonuç ${String(sb)}`);
+      const f = yeni("kimlik-farkli");
+      const pf = planOku(harness(f, "kuru").cikti);
+      const kf = harness(f, "uygula", ["-Onay", String(pf?.n ?? 0), "-Hata", "KIMLIK_FARKLI"]);
+      const gf = gunluk(f);
+      const ihf = pm2LayoutGeriMi(f);
+      check("§3f2 ⭐ doğrulamada FARKLI kimlik (dolu, beklenenden ayrı): beklemeden OTOMATİK geri alma, gerekçe 'kurulum kimligi farkli'",
+        kf.kod === 1 && ihf.length === 0 && gf.some((x) => x.olay === "HATA" && x.adim === "DOGRULAMA") && gf.at(-1)?.veri?.sonuc === "GERI_ALINDI" && /kurulum kimligi farkli/.test(kf.cikti),
+        `kod ${kf.kod} · ${ihf.join(", ") || "temiz"}`);
+    }
     // C — engeller: hiçbir şeye dokunmadan çıkış 1
     for (const [deg, re] of [["goc-eksik", /UYGULANMAMIS/], ["derleme-farkli", /app\\'teki derleme DEGIL/], ["pm2-yabanci", /TeksERP disi uygulama/], ["gorev-yabanci", /TeksERP adli OLMAYAN gorev/]] as const) {
       const c = yeni(deg, deg);
