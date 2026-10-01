@@ -30,10 +30,10 @@ interface FactoryRequest {
   readonly nowMs: number;
 }
 
-async function authenticated(ctx: CloudContext, req: Request): Promise<FactoryRequest> {
+async function authenticated(ctx: CloudContext, req: Request, path: string): Promise<FactoryRequest> {
   const raw = await readRawBody(req, MAX_COMPRESSED_BYTES);
   const nowMs = ctx.now();
-  const caller = await authenticateFactory(ctx, { header: req.get(REQUEST_HEADER), rawBody: raw, nowMs });
+  const caller = await authenticateFactory(ctx, { header: req.get(REQUEST_HEADER), rawBody: raw, nowMs, path });
   return { caller, raw, nowMs };
 }
 
@@ -63,39 +63,39 @@ export function createFactoryRouter(ctx: CloudContext): Router {
   router.use(rateLimit({ perMinute: ctx.config.V1_HIZ_DK, proxyHeader: ctx.config.VEKIL_IP_BASLIGI }));
 
   router.post(SYNC_PATHS.SYNC.replace("/v1", ""), async (req: Request, res: Response) => {
-    const r = await authenticated(ctx, req);
+    const r = await authenticated(ctx, req, SYNC_PATHS.SYNC);
     res.json(await applyPackage(ctx, r.caller, { raw: r.raw, contentEncoding: req.get("content-encoding"), nowMs: r.nowMs }));
   });
 
   router.post(SYNC_PATHS.INBOX_CLAIM.replace("/v1", ""), async (req: Request, res: Response) => {
-    const r = await authenticated(ctx, req);
+    const r = await authenticated(ctx, req, SYNC_PATHS.INBOX_CLAIM);
     res.json(await claimInbox(ctx, r.caller, strictJson(InboxClaimRequestSchema, r, req), r.nowMs));
   });
 
   router.post(SYNC_PATHS.INBOX_RESULT.replace("/v1", ""), async (req: Request, res: Response) => {
-    const r = await authenticated(ctx, req);
+    const r = await authenticated(ctx, req, SYNC_PATHS.INBOX_RESULT);
     res.json(await recordInboxResults(ctx, r.caller, strictJson(InboxResultRequestSchema, r, req), r.nowMs));
   });
 
   router.post(SYNC_PATHS.ACCOUNTS.replace("/v1", ""), async (req: Request, res: Response) => {
-    const r = await authenticated(ctx, req);
+    const r = await authenticated(ctx, req, SYNC_PATHS.ACCOUNTS);
     strictJson(AccountsRequestSchema, r, req);
     res.json(await listAccountsForFactory(ctx, r.caller));
   });
 
   router.post(SYNC_PATHS.ACCOUNT_LOCK.replace("/v1", ""), async (req: Request, res: Response) => {
-    const r = await authenticated(ctx, req);
+    const r = await authenticated(ctx, req, SYNC_PATHS.ACCOUNT_LOCK);
     const out = await lockAccountFromFactory(ctx, r.caller, strictJson(AccountLockRequestSchema, r, req));
     res.status(out.status).json(out.data);
   });
 
   router.post(SYNC_PATHS.REPORT_CLAIM.replace("/v1", ""), async (req: Request, res: Response) => {
-    const r = await authenticated(ctx, req);
+    const r = await authenticated(ctx, req, SYNC_PATHS.REPORT_CLAIM);
     res.json(await claimReports(ctx, r.caller, strictJson(ReportClaimRequestSchema, r, req), r.nowMs));
   });
 
   router.post(SYNC_PATHS.REPORT_RESULT.replace("/v1", ""), async (req: Request, res: Response) => {
-    const r = await authenticated(ctx, req);
+    const r = await authenticated(ctx, req, SYNC_PATHS.REPORT_RESULT);
     res.json(await recordReportResult(ctx, r.caller, strictJson(ReportResultRequestSchema, r, req), r.nowMs));
   });
 

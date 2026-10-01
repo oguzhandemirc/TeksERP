@@ -41,6 +41,8 @@ export interface VerifyInput {
   readonly rawBody: Buffer;
   readonly purposes: readonly RequestPurpose[];
   readonly nowMs: number;
+  /** İsteği alan uç (`ENDPOINTS` sabiti; zarfla gelende `/v1/cevrimdisi`) — imzalı `yol` taşıyan istek buna bağlıdır. */
+  readonly path: string;
   /** Etkinleştirme ve taşımada anahtar kayıtlı değildir: gövdedeki açık anahtar. */
   readonly keyFromBody?: string;
 }
@@ -94,7 +96,7 @@ export async function verifySignedRequest(g: VerifyInput): Promise<VerifiedReque
   }
   const kid = identity.value.kid;
   const verify = (x: string): RequestDoc => {
-    const verified = verifyRequest(g.header, { publicKeyX: x, body: g.rawBody, nowMs: g.nowMs, purposes: g.purposes, installationId: claimedId });
+    const verified = verifyRequest(g.header, { publicKeyX: x, body: g.rawBody, nowMs: g.nowMs, purposes: g.purposes, installationId: claimedId, path: g.path });
     if (!verified.ok) throw requestRejected(verified.code, verified.message, g.nowMs);
     return verified.value;
   };

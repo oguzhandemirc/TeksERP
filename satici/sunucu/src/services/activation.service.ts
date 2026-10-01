@@ -9,7 +9,7 @@
 // kabul etkinleştirmeyle aynı tx'te kurulum kaydına `SOZLESME_KABUL_EDILDI` olarak yazılır. Kapı iki yerde: ucuz ön
 // denetim (nonce'tan önce) ve kodu tüketen claim'in kendisi (tx içi, taze satırla).
 import type { EtkinlestirmeKodu, KodTuru, Kurulum, Prisma, TasimaTalebi } from "@prisma/client";
-import { verifyAcceptance, type AcceptanceDoc, type AcceptanceRejection, type ActivateRequest, type LicenseResponse } from "../lisans-protokol";
+import { ENDPOINTS, verifyAcceptance, type AcceptanceDoc, type AcceptanceRejection, type ActivateRequest, type LicenseResponse } from "../lisans-protokol";
 import { recordAudit } from "../lib/audit";
 import { VendorError, retryConflict } from "../lib/errors";
 import { lockInstallation } from "../lib/locks";
@@ -236,10 +236,17 @@ async function bodyKeyRoleTx(tx: Tx, inst: Kurulum, kid: string): Promise<KeyRol
  */
 export async function handleActivation(
   ctx: VendorContext,
-  g: { header: unknown; rawBody: Buffer; body: ActivateRequest; nowMs: number; limit?: (scope: string) => void },
+  g: { header: unknown; rawBody: Buffer; body: ActivateRequest; nowMs: number; limit?: (scope: string) => void; path?: string },
 ): Promise<LicenseResponse> {
   const body = g.body;
-  const verified = await verifySignedRequest({ header: g.header, rawBody: g.rawBody, purposes: ["etkinlestir"], nowMs: g.nowMs, keyFromBody: body.acikAnahtar });
+  const verified = await verifySignedRequest({
+    header: g.header,
+    rawBody: g.rawBody,
+    purposes: ["etkinlestir"],
+    nowMs: g.nowMs,
+    keyFromBody: body.acikAnahtar,
+    path: g.path ?? ENDPOINTS.ACTIVATE,
+  });
   if ((body.kurulumId ?? null) !== (verified.request.kurulumId ?? null)) {
     throw new VendorError(401, "ISTEK_KURULUM", "Gövdedeki kurulum kimliği imzalı istekle uyuşmuyor");
   }

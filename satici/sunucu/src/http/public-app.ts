@@ -52,16 +52,18 @@ interface SignedCall {
   readonly raw: Buffer;
   readonly nowMs: number;
   readonly limit: ScopeLimit;
+  /** İsteği alan uç: imzalı `yol` buna bağlıdır (zarfla gelende taşıyan uç `/v1/cevrimdisi`). */
+  readonly path: string;
 }
 
 async function activation(c: SignedCall) {
   const body = parseStrict(ActivateRequestSchema, parseJsonBody(c.raw));
-  return handleActivation(c.ctx, { header: c.header, rawBody: c.raw, body, nowMs: c.nowMs, limit: c.limit });
+  return handleActivation(c.ctx, { header: c.header, rawBody: c.raw, body, nowMs: c.nowMs, limit: c.limit, path: c.path });
 }
 
 async function poll(c: SignedCall & { readonly purposes: ("yokla" | "cevrimdisi")[] }) {
   const body = parseStrict(PollRequestSchema, parseJsonBody(c.raw));
-  const auth = await authenticateRequest({ header: c.header, rawBody: c.raw, purposes: c.purposes, nowMs: c.nowMs, limit: c.limit });
+  const auth = await authenticateRequest({ header: c.header, rawBody: c.raw, purposes: c.purposes, nowMs: c.nowMs, limit: c.limit, path: c.path });
   return processPoll(c.ctx, auth, body, c.nowMs);
 }
 
@@ -82,11 +84,11 @@ export function createPublicApp(ctx: VendorContext, hub: DoorbellHub | null): Ex
   app.use("/v1", rateLimit({ perMinute: ctx.config.V1_HIZ_IP_DK, trust }));
 
   app.post(ENDPOINTS.ACTIVATE, raw, async (req: Request, res: Response) => {
-    res.json(await activation({ ctx, header: req.get(REQUEST_HEADER), raw: rawBodyOf(req.body), nowMs: Date.now(), limit }));
+    res.json(await activation({ ctx, header: req.get(REQUEST_HEADER), raw: rawBodyOf(req.body), nowMs: Date.now(), limit, path: ENDPOINTS.ACTIVATE }));
   });
 
   app.post(ENDPOINTS.POLL, raw, async (req: Request, res: Response) => {
-    res.json(await poll({ ctx, header: req.get(REQUEST_HEADER), raw: rawBodyOf(req.body), nowMs: Date.now(), limit, purposes: ["yokla"] }));
+    res.json(await poll({ ctx, header: req.get(REQUEST_HEADER), raw: rawBodyOf(req.body), nowMs: Date.now(), limit, purposes: ["yokla"], path: ENDPOINTS.POLL }));
   });
 
   // Çevrimdışı/aktarma: dış istek imzasızdır (panel ya da telefon taşır); güven zarfın içindeki
@@ -98,14 +100,14 @@ export function createPublicApp(ctx: VendorContext, hub: DoorbellHub | null): Ex
     if (!opened.ok) throw new VendorError(400, "ZARF_BICIM", opened.message);
     const inner = parseJsonBody(opened.value.body);
     const isActivation = isPlainObject(inner) && "kod" in inner;
-    const call: SignedCall = { ctx, header: opened.value.request, raw: opened.value.body, nowMs, limit };
+    const call: SignedCall = { ctx, header: opened.value.request, raw: opened.value.body, nowMs, limit, path: ENDPOINTS.OFFLINE };
     res.json(isActivation ? await activation(call) : await poll({ ...call, purposes: ["yokla", "cevrimdisi"] }));
   });
 
   app.post(ENDPOINTS.TRANSFER, raw, async (req: Request, res: Response) => {
     const body = rawBodyOf(req.body);
     const parsed = parseStrict(TransferRequestSchema, parseJsonBody(body));
-    res.json(await handleTransferRequest(ctx, { header: req.get(REQUEST_HEADER), rawBody: body, body: parsed, nowMs: Date.now(), limit }));
+    res.json(await handleTransferRequest(ctx, { header: req.get(REQUEST_HEADER), rawBody: body, body: parsed, nowMs: Date.now(), limit, path: ENDPOINTS.TRANSFER }));
   });
 
   app.post(ENDPOINTS.DR_TAKEOVER, raw, async (req: Request, res: Response) => {
@@ -118,6 +120,7 @@ export function createPublicApp(ctx: VendorContext, hub: DoorbellHub | null): Ex
       purposes: ["dr-devral"],
       nowMs,
       limit,
+      path: ENDPOINTS.DR_TAKEOVER,
       precheck: async (a) => void (await drTakeoverTarget(a.installation, parsed)),
     });
     res.json(await processDrTakeover(ctx, auth, parsed, nowMs));
@@ -130,14 +133,14 @@ export function createPublicApp(ctx: VendorContext, hub: DoorbellHub | null): Ex
     const nowMs = Date.now();
     const body = rawBodyOf(req.body);
     const parsed = parseStrict(SupportRequestSchema, parseJsonBody(body));
-    const auth = await authenticateRequest({ header: req.get(REQUEST_HEADER), rawBody: body, purposes: ["destek"], nowMs, limit });
+    const auth = await authenticateRequest({ header: req.get(REQUEST_HEADER), rawBody: body, purposes: ["destek"], nowMs, limit, path: ENDPOINTS.SUPPORT });
     res.json(await openSupportTicket(auth, parsed));
   });
 
   // KAPI ZİLİ (SSE): kurulum imzalı abonelik; içerik taşımaz, yalnız "şimdi yokla". Kurulum başına ≤ ZIL_AZAMI_ABONE.
   app.get(ENDPOINTS.DOORBELL, async (req: Request, res: Response) => {
     if (!hub) throw new VendorError(500, "SUNUCU_HATASI", "Kapı zili bu süreçte kapalı");
-    const auth = await authenticateRequest({ header: req.get(REQUEST_HEADER), rawBody: Buffer.alloc(0), purposes: ["zil"], nowMs: Date.now(), limit });
+    const auth = await authenticateRequest({ header: req.get(REQUEST_HEADER), rawBody: Buffer.alloc(0), purposes: ["zil"], nowMs: Date.now(), limit, path: ENDPOINTS.DOORBELL });
     res.status(200).set({
       "Content-Type": "text/event-stream; charset=utf-8",
       "Cache-Control": "no-cache, no-transform",

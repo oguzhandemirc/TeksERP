@@ -322,13 +322,14 @@ export function etkinlestirmeGovdesi(g: { kod: string; kurulumId: string | null;
   };
 }
 
-/** Kurulum imzalı istek (ham gövde baytları imzalanır, aynen gönderilir). `kurulumId: null` = kimliksiz. */
-export function imzaliBaslik(g: { kurulumId: string | null; amac: RequestPurpose; govde: string; anahtar: TestAnahtari; zamanMs?: number; nonce?: string }): string {
+/** Kurulum imzalı istek (ham gövde baytları imzalanır, aynen gönderilir). `kurulumId: null` = kimliksiz; `yol` imzalı uç yolu. */
+export function imzaliBaslik(g: { kurulumId: string | null; amac: RequestPurpose; govde: string; anahtar: TestAnahtari; zamanMs?: number; nonce?: string; yol?: string }): string {
   return signRequest({
     installationId: g.kurulumId,
     purpose: g.amac,
     body: g.govde,
     key: { privateKey: g.anahtar.privateKey, nowMs: g.zamanMs ?? Date.now(), nonce: g.nonce ?? generateNonce() },
+    ...(g.yol !== undefined ? { path: g.yol } : {}),
   });
 }
 
@@ -353,10 +354,10 @@ export async function gonder(url: string, g: { baslik?: string; govde?: string; 
 export async function imzaliPost(
   taban: string,
   yol: string,
-  g: { kurulumId: string | null; amac: RequestPurpose; govde: unknown; anahtar: TestAnahtari; zamanMs?: number; nonce?: string },
+  g: { kurulumId: string | null; amac: RequestPurpose; govde: unknown; anahtar: TestAnahtari; zamanMs?: number; nonce?: string; imzaYolu?: string },
 ): Promise<Yanit & { baslik: string; metin: string }> {
   const metin = JSON.stringify(g.govde);
-  const baslik = imzaliBaslik({ kurulumId: g.kurulumId, amac: g.amac, govde: metin, anahtar: g.anahtar, zamanMs: g.zamanMs, nonce: g.nonce });
+  const baslik = imzaliBaslik({ kurulumId: g.kurulumId, amac: g.amac, govde: metin, anahtar: g.anahtar, zamanMs: g.zamanMs, nonce: g.nonce, yol: g.imzaYolu });
   const y = await gonder(`${taban}${yol}`, { baslik, govde: metin });
   return { ...y, baslik, metin };
 }
