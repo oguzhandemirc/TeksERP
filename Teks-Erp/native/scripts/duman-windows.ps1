@@ -11,8 +11,9 @@
 #   2. --dogrulama baslatma argumani -> yalniz 127.0.0.1 + TEKSERP_DOGRULAMA_KIPI
 #   3. node olurse konak hata koduyla cikar, SCM kurtarmasi yeniden baslatir (yeni pid)
 #   4. konak olurse is nesnesi node'u da oldurur (yetim node portu tutmaz)
-#   5. guncelleyici: hizmet-kur -> baslat -> durum.json (kira yok: DONDURULDU/KIRA_YOK + kalp atisi)
-#      -> is\ korumali DACL -> durdur
+#   5. guncelleyici: hizmet-kur -> baslat -> .env'de zorunlu anahtar (DATABASE_URL) yokken AYAR_EKSIK
+#      (ileti anahtar adi tasir, deger degil) -> .env tamamlaninca durum.json (kira yok: DONDURULDU/KIRA_YOK
+#      + kalp atisi) -> is\ korumali DACL -> durdur
 #   6. hizmet adi parametresi (ayni makinede ikinci kanal): konak --ad ile kendi sanal hesabi ve
 #      TEKSERP_HIZMET_ADI; ACL KAYITTAN SONRA (sanal hesap kayitla dogar); guncelleyici --ad + --veri
 # ASCII: bilerek yalniz ASCII (PS 5.1 BOM'suz UTF-8'i ANSI okur).
@@ -132,9 +133,22 @@ try {
   Start-Service TeksERP-Guncelleyici
   Bekle "TeksERP-Guncelleyici" "Running"
   $durumYolu = "$veri\guncelleme\durum\durum.json"
-  for ($i = 0; $i -lt 60 -and -not (Test-Path $durumYolu); $i++) { Start-Sleep -Milliseconds 500 }
-  if (-not (Test-Path $durumYolu)) { Get-Content "$kok\guncelleyici\gunluk\*.log" -ErrorAction SilentlyContinue; Dur "durum.json yazilmadi" }
-  $d = Get-Content $durumYolu -Raw | ConvertFrom-Json
+  function DurumOku {
+    for ($i = 0; $i -lt 60 -and -not (Test-Path $durumYolu); $i++) { Start-Sleep -Milliseconds 500 }
+    if (-not (Test-Path $durumYolu)) { Get-Content "$kok\guncelleyici\gunluk\*.log" -ErrorAction SilentlyContinue; Dur "durum.json yazilmadi" }
+    return (Get-Content $durumYolu -Raw | ConvertFrom-Json)
+  }
+  # .env yalniz PORT tasiyor: guncelleyicinin zorunlu anahtari yok -> hicbir sey yapilmaz (D2b).
+  $d = DurumOku
+  if ($d.durum -ne "BEKLIYOR" -or $d.hataKodu -ne "AYAR_EKSIK" -or $d.mesaj -notmatch "DATABASE_URL") { Dur "zorunlu anahtar yokken AYAR_EKSIK beklenirdi: $($d | ConvertTo-Json -Compress)" }
+  Stop-Service TeksERP-Guncelleyici
+  Bekle "TeksERP-Guncelleyici" "Stopped"
+  Set-Content -Encoding ascii "$kok\yapilandirma\.env" "PORT=4999`nDATABASE_URL=`"postgresql://tekserp:duman-parola@127.0.0.1:5432/tekserp`"`n"
+  Remove-Item -Force $durumYolu
+  Start-Service TeksERP-Guncelleyici
+  Bekle "TeksERP-Guncelleyici" "Running"
+  $d = DurumOku
+  if ((Get-Content $durumYolu -Raw) -match "duman-parola") { Dur "durum.json DB parolasini tasiyor" }
   if ($d.durum -ne "BEKLIYOR" -or $d.hataKodu -ne "KIRA_YOK" -or $d.kuruluSurum -ne $surum) { Dur "durum beklenen degil: $($d | ConvertTo-Json -Compress)" }
   if ($d.karar.karar -ne "DONDURULDU" -or $d.karar.neden -ne "KIRA_YOK") { Dur "karar beklenen degil: $($d.karar | ConvertTo-Json -Compress)" }
   if (-not $d.sonCanlilik -or $d.canlilikEsigiSn -lt 30) { Dur "kalp atisi alanlari yok: $($d | ConvertTo-Json -Compress)" }

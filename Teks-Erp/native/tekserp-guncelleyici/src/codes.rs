@@ -11,6 +11,9 @@ pub const KURULU_SURUM_YOK: &str = "KURULU_SURUM_YOK";
 pub const KIRA_YOK: &str = "KIRA_YOK";
 pub const KIRA_GECERSIZ: &str = "KIRA_GECERSIZ";
 pub const INSAN_GEREKIYOR: &str = "INSAN_GEREKIYOR";
+/// HATA sonrası onay reddedildi: yalnız başarısız denemenin sürümüne ya da ondan YENİ imzalı adaya verilen
+/// yeni onay kilidi açar (`engine.rs` `failed_exit_rule`); durum HATA kalır.
+pub const ONAY_REDDEDILDI: &str = "ONAY_REDDEDILDI";
 pub const PG_BUYUK_SURUM: &str = "PG_BUYUK_SURUM";
 pub const PG_PAKET: &str = "PG_PAKET";
 pub const PG_DURMADI: &str = "PG_DURMADI";

@@ -280,3 +280,83 @@ fn heartbeat_is_refreshed_every_tick() {
     assert!(b.heartbeat > a.heartbeat, "hiçbir şey değişmese de kalp atışı ilerler: {} → {}", a.heartbeat, b.heartbeat);
     assert_eq!(b.decision, a.decision);
 }
+
+/// HATA (geri alınamadı) dünyası: her sürüm sağlıksız → doğrulama da geri dönüş de düşer; sonra insan düzeltir.
+fn failed_world(tag: &str) -> World {
+    let w = world(tag);
+    w.faults.unhealthy_all.store(true, Ordering::SeqCst);
+    w.run_to_rest(0);
+    let st = w.status().unwrap();
+    assert_eq!((st.state, st.error_code.as_deref()), (State::Failed, Some("INSAN_GEREKIYOR")), "{:?}", st.message);
+    assert_eq!(st.last_detail.and_then(|d| d.error_code).as_deref(), Some("GERI_DONUS_SAGLIKSIZ"));
+    w.faults.unhealthy_all.store(false, Ordering::SeqCst);
+    w
+}
+
+fn assert_still_failed(w: &World, code: &str, starts: u64, ctx: &str) {
+    w.run(2).unwrap();
+    let st = w.status().unwrap();
+    assert_eq!((st.state, st.error_code.as_deref()), (State::Failed, Some(code)), "{ctx}: {:?}", st.message);
+    assert_eq!(w.backend().starts, starts, "{ctx}: işlem başladı");
+}
+
+/// HATA'dan çıkış (D7 raporu): yalnız başarısız denemenin sürümüne verilen YENİ onay açar; eski ya da
+/// imzalı aday olmayan bir sürüme onay `ONAY_REDDEDILDI` ile reddedilir (politika OTOMATİK olsa da
+/// kendiliğinden kurulum başlamaz).
+#[test]
+fn failed_state_is_left_only_by_an_approval_for_the_failed_version() {
+    let w = failed_world("hata-onay");
+    let starts = w.backend().starts;
+    assert_still_failed(&w, "INSAN_GEREKIYOR", starts, "onaysız");
+    w.write_intent(&intent(Some(approval("onay-eski", "2.12.9", "HEMEN"))));
+    assert_still_failed(&w, "ONAY_REDDEDILDI", starts, "başarısız denemeden ESKİ sürüme onay");
+    w.write_intent(&intent(Some(approval("onay-yabanci", "9.0.0", "HEMEN"))));
+    assert_still_failed(&w, "ONAY_REDDEDILDI", starts, "imzalı aday olmayan YENİ sürüme onay");
+    let m = w.status().unwrap().message.unwrap_or_default();
+    assert!(m.contains("imzalı aday 2.13.0") && m.contains("(2.13.0)"), "ileti kuralı söyler: {m}");
+    // Geçerli onay ama uygulanamıyor (belirteç yok): HATA görünür kalır, kod nedeni söyler.
+    w.write_intent(&serde_json::json!({ "v": 1, "yazildi": iso(T0), "onay": approval("onay-ayni", NEW, "HEMEN") }));
+    assert_still_failed(&w, "BELIRTEC_YOK", starts, "onay var, belirteç yok");
+    w.write_intent(&intent(Some(approval("onay-ayni", NEW, "HEMEN"))));
+    w.run_to_rest(0);
+    assert_eq!(w.state(), Some(State::Succeeded), "{:?}", w.status().map(|s| (s.error_code, s.message)));
+    assert_invariants(&w, "başarısız sürüme yeni onay");
+}
+
+/// HATA'dan çıkışın ikinci yolu: imzalı bildirimle gelen daha YENİ adaya verilen yeni onay; aday ilerlemişken
+/// başarısız sürüme verilen onay artık uygulanamaz (yalnız imzalı aday kurulur) — o da reddedilir.
+#[test]
+fn failed_state_is_left_by_an_approval_for_a_newer_signed_candidate() {
+    const NEWER: &str = "2.14.0";
+    let w = failed_world("hata-yeni-aday");
+    let files = version_files(NEWER);
+    let mut all = files.clone();
+    all.extend(integrity_files(&files, NEWER, &w.keys.package, "paket-2026", Some(CHANNEL)));
+    let zip = zip_of(&all);
+    let payload = manifest_payload("paket-2026", NEWER, &zip, None);
+    publish(&w.files, &payload, &sign_manifest(&w.keys.package, "paket-2026", &payload), Some(zip), true);
+    let starts = w.backend().starts;
+    w.write_intent(&intent(Some(approval("onay-eski-hedef", NEW, "HEMEN"))));
+    assert_still_failed(&w, "ONAY_REDDEDILDI", starts, "aday ilerledi, başarısız sürüme onay");
+    w.write_intent(&intent(Some(approval("onay-yeni-aday", NEWER, "HEMEN"))));
+    w.run_to_rest(0);
+    assert_eq!(w.state(), Some(State::Succeeded), "{:?}", w.status().map(|s| (s.error_code, s.message)));
+    assert_eq!(w.current().as_deref(), Some(NEWER));
+}
+
+/// Başarısız denemeden ESKİ ama imzalı bir aday (politika hedefi geri çekildi gibi) onaylansa da HATA'dan
+/// çıkış yolu değildir: onay aday çözülmeden reddedilir.
+#[test]
+fn failed_state_is_not_left_by_an_older_signed_candidate() {
+    const OLDER: &str = "2.12.5";
+    let w = failed_world("hata-eski-aday");
+    let files = version_files(OLDER);
+    let mut all = files.clone();
+    all.extend(integrity_files(&files, OLDER, &w.keys.package, "paket-2026", Some(CHANNEL)));
+    let zip = zip_of(&all);
+    let payload = manifest_payload("paket-2026", OLDER, &zip, None);
+    publish(&w.files, &payload, &sign_manifest(&w.keys.package, "paket-2026", &payload), Some(zip), true);
+    let starts = w.backend().starts;
+    w.write_intent(&intent(Some(approval("onay-eski-aday", OLDER, "HEMEN"))));
+    assert_still_failed(&w, "ONAY_REDDEDILDI", starts, "başarısız denemeden eski imzalı aday");
+}
