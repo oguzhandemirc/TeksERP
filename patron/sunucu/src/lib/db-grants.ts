@@ -3,11 +3,12 @@
 //   · uygulama (hesap API'si): projeksiyonu ve eşitleme tablolarını YALNIZ OKUR — API katmanındaki bir
 //     hata fabrikanın verisini yazamaz ya da taklit edemez.
 //   · eşitleme (fabrika kanalı + bakım): hesap tablolarına dokunamaz — kanal katmanındaki bir hata
-//     hesap/oturum/parola satırına ulaşamaz.
+//     hesap/oturum/parola satırına ulaşamaz; tek istisna gelen kutusu claim'inin yazar sorgusu: `accounts`ta
+//     yalnız kimlik · tesis · durum · izin kolonları (kolon düzeyi SELECT).
 // Migration yeni tablo eklerse buraya satırı AYNI dilimde girer (girmezse iki rol de erişemez: fail-closed).
 export type Privilege = "SELECT" | "INSERT" | "UPDATE" | "DELETE";
 /** Kolon düzeyi yetki: tablo düzeyindekine EK, yalnız adı geçen kolonlarda (aynı yetki iki düzeyde birden verilmez). */
-export type ColumnGrants = Readonly<Record<string, Readonly<Partial<Record<"UPDATE", readonly string[]>>>>>;
+export type ColumnGrants = Readonly<Record<string, Readonly<Partial<Record<"SELECT" | "UPDATE", readonly string[]>>>>>;
 
 export const APP_GRANTS: Readonly<Record<string, readonly Privilege[]>> = {
   facilities: ["SELECT"],
@@ -37,7 +38,11 @@ export const APP_COLUMN_GRANTS: ColumnGrants = {
   operation_receipts: { UPDATE: ["response"] },
 };
 
-export const SYNC_COLUMN_GRANTS: ColumnGrants = {};
+export const SYNC_COLUMN_GRANTS: ColumnGrants = {
+  // Gelen kutusu claim'i yazarın GÜNCEL durumunu ve yazma iznini sorar (`inbox.service.ts` `authorEligibleSql`);
+  // e-posta, ad, parola/TOTP/davet sırları OKUNAMAZ — kanal katmanı hesap kimliğine ulaşmaz.
+  accounts: { SELECT: ["id", "tesis_id", "status", "permissions"] },
+};
 
 export const SYNC_GRANTS: Readonly<Record<string, readonly Privilege[]>> = {
   facilities: ["SELECT", "INSERT", "UPDATE"],

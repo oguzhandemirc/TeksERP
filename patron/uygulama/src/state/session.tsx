@@ -5,8 +5,8 @@ import { ApiError, createClient } from "../api/client";
 import { createApi, type Api } from "../api/endpoints";
 import type { FacilityStatus } from "../api/wire";
 import { apiBaseUrl } from "../lib/config";
-import { clearCache, createCache, type Cache } from "./cache";
-import { plainStore, secretStore } from "./store";
+import { clearCache, createCache, openingCacheHygiene, type Cache } from "./cache";
+import { legacyPlainStore, plainStore, secretStore } from "./store";
 import { applyServerFactoryTimezone } from "../lib/factory-time";
 
 const TOKEN_KEY = "patron.belirtec";
@@ -96,6 +96,8 @@ export function SessionProvider({ children, platform = "mobil" }: { children: Re
     let alive = true;
     void (async () => {
       const [t, s] = await Promise.all([secretStore.get(TOKEN_KEY).catch(() => null), secretStore.get(SCOPE_KEY).catch(() => null)]);
+      if (!alive) return;
+      await openingCacheHygiene({ plain: plainStore, legacy: legacyPlainStore, hasSession: Boolean(t && s) });
       if (!alive) return;
       if (!t || !s) return setPhase("giris");
       token.current = t;

@@ -642,15 +642,15 @@
       "bulut:oturum"
     ]
   },
-  "REPORT_FAMILY_PERMISSION": {
-    "sales": "bulut:siparis:oku",
-    "customer": "bulut:siparis:oku",
-    "inventory": "bulut:stok:oku",
-    "production": "bulut:uretim:oku",
-    "quality": "bulut:uretim:oku",
-    "dokuma": "bulut:uretim:oku",
-    "subcontract": "bulut:uretim:oku",
-    "finance": "bulut:cari-bakiye:oku"
+  "REPORT_KEY_PERMISSION": {
+    "sales/order-intake": "bulut:siparis:oku",
+    "sales/shipment-scorecard": "bulut:sevkiyat:oku",
+    "customer/scorecard": "bulut:siparis:oku",
+    "quality/scorecard": "bulut:uretim:oku",
+    "subcontract/scorecard": "bulut:uretim:oku",
+    "inventory/scorecard": "bulut:stok:oku",
+    "finance/aging": "bulut:cari-bakiye:oku",
+    "finance/cheque-due": "bulut:cek:oku"
   },
   "REPORTS_NOT_IN_CLOUD": [
     "audit/*",
