@@ -265,6 +265,27 @@ async function kosVeDenetle(ad, cwd, betik, argv, parolalar, gizliler) {
 const sha256 = (dosya) => crypto.createHash("sha256").update(fs.readFileSync(dosya)).digest("hex");
 const jsonOku = (dosya) => JSON.parse(fs.readFileSync(dosya, "utf8"));
 
+/**
+ * CF Worker İNDİRME listesi (L2-8): kökün çapa kipi listeyi (`uretim` | `hazirlik`), `deploy/kanallar.json`da o kipe
+ * (`backend.guvenCapasi`) bağlı kanallar satırın kanal kümesini verir. Kanal yoksa satır kurulamaz → parola sorulmadan RED.
+ */
+function workerListesi(kokKid) {
+  const liste = /^hazirlik-/.test(kokKid) ? "hazirlik" : "uretim";
+  const kayit = path.join(REPO, "deploy", "kanallar.json");
+  if (!fs.existsSync(kayit)) throw new TorenHatasi(`Kanal kaydı yok: ${kayit} — CF Worker İNDİRME satırı kurulamaz`, 2);
+  const kanallar = Object.entries(jsonOku(kayit).kanallar ?? {})
+    .filter(([, k]) => k?.backend?.guvenCapasi === liste)
+    .map(([kod]) => kod)
+    .sort();
+  if (kanallar.length === 0) throw new TorenHatasi(`deploy/kanallar.json'da ${liste} çapalı kanal yok — CF Worker İNDİRME satırı kurulamaz`, 2);
+  return { liste, kanallar };
+}
+
+/** Panelde `TKL_INDIRME_AYAR.indirmeListesi.<liste>` dizisine OLDUĞU GİBİ yapıştırılan satır; pencere sertifikanınki. */
+function workerSatiri(worker, ind) {
+  return JSON.stringify({ kid: ind.kid, x: ind.x, kanallar: worker.kanallar, baslangic: ind.baslangic, bitis: ind.bitis });
+}
+
 function dosyalar(kok, alt = "") {
   const out = [];
   for (const e of fs.readdirSync(path.join(kok, alt), { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name))) {
@@ -446,6 +467,7 @@ async function toren(bayraklar) {
   const paketSablonu = bayraklar.get("paket-komutu") || PAKET_KOMUTU;
   const kay = onkosullar(hedef, usb, bayraklar.get("etiket"));
   paketKomutu(paketSablonu, kid.paket, "{dizin}");
+  const worker = workerListesi(kid.kok);
   const toplam = usb ? 11 : 10;
   const adim = (n, baslik) => process.stdout.write(`[${n}/${toplam}] ${baslik}\n`);
 
@@ -455,7 +477,8 @@ async function toren(bayraklar) {
   console.log(`  hedef  : ${hedef}`);
   console.log(`  USB    : ${usb ?? "verilmedi — sonra: uretim-toren.mjs usb-kopyala --usb=<yol>"}`);
   console.log(`  kid'ler: ${kid.kok} · ${kid.alt} (${altGun} gün) · ${kid.ind} (${indGun} gün) · ${kid.paket} · modül: ${moduller.join(", ") || "yok"}`);
-  console.log(`  PAKET  : ${paketSablonu}${paketSablonu === PAKET_KOMUTU ? "" : "  ← varsayılan DEĞİL (--paket-komutu)"}\n`);
+  console.log(`  PAKET  : ${paketSablonu}${paketSablonu === PAKET_KOMUTU ? "" : "  ← varsayılan DEĞİL (--paket-komutu)"}`);
+  console.log(`  Worker : indirmeListesi.${worker.liste} · kanallar ${worker.kanallar.join(", ")}\n`);
   adim(1, "Önkoşullar ✓");
 
   adim(2, "Kök parolası (kâğıda yazılacak; PAKET parolasını 7. adımda PAKET aracı kendisi sorar)");
@@ -556,7 +579,7 @@ async function toren(bayraklar) {
     await yedek("kurtarma arşivi", ["sifrele", "--girdi", duzTar, "--cikti", arsiv, ...alicilar, "--duzu-sil"]);
     await yedek("kurtarma arşivi sınaması", ["dogrula", "--girdi", arsiv, "--anahtar", path.join(O, `${ALICI_MAC}.txt`)]);
 
-    const kunye = kunyeKur(yarim, kid, moduller, kay);
+    const kunye = kunyeKur(yarim, kid, moduller, kay, worker);
     dosyaYaz(path.join(yarim, BENIOKU), beniOku(kunye, hedef));
     kunye.ozetler = Object.fromEntries(dosyalar(yarim).map((f) => [f, sha256(path.join(yarim, f))]));
     dosyaYaz(path.join(yarim, KUNYE), `${JSON.stringify(kunye, null, 2)}\n`);
@@ -594,7 +617,7 @@ async function toren(bayraklar) {
   if (usbHatasi) throw new TorenHatasi(`Tören TAMAM (${hedef}) ama USB kopyası başarısız: ${usbHatasi.message}\n  → yeniden: node deploy/satici/uretim-toren.mjs usb-kopyala --usb=<yol>`);
 }
 
-function kunyeKur(kok, kid, moduller, kay) {
+function kunyeKur(kok, kid, moduller, kay, worker) {
   const A = path.join(kok, "anahtarlar");
   const kokDosya = jsonOku(path.join(A, `${kid.kok}.kok.json`));
   const altDosya = jsonOku(path.join(A, `${kid.alt}.anahtar.json`));
@@ -626,7 +649,8 @@ function kunyeKur(kok, kid, moduller, kay) {
     capaSatirlari: {
       ROOT_PUBLIC_KEYS: `{ kid: "${kokDosya.kid}", x: "${kokDosya.x}", classes: ${JSON.stringify(kokDosya.siniflar)} }`,
       PACKAGE_PUBLIC_KEYS: `{ kid: "${paketDosya.kid}", x: "${paketDosya.x}" }`,
-      CF_WORKER_INDIRME: `{ "kid": "${indDosya.kid}", "x": "${indDosya.x}" }`,
+      CF_WORKER_INDIRME: workerSatiri(worker, { kid: indDosya.kid, x: indDosya.x, baslangic: indS.baslangic, bitis: indS.bitis }),
+      CF_WORKER_LISTESI: worker.liste,
     },
     vds: {
       anahtarBirimi: ["anahtarlar/*", `paket/${kid.paket}.paket.json (ara kopya — USB kopyası alınana dek)`],
@@ -691,7 +715,7 @@ Bu dosyada SIR YOKTUR. Parolalar hiçbir dosyaya yazılmaz.
 ## Rotasyon (hiçbir araç var olan dosyanın üstüne yazmaz — rotasyon yeni kid'dir)
 
 - ALT (sertifika ${k.alt.bitis.slice(0, 10)}): \`cd satici/sunucu && npx tsx scripts/anahtar.ts alt-uret --kid=alt-<yıl>-<n> --kok=${k.kok.kid} --dizin=${hedef}/anahtarlar\` → VDS anahtar birimine kopya; satıcı dakikada bir yeniden okur. Sonra kurtarma arşivi yenilenir (runbook).
-- İNDİRME (sertifika ${k.indirme.bitis.slice(0, 10)}): \`indirme-uret --kid=ind-<yıl+1> --kok=${k.kok.kid}\` + CF Worker'a açık anahtar.
+- İNDİRME (sertifika ${k.indirme.bitis.slice(0, 10)}): üç aylık dönem töreni (\`uretim-toren.mjs donem\`) yenisini üretir; künyedeki \`CF_WORKER_INDIRME\` satırı CF Worker İNDİRME listesine VDS'ten ÖNCE eklenir (runbook §8).
 - PAKET (yıllık): \`${paketElle("paket-<yıl>", `${hedef}/paket`)}\` (repo kökünden; parolayı araç sorar) + güven çapası sürümü.
 `;
 }
@@ -711,8 +735,9 @@ function ozetBas(hedef, k, usbTamam) {
   console.log(`  2. ${usbTamam ? "USB kopyası alındı — USB'yi kasaya koy." : "USB kopyası BEKLİYOR: USB gelince → node deploy/satici/uretim-toren.mjs usb-kopyala --usb=/Volumes/<USB>"}`);
   console.log(`  3. Güven çapası (repo commit'i): cd Teks-Erp && npx tsx scripts/guven-capasi-ekle.ts kok --dosya=${path.join(hedef, k.kok.dosya)}`);
   console.log(`     ve … paket --dosya=${path.join(hedef, k.paket.dosya)} — önce kuru, sonra --yaz (yalnız kid + x okur)`);
-  console.log("  4. VDS: anahtar birimi + üretim satıcısı (docs/ops/SATICI-KURULUM.md §13).");
-  console.log(`  5. CF Worker İNDİRME anahtarı: ${k.capaSatirlari.CF_WORKER_INDIRME}`);
+  console.log(`  4. CF Worker — VDS'TEN ÖNCE (satıcı İNDİRME anahtarıyla yüklendiği an basar): TKL_INDIRME_AYAR.indirmeListesi.${k.capaSatirlari.CF_WORKER_LISTESI}'e ekle → Deploy`);
+  console.log(`     ${k.capaSatirlari.CF_WORKER_INDIRME}`);
+  console.log("  5. VDS: anahtar birimi + üretim satıcısı (docs/ops/SATICI-KURULUM.md §13).");
 }
 
 // ---------------------------------------------------------------- usb-kopyala · dogrula
@@ -837,6 +862,7 @@ async function donem(bayraklar) {
   const kunyeYolu = path.join(hedef, KUNYE);
   const kokKid = bayraklar.get("kok") ?? (fs.existsSync(kunyeYolu) ? jsonOku(kunyeYolu).kok?.kid : undefined);
   if (typeof kokKid !== "string" || !/^(kok|hazirlik)-[a-z0-9-]{1,40}$/.test(kokKid)) throw new TorenHatasi("Kök kimliği belirsiz: künyede yok — --kok=<kid> ver", 2);
+  const worker = workerListesi(kokKid);
   const K = path.join(hedef, "anahtarlar");
   const kokDosya = path.join(K, `${kokKid}.kok.json`);
   if (!fs.existsSync(kokDosya)) throw new TorenHatasi(`Kök dosyası yok: ${kokDosya}`, 2);
@@ -876,6 +902,7 @@ async function donem(bayraklar) {
   console.log(`  yeni   : ${kid.alt} · ${kid.ara} · ${kid.ind} (${DONEM_GUN} gün = 90 + 30 örtüşme)`);
   console.log(`  iptal  : ${yeniIptal ? `YENİ belge, sıra ${(onceki?.sira ?? 0) + 1}${iptalKidleri.length ? ` — iptal: ${iptalKidleri.join(", ")}` : ""}` : `önceki belge aynen (sıra ${onceki.sira})`}`);
   console.log(`  kuyruk : ${kuyruk ? `${kuyruk.adet} HAK kökle imzalanacak (${kuyruk.yol})` : "verilmedi"}`);
+  console.log(`  Worker : indirmeListesi.${worker.liste} · kanallar ${worker.kanallar.join(", ")}`);
   console.log(`  paket  : ${son}/vds-paketi (KÖK GİRMEZ)\n`);
   adim(1, "Önkoşullar ✓");
 
@@ -952,7 +979,7 @@ async function donem(bayraklar) {
     ].sort();
     const sizinti = kokSizdiMi(P, kokDosya);
     if (sizinti.length > 0) throw new TorenHatasi(`Dönem paketinde KÖK izi: ${sizinti.join(", ")} — paket yazılmadı`);
-    const kunye = donemKunyesi({ P, A, kid, kokDosya, kay, iptal, haklar, emekliye, kuyruk });
+    const kunye = donemKunyesi({ P, A, kid, kokDosya, kay, iptal, haklar, emekliye, kuyruk, worker });
     dosyaYaz(path.join(P, DONEM_KUNYE), `${JSON.stringify(kunye, null, 2)}\n`);
     const ozetSatirlari = dosyalar(P).map((f) => `${sha256(path.join(P, f))}  ${f}`);
     dosyaYaz(path.join(P, "SHA256SUMS"), `${ozetSatirlari.join("\n")}\n`);
@@ -975,7 +1002,7 @@ async function donem(bayraklar) {
   }
 }
 
-function donemKunyesi({ P, A, kid, kokDosya, kay, iptal, haklar, emekliye, kuyruk }) {
+function donemKunyesi({ P, A, kid, kokDosya, kay, iptal, haklar, emekliye, kuyruk, worker }) {
   const kok = jsonOku(kokDosya);
   const oku = (dosya) => {
     const d = jsonOku(path.join(A, dosya));
@@ -994,7 +1021,7 @@ function donemKunyesi({ P, A, kid, kokDosya, kay, iptal, haklar, emekliye, kuyru
     iptal: { sira: iptalYuku.sira, satir: iptalYuku.iptaller.length, kidler: iptalYuku.iptaller.map((e) => e.kid) },
     kuyruk: { verildi: Boolean(kuyruk), imzalanan: haklar.length },
     emekliye,
-    capaSatirlari: { CF_WORKER_INDIRME: `{ "kid": "${ind.kid}", "x": "${ind.x}" }` },
+    capaSatirlari: { CF_WORKER_INDIRME: workerSatiri(worker, ind), CF_WORKER_LISTESI: worker.liste },
     ozetler: Object.fromEntries(dosyalar(P).map((f) => [f, sha256(path.join(P, f))])),
   };
 }
@@ -1012,11 +1039,12 @@ function donemOzetiBas(son, k) {
   console.log(`  paket    ${P} (KÖK YOK · ${Object.keys(k.ozetler).length} dosya · SHA256SUMS)`);
   console.log("\nSonraki adımlar (docs/ops/URETIM-SATICI-TOREN.md §8):");
   console.log("  1. Ara imzacı parolası → parola yöneticisi (kâğıda DEĞİL). Kök parolası kâğıtta kalır.");
-  console.log(`  2. VDS'e taşı: scp -P 2222 -rp ${P} <vds>:~/donem-paketi && ssh … 'cd ~/donem-paketi && sha256sum -c SHA256SUMS'`);
-  console.log("  3. Anahtar birimine kur (anahtarlar/* → 0600, 10001) · içe aktar: … anahtar.js donem-ice-aktar < ice-aktar.json");
-  console.log("  4. 1 dk sonra portal Anahtarlar: yeni ALT/ARA/İNDİRME yüklü; İptal belgeleri: dağıtılan sıra = paketinki");
-  console.log(`  5. Eski özel yarılar: … anahtar.js emekliye-ayir --kid=${k.emekliye.join(",") || "<yok>"} (önce kuru, sonra --uygula)`);
-  console.log(`  6. CF Worker İNDİRME: ${k.capaSatirlari.CF_WORKER_INDIRME} · VDS'teki paket kopyası silinir (shred).`);
+  console.log(`  2. CF Worker — anahtar birimine kurmadan ÖNCE (satıcı yeni İNDİRME'yi yüklendiği dakika basar): TKL_INDIRME_AYAR.indirmeListesi.${k.capaSatirlari.CF_WORKER_LISTESI}'e EKLE → Deploy (eski satır kalır, penceresi kendiliğinden kapanır)`);
+  console.log(`     ${k.capaSatirlari.CF_WORKER_INDIRME}`);
+  console.log(`  3. VDS'e taşı: scp -P 2222 -rp ${P} <vds>:~/donem-paketi && ssh … 'cd ~/donem-paketi && sha256sum -c SHA256SUMS'`);
+  console.log("  4. Anahtar birimine kur (anahtarlar/* → 0600, 10001) · içe aktar: … anahtar.js donem-ice-aktar < ice-aktar.json");
+  console.log("  5. 1 dk sonra portal Anahtarlar: yeni ALT/ARA/İNDİRME yüklü; İptal belgeleri: dağıtılan sıra = paketinki");
+  console.log(`  6. Eski özel yarılar: … anahtar.js emekliye-ayir --kid=${k.emekliye.join(",") || "<yok>"} (önce kuru, sonra --uygula) · VDS'teki paket kopyası silinir (shred).`);
 }
 
 async function main() {

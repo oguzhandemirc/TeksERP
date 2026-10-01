@@ -141,6 +141,8 @@
 
 `kanal` · `yolOneki` (tam olarak `/<kanal>/electron/` ya da `/<kanal>/mobil/`) · `kurulumId` · `exp` (ISO). Doğrulama: `simdi > exp + tol` ⇒ `BELGE_SURESI_DOLDU`; `exp − simdi > 70 dk + tol` ⇒ `INDIRME_OMUR`. Yol: önekin ALTINDA (önekin kendisi değil), `..` · `\` · `//` · `%2e` · `%2f` · `%5c` · `%00` RED.
 
+**Anahtar listesi (L2-8):** doğrulayıcı açık anahtarları `DownloadPublicKey {kid, x, kanallar?, baslangic?, bitis?}` satırlarından alır (CF Worker'da `indirmeListesi.{uretim, hazirlik}`); aynı kid'de İLK satır kazanır. Süre ve ömür denetiminden SONRA: satırın penceresi varsa `baslangic − tol ≤ simdi ≤ bitis + tol` olmalı, yarım ya da biçimsiz pencere kapalıdır ⇒ `INDIRME_PENCERE`; satırın kanal kümesi varsa belgenin `kanal`ı kümede olmalı, küme dizi değilse izin yok ⇒ `INDIRME_KANAL`. Kanal ve pencere taşımayan satır kısıtsızdır (L2-8 öncesi `{kid, x}` biçimi; Worker'da bir sürüm daha tanınır).
+
 ### DURUM (`tekserp-durum`) — yerel, KURULUM imzalı, ağa çıkmaz
 
 `kurulumId` · `kiraId` (birikimin ait olduğu kira) · `birikenMs` · `yazildi` · `yuksekSu` · `sonKiraZorlamasi` (bool \| null) · `sonYaptirim` (`{kademe, mesaj, kisitlamaTarihi, donmusModuller[], guncellemeDonuk, devredildi}` \| null — son kullanılabilir kiranın SUNUCU KARARLARI; Faz 1c) · `sira` (her yazımda artar). F1a ekleri (isteğe bağlı: eski kayıt okunur, ilk yazımda dolar): `sonKira {kiraId, verilis}` (kabul edilen son kira — geri alma tespiti) · `sonHak {hakId, surum, sinif, kokTuru: kok·hazirlik}` (HAK pini) · `kapaliMs` (bu kira boyunca kredilenmiş kapalı kalma süresi) · `duvarTutarli` (yazım anında saat tahminle tutarlı mıydı; değilse kapalı süreye kredi vermez) · `saticiSapmaSn` (son `ISTEK_ZAMAN`dan duvar − satıcı, sn \| null). Okuma/yazma 1c'nin (`lib/license/accumulation.ts`, `runtime.ts`); şema ve imza `saat.ts`te.
@@ -269,6 +271,7 @@
 | `BAYI_KIMLIK` · `BAYI_TAVAN_MODUL` · `BAYI_TAVAN_SINIF` | bayi kimliği/anahtarı uyuşmaz · tavan dışı modül · tavan dışı sınıf |
 | `KIRA_HAK_UYUSMAZ` · `KIRA_SINIF_YETKISIZ` | kira başka HAK/sürüm/kuruluma ait · alt anahtar HAK sınıfına yetkisiz |
 | `INDIRME_OMUR` · `INDIRME_YOL` | belirteç ömrü uzun · yol dışı (yol kararı `isDownloadPathAllowed` boolean'ı) |
+| `INDIRME_PENCERE` · `INDIRME_KANAL` (v2, L2-8) | imzalayan kid'in liste satırı şu an pencere dışı · belgenin kanalı satırın kanal kümesinde değil |
 | `ISTEK_KID` · `ISTEK_AMAC` · `ISTEK_ZAMAN` · `ISTEK_KURULUM` · `ISTEK_GOVDE_OZETI` · `ISTEK_TEKRAR` | istek doğrulama adımları |
 | `ISTEK_YOL` (v2) | imzalı `yol` isteği alan uçla eşit değil |
 | `SERTIFIKA_IPTAL` (v2) | sertifika (ya da anahtarı) iptal belgesinde |
@@ -332,6 +335,8 @@
       | Patron sunucusu | Ayna bayt-eşit (`test_patron_kapilari` §7a); `yol` taşıyan istek kendi ucuna bağlı (`authenticateFactory({path})`), yolsuz istek değişmez. Patron yeni belge türlerini tüketmez | patron 24/24 · `test_esitleme_idempotency` §7 |
       | CF Worker (İNDİRME) | Değişmedi (`indirme.ts` dokunulmadı); kid × kanal × pencere listesi L2-8 | `test_indirme_kapisi` 180/0 |
       | Native çekirdek (bugünkü ikili) | v1 vektör dosyası değişmedi, `cargo test` yeşil; native yeni alanları atar (`strict=false`), ara/iptal/kural parametresi yok ⇒ v1 davranışı. Ayna L2-2 (ABI G3 ile aynı numara altında birleşir) | commit kapısı `native/lisans-cekirdek · test` yeşil |
+
+16. **İNDİRME anahtar listesi (L2-8, 2026-10-01):** `DownloadPublicKey`e isteğe bağlı `kanallar` · `baslangic` · `bitis` (Worker liste satırı); `verifyDownloadToken` bunları süre/ömürden sonra uygular (`INDIRME_PENCERE` · `INDIRME_KANAL`, yeni kod — kırıcı değil, §9). Belge (`tekserp-indirme`) DEĞİŞMEDİ; satırı alanlarsız çağıran (satıcı, patron, senaryolar) bugünkü sonucu aynen alır. Aynı kid iki satırdaysa ilk satır kazanır (önceden son satır — Worker `find` ile hizalandı; Worker ayarı çift kid'i zaten reddeder). Kod: `protocol/indirme.ts` + satıcı/patron bayt-eşit aynası · Worker `deploy/guncelleme-sunucusu/worker/indirme-kapisi.js`. Ölçüm: `test_indirme_kapisi` §0 parite + §8.
 
 ## 12a. Adlandırma — plan adı → kod adı
 
