@@ -1,5 +1,5 @@
 // =============================================================================
-// SENARYO L — lisans uçtan uca (plan §8 "Senaryo L", adımlar L1…L30 SIRAYLA)
+// SENARYO L — lisans uçtan uca (plan §8 "Senaryo L", adımlar L1…L34 SIRAYLA)
 // =============================================================================
 // Koşum (Teks-Erp/ içinden; hedefler YALNIZ `_test` DB — fabrika DB'lerine ASLA):
 //   DATABASE_URL='postgresql://…/<ana>_test?schema=public' \
@@ -10,7 +10,8 @@
 // `src/server.ts`; giriş `lib/senaryo-lisans-sunucu.ts` yalnız test çapasını ve sahte makine
 // kimliğini enjekte eder). Aralarında HTTPS aktarıcı (fabrikanın "interneti": açık/kesik/yut),
 // saat her süreçte IPC ile kaydırılır (duvar = saat sıçraması, monotonik = gerçek geçen süre).
-// Rol dağılımı: A ana (L1–L12) → C taşınmış ana (L12–L29) · B/B2 kopya · D DR · E bayi kurulumu.
+// Rol dağılımı: A ana (L1–L12) → C taşınmış ana (L12–L29) · B/B2 kopya · D DR · E bayi kurulumu ·
+// F/G/H/J lisans v2 P + iz merdiveni (L31–L34, kendi kurulum + rol DB'si; `lib/senaryo-lisans-v2-merdiven.ts`).
 // Her adım: yeşil/kırmızı/kısmi + kanıt (HTTP durumu, details.code, detay/portal okuması).
 // Çıkış: 0 hepsi yeşil · 1 yeşil olmayan adım var · 2 hedef reddi / düzenek kurulamadı.
 // =============================================================================
@@ -37,6 +38,7 @@ import { fixtureHedefEngeli, hacimHedefEngeli } from "./lib/hedef-db-kapisi";
 import { FabrikaIstemcisi, PortalIstemcisi, type LisansDetayi, type Yanit } from "./lib/senaryo-lisans-istemci";
 import { l18KunyeOlc } from "./lib/senaryo-lisans-kunye";
 import { l30ModulOlc } from "./lib/senaryo-lisans-modul";
+import { l31Internetsiz400, l32UcIzSilme, l33TekIzSilme, l34UzatmaDosyasi } from "./lib/senaryo-lisans-v2-merdiven";
 import { etkinlestirZayifOnayli, kiraSatiri, nedenOzeti, rolDbHazirla } from "./lib/senaryo-lisans-v2-duzenek";
 import {
   Aktarici,
@@ -89,6 +91,7 @@ const SON_ADIM = process.argv.find((a) => a.startsWith("--son="))?.slice("--son=
 class DurNoktasi extends Error {}
 
 const KOK_ONEKI = "tekserp-senaryo-l-";
+const ADIM_SAYISI = 34;
 
 /** Lisans kimliği (D14) fabrikanın LICENSE_DIR'inde doğar; satıcı kurulumu bu kimlikle bulunur. */
 function lisansKimligiOku(dizin: string): string | null {
@@ -1326,6 +1329,14 @@ async function main(): Promise<number> {
         kontrol: (ad, ok, ayrinti) => a.kontrol(ad, ok, ayrinti),
       });
     });
+
+    // ============================================================ L31…L34 (lisans v2: P + iz merdiveni)
+    // Her biri kendi rolünde, saat yalnız o fabrikada kayar (dünya ve C değişmez); sonda rol fabrikası durur.
+    const merdiven = { portal, kokParolasi: hz.kokParolasi, kanal: KANAL, hakModulleri: HAK_MODULLERI, saticiSimdi, yeniFabrika, rolDb, baslat, durdur, saatUygula, db, detayKurulum };
+    await adim("L31", "internetsiz 400 gün: P−30'a dek NORMAL → bilgi bandı → P sonrası EK_SURE → P+30 KISITLI (okuma/dışa aktarma/yedek açık)", (a) => l31Internetsiz400(merdiven, a));
+    await adim("L32", "üç iz birden silinir (kira + durum kaydı + DB izi) → hemen EK_SURE; portalda sıra sıfırlanması + LISANS_IZI_KAYIP", (a) => l32UcIzSilme(merdiven, a));
+    await adim("L33", "tek iz silinir → UYARI → 14 g → EK_SURE → KISITLI; başarılı yoklama izi onarır", (a) => l33TekIzSilme(merdiven, a));
+    await adim("L34", "uzatma dosyası (internet kesik): portal üretir → panel yükler → P ileri, NORMAL; kurcalı/yabancı/eski dosya RED", (a) => l34UzatmaDosyasi(merdiven, a));
   } catch (err) {
     if (err instanceof DurNoktasi) console.log(`\n⏹  --son=${err.message}: sonraki adımlar koşulmadı`);
     else {
@@ -1373,10 +1384,10 @@ async function main(): Promise<number> {
   const yesil = sonuclar.filter((s) => s.sonuc === "YESIL").length;
   const kismi = sonuclar.filter((s) => s.sonuc === "KISMI").length;
   const kirmizi = sonuclar.filter((s) => s.sonuc === "KIRMIZI").length;
-  console.log(`\n=== Senaryo L: ${yesil} yeşil · ${kismi} kısmi · ${kirmizi} kırmızı (${sonuclar.length}/30 adım koştu) ===`);
+  console.log(`\n=== Senaryo L: ${yesil} yeşil · ${kismi} kısmi · ${kirmizi} kırmızı (${sonuclar.length}/${ADIM_SAYISI} adım koştu) ===`);
   if (jsonCikti) fs.writeFileSync(jsonCikti, JSON.stringify({ sonuclar, ozet: { yesil, kismi, kirmizi } }, null, 2));
   if (cikis !== 0) return cikis;
-  return yesil === 30 ? 0 : 1;
+  return yesil === ADIM_SAYISI ? 0 : 1;
 }
 
 main().then(
