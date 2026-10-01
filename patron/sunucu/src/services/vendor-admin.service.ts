@@ -11,6 +11,7 @@ import { recordAudit } from "../lib/audit";
 import { CloudError, notFound, stateConflict } from "../lib/errors";
 import { uniqueViolationOn } from "../lib/prisma-errors";
 import { withTesis } from "../lib/tenant";
+import { assertEmailFreeInFacility, emailInUseHere } from "./account.service";
 import { safeKeyId } from "./installation-directory";
 
 export const VENDOR_ACTOR = "satici-cli";
@@ -80,6 +81,7 @@ export async function inviteFacilityAdmin(db: PrismaClient, g: { tesisId: string
   try {
     const account = await withTesis(db, { tesisId: g.tesisId, lock: { name: "ACCOUNT_ADMIN", key: g.tesisId } }, async (tx) => {
       if (!(await tx.facility.findUnique({ where: { tesisId: g.tesisId } }))) throw notFound("Tesis");
+      await assertEmailFreeInFacility(tx, g.tesisId, email);
       return tx.account.create({
         data: { tesisId: g.tesisId, email, name: g.name, permissions: [...ROLE_TEMPLATES.PATRON], status: "DAVETLI", inviteTokenHash: invite.digest, inviteExpiresAt: invite.expiresAt },
       });
@@ -87,7 +89,7 @@ export async function inviteFacilityAdmin(db: PrismaClient, g: { tesisId: string
     await recordAudit(db, { tesisId: g.tesisId, actor: VENDOR_ACTOR, event: "YONETICI_DAVET", entity: "Account", entityId: account.id });
     return { accountId: account.id, token: invite.token, expiresAt: invite.expiresAt };
   } catch (err) {
-    if (uniqueViolationOn(err, "email")) throw new CloudError(409, "EPOSTA_KULLANIMDA", "Bu e-posta adresiyle bir bulut hesabı zaten var");
+    if (uniqueViolationOn(err, "tesis_email")) throw emailInUseHere();
     throw err;
   }
 }
@@ -97,9 +99,12 @@ export async function reinviteAdmin(db: PrismaClient, g: { tesisId: string; emai
   const invite = createInvite(nowMs, g.validHours);
   const email = normalizeEmail(g.email);
   const account = await withTesis(db, { tesisId: g.tesisId, lock: { name: "ACCOUNT_ADMIN", key: g.tesisId } }, async (tx) => {
-    const a = await tx.account.findFirst({ where: { tesisId: g.tesisId, email } });
-    if (!a) throw notFound("Hesap");
-    if (a.status === "PASIF") throw stateConflict("Arşivdeki hesap yeniden davet edilemez");
+    // Aynı tesiste aynı e-postalı PASİF satır(lar) da olabilir; hedef PASİF OLMAYAN tek hesaptır.
+    const a = await tx.account.findFirst({ where: { tesisId: g.tesisId, email, status: { not: "PASIF" } } });
+    if (!a) {
+      if (await tx.account.findFirst({ where: { tesisId: g.tesisId, email }, select: { id: true } })) throw stateConflict("Arşivdeki hesap yeniden davet edilemez");
+      throw notFound("Hesap");
+    }
     await tx.session.updateMany({ where: { accountId: a.id, closedAt: null }, data: { closedAt: new Date(nowMs), closeReason: "SIFIRLAMA" } });
     return tx.account.update({
       where: { id: a.id },

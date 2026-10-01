@@ -159,7 +159,9 @@ model Installation {
 model Account {
   id               String        @id @default(uuid()) @db.Uuid
   tesisId          String        @map("tesis_id") @db.Uuid
-  email            String        @unique @map("email") @db.VarChar(254)
+  /// Tekillik kısmi indekslerle (migration `20261001120000`): bulut genelinde yalnız AKTIF · KILITLI hesapta;
+  /// tesis içinde PASİF olmayan hesapta. Davet ve arşiv e-postayı tutmaz.
+  email            String        @map("email") @db.VarChar(254)
   name             String        @map("name") @db.VarChar(120)
   passwordHash     String?       @map("password_hash") @db.VarChar(200)
   totpSecretSealed String?       @map("totp_secret_sealed") @db.VarChar(300)
@@ -168,6 +170,7 @@ model Account {
   status           AccountStatus @default(DAVETLI) @map("status")
   inviteTokenHash  String?       @unique @map("invite_token_hash") @db.VarChar(64)
   inviteExpiresAt  DateTime?     @map("invite_expires_at") @db.Timestamptz
+  /// Hesap düzeyi eski kilit sayacı/bitişi — karar VERMEZ (kilit hesap + kaynak, `auth/login-throttle.ts`); başarıda sıfırlanır.
   failedLogins     Int           @default(0) @map("failed_logins")
   lockedUntil      DateTime?     @map("locked_until") @db.Timestamptz
   lastLoginAt      DateTime?     @map("last_login_at") @db.Timestamptz
@@ -183,6 +186,7 @@ model Account {
   sessions Session[]
 
   @@index([tesisId])
+  @@index([email])
   @@map("accounts")
 }
 

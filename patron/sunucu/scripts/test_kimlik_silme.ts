@@ -6,7 +6,8 @@
 //      adı tombstone · NE KALIR: satır ve kimliği, gelen kutusu hesap kimliği, durum PASIF, izinler · ayak izi
 //   §4 kapsam: KILITLI (kapanmamış) hesap 60 günde bile silinmez · başka tesisin hesabı etkilenmez · ikinci tur etkisiz
 //   §5 yeniden tanımlama kapısı: arşivdeki hesap düzenlenemez (409) · DB CHECK silinmiş hesaba parola yazdırmaz
-//   §6 e-posta: silinmeden önce aynı e-postayla davet 409, silindikten sonra 201
+//   §6 e-posta: arşiv e-postayı TUTMAZ — silinmeden önce de aynı tesiste yeniden davet 201 (G19); PASİF olmayan
+//      kopya varken ikinci davet 409; kimlik silmesi tombstone'u yeni davetle çakışmaz
 //   §7 işlem makbuzu (ISLEM_SAKLAMA_GUN > 30 iken de): davet · güncelleme · gelen kutusu · fabrika kilidi · sıfırlama ·
 //      kapanış makbuzları KALIR ama 30. günde hiçbirinde silinen hesabın e-postası/adı YOK (tombstone) · makbuzun
 //      kimliği/eylemi/gövde özeti değişmez · aynı işlem kimliği tombstone'lu saklı yanıtı alır, başka gövde 409 ·
@@ -98,10 +99,12 @@ async function main(): Promise<void> {
     const kapanacak = await hesapKur(o, a.tesisId, ["bulut:siparis:oku"]);
     await durum(o, yonetici.belirtec, kapanacak.accountId, "PASIF");
     const erken = await api(o, "POST", "/api/hesaplar", { belirtec: yonetici.belirtec, govde: { clientToken: randomUUID(), eposta: kapanacak.eposta, ad: "Yeni", sablon: "SATIS" } });
-    kontrol("§6a silinmeden önce aynı e-posta 409 EPOSTA_KULLANIMDA", erken.status === 409 && erken.json.details?.code === "EPOSTA_KULLANIMDA", String(erken.status));
+    kontrol("§6a arşivlenen hesabın e-postası silinmeden ÖNCE de yeniden davet edilir → 201 (arşiv e-postayı tutmaz)", erken.status === 201, String(erken.status));
+    const kopya = await api(o, "POST", "/api/hesaplar", { belirtec: yonetici.belirtec, govde: { clientToken: randomUUID(), eposta: kapanacak.eposta, ad: "Kopya", sablon: "SATIS" } });
+    kontrol("§6b PASİF olmayan kopya varken aynı e-posta → 409 EPOSTA_KULLANIMDA", kopya.status === 409 && kopya.json.details?.code === "EPOSTA_KULLANIMDA", String(kopya.status));
     await purgeClosedIdentities(o.ctx, a.tesisId, o.saat.simdi() + IDENTITY_PURGE_DAYS * GUN);
-    const sonra = await api(o, "POST", "/api/hesaplar", { belirtec: yonetici.belirtec, govde: { clientToken: randomUUID(), eposta: kapanacak.eposta, ad: "Yeni", sablon: "SATIS" } });
-    kontrol("§6b silindikten sonra aynı e-postayla davet 201", sonra.status === 201, String(sonra.status));
+    const yeniDavet = await withTesis(o.goc.prisma, { tesisId: a.tesisId }, (tx) => tx.account.findFirst({ where: { tesisId: a.tesisId, email: kapanacak.eposta, status: "DAVETLI" } }));
+    kontrol("§6c kimlik silmesi yeni daveti etkilemez (e-posta yeni satırda kalır, eski satır tombstone)", yeniDavet !== null && (await hesap(o, a.tesisId, kapanacak.accountId))?.email === tombstoneEmail(kapanacak.accountId));
 
     console.log("\n§7 işlem makbuzu: kimlik tombstone, makbuz ve tekrar sözleşmesi KALIR (ISLEM_SAKLAMA_GUN > 30 iken de)");
     const m = await hesapKur(o, a.tesisId, ["bulut:cari:yaz"]);

@@ -82,7 +82,8 @@ export async function login(ctx: CloudContext, g: LoginInput): Promise<{ token: 
   const startedMs = Date.now();
   const nowMs = ctx.now();
   const email = normalizeEmail(g.email);
-  const account = email ? await withLookup(ctx.app, { kind: "eposta", value: email }, (tx) => tx.account.findUnique({ where: { email } })) : null;
+  // E-posta bulut genelinde yalnız ETKİN (AKTIF · KILITLI) hesapta tekildir; davet ve arşiv satırı giriş adayı değildir.
+  const account = email ? await withLookup(ctx.app, { kind: "eposta", value: email }, (tx) => tx.account.findFirst({ where: { email, status: { in: ["AKTIF", "KILITLI"] } } })) : null;
   if (!account || account.status !== "AKTIF" || !account.passwordHash || !account.totpSecretSealed) {
     await burnPasswordCheck(g.password);
     if (account) await recordAudit(ctx.app, { tesisId: account.tesisId, actor: "giris", event: "GIRIS_REDDEDILDI", entity: "Account", entityId: account.id, summary: { durum: account.status, ...ipSummary(g.ip) } });
