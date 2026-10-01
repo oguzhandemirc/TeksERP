@@ -9,7 +9,7 @@ import { VendorError, retryConflict } from "../lib/errors";
 import { lockInstallation } from "../lib/locks";
 import { prisma, type Tx } from "../lib/prisma";
 import { enqueueNotificationTx } from "../notifications/outbox";
-import { acceptsClosingLease, copyClosingAnchor, issueOrReuseClosingLease } from "./closing-lease";
+import { acceptsClosingLease, copyEpisodeStart, issueOrReuseClosingLease } from "./closing-lease";
 import type { VendorContext } from "./context";
 import { decideChain, driftAccepted, forkSide, readFingerprint, type ChainDecision } from "./lease-chain";
 import {
@@ -214,7 +214,7 @@ async function renewInTx(tx: Tx, ctx: VendorContext, g: RenewInput): Promise<Ren
         entitlement: hak,
         reason: "KOPYA",
         keyId: g.kid,
-        anchor: copyClosingAnchor(denying, g.nowMs),
+        episodeStart: copyEpisodeStart(denying, g.nowMs),
         presentedLeaseId: g.presentedLeaseId,
         measured,
         nowMs: g.nowMs,

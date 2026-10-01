@@ -1,9 +1,11 @@
 // KAPANIŞ KİRASI (K6, lisans v2 §1.2): P modelinde imzasız 403 hiçbir süreyi kısaltmaz (araya giren biri fabrikayı
-// durduramasın diye kısaltmamalı da). Eşleşmeyen tarafa bunun yerine İMZALI kira gider: K3, kısıtlama anı = olayın ÇAPASI
-// + ek süre. Çapa olayın kendi defterinden: kopya → uyarının ilk red anı (`redZamani`) · taşıma → anahtarın emekli olduğu
-// kurulum kaydı · iptal → son IPTAL kaydı. Yalnız `odenmis-tarih` yeteneğini bildiren istemciye gider; eski fabrika
-// bugünkü 403'ü alır (sıfır fark). Kapanış kirası zincir ucunu İLERLETMEZ ve modül anahtarı/bulut hakkı taşımaz.
-// Aynı olayda tekrar yoklama koşullar değişmediyse AYNI kirayı alır: defter şişmez, kısıtlama tarihi kaymaz.
+// durduramasın diye kısaltmamalı da). Eşleşmeyen tarafa bunun yerine İMZALI kira gider: K3, kısıtlama anı = o olayın
+// İLK kapanış kirasının verilişi + ek süre (ilk kapanışta "şimdi + ek süre"; sonraki her kapanış AYNI tarihi taşır, tekrar
+// yoklamak süreyi uzatmaz; olay geç fark edilse de fabrika aniden durmaz — ek süre her zaman tam verilir). Olayın başı
+// kendi defterinden: kopya → reddi doğuran uyarının ilk görülmesi · taşıma → anahtarın emekli olduğu kurulum kaydı · iptal
+// → son IPTAL kaydı. Yalnız `odenmis-tarih` yeteneğini bildiren istemciye gider; eski fabrika bugünkü 403'ü alır (sıfır
+// fark). Kapanış kirası zincir ucunu İLERLETMEZ, modül anahtarı/bulut hakkı taşımaz; aynı olayda tekrar yoklama koşullar
+// değişmediyse AYNI kirayı alır (defter şişmez).
 import type { Hak, Kira, KopyaUyarisi, Kurulum } from "@prisma/client";
 import {
   DAY_MS,
@@ -29,14 +31,14 @@ export function acceptsClosingLease(capabilities: readonly string[] | undefined)
   return hasCapability(capabilities, CLOSING_LEASE_CAPABILITY);
 }
 
-/** Kopya kapanışının çapası: reddi doğuran uyarıların ilk red anlarının ERKENİ. */
-export function copyClosingAnchor(alerts: readonly Pick<KopyaUyarisi, "redZamani">[], nowMs: number): Date {
-  const times = alerts.flatMap((a) => (a.redZamani ? [a.redZamani.getTime()] : []));
+/** Kopya olayının başı: reddi doğuran uyarıların ilk görülmelerinin ERKENİ (yeni uyarı = yeni olay). */
+export function copyEpisodeStart(alerts: readonly Pick<KopyaUyarisi, "ilkGorulme">[], nowMs: number): Date {
+  const times = alerts.map((a) => a.ilkGorulme.getTime());
   return new Date(times.length > 0 ? Math.min(...times) : nowMs);
 }
 
-/** Taşıma/iptal kapanışının çapası — olayın kurulum kaydı (yoksa null: kapanış basılmaz, eski 403 sürer). */
-export async function ledgerClosingAnchor(tx: Tx, g: { installationDbId: string; reason: "TASIMA" | "IPTAL"; keyId: string }): Promise<Date | null> {
+/** Taşıma/iptal olayının başı — olayın kurulum kaydı (yoksa null: kapanış basılmaz, eski 403 sürer). */
+export async function ledgerEpisodeStart(tx: Tx, g: { installationDbId: string; reason: "TASIMA" | "IPTAL"; keyId: string }): Promise<Date | null> {
   const row = await tx.kurulumKaydi.findFirst({
     where: g.reason === "TASIMA" ? { kurulumId: g.installationDbId, eskiAnahtarKimligi: g.keyId } : { kurulumId: g.installationDbId, olay: "IPTAL" },
     orderBy: [{ createdAt: "desc" }, { id: "desc" }],
@@ -80,17 +82,18 @@ export async function issueOrReuseClosingLease(
     readonly entitlement: Hak;
     readonly reason: ClosingLeaseReason;
     readonly keyId: string;
-    readonly anchor: Date;
+    /** Olayın başı: bu andan sonra bu anahtara verilen ilk kapanış kirası kısıtlama çapasıdır. */
+    readonly episodeStart: Date;
     readonly presentedLeaseId: string | null;
     readonly measured: Fingerprint;
     readonly nowMs: number;
   },
 ): Promise<ClosingLease> {
   const revocation = await leaseRevocation(tx);
-  const last = await tx.kira.findFirst({
-    where: { kurulumId: g.installation.id, anahtarKimligi: g.keyId, karar: "KAPANIS", kapanisNedeni: g.reason, verilis: { gte: g.anchor } },
-    orderBy: [{ createdAt: "desc" }, { id: "desc" }],
-  });
+  const episode = { kurulumId: g.installation.id, anahtarKimligi: g.keyId, karar: "KAPANIS" as const, kapanisNedeni: g.reason, verilis: { gte: g.episodeStart } };
+  const first = await tx.kira.findFirst({ where: episode, orderBy: [{ verilis: "asc" }, { id: "asc" }], select: { verilis: true } });
+  const anchorMs = first ? first.verilis.getTime() : g.nowMs;
+  const last = await tx.kira.findFirst({ where: episode, orderBy: [{ createdAt: "desc" }, { id: "desc" }] });
   if (last && (await reusable(tx, last, { installationDbId: g.installation.id, entitlement: g.entitlement, revocation, nowMs: g.nowMs }))) {
     return { id: last.id, token: last.belge, entitlementToken: await entitlementTokenFor(tx, g.installation, g.entitlement), revocation, reused: true };
   }
@@ -105,7 +108,7 @@ export async function issueOrReuseClosingLease(
     // Kira eşleşmeyen tarafın kendi ölçtüğü kümeyi taşır: fabrika kirayı kendisine ait sayar ve K3'ü uygular.
     acceptedFingerprint: g.measured,
     nowMs: g.nowMs,
-    closing: { reason: g.reason, keyId: g.keyId, restrictAt: new Date(g.anchor.getTime() + ctx.config.EK_SURE_GUN * DAY_MS) },
+    closing: { reason: g.reason, keyId: g.keyId, restrictAt: new Date(anchorMs + ctx.config.EK_SURE_GUN * DAY_MS) },
   });
   return { id: lease.id, token: lease.token, entitlementToken: lease.entitlementToken, revocation: lease.revocation, reused: false };
 }
@@ -126,14 +129,14 @@ export async function closeEndedKey(
     const reason: "TASIMA" | "IPTAL" | null = inst.durum === "IPTAL" ? "IPTAL" : inst.anahtarKimligi !== auth.kid ? "TASIMA" : null;
     if (!reason) throw retryConflict();
     const hak = await tx.hak.findFirst({ where: { kurulumId: inst.id, aktif: true } });
-    const anchor = await ledgerClosingAnchor(tx, { installationDbId: inst.id, reason, keyId: auth.kid });
-    if (!hak || hak.guncelSurum < 1 || !anchor) return null;
+    const episodeStart = await ledgerEpisodeStart(tx, { installationDbId: inst.id, reason, keyId: auth.kid });
+    if (!hak || hak.guncelSurum < 1 || !episodeStart) return null;
     const closing = await issueOrReuseClosingLease(tx, ctx, {
       installation: inst,
       entitlement: hak,
       reason,
       keyId: auth.kid,
-      anchor,
+      episodeStart,
       presentedLeaseId: g.presentedLeaseId,
       measured: g.measured,
       nowMs: g.nowMs,

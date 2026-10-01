@@ -11,8 +11,9 @@
 // kopya uyarısı (yalnız uyarı) · D2s: sunulan kira bu kurulumun kira defterinde yoksa YABANCI_KIRA, raporlanan
 // kip elindeki kiranın zorlamasıyla uyuşmuyorsa KIP_UYUSMAZ — ikisi de yalnız uyarı, kira yine verilir.
 // Lisans v2 (L2-4): §9 K6 kapanış kirası — çatalın ikinci penceresinde kapanış kirasını anlayan (`odenmis-tarih`)
-// eşleşmeyen tarafa 403 yerine İMZALI K3 (çapa = ilk red anı + ek süre; tekrar yoklamada AYNI kira, yeni yaptırımda
-// yeni kira ama AYNI tarih; uç ilerlemez) · §10 taşınmış anahtar ve iptal kurulum kapanışı (çapa kurulum kaydından) ·
+// eşleşmeyen tarafa 403 yerine İMZALI K3 (çapa = olayın ilk kapanış kirası + ek süre; tekrar yoklamada AYNI kira, yeni
+// yaptırımda yeni kira ama AYNI tarih; uç ilerlemez) · §10 taşınmış anahtar ve iptal kurulum kapanışı (olay geç fark
+// edilse de tam ek süre — aniden durmaz) ·
 // §11 YABANCI_HAK (kimlik/sürüm defterde yok ya da bayt özeti tutmuyor; doğru özet susar) · §12 YEREL_MUDAHALE
 // (sıra geriledi/sıfırlandı · lisans izi kayıp · belirsizlik · saat sapması; yeni neden başına bildirim; çatal tarafı
 // sırayı yazamaz) + yetenek kaydı · §13 uzatma dosyası ucu (dosya yüklenmeden ebeveynle gelen → tekrar/olağan, yakala değil).
@@ -101,10 +102,9 @@ async function main(): Promise<void> {
     const ucOnce = (await prisma.kurulum.findUniqueOrThrow({ where: { id: kk.kurulumDbId } })).sonKiraId;
     const kap = await yoklaV2(kk.kurulumId, an, kiraOf(ilk)!.kiraId, fpB, P_YETENEK);
     const yuk = kap.status === 200 ? kiraYuku(kap.json) : {};
-    const uyari = await prisma.kopyaUyarisi.findFirstOrThrow({ where: { kurulumId: kk.kurulumDbId, tur: "ZINCIR_CATALI" } });
-    const beklenen = new Date(uyari.redZamani!.getTime() + ekSureMs).toISOString();
+    const beklenen = kap.status === 200 ? new Date(Date.parse(String(yuk.verilis)) + ekSureMs).toISOString() : "?";
     kontrol(
-      "§9b ⭐ ikinci pencere + `odenmis-tarih` → 200 İMZALI kapanış kirası: kapanis=KOPYA, K3 = ilk red anı + ek süre",
+      "§9b ⭐ ikinci pencere + `odenmis-tarih` → 200 İMZALI kapanış kirası: kapanis=KOPYA, K3 = ilk kapanışın verilişi + ek süre",
       kap.status === 200 && yuk.kapanis === "KOPYA" && yaptirimOf(kap).kademe === "K3" && yaptirimOf(kap).kisitlamaTarihi === beklenen,
       `${kap.status} ${kap.kod ?? ""} ${String(yaptirimOf(kap).kisitlamaTarihi)} ≟ ${beklenen}`,
     );
@@ -141,19 +141,32 @@ async function main(): Promise<void> {
     const yeniAn = kurulumAnahtariUret();
     const inst = await prisma.kurulum.findUniqueOrThrow({ where: { id: kt.kurulumDbId } });
     // Onaylı taşımanın kurulum üzerindeki izi (etkinleştirmenin yazdığıyla aynı): eski anahtar emekli kaydı + anahtar değişimi.
-    const tasindi = await prisma.kurulumKaydi.create({
-      data: { kurulumId: kt.kurulumDbId, olay: "TASINDI", anahtarKimligi: yeniAn.kid, acikAnahtar: yeniAn.x, eskiAnahtarKimligi: inst.anahtarKimligi, eskiAcikAnahtar: inst.acikAnahtar, yapan: "bekci" },
+    // Taşıma 40 gün ÖNCE onaylanmış, eski makine ancak şimdi yokluyor (olay geç fark edildi).
+    await prisma.kurulumKaydi.create({
+      data: {
+        kurulumId: kt.kurulumDbId,
+        olay: "TASINDI",
+        anahtarKimligi: yeniAn.kid,
+        acikAnahtar: yeniAn.x,
+        eskiAnahtarKimligi: inst.anahtarKimligi,
+        eskiAcikAnahtar: inst.acikAnahtar,
+        yapan: "bekci",
+        createdAt: new Date(Date.now() - 40 * DAY_MS),
+      },
     });
     await prisma.kurulum.update({ where: { id: kt.kurulumDbId }, data: { anahtarKimligi: yeniAn.kid, acikAnahtar: yeniAn.x } });
     const eskiRed = await yokla(kt.kurulumId, eskiAn, e0, fpA);
     kontrol("§10a ✓K kapanışı anlamayan eski makine → bugünkü 403 KURULUM_IPTAL", eskiRed.status === 403 && eskiRed.kod === "KURULUM_IPTAL", `${eskiRed.status} ${eskiRed.kod}`);
+    const oncesi = Date.now();
     const kapT = await yoklaV2(kt.kurulumId, eskiAn, e0, fpA, P_YETENEK);
+    const kisitT = Date.parse(String(yaptirimOf(kapT).kisitlamaTarihi));
     kontrol(
-      "§10b ⭐ taşınmış anahtar + `odenmis-tarih` → kapanış kirası TASIMA, K3 = taşıma kaydı + ek süre, kira ESKİ anahtara bağlı",
-      kapT.status === 200 && kiraYuku(kapT.json).kapanis === "TASIMA" && yaptirimOf(kapT).kisitlamaTarihi === new Date(tasindi.createdAt.getTime() + ekSureMs).toISOString() &&
+      "§10b ⭐ taşınmış anahtar + `odenmis-tarih` → kapanış kirası TASIMA, K3 = ilk kapanışın verilişi + ek süre, kira ESKİ anahtara bağlı",
+      kapT.status === 200 && kiraYuku(kapT.json).kapanis === "TASIMA" && kisitT === Date.parse(String(kiraYuku(kapT.json).verilis)) + ekSureMs &&
         kiraYuku(kapT.json).kurulumAnahtarKimligi === eskiAn.kid,
       `${kapT.status} ${kapT.kod ?? ""}`,
     );
+    kontrol("§10b2 ✓K olay 40 gün önceydi ama fabrika ANİDEN durmaz: kısıtlama ilk kapanıştan TAM ek süre sonra", kisitT >= oncesi + ekSureMs, `${new Date(kisitT).toISOString()}`);
     const tekrarT = await yoklaV2(kt.kurulumId, eskiAn, String(kiraYuku(kapT.json).kiraId), fpA, P_YETENEK);
     kontrol("§10c tekrar → aynı kapanış kirası", tekrarT.json.kira === kapT.json.kira);
 
@@ -161,12 +174,12 @@ async function main(): Promise<void> {
     const { k: ki, t0: i0 } = await etkinlestir(an);
     const { cancelInstallation, reinstateInstallation } = await import("../src/services/installation-admin.service");
     await cancelInstallation({ installationDbId: ki.kurulumDbId, reason: "bekçi: sözleşme feshi", actor: "bekci" });
-    const iptalKaydi = await prisma.kurulumKaydi.findFirstOrThrow({ where: { kurulumId: ki.kurulumDbId, olay: "IPTAL" } });
     const eskiI = await yokla(ki.kurulumId, an, i0, fpA);
     const kapI = await yoklaV2(ki.kurulumId, an, i0, fpA, P_YETENEK);
     kontrol(
-      "§10d iptal kurulum: eski istemci 403 KURULUM_IPTAL; `odenmis-tarih` → kapanış IPTAL, K3 = iptal kaydı + ek süre",
-      eskiI.status === 403 && kapI.status === 200 && kiraYuku(kapI.json).kapanis === "IPTAL" && yaptirimOf(kapI).kisitlamaTarihi === new Date(iptalKaydi.createdAt.getTime() + ekSureMs).toISOString(),
+      "§10d iptal kurulum: eski istemci 403 KURULUM_IPTAL; `odenmis-tarih` → kapanış IPTAL, K3 = ilk kapanışın verilişi + ek süre",
+      eskiI.status === 403 && kapI.status === 200 && kiraYuku(kapI.json).kapanis === "IPTAL" &&
+        Date.parse(String(yaptirimOf(kapI).kisitlamaTarihi)) === Date.parse(String(kiraYuku(kapI.json).verilis)) + ekSureMs,
       `${eskiI.status} ${kapI.status} ${kapI.kod ?? ""}`,
     );
     await reinstateInstallation({ installationDbId: ki.kurulumDbId, reason: "bekçi: yanlış iptal", actor: "bekci" });
