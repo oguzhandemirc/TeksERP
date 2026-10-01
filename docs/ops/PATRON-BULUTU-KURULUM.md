@@ -155,7 +155,7 @@ ssh tekserp-vds 'docker version --format "{{.Server.Version}}"; docker compose v
    sudo docker compose --profile goc run --rm patron-goc node dist-cli/scripts/tesis.js yonetici-davet --tesis=<tesis uuid> --eposta=<e-posta> --ad="<Ad Soyad>"
    ```
 
-   Yönetici davetle `https://patron.etkiliyazilim.com/` üzerinden parolasını belirler, TOTP sırrını authenticator'a girer ve ilk kodla onaylar; ekibini kendisi davet eder. Kayıpta: `tesis.js yonetici-yeniden-davet`. Kurulum kaydı `KURULUM_KAYNAGI=satici` kipinde satıcı iç API'sinden dolar (CLI'yle kayıt gerekmez).
+   Yönetici davetle `https://patron.etkiliyazilim.com/` üzerinden parolasını belirler, TOTP sırrını authenticator'a girer ve ilk kodla onaylar; ekibini kendisi davet eder. Kayıpta: `tesis.js yonetici-yeniden-davet` (tesiste AKTİF hesap yöneticisi varken REDDEDİLİR — o yönetici kendisi sıfırlar; tek aktif yönetici kendisi kayıpsa yalnız yazılı taleple `--zorla --talep=<talep no> --gerekce="…"`, ikisi de müşterinin bulut denetiminde görünür). Kurulum kaydı `KURULUM_KAYNAGI=satici` kipinde satıcı iç API'sinden dolar (CLI'yle kayıt gerekmez).
 9. **İlk yedek:** `sudo docker compose exec patron-yedek /arac/yedek-dongusu.sh tek` → `patron_<damga>.dump.tkenc` + `anahtarlar_<damga>.tar.tkenc` ("Yerel anahtar (yerel.tkkey) yok" uyarısı BEKLENİR — VDS kendi yedeğini açamaz).
 10. **Sonra:** `deploy/vds-dogrula.sh` → ✅ adnansahin AYNI.
 
