@@ -401,6 +401,8 @@ Takvim kapısı yoktur; her adımın kapısı bir ölçüm ya da kullanıcı cü
 
 Bu belge kural yazmaz; aşağıdaki değişiklikler L2-0'da, dilimlerle birlikte yapılır.
 
+> **L2-0 (2026-10-01):** kural satırları `docs/kurallar/lisans.md`'ye (kodu inmemiş her v2 satırı `bekçi YOK` dalı + `Kapanır:` koşuluyla borç), tam metin arşive ("2026-10-01 — Lisans v2 kararları (K1–K8)") yazıldı; ezilen arşiv notları KISMEN GEÇERSİZ işaretli; plan §13 (9) + ⚠️ işaretleri ve satıcı runbook işaretçileri kondu. Protokol belgesi L2-1'de. Hukuk metinleri (kabul metni, EULA §7, Yaptırım Maddeleri §3.1, hukuk README) v1 taahhüdünü taşır ve değiştirilmedi — kullanıcı/yönetici kararı.
+
 - **`docs/kurallar/lisans.md` değişmezleri:**
   - "aniden durdurmaz" merdivenine P, bilgi bandı, 14 günlük belirsizlik ve "üç iz birden silinirse hemen ek süre" girer;
   - "Ek süre İMZALI tarihten türer" kuralında v2 çapası P olur;
