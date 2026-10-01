@@ -14236,7 +14236,7 @@ Negatif sondalar (tetik md5(prosrc) ve dosya md5 ile geri alındı):
 
 **Ölçüm.** `cargo test -p tekserp-guncelleyici --test kurulum_dogrulayici` 16/0; yedi mutasyonun yedisi kırmızı (ilk turda ürün kapısı KÖRDÜ — hiçbir test başka ürünün paketini üretmiyordu; `baska_urunun_imzali_paketi_reddedilir` eklendi). `kapi.mjs denetle` (Windows hedefi dahil) + `kapi.mjs test` temiz. `test_kurulum_girdisi` 24/0 (✓K4). `test_sunucu_betikleri` 185/0 (dört kurulum betiği SUNUCU_PS1'de; SCRAM/Pbkdf2/EnvDeger ikizi 3–4 betik). pwsh: cevap şeması + portSec 9/9 vektör + maske ölçüldü. Windows'ta (SCM, ACL, initdb, pg_ctl register, junction, güvenlik duvarı) KOŞULMADI — CI ve W3 (D8).
 
-**Açık.** Inno Setup sihirbazı + CI derleme işi + kurulum bekçisi (2b). `tekserp_dv2d5_test` ile `test_superadmin_provision` DB'li yolu (ZATEN_KURULU) eklenmedi.
+**Açık.** Inno Setup sihirbazı + CI derleme işi + kurulum bekçisi (2b). `tekserp_dv2d5_test` ile `test_superadmin_provision` DB'li yolu (ZATEN_KURULU) eklenmedi — KAPANDI 2026-10-01 (2b sonrası): `test_superadmin_provision` §9 kurulum kipini gerçek süreç + DB ile ölçer (ZATEN_KURULU · OLUSTURULDU · tekrar; ✓B2).
 
 ## 2026-10-01 — Dağıtım v2 D5 (2b): setup.exe (Inno) — sihirbaz, sessiz kip, sır borusu, devam/onarım, kaldırma, CI [ÇEKİRDEK]
 
