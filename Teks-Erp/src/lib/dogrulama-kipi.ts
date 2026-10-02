@@ -30,8 +30,9 @@ export const VERIFICATION_SKIPPED_JOBS = [
 ] as const;
 
 /**
- * Doğrulama kipinde de KOŞAN açılış işleri: tek seferlik, idempotent uzlaştırmalar. Lisans motoru yalnız
- * YEREL ölçümü koşar (kimlik → DB olguları → parmak izi → bütünlük); satıcıya yoklama zamanlanmaz.
+ * Doğrulama kipinde de KOŞAN açılış işleri: tek seferlik, idempotent uzlaştırmalar. Lisans motoru yalnız YEREL
+ * ölçümü koşar (kimlik → DB olguları → parmak izi → bütünlük), yoklamaz ve lisans durumunu yalnız OKUR: durum kaydı,
+ * DB izi, iptal kopyası onarımı, parmak izi önbelleği açılışta da kapanışta da yazılmaz (`test_lisans_motoru` §34).
  */
 export const VERIFICATION_KEPT_JOBS = [
   "startPermissionCatalogReconciler",

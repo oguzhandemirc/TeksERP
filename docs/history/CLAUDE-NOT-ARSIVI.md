@@ -14830,3 +14830,13 @@ Negatif sondalar (tetik md5(prosrc) ve dosya md5 ile geri alındı):
 - (a) KAPANDI → Ek (yönetici kararı 2026-10-02). Premigrate geri yüklemesi `[3/9]`dan sonra yazılan veriyi kaybettirir. Pencere kapandıktan sonra eski sürüme dönüş gerekirse kural veri kaybı dışında bir yol bırakmıyordu: G21-K notundaki "PIN/kartları yeniden ver" seçeneği kapanmıştı.
 - (b) F4-A.
 - (c) Setup onarımında kayıttaki Tailscale aralığının sihirbaza dolmaması (`100.64.0.0/10` → "LocalSubnet") ve OnKosul'un hizmet kökü çakışmasını ölçmemesi D8e-3 bulgularıdır, bu notun kapsamı dışında.
+
+## 2026-10-02 — Dağıtım v2 D8e: doğrulama kipi YAN ETKİSİZ — lisans durumu yalnız okunur (yönetici kararı Q1) [ÇEKİRDEK]
+
+**Neden.** Lisans v2 birleşiminden sonra lisans motorunun açılış yazımı (`licenseHousekeeping`: imzalı durum kaydı `durum.json` + DB izi `license.trace`) doğrulama kipi dönüşünden ÖNCE koşuyordu. Kapanış (`stopLicensePoll`) da yazıyordu. Sağlık düşerse güncelleyici DB'yi güncelleme öncesi yedekten geri yükler; dosya kaydı ise bir sıra önde kalır. v2'nin "iki kopyanın büyüğü" kuralı bunu tolere eder (okunarak ölçüldü). Ama doğrulama kipinin sözü "sağlıklı açılıyor mu" sorusundan başka iz bırakmamaktır.
+
+**Karar (yönetici, 2026-10-02).** Doğrulama kipinde lisans durumu yalnız OKUNUR. Kip dalı açılış yazımından önceye alındı. Kipte şu dört yazım da koşmaz: kapanış yazımı, iptal belgesi kopyasının onarımı (eksik/düşük kopya normal açılışta onarılır), parmak izi 24 sa önbelleği (ölçüm ve önbellek okuması kalır). Sağlık sondasının `lisans`ı için gereken yerel ölçüm (kimlik → DB olguları → parmak izi → bütünlük) aynen koşar.
+
+**Kapsam dışı, beyanlı.** Kurulum anahtarı hiç yoksa ilk açılışta üretilir, bozuksa kenara alınır (`loadLicenseStoreSync`). Bu bir lisans durumu değil kimlik doğuşudur ve sağlık sondası ona dayanır. Şifreli pakette modül anahtarı önbelleği (`preloadEncryptedModules`) kiradan türeyen bir önbellektir. İkisi de kipte koşmaya devam eder.
+
+**Bekçi.** `test_dogrulama_kipi` §3e–§3i (statik: kip dalı yazımdan önce, kapanış/iptal onarımı/önbellek kapısı, yazımı çağıran tek dosya) · `test_lisans_motoru` §34. Davranış: doğrulama kipinde açılış + kapanış sonrası lisans dizininin her dosyası (sha256) ile DB izi ve iptal kopyası (değer + `updatedAt`) BAYT-EŞİT kalır ve satıcıya istek gitmez. Karşı ölçümde aynı açılış normal kipte yazar.

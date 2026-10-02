@@ -39,6 +39,7 @@ import { logLeaseAccepted, sanctionView, verifyResponseDocuments } from "./helpe
 import { syncSupportAfterPoll } from "./support-sync.service";
 import { updateReportField } from "./update-status.service";
 import { refreshUpdaterIntentQuietly } from "./update-intent.service";
+import { isVerificationMode } from "../lib/dogrulama-kipi";
 import {
   buildEnvironment,
   currentFingerprintDigest,
@@ -88,7 +89,7 @@ export async function refreshLicenseFingerprint(): Promise<void> {
   const store = getLicenseStore();
   if (!store?.key) return;
   const recordCache = cacheFromRecordCopy(getLicenseSnapshot().view.record?.parmakIziOnbellegi);
-  const fp = await measureFingerprint(store.key.salt, undefined, { recordCache });
+  const fp = await measureFingerprint(store.key.salt, undefined, { recordCache, persistCache: !isVerificationMode() });
   setFingerprintCacheCopy(cacheToRecordCopy(fp.onbellek));
   setMeasuredFingerprint(fp);
 }

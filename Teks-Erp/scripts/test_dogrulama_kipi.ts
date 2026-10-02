@@ -12,7 +12,9 @@
 //   §1 kip anahtarı: yalnız "1" (boş · "0" · "true" kip değil — normal açılış bugünkü gibi)
 //   §2 ⭐ `server.ts` açılışı: her `start*` çağrısı İKİ listeden BİRİNDE (iki yönlü) · atlananlar `if (!VERIFYING)`
 //      ardında · koşanlar koşulsuz · HOST doğrulamada 127.0.0.1 (`.env` genişletemez)
-//   §3 ⭐ lisans motoru: doğrulamada yerel ölçüm (bütünlük dahil) BİTER, yoklama zamanlanmaz
+//   §3 ⭐ lisans motoru: doğrulamada yerel ölçüm (bütünlük dahil) BİTER, yoklama zamanlanmaz; lisans durumu yalnız
+//      OKUNUR — kip dalı açılış yazımından önce, kapanış yazımı · iptal onarımı · parmak izi önbelleği kipte koşmaz
+//      (davranış: `test_lisans_motoru` §34 dizin + DB izi bayt-eşit)
 //   §4 ⭐ yerel sağlık adres kapısı: döngü adresi ✓ · LAN ✗ · vekil başlığı (döngüden gelse de) ✗
 //   §5 bağlantı: `/health/yerel` önce adres kapısı; public `/health` donmuş kümesine lisans GİRMEZ
 // NEGATİF SONDA (elle, geri alındı; commit mesajında).
@@ -79,6 +81,34 @@ function lisansMotoru(): void {
   check("§3c ⭐ doğrulama dalı yoklama zamanlamasından ve tazeleme zamanlayıcılarından ÖNCE döner",
     kip > 0 && kip < zamanla && kip < aralik && /if \(isVerificationMode\(\)\) \{[\s\S]{0,400}?return;\s*\}/.test(govde));
   check("§3d motor CALISIYOR'a çıkar (yerel sağlık `lisans`ı bu durumu bekler)", /setLicenseEngineStatus\("CALISIYOR", "DOGRULAMA_KIPI"\)/.test(govde));
+  const yazim = govde.indexOf("await licenseHousekeeping();");
+  check("§3e ⭐ doğrulama dalı açılış yazımından (durum kaydı + DB izi) ÖNCE döner — lisans durumu yalnız okunur", kip > 0 && yazim > 0 && kip < yazim, `kip@${kip} yazım@${yazim}`);
+  const durBas = src.indexOf("export function stopLicensePoll");
+  const dur = durBas < 0 ? "" : src.slice(durBas, src.indexOf("\n}\n", durBas));
+  const durCagri = [...dur.matchAll(/licenseHousekeeping\(/g)].length;
+  check("§3f ⭐ kapanış yazımı doğrulama kipinde koşmaz", durCagri === 1 && /if \(!isVerificationMode\(\)\) void licenseHousekeeping\(/.test(dur), `${durCagri} çağrı`);
+  const cagiranlar = srcDosyalari("src").filter((f) => !f.endsWith("license-trail.service.ts") && /\blicenseHousekeeping\(/.test(oku(f)));
+  check("§3g yazımı çağıran tek dosya lisans yoklama işi (yeni çağıran kip dalını atlayamaz)", cagiranlar.length === 1 && cagiranlar[0] === "src/jobs/license-poll.job.ts", cagiranlar.join(", "));
+  const iptal = oku("src/services/license-revocation.service.ts");
+  const iBas = iptal.indexOf("export async function refreshLicenseRevocation");
+  const iGovde = iBas < 0 ? "" : iptal.slice(iBas, iptal.indexOf("\n}\n", iBas));
+  check("§3h ⭐ iptal kopyası onarımı doğrulama kipinde koşmaz (okuma kalır)", /if \(isVerificationMode\(\)\) return;\s*repairRevocationCopies\(/.test(iGovde) && iGovde.indexOf("setRevocationRow(") > 0);
+  const esitleme = oku("src/services/license-sync.service.ts");
+  const fBas = esitleme.indexOf("export async function refreshLicenseFingerprint");
+  const fGovde = fBas < 0 ? "" : esitleme.slice(fBas, esitleme.indexOf("\n}\n", fBas));
+  check("§3i ⭐ parmak izi önbelleği doğrulama kipinde yazılmaz (ölçüm ve okuma kalır)",
+    /persistCache: !isVerificationMode\(\)/.test(fGovde) && /if \(dir && d\.changed && options\.persistCache !== false\)/.test(oku("src/lib/license/fingerprint.ts")));
+}
+
+/** `src` altındaki .ts dosyaları (KOK'a göreli). */
+function srcDosyalari(rel: string): string[] {
+  const out: string[] = [];
+  for (const e of fs.readdirSync(path.join(KOK, rel), { withFileTypes: true })) {
+    const r = `${rel}/${e.name}`;
+    if (e.isDirectory()) out.push(...srcDosyalari(r));
+    else if (e.name.endsWith(".ts")) out.push(r);
+  }
+  return out;
 }
 
 function adresKapisi(): void {
