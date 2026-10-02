@@ -1,6 +1,7 @@
 # pm2 → Windows hizmeti geçişi (Dağıtım v2) — runbook
 
 > **Durum:** W3 provası thinkpad-1'de KOŞULDU (2026-10-01, D8c Senaryo 4: testfabrika pm2 düzeni → hizmet; **4 geçiş + 2 geri alma** — ölçümler §0, §1, §2, §10). Provanın bulduğu kusurlar kapandı (§10). SAHINSRV (adnansahin) geçişi **kullanıcının penceresinde, vardiya yokken ve kullanıcının açık cümlesiyle**. demofabrika aynı yolla, sonra.
+> ⚠️ **adnansahin için GEÇERSİZ (2026-10-03, kullanıcı kararı):** adnansahin dondurulmuştur — SAHINSRV bu yolla geçmez ve hiçbir güncelleme almaz; ileride setup.exe ile temiz kurulum + kendi DB yedeğinden "yedekten kur" (önce thinkpad-1'de yedek kopyasıyla prova). Bu runbook'un adnansahin'e özgü kısımları (§1 madde 4–5a, §8) tarihseldir. Kural: `docs/kurallar/deploy-kurulum.md`; arşiv "2026-10-03 — adnansahin dondurulur".
 > **Araç:** `deploy/gecis/gecis.ps1` (paketin içinde `gecis\gecis.ps1`; betik ve kurduğu paket aynı derlemeden). Yardımcı `gecis\gecis-yardimci.cjs`, izin/kayıt `hizmet\backend-hizmeti.ps1`, güncelleyici `hizmet\guncelleyici-hizmeti.ps1`. Bekçi `Teks-Erp/scripts/test_gecis.ts`; kural `docs/kurallar/deploy-kurulum.md`; sözleşme `docs/design/GUNCELLEYICI.md` §4.
 > **SAHINSRV değerleri** bu belgeye `docs/ops/SUNUCU-ENVANTERI.md`'den (2026-09-29 salt okuma) alındı — bu dilimde sunucuya hiç erişilmedi. Her değer pencerede **KURU koşumla yerinde ölçülür**; belge ile ölçüm ayrışırsa ölçüm kazanır ve buraya düzeltme yazılır.
 
@@ -29,7 +30,7 @@ Kesinti: yalnız kalem 5–10 (pm2 durdur → normal başlatma). **Ölçüm 24�
 4. **Geçiş paketi:** Dağıtım v2 içeren, `runtime\tekserp-hizmet.exe` + `runtime\tekserp-guncelleyici.exe` taşıyan, `adnansahin` kanalının imzalı paketi (terfi etiketli). Geçiş bu ikilileri bulamazsa DURUR. `PAKET.json` kanal kimliğini (`backendHizmetAdi` + `backendLisansSunucusu`) taşımalı, yani D8e 2a'dan sonra derlenmiş olmalı; `backendLisansSunucusu` yoksa UYGULA "lisans sunucusu OLCULEMEDI" ile durur.
 5. **Sunucu bu pakete pm2 düzeninde GEÇMİŞ olmalı** — ayrı, önceki bir pencerede `kur.ps1 -Paket <aynı zip>` (göçler orada, `kur.ps1`'in kendi geri alma yoluyla). Geçiş `app\`teki derlemeden farklı paketi ve bekleyen göçü REDDEDER.
    ⚠️ **PIN/kart özeti (G21-K) geri çevrilemez.** Dağıtım v2'nin ilk paketi `20261001120000_kisa_kimlik_ozet` göçünü taşır. Bu adımdan sonra her başarılı PIN/kart girişi düz değeri özete çevirir ve düz kolonu boşaltır. Eski backend özetli PIN'i okuyamaz.
-   - **(a)** Bu göçü taşıyan backend adnansahin'e YALNIZ bu geçişin paketi olarak çıkar (bu madde + §3). pm2 düzeninde kalacak bağımsız bir güncelleme olarak çıkmaz.
+   - **(a)** GEÇERSİZ (2026-10-03): adnansahin dondurulmuştur, bu göçü taşıyan sürümü hiçbir yoldan almaz (ileride setup.exe + "yedekten kur"; yukarıdaki not).
    - **(b) Geri alma: iki yol, seçim ÖLÇÜMLE** (yönetici kararı 2026-10-02: fabrikada veri kaybı, PIN'i yeniden dağıtmaktan pahalıdır). pm2 düzenindeyken (geçişten önce ya da `gecis.ps1 -GeriAl`den sonra) bu sürümden eskisine:
 
      | Ölçüm (aşağıdaki sorgu) | Yol |
@@ -206,6 +207,8 @@ cd C:\TeksERP\current; $env:DOTENV_CONFIG_PATH='C:\TeksERP\yapilandirma\.env'; $
 ```
 
 ## 8. adnansahin (SAHINSRV) — kanal kimliği geçişte neyi belirler
+
+> ⚠️ Tarihsel (2026-10-03): adnansahin bu geçişi yapmayacak — başlıktaki not.
 
 Geçiş adları ve lisans satıcısını paketin KENDİ kimliğinden çözer (`PAKET.json` → `deploy/hizmet/kanal-adlari.ps1`, setup ile tek çekirdek; kanal kaydı `deploy/kanallar.json`). `-GuncelleyiciAdi` parametresi KALKTI; onu taşıyan eski komut, parametre bağlamasında hiçbir şeye dokunmadan düşer. adnansahin kaydında:
 

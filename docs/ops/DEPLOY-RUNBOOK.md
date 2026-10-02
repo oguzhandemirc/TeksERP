@@ -860,7 +860,7 @@ yükleme" ÖNERİLİR — geri alınabilir).
 > | Göçten sonra üretim verisi YAZILMADI (son yazım `premigrate_` damgasından önce, ÖLÇÜLDÜ) | **1.** `-GeriAl` + aynı kurulumun `premigrate_` dökümünü geri yükle (önce kod, sonra döküm) |
 > | Üretim verisi yazıldı (vardiya sürdü) ya da ölçülemedi | **2. VARSAYILAN.** DB'ye DOKUNMA: yalnız `-GeriAl`, sonra PIN/kartı okunamayan kişilere eski backend'de kişi başı yeni PIN/kart |
 >
-> Ölçüm sorgusu, kişi listesi ve araç gerçeği (G21-K'nın toplu sıfırlaması bu yolda kullanılamaz): `docs/ops/GECIS-PM2-HIZMET.md` §1 madde 5 (b). Kural: `docs/kurallar/deploy-kurulum.md`; adnansahin'de bu sürüm yalnız pm2 → hizmet geçişinin paketi olarak çıkar.
+> Ölçüm sorgusu, kişi listesi ve araç gerçeği (G21-K'nın toplu sıfırlaması bu yolda kullanılamaz): `docs/ops/GECIS-PM2-HIZMET.md` §1 madde 5 (b). Kural: `docs/kurallar/deploy-kurulum.md`; adnansahin dondurulmuştur, bu sürümü almaz (arşiv 2026-10-03).
 
 Birkaç gün sorunsuz çalışınca `app.eski-*` silinebilir; `premigrate_*` dosyaları
 rotasyona girmez, elle temizlenir.

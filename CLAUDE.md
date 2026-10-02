@@ -16,7 +16,7 @@ Tekstil fabrikası ERP'si. Üç alt proje (+ doğmakta olan satıcı platformu),
 | `patron/uygulama/` | React Native + Expo 54 patron uygulaması (Android + iOS + web tek kod tabanı; hesap API'sini okur, salt-okunur çevrimdışı önbellek; tel tipleri `patron/sunucu/src/wire/api.ts`in bayt-eşit aynası) | — |
 | `Teks-Erp/native/lisans-cekirdek/` | Rust + napi-rs native lisans çekirdeği (backend paketine `.node` olarak girer; ayrı süreç değil; kendi `CLAUDE.md`'si) | — |
 
-**Dallanma:** `feature/*` → `main`; müşteri dalı YOK. Fabrika paketi ve demo derlemesi `main`'den üretilir; müşteri farkı yalnız bayrak profilinde yaşar — "adnansahin'de yok" = "bayrağı kapalı". `if (musteri === 'X')` fork'un ilk sinyalidir, yasak. Müşteri adı da koda gömülmez: ekrandaki firma adı bağlanılan sunucunun `company.name` ayarından gelir, yedeği nötr (`test_musteri_adi_kodda_yok`).
+**Dallanma:** `feature/*` → `main`; müşteri dalı YOK. Fabrika paketi ve demo derlemesi `main`'den üretilir; müşteri farkı yalnız bayrak profilinde yaşar — "adnansahin'de yok" = "bayrağı kapalı". `if (musteri === 'X')` fork'un ilk sinyalidir, yasak. Müşteri adı da koda gömülmez: ekrandaki firma adı bağlanılan sunucunun `company.name` ayarından gelir, yedeği nötr (`test_musteri_adi_kodda_yok`). **Hedef (2026-10-03):** her ürün için sürüm başına TEK ortak paket; müşteri kimliği derlemeden değil etkinleştirme kodu + lisanstan gelir (bugünkü kanal başına derleme borçtur — `docs/kurallar/surum-yayin.md`).
 
 ## Üretim akışı — referans profil (adnansahin), sistemin kısıtı DEĞİL
 

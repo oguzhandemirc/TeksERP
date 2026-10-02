@@ -183,6 +183,8 @@ Portal ayrıca: N gün / tarihe uzat · kalıcıya çevir (HAK, kök parolası) 
 
 ### Faz 4 — adnansahin geçişi (kullanıcı "fabrikaya yayınla" + "etkinleştir" cümleleriyle)
 
+> ⚠️ **GEÇERSİZ (2026-10-03, kullanıcı kararı):** adnansahin yerinde faz geçişi almaz — dondurulmuştur; lisans ona ileride setup.exe + "yedekten kur" ile yapılan yeni kurulumda etkinleştirmeyle gelir. Kural: `docs/kurallar/deploy-kurulum.md`.
+
 Terfi sırası mevcut kuralla (önce testfabrika). Portalda adnansahin: müşteri/tesis/kurulum + kalıcı HAK (bakım 1 yıl, bugünkü açık modüller) + `zorlama=false` → etkinleştirme (kök parolalı HAK imzası tailnet/geri döngüden biz; kod ve izleme internetten ERİŞİM'den de) → gözlem verisi (parmak izi kararlılığı, yoklama, yanlış pozitif 0) → kullanıcı onayıyla `zorlama=true` (takvim şartı yok; karar ölçüme ve kullanıcı cümlesine bağlı). Derleme varsayılanı (`LISANS_VARSAYILAN_KIP`) Faz 4 sonrası sürümlerde `zorla` olur (lisanssız yeni kurulum ek süreye düşer); öncesi `gozlem`.
 
 ## 6. PLAN B — patron bulutu

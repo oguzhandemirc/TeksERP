@@ -28,6 +28,7 @@ Kanonik kaynak **kod + `CLAUDE.md` dosyaları**dır. 2026-09-05 yeniden yapılan
 | `ops/` | Deploy/runbook/kurulum reçeteleri (dizinin kendisi listedir) — yalnız TEKRAR KOŞULAN olanlar | Operasyonel, bakımlı |
 | `surumler/` | Sürüm belgeleri: backend paket künyeleri (`backend-<sürüm>.md`, şablon `SABLON.md`, bekçi `test_surum_belgesi`) ve panel/tablet sürüm notu taslağı (`1.3.2-taslak.md` — maddelerin kaynağı kökteki `surum-notlari.json`) | Canlı |
 | `qa/` | Manuel kabul senaryoları | Bakımlı |
+| `plan/` | Açık iş listeleri ve saha bulgusu planları — ör. `plan/DEMOFABRIKA-KURULUM-BULGULARI.md` (2026-10-02/03 demofabrika kurulumunun bulguları ve sonraki işler); iş bitince `history/`e taşınır | Canlı |
 | `hukuk/` | Lisans sözleşmesi ve ekleri (yaptırım, veri işleme, bakım-destek, patron bulutu ekleri, kabul metni, ihlal bildirimi); teknik notlar ayrı: `hukuk/UYGULAMA-NOTLARI.md` (dizin: `hukuk/README.md`) | TASLAK — avukat incelemesi bekliyor |
 | `history/` | Arşiv (salt-okunur): karar notları tam metni, harcanmış tek-seferlik deploy/devir notları, tamamlanmış planlar, eski incelemeler, `denetim-2026-08/` (kök `audit/` kampanyası), `anlama-turu-2026-09-05/` | Donmuş; sayılar/satır referansları bayat |
 

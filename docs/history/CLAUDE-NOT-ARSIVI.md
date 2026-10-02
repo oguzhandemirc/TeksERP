@@ -13223,6 +13223,8 @@ Negatif sondalar (tetik md5(prosrc) ve dosya md5 ile geri alındı):
 
 ## 2026-09-29 — Kod koruma + lisanslama: 12 soru turunun kararları (Plan A) [ÇEKİRDEK] + [PROFİL]
 
+> ⚠️ **KISMEN GEÇERSİZ (2026-10-03)** — "Faz 4 adnansahin `zorla`" sırası: adnansahin yerinde faz geçişi almaz (dondurulur, ileride setup.exe + "yedekten kur") → bkz. "2026-10-03 — adnansahin dondurulur".
+
 > ⚠️ **KISMEN GEÇERSİZ (2026-09-30)** — "Portal … (TOTP, Tailscale'den)" erişim yolu: portal artık internetten Cloudflare Access + parola + TOTP ile de açılır; kök parolası isteyen uçlar yalnız tailnet/geri döngüden → bkz. "2026-09-30 — Satıcı portalı internetten (PG)".
 >
 > ⚠️ **KISMEN GEÇERSİZ → 2026-10-01 (lisans v2, K1–K8)** — md. 3'teki "ölçülemedi → UYARI → 30 gün → KISITLI" (süren ölçülemedi artık 14 gün çalışma süresi UYARI'dan sonra ek süreye geçer; üç iz birden yoksa hemen ek süre), md. 4'teki "Kira 30 gün … + 30 gün ek süre (~60 gün internetsiz sorunsuz)" zarfı (internetsiz çalışma imzalı ödenmiş tarihe dek; kira bitişi yalnız tazelik bilgisi), md. 5'teki "5 etkenden ≥3" eşiği (eşleşen ≥ 3 ∧ güçlü etkenlerden ≥ 2; 24 saat okunamayan etken uyuşmazlık) ve [PROFİL]'deki "Kök anahtar da VDS'te" seçimi (kök çevrimdışı Mac'te, HAK'ı VDS'teki ara imzacı imzalar, şifreli yedek USB yerine Google Drive) ezildi. Bkz. "2026-10-01 — Lisans v2 kararları (K1–K8)".
@@ -14376,6 +14378,8 @@ Negatif sondalar (tetik md5(prosrc) ve dosya md5 ile geri alındı):
 
 ## 2026-10-01 — Lisans v2 kararları (K1–K8): internetsiz çalışma ödenmiş tarihe dek, hatırlatma bandı ve ek süre, iz kaybı merdiveni, G4 ara imzacı + üç aylık kök töreni, uzun ufuk bilinçli kabul, parmak izi v2, eski kurulum yolu yerine Dağıtım v2 [ÇEKİRDEK] + [PROFİL]
 
+> ⚠️ **KISMEN GEÇERSİZ (2026-10-03)** — "[PROFİL] Faz 4 sırası" yalnız adnansahin için: adnansahin yerinde faz geçişi (`zorla`) almaz, lisans ona yeni kurulumda etkinleştirmeyle gelir → bkz. "2026-10-03 — adnansahin dondurulur". Varsayılan `zorla`nın testfabrika ölçüm şartı GEÇERLİ.
+
 **Bağlam (soru ve ölçüm).** 2026-10-01 güvenlik denetiminin iki bulgusu (G4: kök anahtar VDS'te, tek seviyeli zincir, süresiz ve iptalsiz sertifikalar · G12: lisans belirsizliği yalnız UYARI'da takılıyor ve modül tavanını kaldırıyor) üzerine kullanıcı aynı sabah şıklı sorularla dört temel karar, ardından tasarım sorularına (S1–S8) sekiz alt karar (K1–K8) verdi. Kullanıcının çıkış cümlesi: "bazı yerlere offline kurulum yapmamız gerekebilir, interneti olmayabilir veya daha sonra interneti tamamen kapatabilirler; kalan lisans süresi bitmeden uyarı ve ek süreye geçmemeli." Ölçülen v1 durumu (tasarım `docs/design/LISANS-V2-CEVRIMDISI-KIRA.md` §0, kod okuması): internetsiz çalışma kira ömrü (≤ 45 gün, varsayılan 30) + 30 gün ek süre ≈ 60–75 gündür ve bitince ödemesi tam müşteri de kısıtlıya iner · kira ve durum kaydı birlikte silinince kip gözleme düşer · zamanın getirdiği KISITLI'nın ikinci anahtarı "son 24 saatte gerçek bir yoklama başarısız" olduğundan satıcı adresi `kapali` olan, internetsiz ve etkinleşmemiş kurulum merdivene hiç girmez (`evaluateGrace` · `sonYoklamaBasarisizMi`) · `SAAT_ILERI` · `SAAT_GERI` · `DURUM_DOSYASI` gibi ÖLÇÜLEMEDİ bulguları süresiz UYARI'da kalır ve HAK tavanını kaldırır (`computeEffect`: ÖLÇÜLEMEDİ'de `allowed = null`) · parmak izinde ölçülemeyen etken paydadan çıkar, eşik `≥ min(3, ölçülebilen)` ve en az 2 ölçülebilir (`compareFingerprints`) — etken okumayı engellemek eşiği küçültür, VM ya da disk kopyası f1 (makine kimliği) ve f5 (PG kimliği) ikilisini taşır · kök bütün HAK'ları ve sertifikaları imzalar, VDS anahtar biriminde parolalı durur, ALT 180 / İNDİRME 365 gün yaşar, iptal mekanizması yoktur. Karar numaraları (K1–K8) yaptırım kademeleriyle (K0–K5) karışmasın diye kural satırlarında kullanılmaz; kural dosyası yaptırımı K0–K5 diye anar.
 
 **Karar — internetsiz çalışma ödenmiş tarihe dek (temel madde 1, K1, K5, K3, K6).** [ÇEKİRDEK] İnternet kesintisi lisans süresini kısaltmaz: fabrika internetsiz olarak imzalı ÖDENMİŞ TARİHE (P) dek tam çalışır; P'den sonra 30 gün EK_SURE, sonra (internet yoksa) KISITLI; veri erişimi her kademede açıktır ("aniden durdurmaz" korunur). [ÇEKİRDEK] P = min(kiradaki `odenmisTarih`, kira verilişi + HAK'taki `cevrimdisiUfukGun`); satıcıda tek yardımcıdan basılır: peşin ya da vadeli → sözleşme sonu · taksitli → sıradaki ödenmemiş taksitin vadesi (K5) · demo → demo bitişi · kalıcı ve ödemesi tamam → süresiz. [ÇEKİRDEK] Ufuk kirada değil HAK'tadır: kirayı VDS'teki parolasız ALT imzalar, ufku parolalı anahtar verir — çalınan ALT P'yi en çok ufuk kadar ileri yazabilir; varsayılan 400 gün, bayi ≤ 400, DEMO/TEST ≤ 45. [ÇEKİRDEK] P yalnız kira `odenmisTarih`i ve HAK `cevrimdisiUfukGun`u birlikte taşıyorsa kullanılır; biri yoksa bugünkü çapa aynen uygulanır (yeni derleme eski belgeyle bugünkü gibi davranır); HAK silinir ya da doğrulanamazsa P uzatılmaz, eski çapaya düşülür — silmek süreyi yalnız kısaltır. Kira bitişi çapa olmaktan çıkar, yalnız tazelik bilgisidir (yaptırım, sürüm, belirteç). [ÇEKİRDEK] Hatırlatma (K1): P − 30 gün ile P arasında kademe NORMAL kalır, yalnız BİLGİ bandı (`ODEME_YAKLASIYOR`, uyarı kademesi DEĞİL) çıkar ve yalnız internetsizken (son başarılı alışveriş 7 günden eski) ya da P sözleşme sonuyken görünür — internetli taksitli müşteri her ay görmez. [ÇEKİRDEK] Ödeme gelince süre internetten kendiliğinden, internet yoksa QR, panel aktarması ya da portalın istek gerektirmeyen imzalı uzatma DOSYASIYLA uzar; eski dosya geri alma kapısında `LICENSE_LEASE_STALE`. [ÇEKİRDEK] İkinci anahtar (K3): zamanın getirdiği KISITLI için süre geçmiş ∧ "son 24 saatte başarılı kira alışverişi YOK"; "internet var" = son kabul edilen imzalı kiranın `sunucuSaati` güvenilir saate göre 24 saatten yeni (kalıcı ve imzalı; bellekteki yoklama sinyali yeniden başlatmada sıfırlanırdı), QR ya da dosyayla gelen kira da sayılır; böylece `kapali` adresli, internetsiz ve etkinleşmemiş kurulum da merdivene girer, etkinleşmemiş kurulum `zorla` derlemesinde ilk açılış + 30 gün sonunda KISITLI'ya iner; internet varken kademeyi yine yalnız satıcı kararı düşürür. [ÇEKİRDEK] Kopya zincirinin ikinci penceresi (K6): v1'de eşleşmeyen tarafa kira verilmiyordu, v2'de bu etkisizdir (o taraf P'ye dek çalışır) ⇒ eşleşmeyen tarafa imzalı KAPANIŞ KİRASI gider (K3 yaptırımı, `kisitlamaTarihi = şimdi + ekSureGun`); taşınan eski anahtar ve iptal edilen kurulum da aynısını alır; imzasız 403 hiçbir süreyi kısaltmaz (kısaltsaydı araya giren biri fabrikayı durdurabilirdi). **Gerekçe:** endüstriyel yazılımlar internetsiz tesis için makineye bağlı, süre sonuna dek geçerli çevrimdışı lisans verir; ödeme kaldıracı kiranın tazeliğinden ödenmiş tarihe taşınır.
@@ -14768,6 +14772,8 @@ Negatif sondalar (tetik md5(prosrc) ve dosya md5 ile geri alındı):
 
 ## 2026-10-02 — Dağıtım v2 D8e runbook: thinkpad-1 ölçümleri, geçiş kanal kimliği, geçişli kurulumun onarımı (F4-B), PIN özeti sonrası geri alma, elle `current` yasağı [ÇEKİRDEK] + [PROFİL]
 
+> ⚠️ **KISMEN GEÇERSİZ (2026-10-03)** — [PROFİL] "adnansahin geçişi" maddesi ve "Bu sürüm adnansahin'e YALNIZ v2 geçişinin paketi olarak çıkar" cümlesi: adnansahin yerinde geçiş almaz, dondurulur; ileride setup.exe + "yedekten kur" → bkz. "2026-10-03 — adnansahin dondurulur". Ölçümler, F4-B onarımı, PIN özeti geri alma kuralı ve elle `current` yasağı GEÇERLİ.
+
 **Ölçüm (thinkpad-1).**
 - [ÇEKİRDEK] **Geçiş (D8c Senaryo 4, 2026-10-01, testfabrika pm2 → hizmet):** 4 geçiş ve 2 geri alma koşuldu.
   - Geçiş #1, 9. kalemde "kurulum kimligi farkli ya da okunamadi" deyip otomatik geri alındı (LAN kesintisi 24 sn).
@@ -14870,3 +14876,74 @@ Negatif sondalar (tetik md5(prosrc) ve dosya md5 ile geri alındı):
 **Kapılar.** `scripts/test_kurulum_arsivi.mjs` (gölge kök, doğrulayıcı koçanı) ✓K22 + ✓B16 · `scripts/test_derleme_koy.mjs` (sahte ssh/scp, gerçek vds-dogrula) ✓K15 + ✓B10; ikisi CI `docs` işinde.
 
 **Açık.** Cloudflare üzerinden ~200 MB tek yanıt ölçülmedi · Windows'ta "arşivin içinden çift tıklama" ve "Tümünü ayıkla"nın Zone.Identifier'ı taşıması GUI ile ölçülmedi (koddan: setup ön ölçümde üç engelle hiçbir şey yazmadan durur; zip'leri .NET/Rust açtığı için işaret çıkan dosyalara geçmez) · setup Authenticode imzasız (SmartScreen; Akıllı Uygulama Denetimi açık makinede engellenir).
+
+## 2026-10-02 — Müşteri sunucusu Tailscale ağımıza alınmaz; uzaktan destek müşterinin başlattığı yollarla [ÇEKİRDEK] + [PROFİL]
+
+**Bağlam.** demofabrika'nın "yeni müşteri gibi" kurulumunda (2026-10-02) iki şey müşteri kurulumunun bizim tailnet'imize bağlı doğabileceğini gösterdi: sihirbazın Ağ sayfasındaki "Tailscale ağından da erişilsin" kutusu ve kanal kaydında tabletin gömülü ERP adresinin tailnet adı olması (bulgu listesi K3: `docs/plan/DEMOFABRIKA-KURULUM-BULGULARI.md`).
+
+**Karar (kullanıcı).**
+- [ÇEKİRDEK] Müşteri sunucusu bizim Tailscale ağımıza ALINMAZ. Tailscale yalnız bizim makinelerimizde yaşar: thinkpad-1, VDS yönetimi, satıcı portalı tüneli.
+- [PROFİL] adnansahin'in mevcut Tailscale düzeni olduğu gibi kalır (o kurulum dondurulmuştur — 2026-10-03 notu).
+- [ÇEKİRDEK] Kurulum sihirbazının Tailscale kutusu müşteri kurulumunda varsayılan KAPALIDIR.
+- [ÇEKİRDEK] Müşteriye uzaktan destek, müşterinin BAŞLATTIĞI yollarla verilir: portal destek talebi + sağlık özeti + süreli bağlantılar.
+
+**Gerekçe.** Kök kural: fabrika sunucusuna GELEN port açılmaz, dışarıyla tek bağ fabrikanın ÇIKAN imzalı kanallarıdır (tünel 2026-09-30'da emekli). Müşteri makinesini kalıcı olarak kendi ağımıza almak bu kuralın arka kapısıdır ve müşterinin ağ güvenliği sorumluluğunu bize taşır.
+
+**Ölçüm (2026-10-03, kod okuması).** `deploy/kurulum/tekserp-kurulum.iss` Ağ sayfasında kutu kodda bugün varsayılan kapalı (`AgSayfasi.Values[0] := False`); demofabrika kurulumunda neden açık göründüğü ÖLÇÜLMEDİ (aday: aynı makinedeki önceki kurulumun cevabı ya da `kurulum.ps1`in kayıttaki erişimi daraltmaması). `deploy/kanallar.json` demofabrika `tablet.erpAdresi` bir `*.ts.net` adıdır — müşteri ağında çözülmez. Destek talebi ve süreli bağlantı akışlarının bugünkü durumu bu notta taranmadı.
+
+**Kural satırı.** `docs/kurallar/kesif-cihaz.md` (borç biçimi). Migration/izin/APK: yok.
+
+## 2026-10-02 — Sunucu saati kilitlenemez; hedef NTP eşitlemesi + imzalı saatten sapma uyarısı [ÇEKİRDEK]
+
+**Bağlam.** Kullanıcı sorusu: müşteri sunucunun saatini değiştirirse ne olur, saati kilitleyebilir miyiz?
+
+**Karar.**
+- [ÇEKİRDEK] Müşteri sunucusunun saati teknik olarak kilitlenemez — makinenin yöneticisi her zaman değiştirebilir.
+- [ÇEKİRDEK] Lisans işletim sistemi saatine güvenmez (mevcut kural: güvenilir saat taban + monotonik birikimdir, taban imzalı kira saatidir — `docs/kurallar/lisans.md`). Bu karar onu değiştirmez.
+- [ÇEKİRDEK] Hedef (borç), üç parça:
+  1. Kurulum, makine bir etki alanına bağlı DEĞİLSE Windows Time'ı NTP otomatik eşitlemeye ayarlar. Etki alanındaki makinenin saati etki alanı denetleyicisinindir, ona dokunulmaz.
+  2. Backend yoklamada sunucu saati ile satıcının İMZALI saati arasındaki sapmayı ölçer; sapma panel uyarı bandına, `/api/admin/health`e ve portala çıkar.
+  3. Programda saati DEĞİŞTİREN bir işlev yoktur; program yalnız uyarır.
+
+**Ölçüm (2026-10-03, kod okuması).** `w32tm`/`W32Time` hiçbir kurulum betiğinde geçmez. Sapma bugün `saticiSapmaSn` olarak ölçülüp satıcıya raporlanıyor (`Teks-Erp/src/services/license-sync.service.ts`) ve panelin lisans ekranında `SAAT_KAYIK` bulgusu olarak adlandırılıyor (`Electron/src/pages/System/License/labels.ts`). Ayrı bant, sağlık ve portal yüzeyi bu notta taranmadı.
+
+**Kural satırı.** `docs/kurallar/lisans.md` (borç biçimi). Migration/izin/APK: yok.
+
+## 2026-10-03 — Tek ana dal + sürüm başına TEK ortak paket; müşteri kimliği lisanstan; özel istek merdiveni; güncelleme grupları [ÇEKİRDEK]
+
+**Bağlam.** demofabrika kurulumu müşteri başına kanal + derleme düzeninin bedelini gösterdi: her müşteri ayrı kanal kaydı, ayrı panel/tablet/backend derlemesi ve pakete gömülü adres ister (gömülü tailnet adı — K3).
+
+**Karar (kullanıcı).**
+- [ÇEKİRDEK] Müşteri dalı YOK; tek ana dal (mevcut kural teyit edildi).
+- [ÇEKİRDEK] Her ürün için sürüm başına TEK ortak paket: backend, panel, fabrika tableti, patron uygulaması/web. Müşteri kimliği derlemeden değil etkinleştirme kodu + lisanstan gelir; filigran kurulumda lisansla basılır.
+- [ÇEKİRDEK] Bugünkü müşteri başına kanal + derleme düzeni bu modele TAŞINIR (hedef/borç). Bugünkü düzen: panel kanalı derleme anında `TEKSERP_KANAL` ile; tablet paket adı, ERP adresi ve OTA sertifikası kanal kaydından; backend `-Musteri`. Taşınana dek mevcut kanal kuralları (`docs/kurallar/surum-yayin.md`) aynen geçerlidir.
+- [ÇEKİRDEK] Özel istek merdiveni — alttan başlanır, bir basamak yetiyorsa üste çıkılmaz:
+  1. ayar/veri;
+  2. genel yetenek (herkese yarar);
+  3. ekran varyantı — ayardan seçilen ikinci tasarım;
+  4. müşteri eklentisi — ayrı klasör, yalnız o lisansla açılır, çekirdek ona bağımlı DEĞİLDİR.
+- [ÇEKİRDEK] Herkese her şey gider; yeni özellik KAPALI doğar ve kapalıyken bugünkü davranışı verir (mevcut bayrak kuralı).
+- [ÇEKİRDEK] Yayın güncelleme GRUPLARIYLA yapılır: test → öncü → herkes. Bugünkü hazırlık → üretim kanalı terfisi bunun iki gruplu hâlidir.
+
+**Gerekçe.** Müşteri başına derleme, müşteri sayısı × dört ürün kadar paket demektir: her biri ayrı imza, ayrı test, ayrı yayın ister. Kimlik derlemeye gömülünce yanlış müşteri kodu başka fabrikanın güncellemesini SESSİZCE kurar (`docs/kurallar/surum-yayin.md`, yayın adresi satırı). Kimliği zaten lisans taşıyor.
+
+**Kural satırları.** `docs/kurallar/surum-yayin.md` (ortak paket, borç biçimi) · `docs/kurallar/modul-bayrak.md` (merdiven) · kök `CLAUDE.md` "Dallanma" paragrafına tek cümle. Migration/izin/APK: yok (tasarım + uygulama ayrı iş).
+
+## 2026-10-03 — adnansahin dondurulur; ileride setup.exe + "yedekten kur" ile sıfırdan kurulur [PROFİL] + [ÇEKİRDEK]
+
+**Karar (kullanıcı).**
+- [PROFİL] adnansahin'in mevcut düzeni hiçbir güncelleme ALMAZ: SAHINSRV, pm2, panel ve tablet istemcileri, `adnansahin` kanalı. pm2 → hizmet geçişi (`gecis.ps1`) dahil.
+- [PROFİL] İleride setup.exe ile temiz kurulum yapılır ve veri fabrikanın kendi DB yedeğinden aktarılır ("yedekten kur").
+- [PROFİL] Öncesinde thinkpad-1'de o yedeğin KOPYASIYLA prova koşulur.
+- [PROFİL] Eski sunucu, geçiş tamamlanana dek geri dönüş yolu olarak durur.
+- [ÇEKİRDEK] Ortak paket tasarımı (aynı günün notu) adnansahin için yerinde geçiş ya da geriye uyum şartı TAŞIMAZ.
+
+**Ezdiği.**
+- 2026-10-02 D8e runbook notunun [PROFİL] "adnansahin geçişi" maddesi ve "bu sürüm adnansahin'e YALNIZ v2 geçişinin paketi olarak çıkar" cümlesi.
+- 2026-10-01 Lisans v2 ve 2026-09-29 Plan A notlarındaki "Faz 4 adnansahin `zorla`" sırası: adnansahin yerinde faz geçişi almaz, lisans ona yeni kurulumda etkinleştirmeyle gelir.
+
+**Değişmeyen.** adnansahin'e kullanıcının açık cümlesi olmadan dokunulmaz (salt-okuma keşfi hariç). `gecis.ps1` aracının kendi kuralları araç olarak geçerlidir.
+
+**Ölçüm (2026-10-03, kod okuması).** "Yedekten kur" bugün bir setup adımı DEĞİL: sihirbazda yedekten başlatma yok. Panelin yerel yedek geri yüklemesi var (sihirbazdaki yedek parolasıyla açılır). Hangisiyle yapılacağı tasarımda seçilir; yedeğin şema sürümü kurulan sürümden eski olacağı için geri yükleme sonrası göçler de provanın konusudur.
+
+**Kural satırı.** `docs/kurallar/deploy-kurulum.md` (borç biçimi); aynı dosyadaki "bu sürüm adnansahin'e YALNIZ pm2 → hizmet geçişinin paketi olarak çıkar" cümlesi silindi; `docs/kurallar/lisans.md` "Geçiş sırası" satırı uyumlandı. Runbook başlıkları: `docs/ops/GECIS-PM2-HIZMET.md`, `docs/ops/DEPLOY-RUNBOOK.md`. Migration/izin/APK: yok.
