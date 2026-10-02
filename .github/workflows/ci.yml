@@ -80,6 +80,11 @@ jobs:
       # SHA256 ayrı iş akışında (pg-ikili.yml — yalnız deploy/pg değişince).
       - name: Kendi PostgreSQL örneği (kayıt + şablon yasakları)
         run: node scripts/test_pg_ornegi.mjs && node scripts/test_pg_ornegi.mjs --sonda
+      # Sahaya giden PG paketi (deploy/pg/pg-paketle.mjs): gölge kökte sahte EDB zip'iyle gerçek koşum — EDB özeti,
+      # paket manifestosu ya da kök düzeni saparsa DURUR, anahtarsız koşum imza adımında durur. Zero-dep, DB'siz,
+      # ağsız (fetch tuzaklı); Info-ZIP zip/unzip + git ister (ubuntu imajında var).
+      - name: PG paketi üretimi (pg-paketle)
+        run: node scripts/test_pg_paketle.mjs
       # Yayın betiklerinde belirteçsiz HTTP okuma yok (3c') — güncelleme sunucusu Cloudflare
       # Worker'la anonim okumaya kapalı; anonim okuma kalırsa Worker açıldığı gün yayın zinciri
       # kırılır. Zero-dep, DB'siz, ağsız; kapı ve kalıcı sondalar (--sonda) aynı adımda.

@@ -63,6 +63,10 @@ export const dizinAdi = (kayit) => `${kayit.surum}-${kayit.derleme}`;
 /** EDB dosya adı kalıbı — sürüm/derleme ile url/dosya birlikte değişmek ZORUNDA. */
 export const edbDosyaAdi = (surum, derleme) => `postgresql-${surum}-${derleme}-windows-x64-binaries.zip`;
 
+/** Sahaya giden paket (setup `postgresql-*.zip` deseniyle arar) ve kökündeki içerik manifestosu. */
+export const paketDosyaAdi = (kayit) => `postgresql-${dizinAdi(kayit)}-tekserp.zip`;
+export const ICERIK_DOSYASI = 'TEKSERP-ICERIK.sha256';
+
 /** Sürüm kaydının iç tutarlılığı (ağa/diske bakmaz). Boş dizi = temiz. */
 export function surumKaydiHatalari(k) {
   const h = [];

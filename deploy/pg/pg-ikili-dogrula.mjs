@@ -23,10 +23,8 @@ import path from 'node:path';
 import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 
-import { IZINLI_KAYNAK, Olculemedi, SURUM_REL, dizinAdi, edbDosyaAdi, jsonOku, sha256, surumKaydiHatalari } from './lib/pg-ornegi.mjs';
+import { ICERIK_DOSYASI, IZINLI_KAYNAK, Olculemedi, SURUM_REL, dizinAdi, edbDosyaAdi, jsonOku, sha256, surumKaydiHatalari } from './lib/pg-ornegi.mjs';
 import { peImzasi, zipAc } from './lib/zip-okuyucu.mjs';
-
-const ICERIK_DOSYASI = 'TEKSERP-ICERIK.sha256';
 
 function arg(ad) {
   const i = process.argv.indexOf(ad);

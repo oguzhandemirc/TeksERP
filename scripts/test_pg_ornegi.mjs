@@ -55,6 +55,7 @@ const TASARIM = 'docs/design/KENDI-POSTGRESQL.md';
 const TUKETICILER = {
   'deploy/pg/pg-ikili-dogrula.mjs': { iz: /from '\.\/lib\/pg-ornegi\.mjs'/, ne: 'ikili doğrulayıcı/indirici', kod: true },
   'deploy/pg/pg-sablon.mjs': { iz: /from '\.\/lib\/pg-ornegi\.mjs'/, ne: 'şablon üretici/denetleyici', kod: true },
+  'deploy/pg/pg-paketle.mjs': { iz: /from '\.\/lib\/pg-ornegi\.mjs'/, ne: 'PG paketi üreticisi (setup yanındaki zip)', kod: true },
   '.github/workflows/pg-ikili.yml': { iz: /node deploy\/pg\/pg-ikili-dogrula\.mjs --indir/, ne: 'CI ikili doğrulama iş akışı' },
   '.github/workflows/ci.yml': { iz: /node scripts\/test_pg_ornegi\.mjs/, ne: 'CI doküman işi (bu bekçi)' },
   'deploy/backend-yayinla.mjs': { iz: /from '\.\/pg\/lib\/pg-ornegi\.mjs'/, ne: 'backend yayıncısı (bildirimin pg bloğu + hedef PG künyesi)', kod: true },

@@ -57,6 +57,9 @@ export function zipAc(yol) {
       const yorumU = cd.readUInt16LE(p + 32);
       const g = {
         ad: cd.toString(bayrak & 0x800 ? 'utf8' : 'latin1', p + 46, p + 46 + adU),
+        // "yapan" üst baytı işletim sistemi (3 = Unix); Unix'te harici özniteliğin üst 16 biti st_mode (sembolik bağ sondası).
+        yapan: cd.readUInt16LE(p + 4),
+        harici: cd.readUInt32LE(p + 38),
         yontem: cd.readUInt16LE(p + 10),
         sikisik: cd.readUInt32LE(p + 20),
         acik: cd.readUInt32LE(p + 24),

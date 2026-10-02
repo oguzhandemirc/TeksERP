@@ -63,6 +63,20 @@
 4. **İmzalı kökenle çapraz doğrulama (Windows işi, ölçülecek):** EDB'nin Authenticode imzalı kurucusu (`postgresql-<surum>-<derleme>-windows-x64.exe`, imzalayan EnterpriseDB) yalnız-çıkar kipinde açılır ve sunucu ikililerinin özetleri zip'inkilerle karşılaştırılır. Eşitse zip ikilileri EDB'nin kod imzasına bağlanır.
 5. **Sahaya giden:** sahne (1.593 dosya + `TEKSERP-ICERIK.sha256`) bizim paketimiz olarak D1'in imza zarfıyla (PAKET anahtarı, Mac'te; anahtar CI'a girmez) yayınlanır. Setup/güncelleyici imzayı doğrular, açtıktan sonra her dosyayı manifestoya karşı ölçer, ancak ondan sonra kullanır. **Saha EDB'den doğrudan indirmez** — fabrikadan dışarı giden istek yalnız imzalı kanallardandır.
 
+### Paketi üretme ve imzalama — `deploy/pg/pg-paketle.mjs`
+
+setup.exe'nin yanına giden `postgresql-<surum>-<derleme>-tekserp.zip` + `pg.json` TEK komuttan doğar (elle zip'lenmez); satıcı Mac'inde, temiz ağaçtan (`deploy/pg/` kirliyse DURUR — künyedeki commit paketi yeniden üretebilmeli):
+
+```
+node deploy/pg/pg-paketle.mjs --cikti <boş dizin> [--onbellek <EDB zip dizini>] [--anahtar <PAKET anahtar dosyası>]
+node deploy/pg/pg-paketle.mjs --dogrula <paket zip>     # var olan paketi kayda karşı ölçer, üretmez
+```
+
+- **Girdi:** kayıt + EDB zip'i — önbellekte varsa o (kayıtla uyuşmazsa DURUR; silinmez, yeniden indirilmez), yoksa resmî kaynaktan iner. Doğrulama ve sahne `pg-ikili-dogrula.mjs`'nin kendisidir (alt süreç; ikinci kopya yok).
+- **Çıktı:** zip'in kökü = sahne (`bin/` `lib/` `share/` + iki lisans + `TEKSERP-ICERIK.sha256`; `pgsql/` öneki, dizin ya da bağ girdisi YOK — kurulum zip'i hedef dizine olduğu gibi açar). Info-ZIP `zip -X -D` (sistem aracı: npm paketi yok, `pg-imzala` zaten `unzip` ister; `ditto` sıralı liste almaz, Linux'ta yok), bayt sıralı girdi, damga kaydın `yayinTarihi` (UTC), 0644 → aynı araç sürümüyle aynı bayt. Zip yeniden açılıp her girdi manifestoya, manifesto kayda karşı ölçülür; sapma = paket bırakılmaz. Yanına `pg-paketi.json` künyesi (sürüm · EDB özeti · paket ad/boyut/sha256 · içerik özeti · betik commit'i). Sözleşme içerik özetidir: başka makinedeki zip/zlib farklı bayt verebilir, imzalanan o anki zip'tir.
+- **İmza:** `--anahtar` verilirse `Teks-Erp/scripts/backend-bildirim.ts pg-imzala` çağrılır (parola TTY'den; betik parolaya dokunmaz), `pg.json` aynı dizine yazılır, imzalı künye pakete karşı ölçülür → çıkış 0, son satır `SONUC: IMZALANDI`. Verilmezse paket hazırdır ama imza adımında DURUR: tam `pg-imzala` ve `pg-dogrula --guven-capasi=uretim` komutlarını mutlak yollarla basar (üretim anahtarının yalnız YOLU, dosya okunmaz) → çıkış **3**, son satır `SONUC: IMZA-BEKLIYOR`. Çıkış 1 = doğrulama hatası, 2 = ölçülemedi/kullanım.
+- **Kurulum:** dizindeki zip + `pg.json` setup.exe'nin yanına konur (`postgresql-*.zip` ve `pg.json` klasörde TEK olmalı). Bekçi `node scripts/test_pg_paketle.mjs` (ağsız; gölge kök + sahte EDB).
+
 ## 4. İlk kurulum (D5 uygular)
 
 Sıra bağlayıcıdır; her adım ölçerek ilerler, ölçülemeyen adım DURUR (tahminle devam yok). Değerler `pg-ornegi.json`'dan okunur.
