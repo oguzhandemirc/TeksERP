@@ -77,7 +77,7 @@
 
 ## D. Kullanıcıyla yapılacaklar
 
-1. **İndirme kapısının (Cloudflare Worker) yayını.** ÖNCE ölçülmeli: mevcut eski panel ve tabletlerin indirmeleri kesilmiyor mu? adnansahin'in istemcileri dahil. adnansahin'e dokunulmaz; yalnız indirmelerinin kesilmediği ölçülür.
+1. **İndirme kapısının (Cloudflare Worker) yayını — kullanıcı kararı 2026-10-03: bugün DEĞİL, yeni adresle.** Yeni sistem için ayrı alt adres (öneri `indir.etkiliyazilim.com`) tek ortak paketle birlikte açılır; kapı yalnız o adreste çalışır, klasörler güncelleme grubuna göre (`/test`, `/oncu`, `/genel`). Eski `guncelleme.etkiliyazilim.com` adnansahin için olduğu gibi kalır (kapı dışında; adnansahin yeni sisteme taşınınca kapatılır). Demofabrika panel/tableti yeni adresle panel 1.4.3 turunda yeniden derlenir.
 2. **Mac'te dönem töreni.** Kök anahtar VDS'ten kalkar.
 3. **Patron bulutu canlı güncellemesi.** Önce döküm kopyasında prova.
 4. **Avukat:** lisans v2 maddeleri, Cloudflare/KVKK, uzaktan destek maddesi.
