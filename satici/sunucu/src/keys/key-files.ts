@@ -1,8 +1,10 @@
 // Satıcı anahtar dosyaları.
-//   KÖK / hazırlık kökü / BAYİ: özel yarı scrypt(parola) → AES-256-GCM ile SARILI (parolasız okunamaz);
+//   KÖK / hazırlık kökü / BAYİ / HAK ARA İMZACISI: özel yarı scrypt(parola) → AES-256-GCM ile SARILI (parolasız okunamaz);
 //     ek veri (AAD) tür + kid + açık yarı + sınıfları bağlar — alanlar kopartılıp başka dosyaya takılamaz.
 //     Sarmanın TEK uygulaması protokoldedir (`lisans-protokol/anahtar-sarma.ts`; imza aracının PAKET anahtarı da onu kullanır).
 //   ALT (kira) / İNDİRME: otomatik imza için parolasız, 0600; kök imzalı sertifika dosyanın içinde.
+//   EMEKLİ (`*.sertifika.json`): dönem töreninden sonra özel yarısı silinen ALT · İNDİRME · ARA anahtarının YALNIZ açık
+//     yarısı + sertifikası (eski belgeler onunla doğrulanır; imzada kullanılmaz).
 // Parola Buffer olarak dolaşır ve iş bitince sıfırlanır; string'e çevrilmez (V8 string'i silinemez).
 import type { KeyObject } from "node:crypto";
 import { chmodSync, readFileSync, writeFileSync } from "node:fs";
@@ -21,7 +23,8 @@ import {
 
 export { KeyFileError, assertPasswordStrength, passwordBuffer, privateKeyFromRaw, rawPrivateKey };
 
-export const WRAPPED_KEY_TYPES = ["tekserp-kok-anahtar", "tekserp-bayi-anahtar"] as const;
+/** Ara imzacı (`tekserp-ara-anahtar`) da sarılıdır: parolası portal formundan imza alt sürecinin stdin'ine gider. */
+export const WRAPPED_KEY_TYPES = ["tekserp-kok-anahtar", "tekserp-bayi-anahtar", "tekserp-ara-anahtar"] as const;
 export type WrappedKeyType = (typeof WRAPPED_KEY_TYPES)[number];
 export const SUB_KEY_TYPES = ["tekserp-alt-anahtar", "tekserp-indirme-anahtar"] as const;
 export type SubKeyType = (typeof SUB_KEY_TYPES)[number];
@@ -49,7 +52,7 @@ export const WrappedKeyFileSchema = z.strictObject({
   sifreli: b64u,
   etiket: b64u,
   olusturma: z.string(),
-  /** Yalnız BAYİ: kök imzalı sertifika (açık belge). */
+  /** BAYİ ve ARA: kök imzalı sertifika (açık belge); kökte yok. */
   sertifika: z.string().optional(),
 });
 export type WrappedKeyFile = z.infer<typeof WrappedKeyFileSchema>;
@@ -64,6 +67,26 @@ export const SubKeyFileSchema = z.strictObject({
   olusturma: z.string(),
 });
 export type SubKeyFile = z.infer<typeof SubKeyFileSchema>;
+
+/** Emekli anahtar künyesi — özel yarısı SİLİNMİŞ anahtarın açık yarısı + sertifikası (imzada kullanılmaz). */
+export const RETIRED_KEY_TYPE = "tekserp-emekli-anahtar";
+export const RetiredKeyFileSchema = z.strictObject({
+  tur: z.literal(RETIRED_KEY_TYPE),
+  surum: z.literal(1),
+  kid: z.string().regex(KID_PATTERN),
+  /** Emekliye ayrılan dosyanın türü (ALT · İNDİRME · ARA). */
+  kaynakTur: z.enum(["tekserp-alt-anahtar", "tekserp-indirme-anahtar", "tekserp-ara-anahtar"]),
+  x: b64u,
+  sertifika: z.string().min(1),
+  emeklilik: z.string(),
+});
+export type RetiredKeyFile = z.infer<typeof RetiredKeyFileSchema>;
+
+export function readRetiredKeyFile(filePath: string): RetiredKeyFile {
+  const parsed = RetiredKeyFileSchema.safeParse(JSON.parse(readFileSync(filePath, "utf8")));
+  if (!parsed.success) throw new KeyFileError("BICIM", `Emekli anahtar künyesi tanınmıyor: ${filePath}`);
+  return parsed.data;
+}
 
 export async function wrapPrivateKey(
   meta: { tur: WrappedKeyType; kid: string; siniflar: readonly LicenseClass[]; sertifika?: string },

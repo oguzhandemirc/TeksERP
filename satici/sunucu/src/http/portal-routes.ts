@@ -4,6 +4,8 @@
 // Her rota bir izin beyan eder (roles.ts); her yazma işlem kimliğiyle (clientToken) idempotenttir.
 // Yol parametresi gövde özetine girer (`_yol`): aynı kimlik başka kayıtta kullanılamaz.
 import { DISTRIBUTION_PORTAL_ROUTES } from "./distribution-routes";
+import { HARDWARE_PORTAL_ROUTES } from "./hardware-routes";
+import { KEY_PORTAL_ROUTES } from "./key-routes";
 import { z } from "zod";
 import { ChannelCodeSchema, LICENSE_CLASSES, SANCTION_LEVELS } from "../lisans-protokol";
 import { passwordBuffer } from "../keys/key-files";
@@ -20,6 +22,7 @@ import { hashPortalPassword } from "../portal/password";
 import { withSigningPasswordGuard } from "../portal/signing-guard";
 import { NOTIFICATION_PORTAL_ROUTES } from "./notification-routes";
 import { SUPPORT_PORTAL_ROUTES } from "./support-routes";
+import { keyStatus } from "../portal/key-status";
 import * as q from "../portal/queries";
 import { PORTAL_ROLES, roleHas } from "../portal/roles";
 import {
@@ -49,9 +52,15 @@ import {
   createEntitlementTx,
   entitlementVersionAudit,
   prepareEntitlementVersion,
+  prepareRootRequest,
+  previewEntitlementSigner,
   recordEntitlementVersionTx,
+  recordRootRequestTx,
+  rootRequestAudit,
   type EntitlementChanges,
 } from "../services/entitlement.service";
+import { paidThroughView } from "../portal/paid-through-view";
+import { issueExtensionFileTx } from "../services/extension-file.service";
 import { cancelInstallationTx, closeCopyAlertTx, findCopyAlert, reinstateInstallationTx } from "../services/installation-admin.service";
 import {
   changesDealer,
@@ -143,15 +152,28 @@ const EntitlementCreate = z.strictObject({
   uretimModuluCikarilsin: z.boolean().optional(),
 });
 // Vadeli geçerlilik bitişi taslakta YOK: her bitiş değişimi GECERLILIK defter satırıdır (/gecerlilik · /uzat · taksit).
-const EntitlementVersion = z.strictObject({
-  clientToken: Token,
-  kokParolasi: z.string().min(1).max(200),
-  sebep: Reason,
-  moduller: ModuleList.optional(),
-  kalici: z.boolean().optional(),
-  bakimBitis: IsoSchema.optional(),
-  uretimModuluCikarilsin: z.boolean().optional(),
-});
+// İmzacı plandan (yetenek kapısı): `imzaci` arayüzün gördüğü plandır (GET /haklar/:id/imza-plani) — uyuşmazsa 409,
+// parola hiçbir sürece gitmez. `imzaci` yoksa eski arayüz: yalnız KOK planında `kokParolasi` ile imzalar.
+const EntitlementVersion = z
+  .strictObject({
+    clientToken: Token,
+    imzaci: z.enum(["ARA", "KOK", "KUYRUK"]).optional(),
+    /** Ara imzacı ya da kök parolası (plana göre); KUYRUK planında YOK. */
+    imzaParolasi: z.string().min(1).max(200).optional(),
+    /** Eski arayüzün alanı (yalnız KOK planı). */
+    kokParolasi: z.string().min(1).max(200).optional(),
+    sebep: Reason,
+    moduller: ModuleList.optional(),
+    kalici: z.boolean().optional(),
+    bakimBitis: IsoSchema.optional(),
+    uretimModuluCikarilsin: z.boolean().optional(),
+    /** Çevrimdışı ufuk (gün) ya da `null` = süresiz; 400 üstü/süresiz yalnız yönetici + `onay` (K2). */
+    cevrimdisiUfukGun: z.number().int().min(1).max(3650).nullable().optional(),
+    kipAltSiniriZorla: z.boolean().optional(),
+    /** Uzun ufuk ikinci onayı: kurulumun lisans numarası AYNEN. */
+    onay: z.string().max(40).optional(),
+  })
+  .refine((b) => !(b.imzaParolasi && b.kokParolasi), { message: "İmza parolası tek alanda gelir" });
 const CodeCreate = z.strictObject({ clientToken: Token, gecerlilikGun: z.number().int().min(1).max(365).optional() });
 const LightSanction = z.strictObject({
   clientToken: Token,
@@ -332,7 +354,17 @@ export const VENDOR_PORTAL_ROUTES: readonly PortalRouteDef[] = [
       }),
     }),
   },
-  { method: "get", path: "/kurulumlar/:id", permission: "portal:oku", kimlik: "OKUMA", handler: async (c) => ({ data: await q.installationDetail(prisma, idParam(c.req, "id", "Kurulum")) }) },
+  {
+    method: "get",
+    path: "/kurulumlar/:id",
+    permission: "portal:oku",
+    kimlik: "OKUMA",
+    handler: async (c) => {
+      const id = idParam(c.req, "id", "Kurulum");
+      // Ödenmiş tarih (P) görünümü yalnız satıcı künyesinde (bayi künyesi aynı sorgudan, bu blok olmadan).
+      return { data: { ...(await q.installationDetail(prisma, id)), odenmisTarih: await paidThroughView(prisma, id, c.nowMs) } };
+    },
+  },
   { method: "get", path: "/haklar/:id", permission: "portal:oku", kimlik: "OKUMA", handler: async (c) => ({ data: await q.entitlementDetail(prisma, idParam(c.req, "id", "Hak")) }) },
   {
     method: "get",
@@ -370,7 +402,7 @@ export const VENDOR_PORTAL_ROUTES: readonly PortalRouteDef[] = [
       data: await q.listAudit(prisma, { entity: queryText(c.req, "varlik", 40), entityId: queryText(c.req, "varlikId", 64), event: queryText(c.req, "olay", 60), ...pageQuery(c.req) }),
     }),
   },
-  { method: "get", path: "/anahtarlar", permission: "anahtar:oku", kimlik: "OKUMA", handler: async (c) => ({ data: await q.keyStatus(c.ctx, prisma, c.nowMs) }) },
+  { method: "get", path: "/anahtarlar", permission: "anahtar:oku", kimlik: "OKUMA", handler: async (c) => ({ data: await keyStatus(c.ctx, prisma, c.nowMs) }) },
 
   // ------------------------------------------------------------ müşteri · tesis · kurulum
   {
@@ -547,6 +579,13 @@ export const VENDOR_PORTAL_ROUTES: readonly PortalRouteDef[] = [
     },
   },
   {
+    method: "get",
+    path: "/haklar/:id/imza-plani",
+    permission: "portal:oku",
+    kimlik: "OKUMA",
+    handler: async (c) => ({ data: await previewEntitlementSigner(c.ctx, { entitlementId: idParam(c.req, "id", "Hak"), nowMs: c.nowMs }) }),
+  },
+  {
     method: "post",
     path: "/haklar/:id/surum",
     permission: "hak:yaz",
@@ -559,18 +598,37 @@ export const VENDOR_PORTAL_ROUTES: readonly PortalRouteDef[] = [
         modules: moduleChanges(b.moduller, b.uretimModuluCikarilsin),
         perpetual: b.kalici,
         maintenanceUntil: b.bakimBitis ? new Date(b.bakimBitis) : undefined,
+        offlineHorizonDays: b.cevrimdisiUfukGun,
+        modeFloorEnforce: b.kipAltSiniriZorla,
       };
-      const password = passwordBuffer(b.kokParolasi);
+      const longHorizonApproval = { admin: roleHas(c.session.user.rol, "hak:uzun-ufuk"), confirmation: b.onay };
+      const expectedSigner = b.imzaci ?? "KOK";
+      const secret = b.imzaParolasi ?? b.kokParolasi;
+      const common = { entitlementId: id, changes, reason: b.sebep, actor: c.session.actor, nowMs: c.nowMs, expectedSigner, longHorizonApproval } as const;
+      if (expectedSigner === "KUYRUK") {
+        if (secret !== undefined) throw new VendorError(400, "GOVDE_GECERSIZ", "Kök kuyruğuna giren değişiklik imza parolası taşımaz");
+        return portalAction(c, {
+          action: "HAK_KOK_KUYRUGU",
+          clientToken: b.clientToken,
+          body: withPath(b, id),
+          prepare: () => prepareRootRequest(c.ctx, common),
+          run: (tx, p) => recordRootRequestTx(tx, p),
+          respond: (row) => ({ status: 202, data: { kuyruk: true, talepId: row.id, hakId: row.hakId, surum: row.surum, durum: row.durum } }),
+          audit: (row) => [rootRequestAudit(row)],
+        });
+      }
+      if (secret === undefined) throw new VendorError(400, "GOVDE_GECERSIZ", "İmza parolası gerekli");
+      const password = passwordBuffer(secret);
       return portalAction(c, {
         action: "HAK_SURUM",
         clientToken: b.clientToken,
         body: withPath(b, id),
         prepare: () =>
-          withSigningPasswordGuard(c.ctx, { userId: c.session.user.id, actor: c.session.actor, kind: "KOK", nowMs: c.nowMs }, () =>
-            prepareEntitlementVersion(c.ctx, { entitlementId: id, changes, password, reason: b.sebep, actor: c.session.actor, nowMs: c.nowMs }),
+          withSigningPasswordGuard(c.ctx, { userId: c.session.user.id, actor: c.session.actor, kind: expectedSigner, nowMs: c.nowMs }, () =>
+            prepareEntitlementVersion(c.ctx, { ...common, password }),
           ),
         run: async (tx, p) => ({ row: await recordEntitlementVersionTx(tx, p), p }),
-        respond: ({ row }) => ({ status: 201, data: { id: row.id, hakId: row.hakId, surum: row.surum, imzalayanKid: row.imzalayanKid, verilis: row.verilis } }),
+        respond: ({ row }) => ({ status: 201, data: { id: row.id, hakId: row.hakId, surum: row.surum, imzalayanKid: row.imzalayanKid, verilis: row.verilis, uzunUfuk: row.uzunUfuk } }),
         audit: ({ row, p }) => [entitlementVersionAudit(row, p)],
         release: () => password.fill(0),
       });
@@ -918,6 +976,26 @@ export const VENDOR_PORTAL_ROUTES: readonly PortalRouteDef[] = [
     },
   },
   {
+    // Çevrimdışı uzatma dosyası (lisans v2 §1.4-3): uca bağlı yeni kira + HAK, imzalı yanıt JSON'u. Yeni süre vermez
+    // (P ödeme durumundan türer); işlem kimliği tekrarında AYNI dosya döner.
+    method: "post",
+    path: "/kurulumlar/:id/uzatma-dosyasi",
+    permission: "kurulum:yonet",
+    kimlik: "ISLEM_KIMLIGI",
+    handler: async (c) => {
+      const id = idParam(c.req, "id", "Kurulum");
+      const b = bodyOf(c, TokenOnly);
+      return portalAction(c, {
+        action: "UZATMA_DOSYASI",
+        clientToken: b.clientToken,
+        body: withPath(b, id),
+        run: (tx) => issueExtensionFileTx(tx, c.ctx, { installationDbId: id, actor: c.session.actor, nowMs: c.nowMs }),
+        respond: (file) => ({ data: file }),
+        audit: (file) => [{ event: "UZATMA_DOSYASI", entity: "Kurulum", entityId: id, summary: { kiraId: file.kiraId, odenmisTarih: file.odenmisTarih } }],
+      });
+    },
+  },
+  {
     method: "post",
     path: "/kurulumlar/:id/dr-geri-al",
     permission: "kurulum:yonet",
@@ -1167,6 +1245,8 @@ export const VENDOR_PORTAL_ROUTES: readonly PortalRouteDef[] = [
   },
 
   // ------------------------------------------------------------ dağıtım (Faz 3d: distribution-routes.ts)
+  ...KEY_PORTAL_ROUTES,
+  ...HARDWARE_PORTAL_ROUTES,
   ...DISTRIBUTION_PORTAL_ROUTES,
 
   // ------------------------------------------------------------ destek kutusu (3d-2)

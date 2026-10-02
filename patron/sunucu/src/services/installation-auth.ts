@@ -46,7 +46,8 @@ async function recordNonce(ctx: CloudContext, inst: InstallationRecord, request:
   }
 }
 
-export async function authenticateFactory(ctx: CloudContext, g: { header: unknown; rawBody: Buffer; nowMs: number }): Promise<FactoryCaller> {
+/** `path`: isteği alan uç (`SYNC_PATHS` sabiti) — imzalı `yol` taşıyan istek yalnız o uca geçer (amaç hep `esitle`). */
+export async function authenticateFactory(ctx: CloudContext, g: { header: unknown; rawBody: Buffer; nowMs: number; path: string }): Promise<FactoryCaller> {
   if (typeof g.header !== "string" || g.header.length === 0) {
     throw new CloudError(401, "ISTEK_GECERSIZ", "İmzalı istek başlığı (X-TKL-Istek) yok");
   }
@@ -68,6 +69,7 @@ export async function authenticateFactory(ctx: CloudContext, g: { header: unknow
     nowMs: g.nowMs,
     purposes: ["esitle"],
     installationId,
+    path: g.path,
   });
   if (!verified.ok) throw requestRejected(verified.code, verified.message, g.nowMs);
   await recordNonce(ctx, inst, verified.value, g.nowMs);

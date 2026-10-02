@@ -9,6 +9,7 @@ import {
   ModuleKeySchema,
   SANCTION_LEVELS,
   CLOCK_SKEW_MS,
+  GRACE_MAX_DAYS,
   TYP,
   UuidSchema,
   publicKeyFromX,
@@ -31,6 +32,8 @@ export interface ClockInput {
   readonly highWaterMs: number;
   /** Geçerli kiranın `sunucuSaati`; kira yoksa null. */
   readonly leaseServerTimeMs: number | null;
+  /** Kabulde süreklilik tabanı (`leaseClockAnchor`); yoksa ya da kiranın sunucu saatinden gerideyse taban o saattir. */
+  readonly baseMs?: number | null;
   /** Bu kira kabul edildiğinden beri biriken monotonik süre; ölçülemiyorsa null. */
   readonly monotonicElapsedMs: number | null;
   readonly pollIntervalMs: number;
@@ -48,6 +51,10 @@ export interface ClockResult {
   readonly finding: ClockFinding | null;
   /** Bulgu yüksek sudan mı duvar saatinden mi doğdu (portala rapor için). */
   readonly findingSource: "DUVAR" | "YUKSEK_SU" | null;
+  /** Ölçülmüş tahmin (taban + kiradan beri monotonik): yalnız imzalı sunucu saatinden ve monotonik süreden türer; ölçülemediyse null. */
+  readonly estimateMs: number | null;
+  /** Üst eşiğe giren kapalı süre kredisi. */
+  readonly creditMs: number;
 }
 
 /**
@@ -60,27 +67,61 @@ export interface ClockResult {
 export function evaluateClock(g: ClockInput): ClockResult {
   const floor = Math.max(g.highWaterMs, g.leaseServerTimeMs ?? Number.NEGATIVE_INFINITY);
   if (g.leaseServerTimeMs === null || g.monotonicElapsedMs === null) {
+    const unmeasured = { estimateMs: null, creditMs: 0 } as const;
     if (g.wallMs < floor - CLOCK_SKEW_MS) {
-      return { trustedMs: floor, source: "YUKSEK_SU", finding: "SAAT_GERI", findingSource: "DUVAR" };
+      return { trustedMs: floor, source: "YUKSEK_SU", finding: "SAAT_GERI", findingSource: "DUVAR", ...unmeasured };
     }
-    return { trustedMs: Math.max(g.wallMs, floor), source: "DUVAR", finding: null, findingSource: null };
+    return { trustedMs: Math.max(g.wallMs, floor), source: "DUVAR", finding: null, findingSource: null, ...unmeasured };
   }
-  const estimate = g.leaseServerTimeMs + Math.max(0, g.monotonicElapsedMs);
-  const upperBound = estimate + Math.max(0, g.downtimeCreditMs ?? 0) + g.pollIntervalMs + CLOCK_SKEW_MS;
+  const estimate = Math.max(g.leaseServerTimeMs, g.baseMs ?? g.leaseServerTimeMs) + Math.max(0, g.monotonicElapsedMs);
+  const creditMs = Math.max(0, g.downtimeCreditMs ?? 0);
+  const upperBound = estimate + creditMs + g.pollIntervalMs + CLOCK_SKEW_MS;
+  const measured = { estimateMs: estimate, creditMs } as const;
   // Tahminin ötesindeki yüksek su alt sınır olarak HİÇ kullanılmaz: eşikte tavanlamak bile
   // güvenilir saati duvarın ilerisine iter ve sahte SAAT_GERİ üretir.
   const highWaterTrusted = floor <= upperBound;
   const lower = highWaterTrusted ? Math.max(estimate, floor) : estimate;
   const lowerSource: ClockSource = lower === estimate ? "MONOTONIK" : "YUKSEK_SU";
   if (g.wallMs < lower - CLOCK_SKEW_MS) {
-    return { trustedMs: lower, source: lowerSource, finding: "SAAT_GERI", findingSource: "DUVAR" };
+    return { trustedMs: lower, source: lowerSource, finding: "SAAT_GERI", findingSource: "DUVAR", ...measured };
   }
   if (g.wallMs > upperBound) {
-    return { trustedMs: lower, source: lowerSource, finding: "SAAT_ILERI", findingSource: "DUVAR" };
+    return { trustedMs: lower, source: lowerSource, finding: "SAAT_ILERI", findingSource: "DUVAR", ...measured };
   }
   const trustedMs = Math.max(g.wallMs, lower);
-  if (!highWaterTrusted) return { trustedMs, source: "DUVAR", finding: "SAAT_ILERI", findingSource: "YUKSEK_SU" };
-  return { trustedMs, source: "DUVAR", finding: null, findingSource: null };
+  if (!highWaterTrusted) return { trustedMs, source: "DUVAR", finding: "SAAT_ILERI", findingSource: "YUKSEK_SU", ...measured };
+  return { trustedMs, source: "DUVAR", finding: null, findingSource: null, ...measured };
+}
+
+/** Yeni kiranın saat çapası: tahmin tabanı (sunucu saatini aşmıyorsa null — alan yazılmaz) + devreden üst eşik kredisi. */
+export interface LeaseClockAnchor {
+  readonly baseMs: number | null;
+  readonly creditMs: number;
+}
+
+/**
+ * Kiranın fabrikaya geliş yolu. CANLI: satıcıyla o anki alışverişin yanıtı (yoklama · zil · etkinleştirme · taşıma · DR ·
+ * canlı donanım bildirimi) — sunucu saati satıcının ŞİMDİSİdir. TASINMIS: üretildiği andan sonra elle taşınan yanıt
+ * (uzatma dosyası · QR/çevrimdışı yanıt · aktarma · donanım zarfı) — sunucu saati GEÇMİŞtir.
+ */
+export type LeaseArrival = "CANLI" | "TASINMIS";
+
+/**
+ * Kabulde süreklilik YALNIZ taşınmış kirada: tahmin = max(kiranın sunucu saati, kabul anındaki ÖLÇÜLMÜŞ tahmin) + kabulden
+ * beri monotonik — eski tarihli kira tahmini geri çekemez. Canlı kirada taban kiranın kendi saatidir (satıcı saati
+ * kaçıkken şişen taban ilk canlı alışverişte söner; max her yolda olsa cırcır olurdu). Tabana duvar ve yüksek su girmez
+ * (ileri sıçrama aklanmaz); duvarın kapalı süre kredisiyle örtülen kısmı devreder. Saat payı içindeki fark gürültüdür.
+ */
+export function leaseClockAnchor(
+  prev: Pick<ClockResult, "estimateMs" | "creditMs">,
+  g: { readonly leaseServerTimeMs: number; readonly wallMs: number; readonly arrival: LeaseArrival },
+): LeaseClockAnchor {
+  if (g.arrival === "CANLI" || prev.estimateMs === null) return { baseMs: null, creditMs: 0 };
+  const top = Math.max(g.leaseServerTimeMs, prev.estimateMs);
+  return {
+    baseMs: top - g.leaseServerTimeMs > CLOCK_SKEW_MS ? Math.round(top) : null,
+    creditMs: Math.max(0, Math.round(Math.min(g.wallMs, prev.estimateMs + prev.creditMs) - top)),
+  };
 }
 
 /**
@@ -120,14 +161,38 @@ export const EntitlementPinSchema = z.object({
   surum: z.number().int().min(1),
   sinif: z.enum(LICENSE_CLASSES),
   kokTuru: z.enum(ROOT_KINDS),
+  /** Son bilinen modül tavanı (G12 §3.1-2): HAK doğrulanamazsa bu uygulanır; eski kayıtta yok. */
+  moduller: z.array(ModuleKeySchema).max(64).optional(),
+  /** HAK'ın kip alt sınırı: HAK silinse de kip bunun altına inmez. */
+  kipAltSiniri: z.literal("zorla").optional(),
 });
 export type EntitlementPin = z.infer<typeof EntitlementPinSchema>;
 
-/** `durum.json`: kurulum anahtarıyla imzalı, kiraya bağlı birikim kaydı. */
+/** İz türleri (G12 §3.1-4): kira dosyası · durum kaydı dosyası · fabrika DB'sindeki lisans izi. */
+export const TRACE_KINDS = ["KIRA", "DURUM", "IZ"] as const;
+export type TraceKind = (typeof TRACE_KINDS)[number];
+
+/**
+ * Son kabul edilen kiranın süre çapası — kira silinir ya da bozulursa ayakta kalan izlerden okunur (silmek süreyi
+ * uzatmaz). `odenmis` P'dir (yalnız P modeli işliyorduysa; `null` = süresiz); `eski` v1 çapası min(bitiş, vade).
+ */
+export const RememberedAnchorSchema = z.object({
+  kiraId: UuidSchema,
+  odenmis: IsoTimeSchema.nullable().optional(),
+  eski: IsoTimeSchema,
+  eskiNeden: z.enum(["VADE_DOLDU", "KIRA_SURESI_DOLDU"]),
+  ekSureGun: z.number().int().min(0).max(GRACE_MAX_DAYS),
+});
+export type RememberedAnchor = z.infer<typeof RememberedAnchorSchema>;
+
+const CachedFactorRecordSchema = z.object({ ozet: z.string().regex(/^[A-Za-z0-9_-]{43}$/), an: IsoTimeSchema, yol: z.string().max(64).nullable() });
+
+/** `durum.json`: kurulum anahtarıyla imzalı, kiraya bağlı birikim kaydı. Aynı JWS fabrika DB'sinde lisans izi olarak da durur. */
 export const StateRecordSchema = z.object({
   v: z.literal(1),
   kurulumId: UuidSchema,
-  kiraId: UuidSchema,
+  /** `null` = KİRASIZ kayıt: izler kaybolduktan sonra yazılır, hiçbir kiranın monotonik birikimini taşımaz. */
+  kiraId: UuidSchema.nullable(),
   birikenMs: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER),
   yazildi: IsoTimeSchema,
   yuksekSu: IsoTimeSchema,
@@ -142,7 +207,7 @@ export const StateRecordSchema = z.object({
   sonKira: z.object({ kiraId: UuidSchema, verilis: IsoTimeSchema }).nullable().optional(),
   /** Kabul edilen son HAK'ın sürüm/sınıf/kök pini. */
   sonHak: EntitlementPinSchema.nullable().optional(),
-  /** Bu kira boyunca biriken, duvar saatiyle gözlenmiş kapalı kalma süresi (üst eşik kredisi). */
+  /** Bu kira boyunca biriken, duvar saatiyle gözlenmiş kapalı kalma süresi (üst eşik kredisi; kabulde önceki kiradan devreden dahil). */
   kapaliMs: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER).optional(),
   /** Yazım anında duvar saati tahminle tutarlı mıydı; değilse `yazildi` kapalı süreye kredi VERMEZ. */
   duvarTutarli: z.boolean().optional(),
@@ -152,6 +217,28 @@ export const StateRecordSchema = z.object({
   butunlukIlk: IsoTimeSchema.nullable().optional(),
   /** Damganın ait olduğu imzalı paket (`butunluk.jws` paketId); farklı paket kurulunca damga düşer. */
   butunlukPaketId: UuidSchema.nullable().optional(),
+  // Lisans v2 G12 (L2-6): belirsizlik ve parmak izi merdivenleri, iz kaybı, son bilinen çapa.
+  /** Son kabul edilen kiranın süre çapası (kira silinince ayakta kalan izden okunur). */
+  sureCapasi: RememberedAnchorSchema.nullable().optional(),
+  /** Süren ölçülemedinin ÇALIŞMA SÜRESİ birikimi; yalnız yeni kira kabulü sıfırlar. */
+  belirsizlik: z.object({ birikenMs: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER), ilk: IsoTimeSchema.nullable() }).optional(),
+  /** Parmak izi eşiğin altındayken biriken çalışma süresi; eşik yeniden tutunca sıfırlanır. */
+  parmakIziUyusmazMs: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER).optional(),
+  /** Son kiradan beri görülen iz kayıpları (kalıcı bayrak; yalnız yeni kira kabulü siler). */
+  izKaybi: z.object({ ilk: IsoTimeSchema, izler: z.array(z.enum(TRACE_KINDS)).min(1).max(3) }).nullable().optional(),
+  /** Üç iz birden yok bulunduğu an (K7: ek süre buradan, 14 günlük uyarı atlanır). */
+  ekSureCapasi: IsoTimeSchema.nullable().optional(),
+  /** Fabrika DB'sindeki lisans izi bu kayıtla en az bir kez yazıldı (izin silinmesi ancak bundan sonra kayıptır). */
+  izKurulu: z.boolean().optional(),
+  /** Parmak izi 24 sa önbelleğinin kopyası (yalnız tuzlu özet; K8). */
+  parmakIziOnbellegi: z
+    .object({ f1: CachedFactorRecordSchema.optional(), f2: CachedFactorRecordSchema.optional(), f3: CachedFactorRecordSchema.optional(), f4: CachedFactorRecordSchema.optional(), f5: CachedFactorRecordSchema.optional() })
+    .optional(),
+  // Lisans v2 G4 (L2-7).
+  /** İptal pini: görülen en yüksek iptal sırası (kira beyanı ∨ elde tutulan belge); elde daha düşüğü kalırsa belge kayıptır. */
+  iptalSira: z.number().int().min(1).max(Number.MAX_SAFE_INTEGER).optional(),
+  /** Kabulde süreklilik tabanı (`leaseClockAnchor`): bu kiranın tahmini buradan sayılır; yoksa kiranın sunucu saatinden. */
+  saatTabani: IsoTimeSchema.optional(),
 });
 export type StateRecord = z.infer<typeof StateRecordSchema>;
 
@@ -182,6 +269,6 @@ export function verifyStateRecord(
 
 /** Durum kaydından bu kiraya ait monotonik birikimi okur; başka kiraya aitse ölçülemedi. */
 export function monotonicElapsed(record: Result<StateRecord> | null, leaseId: string | null): number | null {
-  if (!record || !record.ok || leaseId === null || record.value.kiraId !== leaseId) return null;
+  if (!record || !record.ok || leaseId === null || record.value.kiraId === null || record.value.kiraId !== leaseId) return null;
   return record.value.birikenMs;
 }

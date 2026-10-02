@@ -2,6 +2,8 @@
 //   *.kok.json     — KÖK / hazırlık kökü (parolalı; burada yalnız AÇIK yarısı okunur)
 //   *.bayi.json    — BAYİ (bayinin parolasıyla sarılı; yalnız açık yarı + sertifika)
 //   *.anahtar.json — ALT (kira) / İNDİRME (parolasız 0600 + kök imzalı sertifika)
+//   *.ara.json     — HAK ARA İMZACISI (G4; parolalı + kök imzalı `HAK` sertifikası; 120 gün, dönem töreninde yenilenir)
+//   *.sertifika.json — EMEKLİ anahtar: özel yarısı silinmiş ALT · İNDİRME · ARA'nın açık yarısı + sertifikası (yalnız künye)
 // Çapa: ortamın kipine göre gömülü liste (GUVEN_CAPASI=uretim → üretim kökleri, hazirlik → hazırlık kökleri;
 // fabrikanın o kipteki derlemesinin güvendiği küme — ayna); yalnız hazırlık/test için GUVEN_CAPASI_DOSYASI.
 // Çapada olmayan kökle imza yapılmaz (fabrika reddederdi); kip yok ya da çapa geçersizse yükleme DURUR (fail-closed).
@@ -14,6 +16,7 @@ import {
   LICENSE_CLASSES,
   STAGING_ROOT_CLASSES,
   isoToMs,
+  parseJws,
   prepareTrustAnchor,
   rootPublicKeysFor,
   verifyCertificate,
@@ -24,9 +27,9 @@ import {
   type TrustAnchorMode,
 } from "../lisans-protokol";
 import type { VendorConfig } from "../config";
-import { readSubKeyFile, readWrappedKeyFile, subKeyPrivate } from "./key-files";
+import { readRetiredKeyFile, readSubKeyFile, readWrappedKeyFile, subKeyPrivate, type RetiredKeyFile } from "./key-files";
 
-export type VendorKeyKind = "KOK" | "HAZIRLIK_KOK" | "ALT" | "INDIRME" | "BAYI";
+export type VendorKeyKind = "KOK" | "HAZIRLIK_KOK" | "ALT" | "INDIRME" | "BAYI" | "ARA";
 
 export interface WrappedKeyInfo {
   readonly path: string;
@@ -48,6 +51,25 @@ export interface LoadedSubKey {
   readonly document: CertificateDoc;
 }
 
+/** HAK ara imzacısı (parolalı dosya + kök imzalı `HAK` sertifikası). `usable`: sertifika ŞİMDİ geçerli. */
+export interface LoadedIntermediate {
+  readonly path: string;
+  readonly kid: string;
+  readonly x: string;
+  readonly certificate: string;
+  readonly document: CertificateDoc;
+  readonly usable: boolean;
+}
+
+/** Emekli anahtar: yalnız açık yarı + sertifika (özel yarı törende silindi) — künyede EMEKLI görünür. */
+export interface RetiredKey {
+  readonly kid: string;
+  readonly kind: "ALT" | "INDIRME" | "ARA";
+  readonly x: string;
+  readonly certificate: string;
+  readonly document: CertificateDoc;
+}
+
 export interface PublicKeyRecord {
   readonly kid: string;
   readonly kind: VendorKeyKind;
@@ -56,6 +78,8 @@ export interface PublicKeyRecord {
   readonly certificate: string | null;
   readonly notBefore: Date | null;
   readonly notAfter: Date | null;
+  /** Özel yarısı silinmiş (emekli) anahtar. */
+  readonly retired?: true;
 }
 
 const AnchorFileSchema = z
@@ -66,6 +90,17 @@ const USAGE_OF: Record<"tekserp-alt-anahtar" | "tekserp-indirme-anahtar", { usag
   "tekserp-alt-anahtar": { usage: "ALT", kind: "ALT" },
   "tekserp-indirme-anahtar": { usage: "INDIRME", kind: "INDIRME" },
 };
+
+const RETIRED_USAGE_OF: Record<RetiredKeyFile["kaynakTur"], { usage: CertUsage; kind: RetiredKey["kind"] }> = {
+  "tekserp-alt-anahtar": { usage: "ALT", kind: "ALT" },
+  "tekserp-indirme-anahtar": { usage: "INDIRME", kind: "INDIRME" },
+  "tekserp-ara-anahtar": { usage: "HAK", kind: "ARA" },
+};
+
+/** Dosya uzantısı → beklenen sarılı tür: yanlış uzantıyla konmuş dosya (ör. ara anahtarı `.kok.json`) yüklenmez. */
+const WRAPPED_SUFFIX_TYPE = { ".kok.json": "tekserp-kok-anahtar", ".bayi.json": "tekserp-bayi-anahtar" } as const;
+
+const sameClasses = (a: readonly string[], b: readonly string[]): boolean => a.length === b.length && [...a].sort().join() === [...b].sort().join();
 
 function listFiles(dir: string, suffix: string): string[] {
   let names: string[];
@@ -112,6 +147,8 @@ export class KeyStore {
     readonly wrapped: readonly WrappedKeyInfo[],
     readonly subKeys: readonly LoadedSubKey[],
     readonly warnings: readonly string[],
+    readonly intermediates: readonly LoadedIntermediate[] = [],
+    readonly retired: readonly RetiredKey[] = [],
   ) {}
 
   static load(config: Pick<VendorConfig, "ANAHTAR_DIZINI" | "GUVEN_CAPASI" | "GUVEN_CAPASI_DOSYASI">, nowMs: number = Date.now()): KeyStore {
@@ -123,9 +160,14 @@ export class KeyStore {
 
     const wrapped: WrappedKeyInfo[] = [];
     const dir = config.ANAHTAR_DIZINI;
-    for (const file of [...listFiles(dir, ".kok.json"), ...listFiles(dir, ".bayi.json")]) {
+    const wrappedFiles = Object.entries(WRAPPED_SUFFIX_TYPE).flatMap(([suffix, expected]) => listFiles(dir, suffix).map((file) => ({ file, expected })));
+    for (const { file, expected } of wrappedFiles) {
       try {
         const k = readWrappedKeyFile(file);
+        if (k.tur !== expected) {
+          warnings.push(`${path.basename(file)} türü (${k.tur}) uzantısıyla uyuşmuyor — kullanılmaz`);
+          continue;
+        }
         const kind = k.tur === "tekserp-bayi-anahtar" ? "BAYI" : k.kid.startsWith("hazirlik-") ? "HAZIRLIK_KOK" : "KOK";
         const inAnchor = kind !== "BAYI" && anchor.some((r) => r.kid === k.kid && r.x === k.x);
         if (kind !== "BAYI" && !inAnchor) warnings.push(`Kök ${k.kid} güven çapasında yok — imzada kullanılmaz`);
@@ -163,7 +205,15 @@ export class KeyStore {
         warnings.push(`Anahtar dosyası okunamadı (${path.basename(file)}): ${(err as Error).message}`);
       }
     }
-    return new KeyStore(anchor, anchorSource, wrapped, subKeys, warnings);
+    const intermediates = loadIntermediates(dir, anchor, nowMs, warnings);
+    const retired = loadRetired(dir, anchor, warnings);
+    return new KeyStore(anchor, anchorSource, wrapped, subKeys, warnings, intermediates, retired);
+  }
+
+  /** HAK'ı imzalayacak ARA imzacı: sertifikası ŞİMDİ geçerli ve sınıfa yetkili olanların en yenisi (G4). */
+  intermediateFor(cls: LicenseClass, nowMs: number): LoadedIntermediate | null {
+    const list = this.intermediates.filter((k) => k.usable && k.document.siniflar.includes(cls) && certValidAt(k.document, nowMs));
+    return [...list].sort((a, b) => isoToMs(b.document.baslangic) - isoToMs(a.document.baslangic))[0] ?? null;
   }
 
   /** Kirayı imzalayacak ALT anahtar: şimdi geçerli ve sınıfa yetkili olanların en yenisi. */
@@ -204,10 +254,95 @@ export class KeyStore {
       notBefore: new Date(isoToMs(k.document.baslangic)),
       notAfter: new Date(isoToMs(k.document.bitis)),
     }));
-    return [...roots, ...subs];
+    const intermediates: PublicKeyRecord[] = this.intermediates.map((k) => ({
+      kid: k.kid,
+      kind: "ARA",
+      x: k.x,
+      classes: k.document.siniflar,
+      certificate: k.certificate,
+      notBefore: new Date(isoToMs(k.document.baslangic)),
+      notAfter: new Date(isoToMs(k.document.bitis)),
+    }));
+    const live = new Set([...roots, ...subs, ...intermediates].map((r) => r.kid));
+    const retired: PublicKeyRecord[] = this.retired
+      .filter((k) => !live.has(k.kid))
+      .map((k) => ({
+        kid: k.kid,
+        kind: k.kind,
+        x: k.x,
+        classes: k.document.siniflar,
+        certificate: k.certificate,
+        notBefore: new Date(isoToMs(k.document.baslangic)),
+        notAfter: new Date(isoToMs(k.document.bitis)),
+        retired: true,
+      }));
+    return [...roots, ...subs, ...intermediates, ...retired];
   }
 
   private newest(list: LoadedSubKey[]): LoadedSubKey | null {
     return [...list].sort((a, b) => isoToMs(b.document.baslangic) - isoToMs(a.document.baslangic))[0] ?? null;
   }
+}
+
+/**
+ * Ara imzacılar: sarılı dosya (`tekserp-ara-anahtar`) + gömülü kök imzalı `HAK` sertifikası. Sertifika çapaya karşı
+ * KENDİ başlangıç anında doğrulanır (imza · kök · sınıf), sonra bugüne göre "kullanılabilir" işaretlenir: süresi
+ * dolmuş ara imzacı künyede görünür ama imzalamaz. Sertifika başka anahtara ya da başka sınıf kümesine aitse yüklenmez.
+ */
+function loadIntermediates(dir: string, anchor: readonly RootKey[], nowMs: number, warnings: string[]): LoadedIntermediate[] {
+  const out: LoadedIntermediate[] = [];
+  for (const file of listFiles(dir, ".ara.json")) {
+    try {
+      const k = readWrappedKeyFile(file);
+      if (k.tur !== "tekserp-ara-anahtar" || !k.sertifika) {
+        warnings.push(`${path.basename(file)} ara imzacı dosyası değil ya da sertifikasız — kullanılmaz`);
+        continue;
+      }
+      const parsed = parseCertificatePayload(k.sertifika);
+      const cert = parsed ? verifyCertificate(k.sertifika, { roots: anchor, usage: "HAK", atMs: isoToMs(parsed.baslangic) }) : null;
+      if (!cert?.ok) {
+        warnings.push(`${k.kid} ara imzacı sertifikası geçersiz (${cert?.code ?? "BELGE_SEMA"}) — kullanılmaz`);
+        continue;
+      }
+      const doc = cert.value.document;
+      if (doc.kid !== k.kid || doc.x !== k.x || !sameClasses(doc.siniflar, k.siniflar)) {
+        warnings.push(`${k.kid} sertifikası başka bir anahtara ya da sınıf kümesine ait — kullanılmaz`);
+        continue;
+      }
+      const usable = certValidAt(doc, nowMs);
+      if (!usable) warnings.push(`${k.kid} ara imzacı sertifikası şu an geçerli değil (${doc.baslangic.slice(0, 10)} → ${doc.bitis.slice(0, 10)}) — imzalamaz`);
+      out.push({ path: file, kid: k.kid, x: k.x, certificate: k.sertifika, document: doc, usable });
+    } catch (err) {
+      warnings.push(`Anahtar dosyası okunamadı (${path.basename(file)}): ${(err as Error).message}`);
+    }
+  }
+  return out;
+}
+
+/** Emekli künyeler: sertifika yine çapaya karşı doğrulanır (künyeye sahte satır giremesin). */
+function loadRetired(dir: string, anchor: readonly RootKey[], warnings: string[]): RetiredKey[] {
+  const out: RetiredKey[] = [];
+  for (const file of listFiles(dir, ".sertifika.json")) {
+    try {
+      const k = readRetiredKeyFile(file);
+      const meta = RETIRED_USAGE_OF[k.kaynakTur];
+      const parsed = parseCertificatePayload(k.sertifika);
+      const cert = parsed ? verifyCertificate(k.sertifika, { roots: anchor, usage: meta.usage, atMs: isoToMs(parsed.baslangic) }) : null;
+      if (!cert?.ok || cert.value.document.kid !== k.kid || cert.value.document.x !== k.x) {
+        warnings.push(`${path.basename(file)} emekli künyesi doğrulanamadı — yok sayıldı`);
+        continue;
+      }
+      out.push({ kid: k.kid, kind: meta.kind, x: k.x, certificate: k.sertifika, document: cert.value.document });
+    } catch (err) {
+      warnings.push(`Emekli künyesi okunamadı (${path.basename(file)}): ${(err as Error).message}`);
+    }
+  }
+  return out;
+}
+
+/** Doğrulanmamış sertifika yükünden yalnız başlangıç anı okunur (doğrulama o anda yapılır). */
+function parseCertificatePayload(token: string): { baslangic: string } | null {
+  const parsed = parseJws(token);
+  const start = parsed.ok ? parsed.value.payload.baslangic : undefined;
+  return typeof start === "string" && Number.isFinite(isoToMs(start)) ? { baslangic: start } : null;
 }

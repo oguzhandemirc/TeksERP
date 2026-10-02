@@ -19,13 +19,15 @@ export function bodyDigest(body: Uint8Array | string): string {
 
 /**
  * `installationId: null` yalnız kimliği henüz bilinmeyen amaçta (etkinleştirme, taşıma) geçerlidir —
- * alan imzaya hiç girmez; başka amaçta şema reddeder (programcı hatası, fırlatır).
+ * alan imzaya hiç girmez; başka amaçta şema reddeder (programcı hatası, fırlatır). `path` verilirse isteğin
+ * gittiği uç (`ENDPOINTS`; zarfla taşınanda `/v1/cevrimdisi`) imzaya girer.
  */
 export function signRequest(g: {
   readonly installationId: string | null;
   readonly purpose: RequestPurpose;
   readonly body: Uint8Array | string;
   readonly key: { readonly privateKey: KeyObject; readonly nowMs: number; readonly nonce?: string };
+  readonly path?: string;
 }): string {
   const kid = installationKeyId(publicKeyX(g.key.privateKey));
   const payload: RequestDoc = {
@@ -35,6 +37,7 @@ export function signRequest(g: {
     nonce: g.key.nonce ?? generateNonce(),
     amac: g.purpose,
     govdeOzeti: bodyDigest(g.body),
+    ...(g.path !== undefined ? { yol: g.path } : {}),
   };
   return signDocument({ typ: TYP.ISTEK, schema: RequestSchema, payload, key: { kid, privateKey: g.key.privateKey } });
 }
@@ -70,6 +73,11 @@ export interface RequestVerifyInput {
    * taşımayan istek (yalnız etkinleştirme/taşıma — şema denetler) bağ denetiminden muaftır: bağ koddadır.
    */
   readonly installationId: string | null;
+  /**
+   * İsteği alan uç (`ENDPOINTS` sabiti — vekil/bağlama farkından bağımsız). İmzalı istek `yol` taşıyorsa eşit
+   * olmalı (`ISTEK_YOL`); `yol` taşımayan (eski) istek denetlenmez.
+   */
+  readonly path?: string;
 }
 
 /** Tekrar oynatma (nonce) denetimi BURADA DEĞİL: çağıran `NonceDefteri` ya da DB'de atomik yapar. */
@@ -86,6 +94,9 @@ export function verifyRequest(token: unknown, g: RequestVerifyInput): Result<Req
     return failure("ISTEK_KURULUM", "İsteğin kurulum kimliği anahtarın sahibiyle uyuşmuyor");
   }
   if (!g.purposes.includes(request.amac)) return failure("ISTEK_AMAC", `Bu uç ${request.amac} amaçlı isteği kabul etmez`);
+  if (request.yol !== undefined && g.path !== undefined && request.yol !== g.path) {
+    return failure("ISTEK_YOL", `İstek ${request.yol} ucu için imzalanmış, ${g.path} ucuna gelmiş`);
+  }
   if (Math.abs(isoToMs(request.zaman) - g.nowMs) > CLOCK_SKEW_MS) {
     return failure("ISTEK_ZAMAN", "İstek zamanı sunucu saatinden 10 dakikadan fazla sapıyor");
   }

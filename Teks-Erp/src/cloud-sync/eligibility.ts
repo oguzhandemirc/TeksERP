@@ -43,7 +43,7 @@ export function evaluateCloudEligibility(
   cloudUrl: string | null,
   installationId: string | null,
 ): CloudEligibility {
-  if (!snap.hazir || !installationId) return { ok: false, reason: "HAZIR_DEGIL" };
+  if (!snap.imzaHazir || !installationId) return { ok: false, reason: "HAZIR_DEGIL" };
   const hak = snap.entitlement?.document;
   if (!hak) return { ok: false, reason: "HAK_YOK" };
   const kira = snap.lease?.document;

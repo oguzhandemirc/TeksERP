@@ -151,6 +151,16 @@ async function main(): Promise<void> {
     kontrol("§1c imzalı hakkı olan kurulumun sınıfı değişmez → 409", sinifImzali.status === 409, `${sinifImzali.status}`);
     const hakAyrinti = await s("get", "/haklar/:id", `/haklar/${hakId}`, 200);
     kontrol("§1d HAK ayrıntısı: sürüm 1 imzalı, modüller uygulandı", (hakAyrinti.veri.guncelSurum as number) === 1 && JSON.stringify(hakAyrinti.veri.moduller) === '["production.enabled","finance.enabled"]');
+    // G4 (davranış test_ara_imzaci · test_iptal_belgesi bekçilerinde): imza planı · kök kuyruğu · iptal defteri · toplu basım.
+    const imzaPlani = await s("get", "/haklar/:id/imza-plani", `/haklar/${hakId}/imza-plani`, 200);
+    await s("get", "/kok-kuyrugu", "/kok-kuyrugu?durum=BEKLIYOR", 200);
+    await s("post", "/kok-kuyrugu/:id/iptal", `/kok-kuyrugu/${randomUUID()}/iptal`, 404, { sebep: "olmayan talep" });
+    await s("get", "/donanim-talepleri", "/donanim-talepleri?durum=BEKLIYOR&tur=DONANIM", 200);
+    await s("post", "/donanim-talepleri/:id/onayla", `/donanim-talepleri/${randomUUID()}/onayla`, 404, { sebep: "olmayan talep" });
+    await s("post", "/donanim-talepleri/:id/reddet", `/donanim-talepleri/${randomUUID()}/reddet`, 404, { sebep: "olmayan talep" });
+    await s("get", "/iptal-belgeleri", "/iptal-belgeleri", 200);
+    const toplu = await s("post", "/haklar/toplu-yeniden-bas", "/haklar/toplu-yeniden-bas", 201, { imzaParolasi: "kullanilmayan-ara-parolasi", sebep: "uçlar kapsamı", hakIdleri: [hakId] });
+    kontrol("§1d2 imza planı KOK (yeteneksiz kurulum, kök VDS'te); toplu ara basımı yeteneksizi ATLAR (sürüm değişmez)", imzaPlani.veri.imzaci === "KOK" && (toplu.veri.sonuclar as { durum: string }[])[0]?.durum === "ATLANDI");
     const kod = await s("post", "/kurulumlar/:id/etkinlestirme-kodu", `/kurulumlar/${kId}/etkinlestirme-kodu`, 201, { gecerlilikGun: 7 });
     const anahtar = kurulumAnahtariUret();
     const et = await imzaliPost(sunucu.genel, ENDPOINTS.ACTIVATE, {
@@ -190,6 +200,13 @@ async function main(): Promise<void> {
     });
     await s("get", "/kopya-uyarilari", "/kopya-uyarilari?durum=ACIK", 200);
     await s("post", "/kopya-uyarilari/:id/kapat", `/kopya-uyarilari/${uyari.id}/kapat`, 200, { sebep: "anakart değişti", digerParmakIziniKabulEt: true });
+    const dosya = await s("post", "/kurulumlar/:id/uzatma-dosyasi", `/kurulumlar/${kId}/uzatma-dosyasi`, 200, {});
+    const dosyaYaniti = dosya.veri.dosya as { kira?: string; hak?: string | null } | undefined;
+    kontrol(
+      "§1m çevrimdışı uzatma dosyası: imzalı yanıt (kira + HAK) ve lisans no'lu dosya adı",
+      typeof dosyaYaniti?.kira === "string" && typeof dosyaYaniti.hak === "string" && /^lisans-TKS-\d{4}-\d{4}-\d{8}\.json$/.test(String(dosya.veri.dosyaAdi)),
+      String(dosya.veri.dosyaAdi),
+    );
 
     // Destek kutusu (3d-2): talep fabrikadan `/v1/destek` ile doğar — burada fikstür olarak DB'den.
     const talep = await prisma.destekTalebi.create({

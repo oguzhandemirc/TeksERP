@@ -21,7 +21,7 @@
 //   §6 Docker teslim künyesi (`PAKET-DOCKER.json`): kapsamdaki teslim dosyaları imzada listelenir, ek alanlar imzada, kurcalama GECERSIZ, eksik dosyayla imza yok, CLI `belge`
 // Koşum: node ../scripts/agir-is.mjs -- npx tsx scripts/test_lisans_butunluk.ts
 // =============================================================================
-import { appendFileSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { appendFileSync, chmodSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
@@ -183,10 +183,34 @@ async function bolum1(core: LicenseCore, ek: string): Promise<void> {
   const ly = await runIntegrityCheck(girdi(k, { core }));
   check(`§1p liste dosyası kurcalı/silinmiş → GECERSIZ BUTUNLUK_LISTE_BOZUK (${ek})`, lb.kod === "BUTUNLUK_LISTE_BOZUK" && ly.kod === "BUTUNLUK_LISTE_BOZUK" && (ly.rapor?.eksik ?? []).includes(INTEGRITY_LIST_FILE));
 
+  await okunamayanDosya(k, core, ek);
+
   rmSync(path.join(k, INTEGRITY_FILE));
   const yokZ = await runIntegrityCheck(girdi(k, { core }));
   const yokG = await runIntegrityCheck(girdi(k, { core, required: false }));
   check(`§1i liste yok: korumalı pakette GECERSIZ BUTUNLUK_LISTE_YOK · geliştirmede KAPSAM_DISI (${ek})`, yokZ.durum === "GECERSIZ" && yokZ.kod === "BUTUNLUK_LISTE_YOK" && yokG.durum === "KAPSAM_DISI");
+}
+
+/** G12 §3.3: zorunlu kipte imzalı listedeki dosya OKUNAMIYORSA değişmiş sayılır (kilitli/izinsiz dosya denetimi atlatamaz). */
+async function okunamayanDosya(k: string, core: LicenseCore, ek: string): Promise<void> {
+  if (process.platform === "win32" || process.getuid?.() === 0) {
+    console.log(`⏭️  §1z atlandı (Windows ya da root: izin kilidi ölçülemez) (${ek})`);
+    return;
+  }
+  await imzala(k, A);
+  const hedef = path.join(k, "dist", "server.js");
+  chmodSync(hedef, 0o000);
+  try {
+    const z = await runIntegrityCheck(girdi(k, { core }));
+    const g = await runIntegrityCheck(girdi(k, { core, required: false }));
+    check(
+      `§1z ⭐ listedeki dosya okunamıyor: ZORUNLU kipte GECERSIZ BUTUNLUK_OKUNAMAYAN (değişmiş sayılır) · geliştirmede ÖLÇÜLEMEDİ (${ek})`,
+      z.durum === "GECERSIZ" && z.kod === "BUTUNLUK_OKUNAMAYAN" && (z.rapor?.okunamayan ?? []).includes("dist/server.js") && g.durum === "OLCULEMEDI",
+      `${z.durum}/${z.kod} · ${g.durum}/${g.kod}`,
+    );
+  } finally {
+    chmodSync(hedef, 0o644);
+  }
 }
 
 async function bolum1b(): Promise<void> {
@@ -292,7 +316,8 @@ function bolum3(): void {
   console.log("\n§3 merdiven · künye · çapa kalıcılığı (saf)");
   const bul = (o: { butunluk: IntegrityOutcome["durum"]; ilk?: number | null; basarisiz?: boolean }): Finding[] => {
     const out: Finding[] = [];
-    evaluateIntegrity({ butunluk: o.butunluk, butunlukIlkUyusmazlikMs: o.ilk ?? null, sonYoklamaBasarisizMi: o.basarisiz ?? false }, NOW, out);
+    // İkinci anahtar (K3): son 24 saatte başarılı kira alışverişi YOK → `internetVar: false`.
+    evaluateIntegrity({ butunluk: o.butunluk, butunlukIlkUyusmazlikMs: o.ilk ?? null, internetVar: !(o.basarisiz ?? false) }, NOW, out);
     return out;
   };
   const f0 = bul({ butunluk: "GECERSIZ" });
@@ -301,8 +326,8 @@ function bolum3(): void {
   const f3 = bul({ butunluk: "GECERSIZ", ilk: NOW - 31 * DAY, basarisiz: true });
   check("§3a çapa yoksa UYARI (BUTUNLUK_GECERSIZ)", f0.length === 1 && f0[0].code === "BUTUNLUK_GECERSIZ" && f0[0].tier === "UYARI");
   check("§3b ilk görülüşten 1 gün → EK_SURE, 29 gün kaldı", f1[0]?.tier === "EK_SURE" && f1[0]?.daysLeft === 29);
-  check("§3c 30 gün geçti + yoklama sürüyor → EK_SURE (0 gün; iki anahtar)", f2[0]?.tier === "EK_SURE" && f2[0]?.daysLeft === 0);
-  check("§3d 30 gün geçti + yoklama başarısız → KISITLI", f3[0]?.tier === "KISITLI");
+  check("§3c 30 gün geçti + internet VAR (son 24 saatte kira alışverişi) → EK_SURE (0 gün; iki anahtar)", f2[0]?.tier === "EK_SURE" && f2[0]?.daysLeft === 0);
+  check("§3d 30 gün geçti + son 24 saatte başarılı alışveriş YOK → KISITLI", f3[0]?.tier === "KISITLI");
   const olc = bul({ butunluk: "OLCULEMEDI" });
   check("§3e ölçülemedi → UYARI (BUTUNLUK_OLCULEMEDI) · GECERLI/KAPSAM_DISI bulgu yok", olc[0]?.code === "BUTUNLUK_OLCULEMEDI" && bul({ butunluk: "GECERLI" }).length === 0 && bul({ butunluk: "KAPSAM_DISI" }).length === 0);
 

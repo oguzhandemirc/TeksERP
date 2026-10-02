@@ -9,7 +9,7 @@
 // kabul etkinleştirmeyle aynı tx'te kurulum kaydına `SOZLESME_KABUL_EDILDI` olarak yazılır. Kapı iki yerde: ucuz ön
 // denetim (nonce'tan önce) ve kodu tüketen claim'in kendisi (tx içi, taze satırla).
 import type { EtkinlestirmeKodu, KodTuru, Kurulum, Prisma, TasimaTalebi } from "@prisma/client";
-import { verifyAcceptance, type AcceptanceDoc, type AcceptanceRejection, type ActivateRequest, type LicenseResponse } from "../lisans-protokol";
+import { ENDPOINTS, verifyAcceptance, type AcceptanceDoc, type AcceptanceRejection, type ActivateRequest, type LicenseResponse } from "../lisans-protokol";
 import { recordAudit } from "../lib/audit";
 import { VendorError, retryConflict } from "../lib/errors";
 import { lockInstallation } from "../lib/locks";
@@ -17,17 +17,38 @@ import { prisma, type Tx } from "../lib/prisma";
 import type { VendorContext } from "./context";
 import { notifyDoorbell } from "./doorbell";
 import { bodyKeyRole, installationCancelled, recordRequestNonce, verifySignedRequest, type KeyRole } from "./installation-auth";
+import { assertIdentificationOnActivation } from "./hardware.service";
+import { assertBindableBeforeLease, leaseUnbindable } from "./lease-binding";
+import { storableSequence } from "./local-intervention";
 import {
   activeEntitlement,
   computeSanctionState,
-  currentEntitlementToken,
   downloadTokens,
   issueLease,
+  leaseEntitlement,
+  leaseRevocation,
   licenseResponse,
 } from "./lease.service";
 
 const codeInvalid = (reason: string): VendorError => new VendorError(404, "ETKINLESTIRME_KODU_GECERSIZ", reason);
 const codeUsed = (): VendorError => new VendorError(409, "ETKINLESTIRME_KODU_KULLANILMIS", "Bu etkinleştirme kodu daha önce kullanıldı");
+/** Genişlik kapısı (yetenek düşüşü): kod TÜKETİLMEZ; güncel şartların kök imzası acil kuyruğa girer. */
+const activationWithheld = (): VendorError =>
+  new VendorError(
+    403,
+    "KIRA_VERILMEDI",
+    "Bu derlemenin tanıyacağı güncel lisans (HAK) satıcının kök imzasını bekliyor; imzalandıktan sonra aynı kodla yeniden deneyin (kod kullanılmadı)",
+  );
+
+/**
+ * Ucuz ön denetim (kodu tüketecek istekte, nonce'tan önce): `hak-ara` bildirmeyen derlemeye teslim edilebilecek HAK yoksa
+ * (en yeni kök sürüm güncelden geniş — genişlik kapısı; yeni makinenin elinde HAK yok) etkinleştirme kod tüketmeden
+ * durur; talep acil kuyruğa girer (kira bağı kapısı, `lease-binding.ts`).
+ */
+async function assertDeliverableOnActivation(inst: Kurulum, body: ActivateRequest, nowMs: number): Promise<void> {
+  await assertBindableBeforeLease({ installation: inst, capabilities: body.yetenekler ?? [], nowMs, refusal: activationWithheld });
+}
+
 const transferCodeRequired = (): VendorError =>
   new VendorError(409, "TASIMA_KODU_GEREKLI", "Bu kurulum başka bir makinede etkin: yeni makine yalnız onaylı taşıma koduyla etkinleşir (portaldan taşıma talebi)");
 
@@ -84,12 +105,14 @@ async function replayOrConflict(tx: Tx, ctx: VendorContext, code: EtkinlestirmeK
   const hak = await activeEntitlement(tx, inst.id);
   const sanction = await computeSanctionState(tx, inst.id);
   return licenseResponse({
-    hak: await currentEntitlementToken(tx, hak),
+    // Tekrar AYNI kirayı verir: HAK da o kiranın bağlı olduğu sürümdür (`hakOzeti` tutsun).
+    hak: (await leaseEntitlement(tx, lease)).belge,
     kira: lease.belge,
     tokens: downloadTokens(ctx, inst, hak, sanction, nowMs),
     nowMs,
     installationId: inst.kurulumId,
     codeKind: code.tur,
+    revocation: await leaseRevocation(tx, ctx.keys),
   });
 }
 
@@ -165,6 +188,9 @@ export async function activateInTx(
       sonOrtam: g.body.ortam,
       etkinlesmeZamani: new Date(g.nowMs),
       sonKiraId: null,
+      // Lisans v2: yetenekler ve durum kaydı sırasının TABANI etkinleştirmede yeniden kurulur (yeni makine sıfırdan sayar).
+      yetenekler: [...(g.body.yetenekler ?? [])],
+      sonDurumSirasi: storableSequence(g.body.durumKaydi) ?? null,
     },
   });
   if (updated.count === 0) throw retryConflict();
@@ -178,6 +204,8 @@ export async function activateInTx(
     acceptedFingerprint: g.body.parmakIzi,
     nowMs: g.nowMs,
   });
+  // Ön denetimle bu tx arasında HAK değiştiyse: kod tüketilmeden geri alınır (kuyruğu ön denetim yazar).
+  if (leaseUnbindable(lease.entitlement)) throw activationWithheld();
   const tip = await tx.kurulum.updateMany({ where: { id: inst.id, sonKiraId: null }, data: { sonKiraId: lease.id } });
   if (tip.count === 0) throw retryConflict();
   await tx.etkinlestirmeKodu.update({ where: { id: code.id }, data: { kiraId: lease.id } });
@@ -187,12 +215,13 @@ export async function activateInTx(
     kind: "activated",
     activated: {
       response: licenseResponse({
-        hak: await currentEntitlementToken(tx, hak),
+        hak: lease.entitlement.belge,
         kira: lease.token,
         tokens: downloadTokens(ctx, fresh, hak, lease.sanction, g.nowMs),
         nowMs: g.nowMs,
         installationId: fresh.kurulumId,
         codeKind: code.tur,
+        revocation: lease.revocation,
       }),
       installationDbId: inst.id,
       codeId: code.id,
@@ -236,10 +265,17 @@ async function bodyKeyRoleTx(tx: Tx, inst: Kurulum, kid: string): Promise<KeyRol
  */
 export async function handleActivation(
   ctx: VendorContext,
-  g: { header: unknown; rawBody: Buffer; body: ActivateRequest; nowMs: number; limit?: (scope: string) => void },
+  g: { header: unknown; rawBody: Buffer; body: ActivateRequest; nowMs: number; limit?: (scope: string) => void; path?: string },
 ): Promise<LicenseResponse> {
   const body = g.body;
-  const verified = await verifySignedRequest({ header: g.header, rawBody: g.rawBody, purposes: ["etkinlestir"], nowMs: g.nowMs, keyFromBody: body.acikAnahtar });
+  const verified = await verifySignedRequest({
+    header: g.header,
+    rawBody: g.rawBody,
+    purposes: ["etkinlestir"],
+    nowMs: g.nowMs,
+    keyFromBody: body.acikAnahtar,
+    path: g.path ?? ENDPOINTS.ACTIVATE,
+  });
   if ((body.kurulumId ?? null) !== (verified.request.kurulumId ?? null)) {
     throw new VendorError(401, "ISTEK_KURULUM", "Gövdedeki kurulum kimliği imzalı istekle uyuşmuyor");
   }
@@ -260,6 +296,10 @@ export async function handleActivation(
   // Yalnız kodu TÜKETECEK istek kabul ister: tüketilmiş kodun ağ tekrarı önceki sonucu alır (kabul o gün yazıldı).
   const acceptance = code.durum === "AKTIF" ? requireAcceptance(body) : null;
   g.limit?.(inst.id);
+  if (acceptance) {
+    await assertIdentificationOnActivation(inst, verified.kid, body, g.nowMs);
+    await assertDeliverableOnActivation(inst, body, g.nowMs);
+  }
   await recordRequestNonce({ installationDbId: inst.id, kid: verified.kid, request: verified.request, nowMs: g.nowMs });
   const result = await prisma.$transaction((tx) =>
     activateInTx(tx, ctx, { codeId: code.id, installationDbId: inst.id, kid: verified.kid, body, acceptance, nowMs: g.nowMs }),

@@ -4,9 +4,9 @@
 // satırından okur. Hedef DB kapısı (yalnız `_test`) her komutta ilk iştir.
 //   hazirla  → anahtar dizini (parolalı kökler, ALT, İNDİRME, çapa) + portal yöneticisi
 //   temizle  → senaryonun kurulumları (kurulum kimliğiyle) · bayileri · portal kullanıcıları · anahtar künyesi ·
-//              kanalı (kurulumsuz kaldıysa)
+//              kanalı (kurulumsuz kaldıysa) · iptal belgesi defterinde verilen yükleyen etiketli satırlar (L35)
 // Çıktı `SENARYO_JSON <json>` satırıdır; sırlar (parola, TOTP) yalnız bu boruya yazılır, loga değil.
-import { anahtarOrtamiKur, bayiKurulumlari, hedefDbKapisi, kapat, portalKullaniciAc, temizleKurulumlar, temizlePortal, TEST_KOK_PAROLASI } from "./test-ortam";
+import { anahtarOrtamiKur, bayiKurulumlari, hedefDbKapisi, kapat, portalKullaniciAc, temizleIptalBelgeleri, temizleKurulumlar, temizlePortal, TEST_KOK_PAROLASI } from "./test-ortam";
 
 function flag(name: string): string[] {
   const hit = process.argv.find((a) => a.startsWith(`--${name}=`));
@@ -43,6 +43,7 @@ async function cleanup(): Promise<void> {
   const dbIds = [...new Set([...rows.map((r) => r.id), ...(await bayiKurulumlari([...dealers]))])];
   await temizleKurulumlar(dbIds, flag("kidler"));
   await temizlePortal({ kullanicilar: flag("kullanicilar"), bayiler: [...dealers], kanallar: flag("kanallar") });
+  for (const yukleyen of flag("iptal-yukleyen")) await temizleIptalBelgeleri(yukleyen);
   emit({ kurulum: dbIds.length, bayi: dealers.size });
 }
 

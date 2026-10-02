@@ -4,17 +4,20 @@
 // "görüldükten sonra N dk" bu pencereden kısa kalırsa tekrar kabul edilir — protokol §12/1).
 // Zaman dışı istek (±10 dk ötesi) 401 ISTEK_ZAMAN. Budama yalnız süresi geçmişi siler ve
 // budanabilir her satır, isteği ZATEN zaman denetiminden düşürecek andan sonra budanır.
+// §5 (L2-1) İSTEK YOL BAĞI: imzalı `yol` taşıyan istek yalnız o uca (zarfla gelende taşıyan uç
+//    `/v1/cevrimdisi`) — başka uç 401 `ISTEK_YOL`, kod/nonce tüketilmez; yol taşımayan (eski) istek değişmez.
 // ⭐ KALICI SONDA ✓K2 (her koşumda): (1) aynı nonce BAŞKA kurulumda kabul (ad alanı kurulum başına —
 //    kapı "nonce'u küresel reddet" diye kör olsaydı kırmızı); (2) DB'ye doğrudan ikinci satır P2002.
 // Koşum: npx tsx scripts/test_nonce_tekrar.ts
 // =============================================================================
-import { CLOCK_SKEW_MS, ENDPOINTS, generateNonce } from "../src/lisans-protokol";
+import { CLOCK_SKEW_MS, ENDPOINTS, generateNonce, wrapEnvelope } from "../src/lisans-protokol";
 import { kurulumAnahtariUret } from "../../../Teks-Erp/scripts/lib/lisans-fikstur";
 import {
   anahtarOrtamiKur,
   etkinlestirmeGovdesi,
   gonder,
   hedefDbKapisi,
+  imzaliBaslik,
   imzaliPost,
   kapat,
   kiraIdOf,
@@ -137,6 +140,31 @@ async function main(): Promise<void> {
       p2002 = isUniqueViolation(err);
     }
     kontrol("§4b DB seddi: aynı (kapsam, nonce) ikinci satır → P2002", p2002);
+
+    console.log("\n§5 İSTEK yol bağı (L2-1)");
+    const yoklama = (sonKiraId: string) => yoklamaGovdesi({ sonKiraId, parmakIzi: f.parmakIzi });
+    const kira0 = kiraIdOf(kabul.json);
+    const yanlis = await imzaliPost(sunucu.genel, ENDPOINTS.POLL, { kurulumId: k.kurulumId, amac: "yokla", anahtar, govde: yoklama(kira0), imzaYolu: ENDPOINTS.SUPPORT });
+    kontrol("§5a ⭐ destek ucu için imzalanmış yoklama yokla ucunda → 401 ISTEK_YOL", yanlis.status === 401 && yanlis.kod === "ISTEK_YOL", `${yanlis.status} ${yanlis.kod}`);
+    const dogru = await imzaliPost(sunucu.genel, ENDPOINTS.POLL, { kurulumId: k.kurulumId, amac: "yokla", anahtar, govde: yoklama(kira0), imzaYolu: ENDPOINTS.POLL });
+    kontrol("§5b kendi ucu için imzalanmış yoklama → 200", dogru.status === 200, `${dogru.status} ${dogru.kod ?? ""}`);
+    const zarfla = async (yol: string, sonKiraId: string) => {
+      const metin = JSON.stringify(yoklama(sonKiraId));
+      const baslik = imzaliBaslik({ kurulumId: k.kurulumId, amac: "cevrimdisi", govde: metin, anahtar, yol });
+      return gonder(`${sunucu.genel}${ENDPOINTS.OFFLINE}`, { govde: JSON.stringify({ v: 1, zarf: wrapEnvelope(baslik, metin) }) });
+    };
+    const zarfYanlis = await zarfla(ENDPOINTS.POLL, kiraIdOf(dogru.json));
+    kontrol("§5c ⭐ zarfla gelen istek yokla ucu için imzalanmışsa → 401 ISTEK_YOL (taşıyan uç /v1/cevrimdisi)", zarfYanlis.status === 401 && zarfYanlis.kod === "ISTEK_YOL", `${zarfYanlis.status} ${zarfYanlis.kod}`);
+    const zarfDogru = await zarfla(ENDPOINTS.OFFLINE, kiraIdOf(dogru.json));
+    kontrol("§5d zarf içindeki istek /v1/cevrimdisi için imzalanmışsa → 200", zarfDogru.status === 200, `${zarfDogru.status} ${zarfDogru.kod ?? ""}`);
+    const k4 = await kurulumFiksturu(ctx);
+    temizlenecek.push(k4.kurulumDbId);
+    const yeniAnahtar = kurulumAnahtariUret();
+    const etGovde = etkinlestirmeGovdesi({ kod: k4.kod, kurulumId: k4.kurulumId, anahtar: yeniAnahtar, parmakIzi: f.parmakIzi });
+    const etYanlis = await imzaliPost(sunucu.genel, ENDPOINTS.ACTIVATE, { kurulumId: k4.kurulumId, amac: "etkinlestir", anahtar: yeniAnahtar, govde: etGovde, imzaYolu: ENDPOINTS.POLL });
+    kontrol("§5e ⭐ gövde anahtarlı yol da bağlı: başka uç için imzalanmış etkinleştirme → 401 ISTEK_YOL", etYanlis.status === 401 && etYanlis.kod === "ISTEK_YOL", `${etYanlis.status} ${etYanlis.kod}`);
+    const etDogru = await imzaliPost(sunucu.genel, ENDPOINTS.ACTIVATE, { kurulumId: k4.kurulumId, amac: "etkinlestir", anahtar: yeniAnahtar, govde: etGovde, imzaYolu: ENDPOINTS.ACTIVATE });
+    kontrol("§5f reddedilen istek kodu TÜKETMEDİ: aynı kod kendi ucu için imzalanınca 200", etDogru.status === 200, `${etDogru.status} ${etDogru.kod ?? ""}`);
   } finally {
     await sunucu.durdur();
     await temizleKurulumlar(temizlenecek, ortam.kidler);

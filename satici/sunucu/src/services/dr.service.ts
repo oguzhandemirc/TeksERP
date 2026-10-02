@@ -12,6 +12,7 @@ import { enqueueNotificationTx } from "../notifications/outbox";
 import type { VendorContext } from "./context";
 import { notifyDoorbell } from "./doorbell";
 import type { AuthenticatedRequest } from "./installation-auth";
+import { assertBindableBeforeLease } from "./lease-binding";
 import { renewLease } from "./renewal.service";
 import { requireReason } from "./sanction.service";
 
@@ -46,6 +47,15 @@ export async function drTakeoverTarget(dr: Kurulum, body: { anaKurulumId?: strin
     throw new VendorError(400, "GOVDE_GECERSIZ", "Ana kurulum bu tesisin üretim kurulumları arasında bulunamadı");
   }
   return main;
+}
+
+/**
+ * Uç ön denetimi (nonce'tan ÖNCE): hedef (yan etkisiz) + kira bağı — DR'nin yeni kirası bağlanamayacaksa (genişlik kapısı;
+ * istek elindeki HAK'ı bildirmez) devir YAZILMAZ: ana kurulum ETKİN kalır, acil kök talebi + 403; DR elindeki kirayla sürer.
+ */
+export async function drTakeoverPrecheck(dr: Kurulum, body: { anaKurulumId?: string | undefined }, nowMs: number): Promise<void> {
+  await drTakeoverTarget(dr, body);
+  await assertBindableBeforeLease({ installation: dr, nowMs });
 }
 
 export async function processDrTakeover(

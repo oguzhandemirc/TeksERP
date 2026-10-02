@@ -58,6 +58,8 @@ const REASON_LABEL: Record<string, string> = {
   ILK_ACILIS_BILINMIYOR: "İlk açılış tarihi bilinmiyor",
   KIRA_SURESI_DOLDU: "Kira süresi doldu",
   VADE_DOLDU: "Vade doldu",
+  ODENMIS_TARIH_DOLDU: "Ödenmiş lisans süresi doldu",
+  ODEME_YAKLASIYOR: "Ödenmiş lisans süresi bitiyor",
   KIRASIZ_EK_SURE: "Kirasız ek süre",
   ETKINLESTIRME_EK_SURESI: "Etkinleştirme ek süresi",
   EK_SURE_BITTI: "Ek süre bitti",
@@ -72,6 +74,10 @@ const REASON_LABEL: Record<string, string> = {
   KIRA_GERI_ALINDI: "Lisans dosyaları eski bir kopyayla değiştirilmiş (geri alma)",
   DEPO_OKUNAMADI: "Lisans dosyası okunamadı",
   SAAT_KAYIK: "Sistem saati lisans sunucusundan kayık",
+  LISANS_IZI_KAYIP: "Lisans izlerinden biri kayıp (kira, durum kaydı ya da veritabanı izi)",
+  LISANS_IZI_CELISKI: "Lisans izleri birbiriyle çelişiyor (farklı süre)",
+  BELIRSIZLIK_SURUYOR: "Lisans durumu uzun süredir ölçülemiyor",
+  IPTAL_BELGESI_KAYIP: "İptal belgesi kayıp",
 };
 
 export const reasonLabel = (kod: string): string => REASON_LABEL[kod] ?? kod;
@@ -84,6 +90,7 @@ const FAILURE_LABEL: Record<string, string> = {
   TASIMA_REDDEDILDI: "Taşıma reddedildi",
   TASIMA_KODU_BEKLENIYOR: "Taşıma onaylandı — taşıma kodu bekleniyor",
   TASIMA_HATASI: "Taşıma talebi sorgulanamadı",
+  ISTEK_YOL: "İstek başka bir lisans sunucusu ucu için imzalanmış (adres ya da vekil yönlendirmesi)",
   EGRESS_NETWORK: "Ağ hatası (internet/proxy)",
   EGRESS_TIMEOUT: "Zaman aşımı",
   EGRESS_PROXY_UNSUPPORTED: "Bu Node sürümü proxy desteklemiyor",

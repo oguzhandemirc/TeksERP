@@ -5,6 +5,9 @@
 //   (b) uçun ebeveyni, aynı makine, tekrar penceresi içinde → REPEAT (AYNI kira döner, yeni satır yok)
 //   (a) geride, aynı makine (snapshot geri alma, eski LICENSE_DIR) → CATCH_UP (uyarı yok)
 //   (c) geride, FARKLI makine aynı ucu ileri taşıyor → FORK (kopya şüphesi)
+//   uç bir UZATMA DOSYASI kirasıysa (karar DOSYA) ve aynı makine ucun ebeveyniyle gelirse → dosya henüz yüklenmemiştir:
+//   olağan yenileme (NORMAL; 15 dk içinde REPEAT) — "yakala" sayılmaz, kopya eşiğine girmez.
+// Kapanış kirası (KAPANIS) hiçbir zaman uç olmaz: onu sunan taraf olağan karardan geçer (çatal → yine kapanış).
 import {
   FINGERPRINT_FACTORS,
   FINGERPRINT_THRESHOLD,
@@ -21,6 +24,8 @@ export interface ChainTip {
   readonly createdAtMs: number;
   /** Uçtaki kirayı isteyenin ölçtüğü parmak izi. */
   readonly clientFingerprint: Fingerprint;
+  /** Uç portalın çevrimdışı uzatma dosyasıyla basıldı (istek yok; fabrika dosyayı henüz yüklememiş olabilir). */
+  readonly fromFile?: boolean;
 }
 
 /** Aynı makine mi: iki tarafta ölçülebilen hiçbir etken farklı değil ve en az iki etken ölçülebilir. */
@@ -39,9 +44,10 @@ export function decideChain(g: {
   if (!g.tip) return "ROOT";
   if (g.presentedLeaseId === g.tip.id) return "NORMAL";
   if (!sameMachine(g.measured, g.tip.clientFingerprint)) return "FORK";
-  const isRetryOfTip =
-    g.presentedLeaseId !== null && g.tip.previousId === g.presentedLeaseId && g.nowMs - g.tip.createdAtMs <= g.repeatWindowMs;
-  return isRetryOfTip ? "REPEAT" : "CATCH_UP";
+  const presentsParent = g.presentedLeaseId !== null && g.tip.previousId === g.presentedLeaseId;
+  const isRetryOfTip = presentsParent && g.nowMs - g.tip.createdAtMs <= g.repeatWindowMs;
+  if (isRetryOfTip) return "REPEAT";
+  return presentsParent && g.tip.fromFile ? "NORMAL" : "CATCH_UP";
 }
 
 export type ForkSide = "REQUESTER_IS_OTHER" | "REQUESTER_IS_OWNER" | "AMBIGUOUS";

@@ -7,7 +7,8 @@ import os from "node:os";
 import path from "node:path";
 import { createPublicKey, randomUUID } from "node:crypto";
 import { DAY_MS, LeaseSchema, TYP, msToIso, signDocument, type LeaseDoc, type SanctionLevel } from "../../src/lib/license/protocol";
-import { loadLicenseStoreSync, saveEntitlement, saveLease, saveStateRecord } from "../../src/lib/license/store";
+import { LICENSE_FILES, loadLicenseStoreSync, saveEntitlement, saveLease, saveLicenseIdentity, saveStateRecord } from "../../src/lib/license/store";
+import { setLicenseTraceRow } from "../../src/lib/license/trace-row";
 import {
   __resetLicenseRuntimeForTests,
   configureLicenseRuntimeForTests,
@@ -35,9 +36,21 @@ export interface KipSecenegi {
   readonly kiraBitti?: boolean;
   /** Kiranın ek alanları (ör. patron bulutu: `esitlemeAraligiDk`, `patronBulutBitis`, `devredildi`). */
   readonly kiraEk?: Partial<Pick<LeaseDoc, "esitlemeAraligiDk" | "patronBulutBitis" | "devredildi">>;
+  /**
+   * true → kurulum anahtarı dosyası okunamaz (izin 000) ve DB izi bellekte (açık anahtar + durum kaydı kopyası): imza
+   * durur, kararlar sürer (G12 §3.1-1). Yalnız Windows dışı ve root olmayan süreçte anlamlıdır.
+   */
+  readonly anahtarOkunamaz?: boolean;
 }
 
 let kokDizin: string | null = null;
+let kilitliAnahtar: string | null = null;
+
+/** Önceki kurulumun kilitlediği anahtar dosyasının iznini geri verir (fikstür aynı dizini yeniden kullanır). */
+function kilidiAc(): void {
+  if (kilitliAnahtar) fs.chmodSync(kilitliAnahtar, 0o600);
+  kilitliAnahtar = null;
+}
 
 /** Geçici lisans deposu kökü (süreç başına bir kez); `temizleLisansKipDizini` siler. */
 function depoDizini(): string {
@@ -47,6 +60,9 @@ function depoDizini(): string {
 
 /** Motoru istenen kipe kurar ve anlık görüntüyü döndürür. */
 export function lisansKipKur(s: KipSecenegi): { f: Fikstur; snap: LicenseSnapshot } {
+  kilidiAc();
+  // Önceki kurulumun kimlik dosyası (yalnız anahtarsız kipte yazılır) yeni fikstürün kimliğini ezmesin.
+  fs.rmSync(path.join(depoDizini(), LICENSE_FILES.IDENTITY), { force: true });
   __resetLicenseRuntimeForTests();
   const store = loadLicenseStoreSync({ dir: depoDizini() });
   const key = store.key;
@@ -103,6 +119,13 @@ export function lisansKipKur(s: KipSecenegi): { f: Fikstur; snap: LicenseSnapsho
     key.x,
   );
   saveStateRecord(kayit);
+  if (s.anahtarOkunamaz) {
+    // Anahtarsız süreç açık anahtarı DB izinden, izi lisans kimliğiyle (kimlik dosyası) eşler.
+    saveLicenseIdentity(f.kurulumId);
+    setLicenseTraceRow({ v: 1, kurulumId: f.kurulumId, anahtar: key.x, durum: kayit });
+    kilitliAnahtar = path.join(depoDizini(), LICENSE_FILES.KEY);
+    fs.chmodSync(kilitliAnahtar, 0o000);
+  }
   loadLicenseStoreSync({ dir: depoDizini() });
   invalidateLicenseSnapshot();
   return { f, snap: getLicenseSnapshot() };
@@ -115,6 +138,7 @@ export function lisansHazirDegil(): LicenseSnapshot {
 }
 
 export function temizleLisansKipDizini(): void {
+  kilidiAc();
   if (kokDizin) fs.rmSync(kokDizin, { recursive: true, force: true });
   kokDizin = null;
   __resetLicenseRuntimeForTests();
