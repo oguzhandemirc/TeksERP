@@ -14412,7 +14412,7 @@ Negatif sondalar (tetik md5(prosrc) ve dosya md5 ile geri alındı):
 
 ## 2026-10-01 — Kısa kimlikler (hızlı PIN + QR kart) özetli saklanır: anahtar halkası LICENSE_DIR'de, yedeğe mühürlü emanet, tembel + betikli dönüşüm, kalıcı giriş kilidi, yalnız onaylı cihaz bayrağı (G21-K) [ÇEKİRDEK] + [PROFİL]
 
-> ⚠️ **KISMEN (2026-10-02)** — "Karar — dönüşüm"deki "dönüşümden sonra eski sürüme `-GeriAl` yapılırsa ya premigrate dökümü geri yüklenir ya PIN/kartlar yeniden verilir" seçeneği daraldı. pm2 düzeninde bu sürümden eskisine `kur.ps1 -GeriAl` YALNIZ `premigrate_` geri yüklemesiyle birlikte yapılır. adnansahin'e bu sürüm yalnız pm2 → hizmet geçişinin paketi olarak çıkar. → bkz. 2026-10-02 "Dağıtım v2 D8e runbook" notu.
+> ⚠️ **KISMEN (2026-10-02, yönetici kararıyla düzeltildi)** — "Karar — dönüşüm"deki iki seçenek ("ya premigrate dökümü geri yüklenir ya PIN/kartlar yeniden verilir") KALIR; seçim ölçüme bağlandı. pm2 düzeninde bu sürümden eskisine geri almada varsayılan: DB'ye dokunmadan `kur.ps1 -GeriAl` + PIN/kartı yeniden verme. `premigrate_` geri yüklemesi yalnız göçten sonra üretim verisi yazılmadığı ölçüldüyse yapılır. Yeniden verme eski backend'de kişi başıdır; bu notun toplu sıfırlaması özet yazdığı için o yolda kullanılamaz. adnansahin'e bu sürüm yalnız pm2 → hizmet geçişinin paketi olarak çıkar. → bkz. 2026-10-02 "Dağıtım v2 D8e runbook" notu, Ek.
 
 **Bağlam (soru ve ölçüm).** 2026-10-01 güvenlik denetimi (G21; FAB-1 · FAB-2 · FAB-10 · FAB-11) hızlı PIN ile kart kodunun `users` tablosunda DÜZ METİN durduğunu, PIN'in tek başına kimlik sayıldığını, personel listesinin eşleştirme kapalıyken kimliksiz döndüğünü ve giriş kilidinin bellekte yaşadığını doğruladı. Kullanıcı kararı (2026-10-01, bulut kurulum kararları madde 7): PIN ve kart HER kurulumda geri çevrilemez özet olarak saklanır; mevcut PIN'ler güncellemede kullanıcıdan yeni PIN istemeden dönüştürülür; deneme sınırı/kilit; kart kodu uzun ve tahmin edilemez; "yalnız onaylı cihazdan PIN/kart" bulut (BARINDIRILAN) sınıfında zorunlu, fabrikada bugünkü davranış varsayılan. Yönetici ekleri: (a) anahtar yeni makineye geri yüklemede kaybolmasın — şifreli yedeğe girsin, uyuşmazlıkta açık mesaj + toplu PIN sıfırlama; (b) dönüşüm otomatik güncelleme politikasında elle koşulmayabilir — başarılı girişte tembel dönüşüm de olsun.
 
@@ -14570,13 +14570,28 @@ Negatif sondalar (tetik md5(prosrc) ve dosya md5 ile geri alındı):
   - F4-A (geçişin setup-uyumlu kayıt yazması) ileriye kaldı.
 - [ÇEKİRDEK] **`current` elle çevrilmez.** Geri dönüş güncelleyicinin telafisiyle (`GERI_DONDU`) ya da kurulumu kuran aracın geri alma yoluyla yapılır. Neden: `current`, işlem günlüğü · `durum.json` · `kurulum-gecmisi.jsonl` · DB şemasıyla aynı işlemde değişir.
 - **G21-K, geri alma (karma not):**
-  - [ÇEKİRDEK] pm2 düzeninde `20261001120000_kisa_kimlik_ozet`i taşıyan sürümden eskisine `kur.ps1 -GeriAl` YALNIZ `premigrate_` geri yüklemesiyle birlikte yapılır. Gerekçe: eski backend özetli PIN'i okuyamaz, `-GeriAl` ise DB'ye dokunmaz.
+  - ⚠️ GEÇERSİZ → 2026-10-02 (Ek, aşağıda): [ÇEKİRDEK] pm2 düzeninde `20261001120000_kisa_kimlik_ozet`i taşıyan sürümden eskisine `kur.ps1 -GeriAl` YALNIZ `premigrate_` geri yüklemesiyle birlikte yapılır. Gerekçe: eski backend özetli PIN'i okuyamaz, `-GeriAl` ise DB'ye dokunmaz.
   - [PROFİL] Bu sürüm adnansahin'e YALNIZ v2 geçişinin paketi olarak çıkar, pm2 düzeninde kalacak bağımsız güncelleme olarak çıkmaz.
   - [ÇEKİRDEK] Hizmet düzeninde aynı risk yapısal olarak kapalıdır. `GERI_DONDU` işlem yedeğini geri yükler. Doğrulama başlatması istemcilere kapalı olduğundan tembel dönüşüm o aşamada başlamaz.
   - Dağıtım v2'nin ilk paketi bu göçü taşır (ölçüldü: göç dizini 371. sırada).
 - [ÇEKİRDEK] **Paket aracını hizmet düzeninde elle koşmak** (`kisa-kimlik`, `superadmin-olustur`): `DOTENV_CONFIG_PATH` ve `LICENSE_DIR` açıkça verilir.
   - `resolveLicenseDir` (`src/lib/license/store.ts`), `.env`de satır yoksa yolu çalışma dizininin `..\lisans`ından türetir. Anahtar halkası ENOENT'te dizinle birlikte doğar (`src/lib/short-credential/keyring.ts`).
   - `current`ten koşan araç doğru dizini bulur. Sürüm dizininden koşan araç `surumler\lisans`ta ikinci bir halka doğurur.
+
+**Ek — G21-K geri alma: iki yol, seçim ölçümle (yönetici kararı, 2026-10-02) [ÇEKİRDEK].**
+- **Karar:** Fabrikada veri kaybı, PIN'i yeniden dağıtmaktan pahalıdır. Bu yüzden pm2 düzeninde iki yol da kalır.
+  - Göçten sonra üretim verisi yazılmadıysa (hemen fark edilen arıza; son yazımın `premigrate_` damgasından önce olduğu ÖLÇÜLDÜYSE): `kur.ps1 -GeriAl` + `premigrate_` geri yüklemesi.
+  - Üretim verisi yazıldıysa (vardiya sürdü) ya da ölçülemediyse: DB'ye DOKUNULMAZ. Yalnız `kur.ps1 -GeriAl`, sonra PIN/kartlar yeniden verilir. VARSAYILAN budur.
+- **Ölçüm — "son yazım dökümden önce mi":** yedi iş tablosunda (`rolls` · `roll_operations` · `roll_movements` · `work_orders` · `orders` · `sacks` · `shipments`) en son zaman damgası ve kesimden sonraki satır sayısı, tek salt okuma SQL'i. Kesim, dosya adındaki damgadır (sunucunun yerel saati). Sorgu `tekserp_dv2d8_test`te koşuldu; sözdizimi ve kolonlar doğru. Panelin geri yükleme etki önizlemesi (backend-v2.10.0'dan beri) karşı ölçümdür.
+- **Ölçüm — aracın gerçeği (kod):** kararın öngördüğü "G21-K'nın toplu sıfırlama aracı" bu yolda KULLANILAMAZ.
+  - Araç var: panel Kullanıcılar → Kısa Kimlikler → "Toplu hızlı PIN sıfırlama". Önizlemesi iki kapsamlıdır ("Doğrulanamayanlar" / "Tüm PIN'liler"), kişi başı onay kutusu taşır, yeni PIN listesini bir kez gösterir ve yazdırır (`/api/admin/short-credentials/bulk-reset[/preview]`).
+  - Ama yalnız G21-K'lı backend'dedir ve yeni PIN'i özet olarak yazar (`assignQuickPin`: `quickPinDigest`, `quickPin: null`). Geri alınmış eski backend özeti okuyamaz.
+  - `kisa-kimlik` CLI'ında sıfırlama komutu yok (`durum` · `donustur` · `anahtar-geri-yukle`). `kur.ps1 -GeriAl` yeni sürümü `app.basarisiz-*`te saklar, ama oradan koşulacak bir sıfırlama yoktur.
+  - Eski backend'de (G21 öncesi, `a6057b7c3^`) yeniden verme kişi başıdır: `POST /api/admin/users/:id/quick-pin` ve `/card-token`. İstemci imzası iki sürümde aynıdır.
+  - Kişi seçimli önizleme bu yüzden salt okuma SQL'iyle yapılır: özeti olup düz değeri boş aktif kullanıcılar.
+- **Yeniden yükseltmede:** eski özet satırda kalır. Kişi yeni PIN'iyle ilk girişte özet ezilir (tembel dönüşüm). O zamana dek eski PIN de geçer, çünkü giriş özet VEYA düz değerle arar.
+- **Belgeler:** `docs/ops/GECIS-PM2-HIZMET.md` §1 madde 5 (b) karar tablosu + iki SQL. `docs/ops/DEPLOY-RUNBOOK.md` §9 kısa tablo. `docs/kurallar/deploy-kurulum.md`te G21-K kural satırı değişti.
+- **Bekçi:** yok, dilim yalnız belgedir. Kapı borcu aynı kalır: yolu hiçbir kapı ölçmüyor.
 
 **Belge çapaları.**
 - `docs/ops/GECIS-PM2-HIZMET.md`: Durum, §0, §1 madde 4 · 5 · 10, §2 tablo, §3, §4, §7, §8, §9, §10.
@@ -14588,6 +14603,6 @@ Negatif sondalar (tetik md5(prosrc) ve dosya md5 ile geri alındı):
 **Üç kapı.** Migration yok, izin yok, APK yok.
 
 **Açık.**
-- (a) Premigrate geri yüklemesi `[3/9]`dan sonra yazılan veriyi kaybettirir. Pencere kapandıktan sonra eski sürüme dönüş gerekirse kural veri kaybı dışında bir yol bırakmıyor: G21-K notundaki "PIN/kartları yeniden ver" seçeneği kapandı. Bu durum için karar yöneticide.
+- (a) KAPANDI → Ek (yönetici kararı 2026-10-02). Premigrate geri yüklemesi `[3/9]`dan sonra yazılan veriyi kaybettirir. Pencere kapandıktan sonra eski sürüme dönüş gerekirse kural veri kaybı dışında bir yol bırakmıyordu: G21-K notundaki "PIN/kartları yeniden ver" seçeneği kapanmıştı.
 - (b) F4-A.
 - (c) Setup onarımında kayıttaki Tailscale aralığının sihirbaza dolmaması (`100.64.0.0/10` → "LocalSubnet") ve OnKosul'un hizmet kökü çakışmasını ölçmemesi D8e-3 bulgularıdır, bu notun kapsamı dışında.

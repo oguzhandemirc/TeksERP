@@ -30,10 +30,45 @@ Kesinti: yalnız kalem 5–10 (pm2 durdur → normal başlatma). **Ölçüm 24�
 5. **Sunucu bu pakete pm2 düzeninde GEÇMİŞ olmalı** — ayrı, önceki bir pencerede `kur.ps1 -Paket <aynı zip>` (göçler orada, `kur.ps1`'in kendi geri alma yoluyla). Geçiş `app\`teki derlemeden farklı paketi ve bekleyen göçü REDDEDER.
    ⚠️ **PIN/kart özeti (G21-K) geri çevrilemez.** Dağıtım v2'nin ilk paketi `20261001120000_kisa_kimlik_ozet` göçünü taşır. Bu adımdan sonra her başarılı PIN/kart girişi düz değeri özete çevirir ve düz kolonu boşaltır. Eski backend özetli PIN'i okuyamaz.
    - **(a)** Bu göçü taşıyan backend adnansahin'e YALNIZ bu geçişin paketi olarak çıkar (bu madde + §3). pm2 düzeninde kalacak bağımsız bir güncelleme olarak çıkmaz.
-   - **(b)** pm2 düzenindeyken (geçişten önce ya da `gecis.ps1 -GeriAl`den sonra) bu sürümden eskisine `kur.ps1 -GeriAl` YALNIZ o pencerenin `premigrate_` dökümünün geri yüklenmesiyle BİRLİKTE yapılır.
+   - **(b) Geri alma: iki yol, seçim ÖLÇÜMLE** (yönetici kararı 2026-10-02: fabrikada veri kaybı, PIN'i yeniden dağıtmaktan pahalıdır). pm2 düzenindeyken (geçişten önce ya da `gecis.ps1 -GeriAl`den sonra) bu sürümden eskisine:
+
+     | Ölçüm (aşağıdaki sorgu) | Yol |
+     |---|---|
+     | Her satırda `kesimden_sonra = 0`: göçten sonra üretim verisi YAZILMADI (hemen fark edilen arıza) | **1.** `kur.ps1 -GeriAl` + aynı pencerenin `premigrate_` dökümünü geri yükle (`DEPLOY-RUNBOOK.md` §9: önce kod, sonra döküm). Düz PIN/kartlar dökümle geri gelir. |
+     | En az bir satır > 0 (vardiya sürdü) ya da ölçülemedi | **2. VARSAYILAN.** DB'ye DOKUNMA. Yalnız `kur.ps1 -GeriAl`; sonra PIN/kartı okunamayan kişilere eski backend'de yeni PIN/kart ver (aşağıda). |
+
+     **Ölçüm** (salt okuma, `psql`, bağlantı `.env`deki `DATABASE_URL`). Kesim = dosya adındaki `premigrate_<yyyyMMdd_HHmmss>` damgası. Damga sunucunun yerel saatidir, dilim farkı yazılır (ör. `+03`):
+     ```sql
+     SELECT tablo, son_yazim, kesimden_sonra FROM (
+       SELECT 'rolls' AS tablo, max("updatedAt") AS son_yazim, count(*) FILTER (WHERE "updatedAt" >= TIMESTAMPTZ '<YYYY-MM-DD HH:MM:SS+03>') AS kesimden_sonra FROM rolls
+       UNION ALL SELECT 'roll_operations', max("createdAt"), count(*) FILTER (WHERE "createdAt" >= TIMESTAMPTZ '<…>') FROM roll_operations
+       UNION ALL SELECT 'roll_movements', max("enteredAt"), count(*) FILTER (WHERE "enteredAt" >= TIMESTAMPTZ '<…>') FROM roll_movements
+       UNION ALL SELECT 'work_orders', max("updatedAt"), count(*) FILTER (WHERE "updatedAt" >= TIMESTAMPTZ '<…>') FROM work_orders
+       UNION ALL SELECT 'orders', max("updatedAt"), count(*) FILTER (WHERE "updatedAt" >= TIMESTAMPTZ '<…>') FROM orders
+       UNION ALL SELECT 'sacks', max("updatedAt"), count(*) FILTER (WHERE "updatedAt" >= TIMESTAMPTZ '<…>') FROM sacks
+       UNION ALL SELECT 'shipments', max("updatedAt"), count(*) FILTER (WHERE "updatedAt" >= TIMESTAMPTZ '<…>') FROM shipments
+     ) x ORDER BY son_yazim DESC NULLS LAST;
+     ```
+     Panelde karşı ölçüm: Sistem → Yedekler → `premigrate_` satırı → "Geri yükle (üzerine yaz)…" etki önizlemesi. Pencere onaylanmadan kapatılır. Önizleme INSERT'leri ve audit'i sayar, sayıları "en az" dilindedir.
+
+     **Yol 2'nin aracı (ölçüldü, kod):**
+     - G21-K'nın toplu sıfırlaması bu yolda KULLANILAMAZ. Yeri: Kullanıcılar → Kısa Kimlikler → "Toplu hızlı PIN sıfırlama" (önizleme "Doğrulanamayanlar" / "Tüm PIN'liler", kişi başı onay kutusu, yeni PIN listesi bir kez gösterilir + Yazdır; uç `/api/admin/short-credentials/bulk-reset`). Yalnız G21-K'lı backend'de vardır ve yeni PIN'i ÖZET olarak yazar; geri alınmış eski backend özeti okuyamaz.
+     - `kisa-kimlik` aracında sıfırlama komutu yok (`durum` · `donustur` · `anahtar-geri-yukle`). `durum` yalnız sayı basar, kişi adı basmaz.
+     - Eski backend'de yeniden verme kişi başıdır. Önce kişi listesi (salt okuma):
+       ```sql
+       SELECT username, "fullName",
+              ("quickPinDigest" IS NOT NULL AND "quickPin" IS NULL)   AS pin_yeniden,
+              ("cardTokenDigest" IS NOT NULL AND "cardToken" IS NULL) AS kart_yeniden
+       FROM users
+       WHERE "isActive" AND "deletedAt" IS NULL AND NOT "isSystemAccount"
+         AND (("quickPinDigest" IS NOT NULL AND "quickPin" IS NULL) OR ("cardTokenDigest" IS NOT NULL AND "cardToken" IS NULL))
+       ORDER BY "fullName";
+       ```
+       Sonra panelde Kullanıcılar → kişi → Hızlı PIN (üret) ve QR personel kartı (yenile). Uçlar (`/api/admin/users/:id/quick-pin` · `/card-token`) iki sürümde aynı sözleşmededir (panelin istemci imzası G21 öncesiyle aynı).
+     - Yeniden yükseltmede eski özet satırda kalır. Kişi yeni PIN'iyle ilk girişte özet ezilir; o zamana dek eski PIN de geçer, çünkü giriş özet VEYA düz değerle arar.
    - **`kur.ps1 -GeriAl` bugün ne yapar (ölçüldü, `deploy/kur.ps1`):** yalnız kodu geri koyar (en yeni geçerli `app.eski-*` → `app\`, pm2 yeniden kayıt) ve DB'ye DOKUNMAZ. Ekrana "DB migration'lari GERI ALINMADI. Eski kod yeni semayla kosuyor" + "Uyumsuzluk varsa yedekten restore gerekir: `<backups>`" yazar.
    - En yeni `premigrate_*` dökümü şifreliyse (`.tkenc`) çözmeyi önerir: parolayı araç sorar; `-Zorla` ya da yönlendirilmiş girişte yalnız komutu basar. `pg_restore … --clean --if-exists` komutunu da yalnız BASAR, koşmaz. Düz dökümde ek bir şey basmaz; döküm yolu kurulum sonundaki "veri:" satırındadır. Geri yükleme `DEPLOY-RUNBOOK.md` §9 sırasıyla yapılır: önce kod, sonra döküm.
-   - Döküm `kur.ps1 [3/9]`da, göçten önce alınır: düz PIN/kart değerlerini taşır, ama sonrasında yazılan her veri geri yüklemede gider. Bu yüzden karar pencere kapanmadan verilir.
+   - Döküm `kur.ps1 [3/9]`da, göçten önce alınır: düz PIN/kart değerlerini taşır, ama sonrasında yazılan her veri geri yüklemede gider. Yol 1 bu yüzden yalnız ölçümle seçilir.
    - Geçişin kendi `-GeriAl`ı (§5) aynı derlemeye döner, DB'ye dokunmaz; bu kuraldan etkilenmez.
 6. **Portal:** bu kurulumun güncelleme politikası geçiş boyunca **ONAYLI ya da DONDUR** (güncelleyici ilk turunda kendiliğinden sürüm kurmasın; KURU koşum OTOMATİK'i uyarır). Satıcı ve CF Worker sözleşme 3'te.
 7. **Yedek:** son gece yedeği (03:00) `backups\backup.log`ta OK ve makine dışı kopya doğrulanmış. Geçiş ayrıca kendi doğrulanmış yedeğini alır.
