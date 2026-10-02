@@ -86,7 +86,7 @@
 ## E) Kullanıcı kararları ve konuşulacaklar (2026-10-03)
 
 - **Kurulum dosyası imzası (Authenticode):** bugün bütçe yok. Ücretsiz önlem: bayi/ekip kılavuzuna "Ek bilgi → Yine de çalıştır" adımı ekran görüntüsüyle; kurulum USB ile getirilirse internet işareti olmadığından SmartScreen uyarısı çıkmaz. Bütçe olunca kod imzalama sertifikasına geçilir.
-- **Android geliştirici doğrulaması (Play dışı kurulan uygulamalar, 2026–2027):** ayrıca, ayrıntılı konuşulacak (D-U-N-S başvurusu ~30 gün sürer).
+- **Fabrika tablet uygulaması Google Play'de (kullanıcı kararı 2026-10-03):** tek "TeksERP" uygulaması, mevcut KURUMSAL Play hesabıyla (yayıncı "Etkili Yazılım" — D-U-N-S zaten var, yeni başvuru GEREKMEZ); herkes kendi sunucusuna IP/ağ araması/QR ile bağlanır; Play test kanalları güncelleme gruplarına eşlenir (iç test → seçili cihazlar → herkes), küçük güncellemeler OTA ile sürer; Google hesabı açmak istemeyen fabrikalar için APK yolu yedek kalır; inceleme için internetten erişilebilen demo sunucu + deneme hesabı gerekir; 2026–2027 Play dışı kurulum doğrulaması aynı hesapla karşılanır. Patron uygulamasının iOS sürümü kullanıcının BİREYSEL Apple hesabıyla yayınlanır (D-U-N-S gerekmez).
 - **Bayi akışı:** ayrıca, ayrıntılı konuşulacak (portal yetkileri, bayi kurulum kılavuzu).
 - **Destek:** şimdilik panelden gelen destek talebine ilk gören kullanıcı cevap verir.
 - **Modül paketleri ve fiyat:** sonra bakılacak.
