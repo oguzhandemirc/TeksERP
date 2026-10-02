@@ -28,6 +28,9 @@ export type RotaKatmani = {
   params?: Record<string, string>;
 };
 
+/** Kimlik guard'ı sayılan middleware adları — ikincisi parola değişimi bekleyen hesabı da geçirir. */
+export const KIMLIK_GUARD_ADLARI: ReadonlySet<string> = new Set(["verifyToken", "verifyTokenAllowPasswordChange"]);
+
 export interface RotaBilgisi {
   /** `METOD[,METOD] /api/<mount>/<route>` — mount öneki dahil TAM YOL. */
   key: string;
@@ -101,7 +104,7 @@ export function rotaEnvanteri(app: unknown): RotaEnvanteri {
           key: `${methods.join(",")} ${tamYol}`,
           methods,
           path: tamYol,
-          hasAuth: levelAuth || l.route.stack.some((s) => s.name === "verifyToken"),
+          hasAuth: levelAuth || l.route.stack.some((s) => KIMLIK_GUARD_ADLARI.has(s.name)),
           chainLength: levelCount + l.route.stack.length,
         });
       } else if (l.handle?.stack) {
@@ -128,7 +131,7 @@ export function rotaEnvanteri(app: unknown): RotaEnvanteri {
         }
         if (!cozuldu && l.handle.stack.some((x) => x.route)) cozulemeyen++;
         walk(l.handle.stack, yolBirlestir(onek, alt), levelAuth, levelCount);
-      } else if (l.name === "verifyToken") {
+      } else if (l.name !== undefined && KIMLIK_GUARD_ADLARI.has(l.name)) {
         // `router.use(verifyToken)` — bundan SONRAKİ her route korumalı.
         levelAuth = true;
         levelCount += 1;

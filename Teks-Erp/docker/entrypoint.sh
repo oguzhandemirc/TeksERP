@@ -90,7 +90,8 @@ else
   echo ""
   echo "[2/3] Boş şema + SEED_ON_EMPTY=1 — ilk kurulum seed'i çalıştırılıyor..."
   if node dist/tools/seed.cjs; then
-    echo "      ✓ Seed tamamlandı (yalnız admin kullanıcısı — ilk girişte parolayı değiştirin)"
+    echo "      ✓ Seed tamamlandı (yalnız admin — parola yukarıda bir kez basıldı ya da ILK_YONETICI_PAROLASI;"
+    echo "        ilk girişte yeni parola zorunlu)"
   else
     echo "      ! Seed başarısız oldu."
     echo "      ! Tekrar denemek için konteyneri yeniden başlatın (şema hâlâ boşsa seed yeniden koşar)."

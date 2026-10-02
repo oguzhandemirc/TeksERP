@@ -17,7 +17,9 @@ export default defineConfig({
   schema: "prisma/schema.prisma",
   migrations: {
     path: "prisma/migrations",
-    seed: "npx ts-node --project prisma/tsconfig.json prisma/seed.ts",
+    // `--gelistirme`: bilinen yerel parola (admin/123123). Docker'ın seed.cjs'i bu bayrağı
+    // ALMAZ → sabit parola yerine ILK_YONETICI_PAROLASI / rastgele + zorunlu ilk değişim.
+    seed: "npx ts-node --project prisma/tsconfig.json prisma/seed.ts --gelistirme",
   },
   datasource: {
     url: process.env["DATABASE_URL"],

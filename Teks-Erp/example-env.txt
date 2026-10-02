@@ -1,3 +1,4 @@
 PORT=4000
 DATABASE_URL="postgresql://****:****@****:****/****?schema=public"
-JWT_SECRET="supersecret_tekserp_jwt_key_change_me_in_prod"
+# JWT_SECRET kurulumda ÜRETİLİR (openssl rand -hex 32); örnek değer yok — boşken backend açılmaz.
+JWT_SECRET=

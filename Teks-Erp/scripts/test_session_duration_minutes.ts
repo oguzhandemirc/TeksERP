@@ -165,7 +165,7 @@ async function main() {
 
     // --- 5. Zaman aşımı KAPALI → Part A "mutlak oturum tavanı" devreye girer ---
     // Zaman aşımı kapalıyken token artık SÜRESİZ DEĞİL: auth.absoluteSessionCapDays
-    // (default 30 gün) exp/expiresAt tavanını koyar. cap=0 → gerçekten süresiz.
+    // (default 30 gün) exp/expiresAt tavanını koyar. cap=0 → en uzun tavan (365 gün).
     check(
       "5-pre default cap = 30 gün",
       DEFAULT_ABSOLUTE_SESSION_CAP_DAYS === 30 && (await readAbsoluteSessionCapDays()) === 30,
@@ -191,18 +191,23 @@ async function main() {
       sessCap ? sessCap.expiresAt.toISOString() : "session yok",
     );
 
-    // 5c/5d: cap=0 → gerçekten süresiz (exp yok, expiresAt uzak gelecek) — eski davranış.
+    // 5c/5d: cap=0 → en uzun tavan (G20 FAB-9: exp'siz token üretilmez).
     await systemSettingService.setFeatureFlags({ absoluteSessionCapDays: 0 }, createdSessionUserId);
     const decodedOff = await loginDecode();
-    check("5c zaman aşımı kapalı + cap=0 → JWT exp claim YOK", decodedOff.exp === undefined, `exp=${decodedOff.exp}`);
+    const offSpan = typeof decodedOff.exp === "number" ? decodedOff.exp - decodedOff.iat : NaN;
+    check(
+      "5c zaman aşımı kapalı + cap=0 → JWT exp VAR (≈365 gün)",
+      Math.abs(offSpan - 365 * 24 * 60 * 60) < 120,
+      `exp=${decodedOff.exp}`,
+    );
     const sessOff = await prisma.session.findFirst({
       where: { userId: createdSessionUserId },
       orderBy: { createdAt: "desc" },
       select: { expiresAt: true },
     });
     check(
-      "5d cap=0 → session expiresAt uzak gelecek (>1 yıl)",
-      !!sessOff && sessOff.expiresAt.getTime() - Date.now() > 365 * 24 * 60 * 60 * 1000,
+      "5d cap=0 → session expiresAt ≈ 365 gün (JWT exp ile hizalı)",
+      !!sessOff && Math.abs(sessOff.expiresAt.getTime() - Date.now() - 365 * 24 * 60 * 60 * 1000) < 5 * 60 * 1000,
       sessOff ? sessOff.expiresAt.toISOString() : "session yok",
     );
     // Cap'i default'a döndür (sonraki bölüm + restore hijyeni).

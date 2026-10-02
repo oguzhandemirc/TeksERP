@@ -590,6 +590,8 @@ function main(): void {
     "assertGelistirmeVeritabani(",
     "Hedef doğrulandı",
     "Hedef veritabanı",
+    // Veritabanına değil dosyaya yazan `--apply` betiği (jwt-sir: `.env`) hedef DOSYAYI basar.
+    "Hedef dosya:",
   ];
   const applyBetikleri = dosyalar.filter((f) => {
     const kod = kodSatirlari(readFileSync(join(dizin, f), "utf8"));

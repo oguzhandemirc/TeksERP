@@ -11,6 +11,7 @@ import { Prisma } from "@prisma/client";
 import { randomBytes } from "crypto";
 import bcrypt from "bcryptjs";
 import { AppError } from "../utils/app-error";
+import { passwordPolicyViolation } from "../constants/password-policy";
 import { AuditService } from "./audit.service";
 import { AuthService } from "./auth.service";
 import { readLoginMethods } from "./system-setting.service";
@@ -458,9 +459,8 @@ export class PermissionManagementService {
       select: { id: true, username: true },
     });
     if (!user) throw AppError.notFound("Kullanıcı bulunamadı");
-    if (newPassword.length < 6) {
-      throw AppError.badRequest("Şifre en az 6 karakter olmalı");
-    }
+    const violation = passwordPolicyViolation(newPassword);
+    if (violation) throw AppError.badRequest(violation, { code: "PASSWORD_POLICY" });
 
     const passwordHash = await bcrypt.hash(newPassword, 10);
     // Şifre sıfırlandı → mevcut tüm oturumları düşür (tokenVersion bump).

@@ -551,7 +551,7 @@ export interface FeatureFlags {
   /** Mobil uygulama arka plana geçince (operatör çıkınca) anında kilitlensin mi
    *  (default true). Idle kilitten bağımsız. Client ENFORCE (yalnız mobil). */
   mobileLockOnBackground: boolean;
-  /** Mutlak oturum tavanı — gün (default 30, 0..365; 0 = süresiz). Zaman aşımı kapalı
+  /** Mutlak oturum tavanı — gün (default 30, 0..365; 0 = en fazla 365 gün). Zaman aşımı kapalı
    *  olsa bile token en fazla bu kadar gün yaşar (sızan token sonsuza kadar geçerli
    *  kalmasın). Backend ENFORCE eder (issueToken). */
   absoluteSessionCapDays: number;
