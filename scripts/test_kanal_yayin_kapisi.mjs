@@ -64,6 +64,8 @@ import { imzaBasligi, imzayiKabulEdenler, multipartKur } from '../mobil/scripts/
 import { buildReleaseDoc, signReleaseDoc } from '../Electron/electron/guncelleme/panel-kunye.mjs';
 import { withReleaseBlock } from '../Electron/electron/guncelleme/latest-yml.mjs';
 import { apkDosyaAdi, buildApkDoc, signApkDoc, withApkBlock } from '../mobil/scripts/lib/apk-kunye.mjs';
+import { YAYIN_EZME_ORTAMLARI } from './lib/yayin-hedefi.mjs';
+import { PANEL_KUNYE_ADI, apkKunyeYolu, derlemeBagiDenetimi, derlemeKunyesiYaz, dosyaOzeti, temizAgacDenetimi } from './lib/derleme-bagi.mjs';
 
 const KOK = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const ESKI = (process.argv.find((a) => a.startsWith('--eski=')) ?? '').slice('--eski='.length) || null;
@@ -90,6 +92,8 @@ const GERCEK_GIT = execFileSync('/usr/bin/env', ['sh', '-c', 'command -v git'], 
 // GIT_* SÖKÜLÜR: bekçi commit kapısından koşarsa hook ortamı GIT_DIR/GIT_INDEX_FILE taşır ve
 // geçici ağaçtaki `git init` GERÇEK depoya yazar (pre-commit.mjs `gitEnvSil` gerekçesi).
 const TEMIZ_ENV = { ...Object.fromEntries(Object.entries(process.env).filter(([k]) => !k.startsWith('GIT_'))), TEKSERP_YAYIN_BILDIRIMI: '0' };
+// Yayın hedefi ezmeleri yükleyiciyi DURDURUR (G22): koşturanın kabuğunda kalmış biri bütün senaryoları düşürmesin.
+for (const ad of YAYIN_EZME_ORTAMLARI) delete TEMIZ_ENV[ad];
 delete TEMIZ_ENV.TEKSERP_PANEL_IMZA_ANAHTARI;
 delete TEMIZ_ENV.TEKSERP_TABLET_IMZA_ANAHTARI;
 
@@ -165,7 +169,19 @@ if (arac === 'ssh') {
   while (k.length && k[0].startsWith('-')) { const o = k.shift(); if (o === '-p' || o === '-o') k.shift(); }
   const host = k.shift();
   const komut = k.join(' ');
-  if (/^bash -s\b/.test(komut)) { stdinOku(); yaz({ host, komut, tur: 'budama' }); process.exit(0); }
+  if (/^bash -s\b/.test(komut)) {
+    // Konumsal argümanlı uzak betik: betik stdin'den, değerler '--'dan sonra. Budama koşturulmaz (uzak ağacı korur).
+    const betik = stdinOku();
+    const i = k.indexOf('--');
+    const argv = i >= 0 ? k.slice(i + 1) : [];
+    if (/ls -1t TeksERP-/.test(betik)) { yaz({ host, komut, tur: 'budama' }); process.exit(0); }
+    yaz({ host, komut, betik, argv });
+    if (process.env.SAHTE_SSH_KOPUK && [komut, betik].some((x) => x.includes(process.env.SAHTE_SSH_KOPUK))) { process.stderr.write('ssh: connect to host: Connection refused\n'); process.exit(255); }
+    const r = spawnSync('bash', ['-s', '--', ...argv.map((x) => x.replaceAll('/opt/stack', UZAK + '/opt/stack'))], { input: betik });
+    if (r.stdout) process.stdout.write(r.stdout);
+    if (r.stderr) process.stderr.write(r.stderr);
+    process.exit(r.status ?? 1);
+  }
   yaz({ host, komut });
   // Kopuk ssh taklidi (bağlantı reddi, çıkış 255): okunamayan kaynak = ÖLÇÜLEMEDİ sondası.
   if (process.env.SAHTE_SSH_KOPUK && komut.includes(process.env.SAHTE_SSH_KOPUK)) { process.stderr.write('ssh: connect to host: Connection refused\n'); process.exit(255); }
@@ -174,7 +190,7 @@ if (arac === 'ssh') {
   process.exit(r.status ?? 1);
 }
 if (arac === 'scp') {
-  const k = a.filter((x, i) => x !== '-r' && x !== '-P' && a[i - 1] !== '-P');
+  const k = a.filter((x, i) => !['-r', '-s', '-q', '-P'].includes(x) && a[i - 1] !== '-P');
   const hedef = k.pop();
   const [host, uzak] = hedef.split(/:(.*)/s);
   yaz({ host, kaynaklar: k.map((x) => path.basename(x)), hedef: uzak });
@@ -348,7 +364,6 @@ function kos(o, komut, argumanlar, { cwd, girdi, ortamEk = {} } = {}) {
       SAHTE_UZAK: o.uzak,
       CAGRI_LOG: o.log,
       GERCEK_GIT,
-      SSH_HEDEF: 'sahte-hedef',
       TEKSERP_YAYIN_BELIRTECI: BELIRTEC,
       // Makinedeki ~/.tekserp/yayin-belirteci-kaynagi.json (CLI kaynağı) dosya belirtecinden ÖNCE okunur;
       // koşum onu görmemeli — yoksa sahte ağaçta gerçek CLI'ı arar (ENOENT) ve 7i–7k düşer.
@@ -365,7 +380,9 @@ function kos(o, komut, argumanlar, { cwd, girdi, ortamEk = {} } = {}) {
 const agText = (o) => o.cagrilar().filter((c) => c.arac === 'ssh' || c.arac === 'scp');
 const yabanciAg = (o) => o.cagrilar().filter((c) => c.YABANCI_AG);
 /** Uzağı DEĞİŞTİREBİLEN çağrılar: scp + okuma olmayan her ssh (terfi/denetim okuması `test -f`/`cat` hariç). */
-const yazanAg = (o) => o.cagrilar().filter((c) => c.arac === 'scp' || (c.arac === 'ssh' && !/^(test -f|cat) '/.test(c.komut)));
+/** Uzak betik okuma mı (yazan komut taşımıyor)? Konumsal argümanlı `bash -s` çağrıları betikten ayırt edilir. */
+const betikOkuma = (c) => typeof c.betik === 'string' && !/\b(mkdir|rm|mv|printf|cp|tee)\b|>/.test(c.betik);
+const yazanAg = (o) => o.cagrilar().filter((c) => c.arac === 'scp' || (c.arac === 'ssh' && !/^(test -f|cat) '/.test(c.komut) && !betikOkuma(c)));
 
 /* ------------------------------------------------------------------ *
  * Geçici ağaç kopyaları
@@ -382,7 +399,8 @@ const gitGoster = (ref, rel) =>
 
 const ORTAK_KAYNAK = [
   'deploy/kanallar.json', 'scripts/lib/kanallar.mjs', 'scripts/kanal-kapisi.mjs', 'scripts/lib/surum.mjs', 'scripts/lib/surum-notu-tavan.mjs',
-  'scripts/lib/terfi.mjs', 'scripts/lib/yayin-okuma.mjs', 'scripts/lib/backend-yayin.mjs',
+  'scripts/lib/terfi.mjs', 'scripts/lib/kullanici-cumlesi.mjs', 'scripts/lib/yayin-okuma.mjs', 'scripts/lib/yayin-hedefi.mjs', 'scripts/lib/derleme-bagi.mjs',
+  'scripts/lib/backend-yayin.mjs',
   ...PANEL_SABIT_DOSYALAR,
   'scripts/lib/yayin-bildirim.mjs',
   'scripts/lib/panel-imza-kapisi.mjs', 'Electron/electron/guncelleme/kunye-jws.mjs', 'Electron/electron/guncelleme/panel-kunye.mjs',
@@ -407,8 +425,26 @@ function agacKur(o, { ref = null, capa = TEST_CAPA } = {}) {
     kopyala(agac, PANEL_CAPA_REL, capaMetni(capa));
     fs.mkdirSync(path.join(agac, 'Teks-Erp'), { recursive: true });
   }
+  // Paketleme temiz ağaç ister, yayın derleme commit'ini HEAD'e bağlar (G22): ağaç bir taban commit'iyle doğar,
+  // derleme çıktısı (release/) gerçek ağaçtaki gibi yoksayılır.
+  kopyala(agac, '.gitignore', 'Electron/release/\n');
+  tabanCommit(agac);
   return agac;
 }
+/** Geçici ağacın bütün içeriğini commit'ler (G22 temiz ağaç); HEAD döner. */
+function tabanCommit(agac, mesaj = 'taban') {
+  execFileSync(GERCEK_GIT, ['add', '-A'], { cwd: agac, env: TEMIZ_ENV });
+  execFileSync(GERCEK_GIT, ['-c', 'user.email=bekci@test', '-c', 'user.name=bekci', 'commit', '-q', '--allow-empty', '-m', mesaj], { cwd: agac, env: TEMIZ_ENV });
+  return execFileSync(GERCEK_GIT, ['rev-parse', 'HEAD'], { cwd: agac, env: TEMIZ_ENV, encoding: 'utf8' }).trim();
+}
+/** Dizini içeren geçici git ağacı (yoksa null) — sahte uzak dizinler ağaç DEĞİLDİR. */
+function agacKokuBul(dizin) {
+  for (let d = path.resolve(dizin); d.startsWith(GECICI) && d !== GECICI; d = path.dirname(d)) {
+    if (fs.existsSync(path.join(d, '.git'))) return d;
+  }
+  return null;
+}
+const basOf = (agac) => execFileSync(GERCEK_GIT, ['rev-parse', 'HEAD'], { cwd: agac, env: TEMIZ_ENV, encoding: 'utf8' }).trim();
 
 /**
  * Mobil yayın betiklerinin koştuğu asgari ağaç kopyası (app.json değiştirilebilir) — gerçek ağaca
@@ -433,6 +469,7 @@ function mobilAgaci(o, appJsonDegistir = null, { tabletCapa = TEST_CAPA } = {}) 
   kopyala(agac, 'mobil/app.json', `${JSON.stringify(aj, null, 2)}\n`);
   kopyala(agac, 'scripts/check-surum-notlari.mjs', 'process.exit(0);\n');
   execFileSync(GERCEK_GIT, ['init', '-q'], { cwd: agac, env: TEMIZ_ENV });
+  tabanCommit(agac);
   return agac;
 }
 
@@ -473,14 +510,21 @@ const engellenen = (o) => o.cagrilar().filter((c) => c.ENGELLENDI).map((c) => c.
 /** Sahte panel derlemesi — electron-builder'ın kimlik taşıyan çıktıları. */
 const KAYIT = JSON.parse(fs.readFileSync(path.join(KOK, 'deploy/kanallar.json'), 'utf8'));
 const tabletSurum = JSON.parse(fs.readFileSync(path.join(KOK, 'mobil/app.json'), 'utf8')).expo.version;
-function panelArtefakti(dizin, { url, cache, exe, surum, ic = 'adnansahin', icMutasyon = null, asarYok = false, kunye = {}, capaGomulu = TEST_CAPA }) {
+/**
+ * Sahte panel paketi. `derleme` (G22): `commit` künyeye ve pakete gömülür · `yok` künye yazılmaz · `gomulu` pakete başka commit
+ * gömülür · `ozetBoz` künyeden SONRA Setup.exe değişir.
+ */
+function panelArtefakti(dizin, { url, cache, exe, surum, ic = 'adnansahin', icMutasyon = null, asarYok = false, kunye = {}, capaGomulu = TEST_CAPA, derleme: d0 = {} }) {
+  // Commit verilmediyse paket, içinde durduğu geçici ağacın HEAD'inden derlenmiş sayılır (yayın dizinindeki eski sürüm: commit'siz).
+  const derleme = { ...d0, commit: d0.commit ?? (() => { const a = agacKokuBul(dizin); return a ? basOf(a) : undefined; })() };
   const res = path.join(dizin, 'win-unpacked', 'resources');
   fs.mkdirSync(res, { recursive: true });
   if (url) fs.writeFileSync(path.join(res, 'app-update.yml'), `provider: generic\nurl: ${url}\nchannel: latest\nupdaterCacheDirName: ${cache}\n`);
   // Paketin İÇİ (asar): hangi kanalla derlendiyse onun kimliği; `icMutasyon` karışık kimliği kurar.
   if (!asarYok) {
     const k = KAYIT.kanallar[ic];
-    const icerik = gomuluKimlik(k, { name: k.panel.paketAdi, productName: k.panel.urunAdi, version: surum }, capaGomulu);
+    const gitCommit = derleme.gomulu ?? derleme.commit;
+    const icerik = gomuluKimlik(k, { name: k.panel.paketAdi, productName: k.panel.urunAdi, version: surum, ...(gitCommit ? { gitCommit } : {}) }, capaGomulu);
     if (icMutasyon) icMutasyon(icerik);
     asarYaz(path.join(res, 'app.asar'), icerik);
   }
@@ -494,9 +538,15 @@ function panelArtefakti(dizin, { url, cache, exe, surum, ic = 'adnansahin', icMu
     `version: ${surum}\nfiles:\n  - url: ${ad}\n    sha512: ${sha}\n    size: ${govde.length}\npath: ${ad}\nsha512: ${sha}\n`);
   // Yayın yolu imzalı künye ister (§8): paket varsayılan olarak kendi kanalı için TEST anahtarıyla imzalı doğar.
   if (kunye) kunyeYaz(dizin, { surum, kanal: ic, ...kunye });
+  // Derleme künyesi (G22): paketleme yazar; yayıncı Setup.exe ↔ künye ↔ HEAD ↔ terfi etiketini bağlar.
+  if (derleme.commit && !derleme.yok) {
+    derlemeKunyesiYaz(path.join(dizin, PANEL_KUNYE_ADI), { urun: 'panel', kanal: ic, surum, commit: derleme.commit, dosyaYolu: path.join(dizin, ad) });
+  }
+  if (derleme.ozetBoz) fs.appendFileSync(path.join(dizin, ad), 'X');
 }
 const ADNANSAHIN_PANEL = { url: `${YAYIN_HOST}adnansahin/electron/`, cache: 'adnan-sahin-erp-admin-updater', exe: 'Adnan Şahin ERP.exe' };
 const TESTFABRIKA_PANEL = { url: `${YAYIN_HOST}testfabrika/electron/`, cache: 'teks-erp-testfabrika-updater', exe: 'TeksERP Test Fabrika.exe', ic: 'testfabrika' };
+const DEMOFABRIKA_PANEL = { url: `${YAYIN_HOST}demofabrika/electron/`, cache: 'teks-erp-demofabrika-updater', exe: 'TeksERP Demo Fabrika.exe', ic: 'demofabrika' };
 
 /** Uzaktaki dosyalar (yol → sha256) — yüklemenin ETKİSİ. */
 function uzakAgaci(o) {
@@ -517,6 +567,15 @@ function iz(o) {
   return o.cagrilar().map((c) => {
     if (c.arac === 'scp') return `scp [${c.kaynaklar.join(', ')}] → ${c.hedef}`;
     if (c.arac === 'ssh' && c.tur === 'budama') return `ssh budama ${c.komut.replace(/^bash -s -- /, '')}`;
+    if (c.arac === 'ssh' && typeof c.betik === 'string') {
+      const a0 = c.argv?.[0];
+      if (/openssl dgst/.test(c.betik)) return `ssh sha512 ${a0}`;
+      if (/sha256sum/.test(c.betik)) return `ssh sha256-sorgu ${a0}`;
+      if (/>> "\$d"/.test(c.betik)) return `ssh defter ${a0}`;
+      if (/mkdir -p -- "\$1"/.test(c.betik)) return `ssh mkdir ${a0}`;
+      if (/^(test -f|cat) /.test(c.betik.trim())) return `ssh oku ${a0}`;
+      return `ssh ?? ${c.betik.slice(0, 60)}`;
+    }
     if (c.arac === 'ssh') {
       if (/sha256sum/.test(c.komut)) return `ssh sha256-sorgu ${/'([^']+)'/.exec(c.komut)?.[1]}`;
       if (/openssl dgst/.test(c.komut)) return `ssh sha512 ${/'([^']+)'/.exec(c.komut)?.[1]}`;
@@ -541,7 +600,7 @@ console.log('\n§1 — electron-yayinla.sh: hedef paketin kimliğinden, ssh\'tan
 const ESKI_KANALLI = ESKI ? gitGoster(ESKI, 'deploy/electron-yayinla.sh').includes('--musteri=') : false;
 
 function yayinSenaryosu({ ref = null, musteriArg = '--musteri=adnansahin', artefakt = ADNANSAHIN_PANEL, dizin = 'adnansahin', surum = '9.9.9', ekArg = [],
-  terfi, mutasyon = null } = {}) {
+  terfi, mutasyon = null, ortamEk = {} } = {}) {
   const o = ortam();
   const agac = agacKur(o, { ref });
   // Bugünden sonra adnansahin'e yayın terfi şartı ister: varsayılan senaryo şartları KURAR (yeni betik, adnansahin);
@@ -556,9 +615,9 @@ function yayinSenaryosu({ ref = null, musteriArg = '--musteri=adnansahin', artef
     fs.writeFileSync(y, sonra);
   }
   const rel = ref && !ESKI_KANALLI ? path.join(agac, 'Electron/release', surum) : path.join(agac, 'Electron/release', dizin, surum);
-  if (artefakt) panelArtefakti(rel, { ...artefakt, surum });
+  if (artefakt) panelArtefakti(rel, { ...artefakt, surum, derleme: { commit: basOf(agac), ...(artefakt.derleme ?? {}) } });
   const args = [musteriArg, surum, ...ekArg].filter(Boolean);
-  const r = kos(o, path.join(agac, 'deploy/electron-yayinla.sh'), args, { cwd: agac });
+  const r = kos(o, path.join(agac, 'deploy/electron-yayinla.sh'), args, { cwd: agac, ortamEk });
   return { o, r, agac };
 }
 
@@ -762,6 +821,58 @@ const belirtecSenaryosu = (hazirla, ekArg = []) => {
   const { o, r } = yayinSenaryosu({ artefakt: { ...ADNANSAHIN_PANEL, asarYok: true } });
   ol('1o paket arşivi (app.asar) yok → ÖLÇÜLEMEDİ, ssh/scp SIFIR', r.kod !== 0 && agText(o).length === 0 && /ÖLÇÜLEMEDİ/.test(r.cikti), r.cikti.slice(-300));
 }
+// G22/DAGY-4 — hedef YALNIZ kayıttan: ortamda kalmış her ezme (eski SSH_HEDEF/UZAK_DIZIN/YAYIN_KOK/YAYIN_URL/BASE_URL)
+// testfabrika (terfi istemeyen) yayınını ağdan ÖNCE durdurur — eskiden paket başka kanalın dizinine inerdi.
+for (const [ad, deger] of [['UZAK_DIZIN', `${VDS}/html/adnansahin/electron`], ['SSH_HEDEF', 'baska-sunucu'], ['YAYIN_KOK', `${VDS}/html`],
+  ['YAYIN_URL', `${YAYIN_HOST}adnansahin/electron`], ['BASE_URL', 'https://guncelleme.etkiliyazilim.com']]) {
+  const { o, r } = yayinSenaryosu({ musteriArg: '--musteri=testfabrika', artefakt: TESTFABRIKA_PANEL, dizin: 'testfabrika', ortamEk: { [ad]: deger } });
+  ol(`1y ⭐ ortamda ${ad} ezmesi (testfabrika yayını) → DUR, ssh/scp/curl SIFIR, hiçbir dosya yüklenmez`,
+    r.kod !== 0 && /YAYIN HEDEFİ EZİLEMEZ/.test(r.cikti) && r.cikti.includes(`ortam ${ad}`) && agSifir(o) &&
+      !Object.keys(uzakAgaci(o)).some((k) => /TeksERP-9\.9\.9/.test(k)), r.cikti.slice(-500));
+}
+{
+  // Pozitif ikiz: ezme kaldırılınca aynı paket kayıttaki hedefe yayınlanır (hedef kaydın vdsPanel'i).
+  const { o, r } = yayinSenaryosu({ musteriArg: '--musteri=testfabrika', artefakt: TESTFABRIKA_PANEL, dizin: 'testfabrika', ortamEk: { UZAK_DIZIN: '' } });
+  const hedefler = o.cagrilar().filter((c) => c.arac === 'scp').map((c) => c.hedef);
+  ol('1y2 boş UZAK_DIZIN (ezme yok) → yayın kayıttaki hedefe: yalnız testfabrika vdsPanel/',
+    r.kod === 0 && hedefler.length === 2 && hedefler.every((h) => h === `${KAYIT.kanallar.testfabrika.yayin.vdsPanel}/`), `${r.cikti.slice(-300)}\n${hedefler.join('\n')}`);
+}
+{
+  // Hedef çözümü — kuru, demofabrika (aynasız hazırlık): VDS dizini + defter + doğrulama adresi KAYITTAN.
+  const { o, r } = yayinSenaryosu({ musteriArg: '--musteri=demofabrika', artefakt: DEMOFABRIKA_PANEL, dizin: 'demofabrika', ekArg: ['--kuru'] });
+  const y = KAYIT.kanallar.demofabrika.yayin;
+  ol('1y3 demofabrika --kuru → hedef, defter ve yayın adresi kanal kaydından (vdsPanel · panelDefter · panelFeed), ağ SIFIR',
+    r.kod === 0 && r.cikti.includes(`[kuru] hedef      : tekserp-yayin:${y.vdsPanel}/`) && r.cikti.includes(`[kuru] defter     : ${y.panelDefter}`) &&
+      r.cikti.includes(`[kuru] yayın adresi: ${y.panelFeed}latest.yml`) && agSifir(o), r.cikti.slice(-600));
+}
+{
+  // DAGY-9: sürüm uzak komutlara gider → biçim dışı sürüm (kabuk karakteri) ağdan ÖNCE durur.
+  const { o, r } = yayinSenaryosu({ musteriArg: '--musteri=testfabrika', artefakt: null, dizin: 'testfabrika', surum: "9.9.9';id;'" });
+  ol('1z ⭐ biçimsiz sürüm argümanı (kabuk karakteri) → DUR, ssh/scp/curl SIFIR', r.kod !== 0 && /Sürüm biçimsiz/.test(r.cikti) && agSifir(o), r.cikti.slice(-400));
+}
+// G22/DAGY-5 — derleme bağı: yüklenecek Setup.exe künyedeki commit'ten; o commit HEAD, paketin İÇİNDEKİ commit ve
+// (üretimde) terfi etiketinin commit'i. Her ihlal ağdan ÖNCE durur.
+for (const [no, ad, derleme, desen] of [
+  ['1d2', 'derleme künyesi YOK (eski paketleme / elle taşınmış paket)', { yok: true }, /DERLEME KÜNYESİ YOK/],
+  ['1d3', 'paket başka commit\'ten derlenmiş (HEAD ilerlemiş)', { commit: 'a'.repeat(40) }, /HEAD [0-9a-f]{12} — yayın/],
+  ['1d4', 'Setup.exe künyeden SONRA değişmiş', { ozetBoz: true }, /künyedeki özetle TUTMUYOR/],
+  ['1d5', 'paketin İÇİNDEKİ commit (asar gitCommit) künyeninkinden farklı', { gomulu: 'b'.repeat(40) }, /İÇİNDEKİ commit/],
+]) {
+  const { o, r } = yayinSenaryosu({ musteriArg: '--musteri=testfabrika', artefakt: { ...TESTFABRIKA_PANEL, derleme }, dizin: 'testfabrika' });
+  ol(`${no} ⭐ ${ad} → DUR, ssh/scp/curl SIFIR`, r.kod !== 0 && /DERLEME BAĞI KOPUK/.test(r.cikti) && desen.test(r.cikti) && agSifir(o), r.cikti.slice(-500));
+}
+{
+  const { o, r } = yayinSenaryosu({ ekArg: ['--kuru'] });
+  ol('1d6 pozitif: adnansahin paketi HEAD = panel-v9.9.9 = terfi etiketinden derlenmiş → derleme bağı geçer (künye · asar · HEAD · terfi), ağ SIFIR',
+    r.kod === 0 && /derleme bağı: panel 9\.9\.9 · commit [0-9a-f]{12} = HEAD = terfi etiketi · özet tutuyor/.test(r.cikti) && agSifir(o), r.cikti.slice(-600));
+}
+{
+  // ⭐ SONDA: yayıncıdan derleme bağı çağrısı sökülünce başka commit'ten derlenmiş paket YÜKLENİR — 1d3 kapıyı ölçüyor.
+  const { o } = yayinSenaryosu({ musteriArg: '--musteri=testfabrika', artefakt: { ...TESTFABRIKA_PANEL, derleme: { commit: 'a'.repeat(40) } }, dizin: 'testfabrika',
+    mutasyon: (m) => m.replaceAll('kanal-kapisi.mjs" panel-derleme-bagi "$musteri"', 'kanal-kapisi.mjs" kanal "$musteri"') });
+  ol('1d7 ⭐ SONDA: derleme bağı sökülünce başka commit\'ten derlenmiş testfabrika paketi YÜKLENİR (kapı yük taşıyor)',
+    agText(o).some((c) => c.arac === 'scp'), iz(o).join('\n'));
+}
 
 /* ------------------------------------------------------------------ *
  * §2 electron-paketle.sh (sahte derleyici)
@@ -777,7 +888,7 @@ const ozet = (agac) => IZLENEN.map((rel) => {
 }).join(',');
 const SURUM = JSON.parse(fs.readFileSync(path.join(KOK, 'Electron/package.json'), 'utf8')).version;
 
-function paketleSenaryosu(argumanlar, { ref = null, mutasyon = null, agacMutasyon = null, terfi } = {}) {
+function paketleSenaryosu(argumanlar, { ref = null, mutasyon = null, agacMutasyon = null, terfi, kirliBirak = false } = {}) {
   const o = ortam();
   const agac = agacKur(o, { ref });
   // adnansahin paketlemesi bugünden sonra terfi şartı ister: yeni betikte varsayılan KURULUR (bkz. yayinSenaryosu).
@@ -791,6 +902,9 @@ function paketleSenaryosu(argumanlar, { ref = null, mutasyon = null, agacMutasyo
     if (sonra === once) throw new Error('paketle mutasyonu UYGULANMADI — sonda geçersiz');
     fs.writeFileSync(y, sonra);
   }
+  // Paketleme temiz ağaç ister (G22): sonda mutasyonları commit'lenir ki ölçülen kapı temiz-ağaç kapısı olmasın
+  // (`kirliBirak` = bilerek kirli bırak — temiz-ağaç kapısının kendi sondası).
+  if ((agacMutasyon || mutasyon) && !kirliBirak) tabanCommit(agac, 'sonda mutasyonu');
   const once = ozet(agac);
   const r = kos(o, path.join(agac, 'deploy/electron-paketle.sh'), argumanlar, { cwd: agac });
   return { o, r, agac, once, sonra: ozet(agac) };
@@ -896,6 +1010,51 @@ const npmCagrisi = (o) => o.cagrilar().find((c) => c.arac === 'npm' && /^run bui
   ol('2f kaynakta literal AUMID (kanaldan değil) → paketleme kanal kapısında DURUR, derleme YOK, dosya yazılmadı',
     s.r.kod !== 0 && !s.o.cagrilar().some((c) => c.arac === 'npm') && /PAKETLENEMEZ/.test(s.r.cikti) && s.once === s.sonra, s.r.cikti.slice(0, 600));
 }
+// G22/DAGY-5 — paketleme temiz ağaç ister; derleme commit'i pakete ve derleme künyesine yazılır.
+{
+  const s = paketleSenaryosu(['testfabrika', SURUM], { kirliBirak: true,
+    agacMutasyon: (agac) => fs.appendFileSync(path.join(agac, 'Electron/electron/main.ts'), '\n// commit\'lenmemiş değişiklik\n') });
+  ol('2g ⭐ commit\'lenmemiş kaynak değişikliği → paketleme DURUR (dosya adıyla), derleme YOK',
+    s.r.kod !== 0 && /çalışma ağacı TEMİZ DEĞİL/.test(s.r.cikti) && /Electron\/electron\/main\.ts/.test(s.r.cikti) && !npmCagrisi(s.o), s.r.cikti.slice(-500));
+}
+{
+  const s = paketleSenaryosu(['testfabrika', SURUM], { kirliBirak: true,
+    agacMutasyon: (agac) => fs.writeFileSync(path.join(agac, 'Electron/yeni-izlenmeyen.ts'), 'export {};\n') });
+  ol('2g2 ⭐ izlenmeyen yeni dosya (paketin içine girebilir) → DURUR, derleme YOK',
+    s.r.kod !== 0 && /\?\? Electron\/yeni-izlenmeyen\.ts/.test(s.r.cikti) && !npmCagrisi(s.o), s.r.cikti.slice(-500));
+}
+{
+  // Pozitif ikiz: yalnız paketlemenin kendi yazdığı sürüm alanı farklı (önceki koşumdan kalan) → paketler.
+  const s = paketleSenaryosu(['testfabrika', SURUM], { kirliBirak: true, agacMutasyon: (agac) => {
+    const y = path.join(agac, 'Electron/package.json');
+    const p = JSON.parse(fs.readFileSync(y, 'utf8'));
+    p.version = '0.0.1';
+    fs.writeFileSync(y, `${JSON.stringify(p, null, 2)}\n`);
+  } });
+  ol('2g3 pozitif: yalnız Electron/package.json version farkı (izinli sürüm alanı) → paketleme geçer',
+    s.r.kod === 0 && /yalnız sürüm alanı: Electron\/package\.json: version [0-9.]+ → 0\.0\.1/.test(s.r.cikti), s.r.cikti.slice(-500));
+}
+{
+  const s = paketleSenaryosu(['testfabrika', SURUM]);
+  const dizin = path.join(s.agac, 'Electron/release/testfabrika', SURUM);
+  const bas = basOf(s.agac);
+  let k = null;
+  try { k = JSON.parse(fs.readFileSync(path.join(dizin, PANEL_KUNYE_ADI), 'utf8')); } catch { k = null; }
+  const oz = fs.existsSync(path.join(dizin, `TeksERP-${SURUM}-Setup.exe`)) ? dosyaOzeti(path.join(dizin, `TeksERP-${SURUM}-Setup.exe`)) : {};
+  const d = derlenen(s.agac, 'testfabrika');
+  ol('2h ⭐ paketleme derleme künyesi yazar: commit = HEAD · Setup.exe özeti · paketin İÇİNDE (asar package.json gitCommit) aynı commit',
+    s.r.kod === 0 && k?.commit === bas && k?.urun === 'panel' && k?.kanal === 'testfabrika' && k?.surum === SURUM &&
+      k?.sha512 === oz.sha512 && k?.boyut === oz.boyut && d?.paket.gitCommit === bas, JSON.stringify(k));
+  // Uçtan uca: aynı ağaçta paketlenen paket kuru yayının derleme bağından geçer.
+  const y = kos(s.o, path.join(s.agac, 'deploy/electron-yayinla.sh'), ['--musteri=testfabrika', SURUM, '--kuru'], { cwd: s.agac });
+  ol('2h2 uçtan uca: paketle → yayınla --kuru (aynı commit) → derleme bağı geçer',
+    y.kod === 0 && /derleme bağı: panel .* = HEAD · özet tutuyor/.test(y.cikti), y.cikti.slice(-500));
+  // Paketlemeden sonra commit atılırsa (HEAD ilerler) yayın durur.
+  tabanCommit(s.agac, 'paketten sonra');
+  const y2 = kos(s.o, path.join(s.agac, 'deploy/electron-yayinla.sh'), ['--musteri=testfabrika', SURUM, '--kuru'], { cwd: s.agac });
+  ol('2h3 ⭐ paketlemeden SONRA yeni commit (HEAD ilerledi) → yayın DURUR (derlenen commit\'te yapılır)',
+    y2.kod !== 0 && /DERLEME BAĞI KOPUK/.test(y2.cikti), y2.cikti.slice(-400));
+}
 
 /* ------------------------------------------------------------------ *
  * §3 mobil-yayinla.mjs (--kuru, gerçek ağaç)
@@ -909,6 +1068,9 @@ function otaPaketi(o, { adres = FABRIKA_ERP, bundleAdres = FABRIKA_ERP, kanal = 
   const d = path.join(o.d, 'ota', kanal, '54.2', damga);
   const bundle = '_expo/static/js/android/index-sahte.hbc';
   fs.mkdirSync(path.join(d, path.dirname(bundle)), { recursive: true });
+  // Aynı ortamda yeniden üretilen paket önceki derleme künyesini taşımaz (yayinla-ota her turda yeni dizin açar).
+  fs.rmSync(path.join(d, PANEL_KUNYE_ADI), { force: true });
+  fs.rmSync(path.join(d, '.kunyesiz'), { force: true });
   if (!bundleYok) fs.writeFileSync(path.join(d, bundle), `\x00\x01hermes${bundleAdres}\x00${ekAdres ?? ''}${capaDizeleri(capaGomulu)}\x00son`, 'latin1');
   const kunye = { musteri: kanal, runtimeVersion: '54.2', damga, bundle, manifestId: 'sahte-id', imzali };
   if (adres !== undefined) kunye.adres = adres;
@@ -919,7 +1081,32 @@ function otaPaketi(o, { adres = FABRIKA_ERP, bundleAdres = FABRIKA_ERP, kanal = 
   fs.writeFileSync(path.join(d, `manifest-${damga}`), man);
   return d;
 }
-const mobilYayinla = (o, args, agac = KOK) => kos(o, process.execPath, [path.join(agac, 'deploy/mobil-yayinla.mjs'), ...args, '--kuru'], { cwd: agac });
+/**
+ * Derleme künyesi (G22) — testin kendisi koymadıysa, `.kunyesiz` işareti yoksa: artefakt yayının koştuğu ağacın HEAD'inden
+ * derlenmiş sayılır (yayinla-ota/build-apk'ın yazacağı künyenin aynısı). Künye kapısının sondaları künyeyi KENDİ yazar.
+ */
+function derlemeKunyesiHazirla(args, agac) {
+  const kanal = (args.find((a) => a.startsWith('--musteri=')) ?? '').slice('--musteri='.length);
+  const apkA = args.find((a) => a.startsWith('--apk='));
+  const paketA = args.find((a) => a.startsWith('--paket='));
+  if (apkA) {
+    const y = apkA.slice('--apk='.length);
+    if (!fs.existsSync(y) || fs.existsSync(apkKunyeYolu(y)) || fs.existsSync(`${y}.kunyesiz`)) return;
+    let k = {};
+    try { k = apkKimligi(y); } catch { return; }
+    derlemeKunyesiYaz(apkKunyeYolu(y), { urun: 'tablet-apk', kanal, surum: k.surumAdi, commit: basOf(agac), dosyaYolu: y, ek: { versionCode: k.surumKodu } });
+  }
+  if (paketA) {
+    const d = paketA.slice('--paket='.length);
+    const man = path.join(d, 'manifest');
+    if (!fs.existsSync(man) || fs.existsSync(path.join(d, PANEL_KUNYE_ADI)) || fs.existsSync(path.join(d, '.kunyesiz'))) return;
+    derlemeKunyesiYaz(path.join(d, PANEL_KUNYE_ADI), { urun: 'tablet-ota', kanal, surum: tabletSurum, commit: basOf(agac), dosyaYolu: man });
+  }
+}
+const mobilYayinla = (o, args, agac = KOK) => {
+  derlemeKunyesiHazirla(args, agac);
+  return kos(o, process.execPath, [path.join(agac, 'deploy/mobil-yayinla.mjs'), ...args, '--kuru'], { cwd: agac });
+};
 /** adnansahin tablet yayını terfi şartı ister: şartları kurulmuş kopya ağaç (gerçek ağacın etiketlerine dokunulmaz). */
 function tabletTerfiAgaci(o, { tabletCapa, ...secenek } = {}) {
   const agac = mobilAgaci(o, null, tabletCapa ? { tabletCapa } : {});
@@ -994,6 +1181,33 @@ const etiketGirisimi = (o) => o.cagrilar().some((c) => c.ENGELLENDI);
   const r = mobilYayinla(o, ['--musteri=testfabirka', `--paket=${otaPaketi(o)}`]);
   ol('3f bilinmeyen kanal → DUR', r.kod !== 0 && /BİLİNMEYEN KANAL/.test(r.cikti), r.cikti.slice(-400));
 }
+// G22/DAGY-4 — tablet yayın hedefi YALNIZ kayıttan: argüman ya da ortam ezmesi HER kipte (kuru · denetim dahil) durur.
+{
+  const tfPaket = (o) => otaPaketi(o, { kanal: 'testfabrika', adres: TEST_ERP, bundleAdres: TEST_ERP });
+  for (const ezme of ['--feed=https://guncelleme.etkiliyazilim.com/adnansahin/mobil/', `--uzak-dizin=${VDS}/html/adnansahin/mobil`, '--ssh=baska-sunucu']) {
+    const o = ortam();
+    const r = mobilYayinla(o, ['--musteri=testfabrika', `--paket=${tfPaket(o)}`, ezme]);
+    ol(`3z ⭐ ${ezme.split('=')[0]} ezmesi (testfabrika OTA) → DUR, ağ SIFIR`, r.kod !== 0 && /YAYIN HEDEFİ EZİLEMEZ/.test(r.cikti) && agSifir(o), r.cikti.slice(-400));
+  }
+  for (const ad of ['UZAK_DIZIN', 'YAYIN_URL', 'SSH_HEDEF']) {
+    const o = ortam();
+    const r = kos(o, process.execPath, [path.join(KOK, 'deploy/mobil-yayinla.mjs'), '--musteri=testfabrika', `--paket=${tfPaket(o)}`, '--kuru'],
+      { cwd: KOK, ortamEk: { [ad]: ad === 'SSH_HEDEF' ? 'baska-sunucu' : `${VDS}/html/adnansahin/mobil` } });
+    ol(`3z2 ortamda ${ad} (testfabrika OTA) → DUR, ağ SIFIR`, r.kod !== 0 && r.cikti.includes(`ortam ${ad}`) && agSifir(o), r.cikti.slice(-400));
+  }
+  const o = ortam();
+  const d = kos(o, process.execPath, [path.join(KOK, 'deploy/mobil-yayinla.mjs'), `--dogrula=${YAYIN_HOST}testfabrika/mobil/apk/surum.json`], { cwd: KOK, ortamEk: { YAYIN_URL: 'https://x.ornek' } });
+  ol('3z3 denetim kipi (--dogrula) de ezmeyi reddeder', d.kod !== 0 && /YAYIN HEDEFİ EZİLEMEZ/.test(d.cikti), d.cikti.slice(-300));
+}
+{
+  // DAGY-9: künyedeki damga uzak yola girer — kabuk karakterli damga hiçbir şey göndermeden durur.
+  const o = ortam();
+  const dz = otaPaketi(o, { kanal: 'testfabrika', adres: TEST_ERP, bundleAdres: TEST_ERP });
+  const k = JSON.parse(fs.readFileSync(path.join(dz, 'yayin.json'), 'utf8'));
+  fs.writeFileSync(path.join(dz, 'yayin.json'), JSON.stringify({ ...k, damga: "1790000000000';id;'" }));
+  const r = mobilYayinla(o, ['--musteri=testfabrika', `--paket=${dz}`]);
+  ol('3z4 ⭐ künye damgası biçimsiz (kabuk karakteri) → DUR, ağ SIFIR', r.kod !== 0 && /Paket künyesi biçimsiz/.test(r.cikti) && agSifir(o), r.cikti.slice(-400));
+}
 
 /** Asgari ZIP (APK biçimi) — merkezî dizinli; biri deflate biri stored. */
 function zipYaz(yol, girdiler) {
@@ -1025,7 +1239,7 @@ function zipYaz(yol, girdiler) {
  * Asgari İKİLİ AndroidManifest (AXML, UTF-16 dize havuzu): `<manifest package>` + `<meta-data>`.
  * Android'in kurulumda okuduğu biçim — paket adı öznitelikten, metin aramasından değil.
  */
-function axmlYaz({ paket, meta = {} }) {
+function axmlYaz({ paket, meta = {}, surumAdi = null, surumKodu = null }) {
   const NS = 'http://schemas.android.com/apk/res/android';
   const YOK = 0xffffffff;
   const dizeler = [];
@@ -1035,6 +1249,8 @@ function axmlYaz({ paket, meta = {} }) {
     return i;
   };
   const ogeler = [{ ad: 'manifest', oz: paket == null ? [] : [{ ns: null, ad: 'package', deger: paket }] }];
+  if (surumKodu != null) ogeler[0].oz.push({ ns: NS, ad: 'versionCode', deger: String(surumKodu) });
+  if (surumAdi != null) ogeler[0].oz.push({ ns: NS, ad: 'versionName', deger: surumAdi });
   for (const [n, v] of Object.entries(meta)) ogeler.push({ ad: 'meta-data', oz: [{ ns: NS, ad: 'name', deger: n }, { ns: NS, ad: 'value', deger: v }] });
   for (const e of ogeler) { no(e.ad); for (const a of e.oz) { if (a.ns) no(a.ns); no(a.ad); no(a.deger); } }
   const veriler = dizeler.map((x) => { const u = Buffer.alloc(2); u.writeUInt16LE(x.length); return Buffer.concat([u, Buffer.from(x, 'utf16le'), Buffer.alloc(2)]); });
@@ -1063,13 +1279,14 @@ function axmlYaz({ paket, meta = {} }) {
   return Buffer.concat([bas, govde]);
 }
 function apk(o, { feed = `${YAYIN_HOST}adnansahin/mobil/`, erp = FABRIKA_ERP, bundleYok = false, manifestUrlYok = false,
-  paket = 'com.teks.erp.mobil', manifestBozuk = false, sertifikaPem = null, appConfig = null, capaGomulu = TEST_CAPA } = {}) {
+  paket = 'com.teks.erp.mobil', manifestBozuk = false, sertifikaPem = null, appConfig = null, capaGomulu = TEST_CAPA,
+  surumAdi = tabletSurum, surumKodu = 57 } = {}) {
   sayac += 1;
   const y = path.join(o.d, `sahte-${sayac}.apk`);
   const meta = { 'expo.modules.updates.ENABLED': 'true' };
   if (!manifestUrlYok) meta['expo.modules.updates.EXPO_UPDATE_URL'] = `${feed}ota/54.2/manifest`;
   if (sertifikaPem) meta['expo.modules.updates.CODE_SIGNING_CERTIFICATE'] = sertifikaPem;
-  const man = manifestBozuk ? Buffer.from('<manifest>duz metin</manifest>') : axmlYaz({ paket, meta });
+  const man = manifestBozuk ? Buffer.from('<manifest>duz metin</manifest>') : axmlYaz({ paket, meta, surumAdi, surumKodu });
   const g = [{ ad: 'AndroidManifest.xml', veri: man, yontem: 8 }];
   if (!bundleYok) g.push({ ad: 'assets/index.android.bundle', veri: Buffer.from(`hermes\u0000${erp}${capaDizeleri(capaGomulu)}\u0000son`, 'latin1'), yontem: 0 });
   if (appConfig) g.push({ ad: 'assets/app.config', veri: Buffer.from(JSON.stringify(appConfig)), yontem: 8 });
@@ -1108,6 +1325,48 @@ function apk(o, { feed = `${YAYIN_HOST}adnansahin/mobil/`, erp = FABRIKA_ERP, bu
   const r = mobilYayinla(o, ['--musteri=adnansahin', `--apk=${apk(o, { feed: `${YAYIN_HOST}testfabrika/mobil/` })}`, `--surum=${tabletSurum}`, '--vc=57']);
   ol('3k APK güncelleme adresi testfabrika + --musteri=adnansahin → DUR', r.kod !== 0 && /YANLIŞ GÜNCELLEME ADRESİNİ/.test(r.cikti), r.cikti.slice(-400));
 }
+// G22/DAGY-5 — APK: sürüm DOSYADAN, derleme künyesi zorunlu ve HEAD/terfi etiketine bağlı.
+{
+  const o = ortam();
+  const agac = tabletTerfiAgaci(o);
+  const iyi = mobilYayinla(o, ['--musteri=adnansahin', `--apk=${apk(o, { sertifikaPem: SERT_KANAL })}`], agac);
+  ol(`3k2 pozitif: --surum/--vc VERİLMEDEN → sürüm APK'dan (${tabletSurum}, vc 57), derleme bağı geçer`,
+    iyi.kod === 0 && new RegExp(`APK sürümü +: ${tabletSurum.replace(/\./g, '\\.')} \\(versionCode 57\\) — APK dosyasından`).test(iyi.cikti) &&
+      /derleme bağı: tablet-apk .* = HEAD = terfi etiketi/.test(iyi.cikti), iyi.cikti.slice(-600));
+  const vc = mobilYayinla(o, ['--musteri=adnansahin', `--apk=${apk(o, { sertifikaPem: SERT_KANAL })}`, '--vc=58'], agac);
+  ol('3k3 ⭐ --vc APK\'nın kendi versionCode\'u değil → DUR, ağ SIFIR', vc.kod !== 0 && /--vc=58 APK'NIN KENDİ SÜRÜMÜ DEĞİL \(APK: 57\)/.test(vc.cikti) && agSifir(o), vc.cikti.slice(-400));
+  const sr = mobilYayinla(o, ['--musteri=adnansahin', `--apk=${apk(o, { sertifikaPem: SERT_KANAL })}`, '--surum=9.9.9'], agac);
+  ol('3k4 ⭐ --surum APK\'nın kendi sürümü değil → DUR', sr.kod !== 0 && /--surum=9\.9\.9 APK'NIN KENDİ SÜRÜMÜ DEĞİL/.test(sr.cikti), sr.cikti.slice(-400));
+  const yok = mobilYayinla(o, ['--musteri=adnansahin', `--apk=${apk(o, { sertifikaPem: SERT_KANAL, surumAdi: null })}`], agac);
+  ol('3k5 APK versionName taşımıyor → ÖLÇÜLEMEDİ, DUR', yok.kod !== 0 && /ÖLÇÜLEMEDİ — APK sürümü okunamadı/.test(yok.cikti), yok.cikti.slice(-400));
+  const kunyesiz = apk(o, { sertifikaPem: SERT_KANAL });
+  fs.writeFileSync(`${kunyesiz}.kunyesiz`, '');
+  const ks = mobilYayinla(o, ['--musteri=adnansahin', `--apk=${kunyesiz}`], agac);
+  ol('3k6 ⭐ APK derleme künyesi YOK (elle taşınmış / eski derleme) → DUR (kuru da), ağ SIFIR',
+    ks.kod !== 0 && /DERLEME KÜNYESİ YOK/.test(ks.cikti) && agSifir(o), ks.cikti.slice(-400));
+  const baska = apk(o, { sertifikaPem: SERT_KANAL });
+  derlemeKunyesiYaz(apkKunyeYolu(baska), { urun: 'tablet-apk', kanal: 'adnansahin', surum: tabletSurum, commit: 'c'.repeat(40), dosyaYolu: baska, ek: { versionCode: 57 } });
+  const bs = mobilYayinla(o, ['--musteri=adnansahin', `--apk=${baska}`], agac);
+  ol('3k7 ⭐ APK başka commit\'ten derlenmiş → DUR (HEAD + terfi etiketi bağı)', bs.kod !== 0 && /HEAD [0-9a-f]{12} — yayın/.test(bs.cikti) && /onaylanan kod bu bayt DEĞİL/.test(bs.cikti), bs.cikti.slice(-500));
+  const vcKunye = apk(o, { sertifikaPem: SERT_KANAL });
+  derlemeKunyesiYaz(apkKunyeYolu(vcKunye), { urun: 'tablet-apk', kanal: 'adnansahin', surum: tabletSurum, commit: basOf(agac), dosyaYolu: vcKunye, ek: { versionCode: 56 } });
+  const vk = mobilYayinla(o, ['--musteri=adnansahin', `--apk=${vcKunye}`], agac);
+  ol('3k8 künyedeki versionCode APK\'nınkiyle aynı değil → DUR', vk.kod !== 0 && /künye versionCode 56 — artefakt 57/.test(vk.cikti), vk.cikti.slice(-400));
+}
+{
+  // OTA: derleme künyesi (derleme.json) zorunlu; manifest künyeden sonra değişirse durur.
+  const o = ortam();
+  const agac = tabletTerfiAgaci(o);
+  const d = otaPaketi(o);
+  fs.writeFileSync(path.join(d, '.kunyesiz'), '');
+  const r = mobilYayinla(o, ['--musteri=adnansahin', `--paket=${d}`], agac);
+  ol('3o2 ⭐ OTA derleme künyesi YOK → DUR, ağ SIFIR', r.kod !== 0 && /DERLEME KÜNYESİ YOK/.test(r.cikti) && agSifir(o), r.cikti.slice(-400));
+  const d2 = otaPaketi(o);
+  derlemeKunyesiHazirla(['--musteri=adnansahin', `--paket=${d2}`], agac);
+  fs.appendFileSync(path.join(d2, 'manifest'), ' ');
+  const r2 = mobilYayinla(o, ['--musteri=adnansahin', `--paket=${d2}`], agac);
+  ol('3o3 ⭐ manifest künyeden SONRA değişti → DUR', r2.kod !== 0 && /künyedeki özetle TUTMUYOR/.test(r2.cikti), r2.cikti.slice(-400));
+}
 {
   const o = ortam();
   const r = mobilYayinla(o, ['--musteri=adnansahin', `--apk=${apk(o, { paket: 'com.teks.erp.mobil.testfabrika' })}`, `--surum=${tabletSurum}`, '--vc=57']);
@@ -1143,9 +1402,33 @@ function apkKunyesi(apkYol, { anahtar = IMZA, kanal = 'adnansahin', vc = 57, sur
   fs.writeFileSync(yol, JSON.stringify(s, null, 2));
   return yol;
 }
-/** Kuru OLMAYAN yayın (yalnız yüklemeden önce duran kapılar ölçülür; doğrulama adresi bağlantı reddi). */
-const mobilYayinlaGercek = (o, args, agac) =>
-  kos(o, process.execPath, [path.join(agac, 'deploy/mobil-yayinla.mjs'), ...args, '--feed=http://127.0.0.1:9/adnansahin/mobil/'], { cwd: agac });
+/**
+ * Kuru OLMAYAN yayın (yalnız yüklemeden önce duran kapılar ölçülür). Doğrulama okuması ağa ÇIKMAZ: süreç önüne yüklenen
+ * sahte `fetch` bağlantı reddi verir (eskiden `--feed=127.0.0.1:9` ezmesiyle yapılırdı — ezme artık yükleyiciyi durdurur).
+ */
+const SAHTE_FETCH_KOPUK = path.join(GECICI, 'sahte-fetch-kopuk.mjs');
+fs.writeFileSync(SAHTE_FETCH_KOPUK, `import fs from 'node:fs';
+globalThis.fetch = async (u) => {
+  fs.appendFileSync(process.env.CAGRI_LOG, JSON.stringify({ arac: 'fetch', url: String(u).split('?')[0] }) + '\\n');
+  throw new TypeError('fetch failed (sahte: bağlantı reddi)');
+};
+`);
+const mobilYayinlaGercek = (o, args, agac) => {
+  derlemeKunyesiHazirla(args, agac);
+  return kos(o, process.execPath, ['--import', pathToFileURL(SAHTE_FETCH_KOPUK).href, path.join(agac, 'deploy/mobil-yayinla.mjs'), ...args], { cwd: agac });
+};
+{
+  // OTA kuru DEĞİL (testfabrika): uzak klasör konumsal argümanla açılır, derleme künyesi yayına GİTMEZ.
+  const o = ortam();
+  const agac = mobilAgaci(o);
+  const d = otaPaketi(o, { kanal: 'testfabrika', adres: TEST_ERP, bundleAdres: TEST_ERP });
+  const r = mobilYayinlaGercek(o, ['--musteri=testfabrika', `--paket=${d}`], agac);
+  const vds = KAYIT.kanallar.testfabrika.yayin.vdsMobil;
+  const scpler = o.cagrilar().filter((c) => c.arac === 'scp');
+  ol('3o4 testfabrika OTA: `ssh mkdir` hedefi kayıttan (konumsal argüman), yüklenenler arasında derleme.json YOK, yayin.json VAR',
+    iz(o).includes(`ssh mkdir ${vds}/ota/54.2/1790000000000`) && scpler.length >= 2 &&
+      scpler.every((c) => !c.kaynaklar.includes(PANEL_KUNYE_ADI)) && scpler.some((c) => c.kaynaklar.includes('yayin.json')), `${iz(o).join('\n')}\n${r.cikti.slice(-300)}`);
+}
 const apkArg = (o, sec = {}) => [`--apk=${apk(o, { sertifikaPem: SERT_KANAL, ...sec })}`, `--surum=${tabletSurum}`, '--vc=57'];
 
 {
@@ -1333,7 +1616,9 @@ const parmakIzi = (cikti) => /Native parmak izi : ([0-9a-f]+)/.exec(cikti)?.[1] 
   const tf = otaCheckKanal(o, 'testfabrika', ['--terfi-atla=fabrika çöktü, test turu beklemeden düzeltmeyi çıkar']);
   ol('4p testfabrika + --terfi-atla → DUR (terfi istemeyen kanalda kaçış anlamsız)', tf.kod !== 0 && /terfi istemiyor/.test(tf.cikti), tf.cikti.slice(-400));
   const tf2 = otaCheckKanal(o, 'testfabrika');
-  ol('4q testfabrika (terfiKaynagi yok) terfi satırı BASMAZ — davranışı değişmedi', tf2.kod === 0 && !/terfi/i.test(tf2.cikti), tf2.cikti.slice(-400));
+  // Kirli ağaç listesindeki dosya yolu (`·M scripts/lib/terfi.mjs`, derleme-bagi biçimi) terfi SATIRI değildir.
+  const terfiSatiri = tf2.cikti.split('\n').filter((l) => !/^\s*[MADRCUT?!·]{2} \S/.test(l)).join('\n');
+  ol('4q testfabrika (terfiKaynagi yok) terfi satırı BASMAZ — davranışı değişmedi', tf2.kod === 0 && !/terfi/i.test(terfiSatiri), tf2.cikti.slice(-400));
 }
 
 /* ------------------------------------------------------------------ *
@@ -1413,6 +1698,55 @@ console.log('\n§5 — ortak yüklemler');
   const disarida = [...okunan].filter((f) => !kanalBekcisiTetigi(f));
   ol(`5i commit kapısı tetiği bu bekçinin okuduğu ${okunan.size} dosyanın HEPSİNİ kapsıyor (import kapanışı ölçüldü)`,
     okunan.size > 15 && disarida.length === 0, disarida.join('\n'));
+}
+{
+  // G22/DAGY-5 — temiz ağaç yüklemi (gerçek git, geçici depo): iki yönlü — kirlilik KIRMIZI, yalnız sürüm alanı YEŞİL.
+  const d = fs.mkdtempSync(path.join(GECICI, 'temiz-'));
+  const g = (...a) => execFileSync(GERCEK_GIT, ['-c', 'user.email=b@t', '-c', 'user.name=b', ...a], { cwd: d, env: TEMIZ_ENV, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
+  const yaz = (rel, icerik) => { fs.mkdirSync(path.dirname(path.join(d, rel)), { recursive: true }); fs.writeFileSync(path.join(d, rel), icerik); };
+  const pj = (o) => `${JSON.stringify(o, null, 2)}\n`;
+  const yokBas = temizAgacDenetimi({ kok: (g('init', '-q'), d) });
+  ol('5j commit\'siz depo → ÖLÇÜLEMEDİ (temiz sayılmaz)', yokBas.sonuc === 'olculemedi', JSON.stringify(yokBas));
+  yaz('Electron/package.json', pj({ name: 'x', version: '1.0.0' }));
+  yaz('mobil/app.json', pj({ expo: { name: 'x', version: '1.0.0', android: { versionCode: 5 } } }));
+  yaz('src/a.ts', 'export const a = 1;\n');
+  g('add', '-A');
+  g('commit', '-q', '-m', 't');
+  const bas = g('rev-parse', 'HEAD').trim();
+  const t0 = temizAgacDenetimi({ kok: d });
+  ol('5j temiz ağaç → temiz, commit = HEAD', t0.sonuc === 'temiz' && t0.commit === bas, JSON.stringify(t0));
+  yaz('Electron/package.json', pj({ name: 'x', version: '1.0.1' }));
+  yaz('mobil/app.json', pj({ expo: { name: 'x', version: '1.0.1', android: { versionCode: 6 } } }));
+  const t1 = temizAgacDenetimi({ kok: d });
+  ol('5k pozitif: yalnız sürüm alanları (package.json version · app.json expo.version + versionCode) → temiz, izinli farklar raporlanır',
+    t1.sonuc === 'temiz' && t1.izinli.length === 2 && t1.izinli.some((x) => x.includes('version 1.0.0 → 1.0.1')), JSON.stringify(t1));
+  yaz('Electron/package.json', pj({ name: 'y', version: '1.0.1' }));
+  const t2 = temizAgacDenetimi({ kok: d });
+  ol('5l ⭐ sürüm alanının YANINDA başka alan değişti (package.json name) → kirli', t2.sonuc === 'kirli' && t2.kirli.some((x) => x.includes('Electron/package.json')), JSON.stringify(t2));
+  yaz('Electron/package.json', pj({ name: 'x', version: '1.0.1' }));
+  yaz('src/a.ts', 'export const a = 2;\n');
+  const t3 = temizAgacDenetimi({ kok: d });
+  ol('5m ⭐ kaynak değişikliği → kirli', t3.sonuc === 'kirli' && t3.kirli.some((x) => x.endsWith('src/a.ts')), JSON.stringify(t3));
+  g('checkout', '-q', '--', 'src/a.ts');
+  yaz('src/yeni.ts', 'x');
+  const t4 = temizAgacDenetimi({ kok: d });
+  ol('5n ⭐ izlenmeyen yeni dosya → kirli', t4.sonuc === 'kirli' && t4.kirli.some((x) => x.includes('?? src/yeni.ts')), JSON.stringify(t4));
+  fs.rmSync(path.join(d, 'src/yeni.ts'));
+  // Derleme bağı yüklemi: künye ↔ artefakt ↔ HEAD ↔ terfi etiketi.
+  yaz('cikti/paket.bin', 'bayt');
+  const kunye = { v: 1, urun: 'panel', kanal: 'k1', surum: '1.0.1', commit: bas, ...dosyaOzeti(path.join(d, 'cikti/paket.bin')) };
+  const bagi = (ek = {}) => derlemeBagiDenetimi({ kok: d, kunye: { ...kunye, ...ek.kunye }, kunyeYolu: 'x', beklenen: { urun: 'panel', kanal: 'k1', surum: '1.0.1' },
+    ozet: dosyaOzeti(path.join(d, 'cikti/paket.bin')), terfiUrunu: ek.terfi ?? null });
+  ol('5o pozitif: künye = HEAD, özet tutuyor, terfi istenmiyor → uyumlu', bagi().sonuc === 'uyumlu', JSON.stringify(bagi()));
+  ol('5p ⭐ terfi isteniyor, etiket YOK → ihlal', bagi({ terfi: 'panel' }).sonuc === 'ihlal' && bagi({ terfi: 'panel' }).satirlar.some((x) => /etiketi YOK/.test(x)));
+  g('commit', '-q', '--allow-empty', '-m', 'baska');
+  const baskaC = g('rev-parse', 'HEAD').trim();
+  g('tag', '-a', 'terfi/k1/panel-v1.0.1', baskaC, '-m', 'onay cümlesi burada yazıyor');
+  g('checkout', '-q', '--detach', bas);
+  const yanlis = bagi({ terfi: 'panel' });
+  ol('5q ⭐ terfi etiketi BAŞKA commit\'i onaylıyor (HEAD = künye) → ihlal', yanlis.sonuc === 'ihlal' && yanlis.satirlar.some((x) => /onaylanan kod bu bayt DEĞİL/.test(x)), JSON.stringify(yanlis));
+  g('tag', '-f', '-a', 'terfi/k1/panel-v1.0.1', bas, '-m', 'onay cümlesi burada yazıyor');
+  ol('5r pozitif: terfi etiketi künyenin commit\'inde → uyumlu', bagi({ terfi: 'panel' }).sonuc === 'uyumlu', JSON.stringify(bagi({ terfi: 'panel' })));
 }
 
 /* ------------------------------------------------------------------ *
@@ -1557,11 +1891,16 @@ console.log('\n§7 — panel terfi kapısı: ssh\'tan ÖNCE, paketlemede derleme
     ol('7l --kuru etiketsiz → DUR (git şartları kuru kipte de ölçülür)', r2.kod !== 0 && agSifir(o2) && /onay etiketi YOK/.test(r2.cikti), r2.cikti.slice(-500));
   }
   {
-    // ⭐ SONDA: terfi çağrısı sökülürse etiketsiz commit fabrikaya YÜKLENİR — 7b'nin kapıyı ölçtüğünün kanıtı.
+    // ⭐ SONDA: terfi çağrısı ve derleme bağının terfi-etiketi halkası (G22) birlikte sökülürse etiketsiz commit fabrikaya
+    // YÜKLENİR — 7b'nin kapıyı ölçtüğünün kanıtı. Yalnız terfi çağrısı sökülürse derleme bağı yine durdurur (7m2: iki kat).
+    const terfiSok = (m) => m.replaceAll('kanal-kapisi.mjs" terfi "$musteri"', 'kanal-kapisi.mjs" kanal "$musteri"');
     const { o } = yayinSenaryosu({ terfi: { terfiEtiketi: null },
-      mutasyon: (m) => m.replaceAll('kanal-kapisi.mjs" terfi "$musteri"', 'kanal-kapisi.mjs" kanal "$musteri"') });
-    ol('7m ⭐ SONDA: yayıncıdan terfi kapısı sökülünce etiketsiz commit adnansahin\'e yüklenir (kapı yük taşıyor)',
+      mutasyon: (m) => terfiSok(m).replace('panel-derleme-bagi "$musteri" "$rel" "$surum" \\\n', 'panel-derleme-bagi "$musteri" "$rel" "$surum" --terfi-atla \\\n') });
+    ol('7m ⭐ SONDA: yayıncıdan terfi kapısı (+ derleme bağının terfi halkası) sökülünce etiketsiz commit adnansahin\'e yüklenir (kapı yük taşıyor)',
       agText(o).some((c) => c.arac === 'scp'), iz(o).join('\n'));
+    const { o: o2, r: r2 } = yayinSenaryosu({ terfi: { terfiEtiketi: null }, mutasyon: terfiSok });
+    ol('7m2 ⭐ yalnız terfi çağrısı sökülürse derleme bağı (G22) terfi etiketinin yokluğunu yakalar → DUR, scp SIFIR',
+      r2.kod !== 0 && /terfi\/adnansahin\/panel-v9\.9\.9 etiketi YOK/.test(r2.cikti) && !agText(o2).some((c) => c.arac === 'scp'), r2.cikti.slice(-500));
   }
   {
     const s = paketleSenaryosu(['adnansahin', SURUM], { terfi: { terfiEtiketi: null } });
@@ -1615,6 +1954,8 @@ console.log('\n§8 — panel imzalı künye: imzasız/geçersiz künyeli latest.
     const rel = path.join(agac, 'Electron/release/adnansahin/9.9.9');
     panelArtefakti(rel, { ...ADNANSAHIN_PANEL, surum: '9.9.9' });
     fs.appendFileSync(path.join(rel, 'TeksERP-9.9.9-Setup.exe'), 'kurcalandı');
+    // Derleme künyesi kurcalanmış dosyaya göre yeniden yazılır: ölçülen kapı imzalı künyedir (derleme bağı 1d4'te ölçülür).
+    derlemeKunyesiYaz(path.join(rel, PANEL_KUNYE_ADI), { urun: 'panel', kanal: 'adnansahin', surum: '9.9.9', commit: basOf(agac), dosyaYolu: path.join(rel, 'TeksERP-9.9.9-Setup.exe') });
     const r = kos(o, path.join(agac, 'deploy/electron-yayinla.sh'), ['--musteri=adnansahin', '9.9.9'], { cwd: agac });
     ol('8f künyeden SONRA değişmiş kurulum dosyası (DOSYA_OZETI) → DUR, yükleme SIFIR', r.kod !== 0 && yalnizTerfiOkumasi(o) && /DOSYA_OZETI/.test(r.cikti), r.cikti.slice(-400));
   }

@@ -9,6 +9,10 @@
 //   node scripts/kanal-kapisi.mjs panel-derleme <kod>              # electron-builder `-c.*` kimlik argümanları (satır başına bir)
 //   node scripts/kanal-kapisi.mjs backend-paketle <kod>          # kayıtlı mı + backend bloğu (pm2Ad/urunAdi/guvenCapasi) → KEY=VALUE
 //   node scripts/kanal-kapisi.mjs panel-yayin <kod> <paket dizini> # paket (release/<kod>/<sürüm>) bu kanalın mı
+//   node scripts/kanal-kapisi.mjs yayin-hedefi <kod> <panel|tablet|backend>  # hedef KAYITTAN → KEY=VALUE; ortam ezmesi = DUR
+//   node scripts/kanal-kapisi.mjs temiz-agac                         # paketleme öncesi: ağaç temiz mi → stdout'a HEAD commit'i
+//   node scripts/kanal-kapisi.mjs panel-derleme-kunyesi <kod> <paket dizini> <sürüm> <commit>  # derleme.json yaz (Setup.exe özeti)
+//   node scripts/kanal-kapisi.mjs panel-derleme-bagi <kod> <paket dizini> <sürüm> [--terfi-atla[=…]]  # künye ↔ exe ↔ asar ↔ HEAD ↔ terfi
 //   node scripts/kanal-kapisi.mjs terfi <kod> <panel|tablet> <sürüm> [--kuru] [--terfi-atla=<cümle>]  # K5 (scripts/lib/terfi.mjs)
 //   node scripts/kanal-kapisi.mjs terfi-atla-kaydi <kod> <panel|tablet> <sürüm> <cümle>             # kaçışın etiketi (best-effort)
 //   node scripts/kanal-kapisi.mjs panel-capa [<kod> <paket dizini>]  # panel imza çapası dolu/üretim biçiminde (+ pakete gömülü)
@@ -40,6 +44,10 @@ import {
   varsayilanLisansSunucusu,
 } from './lib/kanallar.mjs';
 import { cumleDenetle, terfiAtlaKaydi, terfiKapisi, terfiRaporu } from './lib/terfi.mjs';
+import { ezmeSatirlari, yayinEzmeleri, yayinHedefi } from './lib/yayin-hedefi.mjs';
+import { PANEL_KUNYE_ADI, derlemeBagiDenetimi, derlemeKunyesiOku, derlemeKunyesiYaz, dosyaOzeti, temizAgacDenetimi } from './lib/derleme-bagi.mjs';
+import { terfiKaynagi } from './lib/terfi.mjs';
+import path from 'node:path';
 import fs from 'node:fs';
 
 // Panel künye kapısı GECİKMELİ yüklenir: panel komutları dışındaki her komut (kanal · terfi · backend…) panelin
@@ -176,6 +184,49 @@ function main(argv) {
       console.log(`  ✓ paket "${kod}" kanalının (app-update.yml · updater önbelleği · exe adı · paketin package.json'ı · ana süreç/arayüz kimliği)`);
       return;
     }
+    if (komut === 'yayin-hedefi') {
+      // Kabuk yükleyici hedefi buradan alır; ortamı bu süreç miras aldığı için ezme burada görülür.
+      const ezmeler = yayinEzmeleri({ env: process.env });
+      if (ezmeler.length) dur('YAYIN HEDEFİ EZİLEMEZ — hiçbir şey yüklenmedi', ezmeSatirlari(ezmeler), 1);
+      const h = yayinHedefi(kod, dizin);
+      for (const [k, v] of [['SSH_HEDEF', h.ssh], ['UZAK_DIZIN', h.vds], ['YAYIN_URL', h.feed], ['DEFTER', h.defter]]) console.log(`${k}=${v}`);
+      return;
+    }
+    if (komut === 'temiz-agac') {
+      const h = temizAgacDenetimi();
+      if (h.sonuc === 'temiz') {
+        for (const x of h.satirlar) console.error(`  ✓ ${x}`);
+        console.log(h.commit);
+        return;
+      }
+      dur(h.sonuc === 'kirli' ? 'PAKETLENEMEZ — çalışma ağacı temiz değil' : 'ÖLÇÜLEMEDİ — çalışma ağacı okunamadı', h.satirlar, h.sonuc === 'kirli' ? 1 : 2);
+    }
+    if (komut === 'panel-derleme-kunyesi') {
+      const [, , , surum, commit] = argv;
+      kanalCoz(kod);
+      if (!dizin || !surum || !commit) dur('panel-derleme-kunyesi: <kod> <dizin> <sürüm> <commit> gerekli', [], 2);
+      const k = derlemeKunyesiYaz(path.join(dizin, PANEL_KUNYE_ADI), {
+        urun: 'panel', kanal: kod, surum, commit, dosyaYolu: path.join(dizin, `TeksERP-${surum}-Setup.exe`),
+      });
+      console.log(`  ✓ derleme künyesi: ${PANEL_KUNYE_ADI} · commit ${k.commit.slice(0, 12)} · ${k.dosya} ${k.boyut} B · sha256 ${k.sha256.slice(0, 16)}…`);
+      return;
+    }
+    if (komut === 'panel-derleme-bagi') {
+      const [, , , surum, ...ek] = argv;
+      const { kayit } = kanalCoz(kod);
+      if (!dizin || !surum) dur('panel-derleme-bagi: <kod> <dizin> <sürüm> gerekli', [], 2);
+      const atla = ek.some((a) => a === '--terfi-atla' || a.startsWith('--terfi-atla='));
+      const kunyeYolu = path.join(dizin, PANEL_KUNYE_ADI);
+      const h = derlemeBagiDenetimi({
+        kunye: derlemeKunyesiOku(kunyeYolu), kunyeYolu,
+        beklenen: { urun: 'panel', kanal: kod, surum },
+        ozet: dosyaOzeti(path.join(dizin, `TeksERP-${surum}-Setup.exe`)),
+        gomuluCommit: panelArtefaktKimligi(dizin).paket.gitCommit,
+        terfiUrunu: terfiKaynagi(kayit, kod) && !atla ? 'panel' : null,
+      });
+      if (h.sonuc === 'uyumlu') return void console.log(`  ✓ ${h.satirlar[0]}`);
+      dur(h.sonuc === 'olculemedi' ? 'ÖLÇÜLEMEDİ — derleme bağı' : 'DERLEME BAĞI KOPUK — yüklenen bayt onaylanan commit\'e bağlanmıyor', h.satirlar, h.sonuc === 'olculemedi' ? 2 : 1);
+    }
     if (komut === 'terfi') {
       const [, , urun, surum, ...ek] = argv;
       const bilinmeyen = ek.filter((a) => a !== '--kuru' && a !== '--terfi-atla' && !a.startsWith('--terfi-atla='));
@@ -209,7 +260,7 @@ function main(argv) {
       void yayinBildirVeBas({ olay: 'TERFI_ATLANDI', urun, kanal: kod, surum, ayrinti: { cumle: c.cumle, etiket: t.ad } });
       return;
     }
-    dur(`bilinmeyen komut: ${komut ?? '(yok)'}`, ['kanal <kod> · panel-paketle <kod> · backend-paketle <kod> · panel-derleme <kod> · panel-yayin <kod> <dizin> · terfi <kod> <ürün> <sürüm> · terfi-atla-kaydi <kod> <ürün> <sürüm> <cümle> · panel-capa [<kod> <dizin>] · panel-imza <kod> <dizin> · panel-rotasyon <kod> <dizin> <dosya> · panel-imza-uzak <kod> <dosya>'], 2);
+    dur(`bilinmeyen komut: ${komut ?? '(yok)'}`, ['kanal <kod> · panel-paketle <kod> · backend-paketle <kod> · panel-derleme <kod> · panel-yayin <kod> <dizin> · yayin-hedefi <kod> <ürün> · temiz-agac · panel-derleme-kunyesi <kod> <dizin> <sürüm> <commit> · panel-derleme-bagi <kod> <dizin> <sürüm> · terfi <kod> <ürün> <sürüm> · terfi-atla-kaydi <kod> <ürün> <sürüm> <cümle> · panel-capa [<kod> <dizin>] · panel-imza <kod> <dizin> · panel-rotasyon <kod> <dizin> <dosya> · panel-imza-uzak <kod> <dosya>'], 2);
   } catch (e) {
     hataDur(e);
   }

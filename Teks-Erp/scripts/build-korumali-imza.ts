@@ -10,6 +10,7 @@
 //   npx tsx scripts/build-korumali-imza.ts imzala --kok=<paket dizini> --anahtar=<dosya> --surum=<x.y.z>
 //       [--urun=backend] [--musteri=<kod>] [--kurulum=<uuid>] [--derleme-tarihi=<ISO>]
 //   npx tsx scripts/build-korumali-imza.ts zip --zip=<paket.zip> --anahtar=<dosya> [--kurulum=<uuid>] [--surum-belgesi=<md>]
+//       [--ci-kosu=<korumali-paket.yml koşu numarası> | --ci-atla="<kullanıcının onay cümlesi>"]   (ÜRETİM anahtarında biri ZORUNLU)
 //   npx tsx scripts/build-korumali-imza.ts belge --belge=<PAKET-DOCKER.json> --anahtar=<dosya>   (Docker teslim künyesi → <belge>.jws)
 //
 // `zip` kipi: zip'i açar, sürüm/müşteri/derleme künyesini PAKET.json + dist/server-kunye.json'dan okur,
@@ -19,6 +20,13 @@
 // Anahtar AİLESİ derlemenin çapa kipine uymalı (G3, `dist/server-kunye.json` `guvenCapasi`): üretim çapalı pakete
 // yalnız `paket-<yıl>`, hazırlık çapalıya yalnız `paket-hazirlik*` — uymazsa parola sorulmadan RED (paket açılışta
 // imzalı listeyi tanımaz, çekirdeksiz kalırdı).
+// CI KÖKENİ (G22/ALT-9): `.jsc` CI'da derlenir, Mac gözle denetleyemez — üretim anahtarıyla (`paket-<yıl>`) imza
+// `--ci-kosu=<id>` ister ve parola sorulmadan ÖNCE koşu ölçülür: `korumali-paket.yml`, başarıyla bitmiş, `main`
+// dalı, commit'i yapıtın künyesindeki (`dist/server-kunye.json`) ve PAKET.json'unki (`scripts/lib/ci-kokeni.ts`).
+// Hazırlık anahtarında koşu verilirse ölçülür (dal serbest), verilmezse uyarı basılır.
+// KAÇIŞ (kullanıcı kararı 2026-10-01): koşu YOKKEN üretim imzası yalnız `--ci-atla="<kullanıcının cümlesi>"` ile;
+// cümle + saat + makine + HEAD imzalı yüke (`ciKokeni`) girer, yayıncı (`deploy/backend-yayinla.mjs`) uyarır ve
+// defterine yazar. Hazırlık anahtarında `--ci-atla` RED (kaçış gerekmez).
 // Parolalı anahtarla imzada (`imzala` · `zip` · `belge`) parola TTY'den ya da stdin'in satırından sorulur;
 // parola argümandan/ortamdan ASLA alınmaz (`--parola…` biçimli argüman çıkış 2 ile reddedilir).
 // =============================================================================
@@ -38,12 +46,20 @@ import {
   writePackageKey,
 } from "./lib/butunluk-imza";
 import { CliError, args, askPassword } from "./lib/cli-girdi";
+import { git } from "./lib/git";
+import { type CiKokeniKaydi, ciAtlaHukmu, ciKokeniHukmu, ciKosusuOku } from "./lib/ci-kokeni";
 import { STAGING_PACKAGE_CLASSES, STAGING_PACKAGE_KID_PREFIX, isProductionPackageKid, isStagingPackageKid } from "../src/lib/license/integrity-scope";
 import { INTEGRITY_LIST_FILE } from "../src/lib/license/integrity-list";
+import { istanbulSaati } from "../../scripts/lib/kullanici-cumlesi.mjs";
 
 function arg(name: string): string | null {
   const p = process.argv.find((a) => a.startsWith(`--${name}=`));
   return p ? p.slice(name.length + 3) : null;
+}
+/** Verilmediyse undefined; çıplak `--ad` ya da `--ad=` boş dize (boş kaçış cümlesi sessizce "yok" sayılmaz). */
+function argVar(name: string): string | undefined {
+  const p = process.argv.find((a) => a === `--${name}` || a.startsWith(`--${name}=`));
+  return p === undefined ? undefined : p.slice(name.length + 3);
 }
 function need(name: string): string {
   const v = arg(name);
@@ -109,6 +125,55 @@ interface DirOptions {
   readonly keyFile: string;
   readonly surum: string;
   readonly musteri: string | null;
+  /** PAKET.json `commit` (zip kipinde); dizin imzasında null. */
+  readonly paketCommit?: string | null;
+}
+
+/** Kaçışın kaydı HEAD'i taşır; ölçülemezse kaçış yok (fail-closed). */
+function depoHead(): string {
+  try {
+    const sha = git(["-C", DEPO_KOKU, "rev-parse", "HEAD"], { stdio: "yut" }).trim();
+    if (/^[0-9a-f]{40}$/.test(sha)) return sha;
+  } catch {
+    /* aşağıda RED */
+  }
+  throw new Error(`--ci-atla: depo HEAD'i ölçülemedi (${DEPO_KOKU}) — kaçış kaydı HEAD'siz yazılmaz, imza atılmadı`);
+}
+
+/**
+ * ALT-9 — yapıtın CI kökeni; üretim anahtarında `--ci-kosu` ya da kullanıcının cümlesiyle `--ci-atla` zorunlu,
+ * parola sorulmadan ÖNCE ölçülür. Dönen kayıt imzalı yüke girer (hazırlıkta koşusuz: null).
+ */
+function ciKokeniDenetle(kunye: Record<string, unknown>, keyFile: string, paketCommit: string | null): CiKokeniKaydi | null {
+  const kid = packageKeyInfo(keyFile).kid;
+  const uretim = isProductionPackageKid(kid);
+  const id = arg("ci-kosu");
+  const atla = argVar("ci-atla");
+  if (atla !== undefined) {
+    const h = ciAtlaHukmu({ ham: atla, uretim, kosuVar: argVar("ci-kosu") !== undefined });
+    if (h.sonuc !== "uyumlu") throw new Error(`CI KAÇIŞI REDDEDİLDİ (${kid}) — imza atılmadı:\n  ${h.satirlar.join("\n  ")}`);
+    const kayit: CiKokeniKaydi = { kip: "atlandi", cumle: h.cumle, saat: istanbulSaati(), makine: os.hostname().split(".")[0] || "?", head: depoHead() };
+    console.warn(`⚠ ${h.satirlar[0]}`);
+    console.warn(`  saat ${kayit.saat} · makine ${kayit.makine} · HEAD ${kayit.head.slice(0, 12)} — imzalı künyeye yazılıyor; yayıncı uyaracak`);
+    return kayit;
+  }
+  if (!id) {
+    if (uretim) {
+      throw new Error(
+        `üretim PAKET imzası (${kid}) CI kökeni ister: --ci-kosu=<korumali-paket.yml koşu numarası> (gh run list --workflow=korumali-paket.yml)` +
+          ` — koşu yoksa yalnız kullanıcının cümlesiyle: --ci-atla="<cümle>" — imza atılmadı`,
+      );
+    }
+    console.warn(`⚠ CI kökeni ÖLÇÜLMEDİ (hazırlık anahtarı ${kid}, --ci-kosu verilmedi)`);
+    return null;
+  }
+  const kosu = ciKosusuOku(id);
+  const h = ciKokeniHukmu({ kosu, kunyeCommit: kunye.commit, paketCommit, uretim });
+  if (h.sonuc !== "uyumlu") {
+    throw new Error(`CI KÖKENİ ${h.sonuc === "olculemedi" ? "ÖLÇÜLEMEDİ" : "TUTMUYOR"} — imza atılmadı:\n  ${h.satirlar.join("\n  ")}`);
+  }
+  console.log(`✓ ${h.satirlar[0]}`);
+  return { kip: "kosu", kosu: Number(id), dal: String(kosu.head_branch), commit: String(kosu.head_sha) };
 }
 
 /** Derlemenin çapa kipi ile anahtarın ailesi uyuşmalı; künyede kip yoksa (G3 öncesi derleme) uyarı. */
@@ -127,6 +192,7 @@ async function signDir(o: DirOptions): Promise<string> {
   const kunyeFile = path.join(o.root, "dist", "server-kunye.json");
   const kunye = fs.existsSync(kunyeFile) ? readJson(kunyeFile) : {};
   anahtarAilesiDenetle(kunye, o.keyFile);
+  const ciKokeni = ciKokeniDenetle(kunye, o.keyFile, o.paketCommit ?? null);
   const key = await openPackageKey(o.keyFile, paketParolasi);
   const derlemeTarihi = arg("derleme-tarihi") ?? (typeof kunye.zaman === "string" ? kunye.zaman : null);
   if (!derlemeTarihi) throw new Error("derleme tarihi yok: dist/server-kunye.json `zaman` ya da --derleme-tarihi");
@@ -139,6 +205,7 @@ async function signDir(o: DirOptions): Promise<string> {
     musteri: o.musteri ?? (typeof kunye.musteri === "string" ? kunye.musteri : null),
     paketId: typeof kunye.paketId === "string" ? kunye.paketId : undefined,
     kurulumId: arg("kurulum") ?? (typeof kunye.kurulumId === "string" ? kunye.kurulumId : null),
+    ciKokeni,
   });
   console.log(`✓ ${r.file} + ${INTEGRITY_LIST_FILE} — ${r.entries.length} dosya · kapsam ${r.manifest.kapsam.dizinler.join(", ")} · kid ${key.kid}`);
   return key.kid;
@@ -158,7 +225,7 @@ async function signZip(): Promise<void> {
     const surum = paket.uygulamaSurumu;
     if (typeof surum !== "string") throw new Error("PAKET.json uygulamaSurumu yok");
     const kanal = typeof paket.backendKanal === "string" ? paket.backendKanal : null;
-    const kid = await signDir({ root: tmp, keyFile, surum, musteri: arg("musteri") ?? kanal });
+    const kid = await signDir({ root: tmp, keyFile, surum, musteri: arg("musteri") ?? kanal, paketCommit: typeof paket.commit === "string" ? paket.commit : null });
     const updated = { ...paket, dosyaSayisi: Number(paket.dosyaSayisi) + 2, butunlukKid: kid };
     fs.writeFileSync(path.join(tmp, "PAKET.json"), `${JSON.stringify(updated, null, 2)}\n`);
     execFileSync("zip", ["-q", "-X", zip, "butunluk.jws", INTEGRITY_LIST_FILE, "PAKET.json"], { cwd: tmp });

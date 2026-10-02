@@ -22,6 +22,10 @@ Bu dosya, mobil uygulamanın **iki imza anahtarını** parola korumalı bir arş
 
 Yani **asıl korunması gereken mühürdür**; OTA anahtarının kaybı çok daha ucuz.
 
+> **Karar (kullanıcı, 2026-10-01 — güvenlik denetimi G22):** bu şifreli yedek DEPODA KALIR; silinmez, taşınmaz.
+> Git geçmişindeki kopyanın riski (parolanın çevrimdışı denenmesi) anahtar döndürmeyle karşılanır — plan:
+> [`docs/ops/MOBIL-UZAKTAN-GUNCELLEME.md`](../docs/ops/MOBIL-UZAKTAN-GUNCELLEME.md) §5a (yalnız plan; uygulama ayrı karar).
+
 ## Geri yükleme
 
 ```bash

@@ -155,8 +155,13 @@ cd mobil
 TEKSERP_KANAL=<kanal> npx expo prebuild --platform android --clean --no-install
 npm run build:apk -- --musteri=<kanal>
 node ../deploy/mobil-yayinla.mjs --musteri=<kanal> --apk=android/app/build/outputs/apk/release/app-release.apk \
-     --surum=<sürüm> --vc=<versionCode> --anahtar=<istemci yayın anahtarı dosyası>   # parola TTY'den
+     --anahtar=<istemci yayın anahtarı dosyası>   # parola TTY'den
 ```
+
+> **Derleme bağı (G22):** sürüm ve versionCode APK'nın KENDİSİNDEN okunur (`--surum`/`--vc` artık gerekmez; verilirse
+> APK'dakiyle eşit olmalı). `build:apk` yalnız TEMİZ ağaçta derler ve APK'nın yanına `app-release.apk.derleme.json`
+> (commit + sha256 + sürüm) bırakır; yayın bu künyeyi APK'ya, HEAD'e ve üretim kanalında terfi etiketine bağlar —
+> APK başka yere taşınırsa künyesiyle BİRLİKTE taşınır.
 
 > **İmzalı künye (2026-10-01, G6):** `apk/surum.json` imzalı künye taşımadan YÜKLENMEZ; tablet indirdiği APK'yı
 > bu künyeyle doğrulamadan kurmaz. Ayrıntı: §4d.
@@ -331,6 +336,26 @@ yayınla. Tersi, tabletleri indirecek bir şey olmadan kilitler.
 saklanmalı.** İmza `plugins/withReleaseKeystore.js` ile her prebuild'de yeniden yazılır
 (elle düzenleme bir sonraki prebuild'de sessizce kaybolurdu) ve `build:apk` üretilen APK'nın
 parmak izini mühürle karşılaştırır.
+
+### 5a. Anahtar rotasyonu — PLAN (G22; uygulanmadı, karar ve takvim kullanıcıda)
+
+Şifreli yedek (`mobil/keystore-yedek.tar.gz.enc`) git geçmişinde durur ve tek parolaya bağlıdır (kullanıcı kararı
+2026-10-01: dosya depoda KALIR). Parola bir gün zayıf çıkarsa ya da sızarsa iki anahtar da ele geçmiş sayılır;
+ucuz olanından başlayan döndürme planı:
+
+1. **OTA kod imzalama anahtarı — kanal başına, ucuz.** Kanal için yeni anahtar + sertifika üretilir
+   (`ota-keys-<kanal>/`, `ota-certs-<kanal>/`; kayıttaki `otaSertifika` yolu yeni dosyayı gösterir — kimlik değişimi
+   olduğundan üretim kanalında bir GÖÇ kararıdır), yeni sertifika gömülü **yeni APK** aynı mühürle derlenir ve uygulama
+   içi güncelleyiciden dağıtılır. Geçiş penceresinde eski APK'lar yalnız eski anahtarla imzalı OTA'yı kabul eder:
+   önce APK (yeni sertifika), tabletlerin tamamı aldıktan sonra yeni anahtarla OTA. Sıra: testfabrika → (kullanıcı
+   cümlesiyle) adnansahin. Yeni anahtarlar yedek arşive girer ve arşiv yeniden doğrulanır.
+2. **APK mührü — pahalı, APK Signature Scheme v3 ile kayıpsız.** Android 9+ (API 28) `apksigner rotate` ile eski
+   mühürden yeniye *proof-of-rotation* soyu kurulur; v3 imzalı APK eski mühürle kurulu uygulamanın üstüne kurulur,
+   sil-kur gerekmez. Ön koşullar ölçülecek: sahadaki tabletlerin hepsi API ≥ 28 mi, Gradle/AGP `signingConfig`
+   v3 + soy dosyası (`--lineage`) destekliyor mu, `build-apk` mühür parmak izi kapısı yeni mührü + soyu tanıyor mu.
+   Soy dosyası ve iki mühür de çevrimdışı saklanır; eski mühür soy içinde imza yetkisini korur (`--set-rollback` yok).
+3. **Yedeğin kendisi:** yenilenen arşiv uzun rastgele parolayla (parola yöneticisi) üretilir; eski arşiv git
+   geçmişinde kalır — bu yüzden 1 ve 2 tamamlanmadan parola değişimi tek başına koruma sağlamaz.
 
 ---
 

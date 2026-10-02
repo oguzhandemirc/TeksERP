@@ -82,6 +82,7 @@ import { ApkOlculemedi, apkKimligi, sertifikaParmakIzi } from './lib/apk-kimlik.
 import { KANAL_ORTAM, tabletYapilandirmaFarki } from './lib/kanal.cjs';
 import { KAYIT_REL, Olculemedi, erpAdresiEsit, kanalCoz } from '../../scripts/lib/kanallar.mjs';
 import { terfiKapisi, terfiRaporu } from '../../scripts/lib/terfi.mjs';
+import { apkKunyeYolu, derlemeKunyesiYaz, temizAgacDenetimi } from '../../scripts/lib/derleme-bagi.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const PROJECT_ROOT = path.resolve(HERE, '..');
@@ -1165,6 +1166,10 @@ async function main() {
     const sCheck = surumBas();
     surumNotuKapisi(sCheck);
     terfiKapisiUygula(kod, sCheck);
+    // Temiz ağaç (G22) ön kontrolde yalnız SÖYLENİR; gerçek derleme kirli ağaçta DURUR.
+    const agacCheck = temizAgacDenetimi();
+    if (agacCheck.sonuc === 'temiz') bilgi(agacCheck.satirlar[0]);
+    else uyari(`${agacCheck.satirlar.join('\n     ')}\n     (--check: uyarı — gerçek derleme bu ağaçta APK ÜRETMEZ)`);
     // Güncelleme kapısı ucuz yolda da koşar — "prebuild'i unuttum" hatası
     // 70 saniyelik derlemenin sonunda değil, saniyeler içinde görünsün.
     // android/ henüz üretilmemişse kapı atlanır (androidVarMi zaten söyler).
@@ -1207,13 +1212,45 @@ async function main() {
   terfiKapisiUygula(kod, s);
   guncellemeKapisi(kod, kanal);
 
+  // (f4) TEMİZ AĞAÇ (G22) — APK commit'lenmemiş/izlenmeyen kaynak taşımaz; derleme commit'i APK'nın yanındaki
+  // künyeye (`<apk>.derleme.json`) yazılır, yayıncı onu HEAD'e ve terfi etiketine bağlar (android/ prebuild
+  // çıktısı git dışıdır, bu kapının kapsamında DEĞİLDİR). İstisna yalnız app.json sürüm alanları.
+  const agac = temizAgacDenetimi();
+  if (agac.sonuc !== 'temiz') {
+    dur(agac.sonuc === 'kirli' ? 'APK DERLENMEZ — çalışma ağacı temiz değil' : 'ÖLÇÜLEMEDİ — çalışma ağacı okunamadı', ...agac.satirlar);
+  }
+  bilgi(agac.satirlar[0]);
+  fs.rmSync(apkKunyeYolu(APK_PATH), { force: true });
+
   const derlemeBaslangici = Date.now();
   onbellekleriTemizle();
   gradleKos(adres);
   const stat = apkDogrula(adres, { derlemeBaslangici });
   apkKanalKapisi(APK_PATH, kod, kanal);
   imzaKapisi(APK_PATH);
+  derlemeKunyesiBirak(kod, agac.commit);
   ozet(adres, s, stat, APK_PATH, { kod, kanal });
+}
+
+/**
+ * Derleme künyesi (G22): bütün kapılardan geçen APK'nın yanına commit + özet + APK'nın KENDİ sürümü. Derleme
+ * sırasında ağaç ya da HEAD değiştiyse künye YAZILMAZ — yayıncı künyesiz APK'yı reddeder.
+ */
+function derlemeKunyesiBirak(kod, commit) {
+  const son = temizAgacDenetimi();
+  if (son.sonuc !== 'temiz' || son.commit !== commit) {
+    dur('Derleme sırasında çalışma ağacı ya da HEAD değişti — APK güvenilmez, künye YAZILMADI', ...son.satirlar);
+  }
+  let k;
+  try {
+    const { surumAdi, surumKodu } = apkKimligi(APK_PATH);
+    k = derlemeKunyesiYaz(apkKunyeYolu(APK_PATH), {
+      urun: 'tablet-apk', kanal: kod, surum: surumAdi, commit, dosyaYolu: APK_PATH, ek: { versionCode: surumKodu },
+    });
+  } catch (e) {
+    dur('Derleme künyesi yazılamadı — APK yayınlanamaz', String(e?.message ?? e));
+  }
+  bilgi(`Derleme künyesi: ${path.basename(apkKunyeYolu(APK_PATH))} · commit ${k.commit.slice(0, 12)} · ${k.surum} (vc ${k.versionCode}) — APK'yla BİRLİKTE taşı`);
 }
 
 // Beklenmedik istisna da GÜRÜLTÜLÜ bitsin: çıplak yığın izi operatöre

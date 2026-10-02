@@ -45,3 +45,34 @@ Teks-Erp/siklik-defteri.jsonl
 /lisans/
 # Sunucu kurulumu (Inno) yerel derleme çıktısı — CI /O ile koşucunun geçici dizinine yazar
 deploy/kurulum/cikti/
+
+# ── Sırlar ve anahtarlar — KÖKTE de yakalanır (G22): alt proje .gitignore'una tek başına güvenilmez ──
+# Bekçi: Teks-Erp/scripts/test_env_not_tracked.ts §4 (yalnız bu dosyayla, geçici depoda ölçer).
+.env
+.env.*
+!**/.env.example
+!**/.env.*.example
+!**/.env.ornek
+# İzlenen ve sır taşımayan tek env dosyası (aynı bekçinin IZINLI listesi; sır anahtarı taşırsa kırmızı)
+!/Electron/.env.production
+*.pem
+*.key
+*.p8
+*.p12
+*.pfx
+*.jks
+*.keystore
+*.tkenc
+*.pepper
+**/anahtarlar/
+**/_anahtarlar/
+**/patron-vapid.json
+/mobil/credentials.json
+deploy/**/*.env
+!deploy/**/ornek*.env
+# Mobil imza anahtarları: worktree'lerde ana ağaca SEMBOLİK BAĞ olarak durur — eğik çizgisiz (bağı da eşler)
+/mobil/keystore
+# Fabrika verisi dökümleri/dışa aktarımları ve geliştirme lisans deposu
+**/dump/
+**/scripts/out/
+/Teks-Erp/lisans/

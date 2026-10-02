@@ -5,14 +5,18 @@
  * `deploy/electron-yayinla.sh` ve `deploy/mobil-yayinla.mjs`in ikizi: imzalı backend paketini kanalın güncelleme
  * dizinine yükler, PAKET anahtarıyla imzalı SÜRÜM BİLDİRİMİNİ (`tekserp-surum`) üretir ve `son.json`u EN SON yazar.
  *
- * ⚠️ HEDEF KANAL KAYDINDAN, KİMLİK PAKETTEN: `--musteri` `deploy/kanallar.json`da kayıtlı olmalı; VDS yolları, feed
- *    ve defter YALNIZ kayıttan (`kanal.yayin.backend*`) okunur. Paketin `PAKET.json` `backendKanal`ı ve imzalı künyesi
+ * ⚠️ HEDEF KANAL KAYDINDAN, KİMLİK PAKETTEN: `--musteri` `deploy/kanallar.json`da kayıtlı olmalı; VDS yolları, feed,
+ *    defter ve ssh takma adı YALNIZ kayıttan (`kanal.yayin.backend*`, `scripts/lib/yayin-hedefi.mjs`) okunur; `--ssh`
+ *    ya da SSH_HEDEF/UZAK_DIZIN/YAYIN_URL… ezmesi görülürse DURULUR. Paketin `PAKET.json` `backendKanal`ı ve imzalı künyesi
  *    o kanalın olmalı — `Teks-Erp/scripts/backend-bildirim.ts` paketi açıp TAM bütünlük denetimiyle ölçer.
  * ⚠️ SIRA (pazarlık dışı): sürüm dizini GEÇİCİ adla yüklenir → uzakta boy + sha256 ölçülür → dizin yeniden adlanır
  *    → `son.json` geçici adla yüklenip EN SON yerine taşınır. Yarım yayında `son.json` eski sürümü gösterir.
  * ⚠️ DEĞİŞMEZ SÜRÜM: var olan `<sürüm>/` EZİLMEZ; yeni sürüm kanalda yayındaki sürümden BÜYÜK olmalı (geri inme yok).
  * ⚠️ TERFİ (K5): `terfiKaynagi` olan kanala yalnız terfi etiketli commit ve hazırlık kanalında yayınlanmış sürüm.
  * ⚠️ SÜRÜM NOTU: prova olmayan pakette `docs/surumler/backend-<sürüm>.md` ZORUNLU; bildirimin özeti onun "Özet"i.
+ * ⚠️ CI KAÇIŞI (G22): paketin imzalı künyesinde `ciKokeni.kip = "atlandi"` (üretim imzası CI koşusu OLMADAN,
+ *    kullanıcının cümlesiyle — `build-korumali-imza.ts --ci-atla`) görülürse yayın DURMAZ: uyarı basılır, cümle ·
+ *    saat · makine · HEAD yayın defterine `ci-atlandi:` kolonu olarak yazılır.
  * ⚠️ KENAR DOĞRULAMASI: yayın belirteci (Worker) yoksa HİÇBİR ŞEY yüklenmeden DUR; yayından sonra `son.json`
  *    kenardan belirteçle okunur ve yüklenenle bayt bayt kıyaslanır.
  *
@@ -23,7 +27,7 @@
  *
  * Kullanım:
  *   node deploy/backend-yayinla.mjs --musteri=<kod> --paket=<imzalı zip> --anahtar=<PAKET anahtar dosyası>
- *        [--pg-kunye=<pg.json>] [--min-kaynak=<sürüm>] [--zorunlu] [--kuru] [--terfi-atla="<cümle>"] [--ssh=<hedef>]
+ *        [--pg-kunye=<pg.json>] [--min-kaynak=<sürüm>] [--zorunlu] [--kuru] [--terfi-atla="<cümle>"]
  *   node deploy/backend-yayinla.mjs --musteri=<kod> --pg-yayinla --pg-paket=<PG sahne zip> --pg-kunye=<pg.json> [--kuru]
  *        # PG paketi (sözleşme sürümü 2): `<kanal>/backend/pg/<sürüm>-<derleme>/` DEĞİŞMEZ dizinine; son.json'a dokunmaz
  *   node deploy/backend-yayinla.mjs --musteri=<kod> --dogrula        # yükleme YOK: kenardaki son.json'u oku
@@ -38,12 +42,15 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { KAYIT_REL, Olculemedi, kanalCoz } from '../scripts/lib/kanallar.mjs';
 import { cumleDenetle, istanbulSaati, terfiAtlaKaydi, terfiKapisi, terfiRaporu } from '../scripts/lib/terfi.mjs';
-import { BelirtecYok, SSH_HEDEF_VARSAYILAN, belirtecOku, belirtecliFetch, yayinOku } from '../scripts/lib/yayin-okuma.mjs';
+import { BelirtecYok, belirtecOku, belirtecliFetch, yayinOku } from '../scripts/lib/yayin-okuma.mjs';
+import { ezmeSatirlari, yayinEzmeleri, yayinHedefi } from '../scripts/lib/yayin-hedefi.mjs';
 import { yayinSonrasiBildir } from '../scripts/lib/yayin-bildirim.mjs';
 import { Olculemedi as PgOlculemedi, SURUM_REL as PG_KAYIT_REL, jsonOku as pgJsonOku, surumKaydiHatalari } from './pg/lib/pg-ornegi.mjs';
 import {
   SURUM_DESENI,
   cekirdekSurum,
+  ciAtlaMetni,
+  ciKokeniOku,
   defterKomutu,
   defterSatiri,
   isaretciSurumu,
@@ -74,7 +81,10 @@ const arg = (ad) => {
 };
 const KURU = argv.includes('--kuru');
 const TERFI_ATLA = argv.some((a) => a === '--terfi-atla' || a.startsWith('--terfi-atla=')) ? (arg('terfi-atla') ?? '') : undefined;
-const SSH_HEDEF = arg('ssh') || process.env.SSH_HEDEF || SSH_HEDEF_VARSAYILAN;
+{
+  const ezmeler = yayinEzmeleri({ argv });
+  if (ezmeler.length) dur('YAYIN HEDEFİ EZİLEMEZ — hiçbir şey yüklenmedi', ...ezmeSatirlari(ezmeler));
+}
 if (argv.some((a) => /^--(parola|password|sifre)/.test(a))) dur('Parola argümandan ALINMAZ', 'PAKET anahtarının parolası TTY\'de sorulur ya da stdin\'den okunur.');
 
 const MUSTERI = arg('musteri');
@@ -86,6 +96,12 @@ try {
 } catch (e) {
   if (e instanceof Olculemedi) dur(`KANAL KAYIT DEFTERİ ÖLÇÜLEMEDİ (${KAYIT_REL})`, e.message);
   dur(e.message, ...(e.satirlar ?? []));
+}
+let SSH_HEDEF;
+try {
+  SSH_HEDEF = yayinHedefi(MUSTERI, 'backend', { kayit: KAYIT }).ssh;
+} catch (e) {
+  dur(`YAYIN HEDEFİ ÇÖZÜLEMEDİ (${KAYIT_REL})`, e.message, ...(e.satirlar ?? []));
 }
 
 /* ------------------------------------------------------------------ *
@@ -114,7 +130,7 @@ function gonder(yerel, uzakYol, aciklama) {
     bilgi(`    [kuru] scp ${yerel} ${SSH_HEDEF}:${uzakYol}`);
     return;
   }
-  const r = spawnSync('scp', ['-q', '-o', 'BatchMode=yes', yerel, `${SSH_HEDEF}:${uzakYol}`], { stdio: 'inherit' });
+  const r = spawnSync('scp', ['-s', '-q', '-o', 'BatchMode=yes', yerel, `${SSH_HEDEF}:${uzakYol}`], { stdio: 'inherit' });
   if (r.error || r.status !== 0) dur(`${aciklama} — scp başarısız (çıkış ${r.status ?? r.error?.message})`);
 }
 
@@ -293,6 +309,17 @@ const B = sonuc.bildirim;
 if (B.surum !== SURUM || B.kanal !== MUSTERI) dur('Bildirim künyeyle bağlanmıyor', `${B.surum}/${B.kanal} ≠ ${SURUM}/${MUSTERI}`);
 const sha16 = B.paket.sha256.slice(0, 16);
 bilgi(`✓ paket ${B.paket.ad} · ${B.paket.boyut} B · sha256 ${sha16}… · kid ${B.paketImzaKid} · PG ${B.pg.cizgi} ≥ ${B.pg.enAz}${B.pg.hedef ? ` · hedef ${B.pg.hedef.surum}-${B.pg.hedef.derleme}` : ''}`);
+// CI kökeni imzalı künyeden (bütünlük yukarıda TAM denetlendi); kaçış DURDURMAZ, uyarır ve deftere girer.
+let ciKokeni = null;
+try {
+  ciKokeni = ciKokeniOku(execFileSync('unzip', ['-p', PAKET, 'butunluk.jws'], { encoding: 'utf8', maxBuffer: 1024 * 1024 }));
+} catch {
+  ciKokeni = null;
+}
+const CI_ATLA = ciAtlaMetni(ciKokeni);
+if (CI_ATLA) bilgi(`⚠ CI KAÇIŞI: bu paketin üretim imzası CI koşusu OLMADAN atıldı — kullanıcının cümlesi ${CI_ATLA}`);
+else if (ciKokeni?.kip === 'kosu') bilgi(`✓ CI kökeni: koşu ${ciKokeni.kosu} · ${ciKokeni.dal} · ${String(ciKokeni.commit).slice(0, 12)}`);
+else bilgi('ℹ CI kökeni künyede yok (hazırlık imzası ya da G22 öncesi paket)');
 
 const plan = yayinPlani({
   vdsBackend: KANAL.yayin.vdsBackend,
@@ -365,6 +392,7 @@ const satir = defterSatiri({
   sha16,
   boyut: B.paket.boyut,
   terfiAtla: TERFI_ATLA !== undefined ? cumleDenetle(TERFI_ATLA).cumle : null,
+  ciAtla: CI_ATLA,
 });
 const defter = uzak(defterKomutu(plan.defter, satir), 'yayın defteri');
 if (!KURU && defter.status !== 0) bilgi('⚠ yayın defteri yazılamadı (yayın etkilenmedi)');
@@ -390,4 +418,4 @@ if (terfi.atlandi) {
   bilgi(k.durum === 'basarisiz' ? `⚠ terfi atlama etiketi atılamadı: ${k.not}` : `✓ terfi atlama etiketi: ${k.ad}`);
 }
 fs.rmSync(CIKTI, { recursive: true, force: true });
-console.log(`\n${BAR}\n  ✔ backend ${SURUM} "${MUSTERI}" kanalında yayında — kurulumlar politikalarına göre alır\n${BAR}\n`);
+console.log(`\n${BAR}\n  ✔ backend ${SURUM} "${MUSTERI}" kanalında yayında — kurulumlar politikalarına göre alır${CI_ATLA ? `\n  ⚠ CI KAÇIŞLI imza: ${CI_ATLA}` : ''}\n${BAR}\n`);

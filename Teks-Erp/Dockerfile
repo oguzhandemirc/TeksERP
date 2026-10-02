@@ -21,18 +21,25 @@ RUN NODE_OPTIONS=--max-old-space-size=4096 npx tsc && npx esbuild prisma/seed.ts
       --format=cjs --packages=external --outfile=dist/tools/seed.cjs
 
 # ----- 3) runtime: çalışan image -----
+# Süreç KÖK DEĞİL (G22): uygulama ağacı root'a ait ve `node`a salt okunur; yazılabilir yalnız veri, lisans deposu
+# (`<app>/../lisans`) ve LAN OTA deposu (`<app>/../mobil-guncelleme`) — compose bunları birime bağlar, kök FS salt okunur.
+# `scripts/` (yıkıcı bakım betikleri dahil) çalışma imajına girmez; prisma CLI npx'siz çağrılır (yazılabilir önbellek yok).
 FROM node:22-alpine AS runtime
 WORKDIR /app
 ENV NODE_ENV=production \
-    TZ=Europe/Istanbul
+    TZ=Europe/Istanbul \
+    HOME=/tmp \
+    CHECKPOINT_DISABLE=1 \
+    PRISMA_HIDE_UPDATE_MESSAGE=1 \
+    PRISMA_BIN="node /app/node_modules/prisma/build/index.js"
 RUN apk add --no-cache tini openssl libc6-compat tzdata postgresql16-client && \
-    ln -snf /usr/share/zoneinfo/$TZ /etc/localtime
+    ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && \
+    install -d -o node -g node -m 0750 /app/data /lisans /mobil-guncelleme
 COPY --from=deps /app/node_modules ./node_modules
 COPY --from=build /app/dist ./dist
 COPY package*.json prisma.config.ts tsconfig.json ./
 COPY prisma ./prisma
-COPY scripts ./scripts
-COPY docker/entrypoint.sh /usr/local/bin/entrypoint.sh
-RUN chmod +x /usr/local/bin/entrypoint.sh && mkdir -p /app/data
+COPY --chmod=0755 docker/entrypoint.sh /usr/local/bin/entrypoint.sh
+USER node
 EXPOSE 4000
 ENTRYPOINT ["/sbin/tini", "--", "/usr/local/bin/entrypoint.sh"]

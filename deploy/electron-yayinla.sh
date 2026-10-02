@@ -32,16 +32,13 @@
 # =============================================================================
 set -euo pipefail
 
-# ~/.ssh/config takma adı. ⚠️ 2026-09-01'de `yenisunucu`dan `tekserp-yayin`e
-# çevrildi: yayın 80.253.255.188'e taşındı ve DNS de oraya döndü. İki ayrıntı
-# load-bearing:
-#  · `yenisunucu` artık ESKİ sunucudur (91.217.119.138) — adı yanıltıcı ama
-#    demo işi ve bir haftalık geri dönüş yolu orada, o yüzden bırakıldı.
-#  · `tekserp-yayin` kullanıcısı `yayinci`: sudo YOK, yalnız yayın ağacına
-#    yazar. Yönetici hesabıyla yayın yapılmaz.
-SSH_HEDEF="${SSH_HEDEF:-tekserp-yayin}"
-YAYIN_KOK="${YAYIN_KOK:-/opt/stack/apps/tekserp-guncelleme/html}"
-BASE_URL="${BASE_URL:-https://guncelleme.etkiliyazilim.com}"
+# ⚠️ HEDEF EZİLEMEZ: ssh takma adı (`tekserp-yayin` = `yayinci`, sudo yok), VDS dizini, doğrulama adresi ve
+# defter YALNIZ kanal kaydından gelir (`kanal-kapisi.mjs yayin-hedefi`). SSH_HEDEF · UZAK_DIZIN · YAYIN_KOK ·
+# YAYIN_URL · BASE_URL ortamda doluysa betik DURUR — kabukta kalmış bir ezme hazırlık paketini üretim dizinine
+# indirirdi. Prova gerekiyorsa kayıtta ayrı kanal açılır.
+#
+# ⚠️ UZAK KOMUTLARA DEĞER GÖMÜLMEZ: betik stdin'den (`bash -s`), değerler konumsal argümanla (`uzak` yardımcısı);
+# her değer önce biçim denetiminden geçer (ssh argümanları uzak kabukta yeniden sözcüklere bölünür).
 
 kok="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 electron_dir="$kok/Electron"
@@ -83,6 +80,21 @@ done
 node "$kok/scripts/kanal-kapisi.mjs" kanal "$musteri" \
   || hata "Kanal kapısı geçilmedi (kayıt defteri: deploy/kanallar.json)."
 
+# --- YAYIN HEDEFİ — YALNIZ kanal kaydından; ortamda ezme varsa CLI durdurur ------
+hedef_satirlari=$(node "$kok/scripts/kanal-kapisi.mjs" yayin-hedefi "$musteri" panel) \
+  || hata "Yayın hedefi kanal kaydından çözülemedi — hiçbir şey yüklenmedi."
+SSH_HEDEF=""; UZAK_DIZIN=""; YAYIN_URL=""; DEFTER_YOLU=""
+while IFS='=' read -r ad deger; do
+  case "$ad" in
+    SSH_HEDEF) SSH_HEDEF="$deger" ;;
+    UZAK_DIZIN) UZAK_DIZIN="$deger" ;;
+    YAYIN_URL) YAYIN_URL="$deger" ;;
+    DEFTER) DEFTER_YOLU="$deger" ;;
+  esac
+done <<< "$hedef_satirlari"
+{ [ -n "$SSH_HEDEF" ] && [ -n "$UZAK_DIZIN" ] && [ -n "$YAYIN_URL" ] && [ -n "$DEFTER_YOLU" ]; } \
+  || hata "Yayın hedefi eksik çözüldü — hiçbir şey yüklenmedi."
+
 # --- YAYIN BELİRTECİ (3c') — hiçbir ağ/ssh işinden ÖNCE ------------------------
 # Güncelleme sunucusu anonim okumaya kapalıdır (Cloudflare Worker, X-TKL-Indirme).
 # "Ne yayında" sorusu SSH ile VDS diskinden okunur; "kenardan ne görünüyor"
@@ -101,10 +113,24 @@ if [ "$kuru" = "0" ]; then
 fi
 # Güncelleme sunucusuna TEK sanksiyonlu HTTP okuması (bekçi: scripts/check-yayin-okuma.mjs).
 belirtecli_curl() { curl -H "@$BELIRTEC_BASLIK" "$@"; }
+# Uzak komut: betik stdin'den, değerler KONUMSAL argüman. ssh argümanları uzak kabukta yeniden bölündüğü için
+# her değer tek sözcük kalmalı (boşluk/tırnak/`$`/`;` yok) — tutmayan değer GÖNDERİLMEZ (çıkış 97).
+uzak() {
+  local a
+  for a in "$@"; do
+    { [ "${#a}" -le 512 ] && printf '%s' "$a" | grep -qE '^[A-Za-z0-9@%+,./:=_-]+$'; } \
+      || { echo "HATA: uzak komut değeri biçimsiz, gönderilmedi: $a" >&2; return 97; }
+  done
+  ssh -T "$SSH_HEDEF" bash -s -- "$@"
+}
+surum_denetle() {
+  printf '%s' "$1" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+$' || hata "Sürüm biçimsiz: '$1' (x.y.z bekleniyor) — uzak komutlara gidemez."
+}
 
 rel=""
 if [ "$denetim_kipi" = "0" ]; then
   surum="${surum_arg:-$(node -p "require('$electron_dir/package.json').version")}"
+  surum_denetle "$surum"
   rel="$electron_dir/release/$musteri/$surum"
   if [ ! -d "$rel" ]; then
     if [ -d "$electron_dir/release/$surum" ]; then
@@ -131,6 +157,15 @@ if [ "$denetim_kipi" = "0" ]; then
     node "$kok/scripts/kanal-kapisi.mjs" terfi "$musteri" panel "$surum" \
       || hata "Terfi kapısı geçilmedi — yükleme yapılmadı."
   fi
+  # DERLEME BAĞI (G22) — yüklenecek Setup.exe künyedeki commit'ten mi; o commit HEAD mi (sürüm etiketi HEAD'e
+  # atılır) ve üretim kanalında terfi etiketinin onayladığı commit mi? Paketin İÇİNDEKİ commit de aynı olmalı.
+  if [ "$terfi_atla_verildi" = "1" ]; then
+    node "$kok/scripts/kanal-kapisi.mjs" panel-derleme-bagi "$musteri" "$rel" "$surum" --terfi-atla \
+      || hata "Derleme bağı kopuk — yükleme yapılmadı."
+  else
+    node "$kok/scripts/kanal-kapisi.mjs" panel-derleme-bagi "$musteri" "$rel" "$surum" \
+      || hata "Derleme bağı kopuk — yükleme yapılmadı."
+  fi
 fi
 
 # --- İMZALI KÜNYE KAPISI — ssh'tan ÖNCE ----------------------------------------
@@ -153,10 +188,6 @@ if [ "$denetim_kipi" = "0" ]; then
   fi
 fi
 
-# Hedef yalnız doğrulanmış kanal kodundan türer.
-UZAK_DIZIN="${UZAK_DIZIN:-$YAYIN_KOK/$musteri/electron}"
-YAYIN_URL="${YAYIN_URL:-$BASE_URL/$musteri/electron}"
-
 # --- Salt denetim kipi ---------------------------------------------------
 # `--dogrula [sürüm]` yükleme YAPMADAN mevcut yayını denetler. İki işi var:
 # ① "yayın hâlâ ayakta mı" sorusunun ucuz cevabı (elle tur sırasında, ya da
@@ -166,10 +197,13 @@ if [ "$denetim_kipi" = "1" ]; then
   denetim_surum="$surum_arg"
   if [ -z "$denetim_surum" ]; then
     # Hangi sürüm yayında: VDS diskinden (SSH, salt okuma) — kenar görünümünü aşağıda dogrula() ölçer.
-    denetim_surum=$(ssh "$SSH_HEDEF" "cat '$UZAK_DIZIN/latest.yml'" 2>/dev/null | grep "^version:" | awk '{print $2}') \
-      || hata "Yayındaki latest.yml okunamadı: $SSH_HEDEF:$UZAK_DIZIN/latest.yml"
+    denetim_surum=$(uzak "$UZAK_DIZIN/latest.yml" 2>/dev/null <<'UZAK' | grep "^version:" | awk '{print $2}'
+cat -- "$1"
+UZAK
+) || hata "Yayındaki latest.yml okunamadı: $SSH_HEDEF:$UZAK_DIZIN/latest.yml"
     [ -n "$denetim_surum" ] || hata "Yayında latest.yml yok ya da sürüm satırı okunamadı."
   fi
+  surum_denetle "$denetim_surum"
   echo "Yayın denetleniyor: $musteri / $denetim_surum"
   surum="$denetim_surum"
 else
@@ -199,7 +233,7 @@ if [ "$denetim_kipi" = "0" ]; then
     echo "[kuru] hedef      : $SSH_HEDEF:$UZAK_DIZIN/"
     echo "[kuru] sıra       : 1) TeksERP-$surum-Setup.exe + .blockmap  2) latest.yml (EN SON)"
     echo "[kuru] yayın adresi: $YAYIN_URL/latest.yml"
-    echo "[kuru] defter     : $(dirname "$YAYIN_KOK")/defter/$musteri-YAYIN-DEFTERI.tsv"
+    echo "[kuru] defter     : $DEFTER_YOLU"
     echo "[kuru] değişmezlik · sha512 · dış doğrulama · budama · panel-v$surum etiketi ATLANDI (ağ gerektirir)"
     [ "$terfi_atla_verildi" = "1" ] && echo "[kuru] terfi atlama kaydı (yayın defteri + etiket mesajı) ATLANDI (yayın yok)"
     echo "KURU — paket '$musteri' kanalının; yükleme yapılmadı."
@@ -212,8 +246,10 @@ if [ "$denetim_kipi" = "0" ]; then
   # göre hesaplandığı için sahadaki panel bozuk indirme yapar; ② "1.0.0 hangi
   # derleme" sorusu cevapsız kalır — hata raporu ile paket eşleşmez.
   # Aynı bayt ise yükleme atlanır (yeniden yayın zararsız/idempotent olsun).
-  uzak_sha=$(ssh "$SSH_HEDEF" "test -f '$UZAK_DIZIN/TeksERP-$surum-Setup.exe' && \
-      sha256sum '$UZAK_DIZIN/TeksERP-$surum-Setup.exe' | cut -d' ' -f1" 2>/dev/null || true)
+  uzak_sha=$(uzak "$UZAK_DIZIN/TeksERP-$surum-Setup.exe" 2>/dev/null <<'UZAK' || true
+test -f "$1" && sha256sum -- "$1" | cut -d' ' -f1
+UZAK
+)
   if [ -n "$uzak_sha" ]; then
     yerel_sha=$(shasum -a 256 "$setup" | cut -d' ' -f1)
     if [ "$uzak_sha" = "$yerel_sha" ]; then
@@ -233,10 +269,14 @@ if [ "$denetim_kipi" = "0" ]; then
   # Okuma ssh ile diskten (3c'); kopuk ssh ÖLÇÜLEMEDİ = dur.
   yayindaki_yml="$(mktemp "${TMPDIR:-/tmp}/tekserp-yayindaki.XXXXXX")" || hata "Geçici dosya açılamadı."
   rot_kod=0
-  ssh "$SSH_HEDEF" "test -f '$UZAK_DIZIN/latest.yml'" 2>/dev/null || rot_kod=$?
+  uzak "$UZAK_DIZIN/latest.yml" 2>/dev/null <<'UZAK' || rot_kod=$?
+test -f "$1"
+UZAK
   if [ "$rot_kod" = "0" ]; then
-    ssh "$SSH_HEDEF" "cat '$UZAK_DIZIN/latest.yml'" > "$yayindaki_yml" 2>/dev/null \
+    uzak "$UZAK_DIZIN/latest.yml" > "$yayindaki_yml" 2>/dev/null <<'UZAK' \
       || { rm -f "$yayindaki_yml"; hata "Yayındaki latest.yml okunamadı — rotasyon kilidi ÖLÇÜLEMEDİ, yükleme yapılmadı."; }
+cat -- "$1"
+UZAK
   elif [ "$rot_kod" != "1" ]; then
     rm -f "$yayindaki_yml"
     hata "Yayın sunucusuna ulaşılamadı (ssh $rot_kod) — rotasyon kilidi ÖLÇÜLEMEDİ, yükleme yapılmadı."
@@ -246,14 +286,14 @@ if [ "$denetim_kipi" = "0" ]; then
 
   if [ "${atla_yukleme:-0}" != "1" ]; then
   echo "1/2  paket + blockmap..."
-  scp "$setup" "$blockmap" "$SSH_HEDEF:$UZAK_DIZIN/"
+  scp -s "$setup" "$blockmap" "$SSH_HEDEF:$UZAK_DIZIN/"
 
   echo "2/2  latest.yml (en son — sıra önemli)..."
-  scp "$latest" "$SSH_HEDEF:$UZAK_DIZIN/"
+  scp -s "$latest" "$SSH_HEDEF:$UZAK_DIZIN/"
   elif ! cmp -s "$yayindaki_yml" "$latest"; then
     # Paket aynı baytla yayında ama latest.yml (künye) farklı: yarım kalmış yayının tamamlanması — yalnız o gider.
     echo "2/2  latest.yml (paket zaten yayında; künyeli latest.yml yükleniyor)..."
-    scp "$latest" "$SSH_HEDEF:$UZAK_DIZIN/"
+    scp -s "$latest" "$SSH_HEDEF:$UZAK_DIZIN/"
   fi
   rm -f "$yayindaki_yml"
 
@@ -266,8 +306,10 @@ if [ "$denetim_kipi" = "0" ]; then
   # indirmeden).
   bek_sha512=$(grep -m1 -A2 "url: TeksERP-$surum-Setup.exe" "$latest" | grep -m1 "sha512:" | awk '{print $2}')
   if [ -n "$bek_sha512" ]; then
-    gercek_sha512=$(ssh "$SSH_HEDEF" \
-      "openssl dgst -sha512 -binary '$UZAK_DIZIN/TeksERP-$surum-Setup.exe' | openssl base64 -A")
+    gercek_sha512=$(uzak "$UZAK_DIZIN/TeksERP-$surum-Setup.exe" <<'UZAK'
+openssl dgst -sha512 -binary "$1" | openssl base64 -A
+UZAK
+)
     if [ "$bek_sha512" != "$gercek_sha512" ]; then
       hata "SAĞLAMA UYUŞMUYOR — sunucudaki paket latest.yml'in söylediği dosya DEĞİL.
   beklenen: $bek_sha512
@@ -358,28 +400,30 @@ echo "OK — yayında: $surum"
 # sızdırıyordu. nginx'e kural yazmak da olurdu ama kırılgan: yarın oraya konan
 # ikinci bir iç dosya yine sızardı. Ayrım DİZİNDE olmalı — html/ yalnız kamuya
 # açık olması gereken şeyleri barındırır.
-DEFTER_DIZIN="$(dirname "$YAYIN_KOK")/defter"
-# Terfi atlandıysa (S4) kullanıcının cümlesi 6. kolon olur; tek tırnak uzak kabuk için kaçırılır.
-defter_bicim='%s\t%s\t%s\t%s\t%s\n'
-defter_ek=""
+# Defter yolu kanal kaydından ($DEFTER_YOLU). Terfi atlandıysa (S4) kullanıcının cümlesi 6. kolon olur: serbest
+# metin uzak kabuğa base64 olarak gider (konumsal argüman tek sözcük kalmalı), uzakta açılır.
+defter_kim="$(whoami)@$(hostname -s)"
+printf '%s' "$defter_kim" | grep -qE '^[A-Za-z0-9._@-]{1,120}$' || defter_kim="?"
+terfi_b64=""
 if [ "$terfi_atla_verildi" = "1" ]; then
-  defter_bicim='%s\t%s\t%s\t%s\t%s\t%s\n'
-  terfi_atla_kacisli=$(printf '%s' "$terfi_atla" | tr '\t\r\n' '   ' | sed "s/'/'\\\\''/g")
-  defter_ek=" 'terfi-atlandi: $terfi_atla_kacisli'"
+  terfi_b64=$(printf '%s' "$terfi_atla" | tr '\t\r\n' '   ' | base64 | tr -d '\n')
 fi
-ssh "$SSH_HEDEF" "mkdir -p '$DEFTER_DIZIN' && printf '$defter_bicim' \
-  '$(date -Iseconds)' '$surum' '$(whoami)@$(hostname -s)' \
-  '$(shasum -a 256 "$setup" | cut -c1-16)' '$(wc -c < "$setup" | tr -d " ")'$defter_ek \
-  >> '$DEFTER_DIZIN/$musteri-YAYIN-DEFTERI.tsv'" 2>/dev/null \
-  && echo "  ✓ yayın defterine yazıldı" \
-  || echo "  ⚠️ yayın defteri yazılamadı (yayın etkilenmedi)"
+uzak "$DEFTER_YOLU" "$(date -Iseconds)" "$surum" "$defter_kim" "$(shasum -a 256 "$setup" | cut -c1-16)" "$(wc -c < "$setup" | tr -d ' ')" ${terfi_b64:+"$terfi_b64"} 2>/dev/null <<'UZAK' && echo "  ✓ yayın defterine yazıldı" || echo "  ⚠️ yayın defteri yazılamadı (yayın etkilenmedi)"
+d="$1"; shift
+mkdir -p "$(dirname "$d")" || exit 1
+if [ -n "${6:-}" ]; then
+  printf '%s\t%s\t%s\t%s\t%s\t%s\n' "$1" "$2" "$3" "$4" "$5" "terfi-atlandi: $(printf '%s' "$6" | base64 -d)" >> "$d"
+else
+  printf '%s\t%s\t%s\t%s\t%s\n' "$1" "$2" "$3" "$4" "$5" >> "$d"
+fi
+UZAK
 
 # --- ESKİ SÜRÜMLERİ BUDA ---------------------------------------------------
 # Son 5 sürüm durur. Bugün sınırsız birikiyordu: her paket ~141 MB, yılda
 # birkaç sürümle disk sessizce doluyor. `latest.yml` her zaman korunur;
 # silinen yalnız ARTIK GÖSTERİLMEYEN eski paketlerdir.
 # ⚠️ Silmeden önce yayındaki sürüm dışlanır — çalışan yayına dokunulmaz.
-ssh -T "$SSH_HEDEF" bash -s -- "$UZAK_DIZIN" "$surum" <<'BUDA' 2>/dev/null || true
+uzak "$UZAK_DIZIN" "$surum" <<'BUDA' 2>/dev/null || true
   dizin="$1"; guncel="$2"; tut=5
   cd "$dizin" || exit 0
   ls -1t TeksERP-*-Setup.exe 2>/dev/null | grep -v "TeksERP-$guncel-Setup.exe" \
