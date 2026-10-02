@@ -209,6 +209,7 @@ var
   OlculenKok: String;
   Onarim: Boolean;
   Yarim: Boolean;
+  Gecisli: Boolean;
   ProvaKabul: Boolean;
   KurulumHatasi: String;
   HataAsamasi: Integer;
@@ -671,6 +672,7 @@ begin
   OlculenKok := Olc('kok');
   Onarim := Olc('onarim') = '1';
   Yarim := Olc('yarim') = '1';
+  Gecisli := Olc('gecisli') = '1';
   Result := True;
 end;
 
@@ -690,11 +692,13 @@ function KipMetni: String;
 begin
   if Onarim then Result := 'ONARIM (kurulu sürüm ' + KuruluSurum + ', paket ' + Olc('paketSurum') + '; veri korunur)'
   else if Yarim then Result := 'DEVAM (yarım kalan kurulum ' + Olc('oncekiSurum') + ' - kaldığı yerden)'
+  else if Gecisli then Result := 'GEÇİŞLİ KURULUM (pm2 → hizmet geçişiyle kurulmuş; kurulum yardımcısı onarmaz)'
   else Result := 'yeni kurulum';
 end;
 
-// Engeller (kurulum ilerlemez): boş = yok.
+// Engeller (kurulum ilerlemez): boş = yok. Ön ölçüm sayfasında da gösterilir (SayfalariOlcumleDoldur).
 function OlcumEngelleri: String;
+var I, N: Integer;
 begin
   Result := '';
   if Olc('yonetici') <> '1' then Result := Result + '- Yönetici olarak çalıştırılmalı.' + #13#10;
@@ -705,6 +709,17 @@ begin
   if Olc('pgKunyeVar') <> '1' then Result := Result + '- pg.json (PostgreSQL künyesi) yok.' + #13#10;
   if Olc('pgPortHata') <> '' then Result := Result + '- PostgreSQL portu: ' + Olc('pgPortHata') + #13#10;
   if (Olc('kokYabanci') <> '') and (Olc('kokYabanci') <> '0') then Result := Result + '- Kök klasör boş değil ve TeksERP kurulumu değil (' + Olc('kokYabanci') + ' girdi): başka bir klasör seçin; var olan veri ezilmez.' + #13#10;
+  // Geçişle kurulmuş düzen (kurulum kaydı yok; geçiş günlüğü + current): ayrı sınıf, onarılmaz (GECIS-PM2-HIZMET.md §7).
+  if Gecisli then
+    Result := Result + '- Bu klasör pm2 → hizmet geçişiyle kurulmuş bir TeksERP kurulumu (geçiş günlüğü gecis\' + Olc('gecisDamga') + '\ ve current bağlantısı var, kurulum kaydı yok); kurulum yardımcısı onu onarmaz. ' +
+      'Güncelleme güncelleyiciyle gelir; sorun varsa docs/ops/GECIS-PM2-HIZMET.md (5. bölüm: gecis.ps1 -GeriAl; 7. bölüm). Yeni kurulum için başka bir klasör seçin. Hiçbir şey değiştirilmedi.' + #13#10;
+  // Kanal hizmeti BAŞKA köke bağlı (ya da bağlı olduğu kök ölçülemedi): kurulum o kurulumun hizmetini ezerdi.
+  N := StrToIntDef(Olc('hizmetKokSayisi'), 0);
+  for I := 1 to N do
+    if Olc('hizmetKokDurum' + IntToStr(I)) = 'baska' then
+      Result := Result + '- ' + Olc('hizmetKokAd' + IntToStr(I)) + ' zaten ' + Olc('hizmetKokBagli' + IntToStr(I)) + ' köküne bağlı; bu klasöre kurulum/onarım yapılamaz (o kurulumun hizmetini ezerdi). Aynı kökü seçin ya da önce o kurulumu kaldırın. Hiçbir şey değiştirilmedi.' + #13#10
+    else
+      Result := Result + '- ' + Olc('hizmetKokAd' + IntToStr(I)) + ' hizmeti var ama hangi köke bağlı olduğu ölçülemedi; kurulum/onarım yapılamaz (sc.exe qc ' + Olc('hizmetKokAd' + IntToStr(I)) + ' ile denetleyin). Hiçbir şey değiştirilmedi.' + #13#10;
   if (Onarim or Yarim) and (Olc('oncekiHizmet') <> '') and (Olc('oncekiHizmet') <> Olc('backendHizmeti')) then
     Result := Result + '- Bu klasördeki kurulum başka bir kanalın (' + Olc('oncekiHizmet') + '); bu paket ' + Olc('backendHizmeti') + '.' + #13#10;
   if Yarim and (Olc('oncekiSurum') <> Olc('paketSurum')) then
@@ -928,8 +943,14 @@ begin
 end;
 
 procedure SayfalariOlcumleDoldur;
+var Engel: String;
 begin
-  OlcumSayfasi.RichEditViewer.Lines.Text := OlcumOzeti;
+  // Engel varsa ölçüm sayfasının BAŞINDA görünür (yalnız "Sonraki"de değil; thinkpad-1 D8e-3: eski paket, yabancı kök).
+  Engel := OlcumEngelleri;
+  if Engel <> '' then
+    OlcumSayfasi.RichEditViewer.Lines.Text := 'ENGEL - kurulum bu klasörle ilerlemez (Geri ile başka klasör seçin):' + #13#10 + Engel + #13#10 + OlcumOzeti
+  else
+    OlcumSayfasi.RichEditViewer.Lines.Text := OlcumOzeti;
   if Olc('veriOneri') <> '' then VeriSayfasi.Values[0] := Olc('veriOneri');
   if Olc('apiMesgul') = '1' then PortSayfasi.Values[0] := Olc('apiOneri') else PortSayfasi.Values[0] := Olc('apiPort');
   PortSayfasi.Values[1] := Olc('pgPort');
@@ -951,6 +972,14 @@ begin
     if Olc('oncekiLisansOkundu') = '1' then GelismisSayfasi.Values[2] := Olc('oncekiLisansSunucusu')
     else if GelismisSayfasi.Values[2] = '' then GelismisSayfasi.Values[2] := Olc('paketLisans');
     GelismisSayfasi.Edits[2].Enabled := Olc('oncekiLisansOkundu') <> '1';
+    // Ağ sayfası kayıttan (kurulum.json/durum.json ag ya da önceki cevap): varsayılan kayıttaki erişimi daraltmasın.
+    if Olc('oncekiAgIzinli') <> '' then AgSayfasi.Values[0] := Pos('100.64.0.0/10', Olc('oncekiAgIzinli')) > 0;
+    if Olc('oncekiAgProfiller') <> '' then
+    begin
+      AgSayfasi.Values[1] := Pos('Domain', Olc('oncekiAgProfiller')) > 0;
+      AgSayfasi.Values[2] := Pos('Private', Olc('oncekiAgProfiller')) > 0;
+    end;
+    if Olc('oncekiAgMdns') <> '' then AgSayfasi.Values[3] := Olc('oncekiAgMdns') = '1';
     GelismisKayittan := True;
   end
   else if GelismisKayittan then
@@ -959,6 +988,10 @@ begin
     GelismisSayfasi.Values[1] := '';
     GelismisSayfasi.Values[2] := Olc('paketLisans');
     GelismisSayfasi.Edits[2].Enabled := True;
+    AgSayfasi.Values[0] := False;
+    AgSayfasi.Values[1] := True;
+    AgSayfasi.Values[2] := True;
+    AgSayfasi.Values[3] := True;
     GelismisKayittan := False;
   end
   else if GelismisSayfasi.Values[2] = '' then GelismisSayfasi.Values[2] := Olc('paketLisans');
@@ -1117,16 +1150,59 @@ begin
       Ad + ' ' + Etkili + '. Kurulum sürer; ' + Duzelt + '.' + NewLine;
 end;
 
-function UpdateReadyMemo(Space, NewLine, MemoUserInfoInfo, MemoDirInfo, MemoTypeInfo, MemoComponentsInfo, MemoGroupInfo, MemoTasksInfo: String): String;
-var S, Ag: String;
+// Ağ sayfasının seçimi, kayıtla aynı kanonik biçimde (şemanın seçenek sırası; on-olcum oncekiAg* ile karşılaştırılır).
+function AgSayfaIzinli: String;
 begin
-  Ag := 'LocalSubnet';
-  if AgSayfasi.Values[0] then Ag := Ag + ' + Tailscale';
+  Result := 'LocalSubnet';
+  if AgSayfasi.Values[0] then Result := Result + ',100.64.0.0/10';
+end;
+
+function AgSayfaProfiller: String;
+begin
+  Result := '';
+  if AgSayfasi.Values[1] then Result := 'Domain';
+  if AgSayfasi.Values[2] then
+  begin
+    if Result <> '' then Result := Result + ',';
+    Result := Result + 'Private';
+  end;
+end;
+
+// Özet: ETKİLİ ağ erişimi. Onarım/devamda kayıttaki ayar uygulanır (kurulum-ortak.ps1 AgKarari) - sayfadaki farklı
+// seçim uygulanmaz, UYARI. Yeni kurulumda sayfanın seçimi.
+function AgOzeti(const NewLine: String): String;
+var Izinli, Profiller, Mdns, SayfaMdns, Kaynak, Goster: String;
+begin
+  Izinli := AgSayfaIzinli;
+  Profiller := AgSayfaProfiller;
+  if AgSayfasi.Values[3] then SayfaMdns := '1' else SayfaMdns := '0';
+  Mdns := SayfaMdns;
+  Kaynak := '';
+  if (Onarim or Yarim) and (Olc('oncekiAgKaynak') <> '') then
+  begin
+    if Olc('oncekiAgIzinli') <> '' then Izinli := Olc('oncekiAgIzinli');
+    if Olc('oncekiAgProfiller') <> '' then Profiller := Olc('oncekiAgProfiller');
+    if Olc('oncekiAgMdns') <> '' then Mdns := Olc('oncekiAgMdns');
+    Kaynak := '; kayıttan: ' + Olc('oncekiAgKaynak');
+  end;
+  if Izinli = 'LocalSubnet,100.64.0.0/10' then Goster := 'LocalSubnet + Tailscale'
+  else if Izinli = '100.64.0.0/10' then Goster := 'yalnız Tailscale'
+  else Goster := Izinli;
+  Goster := Goster + ' · profil ' + Profiller + ' · mDNS ';
+  if Mdns = '1' then Goster := Goster + 'açık' else Goster := Goster + 'kapalı';
+  Result := 'API portu: ' + PortSayfasi.Values[0] + ' (' + Goster + Kaynak + ')' + NewLine;
+  if (Izinli <> AgSayfaIzinli) or (Profiller <> AgSayfaProfiller) or (Mdns <> SayfaMdns) then
+    Result := Result + 'UYARI: Ağ sayfasındaki seçim kayıttan farklı - onarım ağ ayarını kayıttan korur; sayfadaki değişiklik UYGULANMAZ.' + NewLine;
+end;
+
+function UpdateReadyMemo(Space, NewLine, MemoUserInfoInfo, MemoDirInfo, MemoTypeInfo, MemoComponentsInfo, MemoGroupInfo, MemoTasksInfo: String): String;
+var S: String;
+begin
   S := 'Kip: ' + KipMetni + NewLine +
     'Kök: ' + Kok + NewLine +
     'Paket: ' + Olc('paketSurum') + ' (kanal ' + Olc('paketKanal') + ')' + NewLine +
     'PostgreSQL: ' + Olc('pgSurum') + ' - veri ' + RemoveBackslashUnlessRoot(VeriSayfasi.Values[0]) + ' - port ' + PortSayfasi.Values[1] + NewLine +
-    'API portu: ' + PortSayfasi.Values[0] + ' (' + Ag + ')' + NewLine;
+    AgOzeti(NewLine);
   if SaticiSayfasi.Values[0] <> '' then S := S + 'Satıcı hesabı: ' + SaticiSayfasi.Values[0] + ' (parola ve PIN girildi)' + NewLine
   else S := S + 'Satıcı hesabı: SONRA (konsoldan)' + NewLine;
   case YedekSecimSayfasi.SelectedValueIndex of
@@ -1235,6 +1311,15 @@ begin
     Result := 'kurulum\ klasörü hazırlanamadı: ' + Kok + '\kurulum';
     Exit;
   end;
+  // Onarım/devam: önceki cevap (eski kurulumlarda ağ ayarının TEK kaydı) yenisi yazılmadan saklanır; OnKosul ağ
+  // ayarını kayıttan korur (kurulum-ortak.ps1 KayitliAgAyari: kurulum.json ag > durum.json ag > cevap-onceki.json).
+  if (Onarim or Yarim) and FileExists(KurulumCevabi) then
+    if (not Sessiz) or (Uppercase(ExpandFileName(CevapDosyasi)) <> Uppercase(KurulumCevabi)) then
+      if not FileCopy(KurulumCevabi, Kok + '\kurulum\cevap-onceki.json', False) then
+      begin
+        Result := 'Önceki cevap dosyası saklanamadı: ' + Kok + '\kurulum\cevap-onceki.json';
+        Exit;
+      end;
   if Sessiz then
   begin
     if Uppercase(ExpandFileName(CevapDosyasi)) <> Uppercase(KurulumCevabi) then

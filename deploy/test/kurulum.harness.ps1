@@ -4,7 +4,8 @@
 # Olculen: cevap semasi (CevapDogrula: KATI, SIRSIZ, tur/desen/secenek) - portSec (D4 altin vektorleri,
 # deploy/pg/pg-sablon-vektorleri.json) - .env satiri (sade bicim) - sir adi - JSON ASCII kacisi - maske -
 # surum onceligi (guncelleyicinin vektorleri) + gercek kurulu surum + eski paket engeli (D8d) + lisans saticisi
-# karari (D8e: bos alan = paketin kanali, farkli deger UYARI, onarimda kayit korunur, eski paket beyanli).
+# karari (D8e: bos alan = paketin kanali, farkli deger UYARI, onarimda kayit korunur, eski paket beyanli) + D8e-3b:
+# eski paket TEK giris, gecisli duzen (GECISLI), kanal hizmetinin koku (fail-closed), ag ayari kayittan.
 # Iki kultur: degismez + tr-TR ('I' tuzagi: (?i) ve ToLower() 'I'yi 'i'ye indirmez).
 # Kosucular: Teks-Erp/scripts/test_kurulum_betikleri.ts (pwsh 7; mutasyon sondalari -Ortak ile) ve
 #   .github/workflows/kurulum-windows.yml (Windows PowerShell 5.1 - asil hedef).
@@ -201,6 +202,85 @@ $r = LisansSunucusuKarari $T $P "" "" "testfabrika"
 Olc "lisans.onarim-satirsiz-varsayilan-UYARI" ($r.etkili -ceq $P -and $r.kaynak -ceq "kayit-varsayilan" -and -not $r.yaz -and "$(@($r.uyarilar))".Contains("beklenen $T")) (LisOz $r)
 $r = LisansSunucusuKarari $T $P $P $T "testfabrika"
 Olc "lisans.onarim-cevap-uygulanmaz" ($r.etkili -ceq $T -and -not $r.yaz -and "$(@($r.uyarilar))".Contains("UYGULANMADI")) (LisOz $r)
+
+# --- D8e-3b: eski paket TEK giris - gecisli duzen - kanal hizmetinin koku - ag ayari kayittan --------------------
+function BaglantiKur([string]$baglanti, [string]$hedef) {
+  if ($env:OS -ceq "Windows_NT") { [void](NativeKos "cmd.exe" @("/c", "mklink", "/J", $baglanti, $hedef)) }
+  else { New-Item -ItemType SymbolicLink -Path $baglanti -Target $hedef | Out-Null }
+}
+$gk = Join-Path ([IO.Path]::GetTempPath()) ("kurulum-harness-3b-" + [guid]::NewGuid().ToString("N"))
+try {
+  # Eski paket: sihirbaz (on-olcum) ve OnKosul AYNI islevi (EskiPaketOlcumu) cagirir - sinif ikisine de ayni gider.
+  $kk = Join-Path $gk "ep"; $vk = Join-Path $gk "ep-veri"
+  New-Item -ItemType Directory -Force -Path (Join-Path $kk "kurulum") | Out-Null
+  [IO.File]::WriteAllText((Join-Path $kk "kurulum\kurulum.json"), '{"paket": {"surum": "2.14.5"}}')
+  [IO.File]::WriteAllText((Join-Path $kk "kurulum-gecmisi.jsonl"), ('{"tur": "GUNCELLEME", "yeniSurum": "2.14.9"}' + "`n"))
+  $a = EskiPaketOlcumu $kk $vk "2.14.5"; $b = EskiPaketOlcumu $kk $vk "2.14.9"; $c = EskiPaketOlcumu $kk $vk "bicimsiz"
+  Olc "eskipaket.olcum-tek-giris" ($a.sinif -ceq "eski" -and "$($a.engel)".Contains("2.14.9") -and $a.kurulu.kaynak -ceq "kurulum-gecmisi.jsonl" -and $b.sinif -ceq "" -and $null -eq $b.engel -and $c.sinif -ceq "olculemedi" -and $c.engel) ("eski: $($a.sinif)/$($a.kurulu.surum) esit: '$($b.sinif)' bicimsiz: '$($c.sinif)'")
+
+  # Gecisli duzen: gecis\<damga>\gunluk.jsonl + current baglantisi (IKI isaret) -> GECISLI; tek isaret yetmez.
+  $gd1 = Join-Path $gk "gecisli"
+  New-Item -ItemType Directory -Force -Path (Join-Path $gd1 "gecis\20261001_101500"), (Join-Path $gd1 "gecis\20260930_090000"), (Join-Path $gd1 "surumler\2.14.9") | Out-Null
+  [IO.File]::WriteAllText((Join-Path $gd1 "gecis\20261001_101500\gunluk.jsonl"), "{}`n")
+  [IO.File]::WriteAllText((Join-Path $gd1 "gecis\20260930_090000\gunluk.jsonl"), "{}`n")
+  BaglantiKur (Join-Path $gd1 "current") (Join-Path $gd1 "surumler\2.14.9")
+  $g = GecisliDuzen $gd1
+  Olc "gecisli.duzen-tanir" ($g -and $g.damga -ceq "20261001_101500" -and "$($g.metin)".Contains("GECIS-PM2-HIZMET.md") -and "$($g.metin)".Contains("-GeriAl") -and "$($g.metin)".Contains("onarmaz")) ("sonuc: $(if ($g) { "$($g.damga) | $($g.metin)" } else { 'null' })")
+  $gd2 = Join-Path $gk "yalniz-gunluk"; New-Item -ItemType Directory -Force -Path (Join-Path $gd2 "gecis\20261001_101500") | Out-Null
+  [IO.File]::WriteAllText((Join-Path $gd2 "gecis\20261001_101500\gunluk.jsonl"), "{}`n")
+  $gd3 = Join-Path $gk "yalniz-current"; New-Item -ItemType Directory -Force -Path (Join-Path $gd3 "surumler\1.0.0"), (Join-Path $gd3 "gecis\notlar") | Out-Null
+  BaglantiKur (Join-Path $gd3 "current") (Join-Path $gd3 "surumler\1.0.0")
+  $gd4 = Join-Path $gk "yabanci"; New-Item -ItemType Directory -Force -Path (Join-Path $gd4 "Belgeler") | Out-Null
+  [IO.File]::WriteAllText((Join-Path $gd4 "not.txt"), "x")
+  Olc "gecisli.tek-isaret-yetmez-yabanci-eski-mesaj" ($null -eq (GecisliDuzen $gd2) -and $null -eq (GecisliDuzen $gd3) -and $null -eq (GecisliDuzen $gd4)) "yalniz gunluk / yalniz current / yabanci klasor GECISLI sayilmamali"
+  foreach ($bd in @($gd1, $gd3)) { $cur = Join-Path $bd "current"; if (ReparseMi $cur) { [IO.Directory]::Delete($cur) } }
+
+  # Ag ayari kaydi (TEK okuyucu): kurulum.json ag > durum.json ag > cevap-onceki.json api > cevap.json api.
+  $ak = Join-Path $gk "ag"; New-Item -ItemType Directory -Force -Path (Join-Path $ak "kurulum") | Out-Null
+  [IO.File]::WriteAllText((Join-Path $ak "kurulum\cevap.json"), '{"v": 1, "api": {"port": 4000, "izinliAdresler": ["100.64.0.0/10", "LocalSubnet"], "agProfilleri": ["Private", "Domain"], "mdns": false}}')
+  $r = KayitliAgAyari $ak $semaNesne
+  Olc "ag.kayit-eski-cevaptan" ($r -and $r.kaynak -ceq "cevap.json" -and (AgMetni $r.izinliAdresler) -ceq "LocalSubnet,100.64.0.0/10" -and (AgMetni $r.agProfilleri) -ceq "Domain,Private" -and $r.mdns -eq $false) ("kayit: $(if ($r) { "$($r.kaynak) $(AgMetni $r.izinliAdresler) $(AgMetni $r.agProfilleri) $(AgMetni $r.mdns)" } else { 'null' })")
+  [IO.File]::WriteAllText((Join-Path $ak "kurulum\cevap-onceki.json"), '{"v": 1, "api": {"izinliAdresler": ["LocalSubnet"]}}')
+  $r1 = KayitliAgAyari $ak $semaNesne
+  [IO.File]::WriteAllText((Join-Path $ak "kurulum\kurulum.json"), '{"ag": {"izinliAdresler": ["LocalSubnet", "100.64.0.0/10"], "agProfilleri": ["Domain"], "mdns": true}}')
+  $r2 = KayitliAgAyari $ak $semaNesne
+  Olc "ag.kayit-oncelik" ($r1.kaynak -ceq "cevap-onceki.json" -and (AgMetni $r1.izinliAdresler) -ceq "LocalSubnet" -and $null -eq $r1.agProfilleri -and $r2.kaynak -ceq "kurulum.json" -and (AgMetni $r2.agProfilleri) -ceq "Domain" -and $r2.mdns -eq $true) ("r1: $($r1.kaynak) $(AgMetni $r1.izinliAdresler) / r2: $($r2.kaynak) $(AgMetni $r2.agProfilleri)")
+  [IO.File]::WriteAllText((Join-Path $ak "kurulum\kurulum.json"), '{"ag": {"izinliAdresler": ["0.0.0.0/0"], "agProfilleri": ["Public"], "mdns": "evet"}}')
+  $r3 = KayitliAgAyari $ak $semaNesne
+  Olc "ag.kayit-gecersiz-yok-sayilir" ($r3.kaynak -ceq "cevap-onceki.json") ("gecersiz kurulum.json ag atlanmali, sonraki kaynak: $($r3.kaynak)")
+  # Karar: onarimda kayit KAZANIR (sessiz kip alan vermezse varsayilan DARALTMAZ); acik farkli deger UYGULANMADI uyarisi.
+  $kayit = @{ izinliAdresler = @("LocalSubnet", "100.64.0.0/10"); agProfilleri = @("Domain", "Private"); mdns = $true; kaynak = "cevap.json" }
+  $h = '{"v": 1}' | ConvertFrom-Json
+  $k = AgKarari (CevapDogrula $h $semaNesne).deger $h $kayit $semaNesne
+  Olc "ag.onarim-sessiz-kayit-korunur" ((AgMetni $k.ag.izinliAdresler) -ceq "LocalSubnet,100.64.0.0/10" -and "$($k.ag.kaynak)".StartsWith("kayit") -and @($k.uyarilar).Count -eq 0) ("ag: $(AgMetni $k.ag.izinliAdresler) ($($k.ag.kaynak)) uyari $(@($k.uyarilar).Count)")
+  $h = '{"v": 1, "api": {"izinliAdresler": ["LocalSubnet"], "mdns": true}}' | ConvertFrom-Json
+  $k = AgKarari (CevapDogrula $h $semaNesne).deger $h $kayit $semaNesne
+  $u = "$(@($k.uyarilar) -join ' || ')"
+  Olc "ag.onarim-cevap-uygulanmaz" ((AgMetni $k.ag.izinliAdresler) -ceq "LocalSubnet,100.64.0.0/10" -and @($k.uyarilar).Count -eq 1 -and $u.Contains("UYGULANMADI") -and $u.Contains("api.izinliAdresler")) ("ag: $(AgMetni $k.ag.izinliAdresler) uyari: $u")
+  $h = '{"v": 1, "api": {"izinliAdresler": ["LocalSubnet", "100.64.0.0/10"], "mdns": false}}' | ConvertFrom-Json
+  $k = AgKarari (CevapDogrula $h $semaNesne).deger $h $null $semaNesne
+  Olc "ag.yeni-kurulum-cevaptan" ((AgMetni $k.ag.izinliAdresler) -ceq "LocalSubnet,100.64.0.0/10" -and (AgMetni $k.ag.agProfilleri) -ceq "Domain,Private" -and $k.ag.mdns -eq $false -and $k.ag.kaynak -ceq "cevap" -and @($k.uyarilar).Count -eq 0) ("ag: $(AgMetni $k.ag.izinliAdresler) $(AgMetni $k.ag.agProfilleri) $(AgMetni $k.ag.mdns) ($($k.ag.kaynak))")
+} finally { Remove-Item -LiteralPath $gk -Recurse -Force -ErrorAction SilentlyContinue }
+
+# Kanal hizmetinin koku (FAIL-CLOSED): ayni kok gecer - baska kok durur - ImagePath okunamaz/cozulemez durur.
+$bk = 'C:\TeksERP\current\runtime\tekserp-hizmet.exe hizmet --kok C:\TeksERP --ad TeksERP-Backend-testfabrika'
+$pgk = '"C:\TeksERP\pgsql\18.0-1\bin\pg_ctl.exe" runservice -N "TeksERP-PostgreSQL-testfabrika" -D "D:\TeksERP\pgveri" -w -t 60'
+$a = HizmetKokKarari "TeksERP-Backend-testfabrika" $bk 'c:\teksERP\'
+$b = HizmetKokKarari "TeksERP-PostgreSQL-testfabrika" $pgk 'C:\TeksERP'
+$c = HizmetKokKarari "TeksERP-Backend-testfabrika" $null 'C:\TeksERP-testfabrika'
+Olc "hizmetkok.ayni-kok-gecer" ($null -eq $a -and $null -eq $b -and $null -eq $c) "current\ baglantisi uzerinden (buyuk/kucuk harf, sondaki \) ve PG -D baska surucude: gecmeli; hizmet yok: gecmeli"
+$a = HizmetKokKarari "TeksERP-Backend-testfabrika" $bk 'C:\TeksERP-testfabrika'
+$b = HizmetKokKarari "TeksERP-PostgreSQL-testfabrika" $pgk 'C:\TeksERP-testfabrika'
+# Onek tuzagi: C:\TeksERP secilmisken C:\TeksERP-testfabrika'ya bagli hizmet de BASKA koktur.
+$o = HizmetKokKarari "TeksERP-Backend-testfabrika" 'C:\TeksERP-testfabrika\current\runtime\tekserp-hizmet.exe hizmet --kok C:\TeksERP-testfabrika --ad TeksERP-Backend-testfabrika' 'C:\TeksERP'
+Olc "hizmetkok.baska-kok-durur" ($a.durum -ceq "baska" -and $a.bagli -ceq "C:\TeksERP" -and "$($a.metin)".Contains("yapilamaz") -and $b.durum -ceq "baska" -and $o.durum -ceq "baska" -and $o.bagli -ceq "C:\TeksERP-testfabrika") ("backend: $($a.durum) $($a.bagli) / pg: $($b.durum) $($b.bagli) / onek: $($o.durum) $($o.bagli)")
+$a = HizmetKokKarari "TeksERP-Guncelleyici-testfabrika" "" 'C:\TeksERP'
+$b = HizmetKokKarari "TeksERP-Guncelleyici-testfabrika" "tekserp-guncelleyici.exe hizmet" 'C:\TeksERP'
+Olc "hizmetkok.okunamaz-durur" ($a.durum -ceq "olculemedi" -and $b.durum -ceq "olculemedi" -and "$($a.metin)".Contains("olculemedi")) ("bos: $($a.durum) / goreli: $($b.durum)")
+$adl = [ordered]@{ backend = "B"; guncelleyici = "G"; pg = "P" }
+$e = HizmetKokEngelleri $adl 'C:\K2' { param($hz) switch ($hz) { "B" { 'C:\K1\current\runtime\h.exe hizmet --kok C:\K1 --ad B' } "G" { $null } "P" { "" } } }
+$e2 = HizmetKokEngelleri $adl 'C:\K1' { param($hz) switch ($hz) { "B" { 'C:\K1\current\runtime\h.exe hizmet --kok C:\K1 --ad B' } default { $null } } }
+Olc "hizmetkok.uc-hizmet-olculur" (@($e).Count -eq 2 -and $e[0].ad -ceq "B" -and $e[0].durum -ceq "baska" -and $e[1].ad -ceq "P" -and $e[1].durum -ceq "olculemedi" -and @($e2).Count -eq 0) ("engeller: $((@($e) | ForEach-Object { "$($_.ad)=$($_.durum)" }) -join ',') / ayni kok: $(@($e2).Count)")
 
 Write-Output "=== Sonuc: $($script:gecti) gecti, $($script:kaldi) basarisiz ==="
 if ($script:kaldi -gt 0) { exit 1 }

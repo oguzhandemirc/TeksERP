@@ -4,8 +4,9 @@
 # NE YAPAR: fabrika sunucusuna Windows hizmeti duzeninde (Dagitim v2) SIFIRDAN kurulum ya da AYNI
 #   surumun ONARIMI. Asamalar sirayla, her biri olcerek ilerler; olculemeyen adim DURUR (tahmin yok):
 #     OnKosul    yonetici - Windows x64 - cevap dosyasi (cevap-semasi.json, KATI, sirsiz) - kok/veri
-#                dizini kurallari - paket girdileri - portlar (API mesgulse DUR; PG portSec) - RAM/disk -
-#                lisans saticisi (bos = paketin kanali PAKET.json backendLisansSunucusu; farkli deger UYARI)
+#                dizini kurallari (gecisle kurulmus duzen DUR) - paket girdileri - kanal hizmeti baska koke bagliysa
+#                DUR - portlar (API mesgulse DUR; PG portSec) - RAM/disk - lisans saticisi (bos = paketin kanali
+#                PAKET.json backendLisansSunucusu; farkli deger UYARI) - ag ayari (onarim/devamda kayittan)
 #     Paket      kok ACL (genis grup yok) - backend paketi KURULUMUN KENDI dogrulayicisiyla (tekserp-
 #                guncelleyici kurulum-paket: imza + imzali listedeki her dosya) surumler\<surum>'e -
 #                current baglantisi - hizmet\backend-hizmeti.ps1 -Uygula -YalnizIskelet (SIRDAN ONCE)
@@ -68,6 +69,9 @@ $script:SonucKaydi = [ordered]@{ asama = $Asama; tamam = $false }
 function CevabiYukle {
   $sema = JsonOku (Join-Path $PSScriptRoot "cevap-semasi.json")
   $c = JsonOku $Cevap
+  # Ham cevap (alan ACIKCA verildi mi - ag karari) ve sema (kayit dogrulamasi) asamalara acik.
+  $script:CevapHam = $c
+  $script:CevapSemasi = $sema
   $r = CevapDogrula $c $sema
   if ($r.hatalar.Count) {
     foreach ($h in $r.hatalar) { [void](GunlugeYaz "CEVAP" $h); Write-Host "  X  cevap: $h" -ForegroundColor Red }
@@ -245,6 +249,9 @@ function AsamaOnKosul {
   $yarim = $null
   if (-not $onarim -and (Test-Path -LiteralPath (DurumYolu $kok))) { $yarim = DurumOku $kok }
   if (-not $onarim -and -not $yarim -and (Test-Path -LiteralPath $kok)) {
+    # Gecisle kurulmus duzen (kayit yok, gecis gunlugu + current): ayri sinif, kurulum yardimcisi onarmaz.
+    $gd = GecisliDuzen $kok
+    if ($gd) { Dur $gd.metin }
     $yabanci = @(Get-ChildItem -LiteralPath $kok -Force | Where-Object { $_.Name -cnotmatch '^(kurulum|unins[0-9]{3}\.(exe|dat|msg))$' })
     if ($yabanci.Count) { Dur "kok bos degil ve TeksERP kurulumu degil ($($yabanci.Count) girdi, or. $($yabanci[0].Name)) - baska bir kok secin; var olan veri ezilmez" }
   }
@@ -266,13 +273,17 @@ function AsamaOnKosul {
     if ("$($yarim.adlar.backend)" -cne $ad.backend -or "$($yarim.paket.surum)" -cne "$($k.uygulamaSurumu)") { Dur "yarim kurulum ($($yarim.adlar.backend) $($yarim.paket.surum)) bu paketle ($($ad.backend) $($k.uygulamaSurumu)) surdurulmez - ayni paketi verin ya da once kaldirin (kaldir.ps1 veriyi korur)" }
     Uyar "YARIM KURULUM bulundu ($($yarim.paket.surum)) - kaldigi yerden devam ediliyor (asamalar yeniden olcer)"
   }
+  # Ayni adli kanal hizmeti BASKA koke bagliysa (ya da bagli oldugu kok olculemezse) DUR - o kurulumun hizmetini
+  # ezerdi (kurulum-ortak.ps1 HizmetKokEngelleri; sihirbaz ayni islevle engel gosterir).
+  $hk = HizmetKokEngelleri $ad $kok
+  if ($hk.Count) { Dur ((@($hk) | ForEach-Object { $_.metin }) -join " | ") }
   # Gercek kurulu surum: kurulum.json KURULUM ANININ surumudur. Kaldirilip ESKI kitle yeniden kurulumda eski kod
-  # yeni semali veritabanina inmez - hicbir sey degismeden DUR.
+  # yeni semali veritabanina inmez - hicbir sey degismeden DUR (EskiPaketOlcumu: sihirbazla TEK giris).
   if ($onarim -or $yarim) {
-    $kurulu = EnYeniSurum (KuruluSurumAdaylari $kok $ad.veriKoku)
-    $engel = EskiPaketEngeli $kurulu "$($k.uygulamaSurumu)"
+    $ep = EskiPaketOlcumu $kok $ad.veriKoku "$($k.uygulamaSurumu)"
+    $engel = $ep.engel
     if ($engel) { Dur $engel }
-    if ($kurulu) { Bilgi "kurulu surum $($kurulu.surum) ($($kurulu.kaynak)) - paket $($k.uygulamaSurumu)" }
+    if ($ep.kurulu) { Bilgi "kurulu surum $($ep.kurulu.surum) ($($ep.kurulu.kaynak)) - paket $($k.uygulamaSurumu)" }
   }
 
   # API portu: istemcilerin varsayilan adresi - mesgulse DUR (onarimda dinleyen kendi backend'imiz olabilir).
@@ -335,6 +346,14 @@ function AsamaOnKosul {
   foreach ($x in $lis.uyarilar) { Uyar $x }
   Ok "lisans sunucusu: $(if ($lis.etkili) { $lis.etkili } else { 'derleme varsayilani' }) ($($lis.kaynakMetni))$(if ($lis.yaz) { ' - .env satiri yazilacak' })"
 
+  # Ag ayari (API guvenlik duvari): onarim/devamda KAYITTAN (kurulum-ortak.ps1 KayitliAgAyari + AgKarari) - varsayilan
+  # (LocalSubnet) kayittaki erisimi (or. Tailscale) DARALTMAZ; cevapta acikca verilen farkli deger uyarilir.
+  $agKayit = $null
+  if ($onarim -or $yarim) { $agKayit = KayitliAgAyari $kok $script:CevapSemasi }
+  $agK = AgKarari $C $script:CevapHam $agKayit $script:CevapSemasi
+  foreach ($x in $agK.uyarilar) { Uyar $x }
+  Ok "ag: API $(AgMetni $agK.ag.izinliAdresler) - profil $(AgMetni $agK.ag.agProfilleri) - mDNS $(AgMetni $agK.ag.mdns) ($($agK.ag.kaynak))"
+
   $plan = [ordered]@{
     v = $KURULUM_BICIMI; mod = $(if ($onarim) { "onarim" } elseif ($yarim) { "devam" } else { "kurulum" }); kok = $kok
     girdiler = [ordered]@{ backend = $zip; pg = $pgZip; pgKunye = $pgKunye }
@@ -343,6 +362,7 @@ function AsamaOnKosul {
     portlar = [ordered]@{ api = $apiPort; pg = [int]$sec.port }
     pg = [ordered]@{ veriDizini = $veri; surum = "$($pgSurum.surum)"; derleme = "$($pgSurum.derleme)"; cizgi = "$($pgSurum.cizgi)"; icu = "$($pgSurum.yayin.'win-x64'.icuSurum)"; ramMB = $ramMB }
     lisans = [ordered]@{ etkili = $lis.etkili; kaynak = $lis.kaynak; yaz = $lis.yaz; kanal = $lis.kanal; varsayilan = $lis.varsayilan }
+    ag = $agK.ag
     asamalar = [ordered]@{}
   }
   if ($Kuru) {
@@ -732,14 +752,16 @@ function AsamaHizmetler {
   } else { Bilgi "gorev zaten var, DOKUNULMADI: $gorev" }
 
   # Guvenlik duvari: API yalniz secili profiller + LocalSubnet [+ Tailscale]; mDNS (kesif); PG'ye kural YOK.
+  # Ayar OnKosul KARARINDAN (durum ag: onarim/devamda kayittan); karar tasimayan eski durum.json -> cevap.
+  $ag = $(if ($d.PSObject.Properties["ag"] -and $d.ag) { $d.ag } else { [pscustomobject]@{ izinliAdresler = @($C["api.izinliAdresler"]); agProfilleri = @($C["api.agProfilleri"]); mdns = $C["api.mdns"] } })
   $apiPort = [int]$d.portlar.api
   $apiKural = "TeksERP API $apiPort"
   if (-not (Get-NetFirewallRule -DisplayName $apiKural -ErrorAction SilentlyContinue)) {
-    New-NetFirewallRule -DisplayName $apiKural -Direction Inbound -Protocol TCP -LocalPort $apiPort -Action Allow -Profile @($C["api.agProfilleri"]) -RemoteAddress @($C["api.izinliAdresler"]) | Out-Null
-    Ok "guvenlik duvari: $apiKural ($($C['api.agProfilleri'] -join ',') - $($C['api.izinliAdresler'] -join ','))"
+    New-NetFirewallRule -DisplayName $apiKural -Direction Inbound -Protocol TCP -LocalPort $apiPort -Action Allow -Profile @($ag.agProfilleri) -RemoteAddress @($ag.izinliAdresler) | Out-Null
+    Ok "guvenlik duvari: $apiKural ($(@($ag.agProfilleri) -join ',') - $(@($ag.izinliAdresler) -join ','))"
   } else { Bilgi "kural zaten var, DOKUNULMADI: $apiKural" }
-  if ($C["api.mdns"] -eq $true -and -not (Get-NetFirewallRule -DisplayName "$($d.adlar.mdnsKurali)" -ErrorAction SilentlyContinue)) {
-    New-NetFirewallRule -DisplayName "$($d.adlar.mdnsKurali)" -Direction Inbound -Protocol UDP -LocalPort 5353 -Action Allow -Profile @($C["api.agProfilleri"]) -RemoteAddress LocalSubnet | Out-Null
+  if ($ag.mdns -eq $true -and -not (Get-NetFirewallRule -DisplayName "$($d.adlar.mdnsKurali)" -ErrorAction SilentlyContinue)) {
+    New-NetFirewallRule -DisplayName "$($d.adlar.mdnsKurali)" -Direction Inbound -Protocol UDP -LocalPort 5353 -Action Allow -Profile @($ag.agProfilleri) -RemoteAddress LocalSubnet | Out-Null
     Ok "guvenlik duvari: $($d.adlar.mdnsKurali) (UDP 5353, LocalSubnet - tablet/panel sunucuyu kesfeder)"
   }
   $pgAcik = @(Get-NetFirewallPortFilter -Protocol TCP -ErrorAction SilentlyContinue | Where-Object { "$($_.LocalPort)" -ceq "$($d.portlar.pg)" } | Get-NetFirewallRule -ErrorAction SilentlyContinue | Where-Object { "$($_.Direction)" -ceq "Inbound" -and "$($_.Action)" -ceq "Allow" -and "$($_.Enabled)" -ceq "True" })
@@ -886,6 +908,7 @@ function AsamaDogrulama {
     paket = $d.paket; adlar = $d.adlar; portlar = $d.portlar
     pg = [ordered]@{ veriDizini = "$($d.pg.veriDizini)"; surum = "$($d.pg.surum)"; derleme = "$($d.pg.derleme)" }
     guvenlikDuvari = @("TeksERP API $($d.portlar.api)", "$($d.adlar.mdnsKurali)")
+    ag = $(if ($d.PSObject.Properties["ag"]) { $d.ag } else { $null })
     uyarilar = @($script:Uyarilar); acik = $acik
   }
   MetinYaz (Join-Path $kok "kurulum\kurulum.json") (($kayit | ConvertTo-Json -Depth 6) + "`n")

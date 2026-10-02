@@ -400,6 +400,137 @@ function EskiPaketEngeli($kurulu, [string]$paketSurum) {
   return $null
 }
 
+# Eski paket olcumu TEK giris: on-olcum (sihirbazin engel listesi) ve kurulum.ps1 OnKosul (DUR) bunu cagirir.
+# Doner: @{ kurulu = <aday|$null>; engel = <DUR metni|$null>; sinif = "eski" | "olculemedi" | "" }.
+function EskiPaketOlcumu([string]$kok, [string]$veriKoku, [string]$paketSurum) {
+  $ku = EnYeniSurum (KuruluSurumAdaylari $kok $veriKoku)
+  $e = EskiPaketEngeli $ku $paketSurum
+  $s = ""
+  if ($e) { $s = $(if ((SurumKarsilastir $ku.surum $paketSurum) -eq 1) { "eski" } else { "olculemedi" }) }
+  return @{ kurulu = $ku; engel = $e; sinif = $s }
+}
+
+# --- Gecisle kurulmus duzen (pm2 -> hizmet, deploy/gecis/gecis.ps1) ---------------------------------
+# Kurulum kaydi (kurulum\kurulum.json) YOK; IKI isaret birlikte: gecis\<yyyyMMdd_HHmmss>\gunluk.jsonl ve current
+# baglantisi (tek isaret yetmez: geri alinmis gecis current'i kaldirir). Kurulum yardimcisi onu ONARMAZ - ayri sinif
+# GECISLI, hicbir sey degismeden DUR (docs/ops/GECIS-PM2-HIZMET.md b.7). Doner: @{ damga; metin } ya da $null.
+function GecisliDuzen([string]$kok) {
+  $g = Join-Path $kok "gecis"
+  if (-not (Test-Path -LiteralPath $g -PathType Container)) { return $null }
+  $d = @(Get-ChildItem -LiteralPath $g -Directory -Force -ErrorAction SilentlyContinue | Where-Object { $_.Name -cmatch '^[0-9]{8}_[0-9]{6}$' -and (Test-Path -LiteralPath (Join-Path $_.FullName "gunluk.jsonl") -PathType Leaf) } | Sort-Object Name -Descending)
+  if (-not $d.Count) { return $null }
+  if (-not (ReparseMi (Join-Path $kok "current"))) { return $null }
+  $damga = $d[0].Name
+  return @{ damga = $damga; metin = "bu kok pm2 -> hizmet gecisiyle kurulmus bir TeksERP kurulumu (gecis\$damga\gunluk.jsonl + current baglantisi; kurulum\kurulum.json yok) - kurulum yardimcisi onu onarmaz, hicbir sey degistirilmedi. Guncelleme guncelleyiciyle gelir; sorun varsa docs/ops/GECIS-PM2-HIZMET.md (5. bolum: gecis.ps1 -GeriAl; 7. bolum). Yeni kurulum icin baska bir kok secin." }
+}
+
+# --- Kanal hizmetleri baska koke bagli mi (FAIL-CLOSED) ---------------------------------------------
+# Ayni adli hizmet (KanalAdlariCoz: backend, guncelleyici, PG) BASKA kokun ikilisini ya da --kok'unu gosteriyorsa
+# kurulum/onarim o kurulumun hizmetini EZERDI: DUR. Hizmet var ama ImagePath okunamazsa/cozulemezse de DUR.
+# Kok karsilastirmasi buyuk/kucuk harf ve sondaki '\' bagimsiz; <kok>\current\... (baglanti) kok altindadir.
+function YolKokAltinda([string]$yol, [string]$kok) {
+  $y = ("$yol".Trim() -creplace '/', '\').TrimEnd('\').ToLowerInvariant()
+  $k = ("$kok".Trim() -creplace '/', '\').TrimEnd('\').ToLowerInvariant()
+  if (-not $y -or -not $k -or $y.Contains("..")) { return $false }
+  return ($y -ceq $k -or $y.StartsWith($k + "\", [StringComparison]::Ordinal))
+}
+# $imagePath: $null = hizmet yok (gecer) | "" = var ama okunamadi. Doner: $null (gecer) ya da @{ ad; durum; bagli; metin }.
+function HizmetKokKarari([string]$ad, $imagePath, [string]$kok) {
+  if ($null -eq $imagePath) { return $null }
+  $p = @([regex]::Matches([string]$imagePath, '"([^"]*)"|(\S+)') | ForEach-Object { if ($_.Groups[1].Success) { $_.Groups[1].Value } else { $_.Groups[2].Value } })
+  if (-not $p.Count -or "$($p[0])" -cnotmatch '^[A-Za-z]:\\') {
+    return @{ ad = $ad; durum = "olculemedi"; bagli = ""; metin = "$ad hizmeti var ama hangi koke bagli oldugu olculemedi (ImagePath '$imagePath') - kurulum/onarim yapilamaz (fail-closed), hicbir sey degistirilmedi. Hizmeti 'sc.exe qc $ad' ile denetleyin." }
+  }
+  $kokArg = $null
+  for ($i = 1; $i -lt ($p.Count - 1); $i++) { if ("$($p[$i])" -ceq "--kok") { $kokArg = "$($p[$i + 1])" } }
+  foreach ($y in @("$($p[0])", $kokArg)) {
+    if ($null -eq $y) { continue }
+    if (-not (YolKokAltinda $y $kok)) {
+      # Gosterim: diger kurulumun koku (--kok) bilinirse o, yoksa koke uymayan yol.
+      $bagli = $(if ($kokArg -and -not (YolKokAltinda $kokArg $kok)) { $kokArg } else { $y })
+      return @{ ad = $ad; durum = "baska"; bagli = $bagli; metin = "$ad zaten $bagli'e bagli calisiyor; bu klasore ($kok) kurulum/onarim yapilamaz - o kurulumun hizmetini ezerdi. Ayni koku secin ya da once o kurulumu kaldirin; hicbir sey degistirilmedi." }
+    }
+  }
+  return $null
+}
+# Kayit defterinden ImagePath: $null = hizmet yok | "" = anahtar var ama okunamadi (fail-closed: engel).
+function HizmetImagePath([string]$ad) {
+  $k = "HKLM:\SYSTEM\CurrentControlSet\Services\$ad"
+  try { if (-not (Test-Path -LiteralPath $k)) { return $null } } catch { return "" }
+  try { return "$((Get-ItemProperty -LiteralPath $k -Name ImagePath -ErrorAction Stop).ImagePath)" } catch { return "" }
+}
+# on-olcum (sihirbazin engel listesi) ve OnKosul (DUR) TEK giris. $okuyucu: bekci harness'i icin (varsayilan kayit defteri).
+function HizmetKokEngelleri($adlar, [string]$kok, [scriptblock]$okuyucu) {
+  if (-not $okuyucu) { $okuyucu = { param($a) HizmetImagePath $a } }
+  $e = @()
+  foreach ($ad in @($adlar.backend, $adlar.guncelleyici, $adlar.pg)) {
+    if (-not $ad) { continue }
+    $r = HizmetKokKarari "$ad" (& $okuyucu "$ad") $kok
+    if ($r) { $e += , $r }
+  }
+  return , $e
+}
+
+# --- Ag ayari (API guvenlik duvari): onarim/devamda KAYITTAN ---------------------------------------
+# Kayit TEK okuyucuda (on-olcum sihirbaz sayfasini doldurur, kurulum.ps1 OnKosul karar verir); ilk bulunan:
+#   kurulum\kurulum.json "ag" > kurulum\durum.json "ag" > kurulum\cevap-onceki.json "api" (setup onarimda yeni cevabi
+#   yazmadan once saklar) > kurulum\cevap.json "api" (eski kurulumlar: tek kayit). Semaya uymayan alan yok sayilir.
+# Listeler semanin secenek SIRASIYLA (karsilastirma ve gosterim kararli). Doner: @{ izinliAdresler; agProfilleri; mdns;
+# kaynak } (bilinmeyen alan $null) ya da $null.
+$script:AG_ALANLARI = @("izinliAdresler", "agProfilleri", "mdns")
+function AgKanonik($deger, $tanim) {
+  if ($tanim.tur -ceq "liste") { return , @(@($tanim.secenek) | Where-Object { @($deger) -ccontains $_ }) }
+  return $deger
+}
+function AgMetni($deger) {
+  if ($deger -is [bool]) { return $(if ($deger) { "acik" } else { "kapali" }) }
+  return (@($deger) -join ",")
+}
+function KayitliAgAyari([string]$kok, $sema) {
+  $kaynaklar = @(@("kurulum\kurulum.json", "ag"), @("kurulum\durum.json", "ag"), @("kurulum\cevap-onceki.json", "api"), @("kurulum\cevap.json", "api"))
+  foreach ($k in $kaynaklar) {
+    $y = Join-Path $kok $k[0]
+    if (-not (Test-Path -LiteralPath $y -PathType Leaf)) { continue }
+    try { $j = Get-Content -LiteralPath $y -Raw -Encoding UTF8 | ConvertFrom-Json } catch { continue }
+    if ($null -eq $j -or -not $j.PSObject.Properties[$k[1]]) { continue }
+    $n = $j.($k[1])
+    $r = @{ kaynak = (Split-Path -Leaf $k[0]) }
+    $bir = $false
+    foreach ($a in $script:AG_ALANLARI) {
+      $r[$a] = $null
+      if (-not $n.PSObject.Properties[$a]) { continue }
+      $t = $sema.alanlar."api.$a"
+      $v = $n.$a
+      if ($t.tur -ceq "liste") { $v = @($v) }
+      if (AlanDogrula "api.$a" $v $t) { continue }
+      $r[$a] = AgKanonik $v $t
+      $bir = $true
+    }
+    if ($bir) { return $r }
+  }
+  return $null
+}
+# Karar (OnKosul): onarim/devamda kayittaki alan KAZANIR (kural varsa dokunulmaz, yoksa kayittakiyle kurulur); cevapta
+# ACIKCA verilen farkli deger UYGULANMAZ, uyarilir. Kayit yoksa (yeni kurulum) cevap (alan yoksa sema varsayilani).
+# $deger: CevapDogrula degeri - $ham: ham cevap (alan verildi mi) - $kayit: KayitliAgAyari ($null = kayit yok).
+function AgKarari($deger, $ham, $kayit, $sema) {
+  $r = [ordered]@{}
+  $u = @()
+  $kayittan = @()
+  foreach ($a in $script:AG_ALANLARI) {
+    $t = $sema.alanlar."api.$a"
+    $c = AgKanonik $deger["api.$a"] $t
+    $verildi = ($null -ne $ham) -and ($null -ne $ham.PSObject.Properties["api"]) -and ($null -ne $ham.api) -and ($null -ne $ham.api.PSObject.Properties[$a])
+    if ($kayit -and $null -ne $kayit[$a]) {
+      $r[$a] = $kayit[$a]
+      $kayittan += $a
+      if ($verildi -and (AgMetni $c) -cne (AgMetni $kayit[$a])) { $u += "cevaptaki api.$a ($(AgMetni $c)) UYGULANMADI: onarim ag ayarini kayittan korur ($(AgMetni $kayit[$a]), $($kayit.kaynak))" }
+    } else { $r[$a] = $c }
+  }
+  $r["kaynak"] = $(if ($kayittan.Count) { "kayit ($($kayit.kaynak))" } else { "cevap" })
+  return @{ ag = $r; uyarilar = @($u) }
+}
+
 # --- Lisans saticisi (backend LICENSE_SERVER_URL): kanal kaydindan, TEK karar ---------------------
 # Kanal degeri PAKET.json backendLisansSunucusu (paketle.ps1: deploy/kanallar.json backend.lisansSunucusu), derlemenin
 # varsayilani lisansSunucusuVarsayilan (vendor-url.ts). kurulum.ps1 OnKosul karari, .env satiri ve Dogrulama olcumu bu

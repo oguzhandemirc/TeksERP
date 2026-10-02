@@ -9,7 +9,9 @@
 # -Hafif (sihirbaz acilisi): yalniz paketin kimligi + yonetici + 64-bit (AppId icin sonek); CIM, port ve kok
 #   olcumu YOK - sihirbaz hemen acilir, tam olcum kok secilince "Sistem denetleniyor" penceresiyle kosar.
 # Onarim/devamda gercek kurulu surum (kurulum.json'daki DEGIL: current - kurulum-gecmisi.jsonl - guncelleyici durumu)
-#   paketten YENIYSE "eskiPaket" engeli; gelismis ayarlar (guncelleme sunucusu, vekil, lisans sunucusu) kayittan.
+#   paketten YENIYSE "eskiPaket" engeli; gelismis ayarlar (guncelleme sunucusu, vekil, lisans sunucusu) ve ag ayari kayittan.
+# Engeller (sihirbaz ozet sayfasinda gosterir, OnKosul ayni islevlerle DURUR): gecisli duzen (pm2 -> hizmet, "gecisli"),
+#   kanal hizmeti baska koke bagli ya da olculemedi ("hizmetKok*").
 # Lisans sunucusu: paketin kanal degeri (paketLisans = PAKET.json backendLisansSunucusu) + derleme varsayilani.
 # CIKTI: UTF-16 INI ([olcum] bolumu) - Inno GetIniString okur. Cikis 0 (olcum hatasi INI'de "hata=").
 # =============================================================================
@@ -115,13 +117,18 @@ try {
       $o["oncekiHizmet"] = "$($k.adlar.backend)"
       $ApiPort = [int]$k.portlar.api
       # Gercek kurulu surum (kayit KURULUM ANININ surumudur) - eski paketle onarim degisiklikten ONCE durur.
-      $veriKoku = $adlar.veriKoku
-      $ku = EnYeniSurum (KuruluSurumAdaylari $kok $veriKoku)
-      if ($ku) { $o["kuruluSurum"] = $ku.surum; $o["kuruluKaynak"] = $ku.kaynak }
+      # TEK giris EskiPaketOlcumu (OnKosul ayni islevle DURUR); engel ozet sayfasinda da gosterilir.
+      $ep = EskiPaketOlcumu $kok $adlar.veriKoku "$($o["paketSurum"])"
+      if ($ep.kurulu) { $o["kuruluSurum"] = $ep.kurulu.surum; $o["kuruluKaynak"] = $ep.kurulu.kaynak }
       # eskiPaket: "eski" = kurulu surum paketten YENI; "olculemedi" = karsilastirilamadi (ikisi de engel, sihirbaz metni).
-      if ($o["paketSurum"]) {
-        $e = EskiPaketEngeli $ku "$($o["paketSurum"])"
-        if ($e) { $o["eskiPaket"] = $(if ((SurumKarsilastir $ku.surum "$($o["paketSurum"])") -eq 1) { "eski" } else { "olculemedi" }) }
+      if ($o["paketSurum"] -and $ep.sinif) { $o["eskiPaket"] = $ep.sinif }
+      # Ag ayari kayittan (kurulum-ortak.ps1 KayitliAgAyari; OnKosul ayni kaydi KORUR): sihirbazin Ag sayfasi bununla dolar.
+      $ag = KayitliAgAyari $kok (JsonOku (Join-Path $PSScriptRoot "cevap-semasi.json"))
+      if ($ag) {
+        $o["oncekiAgKaynak"] = $ag.kaynak
+        if ($null -ne $ag.izinliAdresler) { $o["oncekiAgIzinli"] = AgMetni $ag.izinliAdresler }
+        if ($null -ne $ag.agProfilleri) { $o["oncekiAgProfiller"] = AgMetni $ag.agProfilleri }
+        if ($null -ne $ag.mdns) { $o["oncekiAgMdns"] = [int][bool]$ag.mdns }
       }
       # Gelismis ayarlar kayittan: guncelleyicinin ayar.json'u ve .env'deki lisans sunucusu (onarim .env'i yeniden yazmaz).
       $ay = Join-Path $kok "guncelleyici\ayar.json"
@@ -147,7 +154,16 @@ try {
     elseif ($o["yarim"] -eq 1 -and $o["oncekiPgPort"]) { $onceki = [int]$o["oncekiPgPort"] }
     $o["kokVar"] = [int](Test-Path -LiteralPath $kok)
     if ($o["kokVar"] -eq 1 -and $o["onarim"] -eq 0 -and $o["yarim"] -eq 0) {
-      $o["kokYabanci"] = @(Get-ChildItem -LiteralPath $kok -Force | Where-Object { $_.Name -cnotmatch '^(kurulum|unins[0-9]{3}\.(exe|dat|msg))$' }).Count
+      # Gecisle kurulmus duzen (kayit yok, gecis gunlugu + current): ayri sinif GECISLI - "yabanci klasor" degil.
+      $gd = GecisliDuzen $kok
+      if ($gd) { $o["gecisli"] = 1; $o["gecisDamga"] = $gd.damga }
+      else { $o["kokYabanci"] = @(Get-ChildItem -LiteralPath $kok -Force | Where-Object { $_.Name -cnotmatch '^(kurulum|unins[0-9]{3}\.(exe|dat|msg))$' }).Count }
+    }
+    # Kanal hizmetleri BASKA koke bagliysa (ya da bagli oldugu kok olculemezse) engel - OnKosul ayni islevle DURUR.
+    $hk = HizmetKokEngelleri $adlar $kok
+    $o["hizmetKokSayisi"] = $hk.Count
+    for ($i = 0; $i -lt $hk.Count; $i++) {
+      $o["hizmetKokAd$($i + 1)"] = $hk[$i].ad; $o["hizmetKokDurum$($i + 1)"] = $hk[$i].durum; $o["hizmetKokBagli$($i + 1)"] = $hk[$i].bagli
     }
 
     # API portu: mesgulse oneri (4000..4099 ilk bos) - kurulum.ps1 mesgul portta DURUR.
