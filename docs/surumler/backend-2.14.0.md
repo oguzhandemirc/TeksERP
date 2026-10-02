@@ -87,11 +87,12 @@ saklanır, yetkiler her istekte yeniden denetlenir.
 
 ## 3. Sözleşme
 
-- **Kırıldı mı:** ölçülüyor — panel 1.4.2 ve tablet 1.0.15'in bu sürümle birlikte çalışması ayrıca deneniyor; sonuç
-  terfiden önce buraya yazılır. 2.13.0'dan devralınan kural aynen geçerli: lisans etkinleştirmesi sözleşme kabulü
-  ister, bunun için panel en az 1.4.2 olmalı.
-- **Eski istemci ne yapar:** aşağıdakiler koddan okunan bilinen değişikliklerdir, birlikte çalışma ölçümünün sonucu
-  değildir.
+- **Kırıldı mı:** HAYIR — panel 1.4.2 ve tablet 1.0.15'in kullandığı bütün sunucu uçları bu sürümde aynı yol ve
+  biçimle duruyor; değişiklikler yalnız ekleme (2026-10-02 kod karşılaştırmasıyla ölçüldü; uygulama çalıştırılarak
+  denenmedi). Giriş, lisans ekranı (sözleşme kabulü, etkinleştirme, durum) ve yetkiler eski panelde çalışır.
+  2.13.0'dan devralınan kural aynen geçerli: lisans etkinleştirmesi sözleşme kabulü ister, bunun için panel en az
+  1.4.2 olmalı.
+- **Eski istemci ne yapar:** eski panel ve tabletin göreceği farklar:
   - Parola: yeni ya da değiştirilen parola 10 karakterden kısaysa sunucu Türkçe gerekçeyle reddeder.
   - "Parolasını değiştirmeli" işaretli hesap yalnız parola değiştirme adımına girebilir, tabletten giriş yapamaz.
     Panel 1.4.2'de bu adımın ekranı yoktur. Sihirbazla kurulan sunucuda böyle işaretli hesap doğmaz.
