@@ -82,3 +82,16 @@
 3. **Patron bulutu canlı güncellemesi.** Önce döküm kopyasında prova.
 4. **Avukat:** lisans v2 maddeleri, Cloudflare/KVKK, uzaktan destek maddesi.
 5. **Test veritabanlarının silinmesi.** Komut kullanıcıda.
+
+## E) Kullanıcı kararları ve konuşulacaklar (2026-10-03)
+
+- **Kurulum dosyası imzası (Authenticode):** bugün bütçe yok. Ücretsiz önlem: bayi/ekip kılavuzuna "Ek bilgi → Yine de çalıştır" adımı ekran görüntüsüyle; kurulum USB ile getirilirse internet işareti olmadığından SmartScreen uyarısı çıkmaz. Bütçe olunca kod imzalama sertifikasına geçilir.
+- **Android geliştirici doğrulaması (Play dışı kurulan uygulamalar, 2026–2027):** ayrıca, ayrıntılı konuşulacak (D-U-N-S başvurusu ~30 gün sürer).
+- **Bayi akışı:** ayrıca, ayrıntılı konuşulacak (portal yetkileri, bayi kurulum kılavuzu).
+- **Destek:** şimdilik panelden gelen destek talebine ilk gören kullanıcı cevap verir.
+- **Modül paketleri ve fiyat:** sonra bakılacak.
+- **Yedek parolası ve anahtarı:** kurulumda müşteriye yazılı teslim tutanağı (kim saklar, kaybolursa ne olur).
+- **Test yükü ("herkese her şey"):** öneri — her şey kapalı (bugünkü davranış) · her şey açık · tek tek açık · gerçek fabrika profilleri (her müşterinin ayar düzeni adlı profil, her sürüm hepsiyle) · yalnız gerçekten etkileşen özellikler birlikte. Tek ortak paket tasarımına girer (kullanıcı onayı bekliyor).
+- **Hata raporları:** YAPILACAK — müşteri onayıyla, kişisel veri olmadan (hata türü, sürüm, yer) otomatik bize iletilir.
+- **Dil:** ilk hedef yurt içi pazarı; ileride yabancı dillere çevrilecek. Bugünden ucuz hazırlık: ekran yazıları merkezi etiket dosyalarında tutulur (çeviri kolaylaşsın); i18n altyapısı şimdi kurulmaz.
+- **Karar arşivi dosyasının boyutu (`docs/history/CLAUDE-NOT-ARSIVI.md`, ~15 bin satır):** aylara bölünmesi önerildi (çakışma ve kazara büyük okuma azalır); limit sıfırlanınca.
