@@ -1,9 +1,9 @@
 # Backend `2.14.0`
 
 **Durum:** TASLAK — terfide kullanıcı onayı
-**Paket:** _(paketleme doldurur)_
-**SHA256:** _(paketleme doldurur)_
-**Commit:** _(paketleme doldurur)_
+**Paket:** `tekserp-backend-20261002_094313-bf4e9683.zip`
+**SHA256:** `B0386895275DA294CEF373CF7201093CCA854B37BD0C4F960BDFEB60B3F63B92`
+**Commit:** `bf4e9683`
 **Önceki saha sürümü:** yok — sıfırdan kurulum (`demofabrika`, ilk kurulum). Başka bir kuruluma güncelleme olarak
 gidecekse sahadaki sürüm kurulumdan önce sunucunun sağlık bilgisinden okunur; tahmin edilmez.
 
