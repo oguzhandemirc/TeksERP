@@ -47,7 +47,10 @@ export interface BackupListing {
   files: BackupFileInfo[];
   backupDir: string | null; // mutlak yedek klasörü (yoksa geliştirme ortamı)
   restoreTarget: BackupRestoreTarget | null; // pg_restore hedefi (şifre hariç)
-  pm2AppName: string; // geri yüklemede durdurulacak pm2 süreç adı
+  pm2AppName: string; // geri yüklemede durdurulacak pm2 süreç adı (pm2 düzeni)
+  /** Windows hizmeti düzeninde "service"; eski sunucu göndermez → pm2. */
+  processManager?: "pm2" | "service";
+  serviceName?: string | null;
   running: boolean; // sunucuda yedek koşuyor mu
   lastResult: BackupRunResult | null; // son yedek işinin sonucu
   /**
@@ -149,6 +152,9 @@ export function restoreCommand(
   // Şifreli yedeği çözecek yol ya da anahtar dizini yoksa komut ÜRETİLMEZ (fail-closed).
   if (encrypted && (!enc?.decryptedPath || !enc.keyDir)) return null;
   const sealSafety = enc?.state === "acik" && !!enc.keyDir;
+  const svc = serviceCommandInfo(impact);
+  // Hizmet düzeni ama yollar eksik: pm2 bloğu o sunucuda YANLIŞ süreci hedeflerdi (fail-closed).
+  if (impact.processManager === "service" && !svc) return null;
 
   const app = impact.pm2AppName || listing?.pm2AppName || "teks-erp-backend";
   const cwd = impact.backendCwd;
@@ -158,6 +164,10 @@ export function restoreCommand(
   const conn = `-h ${t.host} -p ${t.port} -U ${t.user} -d ${t.database}`;
   const tool = enc?.toolPath ?? "";
   const source = encrypted ? "$plain" : file;
+  // Hizmet düzeninde araçlar PATH'te değil: tam yol + `&`; pm2 düzeni bugünkü gibi.
+  const pgDump = svc ? `& "${svc.pgDumpPath}"` : "pg_dump";
+  const pgRestore = svc ? `& "${svc.pgRestorePath}"` : "pg_restore";
+  const node = svc ? `& "${svc.nodePath}"` : "node";
 
   const decryptBlock = encrypted
     ? [
@@ -166,59 +176,120 @@ export function restoreCommand(
         `#     sorulur (komut satirina yazilmaz). Kopya en sonda KOSULSUZ silinir.`,
         `$plain = "${enc!.decryptedPath}"`,
         `$LASTEXITCODE = 1`,
-        `if ($ok) { node "${tool}" coz --girdi "${file}" --cikti "$plain" --anahtar-dizini "${enc!.keyDir}" }`,
+        `if ($ok) { ${node} "${tool}" coz --girdi "${file}" --cikti "$plain" --anahtar-dizini "${enc!.keyDir}" }`,
         `$ok = $ok -and ($LASTEXITCODE -eq 0) -and (Test-Path "$plain")`,
         `if ($safeOk -and -not $ok) { Write-Host "SIFRELI YEDEK COZULEMEDI (parola/anahtar) - GERI YUKLEME YAPILMADI." -ForegroundColor Red }`,
       ]
     : [];
   const sealBlock = sealSafety
-    ? [`if ($safeOk) { node "${tool}" sifrele --girdi "$safe" --anahtar-dizini "${enc!.keyDir}" --duzu-sil }`]
+    ? [`if ($safeOk) { ${node} "${tool}" sifrele --girdi "$safe" --anahtar-dizini "${enc!.keyDir}" --duzu-sil }`]
     : [];
   const cleanupBlock = encrypted ? [`Remove-Item "$plain" -ErrorAction SilentlyContinue`] : [];
 
+  const { header, stopBlock, migrateBlock, endBlock } = processBlocks(svc, app, cwd, node);
+
   // Write-Host metni ASCII: konsol codepage'i 857/850 olabilir, Türkçe bozulur.
   return [
-    `# !!! BU BLOK YONETICI PowerShell'de CALISTIRILMALI !!!`,
-    `#     PM2 daemon SYSTEM hesabiyla kosuyor (boot'ta kimse giris yapmadan`,
-    `#     kalksin diye). Normal pencerede pm2 komutlari "EPERM \\\\.\\pipe\\rpc.sock"`,
-    `#     ile duser -> backend AYAKTA kalir -> pg_restore --clean acik baglantilarla`,
-    `#     semayi yarim dusurur. Asagidaki guard bunu engeller ama en bastan`,
-    `#     yonetici pencere acmak dogrusudur.`,
+    ...header,
     ``,
     `# 1) Backend'i durdur - pg_restore --clean acik baglantiyla semayi dusuremez`,
-    `$LASTEXITCODE = 1`,
-    `pm2 stop ${app}`,
-    `$stopped = ($LASTEXITCODE -eq 0)`,
-    `if (-not $stopped) { Write-Host "PM2 STOP BASARISIZ - pencere YONETICI mi? GERI YUKLEME YAPILMADI." -ForegroundColor Red }`,
+    ...stopBlock,
     `$env:PGPASSWORD = "<veritabani-sifresi>"`,
     ``,
     `# 2) GUVENLIK YEDEGI - yanlis yedege donulurse geri donus noktasi`,
     `$safe = "${safety.absPath}"`,
     `$LASTEXITCODE = 1`,
-    `if ($stopped) { pg_dump ${conn} -Fc -f "$safe" }`,
+    `if ($stopped) { ${pgDump} ${conn} -Fc -f "$safe" }`,
     `$ok = $stopped -and ($LASTEXITCODE -eq 0) -and (Test-Path "$safe")`,
-    `if ($ok) { pg_restore --list "$safe" > $null; $ok = ($LASTEXITCODE -eq 0) }`,
+    `if ($ok) { ${pgRestore} --list "$safe" > $null; $ok = ($LASTEXITCODE -eq 0) }`,
     `$safeOk = $ok`,
     ``,
     `# 3) YALNIZ guvenlik yedegi dogrulandiysa geri yukle`,
     `if (-not $ok) { Write-Host "GUVENLIK YEDEGI ALINAMADI - GERI YUKLEME YAPILMADI. Disk/yetki/PATH kontrol edin." -ForegroundColor Red }`,
     ...decryptBlock,
-    `if ($ok) { pg_restore ${conn} --clean --if-exists "${source}" }`,
+    `if ($ok) { ${pgRestore} ${conn} --clean --if-exists "${source}" }`,
     `$restored = $ok -and ($LASTEXITCODE -eq 0)`,
     ``,
     `# 4) SEMA GUNCELLEME - ATLANIRSA SESSIZ BOZULMA`,
     `#    Yedek bir migration'dan ONCE alindiysa ve kod yeniyse backend ESKI semaya`,
     `#    baglanir; Prisma P2022 verir ve audit kaydi SESSIZCE kaybolur. migrate`,
     `#    deploy idempotenttir - bekleyen migration yoksa hicbir sey yapmaz.`,
-    `if ($restored) { Set-Location "${cwd}" }`,
-    `if ($restored) { npx prisma migrate deploy }`,
+    ...migrateBlock,
     ``,
     `# 5) Her durumda: sifreyi temizle, backend'i baslat`,
     ...sealBlock,
     ...cleanupBlock,
-    `Remove-Item Env:PGPASSWORD -ErrorAction SilentlyContinue`,
-    `pm2 start ${app}`,
+    ...endBlock,
   ].join("\n");
+}
+
+/** Süreci durdur/başlat + göç satırları: pm2 düzeni (bugünkü) ya da Windows hizmeti (SCM). */
+function processBlocks(
+  svc: ReturnType<typeof serviceCommandInfo>,
+  app: string,
+  cwd: string,
+  node: string,
+): { header: string[]; stopBlock: string[]; migrateBlock: string[]; endBlock: string[] } {
+  const header = svc
+    ? [
+        `# !!! BU BLOK YONETICI PowerShell'de CALISTIRILMALI !!!`,
+        `#     Windows hizmetini (${svc.name}) durdurmak/baslatmak yonetici ister. Normal`,
+        `#     pencerede Stop-Service duser -> backend AYAKTA kalir -> pg_restore --clean`,
+        `#     acik baglantilarla semayi yarim dusurur. Asagidaki guard bunu engeller ama`,
+        `#     en bastan yonetici pencere acmak dogrusudur.`,
+      ]
+    : [
+        `# !!! BU BLOK YONETICI PowerShell'de CALISTIRILMALI !!!`,
+        `#     PM2 daemon SYSTEM hesabiyla kosuyor (boot'ta kimse giris yapmadan`,
+        `#     kalksin diye). Normal pencerede pm2 komutlari "EPERM \\\\.\\pipe\\rpc.sock"`,
+        `#     ile duser -> backend AYAKTA kalir -> pg_restore --clean acik baglantilarla`,
+        `#     semayi yarim dusurur. Asagidaki guard bunu engeller ama en bastan`,
+        `#     yonetici pencere acmak dogrusudur.`,
+      ];
+  const stopBlock = svc
+    ? [
+        `$svc = "${svc.name}"`,
+        `Stop-Service -Name $svc -ErrorAction SilentlyContinue`,
+        `$stopped = ((Get-Service -Name $svc -ErrorAction SilentlyContinue).Status -eq 'Stopped')`,
+        `if (-not $stopped) { Write-Host "HIZMET DURDURULAMADI - pencere YONETICI mi? GERI YUKLEME YAPILMADI." -ForegroundColor Red }`,
+      ]
+    : [
+        `$LASTEXITCODE = 1`,
+        `pm2 stop ${app}`,
+        `$stopped = ($LASTEXITCODE -eq 0)`,
+        `if (-not $stopped) { Write-Host "PM2 STOP BASARISIZ - pencere YONETICI mi? GERI YUKLEME YAPILMADI." -ForegroundColor Red }`,
+      ];
+  // Paket `node_modules\.bin` taşımaz: hizmette prisma CLI giriş noktası paketin Node'uyla, DATABASE_URL `.env`den.
+  const migrateBlock = svc
+    ? [
+        `if ($restored) { Set-Location "${cwd}" }`,
+        `if ($restored) { $env:DOTENV_CONFIG_PATH = "${svc.envFile}" }`,
+        `if ($restored) { ${node} "node_modules\\prisma\\build\\index.js" migrate deploy }`,
+      ]
+    : [`if ($restored) { Set-Location "${cwd}" }`, `if ($restored) { npx prisma migrate deploy }`];
+  const endBlock = svc
+    ? [
+        `Remove-Item Env:PGPASSWORD -ErrorAction SilentlyContinue`,
+        `Remove-Item Env:DOTENV_CONFIG_PATH -ErrorAction SilentlyContinue`,
+        `Start-Service -Name $svc -ErrorAction SilentlyContinue`,
+      ]
+    : [`Remove-Item Env:PGPASSWORD -ErrorAction SilentlyContinue`, `pm2 start ${app}`];
+
+  return { header, stopBlock, migrateBlock, endBlock };
+}
+
+/** Hizmet düzeninin komut bloğu için gereken her şey geldiyse; eksikse `null`. */
+function serviceCommandInfo(impact: RestoreImpact): {
+  name: string;
+  nodePath: string;
+  envFile: string;
+  pgDumpPath: string;
+  pgRestorePath: string;
+} | null {
+  if (impact.processManager !== "service") return null;
+  const { serviceName, nodePath, envFile, pgDumpPath, pgRestorePath } = impact;
+  if (!serviceName || !nodePath || !envFile || !pgDumpPath || !pgRestorePath) return null;
+  return { name: serviceName, nodePath, envFile, pgDumpPath, pgRestorePath };
 }
 
 // ─── OFFSITE YEDEK ────────────────────────────────────────────────────────────

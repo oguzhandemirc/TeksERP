@@ -1,9 +1,27 @@
 // İNDİRME belirteci: kanal-öneki + kurulum + kısa ömür. Doğrulayıcı kenarda (CF Worker)
 // yeniden yazılır; bu dosya onun kâhinidir — iki taraf aynı sınırları uygular.
 import type { KeyObject } from "node:crypto";
+import { z } from "zod";
 import { publicKeyFromX, verifyJws } from "./jws";
-import { DownloadSchema, IsoTimeSchema, TYP, decodeDocument, signDocument, type DownloadDoc } from "./belgeler";
+import { ChannelCodeSchema, IsoTimeSchema, PROTOCOL_VERSION, TYP, UuidSchema, decodeDocument, signDocument } from "./belgeler";
 import { CLOCK_SKEW_MS, success, failure, forwardFailure, isoToMs, type Result } from "./ortak";
+
+/** Güncelleme sunucusunda kanal başına ürün dizinleri (`/<kanal>/<ürün>/`) — indirme belirtecinin önek kümesi. */
+export const DOWNLOAD_PRODUCTS = ["electron", "mobil", "backend"] as const;
+export type DownloadProduct = (typeof DOWNLOAD_PRODUCTS)[number];
+
+export const DownloadSchema = z
+  .object({
+    v: z.literal(PROTOCOL_VERSION),
+    kanal: ChannelCodeSchema,
+    yolOneki: z.string().max(80),
+    kurulumId: UuidSchema,
+    exp: IsoTimeSchema,
+  })
+  .refine((i) => DOWNLOAD_PRODUCTS.some((urun) => i.yolOneki === `/${i.kanal}/${urun}/`), {
+    message: "Yol öneki kanalın electron/, mobil/ ya da backend/ dizini olmalı",
+  });
+export type DownloadDoc = z.infer<typeof DownloadSchema>;
 
 export const DOWNLOAD_MAX_TTL_MS = 70 * 60 * 1000;
 const DOWNLOAD_KID_PATTERN = /^ind-[a-z0-9-]{1,60}$/;

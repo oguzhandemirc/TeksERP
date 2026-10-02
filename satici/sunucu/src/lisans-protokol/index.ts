@@ -12,3 +12,7 @@ export * from "./donanim";
 export * from "./modul-anahtari";
 export * from "./kabul";
 export * from "./kabul-katalogu";
+export * from "./guncelleme-ortak";
+export * from "./guncelleme-pg";
+export * from "./guncelleme";
+export * from "./guncelleme-karar";

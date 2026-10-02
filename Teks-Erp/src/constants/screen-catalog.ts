@@ -227,6 +227,8 @@ const desktop: Array<Omit<ScreenEntry, "capabilities"> & { capabilities: string[
   // Lisans + Hakkında (panel yüzeyi Faz 1d). Hakkında'nın verisi herkese açık `GET /api/license/durum`.
   { key: "system/license", app: "desktop", modul: "cekirdek:sistem-kimlik-belge", title: "Lisans", requires: ["license:view", "license:manage"], capabilities: ["license:manage"] },
   { key: "system/about", app: "desktop", modul: "cekirdek:sistem-kimlik-belge", title: "Hakkında", requires: ["license:view"], capabilities: [] },
+  // Sunucu güncellemeleri (Dağıtım v2): okuma `license:view`, onay ("Şimdi kur" · "Bu gece kur") `license:manage`.
+  { key: "system/server-updates", app: "desktop", modul: "cekirdek:sistem-kimlik-belge", title: "Sunucu Güncellemeleri", requires: ["license:view", "license:manage"], capabilities: ["license:manage"] },
   { key: "system/support", app: "desktop", modul: "cekirdek:sistem-kimlik-belge", title: "Destek", requires: ["support:create"], capabilities: ["support:create"] },
   // Veri Aktarımı — `admin:settings` DEĞİL: toplu yükleme sistem yönetimi değil
   // VERİ yönetimidir ve ayrı atanır. Ekranın kendisi `data:import` ile açılır;

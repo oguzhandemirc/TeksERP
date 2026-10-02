@@ -37,6 +37,9 @@ import { evaluateLicenseTransitions, refreshLicenseTrace } from "./license-trail
 import { adoptFromRejected, adoptOffered, refreshLicenseRevocation, revocationOffer, type RevocationOffer } from "./license-revocation.service";
 import { logLeaseAccepted, sanctionView, verifyResponseDocuments } from "./helpers/license-accept.helper";
 import { syncSupportAfterPoll } from "./support-sync.service";
+import { updateReportField } from "./update-status.service";
+import { refreshUpdaterIntentQuietly } from "./update-intent.service";
+import { isVerificationMode } from "../lib/dogrulama-kipi";
 import {
   buildEnvironment,
   currentFingerprintDigest,
@@ -86,7 +89,7 @@ export async function refreshLicenseFingerprint(): Promise<void> {
   const store = getLicenseStore();
   if (!store?.key) return;
   const recordCache = cacheFromRecordCopy(getLicenseSnapshot().view.record?.parmakIziOnbellegi);
-  const fp = await measureFingerprint(store.key.salt, undefined, { recordCache });
+  const fp = await measureFingerprint(store.key.salt, undefined, { recordCache, persistCache: !isVerificationMode() });
   setFingerprintCacheCopy(cacheToRecordCopy(fp.onbellek));
   setMeasuredFingerprint(fp);
 }
@@ -127,6 +130,8 @@ export async function buildPollBody(nowMs: number = Date.now()): Promise<ReturnT
     gozlem: peekObservationCounters(),
     // Kurulum kaydı yoksa alan hiç gitmez: eski satıcı KATI şemayla tanımadığı anahtarı reddeder.
     ...installRecordsField(),
+    // Güncelleyici yoksa ya da rapor şemadan geçmezse alan hiç gitmez (yoklama bu yüzden düşmez).
+    ...updateReportField(),
     ...capabilitiesField(),
     ...pollV2Fields(snap),
   });
@@ -190,6 +195,7 @@ function acceptVerifiedResponse(
     if (before.lease?.document.kiraId !== leaseDoc.kiraId) saveLease(resp.kira);
     setDownloadTokens(resp.indirmeBelirtecleri);
     invalidateLicenseSnapshot();
+    refreshUpdaterIntentQuietly(); // yeni belirteç güncelleyicinin niyetine (§5.1)
     return { yeniKira: false, kiraId: leaseDoc.kiraId };
   }
   if (known && isoToMs(leaseDoc.verilis) < known.verilisMs) {
@@ -207,6 +213,7 @@ function acceptVerifiedResponse(
   if (getLicenseStore()?.transfer) saveTransfer(null);
   recordPollOutcome({ ok: true });
   invalidateLicenseSnapshot();
+  refreshUpdaterIntentQuietly();
   logLeaseAccepted({ resp, leaseDoc, ...who, firstActivation, priorSanction });
   evaluateLicenseTransitions();
   if (firstActivation) doorbellKick?.();

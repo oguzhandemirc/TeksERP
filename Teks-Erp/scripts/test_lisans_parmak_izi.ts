@@ -299,7 +299,7 @@ async function kayitKopyasiBolumu(): Promise<void> {
   check(
     "§8h ⭐ motor bağı: tazeleme kayıttaki kopyayı ölçüme verir ve ölçümün önbelleğini kayda yazar",
     /cacheFromRecordCopy\(getLicenseSnapshot\(\)\.view\.record\?\.parmakIziOnbellegi\)/.test(ilk) &&
-      /measureFingerprint\([^)]*\{\s*recordCache\s*\}\)/.test(ilk) &&
+      /measureFingerprint\([^)]*\{\s*recordCache\b[^}]*\}\)/.test(ilk) &&
       /setFingerprintCacheCopy\(cacheToRecordCopy\(fp\.onbellek\)\)/.test(ilk),
   );
 }

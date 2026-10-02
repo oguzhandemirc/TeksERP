@@ -26,12 +26,24 @@
 //      §22 aracın DAVRANIŞI (Node birim, sahte `pm2 jlist`).
 //   §23 kurulum kaydının `yeniMigrationSayisi`si DB'de GERÇEKTEN uygulanan sayıdır ([7/9] önü/arkası) ve
 //      [5/9] birleşik ecosystem'de "KORUNDU" başlığı basılmaz.
+//   §24 pm2 yolu DONDURULDU (Dağıtım v2, geçiş dönemi çift yol): kur.ps1 · ilk-kurulum.ps1 · pm2-boot.cmd ·
+//      ecosystem.config.js içeriği aşağıdaki özetlere bağlı + DONDURULDU başlığı taşır. Değişiklik yalnız düzeltme
+//      için ve özet satırı GEREKÇESİYLE aynı commit'te güncellenerek yapılır (yeni özellik pm2 yoluna eklenmez).
+//   §25 hizmet betikleri (backend-hizmeti.ps1 ↔ guncelleyici-hizmeti.ps1) ortak yardımcıları birebir ikiz.
+//   §12d uzaktan-kos.ps1 geçiş kipi (D6): gecis.ps1 -Uygula görevde yalnız kuru koşumun -Onay <N>'iyle; çıktı logs\ dışında.
+//   §26 VİRGÜLLÜ DÖNÜŞ (`return , $x`) yapan fonksiyonun çağrısı `@()` ile sarılmaz, boruya verilmez (iç içe dizi).
+//   §27 `[Validate*]` öznitelikli parametrenin adı gövdede yerel değişken olarak ATANMAZ (ad büyük/küçük harf duyarsız).
+//   §28 betik kapsamındaki `foreach ($x in …)` daha önce ATANMIŞ ve döngüden SONRA okunan bir değişkeni gölgelemez.
+//   §29 `paketle.ps1` hata yolunda (Fail + betik kapsamı trap) yarım sahneyi (%TEMP%\tekserp-backend-*) siler.
+//   §30 tür kısıtlı parametre (`[string]$Sonuc`) betik kapsamında (`$Sonuc` / `$script:Sonuc`) sözlük/dizi değeriyle ATANMAZ.
+//   §31 bir icacls çağrısı `(OI)(CI)` izniyle `/T`yi BİRLİKTE taşımaz (dosyalarda DACL boş kalır); ağaç `/reset` ile.
 // Kaynak ölçülür, davranış değil: pwsh her ortamda yok, 5.1 hiç yok.
 // =============================================================================
 import { readFileSync, existsSync, readdirSync, mkdtempSync, mkdirSync, writeFileSync, rmSync, realpathSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { spawnSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import { psTara, kapsayanFonksiyon } from "./lib/ps-tarama";
 import { INSTALL_HISTORY_FILE_NAME, INSTALL_RECORD_KINDS, InstallRecordSchema } from "../src/lib/license/protocol";
 
@@ -44,8 +56,12 @@ function check(label: string, ok: boolean, detay = ""): void {
   console.log(`${ok ? "✅" : "❌"} ${label}${detay ? ` — ${detay}` : ""}`);
 }
 
-/** Fabrika/müşteri sunucusunda koşan PowerShell betikleri (geliştirme makinesinde koşan `paketle.ps1` hariç). */
-const SUNUCU_PS1 = ["deploy/kur.ps1", "deploy/ilk-kurulum.ps1", "deploy/yedekle.ps1", "deploy/uzaktan-kos.ps1", "deploy/bakim-rolu.ps1"];
+/** Fabrika/müşteri sunucusunda koşan PowerShell betikleri (geliştirme makinesinde koşan `paketle.ps1` hariç; setup.exe'nin
+ *  `deploy/kurulum/` betikleri de sunucuda YÖNETİCİ olarak koşar — D5). */
+const SUNUCU_PS1 = ["deploy/kur.ps1", "deploy/ilk-kurulum.ps1", "deploy/yedekle.ps1", "deploy/uzaktan-kos.ps1", "deploy/bakim-rolu.ps1", "deploy/hizmet/backend-hizmeti.ps1", "deploy/hizmet/guncelleyici-hizmeti.ps1", "deploy/hizmet/kanal-adlari.ps1", "deploy/hizmet/sema-hizasi.ps1", "deploy/gecis/gecis.ps1", "deploy/kurulum/kurulum.ps1", "deploy/kurulum/kurulum-ortak.ps1", "deploy/kurulum/on-olcum.ps1", "deploy/kurulum/kaldir.ps1"];
+
+/** Körlük zemini satır alt sınırı: varsayılan 60; bilerek küçük tek-işlevli kütüphane kendi sınırını taşır. */
+const KORLUK_SATIR: Record<string, number> = { "deploy/hizmet/kanal-adlari.ps1": 25, "deploy/hizmet/sema-hizasi.ps1": 25 };
 
 const YONLENDIRME = /(?:^|\s)2>(?:&1|\$null)/;
 const CIPLAK_NPM = /(?:^|[\s&(;|])npm(?=\s|$)/;
@@ -59,7 +75,7 @@ for (const yol of SUNUCU_PS1) {
   const t = psTara(readFileSync(tam, "utf8"));
   const son = t.satirlar[t.satirlar.length - 1];
   check(`§0 ${yol} tarandı (körlük zemini: satır + fonksiyon + dengeli parantez)`,
-    t.satirlar.length > 60 && t.fonksiyonlar.length >= 1 && son?.derinlik === 0,
+    t.satirlar.length > (KORLUK_SATIR[yol] ?? 60) && t.fonksiyonlar.length >= 1 && son?.derinlik === 0,
     `${t.satirlar.length} satır · ${t.fonksiyonlar.length} fonksiyon · son derinlik ${son?.derinlik}`);
 
   // §1 — yönlendirme yalnız EAP=Continue + finally'de geri koyan yardımcıda
@@ -168,8 +184,12 @@ for (const yol of SUNUCU_PS1) {
   check("§5c ⭐ paketle.ps1 araç listesini (araclar.json) doğruluyor ve eksikte Fail",
     pk.satirlar.some((s) => /araclar\.json/.test(s.kod)) &&
       pk.satirlar.some((s) => /Fail\s+"Arac uretilmedi/.test(s.kod)));
-  const pakete = (ad: string) => pk.satirlar.some((s) =>
-    s.kod.trim() === `Copy-Item "$repo\\deploy\\${ad}" "$stage\\"`);
+  // Paket içeriği TEK LİSTE (`$KOK_BETIKLERI`, D5): listede olan + döngünün kopyaladığı dosya pakettedir.
+  const kokListe = /^\$KOK_BETIKLERI\s*=\s*@\(([^)]*)\)/m.exec(readFileSync(join(KOK, "deploy/paketle.ps1"), "utf8"));
+  const liste = kokListe ? [...kokListe[1]!.matchAll(/"([^"]+)"/g)].map((m) => m[1]!) : [];
+  const dongu = pk.satirlar.some((s) => /foreach \(\$b in \$KOK_BETIKLERI\)/.test(s.kod)) &&
+    pk.satirlar.some((s) => /Copy-Item \$kaynak \(Join-Path \$stage \$b\)/.test(s.kod));
+  const pakete = (ad: string) => dongu && liste.includes(ad);
   const sunucuDosyalari = ["ilk-kurulum.ps1", "yedekle.ps1", "pm2-boot.cmd", "uzaktan-kos.ps1", "bakim-rolu.ps1"];
   const eksikDosya = sunucuDosyalari.filter((a) => !pakete(a));
   check(`§5d paketle.ps1 sunucu dosyalarını pakete koyuyor (${sunucuDosyalari.join(" + ")}) — sunucuya repo ağacı taşınmaz`,
@@ -294,6 +314,21 @@ for (const yol of SUNUCU_PS1) {
   check("§10e pm2-boot.cmd: PM2_HOME kur.ps1'inkiyle aynı (<kök>\\pm2-home), `pm2 resurrect`, tamamı ASCII",
     cmd.includes('set "PM2_HOME=%KOK%pm2-home"') && cmd.includes('pm2\\node_modules\\.bin\\pm2.cmd" resurrect') &&
       !/[^\x00-\x7F]/.test(cmd));
+  // setlocal'li toplu dosyada call'siz .cmd cagrisi cagiranin baglamini bitirir: setlocal ortami (PM2_HOME) duser,
+  // pm2 SYSTEM profiline gider, acilista backend kalkmaz (thinkpad-1 D8c, gercek gorevle yeniden uretildi).
+  const callsizCagri = (metin: string): string[] => {
+    const satirlar = metin.split(/\r?\n/);
+    if (!satirlar.some((s) => /^\s*setlocal\b/i.test(s))) return [];
+    return satirlar.filter((s) => /\.cmd"/i.test(s) && !/^\s*(rem\b|::|set\s|call\s)/i.test(s)).map((s) => s.trim());
+  };
+  const cagri = callsizCagri(cmd);
+  check("§10e2 ⭐ pm2-boot.cmd: setlocal varken .cmd çağrısı `call`lı — çağrısız çağrıda PM2_HOME düşer, pm2 SYSTEM profilinde boş .pm2 ile doğar, açılışta backend kalkmaz",
+    cmd.length > 0 && cagri.length === 0, cagri.join(" | ") || "call'lı");
+  const sondaCallsiz = cmd.replace(/^call (?=")/m, "");
+  check("§10e2 sonda: `call` silindi → kırmızı", sondaCallsiz !== cmd && callsizCagri(sondaCallsiz).length > 0, sondaCallsiz === cmd ? "MUTASYON UYGULANMADI" : "");
+  const sondaSetlocalsiz = sondaCallsiz.replace(/^setlocal\r?\n/im, "");
+  check("§10e2 sonda: setlocal'sız çıplak çağrı (SAHINSRV'nin elle düzenlenmiş biçimi) → yeşil, ortam düşmez",
+    sondaSetlocalsiz !== sondaCallsiz && callsizCagri(sondaSetlocalsiz).length === 0, sondaSetlocalsiz === sondaCallsiz ? "MUTASYON UYGULANMADI" : "");
 }
 
 // §10h — premigrate yedeği ve ilk kurulum şifrelemesi: parola HİÇBİR betikte argümana
@@ -366,6 +401,20 @@ for (const yol of SUNUCU_PS1) {
   check("§12c uzaktan-kos.ps1 kur.ps1'i -Zorla/-GeriAl olmadan göreve vermez (onay sorusu görevde cevaplanamaz; kültür-bağımsız)",
     uz.some((k) => k.includes("[regex]::IsMatch($Argumanlar, '(^|\\s)-(Zorla|GeriAl)\\b', 'IgnoreCase, CultureInvariant')")) &&
       uz.some((k) => /-and -not \$onayli\)/.test(k)));
+  // §12d (D6): geçiş de görevde etkileşimsiz — `-Uygula` kuru koşumun bastığı `-Onay <N>`sız göreve verilmez; çıktısı
+  //   backend'in YAZABİLDİĞİ logs\ yerine betiğin klasöründe (görev SYSTEM'dir, D3 güvenilmez dizin kuralı).
+  const uzIhlal = (u: string[]): string[] => {
+    const ih: string[] = [];
+    if (!u.some((k) => k.includes('$gecisMi = [string]::Equals((Split-Path $betikTam -Leaf), "gecis.ps1", [System.StringComparison]::OrdinalIgnoreCase)'))) ih.push("geçiş betiği kültür-bağımsız tanınmıyor");
+    if (!u.some((k) => /if \(\$gecisMi -and \$uygulaMi -and -not \[regex\]::IsMatch\(\$Argumanlar, '\(\^\|\\s\)-Onay\\s\+\\d\+\\b', 'IgnoreCase, CultureInvariant'\)\) \{/.test(k))) ih.push("geçiş -Onay'sız göreve veriliyor");
+    if (!u.some((k) => /\$dizin = if \(-not \$gecisMi -and \(Test-Path \$varsayilan\)\)/.test(k))) ih.push("geçişin çıktısı logs\\'e yazılıyor");
+    return ih;
+  };
+  check("§12d ⭐ uzaktan-kos.ps1 geçiş kipi: gecis.ps1 -Uygula yalnız -Onay <N> ile, çıktı logs\\ DIŞINDA; kur.ps1 dalı aynen", uzIhlal(uz).length === 0, uzIhlal(uz).join(" | ") || "temiz");
+  for (const [ad, u2] of [
+    ["-Onay kapısı silindi", uz.filter((k) => !/if \(\$gecisMi -and \$uygulaMi/.test(k))],
+    ["çıktı logs\\'e", uz.map((k) => k.replace("if (-not $gecisMi -and (Test-Path $varsayilan))", "if (Test-Path $varsayilan)"))],
+  ] as const) check(`§12d sonda: ${ad} → kırmızı`, uzIhlal([...u2]).length > 0);
 }
 
 // §13 — yedek şifreleme niyeti tek kaynak (D13) + ilk kurulumun sır ve soru kapıları.
@@ -377,6 +426,8 @@ for (const yol of SUNUCU_PS1) {
   const ilkT = tara("deploy/ilk-kurulum.ps1");
   const yedT = tara("deploy/yedekle.ps1");
   const bakT = tara("deploy/bakim-rolu.ps1");
+  const ortT = tara("deploy/kurulum/kurulum-ortak.ps1"); // setup.exe (D5) aynı SCRAM gövdesini taşır
+  const kurT = tara("deploy/kurulum/kurulum.ps1"); // setup.exe (D5) aynı .env okuyucusunu taşır
   const ilk = ilkT.satirlar.map((x) => x.kod);
   const yed = yedT.satirlar.map((x) => x.kod);
   const envOku = yed.findIndex((k) => /EnvDeger \(Get-Content \$envDosya -Encoding UTF8\) "BACKUP_KEY_DIR"/.test(k));
@@ -407,10 +458,10 @@ for (const yol of SUNUCU_PS1) {
     return f ? t.satirlar.filter((x) => x.no >= f.bas && x.no <= f.son).map((x) => x.kod.trim()).filter(Boolean).join("\n") : null;
   };
   for (const [ad, dosyalar] of [
-    ["ScramDogrulayici", [ilkT, bakT]],
-    ["Pbkdf2Sha256", [ilkT, bakT]],
+    ["ScramDogrulayici", [ilkT, bakT, ortT]],
+    ["Pbkdf2Sha256", [ilkT, bakT, ortT]],
     ["SoruSorabilir", [ilkT, bakT]],
-    ["EnvDeger", [ilkT, bakT, yedT]],
+    ["EnvDeger", [ilkT, bakT, yedT, kurT]],
   ] as const) {
     const g = dosyalar.map((t) => govde(t, ad));
     check(`§13d ⭐ \`${ad}\` ikizleri birebir aynı (${dosyalar.length} betik; biri düzelip öteki kalmasın)`,
@@ -872,6 +923,302 @@ function kurulumOlcumIhlalleri(kur: string): string[] {
     const ih2 = uygulandi ? kurulumOlcumIhlalleri(k2) : [];
     check(`§23 sonda: ${ad} → kırmızı`, ih2.length > 0, uygulandi ? ih2.join(" | ") : "MUTASYON UYGULANMADI");
   }
+}
+
+// §24 — pm2 yolu DONDURULDU (yönetici kararı 2026-10-01, geçiş dönemi çift yol). adnansahin ve demofabrika
+//   pm2 düzeninde; geçişe kadar acil düzeltme ESKİ yolla (kur.ps1 -Paket) kurulabilmeli — o yüzden dosyalar
+//   KALIR ve ÇALIŞIR, ama yeni özellik almaz. Özet LF'ye normalize içerikten (checkout CRLF'i fark yaratmaz).
+//   Kaldırma koşulu: filoda pm2 düzeninde kurulum kalmaması (portal filo görünümü) — o gün bu tablo da gider.
+const DONMUS: ReadonlyArray<{ dosya: string; sha256: string; gerekce: string }> = [
+  { dosya: "deploy/kur.ps1", sha256: "0c56f34d39594a006e3fc01290ea20a134b6f5f26ffa07542fcc19b7401d68e5", gerekce: "D6 2026-10-01: dondurma başlığı + HizmetDuzeniIzi kapısı (bu kökü kullanan her TeksERP hizmeti)" },
+  { dosya: "deploy/ilk-kurulum.ps1", sha256: "5a1e0803b1e08f7a88e6e71d178cc7053ff04a210703fd3c3f6eaa3831386640", gerekce: "D6 2026-10-01: dondurma başlığı + HizmetDuzeniIzi kapısı" },
+  { dosya: "deploy/pm2-boot.cmd", sha256: "2659a7f160d0aeb1d7aa2a20b3fe3139b047391e1b2b4abb18794a79d90cf214", gerekce: "D8c 2026-10-01 DÜZELTME: pm2.cmd `call`lı — setlocal ortamı çağrısız çağrıda düşüyor, açılışta pm2 SYSTEM profiline gidip backend'i kaldırmıyordu (thinkpad-1, yönetici onayı)" },
+  { dosya: "Teks-Erp/ecosystem.config.js", sha256: "aabeb95d3c4baf37b8bc48a6c36e688a8f411e5e4a2cc874ce86c6bcbefbfc3e", gerekce: "D6 2026-10-01: dondurma başlığı" },
+];
+function donmusOzet(metin: string): string {
+  return createHash("sha256").update(metin.replace(/\r\n/g, "\n"), "utf8").digest("hex");
+}
+function donmusIhlalleri(dosya: string, metin: string, beklenen: string): string[] {
+  const ih: string[] = [];
+  if (donmusOzet(metin) !== beklenen) ih.push(`${dosya} donmuş özetten farklı`);
+  if (!/DONDURULDU \(Da[gğ][iı]t[iı]m v2, 2026-10-01\)/.test(metin)) ih.push(`${dosya} DONDURULDU başlığı yok`);
+  return ih;
+}
+{
+  for (const d of DONMUS) {
+    const metin = readFileSync(join(KOK, d.dosya), "utf8");
+    const ih = donmusIhlalleri(d.dosya, metin, d.sha256);
+    check(`§24 ⭐ ${d.dosya} DONMUŞ (özet + başlık) — son gerekçe: ${d.gerekce}`, ih.length === 0,
+      ih.length ? `${ih.join(" | ")} — düzeltmeyse özet satırını gerekçesiyle güncelle (ölçülen ${donmusOzet(metin)}); yeni özellikse pm2 yoluna EKLENMEZ` : "aynı");
+    const sondalar: Array<[string, string]> = [
+      ["satır eklendi", `${metin}\n# yeni ozellik\n`],
+      ["başlık silindi", metin.replace(/DONDURULDU \(Da[gğ][iı]t[iı]m v2, 2026-10-01\)/, "pm2 yolu")],
+    ];
+    for (const [ad, m] of sondalar) {
+      const uygulandi = m !== metin;
+      check(`§24 sonda: ${d.dosya} ${ad} → kırmızı`, uygulandi && donmusIhlalleri(d.dosya, m, d.sha256).length > 0, uygulandi ? "" : "MUTASYON UYGULANMADI");
+    }
+  }
+  // CRLF checkout'u (Windows sunucusu) özeti DEĞİŞTİRMEZ — aksi hâlde kapı satır sonuna bekçilik ederdi.
+  const ilk = readFileSync(join(KOK, DONMUS[0]!.dosya), "utf8");
+  check("§24 körlük zemini: CRLF'li kopya aynı özet", donmusOzet(ilk.replace(/\r?\n/g, "\r\n")) === donmusOzet(ilk));
+}
+
+// §25 — hizmet betiklerinin ortak yardımcıları İKİZ (biri düzelip öteki kalmasın): SID algoritması, etkin
+//   erişim, geniş ACE, bağlantı ölçümü, ImagePath ayrıştırma, yol eşitliği.
+{
+  const t1 = psTara(readFileSync(join(KOK, "deploy/hizmet/backend-hizmeti.ps1"), "utf8"));
+  const t2 = psTara(readFileSync(join(KOK, "deploy/hizmet/guncelleyici-hizmeti.ps1"), "utf8"));
+  const govde = (t: ReturnType<typeof psTara>, ad: string): string | null => {
+    const f = t.fonksiyonlar.find((x) => x.ad === ad);
+    return f ? t.satirlar.filter((x) => x.no >= f.bas && x.no <= f.son).map((x) => x.kod.trim()).filter(Boolean).join("\n") : null;
+  };
+  for (const ad of ["HizmetSid", "Erisim", "GenisAce", "ReparseMi", "KomutParcala", "YolEsit"]) {
+    const a = govde(t1, ad), b = govde(t2, ad);
+    check(`§25 ⭐ \`${ad}\` ikizi birebir (backend-hizmeti.ps1 ↔ guncelleyici-hizmeti.ps1)`, a !== null && a.length > 20 && a === b,
+      `${a ? a.length : "YOK"} · ${b ? b.length : "YOK"} bayt`);
+  }
+}
+
+// §26 — VİRGÜLLÜ DÖNÜŞ (thinkpad-1 D8 2026-10-01): `return , $x` diziyi TEK nesne olarak verir. `@(F)` onu İÇ İÇE
+//   diziye çevirir (Count hep 1; `[int[]]` bağlamada "Object[] → Int32" — ön ölçüm PG portunda düştü) ve
+//   `F | Where-Object` öğeleri değil BÜTÜN diziyi süzer. Doğru çağrı `$x = F` ya da `(F)`.
+{
+  const taranan = SUNUCU_PS1.filter((y) => existsSync(join(KOK, y))).map((y) => ({ yol: y, t: psTara(readFileSync(join(KOK, y), "utf8")) }));
+  const virgullu = new Set<string>();
+  for (const { t } of taranan) {
+    for (const f of t.fonksiyonlar) {
+      if (t.satirlar.some((x) => x.no >= f.bas && x.no <= f.son && /\breturn\s*,/.test(x.ciplak))) virgullu.add(f.ad);
+    }
+  }
+  const ihlal: string[] = [];
+  for (const { yol, t } of taranan) {
+    for (const x of t.satirlar) {
+      for (const ad of virgullu) {
+        const e = ad.replace(/[-]/g, "\\-");
+        const sarili = new RegExp(`@\\(\\s*${e}\\b`).test(x.ciplak);
+        const borulu = new RegExp(`(?:^|[=;{]\\s*|\\bin\\s+)${e}\\b[^|()]*\\|`).test(x.ciplak.trim());
+        if (sarili || borulu) ihlal.push(`${yol}:${x.no} ${ad}`);
+      }
+    }
+  }
+  check(`§26 ⭐ virgüllü dönüşlü fonksiyon @() ile sarılmıyor, boruya verilmiyor`, virgullu.size >= 3 && ihlal.length === 0,
+    ihlal.length ? ihlal.slice(0, 8).join(" · ") : `${virgullu.size} fonksiyon, çağrıları temiz`);
+}
+
+// §27 — DOĞRULAMALI PARAMETRE ADI (thinkpad-1 D8 2026-10-01): PowerShell değişken adı büyük/küçük harf DUYARSIZDIR;
+//   `[ValidateSet(...)]$Hedef` parametresi olan betikte döngü değişkeni `$hedef = <yol>` öznitelik doğrulamasından
+//   geçer ve betik orada düşer (`paketle.ps1` [3/6]: korumalı paket hiç üretilemiyordu). deploy/ altındaki BÜTÜN
+//   betikler (geliştirme makinesinde koşan paketle.ps1 dahil).
+{
+  const yollar: string[] = [];
+  const gez = (d: string): void => {
+    for (const g of readdirSync(join(KOK, d), { withFileTypes: true })) {
+      const r = `${d}/${g.name}`;
+      if (g.isDirectory()) gez(r);
+      else if (g.name.endsWith(".ps1")) yollar.push(r);
+    }
+  };
+  gez("deploy");
+  const ihlal: string[] = [];
+  let parametreSayisi = 0;
+  for (const yol of yollar) {
+    const t = psTara(readFileSync(join(KOK, yol), "utf8"));
+    const metin = t.satirlar.map((x) => x.ciplak).join("\n");
+    const m = /(?:^|\n)\s*(?:\[CmdletBinding\([^)]*\)\]\s*)?param\s*\(/i.exec(metin);
+    if (!m) continue;
+    let i = m.index + m[0].length;
+    let d = 1;
+    while (i < metin.length && d > 0) {
+      if (metin[i] === "(") d++;
+      else if (metin[i] === ")") d--;
+      i++;
+    }
+    const blok = metin.slice(m.index + m[0].length, i);
+    const govde = metin.slice(i);
+    for (const p of blok.matchAll(/\[Validate\w+\([^\]]*\)\][^$,]*\$(\w+)/g)) {
+      parametreSayisi++;
+      const ad = p[1];
+      for (const a of govde.matchAll(new RegExp(`\\$${ad}\\s*=(?!=)`, "gi"))) {
+        const satirNo = metin.slice(0, i + (a.index ?? 0)).split("\n").length;
+        ihlal.push(`${yol}:${satirNo} $${ad}`);
+      }
+    }
+  }
+  check(`§27 ⭐ [Validate*] parametresinin adı gövdede atanmıyor (${yollar.length} betik)`, yollar.length >= 15 && parametreSayisi >= 3 && ihlal.length === 0,
+    ihlal.length ? ihlal.slice(0, 8).join(" · ") : `${parametreSayisi} doğrulamalı parametre, atama yok`);
+}
+
+// §28 — DÖNGÜ DEĞİŞKENİ GÖLGESİ (thinkpad-1 D8 2026-10-01): PowerShell'de `foreach` blok kapsamı açmaz; betik
+//   kapsamındaki `foreach ($ad in …)` önceki `$ad = <paket adı>`ı EZER. `paketle.ps1` hizmet ikilisi döngüsü paket adını
+//   "tekserp-guncelleyici.exe" yaptı (zip adı + PAKET.json `ad` + derleme kaydı). Ölçü: fonksiyon DIŞI satırlarda, daha
+//   önce `=` ile atanmış bir ad döngü değişkeni olur VE döngü kapandıktan sonra okunursa ihlal (yalnız döngüde kullanılan
+//   yeniden kullanım serbest — kaldir.ps1 `$k` gibi).
+{
+  const yollar: string[] = [];
+  const gez = (d: string): void => {
+    for (const g of readdirSync(join(KOK, d), { withFileTypes: true })) {
+      const r = `${d}/${g.name}`;
+      if (g.isDirectory()) gez(r);
+      else if (g.name.endsWith(".ps1")) yollar.push(r);
+    }
+  };
+  gez("deploy");
+  const ihlal: string[] = [];
+  let donguSayisi = 0;
+  for (const yol of yollar) {
+    const t = psTara(readFileSync(join(KOK, yol), "utf8"));
+    const icFonk = (no: number): boolean => t.fonksiyonlar.some((f) => no >= f.bas && no <= f.son);
+    const satir = t.satirlar.filter((x) => !icFonk(x.no));
+    const atanan = new Map<string, number>();
+    for (let i = 0; i < satir.length; i++) {
+      const x = satir[i];
+      for (const m of x.ciplak.matchAll(/foreach\s*\(\s*\$(\w+)\s+in\b/gi)) {
+        donguSayisi++;
+        const ad = m[1].toLowerCase();
+        if (!atanan.has(ad)) continue;
+        let son = x.no;
+        const acik = (x.ciplak.match(/\{/g) ?? []).length - (x.ciplak.match(/\}/g) ?? []).length;
+        if (acik > 0) {
+          for (let j = i + 1; j < satir.length; j++) {
+            if (satir[j].derinlik <= x.derinlik && /\}/.test(satir[j].ciplak)) { son = satir[j].no; break; }
+          }
+        }
+        const okuma = new RegExp(`\\$${m[1]}\\b`, "i");
+        const yeniAtama = new RegExp(`(?:^|[;{(\\s])\\$${m[1]}\\s*=(?!=)`, "i");
+        const sonra = satir.filter((y) => y.no > son && okuma.test(y.ciplak) && !yeniAtama.test(y.ciplak));
+        if (sonra.length) ihlal.push(`${yol}:${x.no} $${m[1]} (atama ${atanan.get(ad)}, döngüden sonra okuma ${sonra[0].no})`);
+      }
+      for (const m of x.ciplak.matchAll(/(?:^|[;{(\s])\$(\w+)\s*=(?!=)/g)) {
+        const ad = m[1].toLowerCase();
+        if (!atanan.has(ad)) atanan.set(ad, x.no);
+      }
+    }
+  }
+  check(`§28 ⭐ betik kapsamında foreach değişkeni atanmış + sonradan okunan adı gölgelemiyor (${yollar.length} betik)`,
+    donguSayisi >= 20 && ihlal.length === 0, ihlal.length ? ihlal.slice(0, 6).join(" · ") : `${donguSayisi} döngü temiz`);
+}
+
+// §29 — YARIM SAHNE (thinkpad-1 D8 2026-10-01): düşen dört korumalı derleme SystemTemp'te ~500 MB'lık dört sahne bıraktı.
+//   Fail sahneyi siler, betik kapsamındaki trap da (Fail dışı sonlandırıcı hata); sahne yalnız TEMP altındaysa silinir.
+{
+  const t = psTara(readFileSync(join(KOK, "deploy/paketle.ps1"), "utf8"));
+  const kod = t.satirlar.map((x) => x.ciplak).join("\n");
+  const govdeAl = (ad: string): string => {
+    const f = t.fonksiyonlar.find((x) => x.ad === ad);
+    return f ? t.satirlar.filter((x) => x.no >= f.bas && x.no <= f.son).map((x) => x.ciplak).join("\n") : "";
+  };
+  const eksik: string[] = [];
+  if (!/SahneyiTemizle/.test(govdeAl("Fail"))) eksik.push("Fail sahneyi temizlemiyor");
+  const trapSatiri = t.satirlar.find((x) => /^\s*trap\s*\{/.test(x.ciplak) && !t.fonksiyonlar.some((f) => x.no >= f.bas && x.no <= f.son));
+  if (!trapSatiri || !/SahneyiTemizle/.test(trapSatiri.ciplak)) eksik.push("betik kapsamında `trap { SahneyiTemizle …` yok");
+  if (!/\$script:SahneYolu\s*=\s*\$stage\b/.test(kod)) eksik.push("sahne yolu kaydedilmiyor ($script:SahneYolu = $stage)");
+  if (!/GetTempPath/.test(govdeAl("SahneyiTemizle"))) eksik.push("SahneyiTemizle TEMP sınırını ölçmüyor");
+  check("§29 ⭐ paketle.ps1 hata yolunda yarım sahneyi siler (Fail + trap, yalnız TEMP altı)", eksik.length === 0, eksik.join(" · "));
+}
+
+// §30 — TÜR KISITLI PARAMETRE (thinkpad-1 D8 2026-10-01): `kurulum.ps1`in `-Sonuc` (INI yolu, [string]) parametresi ile
+//   sonuç sözlüğü `$script:Sonuc` AYNI değişkendir; [string] kısıtı sözlüğü metne çevirdi ve ilk gerçek koşum OnKosul
+//   sonunda "Unable to index into an object of type System.String" ile düştü. Ölçü: `[string|int|bool|switch…]$X`
+//   parametresine (adı büyük/küçük harf duyarsız, `$script:` önekli de) `@{` · `[ordered]` · `@(` · `[pscustomobject]` atanmaz.
+{
+  const yollar: string[] = [];
+  const gez = (d: string): void => {
+    for (const g of readdirSync(join(KOK, d), { withFileTypes: true })) {
+      const r = `${d}/${g.name}`;
+      if (g.isDirectory()) gez(r);
+      else if (g.name.endsWith(".ps1")) yollar.push(r);
+    }
+  };
+  gez("deploy");
+  const ihlal: string[] = [];
+  let parametre = 0;
+  for (const yol of yollar) {
+    const t = psTara(readFileSync(join(KOK, yol), "utf8"));
+    const metin = t.satirlar.map((x) => x.ciplak).join("\n");
+    const m = /(?:^|\n)\s*(?:\[CmdletBinding\([^)]*\)\]\s*)?param\s*\(/i.exec(metin);
+    if (!m) continue;
+    let i = m.index + m[0].length;
+    let d = 1;
+    while (i < metin.length && d > 0) {
+      if (metin[i] === "(") d++;
+      else if (metin[i] === ")") d--;
+      i++;
+    }
+    const blok = metin.slice(m.index + m[0].length, i);
+    const govde = metin.slice(i);
+    for (const p of blok.matchAll(/\[(string|int|int64|bool|switch|double|datetime)\]\s*\$(\w+)/gi)) {
+      parametre++;
+      const ad = p[2]!;
+      // Fonksiyon içinde öneksiz `$x =` YEREL değişken doğurur (parametreye dokunmaz); `$script:x =` her yerde parametredir.
+      for (const a of govde.matchAll(new RegExp(`\\$(script:)?${ad}\\s*=\\s*(?:@\\{|\\[ordered\\]|@\\(|\\[pscustomobject\\])`, "gi"))) {
+        const no = metin.slice(0, i + (a.index ?? 0)).split("\n").length;
+        const icFonk = t.fonksiyonlar.some((f) => no >= f.bas && no <= f.son);
+        if (icFonk && !a[1]) continue;
+        ihlal.push(`${yol}:${no} $${a[1] ?? ""}${ad} ([${p[1]}])`);
+      }
+    }
+  }
+  check(`§30 ⭐ tür kısıtlı parametreye sözlük/dizi atanmıyor (${yollar.length} betik)`, parametre >= 20 && ihlal.length === 0,
+    ihlal.length ? ihlal.slice(0, 6).join(" · ") : `${parametre} tür kısıtlı parametre temiz`);
+}
+
+// §31 — AĞAÇ İZNİ (thinkpad-1 D8 2026-10-01, ÖLÇÜLDÜ): `icacls <dizin> /inheritance:r /grant:r *SID:(OI)(CI)F … /T` dizinlere
+//   doğru uygulanır ama DOSYALARDA (OI)(CI) geçersizdir ve miras da kesildiği için dosyanın DACL'i BOŞ kalır — SYSTEM dahil
+//   kimse okuyamaz (yarım kurulumun durum.json'u; AclKoru -Agac ile PG ikili/veri dizinlerinin dosyaları). Doğrusu: izin
+//   dizine /T'siz, alt öğeler `icacls <dizin>\* /reset /T` ile mirası alır. Ölçü: aynı işlev gövdesinde (betik kapsamında
+//   aynı satırda) "(OI)(CI)" ve "/T" birlikte → ihlal. DONMUŞ pm2 dosyasındaki borç beyanlı ve ölçülür (kapanınca çıkarılır).
+{
+  const BORC: ReadonlyArray<{ yol: string; islev: string; neden: string }> = [
+    { yol: "deploy/ilk-kurulum.ps1", islev: "SirIzniDaralt", neden: "DONMUŞ pm2 dosyası (§24); D8 Senaryo 4'te pm2 kurulumunda ölçülüp düzeltilecek" },
+  ];
+  const yollar: string[] = [];
+  const gez = (d: string): void => {
+    for (const g of readdirSync(join(KOK, d), { withFileTypes: true })) {
+      const r = `${d}/${g.name}`;
+      if (g.isDirectory()) gez(r);
+      else if (g.name.endsWith(".ps1")) yollar.push(r);
+    }
+  };
+  gez("deploy");
+  const ihlal: string[] = [];
+  const borcGorulen = new Set<string>();
+  // Çağrı düzeyinde: icacls satırı (OI)(CI)'yi doğrudan ya da onu taşıyan bir değişkenle, /T'yi doğrudan ya da onu
+  // taşıyan bir değişkenle BİRLİKTE alıyorsa ihlal (ayrı /reset çağrısındaki /T serbest).
+  const OICI = /\(OI\)\(CI\)/;
+  const TBAYRAK = /(["'\s(,])\/T(["'\s),]|$)/;
+  const cagriIhlali = (satirlar: string[], icacls: string): boolean => {
+    const oiciVar = new Set<string>();
+    const tVar = new Set<string>();
+    for (const l of satirlar) {
+      for (const m of l.matchAll(/\$(\w+)\s*\+?=\s*(.*)$/g)) {
+        if (/icacls/i.test(m[2]!)) continue; // çağrının SONUCU (`$r = NativeKos "icacls.exe" …`) argüman değildir
+        if (OICI.test(m[2]!)) oiciVar.add(m[1]!.toLowerCase());
+        if (TBAYRAK.test(m[2]!)) tVar.add(m[1]!.toLowerCase());
+      }
+    }
+    const argumanlar = icacls.slice(icacls.search(/icacls/i));
+    const kullanilan = [...argumanlar.matchAll(/[$@](\w+)/g)].map((m) => m[1]!.toLowerCase());
+    const oici = OICI.test(argumanlar) || kullanilan.some((v) => oiciVar.has(v));
+    const tt = TBAYRAK.test(argumanlar) || kullanilan.some((v) => tVar.has(v));
+    return oici && tt;
+  };
+  for (const yol of yollar) {
+    const t = psTara(readFileSync(join(KOK, yol), "utf8"));
+    const bolgeler: Array<{ ad: string; satirlar: typeof t.satirlar }> = t.fonksiyonlar.map((f) => ({ ad: f.ad, satirlar: t.satirlar.filter((x) => x.no >= f.bas && x.no <= f.son) }));
+    bolgeler.push({ ad: "(betik kapsamı)", satirlar: t.satirlar.filter((x) => !t.fonksiyonlar.some((f) => x.no >= f.bas && x.no <= f.son)) });
+    for (const b of bolgeler) {
+      const kodlar = b.satirlar.map((x) => x.kod);
+      for (const x of b.satirlar) {
+        if (!/icacls/i.test(x.kod) || !cagriIhlali(kodlar, x.kod)) continue;
+        if (BORC.some((r) => r.yol === yol && r.islev === b.ad)) { borcGorulen.add(`${yol}:${b.ad}`); continue; }
+        ihlal.push(`${yol}:${x.no} (${b.ad})`);
+      }
+    }
+  }
+  const kapanan = BORC.filter((b) => !borcGorulen.has(`${b.yol}:${b.islev}`)).map((b) => `${b.yol}:${b.islev}`);
+  check(`§31 ⭐ icacls (OI)(CI) izni /T ile birlikte verilmiyor (${yollar.length} betik; beyanlı borç ${borcGorulen.size})`, ihlal.length === 0 && kapanan.length === 0,
+    [...ihlal.map((v) => `ihlal ${v}`), ...kapanan.map((v) => `borç kapanmış, BORC listesinden çıkar: ${v}`)].join(" · "));
 }
 
 console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);

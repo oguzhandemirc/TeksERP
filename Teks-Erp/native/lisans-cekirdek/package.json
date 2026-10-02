@@ -14,8 +14,8 @@
     "derle:linux": "node scripts/derle.mjs linux-x64",
     "derle:linux:uretim": "node scripts/derle.mjs linux-x64 --uretim",
     "derle:linux:hazirlik": "node scripts/derle.mjs linux-x64 --hazirlik",
-    "denetle": "node scripts/kapi.mjs denetle",
-    "test": "node scripts/kapi.mjs test"
+    "denetle": "node ../scripts/kapi.mjs denetle",
+    "test": "node ../scripts/kapi.mjs test"
   },
   "napi": {
     "binaryName": "lisans-cekirdek",

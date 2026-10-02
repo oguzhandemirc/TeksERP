@@ -8,10 +8,12 @@
 // NE ÖLÇER (hepsi DİNLENME durumu, yani commit edilen ağaç):
 //   §1 kayıt defteri: kapalı şema · kod biçimi + önek-bağımsızlık · İKİLİ FARK
 //      (iki kanal hiçbir dağıtım kimliğini paylaşamaz) · S9 görünür etiket
+//   §1b üretim güven çapalı kanalın backend.lisansSunucusu = backend varsayılanı (vendor-url.ts DEFAULT_LICENSE_SERVER_URL)
 //   §2 DONMUŞ kimlik: sahadaki üretim kanalının kimliği literal olarak burada;
 //      değişimi GÖÇTÜR (yeni uygulama · kayıp userData · kopan güncelleme kanalı)
 //   §3 türetilmiş `yayin` alanları koddaki sabitlerle birebir (yayın kökü, VDS
-//      kökü, feed/manifest/künye yolu biçimi) + kaynak sabitler birbirleriyle aynı
+//      kökü, feed/manifest/künye yolu biçimi) + kaynak sabitler birbirleriyle aynı;
+//      backend yayıncısı (`deploy/backend-yayinla.mjs`) yolları YALNIZ kayıttan okur (kök literali taşımaz)
 //   §4 işaretçiler + sabit kimlik: iki musteri.json, Electron/package.json,
 //      mobil/app.json `varsayilan` kanalla birebir; panel kaynağı (main.ts,
 //      index.html, splash.html, shared/channel.ts, build-channel.ts) kimliği KANALDAN
@@ -43,6 +45,7 @@ import {
   Olculemedi,
   PANEL_SABIT_DOSYALAR,
   TABLET_SABIT_DOSYALAR,
+  VENDOR_URL_REL,
   YAYIN_ANAHTARLARI,
   YAYIN_YOLU_DESENLERI,
   dosyalariOku,
@@ -54,6 +57,7 @@ import {
   panelSabitKimlikFarki,
   tabletIsaretciFarki,
   tabletSabitKimlikFarki,
+  varsayilanLisansSunucusu,
 } from './lib/kanallar.mjs';
 
 /**
@@ -92,10 +96,11 @@ const YAYIN_YOLLARI = {
   'mobil/scripts/build-apk.mjs': { sinif: 'kapili', terfi: true },
   'deploy/electron-yayinla.ps1': { sinif: 'saplama' },
   // Backend zip: -Musteri <kod> ile kanal kimliği (pm2Ad/urunAdi) alır → 'kapılı'
-  //   (Faz 2b: müşteri kodu argümandan, kök kuralı backend'e genişledi). TERFİ YOK:
-  //   backend'in HTTP yayın feed'i Faz 3 dağıtım kapısına kadar yok — üretim kanalına
-  //   HTTP terfisi ölçülemez, o yüzden terfi kapısı burada aranmaz.
+  //   (Faz 2b: müşteri kodu argümandan, kök kuralı backend'e genişledi). Paketleme terfi
+  //   ARAMAZ: üretim kanalına çıkış YAYINDA kapılıdır (backend-yayinla.mjs, K5).
   'deploy/paketle.ps1': { sinif: 'kapili' },
+  // Dağıtım v2: backend kanal yayını (imzalı bildirim + paket → VDS, son.json EN SON).
+  'deploy/backend-yayinla.mjs': { sinif: 'kapili', terfi: true },
 };
 const KAPI_IZI = 'scripts/lib/kanallar.mjs';
 /** Kapı izi: .mjs yayıncı kitaplığı import eder, kabuk yayıncı CLI'yi çağırır. */
@@ -115,7 +120,7 @@ const KOD_KAYNAKLARI = [
   'deploy/mobil-yayinla.mjs',
 ];
 const KAPI_KANCASI = 'scripts/hooks/pre-commit.mjs';
-const OKUNAN = [...new Set([KAYIT_REL, KAPI_CLI, KAPI_KANCASI, ...PANEL_SABIT_DOSYALAR, ...TABLET_SABIT_DOSYALAR, ...KOD_KAYNAKLARI, ...Object.keys(YAYIN_YOLLARI)])];
+const OKUNAN = [...new Set([KAYIT_REL, KAPI_CLI, KAPI_KANCASI, VENDOR_URL_REL, ...PANEL_SABIT_DOSYALAR, ...TABLET_SABIT_DOSYALAR, ...KOD_KAYNAKLARI, ...Object.keys(YAYIN_YOLLARI)])];
 
 /** Diskte yayın yolu keşfi — desen: deploy/ kökünde yayinla|paketle · mobil/scripts'te yayinla|apk. */
 function yayinDosyalariniBul(kok = KOK) {
@@ -157,6 +162,14 @@ function sabitleriOlc(d, kirmizi) {
   yakala(d, 'deploy/electron-yayinla.sh', /DEFTER_DIZIN="\$\(dirname "\$YAYIN_KOK"\)\/defter"/, 'DEFTER_DIZIN biçimi');
   yakala(d, 'deploy/electron-yayinla.sh', /\$DEFTER_DIZIN\/\$musteri-YAYIN-DEFTERI\.tsv/, 'defter dosya adı biçimi');
   const vdsMobil = yakala(d, 'deploy/mobil-yayinla.mjs', /`([^`$]+)\/\$\{MUSTERI\}\/mobil`/, 'mobil uzak kök biçimi');
+  // Backend yayıncısı kök sabiti TAŞIMAZ: hedefler kanal kaydından (ikinci kopya olmasın).
+  for (const bag of ['vdsBackend', 'backendManifest', 'backendDefter']) {
+    yakala(d, 'deploy/backend-yayinla.mjs', new RegExp(`\\.yayin\\.${bag}\\b`), `yayin.${bag} bağ noktası (kayıttan okuma)`);
+  }
+  const beKod = d['deploy/backend-yayinla.mjs'].replace(/^\s*(\*|\/\/).*$/gm, '');
+  if (beKod.includes('guncelleme.etkiliyazilim.com') || beKod.includes(vdsYayinla)) {
+    kirmizi.push('§3 deploy/backend-yayinla.mjs yayın/VDS kökünü LİTERAL taşıyor — hedef kanal kaydından (yayin.backend*) okunur');
+  }
 
   const koklar = { 'update-feed.ts UPDATE_BASE_URL': kokUF, 'feed.cjs YAYIN_KOKU': kokFeed,
     'electron-paketle.sh BASE_URL': kokPaketle, 'electron-yayinla.sh BASE_URL + "/"': `${kokYayinla}/` };
@@ -182,6 +195,10 @@ function turet(kod, rv, s) {
     vdsPanel: `${s.vdsKok}/${kod}/electron`,
     vdsMobil: `${s.vdsKok}/${kod}/mobil`,
     panelDefter: `${s.defterKok}/${kod}-YAYIN-DEFTERI.tsv`,
+    backendFeed: `${s.yayinKoku}${kod}/backend/`,
+    backendManifest: `${s.yayinKoku}${kod}/backend/son.json`,
+    vdsBackend: `${s.vdsKok}/${kod}/backend`,
+    backendDefter: `${s.defterKok}/${kod}-BACKEND-YAYIN-DEFTERI.tsv`,
   };
 }
 
@@ -212,6 +229,18 @@ function olc(d, yayinDosyalari, yayinYollari = YAYIN_YOLLARI) {
   // §1
   kirmizi.push(...kayitHatalari(kayit).map((h) => `§1 ${h}`));
   const kanallar = kayit && typeof kayit.kanallar === 'object' && kayit.kanallar ? kayit.kanallar : {};
+  // §1b üretim çapası = backend'in VARSAYILAN satıcısı (vendor-url.ts TEK kaynak): satırı olmayan üretim kurulumu
+  // kanalın satıcısına gider; hazırlık satıcısı varsayılan olamaz (kayitHatalari iki çapayı ayırır).
+  const lisansVarsayilan = varsayilanLisansSunucusu(d[VENDOR_URL_REL]);
+  if (!lisansVarsayilan) olculemedi.push(`${VENDOR_URL_REL} DEFAULT_LICENSE_SERVER_URL okunamadı (ad/biçim değişti?)`);
+  else {
+    for (const [kod, k] of Object.entries(kanallar)) {
+      const b = k?.backend;
+      if (b?.guvenCapasi === 'uretim' && typeof b.lisansSunucusu === 'string' && b.lisansSunucusu !== lisansVarsayilan) {
+        kirmizi.push(`§1b ${kod}: üretim çapalı kanalın lisans satıcısı "${b.lisansSunucusu}" backend varsayılanı ("${lisansVarsayilan}", ${VENDOR_URL_REL}) değil`);
+      }
+    }
+  }
 
   // §2
   for (const [kod, alanlar] of Object.entries(DONMUS)) {
@@ -353,21 +382,22 @@ function sondalar(taban, tabanYollar) {
   const yeniKanal = (o, kod, tur = 'uretim') => {
     const k = JSON.parse(JSON.stringify(as(o)));
     k.tur = tur;
-    k.terfiKaynagi = null;
+    k.terfiKaynagi = 'testfabrika';
     k.ad = `Kanal ${kod}`;
     for (const a of Object.keys(k.yayin)) k.yayin[a] = k.yayin[a].replaceAll('/adnansahin', `/${kod}`);
     k.panel = { appId: `com.ornek.${kod}`, urunAdi: `Urun ${kod}`, paketAdi: `urun-${kod}`, erpAdresi: `http://10.9.8.${kod.length}:4000` };
     k.tablet = { ...k.tablet, androidPaket: `com.ornek.${kod}`, gorunenAd: `Tablet ${kod}`,
       erpAdresi: `http://10.9.9.${kod.length}:4000/api`, otaSertifika: `keystore/ota-certs-${kod}/certificate.pem` };
     // Backend kimliği de AYRIK (urunAdi/pm2Ad her kanalda benzersiz — Faz 2b).
-    k.backend = { urunAdi: `Urun ${kod} Backend`, pm2Ad: `tekserp-backend-${kod}`, guvenCapasi: tur === 'uretim' ? 'uretim' : 'hazirlik' };
+    k.backend = { urunAdi: `Urun ${kod} Backend`, pm2Ad: `tekserp-backend-${kod}`, hizmetAdi: `TeksERP-Backend-${kod}`, guvenCapasi: tur === 'uretim' ? 'uretim' : 'hazirlik',
+      lisansSunucusu: o.kanallar[tur === 'uretim' ? 'adnansahin' : 'testfabrika'].backend.lisansSunucusu };
     o.kanallar[kod] = k;
   };
   const kayitta = (fn) => (d) => jd(d, KAYIT_REL, fn);
   const S = [
     // [ad, beklenen, mutasyon(d, yollar, beyanlar), iz?]
     ['P0 gerçek ağaç YEŞİL', 'yesil', () => {}],
-    ['P1 üçüncü üretim kanalı (aynasız, terfiKaynagi null) benzersiz kimliklerle YEŞİL (kapı aşırı sert değil)', 'yesil', kayitta((o) => yeniKanal(o, 'yenifabrika'))],
+    ['P1 üçüncü üretim kanalı (aynasız, terfi kaynağı testfabrika) benzersiz kimliklerle YEŞİL (kapı aşırı sert değil)', 'yesil', kayitta((o) => yeniKanal(o, 'yenifabrika'))],
     ['P2 runtimeVersion doğru yükseltme (app.json + her kanalın rv + otaManifest) YEŞİL', 'yesil', (d) => {
       jd(d, 'mobil/app.json', (o) => { o.expo.runtimeVersion = '54.3'; });
       jd(d, KAYIT_REL, (o) => {
@@ -432,10 +462,27 @@ function sondalar(taban, tabanYollar) {
     ['N45 üretim kanalının terfiKaynagi AYNASIZ hazırlık kanalını gösteriyor → KIRMIZI', 'kirmizi', kayitta((o) => { as(o).terfiKaynagi = 'demofabrika'; }), 'terfiKaynagi'],
     ['N46 aynasız hazırlık kanalına terfiKaynagi anahtarı → KIRMIZI (şema kapalı)', 'kirmizi', kayitta((o) => { df(o).terfiKaynagi = null; }), 'tanınmayan anahtar'],
     ['N47 hazırlık kanalında ayna anahtarı YOK (null değil) → KIRMIZI (şema kapalı: aynasızlık açıkça null yazılır)', 'kirmizi', kayitta((o) => { delete df(o).ayna; }), 'eksik anahtar'],
-    ['N48 üretim kanalı hazırlık güven çapasına bağlandı → KIRMIZI (hazırlık kökü üretim paketine giremez)', 'kirmizi', kayitta((o) => { as(o).backend.guvenCapasi = 'hazirlik'; }), 'guvenCapasi'],
-    ['N49 tanınmayan güven çapası kipi (test) → KIRMIZI (fail-closed)', 'kirmizi', kayitta((o) => { tf(o).backend.guvenCapasi = 'test'; }), 'guvenCapasi'],
-    ['N50 backend bloğunda guvenCapasi YOK → KIRMIZI (kip örtük kalmaz)', 'kirmizi', kayitta((o) => { delete df(o).backend.guvenCapasi; }), 'eksik anahtar'],
-    ['P3 aynasız hazırlık kanalı (demofabrika) HAZIRLIK satıcısına bağlanabilir → YEŞİL (hazırlık kanalında iki kip de meşru)', 'yesil', kayitta((o) => { df(o).backend.guvenCapasi = 'hazirlik'; })],
+    ['N48 testfabrika backendManifest elle bozuldu (türetilmemiş) → KIRMIZI (§3)', 'kirmizi', kayitta((o) => { tf(o).yayin.backendManifest = tf(o).yayin.backendManifest.replace('son.json', 'latest.json'); }), 'backendManifest'],
+    ['N49 iki kanal aynı vdsBackend → KIRMIZI (ikili fark)', 'kirmizi', kayitta((o) => { tf(o).yayin.vdsBackend = as(o).yayin.vdsBackend; }), 'vdsBackend'],
+    ['N50 backend yayıncısından kanal kapısı silindi → KIRMIZI (§5)', 'kirmizi', (d) => { d['deploy/backend-yayinla.mjs'] = d['deploy/backend-yayinla.mjs'].replaceAll(KAPI_IZI, 'scripts/lib/baska.mjs'); }, 'kanal kapısı'],
+    ['N51 backend yayıncısından terfi kapısı çağrısı silindi → KIRMIZI (§5)', 'kirmizi', (d) => { d['deploy/backend-yayinla.mjs'] = d['deploy/backend-yayinla.mjs'].replaceAll('terfiKapisi(', 'baskaKapi('); }, 'terfi kapısı'],
+    ['N52 backend yayıncısı VDS kökünü literal taşıyor → KIRMIZI (§3)', 'kirmizi', (d) => { d['deploy/backend-yayinla.mjs'] += "\nconst ESKI_KOK = '/opt/stack/apps/tekserp-guncelleme/html';\n"; }, 'LİTERAL'],
+    ['O5 backend yayıncısı VDS yolunu kayıttan okumuyor (bağ noktası yok) → ÖLÇÜLEMEDİ', 'olculemedi', (d) => { d['deploy/backend-yayinla.mjs'] = d['deploy/backend-yayinla.mjs'].replaceAll('.yayin.vdsBackend', '.yayin.baskaYol'); }],
+    ['N53 üretim kanalının (adnansahin) terfiKaynagi null (terfisiz üretim yolu) → KIRMIZI', 'kirmizi', kayitta((o) => { as(o).terfiKaynagi = null; }), 'terfi kaynağı ZORUNLU'],
+    ['N54 iki kanal aynı backend.hizmetAdi → KIRMIZI (ikili fark)', 'kirmizi', kayitta((o) => { o.kanallar.demofabrika.backend.hizmetAdi = tf(o).backend.hizmetAdi; }), 'hizmetAdi'],
+    ['N55 hizmet adları yalnız harf büyüklüğünde ayrışıyor → KIRMIZI (Windows duyarsız)', 'kirmizi', kayitta((o) => { o.kanallar.demofabrika.backend.hizmetAdi = tf(o).backend.hizmetAdi.toUpperCase(); }), 'harf büyüklüğünde'],
+    ['N56 hizmet adında boşluk → KIRMIZI', 'kirmizi', kayitta((o) => { tf(o).backend.hizmetAdi = 'TeksERP Backend'; }), 'hizmetAdi'],
+    ['N57 backend bloğunda hizmetAdi yok → KIRMIZI', 'kirmizi', kayitta((o) => { delete tf(o).backend.hizmetAdi; }), 'eksik anahtar'],
+    ['N58 üretim kanalı hazırlık güven çapasına bağlandı → KIRMIZI (hazırlık kökü üretim paketine giremez)', 'kirmizi', kayitta((o) => { as(o).backend.guvenCapasi = 'hazirlik'; }), 'guvenCapasi'],
+    ['N59 tanınmayan güven çapası kipi (test) → KIRMIZI (fail-closed)', 'kirmizi', kayitta((o) => { tf(o).backend.guvenCapasi = 'test'; }), 'guvenCapasi'],
+    ['N60 backend bloğunda guvenCapasi YOK → KIRMIZI (kip örtük kalmaz)', 'kirmizi', kayitta((o) => { delete df(o).backend.guvenCapasi; }), 'eksik anahtar'],
+    ['P3 aynasız hazırlık kanalı (demofabrika) HAZIRLIK satıcısına bağlanabilir → YEŞİL (hazırlık kanalında iki kip de meşru)', 'yesil', kayitta((o) => { df(o).backend.guvenCapasi = 'hazirlik'; df(o).backend.lisansSunucusu = tf(o).backend.lisansSunucusu; })],
+    ['N61 hazırlık çapalı kanal (testfabrika) ÜRETİM satıcısını gösteriyor → KIRMIZI (satıcı çapanın aynası)', 'kirmizi', kayitta((o) => { tf(o).backend.lisansSunucusu = as(o).backend.lisansSunucusu; }), 'AYNI lisans satıcısını'],
+    ['N62 üretim çapalı kanalların satıcısı backend varsayılanı değil → KIRMIZI (§1b)', 'kirmizi', kayitta((o) => { as(o).backend.lisansSunucusu = 'https://lisans2.etkiliyazilim.com'; df(o).backend.lisansSunucusu = 'https://lisans2.etkiliyazilim.com'; }), '§1b'],
+    ['N63 aynı çapada iki farklı satıcı (demofabrika) → KIRMIZI', 'kirmizi', kayitta((o) => { df(o).backend.lisansSunucusu = 'https://lisans2.etkiliyazilim.com'; }), 'farklı lisans satıcısı'],
+    ['N64 lisans satıcısı sonda / ile → KIRMIZI (biçim)', 'kirmizi', kayitta((o) => { tf(o).backend.lisansSunucusu += '/'; }), 'lisansSunucusu'],
+    ['N65 backend bloğunda lisansSunucusu YOK → KIRMIZI', 'kirmizi', kayitta((o) => { delete tf(o).backend.lisansSunucusu; }), 'eksik anahtar'],
+    ['O6 vendor-url.ts varsayılan sabitinin adı değişti → ÖLÇÜLEMEDİ', 'olculemedi', (d) => { d[VENDOR_URL_REL] = d[VENDOR_URL_REL].replace('DEFAULT_LICENSE_SERVER_URL', 'VARSAYILAN_SATICI'); }],
     ['O1 kayıt defteri bozuk JSON → ÖLÇÜLEMEDİ', 'olculemedi', (d) => { d[KAYIT_REL] = d[KAYIT_REL].slice(0, 40); }],
     ['O2 update-feed.ts UPDATE_BASE_URL adı değişti → ÖLÇÜLEMEDİ', 'olculemedi', (d) => { d['Electron/shared/update-feed.ts'] = d['Electron/shared/update-feed.ts'].replace('export const UPDATE_BASE_URL', 'export const YAYIN_KOKU_URL'); }],
     ['O3 main.ts setAppUserModelId çağrısı kalktı → ÖLÇÜLEMEDİ', 'olculemedi', (d) => { d['Electron/electron/main.ts'] = d['Electron/electron/main.ts'].replace('app.setAppUserModelId(APP_ID);', 'void 0;'); }],

@@ -26,7 +26,7 @@ export const CAPA_DOSYALARI = Object.freeze({
   kokTs: "Teks-Erp/src/lib/license/protocol/kok-anahtarlar.ts",
   kokAynalari: Object.freeze(["satici/sunucu/src/lisans-protokol/kok-anahtarlar.ts", "patron/sunucu/src/lisans-protokol/kok-anahtarlar.ts"]),
   paketTs: "Teks-Erp/src/lib/license/integrity.ts",
-  anchorRs: "Teks-Erp/native/lisans-cekirdek/src/anchor.rs",
+  anchorRs: "Teks-Erp/native/tekserp-dogrulama/src/anchor.rs",
 });
 
 /** Kipin dört yerdeki blok adları. */
@@ -125,7 +125,7 @@ const rsPaketBlok = (ad: string): RegExp => new RegExp(`^pub const ${ad}: &\\[\\
 /** Kâhin §0e ile aynı desen (`test_lisans_native_kahin`). */
 const RS_KOK_OGE = /\("([^"]+)", "([^"]+)", &\[([^\]]*)\]\)/g;
 const RS_PAKET_OGE = /\("([^"]+)", "([^"]+)"\)/g;
-/** `native/lisans-cekirdek/rustfmt.toml` `max_width`. */
+/** `native/rustfmt.toml` (çalışma alanı) `max_width`. */
 export const RUSTFMT_GENISLIK = 140;
 
 const rsKokOgesi = (r: RootKey): string => `(${JSON.stringify(r.kid)}, ${JSON.stringify(r.x)}, &[${r.classes.map((c) => JSON.stringify(c)).join(", ")}])`;

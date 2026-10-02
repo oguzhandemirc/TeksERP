@@ -1,0 +1,46 @@
+# =============================================================================
+# TeksERP - KENDI PostgreSQL ORNEGI - sunucu ayarlari (tekserp.conf)
+# =============================================================================
+# URETILIR, ELLE DUZENLENMEZ. Kaynak: deploy/pg/postgresql.tekserp.conf.sablon
+# + deploy/pg/pg-ornegi.json (bellek formulu). initdb'nin yazdigi postgresql.conf
+# dosyasinin SONUNA tek satir eklenir:  include 'tekserp.conf'
+# Sonra gelen ayar oncekini ezer; ALTER SYSTEM (postgresql.auto.conf) bunu da ezer,
+# o yuzden kurulum postgresql.auto.conf'a YAZMAZ (saglik kontrolu sapmayi raporlar).
+# Tasarim ve gerekceler: docs/design/KENDI-POSTGRESQL.md
+# Bekci: node scripts/test_pg_ornegi.mjs (listen/trust/scram/UTC yasaklari)
+# =============================================================================
+
+# --- Baglanti: YALNIZ bu makine. Ag yok, Unix soketi yok. ---
+listen_addresses = '127.0.0.1'
+port = {{PORT}}
+unix_socket_directories = ''
+max_connections = 100
+ssl = off
+password_encryption = 'scram-sha-256'
+
+# --- Bellek: sunucu RAM'inden (pg-ornegi.json yapilandirma.bellek) ---
+shared_buffers = {{SHARED_BUFFERS}}
+effective_cache_size = {{EFFECTIVE_CACHE_SIZE}}
+maintenance_work_mem = {{MAINTENANCE_WORK_MEM}}
+work_mem = 16MB
+
+# --- Zaman: sunucu UTC. Fabrika saat dilimi uygulamanin donemler defterinden gelir
+#     (factory_timezone_periods); veritabani sunucusuna profil degeri yazilmaz. ---
+timezone = 'UTC'
+log_timezone = 'UTC'
+lc_messages = 'C'
+
+# --- Zaman asimlari (runbook 6 ile ayni; DB duzeyinde de kurulur) ---
+statement_timeout = 50s
+idle_in_transaction_session_timeout = 5min
+
+# --- Gunluk: veri dizini altinda log\, haftanin gunu adiyla 7 dosya (sinirli disk) ---
+logging_collector = on
+log_destination = 'stderr'
+log_directory = 'log'
+log_filename = 'postgresql-%a.log'
+log_rotation_age = 1d
+log_rotation_size = 0
+log_truncate_on_rotation = on
+log_line_prefix = '%m [%p] %q%u@%d '
+log_min_duration_statement = 500ms

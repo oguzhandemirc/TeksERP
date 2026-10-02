@@ -46,7 +46,13 @@ $yedekDir = Join-Path $Kok "backups"
 $logDosya = Join-Path $yedekDir "backup.log"
 $credDosya = Join-Path (Join-Path $Kok "pg-setup") "db-credentials.json"
 $pgbin = Join-Path (Join-Path $Kok "pgsql") "bin"
-$sifreArac = Join-Path (Join-Path (Join-Path (Join-Path $Kok "app") "dist") "tools") "yedek-sifrele.cjs"
+# Windows hizmeti duzeni (Dagitim v2): .env yapilandirma\ altinda, kod current\ (etkin surum) altinda
+# ve Node paketin kendi runtime'i (sistemde Node olmayabilir). Duzen .env'in yerinden anlasilir; pm2
+# duzeninde (app\) hicbir sey degismez.
+$hizmetEnv = Join-Path (Join-Path $Kok "yapilandirma") ".env"
+$hizmetDuzeni = Test-Path -LiteralPath $hizmetEnv
+$appDir = if ($hizmetDuzeni) { Join-Path $Kok "current" } else { Join-Path $Kok "app" }
+$sifreArac = Join-Path (Join-Path (Join-Path $appDir "dist") "tools") "yedek-sifrele.cjs"
 
 # .env degeri: ilk eslesen satir, cevreleyen tek/cift tirnak soyulur. Anahtar buyuk/kucuk
 # harf DUYARLI (-cmatch): tr-TR kulturunde -match 'I'yi 'i'ye indirger (thinkpad-1 dersi).
@@ -106,6 +112,11 @@ try {
   if (-not $cred.db -or -not $kul -or -not $par) { throw "kimlik dosyasi eksik (db/user/pass): $credDosya" }
   $port = if ($cred.port) { "$($cred.port)" } else { "5432" }
   if (-not (Test-Path $yedekDir)) { New-Item -ItemType Directory -Path $yedekDir | Out-Null }
+  # Hizmet duzeninde backups\ hizmet hesabinin YAZABILDIGI dizindir: bu gorev SYSTEM'dir ve baglanti
+  # noktasina (junction) donusturulmus bir dizinde yazmaz/silmez.
+  if ($hizmetDuzeni -and ((Get-Item -LiteralPath $yedekDir -Force).Attributes -band [System.IO.FileAttributes]::ReparsePoint)) {
+    throw "yedek dizini bir baglanti noktasi (junction) - SYSTEM gorevi izlemez: $yedekDir"
+  }
 
   $onEk = if ($cred.db -eq "tekserp" -or $cred.db -like "tekserp_*") { $cred.db } else { "tekserp_$($cred.db)" }
   $ad = "$($onEk)_$(Get-Date -Format 'yyyyMMdd_HHmmss').dump"
@@ -123,11 +134,11 @@ try {
     Remove-Item $yarim -Force -ErrorAction SilentlyContinue
     throw "dogrulama basarisiz (pg_restore --list kod $($v.kod)) - bozuk dokum SILINDI: $($v.cikti)"
   }
-  # Sifreleme niyeti: -AnahtarDizini > app\.env BACKUP_KEY_DIR (beyanli) > <kok>\yedek-anahtar (varsa).
-  $appDir = Join-Path $Kok "app"
+  # Sifreleme niyeti: -AnahtarDizini > .env BACKUP_KEY_DIR (beyanli) > <kok>\yedek-anahtar (varsa).
+  # .env: pm2 duzeninde app\.env, hizmet duzeninde yapilandirma\.env (backend'le ayni dosya).
   $beyanli = [bool]$AnahtarDizini
   if (-not $AnahtarDizini) {
-    $envDosya = Join-Path $appDir ".env"
+    $envDosya = if ($hizmetDuzeni) { $hizmetEnv } else { Join-Path $appDir ".env" }
     $envDizin = if (Test-Path $envDosya) { EnvDeger (Get-Content $envDosya -Encoding UTF8) "BACKUP_KEY_DIR" } else { $null }
     if ($envDizin) {
       $beyanli = $true
@@ -143,6 +154,7 @@ try {
     $alicilar = @(Get-ChildItem $AnahtarDizini -Filter "*.tkpub" -File -ErrorAction SilentlyContinue)
     $node = (Get-Command node.exe -ErrorAction SilentlyContinue).Source
     if (-not $node) { $node = Join-Path $env:ProgramFiles "nodejs\node.exe" }
+    if ($hizmetDuzeni) { $node = Join-Path (Join-Path $appDir "runtime") "node.exe" }
     if ($alicilar.Count -eq 0) { $sifreHatasi = "anahtar dizininde alici (*.tkpub) yok: $AnahtarDizini" }
     elseif (-not (Test-Path $sifreArac)) { $sifreHatasi = "sifreleme araci yok: $sifreArac" }
     elseif (-not (Test-Path $node)) { $sifreHatasi = "node bulunamadi: $node" }

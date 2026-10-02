@@ -38,7 +38,7 @@
 # =============================================================================
 param(
   [string]$Kok = "C:\TeksERP",
-  [string]$EnvDosyasi,                               # varsayilan <Kok>\app\.env
+  [string]$EnvDosyasi,                               # varsayilan <Kok>\app\.env (hizmet duzeninde <Kok>\yapilandirma\.env)
   [string[]]$EkEnvDosyasi = @(),                     # ayni degisikligi alacak ek .env (app.eski-*: geri donus)
   [string]$BakimKullanici = "tekserp_bakim",
   [string]$PostgresKullanici = "postgres",
@@ -195,7 +195,10 @@ Write-Host "================================================================"
 
 if ($BakimKullanici -cnotmatch '^[a-z_][a-z0-9_]{0,62}$') { Dur "-BakimKullanici yalniz kucuk harf, rakam ve _ olabilir: $BakimKullanici" }
 if ($BakimKullanici -ceq $PostgresKullanici) { Dur "-BakimKullanici yonetici kullanicisiyla ayni olamaz." }
-if (-not $EnvDosyasi) { $EnvDosyasi = Join-Path $Kok "app\.env" }
+# Windows hizmeti duzeninde (Dagitim v2) .env yapilandirma\ altindadir; pm2 duzeninde app\ altinda.
+$hizmetEnv = Join-Path $Kok "yapilandirma\.env"
+$hizmetDuzeni = Test-Path -LiteralPath $hizmetEnv
+if (-not $EnvDosyasi) { $EnvDosyasi = if ($hizmetDuzeni) { $hizmetEnv } else { Join-Path $Kok "app\.env" } }
 if (-not (Test-Path $EnvDosyasi)) { Dur ".env bulunamadi: $EnvDosyasi" }
 foreach ($e in $EkEnvDosyasi) { if (-not (Test-Path $e)) { Dur "ek .env bulunamadi: $e" } }
 if (-not $PgBin) { $PgBin = Join-Path $Kok "pgsql\bin" }
@@ -318,7 +321,8 @@ Write-Host "================================================================" -F
 Write-Host "  BAKIM ROLU HAZIR: $BakimKullanici (super DEGIL)" -ForegroundColor Green
 Write-Host "================================================================"
 Write-Host "  1) Backend yeni kimligi yeniden baslatinca okur:"
-Write-Host "       `$env:PM2_HOME='$Kok\pm2-home'; & '$Kok\pm2\node_modules\.bin\pm2.cmd' restart <uygulama-adi>"
+if ($hizmetDuzeni) { Write-Host "       Restart-Service TeksERP-Backend    (yonetici pencere)" }
+else { Write-Host "       `$env:PM2_HOME='$Kok\pm2-home'; & '$Kok\pm2\node_modules\.bin\pm2.cmd' restart <uygulama-adi>" }
 Write-Host "  2) Panel: Sistem > Yedekler > Elle yedek al  +  Veritabani Kopyasi yetenek satiri (kullanici $BakimKullanici)."
 if ($oncekiler.Count) {
   Write-Host "  3) Ikisi de yesilse onceki .env kopyalarini sil (eski BACKUP_PG_* degerini tasirlar):"

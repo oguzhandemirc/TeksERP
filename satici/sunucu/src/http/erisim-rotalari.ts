@@ -33,6 +33,8 @@ export const ERISIM_PORTAL_ROTALARI: ReadonlySet<string> = new Set([
   "GET /bayiler/:id",
   "GET /denetim",
   "GET /anahtarlar",
+  "GET /filo", // Dağıtım v2: kurulum × kurulu/kanal backend sürümü × politika × son güncelleme sonucu (salt okuma)
+  "GET /kurulumlar/:id/guncelleme", // Dağıtım v2: politika · dilim · rapor · geçmiş (salt okuma)
   // müşteri · tesis · kurulum · HAK taslağı · etkinleştirme kodu
   "POST /musteriler",
   "PATCH /musteriler/:id",
@@ -48,6 +50,8 @@ export const ERISIM_PORTAL_ROTALARI: ReadonlySet<string> = new Set([
   "POST /kurulumlar/:id/aktif",
   "POST /kurulumlar/:id/hak",
   "POST /kurulumlar/:id/etkinlestirme-kodu",
+  // Dağıtım v2: güncelleme politikası (kök parolası taşımaz, güven kökü eklemez — operasyon ayarı)
+  "POST /kurulumlar/:id/guncelleme-politikasi",
   // kök kuyruğu talebinden vazgeçmek (parola taşımaz; HAK imzası ve toplu yeniden basım parolalı → yalnız tailnet)
   "POST /kok-kuyrugu/:id/iptal",
   // yaptırım · planlı eylem · taksit

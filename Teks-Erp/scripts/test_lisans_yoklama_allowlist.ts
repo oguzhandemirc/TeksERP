@@ -15,6 +15,8 @@
 // kurulum kimliği eklendi · A3 iş hatası dağılımına hata mesajı eklendi · (F1a) A4 ortamdan DB
 // kimliği düştü (§1d) · A5 yoklamadan satıcı saati sapması düştü (§1d) · (3d-2) A6 kurulum kaydı şeması
 // gevşetildi (`looseObject`): dosya yolu taşıyan satır gövdeye girdi → §1b · §2c · §4a/b/c kırmızı (5).
+// (Dağıtım v2) §5 güncelleme raporu: güncelleyicinin durum/geçmiş dosyası taklit edilir; rapor beyanlı
+// anahtarlarla gider, güncelleyicinin serbest iletisi ve onaylayanın adı GİTMEZ, dosya yoksa alan yok.
 // (L2-1) §1e lisans v2 ekleri: AB1 beyandan `parmakIziKayip` düştü → §1e · AB2 yoklama şemasından aynı alan
 // düştü (KATI şema reddeder) → §1e — şema ile beyan aynı kararı taşımazsa kırmızı. (L2-6) §1f gerçek kurucu ekleri
 // üretir: AC1 kurucudan v2 alanları düştü → §1f. (L2-7) §1g gerçek kurucu yetenek listesini taşır: AD1 yoklama gövdesine
@@ -67,6 +69,9 @@ const IZINLI_ANAHTARLAR = new Set([
   "gozlem", "reddedilecekIstek", "reddedilecekModul",
   "kurulumKayitlari", "kayitId", "tarih", "commit", "paketOzeti", "oncekiSurum", "yeniSurum", "migrationSayisi",
   "yeniMigrationSayisi", "geriDonus", "damga", "kod", "veri", "veriSifreli",
+  // Dağıtım v2 güncelleme raporu (GUNCELLEYICI.md §3.1): dilim · güncelleyici durumu · bekleyen karar · son sonuç.
+  "guncelleme", "saatDilimi", "guncelleyici", "bekleyen", "karar", "neden", "son", "hedefSurum", "kaynakSurum",
+  "sonuc", "baslangic", "bitis", "veriGeriYuklendi",
   // Lisans v2 (L2-1 kararı; üretimi L2-6): yetenekler · HAK bayt özeti · belirsizlik birikimi · durum kaydı
   // sırası · kayıp parmak izi etkenleri — hepsi sayı, kapalı küme ya da özet; iş verisi değil.
   "yetenekler", "ozet", "belirsizlik", "birikenMs", "ilk", "durumKaydi", "sira", "gecerli", "parmakIziKayip",
@@ -96,6 +101,33 @@ function kayit(kayitId: string, ek: Record<string, unknown> = {}): string {
     geriDonus: { damga: "20260929_213000", kod: true, veri: true, veriSifreli: true }, ...ek,
   });
 }
+// Güncelleyicinin durum dizini taklidi (D2 §5, gerçek biçim): serbest ileti, aday özeti, iç ayrıntı ve onaylayan
+// adı dosyada VAR, gövdede olmamalı. Kalp atışı taze (canlı); kesin bloklar (`bekleyen` · `son`) rapora AYNEN.
+const GUNCELLEYICI = path.join(KOK, "guncelleme");
+const ISLEM = randomUUID();
+const ATIS = new Date().toISOString();
+fs.mkdirSync(path.join(GUNCELLEYICI, "durum"), { recursive: true });
+const SON = {
+  kayitId: ISLEM, hedefSurum: "2.14.0", kaynakSurum: "2.13.1", sonuc: "GERI_DONDU", kod: "SAGLIK_HATASI",
+  baslangic: "2026-09-29T23:00:00.000Z", bitis: "2026-09-29T23:20:00.000Z", veriGeriYuklendi: true,
+};
+fs.writeFileSync(path.join(GUNCELLEYICI, "durum", "durum.json"), JSON.stringify({
+  v: 1, zaman: ATIS, sonCanlilik: ATIS, canlilikEsigiSn: 180, turSn: 60, guncelleyiciSurum: "0.1.0",
+  kuruluSurum: "2.14.0", durum: "HAZIR", surum: "2.15.0", kaynakSurum: "2.14.0", urun: null, islemId: null, adim: null, hataKodu: null,
+  mesaj: "GIZLI-GUNCELLEYICI-ILETISI C:\\TeksERP\\surumler", ilerleme: null, planlanan: null,
+  politika: { kip: "ONAYLI", izin: true, neden: null, kaynak: "KIRA", hedefSurum: null, donuk: false },
+  karar: { karar: "ONAY_BEKLIYOR", neden: null, aralik: null, pgGuncellemesi: false },
+  bekleyen: { surum: "2.15.0", karar: "ONAY_BEKLIYOR", neden: null, aralik: null, pgGuncellemesi: false, zorunlu: false, ozet: "GIZLI-ADAY-OZETI" },
+  son: SON,
+  sonAyrinti: { urun: "backend", hataKodu: "SAGLIK_ZAMAN_ASIMI", mesaj: "GIZLI-ICERIK-AYRINTISI" },
+  bilgi: { kod: "SEMA_OLCULEMEDI", mesaj: "GIZLI-BILGI-NEDENI psql" },
+}));
+fs.writeFileSync(path.join(GUNCELLEYICI, "durum", "gecmis.jsonl"), JSON.stringify({
+  v: 1, islemId: ISLEM, onayId: null, urun: "backend", kaynakSurum: "2.13.1", surum: "2.14.0", sonuc: "GERI_DONDU", hataKodu: "SAGLIK_HATASI",
+  ayrintiKodu: "SAGLIK_ZAMAN_ASIMI", veriGeriYuklendi: true, basladi: SON.baslangic, bitti: SON.bitis, gocSayisi: { once: 380, sonra: 384 }, yedek: ISLEM,
+  onay: { onayId: randomUUID(), surum: "2.14.0", zamanlama: "HEMEN", kullaniciId: randomUUID(), ad: "Onaylayan-Kisi-Adi", zaman: "2026-09-29T22:58:00Z" },
+}) + "\n");
+process.env.TEKSERP_GUNCELLEME_DIZINI = GUNCELLEYICI;
 // BOM + bozuk satır + allowlist dışı alanlı satır (dosya adı taşıyor) + aynı kaydın ikinci hâli.
 fs.writeFileSync(GECMIS, [
   "\uFEFF" + kayit(KAYIT_A, { yeniSurum: "2.11.0" }), "{bozuk", kayit(randomUUID(), { yol: "C:\\TeksERP\\premigrate_x.dump" }),
@@ -212,6 +244,17 @@ async function main(): Promise<void> {
     fs.rmSync(GECMIS);
     const govde2 = await buildPollBody();
     check("§4d dosya yoksa alan HİÇ gitmez (eski satıcı uyumu)", !("kurulumKayitlari" in govde2));
+
+    console.log("\n§5 — güncelleme raporu (Dağıtım v2): allowlist, serbest metin yok, dosya yoksa alan yok");
+    const g = govde.guncelleme;
+    check("§5a ⭐ rapor gövdede: güncelleyici çalışıyor, onay bekleyen 2.15.0, son deneme geri döndü (kodlu)",
+      g?.guncelleyici.durum === "CALISIYOR" && g.bekleyen?.surum === "2.15.0" && g.bekleyen.karar === "ONAY_BEKLIYOR" &&
+      g.son?.kayitId === ISLEM && g.son.sonuc === "GERI_DONDU" && g.son.kod === "SAGLIK_HATASI" && JSON.stringify(g.son) === JSON.stringify(SON), JSON.stringify(g));
+    check("§5b ⭐ güncelleyicinin serbest iletisi, aday özeti, iç ayrıntısı, bilgisi ve onaylayanın adı gövdede YOK",
+      !metin.includes("GIZLI-") && !metin.includes("Onaylayan-Kisi-Adi") && !metin.includes("SAGLIK_ZAMAN_ASIMI") && !metin.includes("SEMA_OLCULEMEDI"));
+    fs.rmSync(GUNCELLEYICI, { recursive: true, force: true });
+    const govde3 = await buildPollBody();
+    check("§5c güncelleyici yoksa alan HİÇ gitmez (eski satıcı uyumu)", !("guncelleme" in govde3));
   } catch (e) {
     fail++;
     console.log(`❌ beklenmeyen hata — ${e instanceof Error ? e.stack : String(e)}`);

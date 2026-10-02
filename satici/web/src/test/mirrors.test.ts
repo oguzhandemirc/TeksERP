@@ -47,6 +47,21 @@ import { HEAVY_K3_MIN_DAYS, INSTALLMENT_DEFAULT_RESTRICTION_DAYS } from "../shar
 import { CHANNEL_CODE_PATTERN, CHANNEL_KIND_LABEL, VERSION_PATTERN } from "../portal/pages/Channels";
 import { CLOUD_RETENTION_DEFAULT, CLOUD_RETENTION_MONTHS, SYNC_MINUTES_DEFAULT, SYNC_MINUTES_MAX, SYNC_MINUTES_MIN } from "../shared/cloud-settings";
 import { ACCEPTANCE_EVENT } from "../portal/installation/AcceptancePanel";
+import {
+  RELEASE_VERSION_PATTERN,
+  UPDATE_DECISION_LABEL,
+  UPDATE_EVENT_LABEL,
+  UPDATE_MODE_HINT,
+  UPDATE_MODE_LABEL,
+  UPDATE_POLICY_EVENT,
+  UPDATE_REASON_LABEL,
+  UPDATE_RESULT_CODE_LABEL,
+  UPDATE_RESULT_EVENTS,
+  UPDATE_RESULT_LABEL,
+  UPDATER_STATE_LABEL,
+  WINDOW_END_PATTERN,
+  WINDOW_START_PATTERN,
+} from "../portal/update/labels";
 
 const WEB_SRC = path.resolve(__dirname, "..");
 const SERVER_SRC = path.resolve(__dirname, "../../../sunucu/src");
@@ -361,6 +376,50 @@ describe("eşikler ve biçim desenleri aynası", () => {
     const src = read("lisans-protokol/belgeler.ts");
     expect(CHANNEL_CODE_PATTERN.source).toBe(schemaRegex(src, "ChannelCodeSchema"));
     expect(VERSION_PATTERN.source).toBe(schemaRegex(src, "VersionTextSchema"));
+  });
+});
+
+describe("güncelleme (Dağıtım v2) sözlüğü ve desenleri aynası", () => {
+  const protocol = read("lisans-protokol/guncelleme.ts");
+  const documents = read("lisans-protokol/belgeler.ts");
+  const service = read("services/update-policy.service.ts");
+  const twoWay = (values: readonly string[], map: Record<string, string>) => {
+    expect(values.length).toBeGreaterThan(1);
+    expect(values.filter((v) => !map[v])).toEqual([]);
+    expect(Object.keys(map).filter((k) => !values.includes(k))).toEqual([]);
+  };
+
+  it("kip · karar · neden · güncelleyici durumu · sonuç · sonuç kodu ekran adları iki yönlü", () => {
+    twoWay(listStrings(documents, "export const UPDATE_MODES"), UPDATE_MODE_LABEL);
+    twoWay(listStrings(documents, "export const UPDATE_MODES"), UPDATE_MODE_HINT);
+    twoWay(listStrings(protocol, "export const UPDATE_DECISIONS"), UPDATE_DECISION_LABEL);
+    twoWay(listStrings(protocol, "export const UPDATE_DECISION_REASONS"), UPDATE_REASON_LABEL);
+    twoWay(listStrings(protocol, "export const UPDATER_STATES"), UPDATER_STATE_LABEL);
+    twoWay(listStrings(protocol, "export const UPDATE_RESULTS"), UPDATE_RESULT_LABEL);
+    twoWay(listStrings(protocol, "export const UPDATE_RESULT_CODES"), UPDATE_RESULT_CODE_LABEL);
+  });
+
+  it("kurulum kaydı olay adları (update-policy.service.ts) ve ekran adları", () => {
+    const policy = /export const UPDATE_POLICY_EVENT = "([A-Z_]+)";/.exec(service);
+    expect(policy, "UPDATE_POLICY_EVENT bulunamadı").not.toBeNull();
+    expect(UPDATE_POLICY_EVENT).toBe(policy![1]);
+    const body = /export const UPDATE_RESULT_EVENTS = \{([\s\S]*?)\}/.exec(service);
+    expect(body, "UPDATE_RESULT_EVENTS bulunamadı").not.toBeNull();
+    const server = Object.fromEntries([...body![1]!.matchAll(/([A-Z_]+):\s*"([A-Z_]+)"/g)].map((m) => [m[1]!, m[2]!]));
+    expect(Object.keys(server).length).toBe(3);
+    expect(UPDATE_RESULT_EVENTS).toEqual(server);
+    twoWay([policy![1]!, ...Object.values(server)], UPDATE_EVENT_LABEL);
+  });
+
+  it("sabitlenen sürüm ve pencere saati desenleri (belgeler.ts)", () => {
+    expect(RELEASE_VERSION_PATTERN.source).toBe(schemaRegex(documents, "ReleaseVersionSchema"));
+    const clock = (name: string) => {
+      const m = new RegExp(`const ${name} = z\\.string\\(\\)\\.regex\\(\\/(.+)\\/\\);`).exec(documents);
+      if (!m) throw new Error(`${name} bulunamadı`);
+      return m[1]!;
+    };
+    expect(WINDOW_START_PATTERN.source).toBe(clock("ClockStartSchema"));
+    expect(WINDOW_END_PATTERN.source).toBe(clock("ClockEndSchema"));
   });
 });
 

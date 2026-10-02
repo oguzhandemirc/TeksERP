@@ -318,6 +318,13 @@ async function main(): Promise<void> {
     const ilk = (denetim.veri.items as { id: string }[]).map((x) => x.id);
     const ikinci = ((denetim2?.veri.items as { id: string }[] | undefined) ?? []).map((x) => x.id);
     kontrol("§2c denetim imleçli sayfa: 2 + sonraki sayfa, kesişim yok", ilk.length === 2 && ikinci.length > 0 && !ikinci.some((x) => ilk.includes(x)), `${ilk.length}/${ikinci.length}`);
+    // Dağıtım v2 (davranış test_guncelleme_politikasi'nda): politika ucu + filo görünümü koşulur.
+    await s("post", "/kurulumlar/:id/guncelleme-politikasi", `/kurulumlar/${kId}/guncelleme-politikasi`, 200, {
+      kip: "OTOMATIK", pencere: { baslangic: "02:00", bitis: "05:00", gunler: [6, 7] }, hedefSurum: null, sebep: "hafta sonu gecesi",
+    });
+    const filo = await s("get", "/filo", "/filo", 200);
+    await s("get", "/kurulumlar/:id/guncelleme", `/kurulumlar/${kId}/guncelleme`, 200);
+    kontrol("§2d' filo satırı politikayı taşır", Array.isArray(filo.json.data) && (filo.json.data as { id: string; politika: { kip: string } }[]).some((x) => x.id === kId && x.politika.kip === "OTOMATIK"));
     const anahtarlar = await s("get", "/anahtarlar", "/anahtarlar", 200);
     const anahtarMetni = JSON.stringify(anahtarlar.veri);
     kontrol("§2d anahtar durumu yalnız açık yarı (özel yarı / parola yok)", !anahtarMetni.includes('"d"') && !/privateKey|parola|sifreli/.test(anahtarMetni) && anahtarMetni.includes(f.kok.x));

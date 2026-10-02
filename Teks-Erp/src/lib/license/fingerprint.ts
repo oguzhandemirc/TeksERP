@@ -86,6 +86,8 @@ export interface MeasureOptions {
   readonly nowMs?: number;
   /** İmzalı durum kaydındaki önbellek kopyası: dosya silinse de son okuma 24 saate dek köprülenir (etken başına en yeni). */
   readonly recordCache?: FingerprintCache;
+  /** `false`: önbellek okunur ama YAZILMAZ (doğrulama kipi lisans durumunu yalnız okur). Varsayılan yazar. */
+  readonly persistCache?: boolean;
 }
 
 /** İki önbellekten etken başına EN YENİ okuma (dosya silinirse kayıt kopyası köprüler; eskisi yeniyi ezmez). */
@@ -115,7 +117,7 @@ export async function measureFingerprint(salt: Uint8Array, core: LicenseCore = g
   const dir = options.cacheDir === undefined ? defaultCacheDir() : options.cacheDir;
   const read = dir ? readFingerprintCache(dir, salt) : { cache: {}, durum: "YOK" as const };
   const d = applyFingerprintCache(c.digest, liveYol, mergeFingerprintCaches(read.cache, options.recordCache), nowMs);
-  if (dir && d.changed) {
+  if (dir && d.changed && options.persistCache !== false) {
     try {
       writeFingerprintCache(dir, salt, d.next);
     } catch {

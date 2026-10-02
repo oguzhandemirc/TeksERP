@@ -633,6 +633,7 @@ model User {
   supportTickets                  SupportTicket[]           @relation("SupportTicketCreatedBy")
   /// İlk kurulum sözleşme kabulleri (kim kabul etti — Ek-7).
   licenseAcceptances              LicenseAcceptance[]       @relation("LicenseAcceptanceAcceptedBy")
+  updateApprovals                 UpdateApproval[]          @relation("UpdateApprovalApprovedBy")
 
   @@map("users")
 }
@@ -10890,4 +10891,28 @@ model LicenseAcceptance {
 
   @@index([installationKeyId, createdAt])
   @@map("license_acceptances")
+}
+
+/// Backend güncellemesinin PANEL ONAYI (Dağıtım v2, `docs/design/GUNCELLEYICI.md` §5.1): güncelleyicinin niyet
+/// dosyasına giden TETİK — yetki DEĞİL (kurulacak paket imzalı bildirimden, izin kiradan gelir). Eklemeli: satır
+/// silinmez, güncellenmez; yeni karar (başka zamanlama ya da geri alma) yeni satırdır, yürürlükteki = EN SON satır.
+/// `id` = niyetin `onayId`si (güncelleyici geri dönmüş sürümü ancak YENİ bir onayId ile yeniden dener).
+model UpdateApproval {
+  id           String   @id @default(uuid()) @db.Uuid
+  clientToken  String?  @unique @db.Uuid
+  /// Onaylanan sürüm (güncelleyicinin doğruladığı aday) — `x.y.z[-ön]`, niyetin `onay.surum`u.
+  version      String   @db.VarChar(40)
+  /// HEMEN · PENCERE · GERI_AL — küme büyüyebilir: pg enum değil VarChar + CHECK (`update_approvals_choice_check`).
+  choice       String   @db.VarChar(10)
+  /// Onay anındaki etkin politika kipi (bilgi): OTOMATIK · ONAYLI; kira yoksa null.
+  policyMode   String?  @db.VarChar(10)
+  approvedById String   @db.Uuid
+  /// Onaylayanın o anki adı — niyete ve güncelleyici geçmişine bu ad gider (sonradan değişmez).
+  approverName String   @db.VarChar(200)
+  createdAt    DateTime @default(now()) @db.Timestamptz
+
+  approvedBy User @relation("UpdateApprovalApprovedBy", fields: [approvedById], references: [id], onDelete: Restrict)
+
+  @@index([createdAt])
+  @@map("update_approvals")
 }

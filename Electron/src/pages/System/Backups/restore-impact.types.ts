@@ -74,6 +74,16 @@ export interface RestoreImpact {
   /** Backend çalışma dizini — `prisma migrate deploy` oradan koşar. */
   backendCwd: string;
   pm2AppName: string;
+  /** Windows hizmeti düzeni: komut bloğu `Stop-Service`/`Start-Service` kullanır. Eski sunucu göndermez → pm2. */
+  processManager?: "pm2" | "service";
+  serviceName?: string | null;
+  /** Backend'i koşturan Node (hizmette paketin kendi Node'u; sistemde Node olmayabilir). */
+  nodePath?: string;
+  /** Hizmet düzeninde `.env` yolu (göç DATABASE_URL'i oradan okur). */
+  envFile?: string | null;
+  /** `PG_BIN_DIR`den çözülmüş araç yolları (hizmette PATH'te değiller). */
+  pgDumpPath?: string;
+  pgRestorePath?: string;
   audit: AuditRollup;
   groups: ImpactGroup[];
   totalCreated: number;

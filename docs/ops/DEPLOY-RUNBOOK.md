@@ -853,6 +853,15 @@ dışı). Şema değişen bir sürümden dönüyorsan kodu geri aldıktan SONRA 
 kod eski şemayla, eski kod yeni şemayla uyumsuz olabilir. Restore yolu §5 ("Kopyaya geri
 yükleme" ÖNERİLİR — geri alınabilir).
 
+> ⚠️ **PIN/kart özeti (G21-K) — geri almada iki yol, seçim ÖLÇÜMLE.** Kurulan paket `20261001120000_kisa_kimlik_ozet` göçünü taşıyorsa, sonrasında her başarılı PIN/kart girişi düz değeri özete çevirir ve düz kolonu boşaltır; eski backend özetli PIN'i okuyamaz. Döküm `[3/9]`da alınır; sonrasında yazılan her veri geri yüklemede gider. Yönetici kararı 2026-10-02: fabrikada veri kaybı, PIN'i yeniden dağıtmaktan pahalıdır.
+>
+> | Ölçüm | Yol |
+> |---|---|
+> | Göçten sonra üretim verisi YAZILMADI (son yazım `premigrate_` damgasından önce, ÖLÇÜLDÜ) | **1.** `-GeriAl` + aynı kurulumun `premigrate_` dökümünü geri yükle (önce kod, sonra döküm) |
+> | Üretim verisi yazıldı (vardiya sürdü) ya da ölçülemedi | **2. VARSAYILAN.** DB'ye DOKUNMA: yalnız `-GeriAl`, sonra PIN/kartı okunamayan kişilere eski backend'de kişi başı yeni PIN/kart |
+>
+> Ölçüm sorgusu, kişi listesi ve araç gerçeği (G21-K'nın toplu sıfırlaması bu yolda kullanılamaz): `docs/ops/GECIS-PM2-HIZMET.md` §1 madde 5 (b). Kural: `docs/kurallar/deploy-kurulum.md`; adnansahin'de bu sürüm yalnız pm2 → hizmet geçişinin paketi olarak çıkar.
+
 Birkaç gün sorunsuz çalışınca `app.eski-*` silinebilir; `premigrate_*` dosyaları
 rotasyona girmez, elle temizlenir.
 

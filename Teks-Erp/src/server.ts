@@ -1,4 +1,6 @@
+import "./lib/hizmet-duzeni-once"; // Windows hizmetinde .env yolunu kurar — dotenv'den ÖNCE (pm2/geliştirmede no-op)
 import "dotenv/config"; // .env yükle — diğer tüm importlardan ÖNCE (JWT_SECRET vb. modül-load anında okunur)
+import "./lib/hizmet-duzeni-sonra"; // Windows hizmetinde .env'de olmayan yolları doldurur — env okuyan modüllerden ÖNCE
 import "./lib/zod-locale"; // Zod tr locale
 import app from './app';
 import prisma, { pool } from './lib/prisma';
@@ -32,11 +34,16 @@ import { readWebHardeningConfig, isWebHardeningDeclared } from './middlewares/we
 import { hata, uyari, bilgi, satir } from "./lib/logger";
 import type { Server } from "node:http";
 import { bootFactoryTimezone } from "./services/factory-timezone.service";
+import { shutdownChannel } from "./lib/hizmet-duzeni";
+import { listenShutdownChannel } from "./lib/kapanis-kanali";
+import { isVerificationMode } from "./lib/dogrulama-kipi";
 
 const PORT = process.env.PORT || 4000;
 // 0.0.0.0 = tüm ağ arayüzlerinden dinle (tablet/diğer cihazlar LAN üzerinden erişebilsin).
 // HOST env ile override edilebilir (örn. sadece localhost'a kısıtlamak için 127.0.0.1).
-const HOST = process.env.HOST || "0.0.0.0";
+// Doğrulama kipinde (güncelleyicinin `--dogrulama` başlatması) yalnız döngü adresi — `.env` bunu genişletemez.
+const VERIFYING = isVerificationMode();
+const HOST = VERIFYING ? "127.0.0.1" : process.env.HOST || "0.0.0.0";
 
 // =============================================================================
 // TEK-PROCESS INVARIANT (load-bearing) — cluster/PM2-cluster/worker_threads YOK.
@@ -152,15 +159,20 @@ function startLanListener(): Server {
             ? `açık (${rl.windowMs / 1000}sn · yazma ${rl.writeMax} · giriş ${rl.loginMax})`
             : "kapalı"}`);
     }
+    if (VERIFYING) {
+        satir("--------------------------------------------------------");
+        satir("  DOĞRULAMA KİPİ: yalnız 127.0.0.1 — zamanlayıcılar ve dış bağlantılar başlatılmadı");
+    }
     satir("========================================================");
     satir("");
 
-    startArchiveScheduler();
-    startBackupScheduler();
+    // ⚠️ Doğrulama kipinde zamanlayıcıyla tekrarlayan ya da dışarı konuşan işler BAŞLAMAZ (`lib/dogrulama-kipi.ts`).
+    if (!VERIFYING) startArchiveScheduler();
+    if (!VERIFYING) startBackupScheduler();
     // ⚠️ AYRI ÇAĞRI — `startBackupScheduler` sahada erken döner
     // (BACKUP_SCHEDULE_ENABLED=false: gece yedeğini harici görev alıyor).
     // Süpürme oraya gömülseydi ihtiyaç duyulan tek ortamda hiç koşmazdı.
-    startOffsiteSweeper();
+    if (!VERIFYING) startOffsiteSweeper();
     // İzin kataloğu uzlaştırması BOOT-TIME'dır çünkü tek alternatifi olan "elle SQL
     // / veri migration'ı yaz" adımı UNUTULABİLİR bir adımdır ve 2026-08-01'de fiilen
     // unutuldu (kurşun bypass ekranı canlıya çıktı, izin satırı olmadığı için Admin
@@ -200,7 +212,7 @@ function startLanListener(): Server {
     void refreshDiscoveryCache(Number(PORT));
     // Servis ilanı — "ben buradayım". Her arızada sessizce kapanır (ilanın
     // kendisi de fail-open); istemcide alt ağ taraması yedeği var.
-    void startMdnsAdvertiser({ port: Number(PORT) });
+    if (!VERIFYING) void startMdnsAdvertiser({ port: Number(PORT) });
     void warnIfAuditGuardDisabled();
     // Varsayılan depo da aynı gerekçeyle boot-time uzlaştırılır (migration'a INSERT
     // gömmek uuid/adı taşa yazar). Bu satır olmadan `resolveTargetWarehouseId`
@@ -208,19 +220,20 @@ function startLanListener(): Server {
     startDefaultWarehouseReconciler();
     // TCMB kur çekme: `finance.enabled` KAPALIYKEN tam no-op (dış HTTP denemesi
     // bile atmaz — üretici fabrika internetsiz; gerekçe jobs/exchange-rate.job.ts).
-    startExchangeRateScheduler();
+    if (!VERIFYING) startExchangeRateScheduler();
     // Vardiya takvimi: `dokuma.enabled` KAPALIYKEN tam no-op — referans fabrikada
     // `shift_instances` satırı doğmaz (gerekçe jobs/shift-calendar.job.ts).
-    startShiftCalendarScheduler();
+    if (!VERIFYING) startShiftCalendarScheduler();
     // Kapanan vardiya × tezgah karnesi (M2) — aynı bayrak, aynı sıfır fark.
-    startShiftCloseScheduler();
+    if (!VERIFYING) startShiftCloseScheduler();
     // Lisans yoklaması + kapı zili: kurulum etkinleşmemişse ya da satıcı adresi kapalıysa
     // (`LICENSE_SERVER_URL=kapali`) DIŞARI HİÇ İSTEK ATILMAZ; motor gözlem kipinde (hiçbir istek engellenmez).
+    // Doğrulama kipinde motor yalnız YEREL ölçümü koşar (bütünlük dahil — `/health/yerel`in `lisans`ı), yoklamaz.
     startLicensePoll();
-    startLicenseDoorbell();
+    if (!VERIFYING) startLicenseDoorbell();
     // Patron bulutu (eşitleme + gelen kutusu): yalnız ÜRETİM sınıfı + `patron-bulut` hakkı + kiradaki
     // aralık varken dışarı çıkar (fail-closed); aksi hâlde tek işi günlük işaret budamasıdır.
-    startPatronCloudJobs();
+    if (!VERIFYING) startPatronCloudJobs();
 
     void AuditService.logEvent({
         category: "SYSTEM",
@@ -231,6 +244,7 @@ function startLanListener(): Server {
             lanAddresses: lan.map((l) => l.address),
             env: process.env.APP_ENV ?? process.env.NODE_ENV ?? "development",
             nodeVersion: process.version,
+            dogrulamaKipi: VERIFYING,
         },
     });
 });
@@ -336,7 +350,19 @@ function gracefulShutdown(signal: string, exitCode = 0): void {
 }
 process.on("SIGTERM", () => gracefulShutdown("SIGTERM"));
 process.on("SIGINT", () => gracefulShutdown("SIGINT"));
-// pm2 + Windows: Windows'ta gerçek POSIX sinyali gönderilemez, bu yüzden pm2
+// Windows konsolunda Ctrl+Break: dinleyici yoksa Node süreci ANINDA öldürür (uçuştaki istek kopar).
+process.on("SIGBREAK", () => gracefulShutdown("SIGBREAK"));
+// Windows hizmet konağı (`TEKSERP_KAPANIS=stdin`): `kapat` satırı ya da boru kapanışı. Konak
+// ölünce boru da kapanır — yetim backend portu tutup ikinci süreci doğurmaz (tek-process).
+{
+    const shutdown = shutdownChannel(process.env);
+    if (shutdown.channel === "stdin") {
+        listenShutdownChannel(process.stdin, (reason) => gracefulShutdown(reason));
+    } else if (shutdown.unknown) {
+        uyari("shutdown", `TEKSERP_KAPANIS='${shutdown.unknown}' tanınmıyor — kapanış kanalı açılmadı (konak zorla durdurur)`);
+    }
+}
+// pm2 düzeni (hizmete geçene dek): Windows'ta gerçek POSIX sinyali gönderilemez, bu yüzden pm2
 // `shutdown_with_message: true` (ecosystem.config.js) ile IPC üzerinden "shutdown"
 // mesajı yollar. Bu dinleyici OLMADAN `pm2 restart/stop` prosesi HARD KILL eder →
 // yukarıdaki graceful shutdown hiç çalışmaz: uçuştaki istekler TCP düzeyinde kopar
@@ -353,7 +379,7 @@ process.on("message", (msg) => {
 //   - unhandledRejection: süreç hâlâ tanımlı durumda → logla, AYAKTA KAL
 //     (LAN-only tek-process; gereksiz restart vardiyayı keser).
 //   - uncaughtException: süreç tanımsız/bozuk durumda olabilir → logla + temiz
-//     kapan; süreç yöneticisi (pm2) otomatik yeniden başlatır.
+//     kapan; süreç yöneticisi (pm2 ya da hizmette SCM kurtarma eylemi) yeniden başlatır.
 process.on("unhandledRejection", (reason) => {
     hata("unhandled-rejection", "Yakalanmamış promise reddi", reason);
     void AuditService.logEvent({

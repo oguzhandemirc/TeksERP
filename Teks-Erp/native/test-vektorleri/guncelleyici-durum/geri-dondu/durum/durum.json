@@ -1,0 +1,60 @@
+{
+  "v": 1,
+  "zaman": "2026-09-30T23:33:00.000Z",
+  "sonCanlilik": "2026-09-30T23:33:00.000Z",
+  "canlilikEsigiSn": 180,
+  "turSn": 60,
+  "guncelleyiciSurum": "0.1.0",
+  "kuruluSurum": "2.12.0",
+  "durum": "GERI_DONDU",
+  "surum": "2.13.0",
+  "kaynakSurum": "2.12.0",
+  "urun": null,
+  "islemId": null,
+  "adim": null,
+  "hataKodu": "SAGLIK_ZAMAN_ASIMI",
+  "mesaj": "2.13.0 geri dönmüştü — aynı sürüm kendiliğinden yeniden denenmez; yeni bir panel onayı gerekir",
+  "ilerleme": null,
+  "planlanan": null,
+  "politika": {
+    "kip": "OTOMATIK",
+    "izin": true,
+    "neden": null,
+    "kaynak": "KIRA",
+    "hedefSurum": null,
+    "donuk": false
+  },
+  "karar": {
+    "karar": "KUR",
+    "neden": "PENCERE",
+    "aralik": {
+      "baslangic": "2026-09-30T23:00:00Z",
+      "bitis": "2026-10-01T02:00:00Z"
+    },
+    "pgGuncellemesi": false
+  },
+  "bekleyen": {
+    "surum": "2.13.0",
+    "karar": "ONAY_BEKLIYOR",
+    "neden": null,
+    "aralik": null,
+    "pgGuncellemesi": false,
+    "zorunlu": false,
+    "ozet": "Test sürümü"
+  },
+  "son": {
+    "kayitId": "781a91f3-5c56-4cac-b215-287ff0b8fe98",
+    "hedefSurum": "2.13.0",
+    "kaynakSurum": "2.12.0",
+    "sonuc": "GERI_DONDU",
+    "kod": "SAGLIK_HATASI",
+    "baslangic": "2026-09-30T23:30:00.000Z",
+    "bitis": "2026-09-30T23:33:00.000Z",
+    "veriGeriYuklendi": true
+  },
+  "sonAyrinti": {
+    "urun": "backend",
+    "hataKodu": "SAGLIK_ZAMAN_ASIMI",
+    "mesaj": "status UP olmadı"
+  }
+}

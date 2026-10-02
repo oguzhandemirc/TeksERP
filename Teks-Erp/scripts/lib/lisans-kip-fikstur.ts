@@ -35,7 +35,7 @@ export interface KipSecenegi {
   /** true → kira 10 gün önce bitti (EK_SURE; ek süre 30 gün). */
   readonly kiraBitti?: boolean;
   /** Kiranın ek alanları (ör. patron bulutu: `esitlemeAraligiDk`, `patronBulutBitis`, `devredildi`). */
-  readonly kiraEk?: Partial<Pick<LeaseDoc, "esitlemeAraligiDk" | "patronBulutBitis" | "devredildi">>;
+  readonly kiraEk?: Partial<Pick<LeaseDoc, "esitlemeAraligiDk" | "patronBulutBitis" | "devredildi" | "guncelleme">>;
   /**
    * true → kurulum anahtarı dosyası okunamaz (izin 000) ve DB izi bellekte (açık anahtar + durum kaydı kopyası): imza
    * durur, kararlar sürer (G12 §3.1-1). Yalnız Windows dışı ve root olmayan süreçte anlamlıdır.

@@ -44,6 +44,16 @@ export const PROTOCOL_ERROR_CODES = [
   "ISTEK_GOVDE_OZETI",
   "ISTEK_TEKRAR",
   "ZARF_BICIM",
+  /** Sürüm işaretçisi (`son.json` / `<sürüm>/surum.json`) çözülemedi. */
+  "SURUM_ISARETCI",
+  /** Sürüm bildirimi başka bir kanalın — kanallar arası tekrar oynatma. */
+  "SURUM_KANAL",
+  /** Bildirimi imzalayan PAKET anahtarı bildirimin beyan ettiği `paketImzaKid` değil. */
+  "SURUM_ANAHTAR",
+  /** Açılan paketin imzalı künyesi (`butunluk.jws`) bildirimle bağlanmıyor. */
+  "PAKET_BAGI",
+  /** PG paketi künyesi backend bildiriminin PG hedefiyle bağlanmıyor (farklı ana sürüm dahil). */
+  "PG_BAGI",
 ] as const;
 export type ProtocolErrorCode = (typeof PROTOCOL_ERROR_CODES)[number];
 

@@ -1,0 +1,47 @@
+[package]
+name = "tekserp-guncelleyici"
+version = "0.1.3"
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+description = "TeksERP güncelleyici hizmeti (TeksERP-Guncelleyici): imzalı backend paketini indirir, doğrular, uygular, gerekirse geri alır"
+license.workspace = true
+
+[lib]
+name = "tekserp_guncelleyici"
+path = "src/lib.rs"
+
+[[bin]]
+name = "tekserp-guncelleyici"
+path = "src/main.rs"
+
+[features]
+# Dışarıdan güven çapası (`TEKSERP_TEST_CAPASI` = JSON dosyası) — YALNIZ test/duman derlemesi.
+# Üretim ikilisi özelliksiz çıkar: çapa derlemeye gömülüdür (`tekserp_dogrulama::anchor`).
+test-anchor = []
+# Gömülü çapa kipi (ortak `tekserp-dogrulama/src/anchor.rs`): özelliksiz ÜRETİM, bu özellik YALNIZ hazırlık kökleri +
+# PAKET anahtarları. Hazırlık kanalının paketi bu güncelleyiciyi taşır; künye `capaKipi`, paketleme kipi kıyaslar.
+hazirlik-capasi = ["tekserp-dogrulama/hazirlik-capasi"]
+
+[dependencies]
+tekserp-dogrulama.workspace = true
+tekserp-hizmet = { path = "../tekserp-hizmet" }
+serde = { version = "1", features = ["derive"] }
+serde_json.workspace = true
+sha2.workspace = true
+base64.workspace = true
+regex.workspace = true
+getrandom = "0.3"
+zip = { version = "8.6", default-features = false, features = ["deflate-flate2-zlib-rs"] }
+ureq = { version = "3.4", default-features = false }
+
+[target.'cfg(windows)'.dependencies]
+# Windows'ta TLS işletim sisteminin (SChannel + sertifika deposu): C derlemesi yok, kurum vekillerinin
+# kök sertifikaları tanınır. Windows dışında yalnız düz http (geliştirme/test sunucusu).
+ureq = { version = "3.4", default-features = false, features = ["native-tls"] }
+windows-service.workspace = true
+windows-sys.workspace = true
+junction = "2.1"
+
+[dev-dependencies]
+ed25519-dalek.workspace = true

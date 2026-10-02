@@ -1,6 +1,6 @@
 // Bütünlük denetimi — PAKET anahtarıyla imzalı yük (`butunluk.jws`, `tekserp-butunluk`) + onun
 // sha256'sıyla bağlı liste dosyası (`integrity-list.ts`). Bu TS uygulaması native çekirdeğin
-// (`native/lisans-cekirdek/src/integrity.rs`) başvurusu ve geliştirme yoludur; üretimde denetim
+// (`native/tekserp-dogrulama/src/integrity.rs`) başvurusu ve geliştirme yoludur; üretimde denetim
 // native'dedir (yamalı JS listeyi geçemesin). Karar sırası iki uygulamada aynıdır, kâhin ölçer.
 import { createHash, type KeyObject } from "node:crypto";
 import { createReadStream } from "node:fs";

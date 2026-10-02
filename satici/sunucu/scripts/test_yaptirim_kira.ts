@@ -11,7 +11,7 @@
 //    okuyor) · aynı eylem ikinci kez geri alınamaz (409).
 // Koşum: npx tsx scripts/test_yaptirim_kira.ts
 // =============================================================================
-import { DAY_MS, ENDPOINTS, parseJws, type LeaseDoc } from "../src/lisans-protokol";
+import { DOWNLOAD_PRODUCTS, DAY_MS, ENDPOINTS, parseJws, type LeaseDoc } from "../src/lisans-protokol";
 import { kurulumAnahtariUret } from "../../../Teks-Erp/scripts/lib/lisans-fikstur";
 import {
   anahtarOrtamiKur,
@@ -110,7 +110,7 @@ async function main(): Promise<void> {
     await svc.revertSanction({ actionId: k5.id, reason: "geri", actor: "bekci" });
     await svc.revertSanction({ actionId: k1.id, reason: "bakım yenilendi", actor: "bekci" });
     kira = await yokla();
-    kontrol("§2g K5 + K1 geri → K3, güncelleme serbest, belirteçler döndü", kira.yaptirim.kademe === "K3" && !kira.yaptirim.guncellemeDonuk && (sonYanit.json.indirmeBelirtecleri as unknown[]).length === 2);
+    kontrol("§2g K5 + K1 geri → K3, güncelleme serbest, belirteçler döndü", kira.yaptirim.kademe === "K3" && !kira.yaptirim.guncellemeDonuk && (sonYanit.json.indirmeBelirtecleri as unknown[]).length === DOWNLOAD_PRODUCTS.length);
 
     console.log("\n§3 zorlama ve geçerlilik");
     const z1 = await svc.setEnforcement({ ...ortak, enforce: true, reason: "gözlem verisi temiz" });

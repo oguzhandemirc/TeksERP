@@ -194,6 +194,8 @@ export const TABLE_LABELS: Record<string, string> = {
   CLOUD_INBOX_RECEIPT: "Bulut Gelen Kutusu Makbuzu",
   SUPPORT_TICKET: "Destek Talebi",
   LICENSE_ACCEPTANCE: "Lisans Sözleşmesi Kabulü",
+  // Dağıtım v2 (D7): sunucu güncellemesi onayı (Sistem → Sunucu Güncellemeleri).
+  UPDATE_APPROVAL: "Sunucu Güncellemesi Onayı",
 };
 
 /** Ham tableName'i Türkçe etiketle. Boş → "—", bilinmeyen → ham değer. */

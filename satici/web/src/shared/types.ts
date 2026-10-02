@@ -571,3 +571,80 @@ export interface NotificationOverview {
   readonly kanallar: ChannelOverview[];
   readonly esikler: { readonly sessizSaat: number; readonly vadeGun: number; readonly taramaDk: number; readonly sessizSiniflar: string[] };
 }
+
+// ---------------------------------------------------------------- güncelleme politikası · filo (Dağıtım v2)
+
+export type UpdateMode = "OTOMATIK" | "ONAYLI" | "DONDUR";
+
+/** Pencere kuralı: fabrika saatiyle başlangıç–bitiş, ISO haftası (1 = Pazartesi … 7 = Pazar), artan sıralı. */
+export interface UpdateWindow {
+  readonly baslangic: string;
+  readonly bitis: string;
+  readonly gunler: readonly number[];
+}
+
+/** Kurulumun politikası (sunucu `policyOf`): pencere dilimsiz — dilim fabrikanın bildirdiğidir. */
+export interface UpdatePolicy {
+  readonly kip: UpdateMode;
+  readonly pencere: UpdateWindow | null;
+  readonly hedefSurum: string | null;
+}
+
+/** Tamamlanan güncelleme denemesi (protokol `UpdateResultSchema`). */
+export interface UpdateAttempt {
+  readonly kayitId: string;
+  readonly hedefSurum: string;
+  readonly kaynakSurum: string | null;
+  readonly sonuc: string;
+  readonly kod: string | null;
+  readonly baslangic: string;
+  readonly bitis: string;
+  readonly veriGeriYuklendi: boolean;
+}
+
+/** Yoklamanın son güncelleme raporu (kurulumun durum kolonu; `saatDilimi` ayrı kolonda). */
+export interface UpdateReportSummary {
+  readonly guncelleyici?: { readonly durum: string; readonly surum: string | null };
+  readonly bekleyen?: { readonly surum: string; readonly karar: string; readonly neden: string | null } | null;
+  readonly son?: UpdateAttempt | null;
+}
+
+export interface UpdateHistoryRow {
+  readonly id: string;
+  readonly olay: string;
+  readonly ayrinti: Record<string, unknown> | null;
+  readonly yapan: string;
+  readonly createdAt: string;
+}
+
+/** `GET /kurulumlar/:id/guncelleme`. */
+export interface InstallationUpdateView {
+  readonly politika: UpdatePolicy;
+  /** Pencerenin yorumlandığı dilim: fabrikanın bildirdiği, yoksa varsayılan. */
+  readonly saatDilimi: string;
+  readonly saatDilimiBildirildi: boolean;
+  readonly rapor: UpdateReportSummary | null;
+  readonly raporZamani: string | null;
+  readonly gecmis: UpdateHistoryRow[];
+}
+
+/** `GET /filo` satırı. */
+export interface FleetRow {
+  readonly id: string;
+  readonly kurulumId: string;
+  readonly ad: string | null;
+  readonly musteri: string;
+  readonly tesis: string;
+  readonly kanal: string;
+  readonly sinif: string;
+  readonly durum: string;
+  readonly sonYoklama: string | null;
+  readonly kuruluSurum: string | null;
+  readonly kanalSurumu: { readonly surum: string | null; readonly kaynak: "YAYIN" | "KANAL_KAYDI" | "YOK" };
+  /** İki sürüm de okunabildiyse; okunamayan null ("bilinmiyor"). */
+  readonly geride: boolean | null;
+  readonly politika: UpdatePolicy;
+  readonly rapor: UpdateReportSummary | null;
+  readonly raporZamani: string | null;
+  readonly sonSonuc: { readonly olay: string; readonly ayrinti: Record<string, unknown> | null; readonly createdAt: string } | null;
+}

@@ -49,7 +49,8 @@ if (hedef === "yerel") {
   kos("npx", [...napi, "--target", "x86_64-pc-windows-msvc", "-x"]);
 } else if (hedef === "linux-x64") {
   kos("cargo", ["zigbuild", "--release", ...ozellik, "--target", "x86_64-unknown-linux-gnu.2.28"]);
-  const kaynak = join(DIZIN, "target", "x86_64-unknown-linux-gnu", "release", "liblisans_cekirdek.so");
+  // Cargo çalışma alanı: derleme dizini alanın kökündedir (`native/target`), crate dizininde değil.
+  const kaynak = join(DIZIN, "..", "target", "x86_64-unknown-linux-gnu", "release", "liblisans_cekirdek.so");
   const varis = join(cikti, "lisans-cekirdek.linux-x64-gnu.node");
   if (!existsSync(kaynak)) {
     console.error(`❌ zigbuild çıktısı yok: ${kaynak}`);

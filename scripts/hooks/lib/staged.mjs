@@ -171,15 +171,17 @@ export const PROJELER = [
     test: ["npx", ["vitest", "run"]],
   },
   {
-    // Native lisans çekirdeği (Rust + napi-rs, Faz 2c): `Teks-Erp/` İÇİNDE iç içe proje — dosya EN
-    // ÖZGÜL projeye aittir (`dosyaSahibi`); Teks-Erp'nin tip/lint'i bu dizini zaten taramaz. Tip adımı
-    // `cargo fmt --check` + clippy (uyarı = hata), ESLint YOK (`lint: null`), test `cargo test` (TS
-    // kâhininin vektör dosyası dahil). cargo yoksa betik ⏭ beyanla 0 döner — ölçüm CI "Native" job'ında.
-    ad: "Teks-Erp/native/lisans-cekirdek",
+    // Native Cargo çalışma alanı (Rust): lisans çekirdeği (napi `.node`) · ORTAK doğrulama crate'i ·
+    // güncelleyici + backend hizmet konağı. `Teks-Erp/` İÇİNDE iç içe proje — dosya EN ÖZGÜL projeye
+    // aittir (`dosyaSahibi`); Teks-Erp'nin tip/lint'i bu dizini zaten taramaz. Alan TEK kapıdır: ortak
+    // crate'teki değişiklik lisans çekirdeğinin vektör testini de koşturur. Tip adımı `cargo fmt --check`
+    // + clippy (uyarı = hata; hizmetler Windows hedefinde de), ESLint YOK (`lint: null`), test `cargo
+    // test` (TS kâhininin vektör dosyası dahil). cargo yoksa betik ⏭ beyanla 0 döner — ölçüm CI'da.
+    ad: "Teks-Erp/native",
     typecheck: ["node", ["scripts/kapi.mjs", "denetle"]],
     lint: null,
     test: ["node", ["scripts/kapi.mjs", "test"]],
-    // Rust kaynağı, Cargo.toml/lock, vektör dosyası ve betikler bu projenin girdisidir.
+    // Rust kaynağı, Cargo.toml/lock, vektör dosyaları ve betikler bu projenin girdisidir.
     kodDosyasi: (f) => /\.(rs|toml|lock|json|mjs)$/.test(f),
   },
 ];

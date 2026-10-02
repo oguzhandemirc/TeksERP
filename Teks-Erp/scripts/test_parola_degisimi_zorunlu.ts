@@ -318,6 +318,14 @@ function statik(): void {
     "§5c panel politika aynası backend'e eşit",
     panel.includes(`PASSWORD_MIN_LENGTH = ${PASSWORD_MIN_LENGTH};`) && panel.includes(`PASSWORD_MAX_BYTES = ${PASSWORD_MAX_BYTES};`),
   );
+  // setup.exe sihirbazı satıcı parolasını politikadan önce süzer: kısa eşik kurulumu en sonda (hesap aşamasında) düşürürdü.
+  const sihirbaz = oku(join(KOK, "deploy/kurulum/tekserp-kurulum.iss"));
+  check(
+    "§5c2 kurulum sihirbazının satıcı parolası eşiği politikaya eşit",
+    sihirbaz.includes(`Length(SaticiSayfasi.Values[1]) < ${PASSWORD_MIN_LENGTH} then`) &&
+      sihirbaz.includes(`Utf8Bayt(SaticiSayfasi.Values[1]) > ${PASSWORD_MAX_BYTES} then`) &&
+      (sihirbaz.match(/Length\(SaticiSayfasi\.Values\[1\]\) < \d+/g) ?? []).length === 1,
+  );
   const betikler = ["installer/docker/yonet.ps1", "baslat.sh", "docker/entrypoint.sh"];
   const sabitli = betikler.filter((b) => oku(join(BACKEND, b)).includes("123123"));
   check("§5d kurulum betiklerinde sabit parola yok", sabitli.length === 0, sabitli.join(", "));

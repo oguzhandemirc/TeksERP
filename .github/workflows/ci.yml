@@ -75,6 +75,11 @@ jobs:
       # SHASUMS doğrulaması yalnız yerelde --ag ile). Zero-dep, DB'siz.
       - name: Node sürüm kaydı (korumalı paket runtime)
         run: node scripts/test_node_surumu.mjs
+      # Kendi PostgreSQL örneği (deploy/pg/): kayıt + sözleşme + şablon yasakları (yalnız 127.0.0.1,
+      # yalnız scram-sha-256, trust yok, UTC, initdb UTF8/C) + altın vektörler. Ağsız; indirme +
+      # SHA256 ayrı iş akışında (pg-ikili.yml — yalnız deploy/pg değişince).
+      - name: Kendi PostgreSQL örneği (kayıt + şablon yasakları)
+        run: node scripts/test_pg_ornegi.mjs && node scripts/test_pg_ornegi.mjs --sonda
       # Yayın betiklerinde belirteçsiz HTTP okuma yok (3c') — güncelleme sunucusu Cloudflare
       # Worker'la anonim okumaya kapalı; anonim okuma kalırsa Worker açıldığı gün yayın zinciri
       # kırılır. Zero-dep, DB'siz, ağsız; kapı ve kalıcı sondalar (--sonda) aynı adımda.
@@ -495,14 +500,16 @@ jobs:
         run: npm run build
 
   # ===========================================================================
-  # NATIVE — lisans çekirdeği (Teks-Erp/native/lisans-cekirdek; Rust + napi-rs, Faz 2c). DB'siz:
-  # biçim + clippy (uyarı = hata) + `cargo test` (TS kâhininin vektör dosyası) + linux-x64 `.node`
-  # + kâhin bekçisi GERÇEK `.node`a karşı. TEKSERP_STRICT: bekçinin "ATLANDI"sı burada KIRMIZIDIR
-  # (backend job'ı native derlemez; orada sayılı beyanla atlar). Üretim özellikli (test çapasız)
-  # win-x64 + linux-x64 paket derlemesi `korumali-paket.yml`de (Faz 2b sahipliği).
+  # NATIVE — Cargo çalışma alanı (Teks-Erp/native): lisans çekirdeği (Rust + napi-rs, Faz 2c) + ORTAK
+  # doğrulama crate'i + güncelleyici/backend hizmet konağı (Dağıtım v2). DB'siz: biçim + clippy
+  # (uyarı = hata, bütün alan) + `cargo test` (TS kâhininin vektör dosyası + durum makinesi birimleri)
+  # + linux-x64 `.node` + kâhin bekçisi GERÇEK `.node`a karşı. TEKSERP_STRICT: bekçinin "ATLANDI"sı
+  # burada KIRMIZIDIR (backend job'ı native derlemez; orada sayılı beyanla atlar). Hizmet ikililerinin
+  # Windows derlemesi + SCM dumanı `native-windows.yml`de; üretim özellikli (test çapasız) win-x64 +
+  # linux-x64 paket derlemesi `korumali-paket.yml`de (Faz 2b sahipliği).
   # ===========================================================================
   native:
-    name: Native lisans çekirdeği (fmt + clippy + test + kâhin)
+    name: Native çalışma alanı (fmt + clippy + test + kâhin)
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -522,10 +529,10 @@ jobs:
         run: npm ci
         working-directory: Teks-Erp
       - run: npm ci
-      - name: Biçim + clippy
-        run: node scripts/kapi.mjs denetle
-      - name: cargo test (TS kâhininin vektörleri)
-        run: node scripts/kapi.mjs test
+      - name: Biçim + clippy (bütün çalışma alanı)
+        run: node ../scripts/kapi.mjs denetle
+      - name: cargo test (TS kâhininin vektörleri + güncelleyici/konak birimleri)
+        run: node ../scripts/kapi.mjs test
       - name: Native derleme (linux-x64-gnu, test çapalı)
         run: npx napi build --platform --release --no-js --features test-anchor --output-dir dist
       # G3: kâhinin §9 kip çapraz sondası gerçek üretim ve hazırlık ikililerini ister (STRICT'te yoksa kırmızı).

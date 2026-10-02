@@ -4,6 +4,7 @@ import prisma from "../lib/prisma";
 import { AuditService } from "./audit.service";
 import { uyari } from "../lib/logger";
 import { LICENSE_REVOCATION_SETTING_KEY } from "../constants/reserved-settings";
+import { isVerificationMode } from "../lib/dogrulama-kipi";
 import { getLicenseConfig, getLicenseSnapshot } from "../lib/license/runtime";
 import {
   acknowledgeRevocationWrite,
@@ -30,6 +31,8 @@ export async function refreshLicenseRevocation(): Promise<void> {
     markRevocationRowUnknown();
     return;
   }
+  // Doğrulama kipinde yalnız okunur: onarım normal açılışa kalır (geri dönüşte kopyalar yedekle aynı).
+  if (isVerificationMode()) return;
   repairRevocationCopies(getLicenseConfig().roots);
 }
 

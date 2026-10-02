@@ -21,6 +21,7 @@ import { InstallHistoryPanel } from "./InstallHistoryPanel";
 import { PaidThroughPanel } from "./PaidThroughPanel";
 import { InstallmentPanel, PlannedPanel } from "./PlanPanels";
 import { SanctionPanel } from "./SanctionPanel";
+import { UpdatePanel } from "../update/UpdatePanel";
 
 /** Genel yolda (Cloudflare Access) imza parolası (ara/kök) istenmez: parola Cloudflare'den geçmesin, sunucu o ucu orada 404'ler. */
 const ROOT_SIGNING_OFF_PUBLIC =
@@ -31,6 +32,7 @@ const TABS = [
   ["yaptirim", "Yaptırım"],
   ["plan", "Plan ve taksit"],
   ["saglik", "Sağlık ve kira"],
+  ["guncelleme", "Güncelleme"],
   ["olaylar", "Kopya ve taşıma"],
   ["kayit", "Eylem defteri"],
   ["ilk-kurulum", "İlk kurulum"],
@@ -144,6 +146,7 @@ export function InstallationDetailPage() {
         </>
       ) : null}
       {tab === "saglik" ? <HealthPanel detail={d} /> : null}
+      {tab === "guncelleme" ? <UpdatePanel detail={d} /> : null}
       {tab === "olaylar" ? <IncidentsPanel detail={d} onChanged={refresh} /> : null}
       {tab === "kayit" ? (
         <>

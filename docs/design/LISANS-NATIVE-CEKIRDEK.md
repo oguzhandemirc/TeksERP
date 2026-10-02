@@ -8,7 +8,7 @@
 
 | Parça | Nerede | Ölçüm |
 |---|---|---|
-| Rust çekirdeği (napi-rs) | `Teks-Erp/native/lisans-cekirdek/` | `cargo test` 6 birim + vektör dosyası (319 kayıt) · clippy üç hedefte temiz |
+| Rust çekirdeği (napi-rs) | `Teks-Erp/native/lisans-cekirdek/` (doğrulama modülleri 2026-09-30'dan beri ORTAK `Teks-Erp/native/tekserp-dogrulama/`da — güncelleyici aynı kodu bağlar, `docs/design/GUNCELLEYICI.md`) | `cargo test` 6 birim + vektör dosyası (319 kayıt) · clippy üç hedefte temiz |
 | Arayüz + TS uygulaması | `Teks-Erp/src/lib/license/license-core.ts` | TS protokolünün kendisi — kâhin |
 | Yükleyici · adaptör | `Teks-Erp/src/lib/license/native.ts` · `Teks-Erp/src/lib/license/native-adapter.ts` | dosya yok / bozuk / künye uyuşmaz / zorunlu kip dalları bekçide; native yanıtı sözleşme şemalarından geçer |
 | Bütünlük (2e arayüzü) · modül anahtarı (2d arayüzü) | `Teks-Erp/src/lib/license/integrity.ts` · `Teks-Erp/src/lib/license/module-key.ts` | TS başvurusu = native ile aynı vektörler |
@@ -59,7 +59,7 @@ Her dışa aktarım JSON metni alır, JSON metni döndürür (napi nesne eşleme
 
 ## 3. Güven çapası
 
-- Çapa native ikiliye **gömülüdür** ve ikili TEK kipin listelerini taşır (G3): `src/anchor.rs`in dört bloğu TS `PRODUCTION_`/`STAGING_ROOT_PUBLIC_KEYS` + `…_PACKAGE_PUBLIC_KEYS` aynası, her blok kipinin `cfg`siyle kapılı — özelliksiz derleme üretim, `hazirlik-capasi` hazırlık; künye `capaKipi` (ABI 3), yükleyici kendi kipinden farklı ikiliyi açmaz (`CAPA_UYUSMAZ`). Bekçi §0e kaynak metinden, §3d çalışan ikiliden, §9 iki kip ikilisini gömülü çapa vektörleriyle ölçer. Üretim çağıranı çapayı native'e VERMEZ.
+- Çapa native ikiliye **gömülüdür** ve ikili TEK kipin listelerini taşır (G3): `tekserp-dogrulama/src/anchor.rs`in dört bloğu TS `PRODUCTION_`/`STAGING_ROOT_PUBLIC_KEYS` + `…_PACKAGE_PUBLIC_KEYS` aynası, her blok kipinin `cfg`siyle kapılı — özelliksiz derleme üretim, `hazirlik-capasi` hazırlık; künye `capaKipi` (ABI 3), yükleyici kendi kipinden farklı ikiliyi açmaz (`CAPA_UYUSMAZ`). Bekçi §0e kaynak metinden, §3d çalışan ikiliden, §9 iki kip ikilisini gömülü çapa vektörleriyle ölçer. Aynı çapa (aynı kipte) güncelleyici ikilisine de gömülür; özellik ortak crate'te (`tekserp-dogrulama/hazirlik-capasi`), `.node` ve güncelleyici onu kendi `hazirlik-capasi`sıyla açar. Üretim çağıranı çapayı native'e VERMEZ.
 - Dışarıdan çapa yalnız `test-anchor` cargo özellikli derlemede kabul edilir; özelliksiz (üretim) derleme `CAPA_ENJEKSIYONU_KAPALI` döner (bekçi §7b, ölçüldü darwin + Windows). Paketleme (2b) özelliksiz derlemeyi taşır; yükleyici zorunlu kipte test çapalı derlemeyi reddeder.
 
 ## 4. Eşlik — nerede ve nasıl

@@ -1,0 +1,44 @@
+{
+  "v": 1,
+  "zaman": "2026-09-30T23:30:00.000Z",
+  "sonCanlilik": "2026-09-30T23:30:00.000Z",
+  "canlilikEsigiSn": 180,
+  "turSn": 60,
+  "guncelleyiciSurum": "0.1.0",
+  "kuruluSurum": "2.12.0",
+  "durum": "BEKLIYOR",
+  "surum": "2.13.0",
+  "kaynakSurum": "2.12.0",
+  "urun": null,
+  "islemId": null,
+  "adim": null,
+  "hataKodu": null,
+  "mesaj": "2.13.0 UYGUN_DEGIL / KAYNAK_SURUM_ESKI",
+  "ilerleme": null,
+  "planlanan": null,
+  "politika": {
+    "kip": "OTOMATIK",
+    "izin": false,
+    "neden": "KAYNAK_SURUM_ESKI",
+    "kaynak": "KIRA",
+    "hedefSurum": null,
+    "donuk": false
+  },
+  "karar": {
+    "karar": "UYGUN_DEGIL",
+    "neden": "KAYNAK_SURUM_ESKI",
+    "aralik": null,
+    "pgGuncellemesi": false
+  },
+  "bekleyen": {
+    "surum": "2.13.0",
+    "karar": "UYGUN_DEGIL",
+    "neden": "KAYNAK_SURUM_ESKI",
+    "aralik": null,
+    "pgGuncellemesi": false,
+    "zorunlu": false,
+    "ozet": "Test sürümü"
+  },
+  "son": null,
+  "sonAyrinti": null
+}

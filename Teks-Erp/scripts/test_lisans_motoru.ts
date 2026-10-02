@@ -43,6 +43,8 @@
 //      P ileri, EK_SURE kalkar · kabulden önceki ileri sıçrama aklanmaz · kapalı süre kredisi devreder · eski kayıt bugünkü
 //      · süreklilik YALNIZ taşınmışta (§33f–h): canlı yoklama şişik tabanı sıfırlar · dosya max'ı korur · canlıda eski ya da
 //      tekrar eden yanıt durum kaydını (taban dahil) değiştirmez
+//   ⭐ doğrulama kipi YAN ETKİSİZ (§34): açılış + kapanış sonrası lisans dizini + DB izi + iptal kopyası bayt-eşit, yoklama
+//      yok; karşı: aynı açılış normal kipte yazar (ölçüm kör değil)
 //
 // NEGATİF SONDA — dosya DIŞI mutasyon (cp + shasum ile birebir geri alındı; sonuçlar commit
 // mesajında): M1 persistAccumulation bozuk kayıtta sıfırdan başlatır · M2 kabulde kurulum
@@ -79,13 +81,16 @@
 // anında duvar tabana girdi → 2 ❌ (§33b · e) · N3 kredi devri yok → 1 ❌ (§33e).
 // Süreklilik yalnız taşınmışta (aynı yöntem): NA canlı yol da max'a girer → 2 ❌ (§33f · §32d — şişik taban sonraki bölüme
 // sızar, canlı yoklama da söndüremez: cırcırın kendisi) · NB taşınmış yol da sunucu saatine iner → 9 ❌ (§33a ×3 · a2 · b · c · c2 · e · g).
+// D8e-1c (§34; kaynakta mutasyon, md5 eşit geri alındı): Y1 kip dalı açılış yazımından sonraya → §34b (durum.json, iz) ·
+// Y2 kapanış kapısı kalktı → §34b (durum.json, iz) · Y3 iptal onarım kapısı kalktı → §34b (iptal) · Y4 parmak izi önbellek
+// kapısı kalktı → §34b (parmak-izi-onbellek.json) — dördü de kırmızı, geri alınınca yeşil.
 // ⭐ KALICI SONDA ✓K1 (her koşumda): bilinmeyen kod genel mesaja düşer — §8a'nın "her kodun kendi
 // mesajı var" karşılaştırıcısı kör değil.
 // =============================================================================
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { createPrivateKey, createPublicKey, randomUUID } from "node:crypto";
+import { createHash, createPrivateKey, createPublicKey, randomUUID } from "node:crypto";
 import type { Request } from "express";
 import prisma, { pool } from "../src/lib/prisma";
 import { hedefDbEngeli } from "./lib/hedef-db-kapisi";
@@ -177,6 +182,7 @@ import { sahteSaticiBaslat, sahteProxyBaslat, type SahteSatici } from "./lib/lis
 import { scanLicenseIdentitySeam } from "./lib/lisans-kimlik-dikisi";
 import { kabulEt, temizleKabuller } from "./lib/lisans-kabul-fikstur";
 import { logObservationSummaryIfDue, refreshLicenseTrace, __resetLicenseTrailForTests } from "../src/services/license-trail.service";
+import { VERIFICATION_MODE_ENV } from "../src/lib/dogrulama-kipi";
 
 const engel = hedefDbEngeli();
 if (engel) {
@@ -1687,6 +1693,79 @@ async function motorBolumu(): Promise<void> {
   check("§15e kimlik işi pes etmez: hızlı denemeler tükenince seyrek aralık, sonsuza dek", identityRetryDelayMs(1) === 15_000 && identityRetryDelayMs(5) === 300_000 && identityRetryDelayMs(10_000) === 300_000);
 }
 
+type LisansDurumIzi = { readonly dosyalar: Record<string, string>; readonly iz: string | null; readonly iptal: string | null };
+
+/** Lisans dizininin her dosyası (sha256) + DB izi ve iptal kopyası (değer + `updatedAt`): "yalnız okur" ölçüsü. */
+async function lisansDurumIzi(dizin: string): Promise<LisansDurumIzi> {
+  const dosyalar: Record<string, string> = {};
+  for (const ad of fs.readdirSync(dizin).sort()) {
+    const yol = path.join(dizin, ad);
+    if (fs.statSync(yol).isFile()) dosyalar[ad] = createHash("sha256").update(fs.readFileSync(yol)).digest("hex");
+  }
+  const satir = async (key: string): Promise<string | null> => {
+    const r = await prisma.systemSetting.findUnique({ where: { key }, select: { value: true, updatedAt: true } });
+    return r ? JSON.stringify([r.value, r.updatedAt.toISOString()]) : null;
+  };
+  return { dosyalar, iz: await satir(LICENSE_TRACE_SETTING_KEY), iptal: await satir(LICENSE_REVOCATION_SETTING_KEY) };
+}
+
+function durumFarki(a: LisansDurumIzi, b: LisansDurumIzi): string[] {
+  const adlar = [...new Set([...Object.keys(a.dosyalar), ...Object.keys(b.dosyalar)])].sort();
+  return [...adlar.filter((n) => a.dosyalar[n] !== b.dosyalar[n]), ...(a.iz !== b.iz ? ["iz"] : []), ...(a.iptal !== b.iptal ? ["iptal"] : [])];
+}
+
+/** Güncelleyicinin `--dogrulama` başlatması: sağlık düşerse DB yedekten döner — lisans durumu bir sıra önde kalmamalı. */
+async function dogrulamaKipiBolumu(x: Hazir): Promise<void> {
+  console.log("\n§34 — doğrulama kipi YAN ETKİSİZ: açılış + kapanış lisans durumunu yalnız OKUR (dizin + DB izi bayt-eşit)");
+  const olcum = getMeasuredFingerprint();
+  __resetLicensePollForTests();
+  await flushLicenseTraceWrites();
+  try {
+    // İptal DB kopyası eksik: normal açılış onarır (karşı §34d), doğrulama kipi dokunmamalı.
+    await prisma.systemSetting.deleteMany({ where: { key: LICENSE_REVOCATION_SETTING_KEY } });
+    const once = await lisansDurumIzi(x.dizin);
+    check(
+      "§34 ön koşul: etkin kurulum; durum.json + DB izi + iptal dosyası var, iptal DB kopyası yok",
+      getLicenseSnapshot().activated && LICENSE_FILES.STATE in once.dosyalar && once.iz !== null && LICENSE_FILES.REVOCATION in once.dosyalar && once.iptal === null,
+      Object.keys(once.dosyalar).join(","),
+    );
+    const yokla0 = x.satici.sayac.yokla;
+    process.env[VERIFICATION_MODE_ENV] = "1";
+    configureLicensePollForTests({ identityWaitMs: 2000, bootRetryMs: 400, startupDelayMs: 60 * 60_000 });
+    startLicensePoll();
+    const hazir = await bekleKadar(() => licenseHealthBlock().motorNeden === "DOGRULAMA_KIPI", 15_000);
+    const h = licenseHealthBlock();
+    check("§34a doğrulama kipinde motor yerel ölçümü bitirir → CALISIYOR (DOGRULAMA_KIPI)", hazir && h.motor === "CALISIYOR", `${String(h.motor)} ${String(h.motorNeden)}`);
+    // Kapanış da kipte: güncelleyici sınamadan sonra süreci durdurur.
+    __resetLicensePollForTests();
+    await flushLicenseTraceWrites();
+    await flushRevocationWrites();
+    delete process.env[VERIFICATION_MODE_ENV];
+    const fark = durumFarki(once, await lisansDurumIzi(x.dizin));
+    check("§34b ⭐ açılış + kapanış sonrası lisans dizini (durum.json · parmak izi önbelleği · iptal) ve DB izi + iptal kopyası BAYT-EŞİT", fark.length === 0, fark.join(", ") || "eşit");
+    check("§34c doğrulama kipinde satıcıya istek gitmez", x.satici.sayac.yokla === yokla0, `${yokla0}→${x.satici.sayac.yokla}`);
+    configureLicensePollForTests({ identityWaitMs: 2000, bootRetryMs: 400, startupDelayMs: 60 * 60_000 });
+    startLicensePoll();
+    const calisti = await bekleKadar(() => licenseHealthBlock().motor === "CALISIYOR", 15_000);
+    await flushLicenseTraceWrites();
+    await flushRevocationWrites();
+    const nf = durumFarki(once, await lisansDurumIzi(x.dizin));
+    check(
+      "§34d karşı (ölçüm kör değil): AYNI açılış normal kipte durum.json + DB izini yazar, iptal kopyasını onarır",
+      calisti && nf.includes(LICENSE_FILES.STATE) && nf.includes("iz") && nf.includes("iptal"),
+      nf.join(", "),
+    );
+  } finally {
+    delete process.env[VERIFICATION_MODE_ENV];
+    __resetLicensePollForTests();
+    await flushLicenseTraceWrites();
+    // Silinen iptal kopyası her durumda dosyadan geri yazılır (sonraki bölümler iki kopyaya dayanır).
+    await refreshLicenseRevocation();
+    await flushRevocationWrites();
+    if (olcum) setMeasuredFingerprint(olcum);
+  }
+}
+
 function gozlemSayaciBolumu(): void {
   console.log("\n§16 — gözlem 'reddederdim' sayacı ÇAĞRI değil İSTEK × modül başına");
   const snap = getLicenseSnapshot();
@@ -1885,6 +1964,7 @@ async function main(): Promise<void> {
     ortamBolumu();
     await kapaliSureBolumu(hazir);
     await motorBolumu();
+    await dogrulamaKipiBolumu(hazir);
     await tasimaBolumu(hazir);
     await hakButunlukBolumu(hazir);
     await etkinlestirmeButunlukBolumu(hazir);

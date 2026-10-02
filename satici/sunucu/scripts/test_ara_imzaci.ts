@@ -32,7 +32,7 @@ import { copyFileSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFile
 import os from "node:os";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
-import { DAY_MS, ENDPOINTS, LicenseResponseSchema, TYP, msToIso, parseJws, verifyEntitlement, verifyLease, type CertificateDoc, type LicenseClass } from "../src/lisans-protokol";
+import { DAY_MS, DOWNLOAD_PRODUCTS, ENDPOINTS, LicenseResponseSchema, TYP, msToIso, parseJws, verifyEntitlement, verifyLease, type CertificateDoc, type LicenseClass } from "../src/lisans-protokol";
 import {
   anahtarUret,
   hakYuku,
@@ -325,8 +325,8 @@ async function main(): Promise<void> {
     });
     const yanit = LicenseResponseSchema.safeParse(yoklama.json);
     const kira = yanit.success ? verifyLease(yanit.data.kira, f.kokler) : null;
-    kontrol("§5f ✓K kök yokken YOKLAMA 200: yeni kira ALT ile doğrulanır, iki indirme belirteci var (kira/indirme sürer)",
-      yoklama.status === 200 && !!kira?.ok && kira.value.document.hakSurum === 1 && yanit.success && yanit.data.indirmeBelirtecleri.length === 2,
+    kontrol("§5f ✓K kök yokken YOKLAMA 200: yeni kira ALT ile doğrulanır, her indirme ürününe belirteç var (kira/indirme sürer)",
+      yoklama.status === 200 && !!kira?.ok && kira.value.document.hakSurum === 1 && yanit.success && yanit.data.indirmeBelirtecleri.length === DOWNLOAD_PRODUCTS.length,
       `${yoklama.status} ${yoklama.kod ?? ""}`);
 
     console.log("\n§6 kuyruk → tören (CLI) → içe aktarma");

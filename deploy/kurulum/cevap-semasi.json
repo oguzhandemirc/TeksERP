@@ -1,0 +1,35 @@
+{
+  "_aciklama": [
+    "TeksERP KURULUM CEVAP DOSYASI SEMASI - sihirbaz (TeksERP-Kurulum.exe) cevaplari bu bicimde yazar, bayi sessiz kipte (/VERYSILENT /CEVAP=<dosya>) ayni bicimi verir. TEK KAYNAK: kurulum.ps1 (CevapDogrula) ve bekci (Teks-Erp/scripts/test_kurulum_betikleri.ts) bu dosyayi okur.",
+    "Anahtarlar nokta yoludur (cevapta ic ice nesne: {\"pg\": {\"port\": 5432}} = pg.port). Semada OLMAYAN anahtar RED; anahtar adinin bir segmenti sir cagristiriyorsa (parola, password, secret, token, apikey iceren; tam 'pin' ya da 'sifre'; 'sifresi' ile biten) RED: cevap dosyasi SIR TASIMAZ. Parolalar yalniz sihirbazdan, kurulum betigine STDIN'den gelir; sessiz kipte satici hesabi ve yerel yedek anahtari SONRAYA kalir (kurulum sonunda komutu yazilir).",
+    "tur: sayi (en_az/en_cok) | mantik | metin (desen = .NET/JS ortak alt kume, buyuk-kucuk harf DUYARLI; secenek) | yol (mutlak X:\\ ASCII, BOSLUKSUZ, '..' yok - .env'e tirnaksiz yazilir) | liste (secenek, en_az_oge). bos: true -> null verilebilir. varsayilan: alan cevapta yoksa.",
+    "Ag kurallari: API portu yalniz secilen profillerde (Public YOK) ve yalniz LocalSubnet (+ istenirse Tailscale 100.64.0.0/10); PostgreSQL icin gelen kural ACILMAZ. API portu MESGULSE kurulum DURUR (istemcilerin varsayilan adresi bu porttur; sessiz baska port yok). Onarim/devamda api.izinliAdresler, api.agProfilleri ve api.mdns KAYITTAN korunur (kurulum.json ag > durum.json ag > onceki cevap; alan cevapta yoksa varsayilan kayittaki erisimi DARALTMAZ); cevapta acikca verilen farkli deger uygulanmaz, uyarilir.",
+    "lisans.saticiAdresi: null = paketin KANALININ lisans saticisi (PAKET.json backendLisansSunucusu = deploy/kanallar.json backend.lisansSunucusu). Kanaldan FARKLI deger kurulumu durdurmaz, gunluge ve sonuca UYARI yazar. Onarimda kayittaki .env korunur (cevaptaki deger uygulanmaz, uyarilir)."
+  ],
+  "surum": 1,
+  "alanlar": {
+    "v": { "tur": "sayi", "zorunlu": true, "en_az": 1, "en_cok": 1 },
+    "kok": { "tur": "yol", "varsayilan": "C:\\TeksERP" },
+    "paket.backend": { "tur": "metin", "bos": true, "varsayilan": null, "desen": "^[^\\x00-\\x1f\"<>|*?]{1,240}\\.zip$" },
+    "paket.pg": { "tur": "metin", "bos": true, "varsayilan": null, "desen": "^[^\\x00-\\x1f\"<>|*?]{1,240}\\.zip$" },
+    "paket.pgKunye": { "tur": "metin", "bos": true, "varsayilan": null, "desen": "^[^\\x00-\\x1f\"<>|*?]{1,240}\\.json$" },
+    "pg.veriDizini": { "tur": "yol", "bos": true, "varsayilan": null },
+    "pg.port": { "tur": "sayi", "bos": true, "varsayilan": null, "en_az": 1025, "en_cok": 65535 },
+    "pg.defenderDislamasi": { "tur": "mantik", "varsayilan": true },
+    "api.port": { "tur": "sayi", "varsayilan": 4000, "en_az": 1025, "en_cok": 65535 },
+    "api.izinliAdresler": { "tur": "liste", "varsayilan": ["LocalSubnet"], "secenek": ["LocalSubnet", "100.64.0.0/10"], "en_az_oge": 1 },
+    "api.agProfilleri": { "tur": "liste", "varsayilan": ["Domain", "Private"], "secenek": ["Domain", "Private"], "en_az_oge": 1 },
+    "api.mdns": { "tur": "mantik", "varsayilan": true },
+    "guncelleme.sunucu": { "tur": "metin", "varsayilan": "https://guncelleme.etkiliyazilim.com", "desen": "^https://[A-Za-z0-9.-]{1,120}(:[0-9]{1,5})?$" },
+    "guncelleme.vekil": { "tur": "metin", "bos": true, "varsayilan": null, "desen": "^http://[A-Za-z0-9.-]{1,120}:[0-9]{1,5}$" },
+    "lisans.saticiAdresi": { "tur": "metin", "bos": true, "varsayilan": null, "desen": "^https://[A-Za-z0-9.-]{1,120}(:[0-9]{1,5})?$" },
+    "profil": { "tur": "metin", "bos": true, "varsayilan": null, "secenek": ["basit", "standart", "perde", "perde-dokuma", "dokuma", "tam"] },
+    "yedek.saat": { "tur": "metin", "varsayilan": "03:00", "desen": "^([01][0-9]|2[0-3]):[0-5][0-9]$" },
+    "yedek.ikinciHedef": { "tur": "yol", "bos": true, "varsayilan": null },
+    "yedek.sifreleme": { "tur": "mantik", "varsayilan": true },
+    "yedek.musteriAnahtariCikti": { "tur": "metin", "bos": true, "varsayilan": null, "desen": "^[A-Za-z]:\\\\[^\\x00-\\x1f\"<>|*?]{1,240}$" },
+    "yedek.etkiliAcikAnahtar": { "tur": "metin", "bos": true, "varsayilan": null, "desen": "^[A-Za-z]:\\\\[^\\x00-\\x1f\"<>|*?]{1,240}$" },
+    "saticiHesabi.kullaniciAdi": { "tur": "metin", "bos": true, "varsayilan": null, "desen": "^[A-Za-z0-9._-]{3,50}$" },
+    "provaKabul": { "tur": "mantik", "varsayilan": false }
+  }
+}

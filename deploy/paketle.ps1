@@ -53,6 +53,15 @@
 #   * WEB PANELI (dist-web) PAKETE GIRMEZ (2026-09-30, B6): tek tuketicisi emekli
 #     tunelin patron kabuguydu. Web hedefi yalniz demo imajinda (Dockerfile) derlenir;
 #     eski .env'deki WEB_DIST_DIR'i kur.ps1 uyarir.
+#   * HIZMET DUZENI (Dagitim v2, docs/design/GUNCELLEYICI.md §4): KORUMALI paket runtime\ altina
+#     iki Rust ikilisini (tekserp-hizmet.exe = backend hizmet konagi, tekserp-guncelleyici.exe =
+#     guncelleyici) koyar; yoksa paket URETILMEZ. Ikisi SYSTEM/hizmet olarak kosar: pakete ancak
+#     OLCULEREK girer (PE32+ x64 · kunye adi · TEST capasi YOK) ve runtime\ imzali kapsamdadir.
+#     hizmet\ (dizin/izin + hizmet kaydi betikleri) ve gecis\ (pm2 -> hizmet gecisi) de imzali
+#     kapsamda (Teks-Erp/src/lib/license/integrity-scope.ts). GECIS DONEMI: pm2 dosyalari
+#     (kur.ps1 · ilk-kurulum.ps1 · ecosystem.config.js · pm2-boot.cmd) paket kokunde KALIR.
+#     Paket icerigi asagidaki $KOK_BETIKLERI / $ALT_BETIKLER / $HIZMET_IKILILERI listelerindedir;
+#     bekci: Teks-Erp/scripts/test_paket_kapsami.ts (her calistirilabilir girdi imzali kapsamda).
 # =============================================================================
 # PowerShell 7 SART (uc argumanli Join-Path, $IsWindows): 5.1'de npm ci'den SONRA
 # anlasilmaz hatayla duser; -Korumali Windows x64'te bile "bu hostta uretilemez" derdi.
@@ -91,11 +100,79 @@ param(
   # Sifrelenecek paketler: "hepsi" ya da katalogdaki paket adlari (virgullu).
   [string]$SifreliPaketler = "hepsi",
   # Modul anahtari dizini (verilmezse build-korumali'nin varsayilani ~/.tekserp/satici-hazirlik/modul-anahtarlari).
-  [string]$ModulAnahtarDizini)
+  [string]$ModulAnahtarDizini,
+  # HIZMET IKILILERI (Dagitim v2): tekserp-hizmet.exe + tekserp-guncelleyici.exe'nin durdugu dizin.
+  # Verilmezse Teks-Erp\native\target\release (yerel `cargo build --release`). CI: korumali-paket.yml
+  # win-x64 yapitinin runtime\ dizini (uretim capali, test capasiz derleme).
+  [string]$HizmetIkiliDizini)
 $ErrorActionPreference = "Stop"
 
-function Fail($m) { Write-Host ""; Write-Host "  X $m" -ForegroundColor Red; exit 1 }
+# --- PAKET ICERIGI: tek liste (bekci test_paket_kapsami bu uc diziyi okur) ------------------------
+# Kok betikleri: GECIS DONEMI boyunca pm2 duzeni de bu paketle kurulur (kur.ps1 -Paket) - hicbiri CIKMAZ.
+$KOK_BETIKLERI = @("kur.ps1", "ilk-kurulum.ps1", "yedekle.ps1", "pm2-boot.cmd", "uzaktan-kos.ps1", "bakim-rolu.ps1")
+# Alt dizindeki betikler: repo `deploy/<yol>` -> paket `<yol>`; goreli yollar ikisinde AYNI
+# (gecis\..\hizmet\ , gecis\..\yedekle.ps1). hizmet\ ve gecis\ imzali kapsamdadir.
+$ALT_BETIKLER = @("hizmet/backend-hizmeti.ps1", "hizmet/guncelleyici-hizmeti.ps1", "hizmet/kanal-adlari.ps1", "hizmet/sema-hizasi.ps1", "gecis/gecis.ps1", "gecis/gecis-yardimci.cjs")
+# runtime\ altina giren Rust hizmet ikilileri (yalniz KORUMALI pakette; yoksa paketleme DURUR).
+$HIZMET_IKILILERI = [ordered]@{ "tekserp-hizmet.exe" = "tekserp-hizmet"; "tekserp-guncelleyici.exe" = "tekserp-guncelleyici" }
+
+# Dusen derlemenin sahnesi (%TEMP%\tekserp-backend-*, ~500 MB) diskte kalmasin: Fail ve betik kapsamindaki trap
+# sahneyi siler (yalniz GetTempPath altindaysa). thinkpad-1 D8: dusen dort derleme SystemTemp'te 4 sahne birakti.
+$script:SahneYolu = $null
+function SahneyiTemizle {
+  $y = $script:SahneYolu
+  $script:SahneYolu = $null
+  if (-not $y) { return }
+  $tmp = [System.IO.Path]::GetFullPath([System.IO.Path]::GetTempPath())
+  if (-not [System.IO.Path]::GetFullPath($y).StartsWith($tmp, [System.StringComparison]::OrdinalIgnoreCase)) { return }
+  if (Test-Path -LiteralPath $y) {
+    Remove-Item -LiteralPath $y -Recurse -Force -ErrorAction SilentlyContinue
+    Write-Host "  (yarim sahne silindi: $y)" -ForegroundColor DarkGray
+  }
+}
+function Fail($m) { Write-Host ""; Write-Host "  X $m" -ForegroundColor Red; SahneyiTemizle; exit 1 }
+trap { SahneyiTemizle; break }
 function Adim($m) { Write-Host ""; Write-Host "$m" -ForegroundColor Cyan }
+
+# Hizmet ikilisi pakete OLCULEREK girer: Windows PE32+ x64, uretim derlemesi (test capasi YOK: capayi
+# ortamdan okuyan `test-anchor` derlemesi SYSTEM guncelleyicisinde guven kokunu disariya acardi) ve
+# kunye adi beklenen. Kunye (ikiliyi calistirmak) yalniz Windows'ta; korumali paket zaten Windows'ta uretilir.
+function HizmetIkilisiOlc([string]$yol, [string]$beklenenAd, [string]$capaKipi) {
+  if (-not (Test-Path -LiteralPath $yol)) {
+    Fail "hizmet ikilisi yok: $yol  (-HizmetIkiliDizini ver: CI korumali-paket.yml win-x64 yapitinin runtime\ dizini ya da cargo build --release)"
+  }
+  $b = [System.IO.File]::ReadAllBytes($yol)
+  if ($b.Length -lt 1024 -or $b[0] -ne 0x4D -or $b[1] -ne 0x5A) { Fail "$beklenenAd Windows ikilisi DEGIL (MZ yok): $yol" }
+  $pe = [BitConverter]::ToInt32($b, 0x3C)
+  if ($pe -lt 64 -or ($pe + 6) -gt $b.Length -or $b[$pe] -ne 0x50 -or $b[$pe + 1] -ne 0x45 -or $b[$pe + 2] -ne 0 -or $b[$pe + 3] -ne 0) {
+    Fail "$beklenenAd PE imzasi yok: $yol"
+  }
+  $makine = [BitConverter]::ToUInt16($b, $pe + 4)
+  if ($makine -ne 0x8664) { Fail "$beklenenAd x64 degil (makine 0x$($makine.ToString('X4'))): $yol" }
+  if ([System.Text.Encoding]::GetEncoding(28591).GetString($b).Contains("TEKSERP_TEST_CAPASI")) {
+    Fail "$beklenenAd TEST CAPALI derleme (test-anchor) - uretim paketine GIRMEZ: $yol"
+  }
+  $surum = $null
+  if ($IsWindows) {
+    $k = (& $yol kunye | Out-String).Trim()
+    if ($LASTEXITCODE -ne 0) { Fail "$beklenenAd kunye kosmadi (cikis $LASTEXITCODE): $yol" }
+    try { $j = $k | ConvertFrom-Json } catch { Fail "$beklenenAd kunye JSON degil: $k" }
+    if ($j.ad -cne $beklenenAd -or $j.hedef -cne "windows") { Fail "$beklenenAd kunye beklenen degil: $k" }
+    if (($j.PSObject.Properties.Name -contains "testCapasi") -and ($j.testCapasi -ne $false)) {
+      Fail "$beklenenAd kunye testCapasi=$($j.testCapasi) - uretim paketine GIRMEZ"
+    }
+    # G3: guncelleyicinin gomulu capa kipi paketin (bayt kodu, kanaldan) kipiyle AYNI olmali (konak capa tasimaz).
+    if ($beklenenAd -eq "tekserp-guncelleyici" -and $j.capaKipi -cne $capaKipi) {
+      Fail "$beklenenAd capa kipi '$($j.capaKipi)', paket '$capaKipi' (hazirlik kanali: npm run derle:hizmetler:win:hazirlik + -HizmetIkiliDizini)"
+    }
+    $surum = [string]$j.surum
+  }
+  return [ordered]@{
+    surum  = $surum
+    boyut  = $b.Length
+    sha256 = (Get-FileHash -LiteralPath $yol -Algorithm SHA256).Hash.ToLowerInvariant()
+  }
+}
 
 $repo = (Get-Location).Path
 $proj = Join-Path $repo "Teks-Erp"
@@ -140,6 +217,9 @@ Write-Host "  dal=$dal  commit=$commit"
 # Kimlik pakete FILIGRAN olur (PAKET.json); YOKSA kanal-disi paket + uyari.
 $backendPm2 = $null
 $backendUrun = $null
+$backendHizmet = $null
+$backendLisans = $null
+$lisansVarsayilan = $null
 if ($Musteri) {
   Write-Host ""
   Write-Host "  musteri=$Musteri (kanal kimligi kanallar.json backend blogundan)"
@@ -148,9 +228,16 @@ if ($Musteri) {
   foreach ($satir in @($kanalCik)) {
     if ($satir -cmatch '^TEKSERP_PM2_AD=(.+)$') { $backendPm2 = $Matches[1] }
     elseif ($satir -cmatch '^TEKSERP_BACKEND_URUN=(.+)$') { $backendUrun = $Matches[1] }
+    elseif ($satir -cmatch '^TEKSERP_HIZMET_ADI=(.+)$') { $backendHizmet = $Matches[1] }
+    elseif ($satir -cmatch '^TEKSERP_LISANS_SUNUCUSU=(.+)$') { $backendLisans = $Matches[1] }
+    elseif ($satir -cmatch '^TEKSERP_LISANS_VARSAYILAN=(.+)$') { $lisansVarsayilan = $Matches[1] }
   }
-  if (-not $backendPm2 -or -not $backendUrun) { Fail "kanal kapisi backend kimligini (pm2Ad/urunAdi) vermedi." }
+  if (-not $backendLisans -or -not $lisansVarsayilan) { Fail "kanal kapisi lisans satici kimligini (lisansSunucusu/varsayilan) vermedi." }
+  if (-not $backendPm2 -or -not $backendUrun -or -not $backendHizmet) { Fail "kanal kapisi backend kimligini (pm2Ad/urunAdi/hizmetAdi) vermedi." }
+  # Hizmet adi setup.exe'de SCM adi, olay kaynagi ve NT SERVICE\<ad> olur (GUNCELLEYICI.md §4.2 ad kurali).
+  if ($backendHizmet -cnotmatch '^[A-Za-z0-9][A-Za-z0-9._-]{0,79}$') { Fail "kanal kaydinin backend.hizmetAdi gecersiz: $backendHizmet" }
   Write-Host "    pm2 adi : $backendPm2"
+  Write-Host "    hizmet  : $backendHizmet"
   Write-Host "    urun    : $backendUrun"
 } else {
   Write-Host ""
@@ -217,6 +304,7 @@ $ad    = if ($Prova) { "tekserp-backend-prova-$stamp-$commit" } else { "tekserp-
 $stage = Join-Path ([System.IO.Path]::GetTempPath()) $ad
 if (Test-Path $stage) { Remove-Item $stage -Recurse -Force }
 New-Item -ItemType Directory -Path $stage | Out-Null
+$script:SahneYolu = $stage
 
 Set-Location $proj
 
@@ -389,6 +477,25 @@ if ($Korumali) {
   Write-Host "  native      : native\$natAd (lisans cekirdegi - zorunlu kip)"
 }
 
+# Hizmet ikilileri (Dagitim v2): konak + guncelleyici runtime\ altina, OLCULEREK. Korumali olmayan
+# (sistem Node'lu) paket hizmet duzenine KURULAMAZ (konak runtime\node.exe calistirir) - yalniz pm2.
+$hizmetIkilileri = $null
+if ($Korumali -and $Hedef -eq "win-x64") {
+  $ikiliDizin = if ($HizmetIkiliDizini) { $HizmetIkiliDizini } else { Join-Path (Join-Path (Join-Path $proj "native") "target") "release" }
+  $hizmetIkilileri = [ordered]@{}
+  $paketCapaKipi = (Get-Content -Raw (Join-Path (Join-Path $proj "dist") "server-kunye.json") | ConvertFrom-Json).guvenCapasi
+  foreach ($ikiliAd in $HIZMET_IKILILERI.Keys) {
+    $olcu = HizmetIkilisiOlc (Join-Path $ikiliDizin $ikiliAd) $HIZMET_IKILILERI[$ikiliAd] $paketCapaKipi
+    Copy-Item (Join-Path $ikiliDizin $ikiliAd) (Join-Path (Join-Path $stage "runtime") $ikiliAd)
+    $hizmetIkilileri[$ikiliAd] = $olcu
+    Write-Host "  runtime     : runtime\$ikiliAd ($($olcu.surum), $([math]::Round($olcu.boyut / 1MB, 1)) MB, sha256 $($olcu.sha256.Substring(0, 16))...)"
+  }
+} elseif ($Korumali) {
+  Write-Host "  ! $Hedef paketi Windows hizmet ikilisi TASIMAZ (hizmet duzeni yalniz win-x64)." -ForegroundColor Yellow
+} else {
+  Write-Host "  ! KORUMALI OLMAYAN paket: hizmet ikilisi yok - yalniz pm2 duzenine (kur.ps1) kurulur, setup.exe KURMAZ." -ForegroundColor Yellow
+}
+
 # cwd'den okunan varliklar
 Copy-Item "$proj\public" "$stage\public" -Recurse
 Copy-Item "$proj\assets" "$stage\assets" -Recurse
@@ -417,16 +524,26 @@ Copy-Item "$proj\ecosystem.config.js" "$stage\"
 #   ② `kur.ps1` KONUMUNDAN BAGIMSIZDIR ($PSScriptRoot kullanmaz, her seyi -Kok'tan
 #     alir) - yani operator zip ile script'i ayni klasore koyup ORADAN kosar.
 #     `C:\<kok>\kur.ps1` artik zorunlu degil, yalnizca kolaylik kopyasi.
-Copy-Item "$repo\deploy\kur.ps1" "$stage\"
-# Sifirdan kurulumun iskeleti de ayni zip'te: sunucuya repo agaci tasinmaz.
-# ilk-kurulum acilis + gece yedegi gorevlerinin dosyalarini kendi yanindan alir.
-Copy-Item "$repo\deploy\ilk-kurulum.ps1" "$stage\"
-Copy-Item "$repo\deploy\yedekle.ps1" "$stage\"
-Copy-Item "$repo\deploy\pm2-boot.cmd" "$stage\"
-# SSH'tan kurulum SYSTEM gorevi ister (oturum kapaninca pm2 daemon olur).
-Copy-Item "$repo\deploy\uzaktan-kos.ps1" "$stage\"
-# Super OLMAYAN bakim rolu (yedek / DB kopyasi kimligi); ilk-kurulum -BakimRolu da bunu cagirir.
-Copy-Item "$repo\deploy\bakim-rolu.ps1" "$stage\"
+# Sifirdan kurulumun iskeleti de ayni zip'te (ilk-kurulum acilis + gece yedegi gorevlerinin
+# dosyalarini kendi yanindan alir); uzaktan-kos.ps1 SSH'tan SYSTEM gorevi kurar; bakim-rolu.ps1 super
+# OLMAYAN yedek kimligi. Liste basta ($KOK_BETIKLERI) - hepsi imzali kapsamda (INTEGRITY_SCOPE_FILES).
+foreach ($b in $KOK_BETIKLERI) {
+  $kaynak = Join-Path (Join-Path $repo "deploy") $b
+  if (-not (Test-Path -LiteralPath $kaynak)) { Fail "paket betigi yok: deploy/$b" }
+  Copy-Item $kaynak (Join-Path $stage $b)
+}
+# Hizmet duzeni + gecis betikleri (Dagitim v2): repo deploy/<yol> -> paket <yol>, goreli yollar ayni.
+foreach ($b in $ALT_BETIKLER) {
+  $parca = $b -csplit '/'
+  $kaynak = Join-Path (Join-Path $repo "deploy") ($parca -join [IO.Path]::DirectorySeparatorChar)
+  if (-not (Test-Path -LiteralPath $kaynak)) { Fail "paket betigi yok: deploy/$b (hizmet duzeni/gecis betikleri pakette ZORUNLU)" }
+  # Ad `$hedef` OLAMAZ: PowerShell degisken adi buyuk/kucuk harf duyarsiz, -Hedef parametresinin ValidateSet'i
+  # atamayi dogrular ve paketleme burada duser (thinkpad-1 D8 2026-10-01).
+  $altHedef = Join-Path $stage ($parca -join [IO.Path]::DirectorySeparatorChar)
+  New-Item -ItemType Directory -Force (Split-Path $altHedef -Parent) | Out-Null
+  Copy-Item $kaynak $altHedef
+}
+Write-Host "  betikler    : $($KOK_BETIKLERI.Count) kok (pm2 gecis donemi dahil) + $($ALT_BETIKLER -join ', ')"
 
 # Prisma yapilandirmasi: TS DEGIL, seed kancasi OLMAYAN JS surumu
 $prodCfg = "$proj\deploy\prisma.config.prod.js"
@@ -540,6 +657,14 @@ $manifest = [ordered]@{
   backendKanal    = $Musteri
   backendUrun     = $backendUrun
   backendPm2Ad    = $backendPm2
+  # Hizmet duzeni (Dagitim v2): setup.exe backend hizmetini bu adla kaydeder (kanal kaydi backend.hizmetAdi).
+  backendHizmetAdi = $backendHizmet
+  # Kanalin lisans saticisi (kanal kaydi backend.lisansSunucusu) + bu derlemenin varsayilani (vendor-url.ts):
+  # gecis.ps1 kurulumun etkin LICENSE_SERVER_URL'sini bunlarla olcer. Kanal-disi pakette null.
+  backendLisansSunucusu = $backendLisans
+  lisansSunucusuVarsayilan = $lisansVarsayilan
+  # runtime\ altindaki Rust hizmet ikilileri {surum, boyut, sha256}; korumali olmayan pakette null.
+  hizmetIkilileri = $hizmetIkilileri
   # Korumali paket bicimi: .jsc + runtime\node.exe tasir; kur.ps1 [1/9] onu denetler.
   korumali        = [bool]$Korumali
   korumaHedef     = if ($Korumali) { $Hedef } else { $null }
@@ -689,7 +814,13 @@ if ($Korumali) {
   Write-Host "    Satici Mac'inde imzala (anahtar CI'a/pakete girmez):" -ForegroundColor Yellow
   Write-Host "      npx tsx Teks-Erp/scripts/build-korumali-imza.ts zip --zip=<bu zip> --anahtar=<PAKET anahtari> --surum-belgesi=<surum belgesi>" -ForegroundColor Yellow
 }
-Write-Host "  Sunucuya kopyala, sonra YONETICI PowerShell'de (yurutme ilkesi: -ExecutionPolicy Bypass):"
-Write-Host "    powershell -NoProfile -ExecutionPolicy Bypass -File C:\TeksERP\kur.ps1 -Paket <zip yolu>"
+Write-Host "  KURULUM YOLLARI (gecis donemi - iki duzen yan yana):"
+if ($hizmetIkilileri) {
+  Write-Host "    * YENI kurulum (Windows hizmeti duzeni): TeksERP-Kurulum.exe - ayni klasorde bu zip + PG paketi"
+  Write-Host "      (postgresql-*.zip + pg.json); bayi icin sessiz kip: TeksERP-Kurulum.exe /VERYSILENT /CEVAP=<cevap.json>"
+  Write-Host "    * pm2 duzenindeki kurulumu hizmet duzenine GECIR: paketteki gecis\gecis.ps1 (runbook D6)"
+}
+Write-Host "    * pm2 duzeninde GECIS ONCESI guncelleme - sunucuda YONETICI PowerShell (yurutme ilkesi: -ExecutionPolicy Bypass):"
+Write-Host "      powershell -NoProfile -ExecutionPolicy Bypass -File C:\TeksERP\kur.ps1 -Paket <zip yolu>"
 Write-Host "================================================================"
 Write-Host ""

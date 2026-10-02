@@ -1,0 +1,13 @@
+{
+  "name": "@tekserp/native",
+  "version": "0.1.0",
+  "private": true,
+  "description": "TeksERP native Cargo çalışma alanı (lisans çekirdeği · ortak doğrulama · güncelleyici · backend hizmet konağı) — kapı ve derleme komutları",
+  "license": "UNLICENSED",
+  "scripts": {
+    "denetle": "node scripts/kapi.mjs denetle",
+    "test": "node scripts/kapi.mjs test",
+    "derle:hizmetler:win": "cargo xwin build --release --target x86_64-pc-windows-msvc -p tekserp-guncelleyici -p tekserp-hizmet",
+    "derle:hizmetler:win:hazirlik": "cargo xwin build --release --target x86_64-pc-windows-msvc -p tekserp-guncelleyici -p tekserp-hizmet --features tekserp-guncelleyici/hazirlik-capasi --target-dir target/hazirlik"
+  }
+}

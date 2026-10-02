@@ -382,7 +382,7 @@ const gitGoster = (ref, rel) =>
 
 const ORTAK_KAYNAK = [
   'deploy/kanallar.json', 'scripts/lib/kanallar.mjs', 'scripts/kanal-kapisi.mjs', 'scripts/lib/surum.mjs', 'scripts/lib/surum-notu-tavan.mjs',
-  'scripts/lib/terfi.mjs', 'scripts/lib/yayin-okuma.mjs',
+  'scripts/lib/terfi.mjs', 'scripts/lib/yayin-okuma.mjs', 'scripts/lib/backend-yayin.mjs',
   ...PANEL_SABIT_DOSYALAR,
   'scripts/lib/yayin-bildirim.mjs',
   'scripts/lib/panel-imza-kapisi.mjs', 'Electron/electron/guncelleme/kunye-jws.mjs', 'Electron/electron/guncelleme/panel-kunye.mjs',

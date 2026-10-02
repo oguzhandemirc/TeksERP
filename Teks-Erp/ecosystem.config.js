@@ -1,6 +1,10 @@
 // =============================================================================
 // pm2 — TeksERP backend üretim başlatıcısı
 // =============================================================================
+// DONDURULDU (Dağıtım v2, 2026-10-01): pm2 düzeni yalnız GEÇİŞ DÖNEMİ için yaşar; hizmet düzeninde
+// bu dosya OKUNMAZ — env bloğu geçişte `<kök>\yapilandirma\.env`e taşınır (deploy/gecis/gecis.ps1).
+// Yeni ayar buraya EKLENMEZ (hizmet varsayılanı: src/lib/hizmet-duzeni.ts serviceDefaults); kaldırma
+// koşulu: filoda pm2 düzeninde kurulum kalmaması. Bekçi: test_sunucu_betikleri §24 (donmuş özet).
 // 2026-07-30: Backend eskiden NSSM ile Windows servisi olarak koşuyordu
 // (installer/windows/scripts/manage.ps1). O yol kaldırıldı; üretim artık pm2 ile
 // ayağa kalkar. Kullanım (sunucuda, Teks-Erp\ klasöründe):

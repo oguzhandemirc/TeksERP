@@ -752,6 +752,8 @@ const CHECK_CONSTRAINTS: Array<{ table: string; name: string; notValid?: string;
   { table: "work_order_close_snapshot_lines", name: "work_order_close_snapshot_lines_bucket_known" },
   // TZ-D (2026-09-30): saat dilimi dönem defterinde boş dilim adı yazılamaz (çözümleme onu varsayılana düşürürdü).
   { table: "factory_timezone_periods", name: "factory_timezone_periods_timezone_not_blank" },
+  // Dağıtım v2 (D7, migration 20261001030000): güncelleme onayının türü kapalı küme (HEMEN · PENCERE · GERI_AL).
+  { table: "update_approvals", name: "update_approvals_choice_check" },
 ];
 
 // ─────────────────────────────────────────────────────────────────────────────

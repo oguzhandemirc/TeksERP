@@ -24,6 +24,8 @@ const KOK = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 /** Taranan kapsam: yayın/paketleme betiklerinin yaşadığı dizinler (bekçiler kendi sahte araçlarıyla koşar, hariç). */
 const KAPSAM = [
   { dizin: 'deploy', derin: false, uzanti: /\.(sh|mjs|cjs|js|ps1)$/ },
+  // Kendi PostgreSQL örneğinin indiricisi burada; `deploy` derin taranmadığı için ayrı satır.
+  { dizin: 'deploy/pg', derin: true, uzanti: /\.(sh|mjs|cjs|js|ps1)$/ },
   { dizin: 'scripts', derin: false, uzanti: /\.(sh|mjs|cjs|js)$/, haric: /^(test_|check-)/ },
   { dizin: 'scripts/lib', derin: false, uzanti: /\.(mjs|cjs|js)$/ },
   { dizin: 'mobil/scripts', derin: true, uzanti: /\.(sh|mjs|cjs|js)$/, haric: /\.test\./ },
@@ -44,6 +46,7 @@ const SANKSIYON = {
 const IZINLI = {
   'deploy/kur.ps1': [{ desen: /Invoke-WebRequest "http:\/\/localhost:\$script:saglikPort\/health"/, gerekce: 'kurulan backend\'in yerel /health yoklaması (sunucuda)' }],
   'scripts/koruma-runtime-indir.mjs': [{ desen: /await fetch\(hedef\.url, \{ redirect: 'follow' \}\)/, gerekce: 'Node çalışma zamanı resmî kaynaktan; deploy/node-surumu.json SHA256\'sıyla doğrulanır' }],
+  'deploy/pg/pg-ikili-dogrula.mjs': [{ desen: /const yanit = await fetch\(url, \{ redirect: 'follow' \}\);/, gerekce: 'PostgreSQL ikilisi resmî EDB kaynağından; deploy/pg/pg-surumu.json boyut + SHA256\'sıyla doğrulanır' }],
   'mobil/scripts/build-apk.mjs': [
     { desen: /^import https from 'node:https';$/, gerekce: 'derleme öncesi ERP backend /health yoklaması (fabrika adresi)' },
     { desen: /^import http from 'node:http';$/, gerekce: 'derleme öncesi ERP backend /health yoklaması (fabrika adresi)' },

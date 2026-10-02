@@ -38,20 +38,37 @@ const KANAL_ANAHTARLARI = {
 };
 export const YAYIN_ANAHTARLARI = [
   'panelFeed', 'panelManifest', 'mobilFeed', 'otaManifest', 'apkKunye', 'vdsPanel', 'vdsMobil', 'panelDefter',
+  // Dağıtım v2 — backend kanal yayını (docs/design/GUNCELLEYICI.md §1): feed · en yeni sürüm işaretçisi · VDS · defter.
+  'backendFeed', 'backendManifest', 'vdsBackend', 'backendDefter',
 ];
 export const PANEL_ANAHTARLARI = ['appId', 'urunAdi', 'paketAdi', 'erpAdresi'];
 export const TABLET_ANAHTARLARI = ['androidPaket', 'gorunenAd', 'erpAdresi', 'runtimeVersion', 'otaSertifika'];
 /**
  * Backend paketinin (paketle.ps1 -Musteri <kod>) müşteriye özel dağıtım kimliği. Faz 2b:
  *   · urunAdi — /health + PAKET.json'da görünen backend adı (filigran; her kanalda AYRIK);
- *   · pm2Ad   — sunucudaki pm2 süreç adı (TEKSERP_PM2_AD; iki kurulum çakışmasın — her kanalda AYRIK).
+ *   · pm2Ad   — sunucudaki pm2 süreç adı (TEKSERP_PM2_AD; iki kurulum çakışmasın — her kanalda AYRIK);
+ *   · hizmetAdi — backend'in Windows hizmet adı (Dağıtım v2, TEKSERP_HIZMET_ADI — hizmet konağının ortam adıyla aynı; aynı makinede iki kanal yan yana —
+ *     her kanalda AYRIK, Windows hizmet adı büyük/küçük harf duyarsız olduğu için duyarsız ölçülür);
  *   · guvenCapasi — kanalın lisans satıcısı/kök bağı (`uretim` | `hazirlik`): paket YALNIZ o kipin kök + PAKET
- *     anahtarlarına güvenir (build-korumali derleme sabiti + native `hazirlik-capasi` özelliği). Üretim kanalı
- *     daima `uretim`. OTA sertifikası gibi bir güven BAĞIDIR, çalışma anı bayrağı değil.
- * DAVRANIŞ TAŞIMAZ: bayrak/ayar değil, dağıtım kimliği (feed'ler gibi). Backend yayın feed'i
- * Faz 3'te bu bloğa girer; o güne dek zip elden/portaldan gider.
+ *     anahtarlarına güvenir (build-korumali derleme sabiti + native/güncelleyici `hazirlik-capasi` özelliği). Üretim
+ *     kanalı daima `uretim`. OTA sertifikası gibi bir güven BAĞIDIR, çalışma anı bayrağı değil.
+ *   · lisansSunucusu — kanalın lisans satıcısının kökeni (`https://host[:port]`; backend `LICENSE_SERVER_URL`):
+ *     güven çapasının aynası — `uretim` çapalı her kanal ÜRETİM satıcısı (= backend varsayılanı,
+ *     `vendor-url.ts` DEFAULT_LICENSE_SERVER_URL; check-kanallar ölçer), `hazirlik` çapalı her kanal hazırlık
+ *     satıcısı; iki kip aynı adresi paylaşamaz. Paket PAKET.json'a taşır (backendLisansSunucusu), pm2 → hizmet
+ *     geçişi (deploy/gecis/gecis.ps1) kurulumun etkin değerini buna karşı ölçer.
+ * DAVRANIŞ TAŞIMAZ: bayrak/ayar değil, dağıtım kimliği (feed'ler gibi). Backend YAYIN yolları
+ * (feed · son.json · VDS · defter) panel/tablet gibi `yayin` bloğundadır (Dağıtım v2, `deploy/backend-yayinla.mjs`).
  */
-export const BACKEND_ANAHTARLARI = ['urunAdi', 'pm2Ad', 'guvenCapasi'];
+export const BACKEND_ANAHTARLARI = ['urunAdi', 'pm2Ad', 'hizmetAdi', 'guvenCapasi', 'lisansSunucusu'];
+/** Lisans satıcısı kökeni: yalnız https, küçük harf host, isteğe bağlı port; yol/sonda `/` yok (backend çözücüsünün kabul ettiği biçim). */
+export const LISANS_SUNUCUSU_DESENI = /^https:\/\/[a-z0-9](?:[a-z0-9.-]{0,251}[a-z0-9])?(?::[0-9]{1,5})?$/;
+/** Backend'in varsayılan (ÜRETİM) lisans satıcısı — TEK kaynak `vendor-url.ts`; burada yalnız METİNDEN okunur. */
+export const VENDOR_URL_REL = 'Teks-Erp/src/lib/license/vendor-url.ts';
+export function varsayilanLisansSunucusu(metin) {
+  const m = /^export const DEFAULT_LICENSE_SERVER_URL = "([^"]+)";$/m.exec(typeof metin === 'string' ? metin : '');
+  return m && LISANS_SUNUCUSU_DESENI.test(m[1]) ? m[1] : null;
+}
 /** Backend güven çapası kipleri — Teks-Erp `protocol/kok-anahtarlar.ts` `TRUST_ANCHOR_MODES` ile aynı küme. */
 export const GUVEN_CAPASI_KIPLERI = ['uretim', 'hazirlik'];
 
@@ -65,7 +82,7 @@ export const AYRIK_ALANLAR = [
   ...YAYIN_ANAHTARLARI.map((a) => `yayin.${a}`),
   'panel.appId', 'panel.urunAdi', 'panel.paketAdi', 'panel.erpAdresi',
   'tablet.androidPaket', 'tablet.gorunenAd', 'tablet.erpAdresi', 'tablet.otaSertifika',
-  'backend.urunAdi', 'backend.pm2Ad',
+  'backend.urunAdi', 'backend.pm2Ad', 'backend.hizmetAdi',
 ];
 
 const al = (nesne, yol) => yol.split('.').reduce((o, k) => (o == null ? undefined : o[k]), nesne);
@@ -172,11 +189,15 @@ export function kayitHatalari(kayit) {
         h.push(`${on}: aynası "${k.ayna}" terfiKaynagi "${ayna.terfiKaynagi}" — "${kod}" olmalı (üretim kanalı yalnız hazırlık aynasından terfi alır; K5)`);
       }
     }
-    // terfiKaynagi: null (terfi yok — tek kanallı kurulum) ya da aynası bu kanal olan HAZIRLIK kanalı.
-    if (k.tur === 'uretim' && k.terfiKaynagi !== null) {
+    // terfiKaynagi ZORUNLU (yönetici kararı 2026-10-01; kök kural "üretim kanalına yalnız terfi etiketli commit"):
+    // kayıtlı AYNALI bir HAZIRLIK kanalı — aynasız (demo/deneme) kanal terfi kaynağı olamaz. Aynalı bir hazırlık
+    // kanalı birden çok üretim kanalının kaynağı olabilir (aynası yine TEK üretim kanalıdır).
+    if (k.tur === 'uretim') {
       const kaynak = typeof k.terfiKaynagi === 'string' ? kanallar[k.terfiKaynagi] : undefined;
-      if (!kaynak || kaynak.tur !== 'hazirlik' || kaynak.ayna !== kod) {
-        h.push(`${on}: terfiKaynagi "${k.terfiKaynagi}" aynası "${kod}" olan kayıtlı bir hazırlık kanalı değil (null ya da hazırlık kanal kodu)`);
+      if (!kaynak || kaynak.tur !== 'hazirlik') {
+        h.push(`${on}: terfiKaynagi "${k.terfiKaynagi}" kayıtlı bir hazırlık kanalı değil — üretim kanalının terfi kaynağı ZORUNLU (K5)`);
+      } else if (kaynak.ayna === null) {
+        h.push(`${on}: terfiKaynagi "${k.terfiKaynagi}" AYNASIZ (demo/deneme) hazırlık kanalı — terfi kaynağı aynalı bir hazırlık kanalı olmalı (K5)`);
       }
     }
 
@@ -194,11 +215,18 @@ export function kayitHatalari(kayit) {
         if (typeof v !== 'string' || !v.trim()) h.push(`${on}: ${blok}.${a} boş ya da metin değil`);
       }
     }
+    // Windows hizmet adı: harfle başlar, boşluk/bölü/kabuk yok (sc.exe ve hizmet konağı argümanı).
+    const hizmet = k.backend?.hizmetAdi;
+    if (typeof hizmet === 'string' && !/^[A-Za-z][A-Za-z0-9._-]{1,59}$/.test(hizmet)) {
+      h.push(`${on}: backend.hizmetAdi "${hizmet}" biçimi tutmuyor (harfle başlar; harf/rakam/nokta/tire/alt çizgi, 2-60)`);
+    }
     // Güven çapası: tanınmayan kip fail-closed RED; üretim kanalı hazırlık köküne bağlanamaz (hazırlık kökü
     // ÜRETİM sınıfını imzalayamaz ve daha az korunur — üretim paketi ona hiç güvenmemeli).
     const capa = k.backend?.guvenCapasi;
     if (typeof capa === 'string' && !GUVEN_CAPASI_KIPLERI.includes(capa)) h.push(`${on}: backend.guvenCapasi "${capa}" tanınmıyor (${GUVEN_CAPASI_KIPLERI.join(' | ')})`);
     if (k.tur === 'uretim' && typeof capa === 'string' && capa !== 'uretim') h.push(`${on}: üretim kanalı backend.guvenCapasi "${capa}" — yalnız uretim (hazırlık çapası üretim paketine giremez)`);
+    const lisans = k.backend?.lisansSunucusu;
+    if (typeof lisans === 'string' && lisans && !LISANS_SUNUCUSU_DESENI.test(lisans)) h.push(`${on}: backend.lisansSunucusu "${lisans}" biçimi tutmuyor (https://<küçük harf host>[:port], yol ve sonda / yok)`);
     // pm2 adı sunucuda süreç/servis kimliğidir: boşluk/ters bölü/kabuk taşıyamaz.
     const pm2 = k.backend?.pm2Ad;
     if (typeof pm2 === 'string' && !/^[a-zA-Z0-9._-]{2,60}$/.test(pm2)) {
@@ -215,6 +243,33 @@ export function kayitHatalari(kayit) {
       h.push(`${on}: panel.erpAdresi "${panelErp}" biçimi tutmuyor (http(s)://<host>[:port], /api yok, sonda / yok)`);
     }
     if (typeof panelErp === 'string' && /(localhost|127\.0\.0\.1)/i.test(panelErp)) h.push(`${on}: panel.erpAdresi localhost olamaz`);
+  }
+
+  // Lisans satıcısı güven çapasının aynası: aynı çapa → aynı satıcı; iki çapa aynı satıcıyı paylaşamaz
+  // (hazırlık satıcısı ÜRETİM sınıfını imzalayamaz, üretim satıcısının imzası hazırlık paketinde geçersizdir).
+  const capaSatici = new Map();
+  for (const kod of kodlar) {
+    const b = kanallar[kod]?.backend;
+    if (typeof b?.guvenCapasi !== 'string' || typeof b?.lisansSunucusu !== 'string' || !b.lisansSunucusu) continue;
+    const onceki = capaSatici.get(b.guvenCapasi);
+    if (onceki && onceki.url !== b.lisansSunucusu) {
+      h.push(`ÇAKIŞMA: "${b.guvenCapasi}" çapalı iki kanal farklı lisans satıcısı gösteriyor: ${onceki.kod} "${onceki.url}" · ${kod} "${b.lisansSunucusu}" (satıcı çapanın aynasıdır)`);
+    } else if (!onceki) capaSatici.set(b.guvenCapasi, { kod, url: b.lisansSunucusu });
+  }
+  const uretimSatici = capaSatici.get('uretim'), hazirlikSatici = capaSatici.get('hazirlik');
+  if (uretimSatici && hazirlikSatici && uretimSatici.url === hazirlikSatici.url) {
+    h.push(`ÇAKIŞMA: üretim ve hazırlık çapası AYNI lisans satıcısını gösteriyor ("${uretimSatici.url}") — iki kök iki satıcıdır`);
+  }
+
+  // Windows hizmet adları büyük/küçük harf DUYARSIZDIR: ikili fark (tam eşitlik) onları kaçırırdı.
+  const hizmetler = new Map();
+  for (const kod of kodlar) {
+    const v = kanallar[kod]?.backend?.hizmetAdi;
+    if (typeof v !== 'string' || !v) continue;
+    const a = v.toLowerCase();
+    if (hizmetler.has(a) && kanallar[hizmetler.get(a)]?.backend?.hizmetAdi !== v) {
+      h.push(`ÇAKIŞMA: backend.hizmetAdi "${v}" ile "${kanallar[hizmetler.get(a)].backend.hizmetAdi}" (${hizmetler.get(a)}) yalnız harf büyüklüğünde ayrışıyor — Windows'ta AYNI hizmet`);
+    } else hizmetler.set(a, kod);
   }
 
   // İKİLİ FARK — iki kanal hiçbir dağıtım kimliğini paylaşamaz.
@@ -440,11 +495,16 @@ export function tabletIsaretciFarki(kod, dosyalar) {
  * ağaca YAZILMAZ, paket ANINDA enjekte edilir. Backend'de literal iz taşıyan kaynak
  * yoktur (kimlik çalışma anında env/manifest'ten okunur), o yüzden yalnız değer üretir.
  */
-export function backendPaketleAyarlari(kod, kanal) {
+export function backendPaketleAyarlari(kod, kanal, lisansVarsayilan) {
   return {
     TEKSERP_PM2_AD: kanal.backend.pm2Ad,
     TEKSERP_BACKEND_URUN: kanal.backend.urunAdi,
+    TEKSERP_HIZMET_ADI: kanal.backend.hizmetAdi,
     TEKSERP_GUVEN_CAPASI: kanal.backend.guvenCapasi,
+    // Kanalın lisans satıcısı + bu derlemenin varsayılanı (LICENSE_SERVER_URL satırı yoksa backend'in gittiği yer):
+    // paketle.ps1 ikisini PAKET.json'a yazar; geçiş kurulumun etkin değerini bunlarla ölçer.
+    TEKSERP_LISANS_SUNUCUSU: kanal.backend.lisansSunucusu,
+    TEKSERP_LISANS_VARSAYILAN: lisansVarsayilan,
   };
 }
 
@@ -465,11 +525,11 @@ export const KANAL_BEKCI_DOSYALARI = [...new Set([
   KAYIT_REL, 'scripts/lib/kanallar.mjs', 'scripts/kanal-kapisi.mjs', 'scripts/check-kanallar.mjs',
   'scripts/test_kanal_yayin_kapisi.mjs', 'scripts/lib/surum.mjs', 'scripts/lib/surum-notu-tavan.mjs', 'scripts/lib/terfi.mjs',
   'scripts/lib/yayin-okuma.mjs',
-  'scripts/check-surum-notlari.mjs', 'scripts/hooks/pre-commit.mjs',
+  'scripts/check-surum-notlari.mjs', 'scripts/hooks/pre-commit.mjs', VENDOR_URL_REL,
   ...PANEL_SABIT_DOSYALAR, ...TABLET_SABIT_DOSYALAR,
   'Electron/shared/update-feed.ts', 'mobil/scripts/lib/feed.cjs', 'mobil/scripts/lib/adres.mjs', 'mobil/scripts/lib/zip.mjs',
   'mobil/scripts/lib/manifest.mjs', 'mobil/scripts/lib/apk-kimlik.mjs', 'mobil/scripts/lib/kanal.cjs', 'mobil/app.config.js',
-  'scripts/lib/yayin-bildirim.mjs',
+  'scripts/lib/yayin-bildirim.mjs', 'scripts/lib/backend-yayin.mjs',
   'scripts/lib/panel-imza-kapisi.mjs', 'Electron/electron/guncelleme/kunye-jws.mjs', 'Electron/electron/guncelleme/panel-kunye.mjs',
   'Electron/electron/guncelleme/latest-yml.mjs',
   'mobil/scripts/lib/apk-kunye.mjs', 'mobil/src/lib/apk-imza-capasi.json',

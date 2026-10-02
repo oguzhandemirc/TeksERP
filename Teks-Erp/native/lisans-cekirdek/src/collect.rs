@@ -271,7 +271,27 @@ mod tests {
         assert_eq!(read_outcome(path.to_str().unwrap()).as_deref(), Some(""), "yalnız boşluk → okundu, değer yok");
         let _ = std::fs::remove_file(&path);
         assert_eq!(read_outcome("/olmayan/dosya").as_deref(), Some(""), "ENOENT → yok (kesin cevap)");
+    }
+
+    // Dizini dosya gibi okumak POSIX'te EISDIR'dir; Windows'ta "yok" sınıfına düşer, okunamazlık benzetimi olamaz.
+    #[cfg(unix)]
+    #[test]
+    fn read_outcome_unreadable_is_okunamadi() {
         let dir = std::env::temp_dir();
-        assert_eq!(read_outcome(dir.to_str().unwrap()), None, "dizin okunamaz → OKUNAMADI");
+        assert_eq!(read_outcome(dir.to_str().unwrap()), None, "dizin okunamaz (EISDIR) → OKUNAMADI");
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn read_outcome_unreadable_is_okunamadi() {
+        use std::os::windows::fs::OpenOptionsExt;
+        let path = std::env::temp_dir().join(format!("lisans-read-outcome-kilit-{}", std::process::id()));
+        std::fs::write(&path, "abc123").unwrap();
+        // Paylaşımsız açık tutamak: başka açış ERROR_SHARING_VIOLATION alır — dosya VAR ama okunamaz.
+        let lock = std::fs::OpenOptions::new().read(true).share_mode(0).open(&path).unwrap();
+        let got = read_outcome(path.to_str().unwrap());
+        drop(lock);
+        let _ = std::fs::remove_file(&path);
+        assert_eq!(got, None, "paylaşım ihlali → OKUNAMADI");
     }
 }

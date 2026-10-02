@@ -31,6 +31,10 @@ export const TYP = {
   BUTUNLUK: "tekserp-butunluk",
   /** İlk kurulum kabul belgesi (KURULUM anahtarıyla imzalı, Ek-7) — doğrulayan satıcı (`kabul.ts`). */
   KABUL: "tekserp-kabul",
+  /** Backend sürüm bildirimi (PAKET anahtarıyla imzalı, Dağıtım v2) — doğrulayan güncelleyici (`guncelleme.ts`). */
+  SURUM: "tekserp-surum",
+  /** PostgreSQL paketi künyesi (PAKET imzalı, Dağıtım v2 sözleşme sürümü 2) — doğrulayan güncelleyici + kurulum (`guncelleme-pg.ts`). */
+  PG: "tekserp-pg",
   /** Sertifika iptal belgesi (yalnız KÖK imzalar, G4 §2.3) — doğrulayan fabrika (`verifyRevocation`). */
   IPTAL: "tekserp-iptal",
 } as const;
@@ -93,6 +97,11 @@ export const InstallationKidSchema = z.string().regex(/^kur-[A-Za-z0-9_-]{43}$/)
 export const ModuleKeySchema = z.string().max(64).regex(/^[a-z][A-Za-z0-9]*([.-][A-Za-z0-9]+)*$/);
 export const ChannelCodeSchema = z.string().regex(/^[a-z0-9][a-z0-9-]{0,39}$/);
 export const VersionTextSchema = z.string().regex(/^\d{1,4}\.\d{1,4}\.\d{1,6}([-+][0-9A-Za-z.-]{1,40})?$/);
+/**
+ * YAYINLANAN backend sürümü: `x.y.z` ya da semver ön sürüm `x.y.z-rc.1` — `+yapı` eki YOK (önceliği
+ * tanımsız, iki paket aynı sürüm sayılırdı) ve `..` doğamaz (sürüm URL yol segmentidir). `VersionTextSchema` alt kümesi.
+ */
+export const ReleaseVersionSchema = z.string().regex(/^[0-9]{1,4}\.[0-9]{1,4}\.[0-9]{1,6}(-[0-9A-Za-z]{1,20}(\.[0-9A-Za-z]{1,20}){0,3})?$/);
 export const JwsTextSchema = z.string().min(1).max(32 * 1024);
 /** Satıcı/patron uç yolu: `/v1/<parça>[/<parça>…]` (en çok dört parça). */
 export const RequestPathSchema = z.string().regex(/^\/v1(\/[a-z0-9-]{1,40}){1,4}$/);
@@ -180,6 +189,66 @@ const ModuleKeyGrantListSchema = z
   .max(32)
   .refine((list) => isUnique(list.map((g) => g.kid)), "Modül anahtarı listesinde tekrar var");
 
+// ── Güncelleme politikası (Dağıtım v2) — kiranın `guncelleme` alanı; anlatım docs/design/GUNCELLEYICI.md §2 ──
+/** OTOMATIK: pencerede kendiliğinden · ONAYLI: yalnız yerel onayla · DONDUR: hiç (onay da açmaz). */
+export const UPDATE_MODES = ["OTOMATIK", "ONAYLI", "DONDUR"] as const;
+export type UpdateMode = (typeof UPDATE_MODES)[number];
+/** Kiradaki mutlak aralık tavanı: 45 günlük kira × günde bir pencere + pay. */
+export const UPDATE_INTERVAL_MAX = 64;
+/** Bir mutlak aralık en çok 24 saatlik yerel pencere + yaz saati geçişinin 1 saati sürer. */
+export const UPDATE_INTERVAL_MAX_MS = 25 * 60 * 60 * 1000;
+const ClockStartSchema = z.string().regex(/^([01][0-9]|2[0-3]):[0-5][0-9]$/);
+const ClockEndSchema = z.string().regex(/^(([01][0-9]|2[0-3]):[0-5][0-9]|24:00)$/);
+/** IANA saat dilimi adı (biçim); dilimin VARLIĞINI çağıran Intl'e sorar. */
+export const TimeZoneNameSchema = z.string().max(64).regex(/^[A-Za-z][A-Za-z0-9_+-]*(\/[A-Za-z0-9_+-]+){0,2}$/);
+
+/**
+ * İnsanın yazdığı pencere kuralı (portal/panel gösterimi): fabrika saatiyle `baslangic`–`bitis`, gün listesi
+ * ISO haftası (1 = Pazartesi … 7 = Pazar) ve BAŞLANGIÇ gününe göre, artan sıralı; `bitis < baslangic` gece
+ * yarısını aşar, `bitis = "24:00"` gün sonudur. Güncelleyici bu kuralı YORUMLAMAZ — mutlak aralıkları okur.
+ */
+export const UpdateWindowRuleSchema = z
+  .object({
+    baslangic: ClockStartSchema,
+    bitis: ClockEndSchema,
+    gunler: z.array(z.number().int().min(1).max(7)).min(1).max(7),
+    saatDilimi: TimeZoneNameSchema,
+  })
+  .refine((p) => p.gunler.every((g, i) => i === 0 || g > p.gunler[i - 1]), { message: "Gün listesi artan sıralı ve tekrarsız olmalı" })
+  .refine((p) => p.baslangic !== p.bitis, { message: "Pencere başlangıcı ile bitişi aynı olamaz" });
+export type UpdateWindowRule = z.infer<typeof UpdateWindowRuleSchema>;
+
+/** Kuralın kira ömrü boyunca MUTLAK karşılığı — satıcı basarken hesaplar; güncelleyici saat dilimi hesabı yapmaz. */
+export const UpdateIntervalSchema = z
+  .object({ baslangic: IsoTimeSchema, bitis: IsoTimeSchema })
+  .refine((a) => isoToMs(a.bitis) > isoToMs(a.baslangic), { message: "Aralık bitişi başlangıçtan sonra olmalı" })
+  .refine((a) => isoToMs(a.bitis) - isoToMs(a.baslangic) <= UPDATE_INTERVAL_MAX_MS, { message: "Aralık 25 saatten uzun olamaz" });
+export type UpdateInterval = z.infer<typeof UpdateIntervalSchema>;
+
+const UpdateIntervalListSchema = z
+  .array(UpdateIntervalSchema)
+  .max(UPDATE_INTERVAL_MAX)
+  .refine((list) => list.every((a, i) => i === 0 || isoToMs(a.baslangic) >= isoToMs(list[i - 1].bitis)), {
+    message: "Aralıklar sıralı ve çakışmasız olmalı",
+  });
+
+export const LeaseUpdatePolicySchema = z
+  .object({
+    kip: z.enum(UPDATE_MODES),
+    pencere: UpdateWindowRuleSchema.nullable(),
+    araliklar: UpdateIntervalListSchema,
+    /** Sabitleme: bu sürüm kurulur, ÖTESİNE geçilmez; kurulu sürüm daha yeniyse geri İNİLMEZ. */
+    hedefSurum: ReleaseVersionSchema.nullable(),
+  })
+  .refine((g) => g.kip !== "OTOMATIK" || g.pencere !== null, { message: "Otomatik kip bir güncelleme penceresi ister" })
+  .refine((g) => g.pencere !== null || g.araliklar.length === 0, { message: "Pencere kuralı yokken mutlak aralık olamaz" });
+export type LeaseUpdatePolicy = z.infer<typeof LeaseUpdatePolicySchema>;
+
+/** Kirada `guncelleme` YOKKEN (eski satıcı) geçerli politika = bugünkü davranış: hiçbir şey kendiliğinden kurulmaz. */
+export function defaultUpdatePolicy(): LeaseUpdatePolicy {
+  return { kip: "ONAYLI", pencere: null, araliklar: [], hedefSurum: null };
+}
+
 export const LeaseSchema = z
   .object({
     v: z.literal(PROTOCOL_VERSION),
@@ -211,6 +280,8 @@ export const LeaseSchema = z
     altSertifika: JwsTextSchema,
     /** Faz 2d: HAK'taki, dondurulmamış ve kurulumun X25519'u bilinen modüllerin anahtarları; yoksa şifreli modül açılmaz. */
     modulAnahtarlari: ModuleKeyGrantListSchema.optional(),
+    /** Dağıtım v2: backend güncelleme politikası; yoksa `defaultUpdatePolicy()` (eski satıcı — eski backend alanı ATAR). */
+    guncelleme: LeaseUpdatePolicySchema.optional(),
     /** Ödenmiş tarih P (`null` = süresiz). HAK `cevrimdisiUfukGun` ile birlikte varsa P modeli işler. */
     odenmisTarih: IsoTimeSchema.nullable().optional(),
     /** Parmak izi kuralı (K8); yoksa eski kural (ölçülemeyen etken sayılmaz). */
@@ -226,6 +297,10 @@ export const LeaseSchema = z
   .refine((k) => isoToMs(k.bitis) - isoToMs(k.verilis) <= LEASE_MAX_DAYS * DAY_MS, {
     message: `Kira ömrü ${LEASE_MAX_DAYS} günü aşamaz`,
   })
+  .refine(
+    (k) => !k.guncelleme || k.guncelleme.araliklar.every((a) => isoToMs(a.bitis) > isoToMs(k.verilis) && isoToMs(a.baslangic) < isoToMs(k.bitis)),
+    { message: "Güncelleme aralıkları kiranın ömrüyle kesişmeli" },
+  )
   .refine((k) => k.kapanis === undefined || k.yaptirim.kademe === "K3", { message: "Kapanış kirası K3 yaptırımı taşımalı" });
 export type LeaseDoc = z.infer<typeof LeaseSchema>;
 
@@ -245,19 +320,6 @@ export const RequestSchema = z
     path: ["kurulumId"],
   });
 export type RequestDoc = z.infer<typeof RequestSchema>;
-
-export const DownloadSchema = z
-  .object({
-    v: z.literal(PROTOCOL_VERSION),
-    kanal: ChannelCodeSchema,
-    yolOneki: z.string().max(80),
-    kurulumId: UuidSchema,
-    exp: IsoTimeSchema,
-  })
-  .refine((i) => i.yolOneki === `/${i.kanal}/electron/` || i.yolOneki === `/${i.kanal}/mobil/`, {
-    message: "Yol öneki kanalın electron/ ya da mobil/ dizini olmalı",
-  });
-export type DownloadDoc = z.infer<typeof DownloadSchema>;
 
 const SUB_KID_PREFIX: Record<CertUsage, string> = { ALT: "alt-", INDIRME: "ind-", BAYI: "bayi-", HAK: "ara-" };
 const CERT_KID_PATTERN = /^[a-z]+-[a-z0-9-]{1,60}$/;

@@ -1,8 +1,8 @@
 // =============================================================================
 // Takas komutu (Faz B) — SAF üretici
 // =============================================================================
-// Backend takası ÇALIŞTIRAMAZ: rename kendi bağlantısını koparır ve `pm2 stop`/
-// `start`'ı kendisi yapamaz. Bu yüzden operatörün sunucuda çalıştıracağı komut
+// Backend takası ÇALIŞTIRAMAZ: rename kendi bağlantısını koparır ve kendi sürecini
+// (`pm2 stop`/`start` ya da hizmet düzeninde `Stop-Service`/`Start-Service`) yönetemez. Bu yüzden operatörün sunucuda çalıştıracağı komut
 // bloğunu üretiyoruz — ileri ve GERİ ALMA olmak üzere iki tane.
 //
 // Blok BACKEND'de üretilir (istemcide değil): `PG_BIN_DIR`'den çözülmüş psql
@@ -14,7 +14,7 @@
 // -----------------------------------------------------------------------------
 // 1. `exit`/`throw` YOK. Blok interaktif konsola YAPIŞTIRILIYOR; üst seviye
 //    `throw` yalnız o satırı düşürür, sonraki satırlar KOŞMAYA DEVAM EDER.
-//    `exit` ise pencereyi kapatır ve backend `pm2 stop`'ta ASILI kalır.
+//    `exit` ise pencereyi kapatır ve backend durdurulmuş hâlde ASILI kalır.
 //    Guard iptal değil, KOŞULLU ÇALIŞTIRMA olmak zorunda.
 // 2. Her native çağrıdan ÖNCE `$LASTEXITCODE = 1`. Bu değişken yalnız *native*
 //    exe'lerce yazılır; `psql` PATH'te yoksa PowerShell throw eder ve değişken
@@ -25,7 +25,7 @@
 //    karakterlerini kaçırmaz (PS 7.3+ kuralı ayrıca değiştirdi) → `psql -c '… "x" …'`
 //    bozuk komut satırı üretir. Tek tırnaklı PS string → stdin: sürümler arası güvenli.
 // 4. Her `if` TEK SATIR. Çok satırlı `if (...) {` … `}` satır-satır yapıştırmada bozulur.
-// 5. Temizlik (`Remove-Item Env:PGPASSWORD`, `pm2 start`) KOŞULSUZ ve SONDA.
+// 5. Temizlik (`Remove-Item Env:PGPASSWORD`, `pm2 start`/`Start-Service`) KOŞULSUZ ve SONDA.
 //    Takas başarısızsa DB'ye dokunulmamıştır ama backend duruyordur — mutlaka kalkmalı.
 // =============================================================================
 
@@ -45,11 +45,18 @@ export interface SwapCommandParams {
   port: string;
   user: string;
   pm2AppName: string;
+  /** Süreç yöneticisi; verilmezse pm2 (`pm2AppName`). Hizmet düzeninde SCM komutları üretilir. */
+  process?: ProcessControlInfo;
   /** Backend çalışma dizini — `prisma migrate deploy` oradan koşar. */
   backendCwd: string;
+  /** Hizmet düzeninde göç: paketin Node'u (npx/.bin pakette yok) ve `.env` yolu (DATABASE_URL). */
+  nodePath?: string;
+  envFile?: string;
   /** Doğrulama `missing` migration bulduysa true → deploy adımı zorunlu. */
   needsMigrateDeploy: boolean;
 }
+
+import type { ProcessControlInfo } from "../../lib/hizmet-duzeni";
 
 export interface SwapCommands {
   forward: string;
@@ -77,8 +84,56 @@ function renameLine(p: SwapCommandParams, from: string, to: string): string {
   return `${ps(`ALTER DATABASE ${ident(from)} RENAME TO ${ident(to)};`)} | ${psqlInvoke(p)}`;
 }
 
+/** Süreci durdur/başlat satırları: pm2 (bugünkü) ya da Windows hizmeti (SCM). */
+function processLines(p: SwapCommandParams, abortText: string) {
+  const s = p.process ?? { processManager: "pm2" as const, name: p.pm2AppName };
+  if (s.processManager === "service") {
+    return {
+      variableLine: `$svc  = ${ps(s.name)}`,
+      adminNote: [
+        `# !!! YONETICI PowerShell GEREKLI - Windows hizmetini durdurmak/baslatmak yonetici ister.`,
+      ],
+      stopLines: [
+        `Stop-Service -Name $svc -ErrorAction SilentlyContinue`,
+        `$stopped = ((Get-Service -Name $svc -ErrorAction SilentlyContinue).Status -eq 'Stopped')`,
+        `if (-not $stopped) { Write-Host "HIZMET DURDURULAMADI - pencere YONETICI mi? ${abortText}" -ForegroundColor Red }`,
+      ],
+      startLine: `Start-Service -Name $svc -ErrorAction SilentlyContinue`,
+      serviceMode: true,
+    };
+  }
+  return {
+    variableLine: `$app  = ${ps(s.name)}`,
+    adminNote: [
+      `# !!! YONETICI PowerShell GEREKLI - PM2 daemon SYSTEM olarak kosuyor;`,
+      `#     normal pencerede pm2 "EPERM \\\\.\\pipe\\rpc.sock" ile duser.`,
+    ],
+    stopLines: [
+      `$LASTEXITCODE = 1`,
+      `pm2 stop $app`,
+      `$stopped = ($LASTEXITCODE -eq 0)`,
+      `if (-not $stopped) { Write-Host "PM2 STOP BASARISIZ - pencere YONETICI mi? ${abortText}" -ForegroundColor Red }`,
+    ],
+    startLine: `pm2 start $app`,
+    serviceMode: false,
+  };
+}
+
+/** Göç satırları: hizmette paketin Node'u + prisma CLI'nin giriş noktası (paket `.bin` taşımaz). */
+function migrateLines(p: SwapCommandParams, serviceMode: boolean): string[] {
+  const cd = `if ($s2) { Set-Location ${ps(p.backendCwd)} }`;
+  if (!serviceMode || !p.nodePath || !p.envFile) return [cd, `if ($s2) { npx prisma migrate deploy }`];
+  return [
+    cd,
+    `if ($s2) { $env:DOTENV_CONFIG_PATH = ${ps(p.envFile)} }`,
+    `if ($s2) { & ${ps(p.nodePath)} ${ps("node_modules/prisma/build/index.js")} migrate deploy }`,
+  ];
+}
+
 export function buildSwapCommands(p: SwapCommandParams): SwapCommands {
   const L = ident(p.liveDatabase);
+  const fwd = processLines(p, "TAKAS YAPILMADI.");
+  const back = processLines(p, "GERI ALMA YAPILMADI.");
 
   const forward = [
     `# ============================================================`,
@@ -86,17 +141,13 @@ export function buildSwapCommands(p: SwapCommandParams): SwapCommands {
     `# Geri alma blogu ayrica verildi - once ONU kopyalayin.`,
     `# ============================================================`,
     `$psql = ${ps(p.psqlPath)}`,
-    `$app  = ${ps(p.pm2AppName)}`,
+    fwd.variableLine,
     `$force = $false   # true yaparsaniz acik oturumlar ZORLA kapatilir`,
     ``,
-    `# !!! YONETICI PowerShell GEREKLI - PM2 daemon SYSTEM olarak kosuyor;`,
-    `#     normal pencerede pm2 "EPERM \\\\.\\pipe\\rpc.sock" ile duser.`,
+    ...fwd.adminNote,
     ``,
     `# 1) Backend'i durdur (rename, DB'ye acik baglanti varken CALISMAZ)`,
-    `$LASTEXITCODE = 1`,
-    `pm2 stop $app`,
-    `$stopped = ($LASTEXITCODE -eq 0)`,
-    `if (-not $stopped) { Write-Host "PM2 STOP BASARISIZ - pencere YONETICI mi? TAKAS YAPILMADI." -ForegroundColor Red }`,
+    ...fwd.stopLines,
     `$env:PGPASSWORD = "<veritabani-sifresi>"`,
     ``,
     `# 2) ON KONTROL - hicbir seye dokunmadan`,
@@ -132,12 +183,12 @@ export function buildSwapCommands(p: SwapCommandParams): SwapCommands {
     p.needsMigrateDeploy
       ? `# 5) SEMA GUNCELLEME - yedek koddan ESKI, bu adim ATLANIRSA backend eski semaya baglanir (P2022)`
       : `# 5) SEMA GUNCELLEME - guvenlik icin her durumda calistirilir (idempotent)`,
-    `if ($s2) { Set-Location ${ps(p.backendCwd)} }`,
-    `if ($s2) { npx prisma migrate deploy }`,
+    ...migrateLines(p, fwd.serviceMode),
     ``,
     `# 6) HER DURUMDA: sifreyi temizle, backend'i baslat`,
     `Remove-Item Env:PGPASSWORD -ErrorAction SilentlyContinue`,
-    `pm2 start $app`,
+    ...(fwd.serviceMode ? [`Remove-Item Env:DOTENV_CONFIG_PATH -ErrorAction SilentlyContinue`] : []),
+    fwd.startLine,
   ].join("\n");
 
   const rollback = [
@@ -146,14 +197,14 @@ export function buildSwapCommands(p: SwapCommandParams): SwapCommands {
     `# Takas sonrasi bir sorun gorurseniz BUNU calistirin.`,
     `# ============================================================`,
     `$psql = ${ps(p.psqlPath)}`,
-    `$app  = ${ps(p.pm2AppName)}`,
+    back.variableLine,
     ``,
-    `pm2 stop $app`,
+    ...(back.serviceMode ? back.stopLines : [`pm2 stop $app`]),
     `$env:PGPASSWORD = "<veritabani-sifresi>"`,
     ``,
     `$LASTEXITCODE = 1`,
     `$dbs = ${ps(`SELECT count(*) FROM pg_database WHERE datname IN (${lit(p.liveDatabase)}, ${lit(p.oldDatabase)});`)} | ${psqlInvoke(p)}`,
-    `$go = ($LASTEXITCODE -eq 0) -and ("$dbs".Trim() -eq "2")`,
+    `$go = ${back.serviceMode ? "$stopped -and " : ""}($LASTEXITCODE -eq 0) -and ("$dbs".Trim() -eq "2")`,
     `if (-not $go) { Write-Host "ON KONTROL BASARISIZ - geri alma YAPILMADI." -ForegroundColor Red }`,
     ``,
     `$LASTEXITCODE = 1`,
@@ -168,7 +219,7 @@ export function buildSwapCommands(p: SwapCommandParams): SwapCommands {
     `if ($r2) { Write-Host "GERI ALMA TAMAM." -ForegroundColor Green }`,
     ``,
     `Remove-Item Env:PGPASSWORD -ErrorAction SilentlyContinue`,
-    `pm2 start $app`,
+    back.startLine,
   ].join("\n");
 
   return { forward, rollback };

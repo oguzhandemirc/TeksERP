@@ -8,6 +8,7 @@ import type { Hak, Kira, Kurulum, YaptirimEylemi, ZincirKarari } from "@prisma/c
 import { z } from "zod";
 import {
   DAY_MS,
+  DOWNLOAD_PRODUCTS,
   IsoTimeSchema,
   LeaseSchema,
   LicenseResponseSchema,
@@ -34,6 +35,7 @@ import { deliverableEntitlement, type DeliverableEntitlement, type HeldEntitleme
 import { installationCapabilities } from "./entitlement-policy";
 import { leaseFingerprintRule } from "./fingerprint-policy";
 import { moduleKeyGrants } from "./module-key.service";
+import { leaseUpdatePolicy } from "./update-policy.service";
 import { paidThroughOf, type PaidThrough } from "./paid-through";
 import type { VendorContext } from "./context";
 import { distributableRevocation } from "./revocation.service";
@@ -257,6 +259,7 @@ export async function issueLease(tx: Tx, ctx: VendorContext, g: IssueLeaseInput)
     kanal: { kod: installation.kanalKodu, guncelSurumler: channelVersionsForLease(channel) },
     altSertifika: key.certificate,
     ...(grants.length > 0 ? { modulAnahtarlari: grants } : {}),
+    guncelleme: leaseUpdatePolicy(installation, issuedAt.getTime(), expiresAt.getTime()),
     odenmisTarih: paid.tarih ? paid.tarih.toISOString() : null,
     ...(fingerprintRule ? { parmakIziKurali: fingerprintRule } : {}),
     hakOzeti: jwsDigest(delivered.belge),
@@ -284,8 +287,8 @@ export async function issueLease(tx: Tx, ctx: VendorContext, g: IssueLeaseInput)
 }
 
 /**
- * İndirme belirteçleri (kanalın electron/ ve mobil/ önekleri). Verilmez: K1 (güncelleme donuk),
- * bakım bitmiş (son hak edilen sürümde kalır), kurulum ETKİN değil, indirme anahtarı yok.
+ * İndirme belirteçleri (kanalın electron/ · mobil/ · backend/ önekleri — `DOWNLOAD_PRODUCTS`). Verilmez: K1
+ * (güncelleme donuk), bakım bitmiş (son hak edilen sürümde kalır), kurulum ETKİN değil, indirme anahtarı yok.
  */
 export function downloadTokens(
   ctx: VendorContext,
@@ -298,7 +301,7 @@ export function downloadTokens(
   const key = ctx.keys.downloadKey(nowMs);
   if (!key) return [];
   const exp = msToIso(nowMs + ctx.config.INDIRME_OMUR_DK * 60_000);
-  return ["electron", "mobil"].map((dir) => {
+  return DOWNLOAD_PRODUCTS.map((dir) => {
     const yolOneki = `/${installation.kanalKodu}/${dir}/`;
     return {
       yolOneki,

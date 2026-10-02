@@ -1,16 +1,18 @@
 {
   "_aciklama": [
     "DAĞITIM KANALLARININ KAYIT DEFTERİ — her kanalın bütün dağıtım kimlikleri tek yerde.",
-    "Kanal kodu = güncelleme sunucusundaki yol segmenti (/<kod>/electron/ · /<kod>/mobil/); kodlar birbirinin öneki olamaz.",
+    "Kanal kodu = güncelleme sunucusundaki yol segmenti (/<kod>/electron/ · /<kod>/mobil/ · /<kod>/backend/); kodlar birbirinin öneki olamaz.",
     "DAVRANIŞ TAŞIMAZ: bayrak/ayar anahtarı buraya giremez — şema KAPALI anahtar kümesidir. 'adnansahin'de yok' hâlâ 'bayrağı kapalı' demektir.",
     "'yayin' bloğu koddan TÜRER (yayın kökü · VDS kökü · runtimeVersion); elle düzeltilmez, bekçi türetimle birebir ölçer.",
     "Üretim kanalının kimliği DONMUŞTUR: değişimi sahadaki kurulumlar için bir GÖÇTÜR (yeni uygulama · kayıp userData · kopan güncelleme kanalı).",
     "Commit edilen işaretçiler (Electron/shared/musteri.json · mobil/musteri.json · Electron/package.json · mobil/app.json) 'varsayilan' kanalı gösterir.",
     "Panel kimliği ağaca YAZILMAZ: electron-paketle.sh <kod> onu derleme ANINDA enjekte eder (electron-builder -c.* + Vite sanal modülü, Electron/build-channel.ts); panel.erpAdresi = keşif sonuç vermezse panelin bağlandığı varsayılan sunucu.",
-    "terfiKaynagi (yalnız üretim kanalında): bu kanala yalnız o hazırlık kanalında yayınlanmış ve kullanıcının terfi etiketiyle onayladığı commit çıkar (K5, scripts/lib/terfi.mjs); null = terfi yok. Hazırlık kanalının aynası onu terfiKaynagi olarak göstermek ZORUNDADIR.",
+    "terfiKaynagi (üretim kanalında ZORUNLU — yönetici kararı 2026-10-01): kayıtlı AYNALI bir HAZIRLIK kanalı; bu kanala yalnız o hazırlık kanalında yayınlanmış ve kullanıcının terfi etiketiyle onayladığı commit çıkar (K5, scripts/lib/terfi.mjs). Aynalı bir hazırlık kanalı birden çok üretim kanalının kaynağı olabilir; hazırlığın aynası onu terfiKaynagi olarak göstermek ZORUNDADIR.",
     "ayna: null = AYNASIZ hazırlık kanalı — demo/deneme müşterisi (satış provası): hiçbir üretim kanalının terfi kaynağı değildir, ona yayın terfi istemez, görünür etiket taşır. Demo/test müşterisi üretim türünde kaydedilmez.",
+    "backend.hizmetAdi: backend'in Windows hizmet adı (Dağıtım v2) — aynı makinede iki kanal yan yana kurulabildiği için kanallar arası AYRIK (büyük/küçük harf duyarsız).",
     "runtimeVersion kanal kimliği DEĞİLDİR (JS↔native uyum kimliği): çakışma denetimine girmez, mobil/app.json ile eşit olmak zorundadır.",
-    "backend.guvenCapasi = kanalın lisans SATICISI/kök bağı (uretim | hazirlik): backend paketi YALNIZ o kipin kök + PAKET anahtarlarına güvenir (derleme sabiti + native özelliği; paketle.ps1 -Musteri ile). Üretim kanalı daima uretim; demo/deneme müşterisi üretim satıcısından lisans alıyorsa uretim. Değişimi yeniden derleme + satıcı değişimidir, davranış bayrağı değil.",
+    "backend.guvenCapasi = kanalın lisans SATICISI/kök bağı (uretim | hazirlik): backend paketi YALNIZ o kipin kök + PAKET anahtarlarına güvenir (derleme sabiti + native ve güncelleyici `hazirlik-capasi` özelliği; paketle.ps1 -Musteri ile). Üretim kanalı daima uretim; demo/deneme müşterisi üretim satıcısından lisans alıyorsa uretim. Değişimi yeniden derleme + satıcı değişimidir, davranış bayrağı değil.",
+    "backend.lisansSunucusu = kanalın lisans satıcısının kökeni (backend LICENSE_SERVER_URL; https://host[:port]) — güven çapasının AYNASI: uretim çapası daima üretim satıcısı (= backend varsayılanı vendor-url.ts, check-kanallar ölçer), hazirlik çapası hazırlık satıcısı. Paket PAKET.json backendLisansSunucusu olarak taşır; pm2 → hizmet geçişi (deploy/gecis/gecis.ps1) kurulumun etkin değerini buna karşı ölçer (uyuşmazlıkta kuru uyarır, uygula durur).",
     "Bekçi: node scripts/check-kanallar.mjs (+ --sonda) · yayın kapıları: node scripts/test_kanal_yayin_kapisi.mjs. Kural: docs/kurallar/surum-yayin.md; karar: docs/history/CLAUDE-NOT-ARSIVI.md 2026-09-27 testfabrika D1."
   ],
   "varsayilan": "adnansahin",
@@ -28,7 +30,11 @@
         "apkKunye": "https://guncelleme.etkiliyazilim.com/adnansahin/mobil/apk/surum.json",
         "vdsPanel": "/opt/stack/apps/tekserp-guncelleme/html/adnansahin/electron",
         "vdsMobil": "/opt/stack/apps/tekserp-guncelleme/html/adnansahin/mobil",
-        "panelDefter": "/opt/stack/apps/tekserp-guncelleme/defter/adnansahin-YAYIN-DEFTERI.tsv"
+        "panelDefter": "/opt/stack/apps/tekserp-guncelleme/defter/adnansahin-YAYIN-DEFTERI.tsv",
+        "backendFeed": "https://guncelleme.etkiliyazilim.com/adnansahin/backend/",
+        "backendManifest": "https://guncelleme.etkiliyazilim.com/adnansahin/backend/son.json",
+        "vdsBackend": "/opt/stack/apps/tekserp-guncelleme/html/adnansahin/backend",
+        "backendDefter": "/opt/stack/apps/tekserp-guncelleme/defter/adnansahin-BACKEND-YAYIN-DEFTERI.tsv"
       },
       "panel": {
         "appId": "com.etkiliyazilim.adnan-sahin-erp",
@@ -46,7 +52,9 @@
       "backend": {
         "urunAdi": "Adnan Şahin ERP Backend",
         "pm2Ad": "tekserp-backend-yeni",
-        "guvenCapasi": "uretim"
+        "hizmetAdi": "TeksERP-Backend",
+        "guvenCapasi": "uretim",
+        "lisansSunucusu": "https://lisans.etkiliyazilim.com"
       }
     },
     "testfabrika": {
@@ -62,7 +70,11 @@
         "apkKunye": "https://guncelleme.etkiliyazilim.com/testfabrika/mobil/apk/surum.json",
         "vdsPanel": "/opt/stack/apps/tekserp-guncelleme/html/testfabrika/electron",
         "vdsMobil": "/opt/stack/apps/tekserp-guncelleme/html/testfabrika/mobil",
-        "panelDefter": "/opt/stack/apps/tekserp-guncelleme/defter/testfabrika-YAYIN-DEFTERI.tsv"
+        "panelDefter": "/opt/stack/apps/tekserp-guncelleme/defter/testfabrika-YAYIN-DEFTERI.tsv",
+        "backendFeed": "https://guncelleme.etkiliyazilim.com/testfabrika/backend/",
+        "backendManifest": "https://guncelleme.etkiliyazilim.com/testfabrika/backend/son.json",
+        "vdsBackend": "/opt/stack/apps/tekserp-guncelleme/html/testfabrika/backend",
+        "backendDefter": "/opt/stack/apps/tekserp-guncelleme/defter/testfabrika-BACKEND-YAYIN-DEFTERI.tsv"
       },
       "panel": {
         "appId": "com.etkiliyazilim.teks-erp.testfabrika",
@@ -80,7 +92,9 @@
       "backend": {
         "urunAdi": "TeksERP Test Fabrika Backend",
         "pm2Ad": "tekserp-backend-testfabrika",
-        "guvenCapasi": "hazirlik"
+        "hizmetAdi": "TeksERP-Backend-testfabrika",
+        "guvenCapasi": "hazirlik",
+        "lisansSunucusu": "https://lisans-test.etkiliyazilim.com"
       }
     },
     "demofabrika": {
@@ -96,7 +110,11 @@
         "apkKunye": "https://guncelleme.etkiliyazilim.com/demofabrika/mobil/apk/surum.json",
         "vdsPanel": "/opt/stack/apps/tekserp-guncelleme/html/demofabrika/electron",
         "vdsMobil": "/opt/stack/apps/tekserp-guncelleme/html/demofabrika/mobil",
-        "panelDefter": "/opt/stack/apps/tekserp-guncelleme/defter/demofabrika-YAYIN-DEFTERI.tsv"
+        "panelDefter": "/opt/stack/apps/tekserp-guncelleme/defter/demofabrika-YAYIN-DEFTERI.tsv",
+        "backendFeed": "https://guncelleme.etkiliyazilim.com/demofabrika/backend/",
+        "backendManifest": "https://guncelleme.etkiliyazilim.com/demofabrika/backend/son.json",
+        "vdsBackend": "/opt/stack/apps/tekserp-guncelleme/html/demofabrika/backend",
+        "backendDefter": "/opt/stack/apps/tekserp-guncelleme/defter/demofabrika-BACKEND-YAYIN-DEFTERI.tsv"
       },
       "panel": {
         "appId": "com.etkiliyazilim.teks-erp.demofabrika",
@@ -114,7 +132,9 @@
       "backend": {
         "urunAdi": "TeksERP Demo Fabrika Backend",
         "pm2Ad": "tekserp-backend-demofabrika",
-        "guvenCapasi": "uretim"
+        "hizmetAdi": "TeksERP-Backend-demofabrika",
+        "guvenCapasi": "uretim",
+        "lisansSunucusu": "https://lisans.etkiliyazilim.com"
       }
     }
   }

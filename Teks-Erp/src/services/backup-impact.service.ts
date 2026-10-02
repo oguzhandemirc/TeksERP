@@ -40,6 +40,8 @@ import {
 } from "./helpers/backup-naming.helper";
 import { isEncryptedBackup, type BackupCryptoState } from "../lib/backup-crypto";
 import { hata } from "../lib/logger";
+import { resolveEnvFilePath } from "../lib/hizmet-duzeni";
+import { pgTool } from "./helpers/pg-tool.helper";
 
 // =============================================================================
 // Tipler
@@ -104,8 +106,18 @@ export interface RestoreImpact {
   /** Backend çalışma dizini — komut bloğundaki `prisma migrate deploy` oradan koşar.
    *  İstemci sunucunun cwd'sini bilemez; bu yüzden backend bildirir. */
   backendCwd: string;
-  /** pm2 süreç adı — `pm2 stop/start` satırları için. */
+  /** pm2 süreç adı — `pm2 stop/start` satırları için (pm2 düzeni). */
   pm2AppName: string;
+  /** Süreç yöneticisi: hizmet düzeninde komut bloğu `Stop-Service`/`Start-Service` kullanır. */
+  processManager: "pm2" | "service";
+  serviceName: string | null;
+  /** Backend'i koşturan Node (hizmette paketin `runtime\node.exe`si; sistemde Node olmayabilir). */
+  nodePath: string;
+  /** Hizmet düzeninde `.env` yolu — göç komutu DATABASE_URL'i oradan okur; pm2 düzeninde null. */
+  envFile: string | null;
+  /** `PG_BIN_DIR`den çözülmüş araç yolları — hizmet düzeninde pg araçları PATH'te değildir. */
+  pgDumpPath: string;
+  pgRestorePath: string;
   audit: AuditRollup;
   groups: ImpactGroup[];
   totalCreated: number;
@@ -644,6 +656,12 @@ export async function getRestoreImpact(
     },
     backendCwd: process.cwd(),
     pm2AppName: listing.pm2AppName,
+    processManager: listing.processManager,
+    serviceName: listing.serviceName,
+    nodePath: process.execPath,
+    envFile: listing.processManager === "service" ? resolveEnvFilePath(process.env, process.cwd()) : null,
+    pgDumpPath: pgTool("pg_dump"),
+    pgRestorePath: pgTool("pg_restore"),
     audit,
     groups,
     totalCreated,

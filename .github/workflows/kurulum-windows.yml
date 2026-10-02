@@ -1,0 +1,133 @@
+name: Kurulum (setup.exe, Windows)
+
+# =============================================================================
+# SUNUCU KURULUMU — TeksERP-Kurulum.exe (Inno Setup) · Dağıtım v2 D5
+# =============================================================================
+# windows-latest üzerinde ölçülen (Mac/Linux'ta ölçülemeyen) parçalar:
+#   1. Kurulumun KENDİ doğrulayıcısı: tekserp-guncelleyici sürüm derlemesi (--locked), künyesi üretim
+#      çapası (testCapasi false) — setup.exe paketi bununla doğrular (paketin ikilisi kendini doğrulayamaz).
+#   2. Inno Setup 6.3+ (koşucuda yoksa choco) ile İKİ derleme: asıl kurulum + boru öz-sınaması (/DBORU_SINAMASI).
+#   3. Öz-sınama koşusu: anonim boru STDIN/STDOUT (sırların tek kanalı), 64-bit PowerShell, >64 KB çıktı
+#      (kilitlenmez), Türkçe karakterin JSON kaçışı, stderr birleşimi, çıkış kodu + ön ölçümün Exec yolu.
+#   4. Windows PowerShell 5.1'de (asıl hedef) saf işlevler: deploy/test/kurulum.harness.ps1 (cevap şeması,
+#      portSec D4 vektörleri, .env sade biçim, JSON ASCII, maske; iki kültür: değişmez + tr-TR).
+#   5. Orkestratörün kuru koşusu: OnKosul -Kuru, paket YOK → beklenen DUR (çıkış 1, SONUC satırı), hiçbir şey yazılmaz.
+# Gerçek kurulum (SCM kaydı, initdb, ACL, güvenlik duvarı) W3'te D8'in provasında — bu iş onu İDDİA ETMEZ.
+# Yapıt: imzasız TeksERP-Kurulum-<sürüm>.exe (7 gün). İMZA KANCASI: ISCC /DImzaAraci /Simza="signtool ..."
+# (sertifika gelince; anahtar CI'a girmez). Bekçi: Teks-Erp/scripts/test_kurulum_betikleri.ts §9.
+# =============================================================================
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "deploy/kurulum/**"
+      - "deploy/hizmet/kanal-adlari.ps1"
+      - "deploy/hizmet/sema-hizasi.ps1"
+      - "deploy/pg/**"
+      - "deploy/test/kurulum.harness.ps1"
+      - "Teks-Erp/native/**"
+      - ".github/workflows/kurulum-windows.yml"
+  pull_request:
+    branches: [main]
+    paths:
+      - "deploy/kurulum/**"
+      - "deploy/hizmet/kanal-adlari.ps1"
+      - "deploy/hizmet/sema-hizasi.ps1"
+      - "deploy/pg/**"
+      - "deploy/test/kurulum.harness.ps1"
+      - "Teks-Erp/native/**"
+      - ".github/workflows/kurulum-windows.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  kurulum:
+    name: Kurulum (doğrulayıcı + Inno derlemesi + boru öz-sınaması + PS 5.1)
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Rust araç zinciri (stable)
+        run: rustup toolchain install stable --profile minimal; rustup default stable
+
+      - name: Kurulumun doğrulayıcısı (sürüm derlemesi, üretim çapası)
+        working-directory: Teks-Erp/native
+        run: |
+          cargo build --release --locked -p tekserp-guncelleyici
+          $k = (& target/release/tekserp-guncelleyici.exe kunye | Out-String) | ConvertFrom-Json
+          if ($k.ad -ne "tekserp-guncelleyici" -or $k.testCapasi -ne $false) { Write-Error "doğrulayıcı üretim derlemesi değil (testCapasi): $($k | ConvertTo-Json -Compress)"; exit 1 }
+          $b = [IO.File]::ReadAllBytes((Resolve-Path target/release/tekserp-guncelleyici.exe))
+          if ([Text.Encoding]::GetEncoding(28591).GetString($b).Contains("TEKSERP_TEST_CAPASI")) { Write-Error "doğrulayıcı test çapası taşıyor"; exit 1 }
+          Write-Host "doğrulayıcı: $($k.surum) testCapasi=$($k.testCapasi)"
+
+      - name: Inno Setup 6.3+ (yüklü değilse choco)
+        run: |
+          $iscc = Join-Path ${env:ProgramFiles(x86)} "Inno Setup 6\ISCC.exe"
+          if (-not (Test-Path $iscc)) { choco install innosetup --no-progress -y; if ($LASTEXITCODE -ne 0) { exit 1 } }
+          if (-not (Test-Path $iscc)) { Write-Error "ISCC.exe yok: $iscc"; exit 1 }
+          if (-not (Test-Path (Join-Path (Split-Path $iscc) "Languages\Turkish.isl"))) { Write-Error "Turkish.isl yok"; exit 1 }
+          "ISCC=$iscc" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+
+      - name: setup.exe derlemesi (asıl + boru öz-sınaması)
+        run: |
+          $surum = "0.0.0-git." + "${{ github.sha }}".Substring(0, 7)
+          $dog = (Resolve-Path Teks-Erp/native/target/release/tekserp-guncelleyici.exe).Path
+          $cikti = Join-Path $env:RUNNER_TEMP "kurulum-cikti"
+          & $env:ISCC /Q "/DKurulumSurumu=$surum" "/DDogrulayiciExe=$dog" "/O$cikti" deploy\kurulum\tekserp-kurulum.iss
+          if ($LASTEXITCODE -ne 0) { Write-Error "ISCC (asıl) çıkış $LASTEXITCODE"; exit 1 }
+          & $env:ISCC /Q "/DKurulumSurumu=$surum" "/DDogrulayiciExe=$dog" "/O$cikti" /DBORU_SINAMASI deploy\kurulum\tekserp-kurulum.iss
+          if ($LASTEXITCODE -ne 0) { Write-Error "ISCC (boru öz-sınaması) çıkış $LASTEXITCODE"; exit 1 }
+          Get-ChildItem $cikti | Format-Table Name, Length
+          "KURULUM_CIKTI=$cikti" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+
+      - name: Boru öz-sınaması (STDIN sır kanalı + 64-bit PowerShell + Exec yolu)
+        run: |
+          $exe = Get-ChildItem $env:KURULUM_CIKTI -Filter "*-boru-sinamasi.exe" | Select-Object -First 1
+          $rapor = Join-Path $env:RUNNER_TEMP "boru-raporu.txt"
+          $gunluk = Join-Path $env:RUNNER_TEMP "boru-sinamasi.log"
+          $p = Start-Process -FilePath $exe.FullName -ArgumentList @("/VERYSILENT", "/SUPPRESSMSGBOXES", "/SINAMA=$rapor", "/LOG=$gunluk") -Wait -PassThru
+          Write-Host "setup çıkış kodu: $($p.ExitCode) (öz-sınama kurulum YAPMAZ, 1 beklenir)"
+          if (-not (Test-Path $rapor)) { Get-Content $gunluk -ErrorAction SilentlyContinue; Write-Error "öz-sınama raporu yazılmadı"; exit 1 }
+          $r = Get-Content $rapor -Raw
+          Write-Host $r
+          if ($r -notmatch "(?m)^BORU=TAMAM\r?$") { Get-Content $gunluk -ErrorAction SilentlyContinue; Write-Error "BORU=TAMAM değil"; exit 1 }
+          if ($r -notmatch "(?m)^OLCUM=TAMAM x64Surec=1 ") { Get-Content $gunluk -ErrorAction SilentlyContinue; Write-Error "OLCUM=TAMAM x64Surec=1 değil"; exit 1 }
+
+      - name: Windows PowerShell 5.1 harness (saf işlevler, iki kültür)
+        shell: powershell
+        run: |
+          powershell.exe -NoProfile -ExecutionPolicy Bypass -File deploy\test\kurulum.harness.ps1
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+
+      - name: Orkestratör kuru koşusu (OnKosul -Kuru, paket yok → beklenen DUR)
+        shell: powershell
+        run: |
+          $d = Join-Path $env:RUNNER_TEMP "kuru"
+          New-Item -ItemType Directory -Path $d -Force | Out-Null
+          $cevap = Join-Path $d "cevap.json"
+          '{"v": 1, "kok": "C:\\TeksERP-ci-kuru", "pg": {"veriDizini": null}}' | Set-Content -Path $cevap -Encoding ASCII
+          $c = powershell.exe -NoProfile -ExecutionPolicy Bypass -File deploy\kurulum\kurulum.ps1 -Asama OnKosul -Cevap $cevap -Kaynak $d -Kuru
+          $kod = $LASTEXITCODE
+          $c | ForEach-Object { Write-Host $_ }
+          $s = @($c | Where-Object { "$_".StartsWith("SONUC:") }) | Select-Object -Last 1
+          if ($kod -ne 1 -or -not $s) { Write-Error "beklenen: çıkış 1 + SONUC satırı (gelen çıkış $kod)"; exit 1 }
+          $j = $s.Substring(6) | ConvertFrom-Json
+          if ($j.tamam -ne $false -or "$($j.hata)" -notmatch "backend paketi") { Write-Error "beklenen DUR 'backend paketi' değil: $($j.hata)"; exit 1 }
+          if (Test-Path "C:\TeksERP-ci-kuru") { Write-Error "kuru kip kök oluşturdu"; exit 1 }
+          Write-Host "kuru koşu: beklenen DUR ($($j.hata)) - hiçbir şey yazılmadı"
+          # Beklenen DUR'un çıkış kodu (1) $LASTEXITCODE'da kalır; Actions powershell kabuğu adımı onunla bitirirdi.
+          exit 0
+
+      - name: Yapıt (imzasız kurulum)
+        uses: actions/upload-artifact@v4
+        with:
+          name: tekserp-kurulum-win-x64
+          path: ${{ env.KURULUM_CIKTI }}
+          if-no-files-found: error
+          retention-days: 7

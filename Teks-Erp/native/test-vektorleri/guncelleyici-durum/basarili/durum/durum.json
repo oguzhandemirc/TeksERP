@@ -1,0 +1,57 @@
+{
+  "v": 1,
+  "zaman": "2026-09-30T23:30:00.000Z",
+  "sonCanlilik": "2026-09-30T23:30:00.000Z",
+  "canlilikEsigiSn": 180,
+  "turSn": 60,
+  "guncelleyiciSurum": "0.1.0",
+  "kuruluSurum": "2.13.0",
+  "durum": "BASARILI",
+  "surum": "2.13.0",
+  "kaynakSurum": "2.13.0",
+  "urun": null,
+  "islemId": null,
+  "adim": null,
+  "hataKodu": null,
+  "mesaj": "2.13.0 GUNCEL / SURUM_GUNCEL",
+  "ilerleme": null,
+  "planlanan": null,
+  "politika": {
+    "kip": "OTOMATIK",
+    "izin": true,
+    "neden": null,
+    "kaynak": "KIRA",
+    "hedefSurum": null,
+    "donuk": false
+  },
+  "karar": {
+    "karar": "GUNCEL",
+    "neden": "SURUM_GUNCEL",
+    "aralik": null,
+    "pgGuncellemesi": false
+  },
+  "bekleyen": {
+    "surum": "2.13.0",
+    "karar": "GUNCEL",
+    "neden": "SURUM_GUNCEL",
+    "aralik": null,
+    "pgGuncellemesi": false,
+    "zorunlu": false,
+    "ozet": "Test sürümü"
+  },
+  "son": {
+    "kayitId": "70577516-8d75-4b3f-9656-878cb1583d05",
+    "hedefSurum": "2.13.0",
+    "kaynakSurum": "2.12.0",
+    "sonuc": "BASARILI",
+    "kod": null,
+    "baslangic": "2026-09-30T23:30:00.000Z",
+    "bitis": "2026-09-30T23:30:00.000Z",
+    "veriGeriYuklendi": false
+  },
+  "sonAyrinti": {
+    "urun": "backend",
+    "hataKodu": null,
+    "mesaj": null
+  }
+}

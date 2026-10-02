@@ -24,6 +24,7 @@ import { egressTransport, type VendorTransport } from "../services/helpers/licen
 import { getLicenseConfig, getLicenseSnapshot, onDownloadTokenStale, setLicenseEngineStatus, setNextPollAt } from "../lib/license/runtime";
 import { STARTUP_VENDOR } from "../lib/license/vendor-url";
 import { POLL_DEFAULT_MINUTES } from "../lib/license/protocol";
+import { isVerificationMode } from "../lib/dogrulama-kipi";
 
 const STARTUP_DELAY_MS = 60 * 1000;
 const HOUSEKEEPING_INTERVAL_MS = 60 * 60 * 1000;
@@ -171,6 +172,12 @@ async function bootstrap(): Promise<void> {
   }
   await refreshIntegrityQuietly();
   if (stale()) return;
+  if (isVerificationMode()) {
+    // Yan etkisiz: yerel ölçüm tamam (sağlık sondası `lisans`ı okur); durum kaydı/DB izi yazılmaz, yoklanmaz.
+    setLicenseEngineStatus("CALISIYOR", "DOGRULAMA_KIPI");
+    bilgi("lisans", "doğrulama kipi — yerel ölçüm tamam; durum yazılmadı, yoklama zamanlanmadı");
+    return;
+  }
   // Açılışta bir kez yazım: DB izi kurulur, üç iz birden yoksa (K7) çapası hemen kalıcı olur — yeniden başlatmak
   // ek süreyi tazelemesin.
   await licenseHousekeeping();
@@ -238,7 +245,8 @@ export function stopLicensePoll(): void {
   engineRunning = false;
   if (started) setLicenseEngineStatus("DURDU");
   // Kapanışta best-effort: dosya senkron yazılır, DB izi kuyruğu süreç kapanmadan bitmeyebilir (bir sonraki açılış tazeler).
-  void licenseHousekeeping().catch(() => undefined);
+  // Doğrulama kipinin kapanışı da yazmaz (güncelleyici sınamadan sonra durdurur; geri dönüşte iz yedekle aynı kalsın).
+  if (!isVerificationMode()) void licenseHousekeeping().catch(() => undefined);
 }
 
 /** Test-only: başlatma zamanlamasını kısaltır. */
