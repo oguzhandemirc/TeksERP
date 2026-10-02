@@ -3,6 +3,8 @@
 //      OKUNMAZ; bu dosya yalnız senaryo sürecinde `configureLicenseRuntimeForTests`i çağırır.
 //   ② parmak izi: `SENARYO_PARMAK_IZI` = {makine, seri} verilirse işletim sistemi sorgusu (ioreg)
 //      o makinenin değerlerini döndürür — aynı Mac'te "başka makine" (kopya/taşıma) canlandırılır.
+//   ④ çok etkenli makine: `SENARYO_ETKENLER` = {f1..f4} verilirse toplayıcı (TS ya da native) o kümeyi Linux yollarından
+//      okunmuş gibi döndürür — darwin yalnız f1 + f4 okur (güçlü 1, hep zayıf tanıma); güçlü ≥ 2 makine böyle canlanır.
 //   ③ bütünlük (L18): IPC `senaryo-butunluk` {kok, anahtar} → o kök + geçici PAKET anahtarıyla denetim
 //      koşar ve sonucu döner; `kok: null` hedefi sıfırlar (süreç kökü, liste yok → KAPSAM_DISI).
 import fs from "node:fs";
@@ -12,6 +14,7 @@ import type { RootKey } from "../../src/lib/license/protocol";
 import { configureIntegrityForTests, getIntegrityOutcome } from "../../src/lib/license/integrity-state";
 import { configureLicenseCoreForTests, getLicenseCore } from "../../src/lib/license/native";
 import { tsLicenseCore } from "../../src/lib/license/license-core";
+import { collectedFrom } from "../../src/lib/license/fingerprint-paths";
 import { refreshLicenseIntegrity } from "../../src/services/license-integrity.service";
 
 const capaDosyasi = process.env.SENARYO_CAPA_DOSYASI;
@@ -37,6 +40,23 @@ if (sahte) {
   if (core.source === "native") {
     configureLicenseCoreForTests({ ...core, collectFingerprint: (salt, f5) => tsLicenseCore.collectFingerprint(salt, f5) });
   }
+}
+
+const etkenler = process.env.SENARYO_ETKENLER;
+if (etkenler) {
+  const e = JSON.parse(etkenler) as Partial<Record<"f1" | "f2" | "f3" | "f4", string | null>>;
+  const yol = (v: string | null | undefined): string | null => (v === undefined ? null : v);
+  // Aynı türün iki yolu aynı değeri verir (gerçek Linux'ta olduğu gibi): çelişki raporu doğmaz.
+  const sonuclar = {
+    "f1.machine-id": yol(e.f1),
+    "f1.dbus-machine-id": yol(e.f1),
+    "f2.dmi-uuid": yol(e.f2),
+    "f2.smbios-uuid": yol(e.f2),
+    "f3.udev-seri": yol(e.f3),
+    "f4.dmi-sistem": yol(e.f4),
+    "f4.smbios-sistem": yol(e.f4),
+  };
+  configureLicenseCoreForTests({ ...getLicenseCore(), collectFingerprint: (salt, f5) => Promise.resolve(collectedFrom("linux", sonuclar, salt, f5)) });
 }
 
 interface IntegrityMessage {

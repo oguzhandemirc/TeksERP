@@ -42,7 +42,7 @@ pub fn load(fs: &dyn Fs, license_dir: &Path, anchor: &TrustAnchor) -> LicenseVie
         Ok(t) => t,
         Err(p) => return LicenseView { problem: Some(p), ..LicenseView::default() },
     };
-    let lease = match chain::verify_lease(&token, &anchor.roots) {
+    let lease = match chain::verify_lease(&token, &anchor.roots, None) {
         Ok(l) => l,
         Err(f) => {
             return LicenseView {
@@ -56,7 +56,7 @@ pub fn load(fs: &dyn Fs, license_dir: &Path, anchor: &TrustAnchor) -> LicenseVie
     let frozen = doc.get("yaptirim").and_then(|y| y.get("guncellemeDonuk")).and_then(Value::as_bool) == Some(true);
     let hak = read_token(fs, &license_dir.join("hak.jws"))
         .ok()
-        .and_then(|t| chain::verify_entitlement(&t, &anchor.roots).ok())
+        .and_then(|t| chain::verify_entitlement(&t, &anchor.roots, None, None).ok())
         .filter(|h| chain::check_lease_binding(&lease, h).is_ok());
     let maintenance_end_ms =
         hak.as_ref().and_then(|h| h.document.get("bakimBitis").and_then(Value::as_str).map(iso::date_parse_ms)).filter(|ms| ms.is_finite());

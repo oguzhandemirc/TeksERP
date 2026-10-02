@@ -42,6 +42,15 @@ describe("Lisans ekranı — paket bütünlüğü kartı", () => {
     expect(screen.getByText("İlk uyuşmazlık")).toBeTruthy();
   });
 
+  it("korumalı pakette okunamayan listeli dosya Türkçe bulgu ve okunamayan sayısıyla görünür", () => {
+    renderWithProviders(
+      <LicenseIntegrityCard b={{ ...base, durum: "GECERSIZ", kod: "BUTUNLUK_OKUNAMAYAN", sayilar: { dosya: 15210, eksik: 0, degisik: 0, fazla: 0, okunamayan: 2 } }} />,
+    );
+    expect(screen.getByText("Uyuşmuyor")).toBeTruthy();
+    expect(screen.getByText("Listedeki dosyalar okunamıyor (korumalı pakette değişmiş sayılır)")).toBeTruthy();
+    expect(screen.getByText(/2 okunamadı/)).toBeTruthy();
+  });
+
   it("TS çekirdeğine düşüşte neden görünür; tanınmayan kod ham gösterilir", () => {
     renderWithProviders(<LicenseIntegrityCard b={{ ...base, cekirdek: "ts", cekirdekNeden: "DOSYA_YOK", durum: "OLCULEMEDI", kod: "BUTUNLUK_YENI_KOD" }} />);
     expect(screen.getByTestId("lisans-cekirdek").textContent).toBe("TS çekirdeği (geliştirme)");

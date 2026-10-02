@@ -7,6 +7,7 @@ import {
   DAY_MS,
   EntitlementSchema,
   LeaseSchema,
+  RevocationSchema,
   LICENSE_CLASSES,
   CertificateSchema,
   TYP,
@@ -23,6 +24,7 @@ import {
   type CertificateDoc,
   type CertUsage,
   type LicenseClass,
+  type RevocationDoc,
 } from "../../src/lib/license/protocol";
 
 export interface TestAnahtari {
@@ -61,6 +63,8 @@ export interface Fikstur {
   readonly alt: TestAnahtari;
   readonly ind: TestAnahtari;
   readonly bayi: TestAnahtari;
+  /** HAK ara imzacısı (G4) — kök imzalı `HAK` sertifikasıyla. */
+  readonly ara: TestAnahtari;
   readonly kurulum: TestAnahtari;
   readonly tuz: Buffer;
   readonly parmakIzi: Fingerprint;
@@ -91,6 +95,7 @@ export function fiksturKur(simdi: number): Fikstur {
     alt: anahtarUret("alt-2026-1"),
     ind: anahtarUret("ind-2026"),
     bayi: anahtarUret("bayi-b1"),
+    ara: anahtarUret("ara-2026-1"),
     kurulum: kurulumAnahtariUret(),
     tuz,
     parmakIzi: digestFingerprint(HAM_PARMAK_IZI, tuz),
@@ -184,4 +189,23 @@ export function kiraBas(f: Fikstur, ek: Partial<LeaseDoc> = {}, imzalayan: TestA
 
 export function siniflar(...s: LicenseClass[]): LicenseClass[] {
   return s;
+}
+
+/** Ara imzacı sertifikası (G4): kök imzalı, kullanım `HAK`; varsayılan sınıflar törenin varsayılanı. */
+export function araSertifikasi(f: Fikstur, ek: Partial<CertificateDoc> = {}, imzalayan: TestAnahtari = f.kok, konu: TestAnahtari = f.ara): string {
+  return sertifikaBas(imzalayan, sertifikaYuku(f, konu, "HAK", { siniflar: ["URETIM", "DR", "DEMO", "TEST"], ...ek }));
+}
+
+/** Ara imzalı HAK: imzalayan anahtar ve gömülü sertifika ayrı verilebilir (uyuşmazlık sondaları). */
+export function araHakBas(f: Fikstur, ek: Partial<EntitlementDoc> = {}, g: { sertifika?: string; imzalayan?: TestAnahtari } = {}): string {
+  const payload = hakYuku(f, { imzaciSertifikasi: g.sertifika ?? araSertifikasi(f), ...ek });
+  return signDocument({ typ: TYP.HAK, schema: EntitlementSchema, payload, key: g.imzalayan ?? f.ara });
+}
+
+export function iptalYuku(f: Fikstur, ek: Partial<RevocationDoc> = {}): RevocationDoc {
+  return { v: 1, iptalId: randomUUID(), sira: 1, verilis: msToIso(f.simdi - DAY_MS), iptaller: [], ...ek };
+}
+
+export function iptalBas(imzalayan: TestAnahtari, yuk: RevocationDoc): string {
+  return signDocument({ typ: TYP.IPTAL, schema: RevocationSchema, payload: yuk, key: imzalayan });
 }

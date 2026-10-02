@@ -7,7 +7,7 @@ import { licenseService } from "@/services/licenseService";
 import { copyText } from "@/lib/clipboard";
 import type { AcceptanceGate } from "@/lib/license/acceptance";
 import { offlineRequestQrValues } from "@/lib/license/offline-qr";
-import type { LicenseDetail, LicenseOfflineRequest } from "@/types/license";
+import type { LicenseDetail, LicenseOfflineRequest, OfflinePurpose } from "@/types/license";
 import { InfoRow, LicenseCard, when } from "./LicenseParts";
 import { useLicenseAction } from "./hooks";
 
@@ -16,6 +16,7 @@ import { useLicenseAction } from "./hooks";
  * taşınır; telefonun gösterdiği yanıt tablette QR'la okutulur ya da metni buraya yapıştırılır.
  * Büyük istek sıralı QR parçalarına bölünür (`offlineRequestQrValues`). İstek 10 dk geçerlidir.
  * Etkinleştirme isteği sözleşme kabulünü zarfın içinde taşır (Ek-7): kabul yoksa istek oluşturulmaz.
+ * Etkin kurulum donanım değişikliğini de (K8) aynı yoldan bildirir; yanıt yine buraya yüklenir.
  */
 export function LicenseOfflineCard({ d, gate }: { d: LicenseDetail; gate: AcceptanceGate }) {
   const [req, setReq] = useState<LicenseOfflineRequest | null>(null);
@@ -23,9 +24,9 @@ export function LicenseOfflineCard({ d, gate }: { d: LicenseDetail; gate: Accept
   const [yanit, setYanit] = useState("");
   const { busy, run } = useLicenseAction();
   const amac = d.kurulum.etkin ? "yokla" : "etkinlestir";
-  const create = () =>
+  const create = (purpose: OfflinePurpose = amac, gerekce?: string | null) =>
     run("istek", async () => {
-      setReq(await licenseService.offlineRequest(amac, amac === "etkinlestir" ? kod.trim() : undefined));
+      setReq(await licenseService.offlineRequest(purpose, purpose === "etkinlestir" ? kod.trim() : undefined, gerekce));
       return null;
     });
   const submit = () =>
@@ -48,10 +49,12 @@ export function LicenseOfflineCard({ d, gate }: { d: LicenseDetail; gate: Accept
         </Button>
       </div>
       {amac === "etkinlestir" && !gate.ready && gate.reason && <p className="text-xs text-amber-700 dark:text-amber-400">{gate.reason}</p>}
+      {amac === "yokla" && <OfflineHardwareRequest disabled={busy !== null} onCreate={(gerekce) => void create("donanim", gerekce)} />}
       {req && (
         <div className="flex flex-wrap items-start gap-4 rounded-md border p-3">
           {qrValues && <RequestQrSequence key={req.zarf} values={qrValues} />}
           <div className="min-w-0 flex-1 space-y-1 text-xs">
+            {req.amac === "donanim" && <InfoRow label="İstek">Donanım değişikliği bildirimi</InfoRow>}
             <InfoRow label="Geçerlilik">{when(req.gecerlilikSonu)} saatine kadar</InfoRow>
             <p className="text-muted-foreground">
               {!qrValues
@@ -80,6 +83,26 @@ export function LicenseOfflineCard({ d, gate }: { d: LicenseDetail; gate: Accept
         </Button>
       </div>
     </LicenseCard>
+  );
+}
+
+/** Etkin kurulumun çevrimdışı donanım değişikliği bildirimi (K8): gerekçe + istek; QR ve yanıt kartın ortak yolundan. */
+function OfflineHardwareRequest({ disabled, onCreate }: { disabled: boolean; onCreate: (gerekce: string | null) => void }) {
+  const [gerekce, setGerekce] = useState("");
+  return (
+    <div className="flex flex-wrap gap-2">
+      <Input
+        value={gerekce}
+        onChange={(e) => setGerekce(e.target.value)}
+        placeholder="Ne değişti? (isteğe bağlı)"
+        aria-label="Çevrimdışı donanım değişikliği gerekçesi"
+        maxLength={500}
+        className="max-w-xs"
+      />
+      <Button variant="outline" disabled={disabled} onClick={() => onCreate(gerekce.trim() || null)}>
+        Donanım değişikliği isteği oluştur
+      </Button>
+    </div>
   );
 }
 

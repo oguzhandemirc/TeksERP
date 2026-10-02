@@ -9,7 +9,7 @@ import { COPY_ALERT_LABEL, PLANNED_STATUS_LABEL, TRANSFER_STATUS_LABEL, label } 
 import { useApi, useCan } from "../../shared/session";
 import { installationName, type CopyAlert, type Installation, type PlannedAction, type TransferRequest } from "../../shared/types";
 import { Badge, Button, LoadMore, PageTitle, QueryState, Section, Table } from "../../shared/ui";
-import { CopyAlertCloseDialog, TransferDecisionDialog } from "../installation/IncidentPanels";
+import { alertCauses, CopyAlertCloseDialog, TransferDecisionDialog } from "../installation/IncidentPanels";
 import { plannedSummary } from "../installation/PlanPanels";
 
 function StatusFilter({ value, onChange, options }: { value: string; onChange: (v: string) => void; options: Record<string, string> }) {
@@ -158,6 +158,7 @@ export function CopyAlertsPage() {
               render: (r) => (r.kurulum ? <Link to={`/kurulumlar/${r.kurulumId}`}>{`${r.kurulum.tesis.musteri.ad} › ${r.kurulum.tesis.ad} › ${r.kurulum.ad ?? r.kurulum.kurulumId.slice(0, 8)}`}</Link> : "—"),
             },
             { header: "Tür", render: (r) => label(COPY_ALERT_LABEL, r.tur) },
+            { header: "Neden", render: (r) => alertCauses(r) || "—" },
             { header: "Sayı", render: (r) => r.gorulmeSayisi, className: "num-col" },
             { header: "Kira reddi", render: (r) => fmtDateTime(r.redZamani) },
             { header: "Durum", render: (r) => (r.durum === "ACIK" ? <Badge tone="danger">Açık</Badge> : <Badge>Kapandı</Badge>) },

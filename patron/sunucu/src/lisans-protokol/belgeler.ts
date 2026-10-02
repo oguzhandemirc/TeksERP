@@ -5,6 +5,7 @@ import { z } from "zod";
 import type { KeyObject } from "node:crypto";
 import { signJws } from "./jws";
 import { DAY_MS, success, isPlainObject, failure, isoToMs, type Result } from "./ortak";
+import { FINGERPRINT_RULES } from "./parmak-izi";
 
 export const PROTOCOL_VERSION = 1;
 
@@ -34,13 +35,16 @@ export const TYP = {
   SURUM: "tekserp-surum",
   /** PostgreSQL paketi künyesi (PAKET imzalı, Dağıtım v2 sözleşme sürümü 2) — doğrulayan güncelleyici + kurulum (`guncelleme-pg.ts`). */
   PG: "tekserp-pg",
+  /** Sertifika iptal belgesi (yalnız KÖK imzalar, G4 §2.3) — doğrulayan fabrika (`verifyRevocation`). */
+  IPTAL: "tekserp-iptal",
 } as const;
 
 export const LICENSE_CLASSES = ["URETIM", "TEST", "DR", "DEMO", "BAYI", "BARINDIRILAN"] as const;
 export type LicenseClass = (typeof LICENSE_CLASSES)[number];
 export const SANCTION_LEVELS = ["K0", "K1", "K2", "K3", "K4", "K5"] as const;
 export type SanctionLevel = (typeof SANCTION_LEVELS)[number];
-export const CERT_USAGES = ["ALT", "INDIRME", "BAYI"] as const;
+/** `HAK`: HAK ara imzacısı (G4) — kök → ara sertifika → HAK; yalnız `hak-ara` yeteneğini bildiren kuruluma gider. */
+export const CERT_USAGES = ["ALT", "INDIRME", "BAYI", "HAK"] as const;
 export type CertUsage = (typeof CERT_USAGES)[number];
 export const REQUEST_PURPOSES = [
   "etkinlestir",
@@ -51,6 +55,8 @@ export const REQUEST_PURPOSES = [
   "esitle",
   "tasima",
   "dr-devral",
+  /** Panelden "donanım değişikliğini bildir" (K8) — `POST /v1/donanim` ya da zarfla QR yolu. */
+  "donanim",
 ] as const;
 export type RequestPurpose = (typeof REQUEST_PURPOSES)[number];
 /**
@@ -66,6 +72,15 @@ export function isInstallationIdOptional(purpose: RequestPurpose): boolean {
 /** Kiranın ömür tavanı: sızmış bir alt anahtarla geriye tarihli uzun kira basılamasın. */
 export const LEASE_MAX_DAYS = 45;
 export const GRACE_MAX_DAYS = 60;
+/** HAK çevrimdışı ufkunun şema sınırı (gün); sınıf ve imzacı tavanı ayrıca zincirde (`offlineHorizonCeilingDays`). */
+export const OFFLINE_HORIZON_MAX_DAYS = 3650;
+/** Satıcının varsayılan ufku ve bayi tavanı (gün). */
+export const OFFLINE_HORIZON_DEALER_DAYS = 400;
+/** DEMO ve TEST sınıflarının ufuk tavanı (gün). */
+export const OFFLINE_HORIZON_SHORT_CLASS_DAYS = 45;
+/** Kapanış kirasının nedeni (K6) — bilgi alanı; kısıtlamayı kiranın K3'ü getirir. */
+export const CLOSING_LEASE_REASONS = ["KOPYA", "TASIMA", "IPTAL"] as const;
+export type ClosingLeaseReason = (typeof CLOSING_LEASE_REASONS)[number];
 
 export const IsoTimeSchema = z.iso.datetime();
 export const UuidSchema = z.uuid();
@@ -88,6 +103,8 @@ export const VersionTextSchema = z.string().regex(/^\d{1,4}\.\d{1,4}\.\d{1,6}([-
  */
 export const ReleaseVersionSchema = z.string().regex(/^[0-9]{1,4}\.[0-9]{1,4}\.[0-9]{1,6}(-[0-9A-Za-z]{1,20}(\.[0-9A-Za-z]{1,20}){0,3})?$/);
 export const JwsTextSchema = z.string().min(1).max(32 * 1024);
+/** Satıcı/patron uç yolu: `/v1/<parça>[/<parça>…]` (en çok dört parça). */
+export const RequestPathSchema = z.string().regex(/^\/v1(\/[a-z0-9-]{1,40}){1,4}$/);
 const NameSchema = z.string().min(1).max(200);
 
 function isUnique(list: readonly string[]): boolean {
@@ -121,8 +138,15 @@ export const EntitlementSchema = z
     bayiId: UuidSchema.optional(),
     /** Bayi imzalı HAK'ta imzalayan anahtarın kök imzalı sertifikası. */
     bayiSertifikasi: JwsTextSchema.optional(),
+    /** Ara imzalı HAK'ta (G4) imzalayan anahtarın kök imzalı `HAK` sertifikası. */
+    imzaciSertifikasi: JwsTextSchema.optional(),
+    /** Çevrimdışı ufuk (gün; `null` = süresiz). Yoksa P modeli uygulanmaz, eski çapa sürer. */
+    cevrimdisiUfukGun: z.number().int().min(1).max(OFFLINE_HORIZON_MAX_DAYS).nullable().optional(),
+    /** Kip alt sınırı: kira, durum kaydı ve derleme varsayılanı bunun altına inemez. */
+    kipAltSiniri: z.literal("zorla").optional(),
   })
-  .refine((h) => !h.bayiSertifikasi || h.bayiId, { message: "Bayi sertifikalı HAK bayiId taşımalı" });
+  .refine((h) => !h.bayiSertifikasi || h.bayiId, { message: "Bayi sertifikalı HAK bayiId taşımalı" })
+  .refine((h) => !h.bayiSertifikasi || !h.imzaciSertifikasi, { message: "HAK hem bayi hem ara imzacı sertifikası taşıyamaz" });
 export type EntitlementDoc = z.infer<typeof EntitlementSchema>;
 
 const SanctionSchema = z
@@ -258,6 +282,16 @@ export const LeaseSchema = z
     modulAnahtarlari: ModuleKeyGrantListSchema.optional(),
     /** Dağıtım v2: backend güncelleme politikası; yoksa `defaultUpdatePolicy()` (eski satıcı — eski backend alanı ATAR). */
     guncelleme: LeaseUpdatePolicySchema.optional(),
+    /** Ödenmiş tarih P (`null` = süresiz). HAK `cevrimdisiUfukGun` ile birlikte varsa P modeli işler. */
+    odenmisTarih: IsoTimeSchema.nullable().optional(),
+    /** Parmak izi kuralı (K8); yoksa eski kural (ölçülemeyen etken sayılmaz). */
+    parmakIziKurali: z.enum(FINGERPRINT_RULES).optional(),
+    /** Kapanış kirası (K6): bilgi alanı, anlamı K3 taşır. */
+    kapanis: z.enum(CLOSING_LEASE_REASONS).optional(),
+    /** Bağlı HAK'ın bayt özeti (`jwsDigest`): aynı kimlik ve sürümle basılmış başka HAK bu kiraya bağlanamaz. */
+    hakOzeti: DigestSchema.optional(),
+    /** Satıcının yanıtla dağıttığı iptal belgesinin sırası: fabrika daha düşük sıralı belgeyle yetinmez. */
+    iptalSira: z.number().int().min(1).max(Number.MAX_SAFE_INTEGER).optional(),
   })
   .refine((k) => isoToMs(k.bitis) > isoToMs(k.verilis), { message: "Kira bitişi verilişten sonra olmalı" })
   .refine((k) => isoToMs(k.bitis) - isoToMs(k.verilis) <= LEASE_MAX_DAYS * DAY_MS, {
@@ -266,7 +300,8 @@ export const LeaseSchema = z
   .refine(
     (k) => !k.guncelleme || k.guncelleme.araliklar.every((a) => isoToMs(a.bitis) > isoToMs(k.verilis) && isoToMs(a.baslangic) < isoToMs(k.bitis)),
     { message: "Güncelleme aralıkları kiranın ömrüyle kesişmeli" },
-  );
+  )
+  .refine((k) => k.kapanis === undefined || k.yaptirim.kademe === "K3", { message: "Kapanış kirası K3 yaptırımı taşımalı" });
 export type LeaseDoc = z.infer<typeof LeaseSchema>;
 
 export const RequestSchema = z
@@ -277,6 +312,8 @@ export const RequestSchema = z
     nonce: z.string().regex(/^[A-Za-z0-9_-]{22,64}$/),
     amac: z.enum(REQUEST_PURPOSES),
     govdeOzeti: DigestSchema,
+    /** İsteğin gittiği uç yolu (zarfla taşınanda taşıyan uç `/v1/cevrimdisi`); varsa doğrulayan eşitliği denetler. */
+    yol: RequestPathSchema.optional(),
   })
   .refine((r) => r.kurulumId !== undefined || isInstallationIdOptional(r.amac), {
     message: "Kurulum kimliği yalnız etkinleştirme ve taşıma isteğinde boş olabilir",
@@ -284,31 +321,15 @@ export const RequestSchema = z
   });
 export type RequestDoc = z.infer<typeof RequestSchema>;
 
-/** Güncelleme sunucusunda kanal başına ürün dizinleri (`/<kanal>/<ürün>/`) — indirme belirtecinin önek kümesi. */
-export const DOWNLOAD_PRODUCTS = ["electron", "mobil", "backend"] as const;
-export type DownloadProduct = (typeof DOWNLOAD_PRODUCTS)[number];
-
-export const DownloadSchema = z
-  .object({
-    v: z.literal(PROTOCOL_VERSION),
-    kanal: ChannelCodeSchema,
-    yolOneki: z.string().max(80),
-    kurulumId: UuidSchema,
-    exp: IsoTimeSchema,
-  })
-  .refine((i) => DOWNLOAD_PRODUCTS.some((urun) => i.yolOneki === `/${i.kanal}/${urun}/`), {
-    message: "Yol öneki kanalın electron/, mobil/ ya da backend/ dizini olmalı",
-  });
-export type DownloadDoc = z.infer<typeof DownloadSchema>;
-
-const SUB_KID_PREFIX: Record<CertUsage, string> = { ALT: "alt-", INDIRME: "ind-", BAYI: "bayi-" };
+const SUB_KID_PREFIX: Record<CertUsage, string> = { ALT: "alt-", INDIRME: "ind-", BAYI: "bayi-", HAK: "ara-" };
+const CERT_KID_PATTERN = /^[a-z]+-[a-z0-9-]{1,60}$/;
 
 export const CertificateSchema = z
   .object({
     v: z.literal(PROTOCOL_VERSION),
     sertifikaId: UuidSchema,
     kullanim: z.enum(CERT_USAGES),
-    kid: z.string().regex(/^[a-z]+-[a-z0-9-]{1,60}$/),
+    kid: z.string().regex(CERT_KID_PATTERN),
     x: PublicKeyXSchema,
     siniflar: ClassListSchema,
     baslangic: IsoTimeSchema,
@@ -319,6 +340,30 @@ export const CertificateSchema = z
   .refine((s) => s.kid.startsWith(SUB_KID_PREFIX[s.kullanim]), { message: "kid öneki kullanımla uyuşmuyor" })
   .refine((s) => (s.kullanim === "BAYI") === (s.bayi !== null), { message: "Bayi tavanı yalnız BAYI sertifikasında" });
 export type CertificateDoc = z.infer<typeof CertificateSchema>;
+
+export const REVOCATION_MAX_ENTRIES = 256;
+const RevocationEntrySchema = z
+  .object({
+    kid: z.string().regex(CERT_KID_PATTERN),
+    sertifikaId: UuidSchema,
+    kullanim: z.enum(CERT_USAGES),
+    tarih: IsoTimeSchema,
+    neden: z.string().max(200),
+  })
+  .refine((e) => e.kid.startsWith(SUB_KID_PREFIX[e.kullanim]), { message: "kid öneki kullanımla uyuşmuyor" });
+
+/** İPTAL (G4 §2.3): listelenen sertifika TÜMDEN geçersizdir; `sira` tekdüze artar, düşük sıralı belge yok sayılır. */
+export const RevocationSchema = z.object({
+  v: z.literal(PROTOCOL_VERSION),
+  iptalId: UuidSchema,
+  sira: z.number().int().min(1).max(Number.MAX_SAFE_INTEGER),
+  verilis: IsoTimeSchema,
+  iptaller: z
+    .array(RevocationEntrySchema)
+    .max(REVOCATION_MAX_ENTRIES)
+    .refine((list) => isUnique(list.map((e) => e.sertifikaId)), "İptal listesinde tekrarlı sertifika"),
+});
+export type RevocationDoc = z.infer<typeof RevocationSchema>;
 
 /**
  * Yükü şemadan geçirir. Bilinmeyen `v` şema hatasından AYRI kodlanır: sürüm uyuşmazlığı

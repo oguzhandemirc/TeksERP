@@ -9,6 +9,8 @@
 //      400 · eski sözleşme 400 · kurulum uyuşmazlığı 400 · TEST sınıfı 403 · abonelik bitti 403 ·
 //      imzasız 401 · paket kilidi doluyken 409 PAKET_ISLENIYOR
 //   §6 uzlaştırma: eşit küme istenen yok · farklı küme istenen TAM (UZLASTIRMA) · ANLIK yazımı
+//   §7 (L2-1) İSTEK yol bağı: bütün uçlarda amaç `esitle` olduğu için imzalı `yol` isteği ucuna bağlar —
+//      başka uç için imzalanmış istek 401 `ISTEK_YOL`, etki yok; yol taşımayan (eski fabrika) istek değişmez
 // Koşum: npx tsx scripts/test_esitleme_idempotency.ts
 // =============================================================================
 import { randomUUID } from "node:crypto";
@@ -186,6 +188,20 @@ async function uzlastirma(o: Ortam, k: TestKurulumu): Promise<void> {
   kontrol("§6e yanıt saklama ufkunu taşır (siparis)", typeof esit.ufukTarihi.siparis === "string");
 }
 
+async function yolBagi(o: Ortam, k: TestKurulumu): Promise<void> {
+  console.log("\n§7 İSTEK yol bağı (L2-1)");
+  const ufuk = o.saat.simdi() - 60_000;
+  const p = () => paket(k, { ufuk: new Date(ufuk), kayitlar: [girdi("urun", { yaz: [{ id: randomUUID(), kod: "Y1", ad: "Yol" }], yeni: { t: iso(ufuk), k: "000000000901" } })] });
+  const yanlis = p();
+  const r1 = await imzali(o, k, "/v1/esitle", { govde: yanlis, imzaYolu: "/v1/gelen-kutusu/al" });
+  const makbuz = await withTesis(o.goc.prisma, { tesisId: k.tesisId }, (tx) => tx.packageReceipt.count({ where: { tesisId: k.tesisId, packageId: yanlis.paketId } }));
+  kontrol("§7a ⭐ gelen kutusu ucu için imzalanmış istek eşitleme ucunda → 401 ISTEK_YOL, paket işlenmedi", r1.status === 401 && r1.json.details?.code === "ISTEK_YOL" && makbuz === 0, `${r1.status} ${r1.json.details?.code ?? ""} · makbuz ${makbuz}`);
+  const r2 = await imzali(o, k, "/v1/esitle", { govde: p(), imzaYolu: "/v1/esitle" });
+  kontrol("§7b kendi ucu için imzalanmış istek → 200", r2.status === 200, `${r2.status}`);
+  const r3 = await imzali(o, k, "/v1/esitle", { govde: p() });
+  kontrol("§7c yol taşımayan (eski fabrika) istek değişmeden → 200", r3.status === 200, `${r3.status}`);
+}
+
 async function main(): Promise<void> {
   const o = await ortamKur();
   const k = await tesisKur(o);
@@ -196,6 +212,7 @@ async function main(): Promise<void> {
     await tam(o, k);
     await kapilar(o, k);
     await uzlastirma(o, k);
+    await yolBagi(o, k);
   } finally {
     await temizleTesis(o, k.tesisId);
     await o.kapat();

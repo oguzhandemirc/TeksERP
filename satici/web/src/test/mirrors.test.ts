@@ -11,7 +11,37 @@ import { describe, expect, it } from "vitest";
 import { RETRY_CONFLICT_CODE } from "../shared/api";
 import { LOGIN_RATE_LIMIT_CODE } from "../shared/LoginPage";
 import { DEFAULT_MAINTENANCE_MONTHS, MAX_MAINTENANCE_MONTHS } from "../shared/CeilingFields";
-import { CHANNEL_HEALTH_LABEL, CLASS_LABEL, MODULE_LABEL, NOTIFICATION_CHANNEL_LABEL, NOTIFICATION_EVENT_LABEL, NOTIFICATION_STATUS_LABEL } from "../shared/labels";
+import {
+  CHANNEL_HEALTH_LABEL,
+  CLASS_LABEL,
+  CLOSING_REASON_LABEL,
+  COPY_ALERT_LABEL,
+  LEASE_DECISION_LABEL,
+  LOCAL_INTERVENTION_CAUSE_LABEL,
+  MODULE_LABEL,
+  NOTIFICATION_CHANNEL_LABEL,
+  NOTIFICATION_EVENT_LABEL,
+  NOTIFICATION_STATUS_LABEL,
+  PAID_THROUGH_KIND_LABEL,
+  ROOT_REQUEST_STATUS_LABEL,
+  FACTOR_STATE_LABEL,
+  FINGERPRINT_FACTOR_LABEL,
+  HARDWARE_REQUEST_KIND_LABEL,
+  HARDWARE_REQUEST_STATUS_LABEL,
+  KEY_KIND_LABEL,
+  KEY_STATUS_LABEL,
+  REISSUE_STATUS_LABEL,
+  REVOCATION_BLOCKER_LABEL,
+  SIGNER_PLAN_LABEL,
+  SIGNER_PLAN_REASON_LABEL,
+} from "../shared/labels";
+import {
+  OFFLINE_HORIZON_DEFAULT_DAYS,
+  OFFLINE_HORIZON_MAX_DAYS,
+  OFFLINE_HORIZON_SHORT_CLASS_DAYS,
+  SHORT_HORIZON_CLASSES,
+  UNBOUNDED_HORIZON_CLASSES,
+} from "../portal/installation/EntitlementSigning";
 import { PORTAL_PERMISSIONS, TAILNET_ONLY_PERMISSIONS } from "../shared/permissions";
 import { HEAVY_K3_MIN_DAYS, INSTALLMENT_DEFAULT_RESTRICTION_DAYS } from "../shared/sanctions";
 import { CHANNEL_CODE_PATTERN, CHANNEL_KIND_LABEL, VERSION_PATTERN } from "../portal/pages/Channels";
@@ -186,6 +216,108 @@ describe("katalog ekran adları", () => {
   });
 });
 
+/** Prisma şemasındaki bir enum'un değerleri (belge yorumları `///` atlanır). */
+function prismaEnum(name: string): string[] {
+  const schema = readFileSync(path.resolve(SERVER_SRC, "../prisma/schema.prisma"), "utf8");
+  const m = new RegExp(`\\nenum ${name} \\{([\\s\\S]*?)\\n\\}`).exec(schema);
+  if (!m) throw new Error(`enum ${name} bulunamadı`);
+  return m[1]!.split("\n").map((l) => l.trim()).filter((l) => /^[A-Za-z_]+$/.test(l));
+}
+
+/** Ekran adı haritası sunucu kümesiyle İKİ YÖNLÜ birebir (eksik değer ham kod basar, fazla anahtar ölü etikettir). */
+function twoWay(values: readonly string[], map: Record<string, string>): void {
+  expect(values.length).toBeGreaterThan(1);
+  expect(values.filter((v) => !map[v])).toEqual([]);
+  expect(Object.keys(map).filter((k) => !values.includes(k))).toEqual([]);
+}
+
+describe("lisans v2 — enum ve küme ekran adları (sunucu kaynağı, iki yönlü)", () => {
+  it("kopya uyarısı türleri = Prisma KopyaUyariTuru (YABANCI_HAK · YEREL_MUDAHALE dahil)", () => {
+    const values = prismaEnum("KopyaUyariTuru");
+    expect(values).toEqual(expect.arrayContaining(["YABANCI_HAK", "YEREL_MUDAHALE"]));
+    twoWay(values, COPY_ALERT_LABEL);
+  });
+
+  it("kira zinciri kararları = Prisma ZincirKarari (KAPANIS · DOSYA dahil)", () => {
+    const values = prismaEnum("ZincirKarari");
+    expect(values).toEqual(expect.arrayContaining(["KAPANIS", "DOSYA"]));
+    twoWay(values, LEASE_DECISION_LABEL);
+  });
+
+  it("yerel müdahale nedenleri = LOCAL_INTERVENTION_CAUSES (services/local-intervention.ts)", () => {
+    twoWay(listStrings(read("services/local-intervention.ts"), "export const LOCAL_INTERVENTION_CAUSES"), LOCAL_INTERVENTION_CAUSE_LABEL);
+  });
+
+  it("kök imzası talebi durumları = Prisma HakKokTalebiDurumu ve portal süzgeci (key-routes.ts ROOT_REQUEST_STATES)", () => {
+    const values = prismaEnum("HakKokTalebiDurumu");
+    twoWay(values, ROOT_REQUEST_STATUS_LABEL);
+    expect(listStrings(read("http/key-routes.ts"), "const ROOT_REQUEST_STATES")).toEqual(values);
+  });
+
+  it("donanım talebi türü/durumu = Prisma DonanimTalebiTuru/DonanimTalebiDurumu ve portal süzgeci (hardware-routes.ts)", () => {
+    const kinds = prismaEnum("DonanimTalebiTuru");
+    const states = prismaEnum("DonanimTalebiDurumu");
+    twoWay(kinds, HARDWARE_REQUEST_KIND_LABEL);
+    twoWay(states, HARDWARE_REQUEST_STATUS_LABEL);
+    const src = read("http/hardware-routes.ts");
+    expect(listStrings(src, "const HARDWARE_REQUEST_KINDS")).toEqual(kinds);
+    expect(listStrings(src, "const HARDWARE_REQUEST_STATES")).toEqual(states);
+  });
+
+  it("parmak izi etkenleri = protokol FINGERPRINT_FACTORS · karşılaştırma durumları = FACTOR_STATES (fingerprint-policy.ts)", () => {
+    twoWay(listStrings(read("lisans-protokol/parmak-izi.ts"), "export const FINGERPRINT_FACTORS"), FINGERPRINT_FACTOR_LABEL);
+    twoWay(listStrings(read("services/fingerprint-policy.ts"), "export const FACTOR_STATES"), FACTOR_STATE_LABEL);
+  });
+
+  it("kapanış kirası nedenleri = protokol CLOSING_LEASE_REASONS", () => {
+    twoWay(listStrings(read("lisans-protokol/belgeler.ts"), "export const CLOSING_LEASE_REASONS"), CLOSING_REASON_LABEL);
+  });
+
+  it("ödenmiş tarih kaynağı = PaidThroughKind (services/paid-through.ts)", () => {
+    const m = /export type PaidThroughKind = ([^;]+);/.exec(read("services/paid-through.ts"));
+    expect(m, "PaidThroughKind bulunamadı").not.toBeNull();
+    twoWay([...m![1]!.matchAll(/"([A-Z_]+)"/g)].map((x) => x[1]!), PAID_THROUGH_KIND_LABEL);
+  });
+
+  it("imza planı ve KUYRUK nedeni = SignerPlanKind · EntitlementSignerPlan reason (entitlement-policy.ts)", () => {
+    const src = read("services/entitlement-policy.ts");
+    const kinds = /export type SignerPlanKind = ([^;]+);/.exec(src);
+    const reasons = /readonly reason: ([^}]+) \}/.exec(src);
+    expect(kinds, "SignerPlanKind bulunamadı").not.toBeNull();
+    expect(reasons, "KUYRUK reason bulunamadı").not.toBeNull();
+    twoWay([...kinds![1]!.matchAll(/"([A-Z_]+)"/g)].map((x) => x[1]!), SIGNER_PLAN_LABEL);
+    twoWay([...reasons![1]!.matchAll(/"([A-Z_]+)"/g)].map((x) => x[1]!), SIGNER_PLAN_REASON_LABEL);
+  });
+
+  it("plan değişikliği 409'u `details.imzaci` taşır (arayüz formu yeni plana göre yeniler)", () => {
+    expect(read("services/entitlement-version.service.ts")).toMatch(/new VendorError\(409, "DURUM_CAKISMASI", [^)]*\{ imzaci: plan\.kind \}\)/);
+    expect(listStrings(read("lib/errors.ts"), "export const PORTAL_ERROR_CODES")).toContain("DURUM_CAKISMASI");
+  });
+
+  it("anahtar türü/durumu = Prisma AnahtarTuru/AnahtarDurumu (ARA dahil)", () => {
+    const kinds = prismaEnum("AnahtarTuru");
+    expect(kinds).toContain("ARA");
+    twoWay(kinds, KEY_KIND_LABEL);
+    twoWay(prismaEnum("AnahtarDurumu"), KEY_STATUS_LABEL);
+  });
+
+  it("iptal engeli türleri = RevocationBlocker (revocation.service.ts) · toplu basım sonucu = ReissueResult (entitlement-issue.service.ts)", () => {
+    const blocker = /export type RevocationBlocker =([\s\S]*?);\n/.exec(read("services/revocation.service.ts"));
+    expect(blocker, "RevocationBlocker bulunamadı").not.toBeNull();
+    twoWay([...blocker![1]!.matchAll(/tur: "([A-Z_]+)"/g)].map((x) => x[1]!), REVOCATION_BLOCKER_LABEL);
+    const reissue = /readonly durum: ([^;]+);/.exec(/export interface ReissueResult \{([\s\S]*?)\n\}/.exec(read("services/entitlement-issue.service.ts"))?.[1] ?? "");
+    expect(reissue, "ReissueResult.durum bulunamadı").not.toBeNull();
+    twoWay([...reissue![1]!.matchAll(/"([A-Z_]+)"/g)].map((x) => x[1]!), REISSUE_STATUS_LABEL);
+  });
+
+  it("✓K ayna denetçisi ısırır: eksik ve fazla anahtar ayrı ayrı yakalanır", () => {
+    const missing = { A: "a" };
+    const extra = { A: "a", B: "b", C: "c" };
+    expect(() => twoWay(["A", "B"], missing)).toThrow();
+    expect(() => twoWay(["A", "B"], extra)).toThrow();
+  });
+});
+
 /** `export const AD = <sayı>;` ya da `(…) => … ?? <sayı>` — sunucu sabitinin değeri. */
 function numberConst(src: string, pattern: RegExp): number {
   const m = pattern.exec(src);
@@ -222,6 +354,16 @@ describe("eşikler ve biçim desenleri aynası", () => {
     const src = read("services/dealer.service.ts");
     expect(DEFAULT_MAINTENANCE_MONTHS).toBe(numberConst(src, /export const DEFAULT_MAINTENANCE_MONTHS = (\d+);/));
     expect(MAX_MAINTENANCE_MONTHS).toBe(numberConst(src, /export const MAX_MAINTENANCE_MONTHS = (\d+);/));
+  });
+
+  it("çevrimdışı ufuk sınırları ve sınıf kümeleri (lisans-protokol belgeler.ts · anahtar-zinciri.ts)", () => {
+    const docs = read("lisans-protokol/belgeler.ts");
+    expect(OFFLINE_HORIZON_DEFAULT_DAYS).toBe(numberConst(docs, /export const OFFLINE_HORIZON_DEALER_DAYS = (\d+);/));
+    expect(OFFLINE_HORIZON_SHORT_CLASS_DAYS).toBe(numberConst(docs, /export const OFFLINE_HORIZON_SHORT_CLASS_DAYS = (\d+);/));
+    expect(OFFLINE_HORIZON_MAX_DAYS).toBe(numberConst(docs, /export const OFFLINE_HORIZON_MAX_DAYS = (\d+);/));
+    const chain = read("lisans-protokol/anahtar-zinciri.ts");
+    expect([...SHORT_HORIZON_CLASSES]).toEqual(listStrings(chain, "const SHORT_HORIZON_CLASSES: readonly LicenseClass\\[\\]"));
+    expect([...UNBOUNDED_HORIZON_CLASSES]).toEqual(listStrings(chain, "const UNBOUNDED_HORIZON_CLASSES: readonly LicenseClass\\[\\]"));
   });
 
   it("sözleşme kabulünün kurulum kaydı olay adı (activation.service.ts ACCEPTANCE_EVENT)", () => {
@@ -283,7 +425,7 @@ describe("güncelleme (Dağıtım v2) sözlüğü ve desenleri aynası", () => {
 
 describe("arayüzün çağırdığı her uç sunucuda var", () => {
   // Satıcı tablosu başka dosyadan yayılan parçaları da taşır (`...SUPPORT_PORTAL_ROUTES`): her yayılan tablo bu listede.
-  const VENDOR_ROUTE_FILES = ["http/portal-routes.ts", "http/distribution-routes.ts", "http/support-routes.ts", "http/notification-routes.ts"];
+  const VENDOR_ROUTE_FILES = ["http/portal-routes.ts", "http/key-routes.ts", "http/hardware-routes.ts", "http/distribution-routes.ts", "http/support-routes.ts", "http/notification-routes.ts"];
   const vendor = [...VENDOR_ROUTE_FILES.flatMap(serverRoutes), ...sessionRoutes()];
   const dealer = [...serverRoutes("http/dealer-routes.ts"), ...sessionRoutes()];
   const calls = clientCalls();

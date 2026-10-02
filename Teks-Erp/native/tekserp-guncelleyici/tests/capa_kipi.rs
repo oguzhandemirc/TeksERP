@@ -128,7 +128,9 @@ fn foreign_mode_root_signed_entitlement_is_rejected() {
     let doc = payload_of(&hak.expect("HAK"));
     let roots = TrustAnchor::builtin().roots;
     let verify = |kid: &str| {
-        chain::verify_entitlement(&Value::String(sign(&stranger(), "tekserp-hak", kid, &doc)), &roots).map(|_| ()).map_err(|f| f.code)
+        chain::verify_entitlement(&Value::String(sign(&stranger(), "tekserp-hak", kid, &doc)), &roots, None, None)
+            .map(|_| ())
+            .map_err(|f| f.code)
     };
     assert_eq!(verify(foreign_root_kid()), Err(code::KOK_BILINMIYOR), "{ANCHOR_MODE} güncelleyicisi öteki kipin kökünü tanımamalı");
     let own = roots.first().expect("gömülü kök").kid.clone();

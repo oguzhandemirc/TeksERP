@@ -52,7 +52,7 @@ function kur(): Fikstur {
 async function kiraVer(f: Fikstur, guncelSurumler: Record<string, string>, verilisOfsetMs: number): Promise<void> {
   const verilis = new Date(Date.now() + verilisOfsetMs).toISOString();
   const kira = kiraBas(f, { zorlama: false, verilis, kiraId: randomUUID(), kanal: { kod: "deneme-kanal", guncelSurumler } });
-  await acceptLicenseResponse({ v: 1, hak: hakBas(f), kira, indirmeBelirtecleri: [], sunucuSaati: new Date().toISOString(), kurulumId: f.kurulumId }, "cevrimdisi");
+  await acceptLicenseResponse({ v: 1, hak: hakBas(f), kira, indirmeBelirtecleri: [], sunucuSaati: new Date().toISOString(), kurulumId: f.kurulumId }, "cevrimdisi", "TASINMIS");
 }
 
 async function ucOku(yol: string): Promise<Record<string, unknown>> {

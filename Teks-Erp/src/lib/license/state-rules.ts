@@ -12,9 +12,11 @@ import {
   type Validity,
   type LeaseDoc,
   type LicenseMode,
+  type FingerprintRuleApplied,
 } from "./protocol";
 import type { CoreErrorCode } from "./license-core";
-import { evaluateClock, type ClockResult, type EntitlementPin, type SanctionSnapshot } from "./saat";
+import { evaluateClock, type ClockResult, type EntitlementPin, type RememberedAnchor, type SanctionSnapshot } from "./saat";
+import type { TraceInput } from "./state-rules-trace";
 
 export const REASON_CODES = [
   "HAK_YOK",
@@ -39,6 +41,10 @@ export const REASON_CODES = [
   "ILK_ACILIS_BILINMIYOR",
   "KIRA_SURESI_DOLDU",
   "VADE_DOLDU",
+  /** v2: ödenmiş tarih (P) geçti — ek süre P'den sayılır. */
+  "ODENMIS_TARIH_DOLDU",
+  /** v2 bilgi bandı (K1): P'ye ≤ 30 gün; yalnız internetsizken ya da P sözleşme sonuyken. Kademe değiştirmez. */
+  "ODEME_YAKLASIYOR",
   "KIRASIZ_EK_SURE",
   "ETKINLESTIRME_EK_SURESI",
   "EK_SURE_BITTI",
@@ -50,6 +56,14 @@ export const REASON_CODES = [
   "BAKIM_BITTI",
   "BAKIM_IHLALI",
   "DERLEME_TARIHI_YOK",
+  /** G12: kira · durum kaydı · DB izinden biri ya da birkaçı kayıp (ayrıntı: hangileri); son kiradan beri kalıcı. */
+  "LISANS_IZI_KAYIP",
+  /** G12: ayakta kalan iki iz farklı süre çapası taşıyor — erken olan geçerli. */
+  "LISANS_IZI_CELISKI",
+  /** G12: süren ölçülemedi birikimi (çalışma süresi) — 14 gün UYARI → 30 gün EK_SURE → KISITLI. */
+  "BELIRSIZLIK_SURUYOR",
+  /** G4: kira ya da durum kaydı pini bir iptal sırası istiyor, elde o sırada belge yok (iki kopya da) — zincir ölçülemez. */
+  "IPTAL_BELGESI_KAYIP",
 ] as const;
 export type ReasonCode = (typeof REASON_CODES)[number];
 
@@ -76,6 +90,8 @@ export const REASON_VALIDITY: Readonly<Record<ReasonCode, Validity | null>> = {
   ILK_ACILIS_BILINMIYOR: "OLCULEMEDI",
   KIRA_SURESI_DOLDU: null,
   VADE_DOLDU: null,
+  ODENMIS_TARIH_DOLDU: null,
+  ODEME_YAKLASIYOR: null,
   KIRASIZ_EK_SURE: null,
   ETKINLESTIRME_EK_SURESI: null,
   EK_SURE_BITTI: null,
@@ -87,6 +103,13 @@ export const REASON_VALIDITY: Readonly<Record<ReasonCode, Validity | null>> = {
   BAKIM_BITTI: null,
   BAKIM_IHLALI: null,
   DERLEME_TARIHI_YOK: null,
+  // İz kaybı ve çelişki program kalan süreyi bilemediği hâllerdir: ölçülemedi, merdivene girer.
+  LISANS_IZI_KAYIP: "OLCULEMEDI",
+  LISANS_IZI_CELISKI: "OLCULEMEDI",
+  // Merdivenin kendisi kademe taşır; geçerliliği onu doğuran bulgular belirler.
+  BELIRSIZLIK_SURUYOR: null,
+  // İptal belgesi olmadan iptal edilmiş anahtar ayırt edilemez: ölçülemedi, merdivene girer.
+  IPTAL_BELGESI_KAYIP: "OLCULEMEDI",
 };
 
 export interface Banner {
@@ -121,8 +144,8 @@ export interface LicenseStateInput {
   readonly saat: {
     readonly duvarMs: number;
     readonly yuksekSuMs: number;
-    /** İmzalı durum kaydındaki birikim ve ait olduğu kira; yoksa null. */
-    readonly monotonik: { readonly kiraId: string; readonly gecenMs: number } | null;
+    /** İmzalı durum kaydındaki birikim, ait olduğu kira ve kabulde süreklilik tabanı (`saatTabani`); yoksa null. */
+    readonly monotonik: { readonly kiraId: string; readonly gecenMs: number; readonly tabanMs?: number | null } | null;
     readonly durumDosyasiGecerli: boolean;
     /** Duvar saatiyle gözlenmiş kapalı kalma süresi (üst eşik kredisi; `evaluateClock`). */
     readonly kapaliKrediMs?: number;
@@ -134,13 +157,14 @@ export interface LicenseStateInput {
   readonly derlemeTarihiMs: number | null;
   /** DB'den türeyen (dosya silmekle yenilenemeyen) ilk açılış anı; bilinmiyorsa null. */
   readonly ilkAcilisMs: number | null;
-  /** Son 24 saatte geçerli yeni kira ALINAMAYAN en az bir gerçek yoklama denemesi oldu mu? */
-  readonly sonYoklamaBasarisizMi: boolean;
   readonly varsayilanKip: LicenseMode;
   readonly sonKiraZorlamasi: boolean | null;
   /** Son kullanılabilir kiranın sunucu kararları (`durum.json`); kira kullanılabilirken yok sayılır. */
   readonly sonYaptirim: SanctionSnapshot | null;
-  /** Durum kaydının bildiği son kabul edilen kira (geri alma tespiti); yoksa denetim yok. */
+  /**
+   * Durum kaydının bildiği son kabul edilen kira: geri alma tespiti ve — kira silinmiş/okunamıyorsa —
+   * son başarılı alışverişin zamanı (iki anahtarın ikincisi); yoksa ikisi de kiradan.
+   */
   readonly sonKira?: { readonly kiraId: string; readonly verilisMs: number } | null;
   /** Durum kaydının bildiği son HAK pini (sürüm · sınıf · kök türü). */
   readonly sonHak?: EntitlementPin | null;
@@ -148,6 +172,28 @@ export interface LicenseStateInput {
   readonly saticiSapmaMs?: number | null;
   /** Var olan ama okunamayan depo dosyaları (ad listesi); boşsa sorun yok. */
   readonly depoOkunamadi?: readonly string[];
+  // ── Lisans v2 G12 (L2-6). Hepsi isteğe bağlı: verilmezse bugünkü davranış. ──
+  /** Lisans izlerinin hâli (kira · durum kaydı · DB izi); yoksa iz kuralı işlemez. */
+  readonly izler?: TraceInput;
+  /** Süren ölçülemedi birikimi (çalışma süresi, ms): durum kaydı ile DB izinin BÜYÜĞÜ + bu süreçteki. */
+  readonly belirsizlikMs?: number;
+  /** Parmak izi uyuşmazlık merdiveninin birikimi (çalışma süresi, ms). */
+  readonly parmakIziUyusmazMs?: number;
+  /** Kararın uygulandığı parmak izi kuralı (kiradaki alan; yoksa `v1`); ölçülmediyse verilmez. */
+  readonly parmakIziKurali?: FingerprintRuleApplied;
+  /** Ayakta kalan izlerin (durum kaydı dosyası · DB izi) hatırladığı süre çapaları. */
+  readonly sonCapalar?: readonly RememberedAnchor[];
+  /** HAK doğrulanamazsa uygulanacak son bilinen modül tavanı (durum kaydı pini → DB izi); bilinmiyorsa null. */
+  readonly sonBilinenTavan?: readonly string[] | null;
+  /** Kurulum anahtarı okunamıyor: imza (yoklama, kayıt yazımı) durdu — İnternet YOK sayılır (Z9). */
+  readonly imzaYok?: boolean;
+  /** Üç iz birden yok bulunduğu an (K7, kayıttan): süre çapası budur, HAK verilişi / ilk açılış çapası uygulanmaz. */
+  readonly ekSureCapasiMs?: number | null;
+  // ── Lisans v2 G4 (L2-7). İsteğe bağlı: verilmezse iptal kuralı işlemez (bugünkü davranış). ──
+  /** Elde tutulan etkin iptal belgesinin sırası (yoksa null) ve bir kopyanın okunamaması (dosya izni · DB bilinmiyor). */
+  readonly iptal?: { readonly sira: number | null; readonly okunamadi: boolean };
+  /** Durum kaydı kopyalarının iptal pini (en büyüğü): bir kez görülen sıra geri inmez. */
+  readonly iptalPini?: number | null;
 }
 
 /** Kiradan sunucu kararlarının anlık görüntüsü — `durum.json` bunu saklar, durum onu okur. */
@@ -219,12 +265,14 @@ export function evaluateLease(g: LicenseStateInput, entitlement: VerifiedEntitle
 
 export function computeClock(g: LicenseStateInput, lease: LeaseDoc | null, out: Finding[]): ClockResult {
   const m = g.saat.monotonik;
-  const elapsed = lease && g.saat.durumDosyasiGecerli && m && m.kiraId === lease.kiraId ? m.gecenMs : null;
+  const measured = lease && g.saat.durumDosyasiGecerli && m && m.kiraId === lease.kiraId ? m : null;
+  const elapsed = measured ? measured.gecenMs : null;
   if (lease && elapsed === null) out.push({ code: "DURUM_DOSYASI", tier: "UYARI", banner: UNMEASURED_BANNER });
   const s = evaluateClock({
     wallMs: g.saat.duvarMs,
     highWaterMs: g.saat.yuksekSuMs,
     leaseServerTimeMs: lease ? isoToMs(lease.sunucuSaati) : null,
+    baseMs: measured?.tabanMs ?? null,
     monotonicElapsedMs: elapsed,
     pollIntervalMs: (lease?.yoklamaAraligiDk ?? POLL_DEFAULT_MINUTES) * 60_000,
     downtimeCreditMs: g.saat.kapaliKrediMs ?? 0,
@@ -233,61 +281,10 @@ export function computeClock(g: LicenseStateInput, lease: LeaseDoc | null, out: 
   return s;
 }
 
-export function evaluateMeasurements(g: LicenseStateInput, lease: LeaseDoc | null, out: Finding[]): void {
-  // Kabul edilmiş küme kirada; kira yoksa karşılaştıracak bir şey de yok.
-  if (lease && g.parmakIziEslesme === "ESLESMEDI") out.push({ code: "PARMAK_IZI_UYUSMAZ", tier: "UYARI", banner: UNVERIFIED_BANNER });
-  if (lease && g.parmakIziEslesme === "OLCULEMEDI") out.push({ code: "PARMAK_IZI_OLCULEMEDI", tier: "UYARI", banner: UNMEASURED_BANNER });
-}
-
-interface TimeAnchor {
-  readonly anchorMs: number;
-  readonly graceDays: number;
-  readonly code: ReasonCode;
-  readonly text: string;
-}
-
-/** Ek süre İMZALI tarihten türer: kira → HAK veriliş → (hiç etkinleşmemişse) DB'deki ilk açılış. */
-function timeAnchor(g: LicenseStateInput, entitlement: VerifiedEntitlement | null, lease: LeaseDoc | null): TimeAnchor | null {
-  if (lease) {
-    const end = isoToMs(lease.bitis);
-    const due = lease.gecerlilikBitis === null ? Number.POSITIVE_INFINITY : isoToMs(lease.gecerlilikBitis);
-    return due < end
-      ? { anchorMs: due, graceDays: lease.ekSureGun, code: "VADE_DOLDU", text: "Lisans vadesi doldu" }
-      : { anchorMs: end, graceDays: lease.ekSureGun, code: "KIRA_SURESI_DOLDU", text: "Lisans süresi doldu" };
-  }
-  if (entitlement) {
-    return { anchorMs: isoToMs(entitlement.document.verilis), graceDays: DEFAULT_GRACE_DAYS, code: "KIRASIZ_EK_SURE", text: "Lisans kirası bulunamadı" };
-  }
-  if (g.ilkAcilisMs === null) return null;
-  return { anchorMs: g.ilkAcilisMs, graceDays: DEFAULT_GRACE_DAYS, code: "ETKINLESTIRME_EK_SURESI", text: "Lisans etkinleştirilmedi" };
-}
-
-/** Zamanın getirdiği KISITLI iki anahtarlıdır: süre geçmiş VE son 24 saatte yoklama gerçekten başarısız. */
-export function evaluateGrace(
-  g: LicenseStateInput,
-  docs: { readonly entitlement: VerifiedEntitlement | null; readonly lease: LeaseDoc | null },
-  nowMs: number,
-  out: Finding[],
-): void {
-  const anchor = timeAnchor(g, docs.entitlement, docs.lease);
-  if (!anchor) {
-    out.push({ code: "ILK_ACILIS_BILINMIYOR", tier: "UYARI", banner: UNMEASURED_BANNER });
-    return;
-  }
-  if (nowMs < anchor.anchorMs) return;
-  const end = anchor.anchorMs + anchor.graceDays * DAY_MS;
-  if (nowMs < end) {
-    const left = remainingDays(end, nowMs);
-    const banner = warnBanner(`${anchor.text} — ${left} gün içinde yenilenmezse program kısıtlı kipe geçecek.`);
-    out.push({ code: anchor.code, tier: "EK_SURE", banner, daysLeft: left });
-    return;
-  }
-  out.push({ code: anchor.code });
-  if (g.sonYoklamaBasarisizMi) {
-    out.push({ code: "EK_SURE_BITTI", tier: "KISITLI", banner: dangerBanner(`${anchor.text} ve ek süre bitti: program kısıtlı kipte (okuma, rapor, yedek açık).`) });
-  } else {
-    out.push({ code: "EK_SURE_BITTI", tier: "EK_SURE", daysLeft: 0, banner: warnBanner(`${anchor.text}; lisans sunucusuyla bağlantı sürdükçe kısıtlama uygulanmaz.`) });
-  }
+/** Zamanın getirdiği KISITLI'nın ikinci anahtarı (`state-rules-time.ts` `evaluateExchange` doldurur). */
+export interface SecondKey {
+  /** Son 24 saatte başarılı kira alışverişi VAR — varken süre dolsa da kademe EK_SURE (0 gün) kalır. */
+  readonly internetVar: boolean;
 }
 
 /**

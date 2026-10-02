@@ -111,7 +111,7 @@ export interface LisansDetayi {
   depo: { durumKaydi: { gecerli: boolean; sira: number | null } };
   durum: {
     gecerlilik: string;
-    nedenler: Array<{ kod: string }>;
+    nedenler: Array<{ kod: string; ayrinti?: string | null }>;
     kip: string;
     hesaplananKademe: string;
     uygulananKademe: string;
@@ -122,6 +122,9 @@ export interface LisansDetayi {
     devredildi: boolean;
     yaptirimKademesi: string | null;
     saat: { guvenilir: string; kaynak: string; bulgu: string | null; bulguKaynagi: string | null };
+    /** v2 süre çapası P (`null` = belgeler P taşımıyor, eski çapa). */
+    odenmisTarih: { tarih: string | null; kaynak: string; sozlesmeSonu: boolean } | null;
+    baglanti: { sonAlisveris: string | null; internetVar: boolean };
   };
   hak: { hakId: string; surum: number; lisansNo: string; kalici: boolean; moduller: string[]; bakimBitis: string; bayiId: string | null } | null;
   kira: { kiraId: string; bitis: string; zorlama: boolean; gecerlilikBitis: string | null; devredildi: boolean; yaptirim: { kademe: string | null; guncellemeDonuk: boolean; donmusModuller: string[] } } | null;

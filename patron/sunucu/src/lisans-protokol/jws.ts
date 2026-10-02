@@ -141,6 +141,11 @@ export function publicKeyX(key: KeyObject): string {
   return jwk.x;
 }
 
+/** Belgenin bayt özeti: compact JWS metninin sha256'sı, base64url (43). Kira HAK'a (`hakOzeti`), yoklama HAK'ı bununla bağlar. */
+export function jwsDigest(token: string): string {
+  return b64uEncode(createHash("sha256").update(token, "utf8").digest());
+}
+
 /** Kurulum anahtarının kimliği: `kur-` + sha256(ham açık anahtar), base64url. */
 export function installationKeyId(x: string): string {
   const raw = b64uDecode(x);

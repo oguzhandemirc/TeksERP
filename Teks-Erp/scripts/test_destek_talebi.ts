@@ -74,7 +74,7 @@ async function kur(): Promise<{ f: Fikstur; userId: string }> {
   configureLicenseRuntimeForTests({ roots: f.kokler, vendorUrl: "https://satici.test" });
   setLicenseDbFacts({ installationId: randomUUID(), firstOpenMs: Date.now() - 86_400_000, ledgerHighWaterMs: null });
   setMeasuredFingerprint({ digest: f.parmakIzi as Fingerprint, measured: { f1: true, f2: true, f3: true, f4: true, f5: true }, measuredAt: new Date().toISOString() });
-  await acceptLicenseResponse({ v: 1, hak: hakBas(f), kira: kiraBas(f, { zorlama: false }), indirmeBelirtecleri: [], sunucuSaati: new Date().toISOString(), kurulumId: f.kurulumId }, "cevrimdisi");
+  await acceptLicenseResponse({ v: 1, hak: hakBas(f), kira: kiraBas(f, { zorlama: false }), indirmeBelirtecleri: [], sunucuSaati: new Date().toISOString(), kurulumId: f.kurulumId }, "cevrimdisi", "TASINMIS");
   const u = await ensureTestAdmin();
   return { f, userId: u.id };
 }

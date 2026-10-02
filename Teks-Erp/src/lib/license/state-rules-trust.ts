@@ -6,7 +6,7 @@ import { rootKindOf, type EntitlementPin } from "./saat";
 import { UNMEASURED_BANNER, type Finding, type LicenseStateInput } from "./state-rules";
 
 /** Pin ters mi: başka HAK, daha eski sürüm, başka sınıf ya da başka kök türü. */
-function entitlementPinBroken(entitlement: VerifiedEntitlement, pin: EntitlementPin): string | null {
+export function entitlementPinBroken(entitlement: VerifiedEntitlement, pin: EntitlementPin): string | null {
   const d = entitlement.document;
   if (d.hakId !== pin.hakId) return "HAK";
   if (d.surum < pin.surum) return "HAK_SURUM";

@@ -577,8 +577,9 @@ async function main(): Promise<void> {
   const kokluler = VENDOR_PORTAL_ROUTES.filter((r) => r.kokParolasi).map((r) => routeKey(r.method, r.path));
   const hassaslar = VENDOR_PORTAL_ROUTES.filter((r) => TAILNET_ONLY_PERMISSIONS.includes(r.permission)).map((r) => routeKey(r.method, r.path));
   kontrol(
-    "§4b kök imzası, kullanıcı yönetimi (açma · TOTP sıfırlama · parola sıfırlama · liste) ve güven kökü ekleyen anahtar kayıtları (bayi anahtarı bağlama · yayıncı anahtarı kaydı) listede DEĞİL; kümeler boş değil",
+    "§4b kök/ara imzası (HAK sürümü · ara imzacıyla toplu yeniden basım — G4), kullanıcı yönetimi (açma · TOTP sıfırlama · parola sıfırlama · liste) ve güven kökü ekleyen anahtar kayıtları (bayi anahtarı bağlama · yayıncı anahtarı kaydı) listede DEĞİL; kümeler boş değil",
     kokluler.includes("POST /haklar/:id/surum") &&
+      kokluler.includes("POST /haklar/toplu-yeniden-bas") &&
       ["GET /kullanicilar", "POST /kullanicilar", "POST /kullanicilar/:id/totp-sifirla", "POST /kullanicilar/:id/parola", "POST /bayiler/:id/anahtar", "POST /yayincilar"].every((k) =>
         hassaslar.includes(k),
       ) &&

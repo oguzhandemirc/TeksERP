@@ -1,7 +1,7 @@
 // Advisory kilit ENVANTERİ — satıcı DB'sinin kendi uzayı (backend'in 80xx uzayından bağımsız).
 // Kural: kilit tx'in İLK ifadesidir; birden çok kilit deterministik sırada alınır:
 //   PORTAL_TOKEN → DEALER (kimlik sırasıyla) → CUSTOMER → TRANSFER_KEY → INSTALLATION (kimlik sırasıyla) → LICENSE_NUMBER
-//   → UPLOAD_REQUEST → UPLOAD_SESSION → SHARED_FILE → DOWNLOAD_LINK.
+//   → UPLOAD_REQUEST → UPLOAD_SESSION → SHARED_FILE → DOWNLOAD_LINK → KEY_SET.
 // Envanter CLAUDE.md tablosuyla birebir; bekçi: scripts/test_satici_kapilari.ts.
 import type { Tx } from "./prisma";
 
@@ -26,6 +26,8 @@ export const LOCK_NAMESPACES = {
   SHARED_FILE: 9109,
   /** İndirme bağlantısı (/d) başına: indirme sayacı ↔ iptal. */
   DOWNLOAD_LINK: 9110,
+  /** Satıcının imza anahtarı kümesi (tek anahtar): iptal belgesi içe aktarma (`sira` tekdüze) ↔ anahtar süresi bildirimi. */
+  KEY_SET: 9111,
 } as const;
 
 export async function lockInstallation(tx: Tx, installationDbId: string): Promise<void> {
@@ -80,6 +82,11 @@ export async function lockSharedFile(tx: Tx, fileId: string): Promise<void> {
 
 export async function lockDownloadLink(tx: Tx, linkId: string): Promise<void> {
   await tx.$executeRaw`SELECT pg_advisory_xact_lock(${LOCK_NAMESPACES.DOWNLOAD_LINK}::int4, hashtext(${linkId}))`;
+}
+
+/** Satıcının anahtar kümesi: tek anahtarlı uzay (iptal sırası karşılaştırması + ekleme · anahtar süresi bildirimi). */
+export async function lockKeySet(tx: Tx): Promise<void> {
+  await tx.$executeRaw`SELECT pg_advisory_xact_lock(${LOCK_NAMESPACES.KEY_SET}::int4, 0)`;
 }
 
 /** Yükleme oturumu kapsamı: GELEN oturumda önce isteği, sonra oturumu (UPLOAD_REQUEST → UPLOAD_SESSION). */

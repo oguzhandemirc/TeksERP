@@ -16,8 +16,8 @@ import {
   VersionTextSchema,
   decodeDocument,
   signDocument,
-  type DownloadProduct,
 } from "./belgeler";
+import type { DownloadProduct } from "./indirme";
 import { ArtifactSchema, PackageKidSchema, UPDATE_PLATFORMS, isPackageKid, packageKeyLookup, type PackagePublicKey } from "./guncelleme-ortak";
 import { PgRequirementSchema } from "./guncelleme-pg";
 import { CLOCK_SKEW_MS, failure, forwardFailure, isoToMs, success, type Result } from "./ortak";

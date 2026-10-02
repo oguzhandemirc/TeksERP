@@ -3,6 +3,7 @@
 // bugünkü davranıştır (sıfır fark) — iki alan ayrı tutulur ki gözlem ölçülebilsin.
 import {
   STATE_TIERS,
+  isoToMs,
   type VerifiedEntitlement,
   type VerifiedLease,
   type StateTier,
@@ -17,9 +18,7 @@ import {
   REASON_VALIDITY,
   evaluateEntitlement,
   evaluateLease,
-  evaluateMeasurements,
   computeClock,
-  evaluateGrace,
   evaluateSanction,
   sanctionSnapshotOf,
   type Banner,
@@ -28,16 +27,27 @@ import {
   type LicenseStateInput,
   type ReasonCode,
 } from "./state-rules";
-import { evaluateRollback, evaluateStore, evaluateVendorClock } from "./state-rules-trust";
+import { entitlementPinBroken, evaluateRollback, evaluateStore, evaluateVendorClock } from "./state-rules-trust";
 import { evaluateIntegrity, evaluateMaintenance } from "./state-rules-package";
-import type { ClockResult, SanctionSnapshot } from "./saat";
+import { evaluateExchange, evaluateGrace, paidThrough, type ExchangeStatus, type PaidThrough } from "./state-rules-time";
+import {
+  evaluateFingerprint,
+  evaluateTraces,
+  evaluateUncertainty,
+  isAccumulating,
+  type FingerprintLadderResult,
+} from "./state-rules-trace";
+import { evaluateRevocation } from "./state-rules-revocation";
+import { moduleAllowedByCeiling } from "./module-rules";
+import type { ClockResult, SanctionSnapshot, TraceKind } from "./saat";
 
 export type { Banner, DocResult, LicenseStateInput, ReasonCode } from "./state-rules";
 export { REASON_CODES, REASON_VALIDITY, DEFAULT_GRACE_DAYS, sanctionSnapshotOf } from "./state-rules";
+export type { ExchangeStatus, PaidThrough } from "./state-rules-time";
 
 /**
- * `allowed` HAK'ın satın alınmış modül listesidir (null = HAK tavanı uygulanmıyor);
- * `denied` sunucunun dondurduğu modüller (K2) — belirsizlikte de, ek sürede de kalıcı.
+ * `allowed` HAK'ın satın alınmış modül listesidir — HAK doğrulanamıyorsa son bilinen tavan (null = hiç tavan
+ * bilinmiyor: ham bayrak); `denied` sunucunun dondurduğu modüller (K2) — belirsizlikte de, ek sürede de kalıcı.
  */
 export type ModuleCeiling =
   | { readonly applies: false }
@@ -46,7 +56,7 @@ export type ModuleCeiling =
 export interface LicenseEffect {
   readonly bant: Banner | null;
   readonly guncellemeIzni: boolean;
-  /** HAK tavanı yalnız BELİRSİZLİKTE (ölçülemedi / HAK yok) açılır; dondurulan modül her hâlde kapalı. */
+  /** HAK tavanı belirsizlikte de sürer (G12); çekirdek modül her hâlde açık, dondurulan modül kapalı. */
   readonly modulTavani: ModuleCeiling;
 }
 
@@ -69,6 +79,19 @@ export interface LicenseState {
   readonly devredildi: boolean;
   readonly yaptirimKademesi: SanctionLevel | null;
   readonly saat: ClockResult;
+  /** v2 süre çapası: ödenmiş tarih P. `null` = belgeler P taşımıyor, eski çapa (kira bitişi/vade) işler. */
+  readonly odenmisTarih: PaidThrough | null;
+  /** Son başarılı kira alışverişi: KISITLI'nın ikinci anahtarı ve bilgi bandının "internetsiz" ölçüsü. */
+  readonly baglanti: ExchangeStatus;
+  /** G12 belirsizlik merdiveni: süren ölçülemedi (motor birikimi ilerletir), birikim, iz kaybı, üç iz yok (K7). */
+  readonly belirsizlik: {
+    readonly suruyor: boolean;
+    readonly birikenMs: number;
+    readonly izKaybi: readonly TraceKind[];
+    readonly ucIzYok: boolean;
+  };
+  /** Parmak izi v2 merdiveni (kural kiradan; v1'de merdiven yok). */
+  readonly parmakIziMerdiveni: FingerprintLadderResult;
 }
 
 /** Gözlem kipinde uygulanan etki: bugünkü davranış — bant yok, güncelleme serbest, tavan yok. */
@@ -90,17 +113,27 @@ export function toDocResult<T>(s: CoreResult<T> | null): DocResult<T> {
 
 /**
  * Diskten okunan HAK ve kirayı çapaya karşı LİSANS ÇEKİRDEĞİNDE doğrular (üretimde native; dosya
- * yoksa `null` verilir). `core` yalnız testlerden verilir.
+ * yoksa `null` verilir). `core` yalnız testlerden verilir. G4: önce kira (iptalle), sonra HAK iptal ve
+ * "şimdi" ile — şimdi = taban (duvar ∨ yüksek sular) ∨ doğrulanmış kiranın sunucu saati, ki saati geri
+ * fabrika taze HAK'ı ileri tarihli saymasın. İkisi de verilmezse eski çağrı.
  */
 export function verifyLicenseDocuments(g: {
   readonly entitlementJws: string | null;
   readonly leaseJws: string | null;
   readonly roots: readonly RootKey[];
   readonly core?: LicenseCore;
+  /** Çekirdekte doğrulanmış etkin iptal belgesi metni; null = iptal yok. */
+  readonly revocation?: string | null;
+  readonly nowFloorMs?: number;
 }): { readonly hak: DocResult<VerifiedEntitlement>; readonly kira: DocResult<VerifiedLease> } {
+  const chain = g.revocation === undefined ? undefined : { revocation: g.revocation };
+  const lease = g.leaseJws === null ? null : coreVerifyLease(g.leaseJws, g.roots, g.core, chain);
+  const leaseTime = lease?.ok ? isoToMs(lease.value.document.sunucuSaati) : Number.NEGATIVE_INFINITY;
+  const nowMs = g.nowFloorMs === undefined ? undefined : Math.max(g.nowFloorMs, leaseTime);
+  const options = chain === undefined && nowMs === undefined ? undefined : { ...chain, ...(nowMs === undefined ? {} : { nowMs }) };
   return {
-    hak: toDocResult(g.entitlementJws === null ? null : coreVerifyEntitlement(g.entitlementJws, g.roots, g.core)),
-    kira: toDocResult(g.leaseJws === null ? null : coreVerifyLease(g.leaseJws, g.roots, g.core)),
+    hak: toDocResult(g.entitlementJws === null ? null : coreVerifyEntitlement(g.entitlementJws, g.roots, g.core, options)),
+    kira: toDocResult(lease),
   };
 }
 
@@ -129,7 +162,10 @@ function pickBanner(findings: readonly Finding[]): Banner | null {
  * Kullanılabilir (geri alınmamış) kira varsa onun kararı; yoksa durum kaydındaki son kiranın kararı
  * (silinen ya da eskisiyle değiştirilen kira kipi gevşetmesin); o da yoksa derleme.
  */
-function computeMode(g: LicenseStateInput, lease: VerifiedLease | null): LicenseMode {
+function computeMode(g: LicenseStateInput, lease: VerifiedLease | null, entitlement: VerifiedEntitlement | null): LicenseMode {
+  // Kip alt sınırı HAK'tadır: kira, durum kaydı, DB izi ve derleme varsayılanı bunun altına inemez (HAK yoksa pin).
+  const floor = entitlement ? entitlement.document.kipAltSiniri : g.sonHak?.kipAltSiniri;
+  if (floor === "zorla") return "zorla";
   if (lease) return lease.document.zorlama ? "zorla" : "gozlem";
   if (g.sonKiraZorlamasi !== null) return g.sonKiraZorlamasi ? "zorla" : "gozlem";
   return g.varsayilanKip;
@@ -142,15 +178,24 @@ function sanctionSource(g: LicenseStateInput, lease: VerifiedLease | null): Sanc
   return lease ? sanctionSnapshotOf(lease.document) : g.sonYaptirim;
 }
 
+/**
+ * Modül tavanı HAK doğrulanabildikçe uygulanır; belirsizlik (saat · durum kaydı · depo) onu KALDIRMAZ (§3.1-2).
+ * HAK doğrulanamıyorsa ya da geri alınmışsa son bilinen tavan (durum kaydı pini → DB izi); o da yoksa diskteki
+ * doğrulanmış HAK; hiç tavan bilinmiyorsa (etkinleşmemiş · iz yok) ham bayrak.
+ */
+function ceilingModules(g: LicenseStateInput, entitlement: VerifiedEntitlement | null, entitlementUsable: boolean): readonly string[] | null {
+  if (entitlement && entitlementUsable) return entitlement.document.moduller;
+  return g.sonBilinenTavan ?? entitlement?.document.moduller ?? null;
+}
+
 function computeEffect(x: {
-  readonly validity: Validity;
   readonly tier: StateTier;
-  readonly entitlement: VerifiedEntitlement | null;
+  readonly allowed: readonly string[] | null;
   readonly lease: VerifiedLease | null;
   readonly sanction: SanctionSnapshot | null;
   readonly findings: readonly Finding[];
 }): LicenseEffect {
-  const allowed = x.entitlement !== null && x.validity !== "OLCULEMEDI" ? x.entitlement.document.moduller : null;
+  const allowed = x.allowed;
   const denied = x.sanction ? x.sanction.donmusModuller : [];
   const ceiling: ModuleCeiling = allowed !== null || denied.length > 0 ? { applies: true, allowed, denied } : { applies: false };
   const updateAllowed =
@@ -174,20 +219,34 @@ export function computeLicenseState(g: LicenseStateInput): LicenseState {
   evaluateStore(g, findings);
   const entitlement = evaluateEntitlement(g, findings);
   const lease = evaluateRollback(g, entitlement, evaluateLease(g, entitlement, findings), findings);
+  const entitlementUsable = entitlement !== null && !(g.sonHak && entitlementPinBroken(entitlement, g.sonHak));
+  const traces = evaluateTraces(g, lease, findings);
+  evaluateRevocation(g, lease, findings);
   const clock = computeClock(g, lease?.document ?? null, findings);
   evaluateVendorClock(g, findings);
   const now = clock.trustedMs;
-  evaluateMeasurements(g, lease?.document ?? null, findings);
-  evaluateIntegrity(g, now, findings);
-  evaluateGrace(g, { entitlement, lease: lease?.document ?? null }, now, findings);
+  const leaseDoc = lease?.document ?? null;
+  const exchange = evaluateExchange(g, leaseDoc, now);
+  const paid = entitlementUsable ? paidThrough(entitlement, leaseDoc) : null;
+  const keyed = { ...g, internetVar: exchange.internetVar };
+  const fingerprint = evaluateFingerprint(g, lease, exchange.internetVar, findings);
+  evaluateIntegrity(keyed, now, findings);
+  const ucIzKaybi = traces.ucIzYok || (g.ekSureCapasiMs ?? null) !== null;
+  evaluateGrace(g, { entitlement, lease: leaseDoc, paid, exchange, hakGecerli: entitlementUsable, ucIzKaybi }, now, findings);
+  const uncertainty = evaluateUncertainty(
+    g,
+    { suruyor: isAccumulating(findings, fingerprint.kural), ucIzYok: ucIzKaybi, internetVar: exchange.internetVar },
+    findings,
+  );
   const sanction = sanctionSource(g, lease);
   const restrictionDaysLeft = sanction ? evaluateSanction(sanction, now, findings) : null;
-  if (entitlement) evaluateMaintenance(g, entitlement.document, now, findings);
+  if (entitlement) evaluateMaintenance(keyed, entitlement.document, now, findings);
 
   const validity = computeValidity(findings);
   const computedTier = computeTier(findings, validity);
-  const mode = computeMode(g, lease);
-  const computed = computeEffect({ validity, tier: computedTier, entitlement, lease, sanction, findings });
+  const mode = computeMode(g, lease, entitlementUsable ? entitlement : null);
+  const allowed = ceilingModules(g, entitlement, entitlementUsable);
+  const computed = computeEffect({ tier: computedTier, allowed, lease, sanction, findings });
   const graceDays = findings.filter((f) => f.tier === "EK_SURE" && f.daysLeft !== undefined).map((f) => f.daysLeft ?? 0);
   return {
     gecerlilik: validity,
@@ -202,12 +261,17 @@ export function computeLicenseState(g: LicenseStateInput): LicenseState {
     devredildi: sanction?.devredildi ?? false,
     yaptirimKademesi: sanction?.kademe ?? null,
     saat: clock,
+    odenmisTarih: paid,
+    baglanti: exchange,
+    belirsizlik: { suruyor: uncertainty.suruyor, birikenMs: uncertainty.birikenMs, izKaybi: traces.izKaybi, ucIzYok: traces.ucIzYok },
+    parmakIziMerdiveni: fingerprint,
   };
 }
 
+/** Çekirdek modül (üretim) her hâlde açıktır; bağımlı modül ön koşulu tavandan geçmeden açılmaz (`module-rules.ts`). */
 export function ceilingAllows(cap: ModuleCeiling, key: string): boolean {
   if (!cap.applies) return true;
-  return (cap.allowed === null || cap.allowed.includes(key)) && !cap.denied.includes(key);
+  return moduleAllowedByCeiling(key, (k) => (cap.allowed === null || cap.allowed.includes(k)) && !cap.denied.includes(k));
 }
 
 /** Modül okuyucusunun lisans ayağı: `readX = readXRaw ∧ isModuleLicensed(state, key)`. */

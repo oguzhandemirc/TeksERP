@@ -321,6 +321,7 @@ export const EVENT_ACTION_LABELS: Record<string, string> = {
   LICENSE_STATE_CHANGED: "Lisans durumu değişti",
   LICENSE_LEASE_ACCEPTED: "Lisans kirası yenilendi",
   LICENSE_SANCTION_CHANGED: "Lisans yaptırımı değişti",
+  LICENSE_REVOCATION_ADOPTED: "Lisans iptal belgesi güncellendi",
   LICENSE_OBSERVATION_SUMMARY: "Lisans gözlem özeti",
   LICENSE_ADMIN_ACTION: "Lisans işlemi",
 

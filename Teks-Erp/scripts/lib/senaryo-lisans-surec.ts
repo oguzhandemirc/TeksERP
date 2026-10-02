@@ -204,6 +204,14 @@ export interface FabrikaSureci {
   log(): string;
 }
 
+/** Sahte makine kimliği: darwin `ioreg` değerleri; `etkenler` verilirse toplayıcı bu f1..f4 kümesini Linux yollarından
+ *  okunmuş gibi döndürür (güçlü etken ≥ 2 olan makine; `senaryo-lisans-ayar.ts` ④). `null` = yol hata verdi, "" = değer yok. */
+export interface SahteMakine {
+  makine: string;
+  seri: string;
+  etkenler?: Partial<Record<"f1" | "f2" | "f3" | "f4", string | null>>;
+}
+
 export interface FabrikaSecenekleri {
   readonly ad: string;
   readonly databaseUrl: string;
@@ -212,7 +220,7 @@ export interface FabrikaSecenekleri {
   readonly saticiAdresi: string;
   readonly capaDosyasi: string;
   readonly tlsSertifikasi: string;
-  readonly parmakIzi: { readonly makine: string; readonly seri: string };
+  readonly parmakIzi: SahteMakine;
   readonly jwtSecret: string;
   readonly saat: SaatKaydirmasi;
   readonly logDosyasi: string;
@@ -246,7 +254,8 @@ export async function fabrikaBaslat(g: FabrikaSecenekleri): Promise<FabrikaSurec
     HTTPS_PROXY: "",
     HTTP_PROXY: "",
     SENARYO_CAPA_DOSYASI: g.capaDosyasi,
-    SENARYO_PARMAK_IZI: JSON.stringify(g.parmakIzi),
+    SENARYO_PARMAK_IZI: JSON.stringify({ makine: g.parmakIzi.makine, seri: g.parmakIzi.seri }),
+    SENARYO_ETKENLER: g.parmakIzi.etkenler ? JSON.stringify(g.parmakIzi.etkenler) : "",
     SENARYO_SAAT_DUVAR_MS: String(g.saat.duvarMs),
     SENARYO_SAAT_MONO_MS: String(g.saat.monoMs),
     ...(g.pgBinDir ? { PG_BIN_DIR: g.pgBinDir } : {}),

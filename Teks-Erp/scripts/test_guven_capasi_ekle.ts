@@ -8,7 +8,9 @@
 //      yalnız kendi kipinin kid'ini taşır; gömülü çapa vektörlerinin fikstür kid'leri (`kok-fikstur-1` ·
 //      `paket-fikstur`) biçimin DIŞINDA — tören günü çapaya giren gerçek anahtar vektör dosyasını kaydıramaz (kipin
 //      kendi listesine göre) · fikstür köklerinin kid'leri (`kok-fikstur-1` · `hazirlik-fikstur-1`) gerçek çapada yok
-//      ve biçim dışı (§0g)
+//      ve biçim dışı (§0g) · lisans v2 vektörleri (`protokol-v2.json`, L2-1) de aynı kayma kuralıyla (§0e2); ara
+//      zincirde imzacı, ara sertifikayı imzalayan köktür (§0f2 ✓K). Sonda: v2 türleri sınıflandırıcıdan düştü →
+//      §0e2 · §0f2; imzacı HAK'ın `ara-` kid'inden okundu → §0f2 (gerçek veri o hâlde kör kalır — ✓K bunu görür)
 //   §1 kuru koşum dosyaya dokunmaz · §2 kök ekleme: kid'in KİPİNİN listesinin sonuna eklenir (üretim kökü üretim,
 //      hazırlık kökü hazırlık listesine; öteki liste değişmez), aynalar bayt-eşit, anchor.rs kâhin deseniyle TS'e
 //      eşit, TS modülü derin donuk ve `prepareTrustAnchor` geçer · §3 aynı anahtar ikinci kez → değişiklik yok ·
@@ -124,6 +126,18 @@ function bolum0(): CapaDurumu | null {
     d,
   );
   check("§0f ✓K sınıflandırıcı kipinin biçiminde olup listesinde olmayan imzacıyı (kök + PAKET) ve kipsiz vektörü yakalar, öteki kipin kid'inde susar", sahte.length === 3, sahte.join(" · "));
+  // Lisans v2 vektörleri ayrı dosyada (L2-1): aynı kayma kuralı orada da ölçülür — ikinci dosya kör kalmasın.
+  const v2Kayitlar = (JSON.parse(readFileSync(path.join(DEPO, VEKTOR_V2_DOSYASI), "utf8")) as { kayitlar: Array<{ vektor: Record<string, unknown> }> }).kayitlar;
+  const v2Gomulu = gomuluCapaImzacilari(v2Kayitlar);
+  const v2Kayacak = kaymaAdaylari(v2Gomulu, d);
+  check(
+    "§0e2 ⭐ v2 dosyasında (protokol-v2.json) gömülü çapa vektörlerinin imzacısı da kaymaz; ara zincirde imzacı, ara sertifikayı imzalayan köktür",
+    v2Gomulu.length >= 4 && TRUST_ANCHOR_MODES.every((k) => v2Gomulu.some((i) => i.kip === k)) && v2Gomulu.every((i) => i.kid !== "?") && v2Kayacak.length === 0,
+    v2Kayacak.join(" · ") || `${v2Gomulu.length} vektör`,
+  );
+  const araYuk = b64(JSON.stringify({ imzaciSertifikasi: `${b64(JSON.stringify({ alg: "EdDSA", typ: "tekserp-sertifika", kid: "kok-2099-1" }))}.e30.x` }));
+  const v2Sahte = gomuluCapaImzacilari([{ vektor: { ad: "ara", tur: "hak2", token: `${b64(JSON.stringify({ kid: "ara-2026-1" }))}.${araYuk}.x`, roots: null, kip: "uretim" } }]);
+  check("§0f2 ✓K v2 ara zincirinde imzacı gömülü sertifikanın kökünden okunur (HAK'ın ara- kid'inden değil) ve kayma yakalanır", v2Sahte[0]?.kid === "kok-2099-1" && kaymaAdaylari(v2Sahte, d).length === 1, v2Sahte.map((i) => i.kid).join(","));
   const f = fiksturKur(0);
   const capaKidleri = new Set(TRUST_ANCHOR_MODES.flatMap((k) => d!.kokler[k].map((r) => r.kid)));
   const fiksturKokleri = [f.kok.kid, f.hazirlik.kid];
@@ -136,6 +150,8 @@ function bolum0(): CapaDurumu | null {
 }
 
 const VEKTOR_DOSYASI = "Teks-Erp/native/lisans-cekirdek/test-vektorleri/protokol.json";
+const VEKTOR_V2_DOSYASI = "Teks-Erp/native/lisans-cekirdek/test-vektorleri/protokol-v2.json";
+const b64 = (metin: string): string => Buffer.from(metin, "utf8").toString("base64url");
 
 function jwsKid(token: unknown): string | null {
   if (typeof token !== "string") return null;
@@ -147,14 +163,16 @@ function jwsKid(token: unknown): string | null {
   }
 }
 
-function altSertifikaKid(token: unknown): string | null {
+function gomuluSertifikaKid(token: unknown, alan: "altSertifika" | "imzaciSertifikasi"): string | null {
   if (typeof token !== "string") return null;
   try {
-    return jwsKid((JSON.parse(Buffer.from(token.split(".")[1] ?? "", "base64url").toString("utf8")) as { altSertifika?: unknown }).altSertifika);
+    return jwsKid((JSON.parse(Buffer.from(token.split(".")[1] ?? "", "base64url").toString("utf8")) as Record<string, unknown>)[alan]);
   } catch {
     return null;
   }
 }
+
+const altSertifikaKid = (token: unknown): string | null => gomuluSertifikaKid(token, "altSertifika");
 
 interface Imzaci {
   readonly ad: string;
@@ -174,6 +192,8 @@ function gomuluCapaImzacilari(kayitlar: ReadonlyArray<{ vektor: Record<string, u
     let kid: string | null = null;
     if ((tur === "sertifika" || tur === "hak") && v.roots === null) kid = jwsKid(v.token);
     else if (tur === "kira" && v.roots === null) kid = altSertifikaKid(v.token);
+    else if ((tur === "hak2" || tur === "iptal") && v.roots === null) kid = gomuluSertifikaKid(v.token, "imzaciSertifikasi") ?? jwsKid(v.token);
+    else if (tur === "kira2" && v.roots === null) kid = altSertifikaKid(v.token);
     else if (tur === "butunluk" && v.keys === null) kid = jwsKid(v.manifest);
     else if (v.roots === null || v.keys === null) kid = "?";
     if (kid !== null) out.push({ ad, tur, kid, kip });

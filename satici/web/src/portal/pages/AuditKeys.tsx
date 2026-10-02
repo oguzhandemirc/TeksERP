@@ -2,11 +2,12 @@
 // (yalnız AÇIK yarı + kid + tür + geçerlilik + çapa bilgisi — özel anahtar ve parolası hiçbir
 // yanıtta yoktur).
 import { useState } from "react";
+import { Link } from "react-router-dom";
 import { fmtDateTime } from "../../shared/format";
 import { useGet, usePaged } from "../../shared/hooks";
-import { CLASS_LABEL, label } from "../../shared/labels";
+import { CLASS_LABEL, KEY_KIND_LABEL, KEY_STATUS_LABEL, label } from "../../shared/labels";
 import type { AuditRow, KeyStatus } from "../../shared/types";
-import { Badge, KeyValues, LoadMore, PageTitle, QueryState, Section, Table } from "../../shared/ui";
+import { Badge, KeyValues, LoadMore, PageTitle, QueryState, Section, Table, type Column } from "../../shared/ui";
 
 function summaryText(v: unknown): string {
   if (v === null || v === undefined) return "—";
@@ -49,15 +50,63 @@ export function AuditPage() {
   );
 }
 
-const KEY_KIND_LABEL: Record<string, string> = { KOK: "Kök", HAZIRLIK_KOK: "Hazırlık kökü", ALT: "Alt (kira imzası)", INDIRME: "İndirme belirteci", BAYI: "Bayi" };
-const KEY_STATUS_LABEL: Record<string, string> = { AKTIF: "Aktif", EMEKLI: "Emekli", IPTAL: "İptal" };
+type KeyRow = KeyStatus["anahtarlar"][number];
+
+/** Sertifikalı anahtarda (ALT · İNDİRME · ARA) kalan gün ≤ 30 ise tören uyarısı (`ANAHTAR_SURESI_BITIYOR` ile aynı eşik). */
+function daysLeft(r: KeyRow, nowMs: number): number | null {
+  if (!r.bitis || r.durum !== "AKTIF") return null;
+  return Math.ceil((Date.parse(r.bitis) - nowMs) / 86_400_000);
+}
+
+function keyColumns(nowMs: number, retired: boolean): Column<KeyRow>[] {
+  return [
+    { header: "Kid", render: (r) => <code>{r.kid}</code> },
+    { header: "Tür", render: (r) => label(KEY_KIND_LABEL, r.tur) },
+    { header: "Açık anahtar", render: (r) => <code>{r.acikAnahtar.slice(0, 16)}…</code> },
+    { header: "Sınıflar", render: (r) => r.siniflar.map((c) => label(CLASS_LABEL, c)).join(", ") || "—" },
+    { header: "Sertifika", render: (r) => (r.sertifikaVeren ? `kök imzalı (${r.sertifikaVeren})` : "—") },
+    {
+      header: "Geçerlilik",
+      render: (r) => {
+        const left = daysLeft(r, nowMs);
+        return (
+          <>
+            {`${fmtDateTime(r.baslangic)} → ${fmtDateTime(r.bitis)}`} {left !== null && left <= 30 && left >= 0 ? <Badge tone="warn">{`${left} gün kaldı — dönem töreni`}</Badge> : null}
+          </>
+        );
+      },
+    },
+    ...(retired
+      ? []
+      : [
+          { header: "Durum", render: (r: KeyRow) => label(KEY_STATUS_LABEL, r.durum) },
+          {
+            header: "Yükleme",
+            render: (r: KeyRow) => (
+              <>
+                {r.yuklu ? <Badge tone="ok">Yüklü</Badge> : <Badge>Yüklü değil</Badge>} {r.suresiDoldu ? <Badge tone="danger">Süresi doldu</Badge> : null}{" "}
+                {r.capada === false ? <Badge tone="danger">Çapada yok</Badge> : null}
+              </>
+            ),
+          },
+        ]),
+    { header: "Son değişim", render: (r) => fmtDateTime(r.updatedAt) },
+  ];
+}
 
 export function KeysPage() {
   const q = useGet<KeyStatus>(["anahtarlar"], "/anahtarlar");
   const k = q.data;
+  const nowMs = Date.now();
+  const active = k?.anahtarlar.filter((r) => r.durum !== "EMEKLI") ?? [];
+  const retired = k?.anahtarlar.filter((r) => r.durum === "EMEKLI") ?? [];
   return (
     <>
-      <PageTitle title="Anahtarlar" sub="Yalnız açık yarılar ve künye; özel anahtarlar parolalı dosyalarda, bu ekrana hiç gelmez." />
+      <PageTitle
+        title="Anahtarlar"
+        sub="Yalnız açık yarılar ve künye; özel anahtarlar parolalı dosyalarda, bu ekrana hiç gelmez. Üretimde kök bu sunucuda durmaz: HAK'ı kök imzalı sertifikalı ara imzacı imzalar."
+        actions={<Link to="/iptal-belgeleri">İptal belgeleri</Link>}
+      />
       <QueryState isLoading={q.isLoading} error={q.error} />
       {k ? (
         <>
@@ -89,28 +138,11 @@ export function KeysPage() {
             />
           </Section>
           <Section title="Anahtar künyesi">
-            <Table
-              rows={k.anahtarlar}
-              rowKey={(r) => r.kid}
-              columns={[
-                { header: "Kid", render: (r) => <code>{r.kid}</code> },
-                { header: "Tür", render: (r) => label(KEY_KIND_LABEL, r.tur) },
-                { header: "Açık anahtar", render: (r) => <code>{r.acikAnahtar.slice(0, 16)}…</code> },
-                { header: "Sınıflar", render: (r) => r.siniflar.map((c) => label(CLASS_LABEL, c)).join(", ") || "—" },
-                { header: "Geçerlilik", render: (r) => `${fmtDateTime(r.baslangic)} → ${fmtDateTime(r.bitis)}` },
-                { header: "Durum", render: (r) => label(KEY_STATUS_LABEL, r.durum) },
-                {
-                  header: "Yükleme",
-                  render: (r) => (
-                    <>
-                      {r.yuklu ? <Badge tone="ok">Yüklü</Badge> : <Badge>Yüklü değil</Badge>} {r.suresiDoldu ? <Badge tone="danger">Süresi doldu</Badge> : null}{" "}
-                      {r.capada === false ? <Badge tone="danger">Çapada yok</Badge> : null}
-                    </>
-                  ),
-                },
-                { header: "Son değişim", render: (r) => fmtDateTime(r.updatedAt) },
-              ]}
-            />
+            <Table rows={active} rowKey={(r) => r.kid} columns={keyColumns(nowMs, false)} />
+          </Section>
+          <Section title="Emekli anahtarlar">
+            <p className="muted small">Özel yarısı dönem töreninde silindi; açık yarı + sertifika yalnız eski imzaları doğrulamak için künyede kalır.</p>
+            <Table rows={retired} rowKey={(r) => r.kid} empty="Emekli anahtar yok" columns={keyColumns(nowMs, true)} />
           </Section>
         </>
       ) : null}

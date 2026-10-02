@@ -14,12 +14,16 @@ import { randomUUID } from "node:crypto";
 import {
   ACCEPTANCE_TEXTS,
   DAY_MS,
+  EntitlementSchema,
   REQUEST_HEADER,
+  TYP,
   generateNonce,
   parseJws,
   signAcceptance,
+  signDocument,
   signRequest,
   type AcceptanceDoc,
+  type EntitlementDoc,
   type Fingerprint,
   type LicenseClass,
   type RequestPurpose,
@@ -242,6 +246,36 @@ export async function kurulumFiksturu(
   return { musteriId, tesisId, kurulumDbId: kurulum.id, kurulumId: kurulum.kurulumId, hakId: hak.id, lisansNo: hak.lisansNo, kod: kod.code };
 }
 
+/**
+ * Lisans v2 fikstürü: aktif HAK'ın YENİ sürümü `cevrimdisiUfukGun` ile (fikstür kökü imzalar) — P modelinin HAK yarısı.
+ * Ufuklu HAK'ı portaldan basan yol L2-3'tedir; bekçi o inene dek sürümü doğrudan defterine yazar (kurulum kilidi altında).
+ */
+export async function ufukluHakSurumu(f: Fikstur, hakId: string, ufukGun: number | null = 400): Promise<number> {
+  const { prisma } = await import("../../src/lib/prisma");
+  const { lockInstallation } = await import("../../src/lib/locks");
+  const hak = await prisma.hak.findUniqueOrThrow({ where: { id: hakId } });
+  const onceki = await prisma.hakSurumu.findUniqueOrThrow({ where: { hakId_surum: { hakId, surum: hak.guncelSurum } } });
+  const p = parseJws(onceki.belge);
+  if (!p.ok) throw new Error("fikstür HAK belgesi okunamadı");
+  const surum = hak.guncelSurum + 1;
+  const simdi = new Date();
+  const payload = { ...(p.value.payload as EntitlementDoc), surum, verilis: simdi.toISOString(), cevrimdisiUfukGun: ufukGun };
+  const belge = signDocument({ typ: TYP.HAK, schema: EntitlementSchema, payload, key: { kid: f.kok.kid, privateKey: f.kok.privateKey } });
+  await prisma.$transaction(async (tx) => {
+    await lockInstallation(tx, hak.kurulumId);
+    await tx.hakSurumu.create({ data: { hakId, surum, belge, imzalayanKid: f.kok.kid, verilis: simdi, sebep: "bekçi: ufuklu HAK (lisans v2)", yapan: "bekci" } });
+    await tx.hak.update({ where: { id: hakId }, data: { guncelSurum: surum } });
+  });
+  return surum;
+}
+
+/** Kiranın yükü (kendi imzalı belgemiz; bekçi yalnız okur). */
+export function kiraYuku(json: Record<string, unknown>): Record<string, unknown> {
+  const p = parseJws(json.kira);
+  if (!p.ok) throw new Error("yanıtta kira yok");
+  return p.value.payload as Record<string, unknown>;
+}
+
 // ---------------------------------------------------------------- fabrika (istemci) tarafı
 export interface Yanit {
   readonly status: number;
@@ -259,15 +293,29 @@ export const ORTAM = {
   konteyner: false,
 };
 
-export function yoklamaGovdesi(g: { sonKiraId: string | null; hak?: { hakId: string; surum: number } | null; parmakIzi: Fingerprint }) {
+export function yoklamaGovdesi(g: {
+  sonKiraId: string | null;
+  hak?: { hakId: string; surum: number; ozet?: string } | null;
+  parmakIzi: Fingerprint;
+  /** Lisans v2 ekleri — yalnız verilirse gövdeye girer (eski fabrika hiçbirini göndermez). */
+  v2?: {
+    yetenekler?: string[];
+    durumKaydi?: { sira: number | null; gecerli: boolean };
+    belirsizlik?: { birikenMs: number; ilk: string | null };
+    nedenler?: string[];
+    saticiSapmaSn?: number;
+    parmakIziKayip?: ("f1" | "f2" | "f3" | "f4" | "f5")[];
+  };
+}) {
   const simdi = new Date().toISOString();
+  const v2 = g.v2 ?? {};
   return {
     v: 1,
     sonKiraId: g.sonKiraId,
     hak: g.hak ?? null,
     parmakIzi: g.parmakIzi,
-    durum: { gecerlilik: "GECERLI", nedenler: [], kip: "gozlem", hesaplananKademe: "NORMAL", uygulananKademe: "NORMAL" },
-    saat: { duvar: simdi, guvenilir: simdi, bulgu: null },
+    durum: { gecerlilik: "GECERLI", nedenler: v2.nedenler ?? [], kip: "gozlem", hesaplananKademe: "NORMAL", uygulananKademe: "NORMAL" },
+    saat: { duvar: simdi, guvenilir: simdi, bulgu: null, ...(v2.saticiSapmaSn === undefined ? {} : { saticiSapmaSn: v2.saticiSapmaSn }) },
     ortam: ORTAM,
     saglik: {
       surum: "2.11.2",
@@ -282,6 +330,10 @@ export function yoklamaGovdesi(g: { sonKiraId: string | null; hak?: { hakId: str
       isHatalari: [],
     },
     gozlem: { reddedilecekIstek: 0, reddedilecekModul: 0 },
+    ...(v2.yetenekler === undefined ? {} : { yetenekler: v2.yetenekler }),
+    ...(v2.durumKaydi === undefined ? {} : { durumKaydi: v2.durumKaydi }),
+    ...(v2.belirsizlik === undefined ? {} : { belirsizlik: v2.belirsizlik }),
+    ...(v2.parmakIziKayip === undefined ? {} : { parmakIziKayip: v2.parmakIziKayip }),
   };
 }
 
@@ -322,13 +374,14 @@ export function etkinlestirmeGovdesi(g: { kod: string; kurulumId: string | null;
   };
 }
 
-/** Kurulum imzalı istek (ham gövde baytları imzalanır, aynen gönderilir). `kurulumId: null` = kimliksiz. */
-export function imzaliBaslik(g: { kurulumId: string | null; amac: RequestPurpose; govde: string; anahtar: TestAnahtari; zamanMs?: number; nonce?: string }): string {
+/** Kurulum imzalı istek (ham gövde baytları imzalanır, aynen gönderilir). `kurulumId: null` = kimliksiz; `yol` imzalı uç yolu. */
+export function imzaliBaslik(g: { kurulumId: string | null; amac: RequestPurpose; govde: string; anahtar: TestAnahtari; zamanMs?: number; nonce?: string; yol?: string }): string {
   return signRequest({
     installationId: g.kurulumId,
     purpose: g.amac,
     body: g.govde,
     key: { privateKey: g.anahtar.privateKey, nowMs: g.zamanMs ?? Date.now(), nonce: g.nonce ?? generateNonce() },
+    ...(g.yol !== undefined ? { path: g.yol } : {}),
   });
 }
 
@@ -353,10 +406,10 @@ export async function gonder(url: string, g: { baslik?: string; govde?: string; 
 export async function imzaliPost(
   taban: string,
   yol: string,
-  g: { kurulumId: string | null; amac: RequestPurpose; govde: unknown; anahtar: TestAnahtari; zamanMs?: number; nonce?: string },
+  g: { kurulumId: string | null; amac: RequestPurpose; govde: unknown; anahtar: TestAnahtari; zamanMs?: number; nonce?: string; imzaYolu?: string },
 ): Promise<Yanit & { baslik: string; metin: string }> {
   const metin = JSON.stringify(g.govde);
-  const baslik = imzaliBaslik({ kurulumId: g.kurulumId, amac: g.amac, govde: metin, anahtar: g.anahtar, zamanMs: g.zamanMs, nonce: g.nonce });
+  const baslik = imzaliBaslik({ kurulumId: g.kurulumId, amac: g.amac, govde: metin, anahtar: g.anahtar, zamanMs: g.zamanMs, nonce: g.nonce, yol: g.imzaYolu });
   const y = await gonder(`${taban}${yol}`, { baslik, govde: metin });
   return { ...y, baslik, metin };
 }
@@ -393,6 +446,9 @@ export async function temizleKurulumlar(kurulumDbIdleri: readonly string[], kidl
     await tx.yoklama.deleteMany({ where: w });
     await tx.kopyaUyarisi.deleteMany({ where: w });
     await tx.tasimaTalebi.deleteMany({ where: w });
+    // Donanım / zayıf tanıma onay talepleri (K8): denetim ayak izi talep id'siyle.
+    for (const d of await tx.donanimTalebi.findMany({ where: w, select: { id: true } })) denetimIdleri.add(d.id);
+    await tx.donanimTalebi.deleteMany({ where: w });
     // Destek talepleri (3d-2): defter satırları önce, talep sonra; denetim ayak izi talep id'siyle.
     const talepler = await tx.destekTalebi.findMany({ where: w, select: { id: true } });
     for (const t of talepler) denetimIdleri.add(t.id);
@@ -404,6 +460,8 @@ export async function temizleKurulumlar(kurulumDbIdleri: readonly string[], kidl
     await tx.kurulumKaydi.deleteMany({ where: w });
     await tx.kurulum.updateMany({ where: { id: { in: ids } }, data: { sonKiraId: null } });
     await tx.kira.deleteMany({ where: w });
+    // Kök imzası bekleyen HAK kuyruğu (G4): sürüm defteri satırına bağlı → defterden ÖNCE.
+    await tx.hakKokTalebi.deleteMany({ where: w });
     const haklar = await tx.hak.findMany({ where: w, select: { id: true } });
     await tx.hakSurumu.deleteMany({ where: { hakId: { in: haklar.map((h) => h.id) } } });
     await tx.hak.deleteMany({ where: w });
@@ -431,6 +489,17 @@ export async function temizleBagsizTalepler(anahtarKimlikleri: readonly string[]
     await tx.tasimaTalebi.deleteMany({ where: { id: { in: talepler.map((t) => t.id) } } });
     await tx.nonceDefteri.deleteMany({ where: { kapsam: { in: kidler.map((k) => `kid:${k}`) } } });
     await tx.denetim.deleteMany({ where: { varlikId: { in: talepler.map((t) => t.id) } } });
+  });
+}
+
+/** İptal belgesi defteri fikstürü (G4) — yalnız bu bekçinin yükleyen etiketiyle yazdığı satırlar (`_test` beyanıyla). */
+export async function temizleIptalBelgeleri(yukleyen: string): Promise<void> {
+  const { prisma } = await import("../../src/lib/prisma");
+  await prisma.$transaction(async (tx) => {
+    await tx.$executeRawUnsafe(`SET LOCAL satici.defter_temizlik = 'test'`);
+    const rows = await tx.iptalBelgesi.findMany({ where: { yukleyen }, select: { id: true } });
+    await tx.iptalBelgesi.deleteMany({ where: { yukleyen } });
+    await tx.denetim.deleteMany({ where: { varlikId: { in: rows.map((r) => r.id) } } });
   });
 }
 

@@ -230,11 +230,12 @@ export async function imzali(
   o: Ortam,
   k: Pick<TestKurulumu, "kurulumId" | "privateKey">,
   yol: string,
-  g: { govde?: unknown; ham?: Buffer; gzip?: boolean; baslik?: string; nowMs?: number } = {},
+  g: { govde?: unknown; ham?: Buffer; gzip?: boolean; baslik?: string; nowMs?: number; imzaYolu?: string } = {},
 ): Promise<Yanit & { baslik: string; ham: Buffer }> {
   const json = g.ham ?? Buffer.from(JSON.stringify(g.govde ?? {}), "utf8");
   const ham = g.gzip ? gzipSync(json) : json;
-  const baslik = g.baslik ?? signRequest({ installationId: k.kurulumId, purpose: "esitle", body: ham, key: { privateKey: k.privateKey, nowMs: g.nowMs ?? o.saat.simdi() } });
+  const imza = { installationId: k.kurulumId, purpose: "esitle" as const, body: ham, key: { privateKey: k.privateKey, nowMs: g.nowMs ?? o.saat.simdi() } };
+  const baslik = g.baslik ?? signRequest(g.imzaYolu !== undefined ? { ...imza, path: g.imzaYolu } : imza);
   const res = await fetch(`${o.adres}${yol}`, {
     method: "POST",
     headers: { [REQUEST_HEADER]: baslik, "Content-Type": "application/json", ...(g.gzip ? { "Content-Encoding": "gzip" } : {}) },

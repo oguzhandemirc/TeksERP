@@ -7,6 +7,8 @@
 //   §3 sınıf süzmesi: varsayılan dışı sınıf (DEMO) susar; listeye eklenince yazılır
 //   §4 kira bitişi yaklaşıyor (kira başına bir kez) · lisans geçerlilik bitişi yaklaşıyor (bitiş değişince YENİ
 //      dönem) · taksit vadesi yaklaşıyor (ufuk dışı kalem susar)
+//   §4e lisans v2: P modelini işleten kurulumda (yetenek + ufuklu HAK + P'li kira) kira bitişi TAZELİKTİR → KIRA_BITISI
+//      yazılmaz; ✓K aynı kurulum yeteneği bırakınca (eski sürüme dönüş) yine yazılır (süzme kör değil)
 //   §5 aday yalıtımı: bir adayın yazımı düşerse (tetikleyici) diğer aday yine yazılır, tarama düşmez
 //   §6 bakım işi taramayı `BILDIRIM_TARAMA_DK`da bir koşar (arada yeni sessizlik bekler)
 // ⭐ KALICI SONDA ✓K (her koşumda): §2 tarama gerçekten kilitte BEKLEDİ (süre ölçülür) — beklemeden geçen tarama
@@ -30,6 +32,7 @@ import {
   portalSunuculariKur,
   sonuc,
   temizleKurulumlar,
+  ufukluHakSurumu,
   yoklamaGovdesi,
   type KurulumFiksturu,
 } from "./lib/test-ortam";
@@ -146,6 +149,21 @@ async function main(): Promise<void> {
     await scanTimedNotifications(CFG, Date.now());
     const tRows = await prisma.bildirim.findMany({ where: { olay: "TAKSIT_VADESI_YAKLASIYOR", kurulumId: b.kurulumDbId } });
     kontrol("§4d taksit vadesi 3 gün sonra → iki satır (Taksit 1); 20 gün sonraki kalem susar", tRows.length === 2 && tRows.every((r) => r.ilgiliKayit === plan.kalemler[0]!.id && (r.govde as Record<string, unknown>).referans === "Taksit 1"), `${tRows.length}`);
+
+    const eAnahtar = kurulumAnahtariUret();
+    const e = await kurulumFiksturu(ctx, { tesisId: a.tesisId, musteriId: a.musteriId });
+    const e1 = await etkin(e, eAnahtar);
+    await ufukluHakSurumu(f, e.hakId, 400);
+    const pYokla = (sonKiraId: string, yetenekler?: string[]) =>
+      imzaliPost(sunucu.genel, ENDPOINTS.POLL, { kurulumId: e.kurulumId, amac: "yokla", anahtar: eAnahtar, govde: yoklamaGovdesi({ sonKiraId, parmakIzi: f.parmakIzi, ...(yetenekler ? { v2: { yetenekler } } : {}) }) });
+    const ePy = await pYokla(e1, ["odenmis-tarih"]);
+    const eKira = await prisma.kurulum.findUniqueOrThrow({ where: { id: e.kurulumDbId }, select: { sonKira: { select: { bitis: true } } } });
+    await scanTimedNotifications(CFG, eKira.sonKira!.bitis.getTime() - 3 * DAY);
+    kontrol("§4e ⭐ P modelli kurulum: kira bitişi yaklaşsa da KIRA_BITISI yazılmaz (süre P'ye bağlı)", ePy.status === 200 && (await say("KIRA_BITISI_YAKLASIYOR", e.kurulumDbId)) === 0, `${ePy.status}`);
+    const eEski = await pYokla(kiraIdOf(ePy.json));
+    const eKira2 = await prisma.kurulum.findUniqueOrThrow({ where: { id: e.kurulumDbId }, select: { sonKira: { select: { bitis: true } } } });
+    await scanTimedNotifications(CFG, eKira2.sonKira!.bitis.getTime() - 3 * DAY);
+    kontrol("§4f ✓K aynı kurulum yeteneği bildirmeyince (eski çapa) KIRA_BITISI yine yazılır", eEski.status === 200 && (await say("KIRA_BITISI_YAKLASIYOR", e.kurulumDbId)) === 2);
 
     console.log("\n§5 aday yalıtımı");
     const cAnahtar = kurulumAnahtariUret();
