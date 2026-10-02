@@ -603,3 +603,43 @@ Portal bu kurulumda GERİ DÖNGÜ kipindedir (§4a): yayımlanmaz, Mac'ten `port
 - **PAKET ara kopyası VDS'te:** parolalı (paket parolası ≠ kök parolası); USB kopyası alınınca kaldırılabilir (§13.4-4). Kök parolası portalda yazıldığı için iki parola ayrıdır — portal ele geçse paket anahtarı açılmaz.
 - **ALT sertifikası 180 gün:** bitişten önce rotasyon ([`URETIM-SATICI-TOREN.md`](URETIM-SATICI-TOREN.md) §6); satıcı anahtar birimini dakikada bir yeniden okur. ⚠️ Lisans v2 (G4) inince ALT · ara imzacı · İNDİRME 120 gün ve üç ayda bir `donem` töreni (L2-3).
 - `cf-connecting-ip` taklidi ve kök anahtarın VDS'te (parolalı) durması §11'deki gibi (kök için ⚠️ lisans v2: A düzeniyle VDS'ten kaldırılır).
+
+## 14. İlk kurulum dağıtımı — tek arşiv, derleme deposu, tek bağlantı
+
+Portalda bir bağlantı BİR derleme dosyası verir ([`links.service.ts`](../../satici/sunucu/src/distribution/links.service.ts) `createLinkTx`); setup ise yanında backend zip + PG zip + `pg.json` (+ `etkili.tkpub`) ister. Müşteriye bu yüzden TEK arşiv gider (yönetici kararı 2026-10-02): setup + imzalı korumalı backend + PG paketi + `pg.json` (+ tkpub) + `SHA256SUMS` + `BENIOKU.txt`, kök düz.
+
+### 14.1 Arşiv (Mac)
+
+```bash
+node deploy/kurulum/kurulum-arsivi.mjs --setup <dizin>/TeksERP-Kurulum-<sürüm>.exe \
+  --backend <imzalı tekserp-backend-*.zip> --pg <postgresql-*.zip> --pg-kunye <imzalı pg.json> \
+  [--tkpub <etkili.tkpub>] --musteri <kanal> --cikti <depo dışı dizin>
+```
+
+Çıktı `TeksERP-Kurulum-<kanal>-<backend sürümü>.zip` + `.sha256`. Çıkış 0 hazır · 1 kapı DUR (arşiv bırakılmaz) · 2 ÖLÇÜLEMEDİ. Setup'ın kararı arşivden ÖNCE verilir: adlar `kurulum.ps1 GirdiCoz` desenlerinden (metinden okunur), PAKET.json kanalı = `--musteri`, KORUMALI win-x64, hizmet adı + hizmet ikilileri, derlemenin çapa kipi = kanal `backend.guvenCapasi`, PROVA değil, imza `backend-bildirim.ts dogrula` ile kanalın gerçek çapasından (test çapası geçirilmez) + `--pg-kunye`, PG zip `pg-paketle.mjs --dogrula`, `pg.json` yükü bu zip'i ve kaydı gösterir, tkpub yalnız açık anahtar. Arşiv yeniden açılıp her girdi SHA256SUMS'a ve kaynağa karşı ölçülür (+ `unzip -t`). `--prova` imza kapılarını UYARIYA düşürür ve adı `-PROVA-IMZASIZ` yapar (yapı denemesi; müşteriye verilmez, `derleme-koy` üretime koymaz). Bekçi `node scripts/test_kurulum_arsivi.mjs`.
+
+### 14.2 Satıcının derleme deposuna koy (KURU → kullanıcının "uygula" cümlesiyle)
+
+```bash
+node deploy/satici/derleme-koy.mjs --ortam uretim --dosya <cikti>/TeksERP-Kurulum-<kanal>-<sürüm>.zip            # KURU: yalnız okuma + plan
+node deploy/satici/derleme-koy.mjs --ortam uretim --dosya <cikti>/TeksERP-Kurulum-<kanal>-<sürüm>.zip --uygula   # yazar
+```
+
+KURU: yerel denetim (sha256 · yanındaki `.sha256` · satıcının ad kuralı `storage.ts` `BUILD_NAME`/`BUILD_EXTENSIONS`ten · PROVA adı üretime RED) + VDS'te tek ssh ile YALNIZ OKUMA (`lisans-devreye/lib/ag.mjs` sözleşmesi): satıcının `/derlemeler` bağı (`<K>/derlemeler false` olmalı), yardımcı imaj (`<ortam>-yedek` konteynerinin imajı), dizin sahibi/izni (bugün `0:0 755`, §13.4-2), aynı adlı dosya, disk; sonra `--uygula`nın koşacağı komutların TAM listesi. `--uygula`: `deploy/vds-dogrula.sh` (önce, AYNI) → `~/derleme-koy-<damga>` → scp → `sha256sum -c` → yardımcı konteyner (`--network none --user 0`, yalnız `/g:ro` + depo) gizli ada `install -m 0644 -o <dizin sahibi>` + `ln` ile yayın (var olan dosya EZİLMEZ) → geçici dizin silinir → ölçüm (0644, özet, satıcı konteyneri görüyor mu) → `vds-dogrula.sh` (sonra, çıktısı öncekiyle birebir). Aynı adlı dosya: içerik aynıysa dokunulmaz, farklıysa DUR. Bekçi `node scripts/test_derleme_koy.mjs`. İlk KURU ölçüm (2026-10-02, üretim): bağ `/opt/stack/apps/tekserp-satici-uretim/derlemeler false` · yardımcı imaj `tekserp-satici-yedek:4467956b3db8` · dizin `0:0 755` · 3 dosya; `vds-dogrula` önce/sonra AYNI.
+
+### 14.3 Portal: tek bağlantı
+
+Kurulumlar → kurulum → **İlk kurulum → Bağlantı ver** → derleme listesinden arşiv (`GET /dagitim/derlemeler`) → `/d/<belirteç>`. Bağlantı doğarken sunucu dosyanın sha256'sını ve boyunu DONDURUR; dosya sonradan değişirse indirme 410 (`openVerified`) — bu yüzden depoya konan dosya ezilmez, yeni sürüm yeni addır. Müşteri: indir → arşive sağ tık **Tümünü ayıkla** → çıkan klasörde `TeksERP-Kurulum-<sürüm>.exe`.
+
+### 14.4 Ölçülen sınırlar (tek dosya modeli)
+
+| Konu | Ölçüm | Kaynak |
+|---|---|---|
+| Ad / uzantı | `^[A-Za-z0-9][A-Za-z0-9._-]{0,199}$` + `exe msi apk zip tar gz`; uymayan dosya listelenmez | `storage.ts:39,42,89-92,101-115` |
+| Boyut | derleme için tavan YOK (`DOSYA_AZAMI_MB` yalnız müşteri yüklemesi) — bağlantı doğarken akışla özetlenir | `config.ts:166` · `distribution-routes.ts:84` · `links.service.ts:86-88` |
+| İçerik tipi | ilk kurulum indirmesi `application/octet-stream`, `Content-Disposition: attachment` (RFC 6266), `no-store` | `links.service.ts:142-143` · `distribution-public.ts:45-48,58-66` |
+| Akış | belleğe alınmaz: önce gövde boy+özetle doğrulanır (tam okuma), sonra `pipeline` ile akar; hak indirme BAŞINDA tüketilir | `distribution-public.ts:76-89,116-127` |
+| Zaman aşımı | satıcıda açık ayar yok (Node varsayılanı; yanıt akışına süre sınırı yok). Cloudflare üzerinden ~200 MB tek yanıt ÖLÇÜLMEDİ | — |
+| Arşiv boyu | prova 202.317.746 B (setup ~6 MB + backend ~165 MB + PG 35,5 MB) | `~/.tekserp/demofabrika-paket/arsiv-prova/` |
+
+Windows tarafı (koddan; Windows'ta GUI ile ÖLÇÜLMEDİ): arşivin İÇİNDEN çift tıklanan setup tek başına geçici dizine çıkar, yanındaki dosyaları göremez ve ön ölçüm engelleriyle ("TEK tekserp-backend-*.zip olmalı (bulunan: 0)" · "TEK postgresql-*.zip …" · "pg.json … yok", `tekserp-kurulum.iss` `OlcumEngelleri`) hiçbir şey yazmadan durur — `BENIOKU.txt` "önce Tümünü ayıkla" der. `SHA256SUMS`/`BENIOKU.txt` setup desenleriyle çakışmaz (bekçi §6c). "Tümünü ayıkla" internet işaretini (Zone.Identifier) çıkan dosyalara taşır: imzasız setup'ta SmartScreen "Ek bilgi → Yine de çalıştır" beklenir; backend/PG zip'lerini setup .NET `ZipFile` ve Rust doğrulayıcıyla açar (işaret taşımaz), betikler `-ExecutionPolicy Bypass` ile koşar. thinkpad-1'de Akıllı Uygulama Denetimi KAPALI (`VerifiedAndReputablePolicyState=0`, 2026-10-02) — açık bir makinede imzasız setup "Yine de çalıştır" seçeneği olmadan engellenir (Authenticode gelene dek açık risk).

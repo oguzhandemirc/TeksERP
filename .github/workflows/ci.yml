@@ -85,6 +85,14 @@ jobs:
       # ağsız (fetch tuzaklı); Info-ZIP zip/unzip + git ister (ubuntu imajında var).
       - name: PG paketi üretimi (pg-paketle)
         run: node scripts/test_pg_paketle.mjs
+      # Müşteriye portalda TEK bağlantıyla giden kurulum arşivi (deploy/kurulum/kurulum-arsivi.mjs): gölge kökte,
+      # imza doğrulayıcısı kayıt tutan koçan — setup'ın kararları arşivden ÖNCE verilir, sapma DURUR. Zero-dep, ağsız.
+      - name: Kurulum arşivi (tek bağlantı)
+        run: node scripts/test_kurulum_arsivi.mjs
+      # Derleme deposuna koyma (deploy/satici/derleme-koy.mjs): sahte ssh/scp ile KURU kipte yalnız okuma, var olan
+      # derleme ezilmez, --uygula sırası vds-dogrula arasında. Zero-dep, ağsız.
+      - name: Derleme deposuna koyma (derleme-koy)
+        run: node scripts/test_derleme_koy.mjs
       # Yayın betiklerinde belirteçsiz HTTP okuma yok (3c') — güncelleme sunucusu Cloudflare
       # Worker'la anonim okumaya kapalı; anonim okuma kalırsa Worker açıldığı gün yayın zinciri
       # kırılır. Zero-dep, DB'siz, ağsız; kapı ve kalıcı sondalar (--sonda) aynı adımda.
