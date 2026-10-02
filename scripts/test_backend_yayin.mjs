@@ -10,7 +10,8 @@
 // NE ÖLÇER:
 //   §1 saf yardımcılar (`scripts/lib/backend-yayin.mjs`): sürüm önceliği = protokol `compareVersions` (ortak
 //      vektör dosyası) · sürüm/paket adı deseni protokolün Zod deseniyle AYNI metin · özet çıkarımı · işaretçi
-//      sürümü · yayın planı güvensiz değeri reddeder · defter satırı sekme/satır sızdırmaz
+//      sürümü · yayın planı güvensiz değeri reddeder · defter satırı sekme/satır sızdırmaz · yayın komutu dosya
+//      kipini açıkça verir (scp yerel 0600'ı taşır → nginx 403; §3c2 uçtan uca ölçer)
 //   §2 terfi (K5) backend kaynağı: hazırlık kanalının son.json sürümü ölçülür; prova sürümü terfiye yetmez
 //   §3 uçtan uca (sahte uzak): kuru kip ağa çıkmaz · ilk yayın düzeni (sürüm dizini + surum.json + son.json EN
 //      SON, geçici dizin kalmaz, defter) · kenar okuması belirteçli ve yüklenenle aynı · aynı/eski sürüm DUR ·
@@ -23,7 +24,7 @@
 //      kaydın sürüm/derleme/ICU'su olmayan künye (backend hedefi ya da --pg-yayinla) DUR; zip'te tek ICU ·
 //      §3G (G3) bildirim aracının PAKET çapası kanalın kipinden: kip zorunlu · tanınmayan kip · üretim kanalı hazırlık
 //      kipiyle DUR · üretim kipinin gerçek çapası hazırlık ailesi imzalı paketi REDDEDER (kontrol: test çapasıyla geçer)
-//   §1l/§3ci (G22) CI KAÇIŞI: imzalı künyede `ciKokeni.kip = "atlandi"` → yayın DURMAZ, uyarı basılır, defterde
+//   §1m/§3ci (G22) CI KAÇIŞI: imzalı künyede `ciKokeni.kip = "atlandi"` → yayın DURMAZ, uyarı basılır, defterde
 //      `ci-atlandi:` kolonu (cümle · saat · makine · HEAD); kaçışsız pakette kolon YOK
 //
 //   node scripts/test_backend_yayin.mjs
@@ -44,6 +45,7 @@ import {
   defterSatiri,
   isaretciSurumu,
   ozetCikar,
+  pgYayinPlani,
   surumKiyasla,
   yayinPlani,
 } from './lib/backend-yayin.mjs';
@@ -97,16 +99,27 @@ function bolum1() {
   ol('§1i plan güvensiz değeri REDDEDER (kabuk enjeksiyonu yok)',
     atar({ surum: "2.11.0';rm -rf /;'" }) && atar({ surum: '2.11.0+abc' }) && atar({ vdsBackend: '/opt/v/../etc' }) &&
     atar({ paketAd: "a'b.zip" }) && atar({ paketAd: '../x.zip' }) && atar({ pgAd: 'pg;.zip' }) && atar({ damga: 'a b' }) && !atar({}));
+  // Kip: scp yerel dosyanın kipini taşır; yayın komutu okuma iznini AÇIKÇA vermezse 0600 bir paket nginx'te 403 olur
+  // (thinkpad-1 D8b: 2.14.7 indirilemedi, INDIRME_REDDEDILDI). Sonda: chmod düşerse kırmızı.
+  const kipIhlali = (k) => [
+    !/^chmod -R u=rwX,go=rX '[^']+' && test ! -e '[^']+' && mv /.test(k.yayinla) && 'yayinla: dizin taşınmadan önce go=rX yok',
+    !/^chmod 0644 '[^']+' && mv /.test(k.sonJsonYaz ?? "chmod 0644 'x' && mv ") && 'sonJsonYaz: taşımadan önce 0644 yok',
+  ].filter(Boolean);
+  const pgP = pgYayinPlani({ vdsBackend: temel.vdsBackend, surum: '16.15', derleme: 4, paketAd: 'postgresql-16.15-4-tekserp.zip', damga: 'abc123' });
+  const kipSonda = kipIhlali({ ...p.komut, yayinla: p.komut.yayinla.replace(/^chmod -R u=rwX,go=rX '[^']+' && /, '') });
+  ol('§1l ⭐ yayın komutu dosya kipini AÇIKÇA verir (backend + PG dizini go=rX, son.json 0644) — yerel 0600 paket de okunur çıkar',
+    kipIhlali(p.komut).length === 0 && kipIhlali(pgP.komut).length === 0, [...kipIhlali(p.komut), ...kipIhlali(pgP.komut)].join(' | '));
+  ol('§1l sonda: chmod düşerse → kırmızı', kipSonda.length > 0);
   const satir = defterSatiri({ zaman: 'z', surum: '2.11.0', kim: 'a@b', sha16: 's', boyut: 1, terfiAtla: "kullanıcı\tdedi\n'x'" });
   ol('§1j defter satırı sekme/satır sızdırmaz, altı kolon', satir.split('\t').length === 6 && !/[\r\n]/.test(satir));
   const KACIS = { kip: 'atlandi', cumle: 'CI kırık, kullanıcı\tonayladı: imzala', saat: '2026-10-01T20:00:00+03:00', makine: 'mac', head: 'a'.repeat(40) };
   const jws = (yuk) => `e30.${Buffer.from(JSON.stringify(yuk)).toString('base64url')}.imza`;
-  ol('§1l ciKokeniOku: imzalı yükten kayıt; yoksa/biçimsizse null', ciKokeniOku(jws({ v: 1, ciKokeni: KACIS }))?.kip === 'atlandi' &&
+  ol('§1m ciKokeniOku: imzalı yükten kayıt; yoksa/biçimsizse null', ciKokeniOku(jws({ v: 1, ciKokeni: KACIS }))?.kip === 'atlandi' &&
     ciKokeniOku(jws({ v: 1, ciKokeni: { kip: 'kosu', kosu: 1 } }))?.kip === 'kosu' && ciKokeniOku(jws({ v: 1 })) === null &&
     ciKokeniOku(jws({ v: 1, ciKokeni: { kip: 'baska' } })) === null && ciKokeniOku('bozuk') === null && ciKokeniOku(undefined) === null);
   const iki = defterSatiri({ zaman: 'z', surum: '2.11.0', kim: 'a@b', sha16: 's', boyut: 1, terfiAtla: 'kullanıcı dedi ki yayınla', ciAtla: ciAtlaMetni(KACIS) });
   const yalnizCi = defterSatiri({ zaman: 'z', surum: '2.11.0', kim: 'a@b', sha16: 's', boyut: 1, ciAtla: ciAtlaMetni(KACIS) });
-  ol('§1l2 defter: CI kaçışı etiketli kolon (cümle · saat · makine · HEAD12), terfi kolonundan SONRA; sekme sızmaz; kaçış değilse metin yok',
+  ol('§1m2 defter: CI kaçışı etiketli kolon (cümle · saat · makine · HEAD12), terfi kolonundan SONRA; sekme sızmaz; kaçış değilse metin yok',
     iki.split('\t').length === 7 && iki.split('\t')[5].startsWith('terfi-atlandi: ') && /^ci-atlandi: "CI kırık, kullanıcı onayladı: imzala" · 2026-10-01T20:00:00\+03:00 · mac · HEAD a{12}$/.test(iki.split('\t')[6]) &&
     yalnizCi.split('\t').length === 6 && yalnizCi.split('\t')[5].startsWith('ci-atlandi: ') && ciAtlaMetni({ kip: 'kosu' }) === null && ciAtlaMetni(null) === null, iki);
   ol("§1k defter komutu tek tırnağı kaçırır (içerik biçim dizesine girmez)", defterKomutu('/opt/v/defter/k.tsv', "a'b").includes("'a'\\''b'") && defterKomutu('/opt/v/defter/k.tsv', 'x').includes("printf '%s\\n'"));
@@ -269,8 +282,13 @@ function bolum3() {
     ol(`§3a2 ⭐ ${ad} ezmesi → DUR, ssh/scp SIFIR`, r.kod !== 0 && /YAYIN HEDEFİ EZİLEMEZ/.test(r.cikti) && r.log.length === 0, r.cikti.slice(-400));
   }
 
+  fs.chmodSync(p1, 0o600);
   const ilk = yayinla(ortak(p1));
   const sonJson = uzakDosya('testfabrika/backend/son.json');
+  const okunur = (f) => fs.existsSync(f) && (fs.statSync(f).mode & 0o044) === 0o044;
+  ol('§3c2 ⭐ yerel 0600 paket yayında herkese OKUNUR (paket · surum.json · son.json · sürüm dizini) — nginx 403 vermez',
+    ['testfabrika/backend/9.9.9-prova.1/p1.zip', 'testfabrika/backend/9.9.9-prova.1/surum.json', 'testfabrika/backend/son.json', 'testfabrika/backend/9.9.9-prova.1']
+      .every((f) => okunur(uzakDosya(f))) && (fs.statSync(uzakDosya('testfabrika/backend/9.9.9-prova.1')).mode & 0o011) === 0o011);
   const surumJson = uzakDosya('testfabrika/backend/9.9.9-prova.1/surum.json');
   ol('§3b ilk yayın: çıkış 0', ilk.kod === 0, ilk.cikti.slice(-900));
   ol('§3c sürüm dizininde paket + surum.json; son.json = surum.json (bayt bayt)', fs.existsSync(uzakDosya('testfabrika/backend/9.9.9-prova.1/p1.zip')) &&

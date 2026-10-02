@@ -257,6 +257,10 @@ export const EVENT_ACTION_LABELS: Record<string, string> = {
   // hedefin kimliğine bürünebileceği için bu satır bir "yetki kullanımı" değil
   // bir GÜVENLİK OLAYIDIR; metin de öyle okunmalı.
   USER_CREDENTIAL_READ: "Kullanıcı giriş bilgileri görüntülendi (PIN/kart)",
+  SHORT_CREDENTIAL_CONVERTED: "Hızlı PIN / kartlar özetli saklamaya çevrildi",
+  SHORT_CREDENTIAL_ESCROW_SEALED: "Kısa kimlik anahtarı yedek anahtarlarına mühürlendi",
+  SHORT_CREDENTIAL_KEY_RESTORED: "Kısa kimlik anahtarı yedekten geri kondu",
+  SHORT_CREDENTIAL_BULK_RESET: "Toplu hızlı PIN sıfırlama",
   PERIPHERAL_TEST: "Cihaz testi",
 
   // ── SYSTEM · yedekleme ──
@@ -317,6 +321,7 @@ export const EVENT_ACTION_LABELS: Record<string, string> = {
   LICENSE_STATE_CHANGED: "Lisans durumu değişti",
   LICENSE_LEASE_ACCEPTED: "Lisans kirası yenilendi",
   LICENSE_SANCTION_CHANGED: "Lisans yaptırımı değişti",
+  LICENSE_REVOCATION_ADOPTED: "Lisans iptal belgesi güncellendi",
   LICENSE_OBSERVATION_SUMMARY: "Lisans gözlem özeti",
   LICENSE_ADMIN_ACTION: "Lisans işlemi",
 

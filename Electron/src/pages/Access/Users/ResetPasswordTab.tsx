@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { FormField } from "@/components/forms/FormField";
 import { adminUserService } from "@/services/adminUserService";
+import { newPasswordSchema, PASSWORD_MIN_LENGTH } from "@/lib/password-policy";
 
 interface Props {
   userId: string;
@@ -17,8 +18,8 @@ interface Props {
 
 const schema = z
   .object({
-    password: z.string().min(6, "En az 6 karakter"),
-    confirm: z.string().min(6, "En az 6 karakter"),
+    password: newPasswordSchema,
+    confirm: z.string().min(1, "Yeni şifreyi tekrar girin"),
   })
   .refine((d) => d.password === d.confirm, {
     path: ["confirm"],
@@ -64,7 +65,8 @@ export function ResetPasswordTab({ userId, username }: Props) {
             <span className="font-mono">{username}</span> için yeni şifre
           </p>
           <p className="mt-0.5 text-xs text-muted-foreground">
-            Eski şifre sorulmaz. Kullanıcıya yeni şifreyi güvenli bir kanaldan ileteceğini unutma.
+            Eski şifre sorulmaz; yeni şifre en az {PASSWORD_MIN_LENGTH} karakter olmalı. Kullanıcıya
+            yeni şifreyi güvenli bir kanaldan ileteceğini unutma.
           </p>
         </div>
       </div>

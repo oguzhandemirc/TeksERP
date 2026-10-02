@@ -37,18 +37,34 @@ export interface ApprovalActionInput {
   readonly donuk: boolean;
   readonly bekleyen: PendingUpdateView | null;
   readonly yerelDurum: string | null;
+  /** Güncelleyicinin şu anki sorunu (`durum.hataKodu`; ör. DISK_DOLU) — onaylı sürüm neden kurulmuyor. */
+  readonly yerelHataKodu?: string | null;
   readonly son: UpdateResult | null;
   readonly sonrakiPencere: { readonly baslangic: string; readonly bitis: string } | null;
   readonly onay: UpdateApprovalView | null;
 }
 
-function noTargetReason(p: PendingUpdateView | null): string {
+/**
+ * Karar KUR ama uygulama başlamadı: güncelleyici yerel bir engeli bekliyor (D8b: disk doluyken HEMEN onayından
+ * sonra "şu an kuruluyor" denirdi). Uygulanıyorsa bu yola gelinmez (approvalActions önce keser).
+ */
+function installWaitingReason(surum: string, onayli: boolean, yerelDurum: string | null, hataKodu: string | null): string {
+  const bas = `${surum} ${onayli ? "onaylandı" : "kurulacak"};`;
+  if (hataKodu === "DISK_DOLU") return `${bas} diskte yer olmadığı için bekliyor — yer açılınca kendiliğinden kurulur.`;
+  if (hataKodu === "SEMA_ILERIDE") return `${bas} veritabanı bu sürümün tanımadığı göçler taşıdığı için kurulmuyor (paket şemanın gerisinde, geri indirme yapılmaz) — bu göçleri taşıyan daha yeni bir sürüm gerekir.`;
+  if (hataKodu === "DOSYA_KILITLI") return `${bas} bir dosya başka bir program tarafından kullanıldığı için bekliyor — kilit kalkınca kendiliğinden sürer.`;
+  if (hataKodu) return `${bas} güncelleyici bekliyor (${hataKodu}) — sorun giderilince kendiliğinden kurulur.`;
+  if (yerelDurum === "INDIRILIYOR") return `${bas} paket indiriliyor.`;
+  return `${bas} kurulum birazdan başlar.`;
+}
+
+function noTargetReason(p: PendingUpdateView | null, onayli: boolean, yerelDurum: string | null, hataKodu: string | null): string {
   if (p === null) return "Kurulacak yeni sürüm yok.";
   switch (p.karar) {
     case "GUNCEL":
       return "Kurulu sürüm güncel.";
     case "KUR":
-      return `${p.surum} şu an kuruluyor.`;
+      return installWaitingReason(p.surum, onayli, yerelDurum, hataKodu);
     case "DONDURULDU":
       return `Güncelleme durduruldu${p.neden ? ` (${p.neden})` : ""}.`;
     case "UYGUN_DEGIL":
@@ -75,7 +91,10 @@ export function approvalActions(s: ApprovalActionInput): UpdateActions {
   // Geri dönüş de tamamlanamadıysa (HATA) güncelleyici yeni bir panel onayı gelene dek hiçbir şey yapmaz (§5.1).
   const humanRetry = !awaiting && s.yerelDurum === "HATA" && s.son !== null;
   const target = awaiting ? s.bekleyen!.surum : humanRetry ? s.son!.hedefSurum : null;
-  if (target === null) return none(noTargetReason(s.bekleyen), withdraw);
+  if (target === null) {
+    const onayli = active !== null && active.surum === s.bekleyen?.surum;
+    return none(noTargetReason(s.bekleyen, onayli, s.yerelDurum, s.yerelHataKodu ?? null), withdraw);
+  }
   const already = (t: ApprovalTiming) => active !== null && active.surum === target && active.zamanlama === t;
   const needsApproval = humanRetry || s.bekleyen?.karar === "ONAY_BEKLIYOR";
   return {

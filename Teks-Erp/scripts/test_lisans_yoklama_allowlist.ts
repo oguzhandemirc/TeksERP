@@ -17,6 +17,10 @@
 // gevşetildi (`looseObject`): dosya yolu taşıyan satır gövdeye girdi → §1b · §2c · §4a/b/c kırmızı (5).
 // (Dağıtım v2) §5 güncelleme raporu: güncelleyicinin durum/geçmiş dosyası taklit edilir; rapor beyanlı
 // anahtarlarla gider, güncelleyicinin serbest iletisi ve onaylayanın adı GİTMEZ, dosya yoksa alan yok.
+// (L2-1) §1e lisans v2 ekleri: AB1 beyandan `parmakIziKayip` düştü → §1e · AB2 yoklama şemasından aynı alan
+// düştü (KATI şema reddeder) → §1e — şema ile beyan aynı kararı taşımazsa kırmızı. (L2-6) §1f gerçek kurucu ekleri
+// üretir: AC1 kurucudan v2 alanları düştü → §1f. (L2-7) §1g gerçek kurucu yetenek listesini taşır: AD1 yoklama gövdesine
+// yetenek alanı girmedi (S19) → §1g · AD2 `parmak-izi-v2` her zaman bildirilmedi (S21) → §1g.
 // =============================================================================
 import os from "node:os";
 import path from "node:path";
@@ -30,8 +34,10 @@ import { reportJobFailure } from "../src/jobs/job-failure";
 import { touchClient } from "../src/lib/client-registry";
 import { loadLicenseStoreSync } from "../src/lib/license/store";
 import { configureLicenseRuntimeForTests, recordVendorClockSkew, setLicenseDbFacts, setMeasuredFingerprint } from "../src/lib/license/runtime";
-import { INSTALL_HISTORY_FILE_NAME, PollRequestSchema, type Fingerprint } from "../src/lib/license/protocol";
+import { INSTALL_HISTORY_FILE_NAME, LICENSE_CAPABILITIES, PollRequestSchema, type Fingerprint } from "../src/lib/license/protocol";
 import { acceptLicenseResponse, buildPollBody } from "../src/services/license-sync.service";
+import { flushLicenseTraceWrites } from "../src/lib/license/accumulation";
+import { LICENSE_TRACE_SETTING_KEY } from "../src/constants/reserved-settings";
 import { fiksturKur, hakBas, kiraBas, type Fikstur } from "./lib/lisans-fikstur";
 
 const engel = hedefDbEngeli();
@@ -66,6 +72,9 @@ const IZINLI_ANAHTARLAR = new Set([
   // Dağıtım v2 güncelleme raporu (GUNCELLEYICI.md §3.1): dilim · güncelleyici durumu · bekleyen karar · son sonuç.
   "guncelleme", "saatDilimi", "guncelleyici", "bekleyen", "karar", "neden", "son", "hedefSurum", "kaynakSurum",
   "sonuc", "baslangic", "bitis", "veriGeriYuklendi",
+  // Lisans v2 (L2-1 kararı; üretimi L2-6): yetenekler · HAK bayt özeti · belirsizlik birikimi · durum kaydı
+  // sırası · kayıp parmak izi etkenleri — hepsi sayı, kapalı küme ya da özet; iş verisi değil.
+  "yetenekler", "ozet", "belirsizlik", "birikenMs", "ilk", "durumKaydi", "sira", "gecerli", "parmakIziKayip",
 ]);
 
 function anahtarlar(deger: unknown, yol: string, out: string[]): string[] {
@@ -111,6 +120,7 @@ fs.writeFileSync(path.join(GUNCELLEYICI, "durum", "durum.json"), JSON.stringify(
   bekleyen: { surum: "2.15.0", karar: "ONAY_BEKLIYOR", neden: null, aralik: null, pgGuncellemesi: false, zorunlu: false, ozet: "GIZLI-ADAY-OZETI" },
   son: SON,
   sonAyrinti: { urun: "backend", hataKodu: "SAGLIK_ZAMAN_ASIMI", mesaj: "GIZLI-ICERIK-AYRINTISI" },
+  bilgi: { kod: "SEMA_OLCULEMEDI", mesaj: "GIZLI-BILGI-NEDENI psql" },
 }));
 fs.writeFileSync(path.join(GUNCELLEYICI, "durum", "gecmis.jsonl"), JSON.stringify({
   v: 1, islemId: ISLEM, onayId: null, urun: "backend", kaynakSurum: "2.13.1", surum: "2.14.0", sonuc: "GERI_DONDU", hataKodu: "SAGLIK_HATASI",
@@ -138,6 +148,7 @@ async function hazirla(): Promise<{ f: Fikstur; dbKimligi: string; ornekler: { i
   await acceptLicenseResponse(
     { v: 1, hak: hakBas(f), kira: kiraBas(f, { zorlama: false }), indirmeBelirtecleri: [], sunucuSaati: new Date().toISOString(), kurulumId: f.kurulumId },
     "cevrimdisi",
+    "TASINMIS",
   );
   // Satıcı saati sapması ölçülmüş olsun: `saticiSapmaSn` beyanlı anahtar olarak gövdede görünsün.
   recordVendorClockSkew(-20 * 60_000);
@@ -146,6 +157,12 @@ async function hazirla(): Promise<{ f: Fikstur; dbKimligi: string; ornekler: { i
   touchClient({ instanceId: `${ornekler.istemci}-2`, kind: "mobil", version: null, userId: null });
   reportJobFailure("lisans-bekci-is", new Error(ornekler.hataMetni));
   return { f, dbKimligi: kimlik.installationId, ornekler };
+}
+
+/** Kabulün yazdığı lisans izi satırı (bekçinin kendi kurulumu) — DB'de artık bırakılmaz. */
+async function temizleLisansIzi(): Promise<void> {
+  await flushLicenseTraceWrites();
+  await prisma.systemSetting.deleteMany({ where: { key: LICENSE_TRACE_SETTING_KEY } });
 }
 
 async function main(): Promise<void> {
@@ -160,6 +177,31 @@ async function main(): Promise<void> {
     check("§1a körlük zemini: gövde dolu (≥ 40 anahtar yolu)", tumu.length >= 40, `${tumu.length}`);
     check("§1b ⭐ beyan DIŞI anahtar YOK", disarda.length === 0, disarda.join(", "));
     check("§1c ⭐ gövde KATI protokol şemasından geçer", PollRequestSchema.safeParse(govde).success);
+    const v2 = {
+      ...govde,
+      hak: govde.hak ? { ...govde.hak, ozet: "A".repeat(43) } : null,
+      yetenekler: ["hak-ara", "parmak-izi-v2"],
+      belirsizlik: { birikenMs: 1000, ilk: new Date().toISOString() },
+      durumKaydi: { sira: 3, gecerli: true },
+      parmakIziKayip: ["f4"],
+    };
+    const v2Disarda = anahtarlar(v2, "", []).filter((y) => !IZINLI_ANAHTARLAR.has(y.split(".").pop()?.replace(/\[\d+\]$/, "") ?? ""));
+    check("§1e v2 ekleri (L2-1) şemadan geçer VE her anahtarı beyanlı — şema ile beyan aynı kararı taşır", PollRequestSchema.safeParse(v2).success && v2Disarda.length === 0 && v2.hak !== null, v2Disarda.join(", "));
+    setMeasuredFingerprint({ digest: { ...(f.parmakIzi as Fingerprint), f4: null }, measured: { f1: true, f2: true, f3: true, f4: false, f5: true }, measuredAt: new Date().toISOString() });
+    const gercek = await buildPollBody();
+    const gercekDisarda = anahtarlar(gercek, "", []).filter((y) => !IZINLI_ANAHTARLAR.has(y.split(".").pop()?.replace(/\[\d+\]$/, "") ?? ""));
+    check(
+      "§1f ⭐ GERÇEK kurucu (L2-6) v2 eklerini üretir: durumKaydi (sıra) + hak.ozet + kayıp etken (f4) — beyanlı ve KATI şemadan geçer",
+      typeof gercek.durumKaydi?.sira === "number" && typeof gercek.hak?.ozet === "string" && JSON.stringify(gercek.parmakIziKayip) === '["f4"]' && gercekDisarda.length === 0 && PollRequestSchema.safeParse(gercek).success,
+      `${JSON.stringify(gercek.durumKaydi)} ${JSON.stringify(gercek.parmakIziKayip)} ${gercekDisarda.join(",")}`,
+    );
+    const yetenek = gercek.yetenekler ?? [];
+    check(
+      "§1g ⭐ GERÇEK kurucu (L2-7) yetenek listesini taşır: odenmis-tarih + parmak-izi-v2 HER ZAMAN, liste LICENSE_CAPABILITIES'in alt kümesi ve sırası, değerleri beyanlı anahtar değil (alan adı `yetenekler` beyanlı)",
+      yetenek.includes("odenmis-tarih") && yetenek.includes("parmak-izi-v2") &&
+        JSON.stringify(yetenek) === JSON.stringify(LICENSE_CAPABILITIES.filter((c) => yetenek.includes(c))) && IZINLI_ANAHTARLAR.has("yetenekler"),
+      JSON.stringify(gercek.yetenekler ?? null),
+    );
     check(
       "§1d ortam.installationId = DB kimliği (yalnız bilgi), saat.saticiSapmaSn ölçülen sapma; lisans kimliği gövdede YOK (imzalı başlıkta)",
       govde.ortam.installationId === dbKimligi && govde.saat.saticiSapmaSn === -1200 && dbKimligi !== f.kurulumId && !metin.includes(f.kurulumId),
@@ -208,8 +250,8 @@ async function main(): Promise<void> {
     check("§5a ⭐ rapor gövdede: güncelleyici çalışıyor, onay bekleyen 2.15.0, son deneme geri döndü (kodlu)",
       g?.guncelleyici.durum === "CALISIYOR" && g.bekleyen?.surum === "2.15.0" && g.bekleyen.karar === "ONAY_BEKLIYOR" &&
       g.son?.kayitId === ISLEM && g.son.sonuc === "GERI_DONDU" && g.son.kod === "SAGLIK_HATASI" && JSON.stringify(g.son) === JSON.stringify(SON), JSON.stringify(g));
-    check("§5b ⭐ güncelleyicinin serbest iletisi, aday özeti, iç ayrıntısı ve onaylayanın adı gövdede YOK",
-      !metin.includes("GIZLI-") && !metin.includes("Onaylayan-Kisi-Adi") && !metin.includes("SAGLIK_ZAMAN_ASIMI"));
+    check("§5b ⭐ güncelleyicinin serbest iletisi, aday özeti, iç ayrıntısı, bilgisi ve onaylayanın adı gövdede YOK",
+      !metin.includes("GIZLI-") && !metin.includes("Onaylayan-Kisi-Adi") && !metin.includes("SAGLIK_ZAMAN_ASIMI") && !metin.includes("SEMA_OLCULEMEDI"));
     fs.rmSync(GUNCELLEYICI, { recursive: true, force: true });
     const govde3 = await buildPollBody();
     check("§5c güncelleyici yoksa alan HİÇ gitmez (eski satıcı uyumu)", !("guncelleme" in govde3));
@@ -217,6 +259,7 @@ async function main(): Promise<void> {
     fail++;
     console.log(`❌ beklenmeyen hata — ${e instanceof Error ? e.stack : String(e)}`);
   } finally {
+    await temizleLisansIzi();
     fs.rmSync(KOK, { recursive: true, force: true });
     await prisma.$disconnect();
     await pool.end();

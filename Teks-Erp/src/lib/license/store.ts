@@ -31,6 +31,10 @@ export const LICENSE_FILES = {
   STATE: "durum.json",
   PROXY: "proxy.json",
   TRANSFER: "tasima.json",
+  /** Parmak izi 24 sa önbelleği (K8) — yalnız tuzlu özet; HMAC'li, bozuksa yok sayılır (`fingerprint-cache.ts`). */
+  FINGERPRINT_CACHE: "parmak-izi-onbellek.json",
+  /** Etkin iptal belgesi (G4, kök imzalı JWS) — DB kopyası `license.revocation`; tembel okunur (`revocation-store.ts`). */
+  REVOCATION: "iptal.jws",
 } as const;
 
 /** Depo kullanılamıyorsa nedeni (kapı/ekran TR metni ayrıca üretir). */
@@ -210,7 +214,10 @@ export function loadLicenseStoreSync(opts: { dir?: string } = {}): LicenseStoreS
   const keyFile = path.join(dir, LICENSE_FILES.KEY);
   const keyRead = readFileState(keyFile, MAX_KEY_BYTES);
   if (keyRead.kind === "OKUNAMADI" || keyRead.kind === "BOS" || keyRead.kind === "BUYUK") {
-    current = emptySnapshot(dir, "OKUNAMADI", [LICENSE_FILES.KEY]);
+    // G12 §3.1-1: anahtar okunamazsa YALNIZ imza durur — belgeler yine okunur, kararlar (kapı · tavan · yaptırım)
+    // DB izindeki açık anahtarla doğrulanıp sürer. Anahtar ÜRETİLMEZ (sessiz anahtar değişimi yok).
+    const unreadable = [LICENSE_FILES.KEY];
+    current = { ...emptySnapshot(dir, "OKUNAMADI", unreadable), ...loadDocuments(dir, unreadable) };
     return current;
   }
   try {
@@ -235,15 +242,20 @@ export function loadLicenseStoreSync(opts: { dir?: string } = {}): LicenseStoreS
     return current;
   }
   const unreadable: string[] = [];
+  current = { dir, problem: null, key, setAsideKeyFile, ...loadDocuments(dir, unreadable) };
+  return current;
+}
+
+type StoreDocuments = Omit<LicenseStoreSnapshot, "dir" | "problem" | "key" | "setAsideKeyFile">;
+
+/** Anahtar dışındaki depo dosyaları; okunamayan her dosya `unreadable`a düşer (yok sayılmaz). */
+function loadDocuments(dir: string, unreadable: string[]): StoreDocuments {
   const stateRaw = readJsonField(path.join(dir, LICENSE_FILES.STATE), unreadable);
   const stateParsed = StateFileSchema.safeParse(stateRaw);
   const proxyParsed = ProxyFileSchema.safeParse(readJsonField(path.join(dir, LICENSE_FILES.PROXY), unreadable));
   const transferParsed = TransferFileSchema.safeParse(readJsonField(path.join(dir, LICENSE_FILES.TRANSFER), unreadable));
   const identityParsed = IdentityFileSchema.safeParse(readJsonField(path.join(dir, LICENSE_FILES.IDENTITY), unreadable));
-  current = {
-    dir,
-    problem: null,
-    key,
+  return {
     identity: identityParsed.success ? { kurulumId: identityParsed.data.kurulumId, ogrenildi: identityParsed.data.ogrenildi } : null,
     entitlementJws: readDocField(path.join(dir, LICENSE_FILES.ENTITLEMENT), unreadable),
     leaseJws: readDocField(path.join(dir, LICENSE_FILES.LEASE), unreadable),
@@ -260,10 +272,8 @@ export function loadLicenseStoreSync(opts: { dir?: string } = {}): LicenseStoreS
           durum: transferParsed.data.durum ?? "BEKLIYOR",
         }
       : null,
-    setAsideKeyFile,
     unreadable,
   };
-  return current;
 }
 
 export function getLicenseStore(): LicenseStoreSnapshot | null {

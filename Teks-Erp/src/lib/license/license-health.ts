@@ -15,7 +15,8 @@ export function licenseHealthBlock(): Record<string, unknown> {
     const pollStatus = getPollStatus();
     const iso = (ms: number | null): string | null => (ms === null ? null : new Date(ms).toISOString());
     return {
-      hazir: snap.hazir,
+      hazir: snap.imzaHazir,
+      durumHazir: snap.durumHazir,
       motor: motor.durum,
       motorNeden: motor.neden,
       kip: snap.state.kip,

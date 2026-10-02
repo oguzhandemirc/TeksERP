@@ -12,9 +12,12 @@ import {
   isInstallationIdOptional,
   isoToMs,
   signRequest,
+  type FingerprintFactor,
+  type PollRequest,
   type RequestPurpose,
   type VendorErrorCode,
 } from "../../lib/license/protocol";
+import { getLicenseCore } from "../../lib/license/native";
 import { installHistoryPath, readInstallHistory } from "../../lib/license/install-history";
 import { ensureInstallationX25519, getLicenseStore, type InstallationKey, type LicenseStoreSnapshot } from "../../lib/license/store";
 import { requestClockSkewMs } from "../../lib/license/request-clock";
@@ -24,6 +27,7 @@ import {
   getLicenseSnapshot,
   getMeasuredFingerprint,
   recordVendorClockSkew,
+  type LicenseSnapshot,
 } from "../../lib/license/runtime";
 
 const VENDOR_TIMEOUT_MS = 20_000;
@@ -74,6 +78,7 @@ const VENDOR_MESSAGES = {
   HIZ_SINIRI: "Çok sık denendi; biraz sonra tekrar deneyin.",
   TEKRAR_DENEYIN: "Lisans sunucusunda eşzamanlı bir işlem çakıştı; biraz sonra tekrar deneyin.",
   BULUNAMADI: "Lisans sunucusu bu isteği tanımadı (adres yanlış ya da sunucu sürümü eski olabilir; LICENSE_SERVER_URL ayarını kontrol edin).",
+  ZAYIF_TANIMA_ONAY_BEKLIYOR: "Bu sunucunun donanımı yeterince tanınamadı; etkinleştirme satıcı onayı bekliyor. Onaylanınca aynı kodla yeniden deneyin.",
   SUNUCU_HATASI: "Lisans sunucusunda bir hata oluştu; biraz sonra tekrar deneyin.",
 } as const satisfies Readonly<Record<VendorErrorCode, string>>;
 
@@ -110,7 +115,7 @@ export function requireStore(): LicenseStoreSnapshot & { key: InstallationKey } 
 export function requireReady(): ReadyContext {
   const store = requireStore();
   const snap = getLicenseSnapshot();
-  if (!snap.hazir) throw licenseError(409, "LICENSE_IDENTITY_NOT_READY", "Kurulum kimliği henüz hazır değil; biraz sonra tekrar deneyin.");
+  if (!snap.imzaHazir) throw licenseError(409, "LICENSE_IDENTITY_NOT_READY", "Kurulum kimliği henüz hazır değil; biraz sonra tekrar deneyin.");
   return { store, key: store.key, licenseId: snap.licenseId };
 }
 
@@ -137,8 +142,13 @@ export function requestIdentityFor(ctx: ReadyContext, purpose: RequestPurpose): 
   return requireLicenseId(ctx);
 }
 
-export function signedHeaders(ctx: ReadyContext, purpose: RequestPurpose, bodyText: string, nowMs: number = Date.now()): Record<string, string> {
-  const token = signRequest({ installationId: requestIdentityFor(ctx, purpose), purpose, body: bodyText, key: { privateKey: ctx.key.privateKey, nowMs } });
+/**
+ * `path`: isteğin gittiği uç (`ENDPOINTS` / `SYNC_PATHS` sabiti, alan karşı tarafın doğruladığıyla AYNI) imzaya girer —
+ * imzalı istek başka uca yeniden oynatılamaz (`ISTEK_YOL`); `yol` tanımayan eski doğrulayıcı alanı yok sayar.
+ */
+export function signedHeaders(ctx: ReadyContext, purpose: RequestPurpose, bodyText: string, to: { readonly path: string; readonly nowMs?: number }): Record<string, string> {
+  const key = { privateKey: ctx.key.privateKey, nowMs: to.nowMs ?? Date.now() };
+  const token = signRequest({ installationId: requestIdentityFor(ctx, purpose), purpose, body: bodyText, key, path: to.path });
   return { "content-type": "application/json", accept: "application/json", [REQUEST_HEADER]: token };
 }
 
@@ -178,7 +188,7 @@ export async function vendorPost(path: string, purpose: RequestPurpose, body: Ve
     const text = JSON.stringify(typeof body === "function" ? await (body as () => unknown)() : body);
     let res: VendorHttpResponse;
     try {
-      res = await transport({ url: `${base}${path}`, method: "POST", headers: signedHeaders(ctx, purpose, text, nowMs), body: text });
+      res = await transport({ url: `${base}${path}`, method: "POST", headers: signedHeaders(ctx, purpose, text, { path, nowMs }), body: text });
     } catch (err) {
       return { ok: false, status: 0, code: err instanceof EgressError ? err.code : "EGRESS_NETWORK" };
     }
@@ -264,6 +274,19 @@ export function currentFingerprintDigest(): { f1: string | null; f2: string | nu
   return getMeasuredFingerprint()?.digest ?? { f1: null, f2: null, f3: null, f4: null, f5: null };
 }
 
+/**
+ * Kayıp etkenler (K8): kiranın kabul ettiği kümede değeri olup ölçümde — ≤ 24 sa önbellek dahil — olmayanlar; DR
+ * sınıfında f5 hariç. Karar lisans çekirdeğinden (kural `standart`); kira ya da ölçüm yoksa boş.
+ */
+export function currentLostFactors(): FingerprintFactor[] {
+  const snap = getLicenseSnapshot();
+  const fp = getMeasuredFingerprint();
+  const accepted = snap.lease?.document.parmakIzi;
+  if (!accepted || !fp) return [];
+  const excludeF5 = snap.entitlement?.document.sinif === "DR";
+  return [...getLicenseCore().compareFingerprints(accepted, fp.digest, { rule: "standart", excludeF5 }).lost];
+}
+
 
 export function invalidResponse(message: string, protocolCode?: string): AppError {
   return licenseError(400, "LICENSE_RESPONSE_INVALID", message, protocolCode ? { protocolCode } : {});
@@ -281,4 +304,18 @@ export function installRecordsField(): { kurulumKayitlari?: ReturnType<typeof re
   if (!dir) return {};
   const records = readInstallHistory(installHistoryPath(dir));
   return records.length > 0 ? { kurulumKayitlari: records } : {};
+}
+
+/**
+ * Lisans v2 G12 raporu (satıcı bununla yerel müdahale şüphesini görür; KARAR değil, yalnız uyarı): durum kaydı sırası,
+ * belirsizlik birikimi ve kayıp parmak izi etkenleri. Birikim ve kayıp yalnız doluysa gider. KATI gövde ⇒ satıcı önce.
+ */
+export function pollV2Fields(snap: LicenseSnapshot): Pick<PollRequest, "durumKaydi" | "belirsizlik" | "parmakIziKayip"> {
+  const birikenMs = Math.round(snap.state.belirsizlik.birikenMs);
+  const kayip = currentLostFactors();
+  return {
+    durumKaydi: { sira: snap.view.record?.sira ?? null, gecerli: snap.view.fileValid },
+    ...(birikenMs > 0 ? { belirsizlik: { birikenMs, ilk: snap.view.record?.belirsizlik?.ilk ?? null } } : {}),
+    ...(kayip.length > 0 ? { parmakIziKayip: kayip } : {}),
+  };
 }

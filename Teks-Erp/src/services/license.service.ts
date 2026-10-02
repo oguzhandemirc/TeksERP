@@ -10,23 +10,27 @@ import {
   ActivationCodeSchema,
   DrTakeoverRequestSchema,
   ENDPOINTS,
+  HardwareReportResponseSchema,
   msToIso,
   normalizeActivationCode,
   signRequest,
   wrapEnvelope,
 } from "../lib/license/protocol";
 import { loadLicenseStoreSync, saveProxy } from "../lib/license/store";
+import { capabilitiesField } from "../lib/license/capabilities";
 import { getLicenseConfig, getLicenseSnapshot, getMeasuredFingerprint, invalidateLicenseSnapshot } from "../lib/license/runtime";
 import { adminAction } from "./license-trail.service";
 import { activationAcceptance } from "./license-acceptance.service";
 import { DATA_EXPORT_PATHS } from "../constants/license-routes";
 import { acceptLicenseResponse, buildPollBody, pollLicenseOnce, refreshLicenseFingerprint, runLeaseExchange, sendTransfer, type PollOutcome } from "./license-sync.service";
 import { getLicenseDetail, getProxySettings, type LicenseDetail, type LicenseProxySettings } from "./license-view.service";
+import { buildHardwareReportBody } from "./license-hardware.service";
 import {
   buildEnvironment,
   currentFingerprintDigest,
   egressTransport,
   encryptionKeyField,
+  invalidResponse,
   licenseError,
   requestIdentityFor,
   requireLicenseId,
@@ -102,6 +106,7 @@ function buildActivateBody(ctx: ReadyContext, code: string, acceptanceDoc: strin
     ...encryptionKeyField(),
     parmakIzi: currentFingerprintDigest(),
     ortam: buildEnvironment(),
+    ...capabilitiesField(),
     kabul: acceptanceDoc,
   });
 }
@@ -127,7 +132,7 @@ export async function activateLicense(rawCode: string, userId: string | null, tr
     const r = await vendorPost(ENDPOINTS.ACTIVATE, "etkinlestir", buildActivateBody(ctx, code, acceptance.belge), transport);
     adminAction(userId, "etkinlestir", { sonuc: r.ok ? "yanit" : r.code, kabulId: acceptance.kabulId });
     if (!r.ok) throw vendorFailureToError(r);
-    await acceptLicenseResponse(r.json, "etkinlestirme", userId);
+    await acceptLicenseResponse(r.json, "etkinlestirme", "CANLI", userId);
   });
   return getLicenseDetail();
 }
@@ -139,9 +144,16 @@ export async function pollLicenseNow(transport: VendorTransport = egressTranspor
 }
 
 // ── API: çevrimdışı (QR) / panel aktarma ────────────────────────────────────────
-export type OfflinePurpose = "yokla" | "etkinlestir";
+/** `donanim`: donanım değişikliği bildirimi (K8) zarfla — satıcı `/v1/cevrimdisi`te amaca göre yönlendirir. */
+export type OfflinePurpose = "yokla" | "etkinlestir" | "donanim";
 
-export async function buildOfflineRequest(g: { amac: OfflinePurpose; kod?: string | null }): Promise<LicenseOfflineRequest> {
+function requireActivatedForOffline(ctx: ReadyContext): void {
+  if (!getLicenseSnapshot().activated || !ctx.licenseId) {
+    throw licenseError(409, "LICENSE_NOT_ACTIVE", "Kurulum etkinleşmemiş; önce etkinleştirme isteği oluşturun.");
+  }
+}
+
+export async function buildOfflineRequest(g: { amac: OfflinePurpose; kod?: string | null; gerekce?: string | null }): Promise<LicenseOfflineRequest> {
   const ctx = requireReady();
   const nowMs = Date.now();
   let body: unknown;
@@ -152,14 +164,24 @@ export async function buildOfflineRequest(g: { amac: OfflinePurpose; kod?: strin
     const acceptance = await activationAcceptance(ctx.key.kid);
     if (!getMeasuredFingerprint()) await refreshLicenseFingerprint();
     body = buildActivateBody(ctx, code, acceptance.belge);
+  } else if (g.amac === "donanim") {
+    requireActivatedForOffline(ctx);
+    // Çevrimiçi bildirimle aynı: değişiklik az önce yapılmış olabilir, parmak izi YENİDEN ölçülür.
+    await refreshLicenseFingerprint();
+    body = buildHardwareReportBody(g.gerekce ?? null);
   } else {
-    if (!getLicenseSnapshot().activated || !ctx.licenseId) {
-      throw licenseError(409, "LICENSE_NOT_ACTIVE", "Kurulum etkinleşmemiş; önce etkinleştirme isteği oluşturun.");
-    }
+    requireActivatedForOffline(ctx);
     body = await buildPollBody(nowMs);
   }
   const text = JSON.stringify(body);
-  const token = signRequest({ installationId: requestIdentityFor(ctx, g.amac), purpose: g.amac, body: text, key: { privateKey: ctx.key.privateKey, nowMs } });
+  const token = signRequest({
+    installationId: requestIdentityFor(ctx, g.amac),
+    purpose: g.amac,
+    body: text,
+    key: { privateKey: ctx.key.privateKey, nowMs },
+    // Zarfı taşıyan uç imzaya girer: QR sayfası ve panel aktarması da yalnız `/v1/cevrimdisi`e gönderir.
+    path: ENDPOINTS.OFFLINE,
+  });
   const zarf = wrapEnvelope(token, text);
   const vendorUrl = getLicenseConfig().vendorUrl;
   return {
@@ -186,13 +208,46 @@ function decodeOfflinePayload(raw: unknown): unknown {
   }
 }
 
-export async function acceptOfflineResponse(raw: unknown, source: "cevrimdisi" | "aktarma", userId: string | null): Promise<LicenseDetail> {
+export type OfflineResponseSource = "cevrimdisi" | "aktarma" | "dosya";
+
+const OFFLINE_ACTION: Readonly<Record<OfflineResponseSource, string>> = {
+  cevrimdisi: "cevrimdisi-yanit",
+  aktarma: "aktarma-yaniti",
+  dosya: "lisans-dosyasi",
+};
+
+/**
+ * Satıcı yanıtı kendi imzasıyla doğrulanır; bekleyen bir İSTEK aranmaz — portalın istek gerektirmeyen
+ * uzatma dosyası da (`dosya`) bu yoldan kabul edilir. Eski dosyayı geri alma kapısı reddeder (`LICENSE_LEASE_STALE`).
+ */
+const HARDWARE_PENDING_TEXT =
+  "Donanım değişikliği bildirimi lisans sunucusunda onay bekliyor; onaylanınca yeni bir yenileme isteğiyle (internet varsa kendiliğinden) lisans güncellenir.";
+const HARDWARE_REJECTED_TEXT = "Donanım değişikliği bildirimi lisans sunucusunda reddedildi; satıcıyla görüşün ya da taşıma talebi açın.";
+
+/**
+ * Zarfla gönderilen donanım bildiriminin yanıtı (K8) önce denenir: onaylıysa içteki lisans her yanıt gibi doğrulanıp
+ * kabul edilir; bekleyen ve reddedilen bildirim lisans taşımaz (409, açık cümle). Değilse düz lisans yanıtıdır.
+ */
+async function acceptOfflinePayload(payload: unknown, source: OfflineResponseSource, userId: string | null): Promise<{ yeniKira: boolean; talepId?: string }> {
+  const hardware = HardwareReportResponseSchema.safeParse(payload);
+  if (!hardware.success) return acceptLicenseResponse(payload, source, "TASINMIS", userId);
+  const h = hardware.data;
+  if (h.durum === "BEKLIYOR") throw licenseError(409, "LICENSE_HARDWARE_PENDING", HARDWARE_PENDING_TEXT, { talepId: h.talepId });
+  if (h.durum === "REDDEDILDI") throw licenseError(409, "LICENSE_HARDWARE_REJECTED", HARDWARE_REJECTED_TEXT, { talepId: h.talepId });
+  if (!h.lisans) throw invalidResponse("Donanım bildirimi yanıtı biçimsiz.");
+  const r = await acceptLicenseResponse(h.lisans, "donanim", "TASINMIS", userId);
+  return { ...r, talepId: h.talepId };
+}
+
+export async function acceptOfflineResponse(raw: unknown, source: OfflineResponseSource, userId: string | null): Promise<LicenseDetail> {
   try {
-    const r = await runLeaseExchange(() => acceptLicenseResponse(decodeOfflinePayload(raw), source, userId));
-    adminAction(userId, source === "aktarma" ? "aktarma-yaniti" : "cevrimdisi-yanit", { sonuc: r.yeniKira ? "kabul" : "ayni-kira" });
+    const r = await runLeaseExchange(() => acceptOfflinePayload(decodeOfflinePayload(raw), source, userId));
+    adminAction(userId, OFFLINE_ACTION[source], { sonuc: r.yeniKira ? "kabul" : "ayni-kira", ...(r.talepId ? { donanimTalebi: r.talepId } : {}) });
   } catch (err) {
-    adminAction(userId, source === "aktarma" ? "aktarma-yaniti" : "cevrimdisi-yanit", {
-      sonuc: err instanceof AppError ? String(err.details?.code ?? "RED") : "RED",
+    const details = err instanceof AppError ? err.details : undefined;
+    adminAction(userId, OFFLINE_ACTION[source], {
+      sonuc: details ? String(details.code ?? "RED") : "RED",
+      ...(typeof details?.talepId === "string" ? { donanimTalebi: details.talepId } : {}),
     });
     throw err;
   }
@@ -216,7 +271,7 @@ export async function drTakeover(anaKurulumId: string | undefined, gerekce: stri
     const r = await vendorPost(ENDPOINTS.DR_TAKEOVER, "dr-devral", body, transport);
     adminAction(userId, "dr-devral", { anaKurulumId: anaKurulumId ?? null, sonuc: r.ok ? "yanit" : r.code });
     if (!r.ok) throw vendorFailureToError(r);
-    await acceptLicenseResponse(r.json, "dr-devral", userId);
+    await acceptLicenseResponse(r.json, "dr-devral", "CANLI", userId);
   });
   return getLicenseDetail();
 }

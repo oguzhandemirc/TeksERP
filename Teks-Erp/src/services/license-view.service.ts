@@ -23,15 +23,17 @@ import {
   getLicenseConfig,
   getLicenseDbFacts,
   getLicenseSnapshot,
-  getMeasuredFingerprint,
   getPollStatus,
   peekObservationCounters,
   requestDownloadTokenRefresh,
   type LicenseSnapshot,
 } from "../lib/license/runtime";
-import type { Banner, LicenseEffect, StateReason } from "../lib/license/state";
+import type { Banner, LicenseEffect, PaidThrough, StateReason } from "../lib/license/state";
 import { licenseError } from "./helpers/license-wire.helper";
+import { fingerprintSection } from "./helpers/license-fingerprint-view.helper";
+import type { FactorReport } from "../lib/license/fingerprint";
 import { integritySection } from "./helpers/license-integrity-view.helper";
+import { chainSection, type LicenseChainView } from "./helpers/license-chain-view.helper";
 import type { IntegrityStatus } from "../lib/license/state-rules";
 
 // ── Durum özeti (herkes) ────────────────────────────────────────────────────────
@@ -82,7 +84,7 @@ export function getLicenseStatus(authenticated: boolean): LicenseStatusResponse 
 export function isSuspendedBeforeLogin(): boolean {
   try {
     const snap = getLicenseSnapshot();
-    return snap.hazir && snap.state.kip === "zorla" && snap.state.uygulananKademe === "DURDURULMUS";
+    return snap.durumHazir && snap.state.kip === "zorla" && snap.state.uygulananKademe === "DURDURULMUS";
   } catch {
     return false;
   }
@@ -90,7 +92,10 @@ export function isSuspendedBeforeLogin(): boolean {
 
 // ── Ayrıntı (license:view) ──────────────────────────────────────────────────────
 export interface LicenseDetail {
+  /** İmza hazır (yoklama, etkinleştirme, istek): depo + kurulum anahtarı + DB olguları. */
   readonly hazir: boolean;
+  /** Durum hazır: belgeler doğrulanıyor, kapı ve tavan işliyor (anahtar okunamasa da — G12 §3.1-1). */
+  readonly durumHazir: boolean;
   /**
    * `kurulumId` LİSANS kimliğidir (LICENSE_DIR; etkinleşmemişte null); `veritabaniKimligi` DB'nin
    * `system.installationId`si — yalnız bilgi (DB kopyası taşır, lisans kimliği değildir; D14).
@@ -121,11 +126,16 @@ export interface LicenseDetail {
     devredildi: boolean;
     yaptirimKademesi: SanctionLevel | null;
     saat: { guvenilir: string; kaynak: string; bulgu: string | null; bulguKaynagi: string | null };
+    /** v2 süre çapası (ödenmiş tarih P; `tarih` null = süresiz). `null` = belgeler P taşımıyor, eski çapa işler. */
+    odenmisTarih: { tarih: string | null; kaynak: PaidThrough["kaynak"]; sozlesmeSonu: boolean } | null;
+    /** Son başarılı kira alışverişi (imzalı kiradan) ve "internet var" kararı (son 24 saat). */
+    baglanti: { sonAlisveris: string | null; internetVar: boolean };
   };
-  readonly hak: (Omit<EntitlementDoc, "v" | "kurulumId" | "bayiSertifikasi" | "bayiId"> & { bayiId: string | null }) | null;
+  readonly hak: (Omit<EntitlementDoc, "v" | "kurulumId" | "bayiSertifikasi" | "bayiId" | "imzaciSertifikasi" | "kipAltSiniri"> & { bayiId: string | null }) | null;
   readonly kira: Pick<
     LeaseDoc,
-    "kiraId" | "verilis" | "bitis" | "sunucuSaati" | "ekSureGun" | "zorlama" | "gecerlilikBitis" | "yaptirim" | "yoklamaAraligiDk" | "devredildi" | "kanal"
+    | "kiraId" | "verilis" | "bitis" | "sunucuSaati" | "ekSureGun" | "zorlama" | "gecerlilikBitis" | "yaptirim" | "yoklamaAraligiDk" | "devredildi" | "kanal"
+    | "odenmisTarih"
   > | null;
   readonly parmakIzi: {
     olculdu: string | null;
@@ -134,6 +144,11 @@ export interface LicenseDetail {
     eslesen: number | null;
     olculebilen: number | null;
     uyusmayan: readonly string[];
+    /** Etken başına okuma raporu (K8: çok yollu okuma + 24 sa önbellek) — değer/özet YOK; ölçüm yoksa null. */
+    okuma: Readonly<Record<"f1" | "f2" | "f3" | "f4" | "f5", FactorReport>> | null;
+    /** Kabul edilen kümede değeri olup 24 saattir hiçbir yoldan okunamayan etkenler. */
+    kayip: readonly string[];
+    onbellekBozuk: boolean;
   };
   readonly yoklama: {
     saticiYapilandirildi: boolean;
@@ -163,6 +178,8 @@ export interface LicenseDetail {
     sayilar: { dosya: number; eksik: number; degisik: number; fazla: number; okunamayan: number } | null;
     ilkUyusmazlik: string | null;
   };
+  /** G4 güven zinciri: HAK imzacısı (+ ara sertifikası), kiranın ALT'ı, iptal belgesinin hâli. */
+  readonly zincir: LicenseChainView;
 }
 
 function isoOrNull(ms: number | null): string | null {
@@ -184,6 +201,8 @@ function stateSection(snap: LicenseSnapshot): LicenseDetail["durum"] {
     devredildi: s.devredildi,
     yaptirimKademesi: s.yaptirimKademesi,
     saat: { guvenilir: msToIso(s.saat.trustedMs), kaynak: s.saat.source, bulgu: s.saat.finding, bulguKaynagi: s.saat.findingSource },
+    odenmisTarih: s.odenmisTarih && { tarih: isoOrNull(s.odenmisTarih.tarihMs), kaynak: s.odenmisTarih.kaynak, sozlesmeSonu: s.odenmisTarih.sozlesmeSonu },
+    baglanti: { sonAlisveris: isoOrNull(s.baglanti.sonAlisverisMs), internetVar: s.baglanti.internetVar },
   };
 }
 
@@ -195,12 +214,15 @@ function documentSections(snap: LicenseSnapshot): Pick<LicenseDetail, "hak" | "k
       ? {
           hakId: ent.hakId, surum: ent.surum, lisansNo: ent.lisansNo, musteri: ent.musteri, tesis: ent.tesis, sinif: ent.sinif,
           moduller: ent.moduller, kalici: ent.kalici, bakimBitis: ent.bakimBitis, verilis: ent.verilis, bayiId: ent.bayiId ?? null,
+          // Ham beyan (v1 HAK taşımaz → alan yok); hesaplanan P `durum.odenmisTarih`te.
+          ...(ent.cevrimdisiUfukGun === undefined ? {} : { cevrimdisiUfukGun: ent.cevrimdisiUfukGun }),
         }
       : null,
     kira: l
       ? {
           kiraId: l.kiraId, verilis: l.verilis, bitis: l.bitis, sunucuSaati: l.sunucuSaati, ekSureGun: l.ekSureGun, zorlama: l.zorlama,
           gecerlilikBitis: l.gecerlilikBitis, yaptirim: l.yaptirim, yoklamaAraligiDk: l.yoklamaAraligiDk, devredildi: l.devredildi, kanal: l.kanal,
+          ...(l.odenmisTarih === undefined ? {} : { odenmisTarih: l.odenmisTarih }),
         }
       : null,
   };
@@ -232,10 +254,9 @@ export function getLicenseDetail(): LicenseDetail {
   const store = getLicenseStore();
   const snap = getLicenseSnapshot();
   const facts = getLicenseDbFacts();
-  const fp = getMeasuredFingerprint();
-  const d = snap.fingerprintDecision;
   return {
-    hazir: snap.hazir,
+    hazir: snap.imzaHazir,
+    durumHazir: snap.durumHazir,
     kurulum: {
       kurulumId: snap.licenseId,
       veritabaniKimligi: facts.installationId,
@@ -252,19 +273,13 @@ export function getLicenseDetail(): LicenseDetail {
     },
     durum: stateSection(snap),
     ...documentSections(snap),
-    parmakIzi: {
-      olculdu: fp?.measuredAt ?? null,
-      olculen: fp?.measured ?? null,
-      karar: d?.result ?? null,
-      eslesen: d?.matched ?? null,
-      olculebilen: d?.measurable ?? null,
-      uyusmayan: d?.mismatched ?? [],
-    },
+    parmakIzi: fingerprintSection(snap),
     yoklama: pollingSection(),
     tasima: store?.transfer ?? null,
     gozlem: peekObservationCounters(),
     proxy: getProxySettings(),
     butunluk: integritySection(snap),
+    zincir: chainSection(snap),
   };
 }
 

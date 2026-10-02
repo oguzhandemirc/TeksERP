@@ -31,6 +31,8 @@ export interface AuthMeResponse {
   isSystemAccount: boolean;
   /** Bu kurulumda bir sistem hesabı DOĞMUŞ mu (yoksa modül anahtarı kapısı devre dışı). */
   systemAccountExists: boolean;
+  /** Hesap yeni parola belirlemeden ilerleyemez (eski backend göndermez). */
+  mustChangePassword?: boolean;
 }
 
 /** Giriş yapan istemcinin türü — same-type oturum politikası bununla ayrışır.
@@ -74,12 +76,33 @@ export interface ExistingSessionInfo {
 /** Backend 409 conflict `details.code` değeri — aynı hesap başka yerde açık. */
 export const SESSION_EXISTS_CODE = "SESSION_EXISTS" as const;
 
+/** Backend 403 `details.code` — hesap zorunlu parola değişimini bekliyor (yalnız me/logout/change-password açık). */
+export const PASSWORD_CHANGE_REQUIRED_CODE = "PASSWORD_CHANGE_REQUIRED" as const;
+
 export interface LoginResponse {
   success: boolean;
   data: {
     token: string;
     user: JwtPayload;
+    /**
+     * Hesap ilk kurulumda üretilmiş parolayla açıldı: token yalnız me/logout/
+     * change-password uçlarına geçer → panel uygulamaya girmeden parola değiştirme
+     * adımını açar. Eski backend göndermez (= false).
+     */
+    mustChangePassword?: boolean;
   };
+  message: string;
+}
+
+/** `POST /api/auth/change-password` gövdesi — yeni parola `lib/password-policy` kuralına uyar. */
+export interface ChangePasswordRequest {
+  currentPassword: string;
+  newPassword: string;
+}
+
+/** Başarıda sunucu kullanıcının BÜTÜN oturumlarını kapatır → yeni parolayla yeniden giriş. */
+export interface ChangePasswordResponse {
+  success: boolean;
   message: string;
 }
 

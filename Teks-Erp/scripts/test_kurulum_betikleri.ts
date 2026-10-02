@@ -7,7 +7,8 @@
 // `kaldir.ps1`) + cevap şeması (`cevap-semasi.json`, bayinin sessiz kipi). Ölçülen sözleşmeler:
 //   §1 harness (pwsh varsa): `deploy/test/kurulum.harness.ps1` saf işlevleri GERÇEK kabukta koşar — cevap şeması
 //      (KATI, SIRSIZ, tür/desen/seçenek; değişmez + tr-TR kültürü), portSec D4 altın vektörleri, .env sade
-//      biçim, JSON ASCII kaçışı, maske. Beklenen kontrol adları sayılır (boş küme yeşil sayılmaz).
+//      biçim, JSON ASCII kaçışı, maske, sürüm önceliği (güncelleyicinin `surum-karsilastir` vektörleri), gerçek
+//      kurulu sürüm + eski paket engeli. Beklenen kontrol adları sayılır (boş küme yeşil sayılmaz).
 //   §2 cevap şeması ↔ sihirbaz ↔ örnek: sihirbazın yazdığı cevap (CevapJson, Pascal) GEÇERLİ JSON ve alan
 //      kümesi şemayla BİREBİR; ornek-cevap.json da öyle
 //   §3 sır hijyeni: satıcı parolası/PIN ve yedek parolası argv'ye, ortama, cevap dosyasına, günlüğe, sonuç
@@ -22,7 +23,24 @@
 //      ithal ettiği lib, doğrulayıcı yolu) · yönetici · 64-bit kip · kaldırıcı kaldir.ps1 · çıkış kodu tablosu
 //   §9 CI (kurulum-windows.yml): tetikler, doğrulayıcı üretim derlemesi, iki ISCC derlemesi, boru öz-sınaması
 //      sonucu ölçülür, PS 5.1 harness, kuru koşu
-// NEGATİF SONDA (✓K, her koşumda): §2–§9 yüklemleri bellekte bozulmuş kopyalara koşar (mutasyonun
+//   §11 sihirbaz deneyimi (D8d, thinkpad-1 bulguları 2026-10-01): ön ölçüm "Sistem denetleniyor" penceresiyle koşar
+//      (ölçüm yalnız o yoldan), açılış HAFİF (CIM/port/kök Hafif dalının dışında değil); eski paket iki kapıda
+//      (ön ölçüm engeli + OnKosul DurumYaz'dan ÖNCE DUR); onarım metinleri (Göz at kilidi, veri sayfası, kayıttaki
+//      lisans sunucusu, özette kip); satıcı hesabı / lisans "yapılacak"ı ölçülür
+//   §12 lisans satıcısı KANALDAN (D8e, yönetici K1=A): boş alan = paketin kanalı (PAKET.json backendLisansSunucusu =
+//      kanallar.json backend.lisansSunucusu); karar TEK işlevde (kurulum-ortak.ps1 LisansSunucusuKarari: OnKosul kararı +
+//      .env satırı + Dogrulama ölçümü; harness §1 vektörleri); farklı elle değer ENGELLEMEZ, UYARIR (özet + günlük + sonuç);
+//      onarımda kayıttaki .env korunur; satır yalnız derleme varsayılanından farklıysa (gecis.ps1 ile aynı kural).
+//      BEYANLI İSTİSNA: PAKET.json'da alan yoksa (eski paket) bugünkü davranış + uyarı — fail-closed DEĞİL, eski paketler
+//      bu alanı hiç taşımadı (harness `lisans.eski-paket-uyarir-durmaz`).
+//   §13 onarım/kurulum güvenliği (D8e-3b, yönetici F1–F4B, thinkpad-1 bulguları 2026-10-02): F1 ağ ayarı onarım/devamda
+//      KAYITTAN (tek okuyucu `KayitliAgAyari`: kurulum.json ag > durum.json ag > cevap-onceki.json > cevap.json; sihirbaz Ağ
+//      sayfasını doldurur, özet ETKİLİ değeri yazar, OnKosul `AgKarari` ile korur, Hizmetler kuralı karardan kurar, setup
+//      önceki cevabı saklar) · F2 kanal hizmeti BAŞKA köke bağlıysa ya da ölçülemezse engel/DUR (`HizmetKokEngelleri`,
+//      fail-closed; ön ölçüm + OnKosul aynı işlev) · F3 eski paket TEK girişten (`EskiPaketOlcumu`) ve engel ön ölçüm
+//      SAYFASINDA görünür · F4-B geçişle kurulmuş düzen ayrı sınıf GECISLI (`GecisliDuzen`: geçiş günlüğü + current), DURUR,
+//      yabancı klasör eski mesajla; metin runbook (docs/ops/GECIS-PM2-HIZMET.md §5/§7) ile tutarlı.
+// NEGATİF SONDA (✓K, her koşumda): §2–§11 yüklemleri bellekte bozulmuş kopyalara koşar (mutasyonun
 //   UYGULANDIĞI ölçülür); §1 için kurulum-ortak.ps1'in bozulmuş kopyası harness'e verilir (pwsh varsa).
 //   ÜÇ SONUÇ: kaynak okunamazsa ÖLÇÜLEMEDİ (kırmızı), pwsh yoksa §1 ATLANIR (beyanlı, TEKSERP_STRICT'te kırmızı).
 // =============================================================================
@@ -56,6 +74,7 @@ const YOL = {
   is: ".github/workflows/kurulum-windows.yml",
   pgOrnegi: "deploy/pg/pg-ornegi.json",
   pgSablon: "deploy/pg/pg-sablon.mjs",
+  gecisRunbook: "docs/ops/GECIS-PM2-HIZMET.md",
 } as const;
 type Ad = keyof typeof YOL;
 type Kaynaklar = Record<Ad, string>;
@@ -260,6 +279,12 @@ function olc(k: Kaynaklar): Bulgular {
     const env = /\$env:(\w+)\s*=/.exec(ort.satirlar[s.no - 1]!.ciplak);
     if (env) ekle("§3", `ortak işlevlerde ortam değişkenine yazım (${env[1]}:${s.no})`);
   }
+  // PIN özeti hizmetin anahtar halkasıyla yazılmalı: araç sürüm dizininde koştuğu için lisans deposu ortamdan verilir.
+  const saticiAraci = kodSatirlari(kur).filter((s) => /NodeKos\s+\$\w+\s+@\("dist\\tools\\superadmin-olustur\.cjs"/.test(s.kod));
+  if (saticiAraci.length === 0) ekle("§3", "satıcı hesabı aracı çağrısı bulunamadı (ölçülemedi)");
+  for (const s of saticiAraci) {
+    if (!/LICENSE_DIR\s*=\s*\(Join-Path \$kok "lisans"\)/.test(s.kod)) ekle("§3", `satıcı hesabı aracı lisans deposunu hizmetle aynı yerden almıyor (LICENSE_DIR, satır ${s.no})`);
+  }
   const ini = psGovde(kur, "SonucIniYaz") ?? "";
   if (!ini) ekle("§3", "SonucIniYaz yok (sihirbazın sonuç INI'si)");
   if (/SirSatiri|\$g\./.test(ini)) ekle("§3", "sonuç INI'si sır satırına/girdisine dokunuyor");
@@ -321,6 +346,14 @@ function olc(k: Kaynaklar): Bulgular {
   const kaynaklar = [...k.iss.matchAll(/^Source: "([^"]+)"; DestDir: "([^"]+)"/gm)].map((m) => ({ src: m[1]!, dst: m[2]! }));
   const gerekli = new Set<string>(["kurulum.ps1", "kurulum-ortak.ps1", "on-olcum.ps1", "kaldir.ps1", "cevap-semasi.json", "ornek-cevap.json", "..\\pg\\pg-sablon.mjs"]);
   for (const t of [k.kurulum, k.onOlcum]) for (const m of t.matchAll(/Join-Path \$PG_DIZINI "([^"]+)"/g)) gerekli.add(`..\\pg\\${m[1]}`);
+  // Nokta-kaynak edilen komşu betikler (kanal adları TEK kaynak hizmet\kanal-adlari.ps1 - geçiş aynısını paketten okur).
+  const noktaKaynak = new Set<string>();
+  for (const t of [k.kurulum, k.onOlcum]) for (const m of t.matchAll(/^\. \(Join-Path \$PSScriptRoot "\.\.\\(hizmet\\[^"]+)"\)/gm)) { gerekli.add(`..\\${m[1]}`); noktaKaynak.add(m[1]!.split("\\")[0]!); }
+  // on-olcum ve OnKosul {tmp} kopyasından koşar: nokta-kaynak edilen komşu dizin GeciciDosyalariAc'ta da açılmalı
+  // (thinkpad-1 D8e: hizmet\ açılmadı → on-olcum çıkış 1, sihirbaz hiç açılmadı).
+  const gecici = pasGovde(k.iss, "GeciciDosyalariAc") ?? "";
+  if (noktaKaynak.size === 0) ekle("§8", "kurulum.ps1/on-olcum.ps1'de ..\\hizmet\\ nokta-kaynağı bulunamadı (ölçüm deseni bayat)");
+  for (const d of noktaKaynak) if (!gecici.includes(`ExtractTemporaryFiles('{app}\\kurulum\\deploy\\${d}\\*');`)) ekle("§8", `GeciciDosyalariAc ${d}\\ dizinini {tmp}'e açmıyor — on-olcum/OnKosul onu nokta-kaynak eder`);
   try {
     const pgo = JSON.parse(k.pgOrnegi) as { yapilandirma: { confSablonu: string; hbaSablonu: string } };
     for (const r of [pgo.yapilandirma.confSablonu, pgo.yapilandirma.hbaSablonu]) gerekli.add(`..\\pg\\${r.replace(/^deploy\/pg\//, "").replace(/\//g, "\\")}`);
@@ -331,7 +364,7 @@ function olc(k: Kaynaklar): Bulgular {
   for (const g of gerekli) if (!kaynaklar.some((x) => x.src === g)) ekle("§8", `setup.exe içeriğinde yok: ${g}`);
   for (const x of kaynaklar) {
     if (x.src.startsWith("{#")) continue;
-    const bek = x.src.startsWith("..\\pg\\lib\\") ? "{app}\\kurulum\\deploy\\pg\\lib" : x.src.startsWith("..\\pg\\") ? "{app}\\kurulum\\deploy\\pg" : "{app}\\kurulum\\deploy\\kurulum";
+    const bek = x.src.startsWith("..\\pg\\lib\\") ? "{app}\\kurulum\\deploy\\pg\\lib" : x.src.startsWith("..\\pg\\") ? "{app}\\kurulum\\deploy\\pg" : x.src.startsWith("..\\hizmet\\") ? "{app}\\kurulum\\deploy\\hizmet" : "{app}\\kurulum\\deploy\\kurulum";
     if (x.dst !== bek) ekle("§8", `${x.src} → ${x.dst} (depo düzeninin aynası ${bek} olmalı: pg-sablon.mjs KOK'u ve $PSScriptRoot\\..\\pg buna bağlı)`);
   }
   if (!/^Source: "\{#DogrulayiciExe\}"; DestDir: "\{app\}\\kurulum\\araclar"; DestName: "tekserp-guncelleyici\.exe"/m.test(k.iss)) ekle("§8", "kurulumun KENDİ doğrulayıcısı {app}\\kurulum\\araclar\\tekserp-guncelleyici.exe değil");
@@ -377,6 +410,97 @@ function olc(k: Kaynaklar): Bulgular {
   if (!/\/SINAMA=\$rapor/.test(is) || !/\^BORU=TAMAM/.test(is) || !/\^OLCUM=TAMAM x64Surec=1/.test(is)) ekle("§9", "boru öz-sınaması koşulup sonucu (BORU=TAMAM + OLCUM x64) ölçülmüyor");
   if (!/shell: powershell[\s\S]{0,200}kurulum\.harness\.ps1/.test(is)) ekle("§9", "harness Windows PowerShell 5.1'de koşmuyor");
   if (!/-Asama OnKosul -Cevap \$cevap -Kaynak \$d -Kuru/.test(is) || !/backend paketi/.test(is)) ekle("§9", "orkestratör kuru koşusu (beklenen DUR) yok");
+  // §11 — sihirbaz deneyimi: denetim penceresi, hafif açılış, eski paket iki kapıda, onarım metinleri, yapılacaklar ölçülür
+  const okk = pasGovde(k.iss, "OnOlcumKipli") ?? "";
+  const iPen = okk.indexOf("DenetimPenceresiAc("), iKos = okk.indexOf("OlcumKos("), iSerbest = okk.indexOf("Pencere.Free");
+  if (iPen < 0 || iKos < 0 || iPen > iKos || iSerbest < iKos || !/if not Sessiz then\s*\n\s*begin[\s\S]*?DenetimPenceresiAc\(/.test(okk))
+    ekle("§11", "ön ölçüm 'Sistem denetleniyor' penceresi ölçümden ÖNCE açılıp SONRA kapanmıyor (ya da sessiz kipte açılıyor) — kullanıcı boş ekranda bekler");
+  for (const s of pas) {
+    if (/\bOlcumKos\(/.test(s.satir) && !/^function OlcumKos/.test(s.satir) && s.islev !== "OnOlcumKipli") ekle("§11", `OlcumKos pencere yolunun dışından çağrılıyor (${s.islev}:${s.no})`);
+    if (/on-olcum\.ps1/.test(s.satir) && s.islev !== "OlcumKos") ekle("§11", `on-olcum.ps1 OlcumKos dışından koşuyor (${s.islev}:${s.no})`);
+  }
+  const isu = pasGovde(k.iss, "InitializeSetup") ?? "";
+  if (!/OnOlcumKipli\('C:\\TeksERP', not Sessiz\)/.test(isu) || /\bOnOlcum\(/.test(isu)) ekle("§11", "açılış ölçümü görünür kipte HAFİF değil — sihirbaz CIM/port/kök ölçümü bitene dek açılmaz");
+  const ooSatir = k.onOlcum.split("\n");
+  const hafifDal = ooSatir.findIndex((l) => l.includes('if ($Hafif) { $o["hafif"] = 1 } else {'));
+  if (hafifDal < 0) ekle("§11", "on-olcum.ps1'de Hafif dalı yok");
+  ooSatir.forEach((l, i) => {
+    if (/^\s*#/.test(l) || i >= hafifDal) return;
+    if (/Get-CimInstance|Get-NetTCPConnection|PortDinleniyorMu|PgHizmetPortlari|HaricPortlar|KuruluSurumAdaylari|EskiPaketOlcumu|GecisliDuzen|HizmetKokEngelleri|KayitliAgAyari/.test(l) && !/if \(-not \$Hafif\)/.test(l)) ekle("§11", `on-olcum.ps1 ağır ölçüm Hafif dalının dışında (satır ${i + 1}) — açılış yavaşlar`);
+  });
+  const onk = psGovde(kur, "AsamaOnKosul") ?? "";
+  const iEngel = onk.indexOf("EskiPaketOlcumu"), iDur = onk.indexOf("if ($engel) { Dur $engel }"), iPlanYaz = onk.indexOf("DurumYaz $kok $plan");
+  if (iEngel < 0 || iDur < 0 || iPlanYaz < 0 || iDur > iPlanYaz || !/\$ep = EskiPaketOlcumu \$kok \$ad\.veriKoku /.test(onk))
+    ekle("§11", "OnKosul gerçek kurulu sürümü ölçüp eski pakette DurumYaz'dan ÖNCE durmuyor");
+  if (!/\$ep = EskiPaketOlcumu \$kok \$adlar\.veriKoku /.test(k.onOlcum) || !/\$o\["eskiPaket"\] = \$ep\.sinif/.test(k.onOlcum)) ekle("§11", "ön ölçüm gerçek kurulu sürümü / eski paket engelini ölçmüyor");
+  if (!/if Olc\('eskiPaket'\) = 'eski' then/.test(pasGovde(k.iss, "OlcumEngelleri") ?? "")) ekle("§11", "sihirbaz eski paket engelini göstermiyor (kurulum ilerlerdi)");
+  const sod = pasGovde(k.iss, "SayfalariOlcumleDoldur") ?? "";
+  if (!/VeriSayfasi\.Buttons\[0\]\.Enabled := not \(Onarim or Yarim\)/.test(sod)) ekle("§11", "onarımda veri dizini 'Göz at' düğmesi kilitli değil");
+  if (!/if Onarim then VeriSayfasi\.SubCaptionLabel\.Caption := 'ONARIM/.test(sod)) ekle("§11", "onarımda veri sayfası 'dizin boş olmalı' diyor");
+  if (!/GelismisSayfasi\.Values\[2\] := Olc\('oncekiLisansSunucusu'\)/.test(sod)) ekle("§11", "onarımda gelişmiş sayfası kayıttaki lisans sunucusunu doldurmuyor");
+  if (!/'Kip: ' \+ KipMetni/.test(pasGovde(k.iss, "UpdateReadyMemo") ?? "")) ekle("§11", "özette kip (ONARIM) yok");
+  const dog = psGovde(kur, "AsamaDogrulama") ?? "";
+  if (!/"isSystemAccount"/.test(dog) || !/if \(\$saticiVar\)/.test(dog)) ekle("§11", "satıcı hesabı 'yapılacak' listesine ÖLÇÜLMEDEN giriyor (onarımda hesap zaten var)");
+  if (!/hak\.jws/.test(dog) || /^\s*\$acik \+= "lisans:/m.test(dog)) ekle("§11", "lisans 'yapılacak' listesine etkinlik ölçülmeden giriyor");
+  // §12 — lisans satıcısı kanaldan: tek karar işlevi, boş alan = kanal, farklı değer UYARI (engel değil)
+  if (!psGovde(ort, "LisansSunucusuKarari")) ekle("§12", "kurulum-ortak.ps1'de LisansSunucusuKarari yok (tek karar)");
+  for (const [ad, metin] of [["kurulum.ps1", k.kurulum], ["on-olcum.ps1", k.onOlcum]] as const) {
+    if (/function LisansSunucusuKarari\b/.test(metin)) ekle("§12", `LisansSunucusuKarari'nın ikinci kopyası (${ad})`);
+  }
+  if (!/LisansSunucusuKarari \(\[string\]\$k\.backendLisansSunucusu\) \(\[string\]\$k\.lisansSunucusuVarsayilan\) \(\[string\]\$C\["lisans\.saticiAdresi"\]\) \$lisKayit /.test(onk))
+    ekle("§12", "OnKosul lisans satıcısını paketin kanal değerinden (PAKET.json backendLisansSunucusu) türetmiyor");
+  if (!/foreach \(\$x in \$lis\.uyarilar\) \{ Uyar \$x \}/.test(onk)) ekle("§12", "OnKosul lisans uyarısını günlüğe/sonuca yazmıyor (Uyar)");
+  if (!/lisans = \[ordered\]@\{ etkili = \$lis\.etkili; kaynak = \$lis\.kaynak; yaz = \$lis\.yaz/.test(onk)) ekle("§12", "plan lisans kararını taşımıyor (.env karardan yazılamaz)");
+  const pgA = psGovde(kur, "AsamaPostgreSQL") ?? "";
+  if (!/if \(\$d\.lisans\.yaz -eq \$true\) \{ \$satirlar \+= "LICENSE_SERVER_URL=\$\(\$d\.lisans\.etkili\)" \}/.test(pgA)) ekle("§12", ".env LICENSE_SERVER_URL kurulumun kararından (durum lisans.yaz/etkili) yazılmıyor");
+  if (/LICENSE_SERVER_URL=\$\(\$C\[/.test(k.kurulum)) ekle("§12", ".env LICENSE_SERVER_URL ham cevaptan yazılıyor (boş alan kanalı almaz)");
+  if (!/\$lm = LisansSunucusuKarari /.test(dog) || !/foreach \(\$x in \$lm\.uyarilar\) \{ Uyar \$x \}/.test(dog)) ekle("§12", "Dogrulama yazılan .env'in lisans satıcısını ölçmüyor (uyarı sonuca/kurulum.json'a düşmez)");
+  if (!/\$o\["paketLisans"\] = "\$\(\$k\.backendLisansSunucusu\)"/.test(k.onOlcum) || !/\$o\["paketLisansVarsayilan"\] = "\$\(\$k\.lisansSunucusuVarsayilan\)"/.test(k.onOlcum))
+    ekle("§12", "ön ölçüm paketin kanal lisans satıcısını sihirbaza vermiyor (paketLisans)");
+  if ((sod.match(/GelismisSayfasi\.Values\[2\] := Olc\('paketLisans'\)/g) ?? []).length < 3) ekle("§12", "gelişmiş sayfası lisans sunucusunu paketin kanalıyla doldurmuyor (yeni kurulum · yeni köke dönüş · kayıtsız devam)");
+  const loz = pasGovde(k.iss, "LisansOzeti") ?? "";
+  if (!/Kanal := Olc\('paketLisans'\);/.test(loz) || !/else if Etkili = '' then Etkili := Kanal;/.test(loz)) ekle("§12", "özet boş alanı paketin kanalı olarak göstermiyor");
+  if (!/else if Lowercase\(Etkili\) <> Lowercase\(Kanal\) then/.test(loz) || !/'UYARI: lisans sunucusu paketin kanalından FARKLI - beklenen ' \+ Kanal/.test(loz)) ekle("§12", "özet kanal kaydından farklı lisans sunucusunu UYARMIYOR (beklenen/girilen)");
+  if (!/'UYARI: paket lisans sunucusunun kanal değerini taşımıyor \(eski ya da kanal dışı paket\)/.test(loz)) ekle("§12", "özet eski paketi (kanal değeri yok) uyarmıyor");
+  if (!/S := S \+ LisansOzeti\(NewLine\);/.test(pasGovde(k.iss, "UpdateReadyMemo") ?? "")) ekle("§12", "özet sayfası etkili lisans sunucusunu yazmıyor (LisansOzeti)");
+
+  // §13 — D8e-3b (2026-10-02): tek girişler kurulum-ortak.ps1'de; ön ölçüm ve OnKosul AYNI işlevi çağırır (elle kopya yok)
+  const TEK_GIRIS = ["EskiPaketOlcumu", "GecisliDuzen", "HizmetKokEngelleri", "HizmetKokKarari", "KayitliAgAyari", "AgKarari"];
+  for (const f of TEK_GIRIS) {
+    if (!psGovde(ort, f)) ekle("§13", `kurulum-ortak.ps1'de ${f} yok (tek giriş)`);
+    for (const [ad, metin] of [["kurulum.ps1", k.kurulum], ["on-olcum.ps1", k.onOlcum]] as const) if (new RegExp(`function ${f}\\b`).test(metin)) ekle("§13", `${f}'nın ikinci kopyası (${ad})`);
+  }
+  // F3: eski paket TEK girişten; iki yol çekirdek işlevleri doğrudan çağırmaz
+  for (const [ad, t] of [["kurulum.ps1", kur], ["on-olcum.ps1", psTara(k.onOlcum)]] as const)
+    for (const s of t.satirlar) if (/\b(EskiPaketEngeli|KuruluSurumAdaylari|EnYeniSurum)\b/.test(s.kod)) ekle("§13", `${ad} eski paketi tek giriş (EskiPaketOlcumu) dışından ölçüyor (satır ${s.no})`);
+  const sod13 = pasGovde(k.iss, "SayfalariOlcumleDoldur") ?? "";
+  if (!/Engel := OlcumEngelleri;/.test(sod13) || !/RichEditViewer\.Lines\.Text := 'ENGEL[^\n]*\+ Engel \+/.test(sod13)) ekle("§13", "ön ölçüm sayfası engelleri göstermiyor (yalnız 'Sonraki'de çıkar — eski paket/yabancı kök sayfada 'ONARIM … veri korunur' der)");
+  // F4-B: geçişli düzen ayrı sınıf; OnKosul yabancı klasör kuralından ÖNCE durur, yabancı mesajı aynen kalır
+  const iGecis = onk.indexOf("if ($gd) { Dur $gd.metin }"), iYabanci = onk.indexOf('Dur "kok bos degil ve TeksERP kurulumu degil');
+  if (!/\$gd = GecisliDuzen \$kok/.test(onk) || iGecis < 0 || iYabanci < 0 || iGecis > iYabanci) ekle("§13", "OnKosul geçişle kurulmuş düzeni tanımadan 'yabancı klasör' diyor (F4-B)");
+  if (!/\$gd = GecisliDuzen \$kok/.test(k.onOlcum) || !/if \(\$gd\) \{ \$o\["gecisli"\] = 1;[^\n]*\}\s*\n\s*else \{ \$o\["kokYabanci"\]/.test(k.onOlcum)) ekle("§13", "ön ölçüm geçişli düzeni tanımıyor ya da onu yabancı klasör de sayıyor (F4-B)");
+  const eng13 = pasGovde(k.iss, "OlcumEngelleri") ?? "";
+  if (!/Gecisli := Olc\('gecisli'\) = '1';/.test(pasGovde(k.iss, "OnOlcumKipli") ?? "") || !/if Gecisli then\s*\n\s*Result := Result \+ '- Bu klasör pm2 → hizmet geçişiyle kurulmuş/.test(eng13)) ekle("§13", "sihirbaz geçişli düzeni engel olarak göstermiyor (F4-B)");
+  if (!/else if Gecisli then Result := 'GEÇİŞLİ KURULUM/.test(pasGovde(k.iss, "KipMetni") ?? "")) ekle("§13", "kip geçişli düzende 'yeni kurulum' diyor (F4-B)");
+  const gm = psGovde(ort, "GecisliDuzen") ?? "";
+  for (const [ne, metin] of [["sihirbaz", eng13], ["GecisliDuzen", gm]] as const)
+    if (!/GECIS-PM2-HIZMET\.md/.test(metin) || !/-GeriAl/.test(metin) || !/onarmaz/.test(metin)) ekle("§13", `${ne} geçişli düzen metni runbook'u (GECIS-PM2-HIZMET.md, -GeriAl, 'onarmaz') anmıyor`);
+  if (!/Onarım setup\.exe ile YAPILMAZ[\s\S]{0,200}setup bu kurulumu tanır ve durur[\s\S]{0,200}gecis\.ps1 -GeriAl/.test(k.gecisRunbook)) ekle("§13", "runbook §7 geçişli düzenin setup'la onarılmadığını/durduğunu anlatmıyor — mesaj ile runbook ayrıştı");
+  // F2: kanal hizmetinin kökü — ön ölçüm (engel) ve OnKosul (DUR, DurumYaz'dan ÖNCE) aynı işlevle
+  if (!/\$hk = HizmetKokEngelleri \$adlar \$kok\r?$/m.test(k.onOlcum) || !/\$o\["hizmetKokSayisi"\] = \$hk\.Count/.test(k.onOlcum)) ekle("§13", "ön ölçüm kanal hizmetlerinin kökünü ölçmüyor (F2)");
+  const iHk = onk.indexOf("if ($hk.Count) { Dur"), iHkCagri = onk.indexOf("$hk = HizmetKokEngelleri $ad $kok");
+  if (iHkCagri < 0 || iHk < iHkCagri || iHk > iPlanYaz) ekle("§13", "OnKosul başka köke bağlı kanal hizmetinde DurumYaz'dan ÖNCE durmuyor (F2)");
+  if (!/N := StrToIntDef\(Olc\('hizmetKokSayisi'\), 0\);\s*\n\s*for I := 1 to N do/.test(eng13) || !/köküne bağlı; bu klasöre kurulum\/onarım yapılamaz/.test(eng13) || !/ölçülemedi; kurulum\/onarım yapılamaz/.test(eng13)) ekle("§13", "sihirbaz kanal hizmeti kök engelini (başka kök / ölçülemedi) göstermiyor (F2)");
+  // F1: ağ ayarı onarım/devamda kayıttan
+  if (!/\$ag = KayitliAgAyari \$kok /.test(k.onOlcum) || !/\$o\["oncekiAgIzinli"\]/.test(k.onOlcum) || !/\$o\["oncekiAgProfiller"\]/.test(k.onOlcum) || !/\$o\["oncekiAgMdns"\]/.test(k.onOlcum)) ekle("§13", "ön ölçüm kayıttaki ağ ayarını sihirbaza vermiyor (F1)");
+  if (!/AgSayfasi\.Values\[0\] := Pos\('100\.64\.0\.0\/10', Olc\('oncekiAgIzinli'\)\) > 0;/.test(sod13) || !/AgSayfasi\.Values\[1\] := Pos\('Domain', Olc\('oncekiAgProfiller'\)\) > 0;/.test(sod13) || !/AgSayfasi\.Values\[3\] := Olc\('oncekiAgMdns'\) = '1';/.test(sod13)) ekle("§13", "sihirbaz onarımda Ağ sayfasını kayıttan doldurmuyor (varsayılan LocalSubnet Tailscale'i daraltır) (F1)");
+  const agoz = pasGovde(k.iss, "AgOzeti") ?? "";
+  if (!/AgOzeti\(NewLine\)/.test(pasGovde(k.iss, "UpdateReadyMemo") ?? "") || !/if Olc\('oncekiAgIzinli'\) <> '' then Izinli := Olc\('oncekiAgIzinli'\);/.test(agoz) || !/UYGULANMAZ/.test(agoz)) ekle("§13", "özet ETKİLİ ağ erişimini (onarımda kayıttaki) yazmıyor ya da sayfa farkını uyarmıyor (F1)");
+  if (!/if \(\$onarim -or \$yarim\) \{ \$agKayit = KayitliAgAyari \$kok /.test(onk) || !/\$agK = AgKarari \$C \$script:CevapHam \$agKayit /.test(onk) || !/foreach \(\$x in \$agK\.uyarilar\) \{ Uyar \$x \}/.test(onk) || !/ag = \$agK\.ag/.test(onk)) ekle("§13", "OnKosul ağ ayarını kayıttan korumuyor (sessiz onarım varsayılana düşer) (F1)");
+  if (!/-RemoteAddress @\(\$ag\.izinliAdresler\)/.test(hiz) || /-RemoteAddress @\(\$C\[/.test(hiz) || !/\$d\.ag/.test(hiz)) ekle("§13", "Hizmetler güvenlik duvarı kuralını OnKosul kararından değil ham cevaptan kuruyor (F1)");
+  if (!/ag = \$\(if \(\$d\.PSObject\.Properties\["ag"\]\)/.test(dog)) ekle("§13", "kurulum.json uygulanan ağ ayarını kaydetmiyor (sonraki onarımın kaydı) (F1)");
+  const iOnceki = hazir.indexOf("cevap-onceki.json', False)"), iYeni = hazir.indexOf("SaveStringToFile(KurulumCevabi");
+  if (iOnceki < 0 || iYeni < 0 || iOnceki > iYeni || !/if \(Onarim or Yarim\) and FileExists\(KurulumCevabi\) then/.test(hazir)) ekle("§13", "setup onarımda önceki cevabı yenisini yazmadan saklamıyor (eski kurulumların tek ağ kaydı) (F1)");
   return b;
 }
 
@@ -393,6 +517,12 @@ function harness(ortak?: string): { kod: number | null; satirlar: string[] } {
   const r = spawnSync("pwsh", arg, { encoding: "utf8", timeout: 180_000 });
   return { kod: r.status, satirlar: `${r.stdout ?? ""}\n${r.stderr ?? ""}`.split(/\r?\n/).map((s) => s.trimEnd()) };
 }
+/** D8d: kaldırılıp ESKİ kitle yeniden kurulum — gerçek kurulu sürüm (bayat kurulum.json değil) + eski paket engeli. */
+/** D8e: lisans satıcısı kanaldan (kurulum-ortak.ps1 LisansSunucusuKarari) — eski paket beyanlı istisna dahil. */
+const LISANS_KONTROLLERI = ["bos-alan-kanaldan", "uretim-kanali-satir-yazmaz", "esit-elle-uyarisiz", "farkli-elle-UYARI", "farkli-elle-yazilir", "eski-paket-uyarir-durmaz", "onarim-kayit-korunur", "onarim-satirsiz-varsayilan-UYARI", "onarim-cevap-uygulanmaz"].map((c) => `lisans.${c}`);
+const KURULU_KONTROLLERI = ["kurulu.yalniz-kayit", "kurulu.gecmisin-SON-satiri", "kurulu.bayat-kayit-yerine-guncelleyici", "kurulu.current-baglantisi", "kurulu.eski-paket-DUR"];
+/** D8e-3b: eski paket tek giriş · geçişli düzen · kanal hizmetinin kökü · ağ ayarı kayıttan. */
+const D8E3B_KONTROLLERI = ["eskipaket.olcum-tek-giris", "gecisli.duzen-tanir", "gecisli.tek-isaret-yetmez-yabanci-eski-mesaj", "ag.kayit-eski-cevaptan", "ag.kayit-oncelik", "ag.kayit-gecersiz-yok-sayilir", "ag.onarim-sessiz-kayit-korunur", "ag.onarim-cevap-uygulanmaz", "ag.yeni-kurulum-cevaptan", "hizmetkok.ayni-kok-gecer", "hizmetkok.baska-kok-durur", "hizmetkok.okunamaz-durur", "hizmetkok.uc-hizmet-olculur"];
 const CEVAP_KONTROLLERI = ["ornek-gecerli", "varsayilanlar", "surum-zorunlu", "surum-yanlis", "bilinmeyen-alan", "sir-alan-red", "sir-adi-dar", "tur-sayi", "sayi-aralik", "tur-mantik", "tur-yol", "desen", "secenek-liste", "bos", "sema-sirsiz"];
 function durum(satirlar: string[], ad: string): "OK" | "HATA" | "YOK" {
   if (satirlar.includes(`OK ${ad}`)) return "OK";
@@ -416,10 +546,13 @@ if (eksik.length === 0) {
 
   // §1
   console.log("\n§1 harness — kurulum-ortak.ps1 saf işlevleri gerçek kabukta");
-  if (!pwshVar()) defter.atla("§1 harness", "pwsh 7 yok", CEVAP_KONTROLLERI.length + 6);
+  if (!pwshVar()) defter.atla("§1 harness", "pwsh 7 yok", CEVAP_KONTROLLERI.length + 7 + KURULU_KONTROLLERI.length + LISANS_KONTROLLERI.length + D8E3B_KONTROLLERI.length);
   else {
     const h = harness();
     const vek = JSON.parse(readFileSync(join(KOK, "deploy/pg/pg-sablon-vektorleri.json"), "utf8")) as { port: Array<{ ad: string }> };
+    const surumVek = (JSON.parse(readFileSync(join(TEKS, "native/test-vektorleri/guncelleme-karar.json"), "utf8")) as { kayitlar: Array<{ vektor: { tur: string; ad: string } }> }).kayitlar
+      .filter((v) => v.vektor.tur === "surum-karsilastir")
+      .map((v) => `surum.${v.vektor.ad}`);
     const trAtla = h.satirlar.some((s) => s.startsWith("ATLA cevap@tr-TR"));
     const beklenen = [
       ...CEVAP_KONTROLLERI.map((c) => `cevap.${c}`),
@@ -431,10 +564,15 @@ if (eksik.length === 0) {
       "json.ascii-gidis-donus",
       "maske.kayitli-sir",
       "maske.url-kimligi",
+      ...surumVek,
+      "surum.vektor-kumesi-bos-degil",
+      ...KURULU_KONTROLLERI,
+      ...LISANS_KONTROLLERI,
+      ...D8E3B_KONTROLLERI,
     ];
     if (trAtla) defter.atla("§1 tr-TR kültürü", "pwsh kültür verisi yok (InvariantGlobalization)", CEVAP_KONTROLLERI.length);
     const kotu = beklenen.filter((a) => durum(h.satirlar, a) !== "OK");
-    check(`§1 ⭐ harness: ${beklenen.length} kontrolün HEPSİ OK (cevap şeması iki kültürde · portSec ${vek.port.length} D4 vektörü · .env · JSON · maske)`, h.kod === 0 && kotu.length === 0,
+    check(`§1 ⭐ harness: ${beklenen.length} kontrolün HEPSİ OK (cevap şeması iki kültürde · portSec ${vek.port.length} D4 vektörü · .env · JSON · maske · sürüm önceliği ${surumVek.length} güncelleyici vektörü · gerçek kurulu sürüm + eski paket engeli · lisans satıcısı ${LISANS_KONTROLLERI.length} karar vektörü · D8e-3b ${D8E3B_KONTROLLERI.length}: eski paket tek giriş · geçişli düzen · hizmet kökü · ağ kaydı)`, h.kod === 0 && kotu.length === 0,
       kotu.length ? kotu.map((a) => `${a}=${durum(h.satirlar, a)}`).join(" · ") : `çıkış ${h.kod}`);
   }
 
@@ -449,6 +587,9 @@ if (eksik.length === 0) {
     ["§7", ".env yalnız EnvYaz'dan (sade biçim kapısı)"],
     ["§8", "setup.exe içeriği orkestratörün ihtiyacını karşılar · yönetici · 64-bit · kaldırıcı"],
     ["§9", "CI: tetikler, doğrulayıcı üretim derlemesi, iki derleme, boru öz-sınaması, PS 5.1, kuru koşu"],
+    ["§11", "sihirbaz deneyimi: ölçüm görünür + açılış hafif · eski paket iki kapıda · onarım metinleri · ölçülen yapılacaklar"],
+    ["§12", "lisans satıcısı kanaldan: tek karar işlevi · boş alan = kanal (ön doldurma + özet) · farklı değer UYARI · .env karardan · Dogrulama ölçer"],
+    ["§13", "onarım/kurulum güvenliği (D8e-3b): F1 ağ ayarı kayıttan (ön doldurma · özet etkili · OnKosul korur · kural karardan · önceki cevap saklanır) · F2 başka köke bağlı / ölçülemeyen kanal hizmeti engel+DUR · F3 eski paket tek giriş + sayfada engel · F4-B geçişli düzen GECISLI, DUR"],
   ];
   console.log("");
   for (const [bolum, ne] of BOLUMLER) check(`${bolum} ⭐ ${ne}`, !(b[bolum]?.length), (b[bolum] ?? []).join(" · "));
@@ -483,6 +624,44 @@ if (eksik.length === 0) {
     { ad: "S27 hata kutusu sessiz kipte de gösteriliyor (sessiz dal düştü)", dosya: "iss", eski: "  if not WizardSilent then SuppressibleMsgBox(Metin, mbCriticalError, MB_OK, IDOK);", yeni: "  SuppressibleMsgBox(Metin, mbCriticalError, MB_OK, IDOK);", bolum: "§8", parca: "sessiz dalı olmayan kutu (Hata" },
     { ad: "S28 Kilitle (OI)(CI) iznini /T ile ağaca veriyor (dosya DACL'i boş)", dosya: "iss", eski: "*S-1-5-32-544:(OI)(CI)F /Q', '', SW_HIDE", yeni: "*S-1-5-32-544:(OI)(CI)F' + Ek + ' /Q', '', SW_HIDE", bolum: "§8", parca: "Kilitle (OI)(CI) iznini /T" },
     { ad: "S25 çıplak MsgBox sihirbaz dışı işlevde", dosya: "iss", eski: "function Kok: String;\nbegin\n", yeni: "function Kok: String;\nbegin\n  MsgBox('x', mbInformation, MB_OK);\n", bolum: "§8", parca: "çıplak MsgBox NextButtonClick dışında" },
+    { ad: "S29 ön ölçüm penceresi düştü (ilk pencere ölçüm boyunca görünmez)", dosya: "iss", eski: "      Pencere := DenetimPenceresiAc(Ayrinti);", yeni: "      Pencere := nil;", bolum: "§11", parca: "'Sistem denetleniyor' penceresi" },
+    { ad: "S30 ölçüm pencere yolunun dışından (InitializeSetup çıplak OlcumKos)", dosya: "iss", eski: "  if not OnOlcumKipli('C:\\TeksERP', not Sessiz) then Exit;", yeni: "  if OlcumKos('C:\\TeksERP', False) <> '' then Exit;", bolum: "§11", parca: "OlcumKos pencere yolunun dışından" },
+    { ad: "S31 açılışta TAM ölçüm (sihirbaz CIM/port bitene dek açılmaz)", dosya: "iss", eski: "OnOlcumKipli('C:\\TeksERP', not Sessiz)", yeni: "OnOlcum('C:\\TeksERP')", bolum: "§11", parca: "HAFİF değil" },
+    { ad: "S32 on-olcum CIM ölçümü Hafif dalının dışında", dosya: "onOlcum", eski: 'if (-not $Hafif) { $o["ramMB"]', yeni: 'if ($true) { $o["ramMB"]', bolum: "§11", parca: "Hafif dalının dışında" },
+    { ad: "S33 OnKosul eski pakette durmuyor", dosya: "kurulum", eski: "    if ($engel) { Dur $engel }\n", yeni: "", bolum: "§11", parca: "OnKosul gerçek kurulu sürümü" },
+    { ad: "S34 sihirbaz eski paket engelini göstermiyor", dosya: "iss", eski: "  if Olc('eskiPaket') = 'eski' then", yeni: "  if False then", bolum: "§11", parca: "eski paket engelini göstermiyor" },
+    { ad: "S35 onarımda 'Göz at' açık", dosya: "iss", eski: "  VeriSayfasi.Buttons[0].Enabled := not (Onarim or Yarim);\n", yeni: "", bolum: "§11", parca: "Göz at" },
+    { ad: "S36 onarımda veri sayfası 'boş olmalı' diyor", dosya: "iss", eski: "  if Onarim then VeriSayfasi.SubCaptionLabel.Caption := 'ONARIM", yeni: "  if False then VeriSayfasi.SubCaptionLabel.Caption := 'ONARIM", bolum: "§11", parca: "dizin boş olmalı" },
+    { ad: "S37 gelişmiş sayfası kayıttaki lisans sunucusunu doldurmuyor", dosya: "iss", eski: "GelismisSayfasi.Values[2] := Olc('oncekiLisansSunucusu')", yeni: "GelismisSayfasi.Values[2] := ''", bolum: "§11", parca: "kayıttaki lisans sunucusunu" },
+    { ad: "S38 özette kip yok", dosya: "iss", eski: "  S := 'Kip: ' + KipMetni + NewLine +\n    'Kök: '", yeni: "  S := 'Kök: '", bolum: "§11", parca: "özette kip" },
+    { ad: "S39 satıcı hesabı yapılacağı ölçülmeden", dosya: "kurulum", eski: '  if ($saticiVar) { Ok "satici (superadmin) hesabi var" }\n  elseif (', yeni: "  if (", bolum: "§11", parca: "satıcı hesabı 'yapılacak'" },
+    { ad: "S40 lisans yapılacağı etkinlik ölçülmeden", dosya: "kurulum", eski: '  else { $acik += "lisans:', yeni: '  $acik += "lisans:', bolum: "§11", parca: "lisans 'yapılacak'" },
+    { ad: "S41 satıcı hesabı aracı lisans deposunu ortamdan almıyor (PIN başka anahtarla özetlenir)", dosya: "kurulum", eski: `; LICENSE_DIR = (Join-Path $kok "lisans") }`, yeni: " }", bolum: "§3", parca: "lisans deposunu hizmetle aynı yerden" },
+    { ad: "S42 setup içeriğinden kanal-adlari.ps1 düşmüş (AdlariCoz çekirdeği)", dosya: "iss", eski: `Source: "..\\hizmet\\kanal-adlari.ps1"; DestDir: "{app}\\kurulum\\deploy\\hizmet"; Flags: ignoreversion\n`, yeni: "", bolum: "§8", parca: "kanal-adlari.ps1" },
+    { ad: "S43 OnKosul türetmeyi atlıyor (cevap boşsa kanal yok)", dosya: "kurulum", eski: "LisansSunucusuKarari ([string]$k.backendLisansSunucusu) ([string]$k.lisansSunucusuVarsayilan) ", yeni: "LisansSunucusuKarari \"\" ([string]$k.lisansSunucusuVarsayilan) ", bolum: "§12", parca: "kanal değerinden" },
+    { ad: "S44 .env ham cevabı yazıyor (boş alan = backend varsayılanı, eski davranış)", dosya: "kurulum", eski: `    if ($d.lisans.yaz -eq $true) { $satirlar += "LICENSE_SERVER_URL=$($d.lisans.etkili)" }`, yeni: `    if ($C["lisans.saticiAdresi"]) { $satirlar += "LICENSE_SERVER_URL=$($C['lisans.saticiAdresi'])" }`, bolum: "§12", parca: "ham cevaptan" },
+    { ad: "S45 OnKosul lisans uyarısını yutuyor", dosya: "kurulum", eski: "  foreach ($x in $lis.uyarilar) { Uyar $x }\n", yeni: "", bolum: "§12", parca: "Uyar" },
+    { ad: "S46 Dogrulama lisans satıcısını ölçmüyor", dosya: "kurulum", eski: "    foreach ($x in $lm.uyarilar) { Uyar $x }\n", yeni: "", bolum: "§12", parca: "Dogrulama yazılan .env" },
+    { ad: "S47 karar işlevinin ikinci kopyası (on-olcum)", dosya: "onOlcum", eski: "$o = [ordered]@{}\n", yeni: "$o = [ordered]@{}\nfunction LisansSunucusuKarari { }\n", bolum: "§12", parca: "ikinci kopyası" },
+    { ad: "S48 ön ölçüm kanal değerini vermiyor", dosya: "onOlcum", eski: `$o["paketLisans"] = "$($k.backendLisansSunucusu)"`, yeni: `$o["paketLisans"] = ""`, bolum: "§12", parca: "paketLisans" },
+    { ad: "S49 sihirbaz yeni kurulumda alanı kanalla doldurmuyor", dosya: "iss", eski: "  else if GelismisSayfasi.Values[2] = '' then GelismisSayfasi.Values[2] := Olc('paketLisans');\nend;", yeni: "end;", bolum: "§12", parca: "doldurmuyor" },
+    { ad: "S50 özet farklı değeri uyarmıyor", dosya: "iss", eski: "  else if Lowercase(Etkili) <> Lowercase(Kanal) then", yeni: "  else if False then", bolum: "§12", parca: "UYARMIYOR" },
+    { ad: "S51 özet boş alanı kanal saymıyor", dosya: "iss", eski: "  else if Etkili = '' then Etkili := Kanal;", yeni: "  else if False then Etkili := Kanal;", bolum: "§12", parca: "boş alanı" },
+    { ad: "S53 {tmp}'e hizmet\\ açılmıyor (ön ölçüm kanal-adlari.ps1'i bulamaz)", dosya: "iss", eski: "    ExtractTemporaryFiles('{app}\\kurulum\\deploy\\hizmet\\*');\n", yeni: "", bolum: "§8", parca: "{tmp}'e açmıyor" },
+    { ad: "S52 özet LisansOzeti'ni çağırmıyor (eski 'varsayılan' metni)", dosya: "iss", eski: "  S := S + LisansOzeti(NewLine);", yeni: "  S := S + 'Lisans sunucusu: varsayılan' + NewLine;", bolum: "§12", parca: "LisansOzeti" },
+    { ad: "S54 F1 sihirbaz onarımda Ağ sayfasını kayıttan doldurmuyor (Tailscale düşer)", dosya: "iss", eski: "    if Olc('oncekiAgIzinli') <> '' then AgSayfasi.Values[0] := Pos('100.64.0.0/10', Olc('oncekiAgIzinli')) > 0;\n", yeni: "", bolum: "§13", parca: "Ağ sayfasını kayıttan" },
+    { ad: "S55 F1 özet sayfanın seçimini yazıyor (etkili kayıt değil)", dosya: "iss", eski: "    if Olc('oncekiAgIzinli') <> '' then Izinli := Olc('oncekiAgIzinli');\n", yeni: "", bolum: "§13", parca: "ETKİLİ ağ erişimini" },
+    { ad: "S56 F1 OnKosul ağ kaydını okumuyor (sessiz onarım LocalSubnet'e daralır)", dosya: "kurulum", eski: "  if ($onarim -or $yarim) { $agKayit = KayitliAgAyari $kok $script:CevapSemasi }\n", yeni: "", bolum: "§13", parca: "ağ ayarını kayıttan korumuyor" },
+    { ad: "S57 F1 Hizmetler kuralı ham cevaptan kuruyor", dosya: "kurulum", eski: "-RemoteAddress @($ag.izinliAdresler)", yeni: '-RemoteAddress @($C["api.izinliAdresler"])', bolum: "§13", parca: "ham cevaptan kuruyor" },
+    { ad: "S58 F1 setup önceki cevabı saklamıyor", dosya: "iss", eski: "      if not FileCopy(KurulumCevabi, Kok + '\\kurulum\\cevap-onceki.json', False) then\n", yeni: "      if False then\n", bolum: "§13", parca: "önceki cevabı" },
+    { ad: "S59 F2 OnKosul başka köke bağlı hizmette durmuyor", dosya: "kurulum", eski: '  if ($hk.Count) { Dur ((@($hk) | ForEach-Object { $_.metin }) -join " | ") }\n', yeni: "", bolum: "§13", parca: "DurumYaz'dan ÖNCE durmuyor (F2)" },
+    { ad: "S60 F2 ön ölçüm hizmet kökünü ölçmüyor", dosya: "onOlcum", eski: "$hk = HizmetKokEngelleri $adlar $kok\n", yeni: "$hk = @()\n", bolum: "§13", parca: "kökünü ölçmüyor (F2)" },
+    { ad: "S61 F2 sihirbaz hizmet kökü engelini göstermiyor", dosya: "iss", eski: "  N := StrToIntDef(Olc('hizmetKokSayisi'), 0);\n", yeni: "  N := 0;\n", bolum: "§13", parca: "kök engelini" },
+    { ad: "S62 F3 ön ölçüm sayfası engeli göstermiyor (yalnız Sonraki'de)", dosya: "iss", eski: "' + #13#10 + Engel + #13#10 + OlcumOzeti", yeni: "' + #13#10 + OlcumOzeti", bolum: "§13", parca: "engelleri göstermiyor" },
+    { ad: "S63 F3 ön ölçüm eski paketi tek giriş dışından ölçüyor", dosya: "onOlcum", eski: '      if ($o["paketSurum"] -and $ep.sinif) { $o["eskiPaket"] = $ep.sinif }', yeni: '      if ($o["paketSurum"] -and (EskiPaketEngeli $ep.kurulu "$($o["paketSurum"])")) { $o["eskiPaket"] = $ep.sinif }', bolum: "§13", parca: "tek giriş (EskiPaketOlcumu) dışından" },
+    { ad: "S64 F4-B OnKosul geçişli düzeni yabancı sayıyor", dosya: "kurulum", eski: "    if ($gd) { Dur $gd.metin }\n", yeni: "", bolum: "§13", parca: "geçişle kurulmuş düzeni tanımadan" },
+    { ad: "S65 F4-B ön ölçüm geçişli düzeni tanımıyor", dosya: "onOlcum", eski: "      $gd = GecisliDuzen $kok\n", yeni: "      $gd = $null\n", bolum: "§13", parca: "geçişli düzeni tanımıyor" },
+    { ad: "S66 F4-B sihirbaz geçişli engelini göstermiyor", dosya: "iss", eski: "  if Gecisli then\n    Result := Result + '- Bu klasör pm2", yeni: "  if False then\n    Result := Result + '- Bu klasör pm2", bolum: "§13", parca: "engel olarak göstermiyor" },
     { ad: "S21 CI boru sonucunu ölçmüyor", dosya: "is", eski: `if ($r -notmatch "(?m)^BORU=TAMAM\\r?$")`, yeni: `if ($false)`, bolum: "§9", parca: "boru öz-sınaması" },
     { ad: "S22 CI test çapalı doğrulayıcıyı kabul ediyor", dosya: "is", eski: `$k.testCapasi -ne $false`, yeni: `$false`, bolum: "§9", parca: "doğrulayıcı üretim derlemesi" },
   ];
@@ -509,7 +688,23 @@ if (eksik.length === 0) {
       { ad: "H5 .env tırnağa izin veriyor", eski: `'^[A-Z_][A-Z0-9_]*=[^\\s"''#\\\\]*$'`, yeni: `'^[A-Z_][A-Z0-9_]*=[^\\s''#\\\\]*$'`, kontrol: "env.tirnak-bosluk-diyez-tersbolu-red" },
       { ad: "H6 JSON ASCII dışını kaçırmıyor", eski: "$k -gt 0x7E", yeni: "$k -gt 0xFFFF", kontrol: "json.ascii-gidis-donus" },
       { ad: "H7 sır adı kültüre bağlı küçültülüyor (tr-TR 'I')", eski: "$seg.ToLowerInvariant()", yeni: "$seg.ToLower()", kontrol: "cevap.sir-alan-red@tr-TR" },
+      { ad: "H8 ön sürüm sayısal kimliği sözlükle kıyaslanıyor (rc.10 < rc.2)", eski: "if ($ps -and $qs) { $c = ([double]$p).CompareTo([double]$q) }", yeni: "if ($ps -and $qs) { $c = [string]::CompareOrdinal($p, $q) }", kontrol: "surum.ön sürüm sayısal kimlik" },
+      { ad: "H9 güncelleyicinin durumu okunmuyor (bayat kurulum.json kazanır)", eski: `$a += @{ surum = "$($j.kuruluSurum)"; kaynak = "guncelleyici durum.json" }`, yeni: "", kontrol: "kurulu.bayat-kayit-yerine-guncelleyici" },
+      { ad: "H10 geçmişin İLK satırı okunuyor (geri alınmış sürüm kurulu sanılır)", eski: "Where-Object { $_.Trim() }) | Select-Object -Last 1", yeni: "Where-Object { $_.Trim() }) | Select-Object -First 1", kontrol: "kurulu.gecmisin-SON-satiri" },
+      { ad: "H12 boş alan kanalı almıyor (türetme kaldırıldı)", eski: "  } elseif ($kan) { $etkili = $kan; $kaynak = \"kanal\" }", yeni: "  }", kontrol: "lisans.bos-alan-kanaldan" },
+      { ad: "H13 farklı elle değer uyarısı düştü", eski: "  } elseif ($etkili -cne $kan) {", yeni: "  } elseif ($false) {", kontrol: "lisans.farkli-elle-UYARI" },
+      { ad: "H14 eski/kanal-dışı paket fail-closed değil ama UYARI düştü", eski: "$u += \"paket lisans saticisinin", yeni: "$null = \"paket lisans saticisinin", kontrol: "lisans.eski-paket-uyarir-durmaz" },
+      { ad: "H15 üretim kanalında varsayılana eşit satır yazılıyor (gecis.ps1 kuralı)", eski: "-and ($etkili -cne $vars)", yeni: "", kontrol: "lisans.uretim-kanali-satir-yazmaz" },
+      { ad: "H16 F1 kayıt okuyucu eski kurulumun cevabını okumuyor (Tailscale düşer)", eski: ', @("kurulum\\cevap.json", "api"))', yeni: ")", kontrol: "ag.kayit-eski-cevaptan" },
+      { ad: "H17 F1 onarımda cevap/varsayılan kayda yeğleniyor (erişim daralır)", eski: "    if ($kayit -and $null -ne $kayit[$a]) {", yeni: "    if ($false) {", kontrol: "ag.onarim-sessiz-kayit-korunur" },
+      { ad: "H18 F2 başka köke bağlı hizmet geçiyor", eski: "    if (-not (YolKokAltinda $y $kok)) {", yeni: "    if ($false) {", kontrol: "hizmetkok.baska-kok-durur" },
+      { ad: "H19 F2 ImagePath okunamazken geçiyor (fail-open)", eski: `  if (-not $p.Count -or "$($p[0])" -cnotmatch '^[A-Za-z]:\\\\') {`, yeni: "  if ($false) {", kontrol: "hizmetkok.okunamaz-durur" },
+      { ad: "H20 F2 önek tuzağı (C:\\TeksERP ⊂ C:\\TeksERP-testfabrika)", eski: '$y.StartsWith($k + "\\", [StringComparison]::Ordinal)', yeni: "$y.StartsWith($k, [StringComparison]::Ordinal)", kontrol: "hizmetkok.baska-kok-durur" },
+      { ad: "H21 F3 tek giriş eski paketi sınıflamıyor", eski: '  if ($e) { $s = $(if ((SurumKarsilastir $ku.surum $paketSurum) -eq 1)', yeni: '  if ($false) { $s = $(if ((SurumKarsilastir $ku.surum $paketSurum) -eq 1)', kontrol: "eskipaket.olcum-tek-giris" },
+      { ad: "H22 F4-B tek işaret (yalnız geçiş günlüğü) GECISLI sayılıyor", eski: '  if (-not (ReparseMi (Join-Path $kok "current"))) { return $null }', yeni: "", kontrol: "gecisli.tek-isaret-yetmez-yabanci-eski-mesaj" },
+      { ad: "H11 eski paket engeli düştü (yeni kurulu sürüme eski paket)", eski: "  if ($c -gt 0) { return \"bu kokte kurulu surum", yeni: "  if ($c -gt 1) { return \"bu kokte kurulu surum", kontrol: "kurulu.eski-paket-DUR" },
     ];
+    // Ham dosya (CRLF çıkışında da): desenler TEK satırlık olmalı — "\n" içeren desen CRLF ağaçta bayat görünür.
     const asil = readFileSync(join(KOK, YOL.ortak), "utf8");
     const dizin = mkdtempSync(join(tmpdir(), "kurulum-sonda-"));
     try {
@@ -536,7 +731,7 @@ if (eksik.length === 0) {
     } finally {
       rmSync(dizin, { recursive: true, force: true });
     }
-  } else defter.atla("✓K harness sondaları", "pwsh 7 yok", 8);
+  } else defter.atla("✓K harness sondaları", "pwsh 7 yok", 23);
 }
 
 console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız${defter.ozetEki()} ===`);

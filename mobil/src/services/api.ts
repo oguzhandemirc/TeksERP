@@ -94,6 +94,27 @@ export function isLoginLocked(err: unknown): boolean {
   return e?.status === 429 && e?.details?.code === 'LOGIN_LOCKED';
 }
 
+/** Hızlı PIN / kart "yalnız onaylı cihaz" kuralına takıldı mı (403 DEVICE_NOT_APPROVED)? Yöntem
+ *  kapalı DEĞİLDİR — giriş ekranı yöntemi sıfırlamaz, sunucunun cümlesini gösterir. */
+export function isDeviceNotApproved(err: unknown): boolean {
+  const e = err as { status?: number; details?: { code?: string } } | null;
+  return e?.status === 403 && e?.details?.code === 'DEVICE_NOT_APPROVED';
+}
+
+/** Hesap parola değişimi bekliyor (403 PASSWORD_CHANGE_REQUIRED) mı? Değişim yalnız panelde
+ *  yapılır; giriş yöntemi kapalı DEĞİLDİR — ekran seçimi korur, sunucunun cümlesini gösterir. */
+export function isPasswordChangeRequired(err: unknown): boolean {
+  const e = err as { status?: number; details?: { code?: string } } | null;
+  return e?.status === 403 && e?.details?.code === 'PASSWORD_CHANGE_REQUIRED';
+}
+
+/** PIN/kart girişindeki 403 "bu yöntem panelden kapatıldı" mı? Kodlu 403'ler (onaysız cihaz,
+ *  zorunlu parola değişimi) yöntem kapanması değildir; giriş ekranı yalnız bunda seçimi sıfırlar. */
+export function isLoginMethodDisabled(err: unknown): boolean {
+  const e = err as { status?: number } | null;
+  return e?.status === 403 && !isDeviceNotApproved(err) && !isPasswordChangeRequired(err);
+}
+
 // 403 LICENSE_* → kısıtlı kip / kapalı modül uyarısı (aynı metin 10 sn'de bir) ve
 // K5 sinyali. Kimliksiz `LICENSE_GATE` bilinçli olarak ayrıntısızdır: çağıranın
 // kendi hata yolu yeter (giriş öncesi arka plan istekleri toast yağdırmasın).

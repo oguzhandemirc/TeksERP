@@ -40,7 +40,7 @@ const REPORT_PERIODS: readonly ReportPeriod[] = ["bugun", "bu-ay", "gecen-ay"];
 
 export interface RemoteReport {
   readonly key: ReportKey;
-  /** Bulut okuma izni — raporun AİLESİNE düşen projeksiyon izni (§10). */
+  /** Bulut okuma izni RAPOR BAŞINA — bulut kataloğunun `REPORT_KEY_PERMISSION`ıyla birebir (bekçi `test_bulut_tel_aynasi` §8). */
   readonly permission: string;
   readonly module?: ModuleKey;
   /** Fabrikanın kendi parametre şeması (KATI — tanınmayan anahtar PARAMETRE_GECERSIZ). */

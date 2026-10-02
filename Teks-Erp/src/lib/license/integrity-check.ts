@@ -28,6 +28,8 @@ export const INTEGRITY_GUARD_CODES = [
   "BUTUNLUK_SINIF_BILINMIYOR",
   "BUTUNLUK_FILIGRAN",
   "BUTUNLUK_YUKLEYICI",
+  /** Zorunlu kipte imzalı listedeki bir dosya okunamıyor: değişmiş sayılır (kilitli/izinsiz dosya denetimi atlatamaz). */
+  "BUTUNLUK_OKUNAMAYAN",
 ] as const;
 export type IntegrityGuardCode = (typeof INTEGRITY_GUARD_CODES)[number];
 
@@ -121,6 +123,8 @@ export interface PackageMeasurement {
   readonly ekFazla: readonly string[];
   readonly ekFazlaSayisi: number;
   readonly filigran: BuildWatermark | null;
+  /** Zorunlu kip (korumalı paket): okunamayan listeli dosya DEĞİŞMİŞ sayılır (G12 §3.3). */
+  readonly zorunlu?: boolean;
 }
 
 export interface IntegrityCheckInput {
@@ -217,11 +221,15 @@ async function checkPackageFiles(g: IntegrityCheckInput): Promise<IntegrityOutco
     ekFazla: extra.slice(0, EXTRA_LIST_CAP),
     ekFazlaSayisi: extra.length,
     filigran: g.watermark === undefined ? BUILD_WATERMARK : g.watermark,
+    zorunlu: g.required,
   };
   return decidePackage(measurement, g.entitlementClass, now);
 }
 
-/** Ölçümden karar (tek sıra): hazırlık anahtarının sınıf kuralı → filigran → ikinci katman FAZLA → çekirdek raporu. */
+/**
+ * Ölçümden karar (tek sıra): hazırlık anahtarının sınıf kuralı → filigran → ikinci katman FAZLA → (zorunlu kipte)
+ * okunamayan listeli dosya = değişmiş → çekirdek raporu.
+ */
 function decidePackage(m: PackageMeasurement, entitlementClass: string | null, now: number): IntegrityOutcome {
   const { kid, rapor } = m;
   const shown = m.ekFazlaSayisi > 0 ? m.ekFazla : rapor.fazla;
@@ -234,5 +242,8 @@ function decidePackage(m: PackageMeasurement, entitlementClass: string | null, n
   }
   if (!watermarkMatches(m.filigran, kunye)) return outcome({ ...base, durum: "GECERSIZ", kod: "BUTUNLUK_FILIGRAN" }, now);
   if (rapor.durum === "GECERLI" && m.ekFazlaSayisi > 0) return outcome({ ...base, kunye, durum: "GECERSIZ", kod: "BUTUNLUK_FAZLA" }, now);
+  if (m.zorunlu === true && rapor.durum === "OLCULEMEDI" && rapor.okunamayanSayisi > 0) {
+    return outcome({ ...base, kunye, durum: "GECERSIZ", kod: "BUTUNLUK_OKUNAMAYAN" }, now);
+  }
   return outcome({ ...base, kunye, durum: rapor.durum, kod: rapor.kod }, now);
 }

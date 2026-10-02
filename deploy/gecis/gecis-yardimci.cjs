@@ -133,6 +133,14 @@ function ecoYukle(yol) {
   return { ad: typeof app.name === "string" ? app.name : null, env, bicimsiz };
 }
 
+// Lisans saticisi kokeni (https://host[:port], kucuk harf host, sonda / yok) ya da null. Backend'in cozucusu
+// (vendor-url.ts) bundan genis kabul eder (dongu adresine http); kanal beklentisi daima https oldugundan
+// burada tanimayan deger zaten UYUSMAZ'dir. Kimlik bilgili/yollu deger tanimaz - ciktiya hic girmez.
+function lisansKoken(v) {
+  const m = /^https:\/\/([A-Za-z0-9](?:[A-Za-z0-9.-]{0,251}[A-Za-z0-9])?)(:[0-9]{1,5})?\/?$/.exec(String(v == null ? "" : v).trim());
+  return m ? "https://" + m[1].toLowerCase() + (m[2] || "") : null;
+}
+
 // --- ortam -------------------------------------------------------------------------------
 // Eski etkin: pm2 ecosystem env'i surece dotenv'den ONCE verir -> ecosystem (bos olsa bile) .env'i ezer.
 // Yeni etkin: konak sabitleri > .env > hizmet varsayilanlari (bos ya da yoksa).
@@ -229,6 +237,50 @@ function ortam(g) {
     not(k, hedef === v ? "ECO_EKLENDI" : "ECO_EKLENDI+MUTLAK");
   }
 
+  // Kanal satirlari (gecis.ps1 kanal-adlari.ps1 + PAKET.json'dan verir; DEGERLER .env'den basilmaz):
+  //   guncellemeDizini {yol, yaz}: ikinci kanalin backend'i guncelleyicinin veri kokunu gormeli (setup ile ayni satir).
+  //   lisans {beklenen, varsayilan, yaz}: etkin LICENSE_SERVER_URL kanal kaydina karsi; yaz = yapilandirma\.env'e kanal degeri.
+  const izinliFark = new Set();
+  const kanalEkler = [];
+  if (g.guncellemeDizini && g.guncellemeDizini.yol) {
+    const bek = ileriBolu(String(g.guncellemeDizini.yol));
+    const var0 = eskiEtkin.TEKSERP_GUNCELLEME_DIZINI;
+    if (var0 !== undefined && String(var0).trim() !== "") {
+      if (ileriBolu(String(var0).trim()).toLowerCase() !== bek.toLowerCase()) engeller.push("TEKSERP_GUNCELLEME_DIZINI: eski yapilandirmadaki deger bu kanalin guncelleme dizini degil (beklenen " + bek + ") - backend ile guncelleyici farkli dizin gorurdu; satir elle duzeltilmeli");
+    } else if (g.guncellemeDizini.yaz) {
+      const satir = kanonikSatir("TEKSERP_GUNCELLEME_DIZINI", bek);
+      if (satir === null) engeller.push("TEKSERP_GUNCELLEME_DIZINI: yol okuyucunun ayni okuyacagi bicimde yazilamiyor");
+      else { kanalEkler.push(satir); istenen.TEKSERP_GUNCELLEME_DIZINI = bek; not("TEKSERP_GUNCELLEME_DIZINI", "KANAL_GUNCELLEME", "kanal veri koku"); }
+    }
+  }
+  let lisans = null;
+  if (g.lisans && g.lisans.beklenen) {
+    const L = g.lisans;
+    const beklenen = lisansKoken(L.beklenen);
+    const varsayilanK = lisansKoken(L.varsayilan);
+    const ham = Object.prototype.hasOwnProperty.call(eskiEtkin, "LICENSE_SERVER_URL") ? String(eskiEtkin.LICENSE_SERVER_URL).trim() : "";
+    let kaynak = Object.prototype.hasOwnProperty.call(eco.env, "LICENSE_SERVER_URL") ? "ecosystem" : (Object.prototype.hasOwnProperty.call(dot, "LICENSE_SERVER_URL") ? ".env" : "varsayilan");
+    let bulunan;
+    if (ham === "") { bulunan = varsayilanK; kaynak = "varsayilan"; }
+    else if (ham.toLowerCase() === "kapali") bulunan = "kapali";
+    else bulunan = lisansKoken(ham);
+    const durum = !beklenen || (kaynak === "varsayilan" && !varsayilanK) ? "OLCULEMEDI" : bulunan === "kapali" ? "KAPALI" : bulunan === beklenen ? "UYUMLU" : "UYUSMAZ";
+    let yazilacak = false;
+    if (L.yaz && beklenen && durum !== "UYUMLU" && durum !== "OLCULEMEDI") {
+      const satir = "LICENSE_SERVER_URL=" + beklenen;
+      if (sonSatir.LICENSE_SERVER_URL !== undefined) satirlar[sonSatir.LICENSE_SERVER_URL].metin = satir;
+      else {
+        const i = ekler.findIndex((x) => x.startsWith("LICENSE_SERVER_URL="));
+        if (i >= 0) ekler[i] = satir; else kanalEkler.push(satir);
+      }
+      istenen.LICENSE_SERVER_URL = beklenen;
+      izinliFark.add("LICENSE_SERVER_URL");
+      not("LICENSE_SERVER_URL", "KANAL_LISANS", "kanal kaydindan");
+      yazilacak = true;
+    }
+    lisans = { durum, beklenen, bulunan: bulunan || "(bicimsiz - deger basilmaz)", kaynak, yazilacak };
+  }
+
   // Uygulama dizinini (app\) gosteren yollar: app\ gecisten sonra emekli.
   const appOnek = eskiApp.toLowerCase() + "/";
   for (const [k, v] of Object.entries(istenen)) {
@@ -247,6 +299,11 @@ function ortam(g) {
     if (govde.length && !/\r?\n$/.test(govde)) govde += eol;
     govde += "# --- gecis.ps1 " + String(g.damga || "") + ": pm2 ecosystem.config.js env blogundan (hizmet duzeninde pm2 yok) ---" + eol;
     govde += ekler.map((x) => x + eol).join("");
+  }
+  if (kanalEkler.length) {
+    if (govde.length && !/\r?\n$/.test(govde)) govde += eol;
+    govde += "# --- gecis.ps1 " + String(g.damga || "") + ": kanal kaydindan (hizmet/kanal-adlari.ps1 + paket kimligi) ---" + eol;
+    govde += kanalEkler.map((x) => x + eol).join("");
   }
   // Denetim: istenen degerler birlesik dosyada (okuyucunun gozunden) etkin olmali.
   const dotYeni = dotenvCozumle(govde);
@@ -268,6 +325,7 @@ function ortam(g) {
     const y = yeniEtkin[k];
     if (k === "BACKUP_RCLONE_CONFIG" && (e === undefined || e.trim() === "")) continue;
     if ((e === undefined || e.trim() === "") && Object.prototype.hasOwnProperty.call(varsayilan, k)) continue;
+    if (izinliFark.has(k)) continue;
     if (coz(k, e) !== coz(k, y)) etkinFark.push(k);
   }
   if (etkinFark.length) engeller.push("etkin ayar degisirdi: " + etkinFark.join(", "));
@@ -306,7 +364,7 @@ function ortam(g) {
   }
   return {
     karar: engeller.length ? "ENGEL" : "TAMAM",
-    anahtarlar, engeller, uyarilar, yazildi, rclone, port,
+    anahtarlar, engeller, uyarilar, yazildi, rclone, port, lisans,
     ecoAd: eco.ad, ecoAnahtarSayisi: Object.keys(eco.env).length, envAnahtarSayisi: Object.keys(dot).length,
     ozet: anahtarlar.reduce((o, a) => { o[a.islem] = (o[a.islem] || 0) + 1; return o; }, {}),
   };
@@ -384,7 +442,7 @@ function kira(g) {
 }
 
 const KOMUTLAR = { ortam, pm2, kira };
-module.exports = { dotenvCozumle, kanonikSatir, hizmetVarsayilanlari, YOL_AYARLARI, KONAK_SABIT, ortam, pm2, kira, jlistCoz };
+module.exports = { dotenvCozumle, kanonikSatir, lisansKoken, hizmetVarsayilanlari, YOL_AYARLARI, KONAK_SABIT, ortam, pm2, kira, jlistCoz };
 
 if (require.main === module) {
   const komut = process.argv[2];

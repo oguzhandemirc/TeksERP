@@ -58,7 +58,10 @@ function check(label: string, ok: boolean, detay = ""): void {
 
 /** Fabrika/müşteri sunucusunda koşan PowerShell betikleri (geliştirme makinesinde koşan `paketle.ps1` hariç; setup.exe'nin
  *  `deploy/kurulum/` betikleri de sunucuda YÖNETİCİ olarak koşar — D5). */
-const SUNUCU_PS1 = ["deploy/kur.ps1", "deploy/ilk-kurulum.ps1", "deploy/yedekle.ps1", "deploy/uzaktan-kos.ps1", "deploy/bakim-rolu.ps1", "deploy/hizmet/backend-hizmeti.ps1", "deploy/hizmet/guncelleyici-hizmeti.ps1", "deploy/gecis/gecis.ps1", "deploy/kurulum/kurulum.ps1", "deploy/kurulum/kurulum-ortak.ps1", "deploy/kurulum/on-olcum.ps1", "deploy/kurulum/kaldir.ps1"];
+const SUNUCU_PS1 = ["deploy/kur.ps1", "deploy/ilk-kurulum.ps1", "deploy/yedekle.ps1", "deploy/uzaktan-kos.ps1", "deploy/bakim-rolu.ps1", "deploy/hizmet/backend-hizmeti.ps1", "deploy/hizmet/guncelleyici-hizmeti.ps1", "deploy/hizmet/kanal-adlari.ps1", "deploy/hizmet/sema-hizasi.ps1", "deploy/gecis/gecis.ps1", "deploy/kurulum/kurulum.ps1", "deploy/kurulum/kurulum-ortak.ps1", "deploy/kurulum/on-olcum.ps1", "deploy/kurulum/kaldir.ps1"];
+
+/** Körlük zemini satır alt sınırı: varsayılan 60; bilerek küçük tek-işlevli kütüphane kendi sınırını taşır. */
+const KORLUK_SATIR: Record<string, number> = { "deploy/hizmet/kanal-adlari.ps1": 25, "deploy/hizmet/sema-hizasi.ps1": 25 };
 
 const YONLENDIRME = /(?:^|\s)2>(?:&1|\$null)/;
 const CIPLAK_NPM = /(?:^|[\s&(;|])npm(?=\s|$)/;
@@ -72,7 +75,7 @@ for (const yol of SUNUCU_PS1) {
   const t = psTara(readFileSync(tam, "utf8"));
   const son = t.satirlar[t.satirlar.length - 1];
   check(`§0 ${yol} tarandı (körlük zemini: satır + fonksiyon + dengeli parantez)`,
-    t.satirlar.length > 60 && t.fonksiyonlar.length >= 1 && son?.derinlik === 0,
+    t.satirlar.length > (KORLUK_SATIR[yol] ?? 60) && t.fonksiyonlar.length >= 1 && son?.derinlik === 0,
     `${t.satirlar.length} satır · ${t.fonksiyonlar.length} fonksiyon · son derinlik ${son?.derinlik}`);
 
   // §1 — yönlendirme yalnız EAP=Continue + finally'de geri koyan yardımcıda
@@ -311,6 +314,21 @@ for (const yol of SUNUCU_PS1) {
   check("§10e pm2-boot.cmd: PM2_HOME kur.ps1'inkiyle aynı (<kök>\\pm2-home), `pm2 resurrect`, tamamı ASCII",
     cmd.includes('set "PM2_HOME=%KOK%pm2-home"') && cmd.includes('pm2\\node_modules\\.bin\\pm2.cmd" resurrect') &&
       !/[^\x00-\x7F]/.test(cmd));
+  // setlocal'li toplu dosyada call'siz .cmd cagrisi cagiranin baglamini bitirir: setlocal ortami (PM2_HOME) duser,
+  // pm2 SYSTEM profiline gider, acilista backend kalkmaz (thinkpad-1 D8c, gercek gorevle yeniden uretildi).
+  const callsizCagri = (metin: string): string[] => {
+    const satirlar = metin.split(/\r?\n/);
+    if (!satirlar.some((s) => /^\s*setlocal\b/i.test(s))) return [];
+    return satirlar.filter((s) => /\.cmd"/i.test(s) && !/^\s*(rem\b|::|set\s|call\s)/i.test(s)).map((s) => s.trim());
+  };
+  const cagri = callsizCagri(cmd);
+  check("§10e2 ⭐ pm2-boot.cmd: setlocal varken .cmd çağrısı `call`lı — çağrısız çağrıda PM2_HOME düşer, pm2 SYSTEM profilinde boş .pm2 ile doğar, açılışta backend kalkmaz",
+    cmd.length > 0 && cagri.length === 0, cagri.join(" | ") || "call'lı");
+  const sondaCallsiz = cmd.replace(/^call (?=")/m, "");
+  check("§10e2 sonda: `call` silindi → kırmızı", sondaCallsiz !== cmd && callsizCagri(sondaCallsiz).length > 0, sondaCallsiz === cmd ? "MUTASYON UYGULANMADI" : "");
+  const sondaSetlocalsiz = sondaCallsiz.replace(/^setlocal\r?\n/im, "");
+  check("§10e2 sonda: setlocal'sız çıplak çağrı (SAHINSRV'nin elle düzenlenmiş biçimi) → yeşil, ortam düşmez",
+    sondaSetlocalsiz !== sondaCallsiz && callsizCagri(sondaSetlocalsiz).length === 0, sondaSetlocalsiz === sondaCallsiz ? "MUTASYON UYGULANMADI" : "");
 }
 
 // §10h — premigrate yedeği ve ilk kurulum şifrelemesi: parola HİÇBİR betikte argümana
@@ -914,7 +932,7 @@ function kurulumOlcumIhlalleri(kur: string): string[] {
 const DONMUS: ReadonlyArray<{ dosya: string; sha256: string; gerekce: string }> = [
   { dosya: "deploy/kur.ps1", sha256: "0c56f34d39594a006e3fc01290ea20a134b6f5f26ffa07542fcc19b7401d68e5", gerekce: "D6 2026-10-01: dondurma başlığı + HizmetDuzeniIzi kapısı (bu kökü kullanan her TeksERP hizmeti)" },
   { dosya: "deploy/ilk-kurulum.ps1", sha256: "5a1e0803b1e08f7a88e6e71d178cc7053ff04a210703fd3c3f6eaa3831386640", gerekce: "D6 2026-10-01: dondurma başlığı + HizmetDuzeniIzi kapısı" },
-  { dosya: "deploy/pm2-boot.cmd", sha256: "858cb7c73e45af3fc1d8e3ecab566bb44f682358d3006c304d04c3148dea81c6", gerekce: "D6 2026-10-01: dondurma başlığı" },
+  { dosya: "deploy/pm2-boot.cmd", sha256: "2659a7f160d0aeb1d7aa2a20b3fe3139b047391e1b2b4abb18794a79d90cf214", gerekce: "D8c 2026-10-01 DÜZELTME: pm2.cmd `call`lı — setlocal ortamı çağrısız çağrıda düşüyor, açılışta pm2 SYSTEM profiline gidip backend'i kaldırmıyordu (thinkpad-1, yönetici onayı)" },
   { dosya: "Teks-Erp/ecosystem.config.js", sha256: "aabeb95d3c4baf37b8bc48a6c36e688a8f411e5e4a2cc874ce86c6bcbefbfc3e", gerekce: "D6 2026-10-01: dondurma başlığı" },
 ];
 function donmusOzet(metin: string): string {

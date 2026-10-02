@@ -14,7 +14,7 @@ import { prisma, type Tx } from "../lib/prisma";
 import { isUniqueViolation } from "../lib/prisma-errors";
 
 /** Gövde özetine ve hiçbir kayda girmeyen alanlar. */
-export const SECRET_BODY_KEYS: ReadonlySet<string> = new Set(["parola", "mevcutParola", "yeniParola", "kokParolasi", "bayiParolasi", "totp"]);
+export const SECRET_BODY_KEYS: ReadonlySet<string> = new Set(["parola", "mevcutParola", "yeniParola", "kokParolasi", "imzaParolasi", "bayiParolasi", "totp"]);
 
 export interface PortalActor {
   readonly userId: string;

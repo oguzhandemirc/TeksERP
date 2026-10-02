@@ -4,6 +4,7 @@ import type {
   LicenseAcceptanceView,
   LicenseDataExportManifest,
   LicenseDetail,
+  LicenseHardwareReportResult,
   LicenseOfflineRequest,
   LicenseProxySettings,
   LicenseStatusResponse,
@@ -30,14 +31,31 @@ const isRouteMissing = (err: unknown): boolean =>
  * GÖVDEYLE gider (D12): kod URL'ye, dolayısıyla erişim günlüğüne ve vekil kayıtlarına girmez.
  * POST ucu olmayan eski backend 404 döner → bir kez eski GET yoluna düşülür (geçiş; backend önce iner).
  */
-async function envelope(path: "cevrimdisi-istek" | "aktarma-istegi", amac: OfflinePurpose, kod?: string): Promise<LicenseOfflineRequest> {
-  const body = kod ? { amac, kod } : { amac };
+async function envelope(path: "cevrimdisi-istek" | "aktarma-istegi", amac: OfflinePurpose, kod?: string, gerekce?: string | null): Promise<LicenseOfflineRequest> {
+  const body = { amac, ...(kod ? { kod } : {}), ...(gerekce ? { gerekce } : {}) };
   try {
     return await data(apiClient.post<ApiResponse<LicenseOfflineRequest>>(`${BASE}/${path}`, body, QUIET));
   } catch (err) {
     if (!isRouteMissing(err)) throw err;
     return data(apiClient.get<ApiResponse<LicenseOfflineRequest>>(`${BASE}/${path}`, { ...QUIET, params: body }));
   }
+}
+
+/**
+ * Lisans dosyası (portalın istek gerektirmeyen uzatma dosyası) içeriği: JSON nesnesiyse NESNE olarak gider —
+ * backend'in metin sınırı 64 KB'tır, iptal belgesi taşıyan yanıt onu aşabilir; değilse QR yanıtı gibi düz metin.
+ */
+export function licenseFilePayload(metin: string): string | Record<string, unknown> {
+  const text = metin.replace(/^\uFEFF/, "").trim();
+  if (text.startsWith("{")) {
+    try {
+      const v: unknown = JSON.parse(text);
+      if (v !== null && typeof v === "object" && !Array.isArray(v)) return v as Record<string, unknown>;
+    } catch {
+      // Çözülemeyen metin olduğu gibi gider; backend kendi cümlesiyle reddeder.
+    }
+  }
+  return text;
 }
 
 export const licenseService = {
@@ -52,14 +70,21 @@ export const licenseService = {
     data(apiClient.post<ApiResponse<LicenseDetail>>(`${BASE}/etkinlestir`, { kod }, QUIET)),
   pollNow: () =>
     data(apiClient.post<ApiResponse<{ outcome: PollOutcome; code?: string }>>(`${BASE}/yokla`, {}, QUIET)),
-  offlineRequest: (amac: OfflinePurpose, kod?: string) => envelope("cevrimdisi-istek", amac, kod),
+  /** `donanim` (K8): donanım değişikliği bildirimi zarfla — internetsiz kurulum QR/dosya yolundan bildirir; `gerekce` isteğe bağlı. */
+  offlineRequest: (amac: OfflinePurpose, kod?: string, gerekce?: string | null) => envelope("cevrimdisi-istek", amac, kod, gerekce),
   offlineResponse: (yanit: string) =>
     data(apiClient.post<ApiResponse<LicenseDetail>>(`${BASE}/cevrimdisi-yanit`, { yanit }, QUIET)),
+  /** Çevrimdışı yanıtla AYNI uç; `kaynak: dosya` yalnız ayak izini ayırır (eski backend alanı yok sayar, yine kabul eder). */
+  licenseFile: (metin: string) =>
+    data(apiClient.post<ApiResponse<LicenseDetail>>(`${BASE}/cevrimdisi-yanit`, { yanit: licenseFilePayload(metin), kaynak: "dosya" }, QUIET)),
   relayRequest: (amac: OfflinePurpose, kod?: string) => envelope("aktarma-istegi", amac, kod),
   relayResponse: (yanit: unknown) =>
     data(apiClient.post<ApiResponse<LicenseDetail>>(`${BASE}/aktarma-yaniti`, { yanit }, QUIET)),
   requestTransfer: (gerekce: string | null) =>
     data(apiClient.post<ApiResponse<LicenseTransferResult>>(`${BASE}/tasima-talebi`, { gerekce }, QUIET)),
+  /** Donanım değişikliğini bildir (K8): backend parmak izini yeniden ölçer ve satıcıya imzalı `donanim` isteği gönderir. */
+  reportHardwareChange: (gerekce: string | null) =>
+    data(apiClient.post<ApiResponse<LicenseHardwareReportResult>>(`${BASE}/donanim-bildir`, { gerekce }, QUIET)),
   /** `anaKurulumId` null → gövdeye girmez: satıcı tesisin tek etkin ÜRETİM kurulumunu kendisi çıkarır. */
   drTakeover: (anaKurulumId: string | null, gerekce: string) =>
     data(apiClient.post<ApiResponse<LicenseDetail>>(`${BASE}/dr-devral`, { ...(anaKurulumId ? { anaKurulumId } : {}), gerekce }, QUIET)),

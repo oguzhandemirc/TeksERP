@@ -41,9 +41,13 @@ const ARACLAR = [
   { giris: "scripts/fix_tambur_undo_cancel_marker.ts", cikti: "dist/tools/fix_tambur_undo_cancel_marker.cjs" },
   { giris: "scripts/backfill_workorder_events.ts", cikti: "dist/tools/backfill_workorder_events.cjs" },
   { giris: "scripts/kartela_durum_anomali.ts", cikti: "dist/tools/kartela_durum_anomali.cjs" },
+  // Kısa kimlik (PIN/kart) özet dönüşümü + anahtar emanetinden geri koyma (G21).
+  { giris: "scripts/kisa-kimlik.ts", cikti: "dist/tools/kisa-kimlik.cjs" },
   // Yedek sifreleme (.tkenc): yedekle.ps1, kur.ps1 ve panelin geri yukleme komutu bunu cagirir.
   // Yalniz node:crypto kullanir - paketlenmis sunucuda node_modules olmadan da kosar.
   { giris: "scripts/yedek-sifrele.ts", cikti: "dist/tools/yedek-sifrele.cjs" },
+  // JWT sırrı denetimi + rotasyonu (docs/ops/JWT-SIR-ROTASYONU.md) — backend açılışıyla aynı yüklem.
+  { giris: "scripts/jwt-sir.ts", cikti: "dist/tools/jwt-sir.cjs" },
 ];
 
 // Calisma aninda node_modules'ten cozulecekler. Hepsi URETIM bagimliligidir

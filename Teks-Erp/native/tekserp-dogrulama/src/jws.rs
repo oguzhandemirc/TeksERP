@@ -8,6 +8,7 @@ use crate::outcome::{code, fail, Outcome};
 use ed25519_dalek::{Signature, Verifier, VerifyingKey};
 use regex::Regex;
 use serde_json::{Map, Value};
+use sha2::{Digest, Sha256};
 use std::sync::OnceLock;
 
 pub const ALG: &str = "EdDSA";
@@ -94,6 +95,11 @@ pub fn parse(token: &Value) -> Outcome<Parsed> {
         return fail(code::JWS_BICIM, "İmza parçası geçersiz");
     };
     Ok(Parsed { header, payload, signing_input: format!("{}.{}", parts[0], parts[1]).into_bytes(), signature })
+}
+
+/// Belgenin bayt özeti (TS `jwsDigest`): compact metnin sha256'sı, base64url (43). Kiranın `hakOzeti` bağı buna bakar.
+pub fn digest(token: &str) -> String {
+    b64::encode(&Sha256::digest(token.as_bytes()))
 }
 
 /// Ed25519 doğrulaması (cofactor'suz, kanonik olmayan S RED — OpenSSL `EVP_DigestVerify` ile aynı).

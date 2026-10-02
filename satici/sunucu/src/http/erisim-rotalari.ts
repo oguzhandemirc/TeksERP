@@ -21,8 +21,12 @@ export const ERISIM_PORTAL_ROTALARI: ReadonlySet<string> = new Set([
   "GET /kurulumlar",
   "GET /kurulumlar/:id",
   "GET /haklar/:id",
+  "GET /haklar/:id/imza-plani",
+  "GET /kok-kuyrugu",
+  "GET /iptal-belgeleri",
   "GET /planli-eylemler",
   "GET /tasima-talepleri",
+  "GET /donanim-talepleri",
   "GET /kopya-uyarilari",
   "GET /kanallar",
   "GET /bayiler",
@@ -48,6 +52,8 @@ export const ERISIM_PORTAL_ROTALARI: ReadonlySet<string> = new Set([
   "POST /kurulumlar/:id/etkinlestirme-kodu",
   // Dağıtım v2: güncelleme politikası (kök parolası taşımaz, güven kökü eklemez — operasyon ayarı)
   "POST /kurulumlar/:id/guncelleme-politikasi",
+  // kök kuyruğu talebinden vazgeçmek (parola taşımaz; HAK imzası ve toplu yeniden basım parolalı → yalnız tailnet)
+  "POST /kok-kuyrugu/:id/iptal",
   // yaptırım · planlı eylem · taksit
   "POST /kurulumlar/:id/yaptirim",
   "POST /kurulumlar/:id/agir-yaptirim",
@@ -63,7 +69,10 @@ export const ERISIM_PORTAL_ROTALARI: ReadonlySet<string> = new Set([
   // taşıma · kopya · DR · iptal
   "POST /tasima-talepleri/:id/onayla",
   "POST /tasima-talepleri/:id/reddet",
+  "POST /donanim-talepleri/:id/onayla",
+  "POST /donanim-talepleri/:id/reddet",
   "POST /kopya-uyarilari/:id/kapat",
+  "POST /kurulumlar/:id/uzatma-dosyasi",
   "POST /kurulumlar/:id/dr-geri-al",
   "POST /kurulumlar/:id/iptal",
   "POST /kurulumlar/:id/iptal-geri-al",

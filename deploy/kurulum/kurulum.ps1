@@ -4,7 +4,9 @@
 # NE YAPAR: fabrika sunucusuna Windows hizmeti duzeninde (Dagitim v2) SIFIRDAN kurulum ya da AYNI
 #   surumun ONARIMI. Asamalar sirayla, her biri olcerek ilerler; olculemeyen adim DURUR (tahmin yok):
 #     OnKosul    yonetici - Windows x64 - cevap dosyasi (cevap-semasi.json, KATI, sirsiz) - kok/veri
-#                dizini kurallari - paket girdileri - portlar (API mesgulse DUR; PG portSec) - RAM/disk
+#                dizini kurallari (gecisle kurulmus duzen DUR) - paket girdileri - kanal hizmeti baska koke bagliysa
+#                DUR - portlar (API mesgulse DUR; PG portSec) - RAM/disk - lisans saticisi (bos = paketin kanali
+#                PAKET.json backendLisansSunucusu; farkli deger UYARI) - ag ayari (onarim/devamda kayittan)
 #     Paket      kok ACL (genis grup yok) - backend paketi KURULUMUN KENDI dogrulayicisiyla (tekserp-
 #                guncelleyici kurulum-paket: imza + imzali listedeki her dosya) surumler\<surum>'e -
 #                current baglantisi - hizmet\backend-hizmeti.ps1 -Uygula -YalnizIskelet (SIRDAN ONCE)
@@ -13,7 +15,8 @@
 #                initdb (parola ACL'li gecici dosyadan) - tekserp.conf + pg_hba.conf (pg-sablon.mjs) -
 #                pg_ctl register (sanal hesap) - veri dizini ACL (KAYITTAN SONRA) - baslat + olcum - roller
 #                + DB + DB ayarlari - .env + db-credentials.json - ornek.json (postgres parolasi DPAPI initdb'den once)
-#     Backend    prisma migrate deploy (paketin kendi Node'u) + goc sayisi - bakim rolu (bakim-rolu.ps1) -
+#     Backend    sema hizasi (goc ONCESI, hizmet\sema-hizasi.ps1) + prisma migrate deploy (paketin kendi Node'u) +
+#                goc adlari = paket - bakim rolu (bakim-rolu.ps1) -
 #                yedek sifreleme (musteri anahtari dosyaya)
 #     Hizmetler  hizmet\backend-hizmeti.ps1 -Uygula (kayit -> ACL) - hizmet\guncelleyici-hizmeti.ps1 -Uygula -
 #                gece yedegi gorevi (<KOK>\yedekle.ps1) - guvenlik duvari (API yalniz LocalSubnet [+Tailscale],
@@ -49,6 +52,10 @@ param(
 )
 $ErrorActionPreference = "Stop"
 . (Join-Path $PSScriptRoot "kurulum-ortak.ps1")
+# Kanal adlari TEK kaynaktan (gecis.ps1 ayni dosyayi paketten okur): kitte ..\hizmet\kanal-adlari.ps1.
+. (Join-Path $PSScriptRoot "..\hizmet\kanal-adlari.ps1")
+# Sema hizasi TEK kural (guncelleyici Rust aynasi, gecis paketten okur): kitte ..\hizmet\sema-hizasi.ps1.
+. (Join-Path $PSScriptRoot "..\hizmet\sema-hizasi.ps1")
 
 $KURULUM_BICIMI = 1
 $PG_DIZINI = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot "..\pg"))
@@ -62,6 +69,9 @@ $script:SonucKaydi = [ordered]@{ asama = $Asama; tamam = $false }
 function CevabiYukle {
   $sema = JsonOku (Join-Path $PSScriptRoot "cevap-semasi.json")
   $c = JsonOku $Cevap
+  # Ham cevap (alan ACIKCA verildi mi - ag karari) ve sema (kayit dogrulamasi) asamalara acik.
+  $script:CevapHam = $c
+  $script:CevapSemasi = $sema
   $r = CevapDogrula $c $sema
   if ($r.hatalar.Count) {
     foreach ($h in $r.hatalar) { [void](GunlugeYaz "CEVAP" $h); Write-Host "  X  cevap: $h" -ForegroundColor Red }
@@ -71,23 +81,11 @@ function CevabiYukle {
   return $r.deger
 }
 
-# Hizmet adlari kanaldan (paketin backendHizmetAdi = kanal kaydi backend.hizmetAdi): varsayilan ad ya da
-# "TeksERP-Backend-<kanal>". Son ek (-<kanal>) ikinci kanalin HER adina gecer: guncelleyici, PG, veri koku,
-# gorev, AppId (GUNCELLEYICI.md b.4.2: ayni makinede iki kanal ne hizmet ne IPC paylasir).
+# Hizmet adlari kanaldan (paketin backendHizmetAdi = kanal kaydi backend.hizmetAdi): kural ve turetim
+# TEK yerde - hizmet\kanal-adlari.ps1 KanalAdlariCoz (gecis.ps1 de onu cagirir; GUNCELLEYICI.md b.4.2).
 function AdlariCoz([string]$backendAdi, $musteri, $pgOrnek) {
-  if (-not $backendAdi) { $backendAdi = "TeksERP-Backend" }
-  if ($backendAdi -cnotmatch '^TeksERP-Backend(-[A-Za-z0-9][A-Za-z0-9._-]{0,63})?$') { Dur "backend hizmet adi kanal kuralina uymuyor: $backendAdi" }
-  $sonek = $backendAdi.Substring("TeksERP-Backend".Length)
-  if ($sonek -and $musteri -and ($sonek -cne "-$musteri")) { Dur "hizmet adi ($backendAdi) paketin imzali kanalina ($musteri) ait degil" }
-  return [ordered]@{
-    backend      = $backendAdi
-    sonek        = $sonek
-    guncelleyici = "TeksERP-Guncelleyici$sonek"
-    pg           = "$($pgOrnek.hizmet.ad)$sonek"
-    veriKoku     = Join-Path $env:ProgramData "TeksERP$sonek"
-    gorev        = "TeksERP-DB-Backup$sonek"
-    mdnsKurali   = "TeksERP mDNS$sonek"
-  }
+  try { return (KanalAdlariCoz $backendAdi ([string]$musteri) ([string]$pgOrnek.hizmet.ad) $env:ProgramData) }
+  catch { Dur $_.Exception.Message }
 }
 
 # --- Durum (asamalar arasi, SIRSIZ) ---------------------------------------------------------------
@@ -196,6 +194,13 @@ function PsqlStdin([string]$bin, [int]$port, [string]$kullanici, [string]$parola
   }
 }
 
+# Bitmis goc adlari (hizmet\sema-hizasi.ps1 $SEMA_BITMIS_GOC_SQL - guncelleyiciyle bayt-esit); okunamazsa DUR.
+function BitmisGoclar([string]$bin, [int]$port, [string]$kullanici, [string]$parola, [string]$vt) {
+  $r = PsqlStdin $bin $port $kullanici $parola $vt "$($script:SEMA_BITMIS_GOC_SQL);"
+  if ($r.kod -ne 0) { Dur "goc listesi okunamadi: $($r.cikti)" }
+  return @(($r.cikti -csplit "`n") | ForEach-Object { $_.Trim() } | Where-Object { $_ })
+}
+
 # .env yapilandirma\ dizininin MIRASINI alir (iskelet SYSTEM + Administrators; backend-hizmeti.ps1 -Uygula
 # hizmet hesabina okuma verir). Korumali DACL KONMAZ: konursa hizmet hesabi .env'i okuyamaz. Dizin genis
 # gruplara aciksa (iskelet kurulmamis) sir YAZILMAZ; yazilan dosya da olculur.
@@ -244,6 +249,9 @@ function AsamaOnKosul {
   $yarim = $null
   if (-not $onarim -and (Test-Path -LiteralPath (DurumYolu $kok))) { $yarim = DurumOku $kok }
   if (-not $onarim -and -not $yarim -and (Test-Path -LiteralPath $kok)) {
+    # Gecisle kurulmus duzen (kayit yok, gecis gunlugu + current): ayri sinif, kurulum yardimcisi onarmaz.
+    $gd = GecisliDuzen $kok
+    if ($gd) { Dur $gd.metin }
     $yabanci = @(Get-ChildItem -LiteralPath $kok -Force | Where-Object { $_.Name -cnotmatch '^(kurulum|unins[0-9]{3}\.(exe|dat|msg))$' })
     if ($yabanci.Count) { Dur "kok bos degil ve TeksERP kurulumu degil ($($yabanci.Count) girdi, or. $($yabanci[0].Name)) - baska bir kok secin; var olan veri ezilmez" }
   }
@@ -264,6 +272,18 @@ function AsamaOnKosul {
   if ($yarim) {
     if ("$($yarim.adlar.backend)" -cne $ad.backend -or "$($yarim.paket.surum)" -cne "$($k.uygulamaSurumu)") { Dur "yarim kurulum ($($yarim.adlar.backend) $($yarim.paket.surum)) bu paketle ($($ad.backend) $($k.uygulamaSurumu)) surdurulmez - ayni paketi verin ya da once kaldirin (kaldir.ps1 veriyi korur)" }
     Uyar "YARIM KURULUM bulundu ($($yarim.paket.surum)) - kaldigi yerden devam ediliyor (asamalar yeniden olcer)"
+  }
+  # Ayni adli kanal hizmeti BASKA koke bagliysa (ya da bagli oldugu kok olculemezse) DUR - o kurulumun hizmetini
+  # ezerdi (kurulum-ortak.ps1 HizmetKokEngelleri; sihirbaz ayni islevle engel gosterir).
+  $hk = HizmetKokEngelleri $ad $kok
+  if ($hk.Count) { Dur ((@($hk) | ForEach-Object { $_.metin }) -join " | ") }
+  # Gercek kurulu surum: kurulum.json KURULUM ANININ surumudur. Kaldirilip ESKI kitle yeniden kurulumda eski kod
+  # yeni semali veritabanina inmez - hicbir sey degismeden DUR (EskiPaketOlcumu: sihirbazla TEK giris).
+  if ($onarim -or $yarim) {
+    $ep = EskiPaketOlcumu $kok $ad.veriKoku "$($k.uygulamaSurumu)"
+    $engel = $ep.engel
+    if ($engel) { Dur $engel }
+    if ($ep.kurulu) { Bilgi "kurulu surum $($ep.kurulu.surum) ($($ep.kurulu.kaynak)) - paket $($k.uygulamaSurumu)" }
   }
 
   # API portu: istemcilerin varsayilan adresi - mesgulse DUR (onarimda dinleyen kendi backend'imiz olabilir).
@@ -317,6 +337,23 @@ function AsamaOnKosul {
   $ramMB = [int][math]::Floor((Get-CimInstance Win32_ComputerSystem).TotalPhysicalMemory / 1MB)
   if ($ramMB -lt 2048) { Uyar "RAM $ramMB MB (< 2 GB) - PostgreSQL bellek formulu tabana iner, yavas olabilir" }
 
+  # Lisans saticisi kanal kaydindan (kurulum-ortak.ps1 LisansSunucusuKarari): bos alan = kanal; farkli deger UYARI
+  # (engel degil). Var olan .env (onarim/devam) yeniden yazilmaz: karar ondan, kanaldan farkliysa uyari.
+  $envYolu = Join-Path $kok "yapilandirma\.env"
+  $lisKayit = $null
+  if (Test-Path -LiteralPath $envYolu -PathType Leaf) { $lisKayit = "$(EnvDeger ([IO.File]::ReadAllLines($envYolu)) 'LICENSE_SERVER_URL')" }
+  $lis = LisansSunucusuKarari ([string]$k.backendLisansSunucusu) ([string]$k.lisansSunucusuVarsayilan) ([string]$C["lisans.saticiAdresi"]) $lisKayit ([string]$k.backendKanal)
+  foreach ($x in $lis.uyarilar) { Uyar $x }
+  Ok "lisans sunucusu: $(if ($lis.etkili) { $lis.etkili } else { 'derleme varsayilani' }) ($($lis.kaynakMetni))$(if ($lis.yaz) { ' - .env satiri yazilacak' })"
+
+  # Ag ayari (API guvenlik duvari): onarim/devamda KAYITTAN (kurulum-ortak.ps1 KayitliAgAyari + AgKarari) - varsayilan
+  # (LocalSubnet) kayittaki erisimi (or. Tailscale) DARALTMAZ; cevapta acikca verilen farkli deger uyarilir.
+  $agKayit = $null
+  if ($onarim -or $yarim) { $agKayit = KayitliAgAyari $kok $script:CevapSemasi }
+  $agK = AgKarari $C $script:CevapHam $agKayit $script:CevapSemasi
+  foreach ($x in $agK.uyarilar) { Uyar $x }
+  Ok "ag: API $(AgMetni $agK.ag.izinliAdresler) - profil $(AgMetni $agK.ag.agProfilleri) - mDNS $(AgMetni $agK.ag.mdns) ($($agK.ag.kaynak))"
+
   $plan = [ordered]@{
     v = $KURULUM_BICIMI; mod = $(if ($onarim) { "onarim" } elseif ($yarim) { "devam" } else { "kurulum" }); kok = $kok
     girdiler = [ordered]@{ backend = $zip; pg = $pgZip; pgKunye = $pgKunye }
@@ -324,6 +361,8 @@ function AsamaOnKosul {
     adlar = $ad
     portlar = [ordered]@{ api = $apiPort; pg = [int]$sec.port }
     pg = [ordered]@{ veriDizini = $veri; surum = "$($pgSurum.surum)"; derleme = "$($pgSurum.derleme)"; cizgi = "$($pgSurum.cizgi)"; icu = "$($pgSurum.yayin.'win-x64'.icuSurum)"; ramMB = $ramMB }
+    lisans = [ordered]@{ etkili = $lis.etkili; kaynak = $lis.kaynak; yaz = $lis.yaz; kanal = $lis.kanal; varsayilan = $lis.varsayilan }
+    ag = $agK.ag
     asamalar = [ordered]@{}
   }
   if ($Kuru) {
@@ -593,7 +632,8 @@ function AsamaPostgreSQL {
     SirEkle $jwt
     $satirlar = @("DATABASE_URL=$dbUrl", "JWT_SECRET=$jwt", "PORT=$($d.portlar.api)")
     if ($d.adlar.sonek) { $satirlar += "TEKSERP_GUNCELLEME_DIZINI=$((Join-Path "$($d.adlar.veriKoku)" 'guncelleme') -creplace '\\', '/')" }
-    if ($C["lisans.saticiAdresi"]) { $satirlar += "LICENSE_SERVER_URL=$($C['lisans.saticiAdresi'])" }
+    if (-not $d.PSObject.Properties["lisans"]) { Dur "durum.json lisans saticisi kararini tasimiyor - once OnKosul (ayni kurulum kiti)" }
+    if ($d.lisans.yaz -eq $true) { $satirlar += "LICENSE_SERVER_URL=$($d.lisans.etkili)" }
     if ($C["profil"]) { $satirlar += "TEKSERP_PROFIL=$($C['profil'])" }
     if ($C["yedek.sifreleme"] -eq $true) { $satirlar += "BACKUP_KEY_DIR=$((Join-Path $kok 'yedek-anahtar') -creplace '\\', '/')" }
     EnvYaz $envYolu (($satirlar -join "`n") + "`n")
@@ -636,12 +676,26 @@ function AsamaBackend {
   SirEkle $uyParola
   $bin = Join-Path $kok "pgsql\bin"
 
+  # Sema hizasi (hizmet\sema-hizasi.ps1, guncelleyiciyle TEK kural): veritabaninda paketin tasimadigi bitmis goc
+  # varsa paket semanin GERISINDE - goc KOSMADAN, hicbir sey degismeden DUR (geri indirme yok).
+  $paketGoclari = @(SurumGocAdlari (JunctionHedefi $cur))
+  if ($paketGoclari.Count -ne [int]$d.paket.gocSayisi) { Dur "paketin goc dizini $($paketGoclari.Count) goc tasiyor - PAKET.json $($d.paket.gocSayisi)" }
+  $tablo = PsqlStdin $bin $port $rol $uyParola $vt "SELECT to_regclass('_prisma_migrations') IS NOT NULL;"
+  if ($tablo.kod -ne 0) { Dur "veritabani olculemedi (goc tablosu): $($tablo.cikti)" }
+  if ($tablo.cikti -ceq "t") {
+    $once = BitmisGoclar $bin $port $rol $uyParola $vt
+    $ileri = @(SemaIleride $once $paketGoclari)
+    if ($ileri.Count) { Dur "sema ileride: veritabaninda paketin ($($d.paket.surum)) tasimadigi $($ileri.Count) bitmis goc var (ilk: $($ileri[0])) - paket kurulu semadan ESKI, geri indirme yapilmaz; bu goclari tasiyan surumle kurun" }
+  }
+
   $g = NodeKos $node @("node_modules\prisma\build\index.js", "migrate", "deploy") (JunctionHedefi $cur) @{ DOTENV_CONFIG_PATH = $envYolu; NODE_ENV = "production" } $null
   [void](GunlugeYaz "GOC" ($g.stdout + "`n" + $g.stderr))
   if ($g.kod -ne 0) { Dur "prisma migrate deploy cikis $($g.kod) - gunlukte ayrinti (veritabani BOS kurulumda; tekrar denemek guvenli)" }
-  $say = PsqlStdin $bin $port $rol $uyParola $vt "SELECT count(*) FROM _prisma_migrations WHERE finished_at IS NOT NULL AND rolled_back_at IS NULL;"
-  if ($say.kod -ne 0 -or [int]$say.cikti -ne [int]$d.paket.gocSayisi) { Dur "goc sayisi $($say.cikti) - paket $($d.paket.gocSayisi)" }
-  Ok "goc: $($say.cikti) migration uygulandi (paketin kendi Node'u ve prisma'si)"
+  $sonra = BitmisGoclar $bin $port $rol $uyParola $vt
+  $eksik = @(GocFarki $paketGoclari $sonra)
+  $ileri = @(SemaIleride $sonra $paketGoclari)
+  if ($eksik.Count -or $ileri.Count) { Dur "goc sonrasi veritabani paketle esit degil: eksik $($eksik.Count)$(if ($eksik.Count) { " (ilk: $($eksik[0]))" }) - fazla $($ileri.Count)$(if ($ileri.Count) { " (ilk: $($ileri[0]))" })" }
+  Ok "goc: $($sonra.Count) migration uygulandi = paket (paketin kendi Node'u ve prisma'si)"
 
   $pgOrnek = JsonOku (Join-Path $PG_DIZINI "pg-ornegi.json")
   $suParola = DpapiCoz ([IO.File]::ReadAllBytes((Join-Path $kok "pg-setup\pg-yonetici.dpapi")))
@@ -698,14 +752,16 @@ function AsamaHizmetler {
   } else { Bilgi "gorev zaten var, DOKUNULMADI: $gorev" }
 
   # Guvenlik duvari: API yalniz secili profiller + LocalSubnet [+ Tailscale]; mDNS (kesif); PG'ye kural YOK.
+  # Ayar OnKosul KARARINDAN (durum ag: onarim/devamda kayittan); karar tasimayan eski durum.json -> cevap.
+  $ag = $(if ($d.PSObject.Properties["ag"] -and $d.ag) { $d.ag } else { [pscustomobject]@{ izinliAdresler = @($C["api.izinliAdresler"]); agProfilleri = @($C["api.agProfilleri"]); mdns = $C["api.mdns"] } })
   $apiPort = [int]$d.portlar.api
   $apiKural = "TeksERP API $apiPort"
   if (-not (Get-NetFirewallRule -DisplayName $apiKural -ErrorAction SilentlyContinue)) {
-    New-NetFirewallRule -DisplayName $apiKural -Direction Inbound -Protocol TCP -LocalPort $apiPort -Action Allow -Profile @($C["api.agProfilleri"]) -RemoteAddress @($C["api.izinliAdresler"]) | Out-Null
-    Ok "guvenlik duvari: $apiKural ($($C['api.agProfilleri'] -join ',') - $($C['api.izinliAdresler'] -join ','))"
+    New-NetFirewallRule -DisplayName $apiKural -Direction Inbound -Protocol TCP -LocalPort $apiPort -Action Allow -Profile @($ag.agProfilleri) -RemoteAddress @($ag.izinliAdresler) | Out-Null
+    Ok "guvenlik duvari: $apiKural ($(@($ag.agProfilleri) -join ',') - $(@($ag.izinliAdresler) -join ','))"
   } else { Bilgi "kural zaten var, DOKUNULMADI: $apiKural" }
-  if ($C["api.mdns"] -eq $true -and -not (Get-NetFirewallRule -DisplayName "$($d.adlar.mdnsKurali)" -ErrorAction SilentlyContinue)) {
-    New-NetFirewallRule -DisplayName "$($d.adlar.mdnsKurali)" -Direction Inbound -Protocol UDP -LocalPort 5353 -Action Allow -Profile @($C["api.agProfilleri"]) -RemoteAddress LocalSubnet | Out-Null
+  if ($ag.mdns -eq $true -and -not (Get-NetFirewallRule -DisplayName "$($d.adlar.mdnsKurali)" -ErrorAction SilentlyContinue)) {
+    New-NetFirewallRule -DisplayName "$($d.adlar.mdnsKurali)" -Direction Inbound -Protocol UDP -LocalPort 5353 -Action Allow -Profile @($ag.agProfilleri) -RemoteAddress LocalSubnet | Out-Null
     Ok "guvenlik duvari: $($d.adlar.mdnsKurali) (UDP 5353, LocalSubnet - tablet/panel sunucuyu kesfeder)"
   }
   $pgAcik = @(Get-NetFirewallPortFilter -Protocol TCP -ErrorAction SilentlyContinue | Where-Object { "$($_.LocalPort)" -ceq "$($d.portlar.pg)" } | Get-NetFirewallRule -ErrorAction SilentlyContinue | Where-Object { "$($_.Direction)" -ceq "Inbound" -and "$($_.Action)" -ceq "Allow" -and "$($_.Enabled)" -ceq "True" })
@@ -755,7 +811,8 @@ function AsamaSirlar {
 
   if ($C["saticiHesabi.kullaniciAdi"] -and $g.saticiParolasi) {
     $girdi = "{`"kullaniciAdi`":" + (JsonAscii $C["saticiHesabi.kullaniciAdi"]) + ",`"parola`":" + (JsonAscii "$($g.saticiParolasi)") + ",`"pin`":" + (JsonAscii "$($g.saticiPin)") + "}"
-    $r = NodeKos $node @("dist\tools\superadmin-olustur.cjs", "--kurulum-stdin") (JunctionHedefi $cur) @{ DOTENV_CONFIG_PATH = (Join-Path $kok "yapilandirma\.env") } $girdi
+    # PIN ozeti hizmetin anahtar halkasiyla yazilir: arac surum dizininde kostugu icin varsayilan lisans deposu yanlis yere duser.
+    $r = NodeKos $node @("dist\tools\superadmin-olustur.cjs", "--kurulum-stdin") (JunctionHedefi $cur) @{ DOTENV_CONFIG_PATH = (Join-Path $kok "yapilandirma\.env"); LICENSE_DIR = (Join-Path $kok "lisans") } $girdi
     $girdi = $null
     $satir = @($r.stdout -csplit "`n" | Where-Object { $_.Trim().StartsWith("{") }) | Select-Object -Last 1
     $j = if ($satir) { $satir | ConvertFrom-Json } else { $null }
@@ -804,7 +861,15 @@ function AsamaDogrulama {
   if (-not (Test-Path -LiteralPath $niyet -PathType Container)) { Dur "guncelleme\niyet\ yok: $niyet (backend-hizmeti.ps1 -Uygula kurar)" }
   if (ReparseMi $niyet) { Dur "guncelleme\niyet\ bir baglanti noktasi - niyet yazicisi reddeder: $niyet" }
   $envYolu = Join-Path $kok "yapilandirma\.env"
-  $url = EnvDeger ([IO.File]::ReadAllLines($envYolu)) "DATABASE_URL"
+  $envSatirlari = [IO.File]::ReadAllLines($envYolu)
+  $url = EnvDeger $envSatirlari "DATABASE_URL"
+  # Lisans saticisi yazilan .env'den OLCULUR (ayni islev): karardan sapma ya da kanaldan fark sonuca/kurulum.json'a duser.
+  if ($d.PSObject.Properties["lisans"]) {
+    $lm = LisansSunucusuKarari "$($d.lisans.kanal)" "$($d.lisans.varsayilan)" ([string]$C["lisans.saticiAdresi"]) "$(EnvDeger $envSatirlari 'LICENSE_SERVER_URL')" "$($d.paket.kanal)"
+    foreach ($x in $lm.uyarilar) { Uyar $x }
+    if ("$($lm.etkili)" -cne "$($d.lisans.etkili)") { Uyar "etkin lisans sunucusu ($($lm.etkili), yapilandirma\.env) kurulumun kararindan ($($d.lisans.etkili)) FARKLI" }
+    else { Ok "lisans sunucusu: $(if ($lm.etkili) { $lm.etkili } else { 'derleme varsayilani' }) ($($lm.kaynakMetni))" }
+  } else { Uyar "lisans sunucusu olculmedi: durum.json kurulum kararini tasimiyor" }
   [void]($url -cmatch '^postgresql://([^:]+):([^@]+)@127\.0\.0\.1:([0-9]+)/([^?]+)')
   $rol = [uri]::UnescapeDataString($Matches[1]); $uyParola = [uri]::UnescapeDataString($Matches[2]); $port = [int]$Matches[3]; $vt = $Matches[4]
   SirEkle $uyParola
@@ -822,7 +887,11 @@ function AsamaDogrulama {
   $kg = GuncelleyiciHizmetBetigi $kok $d $C @()
   if ($kg -ne 0) { Uyar "guncelleyici-hizmeti.ps1 olcumu uyumsuz (cikis $kg) - gunlukte ayrinti" } else { Ok "guncelleyici-hizmeti.ps1 olcumu: uyumlu" }
   $acik = @()
-  if (-not $C["saticiHesabi.kullaniciAdi"] -or -not $d.asamalar.PSObject.Properties["Sirlar"]) {
+  # Yapilacaklar OLCULUR (onarimda hesap/lisans zaten var): olculemezse eski kural (fail-closed: listede kalir).
+  $q = PsqlStdin (Join-Path $kok "pgsql\bin") $port $rol $uyParola $vt 'SELECT count(*) FROM users WHERE "isSystemAccount" AND "isActive" AND "deletedAt" IS NULL;'
+  $saticiVar = ($q.kod -eq 0 -and "$($q.cikti)".Trim() -cmatch '^[1-9][0-9]*$')
+  if ($saticiVar) { Ok "satici (superadmin) hesabi var" }
+  elseif (-not $C["saticiHesabi.kullaniciAdi"] -or -not $d.asamalar.PSObject.Properties["Sirlar"]) {
     $acik += "satici (superadmin) hesabi: yonetici konsolunda `"$kok\current\runtime\node.exe`" `"$kok\current\dist\tools\superadmin-olustur.cjs`" (once: `$env:DOTENV_CONFIG_PATH='$kok\yapilandirma\.env'; cd $kok\current) - gercek terminal"
   }
   $ad = Join-Path $kok "yedek-anahtar"
@@ -831,12 +900,15 @@ function AsamaDogrulama {
     if (-not (Test-Path -LiteralPath (Join-Path $ad "yerel.tkkey"))) { $acik += "yerel yedek anahtari yok (panelden geri yukleme musteri anahtari ister): yedek-sifrele.cjs anahtar-uret --ad yerel --dizin $ad --parolali" }
     if (-not (Test-Path -LiteralPath (Join-Path $ad "etkili.tkpub"))) { $acik += "Etkili Yazilim yedek alicisi yok: acik anahtari $ad\etkili.tkpub olarak koy" }
   }
-  $acik += "lisans: panelden Sistem > Lisans > etkinlestirme kodu (kurulum anahtari backend ilk acilista uretti)"
+  $lis = Join-Path $kok "lisans"
+  if ((Test-Path -LiteralPath (Join-Path $lis "hak.jws") -PathType Leaf) -and (Test-Path -LiteralPath (Join-Path $lis "kurulum-kimligi.json") -PathType Leaf)) { Ok "lisans etkin (lisans\hak.jws + kurulum-kimligi.json)" }
+  else { $acik += "lisans: panelden Sistem > Lisans > etkinlestirme kodu (kurulum anahtari backend ilk acilista uretti)" }
   $kayit = [ordered]@{
     v = $KURULUM_BICIMI; zaman = (Get-Date).ToUniversalTime().ToString("o"); kok = $kok
     paket = $d.paket; adlar = $d.adlar; portlar = $d.portlar
     pg = [ordered]@{ veriDizini = "$($d.pg.veriDizini)"; surum = "$($d.pg.surum)"; derleme = "$($d.pg.derleme)" }
     guvenlikDuvari = @("TeksERP API $($d.portlar.api)", "$($d.adlar.mdnsKurali)")
+    ag = $(if ($d.PSObject.Properties["ag"]) { $d.ag } else { $null })
     uyarilar = @($script:Uyarilar); acik = $acik
   }
   MetinYaz (Join-Path $kok "kurulum\kurulum.json") (($kayit | ConvertTo-Json -Depth 6) + "`n")

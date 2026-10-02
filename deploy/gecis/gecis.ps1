@@ -30,6 +30,10 @@
 #   * Her kalem gunluge (gecis\<damga>\gunluk.jsonl) BASLADI/BITTI yazar; backend saglikli olana dek her hata
 #     OTOMATIK geri alinir (ters sirada telafi). Yarim kalan gecis (elektrik, oturum) -GeriAl ile kapanir.
 #
+# KANAL KIMLIGI paketin KENDISINDEN (PAKET.json): hizmet/guncelleyici adlari + veri koku hizmet\kanal-adlari.ps1
+#   (setup ile TEK kaynak; ikinci kanal %ProgramData%\TeksERP-<kanal>), lisans saticisi kanal kaydindan
+#   (backendLisansSunucusu): etkin LICENSE_SERVER_URL uyusmazsa KURU uyarir, UYGULA durur (-LisansSunucusuYaz duzeltir).
+# KURUNUN BASTIGI komut bu kosumun parametrelerini AYNEN tasir (kopyala-yapistir ayni plani uygular).
 # CIKIS: KURU 0 plan hazir | 1 engel. UYGULA 0 tamam | 3 tamam, uyarili | 1 hata, geri alindi (ya da hic
 #   baslamadi) | 4 hata ve GERI ALMA EKSIK (insan gerekir).
 # ASCII: PS 5.1 BOM'suz UTF-8'i ANSI okur; bu dosya bilerek yalniz ASCII tasir.
@@ -43,8 +47,8 @@ param(
   # Paketin beklenen SHA-256'si (yayin defteri / surum notu). Verilirse tutmazsa DURUR.
   [string]$PaketOzeti,
   # Backend hizmet adi: verilmezse paketin PAKET.json backendHizmetAdi, o da yoksa TeksERP-Backend.
+  # (paket kimligiyle AYNI olmali; guncelleyici adi + veri koku bundan turer - ayri parametre YOK, tek kaynak)
   [string]$HizmetAdi,
-  [string]$GuncelleyiciAdi = "TeksERP-Guncelleyici",
   # Backend'in PostgreSQL bagimliligi: verilmezse pgsql\bin baglantisinin gosterdigi hizmet olculur.
   [string]$PgHizmeti,
   [switch]$PgBagimsiz,
@@ -52,6 +56,8 @@ param(
   [string]$Vekil,
   # pgsql\ornek.json'u kip "harici" ile yaz (istege bagli; yoksa guncelleyici zaten harici sayar).
   [switch]$PgKaydiYaz,
+  # Etkin lisans saticisi kanal kaydiyla uyusmuyorsa yapilandirma\.env'e kanalin LICENSE_SERVER_URL'si yazilir (plan kalemi).
+  [switch]$LisansSunucusuYaz,
   [switch]$Uygula,
   [int]$Onay = -1,
   [string]$PlanOzeti,
@@ -65,6 +71,17 @@ param(
   [int]$SaglikSn = 180
 )
 $ErrorActionPreference = "Stop"
+# Basilan "Uygulamak icin" komutu bu kosumun BAGLI parametrelerinden uretilir (UygulaKomutu).
+$script:BAGLI = [ordered]@{}
+foreach ($k in $PSBoundParameters.Keys) { $script:BAGLI[$k] = $PSBoundParameters[$k] }
+# Kanal adlari TEK kaynaktan (setup ayni dosyayi kitten okur): betigin paketteki komsusu hizmet\kanal-adlari.ps1.
+$script:KANAL_ADLARI = Join-Path (Join-Path (Split-Path $PSScriptRoot -Parent) "hizmet") "kanal-adlari.ps1"
+if (-not (Test-Path -LiteralPath $script:KANAL_ADLARI)) { Write-Host "  X kanal adlari yardimcisi yok: $($script:KANAL_ADLARI) - gecis paketin icinden (gecis\gecis.ps1) kosulur" -ForegroundColor Red; exit 1 }
+. $script:KANAL_ADLARI
+# Sema hizasi TEK kural (setup kitten okur, guncelleyici Rust aynasi): paketteki komsu hizmet\sema-hizasi.ps1.
+$script:SEMA_HIZASI = Join-Path (Split-Path $script:KANAL_ADLARI -Parent) "sema-hizasi.ps1"
+if (-not (Test-Path -LiteralPath $script:SEMA_HIZASI)) { Write-Host "  X sema hizasi yardimcisi yok: $($script:SEMA_HIZASI) - gecis paketin icinden (gecis\gecis.ps1) kosulur" -ForegroundColor Red; exit 1 }
+. $script:SEMA_HIZASI
 
 # =============================================================================
 # CIKTI
@@ -455,7 +472,7 @@ function PaketEnvanteri($E) {
     "node_modules/prisma/build/index.js", "butunluk.jws", "butunluk-liste.txt", "yedekle.ps1")
   foreach ($z in $zorunlu) { if ($adlar -notcontains $z) { Engel "pakette yok: $z" } }
   if (-not @($adlar | Where-Object { $_.StartsWith("node_modules/.prisma/client/") }).Count) { Engel "pakette yok: node_modules/.prisma/client" }
-  $E.PaketGoclari = @($adlar | Where-Object { $_ -cmatch '^prisma/migrations/[^/]+/migration\.sql$' } | ForEach-Object { ($_ -csplit '/')[2] } | Sort-Object -Unique)
+  $E.PaketGoclari = @(PaketGocAdlari $adlar)
   $gecici = Join-Path ([System.IO.Path]::GetTempPath()) ("tekserp-gecis-" + [guid]::NewGuid().ToString("N"))
   New-Item -ItemType Directory -Path $gecici -Force | Out-Null
   $E.Gecici = $gecici
@@ -477,9 +494,27 @@ function PaketEnvanteri($E) {
   $beklenenDosya = 0
   if ($E.Paket.dosyaSayisi) { $beklenenDosya = [int]$E.Paket.dosyaSayisi + 1; if ($E.ZipDosyaSayisi -ne $beklenenDosya) { Engel "paket dosya sayisi beyanla tutmuyor (beyan $beklenenDosya, zip $($E.ZipDosyaSayisi))" } }
   $E.BeklenenDosya = $beklenenDosya
-  # Hizmet adi: parametre > paket kimligi > varsayilan.
-  $E.HizmetAdi = if ($HizmetAdi) { $HizmetAdi } elseif ($E.Paket.PSObject.Properties.Name -ccontains "backendHizmetAdi" -and $E.Paket.backendHizmetAdi) { [string]$E.Paket.backendHizmetAdi } else { "TeksERP-Backend" }
-  foreach ($a in @($E.HizmetAdi, $GuncelleyiciAdi)) { if ($a -cnotmatch '^[A-Za-z0-9][A-Za-z0-9._-]{0,79}$') { Engel "gecersiz hizmet adi: $a" } }
+  # Adlar paketin KENDI kimliginden; turetim hizmet\kanal-adlari.ps1 (setup AdlariCoz ile tek kaynak, GUNCELLEYICI.md 4.2).
+  $pkHizmet = if ($E.Paket.PSObject.Properties.Name -ccontains "backendHizmetAdi" -and $E.Paket.backendHizmetAdi) { [string]$E.Paket.backendHizmetAdi } else { $null }
+  $E.Adlar = $null
+  if ($HizmetAdi -and $pkHizmet -and $HizmetAdi -cne $pkHizmet) { Engel "-HizmetAdi $HizmetAdi paketin kanal kimligindeki ad degil ($pkHizmet) - paket kendi kimliginden cozulur; -HizmetAdi'yi birakin" }
+  else {
+    try { $E.Adlar = KanalAdlariCoz $(if ($HizmetAdi) { $HizmetAdi } else { $pkHizmet }) ([string]$E.Paket.backendKanal) "" (OsProgramData) }
+    catch { Engel "kanal adlari cozulemedi: $($_.Exception.Message)" }
+  }
+  if ($E.Adlar) {
+    $E.HizmetAdi = [string]$E.Adlar.backend
+    $E.GuncelleyiciAdi = [string]$E.Adlar.guncelleyici
+    $E.VeriKoku = [string]$E.Adlar.veriKoku
+    $E.GuncellemeDizini = Join-Path $E.VeriKoku "guncelleme"
+    Ok "adlar (kanal $(if ($E.Paket.backendKanal) { $E.Paket.backendKanal } else { 'disi' })): backend $($E.HizmetAdi) | guncelleyici $($E.GuncelleyiciAdi) | veri $($E.VeriKoku)"
+  }
+  # Lisans saticisi beklentisi kanal kaydindan (paketle.ps1 -Musteri: backendLisansSunucusu + derlemenin varsayilani).
+  $E.LisansBeklenen = $null; $E.LisansVarsayilan = $null; $E.LisansYaz = $false
+  if ($E.Paket.PSObject.Properties.Name -ccontains "backendLisansSunucusu" -and $E.Paket.backendLisansSunucusu) {
+    $E.LisansBeklenen = [string]$E.Paket.backendLisansSunucusu
+    $E.LisansVarsayilan = [string]$E.Paket.lisansSunucusuVarsayilan
+  }
   $E.Node = Join-Path $gecici "runtime\node.exe"
   if (-not (MzMi $E.Node)) { Engel "paketin runtime\node.exe'si Windows ikilisi degil (MZ yok)" }
   $E.Yardimci = Kaynak $gecici "gecis\gecis-yardimci.cjs" "gecis-yardimci.cjs"
@@ -499,7 +534,7 @@ function Kaynak($gecici, $paketYolu, $yanYolu) {
 
 function OrtamEnvanteri($E) {
   if (-not $E.Yardimci -or -not (Test-Path -LiteralPath (Join-Path $E.App ".env"))) { return }
-  $girdi = [ordered]@{ kok = $E.Kok; eskiApp = $E.App; eskiEnv = (Join-Path $E.App ".env"); eko = $E.Eko; makineAnahtarlari = @(OsMakineAnahtarlari) }
+  $girdi = OrtamGirdisi $E
   if ($E.Pm2Anahtarlar) { $girdi.pm2Anahtarlar = @($E.Pm2Anahtarlar) }
   try { $r = OsDugum $E.Node $E.Yardimci "ortam" $girdi } catch { Engel "yapilandirma birlestirmesi olculemedi: $($_.Exception.Message)"; return }
   if ([string]$r.karar -ceq "HATA") { Engel "yapilandirma birlestirmesi: $($r.hata)"; return }
@@ -509,6 +544,7 @@ function OrtamEnvanteri($E) {
   Ok "yapilandirma\.env: .env $($r.envAnahtarSayisi) + ecosystem $($r.ecoAnahtarSayisi) anahtar -> $oz (port $($E.Port))"
   foreach ($u in @($r.uyarilar)) { Uyar "yapilandirma: $u" }
   foreach ($x in @($r.engeller)) { Engel "yapilandirma: $x" }
+  LisansDegerlendir $E $r.lisans
   $E.Rclone = $null
   if ($r.rclone) {
     $eski = [string]$r.rclone.eskiYol -creplace '/', '\'
@@ -517,6 +553,49 @@ function OrtamEnvanteri($E) {
       if (Test-Path -LiteralPath $yeni) { Uyar "rclone.conf iki yerde: $eski ve $yeni - veri\ altindaki kullanilacak (kopyalanmaz)" }
       else { $E.Rclone = [pscustomobject]@{ Kaynak = $eski; Hedef = $yeni }; Ok "rclone.conf: $eski -> $yeni (kopya; eskisi yerinde kalir)" }
     } else { Bilgi "rclone.conf yok ($eski) - makine disi supurucu yapilandirilmamis" }
+  }
+}
+
+# Yardimciya giden ortam girdisi (envanter ve YAPILANDIRMA kalemi AYNI girdiyle): kanal satirlari dahil.
+function OrtamGirdisi($E) {
+  $g = [ordered]@{ kok = $E.Kok; eskiApp = $E.App; eskiEnv = (Join-Path $E.App ".env"); eko = $E.Eko; makineAnahtarlari = @(OsMakineAnahtarlari) }
+  if ($E.Adlar) { $g.guncellemeDizini = [ordered]@{ yol = [string]$E.GuncellemeDizini; yaz = [bool]$E.Adlar.sonek } }
+  if ($E.LisansBeklenen) { $g.lisans = [ordered]@{ beklenen = $E.LisansBeklenen; varsayilan = $E.LisansVarsayilan; yaz = [bool]$LisansSunucusuYaz } }
+  return $g
+}
+
+# Etkin lisans saticisi (app\.env + ecosystem, yoksa backend varsayilani) kanal kaydina karsi: uyusmazlik
+# KURUDA uyari, UYGULADA engel (-LisansSunucusuYaz ile yapilandirma\.env'e kanal degeri yazilir).
+function LisansDegerlendir($E, $l) {
+  $E.LisansYaz = $false
+  if (-not $E.Paket -or -not $E.Paket.backendKanal) { Bilgi "lisans sunucusu: kanal-disi paket - kanal beklentisi yok, olculmez"; return }
+  $duzelt = "duzeltme: kuruyu -LisansSunucusuYaz ile yeniden kosun (yapilandirma\.env'e kanalin LICENSE_SERVER_URL'si yazilir, plan kalemi olur, -GeriAl geri alir) ya da app\.env'e satiri elle ekleyip pm2 backend'ini yeniden baslatin"
+  if (-not $l) {
+    $m = "lisans sunucusu OLCULEMEDI: paket kimligi (kanal $($E.Paket.backendKanal)) lisans saticisini tasimiyor (PAKET.json backendLisansSunucusu yok)"
+    if ($Uygula) { Engel $m } else { Uyar "$m - UYGULA bu haliyle DURUR" }
+    return
+  }
+  $ne = "beklenen $($l.beklenen) (kanal $($E.Paket.backendKanal), deploy/kanallar.json), bulunan $($l.bulunan) ($($l.kaynak))"
+  switch ([string]$l.durum) {
+    "UYUMLU" {
+      Ok "lisans sunucusu: $($l.bulunan) ($($l.kaynak)) = kanal $($E.Paket.backendKanal) kaydi"
+      if ($LisansSunucusuYaz) { Bilgi "-LisansSunucusuYaz: zaten uyumlu, satir yazilmaz" }
+    }
+    "KAPALI" {
+      if ($l.yazilacak) { $E.LisansYaz = $true; Uyar "lisans sunucusu bilerek KAPALI idi; -LisansSunucusuYaz: yapilandirma\.env'e LICENSE_SERVER_URL=$($l.beklenen) yazilacak" }
+      else { Uyar "lisans sunucusu bilerek KAPALI (LICENSE_SERVER_URL=kapali) - kanal kaydi $($l.beklenen); gecis dokunmaz (acmak icin -LisansSunucusuYaz)" }
+    }
+    "UYUSMAZ" {
+      if ($l.yazilacak) { $E.LisansYaz = $true; Ok "lisans sunucusu kanal kaydina DUZELTILECEK: yapilandirma\.env LICENSE_SERVER_URL=$($l.beklenen) ($ne)" }
+      else {
+        $m = "lisans sunucusu kanal kaydiyla UYUSMUYOR: $ne - $duzelt"
+        if ($Uygula) { Engel $m } else { Uyar "$m. UYGULA bu haliyle DURUR." }
+      }
+    }
+    default {
+      $m = "lisans sunucusu OLCULEMEDI ($ne)"
+      if ($Uygula) { Engel $m } else { Uyar "$m - UYGULA bu haliyle DURUR" }
+    }
   }
 }
 
@@ -545,8 +624,9 @@ function DbEnvanteri($E) {
   $E.DbGoclari = $uyg
   if ($yarim.Count) { Engel "veritabaninda BITMEMIS goc var: $($yarim -join ', ') - once kur.ps1/migrate status ile cozulmeli" }
   if ($E.PaketGoclari) {
-    $bekleyen = @($E.PaketGoclari | Where-Object { $uyg -notcontains $_ })
-    $fazla = @($uyg | Where-Object { $E.PaketGoclari -notcontains $_ })
+    # hizmet\sema-hizasi.ps1 (setup + guncelleyiciyle TEK kural; ad bayt-esit): fazla = SEMA ILERIDE.
+    $bekleyen = @(GocFarki $E.PaketGoclari $uyg)
+    $fazla = @(SemaIleride $uyg $E.PaketGoclari)
     if ($bekleyen.Count) { Engel "paketin $($bekleyen.Count) goc'u veritabaninda UYGULANMAMIS ($($bekleyen[0])...) - gecis veritabanina DOKUNMAZ; once pm2 duzeninde kur.ps1 -Paket <bu zip>" }
     if ($fazla.Count) { Engel "veritabaninda paketin bilmedigi $($fazla.Count) goc var ($($fazla[0])...) - paket kurulu semadan ESKI" }
     if (-not $bekleyen.Count -and -not $fazla.Count) { Ok "veritabani: $($E.Db.Ad) @ localhost:$($E.Db.Port) | PostgreSQL $($E.PgSurum) | $($uyg.Count) goc = paket (bekleyen yok)" }
@@ -633,7 +713,7 @@ function HizmetEnvanteri($E) {
   try { $hizmetler = @(OsHizmetler) } catch { Engel "hizmetler olculemedi"; return }
   $E.PgHizmetleri = @($hizmetler | Where-Object { (IcerirI $_.Yol "pg_ctl.exe") -or (IcerirI $_.Yol "postgres.exe") })
   foreach ($h in $hizmetler) {
-    if ($h.Ad -ceq $E.HizmetAdi -or $h.Ad -ceq $GuncelleyiciAdi) { Engel "hizmet zaten kayitli: $($h.Ad) ($($h.Durum), $($h.Yol)) - onceki kurulum/gecis kalintisi; -GeriAl ya da hizmet-kaldir" ; continue }
+    if ($h.Ad -ceq $E.HizmetAdi -or $h.Ad -ceq $E.GuncelleyiciAdi) { Engel "hizmet zaten kayitli: $($h.Ad) ($($h.Durum), $($h.Yol)) - onceki kurulum/gecis kalintisi; -GeriAl ya da hizmet-kaldir" ; continue }
     if ($E.PgHizmetleri -contains $h) { continue }
     if ((IcerirI $h.Yol "$($E.Kok)\") -or (IcerirI $h.Yol "pm2")) {
       if ($h.Durum -ceq "Running") { Engel "bu koku ya da pm2'yi kullanan baska hizmet CALISIYOR: $($h.Ad) ($($h.Yol)) - elle durdurulmali" }
@@ -675,7 +755,6 @@ function DizinEnvanteri($E) {
   if ($bos -lt 0) { Uyar "bos alan olculemedi" }
   elseif ($bos -lt $gerek) { Engel "bos alan yetersiz: $([math]::Round($bos / 1MB)) MB (gereken ~$([math]::Round($gerek / 1MB)) MB)" }
   else { Ok "bos alan: $([math]::Round($bos / 1GB, 1)) GB" }
-  $E.ProgramData = OsProgramData
 }
 
 # =============================================================================
@@ -687,7 +766,7 @@ function PlanKur($E) {
   & $ekle "PAKET_AC" "paketi ac + dogrula: $([System.IO.Path]::GetFileName($E.Zip)) -> $($E.Kok)\surumler\$($E.Surum) ($($E.ZipDosyaSayisi) dosya)"
   & $ekle "CURRENT" "baglanti: $($E.Kok)\current -> surumler\$($E.Surum)"
   & $ekle "ISKELET" "dizin iskeleti + korumali izin (SYSTEM + Administrators): backend-hizmeti.ps1 -YalnizIskelet"
-  & $ekle "YAPILANDIRMA" "yapilandirma\.env: app\.env + ecosystem env blogu ($(@($E.Ortam.anahtarlar).Count) anahtar karari)$(if ($E.Rclone) { ' + rclone.conf -> veri\' })"
+  & $ekle "YAPILANDIRMA" "yapilandirma\.env: app\.env + ecosystem env blogu ($(@($E.Ortam.anahtarlar).Count) anahtar karari)$(if ($E.Adlar.sonek) { ' + TEKSERP_GUNCELLEME_DIZINI=' + $E.GuncellemeDizini })$(if ($E.LisansYaz) { ' + LICENSE_SERVER_URL=' + $E.LisansBeklenen + ' (kanal kaydi)' })$(if ($E.Rclone) { ' + rclone.conf -> veri\' })"
   if ($E.Pm2 -and $E.Pm2.bizim -and [string]$E.Pm2.bizim.durum -ceq "online") { & $ekle "PM2_DURDUR" "KESINTI BASLAR - pm2 durdur: $($E.Pm2.bizim.ad) (PID $($E.Pm2.bizim.pid))" }
   & $ekle "YEDEK" "veritabani yedegi (dogrulanmis$(if ($E.Alicilar) { ', sifreli' } else { ', duz' })): $($E.Db.Ad) -> gecis\<damga>\"
   if ($E.Boot -and [string]$E.Boot.Durum -cne "Disabled") { & $ekle "ACILIS_KAPAT" "acilis gorevi kapat: $($E.Boot.Klasor)$($E.Boot.Ad) (pm2 resurrect)" }
@@ -697,7 +776,7 @@ function PlanKur($E) {
   & $ekle "BASLAT" "normal baslatma + saglik + LAN kimligi - KESINTI BITER"
   if ($E.Pm2 -and $E.Pm2.bizim) { & $ekle "PM2_SOKUM" "pm2 sokumu: delete $($E.Pm2.bizim.ad) + save --force$(if (-not @($E.Pm2.digerleri).Count) { ' + kill (daemon)' })" }
   & $ekle "YEDEKLE_BETIGI" "$($E.Kok)\yedekle.ps1 <- paketin hizmet-farkinda surumu (gorev adi/saati/argumanlari korunur)"
-  & $ekle "GUNCELLEYICI" "guncelleyici: $GuncelleyiciAdi (LocalSystem) ikili + ayar.json + kayit + baslat"
+  & $ekle "GUNCELLEYICI" "guncelleyici: $($E.GuncelleyiciAdi) (LocalSystem, veri $($E.VeriKoku)) ikili + ayar.json + kayit + baslat"
   if ($PgKaydiYaz) { & $ekle "PG_KAYDI" "pgsql\ornek.json: kip harici, hizmet $($E.PgHizmeti)" }
   return ,$p.ToArray()
 }
@@ -767,7 +846,7 @@ function Telafi_CURRENT($bas, $bit) {
 }
 
 function Is_ISKELET($E) {
-  $kod = OsBetik $E.AclBetigi @{ Kok = $E.Kok; HizmetAdi = $E.HizmetAdi; Uygula = $true; YalnizIskelet = $true }
+  $kod = OsBetik $E.AclBetigi @{ Kok = $E.Kok; HizmetAdi = $E.HizmetAdi; Uygula = $true; YalnizIskelet = $true; GuncellemeDizini = $E.GuncellemeDizini }
   if ($kod -ne 0) { throw "backend-hizmeti.ps1 -YalnizIskelet cikis $kod" }
   return @{}
 }
@@ -799,9 +878,11 @@ function Telafi_ISKELET($bas, $bit) {
 function Is_YAPILANDIRMA($E) {
   $hedef = Join-Path $E.Kok "yapilandirma\.env"
   if (Test-Path -LiteralPath $hedef) { throw "yapilandirma\.env zaten var" }
-  $girdi = [ordered]@{ kok = $E.Kok; eskiApp = $E.App; eskiEnv = (Join-Path $E.App ".env"); eko = $E.Eko; cikti = $hedef; damga = $script:damga; makineAnahtarlari = @(OsMakineAnahtarlari) }
+  $girdi = OrtamGirdisi $E
+  $girdi.cikti = $hedef; $girdi.damga = $script:damga
   $r = OsDugum $E.NodeKurulu $E.YardimciKurulu "ortam" $girdi
   if ([string]$r.karar -cne "TAMAM" -or -not $r.yazildi) { throw "yapilandirma\.env yazilmadi: $(@($r.engeller) -join '; ')$($r.hata)" }
+  if ([bool]$E.LisansYaz -ne [bool]($r.lisans -and $r.lisans.yazilacak)) { throw "lisans satiri karari envanterdekinden farkli (plan bayat)" }
   Ok "yapilandirma\.env yazildi ($(@($r.anahtarlar).Count) anahtar karari; degerler basilmaz)"
   $kopya = $false
   if ($E.Rclone -and -not (Test-Path -LiteralPath $E.Rclone.Hedef)) {
@@ -897,7 +978,7 @@ function Is_DUVAR($E) {
 function Telafi_DUVAR($bas, $bit) { OsGuvenlikDuvariSil "TeksERP API $($bas.port)"; Bilgi "guvenlik duvari kurali kaldirildi: TeksERP API $($bas.port)" }
 
 function Is_HIZMET_KAYIT($E) {
-  $arg = @{ Kok = $E.Kok; HizmetAdi = $E.HizmetAdi; Uygula = $true }
+  $arg = @{ Kok = $E.Kok; HizmetAdi = $E.HizmetAdi; Uygula = $true; GuncellemeDizini = $E.GuncellemeDizini }
   if ($E.PgHizmeti) { $arg.PgHizmeti = $E.PgHizmeti } else { $arg.PgYok = $true }
   $kod = OsBetik $E.AclBetigi $arg
   if ($kod -ne 0) { throw "backend-hizmeti.ps1 -Uygula cikis $kod (kayit/izin uyumsuz)" }
@@ -927,8 +1008,16 @@ function SaglikBekle($E, [string]$baslik) {
     throw "$baslik saglik $SaglikSn sn icinde gelmedi (son: $(if ($son) { 'API ' + $son.status + ' / DB ' + $son.db + ' / v' + $son.version } else { 'cevap yok' }))"
   }
   if ($E.Kimlik) {
-    $k = KimlikOku "127.0.0.1" $E.Port 5
-    if (-not $k -or [string]$k.installationId -cne $E.Kimlik) { throw "$baslik kurulum kimligi farkli ya da okunamadi" }
+    # Kimlik onbellegi /health'ten SONRA dolar (acilis isi DB'den okur): null = henuz yok, beklenir; dolu ve farkli = hata.
+    $k = $null
+    $kimlikBitis = (Get-Date).AddSeconds($SaglikSn)
+    do {
+      $k = KimlikOku "127.0.0.1" $E.Port 5
+      if ($k -and $k.installationId) { break }
+      OsBekle 2
+    } while ((Get-Date) -lt $kimlikBitis)
+    if (-not $k -or -not $k.installationId) { throw "$baslik kurulum kimligi $SaglikSn sn icinde okunamadi" }
+    if ([string]$k.installationId -cne $E.Kimlik) { throw "$baslik kurulum kimligi farkli: $($k.installationId) (beklenen $($E.Kimlik))" }
   }
   Ok "$($baslik): API UP / DB UP / v$($son.version)$(if ($E.Kimlik) { ' / kimlik ayni' })"
 }
@@ -1008,12 +1097,12 @@ function Telafi_YEDEKLE_BETIGI($bas, $bit) {
 }
 
 function Is_GUNCELLEYICI($E) {
-  $arg = @{ Kok = $E.Kok; HizmetAdi = $GuncelleyiciAdi; BackendHizmeti = $E.HizmetAdi; GuncellemeSunucusu = $GuncellemeSunucusu; Uygula = $true }
+  $arg = @{ Kok = $E.Kok; HizmetAdi = $E.GuncelleyiciAdi; VeriDizini = $E.VeriKoku; BackendHizmeti = $E.HizmetAdi; GuncellemeSunucusu = $GuncellemeSunucusu; Uygula = $true }
   if ($Vekil) { $arg.Vekil = $Vekil }
   $kod = OsBetik $E.GuncBetigiKurulu $arg
   if ($kod -ne 0) { throw "guncelleyici-hizmeti.ps1 -Uygula cikis $kod" }
-  OsHizmetBaslat $GuncelleyiciAdi @()
-  $durum = Join-Path $E.ProgramData "TeksERP\guncelleme\durum\durum.json"
+  OsHizmetBaslat $E.GuncelleyiciAdi @()
+  $durum = Join-Path $E.GuncellemeDizini (Join-Path "durum" "durum.json")
   $bitis = (Get-Date).AddSeconds(120)
   while ((Get-Date) -lt $bitis) {
     if (Test-Path -LiteralPath $durum) {
@@ -1060,7 +1149,7 @@ function BaslangicVerisi($adim, $E) {
     "DOGRULAMA"      { return @{ hizmet = $E.HizmetAdi } }
     "BASLAT"         { return @{ hizmet = $E.HizmetAdi } }
     "YEDEKLE_BETIGI" { return @{ hedef = $E.KokYedekle; varIdi = (Test-Path -LiteralPath $E.KokYedekle) } }
-    "GUNCELLEYICI"   { return @{ hizmet = $GuncelleyiciAdi } }
+    "GUNCELLEYICI"   { return @{ hizmet = $E.GuncelleyiciAdi } }
     default          { return @{} }
   }
 }
@@ -1127,7 +1216,7 @@ function AnlikGoruntu($E) {
   # Izin anlik goruntusu (yalniz erisim bolumu, sir degil) ve bu gecisin yaratacagi dizinler.
   $acl = [ordered]@{}
   $yollar = @($E.Kok) + @($script:DIZINLER | ForEach-Object { Join-Path $E.Kok $_ })
-  $pd = Join-Path $E.ProgramData "TeksERP"
+  $pd = $E.VeriKoku
   $yollar += @($pd, (Join-Path $pd "guncelleme"), (Join-Path $pd "guncelleme\niyet"), (Join-Path $pd "guncelleme\durum"), (Join-Path $pd "guncelleme\is"))
   $olusacak = @()
   foreach ($y in $yollar) {
@@ -1151,7 +1240,8 @@ function KuruKip {
     $k0 = [System.IO.Path]::GetFullPath($Kok).TrimEnd('\', '/')
     $sg0 = SonGecis $k0
     if (([string]$sg0.Durum -cmatch '^BASARILI' -or [string]$sg0.Durum -ceq "TAMAMLANDI") -and (Test-Path -LiteralPath (Join-Path $k0 "current"))) {
-      DurumRaporu ([ordered]@{ Kok = $k0; HizmetAdi = "TeksERP-Backend" })
+      $a0 = KanalAdlariCoz "" "" "" (OsProgramData)
+      DurumRaporu ([ordered]@{ Kok = $k0; HizmetAdi = $a0.backend; GuncelleyiciAdi = $a0.guncelleyici; VeriKoku = $a0.veriKoku })
       Write-Host ""
       Write-Host "  Geri donus: ... -GeriAl  |  pm2 kalintilarini arsivle: ... -Tamamla"
       exit 0
@@ -1169,9 +1259,29 @@ function KuruKip {
   $oz = PlanOzetiHesapla $plan
   Write-Host ""
   Write-Host "  Uyarilar: $($script:uyarilar.Count)  |  plan ozeti: $oz"
-  Write-Host "  Uygulamak icin (planla birebir; arada plan degisirse DURUR):"
-  Write-Host "    powershell -NoProfile -ExecutionPolicy Bypass -File `"$PSCommandPath`" -Kok `"$($E.Kok)`" -Paket `"$($E.Zip)`" -Uygula -Onay $($plan.Count) -PlanOzeti $oz"
+  Write-Host "  Uygulamak icin (planla birebir - bu kosumun parametreleri aynen; arada plan degisirse DURUR):"
+  Write-Host "    $(UygulaKomutu ([ordered]@{ Kok = $E.Kok; Paket = $E.Zip }) @() $plan.Count $oz)"
   exit 0
+}
+
+# Kurunun bastigi uygulama komutu: bu kosumun BAGLI parametreleri (kip anahtarlari haric) AYNEN + kip + onay.
+# Kopyala-yapistir ayni envanteri (prova kabulu, paket ozeti, hizmet/PG adi, lisans yazimi...) ve ayni plani verir.
+# $cozulmus: mutlak yola cozulmus Kok/Paket bagliyi ezer. Deger tirnakla; tirnak tasiyan deger basilmaz (kirilirdi).
+$script:KIP_ANAHTARLARI = @("Uygula", "Onay", "PlanOzeti", "GeriAl", "Tamamla")
+function UygulaKomutu($cozulmus, [string[]]$kip, [int]$n, [string]$oz) {
+  $p = [ordered]@{}
+  foreach ($k in $script:BAGLI.Keys) { if ($script:KIP_ANAHTARLARI -cnotcontains $k) { $p[$k] = $script:BAGLI[$k] } }
+  foreach ($k in $cozulmus.Keys) { if ($cozulmus[$k]) { $p[$k] = $cozulmus[$k] } }
+  $parca = @("powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "`"$PSCommandPath`"")
+  foreach ($k in $p.Keys) {
+    $v = $p[$k]
+    if ($v -is [System.Management.Automation.SwitchParameter] -or $v -is [bool]) { if ([bool]$v) { $parca += "-$k" }; continue }
+    if ($v -is [int] -or $v -is [long]) { $parca += @("-$k", "$v"); continue }
+    if ("$v".Contains('"')) { $parca += @("-$k", "<tirnak tasiyan deger - elle verin>"); continue }
+    $parca += @("-$k", "`"$v`"")
+  }
+  $parca += @($kip) + @("-Uygula", "-Onay", "$n", "-PlanOzeti", $oz)
+  return ($parca -join " ")
 }
 
 function UygulaKip {
@@ -1193,7 +1303,7 @@ function UygulaKip {
   AnlikGoruntu $E
   # Lisans dizininin dosya ADLARI (icerik degil): gecis sonrasi "yerinde mi" olcumu bununla.
   $lisansAdlari = @(Get-ChildItem -LiteralPath (Join-Path $E.Kok "lisans") -File -Force -ErrorAction SilentlyContinue | ForEach-Object { $_.Name })
-  GunlukYaz "PLAN" $null @{ damga = $script:damga; kok = $E.Kok; surum = $E.Surum; paket = @{ ad = [System.IO.Path]::GetFileName($E.Zip); sha256 = $E.ZipOzet; derleme = [string]$E.Paket.derlemeKimligi }; hizmet = $E.HizmetAdi; guncelleyici = $GuncelleyiciAdi; port = $E.Port; kimlik = $E.Kimlik; lisans = $lisansAdlari; kalemler = @($plan | ForEach-Object { $_.Adim }); ozet = $oz }
+  GunlukYaz "PLAN" $null @{ damga = $script:damga; kok = $E.Kok; surum = $E.Surum; paket = @{ ad = [System.IO.Path]::GetFileName($E.Zip); sha256 = $E.ZipOzet; derleme = [string]$E.Paket.derlemeKimligi }; hizmet = $E.HizmetAdi; guncelleyici = $E.GuncelleyiciAdi; veriKoku = $E.VeriKoku; lisansYaz = [bool]$E.LisansYaz; pg = $E.PgHizmeti; port = $E.Port; kimlik = $E.Kimlik; lisans = $lisansAdlari; kalemler = @($plan | ForEach-Object { $_.Adim }); ozet = $oz }
   $E.SurumDizini = Join-Path (Join-Path $E.Kok "surumler") $E.Surum
   $E.NodeKurulu = Join-Path $E.SurumDizini "runtime\node.exe"
   $E.YardimciKurulu = $E.Yardimci
@@ -1260,7 +1370,9 @@ function DurumRaporu($E) {
   $plan = $null
   foreach ($x in $sg.Kayitlar) { if ($x.olay -ceq "PLAN") { $plan = $x.veri } }
   $ad = if ($plan) { [string]$plan.hizmet } else { $E.HizmetAdi }
-  $gad = if ($plan) { [string]$plan.guncelleyici } else { $GuncelleyiciAdi }
+  $gad = if ($plan) { [string]$plan.guncelleyici } else { $E.GuncelleyiciAdi }
+  # veriKoku'suz PLAN = bu degisiklikten onceki gecis: guncelleyici soneksiz veri kokuyle kurulmustu.
+  $vk = if ($plan -and $plan.veriKoku) { [string]$plan.veriKoku } elseif ($plan) { (KanalAdlariCoz "" "" "" (OsProgramData)).veriKoku } else { $E.VeriKoku }
   $port = if ($plan -and $plan.port) { [int]$plan.port } else { 4000 }
   $cur = OsBaglantiHedefi (Join-Path $kok "current")
   if ($cur) { Ok "current -> $cur" } else { Uyar "current baglantisi yok" }
@@ -1283,12 +1395,15 @@ function DurumRaporu($E) {
       elseif ($g.Ad.StartsWith("TeksERP-DB-Backup", [System.StringComparison]::Ordinal)) { Ok "gece yedegi gorevi: $($g.Ad) ($($g.Durum))" }
     }
   } catch { Uyar "gorevler olculemedi" }
-  $durum = Join-Path (OsProgramData) "TeksERP\guncelleme\durum\durum.json"
+  $durum = Join-Path (Join-Path $vk "guncelleme") (Join-Path "durum" "durum.json")
   if (Test-Path -LiteralPath $durum) { try { $d = JsonOku $durum; Ok "guncelleyici durum.json: $($d.durum)$(if ($d.hataKodu) { ' / ' + $d.hataKodu }) | son canlilik $($d.sonCanlilik)" } catch { Uyar "durum.json okunamadi" } } else { Uyar "guncelleyici durum.json yok" }
   $acl = Join-Path $PSScriptRoot "..\hizmet\backend-hizmeti.ps1"
   if (Test-Path -LiteralPath (Join-Path $kok "current\hizmet\backend-hizmeti.ps1")) { $acl = Join-Path $kok "current\hizmet\backend-hizmeti.ps1" }
   if (Test-Path -LiteralPath $acl) {
-    $kod = OsBetik $acl @{ Kok = $kok; HizmetAdi = $ad }
+    # Olcum kaydin KENDI PostgreSQL bagimliligiyla: parametresiz betik yalniz TeksERP-PostgreSQL'i bekler, harici PG'de yanlis UYUMSUZ der.
+    $olcArg = @{ Kok = $kok; HizmetAdi = $ad; GuncellemeDizini = (Join-Path $vk "guncelleme") }
+    if ($plan -and ($plan.PSObject.Properties.Name -ccontains "pg")) { if ($plan.pg) { $olcArg.PgHizmeti = [string]$plan.pg } else { $olcArg.PgYok = $true } }
+    $kod = OsBetik $acl $olcArg
     if ($kod -eq 0) { Ok "izin + kayit olcumu: UYUMLU" } else { Uyar "izin + kayit olcumu: UYUMSUZ (cikis $kod) - ayrinti yukarida" }
   }
 }
@@ -1316,7 +1431,7 @@ function GeriAlKip {
   $oz = PlanOzetiHesapla $plan
   if (-not $Uygula) {
     Write-Host ""
-    Write-Host "  Uygulamak icin: ... -GeriAl -Uygula -Onay $($plan.Count) -PlanOzeti $oz"
+    Write-Host "  Uygulamak icin: $(UygulaKomutu ([ordered]@{ Kok = $kok }) @('-GeriAl') $plan.Count $oz)"
     exit 0
   }
   if ($Onay -ne $plan.Count) { Dur "-Onay $Onay, geri alma plani $($plan.Count) kalem - HICBIR SEYE DOKUNULMADI." }
@@ -1362,7 +1477,7 @@ function TamamlaKip {
   if (-not $DokumuKoru) { foreach ($d in $duz) { $plan.Add([pscustomobject]@{ No = $plan.Count + 1; Adim = "DOKUM_SIL"; Metin = "duz gecis yedegini sil: $($d.FullName)" }) } }
   PlanBas $plan "TAMAMLAMA PLANI ($($plan.Count) kalem) - bundan sonra -GeriAl betikle yapilamaz"
   $oz = PlanOzetiHesapla $plan
-  if (-not $Uygula) { Write-Host ""; Write-Host "  Uygulamak icin: ... -Tamamla -Uygula -Onay $($plan.Count) -PlanOzeti $oz"; exit 0 }
+  if (-not $Uygula) { Write-Host ""; Write-Host "  Uygulamak icin: $(UygulaKomutu ([ordered]@{ Kok = $kok }) @('-Tamamla') $plan.Count $oz)"; exit 0 }
   if ($Onay -ne $plan.Count) { Dur "-Onay $Onay, plan $($plan.Count) kalem - HICBIR SEYE DOKUNULMADI." }
   if ($PlanOzeti -and $PlanOzeti -cne $oz) { Dur "plan ozeti $oz, onaylanan $PlanOzeti - HICBIR SEYE DOKUNULMADI." }
   GunlukYaz "TAMAMLA_BASLADI" $null @{ kalem = $plan.Count }

@@ -99,6 +99,9 @@ pub trait Services: Send + Sync {
     fn start(&self, name: &str, args: &[&str]) -> EnvResult<()>;
     /// Durdurma İSTEĞİ (bekleme çağıranın); zaten durmuşsa hata değil.
     fn stop(&self, name: &str) -> EnvResult<()>;
+    /// Hizmet DURMUŞ ve konak hizmete özgü sıfır-dışı bir kodla (`tekserp_hizmet::contract::exit`) çıkmışsa o kod:
+    /// açılışta düşen sürüm (sağlık zaman aşımını beklemez) ve SCM kurtarmasının bekleyen yeniden başlatması.
+    fn crash_exit_code(&self, name: &str) -> EnvResult<Option<u32>>;
     /// Hizmetin tam komut satırı (ImagePath) — PG küçük sürümünde sürüm dizini değişir (D4 U6).
     fn image_path(&self, name: &str) -> EnvResult<String>;
     fn set_image_path(&self, name: &str, command_line: &str) -> EnvResult<()>;
@@ -635,6 +638,9 @@ impl Services for NoServices {
         Err(EnvError(format!("{name}: hizmet denetimi bu platformda yok")))
     }
     fn stop(&self, name: &str) -> EnvResult<()> {
+        Err(EnvError(format!("{name}: hizmet denetimi bu platformda yok")))
+    }
+    fn crash_exit_code(&self, name: &str) -> EnvResult<Option<u32>> {
         Err(EnvError(format!("{name}: hizmet denetimi bu platformda yok")))
     }
     fn image_path(&self, name: &str) -> EnvResult<String> {

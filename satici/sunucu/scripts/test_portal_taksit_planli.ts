@@ -6,6 +6,8 @@
 // bekleyen kalemler iptal (iş dokunmaz). Planlı eylem vadesinden ÖNCE uygulanmaz, vadesinde
 // dakikalık işte (MaintenanceScheduler.runOnce, saat ENJEKTE) bir kez uygulanır; iptal edilen hiç.
 // Eylemler portal API'sinden (işlem kimliğiyle), iş aynı süreçte enjekte saatle koşar.
+// Lisans v2 (§1g): kurulum künyesinin ödenmiş tarihi (P) taksit planında İLK vade, ödeme onayında SIRADAKİ vade, son
+// ödemede süresiz — fabrikaya giden kirayla aynı kaynaktan (`paid-through.ts`).
 // ⭐ KALICI SONDA ✓K3 (her koşumda): (1) vadeden 1 sn ÖNCE iş 0 uygular, 1 sn SONRA 1 — eşik
 //    gerçekten vadede · (2) aynı işlem kimliğiyle tekrar ödeme bitişi İKİNCİ kez kaydırmaz ·
 //    (3) gecikme günü dolmadan K3 yok, dolunca var.
@@ -62,10 +64,16 @@ async function main(): Promise<void> {
       uzatmaGun: 15,
     });
     kontrol("§1a plan → 201; bitiş = İLK vade + 15 gün", plan.status === 201 && (await bitis(a.kurulumDbId)) === v1 + 15 * DAY_MS, `${plan.status} ${plan.kod ?? ""}`);
+    const pGor = async (kurulumDbId: string) => {
+      const p = (await api(`/kurulumlar/${kurulumDbId}`)).veri.odenmisTarih as { tarih: string | null; tur: string } | null;
+      return p ? `${p.tur}:${p.tarih ?? "-"}` : "yok";
+    };
+    const pPlan = await pGor(a.kurulumDbId);
     const kalemler = (plan.veri.kalemler as { id: string; sira: number }[]).sort((x, y) => x.sira - y.sira);
     const odeme1 = { clientToken: randomUUID() };
     const o1 = await api(`/taksit-kalemleri/${kalemler[0]!.id}/odeme`, odeme1);
     kontrol("§1b 1. ödeme → bitiş KENDİLİĞİNDEN 2. vade + 15 gün", o1.status === 200 && (await bitis(a.kurulumDbId)) === v2 + 15 * DAY_MS, `${o1.status} ${o1.kod ?? ""}`);
+    kontrol("§1b2 ödeme onayında künyedeki P KENDİLİĞİNDEN 2. vadeye ilerledi", (await pGor(a.kurulumDbId)) === `TAKSIT:${new Date(v2).toISOString()}`, await pGor(a.kurulumDbId));
     const gecerlilikSayisi = () => prisma.yaptirimEylemi.count({ where: { kurulumId: a.kurulumDbId, tur: "GECERLILIK" } });
     const once = await gecerlilikSayisi();
     const o1Tekrar = await api(`/taksit-kalemleri/${kalemler[0]!.id}/odeme`, odeme1);
@@ -75,6 +83,11 @@ async function main(): Promise<void> {
     await api(`/taksit-kalemleri/${kalemler[1]!.id}/odeme`, { clientToken: randomUUID() });
     kontrol("§1e son ödeme → süre sınırı kalkar (null)", (await bitis(a.kurulumDbId)) === null);
     kontrol("§1f her bitiş değişimi defterde (plan + 2 ödeme = 3 GECERLILIK)", (await gecerlilikSayisi()) === 3);
+    kontrol(
+      "§1g künyede P: planla İLK vade (TAKSIT), son ödemeden sonra süresiz",
+      pPlan === `TAKSIT:${new Date(v1).toISOString()}` && (await pGor(a.kurulumDbId)) === "SURESIZ:-",
+      `${pPlan} → ${await pGor(a.kurulumDbId)}`,
+    );
 
     console.log("\n§2 taksit: gecikme → K3 (enjekte saat) → ödeme K3'ü kaldırır");
     const b = await kurulumFiksturu(ctx);

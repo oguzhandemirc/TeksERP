@@ -124,7 +124,8 @@ fn windows_command(command: &str, args: &[String]) -> Result<u32, String> {
                 arguments,
                 account: None,
                 dependencies: vec![],
-                restart_delays: [10, 30, 60].map(std::time::Duration::from_secs).to_vec(),
+                // Açılıştaki uyum denetimiyle AYNI dizi (kendini güncelleyen ikili eski kaydı da düzeltir).
+                restart_delays: tekserp_guncelleyici::selfupdate::RESTART_DELAYS_S.map(std::time::Duration::from_secs).to_vec(),
                 required_privileges: vec![],
             })?;
             println!("{name} kaydedildi (kök {})", root.display());

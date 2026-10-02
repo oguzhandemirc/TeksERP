@@ -26,6 +26,7 @@ pub mod pgminor;
 pub mod policy;
 pub mod release;
 pub mod selfupdate;
+pub mod sema;
 pub mod settings;
 pub mod tools;
 pub mod trust;

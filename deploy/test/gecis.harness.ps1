@@ -6,6 +6,10 @@
 # telafi zinciri, yardimci .cjs) AYNEN kosar. Bekci: Teks-Erp/scripts/test_gecis.ts.
 #   pwsh deploy/test/gecis.harness.ps1 -Script deploy/gecis/gecis.ps1 -Taban <dizin> -Kip kur-ortam [-Degisiklik <ad>]
 #   pwsh deploy/test/gecis.harness.ps1 -Script deploy/gecis/gecis.ps1 -Taban <dizin> -Kip kuru|uygula|gerial-kuru|gerial|tamamla-kuru|tamamla [-Onay N] [-Hata <ADIM>]
+#   ... [-EkJson '{"ProvaKabul":true,...}']  ek parametreler (kipin parametrelerine eklenir; -Kip ham: YALNIZ bunlar -
+#        kurunun bastigi komutun ayristirilmis hali aynen verilir)
+#   -Degisiklik: derleme-farkli | goc-eksik | pm2-yabanci | gorev-yabanci | duvar-yok | testfabrika (sonekli kanal,
+#        hazirlik lisans saticisi) | prova (PAKET.json prova=true)
 # Olculmeyen (Windows'ta W3/D8): gercek SCM, icacls/ACL, junction, pm2, PostgreSQL, guvenlik duvari.
 # =============================================================================
 param(
@@ -15,7 +19,8 @@ param(
   [int]$Onay = -1,
   [string]$PlanOzeti,
   [string]$Hata,
-  [string]$Degisiklik
+  [string]$Degisiklik,
+  [string]$EkJson
 )
 $ErrorActionPreference = "Stop"
 $kok = Join-Path $Taban "kok"
@@ -48,8 +53,12 @@ if ($Kip -ceq "kur-ortam") {
   Copy-Item (Join-Path $repo "deploy/gecis/gecis.ps1") (Join-Path $pk "gecis/gecis.ps1")
   Copy-Item (Join-Path $repo "deploy/hizmet/backend-hizmeti.ps1") (Join-Path $pk "hizmet/backend-hizmeti.ps1")
   Copy-Item (Join-Path $repo "deploy/hizmet/guncelleyici-hizmeti.ps1") (Join-Path $pk "hizmet/guncelleyici-hizmeti.ps1")
+  Copy-Item (Join-Path $repo "deploy/hizmet/kanal-adlari.ps1") (Join-Path $pk "hizmet/kanal-adlari.ps1")
+  Copy-Item (Join-Path $repo "deploy/hizmet/sema-hizasi.ps1") (Join-Path $pk "hizmet/sema-hizasi.ps1")
   $sayi = @(Get-ChildItem $pk -Recurse -File -Force).Count
-  $paketJson = [ordered]@{ commit = "abc1234"; derlemeKimligi = "derleme-1"; uygulamaSurumu = "2.14.0"; dosyaSayisi = $sayi; korumali = $true; backendKanal = "adnansahin"; backendPm2Ad = "tekserp-backend-yeni"; prova = $false }
+  $paketJson = [ordered]@{ commit = "abc1234"; derlemeKimligi = "derleme-1"; uygulamaSurumu = "2.14.0"; dosyaSayisi = $sayi; korumali = $true; backendKanal = "adnansahin"; backendPm2Ad = "tekserp-backend-yeni"; backendHizmetAdi = "TeksERP-Backend"; backendLisansSunucusu = "https://lisans.etkiliyazilim.com"; lisansSunucusuVarsayilan = "https://lisans.etkiliyazilim.com"; prova = $false }
+  if ($Degisiklik -ceq "testfabrika") { $paketJson.backendKanal = "testfabrika"; $paketJson.backendHizmetAdi = "TeksERP-Backend-testfabrika"; $paketJson.backendLisansSunucusu = "https://lisans-test.etkiliyazilim.com" }
+  if ($Degisiklik -ceq "prova") { $paketJson.prova = $true }
   Yaz (Join-Path $pk "PAKET.json") ($paketJson | ConvertTo-Json)
   [System.IO.Compression.ZipFile]::CreateFromDirectory($pk, $zip)
   # --- pm2 duzenindeki kok -------------------------------------------------------------------------------
@@ -94,9 +103,10 @@ if ($Kip -ceq "kur-ortam") {
 }
 
 # --- betigi yukle (son satirdaki `Ana` cagrisi olmadan), parametrelerle ------------------------------------
+# Kopya paketin gecis\ dizinine: betik hizmet\kanal-adlari.ps1'i kendi komsusundan (paket duzeni) okur.
 $metin = Get-Content -LiteralPath $Script -Raw
 $metin = [regex]::Replace($metin, '(?m)^Ana\s*$', '')
-$kopya = Join-Path $Taban "gecis-yuklu.ps1"
+$kopya = Join-Path (Join-Path (Join-Path $Taban "paket") "gecis") "gecis-yuklu.ps1"
 [System.IO.File]::WriteAllText($kopya, $metin)
 $p = @{ Kok = $kok; Paket = $zip; SaglikSn = 3 }
 switch ($Kip) {
@@ -106,8 +116,10 @@ switch ($Kip) {
   "gerial"       { $p.GeriAl = $true; $p.Uygula = $true; $p.Onay = $Onay }
   "tamamla-kuru" { $p.Tamamla = $true }
   "tamamla"      { $p.Tamamla = $true; $p.Uygula = $true; $p.Onay = $Onay }
+  "ham"          { $p = @{} }
   default        { throw "bilinmeyen kip $Kip" }
 }
+if ($EkJson) { foreach ($x in ($EkJson | ConvertFrom-Json).PSObject.Properties) { $p[$x.Name] = $x.Value } }
 . $kopya @p
 
 # --- sahte Windows ----------------------------------------------------------------------------------------------
@@ -125,8 +137,11 @@ function OsSshMi { return $false }
 function OsHizmetler { return @($global:S.hizmetler | ForEach-Object { [pscustomobject]@{ Ad = $_.Ad; Durum = $_.Durum; Baslatma = $_.Baslatma; Yol = $_.Yol; Hesap = $_.Hesap; Cikis = 0; OzelCikis = 0 } }) }
 function OsHizmetBaslat($ad, [string[]]$ek) {
   $h = Hizmet $ad; if (-not $h) { throw "sahte: hizmet yok $ad" }
-  $h.Durum = "Running"; $h.Kip = (@($ek) -join " "); Kaydet; Cagri "hizmet baslat $ad $($h.Kip)"
-  if ($ad -ceq "TeksERP-Guncelleyici") { Yaz (Join-Path $Taban "programdata/TeksERP/guncelleme/durum/durum.json") '{"durum":"BEKLIYOR","hataKodu":"BELIRTEC_YOK","sonCanlilik":"2026-10-01T03:00:00Z"}' }
+  $h.Durum = "Running"; $h.Kip = (@($ek) -join " "); $global:S | Add-Member -NotePropertyName kimlikBos -NotePropertyValue 0 -Force; Kaydet; Cagri "hizmet baslat $ad $($h.Kip)"
+  if ($ad -cmatch '^TeksERP-Guncelleyici') {
+    $veri = if ($global:S.PSObject.Properties.Name -ccontains "guncVeri" -and $global:S.guncVeri) { [string]$global:S.guncVeri } else { Join-Path $Taban "programdata/TeksERP" }
+    Yaz (Join-Path $veri "guncelleme/durum/durum.json") '{"durum":"BEKLIYOR","hataKodu":"BELIRTEC_YOK","sonCanlilik":"2026-10-01T03:00:00Z"}'
+  }
 }
 function OsHizmetDurdur($ad) { $h = Hizmet $ad; if ($h) { $h.Durum = "Stopped"; $h.Kip = ""; Kaydet; Cagri "hizmet durdur $ad" } }
 function OsHizmetKaldir($exe, $ad) { $global:S.hizmetler = @($global:S.hizmetler | Where-Object { $_.Ad -cne $ad }); Kaydet; Cagri "hizmet kaldir $ad"; return [pscustomobject]@{ Kod = 0; Metin = "" } }
@@ -182,7 +197,13 @@ function OsHttp($url, [int]$sn) {
   } elseif (Pm2Online) { $surum = "2.14.0" }
   if (-not $surum) { return [pscustomobject]@{ Kod = 0; Govde = $null } }
   if ($url -cmatch '/health$') { return [pscustomobject]@{ Kod = 200; Govde = (@{ status = "UP"; db = $db; version = $surum } | ConvertTo-Json -Compress) } }
-  if ($url -cmatch '/api/discovery/identity$') { return [pscustomobject]@{ Kod = 200; Govde = (@{ installationId = "kurulum-kimligi-1"; companyName = "Sahte Tekstil" } | ConvertTo-Json -Compress) } }
+  if ($url -cmatch '/api/discovery/identity$') {
+    # KIMLIK_GEC: gercek backend'de kimlik onbellegi /health'ten sonra dolar (thinkpad-1 D8c) - her baslatmadan sonra ilk 3 okuma null.
+    $id = "kurulum-kimligi-1"
+    if ($b -and $global:S.hata -ceq "KIMLIK_GEC" -and [int]$global:S.kimlikBos -lt 3) { $global:S.kimlikBos = [int]$global:S.kimlikBos + 1; Kaydet; $id = $null }
+    if ($b -and $global:S.hata -ceq "KIMLIK_FARKLI" -and $b.Kip -cmatch 'dogrulama') { $id = "baska-kurulum" }
+    return [pscustomobject]@{ Kod = 200; Govde = (@{ installationId = $id; companyName = "Sahte Tekstil" } | ConvertTo-Json -Compress) }
+  }
   return [pscustomobject]@{ Kod = 404; Govde = $null }
 }
 function OsBetik($betik, [hashtable]$arg) {
@@ -190,7 +211,8 @@ function OsBetik($betik, [hashtable]$arg) {
   Cagri "betik $ad $(@($arg.Keys | Sort-Object | ForEach-Object { if ($arg[$_] -is [bool]) { '-' + $_ } else { '-' + $_ + '=' + $arg[$_] } }) -join ' ')"
   if ($ad -ceq "backend-hizmeti.ps1" -and $arg.Uygula -and $arg.YalnizIskelet) {
     foreach ($d in @("surumler", "yapilandirma", "lisans", "backups", "yedek-anahtar", "logs", "veri", "mobil-guncelleme", "rclone", "pg-setup", "guncelleyici")) { New-Item -ItemType Directory -Path (Join-Path $kok $d) -Force | Out-Null }
-    foreach ($d in @("niyet", "durum", "is")) { New-Item -ItemType Directory -Path (Join-Path $Taban "programdata/TeksERP/guncelleme/$d") -Force | Out-Null }
+    $gd = if ($arg.GuncellemeDizini) { [string]$arg.GuncellemeDizini } else { Join-Path $Taban "programdata/TeksERP/guncelleme" }
+    foreach ($d in @("niyet", "durum", "is")) { New-Item -ItemType Directory -Path (Join-Path $gd $d) -Force | Out-Null }
     return 0
   }
   if ($ad -ceq "backend-hizmeti.ps1" -and $arg.Uygula) {
@@ -200,6 +222,7 @@ function OsBetik($betik, [hashtable]$arg) {
   }
   if ($ad -ceq "guncelleyici-hizmeti.ps1" -and $arg.Uygula) {
     Mz (Join-Path $kok "guncelleyici/tekserp-guncelleyici.exe")
+    $global:S | Add-Member -NotePropertyName guncVeri -NotePropertyValue ([string]$arg.VeriDizini) -Force
     Yaz (Join-Path $kok "guncelleyici/ayar.json") '{"v":1}'
     $global:S.hizmetler += [pscustomobject]@{ Ad = $arg.HizmetAdi; Durum = "Stopped"; Baslatma = "Auto"; Yol = "$kok\guncelleyici\tekserp-guncelleyici.exe hizmet --kok $kok --ad $($arg.HizmetAdi)"; Hesap = "LocalSystem"; Kip = "" }
     Kaydet; return 0

@@ -190,7 +190,9 @@ export function totpKodu(sir: string, ms: number): string {
 /** Hesap: satıcı daveti → kabul → onay → giriş (gerçek servis yolu). İzinler sonradan GÖÇ rolüyle ayarlanır. */
 export async function hesapKur(o: Ortam, tesisId: string, izinler: readonly string[]): Promise<TestHesabi> {
   const eposta = `bekci-${randomUUID().slice(0, 12)}@ornek.test`;
-  const davet = await inviteFacilityAdmin(o.goc.prisma, { tesisId, email: eposta, name: "Bekçi Hesabı", validHours: 24 }, o.saat.simdi());
+  // Fikstür hesabı satıcı yolundan doğar; tesiste aktif yönetici olabileceği için açık zorlamayla (denetime yazılır).
+  const zorla = { talep: "BEKCI-FIKSTUR", gerekce: "bekçi fikstürü: test hesabı" };
+  const davet = await inviteFacilityAdmin(o.goc.prisma, { tesisId, email: eposta, name: "Bekçi Hesabı", validHours: 24, zorla }, o.saat.simdi());
   const kabul = await acceptInvite(o.ctx, { token: davet.token, password: TEST_PAROLASI });
   o.saat.ilerlet(31_000);
   await confirmInvite(o.ctx, { token: davet.token, totp: totpKodu(kabul.totpSirri, o.saat.simdi()) });
@@ -228,11 +230,12 @@ export async function imzali(
   o: Ortam,
   k: Pick<TestKurulumu, "kurulumId" | "privateKey">,
   yol: string,
-  g: { govde?: unknown; ham?: Buffer; gzip?: boolean; baslik?: string; nowMs?: number } = {},
+  g: { govde?: unknown; ham?: Buffer; gzip?: boolean; baslik?: string; nowMs?: number; imzaYolu?: string } = {},
 ): Promise<Yanit & { baslik: string; ham: Buffer }> {
   const json = g.ham ?? Buffer.from(JSON.stringify(g.govde ?? {}), "utf8");
   const ham = g.gzip ? gzipSync(json) : json;
-  const baslik = g.baslik ?? signRequest({ installationId: k.kurulumId, purpose: "esitle", body: ham, key: { privateKey: k.privateKey, nowMs: g.nowMs ?? o.saat.simdi() } });
+  const imza = { installationId: k.kurulumId, purpose: "esitle" as const, body: ham, key: { privateKey: k.privateKey, nowMs: g.nowMs ?? o.saat.simdi() } };
+  const baslik = g.baslik ?? signRequest(g.imzaYolu !== undefined ? { ...imza, path: g.imzaYolu } : imza);
   const res = await fetch(`${o.adres}${yol}`, {
     method: "POST",
     headers: { [REQUEST_HEADER]: baslik, "Content-Type": "application/json", ...(g.gzip ? { "Content-Encoding": "gzip" } : {}) },

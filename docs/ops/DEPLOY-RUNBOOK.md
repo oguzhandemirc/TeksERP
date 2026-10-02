@@ -324,7 +324,7 @@ New-NetFirewallRule -DisplayName "TeksERP mDNS 5353" -Direction Inbound `
 > İlan kurulamasa bile panel sunucuyu ağ taramasıyla bulur; kapatmak için
 > `ecosystem.config.js` → `DISCOVERY_MDNS_ENABLED: "false"`.
 
-Erişim: `http://localhost:4000` / `http://<ip>:4000`, giriş `admin / 123123`.
+Erişim: `http://localhost:4000` / `http://<ip>:4000`. Giriş: yedekten kurulduysa fabrikanın mevcut kullanıcıları; boş kurulumda paket seed koşmaz, ilk hesap satıcı hesabıdır (`node dist\tools\superadmin-olustur.cjs`, gerçek terminal). Sabit `admin / 123123` yalnız kaynak koddan geliştirme seed'inde (`npm run seed`) vardır.
 
 > **`npm run build` çıktısı `dist\server.js`'tir** (`tsconfig.json`: `rootDir=./src`,
 > `outDir=./dist`) — `dist\src\server.js` **değil**. `ecosystem.config.js` bu yolu
@@ -852,6 +852,15 @@ ve bunu ekrana yazar: eski kod yeni şemayla koşuyor olur.
 dışı). Şema değişen bir sürümden dönüyorsan kodu geri aldıktan SONRA restore et — yeni
 kod eski şemayla, eski kod yeni şemayla uyumsuz olabilir. Restore yolu §5 ("Kopyaya geri
 yükleme" ÖNERİLİR — geri alınabilir).
+
+> ⚠️ **PIN/kart özeti (G21-K) — geri almada iki yol, seçim ÖLÇÜMLE.** Kurulan paket `20261001120000_kisa_kimlik_ozet` göçünü taşıyorsa, sonrasında her başarılı PIN/kart girişi düz değeri özete çevirir ve düz kolonu boşaltır; eski backend özetli PIN'i okuyamaz. Döküm `[3/9]`da alınır; sonrasında yazılan her veri geri yüklemede gider. Yönetici kararı 2026-10-02: fabrikada veri kaybı, PIN'i yeniden dağıtmaktan pahalıdır.
+>
+> | Ölçüm | Yol |
+> |---|---|
+> | Göçten sonra üretim verisi YAZILMADI (son yazım `premigrate_` damgasından önce, ÖLÇÜLDÜ) | **1.** `-GeriAl` + aynı kurulumun `premigrate_` dökümünü geri yükle (önce kod, sonra döküm) |
+> | Üretim verisi yazıldı (vardiya sürdü) ya da ölçülemedi | **2. VARSAYILAN.** DB'ye DOKUNMA: yalnız `-GeriAl`, sonra PIN/kartı okunamayan kişilere eski backend'de kişi başı yeni PIN/kart |
+>
+> Ölçüm sorgusu, kişi listesi ve araç gerçeği (G21-K'nın toplu sıfırlaması bu yolda kullanılamaz): `docs/ops/GECIS-PM2-HIZMET.md` §1 madde 5 (b). Kural: `docs/kurallar/deploy-kurulum.md`; adnansahin'de bu sürüm yalnız pm2 → hizmet geçişinin paketi olarak çıkar.
 
 Birkaç gün sorunsuz çalışınca `app.eski-*` silinebilir; `premigrate_*` dosyaları
 rotasyona girmez, elle temizlenir.

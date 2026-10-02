@@ -11,7 +11,8 @@
       "supportsTablet": true
     },
     "android": {
-      "package": "com.etkiliyazilim.tekserp.patron"
+      "package": "com.etkiliyazilim.tekserp.patron",
+      "allowBackup": false
     },
     "web": {
       "bundler": "metro",

@@ -45,6 +45,8 @@
 // Koşum: npx tsx scripts/test_superadmin_provision.ts
 // =============================================================================
 
+import { getShortCredentialKeyRing } from "../src/lib/short-credential/keyring";
+import { digestQuickPin } from "../src/lib/short-credential/digest";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { spawn } from "node:child_process";
@@ -339,6 +341,7 @@ async function main(): Promise<void> {
         isSystemAccount: true,
         isActive: true,
         quickPin: true,
+        quickPinDigest: true,
         totpSecret: true,
         totpEnabledAt: true,
         passwordHash: true,
@@ -353,7 +356,12 @@ async function main(): Promise<void> {
       satir?.fullName ?? "—",
     );
     check("hesap aktif", satir?.isActive === true);
-    check("PIN yazıldı ve dönüş değeriyle AYNI", satir?.quickPin === ilk.pin);
+    // G21: PIN düz yazılmaz — özet dönüş değerinin özetiyle AYNI olmalı.
+    const halka = getShortCredentialKeyRing();
+    check(
+      "PIN ÖZET olarak yazıldı ve dönüş değerinin özetiyle AYNI (düz kolon boş)",
+      halka.ok && satir?.quickPin === null && satir?.quickPinDigest === digestQuickPin(halka.ring.active, ilk.pin),
+    );
     check("PIN 6 hane", /^\d{6}$/.test(ilk.pin), ilk.pin.replace(/\d/g, "•"));
     // ⭐ 2FA kimseye zorunlu değil (kullanıcı kararı 2026-09-30): doğuşta TOHUMLANMAZ,
     // satıcı isterse panelde kendi 2FA sekmesinden açar.
@@ -393,7 +401,7 @@ async function main(): Promise<void> {
   if (ilk.kind === "created") {
     const once = await prisma.user.findUnique({
       where: { id: ilk.id },
-      select: { passwordHash: true, quickPin: true, totpSecret: true, tokenVersion: true, updatedAt: true },
+      select: { passwordHash: true, quickPinDigest: true, totpSecret: true, tokenVersion: true, updatedAt: true },
     });
     const sayiOnce = await prisma.user.count({ where: { isSystemAccount: true } });
     // Bilerek FARKLI parola/PIN ile: "aynı değeri yazdı" ile "hiç yazmadı"
@@ -407,10 +415,10 @@ async function main(): Promise<void> {
     check("ikinci koşum → 'exists'", ikinci.kind === "exists", ikinci.kind);
     const sonra = await prisma.user.findUnique({
       where: { id: ilk.id },
-      select: { passwordHash: true, quickPin: true, totpSecret: true, tokenVersion: true, updatedAt: true },
+      select: { passwordHash: true, quickPinDigest: true, totpSecret: true, tokenVersion: true, updatedAt: true },
     });
     check("parola hash'i DEĞİŞMEDİ", once?.passwordHash === sonra?.passwordHash);
-    check("PIN DEĞİŞMEDİ", once?.quickPin === sonra?.quickPin);
+    check("PIN DEĞİŞMEDİ", once?.quickPinDigest === sonra?.quickPinDigest);
     check("TOTP sırrı DEĞİŞMEDİ", once?.totpSecret === sonra?.totpSecret);
     check("`tokenVersion` ARTMADI (açık oturumlar düşmedi)", once?.tokenVersion === sonra?.tokenVersion);
     check(
@@ -435,7 +443,7 @@ async function main(): Promise<void> {
     });
     const once = await prisma.user.findUnique({
       where: { id: ilk.id },
-      select: { passwordHash: true, quickPin: true, totpSecret: true, tokenVersion: true, username: true },
+      select: { passwordHash: true, quickPinDigest: true, totpSecret: true, tokenVersion: true, username: true },
     });
     const rot = await provisionSuperadmin(
       { username: "yok-sayilir", password: PAROLA_2, pin: null, rotate: true },
@@ -447,7 +455,7 @@ async function main(): Promise<void> {
       where: { id: ilk.id },
       select: {
         passwordHash: true,
-        quickPin: true,
+        quickPinDigest: true,
         totpSecret: true,
         totpEnabledAt: true,
         totpLastStep: true,
@@ -460,7 +468,7 @@ async function main(): Promise<void> {
       "yeni parola gerçekten geçerli (hash yazıldı, bozulmadı)",
       await bcrypt.compare(PAROLA_2, sonra?.passwordHash ?? ""),
     );
-    check("PIN DEĞİŞTİ", once?.quickPin !== sonra?.quickPin, `${once?.quickPin} → ${sonra?.quickPin}`);
+    check("PIN DEĞİŞTİ (özet farklı)", !!sonra?.quickPinDigest && once?.quickPinDigest !== sonra?.quickPinDigest);
     check(
       "2FA KAPANDI (sır + `totpEnabledAt` + `totpLastStep` boş)",
       once?.totpSecret !== null && sonra?.totpSecret === null && sonra?.totpEnabledAt === null &&
@@ -952,10 +960,13 @@ async function main(): Promise<void> {
     const scriptYolu = path.join(__dirname, "superadmin-olustur.ts");
     const KUR_AD = `${FIXTURE_USERNAME}.k`;
     const KUR_PAROLA = "bekci-p8-kurulum-Parola-çğ";
+    // PIN özetle saklanır: boşluk hem düz kolonda hem etkin anahtarın özetinde aranır.
+    const kurHalka = getShortCredentialKeyRing();
     let KUR_PIN = "";
-    for (let i = 0; i < 50 && !KUR_PIN; i++) {
+    for (let i = 0; i < 50 && !KUR_PIN && kurHalka.ok; i++) {
       const aday = String(100000 + Math.floor(Math.random() * 900000));
-      if ((await prisma.user.count({ where: { quickPin: aday } })) === 0) KUR_PIN = aday;
+      const ozet = digestQuickPin(kurHalka.ring.active, aday);
+      if ((await prisma.user.count({ where: { OR: [{ quickPin: aday }, { quickPinDigest: ozet }] } })) === 0) KUR_PIN = aday;
     }
     sirlar.push(KUR_PIN);
     const girdi = JSON.stringify({ kullaniciAdi: KUR_AD, parola: KUR_PAROLA, pin: KUR_PIN });
@@ -1000,8 +1011,9 @@ async function main(): Promise<void> {
       const r2 = await kos();
       const j2 = satir(r2.out);
       check("hesapsız: çıkış 0 + OLUSTURULDU (istenen ad)", r2.kod === 0 && j2?.sonuc === "OLUSTURULDU" && j2?.kullaniciAdi === KUR_AD, `kod ${r2.kod} · ${JSON.stringify(j2)} · ${r2.err.trim().slice(0, 160)}`);
-      const yeni = await prisma.user.findFirst({ where: { username: KUR_AD }, select: { isSystemAccount: true, quickPin: true, passwordHash: true } });
-      check("hesapsız: hesap DB'de sistem hesabı + verilen PIN", yeni?.isSystemAccount === true && yeni?.quickPin === KUR_PIN, JSON.stringify({ sistem: yeni?.isSystemAccount, pinAyni: yeni?.quickPin === KUR_PIN }));
+      const yeni = await prisma.user.findFirst({ where: { username: KUR_AD }, select: { isSystemAccount: true, quickPin: true, quickPinDigest: true, passwordHash: true } });
+      const pinOzetAyni = kurHalka.ok && yeni?.quickPin === null && yeni?.quickPinDigest === digestQuickPin(kurHalka.ring.active, KUR_PIN);
+      check("hesapsız: hesap DB'de sistem hesabı + verilen PIN'in ÖZETİ (düz kolon boş)", yeni?.isSystemAccount === true && pinOzetAyni, JSON.stringify({ sistem: yeni?.isSystemAccount, pinOzetAyni }));
       check("hesapsız: Türkçe harfli parola boruda BOZULMADAN hash'lendi (bcrypt karşılaştırması)", !!yeni && (await bcrypt.compare(KUR_PAROLA, yeni.passwordHash)));
       check("hesapsız: çıktıda parola/PIN YOK", sirsiz(r2));
 

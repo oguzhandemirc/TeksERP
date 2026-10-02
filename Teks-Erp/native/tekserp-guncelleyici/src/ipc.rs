@@ -225,6 +225,17 @@ pub struct LastDetail {
     pub message: Option<String>,
 }
 
+/// Bilgi (sorun DEĞİL): bu turda ölçülemeyen ama işi durdurmayan şey — bugün yalnız `SEMA_OLCULEMEDI`.
+/// `hataKodu` "şu anki sorun"dur ve onay kuralı onu bekleyiş nedeni sayar; bilgi oraya yazılmaz.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct Notice {
+    #[serde(rename = "kod")]
+    pub code: String,
+    /// En çok `MESSAGE_MAX` karakter; sır taşımaz.
+    #[serde(rename = "mesaj")]
+    pub message: String,
+}
+
 /// `durum\durum.json` (§5.2). Üst alanlar backend okuyucusunun (D1 `UpdaterStatusDocSchema`, sözleşme
 /// sürümü 3) okuduğu biçimle geriye uyumludur; kesin karar ve sonuç `karar` · `bekleyen` · `son`da.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -282,6 +293,9 @@ pub struct StatusDoc {
     pub last: Option<UpdateResult>,
     #[serde(rename = "sonAyrinti")]
     pub last_detail: Option<LastDetail>,
+    /// Bu turun bilgisi (`Notice`); yoksa alan YAZILMAZ (eski okuyucu ve vektörler bayt-eşit kalır).
+    #[serde(rename = "bilgi", default, skip_serializing_if = "Option::is_none")]
+    pub notice: Option<Notice>,
 }
 
 /// `mesaj` tavanı (karakter): backend okuyucusu 500'den uzununu dosyayla birlikte reddeder.
@@ -321,6 +335,7 @@ impl StatusDoc {
             pending: None,
             last: None,
             last_detail: None,
+            notice: None,
         }
     }
 }
@@ -332,6 +347,9 @@ pub fn read_status(fs: &dyn Fs, layout: &Layout) -> Option<StatusDoc> {
 pub fn write_status(fs: &dyn Fs, layout: &Layout, doc: &StatusDoc) -> std::io::Result<()> {
     let mut doc = doc.clone();
     doc.message = doc.message.as_deref().map(clip);
+    if let Some(n) = doc.notice.as_mut() {
+        n.message = clip(&n.message);
+    }
     let text = serde_json::to_vec_pretty(&doc).map_err(std::io::Error::other)?;
     fs.write_atomic(&layout.status_file(), &text)
 }

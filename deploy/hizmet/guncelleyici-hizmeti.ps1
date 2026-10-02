@@ -180,8 +180,8 @@ function HizmetFarki($ad, $ikili, $kok, $veri) {
     }
     $sifirla = [BitConverter]::ToUInt32($fa, 0)
   } else { $sifirla = -1 }
-  if (-not ($sifirla -eq 86400 -and ($eylem -join ",") -ceq "1/10000,1/30000,1/60000")) {
-    $fark += "kurtarma eylemleri '$($eylem -join ',')' sifirlama $sifirla (beklenen 1/10000,1/30000,1/60000 ve 86400)"
+  if (-not ($sifirla -eq 86400 -and ($eylem -join ",") -ceq "1/10000,1/10000,1/30000")) {
+    $fark += "kurtarma eylemleri '$($eylem -join ',')' sifirlama $sifirla (beklenen 1/10000,1/10000,1/30000 ve 86400)"
   }
   if ([int]$v.FailureActionsOnNonCrashFailures -ne 1) { $fark += "FailureActionsOnNonCrashFailures=$($v.FailureActionsOnNonCrashFailures) (beklenen 1)" }
   $dep = @($v.DependOnService | Where-Object { $_ })
@@ -334,7 +334,7 @@ $a = AyarOlc $ayarYolu
 if ($a.Durum -ceq "UYUMLU") { Ok "ayar.json uyumlu" } else { Uyar "ayar.json $($a.Durum)$(if ($a.Fark.Count) { ': ' + ($a.Fark -join ', ') })" }
 $fark = HizmetFarki $HizmetAdi $hedefIkili $kokTam $VeriDizini
 if ($null -eq $fark) { Uyar "hizmet kayitli degil: $HizmetAdi" }
-elseif ($fark.Count -eq 0) { Ok "hizmet kaydi uyumlu: $HizmetAdi (LocalSystem, gecikmeli otomatik, kurtarma 10/30/60 sn)" }
+elseif ($fark.Count -eq 0) { Ok "hizmet kaydi uyumlu: $HizmetAdi (LocalSystem, gecikmeli otomatik, kurtarma 10/10/30 sn)" }
 else { foreach ($f in $fark) { Uyar "hizmet: $f" } }
 
 Write-Host ""

@@ -31,6 +31,7 @@
 import {
   Olculemedi,
   PANEL_SABIT_DOSYALAR,
+  VENDOR_URL_REL,
   backendPaketleAyarlari,
   dosyalariOku,
   kanalCoz,
@@ -40,6 +41,7 @@ import {
   panelIsaretciFarki,
   panelKaynakFarki,
   panelSabitKimlikFarki,
+  varsayilanLisansSunucusu,
 } from './lib/kanallar.mjs';
 import { cumleDenetle, terfiAtlaKaydi, terfiKapisi, terfiRaporu } from './lib/terfi.mjs';
 import { ezmeSatirlari, yayinEzmeleri, yayinHedefi } from './lib/yayin-hedefi.mjs';
@@ -157,7 +159,10 @@ function main(argv) {
       // Backend'in HTTP yayın feed'i YOK (Faz 3'e kadar) → burada TERFİ yok, yalnız
       // kimlik. Çıktı KEY=VALUE (paketle.ps1 ecosystem env'ine + PAKET.json'a yazar).
       const { kanal } = kanalCoz(kod);
-      const ayar = backendPaketleAyarlari(kod, kanal);
+      // Backend'in varsayılan lisans satıcısı derlenen ağaçtan (vendor-url.ts, TEK kaynak); okunamazsa paket kimliksiz doğmaz.
+      const lisansVarsayilan = varsayilanLisansSunucusu(dosyalariOku([VENDOR_URL_REL])[VENDOR_URL_REL]);
+      if (!lisansVarsayilan) dur(`backend-paketle: ${VENDOR_URL_REL} DEFAULT_LICENSE_SERVER_URL okunamadı`, [], 2);
+      const ayar = backendPaketleAyarlari(kod, kanal, lisansVarsayilan);
       for (const [k, v] of Object.entries(ayar)) console.log(`${k}=${v}`);
       return;
     }

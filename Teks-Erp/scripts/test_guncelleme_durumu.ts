@@ -19,7 +19,8 @@
 //      şemadan geçmeyen rapor fırlatmaz, düşer
 //   §6 panel görünümü: kira yok/kiradaki politika/K1/varsayılan · geçmiş (backend + PG satırı) en yeni önce ·
 //      yerel ayrıntı · karar · onayın kullanıldığı
-//   §7 ⭐ eylemler (`approvalActions` — panel düğmeleri ve POST kapısı AYNI yüklem)
+//   §7 ⭐ eylemler (`approvalActions` — panel düğmeleri ve POST kapısı AYNI yüklem); §7k onaylı ama bekleyen sürümün nedeni
+//      (§7l şema ileride: daha yeni sürüm gerekir, "kendiliğinden" denmez)
 //   §8 bağlantı (statik): uçlar izinli ve bağlı · yoklama gövdesi raporu yayar · yoklama niyeti tazeler
 // NEGATİF SONDA (elle, geri alındı; commit mesajında).
 // =============================================================================
@@ -323,6 +324,25 @@ function eylemler(): void {
     }) && e({ bekleyen: null }).neden === "Kurulacak yeni sürüm yok.");
   const hata = e({ yerelDurum: "HATA", bekleyen: null, son: { ...sonuc({ hedefSurum: "2.15.0" }), sonuc: "BASARISIZ" } as never });
   check("§7j geri dönüş de düştüyse (HATA) son denemenin sürümüne yeni onay verilebilir", hata.hemen && hata.pencere && hata.hedefSurum === "2.15.0");
+  // §7k (thinkpad-1 D8b 3H): disk doluyken HEMEN onayından sonra karar KUR, yerel durum BEKLIYOR/DISK_DOLU — "şu an
+  // kuruluyor" YANLIŞTIR; neden bekleyişi söyler. Yüklem önce ESKİ metni reddettiği ölçülerek kullanılır (iki sonda).
+  const dogruBekleyis = (n: string | null, ipucu: RegExp, on = /onaylandı/): boolean => !!n && !/şu an kuruluyor/.test(n) && on.test(n) && ipucu.test(n);
+  const kurBekliyor = (yerelHataKodu: string | null, yerelDurum = "BEKLIYOR") =>
+    e({ yerelDurum, yerelHataKodu, bekleyen: { surum: "2.15.0", karar: "KUR", neden: null }, onay: { ...verildi, zamanlama: "HEMEN" } }).neden;
+  check("§7k sonda: eski metin ('2.15.0 şu an kuruluyor.') yüklemde KIRMIZI", !dogruBekleyis("2.15.0 şu an kuruluyor.", /disk/i));
+  check("§7k ⭐ onaylı sürüm DISK_DOLU beklerken neden 'şu an kuruluyor' değil, disk bekleyişi", dogruBekleyis(kurBekliyor("DISK_DOLU"), /disk/i), kurBekliyor("DISK_DOLU") ?? "-");
+  check("§7k onaylı sürüm kilit beklerken / indirilirken / sorunsuz beklerken de bekleyiş metni",
+    dogruBekleyis(kurBekliyor("DOSYA_KILITLI"), /kilit/i) && dogruBekleyis(kurBekliyor(null, "INDIRILIYOR"), /indiriliyor/) && dogruBekleyis(kurBekliyor(null, "HAZIR"), /birazdan/),
+    [kurBekliyor("DOSYA_KILITLI"), kurBekliyor(null, "INDIRILIYOR"), kurBekliyor(null, "HAZIR")].join(" | "));
+  // §7l (D8e): paket şemanın gerisinde (SEMA_ILERIDE) — sorun kendiliğinden geçmez, daha yeni sürüm gerekir; genel
+  // "kendiliğinden kurulur" metni YANLIŞTIR (sonda: genel dalın metni yüklemde kırmızı).
+  const semaBekleyis = (n: string | null): boolean => dogruBekleyis(n, /geri indirme/) && /daha yeni/.test(n ?? "") && !/kendiliğinden/.test(n ?? "");
+  check("§7l sonda: genel dalın metni ('… sorun giderilince kendiliğinden kurulur.') yüklemde KIRMIZI",
+    !semaBekleyis("2.15.0 onaylandı; güncelleyici bekliyor (SEMA_ILERIDE) — sorun giderilince kendiliğinden kurulur."));
+  check("§7l ⭐ onaylı sürüm SEMA_ILERIDE beklerken neden şemanın ileride olduğunu ve daha yeni sürüm gerektiğini söyler",
+    semaBekleyis(kurBekliyor("SEMA_ILERIDE")), kurBekliyor("SEMA_ILERIDE") ?? "-");
+  const pencereKur = e({ politika: { kip: "OTOMATIK" }, yerelDurum: "BEKLIYOR", yerelHataKodu: "DISK_DOLU", bekleyen: { surum: "2.15.0", karar: "KUR", neden: null } }).neden;
+  check("§7k onaysız (OTOMATİK pencere) KUR beklerken 'onaylandı' denmez", dogruBekleyis(pencereKur, /disk/i, /kurulacak/) && !/onaylandı/.test(pencereKur ?? ""), pencereKur ?? "-");
 }
 
 function baglanti(): void {

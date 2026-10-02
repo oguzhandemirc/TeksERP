@@ -315,6 +315,268 @@ function JunctionKur([string]$baglanti, [string]$hedef) {
   if (-not $olc -or ([IO.Path]::GetFullPath($olc).TrimEnd('\') -cne [IO.Path]::GetFullPath($hedef).TrimEnd('\'))) { Dur "baglanti olculemedi: $baglanti" }
 }
 
+# --- Surum onceligi (guncelleyici version.rs / TS compareVersions AYNASI; vektorler test-vektorleri/
+#     guncelleme-karar.json "surum-karsilastir", harness olcer) -------------------------------------
+function SurumCoz([string]$s) {
+  if (-not ($s -cmatch '^([0-9]{1,4})\.([0-9]{1,4})\.([0-9]{1,6})(?:-([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?(?:\+[0-9A-Za-z.-]+)?$')) { return $null }
+  $on = @()
+  if ($Matches[4]) { $on = @($Matches[4] -csplit '\.') }
+  return @{ cekirdek = @([long]$Matches[1], [long]$Matches[2], [long]$Matches[3]); on = $on }
+}
+
+# -1 / 0 / 1; biri bicimsizse $null (cagiran fail-closed davranir).
+function SurumKarsilastir([string]$a, [string]$b) {
+  $x = SurumCoz $a
+  $y = SurumCoz $b
+  if ($null -eq $x -or $null -eq $y) { return $null }
+  for ($i = 0; $i -lt 3; $i++) {
+    if ($x.cekirdek[$i] -ne $y.cekirdek[$i]) { if ($x.cekirdek[$i] -lt $y.cekirdek[$i]) { return -1 } else { return 1 } }
+  }
+  $xk = $x.on.Count -eq 0
+  $yk = $y.on.Count -eq 0
+  if ($xk -and $yk) { return 0 }
+  if ($xk) { return 1 }
+  if ($yk) { return -1 }
+  $n = [Math]::Min($x.on.Count, $y.on.Count)
+  for ($i = 0; $i -lt $n; $i++) {
+    $p = [string]$x.on[$i]; $q = [string]$y.on[$i]
+    $ps = $p -cmatch '^[0-9]+$'; $qs = $q -cmatch '^[0-9]+$'
+    if ($ps -and $qs) { $c = ([double]$p).CompareTo([double]$q) }
+    elseif ($ps) { $c = -1 }
+    elseif ($qs) { $c = 1 }
+    else { $c = [string]::CompareOrdinal($p, $q) }
+    if ($c -lt 0) { return -1 }
+    if ($c -gt 0) { return 1 }
+  }
+  if ($x.on.Count -lt $y.on.Count) { return -1 }
+  if ($x.on.Count -gt $y.on.Count) { return 1 }
+  return 0
+}
+
+# Kokte GERCEKTEN kurulu surumun adaylari. kurulum\kurulum.json paket.surum KURULUM ANININ surumudur; guncelleyici
+# sonra tasir ve kaldirma surumler\ ile current'i siler ama kok\kurulum-gecmisi.jsonl ile %ProgramData% durumunu
+# korur. Doner: @(@{ surum; kaynak }) - okunamayan kaynak atlanir.
+function KuruluSurumAdaylari([string]$kok, [string]$veriKoku) {
+  $a = @()
+  $h = JunctionHedefi (Join-Path $kok "current")
+  if ($h) { $a += @{ surum = (Split-Path -Leaf ($h.TrimEnd('\', '/'))); kaynak = "current baglantisi" } }
+  $g = Join-Path $kok "kurulum-gecmisi.jsonl"
+  if (Test-Path -LiteralPath $g -PathType Leaf) {
+    try {
+      $son = @([IO.File]::ReadAllLines($g) | Where-Object { $_.Trim() }) | Select-Object -Last 1
+      if ($son) { $j = $son | ConvertFrom-Json; if ($j.yeniSurum) { $a += @{ surum = "$($j.yeniSurum)"; kaynak = "kurulum-gecmisi.jsonl" } } }
+    } catch { }
+  }
+  if ($veriKoku) {
+    $d = Join-Path $veriKoku "guncelleme\durum\durum.json"
+    if (Test-Path -LiteralPath $d -PathType Leaf) {
+      try { $j = JsonOku $d; if ($j.kuruluSurum) { $a += @{ surum = "$($j.kuruluSurum)"; kaynak = "guncelleyici durum.json" } } } catch { }
+    }
+  }
+  $k = Join-Path $kok "kurulum\kurulum.json"
+  if (Test-Path -LiteralPath $k -PathType Leaf) {
+    try { $j = JsonOku $k; if ($j.paket.surum) { $a += @{ surum = "$($j.paket.surum)"; kaynak = "kurulum.json" } } } catch { }
+  }
+  return , $a
+}
+
+# Adaylarin EN YENI bicimli olani (yoksa $null).
+function EnYeniSurum($adaylar) {
+  $en = $null
+  foreach ($x in @($adaylar)) {
+    if ($null -eq (SurumCoz $x.surum)) { continue }
+    if ($null -eq $en -or (SurumKarsilastir $x.surum $en.surum) -gt 0) { $en = $x }
+  }
+  return $en
+}
+
+# Eski paket engeli: kurulu surum paketten YENIYSE DUR metni; degilse $null. Eski kod yeni semali veritabanina
+# kurulmaz (kaldirip ilk USB ile yeniden kurma). Paket surumu karsilastirilamazsa da DUR (fail-closed).
+function EskiPaketEngeli($kurulu, [string]$paketSurum) {
+  if ($null -eq $kurulu) { return $null }
+  $c = SurumKarsilastir $kurulu.surum $paketSurum
+  if ($null -eq $c) { return "paket surumu '$paketSurum' kurulu surumle ($($kurulu.surum)) karsilastirilamadi - hicbir sey degistirilmedi" }
+  if ($c -gt 0) { return "bu kokte kurulu surum $($kurulu.surum) ($($kurulu.kaynak)) bu paketten ($paketSurum) YENI - eski paket kurulmaz, veritabani yeni surumun semasinda. $($kurulu.surum) ya da daha yeni bir kurulum paketi kullanin; hicbir sey degistirilmedi." }
+  return $null
+}
+
+# Eski paket olcumu TEK giris: on-olcum (sihirbazin engel listesi) ve kurulum.ps1 OnKosul (DUR) bunu cagirir.
+# Doner: @{ kurulu = <aday|$null>; engel = <DUR metni|$null>; sinif = "eski" | "olculemedi" | "" }.
+function EskiPaketOlcumu([string]$kok, [string]$veriKoku, [string]$paketSurum) {
+  $ku = EnYeniSurum (KuruluSurumAdaylari $kok $veriKoku)
+  $e = EskiPaketEngeli $ku $paketSurum
+  $s = ""
+  if ($e) { $s = $(if ((SurumKarsilastir $ku.surum $paketSurum) -eq 1) { "eski" } else { "olculemedi" }) }
+  return @{ kurulu = $ku; engel = $e; sinif = $s }
+}
+
+# --- Gecisle kurulmus duzen (pm2 -> hizmet, deploy/gecis/gecis.ps1) ---------------------------------
+# Kurulum kaydi (kurulum\kurulum.json) YOK; IKI isaret birlikte: gecis\<yyyyMMdd_HHmmss>\gunluk.jsonl ve current
+# baglantisi (tek isaret yetmez: geri alinmis gecis current'i kaldirir). Kurulum yardimcisi onu ONARMAZ - ayri sinif
+# GECISLI, hicbir sey degismeden DUR (docs/ops/GECIS-PM2-HIZMET.md b.7). Doner: @{ damga; metin } ya da $null.
+function GecisliDuzen([string]$kok) {
+  $g = Join-Path $kok "gecis"
+  if (-not (Test-Path -LiteralPath $g -PathType Container)) { return $null }
+  $d = @(Get-ChildItem -LiteralPath $g -Directory -Force -ErrorAction SilentlyContinue | Where-Object { $_.Name -cmatch '^[0-9]{8}_[0-9]{6}$' -and (Test-Path -LiteralPath (Join-Path $_.FullName "gunluk.jsonl") -PathType Leaf) } | Sort-Object Name -Descending)
+  if (-not $d.Count) { return $null }
+  if (-not (ReparseMi (Join-Path $kok "current"))) { return $null }
+  $damga = $d[0].Name
+  return @{ damga = $damga; metin = "bu kok pm2 -> hizmet gecisiyle kurulmus bir TeksERP kurulumu (gecis\$damga\gunluk.jsonl + current baglantisi; kurulum\kurulum.json yok) - kurulum yardimcisi onu onarmaz, hicbir sey degistirilmedi. Guncelleme guncelleyiciyle gelir; sorun varsa docs/ops/GECIS-PM2-HIZMET.md (5. bolum: gecis.ps1 -GeriAl; 7. bolum). Yeni kurulum icin baska bir kok secin." }
+}
+
+# --- Kanal hizmetleri baska koke bagli mi (FAIL-CLOSED) ---------------------------------------------
+# Ayni adli hizmet (KanalAdlariCoz: backend, guncelleyici, PG) BASKA kokun ikilisini ya da --kok'unu gosteriyorsa
+# kurulum/onarim o kurulumun hizmetini EZERDI: DUR. Hizmet var ama ImagePath okunamazsa/cozulemezse de DUR.
+# Kok karsilastirmasi buyuk/kucuk harf ve sondaki '\' bagimsiz; <kok>\current\... (baglanti) kok altindadir.
+function YolKokAltinda([string]$yol, [string]$kok) {
+  $y = ("$yol".Trim() -creplace '/', '\').TrimEnd('\').ToLowerInvariant()
+  $k = ("$kok".Trim() -creplace '/', '\').TrimEnd('\').ToLowerInvariant()
+  if (-not $y -or -not $k -or $y.Contains("..")) { return $false }
+  return ($y -ceq $k -or $y.StartsWith($k + "\", [StringComparison]::Ordinal))
+}
+# $imagePath: $null = hizmet yok (gecer) | "" = var ama okunamadi. Doner: $null (gecer) ya da @{ ad; durum; bagli; metin }.
+function HizmetKokKarari([string]$ad, $imagePath, [string]$kok) {
+  if ($null -eq $imagePath) { return $null }
+  $p = @([regex]::Matches([string]$imagePath, '"([^"]*)"|(\S+)') | ForEach-Object { if ($_.Groups[1].Success) { $_.Groups[1].Value } else { $_.Groups[2].Value } })
+  if (-not $p.Count -or "$($p[0])" -cnotmatch '^[A-Za-z]:\\') {
+    return @{ ad = $ad; durum = "olculemedi"; bagli = ""; metin = "$ad hizmeti var ama hangi koke bagli oldugu olculemedi (ImagePath '$imagePath') - kurulum/onarim yapilamaz (fail-closed), hicbir sey degistirilmedi. Hizmeti 'sc.exe qc $ad' ile denetleyin." }
+  }
+  $kokArg = $null
+  for ($i = 1; $i -lt ($p.Count - 1); $i++) { if ("$($p[$i])" -ceq "--kok") { $kokArg = "$($p[$i + 1])" } }
+  foreach ($y in @("$($p[0])", $kokArg)) {
+    if ($null -eq $y) { continue }
+    if (-not (YolKokAltinda $y $kok)) {
+      # Gosterim: diger kurulumun koku (--kok) bilinirse o, yoksa koke uymayan yol.
+      $bagli = $(if ($kokArg -and -not (YolKokAltinda $kokArg $kok)) { $kokArg } else { $y })
+      return @{ ad = $ad; durum = "baska"; bagli = $bagli; metin = "$ad zaten $bagli'e bagli calisiyor; bu klasore ($kok) kurulum/onarim yapilamaz - o kurulumun hizmetini ezerdi. Ayni koku secin ya da once o kurulumu kaldirin; hicbir sey degistirilmedi." }
+    }
+  }
+  return $null
+}
+# Kayit defterinden ImagePath: $null = hizmet yok | "" = anahtar var ama okunamadi (fail-closed: engel).
+function HizmetImagePath([string]$ad) {
+  $k = "HKLM:\SYSTEM\CurrentControlSet\Services\$ad"
+  try { if (-not (Test-Path -LiteralPath $k)) { return $null } } catch { return "" }
+  try { return "$((Get-ItemProperty -LiteralPath $k -Name ImagePath -ErrorAction Stop).ImagePath)" } catch { return "" }
+}
+# on-olcum (sihirbazin engel listesi) ve OnKosul (DUR) TEK giris. $okuyucu: bekci harness'i icin (varsayilan kayit defteri).
+function HizmetKokEngelleri($adlar, [string]$kok, [scriptblock]$okuyucu) {
+  if (-not $okuyucu) { $okuyucu = { param($a) HizmetImagePath $a } }
+  $e = @()
+  foreach ($ad in @($adlar.backend, $adlar.guncelleyici, $adlar.pg)) {
+    if (-not $ad) { continue }
+    $r = HizmetKokKarari "$ad" (& $okuyucu "$ad") $kok
+    if ($r) { $e += , $r }
+  }
+  return , $e
+}
+
+# --- Ag ayari (API guvenlik duvari): onarim/devamda KAYITTAN ---------------------------------------
+# Kayit TEK okuyucuda (on-olcum sihirbaz sayfasini doldurur, kurulum.ps1 OnKosul karar verir); ilk bulunan:
+#   kurulum\kurulum.json "ag" > kurulum\durum.json "ag" > kurulum\cevap-onceki.json "api" (setup onarimda yeni cevabi
+#   yazmadan once saklar) > kurulum\cevap.json "api" (eski kurulumlar: tek kayit). Semaya uymayan alan yok sayilir.
+# Listeler semanin secenek SIRASIYLA (karsilastirma ve gosterim kararli). Doner: @{ izinliAdresler; agProfilleri; mdns;
+# kaynak } (bilinmeyen alan $null) ya da $null.
+$script:AG_ALANLARI = @("izinliAdresler", "agProfilleri", "mdns")
+function AgKanonik($deger, $tanim) {
+  if ($tanim.tur -ceq "liste") { return , @(@($tanim.secenek) | Where-Object { @($deger) -ccontains $_ }) }
+  return $deger
+}
+function AgMetni($deger) {
+  if ($deger -is [bool]) { return $(if ($deger) { "acik" } else { "kapali" }) }
+  return (@($deger) -join ",")
+}
+function KayitliAgAyari([string]$kok, $sema) {
+  $kaynaklar = @(@("kurulum\kurulum.json", "ag"), @("kurulum\durum.json", "ag"), @("kurulum\cevap-onceki.json", "api"), @("kurulum\cevap.json", "api"))
+  foreach ($k in $kaynaklar) {
+    $y = Join-Path $kok $k[0]
+    if (-not (Test-Path -LiteralPath $y -PathType Leaf)) { continue }
+    try { $j = Get-Content -LiteralPath $y -Raw -Encoding UTF8 | ConvertFrom-Json } catch { continue }
+    if ($null -eq $j -or -not $j.PSObject.Properties[$k[1]]) { continue }
+    $n = $j.($k[1])
+    $r = @{ kaynak = (Split-Path -Leaf $k[0]) }
+    $bir = $false
+    foreach ($a in $script:AG_ALANLARI) {
+      $r[$a] = $null
+      if (-not $n.PSObject.Properties[$a]) { continue }
+      $t = $sema.alanlar."api.$a"
+      $v = $n.$a
+      if ($t.tur -ceq "liste") { $v = @($v) }
+      if (AlanDogrula "api.$a" $v $t) { continue }
+      $r[$a] = AgKanonik $v $t
+      $bir = $true
+    }
+    if ($bir) { return $r }
+  }
+  return $null
+}
+# Karar (OnKosul): onarim/devamda kayittaki alan KAZANIR (kural varsa dokunulmaz, yoksa kayittakiyle kurulur); cevapta
+# ACIKCA verilen farkli deger UYGULANMAZ, uyarilir. Kayit yoksa (yeni kurulum) cevap (alan yoksa sema varsayilani).
+# $deger: CevapDogrula degeri - $ham: ham cevap (alan verildi mi) - $kayit: KayitliAgAyari ($null = kayit yok).
+function AgKarari($deger, $ham, $kayit, $sema) {
+  $r = [ordered]@{}
+  $u = @()
+  $kayittan = @()
+  foreach ($a in $script:AG_ALANLARI) {
+    $t = $sema.alanlar."api.$a"
+    $c = AgKanonik $deger["api.$a"] $t
+    $verildi = ($null -ne $ham) -and ($null -ne $ham.PSObject.Properties["api"]) -and ($null -ne $ham.api) -and ($null -ne $ham.api.PSObject.Properties[$a])
+    if ($kayit -and $null -ne $kayit[$a]) {
+      $r[$a] = $kayit[$a]
+      $kayittan += $a
+      if ($verildi -and (AgMetni $c) -cne (AgMetni $kayit[$a])) { $u += "cevaptaki api.$a ($(AgMetni $c)) UYGULANMADI: onarim ag ayarini kayittan korur ($(AgMetni $kayit[$a]), $($kayit.kaynak))" }
+    } else { $r[$a] = $c }
+  }
+  $r["kaynak"] = $(if ($kayittan.Count) { "kayit ($($kayit.kaynak))" } else { "cevap" })
+  return @{ ag = $r; uyarilar = @($u) }
+}
+
+# --- Lisans saticisi (backend LICENSE_SERVER_URL): kanal kaydindan, TEK karar ---------------------
+# Kanal degeri PAKET.json backendLisansSunucusu (paketle.ps1: deploy/kanallar.json backend.lisansSunucusu), derlemenin
+# varsayilani lisansSunucusuVarsayilan (vendor-url.ts). kurulum.ps1 OnKosul karari, .env satiri ve Dogrulama olcumu bu
+# islevden; sihirbaz ozeti ayni kurali gosterir. Bos alan = kanal; farkli elle deger ve kayittaki farkli deger ENGELLEMEZ,
+# UYARIR. Satir yalniz etkin deger derleme varsayilanindan FARKLIYSA yazilir (gecis.ps1 ile ayni kural).
+# Eski paket (alan yok): bugunku davranis (girilen yazilir, yoksa derleme varsayilani) + UYARI - fail-closed DEGIL,
+# eski paketler bu alani hic tasimadi. $kayit: $null = .env yok (karar cevaptan) | "" = .env var, satir yok | satir degeri.
+function LisansKoken([string]$v) {
+  if ("$v".Trim() -cmatch '^https://([A-Za-z0-9](?:[A-Za-z0-9.-]{0,251}[A-Za-z0-9])?)(:[0-9]{1,5})?/?$') { return "https://" + $Matches[1].ToLowerInvariant() + "$($Matches[2])" }
+  return $null
+}
+function LisansSunucusuKarari([string]$kanal, [string]$varsayilan, [string]$girilen, $kayit, [string]$kanalAdi) {
+  $kan = LisansKoken $kanal
+  $vars = LisansKoken $varsayilan
+  $gir = LisansKoken $girilen
+  $u = @()
+  if ($null -ne $kayit) {
+    $ham = "$kayit".Trim()
+    if ($ham -ceq "") { $etkili = $vars; $kaynak = "kayit-varsayilan" }
+    elseif ($ham.ToLowerInvariant() -ceq "kapali") { $etkili = "kapali"; $kaynak = "kayit" }
+    else { $etkili = LisansKoken $ham; if (-not $etkili) { $etkili = "(bicim disi)" }; $kaynak = "kayit" }
+    if ($gir -and $gir -cne $etkili) { $u += "cevaptaki lisans sunucusu ($gir) UYGULANMADI: kayittaki yapilandirma\.env korunur (onarim .env'i yeniden yazmaz)" }
+  } elseif ("$girilen".Trim()) {
+    $etkili = $gir; if (-not $etkili) { $etkili = "(bicim disi)" }
+    $kaynak = $(if ($kan -and $gir -ceq $kan) { "kanal" } else { "cevap" })
+  } elseif ($kan) { $etkili = $kan; $kaynak = "kanal" }
+  else { $etkili = $vars; $kaynak = "varsayilan" }
+  $metin = switch ($kaynak) {
+    "kanal" { "kanal kaydi" }
+    "cevap" { "elle girildi" }
+    "kayit" { "kayittaki yapilandirma\.env" }
+    "kayit-varsayilan" { "kayittaki .env'de satir yok: derleme varsayilani" }
+    default { "derleme varsayilani" }
+  }
+  $goster = $(if ($etkili) { "$etkili ($metin)" } else { "derleme varsayilani" })
+  if (-not $kan) {
+    $u += "paket lisans saticisinin kanal degerini tasimiyor (eski ya da kanal-disi paket: PAKET.json backendLisansSunucusu yok) - etkin $goster; kanal kaydiyla karsilastirilamadi"
+  } elseif ($etkili -cne $kan) {
+    $ad = $(if ($kaynak -ceq "cevap") { "girilen" } elseif ($kaynak -cmatch '^kayit') { "kayittaki" } else { "etkin" })
+    $duzelt = $(if ($kaynak -cmatch '^kayit') { "duzeltmek icin yapilandirma\.env'e LICENSE_SERVER_URL=$kan yazip backend hizmetini yeniden baslatin" } else { "yanlissa lisans sunucusu alanini bos birakin (bos = kanal)" })
+    $u += "lisans sunucusu kanal kaydindan FARKLI: beklenen $kan (kanal $kanalAdi, deploy/kanallar.json), $ad $goster - kurulum surer; $duzelt"
+  }
+  $yaz = ($kaynak -ceq "cevap" -or $kaynak -ceq "kanal") -and [bool](LisansKoken $etkili) -and ($etkili -cne $vars)
+  return [ordered]@{ etkili = $etkili; kaynak = $kaynak; kaynakMetni = $metin; yaz = [bool]$yaz; kanal = $kanal; varsayilan = $varsayilan; uyarilar = @($u) }
+}
+
 # --- Portlar (D4 b.4.5: kural deploy/pg/lib/pg-ornegi.mjs portSec ile AYNI; vektorler bekcide) ----
 # Doner: @{ port = <int> ; neden = "..." } ya da @{ hata = "..." }.
 function PortSec([int[]]$mesgul, [int]$baslangic, [int]$bitis, $onceki, $istenen) {

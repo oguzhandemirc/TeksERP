@@ -49,7 +49,7 @@ const RESULT_CODE_TEXT: Readonly<Record<string, string>> = {
   PAKET_BAGI: "paket bildirimle eşleşmedi",
   BUTUNLUK_GECERSIZ: "paket bütünlüğü geçersiz",
   DISK_DOLU: "disk dolu",
-  DOSYA_KILITLI: "sürüm geçişi yapılamadı",
+  DOSYA_KILITLI: "dosya kilitli (başka bir program kullanıyor)",
   YEDEK_HATASI: "güncelleme öncesi yedek alınamadı",
   DURDURMA_HATASI: "hizmet durdurulamadı",
   PG_GUNCELLEME_HATASI: "PostgreSQL güncellemesi başarısız",

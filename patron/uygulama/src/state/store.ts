@@ -1,37 +1,33 @@
-// İki depo: oturum belirteci GİZLİ depoda (iOS Keychain / Android Keystore; web'de yalnız sekme ömrü),
-// son veri önbelleği düz depoda (AsyncStorage). Depo erişimi hata verebilir — çağıran yutar, çökmeyiz.
+// İki depo: oturum belirteci GİZLİ depoda (iOS Keychain / Android Keystore; web'de yalnız sekme ömrü), son veri
+// önbelleği düz depoda — telefonda AsyncStorage (Android yedeğe girmez: `app.json` `allowBackup: false`), web'de
+// sessionStorage: sekme kapanınca finans/cari verisi tarayıcıda kalmaz. Depo erişimi hata verebilir — çağıran yutar.
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as SecureStore from "expo-secure-store";
 import { Platform } from "react-native";
+import { browserStore, type KeyValue, type ListedStore } from "./browser-store";
 
-export interface KeyValue {
-  get(key: string): Promise<string | null>;
-  set(key: string, value: string): Promise<void>;
-  remove(key: string): Promise<void>;
-}
+export type { KeyValue, ListedStore };
 
-function webSession(): KeyValue {
-  const s = (globalThis as { sessionStorage?: Storage }).sessionStorage;
-  return {
-    get: async (k) => s?.getItem(k) ?? null,
-    set: async (k, v) => s?.setItem(k, v),
-    remove: async (k) => s?.removeItem(k),
-  };
-}
+const web = Platform.OS === "web";
+const browser = globalThis as { sessionStorage?: Storage; localStorage?: Storage };
 
-export const secretStore: KeyValue =
-  Platform.OS === "web"
-    ? webSession()
-    : {
-        get: (k) => SecureStore.getItemAsync(k),
-        set: (k, v) => SecureStore.setItemAsync(k, v),
-        remove: (k) => SecureStore.deleteItemAsync(k),
-      };
+export const secretStore: KeyValue = web
+  ? browserStore(browser.sessionStorage)
+  : {
+      get: (k) => SecureStore.getItemAsync(k),
+      set: (k, v) => SecureStore.setItemAsync(k, v),
+      remove: (k) => SecureStore.deleteItemAsync(k),
+    };
 
-export const plainStore: KeyValue & { keys(): Promise<readonly string[]>; removeMany(keys: readonly string[]): Promise<void> } = {
-  get: (k) => AsyncStorage.getItem(k),
-  set: (k, v) => AsyncStorage.setItem(k, v),
-  remove: (k) => AsyncStorage.removeItem(k),
-  keys: () => AsyncStorage.getAllKeys(),
-  removeMany: (keys) => AsyncStorage.multiRemove([...keys]),
-};
+export const plainStore: ListedStore = web
+  ? browserStore(browser.sessionStorage)
+  : {
+      get: (k) => AsyncStorage.getItem(k),
+      set: (k, v) => AsyncStorage.setItem(k, v),
+      remove: (k) => AsyncStorage.removeItem(k),
+      keys: () => AsyncStorage.getAllKeys(),
+      removeMany: (keys) => AsyncStorage.multiRemove([...keys]),
+    };
+
+/** Eski sürümün web önbelleğini yazdığı kalıcı depo (localStorage) — açılışta temizlenir; telefonda yok. */
+export const legacyPlainStore: ListedStore | null = web ? browserStore(browser.localStorage) : null;

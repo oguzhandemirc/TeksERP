@@ -4,7 +4,7 @@
 // tek kullanımlık `tasima` kodu üretir; kod müşteriye portaldan iletilir, yeni makine onu normal etkinleştirme
 // yolundan kullanır ve anahtar ANCAK o anda değişir (eski anahtar emekli). Onaya kadar eski makine çalışır.
 import type { TasimaTalebi } from "@prisma/client";
-import { TransferResponseSchema, type TransferRequestSchema } from "../lisans-protokol";
+import { ENDPOINTS, TransferResponseSchema, type TransferRequestSchema } from "../lisans-protokol";
 import type { z } from "zod";
 import { recordAudit } from "../lib/audit";
 import { VendorError, notFoundError, stateConflict } from "../lib/errors";
@@ -75,9 +75,16 @@ async function openOrReturn(
  */
 export async function handleTransferRequest(
   _ctx: VendorContext,
-  g: { header: unknown; rawBody: Buffer; body: TransferRequest; nowMs: number; limit?: (scope: string) => void },
+  g: { header: unknown; rawBody: Buffer; body: TransferRequest; nowMs: number; limit?: (scope: string) => void; path?: string },
 ): Promise<TransferResponse> {
-  const verified = await verifySignedRequest({ header: g.header, rawBody: g.rawBody, purposes: ["tasima"], nowMs: g.nowMs, keyFromBody: g.body.acikAnahtar });
+  const verified = await verifySignedRequest({
+    header: g.header,
+    rawBody: g.rawBody,
+    purposes: ["tasima"],
+    nowMs: g.nowMs,
+    keyFromBody: g.body.acikAnahtar,
+    path: g.path ?? ENDPOINTS.TRANSFER,
+  });
   if ((g.body.kurulumId ?? null) !== (verified.request.kurulumId ?? null)) {
     throw new VendorError(401, "ISTEK_KURULUM", "Gövdedeki kurulum kimliği imzalı istekle uyuşmuyor");
   }

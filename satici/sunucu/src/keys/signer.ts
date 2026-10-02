@@ -1,4 +1,4 @@
-// Kök/bayi imzası: parola İMZA ALT SÜRECİNE yalnız stdin'den gider (argv/env ASLA).
+// Kök/bayi/ara imzacı imzası: parola İMZA ALT SÜRECİNE yalnız stdin'den gider (argv/env ASLA).
 // Ana süreç anahtarı hiç açmaz; alt süreç imzalar, Buffer'ları sıfırlar ve çıkar. Parolalı anahtarla imzanın TEK
 // boğazı burasıdır: istek kapsamı (dinleyici) anahtarın DOSYADAKİ türüne göre denetlenir (keys/signing-scope.ts).
 import { spawn, type ChildProcess } from "node:child_process";
@@ -80,7 +80,7 @@ export function spawnSignerProcess(): ChildProcess {
 
 export interface SignWithWrappedKeyInput {
   readonly keyFile: string;
-  readonly typ: "tekserp-hak" | "tekserp-sertifika";
+  readonly typ: "tekserp-hak" | "tekserp-sertifika" | "tekserp-iptal";
   readonly payload: Record<string, unknown>;
   /** Çağıran sıfırlar; burada da iş bitince sıfırlanır. */
   readonly password: Buffer;
@@ -145,6 +145,6 @@ async function signInChild(g: SignWithWrappedKeyInput): Promise<string> {
     throw new Error(`İmza alt süreci çıktı vermedi (çıkış ${String(exitCode)}): ${stderrTail.trim().split("\n").pop() ?? ""}`);
   }
   if (parsed.ok && typeof parsed.belge === "string") return parsed.belge;
-  if (parsed.kod === "YANLIS_PAROLA") throw new KeyFileError("YANLIS_PAROLA", "Kök parolası hatalı");
+  if (parsed.kod === "YANLIS_PAROLA") throw new KeyFileError("YANLIS_PAROLA", "İmza parolası hatalı");
   throw new Error(`İmza reddedildi (${parsed.kod ?? "?"}): ${parsed.mesaj ?? ""}`);
 }

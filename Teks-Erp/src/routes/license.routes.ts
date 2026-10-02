@@ -13,6 +13,7 @@
 import { Router, type NextFunction, type Request, type Response } from "express";
 import { z } from "zod";
 import { readClientVersionHeader } from "../constants/client-info";
+import { HARDWARE_REPORT_REASON_MAX } from "../lib/license/protocol";
 import { verifyToken } from "../middlewares/auth.middleware";
 import { requireAnyPermission, requirePermission } from "../middlewares/rbac.middleware";
 import { AppError } from "../utils/app-error";
@@ -32,6 +33,7 @@ import {
   updateProxySettings,
 } from "../services/license.service";
 import { RecordLicenseAcceptanceSchema, getLicenseAcceptanceView, recordLicenseAcceptance } from "../services/license-acceptance.service";
+import { reportHardwareChange } from "../services/license-hardware.service";
 
 const router = Router();
 
@@ -61,14 +63,19 @@ const canView = requireAnyPermission("license:view", "license:manage");
 const canManage = requirePermission("license:manage");
 
 const ActivateBody = z.object({ kod: z.string().trim().min(12).max(40) });
+// `donanim`: donanım değişikliği bildirimi (K8) zarfla — internetsiz kurulum da donanımını QR/dosya yolundan bildirir.
 const OfflineRequestInput = z.object({
-  amac: z.enum(["yokla", "etkinlestir"]).default("yokla"),
+  amac: z.enum(["yokla", "etkinlestir", "donanim"]).default("yokla"),
   kod: z.string().trim().max(40).optional(),
+  gerekce: z.string().trim().max(HARDWARE_REPORT_REASON_MAX).nullable().optional(),
 });
 const ResponseBody = z.object({
   yanit: z.union([z.string().min(10).max(64 * 1024), z.record(z.string(), z.unknown())]),
 });
+// `kaynak: dosya` — Lisans ekranının "Lisans dosyası yükle"si (portalın uzatma dosyası); yalnız ayak izini ayırır.
+const OfflineResponseBody = ResponseBody.extend({ kaynak: z.enum(["qr", "dosya"]).optional() });
 const TransferBody = z.object({ gerekce: z.string().trim().max(500).nullable().optional() });
+const HardwareReportBody = z.object({ gerekce: z.string().trim().max(HARDWARE_REPORT_REASON_MAX).nullable().optional() });
 // `anaKurulumId` isteğe bağlı: verilmezse satıcı tesisin tek etkin ÜRETİM kurulumunu çıkarır (belirsizse 409 DR_ANA_BELIRSIZ).
 const DrBody = z.object({
   anaKurulumId: z.preprocess((v) => (v === "" || v === null ? undefined : v), z.uuid().optional()),
@@ -243,7 +250,7 @@ function offlineRequestHandler(source: "body" | "query") {
     try {
       const input = OfflineRequestInput.parse((source === "body" ? req.body : req.query) ?? {});
       if (source === "query") res.setHeader("Deprecation", "true");
-      res.status(200).json({ success: true, data: await buildOfflineRequest({ amac: input.amac, kod: input.kod ?? null }) });
+      res.status(200).json({ success: true, data: await buildOfflineRequest({ amac: input.amac, kod: input.kod ?? null, gerekce: input.gerekce || null }) });
     } catch (err) {
       next(err);
     }
@@ -261,7 +268,7 @@ function offlineRequestHandler(source: "body" | "query") {
  *       required: false
  *       content:
  *         application/json:
- *           schema: { type: object, properties: { amac: { type: string, enum: [yokla, etkinlestir] }, kod: { type: string } } }
+ *           schema: { type: object, properties: { amac: { type: string, enum: [yokla, etkinlestir, donanim] }, kod: { type: string }, gerekce: { type: string, maxLength: 500, nullable: true } } }
  *     responses:
  *       200: { description: "{ zarf, gecerlilikSonu, qrAdresi, istekGovdesi, hedefUrl }" }
  *   get:
@@ -270,7 +277,7 @@ function offlineRequestHandler(source: "body" | "query") {
  *     summary: "ESKİ biçim — kod URL'de; POST'a geçildikten bir sürüm sonra kaldırılır"
  *     security: [{ bearerAuth: [] }]
  *     parameters:
- *       - { in: query, name: amac, required: false, schema: { type: string, enum: [yokla, etkinlestir] } }
+ *       - { in: query, name: amac, required: false, schema: { type: string, enum: [yokla, etkinlestir, donanim] } }
  *       - { in: query, name: kod, required: false, schema: { type: string } }
  *     responses:
  *       200: { description: "{ zarf, gecerlilikSonu, qrAdresi, istekGovdesi, hedefUrl }" }
@@ -283,16 +290,29 @@ router.get("/cevrimdisi-istek", canManage, offlineRequestHandler("query"));
  * /api/license/cevrimdisi-yanit:
  *   post:
  *     tags: [Lisans]
- *     summary: Çevrimdışı yanıtı (QR metni ya da JSON) doğrula ve kabul et
+ *     summary: Çevrimdışı yanıtı (QR metni, JSON ya da portalın uzatma dosyası) doğrula ve kabul et
+ *     description: Bekleyen istek aranmaz; yanıt satıcı imzasıyla doğrulanır. Kurulumdakinden eski kira 409 LICENSE_LEASE_STALE.
  *     security: [{ bearerAuth: [] }]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [yanit]
+ *             properties:
+ *               yanit: { oneOf: [{ type: string }, { type: object }] }
+ *               kaynak: { type: string, enum: [qr, dosya], description: "dosya = Lisans ekranından yüklenen uzatma dosyası (yalnız ayak izi)" }
  *     responses:
  *       200: { description: Kabul edildi — güncel ayrıntı }
  *       400: { description: İmza/bağ doğrulanamadı (LICENSE_RESPONSE_INVALID) }
+ *       409: { description: "Donanım bildirimi yanıtı onay bekliyor (LICENSE_HARDWARE_PENDING) ya da reddedildi (LICENSE_HARDWARE_REJECTED)" }
  */
 router.post("/cevrimdisi-yanit", canManage, async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const { yanit } = ResponseBody.parse(req.body);
-    res.status(200).json({ success: true, data: await acceptOfflineResponse(yanit, "cevrimdisi", req.user?.userId ?? null) });
+    const { yanit, kaynak } = OfflineResponseBody.parse(req.body);
+    const source = kaynak === "dosya" ? "dosya" : "cevrimdisi";
+    res.status(200).json({ success: true, data: await acceptOfflineResponse(yanit, source, req.user?.userId ?? null) });
   } catch (err) {
     next(err);
   }
@@ -309,7 +329,7 @@ router.post("/cevrimdisi-yanit", canManage, async (req: Request, res: Response, 
  *       required: false
  *       content:
  *         application/json:
- *           schema: { type: object, properties: { amac: { type: string, enum: [yokla, etkinlestir] }, kod: { type: string } } }
+ *           schema: { type: object, properties: { amac: { type: string, enum: [yokla, etkinlestir, donanim] }, kod: { type: string }, gerekce: { type: string, maxLength: 500, nullable: true } } }
  *     responses:
  *       200: { description: "{ istekGovdesi, hedefUrl, gecerlilikSonu }" }
  *   get:
@@ -318,7 +338,7 @@ router.post("/cevrimdisi-yanit", canManage, async (req: Request, res: Response, 
  *     summary: "ESKİ biçim — kod URL'de; POST'a geçildikten bir sürüm sonra kaldırılır"
  *     security: [{ bearerAuth: [] }]
  *     parameters:
- *       - { in: query, name: amac, required: false, schema: { type: string, enum: [yokla, etkinlestir] } }
+ *       - { in: query, name: amac, required: false, schema: { type: string, enum: [yokla, etkinlestir, donanim] } }
  *       - { in: query, name: kod, required: false, schema: { type: string } }
  *     responses:
  *       200: { description: "{ istekGovdesi, hedefUrl, gecerlilikSonu }" }
@@ -360,6 +380,33 @@ router.post("/tasima-talebi", canManage, async (req: Request, res: Response, nex
   try {
     const { gerekce } = TransferBody.parse(req.body ?? {});
     res.status(200).json({ success: true, data: await requestTransfer(gerekce ?? null, req.user?.userId ?? null) });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * @openapi
+ * /api/license/donanim-bildir:
+ *   post:
+ *     tags: [Lisans]
+ *     summary: Donanım değişikliğini bildir (parmak izi yeniden ölçülür, satıcıya imzalı `donanim` isteği)
+ *     description: Güçlü etkenler (F2 · F3 · F4) tutuyorsa satıcı yeni kümeyi kendiliğinden öğrenir ve yeni kira döner; tutmuyorsa talep portal onayına düşer. Her lisans kademesinde açık.
+ *     security: [{ bearerAuth: [] }]
+ *     requestBody:
+ *       required: false
+ *       content:
+ *         application/json:
+ *           schema: { type: object, properties: { gerekce: { type: string, maxLength: 500, nullable: true } } }
+ *     responses:
+ *       200: { description: "{ talepId, durum: BEKLIYOR|ONAYLANDI|REDDEDILDI, kayip, lisans }" }
+ *       409: { description: Etkinleşmemiş kurulum (LICENSE_NOT_ACTIVE) · satıcı reddetti (LICENSE_VENDOR_REJECTED; eski satıcıda vendorCode BULUNAMADI) · yapılandırılmamış }
+ *       502: { description: Satıcıya ulaşılamadı }
+ */
+router.post("/donanim-bildir", canManage, async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { gerekce } = HardwareReportBody.parse(req.body ?? {});
+    res.status(200).json({ success: true, data: await reportHardwareChange(gerekce || null, req.user?.userId ?? null) });
   } catch (err) {
     next(err);
   }

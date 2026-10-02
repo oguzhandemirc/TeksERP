@@ -24,7 +24,7 @@
                                               └─ yok     (zorunlu kipte native kullanılamıyor: her doğrulama CEKIRDEK_YOK)
 ```
 
-- **Arayüz** (`LicenseCore`): `verifyJws` · `verifyCertificate` · `verifyEntitlement` · `verifyLease` · `checkLeaseBinding` (iki belgeyi doğrular VE bağlar — JS'ten gelen "doğrulanmış" görünüme güvenilmez) · `normalizeFactor` · `digestFingerprint` · `collectFingerprint` (OS f1..f4 + çağıranın F5'i → yalnız tuzlu özet) · `verifyIntegrity` · `unwrapModuleKey`. Sonuç `CoreResult<T>` = protokolün `Result<T>`'si + çekirdek kodları. Görünümler yalnız VERİ taşır (anahtar nesnesi, imza baytı dışarı çıkmaz).
+- **Arayüz** (`LicenseCore`): `verifyJws` · `verifyCertificate` · `verifyEntitlement` · `verifyLease` · `checkLeaseBinding` (iki belgeyi doğrular VE bağlar — JS'ten gelen "doğrulanmış" görünüme güvenilmez) · `normalizeFactor` · `digestFingerprint` · `collectFingerprint` (OS f1..f4 + çağıranın F5'i → yalnız tuzlu özet) · `verifyIntegrity` · `unwrapModuleKey` · lisans v2 (§12): `verifyRevocation` · `pickNewerRevocation` · `isRevocationCurrent` · `compareFingerprints` · `assessIdentification` · `canAutoLearnFingerprint` · `offlineHorizonCeilingDays`. Sonuç `CoreResult<T>` = protokolün `Result<T>`'si + çekirdek kodları. Görünümler yalnız VERİ taşır (anahtar nesnesi, imza baytı dışarı çıkmaz).
 - **Yükleyici aday sırası:** `TEKSERP_LISANS_CEKIRDEK` ortam yolu → paket düzeni `app/native/lisans-cekirdek.<platform>-<arch>[-abi].node` → geliştirme düzeni `Teks-Erp/native/lisans-cekirdek/dist/…`. Dosya adı napi-rs adlandırması: `darwin-arm64` · `win32-x64-msvc` · `linux-x64-gnu`.
 - **Künye kararı** (`identityRejection`, saf): arayüz sürümü (`abi`) + platform + mimari eşit olmalı; zorunlu kipte test çapalı derleme `TEST_DERLEMESI` ile RED.
 - **Zorunlu kip** (`__TEKSERP_NATIVE_REQUIRED__`, derleme sabiti): TS'e DÜŞÜLMEZ (yamalı JS'e kaçış olmasın), ortam yolu OKUNMAZ (yamalı `.node` enjekte edilemesin), yalnız paket yolu. Kullanılamayan çekirdek istisna ATMAZ: doğrulamalar `CEKIRDEK_YOK`, parmak izi ölçülemedi, bütünlük `GECERSIZ(CEKIRDEK_YOK)` — lisans merdiveni (uyarı → ek süre → kısıtlı) işler, süreç düşmez.
@@ -40,8 +40,12 @@ Her dışa aktarım JSON metni alır, JSON metni döndürür (napi nesne eşleme
 | `kunye()` | — | `{ad, surum, abi, platform, arch, hedef, profil, testCapasi, protokolKodlari, cekirdekKodlari, yerTutucular, windowsSondasi, modulHkdfOneki}` |
 | `builtinAnchor()` | — | `{roots: [{kid, x, classes}], packageKeys: [{kid, x}]}` |
 | `verifyJws` | `{token, typ, keys: [{kid, x}]}` | `{ok, value: {header, payload}}` · `{ok: false, code, message}` |
-| `verifyCertificate` | `{token, usage, atMs (null = NaN), roots?}` | `{document, rootKid, allowedClasses}` |
-| `verifyEntitlement` · `verifyLease` | `{token, roots?}` | `{document, signer}` · `{document, subCertificate}` |
+| `verifyCertificate` | `{token, usage, atMs (null = NaN), roots?, iptal?}` | `{document, rootKid, allowedClasses}` |
+| `verifyEntitlement` · `verifyLease` | `{token, roots?, iptal?}` + HAK'ta `nowMs?` (alan varsa sayı olmayan değer RED) | `{document, signer}` (imzacı `KOK`·`BAYI`·`ARA`; özet görünümde YOK) · `{document, subCertificate}` |
+| `verifyRevocation` (v2) | `{token, roots?}` | `{ok, value: {document, rootKid}}` |
+| `pickNewerRevocation` · `isRevocationCurrent` (v2) | `{current?, incoming?, roots?}` · `{lease, iptal?, roots?}` | `{ok, value: {document, rootKid} \| null}` · `{ok, value: bool}` |
+| `compareFingerprints` · `assessIdentification` (v2) | `{accepted, measured, excludeF5?, rule?}` · `{fingerprint, excludeF5?}` | karar `{result, rule, measurable, matched, mismatched, unmeasured, lost, strongMatched}` · `{readable, strongReadable, weak}` (biçimsiz özet → istisna) |
+| `canAutoLearnFingerprint` · `offlineHorizonCeilingDays` (v2) | `{accepted, measured, excludeF5?}` · `{sinif, signer}` | `{value: bool}` · `{value: gün \| null}` |
 | `checkLeaseBinding` | `{lease, entitlement, roots?}` | `true` |
 | `normalizeFactor` | `{factor, raw}` | `{value}` |
 | `digestFingerprint` | `{raw: {f1..f5}, salt}` | `{f1..f5}` (tuz < 16 bayt → istisna, TS gibi) |
@@ -51,7 +55,7 @@ Her dışa aktarım JSON metni alır, JSON metni döndürür (napi nesne eşleme
 | `unwrapLeaseModuleKey` (ABI 2) | `{lease, entitlement, privateKey, modul, kid, roots?}` | `{ok, value: {anahtar, surum}}` |
 | `protectLocal` · `unprotectLocal` (ABI 2) | `{veri}` (base64url) | `{ok, value: {veri}}` — Windows DPAPI; başka platformda `KORUMA_YOK` |
 
-`roots?`/`keys?` verilmezse GÖMÜLÜ çapa. Biçim kırılırsa `api::ABI` ve `NATIVE_ABI` birlikte artar (bekçi §0f eşitliği ölçer).
+`roots?`/`keys?` verilmezse GÖMÜLÜ çapa. `iptal?` İPTAL belgesinin JWS METNİDİR ve aynı çapayla yeniden doğrulanır; doğrulanamazsa istek onun koduyla düşer. Biçim kırılırsa `api::ABI` ve `NATIVE_ABI` birlikte artar (bekçi §0f eşitliği ölçer).
 
 ## 3. Güven çapası
 
@@ -123,3 +127,16 @@ Hedef ölçümü: **darwin-arm64** yerel 34/0 · **win-x64** thinkpad-1'de (Node
 - **P0'ın native'e dokunan iki kuralı vektörle sabitlendi:** imzasız satıcı saati güvenilir saate girmez, imzalı tek saat kaynağı kiranın `sunucuSaati`dir (D4) ve lisans kimliği kiradır (D14; istekte boş kimlik meşru, kira ve HAK'ta değil). 7 vektör: kira `sunucuSaati` yok/saatsiz, kira `kurulumId` yok/boş/null, HAK `kurulumId` yok/boş — hepsi iki uygulamada `BELGE_SEMA`.
 - **`tekserp-butunluk` kayıt defterinde:** `TYP.BUTUNLUK` (satıcı ve patron aynası bayt-eşit); kâhin §0j Rust'taki her `TYP_*` sabitini ad ve değerle ölçer.
 - **Hedef ölçümü:** darwin-arm64 kâhin 37/0 (`TEKSERP_STRICT=1`) · `cargo test` 6 + 2 · fmt + clippy temiz · win-x64 (cargo-xwin) ve linux-x64-gnu (zigbuild, GLIBC 2.28) test ve üretim derlemesi başarılı. Bu dilimde yalnız DERLEME ölçüldü; Windows'ta ve Linux'ta çalıştırma ölçümü 2c'nin ölçümüdür (thinkpad-1 kullanılmadı).
+
+## 12. Lisans v2 aynası (L2-2, 2026-10-01)
+
+- **Kaynak:** `docs/design/LISANS-V2-CEVRIMDISI-KIRA.md` §4.3 (L2-2 satırı) ve K8. Protokol L2-1'de dondu (`lisans2/l2-1-protokol`); native onun denetim SIRASI dahil aynasıdır.
+- **Zincir (`chain.rs`):** ara yol (kök → `kullanim: HAK` sertifikası (`ara-`) → HAK; sınıf `KOK_SINIF_YETKISIZ`, kid `IMZACI_KIMLIK`; kök imzalı HAK ara sertifikası taşıyamaz) · iptal TÜMDENDİR, sertifika kimliğiyle ya da (kid, kullanım) çiftiyle eşleşir (`SERTIFIKA_IPTAL`; ALT · BAYİ · HAK yollarına geçer) · ufuk tavanı (`UFUK_TAVANI_ASIMI`: DEMO/TEST 45 · bayi 400 · süresiz/400 üstü yalnız ÜRETİM ve DR) · veriliş sınırı (`BELGE_ILERI_TARIHLI`; `nowMs` verilmezse işlemez, sonlu değilse RED) · kiranın `hakOzeti` bayt bağı (`KIRA_HAK_UYUSMAZ`; özet compact metnin sha256'sı, `jws::digest` = TS `jwsDigest`) · İPTAL belgesi yalnız çapadaki kökten · `iptalSira` güncelliği · yüksek sıranın seçimi.
+- **Şema (`schema.rs`):** HAK `imzaciSertifikasi?` `cevrimdisiUfukGun?` `kipAltSiniri?` (bayi + ara birlikte RED) · KİRA `odenmisTarih?` `parmakIziKurali?` `kapanis?` (K3 şart) `hakOzeti?` `iptalSira?` · İPTAL (≤ 256 satır, sertifika kimliği tekrarsız, kid öneki kullanımla).
+- **Parmak izi kararı (`fingerprint.rs`):** kural yoksa v1 aynen · `standart`: kabul kümesinde değeri olup ölçülemeyen etken KAYIP ve uyuşmazlık, eşleşen ≥ 3 ∧ güçlülerden (f2 · f3 · f4) ≥ 2 · `zayif`: eşleşen ≥ min(3, n), n = 0 ÖLÇÜLEMEDİ · DR'de f5 hariç · zayıf tanıma (okunabilen < 3 ya da güçlü < 2) · otomatik öğrenme (güçlü eşleşen ≥ 2).
+- **HAK görünümüne özet girmez:** köprü (`core-bridge.ts`) özeti doğrulanan metinden TS'te kurar (L2-1 ilkesi); native bağı kendi içinde ölçer. Bu yüzden v1 vektör dosyası değişmedi.
+- **Adaptör:** sözleşme şemaları `native-contract.ts`te. Saf kararlarda (karar · tanıma · öğrenme · tavan) native istisnası ya da sözleşme dışı yanıt kararı SIKILAŞTIRIR: ÖLÇÜLEMEDİ · zayıf · öğrenmez · en kısa tavan (45); "yok" çekirdeği de aynı varsayılanları, iptal uçlarında `CEKIRDEK_YOK` verir.
+- **ABI 3'te kaldı** (G3 yayınlanmadı; yayınlanmamış değişiklikler tek numarada). Yeni işlevleri taşımayan eski ABI-3 ikilisi `isNativeBinding`den geçmez → `YUKLENEMEDI` (kâhin §1h).
+- **Vektörler:** `test-vektorleri/protokol-v2.json` (L2-1, biçim 1, 137 kayıt) `cargo test`te tüketilir; `istek` ailesi (10 kayıt) çekirdek dışıdır — fabrika istek doğrulamaz, satıcı/patron kâhini ölçer. Kâhin §2''h (TS çekirdeği = protokol) · §4b (kayıtlı, kendi kipi) · §5b (canlı, TS = native) · §9e (iki kip ikilisi) · §0l (12 sabit) · §1h. Açık borç (L2-1): iki dosya tek dosyada birleşir, `VEKTOR_BICIMI` artar.
+- **Ölçüm (darwin-arm64):** `cargo test` iki kipte yeşil · kâhin `TEKSERP_STRICT=1` 80/0, atlama 0 (dist · dist-uretim · dist-hazirlik) · `test_lisans_motoru` native çekirdekle 106/0 · win-x64 ve linux-x64-gnu `cargo check` temiz (bağlama ve çalıştırma ölçülmedi). Negatif sondalar: Rust 29 · kâhin 10 · uçtan uca (ikili yeniden derlenerek) 3 — hepsi kırmızı, geri alınınca yeşil (`Teks-Erp/docs/BEKCI-HARITASI.md` `## lisans`).
+- **Tüketim L2-6/L2-7'de:** motor (`core-bridge.ts`, `runtime.ts`) bu dilimde DEĞİŞMEDİ — `nowMs`, iptal deposu ve parmak izi kuralı yeni seçeneklerle oradan geçirilecek.

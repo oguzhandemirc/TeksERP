@@ -5,6 +5,8 @@
 //! `.eski.exe`ye ve yeni ikili asıl ada yeniden adlandırılır (çalışan exe yeniden adlandırılabilir),
 //! hizmet `EXIT_SELF_UPDATE` ile çıkar, SCM kurtarması yeni ikiliyle başlatır. Yeni ikili İLK iş
 //! olarak açılış sayacını artırır: doğrulanmadan 3. açılışı aşarsa `.eski.exe`yi geri koyar (A/B).
+//! Hizmet her açılışta kendi SCM kurtarmasını `RESTART_DELAYS_S`e getirir (yalnız farklıysa yazar): kurtarma
+//! ayarı kendini güncellemeyle sahaya gider, onarım beklemez.
 use crate::env::Env;
 use crate::layout::Layout;
 use crate::package;
@@ -30,6 +32,31 @@ pub struct SelfState {
 }
 
 pub const MAX_UNVERIFIED_BOOTS: u32 = 3;
+
+/// Güncelleyici hizmetinin SCM kurtarma gecikmeleri (sn) — `hizmet-kur` kaydı ve açılıştaki uyum AYNI diziden;
+/// `guncelleyici-hizmeti.ps1` ölçümü 1/10000,1/10000,1/30000 bekler. Düşen güncelleyici ikinci denemede de 10 sn'de döner.
+pub const RESTART_DELAYS_S: [u64; 3] = [10, 10, 30];
+
+/// SCM'in `SC_ACTION_RESTART` türü.
+const SC_ACTION_RESTART: i32 = 1;
+
+/// Kayıtlı kurtarma (`actions`: SC_ACTION türü + gecikme ms; `reset_s`: `None` = hiç sıfırlanmaz) istenenden
+/// farklıysa farkın metni, uyumluysa `None`.
+pub fn recovery_drift(actions: &[(i32, u64)], reset_s: Option<u64>, non_crash: bool) -> Option<String> {
+    let want: Vec<(i32, u64)> = RESTART_DELAYS_S.iter().map(|s| (SC_ACTION_RESTART, s * 1000)).collect();
+    let mut diff = Vec::new();
+    if actions != want.as_slice() {
+        let seen: Vec<String> = actions.iter().map(|(t, ms)| format!("{t}/{ms}")).collect();
+        diff.push(format!("eylemler '{}'", seen.join(",")));
+    }
+    if reset_s != Some(contract::RECOVERY_RESET_S) {
+        diff.push(format!("sıfırlama {}", reset_s.map_or_else(|| "yok".to_string(), |s| format!("{s} sn"))));
+    }
+    if !non_crash {
+        diff.push("çökmesiz hata kurtarması kapalı".to_string());
+    }
+    (!diff.is_empty()).then(|| diff.join(", "))
+}
 
 fn sibling(exe: &Path, tag: &str) -> PathBuf {
     let stem = exe.file_stem().map(|s| s.to_string_lossy().into_owned()).unwrap_or_default();
@@ -169,4 +196,31 @@ pub fn stage_with_version(
     s.durum = "YER_DEGISTIRILDI".into();
     write(env, layout, &s).map_err(|e| e.to_string())?;
     Ok(true)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const R: i32 = SC_ACTION_RESTART;
+
+    #[test]
+    fn recovery_matching_hizmet_kur_is_left_alone() {
+        assert_eq!(recovery_drift(&[(R, 10_000), (R, 10_000), (R, 30_000)], Some(86_400), true), None);
+    }
+
+    #[test]
+    fn old_10_30_60_recovery_is_drift() {
+        // 0.1.0'ın kaydı (sahada onarımsız kalan): kendini güncelleyen ikili bunu düzeltmeli.
+        let d = recovery_drift(&[(R, 10_000), (R, 30_000), (R, 60_000)], Some(86_400), true).expect("fark");
+        assert!(d.contains("1/10000,1/30000,1/60000"), "{d}");
+    }
+
+    #[test]
+    fn missing_reset_non_crash_or_action_type_is_drift() {
+        assert!(recovery_drift(&[(R, 10_000), (R, 10_000), (R, 30_000)], None, true).is_some_and(|d| d.contains("sıfırlama yok")));
+        assert!(recovery_drift(&[(R, 10_000), (R, 10_000), (R, 30_000)], Some(86_400), false).is_some_and(|d| d.contains("çökmesiz")));
+        assert!(recovery_drift(&[(R, 10_000), (R, 10_000), (0, 30_000)], Some(86_400), true).is_some());
+        assert!(recovery_drift(&[], Some(86_400), true).is_some());
+    }
 }

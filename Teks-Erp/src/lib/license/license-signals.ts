@@ -11,10 +11,7 @@ export function licenseSnapshotVersion(): number {
   return version;
 }
 
-// ── Yoklama ve zil durumu ───────────────────────────────────────────────────────
-/** "Son yoklama başarısız" penceresi (zamanın getirdiği kısıtlamanın ikinci anahtarı). */
-export const POLL_FAILURE_WINDOW_MS = 24 * 60 * 60 * 1000;
-
+// ── Yoklama ve zil durumu (yalnız ekran ve sağlık; kısıtlamanın ikinci anahtarı imzalı kiradan türer) ──
 export interface PollStatus {
   readonly lastAttemptAt: number | null;
   readonly lastSuccessAt: number | null;
@@ -38,16 +35,6 @@ export function setNextPollAt(ms: number | null): void {
 }
 export function getPollStatus(): PollStatus {
   return poll;
-}
-
-/**
- * Son 24 saatte GERÇEK bir yoklama denemesi başarısız oldu mu (ve sonra başarı yok mu)? Kira
- * dosyasının yokluğu tek başına başarısızlık DEĞİLDİR: iki anahtarın ikincisi yalnız denemeyle doğar.
- */
-export function pollFailedRecently(nowMs: number): boolean {
-  const failed = poll.lastFailureAt;
-  if (failed === null || nowMs - failed > POLL_FAILURE_WINDOW_MS) return false;
-  return poll.lastSuccessAt === null || poll.lastSuccessAt < failed;
 }
 
 export interface DoorbellStatus {

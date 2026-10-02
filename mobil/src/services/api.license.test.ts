@@ -3,7 +3,7 @@
 // kimliksiz kapı → sessiz; başka 403 → dokunulmaz. Hata ekrana `details` ile yine ulaşır.
 import { AxiosError, type AxiosResponse, type InternalAxiosRequestConfig } from 'axios';
 import Toast from 'react-native-toast-message';
-import { apiClient } from './api';
+import { apiClient, isDeviceNotApproved, isLoginMethodDisabled, isPasswordChangeRequired } from './api';
 import { useLicenseStore } from '../store/licenseStore';
 
 jest.mock('react-native-toast-message', () => ({ __esModule: true, default: { show: jest.fn() } }));
@@ -80,5 +80,29 @@ describe('403 LICENSE_* global dalı', () => {
     await call({ code: 'MODULE_DISABLED' });
     expect(show).not.toHaveBeenCalled();
     expect(useLicenseStore.getState().blockSeq).toBe(0);
+  });
+});
+
+describe('403 DEVICE_NOT_APPROVED (kısa kimlik yalnız onaylı cihaz)', () => {
+  it('lisans dalına girmez, ekrana details.code ile ulaşır ve yöntem kapanması sayılmaz', async () => {
+    const err = await call({ code: 'DEVICE_NOT_APPROVED' });
+    expect(show).not.toHaveBeenCalled();
+    expect(isDeviceNotApproved(err)).toBe(true);
+    expect(isDeviceNotApproved({ status: 403, details: { code: 'MODULE_DISABLED' } })).toBe(false);
+  });
+});
+
+describe('403 PASSWORD_CHANGE_REQUIRED (parola değişimi bekleyen hesap)', () => {
+  it('yöntem kapanması sayılmaz; giriş ekranı PIN/kart seçimini korur', async () => {
+    const err = await call({ code: 'PASSWORD_CHANGE_REQUIRED' });
+    expect(show).not.toHaveBeenCalled();
+    expect(isPasswordChangeRequired(err)).toBe(true);
+    expect(isLoginMethodDisabled(err)).toBe(false);
+  });
+
+  it('kodsuz 403 (yöntem panelden kapatıldı) seçimi sıfırlatır; onaysız cihaz sıfırlatmaz', async () => {
+    expect(isLoginMethodDisabled(await call({}))).toBe(true);
+    expect(isLoginMethodDisabled(await call({ code: 'DEVICE_NOT_APPROVED' }))).toBe(false);
+    expect(isLoginMethodDisabled({ status: 401 })).toBe(false);
   });
 });

@@ -6,8 +6,8 @@ use std::ffi::{OsStr, OsString};
 use std::path::PathBuf;
 use std::time::Duration;
 use windows_service::service::{
-    ServiceAccess, ServiceAction, ServiceActionType, ServiceDependency, ServiceErrorControl, ServiceFailureActions,
-    ServiceFailureResetPeriod, ServiceInfo, ServiceSidType, ServiceStartType, ServiceState, ServiceType,
+    Service, ServiceAccess, ServiceAction, ServiceActionType, ServiceDependency, ServiceErrorControl, ServiceExitCode,
+    ServiceFailureActions, ServiceFailureResetPeriod, ServiceInfo, ServiceSidType, ServiceStartType, ServiceState, ServiceType,
 };
 use windows_service::service_manager::{ServiceManager, ServiceManagerAccess};
 use windows_sys::Win32::System::Services::{
@@ -77,16 +77,7 @@ pub fn install(s: &ServiceSpec) -> Result<(), String> {
     if s.account.is_some() {
         service.set_config_service_sid_info(ServiceSidType::Unrestricted).map_err(|e| format!("{}: hizmet SID türü: {e}", s.name))?;
     }
-    let actions = s.restart_delays.iter().map(|d| ServiceAction { action_type: ServiceActionType::Restart, delay: *d }).collect();
-    service
-        .update_failure_actions(ServiceFailureActions {
-            reset_period: ServiceFailureResetPeriod::After(Duration::from_secs(86_400)),
-            reboot_msg: None,
-            command: None,
-            actions: Some(actions),
-        })
-        .map_err(|e| format!("{}: kurtarma eylemleri: {e}", s.name))?;
-    service.set_failure_actions_on_non_crash_failures(true).map_err(|e| format!("{}: çökmesiz hata kurtarması: {e}", s.name))?;
+    apply_restart_recovery(&service, &s.name, &s.restart_delays)?;
     if !s.required_privileges.is_empty() {
         // Çoklu dizge: her ad NUL ile biter, liste çift NUL ile.
         let mut multi: Vec<u16> = s.required_privileges.iter().flat_map(|p| p.encode_utf16().chain(std::iter::once(0))).collect();
@@ -100,6 +91,57 @@ pub fn install(s: &ServiceSpec) -> Result<(), String> {
     }
     eventlog::register_source(&s.name)?;
     Ok(())
+}
+
+/// Yeniden başlatma eylemleri + günlük sıfırlama + çökmesiz hata çıkışında da kurtarma (hizmet-kur ile AYNI biçim).
+/// SC_ACTION_RESTART yazmak tutamaçta SERVICE_START ister.
+fn apply_restart_recovery(service: &Service, name: &str, delays: &[Duration]) -> Result<(), String> {
+    let actions = delays.iter().map(|d| ServiceAction { action_type: ServiceActionType::Restart, delay: *d }).collect();
+    service
+        .update_failure_actions(ServiceFailureActions {
+            reset_period: ServiceFailureResetPeriod::After(Duration::from_secs(crate::contract::RECOVERY_RESET_S)),
+            reboot_msg: None,
+            command: None,
+            actions: Some(actions),
+        })
+        .map_err(|e| format!("{name}: kurtarma eylemleri: {e}"))?;
+    service.set_failure_actions_on_non_crash_failures(true).map_err(|e| format!("{name}: çökmesiz hata kurtarması: {e}"))
+}
+
+/// Hizmetin kayıtlı SCM kurtarması: eylemler (tür, gecikme ms), sıfırlama (sn; `None` = hiç), çökmesiz hatada da mı.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Recovery {
+    pub actions: Vec<(i32, u64)>,
+    pub reset_s: Option<u64>,
+    pub non_crash: bool,
+}
+
+pub fn recovery(name: &str) -> Result<Recovery, String> {
+    let m = manager(ServiceManagerAccess::CONNECT)?;
+    let h = m.open_service(name, ServiceAccess::QUERY_CONFIG).map_err(|e| format!("{name}: açılamadı: {e}"))?;
+    let fa = h.get_failure_actions().map_err(|e| format!("{name}: kurtarma eylemleri okunamadı: {e}"))?;
+    let non_crash =
+        h.get_failure_actions_on_non_crash_failures().map_err(|e| format!("{name}: çökmesiz hata kurtarması okunamadı: {e}"))?;
+    let actions = fa
+        .actions
+        .unwrap_or_default()
+        .iter()
+        .map(|a| (a.action_type.to_raw(), u64::try_from(a.delay.as_millis()).unwrap_or(u64::MAX)))
+        .collect();
+    let reset_s = match fa.reset_period {
+        ServiceFailureResetPeriod::Never => None,
+        ServiceFailureResetPeriod::After(d) => Some(d.as_secs()),
+    };
+    Ok(Recovery { actions, reset_s, non_crash })
+}
+
+/// Var olan hizmetin YALNIZ kurtarmasını yazar (kayda dokunmaz) — kendini güncelleyen güncelleyici kendi kaydını düzeltir.
+pub fn set_restart_recovery(name: &str, delays: &[Duration]) -> Result<(), String> {
+    let m = manager(ServiceManagerAccess::CONNECT)?;
+    let h = m
+        .open_service(name, ServiceAccess::QUERY_CONFIG | ServiceAccess::CHANGE_CONFIG | ServiceAccess::START)
+        .map_err(|e| format!("{name}: açılamadı: {e}"))?;
+    apply_restart_recovery(&h, name, delays)
 }
 
 /// Çalışıyorsa durdurur (≤ 60 sn bekler), siler, olay kaynağını kaldırır. Yoksa sessizce geçer.
@@ -140,6 +182,20 @@ pub fn status(name: &str) -> Result<Status, String> {
         ServiceState::Running => Status::Running,
         ServiceState::StopPending => Status::Stopping,
         _ => Status::Other,
+    })
+}
+
+/// DURMUŞ hizmetin hizmete özgü sıfır-dışı çıkış kodu (konak sözleşmesi `exit`: 10 node beklenmedik çıktı …) —
+/// SCM kurtarması onu yeniden başlatacak demektir. Çalışıyorsa, yoksa ya da temiz durduysa `None`.
+pub fn crash_exit_code(name: &str) -> Result<Option<u32>, String> {
+    let m = manager(ServiceManagerAccess::CONNECT)?;
+    let Ok(h) = m.open_service(name, ServiceAccess::QUERY_STATUS) else {
+        return Ok(None);
+    };
+    let s = h.query_status().map_err(|e| format!("{name}: durum okunamadı: {e}"))?;
+    Ok(match (s.current_state, s.exit_code) {
+        (ServiceState::Stopped, ServiceExitCode::ServiceSpecific(c)) if c != 0 => Some(c),
+        _ => None,
     })
 }
 

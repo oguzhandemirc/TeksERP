@@ -87,6 +87,18 @@ pub fn migration_count(env: &Env, be: &BackendEnv) -> Result<MigrationCount, Str
     }
 }
 
+/// Bitmiş göç ADLARI (`sema::FINISHED_MIGRATIONS_SQL`) — şema hizası, backend çalışırken salt okuma.
+pub fn finished_migrations(env: &Env, be: &BackendEnv) -> Result<Vec<String>, String> {
+    let db = &be.db;
+    let c = pg_cmd(be, "psql", db)
+        .args(["-X", "-w"])
+        .args(conn_args(db))
+        .args(["-v", "ON_ERROR_STOP=1", "-tAc", crate::sema::FINISHED_MIGRATIONS_SQL])
+        .timeout(Duration::from_secs(60));
+    let out = run(env, &c, "bitmiş göç adları (psql)")?;
+    Ok(String::from_utf8_lossy(&out.stdout).lines().map(str::trim).filter(|l| !l.is_empty()).map(str::to_string).collect())
+}
+
 /// Özel biçimli döküm (`-Fc`), backend DURMUŞKEN.
 pub fn pg_dump(env: &Env, be: &BackendEnv, out_file: &Path, timeout: Duration) -> Result<(), String> {
     let db = &be.db;

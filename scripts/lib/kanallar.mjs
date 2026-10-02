@@ -52,10 +52,23 @@ export const TABLET_ANAHTARLARI = ['androidPaket', 'gorunenAd', 'erpAdresi', 'ru
  *   · guvenCapasi — kanalın lisans satıcısı/kök bağı (`uretim` | `hazirlik`): paket YALNIZ o kipin kök + PAKET
  *     anahtarlarına güvenir (build-korumali derleme sabiti + native/güncelleyici `hazirlik-capasi` özelliği). Üretim
  *     kanalı daima `uretim`. OTA sertifikası gibi bir güven BAĞIDIR, çalışma anı bayrağı değil.
+ *   · lisansSunucusu — kanalın lisans satıcısının kökeni (`https://host[:port]`; backend `LICENSE_SERVER_URL`):
+ *     güven çapasının aynası — `uretim` çapalı her kanal ÜRETİM satıcısı (= backend varsayılanı,
+ *     `vendor-url.ts` DEFAULT_LICENSE_SERVER_URL; check-kanallar ölçer), `hazirlik` çapalı her kanal hazırlık
+ *     satıcısı; iki kip aynı adresi paylaşamaz. Paket PAKET.json'a taşır (backendLisansSunucusu), pm2 → hizmet
+ *     geçişi (deploy/gecis/gecis.ps1) kurulumun etkin değerini buna karşı ölçer.
  * DAVRANIŞ TAŞIMAZ: bayrak/ayar değil, dağıtım kimliği (feed'ler gibi). Backend YAYIN yolları
  * (feed · son.json · VDS · defter) panel/tablet gibi `yayin` bloğundadır (Dağıtım v2, `deploy/backend-yayinla.mjs`).
  */
-export const BACKEND_ANAHTARLARI = ['urunAdi', 'pm2Ad', 'hizmetAdi', 'guvenCapasi'];
+export const BACKEND_ANAHTARLARI = ['urunAdi', 'pm2Ad', 'hizmetAdi', 'guvenCapasi', 'lisansSunucusu'];
+/** Lisans satıcısı kökeni: yalnız https, küçük harf host, isteğe bağlı port; yol/sonda `/` yok (backend çözücüsünün kabul ettiği biçim). */
+export const LISANS_SUNUCUSU_DESENI = /^https:\/\/[a-z0-9](?:[a-z0-9.-]{0,251}[a-z0-9])?(?::[0-9]{1,5})?$/;
+/** Backend'in varsayılan (ÜRETİM) lisans satıcısı — TEK kaynak `vendor-url.ts`; burada yalnız METİNDEN okunur. */
+export const VENDOR_URL_REL = 'Teks-Erp/src/lib/license/vendor-url.ts';
+export function varsayilanLisansSunucusu(metin) {
+  const m = /^export const DEFAULT_LICENSE_SERVER_URL = "([^"]+)";$/m.exec(typeof metin === 'string' ? metin : '');
+  return m && LISANS_SUNUCUSU_DESENI.test(m[1]) ? m[1] : null;
+}
 /** Backend güven çapası kipleri — Teks-Erp `protocol/kok-anahtarlar.ts` `TRUST_ANCHOR_MODES` ile aynı küme. */
 export const GUVEN_CAPASI_KIPLERI = ['uretim', 'hazirlik'];
 
@@ -212,6 +225,8 @@ export function kayitHatalari(kayit) {
     const capa = k.backend?.guvenCapasi;
     if (typeof capa === 'string' && !GUVEN_CAPASI_KIPLERI.includes(capa)) h.push(`${on}: backend.guvenCapasi "${capa}" tanınmıyor (${GUVEN_CAPASI_KIPLERI.join(' | ')})`);
     if (k.tur === 'uretim' && typeof capa === 'string' && capa !== 'uretim') h.push(`${on}: üretim kanalı backend.guvenCapasi "${capa}" — yalnız uretim (hazırlık çapası üretim paketine giremez)`);
+    const lisans = k.backend?.lisansSunucusu;
+    if (typeof lisans === 'string' && lisans && !LISANS_SUNUCUSU_DESENI.test(lisans)) h.push(`${on}: backend.lisansSunucusu "${lisans}" biçimi tutmuyor (https://<küçük harf host>[:port], yol ve sonda / yok)`);
     // pm2 adı sunucuda süreç/servis kimliğidir: boşluk/ters bölü/kabuk taşıyamaz.
     const pm2 = k.backend?.pm2Ad;
     if (typeof pm2 === 'string' && !/^[a-zA-Z0-9._-]{2,60}$/.test(pm2)) {
@@ -228,6 +243,22 @@ export function kayitHatalari(kayit) {
       h.push(`${on}: panel.erpAdresi "${panelErp}" biçimi tutmuyor (http(s)://<host>[:port], /api yok, sonda / yok)`);
     }
     if (typeof panelErp === 'string' && /(localhost|127\.0\.0\.1)/i.test(panelErp)) h.push(`${on}: panel.erpAdresi localhost olamaz`);
+  }
+
+  // Lisans satıcısı güven çapasının aynası: aynı çapa → aynı satıcı; iki çapa aynı satıcıyı paylaşamaz
+  // (hazırlık satıcısı ÜRETİM sınıfını imzalayamaz, üretim satıcısının imzası hazırlık paketinde geçersizdir).
+  const capaSatici = new Map();
+  for (const kod of kodlar) {
+    const b = kanallar[kod]?.backend;
+    if (typeof b?.guvenCapasi !== 'string' || typeof b?.lisansSunucusu !== 'string' || !b.lisansSunucusu) continue;
+    const onceki = capaSatici.get(b.guvenCapasi);
+    if (onceki && onceki.url !== b.lisansSunucusu) {
+      h.push(`ÇAKIŞMA: "${b.guvenCapasi}" çapalı iki kanal farklı lisans satıcısı gösteriyor: ${onceki.kod} "${onceki.url}" · ${kod} "${b.lisansSunucusu}" (satıcı çapanın aynasıdır)`);
+    } else if (!onceki) capaSatici.set(b.guvenCapasi, { kod, url: b.lisansSunucusu });
+  }
+  const uretimSatici = capaSatici.get('uretim'), hazirlikSatici = capaSatici.get('hazirlik');
+  if (uretimSatici && hazirlikSatici && uretimSatici.url === hazirlikSatici.url) {
+    h.push(`ÇAKIŞMA: üretim ve hazırlık çapası AYNI lisans satıcısını gösteriyor ("${uretimSatici.url}") — iki kök iki satıcıdır`);
   }
 
   // Windows hizmet adları büyük/küçük harf DUYARSIZDIR: ikili fark (tam eşitlik) onları kaçırırdı.
@@ -464,12 +495,16 @@ export function tabletIsaretciFarki(kod, dosyalar) {
  * ağaca YAZILMAZ, paket ANINDA enjekte edilir. Backend'de literal iz taşıyan kaynak
  * yoktur (kimlik çalışma anında env/manifest'ten okunur), o yüzden yalnız değer üretir.
  */
-export function backendPaketleAyarlari(kod, kanal) {
+export function backendPaketleAyarlari(kod, kanal, lisansVarsayilan) {
   return {
     TEKSERP_PM2_AD: kanal.backend.pm2Ad,
     TEKSERP_BACKEND_URUN: kanal.backend.urunAdi,
     TEKSERP_HIZMET_ADI: kanal.backend.hizmetAdi,
     TEKSERP_GUVEN_CAPASI: kanal.backend.guvenCapasi,
+    // Kanalın lisans satıcısı + bu derlemenin varsayılanı (LICENSE_SERVER_URL satırı yoksa backend'in gittiği yer):
+    // paketle.ps1 ikisini PAKET.json'a yazar; geçiş kurulumun etkin değerini bunlarla ölçer.
+    TEKSERP_LISANS_SUNUCUSU: kanal.backend.lisansSunucusu,
+    TEKSERP_LISANS_VARSAYILAN: lisansVarsayilan,
   };
 }
 
@@ -490,7 +525,7 @@ export const KANAL_BEKCI_DOSYALARI = [...new Set([
   KAYIT_REL, 'scripts/lib/kanallar.mjs', 'scripts/kanal-kapisi.mjs', 'scripts/check-kanallar.mjs',
   'scripts/test_kanal_yayin_kapisi.mjs', 'scripts/lib/surum.mjs', 'scripts/lib/surum-notu-tavan.mjs', 'scripts/lib/terfi.mjs', 'scripts/lib/kullanici-cumlesi.mjs',
   'scripts/lib/yayin-okuma.mjs', 'scripts/lib/yayin-hedefi.mjs', 'scripts/lib/derleme-bagi.mjs', 'deploy/vds-dogrula.sh',
-  'scripts/check-surum-notlari.mjs', 'scripts/hooks/pre-commit.mjs',
+  'scripts/check-surum-notlari.mjs', 'scripts/hooks/pre-commit.mjs', VENDOR_URL_REL,
   ...PANEL_SABIT_DOSYALAR, ...TABLET_SABIT_DOSYALAR,
   'Electron/shared/update-feed.ts', 'mobil/scripts/lib/feed.cjs', 'mobil/scripts/lib/adres.mjs', 'mobil/scripts/lib/zip.mjs',
   'mobil/scripts/lib/manifest.mjs', 'mobil/scripts/lib/apk-kimlik.mjs', 'mobil/scripts/lib/kanal.cjs', 'mobil/app.config.js',

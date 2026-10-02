@@ -12,6 +12,8 @@
 // ⭐ KALICI SONDA ✓K2 (her koşumda): (1) kurcalanmış gövde reddedilir — doğrulayıcı gerçekten
 //    gövdeye bakıyor; (2) başka anahtarla imzalı kira fabrikada KIRA_HAK/JWS_KID ile düşer — bekçinin
 //    "zincir doğrulandı" yeşili kurgu değil.
+// §7 zayıf tanıma (K8): okunabilen etken < 3 ya da güçlü < 2 → 409 ZAYIF_TANIMA_ONAY_BEKLIYOR, kod ve nonce tüketilmez,
+// talep onay listesinde (anahtar başına tek); onaydan sonra aynı kod 200 ve kira `parmakIziKurali: zayif`.
 // Koşum: npx tsx scripts/test_etkinlestirme.ts
 // =============================================================================
 import {
@@ -192,6 +194,51 @@ async function main(): Promise<void> {
     );
     const nonceSatiri = await prisma.nonceDefteri.count({ where: { kapsam: k2.kurulumDbId, kurulumId: k2.kurulumDbId } });
     kontrol("§5c4 kimliksiz etkinleştirmenin nonce kapsamı koddan bulunan kurulum", nonceSatiri === 1, `${nonceSatiri}`);
+
+    console.log("\n§7 zayıf tanıma (K8): okunabilen etken < 3 ya da güçlü < 2 → satıcı onayı");
+    const kz = await kurulumFiksturu(ctx);
+    temizlenecek.push(kz.kurulumDbId);
+    const az = kurulumAnahtariUret();
+    const zayif = { f1: f.parmakIzi.f1, f2: f.parmakIzi.f2, f3: null, f4: null, f5: f.parmakIzi.f5 };
+    const zayifEtkinlestir = () =>
+      imzaliPost(sunucu.genel, ENDPOINTS.ACTIVATE, {
+        kurulumId: kz.kurulumId,
+        amac: "etkinlestir",
+        anahtar: az,
+        govde: { ...etkinlestirmeGovdesi({ kod: kz.kod, kurulumId: kz.kurulumId, anahtar: az, parmakIzi: zayif }), yetenekler: ["odenmis-tarih", "parmak-izi-v2"] },
+      });
+    const z1 = await zayifEtkinlestir();
+    const z2 = await zayifEtkinlestir();
+    const kodZ = await prisma.etkinlestirmeKodu.findFirstOrThrow({ where: { kurulumId: kz.kurulumDbId } });
+    const talepZ = await prisma.donanimTalebi.findMany({ where: { kurulumId: kz.kurulumDbId, tur: "ZAYIF_TANIMA" } });
+    kontrol("§7a ⭐ üç etkenli küme (güçlü yalnız f2) → 409 ZAYIF_TANIMA_ONAY_BEKLIYOR; kod TÜKETİLMEDİ, nonce yazılmadı, kurulum etkinleşmedi",
+      z1.status === 409 && z1.kod === "ZAYIF_TANIMA_ONAY_BEKLIYOR" && z2.status === 409 && kodZ.durum === "AKTIF" &&
+        (await prisma.nonceDefteri.count({ where: { kurulumId: kz.kurulumDbId } })) === 0 && (await prisma.kurulum.findUniqueOrThrow({ where: { id: kz.kurulumDbId } })).durum === "ETKINLESMEDI",
+      `${z1.status} ${z1.kod ?? ""} kod=${kodZ.durum}`);
+    kontrol("§7b onay listesinde TEK talep (bu anahtar; ikinci deneme tazeledi), bildirim talep başına bir kez",
+      talepZ.length === 1 && talepZ[0]!.anahtarKimligi === az.kid && talepZ[0]!.durum === "BEKLIYOR" && talepZ[0]!.bildirimSayisi === 2 &&
+        (await prisma.bildirim.count({ where: { kurulumId: kz.kurulumDbId, olay: "DONANIM_ONAYI_BEKLIYOR" } })) === 2);
+    const { decideHardwareTx } = await import("../src/services/hardware.service");
+    await prisma.$transaction((tx) => decideHardwareTx(tx, { talep: talepZ[0]!, decision: "ONAYLANDI", actor: "bekci", reason: "sanal sunucu, müşteriyle teyit edildi" }));
+    const z3 = await zayifEtkinlestir();
+    const kiraZ = LicenseResponseSchema.safeParse(z3.json);
+    const kiraZDoc = kiraZ.success ? verifyLease(kiraZ.data.kira, f.kokler) : null;
+    kontrol("§7c onaydan sonra AYNI kod 200; kira `parmakIziKurali: zayif`, kabul edilen küme bildirilen zayıf küme",
+      z3.status === 200 && !!kiraZDoc?.ok && kiraZDoc.value.document.parmakIziKurali === "zayif" &&
+        JSON.stringify((await prisma.kurulum.findUniqueOrThrow({ where: { id: kz.kurulumDbId } })).kabulEdilenParmakIzi) === JSON.stringify(zayif),
+      `${z3.status} ${z3.kod ?? ""}`);
+    const kz2 = await kurulumFiksturu(ctx);
+    temizlenecek.push(kz2.kurulumDbId);
+    const anahtarZ4 = kurulumAnahtariUret();
+    const z4 = await imzaliPost(sunucu.genel, ENDPOINTS.ACTIVATE, {
+      kurulumId: kz2.kurulumId,
+      amac: "etkinlestir",
+      anahtar: anahtarZ4,
+      govde: etkinlestirmeGovdesi({ kod: kz2.kod, kurulumId: kz2.kurulumId, anahtar: anahtarZ4, parmakIzi: { ...zayif, f3: f.parmakIzi.f3 } }),
+    });
+    kontrol("§7d karşı: dört etkenli, iki güçlü küme zayıf DEĞİL → onaysız 200, talep yok; eski gövde (yeteneksiz) kirasında kural alanı YOK",
+      z4.status === 200 && (await prisma.donanimTalebi.count({ where: { kurulumId: kz2.kurulumDbId } })) === 0 && (LicenseResponseSchema.safeParse(z4.json).success ? (parseJws((z4.json as { kira: string }).kira) as { ok: boolean; value?: { payload: Record<string, unknown> } }).value?.payload.parmakIziKurali : "?") === undefined,
+      `${z4.status} ${z4.kod ?? ""}`);
 
     console.log("\n§6 ✓K sondası: kurgu yeşil değil");
     const sahte = signJws({ typ: "tekserp-kira", kid: f.alt.kid, payload: parseJws(yanit.data.kira).ok ? (parseJws(yanit.data.kira) as { ok: true; value: { payload: Record<string, unknown> } }).value.payload : {}, privateKey: ikinci.privateKey });

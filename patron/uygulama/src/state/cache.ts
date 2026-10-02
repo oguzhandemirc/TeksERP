@@ -2,7 +2,7 @@
 // ("çevrimdışı — son veri <zaman>"). Yetki düşerse (403) saklı kopya da silinir — izni kalkan veri
 // önbellekten gösterilmez. Kapsam hesap+tesis; çıkışta hepsi silinir.
 import { ApiError } from "../api/client";
-import type { KeyValue } from "./store";
+import type { KeyValue, ListedStore } from "./browser-store";
 
 const PREFIX = "patron:onbellek:";
 
@@ -53,11 +53,20 @@ export function createCache(store: KeyValue, scope: string, now: () => Date = ()
 }
 
 /** Çıkışta ya da hesap değişiminde: bütün önbellek silinir. */
-export async function clearCache(store: { keys(): Promise<readonly string[]>; removeMany(k: readonly string[]): Promise<void> }): Promise<void> {
+export async function clearCache(store: Pick<ListedStore, "keys" | "removeMany">): Promise<void> {
   try {
     const keys = (await store.keys()).filter((k) => k.startsWith(PREFIX));
     if (keys.length > 0) await store.removeMany(keys);
   } catch {
     // depo erişilemezse bir sonraki girişte kapsam anahtarı zaten farklıdır
   }
+}
+
+/**
+ * Açılış hijyeni: eski sürümün kalıcı (web localStorage) önbelleği HER açılışta silinir; oturum (belirteç +
+ * kapsam) yoksa düz depodaki önbellek de silinir — oturumsuz cihazda önceki hesabın verisi kalmaz.
+ */
+export async function openingCacheHygiene(g: { plain: Pick<ListedStore, "keys" | "removeMany">; legacy: Pick<ListedStore, "keys" | "removeMany"> | null; hasSession: boolean }): Promise<void> {
+  if (g.legacy) await clearCache(g.legacy);
+  if (!g.hasSession) await clearCache(g.plain);
 }

@@ -32,9 +32,14 @@ pub mod code {
     pub const KOK_SINIF_YETKISIZ: &str = "KOK_SINIF_YETKISIZ";
     pub const SERTIFIKA_KULLANIM: &str = "SERTIFIKA_KULLANIM";
     pub const SERTIFIKA_ZAMAN: &str = "SERTIFIKA_ZAMAN";
+    /// Lisans v2 (G4): iptal belgesindeki sertifika · ara imzacı kimliği · sınıf ufuk tavanı · ileri tarihli HAK.
+    pub const SERTIFIKA_IPTAL: &str = "SERTIFIKA_IPTAL";
     pub const BAYI_KIMLIK: &str = "BAYI_KIMLIK";
     pub const BAYI_TAVAN_MODUL: &str = "BAYI_TAVAN_MODUL";
     pub const BAYI_TAVAN_SINIF: &str = "BAYI_TAVAN_SINIF";
+    pub const IMZACI_KIMLIK: &str = "IMZACI_KIMLIK";
+    pub const UFUK_TAVANI_ASIMI: &str = "UFUK_TAVANI_ASIMI";
+    pub const BELGE_ILERI_TARIHLI: &str = "BELGE_ILERI_TARIHLI";
     pub const KIRA_HAK_UYUSMAZ: &str = "KIRA_HAK_UYUSMAZ";
     pub const KIRA_SINIF_YETKISIZ: &str = "KIRA_SINIF_YETKISIZ";
 
@@ -73,9 +78,13 @@ pub mod code {
         KOK_SINIF_YETKISIZ,
         SERTIFIKA_KULLANIM,
         SERTIFIKA_ZAMAN,
+        SERTIFIKA_IPTAL,
         BAYI_KIMLIK,
         BAYI_TAVAN_MODUL,
         BAYI_TAVAN_SINIF,
+        IMZACI_KIMLIK,
+        UFUK_TAVANI_ASIMI,
+        BELGE_ILERI_TARIHLI,
         KIRA_HAK_UYUSMAZ,
         KIRA_SINIF_YETKISIZ,
     ];

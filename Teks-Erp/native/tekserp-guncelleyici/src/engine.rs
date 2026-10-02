@@ -1,6 +1,7 @@
 //! Motor — hizmetin her turu (§5–§8): yarım işlem varsa ÖNCE onu sonuçlandır; yoksa kira (yetki) →
 //! aday (işaretçi → PAKET imzalı sürüm bildirimi) → TEK karar (`decision::decide`, TS aynası) →
-//! paket (indir · sha256 · aç · bütünlük · bağ) → HAZIR → karar KUR ise (PG küçük sürümü önce) uygula.
+//! paket (indir · sha256 · aç · bütünlük · bağ) → şema hizası (`sema`) → HAZIR → karar KUR ise (PG küçük sürümü
+//! önce) uygula.
 //! Her turun sonunda `durum.json` yazılır (canlılık). Hiçbir karar niyetten YETKİ almaz: niyet yalnız
 //! panel onayı ve indirme belirtecidir; kurulabilirlik imzalı kira + bildirim + paketten gelir.
 use crate::codes;
@@ -8,7 +9,9 @@ use crate::decision::{self, Decision, InstalledPg, Kind, PgMode, PolicySource, U
 use crate::download::{self, Spec};
 use crate::env::Env;
 use crate::health;
-use crate::ipc::{self, Approval, IntentRead, LastDetail, Pending, PolicyView, Progress as IpcProgress, State, StatusDoc, UpdateResult};
+use crate::ipc::{
+    self, Approval, IntentRead, LastDetail, Notice, Pending, PolicyView, Progress as IpcProgress, State, StatusDoc, UpdateResult,
+};
 use crate::journal::{Journal, Kind as JKind};
 use crate::layout::Layout;
 use crate::operation::{self, BackendOp, BackendPlan, Ctx, OpOutcome, Progress};
@@ -17,6 +20,7 @@ use crate::pgminor::{self, PgOp, PgPlan};
 use crate::policy::{self, LicenseView};
 use crate::release::{self, Checked, PgTarget, ReleaseManifest};
 use crate::selfupdate;
+use crate::sema;
 use crate::settings::{self, BackendEnv, UpdaterSettings};
 use crate::tools::{self, Runtime};
 use crate::trust::TrustAnchor;
@@ -60,6 +64,8 @@ pub struct Engine {
     last_status: RefCell<Option<StatusDoc>>,
     last_progress_ms: RefCell<i64>,
     candidate: RefCell<Option<Candidate>>,
+    /// Bu turun bilgisi (`durum.bilgi`): turun başında silinir, ölçüm koyar; sonraki her durum yazımı taşır.
+    notice: RefCell<Option<Notice>>,
 }
 
 struct Inputs {
@@ -95,6 +101,20 @@ struct LastOp {
 
 type Fail = (&'static str, String);
 
+/// Hazırlık dizini işlemi düştü: kilit (erişim engellendi · Windows paylaşım/kilit ihlali 32/33) `DOSYA_KILITLI`,
+/// diğerleri verilen kod. Kilit bir indirme hatası değildir ve paketi ertelemeye sokmaz.
+fn staging_fail(otherwise: &'static str, path: &std::path::Path, e: &std::io::Error) -> Fail {
+    let locked = e.kind() == std::io::ErrorKind::PermissionDenied || (cfg!(windows) && matches!(e.raw_os_error(), Some(32 | 33)));
+    if locked {
+        fail(
+            codes::DOSYA_KILITLI,
+            format!("{} başka bir program tarafından kullanılıyor ({e}) — virüs tarayıcı, yedek ya da açık bir Gezgin penceresi olabilir; kilit kalkınca kendiliğinden sürer", path.display()),
+        )
+    } else {
+        fail(otherwise, format!("{}: {e}", path.display()))
+    }
+}
+
 fn fail(code: &'static str, m: impl Into<String>) -> Fail {
     (code, m.into())
 }
@@ -115,6 +135,7 @@ impl Engine {
             last_status: RefCell::new(None),
             last_progress_ms: RefCell::new(0),
             candidate: RefCell::new(None),
+            notice: RefCell::new(None),
         }
     }
 
@@ -165,6 +186,7 @@ impl Engine {
         d.last_detail = f.last_detail.clone();
         d.error_code = code.map(str::to_string);
         d.message = (!message.is_empty()).then(|| message.to_string());
+        d.notice = self.notice.borrow().clone();
         d
     }
 
@@ -252,6 +274,7 @@ impl Engine {
     /// Bir tur. `stop()` doğru olursa uzun işler (indirme) güvenli noktada bırakılır.
     pub fn tick(&self, stop: &dyn Fn() -> bool) -> TickResult {
         let idle = |s: u64| TickResult::Idle(Duration::from_secs(s));
+        *self.notice.borrow_mut() = None;
         if let Err(m) = self.private_area_ok() {
             self.log.error(&m);
             self.env.events.event(tekserp_hizmet::logfile::Level::Error, &m);
@@ -651,6 +674,11 @@ impl Engine {
                 return idle;
             }
         }
+        // Şema hizası: paket şemanın gerisindeyse (geri indirme) HAZIR denmez, uygulanmaz — hiçbir şey değişmeden bekler.
+        if let Err((code, msg)) = self.schema_check(inputs, &m.doc) {
+            self.write_status(self.doc(&f, State::Waiting, Some(code), &msg));
+            return idle;
+        }
         if d.karar != Kind::Install {
             let mut doc = self.doc(&f, State::Ready, None, &format!("{} hazır; {}", m.doc.surum, d.karar.label()));
             doc.planned = d.aralik.as_ref().filter(|_| d.karar == Kind::AwaitingWindow).map(|a| a.baslangic.clone());
@@ -843,7 +871,7 @@ impl Engine {
                 Err(e) if f.installed.as_deref() == Some(m.surum.as_str()) => return Err(e),
                 Err((_, why)) => {
                     self.log.warn(&format!("{} doğrulanamadı ({why}), yeniden açılacak", dir.display()));
-                    fs.remove_dir_all(&dir).map_err(|x| fail(codes::INDIRME_HATASI, x.to_string()))?;
+                    fs.remove_dir_all(&dir).map_err(|x| staging_fail(codes::INDIRME_HATASI, &dir, &x))?;
                 }
             }
         }
@@ -865,8 +893,8 @@ impl Engine {
         let mut progress = |done: u64, total: u64| self.download_progress(f, done, total);
         download::download(&self.env, &spec, &mut progress, stop).map_err(|e| (e.code, e.message))?;
         let staging = self.layout.staging_dir(&m.surum);
-        fs.remove_dir_all(&staging).map_err(|x| fail(codes::INDIRME_HATASI, x.to_string()))?;
-        fs.create_dir_all(&self.layout.versions()).map_err(|x| fail(codes::INDIRME_HATASI, x.to_string()))?;
+        fs.remove_dir_all(&staging).map_err(|x| staging_fail(codes::INDIRME_HATASI, &staging, &x))?;
+        fs.create_dir_all(&self.layout.versions()).map_err(|x| staging_fail(codes::INDIRME_HATASI, &self.layout.versions(), &x))?;
         if let Err(e) = fs.extract_zip(&zip, &staging, &ExtractLimits::default()) {
             let _ = fs.remove_dir_all(&staging);
             let _ = fs.remove_file(&zip);
@@ -881,7 +909,7 @@ impl Engine {
             let _ = fs.remove_file(&zip);
             return Err(e);
         }
-        fs.rename(&staging, &dir).map_err(|x| fail(codes::INDIRME_HATASI, x.to_string()))?;
+        fs.rename(&staging, &dir).map_err(|x| staging_fail(codes::INDIRME_HATASI, &staging, &x))?;
         place_marker()?;
         let _ = fs.remove_file(&zip);
         self.log.info(&format!("{} hazır: indirildi, sha256 + PAKET imzası + bütünlük listesi + bildirim bağı doğrulandı", m.surum));
@@ -979,9 +1007,9 @@ impl Engine {
         let mut noop = |_: u64, _: u64| {};
         download::download(&self.env, &spec, &mut noop, stop).map_err(|e| (e.code, e.message))?;
         let staging = self.layout.pg_staging_dir(&tag);
-        fs.remove_dir_all(&staging).map_err(|x| fail(codes::PG_PAKET, x.to_string()))?;
+        fs.remove_dir_all(&staging).map_err(|x| staging_fail(codes::PG_PAKET, &staging, &x))?;
         if fs.is_dir(&dir) {
-            fs.remove_dir_all(&dir).map_err(|x| fail(codes::PG_PAKET, x.to_string()))?;
+            fs.remove_dir_all(&dir).map_err(|x| staging_fail(codes::PG_PAKET, &dir, &x))?;
         }
         let checked = fs
             .extract_zip(&zip, &staging, &ExtractLimits::default())
@@ -1012,7 +1040,7 @@ impl Engine {
             let _ = fs.remove_file(&zip);
             return Err(fail(codes::PG_PAKET, e));
         }
-        fs.rename(&staging, &dir).map_err(|x| fail(codes::PG_PAKET, x.to_string()))?;
+        fs.rename(&staging, &dir).map_err(|x| staging_fail(codes::PG_PAKET, &staging, &x))?;
         fs.write_atomic(&marker, json!({ "surum": tag }).to_string().as_bytes()).map_err(|x| fail(codes::PG_PAKET, x.to_string()))?;
         let _ = fs.remove_file(&zip);
         Ok(())
@@ -1039,6 +1067,32 @@ impl Engine {
             }
         }
         Ok(())
+    }
+
+    /// Şema hizası (`sema::verdict`, setup ve geçişle TEK kural), hazırlıktan sonra, hizmet durdurulmadan; ÜÇ sonuç:
+    /// uyumlu → sürer · ileride → `SEMA_ILERIDE`, BEKLİYOR (geri indirme yok) · ölçülemedi → `SEMA_OLCULEMEDI` BİLGİ:
+    /// güncelleme durmaz (göç adımı DB ister, düşerse telafiyle döner) ama kod günlüğe ve `durum.bilgi`ye yazılır.
+    fn schema_check(&self, inputs: &Inputs, m: &ReleaseManifest) -> Result<(), Fail> {
+        let package = sema::package_migrations(self.env.fs.as_ref(), &self.layout.version_dir(&m.surum)).map_err(|e| e.to_string());
+        let db = tools::finished_migrations(&self.env, &inputs.backend);
+        match sema::verdict(db, package) {
+            sema::Verdict::Aligned => Ok(()),
+            sema::Verdict::Unmeasured(why) => {
+                let message = format!("{} için şema hizası ölçülemedi ({why}) — güncelleme bu yüzden durdurulmadı", m.surum);
+                self.log.info(&format!("{}: {message}", codes::SEMA_OLCULEMEDI));
+                *self.notice.borrow_mut() = Some(Notice { code: codes::SEMA_OLCULEMEDI.into(), message });
+                Ok(())
+            }
+            sema::Verdict::Ahead(extra) => Err(fail(
+                codes::SEMA_ILERIDE,
+                format!(
+                    "{} kurulmaz: veritabanında paketin taşımadığı {} bitmiş göç var (ilk: {}) — paket şemanın gerisinde, geri indirme yapılmaz; bu göçleri taşıyan daha yeni bir sürüm gerekir",
+                    m.surum,
+                    extra.len(),
+                    extra[0]
+                ),
+            )),
+        }
     }
 
     fn disk_check(&self, m: &ReleaseManifest) -> Result<(), Fail> {

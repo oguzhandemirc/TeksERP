@@ -4,7 +4,6 @@
 import type { Prisma } from "@prisma/client";
 import { notFoundError } from "../lib/errors";
 import type { Db } from "../lib/prisma";
-import type { VendorContext } from "../services/context";
 import { currentCeiling, dealerUsage } from "../services/dealer.service";
 import { computeSanctionState } from "../services/lease.service";
 import { userView } from "./users.service";
@@ -141,7 +140,7 @@ export async function installationDetail(db: Db, id: string, g: { dealerId?: str
   const dealerView = g.dealerId !== undefined;
   const hak = inst.haklar[0] ?? null;
   const versions = hak
-    ? await db.hakSurumu.findMany({ where: { hakId: hak.id }, orderBy: { surum: "desc" }, select: { id: true, surum: true, imzalayanKid: true, verilis: true, sebep: true, yapan: true, createdAt: true } })
+    ? await db.hakSurumu.findMany({ where: { hakId: hak.id }, orderBy: { surum: "desc" }, select: { id: true, surum: true, imzalayanKid: true, verilis: true, uzunUfuk: true, sebep: true, yapan: true, createdAt: true } })
     : [];
   const codes = await db.etkinlestirmeKodu.findMany({
     where: { kurulumId: inst.id },
@@ -169,7 +168,7 @@ export async function installationDetail(db: Db, id: string, g: { dealerId?: str
     where: { kurulumId: inst.id },
     orderBy: [{ createdAt: "desc" }, { id: "desc" }],
     take: 20,
-    select: { id: true, karar: true, oncekiKiraId: true, anahtarKimligi: true, hakSurum: true, verilis: true, bitis: true, createdAt: true },
+    select: { id: true, karar: true, kapanisNedeni: true, oncekiKiraId: true, anahtarKimligi: true, hakSurum: true, verilis: true, bitis: true, createdAt: true },
   });
   const polls = await db.yoklama.findMany({
     where: { kurulumId: inst.id },
@@ -311,26 +310,6 @@ export async function listAudit(db: Db, g: { entity?: string; entityId?: string;
 }
 
 /** Anahtar durumu: YALNIZ açık yarı + kid + tür + geçerlilik + çapa bilgisi (özel yarı zaten DB'de yok). */
-export async function keyStatus(ctx: VendorContext, db: Db, nowMs: number) {
-  const registry = await db.anahtarKaydi.findMany({
-    orderBy: [{ tur: "asc" }, { kid: "asc" }],
-    select: { kid: true, tur: true, acikAnahtar: true, siniflar: true, baslangic: true, bitis: true, durum: true, createdAt: true, updatedAt: true },
-  });
-  const loaded = new Set([...ctx.keys.wrapped.map((w) => w.kid), ...ctx.keys.subKeys.map((k) => k.kid)]);
-  return {
-    capa: { kaynak: ctx.keys.anchorSource, kokler: ctx.keys.anchor.map((r) => ({ kid: r.kid, x: r.x, siniflar: r.classes })) },
-    anahtarlar: registry.map((r) => ({
-      ...r,
-      yuklu: loaded.has(r.kid),
-      suresiDoldu: r.bitis !== null && r.bitis.getTime() < nowMs,
-      capada: ctx.keys.wrapped.find((w) => w.kid === r.kid)?.inAnchor ?? null,
-    })),
-    kiraImzalayabilir: ctx.keys.subKeys.some((k) => k.kind === "ALT"),
-    indirmeAnahtari: ctx.keys.downloadKey(nowMs)?.kid ?? null,
-    uyarilar: ctx.keys.warnings,
-  };
-}
-
 /** Bayinin kendi görünümü: tavan + kullanım (başka bayiler görünmez). */
 export async function dealerSelf(db: Db, dealerId: string) {
   const dealer = await db.bayi.findUnique({ where: { id: dealerId } });

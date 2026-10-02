@@ -13,7 +13,7 @@ use std::sync::{Arc, OnceLock};
 use std::time::Duration;
 use tekserp_hizmet::contract;
 use tekserp_hizmet::logfile::{Level, LogSpec, RotatingLog};
-use tekserp_hizmet::windows::{eventlog, job};
+use tekserp_hizmet::windows::{eventlog, job, scm};
 use windows_service::service::{ServiceControl, ServiceControlAccept, ServiceExitCode, ServiceState, ServiceStatus, ServiceType};
 use windows_service::service_control_handler::{self, ServiceControlHandlerResult};
 use windows_service::{define_windows_service, service_dispatcher};
@@ -85,6 +85,24 @@ fn service_main(_arguments: Vec<OsString>) {
     drop(job);
 }
 
+/// Kendi SCM kurtarmasını `hizmet-kur` ile AYNI diziye getirir; yalnız farklıysa yazar (sayaç boşuna sıfırlanmasın).
+/// Kendini güncelleyen ikili eski kaydın kurtarmasını da düzeltir — onarım gerekmez.
+fn ensure_own_recovery(log: &RotatingLog) {
+    let r = match scm::recovery(name()) {
+        Ok(r) => r,
+        Err(e) => {
+            log.warn(&format!("SCM kurtarması okunamadı (değiştirilmedi): {e}"));
+            return;
+        }
+    };
+    let Some(diff) = selfupdate::recovery_drift(&r.actions, r.reset_s, r.non_crash) else { return };
+    let delays: Vec<Duration> = selfupdate::RESTART_DELAYS_S.map(Duration::from_secs).to_vec();
+    match scm::set_restart_recovery(name(), &delays) {
+        Ok(()) => log.info(&format!("SCM kurtarması {:?} sn'ye yazıldı (önce: {diff})", selfupdate::RESTART_DELAYS_S)),
+        Err(e) => log.warn(&format!("SCM kurtarması yazılamadı ({diff}): {e}")),
+    }
+}
+
 fn body(layout: &Layout, log: &Arc<RotatingLog>, stop: &AtomicBool, running: &dyn Fn(), job_slot: &mut Option<job::KillOnCloseJob>) -> u32 {
     let own = std::env::current_exe().ok();
     let settings = crate::settings::read_settings(&crate::env::RealFs, layout).unwrap_or_default();
@@ -122,6 +140,7 @@ fn body(layout: &Layout, log: &Arc<RotatingLog>, stop: &AtomicBool, running: &dy
     };
     running();
     log.info(&format!("güncelleyici başladı (sürüm {}; test çapası {})", env!("CARGO_PKG_VERSION"), crate::trust::TEST_ANCHOR));
+    ensure_own_recovery(log);
     let engine = Engine::new(env.clone(), layout.clone(), anchor, Arc::clone(log), own.clone());
     let should_stop = || stop.load(Ordering::SeqCst);
     let mut healthy_marked = false;

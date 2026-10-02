@@ -1,4 +1,5 @@
-// YAPTIRIM KATALOĞU (K0–K5) + zorlama + geçerlilik bitişi + planlı eylem + taksit.
+// YAPTIRIM KATALOĞU (K0–K5) + zorlama + geçerlilik bitişi + planlı eylem + taksit. Ödenmiş tarih (P) bu defterden
+// ve taksit kalemlerinden TÜRER (`paid-through.ts`); burada ayrı bir P kolonu yazılmaz.
 // Her eylem YaptirimEylemi DEFTERİNE satırdır (sebep zorunlu); geri alma ters satırdır (GERI_AL),
 // satır silinmez/düzeltilmez. Etki kiraya yazılır; eylem kendi tx'inde zili çalar (COMMIT'te).
 // Her eylemin `…Tx(tx, …)` biçimi vardır (ilk ifadesi kurulum kilidi): portal onu işlem kimliği
@@ -485,6 +486,8 @@ export async function recordInstallmentPaymentTx(tx: Tx, g: { item: InstallmentI
     reason: next ? `Taksit ${item.sira} ödendi — sonraki vadeye uzatıldı` : "Taksit planı tamamlandı — süre sınırı kalktı",
     actor: g.actor,
   });
+  // Ödenmiş tarih (P) sıradaki vadeye ilerledi: geçerlilik değişmese de çevrimiçi fabrika yeni P'li kirayı hemen alsın.
+  await notifyDoorbell(tx, installationDbId, "lisans");
   return { item, validity, revertedK3 };
 }
 

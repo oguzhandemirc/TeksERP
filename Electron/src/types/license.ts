@@ -80,6 +80,13 @@ export interface LicenseDetail {
     devredildi: boolean;
     yaptirimKademesi: SanctionLevel | null;
     saat: { guvenilir: string; kaynak: string; bulgu: string | null; bulguKaynagi: string | null };
+    /**
+     * Lisans v2 süre çapası — ödenmiş tarih (P; `tarih` null = süresiz). `null` = belgeler P taşımıyor,
+     * eski çapa (kira bitişi/vade) işler. Eski backend göndermez.
+     */
+    odenmisTarih?: { tarih: string | null; kaynak: "ODEME" | "UFUK" | "SURESIZ"; sozlesmeSonu: boolean } | null;
+    /** Son başarılı kira alışverişi (imzalı kiradan) ve "internet var" (son 24 saat). Eski backend göndermez. */
+    baglanti?: { sonAlisveris: string | null; internetVar: boolean };
   };
   hak: {
     hakId: string;
@@ -93,6 +100,8 @@ export interface LicenseDetail {
     bakimBitis: string;
     verilis: string;
     bayiId: string | null;
+    /** HAK'ın çevrimdışı ufku (gün; null = süresiz). v1 HAK taşımaz. */
+    cevrimdisiUfukGun?: number | null;
   } | null;
   kira: {
     kiraId: string;
@@ -112,6 +121,8 @@ export interface LicenseDetail {
     yoklamaAraligiDk: number;
     devredildi: boolean;
     kanal: { kod: string; guncelSurumler: { backend?: string; panel?: string; tablet?: string } };
+    /** Kiradaki ödenmiş tarih beyanı (null = süresiz). v1 kira taşımaz. */
+    odenmisTarih?: string | null;
   } | null;
   parmakIzi: {
     olculdu: string | null;
@@ -121,6 +132,11 @@ export interface LicenseDetail {
     eslesen: number | null;
     olculebilen: number | null;
     uyusmayan: string[];
+    /** Etken başına çok yollu okuma raporu (K8: 24 sa önbellek). Eski backend göndermez. */
+    okuma?: Record<FingerprintFactor, FingerprintFactorReport> | null;
+    /** Kabul edilen kümede değeri olup 24 saattir hiçbir yoldan okunamayan etkenler. Eski backend göndermez. */
+    kayip?: string[];
+    onbellekBozuk?: boolean;
   };
   yoklama: {
     saticiYapilandirildi: boolean;
@@ -144,6 +160,20 @@ export interface LicenseDetail {
   proxy: LicenseProxySettings;
   /** Lisans çekirdeği + imzalı paket bütünlüğü (yalnız sayılar, dosya adı yok). Eski backend göndermez. */
   butunluk?: LicenseIntegrity;
+  /** G4 güven zinciri (HAK imzacısı · kira ALT'ı · iptal belgesi). Eski backend göndermez. */
+  zincir?: LicenseChain;
+}
+
+/** Backend `LicenseChainView` aynası (`license-chain-view.helper.ts`). */
+export interface LicenseChain {
+  hakImzacisi: {
+    kind: "KOK" | "BAYI" | "ARA";
+    kid: string;
+    rootKid: string;
+    sertifika: { sertifikaId: string; siniflar: string[]; baslangic: string; bitis: string } | null;
+  } | null;
+  kiraAlt: { kid: string; baslangic: string; bitis: string } | null;
+  iptal: { sira: number | null; verilis: string | null; kayitSayisi: number | null; pin: number | null; durum: "GUNCEL" | "KAYIP" | "YOK" };
 }
 
 export type IntegrityStatus = "GECERLI" | "GECERSIZ" | "OLCULEMEDI" | "KAPSAM_DISI";
@@ -164,7 +194,8 @@ export interface LicenseIntegrity {
   ilkUyusmazlik: string | null;
 }
 
-export type OfflinePurpose = "yokla" | "etkinlestir";
+/** `donanim`: donanım değişikliği bildirimi zarfla (K8) — eski backend 400 döner (amaç tanınmaz). */
+export type OfflinePurpose = "yokla" | "etkinlestir" | "donanim";
 
 export interface LicenseOfflineRequest {
   amac: OfflinePurpose;
@@ -174,6 +205,24 @@ export interface LicenseOfflineRequest {
   hedefUrl: string | null;
   istekGovdesi: { v: 1; zarf: string };
   qrAdresi: string | null;
+}
+
+/** Etken okuma raporu — değer/özet yok: kaynak (bu ölçüm · ≤ 24 sa önbellek · yok), kazanan yol, son okuma. */
+export interface FingerprintFactorReport {
+  kaynak: "okundu" | "onbellek" | "yok";
+  durum: "OKUNDU" | "DEGER_YOK" | "OKUNAMADI";
+  yol: string | null;
+  sonOkuma: string | null;
+  celiski: string[];
+  hatali: string[];
+}
+
+/** `POST /api/license/donanim-bildir` yanıtı (K8). */
+export interface LicenseHardwareReportResult {
+  talepId: string;
+  durum: "BEKLIYOR" | "ONAYLANDI" | "REDDEDILDI";
+  kayip: string[];
+  lisans: LicenseDetail;
 }
 
 export interface LicenseTransferResult {

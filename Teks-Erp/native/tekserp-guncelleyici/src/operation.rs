@@ -253,6 +253,7 @@ const ALL_CODES: &[&str] = &[
     codes::GOC_HATASI,
     codes::GOC_ZAMAN_ASIMI,
     codes::SAGLIK_ZAMAN_ASIMI,
+    codes::SAGLIK_HIZMET_DUSTU,
     codes::SAGLIK_SURUM,
     codes::SAGLIK_DB,
     codes::SAGLIK_LISANS,
@@ -274,6 +275,49 @@ pub fn wait_state(ctx: &Ctx, name: &str, want: SvcState, timeout: Duration) -> b
     let deadline = ctx.env.clock.now_ms() + i64::try_from(timeout.as_millis()).unwrap_or(i64::MAX);
     loop {
         if ctx.env.svc.state(name).is_ok_and(|s| s == want) {
+            return true;
+        }
+        if ctx.env.clock.now_ms() >= deadline {
+            return false;
+        }
+        ctx.env.clock.sleep(Duration::from_millis(500));
+    }
+}
+
+/// Çökerek duran hizmet için SCM kurtarmasının bekleyen yeniden başlatmasını bekleme penceresi — backend kurtarmasının
+/// en uzun beklemesini (30 sn, `tekserp-hizmet hizmet-kur`) aşar.
+pub const RECOVERY_SETTLE: Duration = Duration::from_secs(40);
+/// Yatıştırmanın üst sınırı (kurtarma her seferinde yeniden başlatıp sürüm yine düşerse).
+pub const RECOVERY_SETTLE_MAX: Duration = Duration::from_secs(150);
+
+/// Durdur + YATIŞTIR: hizmet ÇÖKEREK durmuşsa (konağın sıfır-dışı kodu) SCM kurtarması onu birkaç sn sonra yeniden
+/// başlatır — geri dönüş DB'yi geri yüklerken ya da `current`ı çevirirken düşen sürüm yeniden açılmasın diye o
+/// başlatma beklenir ve TEMİZ durdurulur (çıkış 0 = kurtarma yok). Pencerede başlamazsa bekleyen yok sayılır.
+pub fn stop_and_settle(ctx: &Ctx, name: &str, code_missing: &'static str, code_stuck: &'static str) -> Result<(), StepError> {
+    stop_service(ctx, name, code_missing, code_stuck)?;
+    let limit = ctx.env.clock.now_ms() + i64::try_from(RECOVERY_SETTLE_MAX.as_millis()).unwrap_or(i64::MAX);
+    loop {
+        let Ok(Some(code)) = ctx.env.svc.crash_exit_code(name) else { return Ok(()) };
+        if ctx.env.clock.now_ms() >= limit {
+            return Err(step_err(code_stuck, format!("{name} yatışmadı: kurtarma yeniden başlatıyor, sürüm yine düşüyor (çıkış {code})")));
+        }
+        ctx.log.warn(&format!(
+            "{name} çökerek durdu (çıkış {code}) — SCM kurtarmasının yeniden başlatması bekleniyor (≤ {} sn)",
+            RECOVERY_SETTLE.as_secs()
+        ));
+        if !wait_left_stopped(ctx, name, RECOVERY_SETTLE) {
+            return Ok(());
+        }
+        // Kurtarma başlattı: çalışır olsun (ya da yine düşsün), sonra temiz durdur.
+        wait_state(ctx, name, SvcState::Running, Duration::from_secs(30));
+        stop_service(ctx, name, code_missing, code_stuck)?;
+    }
+}
+
+fn wait_left_stopped(ctx: &Ctx, name: &str, timeout: Duration) -> bool {
+    let deadline = ctx.env.clock.now_ms() + i64::try_from(timeout.as_millis()).unwrap_or(i64::MAX);
+    loop {
+        if ctx.env.svc.state(name).is_ok_and(|s| s != SvcState::Stopped) {
             return true;
         }
         if ctx.env.clock.now_ms() >= deadline {
@@ -483,7 +527,8 @@ impl BackendOp {
     }
 
     fn health(&self, ctx: &Ctx, version: &str, license: bool) -> Result<Value, StepError> {
-        health::wait_healthy(ctx.env, ctx.backend.port, &self.criteria(version, license), ctx.settings.health_timeout())
+        let svc = Some(ctx.settings.backend_service());
+        health::wait_healthy(ctx.env, ctx.backend.port, &self.criteria(version, license), ctx.settings.health_timeout(), svc)
             .map(|h| json!({ "surum": h.version, "lisans": h.license }))
             .map_err(|(code, m)| step_err(code, m))
     }
@@ -638,7 +683,7 @@ impl Operation for BackendOp {
     fn compensate(&self, ctx: &Ctx, view: &OpView, step: &str) -> Result<Value, StepError> {
         match step {
             "BASLAT" | "DOGRULAMA" => {
-                stop_service(ctx, ctx.settings.backend_service(), codes::HIZMET_YOK, codes::HIZMET_DURMADI).map(|()| Value::Null)
+                stop_and_settle(ctx, ctx.settings.backend_service(), codes::HIZMET_YOK, codes::HIZMET_DURMADI).map(|()| Value::Null)
             }
             "GOC" => {
                 if self.db_changed(ctx, view) {

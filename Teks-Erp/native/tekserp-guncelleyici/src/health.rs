@@ -142,9 +142,30 @@ fn judge(h: &Health, c: &Criteria) -> Result<(), Option<(&'static str, String)>>
     Ok(())
 }
 
-/// Zaman aşımına dek dener; son gözlemden hata kodu türetir.
-pub fn wait_healthy(env: &Env, port: u16, c: &Criteria, timeout: Duration) -> Result<Health, (&'static str, String)> {
-    let deadline = env.clock.now_ms() + i64::try_from(timeout.as_millis()).unwrap_or(i64::MAX);
+/// Konağın hizmete özgü çıkış kodunun anlamı (`tekserp_hizmet::contract::exit`).
+fn exit_meaning(code: u32) -> &'static str {
+    use tekserp_hizmet::contract::exit;
+    match code {
+        exit::NODE_UNEXPECTED => "node beklenmedik çıktı",
+        exit::NODE_NOT_STARTED => "node başlatılamadı",
+        exit::ENV_FILE => ".env yok/okunamadı",
+        exit::JOB_OBJECT => "iş nesnesi kurulamadı",
+        exit::CURRENT_LINK => "current çözülemedi",
+        _ => "konak hatası",
+    }
+}
+
+/// Zaman aşımına dek dener; son gözlemden hata kodu türetir. `service` verilirse: hizmet konağın sıfır-dışı
+/// koduyla DURMUŞ görülürse (açılışta düşen sürüm) zaman aşımı beklenmeden `SAGLIK_HIZMET_DUSTU`.
+pub fn wait_healthy(
+    env: &Env,
+    port: u16,
+    c: &Criteria,
+    timeout: Duration,
+    service: Option<&str>,
+) -> Result<Health, (&'static str, String)> {
+    let started = env.clock.now_ms();
+    let deadline = started + i64::try_from(timeout.as_millis()).unwrap_or(i64::MAX);
     let mut last: Option<Health> = None;
     loop {
         if let Some(h) = probe(env, port) {
@@ -152,6 +173,19 @@ pub fn wait_healthy(env: &Env, port: u16, c: &Criteria, timeout: Duration) -> Re
                 Ok(()) => return Ok(h),
                 Err(Some(fatal)) => return Err(fatal),
                 Err(None) => last = Some(h),
+            }
+        }
+        if let Some(name) = service {
+            if let Ok(Some(code)) = env.svc.crash_exit_code(name) {
+                let waited = (env.clock.now_ms() - started) / 1000;
+                return Err((
+                    codes::SAGLIK_HIZMET_DUSTU,
+                    format!(
+                        "{name} açılışta düştü: konak çıkış {code} ({}) — {waited} sn'de görüldü, {} sn beklenmedi",
+                        exit_meaning(code),
+                        timeout.as_secs()
+                    ),
+                ));
             }
         }
         if env.clock.now_ms() >= deadline {

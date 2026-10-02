@@ -5,6 +5,8 @@
 // kademe en şiddetli etkin eylem · zorlama (gözlem ↔ zorla; aynı değer no-op) · geçerlilik bitişi
 // (vade / uzat / kalıcıya çevir) — hepsi imzalı kirada, hepsi defterde; sebep zorunlu.
 // DB seddi: defter satırı güncellenemez/silinemez (tetikleyici).
+// Lisans v2: kiranın ödenmiş tarihi (P) GECERLILIK defterini izler (vade · uzatma · kalıcı → null) · §5 kapanış kirasının
+// yaptırımı (SAF `withClosingRestriction`): kademe en az K3 (K4/K5 korunur), tarih iki K3'ün erkeni, mesaj/modül korunur.
 // ⭐ KALICI SONDA ✓K2 (her koşumda): geri alınan K4 kademeyi düşürür (katlama geri almayı gerçekten
 //    okuyor) · aynı eylem ikinci kez geri alınamaz (409).
 // Koşum: npx tsx scripts/test_yaptirim_kira.ts
@@ -118,13 +120,13 @@ async function main(): Promise<void> {
     const vade = new Date(Date.now() + 40 * DAY_MS);
     await svc.setValidityEnd({ ...ortak, validUntil: vade, reason: "vadeli satış" });
     kira = await yokla();
-    kontrol("§3b vade → kira gecerlilikBitis", kira.gecerlilikBitis === vade.toISOString(), kira.gecerlilikBitis ?? "null");
+    kontrol("§3b vade → kira gecerlilikBitis; P (odenmisTarih) aynı tarih", kira.gecerlilikBitis === vade.toISOString() && kira.odenmisTarih === vade.toISOString(), kira.gecerlilikBitis ?? "null");
     await svc.extendValidity({ ...ortak, days: 10, reason: "10 gün uzat" });
     kira = await yokla();
-    kontrol("§3c 10 gün uzat → vade + 10 gün", kira.gecerlilikBitis === new Date(vade.getTime() + 10 * DAY_MS).toISOString());
+    kontrol("§3c 10 gün uzat → vade + 10 gün (P de)", kira.gecerlilikBitis === new Date(vade.getTime() + 10 * DAY_MS).toISOString() && kira.odenmisTarih === kira.gecerlilikBitis);
     await svc.setValidityEnd({ ...ortak, validUntil: null, reason: "peşin ödendi — kalıcı" });
     kira = await yokla();
-    kontrol("§3d kalıcıya çevir → gecerlilikBitis null", kira.gecerlilikBitis === null);
+    kontrol("§3d kalıcıya çevir → gecerlilikBitis null, P null (süresiz)", kira.gecerlilikBitis === null && kira.odenmisTarih === null);
     kontrol("§3e ZORLAMA eylemi geri alınamaz (ayrı eylemle değişir) → 400", (await hataKodu(() => svc.revertSanction({ actionId: z1!.id, reason: "x", actor: "bekci" }))) === "400");
     kontrol("§3f sebepsiz eylem → 400", (await hataKodu(() => svc.applySanction({ ...ortak, level: "K0", message: "m", reason: "  " }))) === "400");
 
@@ -146,6 +148,18 @@ async function main(): Promise<void> {
       silmeReddi = (err as Error).message;
     }
     kontrol("§4c DB seddi: temizlik beyanı olmadan defter satırı SİLİNEMEZ", /Defter satırı/.test(silmeReddi));
+
+    console.log("\n§5 kapanış kirasının yaptırımı (SAF)");
+    const { withClosingRestriction } = await import("../src/services/lease.service");
+    const bos = { kademe: null, mesaj: null, kisitlamaTarihi: null, donmusModuller: [] as string[], guncellemeDonuk: false };
+    const at = new Date("2026-12-01T00:00:00.000Z");
+    const r1 = withClosingRestriction(bos, at);
+    kontrol("§5a yaptırımsız → K3 + kapanış tarihi", r1.kademe === "K3" && r1.kisitlamaTarihi === at.toISOString());
+    const r2 = withClosingRestriction({ ...bos, kademe: "K4", mesaj: "m", donmusModuller: ["finance.enabled"] }, at);
+    kontrol("§5b K4 korunur (daha şiddetli), mesaj ve donmuş modül korunur", r2.kademe === "K4" && r2.mesaj === "m" && r2.donmusModuller.join() === "finance.enabled" && r2.kisitlamaTarihi === at.toISOString());
+    const erken = "2026-11-01T00:00:00.000Z";
+    kontrol("§5c defterdeki ERKEN K3 tarihi korunur", withClosingRestriction({ ...bos, kademe: "K3", kisitlamaTarihi: erken }, at).kisitlamaTarihi === erken);
+    kontrol("§5d defterdeki GEÇ K3 tarihi kapanışla öne çekilir", withClosingRestriction({ ...bos, kademe: "K3", kisitlamaTarihi: "2027-01-01T00:00:00.000Z" }, at).kisitlamaTarihi === at.toISOString());
   } finally {
     await sunucu.durdur();
     await temizleKurulumlar(temizlenecek, ortam.kidler);

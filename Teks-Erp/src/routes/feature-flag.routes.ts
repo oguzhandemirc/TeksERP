@@ -365,6 +365,8 @@ export const updateSchema = z.strictObject({
   fasonNoteMobileEntry: z.boolean().optional(),
   // Mobil cihaz eşleştirmesi zorunlu mu (true=aktif) yoksa pasif mi (false=default).
   devicePairingRequired: z.boolean().optional(),
+  // Hızlı PIN / QR kart yalnız onaylı cihazdan (false=default; barındırılan kurulumda kapatılamaz).
+  shortCredentialApprovedDeviceOnly: z.boolean().optional(),
   // shipping.confirmationEnabled — sevk onay adımı (UI rehberi).
   shipmentConfirmationEnabled: z.boolean().optional(),
   // shipping.manualSackCountEnabled — "araca yüklenen gerçek çuval adedi" alanı
@@ -503,7 +505,7 @@ export const updateSchema = z.strictObject({
   mobileRasterEnabled: z.boolean().optional(),
   // label.scrapGradeLabelEnabled — fire (QualityGrade.skipLabel) kalitede de OTOMATİK etiket bas (default false → fire topa kâğıt çıkmaz). Client (mobil) ENFORCE; elle baskı onayla mümkün.
   scrapGradeLabelEnabled: z.boolean().optional(),
-  // auth.absoluteSessionCapDays — mutlak oturum tavanı, gün (0=süresiz, 0–365). Backend ENFORCE (issueToken).
+  // auth.absoluteSessionCapDays — mutlak oturum tavanı, gün (0=en fazla 365 gün, 0–365). Backend ENFORCE (issueToken).
   absoluteSessionCapDays: z.number().int().min(0).max(365).optional(),
   // auth.pinLockoutEnabled — hızlı PIN/kart deneme kilidi (default true). Backend ENFORCE.
   pinLockoutEnabled: z.boolean().optional(),

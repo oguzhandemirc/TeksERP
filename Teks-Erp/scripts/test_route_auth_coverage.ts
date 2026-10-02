@@ -182,7 +182,14 @@ const EXEMPT: Record<string, string> = {
  * prisma import'u ARAR. Gerekçe değişirse bekçi kırmızı verir.
  */
 /** 15 → 14 (B6): `GET /api/boss/overview` tünelle kalktı; özet yalnız `cloud-sync/overview`de. */
-const BARE_CHAIN_BASELINE = 14;
+/**
+ * ⚠️ 14 → 15 (2026-10-01, G20, BİLİNÇLİ): `POST /api/auth/change-password` yalnız kimlik guard'ı
+ * (`verifyTokenAllowPasswordChange`) taşır — `/auth/me` ve `/auth/logout` emsali. Uç yalnız
+ * İSTEYENİN kendi parolasını değiştirir (userId token'dan, mevcut parola + ayrı `cp:` kilit kovası);
+ * izin kodu yazmak, o kodu taşımayan hesabın zorunlu parola değişimini imkânsız kılardı.
+ * Uç kümesi `test_parola_degisimi_zorunlu §5a` ile TAM üç olarak sabit.
+ */
+const BARE_CHAIN_BASELINE = 15;
 
 /** Körlük zemini: tarayıcı boşa düşerse "ihlal yok" ile "hiçbir şeye bakılmadı" aynı yeşile çıkmasın. */
 const MIN_ROUTE_LAYERS = 400;

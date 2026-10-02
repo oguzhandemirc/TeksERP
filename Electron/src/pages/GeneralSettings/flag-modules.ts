@@ -219,6 +219,7 @@ export const FLAG_MODULE: Readonly<Record<FlagRowKey | SystemSettingKey, FlagOwn
   companyName: "cekirdek",
   demoModeEnabled: "cekirdek",
   devicePairingRequired: "cekirdek",
+  shortCredentialApprovedDeviceOnly: "cekirdek",
   sessionDurationMinutes: "cekirdek",
   sessionDurationHours: "cekirdek",
   idleTimeoutMinutes: "cekirdek",

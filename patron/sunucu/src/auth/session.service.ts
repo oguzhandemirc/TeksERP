@@ -1,6 +1,7 @@
 // BULUT GİRİŞİ — tek adım: e-posta + parola + TOTP (TOTP ZORUNLU; TOTP'siz oturum YOKTUR — DB CHECK
-// da AKTİF hesabı TOTP'siz doğurmaz). Hata iletisi tek (hangi faktörün tutmadığı söylenmez);
-// bilinmeyen/uygun olmayan hesapta eşdeğer scrypt işi harcanır; ardışık başarısızlık süreli kilit.
+// da AKTİF hesabı TOTP'siz doğurmaz). Hata yanıtı TEK (401, aynı ileti) — bilinmeyen hesap, yanlış faktör ve kilit
+// ayırt edilmez; her başarısız dal tek scrypt işi harcar ve yanıt süre tabanına bekletilir. Kilit hesap + kaynak
+// ikilisine bağlıdır (`login-throttle.ts`): başka kaynaktan doğru üçlü girer.
 // Oturum belirteci düz saklanmaz (sha256); taşıma `Authorization: Bearer`.
 // Kiracı girişte e-postadan çözülür (ön-kiracı arama), sonraki her iş o tesisin kapsamında koşar.
 import { createHash, randomBytes } from "node:crypto";
@@ -13,6 +14,7 @@ import { CloudError } from "../lib/errors";
 import { withLookup, withTesis } from "../lib/tenant";
 import type { CloudContext } from "../services/context";
 import { loadServiceFacts, serviceState } from "../services/service-lifecycle";
+import { loginThrottleFor } from "./login-throttle";
 import { assertPasswordStrength, burnPasswordCheck, hashPassword, verifyPassword } from "./password";
 import { verifyTotp } from "./totp";
 
@@ -49,19 +51,22 @@ export function sessionProjections(permissions: ReadonlySet<CloudPermission>): s
 
 const loginFailed = (): CloudError => new CloudError(401, "GIRIS_BASARISIZ", "E-posta, parola ya da doğrulama kodu hatalı");
 
+/** Başarısız girişin en kısa yanıt süresi (gerçek saat): DB'ye yazan dal ile yazmayan dal süreden ayırt edilmesin. */
+export const LOGIN_FAILURE_FLOOR_MS = 500;
+
+async function failAfterFloor(startedMs: number): Promise<never> {
+  const wait = LOGIN_FAILURE_FLOOR_MS - (Date.now() - startedMs);
+  if (wait > 0) await new Promise((r) => setTimeout(r, wait));
+  throw loginFailed();
+}
+
 /** Giriş olayının istemci adresi — hesap güvenlik kaydına girer, 30 gün sonra alan silinir (`maintenance.ts` `AGED_FIELDS`). */
 const ipSummary = (ip: string | null): { ip?: string } => (ip && ip !== "?" ? { ip: ip.slice(0, 64) } : {});
 
 async function registerFailure(ctx: CloudContext, account: Account, nowMs: number, ip: string | null): Promise<void> {
-  const locked = await withTesis(ctx.app, { tesisId: account.tesisId }, async (tx) => {
-    const bumped = await tx.account.update({ where: { id: account.id }, data: { failedLogins: { increment: 1 } }, select: { failedLogins: true } });
-    if (bumped.failedLogins < ctx.config.GIRIS_ESIGI) return null;
-    const until = new Date(nowMs + ctx.config.KILIT_DK * 60_000);
-    const r = await tx.account.updateMany({ where: { id: account.id, failedLogins: { gte: ctx.config.GIRIS_ESIGI } }, data: { lockedUntil: until, failedLogins: 0 } });
-    return r.count > 0 ? until : null;
-  });
+  const locked = loginThrottleFor(ctx).registerFailure(account.id, ip, nowMs);
   await recordAudit(ctx.app, { tesisId: account.tesisId, actor: "giris", event: "GIRIS_BASARISIZ", entity: "Account", entityId: account.id, summary: ipSummary(ip) });
-  if (locked) await recordAudit(ctx.app, { tesisId: account.tesisId, actor: "giris", event: "HESAP_GECICI_KILIT", entity: "Account", entityId: account.id, summary: { bitis: locked.toISOString(), ...ipSummary(ip) } });
+  if (locked) await recordAudit(ctx.app, { tesisId: account.tesisId, actor: "giris", event: "HESAP_GECICI_KILIT", entity: "Account", entityId: account.id, summary: { bitis: locked.toISOString(), kapsam: "KAYNAK", ...ipSummary(ip) } });
 }
 
 export interface LoginInput {
@@ -74,19 +79,24 @@ export interface LoginInput {
 }
 
 export async function login(ctx: CloudContext, g: LoginInput): Promise<{ token: string; session: SessionContext; expiresAt: Date }> {
+  const startedMs = Date.now();
   const nowMs = ctx.now();
   const email = normalizeEmail(g.email);
-  const account = email ? await withLookup(ctx.app, { kind: "eposta", value: email }, (tx) => tx.account.findUnique({ where: { email } })) : null;
+  // E-posta bulut genelinde yalnız ETKİN (AKTIF · KILITLI) hesapta tekildir; davet ve arşiv satırı giriş adayı değildir.
+  const account = email ? await withLookup(ctx.app, { kind: "eposta", value: email }, (tx) => tx.account.findFirst({ where: { email, status: { in: ["AKTIF", "KILITLI"] } } })) : null;
   if (!account || account.status !== "AKTIF" || !account.passwordHash || !account.totpSecretSealed) {
     await burnPasswordCheck(g.password);
     if (account) await recordAudit(ctx.app, { tesisId: account.tesisId, actor: "giris", event: "GIRIS_REDDEDILDI", entity: "Account", entityId: account.id, summary: { durum: account.status, ...ipSummary(g.ip) } });
-    throw loginFailed();
+    return failAfterFloor(startedMs);
   }
-  if (account.lockedUntil && account.lockedUntil.getTime() > nowMs) {
-    const minutes = Math.ceil((account.lockedUntil.getTime() - nowMs) / 60_000);
-    throw new CloudError(429, "GIRIS_KILITLI", `Çok sayıda hatalı deneme: hesap ${minutes} dakika kilitli`);
-  }
+  const throttle = loginThrottleFor(ctx);
+  // Kilitliyken de parola doğrulaması koşar (eşit iş) ve yanıt bilinmeyen hesapla AYNIDIR.
+  const sourceLocked = throttle.isLocked(account.id, g.ip, nowMs);
   const passwordOk = await verifyPassword(g.password, account.passwordHash);
+  if (sourceLocked) {
+    await recordAudit(ctx.app, { tesisId: account.tesisId, actor: "giris", event: "GIRIS_REDDEDILDI", entity: "Account", entityId: account.id, summary: { sebep: "KAYNAK_KILITLI", ...ipSummary(g.ip) } });
+    return failAfterFloor(startedMs);
+  }
   const secret = ctx.secrets.open(account.totpSecretSealed, account.id);
   if (secret === null) {
     console.error(`[patron] hesap ${account.id}: TOTP sırrı çözülemedi (sır anahtarı değişmiş olabilir — hesap davetle sıfırlanmalı)`);
@@ -95,7 +105,7 @@ export async function login(ctx: CloudContext, g: LoginInput): Promise<{ token: 
   const totp = verifyTotp(secret, g.totp, { atMs: nowMs, lastUsedStep: account.totpLastStep });
   if (!passwordOk || !totp.ok) {
     await registerFailure(ctx, account, nowMs, g.ip);
-    throw loginFailed();
+    return failAfterFloor(startedMs);
   }
   const { token, digest } = newToken();
   const expiresAt = new Date(nowMs + ctx.config.OTURUM_AZAMI_GUN * 86_400_000);
@@ -117,8 +127,9 @@ export async function login(ctx: CloudContext, g: LoginInput): Promise<{ token: 
   if (session === "KAPALI") throw new CloudError(403, "HIZMET_KAPANDI", "Patron bulutu hizmeti sona erdi ve salt okuma süresi doldu; veriler imha sürecinde");
   if (!session) {
     await registerFailure(ctx, account, nowMs, g.ip);
-    throw loginFailed();
+    return failAfterFloor(startedMs);
   }
+  throttle.clear(account.id, g.ip);
   await recordAudit(ctx.app, { tesisId: account.tesisId, actor: accountActor(account.id), event: "GIRIS", entity: "Account", entityId: account.id, summary: { oturumId: session.id, istemci: g.client, ...ipSummary(g.ip) } });
   const permissions = effectivePermissions(account.permissions);
   return {

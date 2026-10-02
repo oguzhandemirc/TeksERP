@@ -7,7 +7,8 @@
 
 import { spawn } from "child_process";
 
-export type PgToolName = "pg_dump" | "pg_restore" | "psql";
+/** `pg_controldata`: lisans parmak izinin F5 ikinci yolu (`system_identifier`, salt okuma). */
+export type PgToolName = "pg_dump" | "pg_restore" | "psql" | "pg_controldata";
 
 /**
  * Aracın tam yolu. `PG_BIN_DIR` **çağrı anında** okunur (modül-yükleme anında

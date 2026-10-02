@@ -126,6 +126,37 @@ fn lease_is_the_authority() {
     assert_eq!(w.backend().starts, 0);
 }
 
+/// Lisans v2 iptal belgesi (G4): fabrikanın `lisans\\iptal.jws`i kirayı imzalayan ALT anahtarını iptal ediyorsa kira
+/// yetki vermez (çekirdekle aynı zincir); başka sertifikayı iptal eden ya da kökle doğrulanamayan belge yok sayılır.
+#[test]
+fn revoked_sub_key_lease_gives_no_authority() {
+    let write = |w: &World, signer: &ed25519_dalek::SigningKey, kid: &str, cert_id: &str| {
+        let doc = json!({
+            "v": 1, "iptalId": "77777777-7777-4777-8777-777777777777", "sira": 1, "verilis": iso(T0 - DAY),
+            "iptaller": [{ "kid": kid, "sertifikaId": cert_id, "kullanim": "ALT", "tarih": iso(T0 - DAY), "neden": "sızıntı" }],
+        });
+        std::fs::write(w.layout.root.join("lisans").join("iptal.jws"), sign(signer, "tekserp-iptal", "kok-test-1", &doc)).unwrap();
+    };
+    let w = World::new("iptal-alt", Setup::default());
+    let root = w.keys.root.clone();
+    write(&w, &root, "alt-test-1", "33333333-3333-4333-8333-333333333333");
+    w.run(1).unwrap();
+    assert_eq!(code(&w).1.as_deref(), Some("KIRA_GECERSIZ"), "iptal edilmiş alt anahtarın kirası");
+    assert!(w.status().unwrap().policy.is_none(), "iptal edilmiş kira politika taşımaz");
+    untouched(&w, "iptal-alt");
+    // İptal ANAHTARIN iptalidir (kimlik ya da kid × kullanım): başka bir anahtarın satırı bu kirayı düşürmez.
+    for (tag, signer, kid, cert_id) in [
+        ("iptal-baska", root.clone(), "alt-test-2", "88888888-8888-4888-8888-888888888888"),
+        ("iptal-sahte-kok", ed25519_dalek::SigningKey::from_bytes(&[9; 32]), "alt-test-1", "33333333-3333-4333-8333-333333333333"),
+    ] {
+        let w = World::new(tag, Setup::default());
+        write(&w, &signer, kid, cert_id);
+        w.run(1).unwrap();
+        assert_ne!(code(&w).1.as_deref(), Some("KIRA_GECERSIZ"), "{tag}: kira geçerli kalmalı");
+        assert!(w.status().unwrap().policy.is_some(), "{tag}: kira politikası okunmalı");
+    }
+}
+
 #[test]
 fn maintenance_and_entitlement_gate() {
     refused(
@@ -344,6 +375,25 @@ fn disk_full_blocks_before_touching_anything() {
     assert_eq!(code(&w).1.as_deref(), Some("DISK_DOLU"));
     untouched(&w, "disk");
     assert!(!w.layout.downloads().join(format!("{NEW}.zip.part")).exists(), "yer yokken indirme başlamaz");
+}
+
+#[test]
+fn locked_staging_dir_is_a_locked_file_not_a_download_error() {
+    // thinkpad-1 D8b 3I: hazırlık dizininde paylaşımsız açık dosya INDIRME_HATASI diye raporlanıyordu.
+    let w = World::new("hazirlik-kilit", Setup::default());
+    let staging = format!(".hazirlik-{NEW}");
+    w.fs.locked.lock().unwrap().push(staging.clone());
+    w.run(1).unwrap();
+    let (state, c) = code(&w);
+    assert_eq!(c.as_deref(), Some("DOSYA_KILITLI"), "kilit indirme hatası değil");
+    assert_eq!(state, State::Waiting, "kilit beklenir (İNDİRİLİYOR değil)");
+    assert_eq!(tekserp_guncelleyici::codes::report_code("DOSYA_KILITLI"), "DOSYA_KILITLI");
+    assert!(w.layout.downloads().join(format!("{NEW}.zip")).exists(), "tam zip korunur (yeniden indirilmez)");
+    untouched(&w, "hazırlık kilidi");
+    // Kilit kalkınca kendiliğinden sürer (erteleme yok).
+    w.fs.locked.lock().unwrap().clear();
+    w.run_to_rest(0);
+    assert_eq!(w.state(), Some(State::Succeeded));
 }
 
 #[cfg(unix)]

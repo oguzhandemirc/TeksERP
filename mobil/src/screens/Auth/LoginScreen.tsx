@@ -13,7 +13,7 @@ import { useAuthStore } from '../../store/authStore';
 import { authService, type LoginMethod } from '../../services/auth.service';
 import { useAlphaKeyboardPref } from './useAlphaKeyboardPref';
 import { sanitizeAlphaInput, sanitizeNumericInput } from './loginInput';
-import { isLoginLocked } from '../../services/api';
+import { isLoginLocked, isLoginMethodDisabled } from '../../services/api';
 import { authActions } from '../../services/authActions';
 import { pinServerIdentityAfterLogin } from '../../services/serverIdentity';
 import { useSessionConflict } from '../../hooks/useSessionConflict';
@@ -245,8 +245,8 @@ export default function LoginScreen({ lock }: { lock?: LoginLockContext } = {}) 
   const refetchMethods = methodsQ.refetch;
   const handleMethodDisabled = useCallback(
     (e: unknown): boolean => {
-      const status = (e as { status?: number })?.status;
-      if (status !== 403) return false;
+      // Onaysız cihaz ve zorunlu parola değişimi yöntem kapanması değildir — seçim korunur.
+      if (!isLoginMethodDisabled(e)) return false;
       setPickedMethod(null);
       setMethodPickerOpen(false);
       void refetchMethods();

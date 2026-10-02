@@ -13,6 +13,17 @@
 //      (ezilmez) · grup/başkalarına açık üst dizin
 //   §4 GERÇEK PAKET aracı (varsayılan PAKET_KOMUTU): üretim kid'ini tanıyorsa tören onunla uçtan uca; tanımıyorsa
 //      (ayrı dilim henüz inmedi) beyanlı ⏭ — araç tanıdığı gün bu bölüm kendiliğinden koşar
+//   §6 DÖNEM TÖRENİ (`donem`, G4 §2.4): yeni ALT · ara imzacı · İNDİRME (120 gün) + iptal belgesi (ilk dönem sıra 1,
+//      `--iptal` ile sıra + 1 ve önceki satırlar) + kuyruktaki HAK'ların kök imzası → KÖKSÜZ VDS paketi (künye + SHA256SUMS,
+//      700/600); paketin anahtarları köke karşı geçerli; ara parolası kökünkinden ayrı; ilk tören dizini dokunulmaz;
+//      RED (paket yazılmadan): ara = kök parolası · yanlış kök parolası · eşleşmeyen ara · bilinmeyen/kök --iptal ·
+//      biçimsiz kuyruk · argv'de parola
+//   §7 HAZIRLIK dönemi: kid'ler `alt|ara|ind-hazirlik-<yıl>-<n>` (numara önekli ilk anahtarlardan ilerler), ortam kök
+//      dosyasının kimliğinden (bayrak YOK), yeni kid'ler karşı ortamın (üretim) kümesinde değil, Worker satırı `hazirlik`;
+//      RED parola sorulmadan: kid karşı kümede · kök dosyası başka kimlik · `--ortam` · karşı dizin = tören dizini
+//   §1o' · §6k' CF Worker İNDİRME satırı (L2-8): künyedeki tek satır JSON = sertifikanın kid · x · penceresi + kanallar.json'un
+//      o çapa kipindeki kanalları, liste adı `CF_WORKER_LISTESI`; Worker'ın `ayarCoz`u satırı kabul eder · §1o'' · §6k''
+//      "Sonraki adımlar"da CF Worker adımı VDS'e kurmadan ÖNCE (satıcı yeni İNDİRME'yi yüklendiği dakika basar)
 //   §5 KAYNAK (parola sorulmadan RED): kirli ağaç (izlenen değişiklik · izlenmeyen dosya) · HEAD origin/main'de değil ·
 //      etiket başka commit'i gösteriyor · npm ls hatalı; origin/main'deki HEAD etiketsiz GEÇER; künye tam sha + kilit özetleri
 //   Tören her koşumda TEMİZ bir kopyadan koşar (çalışma ağacının izlenen + izlenmeyen dosyaları → geçici git deposu,
@@ -23,10 +34,11 @@
 // Koşum: node ../../scripts/agir-is.mjs -- npx tsx scripts/test_uretim_toren.ts   (DB GEREKMEZ; Teks-Erp npm ci ister)
 // =============================================================================
 import { execFileSync, spawn, spawnSync } from "node:child_process";
-import { createHash, randomBytes } from "node:crypto";
+import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { chmodSync, cpSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, symlinkSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { pathToFileURL } from "node:url";
 import { LICENSE_CLASSES, parseModuleKeyFile } from "../src/lisans-protokol";
 import { KeyFileError, passwordBuffer, readWrappedKeyFile, unwrapPrivateKey } from "../src/keys/key-files";
 import { KeyStore } from "../src/keys/key-store";
@@ -41,7 +53,7 @@ let TOREN = "";
 const ETIKET = "toren-sonda";
 const ET = `--etiket=${ETIKET}`;
 /** Kopyaya giren yollar: törenin koşturduğu araçlar + onların kaynakları. */
-const KLON_YOLLARI = [".gitignore", "deploy/satici", "satici/sunucu", "Teks-Erp/src", "Teks-Erp/scripts", "Teks-Erp/package.json", "Teks-Erp/package-lock.json", "Teks-Erp/tsconfig.json"];
+const KLON_YOLLARI = [".gitignore", "deploy/satici", "deploy/kanallar.json", "satici/sunucu", "Teks-Erp/src", "Teks-Erp/scripts", "Teks-Erp/package.json", "Teks-Erp/package-lock.json", "Teks-Erp/tsconfig.json"];
 const gitK = (args: string[]) => spawnSync("git", ["-C", KLON, "-c", "user.name=bekci", "-c", "user.email=bekci@ornek.test", ...args], { encoding: "utf8" });
 
 /**
@@ -69,9 +81,50 @@ function klonKur(tmp: string): void {
   }
   TOREN = path.join(KLON, "deploy", "satici", "uretim-toren.mjs");
 }
+/** `a` metni `b`den önce geçiyor mu (ikisi de var)? — törenin "Sonraki adımlar" sırası. */
+function sonra(metin: string, a: string, b: string): boolean {
+  const i = metin.indexOf("Sonraki adımlar");
+  const ia = metin.indexOf(a, i);
+  const ib = metin.indexOf(b, i);
+  return i >= 0 && ia >= 0 && ib >= 0 && ia < ib;
+}
+
+/**
+ * Künyenin CF Worker satırı Worker'ın İNDİRME listesine olduğu gibi yapıştırılabilir mi: tek satır JSON, alanları
+ * künyedeki sertifikayla aynı, kanallar `deploy/kanallar.json`un o çapa kipindeki kanalları, Worker `ayarCoz` kabul eder.
+ */
+async function workerSatiriOlc(
+  satirlar: Record<string, string>,
+  ind: { kid: string; x: string; baslangic?: string; bitis?: string },
+  liste: "uretim" | "hazirlik",
+): Promise<{ ok: boolean; detay: string }> {
+  const w = (await import(pathToFileURL(path.join(REPO, "deploy/guncelleme-sunucusu/worker/indirme-kapisi.js")).href)) as {
+    ayarCoz: (ham: unknown, simdiMs: number) => { ok: boolean; neden?: string };
+    VARSAYILAN_AYAR: Record<string, unknown>;
+  };
+  const kanallar = Object.entries((JSON.parse(readFileSync(path.join(REPO, "deploy/kanallar.json"), "utf8")) as { kanallar: Record<string, { backend?: { guvenCapasi?: string } }> }).kanallar)
+    .filter(([, k]) => k.backend?.guvenCapasi === liste)
+    .map(([kod]) => kod)
+    .sort();
+  let satir: Record<string, unknown> | null = null;
+  try {
+    satir = JSON.parse(satirlar.CF_WORKER_INDIRME ?? "") as Record<string, unknown>;
+  } catch {
+    return { ok: false, detay: `satır JSON değil: ${satirlar.CF_WORKER_INDIRME}` };
+  }
+  const beklenen = { kid: ind.kid, x: ind.x, kanallar, baslangic: ind.baslangic, bitis: ind.bitis };
+  const ayni = JSON.stringify(satir) === JSON.stringify(beklenen) && !satirlar.CF_WORKER_INDIRME!.includes("\n");
+  const cozum = w.ayarCoz({ ...w.VARSAYILAN_AYAR, indirmeListesi: { uretim: [], hazirlik: [], [liste]: [satir] } }, Date.now());
+  return {
+    ok: kanallar.length > 0 && satirlar.CF_WORKER_LISTESI === liste && ayni && cozum.ok,
+    detay: `liste ${satirlar.CF_WORKER_LISTESI} · kanallar ${kanallar.join(",")} · ${ayni ? "alanlar aynı" : `FARK ${satirlar.CF_WORKER_INDIRME}`} · Worker ${cozum.ok ? "kabul" : cozum.neden}`,
+  };
+}
+
 const YIL = "2099";
 const KOK_PAROLA = `kok-sonda-${randomBytes(9).toString("hex")}`;
 const PAKET_PAROLA = `paket-sonda-${randomBytes(9).toString("hex")}`;
+const ARA_PAROLA = `ara-sonda-${randomBytes(9).toString("hex")}`;
 const bekle = (ms: number) => new Promise((r) => setTimeout(r, ms));
 const ozet = (s: string) => createHash("sha256").update(s, "utf8").digest("hex");
 
@@ -152,7 +205,7 @@ async function tore(argv: string[], stdin: string, ekOrtam: Record<string, strin
   while (!bitti) {
     const y = surecYuzeyi();
     yoklama++;
-    if (y.includes(KOK_PAROLA) || y.includes(PAKET_PAROLA)) parolaGoruldu = true;
+    if (y.includes(KOK_PAROLA) || y.includes(PAKET_PAROLA) || y.includes(ARA_PAROLA)) parolaGoruldu = true;
     await Promise.race([kapandi, bekle(60)]);
   }
   await kapandi;
@@ -232,7 +285,7 @@ async function main(): Promise<void> {
     const k = JSON.parse(readFileSync(path.join(D, "TOREN-KUNYE.json"), "utf8")) as {
       kok: { kid: string; x: string; siniflar: string[] };
       alt: { kid: string; x: string; bitis: string };
-      indirme: { kid: string; x: string };
+      indirme: { kid: string; x: string; baslangic: string; bitis: string };
       paket: { kid: string; x: string };
       modulAnahtarlari: Array<{ modul: string; kid: string }>;
       yedekAlicilari: Array<{ ad: string; parmakIzi: string }>;
@@ -325,6 +378,10 @@ async function main(): Promise<void> {
     );
     kontrol("§1o künye çapa satırları: kök (bütün sınıflar) · paket · CF Worker İNDİRME",
       k.capaSatirlari.ROOT_PUBLIC_KEYS!.includes(k.kok.x) && k.capaSatirlari.PACKAGE_PUBLIC_KEYS!.includes(`paket-${YIL}`) && k.capaSatirlari.CF_WORKER_INDIRME!.includes(k.indirme.x));
+    const w1 = await workerSatiriOlc(k.capaSatirlari, k.indirme, "uretim");
+    kontrol("§1o' ⭐ CF Worker satırı (L2-8): liste `uretim`, kid · x · pencere künyedeki sertifikanın, kanallar = kanallar.json'un üretim çapalı kanalları; Worker ayarı onu KABUL eder",
+      w1.ok, w1.detay);
+    kontrol("§1o'' Sonraki adımlar: CF Worker adımı VDS adımından ÖNCE (satıcı yüklendiği an basar)", sonra(t.cikti, "CF Worker", "VDS: anahtar birimi"));
 
     const dogru = spawnSync(process.execPath, [TOREN, "dogrula", `--dizin=${D}`], { encoding: "utf8" });
     chmodSync(path.join(A, "portal-totp.key"), 0o644);
@@ -452,6 +509,188 @@ async function main(): Promise<void> {
       atlanan++;
       console.log(`  ⏭ ATLANDI — gerçek PAKET aracı üretim kid'ini henüz tanımıyor (lisans/uretim-gecis dilimi): ${(yok.stderr || yok.stdout).trim().split("\n").pop()?.slice(0, 140) ?? ""}`);
     }
+
+    console.log("\n§6 DÖNEM TÖRENİ (G4 §2.4) — ara imzacı · ALT · İNDİRME 120 gün · iptal belgesi · kök kuyruğu, KÖKSÜZ paket");
+    const donemler = path.join(D, "donemler");
+    const donemDizinleri = () => (existsSync(donemler) ? readdirSync(donemler).sort() : []);
+    const kuyrukYuku = {
+      v: 1,
+      hakId: randomUUID(),
+      surum: 2,
+      lisansNo: "TKS-2099-0001",
+      musteri: { id: randomUUID(), ad: "Tören Tekstil" },
+      tesis: { id: randomUUID(), ad: "Merkez" },
+      kurulumId: randomUUID(),
+      sinif: "URETIM",
+      moduller: ["production.enabled", "finance.enabled"],
+      kalici: true,
+      bakimBitis: new Date(Date.now() + 365 * 86_400_000).toISOString(),
+      verilis: new Date(Date.now() - 86_400_000).toISOString(),
+      cevrimdisiUfukGun: 400,
+    };
+    const kuyrukDosyasi = path.join(tmp, "kuyruk.json");
+    writeFileSync(kuyrukDosyasi, JSON.stringify({ v: 1, tur: "tekserp-kok-kuyrugu", uretim: new Date().toISOString(), talepler: [{ talepId: randomUUID(), hakId: kuyrukYuku.hakId, lisansNo: kuyrukYuku.lisansNo, tabanSurum: 1, surum: 2, yuk: kuyrukYuku }] }));
+    const ucParola = (kok: string, ara: string, araTekrar = ara) => `${kok}\n${ara}\n${araTekrar}\n`;
+    const dogrulaOnce = spawnSync(process.execPath, [TOREN, "dogrula", `--dizin=${D}`], { encoding: "utf8" });
+    const d1 = await tore(["donem", `--dizin=${D}`, `--yil=${YIL}`, ET, `--kuyruk=${kuyrukDosyasi}`], ucParola(KOK_PAROLA, ARA_PAROLA), {}, ev);
+    const ilkDonem = donemDizinleri().filter((n) => !n.includes(".yarim-"));
+    const P = ilkDonem[0] ? path.join(donemler, ilkDonem[0], "vds-paketi") : "";
+    kontrol("§6a dönem töreni çıkış 0, TEK dönem dizini, yarım kalıntı yok", d1.status === 0 && ilkDonem.length === 1 && !donemDizinleri().some((n) => n.includes(".yarim-")), `${d1.status} ${d1.status === 0 ? "" : d1.cikti.slice(-500)}`);
+    if (d1.status !== 0) throw new Error("dönem töreni koşmadı");
+    const paketDosyalari = dosyaListesi(P).sort();
+    const beklenenPaket = ["DONEM-KUNYE.json", "SHA256SUMS", `anahtarlar/alt-${YIL}-2.anahtar.json`, `anahtarlar/ara-${YIL}-1.ara.json`, `anahtarlar/ind-${YIL}-2.anahtar.json`, "ice-aktar.json", "iptal.json"];
+    kontrol("§6b paket TAM OLARAK beklenen küme (sıradaki numaralar: ALT 2 · ARA 1 · İNDİRME 2 — ilk törenin `ind-<yıl>`ı 1 sayılır)", JSON.stringify(paketDosyalari) === JSON.stringify(beklenenPaket), paketDosyalari.join(" "));
+    const kokDosyaMetni = readFileSync(path.join(A, `kok-${YIL}-1.kok.json`), "utf8");
+    const kokSifreli = (JSON.parse(kokDosyaMetni) as { sifreli: string }).sifreli;
+    const kokIzi = paketDosyalari.filter((f) => {
+      const m = readFileSync(path.join(P, f), "utf8");
+      return m.includes("tekserp-kok-anahtar") || m.includes(kokSifreli) || f.endsWith(".kok.json");
+    });
+    kontrol("§6c ⭐ pakette KÖK YOK (kök türü, kökün şifreli yarısı, .kok.json hiçbir dosyada)", kokIzi.length === 0, kokIzi.join(" "));
+    const ozetler = readFileSync(path.join(P, "SHA256SUMS"), "utf8").trim().split("\n").map((l) => l.split(/\s+/));
+    const dk = JSON.parse(readFileSync(path.join(P, "DONEM-KUNYE.json"), "utf8")) as {
+      yeni: Record<"alt" | "ara" | "indirme", { kid: string; x: string; siniflar: string[]; baslangic: string; bitis: string }>;
+      iptal: { sira: number; satir: number };
+      kuyruk: { imzalanan: number };
+      emekliye: string[];
+      ozetler: Record<string, string>;
+      kok: { kid: string };
+    };
+    const shaTutar =
+      ozetler.length === paketDosyalari.length - 1 &&
+      Object.keys(dk.ozetler).length === paketDosyalari.length - 2 &&
+      ozetler.every(([oz, f]) => createHash("sha256").update(readFileSync(path.join(P, f!))).digest("hex") === oz && (f === "DONEM-KUNYE.json" || dk.ozetler[f!] === oz));
+    kontrol("§6d SHA256SUMS her dosyayı (kendisi hariç) doğrular; DONEM-KUNYE özetleri (künye ve SHA256SUMS hariç) aynı", shaTutar, `${ozetler.length} satır · künye ${Object.keys(dk.ozetler).length}`);
+    const izin = [...["", "anahtarlar"].filter((d) => mod(path.join(P, d)) !== 0o700), ...paketDosyalari.filter((f) => mod(path.join(P, f)) !== 0o600)];
+    kontrol("§6e izinler: dizinler 700, dosyalar 600", izin.length === 0, izin.join(" "));
+    const capaYolu = path.join(tmp, "capa-donem.json");
+    writeFileSync(capaYolu, JSON.stringify([{ kid: kok.kid, x: kok.x, classes: kok.siniflar }]));
+    const pks = KeyStore.load({ ANAHTAR_DIZINI: path.join(P, "anahtarlar"), GUVEN_CAPASI_DOSYASI: capaYolu });
+    const simdi = Date.now();
+    const gunSay = (x: { baslangic: string; bitis: string }) => Math.round((Date.parse(x.bitis) - Date.parse(x.baslangic)) / 86_400_000);
+    kontrol("§6f paketin anahtarları KÖKE karşı geçerli: kira ALT · İNDİRME · ARA (URETIM) seçilir, üçü de 120 gün, ara sınıfları URETIM·DR·DEMO·TEST, uyarı yok",
+      pks.leaseKeyFor("URETIM", simdi)?.kid === `alt-${YIL}-2` && pks.downloadKey(simdi)?.kid === `ind-${YIL}-2` && pks.intermediateFor("URETIM", simdi)?.kid === `ara-${YIL}-1` &&
+        [dk.yeni.alt, dk.yeni.ara, dk.yeni.indirme].every((x) => gunSay(x) === 120) && JSON.stringify([...dk.yeni.ara.siniflar].sort()) === JSON.stringify(["DEMO", "DR", "TEST", "URETIM"]) &&
+        pks.warnings.filter((w) => !w.startsWith("Güven çapası DOSYADAN")).length === 0,
+      pks.warnings.join(" | "));
+    const araDosya = readWrappedKeyFile(path.join(P, "anahtarlar", `ara-${YIL}-1.ara.json`));
+    const araAcik = await unwrapPrivateKey(araDosya, passwordBuffer(ARA_PAROLA)).then((r) => (r.fill(0), true), () => false);
+    let araKokle = "";
+    await unwrapPrivateKey(araDosya, passwordBuffer(KOK_PAROLA)).catch((e: unknown) => (araKokle = e instanceof KeyFileError ? e.kind : "?"));
+    kontrol("§6g ara imzacı ARA parolasıyla açılır, KÖK parolasıyla açılmaz (iki ayrı parola)", araAcik && araKokle === "YANLIS_PAROLA" && araDosya.tur === "tekserp-ara-anahtar");
+    const { verifyRevocation, verifyEntitlement } = await import("../src/lisans-protokol");
+    const capaKok = [{ kid: kok.kid, x: kok.x, classes: kok.siniflar }];
+    const iptal1 = JSON.parse(readFileSync(path.join(P, "iptal.json"), "utf8")) as { sira: number; belge: string };
+    const iptalV = verifyRevocation(iptal1.belge, capaKok);
+    const ice = JSON.parse(readFileSync(path.join(P, "ice-aktar.json"), "utf8")) as { tur: string; iptal: string; haklar: { talepId: string; belge: string }[] };
+    const hakV = ice.haklar[0] ? verifyEntitlement(ice.haklar[0].belge, capaKok) : null;
+    const kanonik = (v: unknown): string => JSON.stringify(v, (_k, x: unknown) => (x && typeof x === "object" && !Array.isArray(x) ? Object.fromEntries(Object.entries(x as Record<string, unknown>).sort(([a], [b]) => a.localeCompare(b))) : x));
+    kontrol("§6h ilk dönem: iptal belgesi sıra 1 (boş liste, kökle doğrulanır); ice-aktar iptali aynı belge; kuyruktaki HAK KÖKLE imzalandı ve yükü kuyruktakiyle BİREBİR",
+      iptalV.ok && iptalV.value.document.sira === 1 && iptalV.value.document.iptaller.length === 0 && ice.tur === "tekserp-donem-ice-aktar" && ice.iptal === iptal1.belge &&
+        !!hakV?.ok && hakV.value.signer.kind === "KOK" && kanonik(hakV.value.document) === kanonik(kuyrukYuku) && dk.kuyruk.imzalanan === 1);
+    kontrol("§6i emekliye listesi: önceki ALT · İNDİRME (ilk törenin) var, yeniler YOK", dk.emekliye.includes(`alt-${YIL}-1`) && dk.emekliye.includes(`ind-${YIL}`) && !dk.emekliye.some((k) => [`alt-${YIL}-2`, `ara-${YIL}-1`, `ind-${YIL}-2`].includes(k)), dk.emekliye.join(","));
+    const dogrulaSonra = spawnSync(process.execPath, [TOREN, "dogrula", `--dizin=${D}`], { encoding: "utf8" });
+    kontrol("§6j ilk tören dizini dokunulmadı: `dogrula` önce ve sonra 0 (künye özetleri aynı)", dogrulaOnce.status === 0 && dogrulaSonra.status === 0, `${dogrulaOnce.status}/${dogrulaSonra.status}`);
+    const paketSirlari = [ARA_PAROLA, KOK_PAROLA, (JSON.parse(readFileSync(path.join(P, "anahtarlar", `alt-${YIL}-2.anahtar.json`), "utf8")) as { d: string }).d];
+    kontrol("§6k ⭐ parolalar hiçbir sürecin argv/env'inde görünmedi; ekran parola ve ALT özel yarısı taşımaz, yeni kid'leri ve sonraki adımları basar",
+      !d1.parolaGoruldu && d1.yoklama >= 5 && paketSirlari.every((x) => !d1.cikti.includes(x)) && [`alt-${YIL}-2`, `ara-${YIL}-1`, `ind-${YIL}-2`, "Sonraki adımlar", "emekliye-ayir"].every((x) => d1.cikti.includes(x)),
+      `${d1.yoklama} yoklama`);
+    const dkc = JSON.parse(readFileSync(path.join(P, "DONEM-KUNYE.json"), "utf8")) as { capaSatirlari: Record<string, string> };
+    const w6 = await workerSatiriOlc(dkc.capaSatirlari, dk.yeni.indirme, "uretim");
+    kontrol("§6k' ⭐ dönem künyesinin CF Worker satırı (L2-8): yeni İNDİRME'nin kid · x · 120 günlük penceresi + üretim kanalları; Worker ayarı onu KABUL eder", w6.ok, w6.detay);
+    kontrol("§6k'' ⭐ dönem Sonraki adımlar: CF Worker adımı anahtar birimine kurmadan ÖNCE (örtüşmeli geçiş)", sonra(d1.cikti, "CF Worker", "Anahtar birimine kur"), "");
+
+    const d2 = await tore(["donem", `--dizin=${D}`, `--yil=${YIL}`, ET, `--iptal=ara-${YIL}-1`, "--neden=bekçi acil iptal"], ucParola(KOK_PAROLA, `${ARA_PAROLA}-2`), {}, ev);
+    const ikinciDonem = donemDizinleri().filter((n) => !n.includes(".yarim-") && n !== ilkDonem[0]);
+    const P2 = ikinciDonem[0] ? path.join(donemler, ikinciDonem[0], "vds-paketi") : "";
+    const iptal2 = P2 && existsSync(path.join(P2, "iptal.json")) ? verifyRevocation((JSON.parse(readFileSync(path.join(P2, "iptal.json"), "utf8")) as { belge: string }).belge, capaKok) : null;
+    const dk2 = P2 ? (JSON.parse(readFileSync(path.join(P2, "DONEM-KUNYE.json"), "utf8")) as typeof dk) : null;
+    kontrol("§6l olağan dışı dönem (--iptal): numaralar ilerler (ALT 3 · ARA 2 · İND 3), iptal sıra 2 ara-…-1'i taşır, ice-aktar'da HAK yok, emekliye eski ara dahil",
+      d2.status === 0 && !!iptal2?.ok && iptal2.value.document.sira === 2 && iptal2.value.document.iptaller.some((e) => e.kid === `ara-${YIL}-1` && e.kullanim === "HAK" && e.neden === "bekçi acil iptal") &&
+        dk2?.yeni.alt.kid === `alt-${YIL}-3` && dk2.yeni.ara.kid === `ara-${YIL}-2` && dk2.yeni.indirme.kid === `ind-${YIL}-3` && dk2.kuyruk.imzalanan === 0 && dk2.emekliye.includes(`ara-${YIL}-1`) && dk2.emekliye.includes(`alt-${YIL}-2`),
+      `${d2.status} ${d2.status === 0 ? "" : d2.cikti.slice(-300)}`);
+
+    const sayiOnce = donemDizinleri().length;
+    const ayni = await tore(["donem", `--dizin=${D}`, `--yil=${YIL}`, ET], ucParola(KOK_PAROLA, KOK_PAROLA), {}, ev);
+    const yanlisKok = await tore(["donem", `--dizin=${D}`, `--yil=${YIL}`, ET], ucParola(`${KOK_PAROLA}-yanlis`, `${ARA_PAROLA}-3`), {}, ev);
+    const eslesmez = await tore(["donem", `--dizin=${D}`, `--yil=${YIL}`, ET], ucParola(KOK_PAROLA, `${ARA_PAROLA}-4`, `${ARA_PAROLA}-5`), {}, ev);
+    const bilinmezKid = await tore(["donem", `--dizin=${D}`, `--yil=${YIL}`, ET, "--iptal=ara-2099-99"], ucParola(KOK_PAROLA, `${ARA_PAROLA}-6`), {}, ev);
+    writeFileSync(path.join(tmp, "bozuk-kuyruk.json"), JSON.stringify({ v: 1, tur: "baska" }));
+    const bozukKuyruk = await tore(["donem", `--dizin=${D}`, `--yil=${YIL}`, ET, `--kuyruk=${path.join(tmp, "bozuk-kuyruk.json")}`], ucParola(KOK_PAROLA, `${ARA_PAROLA}-7`), {}, ev);
+    const argvParola = await tore(["donem", `--dizin=${D}`, `--ara-parolasi=${ARA_PAROLA}`], "", {}, ev);
+    const kokIptal = await tore(["donem", `--dizin=${D}`, `--yil=${YIL}`, ET, `--iptal=kok-${YIL}-1`], ucParola(KOK_PAROLA, `${ARA_PAROLA}-8`), {}, ev);
+    kontrol("§6m RED, dönem paketi YAZILMADAN: ara = kök parolası (2) · yanlış kök parolası (1, yarım silindi) · eşleşmeyen ara (2) · bilinmeyen --iptal kid (2) · biçimsiz kuyruk (2) · argv'de parola (2) · kök iptal (2)",
+      ayni.status === 2 && /AYNI olamaz/.test(ayni.cikti) &&
+        yanlisKok.status === 1 && /yarım dönem dizini silindi/.test(yanlisKok.cikti) &&
+        eslesmez.status === 2 && /eşleşmedi/.test(eslesmez.cikti) &&
+        bilinmezKid.status === 2 && /bulunamadı/.test(bilinmezKid.cikti) &&
+        bozukKuyruk.status === 2 && /--kuyruk tanınmıyor/.test(bozukKuyruk.cikti) &&
+        argvParola.status === 2 && /argümandan ALINMAZ/.test(argvParola.cikti) &&
+        kokIptal.status === 2 && /iptal edilemez tür/.test(kokIptal.cikti) &&
+        donemDizinleri().length === sayiOnce && ![ayni, yanlisKok, eslesmez].some((r) => r.parolaGoruldu),
+      [ayni, yanlisKok, eslesmez, bilinmezKid, bozukKuyruk, argvParola, kokIptal].map((r) => r.status).join("/"));
+
+    console.log("\n§7 HAZIRLIK dönem töreni — kid'ler `…-hazirlik-<yıl>-<n>`, ortam kökün kimliğinden, karşı ortamla çakışmaz");
+    const HZ = path.join(tmp, "satici-hazirlik");
+    const HA = path.join(HZ, "anahtarlar");
+    mkdirSync(HA, { recursive: true, mode: 0o700 });
+    chmodSync(HZ, 0o700);
+    const HKOK = `hkok-sonda-${randomBytes(9).toString("hex")}`;
+    const HARA = `hara-sonda-${randomBytes(9).toString("hex")}`;
+    const cli = (argv: string[], girdi: string) => spawnSync(process.execPath, ["--import", "tsx", "scripts/anahtar.ts", ...argv], { cwd: SATICI_KOKU, encoding: "utf8", input: girdi });
+    const hKur = [
+      cli(["kok-uret", `--kid=hazirlik-${YIL}-1`, `--dizin=${HA}`], `${HKOK}\n${HKOK}\n`),
+      cli(["alt-uret", `--kid=alt-hazirlik-${YIL}-1`, `--kok=hazirlik-${YIL}-1`, `--dizin=${HA}`], `${HKOK}\n`),
+      cli(["indirme-uret", `--kid=ind-hazirlik-${YIL}`, `--kok=hazirlik-${YIL}-1`, `--dizin=${HA}`], `${HKOK}\n`),
+    ];
+    kontrol("§7 kurulum: hazırlık kökü + bugünkü biçimde ilk ALT/İND (`alt-hazirlik-<yıl>-1` · `ind-hazirlik-<yıl>`)", hKur.every((r) => r.status === 0), hKur.map((r) => `${r.status} ${r.stderr.trim().slice(0, 80)}`).join(" | "));
+    const hDonemler = path.join(HZ, "donemler");
+    const hDonemDizinleri = () => (existsSync(hDonemler) ? readdirSync(hDonemler).filter((n) => !n.includes(".yarim-")).sort() : []);
+    const h1 = await tore(["donem", `--dizin=${HZ}`, `--kok=hazirlik-${YIL}-1`, `--yil=${YIL}`, `--karsi-dizin=${D}`, ET], ucParola(HKOK, HARA), {}, ev);
+    const HP = hDonemDizinleri()[0] ? path.join(hDonemler, hDonemDizinleri()[0]!, "vds-paketi") : "";
+    const hBeklenen = ["DONEM-KUNYE.json", "SHA256SUMS", `anahtarlar/alt-hazirlik-${YIL}-2.anahtar.json`, `anahtarlar/ara-hazirlik-${YIL}-1.ara.json`, `anahtarlar/ind-hazirlik-${YIL}-2.anahtar.json`, "ice-aktar.json", "iptal.json"];
+    const hPaket = HP ? dosyaListesi(HP).sort() : [];
+    kontrol("§7a ⭐ hazırlık dönemi çıkış 0; kid'ler `alt|ara|ind-hazirlik-<yıl>-<n>`, numara önekli ilk anahtarlardan ilerler (ALT 2 · ARA 1 · İND 2); ortam kökün kimliğinden",
+      h1.status === 0 && JSON.stringify(hPaket) === JSON.stringify(hBeklenen) && /ortam HAZIRLIK \(kökün kimliğinden\)/.test(h1.cikti),
+      `${h1.status} ${h1.status === 0 ? hPaket.join(" ") : h1.cikti.slice(-400)}`);
+    const uretimKidleri = new Set(
+      [A, ...donemDizinleri().map((n) => path.join(donemler, n, "vds-paketi", "anahtarlar"))]
+        .filter((d) => existsSync(d))
+        .flatMap((d) => readdirSync(d))
+        .map((ad) => /^((?:alt|ara|ind)-[a-z0-9-]+)\.(anahtar|ara|sertifika)\.json$/.exec(ad)?.[1])
+        .filter((k): k is string => !!k),
+    );
+    const hYeni = hBeklenen.map((f) => /^anahtarlar\/(.+)\.(anahtar|ara)\.json$/.exec(f)?.[1]).filter((k): k is string => !!k);
+    kontrol("§7b yeni hazırlık kid'lerinin HİÇBİRİ üretim kümesinde değil; tören karşı kümeyi okuduğunu söyler",
+      hYeni.length === 3 && uretimKidleri.size >= 6 && hYeni.every((k) => !uretimKidleri.has(k)) && h1.cikti.includes(`karşı  : ${D} · ${uretimKidleri.size} kid, çakışma yok`),
+      `üretim ${uretimKidleri.size} kid · ${hYeni.join(",")}`);
+    const hdk = HP ? (JSON.parse(readFileSync(path.join(HP, "DONEM-KUNYE.json"), "utf8")) as { yeni: { indirme: { kid: string; x: string; baslangic: string; bitis: string } }; capaSatirlari: Record<string, string> }) : null;
+    const w7 = hdk ? await workerSatiriOlc(hdk.capaSatirlari, hdk.yeni.indirme, "hazirlik") : { ok: false, detay: "künye yok" };
+    kontrol("§7c CF Worker satırı `hazirlik` listesine, kanallar = kanallar.json'un hazırlık çapalı kanalları; Worker kabul eder", w7.ok, w7.detay);
+
+    const hSayi = hDonemDizinleri().length;
+    const sahteKarsi = path.join(tmp, "karsi-sahte");
+    mkdirSync(path.join(sahteKarsi, "anahtarlar"), { recursive: true });
+    writeFileSync(path.join(sahteKarsi, "anahtarlar", `ind-hazirlik-${YIL}-3.anahtar.json`), "{}");
+    const kume = await tore(["donem", `--dizin=${HZ}`, `--kok=hazirlik-${YIL}-1`, `--yil=${YIL}`, `--karsi-dizin=${sahteKarsi}`, ET], ucParola(HKOK, `${HARA}-2`), {}, ev);
+    cpSync(path.join(HA, `hazirlik-${YIL}-1.kok.json`), path.join(HA, `hazirlik-${YIL}-9.kok.json`));
+    const kimlik = await tore(["donem", `--dizin=${HZ}`, `--kok=hazirlik-${YIL}-9`, `--yil=${YIL}`, `--karsi-dizin=${D}`, ET], ucParola(HKOK, `${HARA}-3`), {}, ev);
+    rmSync(path.join(HA, `hazirlik-${YIL}-9.kok.json`));
+    const sahteKok = JSON.parse(readFileSync(path.join(HA, `hazirlik-${YIL}-1.kok.json`), "utf8")) as Record<string, unknown>;
+    writeFileSync(path.join(HA, `hazirlik-${YIL}-8.kok.json`), JSON.stringify({ ...sahteKok, kid: `hazirlik-${YIL}-8`, siniflar: ["URETIM", "TEST"] }));
+    const sinifli = await tore(["donem", `--dizin=${HZ}`, `--kok=hazirlik-${YIL}-8`, `--yil=${YIL}`, `--karsi-dizin=${D}`, ET], ucParola(HKOK, `${HARA}-6`), {}, ev);
+    rmSync(path.join(HA, `hazirlik-${YIL}-8.kok.json`));
+    const ortamBayragi = await tore(["donem", `--dizin=${HZ}`, `--kok=hazirlik-${YIL}-1`, "--ortam=uretim", ET], ucParola(HKOK, `${HARA}-4`), {}, ev);
+    const kendisi = await tore(["donem", `--dizin=${HZ}`, `--kok=hazirlik-${YIL}-1`, `--yil=${YIL}`, `--karsi-dizin=${HZ}`, ET], ucParola(HKOK, `${HARA}-5`), {}, ev);
+    const parolaSorulmadi = (r: Kosum) => r.status === 2 && !/\[2\/8\]/.test(r.cikti);
+    kontrol("§7d ⭐ RED parola sorulmadan, paket yazılmadan: yeni kid KARŞI ortamın kümesinde · kök dosyasının kimliği istenen değil · hazırlık kökü TEST/DEMO dışı sınıf · ortam bayrağı YOK (tanınmayan) · karşı dizin = tören dizini",
+      parolaSorulmadi(kume) && /KARŞI ortamın \(uretim\) anahtar kümesinde var/.test(kume.cikti) && kume.cikti.includes(`ind-hazirlik-${YIL}-3`) &&
+        parolaSorulmadi(kimlik) && /Kök dosyasının kimliği/.test(kimlik.cikti) &&
+        parolaSorulmadi(sinifli) && /ortamı belirsiz/.test(sinifli.cikti) &&
+        parolaSorulmadi(ortamBayragi) && /ortam/.test(ortamBayragi.cikti) &&
+        parolaSorulmadi(kendisi) && /tören dizininin kendisi/.test(kendisi.cikti) &&
+        hDonemDizinleri().length === hSayi,
+      [kume, kimlik, sinifli, ortamBayragi, kendisi].map((r) => `${r.status} ${r.cikti.trim().split("\n").pop()?.slice(0, 90)}`).join(" | "));
 
     console.log("\n§5 KAYNAK — kirli ağaç, origin/main dışı HEAD, yanlış etiket, npm ls (parola SORULMADAN RED)");
     const H5 = path.join(tmp, "kaynak-hedef");

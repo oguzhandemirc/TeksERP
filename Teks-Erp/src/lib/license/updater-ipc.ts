@@ -44,6 +44,7 @@ export const UpdaterStatusDocSchema = z.object({
   bekleyen: z.unknown().optional(),
   son: z.unknown().optional(),
   sonAyrinti: z.unknown().optional(),
+  bilgi: z.unknown().optional(),
   surum: Short(40),
   kaynakSurum: Short(40),
   kuruluSurum: Short(40),
@@ -103,6 +104,9 @@ export const UpdaterLastDetailSchema = z.object({
   mesaj: z.string().max(500).nullable(),
 });
 export type UpdaterLastDetail = z.infer<typeof UpdaterLastDetailSchema>;
+/** `bilgi`: bu turun SORUN OLMAYAN bilgisi (bugün yalnız `SEMA_OLCULEMEDI`) — `hataKodu`ndan ayrı; yoksa alan yok. */
+export const UpdaterNoticeSchema = z.object({ kod: Code, mesaj: z.string().max(500) });
+export type UpdaterNotice = z.infer<typeof UpdaterNoticeSchema>;
 
 export type UpdaterStatusRead =
   | { readonly kind: "missing" }

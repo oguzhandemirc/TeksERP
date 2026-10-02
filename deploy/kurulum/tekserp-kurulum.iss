@@ -2,7 +2,8 @@
 ; TeksERP SUNUCU KURULUMU - Inno Setup 6 betiği (TeksERP-Kurulum-<sürüm>.exe) · Dağıtım v2 D5
 ; =============================================================================
 ; Sihirbaz YALNIZ cevap toplar ve aşama koşucusunu (kurulum.ps1) çağırır; karar ve ölçüm betiktedir:
-;   ön ölçüm (on-olcum.ps1, salt okuma) → PrepareToInstall: kök kilidi + cevap.json + OnKosul →
+;   ön ölçüm (on-olcum.ps1, salt okuma; açılışta HAFİF, kök seçilince TAM - ikisi de "Sistem denetleniyor"
+;   penceresiyle) → PrepareToInstall: kök kilidi + cevap.json + OnKosul →
 ;   dosyalar → Paket → PostgreSQL → Backend → Hizmetler → [Sirlar: BORUYLA] → Dogrulama.
 ; SIR HİJYENİ: satıcı parolası/PIN ve yerel yedek parolası cevap dosyasına, komut satırına, ortama,
 ;   günlüğe GİRMEZ — Sirlar aşamasına anonim boruyla (STDIN) gider (BoruIleKos). Müşteri yedek
@@ -86,6 +87,8 @@ ConfirmUninstall=TeksERP sunucusunun PROGRAMI kaldırılacak: hizmetler, sürüm
 Source: "{#DogrulayiciExe}"; DestDir: "{app}\kurulum\araclar"; DestName: "tekserp-guncelleyici.exe"; Flags: ignoreversion
 Source: "kurulum.ps1"; DestDir: "{app}\kurulum\deploy\kurulum"; Flags: ignoreversion
 Source: "kurulum-ortak.ps1"; DestDir: "{app}\kurulum\deploy\kurulum"; Flags: ignoreversion
+Source: "..\hizmet\kanal-adlari.ps1"; DestDir: "{app}\kurulum\deploy\hizmet"; Flags: ignoreversion
+Source: "..\hizmet\sema-hizasi.ps1"; DestDir: "{app}\kurulum\deploy\hizmet"; Flags: ignoreversion
 Source: "on-olcum.ps1"; DestDir: "{app}\kurulum\deploy\kurulum"; Flags: ignoreversion
 Source: "kaldir.ps1"; DestDir: "{app}\kurulum\deploy\kurulum"; Flags: ignoreversion
 Source: "cevap-semasi.json"; DestDir: "{app}\kurulum\deploy\kurulum"; Flags: ignoreversion
@@ -195,6 +198,8 @@ const
   C_ILETI_KALDIR = 1;
   C_SURUCU_CIKARILABILIR = 2;
   PS_ARGS = '-NoProfile -NonInteractive -ExecutionPolicy Bypass -File ';
+  VARSAYILAN_GUNCELLEME = 'https://guncelleme.etkiliyazilim.com';
+  VERI_ACIKLAMASI = 'Veritabanı dosyaları bu dizinde tutulur: yerel, SABİT bir NTFS diski seçin (öneri: D:). Dizin YOK ya da BOŞ olmalı; dolu dizine kurulmaz, veri silinmez.';
 
 var
   OlcumIni: String;
@@ -204,6 +209,7 @@ var
   OlculenKok: String;
   Onarim: Boolean;
   Yarim: Boolean;
+  Gecisli: Boolean;
   ProvaKabul: Boolean;
   KurulumHatasi: String;
   HataAsamasi: Integer;
@@ -221,6 +227,8 @@ var
   ProfilSayfasi: TInputOptionWizardPage;
   SonucSayfasi: TOutputMsgMemoWizardPage;
   AnahtarOnay: TNewCheckBox;
+  SihirbazHazir: Boolean;
+  GelismisKayittan: Boolean;
 
 // -----------------------------------------------------------------------------
 // Yardımcılar. Dizin erişimi uzunluk denetiminden SONRA iç içe if ile: kısa devre değerlendirmesine
@@ -554,43 +562,143 @@ begin
   Result := True;
   try
     ExtractTemporaryFiles('{app}\kurulum\deploy\kurulum\*');
+    // on-olcum.ps1 ve OnKosul (kurulum.ps1) {tmp}'ten koşar ve ..\hizmet\ komşularını nokta-kaynak eder.
+    ExtractTemporaryFiles('{app}\kurulum\deploy\hizmet\*');
     ExtractTemporaryFiles('{app}\kurulum\deploy\pg\*');
   except
     Result := Hata('Kurulum dosyaları açılamadı: ' + GetExceptionMessage);
   end;
 end;
 
-function OnOlcum(const KokAdayi: String): Boolean;
+// "Sistem denetleniyor" penceresi: ölçüm (PowerShell) sürerken ekran boş kalmasın - kullanıcı programı donmuş
+// sanmasın (thinkpad-1 D8b: ilk pencere ~60 sn görünmedi). Sessiz kipte açılmaz. Exec beklerken iletileri işler.
+function DenetimPenceresiAc(const Ayrinti: String): TSetupForm;
+var F: TSetupForm; Baslik, Metin: TNewStaticText; Cubuk: TNewProgressBar;
+begin
+  // CreateCustomForm imzası Inno 6.6'da değişti (boyut + KeepSize); TSetupForm.CreateNew 6.7.3'te derlenmez.
+#if Ver >= EncodeVer(6, 6, 0, 0)
+  F := CreateCustomForm(ScaleX(460), ScaleY(128), True, True);
+#else
+  F := CreateCustomForm;
+#endif
+  F.Caption := 'TeksERP Sunucu Kurulumu';
+  F.BorderStyle := bsDialog;
+  F.Position := poScreenCenter;
+  // Boyut EN SON: kenarlık değişimi pencereyi yeniden kurar ve ölçeği bir kez daha uygular
+  // (thinkpad-1: önce verilen boyut 835x275 çıktı, içerik sol 600 px'te kaldı).
+  F.ClientWidth := ScaleX(460);
+  F.ClientHeight := ScaleY(128);
+  Baslik := TNewStaticText.Create(F);
+  Baslik.Parent := F;
+  Baslik.Left := ScaleX(16);
+  Baslik.Top := ScaleY(14);
+  Baslik.Font.Style := [fsBold];
+  Baslik.Caption := 'Sistem denetleniyor...';
+  Metin := TNewStaticText.Create(F);
+  Metin.Parent := F;
+  Metin.AutoSize := False;
+  Metin.WordWrap := True;
+  Metin.Left := ScaleX(16);
+  Metin.Top := ScaleY(38);
+  Metin.Width := ScaleX(428);
+  Metin.Height := ScaleY(46);
+  Metin.Caption := Ayrinti;
+  Cubuk := TNewProgressBar.Create(F);
+  Cubuk.Parent := F;
+  Cubuk.Left := ScaleX(16);
+  Cubuk.Top := ScaleY(94);
+  Cubuk.Width := ScaleX(428);
+  Cubuk.Height := ScaleY(18);
+  Cubuk.Style := npbstMarquee;
+  F.Show;
+  IletileriIsle;
+  Result := F;
+end;
+
+// Ölçümün kendisi (pencere yok): boş = tamam, dolu = hata metni.
+function OlcumKos(const KokAdayi: String; Hafif: Boolean): String;
 var Kod: Integer; Arg: String;
 begin
+  Result := '';
   OlcumIni := ExpandConstant('{tmp}\olcum.ini');
   DeleteFile(OlcumIni);
   Arg := '-Kaynak ' + ArgYol(ExpandConstant('{src}')) + ' -Kok ' + ArgYol(KokAdayi) + ' -Cikti ' + ArgYol(OlcumIni);
   if CevapDosyasi <> '' then Arg := Arg + ' -Cevap ' + ArgYol(CevapDosyasi);
+  if Hafif then Arg := Arg + ' -Hafif';
   if not Exec(PowerShellYolu, PS_ARGS + ArgYol(TmpKurulum('deploy\kurulum\on-olcum.ps1')) + ' ' + Arg, '', SW_HIDE, ewWaitUntilTerminated, Kod) then
   begin
-    Result := Hata('PowerShell başlatılamadı (' + SysErrorMessage(Kod) + ').');
+    Result := 'PowerShell başlatılamadı (' + SysErrorMessage(Kod) + ').';
     Exit;
   end;
   if not FileExists(OlcumIni) or (Olc('tamam') <> '1') then
   begin
-    Result := Hata('Ön ölçüm yapılamadı (çıkış ' + IntToStr(Kod) + '): ' + Olc('hata') + #13#10 + 'Yürütme ilkesi (GPO AllSigned) PowerShell betiklerini engelliyor olabilir.');
+    Result := 'Ön ölçüm yapılamadı (çıkış ' + IntToStr(Kod) + '): ' + Olc('hata') + #13#10 + 'Yürütme ilkesi (GPO AllSigned) PowerShell betiklerini engelliyor olabilir.';
     Exit;
   end;
-  if Olc('x64Surec') <> '1' then
+  if Olc('x64Surec') <> '1' then Result := '64-bit PowerShell çalıştırılamadı (32-bit kabuk). Kurulum 64-bit Windows PowerShell ister.';
+end;
+
+// Hafif: sihirbaz açılmadan önce yalnız paketin kimliği (AppId'nin kanal soneki) - CIM/port/kök ölçümü YOK.
+// Görünür kipte ölçüm boyunca denetim penceresi açık; sihirbaz varsa ölçüm bitene dek KİLİTLİ (Exec iletileri
+// işler, ikinci "İleri" tıklaması ölçümü iç içe başlatmasın).
+function OnOlcumKipli(const KokAdayi: String; Hafif: Boolean): Boolean;
+var Pencere: TSetupForm; Sorun, Ayrinti: String;
+begin
+  Pencere := nil;
+  if not Sessiz then
   begin
-    Result := Hata('64-bit PowerShell çalıştırılamadı (32-bit kabuk). Kurulum 64-bit Windows PowerShell ister.');
+    if Hafif then Ayrinti := 'Kurulum paketi okunuyor; sihirbaz birazdan açılacak.'
+    else Ayrinti := 'Bu bilgisayar, ' + KokAdayi + ' klasörü ve kurulum paketi ölçülüyor (önceki kurulum, portlar, diskler). Bu bir dakika kadar sürebilir.';
+    try
+      Pencere := DenetimPenceresiAc(Ayrinti);
+    except
+      Log('denetim penceresi acilamadi: ' + GetExceptionMessage);
+      Pencere := nil;
+    end;
+    if SihirbazHazir then WizardForm.Enabled := False;
+  end;
+  try
+    Sorun := OlcumKos(KokAdayi, Hafif);
+  finally
+    if SihirbazHazir and not Sessiz then WizardForm.Enabled := True;
+    if Pencere <> nil then Pencere.Free;
+  end;
+  if Sorun <> '' then
+  begin
+    Result := Hata(Sorun);
     Exit;
   end;
   Sonek := Olc('sonek');
   OlculenKok := Olc('kok');
   Onarim := Olc('onarim') = '1';
   Yarim := Olc('yarim') = '1';
+  Gecisli := Olc('gecisli') = '1';
   Result := True;
 end;
 
-// Engeller (kurulum ilerlemez): boş = yok.
+function OnOlcum(const KokAdayi: String): Boolean;
+begin
+  Result := OnOlcumKipli(KokAdayi, False);
+end;
+
+// Gerçek kurulu sürüm (ölçüm: current · kurulum-gecmisi.jsonl · güncelleyici durumu); yoksa kayıttaki.
+function KuruluSurum: String;
+begin
+  Result := Olc('kuruluSurum');
+  if Result = '' then Result := Olc('oncekiSurum');
+end;
+
+function KipMetni: String;
+begin
+  if Onarim then Result := 'ONARIM (kurulu sürüm ' + KuruluSurum + ', paket ' + Olc('paketSurum') + '; veri korunur)'
+  else if Yarim then Result := 'DEVAM (yarım kalan kurulum ' + Olc('oncekiSurum') + ' - kaldığı yerden)'
+  else if Gecisli then Result := 'GEÇİŞLİ KURULUM (pm2 → hizmet geçişiyle kurulmuş; kurulum yardımcısı onarmaz)'
+  else Result := 'yeni kurulum';
+end;
+
+// Engeller (kurulum ilerlemez): boş = yok. Ön ölçüm sayfasında da gösterilir (SayfalariOlcumleDoldur).
 function OlcumEngelleri: String;
+var I, N: Integer;
 begin
   Result := '';
   if Olc('yonetici') <> '1' then Result := Result + '- Yönetici olarak çalıştırılmalı.' + #13#10;
@@ -601,21 +709,34 @@ begin
   if Olc('pgKunyeVar') <> '1' then Result := Result + '- pg.json (PostgreSQL künyesi) yok.' + #13#10;
   if Olc('pgPortHata') <> '' then Result := Result + '- PostgreSQL portu: ' + Olc('pgPortHata') + #13#10;
   if (Olc('kokYabanci') <> '') and (Olc('kokYabanci') <> '0') then Result := Result + '- Kök klasör boş değil ve TeksERP kurulumu değil (' + Olc('kokYabanci') + ' girdi): başka bir klasör seçin; var olan veri ezilmez.' + #13#10;
+  // Geçişle kurulmuş düzen (kurulum kaydı yok; geçiş günlüğü + current): ayrı sınıf, onarılmaz (GECIS-PM2-HIZMET.md §7).
+  if Gecisli then
+    Result := Result + '- Bu klasör pm2 → hizmet geçişiyle kurulmuş bir TeksERP kurulumu (geçiş günlüğü gecis\' + Olc('gecisDamga') + '\ ve current bağlantısı var, kurulum kaydı yok); kurulum yardımcısı onu onarmaz. ' +
+      'Güncelleme güncelleyiciyle gelir; sorun varsa docs/ops/GECIS-PM2-HIZMET.md (5. bölüm: gecis.ps1 -GeriAl; 7. bölüm). Yeni kurulum için başka bir klasör seçin. Hiçbir şey değiştirilmedi.' + #13#10;
+  // Kanal hizmeti BAŞKA köke bağlı (ya da bağlı olduğu kök ölçülemedi): kurulum o kurulumun hizmetini ezerdi.
+  N := StrToIntDef(Olc('hizmetKokSayisi'), 0);
+  for I := 1 to N do
+    if Olc('hizmetKokDurum' + IntToStr(I)) = 'baska' then
+      Result := Result + '- ' + Olc('hizmetKokAd' + IntToStr(I)) + ' zaten ' + Olc('hizmetKokBagli' + IntToStr(I)) + ' köküne bağlı; bu klasöre kurulum/onarım yapılamaz (o kurulumun hizmetini ezerdi). Aynı kökü seçin ya da önce o kurulumu kaldırın. Hiçbir şey değiştirilmedi.' + #13#10
+    else
+      Result := Result + '- ' + Olc('hizmetKokAd' + IntToStr(I)) + ' hizmeti var ama hangi köke bağlı olduğu ölçülemedi; kurulum/onarım yapılamaz (sc.exe qc ' + Olc('hizmetKokAd' + IntToStr(I)) + ' ile denetleyin). Hiçbir şey değiştirilmedi.' + #13#10;
   if (Onarim or Yarim) and (Olc('oncekiHizmet') <> '') and (Olc('oncekiHizmet') <> Olc('backendHizmeti')) then
     Result := Result + '- Bu klasördeki kurulum başka bir kanalın (' + Olc('oncekiHizmet') + '); bu paket ' + Olc('backendHizmeti') + '.' + #13#10;
   if Yarim and (Olc('oncekiSurum') <> Olc('paketSurum')) then
     Result := Result + '- Yarım kalan kurulum ' + Olc('oncekiSurum') + ' paketiyle başlamış; aynı paketle sürdürün ya da önce kaldırın (veri korunur).' + #13#10;
+  // Kaldırılıp ESKİ kitle yeniden kurulum: eski kod yeni şemalı veritabanına inmez (OnKosul da aynı kuralla durur).
+  if Olc('eskiPaket') = 'eski' then
+    Result := Result + '- Bu klasörde daha YENİ bir sürüm kurulu: ' + Olc('kuruluSurum') + ' (' + Olc('kuruluKaynak') + '); bu paket ' + Olc('paketSurum') +
+      '. Eski paket kurulmaz - veritabanı yeni sürümün şemasında. ' + Olc('kuruluSurum') + ' ya da daha yeni bir kurulum paketi kullanın. Hiçbir şey değiştirilmedi.' + #13#10
+  else if Olc('eskiPaket') <> '' then
+    Result := Result + '- Paket sürümü (' + Olc('paketSurum') + ') kurulu sürümle (' + Olc('kuruluSurum') + ') karşılaştırılamadı; hiçbir şey değiştirilmedi.' + #13#10;
 end;
 
 function OlcumOzeti: String;
-var Kip: String;
 begin
-  if Onarim then Kip := 'ONARIM (kayıtlı kurulum ' + Olc('oncekiSurum') + ')'
-  else if Yarim then Kip := 'DEVAM (yarım kalan kurulum ' + Olc('oncekiSurum') + ' - kaldığı yerden)'
-  else Kip := 'yeni kurulum';
   Result :=
     'Paket          : ' + Olc('paketSurum') + '  (kanal: ' + Olc('paketKanal') + ')' + #13#10 +
-    'Kip            : ' + Kip + #13#10 +
+    'Kip            : ' + KipMetni + #13#10 +
     'Kök            : ' + Olc('kok') + #13#10 +
     'Hizmetler      : ' + Olc('backendHizmeti') + ' · ' + Olc('guncelleyiciHizmeti') + ' · ' + Olc('pgHizmeti') + #13#10 +
     'PostgreSQL     : ' + Olc('pgSurum') + '  (port önerisi ' + Olc('pgPort') + ' - ' + Olc('pgPortNeden') + ')' + #13#10 +
@@ -718,7 +839,8 @@ begin
     Hata('Cevap dosyası yok: ' + CevapDosyasi);
     Exit;
   end;
-  if not OnOlcum('C:\TeksERP') then Exit;
+  // Görünür kipte HAFİF ölçüm (sihirbaz hemen açılsın); tam ölçüm kök seçilince. Sessiz kipte karar cevap dosyasında: TAM.
+  if not OnOlcumKipli('C:\TeksERP', not Sessiz) then Exit;
   if CevapDosyasi <> '' then
   begin
     if Olc('cevapGecerli') <> '1' then
@@ -740,9 +862,7 @@ procedure InitializeWizard;
 begin
   OlcumSayfasi := CreateOutputMsgMemoPage(wpSelectDir, 'Ön ölçüm', 'Bu bilgisayar ve paket ölçüldü',
     'Aşağıdaki değerler kuruluma esas alınır. Engel varsa kurulum ilerlemez.', '');
-  VeriSayfasi := CreateInputDirPage(OlcumSayfasi.ID, 'Veritabanı verisi', 'PostgreSQL veri dizini',
-    'Veritabanı dosyaları bu dizinde tutulur: yerel, SABİT bir NTFS diski seçin (öneri: D:). Dizin YOK ya da BOŞ olmalı; dolu dizine kurulmaz, veri silinmez.',
-    False, '');
+  VeriSayfasi := CreateInputDirPage(OlcumSayfasi.ID, 'Veritabanı verisi', 'PostgreSQL veri dizini', VERI_ACIKLAMASI, False, '');
   VeriSayfasi.Add('Veri dizini (boşluksuz):');
   PortSayfasi := CreateInputQueryPage(VeriSayfasi.ID, 'Portlar', 'Uygulama ve veritabanı portları',
     'API portu panel ve tabletlerin bağlandığı porttur (varsayılan 4000; meşgulse kurulum durur). PostgreSQL yalnız bu bilgisayardan (127.0.0.1) dinler.');
@@ -762,7 +882,7 @@ begin
   SaticiSayfasi := CreateInputQueryPage(AgSayfasi.ID, 'Satıcı hesabı', 'Destek (süperadmin) hesabı',
     'Parola ve PIN dosyaya, günlüğe, komut satırına yazılmaz; kuruluma kayıt dışı bir boruyla aktarılır. Boş bırakırsanız hesap kurulum sonunda konsoldan kurulur.');
   SaticiSayfasi.Add('Kullanıcı adı (3-50; harf, rakam . _ -):', False);
-  SaticiSayfasi.Add('Parola (en az 8 karakter):', True);
+  SaticiSayfasi.Add('Parola (en az 10 karakter):', True);
   SaticiSayfasi.Add('Parola (tekrar):', True);
   SaticiSayfasi.Add('PIN (6 hane):', True);
   SaticiSayfasi.Add('PIN (tekrar):', True);
@@ -785,8 +905,8 @@ begin
     'Varsayılanlar çoğu kurulum için doğrudur. Güncelleyici yalnız güncelleme sunucusuna (ve verilirse vekile) çıkar.');
   GelismisSayfasi.Add('Güncelleme sunucusu (https://):', False);
   GelismisSayfasi.Add('HTTP vekili (isteğe bağlı; http://ad:port):', False);
-  GelismisSayfasi.Add('Lisans sunucusu (isteğe bağlı; https://):', False);
-  GelismisSayfasi.Values[0] := 'https://guncelleme.etkiliyazilim.com';
+  GelismisSayfasi.Add('Lisans sunucusu (boş = paketin kanalı; https://):', False);
+  GelismisSayfasi.Values[0] := VARSAYILAN_GUNCELLEME;
   ProfilSayfasi := CreateInputOptionPage(GelismisSayfasi.ID, 'Modül profili', 'Kurulum profili (TEKSERP_PROFIL)',
     'Profil ilk açılışta modül bayraklarını belirler.', True, False);
   ProfilSayfasi.Add('Paketin varsayılanı');
@@ -805,6 +925,7 @@ begin
   AnahtarOnay.Width := SonucSayfasi.SurfaceWidth;
   AnahtarOnay.Caption := 'Müşteri yedek anahtarını kâğıda yazdım / güvenli yere kaydettim (bir daha gösterilmez).';
   AnahtarOnay.Visible := False;
+  SihirbazHazir := True;
 end;
 
 function ProfilDegeri: String;
@@ -822,15 +943,58 @@ begin
 end;
 
 procedure SayfalariOlcumleDoldur;
+var Engel: String;
 begin
-  OlcumSayfasi.RichEditViewer.Lines.Text := OlcumOzeti;
+  // Engel varsa ölçüm sayfasının BAŞINDA görünür (yalnız "Sonraki"de değil; thinkpad-1 D8e-3: eski paket, yabancı kök).
+  Engel := OlcumEngelleri;
+  if Engel <> '' then
+    OlcumSayfasi.RichEditViewer.Lines.Text := 'ENGEL - kurulum bu klasörle ilerlemez (Geri ile başka klasör seçin):' + #13#10 + Engel + #13#10 + OlcumOzeti
+  else
+    OlcumSayfasi.RichEditViewer.Lines.Text := OlcumOzeti;
   if Olc('veriOneri') <> '' then VeriSayfasi.Values[0] := Olc('veriOneri');
   if Olc('apiMesgul') = '1' then PortSayfasi.Values[0] := Olc('apiOneri') else PortSayfasi.Values[0] := Olc('apiPort');
   PortSayfasi.Values[1] := Olc('pgPort');
-  // Onarım/devam: veri dizini ve portlar KAYITTAN gelir, değiştirilmez.
+  // Onarım/devam: veri dizini ve portlar KAYITTAN gelir, değiştirilmez ("Göz at" da kilitli; metin onarımı anlatır).
   VeriSayfasi.Edits[0].Enabled := not (Onarim or Yarim);
+  VeriSayfasi.Buttons[0].Enabled := not (Onarim or Yarim);
+  if Onarim then VeriSayfasi.SubCaptionLabel.Caption := 'ONARIM: veritabanı kayıttaki dizinde kalır ve korunur; bu dizin değiştirilemez.'
+  else if Yarim then VeriSayfasi.SubCaptionLabel.Caption := 'DEVAM: veritabanı yarım kalan kurulumun dizininde kalır; bu dizin değiştirilemez.'
+  else VeriSayfasi.SubCaptionLabel.Caption := VERI_ACIKLAMASI;
   PortSayfasi.Edits[0].Enabled := not (Onarim or Yarim);
   PortSayfasi.Edits[1].Enabled := not (Onarim or Yarim);
+  // Gelişmiş ayarlar kayıttan (güncelleyicinin ayar.json'u + .env'deki lisans sunucusu). Onarım .env'i yeniden
+  // yazmaz: lisans sunucusu orada korunur, alan kilitli. Yeni köke dönülürse varsayılanlar geri gelir.
+  // Lisans sunucusu yoksa paketin kanalından (paketLisans; boş = kanal), kullanıcının girdiği değer ezilmez.
+  if Onarim or Yarim then
+  begin
+    if Olc('oncekiGuncellemeSunucusu') <> '' then GelismisSayfasi.Values[0] := Olc('oncekiGuncellemeSunucusu');
+    if Olc('oncekiVekil') <> '' then GelismisSayfasi.Values[1] := Olc('oncekiVekil');
+    if Olc('oncekiLisansOkundu') = '1' then GelismisSayfasi.Values[2] := Olc('oncekiLisansSunucusu')
+    else if GelismisSayfasi.Values[2] = '' then GelismisSayfasi.Values[2] := Olc('paketLisans');
+    GelismisSayfasi.Edits[2].Enabled := Olc('oncekiLisansOkundu') <> '1';
+    // Ağ sayfası kayıttan (kurulum.json/durum.json ag ya da önceki cevap): varsayılan kayıttaki erişimi daraltmasın.
+    if Olc('oncekiAgIzinli') <> '' then AgSayfasi.Values[0] := Pos('100.64.0.0/10', Olc('oncekiAgIzinli')) > 0;
+    if Olc('oncekiAgProfiller') <> '' then
+    begin
+      AgSayfasi.Values[1] := Pos('Domain', Olc('oncekiAgProfiller')) > 0;
+      AgSayfasi.Values[2] := Pos('Private', Olc('oncekiAgProfiller')) > 0;
+    end;
+    if Olc('oncekiAgMdns') <> '' then AgSayfasi.Values[3] := Olc('oncekiAgMdns') = '1';
+    GelismisKayittan := True;
+  end
+  else if GelismisKayittan then
+  begin
+    GelismisSayfasi.Values[0] := VARSAYILAN_GUNCELLEME;
+    GelismisSayfasi.Values[1] := '';
+    GelismisSayfasi.Values[2] := Olc('paketLisans');
+    GelismisSayfasi.Edits[2].Enabled := True;
+    AgSayfasi.Values[0] := False;
+    AgSayfasi.Values[1] := True;
+    AgSayfasi.Values[2] := True;
+    AgSayfasi.Values[3] := True;
+    GelismisKayittan := False;
+  end
+  else if GelismisSayfasi.Values[2] = '' then GelismisSayfasi.Values[2] := Olc('paketLisans');
 end;
 
 function NextButtonClick(CurPageID: Integer): Boolean;
@@ -891,7 +1055,7 @@ begin
     if SaticiSayfasi.Values[0] <> '' then
     begin
       if not KullaniciAdiGecerli(SaticiSayfasi.Values[0]) then Result := Hata('Kullanıcı adı 3-50 karakter; yalnız harf, rakam, nokta, alt çizgi, tire.')
-      else if Length(SaticiSayfasi.Values[1]) < 8 then Result := Hata('Parola en az 8 karakter olmalı.')
+      else if Length(SaticiSayfasi.Values[1]) < 10 then Result := Hata('Parola en az 10 karakter olmalı.')
       else if Utf8Bayt(SaticiSayfasi.Values[1]) > 72 then Result := Hata('Parola 72 baytı aşıyor (Türkçe harfler 2 bayt sayılır).')
       else if SaticiSayfasi.Values[1] <> SaticiSayfasi.Values[2] then Result := Hata('Parolalar aynı değil.')
       else if (Length(SaticiSayfasi.Values[3]) <> 6) or not RakamMi(SaticiSayfasi.Values[3]) then Result := Hata('PIN TAM 6 haneli rakam olmalı.')
@@ -961,15 +1125,84 @@ begin
   end;
 end;
 
-function UpdateReadyMemo(Space, NewLine, MemoUserInfoInfo, MemoDirInfo, MemoTypeInfo, MemoComponentsInfo, MemoGroupInfo, MemoTasksInfo: String): String;
-var S, Ag: String;
+// Özet: etkili lisans sunucusu + paketin kanalından farklıysa UYARI (engel değil). Karar kurulum.ps1'de
+// (kurulum-ortak.ps1 LisansSunucusuKarari; sonuç sayfası onun uyarısını gösterir): boş = kanal, onarımda kayıttaki .env.
+function LisansOzeti(const NewLine: String): String;
+var Kanal, Etkili, Ad, Duzelt: String;
 begin
-  Ag := 'LocalSubnet';
-  if AgSayfasi.Values[0] then Ag := Ag + ' + Tailscale';
-  S := 'Kök: ' + Kok + NewLine +
+  Kanal := Olc('paketLisans');
+  Etkili := GelismisSayfasi.Values[2];
+  Ad := 'girilen';
+  Duzelt := 'yanlışsa Geri ile düzeltin (boş = kanal)';
+  if (Onarim or Yarim) and (Olc('oncekiLisansOkundu') = '1') then
+  begin
+    Ad := 'kayıttaki .env';
+    Duzelt := 'onarım .env dosyasını değiştirmez; yapilandirma\.env LICENSE_SERVER_URL satırını elle düzeltin';
+    if Etkili = '' then Etkili := Olc('paketLisansVarsayilan');
+  end
+  else if Etkili = '' then Etkili := Kanal;
+  if Etkili = '' then Result := 'Lisans sunucusu: derleme varsayılanı' + NewLine
+  else Result := 'Lisans sunucusu: ' + Etkili + NewLine;
+  if Kanal = '' then
+    Result := Result + 'UYARI: paket lisans sunucusunun kanal değerini taşımıyor (eski ya da kanal dışı paket); kanal kaydıyla karşılaştırılamadı.' + NewLine
+  else if Lowercase(Etkili) <> Lowercase(Kanal) then
+    Result := Result + 'UYARI: lisans sunucusu paketin kanalından FARKLI - beklenen ' + Kanal + ' (kanal ' + Olc('paketKanal') + '), ' +
+      Ad + ' ' + Etkili + '. Kurulum sürer; ' + Duzelt + '.' + NewLine;
+end;
+
+// Ağ sayfasının seçimi, kayıtla aynı kanonik biçimde (şemanın seçenek sırası; on-olcum oncekiAg* ile karşılaştırılır).
+function AgSayfaIzinli: String;
+begin
+  Result := 'LocalSubnet';
+  if AgSayfasi.Values[0] then Result := Result + ',100.64.0.0/10';
+end;
+
+function AgSayfaProfiller: String;
+begin
+  Result := '';
+  if AgSayfasi.Values[1] then Result := 'Domain';
+  if AgSayfasi.Values[2] then
+  begin
+    if Result <> '' then Result := Result + ',';
+    Result := Result + 'Private';
+  end;
+end;
+
+// Özet: ETKİLİ ağ erişimi. Onarım/devamda kayıttaki ayar uygulanır (kurulum-ortak.ps1 AgKarari) - sayfadaki farklı
+// seçim uygulanmaz, UYARI. Yeni kurulumda sayfanın seçimi.
+function AgOzeti(const NewLine: String): String;
+var Izinli, Profiller, Mdns, SayfaMdns, Kaynak, Goster: String;
+begin
+  Izinli := AgSayfaIzinli;
+  Profiller := AgSayfaProfiller;
+  if AgSayfasi.Values[3] then SayfaMdns := '1' else SayfaMdns := '0';
+  Mdns := SayfaMdns;
+  Kaynak := '';
+  if (Onarim or Yarim) and (Olc('oncekiAgKaynak') <> '') then
+  begin
+    if Olc('oncekiAgIzinli') <> '' then Izinli := Olc('oncekiAgIzinli');
+    if Olc('oncekiAgProfiller') <> '' then Profiller := Olc('oncekiAgProfiller');
+    if Olc('oncekiAgMdns') <> '' then Mdns := Olc('oncekiAgMdns');
+    Kaynak := '; kayıttan: ' + Olc('oncekiAgKaynak');
+  end;
+  if Izinli = 'LocalSubnet,100.64.0.0/10' then Goster := 'LocalSubnet + Tailscale'
+  else if Izinli = '100.64.0.0/10' then Goster := 'yalnız Tailscale'
+  else Goster := Izinli;
+  Goster := Goster + ' · profil ' + Profiller + ' · mDNS ';
+  if Mdns = '1' then Goster := Goster + 'açık' else Goster := Goster + 'kapalı';
+  Result := 'API portu: ' + PortSayfasi.Values[0] + ' (' + Goster + Kaynak + ')' + NewLine;
+  if (Izinli <> AgSayfaIzinli) or (Profiller <> AgSayfaProfiller) or (Mdns <> SayfaMdns) then
+    Result := Result + 'UYARI: Ağ sayfasındaki seçim kayıttan farklı - onarım ağ ayarını kayıttan korur; sayfadaki değişiklik UYGULANMAZ.' + NewLine;
+end;
+
+function UpdateReadyMemo(Space, NewLine, MemoUserInfoInfo, MemoDirInfo, MemoTypeInfo, MemoComponentsInfo, MemoGroupInfo, MemoTasksInfo: String): String;
+var S: String;
+begin
+  S := 'Kip: ' + KipMetni + NewLine +
+    'Kök: ' + Kok + NewLine +
     'Paket: ' + Olc('paketSurum') + ' (kanal ' + Olc('paketKanal') + ')' + NewLine +
     'PostgreSQL: ' + Olc('pgSurum') + ' - veri ' + RemoveBackslashUnlessRoot(VeriSayfasi.Values[0]) + ' - port ' + PortSayfasi.Values[1] + NewLine +
-    'API portu: ' + PortSayfasi.Values[0] + ' (' + Ag + ')' + NewLine;
+    AgOzeti(NewLine);
   if SaticiSayfasi.Values[0] <> '' then S := S + 'Satıcı hesabı: ' + SaticiSayfasi.Values[0] + ' (parola ve PIN girildi)' + NewLine
   else S := S + 'Satıcı hesabı: SONRA (konsoldan)' + NewLine;
   case YedekSecimSayfasi.SelectedValueIndex of
@@ -979,6 +1212,8 @@ begin
     S := S + 'Yedek: ŞİFRESİZ' + NewLine;
   end;
   S := S + 'Gece yedeği: ' + YedekSayfasi.Values[3] + NewLine + 'Güncelleme sunucusu: ' + GelismisSayfasi.Values[0] + NewLine;
+  if GelismisSayfasi.Values[1] <> '' then S := S + 'HTTP vekili: ' + GelismisSayfasi.Values[1] + NewLine;
+  S := S + LisansOzeti(NewLine);
   if ProfilDegeri <> '' then S := S + 'Profil: ' + ProfilDegeri + NewLine;
   Result := S;
 end;
@@ -1076,6 +1311,15 @@ begin
     Result := 'kurulum\ klasörü hazırlanamadı: ' + Kok + '\kurulum';
     Exit;
   end;
+  // Onarım/devam: önceki cevap (eski kurulumlarda ağ ayarının TEK kaydı) yenisi yazılmadan saklanır; OnKosul ağ
+  // ayarını kayıttan korur (kurulum-ortak.ps1 KayitliAgAyari: kurulum.json ag > durum.json ag > cevap-onceki.json).
+  if (Onarim or Yarim) and FileExists(KurulumCevabi) then
+    if (not Sessiz) or (Uppercase(ExpandFileName(CevapDosyasi)) <> Uppercase(KurulumCevabi)) then
+      if not FileCopy(KurulumCevabi, Kok + '\kurulum\cevap-onceki.json', False) then
+      begin
+        Result := 'Önceki cevap dosyası saklanamadı: ' + Kok + '\kurulum\cevap-onceki.json';
+        Exit;
+      end;
   if Sessiz then
   begin
     if Uppercase(ExpandFileName(CevapDosyasi)) <> Uppercase(KurulumCevabi) then
@@ -1151,7 +1395,7 @@ var I, N: Integer; S: String;
 begin
   if KurulumHatasi = '' then
     S := 'KURULUM TAMAM' + #13#10#13#10 +
-      'Sunucu adresi : http://<bu-bilgisayar>:' + PortSayfasi.Values[0] + #13#10 +
+      'Sunucu adresi : http://' + GetComputerNameString + ':' + PortSayfasi.Values[0] + #13#10 +
       'Sürüm         : ' + Olc('paketSurum') + #13#10 +
       'Hizmetler     : ' + Olc('backendHizmeti') + ' · ' + Olc('guncelleyiciHizmeti') + ' · ' + Olc('pgHizmeti') + #13#10
   else

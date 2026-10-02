@@ -5,7 +5,7 @@
 import { Router } from "express";
 import { AuthController } from "../controllers/auth.controller";
 import { UserPreferenceController } from "../controllers/user-preference.controller";
-import { verifyToken } from "../middlewares/auth.middleware";
+import { verifyToken, verifyTokenAllowPasswordChange } from "../middlewares/auth.middleware";
 
 const router = Router();
 
@@ -24,8 +24,10 @@ router.post("/totp/enroll", AuthController.totpEnrollConsume);
 // Protected
 // K6 (2026-06-12): POST /register kaldırıldı — hiçbir istemci çağırmıyordu;
 // kullanıcı oluşturmanın tek yolu POST /api/admin/users (permission-management).
-router.get("/me", verifyToken, AuthController.me);
-router.post("/logout", verifyToken, AuthController.logout);
+// Zorunlu parola değişimi bekleyen hesabın geçebildiği YALNIZ üç uç (kimlik, çıkış, değişim).
+router.get("/me", verifyTokenAllowPasswordChange, AuthController.me);
+router.post("/logout", verifyTokenAllowPasswordChange, AuthController.logout);
+router.post("/change-password", verifyTokenAllowPasswordChange, AuthController.changePassword);
 
 // Self-service UI tercihleri (ekstra permission gerekmez — kendi kaydı)
 router.get("/preferences", verifyToken, UserPreferenceController.getMine);

@@ -33,9 +33,13 @@ describe("form gövdeleri", () => {
 });
 
 describe("rapor isteği", () => {
-  it("izin: rapor:oku + aile izni; bulutta olmayan ve bilinmeyen aile RED", () => {
+  it("izin: rapor:oku + rapor başına izin; bulutta olmayan ve bilinmeyen anahtar RED", () => {
     const p = ["bulut:rapor:oku", "bulut:siparis:oku"];
     expect(requestable("sales/order-intake", p)).toBe(true);
+    expect(requestable("sales/shipment-scorecard", p)).toBe(false);
+    expect(requestable("sales/shipment-scorecard", [...p, "bulut:sevkiyat:oku"])).toBe(true);
+    expect(requestable("finance/cheque-due", ["bulut:rapor:oku", "bulut:cari-bakiye:oku"])).toBe(false);
+    expect(requestable("sales/bilinmeyen", p)).toBe(false);
     expect(requestable("finance/aging", p)).toBe(false);
     expect(requestable("audit/user-activity", [...p, "bulut:hesap:yonet"])).toBe(false);
     expect(requestable("bilinmeyen/x", p)).toBe(false);

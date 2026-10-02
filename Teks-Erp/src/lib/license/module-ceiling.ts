@@ -20,7 +20,7 @@ export interface LicenseModuleBlock {
 function readySnapshot(): LicenseSnapshot | null {
   try {
     const snap = getLicenseSnapshot();
-    return snap.hazir ? snap : null;
+    return snap.durumHazir ? snap : null;
   } catch {
     return null;
   }

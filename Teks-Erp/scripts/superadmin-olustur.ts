@@ -55,6 +55,7 @@ import { createInterface } from "node:readline/promises";
 
 import prisma, { pool } from "../src/lib/prisma";
 import { AuthService } from "../src/services/auth.service";
+import { passwordPolicyViolation } from "../src/constants/password-policy";
 import {
   SYSTEM_ACCOUNT_FULLNAME,
   logSuperadminLifecycleEvent,
@@ -62,14 +63,21 @@ import {
 import { setSystemAccountExists } from "../src/services/helpers/system-account.registry";
 import { p2002Mentions } from "../src/utils/p2002";
 import { KurulumGirdiHatasi, kurulumGirdisiOku, type KurulumGirdisi } from "./lib/kurulum-girdisi";
+import { getShortCredentialKeyRing } from "../src/lib/short-credential/keyring";
+import { digestQuickPin } from "../src/lib/short-credential/digest";
+import { isQuickPinTaken } from "../src/services/short-credential.service";
+
+/** PIN özeti — etkin anahtarla (halka `pinCoz`da doğrulandı; burada yoksa programlama hatası). */
+function pinOzeti(pin: string): string {
+  const halka = getShortCredentialKeyRing();
+  if (!halka.ok) throw new Error("Kısa kimlik anahtarı kullanılamıyor");
+  return digestQuickPin(halka.ring.active, pin);
+}
 
 /** `quickPin` sözleşmesi: TAM 6 hane (`auth.service.loginWithQuickPin` ile aynı). */
 const PIN_RE = /^\d{6}$/;
 /** Kullanıcı adı: boşluksuz, ASCII, giriş kutusuna elle yazılabilir. */
 const USERNAME_RE = /^[A-Za-z0-9._-]{3,50}$/;
-/** bcrypt 72 BAYT'tan sonrasını sessizce kırpar → sınır BAYT cinsinden. */
-const PASSWORD_MIN = 8;
-const PASSWORD_MAX_BYTES = 72;
 /** PIN üretim denemesi — `quickPin` sistem genelinde `@unique`. */
 const PIN_TRY = 60;
 
@@ -107,6 +115,7 @@ export type ProvisionErrorCode =
   | "PIN_TAKEN"
   | "PIN_EXHAUSTED"
   | "NOT_PROVISIONED"
+  | "PIN_KEY_UNAVAILABLE"
   | "RACE";
 
 export interface ProvisionSecrets {
@@ -136,18 +145,9 @@ function hata(code: ProvisionErrorCode, message: string): ProvisionResult {
   return { kind: "error", code, message };
 }
 
-/** Parola sözleşmesi — bcrypt'in sessiz kırpması yüzünden ÜST sınır da var. */
+/** Parola sözleşmesi — panel kullanıcılarıyla AYNI politika (alt + bcrypt üst sınırı). */
 function parolaKusuru(password: string): string | null {
-  if (password.length < PASSWORD_MIN) {
-    return `Parola en az ${PASSWORD_MIN} karakter olmalı.`;
-  }
-  if (Buffer.byteLength(password, "utf8") > PASSWORD_MAX_BYTES) {
-    return (
-      `Parola ${PASSWORD_MAX_BYTES} BAYT'ı aşıyor — bcrypt fazlasını SESSİZCE kırpar ` +
-      "(Türkçe harfler 2 bayt sayılır)."
-    );
-  }
-  return null;
+  return passwordPolicyViolation(password);
 }
 
 /**
@@ -160,13 +160,15 @@ async function pinCoz(
   deps: ProvisionDeps,
   haricUserId: string | null,
 ): Promise<{ pin: string } | { code: ProvisionErrorCode; message: string }> {
-  const kullanimda = async (pin: string): Promise<boolean> => {
-    const row = await prisma.user.findFirst({
-      where: { quickPin: pin, ...(haricUserId ? { id: { not: haricUserId } } : {}) },
-      select: { id: true },
-    });
-    return row !== null;
-  };
+  const halka = getShortCredentialKeyRing();
+  if (!halka.ok) {
+    return {
+      code: "PIN_KEY_UNAVAILABLE",
+      message: `Kısa kimlik anahtarı kullanılamıyor (${halka.detail}) — PIN özetlenemez; lisans deposunu (LICENSE_DIR) kontrol edin.`,
+    };
+  }
+  // Benzersizlik özet ÜZERİNDEN (her halka anahtarıyla) + henüz dönüştürülmemiş düz kolon.
+  const kullanimda = (pin: string): Promise<boolean> => isQuickPinTaken(halka.ring, pin, haricUserId);
 
   if (istenen !== null) {
     if (!PIN_RE.test(istenen)) {
@@ -228,7 +230,9 @@ export async function provisionSuperadmin(
           where: { id: mevcut.id },
           data: {
             passwordHash,
-            quickPin: pinSonuc.pin,
+            quickPinDigest: pinOzeti(pinSonuc.pin),
+            quickPinSetAt: deps.now(),
+            quickPin: null,
             // 2FA KAPANIR (yönetici sıfırlamasıyla aynı üçlü): satıcı isterse panelden yeniden açar.
             totpSecret: null,
             totpEnabledAt: null,
@@ -249,7 +253,7 @@ export async function provisionSuperadmin(
         });
       });
     } catch (err) {
-      if (p2002Mentions(err, /users_(username_key|username_lower_uq|quickPin_key)/)) {
+      if (p2002Mentions(err, /users_(username_key|username_lower_uq|quickPin_key|quickPinDigest_key)/)) {
         return hata("RACE", "PIN/kullanıcı adı bu sırada başka bir kullanıcıya yazıldı.");
       }
       throw err;
@@ -308,7 +312,8 @@ export async function provisionSuperadmin(
         // `fullName`i basar, yani gerçek ad hiçbir zaman DB'ye girmez.
         fullName: SYSTEM_ACCOUNT_FULLNAME,
         passwordHash,
-        quickPin: pinSonuc.pin,
+        quickPinDigest: pinOzeti(pinSonuc.pin),
+        quickPinSetAt: deps.now(),
         isSystemAccount: true,
         isActive: true,
       },
@@ -317,7 +322,7 @@ export async function provisionSuperadmin(
   } catch (err) {
     // ÜÇ unique çarpabilir ve üçüncüsü ŞEMA-DIŞIDIR (`users_username_lower_uq`,
     // migration 20260731160000) — regex'e konmazsa yarış "bilinmeyen hata" sayılır.
-    if (p2002Mentions(err, /users_(username_key|username_lower_uq|quickPin_key)/)) {
+    if (p2002Mentions(err, /users_(username_key|username_lower_uq|quickPin_key|quickPinDigest_key)/)) {
       return hata(
         "RACE",
         "Kullanıcı adı ya da PIN bu sırada başka bir kullanıcıya yazıldı — tekrar deneyin.",
@@ -363,6 +368,7 @@ export const KURULUM_CIKIS: Readonly<Record<string, number>> = Object.freeze({
   PIN_EXHAUSTED: 15,
   RACE: 16,
   NOT_PROVISIONED: 17,
+  PIN_KEY_UNAVAILABLE: 18,
   GIRDI_BICIMSIZ: 20,
   GIRDI_TAVAN: 20,
   GIRDI_YOK: 20,

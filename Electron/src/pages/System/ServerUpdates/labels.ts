@@ -39,7 +39,8 @@ const RESULT_CODES: Record<string, string> = {
   PAKET_BAGI: "Paket, sürüm bildirimiyle eşleşmedi",
   BUTUNLUK_GECERSIZ: "Paket bütünlüğü geçersiz",
   DISK_DOLU: "Disk dolu",
-  DOSYA_KILITLI: "Sürüm geçişi yapılamadı (dosya kilitli)",
+  DOSYA_KILITLI: "Dosya kilitli — başka bir program kullanıyor (kilit kalkınca kendiliğinden sürer)",
+  SEMA_ILERIDE: "Şema ileride — veritabanında bu paketin tanımadığı göçler var; geri indirme yapılmaz (daha yeni sürüm gerekir)",
   YEDEK_HATASI: "Güncelleme öncesi yedek alınamadı",
   DURDURMA_HATASI: "Sunucu hizmeti durdurulamadı",
   PG_GUNCELLEME_HATASI: "PostgreSQL güncellemesi başarısız",
@@ -49,6 +50,11 @@ const RESULT_CODES: Record<string, string> = {
   KESINTI: "İşlem yarıda kesildi",
   GERI_DONUS_HATASI: "Geri dönüş tamamlanamadı",
   BILINMEYEN: "Bilinmeyen hata",
+};
+
+/** `yerel.bilgi` — sorun DEĞİL ("Sorun" satırına girmez, `hataKodu` sözlüğünden ayrı). */
+const NOTICES: Record<string, string> = {
+  SEMA_OLCULEMEDI: "Şema hizası ölçülemedi — güncelleme bu yüzden durdurulmadı (göç adımı veritabanını ayrıca denetler)",
 };
 
 const RESULTS: Record<UpdateResultKind, string> = {
@@ -85,6 +91,7 @@ const DAYS = ["Pzt", "Sal", "Çar", "Per", "Cum", "Cmt", "Paz"];
 export const decisionLabel = (k: UpdateDecisionKind): string => DECISIONS[k] ?? k;
 export const reasonLabel = (code: string | null): string | null => (code ? (REASONS[code] ?? code) : null);
 export const resultCodeLabel = (code: string | null): string | null => (code ? (RESULT_CODES[code] ?? code) : null);
+export const noticeLabel = (code: string): string => NOTICES[code] ?? code;
 export const resultLabel = (k: UpdateResultKind): string => RESULTS[k] ?? k;
 export const updaterLabel = (s: UpdaterState): string => UPDATER[s] ?? s;
 export const localStateLabel = (s: string): string => LOCAL_STATES[s] ?? s;

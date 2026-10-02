@@ -20,12 +20,17 @@
 //   §6 ayar/yöntem/önbellek: tanınmayan alan 503 · GET/HEAD dışı 405 · değişmez dosyada
 //      cacheEverything + 404 tutulmaz, değişken dosyada cf yok
 //   §7 varsayılan dışa aktarım: gerçek saat + `env.TKL_INDIRME_AYAR` (dize ve nesne)
-//   §8 backend/ öneki (Dağıtım v2): Worker ürün kümesi = kâhin `DOWNLOAD_PRODUCTS` · backend belirteci
+//   §8 İNDİRME listesi (L2-8): kid × kanal × pencere — §0'a parite satırları (INDIRME_KANAL · INDIRME_PENCERE ·
+//      ±10 dk · yarım/biçimsiz pencere · dize kanal tuzağı · aynı kid ilk satır) + HTTP: üretim/hazırlık ayrımı iki
+//      yönde (G3) · pencere sınırları · örtüşmeli döndürme (eski kid penceresiyle kendiliğinden kapanır) · eski biçim
+//      kısıtsız (bir sürüm) · 22 geçersiz liste ayarı 503 (her biri geçerli komşusuyla) · env dize · runbook şablonu
+//   §9 backend/ öneki (Dağıtım v2): Worker ürün kümesi = kâhin `DOWNLOAD_PRODUCTS` · backend belirteci
 //      yalnız backend/ altında · başka ürünün belirteci backend/de RED · son.json değişken, zip değişmez
 // ÖLÇMEDİĞİ: Cloudflare çalışma zamanı (workerd). WebCrypto Ed25519 burada Node'unkidir;
 // kenar ölçümü runbook'un prova adımında (docs/ops/INDIRME-KAPISI-WORKER.md).
 // =============================================================================
 import path from "node:path";
+import { readFileSync } from "node:fs";
 import { generateKeyPairSync } from "node:crypto";
 import { pathToFileURL } from "node:url";
 import {
@@ -37,6 +42,7 @@ import {
   isDownloadPathAllowed as isDownloadPathAllowedKahin,
   b64uEncode,
   type DownloadDoc,
+  type DownloadPublicKey,
 } from "../src/lib/license/protocol";
 import { anahtarUret, hamImzala, type TestAnahtari } from "./lib/lisans-fikstur";
 
@@ -52,13 +58,17 @@ type Yanitlayici = (r: Request, init?: { cf?: Record<string, unknown> }) => Prom
 interface WorkerModulu {
   default: { fetch: (r: Request, env?: Record<string, unknown>) => Promise<Response> };
   kapiOlustur: (g: { ayar: unknown; fetchImpl?: Yanitlayici; simdi?: () => number }) => (r: Request) => Promise<Response>;
-  belirteciDogrula: (t: unknown, g: { anahtarlar: { kid: string; x: string }[]; simdiMs: number }) => Promise<{ ok: boolean; kod?: string; belge?: DownloadDoc }>;
+  belirteciDogrula: (t: unknown, g: { anahtarlar: AnahtarSatiri[]; simdiMs: number }) => Promise<{ ok: boolean; kod?: string; belge?: DownloadDoc }>;
+  ayarCoz: (ham: unknown, simdiMs: number) => { ok: boolean; neden?: string };
   yolIzinli: (b: DownloadDoc, yol: string) => boolean;
   sozlukDegeri: (metin: string, anahtar: string) => string | null;
   extensionsYaz: (metin: string, sinir: string, belirtec: string) => string | null;
   VARSAYILAN_AYAR: Record<string, unknown>;
   URUN_DIZINLERI: readonly string[];
 }
+
+/** Eski biçim `{kid, x}` ya da liste satırı; parite tablosu bilerek biçimsiz değer de taşır (kâhine `unknown` gider). */
+type AnahtarSatiri = { kid: string; x: string; kanallar?: unknown; baslangic?: unknown; bitis?: unknown };
 
 let pass = 0;
 let fail = 0;
@@ -81,6 +91,11 @@ function bas(urun: Urun, ek: Partial<DownloadDoc> = {}, anahtar: TestAnahtari = 
   return signDownloadToken({ payload: yuk(urun, ek), key: { kid: anahtar.kid, privateKey: anahtar.privateKey }, nowMs: simdi });
 }
 const acik = (a: TestAnahtari) => ({ kid: a.kid, x: a.x });
+const GUN = 24 * 60 * DAKIKA;
+/** İNDİRME listesi satırı: varsayılan kanal KANAL, pencere SIMDI − 1 gün → + 119 gün (120 g sertifika). */
+function satir(a: TestAnahtari, ek: Partial<Record<"kanallar" | "baslangic" | "bitis", unknown>> = {}): AnahtarSatiri {
+  return { kid: a.kid, x: a.x, kanallar: [KANAL], baslangic: msToIso(SIMDI - GUN), bitis: msToIso(SIMDI + 119 * GUN), ...ek };
+}
 
 interface Kayit {
   url: string;
@@ -130,7 +145,7 @@ async function bolum0(w: WorkerModulu): Promise<void> {
   const baslik = { alg: "EdDSA", typ: TYP.INDIRME, kid: IND.kid };
   const ham = (ek: Record<string, unknown>, a: TestAnahtari = IND) => hamImzala(TYP.INDIRME, a, { ...yuk("electron"), ...ek });
   const exp = (dk: number) => msToIso(SIMDI + dk * DAKIKA);
-  const tablo: [string, unknown, string, { kid: string; x: string }[]?][] = [
+  const tablo: [string, unknown, string, AnahtarSatiri[]?][] = [
     ["geçerli", g, "OK"],
     ["alg none", `${b64j({ ...baslik, alg: "none" })}.${p}.`, "JWS_ALG"],
     ["alg HS256", elleBaslik({ ...baslik, alg: "HS256" }, g), "JWS_ALG"],
@@ -170,9 +185,26 @@ async function bolum0(w: WorkerModulu): Promise<void> {
     ["mobil önekli geçerli", bas("mobil"), "OK"],
     ["backend önekli geçerli (Dağıtım v2)", bas("backend"), "OK"],
     ["tanınmayan ürün öneki", ham({ yolOneki: `/${KANAL}/diger/` }), "BELGE_SEMA"],
+    // §8 — İNDİRME listesi satırı (kid × kanal × pencere).
+    ["liste: kanal kümede, pencere içinde", g, "OK", [satir(IND)]],
+    ["liste: çok kanallı küme kanalı içerir", g, "OK", [satir(IND, { kanallar: ["baska-kanal", KANAL] })]],
+    ["liste: kanal kümede DEĞİL", g, "INDIRME_KANAL", [satir(IND, { kanallar: ["baska-kanal"] })]],
+    ["liste: kanallar boş dizi", g, "INDIRME_KANAL", [satir(IND, { kanallar: [] })]],
+    ["liste: kanallar dize (alt dize tuzağı)", g, "INDIRME_KANAL", [satir(IND, { kanallar: `${KANAL}-uzun` })]],
+    ["liste: pencere 9 dk sonra başlıyor (tolerans içi)", g, "OK", [satir(IND, { baslangic: exp(9) })]],
+    ["liste: pencere 11 dk sonra başlıyor", g, "INDIRME_PENCERE", [satir(IND, { baslangic: exp(11) })]],
+    ["liste: pencere 9 dk önce bitti (tolerans içi)", g, "OK", [satir(IND, { bitis: exp(-9) })]],
+    ["liste: pencere 11 dk önce bitti", g, "INDIRME_PENCERE", [satir(IND, { bitis: exp(-11) })]],
+    ["liste: yarım pencere (başlangıç yok)", g, "INDIRME_PENCERE", [{ ...satir(IND), baslangic: undefined }]],
+    ["liste: pencere biçimsiz (ofsetli ISO)", g, "INDIRME_PENCERE", [satir(IND, { bitis: "2027-01-01T00:00:00+03:00" })]],
+    ["liste: pencere ve kanal ikisi de dışında → pencere önce", g, "INDIRME_PENCERE", [satir(IND, { bitis: exp(-11), kanallar: ["baska-kanal"] })]],
+    ["liste: süresi dolmuş + pencere dışı → süre önce", ham({ exp: exp(-11) }), "BELGE_SURESI_DOLDU", [satir(IND, { bitis: exp(-30) })]],
+    ["liste: aynı kid iki satır → İLK kazanır (ilki kanal dışı)", g, "INDIRME_KANAL", [satir(IND, { kanallar: ["baska-kanal"] }), satir(IND)]],
+    ["liste: aynı kid iki satır, ilkinin x'i bozuk → kid bilinmez", g, "JWS_KID", [{ kid: IND.kid, x: "AAAA" }, acik(IND)]],
+    ["liste: başka kid'in satırı kısıtlı, bu kid eski biçim → kısıtsız", g, "OK", [satir(IND2, { kanallar: ["baska-kanal"] }), acik(IND)]],
   ];
   for (const [ad, belirtec, beklenen, anahtarlar = [acik(IND), acik(IND2)]] of tablo) {
-    const k = verifyDownloadToken(belirtec, { keys: anahtarlar, nowMs: SIMDI });
+    const k = verifyDownloadToken(belirtec, { keys: anahtarlar as DownloadPublicKey[], nowMs: SIMDI });
     const sonuc = await w.belirteciDogrula(belirtec, { anahtarlar, simdiMs: SIMDI });
     const kk = k.ok ? "OK" : k.code;
     const wk = sonuc.ok ? "OK" : String(sonuc.kod);
@@ -498,26 +530,153 @@ async function bolum7(w: WorkerModulu): Promise<void> {
   }
 }
 
-// §8 — backend/ öneki (Dağıtım v2): tek ürün kümesi, önek ayrımı, işaretçi değişken.
+
+// §8 — İNDİRME listesi (L2-8): kid × kanal × pencere, üretim/hazırlık listeleri ayrı.
+const HZR = anahtarUret("ind-hazirlik-2026");
+const HZR_KANAL = "hazirlik-kanal";
+const RUNBOOK = path.join(REPO, "docs/ops/INDIRME-KAPISI-WORKER.md");
+function basK(kanal: string, anahtar: TestAnahtari, simdi = SIMDI, urun: "electron" | "mobil" = "electron"): string {
+  return signDownloadToken({ payload: { ...yuk(urun, {}, kanal), exp: msToIso(simdi + 60 * DAKIKA) }, key: { kid: anahtar.kid, privateKey: anahtar.privateKey }, nowMs: simdi });
+}
+function listeAyari(w: WorkerModulu, uretim: unknown, hazirlik: unknown, ek: Ayar = {}): Ayar {
+  return { ...w.VARSAYILAN_AYAR, anahtarlar: [], indirmeListesi: { uretim, hazirlik }, ...ek };
+}
+const exeK = (kanal: string) => `/${kanal}/electron/TeksERP-Setup-1.3.2.exe`;
+
 async function bolum8(w: WorkerModulu): Promise<void> {
-  console.log("\n§8 — backend/ öneki");
-  check("§8a Worker ürün dizinleri = kâhin DOWNLOAD_PRODUCTS", JSON.stringify([...w.URUN_DIZINLERI]) === JSON.stringify([...DOWNLOAD_PRODUCTS]), JSON.stringify(w.URUN_DIZINLERI));
+  console.log("\n§8 — İNDİRME listesi: kid × kanal × pencere · üretim/hazırlık ayrımı · döndürme · fail-closed ayar");
+  const iki = "uretim-iki";
+  const a = listeAyari(w, [satir(IND, { kanallar: [KANAL, iki] })], [satir(HZR, { kanallar: [HZR_KANAL] })]);
+  check("§8a varsayılan ayarda liste boş ve iki ayrı dizi", JSON.stringify(w.VARSAYILAN_AYAR.indirmeListesi) === JSON.stringify({ uretim: [], hazirlik: [] }) && w.ayarCoz(w.VARSAYILAN_AYAR, SIMDI).ok);
+  await kabul(w, "§8b üretim satırı: kanal kümede, pencere içinde", a, istek(exeK(KANAL), bsl(basK(KANAL, IND))));
+  await kabul(w, "§8b' aynı anahtar kümedeki ikinci kanal", a, istek(exeK(iki), bsl(basK(iki, IND))));
+  await ret(w, "§8c ⭐ hazırlık anahtarı üretim kanalına (G3)", a, istek(exeK(KANAL), bsl(basK(KANAL, HZR))), "INDIRME_KANAL");
+  await kabul(w, "§8c' hazırlık anahtarı kendi kanalına", a, istek(exeK(HZR_KANAL), bsl(basK(HZR_KANAL, HZR))));
+  await ret(w, "§8d ⭐ üretim anahtarı hazırlık kanalına (G3, öbür yön)", a, istek(exeK(HZR_KANAL), bsl(basK(HZR_KANAL, IND))), "INDIRME_KANAL");
+  await ret(w, "§8e tanınmayan kid (listede yok)", a, istek(exeK(KANAL), bsl(basK(KANAL, YABANCI))), "JWS_KID");
+  await kabul(w, "§8e' aynı kid listeye girince", listeAyari(w, [satir(IND), satir(YABANCI)], []), istek(exeK(KANAL), bsl(basK(KANAL, YABANCI))));
+
+  const bas0 = SIMDI + GUN;
+  const bit0 = SIMDI + 121 * GUN;
+  const p = listeAyari(w, [satir(IND, { baslangic: msToIso(bas0), bitis: msToIso(bit0) })], []);
+  await ret(w, "§8f pencere başlamadı (1 gün önce)", p, istek(exeK(KANAL), bsl(basK(KANAL, IND))), "INDIRME_PENCERE");
+  await ret(w, "§8f' başlangıçtan 11 dk önce", p, istek(exeK(KANAL), bsl(basK(KANAL, IND, bas0 - 11 * DAKIKA))), "INDIRME_PENCERE", 403, bas0 - 11 * DAKIKA);
+  await kabul(w, "§8f'' başlangıçtan 9 dk önce (tolerans)", p, istek(exeK(KANAL), bsl(basK(KANAL, IND, bas0 - 9 * DAKIKA))), bas0 - 9 * DAKIKA);
+  await kabul(w, "§8g bitişten 9 dk sonra (tolerans)", p, istek(exeK(KANAL), bsl(basK(KANAL, IND, bit0 + 9 * DAKIKA))), bit0 + 9 * DAKIKA);
+  await ret(w, "§8g' bitişten 11 dk sonra", p, istek(exeK(KANAL), bsl(basK(KANAL, IND, bit0 + 11 * DAKIKA))), "INDIRME_PENCERE", 403, bit0 + 11 * DAKIKA);
+
+  // Örtüşmeli döndürme: eski (ind-2026, bitişi tören + 30 g) ve yeni (ind-2026-yedek, tören anından 120 g) birlikte listede.
+  const toren = SIMDI;
+  const r = listeAyari(w, [
+    satir(IND, { baslangic: msToIso(toren - 90 * GUN), bitis: msToIso(toren + 30 * GUN) }),
+    satir(IND2, { baslangic: msToIso(toren), bitis: msToIso(toren + 120 * GUN) }),
+  ], []);
+  const t1 = toren + 60 * DAKIKA;
+  await kabul(w, "§8h örtüşme: eski kid tören sonrası hâlâ geçer", r, istek(exeK(KANAL), bsl(basK(KANAL, IND, t1))), t1);
+  await kabul(w, "§8h' örtüşme: yeni kid tören anından itibaren geçer", r, istek(exeK(KANAL), bsl(basK(KANAL, IND2, t1))), t1);
+  const t2 = toren + 30 * GUN + 11 * DAKIKA;
+  await ret(w, "§8i eski kid penceresi kendiliğinden kapandı (satır silinmeden)", r, istek(exeK(KANAL), bsl(basK(KANAL, IND, t2))), "INDIRME_PENCERE", 403, t2);
+  await kabul(w, "§8i' yeni kid aynı anda geçer", r, istek(exeK(KANAL), bsl(basK(KANAL, IND2, t2))), t2);
+
+  const eski = { ...w.VARSAYILAN_AYAR, anahtarlar: [acik(IND2)], indirmeListesi: { uretim: [satir(IND)], hazirlik: [] } };
+  await kabul(w, "§8j eski biçim (bir sürüm) liste ile birlikte: eski kid kısıtsız, başka kanal", eski, istek(exeK("baska-kanal"), bsl(basK("baska-kanal", IND2))));
+  await ret(w, "§8j' liste satırı aynı ayarda kanalına bağlı", eski, istek(exeK("baska-kanal"), bsl(basK("baska-kanal", IND))), "INDIRME_KANAL");
+
+  const yml = `/${KANAL}/electron/latest.yml`;
+  const gecerli = bsl(basK(KANAL, IND));
+  const S = (ek: Partial<Record<string, unknown>> = {}) => ({ ...satir(IND), ...ek });
+  const alansiz = (o: Record<string, unknown>, alan: string) => Object.fromEntries(Object.entries(o).filter(([k]) => k !== alan));
+  const gecersizler: [string, Ayar, Ayar][] = [
+    ["indirmeListesi dizi", { ...w.VARSAYILAN_AYAR, indirmeListesi: [] }, listeAyari(w, [], [])],
+    ["indirmeListesi null", { ...w.VARSAYILAN_AYAR, indirmeListesi: null }, listeAyari(w, [satir(IND)], [])],
+    ["tanınmayan liste adı", { ...w.VARSAYILAN_AYAR, indirmeListesi: { uretim: [satir(IND)], hazirlik: [], test: [] } }, listeAyari(w, [satir(IND)], [])],
+    ["hazırlık listesi eksik", { ...w.VARSAYILAN_AYAR, indirmeListesi: { uretim: [satir(IND)] } }, listeAyari(w, [satir(IND)], [])],
+    ["liste dizi değil", listeAyari(w, { 0: satir(IND) }, []), listeAyari(w, [satir(IND)], [])],
+    ["satırda tanınmayan alan", listeAyari(w, [S({ sinif: "URETIM" })], []), listeAyari(w, [S()], [])],
+    ["satırda bitiş yok", listeAyari(w, [alansiz(S(), "bitis")], []), listeAyari(w, [S()], [])],
+    ["kid ind- değil", listeAyari(w, [{ ...S(), kid: ALT.kid, x: ALT.x }], []), listeAyari(w, [S()], [])],
+    ["x biçimsiz", listeAyari(w, [S({ x: "AAAA" })], []), listeAyari(w, [S()], [])],
+    ["kanallar boş", listeAyari(w, [S({ kanallar: [] })], []), listeAyari(w, [S()], [])],
+    ["kanallar dize", listeAyari(w, [S({ kanallar: KANAL })], []), listeAyari(w, [S()], [])],
+    ["kanal biçimsiz (büyük harf)", listeAyari(w, [S({ kanallar: [KANAL, "Deneme"] })], []), listeAyari(w, [S({ kanallar: [KANAL, "deneme"] })], [])],
+    ["kanal iki kez", listeAyari(w, [S({ kanallar: [KANAL, KANAL] })], []), listeAyari(w, [S({ kanallar: [KANAL] })], [])],
+    ["başlangıç tarihsiz saat yok", listeAyari(w, [S({ baslangic: "2026-09-29" })], []), listeAyari(w, [S()], [])],
+    ["pencere ters (bitiş < başlangıç)", listeAyari(w, [S({ baslangic: msToIso(SIMDI + GUN), bitis: msToIso(SIMDI - GUN) })], []), listeAyari(w, [S()], [])],
+    ["pencere 731 gün", listeAyari(w, [S({ baslangic: msToIso(SIMDI - GUN), bitis: msToIso(SIMDI + 730 * GUN) })], []), listeAyari(w, [S({ baslangic: msToIso(SIMDI - GUN), bitis: msToIso(SIMDI + 729 * GUN) })], [])],
+    ["aynı kid iki listede", listeAyari(w, [S()], [{ ...satir(IND, { kanallar: [HZR_KANAL] }), x: HZR.x }]), listeAyari(w, [S()], [satir(HZR, { kanallar: [HZR_KANAL] })])],
+    ["aynı kid eski biçimde ve listede", listeAyari(w, [S()], [], { anahtarlar: [acik(IND)] }), listeAyari(w, [S()], [], { anahtarlar: [acik(IND2)] })],
+    ["aynı açık anahtar iki kid'de", listeAyari(w, [S(), { ...satir(IND2), x: IND.x }], []), listeAyari(w, [S(), satir(IND2)], [])],
+    ["⭐ kanal iki listede (G3)", listeAyari(w, [S()], [satir(HZR, { kanallar: [HZR_KANAL, KANAL] })]), listeAyari(w, [S()], [satir(HZR, { kanallar: [HZR_KANAL] })])],
+    ["eski biçim satırı kanal taşıyor (yanlış diziye yapıştırma)", listeAyari(w, [], [], { anahtarlar: [satir(IND)] }), listeAyari(w, [satir(IND)], [])],
+    ["eski biçim + listede aynı açık anahtar", listeAyari(w, [S()], [], { anahtarlar: [{ kid: IND2.kid, x: IND.x }] }), listeAyari(w, [S()], [], { anahtarlar: [acik(IND2)] })],
+  ];
+  for (const [ad, bozuk, komsu] of gecersizler) {
+    await ret(w, `§8k ayar geçersiz: ${ad}`, bozuk, istek(yml, gecerli), "AYAR_GECERSIZ", 503);
+    const { y, o } = await kapidan(w, komsu, istek(yml, gecerli));
+    // Komşu ayar GEÇERLİ olmalı: kabul (200) ya da belirtecin kendi kodu (ör. boş listede JWS_KID) — 503 değil.
+    check(`§8k' geçerli komşu: ${ad}`, y.status !== 503 && (y.status === 200 ? o.cagrilar.length === 1 : o.cagrilar.length === 0), `${y.status} ${kodu(y)}`);
+  }
+  await kabul(w, "§8l geçmiş pencereli satır ayarı GEÇERSİZ KILMAZ (temizlik ayrı)", listeAyari(w, [satir(IND2, { baslangic: msToIso(SIMDI - 200 * GUN), bitis: msToIso(SIMDI - 80 * GUN) }), S()], []), istek(yml, gecerli));
+
+  // Varsayılan dışa aktarım: panel değişkeni JSON dizesi, gerçek saat.
+  const eskiFetch = globalThis.fetch;
+  const o = sahteOrigin();
+  globalThis.fetch = o.fetchImpl as typeof fetch;
+  try {
+    const simdi = Date.now();
+    const satirSimdi = { kid: IND.kid, x: IND.x, kanallar: [KANAL], baslangic: msToIso(simdi - GUN), bitis: msToIso(simdi + 119 * GUN) };
+    const env = { TKL_INDIRME_AYAR: JSON.stringify({ indirmeListesi: { uretim: [satirSimdi], hazirlik: [] } }) };
+    const y1 = await w.default.fetch(istek(exeK(KANAL), bsl(basK(KANAL, IND, simdi))), env);
+    const y2 = await w.default.fetch(istek(exeK(HZR_KANAL), bsl(basK(HZR_KANAL, IND, simdi))), env);
+    check("§8m env dize JSON (yalnız indirmeListesi): kanal içi 200, kanal dışı 403 INDIRME_KANAL", y1.status === 200 && y2.status === 403 && kodu(y2) === "INDIRME_KANAL", `${y1.status} ${kodu(y1)} / ${y2.status} ${kodu(y2)}`);
+  } finally {
+    globalThis.fetch = eskiFetch;
+  }
+
+  // Runbook'taki yapıştırma şablonu Worker'ın kabul ettiği biçimde mi? Yer tutucular test değerleriyle doldurulur.
+  const metin = readFileSync(RUNBOOK, "utf8");
+  const blok = /<!-- indirme-listesi-sablonu -->\s*```json\n([\s\S]*?)```/.exec(metin)?.[1];
+  let sablon: Ayar | null = null;
+  if (blok) {
+    let n = 0;
+    const xler = [IND.x, HZR.x, IND2.x, YABANCI.x];
+    const dolu = blok
+      .replace(/"x": "<[^"]*>"/g, () => `"x": "${xler[n++ % xler.length]}"`)
+      .replace(/"baslangic": "<[^"]*>"/g, `"baslangic": "${msToIso(SIMDI - GUN)}"`)
+      .replace(/"bitis": "<[^"]*>"/g, `"bitis": "${msToIso(SIMDI + 119 * GUN)}"`);
+    try {
+      const ayrik: unknown = JSON.parse(dolu);
+      if (typeof ayrik === "object" && ayrik !== null && !Array.isArray(ayrik)) sablon = { ...ayrik };
+    } catch {
+      sablon = null;
+    }
+  }
+  const sablonCozum = sablon ? w.ayarCoz({ ...w.VARSAYILAN_AYAR, ...sablon }, SIMDI) : { ok: false, neden: "şablon bloğu bulunamadı ya da JSON değil" };
+  const liste = sablon?.indirmeListesi;
+  const listeli = typeof liste === "object" && liste !== null && "uretim" in liste && Array.isArray(liste.uretim) && liste.uretim.length > 0;
+  check("§8n runbook şablonu (INDIRME-KAPISI-WORKER.md §8) doldurulunca Worker ayarı GEÇERLİ ve liste biçiminde", sablonCozum.ok && listeli, sablonCozum.neden ?? "");
+}
+
+// §9 — backend/ öneki (Dağıtım v2): tek ürün kümesi, önek ayrımı, işaretçi değişken.
+async function bolum9(w: WorkerModulu): Promise<void> {
+  console.log("\n§9 — backend/ öneki");
+  check("§9a Worker ürün dizinleri = kâhin DOWNLOAD_PRODUCTS", JSON.stringify([...w.URUN_DIZINLERI]) === JSON.stringify([...DOWNLOAD_PRODUCTS]), JSON.stringify(w.URUN_DIZINLERI));
   const a = ayarKur(w);
   const be = bas("backend");
   const zip = `/${KANAL}/backend/2.11.0/tekserp-backend-2.11.0.zip`;
   const son = `/${KANAL}/backend/son.json`;
-  const o = await kabul(w, "§8b backend belirteci → paket zip", a, istek(zip, bsl(be)));
-  check("§8b' zip DEĞİŞMEZ: kenar önbelleği", o.cagrilar[0]?.init?.cf?.cacheEverything === true);
-  const o2 = await kabul(w, "§8c backend belirteci → son.json", a, istek(son, bsl(be)));
-  check("§8c' son.json DEĞİŞKEN: cf seçeneği YOK", o2.cagrilar[0]?.init === undefined);
-  await kabul(w, "§8d backend belirteci → sürüm işaretçisi", a, istek(`/${KANAL}/backend/2.11.0/surum.json`, bsl(be)));
-  await ret(w, "§8e belirteçsiz son.json", a, istek(son), "INDIRME_BELIRTEC_YOK");
-  await ret(w, "§8f electron belirteci backend/de", a, istek(son, bsl(bas("electron"))), "INDIRME_YOL");
-  await ret(w, "§8g backend belirteci electron/da", a, istek(`/${KANAL}/electron/latest.yml`, bsl(be)), "INDIRME_YOL");
-  await ret(w, "§8h başka kanalın backend'i", a, istek("/baska-kanal/backend/son.json", bsl(be)), "INDIRME_YOL");
-  await ret(w, "§8i kodlanmış atlatma (%62ackend)", a, istek(`/${KANAL}/%62ackend/son.json`), "INDIRME_BELIRTEC_YOK");
+  const o = await kabul(w, "§9b backend belirteci → paket zip", a, istek(zip, bsl(be)));
+  check("§9b' zip DEĞİŞMEZ: kenar önbelleği", o.cagrilar[0]?.init?.cf?.cacheEverything === true);
+  const o2 = await kabul(w, "§9c backend belirteci → son.json", a, istek(son, bsl(be)));
+  check("§9c' son.json DEĞİŞKEN: cf seçeneği YOK", o2.cagrilar[0]?.init === undefined);
+  await kabul(w, "§9d backend belirteci → sürüm işaretçisi", a, istek(`/${KANAL}/backend/2.11.0/surum.json`, bsl(be)));
+  await ret(w, "§9e belirteçsiz son.json", a, istek(son), "INDIRME_BELIRTEC_YOK");
+  await ret(w, "§9f electron belirteci backend/de", a, istek(son, bsl(bas("electron"))), "INDIRME_YOL");
+  await ret(w, "§9g backend belirteci electron/da", a, istek(`/${KANAL}/electron/latest.yml`, bsl(be)), "INDIRME_YOL");
+  await ret(w, "§9h başka kanalın backend'i", a, istek("/baska-kanal/backend/son.json", bsl(be)), "INDIRME_YOL");
+  await ret(w, "§9i kodlanmış atlatma (%62ackend)", a, istek(`/${KANAL}/%62ackend/son.json`), "INDIRME_BELIRTEC_YOK");
   const { y, o: o3 } = await kapidan(w, a, istek(`/${KANAL}/backendx/a`, {}, "POST"));
-  check("§8j benzer ad (backendx) kapsam dışı, aynen geçer", y.status === 200 && o3.cagrilar.length === 1);
+  check("§9j benzer ad (backendx) kapsam dışı, aynen geçer", y.status === 200 && o3.cagrilar.length === 1);
 }
 
 async function main(): Promise<void> {
@@ -532,6 +691,7 @@ async function main(): Promise<void> {
   await bolum6(w);
   await bolum7(w);
   await bolum8(w);
+  await bolum9(w);
   console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
   process.exit(fail === 0 ? 0 : 1);
 }

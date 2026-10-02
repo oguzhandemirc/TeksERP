@@ -52,6 +52,8 @@ export interface HealthResponse {
   masterDataArchive?: { total: number; archivedWithLiveRefs: Record<string, number>; stale: boolean } | null;
   /** Fabrika saat dilimi: `warning` doluysa kayıtlı değer geçersiz, sunucu `active` ile koşuyor. Eski backend göndermez. */
   factoryTimezone?: { active: string; warning: { code: string; message: string } | null };
+  /** JWT sırrı: `rotationRequired` → sunucu bilinen/zayıf sırla açıldı. Değer taşımaz; eski backend göndermez. */
+  jwtSecret?: { status: "OK" | "BILINEN" | "ZAYIF"; rotationRequired: boolean };
 }
 
 const MASTER_DATA_LABEL: Record<string, string> = {
@@ -238,6 +240,15 @@ export function evaluateAlerts(d: HealthResponse | undefined): Alert[] {
   // Metin sunucunundur (FACTORY_TIMEZONE_INVALID_STORED): sunucu varsayılan dilimle açıldı, düzeltme panelden.
   const tzWarn = d.factoryTimezone?.warning;
   if (tzWarn) out.push({ level: "warn", message: tzWarn.message });
+
+  // Bilinen/zayıf sırla imzalanan token taklit edilebilir → kritik; rotasyon vardiya dışında.
+  if (d.jwtSecret?.rotationRequired === true)
+    out.push({
+      level: "crit",
+      message:
+        "JWT sırrı döndürülmeli — sunucu bilinen/zayıf bir sırla açıldı. Vardiya dışında rotasyon: " +
+        "docs/ops/JWT-SIR-ROTASYONU.md (bütün oturumlar düşer).",
+    });
 
   // Yedek bayatlığı: 24sa üstü uyarı, 48sa üstü kritik.
   const ageH = d.lastBackup ? (Date.now() - new Date(d.lastBackup.time).getTime()) / 3_600_000 : null;

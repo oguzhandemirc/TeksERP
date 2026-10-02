@@ -166,6 +166,33 @@ describe("sunucu güncellemesi — sonuç ve uyarılar", () => {
     expect(screen.getByTestId("geri-donus-ayrinti").textContent).toBe("SAGLIK_ZAMAN_ASIMI: status UP olmadı");
   });
 
+  it("hazırlık dizini kilitliyken: iş Bekliyor + sorun 'Dosya kilitli' (indirme hatası DEĞİL) + onaylı sürümün bekleyiş nedeni", async () => {
+    perms.push("license:view");
+    status.mockResolvedValue(
+      durum({
+        yerel: { ...durum().yerel!, durum: "BEKLIYOR", hataKodu: "DOSYA_KILITLI", mesaj: "C:\\TeksERP\\surumler\\.hazirlik-2.13.0 başka bir program tarafından kullanılıyor" },
+        eylemler: { hemen: false, pencere: false, geriAl: false, hedefSurum: null, neden: "2.13.0 onaylandı; bir dosya başka bir program tarafından kullanıldığı için bekliyor — kilit kalkınca kendiliğinden sürer." },
+      }),
+    );
+    renderWithProviders(<ServerUpdatesPage />);
+    expect(await screen.findByText("Dosya kilitli — başka bir program kullanıyor (kilit kalkınca kendiliğinden sürer)")).toBeTruthy();
+    expect(screen.queryByText("Paket indirilemedi")).toBeNull();
+    expect(screen.getByText("Bekliyor")).toBeTruthy();
+  });
+
+  it("paket şemanın gerisindeyken: iş Bekliyor + sorun 'Şema ileride' (geri indirme yok) + onaylı sürümün bekleyiş nedeni", async () => {
+    perms.push("license:view");
+    status.mockResolvedValue(
+      durum({
+        yerel: { ...durum().yerel!, durum: "BEKLIYOR", hataKodu: "SEMA_ILERIDE", mesaj: "2.13.0 kurulmaz: veritabanında paketin taşımadığı 1 bitmiş göç var (ilk: 20261001_x)" },
+        eylemler: { hemen: false, pencere: false, geriAl: false, hedefSurum: null, neden: "2.13.0 onaylandı; veritabanı bu sürümün tanımadığı göçler taşıdığı için kurulmuyor." },
+      }),
+    );
+    renderWithProviders(<ServerUpdatesPage />);
+    expect(await screen.findByText("Şema ileride — veritabanında bu paketin tanımadığı göçler var; geri indirme yapılmaz (daha yeni sürüm gerekir)")).toBeTruthy();
+    expect(screen.getByText("Bekliyor")).toBeTruthy();
+  });
+
   it("güncelleyici yanıt vermiyor → uyarı + son sinyal; kurulu değil → sade not", async () => {
     perms.push("license:view");
     status.mockResolvedValueOnce(durum({ guncelleyici: { durum: "OLCULEMEDI", surum: null }, canlilik: { sonCanlilik: "2026-10-01T09:00:00.000Z", esikSn: 180, gecikmeSn: 3600, yanitVermiyor: true } }));
@@ -187,5 +214,24 @@ describe("sunucu güncellemesi — sonuç ve uyarılar", () => {
     fireEvent.click(screen.getByRole("button", { name: "Pencereye bırak" }));
     fireEvent.click(within(await screen.findByRole("dialog")).getByRole("button", { name: "Pencereye bırak" }));
     await waitFor(() => expect(approve).toHaveBeenCalledWith(expect.objectContaining({ surum: "2.13.0", zamanlama: "GERI_AL" })));
+  });
+});
+
+describe("sunucu güncellemesi — bilgi (sorun değil)", () => {
+  beforeEach(sifirla);
+
+  it("şema hizası ölçülemedi → 'Bilgi' satırı (Sorun DEĞİL), durum Hazır kalır", async () => {
+    perms.push("license:view");
+    status.mockResolvedValue(
+      durum({
+        yerel: { ...durum().yerel!, bilgi: { kod: "SEMA_OLCULEMEDI", mesaj: "2.13.0 için şema hizası ölçülemedi (psql: bağlantı reddedildi)" } },
+      }),
+    );
+    renderWithProviders(<ServerUpdatesPage />);
+    const bilgi = await screen.findByTestId("guncelleyici-bilgi");
+    expect(bilgi.textContent).toBe("Şema hizası ölçülemedi — güncelleme bu yüzden durdurulmadı (göç adımı veritabanını ayrıca denetler)");
+    expect(bilgi.getAttribute("title")).toContain("psql");
+    expect(screen.queryByText("Sorun")).toBeNull();
+    expect(screen.getByText("Hazır")).toBeTruthy();
   });
 });

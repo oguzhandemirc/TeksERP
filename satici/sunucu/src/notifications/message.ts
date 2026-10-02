@@ -30,6 +30,7 @@ const DATE_LABEL: Partial<Record<BildirimOlayi, string>> = {
   GUNCELLEME_TAMAMLANDI: "Bitiş",
   GUNCELLEME_GERI_DONDU: "Bitiş",
   GUNCELLEME_BASARISIZ: "Bitiş",
+  ANAHTAR_SURESI_BITIYOR: "Sertifika bitişi",
 };
 
 const htmlEscape = (s: string): string => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");

@@ -25,7 +25,8 @@
 // NEGATİF SONDA — dosya DIŞI mutasyon (cp + shasum ile birebir geri alındı; sonuçlar commit
 // mesajında): N1 kart makbuzu ayrı tx'e taşınır (§4) · N2 mobil liste süzgeci kaldırılır (§9) ·
 // N3 `issueToken` reddi kaldırılır (§9) · N4 kalem eşlemesinde hedef yazılabilir küme dışına (§1) ·
-// N5 lisans yazma yüklemi atlanır (§10).
+// N5 lisans yazma yüklemi atlanır (§10). (L2-7 B) S26 gelen kutusu isteği başka ucun yolunu imzalar → "sıra" ve
+// sahte bulutun ISTEK_YOL reddiyle bağlı üç kontrol ❌ (kaynakta mutasyon, sha eşit geri alındı).
 // =============================================================================
 import { randomUUID } from "node:crypto";
 import { Prisma } from "@prisma/client";
@@ -136,11 +137,11 @@ async function bolum2(adminId: string): Promise<string> {
   check("etkinleştirme idempotent (ikinci çağrı aynı kullanıcı, yeni hesap yok)", a.userId === b.userId && !b.created, JSON.stringify({ a, b }));
   const u = await prisma.user.findUnique({
     where: { id: a.userId },
-    select: { fullName: true, quickPin: true, isActive: true, permissions: { select: { permission: { select: { code: true } } } } },
+    select: { fullName: true, quickPin: true, quickPinDigest: true, isActive: true, permissions: { select: { permission: { select: { code: true } } } } },
   });
   const kodlar = (u?.permissions ?? []).map((p) => p.permission.code).sort();
   check("izinler TAM OLARAK order:write + customer:write", JSON.stringify(kodlar) === JSON.stringify([...PATRON_CLOUD_PERMISSIONS].sort()), kodlar.join(","));
-  check("mobil kimliği yok (hızlı PIN üretilmedi)", u?.quickPin === null || u?.quickPin === undefined);
+  check("mobil kimliği yok (hızlı PIN üretilmedi)", (u?.quickPin ?? null) === null && (u?.quickPinDigest ?? null) === null);
   check("ad 'Patron Bulutu', aktif", u?.fullName === "Patron Bulutu" && u?.isActive === true);
   check("kimlik kaydı ham ayar ucundan yazılamaz (ayrılmış anahtar)", isReservedSettingKey(PATRON_CLOUD_USER_SETTING_KEY));
   check("etkinleştirme audit'li (SYSTEM_SETTING satırı)", auditlar.some((x) => x.tableName === "SYSTEM_SETTING" && x.recordId === PATRON_CLOUD_USER_SETTING_KEY) || !a.created);
@@ -280,9 +281,10 @@ function sahteBulut(kurulumX: string, kurulumId: string): SahteBulut {
       const yol = new URL(req.url).pathname;
       const token = req.headers[REQUEST_HEADER];
       const kimlik = readRequestIdentity(token);
-      const v = verifyRequest(token, { publicKeyX: kurulumX, body: req.body ?? "", nowMs: Date.now(), purposes: ["esitle"], installationId: kurulumId });
+      // Gerçek bulut gibi isteği alan ucun yolu verilir: imzalı `yol` başka uca aitse ISTEK_YOL.
+      const v = verifyRequest(token, { publicKeyX: kurulumX, body: req.body ?? "", nowMs: Date.now(), purposes: ["esitle"], installationId: kurulumId, path: yol });
       const govde = JSON.parse(req.body ?? "{}") as Record<string, unknown>;
-      b.cagrilar.push({ yol, govde, imzaGecerli: kimlik.ok && v.ok });
+      b.cagrilar.push({ yol, govde, imzaGecerli: kimlik.ok && v.ok && v.value.yol === yol });
       if (!v.ok) return { status: 401, body: JSON.stringify({ success: false, message: "imza", details: { code: "ISTEK_IMZA" } }) };
       if (yol === SYNC_PATHS.ACCOUNTS) {
         return { status: 200, body: JSON.stringify({ v: 1, hesaplar: [{ id: randomUUID(), ad: "Ayşe Patron", eposta: "ayse@example.com", durum: "AKTIF", sonGiris: null, gizli: "düşer" }] }) };
@@ -326,7 +328,7 @@ async function bolum10(aktor: string, kartId: string): Promise<void> {
   r = await runCloudInboxOnce(bulut.tasiyici);
   for (const o of r.outcomes) kaydet(o, o.mesajId === siparis.mesajId ? "SIPARIS" : "CARI");
   const yollar = bulut.cagrilar.map((c) => c.yol);
-  check("sıra: hesaplar → al → sonuç; hepsi kurulum anahtarıyla imzalı", JSON.stringify(yollar) === JSON.stringify([SYNC_PATHS.ACCOUNTS, SYNC_PATHS.INBOX_CLAIM, SYNC_PATHS.INBOX_RESULT]) && bulut.cagrilar.every((c) => c.imzaGecerli), yollar.join(" → "));
+  check("sıra: hesaplar → al → sonuç; hepsi kurulum anahtarıyla, ucun yolu imzada", JSON.stringify(yollar) === JSON.stringify([SYNC_PATHS.ACCOUNTS, SYNC_PATHS.INBOX_CLAIM, SYNC_PATHS.INBOX_RESULT]) && bulut.cagrilar.every((c) => c.imzaGecerli), yollar.join(" → "));
   const sonuclar = (bulut.cagrilar[2]?.govde.sonuclar ?? []) as InboxOutcome[];
   check("iki kayıt ISLENDI, olusturma sırasıyla (önce cari)", r.outcome === "BASARILI" && sonuclar.length === 2 && sonuclar.every((s) => s.durum === "ISLENDI") && sonuclar[0]?.mesajId === yeniKart.mesajId, JSON.stringify(sonuclar.map((s) => [s.durum, s.kod])));
   const durum = await getPatronCloudStatus();
