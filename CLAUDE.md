@@ -12,7 +12,7 @@ Tekstil fabrikası ERP'si. Üç alt proje (+ doğmakta olan satıcı platformu),
 | `Electron/` | Electron 42 + React 19 + Vite yönetim paneli (**admin frontend buraya yazılır**; `React/` yok) | 5174 |
 | `mobil/` | React Native + Expo 54, Android tablet (yatay) + telefon (dikey) — saha | — |
 | `satici/` | Express 5 + Prisma 7 satıcı sunucusu (lisans API `/v1/*` + portal JSON API; VDS'te, fabrikaya kurulmaz; kendi `CLAUDE.md`'si `satici/sunucu/`) + React 19 + Vite portal web arayüzü (`satici/web/`, aynı kökenden sunulur) | 4610 genel (`/bayi`) · 4611 portal (`/portal`, tailnet) · 4613 portal (`portal.<alan>`, Cloudflare Access; kök parolası yok) |
-| `patron/` | Express 5 + Prisma 7 patron bulutu sunucusu (`patron/sunucu`: eşitleme alıcısı `/v1/*` + hesap API'si `/api/*`; çok kiracılı tek DB + PostgreSQL RLS; VDS'te, fabrikaya kurulmaz; kendi `CLAUDE.md`'si) | 4620 |
+| `patron/` | Express 5 + Prisma 7 patron bulutu sunucusu (`patron/sunucu`: eşitleme alıcısı `/v1/*` + hesap API'si `/api/*`; hedef: tesis başına ayrı DB (bugün tek DB + RLS, geçiş borçta); VDS'te, fabrikaya kurulmaz; kendi `CLAUDE.md`'si) | 4620 |
 | `patron/uygulama/` | React Native + Expo 54 patron uygulaması (Android + iOS + web tek kod tabanı; hesap API'sini okur, salt-okunur çevrimdışı önbellek; tel tipleri `patron/sunucu/src/wire/api.ts`in bayt-eşit aynası) | — |
 | `Teks-Erp/native/lisans-cekirdek/` | Rust + napi-rs native lisans çekirdeği (backend paketine `.node` olarak girer; ayrı süreç değil; kendi `CLAUDE.md`'si) | — |
 
@@ -120,7 +120,7 @@ Her adım istasyon kataloğu + rota şablonundan kurulur; **TOPUN rotası için*
 | Filtre · liste · arama | `docs/kurallar/filtre-liste.md` | Sunucu süzmesi; CSV; `updatedAt desc` (giriş sekmeleri Ham Stok + Yarı Mamul hariç); tek metraj; Ctrl+F yok |
 | Raporlar · karneler | `docs/kurallar/raporlar.md` | `finalizedAt` trigger; kaynak statü listesi; takvim günü ↔ mutlak pencere; parti araması aday listesi |
 | Finans · sağlamlık sınıfları | `docs/kurallar/finans.md` | Beş sınıf; iki tarih; ters yol; kilit sırası; çift yüklem; tek kaynak satır; kasa/KDV bayrakları PROFİL |
-| **Patron bulutu · eşitleme · gelen kutusu · bulut sunucusu** | `docs/kurallar/patron-bulutu.md` | Bulut hesap yapmaz, fabrika tek kaynak yardımcıyla hesaplar; katalog opt-in (`src/cloud-sync/projections.ts`); ön koşul fail-closed ve TEK (`cloudEligibility`: URETIM + `patron-bulut` + kira); filigran yalnız bulut onayıyla ilerler; silme tetikleyiciyle (`sync_marks`, telemetri); tek yazma kanalı gelen kutusu (makbuz aynı tx); bulutta `tesis_id` + RLS FORCE, iki rol NOBYPASSRLS |
+| **Patron bulutu · eşitleme · gelen kutusu · bulut sunucusu** | `docs/kurallar/patron-bulutu.md` | Bulut hesap yapmaz, fabrika tek kaynak yardımcıyla hesaplar; katalog opt-in (`src/cloud-sync/projections.ts`); ön koşul fail-closed ve TEK (`cloudEligibility`: URETIM — hedef + BARINDIRILAN + DEMO — + `patron-bulut` + kira); filigran yalnız bulut onayıyla ilerler; silme tetikleyiciyle (`sync_marks`, telemetri); tek yazma kanalı gelen kutusu (makbuz aynı tx); hedef: tesis başına ayrı DB + yalnız ona yetkili DB kullanıcısı (bugün tek DB, `tesis_id` + RLS FORCE, iki rol NOBYPASSRLS — geçiş borçta) |
 | **Lisans · kod koruma · satıcı platformu** | `docs/kurallar/lisans.md` | Gözlem sıfır fark; ek süre imzalı tarihten; KISITLI iki anahtarlı; sunucu kararı ek sürede kalıcı; parmak izi MAC'siz; kök parolası stdin |
 | Genel · konvansiyon | `docs/kurallar/genel.md` | Künye başlığı kapı değil; `CLIENT_IP_HEADER` yalnız beyanlı vekilde; TOTP kurulumu; audit; tek process |
 

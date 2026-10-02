@@ -13423,6 +13423,8 @@ Negatif sondalar (tetik md5(prosrc) ve dosya md5 ile geri alındı):
 
 > ⚠️ **KISMEN GEÇERSİZ → 2026-10-01 (güvenlik dilimi G19)** — "e-posta bütün bulutta tekil" ve "rapor ailesinin izni bulutta anahtar önekinden" ezildi: e-posta bulut genelinde yalnız ETKİN (AKTIF · KILITLI) hesapta tekildir (davet ve arşiv tutmaz), rapor izni rapor anahtarı BAŞINADIR ve sonuç rapor başına RLS adıyla korunur; eşitleme rolü gelen kutusu claim'i için `accounts`ta yalnız kimlik · tesis · durum · izin kolonlarını okur. Bkz. "2026-10-01 — Güvenlik dilimi G19".
 
+> ⚠️ **KISMEN GEÇERSİZ → 2026-10-03 (tesis başına DB)** — Karar (1)'deki "çok kiracılı TEK DB; tesisler arası ayrımın asıl güvencesi her tabloda `tesis_id` + RLS ENABLE + FORCE" HEDEF olarak ezildi: her tesisin (fabrikanın) AYRI veritabanı ve yalnız o DB'ye yetkili ayrı DB kullanıcısı olur, istek doğru DB'ye yönlendirilir; RLS ikinci savunma olarak kalabilir. Uygulama inene dek bu notun düzeni geçerlidir (geçiş borcu `docs/kurallar/patron-bulutu.md`). Bkz. "2026-10-03 — Patron bulutunda her tesise ayrı veritabanı".
+
 **Bağlam.** Plan B §B2 ve eşitleme sözleşmesi v1 (`docs/design/PATRON-BULUTU-ESITLEME.md` §6–§10) `patron/sunucu`da yeni alt proje olarak kuruldu (satıcıyla aynı yığın ve sürümler: Express 5 + Prisma 7 + PG). Fabrika tarafı (B1 `cloud-sync`, B3 gelen kutusu işleyicisi) paralel dilimlerdir; bu dilim yalnız bulut tarafıdır.
 
 **Karar [ÇEKİRDEK].** (1) Her tablo `tesis_id` + RLS ENABLE + FORCE; `app.tesis_id` + `app.projeksiyonlar` + (varsa) advisory kilit her tx'in İLK ifadesinde TEK SELECT'te yazılır (tek yazar `src/lib/tenant.ts`) — kök "kilit tx'in ilk ifadesi" kuralı ile "SET LOCAL ilk ifade" şartı aynı ifadede karşılanır. Ayarsız/sıfırlanmış bağlantıda sorgu HATA verir (fail-closed). Ön-kiracı aramalar (giriş e-postası, oturum/davet özeti, kurulum kimliği, bakım listesi) SELECT-yalnız, tek anahtarlı politikalardır; o kiplerde kiracı sıfır UUID'dir. (2) Sunucu iki çalışma rolüyle bağlanır (NOSUPERUSER NOBYPASSRLS, tablo sahibi değil): uygulama rolü projeksiyona yazamaz, eşitleme rolü hesap/oturum okuyamaz; yetkiler `src/lib/db-grants.ts`, roller `scripts/db-rolleri.ts` (küme düzeyi, migration'da değil); RLS'i atlayabilen rolle sunucu kalkmaz. (3) Alan izni projeksiyon ADIYLA RLS'tedir; kök satırda FINANS/KİŞİSEL alan taşıyan girdi bulutta RET (fabrika hatasına ikinci sed). (4) Sürüm anı paketin ufkudur, mezar taşı 7 gün; gelecekteki ufuk 400 (sürüm anı zehirlenmesin). (5) Hesap davetle doğar, TOTP'siz AKTİF hesap DB CHECK'le de imkânsız; son aktif yönetici düşürülemez. (6) Kuyruk claim'i `WITH … FOR UPDATE SKIP LOCKED` CTE'si — `IN (… LIMIT n … SKIP LOCKED)` biçimi LIMIT'i aştı (bekçi yazılırken ölçüldü: enFazla 1 iken tek çağrı 2 kayıt aldı).
@@ -14947,3 +14949,32 @@ Negatif sondalar (tetik md5(prosrc) ve dosya md5 ile geri alındı):
 **Ölçüm (2026-10-03, kod okuması).** "Yedekten kur" bugün bir setup adımı DEĞİL: sihirbazda yedekten başlatma yok. Panelin yerel yedek geri yüklemesi var (sihirbazdaki yedek parolasıyla açılır). Hangisiyle yapılacağı tasarımda seçilir; yedeğin şema sürümü kurulan sürümden eski olacağı için geri yükleme sonrası göçler de provanın konusudur.
 
 **Kural satırı.** `docs/kurallar/deploy-kurulum.md` (borç biçimi); aynı dosyadaki "bu sürüm adnansahin'e YALNIZ pm2 → hizmet geçişinin paketi olarak çıkar" cümlesi silindi; `docs/kurallar/lisans.md` "Geçiş sırası" satırı uyumlandı. Runbook başlıkları: `docs/ops/GECIS-PM2-HIZMET.md`, `docs/ops/DEPLOY-RUNBOOK.md`. Migration/izin/APK: yok.
+
+## 2026-10-03 — Patron bulutunda her tesise ayrı veritabanı (tek DB + RLS yerine; hedef, uygulama borçta) [ÇEKİRDEK]
+
+**Bağlam.** Patron bulutu sunucusu (B2, 2026-09-29) çok kiracılı TEK veritabanıyla kuruldu: her tablo `tesis_id` taşır, tesisler arası ayrımı RLS ENABLE + FORCE ve iki NOBYPASSRLS çalışma rolü sağlar. Kullanıcı: "patron bulutunda herkesin aynı şeyi paylaşmasını doğru bulmuyorum."
+
+**Karar (kullanıcı) [ÇEKİRDEK].**
+- Her fabrikaya (tesis) AYRI veritabanı. Aynı PostgreSQL sunucusu ve TEK patron API'si kalır.
+- Her tesis DB'sinin yalnız o DB'ye yetkili ayrı DB kullanıcısı olur; başka tesisin DB'sine bağlanamaz.
+- İstek doğru tesisin DB'sine yönlendirilir. Tesis imzadan ya da oturumdan çözülür, gövdeden asla (mevcut kural aynen).
+- Yeni tesiste DB ve kullanıcısı kendiliğinden hazırlanır.
+- Göçler bütün tesis DB'lerine otomatik ve TEK TEK uygulanır; bir tesisteki hata diğerlerini durdurmaz.
+- Tek tesisin yedeği, dışa aktarımı ve silinmesi (imha) o DB üzerinden yapılır.
+- RLS ikinci savunma olarak kalabilir; asıl güvence DB + kullanıcı ayrımıdır.
+- Ek karar (aynı gün, kullanıcı onayı): DEMO sınıfı lisans, HAK'ta `patron-bulut` modülü varsa patron bulutuna veri gönderebilir; gönderici sınıf kümesi URETIM + BARINDIRILAN + DEMO olur ve `docs/design/BULUT-KURULUM.md` B1 iş paketiyle (sınıf tek kaynağı) birlikte uygulanır.
+
+**Gerekçe.** Rakip fabrikaların verisi aynı tablolarda durursa müşteri güveni ve KVKK açısından savunmak zor: tek bir politika hatası ya da yanlış ayarlanmış bağlantı başka fabrikanın satırını gösterebilir. Ayrı DB + ayrı kullanıcıda bu, bağlantı düzeyinde imkânsızdır. Tek tesisin yedeği, iadesi ve imhası da kendi DB'siyle sadeleşir.
+
+**Taşıma.** Yok: henüz hiçbir fabrika buluta veri göndermiyor.
+
+**Ezdiği.** 2026-09-29 B2 notunun Karar (1)'i (çok kiracılı tek DB, asıl güvence RLS) — HEDEF olarak. Uygulama inene dek mevcut düzen geçerlidir (geçiş dönemi).
+
+**Kararın dokunmadığı kurallar.** Bulut hesap yapmaz; tek yazma kanalı gelen kutusu; iki çalışma rolünün ayrımı (uygulama projeksiyona yazamaz, eşitleme hesap tablosunu okuyamaz); alan izni (`app.projeksiyonlar`); destek rolü kapısı; hizmet sonu ve imha kuralları. Bunlar tesis DB'sinin içinde sürer.
+
+**Açık (uygulama dilimi, tasarımda seçilir).**
+- Tesis başına DB yönlendirmesi, göç koşucusu (tek tek, hata yalıtımlı) ve DB kullanıcısı yetki bekçisi (negatif sondalı: başka tesisin DB'sine bağlanma RED).
+- Bugün tek DB'de duran tesisler arası işlerin yeri: bulut genelinde e-posta tekilliği (giriş tesis sormaz), kurulum dizini ve satıcı iç API önbelleği, bakım tiki. Ortak bir yönetim DB'si mi, başka bir yol mu — tasarım kararı.
+- `docs/design/PATRON-BULUTU-ESITLEME.md` bölüm 9 (bulut veri modeli ve RLS) uygulama dilimiyle güncellenir.
+
+**Kural satırları.** `docs/kurallar/patron-bulutu.md` (iki borç satırı: tesis başına DB ve DEMO gönderici; mevcut üç satıra geçiş dönemi notu) · `docs/design/BULUT-KURULUM.md` B1 satırında sınıf kümesine DEMO · kök `CLAUDE.md` proje tablosu ve alan dizini satırı · `docs/plan/DEMOFABRIKA-KURULUM-BULGULARI.md` bölüm B. Migration/izin/APK: yok.

@@ -64,6 +64,8 @@
 3. **Sunucu saati** (karar 2026-10-02). Kurulum, etki alanına bağlı olmayan makinede Windows NTP eşitlemesini açmalı. Backend, imzalı saatten sapmayı panel bandına, sağlık ucuna ve portala taşımalı. Programda saat değiştiren işlev olmamalı.
 4. **Öneri: müşteri başına ek süre.** Ek süre müşteri başına ayarlanabilmeli: 7, 15 ya da 30 gün.
 5. **adnansahin için "yedekten kur" + prova** (karar 2026-10-03). adnansahin dondurulur, ileride setup.exe ile temiz kurulur ve veri kendi yedeğinden aktarılır. Önce thinkpad-1'de o yedeğin kopyasıyla prova koşulur. Bugün sihirbazda yedekten başlatma adımı yok; panelin yerel yedek geri yüklemesi var. Hangisinin kullanılacağı tasarımda seçilir.
+6. **Patron bulutunda tesis başına ayrı veritabanı** (karar 2026-10-03). Aynı PostgreSQL sunucusu ve tek patron API'si; her fabrikaya ayrı DB ve yalnız o DB'ye yetkili ayrı DB kullanıcısı. İstek doğru DB'ye yönlendirilir, yeni tesiste DB kendiliğinden hazırlanır, göçler her DB'ye tek tek uygulanır (bir tesisin hatası diğerlerini durdurmaz). Yedek, dışa aktarma ve imha tesis DB'si üzerinden yapılır; RLS ikinci savunma olarak kalabilir. Bugünkü tek DB + RLS düzeninin yerine geçer; taşınacak veri yok. Borç ve kapanma koşulu `docs/kurallar/patron-bulutu.md`'de.
+7. **DEMO sınıfı patron bulutuna veri gönderebilir** (karar 2026-10-03). Lisansın HAK'ında `patron-bulut` modülü varsa DEMO kurulum da eşitler. Gönderici sınıf kümesi URETIM + BARINDIRILAN + DEMO olur; uygulama bulut kurulum tasarımındaki B1 iş paketiyle (sınıf tek kaynağı) birlikte yapılır. Bugün yalnız `URETIM` gönderir (`SINIF_URETIM_DEGIL`).
 
 ## C. Kalan güvenlik işleri
 
