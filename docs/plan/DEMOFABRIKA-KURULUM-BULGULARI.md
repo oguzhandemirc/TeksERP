@@ -90,6 +90,11 @@
 - **Kurulum dosyası imzası (Authenticode):** bugün bütçe yok. Ücretsiz önlem: bayi/ekip kılavuzuna "Ek bilgi → Yine de çalıştır" adımı ekran görüntüsüyle; kurulum USB ile getirilirse internet işareti olmadığından SmartScreen uyarısı çıkmaz. Bütçe olunca kod imzalama sertifikasına geçilir.
 - **Fabrika tablet uygulaması Google Play'de (kullanıcı kararı 2026-10-03):** tek "TeksERP" uygulaması, mevcut KURUMSAL Play hesabıyla (yayıncı "Etkili Yazılım" — D-U-N-S zaten var, yeni başvuru GEREKMEZ); herkes kendi sunucusuna IP/ağ araması/QR ile bağlanır; Play test kanalları güncelleme gruplarına eşlenir (iç test → seçili cihazlar → herkes), küçük güncellemeler OTA ile sürer; Google hesabı açmak istemeyen fabrikalar için APK yolu yedek kalır; inceleme için internetten erişilebilen demo sunucu + deneme hesabı gerekir; 2026–2027 Play dışı kurulum doğrulaması aynı hesapla karşılanır. Patron uygulamasının iOS sürümü kullanıcının BİREYSEL Apple hesabıyla yayınlanır (D-U-N-S gerekmez).
 - **Bayi akışı:** ayrıca, ayrıntılı konuşulacak (portal yetkileri, bayi kurulum kılavuzu).
+- **Sonra konuşulacak — hiç açılmamış dört konu (kullanıcı 2026-10-03):**
+  1. **e-İrsaliye / e-Fatura ve muhasebe programı bağlantısı** — bugün resmi belge dış programda elle yeniden yazılıyor, muhasebeye yalnız fiyatsız Excel dökümü çıkıyor (tasarımda bilerek kapsam dışı); seçenekler: özel entegratörle doğrudan kesim ya da yaygın muhasebe programlarına otomatik aktarım. Öncelik: ilk.
+  2. **Kullanım kılavuzu ve eğitim** — personel ve yönetici için kılavuz, ekran içi yardım, kısa eğitim videoları (bayi/ekip arkadaşı müşteri eğitimini bununla verir).
+  3. **Sunucu ve tablet donanım önerisi (Model 1)** — sunucu özelliği, kesintisiz güç kaynağı, yedek disk, tablet modeli, ağ; tabletin yalnız TeksERP'ye sabitlenmesi ve kaybolan tabletin kapatılması.
+  4. **Bağımsız güvenlik testi** — bulut modeli satılmadan önce dış firma sızma testi (ücretli, acele yok).
 - **Destek:** şimdilik panelden gelen destek talebine ilk gören kullanıcı cevap verir.
 - **Modül paketleri ve fiyat:** sonra bakılacak.
 - **Yedek parolası ve anahtarı:** kurulumda müşteriye yazılı teslim tutanağı (kim saklar, kaybolursa ne olur).
