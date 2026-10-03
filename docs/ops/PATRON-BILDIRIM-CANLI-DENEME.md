@@ -1,6 +1,6 @@
 # Patron bildirimleri — canlı gönderim denemesi (runbook)
 
-> Kural kaynağı: `docs/kurallar/patron-bulutu.md` § Bildirimler (B5) · sunucu: `patron/sunucu/CLAUDE.md` § Bildirimler.
+> Kural kaynağı: `docs/kurallar/patron-bulutu.md` § Bildirimler (B5) · sunucu: `docs/kurallar/patron-bulutu.md` § Patron sunucusu — Bildirimler (B5).
 > Yerelde gerçek gönderim DENENMEZ (bekçiler sahte taşıyıcıyla koşar). Bu runbook yalnız şu ön koşullar tamamken koşulur:
 > Apple/Google mağaza hesapları + Expo projesi (EAS) · patron bulutu VDS kurulumu · kullanıcının "canlı dene" cümlesi.
 

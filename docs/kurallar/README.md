@@ -1,38 +1,40 @@
 # Alan kural dosyaları
 
 > Kök `CLAUDE.md` her oturumda yüklenir ve yalnız ÇEKİRDEK'i taşır; bir alana dokunmadan önce buradaki dosya okunur. Dosyalar anlama turunda (2026-09-05) ayrıştırıldı; yeni karar notu **arşive** yazılır, buradaki ilgili dosyaya **tek kural satırı** eklenir.
+>
+> **Kısa özet** kolonu kök `CLAUDE.md` alan dizininden buraya taşındı (2026-10-03 kısaltma turu; kökte yalnız Alan | Dosya kalır) — alanın özet satırı artık BURADA güncellenir. Kökün yeniden yapılandırma geçmişi: 2026-09-05 anlama turu (önceki sürüm git `6695afc2`, 42k token → hedef ≤ 12k) · 2026-10-03 kısaltma turu (önceki sürüm git `a61efbd21`, 30.717 karakter → ~21.300).
 
-| Alan | Dosya | Arşiv tarihleri |
-|---|---|---|
-| **Defter · Hareket tablosu · Ters kayıt · Hard delete** | `docs/kurallar/defter.md` | 2026-09-10, 2026-09-30 |
-| Sevkiyat · Çuval · Brüt · Storno/İade | `docs/kurallar/sevkiyat.md` | 2026-08-02, 2026-08-03, 2026-08-05, 2026-08-21, 2026-08-22, 2026-08-25, 2026-09-13 |
-| Fason · Kartela | `docs/kurallar/fason.md` | 2026-08-04, 2026-08-19 |
-| Tambur · Finalize · Kesim · Geri alma | `docs/kurallar/tambur.md` | 2026-08-04, 2026-08-12, 2026-08-13, 2026-09-03 |
-| Top düzeltme · İptal · Fire · Geri alma | `docs/kurallar/top-duzeltme.md` | 2026-07-13, 2026-08-05, 2026-08-06, 2026-08-12, 2026-08-19, 2026-08-21, 2026-08- |
-| KK1 · İdempotency · Çevrimdışı kuyruk | `docs/kurallar/kk1.md` | 2026-08-05, 2026-08-12 |
-| Kurşun planlama · Bypass | `docs/kurallar/kursun.md` | 2026-08-05, 2026-08-06 |
-| İş emri · Sipariş bağı | `docs/kurallar/is-emri.md` | 2026-08-04, 2026-08-21, 2026-08-25, 2026-09-13 |
-| Rota · Renk · Özellik · Kapsama | `docs/kurallar/rota-renk.md` | 2026-08-06, 2026-08-10, 2026-08-19, 2026-08-21, 2026-08-27 |
-| Kalite · İstasyon yeteneği | `docs/kurallar/kalite.md` | 2026-08-02, 2026-08-06, 2026-09-03 |
-| Parti (Batch) | `docs/kurallar/parti.md` |  |
-| Yarı mamul | `docs/kurallar/yari-mamul.md` | 2026-08-26, 2026-08-27 |
-| Dokuma · Dokuma işi · Doff · Tezgah karnesi | `docs/kurallar/dokuma.md` | 2026-09-13, 2026-09-14 |
-| Refakat kartı | `docs/kurallar/refakat-karti.md` | 2026-08-05 |
-| Belge · Etiket · Şablon | `docs/kurallar/belge-etiket.md` | 2026-07-30, 2026-08-05, 2026-08-13, 2026-09-04 |
-| Mükerrer · nameFold seddi | `docs/kurallar/mukerrer.md` | 2026-08-21, 2026-08-22, 2026-08-25 |
-| Numaralandırma · numara serisi · ön ek | `docs/kurallar/numaralandirma.md` | 2026-09-22 |
-| Sebep katalogları | `docs/kurallar/sebep-katalogu.md` | 2026-08-25, 2026-08-26 |
-| Keşif · Cihaz · Ağ · Donanım | `docs/kurallar/kesif-cihaz.md` | 2026-09-04, 2026-09-28 |
-| Sürüm · Yayın (panel/tablet) | `docs/kurallar/surum-yayin.md` | 2026-08-19, 2026-08-26, 2026-08-27, 2026-09-03, 2026-09-28 |
-| Deploy · Kurulum · Migration | `docs/kurallar/deploy-kurulum.md` | 2026-08-26, 2026-09-04 |
-| Modül anahtarları · Bayraklar · Profiller | `docs/kurallar/modul-bayrak.md` | 2026-09-02, 2026-09-03, 2026-09-04 |
-| Süperadmin · Ayar şifresi | `docs/kurallar/superadmin.md` | 2026-09-03 |
-| Yetki · İzin · Rol | `docs/kurallar/yetki-izin.md` | 2026-08-06, 2026-08-26, 2026-09-03 |
-| Filtre · Liste · Arama · Sıralama | `docs/kurallar/filtre-liste.md` | 2026-08-06, 2026-08-12, 2026-08-27 |
-| Raporlar · Karneler | `docs/kurallar/raporlar.md` | 2026-08-09, 2026-09-30 |
-| Finans · Sağlamlık sınıfları | `docs/kurallar/finans.md` | 2026-08-02, 2026-09-13 |
-| Lisans · Kod koruma · Satıcı platformu | `docs/kurallar/lisans.md` | 2026-09-29 |
-| Patron bulutu · Eşitleme · Gelen kutusu · Bulut sunucusu · Rapor isteği | `docs/kurallar/patron-bulutu.md` | 2026-09-29, 2026-09-30 |
-| Genel · Uzak erişim · Konvansiyon | `docs/kurallar/genel.md` | 2026-09-01, 2026-09-13 |
+| Alan | Dosya | Kısa özet | Arşiv tarihleri |
+|---|---|---|---|
+| **Defter · Hareket tablosu · Ters kayıt · Hard delete** | `docs/kurallar/defter.md` | Durum ≠ defter; hard delete iki sınıf; geri alma ters kayıt; defter envanteri ve eksik ters yollar | 2026-09-10, 2026-09-30 |
+| Sevkiyat · Çuval · Brüt · Storno/İade | `docs/kurallar/sevkiyat.md` | Çuval depo nesnesi; `SackAllocation` sevk anında; brüt tek kaynak `RollReturn`; storno ≠ iade; SoD izinleri | 2026-08-02, 2026-08-03, 2026-08-05, 2026-08-21, 2026-08-22, 2026-08-25, 2026-09-13 |
+| Fason · Kartela | `docs/kurallar/fason.md` | Kısmi kabul topu tüketmez; çekme ölçümdür (RollVariance); LIFO iptal; açık-sevk tek helper; kartela WO'suz | 2026-08-04, 2026-08-19 |
+| Tambur · Finalize · Kesim · Geri alma | `docs/kurallar/tambur.md` | Son adım finalize; `currentStep`'ten WO; split beş yol; aşım koruması iki dalda farklı; plan-sapma kapısı | 2026-08-04, 2026-08-12, 2026-08-13, 2026-09-03 |
+| Top düzeltme · İptal · Fire · Geri alma | `docs/kurallar/top-duzeltme.md` | İptal ≠ fire; kapsam topun durumundan; sebep kodu sunucuda; ölü etiket onayı kalktı | 2026-07-13, 2026-08-05, 2026-08-06, 2026-08-12, 2026-08-19, 2026-08-21, 2026-08- |
+| KK1 · İdempotency · Çevrimdışı kuyruk | `docs/kurallar/kk1.md` | Mükerrer tuzağı 8021 tx'in ilk ifadesi; `clientEnteredAt` iki yönlü; kuyruk kalktı, anlık toast | 2026-08-05, 2026-08-12 |
+| Kurşun planlama · Bypass | `docs/kurallar/kursun.md` | Dağıtım ön koşul değil; atıf uydurulmaz (`machineId=null`); tek kapı `assertKursunTabletMayWrite` | 2026-08-05, 2026-08-06 |
+| İş emri · Sipariş bağı | `docs/kurallar/is-emri.md` | Tip bağın aynası; iki bağ yolu iki sözleşme; kapanış dispozisyonu; giriş noktası; quick-start tek giriş | 2026-08-04, 2026-08-21, 2026-08-25, 2026-09-13 |
+| Rota · Renk · Özellik · Kapsama | `docs/kurallar/rota-renk.md` | Renk kısıt değil reçete; özellik gerçek kısıt, boş doğamaz; hedef siparişten; kapsama uyarır; renk kilidi mala bakar | 2026-08-06, 2026-08-10, 2026-08-19, 2026-08-21, 2026-08-27 |
+| Kalite · İstasyon yeteneği | `docs/kurallar/kalite.md` | Kalite = istasyon yeteneği, boğaz ikiz; `RollError` Tambur kararıyla kapanır; Faz B açık | 2026-08-02, 2026-08-06, 2026-09-03 |
+| Parti (Batch) | `docs/kurallar/parti.md` | Kimlik yalnız `Batch.id`; P01…P99 sarar, aynı iş emrinde dolu numarayı atlar (profil); 8022 ilk ifade |  |
+| Yarı mamul | `docs/kurallar/yari-mamul.md` | Arzdır, düşülmez; `RAW_STOCK` bilerek geniş; `rollScope` fail-closed | 2026-08-26, 2026-08-27 |
+| **Dokuma · Dokuma işi · Doff · Tezgah karnesi** | `docs/kurallar/dokuma.md` | Şema P1…P3 + karne indi; otomatik toplama Faz 2 kâğıtta. Tezgah kendi VARLIĞI, topun rotasında adım değil; `MachineStopEvent` `MachineRun`ın defteri, ayrı varlık değil; top KK1'de doğar (`entrySource=WEAVING`); elle giriş birinci sınıf, rapor "ölçüldü mü elle mi" taşır | 2026-09-13, 2026-09-14 |
+| Refakat kartı | `docs/kurallar/refakat-karti.md` | WO ile doğar; plan canlı, sunum canlı, içerik yalnız geçersiz kartta donuk; `resolvePrintPlan` tek karar | 2026-08-05 |
+| Belge · Etiket · Şablon | `docs/kurallar/belge-etiket.md` | İki oran; opt-in kolon; koşullu eleman kodla; SACK barkodu `sackNo`; müşterideki ad donar rejim donmaz; belge tasarımı ayrı yetki | 2026-07-30, 2026-08-05, 2026-08-13, 2026-09-04 |
+| Mükerrer · nameFold seddi · Ana veri arşivi | `docs/kurallar/mukerrer.md` | Kelime bazlı bulanık eşleme; partial UNIQUE yumuşak kapı; kimlik alanına sed yok; top birleştirilmez iptal edilir; canlı referanslı ana veri pasife alınamaz (ürün üç durumlu: Aktif · Tükenene kadar · Pasif) | 2026-08-21, 2026-08-22, 2026-08-25 |
+| **Numaralandırma · numara serisi · ön ek** | `docs/kurallar/numaralandirma.md` | Kimlik katalogda biçim veride; tarih segmenti = sıfırlama dönemi; geçmiş yeniden numaralanmaz, ön ek emekliye ayrılır; çakışma kapısı yalnız tarama uzayında | 2026-09-22 |
+| Sebep katalogları | `docs/kurallar/sebep-katalogu.md` | `ReasonPreset` DB'de; `code` asla değişmez; TTL tazelik; son aktif satır gizlenemez | 2026-08-25, 2026-08-26 |
+| Keşif · Cihaz · Ağ · Donanım | `docs/kurallar/kesif-cihaz.md` | Bir satır = bir sunucu (`installationId`); kademeli port; yedekte kimlik zorunlu; cihaz doğuşu bayraktan | 2026-09-04, 2026-09-28 |
+| Sürüm · Yayın (panel/tablet) | `docs/kurallar/surum-yayin.md` | Not kapısı; yama hanesi etiketten; müşteri kodu argümandan; manifest en son; kod imzalama | 2026-08-19, 2026-08-26, 2026-08-27, 2026-09-03, 2026-09-28 |
+| Deploy · Kurulum · Migration | `docs/kurallar/deploy-kurulum.md` | `kur.ps1` geri alma; iki Prisma motoru; yumuşak kapı; `apply-migration.ts`; altı sözleşme tetiği | 2026-08-26, 2026-09-04 |
+| Modül anahtarları · Bayraklar · Profiller | `docs/kurallar/modul-bayrak.md` | `finance.enabled` kalıbı; kapalı modül 403; profiller TS sabiti; kapalı modülün bayrağı çizilmez; Dilim 2 | 2026-09-02, 2026-09-03, 2026-09-04 |
+| Süperadmin · Ayar şifresi | `docs/kurallar/superadmin.md` | `isSystemAccount` tek yazar script; görünür ama kimlik teslim edilmez; `flagWriteGuard` sırası; başlıkta şifre, ASCII 8–72 | 2026-09-03 |
+| Yetki · İzin · Rol | `docs/kurallar/yetki-izin.md` | İzin doğrudan kullanıcıya; katalog koda; `matchesPermission` üç istemcide; belge tasarımı izin çifti | 2026-08-06, 2026-08-26, 2026-09-03 |
+| Filtre · Liste · Arama · Sıralama | `docs/kurallar/filtre-liste.md` | Sunucu süzmesi; CSV; `updatedAt desc` (giriş sekmeleri Ham Stok + Yarı Mamul hariç); tek metraj; Ctrl+F yok | 2026-08-06, 2026-08-12, 2026-08-27 |
+| Raporlar · Karneler | `docs/kurallar/raporlar.md` | `finalizedAt` trigger; kaynak statü listesi; takvim günü ↔ mutlak pencere; parti araması aday listesi | 2026-08-09, 2026-09-30 |
+| Finans · Sağlamlık sınıfları | `docs/kurallar/finans.md` | Beş sınıf; iki tarih; ters yol; kilit sırası; çift yüklem; tek kaynak satır; kasa/KDV bayrakları PROFİL | 2026-08-02, 2026-09-13 |
+| **Lisans · Kod koruma · Satıcı platformu** | `docs/kurallar/lisans.md` | Gözlem sıfır fark; ek süre imzalı tarihten; KISITLI iki anahtarlı; sunucu kararı ek sürede kalıcı; parmak izi MAC'siz; kök parolası stdin | 2026-09-29 |
+| **Patron bulutu · Eşitleme · Gelen kutusu · Bulut sunucusu · Rapor isteği** | `docs/kurallar/patron-bulutu.md` | Bulut hesap yapmaz, fabrika tek kaynak yardımcıyla hesaplar; katalog opt-in (`src/cloud-sync/projections.ts`); ön koşul fail-closed ve TEK (`cloudEligibility`: URETIM — hedef + BARINDIRILAN + DEMO — + `patron-bulut` + kira); filigran yalnız bulut onayıyla ilerler; silme tetikleyiciyle (`sync_marks`, telemetri); tek yazma kanalı gelen kutusu (makbuz aynı tx); hedef: tesis başına ayrı DB + yalnız ona yetkili DB kullanıcısı (bugün tek DB, `tesis_id` + RLS FORCE, iki rol NOBYPASSRLS — geçiş borçta) | 2026-09-29, 2026-09-30 |
+| Genel · Uzak erişim · Konvansiyon | `docs/kurallar/genel.md` | Künye başlığı kapı değil; `CLIENT_IP_HEADER` yalnız beyanlı vekilde; TOTP kurulumu; audit; tek process | 2026-09-01, 2026-09-13 |
 
 > ⚠️ **"Arşiv tarihleri" kolonu ELLE tutulur ve KAPISI YOKTUR.** Ölçüldü 2026-09-14: 26 satırın 19'u dosyanın kendi en yeni arşiv atfının gerisinde (ör. `fason.md` kolonda 2026-08-19, dosyada 2026-09-14; `belge-etiket.md` 09-04 ↔ 09-14; `tambur.md` 09-03 ↔ 09-14) ve 9 dosyanın atıfları bu kolonun okuyamadığı biçimde (`R:…`, `CLAUDE.md:…`). ⇒ Bir alanın güncel arşiv tarihini bu kolondan OKUMA, dosyanın kendisinden ölç (`grep -oE 'arşiv:?[ ]?2026-[0-9-]+' docs/kurallar/<dosya>.md | sort | tail -1`). Kolon yalnız kaba bir işarettir; ölçülene dek bayat varsayılır.

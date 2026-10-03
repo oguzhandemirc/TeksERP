@@ -22,7 +22,7 @@ Kanonik kaynak **kod + `CLAUDE.md` dosyaları**dır. 2026-09-05 yeniden yapılan
 
 | Klasör | İçerik | Güncellik |
 |---|---|---|
-| `kurallar/` | Alan kural dosyaları (liste ve arşiv tarihleri: `kurallar/README.md`) — üretildi 2026-09-05, sonra elle bakılır | Canlı |
+| `kurallar/` | Alan kural dosyaları (liste, kısa özet ve arşiv tarihleri: `kurallar/README.md`) — üretildi 2026-09-05, sonra elle bakılır | Canlı |
 | `standart/` | Kod yazım standardı (giriş `standart/README.md`, dosya listesi orada): `ILKELER` · `BACKEND` · `VERITABANI` · `VERITABANI-MIGRATION` · `ESZAMANLILIK` · `ESZAMANLILIK-ENVANTER` · `ELECTRON` · `MOBIL` · `KUTUPHANELER` · `TEST-VE-DERLEME` · `TEST-VE-DERLEME-BEKCI` · `TEST-VE-DERLEME-SINIRLAR` · `OLCUM-DISIPLINI` · `OLCUM-DISIPLINI-KAPI` · `OLCUM-DISIPLINI-KAPI-OLUMU` · `OLCUM-DISIPLINI-SINIFLAR` · `OLCUM-DISIPLINI-ORTAK-AGAC` · `OLCUM-DISIPLINI-ARAC` · `OLCUM-DISIPLINI-SUREC` · `OLCUM-DISIPLINI-YUKLEM` · `OLCUM-DISIPLINI-CIKARIM`. Olay-türevi kural değil, RUTİN konvansiyon; her kural `[kimlik] · zorlama · kanıt · devralınan` taşır | Canlı |
 | `design/` | Domain tasarımları (dizinin kendisi listedir) — yalnız CANLI olanlar; her birinin durum banner'ı 2026-09-05'te koda karşı doğrulandı. `SEKTOR-YOL-HARITASI.md` (2026-09-11) bir ÜRÜN belgesidir: 90 doğrulanmış eksik defter, karar bekliyor | Canlı |
 | `ops/` | Deploy/runbook/kurulum reçeteleri (dizinin kendisi listedir) — yalnız TEKRAR KOŞULAN olanlar | Operasyonel, bakımlı |
@@ -56,4 +56,4 @@ Kanonik kaynak **kod + `CLAUDE.md` dosyaları**dır. 2026-09-05 yeniden yapılan
 
 ## Bayatlık bekçisi (CI)
 
-`scripts/check-docs.mjs` (`cd Teks-Erp && npm run check:docs`): ölü doküman-link **GATE**; kaldırılmış-sembol atfı advisory; **belge boyut tavanı GATE** (kök `CLAUDE.md` ≤ 36 KB, alt `CLAUDE.md`'ler ve `docs/standart/*.md` ≤ 24 KB — sadeleştirmenin geri şişmemesi için; standart dosyaları taranarak bulunur, yeni dosya tavansız doğmaz). Yeni sembol kaldırıldığında `REMOVED_SYMBOLS`'e ekle.
+`scripts/check-docs.mjs` (`cd Teks-Erp && npm run check:docs`): ölü doküman-link **GATE**; kaldırılmış-sembol atfı advisory; **belge boyut tavanı GATE** (kök `CLAUDE.md` ≤ 26 KB, `satici/sunucu/CLAUDE.md` ≤ 16 KB, `patron/sunucu/CLAUDE.md` ≤ 13 KB, diğer alt `CLAUDE.md`'ler ve `docs/standart/*.md` ≤ 24 KB — sadeleştirmenin geri şişmemesi için; standart dosyaları taranarak bulunur, yeni dosya tavansız doğmaz). Yeni sembol kaldırıldığında `REMOVED_SYMBOLS`'e ekle.

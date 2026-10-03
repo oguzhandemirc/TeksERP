@@ -1,22 +1,22 @@
 # TeksERP — Monorepo Kökü
 
-> **Bu dosya her oturumda yüklenir; yalnız her alanda geçerli ÇEKİRDEK'i ve alan haritasını taşır.** Alan kuralları `docs/kurallar/<alan>.md`'de (o alana dokunmadan ÖNCE oku), karar hikâyeleri `docs/history/CLAUDE-NOT-ARSIVI.md`'de. Yeniden yapılandırma: 2026-09-05 anlama turu (önceki sürüm: git `6695afc2`, 42k token → hedef ≤ 12k; kapı `scripts/check-docs.mjs`).
+> **Bu dosya her oturumda yüklenir; yalnız her alanda geçerli ÇEKİRDEK'i ve alan haritasını taşır.** Alan kuralları `docs/kurallar/<alan>.md`'de (o alana dokunmadan ÖNCE oku), karar hikâyeleri `docs/history/CLAUDE-NOT-ARSIVI.md`'de. Yeniden yapılandırma: 2026-10-03 kısaltma turu (önceki sürüm git `a61efbd21`).
 >
-> **Tek gövde, çok fabrika — kural yazarken sor: çekirdek mi, profil mü?** [ÇEKİRDEK] her kurulumda aynıdır (defter semantiği, brüt sevk, idempotency, kilit sırası, atomik claim, fail-closed kapılar, sır hijyeni, veri bütünlüğü). [PROFİL] bu fabrikanın seçimidir ve bayrak/veriyle değişir (rota, istasyon topolojisi, açık modüller, sayısal ayarlar). Ölçüt ve red gerekçeleri: `docs/design/MODUL-BAYRAK-TASARIM.md` §0, §11, §12.
+> **Tek gövde, çok fabrika — kural yazarken sor: çekirdek mi, profil mi?** [ÇEKİRDEK] her kurulumda aynıdır (defter semantiği, brüt sevk, idempotency, kilit sırası, atomik claim, fail-closed kapılar, sır hijyeni, veri bütünlüğü). [PROFİL] bu fabrikanın seçimidir ve bayrak/veriyle değişir (rota, istasyon topolojisi, açık modüller, sayısal ayarlar). Ölçüt ve red gerekçeleri: `docs/design/MODUL-BAYRAK-TASARIM.md` §0, §11, §12.
 
-Tekstil fabrikası ERP'si. Üç alt proje (+ doğmakta olan satıcı platformu), her birinin kendi `CLAUDE.md`'si var:
+Tekstil fabrikası ERP'si; her alt projenin kendi `CLAUDE.md`'si var:
 
 | Proje | Stack | Port |
 |---|---|---|
 | `Teks-Erp/` | Express 5 + Prisma 7 + PostgreSQL backend | 4000 |
 | `Electron/` | Electron 42 + React 19 + Vite yönetim paneli (**admin frontend buraya yazılır**; `React/` yok) | 5174 |
 | `mobil/` | React Native + Expo 54, Android tablet (yatay) + telefon (dikey) — saha | — |
-| `satici/` | Express 5 + Prisma 7 satıcı sunucusu (lisans API `/v1/*` + portal JSON API; VDS'te, fabrikaya kurulmaz; kendi `CLAUDE.md`'si `satici/sunucu/`) + React 19 + Vite portal web arayüzü (`satici/web/`, aynı kökenden sunulur) | 4610 genel (`/bayi`) · 4611 portal (`/portal`, tailnet) · 4613 portal (`portal.<alan>`, Cloudflare Access; kök parolası yok) |
-| `patron/` | Express 5 + Prisma 7 patron bulutu sunucusu (`patron/sunucu`: eşitleme alıcısı `/v1/*` + hesap API'si `/api/*`; hedef: tesis başına ayrı DB (bugün tek DB + RLS, geçiş borçta); VDS'te, fabrikaya kurulmaz; kendi `CLAUDE.md`'si) | 4620 |
-| `patron/uygulama/` | React Native + Expo 54 patron uygulaması (Android + iOS + web tek kod tabanı; hesap API'sini okur, salt-okunur çevrimdışı önbellek; tel tipleri `patron/sunucu/src/wire/api.ts`in bayt-eşit aynası) | — |
-| `Teks-Erp/native/lisans-cekirdek/` | Rust + napi-rs native lisans çekirdeği (backend paketine `.node` olarak girer; ayrı süreç değil; kendi `CLAUDE.md`'si) | — |
+| `satici/` | Express 5 + Prisma 7 lisans sunucusu (`sunucu/`) + React 19 + Vite portal (`web/`); VDS'te, fabrikaya kurulmaz | 4610 genel · 4611 portal (tailnet) · 4613 portal (Cloudflare Access, kök parolası yok) |
+| `patron/` | Express 5 + Prisma 7 patron bulutu sunucusu (`sunucu/`); VDS'te, fabrikaya kurulmaz; hedef tesis başına ayrı DB (bugün tek DB + RLS, geçiş borçta) | 4620 |
+| `patron/uygulama/` | React Native + Expo 54 patron uygulaması (Android + iOS + web; salt-okunur çevrimdışı önbellek; tel tipleri `patron/sunucu/src/wire/api.ts`in bayt-eşit aynası) | — |
+| `Teks-Erp/native/lisans-cekirdek/` | Rust + napi-rs lisans çekirdeği (backend paketine `.node` olarak girer, ayrı süreç değil) | — |
 
-**Dallanma:** `feature/*` → `main`; müşteri dalı YOK. Fabrika paketi ve demo derlemesi `main`'den üretilir; müşteri farkı yalnız bayrak profilinde yaşar — "adnansahin'de yok" = "bayrağı kapalı". `if (musteri === 'X')` fork'un ilk sinyalidir, yasak. Müşteri adı da koda gömülmez: ekrandaki firma adı bağlanılan sunucunun `company.name` ayarından gelir, yedeği nötr (`test_musteri_adi_kodda_yok`). **Hedef (2026-10-03):** her ürün için sürüm başına TEK ortak paket; müşteri kimliği derlemeden değil etkinleştirme kodu + lisanstan gelir (bugünkü kanal başına derleme borçtur — `docs/kurallar/surum-yayin.md`).
+**Dallanma:** `feature/*` → `main`; müşteri dalı YOK, müşteri farkı yalnız bayrak profilinde ("adnansahin'de yok" = "bayrağı kapalı"); `if (musteri === 'X')` yasak; müşteri adı koda gömülmez; hedef sürüm başına TEK ortak paket (`docs/kurallar/deploy-kurulum.md`, `genel.md`, `surum-yayin.md`).
 
 ## Üretim akışı — referans profil (adnansahin), sistemin kısıtı DEĞİL
 
@@ -25,9 +25,7 @@ Stok (Roll) → İş Emri → KK1 (RAW_QC) → [opsiyonel Fason] → Kurşun + K
   Depo (RollStatus.WAREHOUSE) → Çuval (Sack; müşteri opsiyonel, rezerv YOK) → Sevkiyat (PLANNED → DISPATCHED)
 ```
 
-Her adım istasyon kataloğu + rota şablonundan kurulur; **TOPUN rotası için** devere/çözgü/haşıl yeni mimari istemez — istasyon kataloğuna istasyon, rotaya adım eklenir. Her rotanın SON adımı topu finalize eder (Tambur özel değil); depo bir istasyon değil bekleme statüsüdür; `PRODUCED` limbosu yok. Ayrıntı: `docs/kurallar/tambur.md`, `kalite.md`, `sevkiyat.md`.
-
-⚠️ **Ama rota mimarisi TOPA aittir, fabrikanın tamamına değil.** Kendi nesnesi, kendi yaşam döngüsü ve kendi defteri olan üretim alanları **kendi tablolarını, kendi tx sınırlarını ve kendi mimarilerini taşıyabilir** — levent (`WarpBeam`) ve tezgah telemetrisi bunun ilk örnekleri. Ölçüt: *nesne topun rotasında bir ADIM mı, yoksa kendi kimliği ve defteri olan ayrı bir VARLIK mı?* İlkinde istasyon/adım eklenir, ikincisinde yeni model meşrudur (kullanıcı kararı 2026-09-13). Çekirdek kurallar (defter semantiği, ters yol, atomik claim, fail-closed) yeni alanda da aynen geçerlidir. [PROFİL] `adnansahin` bugün çözgü/dokuma yapmıyor, kumaş hazır geliyor — bu fabrikanın durumudur, sistemin kısıtı değil.
+Her adım istasyon kataloğu + rota şablonundan kurulur (devere/çözgü/haşıl = yeni istasyon/adım); her rotanın SON adımı topu finalize eder, depo istasyon değil bekleme statüsüdür, `PRODUCED` limbosu yok (`kalite.md`, `tambur.md`). ⚠️ Rota mimarisi TOPA aittir, fabrikanın tamamına değil: ölçüt *nesne topun rotasında bir ADIM mı, yoksa kendi kimliği ve defteri olan ayrı bir VARLIK mı?* — VARLIK (levent, tezgah telemetrisi) kendi tablolarını, tx sınırlarını ve mimarisini taşıyabilir; çekirdek kurallar orada da aynen geçerlidir (`modul-bayrak.md`).
 
 ## Çekirdek değişmezler — her kurulumda, her oturumda
 
@@ -91,51 +89,45 @@ Her adım istasyon kataloğu + rota şablonundan kurulur; **TOPUN rotası için*
 
 ## Alan dizini — dokunmadan önce oku
 
-| Alan | Dosya | Kısa özet |
-|---|---|---|
-| **Defter · hareket tablosu · ters kayıt · hard delete** | `docs/kurallar/defter.md` | Durum ≠ defter; hard delete iki sınıf; geri alma ters kayıt; defter envanteri ve eksik ters yollar |
-| Sevkiyat · çuval · brüt · storno/iade | `docs/kurallar/sevkiyat.md` | Çuval depo nesnesi; `SackAllocation` sevk anında; brüt tek kaynak `RollReturn`; storno ≠ iade; SoD izinleri |
-| Fason · kartela | `docs/kurallar/fason.md` | Kısmi kabul topu tüketmez; çekme ölçümdür (RollVariance); LIFO iptal; açık-sevk tek helper; kartela WO'suz |
-| Tambur · finalize · kesim · geri alma | `docs/kurallar/tambur.md` | Son adım finalize; `currentStep`'ten WO; split beş yol; aşım koruması iki dalda farklı; plan-sapma kapısı |
-| Top düzeltme · iptal · fire · geri alma | `docs/kurallar/top-duzeltme.md` | İptal ≠ fire; kapsam topun durumundan; sebep kodu sunucuda; ölü etiket onayı kalktı |
-| KK1 · idempotency · çevrimdışı kuyruk | `docs/kurallar/kk1.md` | Mükerrer tuzağı 8021 tx'in ilk ifadesi; `clientEnteredAt` iki yönlü; kuyruk kalktı, anlık toast |
-| Kurşun planlama · bypass | `docs/kurallar/kursun.md` | Dağıtım ön koşul değil; atıf uydurulmaz (`machineId=null`); tek kapı `assertKursunTabletMayWrite` |
-| İş emri · sipariş bağı | `docs/kurallar/is-emri.md` | Tip bağın aynası; iki bağ yolu iki sözleşme; kapanış dispozisyonu; giriş noktası; quick-start tek giriş |
-| Rota · renk · özellik · kapsama | `docs/kurallar/rota-renk.md` | Renk kısıt değil reçete; özellik gerçek kısıt, boş doğamaz; hedef siparişten; kapsama uyarır; renk kilidi mala bakar |
-| Kalite · istasyon yeteneği | `docs/kurallar/kalite.md` | Kalite = istasyon yeteneği, boğaz ikiz; `RollError` Tambur kararıyla kapanır; Faz B açık |
-| **Dokuma · dokuma işi · doff · tezgah karnesi** (şema P1…P3 + karne indi; otomatik toplama Faz 2 kâğıtta) | `docs/kurallar/dokuma.md` | Tezgah kendi VARLIĞI, topun rotasında adım değil; `MachineStopEvent` `MachineRun`ın defteri, ayrı varlık değil; top KK1'de doğar (`entrySource=WEAVING`); elle giriş birinci sınıf, rapor "ölçüldü mü elle mi" taşır |
-| Parti (Batch) | `docs/kurallar/parti.md` | Kimlik yalnız `Batch.id`; P01…P99 sarar, aynı iş emrinde dolu numarayı atlar (profil); 8022 ilk ifade |
-| Yarı mamul | `docs/kurallar/yari-mamul.md` | Arzdır, düşülmez; `RAW_STOCK` bilerek geniş; `rollScope` fail-closed |
-| Refakat kartı | `docs/kurallar/refakat-karti.md` | WO ile doğar; plan canlı, sunum canlı, içerik yalnız geçersiz kartta donuk; `resolvePrintPlan` tek karar |
-| Belge · etiket · şablon | `docs/kurallar/belge-etiket.md` | İki oran; opt-in kolon; koşullu eleman kodla; SACK barkodu `sackNo`; müşterideki ad donar rejim donmaz; belge tasarımı ayrı yetki |
-| Mükerrer · nameFold seddi · ana veri arşivi | `docs/kurallar/mukerrer.md` | Kelime bazlı bulanık eşleme; partial UNIQUE yumuşak kapı; kimlik alanına sed yok; top birleştirilmez iptal edilir; canlı referanslı ana veri pasife alınamaz (ürün üç durumlu: Aktif · Tükenene kadar · Pasif) |
-| **Numaralandırma · numara serisi · ön ek** | `docs/kurallar/numaralandirma.md` | Kimlik katalogda biçim veride; tarih segmenti = sıfırlama dönemi; geçmiş yeniden numaralanmaz, ön ek emekliye ayrılır; çakışma kapısı yalnız tarama uzayında |
-| Sebep katalogları | `docs/kurallar/sebep-katalogu.md` | `ReasonPreset` DB'de; `code` asla değişmez; TTL tazelik; son aktif satır gizlenemez |
-| Keşif · cihaz · ağ · donanım | `docs/kurallar/kesif-cihaz.md` | Bir satır = bir sunucu (`installationId`); kademeli port; yedekte kimlik zorunlu; cihaz doğuşu bayraktan |
-| Sürüm · yayın | `docs/kurallar/surum-yayin.md` | Not kapısı; yama hanesi etiketten; müşteri kodu argümandan; manifest en son; kod imzalama |
-| Deploy · kurulum · migration | `docs/kurallar/deploy-kurulum.md` | `kur.ps1` geri alma; iki Prisma motoru; yumuşak kapı; `apply-migration.ts`; altı sözleşme tetiği |
-| Modül anahtarları · bayraklar · profiller | `docs/kurallar/modul-bayrak.md` | `finance.enabled` kalıbı; kapalı modül 403; profiller TS sabiti; kapalı modülün bayrağı çizilmez; Dilim 2 |
-| Süperadmin · ayar şifresi | `docs/kurallar/superadmin.md` | `isSystemAccount` tek yazar script; görünür ama kimlik teslim edilmez; `flagWriteGuard` sırası; başlıkta şifre, ASCII 8–72 |
-| Yetki · izin · rol | `docs/kurallar/yetki-izin.md` | İzin doğrudan kullanıcıya; katalog koda; `matchesPermission` üç istemcide; belge tasarımı izin çifti |
-| Filtre · liste · arama | `docs/kurallar/filtre-liste.md` | Sunucu süzmesi; CSV; `updatedAt desc` (giriş sekmeleri Ham Stok + Yarı Mamul hariç); tek metraj; Ctrl+F yok |
-| Raporlar · karneler | `docs/kurallar/raporlar.md` | `finalizedAt` trigger; kaynak statü listesi; takvim günü ↔ mutlak pencere; parti araması aday listesi |
-| Finans · sağlamlık sınıfları | `docs/kurallar/finans.md` | Beş sınıf; iki tarih; ters yol; kilit sırası; çift yüklem; tek kaynak satır; kasa/KDV bayrakları PROFİL |
-| **Patron bulutu · eşitleme · gelen kutusu · bulut sunucusu** | `docs/kurallar/patron-bulutu.md` | Bulut hesap yapmaz, fabrika tek kaynak yardımcıyla hesaplar; katalog opt-in (`src/cloud-sync/projections.ts`); ön koşul fail-closed ve TEK (`cloudEligibility`: URETIM — hedef + BARINDIRILAN + DEMO — + `patron-bulut` + kira); filigran yalnız bulut onayıyla ilerler; silme tetikleyiciyle (`sync_marks`, telemetri); tek yazma kanalı gelen kutusu (makbuz aynı tx); hedef: tesis başına ayrı DB + yalnız ona yetkili DB kullanıcısı (bugün tek DB, `tesis_id` + RLS FORCE, iki rol NOBYPASSRLS — geçiş borçta) |
-| **Lisans · kod koruma · satıcı platformu** | `docs/kurallar/lisans.md` | Gözlem sıfır fark; ek süre imzalı tarihten; KISITLI iki anahtarlı; sunucu kararı ek sürede kalıcı; parmak izi MAC'siz; kök parolası stdin |
-| Genel · konvansiyon | `docs/kurallar/genel.md` | Künye başlığı kapı değil; `CLIENT_IP_HEADER` yalnız beyanlı vekilde; TOTP kurulumu; audit; tek process |
+| Alan | Dosya (`docs/kurallar/`) |
+|---|---|
+| Defter · hareket tablosu · ters kayıt · hard delete | defter.md |
+| Sevkiyat · çuval · brüt · storno/iade | sevkiyat.md |
+| Fason · kartela | fason.md |
+| Tambur · finalize · kesim · geri alma | tambur.md |
+| Top düzeltme · iptal · fire · geri alma | top-duzeltme.md |
+| KK1 · idempotency · çevrimdışı kuyruk | kk1.md |
+| Kurşun planlama · bypass | kursun.md |
+| İş emri · sipariş bağı | is-emri.md |
+| Rota · renk · özellik · kapsama | rota-renk.md |
+| Kalite · istasyon yeteneği | kalite.md |
+| Dokuma · dokuma işi · doff · tezgah karnesi | dokuma.md |
+| Parti (Batch) | parti.md |
+| Yarı mamul | yari-mamul.md |
+| Refakat kartı | refakat-karti.md |
+| Belge · etiket · şablon | belge-etiket.md |
+| Mükerrer · nameFold seddi · ana veri arşivi | mukerrer.md |
+| Numaralandırma · numara serisi · ön ek | numaralandirma.md |
+| Sebep katalogları | sebep-katalogu.md |
+| Keşif · cihaz · ağ · donanım | kesif-cihaz.md |
+| Sürüm · yayın | surum-yayin.md |
+| Deploy · kurulum · migration | deploy-kurulum.md |
+| Modül anahtarları · bayraklar · profiller | modul-bayrak.md |
+| Süperadmin · ayar şifresi | superadmin.md |
+| Yetki · izin · rol | yetki-izin.md |
+| Filtre · liste · arama | filtre-liste.md |
+| Raporlar · karneler | raporlar.md |
+| Finans · sağlamlık sınıfları | finans.md |
+| Patron bulutu · eşitleme · gelen kutusu · bulut sunucusu | patron-bulutu.md |
+| Lisans · kod koruma · satıcı platformu | lisans.md |
+| Genel · konvansiyon | genel.md |
 
-Dizin ve arşiv tarihleri: `docs/kurallar/README.md`. Tasarım belgeleri: `docs/design/` (canlı), runbook'lar: `docs/ops/`, harita: `docs/README.md`.
+Kısa özetler ve arşiv tarihleri: `docs/kurallar/README.md`; belge haritası: `docs/README.md`.
 
 ## Çalışma düzeni
 
-- **Geliştirme döngüsü:** `docs/GELISTIRME-DONGUSU.md` — ana ağacın `.env`i yerel test kopyasını gösterir (bugün `tekserp_fabrika_0923` — FABRİKA VERİSİ: bekçi/script koşulmaz, `.env` worktree'ye kopyalanmaz, oturum kendi `tekserp_<oturum>_test` DB'sini açar); giriş `admin` / `123123` (seed yalnız admin üretir, sırlar buraya yazılmaz); yeni kullanıcı panelden.
-- **Oturum sınırı:** iş kapandığında (commit/push · sürüm · alan değişimi) oturum `/clear` ile tazelenir; bağlamı 500k token üstünde koşan istekler toplam tüketimin %74'üdür (ölçüldü 2026-09-10, 10.180 istek). Dosya döken tarama işi ana bağlama değil subagent'a verilir.
-- **Bekçiler:** değişiklikten sonra ilgili alanın bekçileri koşulur — liste alan dosyasının sonunda, tam harita `Teks-Erp/docs/BEKCI-HARITASI.md`. Tek bekçi: `cd Teks-Erp && npx tsx scripts/run-all-tests.ts <ad-parçası>`; tam paket `npm test` **~6,5 dakika** sürer (455 dosya, sıralı; ölçüldü 2026-09-05) ve PR/push öncesi koşulur. Yeni bekçi negatif sondayla kırmızı verdiği doğrulanarak yazılır (`docs/RECETELER.md` § bekçi).
-  ⚠️ **CIRCIRA İKİ SONDA gerekir** (ölçüldü 2026-09-13): ihlal ekleyince taban ARTAR (negatif) **ve ihlali düzeltince taban DÜŞER** (pozitif). İkincisi olmadan, tabanı düşüremeyen bir cırcır yazılabilir — ve ***tabanı DÜŞÜREMEYEN bir cırcır, hiç kapı olmamasından KÖTÜDÜR***: borç kapatılamaz, sayı hiç inmez, kapı ilk sıkışmada susturulur, üstelik "çalışıyor" görünerek. Negatif sonda bu kusuru **yapısal olarak göremez**.
-- **Reçeteler:** `docs/RECETELER.md` — yeni bayrak · enum değeri · route+izin · migration · bekçi · Electron sayfası · mobil ekran · sürüm çıkarma · yeni müşteri kanalı.
-- **Kod yazım standardı:** `docs/standart/README.md` — rutin sorular (katman içerikleri, servis/model şablonu, boyut, kütüphane seçimi, eşzamanlılık karar tablosu, test kadansı). Kural biçimi tek satır + zorlama etiketi; devralınan kod `lint-baseline.json`'da donar.
-- **Commit kapısı:** `node scripts/hooks-kur.mjs` (bir kez) → değişen alt projede tip + lint + lint tavanı + migration hijyeni + **hızlı mandallar** (34 DB'siz mandal, eşzamanlı 4, ~8–12 sn; tetik `Teks-Erp/scripts/ | Teks-Erp/docs/ | Teks-Erp/src/ | Teks-Erp/prisma/ | Electron/src/ | mobil/src/ | docs/ | satici/sunucu/scripts/ | patron/sunucu/scripts/` — tetik bekçinin okuduğu dizinden geniş olamaz, ondan dar da kalmaz; **yalnız izole worktree'de koşar, ortak ağaçta sesli ⏭ basar** — `scripts/hooks/hizli-mandallar.mjs`). Her koşum `os.tmpdir()/tekserp-kapi-defteri.tsv`e bir satır düşer (best-effort; ısırık ölçümü beyansız). Kaçış `TEKSERP_HOOK_SKIP=1`. **Kapı DIŞI ağır koşum** (tsc · eslint · `npm test` · bekçi paketi) `node scripts/agir-is.mjs -- <komut>` ile — makine-geneli semafor (4 slot) ve defter kapıyla ortaktır; çıplak koşum slot havuzunu görmez ve komşu oturumun kapısını yük altında düşürür (ölçüldü 2026-09-14: 3 eşzamanlı kapı 38 → 250–300 sn, Electron testleri 5 sn zaman aşımı).
-  ⚠️ **Kapı bekçilerin yalnız o 33'ünü koşar** ⇒ diğer her dosya yalnız ELLE koşturulduğu kadar ölçülür. İki yönlü zorunluluk (ölçüldü 2026-09-13, iki oturum aynı gün CI'da bedelini ödedi): ① yeni bir **mandal** indirdikten sonra onu KENDİ yeni dosyalarına karşı koştur · ② yeni bir **dosya** yazdıktan sonra onu o dizini tarayan BÜTÜN tarayıcılara koştur — yalnız seni yakalayana değil · ③ bir **sabiti** yeniden adlandıran ya da genişleten commit, o sabiti OKUYAN bütün bekçileri koşturur — tek terimle ölçen bekçi terim gidince kırmızı vermeden kör kalır (ölçüldü 2026-09-15: `MODULE_FLAG_KEYS` yanına ikinci küme gelince iki bekçi sessizce ölçmeyi bıraktı). ⇒ ***Kendine uygulanmayan kural için tek çare kapıdır; "bunu biliyorum" bir kapı değildir.***
-- **Kod kuralları:** `docs/KOD-KURALLARI.md` (F221 deseni, atomik claim, Zod↔mutationFn, `details.code`, yorum politikası, tam yasak listesi). **Sözlük:** `docs/SOZLUK.md`.
-- **Sürüm çıkarma (özet):** `surum-notlari.json`a not → `node scripts/surum-notlari-kopyala.mjs` → `node scripts/check-surum-notlari.mjs` → panel `./deploy/electron-paketle.sh <müşteri>` + `./deploy/electron-yayinla.sh --musteri=<müşteri>` → tablet `cd mobil && npm run yayinla -- --musteri=<müşteri>` (ERP adresi kanal kaydından; açık verilirse kanalınkiyle eşit olmalı) paketi ÜRETİR, sahaya çıkış ayrı adım `node deploy/mobil-yayinla.mjs --musteri=<müşteri> --paket=<dizin>` (native değiştiyse `npm run build:apk -- --musteri=<müşteri>` + `--apk=`). Reçete ve tuzaklar: `docs/kurallar/surum-yayin.md`, `docs/ops/ELECTRON-OTOMATIK-GUNCELLEME.md`, `docs/ops/MOBIL-UZAKTAN-GUNCELLEME.md`.
-- **Alt projeler:** `Teks-Erp/CLAUDE.md` (backend katmanları, servis/route disiplini), `Electron/CLAUDE.md` (panel: izin aynası, karo/route/palet), `mobil/CLAUDE.md` (tablet: OTA/APK sınırı, offline kuyruk, HAL).
+- **Geliştirme döngüsü:** `docs/GELISTIRME-DONGUSU.md`; ana ağacın `.env`i FABRİKA VERİSİDİR — ona karşı bekçi/script koşulmaz, worktree'ye kopyalanmaz, oturum kendi `tekserp_<oturum>_test` DB'sini açar.
+- **Oturum sınırı:** iş kapanınca (commit/push · sürüm · alan değişimi) `/clear`; dosya döken tarama işi subagent'a verilir.
+- **Bekçiler:** değişiklikten sonra alanın bekçileri koşulur (liste alan dosyasının sonunda, harita `Teks-Erp/docs/BEKCI-HARITASI.md`), PR/push öncesi `npm test`; yeni bekçi negatif sondayla kırmızı verdiği doğrulanarak, cırcır İKİ sondayla (ihlal → taban artar, düzeltme → düşer) yazılır — tabanı düşüremeyen cırcır kapısızlıktan kötüdür (`docs/RECETELER.md` § Yeni bekçi).
+- **Commit kapısı:** `node scripts/hooks-kur.mjs` bir kez; kapı yalnız izole worktree'de koşar (ortak ağaçta ⏭ basar), kaçış `TEKSERP_HOOK_SKIP=1`. Kapı bekçilerin yalnız bir kısmını koşar ⇒ ① yeni mandalı KENDİ yeni dosyalarına karşı koştur · ② yeni dosyayı o dizini tarayan BÜTÜN tarayıcılara koştur · ③ sabiti yeniden adlandıran/genişleten commit o sabiti OKUYAN bütün bekçileri koşturur. Kapı dışı ağır koşum `node scripts/agir-is.mjs -- <komut>` ile (`docs/GELISTIRME-DONGUSU.md` § Kapı ve oturum).
+- **Başvuru:** reçeteler `docs/RECETELER.md` (bayrak · enum değeri · route+izin · migration · bekçi · Electron sayfası · mobil ekran · sürüm · yeni müşteri kanalı) · `docs/standart/README.md` (kural tek satır + zorlama etiketi; devralınan kod `lint-baseline.json`'da donar) · `docs/KOD-KURALLARI.md` · `docs/SOZLUK.md` · sürüm `docs/kurallar/surum-yayin.md` (tablet `yayinla` yalnız paket üretir, sahaya çıkış ayrı adım).

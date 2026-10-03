@@ -90,6 +90,40 @@
 - **[ÇEKİRDEK]** Deneme bildirimi yalnız hesabın KENDİ etkin cihazlarına gider, kuyruğa ve geçmişe yazılmaz, hesap başına dakikada birle sınırlıdır; kip kapalıyken 409 döner. · bekçi: `test_bildirim_makbuz (§3)` <sub>(arşiv:2026-09-30 F1)</sub>
 - **[PROFİL]** `BILDIRIM_KIPI` varsayılanı `kapali`dır (bugünkü davranış); `gercek` yalnız mağaza hesapları + patron VDS kurulumundan sonra açılır.
 
+## Patron sunucusu — alt-alan kuralları (patron/sunucu/CLAUDE.md'den, 2026-10-03)
+
+> `patron/sunucu/CLAUDE.md`'nin yalnız o alt alana dokunan oturumu ilgilendiren bölümleri buraya KELİMESİ KELİMESİNE taşındı (kullanıcı kararı 2026-10-03; başlıklar eski bölüm başlıklarıdır). Patron sunucusunun her değişikliğinde geçerli çekirdek `patron/sunucu/CLAUDE.md`'de kalır. Üstteki § Bulut sunucusu (`patron/sunucu`) ve § Bildirimler (B5) maddeleri aynı konuların etiketli kural satırlarıdır.
+
+### Kurulum kaydı (imzalı istek + eşitleme hakkı)
+
+`KURULUM_KAYNAGI=kayit` (varsayılan): satıcı CLI'si (`scripts/tesis.ts kurulum-kaydet`) açık anahtarı, sınıfı, modülleri, patron bulutu bitişini yazar. `KURULUM_KAYNAGI=satici`: satıcı İÇ API'si (`GET <SATICI_IC_API_URL>/ic/v1/kurulum/:id`, Bearer, iç ağ) + `installations` önbelleği — önbellek TAZELİKTİR: süre (`KURULUM_ONBELLEK_DK`) dolunca sorulur, ulaşılamazsa bayat kayıt, HİÇ dolmadıysa RED; satıcının 404'ü kaydı pasife çeker. Zil (`POST /ic/v1/zil {tesisId, konu}`) yalnız bu kipte gider, içerik taşımaz. Satıcı tarafı iç API'si AYRI dilimdir (sözleşme §17).
+
+Eşitleme hakkı (bulut İKİNCİ kapıdır; fabrika zaten göndermez): `sinif = URETIM` ∧ `patron-bulut ∈ modüller` ∧ `patronBulutBitis > şimdi` ∧ devredilmemiş ∧ tesisin hizmet aşaması ACIK — yoksa 403 `SINIF_GONDEREMEZ` / `PATRON_BULUT_KAPALI`. Hesap yazmaları (gelen kutusu, rapor isteği) da tesisin açık aboneliğini ister.
+
+### Hizmet aşaması (Ek-6/A §4 — tek kaynak `src/services/service-lifecycle.ts`)
+
+- **ACIK** — sözleşme açık: tesis AKTİF ∧ en az bir aktif kurulumda `patron-bulut` ∧ bitiş gelecekte. Sınıf ve DR devri işletme durumudur (eşitleme kapısı ayrıca ister), hizmeti bitirmez.
+- **SALT_OKUNUR** — kira bitti, hak düştü ya da tesis `tesis-durum --durum=PASIF` ile kapatıldı: bitişten itibaren 90 gün giriş, okuma, dışa aktarma ve hesap yönetimi AÇIK; eşitleme, gelen kutusu, rapor isteği ve bildirim KAPALI. `GET /api/oturum` `hizmet` alanı aşamayı ve salt okuma bitişini taşır.
+- **KAPALI** — 90 gün doldu: giriş 403 `HIZMET_KAPANDI`, oturum 401; veri imha bekler (bakım günlüğü her gün hatırlatır).
+- Bitiş anı DONAR: `facilities.service_ended_at`ın tek yazarı bakım tikindeki `refreshServiceEnd` (kapanışta kira bitişiyle yazar, yeniden açılışta siler; ayak izi `HIZMET_SONA_ERDI`/`HIZMET_YENIDEN_ACILDI`). Satıcı kipinde hak donunca bitiş NULL gelir — damga olmasa süre hiç dolmazdı.
+- **Dışa aktarma** (`GET /api/disa-aktar` manifest · `GET /api/disa-aktar/:kume?bicim=json|csv`): yalnız `bulut:hesap:yonet`; projeksiyonlar hesabın okuyabildiği kadar (RLS `app.projeksiyonlar` oturumla aynı), bulutta doğan veri sırsız görünümle (gelen kutusu · hesaplar · hesap denetimi); sayfalı akış, ayak izi `DISA_AKTARIM`.
+- **İmha** yalnız satıcı CLI'si: `scripts/tesis.ts imha --tesis=<uuid> --isleyen="Ad Soyad" [--erken-talep=<no>] [--uygula]` — kuru koşum varsayılan; ACIK'ta asla, SALT_OKUNUR'da yalnız yazılı erken talep numarasıyla; tek tx, `ACCOUNT_ADMIN` kilidi; silme sırası `src/services/facility-destruction.ts` `DESTRUCTION_STEPS` (= `CLOUD_TABLES` − `RETAINED_TABLES`, bekçi iki yönlü), imha kaydı `facility_destructions` (tutanak verisi; değiştirilemez, silinemez). Runbook `docs/ops/PATRON-BULUTU-HIZMET-SONU.md`.
+
+### Hesaplar
+
+Bulutta BAĞIMSIZ (fabrika kullanıcısına bağlanmaz), hesap başına TEK tesis; e-posta bulut genelinde yalnız ETKİN (AKTIF · KILITLI) hesapta tekil (giriş tesis sormaz, yalnız etkin hesaba çözülür), tesis içinde PASİF olmayan hesapta tekil — davet ve arşiv e-postayı tutmaz; davet başka tesisi sormaz, onaydaki çakışma genel iletiyle reddedilir (409 `DAVET_ETKINLESTIRILEMEDI`). Giriş tek adım: e-posta + parola (scrypt) + TOTP — TOTP'siz oturum YOK (DB CHECK dahil); tek hata yanıtı (bilinmeyen hesap · yanlış faktör · kilit AYNI 401, süre tabanında), ardışık hatada hesap + KAYNAK ikilisine süreli kilit (`auth/login-throttle.ts`; başka kaynaktan doğru üçlü girer), TOTP adım kilidi. Hesap DAVETLE doğar: satıcı CLI'si ilk tesis yöneticisini (`scripts/tesis.ts yonetici-davet`), yönetici ekibini (`POST /api/hesaplar`) davet eder; davetli kendi cihazında kabul (parola → TOTP sırrı BİR KEZ) + onay (ilk kod → AKTİF). Kurtarma kodu YOK: kayıpta yönetici sıfırlar, yönetici yoksa satıcı CLI'si (`yonetici-yeniden-davet`). Satıcı CLI'si tesiste AKTİF hesap yöneticisi varken yönetici açamaz ya da hesabı yöneticiye yükseltemez (409 `AKTIF_YONETICI_VAR`; hedef tek aktif yöneticinin kendisi olsa da); zorunluysa yalnız `--zorla --talep=<talep no> --gerekce="…"` ile — talep, gerekçe ve aktif yönetici sayısı denetime yazılır, tesis yöneticisi denetim ekranında görür. Yükseltme atomik claim'dir. Son aktif yönetici düşürülemez (409 `SON_YONETICI`). TOTP sırrı AES-256-GCM sarılı, anahtar `ANAHTAR_DIZINI/patron-totp.key` (DB'de değil).
+
+### Bildirimler (B5)
+
+- **Kip:** `BILDIRIM_KIPI` = `kapali` (varsayılan — bugünkü davranış: iş kurulmaz, hiçbir şey üretilmez) · `sahte` (kayıtlı sahte gönderici, ağ yok; yerel/prova) · `gercek` (Expo push HTTP API'si + web push VAPID; `BILDIRIM_VAPID_KONU` zorunlu). Gerçek gönderim yerelde DENENMEZ; canlı deneme mağaza hesapları + patron VDS kurulumu sonrası.
+- **Kural tek kaynak** `src/catalog/notifications.ts`: tür → kaynak projeksiyon + izinler (HEPSİ) + finans sınıfı; tür, kaynağın okuma iznini KAPSAR, finans türü finans izni ister (açılışta ölçülür). Ayar: hesap → tesis yöneticisinin varsayılanı → koddaki varsayılan (tek çözücü `resolveSettings`).
+- **Olay üretimi durumsuz** (`notification-events.ts`): bulut HESAP YAPMAZ — eşik fabrikanın özet sayısıyla yalnız karşılaştırılır; `dedup_key` (gün / olay kimliği) + `UNIQUE(tesis, hesap, dedup_key)` ⇒ aynı olay ikinci kez doğmaz. Kural düşüren olay ATLANDI doğar (tür sonradan açılınca eski olay gitmez).
+- **Gönderim** (`notification-sender.ts`): `FOR UPDATE SKIP LOCKED` claim; ağ çağrısı tx dışında; sonuç yalnız kendi claim'imiz duruyorsa yazılır; gönderim anında izin/tür/sessiz saat YENİDEN (sessizde bitişe ertelenir, hak yanmaz); geçersiz cihaz pasife; geçici hata 5 denemeye kadar.
+- **Sır:** VAPID çifti `ANAHTAR_DIZINI/patron-vapid.json` (0600, üstüne yazılmaz); gizli anahtar yalnız `VapidKeys` kapanışında, günlüğe/DB'ye/API'ye düşmez (taşıyıcı hatası yalnız kısa KOD olarak saklanır). Web aboneliği yalnız izinli push servisine (SSRF kapısı, kayıtta ve gönderimde aynı yüklem `push/targets.ts`).
+- **Makbuz (Expo ikinci aşama)** (`notification-receipts.ts`): bilet alınan teslim `receipt_due_at` taşır, 15 dk sonra atomik claim'le yoklanır; makbuzdaki `DeviceNotRegistered` cihazı pasife çeker, bildirimin durumu değişmez; hazır olmayan makbuz yeniden sorulur, 24 saatte `ZAMAN_ASIMI`. Biletsiz teslim (web, sahte kip) yoklamaya girmez.
+- **Deneme bildirimi** (`POST /api/bildirim/deneme`, `notification-test.service.ts`): yalnız kendi etkin cihazlarına, kuyruğa/geçmişe yazılmadan; hesap başına dakikada bir (429 `HIZ_SINIRI`); kip kapalıyken ya da cihaz yokken 409; ayak izi `account_audit`.
+- Bekçiler: `test_bildirim_kurallari` (tekrar yok · sessiz saat · kapalı tür · izin) · `test_bildirim_gonderim` (katalog · kip · VAPID sırrı · SSRF · teslim · API · budama) · `test_bildirim_makbuz` (Expo makbuzu · deneme bildirimi).
+
 ## Uygulama (`patron/uygulama`)
 
 ### Değişmezler

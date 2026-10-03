@@ -1,6 +1,8 @@
 # Sürüm · Yayın (panel/tablet)
 
 > Alan kural dosyası — bu alana dokunmadan ÖNCE okunur. Kaynak: anlama turu 2026-09-05 (kök `CLAUDE.md` + `docs/history/CLAUDE-NOT-ARSIVI.md` notlarından ayrıştırıldı). Hikâye, ölçüm ve gerekçe arşivde; burada yalnız bugün geçerli kural. Sınıf: **[ÇEKİRDEK]** her kurulumda aynı · **[PROFİL]** bu fabrikanın seçimi.
+>
+> Adım adım komut zinciri (not → kopyala → not kapısı → panel paketle/yayınla → tablet `yayinla` paketi üretir, sahaya çıkış ayrı `deploy/mobil-yayinla.mjs` adımı; native değiştiyse `build:apk` + `--apk=`): `docs/RECETELER.md` § Sürüm çıkarma. Runbook ve tuzaklar: `docs/ops/ELECTRON-OTOMATIK-GUNCELLEME.md`, `docs/ops/MOBIL-UZAKTAN-GUNCELLEME.md` (kök `CLAUDE.md` § Çalışma düzeninden taşındı, 2026-10-03).
 
 > Hakem notu: 12 üye; 8'i gerçekten sürüm/yayın konusu (N0 kök bölüm, N1 backend, N2/N3/N4 mobil, N7/N8 kök tarihli, N9 Electron). N5/N6/N10/N11 kümeye yalnız 'Backend ÖNCE / APK YOK' ibaresiyle düşmüş — dizin kararı kendi kümelerinde. Bayat olanlar: N9 (elle version artırma → 2026-09-02 script), N7 (4 saat → 15 dk, 2026-09-04 kodda), N4:136 + N0 bash bloğu (`build:apk` --musteri'siz; kod zorunlu kılıyor), N8 arşivinin LAN-kanal yarısı (aynı gün VPS'e taşındı). En riskli uyuşmazlık: kök bölümün kendi komut satırı kodun reddedeceği bir çağrı öğretiyor (`npm run build:apk` argümansız); ikincisi 'elle tur' ifadesinin APK'nın tabletçe indirildiği gerçeğini gizlemesi. Sürüm numaralandırması 2026-08-28'de 1.0.0'dan yeniden başladı; eski 2.9.x/vc5x örnekleri tarihsel.
 
