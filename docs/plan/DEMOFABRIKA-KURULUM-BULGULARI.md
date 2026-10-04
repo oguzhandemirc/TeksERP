@@ -16,7 +16,7 @@
 **Faz 1 — hemen (küçük, kararı verilmiş)**
 - [ ] ▶ 1.1 Satıcı portalı tamamen internetten + `lisans.md`'deki iki biçimli satıcı kurallarının birleştirilmesi (§E; C-1 "satıcı portalı yetkileri" bununla kapanır) — 2026-10-04 keşif + plan başladı
 - [ ] 1.2 Mac'te dönem töreni: kök anahtar VDS'ten kalkar (§D-2) — 1.1'in hemen arkasından
-- [ ] 1.3 Test veritabanlarının silinmesi (§D-5) — liste çıkarılır, kullanıcı onayıyla
+- [x] 1.3 Test veritabanlarının silinmesi (§D-5) — 2026-10-04, 223 `_test` DB (~6,5 GB) silindi; kalan yalnız `postgres` + `tekserp_fabrika_0923`
 - [ ] 1.4 Karar arşivinin aylara bölünmesi (§E)
 
 **Faz 2 — demofabrika kusurları (§A)**
