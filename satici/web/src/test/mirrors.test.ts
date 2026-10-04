@@ -164,6 +164,21 @@ describe("izin tablosu aynası (satici/sunucu src/portal/roles.ts)", () => {
   it("sunucuda dinleyiciye göre izin düşüren sınıf YOK (portal internetten: rol ne açıyorsa iki yolda da açar)", () => {
     expect(read("portal/roles.ts")).not.toMatch(/TAILNET_ONLY_PERMISSIONS/);
   });
+
+  // NEGATİF SONDA (2026-10-04, dosya DIŞI, shasum ile geri alındı): web permissions.ts'e `TAILNET_ONLY_PERMISSIONS` geri
+  // yazıldı → ❌; Layout.tsx'e `listener === "ERISIM"` dalı eklendi → ❌; sunucu roles.ts'e sabit geri yazıldı → yukarıdaki
+  // sunucu testi ❌.
+  it("web de dinleyiciye göre izin düşürmez: TAILNET_ONLY_PERMISSIONS yok, kaynakta ERISIM karşılaştırması yok", () => {
+    const offenders: string[] = [];
+    for (const file of walk(WEB_SRC)) {
+      const src = readFileSync(file, "utf8");
+      const rel = path.relative(WEB_SRC, file);
+      if (/TAILNET_ONLY_PERMISSIONS/.test(src)) offenders.push(`${rel}: TAILNET_ONLY_PERMISSIONS`);
+      // Dinleyici yalnız TİP olarak (session.tsx) anılır; kod hiçbir yerde ona göre dallanmaz.
+      if (rel !== path.join("shared", "session.tsx") && /["']ERISIM["']/.test(src)) offenders.push(`${rel}: "ERISIM" karşılaştırması`);
+    }
+    expect(offenders).toEqual([]);
+  });
 });
 
 describe("katalog ekran adları", () => {

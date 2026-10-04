@@ -1,12 +1,13 @@
 // İPTAL BELGELERİ + ANAHTARLAR — bileşen bekçisi (lisans v2 · G4 §2.3). İptal ekranı fabrikalara giden sırayı, kapıda
 // bekleyen belgeyi ve engellerini (HAK → yeniden bas · ANAHTAR → emekliye ayır) gösterir. Toplu yeniden basım ara imzacı
-// parolası ister: düğme YALNIZ tailnet/geri döngü oturumunda (genel yolda ERİŞİM düğme yok, yol gösteren açıklama var,
-// uç çağrılmaz); gövde seçilen HAK'lar + sebep + parola, sonuç satır satır (basılan · atlanan + neden). Anahtarlar ekranı
-// ara imzacıyı türüyle, sertifikayı veren kökle, emekli anahtarları ayrı bölümde gösterir.
+// parolası ister: düğme tailnet VE internet (ERİŞİM) oturumunda aynı çıkar (kullanıcı kararı 2026-10-04); gövde seçilen
+// HAK'lar + sebep + parola, sonuç satır satır (basılan · atlanan + neden). Anahtarlar ekranı ara imzacıyı türüyle,
+// sertifikayı veren kökle, emekli anahtarları ayrı bölümde gösterir.
+// NEGATİF SONDA (2026-10-04, dosya DIŞI, shasum ile geri alındı): Revocations.tsx'te düğme koşuluna ERISIM'de false
+// (eski kilit) geri konuldu → ERİŞİM yeniden basım testi ❌, öteki dört test yeşil.
 import { screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it } from "vitest";
-import { REISSUE_OFF_PUBLIC } from "../portal/pages/Revocations";
 import { PORTAL_ROUTES } from "../portal/routes";
 import type { SessionListener } from "../shared/session";
 import type { KeyStatus, ReissueResponse, RevocationStatus } from "../shared/types";
@@ -84,12 +85,19 @@ describe("iptal belgeleri ekranı", () => {
     expect(within(done).getByText("kurulum hak-ara yeteneği bildirmiyor")).toBeInTheDocument();
   });
 
-  it("⭐ genel yol (ERİŞİM): yeniden basım düğmesi YOK, tailnet yolunu anlatan açıklama var, uç çağrılmaz", async () => {
+  it("⭐ internet (ERİŞİM): yeniden basım düğmesi VAR, tünel açıklaması yok; uç aynı gövdeyle çağrılır", async () => {
+    const user = userEvent.setup();
     const { calls } = open("/iptal-belgeleri", "ERISIM");
-    expect(await screen.findByText(REISSUE_OFF_PUBLIC)).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /yeniden bas/ })).toBeNull();
-    expect(document.querySelector('input[type="password"]')).toBeNull();
-    expect(writes(calls)).toHaveLength(0);
+    await user.click(await screen.findByRole("button", { name: "Engelli HAK'ları yeniden bas…" }));
+    expect(screen.queryByText(/tailnet|portal-baglan|bu bağlantıdan yapılamaz/)).toBeNull();
+    const dialog = await screen.findByRole("dialog", { name: "Engelli HAK'ları ara imzacıyla yeniden bas" });
+    await user.type(within(dialog).getByLabelText(/^Sebep/), "acil iptal turu");
+    await user.type(within(dialog).getByLabelText(/^Ara imzacı parolası/), "ara-parola");
+    await user.click(within(dialog).getByRole("button", { name: "Yeniden bas" }));
+    const w = writes(calls);
+    expect(w).toHaveLength(1);
+    expect(w[0]!.path).toBe("/haklar/toplu-yeniden-bas");
+    expect(w[0]!.body).toMatchObject({ hakIdleri: [HAK_A, HAK_B], sebep: "acil iptal turu", imzaParolasi: "ara-parola" });
   });
 
   it("menüde 'İptal belgeleri' (anahtar:oku) görünür", async () => {

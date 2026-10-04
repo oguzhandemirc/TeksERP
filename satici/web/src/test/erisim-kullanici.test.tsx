@@ -1,7 +1,8 @@
-// GENEL YOL (ERİŞİM, Cloudflare Access arkası) — kullanıcı yönetimi yalnız tailnet/geri döngüden: hesap açma, TOTP ve
-// parola sıfırlama sırları Cloudflare'den GEÇMEZ. ERISIM oturumunda "Portal kullanıcıları" menüde yok, sayfa yol
-// gösteren açıklama çizer ve /kullanicilar'ı ÇAĞIRMAZ (sunucu o uçları orada zaten 404'ler).
-// Pozitif kontrol: aynı ekran TAILNET oturumunda menü öğesini ve listeyi gösterir (kör gizleme yeşil veremez).
+// İNTERNET PORTALI (ERİŞİM, Cloudflare Access arkası) — kullanıcı yönetimi TAILNET ile AYNI açık (kullanıcı kararı
+// 2026-10-04): ERISIM oturumunda "Portal kullanıcıları" menüde var, sayfa /kullanicilar'ı çağırır, "Yeni kullanıcı"
+// düğmesi var ve "tünelden yönetilir" açıklaması YOK. Pozitif kontrol: aynı ekran TAILNET'te aynı görünür.
+// NEGATİF SONDA (2026-10-04, dosya DIŞI, shasum ile geri alındı): Users.tsx'e eski ERISIM açıklama dalı → ERISIM testi ❌
+// (TAILNET yeşil); Layout.tsx menüsüne ERISIM'de `kullanici:yonet` süzgeci → ERISIM testi ❌ (+ mirrors ❌).
 import { screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { PORTAL_ROUTES } from "../portal/routes";
@@ -21,7 +22,7 @@ function openUsers(dinleyici: SessionListener) {
   });
 }
 
-describe("genel yolda kullanıcı yönetimi kapalı", () => {
+describe("internet portalında kullanıcı yönetimi açık", () => {
   it("TAILNET: menüde 'Portal kullanıcıları' var, sayfa listeyi çağırır, 'Yeni kullanıcı' düğmesi var (pozitif kontrol)", async () => {
     const r = openUsers("TAILNET");
     expect(await screen.findByRole("button", { name: "Yeni kullanıcı" })).toBeInTheDocument();
@@ -29,12 +30,11 @@ describe("genel yolda kullanıcı yönetimi kapalı", () => {
     expect(r.calls.some((c) => c.path === "/kullanicilar")).toBe(true);
   });
 
-  it("ERISIM: menüde yok, sayfa tailnet/geri döngü yolunu anlatır, /kullanicilar çağrılmaz, form düğmesi yok", async () => {
+  it("ERISIM: menüde var, sayfa /kullanicilar'ı çağırır, 'Yeni kullanıcı' düğmesi var, tünel açıklaması yok", async () => {
     const r = openUsers("ERISIM");
-    expect(await screen.findByText(/Cloudflare'den geçmez/)).toBeInTheDocument();
-    expect(screen.getByText(/portal-baglan/)).toBeInTheDocument();
-    expect(screen.queryByRole("link", { name: "Portal kullanıcıları" })).toBeNull();
-    expect(screen.queryByRole("button", { name: "Yeni kullanıcı" })).toBeNull();
-    expect(r.calls.some((c) => c.path.startsWith("/kullanicilar"))).toBe(false);
+    expect(await screen.findByRole("button", { name: "Yeni kullanıcı" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Portal kullanıcıları" })).toBeInTheDocument();
+    expect(screen.queryByText(/Cloudflare'den geçmez|portal-baglan/)).toBeNull();
+    expect(r.calls.some((c) => c.path === "/kullanicilar")).toBe(true);
   });
 });

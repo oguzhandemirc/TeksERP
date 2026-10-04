@@ -4,7 +4,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState, t
 import { useQueryClient } from "@tanstack/react-query";
 import { createApiClient, type ApiBase, type ApiClient } from "./api";
 import type { PortalPermission, PortalRole } from "./permissions";
-import { canUse } from "./permissions";
+import { roleHas } from "./permissions";
 
 export interface SessionUser {
   readonly id: string;
@@ -107,15 +107,8 @@ export function useUser(): SessionUser {
   return state.session.kullanici;
 }
 
-/** Oturumun dinleyicisi (yalnız girişli sayfalarda çağrılır). */
-export function useListener(): SessionListener {
-  const { state } = useSessionContext();
-  if (state.status !== "in") throw new Error("Oturum yok");
-  return state.session.dinleyici;
-}
-
-/** Rol izni + dinleyici (ERİŞİM oturumunda hassas izinli ekran yok — permissions.ts `canUse`). */
+/** Rol izni (dinleyici izni daraltmaz: tailnet ve ERİŞİM oturumunda aynı roller aynı ekranları görür). */
 export function useCan(permission: PortalPermission): boolean {
   const { state } = useSessionContext();
-  return state.status === "in" && canUse(state.session.kullanici.rol, permission, state.session.dinleyici);
+  return state.status === "in" && roleHas(state.session.kullanici.rol, permission);
 }

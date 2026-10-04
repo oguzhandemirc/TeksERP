@@ -1,4 +1,4 @@
-// Satıcı arayüzü girişi — tailnet dinleyicisinde /portal altında sunulur (API /portal/api).
+// Satıcı arayüzü girişi — tailnet ve ERİŞİM (internet) dinleyicilerinde /portal altında sunulur (API /portal/api).
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { createBrowserRouter } from "react-router-dom";

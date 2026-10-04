@@ -1,7 +1,10 @@
-// GENEL YOL (ERİŞİM, Cloudflare Access arkası) — güven kökü EKLEYEN anahtar kayıtları yalnız tailnet/geri döngüden
-// (en az yetki): bayi imza anahtarı bağlama ve yayıncı anahtarı kaydı düğmesi ERISIM oturumunda çizilmez, yerine yol
-// gösteren açıklama; aynı ekranın öteki yönetim düğmeleri (tavan, pasife alma) kalır. Pozitif kontrol: TAILNET
-// oturumunda düğmeler görünür (kör gizleme yeşil veremez).
+// İNTERNET PORTALI (ERİŞİM, Cloudflare Access arkası) — anahtar kayıtları TAILNET ile AYNI açık (kullanıcı kararı
+// 2026-10-04): bayi imza anahtarı bağlama ("Anahtar bağla") ve yayıncı anahtarı kaydı ("Anahtar kaydet") düğmeleri ERISIM
+// oturumunda çizilir, "güven kökü ekler ve bu bağlantıdan yapılamaz" açıklaması YOK; öteki yönetim düğmeleri (tavan, pasife
+// alma) yerinde kalır. Pozitif kontrol: TAILNET'te düğmeler aynı görünür (kör gizleme/kör açma yeşil veremez).
+// NEGATİF SONDA (2026-10-04, dosya DIŞI, shasum ile geri alındı): DealerDetail.tsx'te `canKey` ERISIM'de false → bayi
+// ERISIM testi ❌ (TAILNET yeşil); Releases.tsx'te `canRegister` ERISIM'de false → sürümler ERISIM testi ❌; session.tsx
+// `useCan` ERISIM'de bayi:anahtar/yayinci:anahtar false → iki ERISIM testi ❌.
 import { screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { PORTAL_ROUTES } from "../portal/routes";
@@ -38,19 +41,19 @@ function openReleases(dinleyici: SessionListener) {
   });
 }
 
-describe("genel yolda anahtar kaydı kapalı", () => {
+describe("internet portalında anahtar kaydı açık", () => {
   it("TAILNET: bayi ekranında 'Anahtar bağla', sürümlerde 'Anahtar kaydet' var (pozitif kontrol)", async () => {
     openDealer("TAILNET");
     expect(await screen.findByRole("button", { name: "Anahtar bağla" })).toBeInTheDocument();
     expect(screen.queryByText(/Anahtar kaydı güven kökü ekler/)).toBeNull();
   });
 
-  it("ERISIM: bayi ekranında 'Anahtar bağla' YOK, tavan/pasif düğmeleri var, tailnet yolunu anlatan açıklama var", async () => {
+  it("ERISIM: bayi ekranında 'Anahtar bağla' VAR, tavan/pasif düğmeleri de var, tünel açıklaması yok", async () => {
     openDealer("ERISIM");
-    expect(await screen.findByRole("button", { name: "Tavanı değiştir" })).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: "Anahtar bağla" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Tavanı değiştir" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Pasife al" })).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /Anahtar bağla|Anahtarı değiştir/ })).toBeNull();
-    expect(screen.getByText(/Anahtar kaydı güven kökü ekler[^]*portal-baglan/)).toBeInTheDocument();
+    expect(screen.queryByText(/Anahtar kaydı güven kökü ekler|portal-baglan/)).toBeNull();
   });
 
   it("TAILNET: sürümlerde 'Anahtar kaydet' var (pozitif kontrol)", async () => {
@@ -58,10 +61,10 @@ describe("genel yolda anahtar kaydı kapalı", () => {
     expect(await screen.findByRole("button", { name: "Anahtar kaydet" })).toBeInTheDocument();
   });
 
-  it("ERISIM: sürümlerde 'Anahtar kaydet' YOK, açıklama var; yayıncıyı pasife alma (güveni daraltır) kalır", async () => {
+  it("ERISIM: sürümlerde 'Anahtar kaydet' VAR, yayıncıyı pasife alma da var, tünel açıklaması yok", async () => {
     openReleases("ERISIM");
-    expect(await screen.findByText(/Anahtar kaydı güven kökü ekler[^]*portal-baglan/)).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Anahtar kaydet" })).toBeNull();
+    expect(await screen.findByRole("button", { name: "Anahtar kaydet" })).toBeInTheDocument();
     expect(await screen.findByRole("button", { name: "Pasife al" })).toBeInTheDocument();
+    expect(screen.queryByText(/Anahtar kaydı güven kökü ekler|portal-baglan/)).toBeNull();
   });
 });

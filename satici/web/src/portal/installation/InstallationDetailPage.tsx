@@ -9,7 +9,7 @@ import { fmtDateTime } from "../../shared/format";
 import { InstallationFormModal } from "../../shared/forms";
 import { useChannels, useGet } from "../../shared/hooks";
 import { CLASS_LABEL, INSTALLATION_STATUS_LABEL, label } from "../../shared/labels";
-import { useApi, useCan, useListener } from "../../shared/session";
+import { useApi, useCan } from "../../shared/session";
 import { installationName, type Catalog, type InstallationDetail } from "../../shared/types";
 import { Badge, Button, KeyValues, PageTitle, QueryState, Section } from "../../shared/ui";
 import { statusTone } from "../pages/Installations";
@@ -22,10 +22,6 @@ import { PaidThroughPanel } from "./PaidThroughPanel";
 import { InstallmentPanel, PlannedPanel } from "./PlanPanels";
 import { SanctionPanel } from "./SanctionPanel";
 import { UpdatePanel } from "../update/UpdatePanel";
-
-/** Genel yolda (Cloudflare Access) imza parolası (ara/kök) istenmez: parola Cloudflare'den geçmesin, sunucu o ucu orada 404'ler. */
-const ROOT_SIGNING_OFF_PUBLIC =
-  "Lisans imzası imza parolası (ara imzacı ya da kök) ister ve bu bağlantıdan yapılamaz (parola Cloudflare'den geçmez). İmza için portala tailnet ya da geri döngü tüneliyle (portal-baglan) bağlanın.";
 
 const TABS = [
   ["lisans", "Lisans"],
@@ -49,7 +45,6 @@ export function InstallationDetailPage() {
   const canCancel = useCan("kurulum:iptal");
   const canManage = useCan("kurulum:yonet");
   const canEntitle = useCan("hak:yaz");
-  const listener = useListener();
   const canCode = useCan("kod:uret");
   const q = useGet<InstallationDetail>(["kurulum", id], `/kurulumlar/${id}`);
   const catalog = useGet<Catalog>(["katalog"], "/katalog");
@@ -129,7 +124,6 @@ export function InstallationDetailPage() {
             passwordField: "kokParolasi",
             passwordLabel: "Kök anahtar parolası",
             allowPerpetual: true,
-            signingBlocked: listener === "ERISIM" ? ROOT_SIGNING_OFF_PUBLIC : undefined,
             signerPlan: d.hak ? <SigningPlanNote entitlementId={d.hak.id} /> : undefined,
             versionModal: d.hak
               ? (p) => <VendorEntitlementVersionModal entitlement={d.hak!} installationClass={inst.sinif} modules={catalog.data?.moduller ?? d.hak!.moduller} {...p} />

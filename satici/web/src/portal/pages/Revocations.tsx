@@ -1,7 +1,7 @@
 // İPTAL BELGELERİ (lisans v2 · G4 §2.3): satıcı iptal belgesini BASMAZ — dönem töreninin paketinden içe aktarır; defter
 // ekleme-yalnızdır. Dağıtım kapısı: bir HAK'ı ya da hâlâ yüklü bir anahtarı geçersiz kılacak belge, HAK ara imzacıyla
 // yeniden basılıp anahtar emekliye ayrılmadan fabrikalara gitmez; o güne dek bir önceki belge dağıtılır. Engelli HAK'ları
-// TOPLU yeniden basma ara imzacı parolası ister: yalnız tailnet/geri döngü oturumunda görünür (genel yolda düğme YOK).
+// TOPLU yeniden basma ara imzacı parolası ister; düğme her dinleyicide görünür.
 import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { ApiError } from "../../shared/api";
@@ -9,12 +9,9 @@ import { useWrite } from "../../shared/attempt";
 import { fmtDateTime } from "../../shared/format";
 import { useGet } from "../../shared/hooks";
 import { REISSUE_STATUS_LABEL, REVOCATION_BLOCKER_LABEL, label } from "../../shared/labels";
-import { useApi, useCan, useListener } from "../../shared/session";
+import { useApi, useCan } from "../../shared/session";
 import type { ReissueResponse, RevocationBlocker, RevocationStatus } from "../../shared/types";
 import { Badge, Button, ErrorText, Field, KeyValues, Modal, ModalActions, PageTitle, QueryState, Section, Table } from "../../shared/ui";
-
-/** Genel yolda (Cloudflare Access) ara imzacı parolası istenmez — sunucu toplu basım ucunu orada 404'ler. */
-export const REISSUE_OFF_PUBLIC = "Toplu yeniden basım ara imzacı parolası ister ve bu bağlantıdan yapılamaz. Portala tailnet ya da geri döngü tüneliyle (portal-baglan) bağlanın.";
 
 type HakBlocker = Extract<RevocationBlocker, { tur: "HAK" }>;
 
@@ -101,7 +98,6 @@ export function RevocationsPage() {
   const queryClient = useQueryClient();
   const q = useGet<RevocationStatus>(["iptal-belgeleri"], "/iptal-belgeleri");
   const canWrite = useCan("hak:yaz");
-  const listener = useListener();
   const [reissue, setReissue] = useState(false);
   const s = q.data;
   const blockers = s ? hakBlockers(s) : [];
@@ -126,13 +122,8 @@ export function RevocationsPage() {
           {s.bekleyen ? (
             <Section
               title={`Bekleyen belgenin engelleri (sıra ${s.bekleyen.sira})`}
-              actions={canWrite && listener !== "ERISIM" && blockers.length > 0 ? <Button onClick={() => setReissue(true)}>Engelli HAK'ları yeniden bas…</Button> : null}
+              actions={canWrite && blockers.length > 0 ? <Button onClick={() => setReissue(true)}>Engelli HAK'ları yeniden bas…</Button> : null}
             >
-              {canWrite && listener === "ERISIM" && blockers.length > 0 ? (
-                <p className="muted small" role="note">
-                  {REISSUE_OFF_PUBLIC}
-                </p>
-              ) : null}
               <Table
                 rows={s.bekleyen.engeller}
                 rowKey={(b) => (b.tur === "HAK" ? `${b.hakId}:${b.surum}` : `k:${b.kid}`)}
@@ -143,7 +134,7 @@ export function RevocationsPage() {
                     header: "Ne yapılır",
                     render: (b) =>
                       b.tur === "HAK" ? (
-                        "Ara imzacıyla yeniden bas (tailnet)"
+                        "Ara imzacıyla yeniden bas"
                       ) : (
                         <>
                           Emekliye ayır — VDS'te <code>anahtar.js emekliye-ayir</code> (runbook §8 adım 7)

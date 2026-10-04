@@ -1,7 +1,7 @@
 // PORTAL KULLANICILARI (yalnız yönetici) — hesap aç (TOTP kurulumu BURADA: sır ve QR yalnız bu canlı
 // yanıtta bir kez; kullanıcı ilk girişten önce doğrulayıcısına okutur), TOTP sıfırla (telefon kaybı —
-// kurtarma kodu YOK), kilit aç, parola sıfırla, pasife al. Satıcı rolleri yalnız tailnet'ten, BAYI
-// yalnız genel adresten girer. Genel yolda (ERİŞİM oturumu) sayfa HİÇ açılmaz: sırlar Cloudflare'den geçmez.
+// kurtarma kodu YOK), kilit aç, parola sıfırla, pasife al. Satıcı rolleri tailnet ya da internet
+// portalından, BAYI yalnız genel adresten girer. Sayfa her dinleyicide açıktır.
 import { useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
@@ -12,7 +12,7 @@ import { useGet } from "../../shared/hooks";
 import { ROLE_LABEL, label } from "../../shared/labels";
 import { OnceSecretModal } from "../../shared/OnceSecret";
 import type { PortalRole } from "../../shared/permissions";
-import { useApi, useListener, useUser } from "../../shared/session";
+import { useApi, useUser } from "../../shared/session";
 import type { Dealer, PortalUserView, TotpEnrollmentResponse } from "../../shared/types";
 import { Badge, Button, ErrorText, Field, Modal, ModalActions, PageTitle, QueryState, Section, Table } from "../../shared/ui";
 
@@ -32,24 +32,7 @@ export function userLabel(u: PortalUserView, dealers: readonly Dealer[]): string
   return `${u.adSoyad} (${u.kullaniciAdi}) — ${label(ROLE_LABEL, u.rol)}${dealer ? ` · ${dealer}` : ""}`;
 }
 
-/** Genel yolda kullanıcı yönetimi yok: sunucu bu uçları orada 404'ler, ekran yol gösterir. */
-export const USERS_OFF_PUBLIC =
-  "Portal kullanıcıları yalnız tailnet ya da geri döngü tüneliyle (portal-baglan) yönetilir: hesap açma, doğrulama kodu ve parola sıfırlama sırları Cloudflare'den geçmez.";
-
 export function UsersPage() {
-  return useListener() === "ERISIM" ? (
-    <>
-      <PageTitle title="Portal kullanıcıları" />
-      <p className="muted small" role="note">
-        {USERS_OFF_PUBLIC}
-      </p>
-    </>
-  ) : (
-    <UsersManagement />
-  );
-}
-
-function UsersManagement() {
   const api = useApi();
   const me = useUser();
   const queryClient = useQueryClient();
@@ -203,7 +186,7 @@ function UserCreateModal({
       <Field label="Ad soyad">
         <input value={fullName} maxLength={120} onChange={(e) => setFullName(e.target.value)} />
       </Field>
-      <Field label="Rol" hint="Satıcı rolleri yalnız tailnet adresinden, bayi yalnız genel adresten giriş yapar.">
+      <Field label="Rol" hint="Satıcı rolleri tailnet ya da internet portalından, bayi yalnız genel adresten giriş yapar.">
         <select value={role} onChange={(e) => setRole(e.target.value as PortalRole)}>
           {ROLES.map((r) => (
             <option key={r} value={r}>

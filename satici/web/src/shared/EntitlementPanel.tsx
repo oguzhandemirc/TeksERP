@@ -23,8 +23,6 @@ export interface EntitlementPolicy {
   readonly maxMaintenanceMonths?: number;
   /** Kod yalnız hiç etkinleşmemiş kuruluma (bayi — D8; etkin kurulumun makine değişimi satıcı onaylı taşımadır). */
   readonly codeOnlyUnactivated?: boolean;
-  /** Doluysa imza formu HİÇ açılmaz, yerine bu açıklama (ör. genel yolda kök parolası Cloudflare'den geçmez). */
-  readonly signingBlocked?: string;
   /** Satıcı: hakkın imza planı satırı (ara imzacı · kök · kök kuyruğu); bayide yok. */
   readonly signerPlan?: ReactNode;
   /** Satıcı: plana göre parola soran sürüm formu; yoksa ortak form (bayi parolası). */
@@ -56,11 +54,9 @@ export function EntitlementPanel({ detail, policy, onChanged }: { detail: Instal
         actions={
           canWrite && !closed ? (
             hak ? (
-              policy.signingBlocked ? null : (
-                <Button variant="primary" onClick={() => setDialog("version")}>
-                  {hak.guncelSurum === 0 ? "Lisansı imzala" : "Lisansı yenile"}
-                </Button>
-              )
+              <Button variant="primary" onClick={() => setDialog("version")}>
+                {hak.guncelSurum === 0 ? "Lisansı imzala" : "Lisansı yenile"}
+              </Button>
             ) : (
               <Button variant="primary" onClick={() => setDialog("create")} disabled={!policy.modules}>
                 Lisans hakkı oluştur
@@ -69,11 +65,6 @@ export function EntitlementPanel({ detail, policy, onChanged }: { detail: Instal
           ) : null
         }
       >
-        {hak && canWrite && !closed && policy.signingBlocked ? (
-          <p className="muted small" role="note">
-            {policy.signingBlocked}
-          </p>
-        ) : null}
         {hak ? (
           <KeyValues
             items={[
@@ -135,8 +126,8 @@ export function EntitlementPanel({ detail, policy, onChanged }: { detail: Instal
           onSaved={done}
         />
       ) : null}
-      {dialog === "version" && hak && !policy.signingBlocked && policy.versionModal ? policy.versionModal({ onClose: () => setDialog(null), onSaved: done }) : null}
-      {dialog === "version" && hak && !policy.signingBlocked && !policy.versionModal ? (
+      {dialog === "version" && hak && policy.versionModal ? policy.versionModal({ onClose: () => setDialog(null), onSaved: done }) : null}
+      {dialog === "version" && hak && !policy.versionModal ? (
         <EntitlementVersionModal
           entitlement={hak}
           modules={policy.modules ?? hak.moduller}

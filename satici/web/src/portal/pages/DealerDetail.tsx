@@ -10,8 +10,7 @@ import { ConfirmAction } from "../../shared/ConfirmAction";
 import { fmtDate, fmtDateTime } from "../../shared/format";
 import { useChannels, useGet } from "../../shared/hooks";
 import { CLASS_LABEL, MODULE_LABEL, ROLE_LABEL, label } from "../../shared/labels";
-import { KEY_REGISTRATION_TAILNET_ONLY, roleHas } from "../../shared/permissions";
-import { useApi, useCan, useListener, useUser } from "../../shared/session";
+import { useApi, useCan } from "../../shared/session";
 import type { Catalog, DealerDetail } from "../../shared/types";
 import { Badge, Button, ErrorText, Field, KeyValues, Modal, ModalActions, PageTitle, QueryState, Section, Table } from "../../shared/ui";
 
@@ -25,9 +24,6 @@ export function DealerDetailPage() {
   const queryClient = useQueryClient();
   const canManage = useCan("bayi:yonet");
   const canKey = useCan("bayi:anahtar");
-  const listener = useListener();
-  const user = useUser();
-  const keyBlocked = listener === "ERISIM" && roleHas(user.rol, "bayi:anahtar");
   const canUsers = useCan("kullanici:yonet");
   const q = useGet<DealerDetail>(["bayi", id], `/bayiler/${id}`);
   const [dialog, setDialog] = useState<Dialog>(null);
@@ -63,10 +59,7 @@ export function DealerDetailPage() {
             ["Durum", d.aktif ? <Badge tone="ok">Aktif</Badge> : <Badge>Pasif</Badge>],
             [
               "İmza anahtarı",
-              <>
-                {d.anahtarKid ? <code>{d.anahtarKid}</code> : <Badge tone="warn">Bağlı değil (bayi imzalayamaz)</Badge>}
-                {keyBlocked ? <p className="muted small">{KEY_REGISTRATION_TAILNET_ONLY}</p> : null}
-              </>,
+              d.anahtarKid ? <code>{d.anahtarKid}</code> : <Badge tone="warn">Bağlı değil (bayi imzalayamaz)</Badge>,
             ],
             ["Müşteri sayısı", String(d.musteriSayisi)],
             ["Kurulum kullanımı", `${d.kullanim} / ${t?.kurulumAdedi ?? 0}`],
