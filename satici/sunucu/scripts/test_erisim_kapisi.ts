@@ -1,7 +1,8 @@
 // =============================================================================
 // ERİŞİM KAPISI — satıcı portalının internetten yolu (portal.<alan>, Cloudflare proxy + Access). İstek portala
-// YALNIZ geçerli `Cf-Access-Jwt-Assertion` ile ulaşır; bu yolda YALNIZ izin listesindeki rotalar var (opt-in: kök
-// parolalı ve kullanıcı yönetimi uçları yok, kök imzası imza boğazında da reddedilir); tailnet yolu değişmez.
+// YALNIZ geçerli `Cf-Access-Jwt-Assertion` ile ulaşır; bu yolda YALNIZ izin listesindeki rotalar var (opt-in; satıcı
+// portalının her işlemi — imza, kullanıcı yönetimi, anahtar kayıtları dahil — listede, her tablo rotası listede ya da
+// gerekçeli dışlamada); imza boğazı kök/ara imzasını bu yoldan GEÇİRİR, bayi yolundan (GENEL) değil; tünel yolu yedek.
 //   §1 yapılandırma: PORT_ERISIM yoksa dinleyici yok · ERISIM_BIND joker RED · takım alanı yalnız
 //      <takım>.cloudflareaccess.com · AUD 64 onaltılık · ikisinden biri yoksa kip KAPALI
 //   §2 doğrulayıcı (DB'siz, gerçek RSA, JWKS ağı sahte): her saldırı KENDİ gerekçesiyle RED — başlıksız ·
@@ -16,28 +17,38 @@
 //      sunucunun doğrulayıcısı ağa HİÇ çıkmaz · §3i yan konteyner (jwks-cekici): yalnız doğrulanmış anahtarı atomik
 //      yazar, her başarısızlıkta eski dosya bayt-eşit kalır, geçici dosya bırakmaz · §3j yaş tavanı: tavanı aşan dosya
 //      RED (JWKS_ESKI), yarısında uyarı, yenilenen dosya onarır, tavan ortamdan (1–30 gün, varsayılan 7)
-//   §4 izin listesi (BEYANA bakar, gövde metnine değil): liste ⊆ rota tablosu · kök parolalı ve hassas izinli
-//      (TAILNET_ONLY_PERMISSIONS) rota listede yok · doğrulayıcı sentetik kusurlu listede ısırır · kusurlu listeyle
-//      yönlendirici KURULMAZ · §4g access-app BAĞLAMA ENVANTERİ: `createAccessApp`teki her `app.*` çağrısı (ara katman,
+//   §4 izin listesi (BEYANA bakar, gövde metnine değil): liste ⊆ rota tablosu · KARAR TAMLIĞI: her tablo rotası listede
+//      ya da `ERISIM_DISI_ROTALAR`da (ikisinde birden değil) · imza · kullanıcı yönetimi · anahtar kaydı rotaları listede ·
+//      doğrulayıcı sentetik kusurlu listede ve kararsız sonda rotasında ısırır · tabloda olmayan satırlı listeyle
+//      yönlendirici KURULMAZ · §4i `src/`te rota bayrağı `kokParolasi: true` ve `rootPasswordGate` yok (AST) ·
+//      §4g access-app BAĞLAMA ENVANTERİ: `createAccessApp`teki her `app.*` çağrısı (ara katman,
 //      yönlendirici, rota, ayar) beklenen sıralı kümeyle BİREBİR — küme dışı bağlama (izin listesini atlayan yol) kırmızı
 //   §5 compose: portal yönlendiricisinin Traefik ipallowlist aralıkları = CLOUDFLARE_NETWORKS · üst dosya satıcıya AĞ
 //      EKLEMEZ, JWKS bağı satıcıda salt okunur · yan konteyner sertleştirilmiş, sırsız, yalnız kendi çıkış köprüsünde
 //      · birleşik yapılandırmada (docker compose config) satıcının HER ağı internal (docker yoksa ÖLÇÜLEMEDİ beyanı)
 //   §6 HTTP (süreç içi dinleyiciler, kendi `_test` DB'si): her tablo rotası ERİŞİM'de listeye göre bağlı (listede 401,
-//      liste dışı 404) · yardımcıya devreden kök imza rotası 404 · listeye sızmış kök imzası İMZA BOĞAZINDA reddedilir ·
-//      kullanıcı yönetimi 404 · denetim satırlarında Access e-postası + ERISIM_YAZMA ayak izi · JWT kapısız bağlanmış
-//      ERİŞİM yönlendiricisi 404 · §7 gerçek süreç: açılış satırı, KAPALI kip ve JWKS dosyalı AÇIK kip
+//      liste dışı 404) · HAK imzası ERİŞİM'de: yanlış parola 400 + sayaç, doğru parola 201 · listede olmayan sonda rotası
+//      404 (işleyici koşmaz) · imza yardımcısı ve imza parolası kapısı ERİŞİM'de imzalar · kullanıcı yönetimi ve yayıncı
+//      kaydı ERİŞİM'de çalışır (TOTP sırrı yalnız canlı yanıtta) · denetim satırlarında Access e-postası (sır yok) +
+//      ERISIM_YAZMA ayak izi · JWT kapısız bağlanmış ERİŞİM yönlendiricisi 404 · §7 gerçek süreç: açılış satırı, KAPALI
+//      kip ve JWKS dosyalı AÇIK kip
 // ⭐ KALICI SONDA ✓K9 (her koşumda): (1) geçerli jeton GEÇER (§2a, §6c — her şeyi reddeden kör kapı yeşil veremez)
-//    (2) BAYAT önbellek geçer, BOŞ önbellek reddeder (§3c) (3) AYNI kök parolalı istek tailnet'te 404 DEĞİL (§6k —
-//    404 rotanın kapısından geliyor, eksik rotadan değil) (4) §4 doğrulayıcısı sentetik kusurlu listede ısırır
+//    (2) BAYAT önbellek geçer, BOŞ önbellek reddeder (§3c) (3) AYNI imza isteği ERİŞİM'de rotaya ULAŞIR ve doğru
+//    parolayla GERÇEKTEN imzalar (§6k · §6k5) (4) §4 doğrulayıcısı sentetik kusurlu listede ve kararsız rotada ısırır
 //    (5) dosya kaynağı geçerli dosyayla GEÇER (§3h4 · §3h7 — her dosyayı reddeden kör okuyucu yeşil veremez)
 //    (6) yan konteyner geçerli yanıtı GERÇEKTEN yazar (§3i1 — hiç yazmayan çekici "eski dosya korundu" yeşili veremez)
-//    (7) 8 günlük JWKS RED, aynı küme yenilenince GEÇER (§3j1 · §3j4) (8) listeye sızmış kök imza rotası TAILNET'te
-//    GERÇEKTEN imzalar (§6q2 — boğazın reddi kör RED değil) (9) listedeki her rota ERİŞİM'de 401 (§6p — bağlama ölçülüyor)
+//    (7) 8 günlük JWKS RED, aynı küme yenilenince GEÇER (§3j1 · §3j4) (8) listede OLMAYAN sonda rotası ERİŞİM'de 404,
+//    işleyici koşmaz (§6q1 — açık-liste düzeni; GENEL'den imza reddi test_imza_parolasi §7b) (9) listedeki her rota
+//    ERİŞİM'de 401 (§6p — bağlama ölçülüyor)
 //    (10–12) §4h bağlama envanteri sentetik ek yönlendiricide · yerel Router'da · JWT kapısı yönlendiricilerin arkasına
 //    alınınca ısırır.
 // NEGATİF SONDA (sertleştirme 2, dosya DIŞI): access-app.ts'e diskte `app.use("/hata-ayikla", createPortalRouter(ctx,
 //   "TAILNET", …))` → §4g ❌ (§6 HTTP sondaları görmedi); cp + shasum ile geri alındı.
+// NEGATİF SONDA (portal internetten, 2026-10-04, dosya DIŞI, cp + shasum ile geri alındı): listeden "POST /kullanicilar"
+//   silindi → §4a (karar yok) · §4b · §4c · §6r1 · §6r2 · §6s6 ❌ · listeye "POST /olmayan" → §4a · §4e2 ❌ + açılış düştü ·
+//   HAK sürüm rotasına `kokParolasi: true` → §4i ❌ · `SIGNING_ORIGINS.KOK` eski [TAILNET, CLI] → §6k · §6k3 · §6k5 · §6q2a
+//   · §6q3 ❌ · `allowlistGate` kaldırılıp her rota bağlandı → §6p3 · §6q1 ❌ · audit e-posta koşulu TAILNET → §6k5 · §6s1–
+//   §6s6 ❌ · kullanıcı açma özetine `parola` → §6s6 ❌.
 // Koşum: npx tsx scripts/test_erisim_kapisi.ts   (§6–§7 kendi _test DB'si)
 // =============================================================================
 import http from "node:http";
@@ -66,13 +77,12 @@ import express from "express";
 import { createAccessApp, requireAccessJwt } from "../src/http/access-app";
 import { CLOUDFLARE_NETWORKS } from "../src/http/client-address";
 import { RAW_ROUTE_KEYS } from "../src/http/distribution-raw";
-import { ERISIM_HAM_ROTALARI, ERISIM_PORTAL_ROTALARI } from "../src/http/erisim-rotalari";
+import { ERISIM_DISI_ROTALAR, ERISIM_HAM_ROTALARI, ERISIM_PORTAL_ROTALARI } from "../src/http/erisim-rotalari";
 import { errorHandler, notFound } from "../src/http/error-handler";
 import { SESSION_ROUTE_KEYS, createPortalRouter, erisimListesiBulgulari, routeKey, type PortalRequestContext, type PortalRouteDef } from "../src/http/portal-http";
 import { VENDOR_PORTAL_ROUTES } from "../src/http/portal-routes";
 import { createTailnetApp } from "../src/http/tailnet-app";
 import { passwordBuffer } from "../src/keys/key-files";
-import { TAILNET_ONLY_PERMISSIONS } from "../src/portal/roles";
 import { withSigningPasswordGuard } from "../src/portal/signing-guard";
 import { prepareEntitlementVersion } from "../src/services/entitlement.service";
 import {
@@ -86,6 +96,7 @@ import {
   portalKullaniciAc,
   sonuc,
   sunucuBaslat,
+  temizleDagitim,
   temizleKurulumlar,
   temizlePortal,
   TEST_KOK_PAROLASI,
@@ -214,6 +225,26 @@ function erisimBaglamalari(metin: string): { baglamalar: string[]; bulgular: str
   if (!fonksiyon) bulgular.push("createAccessApp bulunamadı");
   if (expressCagrisi !== 1) bulgular.push(`express() ${expressCagrisi} kez çağrıldı (beklenen 1)`);
   return { baglamalar, bulgular };
+}
+
+/**
+ * Kaldırılan "kök parolalı rota" düzeninin geri dönüşü (§4i): rota bayrağı `kokParolasi: true` (nesne literalinde)
+ * ya da tip alanı `kokParolasi` (arayüz/tip literali) ve `rootPasswordGate` adı. Gövde alanı `kokParolasi` (zod şeması,
+ * `b.kokParolasi`, SECRET_BODY_KEYS dizgisi) bulgu DEĞİLDİR — o eski arayüzün gövde alanıdır.
+ */
+function kokBayragiBulgulari(metin: string, ad: string): string[] {
+  const sf = ts.createSourceFile(ad, metin, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
+  const out: string[] = [];
+  const satir = (n: ts.Node) => sf.getLineAndCharacterOfPosition(n.getStart(sf)).line + 1;
+  const adi = (n: ts.PropertyName) => (ts.isIdentifier(n) || ts.isStringLiteral(n) ? n.text : "");
+  const gez = (n: ts.Node): void => {
+    if (ts.isPropertyAssignment(n) && adi(n.name) === "kokParolasi" && n.initializer.kind === ts.SyntaxKind.TrueKeyword) out.push(`${ad}:${satir(n)} rota bayrağı kokParolasi: true`);
+    if (ts.isPropertySignature(n) && adi(n.name) === "kokParolasi") out.push(`${ad}:${satir(n)} tip alanı kokParolasi`);
+    if (ts.isIdentifier(n) && n.text === "rootPasswordGate") out.push(`${ad}:${satir(n)} rootPasswordGate`);
+    ts.forEachChild(n, gez);
+  };
+  gez(sf);
+  return out;
 }
 
 function dinle(server: http.Server): Promise<AddressInfo> {
@@ -572,49 +603,80 @@ async function main(): Promise<void> {
   console.log("\n§4 ERİŞİM izin listesi (opt-in) — beyana bakar, gövde metnine değil");
   const liste = [...ERISIM_PORTAL_ROTALARI];
   const tablo = new Map(VENDOR_PORTAL_ROUTES.map((r) => [routeKey(r.method, r.path), r]));
-  const bulgular = erisimListesiBulgulari(VENDOR_PORTAL_ROUTES, ERISIM_PORTAL_ROTALARI);
-  kontrol("§4a liste geçerli: her satır tabloda (ya da oturum ucu), kök parolalı ve hassas izinli rota YOK", bulgular.length === 0, bulgular.join(" | "));
-  const kokluler = VENDOR_PORTAL_ROUTES.filter((r) => r.kokParolasi).map((r) => routeKey(r.method, r.path));
-  const hassaslar = VENDOR_PORTAL_ROUTES.filter((r) => TAILNET_ONLY_PERMISSIONS.includes(r.permission)).map((r) => routeKey(r.method, r.path));
+  const bulgular = erisimListesiBulgulari(VENDOR_PORTAL_ROUTES, ERISIM_PORTAL_ROTALARI, SESSION_ROUTE_KEYS, ERISIM_DISI_ROTALAR);
   kontrol(
-    "§4b kök/ara imzası (HAK sürümü · ara imzacıyla toplu yeniden basım — G4), kullanıcı yönetimi (açma · TOTP sıfırlama · parola sıfırlama · liste) ve güven kökü ekleyen anahtar kayıtları (bayi anahtarı bağlama · yayıncı anahtarı kaydı) listede DEĞİL; kümeler boş değil",
-    kokluler.includes("POST /haklar/:id/surum") &&
-      kokluler.includes("POST /haklar/toplu-yeniden-bas") &&
-      ["GET /kullanicilar", "POST /kullanicilar", "POST /kullanicilar/:id/totp-sifirla", "POST /kullanicilar/:id/parola", "POST /bayiler/:id/anahtar", "POST /yayincilar"].every((k) =>
-        hassaslar.includes(k),
-      ) &&
-      [...kokluler, ...hassaslar].every((k) => !ERISIM_PORTAL_ROTALARI.has(k)),
-    `${kokluler.length} kök · ${hassaslar.length} hassas`,
+    "§4a liste geçerli: her satır tabloda (ya da oturum ucu); KARAR TAMLIĞI — her tablo rotası listede ya da gerekçeli dışlamada, ikisinde birden değil",
+    bulgular.length === 0,
+    bulgular.join(" | "),
+  );
+  const ACILAN = [
+    "GET /kullanicilar",
+    "POST /kullanicilar",
+    "POST /kullanicilar/:id/pasif",
+    "POST /kullanicilar/:id/aktif",
+    "POST /kullanicilar/:id/totp-sifirla",
+    "POST /kullanicilar/:id/kilit-ac",
+    "POST /kullanicilar/:id/parola",
+    "POST /bayiler/:id/anahtar",
+    "POST /yayincilar",
+    "POST /haklar/:id/surum",
+    "POST /haklar/toplu-yeniden-bas",
+  ];
+  kontrol(
+    "§4b imza (HAK sürümü · ara imzacıyla toplu yeniden basım), kullanıcı yönetimi (liste · açma · pasif/aktif · TOTP sıfırlama · kilit açma · parola sıfırlama) ve anahtar kayıtları (bayi anahtarı bağlama · yayıncı kaydı) tabloda VE listede",
+    ACILAN.every((k) => tablo.has(k) && ERISIM_PORTAL_ROTALARI.has(k)),
+    ACILAN.filter((k) => !tablo.has(k) || !ERISIM_PORTAL_ROTALARI.has(k)).join(" · "),
   );
   kontrol(
-    "§4c liste giriş/çıkış/oturum/parola değişimi uçlarını, temel okumayı, etkinleştirme kodunu, yayıncı pasife almayı ve bildirimleri (bilinçli satır) taşır (boş liste yeşil vermez)",
+    "§4c liste giriş/çıkış/oturum/parola değişimi uçlarını, temel okumayı, etkinleştirme kodunu, yayıncı pasife almayı, bildirimleri, kullanıcı açmayı ve HAK imzasını (bilinçli satır) taşır (boş liste yeşil vermez)",
     SESSION_ROUTE_KEYS.every((k) => ERISIM_PORTAL_ROTALARI.has(k)) &&
-      ["GET /pano", "POST /kurulumlar/:id/yaptirim", "POST /kurulumlar/:id/etkinlestirme-kodu", "POST /yayincilar/:id/pasif", "GET /bildirimler", "GET /bildirimler/durum", "POST /bildirimler/deneme"].every((k) =>
-        ERISIM_PORTAL_ROTALARI.has(k),
-      ),
+      [
+        "GET /pano",
+        "POST /kurulumlar/:id/yaptirim",
+        "POST /kurulumlar/:id/etkinlestirme-kodu",
+        "POST /yayincilar/:id/pasif",
+        "GET /bildirimler",
+        "GET /bildirimler/durum",
+        "POST /bildirimler/deneme",
+        "POST /kullanicilar",
+        "POST /haklar/:id/surum",
+      ].every((k) => ERISIM_PORTAL_ROTALARI.has(k)),
     `${liste.length} satır`,
   );
-  const sentetikListe = new Set([...ERISIM_PORTAL_ROTALARI, "POST /haklar/:id/surum", "POST /kullanicilar/:id/totp-sifirla", "GET /olmayan-rota"]);
+  const sentetikListe = new Set([...ERISIM_PORTAL_ROTALARI, "GET /olmayan-rota"]);
   const sonda = erisimListesiBulgulari(VENDOR_PORTAL_ROUTES, sentetikListe);
+  kontrol("§4d ✓K doğrulayıcı sentetik kusurlu listede ısırır: tabloda olmayan satır", sonda.length === 1 && sonda[0]!.startsWith("GET /olmayan-rota"), sonda.join(" | "));
+  const kararsiz: PortalRouteDef = { method: "post", path: "/sonda/kararsiz", permission: "portal:oku", kimlik: { muaf: "sonda" }, handler: async () => ({ data: null }) };
+  const kararsizBulgu = erisimListesiBulgulari([...VENDOR_PORTAL_ROUTES, kararsiz], ERISIM_PORTAL_ROTALARI, SESSION_ROUTE_KEYS, {});
+  const dislanan = erisimListesiBulgulari([...VENDOR_PORTAL_ROUTES, kararsiz], ERISIM_PORTAL_ROTALARI, SESSION_ROUTE_KEYS, { "POST /sonda/kararsiz": "sonda gerekçesi" });
+  const disiKusurlu = erisimListesiBulgulari(VENDOR_PORTAL_ROUTES, ERISIM_PORTAL_ROTALARI, SESSION_ROUTE_KEYS, { "GET /pano": "sonda", "GET /olmayan-disi": "sonda" });
   kontrol(
-    "§4d ✓K doğrulayıcı sentetik kusurlu listede ısırır: kök parolalı · hassas izinli · tabloda olmayan satır",
-    sonda.length === 3 && sonda.some((b) => b.startsWith("POST /haklar/:id/surum")) && sonda.some((b) => b.startsWith("POST /kullanicilar/:id/totp-sifirla")) && sonda.some((b) => b.startsWith("GET /olmayan-rota")),
-    sonda.join(" | "),
+    "§4d2 ✓K karar tamlığı: listede de dışlamada da olmayan sonda rotası BULGU; gerekçeli dışlamaya girince bulgu YOK (dışlama da karardır); dışlamada tabloda olmayan satır ve hem listede hem dışlamada satır BULGU",
+    kararsizBulgu.length === 1 &&
+      /^POST \/sonda\/kararsiz: .*karar yok/.test(kararsizBulgu[0]!) &&
+      dislanan.length === 0 &&
+      disiKusurlu.length === 2 &&
+      disiKusurlu.some((b) => /^GET \/pano: hem listede hem dışlamada/.test(b)) &&
+      disiKusurlu.some((b) => /^GET \/olmayan-disi: dışlamada ama rota tablosunda yok/.test(b)),
+    [...kararsizBulgu, ...dislanan, ...disiKusurlu].join(" | "),
   );
+  kontrol("§4d3 dışlama beyanı donmuş (çalışma anında genişletilemez)", Object.isFrozen(ERISIM_DISI_ROTALAR));
   const kurulamadi = (routes: readonly PortalRouteDef[]): string => {
     try {
-      createPortalRouter({} as never, "ERISIM", routes);
+      createPortalRouter({ config: loadConfig(TABAN) } as never, "ERISIM", routes);
       return "";
     } catch (err) {
       return (err as Error).message;
     }
   };
-  const kokBeyanli = VENDOR_PORTAL_ROUTES.map((r) => (routeKey(r.method, r.path) === "POST /kurulumlar/:id/yaptirim" ? { ...r, kokParolasi: true as const } : r));
-  const hata = kurulamadi(kokBeyanli);
-  kontrol("§4e listede kök parolalı rota varsa ERİŞİM yönlendiricisi KURULMAZ (açılış durur)", /kök parolalı rota ERİŞİM'e açılamaz/.test(hata), hata.slice(0, 120));
+  const panosuz = VENDOR_PORTAL_ROUTES.filter((r) => routeKey(r.method, r.path) !== "GET /pano");
+  const hata = kurulamadi(panosuz);
+  kontrol("§4e listede tabloda olmayan satır varsa ERİŞİM yönlendiricisi KURULMAZ (açılış durur)", /GET \/pano: listede ama rota tablosunda yok/.test(hata), hata.slice(0, 120));
+  const kararsizKurulum = kurulamadi([...VENDOR_PORTAL_ROUTES, kararsiz]);
+  kontrol("§4e2 kararsız rota açılışı DURDURMAZ (liste dışı = 404, fail-closed; tamlık bekçide §4a)", kararsizKurulum === "", kararsizKurulum.slice(0, 120));
   kontrol("§4f ham ERİŞİM listesi ham yönlendiricinin rotalarının alt kümesi (parça PUT + dosya indirme)", [...ERISIM_HAM_ROTALARI].every((k) => RAW_ROUTE_KEYS.includes(k)) && ERISIM_HAM_ROTALARI.size === 2);
-  const disarida = [...tablo.keys()].filter((k) => !ERISIM_PORTAL_ROTALARI.has(k));
-  console.log(`  ℹ️  ERİŞİM dışı ${disarida.length} tablo rotası (tailnet/geri döngüden): ${disarida.join(" · ")}`);
+  const disarida = Object.entries(ERISIM_DISI_ROTALAR);
+  console.log(`  ℹ️  ERİŞİM dışı ${disarida.length} tablo rotası (beyanlı): ${disarida.map(([k, g]) => `${k} (${g})`).join(" · ") || "yok"}`);
   const erisimUygulamasi = readFileSync(path.join(__dirname, "..", "src", "http", "access-app.ts"), "utf8");
   const envanter = erisimBaglamalari(erisimUygulamasi);
   const farklar = (e: typeof envanter) => [
@@ -636,6 +698,13 @@ async function main(): Promise<void> {
     farklar(ekli).some((x) => x.includes('/hata-ayikla')) && farklar(yerel).some((x) => x.includes("Router")) && farklar(once).length > 0 && ekli.baglamalar.length === ERISIM_BAGLAMALARI.length + 1,
     `${farklar(ekli).length} · ${farklar(yerel).length} · ${farklar(once).length}`,
   );
+  const kokBayragi = tsDosyalari.flatMap((f) => kokBayragiBulgulari(kaynak(f), f));
+  kontrol("§4i src/'te kök parolalı rota düzeni YOK: rota bayrağı `kokParolasi: true` · tip alanı · `rootPasswordGate` (yol kararı imza boğazında)", kokBayragi.length === 0, kokBayragi.join(" | "));
+  const kokSonda = kokBayragiBulgulari(
+    'interface D { readonly kokParolasi?: true }\nconst r = { method: "post", kokParolasi: true };\nconst o = { rootPasswordGate: g };\nconst z = { kokParolasi: s.optional() }; b.kokParolasi;',
+    "sonda.ts",
+  );
+  kontrol("§4i2 ✓K çözümleyici sentetik metinde üç biçimi yakalar, gövde alanını (şema · erişim) bulgu saymaz", kokSonda.length === 3, kokSonda.join(" | "));
 
   console.log("\n§5 compose (Traefik ipallowlist = Cloudflare aralıkları · satıcı dış bağlantısız · yan konteyner)");
   const composeYolu = path.join(__dirname, "..", "..", "..", "deploy", "satici", "docker-compose.portal-genel.yml");
@@ -750,12 +819,12 @@ async function main(): Promise<void> {
   const erisim = http.createServer(erisimApp);
   const yanlisSoket = http.createServer(erisimApp);
   const kapali = http.createServer(createAccessApp(ctx, { listener: () => kapaliAdresi, verifier: null }));
-  // Sentetik yönlendiriciler (§6q–§6t): ERİŞİM = JWT kapısı + opt-in yönlendirici; TAILNET = geçiren kök kapısı.
+  // Sentetik yönlendiriciler (§6q–§6t): ERİŞİM = JWT kapısı + opt-in yönlendirici; TAILNET = yalnız yönlendirici.
   const sondaSunuculari: http.Server[] = [];
   const sondaKur = async (listener: "ERISIM" | "TAILNET", routes: readonly PortalRouteDef[], jwtKapisi = true): Promise<string> => {
     const app = express();
     if (listener === "ERISIM" && jwtKapisi) app.use(requireAccessJwt(httpV));
-    app.use("/portal/api", createPortalRouter(ctx, listener, routes, listener === "TAILNET" ? { rootPasswordGate: (_q, _r, n) => n() } : {}));
+    app.use("/portal/api", createPortalRouter(ctx, listener, routes));
     app.use(notFound);
     app.use(errorHandler);
     const srv = http.createServer(app);
@@ -765,6 +834,7 @@ async function main(): Promise<void> {
   const kullanicilar: string[] = [];
   const bayiler: string[] = [];
   const kurulumlar: string[] = [];
+  const yayinciKidler: string[] = [];
   try {
     tailnetAdresi = await dinle(tailnet);
     erisimAdresi = await dinle(erisim);
@@ -814,21 +884,39 @@ async function main(): Promise<void> {
 
     const k = await kurulumFiksturu(ctx);
     kurulumlar.push(k.kurulumDbId);
-    const kokGovde = { clientToken: randomUUID(), kokParolasi: "yanlis-parola-bekci", sebep: "erişim bekçisi" };
-    const kokE = await portalIstek(E, `/portal/api/haklar/${k.hakId}/surum`, { cerez: eCerez, basliklar: JWT, govde: kokGovde });
-    const kokEOturumsuz = await portalIstek(E, `/portal/api/haklar/${k.hakId}/surum`, { basliklar: JWT, govde: kokGovde });
-    const kokEFormsuz = await portalIstek(E, `/portal/api/haklar/${k.hakId}/surum`, { cerez: eCerez, basliklar: JWT, govde: "x=1", icerikTuru: "application/x-www-form-urlencoded" });
+    const plan = await portalIstek(E, `/portal/api/haklar/${k.hakId}/imza-plani`, { cerez: eCerez, basliklar: JWT });
+    const imzaci = String(plan.veri.imzaci ?? "");
+    const yanlisGovde = { clientToken: randomUUID(), imzaci, imzaParolasi: "yanlis-parola-bekci", sebep: "erişim bekçisi" };
+    const kokE = await portalIstek(E, `/portal/api/haklar/${k.hakId}/surum`, { cerez: eCerez, basliklar: JWT, govde: yanlisGovde });
+    const kokEOturumsuz = await portalIstek(E, `/portal/api/haklar/${k.hakId}/surum`, { basliklar: JWT, govde: { ...yanlisGovde, clientToken: randomUUID() } });
     kontrol(
-      "§6k ⭐ kök parolalı uç ERİŞİM'de 404 (oturumlu · oturumsuz · JSON dışı gövdeyle de — tailnet kapısı gövdeden ÖNCE)",
-      kokE.status === 404 && kokEOturumsuz.status === 404 && kokEFormsuz.status === 404,
-      `${kokE.status}/${kokEOturumsuz.status}/${kokEFormsuz.status}`,
+      "§6k ⭐ HAK imzası ERİŞİM'de rotaya ULAŞIR: yanlış imza parolası 400 IMZA_PAROLASI_HATALI (oturumsuz 401 OTURUM_YOK — 404 değil)",
+      imzaci === "KOK" && kokE.status === 400 && kokE.kod === "IMZA_PAROLASI_HATALI" && kokEOturumsuz.status === 401 && kokEOturumsuz.kod === "OTURUM_YOK",
+      `plan ${imzaci} · ${kokE.status} ${kokE.kod ?? ""} / ${kokEOturumsuz.status} ${kokEOturumsuz.kod ?? ""}`,
     );
-    const kokT = await portalIstek(T, `/portal/api/haklar/${k.hakId}/surum`, { cerez: tCerez, govde: { ...kokGovde, clientToken: randomUUID() } });
-    kontrol("§6k2 ✓K AYNI istek tailnet'te rotaya ULAŞIR (400 IMZA_PAROLASI_HATALI — 404 rotanın kapısından)", kokT.status === 400 && kokT.kod === "IMZA_PAROLASI_HATALI", `${kokT.status} ${kokT.kod ?? ""}`);
+    const kokT = await portalIstek(T, `/portal/api/haklar/${k.hakId}/surum`, { cerez: tCerez, govde: { ...yanlisGovde, clientToken: randomUUID() } });
+    kontrol("§6k2 AYNI istek tailnet'te de aynı yanıtı alır (400 IMZA_PAROLASI_HATALI — iki yol eşit)", kokT.status === 400 && kokT.kod === "IMZA_PAROLASI_HATALI", `${kokT.status} ${kokT.kod ?? ""}`);
     const sayac = await prisma.portalKullanici.findUniqueOrThrow({ where: { id: yonetici.id }, select: { imzaBasarisiz: true } });
-    kontrol("§6k3 ERİŞİM'deki denemeler imza sayacına girmedi (yalnız tailnet'teki tek deneme)", sayac.imzaBasarisiz === 1, `${sayac.imzaBasarisiz}`);
+    kontrol("§6k3 ERİŞİM'deki yanlış parola da imza sayacına girdi (ERİŞİM + tailnet = 2; kilit eşiği iki yolda ortak)", sayac.imzaBasarisiz === 2, `${sayac.imzaBasarisiz}`);
     const hakSurum = await prisma.hakSurumu.count({ where: { hakId: k.hakId } });
-    kontrol("§6k4 hiçbir yeni imzalı sürüm doğmadı", hakSurum === 1, `${hakSurum}`);
+    kontrol("§6k4 yanlış parolayla hiçbir yeni imzalı sürüm doğmadı", hakSurum === 1, `${hakSurum}`);
+    const imzaE = await portalIstek(E, `/portal/api/haklar/${k.hakId}/surum`, {
+      cerez: eCerez,
+      basliklar: JWT,
+      govde: { clientToken: randomUUID(), imzaci, imzaParolasi: TEST_KOK_PAROLASI, sebep: "erişim bekçisi imzası" },
+    });
+    const imzaSatiri = await prisma.denetim.findFirst({ where: { varlik: "Hak", varlikId: k.hakId, olay: "HAK_IMZALANDI" }, orderBy: { createdAt: "desc" } });
+    const sayacSonra = await prisma.portalKullanici.findUniqueOrThrow({ where: { id: yonetici.id }, select: { imzaBasarisiz: true } });
+    kontrol(
+      "§6k5 ✓K doğru imza parolasıyla ERİŞİM'de GERÇEKTEN imzalar: 201 · sürüm 2 · denetimde erisimKimligi · parola özette YOK · sayaç sıfırlandı",
+      imzaE.status === 201 &&
+        imzaE.veri.surum === 2 &&
+        (await prisma.hakSurumu.count({ where: { hakId: k.hakId } })) === 2 &&
+        (imzaSatiri?.ozet as { erisimKimligi?: string } | null)?.erisimKimligi === EPOSTA &&
+        !JSON.stringify(imzaSatiri?.ozet ?? null).includes(TEST_KOK_PAROLASI) &&
+        sayacSonra.imzaBasarisiz === 0,
+      `${imzaE.status} ${imzaE.kod ?? ""} · ${JSON.stringify(imzaSatiri?.ozet ?? null)} · sayaç ${sayacSonra.imzaBasarisiz}`,
+    );
     const yaz = await portalIstek(E, `/portal/api/kurulumlar/${k.kurulumDbId}/yaptirim`, {
       cerez: eCerez,
       basliklar: JWT,
@@ -846,13 +934,6 @@ async function main(): Promise<void> {
     const bayiE = await portalGiris(E, "/portal/api", bayi, { basliklar: JWT });
     const bilinmeyen = await portalIstek(E, "/portal/api/oturum/ac", { basliklar: JWT, govde: { kullaniciAdi: "hic-olmayan", parola: "x".repeat(20), totp: "123456" } });
     kontrol("§6m BAYI ERİŞİM'den giremez: 401, bilinmeyen hesapla AYNI ileti", bayiE.status === 401 && bayiE.json.message === bilinmeyen.json.message && bayiE.setCookie === null, `${bayiE.status}`);
-    let kapisiz = "";
-    try {
-      createPortalRouter(ctx, "TAILNET", VENDOR_PORTAL_ROUTES);
-    } catch (err) {
-      kapisiz = (err as Error).message;
-    }
-    kontrol("§6n TAILNET'te kök parolalı rota kapısız bağlanamaz (yönlendirici kurulurken hata)", /kapısız bağlanamaz/.test(kapisiz), kapisiz.slice(0, 100));
     const saglik = await portalIstek(T, "/portal/saglik");
     const erisimDurumu = (saglik.veri.erisim ?? {}) as { kip?: string; jwks?: { dolu?: boolean; dosyaYasiSn?: number | null; azamiYasSn?: number; yasDurumu?: string } };
     kontrol(
@@ -887,16 +968,20 @@ async function main(): Promise<void> {
       const bek = ERISIM_PORTAL_ROTALARI.has(key) ? 401 : 404;
       if (y.status !== bek) sapma.push(`${key} → ${y.status} (beklenen ${bek})`);
     }
-    kontrol("§6p ✓K listedeki her tablo rotası ERİŞİM'de oturumsuz 401 (bağlı), liste dışı her rota 404", sapma.length === 0, sapma.slice(0, 5).join(" | ") || `${VENDOR_PORTAL_ROUTES.length} rota`);
+    kontrol("§6p ✓K listedeki her tablo rotası ERİŞİM'de oturumsuz 401 (bağlı), liste dışı (dışlamadaki) her rota 404", sapma.length === 0, sapma.slice(0, 5).join(" | ") || `${VENDOR_PORTAL_ROUTES.length} rota`);
     const hamPut = await portalIstek(E, `/portal/api/ham/giden-oturum/${UUID0}/parca/0`, { yontem: "PUT", basliklar: JWT, govde: "x", icerikTuru: "application/octet-stream" });
     const hamGet = await portalIstek(E, `/portal/api/ham/dosyalar/${UUID0}`, { basliklar: JWT });
     const hamYok = await portalIstek(E, `/portal/api/ham/olmayan/${UUID0}`, { basliklar: JWT });
     kontrol("§6p2 ham uçlar: listedeki parça PUT ve dosya indirme bağlı (401), liste dışı ham yol 404", hamPut.status === 401 && hamGet.status === 401 && hamYok.status === 404, `${hamPut.status}/${hamGet.status}/${hamYok.status}`);
-    const formlu = await portalIstek(E, `/portal/api/kullanicilar/${UUID0}/parola`, { cerez: eCerez, basliklar: JWT, govde: "parola=x", icerikTuru: "application/x-www-form-urlencoded" });
-    kontrol("§6p3 liste dışı yazma gövde OKUNMADAN 404 (JSON dışı gövde 400 değil 404)", formlu.status === 404, `${formlu.status} ${formlu.kod ?? ""}`);
+    const formlu = await portalIstek(E, `/portal/api/liste-disi/${UUID0}/parola`, { cerez: eCerez, basliklar: JWT, govde: "parola=x", icerikTuru: "application/x-www-form-urlencoded" });
+    const formluListede = await portalIstek(E, `/portal/api/kullanicilar/${UUID0}/parola`, { cerez: eCerez, basliklar: JWT, govde: "parola=x", icerikTuru: "application/x-www-form-urlencoded" });
+    kontrol(
+      "§6p3 liste dışı yazma gövde OKUNMADAN 404 (JSON dışı gövde 400 değil 404); AYNI gövde listedeki rotada gövde kapısına takılır (400 — kapı kör değil)",
+      formlu.status === 404 && formluListede.status === 400 && formluListede.kod === "GOVDE_GECERSIZ",
+      `${formlu.status} ${formlu.kod ?? ""} / ${formluListede.status} ${formluListede.kod ?? ""}`,
+    );
 
-    console.log("\n§6q kök imzası: yardımcıya devreden rota ve listeye sızmış rota — imza boğazı");
-    const surumSayisi = () => prisma.hakSurumu.count({ where: { hakId: k.hakId } });
+    console.log("\n§6q açık-liste düzeni (liste dışı sonda rotası) ve imza boğazı ERİŞİM kapsamında");
     const imzaSayaci = async () => (await prisma.portalKullanici.findUniqueOrThrow({ where: { id: yonetici.id }, select: { imzaBasarisiz: true } })).imzaBasarisiz;
     let devredenKostu = 0;
     const kokImzaYardimcisi = (c: PortalRequestContext) =>
@@ -913,59 +998,81 @@ async function main(): Promise<void> {
     };
     const eSonda = await sondaKur("ERISIM", [...VENDOR_PORTAL_ROUTES, devreden]);
     const dev = await portalIstek(eSonda, "/portal/api/sonda/kok-imza", { cerez: eCerez, basliklar: JWT, govde: {} });
-    kontrol("§6q1 ⭐ beyansız (kokParolasi YOK) yardımcıya devreden kök imza rotası ERİŞİM'de 404 — listede değil, işleyici KOŞMADI", dev.status === 404 && devredenKostu === 0, `${dev.status} · koştu ${devredenKostu}`);
+    kontrol("§6q1 ⭐ listede OLMAYAN sonda rotası ERİŞİM'de 404, işleyici KOŞMADI — açık-liste düzeni (liste ≈ tablo iken de)", dev.status === 404 && devredenKostu === 0, `${dev.status} · koştu ${devredenKostu}`);
     const SIZAN = "POST /kurulumlar/:id/yaptirim";
-    const sizmis = (handler: PortalRouteDef["handler"]): PortalRouteDef[] => [
+    const yerine = (handler: PortalRouteDef["handler"]): PortalRouteDef[] => [
       { method: "post", path: "/kurulumlar/:id/yaptirim", permission: "hak:yaz", kimlik: { muaf: "sonda" }, handler },
       ...VENDOR_PORTAL_ROUTES.filter((r) => routeKey(r.method, r.path) !== SIZAN),
     ];
-    const sizanRotalar = sizmis(async (c) => ({ data: { surum: (await kokImzaYardimcisi(c)).version } }));
     const hatalar: string[] = [];
     const gercekHata = console.error;
-    const oncekiSurum = await surumSayisi();
-    const oncekiSayac = await imzaSayaci();
-    const eSizan = await sondaKur("ERISIM", sizanRotalar);
+    const eYardimci = await sondaKur("ERISIM", yerine(async (c) => ({ data: { surum: (await kokImzaYardimcisi(c)).version } })));
     console.error = (...a: unknown[]) => void hatalar.push(a.map(String).join(" "));
-    let sizanE;
+    let yardimciE;
     try {
-      sizanE = await portalIstek(eSizan, `/portal/api/kurulumlar/${k.kurulumDbId}/yaptirim`, { cerez: eCerez, basliklar: JWT, govde: {} });
+      yardimciE = await portalIstek(eYardimci, `/portal/api/kurulumlar/${k.kurulumDbId}/yaptirim`, { cerez: eCerez, basliklar: JWT, govde: {} });
     } finally {
       console.error = gercekHata;
     }
     kontrol(
-      "§6q2a ⭐ listeye SIZMIŞ kök imza rotası ERİŞİM'de işleyiciye ulaşsa da İMZA BOĞAZI reddeder (404, 'ERISIM yolundan istendi'), sürüm doğmaz, imza sayacı değişmez",
-      sizanE.status === 404 && hatalar.some((h) => /KOK anahtarı ERISIM yolundan istendi — RED/.test(h)) && (await surumSayisi()) === oncekiSurum && (await imzaSayaci()) === oncekiSayac,
-      `${sizanE.status} · ${hatalar.join(" / ").slice(0, 120)}`,
+      "§6q2a ✓K listedeki rotadan imza yardımcısına devreden kök imzası ERİŞİM'de GERÇEKTEN imzalar (200, sürüm hazırlandı) — boğaz ERİŞİM kapsamını reddetmedi",
+      yardimciE.status === 200 && typeof yardimciE.veri.surum === "number" && !hatalar.some((h) => /yolundan istendi — RED/.test(h)),
+      `${yardimciE.status} ${yardimciE.kod ?? ""} · ${hatalar.join(" / ").slice(0, 120)}`,
     );
-    const tSizan = await sondaKur("TAILNET", sizanRotalar);
-    const sizanT = await portalIstek(tSizan, `/portal/api/kurulumlar/${k.kurulumDbId}/yaptirim`, { cerez: tCerez, govde: {} });
-    kontrol("§6q2b ✓K AYNI sızmış rota TAILNET'te GERÇEKTEN imzalar (200, yeni sürüm hazırlandı) — boğazın reddi kör RED değil", sizanT.status === 200 && typeof sizanT.veri.surum === "number", `${sizanT.status} ${sizanT.kod ?? ""}`);
-    const korunan = sizmis(async (c) => ({
+    const tYardimci = await sondaKur("TAILNET", yerine(async (c) => ({ data: { surum: (await kokImzaYardimcisi(c)).version } })));
+    const yardimciT = await portalIstek(tYardimci, `/portal/api/kurulumlar/${k.kurulumDbId}/yaptirim`, { cerez: tCerez, govde: {} });
+    kontrol("§6q2b AYNI rota TAILNET'te de imzalar (200) — iki yol eşit", yardimciT.status === 200 && typeof yardimciT.veri.surum === "number", `${yardimciT.status} ${yardimciT.kod ?? ""}`);
+    const oncekiSayac = await imzaSayaci();
+    const korunan = yerine(async (c) => ({
       data: await withSigningPasswordGuard(c.ctx, { userId: c.session.user.id, actor: c.session.actor, kind: "KOK" }, async () => (await kokImzaYardimcisi(c)).version),
     }));
     const eKorunan = await sondaKur("ERISIM", korunan);
     const korunanE = await portalIstek(eKorunan, `/portal/api/kurulumlar/${k.kurulumDbId}/yaptirim`, { cerez: eCerez, basliklar: JWT, govde: {} });
-    kontrol("§6q3 imza parolası kapısı da (withSigningPasswordGuard) ERİŞİM'de sayaçlara dokunmadan reddeder", korunanE.status === 404 && (await imzaSayaci()) === oncekiSayac, `${korunanE.status}`);
+    kontrol("§6q3 imza parolası kapısı (withSigningPasswordGuard) ERİŞİM'de kök imzasını geçirir (200), sayaç artmaz", korunanE.status === 200 && (await imzaSayaci()) === oncekiSayac, `${korunanE.status} ${korunanE.kod ?? ""}`);
     const jwtsizSonda = await sondaKur("ERISIM", VENDOR_PORTAL_ROUTES, false);
     const jwtsiz = await portalIstek(jwtsizSonda, "/portal/api/pano", { cerez: eCerez });
     kontrol("§6q4 JWT kapısı OLMADAN bağlanmış ERİŞİM yönlendiricisi her isteğe 404 (Access kimliği yok)", jwtsiz.status === 404, `${jwtsiz.status}`);
 
-    console.log("\n§6r kullanıcı yönetimi yalnız tailnet (TOTP tohumu / parola Cloudflare'den geçmez)");
+    console.log("\n§6r kullanıcı yönetimi ve anahtar kayıtları ERİŞİM'de (TOTP sırrı yalnız canlı yanıtta)");
     const sondaAdi = `erisim-sonda-${randomUUID().slice(0, 8)}`;
-    const kulE = await Promise.all([
-      portalIstek(E, "/portal/api/kullanicilar", { cerez: eCerez, basliklar: JWT }),
-      portalIstek(E, "/portal/api/kullanicilar", { cerez: eCerez, basliklar: JWT, govde: { clientToken: randomUUID(), kullaniciAdi: sondaAdi, adSoyad: "Sonda", rol: "SATICI_OPERATOR", parola: "x".repeat(20) } }),
-      portalIstek(E, `/portal/api/kullanicilar/${yonetici.id}/totp-sifirla`, { cerez: eCerez, basliklar: JWT, govde: { clientToken: randomUUID(), sebep: "sonda" } }),
-      portalIstek(E, `/portal/api/kullanicilar/${yonetici.id}/parola`, { cerez: eCerez, basliklar: JWT, govde: { clientToken: randomUUID(), parola: "y".repeat(20), sebep: "sonda" } }),
-    ]);
-    const kulT = await portalIstek(T, "/portal/api/kullanicilar", { cerez: tCerez });
-    const sizanKullanici = await prisma.portalKullanici.findUnique({ where: { kullaniciAdi: sondaAdi } });
-    if (sizanKullanici) kullanicilar.push(sizanKullanici.id);
+    const sondaParola = `erisim-sonda-parola-${randomUUID()}`;
+    const acmaGovde = { clientToken: randomUUID(), kullaniciAdi: sondaAdi, adSoyad: "Sonda", rol: "SATICI_OPERATOR", parola: sondaParola };
+    const acma = await portalIstek(E, "/portal/api/kullanicilar", { cerez: eCerez, basliklar: JWT, govde: acmaGovde });
+    const sondaId = String((acma.veri.kullanici as { id?: string } | undefined)?.id ?? "");
+    if (sondaId) kullanicilar.push(sondaId);
+    const acmaTekrar = await portalIstek(E, "/portal/api/kullanicilar", { cerez: eCerez, basliklar: JWT, govde: acmaGovde });
     kontrol(
-      "§6r ERİŞİM'de kullanıcı listesi · açma · TOTP sıfırlama · parola sıfırlama 404; tailnet'te liste 200 (pozitif)",
-      kulE.every((y) => y.status === 404) && kulT.status === 200 && sizanKullanici === null,
-      `${kulE.map((y) => y.status).join("/")} · tailnet ${kulT.status}`,
+      "§6r1 ⭐ ERİŞİM'de kullanıcı açma 201 + TOTP sırrı canlı yanıtta; aynı işlem kimliği tekrarında sır YOK (totpGosterilemez)",
+      acma.status === 201 && sondaId !== "" && acma.veri.totp !== null && acma.veri.totp !== undefined && acmaTekrar.veri.totp === null && acmaTekrar.veri.totpGosterilemez === true,
+      `${acma.status} ${acma.kod ?? ""} / tekrar ${acmaTekrar.status} ${String(acmaTekrar.veri.totpGosterilemez)}`,
     );
+    const kulListe = await portalIstek(E, "/portal/api/kullanicilar", { cerez: eCerez, basliklar: JWT });
+    const kul = (yol: string, govde: Record<string, unknown>) => portalIstek(E, `/portal/api/kullanicilar/${sondaId}/${yol}`, { cerez: eCerez, basliklar: JWT, govde: { clientToken: randomUUID(), ...govde } });
+    const pasif = await kul("pasif", { sebep: "erişim bekçisi" });
+    const aktif = await kul("aktif", { sebep: "erişim bekçisi" });
+    const totpS = await kul("totp-sifirla", { sebep: "erişim bekçisi" });
+    const kilit = await kul("kilit-ac", {});
+    const parolaS = await kul("parola", { parola: `${sondaParola}-2`, sebep: "erişim bekçisi" });
+    const durumlar = [kulListe, pasif, aktif, totpS, kilit, parolaS].map((y) => y.status);
+    kontrol(
+      "§6r2 ERİŞİM'de liste · pasif · aktif · TOTP sıfırlama (yeni sır canlı yanıtta) · kilit açma · parola sıfırlama → 200",
+      durumlar.every((d) => d === 200) && JSON.stringify(kulListe.veri).includes(sondaAdi) && totpS.veri.totp !== null && totpS.veri.totp !== undefined,
+      durumlar.join("/"),
+    );
+    const bayiAnahtarE = await portalIstek(E, `/portal/api/bayiler/${bayiler[0] ?? UUID0}/anahtar`, { cerez: eCerez, basliklar: JWT, govde: { clientToken: randomUUID(), kid: "bayi-erisim-sonda" } });
+    kontrol(
+      "§6r3 bayi anahtarı bağlama ERİŞİM'de işleyiciye ULAŞIR (dizinde olmayan anahtar → 400 iş kuralı, 404 değil)",
+      bayiAnahtarE.status === 400 && /anahtar dizininde yok/.test(String(bayiAnahtarE.json.message ?? "")),
+      `${bayiAnahtarE.status} ${bayiAnahtarE.kod ?? ""}`,
+    );
+    const yayinciKid = `erisim-sonda-${randomUUID().slice(0, 8)}`;
+    yayinciKidler.push(yayinciKid);
+    const yayinciE = await portalIstek(E, "/portal/api/yayincilar", {
+      cerez: eCerez,
+      basliklar: JWT,
+      govde: { clientToken: randomUUID(), kid: yayinciKid, ad: "Erişim sonda yayıncısı", acikAnahtar: generateKeyPairSync("ed25519").publicKey.export({ format: "jwk" }).x },
+    });
+    kontrol("§6r4 yayıncı anahtarı kaydı ERİŞİM'de 201", yayinciE.status === 201, `${yayinciE.status} ${yayinciE.kod ?? ""}`);
 
     console.log("\n§6s denetim: ERİŞİM'den gelen her satırda Access e-postası; denetimsiz yazmaya ayak izi");
     type Ozet = { dinleyici?: string; erisimKimligi?: string; rota?: string } | null;
@@ -979,6 +1086,17 @@ async function main(): Promise<void> {
     );
     const yaptirimSatiri = await prisma.denetim.findFirst({ where: { varlik: "Kurulum", varlikId: k.kurulumDbId, olay: { startsWith: "YAPTIRIM_" } }, orderBy: { createdAt: "desc" } });
     kontrol("§6s2 ERİŞİM'den yapılan yazmanın (K0) denetim satırında erisimKimligi", (yaptirimSatiri?.ozet as Ozet)?.erisimKimligi === EPOSTA, JSON.stringify(yaptirimSatiri?.ozet ?? null));
+    const kulSatirlari = await prisma.denetim.findMany({ where: { varlik: "PortalKullanici", varlikId: sondaId } });
+    const yayinciSatiri = await prisma.denetim.findFirst({ where: { olay: "YAYINCI_EKLENDI", varlikId: String(yayinciE.veri.id ?? "") } });
+    const sirSizdi = kulSatirlari.filter((r) => {
+      const metin = JSON.stringify(r.ozet ?? null);
+      return metin.includes(sondaParola) || /"(parola|totp|sir|tohum|uri)"/i.test(metin);
+    });
+    kontrol(
+      "§6s6 ERİŞİM'den kullanıcı yönetimi (açma · pasif · aktif · TOTP · kilit · parola) ve yayıncı kaydı satırlarında erisimKimligi; kullanıcı satırlarında parola/TOTP sırrı YOK",
+      kulSatirlari.length >= 6 && kulSatirlari.every((r) => (r.ozet as Ozet)?.erisimKimligi === EPOSTA) && sirSizdi.length === 0 && (yayinciSatiri?.ozet as Ozet)?.erisimKimligi === EPOSTA,
+      `${kulSatirlari.length} satır · ${kulSatirlari.map((r) => r.olay).join(",")} · sızan ${sirSizdi.length} · yayıncı ${JSON.stringify(yayinciSatiri?.ozet ?? null)}`,
+    );
     const izSayisi = () => prisma.denetim.count({ where: { olay: "ERISIM_YAZMA", yapan: `satici:${yonetici.kullaniciAdi}` } });
     const izOnce = await izSayisi();
     const izRotalari: PortalRouteDef[] = [
@@ -1017,6 +1135,7 @@ async function main(): Promise<void> {
     for (const s of [tailnet, erisim, yanlisSoket, kapali, ...sondaSunuculari]) await kapatSunucu(s);
     await temizleKurulumlar(kurulumlar, ortam.kidler);
     await temizlePortal({ kullanicilar, bayiler });
+    await temizleDagitim({ yayinciKidler });
   }
 
   console.log("\n§7 gerçek süreç — açılış satırı, KAPALI kip, JWKS dosyalı AÇIK kip");

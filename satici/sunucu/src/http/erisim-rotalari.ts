@@ -1,8 +1,7 @@
 // ERİŞİM İZİN LİSTESİ — Cloudflare Access arkasındaki genel portal yoluna (ERİŞİM dinleyicisi) YALNIZ buradaki rotalar
-// bağlanır (OPT-IN): listede olmayan istek gövdesi okunmadan 404; yeni rota ERİŞİM'e ancak bilinçli bir satırla açılır.
-// Kök parolalı (`kokParolasi`) ve hassas izinli (roles.ts `TAILNET_ONLY_PERMISSIONS`: kullanıcı yönetimi, bayi anahtarı
-// bağlama, yayıncı anahtarı kaydı) rota listeye GİREMEZ, tabloda
-// olmayan satır da kalamaz — yönlendirici kurulurken düşer (portal-http.ts `erisimListesiBulgulari`).
+// bağlanır (OPT-IN): listede olmayan istek gövdesi okunmadan 404. Her tablo rotası için karar BİLİNÇLİDİR: ya bu listede
+// ya `ERISIM_DISI_ROTALAR`da gerekçesiyle (bekçi §4a); tabloda olmayan satır kalamaz — yönlendirici kurulurken düşer
+// (portal-http.ts `erisimListesiBulgulari`). İmza parolası taşıyan rotalarda yol kararı ayrıca imza boğazındadır.
 // Anahtar "YÖNTEM /yol": rota tablosundaki yazımla birebir. Bekçi: scripts/test_erisim_kapisi.ts §4 · §6.
 
 /** /portal/api — JSON rota tablosu (portal-routes.ts ve yaydığı tablolar) + oturum uçları (portal-http.ts). */
@@ -35,7 +34,7 @@ export const ERISIM_PORTAL_ROTALARI: ReadonlySet<string> = new Set([
   "GET /anahtarlar",
   "GET /filo", // Dağıtım v2: kurulum × kurulu/kanal backend sürümü × politika × son güncelleme sonucu (salt okuma)
   "GET /kurulumlar/:id/guncelleme", // Dağıtım v2: politika · dilim · rapor · geçmiş (salt okuma)
-  // müşteri · tesis · kurulum · HAK taslağı · etkinleştirme kodu
+  // müşteri · tesis · kurulum · HAK taslağı · imzalı HAK sürümü · etkinleştirme kodu
   "POST /musteriler",
   "PATCH /musteriler/:id",
   "POST /musteriler/:id/pasif",
@@ -49,11 +48,13 @@ export const ERISIM_PORTAL_ROTALARI: ReadonlySet<string> = new Set([
   "POST /kurulumlar/:id/pasif",
   "POST /kurulumlar/:id/aktif",
   "POST /kurulumlar/:id/hak",
+  "POST /haklar/:id/surum", // imza parolası (ara/kök) gövdede; yol kararı imza boğazında (signing-scope.ts)
   "POST /kurulumlar/:id/etkinlestirme-kodu",
   // Dağıtım v2: güncelleme politikası (kök parolası taşımaz, güven kökü eklemez — operasyon ayarı)
   "POST /kurulumlar/:id/guncelleme-politikasi",
-  // kök kuyruğu talebinden vazgeçmek (parola taşımaz; HAK imzası ve toplu yeniden basım parolalı → yalnız tailnet)
+  // kök kuyruğu talebinden vazgeçmek · ara imzacıyla toplu yeniden basım (ara imzacı parolası gövdede)
   "POST /kok-kuyrugu/:id/iptal",
+  "POST /haklar/toplu-yeniden-bas",
   // yaptırım · planlı eylem · taksit
   "POST /kurulumlar/:id/yaptirim",
   "POST /kurulumlar/:id/agir-yaptirim",
@@ -76,13 +77,14 @@ export const ERISIM_PORTAL_ROTALARI: ReadonlySet<string> = new Set([
   "POST /kurulumlar/:id/dr-geri-al",
   "POST /kurulumlar/:id/iptal",
   "POST /kurulumlar/:id/iptal-geri-al",
-  // kanal · bayi (anahtar bağlama güven kökü ekler → yalnız tailnet/geri döngü, listede YOK)
+  // kanal · bayi (bayi anahtarı bağlama güven kökü ekler — izni yalnız yönetici rolünde)
   "POST /kanallar",
   "PATCH /kanallar/:id",
   "POST /bayiler",
   "POST /bayiler/:id/tavan",
   "POST /bayiler/:id/pasif",
   "POST /bayiler/:id/aktif",
+  "POST /bayiler/:id/anahtar",
   // dağıtım · sürümler · yayıncılar
   "GET /dagitim/derlemeler",
   "GET /dagitim/baglantilar",
@@ -98,7 +100,8 @@ export const ERISIM_PORTAL_ROTALARI: ReadonlySet<string> = new Set([
   "POST /dagitim/giden-oturum/:id/tamamla",
   "GET /surumler",
   "GET /yayincilar",
-  "POST /yayincilar/:id/pasif", // kayıt (POST /yayincilar) güven kökü ekler → yalnız tailnet/geri döngü
+  "POST /yayincilar", // kayıt güven kökü ekler — izni yalnız yönetici rolünde
+  "POST /yayincilar/:id/pasif",
   // destek kutusu
   "GET /destek",
   "GET /destek/:id",
@@ -109,7 +112,21 @@ export const ERISIM_PORTAL_ROTALARI: ReadonlySet<string> = new Set([
   "GET /bildirimler",
   "GET /bildirimler/durum",
   "POST /bildirimler/deneme",
+  // kullanıcı yönetimi (yalnız yönetici; yeni parola gövdede, TOTP sırrı yalnız ilk yanıtta — no-store)
+  "GET /kullanicilar",
+  "POST /kullanicilar",
+  "POST /kullanicilar/:id/pasif",
+  "POST /kullanicilar/:id/aktif",
+  "POST /kullanicilar/:id/totp-sifirla",
+  "POST /kullanicilar/:id/kilit-ac",
+  "POST /kullanicilar/:id/parola",
 ]);
+
+/**
+ * ERİŞİM'e BİLİNÇLİ olarak açılmayan tablo rotaları — anahtar "YÖNTEM /yol", değer gerekçe. Bugün boş: satıcı portalının
+ * her işlemi internet yolundan da yapılır. Yeni rota ya listeye ya buraya girer; ikisinde de yoksa bekçi kırmızı.
+ */
+export const ERISIM_DISI_ROTALAR: Readonly<Record<string, string>> = Object.freeze({});
 
 /** /portal/api/ham — ham gövdeli dağıtım uçları (distribution-raw.ts). */
 export const ERISIM_HAM_ROTALARI: ReadonlySet<string> = new Set(["PUT /giden-oturum/:id/parca/:sira", "GET /dosyalar/:id"]);

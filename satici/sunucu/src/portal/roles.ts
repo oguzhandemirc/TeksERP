@@ -1,7 +1,7 @@
 // Portal rolleri × izinler × dinleyiciler — TEK KAYNAK. Her portal rotası bir izin beyan eder
 // (bekçi: scripts/test_portal_rol_dinleyici.ts). Dinleyici ayrımı KESKİN: satıcı rolleri yalnız
-// TAILNET'ten ve ERİŞİM'den (Cloudflare Access arkasındaki genel yol; yalnız izin listesindeki rotalar —
-// kök parolalı ve hassas izinli uçlar orada yok), BAYI yalnız GENEL'den girer; oturum doğduğu dinleyiciye bağlıdır.
+// TAILNET'ten ve ERİŞİM'den (Cloudflare Access arkasındaki genel yol; yalnız izin listesindeki rotalar), BAYI yalnız
+// GENEL'den girer; oturum doğduğu dinleyiciye bağlıdır. İzin dinleyiciye göre değişmez: rol ne açıyorsa iki yolda da açar.
 import type { PortalDinleyici, PortalRolu } from "@prisma/client";
 
 export const PORTAL_ROLES = ["SATICI_YONETICI", "SATICI_OPERATOR", "BAYI"] as const satisfies readonly PortalRolu[];
@@ -34,7 +34,7 @@ export const PORTAL_PERMISSIONS = {
   /** Kanal ana verisi (kod · ad · tür · güncel sürümler). */
   "kanal:yonet": ADMIN,
   "bayi:yonet": ADMIN,
-  /** Bayinin imza anahtarını (kid) bağlama/değiştirme — HASSAS: yalnız tailnet/geri döngü. */
+  /** Bayinin imza anahtarını (kid) bağlama/değiştirme (güven kökü ekler — yalnız yönetici). */
   "bayi:anahtar": ADMIN,
   "kullanici:yonet": ADMIN,
   "denetim:oku": VENDOR,
@@ -42,7 +42,7 @@ export const PORTAL_PERMISSIONS = {
   "dagitim:yaz": VENDOR,
   /** Yayıncı imza anahtarının pasife alınması (yayın bildirimi güvenini daraltır; genel yoldan da açık). */
   "yayinci:yonet": ADMIN,
-  /** Yayıncı imza anahtarı KAYDI (yayın bildirimi güvenini genişletir) — HASSAS: yalnız tailnet/geri döngü. */
+  /** Yayıncı imza anahtarı KAYDI (yayın bildirimi güvenini genişletir — yalnız yönetici). */
   "yayinci:anahtar": ADMIN,
   /** Destek kutusu: fabrikanın talebine yanıt yazma ve talebi kapatma (okuma `portal:oku`). */
   "destek:yanitla": VENDOR,
@@ -55,14 +55,6 @@ export const PORTAL_PERMISSIONS = {
   "bayi:portal": ["BAYI"],
 } as const satisfies Record<string, readonly PortalRole[]>;
 export type PortalPermission = keyof typeof PORTAL_PERMISSIONS;
-
-/**
- * HASSAS sınıf (kök parolalı rotalarla aynı), yalnız tailnet/geri döngüden: TOTP tohumu / başka kullanıcının parolası
- * taşıyan kullanıcı yönetimi ve GÜVEN KÖKÜ EKLEYEN anahtar kayıtları (bayi imza anahtarı bağlama · yayıncı anahtarı
- * kaydı — en az yetki). ERİŞİM listesine giremez (portal-http.ts `erisimListesiBulgulari`), arayüz ERİŞİM oturumunda
- * bu düğmeleri/ekranları çizmez.
- */
-export const TAILNET_ONLY_PERMISSIONS: readonly PortalPermission[] = ["kullanici:yonet", "bayi:anahtar", "yayinci:anahtar"];
 
 export const LISTENER_ROLES: Readonly<Record<PortalListener, readonly PortalRole[]>> = {
   TAILNET: VENDOR,

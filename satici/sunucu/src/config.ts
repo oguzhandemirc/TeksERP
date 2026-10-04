@@ -135,7 +135,7 @@ const EnvSchema = z.object({
   IC_API_BELIRTEC_DOSYASI: z.string().min(1).optional(),
   /**
    * ERİŞİM dinleyicisi: satıcı portalının Cloudflare Access arkasındaki GENEL yolu (portal.<alan>). Port
-   * verilmezse dinleyici AÇILMAZ. Açıksa her istek geçerli Access JWT'si ister; kök parolalı uçlar burada 404.
+   * verilmezse dinleyici AÇILMAZ. Açıksa her istek geçerli Access JWT'si ister; yalnız izin listesindeki rotalar bağlanır.
    */
   PORT_ERISIM: port.optional(),
   ERISIM_BIND: z

@@ -4,8 +4,8 @@
 //      künyede görünür ama İMZALAMAZ; başka anahtarın sertifikası · sınıf kümesi uyuşmayan · çapa dışı kökün imzaladığı ·
 //      yanlış uzantıyla konmuş (`.kok.json`) ara dosyası YÜKLENMEZ; emekli künye (`*.sertifika.json`) künyede EMEKLI
 //   §2 imza alt süreci: ara imzacı YALNIZ kendi sertifikasını gömülü taşıyan HAK'ı imzalar; sertifika ve iptal belgesi
-//      basamaz; ufuk tavanını (TEST > 45) aşan HAK'ı basmaz; kök, ara sertifikalı HAK'ı basmaz; kapsam ARA: TAILNET·CLI
-//      geçer, ERİŞİM·GENEL 404 ve parola alt sürece yazılmaz
+//      basamaz; ufuk tavanını (TEST > 45) aşan HAK'ı basmaz; kök, ara sertifikalı HAK'ı basmaz; kapsam ARA: TAILNET·ERİŞİM·
+//      CLI geçer, GENEL (bayi yolu) 404 ve parola alt sürece yazılmaz
 //   §3 yetenek kapısı: `hak-ara` bildiren kuruluma ARA, bildirmeyene KÖK (VDS'te varsa), ikisi de yoksa KUYRUK; ara
 //      imzalı HAK fabrikanın doğrulayıcısından ARA olarak geçer; eski derlemeye ara imzalı HAK GİTMEZ
 //      (`deliverableEntitlement`); arayüz planı uyuşmazsa 409 ve parola kullanılmaz
@@ -22,8 +22,10 @@
 //   §8 toplu yeniden basım servisi: tek parola, yetenekliler ARA imzalı yeni sürüm, yeteneksiz atlanır; yanlış parola
 //      hiçbir sürüm yazmaz
 //   §9 anahtar süresi (K4): kullanım başına en yeni sertifikanın bitişine 30/15/7/1 gün kala bildirim, eşik başına TEK
-// ⭐ KALICI SONDA ✓K (her koşumda): §1b ara GERÇEKTEN imzalar (kör RED değil) · §2g TAILNET'te ara imzası parolayı alt
-//    sürece GERÇEKTEN yazar · §4c onaylı uzun ufuk GERÇEKTEN imzalanır · §5f kök yokken yoklama GERÇEKTEN 200.
+// ⭐ KALICI SONDA ✓K (her koşumda): §1b ara GERÇEKTEN imzalar (kör RED değil) · §2g TAILNET ve ERİŞİM'de ara imzası
+//    parolayı alt sürece GERÇEKTEN yazar · §4c onaylı uzun ufuk GERÇEKTEN imzalanır · §5f kök yokken yoklama GERÇEKTEN 200.
+// NEGATİF SONDA (dosya DIŞI, cp + shasum ile geri alındı; 2026-10-04): `SIGNING_ORIGINS.ARA` eski `[TAILNET, CLI]` → §0a ❌ ·
+//   §2g ❌ (ERİŞİM 404); `"GENEL"` eklendi → §0a ❌ · §2g ❌ (GENEL imzaladı).
 // Koşum: node ../../scripts/agir-is.mjs -- npx tsx scripts/test_ara_imzaci.ts   (kendi _test DB'si)
 // =============================================================================
 import type { Socket } from "node:net";
@@ -131,7 +133,7 @@ async function main(): Promise<void> {
   let portalKoksuz: Awaited<ReturnType<typeof portalSunuculariKur>> | null = null;
   try {
     console.log("\n§0 kapsam haritası");
-    kontrol("§0a ara anahtar türü → ARA; ARA yalnız TAILNET · CLI", signingKindOf("tekserp-ara-anahtar") === "ARA" && JSON.stringify(SIGNING_ORIGINS.ARA) === JSON.stringify(["TAILNET", "CLI"]));
+    kontrol("§0a ara anahtar türü → ARA; ARA yalnız TAILNET · ERİŞİM · CLI (GENEL/bayi yolu YOK)", signingKindOf("tekserp-ara-anahtar") === "ARA" && JSON.stringify(SIGNING_ORIGINS.ARA) === JSON.stringify(["TAILNET", "ERISIM", "CLI"]));
 
     console.log("\n§1 anahtar deposu");
     const araSertifikasi = await araYaz(ortam.dizin, f);
@@ -203,9 +205,9 @@ async function main(): Promise<void> {
     const erisim = await kapsamDene("ERISIM");
     const genel = await kapsamDene("GENEL");
     const tailnet = await kapsamDene("TAILNET");
-    kontrol("§2g ✓K ara imzası: ERİŞİM ve GENEL 404 (parola alt sürece YAZILMADI, sıfırlandı); TAILNET imzalar",
-      erisim.sonuc === "404 BULUNAMADI" && erisim.yazilan === 0 && erisim.sifir && genel.sonuc === "404 BULUNAMADI" && genel.yazilan === 0 && tailnet.sonuc === "GECTI" && tailnet.yazilan > 0,
-      `${erisim.sonuc}/${genel.sonuc}/${tailnet.sonuc} · ${tailnet.yazilan} bayt`);
+    kontrol("§2g ✓K ara imzası: GENEL 404 (parola alt sürece YAZILMADI, sıfırlandı); TAILNET ve ERİŞİM imzalar",
+      genel.sonuc === "404 BULUNAMADI" && genel.yazilan === 0 && genel.sifir && tailnet.sonuc === "GECTI" && tailnet.yazilan > 0 && erisim.sonuc === "GECTI" && erisim.yazilan > 0,
+      `${erisim.sonuc}/${genel.sonuc}/${tailnet.sonuc} · ${tailnet.yazilan}/${erisim.yazilan} bayt`);
 
     console.log("\n§3 yetenek kapısı");
     const k1 = await kurulumFiksturu(ctx);

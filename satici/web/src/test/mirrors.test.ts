@@ -42,7 +42,7 @@ import {
   SHORT_HORIZON_CLASSES,
   UNBOUNDED_HORIZON_CLASSES,
 } from "../portal/installation/EntitlementSigning";
-import { PORTAL_PERMISSIONS, TAILNET_ONLY_PERMISSIONS } from "../shared/permissions";
+import { PORTAL_PERMISSIONS } from "../shared/permissions";
 import { HEAVY_K3_MIN_DAYS, INSTALLMENT_DEFAULT_RESTRICTION_DAYS } from "../shared/sanctions";
 import { CHANNEL_CODE_PATTERN, CHANNEL_KIND_LABEL, VERSION_PATTERN } from "../portal/pages/Channels";
 import { CLOUD_RETENTION_DEFAULT, CLOUD_RETENTION_MONTHS, SYNC_MINUTES_DEFAULT, SYNC_MINUTES_MAX, SYNC_MINUTES_MIN } from "../shared/cloud-settings";
@@ -160,10 +160,9 @@ describe("izin tablosu aynası (satici/sunucu src/portal/roles.ts)", () => {
     expect(web).toEqual(Object.fromEntries(Object.entries(server).map(([k, v]) => [k, [...v].sort()])));
   });
 
-  it("yalnız tailnet izinleri (hassas sınıf: ERİŞİM oturumunda ekran yok) birebir aynı", () => {
-    const server = listStrings(read("portal/roles.ts"), "export const TAILNET_ONLY_PERMISSIONS: readonly PortalPermission\\[\\]");
-    expect(server).toEqual(expect.arrayContaining(["kullanici:yonet", "bayi:anahtar", "yayinci:anahtar"]));
-    expect([...TAILNET_ONLY_PERMISSIONS].sort()).toEqual([...server].sort());
+  // NEGATİF SONDA (2026-10-04, dosya DIŞI, geri alındı): roles.ts'e `TAILNET_ONLY_PERMISSIONS` geri yazıldı → ❌.
+  it("sunucuda dinleyiciye göre izin düşüren sınıf YOK (portal internetten: rol ne açıyorsa iki yolda da açar)", () => {
+    expect(read("portal/roles.ts")).not.toMatch(/TAILNET_ONLY_PERMISSIONS/);
   });
 });
 

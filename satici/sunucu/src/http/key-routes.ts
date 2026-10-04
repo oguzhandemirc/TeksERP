@@ -1,6 +1,6 @@
 // ANAHTAR KATMANI PORTAL ROTALARI (G4) — kök imzası bekleyen HAK kuyruğu · iptal belgesi defteri · ara imzacıyla toplu
-// yeniden basım. Toplu basım ara imzacı parolası taşır: `kokParolasi: true` (yalnız tailnet/geri döngü, ERİŞİM listesine
-// giremez) + imza parolası kapısı. Kuyruk talebinin kendisi HAK sürüm rotasından doğar (`/haklar/:id/surum`, plan KUYRUK).
+// yeniden basım. Toplu basım ara imzacı parolası taşır: imza parolası kapısı + imza boğazı (hangi yoldan imzalanacağı
+// keys/signing-scope.ts). Kuyruk talebinin kendisi HAK sürüm rotasından doğar (`/haklar/:id/surum`, plan KUYRUK).
 import { z } from "zod";
 import { passwordBuffer } from "../keys/key-files";
 import { prisma } from "../lib/prisma";
@@ -60,7 +60,6 @@ export const KEY_PORTAL_ROUTES: readonly PortalRouteDef[] = [
     path: "/haklar/toplu-yeniden-bas",
     permission: "hak:yaz",
     kimlik: "ISLEM_KIMLIGI",
-    kokParolasi: true,
     handler: async (c) => {
       const b = bodyOf(c, ReissueBody);
       const password = passwordBuffer(b.imzaParolasi);

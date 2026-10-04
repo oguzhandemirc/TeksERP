@@ -10,19 +10,20 @@
 //      aşılınca yeni istek beklemez, 429 HIZ_SINIRI alır
 //   §6 aynı kullanıcının EŞZAMANLI denemeleri sıraya girer: 8 paralel yanlış parolanın tam 5'i denetlenir,
 //      kalanı kilide takılır (sıra olmasaydı hepsi kilit denetimini birlikte geçip 8 tahmin yaptırırdı)
-//   §7 imza KAPSAMI (tek boğaz `signWithWrappedKey`, anahtar türü DOSYADAN): kapsamsız kök imzası 500 · ERİŞİM ve
-//      GENEL'den kök imzası 404 · TAILNET ve CLI geçer · bayi anahtarı yalnız GENEL/CLI · HAK ara imzacısı (G4) kök gibi
-//      yalnız TAILNET/CLI (§7e); reddedilen parola hiçbir sürece YAZILMAZ ve Buffer'ı sıfırlanır
+//   §7 imza KAPSAMI (tek boğaz `signWithWrappedKey`, anahtar türü DOSYADAN): kapsamsız kök imzası 500 · GENEL'den (bayi
+//      yolu) kök imzası 404 · TAILNET, ERİŞİM ve CLI geçer · bayi anahtarı yalnız GENEL/CLI · HAK ara imzacısı (G4) kök gibi
+//      TAILNET/ERİŞİM/CLI, GENEL'de 404 (§7e); reddedilen parola hiçbir sürece YAZILMAZ ve Buffer'ı sıfırlanır
 //   §8 kapsam boğazının kaynağı: `signingKindOf` tanınmayan türde RED (fail-closed; eskiden bayi sayılırdı) · src/ içinde
 //      `runAsCli` / serbest `runInScope` ANILMAZ (içe aktarma · ad alanı · dizgi erişimi dahil; yalnız scripts/ ve bekçiler) ·
 //      sunucu kapsamı yalnız `runInListenerScope` ile ve yalnız portal-http.ts'ten · o yol CLI kapsamı açamaz
 // ⭐ KALICI SONDA ✓K5 (her koşumda): kilit öncesi 5 deneme GERÇEKTEN parola denetler (400, 429 değil) ·
 //    araya giren başarı kilidi önler · 2 slotta iki imza GERÇEKTEN aynı anda koşar (slot kör değil) ·
-//    eşzamanlı denemelerin 5'i gerçekten denetlenir (kilit körü körüne herkesi reddetmez) · TAILNET kapsamında kök
-//    imzası GERÇEKTEN imzalar ve GENEL'de bayi anahtarı kapsamı geçer (§7 reddi kör RED değil) · §8d çözümleyici sentetik
+//    eşzamanlı denemelerin 5'i gerçekten denetlenir (kilit körü körüne herkesi reddetmez) · TAILNET ve ERİŞİM kapsamında
+//    kök imzası GERÇEKTEN imzalar ve GENEL'de bayi anahtarı kapsamı geçer (§7 reddi kör RED değil) · §8d çözümleyici sentetik
 //    içe aktarma/ad alanı/dizgi/iç çağrı dört biçimini yakalar · §8e CLI kapsamı açılamaz.
 // NEGATİF SONDA (dosya DIŞI, cp + shasum ile geri alındı): I8 eski signing-scope (bilinmeyen tür → BAYI) + eski
-//   portal-http (runInScope) → §8a–§8d ❌.
+//   portal-http (runInScope) → §8a–§8d ❌. Portal internetten (2026-10-04): `SIGNING_ORIGINS.KOK`/`ARA`ya "GENEL" eklendi →
+//   §7b ❌ · §7e ❌; `ERISIM` çıkarıldı (eski dizi) → §7c ❌ · §7e ❌.
 // Koşum: npx tsx scripts/test_imza_parolasi.ts   (kendi _test DB'si)
 // =============================================================================
 import type { Socket } from "node:net";
@@ -277,16 +278,20 @@ async function main(): Promise<void> {
     };
     const kapsamsiz = await dene(kokYolu, TEST_KOK_PAROLASI, null);
     kontrol("§7a ⭐ kapsamsız kök imzası RED 500; parola hiçbir sürece yazılmadı, Buffer sıfırlandı", kapsamsiz.sonuc === "500 SUNUCU_HATASI" && kapsamsiz.yazilan === 0 && kapsamsiz.sifir, JSON.stringify(kapsamsiz));
-    const erisimden = await dene(kokYolu, TEST_KOK_PAROLASI, "ERISIM");
     const genelden = await dene(kokYolu, TEST_KOK_PAROLASI, "GENEL");
     kontrol(
-      "§7b ⭐ ERİŞİM'den ve GENEL'den kök imzası 404; parola alt sürece yazılmadı",
-      erisimden.sonuc === "404 BULUNAMADI" && genelden.sonuc === "404 BULUNAMADI" && erisimden.yazilan === 0 && genelden.yazilan === 0 && erisimden.sifir && genelden.sifir,
-      `${erisimden.sonuc} / ${genelden.sonuc}`,
+      "§7b ⭐ GENEL'den (bayi yolu) kök imzası 404; parola alt sürece yazılmadı, Buffer sıfırlandı",
+      genelden.sonuc === "404 BULUNAMADI" && genelden.yazilan === 0 && genelden.sifir,
+      genelden.sonuc,
     );
+    const erisimden = await dene(kokYolu, TEST_KOK_PAROLASI, "ERISIM");
     const tailnetten = await dene(kokYolu, TEST_KOK_PAROLASI, "TAILNET");
     const cliden = await dene(kokYolu, TEST_KOK_PAROLASI, "CLI");
-    kontrol("§7c ✓K TAILNET ve CLI kapsamında kök imzası GERÇEKTEN imzalar (parola alt sürece gitti)", tailnetten.sonuc === "GECTI" && cliden.sonuc === "GECTI" && tailnetten.yazilan > 0, `${tailnetten.sonuc}/${cliden.sonuc} · ${tailnetten.yazilan} bayt`);
+    kontrol(
+      "§7c ✓K TAILNET, ERİŞİM ve CLI kapsamında kök imzası GERÇEKTEN imzalar (parola alt sürece gitti)",
+      tailnetten.sonuc === "GECTI" && erisimden.sonuc === "GECTI" && cliden.sonuc === "GECTI" && tailnetten.yazilan > 0 && erisimden.yazilan > 0,
+      `${tailnetten.sonuc}/${erisimden.sonuc}/${cliden.sonuc} · ${tailnetten.yazilan}/${erisimden.yazilan} bayt`,
+    );
     const bayiTailnet = await dene(bayiYolu, "bayi-sonda-parolasi", "TAILNET");
     const bayiGenel = await dene(bayiYolu, "bayi-sonda-parolasi", "GENEL");
     kontrol(
@@ -301,8 +306,11 @@ async function main(): Promise<void> {
     const araKapsamsiz = await dene(araYolu, "ara-sonda-parolasi", null);
     const araTailnet = await dene(araYolu, "ara-sonda-parolasi", "TAILNET");
     kontrol(
-      "§7e ara imzacı anahtarı (tür DOSYADAN): ERİŞİM ve GENEL 404 · kapsamsız 500 — parola hiçbir sürece yazılmadı; TAILNET'te kapsamı GEÇER (alt süreç kendi kuralıyla reddeder)",
-      araErisim.sonuc === "404 BULUNAMADI" && araGenel.sonuc === "404 BULUNAMADI" && araKapsamsiz.sonuc === "500 SUNUCU_HATASI" && [araErisim, araGenel, araKapsamsiz].every((x) => x.yazilan === 0 && x.sifir) && araTailnet.sonuc.startsWith("HATA İmza reddedildi (YETKISIZ)") && araTailnet.yazilan > 0,
+      "§7e ara imzacı anahtarı (tür DOSYADAN): GENEL 404 · kapsamsız 500 — parola hiçbir sürece yazılmadı; TAILNET ve ERİŞİM'de kapsamı GEÇER (alt süreç kendi kuralıyla reddeder)",
+      araGenel.sonuc === "404 BULUNAMADI" &&
+        araKapsamsiz.sonuc === "500 SUNUCU_HATASI" &&
+        [araGenel, araKapsamsiz].every((x) => x.yazilan === 0 && x.sifir) &&
+        [araTailnet, araErisim].every((x) => x.sonuc.startsWith("HATA İmza reddedildi (YETKISIZ)") && x.yazilan > 0),
       `${araErisim.sonuc} / ${araGenel.sonuc} / ${araKapsamsiz.sonuc} / ${araTailnet.sonuc.slice(0, 60)}`,
     );
   } finally {

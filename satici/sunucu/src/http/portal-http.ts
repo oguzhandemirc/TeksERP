@@ -2,10 +2,8 @@
 // (GENEL, /bayi/api) aynı yapıdan doğar: oturum (çerez httpOnly + SameSite=Strict), rota başına BEYANLI
 // izin, yazma rotalarında işlem kimliği (clientToken) ile idempotent eylem. Rota tabloları
 // (portal-routes.ts · dealer-routes.ts) veridir: bekçi her rotanın iznini ve kimlik beyanını ölçer.
-// Kök parolalı rota (`kokParolasi: true`) kapısıyla bağlanır (tailnet kaynağı ara katmanı); kapı verilmeyen
-// yönlendirici o rotayı bağlamaz, AÇILIŞTA düşer (fail-closed).
 // ERİŞİM (Cloudflare Access) yönlendiricisi OPT-IN: yalnız erisim-rotalari.ts listesindeki rotalar bağlanır, liste
-// dışı istek gövde okunmadan 404. Her işleyici istek kapsamında koşar (lib/request-scope.ts): imza boğazı dinleyiciyi,
+// dışı istek gövde okunmadan 404. İmza parolasının hangi yoldan geçebileceğini rota değil imza boğazı söyler (signing-scope.ts). Her işleyici istek kapsamında koşar (lib/request-scope.ts): imza boğazı dinleyiciyi,
 // denetim Access e-postasını oradan okur; denetim satırı yazmayan ERİŞİM yazması genel ayak izi satırı alır.
 // CSRF: SameSite=Strict + yazmada yalnız application/json (tarayıcı formu bu türü gönderemez) + CORS yok.
 import express, { Router, type NextFunction, type Request, type RequestHandler, type Response } from "express";
@@ -15,7 +13,7 @@ import { VendorError, notFoundError } from "../lib/errors";
 import { currentScope, runInListenerScope } from "../lib/request-scope";
 import { login, logout, resolveSession, SESSION_COOKIE, SESSION_COOKIE_PATH, type PortalSession } from "../portal/auth.service";
 import { executePortalAction, type PortalActionResult, type PortalActionSpec } from "../portal/idempotency";
-import { TAILNET_ONLY_PERMISSIONS, roleHas, type PortalListener, type PortalPermission } from "../portal/roles";
+import { roleHas, type PortalListener, type PortalPermission } from "../portal/roles";
 import { changeOwnPassword } from "../portal/users.service";
 import type { VendorContext } from "../services/context";
 import { parseStrict } from "./body";
@@ -48,14 +46,7 @@ export interface PortalRouteDef {
   readonly path: string;
   readonly permission: PortalPermission;
   readonly kimlik: "OKUMA" | "ISLEM_KIMLIGI" | { readonly muaf: string };
-  /** Gövdede kök parolası taşır: yalnız tailnet/geri döngüden (genel yolda 404, parola CF'den geçmesin). */
-  readonly kokParolasi?: true;
   readonly handler: (c: PortalRequestContext) => Promise<PortalRouteResult>;
-}
-
-export interface PortalRouterOptions {
-  /** Kök parolalı rotaların önündeki kapı (tailnet kaynağı ara katmanı); gövde okunmadan önce koşar. */
-  readonly rootPasswordGate?: RequestHandler;
 }
 
 export const ClientTokenSchema = z.uuid();
@@ -192,21 +183,26 @@ export const routeKey = (method: RouteMethod, path: string): string => `${method
 export const SESSION_ROUTE_KEYS: readonly string[] = ["POST /oturum/ac", "POST /oturum/kapat", "GET /oturum", "POST /oturum/parola"];
 
 /**
- * ERİŞİM izin listesinin kusurları: tabloda olmayan satır · kök parolalı rota · hassas izinli rota (roles.ts
- * `TAILNET_ONLY_PERMISSIONS`). Boş dizi = geçerli; yönlendirici kurulurken dolu dizi AÇILIŞI durdurur.
+ * ERİŞİM izin listesinin kusurları: listede ama rota tablosunda olmayan satır. `disi` (erisim-rotalari.ts
+ * `ERISIM_DISI_ROTALAR`) verilirse KARAR TAMLIĞI da ölçülür: her tablo rotası ya listede ya gerekçeli dışlamada, ikisinde
+ * birden değil, dışlamada tabloda olmayan satır yok. Yönlendirici yalnız birinci kolu açılışta uygular (liste dışı rota
+ * zaten 404); tamlık bekçide (test_erisim_kapisi §4a). Boş dizi = geçerli.
  */
-export function erisimListesiBulgulari(routes: readonly PortalRouteDef[], list: ReadonlySet<string>, fixedKeys: readonly string[] = SESSION_ROUTE_KEYS): string[] {
+export function erisimListesiBulgulari(
+  routes: readonly PortalRouteDef[],
+  list: ReadonlySet<string>,
+  fixedKeys: readonly string[] = SESSION_ROUTE_KEYS,
+  disi?: Readonly<Record<string, string>>,
+): string[] {
   const out: string[] = [];
-  const byKey = new Map(routes.map((d) => [routeKey(d.method, d.path), d]));
-  for (const key of list) {
-    const def = byKey.get(key);
-    if (!def) {
-      if (!fixedKeys.includes(key)) out.push(`${key}: listede ama rota tablosunda yok`);
-      continue;
-    }
-    if (def.kokParolasi) out.push(`${key}: kök parolalı rota ERİŞİM'e açılamaz`);
-    if (TAILNET_ONLY_PERMISSIONS.includes(def.permission)) out.push(`${key}: hassas izinli (${def.permission}) rota ERİŞİM'e açılamaz`);
+  const keys = new Set(routes.map((d) => routeKey(d.method, d.path)));
+  for (const key of list) if (!keys.has(key) && !fixedKeys.includes(key)) out.push(`${key}: listede ama rota tablosunda yok`);
+  if (disi === undefined) return out;
+  for (const key of Object.keys(disi)) {
+    if (!keys.has(key)) out.push(`${key}: dışlamada ama rota tablosunda yok`);
+    if (list.has(key)) out.push(`${key}: hem listede hem dışlamada`);
   }
+  for (const key of keys) if (!list.has(key) && !Object.hasOwn(disi, key)) out.push(`${key}: tablo rotası ne ERİŞİM listesinde ne dışlamada (karar yok)`);
   return out;
 }
 
@@ -270,7 +266,7 @@ export function scopedHandler(listener: PortalListener, key: string, fn: (req: R
   };
 }
 
-export function createPortalRouter(ctx: VendorContext, listener: PortalListener, routes: readonly PortalRouteDef[], options: PortalRouterOptions = {}): Router {
+export function createPortalRouter(ctx: VendorContext, listener: PortalListener, routes: readonly PortalRouteDef[]): Router {
   const router = express.Router();
   // ERİŞİM: YALNIZ izin listesi (opt-in). Kusurlu liste açılışı durdurur; liste dışı istek gövde okunmadan 404.
   const allowed = listener === "ERISIM" ? ERISIM_PORTAL_ROTALARI : null;
@@ -281,11 +277,6 @@ export function createPortalRouter(ctx: VendorContext, listener: PortalListener,
   }
   const bind = (key: string): boolean => allowed === null || allowed.has(key);
   const bound = routes.filter((d) => bind(routeKey(d.method, d.path)));
-  // Kök parolalı rota kapısı EN ÖNDE: reddedilen isteğin gövdesi (parola) hiç ayrıştırılmaz.
-  for (const def of bound.filter((d) => d.kokParolasi)) {
-    if (!options.rootPasswordGate) throw new Error(`${def.method.toUpperCase()} ${def.path}: kök parolalı rota kapısız bağlanamaz`);
-    router[def.method](def.path, options.rootPasswordGate);
-  }
   router.use(noStore);
   router.use(jsonOnlyWrites);
   router.use(express.json({ limit: "64kb", strict: true }));

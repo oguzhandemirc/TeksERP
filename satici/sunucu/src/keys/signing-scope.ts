@@ -1,6 +1,6 @@
-// İMZA KAPSAMI — parolalı anahtarla imza HANGİ yoldan istenebilir (tek kaynak). Kök ve ara imzacı parolası Cloudflare'den
-// geçmez: KÖK ve ARA (HAK ara imzacısı) yalnız tailnet portalından ve CLI'dan, BAYİ yalnız bayi portalından (GENEL) ve
-// CLI'dan; kapsam yoksa RED.
+// İMZA KAPSAMI — parolalı anahtarla imza HANGİ yoldan istenebilir (tek kaynak). KÖK ve ARA (HAK ara imzacısı) satıcı
+// portalının iki yolundan (tailnet · ERİŞİM) ve CLI'dan; bayi yolundan (GENEL) ASLA. BAYİ yalnız bayi portalından (GENEL)
+// ve CLI'dan; kapsam yoksa RED.
 // İki boğaz aynı kuralı çağırır: portal imza kapısı (`withSigningPasswordGuard`, sayaçlara dokunmadan) ve imza alt
 // sürecini başlatan TEK fonksiyon (`signWithWrappedKey`, anahtar türünü DOSYADAN okur — rota beyanına güvenmez).
 import { VendorError } from "../lib/errors";
@@ -10,9 +10,9 @@ import type { WrappedKeyType } from "./key-files";
 export type SigningKeyKind = "KOK" | "BAYI" | "ARA";
 
 export const SIGNING_ORIGINS: Readonly<Record<SigningKeyKind, readonly ScopeOrigin[]>> = {
-  KOK: ["TAILNET", "CLI"],
+  KOK: ["TAILNET", "ERISIM", "CLI"],
   BAYI: ["GENEL", "CLI"],
-  ARA: ["TAILNET", "CLI"],
+  ARA: ["TAILNET", "ERISIM", "CLI"],
 };
 
 /** Tür → kapsam haritası AÇIK: tanınmayan tür (yeni anahtar türü, bozuk dosya, "__proto__") BAYİ SAYILMAZ, RED. */
@@ -29,7 +29,7 @@ export function signingKindOf(tur: WrappedKeyType): SigningKeyKind {
   throw new VendorError(500, "SUNUCU_HATASI", "Anahtar türü tanınmıyor; imza reddedildi");
 }
 
-/** Kapsamsız istek 500 (programlama hatası, imza yok); izinsiz dinleyici 404 (ERİŞİM'de rota yokmuş gibi). */
+/** Kapsamsız istek 500 (programlama hatası, imza yok); izinsiz dinleyici 404 (o yolda rota yokmuş gibi). */
 export function assertSigningScope(kind: SigningKeyKind): void {
   const scope = currentScope();
   if (!scope) {

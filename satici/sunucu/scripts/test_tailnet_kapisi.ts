@@ -1,5 +1,5 @@
 // =============================================================================
-// TAILNET KAPISI — portal ve kök parolası isteyen uçlar YALNIZ tailnet dinleyicisinde; kapı iki
+// TAILNET KAPISI — satıcı portalının tünel yolu (internet yolu ERİŞİM'dir; tünel yedek yol); kapı iki
 // koşullu ve FAIL-CLOSED: (1) istek tailnet dinleyicisinin soketine gelmiş olmalı, (2) kaynak adres
 // Tailscale ağında olmalı — geri döngü (127/8 · ::1) YALNIZ TAILNET_LOOPBACK=1 iken (varsayılan KAPALI;
 // Tailscale kurulana dek SSH tüneli için). Biri tutmazsa 404 (varlık sızdırılmaz). Yapılandırma

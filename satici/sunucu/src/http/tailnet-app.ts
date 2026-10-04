@@ -1,9 +1,8 @@
-// TAILNET DİNLEYİCİSİ — portal (1f) ve kök parolası isteyen uçlar YALNIZ burada.
+// TAILNET DİNLEYİCİSİ — satıcı portalının (1f) tünel yolu; aynı portalın internet yolu ERİŞİM'dir (access-app.ts).
 // Kapı iki koşullu ve FAIL-CLOSED: istek (1) tailnet dinleyicisinin soketine gelmiş olmalı ve
 // (2) kaynak adresi tailnet ağında olmalı (geri döngü yalnız TAILNET_LOOPBACK=1 iken); biri tutmazsa 404.
 // Portal JSON API'si /portal/api altında (portal-routes.ts); /portal/saglik yalnız sayılar taşır;
-// satıcı web arayüzü (satici/web dist/portal) /portal altında, kapının ARKASINDA. Aynı arayüzün Cloudflare
-// Access arkasındaki genel yolu ERİŞİM dinleyicisidir (access-app.ts) — kök parolalı uçlar yalnız BURADA.
+// satıcı web arayüzü (satici/web dist/portal) /portal altında, kapının ARKASINDA.
 import type { AddressInfo } from "node:net";
 import express, { type Express, type NextFunction, type Request, type Response } from "express";
 import { auditFailureCount } from "../lib/audit";
@@ -69,7 +68,7 @@ export function createTailnetApp(
   app.use(gate);
   // Ham gövdeli dağıtım uçları JSON yönlendiricisinden ÖNCE (JSON-yalnız yazma kapısı parça PUT'unu reddederdi).
   app.use("/portal/api/ham", createDistributionRawRouter(ctx, "TAILNET"));
-  app.use("/portal/api", createPortalRouter(ctx, "TAILNET", VENDOR_PORTAL_ROUTES, { rootPasswordGate: gate }));
+  app.use("/portal/api", createPortalRouter(ctx, "TAILNET", VENDOR_PORTAL_ROUTES));
   const portal = express.Router();
   portal.get("/saglik", (_req, res) => {
     const now = Date.now();

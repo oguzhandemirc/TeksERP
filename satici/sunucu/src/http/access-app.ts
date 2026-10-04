@@ -3,8 +3,8 @@
 //   (1) istek ERİŞİM dinleyicisinin soketine gelmiş olmalı;
 //   (2) Access yapılandırması var (takım alanı + AUD) ve `Cf-Access-Jwt-Assertion` doğrulanıyor — HER istekte,
 //       statik dosyalar dahil; kaynak IP'ye, Host başlığına, istemci beyanına güvenilmez;
-//   (3) YALNIZ izin listesindeki rotalar (erisim-rotalari.ts, OPT-IN): kök parolalı ve hassas (kullanıcı yönetimi)
-//       rota listeye giremez, liste dışı istek gövde okunmadan 404; kök imzası ayrıca imza boğazında reddedilir.
+//   (3) YALNIZ izin listesindeki rotalar (erisim-rotalari.ts, OPT-IN; her tablo rotası listede ya da gerekçeli
+//       dışlamada): liste dışı istek gövde okunmadan 404. İmzanın bu yoldan geçip geçemeyeceği imza boğazında (signing-scope.ts).
 // Arkasında tailnet'le aynı portal (parola + TOTP, oturum ERISIM dinleyicisine bağlı) ve aynı web arayüzü.
 import type { AddressInfo } from "node:net";
 import express, { type Express, type NextFunction, type Request, type Response } from "express";
