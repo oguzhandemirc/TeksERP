@@ -41,7 +41,7 @@
                     ┌──────────────── VDS tekserp-vds (Ubuntu 24.04, Türkiye, Traefik) ────────────────┐
  Fabrika (on-prem)  │  guncelleme (nginx statik, mevcut)   satici (YENİ: lisans API + portal + dosya)   │
  backend ──443────► CF ─► /v1/* (etkinleştir, yokla, zil SSE, indirme belirteci, destek, çevrimdışı/QR)   │
-   ▲ LAN            │        portal: tailnet · ERİŞİM (CF Access+parola+TOTP, kök parola yok) · bayi (CF) │
+   ▲ LAN            │        portal: tailnet · ERİŞİM (CF Access+parola+TOTP, kök dahil)      · bayi (CF) │
  panel/tablet ─443► CF Worker (indirme belirteci doğrular, önbellekten verir) ─► guncelleme               │
                     │  patron-bulut (YENİ, Plan B: eşitleme alıcı + gelen kutusu + API + web)           │
                     │  [ayrı docker ağları · ortak birim yok · cgroup sınırları · kök anahtar parolalı]  │

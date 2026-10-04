@@ -15,8 +15,9 @@
 #   3. Satıcının ERİŞİM dinleyicisi (4613, kenar adresi, port YAYIMLANMAZ) — her istekte Access JWT'si (RS256 ·
 #      AUD · iss · süre · e-posta); yoksa 404. Access ayarı eksikse dinleyici her isteğe 404 (genel portal KAPALI).
 #   4. Portal parolası + TOTP; bu yolda YALNIZ izin listesindeki rotalar (satici/sunucu/src/http/erisim-rotalari.ts,
-#      opt-in): kök parolası isteyen uçlar (HAK imzası, kalıcıya çevirme…) ve kullanıcı yönetimi (TOTP tohumu/parola)
-#      404 — onlar yalnız tailnet/geri döngüden (Mac'te `node deploy/satici/portal-baglan.mjs`).
+#      opt-in). Satıcı portalının BÜTÜN işlemleri listededir (kök/ara imzası, kullanıcı yönetimi, anahtar kayıtları
+#      dahil — kullanıcı kararı 2026-10-04); parolalar Cloudflare kenarında çözülür, Cloudflare hesabı korunur.
+#      Tailnet/geri döngü yolu (`portal-baglan.mjs`) internet yolu VDS'te doğrulanınca kaldırılacak (D5).
 #
 # SATICI DIŞ BAĞLANTISIZ KALIR (anahtar tutan konteynere çıkış açılmaz): bu dosya satıcıya AĞ EKLEMEZ. Access imza
 # anahtarlarını (https://<takım>/cdn-cgi/access/certs) `satici-jwks` yan konteyneri 10 dk'da bir çeker, doğrular ve

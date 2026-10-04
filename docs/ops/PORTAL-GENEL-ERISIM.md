@@ -1,6 +1,6 @@
 # Satıcı portalı — genel erişim (Cloudflare Access) runbook'u
 
-> **Karar (kullanıcı, 2026-09-30):** satıcı portalı her cihaza Tailscale kurmadan internetten açılır — `https://portal.etkiliyazilim.com`, Cloudflare proxy AÇIK + **Cloudflare Access** (e-posta tek kullanımlık kodu, izinli e-posta listesi) + mevcut portal parolası + TOTP. Kök parolası isteyen nadir işler (HAK imzası, kalıcıya çevirme) ve **kullanıcı yönetimi** (hesap açma · TOTP ve parola sıfırlama — tohum ve parola taşır) **yine yalnız tailnet/geri döngüden** (Mac'te `node deploy/satici/portal-baglan.mjs`). Genel yolda YALNIZ izin listesindeki rotalar bağlanır (`satici/sunucu/src/http/erisim-rotalari.ts`, opt-in; sertleştirme 2026-09-30).
+> **Karar (kullanıcı, 2026-09-30; genişletildi 2026-10-04):** satıcı portalı her cihaza Tailscale kurmadan internetten açılır — `https://portal.etkiliyazilim.com`, Cloudflare proxy AÇIK + **Cloudflare Access** (e-posta tek kullanımlık kodu, izinli e-posta listesi, oturum 24 saat) + mevcut portal parolası + TOTP. 2026-10-04'ten beri satıcı portalının **BÜTÜN** işlemleri bu yoldan yapılır — kök (ana) anahtar parolası isteyen imza, kullanıcı yönetimi, bayi/yayıncı anahtarı kaydı ve toplu yeniden basım dahil. Genel yolda YALNIZ izin listesindeki rotalar bağlanır (`satici/sunucu/src/http/erisim-rotalari.ts`, opt-in; sertleştirme 2026-09-30). Tailnet/geri döngü yolu (4611 + `node deploy/satici/portal-baglan.mjs`) internet yolu VDS'te doğrulanınca **kaldırılacak** (D5); VDS'e SSH yönetim erişimi kalır.
 > Kod: `satici/sunucu/src/http/access-jwt.ts` · `access-app.ts` · bekçi `satici/sunucu/scripts/test_erisim_kapisi.ts`. Compose üst dosyası: [`deploy/satici/docker-compose.portal-genel.yml`](../../deploy/satici/docker-compose.portal-genel.yml). Kural: [`kurallar/lisans.md`](../kurallar/lisans.md). Kurulum: [`SATICI-KURULUM.md`](SATICI-KURULUM.md). Arşiv notu: `docs/history/CLAUDE-NOT-ARSIVI.md` "2026-09-30 — Satıcı portalı internetten (PG)".
 > **Değişmez:** her VDS yazımından ÖNCE ve SONRA `deploy/vds-dogrula.sh` → *adnansahin baytları AYNI*. Cloudflare ve VDS yazımı kullanıcının ya da yöneticinin "uygula" cümlesiyle; bu belge komutları sıralar, koşturmaz.
 
@@ -11,9 +11,9 @@
 | 1 | Cloudflare Access — One-time PIN, izinli e-posta listesi, oturum 12 sa | Cloudflare kenarı | 3. kapı yine her isteği ister |
 | 2 | Traefik `ipallowlist` — portal yönlendiricisi yalnız Cloudflare kenar aralıklarından gelen TCP bağlantısını kabul eder | VDS Traefik (etiketle, statik yapılandırma değişmez) | 3. kapı yine her isteği ister |
 | 3 | Satıcının **ERİŞİM** dinleyicisi (4613, kenar adresi, port yayını YOK) — **her** istekte `Cf-Access-Jwt-Assertion`: RS256 · takım JWKS'i (yan konteynerin yazdığı dosyadan, satıcı ağa çıkmaz) · `aud` = uygulamanın AUD etiketi · `iss` = takım · `exp`/`nbf` · e-posta; değilse **404** | satıcı süreci | — (son teknik kapı) |
-| 4 | Portal parolası + TOTP; bu yolda YALNIZ izin listesindeki rotalar (opt-in): kök parolalı uç (`POST /portal/api/haklar/:id/surum`), kullanıcı yönetimi (`/portal/api/kullanicilar*`) ve güven kökü ekleyen anahtar kayıtları (`POST /portal/api/bayiler/:id/anahtar` · `POST /portal/api/yayincilar`) gövde okunmadan **404**, arayüz o ekranları açmaz; kök imzası ayrıca imza boğazında dinleyiciyle reddedilir (listeye yanlışlıkla girse de) | satıcı süreci + web arayüzü | — |
+| 4 | Portal parolası + TOTP; bu yolda YALNIZ izin listesindeki rotalar (opt-in): satıcı portalının bütün işlemleri listededir (kök/ara imzalı HAK sürümü · kullanıcı yönetimi · bayi/yayıncı anahtarı kaydı · toplu yeniden basım), liste dışı rota gövde okunmadan **404**; kök/ara imzası imza boğazında GENEL (bayi) yolundan yine reddedilir | satıcı süreci + web arayüzü | — |
 
-Kök parolası, TOTP tohumu ve başka kullanıcının parolası Cloudflare'den (TLS'i kenarda sonlanan üçüncü taraf) **geçmez**: sunucunun 404'ü gönderilmesini engelleyemez, engel ekrandadır — ERİŞİM oturumunda "Lisansı imzala/yenile" düğmesi ve "Portal kullanıcıları" sayfası yerine tailnet/geri döngü yolunu anlatan açıklama durur. ERİŞİM'den gelen her denetim satırı Access e-postasını taşır (`erisimKimligi`); kendi denetimini yazmayan yazma `ERISIM_YAZMA` satırı alır.
+Kök/ara imzacı parolası, TOTP tohumu ve başka kullanıcının parolası Cloudflare'den (TLS'i kenarda sonlanan üçüncü taraf) **geçer** ve kenarda düz metin görünür hâle gelir — kullanıcı bu riski tünelsiz kullanım için bilinçli kabul etti (2026-10-04); savunma Cloudflare hesabının kendisidir (hesabın iki adımlı girişi D4 öncesi kullanıcıyla birlikte kontrol edilecek). Arayüz dinleyiciye göre ekran gizlemez, rol izni belirler. ERİŞİM'den gelen her denetim satırı Access e-postasını taşır (`erisimKimligi`); kendi denetimini yazmayan yazma `ERISIM_YAZMA` satırı alır.
 
 ## 1. Ölçülmüş başlangıç durumu (2026-09-30)
 
@@ -59,7 +59,7 @@ IDP_ID=$(cf -X POST "$CF/accounts/$ACCOUNT_ID/access/identity_providers" \
 ```bash
 APP=$(cf -X POST "$CF/accounts/$ACCOUNT_ID/access/apps" -d "$(jq -n --arg h "$HOST" --arg idp "$IDP_ID" '{
   type:"self_hosted", name:"TeksERP satıcı portalı", domain:$h,
-  session_duration:"12h", allowed_idps:[$idp], auto_redirect_to_identity:true,
+  session_duration:"24h", allowed_idps:[$idp], auto_redirect_to_identity:true,
   app_launcher_visible:false, http_only_cookie_attribute:true, same_site_cookie_attribute:"lax"}')")
 APP_ID=$(jq -r '.result.id' <<<"$APP"); echo "$APP_ID"
 ```
@@ -68,7 +68,7 @@ Oturum süresi 12 sa = portal oturumunun mutlak ömrü (`PORTAL_OTURUM_AZAMI_SAA
 **2.3 Allow politikası — izinli e-posta listesi:**
 ```bash
 cf -X POST "$CF/accounts/$ACCOUNT_ID/access/apps/$APP_ID/policies" -d "$(jq -n --arg l "$IZINLI_EPOSTALAR" '{
-  name:"İzinli e-postalar", decision:"allow", precedence:1, session_duration:"12h",
+  name:"İzinli e-postalar", decision:"allow", precedence:1, session_duration:"24h",
   include: ($l | split(",") | map(gsub("^\\s+|\\s+$";"")) | map(select(length>0)) | map({email:{email:.}}))}')" \
   | jq '{ok: .success, id: .result.id, kisi: (.result.include | length)}'
 ```
@@ -140,11 +140,11 @@ Kural yalnız IPv4'ü ve yalnız `<JWKS_CIKIS_AGI>`yi daraltır: `sudo docker ne
 | 2 | `curl -sk -o /dev/null -w '%{http_code}\n' --resolve portal.etkiliyazilim.com:443:80.253.255.188 https://portal.etkiliyazilim.com/portal/` | Mac (CF dışı) | **403** (Traefik `ipallowlist`); ara katman yoksa **404** (satıcının JWT kapısı) — asla 200 |
 | 3 | Tarayıcı: `https://portal.etkiliyazilim.com` → e-posta kodu → portal giriş ekranı → parola + TOTP | izinli e-posta | **200**, pano açılır; izinsiz e-posta Access'te durur |
 | 4 | `cloudflared access curl https://portal.etkiliyazilim.com/portal/api/oturum` | izinli e-posta | **401 `OTURUM_YOK`** (Access kapısı geçildi, portal oturumu yok) |
-| 5 | `cloudflared access curl -X POST -H 'Content-Type: application/json' -d '{}' https://portal.etkiliyazilim.com/portal/api/haklar/00000000-0000-4000-8000-000000000000/surum` | izinli e-posta | **404** — aynı anda `…/portal/api/pano` **401**: fark kök parolalı rotanın kapısından |
-| 5b | `cloudflared access curl https://portal.etkiliyazilim.com/portal/api/kullanicilar` (tarayıcıdan alınan portal çerezi ile) | izinli e-posta | **404** (kullanıcı yönetimi yalnız tailnet); aynı uç `portal-baglan` yolunda **200** |
-| 6 | Kurulum → Lisans sekmesi ve menü (genel yoldan girişte) | tarayıcı | "Lisansı imzala/yenile" YOK ve menüde "Portal kullanıcıları" YOK; yerlerinde tailnet/geri döngü yolunu anlatan açıklama |
+| 5 | `cloudflared access curl -X POST -H 'Content-Type: application/json' -d '{}' https://portal.etkiliyazilim.com/portal/api/haklar/00000000-0000-4000-8000-000000000000/surum` | izinli e-posta | **401** `OTURUM_YOK` (portal çerezi yok) — 404 DEĞİL: imza rotası ERİŞİM'de bağlı |
+| 5b | `cloudflared access curl https://portal.etkiliyazilim.com/portal/api/kullanicilar` (tarayıcıdan alınan portal çerezi ile) | izinli e-posta | **200** (kullanıcı yönetimi ERİŞİM'de) |
+| 6 | Kurulum → Lisans sekmesi ve menü (genel yoldan girişte, yönetici) | tarayıcı | "Lisansı imzala/yenile" VAR ve menüde "Portal kullanıcıları" VAR; tünele yönlendiren açıklama YOK |
 | 6b | Denetim defteri → son `PORTAL_GIRIS` (genel yoldan) | tarayıcı | özette `erisimKimligi` = giriş yapan izinli e-posta; tailnet girişinde bu alan YOK |
-| 7 | `node deploy/satici/portal-baglan.mjs` → `http://127.0.0.1:14611/portal/` | Mac | tailnet/geri döngü yolu DEĞİŞMEDİ: giriş + imza formu açık |
+| 7 | `node deploy/satici/portal-baglan.mjs` → `http://127.0.0.1:14611/portal/` | Mac | D5'e dek tailnet/geri döngü yolu da açık (giriş + imza formu); D5'te araç ve 4611 kalkınca bu satır silinir |
 | 8 | `sudo docker compose logs satici \| grep "erisim:"` | VDS | `Cloudflare Access kapısı AÇIK`; 2. adımdan sonra (ara katman yoksa) `RED BASLIK_YOK` satırı, dakikada en çok bir |
 | 9 | `sudo docker compose logs satici-jwks \| tail -3` | VDS | `[jwks] yazıldı: N anahtar` (10 dk'da bir); `çekilemedi (eski dosya KORUNDU)` sürüyorsa çıkış kuralı/DNS |
 | 10 | `sudo docker network inspect tekserp-satici-<ortam>-jwks-cikis --format '{{range .Containers}}{{.Name}} {{end}}'` | VDS | YALNIZ `tekserp-satici-<ortam>-jwks` — satıcı bu köprüde DEĞİL |

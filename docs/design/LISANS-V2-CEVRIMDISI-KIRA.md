@@ -119,7 +119,7 @@ P, güvenilir saat T ile karşılaştırılır (`Teks-Erp/src/lib/license/saat.t
 | Anahtar | `kid` | Yer | İmzaladığı | Ömür | İptal |
 |---|---|---|---|---|---|
 | KÖK | `kok-<yıl>-<n>` | Mac, parolalı dosya, VDS'ten uzakta. Şifreli yedek: kullanıcının elle yüklediği Google Drive. Parola kâğıtta | ara sertifikalar (HAK · ALT · İNDİRME · BAYİ), iptal belgesi, eski derleme HAK'ları (§2.6) | çapada süresiz | yalnız yeni derleme |
-| HAK ara imzacısı | `ara-<yıl>-<n>` | VDS anahtar birimi, parolalı. Parola portal formu → alt süreç stdin yoluyla gelir; yalnız tailnet ya da geri döngü | HAK | **120 g** | iptal belgesi |
+| HAK ara imzacısı | `ara-<yıl>-<n>` | VDS anahtar birimi, parolalı. Parola portal formu → alt süreç stdin yoluyla gelir; tailnet, internet portalı (ERİŞİM, Access) ya da geri döngü | HAK | **120 g** | iptal belgesi |
 | ALT | `alt-…` | VDS, 0600, parolasız | KİRA | **120 g** | iptal belgesi |
 | İNDİRME | `ind-…` | VDS 0600; açık yarı Worker'da | indirme belirteci | **120 g**; Worker listesi kid × kanal × pencere | iptal belgesi + Worker listesinden çıkarma |
 | BAYİ | `bayi-…` | VDS, bayi parolasıyla | bayi tavanı içinde HAK (ufuk ≤ 400) | 365 g | iptal belgesi |

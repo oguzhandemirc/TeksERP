@@ -2,6 +2,8 @@
 // =============================================================================
 // Satıcı portalına Mac'ten SSH üzerinden bağlanma — GERİ DÖNGÜ KİPİ (Tailscale öncesi) aracı.
 // =============================================================================
+// ⚠️ KALDIRILACAK (kullanıcı kararı 2026-10-04): portalın bütün işlemleri internetten (ERİŞİM, 4613); bu araç,
+// 4611 dinleyicisi ve tailnet servisi internet yolu VDS'te doğrulanınca D5 diliminde kalkar. Yedek yol değildir.
 // VDS'in sshd'si TCP yönlendirmeyi kapatır (`AllowTcpForwarding no`) → `ssh -L`/`-W` "administratively
 // prohibited" döner. Bu araç Mac'te YALNIZ 127.0.0.1'i dinler ve her tarayıcı bağlantısı için bir SSH
 // OTURUMU açıp VDS'te `nc -N <köprü> 4611` koşturur: bayt akışı SSH'in içinden portal ileticisine
