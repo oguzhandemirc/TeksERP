@@ -17,7 +17,8 @@
 //   ⑧ sırlar: göç parolası sunucuya BAĞLANMAZ (yalnız DB · göç · yedek); çalışma parolaları yalnız
 //      sunucu + göç; iç API belirteci yalnız sunucu; ortamda düz parola/belirteç yok
 //   ⑨ SATICIYLA UYUM (--satici-env): ic-api ağ adı, satıcı iç adresi ve PATRON_IC_IP satıcınınkiyle AYNI;
-//      SIR_GID satıcınınkinden FARKLI; patronun kenar ve çıkış ağları satıcının hiçbir ağıyla çakışmaz
+//      SIR_GID satıcınınkinden FARKLI; patronun kenar ve çıkış ağları satıcının hiçbir ağıyla (kenar · ic-api · JWKS ve
+//      bildirim çıkışı — satıcı .env'inde tanımlıysa) çakışmaz
 //
 // Kullanım: node deploy/patron/compose-denetle.mjs --env-file <.env> --satici-env <satıcının .env'i> [-f <compose> ...]
 // Çıkış: 0 temiz · 1 ihlal · 2 ölçülemedi (docker yok / config çözülemedi / satıcı .env'i yok).
@@ -155,12 +156,12 @@ for (const [ad, s] of servisler) {
   for (const v of s.volumes ?? []) if (v.target === "/anahtarlar") kontrol(`⑤ ${ad} anahtar birimi salt okunur`, v.read_only === true);
 }
 
-// ⑥ köprü ağları tailnet/geri döngü aralığı dışında · ⑥b kenar dinamik aralığı
+// ⑥ köprü ağları CGNAT/geri döngü aralığı dışında · ⑥b kenar dinamik aralığı
 for (const [anahtar, n] of Object.entries(aglar)) {
   for (const c of n.ipam?.config ?? []) {
     if (!c.subnet) continue;
     const kotu = ["100.64.0.0/10", "127.0.0.0/8"].filter((y) => cakisir(c.subnet, y));
-    kontrol(`⑥ ${anahtar} ağı (${c.subnet}) tailnet/geri döngü aralığında DEĞİL`, kotu.length === 0, kotu.join(", "));
+    kontrol(`⑥ ${anahtar} ağı (${c.subnet}) 100.64/10 (CGNAT) ve geri döngü aralığında DEĞİL`, kotu.length === 0, kotu.join(", "));
   }
 }
 const kc = aglar.kenar?.ipam?.config?.[0] ?? {};
@@ -208,10 +209,12 @@ if (!saticiEnv) {
   kontrol("⑨ PATRON_IC_IP satıcının ic-api alt ağında, dinamik aralık dışında", !!s.IC_API_AGI && aralikta(icIp, s.IC_API_AGI) && !aralikta(icIp, s.IC_API_DINAMIK_ARALIK ?? "0.0.0.0/32"), `${s.IC_API_AGI ?? "YOK"} · dinamik ${s.IC_API_DINAMIK_ARALIK ?? "YOK"}`);
   const gid = JSON.parse(gidler[0] ?? "[]")[0];
   kontrol("⑨ SIR_GID satıcınınkinden FARKLI (sır grubu ortak değil)", !!s.SIR_GID && String(gid) !== String(s.SIR_GID), `patron ${gid} · satıcı ${s.SIR_GID ?? "YOK"}`);
-  const cakisan = ["KENAR_AGI", "TAILNET_AGI", "IC_API_AGI"].filter((k) => s[k] && kc.subnet && cakisir(kc.subnet, s[k]));
+  // Satıcının .env'le adreslenen ağları (tünel ağı D5'te emekli); tanımsız olan sessiz atlanır, yazılmış olan ölçülür.
+  const SATICI_AGLARI = ["KENAR_AGI", "IC_API_AGI", "JWKS_CIKIS_AGI", "BILDIRIM_CIKIS_AGI"];
+  const cakisan = SATICI_AGLARI.filter((k) => s[k] && kc.subnet && cakisir(kc.subnet, s[k]));
   kontrol("⑨ patronun kenar ağı satıcının hiçbir ağıyla çakışmaz", !!kc.subnet && cakisan.length === 0, cakisan.join(", "));
   const cc = aglar.cikis?.ipam?.config?.[0]?.subnet;
-  const cikisCakisan = ["KENAR_AGI", "TAILNET_AGI", "IC_API_AGI"].filter((k) => s[k] && cc && cakisir(cc, s[k]));
+  const cikisCakisan = SATICI_AGLARI.filter((k) => s[k] && cc && cakisir(cc, s[k]));
   kontrol("⑨ patronun çıkış ağı satıcının hiçbir ağıyla ve kenarla çakışmaz", !!cc && cikisCakisan.length === 0 && !(kc.subnet && cakisir(cc, kc.subnet)), cikisCakisan.join(", ") || cc || "YOK");
 }
 

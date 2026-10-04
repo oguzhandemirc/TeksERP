@@ -5,7 +5,7 @@
 # Yan konteyner `satici-bildirim` (docker-compose.bildirim.yml) internal OLMAYAN `bildirim-cikis` ağına katılır;
 # bu betik o ağın çıkışını YALNIZ şuna daraltır (Docker yayımlı/köprü trafiğinde ufw'yi ATLAR → kural DOCKER-USER'da):
 #   1) sabit DNS çözücülerine (compose `dns:` — BILDIRIM_DNS_1/2) udp/tcp 53
-#   2) özel/iç ağlara (10/8 · 172.16/12 · 192.168/16 · 100.64/10 tailnet · 169.254/16) HİÇBİR yeni bağlantı
+#   2) özel/iç ağlara (10/8 · 172.16/12 · 192.168/16 · 100.64/10 CGNAT · 169.254/16) HİÇBİR yeni bağlantı
 #   3) internete YALNIZ tcp/443 (api.telegram.org · api.resend.com)
 #   4) başka her YENİ dış bağlantı düşer; VDS'in kendisine (köprü ağ geçidi, INPUT) yeni bağlantı düşer
 # Yanıt paketleri (ESTABLISHED) serbest. İdempotent: önce bu betiğin kurallarını SİLER, sonra sırayla koyar

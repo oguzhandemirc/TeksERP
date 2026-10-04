@@ -13,7 +13,6 @@ export const s = (sonuc, not = '') => ({ sonuc, not });
 export const VARSAYILAN = Object.freeze({
   saticiKok: 'https://lisans-test.etkiliyazilim.com',
   tpKok: 'http://100.70.47.46:4000',
-  portalKok: 'http://127.0.0.1:14611',
   kanal: 'testfabrika',
   /** vds-dogrula tabanı: sahaya özgü veri, repo DIŞI (betiğin varsayılanıyla aynı; `--vds-taban=` ezer). */
   vdsTaban: '~/.tekserp/vds-taban',

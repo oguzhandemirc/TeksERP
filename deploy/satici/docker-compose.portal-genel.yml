@@ -1,9 +1,9 @@
 # =============================================================================
 # Satıcı — PORTAL GENEL ERİŞİMİ: satıcı portalı internetten (portal.<alan>), Cloudflare proxy + Access arkasında
 # =============================================================================
-# Ana dosyanın (geri döngü kipinde onun da) ÜSTÜNE bindirilir; `.env`'deki COMPOSE_FILE satırına EN SONA eklenir:
-#   geri döngü kipi : COMPOSE_FILE=docker-compose.yml:docker-compose.loopback.yml:docker-compose.portal-genel.yml
-#   ana (tailnet)   : COMPOSE_FILE=docker-compose.yml:docker-compose.portal-genel.yml
+# Ana dosyanın ÜSTÜNE bindirilir; portalın TEK yoludur (tünel yok). YALNIZ ÜRETİMDE ve orada ZORUNLU, hazırlıkta
+# portal YOK (tek portal — kullanıcı kararı 2026-10-05; compose-denetle Ⓞ ölçer):
+#   üretim : COMPOSE_FILE=docker-compose.yml:docker-compose.portal-genel.yml[:docker-compose.bildirim.yml]
 # Runbook (Cloudflare tarafı · DNS · doğrulama · geri alma): docs/ops/PORTAL-GENEL-ERISIM.md
 #
 # Dört kapı, dıştan içe (biri düşse de öteki fail-closed kalır):
@@ -17,7 +17,6 @@
 #   4. Portal parolası + TOTP; bu yolda YALNIZ izin listesindeki rotalar (satici/sunucu/src/http/erisim-rotalari.ts,
 #      opt-in). Satıcı portalının BÜTÜN işlemleri listededir (kök/ara imzası, kullanıcı yönetimi, anahtar kayıtları
 #      dahil — kullanıcı kararı 2026-10-04); parolalar Cloudflare kenarında çözülür, Cloudflare hesabı korunur.
-#      Tailnet/geri döngü yolu (`portal-baglan.mjs`) internet yolu VDS'te doğrulanınca kaldırılacak (D5).
 #
 # SATICI DIŞ BAĞLANTISIZ KALIR (anahtar tutan konteynere çıkış açılmaz): bu dosya satıcıya AĞ EKLEMEZ. Access imza
 # anahtarlarını (https://<takım>/cdn-cgi/access/certs) `satici-jwks` yan konteyneri 10 dk'da bir çeker, doğrular ve

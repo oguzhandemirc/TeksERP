@@ -1,23 +1,23 @@
-// Aşama 6–8 kontrolleri: portal (geri döngü tüneli) · etkinleştirme (gözlem kipi) · Senaryo T. SALT OKUMA.
+// Aşama 6–8 kontrolleri: satıcı anahtar sağlığı (açılış günlüğü) · etkinleştirme (gözlem kipi) · Senaryo T. SALT OKUMA.
 import fs from 'node:fs';
 import { evYolu } from './ag.mjs';
 import { ozet, tsvOku } from './gozlem.mjs';
-import { I, O, U, httpSonuc, s, vdsDogrulaDegerlendir, vdsDogrulaKos } from './ortak.mjs';
+import { I, O, SATICI_KONTEYNER, U, httpSonuc, s, uzakSonuc, vdsDogrulaDegerlendir, vdsDogrulaKos } from './ortak.mjs';
 
 const detay = (ag, g) => ag.http(`${g.tpKok}/api/license/detay`, { belirtec: g.belirtec });
 const veri = (r) => r.json?.data ?? r.json ?? {};
 
 export const ASAMA_6 = [
-  { no: '6.1', ad: 'portal sağlığı (tünel: node deploy/satici/portal-baglan.mjs açık olmalı)', kos: (ag, g) => ag.http(`${g.portalKok}/portal/saglik`), degerlendir: (r) => {
-    if (r.durum === null || r.durum === undefined) return s(O, 'tünel kapalı — portal-baglan.mjs açılmadan ölçülemez');
-    const h = httpSonuc(r);
-    if (h) return h;
-    const p = veri(r).anahtarlar ?? {}; // satıcı /portal/saglik: data.anahtarlar.{capa, altGecerli, uyariSayisi}
-    const kotu = [];
-    if (p.capa !== 'gomulu') kotu.push(`capa=${p.capa}`);
-    if (!(Number(p.altGecerli) >= 1)) kotu.push(`altGecerli=${p.altGecerli}`);
-    if (Number(p.uyariSayisi) !== 0) kotu.push(`uyariSayisi=${p.uyariSayisi}`);
-    return kotu.length ? s(I, kotu.join(', ')) : s(U);
+  // Portal tüneli kapandı ve hazırlıkta portal yok: anahtar uyarıları (çapa · alt anahtar · künye) açılış günlüğünden okunur.
+  { no: '6.1', ad: 'satıcı anahtar sağlığı: son açılışta `[satici] anahtar` uyarısı yok', kos: (ag) => ag.ssh(`docker logs --tail 300 ${SATICI_KONTEYNER}`), degerlendir: (r) => {
+    const u = uzakSonuc(r);
+    if (u) return u;
+    const satirlar = `${r.cikti}\n${r.hata}`.split('\n');
+    const son = satirlar.map((l, i) => (l.includes('SATICI_DINLIYOR') ? i : -1)).filter((i) => i >= 0).pop();
+    if (son === undefined) return s(O, 'SATICI_DINLIYOR satırı son 300 satırda yok (açılış günlüğü kaymış)');
+    const onceki = satirlar.slice(0, son).map((l, i) => (l.includes('SATICI_DINLIYOR') ? i : -1)).filter((i) => i >= 0).pop() ?? -1;
+    const uyarilar = satirlar.slice(onceki + 1, son).filter((l) => /\[satici\] anahtar( künyesi)?[: ]/.test(l)).map((l) => l.trim());
+    return uyarilar.length ? s(I, uyarilar.join(' | ')) : s(U);
   } },
   { no: '6.2', ad: "testfabrika'nın açık modülleri (HAK tavanına aynen; patron-bulut EKLENMEZ)", bearer: true, kos: (ag, g) => ag.http(`${g.tpKok}/api/admin/module-profile`, { belirtec: g.belirtec }), degerlendir: (r) => {
     const h = httpSonuc(r);

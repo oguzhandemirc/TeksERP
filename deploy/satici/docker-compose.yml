@@ -10,12 +10,12 @@ name: tekserp-satici-${ORTAM:?ORTAM gerekli (hazirlik|uretim)}
 # Konteyner/ağ/DB hacmi adları ORTAM'dan türer; host yolları, alt ağlar ve sır grubu .env'de ayrıdır
 # (compose-denetle.mjs --diger-env iki ortamın çakışmadığını ölçer).
 #
-# Dört ağ, dört ayrı kapı — yalnız `ic-api` patron konteyneriyle ORTAK; hiçbiri güncelleme/kiracıyla değil:
-#   kenar   (internal) Traefik ↔ satıcının GENEL dinleyicisi (/v1/*, /q, /bayi/api). Traefik bu ağa
-#                      runbook adımıyla bağlanır; `web` ağına satıcı KATILMAZ.
+# Üç ağ, üçü de internal — yalnız `ic-api` patron konteyneriyle ORTAK; hiçbiri güncelleme/kiracıyla değil.
+# Satıcı HİÇBİR portu yayımlamaz ve dış bağlantısı yoktur; portal yalnız üretimde, `docker-compose.portal-genel.yml`
+# örtüsüyle Traefik + Cloudflare Access arkasından açılır (hazırlıkta portal YOK — denetim Ⓞ).
+#   kenar   (internal) Traefik ↔ satıcının GENEL dinleyicisi (/v1/*, /q, /bayi/api) ve (örtüyle) ERİŞİM dinleyicisi.
+#                      Traefik bu ağa runbook adımıyla bağlanır; `web` ağına satıcı KATILMAZ.
 #   ic      (internal) satıcı ↔ kendi PG16'sı ↔ yedek işi. Port yayını YOK.
-#   tailnet (tek çıkış) portalın TEK yolu: port yalnız VDS'in Tailscale IP'sine yayımlanır; uygulama
-#                      ayrıca soket + kaynak ağı (100.64/10) kapısıyla fail-closed 404 verir.
 #   ic-api  (internal) patron bulutu → satıcı iç API'si (/ic/v1/*, 4612). Port yayını YOK. Satıcı kaynağı
 #                      YALNIZ patronun sabit adresinden (/32) kabul eder + ortak sır (docker secret); patron
 #                      compose'u bu ağa `external` olarak katılır (ayrı dilim). Sır dosyası yoksa iç API açılmaz.
@@ -80,8 +80,6 @@ services:
       NODE_ENV: production
       PORT_GENEL: "4610"
       GENEL_BIND: ${KENAR_IP:?KENAR_IP gerekli}
-      PORT_TAILNET: "4611"
-      TAILNET_BIND: ${TAILNET_KONTEYNER_IP:?TAILNET_KONTEYNER_IP gerekli}
       ANAHTAR_DIZINI: /anahtarlar
       # Gömülü güven çapası kipi = ortam: üretim satıcısı yalnız üretim köklerine, hazırlık yalnız hazırlık köklerine güvenir.
       GUVEN_CAPASI: ${ORTAM}
@@ -89,8 +87,6 @@ services:
       # soket Traefik'tir (kenar ağı) → güven kararı Traefik'in X-Forwarded-For'a yazdığı son halka CF aralığındaysa.
       VEKIL_IP_BASLIGI: cf-connecting-ip
       IC_VEKIL_AGLARI: ${KENAR_AGI}
-      # Tailnet dinleyicisi düz HTTP (WireGuard içinde) → çerez Secure'suz; genelde her zaman Secure.
-      TAILNET_CEREZ_GUVENLI: "0"
       # İç API: kendi köprüsündeki sabit adres; kaynak YALNIZ patron konteyneri (soket adresi, başlık okunmaz).
       PORT_IC: "4612"
       IC_BIND: ${IC_API_IP:?IC_API_IP gerekli}
@@ -116,11 +112,7 @@ services:
     networks:
       kenar: { ipv4_address: "${KENAR_IP}" }
       ic: {}
-      tailnet: { ipv4_address: "${TAILNET_KONTEYNER_IP}" }
       ic-api: { ipv4_address: "${IC_API_IP}" }
-    ports:
-      # YALNIZ Tailscale arayüz IP'sine (100.x) — 0.0.0.0 ya da genel IP YASAK.
-      - "${TAILNET_IP:?TAILNET_IP gerekli (tailscale ip -4)}:${TAILNET_PORT:-4611}:4611"
     cpus: 0.75
     mem_limit: 384m
     memswap_limit: 384m
@@ -207,10 +199,6 @@ networks:
   ic:
     name: tekserp-satici-${ORTAM}-ic
     internal: true
-  tailnet:
-    name: tekserp-satici-${ORTAM}-tailnet
-    ipam:
-      config: [{ subnet: "${TAILNET_AGI:?TAILNET_AGI gerekli}" }]
   ic-api:
     name: tekserp-satici-${ORTAM}-ic-api
     internal: true

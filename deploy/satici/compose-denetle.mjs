@@ -3,13 +3,17 @@
 // Satıcı compose'unun yalıtım değişmezleri — UYGULAMADAN ÖNCE (Mac'te, sunucunun .env'iyle) koşulur.
 // =============================================================================
 // `docker compose config --format json` çıktısını (değişkenler çözülmüş hâli) ölçer:
-//   ① port yalnız `satici`de ve YALNIZ Tailscale adresine (100.64.0.0/10) yayımlı
+//   Ⓚ TÜNEL KALINTISI YOK (portal tüneli 2026-10 kapandı; tek portal yolu portal-genel örtüsü): .env'de TAILNET_* anahtarı
+//      ve emekli örtü (docker-compose.loopback.yml) yok — compose ÇÖZÜLMEDEN ölçülür (eski örtü yeni imajla koşarsa
+//      `portal-tunel` çökme döngüsüne girer: imaj ve compose AYNI adımda iner); çözülmüş yapılandırmada `portal-tunel`
+//      servisi, `tailnet` ağı ve TAILNET_*/PORT_TAILNET ortam anahtarı yok
+//   ① HİÇBİR servis port yayımlamaz (genel + portal Traefik'ten, iç API köprüden; host'a yayın yok)
 //   ② docker soketi hiçbir servise bağlı değil
 //   ③ her servis: salt okunur kök FS · cap_drop ALL · no-new-privileges · root olmayan kullanıcı ·
 //      bellek + CPU + süreç sınırı
 //   ③b her servis (yan konteynerler dahil): yalıtım GEVŞETMESİ yok — volumes_from · privileged · cap_add · pid/ipc/uts/
-//      userns/cgroup · devices · runtime · sysctls YASAK; network_mode yalnız beyanlı istisna (geri döngü kipinde
-//      portal-tunel → service:satici); security_opt TAM OLARAK no-new-privileges:true (seccomp/apparmor/label gevşetmesi yok)
+//      userns/cgroup · devices · runtime · sysctls · network_mode YASAK (istisna yok); security_opt TAM OLARAK
+//      no-new-privileges:true (seccomp/apparmor/label gevşetmesi yok)
 //   ③c her servisin anahtarları TANINAN kümede (fail-closed: bilinmeyen anahtar = ihlal; yeni anahtar bilinçli eklenir);
 //      yapılandırma BÜTÜN profillerle çözülür (`--profile '*'`) ve `profiles` yalnız satici-goc'ta, tam olarak ["goc"]
 //   ③d host bağları servis başına ALLOWLIST (hedef → .env değişkeni, salt okunurluk; DB yalnız kendi birimi): beyansız
@@ -17,9 +21,8 @@
 //   ③e group_add yalnız SIR_GID (sayısal, ≥ 1000) ve yalnız sırrı okuyan servislerde; birincil grup root olamaz (③)
 //   ④ kenar + ic ağları internal; dış (`external`) ağa katılan servis yok (Traefik'in `web`i dahil)
 //   ⑤ anahtar birimi her bağlandığı yerde salt okunur
-//   ⑥ satıcı köprü ağları 100.64/10 ve 127/8 DIŞINDA — köprü ağ geçidi tailnet kapısını kandırmasın
-//      (ölçüldü: tailnet ağı 100.100.100.0/28 iken host'tan yayımlı porta gelen istek geçidin
-//      adresiyle girip portalı 200 açtı)
+//   ⑥ satıcı köprü ağları 100.64/10 ve 127/8 DIŞINDA — köprü ağ geçidinin adresi geri döngü/CGNAT sayan bir kaynak
+//      kapısını (iç API IC_KAYNAK_AGLARI, eski imajın tünel kapısı) kandırmasın
 //   ⑥c her ağda IPv6 KAPALI (enable_ipv6 · v6 alt ağı · ipv6 sürücü seçeneği yok) — çıkış kuralları yalnız IPv4'ü daraltır
 //   ⑥b kenar ağında dinamik dağıtım aralığı (ip_range) alt ağın içinde ve satıcının sabit adresi
 //      onun DIŞINDA — Traefik (dinamik) satıcının adresini kapamasın
@@ -30,19 +33,17 @@
 //   ⑨ DAĞITIM BAĞLARI (3d-1): kök FS salt okunur → satıcının yazdığı TEK yol `/dosyalar` (kendi birimi, rw);
 //      `/derlemeler` ve `/yayin` (güncelleme sunucusu kökü) salt okunur; ortam adları bağlarla aynı; genel kök
 //      https; dosya birimi yayın kökünün/anahtar biriminin içinde değil; üç bağ YALNIZ satıcıda
-//   Ⓛ GERİ DÖNGÜ KİPİ (docker-compose.loopback.yml, satıcıda TAILNET_LOOPBACK=1 — Tailscale gelene dek):
-//      ① yerine: HİÇBİR port yayımlanmaz · satıcının tailnet dinleyicisi 127.0.0.1'de · tailnet ağı
-//      internal · `portal-tunel` satıcının ağ ad alanında, portsuz/birimsiz, tailnet köprü adresini dinler.
-//      Ana kipte TAILNET_LOOPBACK ve `portal-tunel` YASAK (iki kip karışmaz).
 //   ⑩ GENEL_KOK_ADRESI'nin makinesi Traefik Host kuralıyla aynı (/d · /y bağlantısı başka ortama gitmesin)
 //   ⑪ satıcı gömülü güven çapasıyla koşar: GUVEN_CAPASI_DOSYASI YOK (yalnız test) · NODE_ENV=production ·
 //      GUVEN_CAPASI = projenin ORTAMI (üretim satıcısı hazırlık köküne güvenmez)
 //   Ⓞ ÖRTÜLER (ana dosyanın üstüne bindirilen kipler; algı + beklenen servisler + kendi denetimleri, ORTULER listesi):
 //      portal-genel (`docker-compose.portal-genel.yml`: `satici-jwks` servisi ya da satıcıda PORT_ERISIM) → ⑬.
-//      Her kipte: satıcının ağ kümesi tam dört ağ (örtü satıcıya ağ EKLEMEZ); internal olmayan ağ yalnız ana kipte
-//      `tailnet` (üyesi yalnız satıcı) ve örtünün çıkış ağı (üyesi yalnız örtünün yan konteyneri) — ④b/④c.
+//      Ⓞ TEK PORTAL (kullanıcı kararı 2026-10-05): portal-genel örtüsü ÜRETİMDE ZORUNLU (portalın tek yolu), HAZIRLIKTA YOK.
+//      Her durumda: satıcının ağ kümesi tam üç ağ, üçü internal (örtü satıcıya ağ EKLEMEZ); internal olmayan ağ yalnız
+//      örtünün çıkış ağı (üyesi yalnız örtünün yan konteyneri) — ④b/④c.
 //      ⑦ BÜTÜN Traefik yönlendiricilerini ölçer: küme = genel (+ örtününkiler), her biri Host + websecure + tls;
-//      birden çok hizmette her yönlendirici hizmetine AÇIKÇA bağlı, genel → 4610; hizmet portları 4611/4612 OLAMAZ.
+//      birden çok hizmette her yönlendirici hizmetine AÇIKÇA bağlı, genel → 4610; hizmet portları yalnız beyanlı
+//      (4610 + örtününkiler) — emekli tünel portu 4611 ve iç API 4612 OLAMAZ.
 //   ⑬ PORTAL-GENEL: PORT_ERISIM 4613 · ERISIM_BIND = kenar adresi · 4613 yayımlanmaz · Access ayarı biçimli · JWKS bağı
 //      satıcıda salt okunur, yan konteynerde yazılır, create_host_path yok, anahtar/dağıtım birimlerinin dışında ·
 //      `satici-jwks` satıcı imajı + çekici giriş noktası, sırsız/bağsız/portsuz/etiketsiz, yalnız `jwks-cikis`te ·
@@ -50,7 +51,7 @@
 //      ⑬g yan konteyner ortamı ALLOWLIST · ⑬h `jwks-cikis` alt ağı = .env'deki JWKS_CIKIS_AGI (DOCKER-USER kuralının ağı).
 //   Ⓑ BİLDİRİM (`docker-compose.bildirim.yml`: dosya COMPOSE_FILE'da ya da `satici-bildirim` servisi) — satıcı dış
 //      bağlantısız kalır, dışarı YALNIZ en az yetkili gönderici çıkar: Ⓑ0 dosya ↔ servis · Ⓑ1 internal olmayan ağlar
-//      tam olarak (ana kipte tailnet +) örtü çıkış ağları, bildirim-cikis tek üyeli · Ⓑ2 gönderici ağları tam ic +
+//      tam olarak örtü çıkış ağları, bildirim-cikis tek üyeli · Ⓑ2 gönderici ağları tam ic +
 //      bildirim-cikis, çekirdek servisler bildirim-cikis'e katılmaz · Ⓑ3 port/birim/Traefik etiketi/soket yok · Ⓑ4 tam dört
 //      kanal sırrı, başka serviste yok · Ⓑ5 ortam ALLOWLIST: satici_bildirim rolü, sır yolları /run/secrets/, DB adresi ve
 //      sağlayıcı kökleri yalnız beklenen değer, tanınmayan anahtar (NODE_OPTIONS, düz sır, DATABASE_URL…) yok · Ⓑ6 satıcı
@@ -59,13 +60,14 @@
 //      Ⓑ8 dns iki sabit IPv4 = `vds/bildirim-cikis.sh`in 53'ü açtığı adresler (betiğin varsayılanı + .env'deki BILDIRIM_DNS_1/2).
 //   ⑫ İKİ ORTAM YAN YANA (--diger-env <öteki ortamın .env'i>): proje/DB hacmi/Host/genel kök/sır grubu farklı,
 //      köprü alt ağları çakışmaz, host bağları ve sır dosyaları ortak ya da iç içe değil (tek istisna salt
-//      okunur yayın kökü), yayımlı portlar çakışmaz — üretim hazırlığın anahtarını/DB'sini ASLA bağlamasın.
+//      okunur yayın kökü), öteki ortamda da port yayını ve tünel kalıntısı yok — üretim hazırlığın anahtarını/DB'sini
+//      ASLA bağlamasın.
 //      Verilmezse ⑫ ÖLÇÜLMEDİ diye basılır (geçti sayılmaz); ORTAM=uretim'de çıkış 2 (hazırlığın yanına kurulur).
 //
 // Kullanım: node deploy/satici/compose-denetle.mjs --env-file <.env> [-f <compose> ...] [--diger-env <.env>] [--patron-env <.env>]
 //   --patron-env: patron bulutunun .env'i (deploy/patron/docker-compose.yml onunla çözülür) — Ⓑ7'nin patron ayağı.
 //   -f verilmezse .env'deki COMPOSE_FILE (":" ayrık, bu dizine göre) — yoksa docker-compose.yml.
-// Çıkış: 0 temiz · 1 ihlal · 2 ölçülemedi (docker yok / config çözülemedi).
+// Çıkış: 0 temiz · 1 ihlal (Ⓚ kalıntısı yüzünden config çözülemese de) · 2 ölçülemedi (docker yok / config çözülemedi).
 // =============================================================================
 import { spawnSync } from "node:child_process";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
@@ -88,41 +90,6 @@ if (!envDosyasi || (args.includes("--diger-env") && !digerEnv) || (args.includes
 }
 const acikF = args.flatMap((a, i) => (a === "-f" && args[i + 1] ? [args[i + 1]] : []));
 
-/** .env'in çözülmüş compose yapılandırması (COMPOSE_FILE ya da -f); okunamazsa ÖLÇÜLEMEDİ (çıkış 2). */
-function coz(env, fDosyalari) {
-  let envMetni;
-  try {
-    envMetni = readFileSync(env, "utf8");
-  } catch (err) {
-    console.error(`ÖLÇÜLEMEDİ: .env okunamadı (${env}) — ${err.message}`);
-    process.exit(2);
-  }
-  const composeFileSatiri = envMetni
-    .split(/\r?\n/)
-    .map((l) => l.match(/^\s*COMPOSE_FILE\s*=\s*(.*?)\s*$/)?.[1])
-    .filter((v) => v !== undefined)
-    .pop();
-  const dosyalar =
-    fDosyalari.length > 0
-      ? fDosyalari
-      : composeFileSatiri
-        ? composeFileSatiri.replace(/^["']|["']$/g, "").split(":").filter(Boolean).map((f) => path.resolve(burasi, f))
-        : [path.join(burasi, "docker-compose.yml")];
-  // BÜTÜN profiller çözülür ("*"): yalnız `goc` açılsaydı başka profildeki servis hiç denetlenmezdi. Profil anahtarı
-  // ③c'de ölçülür (yalnız satici-goc = ["goc"]); "*"i tanımayan compose satici-goc'u çözmez → körlük zemini kırmızı.
-  const r = spawnSync(
-    "docker",
-    ["compose", "--env-file", env, ...dosyalar.flatMap((f) => ["-f", f]), "--profile", "*", "config", "--format", "json"],
-    { encoding: "utf8" },
-  );
-  if (r.status !== 0) {
-    console.error(`ÖLÇÜLEMEDİ: docker compose config (${env}) — ${(r.stderr || r.error?.message || "").trim()}`);
-    process.exit(2);
-  }
-  return { cfg: JSON.parse(r.stdout), dosyalar };
-}
-const { cfg, dosyalar: composeDosyalari } = coz(envDosyasi, acikF);
-
 let ihlal = 0;
 let gecti = 0;
 let olculmedi = 0;
@@ -131,6 +98,68 @@ function kontrol(ad, ok, ayrinti = "") {
   else ihlal++;
   console.log(`${ok ? "✅" : "❌"} ${ad}${ayrinti ? ` — ${ayrinti}` : ""}`);
 }
+
+// Ⓚ portal tüneli emekli (D5): bu dosyalar ve anahtarlar repoda yok; .env/COMPOSE_FILE'da görünmesi yarım geçiştir.
+const EMEKLI_ORTULER = ["docker-compose.loopback.yml"];
+const EMEKLI_SERVISLER = ["portal-tunel"];
+const tunelAnahtari = (k) => /^(TAILNET_|PORT_TAILNET$)/.test(k);
+
+function envOku(env) {
+  try {
+    return readFileSync(env, "utf8");
+  } catch (err) {
+    console.error(`ÖLÇÜLEMEDİ: .env okunamadı (${env}) — ${err.message}`);
+    process.exit(2);
+  }
+}
+
+/** .env'in COMPOSE_FILE (ya da -f) dosya listesi; ikisi de yoksa docker-compose.yml. */
+function composeDosyalariOf(envMetni, fDosyalari) {
+  const composeFileSatiri = envMetni
+    .split(/\r?\n/)
+    .map((l) => l.match(/^\s*COMPOSE_FILE\s*=\s*(.*?)\s*$/)?.[1])
+    .filter((v) => v !== undefined)
+    .pop();
+  return fDosyalari.length > 0
+    ? fDosyalari
+    : composeFileSatiri
+      ? composeFileSatiri.replace(/^["']|["']$/g, "").split(":").filter(Boolean).map((f) => path.resolve(burasi, f))
+      : [path.join(burasi, "docker-compose.yml")];
+}
+
+/** Ⓚ compose ÇÖZÜLMEDEN: .env'de TAILNET_* anahtarı ve dosya listesinde emekli örtü yok (eski örtü yeni imajla koşmasın). */
+function kalintiOnDenetle(env, fDosyalari, etiket) {
+  const metin = envOku(env);
+  const anahtarlar = metin.split(/\r?\n/).map((l) => l.match(/^\s*(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*=/)?.[1]).filter((k) => k && tunelAnahtari(k));
+  const emekli = composeDosyalariOf(metin, fDosyalari).filter((f) => EMEKLI_ORTULER.includes(path.basename(f))).map((f) => path.basename(f));
+  kontrol(`Ⓚ ${etiket}: .env'de tünel anahtarı (TAILNET_*) yok · dosya listesinde emekli örtü (${EMEKLI_ORTULER.join(", ")}) yok`,
+    anahtarlar.length === 0 && emekli.length === 0,
+    [...new Set(anahtarlar)].map((k) => `anahtar ${k}`).concat(emekli.map((f) => `örtü ${f} — yeni imajda portal-tunel YOK, compose ile imaj AYNI adımda iner`)).join(" · "));
+}
+
+/** .env'in çözülmüş compose yapılandırması (COMPOSE_FILE ya da -f); okunamazsa ÖLÇÜLEMEDİ (çıkış 2) — Ⓚ ihlali varsa çıkış 1. */
+function coz(env, fDosyalari) {
+  const dosyalar = composeDosyalariOf(envOku(env), fDosyalari);
+  // BÜTÜN profiller çözülür ("*"): yalnız `goc` açılsaydı başka profildeki servis hiç denetlenmezdi. Profil anahtarı
+  // ③c'de ölçülür (yalnız satici-goc = ["goc"]); "*"i tanımayan compose satici-goc'u çözmez → körlük zemini kırmızı.
+  const r = spawnSync(
+    "docker",
+    ["compose", "--env-file", env, ...dosyalar.flatMap((f) => ["-f", f]), "--profile", "*", "config", "--format", "json"],
+    { encoding: "utf8" },
+  );
+  if (r.status !== 0) {
+    console.error(`${ihlal > 0 ? "ÇÖZÜLEMEDİ" : "ÖLÇÜLEMEDİ"}: docker compose config (${env}) — ${(r.stderr || r.error?.message || "").trim()}`);
+    if (ihlal > 0) {
+      console.log(`\n=== ${gecti} geçti, ${ihlal} ihlal (yapılandırma çözülmeden) ===`);
+      process.exit(1);
+    }
+    process.exit(2);
+  }
+  return { cfg: JSON.parse(r.stdout), dosyalar };
+}
+kalintiOnDenetle(envDosyasi, acikF, "bu ortam");
+if (digerEnv) kalintiOnDenetle(digerEnv, [], `öteki ortam (${path.basename(digerEnv)})`);
+const { cfg, dosyalar: composeDosyalari } = coz(envDosyasi, acikF);
 
 function ipv4(s) {
   const p = s.split(".").map(Number);
@@ -152,9 +181,7 @@ function cakisir(cidr, yasak) {
 }
 
 const servisler = Object.entries(cfg.services ?? {});
-const saticiOrtam = cfg.services?.satici?.environment ?? {};
-const geriDongu = String(saticiOrtam.TAILNET_LOOPBACK ?? "") === "1";
-const tunel = cfg.services?.["portal-tunel"];
+const projeOrtamiAdi = /^tekserp-satici-(uretim|hazirlik)$/.exec(String(cfg.name ?? ""))?.[1] ?? null;
 
 // Ⓑ bildirim örtüsü — gönderici yan konteyneri satıcının TEK dış bağlantısıdır; sırrı, ağı ve imajı burada ölçülür.
 const BILDIRIM_ORTU_DOSYASI = "docker-compose.bildirim.yml";
@@ -213,39 +240,40 @@ const ORTULER = [
   },
 ];
 const aktif = ORTULER.filter((o) => o.var(cfg));
-console.log(`kip: ${geriDongu ? "GERİ DÖNGÜ (Tailscale öncesi, portal yalnız VDS içinden)" : "TAILNET"}${aktif.length ? ` · örtü: ${aktif.map((o) => o.ad).join(" + ")}` : ""} · dosyalar: ${composeDosyalari.map((f) => path.basename(f)).join(" + ")}\n`);
-const beklenen = [
-  ...(geriDongu ? ["satici-db", "satici", "satici-goc", "satici-yedek", "portal-tunel"] : ["satici-db", "satici", "satici-goc", "satici-yedek"]),
-  ...aktif.flatMap((o) => o.servisler),
-];
+console.log(`\nortam: ${projeOrtamiAdi ?? cfg.name}${aktif.length ? ` · örtü: ${aktif.map((o) => o.ad).join(" + ")}` : ""} · dosyalar: ${composeDosyalari.map((f) => path.basename(f)).join(" + ")}\n`);
+const beklenen = [...["satici-db", "satici", "satici-goc", "satici-yedek"], ...aktif.flatMap((o) => o.servisler)];
 kontrol(
   `körlük zemini: ${beklenen.length} servis çözüldü (${beklenen.join(" · ")})`,
   servisler.length === beklenen.length && beklenen.every((a) => a in (cfg.services ?? {})),
   servisler.map(([a]) => a).join(", "),
 );
 
-// ① port yayını
+// ① port yayını — hiçbir servis host'a port yayımlamaz (127.0.0.1 dahil: eski tünel portu 4611 de buradan geri gelemez)
 const yayinlayan = servisler.filter(([, s]) => (s.ports ?? []).length > 0);
-if (geriDongu) {
-  kontrol("①Ⓛ hiçbir servis port yayımlamaz (portal yalnız VDS'in içinden, SSH tüneliyle)", yayinlayan.length === 0, yayinlayan.map(([a]) => a).join(", ") || "hiçbiri");
-  kontrol("①Ⓛ satıcının tailnet dinleyicisi konteynerin geri döngüsünde (TAILNET_BIND=127.0.0.1)", saticiOrtam.TAILNET_BIND === "127.0.0.1", String(saticiOrtam.TAILNET_BIND ?? "YOK"));
-  const kopruIp = cfg.services?.satici?.networks?.tailnet?.ipv4_address;
-  const tunelOrtam = tunel?.environment ?? {};
-  kontrol("①Ⓛ portal-tunel satıcının ağ ad alanında", tunel?.network_mode === "service:satici", String(tunel?.network_mode ?? "YOK"));
+kontrol("① hiçbir servis port yayımlamaz", yayinlayan.length === 0,
+  yayinlayan.map(([a, s]) => `${a}: ${s.ports.map((p) => `${p.host_ip ?? "0.0.0.0"}:${p.published}→${p.target}`).join(",")}`).join(" · ") || "hiçbiri");
+
+// Ⓚ çözülmüş yapılandırmada tünel kalıntısı — ön denetimin göremediği (örtü başka adla bindirilmiş olabilir) her iz.
+{
+  const iz = [
+    ...servisler.filter(([ad]) => EMEKLI_SERVISLER.includes(ad)).map(([ad]) => `servis ${ad}`),
+    ...Object.entries(cfg.networks ?? {}).filter(([a, n]) => /tailnet/i.test(`${a} ${n.name ?? ""}`)).map(([a]) => `ağ ${a}`),
+    ...servisler.flatMap(([ad, s]) => Object.keys(s.environment ?? {}).filter(tunelAnahtari).map((k) => `${ad}: ${k}`)),
+  ];
+  kontrol(`Ⓚ çözülmüş yapılandırmada tünel kalıntısı yok (${EMEKLI_SERVISLER.join(", ")} servisi · tailnet ağı · TAILNET_*/PORT_TAILNET ortamı)`, iz.length === 0, iz.join(" · "));
+}
+
+// Ⓞ tek portal — portal-genel örtüsü üretimde zorunlu (portalın tek yolu), hazırlıkta yasak (kullanıcı kararı 2026-10-05).
+{
+  const portalVar = aktif.some((o) => o.ad === "portal-genel");
+  const beklenenPortal = projeOrtamiAdi === "uretim";
   kontrol(
-    "①Ⓛ portal-tunel portsuz ve birimsiz, yalnız tailnet köprü adresini dinler",
-    (tunel?.ports ?? []).length === 0 && (tunel?.volumes ?? []).length === 0 && !!kopruIp && tunelOrtam.TUNEL_DINLE === kopruIp,
-    `TUNEL_DINLE=${tunelOrtam.TUNEL_DINLE ?? "YOK"} · köprü=${kopruIp ?? "YOK"}`,
+    projeOrtamiAdi === "hazirlik"
+      ? "Ⓞ hazırlıkta portal YOK: portal-genel örtüsü (satici-jwks · PORT_ERISIM) bindirilmemiş — tek portal üretimde"
+      : "Ⓞ üretimde portal-genel örtüsü ZORUNLU (satici-jwks + PORT_ERISIM) — portalın tek yolu",
+    projeOrtamiAdi !== null && portalVar === beklenenPortal,
+    `ortam ${projeOrtamiAdi ?? `TANINMADI (${cfg.name})`} · portal-genel ${portalVar ? "VAR" : "YOK"}`,
   );
-} else {
-  kontrol("① yalnız `satici` port yayımlar", yayinlayan.length === 1 && yayinlayan[0][0] === "satici", yayinlayan.map(([a]) => a).join(", ") || "hiçbiri");
-  for (const [ad, s] of yayinlayan) {
-    for (const p of s.ports) {
-      const ip = p.host_ip ?? "";
-      kontrol(`① ${ad}:${p.published}→${p.target} yalnız Tailscale adresine (100.64.0.0/10)`, ip !== "" && aralikta(ip, "100.64.0.0/10"), ip || "host_ip YOK (0.0.0.0)");
-    }
-  }
-  kontrol("① geri döngü kalıntısı yok (TAILNET_LOOPBACK · portal-tunel)", !tunel && saticiOrtam.TAILNET_LOOPBACK === undefined, [tunel ? "portal-tunel" : "", saticiOrtam.TAILNET_LOOPBACK !== undefined ? `TAILNET_LOOPBACK=${saticiOrtam.TAILNET_LOOPBACK}` : ""].filter(Boolean).join(", "));
 }
 
 // ② docker soketi
@@ -272,18 +300,14 @@ for (const [ad, s] of servisler) {
 }
 
 // ③b yalıtım gevşetmesi — cap_drop ALL'ı cap_add/privileged ezse ③ yine yeşil verirdi; burada her anahtar ayrı ölçülür.
-// Beyanlı istisnalar (servis · anahtar · değer · koşul); başka her gevşetme ihlaldir.
-const ISTISNALAR = [
-  { servis: "portal-tunel", anahtar: "network_mode", deger: "service:satici", kosul: () => geriDongu, neden: "geri döngü iletici (§4a)" },
-];
-const istisna = (ad, anahtar, deger) => ISTISNALAR.some((i) => i.servis === ad && i.anahtar === anahtar && i.deger === deger && i.kosul());
+// İstisna YOK: network_mode'un tek beyanlı kullanıcısı (geri döngü iletici portal-tunel) tünelle birlikte emekli.
 const doluMu = (v) => v !== undefined && v !== null && v !== false && v !== "" && !(Array.isArray(v) && v.length === 0) && !(typeof v === "object" && !Array.isArray(v) && Object.keys(v).length === 0);
 const YASAK_ANAHTARLAR = ["volumes_from", "privileged", "cap_add", "pid", "ipc", "uts", "userns_mode", "cgroup", "cgroup_parent", "devices", "device_cgroup_rules", "runtime", "isolation", "sysctls", "network_mode"];
 for (const [ad, s] of servisler) {
-  const gevsek = YASAK_ANAHTARLAR.filter((k) => doluMu(s[k]) && !istisna(ad, k, s[k])).map((k) => `${k}=${JSON.stringify(s[k])}`);
+  const gevsek = YASAK_ANAHTARLAR.filter((k) => doluMu(s[k])).map((k) => `${k}=${JSON.stringify(s[k])}`);
   const so = s.security_opt ?? [];
   if (JSON.stringify(so) !== JSON.stringify(["no-new-privileges:true"])) gevsek.push(`security_opt=${JSON.stringify(so)} (yalnız no-new-privileges:true)`);
-  kontrol(`③b ${ad} yalıtım gevşetmesi yok`, gevsek.length === 0, gevsek.join(" · ") || (s.network_mode ? `beyanlı istisna: network_mode=${s.network_mode}` : ""));
+  kontrol(`③b ${ad} yalıtım gevşetmesi yok`, gevsek.length === 0, gevsek.join(" · "));
 }
 
 // ③c tanınan anahtarlar: `docker compose config` çıktısında bugün görülen (+ bildirim yan konteynerinin `dns`i) küme.
@@ -381,21 +405,21 @@ const yolIcIce = (x, y) => {
 
 // ④ ağlar
 const aglar = cfg.networks ?? {};
-for (const anahtar of geriDongu ? ["kenar", "ic", "tailnet", "ic-api"] : ["kenar", "ic", "ic-api"]) {
+for (const anahtar of ["kenar", "ic", "ic-api"]) {
   kontrol(`④ ${anahtar} ağı internal`, aglar[anahtar]?.internal === true, aglar[anahtar]?.name ?? "YOK");
 }
 const disAglar = Object.entries(aglar).filter(([, n]) => n.external).map(([a]) => a);
 const disaKatilan = servisler.filter(([, s]) => Object.keys(s.networks ?? {}).some((n) => disAglar.includes(n) || !(n in aglar))).map(([a]) => a);
 kontrol("④ dış (external) ağa katılan servis yok (`web` dahil)", disAglar.length === 0 && disaKatilan.length === 0, [...disAglar, ...disaKatilan].join(", "));
 const saticiAglari = Object.keys(cfg.services?.satici?.networks ?? {}).sort();
-kontrol("④b satıcının ağ kümesi tam dört ağ (kenar · ic · tailnet · ic-api) — örtü satıcıya ağ eklemez", JSON.stringify(saticiAglari) === JSON.stringify(["ic", "ic-api", "kenar", "tailnet"]), saticiAglari.join(", "));
+kontrol("④b satıcının ağ kümesi tam üç ağ (kenar · ic · ic-api), üçü internal — örtü satıcıya ağ eklemez", JSON.stringify(saticiAglari) === JSON.stringify(["ic", "ic-api", "kenar"]), saticiAglari.join(", "));
 {
   const uyeler = (ag) => servisler.filter(([, sv]) => ag in (sv.networks ?? {})).map(([a]) => a).sort();
-  const izinli = { ...(geriDongu ? {} : { tailnet: ["satici"] }), ...Object.assign({}, ...aktif.map((o) => o.cikisAglari)) };
+  const izinli = Object.assign({}, ...aktif.map((o) => o.cikisAglari));
   const acik = Object.entries(aglar).filter(([, n]) => n.internal !== true && !n.external).map(([a]) => a);
   const kotu = acik.filter((a) => !(a in izinli) || JSON.stringify(uyeler(a)) !== JSON.stringify([...izinli[a]].sort()));
   kontrol(
-    `④c internal olmayan ağ yalnız ${geriDongu ? "" : "tailnet (yalnız satıcı) ve "}örtü çıkış ağları (yalnız yan konteyner)`,
+    "④c internal olmayan ağ yalnız örtü çıkış ağları (yalnız yan konteyner) — satıcının dış bağlantısı yok",
     kotu.length === 0,
     acik.map((a) => `${a}: ${uyeler(a).join("+") || "boş"}`).join(" · ") || "hepsi internal",
   );
@@ -408,12 +432,12 @@ for (const [ad, s] of servisler) {
   }
 }
 
-// ⑥ köprü ağları tailnet/geri döngü aralığı dışında
+// ⑥ köprü ağları CGNAT/geri döngü aralığı dışında (ağ geçidi adresi kaynak kapısını kandırmasın)
 for (const [anahtar, n] of Object.entries(aglar)) {
   for (const c of n.ipam?.config ?? []) {
     if (!c.subnet) continue;
     const kotu = ["100.64.0.0/10", "127.0.0.0/8"].filter((y) => cakisir(c.subnet, y));
-    kontrol(`⑥ ${anahtar} ağı (${c.subnet}) tailnet/geri döngü aralığında DEĞİL`, kotu.length === 0, kotu.join(", "));
+    kontrol(`⑥ ${anahtar} ağı (${c.subnet}) 100.64/10 (CGNAT) ve geri döngü aralığında DEĞİL`, kotu.length === 0, kotu.join(", "));
   }
 }
 
@@ -468,7 +492,7 @@ const hizmetPortu = Object.fromEntries(Object.entries(etiket).flatMap(([k, v]) =
   kontrol("⑦ her yönlendirici bir hizmete bağlı (birden çok hizmette AÇIKÇA); genel yönlendirici → 4610", baglanmamis.length === 0 && hizmetinPortu(cfg.name) === "4610", `${baglanmamis.join(", ") || "tamam"} · genel → ${hizmetinPortu(cfg.name) ?? "YOK"}`);
   const izinliPort = ["4610", ...aktif.flatMap((o) => o.hizmetPortlari)];
   const kotuPort = Object.entries(hizmetPortu).filter(([, pt]) => !izinliPort.includes(pt));
-  kontrol("⑦ Traefik hizmet portları yalnız genel (4610) + örtülerinki — tailnet 4611 / iç API 4612 ASLA", kotuPort.length === 0, kotuPort.map(([h, pt]) => `${h}:${pt}`).join(", ") || Object.values(hizmetPortu).join(", "));
+  kontrol("⑦ Traefik hizmet portları yalnız genel (4610) + örtülerinki — emekli tünel 4611 / iç API 4612 ASLA", kotuPort.length === 0, kotuPort.map(([h, pt]) => `${h}:${pt}`).join(", ") || Object.values(hizmetPortu).join(", "));
 }
 const db = cfg.services?.["satici-db"] ?? {};
 kontrol("⑦ DB portsuz ve yalnız iç ağda", (db.ports ?? []).length === 0 && JSON.stringify(Object.keys(db.networks ?? {})) === '["ic"]', Object.keys(db.networks ?? {}).join(", "));
@@ -631,7 +655,7 @@ function bildirimDenetle(c) {
   kontrol(`Ⓑ0 örtü dosyası (${BILDIRIM_ORTU_DOSYASI}) COMPOSE_FILE'da ↔ satici-bildirim beklenen servislerde ve çözüldü`, dosyada && serviste, `dosya ${dosyada ? "var" : "YOK"} · servis ${serviste ? "var" : "YOK"}`);
 
   const acik = Object.entries(ag).filter(([, n]) => n.internal !== true && !n.external).map(([a]) => a).sort();
-  const beklenenAcik = [...(geriDongu ? [] : ["tailnet"]), ...aktif.flatMap((o) => Object.keys(o.cikisAglari))].sort();
+  const beklenenAcik = aktif.flatMap((o) => Object.keys(o.cikisAglari)).sort();
   const cikisUyeleri = uyeler("bildirim-cikis");
   kontrol(
     `Ⓑ1 internal olmayan ağlar tam olarak ${beklenenAcik.join(" + ")} · bildirim-cikis'in tek üyesi satici-bildirim`,
@@ -801,6 +825,10 @@ if (!digerEnv) {
     baglar: Object.values(c.services ?? {}).flatMap((sv) => (sv.volumes ?? []).filter((v) => v.type === "bind").map((v) => ({ kaynak: v.source, hedef: v.target }))),
     sirlar: Object.values(c.secrets ?? {}).map((x) => x.file).filter(Boolean),
     portlar: Object.values(c.services ?? {}).flatMap((sv) => (sv.ports ?? []).map((p) => `${p.host_ip ?? "0.0.0.0"}:${p.published}`)),
+    kalinti: [
+      ...Object.keys(c.services ?? {}).filter((x) => EMEKLI_SERVISLER.includes(x)),
+      ...Object.entries(c.networks ?? {}).filter(([x, n]) => /tailnet/i.test(`${x} ${n.name ?? ""}`)).map(([x]) => `ağ ${x}`),
+    ],
   });
   const a = bu(cfg);
   const b = bu(o);
@@ -816,8 +844,7 @@ if (!digerEnv) {
   kontrol("⑫d host bağları ortak/iç içe değil (anahtar · yedek · alıcı · dosya · derleme; yalnız /yayin ortak)", ortakBag.length === 0, ortakBag.join(" | "));
   const ortakSir = a.sirlar.filter((x) => b.sirlar.some((y) => icIce(x, y)));
   kontrol("⑫e sır dosyaları (DB parolası · iç API belirteci) ortak değil", ortakSir.length === 0, ortakSir.join(", "));
-  const ortakPort = a.portlar.filter((x) => b.portlar.includes(x));
-  kontrol("⑫f yayımlı portlar çakışmaz", ortakPort.length === 0, ortakPort.join(", "));
+  kontrol("⑫f öteki ortam da port yayımlamaz ve tünel kalıntısı taşımaz (portal-tunel · tailnet ağı)", b.portlar.length === 0 && b.kalinti.length === 0, [...b.portlar, ...b.kalinti].join(", "));
 }
 
 console.log(`\n=== ${gecti} geçti, ${ihlal} ihlal${olculmedi ? `, ${olculmedi} ölçülmedi` : ""} ===`);

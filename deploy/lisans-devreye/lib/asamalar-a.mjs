@@ -77,8 +77,9 @@ export const ASAMA_2 = [
     if (u) return u;
     const satir = `${r.cikti}\n${r.hata}`.split('\n').filter((l) => l.includes('SATICI_DINLIYOR')).pop();
     if (!satir) return s(O, 'SATICI_DINLIYOR satırı son 300 satırda yok');
-    if (/tailnet=/.test(satir)) return s(I, `tünel dinleyicisi açık (eski imaj): ${satir.trim()}`);
-    return /ic=4612/.test(satir) ? s(U, satir.trim()) : s(I, `iç API kapalı: ${satir.trim()}`);
+    // Satırda tailnet= varsa konteyner tünel öncesi imajla koşuyor (compose yenilendi, imaj yenilenmedi).
+    if (/\btailnet=/.test(satir)) return s(I, `tünel dinleyicisi açık (eski imaj): ${satir.trim()}`);
+    return /\bgenel=4610\b/.test(satir) && /\bic=4612\b/.test(satir) ? s(U, satir.trim()) : s(I, `genel/iç API kapalı: ${satir.trim()}`);
   } },
   { no: '2.7', ad: 'internetten /saglik 200', kos: (ag, g) => ag.http(`${g.saticiKok}/saglik`), degerlendir: (r) => httpSonuc(r) ?? (r.json?.success === true ? s(U) : s(I, 'gövde success:true değil')) },
   { no: '2.8', ad: 'internetten portal YOK (404)', kos: (ag, g) => ag.http(`${g.saticiKok}/portal/saglik`), degerlendir: (r) => httpSonuc(r, 404) ?? s(U) },

@@ -9,17 +9,25 @@
 //   (5) DB (kendi `_test` DB'si): elle yazılmış geçerli belirteçli `dinleyici: TAILNET` oturumu ERİŞİM'de ÇÖZÜLMEZ;
 //       AYNI satır ERISIM'e çekilince AYNI belirteç çözülür (✓K — reddin kör olmadığı)
 //   (7) scripts/: SATICI_DINLIYOR okuyucuları `tailnet=` beklemez, silinen tailnet-app modülü anılmaz
-// Deploy kapsamı (compose/Dockerfile/örnek env, silinen dağıtım dosyaları) T2 birleşmesiyle bu dosyaya eklenir.
+//   (8) deploy/satici: emekli beş dağıtım dosyası (loopback örtüsü · portal-tunel.cjs · portal-baglan.mjs · vds/tailnet-hazirla.sh
+//       · vds/tekserp-satici-tailnet@.service) YOK, dizinde adı tünel anan dosya yok; docker-compose*.yml · Dockerfile ·
+//       imaj-derle.sh · ornek*.env METNİNDE (yorum dahil) 4611 · tailnet · portal-tunel geçmez; compose-denetle.mjs Ⓚ kalıntı
+//       (ön + çözülmüş) ve Ⓞ tek portal denetimlerini taşır
 // ⭐ KALICI SONDA ✓K (her koşumda): (2)/(3)'ün AST tarayıcısı sentetik kaynakta ısırır (dizgi · tip literali ·
-//    tanımlayıcı · özellik adı) ve roles.ts beyanını geçirir; (5) ERISIM eşi çözülür.
+//    tanımlayıcı · özellik adı) ve roles.ts beyanını geçirir; (5) ERISIM eşi çözülür; (8) metin deseni sentetik
+//    satırlarda ısırır, temiz satırı geçirir ve taranan dosya kümesi boş değil (kör tarama yeşil veremez).
 // NEGATİF SONDA (2026-10-05, dosya DIŞI, cp + shasum ile geri alındı): `SIGNING_ORIGINS.KOK`/`ARA`ya "TAILNET" → §2a · §4a ❌
 //   (+ test_ara_imzaci §0a · §2g, test_imza_parolasi §7c2 ❌) · server.ts'e 4. `http.createServer` → §1a ❌ · resolveSession'dan
 //   dinleyici denetimi kaldırıldı → §5a ❌ (test_erisim_kapisi YEŞİL kaldı: aynı rolde ikinci dinleyici yok, bağı yalnız §5a
 //   ölçer) · config şemasına `PORT_TAILNET` → §2a · §3a · §3b ❌.
+// NEGATİF SONDA (T2 deploy kapsamı, 2026-10-05, dosya DIŞI, cp + shasum ile geri alındı / yeni dosya silindi):
+//   portal-tunel.cjs geri → §8a · §8b ❌ · vds/tailnet-yeni.sh → §8b ❌ · Dockerfile'a `COPY portal-tunel.cjs` · ornek.env'e
+//   TAILNET_IP · docker-compose.yml'ye "4611" yorumu → §8c ❌ · compose-denetle'de EMEKLI_ORTULER boş · ön denetim çağrısı
+//   kapalı · Ⓞ beklenen = örtü var mı · çözülmüş Ⓚ bloğu silindi → §8e ❌ (her biri 16–17/18).
 // Koşum: npx tsx scripts/test_tunel_yok.ts   (yalnız (5) DB'ye dokunur, kendi _test DB'si)
 // =============================================================================
 import { randomBytes } from "node:crypto";
-import { readFileSync, readdirSync, statSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import path from "node:path";
 import ts from "typescript";
 import { loadConfig } from "../src/config";
@@ -29,6 +37,18 @@ import { anahtarOrtamiKur, hedefDbKapisi, kapat, kontrol, portalKullaniciAc, son
 
 const KOK = path.resolve(__dirname, "..");
 const SRC = path.join(KOK, "src");
+const DEPLOY = path.resolve(KOK, "..", "..", "deploy", "satici");
+/** Emekli tünelin dağıtım dosyaları (deploy/satici'ye göre). */
+const EMEKLI_DOSYALAR = ["docker-compose.loopback.yml", "portal-tunel.cjs", "portal-baglan.mjs", "vds/tailnet-hazirla.sh", "vds/tekserp-satici-tailnet@.service"];
+/** Dağıtım metninde tünel izi: eski port, tailnet (TAILNET_* dahil), iletici servis. */
+const TUNEL_IZI = /4611|tailnet|portal-tunel/i;
+
+function dosyalarOzyineli(dizin: string): string[] {
+  return readdirSync(dizin).flatMap((ad) => {
+    const tam = path.join(dizin, ad);
+    return statSync(tam).isDirectory() ? dosyalarOzyineli(tam) : [tam];
+  });
+}
 
 function tsDosyalari(dizin: string): string[] {
   const out: string[] = [];
@@ -148,6 +168,40 @@ async function main(): Promise<void> {
   });
   const modulAnan = scriptler.filter((d) => /tailnet-app|createTailnetApp/.test(readFileSync(d, "utf8")));
   kontrol("§7a SATICI_DINLIYOR okuyucuları tailnet= beklemez; silinen tailnet-app modülü anılmaz", okuyucular.length === 0 && modulAnan.length === 0, [...okuyucular, ...modulAnan].map((d) => path.relative(KOK, d)).join(","));
+
+  console.log("\n§8 deploy/satici (dağıtım)");
+  const kalan = EMEKLI_DOSYALAR.filter((f) => existsSync(path.join(DEPLOY, f)));
+  kontrol("§8a emekli beş dağıtım dosyası YOK (loopback örtüsü · portal-tunel.cjs · portal-baglan.mjs · vds/tailnet-*)", kalan.length === 0, kalan.join(","));
+  const deployDosyalari = dosyalarOzyineli(DEPLOY).map((d) => path.relative(DEPLOY, d));
+  const adAnan = deployDosyalari.filter((d) => /tailnet|portal-tunel|portal-baglan|loopback/i.test(path.basename(d)));
+  kontrol("§8b deploy/satici'de adı tünel anan dosya yok (tailnet · portal-tunel · portal-baglan · loopback)", adAnan.length === 0, adAnan.join(","));
+  const taranan = deployDosyalari.filter((d) => /^(docker-compose[^/]*\.yml|Dockerfile|imaj-derle\.sh|ornek[^/]*\.env)$/.test(d)).sort();
+  const izli = taranan.flatMap((d) =>
+    readFileSync(path.join(DEPLOY, d), "utf8")
+      .split("\n")
+      .flatMap((l, i) => (TUNEL_IZI.test(l) ? [`${d}:${i + 1}`] : [])),
+  );
+  const beklenenTaranan = ["Dockerfile", "docker-compose.bildirim.yml", "docker-compose.portal-genel.yml", "docker-compose.yml", "imaj-derle.sh", "ornek-uretim.env", "ornek.env"];
+  kontrol(
+    "§8c docker-compose*.yml · Dockerfile · imaj-derle.sh · ornek*.env metninde (yorum dahil) 4611 / tailnet / TAILNET_ / portal-tunel YOK",
+    izli.length === 0 && beklenenTaranan.every((d) => taranan.includes(d)),
+    izli.slice(0, 6).join(" | ") || `${taranan.length} dosya: ${taranan.join(",")}`,
+  );
+  const izSonda = ["TAILNET_IP=100.64.0.9", '      - "127.0.0.1:4611:4611"', "  portal-tunel:", "    networks: [kenar, tailnet]", "COPY portal-tunel.cjs /usr/local/lib/"].filter((l) => TUNEL_IZI.test(l)).length;
+  kontrol("§8d ✓K desen sentetik tünel satırlarında ısırır (5/5), temiz satırı geçirir", izSonda === 5 && !TUNEL_IZI.test("    networks: [kenar, ic, ic-api]"), `${izSonda}/5`);
+  const denetle = readFileSync(path.join(DEPLOY, "compose-denetle.mjs"), "utf8");
+  const kKontrol = (denetle.match(/kontrol\(`Ⓚ /g) ?? []).length;
+  kontrol(
+    "§8e compose-denetle.mjs: Ⓚ kalıntı denetimi (ön + çözülmüş; emekli örtü loopback · servis portal-tunel · TAILNET_*/PORT_TAILNET) ve Ⓞ tek portal (üretimde portal-genel zorunlu) var",
+    kKontrol === 2 &&
+      /const EMEKLI_ORTULER = \[[^\]]*"docker-compose\.loopback\.yml"/.test(denetle) &&
+      /const EMEKLI_SERVISLER = \[[^\]]*"portal-tunel"/.test(denetle) &&
+      /const tunelAnahtari = \(k\) => \/\^\(TAILNET_\|PORT_TAILNET\$\)\/\.test\(k\);/.test(denetle) &&
+      /^kalintiOnDenetle\(envDosyasi, /m.test(denetle) &&
+      /const beklenenPortal = projeOrtamiAdi === "uretim";/.test(denetle) &&
+      /"Ⓞ üretimde portal-genel örtüsü ZORUNLU/.test(denetle),
+    `Ⓚ kontrol: ${kKontrol}`,
+  );
 
   console.log("\n§5 DB: TAILNET oturumu çözülmez");
   hedefDbKapisi();

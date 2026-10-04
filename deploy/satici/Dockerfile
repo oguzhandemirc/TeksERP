@@ -5,8 +5,8 @@
 # Bağlam `imaj-derle.sh`in HEAD'den (git archive) kurduğu temiz dizindir; VDS'te derleme YOK,
 # kaynak VDS'e gitmez (imaj `docker save` arşiviyle taşınır). Runbook: docs/ops/SATICI-KURULUM.md
 #
-#   sunucu — node dist/server.js (tek süreç, iki dinleyici) · Prisma şema motoru göç işi için içeride ·
-#            portal web arayüzü (satici/web derlemesi: /portal tailnet'te, /bayi genelde) /uygulama/web'de ·
+#   sunucu — node dist/server.js (tek süreç: genel · iç API · ERİŞİM dinleyicileri) · Prisma şema motoru göç işi için
+#            içeride · portal web arayüzü (satici/web derlemesi: /portal ERİŞİM'de, /bayi genelde) /uygulama/web'de ·
 #            AYNI imaj bildirim yan konteynerini de koşar (`node dist/notifications/sender-main.js`,
 #            docker-compose.bildirim.yml) ve gönderici rolüne girişi açar (`dist/notifications/role-cli.js`)
 #   yedek  — pg_dump 16 + yedek-sifrele.cjs (.tkenc) döngüsü; anahtar dizini arşivi de şifreli
@@ -71,8 +71,6 @@ COPY --from=derleme /uygulama/prisma ./prisma
 COPY --from=derleme /uygulama/prisma.config.ts /uygulama/package.json ./
 COPY --from=web /web/dist ./web
 COPY --chmod=0755 satici-baslat.sh /usr/local/bin/satici-baslat
-# Yalnız geri döngü kipinde (Tailscale onayı gelene dek) ayrı konteynerde koşar: docker-compose.loopback.yml
-COPY --chmod=0444 portal-tunel.cjs /usr/local/lib/portal-tunel.cjs
 ENV NODE_ENV=production \
     HOME=/tmp \
     CHECKPOINT_DISABLE=1 \

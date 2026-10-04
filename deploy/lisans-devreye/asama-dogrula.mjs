@@ -7,7 +7,7 @@
 //
 //   node deploy/lisans-devreye/asama-dogrula.mjs --asama=2 [--olc] [--satici-sha=<12>] [--backend-surum=<x>]
 //        [--panel-surum=<x>] [--belirtec-dosyasi=~/.tekserp/testfabrika-gozlem.jwt] [--t4-tsv=<dosya>]
-//        [--traefik-baslangic=<ISO önek>] [--vds-taban=<dizin>] [--satici-kok=<url>] [--tp-kok=<url>] [--portal-kok=<url>]
+//        [--traefik-baslangic=<ISO önek>] [--vds-taban=<dizin>] [--satici-kok=<url>] [--tp-kok=<url>]
 //        [--hak-sinif=<TEST|URETIM|…>] [--paket-kid=<önek>]   (üretim satıcısına geçişten sonra: URETIM · paket-2026)
 //   --asama: 1..8 | hepsi (virgülle birden çok: --asama=1,2)
 //
@@ -35,7 +35,6 @@ export function parametreler(argv) {
     ...VARSAYILAN,
     saticiKok: arg(argv, 'satici-kok') ?? VARSAYILAN.saticiKok,
     tpKok: arg(argv, 'tp-kok') ?? VARSAYILAN.tpKok,
-    portalKok: arg(argv, 'portal-kok') ?? VARSAYILAN.portalKok,
     traefikBaslangic: arg(argv, 'traefik-baslangic') ?? VARSAYILAN.traefikBaslangic,
     vdsTaban: arg(argv, 'vds-taban') ?? VARSAYILAN.vdsTaban,
     saticiSha: arg(argv, 'satici-sha') ?? null,

@@ -26,7 +26,8 @@
 //      yönlendirici, rota, ayar) beklenen sıralı kümeyle BİREBİR — küme dışı bağlama (izin listesini atlayan yol) kırmızı
 //   §5 compose: portal yönlendiricisinin Traefik ipallowlist aralıkları = CLOUDFLARE_NETWORKS · üst dosya satıcıya AĞ
 //      EKLEMEZ, JWKS bağı satıcıda salt okunur · yan konteyner sertleştirilmiş, sırsız, yalnız kendi çıkış köprüsünde
-//      · birleşik yapılandırmada (docker compose config) satıcının HER ağı internal (docker yoksa ÖLÇÜLEMEDİ beyanı)
+//      · üretim kurulumu (ornek-uretim.env'in COMPOSE_FILE'ı = ana dosya + portal-genel) birleşik yapılandırmada satıcının
+//      internal olmayan ağı YOK, yapılandırmanın tek çıkışlı ağı jwks-cikis (docker yoksa ÖLÇÜLEMEDİ beyanı)
 //   §6 HTTP (süreç içi dinleyiciler, kendi `_test` DB'si): her tablo rotası ERİŞİM'de listeye göre bağlı (listede 401,
 //      liste dışı 404) · HAK imzası ERİŞİM'de: yanlış parola 400 + sayaç, doğru parola 201; saklanan gövde özeti parolasız
 //      gövdenin bağımsız özeti, aynı kimlik başka parolayla 201 tekrar (§6k6 · §6k7) · listede olmayan sonda rotası
@@ -57,6 +58,9 @@
 // NEGATİF SONDA (tünel kapatma T1, 2026-10-05, dosya DIŞI, cp + shasum ile geri alındı): listeden "GET /saglik" silindi →
 //   §4a · §4d2 · §6o ❌ (144/147) · resolveSession dinleyici denetimi kaldırıldı → bu bekçi YEŞİL (§6j'nin 401'leri rol
 //   kuralından da gelir) — o bağı test_tunel_yok §5a ölçer.
+// NEGATİF SONDA (tünel kapatma T2, 2026-10-05, deploy dosyalarında dosya DIŞI, cp + shasum ile geri alındı): ornek-uretim.env
+//   COMPOSE_FILE yalnız ana dosya → §5e0 · §5e2 · §5e3 ❌ · ana dosyada kenar `internal: false` → §5e · §5e2 ❌ · portal-genel'e
+//   tailnet ağlı portal-tunel servisi → §5e2 ❌ · portal-genel'e jwks-cikis'te ikinci servis → §5e3 ❌ (her biri 145–147/148).
 // Koşum: npx tsx scripts/test_erisim_kapisi.ts   (§6–§7 kendi _test DB'si)
 // =============================================================================
 import http from "node:http";
@@ -792,44 +796,59 @@ async function main(): Promise<void> {
   } else {
     const gDizin = mkdtempSync(path.join(os.tmpdir(), "satici-compose-"));
     try {
-      const ortamMetni = readFileSync(path.join(composeKoku, "ornek.env"), "utf8")
+      // Üretim kurulumu ornek-uretim.env'in KENDİ COMPOSE_FILE listesiyle çözülür (tek portal üretimde, hazırlıkta yok).
+      const uretimMetni = readFileSync(path.join(composeKoku, "ornek-uretim.env"), "utf8");
+      const composeDosyalari = (/^COMPOSE_FILE=(.*)$/m.exec(uretimMetni)?.[1] ?? "").trim().replace(/^["']|["']$/g, "").split(":").filter(Boolean);
+      const ortamMetni = uretimMetni
         .replace(/^SATICI_IMAJ=.*$/m, "SATICI_IMAJ=tekserp-satici:bekci")
         .replace(/^SATICI_YEDEK_IMAJ=.*$/m, "SATICI_YEDEK_IMAJ=tekserp-satici-yedek:bekci")
-        .replace(/^TAILNET_IP=.*$/m, "TAILNET_IP=100.64.0.9");
+        .replace(/^PORTAL_HOST=.*$/m, "PORTAL_HOST=portal.bekci.test")
+        .replace(/^CF_ACCESS_TAKIM_ALANI=.*$/m, `CF_ACCESS_TAKIM_ALANI=${TAKIM}`)
+        .replace(/^CF_ACCESS_AUD=.*$/m, `CF_ACCESS_AUD=${AUD}`)
+        .replace(/^ERISIM_JWKS_DIZINI_HOST=.*$/m, `ERISIM_JWKS_DIZINI_HOST=${gDizin}`);
       const envDosyasi = path.join(gDizin, "bekci.env");
-      writeFileSync(envDosyasi, `${ortamMetni}\nPORTAL_HOST=portal.bekci.test\nCF_ACCESS_TAKIM_ALANI=${TAKIM}\nCF_ACCESS_AUD=${AUD}\nERISIM_JWKS_DIZINI_HOST=${gDizin}\nJWKS_CIKIS_AGI=172.31.255.0/29\n`);
+      writeFileSync(envDosyasi, ortamMetni);
       type Birlesik = { services: Record<string, { networks?: Record<string, unknown>; volumes?: { target?: string; read_only?: boolean }[] }>; networks: Record<string, { internal?: boolean }> };
       const birlestir = (dosyalar: string[]): Birlesik | string => {
         const r = spawnSync("docker", ["compose", "--env-file", envDosyasi, ...dosyalar.flatMap((f) => ["-f", path.join(composeKoku, f)]), "config", "--format", "json"], { encoding: "utf8" });
         return r.status === 0 ? (JSON.parse(r.stdout) as Birlesik) : (r.stderr || "config başarısız").trim().slice(0, 300);
       };
-      const loop = birlestir(["docker-compose.yml", "docker-compose.loopback.yml", "docker-compose.portal-genel.yml"]);
-      const ana = birlestir(["docker-compose.yml", "docker-compose.portal-genel.yml"]);
-      if (typeof loop === "string" || typeof ana === "string") {
-        kontrol("§5e birleşik yapılandırma çözüldü", false, typeof loop === "string" ? loop : String(ana));
+      kontrol(
+        "§5e0 ornek-uretim.env COMPOSE_FILE = docker-compose.yml + docker-compose.portal-genel.yml (portalın tek yolu; emekli örtü yok)",
+        JSON.stringify(composeDosyalari) === JSON.stringify(["docker-compose.yml", "docker-compose.portal-genel.yml"]),
+        composeDosyalari.join(":") || "COMPOSE_FILE yok",
+      );
+      const uretim = birlestir(composeDosyalari);
+      const yalin = birlestir(["docker-compose.yml"]);
+      if (typeof uretim === "string" || typeof yalin === "string") {
+        kontrol("§5e birleşik yapılandırma çözüldü", false, typeof uretim === "string" ? uretim : String(yalin));
       } else {
-        const aglar = (c: Birlesik, sv: string) => Object.keys(c.services[sv]?.networks ?? {});
+        const aglar = (c: Birlesik, sv: string) => Object.keys(c.services[sv]?.networks ?? {}).sort();
         const dis = (c: Birlesik, sv: string) => aglar(c, sv).filter((n) => c.networks[n]?.internal !== true);
         const uyeler = (c: Birlesik, ag: string) => Object.entries(c.services).filter(([, s]) => ag in (s.networks ?? {})).map(([a]) => a);
         const bag = (c: Birlesik, sv: string) => (c.services[sv]?.volumes ?? []).find((v) => v.target === "/erisim-jwks");
+        const disAglar = Object.entries(uretim.networks).filter(([, n]) => n.internal !== true).map(([a]) => a).sort();
         kontrol(
-          "§5e ⭐ geri döngü kipi (bugünkü kurulum): satıcının katıldığı HER ağ internal — dış bağlantı yok",
-          aglar(loop, "satici").length >= 4 && dis(loop, "satici").length === 0,
-          `ağlar: ${aglar(loop, "satici").join(",")} · internal olmayan: ${dis(loop, "satici").join(",") || "yok"}`,
+          "§5e ⭐ üretim kurulumu: satıcının internal olmayan ağı YOK — ağları tam kenar · ic · ic-api, üçü internal",
+          JSON.stringify(aglar(uretim, "satici")) === JSON.stringify(["ic", "ic-api", "kenar"]) && dis(uretim, "satici").length === 0,
+          `ağlar: ${aglar(uretim, "satici").join(",")} · internal olmayan: ${dis(uretim, "satici").join(",") || "yok"}`,
         );
         kontrol(
-          "§5e2 ana kip: satıcının internal olmayan TEK ağı tailnet (Tailscale yayını; DOCKER-USER ile çıkışı kapalı) — üst dosya ağ eklemedi",
-          JSON.stringify(dis(ana, "satici")) === JSON.stringify(["tailnet"]),
-          dis(ana, "satici").join(","),
+          "§5e2 üst dosya satıcıya ağ eklemedi (yalın ana dosyayla aynı küme); yapılandırmanın internal olmayan TEK ağı jwks-cikis; tailnet ağı / portal-tunel servisi yok",
+          JSON.stringify(aglar(uretim, "satici")) === JSON.stringify(aglar(yalin, "satici")) &&
+            JSON.stringify(disAglar) === JSON.stringify(["jwks-cikis"]) &&
+            !Object.keys(uretim.networks).some((a) => /tailnet/i.test(a)) &&
+            !("portal-tunel" in uretim.services),
+          `internal olmayan: ${disAglar.join(",") || "yok"}`,
         );
         kontrol(
           "§5e3 çıkışlı köprünün (jwks-cikis) TEK üyesi satici-jwks; JWKS bağı satıcıda ro, yan konteynerde rw",
-          JSON.stringify(uyeler(loop, "jwks-cikis")) === JSON.stringify(["satici-jwks"]) &&
-            loop.networks["jwks-cikis"]?.internal !== true &&
-            bag(loop, "satici")?.read_only === true &&
-            bag(loop, "satici-jwks") !== undefined &&
-            bag(loop, "satici-jwks")?.read_only !== true,
-          uyeler(loop, "jwks-cikis").join(","),
+          JSON.stringify(uyeler(uretim, "jwks-cikis")) === JSON.stringify(["satici-jwks"]) &&
+            uretim.networks["jwks-cikis"]?.internal !== true &&
+            bag(uretim, "satici")?.read_only === true &&
+            bag(uretim, "satici-jwks") !== undefined &&
+            bag(uretim, "satici-jwks")?.read_only !== true,
+          uyeler(uretim, "jwks-cikis").join(","),
         );
       }
     } finally {

@@ -1,8 +1,8 @@
 # =============================================================================
 # Satıcı — BİLDİRİM YAN KONTEYNERİ (örtü; ana dosyanın ÜSTÜNE bindirilir)
 # =============================================================================
-# `.env`: COMPOSE_FILE=docker-compose.yml:docker-compose.bildirim.yml  (geri döngü kipinde üçü birden:
-#         docker-compose.yml:docker-compose.loopback.yml:docker-compose.bildirim.yml). Runbook: docs/ops/SATICI-KURULUM.md §5c.
+# `.env`: hazırlık COMPOSE_FILE=docker-compose.yml:docker-compose.bildirim.yml · üretim (portal örtüsüyle üçü birden)
+#         docker-compose.yml:docker-compose.portal-genel.yml:docker-compose.bildirim.yml. Runbook: docs/ops/SATICI-KURULUM.md §5c.
 #
 # Satıcı DIŞ BAĞLANTISIZ kalır (anahtar tutuyor): olay, satıcının kendi tx'inde giden kutusuna (`bildirim` tablosu)
 # satır yazar. E-posta (Resend HTTP API) ve Telegram (Bot API) çağrısını YALNIZ bu servis yapar — satıcıyla AYNI
@@ -17,7 +17,7 @@
 #     yok, nabız/günlük "kanal yapılandırılmamış" der). Grup süper gruba taşınırsa satır kalıcı HATA olur ve YENİ
 #     kimlik (yalnız sayı) nabızda + portalda görünür → dosyaya yazılıp servis yeniden yaratılır.
 #   · e-posta hedefleri ve portal kökü (sır DEĞİL) `.env`den: BILDIRIM_EPOSTA_ALICI · BILDIRIM_EPOSTA_GONDEREN ·
-#     BILDIRIM_PORTAL_ADRESI (tailnet portal kökü, bağlantı için; boşsa iletide yalnız yol).
+#     BILDIRIM_PORTAL_ADRESI (internet portalının kökü https://<PORTAL_HOST>/portal; boşsa iletide yalnız yol).
 #   · birim YOK, port YOK, kök FS salt okunur, /tmp tmpfs (nabız dosyası), cgroup sınırları.
 # =============================================================================
 
@@ -83,7 +83,7 @@ secrets:
 networks:
   bildirim-cikis:
     # Dış çıkış — internal DEĞİL; YALNIZ satici-bildirim katılır. Alt ağ satıcının/patronun hiçbir ağıyla ve
-    # 100.64/10 (tailnet) · 127/8 ile çakışmaz; DOCKER-USER kuralı bu alt ağa bağlanır (vds/bildirim-cikis.sh).
+    # 100.64/10 (CGNAT) · 127/8 ile çakışmaz; DOCKER-USER kuralı bu alt ağa bağlanır (vds/bildirim-cikis.sh).
     name: tekserp-satici-${ORTAM}-bildirim-cikis
     ipam:
       config: [{ subnet: "${BILDIRIM_CIKIS_AGI:?BILDIRIM_CIKIS_AGI gerekli}" }]
