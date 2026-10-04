@@ -3,7 +3,7 @@
 // düğmesi var ve "tünelden yönetilir" açıklaması YOK. Pozitif kontrol: aynı ekran TAILNET'te aynı görünür.
 // NEGATİF SONDA (2026-10-04, dosya DIŞI, shasum ile geri alındı): Users.tsx'e eski ERISIM açıklama dalı → ERISIM testi ❌
 // (TAILNET yeşil); Layout.tsx menüsüne ERISIM'de `kullanici:yonet` süzgeci → ERISIM testi ❌ (+ mirrors ❌).
-import { screen } from "@testing-library/react";
+import { screen, waitFor } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { PORTAL_ROUTES } from "../portal/routes";
 import type { SessionListener } from "../shared/session";
@@ -27,7 +27,7 @@ describe("internet portalında kullanıcı yönetimi açık", () => {
     const r = openUsers("TAILNET");
     expect(await screen.findByRole("button", { name: "Yeni kullanıcı" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Portal kullanıcıları" })).toBeInTheDocument();
-    expect(r.calls.some((c) => c.path === "/kullanicilar")).toBe(true);
+    await waitFor(() => expect(r.calls.some((c) => c.path === "/kullanicilar")).toBe(true));
   });
 
   it("ERISIM: menüde var, sayfa /kullanicilar'ı çağırır, 'Yeni kullanıcı' düğmesi var, tünel açıklaması yok", async () => {
@@ -35,6 +35,6 @@ describe("internet portalında kullanıcı yönetimi açık", () => {
     expect(await screen.findByRole("button", { name: "Yeni kullanıcı" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Portal kullanıcıları" })).toBeInTheDocument();
     expect(screen.queryByText(/Cloudflare'den geçmez|portal-baglan/)).toBeNull();
-    expect(r.calls.some((c) => c.path === "/kullanicilar")).toBe(true);
+    await waitFor(() => expect(r.calls.some((c) => c.path === "/kullanicilar")).toBe(true));
   });
 });

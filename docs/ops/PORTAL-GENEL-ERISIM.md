@@ -8,7 +8,7 @@
 
 | # | Kapı | Nerede | Düşerse |
 |---|---|---|---|
-| 1 | Cloudflare Access — One-time PIN, izinli e-posta listesi, oturum 12 sa | Cloudflare kenarı | 3. kapı yine her isteği ister |
+| 1 | Cloudflare Access — One-time PIN, izinli e-posta listesi, oturum 24 sa | Cloudflare kenarı | 3. kapı yine her isteği ister |
 | 2 | Traefik `ipallowlist` — portal yönlendiricisi yalnız Cloudflare kenar aralıklarından gelen TCP bağlantısını kabul eder | VDS Traefik (etiketle, statik yapılandırma değişmez) | 3. kapı yine her isteği ister |
 | 3 | Satıcının **ERİŞİM** dinleyicisi (4613, kenar adresi, port yayını YOK) — **her** istekte `Cf-Access-Jwt-Assertion`: RS256 · takım JWKS'i (yan konteynerin yazdığı dosyadan, satıcı ağa çıkmaz) · `aud` = uygulamanın AUD etiketi · `iss` = takım · `exp`/`nbf` · e-posta; değilse **404** | satıcı süreci | — (son teknik kapı) |
 | 4 | Portal parolası + TOTP; bu yolda YALNIZ izin listesindeki rotalar (opt-in): satıcı portalının bütün işlemleri listededir (kök/ara imzalı HAK sürümü · kullanıcı yönetimi · bayi/yayıncı anahtarı kaydı · toplu yeniden basım), liste dışı rota gövde okunmadan **404**; kök/ara imzası imza boğazında GENEL (bayi) yolundan yine reddedilir | satıcı süreci + web arayüzü | — |
@@ -63,7 +63,7 @@ APP=$(cf -X POST "$CF/accounts/$ACCOUNT_ID/access/apps" -d "$(jq -n --arg h "$HO
   app_launcher_visible:false, http_only_cookie_attribute:true, same_site_cookie_attribute:"lax"}')")
 APP_ID=$(jq -r '.result.id' <<<"$APP"); echo "$APP_ID"
 ```
-Oturum süresi 12 sa = portal oturumunun mutlak ömrü (`PORTAL_OTURUM_AZAMI_SAAT`). `same_site` **lax** kalır: OTP dönüşü siteler arası yönlendirmedir, `strict` çerezi o zincirde göndermez ve giriş döngüye girer.
+Access oturum süresi 24 sa (portal oturumunun mutlak ömrü ayrıdır: `PORTAL_OTURUM_AZAMI_SAAT`, 12 sa). `same_site` **lax** kalır: OTP dönüşü siteler arası yönlendirmedir, `strict` çerezi o zincirde göndermez ve giriş döngüye girer.
 
 **2.3 Allow politikası — izinli e-posta listesi:**
 ```bash
@@ -91,7 +91,7 @@ Proxy (turuncu bulut) **AÇIK** kalmalı: Origin CA'ya yalnız Cloudflare güven
 ## 3. Cloudflare — panelden (aynı adımlar)
 
 1. **Zero Trust → Settings → Authentication → Login methods → Add new → One-time PIN** → Save.
-2. **Zero Trust → Access → Applications → Add an application → Self-hosted**: ad "TeksERP satıcı portalı" · Session Duration **12 hours** · Application domain: subdomain `portal`, domain `etkiliyazilim.com` · Identity providers: yalnız **One-time PIN**, *Instant Auth* açık · App Launcher'da gösterme.
+2. **Zero Trust → Access → Applications → Add an application → Self-hosted**: ad "TeksERP satıcı portalı" · Session Duration **24 hours** · Application domain: subdomain `portal`, domain `etkiliyazilim.com` · Identity providers: yalnız **One-time PIN**, *Instant Auth* açık · App Launcher'da gösterme.
 3. **Policies → Add a policy**: ad "İzinli e-postalar" · Action **Allow** · Include → **Emails** → izinli adresler (dağıtımda verilir) → Save.
 4. **Settings → Cookie settings**: HttpOnly açık · SameSite **Lax** (Strict OTP dönüşünü döngüye sokar). *Binding cookie* isteğe bağlı (çalınan belirtece karşı; `cloudflared access` ile komut satırı denemesinde sorun çıkarırsa kapatılır).
 5. Uygulamanın **Overview** sekmesi → **Application Audience (AUD) Tag** → kopyala → `CF_ACCESS_AUD`.
@@ -151,7 +151,7 @@ Kural yalnız IPv4'ü ve yalnız `<JWKS_CIKIS_AGI>`yi daraltır: `sudo docker ne
 
 ## 6b. Bilinen davranış
 
-- **İki ayrı oturum, iki ayrı saat:** Access oturumu (12 sa, e-posta kodundan itibaren) ve portal oturumu (12 sa mutlak, 30 dk boşta — parola + TOTP'den itibaren) bağımsızdır. Access oturumu dolunca arayüzün API çağrıları Cloudflare giriş sayfasına yönlenir ve ekran ağ hatası gösterir: sayfayı yenilemek e-posta koduna götürür, portal oturumu sürüyorsa kaldığı yerden devam eder.
+- **İki ayrı oturum, iki ayrı saat:** Access oturumu (24 sa, e-posta kodundan itibaren) ve portal oturumu (12 sa mutlak, 30 dk boşta — parola + TOTP'den itibaren) bağımsızdır. Access oturumu dolunca arayüzün API çağrıları Cloudflare giriş sayfasına yönlenir ve ekran ağ hatası gösterir: sayfayı yenilemek e-posta koduna götürür, portal oturumu sürüyorsa kaldığı yerden devam eder.
 - **Tek ad, tek ortam:** `portal.etkiliyazilim.com` bir anda YALNIZ bir satıcı ortamına (bugün `hazirlik`) bağlanır — `PORTAL_HOST` o ortamın `.env`'indedir. Üretim satıcısı kurulunca ad ona taşınır (hazırlıkta satır kaldırılır, üretimde eklenir) ya da hazırlığa ayrı ad verilir; iki ortam aynı adı taşıyamaz (Traefik iki yönlendiriciyi çakıştırır).
 - Portal arayüzünün statik dosyaları (`/portal/assets/*`, içerik özetli, `immutable`) Cloudflare kenarında önbelleğe girebilir; Access denetimi önbellekten ÖNCE koşar ve bu dosyalar sır taşımaz. API ve giriş HTML'i `no-store`.
 
