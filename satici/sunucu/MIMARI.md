@@ -1,6 +1,6 @@
 # satici/sunucu — mimari ve ayrıntı
 
-> `satici/sunucu/CLAUDE.md`'den 2026-10-03'te taşınan açıklayıcı metin: çekirdekte KALAN bölümlerin anlatım parçaları (amaç ayrıntısı, şema, dinleyici ortamı, CLI'ler, ortam değişkenleri). Oturum açılışında yüklenmez. Kurallar `satici/sunucu/CLAUDE.md`'de; alt-alan bölümleri `docs/kurallar/lisans.md` § Satıcı sunucusu — alt-alan kuralları'nda eski metinleriyle TAM durur ve burada tekrarlanmaz. Başlıklar eski CLAUDE.md bölüm başlıklarıyla aynıdır.
+> `satici/sunucu/CLAUDE.md`'den 2026-10-03'te taşınan açıklayıcı metin: çekirdekte KALAN bölümlerin anlatım parçaları (amaç ayrıntısı, şema, dinleyici ortamı, CLI'ler, ortam değişkenleri) + alt-alanların anlatımı (uç listeleri, akışlar, ortam değişkenleri — § Alt-alan anlatımı). Oturum açılışında yüklenmez. Kurallar `satici/sunucu/CLAUDE.md`'de ve `docs/kurallar/lisans.md` § Satıcı sunucusu kimlikli satırlarında; bu alt-alanların kimlikli kuralları orada, burada yalnız anlatımları durur (`ERİŞİM` ve `Anahtar hiyerarşisi` bölümleri henüz `docs/kurallar/lisans.md` § Satıcı sunucusu — alt-alan kuralları altındadır). Amaç/Katmanlar/Komutlar başlıkları eski CLAUDE.md bölüm başlıklarıyla aynıdır.
 
 ## Amaç
 
@@ -28,3 +28,77 @@ node ../../scripts/agir-is.mjs -- npx tsx scripts/run-all-tests.ts [ad-parçası
 ```
 
 `.env` (repoya girmez, 0600): `DATABASE_URL` (kendi `_test` DB'si; `tekserp_fabrika_*` ASLA) · `PORT_GENEL` · `TAILNET_BIND` · `PORT_TAILNET` · `ANAHTAR_DIZINI` · `PORTAL_WEB_DIZINI` (derlenmiş `satici/web` çıktısı; varsayılan `../web/dist`) · (genel portal için) `PORT_ERISIM` · `ERISIM_BIND` · `CF_ACCESS_TAKIM_ALANI` · `CF_ACCESS_AUD` · `CF_ACCESS_JWKS_DOSYASI` · (iç API için) `PORT_IC` · `IC_BIND` · `IC_KAYNAK_AGLARI` · `IC_API_BELIRTEC_DOSYASI` (0600/0640 sır dosyası; repoya girmez) · `DOSYA_DIZINI` · `DERLEME_DIZINI` · `YAYIN_DIZINI` (salt-okunur) · (yalnız test) `GUVEN_CAPASI_DOSYASI`; saklama süreleri, bildirim eşikleri (`BILDIRIM_*`) ve diğer isteğe bağlılar `.env.example`te. Göndericinin ortamı (kanal sırları · hedefler) satıcının `.env`inde DEĞİL, yan konteynerde (`sender-config.ts`). Bekçiler `scripts/test_*.ts`; harita `Teks-Erp/docs/BEKCI-HARITASI.md` § lisans. CI'da ayrı "Satıcı" job'ı (PG 16, `migrate deploy`, lint + tavan + tip + kapı kapsamı + bekçi koşucusu).
+
+## Alt-alan anlatımı — kural kimlikli satırda, ayrıntı burada
+
+`docs/kurallar/lisans.md` § Satıcı sunucusu'ndaki kimlikli satırların altında yatan akış, uç ve ortam anlatımı (2026-10-03'te `docs/kurallar/lisans.md`'ye taşınan alt-alan paragraflarının kelimesi kelimesine aynısı; yer değişti, anlam değişmedi).
+
+### Kurulum kaydı + destek (3d-2)
+
+> Kural: kimlikli satır: `bekçi: test_destek_kurulum_kaydi.ts`.
+
+**Kurulum kaydı + destek (3d-2):** yoklamanın `kurulumKayitlari` (fabrikanın `kur.ps1` geçmişi) `kurulum_kaydi`na `(kurulum, kaynakKayitId)` ile idempotent yazılır; `POST /v1/destek` (amaç `destek`, ham gövde ≤2 MB, ek ≤1 MB görüntü) talep açar, destek kutusu (`/portal/api/destek*`, yazma `destek:yanitla`) yanıtlar/kapatır → zil `destek`, yanıt yoklama yanıtının `destek` alanıyla döner.
+
+### VDS kurulumu
+
+> Kural: kimlikli satır: üretim anahtar kümesi yalnız tören aracıyla (`bekçi: test_uretim_toren.ts`).
+
+**VDS kurulumu** (compose · imaj · yalıtım denetimi · yedek): `deploy/satici/` + runbook `docs/ops/SATICI-KURULUM.md` — imaj Mac'te HEAD'den derlenir, VDS'te kaynak yok; hazırlık anahtarları `~/.tekserp/satici-hazirlik/` (repo dışı). ÜRETİM anahtar kümesi YALNIZ tören aracıyla (`deploy/satici/uretim-toren.mjs` → `~/.tekserp/satici-uretim/`, runbook `docs/ops/URETIM-SATICI-TOREN.md`); üretim satıcısı aynı compose, `ORTAM=uretim` (runbook §13).
+
+### İç API
+
+> Kural: kimlikli satır: `bekçi: test_ic_api`.
+
+- **İç API** (`src/http/internal-app.ts`, patron bulutu → satıcı; sözleşme `PATRON-BULUTU-ESITLEME.md` §17): `GET /ic/v1/kurulum/:kurulumId` (LİSANS kimliği; yanıt KATI allowlist — `moduller` yalnız `patron-bulut`, bitiş `cloudEntitlementUntil`) · `POST /ic/v1/zil {v, tesisId, konu: gelen-kutusu|rapor|ozet}` (tesisin ETKİN ÜRETİM kurulumları; kurulum başına `IC_ZIL_HIZ_DK`). Kapı: iç dinleyicinin soketi + kaynak `IC_KAYNAK_AGLARI` (yoksa yalnız geri döngü) → değilse 404; Bearer = `IC_API_BELIRTEC_DOSYASI` (sabit zamanlı; yanlışsa 401 `IC_KIMLIK_GECERSIZ` — 404 değil, patron 404'te kaydı pasife çeker). Sır dosyası yok/okunamaz/herkese açık/zayıfsa dinleyici AÇILMAZ (`ic=kapali`). Çağrılar uç × durum sayılır, denetime pencere başına tek `IC_API_SAYAC` satırı (`IC_SAYAC_DK`). Bekçi `test_ic_api`.
+
+### Kira zinciri
+
+> Kural: kimlikli satır: `bekçi: test_kira_zinciri.ts`.
+
+- **Kira zinciri** (`services/lease-chain.ts`, SAF): uçta NORMAL · (b) 15 dk içinde aynı ucun tekrarı → AYNI kira · (a) aynı makine geride → YAKALA (uyarı yok) · (c) farklı makine → ÇATAL (ilk pencere uyarı, ikincide eşleşmeyen tarafa 403 `KIRA_VERILMEDI`; sahip asla reddedilmez).
+
+### Parmak izi v2
+
+> Kural: kimlikli satırlar: parmak izi kümesi öğrenme kuralı + `Donanım değişikliği lisansı iptal ETMEZ` (`bekçi: test_donanim_bildirimi.ts`).
+
+- **Parmak izi v2 (K8, L2-11 — `services/fingerprint-policy.ts` SAF · `services/hardware.service.ts`):** kabul edilen küme yalnız öğrenilebilir değişimde kayar (`canLearnFingerprint`: güçlü etkenlerden F2 · F3 · F4 ≥ 2 tutuyor; zayıf kümede zayıf kural; kayıp etken eski değerini korur; çatalda/çatal açıkken asla) ve öğrenilebilir değişim PARMAK_IZI_UYUSMAZ doğurmaz. Kiraya `parmakIziKurali` (kümeden: zayıf → `zayif`, değilse `standart`) yalnız `parmak-izi-v2` bildirene basılır. `POST /v1/donanim` (amaç `donanim`; zarfla `/v1/cevrimdisi`, yanıt aynı `HardwareReportResponse`): öğrenilebilirse talep kendiliğinden ONAYLANDI + yeni kümeli kira (uç ilerler; kira bağlanamıyorsa 403, öğrenme yazılmaz), değilse `donanim_talebi` BEKLIYOR (kurulum · tür · anahtar başına tek, sonraki bildirim tazeler, `DONANIM_ONAYI_BEKLIYOR`). Portal `/donanim-talepleri` (liste etken etken karşılaştırma, tuzlu özet değil · onay/ret `kurulum:yonet`, sebep zorunlu, atomik claim, kurulum kaydı; donanım onayı kabul edilen kümeyi BİLDİRİLEN küme yapar + zil). Zayıf tanıma: etkinleştirmede okunabilen etken < 3 ya da güçlü < 2 → 409 `ZAYIF_TANIMA_ONAY_BEKLIYOR` (kod/nonce tüketilmez, ZAYIF_TANIMA talebi), onay (kurulum + anahtar) sonrası aynı kod; v1'den gelen zayıf kurulum `parmak-izi-v2` bildirince durmaz, listeye düşer. Bekçi `test_donanim_bildirimi` · `test_etkinlestirme` §7 · `test_kira_zinciri` §5c–§5e.
+
+### Modül anahtarı kasası
+
+> Kural: kimlikli satır: `bekçi: test_modul_anahtari.ts`.
+
+- **Modül anahtarı kasası (Faz 2d)**: `modul_anahtari` (modül × sürüm → AES-256 anahtar) kasa anahtarıyla (`ANAHTAR_DIZINI/modul-kasasi.key`, 0600, DB'de DEĞİL) sarılı; satır silinmez, anahtar değişmez (tetikleyici), emeklilik `aktif=false`. Anahtar hazırlıkta `scripts/modul-anahtari.ts uret` (0600 dosya, repo dışı) → `ice-aktar`; kira basımında yalnız HAK'taki, dondurulmamış ve X25519'u (`kurulum.sifrelemeAnahtari`, temiz zincirde kaydedilir) bilinen kuruluma sarılır (`services/module-key.service.ts`). Bekçi `test_modul_anahtari`.
+
+### Hız ve vekil
+
+> Kural: kimlikli satır: `Genel dinleyicide /v1/* istemci IP'si başına …` (`bekçi: test_genel_dinleyici`).
+
+- **Hız ve vekil (D9)**: `/v1/*` istemci IP'si başına (`V1_HIZ_IP_DK`) ve imza doğrulandıktan sonra kurulum (kurulumsuz talepte anahtar) başına (`V1_HIZ_KURULUM_DK`) 429 `HIZ_SINIRI`. Vekil başlığı (`VEKIL_IP_BASLIGI`, cf-connecting-ip) YALNIZ güvenilen kenar ağından (`GUVENILIR_VEKIL_AGLARI`, yoksa yerleşik Cloudflare aralıkları) gelen bağlantıda okunur; arada iç vekil (Traefik) varsa `IC_VEKIL_AGLARI` verilir ve güven kararı X-Forwarded-For'un son halkasına göre (`src/http/client-address.ts`).
+
+### Bildirimler (giden kutusu + yan konteyner)
+
+> Kural: kimlikli satırlar: `Satıcı DIŞARI BAĞLANMAZ` ve devamındaki dört bildirim satırı + giden kutusu yazarı (`bekçi: test_bildirim_giden_kutusu · test_bildirim_gonderici · test_bildirim_rolu`).
+
+- **Satıcı DIŞARI BAĞLANMAZ.** Olay (destek talebi · kopya şüphesi + ikinci pencerede kira reddi · taşıma talebi · DR devri · deneme · uzun çevrimdışı ufuk verildi; zamana bağlı: ses vermeyen kurulum · kira/geçerlilik/taksit vadesi yaklaşıyor · planlı eylem ve taksit gecikmesi uygulandı · imza anahtarının süresi bitiyor) KENDİ tx'inde `bildirim` giden kutusuna kanal başına (EPOSTA · TELEGRAM) satır yazar — tek yazar `enqueueNotificationTx(tx, …)` (`src/notifications/outbox.ts`; ilk argüman `tx`, bekçi ölçer). Tekillik `(tekillikAnahtari, kanal)` UNIQUE + `skipDuplicates`; zamana bağlı olayların anahtarı DÖNEMİ taşır. Tarama bakım işinde `BILDIRIM_TARAMA_DK`da bir (`src/notifications/scanner.ts`): aday kilitsiz, her aday kurulum kilidi altında taze okunup yeniden doğrulanır.
+- **Gövde ALLOWLIST'tir:** `NOTIFICATION_BODY_KEYS` (`src/notifications/catalog.ts`) = DB seddi `bildirim_govde_gecerli` (müşteri · tesis · kurulum · lisans no · sınıf · konu · referans · tarih · portal yolu); talep metni, ek, sağlık, kişisel veri için anahtar YOKTUR. Yeni alan = katalog + göç seddi + bekçi birlikte. **İçerik iş olayını ASLA düşürmez:** eşsiz UTF-16 vekili U+FFFD, kontrol karakteri boşluk, değer vekil çiftini bölmeden 300 kod birimi; gövde DB seddinin ölçüsüyle (`pgJsonbTextBytes` = `octet_length(govde::text)`, `JSON.stringify` değil) 2000 bayta KISALTILIR ('…'), reddedilmez (bekçi `test_bildirim_giden_kutusu` §0f · §4).
+- **Gönderici** aynı imajın ikinci giriş noktası: `node dist/notifications/sender-main.js` (yan konteyner `satici-bildirim`, `deploy/satici/docker-compose.bildirim.yml`). DB'ye YALNIZ `satici_bildirim` rolüyle (göç: `bildirim` SELECT + `SENDER_UPDATE_COLUMNS` UPDATE) bağlanır, açılışta yetkisini girişi açan yolla AYNI ölçümle denetler (`privilegeReport`: tablo × yetki · kolon · dizi · öznitelik — REPLICATION dahil · rol üyeliği — önceden tanımlı roller dahil · public dışı şema · veritabanı CREATE · fonksiyon EXECUTE; fazlaysa ya da ölçülemezse DURUR), `.env` OKUMAZ. Claim `updateMany WHERE {id, durum, deneme}` + kilit süresi; sonuç yalnız claim duruyorsa yazılır; üstel geri çekilme, tavan `BILDIRIM_DENEME_TAVANI`; yapılandırılmamış kanal satırı `KAPALI`. Sağlayıcılar paketsiz `fetch` (Resend `POST /emails` + `Idempotency-Key`, Telegram `sendMessage`); hata yalnız kısa KOD. 429'da kanal `retry_after` boyunca istek görmez (deneme hakkı yanmaz); Telegram grubu süper gruba taşınırsa (400 + `migrate_to_chat_id`) satır İLK denemede kalıcı HATA, YENİ kimlik (yalnız sayı) `yeniSohbetKimligi`nde + nabızda + portalda — otomatik geçiş yok. Bot belirteci, grup kimliği ve Resend anahtarı dağıtımda DOSYADAN (`…_DOSYASI`). Rol girişi kurulumda `node dist/notifications/role-cli.js` (parola stdin, SCRAM istemcide). Portal: `GET /bildirimler` · `GET /bildirimler/durum` (`bildirim:oku`) · `POST /bildirimler/deneme` (`bildirim:yonet`; kullanıcı başına 5 dk'da bir — yeni işlem kimliği pencerede 429 `HIZ_SINIRI`, aynı kimliğin tekrarı yanıtı alır). Runbook `docs/ops/SATICI-KURULUM.md` §5c.
+
+### Portal (JSON API)
+
+> Kural: kimlikli satırlar: bayi sahipliği · bayi tavanı · kanal (`bekçi: test_bayi_sahipligi · test_portal_bayi_tavani · test_portal_uclar`).
+
+- **Bayi sahipliği (D10):** bayinin her yazması sahipliği eylemin tx'inde müşteri kilidi ALTINDA yeniden okur (başka bayiye geçmiş müşteri "bulunamadı"); bayi kurulumu yalnız tavandaki kanallarda açar; müşterinin bayisini değiştirmek yalnız YÖNETİCİ, eski + yeni bayi kilidiyle ve yeni bayinin tavanı müşterinin canlı kurulumlarını (adet · sınıf · kanal · modül) kaldırıyorsa; bayi YALNIZ hiç etkinleşmemiş kuruluma kod üretir. Bayi görünümünde `yapan` satıcı/başka bayi kullanıcı adı göstermez.
+- **Bayi imzalı HAK:** protokolün sertifika kısıtına EK olarak bayinin GÜNCEL tavanı (modül ⊆ · sınıf ⊆ · kurulum adedi · kanal ⊆ · kalıcı izni, varsayılan HAYIR · bakım ay tavanı, varsayılan 12 — bakım bitişi imza anı + tavan ayını aşamaz) imzadan önce ve bayi kilidi altında yeniden denetlenir (`BAYI_TAVANI_ASILDI`). Tavan sürümlü defterdir (`bayi_tavani`).
+- **Kanal** (`kanal`, asgari ana veri): `kod` (kimlik, DEĞİŞMEZ, sert silinmez — indirme yolunun öneki) · `ad` · `tur` (`uretim`|`hazirlik`) · `guncelSurumler` (`{backend?, panel?, tablet?}`). Kurulum KAYITLI kanala bağlıdır (FK `kurulum.kanalKodu → kanal.kod`); kiranın `kanal.guncelSurumler`i kanal satırından dolar; bayi yalnız satıcının tavanına atadığı kanallarda kurulum açar. Yayın bildirimi (sürümün otomatik yazılması) Faz 3.
+
+### Dağıtım (Faz 3d)
+
+> Kural: kimlikli satırlar: dağıtım belirteci · müşteri yüklemesi · yayın bildirimi · dağıtım yüzeyi (`bekçi: test_dagitim_baglanti.ts · test_dagitim_yukleme.ts · test_dagitim_budama.ts`).
+
+- **İlk kurulum bağlantısı + paylaşım (`/d/<belirteç>`):** müşteriye özel, süreli (≤ 90 gün), indirme sayısı sınırlı (1–1000); `ILK_KURULUM` `DERLEME_DIZINI`deki derlemeyi (sha256 bağlantı doğarken DONAR; dosya değişirse hak tüketilmeden 410), `DOSYA` paylaşılan GİDEN dosyayı indirir. GET açılış sayfasıdır (önizleme botu hak tüketmez), indirme POST'la ve BAŞLARKEN hak tüketir (`indirmeSayisi ≤ azamiIndirme` atomik WHERE + CHECK). Bilinmeyen belirteç 404; süresi/hakkı biten, iptal edilen 410 `BAGLANTI_GECERSIZ`; budanmış gövde 410 `GOVDE_BUDANDI`.
+- **Müşteriden bize (`/y/<belirteç>`):** süreli, kotalı yükleme isteği; parçalı ve sürdürülebilir yükleme (Cloudflare gövde sınırı ≤ 100 MB → parça ≤ `PARCA_AZAMI_MB` = 50): oturum işlem kimliğiyle açılır ve kotayı beyan edilen boyutla REZERVE eder (koşullu UPDATE + CHECK); her parça boyutu ve `X-Parca-Sha256` özeti birebir tutmalı (422 `PARCA_BUTUNLUGU`), aynı sıra aynı özet idempotent; tamamlama birleşik gövdenin özetini beyanla karşılaştırır. Uzantı/MIME allowlist'i sunucuda (`storage.ts`; müşteri çalıştırılabilir dosya yükleyemez, 415 `DOSYA_TURU_YASAK`); tavanlar 413 (`DOSYA_COK_BUYUK` · `KOTA_ASILDI`).
+- **Belirteç:** 24 bayt rastgele; DB'de yalnız `ANAHTAR_DIZINI` sırrıyla ALAN AYRIMLI HMAC + son 4; düz metin yalnız doğduğu yanıtta, işlem kimliğinin saklanan yanıtında YOK. Erişim günlüğü `/d/***` · `/y/***` basar; sayfalar `Referrer-Policy: no-referrer` + nonce'lu CSP.
+- **Defter:** `dagitim_defteri` (BAGLANTI_VERILDI · INDIRILDI · BAGLANTI_IPTAL · YUKLEME_ISTEGI_VERILDI/IPTAL · DOSYA_YUKLENDI · YUKLEME_TERK · GOVDE_BUDANDI) — iptal ters kayıttır, satır silinmez.
+- **Yayın bildirimi (`POST /yayin/bildirim`, genel):** yayın betikleri (`scripts/lib/yayin-bildirim.mjs`) yayın/terfi sonrası yayıncı anahtarıyla (Ed25519, açık yarı `yayinci_anahtari`, portaldan YÖNETİCİ kaydeder) imzalı bildirim yollar; kimlik içerikten türer (tekrar aynı satır), `yayin_bildirimi` defterine girer. Bildirim `kanal.guncelSurumler`i (kiraya akan) DEĞİŞTİRMEZ. Başarısız bildirim yayını DURDURMAZ (betik uyarı basar).
+- **Sürüm/kanal görünümü (`GET /portal/api/surumler`):** `YAYIN_DIZINI` (güncelleme sunucusunun `html/` + `defter/` kökü, SALT-OKUNUR bağ) okunur: `latest.yml` · OTA manifesti · APK künyesi · yayın defteri TSV'si; kök yoksa "ölçülemedi" (boş liste "yayın yok" değildir).
+- Ham gövdeli portal uçları `/portal/api/ham` (parça PUT, dosya indirme) JSON tablosunun dışındadır ama aynı oturum + izin kapısından geçer (`requirePortalSession`).
