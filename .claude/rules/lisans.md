@@ -13,4 +13,4 @@ paths:
   - "**/*Lisans*"
 ---
 
-Dokunduğun dosya **Lisans · kod koruma · satıcı platformu** alanına giriyor. Kod yazmadan/değiştirmeden ÖNCE `docs/kurallar/lisans.md` dosyasını oku (satıcı sunucusunun alt-alan kuralları § Satıcı sunucusu — alt-alan kuralları altında; bugün geçerli kurallar, koşulacak bekçiler). Bitince o alanın bekçilerini koş (`/bekci-kos`). Yeni karar çıktıysa `/karar-notu` ile yaz.
+Dokunduğun dosya **Lisans · kod koruma · satıcı platformu** alanına giriyor. Kod yazmadan/değiştirmeden ÖNCE `docs/kurallar/lisans.md` dosyasını oku (satıcı sunucusunun kuralları § Satıcı sunucusu kimlikli satırlarında, anlatımı `satici/sunucu/MIMARI.md` § Alt-alan anlatımı'nda; bugün geçerli kurallar, koşulacak bekçiler). Bitince o alanın bekçilerini koş (`/bekci-kos`). Yeni karar çıktıysa `/karar-notu` ile yaz.

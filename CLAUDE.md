@@ -11,7 +11,7 @@ Tekstil fabrikası ERP'si; her alt projenin kendi `CLAUDE.md`'si var:
 | `Teks-Erp/` | Express 5 + Prisma 7 + PostgreSQL backend | 4000 |
 | `Electron/` | Electron 42 + React 19 + Vite yönetim paneli (**admin frontend buraya yazılır**; `React/` yok) | 5174 |
 | `mobil/` | React Native + Expo 54, Android tablet (yatay) + telefon (dikey) — saha | — |
-| `satici/` | Express 5 + Prisma 7 lisans sunucusu (`sunucu/`) + React 19 + Vite portal (`web/`); VDS'te, fabrikaya kurulmaz | 4610 genel · 4611 portal (tailnet) · 4613 portal (Cloudflare Access, kök parolası yok) |
+| `satici/` | Express 5 + Prisma 7 lisans sunucusu (`sunucu/`) + React 19 + Vite portal (`web/`); VDS'te, fabrikaya kurulmaz | 4610 genel · 4611 portal (tailnet) · 4613 portal (Cloudflare Access; kök parolası dahil bütün işlemler) |
 | `patron/` | Express 5 + Prisma 7 patron bulutu sunucusu (`sunucu/`); VDS'te, fabrikaya kurulmaz; hedef tesis başına ayrı DB (bugün tek DB + RLS, geçiş borçta) | 4620 |
 | `patron/uygulama/` | React Native + Expo 54 patron uygulaması (Android + iOS + web; salt-okunur çevrimdışı önbellek; tel tipleri `patron/sunucu/src/wire/api.ts`in bayt-eşit aynası) | — |
 | `Teks-Erp/native/lisans-cekirdek/` | Rust + napi-rs lisans çekirdeği (backend paketine `.node` olarak girer, ayrı süreç değil) | — |
