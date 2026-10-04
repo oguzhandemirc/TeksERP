@@ -5,6 +5,65 @@
 > **Kararlar:** bu turda verilen kullanıcı kararları arşivde: `docs/history/CLAUDE-NOT-ARSIVI.md` → "2026-10-02 — Müşteri sunucusu Tailscale ağımıza alınmaz" · "2026-10-02 — Sunucu saati kilitlenemez" · "2026-10-03 — Tek ana dal + sürüm başına TEK ortak paket" · "2026-10-03 — adnansahin dondurulur".
 > **Durum:** açık iş listesi. İş bitince belge `docs/history/`e taşınır.
 
+## 0. Sıralı iş listesi (kullanıcı onayı 2026-10-04)
+
+> **Sıra ölçütü:** sonraki işin dayandığı iş önce gelir; müşterinin gördüğü kusur yenilikten önce kapanır. Biten madde `[x]` + tarih + commit; başlayan `▶`. Ayrıntı her maddenin gösterdiği bölümde.
+
+**Faz 0 — hazırlık**
+- [x] Kök, satıcı ve patron CLAUDE.md kısaltması — 2026-10-03, `58185acdc`
+- [x] İş sırası belirlendi, bu listeye yazıldı — 2026-10-04
+
+**Faz 1 — hemen (küçük, kararı verilmiş)**
+- [ ] ▶ 1.1 Satıcı portalı tamamen internetten + `lisans.md`'deki iki biçimli satıcı kurallarının birleştirilmesi (§E; C-1 "satıcı portalı yetkileri" bununla kapanır) — 2026-10-04 keşif + plan başladı
+- [ ] 1.2 Mac'te dönem töreni: kök anahtar VDS'ten kalkar (§D-2) — 1.1'in hemen arkasından
+- [ ] 1.3 Test veritabanlarının silinmesi (§D-5) — liste çıkarılır, kullanıcı onayıyla
+- [ ] 1.4 Karar arşivinin aylara bölünmesi (§E)
+
+**Faz 2 — demofabrika kusurları (§A)**
+- [ ] 2.1 K5 — DEMO lisansı bitişsiz kaydedilemesin
+- [ ] 2.2 K11 — panelde backend güncellemesi onay ekranı (panel 1.4.3; ilk backend güncellemesinden önce)
+- [ ] 2.3 K4 — müşterinin kendi yönetici hesabını açma adımı
+- [ ] 2.4 K6 bant önceliği · K9 bakım bitişi bildirimi · K8 yanlış mesaj · K7 "yenilendi" mesajı · K10 portalda açık modüller
+- [ ] 2.5 K1 — kullanılmayan ağ adreslerinin duyurulmaması
+- (K2 ve K3'ün kalıcı çözümü Faz 3'te)
+
+**Faz 3 — tek ortak paket (§B-1)**
+- [ ] 3.0 Test yükü önerisine kullanıcı onayı (§E) — tasarımdan önce
+- [ ] 3.1 Tek ortak paket tasarım + uygulama; K2 firma adı, K3 Tailscale kutusu/gömülü adres
+- [ ] 3.2 İndirme kapısı yeni alt adresle (§D-1)
+- [ ] 3.3 Panel 1.4.3: sunucu durumu ekranı + canlı güncelleme penceresi + tablet bandı (§E)
+- [ ] 3.4 Sunucu bilgisayarında sağ alt simge (§E)
+- [ ] 3.5 Sunucu saati (§B-3)
+- [ ] 3.6 Hata raporları (§E)
+- [ ] 3.7 Fabrika tableti Google Play'de (§E)
+
+**Faz 4 — adnansahin taşıması (§B-5)**
+- [ ] 4.1 thinkpad-1'de yedek kopyasıyla prova
+- [ ] 4.2 Gerçek taşıma; eski `guncelleme.etkiliyazilim.com` kapanır
+
+**Faz 5 — patron bulutu**
+- [ ] 5.1 Tesis başına ayrı veritabanı (§B-6)
+- [ ] 5.2 DEMO sınıfı gönderici (§B-7)
+- [ ] 5.3 Canlı güncelleme — önce döküm kopyasında prova (§D-3)
+
+**Faz 6 — kalan güvenlik işleri (§C)**
+- [ ] 6.1 Fabrika ağında TLS
+- [ ] 6.2 İnternet kenarı: hız sınırı, satıcının genel uçları
+- [ ] 6.3 Lisans v2 küçük kalemleri
+- [ ] 6.4 PIN bayat özet
+
+**Faz 7 — bulut satışı**
+- [ ] 7.1 Bulut kurulum modeli (§B-2) + müşteri başına ek süre önerisi (§B-4)
+- [ ] 7.2 Bağımsız güvenlik testi (§E) — bulut satışından önce
+
+**Paralel — konuşma ve kullanıcı işleri**
+- [ ] P1 e-İrsaliye / e-Fatura ve muhasebe bağlantısı — konuşma ÖNCE (öncelik ilk), kodlama Faz 3'ten sonra
+- [ ] P2 Avukat (§D-4)
+- [ ] P3 Bayi akışı
+- [ ] P4 Kılavuz ve eğitim
+- [ ] P5 Sunucu ve tablet donanım önerisi
+- [ ] P6 Modül paketleri ve fiyat · yedek parolası teslim tutanağı · kurulum dosyası imzası (bütçe olunca)
+
 ## A. Kurulum bulguları
 
 ### K11 — Panel 1.4.2'de backend güncellemesi için onay ekranı yok
