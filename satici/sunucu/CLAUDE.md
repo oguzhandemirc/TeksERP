@@ -1,7 +1,7 @@
 # satici/sunucu — TeksERP satıcı (lisans) sunucusu
 
 > Kök `CLAUDE.md` çekirdeği burada da AYNEN geçerlidir (defter semantiği, atomik claim, advisory kilit tx'in ilk ifadesi, fail-closed kapı, `details.code`, TR mesaj, sır hijyeni). Plan: Kod Koruma + Lisanslama (Faz 1b). Sözleşme: `docs/design/LISANS-PROTOKOLU.md`.
-> Bu dosya yalnız satıcı sunucusunun HER değişikliğinde geçerli çekirdeği taşır; alt-alan kuralları `docs/kurallar/lisans.md`'de (dizin: § Alt-alan kuralları), anlatım parçaları (dinleyici ortamı, şema, CLI'ler, ortam değişkenleri) `satici/sunucu/MIMARI.md`'de. Alanın kimlikli kuralları: `docs/kurallar/lisans.md` § Satıcı sunucusu · bekçiler: `Teks-Erp/docs/BEKCI-HARITASI.md` § lisans.
+> Bu dosya yalnız satıcı sunucusunun HER değişikliğinde geçerli çekirdeği taşır; alt-alan kuralları `docs/kurallar/lisans.md`'de (kimlikli satırlar; dizin: § Alt-alan kuralları), anlatım parçaları (alt-alan anlatımı, dinleyici ortamı, şema, CLI'ler, ortam değişkenleri) `satici/sunucu/MIMARI.md`'de. Alanın kimlikli kuralları: `docs/kurallar/lisans.md` § Satıcı sunucusu · bekçiler: `Teks-Erp/docs/BEKCI-HARITASI.md` § lisans.
 
 ## Amaç
 
@@ -57,20 +57,10 @@ Yaşa göre silinen tablolar YALNIZ (`src/services/maintenance.ts` `PRUNED_MODEL
 
 ## Alt-alan kuralları — dokunmadan önce oku
 
-2026-10-03'te `docs/kurallar/lisans.md` § Satıcı sunucusu — alt-alan kuralları altına aynı adlı `###` başlıklarla kelimesi kelimesine taşındı; o alt alana dokunan oturum önce ilgili başlığı okur.
+Kural: `docs/kurallar/lisans.md` § Satıcı sunucusu (kimlikli satırlar); anlatım (uç listesi, akış, ortam): `satici/sunucu/MIMARI.md` § Alt-alan anlatımı (aynı adlı başlık). Alt alana dokunan önce ikisini okur.
 
-- **Kurulum kaydı + destek (3d-2)** — bu bölüme dokunmadan önce oku: `docs/kurallar/lisans.md` § Satıcı sunucusu — Kurulum kaydı + destek (3d-2)
-- **VDS kurulumu** — bu bölüme dokunmadan önce oku: `docs/kurallar/lisans.md` § Satıcı sunucusu — VDS kurulumu
-- **ERİŞİM** — bu bölüme dokunmadan önce oku: `docs/kurallar/lisans.md` § Satıcı sunucusu — ERİŞİM
-- **İç API** — bu bölüme dokunmadan önce oku: `docs/kurallar/lisans.md` § Satıcı sunucusu — İç API
-- **Anahtar hiyerarşisi** — bu bölüme dokunmadan önce oku: `docs/kurallar/lisans.md` § Satıcı sunucusu — Anahtar hiyerarşisi
-- **Kira zinciri** — bu bölüme dokunmadan önce oku: `docs/kurallar/lisans.md` § Satıcı sunucusu — Kira zinciri
-- **Parmak izi v2** — bu bölüme dokunmadan önce oku: `docs/kurallar/lisans.md` § Satıcı sunucusu — Parmak izi v2
-- **Modül anahtarı kasası** — bu bölüme dokunmadan önce oku: `docs/kurallar/lisans.md` § Satıcı sunucusu — Modül anahtarı kasası
-- **Hız ve vekil** — bu bölüme dokunmadan önce oku: `docs/kurallar/lisans.md` § Satıcı sunucusu — Hız ve vekil
-- **Bildirimler (giden kutusu + yan konteyner)** — bu bölüme dokunmadan önce oku: `docs/kurallar/lisans.md` § Satıcı sunucusu — Bildirimler (giden kutusu + yan konteyner)
-- **Portal (JSON API)** (bayi sahipliği · bayi imzalı HAK · kanal) — bu bölüme dokunmadan önce oku: `docs/kurallar/lisans.md` § Satıcı sunucusu — Portal (JSON API)
-- **Dağıtım (Faz 3d)** — bu bölüme dokunmadan önce oku: `docs/kurallar/lisans.md` § Satıcı sunucusu — Dağıtım (Faz 3d)
+- **Kurulum kaydı + destek (3d-2)** · **VDS kurulumu** · **İç API** · **Kira zinciri** · **Parmak izi v2** · **Modül anahtarı kasası** · **Hız ve vekil** · **Bildirimler (giden kutusu + yan konteyner)** · **Portal (JSON API)** (bayi sahipliği · bayi imzalı HAK · kanal) · **Dağıtım (Faz 3d)** — MIMARI'de aynı adlı `###` başlık; kural satırı bekçi adından bulunur (`test_destek_kurulum_kaydi` · `test_kira_zinciri` · `test_donanim_bildirimi` · `test_modul_anahtari` · `test_ic_api` · `test_genel_dinleyici` · `test_bildirim_*` · `test_bayi_*` · `test_dagitim_*`).
+- **ERİŞİM** · **Anahtar hiyerarşisi** — henüz `docs/kurallar/lisans.md` § Satıcı sunucusu — ERİŞİM / — Anahtar hiyerarşisi başlıklarındadır (kimlikli satıra birleştirme ayrı dilim).
 
 ## Komutlar
 
