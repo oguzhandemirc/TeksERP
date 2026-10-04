@@ -1,11 +1,11 @@
-// ERİŞİM DİNLEYİCİSİ — satıcı portalının internetten yolu (portal.<alan>, Cloudflare proxy + Access).
+// ERİŞİM DİNLEYİCİSİ — satıcı portalının tek yolu (portal.<alan>, Cloudflare proxy + Access).
 // Kapılar (sırayla, hepsi FAIL-CLOSED, red 404 — varlık sızdırılmaz):
 //   (1) istek ERİŞİM dinleyicisinin soketine gelmiş olmalı;
 //   (2) Access yapılandırması var (takım alanı + AUD) ve `Cf-Access-Jwt-Assertion` doğrulanıyor — HER istekte,
 //       statik dosyalar dahil; kaynak IP'ye, Host başlığına, istemci beyanına güvenilmez;
 //   (3) YALNIZ izin listesindeki rotalar (erisim-rotalari.ts, OPT-IN; her tablo rotası listede ya da gerekçeli
 //       dışlamada): liste dışı istek gövde okunmadan 404. İmzanın bu yoldan geçip geçemeyeceği imza boğazında (signing-scope.ts).
-// Arkasında tailnet'le aynı portal (parola + TOTP, oturum ERISIM dinleyicisine bağlı) ve aynı web arayüzü.
+// Satıcı portalının TEK yolu (tünel yok): parola + TOTP, oturum ERISIM dinleyicisine bağlı; satıcı web arayüzü de burada.
 import type { AddressInfo } from "node:net";
 import express, { type Express, type NextFunction, type Request, type Response } from "express";
 import type { VendorContext } from "../services/context";
@@ -14,7 +14,7 @@ import { createDistributionRawRouter } from "./distribution-raw";
 import { accessLog, errorHandler, notFound } from "./error-handler";
 import { createPortalRouter } from "./portal-http";
 import { VENDOR_PORTAL_ROUTES } from "./portal-routes";
-import { arrivedOn } from "./tailnet-app";
+import { arrivedOn } from "./listener-socket";
 import { createWebAppRouter } from "./web-static";
 
 type ListenerOf = () => AddressInfo | string | null;

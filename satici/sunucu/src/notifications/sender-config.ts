@@ -38,7 +38,7 @@ const EnvSchema = z.object({
   RESEND_API_KEY_DOSYASI: z.string().min(1).optional(),
   BILDIRIM_EPOSTA_ALICI: emailList.optional(),
   BILDIRIM_EPOSTA_GONDEREN: sender.optional(),
-  /** Portal kökü (tailnet): ör. http://tekserp-vds:4611/portal — bildirimdeki bağlantı buna göreli yol ekler. */
+  /** Portal kökü (ERİŞİM): ör. https://portal.<alan>/portal — bildirimdeki bağlantı buna göreli yol ekler. */
   BILDIRIM_PORTAL_ADRESI: z.url({ protocol: /^https?$/ }).transform((v) => v.replace(/\/+$/, "")).optional(),
   TELEGRAM_API_KOKU: apiRoot.default("https://api.telegram.org"),
   RESEND_API_KOKU: apiRoot.default("https://api.resend.com"),

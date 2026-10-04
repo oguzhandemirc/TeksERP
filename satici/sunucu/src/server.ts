@@ -1,6 +1,6 @@
-// SATICI SUNUCUSU — tek süreç, dört dinleyici: GENEL (/v1/*, /q) + TAILNET (portal; kök parolası) + İÇ
-// (patron bulutunun iç API'si; yalnız ortak sır dosyası geçerliyse açılır) + ERİŞİM (portalın Cloudflare Access
-// arkasındaki genel yolu; yalnız PORT_ERISIM verilirse açılır, Access ayarı yoksa her isteğe 404). Açılış: yapılandırma
+// SATICI SUNUCUSU — tek süreç, üç dinleyici: GENEL (/v1/*, /q, bayi portalı) + İÇ (patron bulutunun iç API'si; yalnız
+// ortak sır dosyası geçerliyse açılır) + ERİŞİM (satıcı portalının TEK yolu, Cloudflare Access arkası; yalnız PORT_ERISIM
+// verilirse açılır, Access ayarı yoksa her isteğe 404). Tünel dinleyicisi yok. Açılış: yapılandırma
 // (fail-closed) → anahtar deposu → anahtar künyesi → zil (PG LISTEN) → dinleyiciler → bakım işi. Kapanış: SIGTERM/SIGINT'te akışlar ve bağlantılar düzgün kapanır.
 import http from "node:http";
 import type { AddressInfo } from "node:net";
@@ -11,7 +11,6 @@ import { loadEnvFile } from "./lib/env";
 import { pool, prisma } from "./lib/prisma";
 import { createPublicApp } from "./http/public-app";
 import { createInternalApp } from "./http/internal-app";
-import { createTailnetApp } from "./http/tailnet-app";
 import { createAccessApp } from "./http/access-app";
 import { createAccessVerifier, missingAccessSettings } from "./http/access-jwt";
 import { loadInternalBearer } from "./lib/internal-bearer";
@@ -41,21 +40,17 @@ async function main(): Promise<void> {
   for (const app of ["portal", "bayi"] as const) {
     if (!webAppAvailable(config.PORTAL_WEB_DIZINI, app)) console.warn(`[satici] web arayüzü (${app}) derlenmemiş: /${app} 404 döner, API çalışır`);
   }
-  // Anahtar birimi salt okunur: sırlar yalnız OKUNUR, eksikse açılış yaratmadan durur (`anahtar.ts sirlar-uret`).
-  const ctx: VendorContext = { config, keys, ...loadServerSecrets(config.ANAHTAR_DIZINI) };
-  await syncKeyRegistry(keys).catch((err: Error) => console.error(`[satici] anahtar künyesi yazılamadı: ${err.message}`));
-
   const hub = new DoorbellHub(config.DATABASE_URL, config.ZIL_KALP_SN, config.ZIL_AZAMI_ABONE);
-  await hub.start();
-
   // ERİŞİM: doğrulayıcı yalnız dinleyici açılacaksa kurulur; JWKS yan konteynerin dosyasından (satıcı ağa çıkmaz),
   // açılışta ısıtılır (dosya henüz yoksa uyarıdır, istek RED alır).
   const accessVerifier = config.PORT_ERISIM !== undefined ? createAccessVerifier(config) : null;
+  // Anahtar birimi salt okunur: sırlar yalnız OKUNUR, eksikse açılış yaratmadan durur (`anahtar.ts sirlar-uret`).
+  const ctx: VendorContext = { config, keys, ...loadServerSecrets(config.ANAHTAR_DIZINI), runtime: { hub, access: accessVerifier } };
+  await syncKeyRegistry(keys).catch((err: Error) => console.error(`[satici] anahtar künyesi yazılamadı: ${err.message}`));
+  await hub.start();
+
   const publicServer = http.createServer(createPublicApp(ctx, hub));
-  let tailnetAddress: AddressInfo | null = null;
-  const tailnetServer = http.createServer(createTailnetApp(ctx, hub, () => tailnetAddress, accessVerifier));
   const publicAddress = await listen(publicServer, config.PORT_GENEL, config.GENEL_BIND);
-  tailnetAddress = await listen(tailnetServer, config.PORT_TAILNET, config.TAILNET_BIND);
 
   let accessAddress: AddressInfo | null = null;
   let accessServer: http.Server | null = null;
@@ -83,7 +78,7 @@ async function main(): Promise<void> {
   const counterTimer = setInterval(() => void internalCounters.flush(), config.IC_SAYAC_DK * 60_000);
   counterTimer.unref();
   console.log(
-    `SATICI_DINLIYOR genel=${publicAddress.port} tailnet=${tailnetAddress.port} ic=${internalAddress ? internalAddress.port : "kapali"} erisim=${accessAddress ? accessAddress.port : "kapali"}`,
+    `SATICI_DINLIYOR genel=${publicAddress.port} ic=${internalAddress ? internalAddress.port : "kapali"} erisim=${accessAddress ? accessAddress.port : "kapali"}`,
   );
 
   const maintenance = new MaintenanceScheduler(ctx);
@@ -100,7 +95,6 @@ async function main(): Promise<void> {
     await hub.stop();
     await Promise.all([
       new Promise<void>((r) => publicServer.close(() => r())),
-      new Promise<void>((r) => tailnetServer.close(() => r())),
       new Promise<void>((r) => (internalServer ? internalServer.close(() => r()) : r())),
       new Promise<void>((r) => (accessServer ? accessServer.close(() => r()) : r())),
     ]);

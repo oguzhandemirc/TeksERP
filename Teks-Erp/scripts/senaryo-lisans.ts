@@ -441,8 +441,10 @@ async function main(): Promise<number> {
       saat: { duvarMs: 0, monoMs: 0 },
       logDosyasi: path.join(logDizini, "satici.log"),
     });
-    portal = new PortalIstemcisi(satici.tailnet, "/portal/api", hz.yonetici, saticiSimdi);
-    console.log(`🏪 Satıcı: genel ${satici.genel} · portal ${satici.tailnet}`);
+    // T1b: senaryo ERİŞİM düzeneğini (satici/sunucu scripts/lib/test-ortam.ts `erisimOrtami`) kurana dek portal kapalıdır.
+    if (!satici.portal) throw new Error("satıcı portalı (ERİŞİM) kapalı — senaryo ERİŞİM düzeneğini kurmalı");
+    portal = new PortalIstemcisi(satici.portal, "/portal/api", hz.yonetici, saticiSimdi);
+    console.log(`🏪 Satıcı: genel ${satici.genel} · portal ${satici.portal}`);
 
     const A = await yeniFabrika("A", anaUrl, PARMAK_IZLERI.A);
     await baslat(A);

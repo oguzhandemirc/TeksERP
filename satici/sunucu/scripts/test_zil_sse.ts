@@ -3,11 +3,13 @@
 // Ölçülen: başlıklar (text/event-stream, `Cache-Control: no-transform`, tampon kapalı, sıkıştırma
 // YOK); bağlanınca ve periyodik yorum satırı (kalp atışı; burada 1 sn); BAŞKA bir süreçten
 // (portal/CLI/zamanlayıcı yerine bu bekçi) PG NOTIFY ile çalınan zil her konuda ≤2 sn'de gelir;
-// yaptırım eylemi zili KENDİ tx'inde çalar; abone sayısı tailnet sağlık ucunda görünür ve kopunca
+// yaptırım eylemi zili KENDİ tx'inde çalar; abone sayısı portal sağlık ucunda (ERİŞİM, giriş yapmış yönetici) görünür ve kopunca
 // düşer; imzasız/yanlış amaçlı abonelik reddedilir; kurulum başına en çok ZIL_AZAMI_ABONE (3) akış —
 // dördüncüsü EN ESKİSİNİ kapatır (yarı açık eski bağlantı meşru yeniden bağlanmayı kilitlemez, D9).
 // ⭐ KALICI SONDA ✓K2 (her koşumda): başka kurulumun zili bu aboneye GELMEZ (çapraz teslim yok) · tavanın
 //    altındaki üç akışın üçü de zili alır (tavan körü körüne reddetmiyor).
+// NEGATİF SONDA (tünel kapatma T1, 2026-10-05, cp + shasum ile geri alındı): server.ts bağlamında `runtime.access: null` →
+//   §2e ❌ (sağlık ucu sunucunun gerçek tutamaçlarını okuyor) · düzenek Access JWT'si eklemedi → giriş 404, bekçi çöktü.
 // Koşum: npx tsx scripts/test_zil_sse.ts
 // =============================================================================
 import { DOORBELL_TOPICS, ENDPOINTS, REQUEST_HEADER } from "../src/lisans-protokol";
@@ -23,8 +25,12 @@ import {
   kontrol,
   kurulumFiksturu,
   sonuc,
+  portalGiris,
+  portalIstek,
+  portalKullaniciAc,
   sunucuBaslat,
   temizleKurulumlar,
+  temizlePortal,
   zilAboneOl,
 } from "./lib/test-ortam";
 
@@ -39,10 +45,11 @@ async function main(): Promise<void> {
   const { applySanction } = await import("../src/services/sanction.service");
   const temizlenecek: string[] = [];
   const sunucu = await sunucuBaslat(ortam, { ZIL_KALP_SN: "1" });
-  const saglik = async () => {
-    const r = await fetch(`${sunucu.tailnet}/portal/saglik`);
-    return ((await r.json()) as { data: { zil: { abone: number; dinliyor: boolean } } }).data.zil;
-  };
+  const yonetici = await portalKullaniciAc(ctx, "SATICI_YONETICI");
+  const giris = await portalGiris(sunucu.portal, "/portal/api", yonetici);
+  if (!giris.cerez) throw new Error(`portal girişi ${giris.status} ${giris.kod ?? ""}`);
+  const saglikTam = async () => (await portalIstek(sunucu.portal, "/portal/api/saglik", { cerez: giris.cerez! })).veri as { zil: { abone: number; dinliyor: boolean }; erisim: { kip?: string } };
+  const saglik = async () => (await saglikTam()).zil;
   try {
     const anahtar = kurulumAnahtariUret();
     const k = await kurulumFiksturu(ctx);
@@ -71,8 +78,9 @@ async function main(): Promise<void> {
     kontrol("§2c sıkıştırma YOK (content-encoding boş)", !zil.basliklar.get("content-encoding"));
     await bekle(1_600);
     kontrol("§2d bağlantı + kalp atışı yorum satırları geliyor", zil.yorumSayisi() >= 2, `${zil.yorumSayisi()} yorum`);
-    const s1 = await saglik();
-    kontrol("§2e tailnet sağlığında 1 abone, PG dinleyicisi bağlı", s1.abone === 1 && s1.dinliyor, JSON.stringify(s1));
+    const t1 = await saglikTam();
+    const s1 = t1.zil;
+    kontrol("§2e portal sağlığında 1 abone, PG dinleyicisi bağlı; ERİŞİM kipi açık (sunucunun çalışma tutamaçları bağlamda)", s1.abone === 1 && s1.dinliyor && t1.erisim.kip === "acik", `${JSON.stringify(s1)} · ${JSON.stringify(t1.erisim.kip)}`);
 
     console.log("\n§3 başka süreçten zil (PG NOTIFY) — her konu ≤2 sn");
     let hepsi = true;
@@ -107,7 +115,13 @@ async function main(): Promise<void> {
     const s2 = await saglik();
     kontrol("§6a abone sayısı 0", s2.abone === 0, JSON.stringify(s2));
     const genelPortal = await fetch(`${sunucu.genel}/portal/saglik`, { headers: { [REQUEST_HEADER]: "x" } });
-    kontrol("§6b portal sağlık ucu GENEL dinleyicide YOK (404)", genelPortal.status === 404, `${genelPortal.status}`);
+    const genelApi = await fetch(`${sunucu.genel}/portal/api/saglik`, { headers: { Cookie: giris.cerez } });
+    const eskiUc = await portalIstek(sunucu.portal, "/portal/saglik", { cerez: giris.cerez });
+    kontrol(
+      "§6b portal sağlık ucu GENEL dinleyicide YOK (404, iki yol); eski oturumsuz /portal/saglik ERİŞİM'de de YOK (404)",
+      genelPortal.status === 404 && genelApi.status === 404 && eskiUc.status === 404,
+      `${genelPortal.status}/${genelApi.status}/${eskiUc.status}`,
+    );
 
     console.log("\n§7 kurulum başına abonelik tavanı (3) — dördüncü en eskisini kapatır");
     const akislar = [];
@@ -130,6 +144,7 @@ async function main(): Promise<void> {
   } finally {
     await sunucu.durdur();
     await temizleKurulumlar(temizlenecek, ortam.kidler);
+    await temizlePortal({ kullanicilar: [yonetici.id] });
     ortam.temizle();
     await kapat();
   }

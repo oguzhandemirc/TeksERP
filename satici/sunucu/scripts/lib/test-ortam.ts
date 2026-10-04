@@ -3,14 +3,16 @@
 //     ile başlayan DB'de HİÇBİR bekçi koşmaz.
 //   · Anahtarlar Teks-Erp fikstüründen ÇALIŞMA ANINDA üretilir (lisans-fikstur.ts — Senaryo L'nin
 //     fabrika tarafıyla aynı kökler); kök parolalı dosya, alt/indirme 0600 geçici dizine yazılır.
-//   · Sunucu GERÇEK süreç olarak kalkar (tek süreç, iki dinleyici, port 0) ve PID'iyle kapatılır.
+//   · Sunucu GERÇEK süreç olarak kalkar (tek süreç, port 0) ve PID'iyle kapatılır.
+//   · Satıcı portalının TEK yolu ERİŞİM'dir (tünel yok): düzenek süreç başına bir RSA-2048 anahtarı üretir, JWKS'ini
+//     dosyaya yazar, sunucuyu sahte takım alanı + AUD ile açar ve portal isteklerine `Cf-Access-Jwt-Assertion` ekler.
 import { spawn, type ChildProcess } from "node:child_process";
 import http from "node:http";
 import type { AddressInfo } from "node:net";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { randomUUID } from "node:crypto";
+import { generateKeyPairSync, randomBytes, randomUUID, sign, type KeyObject } from "node:crypto";
 import {
   ACCEPTANCE_TEXTS,
   DAY_MS,
@@ -48,11 +50,10 @@ import type { VendorContext } from "../../src/services/context";
 export const SATICI_KOKU = path.resolve(__dirname, "..", "..");
 
 /**
- * Bekçi ortamının varsayılanları: sunucu 127.0.0.1'de dinler (geri döngü tailnet sayılsın) ve /v1 hız sınırı
- * akış bekçilerini ısırmasın. Hız sınırı ve geri döngü kapısı KENDİ bekçilerinde düşük/kapalı değerle ölçülür
- * (`ekOrtam` bu varsayılanları ezer).
+ * Bekçi ortamının varsayılanları: /v1 hız sınırı akış bekçilerini ısırmasın. Hız sınırı KENDİ bekçisinde düşük
+ * değerle ölçülür (`ekOrtam` bu varsayılanları ezer).
  */
-export const BEKCI_ORTAMI: Readonly<Record<string, string>> = { TAILNET_LOOPBACK: "1", V1_HIZ_IP_DK: "100000", V1_HIZ_KURULUM_DK: "100000" };
+export const BEKCI_ORTAMI: Readonly<Record<string, string>> = { V1_HIZ_IP_DK: "100000", V1_HIZ_KURULUM_DK: "100000" };
 export const TEST_KOK_PAROLASI = "bekci-kok-parolasi-2026";
 
 let gecti = 0;
@@ -131,6 +132,9 @@ export async function anahtarOrtamiKur(simdi: number = Date.now(), ekOrtam: Reco
 
 export interface CalisanSunucu {
   readonly genel: string;
+  /** Satıcı portalı = ERİŞİM dinleyicisi; istek yardımcıları (portalIstek · portalGiris · portalFetch) JWT'yi ekler. */
+  readonly portal: string;
+  /** @deprecated T1b: `portal` — taşıma bitince silinir (aynı ERİŞİM adresi; tünel yok). */
   readonly tailnet: string;
   /** İç API dinleyicisi; ortak sır dosyası verilmediyse null (dinleyici AÇILMAZ). */
   readonly ic: string | null;
@@ -139,18 +143,21 @@ export interface CalisanSunucu {
   durdur(): Promise<void>;
 }
 
-/** Satıcı sunucusunu gerçek süreç olarak kaldırır (port 0; dinleme satırından okunur). */
-export function sunucuBaslat(ortam: AnahtarOrtami, ekOrtam: Record<string, string> = {}): Promise<CalisanSunucu> {
+/**
+ * Satıcı sunucusunu gerçek süreç olarak kaldırır (port 0; dinleme satırından okunur). Varsayılan: ERİŞİM düzeneği
+ * açık (portal var). `{ erisim: false }`: düzenek ortamı verilmez — ERİŞİM'i kendi ayarıyla ölçen bekçi içindir.
+ */
+export function sunucuBaslat(ortam: AnahtarOrtami, ekOrtam: Record<string, string> = {}, g: { erisim?: boolean } = {}): Promise<CalisanSunucu> {
+  const erisim = g.erisim === false ? {} : erisimOrtami();
   const surec = spawn(process.execPath, ["--import", "tsx", "src/server.ts"], {
     cwd: SATICI_KOKU,
     env: {
       ...process.env,
       PORT_GENEL: "0",
-      PORT_TAILNET: "0",
       PORT_IC: "0",
       IC_BIND: "127.0.0.1",
       GENEL_BIND: "127.0.0.1",
-      TAILNET_BIND: "127.0.0.1",
+      ...erisim,
       ANAHTAR_DIZINI: ortam.dizin,
       GUVEN_CAPASI_DOSYASI: ortam.capaDosyasi,
       SATICI_ERISIM_GUNLUGU: "0",
@@ -167,15 +174,27 @@ export function sunucuBaslat(ortam: AnahtarOrtami, ekOrtam: Record<string, strin
     }, 30_000);
     const oku = (c: Buffer): void => {
       log += c.toString("utf8");
-      const m = /SATICI_DINLIYOR genel=(\d+) tailnet=(\d+) ic=(\d+|kapali)/.exec(log);
+      const m = /SATICI_DINLIYOR genel=(\d+) ic=(\d+|kapali) erisim=(\d+|kapali)/.exec(log);
       if (m) {
         clearTimeout(zaman);
         surec.stdout!.off("data", oku);
         surec.stdout!.on("data", (d: Buffer) => (log += d.toString("utf8")));
+        const erisimAdresi = m[3] === "kapali" ? null : `http://127.0.0.1:${m[3]}`;
+        // Düzenek ortamı verilmeyen süreçte (kendi Access ayarı) yardımcılar JWT eklemez.
+        const portal = erisimAdresi && g.erisim !== false ? erisimTabaniKaydet(erisimAdresi) : erisimAdresi;
+        const portalAdresi = (): string => {
+          if (!portal) throw new Error("ERİŞİM dinleyicisi kapalı (sunucuBaslat { erisim: false } ya da PORT_ERISIM yok)");
+          return portal;
+        };
         resolve({
           genel: `http://127.0.0.1:${m[1]}`,
-          tailnet: `http://127.0.0.1:${m[2]}`,
-          ic: m[3] === "kapali" ? null : `http://127.0.0.1:${m[3]}`,
+          get portal() {
+            return portalAdresi();
+          },
+          get tailnet() {
+            return portalAdresi();
+          },
+          ic: m[2] === "kapali" ? null : `http://127.0.0.1:${m[2]}`,
           surec,
           cikti: () => log,
           durdur: () =>
@@ -588,9 +607,73 @@ export function kiraIdOf(json: Record<string, unknown>): string {
   return id;
 }
 
+// ---------------------------------------------------------------- ERİŞİM düzeneği (satıcı portalının tek yolu)
+// Süreç başına TEK RSA-2048 anahtarı ve TEK JWKS dosyası (süreç başında yazılır, çıkışta silinir — yaş tavanı ısırmaz).
+// Takım alanı ve AUD sahtedir; sunucu ağa çıkmaz. Jeton her istekte taze basılır (exp +1 sa).
+export const ERISIM_TAKIM_ALANI = "bekci.cloudflareaccess.com";
+export const ERISIM_EPOSTA = "bekci@ornek.test";
+export const ERISIM_BASLIGI = "cf-access-jwt-assertion";
+
+interface ErisimAnahtari {
+  readonly ozel: KeyObject;
+  readonly kid: string;
+  readonly aud: string;
+  readonly jwksDosyasi: string;
+}
+let erisimAnahtari: ErisimAnahtari | null = null;
+
+function erisimAnahtar(): ErisimAnahtari {
+  if (erisimAnahtari) return erisimAnahtari;
+  const { privateKey, publicKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
+  const kid = `bekci-${randomUUID().slice(0, 8)}`;
+  const dizin = mkdtempSync(path.join(os.tmpdir(), "satici-erisim-"));
+  process.once("exit", () => rmSync(dizin, { recursive: true, force: true }));
+  const jwksDosyasi = path.join(dizin, "certs.json");
+  const jwk = publicKey.export({ format: "jwk" });
+  writeFileSync(jwksDosyasi, `${JSON.stringify({ keys: [{ kid, kty: "RSA", n: jwk.n, e: jwk.e, alg: "RS256", use: "sig" }] })}\n`);
+  erisimAnahtari = { ozel: privateKey, kid, aud: randomBytes(32).toString("hex"), jwksDosyasi };
+  return erisimAnahtari;
+}
+
+/** Bu sürecin düzeneğine göre geçerli Access JWT'si (gerçek RS256). */
+export function erisimJetonu(g: { eposta?: string } = {}): string {
+  const a = erisimAnahtar();
+  const sn = Math.floor(Date.now() / 1000);
+  const b64u = (x: unknown): string => Buffer.from(JSON.stringify(x)).toString("base64url");
+  const govde = `${b64u({ alg: "RS256", kid: a.kid, typ: "JWT" })}.${b64u({ aud: [a.aud], email: g.eposta ?? ERISIM_EPOSTA, sub: "bekci", iss: `https://${ERISIM_TAKIM_ALANI}`, iat: sn - 5, nbf: sn - 5, exp: sn + 3600, type: "app" })}`;
+  return `${govde}.${sign("sha256", Buffer.from(govde), a.ozel).toString("base64url")}`;
+}
+
+/** Sunucunun ERİŞİM ayarları (gerçek süreç ortamı ya da `loadConfig` girdisi). */
+export function erisimOrtami(): Record<string, string> {
+  const a = erisimAnahtar();
+  return { PORT_ERISIM: "0", ERISIM_BIND: "127.0.0.1", CF_ACCESS_TAKIM_ALANI: ERISIM_TAKIM_ALANI, CF_ACCESS_AUD: a.aud, CF_ACCESS_JWKS_DOSYASI: a.jwksDosyasi };
+}
+
+/** Düzeneğin ERİŞİM adresleri: istek yardımcıları yalnız bunlara JWT ekler (bayi/genel adresine asla). */
+const erisimTabanlari = new Set<string>();
+function erisimTabaniKaydet(taban: string): string {
+  erisimTabanlari.add(taban);
+  return taban;
+}
+function erisimAdresiMi(url: string): boolean {
+  for (const t of erisimTabanlari) if (url === t || url.startsWith(`${t}/`)) return true;
+  return false;
+}
+
+/** Ham `fetch` (statik dosya, ham dağıtım uçları): adres düzeneğin ERİŞİM adresiyse JWT'yi ekler, yoksa dokunmaz. */
+export function portalFetch(url: string, init: RequestInit = {}): Promise<Response> {
+  if (!erisimAdresiMi(url)) return fetch(url, init);
+  const headers = new Headers(init.headers);
+  if (!headers.has(ERISIM_BASLIGI)) headers.set(ERISIM_BASLIGI, erisimJetonu());
+  return fetch(url, { ...init, headers });
+}
+
 // ---------------------------------------------------------------- portal (süreç içi iki dinleyici)
 export interface PortalSunuculari {
-  /** Tailnet dinleyicisi (satıcı portalı /portal/api). */
+  /** Satıcı portalı = ERİŞİM uygulaması (/portal/api); istek yardımcıları JWT'yi ekler. */
+  readonly portal: string;
+  /** @deprecated T1b: `portal` — taşıma bitince silinir (aynı ERİŞİM adresi; tünel yok). */
   readonly tailnet: string;
   /** Genel dinleyici (bayi alt-portalı /bayi/api, /v1/*). */
   readonly genel: string;
@@ -604,19 +687,25 @@ function dinle(server: http.Server): Promise<AddressInfo> {
 /** Portal uygulamalarını AYNI bağlamla süreç içinde kaldırır (bekçi saati/anahtarı enjekte edebilsin). */
 export async function portalSunuculariKur(ctx: VendorContext): Promise<PortalSunuculari> {
   process.env.SATICI_ERISIM_GUNLUGU ??= "0";
-  const { createTailnetApp } = await import("../../src/http/tailnet-app");
+  const { createAccessApp } = await import("../../src/http/access-app");
+  const { createAccessVerifier } = await import("../../src/http/access-jwt");
   const { createPublicApp } = await import("../../src/http/public-app");
-  let tailnetAdresi: AddressInfo | null = null;
-  const t = http.createServer(createTailnetApp(ctx, null, () => tailnetAdresi));
+  const o = erisimOrtami();
+  const verifier = createAccessVerifier({ CF_ACCESS_TAKIM_ALANI: o.CF_ACCESS_TAKIM_ALANI, CF_ACCESS_AUD: o.CF_ACCESS_AUD, CF_ACCESS_JWKS_DOSYASI: o.CF_ACCESS_JWKS_DOSYASI });
+  if (!verifier) throw new Error("ERİŞİM düzeneği kurulamadı");
+  let erisimAdresi: AddressInfo | null = null;
+  const e = http.createServer(createAccessApp(ctx, { listener: () => erisimAdresi, verifier }));
   const g = http.createServer(createPublicApp(ctx, null));
-  tailnetAdresi = await dinle(t);
+  erisimAdresi = await dinle(e);
   const genelAdresi = await dinle(g);
+  const portal = erisimTabaniKaydet(`http://127.0.0.1:${erisimAdresi.port}`);
   const kapat = (s: http.Server) => new Promise<void>((r) => (s.closeAllConnections(), s.close(() => r())));
   return {
-    tailnet: `http://127.0.0.1:${tailnetAdresi.port}`,
+    portal,
+    tailnet: portal,
     genel: `http://127.0.0.1:${genelAdresi.port}`,
     kapat: async () => {
-      await kapat(t);
+      await kapat(e);
       await kapat(g);
     },
   };
@@ -654,18 +743,23 @@ export interface PortalYanit extends Yanit {
   readonly veri: Record<string, unknown>;
 }
 
-/** JSON portal isteği; `cerez` "ad=değer" biçiminde; `basliklar` ek başlıklar (ör. Access JWT'si). */
+/**
+ * JSON portal isteği; `cerez` "ad=değer" biçiminde; `basliklar` ek başlıklar. Düzeneğin ERİŞİM adresine geçerli Access
+ * JWT'si kendiliğinden eklenir (`basliklar`taki açık başlık onu ezer; `erisimJetonu: false` hiç eklemez).
+ */
 export async function portalIstek(
   taban: string,
   yol: string,
-  g: { yontem?: string; govde?: unknown; cerez?: string; icerikTuru?: string; basliklar?: Record<string, string> } = {},
+  g: { yontem?: string; govde?: unknown; cerez?: string; icerikTuru?: string; basliklar?: Record<string, string>; erisimJetonu?: false } = {},
 ): Promise<PortalYanit> {
   const yontem = g.yontem ?? (g.govde === undefined ? "GET" : "POST");
+  const jwt: Record<string, string> = g.erisimJetonu !== false && erisimAdresiMi(taban) ? { [ERISIM_BASLIGI]: erisimJetonu() } : {};
   const r = await fetch(`${taban}${yol}`, {
     method: yontem,
     headers: {
       ...(yontem === "GET" ? {} : { "Content-Type": g.icerikTuru ?? "application/json" }),
       ...(g.cerez ? { Cookie: g.cerez } : {}),
+      ...jwt,
       ...(g.basliklar ?? {}),
     },
     ...(g.govde === undefined ? {} : { body: typeof g.govde === "string" ? g.govde : JSON.stringify(g.govde) }),
@@ -686,11 +780,12 @@ export async function portalGiris(
   taban: string,
   yol: PortalYolu,
   k: PortalKimlik,
-  g: { totp?: string; parola?: string; adimKaydir?: number; basliklar?: Record<string, string> } = {},
+  g: { totp?: string; parola?: string; adimKaydir?: number; basliklar?: Record<string, string>; erisimJetonu?: false } = {},
 ): Promise<PortalYanit & { cerez: string | null; setCookie: string | null }> {
   const y = await portalIstek(taban, `${yol}/oturum/ac`, {
     govde: { kullaniciAdi: k.kullaniciAdi, parola: g.parola ?? k.parola, totp: g.totp ?? (await totpKodu(k.sir, g.adimKaydir ?? 0)) },
     basliklar: g.basliklar,
+    erisimJetonu: g.erisimJetonu,
   });
   const setCookie = y.basliklar.get("set-cookie");
   const cerez = y.status === 200 && setCookie ? setCookie.split(";")[0]!.trim() : null;

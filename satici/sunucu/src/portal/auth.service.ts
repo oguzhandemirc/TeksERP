@@ -1,5 +1,5 @@
 // PORTAL GİRİŞİ — tek adım: kullanıcı adı + parola + TOTP (TOTP ZORUNLU; TOTP'siz oturum yoktur).
-// Kapılar (sırayla): hesap bu dinleyicide girebilir mi (satıcı rolleri yalnız TAILNET/ERİŞİM, BAYI yalnız
+// Kapılar (sırayla): hesap bu dinleyicide girebilir mi (satıcı rolleri yalnız ERİŞİM, BAYI yalnız
 // GENEL; uymayan hesap BİLİNMEYEN hesap gibi davranır — sayaç değişmez, eşdeğer iş harcanır) →
 // kilit (kilitli hesap da BİLİNMEYEN hesap gibi: aynı yanıt, aynı scrypt işi — kilit hesabın varlığını
 // sızdırmasın) → parola + TOTP (tekrar oynatma kilidi) → oturum. Hata iletisi tek: hangi faktörün
@@ -15,9 +15,9 @@ import { burnPasswordCheck, verifyPortalPassword } from "./password";
 import { actorOf, roleAllowedOn, type PortalListener, type PortalRole } from "./roles";
 import { verifyTotp } from "./totp";
 
-// TAILNET ve ERİŞİM aynı arayüzü farklı kökenlerden sunar (çerez adı/yolu aynı); oturumu ayıran DB'deki dinleyicidir.
-export const SESSION_COOKIE: Readonly<Record<PortalListener, string>> = { TAILNET: "satici_oturum", GENEL: "bayi_oturum", ERISIM: "satici_oturum" };
-export const SESSION_COOKIE_PATH: Readonly<Record<PortalListener, string>> = { TAILNET: "/portal", GENEL: "/bayi", ERISIM: "/portal" };
+// Oturumu ayıran DB'deki dinleyicidir: emekli TAILNET satırı hiçbir dinleyiciye eşit olmadığından çözülmez.
+export const SESSION_COOKIE: Readonly<Record<PortalListener, string>> = { GENEL: "bayi_oturum", ERISIM: "satici_oturum" };
+export const SESSION_COOKIE_PATH: Readonly<Record<PortalListener, string>> = { GENEL: "/bayi", ERISIM: "/portal" };
 
 const TOKEN_PATTERN = /^[A-Za-z0-9_-]{43}$/;
 const TOUCH_INTERVAL_MS = 60_000;

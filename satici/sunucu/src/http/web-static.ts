@@ -1,6 +1,6 @@
 // WEB ARAYÜZÜ STATİK SERVİSİ — derlenmiş `satici/web` çıktısı API ile AYNI kökenden sunulur (çerez
 // yolları `/portal` · `/bayi` korunur, CORS gerekmez). Her dinleyici yalnız KENDİ uygulamasının
-// dizinini bilir: satıcı arayüzü (`dist/portal`) TAILNET ve ERİŞİM'de `/portal`, bayi arayüzü
+// dizinini bilir: satıcı arayüzü (`dist/portal`) ERİŞİM'de `/portal`, bayi arayüzü
 // (`dist/bayi`) yalnız GENEL'de `/bayi`. `/api` altı ASLA HTML'e düşmez (bilinmeyen uç JSON 404 kalır).
 import { existsSync } from "node:fs";
 import path from "node:path";

@@ -1,7 +1,7 @@
 // İLETİ KURUCU — gönderici (yan konteyner) giden kutusu satırından e-posta konusu/metni ve Telegram HTML'ini kurar.
 // YALNIZ olay türü + allowlist gövdesi okunur (NotificationBodySchema'dan geçmiş); başka kaynak yoktur, yani talep
 // metni, ek, sağlık ayrıntısı iletilere yapısal olarak giremez. Bağlantı `BILDIRIM_PORTAL_ADRESI` (ör.
-// http://<tailnet-adı>:4611/portal) + gövdenin göreli yolu; adres verilmezse yalnız yol yazılır.
+// https://portal.<alan>/portal) + gövdenin göreli yolu; adres verilmezse yalnız yol yazılır.
 import type { BildirimOlayi } from "@prisma/client";
 import { NOTIFICATION_TITLES, type NotificationBody } from "./catalog";
 

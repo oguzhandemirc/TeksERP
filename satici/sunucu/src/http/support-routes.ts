@@ -1,4 +1,4 @@
-// DESTEK KUTUSU rotaları (satıcı portalı, tailnet): liste · ayrıntı · ek · yanıtla · kapat.
+// DESTEK KUTUSU rotaları (satıcı portalı, ERİŞİM): liste · ayrıntı · ek · yanıtla · kapat.
 // Yazma işlem kimliğiyle idempotent; yol parametresi gövde özetine girer (`_yol`).
 import { z } from "zod";
 import { SUPPORT_TEXT_MAX } from "../lisans-protokol";

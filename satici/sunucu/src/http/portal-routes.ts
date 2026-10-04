@@ -1,4 +1,4 @@
-// SATICI PORTALI JSON API'si — tailnet ve ERİŞİM (Cloudflare Access arkası) dinleyicilerinde, /portal/api
+// SATICI PORTALI JSON API'si — ERİŞİM (Cloudflare Access arkası) dinleyicisinde, /portal/api
 // altında (web arayüzü 1f). İmza parolasının geçebileceği yol rotada değil imza boğazındadır (keys/signing-scope.ts).
 // ERİŞİM'e yalnız erisim-rotalari.ts listesindeki rotalar bağlanır (opt-in): yeni rota orada ayrıca karar ister.
 // Her rota bir izin beyan eder (roles.ts); her yazma işlem kimliğiyle (clientToken) idempotenttir.
@@ -97,6 +97,7 @@ import {
   setEnforcementTx,
   setValidityEndTx,
 } from "../services/sanction.service";
+import { systemHealth } from "../services/system-health";
 import { decideTransferTx, findTransferRequest } from "../services/transfer.service";
 import { UpdatePolicyInputSchema, setUpdatePolicyTx } from "../services/update-policy.service";
 import {
@@ -315,6 +316,8 @@ function activeToggle(
 export const VENDOR_PORTAL_ROUTES: readonly PortalRouteDef[] = [
   // ------------------------------------------------------------ okuma
   { method: "get", path: "/pano", permission: "portal:oku", kimlik: "OKUMA", handler: async (c) => ({ data: await q.dashboard(prisma, c.nowMs) }) },
+  // Sistem sağlığı kartı: yalnız sayı ve durum (sır yok) — tünelin /portal/saglik'inin portal içindeki yeri.
+  { method: "get", path: "/saglik", permission: "portal:oku", kimlik: "OKUMA", handler: async (c) => ({ data: systemHealth(c.ctx, c.nowMs) }) },
   {
     method: "get",
     path: "/katalog",
