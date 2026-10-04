@@ -21,13 +21,15 @@
 //      ya da `ERISIM_DISI_ROTALAR`da (ikisinde birden değil) · imza · kullanıcı yönetimi · anahtar kaydı rotaları listede ·
 //      doğrulayıcı sentetik kusurlu listede ve kararsız sonda rotasında ısırır · tabloda olmayan satırlı listeyle
 //      yönlendirici KURULMAZ · §4i `src/`te rota bayrağı `kokParolasi: true` ve `rootPasswordGate` yok (AST) ·
+//      §4j `src/`teki parola/TOTP taşıyan HER Zod gövde anahtarı (AST) gövde özetine girmez (`SECRET_BODY_KEYS`) ·
 //      §4g access-app BAĞLAMA ENVANTERİ: `createAccessApp`teki her `app.*` çağrısı (ara katman,
 //      yönlendirici, rota, ayar) beklenen sıralı kümeyle BİREBİR — küme dışı bağlama (izin listesini atlayan yol) kırmızı
 //   §5 compose: portal yönlendiricisinin Traefik ipallowlist aralıkları = CLOUDFLARE_NETWORKS · üst dosya satıcıya AĞ
 //      EKLEMEZ, JWKS bağı satıcıda salt okunur · yan konteyner sertleştirilmiş, sırsız, yalnız kendi çıkış köprüsünde
 //      · birleşik yapılandırmada (docker compose config) satıcının HER ağı internal (docker yoksa ÖLÇÜLEMEDİ beyanı)
 //   §6 HTTP (süreç içi dinleyiciler, kendi `_test` DB'si): her tablo rotası ERİŞİM'de listeye göre bağlı (listede 401,
-//      liste dışı 404) · HAK imzası ERİŞİM'de: yanlış parola 400 + sayaç, doğru parola 201 · listede olmayan sonda rotası
+//      liste dışı 404) · HAK imzası ERİŞİM'de: yanlış parola 400 + sayaç, doğru parola 201; saklanan gövde özeti parolasız
+//      gövdenin bağımsız özeti, aynı kimlik başka parolayla 201 tekrar (§6k6 · §6k7) · listede olmayan sonda rotası
 //      404 (işleyici koşmaz) · imza yardımcısı ve imza parolası kapısı ERİŞİM'de imzalar · kullanıcı yönetimi ve yayıncı
 //      kaydı ERİŞİM'de çalışır (TOTP sırrı yalnız canlı yanıtta) · denetim satırlarında Access e-postası (sır yok) +
 //      ERISIM_YAZMA ayak izi · JWT kapısız bağlanmış ERİŞİM yönlendiricisi 404 · §7 gerçek süreç: açılış satırı, KAPALI
@@ -49,12 +51,15 @@
 //   HAK sürüm rotasına `kokParolasi: true` → §4i ❌ · `SIGNING_ORIGINS.KOK` eski [TAILNET, CLI] → §6k · §6k3 · §6k5 · §6q2a
 //   · §6q3 ❌ · `allowlistGate` kaldırılıp her rota bağlandı → §6p3 · §6q1 ❌ · audit e-posta koşulu TAILNET → §6k5 · §6s1–
 //   §6s6 ❌ · kullanıcı açma özetine `parola` → §6s6 ❌.
+// NEGATİF SONDA (gövde özetinde parola, 2026-10-05, dosya DIŞI, cp + shasum ile geri alındı): `SECRET_BODY_KEYS`ten
+//   `kokParolasi` + `imzaParolasi` çıkarıldı → §4j · §6k6 · §6k7 ❌ (145/148) · key-routes şemasına listesiz
+//   `yedekParolasi: z.string()` → §4j ❌ (147/148).
 // Koşum: npx tsx scripts/test_erisim_kapisi.ts   (§6–§7 kendi _test DB'si)
 // =============================================================================
 import http from "node:http";
 import type { AddressInfo } from "node:net";
 import { spawnSync } from "node:child_process";
-import { createHmac, generateKeyPairSync, randomBytes, randomUUID, sign, type KeyObject } from "node:crypto";
+import { createHash, createHmac, generateKeyPairSync, randomBytes, randomUUID, sign, type KeyObject } from "node:crypto";
 import ts from "typescript";
 import { mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, utimesSync, writeFileSync } from "node:fs";
 import os from "node:os";
@@ -83,6 +88,7 @@ import { SESSION_ROUTE_KEYS, createPortalRouter, erisimListesiBulgulari, routeKe
 import { VENDOR_PORTAL_ROUTES } from "../src/http/portal-routes";
 import { createTailnetApp } from "../src/http/tailnet-app";
 import { passwordBuffer } from "../src/keys/key-files";
+import { portalBodyDigest } from "../src/portal/idempotency";
 import { withSigningPasswordGuard } from "../src/portal/signing-guard";
 import { prepareEntitlementVersion } from "../src/services/entitlement.service";
 import {
@@ -245,6 +251,24 @@ function kokBayragiBulgulari(metin: string, ad: string): string[] {
   };
   gez(sf);
   return out;
+}
+
+/** Zod şemasındaki (`x: z.…` ya da `x: Şema`) sır adlı gövde anahtarları — parola/TOTP taşıyan HER alan (§4j). */
+function sirGovdeAnahtarlari(metin: string, ad: string): string[] {
+  const sf = ts.createSourceFile(ad, metin, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
+  const out: string[] = [];
+  const gez = (n: ts.Node): void => {
+    if (ts.isPropertyAssignment(n) && (ts.isIdentifier(n.name) || ts.isStringLiteral(n.name)) && /parola|totp/i.test(n.name.text) && /^z\./.test(n.initializer.getText(sf))) out.push(n.name.text);
+    ts.forEachChild(n, gez);
+  };
+  gez(sf);
+  return out;
+}
+
+/** idempotency.ts'ten BAĞIMSIZ beklenen özet: verilen sır anahtarları + clientToken çıkarılmış, anahtar sıralı gövde. */
+function bagimsizOzet(govde: Record<string, unknown>, sirlar: readonly string[]): string {
+  const sirali = Object.fromEntries(Object.keys(govde).filter((k) => k !== "clientToken" && !sirlar.includes(k)).sort().map((k) => [k, govde[k]]));
+  return createHash("sha256").update(JSON.stringify(sirali), "utf8").digest("hex");
 }
 
 function dinle(server: http.Server): Promise<AddressInfo> {
@@ -705,6 +729,20 @@ async function main(): Promise<void> {
     "sonda.ts",
   );
   kontrol("§4i2 ✓K çözümleyici sentetik metinde üç biçimi yakalar, gövde alanını (şema · erişim) bulgu saymaz", kokSonda.length === 3, kokSonda.join(" | "));
+  // Kök parolası internetten de geçer: parola/TOTP taşıyan HER gövde anahtarı tuzsuz gövde özetine (PortalIslemi.govdeOzeti) girmemeli.
+  const sirAnahtarlari = [...new Set(tsDosyalari.flatMap((f) => sirGovdeAnahtarlari(kaynak(f), f)))].sort();
+  const ozeteGiren = sirAnahtarlari.filter((k) => portalBodyDigest({ a: 1, [k]: "sir-1" }) !== portalBodyDigest({ a: 1 }));
+  kontrol(
+    "§4j src/'teki parola/TOTP taşıyan HER gövde anahtarı gövde özetine GİRMEZ (kokParolasi · imzaParolasi dahil)",
+    ozeteGiren.length === 0 && sirAnahtarlari.includes("kokParolasi") && sirAnahtarlari.includes("imzaParolasi") && sirAnahtarlari.length >= 7,
+    `${sirAnahtarlari.join(", ")}${ozeteGiren.length ? ` · ÖZETE GİREN: ${ozeteGiren.join(", ")}` : ""}`,
+  );
+  const sirSonda = sirGovdeAnahtarlari('const S = z.strictObject({ yedekParolasi: z.string(), totpKodu: z.string(), ad: z.string() }); const t = { parolaOzeti: hash };', "sonda.ts");
+  kontrol(
+    "§4j2 ✓K tarayıcı sentetik şemada sır anahtarlarını bulur (şema dışı alanı saymaz); özet kör değil (sır olmayan alan özeti değiştirir)",
+    JSON.stringify(sirSonda) === JSON.stringify(["yedekParolasi", "totpKodu"]) && portalBodyDigest({ a: 1, sebep: "x" }) !== portalBodyDigest({ a: 1 }),
+    sirSonda.join(", "),
+  );
 
   console.log("\n§5 compose (Traefik ipallowlist = Cloudflare aralıkları · satıcı dış bağlantısız · yan konteyner)");
   const composeYolu = path.join(__dirname, "..", "..", "..", "deploy", "satici", "docker-compose.portal-genel.yml");
@@ -900,11 +938,8 @@ async function main(): Promise<void> {
     kontrol("§6k3 ERİŞİM'deki yanlış parola da imza sayacına girdi (ERİŞİM + tailnet = 2; kilit eşiği iki yolda ortak)", sayac.imzaBasarisiz === 2, `${sayac.imzaBasarisiz}`);
     const hakSurum = await prisma.hakSurumu.count({ where: { hakId: k.hakId } });
     kontrol("§6k4 yanlış parolayla hiçbir yeni imzalı sürüm doğmadı", hakSurum === 1, `${hakSurum}`);
-    const imzaE = await portalIstek(E, `/portal/api/haklar/${k.hakId}/surum`, {
-      cerez: eCerez,
-      basliklar: JWT,
-      govde: { clientToken: randomUUID(), imzaci, imzaParolasi: TEST_KOK_PAROLASI, sebep: "erişim bekçisi imzası" },
-    });
+    const imzaGovdesi = { clientToken: randomUUID(), imzaci, imzaParolasi: TEST_KOK_PAROLASI, sebep: "erişim bekçisi imzası" };
+    const imzaE = await portalIstek(E, `/portal/api/haklar/${k.hakId}/surum`, { cerez: eCerez, basliklar: JWT, govde: imzaGovdesi });
     const imzaSatiri = await prisma.denetim.findFirst({ where: { varlik: "Hak", varlikId: k.hakId, olay: "HAK_IMZALANDI" }, orderBy: { createdAt: "desc" } });
     const sayacSonra = await prisma.portalKullanici.findUniqueOrThrow({ where: { id: yonetici.id }, select: { imzaBasarisiz: true } });
     kontrol(
@@ -916,6 +951,18 @@ async function main(): Promise<void> {
         !JSON.stringify(imzaSatiri?.ozet ?? null).includes(TEST_KOK_PAROLASI) &&
         sayacSonra.imzaBasarisiz === 0,
       `${imzaE.status} ${imzaE.kod ?? ""} · ${JSON.stringify(imzaSatiri?.ozet ?? null)} · sayaç ${sayacSonra.imzaBasarisiz}`,
+    );
+    const islem = await prisma.portalIslemi.findUnique({ where: { clientToken: imzaGovdesi.clientToken } });
+    kontrol(
+      "§6k6 ⭐ saklanan gövde özeti = imza parolası ÇIKARILMIŞ gövdenin özeti (bağımsız hesap; parola tuzsuz SHA-256'ya girmez)",
+      islem !== null && islem.govdeOzeti === bagimsizOzet({ ...imzaGovdesi, _yol: k.hakId }, ["imzaParolasi"]) && islem.govdeOzeti !== bagimsizOzet({ ...imzaGovdesi, _yol: k.hakId }, []),
+      islem?.govdeOzeti ?? "işlem satırı yok",
+    );
+    const imzaTekrar = await portalIstek(E, `/portal/api/haklar/${k.hakId}/surum`, { cerez: eCerez, basliklar: JWT, govde: { ...imzaGovdesi, imzaParolasi: "baska-parola-bekci" } });
+    kontrol(
+      "§6k7 aynı kimlik BAŞKA parolayla aynı yanıtı alır (201 tekrar, 409 değil): parola gövde kapısına girmez, imza ikinci kez koşmaz",
+      imzaTekrar.status === 201 && imzaTekrar.veri.surum === 2 && (await prisma.hakSurumu.count({ where: { hakId: k.hakId } })) === 2,
+      `${imzaTekrar.status} ${imzaTekrar.kod ?? ""}`,
     );
     const yaz = await portalIstek(E, `/portal/api/kurulumlar/${k.kurulumDbId}/yaptirim`, {
       cerez: eCerez,
