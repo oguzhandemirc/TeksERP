@@ -15,7 +15,7 @@
 
 **Faz 1 — hemen (küçük, kararı verilmiş)**
 - [ ] ▶ 1.1 Satıcı portalı tamamen internetten + `lisans.md`'deki iki biçimli satıcı kurallarının birleştirilmesi (§E; C-1 "satıcı portalı yetkileri" bununla kapanır) — 2026-10-04 keşif + plan başladı · İlerleme: D1 (sunucu kilitleri) · D2 (web kilitleri) · D3b · D3a (belgeler + gövde özeti bekçisi) · denetim temiz; sırada D4 VDS kurulumu (kullanıcı onayıyla), D5 tünel kapatma
-- [ ] 1.2 Mac'te dönem töreni: kök anahtar VDS'ten kalkar (§D-2) — 1.1'in hemen arkasından
+- [ ] 1.2 Mac'te dönem töreni: kök anahtar VDS'ten kalkar (§D-2) — 1.1'in hemen arkasından (kullanıcı kararı 2026-10-05: D5 tünel kapatma bitince; kök dosyası bugün VDS'te şifreli duruyor, o arada portaldan kök parolasıyla imza atılmaz)
 - [x] 1.3 Test veritabanlarının silinmesi (§D-5) — 2026-10-04, 223 `_test` DB (~6,5 GB) silindi; kalan yalnız `postgres` + `tekserp_fabrika_0923`
 - [ ] 1.4 Karar arşivinin aylara bölünmesi (§E)
 - [ ] 1.5 `test_uretim_toren` temiz ağaçta kırmızı (PAKET aracı Node 26.8.1'de çöküyor) — ayrı incelenecek
@@ -37,6 +37,8 @@
 - [ ] 3.5 Sunucu saati (§B-3)
 - [ ] 3.6 Hata raporları (§E)
 - [ ] 3.7 Fabrika tableti Google Play'de (§E)
+- [ ] 3.8 testfabrika üretim lisans sunucusuna taşınır ve "test" güncelleme grubu olur; hazırlık satıcısı portalsız kalır, yalnız lisans sunucusunun kendi sürüm denemesi için (kullanıcı kararı 2026-10-05)
+- [ ] 3.9 Paket anahtarı kökün altına alınır: paket anahtarı kök imzalı sertifikayla ve kısa ömürlü (ör. 1 yıl) olur, kaybı/çalınması kökle yeni sertifika + iptalle kapanır, fabrikaya elle kurulum gerekmez; güncelleyici (Rust) zincirle doğrular, geçişte çift imza (kullanıcı kararı 2026-10-05; yedek anahtar ve parola bölme şimdilik YAPILMAZ, donanım anahtarı bütçe yok)
 
 **Faz 4 — adnansahin taşıması (§B-5)**
 - [ ] 4.1 thinkpad-1'de yedek kopyasıyla prova
