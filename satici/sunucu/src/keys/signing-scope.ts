@@ -1,5 +1,5 @@
 // İMZA KAPSAMI — parolalı anahtarla imza HANGİ yoldan istenebilir (tek kaynak). KÖK ve ARA (HAK ara imzacısı) satıcı
-// portalının iki yolundan (tailnet · ERİŞİM) ve CLI'dan; bayi yolundan (GENEL) ASLA. BAYİ yalnız bayi portalından (GENEL)
+// portalının tek yolundan (ERİŞİM) ve CLI'dan; bayi yolundan (GENEL) ASLA. BAYİ yalnız bayi portalından (GENEL)
 // ve CLI'dan; kapsam yoksa RED.
 // İki boğaz aynı kuralı çağırır: portal imza kapısı (`withSigningPasswordGuard`, sayaçlara dokunmadan) ve imza alt
 // sürecini başlatan TEK fonksiyon (`signWithWrappedKey`, anahtar türünü DOSYADAN okur — rota beyanına güvenmez).
@@ -10,9 +10,9 @@ import type { WrappedKeyType } from "./key-files";
 export type SigningKeyKind = "KOK" | "BAYI" | "ARA";
 
 export const SIGNING_ORIGINS: Readonly<Record<SigningKeyKind, readonly ScopeOrigin[]>> = {
-  KOK: ["TAILNET", "ERISIM", "CLI"],
+  KOK: ["ERISIM", "CLI"],
   BAYI: ["GENEL", "CLI"],
-  ARA: ["TAILNET", "ERISIM", "CLI"],
+  ARA: ["ERISIM", "CLI"],
 };
 
 /** Tür → kapsam haritası AÇIK: tanınmayan tür (yeni anahtar türü, bozuk dosya, "__proto__") BAYİ SAYILMAZ, RED. */

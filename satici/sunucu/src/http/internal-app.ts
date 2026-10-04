@@ -1,5 +1,5 @@
 // İÇ DİNLEYİCİ — satıcı iç API'si (`/ic/v1/*`, patron bulutu → satıcı) YALNIZ burada; genel dinleyici ve
-// tailnet portalı bu yolu bilmez (404). Kapı üç koşullu ve FAIL-CLOSED:
+// ERİŞİM portalı bu yolu bilmez (404). Kapı üç koşullu ve FAIL-CLOSED:
 //   (1) istek iç dinleyicinin SOKETİNE gelmiş  (2) kaynak adres IC_KAYNAK_AGLARI'nda (soketten; başlık
 //   OKUNMAZ; verilmezse yalnız geri döngü) — biri tutmazsa 404 · (3) Bearer ortak sırla sabit zamanlı eşit —
 //   değilse 401 IC_KIMLIK_GECERSIZ (404 DEĞİL: patron 404'ü "kurulum yok" okuyup kaydı pasife çeker).
@@ -20,7 +20,7 @@ import { UuidSchema } from "../lisans-protokol";
 import { blockListOf, inList, stripMapped } from "./client-address";
 import { accessLog, errorHandler, notFound } from "./error-handler";
 import { FixedWindowLimiter, rateLimited } from "./rate-limit";
-import { LOOPBACK_NETWORKS } from "./tailnet-app";
+import { LOOPBACK_NETWORKS } from "./listener-socket";
 
 export const INTERNAL_PREFIX = "/ic/v1";
 

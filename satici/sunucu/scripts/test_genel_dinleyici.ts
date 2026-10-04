@@ -82,7 +82,7 @@ async function main(): Promise<void> {
   const { prisma } = await import("../src/lib/prisma");
   const temizlenecek: string[] = [];
   const ipSunucu = await portalSunuculariKur(ctx);
-  const kurulumConfig = loadConfig({ ...process.env, TAILNET_LOOPBACK: "1", V1_HIZ_IP_DK: "100000", V1_HIZ_KURULUM_DK: "4", ANAHTAR_DIZINI: ortam.dizin, GUVEN_CAPASI_DOSYASI: ortam.capaDosyasi });
+  const kurulumConfig = loadConfig({ ...process.env, V1_HIZ_IP_DK: "100000", V1_HIZ_KURULUM_DK: "4", ANAHTAR_DIZINI: ortam.dizin, GUVEN_CAPASI_DOSYASI: ortam.capaDosyasi });
   const kurulumCtx = { ...ctx, config: kurulumConfig };
   const sunucu = await portalSunuculariKur(kurulumCtx);
   try {

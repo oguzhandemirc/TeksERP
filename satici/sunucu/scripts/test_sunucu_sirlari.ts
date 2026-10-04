@@ -47,7 +47,7 @@ function sunucuCikisi(dizin: string, capa: string): Promise<{ kod: number | null
   return new Promise((resolve) => {
     const surec = spawn(process.execPath, ["--import", "tsx", "src/server.ts"], {
       cwd: SATICI_KOKU,
-      env: { ...process.env, ...BEKCI_ORTAMI, PORT_GENEL: "0", PORT_TAILNET: "0", PORT_IC: "0", GENEL_BIND: "127.0.0.1", TAILNET_BIND: "127.0.0.1", IC_BIND: "127.0.0.1", ANAHTAR_DIZINI: dizin, GUVEN_CAPASI_DOSYASI: capa },
+      env: { ...process.env, ...BEKCI_ORTAMI, PORT_GENEL: "0", PORT_IC: "0", GENEL_BIND: "127.0.0.1", IC_BIND: "127.0.0.1", ANAHTAR_DIZINI: dizin, GUVEN_CAPASI_DOSYASI: capa },
       stdio: ["ignore", "pipe", "pipe"],
     });
     let log = "";

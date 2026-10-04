@@ -4,8 +4,8 @@
 //      künyede görünür ama İMZALAMAZ; başka anahtarın sertifikası · sınıf kümesi uyuşmayan · çapa dışı kökün imzaladığı ·
 //      yanlış uzantıyla konmuş (`.kok.json`) ara dosyası YÜKLENMEZ; emekli künye (`*.sertifika.json`) künyede EMEKLI
 //   §2 imza alt süreci: ara imzacı YALNIZ kendi sertifikasını gömülü taşıyan HAK'ı imzalar; sertifika ve iptal belgesi
-//      basamaz; ufuk tavanını (TEST > 45) aşan HAK'ı basmaz; kök, ara sertifikalı HAK'ı basmaz; kapsam ARA: TAILNET·ERİŞİM·
-//      CLI geçer, GENEL (bayi yolu) 404 ve parola alt sürece yazılmaz
+//      basamaz; ufuk tavanını (TEST > 45) aşan HAK'ı basmaz; kök, ara sertifikalı HAK'ı basmaz; kapsam ARA: ERİŞİM·CLI
+//      geçer, GENEL (bayi yolu) ve emekli TAILNET 404, parola alt sürece yazılmaz
 //   §3 yetenek kapısı: `hak-ara` bildiren kuruluma ARA, bildirmeyene KÖK (VDS'te varsa), ikisi de yoksa KUYRUK; ara
 //      imzalı HAK fabrikanın doğrulayıcısından ARA olarak geçer; eski derlemeye ara imzalı HAK GİTMEZ
 //      (`deliverableEntitlement`); arayüz planı uyuşmazsa 409 ve parola kullanılmaz
@@ -22,10 +22,12 @@
 //   §8 toplu yeniden basım servisi: tek parola, yetenekliler ARA imzalı yeni sürüm, yeteneksiz atlanır; yanlış parola
 //      hiçbir sürüm yazmaz
 //   §9 anahtar süresi (K4): kullanım başına en yeni sertifikanın bitişine 30/15/7/1 gün kala bildirim, eşik başına TEK
-// ⭐ KALICI SONDA ✓K (her koşumda): §1b ara GERÇEKTEN imzalar (kör RED değil) · §2g TAILNET ve ERİŞİM'de ara imzası
+// ⭐ KALICI SONDA ✓K (her koşumda): §1b ara GERÇEKTEN imzalar (kör RED değil) · §2g ERİŞİM'de ara imzası
 //    parolayı alt sürece GERÇEKTEN yazar · §4c onaylı uzun ufuk GERÇEKTEN imzalanır · §5f kök yokken yoklama GERÇEKTEN 200.
 // NEGATİF SONDA (dosya DIŞI, cp + shasum ile geri alındı; 2026-10-04): `SIGNING_ORIGINS.ARA` eski `[TAILNET, CLI]` → §0a ❌ ·
 //   §2g ❌ (ERİŞİM 404); `"GENEL"` eklendi → §0a ❌ · §2g ❌ (GENEL imzaladı).
+// NEGATİF SONDA (tünel kapatma T1, 2026-10-05): `SIGNING_ORIGINS.ARA`ya "TAILNET" geri → §0a · §2g ❌ · düzenek portal
+//   isteklerine Access JWT'si eklemedi → §7a–§7i ❌ (taşıma ERİŞİM'den gerçekten geçiyor); cp + shasum ile geri alındı.
 // Koşum: node ../../scripts/agir-is.mjs -- npx tsx scripts/test_ara_imzaci.ts   (kendi _test DB'si)
 // =============================================================================
 import type { Socket } from "node:net";
@@ -133,7 +135,7 @@ async function main(): Promise<void> {
   let portalKoksuz: Awaited<ReturnType<typeof portalSunuculariKur>> | null = null;
   try {
     console.log("\n§0 kapsam haritası");
-    kontrol("§0a ara anahtar türü → ARA; ARA yalnız TAILNET · ERİŞİM · CLI (GENEL/bayi yolu YOK)", signingKindOf("tekserp-ara-anahtar") === "ARA" && JSON.stringify(SIGNING_ORIGINS.ARA) === JSON.stringify(["TAILNET", "ERISIM", "CLI"]));
+    kontrol("§0a ara anahtar türü → ARA; ARA yalnız ERİŞİM · CLI (GENEL/bayi yolu ve emekli TAILNET YOK)", signingKindOf("tekserp-ara-anahtar") === "ARA" && JSON.stringify(SIGNING_ORIGINS.ARA) === JSON.stringify(["ERISIM", "CLI"]), JSON.stringify(SIGNING_ORIGINS.ARA));
 
     console.log("\n§1 anahtar deposu");
     const araSertifikasi = await araYaz(ortam.dizin, f);
@@ -204,10 +206,10 @@ async function main(): Promise<void> {
     };
     const erisim = await kapsamDene("ERISIM");
     const genel = await kapsamDene("GENEL");
-    const tailnet = await kapsamDene("TAILNET");
-    kontrol("§2g ✓K ara imzası: GENEL 404 (parola alt sürece YAZILMADI, sıfırlandı); TAILNET ve ERİŞİM imzalar",
-      genel.sonuc === "404 BULUNAMADI" && genel.yazilan === 0 && genel.sifir && tailnet.sonuc === "GECTI" && tailnet.yazilan > 0 && erisim.sonuc === "GECTI" && erisim.yazilan > 0,
-      `${erisim.sonuc}/${genel.sonuc}/${tailnet.sonuc} · ${tailnet.yazilan}/${erisim.yazilan} bayt`);
+    const tailnet = await kapsamDene("TAILNET" as never);
+    kontrol("§2g ✓K ara imzası: GENEL ve elle kurulmuş emekli TAILNET kapsamı 404 (parola alt sürece YAZILMADI, sıfırlandı); ERİŞİM imzalar",
+      [genel, tailnet].every((x) => x.sonuc === "404 BULUNAMADI" && x.yazilan === 0 && x.sifir) && erisim.sonuc === "GECTI" && erisim.yazilan > 0,
+      `${erisim.sonuc}/${genel.sonuc}/${tailnet.sonuc} · ${erisim.yazilan} bayt`);
 
     console.log("\n§3 yetenek kapısı");
     const k1 = await kurulumFiksturu(ctx);
@@ -379,36 +381,36 @@ async function main(): Promise<void> {
     const yonetici = await portalKullaniciAc(ctx, "SATICI_YONETICI");
     const op = await portalKullaniciAc(ctx, "SATICI_OPERATOR");
     kullanicilar.push(yonetici.id, op.id);
-    const cY = (await portalGiris(portal.tailnet, "/portal/api", yonetici)).cerez!;
-    const cO = (await portalGiris(portal.tailnet, "/portal/api", op)).cerez!;
-    const cYk = (await portalGiris(portalKoksuz.tailnet, "/portal/api", yonetici, { adimKaydir: 1 })).cerez!;
+    const cY = (await portalGiris(portal.portal, "/portal/api", yonetici)).cerez!;
+    const cO = (await portalGiris(portal.portal, "/portal/api", op)).cerez!;
+    const cYk = (await portalGiris(portalKoksuz.portal, "/portal/api", yonetici, { adimKaydir: 1 })).cerez!;
     const kW = await kurulumFiksturu(ctx);
     temizlenecek.push(kW.kurulumDbId);
-    const planY = await portalIstek(portal.tailnet, `/portal/api/haklar/${kW.hakId}/imza-plani`, { cerez: cO });
+    const planY = await portalIstek(portal.portal, `/portal/api/haklar/${kW.hakId}/imza-plani`, { cerez: cO });
     kontrol("§7a GET imza-plani: yeteneksiz + kök → KOK (kid ile)", planY.status === 200 && planY.veri.imzaci === "KOK" && planY.veri.kid === f.kok.kid, JSON.stringify(planY.veri));
     const surum = (taban: string, cerez: string, govde: Record<string, unknown>) => portalIstek(taban, `/portal/api/haklar/${kW.hakId}/surum`, { cerez, govde: { clientToken: randomUUID(), sebep: "portal bekçisi", ...govde } });
-    const pUyusmaz = await surum(portal.tailnet, cO, { imzaci: "ARA", imzaParolasi: YANLIS });
+    const pUyusmaz = await surum(portal.portal, cO, { imzaci: "ARA", imzaParolasi: YANLIS });
     const sayac = (await prisma.portalKullanici.findUniqueOrThrow({ where: { id: op.id } })).imzaBasarisiz;
     kontrol("§7b plan uyuşmazlığı 409 DURUM_CAKISMASI; yanlış parola alt sürece gitmedi (imza sayacı 0)", pUyusmaz.status === 409 && pUyusmaz.kod === "DURUM_CAKISMASI" && sayac === 0, `${pUyusmaz.status} ${pUyusmaz.kod} · sayaç ${sayac}`);
-    const eskiArayuz = await surum(portal.tailnet, cO, { kokParolasi: TEST_KOK_PAROLASI });
+    const eskiArayuz = await surum(portal.portal, cO, { kokParolasi: TEST_KOK_PAROLASI });
     kontrol("§7c eski arayüz gövdesi (yalnız kokParolasi) KOK planında 201", eskiArayuz.status === 201 && eskiArayuz.veri.imzalayanKid === f.kok.kid, `${eskiArayuz.status} ${eskiArayuz.kod ?? ""}`);
-    const kuyrukKoklu = await surum(portal.tailnet, cO, { imzaci: "KUYRUK" });
+    const kuyrukKoklu = await surum(portal.portal, cO, { imzaci: "KUYRUK" });
     kontrol("§7d kök VDS'teyken KUYRUK isteği 409 (plan KOK)", kuyrukKoklu.status === 409 && kuyrukKoklu.kod === "DURUM_CAKISMASI", `${kuyrukKoklu.status}`);
-    const parolali = await surum(portalKoksuz.tailnet, cYk, { imzaci: "KUYRUK", imzaParolasi: "kuyruga-parola-gitmez" });
-    const kuyruk202 = await surum(portalKoksuz.tailnet, cYk, { imzaci: "KUYRUK", moduller: ["production.enabled", "finance.enabled", "ticaret.enabled"] });
+    const parolali = await surum(portalKoksuz.portal, cYk, { imzaci: "KUYRUK", imzaParolasi: "kuyruga-parola-gitmez" });
+    const kuyruk202 = await surum(portalKoksuz.portal, cYk, { imzaci: "KUYRUK", moduller: ["production.enabled", "finance.enabled", "ticaret.enabled"] });
     kontrol("§7e köksüz: KUYRUK parola taşıyamaz (400); parolasız 202 + talep", parolali.status === 400 && kuyruk202.status === 202 && kuyruk202.veri.kuyruk === true && typeof kuyruk202.veri.talepId === "string", `${parolali.status} / ${kuyruk202.status} ${kuyruk202.kod ?? ""}`);
-    const liste = await portalIstek(portal.tailnet, "/portal/api/kok-kuyrugu?durum=BEKLIYOR", { cerez: cO });
+    const liste = await portalIstek(portal.portal, "/portal/api/kok-kuyrugu?durum=BEKLIYOR", { cerez: cO });
     const items = (liste.veri.items ?? []) as { id: string; lisansNo: string }[];
     kontrol("§7f GET kok-kuyrugu: bekleyen talep lisans numarasıyla listede", liste.status === 200 && items.some((i) => i.id === kuyruk202.veri.talepId && i.lisansNo === kW.lisansNo));
-    const pIptal = await portalIstek(portal.tailnet, `/portal/api/kok-kuyrugu/${String(kuyruk202.veri.talepId)}/iptal`, { cerez: cO, govde: { clientToken: randomUUID(), sebep: "portal iptali" } });
+    const pIptal = await portalIstek(portal.portal, `/portal/api/kok-kuyrugu/${String(kuyruk202.veri.talepId)}/iptal`, { cerez: cO, govde: { clientToken: randomUUID(), sebep: "portal iptali" } });
     kontrol("§7g POST kok-kuyrugu/:id/iptal → IPTAL", pIptal.status === 200 && pIptal.veri.durum === "IPTAL", `${pIptal.status} ${pIptal.kod ?? ""}`);
-    const opUzun = await surum(portal.tailnet, cO, { imzaci: "KOK", imzaParolasi: TEST_KOK_PAROLASI, cevrimdisiUfukGun: null, onay: kW.lisansNo });
-    const yUzunOnaysiz = await surum(portal.tailnet, cY, { imzaci: "KOK", imzaParolasi: TEST_KOK_PAROLASI, cevrimdisiUfukGun: 900 });
-    const yUzun = await surum(portal.tailnet, cY, { imzaci: "KOK", imzaParolasi: TEST_KOK_PAROLASI, cevrimdisiUfukGun: 900, onay: kW.lisansNo });
+    const opUzun = await surum(portal.portal, cO, { imzaci: "KOK", imzaParolasi: TEST_KOK_PAROLASI, cevrimdisiUfukGun: null, onay: kW.lisansNo });
+    const yUzunOnaysiz = await surum(portal.portal, cY, { imzaci: "KOK", imzaParolasi: TEST_KOK_PAROLASI, cevrimdisiUfukGun: 900 });
+    const yUzun = await surum(portal.portal, cY, { imzaci: "KOK", imzaParolasi: TEST_KOK_PAROLASI, cevrimdisiUfukGun: 900, onay: kW.lisansNo });
     kontrol("§7h uzun ufuk rotada: operatör 403 · yönetici onaysız 400 · yönetici + lisans no 201 (uzunUfuk)",
       opUzun.status === 403 && yUzunOnaysiz.status === 400 && yUzunOnaysiz.kod === "IKINCI_ONAY_GEREKLI" && yUzun.status === 201 && yUzun.veri.uzunUfuk === true,
       `${opUzun.status} / ${yUzunOnaysiz.status} ${yUzunOnaysiz.kod} / ${yUzun.status} ${yUzun.kod ?? ""}`);
-    const toplu = await portalIstek(portal.tailnet, "/portal/api/haklar/toplu-yeniden-bas", { cerez: cY, govde: { clientToken: randomUUID(), imzaParolasi: ARA_PAROLASI, sebep: "toplu", hakIdleri: [kW.hakId] } });
+    const toplu = await portalIstek(portal.portal, "/portal/api/haklar/toplu-yeniden-bas", { cerez: cY, govde: { clientToken: randomUUID(), imzaParolasi: ARA_PAROLASI, sebep: "toplu", hakIdleri: [kW.hakId] } });
     const sonuclar = (toplu.veri.sonuclar ?? []) as { durum: string; neden: string }[];
     kontrol("§7i toplu yeniden basım rotası: kurulum kaydı yetenek taşımadıkça ATLAR (kolon entegrasyonda bağlanır)", toplu.status === 201 && sonuclar.length === 1 && sonuclar[0]!.durum === "ATLANDI" && /hak-ara/.test(sonuclar[0]!.neden), `${toplu.status} ${JSON.stringify(sonuclar)}`);
 

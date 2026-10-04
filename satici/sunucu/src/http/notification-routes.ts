@@ -1,4 +1,4 @@
-// BİLDİRİMLER rotaları (satıcı portalı, tailnet + ERİŞİM): kanal durumu · son bildirimler (salt okuma, `bildirim:oku`) ·
+// BİLDİRİMLER rotaları (satıcı portalı, ERİŞİM): kanal durumu · son bildirimler (salt okuma, `bildirim:oku`) ·
 // deneme bildirimi (`bildirim:yonet`; giden kutusuna satır — gönderimi yan konteyner yapar, satıcı dışarı bağlanmaz).
 // Deneme GERÇEK e-posta/Telegram iletisi doğurur ve internetten (ERİŞİM) açıktır: kullanıcı başına 5 dk'da BİR.
 import { z } from "zod";

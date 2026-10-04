@@ -1,4 +1,4 @@
-// SATICI PORTALI — ham gövdeli/akışlı dağıtım uçları (/portal/api/ham; tailnet ve ERİŞİM). JSON rota tablosuna
+// SATICI PORTALI — ham gövdeli/akışlı dağıtım uçları (/portal/api/ham; ERİŞİM). JSON rota tablosuna
 // sığmaz (gövde ham bayt ya da yanıt dosya akışı) ama AYNI oturum + izin kapısından geçer
 // (`requirePortalSession`). CSRF: SameSite=Strict çerez + parça PUT'u özel başlık ister (form gönderemez).
 // ERİŞİM'de yalnız erisim-rotalari.ts `ERISIM_HAM_ROTALARI` bağlanır (opt-in); işleyiciler istek kapsamında koşar.

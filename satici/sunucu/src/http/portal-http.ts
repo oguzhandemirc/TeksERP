@@ -1,4 +1,4 @@
-// PORTAL HTTP ORTAK KATMANI — satıcı portalı (TAILNET ve ERİŞİM, /portal/api) ve bayi alt-portalı
+// PORTAL HTTP ORTAK KATMANI — satıcı portalı (ERİŞİM, /portal/api) ve bayi alt-portalı
 // (GENEL, /bayi/api) aynı yapıdan doğar: oturum (çerez httpOnly + SameSite=Strict), rota başına BEYANLI
 // izin, yazma rotalarında işlem kimliği (clientToken) ile idempotent eylem. Rota tabloları
 // (portal-routes.ts · dealer-routes.ts) veridir: bekçi her rotanın iznini ve kimlik beyanını ölçer.
@@ -115,16 +115,15 @@ export function readCookie(req: Request, name: string): string | undefined {
   return undefined;
 }
 
-function cookieHeader(ctx: VendorContext, listener: PortalListener, value: string, maxAgeSec: number): string {
+function cookieHeader(listener: PortalListener, value: string, maxAgeSec: number): string {
   // GENEL ve ERİŞİM yalnız HTTPS'ten (Cloudflare) gelir: çerez her zaman Secure.
-  const secure = listener !== "TAILNET" || ctx.config.TAILNET_CEREZ_GUVENLI === "1";
   return [
     `${SESSION_COOKIE[listener]}=${value}`,
     `Path=${SESSION_COOKIE_PATH[listener]}`,
     `Max-Age=${maxAgeSec}`,
     "HttpOnly",
     "SameSite=Strict",
-    ...(secure ? ["Secure"] : []),
+    "Secure",
   ].join("; ");
 }
 
@@ -163,7 +162,7 @@ export async function requirePortalSession(ctx: VendorContext, listener: PortalL
   const { req, res } = http;
   const session = await resolveSession(ctx, { listener, token: readCookie(req, SESSION_COOKIE[listener]) });
   if (!session) {
-    res.append("Set-Cookie", cookieHeader(ctx, listener, "", 0));
+    res.append("Set-Cookie", cookieHeader(listener, "", 0));
     throw new VendorError(401, "OTURUM_YOK", "Oturum yok ya da süresi doldu; yeniden giriş yapın");
   }
   if (permission && !roleHas(session.user.rol, permission)) throw new VendorError(403, "YETKISIZ", "Bu işlem için yetkiniz yok");
@@ -281,7 +280,7 @@ export function createPortalRouter(ctx: VendorContext, listener: PortalListener,
   router.use(jsonOnlyWrites);
   router.use(express.json({ limit: "64kb", strict: true }));
   // Vekil başlığı yalnız Cloudflare arkasındaki dinleyicilerde (GENEL · ERİŞİM) ve yalnız güvenilen vekilden gelen bağlantıda okunur.
-  const trust = listener === "TAILNET" ? proxyTrustFrom({ VEKIL_IP_BASLIGI: undefined, GUVENILIR_VEKIL_AGLARI: [], IC_VEKIL_AGLARI: [] }) : proxyTrustFrom(ctx.config);
+  const trust = proxyTrustFrom(ctx.config);
   const scoped = (key: string, fn: (req: Request, res: Response) => Promise<void>): RequestHandler => scopedHandler(listener, key, fn);
 
   if (bind("POST /oturum/ac")) {
@@ -291,7 +290,7 @@ export function createPortalRouter(ctx: VendorContext, listener: PortalListener,
       scoped("POST /oturum/ac", async (req, res) => {
         const body = parseStrict(LoginSchema, req.body ?? {});
         const { token, session } = await login(ctx, { listener, username: body.kullaniciAdi, password: body.parola, totp: body.totp });
-        res.append("Set-Cookie", cookieHeader(ctx, listener, token, ctx.config.PORTAL_OTURUM_AZAMI_SAAT * 3600));
+        res.append("Set-Cookie", cookieHeader(listener, token, ctx.config.PORTAL_OTURUM_AZAMI_SAAT * 3600));
         res.status(200).json({ success: true, data: sessionView(session) });
       }),
     );
@@ -305,7 +304,7 @@ export function createPortalRouter(ctx: VendorContext, listener: PortalListener,
       scoped("POST /oturum/kapat", async (req, res) => {
         const session = await resolveSession(ctx, { listener, token: readCookie(req, SESSION_COOKIE[listener]) });
         if (session) await logout(session);
-        res.append("Set-Cookie", cookieHeader(ctx, listener, "", 0));
+        res.append("Set-Cookie", cookieHeader(listener, "", 0));
         res.json({ success: true, data: null });
       }),
     );

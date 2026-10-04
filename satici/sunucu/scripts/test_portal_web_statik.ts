@@ -1,12 +1,14 @@
 // =============================================================================
 // PORTAL WEB STATİK SERVİSİ — derlenmiş `satici/web` arayüzü API ile aynı kökenden sunulur ve
-// ROL × DİNLEYİCİ ayrımı korunur: satıcı arayüzü yalnız TAILNET'te `/portal` (tailnet kapısının
-// ARKASINDA), bayi arayüzü yalnız GENEL'de `/bayi`; bir dinleyici ötekinin arayüzünü hiç sunmaz.
+// ROL × DİNLEYİCİ ayrımı korunur: satıcı arayüzü yalnız ERİŞİM'de `/portal` (Access JWT kapısının
+// ARKASINDA; JWT'siz 404), bayi arayüzü yalnız GENEL'de `/bayi`; bir dinleyici ötekinin arayüzünü hiç sunmaz.
 // `/api` altı HTML'e düşmez (bilinmeyen uç JSON 404, oturumsuz uç 401 kalır); istemci yönlendirmesi
 // uzantısız yolda giriş HTML'ini alır, eksik varlık 404; dizin dışına çıkılamaz; güvenlik başlıkları
 // (CSP, çerçeve yasağı) her yanıtta; derlenmemiş arayüz 404 döner, API çalışır.
 // ⭐ KALICI SONDA ✓K (her koşumda): §2a/§2b/§4a doğru dinleyicide arayüz GERÇEKTEN sunulur (her
 //    şeyi 404'leyen kör bir servis de "sızmıyor" yeşili verirdi).
+// NEGATİF SONDA (tünel kapatma T1, 2026-10-05, cp + shasum ile geri alındı): access-app'ten `requireAccessJwt` çıkarıldı →
+//   §1f · §1j · §4a ❌ (JWT'siz arayüz 200).
 // Koşum: npx tsx scripts/test_portal_web_statik.ts   (DB sorgusu yok)
 // =============================================================================
 import http from "node:http";
@@ -18,12 +20,13 @@ import { loadConfig } from "../src/config";
 import { KeyStore } from "../src/keys/key-store";
 import { ActivationCodeHasher } from "../src/keys/code-pepper";
 import { createPublicApp } from "../src/http/public-app";
-import { createTailnetApp } from "../src/http/tailnet-app";
+import { createAccessApp } from "../src/http/access-app";
+import { createAccessVerifier } from "../src/http/access-jwt";
 import { PortalSecretBox } from "../src/portal/secret-box";
 import { ModuleKeyVault } from "../src/keys/module-vault";
 import type { VendorContext } from "../src/services/context";
 import { fiksturKur } from "../../../Teks-Erp/scripts/lib/lisans-fikstur";
-import { kontrol, sonuc } from "./lib/test-ortam";
+import { ERISIM_BASLIGI, erisimJetonu, erisimOrtami, kontrol, sonuc } from "./lib/test-ortam";
 
 interface Ham {
   readonly status: number;
@@ -32,9 +35,9 @@ interface Ham {
 }
 
 /** Ham yol (fetch `..` ve `%2e%2e`yi normalleştirir; kaçış denemesi olduğu gibi gitmeli). */
-function iste(port: number, yol: string, method = "GET"): Promise<Ham> {
+function iste(port: number, yol: string, method = "GET", headers: Record<string, string> = {}): Promise<Ham> {
   return new Promise((resolve, reject) => {
-    const req = http.request({ host: "127.0.0.1", port, path: yol, method }, (res) => {
+    const req = http.request({ host: "127.0.0.1", port, path: yol, method, headers }, (res) => {
       let body = "";
       res.setEncoding("utf8");
       res.on("data", (c: string) => (body += c));
@@ -67,8 +70,14 @@ async function main(): Promise<void> {
 
   const f = fiksturKur(Date.now());
   writeFileSync(path.join(kok, "capa.json"), JSON.stringify(f.kokler));
-  // Bekçi 127.0.0.1'den bağlanır: geri döngü tailnet kaynağı sayılsın (kapının kendisi test_tailnet_kapisi'nde).
-  const taban = { DATABASE_URL: "postgresql://x@127.0.0.1:1/x_test", ANAHTAR_DIZINI: kok, GUVEN_CAPASI_DOSYASI: path.join(kok, "capa.json"), TAILNET_LOOPBACK: "1" };
+  // Satıcı arayüzü ERİŞİM uygulamasından: düzeneğin Access doğrulayıcısı + geçerli JWT (kapının kendisi test_erisim_kapisi'nde).
+  const taban = { DATABASE_URL: "postgresql://x@127.0.0.1:1/x_test", ANAHTAR_DIZINI: kok, GUVEN_CAPASI_DOSYASI: path.join(kok, "capa.json") };
+  const o = erisimOrtami();
+  const verifier = createAccessVerifier({ CF_ACCESS_TAKIM_ALANI: o.CF_ACCESS_TAKIM_ALANI, CF_ACCESS_AUD: o.CF_ACCESS_AUD, CF_ACCESS_JWKS_DOSYASI: o.CF_ACCESS_JWKS_DOSYASI });
+  if (!verifier) throw new Error("ERİŞİM düzeneği kurulamadı");
+  const JWT = { [ERISIM_BASLIGI]: erisimJetonu() };
+  /** ERİŞİM dinleyicisine JWT'li istek (Cloudflare Access'in eklediği başlık). */
+  const ie = (port: number, yol: string, method = "GET"): Promise<Ham> => iste(port, yol, method, JWT);
   const baglam = (webDizini: string): VendorContext => {
     const config = loadConfig({ ...taban, PORTAL_WEB_DIZINI: webDizini });
     return { config, keys: KeyStore.load(config), portalSecrets: PortalSecretBox.load(kok, { create: true }), codeHasher: ActivationCodeHasher.load(kok, { create: true }), moduleVault: ModuleKeyVault.load(kok, { create: true }) };
@@ -79,25 +88,25 @@ async function main(): Promise<void> {
 
   process.env.SATICI_ERISIM_GUNLUGU = "0";
   const ctx = baglam(dist);
-  let tailnetAdresi: AddressInfo | null = null;
-  const tailnetApp = createTailnetApp(ctx, null, () => tailnetAdresi);
-  const tailnet = http.createServer(tailnetApp);
-  const yanlisSoket = http.createServer(tailnetApp);
+  let erisimAdresi: AddressInfo | null = null;
+  const erisimApp = createAccessApp(ctx, { listener: () => erisimAdresi, verifier });
+  const erisim = http.createServer(erisimApp);
+  const yanlisSoket = http.createServer(erisimApp);
   const genel = http.createServer(createPublicApp(ctx, null));
   const eksikCtx = baglam(path.join(kok, "yok"));
   let eksikAdres: AddressInfo | null = null;
-  const eksikTailnet = http.createServer(createTailnetApp(eksikCtx, null, () => eksikAdres));
+  const eksikErisim = http.createServer(createAccessApp(eksikCtx, { listener: () => eksikAdres, verifier }));
   const eksikGenel = http.createServer(createPublicApp(eksikCtx, null));
   try {
-    tailnetAdresi = await listen(tailnet);
-    const t = tailnetAdresi.port;
+    erisimAdresi = await listen(erisim);
+    const t = erisimAdresi.port;
     const y = (await listen(yanlisSoket)).port;
     const g = (await listen(genel)).port;
-    eksikAdres = await listen(eksikTailnet);
+    eksikAdres = await listen(eksikErisim);
     const eg = (await listen(eksikGenel)).port;
 
-    console.log("\n§1 tailnet: satıcı arayüzü, kapının arkasında");
-    const ana = await iste(t, "/portal/");
+    console.log("\n§1 ERİŞİM: satıcı arayüzü, Access kapısının arkasında");
+    const ana = await ie(t, "/portal/");
     kontrol("§1a ✓K /portal/ → 200 satıcı arayüzü", ana.status === 200 && ana.body.includes(SATICI_ISARET), `${ana.status}`);
     const csp = String(ana.headers["content-security-policy"] ?? "");
     kontrol(
@@ -106,26 +115,28 @@ async function main(): Promise<void> {
         ana.headers["x-frame-options"] === "DENY" && ana.headers["x-content-type-options"] === "nosniff" && ana.headers["cache-control"] === "no-store",
       csp,
     );
-    const derin = await iste(t, "/portal/kurulumlar/5b0c6a4e-0000-4000-8000-000000000000");
-    const kok0 = await iste(t, "/portal");
+    const derin = await ie(t, "/portal/kurulumlar/5b0c6a4e-0000-4000-8000-000000000000");
+    const kok0 = await ie(t, "/portal");
     kontrol("§1c istemci yönlendirmesi: derin bağlantı ve /portal → giriş HTML'i", derin.status === 200 && derin.body.includes(SATICI_ISARET) && kok0.status === 200 && kok0.body.includes(SATICI_ISARET), `${derin.status} ${kok0.status}`);
-    const varlik = await iste(t, "/portal/assets/uygulama-a1b2.js");
+    const varlik = await ie(t, "/portal/assets/uygulama-a1b2.js");
     kontrol("§1d özetli varlık → 200 + değişmez önbellek", varlik.status === 200 && String(varlik.headers["cache-control"]).includes("immutable"), `${varlik.status} ${String(varlik.headers["cache-control"])}`);
-    const eksikVarlik = await iste(t, "/portal/assets/olmayan-9999.js");
+    const eksikVarlik = await ie(t, "/portal/assets/olmayan-9999.js");
     kontrol("§1e eksik varlık → 404 (HTML'e düşmez)", eksikVarlik.status === 404 && !eksikVarlik.body.includes(SATICI_ISARET), `${eksikVarlik.status}`);
-    const apiYok = await iste(t, "/portal/api/olmayan-uc");
-    const apiOturum = await iste(t, "/portal/api/pano");
+    const apiYok = await ie(t, "/portal/api/olmayan-uc");
+    const apiOturum = await ie(t, "/portal/api/pano");
     kontrol(
       "§1f /portal/api altı HTML'e düşmez: bilinmeyen uç JSON 404, oturumsuz uç JSON 401",
       apiYok.status === 404 && apiYok.body.includes('"BULUNAMADI"') && apiOturum.status === 401 && apiOturum.body.includes('"OTURUM_YOK"'),
       `${apiYok.status} ${apiOturum.status}`,
     );
-    const post = await iste(t, "/portal/kurulumlar", "POST");
+    const post = await ie(t, "/portal/kurulumlar", "POST");
     kontrol("§1g arayüz yolunda GET dışı → 404", post.status === 404 && !post.body.includes(SATICI_ISARET), `${post.status}`);
-    const tailnetBayi = [await iste(t, "/bayi/"), await iste(t, "/bayi/bayi.html"), await iste(t, "/bayi/assets/bayi-c3d4.js")];
-    kontrol("§1h tailnet dinleyicisi bayi arayüzünü SUNMAZ", tailnetBayi.every((r) => r.status === 404 && !r.body.includes(BAYI_ISARET)), tailnetBayi.map((r) => r.status).join(","));
-    const yanlis = await iste(y, "/portal/");
-    kontrol("§1i aynı uygulama BAŞKA sokette → 404 (arayüz tailnet kapısının arkasında)", yanlis.status === 404 && !yanlis.body.includes(SATICI_ISARET), `${yanlis.status}`);
+    const erisimBayi = [await ie(t, "/bayi/"), await ie(t, "/bayi/bayi.html"), await ie(t, "/bayi/assets/bayi-c3d4.js")];
+    kontrol("§1h ERİŞİM dinleyicisi bayi arayüzünü SUNMAZ (JWT'li istekte de)", erisimBayi.every((r) => r.status === 404 && !r.body.includes(BAYI_ISARET)), erisimBayi.map((r) => r.status).join(","));
+    const yanlis = await ie(y, "/portal/");
+    kontrol("§1i aynı uygulama BAŞKA sokette → 404 (JWT'li istekte de; soket koşulu okunuyor)", yanlis.status === 404 && !yanlis.body.includes(SATICI_ISARET), `${yanlis.status}`);
+    const jwtsiz = [await iste(t, "/portal/"), await iste(t, "/portal/assets/uygulama-a1b2.js"), await iste(t, "/portal/kurulumlar")];
+    kontrol("§1j JWT'siz istek arayüzü, varlığı ve derin bağlantıyı ALAMAZ → 404", jwtsiz.every((r) => r.status === 404 && !r.body.includes(SATICI_ISARET)), jwtsiz.map((r) => r.status).join(","));
 
     console.log("\n§2 genel: bayi arayüzü");
     const bayi = await iste(g, "/bayi/");
@@ -143,23 +154,23 @@ async function main(): Promise<void> {
       await iste(g, "/bayi/%2e%2e/portal/portal.html"),
       await iste(g, "/bayi/..%2f..%2fgizli.txt"),
       await iste(g, "/bayi/%2e%2e%2f%2e%2e%2fgizli.txt"),
-      await iste(t, "/portal/..%2f..%2fgizli.txt"),
+      await ie(t, "/portal/..%2f..%2fgizli.txt"),
     ];
     kontrol(
       "§3a kodlanmış '..' ile öteki uygulamaya ya da dist dışına ulaşılamaz",
       kacis.every((r) => r.status !== 200 || (!r.body.includes(SATICI_ISARET) && !r.body.includes(GIZLI_ISARET))) && kacis.every((r) => !r.body.includes(GIZLI_ISARET)),
       kacis.map((r) => r.status).join(","),
     );
-    const nokta = await iste(t, "/portal/.env");
+    const nokta = await ie(t, "/portal/.env");
     kontrol("§3b nokta dosyası sunulmaz", !nokta.body.includes("GIZLI=1"), `${nokta.status}`);
 
     console.log("\n§4 derlenmemiş arayüz");
-    const eksikPortal = await iste(eksikAdres.port, "/portal/");
-    const eksikApi = await iste(eksikAdres.port, "/portal/api/pano");
+    const eksikPortal = await ie(eksikAdres.port, "/portal/");
+    const eksikApi = await ie(eksikAdres.port, "/portal/api/pano");
     const eksikBayi = await iste(eg, "/bayi/");
     kontrol("§4a ✓K arayüz yoksa /portal ve /bayi → 404, API yine yanıt verir (401)", eksikPortal.status === 404 && eksikBayi.status === 404 && eksikApi.status === 401, `${eksikPortal.status} ${eksikBayi.status} ${eksikApi.status}`);
   } finally {
-    for (const s of [tailnet, yanlisSoket, genel, eksikTailnet, eksikGenel]) {
+    for (const s of [erisim, yanlisSoket, genel, eksikErisim, eksikGenel]) {
       s.closeAllConnections();
       await new Promise<void>((r) => s.close(() => r()));
     }

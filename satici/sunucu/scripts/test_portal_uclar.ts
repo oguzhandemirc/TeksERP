@@ -276,6 +276,14 @@ async function main(): Promise<void> {
     kontrol("§1i listeler süzmeyle dolu (müşteri araması · ETKİN kurulum araması)", ((liste.veri.items as unknown[]) ?? []).length === 1 && ((kurulumListe.veri.items as unknown[]) ?? []).length === 1);
     const pano = await s("get", "/pano", "/pano", 200);
     kontrol("§1j pano sayıları", typeof pano.veri.acikKopyaUyarisi === "number" && typeof pano.veri.kurulumlar === "object");
+    const saglik = await s("get", "/saglik", "/saglik", 200);
+    const saglikAnahtar = saglik.veri.anahtarlar as { altGecerli?: unknown } | undefined;
+    kontrol(
+      "§1j2 sağlık özeti (pano kartı): zil · anahtarlar · denetim yazma hatası · erişim kipi; sır yok (anahtar/JWKS/PEM)",
+      typeof saglik.veri.zil === "object" && typeof saglikAnahtar?.altGecerli === "number" && typeof saglik.veri.denetimYazmaHatasi === "number" && typeof (saglik.veri.erisim as { kip?: unknown })?.kip === "string" &&
+        !/"n"|"d"|BEGIN|PRIVATE|parola/i.test(JSON.stringify(saglik.veri)),
+      JSON.stringify(saglik.veri).slice(0, 160),
+    );
 
     console.log("\n§2 bayi · kullanıcı · denetim · anahtar");
     const bayi = await s("post", "/bayiler", "/bayiler", 201, { ad: "Uçlar Bayi", tavan: { moduller: ["production.enabled"], siniflar: ["URETIM"], kurulumAdedi: 3 }, sebep: "sözleşme" });

@@ -31,7 +31,7 @@ const classList = z
   .refine((list) => list.length > 0 && list.every((x) => (LICENSE_CLASSES as readonly string[]).includes(x)), `Sınıf listesi yalnız ${LICENSE_CLASSES.join(" · ")} taşır`)
   .transform((list) => list as LicenseClass[]);
 
-/** Tailnet dinleyicisi joker adrese bağlanamaz: portal internete açılmasın. */
+/** İç API ve ERİŞİM dinleyicileri joker adrese bağlanamaz: yalnız kendi ağ arayüzlerinde dinlerler. */
 const WILDCARD_ADDRESSES = new Set(["0.0.0.0", "::", "[::]", "*", ""]);
 
 /** Cloudflare Access takım alanı: JWKS ve `iss` bu alandan türer, yalnız `<takım>.cloudflareaccess.com` kabul edilir. */
@@ -54,11 +54,6 @@ const EnvSchema = z.object({
   DATABASE_URL: z.string().min(1),
   PORT_GENEL: port.default(4610),
   GENEL_BIND: z.string().min(1).default("127.0.0.1"),
-  TAILNET_BIND: z
-    .string()
-    .default("127.0.0.1")
-    .refine((v) => !WILDCARD_ADDRESSES.has(v.trim()), "TAILNET_BIND joker adres olamaz (0.0.0.0 / ::)"),
-  PORT_TAILNET: port.default(4611),
   ANAHTAR_DIZINI: z.string().min(1).default("anahtarlar"),
   /** Derlenmiş web arayüzü (`satici/web` → `dist/portal` · `dist/bayi`); yoksa arayüz 404, API çalışır. */
   PORTAL_WEB_DIZINI: z.string().min(1).default("../web/dist"),
@@ -100,8 +95,6 @@ const EnvSchema = z.object({
    * güven kararı X-Forwarded-For'un SON halkasına (iç vekilin gördüğü adres) göre verilir. Boş = iç vekil yok.
    */
   IC_VEKIL_AGLARI: cidrList.default([]),
-  /** Geri döngü (127.0.0.0/8 · ::1) yalnız "1" iken tailnet kaynağı sayılır (Tailscale kurulana dek SSH tüneli için). */
-  TAILNET_LOOPBACK: z.enum(["0", "1"]).default("0"),
   /** İmza parolası (kök/bayi): kullanıcı başına ardışık hata eşiği ve kilit süresi (dk). */
   IMZA_PAROLA_ESIGI: positiveInt(3, 50).default(5),
   IMZA_KILIT_DK: positiveInt(1, 24 * 60).default(15),
@@ -121,8 +114,6 @@ const EnvSchema = z.object({
   /** Denetim budaması (günlük; denetim defter değil ayak izidir): başarısız giriş satırları ve diğer denetim (gün). */
   DENETIM_GIRIS_SAKLAMA_GUN: positiveInt(30, 3650).default(90),
   DENETIM_SAKLAMA_GUN: positiveInt(365, 3650).default(730),
-  /** Tailnet çerezine Secure: yalnız tailnet dinleyicisi HTTPS arkasındaysa "1" (genel dinleyicide her zaman Secure). */
-  TAILNET_CEREZ_GUVENLI: z.enum(["0", "1"]).default("0"),
   /** İÇ API dinleyicisi (patron bulutu → satıcı, `/ic/v1/*`): docker iç ağındaki kendi adresi ya da geri döngü. */
   PORT_IC: port.default(4612),
   IC_BIND: z

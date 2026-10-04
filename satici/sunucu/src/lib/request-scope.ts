@@ -5,10 +5,10 @@
 // Okuyucular: imza boğazı (keys/signing-scope.ts — kapsamsız imza RED) ve denetim (lib/audit.ts — ERİŞİM satırına e-posta).
 import { AsyncLocalStorage } from "node:async_hooks";
 
-export type ScopeOrigin = "TAILNET" | "ERISIM" | "GENEL" | "CLI";
+export type ScopeOrigin = "ERISIM" | "GENEL" | "CLI";
 /** Dinleyici kökenleri — sunucu kodunun kurabildiği TEK kapsamlar (CLI hariç). */
 export type ListenerOrigin = Exclude<ScopeOrigin, "CLI">;
-const LISTENER_ORIGINS: readonly ListenerOrigin[] = ["TAILNET", "ERISIM", "GENEL"];
+const LISTENER_ORIGINS: readonly ListenerOrigin[] = ["ERISIM", "GENEL"];
 
 export interface RequestScope {
   readonly origin: ScopeOrigin;

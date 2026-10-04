@@ -72,11 +72,12 @@ export const ASAMA_2 = [
     const kotu = Object.entries(bek).filter(([k, v]) => m[k] !== v).map(([k, v]) => `${k}=${m[k] ?? 'yok'} (beklenen ${v})`);
     return kotu.length ? s(I, kotu.join(', ')) : s(U);
   } },
-  { no: '2.6', ad: 'dinleyiciler: genel · tailnet · iç API açık', kos: (ag) => ag.ssh(`docker logs --tail 300 ${SATICI_KONTEYNER}`), degerlendir: (r) => {
+  { no: '2.6', ad: 'dinleyiciler: genel · iç API açık, tünel dinleyicisi YOK', kos: (ag) => ag.ssh(`docker logs --tail 300 ${SATICI_KONTEYNER}`), degerlendir: (r) => {
     const u = uzakSonuc(r);
     if (u) return u;
     const satir = `${r.cikti}\n${r.hata}`.split('\n').filter((l) => l.includes('SATICI_DINLIYOR')).pop();
     if (!satir) return s(O, 'SATICI_DINLIYOR satırı son 300 satırda yok');
+    if (/tailnet=/.test(satir)) return s(I, `tünel dinleyicisi açık (eski imaj): ${satir.trim()}`);
     return /ic=4612/.test(satir) ? s(U, satir.trim()) : s(I, `iç API kapalı: ${satir.trim()}`);
   } },
   { no: '2.7', ad: 'internetten /saglik 200', kos: (ag, g) => ag.http(`${g.saticiKok}/saglik`), degerlendir: (r) => httpSonuc(r) ?? (r.json?.success === true ? s(U) : s(I, 'gövde success:true değil')) },

@@ -3,13 +3,15 @@
 // (sözleşme PATRON-BULUTU-ESITLEME §17). Kapı FAIL-CLOSED ve üç koşullu: iç dinleyicinin soketi + kaynak
 // ağı (IC_KAYNAK_AGLARI; yoksa yalnız geri döngü) → değilse 404 · Bearer ortak sır (dosyadan, sabit zamanlı)
 // → değilse 401 IC_KIMLIK_GECERSIZ. Sır yoksa/zayıfsa/herkese açıksa iç dinleyici HİÇ AÇILMAZ. Genel ve
-// tailnet dinleyicileri /ic/* yolunu bilmez (404). Kimlik = portalda doğan LİSANS kimliği (D14); satıcı DB
+// ERİŞİM (satıcı portalı) dinleyicileri /ic/* yolunu bilmez (404). Kimlik = portalda doğan LİSANS kimliği (D14); satıcı DB
 // kimliği eşleşmez. Yanıt ALLOWLIST (katı şema): müşteri/lisans no/parmak izi/öteki modüller ÇIKMAZ.
 // Zil: konu yalnız {gelen-kutusu, rapor, ozet}; hedef tesisin ETKİN ÜRETİM kurulumları; kurulum başına hız
 // sınırı. Çağrılar denetime SAYAÇLA (pencere başına tek satır) yazılır.
 // ⭐ KALICI SONDA ✓K3 (her koşumda): katı şema sentetik fazla üst alanı, tesis altındaki fazla alanı ve
 //    patron-bulut dışı modülü REDDEDER (§3b–§3d) — ve doğru yanıtı GEÇİRİR (§3a); kapı doğru soket + kaynak +
 //    sırla GEÇİRİR (§4c, §5a; her şeyi reddeden kör kapı da 404/401 yeşili verirdi).
+// NEGATİF SONDA (tünel kapatma T1, 2026-10-05, cp + shasum ile geri alındı): `portalFetch` JWT eklemedi → §6i ❌ (canlı 404 —
+//   /ic/* 404'ü kapıdan değil yönlendirmeden geliyor).
 // Koşum: npx tsx scripts/test_ic_api.ts
 // =============================================================================
 import { randomBytes } from "node:crypto";
@@ -32,6 +34,7 @@ import {
   kapat,
   kontrol,
   kurulumFiksturu,
+  portalFetch,
   sonuc,
   sunucuBaslat,
   temizleKurulumlar,
@@ -51,7 +54,8 @@ interface Cevap {
 }
 
 async function istek(url: string, g: { yontem?: string; bearer?: string | null; govde?: unknown } = {}): Promise<Cevap> {
-  const r = await fetch(url, {
+  // portalFetch: düzeneğin ERİŞİM adresine Access JWT'si eklenir (404 kapıdan değil yönlendirmeden gelsin); diğerlerine dokunmaz.
+  const r = await portalFetch(url, {
     method: g.yontem ?? "GET",
     headers: {
       ...(g.bearer ? { Authorization: `Bearer ${g.bearer}` } : {}),
@@ -188,6 +192,8 @@ async function main(): Promise<void> {
   birimSondalari(ortam, sir);
 
   const kapali = await sunucuBaslat(ortam);
+  // Uyarı stderr'de, dinleme satırı stdout'ta: iki akışın varış sırası garanti değil — uyarıyı en çok 2 sn bekle.
+  for (let i = 0; i < 40 && !/iç API KAPALI/.test(kapali.cikti()); i++) await new Promise((r) => setTimeout(r, 50));
   kontrol("§1k ✓ sır dosyası verilmeyen sunucu iç dinleyiciyi AÇMAZ (ic=kapali)", kapali.ic === null && /iç API KAPALI/.test(kapali.cikti()));
   await kapali.durdur();
   const sunucu = await sunucuBaslat(ortam, { IC_API_BELIRTEC_DOSYASI: sirYolu, IC_ZIL_HIZ_DK: "2" });
@@ -239,9 +245,14 @@ async function main(): Promise<void> {
     const genel = await istek(`${sunucu.genel}/ic/v1/kurulum/${bulut.kurulumId}`, { bearer: sir });
     const genelZil = await istek(`${sunucu.genel}/ic/v1/zil`, { yontem: "POST", bearer: sir, govde: { v: 1, tesisId: bulut.tesisId, konu: "rapor" } });
     kontrol("§6h genel dinleyicide /ic/* → 404 (GET + POST)", genel.status === 404 && genelZil.status === 404, `${genel.status} ${genelZil.status}`);
-    const tailnet = await istek(`${sunucu.tailnet}/ic/v1/kurulum/${bulut.kurulumId}`, { bearer: sir });
-    const tailnetPortal = await istek(`${sunucu.tailnet}/portal/api/ic/v1/kurulum/${bulut.kurulumId}`, { bearer: sir });
-    kontrol("§6i tailnet portalında /ic/* → 404", tailnet.status === 404 && tailnetPortal.status !== 200, `${tailnet.status} ${tailnetPortal.status}`);
+    const erisim = await istek(`${sunucu.portal}/ic/v1/kurulum/${bulut.kurulumId}`, { bearer: sir });
+    const erisimPortal = await istek(`${sunucu.portal}/portal/api/ic/v1/kurulum/${bulut.kurulumId}`, { bearer: sir });
+    const erisimCanli = await istek(`${sunucu.portal}/portal/api/oturum`);
+    kontrol(
+      "§6i ERİŞİM portalında (geçerli Access JWT ile) /ic/* → 404; aynı JWT portal ucunda kapıyı geçer (401 — 404 kapıdan gelmiyor)",
+      erisim.status === 404 && erisimPortal.status !== 200 && erisimCanli.status === 401,
+      `${erisim.status} ${erisimPortal.status} · canlı ${erisimCanli.status}`,
+    );
 
     console.log("\n§7 zil — konu allowlist'i, hedef, kurulum başına hız sınırı");
     const zil = await zilAboneOl(sunucu.genel, { kurulumId: bulut.kurulumId, anahtar });

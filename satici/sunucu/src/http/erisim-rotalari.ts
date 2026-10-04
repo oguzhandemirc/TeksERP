@@ -13,6 +13,7 @@ export const ERISIM_PORTAL_ROTALARI: ReadonlySet<string> = new Set([
   "POST /oturum/parola",
   // okuma
   "GET /pano",
+  "GET /saglik", // sistem sağlığı kartı (sayı ve durum; sır yok)
   "GET /katalog",
   "GET /musteriler",
   "GET /musteriler/:id",

@@ -1,15 +1,17 @@
 // =============================================================================
-// PORTAL — ROL / DİNLEYİCİ AYRIMI. Satıcı rolleri (YÖNETİCİ · OPERATÖR) YALNIZ tailnet dinleyicisinden,
+// PORTAL — ROL / DİNLEYİCİ AYRIMI. Satıcı rolleri (YÖNETİCİ · OPERATÖR) YALNIZ ERİŞİM dinleyicisinden (Access),
 // BAYI YALNIZ genel dinleyiciden girer; oturum doğduğu dinleyiciye bağlıdır (çerez adı + DB);
 // uymayan hesap bilinmeyen hesap gibi davranır (aynı ileti, sayaç DEĞİŞMEZ — internetten satıcı
 // hesabı kilitlenemez). İzinler tek kaynaktan (roles.ts); bayi yalnız kendi müşterisini görür.
 //   §1 STATİK: rota tabloları — her rota tanımlı bir izin taşır · satıcı tablosunda BAYI izni yok ·
 //      bayi tablosunda yalnız BAYI izni · her yazma işlem kimliğiyle idempotent (ya da gerekçeli muaf)
-//      · yöntem+yol tekil · dinleyici rol kümeleri ayrık
+//      · yöntem+yol tekil · dinleyici rol kümeleri ayrık · rol tablosunda emekli TAILNET anahtarı YOK
 //   §2–§5 ÇALIŞMA: gerçek HTTP (süreç içi iki dinleyici, kendi `_test` DB'si)
 // ⭐ KALICI SONDA ✓K3 (her koşumda): (1) §1 çözümleyicisi sentetik bozuk tabloda ısırır (satıcı
 //    rotasında bayi izni · kimliksiz yazma · tekrar eden yol) · (2) operatör izinli işi YAPAR (201)
 //    — 403'ler kör bir kapıdan gelmiyor · (3) bayi kendi müşterisini GÖRÜR.
+// NEGATİF SONDA (tünel kapatma T1, 2026-10-05, cp + shasum ile geri alındı): düzenek Access JWT'si eklemedi → satıcı girişi
+//   404, bekçi çöktü (§2–§5 ERİŞİM'den gerçekten geçiyor).
 // Koşum: npx tsx scripts/test_portal_rol_dinleyici.ts
 // =============================================================================
 import { randomUUID } from "node:crypto";
@@ -52,7 +54,7 @@ export function routeTableFindings(vendor: readonly PortalRouteDef[], dealer: re
       if (r.method === "get" && r.kimlik !== "OKUMA") out.push(`${name}: ${key} okuma rotası OKUMA beyanı taşımıyor`);
     }
   };
-  check(vendor, "satici", (roles) => roles.length > 0 && roles.every((x) => LISTENER_ROLES.TAILNET.includes(x)));
+  check(vendor, "satici", (roles) => roles.length > 0 && roles.every((x) => LISTENER_ROLES.ERISIM.includes(x)));
   check(dealer, "bayi", (roles) => roles.length > 0 && roles.every((x) => LISTENER_ROLES.GENEL.includes(x)));
   return out;
 }
@@ -62,8 +64,10 @@ async function main(): Promise<void> {
   const bulgular = routeTableFindings(VENDOR_PORTAL_ROUTES, DEALER_PORTAL_ROUTES);
   kontrol("§1a tablolar dolu", VENDOR_PORTAL_ROUTES.length >= 40 && DEALER_PORTAL_ROUTES.length >= 10, `${VENDOR_PORTAL_ROUTES.length} + ${DEALER_PORTAL_ROUTES.length}`);
   kontrol("§1b her rota: tanımlı izin · dinleyicisine ait rol · yazmada işlem kimliği · tekil yol", bulgular.length === 0, bulgular.join(" | "));
-  const ayrik = LISTENER_ROLES.TAILNET.every((r) => !LISTENER_ROLES.GENEL.includes(r));
-  kontrol("§1c dinleyici rol kümeleri ayrık (TAILNET ∩ GENEL = ∅)", ayrik && LISTENER_ROLES.GENEL.length > 0);
+  const ayrik = LISTENER_ROLES.ERISIM.every((r) => !LISTENER_ROLES.GENEL.includes(r));
+  kontrol("§1c dinleyici rol kümeleri ayrık (ERISIM ∩ GENEL = ∅)", ayrik && LISTENER_ROLES.GENEL.length > 0 && LISTENER_ROLES.ERISIM.length > 0);
+  const anahtarlar = Object.keys(LISTENER_ROLES).sort();
+  kontrol("§1c2 rol tablosu yalnız ERISIM + GENEL (emekli TAILNET'e rol YOK)", JSON.stringify(anahtarlar) === JSON.stringify(["ERISIM", "GENEL"]), anahtarlar.join(","));
   const saticiBayiIzni = VENDOR_PORTAL_ROUTES.filter((r) => (PORTAL_PERMISSIONS[r.permission] as readonly string[]).includes("BAYI"));
   kontrol("§1d satıcı tablosunda BAYI'ya açık rota yok", saticiBayiIzni.length === 0, saticiBayiIzni.map((r) => r.path).join(","));
   const bozuk: PortalRouteDef[] = [
@@ -94,10 +98,10 @@ async function main(): Promise<void> {
   try {
     const yonetici = await ac("SATICI_YONETICI");
     const operator = await ac("SATICI_OPERATOR");
-    const yGiris = await portalGiris(sunucu.tailnet, "/portal/api", yonetici);
+    const yGiris = await portalGiris(sunucu.portal, "/portal/api", yonetici);
     const yCerez = yGiris.cerez!;
     const bayiAc = async (ad: string) => {
-      const r = await portalIstek(sunucu.tailnet, "/portal/api/bayiler", {
+      const r = await portalIstek(sunucu.portal, "/portal/api/bayiler", {
         cerez: yCerez,
         govde: { clientToken: randomUUID(), ad, tavan: { moduller: ["production.enabled"], siniflar: ["URETIM"], kurulumAdedi: 5 }, sebep: "bekçi bayisi" },
       });
@@ -120,12 +124,12 @@ async function main(): Promise<void> {
       `${saticiGenelde.status}`,
     );
     kontrol("§2b genelden satıcı denemesi hata sayacını ARTIRMAZ ve adımı TÜKETMEZ", opSatir.basarisizGiris === 0 && opSatir.totpSonAdim === null, `${opSatir.basarisizGiris}/${opSatir.totpSonAdim}`);
-    const bayiTailnette = await portalGiris(sunucu.tailnet, "/portal/api", bayiKullaniciA);
-    kontrol("§2c BAYI tailnet dinleyicisinden → 401", bayiTailnette.status === 401, `${bayiTailnette.status}`);
-    const opGiris = await portalGiris(sunucu.tailnet, "/portal/api", operator);
+    const bayiErisimde = await portalGiris(sunucu.portal, "/portal/api", bayiKullaniciA);
+    kontrol("§2c BAYI ERİŞİM dinleyicisinden (geçerli Access JWT ile) → 401", bayiErisimde.status === 401, `${bayiErisimde.status}`);
+    const opGiris = await portalGiris(sunucu.portal, "/portal/api", operator);
     const bayiGirisA = await portalGiris(sunucu.genel, "/bayi/api", bayiKullaniciA);
     const bayiGirisB = await portalGiris(sunucu.genel, "/bayi/api", bayiKullaniciB);
-    kontrol("§2d satıcı tailnet'ten, bayi genelden → 200", opGiris.status === 200 && bayiGirisA.status === 200 && bayiGirisB.status === 200);
+    kontrol("§2d satıcı ERİŞİM'den, bayi genelden → 200", opGiris.status === 200 && bayiGirisA.status === 200 && bayiGirisB.status === 200);
     kontrol("§2e bayi çerezi Secure + Path=/bayi", /Secure/.test(bayiGirisA.setCookie ?? "") && /Path=\/bayi(;|$)/.test(bayiGirisA.setCookie ?? ""));
 
     console.log("\n§3 oturum dinleyiciye bağlı");
@@ -133,37 +137,37 @@ async function main(): Promise<void> {
     const bayiBelirteci = bayiGirisA.cerez!.split("=")[1]!;
     const tasinanSatici = await portalIstek(sunucu.genel, "/bayi/api/ben", { cerez: `bayi_oturum=${saticiBelirteci}` });
     kontrol("§3a satıcı oturum belirteci genelde (bayi çerezi adıyla) → 401 OTURUM_YOK", tasinanSatici.status === 401 && tasinanSatici.kod === "OTURUM_YOK", `${tasinanSatici.status}`);
-    const tasinanBayi = await portalIstek(sunucu.tailnet, "/portal/api/pano", { cerez: `satici_oturum=${bayiBelirteci}` });
-    kontrol("§3b bayi oturum belirteci tailnet'te (satıcı çerezi adıyla) → 401", tasinanBayi.status === 401, `${tasinanBayi.status}`);
+    const tasinanBayi = await portalIstek(sunucu.portal, "/portal/api/pano", { cerez: `satici_oturum=${bayiBelirteci}` });
+    kontrol("§3b bayi oturum belirteci ERİŞİM'de (satıcı çerezi adıyla) → 401", tasinanBayi.status === 401, `${tasinanBayi.status}`);
     const saticiUcuGenelde = await portalIstek(sunucu.genel, "/portal/api/pano", { cerez: yCerez });
     kontrol("§3c satıcı portal ucu genel dinleyicide YOK → 404", saticiUcuGenelde.status === 404, `${saticiUcuGenelde.status}`);
-    const bayiUcuTailnette = await portalIstek(sunucu.tailnet, "/bayi/api/ben", { cerez: bayiGirisA.cerez! });
-    kontrol("§3d bayi ucu tailnet dinleyicisinde YOK → 404", bayiUcuTailnette.status === 404, `${bayiUcuTailnette.status}`);
+    const bayiUcuErisimde = await portalIstek(sunucu.portal, "/bayi/api/ben", { cerez: bayiGirisA.cerez! });
+    kontrol("§3d bayi ucu ERİŞİM dinleyicisinde YOK (JWT'li istekte de) → 404", bayiUcuErisimde.status === 404, `${bayiUcuErisimde.status}`);
 
     console.log("\n§4 rol izinleri");
     const k = await kurulumFiksturu(ctx);
     kurulumlar.push(k.kurulumDbId);
     const opCerez = opGiris.cerez!;
-    const opK4 = await portalIstek(sunucu.tailnet, `/portal/api/kurulumlar/${k.kurulumDbId}/agir-yaptirim`, {
+    const opK4 = await portalIstek(sunucu.portal, `/portal/api/kurulumlar/${k.kurulumDbId}/agir-yaptirim`, {
       cerez: opCerez,
       govde: { clientToken: randomUUID(), kademe: "K4", sebep: "deneme", onay: k.lisansNo },
     });
     kontrol("§4a operatör K4 → 403 YETKISIZ", opK4.status === 403 && opK4.kod === "YETKISIZ", `${opK4.status} ${opK4.kod}`);
-    const opKullanicilar = await portalIstek(sunucu.tailnet, "/portal/api/kullanicilar", { cerez: opCerez });
-    const opBayi = await portalIstek(sunucu.tailnet, "/portal/api/bayiler", { cerez: opCerez, govde: { clientToken: randomUUID(), ad: "x", tavan: { moduller: [], siniflar: ["URETIM"], kurulumAdedi: 1 }, sebep: "x" } });
-    const opIptal = await portalIstek(sunucu.tailnet, `/portal/api/kurulumlar/${k.kurulumDbId}/iptal`, { cerez: opCerez, govde: { clientToken: randomUUID(), sebep: "x" } });
-    const opZorla = await portalIstek(sunucu.tailnet, `/portal/api/kurulumlar/${k.kurulumDbId}/zorlama`, { cerez: opCerez, govde: { clientToken: randomUUID(), zorla: true, sebep: "x" } });
+    const opKullanicilar = await portalIstek(sunucu.portal, "/portal/api/kullanicilar", { cerez: opCerez });
+    const opBayi = await portalIstek(sunucu.portal, "/portal/api/bayiler", { cerez: opCerez, govde: { clientToken: randomUUID(), ad: "x", tavan: { moduller: [], siniflar: ["URETIM"], kurulumAdedi: 1 }, sebep: "x" } });
+    const opIptal = await portalIstek(sunucu.portal, `/portal/api/kurulumlar/${k.kurulumDbId}/iptal`, { cerez: opCerez, govde: { clientToken: randomUUID(), sebep: "x" } });
+    const opZorla = await portalIstek(sunucu.portal, `/portal/api/kurulumlar/${k.kurulumDbId}/zorlama`, { cerez: opCerez, govde: { clientToken: randomUUID(), zorla: true, sebep: "x" } });
     kontrol("§4b operatör kullanıcı/bayi yönetimi · kurulum iptali · zorlama → 403", [opKullanicilar, opBayi, opIptal, opZorla].every((y) => y.status === 403), [opKullanicilar, opBayi, opIptal, opZorla].map((y) => y.status).join(","));
-    const opK0 = await portalIstek(sunucu.tailnet, `/portal/api/kurulumlar/${k.kurulumDbId}/yaptirim`, {
+    const opK0 = await portalIstek(sunucu.portal, `/portal/api/kurulumlar/${k.kurulumDbId}/yaptirim`, {
       cerez: opCerez,
       govde: { clientToken: randomUUID(), kademe: "K0", mesaj: "Ödeme hatırlatması", sebep: "vade yaklaşıyor" },
     });
     kontrol("§4c ✓K operatör K0 (izinli) → 201", opK0.status === 201, `${opK0.status} ${opK0.kod ?? ""}`);
-    const yK4 = await portalIstek(sunucu.tailnet, `/portal/api/kurulumlar/${k.kurulumDbId}/agir-yaptirim`, {
+    const yK4 = await portalIstek(sunucu.portal, `/portal/api/kurulumlar/${k.kurulumDbId}/agir-yaptirim`, {
       cerez: yCerez,
       govde: { clientToken: randomUUID(), kademe: "K4", sebep: "sözleşme ihlali", onay: k.lisansNo },
     });
-    const opGeriK4 = await portalIstek(sunucu.tailnet, `/portal/api/yaptirimlar/${yK4.veri.id as string}/geri-al`, { cerez: opCerez, govde: { clientToken: randomUUID(), sebep: "uzlaşıldı" } });
+    const opGeriK4 = await portalIstek(sunucu.portal, `/portal/api/yaptirimlar/${yK4.veri.id as string}/geri-al`, { cerez: opCerez, govde: { clientToken: randomUUID(), sebep: "uzlaşıldı" } });
     kontrol("§4d yönetici K4 → 201; operatör onu geri ALAMAZ → 403", yK4.status === 201 && opGeriK4.status === 403, `${yK4.status}/${opGeriK4.status}`);
     const bayiSaticiIzni = await portalIstek(sunucu.genel, "/bayi/api/kurulumlar", { cerez: bayiGirisA.cerez! });
     kontrol("§4e bayi kendi alt-portalında liste okur → 200", bayiSaticiIzni.status === 200, `${bayiSaticiIzni.status}`);
@@ -187,7 +191,7 @@ async function main(): Promise<void> {
     kontrol("§5e bayi gövdesinde bayiId → 400 (KATI şema)", bayiGovdeBayiId.status === 400, `${bayiGovdeBayiId.status}`);
 
     console.log("\n§6 pasif bayi");
-    await portalIstek(sunucu.tailnet, `/portal/api/bayiler/${bayiB}/pasif`, { cerez: yCerez, govde: { clientToken: randomUUID(), sebep: "sözleşme bitti" } });
+    await portalIstek(sunucu.portal, `/portal/api/bayiler/${bayiB}/pasif`, { cerez: yCerez, govde: { clientToken: randomUUID(), sebep: "sözleşme bitti" } });
     const pasifOturum = await portalIstek(sunucu.genel, "/bayi/api/ben", { cerez: bayiGirisB.cerez! });
     const pasifGiris = await portalGiris(sunucu.genel, "/bayi/api", bayiKullaniciB, { adimKaydir: 1 });
     kontrol("§6 bayi pasife alınınca oturumu düşer ve giriş 401", pasifOturum.status === 401 && pasifGiris.status === 401, `${pasifOturum.status}/${pasifGiris.status}`);

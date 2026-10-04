@@ -120,7 +120,8 @@ function surecDurdur(surec: ChildProcess): Promise<void> {
 // ---------------------------------------------------------------- satıcı sunucusu
 export interface SaticiSureci {
   readonly genel: string;
-  readonly tailnet: string;
+  /** Satıcı portalı = ERİŞİM dinleyicisi (tünel yok); ortamda PORT_ERISIM + Access ayarı yoksa null. */
+  readonly portal: string | null;
   saat(k: SaatKaydirmasi): Promise<void>;
   durdur(): Promise<void>;
   log(): string;
@@ -145,13 +146,13 @@ export function saticiBaslat(g: { env: NodeJS.ProcessEnv; saat: SaatKaydirmasi; 
       reject(new Error(`satıcı 30 sn'de dinlemedi:\n${log}`));
     }, 30_000);
     const bak = setInterval(() => {
-      const m = /SATICI_DINLIYOR genel=(\d+) tailnet=(\d+)/.exec(log);
+      const m = /SATICI_DINLIYOR genel=(\d+) ic=(?:\d+|kapali) erisim=(\d+|kapali)/.exec(log);
       if (!m) return;
       clearInterval(bak);
       clearTimeout(zaman);
       resolve({
         genel: `http://127.0.0.1:${m[1]}`,
-        tailnet: `http://127.0.0.1:${m[2]}`,
+        portal: m[2] === "kapali" ? null : `http://127.0.0.1:${m[2]}`,
         saat: (k) => saatGonder(surec, k),
         durdur: () => surecDurdur(surec),
         log: () => log,
