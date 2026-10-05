@@ -6,7 +6,8 @@
 //       uyarı (kira verilir), ikinci pencerede sürerse EŞLEŞMEYEN tarafa kira yok (403
 //       KIRA_VERILMEDI); sahip taraf hiç reddedilmez — asla anında durdurma.
 // Ek: kabul edilen küme yalnız güçlü etkenlerden (F2 · F3 · F4) ≥ 2 tutan değişimde kayar (K8 — §5c; f1 + f5 tutup
-// güçlüler tutmayan VM/disk kopyası kaymaz ve uyarı alır §5d; kayıp etken eski değerini korur §5e; çatal açıkken asla) · kabul edilen
+// güçlüler tutmayan VM/disk kopyası kaymaz ve uyarı alır §5d; kayıp etken eski değerini korur §5e; v2 alıcıda uyarı kiranın kuralıyla,
+// ret v1 eşiğiyle §5f–§5h; çatal açıkken asla) · kabul edilen
 // kümeyle ESLESMEDI (kopyalanan LICENSE_DIR) → uyarı, ikinci pencerede red; satıcı uyarıyı kapatıp
 // kümeyi kabul edince (meşru donanım değişimi) kira döner · ardışık "yakala" → ayırt edilemeyen
 // kopya uyarısı (yalnız uyarı) · D2s: sunulan kira bu kurulumun kira defterinde yoksa YABANCI_KIRA, raporlanan
@@ -379,6 +380,31 @@ async function main(): Promise<void> {
     kontrol("§5e kayıp etken (f4 okunamıyor) kümeden SİLİNMEZ (eski değer korunur), kayıp listesi portal notu olarak kurulumda, kira kuralı standart",
       o2y.status === 200 && (instO.kabulEdilenParmakIzi as Fingerprint).f4 === ucDegisti.f4 && instO.sonKayipEtkenler.join() === "f4" && kiraYuku(o2y.json).parmakIziKurali === "standart",
       `${o2y.status} ${o2y.kod ?? ""} kayip=${instO.sonKayipEtkenler.join()}`);
+
+    // L2-13 (a): eşik altı v2 uyuşmazlığı — iki GÜÇLÜ etken (F2 · F4, anakart) değişti, f1 · f3 · f5 tutuyor: v1 ESLESTI, standart
+    // kural ESLESMEDI. Uyarı kiranın kuralıyla (v2 alıcı), ret (K6) v1 eşiğiyle → ikinci pencerede de kira verilir.
+    const anakart = digestFingerprint({ ...HAM_PARMAK_IZI, f2: "12345678-ABCD-4EF0-8123-456789ABCDEF", f4: "YENIANAKART77" }, f.tuz);
+    const V2_FP = { yetenekler: ["parmak-izi-v2"] };
+    const anahtarAk = kurulumAnahtariUret();
+    const { k: kAk, t0: ak0 } = await etkinlestir(anahtarAk);
+    const ak1 = await yoklaV2(kAk.kurulumId, anahtarAk, ak0, anakart, V2_FP);
+    const akUyari = () => prisma.kopyaUyarisi.findMany({ where: { kurulumId: kAk.kurulumDbId, tur: "PARMAK_IZI_UYUSMAZ" } });
+    kontrol("§5f ⭐ v2 alıcı, eşik altı uyuşmazlık (F2 + F4) → 200 + PARMAK_IZI_UYUSMAZ (kiranın kuralıyla), küme KAYMAZ",
+      ak1.status === 200 && (await akUyari()).length === 1 && kiraYuku(ak1.json).parmakIziKurali === "standart" &&
+        JSON.stringify((await prisma.kurulum.findUniqueOrThrow({ where: { id: kAk.kurulumDbId } })).kabulEdilenParmakIzi) === JSON.stringify(fpA),
+      `${ak1.status} ${ak1.kod ?? ""}`);
+    await bekle(PENCERE_SN * 1000 + 300);
+    const ak2 = await yoklaV2(kAk.kurulumId, anahtarAk, kiraOf(ak1)!.kiraId, anakart, V2_FP);
+    const akSon = await akUyari();
+    kontrol("§5g ⭐ ikinci pencerede de 200 (K6 ret eşiği v1: eşik altı uyuşmazlık kira reddi doğurmaz), uyarıda red yok",
+      ak2.status === 200 && akSon.length === 1 && akSon[0]!.redZamani === null && akSon[0]!.gorulmeSayisi === 2,
+      `${ak2.status} ${ak2.kod ?? ""}`);
+    const anahtarAkE = kurulumAnahtariUret();
+    const { k: kAkE, t0: akE0 } = await etkinlestir(anahtarAkE);
+    const akE1 = await yokla(kAkE.kurulumId, anahtarAkE, akE0, anakart);
+    kontrol("§5h ✓K yeteneksiz (eski) fabrika aynı değişimde uyarı ALMAZ (v1 kuralı; eski satıcıyla sıfır fark)",
+      akE1.status === 200 && (await prisma.kopyaUyarisi.count({ where: { kurulumId: kAkE.kurulumDbId, tur: "PARMAK_IZI_UYUSMAZ" } })) === 0,
+      `${akE1.status} ${akE1.kod ?? ""}`);
 
     console.log("\n§6 kopyalanan LICENSE_DIR — kabul edilen kümeyle ESLESMEDI");
     const anahtar3 = kurulumAnahtariUret();

@@ -4,7 +4,7 @@
 // (P modeli) istemciye 403 yerine İMZALI kapanış kirası gider (K6, `closing-lease.ts`).
 // Lisans v2 ekleri ayrı işlevlerde: yabancı HAK · yerel müdahale (`local-intervention.ts`) · yetenek ve durum kaydı sırası.
 import type { KopyaUyarisi, Prisma } from "@prisma/client";
-import { compareFingerprints, hasCapability, jwsDigest, parseJws, type Fingerprint, type LicenseResponse, type PollRequest } from "../lisans-protokol";
+import { hasCapability, jwsDigest, parseJws, type Fingerprint, type LicenseResponse, type PollRequest } from "../lisans-protokol";
 import { VendorError, retryConflict } from "../lib/errors";
 import { lockInstallation } from "../lib/locks";
 import { prisma, type Tx } from "../lib/prisma";
@@ -12,7 +12,7 @@ import { enqueueNotificationTx } from "../notifications/outbox";
 import { acceptsClosingLease, copyEpisodeStart, issueOrReuseClosingLease } from "./closing-lease";
 import type { VendorContext } from "./context";
 import { inSecondWindow, upsertCopyAlert } from "./copy-alert";
-import { FINGERPRINT_V2_CAPABILITY, canLearnFingerprint } from "./fingerprint-policy";
+import { FINGERPRINT_V2_CAPABILITY, canLearnFingerprint, fingerprintMismatch } from "./fingerprint-policy";
 import { listLegacyWeakInstallationTx } from "./hardware.service";
 import { decideChain, driftAccepted, forkSide, readFingerprint, type ChainDecision } from "./lease-chain";
 import {
@@ -109,9 +109,9 @@ async function renewInTx(tx: Tx, ctx: VendorContext, g: RenewInput): Promise<Ren
           nowMs: g.nowMs,
           repeatWindowMs: ctx.config.TEKRAR_PENCERE_SN * 1000,
         });
-  const vsAccepted = compareFingerprints(accepted, measured, { excludeF5: inst.sinif === "DR" });
-  // Meşru donanım değişikliği (K8): güçlü etkenlerden ≥ 2 tutuyorsa (zayıf kümede zayıf kural) uyuşmazlık değil öğrenmedir.
+  // Meşru donanım değişikliği (K8) öğrenmedir; uyuşmazlık uyarısı kiranın kuralıyla, ret v1 eşiğiyle (`fingerprintMismatch`).
   const learnable = g.measured !== null && canLearnFingerprint(accepted, measured, inst.sinif);
+  const mismatch = fingerprintMismatch(accepted, measured, inst, receiverCapabilities);
 
   let deny = false;
   const alerts: KopyaUyarisi[] = [];
@@ -129,10 +129,10 @@ async function renewInTx(tx: Tx, ctx: VendorContext, g: RenewInput): Promise<Ren
     alerts.push(alert);
     if (side === "REQUESTER_IS_OTHER" && inSecondWindow(ctx, alert, g.nowMs)) deny = true;
   }
-  if (vsAccepted.result === "ESLESMEDI" && !learnable) {
+  if (mismatch.alert) {
     const alert = await upsertCopyAlert(tx, inst.id, "PARMAK_IZI_UYUSMAZ", { owner: accepted, other: measured }, g.nowMs);
-    alerts.push(alert);
-    if (inSecondWindow(ctx, alert, g.nowMs)) deny = true;
+    if (mismatch.deniable) alerts.push(alert);
+    if (mismatch.deniable && inSecondWindow(ctx, alert, g.nowMs)) deny = true;
   }
   // D2s — kira zincirinin iki kurcalama izi (yalnız UYARI; kira yine verilir, asla anında durdurma):
   // sunulan kira bu kurulumun defterinde yoksa (başka kurulumdan taşınmış ya da uydurulmuş) YABANCI_KIRA;
