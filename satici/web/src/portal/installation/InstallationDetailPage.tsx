@@ -16,7 +16,7 @@ import { statusTone } from "../pages/Installations";
 import { FirstInstallPanel } from "../distribution/FirstInstallPanel";
 import { HealthPanel, IncidentsPanel, RecordsPanel } from "./IncidentPanels";
 import { AcceptancePanel } from "./AcceptancePanel";
-import { SigningPlanNote, VendorEntitlementVersionModal } from "./EntitlementSigning";
+import { SigningPlanNote, VendorEntitlementVersionModal, installedBuildOf } from "./EntitlementSigning";
 import { InstallHistoryPanel } from "./InstallHistoryPanel";
 import { PaidThroughPanel } from "./PaidThroughPanel";
 import { InstallmentPanel, PlannedPanel } from "./PlanPanels";
@@ -126,7 +126,7 @@ export function InstallationDetailPage() {
             allowPerpetual: true,
             signerPlan: d.hak ? <SigningPlanNote entitlementId={d.hak.id} /> : undefined,
             versionModal: d.hak
-              ? (p) => <VendorEntitlementVersionModal entitlement={d.hak!} installationClass={inst.sinif} modules={catalog.data?.moduller ?? d.hak!.moduller} {...p} />
+              ? (p) => <VendorEntitlementVersionModal entitlement={d.hak!} installationClass={inst.sinif} modules={catalog.data?.moduller ?? d.hak!.moduller} installedBuild={installedBuildOf(inst.sonOrtam)} {...p} />
               : undefined,
           }}
           onChanged={refresh}
