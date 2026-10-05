@@ -422,6 +422,9 @@ function bakimBolumu(): void {
   check("§12a bakım içinde çıkmış sürüm → NORMAL, yalnız güncelleme kesilir", a.hesaplananKademe === "NORMAL" && !a.uygulanan.guncellemeIzni && nedenVar(a, "BAKIM_BITTI"), ozet(a));
   const b = durum({ hak: bitmis, girdi: { derlemeTarihiMs: SIMDI - 2 * DAY_MS } });
   check("§12b bakım SONRASI çıkmış sürüm → EK_SÜRE (28 gün)", b.hesaplananKademe === "EK_SURE" && b.ekSureKalanGun === 28, ozet(b));
+  const bMetin = b.hesaplanan.bant?.metin ?? "";
+  check("§12b-K8 bakım ihlali bandı müşterinin yapabileceği şeyi söyler: satıcıyla görüşme", bMetin.includes("bakımı yenilemek için satıcınızla görüşün"), bMetin);
+  check("§12b-K8 negatif sonda: eski 'hak ettiğiniz sürüme dönün' cümlesi yok", !bMetin.includes("hak ettiğiniz sürüme dön"), bMetin);
   const ihlal = { hak: { bakimBitis: msToIso(SIMDI - 60 * DAY_MS) }, girdi: { derlemeTarihiMs: SIMDI - 40 * DAY_MS } };
   const c = durum({ ...ihlal, kira: eskiKira(2, -20).kira, saat: eskiKira(2, -20).saat });
   check("§12c ihlalde 30 gün geçti + son alışveriş 2 gün önce → KISITLI", c.hesaplananKademe === "KISITLI" && nedenVar(c, "BAKIM_IHLALI"), ozet(c));
@@ -429,6 +432,16 @@ function bakimBolumu(): void {
   check("§12f karşı: aynı ihlal, son alışveriş 1 saat önce (internet VAR) → EK_SÜRE (0 gün)", ci.hesaplananKademe === "EK_SURE" && ci.ekSureKalanGun === 0, ozet(ci));
   const d = durum({ hak: { bakimBitis: msToIso(SIMDI + 10 * DAY_MS) } });
   check("§12d bakıma 10 gün → bilgi nedeni, kademe NORMAL", d.nedenler.some((n) => n.kod === "BAKIM_BITIYOR" && n.ayrinti === "10") && d.hesaplananKademe === "NORMAL", ozet(d));
+  const dBant = d.hesaplanan.bant;
+  check("§12d-K9 bitişe 10 gün → hatırlatma bandı (bilgi tonu, kalan gün yazılı)", dBant?.ton === "bilgi" && dBant.metin.includes("10 gün sonra bitiyor"), dBant?.metin ?? "bant yok");
+  const aBant = a.hesaplanan.bant;
+  check("§12a-K9 bakım bitti (sürüm bakım içinde çıkmış) → bilgi bandı: yeni sürümler için bakımı yenileyin", aBant?.ton === "bilgi" && aBant.metin.includes("yeni sürümler için bakımı yenileyin"), aBant?.metin ?? "bant yok");
+  const uzak = durum({ hak: { bakimBitis: msToIso(SIMDI + 31 * DAY_MS) } });
+  check("§12g-K9 negatif sonda: bitişe 31 gün (hatırlatma penceresi dışı) → bant yok", uzak.hesaplanan.bant === null && !nedenVar(uzak, "BAKIM_BITIYOR"), ozet(uzak));
+  const sinir = durum({ hak: { bakimBitis: msToIso(SIMDI + 30 * DAY_MS) } });
+  check("§12h-K9 sınır: bitişe tam 30 gün → hatırlatma bandı var", sinir.hesaplanan.bant?.metin.includes("30 gün sonra bitiyor") === true, sinir.hesaplanan.bant?.metin ?? "bant yok");
+  const ihlalBant = b.hesaplanan.bant;
+  check("§12b-K9 ihlal bandı (EK_SURE) bilgi bandını gölgeler: daha şiddetli bant kazanır", ihlalBant?.ton === "uyari" && ihlalBant.metin.includes("bakım süreniz bittikten sonra çıktı"), ihlalBant?.metin ?? "bant yok");
   const e = durum({ girdi: { derlemeTarihiMs: null } });
   check("§12e derleme tarihi yok → bilgi nedeni, kademe NORMAL", nedenVar(e, "DERLEME_TARIHI_YOK") && e.hesaplananKademe === "NORMAL", ozet(e));
 }

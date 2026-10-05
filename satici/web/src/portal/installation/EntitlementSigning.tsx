@@ -17,6 +17,25 @@ import { isValidityEndRequired } from "../../shared/validity";
 import type { EntitlementSummary, EntitlementVersionResult, SigningPlan } from "../../shared/types";
 import { Badge, Button, ErrorText, Field, Loading, Modal, ModalActions } from "../../shared/ui";
 
+/**
+ * Fabrikada kurulu sürümün derleme tarihi son yoklamadan (`sonOrtam.derlemeTarihi`); okunamazsa null.
+ */
+export function installedBuildOf(env: Record<string, unknown> | null | undefined): string | null {
+  const v = env?.derlemeTarihi;
+  return typeof v === "string" && Number.isFinite(Date.parse(v)) ? v : null;
+}
+
+/**
+ * Yeni bakım bitişi kurulu sürümün derlemesinden ÖNCEYE düşüyor mu — fabrika bunu "bakım sonrası çıkmış sürüm"
+ * sayar (`state-rules-package.ts`: derleme > bakım bitişi) ve ek süreye düşer; imzadan ÖNCE uyarılır (K8).
+ */
+export function maintenanceBeforeBuild(maintenanceIso: string | undefined, installedBuild: string | null | undefined): boolean {
+  if (!maintenanceIso || !installedBuild) return false;
+  const end = Date.parse(maintenanceIso);
+  const build = Date.parse(installedBuild);
+  return Number.isFinite(end) && Number.isFinite(build) && build > end;
+}
+
 /** Lisans protokolünün ufuk sınırları — `lisans-protokol/belgeler.ts` · `anahtar-zinciri.ts` aynası (mirrors.test.ts). */
 export const OFFLINE_HORIZON_DEFAULT_DAYS = 400;
 export const OFFLINE_HORIZON_SHORT_CLASS_DAYS = 45;
@@ -198,12 +217,15 @@ export function VendorEntitlementVersionModal({
   entitlement,
   installationClass,
   modules,
+  installedBuild,
   onClose,
   onSaved,
 }: {
   entitlement: EntitlementSummary;
   installationClass: string;
   modules: readonly string[];
+  /** Fabrikada kurulu sürümün derleme tarihi (ISO); bilinmiyorsa null/yok ve uyarı çıkmaz. */
+  installedBuild?: string | null;
   onClose: () => void;
   onSaved: () => void;
 }) {
@@ -234,6 +256,7 @@ export function VendorEntitlementVersionModal({
   if (queued) return <QueuedResult result={queued} onClose={onSaved} />;
   const maintenanceIso = dateInputToIso(maintenance);
   const maintenanceChanged = maintenanceIso !== undefined && isoToDateInput(entitlement.bakimBitis) !== maintenance;
+  const maintenanceBeforeInstalled = maintenanceChanged && maintenanceBeforeBuild(maintenanceIso, installedBuild);
   const requested = horizonRequest(horizon);
   const problem = horizonProblem(requested, installationClass, admin);
   const confirmNeeded = requested !== undefined && longGrant(entitlement, requested);
@@ -292,6 +315,13 @@ export function VendorEntitlementVersionModal({
       <Field label="Bakım bitişi" hint="Bakım süresini uzatmak yeni sürüm ister.">
         <input type="date" value={maintenance} onChange={(e) => setMaintenance(e.target.value)} />
       </Field>
+      {maintenanceBeforeInstalled ? (
+        <p className="error" role="alert" data-testid="bakim-kurulu-surumden-once">
+          Seçilen bakım bitişi, fabrikada kurulu sürümün derleme tarihinden ({fmtDate(installedBuild)}) önce. İmzalarsanız fabrika bu sürümü
+          "bakım sonrası çıkmış sürüm" sayar: ek süre başlar, süre dolunca kısıtlı kipe düşer. Müşteri bunu kendisi düzeltemez; bakım bitişini
+          en az bu tarihe çekin ya da bilerek imzalayın.
+        </p>
+      ) : null}
       <HorizonFields entitlement={entitlement} cls={installationClass} admin={admin} value={horizon} onChange={setHorizon} confirm={horizonConfirm} onConfirm={setHorizonConfirm} />
       {problem ? <p className="error">{problem}</p> : null}
       <label className="check field">

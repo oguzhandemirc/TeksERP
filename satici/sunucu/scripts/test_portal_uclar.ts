@@ -333,6 +333,17 @@ async function main(): Promise<void> {
     });
     const filo = await s("get", "/filo", "/filo", 200);
     await s("get", "/kurulumlar/:id/guncelleme", `/kurulumlar/${kId}/guncelleme`, 200);
+    const bakimSatiri = async (gun: number) => {
+      await prisma.hak.update({ where: { id: hakId }, data: { bakimBitis: new Date(Date.now() + gun * 86_400_000) } });
+      const r = await s("get", "/bakim-bitecek", "/bakim-bitecek", 200);
+      return (r.json.data as { hakId: string; asama: string; kalanGun: number; musteri: string; lisansNo: string }[]).find((x) => x.hakId === hakId);
+    };
+    const yakin = await bakimSatiri(10);
+    kontrol("§2d'' bakım listesi: 10 gün kala YAKLASIYOR (müşteri · lisans no · kalan gün)", yakin?.asama === "YAKLASIYOR" && yakin.kalanGun === 10 && !!yakin.musteri && !!yakin.lisansNo, JSON.stringify(yakin));
+    kontrol("§2d''b 60 gün kala SONRAKI (liste penceresi 90 gün)", (await bakimSatiri(60))?.asama === "SONRAKI");
+    kontrol("§2d''c bakım bitmiş → BITTI (kalan gün ≤ 0, listeden düşmez)", (await bakimSatiri(-3))?.asama === "BITTI");
+    kontrol("§2d''d negatif sonda: 200 gün kala liste penceresi dışı → satır yok", (await bakimSatiri(200)) === undefined);
+    await prisma.hak.update({ where: { id: hakId }, data: { bakimBitis: new Date(Date.now() + 365 * 86_400_000) } });
     kontrol("§2d' filo satırı politikayı taşır", Array.isArray(filo.json.data) && (filo.json.data as { id: string; politika: { kip: string } }[]).some((x) => x.id === kId && x.politika.kip === "OTOMATIK"));
     const anahtarlar = await s("get", "/anahtarlar", "/anahtarlar", 200);
     const anahtarMetni = JSON.stringify(anahtarlar.veri);

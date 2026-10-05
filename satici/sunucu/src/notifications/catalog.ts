@@ -26,6 +26,7 @@ export const NOTIFICATION_EVENTS = [
   "UZUN_UFUK_VERILDI",
   "KOK_IMZASI_ACIL",
   "DONANIM_ONAYI_BEKLIYOR",
+  "BAKIM_BITISI_YAKLASIYOR",
 ] as const satisfies readonly BildirimOlayi[];
 
 export const NOTIFICATION_CHANNELS = ["EPOSTA", "TELEGRAM"] as const satisfies readonly BildirimKanali[];
@@ -54,6 +55,7 @@ export const NOTIFICATION_TITLES: Readonly<Record<BildirimOlayi, string>> = {
   UZUN_UFUK_VERILDI: "Uzun çevrimdışı ufuklu lisans verildi",
   KOK_IMZASI_ACIL: "ACİL kök imzası gerekiyor — fabrika kira alamıyor (yetenek düşüşü)",
   DONANIM_ONAYI_BEKLIYOR: "Donanım değişikliği / zayıf tanıma onay bekliyor",
+  BAKIM_BITISI_YAKLASIYOR: "Bakım bitişi yaklaşıyor — yenileme zamanı",
 };
 
 /** Gövde ALLOWLIST'i — göçteki `bildirim_govde_gecerli` dizisiyle BİREBİR (sıra dahil). */

@@ -34,6 +34,7 @@ export const ERISIM_PORTAL_ROTALARI: ReadonlySet<string> = new Set([
   "GET /denetim",
   "GET /anahtarlar",
   "GET /filo", // Dağıtım v2: kurulum × kurulu/kanal backend sürümü × politika × son güncelleme sonucu (salt okuma)
+  "GET /bakim-bitecek", // K9: bakımı biten/bitecek aktif HAK'lar (yenileme satışı; salt okuma)
   "GET /kurulumlar/:id/guncelleme", // Dağıtım v2: politika · dilim · rapor · geçmiş (salt okuma)
   // müşteri · tesis · kurulum · HAK taslağı · imzalı HAK sürümü · etkinleştirme kodu
   "POST /musteriler",
