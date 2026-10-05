@@ -1,5 +1,7 @@
 # Lisans devreye alma — testfabrika (thinkpad-1) runbook'u
 
+> ⚠️ **testfabrika EMEKLİ (kullanıcı kararı 2026-10-05):** testfabrika taşınmaz, tamamen kaldırılır (thinkpad-1'deki test kurulumu dahil); kaldırma (VDS, kanal, thinkpad) ayrı bir iştir ve bu belgeyle yapılmaz. Bu runbook, üretim lisans sunucusunda "test" güncelleme grubunda SIFIRDAN kurulacak yeni test kurulumu için ŞABLONDUR; aşağıdaki testfabrika adları ve kurulum kayıtları tarihîdir.
+>
 > **Durum:** YAZILDI, UYGULANMADI (dilim R2, 2026-09-30). İniş A2 `origin/main`e indikten sonra bir operasyon ajanının ADIM ADIM izleyeceği tek kaynak. Sıra PAZARLIK DIŞIDIR (§1 → §9); bir adım kırmızıysa bir sonrakine geçilmez, §9'a bakılır.
 >
 > **Neden önce testfabrika:** kullanıcı kuralı — her sunucu işlemi ve lisans devreye alma önce kendi test sunucumuzda (thinkpad-1) uçtan uca ölçülür, kanıtla adnansahin'e taşınır; gözlem kipi → sonra zorlama (Faz 4, kullanıcı cümlesiyle). Takvim kapısı YOK: T4 gözlemi paralel koşar, fazı bekletmez.
@@ -14,7 +16,7 @@
 | `node deploy/lisans-devreye/t4-gozlem.mjs` | Senaryo T4 sürekli gözlem (yoklama başarı oranı · parmak izi kararlılığı · yanlış pozitif); `--ozet=<tsv>` ağsız özet | **KURU**; ölçüm `--olc` |
 | `Teks-Erp-wt/testfabrika-araclar/tp.sh <betik.ps1>` | thinkpad-1'de PowerShell 5.1; önce Tailscale kimlik kapısı (100.70.47.46), tutmazsa 99 | — |
 | `deploy/vds-dogrula.sh [--taban=<dizin>]` | adnansahin'e ait her VDS baytı tabanla AYNI mı (0 aynı · 1 fark · 2 ölçülemedi); `--taban-yaz` tabanı yazar (dolu dizini ezmez), `--komut-yaz` uzak komutu basar | VDS'e salt okuma; taban repo DIŞI `~/.tekserp/vds-taban/` |
-| `node deploy/satici/portal-baglan.mjs` | Portal geri döngü kipinde Mac'ten SSH tüneli → `http://127.0.0.1:14611/portal/` | salt okuma dışı değil — tarayıcı oturumu |
+| `https://portal.etkiliyazilim.com` (tarayıcı) | Satıcı portalı — Cloudflare Access + parola + TOTP; YALNIZ üretim satıcısında (tünel 2026-10-05'te kalktı, hazırlık satıcısının portalı yok) | salt okuma dışı değil — tarayıcı oturumu |
 
 Betik sözleşmesi bekçiyle ölçülür: `node scripts/test_lisans_devreye_kuru.mjs` (kuru kipte sıfır ağ/süreç girişimi; `--olc`ta bile yalnız GET/HEAD ve ssh/PowerShell salt-okuma izin listesi).
 
@@ -158,7 +160,7 @@ Genel yönlendirici ``Host(`lisans-test.etkiliyazilim.com`)`` kuralıyla TÜM yo
   ssh -p 2222 oguzhan@80.253.255.188 'cd /opt/stack/apps/tekserp-satici-hazirlik && docker compose --profile goc run --rm satici-goc && docker compose up -d'
   ```
 
-- **Beklenen:** göç "All migrations have been successfully applied" — 2026-09-30'daki 3 göçün üstüne A2'nin göçleri (ölçüm anında: `tasima_kodu_kimliksiz` · `kurulum_bulut_ayarlari` · `kurulum_kaydi_destek` · `dagitim_dosya` · `modul_anahtari_kasasi`); `up -d` satıcıyı + yedeği + (geri döngü kipinde) `portal-tunel`i yeniden yaratır, birkaç saniye kesinti (hiçbir fabrika henüz bu satıcıya bağlı değil). Günlük: `SATICI_DINLIYOR genel=4610 tailnet=4611 ic=4612`.
+- **Beklenen:** göç "All migrations have been successfully applied" — 2026-09-30'daki 3 göçün üstüne A2'nin göçleri (ölçüm anında: `tasima_kodu_kimliksiz` · `kurulum_bulut_ayarlari` · `kurulum_kaydi_destek` · `dagitim_dosya` · `modul_anahtari_kasasi`); `up -d` satıcıyı + yedeği yeniden yaratır, birkaç saniye kesinti (hiçbir fabrika henüz bu satıcıya bağlı değil). Günlük: `SATICI_DINLIYOR genel=4610 ic=4612 erisim=kapali` (hazırlık; `tailnet=` görünürse konteyner tünel öncesi imajla koşuyor — aşama 2.6 ❌).
 - **Geri alma:** SATICI-KURULUM §8 "Sürüm yükseltme": `.env`'de eski etiket + `docker compose up -d`; göç geri alınamadığından DB §2.4 yedeğinden geri yüklenir (önce `compose stop satici`, `pg_restore --clean` yardımcı konteynerde, sonra eski etiketle `up -d`). Eski imaj bir sürüm boyunca silinmez.
 
 ### 2.8 Modül kasası — hazırlık modül anahtarlarının `ice-aktar`ı (2d)
@@ -174,7 +176,7 @@ Genel yönlendirici ``Host(`lisans-test.etkiliyazilim.com`)`` kuralıyla TÜM yo
     docker exec tekserp-satici-hazirlik shred -u /tmp/mk.json'
   ```
 
-  `docker compose run satici …` KULLANILMAZ: satıcı servisinin kenar/tailnet/iç API adresleri sabittir, çalışan satıcıyla aynı adresi isteyen `run` konteyneri `Address already in use` ile açılmaz (ölçüldü 2026-09-30).
+  `docker compose run satici …` KULLANILMAZ: satıcı servisinin kenar/iç API adresleri sabittir, çalışan satıcıyla aynı adresi isteyen `run` konteyneri `Address already in use` ile açılmaz (ölçüldü 2026-09-30).
 
 - **Beklenen:** `✅ kasaya alındı: depo.multiEnabled 1. sürüm · <kid>` (tekrar koşumda `= zaten kasada`). Düz anahtar argv/env/log/denetime girmez.
 - **Geri alma:** kasa satırı silinmez/değişmez (defter); modülü kiradan çıkarmak = HAK'tan çıkarmak ya da dondurmak (portal).
@@ -307,13 +309,13 @@ Bayt kodu (`.jsc`) OS + mimari + V8'e kilitlidir → korumalı paket HEDEFTE ür
 
 ## 6. Portal — müşteri → tesis → kurulum (TEST) → HAK → etkinleştirme kodu
 
-**Doğrulama:** `asama-dogrula.mjs --asama=6 --olc --belirtec-dosyasi=…` (6.1 tünel açıkken; 6.2 HAK modül listesini verir).
+**Doğrulama:** `asama-dogrula.mjs --asama=6 --olc --belirtec-dosyasi=…` (6.1 SSH ile satıcının son açılışındaki günlükte `[satici] anahtar` uyarısı arar — portal gerekmez; 6.2 HAK modül listesini verir).
 
-### 6.0 Portal erişimi (geri döngü kipi)
+### 6.0 Portal erişimi
 
-- **Komut:** ayrı terminalde `node deploy/satici/portal-baglan.mjs` → tarayıcıda `http://127.0.0.1:14611/portal/`; giriş `oguzhan` + parola + TOTP (`~/.tekserp/sirlar/portal-yonetici-hazirlik.txt` — değer basılmaz, kopyala-yapıştır geçmişi temizlenir).
-- **Beklenen:** aşama 6.1 ✅ (`capa: gomulu` · `altGecerli ≥ 1` · `uyariSayisi 0`).
-- **Geri alma:** Ctrl+C (tünel kapanır).
+- **Durum (D5, 2026-10-05):** portal tüneli kalktı; tek portal `https://portal.etkiliyazilim.com`, YALNIZ üretim satıcısında (Cloudflare Access + parola + TOTP). Hazırlık satıcısının portalı YOK. testfabrika emekli (kullanıcı kararı 2026-10-05): testfabrika için lisans işlemi yapılmaz, ara dönem aracı yazılmaz; yeni test kurulumu üretim satıcısında "test" güncelleme grubunda olduğundan §6.2–6.4'ün portal adımları üretim satıcısında yapılır.
+- **Komut (üretim satıcısında):** tarayıcıda `https://portal.etkiliyazilim.com` → e-posta kodu → portal kullanıcısı + parola + TOTP (değer basılmaz, kopyala-yapıştır geçmişi temizlenir).
+- **Beklenen:** pano **Sistem sağlığı** kartı: Güven çapası Gömülü · geçerli alt sertifika ≥ 1 · anahtar uyarısı Yok; aşama 6.1 ✅ (açılış günlüğünde `[satici] anahtar` uyarısı yok).
 
 ### 6.1 HAK'a girecek modüller = testfabrika'nın AÇIK modülleri
 
@@ -505,7 +507,7 @@ Traefik hiçbir geri almada yeniden başlatılmaz; kenar ağı satırı yerinde 
 | K1 | `kok-2026-1` töreni (satıcı `anahtar.ts kok-uret`, parolalı, VDS dışı kopya) → açık yarı çapaya: `cd Teks-Erp && npx tsx scripts/guven-capasi-ekle.ts kok --dosya=<dizin>/kok-2026-1.kok.json` (KURU) → `--yaz` → betiğin bastığı bekçiler + `cd native/lisans-cekirdek && npm run denetle && npm test` → commit | tören: kullanıcı · commit: geliştirici | `test_guven_capasi_ekle` · `test_lisans_native_kahin` §0e · `test_lisans_protokol_aynasi` |
 | K2 | Üretim PAKET anahtarı töreni (Mac): `cd Teks-Erp && npx tsx scripts/build-korumali-imza.ts anahtar-uret --kid=paket-2026 --dizin=~/.tekserp/satici-uretim` (parola TTY'de iki kez; TTY yoksa stdin'in ilk iki satırı; `--json` tek satır `{v, kid, x, dosya, parolali}`) → `guven-capasi-ekle.ts paket --dosya=~/.tekserp/satici-uretim/paket/paket-2026.paket.json` (KURU) → `--yaz` → aynı bekçiler → commit (K1 ile aynı commit olabilir). Parolalı dosyanın kopyası Mac DIŞINDA (USB + kâğıt, parola ayrı) | kullanıcı (parola) + geliştirici | `test_lisans_paket_anahtari` · `test_lisans_native_kahin` §0e' · `test_guven_capasi_ekle` |
 | K3 | Native üretim derlemesi YENİ çapayla (`npm run derle:win:uretim`, §4.1) → paket (§4.2, klis2 kökünde; çalışan backend'e dokunmaz) → imza **`paket-2026`** anahtarıyla: §4.3 komutu `--anahtar=$HOME/.tekserp/satici-uretim/paket/paket-2026.paket.json` ile (parola TTY'de sorulur; hazırlık anahtarıyla imza parola sormaz) | geliştirici/ops + kullanıcı (parola) | zip'te `butunlukKid paket-2026` |
-| K4 | Üretim satıcısı yayında (`https://lisans.etkiliyazilim.com`), imajı K1 commit'inden (gömülü çapa aynasında `kok-2026-1`; `GUVEN_CAPASI_DOSYASI` VERİLMEZ), ALT + İNDİRME sertifikaları `kok-2026-1` imzalı, iç API (`ORTAM=uretim` ağı + `IC_API_IP`/`PATRON_IC_IP` + sır) kurulu, `testfabrika` kanalı kayıtlı | ops (dal `lisans/uretim-satici`) | `/portal/saglik` `capa gomulu` · `altGecerli ≥ 1` · `uyariSayisi 0` |
+| K4 | Üretim satıcısı yayında (`https://lisans.etkiliyazilim.com`), imajı K1 commit'inden (gömülü çapa aynasında `kok-2026-1`; `GUVEN_CAPASI_DOSYASI` VERİLMEZ), ALT + İNDİRME sertifikaları `kok-2026-1` imzalı, iç API (`ORTAM=uretim` ağı + `IC_API_IP`/`PATRON_IC_IP` + sır) kurulu, `testfabrika` kanalı kayıtlı | ops (dal `lisans/uretim-satici`) | portal Sistem sağlığı kartı: çapa Gömülü · alt sertifika ≥ 1 · anahtar uyarısı Yok (ya da aşama 6.1: açılış günlüğünde `[satici] anahtar` uyarısı yok) |
 | K5 | T4 (hazırlık kesiti) 24 saati TAMAMLADI ve özeti alındı: `asama-dogrula.mjs --asama=8 --olc --t4-tsv=<dosya>` | ops | 8.3 UYUMLU |
 
 > **2026-09-30 — K1 + K2 tören ve çapa ayağı YAPILDI:** anahtarlar tek törenle doğdu (`URETIM-SATICI-TOREN.md` §7; PAKET dosyası `paket/` alt dizininde — K2/K3 yolları buna göre), `kok-2026-1` + `paket-2026` çapa dilimi `lisans/capa`da bekçilerle yazıldı; iniş yöneticide. K3 bu çapanın `main`e inmesinden SONRA derlenir.

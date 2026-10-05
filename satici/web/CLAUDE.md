@@ -8,7 +8,7 @@ Satıcı sunucusunun portal JSON API'sine arayüz. Tek kod tabanından **iki ayr
 
 | Uygulama | Giriş | Derleme | Sunulduğu yer | API |
 |---|---|---|---|---|
-| Satıcı arayüzü | `portal.html` → `src/portal/` | `npm run build:portal` → `dist/portal` | tailnet dinleyicisi `/portal` (tailnet kapısının arkasında) + ERİŞİM dinleyicisi `/portal` (Cloudflare Access kapısının arkasında, `portal.<alan>`) | `/portal/api` |
+| Satıcı arayüzü | `portal.html` → `src/portal/` | `npm run build:portal` → `dist/portal` | yalnız ERİŞİM dinleyicisi `/portal` (Cloudflare Access kapısının arkasında, `portal.<alan>`) | `/portal/api` |
 | Bayi arayüzü | `bayi.html` → `src/bayi/` | `npm run build:bayi` → `dist/bayi` | genel dinleyici `/bayi` | `/bayi/api` |
 
 - `src/shared/` ortak katmandır ve hiçbir uygulamaya bağımlı değildir; **bayi paketi satıcı kodunu TAŞIMAZ** (bekçi `src/test/app-isolation.test.ts`).
@@ -25,7 +25,7 @@ Satıcı sunucusunun portal JSON API'sine arayüz. Tek kod tabanından **iki ayr
 - **Giriş:** kullanıcı adı + parola + TOTP TEK adım (TOTP'siz oturum yok). TOTP kurulumu hesabı AÇAN ya da SIFIRLAYAN yöneticinin ekranında QR ile bir kez; kurtarma kodu YOK (kayıpta yönetici sıfırlar, yönetici yoksa sunucu CLI'ı `scripts/portal-kullanici.ts`).
 - **Yıkıcı / deftere yazan eylem** `shared/ConfirmAction.tsx` ile: etkilenen kaydı ADIYLA gösterir, sebep ister (sunucuda zorunlu). **Ağır yaptırım** (K4 · K5 · geri sayımı 7 günden kısa K3 — planlı eylem ve taksit kısıtlama günü dahil) yalnız yöneticiye görünür ve kurulumun lisans numarası AYNEN yazılarak (`onay`) gider; K4/K5 `/agir-yaptirim`, K3 `/yaptirim` ucundan.
 - **Dağıtım ekranları (Faz 3d):** Kurulum → İlk kurulum sekmesi · Dosyalar · Sürümler. `/d` · `/y` bağlantı adresi BİR KEZ gösterilir (`TokenSecretModal`; sunucu `GENEL_KOK_ADRESI` yoksa yalnız yol); giden dosya parçalı yüklenir (`portal/distribution/upload.ts`, artımlı SHA-256, aynı dosya yeniden seçilince aynı işlem kimliği → oturum SÜRER); ham uçlar (`/portal/api/ham/…`) JSON tablosunun dışında olduğundan ayna testi onları sunucunun `distribution-raw.ts` yönlendiricisinde ayrıca arar.
-- **Dinleyiciye göre ekran gizlenmez (2026-10-04):** ERİŞİM (internet) ve tailnet oturumu aynı ekranları rol iznine göre çizer — imza formu (kök/ara imzacı parolası), kullanıcı yönetimi, bayi/yayıncı anahtarı kaydı ve toplu yeniden basım dahil; web dinleyiciye özel izin kümesi taşımaz (bekçi `src/test/erisim-imza.test.tsx` · `erisim-kullanici.test.tsx` · `erisim-anahtar.test.tsx` · `revocations.test.tsx` · `mirrors.test.ts`).
+- **Dinleyiciye göre ekran gizlenmez (2026-10-04):** portal tek yoldan (ERİŞİM) açılır ve ekranları yalnız rol iznine göre çizer — imza formu (kök/ara imzacı parolası), kullanıcı yönetimi, bayi/yayıncı anahtarı kaydı ve toplu yeniden basım dahil; web dinleyiciye özel izin kümesi taşımaz (bekçi `src/test/erisim-imza.test.tsx` · `erisim-kullanici.test.tsx` · `erisim-anahtar.test.tsx` · `revocations.test.tsx` · `mirrors.test.ts`).
 - **Bildirimler:** kanal durumu ve son bildirimler salt okunur (`bildirim:oku`); kanal sırları arayüze ve satıcıya GELMEZ (yan konteynerde). Deneme bildirimi yalnız `bildirim:yonet` (yönetici), işlem kimliğiyle giden kutusuna yazar; olay/kanal/durum ekran adları sunucu kataloğunun aynasıdır (`mirrors.test.ts`).
 - **Lisans v2 imza ve anahtar ekranları (L2-3W):** HAK sürüm formu (`portal/installation/EntitlementSigning.tsx`) planı sunucudan alır (`GET /haklar/:id/imza-plani`) ve `imzaci` olarak beyan eder — parola plana göre (ara imzacı / kök), kök kuyruğunda yok; 409 plan değişikliğinde (`details.imzaci`) plan yeniden çekilir, açıklama gösterilir, parola silinir. Ufuk alanı yalnız "değiştir" kutusunun arkasında; uzun ufuk yalnız yöneticiye + lisans numarası, sınırlar protokol aynası. Kök imzası kuyruğu (yönerge + runbook yolu) · Donanım onayları · İptal belgeleri (toplu yeniden basım) · Anahtarlar (ara/sertifika/emekli) — bekçiler `signing-plan` · `root-queue` · `hardware-requests` · `revocations` testleri. Satıcıya özgü form `EntitlementPanel`e `policy.versionModal` ile girer (bayi paketi satıcı kodunu taşımaz).
 - Kurulum fabrikanın `installationId`'siyle açılır; kanal yalnız KAYITLI kanaldan seçilir (satıcıda `/kanallar`, bayide tavanın kanalları).
@@ -36,7 +36,7 @@ Satıcı sunucusunun portal JSON API'sine arayüz. Tek kod tabanından **iki ayr
 ```bash
 cd satici/web
 npm ci
-npm run dev:portal      # vekil → satıcı sunucusu tailnet dinleyicisi (SATICI_TAILNET_URL, varsayılan 127.0.0.1:4611)
+npm run dev:portal      # vekil → ERİŞİM dinleyicisi (SATICI_ERISIM_URL, varsayılan 127.0.0.1:4613) + SATICI_ERISIM_JETON (jetonu satici/sunucu'da npm run dev:erisim basar)
 npm run dev:bayi        # vekil → genel dinleyici (SATICI_GENEL_URL, varsayılan 127.0.0.1:4610)
 npm run build           # dist/portal + dist/bayi (satıcı sunucusu bunları sunar)
 node ../../scripts/agir-is.mjs -- npm run typecheck:plain

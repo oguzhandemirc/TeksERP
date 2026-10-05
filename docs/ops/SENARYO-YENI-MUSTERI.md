@@ -13,7 +13,7 @@
 | # | İş | Komut / yer | Bugünkü durum |
 |---|---|---|---|
 | 0.1 | Kanal kaydı + OTA imza anahtarı | `deploy/kanallar.json` `demofabrika`; anahtar `mobil/keystore/ota-keys-demofabrika/` (git dışı) | kayıt dalda, anahtar üretildi — **şifreli yedek yenilenmedi** (parola sahibi, `mobil/keystore-yedek.README.md`) |
-| 0.2 | Satıcı kararı (**KARAR**) | (A) hazırlık satıcısı `lisans-test` → sınıf **Demo / deneme**; (B) üretim satıcısı → sınıf **Üretim** | güven çapasında yalnız hazırlık kökü var; üretim töreni "YAZILDI, UYGULANMADI" (`docs/ops/URETIM-SATICI-TOREN.md`). **Patron bulutu (§12) yalnız (B)'de çalışır.** |
+| 0.2 | Satıcı ve sınıf | Satıcı: ÜRETİM lisans sunucusu, demo müşteri "test" güncelleme grubunda (kullanıcı kararı 2026-10-05; hazırlık satıcısı `lisans-test` portalsız ve fabrikasız, bu senaryoda kullanılmaz). Sınıf (**KARAR**): (A) **Demo / deneme** · (B) **Üretim** | güven çapasında yalnız hazırlık kökü var; üretim töreni "YAZILDI, UYGULANMADI" (`docs/ops/URETIM-SATICI-TOREN.md`). **Patron bulutu (§12) yalnız (B)'de çalışır.** |
 | 0.3 | Sürüm notları | yeni panel/tablet/backend numarası için `surum-notlari.json` + `node scripts/surum-notlari-kopyala.mjs` | ilk paket kanal kaydını taşıyan commit'ten çıkmak ZORUNDA (eski etiketten derlenemez) ⇒ yeni numara + not |
 | 0.4 | Backend paketi | `pwsh deploy/paketle.ps1 -Musteri demofabrika -Korumali …` (PAKET anahtarı 0.2'deki satıcının) | — |
 | 0.5 | Panel paketi + yayını | `./deploy/electron-paketle.sh demofabrika` → `ssh tekserp-yayin "mkdir -p /opt/stack/apps/tekserp-guncelleme/html/demofabrika/electron"` (bir kez) → `./deploy/electron-yayinla.sh --musteri=demofabrika` | ilk yayında uzak dizin elle açılır |
@@ -29,7 +29,7 @@
 
 ## 1. Portal — müşteri, tesis, kurulum
 
-- **Nerede:** Portal (tailnet/geri döngü: `node deploy/satici/portal-baglan.mjs` → tarayıcıda `/portal/`) → giriş "Kullanıcı adı" · "Parola" · "Doğrulama kodu" → "Giriş yap" → sol menü "Müşteriler" → "Yeni müşteri".
+- **Nerede:** Portal (`https://portal.etkiliyazilim.com` → Cloudflare Access e-posta kodu → portal giriş ekranı; tek portal ÜRETİM satıcısındadır, senaryo orada koşar — 0.2) → giriş "Kullanıcı adı" · "Parola" · "Doğrulama kodu" → "Giriş yap" → sol menü "Müşteriler" → "Yeni müşteri".
 - **Yap:** "Ad" = `Demo Fabrika Tekstil` · "Vergi no (isteğe bağlı)" · "Bayi" = "— Doğrudan satıcı —" → "Kaydet". Müşteri sayfası → "Tesisler" → "Yeni tesis" → "Tesis adı" → "Kaydet". Tesis satırında "Kurulum ekle" → "Yeni kurulum": "Lisans sınıfı" = (A) "Demo / deneme" · (B) "Üretim" · "Kanal" = `demofabrika` · "Ad (isteğe bağlı)" · "Yoklama aralığı (dakika)" 60 · "Patron bulutu eşitleme aralığı (dakika)" 5 → "Kaydet".
 - **Beklenen:** kurulum listede, durum **ETKİNLEŞMEDİ**; "Kanal" sütunu `demofabrika`.
 - **Kanıt:** kurulum sayfasının ekran görüntüsü (kurulum no + kanal).
@@ -37,7 +37,7 @@
 ## 2. Portal — HAK, ZORUNLU kip, etkinleştirme kodu
 
 - **Nerede:** kurulum sayfası → "Lisans" sekmesi → "Lisans hakkı oluştur".
-- **Yap:** "Modüller (lisans tavanı)" — üretim + (B'de) patron bulutu dahil; "Kalıcı lisans" (varsayılan işaretli) · "Bakım bitişi" → "Oluştur" → "Lisansı imzala": "Sebep (deftere yazılır)" = "İlk imza" · "Kök anahtar parolası" → "İmzala". (İnternet portalında imza düğmesi gizlidir — imza tailnet/geri döngü portalından.)
+- **Yap:** "Modüller (lisans tavanı)" — üretim + (B'de) patron bulutu dahil; "Kalıcı lisans" (varsayılan işaretli) · "Bakım bitişi" → "Oluştur" → "Lisansı imzala": "Sebep (deftere yazılır)" = "İlk imza" · "Kök anahtar parolası" → "İmzala". (İmza düğmesi internet portalında açıktır — 2026-10-04'ten beri tek yol.)
 - **Yap (kip):** "Yaptırım" sekmesi → "Zorla kipine geçir" (izin `yaptirim:agir`, yalnız yönetici). Ekrandaki ad "Zorla"; "ZORUNLU" diye bir etiket yok.
 - **Yap (kod):** "Lisans" sekmesi → "Etkinleştirme kodları" → "Etkinleştirme kodu üret" → "Geçerlilik (gün)" 30 → "Üret" → kod "Etkinleştirme kodu" penceresinde BİR KEZ görünür → kâğıda/parola yöneticisine → "Kaydettim, kapat".
 - **Beklenen:** HAK imzalı; kip Zorla; tek aktif kod (yeni kod eskisini iptal eder).
@@ -65,7 +65,7 @@
    - Sorulanlar: uygulama rolü parolası · PostgreSQL yönetici parolası · yedek parolası (≥10 karakter; müşteride VE Etkili Yazılım kasasında saklanır).
    - `-ApiIzinliAdres`e Tailscale aralığı bilerek eklenir: tablet sunucuya Tailscale'den gelir, varsayılan `LocalSubnet` onu kapsamaz.
    - **Beklenen:** "ISKELET HAZIR" + "YAPILMADAN KALANLAR" listesi (bugün en az: Etkili Yazılım alıcısı yok). Müşteri özel anahtarı USB'de; "SUNUCUDA BIRAKMA" uyarısı.
-4. **Satıcı adresi (yalnız 0.2-A):** `.env`e kurulumdan ÖNCE `LICENSE_SERVER_URL=https://lisans-test.etkiliyazilim.com` eklenir (0.2-B'de satır YOK — varsayılan üretim satıcısı). Kaynak: `docs/ops/LISANS-DEVREYE-ALMA-TESTFABRIKA.md` §4.4.
+4. **Satıcı adresi:** `.env`e `LICENSE_SERVER_URL` satırı EKLENMEZ — varsayılan üretim satıcısıdır (0.2; hazırlık satıcısı `lisans-test` bu senaryoda kullanılmaz).
 5. **Sürüm:** `powershell -NoProfile -ExecutionPolicy Bypass -File .\kur.ps1 -Kok C:\TeksERP -Paket <zip> -UygulamaAdi tekserp-backend-demofabrika` (SSH'tan: paketteki `uzaktan-kos.ps1` ile SYSTEM görevi; runbook `docs/ops/DEPLOY-RUNBOOK.md` §3b).
    - **Beklenen:** `[1/9]`…`[9/9]` → "KURULUM TAMAM", `API : UP DB: UP surum: <X>`; pm2 adı paket kimliğiyle aynı (sarı "Paketin kanal kimligi pm2 adi" uyarısı ÇIKMAZ).
 6. **Satıcı (süperadmin) hesabı:** `cd C:\TeksERP\app ; node dist\tools\superadmin-olustur.cjs` (gerçek terminal şart). ⚠️ `docs/ops/SUPERADMIN-KURULUM.md` `npm run superadmin:kur` diyor — paketli kurulumda `npm run` yok (belge borcu).

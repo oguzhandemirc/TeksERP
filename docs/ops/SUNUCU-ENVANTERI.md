@@ -170,9 +170,9 @@ Yedek şifreleme parolası **sunucuda YOK** — fabrikada ve parola yöneticisin
 - [`ELECTRON-OTOMATIK-GUNCELLEME.md`](ELECTRON-OTOMATIK-GUNCELLEME.md) — panel güncellemesi
 - [`MOBIL-UZAKTAN-GUNCELLEME.md`](MOBIL-UZAKTAN-GUNCELLEME.md) — tablet güncellemesi
 - [`YEDEK-GERI-YUKLEME-TATBIKATI.md`](YEDEK-GERI-YUKLEME-TATBIKATI.md) — geri yükleme provası
-- [`SATICI-KURULUM.md`](SATICI-KURULUM.md) — satıcı (lisans) sunucusu: ayrı compose projesi, tailnet portalı, şifreli yedek (hazırlık; VDS'e henüz kurulmadı)
-- [`PORTAL-GENEL-ERISIM.md`](PORTAL-GENEL-ERISIM.md) — satıcı portalının internetten yolu (`portal.etkiliyazilim.com`): Cloudflare Access + parola + TOTP, kök parolası dahil bütün satıcı işlemleri (2026-10-04; tailnet yolu D5'te kalkar); Cloudflare API sırası, DNS, doğrulama
-- [`LISANS-DEVREYE-ALMA-TESTFABRIKA.md`](LISANS-DEVREYE-ALMA-TESTFABRIKA.md) — lisansı testfabrika'da devreye alma sırası (satıcı A2 imajı → yayıncı → korumalı backend → yayın → portal → gözlem kipinde etkinleştirme → Senaryo T); salt-okuma aşama doğrulayıcısı
+- [`SATICI-KURULUM.md`](SATICI-KURULUM.md) — satıcı (lisans) sunucusu: ayrı compose projesi, port yayını yok, şifreli yedek; hazırlık KURULU ve portalsız, üretim §13 (portal örtüsü zorunlu); eski kurulumu tünelsize çevirme §4a
+- [`PORTAL-GENEL-ERISIM.md`](PORTAL-GENEL-ERISIM.md) — satıcı portalının internetten yolu (`portal.etkiliyazilim.com`): Cloudflare Access + parola + TOTP, kök parolası dahil bütün satıcı işlemleri (2026-10-04; 2026-10-05'ten beri portalın TEK yolu, yalnız üretim satıcısında — tünel D5'te kalktı); Cloudflare API sırası, DNS, doğrulama
+- [`LISANS-DEVREYE-ALMA-TESTFABRIKA.md`](LISANS-DEVREYE-ALMA-TESTFABRIKA.md) — lisansı testfabrika'da devreye alma sırası; testfabrika emekli (kullanıcı kararı 2026-10-05, kaldırma ayrı adım), belge üretim satıcısında "test" grubunda kurulacak yeni test kurulumu için şablon (satıcı A2 imajı → yayıncı → korumalı backend → yayın → portal → gözlem kipinde etkinleştirme → Senaryo T); salt-okuma aşama doğrulayıcısı
 
 ## Açık iş
 
