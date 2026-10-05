@@ -21,6 +21,7 @@ import {
 import { hashPortalPassword } from "../portal/password";
 import { withSigningPasswordGuard } from "../portal/signing-guard";
 import { NOTIFICATION_PORTAL_ROUTES } from "./notification-routes";
+import { ERROR_REPORT_PORTAL_ROUTES } from "./error-report-routes";
 import { SUPPORT_PORTAL_ROUTES } from "./support-routes";
 import { fleetView, installationUpdateView } from "../portal/fleet";
 import { maintenanceDueView } from "../portal/maintenance-due";
@@ -1289,6 +1290,7 @@ export const VENDOR_PORTAL_ROUTES: readonly PortalRouteDef[] = [
 
   // ------------------------------------------------------------ destek kutusu (3d-2)
   ...SUPPORT_PORTAL_ROUTES,
+  ...ERROR_REPORT_PORTAL_ROUTES,
 
   // ------------------------------------------------------------ bildirimler (giden kutusu görünümü + deneme)
   ...NOTIFICATION_PORTAL_ROUTES,

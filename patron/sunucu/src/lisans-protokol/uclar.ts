@@ -28,6 +28,8 @@ export const ENDPOINTS = {
   SUPPORT: "/v1/destek",
   /** Donanım değişikliği bildirimi (K8) — gövde `donanim.ts`. */
   HARDWARE: "/v1/donanim",
+  /** Müşteri onaylı hata raporu — gövde `hata-raporu.ts`. */
+  ERROR_REPORT: "/v1/hata-raporu",
 } as const;
 
 export const VALIDITY_VALUES = ["GECERLI", "GECERSIZ", "OLCULEMEDI"] as const;

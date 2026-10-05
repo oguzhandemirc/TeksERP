@@ -7,6 +7,7 @@ import {
   ActivateRequestSchema,
   DrTakeoverRequestSchema,
   ENDPOINTS,
+  ErrorReportRequestSchema,
   HardwareReportRequestSchema,
   OfflineRequestSchema,
   PollRequestSchema,
@@ -23,6 +24,7 @@ import { acceptsClosingLease } from "../services/closing-lease";
 import type { VendorContext } from "../services/context";
 import type { DoorbellHub } from "../services/doorbell";
 import { drTakeoverPrecheck, processDrTakeover } from "../services/dr.service";
+import { acceptErrorReport } from "../services/error-report.service";
 import { handleHardwareReport } from "../services/hardware.service";
 import { authenticateRequest } from "../services/installation-auth";
 import { processPoll } from "../services/poll.service";
@@ -168,6 +170,15 @@ export function createPublicApp(ctx: VendorContext, hub: DoorbellHub | null): Ex
     const parsed = parseStrict(SupportRequestSchema, parseJsonBody(body));
     const auth = await authenticateRequest({ header: req.get(REQUEST_HEADER), rawBody: body, purposes: ["destek"], nowMs, limit, path: ENDPOINTS.SUPPORT });
     res.json(await openSupportTicket(auth, parsed));
+  });
+
+  // HATA RAPORU: müşteri onaylı, kişisel verisiz grup özetleri (amaç `hata-raporu`; yoklamaya karışmaz).
+  app.post(ENDPOINTS.ERROR_REPORT, raw, async (req: Request, res: Response) => {
+    const nowMs = Date.now();
+    const body = rawBodyOf(req.body);
+    const parsed = parseStrict(ErrorReportRequestSchema, parseJsonBody(body));
+    const auth = await authenticateRequest({ header: req.get(REQUEST_HEADER), rawBody: body, purposes: ["hata-raporu"], nowMs, limit, path: ENDPOINTS.ERROR_REPORT });
+    res.json(await acceptErrorReport(auth, parsed, ctx.config.HATA_RAPORU_KURULUM_AZAMI_GRUP));
   });
 
   // KAPI ZİLİ (SSE): kurulum imzalı abonelik; içerik taşımaz, yalnız "şimdi yokla". Kurulum başına ≤ ZIL_AZAMI_ABONE.

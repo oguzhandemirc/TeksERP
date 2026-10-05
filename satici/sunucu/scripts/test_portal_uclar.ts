@@ -219,6 +219,9 @@ async function main(): Promise<void> {
     await s("get", "/destek/:id/ek", `/destek/${talep.id}/ek`, 200);
     await s("post", "/destek/:id/yanitla", `/destek/${talep.id}/yanitla`, 200, { metin: "incelendi" });
     await s("post", "/destek/:id/kapat", `/destek/${talep.id}/kapat`, 200, { not: null });
+    // Hata raporları: gruplar fabrikadan `/v1/hata-raporu` ile doğar — uç kapsamı için okuma yeter.
+    await s("get", "/hata-raporlari", "/hata-raporlari", 200);
+    await s("get", "/hata-raporlari/:id", `/hata-raporlari/${kId}?kaynak=sunucu`, 200);
 
     const tasi = async () => {
       const yeni = kurulumAnahtariUret();
