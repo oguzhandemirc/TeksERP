@@ -60,4 +60,11 @@ describe("LicenseBanner — tek alanda sıralı dönüş (K6)", () => {
     expect(await screen.findByTestId("lisans-bandi")).toHaveTextContent("Tek mesaj.");
     expect(screen.queryByTestId("lisans-bandi-sira")).toBeNull();
   });
+
+  it("K9: gözlem kipinde backend bilgi bandı (bakım hatırlatması) verirse çizilir", async () => {
+    login();
+    status.mockResolvedValue({ ...base, kip: "gozlem", bant: { metin: "Bakım süreniz 10 gün sonra bitiyor.", ton: "bilgi" } });
+    renderWithProviders(<LicenseBanner />);
+    expect(await screen.findByTestId("lisans-bandi")).toHaveTextContent("Bakım süreniz 10 gün sonra bitiyor.");
+  });
 });

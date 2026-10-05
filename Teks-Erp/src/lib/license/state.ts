@@ -164,6 +164,17 @@ function collectBanners(findings: readonly Finding[]): Banner[] {
 }
 
 /**
+ * K9 — gözlem kipinde de görünen YALNIZ-BİLGİ bantlarının nedenleri (bakım hatırlatması). "Gözlemde sıfır fark"ın
+ * beyanlı tek istisnasıdır: engel/kademe/tavan yine uygulanmaz, yalnız bu bilgi bandı çıkar. Küme kapalıdır.
+ */
+export const OBSERVE_INFO_BANNER_CODES: ReadonlySet<ReasonCode> = new Set<ReasonCode>(["BAKIM_BITIYOR", "BAKIM_BITTI"]);
+
+function observeEffect(findings: readonly Finding[]): LicenseEffect {
+  const info = collectBanners(findings.filter((f) => OBSERVE_INFO_BANNER_CODES.has(f.code)));
+  return info.length === 0 ? OBSERVE_EFFECT : { ...OBSERVE_EFFECT, bant: info[0] ?? null, bantlar: Object.freeze(info) };
+}
+
+/**
  * Kullanılabilir (geri alınmamış) kira varsa onun kararı; yoksa durum kaydındaki son kiranın kararı
  * (silinen ya da eskisiyle değiştirilen kira kipi gevşetmesin); o da yoksa derleme.
  */
@@ -261,7 +272,7 @@ export function computeLicenseState(g: LicenseStateInput): LicenseState {
     hesaplananKademe: computedTier,
     uygulananKademe: mode === "zorla" ? computedTier : "NORMAL",
     hesaplanan: computed,
-    uygulanan: mode === "zorla" ? computed : OBSERVE_EFFECT,
+    uygulanan: mode === "zorla" ? computed : observeEffect(findings),
     ekSureKalanGun: computedTier === "EK_SURE" && graceDays.length > 0 ? Math.min(...graceDays) : null,
     kisitlamaKalanGun: restrictionDaysLeft,
     devredildi: sanction?.devredildi ?? false,
