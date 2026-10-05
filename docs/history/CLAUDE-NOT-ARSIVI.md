@@ -14863,7 +14863,7 @@ Negatif sondalar (tetik md5(prosrc) ve dosya md5 ile geri alındı):
   - `kisa-kimlik` CLI'ında sıfırlama komutu yok (`durum` · `donustur` · `anahtar-geri-yukle`). `kur.ps1 -GeriAl` yeni sürümü `app.basarisiz-*`te saklar, ama oradan koşulacak bir sıfırlama yoktur.
   - Eski backend'de (G21 öncesi, `a6057b7c3^`) yeniden verme kişi başıdır: `POST /api/admin/users/:id/quick-pin` ve `/card-token`. İstemci imzası iki sürümde aynıdır.
   - Kişi seçimli önizleme bu yüzden salt okuma SQL'iyle yapılır: özeti olup düz değeri boş aktif kullanıcılar.
-- **Yeniden yükseltmede:** eski özet satırda kalır. Kişi yeni PIN'iyle ilk girişte özet ezilir (tembel dönüşüm). O zamana dek eski PIN de geçer, çünkü giriş özet VEYA düz değerle arar.
+- ⚠️ GEÇERSİZ → 2026-10-05 ("PIN bayat özet"): **Yeniden yükseltmede:** eski özet satırda kalır. Kişi yeni PIN'iyle ilk girişte özet ezilir (tembel dönüşüm). O zamana dek eski PIN de geçer, çünkü giriş özet VEYA düz değerle arar.
 - **Belgeler:** `docs/ops/GECIS-PM2-HIZMET.md` §1 madde 5 (b) karar tablosu + iki SQL. `docs/ops/DEPLOY-RUNBOOK.md` §9 kısa tablo. `docs/kurallar/deploy-kurulum.md`te G21-K kural satırı değişti.
 - **Bekçi:** yok, dilim yalnız belgedir. Kapı borcu aynı kalır: yolu hiçbir kapı ölçmüyor.
 
@@ -15054,3 +15054,14 @@ Negatif sondalar (tetik md5(prosrc) ve dosya md5 ile geri alındı):
 **Ek — testfabrika emekli (kullanıcı kararları 2026-10-05).**
 - [PROFİL] testfabrika TAŞINMAZ, EMEKLİ olur: tamamen kaldırılır (thinkpad-1'deki test kurulumu dahil); yerine ileride SIFIRDAN yeni bir test kurulumu üretim lisans sunucusunda "test" güncelleme grubunda yapılır. Hazırlık satıcısı portalsız ve fabrikasız kalır, yalnız lisans sunucusunun kendi sürüm denemesi içindir. Ara dönem için komut satırı aracı YAZILMAZ (testfabrika için lisans işlemi yapılmaz). Kaldırma işinin kendisi (VDS'te `html/testfabrika`, kanal, thinkpad) AYRI adımdır, bu notla yapılmadı. `docs/ops/LISANS-DEVREYE-ALMA-TESTFABRIKA.md` yeni test kurulumu için şablon olarak kalır.
 - [PROFİL] Yeni müşteri senaryosu (`docs/ops/SENARYO-YENI-MUSTERI.md`, demofabrika provası) ÜRETİM lisans sunucusunda, demo müşteri "test" grubunda koşar.
+
+## 2026-10-05 — PIN bayat özet: geri alıp yeniden yükseltmede düz değer esastır, iki kişide eşleşen PIN kimseyi açmaz [ÇEKİRDEK]
+
+**Bağlam (iş listesi 6.4).** G21-K'yı taşıyan sürümden eskisine geri alınıp eski backend'de PIN/kart yeniden verildikten sonra tekrar yükseltilince satırda iki değer birden durur: eski backend'in yazdığı düz değer ve G21-K döneminin özeti. Ölçüm (`test_kisa_kimlik_ozet` §9, düzeltmeden önce 5 kırmızı): eski PIN geçiyordu (giriş önce özete bakar); eski kart geçiyor, eski backend'de basılan YENİ kart reddediliyordu (kart yolu özet varken düze hiç bakmaz); eski backend benzersizliği yalnız düz kolonda ölçtüğü için A'nın özetli PIN'i B'ye düz verilebiliyor ve o PIN A'yı açıyordu. 2026-10-02 notundaki "eski PIN de geçer" bu tablonun yalnız ilk satırıydı.
+
+**Karar [ÇEKİRDEK].** Bu sürüm özet yazdığı her yolda düz kolonu aynı ifadede boşaltır; ikisi birden doluysa düzü özetten SONRA eski backend yazmıştır ⇒ düz esastır, özet bayattır (`src/lib/short-credential/digest.ts` `liveDigest`). PIN özet sorgusu yalnız düzü boş satırı tanır; kart girişi düz doluysa düzü doğrular ve başarılı girişte tembel dönüşüm özeti ezer; kimlik durumu (`quickPinStorage`, anahtar uyumu) aynı kuralı izler. Aynı PIN bir kişide geçerli özet, başka kişide düz olarak eşleşirse giriş kimseyi açmaz: 401 `QUICK_PIN_AMBIGUOUS` (fail-closed; kimin olduğunu söylemez). Çözüm yöneticide: iki kişiden birine yeni PIN.
+
+**Veri.** Göç ya da toplu düzeltme YOK: kural okuma anında uygulanır, bayat özet ilk başarılı girişte ya da `kisa-kimlik donustur --apply` ile ezilir.
+
+**Açık.** Eski backend'de PIN KALDIRMA ya da kart İPTALİ düz kolonu boşaltır ama özete dokunmaz; yeniden yükseltmede bu satır "hiç değişmemiş özetli kişi"den ayırt edilemez ve kaldırılan PIN/kart yeniden geçer. Veriden ayırt edilemediği için kod kapatamaz; geri alma runbook'una "yeniden yükseltmeden önce eski backend'de kaldırılan/iptal edilen PIN/kartları listele" adımı ayrı karar.
+
