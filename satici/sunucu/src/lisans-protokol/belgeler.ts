@@ -37,15 +37,25 @@ export const TYP = {
   PG: "tekserp-pg",
   /** Sertifika iptal belgesi (yalnız KÖK imzalar, G4 §2.3) — doğrulayan fabrika (`verifyRevocation`). */
   IPTAL: "tekserp-iptal",
+  /**
+   * PAKET sertifikası iptal belgesi (yalnız KÖK imzalar; `paket-zinciri.ts`). `IPTAL`den AYRI tür: o belgenin satır
+   * kullanımı sahadaki doğrulayıcılarda kapalı enumdur, PAKET satırı onları bütün belgeden koparırdı. Adda tire yok: `typ` deseni `^tekserp-[a-z]+$`.
+   */
+  PAKET_IPTAL: "tekserp-paketiptal",
 } as const;
 
 export const LICENSE_CLASSES = ["URETIM", "TEST", "DR", "DEMO", "BAYI", "BARINDIRILAN"] as const;
 export type LicenseClass = (typeof LICENSE_CLASSES)[number];
 export const SANCTION_LEVELS = ["K0", "K1", "K2", "K3", "K4", "K5"] as const;
 export type SanctionLevel = (typeof SANCTION_LEVELS)[number];
-/** `HAK`: HAK ara imzacısı (G4) — kök → ara sertifika → HAK; yalnız `hak-ara` yeteneğini bildiren kuruluma gider. */
-export const CERT_USAGES = ["ALT", "INDIRME", "BAYI", "HAK"] as const;
+/**
+ * `HAK`: HAK ara imzacısı (G4) — kök → ara sertifika → HAK; yalnız `hak-ara` yeteneğini bildiren kuruluma gider.
+ * `PAKET`: paket belgelerini imzalayan kök sertifikalı anahtar (`pkt-`, `paket-zinciri.ts`).
+ */
+export const CERT_USAGES = ["ALT", "INDIRME", "BAYI", "HAK", "PAKET"] as const;
 export type CertUsage = (typeof CERT_USAGES)[number];
+/** `tekserp-iptal` satırının kullanımları — PAKET YOK (iptali ayrı belgededir, `TYP.PAKET_IPTAL`). */
+export const REVOCATION_USAGES = ["ALT", "INDIRME", "BAYI", "HAK"] as const satisfies readonly CertUsage[];
 export const REQUEST_PURPOSES = [
   "etkinlestir",
   "yokla",
@@ -321,7 +331,7 @@ export const RequestSchema = z
   });
 export type RequestDoc = z.infer<typeof RequestSchema>;
 
-const SUB_KID_PREFIX: Record<CertUsage, string> = { ALT: "alt-", INDIRME: "ind-", BAYI: "bayi-", HAK: "ara-" };
+const SUB_KID_PREFIX: Record<CertUsage, string> = { ALT: "alt-", INDIRME: "ind-", BAYI: "bayi-", HAK: "ara-", PAKET: "pkt-" };
 const CERT_KID_PATTERN = /^[a-z]+-[a-z0-9-]{1,60}$/;
 
 export const CertificateSchema = z
@@ -346,7 +356,7 @@ const RevocationEntrySchema = z
   .object({
     kid: z.string().regex(CERT_KID_PATTERN),
     sertifikaId: UuidSchema,
-    kullanim: z.enum(CERT_USAGES),
+    kullanim: z.enum(REVOCATION_USAGES),
     tarih: IsoTimeSchema,
     neden: z.string().max(200),
   })

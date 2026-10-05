@@ -14,9 +14,15 @@ import {
   UuidSchema,
   VersionTextSchema,
   b64uEncode,
+  carriesPackageChainFields,
   decodeDocument,
+  isChainPackageKid,
+  parseJws,
   publicKeyFromX,
   verifyJws,
+  verifyPackageSigned,
+  type PackageChainSigner,
+  type PackageTrust,
   type TrustAnchorMode,
 } from "./protocol";
 import {
@@ -243,14 +249,26 @@ export async function readIntegrityList(root: string, liste: IntegrityManifest["
 }
 
 export type SignedManifest =
-  | { readonly ok: true; readonly kid: string; readonly manifest: IntegrityManifest }
+  | { readonly ok: true; readonly kid: string; readonly manifest: IntegrityManifest; readonly chain: PackageChainSigner | null }
   | { readonly ok: false; readonly durum: "GECERSIZ" | "OLCULEMEDI"; readonly code: string };
+
+/** Zincirli (`pkt-*`) listenin güveni: kökler + kip (+ iptal, sınıf); verilmezse zincirli liste kök olmadan düşer. */
+export type IntegrityChainTrust = Omit<PackageTrust, "keys">;
 
 /**
  * İmzalı yükü verilen PAKET çapasıyla doğrular ve çözer — TS çekirdeği, `.node` yükleyicisi ve ikinci katman AYNI
- * kuralı kullanır (biçimsiz çapa ölçülemedi; imza/şema düşerse geçersiz).
+ * kuralı kullanır (biçimsiz çapa ölçülemedi; imza/şema düşerse geçersiz). `pkt-*` imzalı liste gömülü çapaya değil
+ * kök imzalı PAKET sertifikasına dayanır (`paket-zinciri.ts`); gömülü liste boş olsa da doğrulanır.
  */
-export function verifySignedManifest(manifest: unknown, keys: readonly PackageKey[]): SignedManifest {
+export function verifySignedManifest(manifest: unknown, keys: readonly PackageKey[], zincir?: IntegrityChainTrust): SignedManifest {
+  const parsed = parseJws(manifest);
+  if (parsed.ok && isChainPackageKid(parsed.value.header.kid)) {
+    const signed = verifyPackageSigned(manifest, INTEGRITY_TYP, { roots: [], mode: "YERLESIK", ...zincir, keys });
+    if (!signed.ok) return { ok: false, durum: "GECERSIZ", code: signed.code };
+    const d = decodeDocument(IntegrityManifestSchema, signed.value.payload);
+    if (!d.ok) return { ok: false, durum: "GECERSIZ", code: d.code };
+    return { ok: true, kid: signed.value.kid, manifest: d.value, chain: signed.value.chain };
+  }
   const usable = new Map<string, KeyObject>();
   for (const k of keys) {
     const key = PACKAGE_KID.test(k.kid) ? publicKeyFromX(k.x) : null;
@@ -259,14 +277,20 @@ export function verifySignedManifest(manifest: unknown, keys: readonly PackageKe
   if (usable.size === 0 || usable.size !== keys.length) return { ok: false, durum: "OLCULEMEDI", code: "BUTUNLUK_CAPA_BOS" };
   const j = verifyJws(manifest, { typ: INTEGRITY_TYP, findKey: (kid) => usable.get(kid) });
   if (!j.ok) return { ok: false, durum: "GECERSIZ", code: j.code };
+  if (carriesPackageChainFields(j.value.payload)) return { ok: false, durum: "GECERSIZ", code: "BELGE_SEMA" };
   const d = decodeDocument(IntegrityManifestSchema, j.value.payload);
   if (!d.ok) return { ok: false, durum: "GECERSIZ", code: d.code };
-  return { ok: true, kid: j.value.header.kid, manifest: d.value };
+  return { ok: true, kid: j.value.header.kid, manifest: d.value, chain: null };
 }
 
 /** İmzalı yüke karşı `root` altındaki dosyalar. `keys` verilmezse bu derlemenin `PACKAGE_PUBLIC_KEYS`i. */
-export async function verifyIntegrity(manifest: unknown, root: string, keys: readonly PackageKey[] = PACKAGE_PUBLIC_KEYS): Promise<IntegrityReport> {
-  const signed = verifySignedManifest(manifest, keys);
+export async function verifyIntegrity(
+  manifest: unknown,
+  root: string,
+  keys: readonly PackageKey[] = PACKAGE_PUBLIC_KEYS,
+  zincir?: IntegrityChainTrust,
+): Promise<IntegrityReport> {
+  const signed = verifySignedManifest(manifest, keys, zincir);
   if (!signed.ok) return report({ durum: signed.durum, kod: signed.code });
   const m = signed.manifest;
   const paket = { paketId: m.paketId, urun: m.urun, surum: m.surum, derlemeTarihi: m.derlemeTarihi, musteri: m.musteri };

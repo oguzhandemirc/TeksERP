@@ -4,9 +4,9 @@
 // Ana sürüm (çizgi) değişimi hiçbir yoldan otomatik değildir.
 import type { KeyObject } from "node:crypto";
 import { z } from "zod";
-import { verifyJws } from "./jws";
 import { IsoTimeSchema, PROTOCOL_VERSION, TYP, decodeDocument, signDocument } from "./belgeler";
-import { ArtifactSchema, Sha256HexSchema, UPDATE_PLATFORMS, isPackageKid, packageKeyLookup, type PackagePublicKey } from "./guncelleme-ortak";
+import { ArtifactSchema, Sha256HexSchema, UPDATE_PLATFORMS, isPackageKid, type PackagePublicKey } from "./guncelleme-ortak";
+import { verifyPackageSigned, type PackageTrust } from "./paket-zinciri";
 import { failure, forwardFailure, success, type Result } from "./ortak";
 
 /** `/<kanal>/backend/pg/<sürüm>-<derleme>/` — dizin değişmez; künye `pg.json`, paket künyedeki `paket.ad`. */
@@ -96,10 +96,12 @@ export function signPgPackageManifest(g: {
   return signDocument({ typ: TYP.PG, schema: PgPackageManifestSchema, payload: g.payload, key: g.key });
 }
 
-/** Sıra: JWS (typ · kid · imza) → şema. Anahtar kümesi çağıranın (hazırlık anahtarı yalnız TEST/DEMO'da). */
-export function verifyPgPackageManifest(token: unknown, g: { readonly keys: readonly PackagePublicKey[] }): Result<PgPackageManifest> {
-  const lookup = packageKeyLookup(g.keys);
-  const j = verifyJws(token, { typ: TYP.PG, findKey: (kid) => lookup.get(kid) });
+/** Sıra: JWS (typ · kid · imza; `pkt-*` ise zincir) → şema. Anahtar kümesi çağıranın (hazırlık anahtarı yalnız TEST/DEMO'da). */
+export function verifyPgPackageManifest(
+  token: unknown,
+  g: { readonly keys: readonly PackagePublicKey[]; readonly zincir?: Omit<PackageTrust, "keys"> },
+): Result<PgPackageManifest> {
+  const j = verifyPackageSigned(token, TYP.PG, { roots: [], mode: "YERLESIK", ...g.zincir, keys: g.keys });
   if (!j.ok) return forwardFailure(j);
   const b = decodeDocument(PgPackageManifestSchema, j.value.payload);
   return b.ok ? success(b.value) : forwardFailure(b);

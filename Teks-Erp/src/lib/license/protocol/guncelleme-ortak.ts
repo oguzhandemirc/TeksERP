@@ -15,6 +15,8 @@ const PACKAGE_KID = /^paket-[a-z0-9-]{1,40}$/;
 export const Sha256HexSchema = z.string().regex(/^[0-9a-f]{64}$/);
 const ArtifactNameSchema = z.string().max(120).regex(/^[A-Za-z0-9][A-Za-z0-9._-]{0,115}\.zip$/);
 export const PackageKidSchema = z.string().regex(PACKAGE_KID);
+/** Bildirimin `paketImzaKid`i: gömülü çapalı `paket-*` ya da kök sertifikalı `pkt-*` (`paket-zinciri.ts`). */
+export const PackageSignerKidSchema = z.string().regex(/^(paket|pkt)-[a-z0-9-]{1,40}$/);
 
 /** Kanalda duran bir zip'in künyesi: sürüm dizinindeki ad (yol yok), bayt boyu, zip baytlarının sha256'sı. */
 export const ArtifactSchema = z.object({
