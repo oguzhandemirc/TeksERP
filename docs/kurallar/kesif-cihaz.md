@@ -169,9 +169,9 @@ Backend: `test_kisa_kimlik_ozet`, `test_audit_followups`, `test_canvas_preview_p
 
 ## Arşiv notları (tam metin, gerekçe ve ölçüm)
 
-- 2026-10-01 · 2026-10-01 — Kısa kimlikler (hızlı PIN + QR kart) özetli saklanır: anahtar halkası LICENSE_DIR'de, yedeğe mühürlü emanet, tembel + betikli dönüşüm, kalıcı giriş kilidi, yalnız onaylı cihaz bayrağı (G21-K) [ÇEKİRDEK] + [PROFİL] — `CLAUDE-NOT-ARSIVI.md` §2026-10-01 G21-K
-- 2026-10-01 · 2026-10-01 — Güvenlik denetimi G2: PDF penceresi, panel kabuğu (gezinme · preload · IPC gönderen · izin · dış bağlantı · secure-store), belge şablonu izin listesi [ÇEKİRDEK] — `CLAUDE-NOT-ARSIVI.md` §2026-10-01 G2
-- 2026-09-30 · 2026-09-30 — Eski tünel emekliliği (B6) [ÇEKİRDEK] — `CLAUDE-NOT-ARSIVI.md` §2026-09-30 B6
-- 2026-09-04 · 2026-09-04 — Cihaz onay kapısı: bayrak kapalıyken de her cihaz PENDING doğuyordu [ÇEKİRDEK] — `CLAUDE-NOT-ARSIVI.md:2345-2422`
-- 2026-09-04 · 2026-09-04 — Keşif: bir satır = bir SUNUCU (BULGU C); sıralama var, ELEME yok — `CLAUDE-NOT-ARSIVI.md:2423-2483`
-- 2026-09-04 · 2026-09-04 — Keşif kademeli PORT taraması: mDNS portu ilandan alıyordu, TARAMA tek porta kilitliydi [ÇEKİRDEK] — `CLAUDE-NOT-ARSIVI.md:2575-2638`
+- 2026-10-01 · 2026-10-01 — Kısa kimlikler (hızlı PIN + QR kart) özetli saklanır: anahtar halkası LICENSE_DIR'de, yedeğe mühürlü emanet, tembel + betikli dönüşüm, kalıcı giriş kilidi, yalnız onaylı cihaz bayrağı (G21-K) [ÇEKİRDEK] + [PROFİL] — `arsiv/2026-10.md` §2026-10-01 G21-K
+- 2026-10-01 · 2026-10-01 — Güvenlik denetimi G2: PDF penceresi, panel kabuğu (gezinme · preload · IPC gönderen · izin · dış bağlantı · secure-store), belge şablonu izin listesi [ÇEKİRDEK] — `arsiv/2026-10.md` §2026-10-01 G2
+- 2026-09-30 · 2026-09-30 — Eski tünel emekliliği (B6) [ÇEKİRDEK] — `arsiv/2026-09.md` §2026-09-30 B6
+- 2026-09-04 · 2026-09-04 — Cihaz onay kapısı: bayrak kapalıyken de her cihaz PENDING doğuyordu [ÇEKİRDEK] — `arsiv/2026-09.md`
+- 2026-09-04 · 2026-09-04 — Keşif: bir satır = bir SUNUCU (BULGU C); sıralama var, ELEME yok — `arsiv/2026-09.md`
+- 2026-09-04 · 2026-09-04 — Keşif kademeli PORT taraması: mDNS portu ilandan alıyordu, TARAMA tek porta kilitliydi [ÇEKİRDEK] — `arsiv/2026-09.md`

@@ -1,6 +1,6 @@
 # Patron bulutu · Eşitleme · Gelen kutusu · Bulut sunucusu
 
-> Alan kural dosyası — bu alana dokunmadan ÖNCE okunur. Alan 2026-09-29'da doğdu (Plan B, patron bulutu). Hikâye, ölçüm ve gerekçe arşivde (`docs/history/CLAUDE-NOT-ARSIVI.md`, 2026-09-29 notları); burada yalnız bugün geçerli kural. Sınıf: **[ÇEKİRDEK]** her kurulumda aynı · **[PROFİL]** bu fabrikanın seçimi.
+> Alan kural dosyası — bu alana dokunmadan ÖNCE okunur. Alan 2026-09-29'da doğdu (Plan B, patron bulutu). Hikâye, ölçüm ve gerekçe arşivde (`docs/history/arsiv/2026-09.md`, 2026-09-29 notları); burada yalnız bugün geçerli kural. Sınıf: **[ÇEKİRDEK]** her kurulumda aynı · **[PROFİL]** bu fabrikanın seçimi.
 > Tasarım: `docs/design/PATRON-BULUTU.md` (Plan B kararları) · bağlayıcı sözleşme `docs/design/PATRON-BULUTU-ESITLEME.md` (paket §6 · rapor §7 · gelen kutusu §8 · bulut modeli + RLS §9 · izin kataloğu §10 · sapmalar §14 · B2 uygulama notları §17) · imza biçimi `docs/design/LISANS-PROTOKOLU.md`. Fabrika kodu `Teks-Erp/src/cloud-sync/` + `Teks-Erp/src/jobs/cloud-sync.job.ts` · `cloud-inbox.job.ts` (tek başlatma `jobs/patron-cloud.jobs.ts`); katalog tek kaynak `src/cloud-sync/projections.ts`; bulut sunucusu `patron/sunucu`. Kod adları İngilizce, tel şeması anahtarları ve kod DEĞERLERİ Türkçe.
 
 ## Ortak (fabrika + bulut + uygulama)

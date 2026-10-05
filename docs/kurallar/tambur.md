@@ -127,7 +127,7 @@ Backend: `test_client_token_collision`, `test_denetim_s2_paketi`, `test_e2e_full
 
 ## Arşiv notları (tam metin, gerekçe ve ölçüm)
 
-- 2026-08-04 · 2026-08-04 — topun KALICI alanları: kat + giriş sebebi; ve elle eklenen top artık PARTİLİ — `CLAUDE-NOT-ARSIVI.md:80-91`
+- 2026-08-04 · 2026-08-04 — topun KALICI alanları: kat + giriş sebebi; ve elle eklenen top artık PARTİLİ — `arsiv/2026-09.md`
 - 2026-08-12 · 2026-08-12 — TOP LİSTESİ FİLTRESİ: zaman + kumaş, KK1 ile Tambur ORTAK — `CLAUDE-NOT-ARSIVI.md:176-191`
 - 2026-08-13 · 2026-08-13 — KESİMDE KAT SESSİZCE DÜŞÜYORDU: mutationFn gövdesi alanı geçirmiyordu — `CLAUDE-NOT-ARSIVI.md:192-202`
-- 2026-09-03 · 2026-09-03 — Dilim 2 davranış bayrakları: varsayılan = BUGÜN, ve "çıkışsız kapı" bir tasarım hatasıdır — `CLAUDE-NOT-ARSIVI.md:2185-2203`
+- 2026-09-03 · 2026-09-03 — Dilim 2 davranış bayrakları: varsayılan = BUGÜN, ve "çıkışsız kapı" bir tasarım hatasıdır — `arsiv/2026-09.md`

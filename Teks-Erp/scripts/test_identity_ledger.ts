@@ -6,7 +6,7 @@
 //
 // İki yön, aynı hastalığın iki ucu (belge ile ölçümün ayrışması):
 //
-//   YÖN A — kümeden üye DÜŞTÜ. Düşen üyenin ADI `CLAUDE-NOT-ARSIVI.md`de
+//   YÖN A — kümeden üye DÜŞTÜ. Düşen üyenin ADI `docs/history/arsiv/*.md`de
 //     geçmelidir. Silme YASAK DEĞİL, **SESSİZ** silme yasak.
 //     ⚠️ Gerekçe COMMIT MESAJINDA DEĞİL DEFTERDE yaşar: rebase/squash mesajı
 //     değiştirir, ağacın içeriğini değiştirmez. Kimlik kaldırmak bir DURUM
@@ -85,7 +85,22 @@ import { editRatio, tokenize } from "../src/utils/string-similarity";
 import { foldSearchText } from "../src/utils/search-fold";
 
 const REPO = path.join(__dirname, "..", "..");
-const ARSIV = "docs/history/CLAUDE-NOT-ARSIVI.md";
+const ARSIV_DIZIN = "docs/history/arsiv";
+const ARSIV_DIZINI = "docs/history/CLAUDE-NOT-ARSIVI.md";
+const aylikMi = (f: string) => /^\d{4}-\d{2}\.md$/.test(f);
+/** Arşiv = aylık dosyaların birleşimi (2026-10-05'te tek dosyadan bölündü). */
+const arsivMetniOku = () => existsSync(path.join(REPO, ARSIV_DIZIN))
+  ? readdirSync(path.join(REPO, ARSIV_DIZIN)).filter(aylikMi).sort().map((f) => oku(`${ARSIV_DIZIN}/${f}`)).join("\n")
+  : "";
+/** `taban` revizyonundaki arşiv: bölmeden ÖNCEKİ taban tek dosyadır, sonrakinde aylıktır — ikisi de okunur. */
+const arsivMetniTaban = (taban: string) => {
+  let s = "";
+  try { s += g("show", `${taban}:${ARSIV_DIZINI}`) + "\n"; } catch { /* dosya yok */ }
+  let liste: string[] = [];
+  try { liste = g("ls-tree", "--name-only", taban, `${ARSIV_DIZIN}/`).split("\n").filter((x) => aylikMi(path.basename(x))); } catch { /* dizin yok */ }
+  for (const f of liste) s += g("show", `${taban}:${f}`) + "\n";
+  return s;
+};
 const HARITA = "Teks-Erp/docs/BEKCI-HARITASI.md";
 const ESIK = 0.95;
 const ESIK_KAYNAK = "2026-09-12 ölçümü, 55 commit / 40 olay, normalizasyon sonrası kırmızı 0";
@@ -125,14 +140,14 @@ function yonA(taban: string) {
 
   // ① Arşiv SALT-EKLEMEDİR: başlık kümesi KÜÇÜLEMEZ, gerekçe kabul edilmez.
   //    Geçersiz not bile silinmez, altına `> ⚠️ GEÇERSİZ/KISMEN (tarih)` konur.
-  const eski = basliklar(g("show", `${taban}:${ARSIV}`));
-  const yeni = basliklar(oku(ARSIV));
+  const eski = basliklar(arsivMetniTaban(taban));
+  const yeni = basliklar(arsivMetniOku());
   const dusenArsiv = eski.filter((h) => !yeni.includes(h));
   if (dusenArsiv.length === 0) ok(`arşiv salt-ekleme korundu (${yeni.length} başlık)`);
   else no(`ARŞİVDEN ${dusenArsiv.length} BAŞLIK DÜŞTÜ — arşiv salt-eklemedir, gerekçe kabul edilmez:\n      ${dusenArsiv.join("\n      ")}`);
 
   // ② Düzyazı kümeleri: düşen başlık ya yeniden adlandırmadır ya arşivde adı geçer.
-  const arsivMetni = oku(ARSIV);
+  const arsivMetni = oku(ARSIV_DIZINI) + "\n" + arsivMetniOku();
   const duzyaziDosyalar = [
     ...readdirSync(path.join(REPO, "docs/kurallar")).filter((f) => f.endsWith(".md")).map((f) => `docs/kurallar/${f}`),
     HARITA,

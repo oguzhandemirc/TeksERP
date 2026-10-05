@@ -35,7 +35,7 @@
 
 ### Reçeteler
 
-- **[ÇEKİRDEK]** Yeni tarihli not CLAUDE.md'ye değil ARŞİVE (`docs/history/CLAUDE-NOT-ARSIVI.md`) yazılır; köke yalnız `[ÇEKİRDEK]`/`[PROFİL]` etiketli özet satırı eklenir; alana dokunmadan önce arşivdeki TAM not okunur. Ölçüt: MODUL-BAYRAK-TASARIM §11 'bayraklanmayacaklar' = ÇEKİRDEK. <sub>(CLAUDE.md:35)</sub>
+- **[ÇEKİRDEK]** Yeni tarihli not CLAUDE.md'ye değil ARŞİVE (`docs/history/arsiv/<YYYY-MM>.md`) yazılır; köke yalnız `[ÇEKİRDEK]`/`[PROFİL]` etiketli özet satırı eklenir; alana dokunmadan önce arşivdeki TAM not okunur. Ölçüt: MODUL-BAYRAK-TASARIM §11 'bayraklanmayacaklar' = ÇEKİRDEK. <sub>(CLAUDE.md:35)</sub>
 
 ### Kararlar
 
@@ -137,4 +137,4 @@ Backend: `test_batch_redye_three_paths`, `test_batch_split_new_wo_modes`, `test_
 - 2026-08-10 · 2026-08-10 — ÜRETİM KARAKTERİSTİĞİ: kat KATALOĞA taşındı + istasyon-özellik DAVRANIŞ MODU + istasyon yeteneği  — `CLAUDE-NOT-ARSIVI.md:307-332`
 - 2026-08-19 · 2026-08-19 — Tambur plan-gerçek sapma kapısı + "Sipariş Bağla" [v1+v2] + planlamacı dağılım bandı — `CLAUDE-NOT-ARSIVI.md:365-374`
 - 2026-08-21 · 2026-08-21 — Üretim rengi değişikliği TEK BEKÇİ + kısmi-boya onayı + fason kabul taze renk + sipariş kalemi re — `CLAUDE-NOT-ARSIVI.md:423-436`
-- 2026-08-27 · 2026-08-27 — "Sipariş bağlarsam hata veriyor, siparişsiz açınca geçiyor" — hedef, plandan değil SİPARİŞTEN tür — `CLAUDE-NOT-ARSIVI.md:1445-1520`
+- 2026-08-27 · 2026-08-27 — "Sipariş bağlarsam hata veriyor, siparişsiz açınca geçiyor" — hedef, plandan değil SİPARİŞTEN tür — `arsiv/2026-08.md`

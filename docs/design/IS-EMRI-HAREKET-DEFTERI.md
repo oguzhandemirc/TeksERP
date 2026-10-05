@@ -584,7 +584,7 @@ ekranda yüklenmiş sayfayla sınırlı değil, süzgeçteki listenin tamamı (s
 > alanlarıdır (qtyIn · weightIn · enteredAt · operatorId · machineId) — açık satırın `qtyIn`i sonraki kapanışın
 > `qtyOut`una, `enteredAt` adım başlangıcına ve operatör penceresine akıyor (ölçüldü). Altı iptal yolu
 > `cancelledById` yazar; `restoreCancelledRoll` DURUM kolonu olarak beyanlı; kapı `test_defter_ters_yol` §14.
-> Gerekçe ve ölçüm: `docs/history/CLAUDE-NOT-ARSIVI.md` 2026-09-25 B-RM.
+> Gerekçe ve ölçüm: `docs/history/arsiv/2026-09.md` 2026-09-25 B-RM.
 
 - **Ölçüm:** beş yol kapanmış hareketi YENİDEN AÇARKEN `exitedAt/qtyOut/weightOut`u `null`'a çekiyor ve
   `notes`u eziyor: `tambur-undo.service.ts:1697` (SINGLE) · `:1976` (FULL) · `kursun-qc.reopenStep` :1202 ·

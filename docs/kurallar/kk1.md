@@ -24,7 +24,7 @@
 
 ### Reçeteler
 
-- **[ÇEKİRDEK]** Yeni tarihli notu kök CLAUDE.md'ye YAZMA — tam metin `docs/history/CLAUDE-NOT-ARSIVI.md`'ye, köke yalnız `[ÇEKİRDEK]`/`[PROFİL]` etiketiyle BAŞLAYAN özet satırı. Bir alana dokunmadan önce arşivdeki TAM notu oku; kökteki satır 'dur ve arşive bak' tetiğidir. <sub>(CLAUDE.md:35)</sub>
+- **[ÇEKİRDEK]** Yeni tarihli notu kök CLAUDE.md'ye YAZMA — tam metin `docs/history/arsiv/<YYYY-MM>.md`'ye, köke yalnız `[ÇEKİRDEK]`/`[PROFİL]` etiketiyle BAŞLAYAN özet satırı. Bir alana dokunmadan önce arşivdeki TAM notu oku; kökteki satır 'dur ve arşive bak' tetiğidir. <sub>(CLAUDE.md:35)</sub>
 
 ## Backend
 

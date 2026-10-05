@@ -1,6 +1,6 @@
 # Yedek şifreleme (`.tkenc`) — runbook
 
-> Kural satırı: `docs/kurallar/deploy-kurulum.md` · karar notu: `docs/history/CLAUDE-NOT-ARSIVI.md` (2026-09-29 — Yedek şifreleme) · plan: Faz 0 dilim 0.2.
+> Kural satırı: `docs/kurallar/deploy-kurulum.md` · karar notu: `docs/history/arsiv/2026-09.md` (2026-09-29 — Yedek şifreleme) · plan: Faz 0 dilim 0.2.
 > Kod: `Teks-Erp/src/lib/backup-crypto/` · araç `Teks-Erp/scripts/yedek-sifrele.ts` (pakette `app\dist\tools\yedek-sifrele.cjs`) · bekçi `test_yedek_sifreleme` · senaryo `Teks-Erp/scripts/senaryo-yedek.ts`.
 
 ## 1. Ne yapar, ne yapmaz

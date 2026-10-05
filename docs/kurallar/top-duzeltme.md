@@ -131,6 +131,6 @@ Backend: `test_audit_p0`⚠️, `test_batch_drop`, `test_cancel_reason_required`
 - 2026-08-21 · 2026-08-21 — FASON KABULÜ: "çekme" bir HATA DEĞİL, ÖLÇÜLEN BİR GERÇEK; kısmi kabul TEK soruya indi — `CLAUDE-NOT-ARSIVI.md:437-451`
 - 2026-08-21 · 2026-08-21 — İş emri TİPİ bağın AYNASIDIR: "Sipariş Bağla" STOK → SİPARİŞE ÖZEL çevirir — `CLAUDE-NOT-ARSIVI.md:414-422`
 - 2026-08-21 · 2026-08-21 akşam — Tutarlılık taraması: "türetilmiş alan / ayrışan yüzey" sınıfı kapatıldı):** `WorkOrder.type — `CLAUDE-NOT-ARSIVI.md:464-468`
-- 2026-08-22 · 2026-08-22 — §13 kök nedeni: tekil geri almada AŞIM KORUMASI canlı dalda yoktu (ayna kırıktı) — `CLAUDE-NOT-ARSIVI.md:485-551`
-- 2026-08-25 · 2026-08-25 — Saha deploy sonrası üç arıza: "kutu var, uç yok" · "soru var, süreç yok" · "ölçek var, sınır yok" — `CLAUDE-NOT-ARSIVI.md:552-755`
-- 2026-08-27 · 2026-08-27 (üçüncü tur) — Yarı mamul ayrımı: kalan dört yüzey. AYRIM GÖSTERİMDE, ARZDA DEĞİL — `CLAUDE-NOT-ARSIVI.md:1730-1790`
+- 2026-08-22 · 2026-08-22 — §13 kök nedeni: tekil geri almada AŞIM KORUMASI canlı dalda yoktu (ayna kırıktı) — `arsiv/2026-09.md`
+- 2026-08-25 · 2026-08-25 — Saha deploy sonrası üç arıza: "kutu var, uç yok" · "soru var, süreç yok" · "ölçek var, sınır yok" — `arsiv/2026-08.md`
+- 2026-08-27 · 2026-08-27 (üçüncü tur) — Yarı mamul ayrımı: kalan dört yüzey. AYRIM GÖSTERİMDE, ARZDA DEĞİL — `arsiv/2026-08.md`

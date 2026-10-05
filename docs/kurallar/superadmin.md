@@ -109,7 +109,7 @@ Backend: `test_db_invariants`, `test_kurulum_girdisi`, `test_settings_password`,
 
 ## Arşiv notları (tam metin, gerekçe ve ölçüm)
 
-- 2026-09-03 · 2026-09-03 — Süperadmin P2: gizli GERÇEK satır, `["*"]` tam yetki, tek-kaynak gizleme süzgeci, kilitlenme supa — `CLAUDE-NOT-ARSIVI.md:2057-2095`
-- 2026-09-03 · 2026-09-03 — Ayar şifresi P3: ikinci kapı BAŞLIKTA, hash `set()` dışında, kilit kovası girişten AYRI, kapsam " — `CLAUDE-NOT-ARSIVI.md:2096-2115`
-- 2026-09-03 · 2026-09-03 — Panel modül kapıları + Sistem Profili (P5): kilit GİZLEME DEĞİLDİR — `CLAUDE-NOT-ARSIVI.md:2145-2158`
-- 2026-09-03 · 2026-09-03 — Tamlık bekçisi + kurulum profilleri (P6): profil dosyası pakete HİÇ GİRMİYORDU — `CLAUDE-NOT-ARSIVI.md:2134-2144`- 2026-10-01 · Dağıtım v2 D5 (2a): setup.exe paket doğrulayıcısı + orkestratör + satıcı hesabının kurulum kipi
+- 2026-09-03 · 2026-09-03 — Süperadmin P2: gizli GERÇEK satır, `["*"]` tam yetki, tek-kaynak gizleme süzgeci, kilitlenme supa — `arsiv/2026-09.md`
+- 2026-09-03 · 2026-09-03 — Ayar şifresi P3: ikinci kapı BAŞLIKTA, hash `set()` dışında, kilit kovası girişten AYRI, kapsam " — `arsiv/2026-09.md`
+- 2026-09-03 · 2026-09-03 — Panel modül kapıları + Sistem Profili (P5): kilit GİZLEME DEĞİLDİR — `arsiv/2026-09.md`
+- 2026-09-03 · 2026-09-03 — Tamlık bekçisi + kurulum profilleri (P6): profil dosyası pakete HİÇ GİRMİYORDU — `arsiv/2026-10.md`- 2026-10-01 · Dağıtım v2 D5 (2a): setup.exe paket doğrulayıcısı + orkestratör + satıcı hesabının kurulum kipi

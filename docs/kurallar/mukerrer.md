@@ -78,9 +78,9 @@ Backend: `test_color_name_dup`, `test_tr_case`, `test_consistency`, `test_data_i
 ## Arşiv notları (tam metin, gerekçe ve ölçüm)
 
 - 2026-08-21 · 2026-08-21 — SIFIRLAMA PENCERESİ: nameFold DB SEDDİ (3 tablo) + sebep KODU topun satırında — `CLAUDE-NOT-ARSIVI.md:452-463`
-- 2026-08-22 · 2026-08-22 — SIFIRLAMA RAFA KALKTI: nameFold seddi YUMUŞAK KAPIYA çevrildi; mükerrer paneli tasarımı — `CLAUDE-NOT-ARSIVI.md:469-472`
-- 2026-08-22 · 2026-08-22 — MÜKERRER PANELİ v2 P1 UYGULANDI — `CLAUDE-NOT-ARSIVI.md:481-484`
-- 2026-08-25 · 2026-08-25 — Prod oturumunun üç "dev'de yapılacaklar" notu teyit edildi ve uygulandı (kur.ps1 · renk seddi · d — `CLAUDE-NOT-ARSIVI.md:810-839`
-- 2026-09-17 · 2026-09-17 — Master veri kimlik tekilliği: tekillik TABLOLAR ARASI sorulur [ÇEKİRDEK] — `CLAUDE-NOT-ARSIVI.md` §2026-09-17 master veri
-- 2026-09-25 · 2026-09-25 — Ürün kartı yaşam döngüsü ve ana veri arşiv kapısı (MV-06) — `CLAUDE-NOT-ARSIVI.md` §2026-09-25 ürün yaşam döngüsü
-- 2026-09-30 · 2026-09-30 — Şube ve ürün kartının oluşturanı doğuşta (KÜN) [ÇEKİRDEK] — `CLAUDE-NOT-ARSIVI.md` §2026-09-30 şube ve ürün kartı oluşturanı
+- 2026-08-22 · 2026-08-22 — SIFIRLAMA RAFA KALKTI: nameFold seddi YUMUŞAK KAPIYA çevrildi; mükerrer paneli tasarımı — `arsiv/2026-09.md`
+- 2026-08-22 · 2026-08-22 — MÜKERRER PANELİ v2 P1 UYGULANDI — `arsiv/2026-09.md`
+- 2026-08-25 · 2026-08-25 — Prod oturumunun üç "dev'de yapılacaklar" notu teyit edildi ve uygulandı (kur.ps1 · renk seddi · d — `arsiv/2026-08.md`
+- 2026-09-17 · 2026-09-17 — Master veri kimlik tekilliği: tekillik TABLOLAR ARASI sorulur [ÇEKİRDEK] — `arsiv/2026-09.md` §2026-09-17 master veri
+- 2026-09-25 · 2026-09-25 — Ürün kartı yaşam döngüsü ve ana veri arşiv kapısı (MV-06) — `arsiv/2026-09.md` §2026-09-25 ürün yaşam döngüsü
+- 2026-09-30 · 2026-09-30 — Şube ve ürün kartının oluşturanı doğuşta (KÜN) [ÇEKİRDEK] — `arsiv/2026-09.md` §2026-09-30 şube ve ürün kartı oluşturanı

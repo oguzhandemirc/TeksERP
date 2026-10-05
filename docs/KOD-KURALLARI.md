@@ -2,7 +2,7 @@
 
 > **Üç belge katmanının ortadakidir:** "Bu tuzak neden var?" — olaydan doğan desen ve yasaklar. Rutin "nasıl yazılır" sorularının cevabı `docs/standart/` altındadır (`docs/standart/README.md` § Üç belge katmanı); alan kararları `docs/kurallar/<alan>.md`. Üçü birbirine **bağlanır, kopyalanmaz** — bir cümle iki yerde yaşıyorsa biri bayatlar.
 
-> Anlama turu 2026-09-05'te 24 karar hikâyesinin içinden ayrıştırıldı. Her madde tek cümle, emir kipi; gerekçe arşivde. Yeni desen eklerken: kural buraya, hikâye `docs/history/CLAUDE-NOT-ARSIVI.md`'ye. Alan-özgü kurallar `docs/kurallar/`, yasaklar aşağıda ve kök `CLAUDE.md`'de.
+> Anlama turu 2026-09-05'te 24 karar hikâyesinin içinden ayrıştırıldı. Her madde tek cümle, emir kipi; gerekçe arşivde. Yeni desen eklerken: kural buraya, hikâye `docs/history/arsiv/<YYYY-MM>.md`'ye. Alan-özgü kurallar `docs/kurallar/`, yasaklar aşağıda ve kök `CLAUDE.md`'de.
 
 
 ## Değişmezler (23)

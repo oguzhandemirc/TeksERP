@@ -150,10 +150,10 @@ Panel imzalı künye: `test_panel_imza` (Teks-Erp) · `panel-kunye.test.ts` · `
 ## Arşiv notları (tam metin, gerekçe ve ölçüm)
 
 - 2026-08-19 · 2026-08-19 — TAMBUR PAKETİ 2: sektör boşluklarının kapatılması; dördü de MEVCUT yetkiye bağlı, yetkisizde UI H — `CLAUDE-NOT-ARSIVI.md:404-413`
-- 2026-08-26 · 2026-08-26 — Electron dağıtımı: setup elden ele taşınıyordu, güncelleyici KURULUYDU ama hiçbir yere bağlanmamı — `CLAUDE-NOT-ARSIVI.md:958-1010`
-- 2026-08-26 · 2026-08-26 — Mobil uzaktan güncelleme: APK elden ele taşınıyordu, JS paketi hiç ayrılmamıştı — `CLAUDE-NOT-ARSIVI.md:1117-1376`
-- 2026-08-27 · 2026-08-27 — Sipariş görünürlüğü: şerit + altı rapor + iptal sebebi + kalem iptali — `CLAUDE-NOT-ARSIVI.md:1521-1655`
-- 2026-09-03 · 2026-09-03 — Süperadmin doğuşu P8: iki yol iki sır yüzeyi; sessiz kilitlenme kabul edilemez — `CLAUDE-NOT-ARSIVI.md:2204-2216`
+- 2026-08-26 · 2026-08-26 — Electron dağıtımı: setup elden ele taşınıyordu, güncelleyici KURULUYDU ama hiçbir yere bağlanmamı — `arsiv/2026-08.md`
+- 2026-08-26 · 2026-08-26 — Mobil uzaktan güncelleme: APK elden ele taşınıyordu, JS paketi hiç ayrılmamıştı — `arsiv/2026-08.md`
+- 2026-08-27 · 2026-08-27 — Sipariş görünürlüğü: şerit + altı rapor + iptal sebebi + kalem iptali — `arsiv/2026-08.md`
+- 2026-09-03 · 2026-09-03 — Süperadmin doğuşu P8: iki yol iki sır yüzeyi; sessiz kilitlenme kabul edilemez — `arsiv/2026-09.md`
 
 - 2026-10-01 · Dağıtım v2 D5 (1/2): backend paketinin imzalı kapsamı (hizmet\ · gecis\ · runtime\ Rust ikilileri) + PG tek kaynağı (pg-surumu.json backendEnAz)
 - 2026-10-01 · G22 yayın hijyeni: hedef yalnız kanal kaydından · uzak komut konumsal argüman · derleme bağı (temiz ağaç, künye, HEAD + terfi) · APK sürümü dosyadan · üretim PAKET imzası CI kökeni ister, kaçış yalnız kullanıcı cümlesiyle

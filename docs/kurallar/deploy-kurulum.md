@@ -176,14 +176,14 @@ Native (cargo, `cd Teks-Erp/native && npm test`; commit kapısında koşar, carg
 İstemci: `GuncellemeDugmesi.test.tsx`⚠️, `surum-notlari.test.ts`⚠️, `version-compare.test.ts`⚠️, `clients-utils.test.ts`, `update-check-interval.test.ts`, `update-feed-url.test.ts`, `update-gate-escape.test.ts`, `UpdateActions.test.tsx`, `appUpdate.service.test.ts`, `clientPolicy.service.test.ts`, `surumNotlari.test.ts`, `update-feed-url.test.ts`
 
 ## Arşiv notları (tam metin, gerekçe ve ölçüm)
-- 2026-10-02 · Tek kurulum arşivi (yönetici kararı TEK ARŞİV): setup'ın kararları arşivden önce, satıcının derleme deposuna KURU → `--uygula` koyma, var olan derleme ezilmez [ÇEKİRDEK] — `CLAUDE-NOT-ARSIVI.md` §2026-10-02 tek kurulum arşivi
+- 2026-10-02 · Tek kurulum arşivi (yönetici kararı TEK ARŞİV): setup'ın kararları arşivden önce, satıcının derleme deposuna KURU → `--uygula` koyma, var olan derleme ezilmez [ÇEKİRDEK] — `arsiv/2026-10.md` §2026-10-02 tek kurulum arşivi
 
-- 2026-10-02 · Dağıtım v2 D8e runbook: thinkpad-1 ölçümleri (geçiş 24–29 sn, ilk pencere 0,91 sn, icacls 87), geçiş kanal kimliği, F4-B, G21-K geri alma kuralı, elle `current` yasağı, araçta LICENSE_DIR [ÇEKİRDEK] + [PROFİL] — `CLAUDE-NOT-ARSIVI.md` §2026-10-02 D8e runbook
-- 2026-10-02 · Dağıtım v2 D8e: şema hizası ölçülemedi — üçüncü sonuç `SEMA_OLCULEMEDI` (bilgi, güncelleme sürer, sessiz geçmez), yönetici kararı [ÇEKİRDEK] — `CLAUDE-NOT-ARSIVI.md` §2026-10-02 D8e ölçülemedi
-- 2026-10-02 · Dağıtım v2 D8e: şema ileride — güncelleyici de durur (`SEMA_ILERIDE`), setup/geçişle tek kural (ad kümesi), yönetici kararı [ÇEKİRDEK] — `CLAUDE-NOT-ARSIVI.md` §2026-10-02 D8e
-- 2026-10-01 · 2026-10-01 — Güvenlik dilimi G20: fabrika JWT sırrı ret listesi (uyarır, durdurmaz), istek yetkisi DB'den, token daima süreli, ilk kurulum parolası ve zorunlu parola değişimi [ÇEKİRDEK] — `CLAUDE-NOT-ARSIVI.md` §2026-10-01 G20
-- 2026-08-26 · 2026-08-26 (akşam) — Sebep listesi büyüyünce Kaydet ekran dışında kalıyordu + sıra artık sürüklenerek KALICI — `CLAUDE-NOT-ARSIVI.md:1377-1444`
-- 2026-09-04 · 2026-09-04 — [ÇEKİRDEK] Prisma'nın İKİ motoru var ve yalnız biri platformdan bağımsız — `CLAUDE-NOT-ARSIVI.md:2639-2681`
+- 2026-10-02 · Dağıtım v2 D8e runbook: thinkpad-1 ölçümleri (geçiş 24–29 sn, ilk pencere 0,91 sn, icacls 87), geçiş kanal kimliği, F4-B, G21-K geri alma kuralı, elle `current` yasağı, araçta LICENSE_DIR [ÇEKİRDEK] + [PROFİL] — `arsiv/2026-10.md` §2026-10-02 D8e runbook
+- 2026-10-02 · Dağıtım v2 D8e: şema hizası ölçülemedi — üçüncü sonuç `SEMA_OLCULEMEDI` (bilgi, güncelleme sürer, sessiz geçmez), yönetici kararı [ÇEKİRDEK] — `arsiv/2026-10.md` §2026-10-02 D8e ölçülemedi
+- 2026-10-02 · Dağıtım v2 D8e: şema ileride — güncelleyici de durur (`SEMA_ILERIDE`), setup/geçişle tek kural (ad kümesi), yönetici kararı [ÇEKİRDEK] — `arsiv/2026-10.md` §2026-10-02 D8e
+- 2026-10-01 · 2026-10-01 — Güvenlik dilimi G20: fabrika JWT sırrı ret listesi (uyarır, durdurmaz), istek yetkisi DB'den, token daima süreli, ilk kurulum parolası ve zorunlu parola değişimi [ÇEKİRDEK] — `arsiv/2026-10.md` §2026-10-01 G20
+- 2026-08-26 · 2026-08-26 (akşam) — Sebep listesi büyüyünce Kaydet ekran dışında kalıyordu + sıra artık sürüklenerek KALICI — `arsiv/2026-08.md`
+- 2026-09-04 · 2026-09-04 — [ÇEKİRDEK] Prisma'nın İKİ motoru var ve yalnız biri platformdan bağımsız — `arsiv/2026-09.md`
 - 2026-09-30 · Lisans + patron entegrasyonu 5 (I6): Docker teslim künyesi 2e-S biçiminde, müşteri paketinden üretici kimliği çıktı
 - 2026-09-30 · Kendi PostgreSQL örneği (Dağıtım v2 D4): sabit 16.x ikilisi, initdb C + scram + checksum, yalnız 127.0.0.1, küçük sürüm yan yana, büyük sürüm runbook
 - 2026-10-01 · Dağıtım v2 D6: pm2 → hizmet geçişi (veritabanına dokunmaz), geçiş dönemi çift yol (pm2 yolu dondu), backend-hizmeti.ps1 kayıt tek kaynak + sıra, güncelleyici hizmeti betiği

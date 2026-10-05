@@ -105,5 +105,5 @@ Backend: `test_iade_enhancements`, `test_order_cancel_reason`, `test_reason_pres
 
 ## Arşiv notları (tam metin, gerekçe ve ölçüm)
 
-- 2026-08-25 · 2026-08-25 — "Bitmiş kumaş tekrar iş emrine bağlanabiliyor mu?" — evet, ama HİÇBİR istemciden yapılamıyordu — `CLAUDE-NOT-ARSIVI.md:756-809`
-- 2026-08-26 · 2026-08-26 — Fabrikanın kendi eklediği sebep 60 saniyelik bir pencerede yaşıyordu ("taze ya da hiç" yanlış tak — `CLAUDE-NOT-ARSIVI.md:892-957`
+- 2026-08-25 · 2026-08-25 — "Bitmiş kumaş tekrar iş emrine bağlanabiliyor mu?" — evet, ama HİÇBİR istemciden yapılamıyordu — `arsiv/2026-08.md`
+- 2026-08-26 · 2026-08-26 — Fabrikanın kendi eklediği sebep 60 saniyelik bir pencerede yaşıyordu ("taze ya da hiç" yanlış tak — `arsiv/2026-08.md`

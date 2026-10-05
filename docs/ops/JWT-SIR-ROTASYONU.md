@@ -1,6 +1,6 @@
 # JWT sırrı rotasyonu
 
-> Kod: `Teks-Erp/src/lib/jwt-secret.ts` (tek yüklem `checkJwtSecret`) · araç `Teks-Erp/scripts/jwt-sir.ts` (pakette `app\dist\tools\jwt-sir.cjs`) · bekçiler `test_jwt_sir_kapisi`, `test_izin_db_kaynagi` · kural `docs/kurallar/deploy-kurulum.md` · karar notu `docs/history/CLAUDE-NOT-ARSIVI.md` (2026-10-01, G20).
+> Kod: `Teks-Erp/src/lib/jwt-secret.ts` (tek yüklem `checkJwtSecret`) · araç `Teks-Erp/scripts/jwt-sir.ts` (pakette `app\dist\tools\jwt-sir.cjs`) · bekçiler `test_jwt_sir_kapisi`, `test_izin_db_kaynagi` · kural `docs/kurallar/deploy-kurulum.md` · karar notu `docs/history/arsiv/2026-10.md` (2026-10-01, G20).
 
 ⚠️ **Canlı fabrikada rotasyonun ZAMANI ve ONAYI kullanıcıdadır.** Bu belge yalnız adımları verir. Sıra her zaman aynı: önce test sunucusunda (testfabrika) prova, ölçüm yeşilse fabrikada, **vardiya dışında** ve kullanıcının açık cümlesiyle.
 

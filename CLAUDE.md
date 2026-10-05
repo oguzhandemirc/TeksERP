@@ -1,6 +1,6 @@
 # TeksERP — Monorepo Kökü
 
-> **Bu dosya her oturumda yüklenir; yalnız her alanda geçerli ÇEKİRDEK'i ve alan haritasını taşır.** Alan kuralları `docs/kurallar/<alan>.md`'de (o alana dokunmadan ÖNCE oku), karar hikâyeleri `docs/history/CLAUDE-NOT-ARSIVI.md`'de. Yeniden yapılandırma: 2026-10-03 kısaltma turu (önceki sürüm git `a61efbd21`).
+> **Bu dosya her oturumda yüklenir; yalnız her alanda geçerli ÇEKİRDEK'i ve alan haritasını taşır.** Alan kuralları `docs/kurallar/<alan>.md`'de (o alana dokunmadan ÖNCE oku), karar hikâyeleri `docs/history/arsiv/<YYYY-MM>.md`'de (dizin: `docs/history/CLAUDE-NOT-ARSIVI.md`). Yeniden yapılandırma: 2026-10-03 kısaltma turu (önceki sürüm git `a61efbd21`).
 >
 > **Tek gövde, çok fabrika — kural yazarken sor: çekirdek mi, profil mi?** [ÇEKİRDEK] her kurulumda aynıdır (defter semantiği, brüt sevk, idempotency, kilit sırası, atomik claim, fail-closed kapılar, sır hijyeni, veri bütünlüğü). [PROFİL] bu fabrikanın seçimidir ve bayrak/veriyle değişir (rota, istasyon topolojisi, açık modüller, sayısal ayarlar). Ölçüt ve red gerekçeleri: `docs/design/MODUL-BAYRAK-TASARIM.md` §0, §11, §12.
 
@@ -74,7 +74,7 @@ Her adım istasyon kataloğu + rota şablonundan kurulur (devere/çözgü/haşı
 - Yeni paket eklemeden önce onay; Sonnet/ucuz model yalnız mekanik işte (kullanıcı tercihi).
 
 ### Belge ve not disiplini
-- Yeni karar notu **arşive** yazılır (`docs/history/CLAUDE-NOT-ARSIVI.md`, tarih + `[ÇEKİRDEK]/[PROFİL]` etiketi — karma notta etiket cümle bazında); ilgili `docs/kurallar/<alan>.md`'ye TEK kural satırı eklenir; bu dosyaya yalnız her alanda geçerli bir değişmez girer. Kural ile hikâye ayrılır: kural tek cümle emir kipi, gerekçe/ölçüm arşivde.
+- Yeni karar notu **arşive** yazılır (`docs/history/arsiv/<YYYY-MM>.md`, tarih + `[ÇEKİRDEK]/[PROFİL]` etiketi — karma notta etiket cümle bazında); ilgili `docs/kurallar/<alan>.md`'ye TEK kural satırı eklenir; bu dosyaya yalnız her alanda geçerli bir değişmez girer. Kural ile hikâye ayrılır: kural tek cümle emir kipi, gerekçe/ölçüm arşivde.
 - Koddaki yorum 1–3 satır NEDEN söyler, tarih ve ölçüm anlatısı taşımaz (politika: `docs/KOD-KURALLARI.md` § Yorum politikası).
 - Bir kural iptal edilince eski cümle silinir, arşivdeki nota "GEÇERSİZ → tarih" başlığı konur; iki cümle yan yana bırakılmaz.
 

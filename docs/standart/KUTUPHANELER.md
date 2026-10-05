@@ -111,6 +111,6 @@ Ayrıca kayıtta duran iki küçük borç: OFL-1.1 font lisans metninin dağıt�
 **backend log kanalı** (2026-09-07) — `pino`/`winston` yerine **elle yazmak**
 seçildi ([KU-07]), çünkü taşımayı pm2 ve rotasyonu `pm2-logrotate` zaten
 yapıyordu; kalan tek eksik seviye + alan etiketiydi. Altı satırlık kayıt, ölçüm
-ve sonuç arşivde: `docs/history/CLAUDE-NOT-ARSIVI.md` (2026-09-07) ve
+ve sonuç arşivde: `docs/history/arsiv/2026-09.md` (2026-09-07) ve
 `Teks-Erp/src/lib/logger.ts` başlığı. Yeni paket eklenince §3'teki blok buraya,
 §2'ye bir satır yazılır.

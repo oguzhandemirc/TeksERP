@@ -126,7 +126,7 @@ Backend: `test_attached_rolls_select`, `test_batch_drop`, `test_batch_redye_thre
 
 ## Arşiv notları (tam metin, gerekçe ve ölçüm)
 
-- 2026-08-04 · 2026-08-04 — "GİRİŞ NOKTASI" kuralı: iş emrine AŞAĞIDAN katılan top yukarıdaki adımları bekletemez — `CLAUDE-NOT-ARSIVI.md:226-229`
+- 2026-08-04 · 2026-08-04 — "GİRİŞ NOKTASI" kuralı: iş emrine AŞAĞIDAN katılan top yukarıdaki adımları bekletemez — `arsiv/2026-09.md`
 - 2026-08-21 · 2026-08-21 — İş emri TİPİ bağın AYNASIDIR: "Sipariş Bağla" STOK → SİPARİŞE ÖZEL çevirir — `CLAUDE-NOT-ARSIVI.md:414-422`
-- 2026-08-25 · 2026-08-25 — "Bitmiş kumaş tekrar iş emrine bağlanabiliyor mu?" — evet, ama HİÇBİR istemciden yapılamıyordu — `CLAUDE-NOT-ARSIVI.md:756-809`
-- 2026-08-25 · 2026-08-25 (akşam) — Mobil "Yeniden Üretime Al" + Fason Kabul boşluğunun GERÇEK sebebi — `CLAUDE-NOT-ARSIVI.md:840-891`
+- 2026-08-25 · 2026-08-25 — "Bitmiş kumaş tekrar iş emrine bağlanabiliyor mu?" — evet, ama HİÇBİR istemciden yapılamıyordu — `arsiv/2026-08.md`
+- 2026-08-25 · 2026-08-25 (akşam) — Mobil "Yeniden Üretime Al" + Fason Kabul boşluğunun GERÇEK sebebi — `arsiv/2026-08.md`

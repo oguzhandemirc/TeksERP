@@ -1,6 +1,6 @@
 # Native lisans çekirdeği (Faz 2c) — arayüz, biçimler, derleme
 
-> **Durum:** Faz 2c, 2026-09-29, dal `lisans/2c-native` (taban `lisans/entegrasyon`). Plan: `docs/design/LISANS-KOD-KORUMA.md` §5 Faz 2 (2c). Kurallar: `docs/kurallar/lisans.md` § Native lisans çekirdeği. Arşiv: `docs/history/CLAUDE-NOT-ARSIVI.md` (2026-09-29, native çekirdek notu).
+> **Durum:** Faz 2c, 2026-09-29, dal `lisans/2c-native` (taban `lisans/entegrasyon`). Plan: `docs/design/LISANS-KOD-KORUMA.md` §5 Faz 2 (2c). Kurallar: `docs/kurallar/lisans.md` § Native lisans çekirdeği. Arşiv: `docs/history/arsiv/2026-09.md` (2026-09-29, native çekirdek notu).
 > **Tek kaynak TS protokolüdür** (`Teks-Erp/src/lib/license/protocol/`): native çekirdek onun AYNASIDIR ve TS test kâhini olarak kalır. Ayrışırsa TS kazanır; ayna düzeltilir, vektör dosyası yeniden üretilir.
 > **Kapsam:** yalnız arayüz + düşme davranışı + bekçi. Motorun (`runtime.ts`, `state.ts`, `license-sync.service.ts`) native'e bağlanması ve zorunluluk bayrağının açılması Faz 2b/2e'nindir (§9).
 

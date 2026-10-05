@@ -138,6 +138,6 @@ Backend: `test_partner_roles`, `test_subcontractor_customer_profile`, `test_supp
 
 ## Arşiv notları (tam metin, gerekçe ve ölçüm)
 
-- 2026-08-04 · 2026-08-04 — topun KALICI alanları: kat + giriş sebebi; ve elle eklenen top artık PARTİLİ — `CLAUDE-NOT-ARSIVI.md:80-91`
-- 2026-08-04 · 2026-08-04 — "GİRİŞ NOKTASI" kuralı: iş emrine AŞAĞIDAN katılan top yukarıdaki adımları bekletemez — `CLAUDE-NOT-ARSIVI.md:226-229`
+- 2026-08-04 · 2026-08-04 — topun KALICI alanları: kat + giriş sebebi; ve elle eklenen top artık PARTİLİ — `arsiv/2026-09.md`
+- 2026-08-04 · 2026-08-04 — "GİRİŞ NOKTASI" kuralı: iş emrine AŞAĞIDAN katılan top yukarıdaki adımları bekletemez — `arsiv/2026-09.md`
 - 2026-08-19 · 2026-08-19 — Fason KISMİ KABUL + kalan-kapama + parti kuralı — `CLAUDE-NOT-ARSIVI.md:389-403`
