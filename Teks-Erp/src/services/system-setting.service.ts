@@ -2055,6 +2055,21 @@ export class SystemSettingService {
    * Tüm feature flag'leri tek atışta. Default: tüm flag'ler false (en
    * konservatif — fabrika fiyat görmek istemiyor şu an).
    */
+  /**
+   * Fabrikada AÇIK modüllerin DB anahtarları (bayrak ∧ lisans tavanı; sıralı) — yoklamanın `acikModuller` alanı (K10).
+   * Kaynak `getFeatureFlags`tir: ham bayrak + canlı lisans bloğu, ikinci bir okuma yolu yok.
+   */
+  async getOpenModuleKeys(): Promise<string[]> {
+    const flags = (await this.getFeatureFlags()).data;
+    if (!flags) return [];
+    const closed = new Set(flags.license.kapaliModuller.map((m) => m.anahtar));
+    const record = flags as unknown as Record<string, unknown>;
+    return Object.entries(MODULE_SETTING_KEY_BY_FLAG)
+      .filter(([flag, key]) => record[flag] === true && !closed.has(key))
+      .map(([, key]) => key)
+      .sort();
+  }
+
   async getFeatureFlags(): Promise<ApiResponse<FeatureFlags>> {
     const now = Date.now();
     if (featureFlagsCache && featureFlagsCache.expiresAt > now) {

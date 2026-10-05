@@ -38,6 +38,7 @@ import { INSTALL_HISTORY_FILE_NAME, LICENSE_CAPABILITIES, PollRequestSchema, typ
 import { acceptLicenseResponse, buildPollBody } from "../src/services/license-sync.service";
 import { flushLicenseTraceWrites } from "../src/lib/license/accumulation";
 import { LICENSE_TRACE_SETTING_KEY } from "../src/constants/reserved-settings";
+import { MODULE_SETTING_KEYS } from "../src/constants/module-flags";
 import { fiksturKur, hakBas, kiraBas, type Fikstur } from "./lib/lisans-fikstur";
 
 const engel = hedefDbEngeli();
@@ -75,6 +76,8 @@ const IZINLI_ANAHTARLAR = new Set([
   // Lisans v2 (L2-1 kararı; üretimi L2-6): yetenekler · HAK bayt özeti · belirsizlik birikimi · durum kaydı
   // sırası · kayıp parmak izi etkenleri — hepsi sayı, kapalı küme ya da özet; iş verisi değil.
   "yetenekler", "ozet", "belirsizlik", "birikenMs", "ilk", "durumKaydi", "sira", "gecerli", "parmakIziKayip",
+  // K10: fabrikada açık modül ADLARI (`finance.enabled` …) — yapılandırma, iş verisi değil; değerleri kapalı küme (MODULE_SETTING_KEYS).
+  "acikModuller",
 ]);
 
 function anahtarlar(deger: unknown, yol: string, out: string[]): string[] {
@@ -201,6 +204,16 @@ async function main(): Promise<void> {
       yetenek.includes("odenmis-tarih") && yetenek.includes("parmak-izi-v2") &&
         JSON.stringify(yetenek) === JSON.stringify(LICENSE_CAPABILITIES.filter((c) => yetenek.includes(c))) && IZINLI_ANAHTARLAR.has("yetenekler"),
       JSON.stringify(gercek.yetenekler ?? null),
+    );
+    const acik = gercek.acikModuller ?? [];
+    check(
+      "§1h ⭐ GERÇEK kurucu (K10) açık modül adlarını taşır: yalnız MODULE_SETTING_KEYS değerleri, sıralı, tekil, çekirdek `production.enabled` açık; alan adı beyanlı",
+      acik.length > 0 && acik.every((k) => MODULE_SETTING_KEYS.has(k)) && JSON.stringify(acik) === JSON.stringify([...new Set(acik)].sort()) && acik.includes("production.enabled") && IZINLI_ANAHTARLAR.has("acikModuller"),
+      JSON.stringify(gercek.acikModuller ?? null),
+    );
+    check(
+      "§1i karşı (K10): şema modül adı DIŞI değeri (boşluklu/serbest metin) ve yinelenen adı REDDEDER",
+      !PollRequestSchema.safeParse({ ...gercek, acikModuller: ["Müşteri Adı Ltd"] }).success && !PollRequestSchema.safeParse({ ...gercek, acikModuller: ["finance.enabled", "finance.enabled"] }).success && PollRequestSchema.safeParse({ ...gercek, acikModuller: undefined }).success,
     );
     check(
       "§1d ortam.installationId = DB kimliği (yalnız bilgi), saat.saticiSapmaSn ölçülen sapma; lisans kimliği gövdede YOK (imzalı başlıkta)",

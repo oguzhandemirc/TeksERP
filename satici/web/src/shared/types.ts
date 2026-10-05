@@ -69,6 +69,9 @@ export interface Installation {
   readonly platform: string | null;
   readonly sonOrtam: Record<string, unknown> | null;
   readonly sonSaglik: Record<string, unknown> | null;
+  /** K10: fabrikanın son yoklamada bildirdiği AÇIK modül adları; null = fabrika bildirmedi (eski sürüm). */
+  readonly acikModuller?: readonly string[] | null;
+  readonly acikModullerZamani?: string | null;
   readonly sonYoklamaZamani: string | null;
   readonly etkinlesmeZamani: string | null;
   readonly aktif: boolean;
