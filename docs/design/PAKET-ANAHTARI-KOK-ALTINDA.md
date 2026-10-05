@@ -1,6 +1,6 @@
 # PAKET anahtarı kökün altında — kök imzalı paket sertifikası, iptal, çift imzalı geçiş
 
-> **Durum:** TASARIM — kod yazılmadı, kural satırı ve arşiv notu yazılmadı (karar henüz tasarım). İş listesi maddesi 3.9 ([DEMOFABRIKA-KURULUM-BULGULARI.md](../plan/DEMOFABRIKA-KURULUM-BULGULARI.md), Faz 3).
+> **Durum:** TASARIM + §8 kararları verildi (2026-10-06, arşiv notu `docs/history/arsiv/2026-10.md`); D1–D3 doğrulayıcıları `gece/paket-anahtar-d13` dalında, kural satırı D9'da. İş listesi maddesi 3.9 ([DEMOFABRIKA-KURULUM-BULGULARI.md](../plan/DEMOFABRIKA-KURULUM-BULGULARI.md), Faz 3).
 > **Bağlayıcı karar (kullanıcı, 2026-10-05):** paket anahtarı kök imzalı sertifikayla ve kısa ömürlü (ör. 1 yıl) olur; kaybı ya da çalınması kökle yeni sertifika + iptalle kapanır; fabrikaya elle kurulum gerekmez; güncelleyici (Rust) zincirle doğrular; geçişte çift imza. Yedek anahtar ve parola bölme şimdilik YAPILMAZ; donanım anahtarı için bütçe yok.
 > **Üst belgeler:** [LISANS-V2-CEVRIMDISI-KIRA.md](LISANS-V2-CEVRIMDISI-KIRA.md) (ara imzacı + iptal deseni, bu belge onu PAKET'e uygular) · [GUNCELLEYICI.md](GUNCELLEYICI.md) · kurallar [lisans.md](../kurallar/lisans.md) · tören [URETIM-SATICI-TOREN.md](../ops/URETIM-SATICI-TOREN.md).
 > **Önkoşul:** iş listesi 1.2 (kök Mac'e iner, VDS'te durmaz). Kök VDS'teyken PAKET sertifikası basılmaz.
@@ -105,10 +105,10 @@ KÖK ── PAKET iptal belgesi  tekserp-paket-iptal { sira, iptaller: [{kid, se
 
 | Kip | Nerede | Zaman ölçütü | İptal |
 |---|---|---|---|
-| **KABUL** — dışarıdan gelen yeni belge | V1 aday · V2 indirilen paket · V3 PG künyesi · V5 setup CLI | `imzaZamani ∈ [baslangic, bitis]` VE `şimdi ≤ bitis + kabul toleransı`; `şimdi` = max(sistem saati, elde doğrulanmış kiranın `verilis`i) | iptalli sertifika RED |
-| **YERLEŞİK** — zaten kabul edilip kurulmuş dizin | V4 kendini güncelleme · kurulu sürüm dizinine geri dönüş · V6 · V7 · V8 | yalnız `imzaZamani ∈ [baslangic, bitis]` (kurulu paket sertifika bitince ÖLMEZ) | uyarı (§8 soru 3; öneri) |
+| **KABUL** — dışarıdan gelen yeni belge | V1 aday · V2 indirilen paket · V3 PG künyesi · V5 setup CLI | `imzaZamani ∈ [baslangic, bitis]` VE `şimdi ≤ bitis + kabul toleransı (180 gün)`; `şimdi` = max(sistem saati, elde doğrulanmış kiranın `verilis`i) | iptalli sertifika RED |
+| **YERLEŞİK** — zaten kabul edilip kurulmuş dizin | V4 kendini güncelleme · kurulu sürüm dizinine geri dönüş · V6 · V7 · V8 | yalnız `imzaZamani ∈ [baslangic, bitis]` (kurulu paket sertifika bitince ÖLMEZ) | uyarı (§8 soru 3; KARAR 2026-10-06) |
 
-- Kabul toleransı (öneri **90 gün**, §8 soru 2): internetsiz fabrikaya USB ile geç gelen paketin, sertifikası yeni bitmiş diye reddedilmemesi için. Toleransın amacı süreyi uzatmak değil, yıllık törenle aynı gün basılmış paketlerin USB gecikmesini karşılamaktır; çalınan anahtarın ömrünü üst sınırlayan değer `bitis + tolerans`tır.
+- Kabul toleransı **180 gün** (KARAR 2026-10-06, §8 soru 2; önceki öneri 90 gündü): internetsiz fabrikaya USB ile geç gelen paketin, sertifikası yeni bitmiş diye reddedilmemesi için. Toleransın amacı süreyi uzatmak değil, yıllık törenle aynı gün basılmış paketlerin USB gecikmesini karşılamaktır; çalınan anahtarın ömrünü üst sınırlayan değer `bitis + tolerans`tır.
 - `imzaZamani` imzalayanın beyanıdır: çalınan anahtar geçmiş tarih yazabilir. Bu yüzden KABUL kipinde `şimdi` ölçütü ZORUNLUDUR; YERLEŞİK kipte zaman yalnız tutarlılık denetimidir (güvenlik kapısı değildir — kurulu paketi zaten KABUL kipi süzdü).
 - Neden YERLEŞİK kipte iptal sert değil: çalışma anı bütünlük denetimini paketin KENDİ kodu yapar (V6–V8 paketin içindedir). Kötü niyetli ama geçerli imzalı bir paket kendi denetimini atlayabilir; bu denetim yalnız kurulumdan SONRA dosyaya dokunulmasına karşı korur. Gerçek kapı, paketten ÖNCE kurulu olan güncelleyicidir (KABUL). Kurulu meşru paketleri iptal yüzünden GEÇERSİZ'e düşürmek, güvenlik kazancı olmadan bütün filoyu 30 günlük ek süre merdivenine sokar.
 
@@ -202,7 +202,7 @@ G0 → G1 arası en az bir sürüm geçer ki G1'in ilk zincirli paketini indiren
 ## 5. Tören adımları
 
 - **Ön koşul (iş listesi 1.2):** kök Mac'te, VDS'te yok. PAKET sertifikası ve PAKET iptal belgesi YALNIZ Mac'te, kök parolasıyla basılır; VDS'e yalnız AÇIK belgeler gider (sertifika, iptal belgesi). 1.2 töreninde 3.9 için yapılacak tek iş: VDS anahtar biriminde PAKET özel yarısı kopyası olup olmadığının ölçülmesi ve varsa kaldırılması (§8 soru 5).
-- **Yıllık PAKET adımı** — dönem töreninin (üç aylık) bir turuna eklenir (`uretim-toren.mjs donem --paket`, öneri; §8 soru 8), kök parolası bir kez:
+- **Yıllık PAKET adımı** — YILLIK dönem töreninin parçasıdır (KARAR 2026-10-06, §8 soru 8: bütün anahtar yenilemeleri yılda bir törende; `uretim-toren.mjs donem --paket`), kök parolası bir kez:
   1. PAKET aracı yeni anahtarı üretir (`anahtar-uret --kid=pkt-<yıl>-<n>`), **paket parolasını kendisi sorar** (kökten FARKLI).
   2. `anahtar.ts paket-sertifika-uret --x=<x> --kid=pkt-<yıl>-<n> --kok=<kök> --gun=395` — kök parolası stdin'den; çıktı açık `<kid>.sertifika.json`.
   3. PAKET aracı `sertifika-ekle` — sertifika anahtar dosyasına girer (`x` eşleşmesi).
@@ -251,10 +251,18 @@ Her dilimde yalnız o dilimin bekçileri koşulur; D9 sonunda tam koşum.
 ## 8. Açık kararlar — kullanıcıya sorulacak (sade dille)
 
 1. **Sertifika süresi:** programı imzalayan anahtarın "kimlik belgesi" 1 yıl + 1 ay geçerli olsun, her yıl yenisi çıkarılsın — uygun mu?
+   **KARAR (2026-10-06): evet — sertifika 1 yıl + 1 ay (395 gün), her yıl yenisi basılır.**
 2. **İnternetsiz fabrikaya geç gelen paket:** bir güncelleme USB ile birkaç ay sonra götürülürse, imzanın belgesi süresi bittikten sonra kaç gün daha kurulabilsin? Öneri **90 gün**. Sayı küçüldükçe çalınma riski azalır, eski USB paketi reddedilme ihtimali artar.
+   **KARAR (2026-10-06): 180 gün — sertifika bitiminden sonra 180 gün daha kurulabilir (KABUL toleransı 180 gün; §2.3'teki 90 günlük öneri GEÇERSİZ).**
 3. **Anahtar çalındığında zaten çalışan fabrikalar:** iptalden sonra kurulu programda yalnız uyarı mı çıksın (öneri), yoksa fabrika 30 günlük ek süreye girip yeni sürüme zorlansın mı? Öneri uyarı, çünkü asıl kapı yeni paketi kurmadan önce bakan güncelleyicidir.
+   **KARAR (2026-10-06): yalnız uyarı — kurulu programda iptal YERLEŞİK kipte GEÇERLİ + uyarıdır; sert kapı yeni paketi kurmadan önce bakan güncelleyicidir.**
 4. **Eski anahtarla imzalamayı ne zaman bırakalım:** bütün fabrikalar yeni güncelleyiciye geçtiği portaldaki listede görülünce mi (öneri), yoksa sabit bir tarihte mi? Geçmeyen bir fabrika olursa o tarihten sonra da elle iş gerekmez; son eski imzalı sürüme kendiliğinden gelir ve oradan devam eder.
+   **KARAR (2026-10-06): bütün fabrikalar yeni güncelleyiciye geçtiği portal listesinde görülünce bırakılır (sabit tarih yok).**
 5. **Eski paket anahtarının kopyası:** tören belgesi, eski paket anahtarının USB gelene dek VDS'te de bir kopyası olduğunu yazıyor. Bugün orada duruyor mu, birlikte bakıp 1.2 töreninde silelim mi?
+   **KARAR (2026-10-06): VDS'te eski paket anahtarının kopyası YOK (2026-10-05 ölçüldü); 1.2 töreninde silinecek bir şey kalmadı.**
 6. **Sıra:** 3.9'un kodu tek ortak paketten (3.1) ve yeni indirme adresinden (3.2) önce mi insin? Öneri: doğrulayıcılar (D1–D3) 3.1'den ÖNCE iner; yeni adres baştan yalnız yeni düzenle açılır, çift imza yalnız eski adreste yaşar.
+   **KARAR (2026-10-06): evet — doğrulayıcılar (D1–D3) 3.1'den ÖNCE iner; yeni adres baştan yalnız yeni düzenle açılır, çift imza yalnız eski adreste yaşar.**
 7. **Panel ve tablet:** panel ile tablet güncellemelerini imzalayan ayrı anahtar da (bugün iki tane, biri yedek) ileride aynı "kökün altında, süreli" düzene alınsın mı? Öneri evet, ama ayrı iş olarak.
+   **KARAR (2026-10-06): evet, ama AYRI iş — panel/tablet imza anahtarları aynı düzene ayrı dilimde alınır; 3.9'un kapsamı dışında kalır.**
 8. **Yıllık tören günü:** yıllık paket belgesi yenilemesi üç ayda bir yapılan anahtar töreninin birine eklensin mi (ana parola bir kez yazılır)? Öneri evet.
+   **KARAR (2026-10-06): evet, daha da ileri — kullanıcı aynı gece bütün anahtar yenilemelerini YILDA BİR dönem töreninde topladı (ara imzacı/ALT/İNDİRME de 1 yıla çıkıyor; o ayrı işte kodlanıyor). Yıllık PAKET adımı bu tek yıllık törenin parçasıdır, ana parola bir kez yazılır.**
