@@ -7,7 +7,7 @@
 // ÖNCE ve deftere yazarken bayi kilidi ALTINDA yeniden yapılır. Tavan sürümlü defterdir.
 //   §0 portal modül kataloğu = backend MODULE_SETTING_KEYS ∪ {patron-bulut}
 //   §9 kalıcı izni (varsayılan HAYIR) + bakım ay tavanı sürüm imzasında da bağlar
-// Ölçüm gerçek HTTP ile (süreç içi iki dinleyici: satıcı tailnet, bayi genel; kendi `_test` DB'si).
+// Ölçüm gerçek HTTP ile (süreç içi iki dinleyici: satıcı ERİŞİM, bayi genel; kendi `_test` DB'si).
 // ⭐ KALICI SONDA ✓K5 (her koşumda): (1) tavan içindeki HAK imzalanır ve protokolden BAYİ imzalı
 //    olarak geçer · (2) sertifikanın izin verdiği ama tavanın dışındaki modüllü HAK'ı protokol
 //    TEK BAŞINA kabul eder (sunucu katmanı gerçekten EK) · (3) tavan tekrar genişleyince aynı
@@ -72,8 +72,8 @@ async function main(): Promise<void> {
   try {
     const yonetici = await portalKullaniciAc(ctx, "SATICI_YONETICI");
     kullanicilar.push(yonetici.id);
-    const yCerez = (await portalGiris(sunucu.tailnet, "/portal/api", yonetici)).cerez!;
-    const satici = (yol: string, govde?: unknown) => portalIstek(sunucu.tailnet, `/portal/api${yol}`, { cerez: yCerez, govde });
+    const yCerez = (await portalGiris(sunucu.portal, "/portal/api", yonetici)).cerez!;
+    const satici = (yol: string, govde?: unknown) => portalIstek(sunucu.portal, `/portal/api${yol}`, { cerez: yCerez, govde });
     const tavanYaz = (bayiId: string, moduller: string[], siniflar: string[], kurulumAdedi: number, sebep: string, ek: { kaliciIzni?: boolean; bakimAyTavani?: number } = {}) =>
       satici(`/bayiler/${bayiId}/tavan`, { clientToken: randomUUID(), tavan: { moduller, siniflar, kurulumAdedi, kanallar: [KANAL], ...ek }, sebep });
     await kanalFiksturu(KANAL);

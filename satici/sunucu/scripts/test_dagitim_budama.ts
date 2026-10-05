@@ -16,7 +16,7 @@ import { abandonStaleSessions, BODY_PRUNED_MODELS, pruneExpiredBodies } from "..
 import { completeSession, startSession, writePart, type SessionOwner } from "../src/distribution/sessions.service";
 import { bodyPath } from "../src/distribution/storage";
 import { dagitimOrtamiKur, genelIstek, sha256 } from "./lib/dagitim-ortam";
-import { hedefDbKapisi, kapat, kontrol, SATICI_KOKU, sonuc } from "./lib/test-ortam";
+import { hedefDbKapisi, kapat, kontrol, portalFetch, SATICI_KOKU, sonuc } from "./lib/test-ortam";
 
 async function main(): Promise<void> {
   hedefDbKapisi();
@@ -53,7 +53,7 @@ async function main(): Promise<void> {
     console.log("\n§2 budanmış gövde");
     const eskiIndir = await genelIstek(d.sunucu.genel, `/d/${String(eskiBag.veri.belirtec)}`, { yontem: "POST" });
     const yeniBag = await d.p("POST", "/dagitim/baglantilar", { tur: "DOSYA", musteriId: d.musteriId, dosyaId: eskiId, gecerlilikSaat: 24, azamiIndirme: 1 });
-    const portal = await fetch(`${d.sunucu.tailnet}/portal/api/ham/dosyalar/${eskiId}`, { headers: { Cookie: d.yonetici.cerez } });
+    const portal = await portalFetch(`${d.sunucu.portal}/portal/api/ham/dosyalar/${eskiId}`, { headers: { Cookie: d.yonetici.cerez } });
     kontrol("§2a eski bağlantı 410 GOVDE_BUDANDI · yeni paylaşım 410 · portal indirmesi 410", eskiIndir.status === 410 && eskiIndir.kod === "GOVDE_BUDANDI" && yeniBag.status === 410 && portal.status === 410, `${eskiIndir.status}/${yeniBag.status}/${portal.status}`);
     const bag = await prisma.indirmeBaglantisi.findFirstOrThrow({ where: { dosyaId: eskiId } });
     kontrol("§2b budanmış gövdede hak TÜKETİLMEDİ", bag.indirmeSayisi === 0);

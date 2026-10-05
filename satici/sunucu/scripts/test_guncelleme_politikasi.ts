@@ -195,20 +195,20 @@ async function uctanUca(temizlenecek: { kurulumlar: string[]; kidler: string[]; 
 
     const kul = await portalKullaniciAc(ortam.ctx, "SATICI_OPERATOR");
     temizlenecek.kullanicilar.push(kul.id);
-    const giris = await portalGiris(portal.tailnet, "/portal/api", kul);
+    const giris = await portalGiris(portal.portal, "/portal/api", kul);
     const cerez = giris.cerez ?? "";
     const yol = `/portal/api/kurulumlar/${k.kurulumDbId}/guncelleme-politikasi`;
     const govde = { clientToken: crypto.randomUUID(), kip: "OTOMATIK", pencere: { baslangic: "02:00", bitis: "05:00", gunler: [1, 2, 3, 4, 5, 6, 7] }, hedefSurum: null, sebep: "bekçi: gece penceresi" };
-    const r1 = await portalIstek(portal.tailnet, yol, { govde, cerez });
+    const r1 = await portalIstek(portal.portal, yol, { govde, cerez });
     kontrol("§2c politika ucu → 200, değişti", r1.status === 200 && r1.veri.degisti === true, `${r1.status} ${r1.kod ?? ""}`);
-    const r2 = await portalIstek(portal.tailnet, yol, { govde, cerez });
+    const r2 = await portalIstek(portal.portal, yol, { govde, cerez });
     const defter = await prisma.kurulumKaydi.count({ where: { kurulumId: k.kurulumDbId, olay: "GUNCELLEME_POLITIKASI" } });
     kontrol("§2d aynı işlem kimliği → aynı yanıt, defterde TEK satır", r2.status === 200 && r2.basliklar.get("idempotent-replay") === "true" && defter === 1, `${r2.status} replay=${r2.basliklar.get("idempotent-replay")} defter=${defter}`);
-    const r3 = await portalIstek(portal.tailnet, yol, { govde: { ...govde, clientToken: crypto.randomUUID(), pencere: null }, cerez });
+    const r3 = await portalIstek(portal.portal, yol, { govde: { ...govde, clientToken: crypto.randomUUID(), pencere: null }, cerez });
     kontrol("§2e OTOMATİK + pencere yok → 400 GOVDE_GECERSIZ", r3.status === 400 && r3.kod === "GOVDE_GECERSIZ", `${r3.status} ${r3.kod}`);
-    const r4 = await portalIstek(portal.tailnet, yol, { govde: { ...govde, clientToken: crypto.randomUUID(), fazla: 1 }, cerez });
+    const r4 = await portalIstek(portal.portal, yol, { govde: { ...govde, clientToken: crypto.randomUUID(), fazla: 1 }, cerez });
     kontrol("§2f gövdede tanınmayan anahtar → 400 (KATI)", r4.status === 400);
-    const r5 = await portalIstek(portal.tailnet, yol, { govde: { ...govde, clientToken: crypto.randomUUID() } });
+    const r5 = await portalIstek(portal.portal, yol, { govde: { ...govde, clientToken: crypto.randomUUID() } });
     kontrol("§2g oturumsuz → 401", r5.status === 401, String(r5.status));
 
     kira = await yokla();
@@ -230,10 +230,10 @@ async function uctanUca(temizlenecek: { kurulumlar: string[]; kidler: string[]; 
     });
     kontrol("§2l rapor KATI: tanınmayan alan → yoklama 400 (allowlist)", eskiGovde.status === 400, `${eskiGovde.status} ${eskiGovde.kod}`);
 
-    const filo = await portalIstek(portal.tailnet, "/portal/api/filo", { cerez });
+    const filo = await portalIstek(portal.portal, "/portal/api/filo", { cerez });
     const satir = (filo.json.data as { id: string; kuruluSurum: string | null; politika: { kip: string }; sonSonuc: { olay: string } | null }[] | undefined)?.find((x) => x.id === k.kurulumDbId);
     kontrol("§2m filo: kurulu sürüm (yoklamadan) · politika · son sonuç (defterden)", filo.status === 200 && satir?.kuruluSurum === "2.11.2" && satir.politika.kip === "OTOMATIK" && satir.sonSonuc?.olay === "GUNCELLEME_GERI_DONDU", JSON.stringify(satir).slice(0, 200));
-    const detay = await portalIstek(portal.tailnet, `/portal/api/kurulumlar/${k.kurulumDbId}/guncelleme`, { cerez });
+    const detay = await portalIstek(portal.portal, `/portal/api/kurulumlar/${k.kurulumDbId}/guncelleme`, { cerez });
     const gd = detay.json.data as { politika?: { kip?: string }; saatDilimi?: string; gecmis?: { olay: string }[] } | undefined;
     kontrol("§2n kurulumun güncelleme görünümü: politika + dilim + geçmiş (politika ve sonuç satırları)", gd?.politika?.kip === "OTOMATIK" && gd.saatDilimi === "Europe/Berlin" && (gd.gecmis ?? []).some((x) => x.olay === "GUNCELLEME_POLITIKASI") && (gd.gecmis ?? []).some((x) => x.olay === "GUNCELLEME_GERI_DONDU"));
 
@@ -244,7 +244,7 @@ async function uctanUca(temizlenecek: { kurulumlar: string[]; kidler: string[]; 
       ham = "ATILDI";
     }
     kontrol("§2o DB CHECK: OTOMATİK kipte pencereyi silen ham yazım RED", ham === "ATILDI");
-    const dondur = await portalIstek(portal.tailnet, yol, { govde: { clientToken: crypto.randomUUID(), kip: "DONDUR", pencere: null, hedefSurum: "2.11.2", sebep: "bekçi: dondur" }, cerez });
+    const dondur = await portalIstek(portal.portal, yol, { govde: { clientToken: crypto.randomUUID(), kip: "DONDUR", pencere: null, hedefSurum: "2.11.2", sebep: "bekçi: dondur" }, cerez });
     kira = await yokla();
     kontrol("§2p DONDUR + sabitleme kiraya gider; pencere/aralık yok", dondur.status === 200 && kira?.guncelleme?.kip === "DONDUR" && kira.guncelleme.hedefSurum === "2.11.2" && kira.guncelleme.araliklar.length === 0);
     await bildirimler(prisma, k.kurulumDbId, rapor, yokla);

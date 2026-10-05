@@ -53,7 +53,7 @@ async function main(): Promise<void> {
     console.log("\n§2 yetkisiz indirme");
     const bilinmeyen = await indir(randomBytes(24).toString("base64url"));
     const bicimsiz = await genelIstek(d.sunucu.genel, "/d/..%2F..%2Fx");
-    const oturumsuz = await genelIstek(d.sunucu.tailnet, "/portal/api/dagitim/baglantilar");
+    const oturumsuz = await genelIstek(d.sunucu.portal, "/portal/api/dagitim/baglantilar");
     kontrol("§2a bilinmeyen belirteç 404 (varlık sızmaz)", bilinmeyen.status === 404 && bilinmeyen.kod === "BULUNAMADI", `${bilinmeyen.status}`);
     kontrol("§2b biçimsiz belirteç 404", bicimsiz.status === 404, `${bicimsiz.status}`);
     kontrol("§2c oturumsuz portal listesi 401", oturumsuz.status === 401, `${oturumsuz.status}`);

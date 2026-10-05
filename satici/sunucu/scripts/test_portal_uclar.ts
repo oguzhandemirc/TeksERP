@@ -1,5 +1,5 @@
 // =============================================================================
-// PORTAL UÇLARI — rota KAPSAMI. Satıcı (tailnet) ve bayi (genel) rota tablolarındaki HER rota gerçek
+// PORTAL UÇLARI — rota KAPSAMI. Satıcı (ERİŞİM) ve bayi (genel) rota tablolarındaki HER rota gerçek
 // bir iş akışında en az bir kez beklenen durumla çağrılır (kanal → müşteri → tesis → kurulum → HAK imzası →
 // kod → /v1 etkinleştirme → yaptırım/uzatma/planlı/taksit → kopya uyarısı → taşıma → iptal → DR geri
 // alma → bayi → kullanıcı → denetim → anahtar → oturum). Sonda tablo ile çağrılan küme EŞİTLENİR:
@@ -32,6 +32,7 @@ import {
   kapat,
   kontrol,
   portalGiris,
+  portalFetch,
   portalIstek,
   portalKullaniciAc,
   portalSunuculariKur,
@@ -70,10 +71,10 @@ async function main(): Promise<void> {
   try {
     const yonetici = await portalKullaniciAc(ctx, "SATICI_YONETICI");
     kullanicilar.push(yonetici.id);
-    const cerez = (await portalGiris(sunucu.tailnet, "/portal/api", yonetici)).cerez!;
+    const cerez = (await portalGiris(sunucu.portal, "/portal/api", yonetici)).cerez!;
     /** Satıcı rotası: şablon + gerçek yol + beklenen durum. */
     const s = async (yontem: "get" | "post" | "patch", sablon: string, gercek: string, beklenen: number, govde?: object): Promise<PortalYanit> => {
-      const y = await portalIstek(sunucu.tailnet, `/portal/api${gercek}`, {
+      const y = await portalIstek(sunucu.portal, `/portal/api${gercek}`, {
         cerez,
         yontem: yontem.toUpperCase(),
         ...(govde === undefined ? {} : { govde: { clientToken: randomUUID(), ...govde } }),
@@ -87,8 +88,8 @@ async function main(): Promise<void> {
     const akisBaslangici = new Date(Date.now() - 1000);
     await s("get", "/katalog", "/katalog", 200);
     const kn = await s("post", "/kanallar", "/kanallar", 201, { kod: kanal, ad: "Uçlar kanalı", tur: "hazirlik" });
-    const knTekrar = await portalIstek(sunucu.tailnet, "/portal/api/kanallar", { cerez, govde: { clientToken: randomUUID(), kod: kanal, ad: "x", tur: "uretim" } });
-    const knSurumBozuk = await portalIstek(sunucu.tailnet, `/portal/api/kanallar/${kn.veri.id as string}`, { cerez, yontem: "PATCH", govde: { clientToken: randomUUID(), guncelSurumler: { panel: "1.3", web: "1.0.0" } } });
+    const knTekrar = await portalIstek(sunucu.portal, "/portal/api/kanallar", { cerez, govde: { clientToken: randomUUID(), kod: kanal, ad: "x", tur: "uretim" } });
+    const knSurumBozuk = await portalIstek(sunucu.portal, `/portal/api/kanallar/${kn.veri.id as string}`, { cerez, yontem: "PATCH", govde: { clientToken: randomUUID(), guncelSurumler: { panel: "1.3", web: "1.0.0" } } });
     kontrol("§1k0 aynı kanal kodu → 409; sürüm şeması dışı güncel sürüm → 400", knTekrar.status === 409 && knSurumBozuk.status === 400, `${knTekrar.status}/${knSurumBozuk.status}`);
     await s("patch", "/kanallar/:id", `/kanallar/${kn.veri.id as string}`, 200, { tur: "uretim", guncelSurumler: { backend: "2.11.2", panel: "1.3.2" } });
     const knListe = await s("get", "/kanallar", "/kanallar", 200);
@@ -104,9 +105,9 @@ async function main(): Promise<void> {
     tesisler.push(tId);
     await s("patch", "/tesisler/:id", `/tesisler/${tId}`, 200, { ad: "Merkez Tesis" });
     await s("get", "/tesisler", `/tesisler?musteriId=${mId}`, 200);
-    const kayitsiz = await portalIstek(sunucu.tailnet, "/portal/api/kurulumlar", { cerez, govde: { clientToken: randomUUID(), tesisId: tId, sinif: "URETIM", kanalKodu: "kayitsiz-kanal-yok" } });
+    const kayitsiz = await portalIstek(sunucu.portal, "/portal/api/kurulumlar", { cerez, govde: { clientToken: randomUUID(), tesisId: tId, sinif: "URETIM", kanalKodu: "kayitsiz-kanal-yok" } });
     kontrol("§1k2 kayıtlı olmayan kanala kurulum açılamaz → 400", kayitsiz.status === 400, `${kayitsiz.status} ${kayitsiz.kod ?? ""}`);
-    const istemciKimligi = await portalIstek(sunucu.tailnet, "/portal/api/kurulumlar", { cerez, govde: { clientToken: randomUUID(), tesisId: tId, kurulumId: randomUUID(), sinif: "URETIM", kanalKodu: kanal } });
+    const istemciKimligi = await portalIstek(sunucu.portal, "/portal/api/kurulumlar", { cerez, govde: { clientToken: randomUUID(), tesisId: tId, kurulumId: randomUUID(), sinif: "URETIM", kanalKodu: kanal } });
     kontrol("§1k3 lisans kimliğini istemci VEREMEZ (D14; KATI gövde) → 400", istemciKimligi.status === 400 && istemciKimligi.kod === "GOVDE_GECERSIZ", `${istemciKimligi.status} ${istemciKimligi.kod ?? ""}`);
     const k = await s("post", "/kurulumlar", "/kurulumlar", 201, { tesisId: tId, sinif: "URETIM", kanalKodu: kanal, ad: "Ana sunucu" });
     const kId = k.veri.id as string;
@@ -114,7 +115,7 @@ async function main(): Promise<void> {
     kontrol("§1k4 ✓K lisans kimliği sunucuda doğdu (UUID, satıcı kaydının id'sinden ayrı)", /^[0-9a-f-]{36}$/.test(kurulumId) && kurulumId !== kId, kurulumId);
     kurulumlar.push(kId);
     await s("patch", "/kurulumlar/:id", `/kurulumlar/${kId}`, 200, { yoklamaAraligiDk: 30, sinif: "TEST" });
-    await portalIstek(sunucu.tailnet, `/portal/api/kurulumlar/${kId}`, { cerez, yontem: "PATCH", govde: { clientToken: randomUUID(), sinif: "URETIM" } });
+    await portalIstek(sunucu.portal, `/portal/api/kurulumlar/${kId}`, { cerez, yontem: "PATCH", govde: { clientToken: randomUUID(), sinif: "URETIM" } });
 
     console.log("\n§1z dağıtım rotaları (Faz 3d; davranış test_dagitim_* bekçilerinde)");
     mkdirSync(derlemeDizini, { recursive: true });
@@ -130,7 +131,7 @@ async function main(): Promise<void> {
     const dIcerik = Buffer.from("uçlar giden dosyası");
     const dOt = await s("post", "/dagitim/giden-oturum", "/dagitim/giden-oturum", 200, { musteriId: mId, dosyaAdi: "not.txt", boyut: dIcerik.length, sha256: ozet(dIcerik) });
     const dOid = dOt.veri.oturumId as string;
-    const dPut = await fetch(`${sunucu.tailnet}/portal/api/ham/giden-oturum/${dOid}/parca/0`, { method: "PUT", headers: { Cookie: cerez, "X-Parca-Sha256": ozet(dIcerik) }, body: new Uint8Array(dIcerik) });
+    const dPut = await portalFetch(`${sunucu.portal}/portal/api/ham/giden-oturum/${dOid}/parca/0`, { method: "PUT", headers: { Cookie: cerez, "X-Parca-Sha256": ozet(dIcerik) }, body: new Uint8Array(dIcerik) });
     kontrol("§1z0 ham parça ucu (JSON tablosu dışı) oturumla 200", dPut.status === 200, `${dPut.status}`);
     await s("get", "/dagitim/giden-oturum/:id", `/dagitim/giden-oturum/${dOid}`, 200);
     await s("post", "/dagitim/giden-oturum/:id/tamamla", `/dagitim/giden-oturum/${dOid}/tamamla`, 200, {});
@@ -142,12 +143,12 @@ async function main(): Promise<void> {
     await s("post", "/yayincilar/:id/pasif", `/yayincilar/${dYk.veri.id as string}/pasif`, 200, { sebep: "uçlar kapsamı" });
     const hak = await s("post", "/kurulumlar/:id/hak", `/kurulumlar/${kId}/hak`, 201, { kalici: false, bakimBitis: new Date(Date.now() + 365 * DAY_MS).toISOString() });
     const hakId = hak.veri.id as string;
-    const uretimsiz = await portalIstek(sunucu.tailnet, `/portal/api/haklar/${hakId}/surum`, { cerez, govde: { clientToken: randomUUID(), kokParolasi: TEST_KOK_PAROLASI, sebep: "x", moduller: ["finance.enabled"] } });
+    const uretimsiz = await portalIstek(sunucu.portal, `/portal/api/haklar/${hakId}/surum`, { cerez, govde: { clientToken: randomUUID(), kokParolasi: TEST_KOK_PAROLASI, sebep: "x", moduller: ["finance.enabled"] } });
     kontrol("§1a üretim modülü onaysız çıkarılamaz → 400 URETIM_MODULU_UYARISI", uretimsiz.status === 400 && uretimsiz.kod === "URETIM_MODULU_UYARISI", `${uretimsiz.status} ${uretimsiz.kod}`);
-    const yanlisKok = await portalIstek(sunucu.tailnet, `/portal/api/haklar/${hakId}/surum`, { cerez, govde: { clientToken: randomUUID(), kokParolasi: "yanlis-kok-parolasi-x", sebep: "ilk imza" } });
+    const yanlisKok = await portalIstek(sunucu.portal, `/portal/api/haklar/${hakId}/surum`, { cerez, govde: { clientToken: randomUUID(), kokParolasi: "yanlis-kok-parolasi-x", sebep: "ilk imza" } });
     kontrol("§1b yanlış kök parolası → 400 IMZA_PAROLASI_HATALI", yanlisKok.status === 400 && yanlisKok.kod === "IMZA_PAROLASI_HATALI", `${yanlisKok.status} ${yanlisKok.kod}`);
     await s("post", "/haklar/:id/surum", `/haklar/${hakId}/surum`, 201, { kokParolasi: TEST_KOK_PAROLASI, sebep: "ilk imza", moduller: ["production.enabled", "finance.enabled"] });
-    const sinifImzali = await portalIstek(sunucu.tailnet, `/portal/api/kurulumlar/${kId}`, { cerez, yontem: "PATCH", govde: { clientToken: randomUUID(), sinif: "TEST" } });
+    const sinifImzali = await portalIstek(sunucu.portal, `/portal/api/kurulumlar/${kId}`, { cerez, yontem: "PATCH", govde: { clientToken: randomUUID(), sinif: "TEST" } });
     kontrol("§1c imzalı hakkı olan kurulumun sınıfı değişmez → 409", sinifImzali.status === 409, `${sinifImzali.status}`);
     const hakAyrinti = await s("get", "/haklar/:id", `/haklar/${hakId}`, 200);
     kontrol("§1d HAK ayrıntısı: sürüm 1 imzalı, modüller uygulandı", (hakAyrinti.veri.guncelSurum as number) === 1 && JSON.stringify(hakAyrinti.veri.moduller) === '["production.enabled","finance.enabled"]');
@@ -184,7 +185,7 @@ async function main(): Promise<void> {
     const k2 = await s("post", "/kurulumlar/:id/yaptirim", `/kurulumlar/${kId}/yaptirim`, 201, { kademe: "K2", moduller: ["finance.enabled"], sebep: "finans ödenmedi" });
     await s("post", "/yaptirimlar/:id/geri-al", `/yaptirimlar/${k2.veri.id as string}/geri-al`, 201, { sebep: "ödendi" });
     const k5 = await s("post", "/kurulumlar/:id/agir-yaptirim", `/kurulumlar/${kId}/agir-yaptirim`, 201, { kademe: "K5", sebep: "tam durdurma", onay: hak.veri.lisansNo });
-    await portalIstek(sunucu.tailnet, `/portal/api/yaptirimlar/${k5.veri.id as string}/geri-al`, { cerez, govde: { clientToken: randomUUID(), sebep: "uzlaşıldı" } });
+    await portalIstek(sunucu.portal, `/portal/api/yaptirimlar/${k5.veri.id as string}/geri-al`, { cerez, govde: { clientToken: randomUUID(), sebep: "uzlaşıldı" } });
     const planli = await s("post", "/kurulumlar/:id/planli-eylem", `/kurulumlar/${kId}/planli-eylem`, 201, { kademe: "K0", vade: new Date(Date.now() + DAY_MS).toISOString(), mesaj: "hatırlatma", sebep: "vade" });
     await s("get", "/planli-eylemler", `/planli-eylemler?durum=BEKLIYOR&kurulumId=${kId}`, 200);
     await s("post", "/planli-eylemler/:id/iptal", `/planli-eylemler/${planli.veri.id as string}/iptal`, 200, { sebep: "gerek kalmadı" });
@@ -251,17 +252,17 @@ async function main(): Promise<void> {
 
     const bos = await s("post", "/kurulumlar", "/kurulumlar", 201, { tesisId: tId, sinif: "TEST", kanalKodu: kanal });
     kurulumlar.push(bos.veri.id as string);
-    const canliPasif = await portalIstek(sunucu.tailnet, `/portal/api/kurulumlar/${kId}/pasif`, { cerez, govde: { clientToken: randomUUID(), sebep: "x" } });
+    const canliPasif = await portalIstek(sunucu.portal, `/portal/api/kurulumlar/${kId}/pasif`, { cerez, govde: { clientToken: randomUUID(), sebep: "x" } });
     kontrol("§1f ETKİN kurulum pasife alınamaz (önce iptal) → 409", canliPasif.status === 409, `${canliPasif.status}`);
     await s("post", "/kurulumlar/:id/pasif", `/kurulumlar/${bos.veri.id as string}/pasif`, 200, { sebep: "yanlış açıldı" });
     await s("post", "/kurulumlar/:id/aktif", `/kurulumlar/${bos.veri.id as string}/aktif`, 200, { sebep: "geri alındı" });
-    const tesisPasif = await portalIstek(sunucu.tailnet, `/portal/api/tesisler/${tId}/pasif`, { cerez, govde: { clientToken: randomUUID(), sebep: "x" } });
+    const tesisPasif = await portalIstek(sunucu.portal, `/portal/api/tesisler/${tId}/pasif`, { cerez, govde: { clientToken: randomUUID(), sebep: "x" } });
     kontrol("§1g aktif kurulumu olan tesis pasife alınamaz (MV-06) → 409", tesisPasif.status === 409, `${tesisPasif.status}`);
-    const t2 = await portalIstek(sunucu.tailnet, "/portal/api/tesisler", { cerez, govde: { clientToken: randomUUID(), musteriId: mId, ad: "Depo" } });
+    const t2 = await portalIstek(sunucu.portal, "/portal/api/tesisler", { cerez, govde: { clientToken: randomUUID(), musteriId: mId, ad: "Depo" } });
     tesisler.push(t2.veri.id as string);
     await s("post", "/tesisler/:id/pasif", `/tesisler/${t2.veri.id as string}/pasif`, 200, { sebep: "kapandı" });
     await s("post", "/tesisler/:id/aktif", `/tesisler/${t2.veri.id as string}/aktif`, 200, { sebep: "açıldı" });
-    const m2 = await portalIstek(sunucu.tailnet, "/portal/api/musteriler", { cerez, govde: { clientToken: randomUUID(), ad: "Boş Müşteri" } });
+    const m2 = await portalIstek(sunucu.portal, "/portal/api/musteriler", { cerez, govde: { clientToken: randomUUID(), ad: "Boş Müşteri" } });
     musteriler.push(m2.veri.id as string);
     await s("post", "/musteriler/:id/pasif", `/musteriler/${m2.veri.id as string}/pasif`, 200, { sebep: "çalışmıyoruz" });
     await s("post", "/musteriler/:id/aktif", `/musteriler/${m2.veri.id as string}/aktif`, 200, { sebep: "döndü" });
@@ -322,7 +323,7 @@ async function main(): Promise<void> {
 
     const denetim = await s("get", "/denetim", `/denetim?varlik=Kurulum&varlikId=${kId}&limit=2`, 200);
     const imlec = denetim.veri.nextCursor as string | null;
-    const denetim2 = imlec ? await portalIstek(sunucu.tailnet, `/portal/api/denetim?varlik=Kurulum&varlikId=${kId}&limit=2&imlec=${imlec}`, { cerez }) : null;
+    const denetim2 = imlec ? await portalIstek(sunucu.portal, `/portal/api/denetim?varlik=Kurulum&varlikId=${kId}&limit=2&imlec=${imlec}`, { cerez }) : null;
     const ilk = (denetim.veri.items as { id: string }[]).map((x) => x.id);
     const ikinci = ((denetim2?.veri.items as { id: string }[] | undefined) ?? []).map((x) => x.id);
     kontrol("§2c denetim imleçli sayfa: 2 + sonraki sayfa, kesişim yok", ilk.length === 2 && ikinci.length > 0 && !ikinci.some((x) => ilk.includes(x)), `${ilk.length}/${ikinci.length}`);
@@ -384,14 +385,14 @@ async function main(): Promise<void> {
     console.log("\n§4 oturum");
     const opK = await portalKullaniciAc(ctx, "SATICI_OPERATOR");
     kullanicilar.push(opK.id);
-    const opCerez = (await portalGiris(sunucu.tailnet, "/portal/api", opK)).cerez!;
-    const degis = await portalIstek(sunucu.tailnet, "/portal/api/oturum/parola", { cerez: opCerez, govde: { mevcutParola: opK.parola, yeniParola: `yeni-${opK.parola}`, totp: await totpKodu(opK.sir, 1) } });
-    const sonra = await portalIstek(sunucu.tailnet, "/portal/api/oturum", { cerez: opCerez });
+    const opCerez = (await portalGiris(sunucu.portal, "/portal/api", opK)).cerez!;
+    const degis = await portalIstek(sunucu.portal, "/portal/api/oturum/parola", { cerez: opCerez, govde: { mevcutParola: opK.parola, yeniParola: `yeni-${opK.parola}`, totp: await totpKodu(opK.sir, 1) } });
+    const sonra = await portalIstek(sunucu.portal, "/portal/api/oturum", { cerez: opCerez });
     kontrol("§4a kendi parola değişimi (mevcut parola + TOTP) → 200, bu oturum sürer", degis.status === 200 && sonra.status === 200, `${degis.status}/${sonra.status}`);
-    const cikis = await portalIstek(sunucu.tailnet, "/portal/api/oturum/kapat", { cerez: opCerez, govde: {} });
-    const cikistan = await portalIstek(sunucu.tailnet, "/portal/api/oturum", { cerez: opCerez });
+    const cikis = await portalIstek(sunucu.portal, "/portal/api/oturum/kapat", { cerez: opCerez, govde: {} });
+    const cikistan = await portalIstek(sunucu.portal, "/portal/api/oturum", { cerez: opCerez });
     kontrol("§4b çıkış → 200, çerez temizlenir, oturum 401", cikis.status === 200 && /Max-Age=0/.test(cikis.basliklar.get("set-cookie") ?? "") && cikistan.status === 401);
-    const formGovde = await portalIstek(sunucu.tailnet, "/portal/api/musteriler", { cerez, govde: "ad=x", icerikTuru: "application/x-www-form-urlencoded" });
+    const formGovde = await portalIstek(sunucu.portal, "/portal/api/musteriler", { cerez, govde: "ad=x", icerikTuru: "application/x-www-form-urlencoded" });
     kontrol("§4c JSON olmayan yazma (form gönderimi) → 400 (CSRF seddi)", formGovde.status === 400, `${formGovde.status}`);
 
     console.log("\n§5 kapsam");

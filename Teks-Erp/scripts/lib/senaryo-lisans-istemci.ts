@@ -172,6 +172,8 @@ export class PortalIstemcisi {
     private readonly kimlik: { kullaniciAdi: string; parola: string; sir: string },
     /** Satıcının saati (kaydırılmış) — TOTP adımı ondan. */
     private readonly saticiSaati: () => number,
+    /** Her isteğe eklenecek başlıklar (satıcı portalı: ERİŞİM düzeneğinin Access JWT'si, satıcının saatine göre basılır). */
+    private readonly ekBasliklar: () => Record<string, string> = () => ({}),
   ) {}
 
   async giris(): Promise<Yanit> {
@@ -184,7 +186,7 @@ export class PortalIstemcisi {
     }
     const r = await fetch(`${this.taban}${this.onEk}/oturum/ac`, {
       method: "POST",
-      headers: { "content-type": "application/json" },
+      headers: { "content-type": "application/json", ...this.ekBasliklar() },
       body: JSON.stringify({ kullaniciAdi: this.kimlik.kullaniciAdi, parola: this.kimlik.parola, totp: totpKodu(this.kimlik.sir, adim) }),
     });
     this.sonAdim = adim;
@@ -199,7 +201,7 @@ export class PortalIstemcisi {
   async istek(yontem: string, yol: string, govde?: Record<string, unknown>): Promise<Yanit> {
     if (!this.cerez) await this.giris();
     const beden = govde === undefined ? undefined : { clientToken: randomUUID(), ...govde };
-    const gonder = (): Promise<Yanit> => jsonIstek(`${this.taban}${this.onEk}${yol}`, { yontem, govde: beden, basliklar: this.cerez ? { cookie: this.cerez } : {} });
+    const gonder = (): Promise<Yanit> => jsonIstek(`${this.taban}${this.onEk}${yol}`, { yontem, govde: beden, basliklar: { ...this.ekBasliklar(), ...(this.cerez ? { cookie: this.cerez } : {}) } });
     let y = await gonder();
     if (y.status === 401) {
       await this.giris();

@@ -60,9 +60,9 @@ async function main(): Promise<void> {
     const yonetici = await portalKullaniciAc(ctx, "SATICI_YONETICI");
     const operator = await portalKullaniciAc(ctx, "SATICI_OPERATOR");
     kullanicilar.push(yonetici.id, operator.id);
-    const yCerez = (await portalGiris(sunucu.tailnet, "/portal/api", yonetici)).cerez!;
-    const oCerez = (await portalGiris(sunucu.tailnet, "/portal/api", operator)).cerez!;
-    const satici = (yol: string, govde?: unknown, yontem?: string, cerez = yCerez) => portalIstek(sunucu.tailnet, `/portal/api${yol}`, { cerez, govde, yontem });
+    const yCerez = (await portalGiris(sunucu.portal, "/portal/api", yonetici)).cerez!;
+    const oCerez = (await portalGiris(sunucu.portal, "/portal/api", operator)).cerez!;
+    const satici = (yol: string, govde?: unknown, yontem?: string, cerez = yCerez) => portalIstek(sunucu.portal, `/portal/api${yol}`, { cerez, govde, yontem });
     const bayiAc = async (ad: string, kurulumAdedi: number, kanallar: string[]) => {
       const y = await satici("/bayiler", { clientToken: randomUUID(), ad, tavan: { moduller: MODULLER, siniflar: ["URETIM"], kurulumAdedi, kanallar }, sebep: "sahiplik bekçisi" });
       if (y.status !== 201) throw new Error(`bayi ${y.status} ${y.kod}`);
