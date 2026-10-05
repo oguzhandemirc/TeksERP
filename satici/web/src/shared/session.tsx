@@ -14,8 +14,8 @@ export interface SessionUser {
   readonly bayiId: string | null;
 }
 
-/** Oturumun doğduğu dinleyici: TAILNET (tailnet/geri döngü) · ERISIM (Cloudflare Access arkası genel yol) · GENEL (bayi). */
-export type SessionListener = "TAILNET" | "GENEL" | "ERISIM";
+/** Oturumun doğduğu dinleyici: ERISIM (Cloudflare Access arkası satıcı portalı) · GENEL (bayi). */
+export type SessionListener = "GENEL" | "ERISIM";
 
 export interface SessionInfo {
   readonly kullanici: SessionUser;
@@ -107,7 +107,7 @@ export function useUser(): SessionUser {
   return state.session.kullanici;
 }
 
-/** Rol izni (dinleyici izni daraltmaz: tailnet ve ERİŞİM oturumunda aynı roller aynı ekranları görür). */
+/** Rol izni (dinleyici izni daraltmaz: rol neyi görüyorsa her dinleyicide aynıdır). */
 export function useCan(permission: PortalPermission): boolean {
   const { state } = useSessionContext();
   return state.status === "in" && roleHas(state.session.kullanici.rol, permission);

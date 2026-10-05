@@ -1,7 +1,7 @@
 // PORTAL KULLANICILARI (yalnız yönetici) — hesap aç (TOTP kurulumu BURADA: sır ve QR yalnız bu canlı
 // yanıtta bir kez; kullanıcı ilk girişten önce doğrulayıcısına okutur), TOTP sıfırla (telefon kaybı —
-// kurtarma kodu YOK), kilit aç, parola sıfırla, pasife al. Satıcı rolleri tailnet ya da internet
-// portalından, BAYI yalnız genel adresten girer. Sayfa her dinleyicide açıktır.
+// kurtarma kodu YOK), kilit aç, parola sıfırla, pasife al. Satıcı rolleri yalnız internet
+// portalından (Cloudflare Access arkası), BAYI yalnız genel adresten girer. Sayfa her dinleyicide açıktır.
 import { useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
@@ -186,7 +186,7 @@ function UserCreateModal({
       <Field label="Ad soyad">
         <input value={fullName} maxLength={120} onChange={(e) => setFullName(e.target.value)} />
       </Field>
-      <Field label="Rol" hint="Satıcı rolleri tailnet ya da internet portalından, bayi yalnız genel adresten giriş yapar.">
+      <Field label="Rol" hint="Satıcı rolleri yalnız internet portalından (Cloudflare Access arkası), bayi yalnız genel adresten giriş yapar.">
         <select value={role} onChange={(e) => setRole(e.target.value as PortalRole)}>
           {ROLES.map((r) => (
             <option key={r} value={r}>

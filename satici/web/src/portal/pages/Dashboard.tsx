@@ -3,6 +3,7 @@ import { useGet } from "../../shared/hooks";
 import { INSTALLATION_STATUS_LABEL, label } from "../../shared/labels";
 import type { Dashboard } from "../../shared/types";
 import { PageTitle, QueryState, Section } from "../../shared/ui";
+import { SystemHealthCard } from "./SystemHealthCard";
 
 function Card({ title, value, to }: { title: string; value: number; to?: string }) {
   const body = (
@@ -41,6 +42,7 @@ export function DashboardPage() {
           </Section>
         </>
       ) : null}
+      <SystemHealthCard />
     </>
   );
 }

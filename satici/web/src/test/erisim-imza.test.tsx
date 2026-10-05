@@ -1,10 +1,10 @@
-// İNTERNET PORTALI (ERİŞİM, Cloudflare Access arkası) — lisans imzası TAILNET ile AYNI çalışır (kullanıcı kararı
+// İNTERNET PORTALI (ERİŞİM, Cloudflare Access arkası) — lisans imzası dinleyiciden bağımsız AYNI çalışır (kullanıcı kararı
 // 2026-10-04): ERISIM oturumunda "Lisansı yenile" düğmesi var, form planın istediği parolayı (ara imzacı / kök) sorar ve
 // gövde `imzaci` + `imzaParolasi` ile /surum'a gider; "bu bağlantıdan yapılamaz" açıklaması YOK. Pozitif kontrol: aynı
-// akış TAILNET'te de koşar (kör "her şey kapalı" ile kör "her şey açık" ayrılır).
+// akış GENEL oturumunda da koşar (kör "her şey kapalı" ile kör "her şey açık" ayrılır).
 // NEGATİF SONDA (2026-10-04, dosya DIŞI, shasum ile geri alındı): EntitlementPanel'de imza düğmesi ERISIM'de gizlendi
-// (eski `signingBlocked` kilidinin eşdeğeri) → ERISIM ARA ve ERISIM KOK testleri ❌, TAILNET yeşil; panel her dinleyicide
-// kapatılınca (`closed = true`) üç test de ❌ (TAILNET pozitif kontrolü kör-açma/kör-kapama ayrımını taşır).
+// (eski `signingBlocked` kilidinin eşdeğeri) → ERISIM ARA ve ERISIM KOK testleri ❌, GENEL yeşil; panel her dinleyicide
+// kapatılınca (`closed = true`) üç test de ❌ (GENEL pozitif kontrolü kör-açma/kör-kapama ayrımını taşır).
 import { screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it } from "vitest";
@@ -44,9 +44,9 @@ async function sign(user: ReturnType<typeof userEvent.setup>, passwordLabel: Reg
 }
 
 describe("internet portalında lisans imzası açık", () => {
-  it("TAILNET: yönetici 'Lisansı yenile' düğmesini görür, ara imzacı parolasıyla /surum çağrılır (pozitif kontrol)", async () => {
+  it("GENEL: yönetici 'Lisansı yenile' düğmesini görür, ara imzacı parolasıyla /surum çağrılır (pozitif kontrol)", async () => {
     const user = userEvent.setup();
-    const { calls } = openInstallation("TAILNET");
+    const { calls } = openInstallation("GENEL");
     await sign(user, /^Ara imzacı parolası/, "ara-parola");
     expect(writes(calls)[0]!.body).toMatchObject({ imzaci: "ARA", imzaParolasi: "ara-parola" });
     expect(screen.queryByText(/Cloudflare'den geçmez/)).toBeNull();

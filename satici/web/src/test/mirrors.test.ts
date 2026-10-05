@@ -160,7 +160,7 @@ describe("izin tablosu aynası (satici/sunucu src/portal/roles.ts)", () => {
     expect(web).toEqual(Object.fromEntries(Object.entries(server).map(([k, v]) => [k, [...v].sort()])));
   });
 
-  // NEGATİF SONDA (2026-10-04, dosya DIŞI, geri alındı): roles.ts'e `TAILNET_ONLY_PERMISSIONS` geri yazıldı → ❌.
+  // Tünel emekli: TAILNET dinleyicisi yok, bu sınıf geri gelirse kırmızı. NEGATİF SONDA (dosya DIŞI, geri alındı): roles.ts'e `TAILNET_ONLY_PERMISSIONS` geri yazıldı → ❌.
   it("sunucuda dinleyiciye göre izin düşüren sınıf YOK (portal internetten: rol ne açıyorsa iki yolda da açar)", () => {
     expect(read("portal/roles.ts")).not.toMatch(/TAILNET_ONLY_PERMISSIONS/);
   });

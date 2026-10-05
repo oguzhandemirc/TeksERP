@@ -4,7 +4,7 @@
 import { useCallback, useRef, useState } from "react";
 import { isAmbiguousError } from "./api";
 
-/** UUID v4 — `crypto.randomUUID` yalnız güvenli bağlamda var; tailnet portalı düz HTTP olabilir (internet portalı HTTPS). */
+/** UUID v4 — `crypto.randomUUID` yalnız güvenli bağlamda var; düz HTTP'de açılan geliştirme/kurulum sayfaları güvenli bağlam değildir. */
 export function newClientToken(): string {
   const b = new Uint8Array(16);
   crypto.getRandomValues(b);

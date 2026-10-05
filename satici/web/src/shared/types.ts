@@ -507,6 +507,27 @@ export interface Dashboard {
   readonly yirmiDortSaattirSessiz: number;
 }
 
+/** GET /saglik — sunucunun `services/system-health.ts` çıktısının aynası (yalnız sayı ve durum). */
+export interface SystemHealth {
+  readonly zil: { readonly dinliyor: boolean; readonly abone: number; readonly teslim: number };
+  readonly anahtarlar: { readonly capa: "gomulu" | "dosya"; readonly altGecerli: number; readonly indirmeVar: boolean; readonly uyariSayisi: number };
+  readonly denetimYazmaHatasi: number;
+  readonly erisim:
+    | { readonly kip: "kapali" }
+    | {
+        readonly kip: "acik";
+        readonly jwks: {
+          readonly dolu: boolean;
+          readonly anahtarSayisi: number;
+          readonly dosyaYasiSn: number | null;
+          readonly azamiYasSn: number;
+          readonly yasDurumu: "TAZE" | "UYARI" | "ASILDI" | null;
+          readonly okumaYasiSn: number | null;
+          readonly sonHata: string | null;
+        };
+      };
+}
+
 /** Bir kez gösterilen kod yanıtı (tekrar yanıtında `kod: null`, `kodGosterilemez: true`, son 4 yok). */
 export interface ActivationCodeCreated {
   readonly id: string;

@@ -1,6 +1,6 @@
 // ERİŞİM DÜZENEĞİ (yaprak modül; yalnız node: bağımlılığı) — satıcı portalının tek yolu Cloudflare Access'tir; testte
 // süreç başına TEK RSA-2048 anahtarı ve TEK JWKS dosyası (ilk kullanımda yazılır, çıkışta silinir — yaş tavanı ısırmaz).
-// Takım alanı ve AUD sahtedir; sunucu ağa çıkmaz. Jeton her istekte taze basılır (exp +1 sa).
+// Takım alanı ve AUD sahtedir; sunucu ağa çıkmaz. Jeton her istekte taze basılır (exp +1 sa; yerel geliştirme betiği `omurSn` ile uzatır).
 // `test-ortam.ts` (satıcı bekçileri) ve Teks-Erp `senaryo-lisans` (saati kaydırılmış satıcı süreci) aynı düzeneği kullanır.
 import { generateKeyPairSync, randomBytes, randomUUID, sign, type KeyObject } from "node:crypto";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
@@ -38,11 +38,11 @@ export function erisimJwksDosyasi(): string {
 }
 
 /** Bu sürecin düzeneğine göre geçerli Access JWT'si (gerçek RS256). `simdiMs`: doğrulayan sürecin saati (kaydırılmışsa onunki). */
-export function erisimJetonu(g: { eposta?: string; simdiMs?: number } = {}): string {
+export function erisimJetonu(g: { eposta?: string; simdiMs?: number; omurSn?: number } = {}): string {
   const a = erisimAnahtar();
   const sn = Math.floor((g.simdiMs ?? Date.now()) / 1000);
   const b64u = (x: unknown): string => Buffer.from(JSON.stringify(x)).toString("base64url");
-  const govde = `${b64u({ alg: "RS256", kid: a.kid, typ: "JWT" })}.${b64u({ aud: [a.aud], email: g.eposta ?? ERISIM_EPOSTA, sub: "bekci", iss: `https://${ERISIM_TAKIM_ALANI}`, iat: sn - 5, nbf: sn - 5, exp: sn + 3600, type: "app" })}`;
+  const govde = `${b64u({ alg: "RS256", kid: a.kid, typ: "JWT" })}.${b64u({ aud: [a.aud], email: g.eposta ?? ERISIM_EPOSTA, sub: "bekci", iss: `https://${ERISIM_TAKIM_ALANI}`, iat: sn - 5, nbf: sn - 5, exp: sn + (g.omurSn ?? 3600), type: "app" })}`;
   return `${govde}.${sign("sha256", Buffer.from(govde), a.ozel).toString("base64url")}`;
 }
 

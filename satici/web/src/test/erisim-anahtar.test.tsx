@@ -1,9 +1,9 @@
-// İNTERNET PORTALI (ERİŞİM, Cloudflare Access arkası) — anahtar kayıtları TAILNET ile AYNI açık (kullanıcı kararı
+// İNTERNET PORTALI (ERİŞİM, Cloudflare Access arkası) — anahtar kayıtları dinleyiciden bağımsız AYNI açık (kullanıcı kararı
 // 2026-10-04): bayi imza anahtarı bağlama ("Anahtar bağla") ve yayıncı anahtarı kaydı ("Anahtar kaydet") düğmeleri ERISIM
 // oturumunda çizilir, "güven kökü ekler ve bu bağlantıdan yapılamaz" açıklaması YOK; öteki yönetim düğmeleri (tavan, pasife
-// alma) yerinde kalır. Pozitif kontrol: TAILNET'te düğmeler aynı görünür (kör gizleme/kör açma yeşil veremez).
+// alma) yerinde kalır. Pozitif kontrol: GENEL oturumunda düğmeler aynı görünür (dinleyici izni daraltmaz) (kör gizleme/kör açma yeşil veremez).
 // NEGATİF SONDA (2026-10-04, dosya DIŞI, shasum ile geri alındı): DealerDetail.tsx'te `canKey` ERISIM'de false → bayi
-// ERISIM testi ❌ (TAILNET yeşil); Releases.tsx'te `canRegister` ERISIM'de false → sürümler ERISIM testi ❌; session.tsx
+// ERISIM testi ❌ (GENEL yeşil); Releases.tsx'te `canRegister` ERISIM'de false → sürümler ERISIM testi ❌; session.tsx
 // `useCan` ERISIM'de bayi:anahtar/yayinci:anahtar false → iki ERISIM testi ❌.
 import { screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
@@ -42,8 +42,8 @@ function openReleases(dinleyici: SessionListener) {
 }
 
 describe("internet portalında anahtar kaydı açık", () => {
-  it("TAILNET: bayi ekranında 'Anahtar bağla', sürümlerde 'Anahtar kaydet' var (pozitif kontrol)", async () => {
-    openDealer("TAILNET");
+  it("GENEL: bayi ekranında 'Anahtar bağla', sürümlerde 'Anahtar kaydet' var (pozitif kontrol)", async () => {
+    openDealer("GENEL");
     expect(await screen.findByRole("button", { name: "Anahtar bağla" })).toBeInTheDocument();
     expect(screen.queryByText(/Anahtar kaydı güven kökü ekler/)).toBeNull();
   });
@@ -56,8 +56,8 @@ describe("internet portalında anahtar kaydı açık", () => {
     expect(screen.queryByText(/Anahtar kaydı güven kökü ekler|portal-baglan/)).toBeNull();
   });
 
-  it("TAILNET: sürümlerde 'Anahtar kaydet' var (pozitif kontrol)", async () => {
-    openReleases("TAILNET");
+  it("GENEL: sürümlerde 'Anahtar kaydet' var (pozitif kontrol)", async () => {
+    openReleases("GENEL");
     expect(await screen.findByRole("button", { name: "Anahtar kaydet" })).toBeInTheDocument();
   });
 

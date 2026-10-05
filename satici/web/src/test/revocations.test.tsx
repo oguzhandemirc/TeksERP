@@ -1,6 +1,6 @@
 // İPTAL BELGELERİ + ANAHTARLAR — bileşen bekçisi (lisans v2 · G4 §2.3). İptal ekranı fabrikalara giden sırayı, kapıda
 // bekleyen belgeyi ve engellerini (HAK → yeniden bas · ANAHTAR → emekliye ayır) gösterir. Toplu yeniden basım ara imzacı
-// parolası ister: düğme tailnet VE internet (ERİŞİM) oturumunda aynı çıkar (kullanıcı kararı 2026-10-04); gövde seçilen
+// parolası ister: düğme internet (ERİŞİM) oturumunda çıkar (kullanıcı kararı 2026-10-04); gövde seçilen
 // HAK'lar + sebep + parola, sonuç satır satır (basılan · atlanan + neden). Anahtarlar ekranı ara imzacıyı türüyle,
 // sertifikayı veren kökle, emekli anahtarları ayrı bölümde gösterir.
 // NEGATİF SONDA (2026-10-04, dosya DIŞI, shasum ile geri alındı): Revocations.tsx'te düğme koşuluna ERISIM'de false
@@ -39,7 +39,7 @@ const RESULT: ReissueResponse = {
   ],
 };
 
-function open(path: string, dinleyici: SessionListener = "TAILNET", extra: Record<string, Handler> = {}) {
+function open(path: string, dinleyici: SessionListener = "ERISIM", extra: Record<string, Handler> = {}) {
   return renderApp({
     base: "/portal/api",
     routes: PORTAL_ROUTES,
@@ -65,7 +65,7 @@ describe("iptal belgeleri ekranı", () => {
     expect(within(within(ledger).getByText("alt-2026-1").closest("tr")!).getByText("Dağıtılıyor")).toBeInTheDocument();
   });
 
-  it("⭐ toplu yeniden basım (tailnet): HAK başına tek satır, sebep + parola zorunlu; gövde seçilen HAK'lar; sonuç satır satır", async () => {
+  it("⭐ toplu yeniden basım: HAK başına tek satır, sebep + parola zorunlu; gövde seçilen HAK'lar; sonuç satır satır", async () => {
     const user = userEvent.setup();
     const { calls } = open("/iptal-belgeleri");
     await user.click(await screen.findByRole("button", { name: "Engelli HAK'ları yeniden bas…" }));
@@ -119,7 +119,7 @@ const KEYS: KeyStatus = {
 
 describe("anahtarlar ekranı (ara imzacı · sertifika · emekli)", () => {
   it("ara imzacı türüyle, sertifikayı veren kökle ve tören uyarısıyla; emekli anahtar ayrı bölümde", async () => {
-    open("/anahtarlar", "TAILNET", { "GET /anahtarlar": () => ({ data: KEYS }) });
+    open("/anahtarlar", "ERISIM", { "GET /anahtarlar": () => ({ data: KEYS }) });
     const active = (await screen.findByText("Anahtar künyesi")).closest("section")!;
     const row = within(active).getByText("ara-2026-2").closest("tr")!;
     expect(within(row).getByText("Ara imzacı (HAK)")).toBeInTheDocument();

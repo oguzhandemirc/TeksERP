@@ -20,7 +20,7 @@ export type Handler = (req: Recorded, calls: readonly Recorded[]) => Reply | Pro
 export function sessionFor(role: PortalRole, over: Partial<SessionInfo["kullanici"]> = {}): SessionInfo {
   return {
     kullanici: { id: "00000000-0000-4000-8000-00000000000a", kullaniciAdi: "deneme", adSoyad: "Deneme Kullanıcı", rol: role, bayiId: role === "BAYI" ? "00000000-0000-4000-8000-0000000000b1" : null, ...over },
-    dinleyici: role === "BAYI" ? "GENEL" : "TAILNET",
+    dinleyici: role === "BAYI" ? "GENEL" : "ERISIM",
     bitis: new Date(Date.now() + 3_600_000).toISOString(),
   };
 }

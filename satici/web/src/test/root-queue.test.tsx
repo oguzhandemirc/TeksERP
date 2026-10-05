@@ -29,7 +29,7 @@ const URGENT: RootRequest = {
 };
 const DONE: RootRequest = { ...URGENT, id: "7a000000-0000-4000-8000-000000000002", lisansNo: "TKS-2026-0102", acil: false, durum: "IMZALANDI", kapanisZamani: "2026-10-01T10:00:00.000Z" };
 
-function open(dinleyici: SessionListener = "TAILNET") {
+function open(dinleyici: SessionListener = "ERISIM") {
   return renderApp({
     base: "/portal/api",
     routes: PORTAL_ROUTES,
