@@ -12,7 +12,7 @@
 | Güven | `paket-2026` açık anahtarı derlemeye GÖMÜLÜ, süresiz | gömülü olan yalnız KÖK; PAKET anahtarı kök imzalı sertifikayla gelir |
 | Ömür | yok (anahtar ömrü = derlemenin ömrü) | sertifika 1 yıl + 30 gün örtüşme |
 | Kayıp / çalınma | yeni anahtar → yeni çapa → her doğrulayıcının yeni sürümü; eski güncelleyici eski anahtara sonsuza dek güvenir | kökle yeni sertifika + kök imzalı PAKET iptal belgesi; fabrikada elle iş yok |
-| İptal belgesi | `tekserp-iptal` (yalnız ALT · İNDİRME · BAYİ · HAK) | AYRI belge `tekserp-paket-iptal` (§2.4 — eski doğrulayıcıyı kırmamak için) |
+| İptal belgesi | `tekserp-iptal` (yalnız ALT · İNDİRME · BAYİ · HAK) | AYRI belge `tekserp-paketiptal` (§2.4 — eski doğrulayıcıyı kırmamak için) |
 | Geçiş | — | çift imza: eski dosyalar `paket-2026` ile aynen, yanında `-zincir` dosyaları; kesimde son çift imzalı sürüm "köprü sürüm" olarak donar |
 
 **Ana seçim:** mevcut sertifika biçimi (`tekserp-sertifika`) yeni bir kullanım değeriyle (`PAKET`, kid öneki `pkt-`) aynen kullanılır; sertifika imzalı belgenin YÜKÜNDE gömülü taşınır (HAK'taki `imzaciSertifikasi` gibi — JWS başlığına alan eklenemez). İptal ayrı belge türüyle taşınır. Sahadaki eski güncelleyici eski dosyaları okumaya devam eder ve son çift imzalı "köprü sürüme" kadar kendiliğinden gelir, oradan kendini günceller.
@@ -84,7 +84,7 @@ KÖK (kok-<yıl>-<n>, Mac'te, çevrimdışı)
             · bütünlük listesi   butunluk-zincir.jws   (typ tekserp-butunluk)
             · sürüm bildirimi    son-zincir.json / <sürüm>/surum-zincir.json  (typ tekserp-surum)
             · PG künyesi         pg-zincir.json        (typ tekserp-pg)
-KÖK ── PAKET iptal belgesi  tekserp-paket-iptal { sira, iptaller: [{kid, sertifikaId, tarih, neden}] }
+KÖK ── PAKET iptal belgesi  tekserp-paketiptal { sira, iptaller: [{kid, sertifikaId, tarih, neden}] }
 ```
 
 - Hazırlık aynı zincirdir: `hazirlik-<yıl>-<n>` kökü `pkt-hazirlik-<yıl>-<n>` sertifikası basar; kip ayrımı KÖKTEN gelir (hazırlık derlemesinde üretim kökü yoktur, tersi de), kid öneki ikinci savunmadır.
@@ -105,7 +105,7 @@ KÖK ── PAKET iptal belgesi  tekserp-paket-iptal { sira, iptaller: [{kid, se
 
 | Kip | Nerede | Zaman ölçütü | İptal |
 |---|---|---|---|
-| **KABUL** — dışarıdan gelen yeni belge | V1 aday · V2 indirilen paket · V3 PG künyesi · V5 setup CLI | `imzaZamani ∈ [baslangic, bitis]` VE `şimdi ≤ bitis + kabul toleransı (180 gün)`; `şimdi` = max(sistem saati, elde doğrulanmış kiranın `verilis`i) | iptalli sertifika RED |
+| **KABUL** — dışarıdan gelen yeni belge | V1 aday · V2 indirilen paket · V3 PG künyesi · V5 setup CLI (`kurulum-dizin` hariç: YERLEŞİK, KARAR 2026-10-06) | `imzaZamani ∈ [baslangic, bitis]` VE `şimdi ≤ bitis + kabul toleransı (180 gün)`; `şimdi` = max(sistem saati, elde doğrulanmış kiranın `verilis`i) | iptalli sertifika RED |
 | **YERLEŞİK** — zaten kabul edilip kurulmuş dizin | V4 kendini güncelleme · kurulu sürüm dizinine geri dönüş · V6 · V7 · V8 | yalnız `imzaZamani ∈ [baslangic, bitis]` (kurulu paket sertifika bitince ÖLMEZ) | uyarı (§8 soru 3; KARAR 2026-10-06) |
 
 - Kabul toleransı **180 gün** (KARAR 2026-10-06, §8 soru 2; önceki öneri 90 gündü): internetsiz fabrikaya USB ile geç gelen paketin, sertifikası yeni bitmiş diye reddedilmemesi için. Toleransın amacı süreyi uzatmak değil, yıllık törenle aynı gün basılmış paketlerin USB gecikmesini karşılamaktır; çalınan anahtarın ömrünü üst sınırlayan değer `bitis + tolerans`tır.
@@ -114,7 +114,7 @@ KÖK ── PAKET iptal belgesi  tekserp-paket-iptal { sira, iptaller: [{kid, se
 
 ### 2.4 PAKET iptal belgesi ve taşınması
 
-- **Ayrı belge türü** `tekserp-paket-iptal` (yeni `typ`), yalnız KÖK imzalar, kendi tekdüze `sira`sı, satır `{kid (pkt-*), sertifikaId, tarih, neden}`, en çok 256 satır. Gerekçe §1.5: mevcut `tekserp-iptal`e yeni kullanım eklemek sahadaki her doğrulayıcıyı iptal belgesinden koparır. Kod paylaşımı: şema ve `pickNewer…` mantığı iptal belgesinin aynısıdır, yalnız tür ve satır kullanımı sabittir.
+- **Ayrı belge türü** `tekserp-paketiptal` (yeni `typ`; adda tire YOK — JWS `typ` deseni `^tekserp-[a-z]+$` tireyi kabul etmez, D1'de böyle uygulandı), yalnız KÖK imzalar, kendi tekdüze `sira`sı, satır `{kid (pkt-*), sertifikaId, tarih, neden}`, en çok 256 satır. Gerekçe §1.5: mevcut `tekserp-iptal`e yeni kullanım eklemek sahadaki her doğrulayıcıyı iptal belgesinden koparır. Kod paylaşımı: şema ve `pickNewer…` mantığı iptal belgesinin aynısıdır, yalnız tür ve satır kullanımı sabittir.
 - Fabrikada tek dosya: `lisans\paket-iptal.jws` (backend'in iptal deposu yazar, en yüksek `sira` kazanır, düşük olan yok sayılır — mevcut iptal kuralıyla aynı).
 - **Üç taşıma yolu**, hepsi kendini doğrular (kök imzalı) ve "en yüksek `sira`" kuralıyla birleşir:
   1. **Kira yanıtı** — `LicenseResponse`a isteğe bağlı `paketIptal` alanı; satıcı yalnız `paket-zinciri` yeteneğini bildiren kuruluma gönderir (şema gevşek olduğu için eski fabrika zaten atar; yetenek kapısı yine de beyan içindir).
@@ -146,6 +146,7 @@ KÖK ── PAKET iptal belgesi  tekserp-paket-iptal { sira, iptaller: [{kid, se
 - **PG (V3):** `pg-zincir.json` önce, aynı düşüş kuralı.
 - **Kendini güncelleme (V4) ve sürüm dizinleri:** YERLEŞİK kip. Kendini güncelleme kip değiştirmez kuralı aynen.
 - **Setup CLI (V5):** KABUL kipi, `şimdi` = sistem saati (kira yok); iptal yalnız paketin getirdiğinden.
+  - **KARAR (2026-10-06, 1e):** `kurulum-paket` ve `kurulum-pg` KABUL kalır; `kurulum-dizin` YERLEŞİK kipindedir — onarım komutu yeni belge kabul etmez, kurulu dizini yeniden ölçer (V4 ile aynı ölçü; süresi geçmiş ya da sonradan iptal edilmiş sertifikalı kurulu paket onarımda düşmez).
 - **İptal:** `policy.rs` `lisans\paket-iptal.jws`i `iptal.jws` gibi yükler; KABUL kipinde paketin getirdiğiyle birleştirir.
 - **Yetenek bildirimi:** güncelleyicinin künyesi/durum dosyası `paketZinciri: true` taşır; backend `paket-zinciri` yeteneğini YALNIZ güncelleyici bunu bildiriyorsa yoklamaya koyar (satıcının filo ekranı kesim kararını buna bakarak verir).
 - **Durum kodları:** `PAKET_SERTIFIKA_ZAMAN` · `PAKET_SERTIFIKA_IPTAL` · `PAKET_SERTIFIKA_SINIF` · `PAKET_SERTIFIKA_YOK` (Türkçe mesajlı, panel güncelleme ekranında görünür).
@@ -209,7 +210,7 @@ G0 → G1 arası en az bir sürüm geçer ki G1'in ilk zincirli paketini indiren
   4. Künye: kid · açık anahtar · sertifika penceresi · özetler (`DONEM-KUNYE.json`).
   5. **Yayındaki her kanalın/grubun son sürümünü ve etkin PG künyelerini yeni sertifikayla yeniden imzala** (paket parolası) — eski sertifika `bitis + tolerans` geçince taze kurulum ve USB ile geç gelen paket bunlara dayanır. Aynı sürüm yeniden imzalandığında kurulu fabrika yeniden kurmaz (sürüm aynı).
   6. VDS'e açık sertifika (süre uyarısı için).
-- **Kayıp / çalınma:** aynı adımlar `--iptal=pkt-<…>` ile; kök `tekserp-paket-iptal`i bir sıra artırarak basar → satıcıya içe aktarılır (kira yanıtıyla yayılır) → yeniden imzalanan sürümler iptali içlerinde taşır. Kurulu fabrikada elle iş YOK.
+- **Kayıp / çalınma:** aynı adımlar `--iptal=pkt-<…>` ile; kök `tekserp-paketiptal`i bir sıra artırarak basar → satıcıya içe aktarılır (kira yanıtıyla yayılır) → yeniden imzalanan sürümler iptali içlerinde taşır. Kurulu fabrikada elle iş YOK.
 - **Paket parolası unutuldu:** sertifika iptal edilmez (anahtar çalınmadı), yalnız yeni anahtar + sertifika basılır; eskisi süresiyle söner.
 - Hazırlık ortamı aynı adımları hazırlık köküyle provalar.
 
@@ -222,7 +223,7 @@ G0 → G1 arası en az bir sürüm geçer ki G1'in ilk zincirli paketini indiren
 | `tekserp-guncelleyici/tests/paket_zinciri.rs` (yeni) | KABUL/YERLEŞİK zaman kuralı, tolerans sınırı, elde + paketteki iptalin birleşmesi, işaretçi sırası ve düşüş yalnız gömülü `paket-*` varken, kendini güncelleme YERLEŞİK, setup CLI | tolerans +1 gün kırmızı |
 | `tekserp-guncelleyici/tests/capa_kipi.rs` (genişler) | öteki kipin kökünden PAKET sertifikası RED | — |
 | **Eski güncelleyici aynası** (yeni) | yayın aracının G1 çıktısı (`son.json`, `butunluk.jws`, `pg.json`) bugünkü doğrulayıcının DONDURULMUŞ kopyasıyla (KATI işaretçi + yalnız `paket-2026`) geçer; `-zincir` dosyaları bütünlük kapsamına girmez | `son.json`a alan eklenince kırmızı |
-| `test_iptal_belgesi` (satıcı, genişler) | `tekserp-iptal`e `PAKET` satırı GİREMEZ (araç RED); `tekserp-paket-iptal` sıra kuralı | — |
+| `test_iptal_belgesi` (satıcı, genişler) | `tekserp-iptal`e `PAKET` satırı GİREMEZ (araç RED); `tekserp-paketiptal` sıra kuralı | — |
 | `test_lisans_butunluk` (genişler) | YERLEŞİK kip: iptal → GEÇERLİ + uyarı; pencere dışı → GEÇERSİZ; sınıf süzgeci sertifikadan | — |
 | `test_paket_kapsami` (genişler) | `butunluk-zincir.jws` ve `paket-iptal.jws` paket kökünde, kapsam dışında; FAZLA sayımı değişmez | — |
 | `test_lisans_paket_anahtari` (genişler) | `sertifika-ekle` `x` uyuşmazlığı RED; kök parolası PAKET aracına gitmez | — |
@@ -236,7 +237,7 @@ G0 → G1 arası en az bir sürüm geçer ki G1'in ilk zincirli paketini indiren
 | # | İş | Bağımlılık | Model önerisi |
 |---|---|---|---|
 | D0 | Ölçüm + kullanıcı kararları (§8): sahadaki güncelleyicili kurulumlar ve sürümleri, hazırlık kipli kurulum var mı, VDS'te PAKET kopyası var mı (kullanıcıyla). Kod yok. | 1.2 ile aynı oturum olabilir | Opus, orta efor |
-| D1 | Protokol: `PAKET` kullanımı, `pkt-` öneki, `imzaZamani` + `paketSertifikasi` alanları, `tekserp-paket-iptal`, zincirli doğrulayıcılar (TS + `tekserp-dogrulama`) + kâhin vektörleri | — | Opus, yüksek efor |
+| D1 | Protokol: `PAKET` kullanımı, `pkt-` öneki, `imzaZamani` + `paketSertifikasi` alanları, `tekserp-paketiptal`, zincirli doğrulayıcılar (TS + `tekserp-dogrulama`) + kâhin vektörleri | — | Opus, yüksek efor |
 | D2 | Rust güncelleyici: KABUL/YERLEŞİK, işaretçi sırası, iptal birleştirme, yetenek künyesi, durum kodları, `paket_zinciri.rs` + eski güncelleyici aynası | D1 | Opus, yüksek efor |
 | D3 | Backend + native çekirdek: V6–V8 zincirle, iptal deposu, `paket-zinciri` yeteneği, panel kartı etiketi | D1 | Opus, yüksek efor |
 | D4 | Satıcı: PAKET iptal defteri (migration reçetesi), içe aktarma, kira yanıtında `paketIptal`, filo sütunu, süre uyarısı | D1; fabrikadan ÖNCE dağıtılır | Opus, orta efor |

@@ -66,6 +66,11 @@ fn headers(spec: &Spec, from: u64) -> Vec<(String, String)> {
 
 /// Küçük bir belgeyi (işaretçi: `son.json` · `surum.json` · `pg.json`) indirir; 64 KB tavanlı.
 pub fn fetch_small(env: &Env, url: &str, token: Option<&str>) -> Result<Vec<u8>, DlError> {
+    fetch_small_opt(env, url, token)?.ok_or_else(|| dl_err(codes::MANIFEST_INDIRILEMEDI, "HTTP 404"))
+}
+
+/// `fetch_small` gibi; yalnız HTTP 404'ü `Ok(None)` döner (zincirli işaretçi yoksa eski dosyaya düşmek için).
+pub fn fetch_small_opt(env: &Env, url: &str, token: Option<&str>) -> Result<Option<Vec<u8>>, DlError> {
     let mut h = Vec::new();
     if let Some(t) = token {
         h.push((TOKEN_HEADER.to_string(), t.to_string()));
@@ -73,6 +78,7 @@ pub fn fetch_small(env: &Env, url: &str, token: Option<&str>) -> Result<Vec<u8>,
     let r = env.net.get(url, &h, Duration::from_secs(60)).map_err(|e| dl_err(codes::MANIFEST_INDIRILEMEDI, e.0))?;
     match r.status {
         200 => {}
+        404 => return Ok(None),
         401 | 403 => return Err(rejected(&r)),
         s => return Err(dl_err(codes::MANIFEST_INDIRILEMEDI, format!("HTTP {s}"))),
     }
@@ -81,7 +87,7 @@ pub fn fetch_small(env: &Env, url: &str, token: Option<&str>) -> Result<Vec<u8>,
     if out.len() > 64 * 1024 {
         return Err(dl_err(codes::MANIFEST_GECERSIZ, "işaretçi 64 KB'ı aşıyor"));
     }
-    Ok(out)
+    Ok(Some(out))
 }
 
 fn rejected(r: &crate::env::HttpResponse) -> DlError {

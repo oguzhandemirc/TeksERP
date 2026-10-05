@@ -30,6 +30,7 @@ use std::cell::RefCell;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Duration;
+use tekserp_dogrulama::paket_zinciri::{PackageMode, PackageTrust};
 use tekserp_hizmet::logfile::RotatingLog;
 use tekserp_hizmet::timefmt;
 
@@ -52,6 +53,12 @@ struct Candidate {
     fetched_ms: i64,
     pointer: String,
     manifest: Checked<ReleaseManifest>,
+}
+
+/// İşaretçi çifti: zincirli (PAKET sertifikalı) dosya önce, eski (`paket-*` imzalı) dosya 404 düşüşü.
+struct Pointer {
+    chained: String,
+    legacy: String,
 }
 
 pub struct Engine {
@@ -442,8 +449,8 @@ impl Engine {
         let own = self.own_exe.as_ref()?;
         let (_, current_dir) = self.installed_version()?;
         let lic = policy::load(self.env.fs.as_ref(), &inputs.backend.license_dir, &self.anchor);
-        let keys = policy::package_keys(&self.anchor, lic.class.as_deref());
-        match selfupdate::stage(&self.env, &self.layout, own, &current_dir, &keys) {
+        let trust = policy::package_trust(&self.anchor, &lic, PackageMode::Yerlesik, self.now() as f64);
+        match selfupdate::stage(&self.env, &self.layout, own, &current_dir, &trust) {
             Ok(true) => {
                 self.log.info("güncelleyicinin yeni ikilisi yerleştirildi — yeniden başlatılıyor");
                 Some(TickResult::RestartForSelfUpdate)
@@ -558,7 +565,7 @@ impl Engine {
             self.write_status(self.doc(&f, State::Waiting, Some(codes::KIRA_GECERSIZ), "kira kanal taşımıyor"));
             return idle;
         };
-        let keys = policy::package_keys(&self.anchor, lic.class.as_deref());
+        let mut trust = policy::package_trust(&self.anchor, &lic, PackageMode::Kabul, now as f64);
         let token = intent.as_ref().and_then(|i| i.token_at(now)).map(str::to_string);
         let token_problem = || -> Fail {
             match (&intent, &intent_problem) {
@@ -578,10 +585,13 @@ impl Engine {
             }
         };
         let pointer = match pol.as_ref().and_then(|p| p.0.target.clone()) {
-            Some(t) => release::release_file_path(&channel, &t, release::RELEASE_MANIFEST_FILE),
-            None => release::release_pointer_path(&channel),
+            Some(t) => Pointer {
+                chained: release::release_file_path(&channel, &t, release::CHAINED_RELEASE_MANIFEST_FILE),
+                legacy: release::release_file_path(&channel, &t, release::RELEASE_MANIFEST_FILE),
+            },
+            None => Pointer { chained: release::chained_release_pointer_path(&channel), legacy: release::release_pointer_path(&channel) },
         };
-        let m = match self.candidate(&server, &pointer, token.as_deref(), &keys, &channel, CANDIDATE_TTL_MS, &token_problem) {
+        let m = match self.candidate(&server, &pointer, token.as_deref(), &trust, &channel, CANDIDATE_TTL_MS, &token_problem) {
             Ok(m) => m,
             Err((code, msg)) => {
                 f.decision = Some(pre);
@@ -658,7 +668,8 @@ impl Engine {
             self.write_status(self.doc(&f, State::Waiting, Some(code), &msg));
             return idle;
         }
-        if let Err((code, msg)) = self.prepare_backend(&f, &server, &channel, &keys, &m.doc, &token, stop) {
+        if let Err((code, msg)) = self.prepare_backend(&f, &server, &channel, &inputs.backend.license_dir, &mut trust, &m.doc, &token, stop)
+        {
             let state = if matches!(code, codes::INDIRME_HATASI | codes::INDIRME_REDDEDILDI) { State::Downloading } else { State::Waiting };
             self.write_status(self.doc(&f, state, Some(code), &msg));
             return TickResult::Idle(Duration::from_secs(tick_s.min(60)));
@@ -669,7 +680,7 @@ impl Engine {
                 self.write_status(self.doc(&f, State::Waiting, Some(codes::PG_PAKET), "PG güncellemesi istendi ama kendi örnek kaydı yok"));
                 return idle;
             };
-            if let Err((code, msg)) = self.prepare_pg(&server, &channel, &keys, &m.doc, target, inst, &token, stop) {
+            if let Err((code, msg)) = self.prepare_pg(&server, &channel, &trust, &m.doc, target, inst, &token, stop) {
                 self.write_status(self.doc(&f, State::Waiting, Some(code), &msg));
                 return idle;
             }
@@ -686,7 +697,7 @@ impl Engine {
             return idle;
         }
         // ── Uygulama: bildirim bayatsa önce tazelenir ve karar yeniden verilir ─────────────
-        let m = match self.candidate(&server, &pointer, Some(&token), &keys, &channel, CANDIDATE_FRESH_FOR_APPLY_MS, &token_problem) {
+        let m = match self.candidate(&server, &pointer, Some(&token), &trust, &channel, CANDIDATE_FRESH_FOR_APPLY_MS, &token_problem) {
             Ok(fresh) if fresh.doc == m.doc => fresh,
             Ok(_) => {
                 self.write_status(self.doc(
@@ -706,7 +717,7 @@ impl Engine {
             self.write_status(self.doc(&f, State::Waiting, Some(code), &msg));
             return idle;
         }
-        if let Err((code, msg)) = self.reverify_prepared(&keys, &m.doc, pg_target.as_ref()) {
+        if let Err((code, msg)) = self.reverify_prepared(&trust, &m.doc, pg_target.as_ref()) {
             self.log.warn(&msg);
             self.write_status(self.doc(&f, State::Waiting, Some(code), &msg));
             return idle;
@@ -738,25 +749,41 @@ impl Engine {
     fn candidate(
         &self,
         server: &str,
-        pointer: &str,
+        pointer: &Pointer,
         token: Option<&str>,
-        keys: &[(String, String)],
+        trust: &PackageTrust,
         channel: &str,
         max_age: i64,
         token_problem: &dyn Fn() -> Fail,
     ) -> Result<Checked<ReleaseManifest>, Fail> {
         let now = self.now();
-        if let Some(c) = self.candidate.borrow().as_ref().filter(|c| c.pointer == pointer && now - c.fetched_ms < max_age) {
+        if let Some(c) = self.candidate.borrow().as_ref().filter(|c| c.pointer == pointer.chained && now - c.fetched_ms < max_age) {
             return Ok(c.manifest.clone());
         }
         let Some(token) = token else { return Err(token_problem()) };
-        let bytes = download::fetch_small(&self.env, &format!("{server}{pointer}"), Some(token)).map_err(|e| (e.code, e.message))?;
+        let (path, bytes) = self.fetch_pointer(server, pointer, token, trust)?;
         let text = String::from_utf8(bytes).map_err(|_| fail(release::code::SURUM_ISARETCI, "işaretçi UTF-8 değil"))?;
-        let jws_text = release::read_release_pointer(&text).map_err(|e| (e.code, format!("{pointer}: {}", e.message)))?;
-        let checked = release::verify_release_manifest(&Value::String(jws_text), keys, channel)
+        let jws_text = release::read_release_pointer(&text).map_err(|e| (e.code, format!("{path}: {}", e.message)))?;
+        let checked = release::verify_release_manifest(&Value::String(jws_text), trust, channel)
             .map_err(|e| (e.code, format!("sürüm bildirimi reddedildi ({}): {}", e.code, e.message)))?;
-        *self.candidate.borrow_mut() = Some(Candidate { fetched_ms: now, pointer: pointer.to_string(), manifest: checked.clone() });
+        *self.candidate.borrow_mut() = Some(Candidate { fetched_ms: now, pointer: pointer.chained.clone(), manifest: checked.clone() });
         Ok(checked)
+    }
+
+    /// İşaretçi sırası (sözleşme `PAKET-ANAHTARI-KOK-ALTINDA.md` §4): önce zincirli dosya; yalnız HTTP 404'te ve gömülü
+    /// `paket-*` anahtarı varken eski dosya — eski dosyanın okunuşu (hata kodu, mesaj) bugünküyle aynıdır.
+    fn fetch_pointer<'p>(&self, server: &str, pointer: &'p Pointer, token: &str, trust: &PackageTrust) -> Result<(&'p str, Vec<u8>), Fail> {
+        let got =
+            download::fetch_small_opt(&self.env, &format!("{server}{}", pointer.chained), Some(token)).map_err(|e| (e.code, e.message))?;
+        match got {
+            Some(bytes) => Ok((pointer.chained.as_str(), bytes)),
+            None if trust.keys.is_empty() => Err(fail(codes::MANIFEST_INDIRILEMEDI, format!("{}: HTTP 404", pointer.chained))),
+            None => {
+                let bytes = download::fetch_small(&self.env, &format!("{server}{}", pointer.legacy), Some(token))
+                    .map_err(|e| (e.code, e.message))?;
+                Ok((pointer.legacy.as_str(), bytes))
+            }
+        }
     }
 
     /// Kurulu PG (sözleşme §1.6): kip `pgsql\ornek.json`dan (yoksa HARİCİ: bugünkü kurulumlar), sürüm
@@ -816,13 +843,14 @@ impl Engine {
         f: &Frame,
         server: &str,
         channel: &str,
-        keys: &[(String, String)],
+        license_dir: &Path,
+        trust: &mut PackageTrust,
         m: &ReleaseManifest,
         token: &str,
         stop: &dyn Fn() -> bool,
     ) -> Result<(), Fail> {
         let key = format!("paket:{}:{}", m.surum, m.paket.sha256);
-        let r = self.prepare_backend_inner(f, server, channel, keys, m, token, stop, &key);
+        let r = self.prepare_backend_inner(f, server, channel, license_dir, trust, m, token, stop, &key);
         match &r {
             Ok(()) => self.backoff_mark(&key, false),
             Err((code, _)) if Self::definitive(code) => self.backoff_mark(&key, true),
@@ -837,7 +865,8 @@ impl Engine {
         f: &Frame,
         server: &str,
         channel: &str,
-        keys: &[(String, String)],
+        license_dir: &Path,
+        trust: &mut PackageTrust,
         m: &ReleaseManifest,
         token: &str,
         stop: &dyn Fn() -> bool,
@@ -863,7 +892,7 @@ impl Engine {
         };
         if fs.is_dir(&dir) {
             // İşaretsiz sürüm dizini (yarım yerleştirme ya da elle konmuş): doğrulanır ve bağlanırsa kabul, değilse silinir.
-            let verified = package::verify_dir(&dir, fs, keys)
+            let verified = package::verify_dir(&dir, fs, trust, Some(&m.signer_kid))
                 .map_err(|e| (e.code, e.message))
                 .and_then(|id| release::check_package_binding(m, &id).map_err(|e| (e.code, e.message)));
             match verified {
@@ -901,7 +930,11 @@ impl Engine {
             let code = if e.starts_with("PAKET_YOL") { codes::PAKET_YOL } else { codes::BUTUNLUK_GECERSIZ };
             return Err(fail(code, e));
         }
-        let verified = package::verify_dir(&staging, fs, keys)
+        // Paketin taşıdığı PAKET iptal listesi daha yeniyse (kökle doğrulanmış) güvene ve `lisans\`e geçer.
+        if policy::adopt_package_revocation(fs, license_dir, &self.anchor, &staging, trust) {
+            self.log.info("paketteki daha yeni PAKET iptal listesi benimsendi");
+        }
+        let verified = package::verify_dir(&staging, fs, trust, Some(&m.signer_kid))
             .map_err(|e| (e.code, e.message))
             .and_then(|id| release::check_package_binding(m, &id).map_err(|e| (e.code, e.message)));
         if let Err(e) = verified {
@@ -933,7 +966,7 @@ impl Engine {
         &self,
         server: &str,
         channel: &str,
-        keys: &[(String, String)],
+        trust: &PackageTrust,
         m: &ReleaseManifest,
         target: &PgTarget,
         inst: &pgminor::Instance,
@@ -941,7 +974,7 @@ impl Engine {
         stop: &dyn Fn() -> bool,
     ) -> Result<(), Fail> {
         let key = format!("pg:{}:{}", target.tag(), target.paket.sha256);
-        let r = self.prepare_pg_inner(server, channel, keys, m, target, inst, token, stop, &key);
+        let r = self.prepare_pg_inner(server, channel, trust, m, target, inst, token, stop, &key);
         match &r {
             Ok(()) => self.backoff_mark(&key, false),
             Err((code, _)) if Self::definitive(code) => self.backoff_mark(&key, true),
@@ -955,7 +988,7 @@ impl Engine {
         &self,
         server: &str,
         channel: &str,
-        keys: &[(String, String)],
+        trust: &PackageTrust,
         m: &ReleaseManifest,
         target: &PgTarget,
         inst: &pgminor::Instance,
@@ -988,11 +1021,14 @@ impl Engine {
             ));
         }
         // Künye: ayrı PAKET imzalı belge, bildirimin hedefiyle BAĞLANIR (ana sürüm dahil).
-        let pointer = release::pg_release_file_path(channel, &target.surum, target.derleme, release::PG_POINTER_FILE);
-        let bytes = download::fetch_small(&self.env, &format!("{server}{pointer}"), Some(token)).map_err(|e| (e.code, e.message))?;
+        let pointer = Pointer {
+            chained: release::pg_release_file_path(channel, &target.surum, target.derleme, release::CHAINED_PG_POINTER_FILE),
+            legacy: release::pg_release_file_path(channel, &target.surum, target.derleme, release::PG_POINTER_FILE),
+        };
+        let (path, bytes) = self.fetch_pointer(server, &pointer, token, trust)?;
         let text = String::from_utf8(bytes).map_err(|_| fail(release::code::SURUM_ISARETCI, "PG künyesi UTF-8 değil"))?;
-        let jws_text = release::read_release_pointer(&text).map_err(|e| (e.code, format!("{pointer}: {}", e.message)))?;
-        let kunye = release::verify_pg_package_manifest(&Value::String(jws_text), keys)
+        let jws_text = release::read_release_pointer(&text).map_err(|e| (e.code, format!("{path}: {}", e.message)))?;
+        let kunye = release::verify_pg_package_manifest(&Value::String(jws_text), trust)
             .map_err(|e| (e.code, format!("PG künyesi reddedildi ({}): {}", e.code, e.message)))?;
         release::check_pg_binding(&m.pg, &kunye.doc).map_err(|e| (e.code, e.message))?;
         let zip = self.layout.downloads().join(format!("pg-{tag}.zip"));
@@ -1050,9 +1086,9 @@ impl Engine {
     /// (imza + bütünlük listesi + her dosya + bildirim bağı) ve PG güncellemesi varsa PG dizini (içerik
     /// manifestosu) yeniden doğrulanır; tutmazsa hazır işareti düşer, işlem başlamaz, sonraki tur yeniden
     /// hazırlar. Doğrulama ile kullanım arasındaki pencere izin ölçümüyle (`trusted_paths_ok`) kapanır.
-    fn reverify_prepared(&self, keys: &[(String, String)], m: &ReleaseManifest, pg: Option<&PgTarget>) -> Result<(), Fail> {
+    fn reverify_prepared(&self, trust: &PackageTrust, m: &ReleaseManifest, pg: Option<&PgTarget>) -> Result<(), Fail> {
         let fs = self.env.fs.as_ref();
-        let backend = package::verify_dir(&self.layout.version_dir(&m.surum), fs, keys)
+        let backend = package::verify_dir(&self.layout.version_dir(&m.surum), fs, trust, Some(&m.signer_kid))
             .map_err(|e| (e.code, e.message))
             .and_then(|id| release::check_package_binding(m, &id).map_err(|e| (e.code, e.message)));
         if let Err((code, why)) = backend {

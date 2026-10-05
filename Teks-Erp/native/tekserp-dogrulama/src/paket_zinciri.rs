@@ -74,6 +74,13 @@ pub struct PackageTrust {
     pub install_class: Option<Option<String>>,
 }
 
+impl PackageTrust {
+    /// Yalnız gömülü `paket-*` anahtarları (kök yok): TS'te `zincir` verilmemiş çağrı — `pkt-*` belge GUVEN_CAPASI_BOS.
+    pub fn embedded(keys: Vec<(String, String)>) -> PackageTrust {
+        PackageTrust { keys, roots: Vec::new(), mode: PackageMode::Yerlesik, now_ms: None, revocation: None, install_class: None }
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct PackageChainSigner {
     pub certificate: Map<String, Value>,

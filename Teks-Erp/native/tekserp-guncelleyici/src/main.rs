@@ -9,7 +9,7 @@
 //! Aynı makinede ikinci kanal: güncelleyici kendi adını (`--ad`, varsayılan `TeksERP-Guncelleyici`) ve
 //! kendi veri kökünü (`--veri`; backend'in `TEKSERP_GUNCELLEME_DIZINI` = `<veri>\guncelleme`) alır; yönettiği
 //! backend hizmetinin adı `ayar.json` `backendHizmeti`dir (kanal kaydı `backend.hizmetAdi`).
-//!   kunye                           {ad, surum, hedef, testCapasi} JSON (kendini güncellemede sınanır)
+//!   kunye                           {ad, surum, hedef, testCapasi, capaKipi, paketZinciri} JSON (kendini güncellemede sınanır)
 //!   kurulum-paket --zip <z> --hedef <d>                 setup.exe: backend paketini aç + doğrula (§1.5)
 //!   kurulum-pg --kunye <pg.json> --zip <z> --hedef <d>  setup.exe: PG paketini aç + doğrula (§1.6)
 //!   kurulum-dizin --dizin <d>                         setup.exe onarımı: açılmış sürüm dizinini yeniden ölç
@@ -55,6 +55,7 @@ fn identity() -> String {
         "hedef": std::env::consts::OS,
         "testCapasi": TEST_ANCHOR,
         "capaKipi": ANCHOR_MODE,
+        "paketZinciri": true,
     })
     .to_string()
 }

@@ -7,6 +7,7 @@ use ed25519_dalek::SigningKey;
 use serde_json::{json, Value};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
+use tekserp_dogrulama::paket_zinciri::PackageTrust;
 use tekserp_guncelleyici::kurulum::{self, kod};
 
 static SIRA: AtomicU64 = AtomicU64::new(0);
@@ -24,8 +25,8 @@ fn anahtar(tohum: u8) -> SigningKey {
 }
 
 /// Gömülü çapanın yerine test kümesi: üretim + hazırlık PAKET anahtarı.
-fn kume(paket: &SigningKey, hazirlik: &SigningKey) -> Vec<(String, String)> {
-    vec![("paket-2026".into(), x_of(paket)), ("paket-hazirlik".into(), x_of(hazirlik))]
+fn kume(paket: &SigningKey, hazirlik: &SigningKey) -> PackageTrust {
+    PackageTrust::embedded(vec![("paket-2026".into(), x_of(paket)), ("paket-hazirlik".into(), x_of(hazirlik))])
 }
 
 fn backend_zip(dir: &Path, imzalayan: &SigningKey, kid: &str, kurcala: bool, ek: &[(String, Vec<u8>)]) -> PathBuf {

@@ -10,6 +10,7 @@ use common::*;
 use ed25519_dalek::SigningKey;
 use serde_json::Value;
 use tekserp_dogrulama::outcome::code;
+use tekserp_dogrulama::paket_zinciri::PackageTrust;
 use tekserp_dogrulama::{anchor, b64, chain};
 use tekserp_guncelleyici::codes;
 use tekserp_guncelleyici::kurulum;
@@ -74,7 +75,7 @@ fn builtin_anchor_is_the_shared_single_mode_anchor() {
 /// hazırlık anahtarını bu sınıfta kümeye ALIR; red yalnız çapadan gelmeli.
 #[test]
 fn foreign_mode_package_signed_manifest_is_rejected() {
-    let keys = policy::package_keys(&TrustAnchor::builtin(), Some("TEST"));
+    let keys = PackageTrust::embedded(policy::package_keys(&TrustAnchor::builtin(), Some("TEST")));
     let zip = b"paket".to_vec();
     let verify = |kid: &str| {
         let token = sign_manifest(&stranger(), kid, &manifest_payload(kid, NEW, &zip, None));
@@ -88,7 +89,7 @@ fn foreign_mode_package_signed_manifest_is_rejected() {
 /// paketi açılmaz, hedef dizin kalmaz. Kod `BUTUNLUK_GECERSIZ`, iç neden iletide (`(JWS_KID)` / `(JWS_IMZA)`).
 #[test]
 fn foreign_mode_package_integrity_is_rejected_by_installer() {
-    let keys = TrustAnchor::builtin().package_keys;
+    let keys = PackageTrust::embedded(TrustAnchor::builtin().package_keys);
     let run = |tag: &str, kid: &str| {
         let dir = std::env::temp_dir().join(format!("tekserp-capa-kipi-{tag}-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);

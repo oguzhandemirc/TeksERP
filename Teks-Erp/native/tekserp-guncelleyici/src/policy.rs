@@ -9,6 +9,7 @@ use crate::env::Fs;
 use crate::trust::{self, TrustAnchor};
 use serde_json::{Map, Value};
 use std::path::Path;
+use tekserp_dogrulama::paket_zinciri::{self, PackageMode, PackageTrust, VerifiedPackageRevocation};
 use tekserp_dogrulama::{chain, iso};
 
 const DOC_MAX: u64 = 64 * 1024;
@@ -27,6 +28,10 @@ pub struct LicenseView {
     pub maintenance_end_ms: Option<f64>,
     /// HAK sınıfı (hazırlık PAKET anahtarı yalnız TEST/DEMO'da geçer); bilinmiyorsa `None` = süzülür.
     pub class: Option<String>,
+    /// Doğrulanmış kiranın `verilis`i (ms): KABUL kipinin "şimdi"si sistem saatinin gerisinde kalamaz.
+    pub lease_issued_ms: Option<f64>,
+    /// `lisans\paket-iptal.jws` kökle doğrulanırsa (yoksa/bozuksa yok sayılır, iptal deposu gibi).
+    pub package_revocation: Option<VerifiedPackageRevocation>,
 }
 
 fn read_token(fs: &dyn Fs, p: &Path, max: u64) -> Result<Value, (&'static str, String)> {
@@ -46,11 +51,18 @@ fn load_revocation(fs: &dyn Fs, license_dir: &Path, anchor: &TrustAnchor) -> Opt
     chain::verify_revocation(&token, &anchor.roots).ok()
 }
 
+/// PAKET iptal belgesi (`lisans\paket-iptal.jws` ya da paketin kökündeki): kökle doğrulanamazsa yok sayılır.
+pub fn read_package_revocation(fs: &dyn Fs, path: &Path, anchor: &TrustAnchor) -> Option<VerifiedPackageRevocation> {
+    let token = read_token(fs, path, REVOCATION_MAX).ok()?;
+    paket_zinciri::verify_package_revocation(&token, &anchor.roots).ok()
+}
+
 /// Kirayı (+ varsa HAK'ı) doğrular. Hiçbir hata fırlatmaz: yetki yoksa `lease: None` (karar `KIRA_YOK`).
 pub fn load(fs: &dyn Fs, license_dir: &Path, anchor: &TrustAnchor) -> LicenseView {
+    let package_revocation = read_package_revocation(fs, &license_dir.join(paket_zinciri::PACKAGE_REVOCATION_FILE), anchor);
     let token = match read_token(fs, &license_dir.join("kira.jws"), DOC_MAX) {
         Ok(t) => t,
-        Err(p) => return LicenseView { problem: Some(p), ..LicenseView::default() },
+        Err(p) => return LicenseView { problem: Some(p), package_revocation, ..LicenseView::default() },
     };
     let revocation = load_revocation(fs, license_dir, anchor);
     let lease = match chain::verify_lease(&token, &anchor.roots, revocation.as_ref()) {
@@ -58,6 +70,7 @@ pub fn load(fs: &dyn Fs, license_dir: &Path, anchor: &TrustAnchor) -> LicenseVie
         Err(f) => {
             return LicenseView {
                 problem: Some((codes::KIRA_GECERSIZ, format!("kira doğrulanamadı: {} ({})", f.message, f.code))),
+                package_revocation,
                 ..LicenseView::default()
             }
         }
@@ -72,7 +85,8 @@ pub fn load(fs: &dyn Fs, license_dir: &Path, anchor: &TrustAnchor) -> LicenseVie
     let maintenance_end_ms =
         hak.as_ref().and_then(|h| h.document.get("bakimBitis").and_then(Value::as_str).map(iso::date_parse_ms)).filter(|ms| ms.is_finite());
     let class = hak.as_ref().and_then(|h| h.document.get("sinif").and_then(Value::as_str).map(str::to_string));
-    LicenseView { lease: Some(doc), problem: None, channel, frozen, maintenance_end_ms, class }
+    let lease_issued_ms = doc.get("verilis").and_then(Value::as_str).map(iso::date_parse_ms).filter(|ms| ms.is_finite());
+    LicenseView { lease: Some(doc), problem: None, channel, frozen, maintenance_end_ms, class, lease_issued_ms, package_revocation }
 }
 
 /// Bu kurulumun kabul ettiği PAKET anahtarları (TS `integrity-scope` süzgeci): hazırlık anahtarı
@@ -80,4 +94,45 @@ pub fn load(fs: &dyn Fs, license_dir: &Path, anchor: &TrustAnchor) -> LicenseVie
 pub fn package_keys(anchor: &TrustAnchor, class: Option<&str>) -> Vec<(String, String)> {
     let staging_ok = class.is_some_and(|c| trust::STAGING_PACKAGE_CLASSES.contains(&c));
     anchor.package_keys.iter().filter(|(kid, _)| staging_ok || !trust::is_staging_package_kid(kid)).cloned().collect()
+}
+
+/// Paket belgelerinin güveni (sözleşme `PAKET-ANAHTARI-KOK-ALTINDA.md` §2.3): KABUL (dışarıdan gelen aday · paket ·
+/// PG künyesi) "şimdi"yi max(sistem saati, kira verilişi) alır; YERLEŞİK (kurulu dizin) zamana ve iptale sert bakmaz.
+/// Sınıf HAK'tan: bilinmiyorsa zincirli belge RED (gömülü kümedeki hazırlık süzgeciyle aynı ölçü).
+pub fn package_trust(anchor: &TrustAnchor, lic: &LicenseView, mode: PackageMode, system_now_ms: f64) -> PackageTrust {
+    let now_ms = match mode {
+        PackageMode::Kabul => Some(lic.lease_issued_ms.map_or(system_now_ms, |issued| issued.max(system_now_ms))),
+        PackageMode::Yerlesik => None,
+    };
+    PackageTrust {
+        keys: package_keys(anchor, lic.class.as_deref()),
+        roots: anchor.roots.clone(),
+        mode,
+        now_ms,
+        revocation: lic.package_revocation.clone(),
+        install_class: Some(lic.class.clone()),
+    }
+}
+
+/// Paketin getirdiği PAKET iptali elindekinden YÜKSEK sıralıysa güvene alınır ve `lisans\paket-iptal.jws`e yazılır
+/// (yazım hatası güncellemeyi durdurmaz: iptal bu turun güveninde yine uygulanır). Dönen: bu turda yazıldı mı.
+pub fn adopt_package_revocation(
+    fs: &dyn Fs,
+    license_dir: &Path,
+    anchor: &TrustAnchor,
+    package_dir: &Path,
+    trust: &mut PackageTrust,
+) -> bool {
+    let Ok(bytes) = fs.read_untrusted(&package_dir.join(paket_zinciri::PACKAGE_REVOCATION_FILE), REVOCATION_MAX) else {
+        return false;
+    };
+    let Ok(text) = std::str::from_utf8(&bytes) else { return false };
+    let Ok(incoming) = paket_zinciri::verify_package_revocation(&Value::String(text.trim().to_string()), &anchor.roots) else {
+        return false;
+    };
+    if trust.revocation.as_ref().is_some_and(|c| c.sequence() >= incoming.sequence()) {
+        return false;
+    }
+    trust.revocation = Some(incoming);
+    fs.write_atomic(&license_dir.join(paket_zinciri::PACKAGE_REVOCATION_FILE), &bytes).is_ok()
 }
