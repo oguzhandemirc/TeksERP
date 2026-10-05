@@ -256,11 +256,15 @@ function paketKomutu(sablon, kid, dizin) {
   return { cwd: yol.startsWith(`${SATICI}${path.sep}`) ? SATICI : TEKS, nodeArgv: ["--import", "tsx", yol, ...argv] };
 }
 
-/** Alt süreç hatasının son satırları; parola baytı taşıyan çıktı hiç basılmaz. */
+/** Alt süreç hatasının ilk asıl hata satırı + son satırları (son satır çoğu kez yalnız "Node.js vX"); parola baytı taşıyan çıktı hiç basılmaz. */
 function hataOzeti(r, parolalar) {
   const ham = Buffer.concat([r.stderr ?? Buffer.alloc(0), r.stdout]);
   if (parolalar.some((p) => p.length > 0 && ham.indexOf(p) >= 0)) return "(çıktı parola içeriyordu — basılmadı)";
-  return ham.toString("utf8").trim().split("\n").slice(-3).join(" | ").slice(0, 400);
+  const satirlar = ham.toString("utf8").trim().split("\n");
+  const son = satirlar.slice(-3);
+  const asil = [/Cannot find (module|package)/, /^\s*(\w+ )?\w*Error( \[\w+\])?:/, /ENOENT|EACCES/].reduce((bulunan, kalip) => bulunan ?? satirlar.find((l) => kalip.test(l)), undefined);
+  const secilen = asil !== undefined && !son.includes(asil) ? [asil.trim().slice(0, 200), ...son] : son;
+  return secilen.join(" | ").slice(0, 600);
 }
 
 async function kosVeDenetle(ad, cwd, betik, argv, parolalar, gizliler) {

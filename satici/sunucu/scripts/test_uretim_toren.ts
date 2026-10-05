@@ -11,8 +11,8 @@
 //      eşleşmeyen · yarım kalıntı · tanınmayan bayrak · PAKET aracı parolasız dosya üretirse · ortada düşen adım ·
 //      TOCTOU: yolda sembolik bağ · parola beklerken yarım yola konan bağ · parola beklerken doğan BOŞ hedef dizini
 //      (ezilmez) · grup/başkalarına açık üst dizin
-//   §4 GERÇEK PAKET aracı (varsayılan PAKET_KOMUTU): üretim kid'ini tanıyorsa tören onunla uçtan uca; tanımıyorsa
-//      (ayrı dilim henüz inmedi) beyanlı ⏭ — araç tanıdığı gün bu bölüm kendiliğinden koşar
+//   §4 GERÇEK PAKET aracı (varsayılan PAKET_KOMUTU): tören onunla uçtan uca; araç ön yoklamada çökerse KIRMIZI
+//      (atlama yok — eksik modül/önkoşul da çökmedir, "atlandı" gerçek bir kırılmayı örter)
 //   §6 DÖNEM TÖRENİ (`donem`, G4 §2.4): yeni ALT · ara imzacı · İNDİRME (120 gün) + iptal belgesi (ilk dönem sıra 1,
 //      `--iptal` ile sıra + 1 ve önceki satırlar) + kuyruktaki HAK'ların kök imzası → KÖKSÜZ VDS paketi (künye + SHA256SUMS,
 //      700/600); paketin anahtarları köke karşı geçerli; ara parolası kökünkinden ayrı; ilk tören dizini dokunulmaz;
@@ -138,6 +138,7 @@ const a = new Map(process.argv.slice(2).map((x) => { const m = /^--([a-z]+)(?:=(
 const parcalar = []; for await (const p of process.stdin) parcalar.push(p);
 const [p1 = "", p2 = ""] = Buffer.concat(parcalar).toString("utf8").split("\\n");
 if (p1 !== p2 || [...p1].length < 12) { console.error("✖ saplama: parola eşleşmedi ya da kısa"); process.exit(2); }
+if (a.get("kip") === "coker") await import("./yok-olan-modul-sonda.mjs");
 const { privateKey } = crypto.generateKeyPairSync("ed25519"); const j = privateKey.export({ format: "jwk" });
 const govde = { tur: "tekserp-paket-anahtar", surum: 2, kid: a.get("kid"), x: j.x, sarili: { ad: a.get("kid"), ozet: crypto.createHash("sha256").update(p1, "utf8").digest("hex") } };
 if (a.get("kip") === "parolasiz") govde.d = j.d;
@@ -229,7 +230,6 @@ async function main(): Promise<void> {
   const gercekEvOnce = existsSync(gercekEv) ? statSync(gercekEv).mtimeMs : null;
   const D = path.join(tmp, "satici-uretim");
   const A = path.join(D, "anahtarlar");
-  let atlanan = 0;
   try {
     console.log("\n§0 ✓K süreç yüzeyi okuyucusu kör değil");
     const sonda = `yuzey-sonda-${randomBytes(8).toString("hex")}`;
@@ -436,6 +436,10 @@ async function main(): Promise<void> {
       parolasiz.status === 1 && /PAROLASIZ/.test(parolasiz.cikti) && dosyasiz.status === 1 && /beklenen dosyayı üretmedi/.test(dosyasiz.cikti) &&
         yalanci.status === 1 && /özeti dosyayla uyuşmuyor/.test(yalanci.cikti) && temiz(),
       `${parolasiz.status}/${dosyasiz.status}/${yalanci.status}`);
+    const coker = await tore([`--dizin=${H}`, `--yil=${YIL}`, ET, paketBayragi("coker")], iki(KOK_PAROLA, PAKET_PAROLA), {}, ev);
+    const cokerHata = /PAKET başarısız[^\n]*Cannot find module/.test(coker.cikti);
+    kontrol("§3f2 PAKET aracı modül bulamayıp çökerse hata özeti asıl satırı (Cannot find module) gösterir — yalnız son 3 satır (Node.js vX) değil; hedef doğmaz",
+      coker.status === 1 && cokerHata && !coker.parolaGoruldu && !existsSync(H), `${coker.status} ${coker.cikti.trim().split("\n").slice(-2).join(" / ").slice(0, 300)}`);
     const kalinti = path.join(tmp, "hedef-yok.yarim-12345");
     mkdirSync(kalinti);
     const yarim = await tore([`--dizin=${H}`, `--yil=${YIL}`, ET, paketBayragi()], iki(KOK_PAROLA, PAKET_PAROLA), {}, ev);
@@ -506,8 +510,11 @@ async function main(): Promise<void> {
       kontrol("§4a tören gerçek PAKET aracıyla uçtan uca: parolalı dosya (ham d yok), künyede açık yarı; parola hiçbir süreçte görünmedi",
         g.status === 0 && !!gk.paket?.x && gp.includes(gk.paket.x) && !gp.includes(PAKET_PAROLA) && !/"d"\s*:/.test(gp) && !g.parolaGoruldu, `${g.status} ${g.status === 0 ? "" : g.cikti.slice(-300)}`);
     } else {
-      atlanan++;
-      console.log(`  ⏭ ATLANDI — gerçek PAKET aracı üretim kid'ini henüz tanımıyor (lisans/uretim-gecis dilimi): ${(yok.stderr || yok.stdout).trim().split("\n").pop()?.slice(0, 140) ?? ""}`);
+      // Ön yoklama çökmesi atlanmaz: tam çıktı (ilk hata satırı dahil) basılır, parola maskelenir.
+      const yokCikti = `${yok.error?.message ?? ""} ${yok.stderr ?? ""} ${yok.stdout ?? ""}`.replaceAll(PAKET_PAROLA, "***").trim();
+      const yokSatirlar = yokCikti.split("\n");
+      const yokAsil = [/Cannot find (module|package)/, /^\s*(\w+ )?\w*Error( \[\w+\])?:/, /ENOENT|EACCES/].reduce<string | undefined>((bulunan, kalip) => bulunan ?? yokSatirlar.find((l) => kalip.test(l)), undefined);
+      kontrol("§4a gerçek PAKET aracı ön yoklamada çökmedi (üretim kid'ini tanıyor, parolalı dosya yazıyor)", false, `çıkış ${yok.status} ${[yokAsil, ...yokSatirlar.slice(-3)].filter(Boolean).join(" | ").slice(0, 500)}`);
     }
 
     console.log("\n§6 DÖNEM TÖRENİ (G4 §2.4) — ara imzacı · ALT · İNDİRME 120 gün · iptal belgesi · kök kuyruğu, KÖKSÜZ paket");
@@ -729,7 +736,6 @@ async function main(): Promise<void> {
   } finally {
     rmSync(tmp, { recursive: true, force: true });
   }
-  if (atlanan > 0) console.log(`\nℹ️  ${atlanan} bölüm beyanla atlandı (§4) — geçti SAYILMADI`);
   sonuc();
 }
 
