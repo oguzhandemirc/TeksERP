@@ -23,6 +23,7 @@ import { withSigningPasswordGuard } from "../portal/signing-guard";
 import { NOTIFICATION_PORTAL_ROUTES } from "./notification-routes";
 import { SUPPORT_PORTAL_ROUTES } from "./support-routes";
 import { fleetView, installationUpdateView } from "../portal/fleet";
+import { maintenanceDueView } from "../portal/maintenance-due";
 import { keyStatus } from "../portal/key-status";
 import * as q from "../portal/queries";
 import { PORTAL_ROLES, roleHas } from "../portal/roles";
@@ -410,6 +411,7 @@ export const VENDOR_PORTAL_ROUTES: readonly PortalRouteDef[] = [
   },
   { method: "get", path: "/anahtarlar", permission: "anahtar:oku", kimlik: "OKUMA", handler: async (c) => ({ data: await keyStatus(c.ctx, prisma, c.nowMs) }) },
   { method: "get", path: "/filo", permission: "portal:oku", kimlik: "OKUMA", handler: async (c) => ({ data: await fleetView(prisma, c.ctx.config.YAYIN_DIZINI) }) },
+  { method: "get", path: "/bakim-bitecek", permission: "portal:oku", kimlik: "OKUMA", handler: async (c) => ({ data: await maintenanceDueView(prisma, c.nowMs) }) },
   {
     method: "get",
     path: "/kurulumlar/:id/guncelleme",

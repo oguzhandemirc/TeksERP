@@ -1,6 +1,7 @@
 // ZAMANA BAĞLI BİLDİRİMLER — dakikalık bakım işinin içinde `BILDIRIM_TARAMA_DK`da bir koşar: kurulum ses vermiyor ·
 // kira bitişi yaklaşıyor (yalnız eski çapalı kurulum; P modelinde kira bitişi tazeliktir) · lisans geçerlilik bitişi
-// yaklaşıyor · taksit vadesi yaklaşıyor (bu ikisi ödenmiş tarih P'nin iki kaynağıdır — `paid-through.ts`). Aday kilitsiz okunur, her
+// yaklaşıyor · taksit vadesi yaklaşıyor (bu ikisi ödenmiş tarih P'nin iki kaynağıdır — `paid-through.ts`) · bakım bitişi
+// yaklaşıyor (30 gün; yenileme satışı). Aday kilitsiz okunur, her
 // aday kendi tx'inde kurulum kilidi ALTINDA TAZE okunup yeniden doğrulanır (TOCTOU: arada yoklayan kurulum "sessiz"
 // bildirimi almaz). Tekillik anahtarı dönemi taşır (son yoklama anı · kira kimliği · bitiş/vade anı): aynı dönem
 // ikinci satır doğurmaz, iki zamanlayıcı yarışsa da UNIQUE tek satır bırakır — spam yok.
@@ -28,6 +29,7 @@ export interface ScanTotals {
   leaseEnd: number;
   validityEnd: number;
   installmentDue: number;
+  maintenanceEnd: number;
 }
 
 /** Tek adayın tx'i: ilk ifade kurulum kilidi; aday düşerse (hata) diğerleri sürer. */
@@ -125,6 +127,37 @@ async function scanValidityEnd(cfg: ScanConfig, nowMs: number): Promise<number> 
   return n;
 }
 
+/** Bakım bitişi hatırlatma penceresi (gün) — fabrikanın bakım bandıyla (`MAINTENANCE_WARNING_DAYS`) aynı 30. */
+export const MAINTENANCE_REMINDER_DAYS = 30;
+/** Bakım yenileme satışı DEMO/TEST'te anlamsızdır. */
+const MAINTENANCE_SKIPPED_CLASSES = ["DEMO", "TEST"] as const;
+
+/** Bakım bitişi yaklaşıyor (K9): aktif HAK, bitişe ≤ 30 gün; bitiş değişirse (yenileme) yeni dönem. */
+async function scanMaintenanceEnd(nowMs: number): Promise<number> {
+  const now = new Date(nowMs);
+  const horizon = new Date(nowMs + MAINTENANCE_REMINDER_DAYS * DAY_MS);
+  const rows = await prisma.hak.findMany({
+    where: {
+      aktif: true,
+      bakimBitis: { gt: now, lte: horizon },
+      kurulum: { aktif: true, durum: { in: ["ETKIN", "DEVREDILDI"] }, sinif: { notIn: [...MAINTENANCE_SKIPPED_CLASSES] } },
+    },
+    select: { id: true, kurulumId: true },
+    orderBy: { id: "asc" },
+    take: SCAN_LIMIT,
+  });
+  let n = 0;
+  for (const r of rows) {
+    n += await underLock(r.kurulumId, async (tx) => {
+      const h = await tx.hak.findUnique({ where: { id: r.id }, select: { aktif: true, bakimBitis: true } });
+      const end = h?.bakimBitis ?? null;
+      if (!h || !h.aktif || !end || end <= now || end > horizon) return 0;
+      return enqueueNotificationTx(tx, { event: "BAKIM_BITISI_YAKLASIYOR", keyParts: [r.id, end.getTime()], installationDbId: r.kurulumId, relatedId: r.id, portalPath: `/kurulumlar/${r.kurulumId}`, tarih: end });
+    });
+  }
+  return n;
+}
+
 /** Taksit vadesi yaklaşıyor: aktif plandaki BEKLEYEN kalem (kalem + vade başına bir kez). */
 async function scanInstallmentDue(cfg: ScanConfig, nowMs: number): Promise<number> {
   const now = new Date(nowMs);
@@ -147,12 +180,13 @@ async function scanInstallmentDue(cfg: ScanConfig, nowMs: number): Promise<numbe
   return n;
 }
 
-/** Dört tarama sırayla; dönüş yeni yazılan satır sayısı (kanal başına). */
+/** Beş tarama sırayla; dönüş yeni yazılan satır sayısı (kanal başına). */
 export async function scanTimedNotifications(cfg: ScanConfig, nowMs: number): Promise<ScanTotals> {
   return {
     silent: await scanSilent(cfg, nowMs),
     leaseEnd: await scanLeaseEnd(cfg, nowMs),
     validityEnd: await scanValidityEnd(cfg, nowMs),
     installmentDue: await scanInstallmentDue(cfg, nowMs),
+    maintenanceEnd: await scanMaintenanceEnd(nowMs),
   };
 }

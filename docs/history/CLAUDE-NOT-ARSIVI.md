@@ -15054,3 +15054,10 @@ Negatif sondalar (tetik md5(prosrc) ve dosya md5 ile geri alındı):
 **Ek — testfabrika emekli (kullanıcı kararları 2026-10-05).**
 - [PROFİL] testfabrika TAŞINMAZ, EMEKLİ olur: tamamen kaldırılır (thinkpad-1'deki test kurulumu dahil); yerine ileride SIFIRDAN yeni bir test kurulumu üretim lisans sunucusunda "test" güncelleme grubunda yapılır. Hazırlık satıcısı portalsız ve fabrikasız kalır, yalnız lisans sunucusunun kendi sürüm denemesi içindir. Ara dönem için komut satırı aracı YAZILMAZ (testfabrika için lisans işlemi yapılmaz). Kaldırma işinin kendisi (VDS'te `html/testfabrika`, kanal, thinkpad) AYRI adımdır, bu notla yapılmadı. `docs/ops/LISANS-DEVREYE-ALMA-TESTFABRIKA.md` yeni test kurulumu için şablon olarak kalır.
 - [PROFİL] Yeni müşteri senaryosu (`docs/ops/SENARYO-YENI-MUSTERI.md`, demofabrika provası) ÜRETİM lisans sunucusunda, demo müşteri "test" grubunda koşar.
+
+## 2026-10-05 — küçük mesajlar (demofabrika bulguları K7 · K8 · K9)
+
+- [ÇEKİRDEK] K7: panel eşitleme sonrası "Lisans yenilendi" demez; eylem öncesi/sonrası `/detay`ı karşılaştırıp "Lisans bilgisi güncellendi — bitiş: X (değişmedi/uzadı/kısaldı, eski: Y)" ve değişen alanları (bakım bitişi, modül, satıcı kararı) yazar. Yeni tel alanı yok.
+- [ÇEKİRDEK] K8: bakım ihlali bandı "hak ettiğiniz sürüme dönün" yerine "bakımı yenilemek için satıcınızla görüşün" der; portal imza formu bakım bitişi `sonOrtam.derlemeTarihi`nden önceye alınırken imzadan önce uyarır (engellemez; karar fabrikada).
+- [ÇEKİRDEK] K9: `BAKIM_BITIYOR`/`BAKIM_BITTI` bilgi bandı taşır (gözlem kipinde uygulanan bant yine null — sıfır fark); satıcıda `BAKIM_BITISI_YAKLASIYOR` bildirimi (30 gün, migration `20261005120000`) ve "Bakım bitişleri" listesi (`GET /bakim-bitecek`, `portal:oku`).
+- Açık (kullanıcı kararı bekliyor): K6 (çoklu bant + satıcı mesajı için yeni tel alanı), K10 (yoklama gövdesine açık modül listesi: protokol değişikliği, satıcı ÖNCE).

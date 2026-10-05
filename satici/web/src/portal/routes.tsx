@@ -15,6 +15,7 @@ import { FilesPage } from "./pages/Files";
 import { FleetPage } from "./pages/Fleet";
 import { HardwareRequestsPage } from "./pages/HardwareRequests";
 import { InstallationsPage } from "./pages/Installations";
+import { MaintenanceDuePage } from "./pages/MaintenanceDue";
 import { NotificationsPage } from "./pages/Notifications";
 import { SupportPage } from "./pages/Support";
 import { SupportDetailPage } from "./pages/SupportDetail";
@@ -42,6 +43,7 @@ export const PORTAL_NAV: readonly NavItem[] = [
   { to: "/kanallar", label: "Kanallar", permission: "portal:oku" },
   { to: "/surumler", label: "Sürümler", permission: "portal:oku" },
   { to: "/filo", label: "Filo", permission: "portal:oku" },
+  { to: "/bakim-bitecek", label: "Bakım bitişleri", permission: "portal:oku" },
   { to: "/dosyalar", label: "Dosyalar", permission: "portal:oku" },
   { to: "/kullanicilar", label: "Portal kullanıcıları", permission: "kullanici:yonet" },
   { to: "/denetim", label: "Denetim defteri", permission: "denetim:oku" },
@@ -73,6 +75,7 @@ export const PORTAL_ROUTES: RouteObject[] = [
       { path: "kanallar", element: <ChannelsPage /> },
       { path: "surumler", element: <ReleasesPage /> },
       { path: "filo", element: <FleetPage /> },
+      { path: "bakim-bitecek", element: <MaintenanceDuePage /> },
       { path: "dosyalar", element: <FilesPage /> },
       { path: "kullanicilar", element: <UsersPage /> },
       { path: "denetim", element: <AuditPage /> },

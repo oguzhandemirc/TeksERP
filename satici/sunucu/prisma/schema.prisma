@@ -1290,6 +1290,8 @@ enum BildirimOlayi {
   KOK_IMZASI_ACIL
   /// K8: donanım değişikliği ya da zayıf tanıma portal onayı bekliyor (talep başına bir kez).
   DONANIM_ONAYI_BEKLIYOR
+  /// K9: HAK bakım bitişine ≤ 30 gün (yenileme satışı); bitiş değişirse yeni dönem.
+  BAKIM_BITISI_YAKLASIYOR
 }
 
 enum BildirimKanali {

@@ -9,6 +9,8 @@
 //      dönem) · taksit vadesi yaklaşıyor (ufuk dışı kalem susar)
 //   §4e lisans v2: P modelini işleten kurulumda (yetenek + ufuklu HAK + P'li kira) kira bitişi TAZELİKTİR → KIRA_BITISI
 //      yazılmaz; ✓K aynı kurulum yeteneği bırakınca (eski sürüme dönüş) yine yazılır (süzme kör değil)
+//   §4g bakım bitişi yaklaşıyor (K9): ≤ 30 gün → kanal başına satır; pencere dışı/bitmiş/DEMO susar; bitiş değişince
+//      YENİ dönem; ✓K aynı kurulum üretim sınıfına geçince yazılır
 //   §5 aday yalıtımı: bir adayın yazımı düşerse (tetikleyici) diğer aday yine yazılır, tarama düşmez
 //   §6 bakım işi taramayı `BILDIRIM_TARAMA_DK`da bir koşar (arada yeni sessizlik bekler)
 // ⭐ KALICI SONDA ✓K (her koşumda): §2 tarama gerçekten kilitte BEKLEDİ (süre ölçülür) — beklemeden geçen tarama
@@ -164,6 +166,33 @@ async function main(): Promise<void> {
     const eKira2 = await prisma.kurulum.findUniqueOrThrow({ where: { id: e.kurulumDbId }, select: { sonKira: { select: { bitis: true } } } });
     await scanTimedNotifications(CFG, eKira2.sonKira!.bitis.getTime() - 3 * DAY);
     kontrol("§4f ✓K aynı kurulum yeteneği bildirmeyince (eski çapa) KIRA_BITISI yine yazılır", eEski.status === 200 && (await say("KIRA_BITISI_YAKLASIYOR", e.kurulumDbId)) === 2);
+
+    console.log("\n§4g bakım bitişi yaklaşıyor (K9 — yenileme satışı)");
+    const mAnahtar = kurulumAnahtariUret();
+    const m = await kurulumFiksturu(ctx, { tesisId: a.tesisId, musteriId: a.musteriId });
+    await etkin(m, mAnahtar);
+    const bakimGun = (hakId: string, gun: number) => prisma.hak.update({ where: { id: hakId }, data: { bakimBitis: new Date(Date.now() + gun * DAY) } });
+    await bakimGun(m.hakId, 45);
+    await scanTimedNotifications(CFG, Date.now());
+    kontrol("§4g-a bakım bitişi 45 gün sonra (pencere dışı) → yazılmaz", (await say("BAKIM_BITISI_YAKLASIYOR", m.kurulumDbId)) === 0);
+    await bakimGun(m.hakId, 10);
+    const tm = await scanTimedNotifications(CFG, Date.now());
+    await scanTimedNotifications(CFG, Date.now());
+    const mRows = await prisma.bildirim.findMany({ where: { olay: "BAKIM_BITISI_YAKLASIYOR", kurulumId: m.kurulumDbId } });
+    const mg = mRows[0]?.govde as Record<string, string | null> | undefined;
+    kontrol("§4g-b bakım bitişi 10 gün sonra → iki kanal satırı (tarih · lisans no · portal yolu), ikinci tur yeni satır yok", mRows.length === 2 && tm.maintenanceEnd === 2 && mg?.lisansNo === m.lisansNo && !!mg?.tarih && mg.portalYolu === `/kurulumlar/${m.kurulumDbId}`, `${mRows.length} · ${JSON.stringify(mg)}`);
+    await bakimGun(m.hakId, 20);
+    await scanTimedNotifications(CFG, Date.now());
+    kontrol("§4g-c bitiş değişti (kısmi yenileme, hâlâ pencerede) → YENİ dönem satırı (2 → 4)", (await say("BAKIM_BITISI_YAKLASIYOR", m.kurulumDbId)) === 4);
+    await bakimGun(m.hakId, -1);
+    await scanTimedNotifications(CFG, Date.now());
+    kontrol("§4g-d bakım bitmiş (geçmiş) → yeni satır yok (bitmiş bakım için ayrı hatırlatma yok; liste gösterir)", (await say("BAKIM_BITISI_YAKLASIYOR", m.kurulumDbId)) === 4);
+    await bakimGun(d.hakId, 10);
+    await scanTimedNotifications(CFG, Date.now());
+    kontrol("§4g-e DEMO sınıfı için yazılmaz", (await say("BAKIM_BITISI_YAKLASIYOR", d.kurulumDbId)) === 0);
+    await prisma.kurulum.update({ where: { id: d.kurulumDbId }, data: { sinif: "URETIM" } });
+    await scanTimedNotifications(CFG, Date.now());
+    kontrol("§4g-f ✓K aynı kurulum üretim sınıfına geçince yazılır (süzme kör değil)", (await say("BAKIM_BITISI_YAKLASIYOR", d.kurulumDbId)) === 2);
 
     console.log("\n§5 aday yalıtımı");
     const cAnahtar = kurulumAnahtariUret();

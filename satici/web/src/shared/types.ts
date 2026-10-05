@@ -649,6 +649,28 @@ export interface InstallationUpdateView {
   readonly gecmis: UpdateHistoryRow[];
 }
 
+/** `GET /bakim-bitecek` satırı (K9) — aşama ve kalan gün sunucunun hükmü. */
+export interface MaintenanceDueRow {
+  /** Kurulum kaydı id'si (kurulum ayrıntı bağlantısı). */
+  readonly id: string;
+  readonly kurulumId: string;
+  readonly hakId: string;
+  readonly ad: string | null;
+  readonly musteri: string;
+  readonly tesis: string;
+  readonly sinif: string;
+  readonly durum: string;
+  readonly lisansNo: string;
+  readonly kalici: boolean;
+  readonly bakimBitis: string;
+  /** Negatif/0 = bitti. */
+  readonly kalanGun: number;
+  readonly asama: "BITTI" | "YAKLASIYOR" | "SONRAKI";
+  readonly kuruluSurum: string | null;
+  readonly kuruluDerleme: string | null;
+  readonly surumBakimDisi: boolean | null;
+}
+
 /** `GET /filo` satırı. */
 export interface FleetRow {
   readonly id: string;
