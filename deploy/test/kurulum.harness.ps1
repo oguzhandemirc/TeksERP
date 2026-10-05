@@ -5,7 +5,8 @@
 # deploy/pg/pg-sablon-vektorleri.json) - .env satiri (sade bicim) - sir adi - JSON ASCII kacisi - maske -
 # surum onceligi (guncelleyicinin vektorleri) + gercek kurulu surum + eski paket engeli (D8d) + lisans saticisi
 # karari (D8e: bos alan = paketin kanali, farkli deger UYARI, onarimda kayit korunur, eski paket beyanli) + D8e-3b:
-# eski paket TEK giris, gecisli duzen (GECISLI), kanal hizmetinin koku (fail-closed), ag ayari kayittan.
+# eski paket TEK giris, gecisli duzen (GECISLI), kanal hizmetinin koku (fail-closed), ag ayari kayittan + saat
+# esitlemesi karari (2026-10-02: etki alanina DOKUNMA, disinda NTP + otomatik hizmet, onceki ayar kayitta).
 # Iki kultur: degismez + tr-TR ('I' tuzagi: (?i) ve ToLower() 'I'yi 'i'ye indirmez).
 # Kosucular: Teks-Erp/scripts/test_kurulum_betikleri.ts (pwsh 7; mutasyon sondalari -Ortak ile) ve
 #   .github/workflows/kurulum-windows.yml (Windows PowerShell 5.1 - asil hedef).
@@ -281,6 +282,22 @@ $adl = [ordered]@{ backend = "B"; guncelleyici = "G"; pg = "P" }
 $e = HizmetKokEngelleri $adl 'C:\K2' { param($hz) switch ($hz) { "B" { 'C:\K1\current\runtime\h.exe hizmet --kok C:\K1 --ad B' } "G" { $null } "P" { "" } } }
 $e2 = HizmetKokEngelleri $adl 'C:\K1' { param($hz) switch ($hz) { "B" { 'C:\K1\current\runtime\h.exe hizmet --kok C:\K1 --ad B' } default { $null } } }
 Olc "hizmetkok.uc-hizmet-olculur" (@($e).Count -eq 2 -and $e[0].ad -ceq "B" -and $e[0].durum -ceq "baska" -and $e[1].ad -ceq "P" -and $e[1].durum -ceq "olculemedi" -and @($e2).Count -eq 0) ("engeller: $((@($e) | ForEach-Object { "$($_.ad)=$($_.durum)" }) -join ',') / ayni kok: $(@($e2).Count)")
+
+# --- Saat esitlemesi (karar 2026-10-02): etki alanina dokunma, disinda NTP + otomatik hizmet ---------------
+function SaatOz($k) { return "$($k.eylem)/$($k.neden)/$($k.sunucu)" }
+$a = SaatEsitlemeKarari $true "NoSync" "" "Disabled"
+$b = SaatEsitlemeKarari $true "NT5DS" "dc.ornek.local" "Auto"
+Olc "saat.etki-alani-dokunmaz" ($a.eylem -ceq "DOKUNMA" -and $a.neden -ceq "etki-alani" -and $b.eylem -ceq "DOKUNMA" -and $b.neden -ceq "etki-alani") ((SaatOz $a) + " / " + (SaatOz $b))
+$a = SaatEsitlemeKarari $false "NTP" "pool.ntp.org,0x9" "Auto"
+$b = SaatEsitlemeKarari $false "AllSync" "" "Auto"
+$c = SaatEsitlemeKarari $false "ntp" "x.ornek.com" "Auto"
+Olc "saat.zaten-ntp-dokunmaz" ($a.eylem -ceq "DOKUNMA" -and $a.sunucu -ceq "pool.ntp.org,0x9" -and $b.eylem -ceq "DOKUNMA" -and $c.eylem -ceq "DOKUNMA") ((SaatOz $a) + " / " + (SaatOz $b) + " / " + (SaatOz $c))
+$a = SaatEsitlemeKarari $false "NTP" "time.windows.com,0x9" "Manual"
+Olc "saat.ntp-hizmet-otomatik" ($a.eylem -ceq "HIZMET_OTOMATIK" -and $a.sunucu -ceq "time.windows.com,0x9") (SaatOz $a)
+$a = SaatEsitlemeKarari $false "NoSync" "" "Disabled"
+$b = SaatEsitlemeKarari $false "NT5DS" "kendi.ornek.local,0x8" "Manual"
+Olc "saat.kapali-ntp-acar" ($a.eylem -ceq "NTP_AC" -and $a.sunucu -ceq "time.windows.com,0x9" -and $b.eylem -ceq "NTP_AC" -and $b.sunucu -ceq "kendi.ornek.local,0x8") ((SaatOz $a) + " / " + (SaatOz $b))
+Olc "saat.onceki-kayda-girer" ($b.onceki.tip -ceq "NT5DS" -and $b.onceki.ntpSunucu -ceq "kendi.ornek.local,0x8" -and $b.onceki.baslangic -ceq "Manual") ("tip $($b.onceki.tip) sunucu $($b.onceki.ntpSunucu) baslangic $($b.onceki.baslangic)")
 
 Write-Output "=== Sonuc: $($script:gecti) gecti, $($script:kaldi) basarisiz ==="
 if ($script:kaldi -gt 0) { exit 1 }
