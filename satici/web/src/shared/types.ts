@@ -351,6 +351,8 @@ export interface InstallationDetail {
   readonly yaptirimDefteri?: SanctionAction[];
   readonly kiralar?: Lease[];
   readonly yoklamalar?: PollRow[];
+  /** Son yoklamanın İMZALI saat sapması (sn; + = fabrika saati ileride); null = bildirilmedi (eski sürüm / ölçülmedi). */
+  readonly saatSapmasi?: { readonly sapmaSn: number; readonly uyari: boolean; readonly esikSn: number; readonly an: string } | null;
   readonly kopyaUyarilari?: CopyAlert[];
   readonly tasimaTalepleri?: TransferRequest[];
   readonly planliEylemler?: PlannedAction[];
