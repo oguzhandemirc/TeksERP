@@ -18,6 +18,7 @@ import {
   checkModuleFormat,
   installationCapabilities,
   planEntitlementSigner,
+  isValidityEndRequired,
   resolveOfflineHorizon,
   type EmbeddedSigner,
   type LongHorizonApproval,
@@ -100,6 +101,10 @@ export function buildEntitlementPayload(
   const inst = hak.kurulum;
   const modules = changes.modules === undefined ? [...hak.moduller] : checkModuleFormat(changes.modules);
   const perpetual = changes.perpetual ?? hak.kalici;
+  // Kalıcıya çevirmek geçerlilik bitişini kaldırır (`clearValidity`): bitişi zorunlu sınıfta imzadan ÖNCE reddedilir.
+  if (changes.perpetual === true && !hak.kalici && isValidityEndRequired(inst.sinif)) {
+    throw badRequest(`${inst.sinif} sınıfı lisans kalıcıya çevrilemez: geçerlilik bitişi zorunludur`);
+  }
   const maintenanceUntil = changes.maintenanceUntil ?? hak.bakimBitis;
   if (Number.isNaN(maintenanceUntil.getTime())) throw badRequest("Bakım bitişi geçersiz");
   const horizon = resolveOfflineHorizon(hak, changes.offlineHorizonDays, inst.sinif, signer.kind);

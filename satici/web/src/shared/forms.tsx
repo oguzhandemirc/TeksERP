@@ -8,6 +8,7 @@ import { dateInputToIso, fmtDate, isoToDateInput } from "./format";
 import { CLASS_LABEL, MODULE_LABEL, PRODUCTION_MODULE_KEY, label } from "./labels";
 import { OnceSecretModal } from "./OnceSecret";
 import { useApi, useCan } from "./session";
+import { isValidityEndRequired } from "./validity";
 import type { ActivationCodeCreated, Customer, EntitlementSummary, Installation, Ref, Site } from "./types";
 import { Button, ErrorText, Field, Modal, ModalActions } from "./ui";
 import { CLOUD_RETENTION_DEFAULT, RETENTION_CHOICES, SYNC_MINUTES_DEFAULT, SYNC_MINUTES_MAX, SYNC_MINUTES_MIN, retentionBody, retentionValue } from "./cloud-settings";
@@ -266,7 +267,7 @@ export function InstallationFormModal({
 
 // ---------------------------------------------------------------- HAK
 
-/** HAK taslağı (imzasız): modüller + kalıcı + bakım bitişi. İmza ayrı adımdır (parolalı sürüm). */
+/** HAK taslağı (imzasız): modüller + kalıcı + bakım bitişi (+ DEMO'da zorunlu geçerlilik bitişi). İmza ayrı adımdır (parolalı sürüm). */
 export function EntitlementCreateModal({
   installation,
   modules,
@@ -289,11 +290,20 @@ export function EntitlementCreateModal({
   const [confirmed, setConfirmed] = useState(false);
   const [perpetual, setPerpetual] = useState(allowPerpetual);
   const [maintenance, setMaintenance] = useState(isoToDateInput(new Date(Date.now() + 365 * 86_400_000).toISOString()));
+  const validityRequired = isValidityEndRequired(installation.sinif);
+  const [validity, setValidity] = useState("");
   const write = useWrite<EntitlementSummary>((body) => api.post(`/kurulumlar/${installation.id}/hak`, body));
   const iso = dateInputToIso(maintenance);
+  const validityIso = validityRequired ? dateInputToIso(validity) : undefined;
   const tooLate = maintenanceBeyond(iso, maxMaintenanceMonths);
   const submit = async () => {
-    const r = await write.run({ moduller: selected, kalici: perpetual, bakimBitis: iso, ...(selected.includes(PRODUCTION_MODULE_KEY) ? {} : { uretimModuluCikarilsin: confirmed }) });
+    const r = await write.run({
+      moduller: selected,
+      kalici: perpetual,
+      bakimBitis: iso,
+      ...(validityIso ? { gecerlilikBitis: validityIso } : {}),
+      ...(selected.includes(PRODUCTION_MODULE_KEY) ? {} : { uretimModuluCikarilsin: confirmed }),
+    });
     if (r.ok) onSaved();
   };
   return (
@@ -309,12 +319,17 @@ export function EntitlementCreateModal({
         <input type="date" value={maintenance} onChange={(e) => setMaintenance(e.target.value)} />
       </Field>
       {tooLate ? <p className="error">Bakım bitişi tavanı aşıyor (en çok {maxMaintenanceMonths} ay).</p> : null}
+      {validityRequired ? (
+        <Field label="Geçerlilik bitişi (zorunlu)" hint={`${label(CLASS_LABEL, installation.sinif)} lisansı bitiş tarihi olmadan kaydedilemez.`}>
+          <input type="date" value={validity} onChange={(e) => setValidity(e.target.value)} />
+        </Field>
+      ) : null}
       <ErrorText error={write.error} />
       <ModalActions>
         <Button onClick={onClose} disabled={write.pending}>
           Vazgeç
         </Button>
-        <Button variant="primary" onClick={submit} disabled={write.pending || !iso || tooLate || !modulesReady(selected, confirmed)}>
+        <Button variant="primary" onClick={submit} disabled={write.pending || !iso || tooLate || (validityRequired && !validityIso) || !modulesReady(selected, confirmed)}>
           Oluştur
         </Button>
       </ModalActions>
@@ -328,6 +343,7 @@ export function EntitlementCreateModal({
  */
 export function EntitlementVersionModal({
   entitlement,
+  installationClass,
   modules,
   passwordField,
   passwordLabel,
@@ -337,6 +353,8 @@ export function EntitlementVersionModal({
   onSaved,
 }: {
   entitlement: EntitlementSummary;
+  /** Bitişi zorunlu sınıfta (DEMO) "kalıcıya çevir" sunulmaz — sunucu da reddeder. */
+  installationClass?: string;
   modules: readonly string[];
   passwordField: "kokParolasi" | "bayiParolasi";
   passwordLabel: string;
@@ -383,7 +401,7 @@ export function EntitlementVersionModal({
       {changeModules ? (
         <ModulePicker available={modules} value={selected} onChange={setSelected} productionRemovalConfirmed={confirmed} onProductionRemovalConfirmed={setConfirmed} />
       ) : null}
-      {!entitlement.kalici && allowPerpetual ? (
+      {!entitlement.kalici && allowPerpetual && !isValidityEndRequired(installationClass) ? (
         <label className="check field">
           <input type="checkbox" checked={makePerpetual} onChange={(e) => setMakePerpetual(e.target.checked)} />
           Kalıcıya çevir (vadeli geçerlilik bitişi kalkar)

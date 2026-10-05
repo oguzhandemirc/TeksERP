@@ -13,6 +13,7 @@ import { dateInputToIso, fmtDate, isoToDateInput } from "../../shared/format";
 import { useGet } from "../../shared/hooks";
 import { PRODUCTION_MODULE_KEY, SIGNER_PLAN_LABEL, SIGNER_PLAN_REASON_LABEL, label } from "../../shared/labels";
 import { useApi, useCan } from "../../shared/session";
+import { isValidityEndRequired } from "../../shared/validity";
 import type { EntitlementSummary, EntitlementVersionResult, SigningPlan } from "../../shared/types";
 import { Badge, Button, ErrorText, Field, Loading, Modal, ModalActions } from "../../shared/ui";
 
@@ -282,7 +283,7 @@ export function VendorEntitlementVersionModal({
       {changeModules ? (
         <ModulePicker available={modules} value={selected} onChange={setSelected} productionRemovalConfirmed={confirmed} onProductionRemovalConfirmed={setConfirmed} />
       ) : null}
-      {!entitlement.kalici ? (
+      {!entitlement.kalici && !isValidityEndRequired(installationClass) ? (
         <label className="check field">
           <input type="checkbox" checked={makePerpetual} onChange={(e) => setMakePerpetual(e.target.checked)} />
           Kalıcıya çevir (vadeli geçerlilik bitişi kalkar)

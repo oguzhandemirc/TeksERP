@@ -9,6 +9,7 @@ import { MODULE_LABEL, SANCTION_LABEL, label } from "../../shared/labels";
 import { HEAVY_ENDPOINT_LEVELS, HEAVY_K3_MIN_DAYS, isHeavySanctionInput, isHeavySanctionRow, type SanctionLevel } from "../../shared/sanctions";
 import { useApi, useCan } from "../../shared/session";
 import { installationName, type InstallationDetail, type SanctionAction } from "../../shared/types";
+import { isValidityEndRequired } from "../../shared/validity";
 import { Badge, Button, ErrorText, Field, KeyValues, Modal, ModalActions, Section, Table } from "../../shared/ui";
 
 const LIGHT: readonly SanctionLevel[] = ["K0", "K1", "K2", "K3"];
@@ -262,7 +263,7 @@ export function SanctionPanel({ detail, modules, onChanged }: { detail: Installa
         />
       ) : null}
       {extendOpen && hak ? <ExtendModal installationId={inst.id} target={`${name} · ${hak.lisansNo}`} current={hak.gecerlilikBitis} onClose={() => setExtendOpen(false)} onDone={done} /> : null}
-      {validityOpen && hak ? <ValidityModal installationId={inst.id} target={`${name} · ${hak.lisansNo}`} current={hak.gecerlilikBitis} onClose={() => setValidityOpen(false)} onDone={done} /> : null}
+      {validityOpen && hak ? <ValidityModal installationId={inst.id} target={`${name} · ${hak.lisansNo}`} current={hak.gecerlilikBitis} endRequired={isValidityEndRequired(inst.sinif)} onClose={() => setValidityOpen(false)} onDone={done} /> : null}
     </>
   );
 }
@@ -304,9 +305,25 @@ function ExtendModal({ installationId, target, current, onClose, onDone }: { ins
   );
 }
 
-function ValidityModal({ installationId, target, current, onClose, onDone }: { installationId: string; target: string; current: string | null; onClose: () => void; onDone: () => void }) {
+/** `endRequired` (DEMO — K5): süre sınırı kaldırılamaz, tarih zorunlu; sunucu da reddeder. */
+function ValidityModal({
+  installationId,
+  target,
+  current,
+  endRequired,
+  onClose,
+  onDone,
+}: {
+  installationId: string;
+  target: string;
+  current: string | null;
+  endRequired: boolean;
+  onClose: () => void;
+  onDone: () => void;
+}) {
   const api = useApi();
-  const [unlimited, setUnlimited] = useState(current === null);
+  const [unlimitedChoice, setUnlimited] = useState(current === null && !endRequired);
+  const unlimited = unlimitedChoice && !endRequired;
   const [date, setDate] = useState("");
   const [reason, setReason] = useState("");
   const write = useWrite((b) => api.post(`/kurulumlar/${installationId}/gecerlilik`, b));
@@ -317,10 +334,14 @@ function ValidityModal({ installationId, target, current, onClose, onDone }: { i
       <p>
         <strong>{target}</strong> — şu anki bitiş: {current ? fmtDate(current) : "süresiz"}.
       </p>
-      <label className="check field">
-        <input type="checkbox" checked={unlimited} onChange={(e) => setUnlimited(e.target.checked)} />
-        Süre sınırını kaldır (vadesiz)
-      </label>
+      {endRequired ? (
+        <p className="muted small">Bu lisans sınıfında bitiş tarihi zorunludur; süre sınırı kaldırılamaz.</p>
+      ) : (
+        <label className="check field">
+          <input type="checkbox" checked={unlimited} onChange={(e) => setUnlimited(e.target.checked)} />
+          Süre sınırını kaldır (vadesiz)
+        </label>
+      )}
       {!unlimited ? (
         <Field label="Bitiş tarihi">
           <input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
