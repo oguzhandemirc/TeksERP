@@ -266,6 +266,8 @@ export const LicenseResponseSchema = z.object({
   kodTuru: z.enum(ACTIVATION_CODE_KINDS).optional().catch(undefined),
   /** Güncel iptal belgesi (`tekserp-iptal`, G4) — ayrıca doğrulanır; biçimsizse yok sayılır, kirayı düşürmez. */
   iptal: JwsTextSchema.optional().catch(undefined),
+  /** İstek bağı (`tekserp-yanit`, 6.3c): canlı yanıtta kirayı isteğin nonce'una bağlar; eski satıcı göndermez. */
+  yanitBagi: JwsTextSchema.optional(),
 });
 
 /**

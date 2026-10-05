@@ -54,6 +54,12 @@ export const PROTOCOL_ERROR_CODES = [
   "PAKET_BAGI",
   /** PG paketi künyesi backend bildiriminin PG hedefiyle bağlanmıyor (farklı ana sürüm dahil). */
   "PG_BAGI",
+  /** Canlı lisans yanıtı istek bağı taşımıyor ama kira bağla teslim edildiğini beyan ediyor (bağ soyulmuş). */
+  "YANIT_BAGI_YOK",
+  /** Yanıt bağı bu yanıtın kirasına bağlı değil ya da imzalayanı kiranın sınıfına yetkisiz. */
+  "YANIT_BAGI_UYUSMAZ",
+  /** Yanıt bağı başka bir isteğin nonce'unu taşıyor — eski/başka yanıtın tekrar oynatılması. */
+  "YANIT_NONCE_UYUSMAZ",
 ] as const;
 export type ProtocolErrorCode = (typeof PROTOCOL_ERROR_CODES)[number];
 

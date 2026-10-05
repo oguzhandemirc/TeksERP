@@ -31,6 +31,7 @@ import {
   egressTransport,
   encryptionKeyField,
   invalidResponse,
+  liveArrival,
   licenseError,
   requestIdentityFor,
   requireLicenseId,
@@ -132,7 +133,7 @@ export async function activateLicense(rawCode: string, userId: string | null, tr
     const r = await vendorPost(ENDPOINTS.ACTIVATE, "etkinlestir", buildActivateBody(ctx, code, acceptance.belge), transport);
     adminAction(userId, "etkinlestir", { sonuc: r.ok ? "yanit" : r.code, kabulId: acceptance.kabulId });
     if (!r.ok) throw vendorFailureToError(r);
-    await acceptLicenseResponse(r.json, "etkinlestirme", "CANLI", userId);
+    await acceptLicenseResponse(r.json, "etkinlestirme", liveArrival(r), userId);
   });
   return getLicenseDetail();
 }
@@ -271,7 +272,7 @@ export async function drTakeover(anaKurulumId: string | undefined, gerekce: stri
     const r = await vendorPost(ENDPOINTS.DR_TAKEOVER, "dr-devral", body, transport);
     adminAction(userId, "dr-devral", { anaKurulumId: anaKurulumId ?? null, sonuc: r.ok ? "yanit" : r.code });
     if (!r.ok) throw vendorFailureToError(r);
-    await acceptLicenseResponse(r.json, "dr-devral", "CANLI", userId);
+    await acceptLicenseResponse(r.json, "dr-devral", liveArrival(r), userId);
   });
   return getLicenseDetail();
 }

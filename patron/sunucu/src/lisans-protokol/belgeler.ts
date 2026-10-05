@@ -37,6 +37,8 @@ export const TYP = {
   PG: "tekserp-pg",
   /** Sertifika iptal belgesi (yalnız KÖK imzalar, G4 §2.3) — doğrulayan fabrika (`verifyRevocation`). */
   IPTAL: "tekserp-iptal",
+  /** Canlı lisans yanıtının istek bağı (ALT imzalı, 6.3c) — kirayı isteğin nonce'una bağlar; doğrulayan fabrika. */
+  YANIT_BAGI: "tekserp-yanit",
 } as const;
 
 export const LICENSE_CLASSES = ["URETIM", "TEST", "DR", "DEMO", "BAYI", "BARINDIRILAN"] as const;
@@ -292,6 +294,8 @@ export const LeaseSchema = z
     hakOzeti: DigestSchema.optional(),
     /** Satıcının yanıtla dağıttığı iptal belgesinin sırası: fabrika daha düşük sıralı belgeyle yetinmez. */
     iptalSira: z.number().int().min(1).max(Number.MAX_SAFE_INTEGER).optional(),
+    /** Satıcı bu kirayı canlı yanıtta istek bağıyla (`yanitBagi`) teslim eder: bağsız canlı teslim RED (bağ soyulamaz). */
+    yanitBagli: z.literal(true).optional(),
   })
   .refine((k) => isoToMs(k.bitis) > isoToMs(k.verilis), { message: "Kira bitişi verilişten sonra olmalı" })
   .refine((k) => isoToMs(k.bitis) - isoToMs(k.verilis) <= LEASE_MAX_DAYS * DAY_MS, {
@@ -304,12 +308,15 @@ export const LeaseSchema = z
   .refine((k) => k.kapanis === undefined || k.yaptirim.kademe === "K3", { message: "Kapanış kirası K3 yaptırımı taşımalı" });
 export type LeaseDoc = z.infer<typeof LeaseSchema>;
 
+/** İsteğin tek seferlik sayısı (base64url 22–64). */
+export const RequestNonceSchema = z.string().regex(/^[A-Za-z0-9_-]{22,64}$/);
+
 export const RequestSchema = z
   .object({
     v: z.literal(PROTOCOL_VERSION),
     kurulumId: OptionalInstallationIdSchema,
     zaman: IsoTimeSchema,
-    nonce: z.string().regex(/^[A-Za-z0-9_-]{22,64}$/),
+    nonce: RequestNonceSchema,
     amac: z.enum(REQUEST_PURPOSES),
     govdeOzeti: DigestSchema,
     /** İsteğin gittiği uç yolu (zarfla taşınanda taşıyan uç `/v1/cevrimdisi`); varsa doğrulayan eşitliği denetler. */
@@ -364,6 +371,20 @@ export const RevocationSchema = z.object({
     .refine((list) => isUnique(list.map((e) => e.sertifikaId)), "İptal listesinde tekrarlı sertifika"),
 });
 export type RevocationDoc = z.infer<typeof RevocationSchema>;
+
+/**
+ * YANIT BAĞI (6.3c): canlı lisans yanıtındaki kirayı (`kiraOzeti` = `jwsDigest(kira)`) yanıtın cevapladığı isteğin
+ * nonce'una bağlar. ALT imzalıdır ve kendi alt sertifikasını gömer — aynı kirayı yeniden veren yol (tekrar · kapanış)
+ * kirayı imzalayandan başka bir ALT anahtarla bağlayabilir.
+ */
+export const ResponseBindingSchema = z.object({
+  v: z.literal(PROTOCOL_VERSION),
+  kiraOzeti: DigestSchema,
+  istekNonce: RequestNonceSchema,
+  verilis: IsoTimeSchema,
+  altSertifika: JwsTextSchema,
+});
+export type ResponseBindingDoc = z.infer<typeof ResponseBindingSchema>;
 
 /**
  * Yükü şemadan geçirir. Bilinmeyen `v` şema hatasından AYRI kodlanır: sürüm uyuşmazlığı

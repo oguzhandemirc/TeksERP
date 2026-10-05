@@ -4,6 +4,7 @@ export * from "./jws";
 export * from "./belgeler";
 export * from "./kok-anahtarlar";
 export * from "./anahtar-zinciri";
+export * from "./yanit-bagi";
 export * from "./indirme";
 export * from "./parmak-izi";
 export * from "./istek";

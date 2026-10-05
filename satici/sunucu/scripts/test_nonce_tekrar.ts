@@ -6,11 +6,14 @@
 // budanabilir her satır, isteği ZATEN zaman denetiminden düşürecek andan sonra budanır.
 // §5 (L2-1) İSTEK YOL BAĞI: imzalı `yol` taşıyan istek yalnız o uca (zarfla gelende taşıyan uç
 //    `/v1/cevrimdisi`) — başka uç 401 `ISTEK_YOL`, kod/nonce tüketilmez; yol taşımayan (eski) istek değişmez.
+// §6 (6.3c) YANIT İSTEK BAĞI: canlı uçların (etkinleştir · yokla) lisans yanıtı `yanitBagi` taşır — kirayı (`kiraOzeti`)
+//    isteğin nonce'una ALT imzasıyla bağlar, kira `yanitBagli: true` beyan eder; başka nonce'la doğrulama
+//    `YANIT_NONCE_UYUSMAZ`; zarf ucu (`/v1/cevrimdisi`) bağ basmaz; aynı kirayı yeniden veren tekrar yolu TAZE bağ basar.
 // ⭐ KALICI SONDA ✓K2 (her koşumda): (1) aynı nonce BAŞKA kurulumda kabul (ad alanı kurulum başına —
 //    kapı "nonce'u küresel reddet" diye kör olsaydı kırmızı); (2) DB'ye doğrudan ikinci satır P2002.
 // Koşum: npx tsx scripts/test_nonce_tekrar.ts
 // =============================================================================
-import { CLOCK_SKEW_MS, ENDPOINTS, generateNonce, wrapEnvelope } from "../src/lisans-protokol";
+import { CLOCK_SKEW_MS, ENDPOINTS, generateNonce, jwsDigest, parseJws, verifyResponseBinding, wrapEnvelope } from "../src/lisans-protokol";
 import { kurulumAnahtariUret } from "../../../Teks-Erp/scripts/lib/lisans-fikstur";
 import {
   anahtarOrtamiKur,
@@ -165,6 +168,36 @@ async function main(): Promise<void> {
     kontrol("§5e ⭐ gövde anahtarlı yol da bağlı: başka uç için imzalanmış etkinleştirme → 401 ISTEK_YOL", etYanlis.status === 401 && etYanlis.kod === "ISTEK_YOL", `${etYanlis.status} ${etYanlis.kod}`);
     const etDogru = await imzaliPost(sunucu.genel, ENDPOINTS.ACTIVATE, { kurulumId: k4.kurulumId, amac: "etkinlestir", anahtar: yeniAnahtar, govde: etGovde, imzaYolu: ENDPOINTS.ACTIVATE });
     kontrol("§5f reddedilen istek kodu TÜKETMEDİ: aynı kod kendi ucu için imzalanınca 200", etDogru.status === 200, `${etDogru.status} ${etDogru.kod ?? ""}`);
+
+    console.log("\n§6 yanıt istek bağı (6.3c)");
+    const sinif = (await prisma.kurulum.findUniqueOrThrow({ where: { id: k.kurulumDbId }, select: { sinif: true } })).sinif;
+    const bagOf = (j: Record<string, unknown>) => (typeof j.yanitBagi === "string" ? j.yanitBagi : undefined);
+    const kiraOf = (j: Record<string, unknown>) => String(j.kira);
+    const yuk = (jws: string): Record<string, unknown> => {
+      const p = parseJws(jws);
+      return p.ok ? (p.value.payload as Record<string, unknown>) : {};
+    };
+    const etBag = verifyResponseBinding(bagOf(et.json), f.kokler, { lease: kiraOf(et.json), nonce: String(yuk(et.baslik).nonce), sinif });
+    kontrol("§6a ⭐ etkinleştirme yanıtı isteğin nonce'una bağlı (bağ doğrulanır)", etBag.ok, etBag.ok ? "" : `${etBag.code} ${etBag.message}`);
+    const n1 = generateNonce();
+    const tip = kiraIdOf(zarfDogru.json);
+    const y1 = await imzaliPost(sunucu.genel, ENDPOINTS.POLL, { kurulumId: k.kurulumId, amac: "yokla", anahtar, govde: yoklama(tip), nonce: n1 });
+    const bag1 = verifyResponseBinding(bagOf(y1.json), f.kokler, { lease: kiraOf(y1.json), nonce: n1, sinif });
+    kontrol("§6b ⭐ yoklama yanıtı kendi nonce'una bağlı", y1.status === 200 && bag1.ok, bag1.ok ? "" : `${y1.status} ${bag1.code} ${bag1.message}`);
+    const yabanci = verifyResponseBinding(bagOf(y1.json), f.kokler, { lease: kiraOf(y1.json), nonce: generateNonce(), sinif });
+    kontrol("§6c ⭐ aynı yanıt BAŞKA isteğin nonce'uyla → YANIT_NONCE_UYUSMAZ (eski yanıtı oynatma)", !yabanci.ok && yabanci.code === "YANIT_NONCE_UYUSMAZ", yabanci.ok ? "kabul" : yabanci.code);
+    const baskaKira = verifyResponseBinding(bagOf(y1.json), f.kokler, { lease: kiraOf(et.json), nonce: n1, sinif });
+    kontrol("§6d bağ başka kiraya takılamaz → YANIT_BAGI_UYUSMAZ", !baskaKira.ok && baskaKira.code === "YANIT_BAGI_UYUSMAZ", baskaKira.ok ? "kabul" : baskaKira.code);
+    kontrol("§6e kira bağla teslimi beyan eder (yanitBagli: true, imzalı)", yuk(kiraOf(y1.json)).yanitBagli === true, String(yuk(kiraOf(y1.json)).yanitBagli));
+    kontrol("§6f zarf ucunun yanıtı bağ BASMAZ (taşınmış yanıt; QR yükü büyümez)", zarfDogru.status === 200 && bagOf(zarfDogru.json) === undefined);
+    const n2 = generateNonce();
+    const tekrar = await imzaliPost(sunucu.genel, ENDPOINTS.POLL, { kurulumId: k.kurulumId, amac: "yokla", anahtar, govde: yoklama(tip), nonce: n2 });
+    const bag2 = verifyResponseBinding(bagOf(tekrar.json), f.kokler, { lease: kiraOf(tekrar.json), nonce: n2, sinif });
+    kontrol(
+      "§6g ⭐ yanıtı kaybolan istek tekrarı AYNI kirayı TAZE bağla alır (yeni nonce'a bağlı, kira bayt-eşit)",
+      tekrar.status === 200 && kiraOf(tekrar.json) === kiraOf(y1.json) && bag2.ok && bagOf(tekrar.json) !== bagOf(y1.json),
+      bag2.ok ? `${jwsDigest(kiraOf(tekrar.json)).slice(0, 8)}` : `${tekrar.status} ${bag2.code}`,
+    );
   } finally {
     await sunucu.durdur();
     await temizleKurulumlar(temizlenecek, ortam.kidler);
