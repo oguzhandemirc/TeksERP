@@ -3,7 +3,8 @@
 //   SIRA_GERILEDI / SIRA_SIFIRLANDI — imzalı durum kaydının sırası satıcının son gördüğünden küçük / kayıt yok ya da
 //   sıra 0'dan yeniden başlamış (K7: üç iz silinince fabrika kirasız kaydı sıra 0'la doğurur ve hemen ek süreye geçer,
 //   satıcıda görünen yüzü budur) · LISANS_IZI_KAYIP — fabrika bulgusu (tek
-//   iz kaybı da: kira, durum kaydı ya da DB izinden biri) ·
+//   iz kaybı da: kira, durum kaydı ya da DB izinden biri) · IPTAL_BELGESI_KAYIP — fabrika bulgusu (iptal belgesinin iki
+//   kopyası da gereken sıranın altında: silinmiş, okunamıyor ya da yanıttan ayıklanmış) ·
 //   BELIRSIZLIK — süren ölçülemedi birikimi 7 günü aştı · SAAT_SAPMASI — fabrikanın ölçtüğü satıcı sapması büyük ·
 //   YETENEK_DUSUSU — `hak-ara` bildirmeyen yoklamaya genişlik kapısı tuttu (eski kök sürüm güncelden geniş; meşru olabilir:
 //   eski derlemeye geri dönüş — yalnız bilgi, kök imzası kuyruğa girer).
@@ -14,7 +15,7 @@ import { DAY_MS, jwsDigest, type Fingerprint, type PollRequest } from "../lisans
 import type { Tx } from "../lib/prisma";
 import { enqueueNotificationTx } from "../notifications/outbox";
 
-export const LOCAL_INTERVENTION_CAUSES = ["SIRA_GERILEDI", "SIRA_SIFIRLANDI", "LISANS_IZI_KAYIP", "BELIRSIZLIK", "SAAT_SAPMASI", "YETENEK_DUSUSU"] as const;
+export const LOCAL_INTERVENTION_CAUSES = ["SIRA_GERILEDI", "SIRA_SIFIRLANDI", "LISANS_IZI_KAYIP", "IPTAL_BELGESI_KAYIP", "BELIRSIZLIK", "SAAT_SAPMASI", "YETENEK_DUSUSU"] as const;
 export type LocalInterventionCause = (typeof LOCAL_INTERVENTION_CAUSES)[number];
 
 /** Bildirim referansı ve portal etiketi (sunucu tek kaynak; web aynası `mirrors.test.ts`). */
@@ -22,6 +23,7 @@ export const LOCAL_INTERVENTION_CAUSE_LABELS: Readonly<Record<LocalInterventionC
   SIRA_GERILEDI: "Durum kaydı sırası geriledi (eski kopya geri yüklenmiş)",
   SIRA_SIFIRLANDI: "Durum kaydı sıfırlandı (lisans izleri silinmiş)",
   LISANS_IZI_KAYIP: "Lisans izi kayıp (kira, durum kaydı ya da DB izinden en az biri yok)",
+  IPTAL_BELGESI_KAYIP: "İptal belgesi kayıp (iki kopya da gereken sıranın altında: silinmiş ya da yanıttan ayıklanmış)",
   BELIRSIZLIK: "Süren ölçülemedi 7 günü aştı",
   SAAT_SAPMASI: "Fabrika saati satıcıdan çok sapmış",
   YETENEK_DUSUSU: "Yetenek düşüşü: eski kök sürüm güncelden geniş, HAK teslim edilmedi (kök imzası kuyrukta)",
@@ -43,6 +45,8 @@ export function storableSequence(record: PollRequest["durumKaydi"]): number | nu
 
 /** Fabrikanın durum özetindeki bulgu kodu (G12 §3.1-4). */
 export const TRACE_LOST_FINDING = "LISANS_IZI_KAYIP";
+/** Fabrikanın iptal belgesi bulgusu (L2-7 `state-rules-revocation.ts`): iki kopyanın büyüğü bile gereken sıranın altında. */
+export const REVOCATION_LOST_FINDING = "IPTAL_BELGESI_KAYIP";
 
 /** Yoklamanın lisans v2 ekleri (yalnız doluysa gelir; eski fabrika hiçbirini göndermez). */
 export interface PollV2Report {
@@ -73,6 +77,7 @@ export function localInterventionCauses(g: {
     else if (sequence < g.lastSeenSequence) out.push("SIRA_GERILEDI");
   }
   if (g.findings.includes(TRACE_LOST_FINDING)) out.push("LISANS_IZI_KAYIP");
+  if (g.findings.includes(REVOCATION_LOST_FINDING)) out.push("IPTAL_BELGESI_KAYIP");
   if (g.report.uncertainty && g.report.uncertainty.birikenMs > UNCERTAINTY_ALERT_MS) out.push("BELIRSIZLIK");
   if (g.vendorSkewSeconds !== undefined && Math.abs(g.vendorSkewSeconds) >= CLOCK_SKEW_ALERT_SECONDS) out.push("SAAT_SAPMASI");
   if (g.capabilityDowngrade) out.push("YETENEK_DUSUSU");

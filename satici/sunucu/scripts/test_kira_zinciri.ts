@@ -17,7 +17,7 @@
 // yaptırımda yeni kira ama AYNI tarih; uç ilerlemez) · §10 taşınmış anahtar ve iptal kurulum kapanışı (olay geç fark
 // edilse de tam ek süre — aniden durmaz) ·
 // §11 YABANCI_HAK (kimlik/sürüm defterde yok ya da bayt özeti tutmuyor; doğru özet susar) · §12 YEREL_MUDAHALE
-// (sıra geriledi/sıfırlandı · lisans izi kayıp · belirsizlik · saat sapması; yeni neden başına bildirim; çatal tarafı
+// (sıra geriledi/sıfırlandı · lisans izi kayıp · iptal belgesi kayıp §12g2–g4 · belirsizlik · saat sapması; yeni neden başına bildirim; çatal tarafı
 // sırayı yazamaz) + yetenek kaydı · §13 uzatma dosyası ucu (dosya yüklenmeden ebeveynle gelen → tekrar/olağan, yakala değil).
 // Sunucu kısa kopya penceresiyle kalkar (KOPYA_PENCERE_SN=2) — ikinci pencere beklenerek ölçülür.
 // ⭐ KALICI SONDA ✓K4 (her koşumda): sahip taraf ikinci pencerede de 200 alır (kapı "çatalda herkesi
@@ -28,6 +28,8 @@
 //    doğurmaz · uzatma dosyası ucu olmayan zincirde ebeveynle gelen YAKALA kalır.
 // Koşum: npx tsx scripts/test_kira_zinciri.ts
 // =============================================================================
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { DAY_MS, ENDPOINTS, digestFingerprint, jwsDigest, parseJws, type Fingerprint } from "../src/lisans-protokol";
 import { HAM_PARMAK_IZI, kurulumAnahtariUret, type TestAnahtari } from "../../../Teks-Erp/scripts/lib/lisans-fikstur";
 import {
@@ -46,6 +48,7 @@ import {
   type CalisanSunucu,
   type Yanit,
 } from "./lib/test-ortam";
+import { REVOCATION_LOST_FINDING, TRACE_LOST_FINDING } from "../src/services/local-intervention";
 
 const PENCERE_SN = 2;
 const bekle = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -242,14 +245,25 @@ async function main(): Promise<void> {
     kontrol("§12f belirsizlik > 7 g ve saat sapması ≥ 1 sa → iki yeni neden (6 → 10)", m6y.status === 200 && (await nedenler()).includes("BELIRSIZLIK") && (await nedenler()).includes("SAAT_SAPMASI") && (await bildirimler()).length === 10);
     const kisa = await yoklaV2(km.kurulumId, an, kiraOf(m6y)!.kiraId, fpA, { ...P_YETENEK, belirsizlik: { birikenMs: 6 * DAY_MS, ilk: null }, saticiSapmaSn: 3599 });
     kontrol("§12g ✓K eşik altı belirsizlik (6 g) ve sapma (3599 sn) yeni neden doğurmaz", kisa.status === 200 && (await bildirimler()).length === 10);
-    const eski = await yokla(km.kurulumId, an, kiraOf(kisa)!.kiraId, fpA);
+    // L2-13 (b): iptal belgesinin iki kopyası da gereken sıranın altında (fabrika IPTAL_BELGESI_KAYIP) → yerel müdahale nedeni.
+    const ipt = await yoklaV2(km.kurulumId, an, kiraOf(kisa)!.kiraId, fpA, { ...P_YETENEK, nedenler: ["IPTAL_BELGESI_KAYIP"] });
+    const iptB = await bildirimler();
+    kontrol("§12g2 ⭐ IPTAL_BELGESI_KAYIP → yeni neden + iki kanal bildirimi (10 → 12, referans etiketi); kira yine verilir",
+      ipt.status === 200 && (await nedenler()).includes("IPTAL_BELGESI_KAYIP") && iptB.length === 12 && iptB.some((b) => String((b.govde as { referans?: string }).referans).startsWith("İptal belgesi kayıp")),
+      `${ipt.status} ${(await nedenler()).join()} · ${iptB.length}`);
+    const ipt2 = await yoklaV2(km.kurulumId, an, kiraOf(ipt)!.kiraId, fpA, { ...P_YETENEK, nedenler: ["IPTAL_BELGESI_KAYIP", "SAAT_KAYIK"] });
+    kontrol("§12g3 ✓K süren neden ve neden sayılmayan bulgu (SAAT_KAYIK) yeni bildirim doğurmaz (12)", ipt2.status === 200 && (await bildirimler()).length === 12);
+    const fabrikaKodlari = readFileSync(resolve(__dirname, "../../../Teks-Erp/src/lib/license/state-rules.ts"), "utf8").split("export const REASON_CODES")[1]?.split("] as const")[0] ?? "";
+    kontrol("§12g4 satıcının okuduğu bulgu kodları fabrikanın REASON_CODES listesinde (LISANS_IZI_KAYIP · IPTAL_BELGESI_KAYIP)",
+      [TRACE_LOST_FINDING, REVOCATION_LOST_FINDING].every((c) => fabrikaKodlari.includes(`"${c}"`)));
+    const eski = await yokla(km.kurulumId, an, kiraOf(ipt2)!.kiraId, fpA);
     kontrol("§12h yeteneği bildirmeyen (eski sürüme dönen) fabrika → yetenekler boşalır (kayıt satırı)", eski.status === 200 && (await durum()).yetenekler.length === 0 && (await prisma.kurulumKaydi.count({ where: { kurulumId: km.kurulumDbId, olay: "YETENEKLER" } })) === 2);
     await yoklaV2(km.kurulumId, an, kiraOf(eski)!.kiraId, fpA, { ...P_YETENEK, durumKaydi: { ...kayit, sira: 20 } });
     const once = (await durum()).sonDurumSirasi;
     const klon = await yoklaV2(km.kurulumId, an, m0, fpB, { ...P_YETENEK, durumKaydi: { ...kayit, sira: 1 } });
     kontrol(
       "§12i ✓K çatal tarafı (klon, sıra 1) satıcının sırasını (20) YAZAMAZ ve yerel müdahale nedeni doğurmaz",
-      klon.status === 200 && once === 20 && (await durum()).sonDurumSirasi === 20 && (await bildirimler()).length === 10,
+      klon.status === 200 && once === 20 && (await durum()).sonDurumSirasi === 20 && (await bildirimler()).length === 12,
       `${String(once)} → ${String((await durum()).sonDurumSirasi)}`,
     );
     // K7'de fabrika KİRASIZ kayıt bildirir (geçerli, sıra 0; fabrika kuralı) — "kayıt yok" (null) ile aynı neden: sıfırlandı.
