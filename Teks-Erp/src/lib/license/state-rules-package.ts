@@ -66,6 +66,10 @@ export function evaluateMaintenance(
       out.push({ code: "BAKIM_IHLALI", tier: "EK_SURE", daysLeft: 0, banner: warnBanner(`${text}; bakımı yenilemek için satıcınızla görüşün.`) });
     }
   }
-  if (nowMs > maintenanceEnd) out.push({ code: "BAKIM_BITTI" });
-  else if (maintenanceEnd - nowMs <= MAINTENANCE_WARNING_DAYS * DAY_MS) out.push({ code: "BAKIM_BITIYOR", detail: String(remainingDays(maintenanceEnd, nowMs)) });
+  if (nowMs > maintenanceEnd) {
+    out.push({ code: "BAKIM_BITTI", banner: { metin: "Bakım süreniz bitti; yeni sürümler için bakımı yenileyin (satıcınızla görüşün). Kurulu sürüm çalışmaya devam eder.", ton: "bilgi" } });
+  } else if (maintenanceEnd - nowMs <= MAINTENANCE_WARNING_DAYS * DAY_MS) {
+    const left = remainingDays(maintenanceEnd, nowMs);
+    out.push({ code: "BAKIM_BITIYOR", detail: String(left), banner: { metin: `Bakım süreniz ${left} gün sonra bitiyor; yeni sürümler için bakımı yenilemek üzere satıcınızla görüşün.`, ton: "bilgi" } });
+  }
 }
