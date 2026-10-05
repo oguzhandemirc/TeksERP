@@ -9,10 +9,12 @@ export function refetchIntervalFor(s: UpdateStatus | undefined): number {
   return s?.yerel && (s.yerel.durum === "INDIRILIYOR" || s.yerel.durum === "UYGULANIYOR") ? 5_000 : 30_000;
 }
 
-export function useServerUpdateStatus() {
+/** `enabled=false`: izinsiz kullanıcı ya da eski backend için istek atılmaz (kabuk bileşenleri izne göre açar). */
+export function useServerUpdateStatus(enabled = true) {
   return useQuery({
     queryKey: SERVER_UPDATE_KEY,
     queryFn: serverUpdateService.status,
+    enabled,
     refetchInterval: (q) => refetchIntervalFor(q.state.data),
     retry: false,
   });
