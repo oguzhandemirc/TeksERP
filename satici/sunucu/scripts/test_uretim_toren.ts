@@ -52,8 +52,8 @@ let KLON = "";
 let TOREN = "";
 const ETIKET = "toren-sonda";
 const ET = `--etiket=${ETIKET}`;
-/** Kopyaya giren yollar: törenin koşturduğu araçlar + onların kaynakları. */
-const KLON_YOLLARI = [".gitignore", "deploy/satici", "deploy/kanallar.json", "satici/sunucu", "Teks-Erp/src", "Teks-Erp/scripts", "Teks-Erp/package.json", "Teks-Erp/package-lock.json", "Teks-Erp/tsconfig.json"];
+/** Kopyaya giren yollar: törenin koşturduğu araçlar + onların kaynakları (kök `scripts/lib`: PAKET aracı oradan import eder). */
+const KLON_YOLLARI = [".gitignore", "deploy/satici", "deploy/kanallar.json", "scripts/lib", "satici/sunucu", "Teks-Erp/src", "Teks-Erp/scripts", "Teks-Erp/package.json", "Teks-Erp/package-lock.json", "Teks-Erp/tsconfig.json"];
 const gitK = (args: string[]) => spawnSync("git", ["-C", KLON, "-c", "user.name=bekci", "-c", "user.email=bekci@ornek.test", ...args], { encoding: "utf8" });
 
 /**

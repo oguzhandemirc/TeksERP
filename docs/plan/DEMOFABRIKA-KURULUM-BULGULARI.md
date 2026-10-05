@@ -18,7 +18,7 @@
 - [ ] 1.2 Mac'te dönem töreni: kök anahtar VDS'ten kalkar (§D-2) — 1.1'in hemen arkasından (kullanıcı kararı 2026-10-05: D5 tünel kapatma bitince; kök dosyası bugün VDS'te şifreli duruyor, o arada portaldan kök parolasıyla imza atılmaz)
 - [x] 1.3 Test veritabanlarının silinmesi (§D-5) — 2026-10-04, 223 `_test` DB (~6,5 GB) silindi; kalan yalnız `postgres` + `tekserp_fabrika_0923`
 - [x] 1.4 Karar arşivinin aylara bölünmesi (§E) — `docs/history/arsiv/<YYYY-MM>.md`, dizin `docs/history/CLAUDE-NOT-ARSIVI.md` (2026-10-05)
-- [ ] 1.5 `test_uretim_toren` temiz ağaçta kırmızı (PAKET aracı Node 26.8.1'de çöküyor) — ayrı incelenecek
+- [x] 1.5 `test_uretim_toren` temiz ağaçta kırmızı — 2026-10-05: Node 26 değil; PAKET aracı kök `scripts/lib/kullanici-cumlesi.mjs`'i import ediyor (G22), bekçinin tören kopyasına o yol girmiyordu (MODULE_NOT_FOUND; hata özetinin son satırı "Node.js v26.8.1" yanılttı) — kopya yollarına `scripts/lib` eklendi
 
 **Faz 2 — demofabrika kusurları (§A)**
 - [ ] 2.1 K5 — DEMO lisansı bitişsiz kaydedilemesin
