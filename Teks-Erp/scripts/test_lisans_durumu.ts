@@ -442,6 +442,13 @@ function bakimBolumu(): void {
   check("§12h-K9 sınır: bitişe tam 30 gün → hatırlatma bandı var", sinir.hesaplanan.bant?.metin.includes("30 gün sonra bitiyor") === true, sinir.hesaplanan.bant?.metin ?? "bant yok");
   const ihlalBant = b.hesaplanan.bant;
   check("§12b-K9 ihlal bandı (EK_SURE) bilgi bandını gölgeler: daha şiddetli bant kazanır", ihlalBant?.ton === "uyari" && ihlalBant.metin.includes("bakım süreniz bittikten sonra çıktı"), ihlalBant?.metin ?? "bant yok");
+  // K6 — çoklu bant
+  const coklu = durum({ ...ihlal, kira: eskiKira(2, -20).kira, saat: eskiKira(2, -20).saat });
+  check("§12o-K6 zorlamada birden çok bant: bantlar şiddete göre azalan, bant = bantlar[0], metinler tekil", coklu.uygulanan.bantlar.length >= 1 && coklu.uygulanan.bant === coklu.uygulanan.bantlar[0] && new Set(coklu.uygulanan.bantlar.map((x) => x.metin)).size === coklu.uygulanan.bantlar.length, JSON.stringify(coklu.uygulanan.bantlar.map((x) => x.ton)));
+  const v2i = v2({ pGun: 20, kiraSaat: 240, vade: 15 });
+  const ikili = durum(Object.assign({}, v2i, { hak: { ...(v2i.hak as object), bakimBitis: msToIso(SIMDI + 10 * DAY_MS) } }));
+  const tonlar = ikili.uygulanan.bantlar.map((x) => x.ton);
+  check("§12p-K6 iki bilgi bandı (ödeme + bakım) birlikte taşınır", tonlar.length >= 2 && ikili.uygulanan.bant === ikili.uygulanan.bantlar[0], JSON.stringify(ikili.uygulanan.bantlar.map((x) => x.metin)));
   const e = durum({ girdi: { derlemeTarihiMs: null } });
   check("§12e derleme tarihi yok → bilgi nedeni, kademe NORMAL", nedenVar(e, "DERLEME_TARIHI_YOK") && e.hesaplananKademe === "NORMAL", ozet(e));
 }

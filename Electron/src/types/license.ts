@@ -20,6 +20,8 @@ export interface LicenseStatusSummary {
   kademe: StateTier;
   /** Uygulanan bant — gözlemde daima null. */
   bant: Banner | null;
+  /** Tüm bantlar (şiddete göre azalan). Eski backend göndermez → `bant`a düşülür. */
+  bantlar?: Banner[];
   ekSureKalanGun: number | null;
   kisitlamaKalanGun: number | null;
   guncellemeIzni: boolean;

@@ -54,7 +54,10 @@ export type ModuleCeiling =
   | { readonly applies: true; readonly allowed: readonly string[] | null; readonly denied: readonly string[] };
 
 export interface LicenseEffect {
+  /** Tek bant (eski istemci alanı): en şiddetli bulgunun bandı = `bantlar[0]`. */
   readonly bant: Banner | null;
+  /** Tüm bantlar, şiddete göre azalan (K6: panel tek alanda sırayla döndürür); `bant` yoksa boş. */
+  readonly bantlar: readonly Banner[];
   readonly guncellemeIzni: boolean;
   /** HAK tavanı belirsizlikte de sürer (G12); çekirdek modül her hâlde açık, dondurulan modül kapalı. */
   readonly modulTavani: ModuleCeiling;
@@ -97,6 +100,7 @@ export interface LicenseState {
 /** Gözlem kipinde uygulanan etki: bugünkü davranış — bant yok, güncelleme serbest, tavan yok. */
 export const OBSERVE_EFFECT: LicenseEffect = Object.freeze({
   bant: null,
+  bantlar: Object.freeze([]),
   guncellemeIzni: true,
   modulTavani: Object.freeze({ applies: false }),
 });
@@ -149,13 +153,14 @@ function computeTier(findings: readonly Finding[], validity: Validity): StateTie
   return tier;
 }
 
-/** En şiddetli bulgunun bandı; eşitlikte ilk yazılan. */
-function pickBanner(findings: readonly Finding[]): Banner | null {
-  let chosen: Finding | null = null;
-  for (const f of findings) {
-    if (f.banner && (!chosen || severity(f.tier) > severity(chosen.tier))) chosen = f;
-  }
-  return chosen?.banner ?? null;
+/** Bantlar şiddete göre azalan, eşitlikte yazım sırası; aynı metin bir kez. `bant` = ilki (tek kaynak). */
+function collectBanners(findings: readonly Finding[]): Banner[] {
+  const withBanner = findings.filter((f) => f.banner);
+  const ordered = withBanner
+    .map((f, i) => ({ f, i }))
+    .sort((a, b) => severity(b.f.tier) - severity(a.f.tier) || a.i - b.i)
+    .map((x) => x.f.banner as Banner);
+  return ordered.filter((b, i) => ordered.findIndex((o) => o.metin === b.metin) === i);
 }
 
 /**
@@ -200,7 +205,8 @@ function computeEffect(x: {
   const ceiling: ModuleCeiling = allowed !== null || denied.length > 0 ? { applies: true, allowed, denied } : { applies: false };
   const updateAllowed =
     x.lease !== null && x.tier !== "DURDURULMUS" && !x.findings.some((f) => UPDATE_BLOCKERS.has(f.code));
-  return { bant: pickBanner(x.findings), guncellemeIzni: updateAllowed, modulTavani: ceiling };
+  const bantlar = collectBanners(x.findings);
+  return { bant: bantlar[0] ?? null, bantlar, guncellemeIzni: updateAllowed, modulTavani: ceiling };
 }
 
 function reasonList(findings: readonly Finding[]): StateReason[] {

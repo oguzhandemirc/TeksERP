@@ -42,7 +42,10 @@ export interface LicenseStatusSummary {
   readonly kip: LicenseMode;
   /** UYGULANAN kademe — gözlemde daima NORMAL (sıfır fark). */
   readonly kademe: StateTier;
+  /** Tek bant (eski istemci): en şiddetli = `bantlar[0]`. */
   readonly bant: Banner | null;
+  /** Tüm bantlar (şiddete göre azalan); yeni panel tek alanda sırayla döndürür. */
+  readonly bantlar: readonly Banner[];
   /** Yalnız uygulanan kademe EK_SURE iken dolu. */
   readonly ekSureKalanGun: number | null;
   /** Yalnız zorlamada (K3 geri sayımı) dolu. */
@@ -66,6 +69,7 @@ export function getLicenseStatus(authenticated: boolean): LicenseStatusResponse 
     kip: s.kip,
     kademe: s.uygulananKademe,
     bant: s.uygulanan.bant,
+    bantlar: s.uygulanan.bantlar,
     ekSureKalanGun: s.uygulananKademe === "EK_SURE" ? s.ekSureKalanGun : null,
     kisitlamaKalanGun: s.kip === "zorla" ? s.kisitlamaKalanGun : null,
     guncellemeIzni: s.uygulanan.guncellemeIzni,
