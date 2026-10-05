@@ -30,6 +30,8 @@
 //   • `stopMdnsAdvertiser`ın iç kapısı (setTimeout) kaldırıldı
 //       → test ASILI kaldı, "Sonuç" satırı hiç basılmadı (SIGALRM/142). Kapı
 //         load-bearing.
+//   §5 (adres süzgeci, 2026-10-05): kablolama söküldü → §5e 1 ❌ · `lanExclusionOf`
+//   hep null → 14 ❌ · fallback satırı silindi → §5c 1 ❌; geri yüklenince 52/0.
 // =============================================================================
 import { readFileSync } from "fs";
 import { resolve } from "path";
@@ -38,8 +40,16 @@ import {
   stopMdnsAdvertiser,
   getMdnsState,
   __resetMdnsStateForTests,
+  installAddressFilter,
   MDNS_SERVICE_TYPE,
 } from "../src/jobs/mdns-advertiser.job";
+import {
+  lanExclusionOf,
+  partitionLanAddresses,
+  filterAdvertisedRecords,
+  getLanAddresses,
+} from "../src/lib/lan-addresses";
+import type { NetworkInterfaceInfo } from "os";
 import {
   buildAdvertisedTxt,
   encodedTxtLength,
@@ -277,6 +287,134 @@ async function main(): Promise<void> {
     /startMdnsAdvertiser\(\s*\{/.test(serverSrc),
     "startMdnsAdvertiser({ port })",
   );
+
+  // ---------------------------------------------------------------------
+  // §5 — İlan yalnız kullanılabilir adresleri taşır (sanal / kendi kendine atanmış elenir)
+  // ---------------------------------------------------------------------
+  const elenir: Array<[string, string, string]> = [
+    ["Ethernet 2", "169.254.12.7", "link-local"],
+    ["Ethernet", "fe80::1c2b:3a4d:5e6f:7081", "link-local"],
+    ["vEthernet (Default Switch)", "172.20.144.1", "virtual-adapter"],
+    ["vEthernet (WSL (Hyper-V firewall))", "172.29.0.1", "virtual-adapter"],
+    ["VirtualBox Host-Only Network", "192.168.56.1", "virtual-adapter"],
+    ["VMware Network Adapter VMnet8", "192.168.150.1", "virtual-adapter"],
+    ["docker0", "172.17.0.1", "virtual-adapter"],
+    ["Tailscale", "100.101.102.103", "virtual-adapter"],
+    ["utun8", "100.102.98.100", "virtual-adapter"],
+    ["ZeroTier One [8056c2e21c000001]", "10.147.17.5", "virtual-adapter"],
+  ];
+  for (const [iface, addr, beklenen] of elenir) {
+    check(`§5a ${iface} ${addr} → ${beklenen}`, lanExclusionOf(iface, addr) === beklenen, String(lanExclusionOf(iface, addr)));
+  }
+  const kalir: Array<[string, string]> = [
+    ["Ethernet", "192.168.1.10"],
+    ["Wi-Fi", "10.0.0.5"],
+    ["vEthernet (Harici Anahtar)", "192.168.1.20"],
+    ["eth0", "172.17.0.2"],
+    ["en0", "fd12:3456:789a::1"],
+    ["utun3", "10.8.0.2"],
+    ["Ethernet", "100.64.0.9"],
+  ];
+  for (const [iface, addr] of kalir) {
+    check(`§5a ${iface} ${addr} DUYURULUR (haksız eleme yok)`, lanExclusionOf(iface, addr) === null, String(lanExclusionOf(iface, addr)));
+  }
+
+  const nic = (address: string, family: "IPv4" | "IPv6", internal = false): NetworkInterfaceInfo =>
+    ({ address, family, internal, netmask: family === "IPv4" ? "255.255.255.0" : "ffff:ffff:ffff:ffff::", mac: "00:15:5d:01:02:03", cidr: null, ...(family === "IPv6" ? { scopeid: 0 } : {}) }) as NetworkInterfaceInfo;
+  const sunucuKartlari = {
+    Ethernet: [nic("192.168.1.10", "IPv4"), nic("fe80::1", "IPv6")],
+    "Ethernet 2": [nic("169.254.12.7", "IPv4")],
+    "vEthernet (Default Switch)": [nic("172.20.144.1", "IPv4")],
+    Tailscale: [nic("100.101.102.103", "IPv4")],
+    "Loopback Pseudo-Interface 1": [nic("127.0.0.1", "IPv4", true)],
+  };
+  const kayit = (type: string, data: string) => ({ name: "x.local", type, ttl: 120, data });
+  const tumKayitlar = [
+    kayit("PTR", "TeksERP._teks-erp._tcp.local"),
+    kayit("SRV", "srv"),
+    kayit("TXT", "txt"),
+    kayit("A", "192.168.1.10"),
+    kayit("AAAA", "fe80::1"),
+    kayit("A", "169.254.12.7"),
+    kayit("A", "172.20.144.1"),
+    kayit("A", "100.101.102.103"),
+  ];
+  const suzulmus = filterAdvertisedRecords(tumKayitlar, sunucuKartlari);
+  const aKayitlari = suzulmus.filter((r) => r.type === "A" || r.type === "AAAA").map((r) => r.data);
+  check("§5b ilan yalnız gerçek LAN adresini taşır", JSON.stringify(aKayitlari) === JSON.stringify(["192.168.1.10"]), JSON.stringify(aKayitlari));
+  check(
+    "§5b adres dışı kayıtlar (PTR/SRV/TXT) dokunulmadan kalır",
+    ["PTR", "SRV", "TXT"].every((t) => suzulmus.some((r) => r.type === t)),
+  );
+
+  const yalnizSanal = {
+    "vEthernet (Default Switch)": [nic("172.20.144.1", "IPv4")],
+    "Ethernet 2": [nic("169.254.12.7", "IPv4")],
+  };
+  const sanalKayitlar = [kayit("SRV", "srv"), kayit("A", "172.20.144.1"), kayit("A", "169.254.12.7")];
+  check(
+    "§5c eleme hiç adres bırakmazsa ilan DEĞİŞMEZ (keşif bugünkünden kötüye gitmez)",
+    filterAdvertisedRecords(sanalKayitlar, yalnizSanal) === sanalKayitlar,
+  );
+  const bolum = partitionLanAddresses(getLanAddresses(sunucuKartlari));
+  check(
+    "§5d banner bölümü: bir duyurulan, üç duyurulmayan",
+    bolum.usable.length === 1 && bolum.usable[0]?.address === "192.168.1.10" && bolum.excluded.length === 3 && !bolum.fallback,
+    JSON.stringify(bolum.usable.map((u) => u.address)),
+  );
+  const bolumSanal = partitionLanAddresses(getLanAddresses(yalnizSanal));
+  check("§5d yalnız sanal kartta banner bütün listeyi gösterir (fallback)", bolumSanal.fallback && bolumSanal.usable.length === 2);
+
+  // 5e) Kablolama: ilan kurulurken yayınlanan servisin records()'u SARILIR.
+  __resetMdnsStateForTests();
+  const hamRecords = (): typeof tumKayitlar => tumKayitlar;
+  const servis: { updateTxt: () => void; records: () => typeof tumKayitlar } = { updateTxt: () => {}, records: hamRecords };
+  const wired = await startMdnsAdvertiser({
+    loader: () => ({
+      Bonjour: class {
+        publish(): typeof servis {
+          return servis;
+        }
+        unpublishAll(cb?: () => void): void {
+          cb?.();
+        }
+        destroy(cb?: () => void): void {
+          cb?.();
+        }
+      },
+    }),
+    identityWaitMs: 10,
+  });
+  check("§5e sahte kütüphaneyle ilan kuruldu", wired.active === true, wired.reason);
+  check("§5e startMdnsAdvertiser yayınlanan servisin records()'unu sardı", servis.records !== hamRecords);
+  await stopMdnsAdvertiser();
+
+  const sarilacak: { records: () => typeof tumKayitlar } = { records: hamRecords };
+  check("§5e süzgeç enjekte kartlarla takıldı", installAddressFilter(sarilacak, () => sunucuKartlari));
+  check(
+    "§5e sarılmış records() yalnız LAN adresini döner",
+    JSON.stringify(sarilacak.records().filter((r) => r.type === "A").map((r) => r.data)) === JSON.stringify(["192.168.1.10"]),
+  );
+  check("§5e records'u olmayan servis → false (ilan elemesiz sürer, düşmez)", installAddressFilter({}) === false);
+
+  // 5f) Gerçek kütüphane: kayıtlar publish DÖNDÜKTEN SONRA okunur — sarma ilk duyuruya yetişir.
+  const { Registry } = require("bonjour-service/dist/lib/registry") as {
+    Registry: new (server: unknown) => { publish(c: { name: string; type: string; port: number }): { records?: unknown; destroyed: boolean; activated: boolean } };
+  };
+  let registerCalls = 0;
+  const sahteSunucu = {
+    mdns: { query: () => {}, on: () => {}, removeListener: () => {}, respond: () => {} },
+    register: () => {
+      registerCalls++;
+    },
+    unregister: () => {},
+  };
+  const reg = new Registry(sahteSunucu);
+  const gercekServis = reg.publish({ name: "bekci", type: MDNS_SERVICE_TYPE, port: 4999 });
+  check("§5f gerçek kütüphanede records() bir örnek metodu (sarılabilir)", typeof gercekServis.records === "function");
+  check("§5f publish döndüğünde kayıtlar HENÜZ okunup kaydedilmedi (yoklama asenkron)", registerCalls === 0, `register×${registerCalls}`);
+  gercekServis.destroyed = true;
+  gercekServis.activated = false;
 
   clearInterval(keepAlive);
   console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);

@@ -4,7 +4,7 @@ import "./lib/hizmet-duzeni-sonra"; // Windows hizmetinde .env'de olmayan yollar
 import "./lib/zod-locale"; // Zod tr locale
 import app from './app';
 import prisma, { pool } from './lib/prisma';
-import { getLanAddresses } from './lib/lan-addresses';
+import { getLanAddresses, partitionLanAddresses } from './lib/lan-addresses';
 import { startInstallationIdentity } from './jobs/installation-identity.job';
 import { startSuperadminAccount } from './jobs/superadmin.job';
 import { startShortCredentialJob } from './jobs/short-credential.job';
@@ -121,19 +121,24 @@ async function warnIfAuditGuardDisabled(): Promise<void> {
 
 function startLanListener(): Server {
   return app.listen(Number(PORT), HOST, () => {
-    const lan = getLanAddresses();
+    const allLan = getLanAddresses();
+    const lan = partitionLanAddresses(allLan);
 
     satir("");
     satir("========================================================");
     satir(`  TeksERP Backend ayakta  (port ${PORT}, host ${HOST})`);
     satir("--------------------------------------------------------");
     satir(`  Yerel  : http://localhost:${PORT}`);
-    if (lan.length === 0) {
+    if (lan.usable.length === 0) {
         satir("  Ağ     : (aktif LAN IPv4 adresi bulunamadı)");
     } else {
-        for (const { iface, address } of lan) {
+        for (const { iface, address } of lan.usable) {
             satir(`  Ağ     : http://${address}:${PORT}   [${iface}]`);
         }
+    }
+    for (const { iface, address, reason } of lan.excluded) {
+        const reasonText = reason === "link-local" ? "kendi kendine atanmış" : "sanal kart";
+        satir(`  Duyurulmaz: ${address}   [${iface}] (${reasonText})`);
     }
     // ⚠️ Swagger satırı artık app.ts ile AYNI kaynaktan çözülür. Eskiden burada
     // düz `NODE_ENV !== "production"` yazıyordu; `SWAGGER_ENABLED=false` ile
@@ -241,7 +246,7 @@ function startLanListener(): Server {
         payload: {
             port: Number(PORT),
             host: HOST,
-            lanAddresses: lan.map((l) => l.address),
+            lanAddresses: allLan.map((l) => l.address),
             env: process.env.APP_ENV ?? process.env.NODE_ENV ?? "development",
             nodeVersion: process.version,
             dogrulamaKipi: VERIFYING,
