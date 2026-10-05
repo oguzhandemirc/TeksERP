@@ -54,13 +54,13 @@ function sureMetni(sn: number): string {
   return sa < 48 ? `${sa} saat` : `${Math.round(sa / 24)} gün`;
 }
 
-/** Panel bandı: yalnız eşik aşılınca; yön ve büyüklük söylenir, saat programdan DEĞİŞTİRİLMEZ. */
+/** Panel BİLGİ bandı (lisans bandı değil): yalnız eşik aşılınca; yön ve büyüklük söylenir, saat programdan DEĞİŞTİRİLMEZ. */
 export function signedSkewBanner(v: SignedSkewView): Banner | null {
   if (v.durum !== "UYARI" || v.sapmaSn === null) return null;
   const yon = v.sapmaSn > 0 ? "ileride" : "geride";
   return {
     metin: `Sunucu saati lisans sunucusunun imzalı saatinden ${sureMetni(v.sapmaSn)} ${yon}. Sunucuda Windows saat eşitlemesini (Saati otomatik ayarla) denetleyin; kayıt saatleri bu saatten yazılır.`,
-    ton: "uyari",
+    ton: "bilgi",
   };
 }
 

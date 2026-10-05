@@ -34,7 +34,7 @@
 - [ ] 3.2 İndirme kapısı yeni alt adresle (§D-1)
 - [ ] 3.3 Panel 1.4.3: sunucu durumu ekranı + canlı güncelleme penceresi + tablet bandı (§E)
 - [ ] 3.4 Sunucu bilgisayarında sağ alt simge (§E)
-- [ ] 3.5 Sunucu saati (§B-3)
+- [x] 3.5 Sunucu saati (§B-3) — 2026-10-06, dal `gece/sunucu-saati` (NTP · imzalı sapma · portal · bekçi); birleşmedi; sıra: SATICI ÖNCE, sonra fabrika
 - [ ] 3.6 Hata raporları (§E)
 - [ ] 3.7 Fabrika tableti Google Play'de (§E)
 - [ ] 3.8 testfabrika emekli (taşınmaz); yeni test kurulumu sıfırdan üretim lisans sunucusunda "test" güncelleme grubunda yapılır; hazırlık satıcısı 2026-10-05'te emekli edildi ve verisi silindi (kod ayrımı 3.1); testfabrika kaldırma (VDS + thinkpad) ayrı adım (kullanıcı kararı 2026-10-05)

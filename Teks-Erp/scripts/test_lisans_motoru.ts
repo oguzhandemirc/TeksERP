@@ -700,7 +700,7 @@ async function saatKaymasiBolumu(x: Hazir): Promise<void> {
   const saatBandi = durumUcu.ayrinti ? durumUcu.bantlar.find(saatBandiMi) : undefined;
   check(
     "§11l ⭐ /durum bantlar[] saat bandını taşır (ayrı alan değil) ve bant = bantlar[0]",
-    !!saatBandi && saatBandi.ton === "uyari" && saatBandi.metin.includes("7 dk ileride") && durumUcu.ayrinti && durumUcu.bant === durumUcu.bantlar[0] && !("saatSapmasi" in durumUcu),
+    !!saatBandi && saatBandi.ton === "bilgi" && saatBandi.metin.includes("7 dk ileride") && durumUcu.ayrinti && durumUcu.bant === durumUcu.bantlar[0] && !("saatSapmasi" in durumUcu),
     saatBandi?.metin ?? "bant yok",
   );
   const sonrakiGovde = await buildPollBody();

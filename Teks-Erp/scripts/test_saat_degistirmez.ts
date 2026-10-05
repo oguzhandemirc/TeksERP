@@ -113,7 +113,7 @@ function main(): void {
   const geri = signedSkewBanner(at(s(-7200)));
   check(
     "§3f bant yalnız UYARIda; yön ve büyüklük metinde",
-    signedSkewBanner(at(s(60))) === null && !!ileri && ileri.ton === "uyari" && ileri.metin.includes("7 dk ileride") && !!geri && geri.metin.includes("2 saat geride"),
+    signedSkewBanner(at(s(60))) === null && !!ileri && ileri.ton === "bilgi" && ileri.metin.includes("7 dk ileride") && !!geri && geri.metin.includes("2 saat geride"),
     `${ileri?.metin.slice(0, 80)} | ${geri?.metin.slice(0, 80)}`,
   );
   check("§3g süreç bilgi bantları kapalı liste: yalnız SAAT_SAPMASI", JSON.stringify(Object.keys(PROCESS_INFO_BANNERS)) === '["SAAT_SAPMASI"]', Object.keys(PROCESS_INFO_BANNERS).join(","));
