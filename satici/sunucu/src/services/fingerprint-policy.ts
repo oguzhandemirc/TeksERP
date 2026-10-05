@@ -13,6 +13,7 @@ import {
   type FingerprintRule,
   type LicenseClass,
 } from "../lisans-protokol";
+import { installationCapabilities } from "./entitlement-policy";
 
 /** Kiraya `parmakIziKurali` yalnız bu yeteneği bildiren alıcıya basılır (eski fabrika eski kuralı uygular). */
 export const FINGERPRINT_V2_CAPABILITY = "parmak-izi-v2";
@@ -40,6 +41,27 @@ export function canLearnFingerprint(accepted: Fingerprint, measured: Fingerprint
   const excludeF5 = excludeF5Of(licenseClass);
   if (fingerprintRuleOf(accepted, licenseClass) === "zayif") return compareFingerprints(accepted, measured, { excludeF5, rule: "zayif" }).result === "ESLESTI";
   return canAutoLearnFingerprint(accepted, measured, { excludeF5 });
+}
+
+/**
+ * Yoklamadaki kabul kümesi uyuşmazlığı: UYARI kiranın kuralıyla (v2 alıcıda `parmakIziKurali`, fabrikanın kendi kararıyla
+ * aynı), RET (K6 ikinci pencere) her alıcıda v1 eşiğiyle — eşik altı v2 uyuşmazlığı (ör. anakart değişimi) uyarı açar,
+ * kira reddi doğurmaz. v2 kararı v1'den gevşek olamaz: `deniable` ⇒ `alert`.
+ */
+export function fingerprintMismatch(
+  accepted: Fingerprint,
+  measured: Fingerprint,
+  installation: { readonly sinif: LicenseClass; readonly yetenekler: unknown },
+  /** Yanıtı alacak tarafın bildirdiği küme; yoksa kurulum kaydı (kira basımıyla aynı kaynak). */
+  receiverCapabilities: readonly string[] | undefined,
+): { readonly alert: boolean; readonly deniable: boolean } {
+  const licenseClass = installation.sinif;
+  if (canLearnFingerprint(accepted, measured, licenseClass)) return { alert: false, deniable: false };
+  const excludeF5 = excludeF5Of(licenseClass);
+  const rule = leaseFingerprintRule(accepted, licenseClass, receiverCapabilities ?? installationCapabilities(installation));
+  const deniable = compareFingerprints(accepted, measured, { excludeF5 }).result === "ESLESMEDI";
+  const alert = rule === undefined ? deniable : deniable || compareFingerprints(accepted, measured, { excludeF5, rule }).result === "ESLESMEDI";
+  return { alert, deniable };
 }
 
 export const FACTOR_STATES = ["AYNI", "FARKLI", "KAYIP", "YENI", "YOK"] as const;
