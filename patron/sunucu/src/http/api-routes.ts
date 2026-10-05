@@ -34,7 +34,7 @@ export const API_ROUTES: readonly ApiRouteDef[] = [
     kimlik: { muaf: "oturum doğumu; tekrar yeni oturum açar (eski oturum süresiyle kapanır)" },
     handler: async (c) => {
       const b = body(c, z.strictObject({ eposta: z.string().min(3).max(254), parola: z.string().min(1).max(200), totp: z.string().min(1).max(12), istemci: z.enum(["mobil", "web"]).optional() }));
-      const r = await login(c.ctx, { email: b.eposta, password: b.parola, totp: b.totp, client: b.istemci ?? null, ip: clientAddress(c.req, c.ctx.config.VEKIL_IP_BASLIGI) });
+      const r = await login(c.ctx, { email: b.eposta, password: b.parola, totp: b.totp, client: b.istemci ?? null, ip: clientAddress(c.req, c.ctx.config) });
       const data: LoginResponse = { belirtec: r.token, bitis: r.expiresAt.toISOString(), hesap: { id: r.session.accountId, ad: r.session.accountName, eposta: r.session.email, izinler: [...r.session.permissions].sort() }, tesisId: r.session.tesisId };
       return { data };
     },
@@ -85,7 +85,7 @@ export const API_ROUTES: readonly ApiRouteDef[] = [
     kimlik: { muaf: "TOTP adımı tekrar oynatmayı keser (aynı kod ikinci kez geçmez)" },
     handler: async (c) => {
       const b = body(c, z.strictObject({ mevcutParola: z.string().min(1).max(200), yeniParola: z.string().min(1).max(200), totp: z.string().min(1).max(12) }));
-      await changeOwnPassword(c.ctx, s(c), { current: b.mevcutParola, next: b.yeniParola, totp: b.totp, ip: clientAddress(c.req, c.ctx.config.VEKIL_IP_BASLIGI) });
+      await changeOwnPassword(c.ctx, s(c), { current: b.mevcutParola, next: b.yeniParola, totp: b.totp, ip: clientAddress(c.req, c.ctx.config) });
       return { data: null };
     },
   },
@@ -259,7 +259,7 @@ export function createApiRouter(ctx: CloudContext): Router {
   router.use(noStore);
   router.use(jsonOnlyWrites);
   router.use(express.json({ limit: "256kb", strict: true }));
-  const loginLimit = rateLimit({ perMinute: ctx.config.GIRIS_HIZ_DK, proxyHeader: ctx.config.VEKIL_IP_BASLIGI });
+  const loginLimit = rateLimit({ perMinute: ctx.config.GIRIS_HIZ_DK, config: ctx.config });
   for (const def of API_ROUTES) {
     const guards = def.auth === "ACIK" ? [loginLimit] : [];
     router[def.method](def.path, ...guards, async (req: Request, res: Response) => {
