@@ -14,14 +14,14 @@
 - [x] İş sırası belirlendi, bu listeye yazıldı — 2026-10-04
 
 **Faz 1 — hemen (küçük, kararı verilmiş)**
-- [ ] ▶ 1.1 Satıcı portalı tamamen internetten + `lisans.md`'deki iki biçimli satıcı kurallarının birleştirilmesi (§E; C-1 "satıcı portalı yetkileri" bununla kapanır) — 2026-10-04 keşif + plan başladı · İlerleme: D1 (sunucu kilitleri) · D2 (web kilitleri) · D3b · D3a (belgeler + gövde özeti bekçisi) · denetim temiz · D5 tünel kapatma T1–T4 (kod + belgeler) bitti; açık: D4 VDS kurulumu (kullanıcı onayıyla), D5 T5 iniş + T6 VDS
+- [x] 1.1 Satıcı portalı tamamen internetten + `lisans.md`'deki iki biçimli satıcı kurallarının birleştirilmesi (§E; C-1 "satıcı portalı yetkileri" bununla kapanır) — 2026-10-04 keşif + plan başladı · İlerleme: D1 (sunucu kilitleri) · D2 (web kilitleri) · D3b · D3a (belgeler + gövde özeti bekçisi) · denetim temiz · D5 tünel kapatma T1–T4 (kod + belgeler) bitti; açık: D4 VDS kurulumu (kullanıcı onayıyla), D5 T5 iniş + T6 VDS — 2026-10-06 kullanıcı tarayıcıda doğruladı (portal girişi, sağlık kartı, okuma/yazma, son yoklama); D5 T1–T6 tamam
 - [ ] 1.2 Mac'te dönem töreni: kök anahtar VDS'ten kalkar (§D-2) — 1.1'in hemen arkasından (kullanıcı kararı 2026-10-05: D5 tünel kapatma bitince; kök dosyası bugün VDS'te şifreli duruyor, o arada portaldan kök parolasıyla imza atılmaz)
 - [x] 1.3 Test veritabanlarının silinmesi (§D-5) — 2026-10-04, 223 `_test` DB (~6,5 GB) silindi; kalan yalnız `postgres` + `tekserp_fabrika_0923`
 - [x] 1.4 Karar arşivinin aylara bölünmesi (§E) — `docs/history/arsiv/<YYYY-MM>.md`, dizin `docs/history/CLAUDE-NOT-ARSIVI.md` (2026-10-05)
 - [x] 1.5 `test_uretim_toren` temiz ağaçta kırmızı — 2026-10-05: Node 26 değil; PAKET aracı kök `scripts/lib/kullanici-cumlesi.mjs`'i import ediyor (G22), bekçinin tören kopyasına o yol girmiyordu (MODULE_NOT_FOUND; hata özetinin son satırı "Node.js v26.8.1" yanılttı) — kopya yollarına `scripts/lib` eklendi
 
 **Faz 2 — demofabrika kusurları (§A)**
-- [ ] 2.1 K5 — DEMO lisansı bitişsiz kaydedilemesin
+- [x] 2.1 K5 — DEMO lisansı bitişsiz kaydedilemesin — 45 gün sınırı YOK (kullanıcı kararı 2026-10-05), yalnız bitiş zorunlu
 - [ ] 2.2 K11 — panelde backend güncellemesi onay ekranı (panel 1.4.3; ilk backend güncellemesinden önce)
 - [ ] 2.3 K4 — müşterinin kendi yönetici hesabını açma adımı
 - [ ] 2.4 K6 bant önceliği · K9 bakım bitişi bildirimi · K8 yanlış mesaj · K7 "yenilendi" mesajı · K10 portalda açık modüller
