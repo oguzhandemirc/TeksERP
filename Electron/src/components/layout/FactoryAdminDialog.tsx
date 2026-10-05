@@ -1,5 +1,7 @@
 import { useState } from "react";
 import { useMutation } from "@tanstack/react-query";
+import { useNavigate } from "react-router-dom";
+import axios from "axios";
 import { Copy, KeyRound } from "lucide-react";
 import {
   Dialog,
@@ -19,6 +21,20 @@ import { isAmbiguousFailure } from "@/lib/attemptToken";
 
 const schema = userFormSchema.pick({ username: true, fullName: true });
 
+/** Uç clientToken taşımaz (beyanlı istisna): kaybolan 201'in ikinci denemesi bu 409'u alır. */
+export const FACTORY_ADMIN_EXISTS = "FACTORY_ADMIN_EXISTS";
+
+/** Hata sonucu: belirsiz (cevap gelmedi) · zaten var (önceki deneme sonuçlanmış olabilir) · diğer (toast söyler). */
+type Outcome = "uncertain" | "exists" | null;
+
+function outcomeOf(error: unknown): Outcome {
+  if (isAmbiguousFailure(error)) return "uncertain";
+  const code = axios.isAxiosError(error)
+    ? (error.response?.data as { details?: { code?: unknown } } | undefined)?.details?.code
+    : undefined;
+  return code === FACTORY_ADMIN_EXISTS ? "exists" : null;
+}
+
 interface Props {
   open: boolean;
   /** Pencere kapandı — kart `/auth/me`yi tazeler (açıldı · zaten vardı · sonuç belirsiz). */
@@ -34,12 +50,13 @@ export function FactoryAdminDialog({ open, onClose }: Props) {
   const [fullName, setFullName] = useState("");
   const [errors, setErrors] = useState<{ username?: string; fullName?: string }>({});
   const [created, setCreated] = useState<FactoryAdminCreated | null>(null);
-  const [uncertain, setUncertain] = useState(false);
+  const [outcome, setOutcome] = useState<Outcome>(null);
+  const navigate = useNavigate();
 
   const mutation = useMutation({
     mutationFn: (body: { username: string; fullName: string }) => adminUserService.createFactoryAdmin(body),
     onSuccess: (data) => setCreated(data),
-    onError: (error) => setUncertain(isAmbiguousFailure(error)),
+    onError: (error) => setOutcome(outcomeOf(error)),
   });
 
   const close = () => {
@@ -47,9 +64,14 @@ export function FactoryAdminDialog({ open, onClose }: Props) {
     setUsername("");
     setFullName("");
     setErrors({});
-    setUncertain(false);
+    setOutcome(null);
     mutation.reset();
     onClose();
+  };
+
+  const goToUsers = () => {
+    close();
+    navigate("/access/users");
   };
 
   const submit = () => {
@@ -60,7 +82,7 @@ export function FactoryAdminDialog({ open, onClose }: Props) {
       return;
     }
     setErrors({});
-    setUncertain(false);
+    setOutcome(null);
     mutation.mutate(parsed.data);
   };
 
@@ -86,30 +108,66 @@ export function FactoryAdminDialog({ open, onClose }: Props) {
             username={username}
             fullName={fullName}
             errors={errors}
-            uncertain={uncertain}
+            outcome={outcome}
             onUsername={setUsername}
             onFullName={setFullName}
           />
         )}
 
         <DialogFooter>
-          {created ? (
-            <Button type="button" onClick={close}>
-              Kapat
-            </Button>
-          ) : (
-            <>
-              <Button type="button" variant="outline" onClick={close}>
-                Vazgeç
-              </Button>
-              <Button type="button" onClick={submit} disabled={mutation.isPending}>
-                {mutation.isPending ? "Açılıyor…" : "Hesabı aç"}
-              </Button>
-            </>
-          )}
+          <Actions
+            created={created !== null}
+            outcome={outcome}
+            pending={mutation.isPending}
+            onClose={close}
+            onSubmit={submit}
+            onUsers={goToUsers}
+          />
         </DialogFooter>
       </DialogContent>
     </Dialog>
+  );
+}
+
+interface ActionsProps {
+  created: boolean;
+  outcome: Outcome;
+  pending: boolean;
+  onClose: () => void;
+  onSubmit: () => void;
+  onUsers: () => void;
+}
+
+/** Alt düğmeler: açıldı → Kapat · zaten var → Kullanıcılar ekranı (parola oradan) · form → Vazgeç / Hesabı aç. */
+function Actions({ created, outcome, pending, onClose, onSubmit, onUsers }: ActionsProps) {
+  if (created) {
+    return (
+      <Button type="button" onClick={onClose}>
+        Kapat
+      </Button>
+    );
+  }
+  if (outcome === "exists") {
+    return (
+      <>
+        <Button type="button" variant="outline" onClick={onClose}>
+          Kapat
+        </Button>
+        <Button type="button" onClick={onUsers}>
+          Kullanıcılar ekranına git
+        </Button>
+      </>
+    );
+  }
+  return (
+    <>
+      <Button type="button" variant="outline" onClick={onClose}>
+        Vazgeç
+      </Button>
+      <Button type="button" onClick={onSubmit} disabled={pending}>
+        {pending ? "Açılıyor…" : "Hesabı aç"}
+      </Button>
+    </>
   );
 }
 
@@ -140,12 +198,12 @@ interface FormViewProps {
   username: string;
   fullName: string;
   errors: { username?: string; fullName?: string };
-  uncertain: boolean;
+  outcome: Outcome;
   onUsername: (v: string) => void;
   onFullName: (v: string) => void;
 }
 
-function FormView({ username, fullName, errors, uncertain, onUsername, onFullName }: FormViewProps) {
+function FormView({ username, fullName, errors, outcome, onUsername, onFullName }: FormViewProps) {
   return (
     <div className="space-y-3">
       <FormField
@@ -171,10 +229,17 @@ function FormView({ username, fullName, errors, uncertain, onUsername, onFullNam
       >
         <Input id="fy-fullname" value={fullName} onChange={(e) => onFullName(e.target.value)} />
       </FormField>
-      {uncertain && (
+      {outcome === "uncertain" && (
         <Callout tone="warning" title="Sonuç belirsiz">
-          Hesap açılmış olabilir. Pencereyi kapatın: uyarı kaybolursa hesap açılmıştır ve geçici parolayı
-          Kullanıcılar ekranından sıfırlayarak yeniden verebilirsiniz.
+          Hesap açılmış olabilir. Yeniden denerseniz ikinci hesap açılmaz; hesap açıldıysa geçici parola
+          yeniden gösterilemez — Yetkilendirme › Kullanıcılar ekranında hesabı açıp “Şifre Sıfırla” ile yeni
+          parola verin.
+        </Callout>
+      )}
+      {outcome === "exists" && (
+        <Callout tone="warning" title="Fabrika yöneticisi zaten açılmış">
+          Önceki denemeniz sonuçlanmış olabilir. Geçici parolayı görmediyseniz Yetkilendirme › Kullanıcılar
+          ekranında hesabı açıp “Şifre Sıfırla” ile yeni geçici parola verin.
         </Callout>
       )}
     </div>

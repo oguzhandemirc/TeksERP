@@ -6,14 +6,16 @@
 //      (sistem) hesabı, pasif, silinmiş, süresi geçmiş, henüz başlamamış ve yalnız
 //      `admin:settings` taşıyan hesap SAYILMAZ.
 //   §2 POST /api/admin/factory-admin + /auth/me `factoryAdminExists`: yönetici varken 409;
-//      gövdede parola/bayrak 400; başarı 201 + geçici parola bir kez, hesap zorunlu parola
+//      gövdede parola/bayrak/clientToken 400 (uç token'sız beyanlı); başarı 201 + geçici parola bir kez, hesap zorunlu parola
 //      değişimiyle, mobil izin/kimlik yok, sistem hesabı değil; audit parola taşımaz; ikinci
-//      deneme (eşzamanlı dahil) ikinci hesap açamaz; izinsiz kullanıcı 403.
+//      deneme (eşzamanlı ve aynı gövdeli tekrar dahil) ikinci hesap açamaz, 409 parola taşımaz;
+//      izinsiz kullanıcı 403.
 //   §3 Statik: /auth/me ve son-admin guard'ları ölçütü yüklemden okur (kopya yok).
 // İzolasyon: TEST kullanıcıları silinir; §2 süresince mevcut fabrika yöneticileri pasife
 // alınır ve `finally`de geri açılır. Sunucu bu süreçte 127.0.0.1:0'da açılır. DB GEREKİR.
 // =============================================================================
 import prisma, { pool } from "../src/lib/prisma"; // İLK import: dotenv.config()
+import { randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import type { AddressInfo } from "node:net";
@@ -113,9 +115,12 @@ async function yokkenAcma(call: Call, sysToken: string): Promise<void> {
   const me0 = await call("GET", "/api/auth/me", sysToken);
   check("§2c yönetici yokken /auth/me factoryAdminExists:false", me0.body.data?.factoryAdminExists === false);
   const yol = "/api/admin/factory-admin";
-  for (const fazla of [{ password: PAROLA }, { mustChangePassword: false }, { permissions: ["*"] }]) {
+  // clientToken da 400: uç token'sız beyanlıdır (token-replay-beyan TOKENSIZ_UCLAR) — sessizce yutulmaz.
+  for (const fazla of [{ password: PAROLA }, { mustChangePassword: false }, { permissions: ["*"] }, { clientToken: randomUUID() }]) {
     const r = await call("POST", yol, sysToken, { username: `TESTfyx${TS}`, fullName: "TEST X", ...fazla });
     check(`§2d gövdede ${Object.keys(fazla)[0]} → 400`, r.status === 400, `status=${r.status}`);
+    const sizan = (r.body.data?.user as { id?: string } | undefined)?.id;
+    if (sizan) userIds.push(sizan); // sonda sızdırırsa hesap da temizlenir
   }
   const username = `TESTfyA${TS}`;
   const [a, b] = await Promise.all([
@@ -136,6 +141,16 @@ async function yokkenAcma(call: Call, sysToken: string): Promise<void> {
   check("§2j açıldıktan sonra /auth/me factoryAdminExists:true", me1.body.data?.factoryAdminExists === true);
   const ucuncu = await call("POST", yol, sysToken, { username: `TESTfyC${TS}`, fullName: "TEST Üçüncü" });
   check("§2k ardışık ikinci deneme → 409 FACTORY_ADMIN_EXISTS", ucuncu.body.details?.code === "FACTORY_ADMIN_EXISTS");
+  // Cevabı kaybolan denemenin AYNI gövdeyle tekrarı: replay yok (parola saklanmaz), 409 + tek hesap.
+  // Eşzamanlı yarışı hangisi kazandıysa ONUN gövdesi tekrarlanır.
+  const kazanan = a.status === 201 ? { username, fullName: "TEST Fabrika Yöneticisi" } : { username: `TESTfyB${TS}`, fullName: "TEST İkinci" };
+  const tekrar = await call("POST", yol, sysToken, kazanan);
+  const ayniAd = await prisma.user.count({ where: { username: { equals: kazanan.username, mode: "insensitive" } } });
+  check(
+    "§2m kaybolan cevabın aynı gövdeli tekrarı → 409 FACTORY_ADMIN_EXISTS, parola dönmez, tek hesap",
+    tekrar.status === 409 && tekrar.body.details?.code === "FACTORY_ADMIN_EXISTS" && !JSON.stringify(tekrar.body).includes(parola) && ayniAd === 1,
+    `status=${tekrar.status} hesap=${ayniAd}`,
+  );
   const login = await giris(call, String(sonuc?.user?.username ?? ""), parola);
   check("§2l geçici parolayla panel girişi → mustChangePassword:true", login.body.data?.mustChangePassword === true);
 }

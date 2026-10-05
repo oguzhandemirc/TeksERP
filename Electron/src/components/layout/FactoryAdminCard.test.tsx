@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { fireEvent, screen, waitFor } from "@testing-library/react";
 import { renderWithProviders } from "@/test/render";
+import { AxiosError } from "axios";
 import { useAuthStore } from "@/store/auth";
 
 /**
@@ -70,6 +71,40 @@ describe("FactoryAdminCard", () => {
     fireEvent.click(screen.getAllByRole("button", { name: "Kapat" })[0]!);
     await waitFor(() => expect(refresh).toHaveBeenCalledTimes(1));
     expect(screen.queryByText("Gecici7Parola9x")).toBeNull();
+  });
+
+  // Uç clientToken taşımaz (beyanlı istisna, token-replay-beyan TOKENSIZ_UCLAR): kaybolan 201'in yerine geçen
+  // replay yok — ikinci deneme 409 alır ve panel parolayı "Şifre Sıfırla"dan yeniden verdirmeye yönlendirir.
+  it("409 FACTORY_ADMIN_EXISTS → 'zaten açılmış' + Şifre Sıfırla yönlendirmesi, yeniden deneme düğmesi yok", async () => {
+    hesap(true, false);
+    api.createFactoryAdmin.mockRejectedValue(
+      new AxiosError("409", "ERR_BAD_REQUEST", undefined, undefined, {
+        status: 409,
+        data: { success: false, message: "Fabrika yöneticisi zaten açılmış.", details: { code: "FACTORY_ADMIN_EXISTS" } },
+      } as never),
+    );
+    renderWithProviders(<FactoryAdminCard />);
+    fireEvent.click(screen.getByRole("button", { name: "Fabrika yöneticisini aç" }));
+    fireEvent.change(screen.getByLabelText(/Kullanıcı Adı/), { target: { value: "mehmet" } });
+    fireEvent.change(screen.getByLabelText(/Ad Soyad/), { target: { value: "Mehmet Yılmaz" } });
+    fireEvent.click(screen.getByRole("button", { name: "Hesabı aç" }));
+    expect(await screen.findByText("Fabrika yöneticisi zaten açılmış")).toBeTruthy();
+    expect(screen.getByText(/Şifre Sıfırla/)).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Kullanıcılar ekranına git" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Hesabı aç" })).toBeNull();
+  });
+
+  it("ağ hatası → 'Sonuç belirsiz' (ikinci hesap açılmaz, parola Şifre Sıfırla'dan)", async () => {
+    hesap(true, false);
+    api.createFactoryAdmin.mockRejectedValue(new AxiosError("Network Error", "ERR_NETWORK"));
+    renderWithProviders(<FactoryAdminCard />);
+    fireEvent.click(screen.getByRole("button", { name: "Fabrika yöneticisini aç" }));
+    fireEvent.change(screen.getByLabelText(/Kullanıcı Adı/), { target: { value: "mehmet" } });
+    fireEvent.change(screen.getByLabelText(/Ad Soyad/), { target: { value: "Mehmet Yılmaz" } });
+    fireEvent.click(screen.getByRole("button", { name: "Hesabı aç" }));
+    expect(await screen.findByText("Sonuç belirsiz")).toBeTruthy();
+    expect(screen.queryByText("Fabrika yöneticisi zaten açılmış")).toBeNull();
+    expect(screen.getByRole("button", { name: "Hesabı aç" })).toBeTruthy();
   });
 
   it("geçersiz kullanıcı adı sunucuya gitmez", () => {

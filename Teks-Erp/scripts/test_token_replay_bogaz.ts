@@ -13,12 +13,15 @@
 //   §4c öz-kıyas yok: `gelen`, aynı identity'de bir `mevcut`in okuduğu prior alanını okumaz ve `mevcut`le aynı ifade değildir.
 //   §5 muaf sınıfı KAPALI kümeden; ON_KONTROL_OKUYUCUSU yanıt üretemez (okuma yalnız `clientToken`ı seçer, boğaz yok).
 //   §6 borç CIRCIR (yalnız düşer — iki yönlü, `circir-kolu`).
+//   §7 token'sız kayıt-yaratan uç beyanının iddiası: uç var + gövde strict (clientToken yok), servis token'a dokunmaz,
+//      tx'in ilk await'i beyanlı kilit, tekillik kodu serviste ve istemcide (ölü/eksik satır kırmızı).
 // =============================================================================
+import * as fs from "node:fs";
 import * as path from "node:path";
 import * as ts from "typescript";
 import { atlamaDefteri } from "./lib/atlama";
 import { curumeKolu } from "./lib/circir-kolu";
-import { KIMLIK_BEYANI, MUAF_SINIFLARI, TOKEN_YOLLARI, type Kip } from "./lib/token-replay-beyan";
+import { KIMLIK_BEYANI, MUAF_SINIFLARI, TOKEN_YOLLARI, TOKENSIZ_UC_SINIFLARI, TOKENSIZ_UCLAR, type Kip } from "./lib/token-replay-beyan";
 import { tokenBirimleri, type TokenBirimi } from "./lib/token-yazim-tarama";
 
 let pass = 0;
@@ -59,6 +62,49 @@ function inTxIlkAwaitMi(b: TokenBirimi): boolean {
   };
   ara(b.dugum);
   return bulundu && hepsiIlk;
+}
+
+/** Birimdeki her `$transaction(async (tx) => …)` geri çağrısının ilk await ifadesinin metni. */
+function txIlkAwaitleri(dugum: ts.Node): string[] {
+  const out: string[] = [];
+  const ara = (n: ts.Node) => {
+    if (ts.isCallExpression(n) && ts.isPropertyAccessExpression(n.expression) && n.expression.name.text === "$transaction") {
+      const fn = n.arguments[0];
+      if (fn && (ts.isArrowFunction(fn) || ts.isFunctionExpression(fn))) {
+        let ilk: ts.AwaitExpression | null = null;
+        const awaitBul = (k: ts.Node) => {
+          if (ilk) return;
+          if (ts.isAwaitExpression(k)) ilk = k;
+          else ts.forEachChild(k, awaitBul);
+        };
+        ts.forEachChild(fn.body, awaitBul);
+        out.push(ilk ? (ilk as ts.AwaitExpression).getText() : "");
+      }
+    }
+    ts.forEachChild(n, ara);
+  };
+  ara(dugum);
+  return out;
+}
+
+/** `router.post(yol, …)` çağrısı ve gövdeyi ayrıştıran şemanın başlatıcısı (aynı dosyada `const X = …`). */
+function rotaVeSema(dosya: string, yol: string): { cagri: string; sema: string | null } | null {
+  const sf = ts.createSourceFile(dosya, fs.readFileSync(dosya, "utf8"), ts.ScriptTarget.Latest, true);
+  let cagri: ts.CallExpression | null = null;
+  const semalar = new Map<string, string>();
+  const gez = (n: ts.Node) => {
+    if (ts.isVariableDeclaration(n) && ts.isIdentifier(n.name) && n.initializer) semalar.set(n.name.text, n.initializer.getText(sf));
+    if (
+      ts.isCallExpression(n) && ts.isPropertyAccessExpression(n.expression) && n.expression.name.text === "post" &&
+      n.expression.expression.getText(sf) === "router" && n.arguments[0] && ts.isStringLiteral(n.arguments[0]) && n.arguments[0].text === yol
+    ) cagri = n;
+    ts.forEachChild(n, gez);
+  };
+  gez(sf);
+  if (!cagri) return null;
+  const metin = (cagri as ts.CallExpression).getText(sf);
+  const ad = /(\w+)\.parse\(req\.body\)/.exec(metin)?.[1];
+  return { cagri: metin, sema: ad ? semalar.get(ad) ?? null : null };
 }
 
 function main(): void {
@@ -228,6 +274,31 @@ function main(): void {
   const borc = Object.values(TOKEN_YOLLARI).filter((y) => "borc" in y).length;
   check("⭐ boğaz dışı (borç) birim ARTMADI", borc <= BORC_TABANI, `gerçek ${borc} · taban ${BORC_TABANI}`);
   curumeKolu(check, ATLAMA.atla, "borç tabanı ÇÜRÜMEDİ (boğaza taşınan yol listeden düştü)", borc, BORC_TABANI);
+
+  console.log("§7 Token'sız kayıt-yaratan uçlar");
+  const tokensizHatasi = Object.entries(TOKENSIZ_UCLAR).flatMap(([ad, u]) => {
+    const h: string[] = [];
+    if (!(u.sinif in TOKENSIZ_UC_SINIFLARI)) h.push(`${ad}: sınıf kapalı kümede değil`);
+    const b = tarama.hepsi.get(u.servis);
+    if (!b) return [...h, `${ad}: servis birimi yok (${u.servis})`];
+    if (b.yazimSatirlari.length > 0 || b.okumalar.length > 0 || u.servis in TOKEN_YOLLARI || b.cagrilar.some((c) => c.ad === "tokenReplay")) {
+      h.push(`${ad}: servis token'a dokunuyor — yolu boğaza beyan et, bu satırı sil`);
+    }
+    const ilkler = txIlkAwaitleri(b.dugum);
+    if (ilkler.length === 0 || !ilkler.every((t) => t.includes(`.${u.kilit}(`))) h.push(`${ad}: tx'in ilk await'i ${u.kilit} değil (${ilkler.join(" | ") || "tx yok"})`);
+    if (!b.dugum.getText().includes(`"${u.tekillikKodu}"`)) h.push(`${ad}: servis ${u.tekillikKodu} atmıyor`);
+    const rota = rotaVeSema(path.join(KOK, u.rota), u.yol);
+    const birim = u.servis.split("::")[1]!;
+    if (!rota) h.push(`${ad}: ${u.rota} içinde router.post("${u.yol}") yok`);
+    else {
+      if (!rota.cagri.includes(`.${birim}(`)) h.push(`${ad}: uç ${birim} çağırmıyor`);
+      if (!rota.sema || !rota.sema.startsWith("z.strictObject(") || rota.sema.includes("clientToken")) h.push(`${ad}: gövde şeması strict değil ya da clientToken alıyor`);
+    }
+    const istemci = path.join(KOK, "..", u.istemci);
+    if (!fs.existsSync(istemci) || !fs.readFileSync(istemci, "utf8").includes(u.tekillikKodu)) h.push(`${ad}: istemci ${u.tekillikKodu}'u ele almıyor (${u.istemci})`);
+    return h;
+  });
+  check("⭐ token'sız kayıt-yaratan uç beyanı ölçülen iddiayla tutarlı", tokensizHatasi.length === 0, tokensizHatasi.join(" · "));
 
   console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız${ATLAMA.ozetEki()} ===`);
   process.exit(fail > 0 ? 1 : 0);
