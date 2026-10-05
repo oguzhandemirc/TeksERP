@@ -17,6 +17,8 @@ import { AuthService } from "./auth.service";
 import { readLoginMethods } from "./system-setting.service";
 import { SessionRegistryService } from "./session-registry.service";
 import { foldNameForCompare } from "./helpers/name-normalize.helper";
+import { USER_ADMIN_CODES, effectiveUserAdminGrantWhere, factoryAdminExists } from "./helpers/factory-admin.helper";
+import { geciciParolaUret } from "../lib/ilk-yonetici-parolasi";
 
 /** Yetki (son-admin) guard'ı advisory lock namespace'i (F-KIM-GUV-003). Tek anahtar:
  *  guard sistem geneli tek bir seri kapıdır, kullanıcı başına DEĞİL. */
@@ -49,6 +51,9 @@ const USER_SELECT = {
   isActive: true,
   createdAt: true,
 } as const;
+
+/** Fabrika yöneticisine uygulanan sistem şablonu. */
+const FACTORY_ADMIN_TEMPLATE_CODE = "ADMIN_FULL";
 
 /** Ad-soyad normalizasyonu: baş/son boşluk kırp + iç ardışık boşlukları TEK'e indir. */
 function normalizeFullName(name: string): string {
@@ -578,6 +583,83 @@ export class PermissionManagementService {
     return user;
   }
 
+  /**
+   * Fabrikanın kendi yöneticisini açar (K4): "Admin (Tam Yetki)" şablonu, web kullanıcısı
+   * (mobil izin/kimlik yok), sistemin ürettiği geçici parola + ilk girişte zorunlu değişim.
+   * Yalnız fabrika yöneticisi YOKKEN çalışır; kontrol ve yazım son-admin kilidi altında,
+   * ikinci deneme ikinci hesap açamaz. Parola yalnız bu dönüşte döner, audit'e girmez.
+   */
+  static async createFactoryAdmin(
+    input: { username: string; fullName: string },
+    actorUserId: string | undefined,
+  ) {
+    const temporaryPassword = geciciParolaUret();
+    const passwordHash = await bcrypt.hash(temporaryPassword, 10);
+    const { user, permissionCount } = await prisma.$transaction(async (tx) => {
+      await PermissionManagementService.acquireAdminGuardLock(tx);
+      if (await factoryAdminExists(tx)) {
+        throw AppError.conflict("Fabrika yöneticisi zaten açılmış.", { code: "FACTORY_ADMIN_EXISTS" });
+      }
+      const taken = await tx.user.findFirst({
+        where: { username: { equals: input.username, mode: "insensitive" } },
+        select: { id: true },
+      });
+      if (taken) throw AppError.conflict("Bu kullanıcı adı zaten kullanılıyor");
+      const template = await tx.permissionTemplate.findFirst({
+        where: { code: FACTORY_ADMIN_TEMPLATE_CODE, isActive: true },
+        select: { permissions: { select: { permissionId: true } } },
+      });
+      if (!template || template.permissions.length === 0) {
+        throw AppError.conflict(
+          "'Admin (Tam Yetki)' şablonu bulunamadı ya da pasif — sunucuyu yeniden başlatıp tekrar deneyin.",
+          { code: "FACTORY_ADMIN_TEMPLATE_MISSING" },
+        );
+      }
+      const created = await tx.user.create({
+        data: {
+          createdById: actorUserId ?? null,
+          updatedById: actorUserId ?? null,
+          username: input.username,
+          fullName: normalizeFullName(input.fullName),
+          passwordHash,
+          isActive: true,
+          mustChangePassword: true,
+          permissions: {
+            create: template.permissions.map((p) => ({
+              permissionId: p.permissionId,
+              grantedById: actorUserId ?? null,
+            })),
+          },
+        },
+        select: USER_SELECT,
+      });
+      // Şablon kullanıcı yönetme iznini taşımıyorsa hesap ölçütü karşılamaz: geri al.
+      if (!(await factoryAdminExists(tx))) {
+        throw AppError.conflict("Şablon kullanıcı yönetme iznini içermiyor — hesap açılmadı.", {
+          code: "FACTORY_ADMIN_TEMPLATE_MISSING",
+        });
+      }
+      return { user: created, permissionCount: template.permissions.length };
+    });
+
+    await AuditService.log({
+      userId: actorUserId,
+      action: "CREATE",
+      tableName: "users",
+      recordId: user.id,
+      newData: {
+        username: user.username,
+        fullName: user.fullName,
+        isActive: user.isActive,
+        factoryAdmin: true,
+        appliedTemplate: FACTORY_ADMIN_TEMPLATE_CODE,
+        permissionCount,
+        mustChangePassword: true,
+      },
+    });
+    return { user, temporaryPassword };
+  }
+
   static async updateUser(
     id: string,
     input: { fullName?: string },
@@ -669,20 +751,13 @@ export class PermissionManagementService {
     );
   }
 
-  /** Kullanıcı-yöneticisi izin kodları (admin:users ve wildcard admin:*). */
-  private static readonly ADMIN_CODES = ["admin:users", "admin:*"] as const;
+  /** Kullanıcı-yöneticisi izin kodları — tek kaynak `factory-admin.helper`. */
+  private static readonly ADMIN_CODES = USER_ADMIN_CODES;
 
-  /** getEffectivePermissions ile AYNI zaman penceresi — validFrom geçmiş/boş +
-   *  validUntil gelecek/boş olan admin grant'ı. F253/F254 son-admin guard'ları
+  /** getEffectivePermissions ile AYNI zaman penceresi; F253/F254 son-admin guard'ları
    *  süresi geçmiş/henüz başlamamış yedek admin grant'ını "aktif" saymamalı. */
   private static effectiveAdminWindow(now: Date): Prisma.UserPermissionWhereInput {
-    return {
-      permission: { code: { in: [...this.ADMIN_CODES] } },
-      AND: [
-        { OR: [{ validFrom: null }, { validFrom: { lte: now } }] },
-        { OR: [{ validUntil: null }, { validUntil: { gte: now } }] },
-      ],
-    };
+    return effectiveUserAdminGrantWhere(now);
   }
 
   /** Admin-coverage guard'larının seri kapısı — tx-ömürlü advisory lock. Read

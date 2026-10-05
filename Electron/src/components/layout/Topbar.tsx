@@ -3,6 +3,7 @@ import { PencereKontrolleri } from "./PencereKontrolleri";
 import { Button } from "@/components/ui/button";
 import { DemoModeBadge } from "@/components/demo/DemoModeBadge";
 import { ChannelBadge } from "./ChannelBadge";
+import { SupportSessionBadge } from "./SupportSessionBadge";
 import { AppearanceMenu } from "./AppearanceMenu";
 import { NotificationBell } from "./NotificationBell";
 import { GuncellemeDugmesi } from "./GuncellemeDugmesi";
@@ -73,6 +74,8 @@ export function Topbar({ onToggleSidebar, onOpenCommand }: Props) {
       <div className="ml-auto flex items-center gap-1 app-no-drag">
         {/* Hazırlık kanalının işareti ("TEST FABRİKA") — üretim kanalında hiçbir şey çizilmez. */}
         <ChannelBadge />
+        {/* Destek (süperadmin) oturumunun sürekli işareti — fabrika hesabında çizilmez. */}
+        <SupportSessionBadge />
         {/* Unutulmuş demo modu SESSİZ kalamaz — bayrak kapalıyken hiçbir şey çizilmez. */}
         <DemoModeBadge />
         <Button

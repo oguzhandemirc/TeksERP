@@ -104,7 +104,19 @@ export interface TotpWindow {
   expiresAt: string;
 }
 
+/** Fabrika yöneticisi açma sonucu. `temporaryPassword` YALNIZ bu cevapta gelir. */
+export interface FactoryAdminCreated {
+  user: { id: string; username: string; fullName: string };
+  temporaryPassword: string;
+}
+
 export const adminUserService = {
+  /** Fabrikanın kendi yöneticisini aç — parolayı sunucu üretir, yetkiyi sunucu uygular. */
+  createFactoryAdmin: (body: { username: string; fullName: string }): Promise<FactoryAdminCreated> =>
+    apiClient
+      .post<ApiResponse<FactoryAdminCreated>>("/api/admin/factory-admin", body)
+      .then((r) => r.data.data),
+
   list: (): Promise<ApiResponse<AdminUserListItem[]>> =>
     apiClient.get<ApiResponse<AdminUserListItem[]>>("/api/admin/users").then((r) => r.data),
 

@@ -342,6 +342,43 @@ router.post(
   }
 );
 
+// Fabrika yöneticisi: parola ve yetki gövdeden GELMEZ (sunucu üretir/uygular) —
+// tanınmayan anahtar 400 (strict), yazılabilir alan kümesi yalnız bu ikisi.
+const createFactoryAdminSchema = z.strictObject(
+  {
+    username: createUserSchema.shape.username,
+    fullName: createUserSchema.shape.fullName,
+  },
+  {
+    error: (issue) =>
+      issue.code === "unrecognized_keys" ? `Bu alanlar kabul edilmez: ${issue.keys.join(", ")}` : undefined,
+  },
+);
+
+/**
+ * @openapi
+ * /api/admin/factory-admin:
+ *   post:
+ *     tags: [Admin]
+ *     summary: Fabrikanın kendi yöneticisini aç (geçici parola bir kez döner, ilk girişte değişir)
+ *     description: Yalnız fabrika yöneticisi yokken çalışır; varsa 409 FACTORY_ADMIN_EXISTS.
+ *     security: [{ bearerAuth: [] }]
+ */
+router.post(
+  "/factory-admin",
+  verifyToken,
+  requirePermission("admin:users"),
+  async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const body = createFactoryAdminSchema.parse(req.body);
+      const data = await PermissionManagementService.createFactoryAdmin(body, req.user?.userId);
+      res.status(201).json({ success: true, data });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
 /**
  * @openapi
  * /api/admin/users/{id}:

@@ -97,6 +97,8 @@
 - **Yap:** "Firma Adı" = `Demo Fabrika Tekstil` → "Kaydet" (ayar şifresi istenirse "Şifre" → "Onayla").
 - **Beklenen:** "Şirket bilgileri kaydedildi."; sol menü başlığı ve tablet başlığı yeni ad.
 - **Yap (saat dilimi provası):** aynı sekme "Saat dilimi" → "Şu anki dilim: Europe/Istanbul" → "Dilim ara (örn. Istanbul, Berlin, New_York)" → başka bir dilim seç → önizleme "Yeni dilim: A → B (geçmiş kayıtlar değişmez)" · "Yürürlük" · "Geçiş günü" → "Saat dilimini değiştir" → "Bekleyen değişiklik: A → B" → **"Değişikliği iptal et"** (dilim İstanbul'da kalır; geri alma ölçülür).
+- **Yap (fabrika yöneticisi, satıcı oturumu):** başlık çubuğunda sarı "Destek hesabıyla girdiniz" rozeti; üst çubuğun altında "Fabrikanın kendi yönetici hesabı yok — destek hesabı günlük iş için kullanılmaz." kartı → "Fabrika yöneticisini aç" → "Kullanıcı Adı" · "Ad Soyad" → "Hesabı aç" → "Fabrika yöneticisi açıldı" penceresinde "Geçici parola" BİR KEZ görünür ("Parolayı kopyala") → müşteriye ilet → "Kapat" → kart kaybolur. Müşteri bu kullanıcı adı + geçici parolayla girer → "Yeni parola belirleyin" → "Yeni parola" · "Yeni parola (tekrar)" (≥ 10 karakter) → "Parolayı değiştir" → panel açılır.
+- **Beklenen:** kart yalnız uyarır (panel kullanılmaya devam eder); yönetici açıldıktan sonra satıcı girişinde kart çıkmaz, rozet durur. Geçici parola görülmeden kaybolduysa: "Kullanıcılar" → kullanıcı → "Şifre Sıfırla".
 - **Yap (kullanıcı):** "Yetkilendirme" → "Kullanıcı Erişimi" → "Kullanıcılar" → "Yeni Kullanıcı" → "Kullanıcı Adı" · "Ad Soyad" · "Şifre" · "Üretim operatörü yetkilerini ver" → "Kaydet" → "Kullanıcı oluşturuldu" → "QR Personel Kartı" → "Yazdır".
 - **Yap (modüller, satıcı oturumu):** "Sistem" → "Modüller" — HAK tavanı içinde bu fabrikanın modülleri.
 

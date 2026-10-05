@@ -3,14 +3,11 @@ import { Sidebar } from "./Sidebar";
 import { Topbar } from "./Topbar";
 import { CommandPalette } from "./CommandPalette";
 import { ShortcutsDialog } from "./ShortcutsDialog";
+import { ShellBanners } from "./ShellBanners";
 import { TabHost } from "./tabs";
-import { UpdateStrips } from "./UpdateSecurityStrip";
 import { SurumNotlariDialog } from "./SurumNotlariDialog";
 import { useSurumNotuAcilis } from "@/hooks/useSurumNotuAcilis";
 import { useGirisGuncellemeKontrolu } from "@/hooks/useGirisGuncellemeKontrolu";
-import { ServerOfflineBanner } from "./ServerOfflineBanner";
-import { LicenseBanner } from "./LicenseBanner";
-import { FactoryTimezoneBanner } from "./FactoryTimezoneBanner";
 import { ScanResultOverlay } from "@/components/scanner/ScanResultOverlay";
 import { useGlobalShortcuts } from "@/hooks/useGlobalShortcuts";
 import { useTabShortcuts } from "@/hooks/useTabShortcuts";
@@ -94,13 +91,7 @@ export function AppShell() {
         onToggleSidebar={toggleSidebar}
         onOpenCommand={() => setPaletteOpen(true)}
       />
-      {/* Kurulum tetiği (`UpdateGate`) burada DEĞİL, `App.tsx` `Root`ta — giriş
-          ekranı ve patron kabuğu da kurabilsin. Burada yalnız şeritler (indirme + imza reddi). */}
-      <UpdateStrips />
-      {/* Lisans bandı backend'in uyguladığı karardır; gözlemde hiç çizilmez. */}
-      <LicenseBanner />
-      <FactoryTimezoneBanner />
-      <ServerOfflineBanner />
+      <ShellBanners />
       <div className="flex min-h-0 flex-1">
         <Sidebar collapsed={collapsed} />
         <main className="relative min-w-0 flex-1 overflow-hidden">

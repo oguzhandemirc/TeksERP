@@ -33,6 +33,8 @@ export interface AuthMeResponse {
   systemAccountExists: boolean;
   /** Hesap yeni parola belirlemeden ilerleyemez (eski backend göndermez). */
   mustChangePassword?: boolean;
+  /** Fabrikanın kendi yöneticisi var mı — ölçüt sunucuda tek yüklemde (eski backend göndermez). */
+  factoryAdminExists?: boolean;
 }
 
 /** Giriş yapan istemcinin türü — same-type oturum politikası bununla ayrışır.

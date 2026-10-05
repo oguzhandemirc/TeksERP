@@ -15054,3 +15054,23 @@ Negatif sondalar (tetik md5(prosrc) ve dosya md5 ile geri alındı):
 **Ek — testfabrika emekli (kullanıcı kararları 2026-10-05).**
 - [PROFİL] testfabrika TAŞINMAZ, EMEKLİ olur: tamamen kaldırılır (thinkpad-1'deki test kurulumu dahil); yerine ileride SIFIRDAN yeni bir test kurulumu üretim lisans sunucusunda "test" güncelleme grubunda yapılır. Hazırlık satıcısı portalsız ve fabrikasız kalır, yalnız lisans sunucusunun kendi sürüm denemesi içindir. Ara dönem için komut satırı aracı YAZILMAZ (testfabrika için lisans işlemi yapılmaz). Kaldırma işinin kendisi (VDS'te `html/testfabrika`, kanal, thinkpad) AYRI adımdır, bu notla yapılmadı. `docs/ops/LISANS-DEVREYE-ALMA-TESTFABRIKA.md` yeni test kurulumu için şablon olarak kalır.
 - [PROFİL] Yeni müşteri senaryosu (`docs/ops/SENARYO-YENI-MUSTERI.md`, demofabrika provası) ÜRETİM lisans sunucusunda, demo müşteri "test" grubunda koşar.
+
+## 2026-10-05 — Fabrikanın kendi yöneticisi (K4, iş listesi 2.3): destek hesabında kart, sunucunun ürettiği geçici parola, "yönetici var mı" tek yüklemde [ÇEKİRDEK]
+
+**Soru.** setup.exe kurulumu bitince DB'de yalnız satıcının destek (süperadmin) hesabı var; fabrikanın kendi yöneticisini açmayı hatırlatan ekran da rehber satırı da yoktu, açılan hesabın parolasını da açan kişi biliyordu.
+
+**Karar (kullanıcı, 2026-10-05, tasarım belgesi seçenek A).**
+- [ÇEKİRDEK] Destek hesabıyla panele girilince, fabrika yöneticisi yoksa üst çubuğun altında "Fabrika yöneticisini aç" kartı çıkar. Kart yalnız UYARIR; panel kullanılmaya devam eder.
+- [ÇEKİRDEK] "Fabrika yöneticisi var" = kullanıcı yönetme izni (`admin:users` ya da `admin:*`, geçerlilik penceresinde) olan en az bir AKTİF, silinmemiş fabrika hesabı; satıcı hesabı sayılmaz. Koşul backend'de TEK yüklemde yaşar (`services/helpers/factory-admin.helper.ts`), panel `/auth/me`deki `factoryAdminExists` sonucunu okur. Son-admin guard'larının izin penceresi de aynı dosyadan gelir (kopya kalktı).
+- [ÇEKİRDEK] Geçici parolayı SİSTEM üretir (14 karakter, karışan harf yok); yalnız oluşturma cevabında bir kez döner, ekranda bir kez gösterilir, audit'e/log'a girmez. Hesap "Admin (Tam Yetki)" şablonuyla, mobil izin/PIN/kart olmadan ve `mustChangePassword` ile doğar — bayinin gördüğü parola ilk girişte ölür.
+- [ÇEKİRDEK] Destek hesabıyla girilen her oturumda başlık çubuğunda "Destek hesabıyla girdiniz" rozeti durur.
+
+**Uygulama.** Yeni uç `POST /api/admin/factory-admin` (izin `admin:users`; yeni izin kodu yok). Gövde `strictObject` — yalnız kullanıcı adı + ad soyad; parola, `mustChangePassword` ya da izin gönderilirse 400. Servis `PermissionManagementService.createFactoryAdmin`: tx'in ilk ifadesi son-admin kilidi (8025, sahibi aynı dosya) → yönetici varsa 409 `FACTORY_ADMIN_EXISTS` → kullanıcı adı çakışması 409 → şablon yoksa/pasifse 409 `FACTORY_ADMIN_TEMPLATE_MISSING` → kullanıcı + şablon izinleri aynı tx'te → yüklem yeniden ölçülür, karşılanmıyorsa tx geri alınır. Panel: `ShellBanners` (şerit yığını AppShell'den ayrıldı), `FactoryAdminCard` + `FactoryAdminDialog`, `SupportSessionBadge`; store'da `factoryAdminExists` varsayılanı `true`.
+
+**Neden yeni uç, neden `clientToken` yok.** Tasarım A'nın "POST /api/admin/users'a `mustChangePassword`" yolu, sunucunun parola üretmesi kararıyla birlikte genel kullanıcı ucunun sözleşmesini (parolasız gövde) değiştirecek ve şablon uygulamasını ikinci bir istemci çağrısına bırakacaktı (yarım hesap). Ayrı uç tek tx'te biter. Uç doğal olarak tek atımlıktır: kilit altındaki "yönetici var mı" ön koşulu ikinci denemeye ikinci hesap açtırmaz (eşzamanlı iki denemeden tam biri 201, ölçüldü). Token replay'i de parolayı yeniden veremezdi (DB'de yalnız özet var, sır yalnız verildiği an döner); sonucu belirsiz kalan denemede pencere bunu söyler, kart kaybolduysa parola "Kullanıcılar → Şifre Sıfırla"dan yeniden verilir.
+
+**Eski panel.** Yeni alanı ve ucu bilmeyen panel kart ve rozet çizmez, bugünkü davranış sürer; sözleşme kıran değişiklik yok, `minVersion` gerekmez. Yeni panel eski backend'e bağlanırsa alan gelmez → varsayılan `true` → kart çizilmez (rozet `isSystemAccount`tan, o alan eskiden de vardı).
+
+**Bekçi.** `scripts/test_fabrika_yoneticisi.ts` (24; negatif sonda: yüklemden `isSystemAccount:false` ve `isActive:true` çıkarılınca §1 sistem/pasif kolları + §2c/§2e/§2f kırmızı) · `Electron/src/components/layout/FactoryAdminCard.test.tsx` (6).
+
+**Kural satırı.** `docs/kurallar/superadmin.md` § Ortak → Değişmezler. Rehber: `docs/ops/SENARYO-YENI-MUSTERI.md` §9.

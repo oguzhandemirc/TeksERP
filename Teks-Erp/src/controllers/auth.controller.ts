@@ -6,6 +6,7 @@ import { Request, Response, NextFunction } from "express";
 import { z } from "zod";
 import { AuthService } from "../services/auth.service";
 import { resolveSystemAccountLock } from "../services/helpers/system-account.registry";
+import { factoryAdminExists as factoryAdminExistsCheck } from "../services/helpers/factory-admin.helper";
 import { isSettingsPasswordConfigured } from "../services/settings-password.service";
 import { readClientVersionHeader } from "../constants/client-info";
 import { CURRENT_PASSWORD_INVALID_CODE, type LoginContext } from "../services/auth.service";
@@ -556,6 +557,8 @@ export class AuthController {
       // ⚠️ CACHE'SİZ okunur (rejim okuması): şifre kaldırıldığı ANDA panel de
       // sormayı bırakmalı.
       const settingsPasswordRequired = await isSettingsPasswordConfigured();
+      // Panelin "fabrika yöneticisini aç" kartı bunu okur; ölçüt tek yüklemde.
+      const factoryAdminExists = await factoryAdminExistsCheck();
       res.status(200).json({
         success: true,
         data: {
@@ -579,6 +582,7 @@ export class AuthController {
           // KENDİ yüklemidir (tembel doğrulamalı sürümü — yukarıda).
           systemAccountExists,
           settingsPasswordRequired,
+          factoryAdminExists,
         },
       });
     } catch (error) {
