@@ -17,7 +17,7 @@
     "lint": "eslint src scripts",
     "test": "tsx scripts/run-all-tests.ts",
     "anahtar": "tsx scripts/anahtar.ts",
-    "dev:erisim": "tsx scripts/dev-erisim.ts",
+    "dev:erisim": "tsx scripts/dev/dev-erisim.ts",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate deploy"
   },

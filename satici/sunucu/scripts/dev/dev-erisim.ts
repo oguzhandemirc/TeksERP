@@ -1,7 +1,7 @@
-// Yerel geliştirme düzeneği (npm run dev:portal için): sahte Access takımı + JWKS + jeton basar, satıcı sunucusunun
-// ERİŞİM ayarlarını ve vite vekilinin jetonunu yazdırır. Sunucuya ikinci yol açmaz; bekçilerin kullandığı düzenek.
+// Yerel geliştirme düzeneği (npm run dev:erisim): sahte Access takımı + JWKS + jeton basar, satıcı sunucusunun
+// ERİŞİM ayarlarını ve vite vekilinin jetonunu yazdırır. scripts/dev altında durur ki üretim imajına (dist-cli) girmesin.
 // Betik açık kaldıkça JWKS dosyası durur (kapanınca silinir) — satıcı sunucusunu o ortamla başlat.
-import { erisimJetonu, erisimOrtami } from "./lib/erisim-duzenegi";
+import { erisimJetonu, erisimOrtami } from "../lib/erisim-duzenegi";
 
 const OMUR_SN = 12 * 3600;
 const ortam = erisimOrtami();
