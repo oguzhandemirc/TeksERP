@@ -4,9 +4,10 @@
 // Sözleşme: docs/design/PATRON-BULUTU-ESITLEME.md §9 (bulut veri modeli ve RLS).
 // Çekirdek kurallar burada da geçerli (kök CLAUDE.md):
 //   - PK: UUID; her DateTime timestamptz; UUID kolon @db.Uuid.
-//   - ÇOK KİRACILI TEK DB: her satır `tesis_id` taşır ve PostgreSQL RLS ile yalıtılır
-//     (politikalar migration SQL'inde; `current_setting('app.tesis_id')` her istek tx'inin
-//     İLK ifadesinde yazılır — tek yazar `src/lib/tenant.ts`).
+//   - TESİS BAŞINA AYRI DB (docs/design/PATRON-TESIS-DB.md): merkez DB yönlendirme kataloğudur, her
+//     tesisin verisi kendi DB'sindedir; ŞEMA TEKTİR, tablonun nerede yaşadığını yetkiler belirler
+//     (`src/lib/db-grants.ts` MERKEZ_TABLES). Tesis DB'sinde her satır yine `tesis_id` taşır ve RLS ile
+//     yalıtılır (ikinci savunma; `app.tesis_id` her tx'in İLK ifadesinde — tek yazar `src/lib/tenant.ts`).
 //   - Bulut HESAP YAPMAZ: projeksiyon satırı fabrikanın hesapladığı veridir (jsonb), bulut saklar,
 //     süzer, gösterir. İş kaydı fabrikada doğar; buluttaki tek yazma kanalı gelen kutusudur.
 //   - Soft delete: hesap `status`, cihaz `active`, kurulum `active`. Hard delete yalnız
@@ -100,6 +101,70 @@ enum NotificationStatus {
   GONDERILDI
   BASARISIZ
   ATLANDI
+}
+
+/// Tesis veritabanının yaşam döngüsü (merkez): ISTENDI → HAZIR → IMHA_SURUYOR → IMHA_EDILDI (hepsi atomik claim).
+enum FacilityDbStatus {
+  ISTENDI
+  HAZIR
+  IMHA_SURUYOR
+  IMHA_EDILDI
+}
+
+// -----------------------------------------------------------------------------
+// MERKEZ — yönlendirme kataloğu (yalnız merkez DB'sinde dolu; tesis DB'lerinde boş ve yetkisiz)
+// -----------------------------------------------------------------------------
+
+/// Tesis → veritabanı. Ad `<merkez>_t<tesis kimliğinin ilk 16 onaltılık hanesi>` (belirlenimli; yönlendirici
+/// adı satırdan değil kimlikten türetir, satır yalnız durum ve şema sürümü verir). Yazan: hazırlayıcı + göç
+/// koşucusu + imha (göç rolü); eşitleme rolü yalnız `tesis_id` ile hazırlık isteği açar.
+model FacilityDatabase {
+  id              String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tesisId         String           @unique @map("tesis_id") @db.Uuid
+  databaseName    String?          @unique @map("database_name") @db.VarChar(63)
+  status          FacilityDbStatus @default(ISTENDI) @map("status")
+  schemaVersion   String?          @map("schema_version") @db.VarChar(255)
+  claimOwner      String?          @map("claim_owner") @db.VarChar(80)
+  claimUntil      DateTime?        @map("claim_until") @db.Timestamptz
+  attempts        Int              @default(0) @map("attempts")
+  nextAttemptAt   DateTime?        @map("next_attempt_at") @db.Timestamptz
+  lastError       String?          @map("last_error") @db.VarChar(500)
+  migratedAt      DateTime?        @map("migrated_at") @db.Timestamptz
+  migrationError  String?          @map("migration_error") @db.VarChar(500)
+  destructionPlan Json?            @map("destruction_plan")
+  readyAt         DateTime?        @map("ready_at") @db.Timestamptz
+  destroyedAt     DateTime?        @map("destroyed_at") @db.Timestamptz
+  createdAt       DateTime         @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt       DateTime         @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+
+  @@index([status, nextAttemptAt])
+  @@map("facility_databases")
+}
+
+/// Kurulum → tesis (değişmez). İmzalı isteğin tesisi buradan çözülür; satır yoksa kurulum bilinmiyor (401).
+model InstallationRoute {
+  id             String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  installationId String   @unique @map("kurulum_id") @db.Uuid
+  tesisId        String   @map("tesis_id") @db.Uuid
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt      DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+
+  @@index([tesisId])
+  @@map("installation_routes")
+}
+
+/// Giriş dizini: e-postanın ANAHTARLI özeti (HMAC-SHA256, `patron-tesis-db.key`, alan "giris-dizini") → tesis +
+/// hesap. Merkez düz e-posta TAŞIMAZ. Yalnız davet onayında yazılır; hedefi etkin olmayan satırı bakım siler.
+model LoginRoute {
+  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  emailDigest String   @unique @map("email_digest") @db.VarChar(64)
+  tesisId     String   @map("tesis_id") @db.Uuid
+  accountId   String   @unique @map("account_id") @db.Uuid
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt   DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+
+  @@index([tesisId])
+  @@map("login_routes")
 }
 
 // -----------------------------------------------------------------------------
@@ -300,15 +365,15 @@ model ReportRequest {
 
 /// Rapor sonucu — ekleme-yalnız; `projection` = `rapor.<aile>` (alan izni RLS'i projeksiyon adından).
 model ReportResult {
-  id           String    @id @default(uuid()) @db.Uuid
-  tesisId      String    @map("tesis_id") @db.Uuid
-  reportKey    String    @map("report_key") @db.VarChar(80)
-  projection   String    @map("projection") @db.VarChar(80)
-  paramsDigest String    @map("params_digest") @db.VarChar(64)
-  data         Json      @map("data")
-  computedAt   DateTime  @map("computed_at") @db.Timestamptz
+  id            String    @id @default(uuid()) @db.Uuid
+  tesisId       String    @map("tesis_id") @db.Uuid
+  reportKey     String    @map("report_key") @db.VarChar(80)
+  projection    String    @map("projection") @db.VarChar(80)
+  paramsDigest  String    @map("params_digest") @db.VarChar(64)
+  data          Json      @map("data")
+  computedAt    DateTime  @map("computed_at") @db.Timestamptz
   sourceHorizon DateTime? @map("source_horizon") @db.Timestamptz
-  createdAt    DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamptz
 
   @@index([tesisId, reportKey, paramsDigest, computedAt])
   @@map("report_results")
@@ -448,16 +513,16 @@ model PackageReceipt {
 
 /// Tesisin eşitleme durumu ("son eşitleme" damgası, sözleşme uyarısı, takılan ufuk).
 model SyncState {
-  tesisId            String    @id @map("tesis_id") @db.Uuid
-  lastPackageAt      DateTime  @map("last_package_at") @db.Timestamptz
-  lastInstallationId String    @map("last_installation_id") @db.Uuid
-  contractVersion    Int       @map("contract_version")
-  appVersion         String?   @map("app_version") @db.VarChar(40)
-  horizon            DateTime  @map("horizon") @db.Timestamptz
-  horizonChangedAt   DateTime  @map("horizon_changed_at") @db.Timestamptz
-  contractWarning    String?   @map("contract_warning") @db.VarChar(40)
-  createdAt          DateTime  @default(now()) @map("created_at") @db.Timestamptz
-  updatedAt          DateTime  @updatedAt @map("updated_at") @db.Timestamptz
+  tesisId            String   @id @map("tesis_id") @db.Uuid
+  lastPackageAt      DateTime @map("last_package_at") @db.Timestamptz
+  lastInstallationId String   @map("last_installation_id") @db.Uuid
+  contractVersion    Int      @map("contract_version")
+  appVersion         String?  @map("app_version") @db.VarChar(40)
+  horizon            DateTime @map("horizon") @db.Timestamptz
+  horizonChangedAt   DateTime @map("horizon_changed_at") @db.Timestamptz
+  contractWarning    String?  @map("contract_warning") @db.VarChar(40)
+  createdAt          DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt          DateTime @updatedAt @map("updated_at") @db.Timestamptz
 
   @@map("sync_state")
 }

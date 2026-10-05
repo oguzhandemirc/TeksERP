@@ -19,7 +19,8 @@ import { randomUUID } from "node:crypto";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { Client } from "pg";
-import { APP_COLUMN_GRANTS, APP_GRANTS, CLOUD_TABLES, SYNC_COLUMN_GRANTS, SYNC_GRANTS, type ColumnGrants } from "../src/lib/db-grants";
+import { APP_COLUMN_GRANTS, APP_GRANTS, CLOUD_TABLES, MERKEZ_APP_GRANTS, MERKEZ_SYNC_COLUMN_GRANTS, MERKEZ_SYNC_GRANTS, ROUTING_TABLES, SYNC_COLUMN_GRANTS, SYNC_GRANTS, type ColumnGrants } from "../src/lib/db-grants";
+import { mergeGrants } from "../src/lib/db-roles";
 import { NO_TENANT, withTesis } from "../src/lib/tenant";
 import { PATRON_KOKU, hesapKur, imzali, kontrol, ortamKur, paket, girdi, sonuc, temizleTesis, tesisKur, type Ortam } from "./lib/test-ortam";
 
@@ -59,11 +60,12 @@ async function semaBolumu(o: Ortam): Promise<void> {
     );
     const tables = t.rows.map((r) => r.relname);
     kontrol("§1a DB tablo kümesi = CLOUD_TABLES", JSON.stringify(tables) === JSON.stringify([...CLOUD_TABLES].sort()), tables.length + " tablo");
-    const eksik = t.rows.filter((r) => !r.rls || !r.force).map((r) => r.relname);
-    kontrol("§1b her tabloda RLS ENABLE + FORCE", eksik.length === 0, eksik.join(",") || "hepsi");
+    const kiraci = t.rows.filter((r) => !ROUTING_TABLES.includes(r.relname));
+    const eksik = kiraci.filter((r) => !r.rls || !r.force).map((r) => r.relname);
+    kontrol("§1b her kiracı tablosunda RLS ENABLE + FORCE", eksik.length === 0, eksik.join(",") || "hepsi");
     const pol = await goc.query<{ tablename: string }>(`SELECT tablename FROM pg_policies WHERE policyname = 'tesis_yalitimi'`);
     const polSet = new Set(pol.rows.map((r) => r.tablename));
-    kontrol("§1c her tabloda tesis_yalitimi politikası", tables.every((x) => polSet.has(x)));
+    kontrol("§1c her kiracı tablosunda tesis_yalitimi politikası", kiraci.every((x) => polSet.has(x.relname)));
     // Bütün migration'ların RLS döngü listelerinin birleşimi (yeni tabloyu getiren migration kendi listesini taşır).
     const migDir = path.join(PATRON_KOKU, "prisma/migrations");
     const migTables = readdirSync(migDir)
@@ -73,10 +75,11 @@ async function semaBolumu(o: Ortam): Promise<void> {
         return [...dizi.matchAll(/'([a-z_]+)'/g)].map((m) => m[1]!);
       })
       .sort();
-    kontrol("§1d migration RLS listeleri (birleşim) = CLOUD_TABLES", JSON.stringify(migTables) === JSON.stringify([...CLOUD_TABLES].sort()), `${migTables.length}/${CLOUD_TABLES.length}`);
+    const kiraciTablolari = CLOUD_TABLES.filter((x) => !ROUTING_TABLES.includes(x)).sort();
+    kontrol("§1d migration RLS listeleri (birleşim) = CLOUD_TABLES − yönlendirme", JSON.stringify(migTables) === JSON.stringify(kiraciTablolari), `${migTables.length}/${kiraciTablolari.length}`);
     for (const [label, url, want, wantColumns] of [
-      ["uygulama", o.ctx.config.DATABASE_URL, APP_GRANTS, APP_COLUMN_GRANTS],
-      ["eşitleme", o.ctx.config.ESITLEME_DATABASE_URL, SYNC_GRANTS, SYNC_COLUMN_GRANTS],
+      ["uygulama", o.ctx.config.DATABASE_URL, mergeGrants(APP_GRANTS, MERKEZ_APP_GRANTS), APP_COLUMN_GRANTS],
+      ["eşitleme", o.ctx.config.ESITLEME_DATABASE_URL, mergeGrants(SYNC_GRANTS, MERKEZ_SYNC_GRANTS), { ...SYNC_COLUMN_GRANTS, ...MERKEZ_SYNC_COLUMN_GRANTS }],
     ] as const) {
       const role = decodeURIComponent(new URL(url).username);
       const g = await goc.query<{ table_name: string; privilege_type: string }>(

@@ -8,7 +8,7 @@
 //      ya da ham sorgu çağrısı YOK — hepsi `withTesis/withLookup/withMaintenanceList` tx'inde
 //   §4 silme beyanı: `src`teki HER silme (`deleteMany`/`.delete(`/`DELETE FROM`) iki beyanlı dosyadan birinde:
 //      `maintenance.ts` (yaşa göre; hedef `PRUNED_TABLES`ta, ölü beyan da KIRMIZI) · `facility-destruction.ts`
-//      (tesis imhası; hedef kümesi = CLOUD_TABLES − RETAINED_TABLES İKİ YÖNLÜ — yeni tablo imhadan kaçamaz)
+//      (tesis imhası; hedef kümesi = TESIS_TABLES − RETAINED_TABLES İKİ YÖNLÜ — yeni tablo imhadan kaçamaz)
 //   §5 rota tablosu: yöntem+yol tekil · her yazma rotası işlem kimliği ya da GEREKÇELİ muafiyet beyan
 //      eder, her okuma rotası OKUMA · muafiyet gerekçesi boş olamaz
 //   §6 katalog: izin kodları tekil · her okuma izni en az bir projeksiyon/rapor açar · yazma ve
@@ -29,7 +29,7 @@ import { PROJECTION_CATALOG } from "../src/catalog/projections";
 import { REPORT_KEY_PERMISSION } from "../src/catalog/reports";
 import { API_ROUTES, type ApiRouteDef } from "../src/http/api-routes";
 import { CLOUD_ERROR_CODES } from "../src/lib/errors";
-import { APP_COLUMN_GRANTS, APP_GRANTS, CLOUD_TABLES } from "../src/lib/db-grants";
+import { APP_COLUMN_GRANTS, APP_GRANTS, CLOUD_TABLES, TESIS_TABLES } from "../src/lib/db-grants";
 import { LOCK_NAMESPACES } from "../src/lib/locks";
 import { DESTRUCTION_STEPS, RETAINED_TABLES } from "../src/services/facility-destruction";
 import { AGED_FIELDS, PRUNED_TABLES } from "../src/services/maintenance";
@@ -83,7 +83,9 @@ function tekYazar(): void {
     [/pg_(try_)?advisory/, "pg_advisory"],
     [/\$transaction\s*\(/, "$transaction"],
   ] as const) {
-    const disarida = kaynaklar.filter((f) => !f.endsWith(path.join("lib", "tenant.ts")) && desen.test(kod(readFileSync(f, "utf8")))).map(goreli);
+    // Tek beyanlı istisna: göç koşucusu Prisma şema motorunun OTURUM kilidini alır (uygulama kilit uzayı değil).
+    const muaf = (f: string): boolean => f.endsWith(path.join("lib", "tenant.ts")) || (ad === "pg_advisory" && f.endsWith(path.join("lib", "tesis-goc.ts")));
+    const disarida = kaynaklar.filter((f) => !muaf(f) && desen.test(kod(readFileSync(f, "utf8")))).map(goreli);
     kontrol(`§2 ${ad} yalnız src/lib/tenant.ts`, disarida.length === 0, disarida.join(", ") || "temiz");
   }
 }
@@ -144,12 +146,12 @@ function budama(): void {
   kontrol("§4d ✓K sonda: hesap silmesi `accounts` olarak ısırır (beyan dışı)", sonda.tablolar.has("accounts") && !beyan.has("accounts"));
   const imhaHedef = silmeHedefleri(readFileSync(imha, "utf8"), modeller);
   const kalan = new Set(Object.keys(RETAINED_TABLES));
-  const beklenen = CLOUD_TABLES.filter((t) => !kalan.has(t)).sort();
+  const beklenen = TESIS_TABLES.filter((t) => !kalan.has(t)).sort();
   const bulunan = [...imhaHedef.tablolar].sort();
-  kontrol("§4e imha silme kümesi = CLOUD_TABLES − RETAINED_TABLES (iki yönlü)", JSON.stringify(bulunan) === JSON.stringify(beklenen) && imhaHedef.bilinmeyen.length === 0, `${bulunan.length}/${beklenen.length}${imhaHedef.bilinmeyen.length ? ` bilinmeyen ${imhaHedef.bilinmeyen.join(",")}` : ""}`);
+  kontrol("§4e imha silme kümesi = TESIS_TABLES − RETAINED_TABLES (iki yönlü)", JSON.stringify(bulunan) === JSON.stringify(beklenen) && imhaHedef.bilinmeyen.length === 0, `${bulunan.length}/${beklenen.length}${imhaHedef.bilinmeyen.length ? ` bilinmeyen ${imhaHedef.bilinmeyen.join(",")}` : ""}`);
   kontrol("§4f imha adım listesi = silinen tablolar (DESTRUCTION_STEPS birebir)", JSON.stringify(DESTRUCTION_STEPS.map((st) => st.table).sort()) === JSON.stringify(beklenen));
   kontrol("§4g kalan tablo CLOUD_TABLES'ta ve imhada silinmiyor", [...kalan].every((t) => CLOUD_TABLES.includes(t) && !imhaHedef.tablolar.has(t)));
-  const eksikSonda = CLOUD_TABLES.filter((t) => !kalan.has(t) && t !== "sessions").sort();
+  const eksikSonda = TESIS_TABLES.filter((t) => !kalan.has(t) && t !== "sessions").sort();
   kontrol("§4h ✓K sonda: bir tablo eksik silinirse küme eşitliği bozulur", JSON.stringify(eksikSonda) !== JSON.stringify(beklenen));
 }
 

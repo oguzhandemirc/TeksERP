@@ -1,4 +1,6 @@
-// ROL YETKİLERİ — tek kaynak (`scripts/db-rolleri.ts` uygular, bekçi `test_rls_sizinti` ölçer).
+// ROL YETKİLERİ — tek kaynak (`scripts/db-rolleri.ts` merkezde, `src/lib/tesis-db-hazirlik.ts` tesis DB'lerinde
+// uygular; bekçiler `test_rls_sizinti` · `test_tesis_db_yalitimi` ölçer). Şema tektir, tablonun YAŞADIĞI yeri
+// yetki belirler: merkezde yalnız MERKEZ_* yetkileri, tesis DB'sinde yalnız APP/SYNC/SUPPORT yetkileri verilir.
 // İki çalışma rolü, ikisi de NOSUPERUSER NOBYPASSRLS ve tablo sahibi DEĞİL (RLS ikisine de uygulanır):
 //   · uygulama (hesap API'si): projeksiyonu ve eşitleme tablolarını YALNIZ OKUR — API katmanındaki bir
 //     hata fabrikanın verisini yazamaz ya da taklit edemez.
@@ -8,7 +10,7 @@
 // Migration yeni tablo eklerse buraya satırı AYNI dilimde girer (girmezse iki rol de erişemez: fail-closed).
 export type Privilege = "SELECT" | "INSERT" | "UPDATE" | "DELETE";
 /** Kolon düzeyi yetki: tablo düzeyindekine EK, yalnız adı geçen kolonlarda (aynı yetki iki düzeyde birden verilmez). */
-export type ColumnGrants = Readonly<Record<string, Readonly<Partial<Record<"SELECT" | "UPDATE", readonly string[]>>>>>;
+export type ColumnGrants = Readonly<Record<string, Readonly<Partial<Record<"SELECT" | "INSERT" | "UPDATE", readonly string[]>>>>>;
 
 export const APP_GRANTS: Readonly<Record<string, readonly Privilege[]>> = {
   facilities: ["SELECT"],
@@ -60,7 +62,7 @@ export const SYNC_GRANTS: Readonly<Record<string, readonly Privilege[]>> = {
 
 /**
  * Şemadaki bütün uygulama tabloları (bekçi: şema ↔ bu liste birebir). Çalışma rollerinin hiçbirinde
- * yetkisi olmayan tablo yalnız göç rolünün (satıcı CLI'si) tablosudur: `facility_destructions`.
+ * yetkisi olmayan tablo yalnız göç rolünün (satıcı CLI'si) tablosudur: `facility_destructions` (merkez).
  */
 export const CLOUD_TABLES: readonly string[] = [
   "facilities",
@@ -84,7 +86,41 @@ export const CLOUD_TABLES: readonly string[] = [
   "request_nonces",
   "facility_destructions",
   "support_access",
+  "facility_databases",
+  "installation_routes",
+  "login_routes",
 ];
+
+/**
+ * MERKEZ TABLOLARI — yalnız merkez DB'sinde dolu (yönlendirme kataloğu + imha tutanağı + imhada kopyalanan destek
+ * erişim kaydı). Tesis DB'sinde bu tablolar BOŞ ve hiçbir çalışma rolüne yetkisizdir; `support_access` iki tarafta
+ * da yaşar (tesiste canlı kayıt, merkezde imha arşivi).
+ */
+export const MERKEZ_TABLES: readonly string[] = ["facility_databases", "installation_routes", "login_routes", "facility_destructions", "support_access"];
+
+/** Yönlendirme tabloları: kiracı verisi değildir, RLS TAŞIMAZ (merkezde çalışma rollerinin tek yetkisi bunlardır). */
+export const ROUTING_TABLES: readonly string[] = ["facility_databases", "installation_routes", "login_routes"];
+
+/** Tesis DB'sinde yaşayan tablolar (CLOUD_TABLES − yalnız-merkez tabloları). */
+export const TESIS_TABLES: readonly string[] = CLOUD_TABLES.filter((t) => t === "support_access" || !MERKEZ_TABLES.includes(t));
+
+/** Merkez uygulama rolü: yönlendirme okur (tesis listesi), giriş dizinini davet onayında yazar. */
+export const MERKEZ_APP_GRANTS: Readonly<Record<string, readonly Privilege[]>> = {
+  facility_databases: ["SELECT"],
+  login_routes: ["SELECT", "INSERT", "UPDATE", "DELETE"],
+};
+
+/** Merkez eşitleme rolü: kurulum yönü (satıcı iç API önbelleği) + hazırlık isteği + bayat giriş satırı budaması. */
+export const MERKEZ_SYNC_GRANTS: Readonly<Record<string, readonly Privilege[]>> = {
+  facility_databases: ["SELECT"],
+  installation_routes: ["SELECT", "INSERT"],
+  login_routes: ["SELECT", "DELETE"],
+};
+
+/** Hazırlık isteği yalnız kimlikle açılır; durum, ad, şema sürümü hazırlayıcınındır. */
+export const MERKEZ_SYNC_COLUMN_GRANTS: ColumnGrants = {
+  facility_databases: { INSERT: ["tesis_id"] },
+};
 
 /**
  * DESTEK ROLÜ (Ek-6/B §3.2) — `<veritabanı>_destek` (üretimde `patron_destek`): NOLOGIN doğar (göç), NOSUPERUSER
