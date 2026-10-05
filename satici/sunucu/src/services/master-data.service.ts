@@ -13,6 +13,7 @@ import { lockCustomer, lockDealers, lockInstallation } from "../lib/locks";
 import { prisma, type Db, type Tx } from "../lib/prisma";
 import { requireChannel } from "./channel.service";
 import { notifyDoorbell } from "./doorbell";
+import { requireValidityEnd } from "./entitlement-policy";
 import { requireReason } from "./sanction.service";
 
 export function cleanName(name: string, what: string): string {
@@ -229,6 +230,8 @@ export async function updateInstallationTx(tx: Tx, g: UpdateInstallationInput): 
   if (g.licenseClass !== undefined && g.licenseClass !== inst.sinif) {
     const signed = await tx.hak.count({ where: { kurulumId: inst.id, guncelSurum: { gte: 1 } } });
     if (signed > 0) throw stateConflict("Sınıf imzalı HAK'ın parçası: imzalı hakkı olan kurulumun sınıfı değişmez (yeni kurulum açın)");
+    const draft = await tx.hak.findFirst({ where: { kurulumId: inst.id, aktif: true }, select: { gecerlilikBitis: true } });
+    if (draft) requireValidityEnd(g.licenseClass, draft.gecerlilikBitis);
   }
   const data = {
     ...(g.name === undefined ? {} : { ad: g.name === null ? null : cleanName(g.name, "Kurulum") }),

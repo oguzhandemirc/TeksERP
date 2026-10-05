@@ -254,6 +254,8 @@ export async function kurulumFiksturu(
     modules: g.moduller ?? ["production.enabled", "finance.enabled"],
     perpetual: true,
     maintenanceUntil: new Date(Date.now() + 365 * DAY_MS),
+    // Bitişi zorunlu sınıf (DEMO — K5) bitişsiz doğamaz.
+    ...(svc.isValidityEndRequired(kurulum.sinif) ? { validUntil: new Date(Date.now() + 30 * DAY_MS) } : {}),
     actor: "bekci",
   });
   await runAsCli(() => svc.issueEntitlementVersion(ctx, { entitlementId: hak.id, password: passwordBuffer(TEST_KOK_PAROLASI), reason: "bekçi fikstürü", actor: "bekci" }));

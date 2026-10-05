@@ -130,6 +130,7 @@ export function EntitlementPanel({ detail, policy, onChanged }: { detail: Instal
       {dialog === "version" && hak && !policy.versionModal ? (
         <EntitlementVersionModal
           entitlement={hak}
+          installationClass={inst.sinif}
           modules={policy.modules ?? hak.moduller}
           passwordField={policy.passwordField}
           passwordLabel={policy.passwordLabel}

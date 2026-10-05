@@ -44,6 +44,7 @@ import {
 } from "../portal/installation/EntitlementSigning";
 import { PORTAL_PERMISSIONS } from "../shared/permissions";
 import { HEAVY_K3_MIN_DAYS, INSTALLMENT_DEFAULT_RESTRICTION_DAYS } from "../shared/sanctions";
+import { VALIDITY_END_REQUIRED_CLASSES } from "../shared/validity";
 import { CHANNEL_CODE_PATTERN, CHANNEL_KIND_LABEL, VERSION_PATTERN } from "../portal/pages/Channels";
 import { CLOUD_RETENTION_DEFAULT, CLOUD_RETENTION_MONTHS, SYNC_MINUTES_DEFAULT, SYNC_MINUTES_MAX, SYNC_MINUTES_MIN } from "../shared/cloud-settings";
 import { ACCEPTANCE_EVENT } from "../portal/installation/AcceptancePanel";
@@ -351,6 +352,11 @@ describe("eşikler ve biçim desenleri aynası", () => {
     const src = read("services/sanction.service.ts");
     expect(HEAVY_K3_MIN_DAYS).toBe(numberConst(src, /export const HEAVY_K3_MIN_DAYS = (\d+);/));
     expect(INSTALLMENT_DEFAULT_RESTRICTION_DAYS).toBe(numberConst(src, /installmentRestrictionDays = [^\n]*\?\? (\d+);/));
+  });
+
+  it("geçerlilik bitişi zorunlu sınıflar = VALIDITY_END_REQUIRED_CLASSES (entitlement-policy.ts, K5)", () => {
+    const src = read("services/entitlement-policy.ts");
+    expect([...VALIDITY_END_REQUIRED_CLASSES]).toEqual(listStrings(src, "VALIDITY_END_REQUIRED_CLASSES: readonly LicenseClass\\[\\]"));
   });
 
   it("patron bulutu eşitleme aralığı ve saklama seçenekleri (cloud-entitlement.ts)", () => {

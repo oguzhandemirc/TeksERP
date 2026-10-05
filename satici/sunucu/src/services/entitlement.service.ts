@@ -9,7 +9,8 @@ import { VendorError, badRequest, notFoundError, stateConflict } from "../lib/er
 import { lockInstallation, lockLicenseNumber } from "../lib/locks";
 import { prisma, type Tx } from "../lib/prisma";
 import type { VendorContext } from "./context";
-import { checkModuleFormat } from "./entitlement-policy";
+import { checkModuleFormat, requireValidityEnd } from "./entitlement-policy";
+import { recordValidityAtBirthTx } from "./sanction.service";
 
 export { createCustomer, createInstallation, createSite } from "./master-data.service";
 export * from "./entitlement-policy";
@@ -25,9 +26,11 @@ export interface CreateEntitlementInput {
   readonly modules: readonly string[];
   readonly perpetual: boolean;
   readonly maintenanceUntil: Date;
+  /** Geçerlilik bitişi (vadeli/demo); DEMO'da zorunlu. Verilirse GECERLILIK defter satırı aynı tx'te yazılır. */
   readonly validUntil?: Date | null;
   /** Numaranın yılı bu andan (İstanbul) — kilit ve numara aynı yılı görsün. */
   readonly nowMs: number;
+  readonly actor: string;
 }
 
 /** Hak TASLAĞI doğar (imzasız); lisans numarası (TKS-YYYY-NNNN) doğuşta, yıl sayacı kilidi altında materyalize edilir. */
@@ -39,13 +42,15 @@ export async function createEntitlementTx(tx: Tx, g: CreateEntitlementInput): Pr
   const inst = await tx.kurulum.findUnique({ where: { id: g.installationDbId } });
   if (!inst) throw notFoundError("Kurulum");
   if (!inst.aktif || inst.durum === "IPTAL") throw stateConflict("Pasif ya da iptal edilmiş kuruluma hak açılamaz");
+  if (g.validUntil && Number.isNaN(g.validUntil.getTime())) throw badRequest("Geçerlilik bitişi geçersiz");
+  requireValidityEnd(inst.sinif, g.validUntil);
   const existing = await tx.hak.findFirst({ where: { kurulumId: inst.id, aktif: true }, select: { lisansNo: true } });
   if (existing) throw stateConflict(`Kurulumun zaten aktif bir hakkı var (${existing.lisansNo}); değişiklik yeni sürümle yapılır`);
   const prefix = `TKS-${year}-`;
   const last = await tx.hak.findFirst({ where: { lisansNo: { startsWith: prefix } }, orderBy: { lisansNo: "desc" } });
   const next = last ? Number(last.lisansNo.slice(prefix.length)) + 1 : 1;
   if (next > 999_999) throw new VendorError(500, "SUNUCU_HATASI", "Lisans numarası uzayı doldu");
-  return tx.hak.create({
+  const hak = await tx.hak.create({
     data: {
       kurulumId: inst.id,
       lisansNo: `${prefix}${String(next).padStart(4, "0")}`,
@@ -55,9 +60,11 @@ export async function createEntitlementTx(tx: Tx, g: CreateEntitlementInput): Pr
       gecerlilikBitis: g.validUntil ?? null,
     },
   });
+  if (g.validUntil) await recordValidityAtBirthTx(tx, { installationDbId: inst.id, validUntil: g.validUntil, actor: g.actor });
+  return hak;
 }
 
-export async function createEntitlement(g: Omit<CreateEntitlementInput, "nowMs"> & { nowMs?: number; actor: string }): Promise<Hak> {
+export async function createEntitlement(g: Omit<CreateEntitlementInput, "nowMs"> & { nowMs?: number }): Promise<Hak> {
   const input: CreateEntitlementInput = { ...g, nowMs: g.nowMs ?? Date.now() };
   const row = await prisma.$transaction((tx) => createEntitlementTx(tx, input));
   await recordAudit({ event: "HAK_EKLENDI", entity: "Hak", entityId: row.id, actor: g.actor, summary: { lisansNo: row.lisansNo } });

@@ -12,6 +12,7 @@ import { lockInstallation } from "../lib/locks";
 import { prisma, type Tx } from "../lib/prisma";
 import { enqueueNotificationTx } from "../notifications/outbox";
 import { notifyDoorbell } from "./doorbell";
+import { requireValidityEnd } from "./entitlement-policy";
 
 const LEVELS: readonly string[] = SANCTION_LEVELS;
 
@@ -207,8 +208,9 @@ export async function setEnforcement(g: { installationDbId: string; enforce: boo
 }
 
 async function setValidityInTx(tx: Tx, g: { installationDbId: string; validUntil: Date | null; reason: string; actor: string }): Promise<YaptirimEylemi | null> {
-  const hak = await tx.hak.findFirst({ where: { kurulumId: g.installationDbId, aktif: true } });
+  const hak = await tx.hak.findFirst({ where: { kurulumId: g.installationDbId, aktif: true }, include: { kurulum: { select: { sinif: true } } } });
   if (!hak) throw notFoundError("Kurulumun aktif hakkı");
+  requireValidityEnd(hak.kurulum.sinif, g.validUntil);
   const before = hak.gecerlilikBitis?.toISOString() ?? null;
   const after = g.validUntil?.toISOString() ?? null;
   if (before === after) return null;
@@ -219,6 +221,17 @@ async function setValidityInTx(tx: Tx, g: { installationDbId: string; validUntil
     type: "GECERLILIK",
     param: { onceki: before, yeni: after },
     reason: g.reason,
+    actor: g.actor,
+  });
+}
+
+/** Hak doğuşta bitişle açıldıysa bitiş de defterdedir: GECERLILIK satırı (önceki yok → yeni), hakkın kendi tx'inde. */
+export async function recordValidityAtBirthTx(tx: Tx, g: { installationDbId: string; validUntil: Date; actor: string }): Promise<YaptirimEylemi> {
+  return writeAction(tx, {
+    installationDbId: g.installationDbId,
+    type: "GECERLILIK",
+    param: { onceki: null, yeni: g.validUntil.toISOString() },
+    reason: "Lisans hakkı geçerlilik bitişiyle açıldı",
     actor: g.actor,
   });
 }

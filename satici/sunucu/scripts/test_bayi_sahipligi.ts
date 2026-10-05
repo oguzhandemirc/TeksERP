@@ -131,7 +131,7 @@ async function main(): Promise<void> {
     await dene("kurulum", () => prisma.$transaction((tx) => ownershipSvc.createDealerInstallationTx(tx, { dealerId: A.id, site: tesis, siteId: tesis.id, licenseClass: "URETIM", channelCode: KANAL })));
     await dene("hak", () =>
       prisma.$transaction((tx) =>
-        ownershipSvc.createDealerEntitlementTx(tx, { dealerId: A.id, customerId: musteriId, licenseClass: "URETIM", installationDbId: kurId, modules: MODULLER, perpetual: false, maintenanceUntil: new Date(Date.now() + 200 * DAY_MS), nowMs: Date.now() }),
+        ownershipSvc.createDealerEntitlementTx(tx, { dealerId: A.id, customerId: musteriId, licenseClass: "URETIM", installationDbId: kurId, modules: MODULLER, perpetual: false, maintenanceUntil: new Date(Date.now() + 200 * DAY_MS), nowMs: Date.now(), actor: "bekci" }),
       ),
     );
     await dene("kod", () => prisma.$transaction((tx) => ownershipSvc.createDealerActivationCodeTx(tx, ctx, { dealerId: A.id, customerId: musteriId, installationDbId: kurId, actor: "bekci" })));

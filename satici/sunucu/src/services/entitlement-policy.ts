@@ -64,6 +64,22 @@ export function resolveOfflineHorizon(
   return { days, long, granted: long && !alreadyGranted };
 }
 
+// ---------------------------------------------------------------- geçerlilik bitişi zorunlu sınıflar (K5)
+
+/** Bu sınıfların hakkı geçerlilik bitişi (`gecerlilikBitis`) olmadan kaydedilmez: doğuş · bitiş değişimi · kalıcıya çevirme · sınıf değişimi. */
+export const VALIDITY_END_REQUIRED_CLASSES: readonly LicenseClass[] = ["DEMO"];
+
+export function isValidityEndRequired(licenseClass: string): boolean {
+  return (VALIDITY_END_REQUIRED_CLASSES as readonly string[]).includes(licenseClass);
+}
+
+/** Tek boğaz: zorunlu sınıfta bitişsiz kayıt 400. */
+export function requireValidityEnd(licenseClass: string, validUntil: Date | null | undefined): void {
+  if (isValidityEndRequired(licenseClass) && (validUntil === null || validUntil === undefined)) {
+    throw badRequest(`${licenseClass} sınıfı lisansın geçerlilik bitişi zorunludur; bitiş tarihi olmadan kaydedilemez`);
+  }
+}
+
 /** Gömülü imzacı sertifikası: bayi (BAYİ sertifikası + bayi kimliği) ya da ara imzacı (HAK sertifikası); kökte yok. */
 export type EmbeddedSigner =
   | { readonly kind: "KOK" }
