@@ -1,6 +1,6 @@
 # Fabrika ağında TLS (plan 6.1 · §C-2)
 
-> Durum: TASARIM; dilimler §8. Karar notu: `docs/history/arsiv/2026-10.md` §2026-10-06 LAN TLS. Kural satırı: `docs/kurallar/kesif-cihaz.md`.
+> Durum: D1–D2 uygulandı (backend); dilimler §8. Karar notu: `docs/history/arsiv/2026-10.md` §2026-10-06 LAN TLS. Kural satırı: `docs/kurallar/kesif-cihaz.md`.
 
 ## 1. Tehdit
 
@@ -76,7 +76,7 @@ Kurulum sihirbazının son sayfası ve `kur.ps1` sonu parmak izini ve durum sayf
 | Dilim | İçerik | Durum |
 |---|---|---|
 | D1 | Bu not | ✅ |
-| D2 | Backend: sertifika üretimi/saklama, `LAN_TLS_MODE` dinleyicileri, kimlik ucunda `tls`, bekçi `test_lan_tls` | sırada |
+| D2 | Backend: sertifika üretimi/saklama, `LAN_TLS_MODE` dinleyicileri, kimlik ucunda `tls`, bekçi `test_lan_tls` + `test_lan_tls_http` | ✅ |
 | D3 | Panel: doğrulama kancası + pin deposu + https probu + onay diyaloğu + tablet QR'ı | sırada |
 | D4 | Tablet: QR okuma + pin deposu (JS, OTA ile gider) | sırada |
 | D5 | Tablet: native zorlama (OkHttp) | **ONAY bekler** |

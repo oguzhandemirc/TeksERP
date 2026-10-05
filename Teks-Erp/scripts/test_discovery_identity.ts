@@ -40,6 +40,7 @@ import {
   buildDiscoveryIdentity,
   __resetDiscoveryCacheForTests,
 } from "../src/services/discovery.service";
+import { __setLanTlsAdvertForTests } from "../src/lib/lan-tls/listener";
 
 let pass = 0;
 let fail = 0;
@@ -65,6 +66,7 @@ const IDENTITY_FIELDS = [
   "protocol",
   "apiPort",
   "apiBasePath",
+  "tls",
   "time",
 ].sort();
 
@@ -195,6 +197,19 @@ async function main(): Promise<void> {
       payload.installationId === regenerated.installationId,
       String(payload.installationId),
     );
+
+    // LAN TLS: dinleyici yokken `tls` null (eski istemci için yük birebir bugünkü + boş ek alan);
+    // dinleyici varken port + parmak izi taşır — ve parmak izi dışında sır/iç durum taşımaz.
+    __setLanTlsAdvertForTests(null);
+    check("§3 LAN TLS kapalıyken `tls` null", buildDiscoveryIdentity().tls === null);
+    __setLanTlsAdvertForTests({ port: 4443, fingerprint: "ab".repeat(32) });
+    const withTls = buildDiscoveryIdentity().tls;
+    check(
+      "§3 LAN TLS açıkken `tls` = { port, fingerprint } (başka alan yok)",
+      !!withTls && withTls.port === 4443 && Object.keys(withTls).sort().join(",") === "fingerprint,port",
+      JSON.stringify(withTls),
+    );
+    __setLanTlsAdvertForTests(null);
 
     // NEGATİF SINAMA: aynı denetim, kasten kirletilmiş nesnede DÜŞMELİ.
     const dirty = { ...payload, dbSizeBytes: 123, lanAddresses: ["10.0.0.1"] };
