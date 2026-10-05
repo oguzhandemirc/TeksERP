@@ -107,6 +107,48 @@ export const TOKEN_YOLLARI: Record<string, TokenYolu> = {
   [`${S}import/import.service.ts::apply`]: { muaf: "TOKEN_CLAIM_ONCE", neden: "ImportRun satırı koşumdan önce claim edilir (plan §1 sınıf dışı)" },
 };
 
+// =============================================================================
+// TOKEN'SIZ KAYIT YARATAN UÇLAR — beyanlı istisna (kk1.md "Kayıt-yaratan uçlar clientToken taşır")
+// =============================================================================
+// Token'ı hiç görmeyen birim yukarıdaki taramaya girmez; bu yüzden token'sız doğan her kayıt-yaratan uç burada TEK
+// satırdır ve satırın iddiası `test_token_replay_bogaz` §7'de ölçülür: uç var ve gövdesi strict (clientToken 400),
+// servis birimi token'a dokunmaz, tx'in İLK await'i beyanlı kilit, tekillik kodu serviste ve istemcide.
+// =============================================================================
+
+/** KAPALI sınıf kümesi — yeni sınıf bekçide ve burada birlikte açılır. */
+export const TOKENSIZ_UC_SINIFLARI = {
+  /** Başarı cevabı o an üretilen ve saklanmayan bir sır taşır → replay 201'i yeniden üretemez; aynı denemenin ikinci
+   *  kopyası kilitli tekillik yükleminden 409 alır, istemci sırrı ayrı uçtan yeniden verdirmeye yönlendirir. */
+  SIR_DONEN_TEKIL: "cevap tekrar üretilemeyen sır taşır; kilitli tekillik yüklemi ikinci kaydı keser",
+} as const;
+
+export interface TokensizUc {
+  sinif: keyof typeof TOKENSIZ_UC_SINIFLARI;
+  /** `src/routes/…` (Teks-Erp köküne göre) ve `router.post` yolu. */
+  rota: string;
+  yol: string;
+  /** `dosya::birim` — `$transaction` geri çağrısının ilk await'i `kilit` çağrısı, `tekillikKodu` birimde atılır. */
+  servis: string;
+  kilit: string;
+  tekillikKodu: string;
+  /** Tekillik kodunu ele alan istemci dosyası (repo köküne göre) — cevabı kaybeden kullanıcıya yolu gösterir. */
+  istemci: string;
+  neden: string;
+}
+
+export const TOKENSIZ_UCLAR: Record<string, TokensizUc> = {
+  "POST /api/admin/factory-admin": {
+    sinif: "SIR_DONEN_TEKIL",
+    rota: "src/routes/admin.routes.ts",
+    yol: "/factory-admin",
+    servis: `${S}permission-management.service.ts::createFactoryAdmin`,
+    kilit: "acquireAdminGuardLock",
+    tekillikKodu: "FACTORY_ADMIN_EXISTS",
+    istemci: "Electron/src/components/layout/FactoryAdminDialog.tsx",
+    neden: "geçici parola yalnız 201'de döner, saklanmaz; cevap kaybolursa 409 → Kullanıcılar › Şifre Sıfırla",
+  },
+};
+
 /**
  * KİMLİK BEYANI — her `tokenReplay` politikasının gövde kapısındaki alanlar (`identity`in `ad`leri), politikayı kuran
  * birimin adıyla. `test_token_replay_bogaz` §4b iki kümeyi BİREBİR kıyaslar: koddan alan silinir ya da beyansız eklenirse

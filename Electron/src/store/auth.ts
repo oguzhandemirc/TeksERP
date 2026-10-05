@@ -20,6 +20,11 @@ interface AuthState {
    * dedirtip sunucuda reddedilmek, kısa süre salt-okunur görmekten kötüdür.
    */
   systemAccountExists: boolean;
+  /**
+   * Fabrikanın kendi yöneticisi var mı — `/api/auth/me`den. Varsayılan `true`: cevap
+   * yoksa ya da alanı bilmeyen eski backend ise "fabrika yöneticisini aç" kartı çizilmez.
+   */
+  factoryAdminExists: boolean;
   setUser: (user: JwtPayload | null) => void;
   setHydrated: (hydrated: boolean) => void;
   /** `/api/auth/me`den sistem-hesabı bayraklarını tazeler. ASLA reject etmez
@@ -28,17 +33,25 @@ interface AuthState {
   logout: () => Promise<void>;
 }
 
+/** Oturum kapanınca geri dönülen hesap bayrakları (fail-closed varsayılanlar). */
+const SIFIR_HESAP_BAYRAKLARI = {
+  isSystemAccount: false,
+  systemAccountExists: true,
+  factoryAdminExists: true,
+} as const;
+
 export const useAuthStore = create<AuthState>((set) => ({
   user: null,
   isHydrated: false,
   isSystemAccount: false,
   systemAccountExists: true,
+  factoryAdminExists: true,
   // ⚠️ `user = null` sistem-hesabı bayraklarını da SIFIRLAR. Tek yer değil iki
   // yol buraya düşüyor (manuel çıkış + apiClient'ın 401 dalı) ve ikisinde de
   // eski kimliğin bayrağı kalsaydı, aynı makinede nöbetleşen bir sonraki
   // kullanıcı `refreshSystemAccount()` cevap verene kadar YANLIŞ ekranı görürdü.
   setUser: (user) =>
-    set(user === null ? { user: null, isSystemAccount: false, systemAccountExists: true } : { user }),
+    set(user === null ? { user: null, ...SIFIR_HESAP_BAYRAKLARI } : { user }),
   setHydrated: (isHydrated) => set({ isHydrated }),
   refreshSystemAccount: async () => {
     try {
@@ -49,6 +62,7 @@ export const useAuthStore = create<AuthState>((set) => ({
         isSystemAccount: me.data.isSystemAccount === true,
         // Alan taşımayan ESKİ backend → `true` (fail-closed; bkz. tip yorumu).
         systemAccountExists: me.data.systemAccountExists !== false,
+        factoryAdminExists: me.data.factoryAdminExists !== false,
       });
     } catch {
       /* sunucuya ulaşılamadı / oturum düştü — varsayılanlar korunur */
@@ -76,7 +90,7 @@ export const useAuthStore = create<AuthState>((set) => ({
     }
     // Sistem-hesabı bayrakları da SIFIRLANIR: aynı makinede nöbetleşen bir
     // sonraki kullanıcı, öncekinin kimliğiyle çizilmiş bir ekran görmemeli.
-    set({ user: null, isSystemAccount: false, systemAccountExists: true });
+    set({ user: null, ...SIFIR_HESAP_BAYRAKLARI });
     // Sekme defteri de kapanır: kalıcı olduğu için temizlenmezse bir sonraki
     // kullanıcı öncekinin sekmelerini (ve başlıklarındaki müşteri/sipariş
     // adlarını) hazır bulurdu. Dinamik import: store döngüsünü kırar.
