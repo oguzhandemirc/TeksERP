@@ -3,6 +3,7 @@ import { RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import type { AcceptanceGate } from "@/lib/license/acceptance";
+import { refreshSummary } from "@/lib/license/refresh-summary";
 import { canRelay, relayViaPanel } from "@/lib/license/relay";
 import { licenseService } from "@/services/licenseService";
 import type { LicenseDetail, OfflinePurpose } from "@/types/license";
@@ -10,7 +11,6 @@ import { LicenseCard } from "./LicenseParts";
 import { useLicenseAction } from "./hooks";
 
 const POLL_TEXT: Record<string, string> = {
-  BASARILI: "Lisans yenilendi.",
   YAPILANDIRILMAMIS: "Lisans sunucusu adresi tanımlı değil.",
   HAZIR_DEGIL: "Kurulum kimliği ya da lisans klasörü hazır değil.",
   ETKIN_DEGIL: "Kurulum etkinleşmemiş; önce etkinleştirme kodu girin.",
@@ -28,9 +28,16 @@ export function LicenseActivateCard({ d, gate }: { d: LicenseDetail; gate: Accep
   const canActivate = busy === null && kod.trim().length > 0 && gate.ready;
   const relay = (amac: OfflinePurpose) =>
     run(`aktar-${amac}`, async () => {
-      const r = await relayViaPanel(amac, amac === "etkinlestir" ? kod.trim() : undefined);
-      if (!r.ok) throw new Error(r.message);
-      return amac === "etkinlestir" ? "Kurulum bu bilgisayar üzerinden etkinleştirildi." : "Lisans bu bilgisayar üzerinden yenilendi.";
+      if (amac === "etkinlestir") {
+        const r = await relayViaPanel(amac, kod.trim());
+        if (!r.ok) throw new Error(r.message);
+        return "Kurulum bu bilgisayar üzerinden etkinleştirildi.";
+      }
+      return refreshSummary(async () => {
+        const r = await relayViaPanel(amac);
+        if (!r.ok) throw new Error(r.message);
+        return r.detail;
+      });
     });
   return (
     <LicenseCard title={active ? "Yenileme" : "Etkinleştirme"}>
@@ -69,8 +76,12 @@ export function LicenseActivateCard({ d, gate }: { d: LicenseDetail; gate: Accep
             disabled={busy !== null}
             onClick={() =>
               void run("yokla", async () => {
-                const r = await licenseService.pollNow();
-                return POLL_TEXT[r.outcome] ?? `Yoklama başarısız: ${r.code ?? r.outcome}`;
+                const fail: { text: string | null } = { text: null };
+                const summary = await refreshSummary(async () => {
+                  const r = await licenseService.pollNow();
+                  if (r.outcome !== "BASARILI") fail.text = POLL_TEXT[r.outcome] ?? `Yoklama başarısız: ${r.code ?? r.outcome}`;
+                });
+                return fail.text ?? summary;
               })
             }
           >

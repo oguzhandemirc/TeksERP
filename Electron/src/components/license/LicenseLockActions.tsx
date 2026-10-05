@@ -8,6 +8,7 @@ import { useRoleAccess } from "@/hooks/useRoleAccess";
 import { canRelay, relayViaPanel } from "@/lib/license/relay";
 import { licenseService } from "@/services/licenseService";
 import { apiErrorText } from "@/lib/api-error";
+import { refreshSummary } from "@/lib/license/refresh-summary";
 
 /**
  * Satıcı yaptırımı kaldırdıysa kilidin hemen açılması için: şimdi yokla / bu
@@ -32,13 +33,25 @@ export function LicenseLockActions() {
   };
   const poll = () =>
     refresh(async () => {
-      const r = await licenseService.pollNow();
-      return r.outcome === "BASARILI" ? "Lisans yenilendi." : `Yoklama sonucu: ${r.code ?? r.outcome}`;
+      const fail: { text: string | null } = { text: null };
+      const summary = await refreshSummary(async () => {
+        const r = await licenseService.pollNow();
+        if (r.outcome !== "BASARILI") fail.text = `Yoklama sonucu: ${r.code ?? r.outcome}`;
+      });
+      return fail.text ?? summary;
     });
   const relay = () =>
     refresh(async () => {
-      const r = await relayViaPanel("yokla");
-      return r.ok ? "Lisans bu bilgisayar üzerinden yenilendi." : r.message;
+      const fail: { text: string | null } = { text: null };
+      const summary = await refreshSummary(async () => {
+        const r = await relayViaPanel("yokla");
+        if (!r.ok) {
+          fail.text = r.message;
+          return null;
+        }
+        return r.detail;
+      });
+      return fail.text ?? summary;
     });
   return (
     <div className="flex flex-wrap gap-2">
