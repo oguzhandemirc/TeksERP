@@ -36,6 +36,7 @@ import { buildAdvertisedTxt, type AdvertisedTxt } from "../lib/discovery-txt";
 import { whenIdentityReady } from "./installation-identity.job";
 import { DISCOVERY_VERSION, buildDiscoveryIdentity } from "../services/discovery.service";
 import { bilgi, uyari } from "../lib/logger";
+import { filterAdvertisedRecords, type DnsRecordLike } from "../lib/lan-addresses";
 
 /** İlan edilen servis tipi → ağda `_teks-erp._tcp.local` olarak görünür. */
 export const MDNS_SERVICE_TYPE = "teks-erp";
@@ -63,19 +64,41 @@ let state: MdnsState = {
 };
 
 // Tip yalnız yapısal — paketi statik import ETMİYORUZ (tembel yükleme şartı).
+interface PublishedLike {
+    updateTxt?: (txt: Record<string, string>) => void;
+    records?: () => DnsRecordLike[];
+}
+
 interface BonjourLike {
     publish(opts: {
         name: string;
         type: string;
         port: number;
         txt?: Record<string, string>;
-    }): { updateTxt?: (txt: Record<string, string>) => void };
+    }): PublishedLike;
     unpublishAll(cb?: () => void): void;
     destroy(cb?: () => void): void;
 }
 
 let instance: BonjourLike | null = null;
-let published: { updateTxt?: (txt: Record<string, string>) => void } | null = null;
+let published: PublishedLike | null = null;
+
+/**
+ * Kütüphane A/AAAA kayıtlarını makinenin BÜTÜN kartlarından üretir; sanal ve
+ * kendi kendine atanmış adresleri ilandan çıkarır. Kayıtlar ilk duyuruda
+ * (isim yoklamasından sonra, asenkron) okunduğu için publish'ten hemen sonra
+ * sarmak yeterlidir. Sarılamazsa ilan elemesiz sürer (fail-open).
+ */
+export function installAddressFilter(
+    svc: PublishedLike | null,
+    nets: () => NodeJS.Dict<os.NetworkInterfaceInfo[]> = () => os.networkInterfaces(),
+): boolean {
+    const original = svc?.records;
+    if (!svc || typeof original !== "function") return false;
+    const bound = original.bind(svc);
+    svc.records = () => filterAdvertisedRecords(bound(), nets());
+    return true;
+}
 
 /** Durum kopyası — `buildRichHealth` bunu basar (operasyonel iç durum ORAYA ait). */
 export function getMdnsState(): MdnsState {
@@ -168,6 +191,9 @@ export async function startMdnsAdvertiser(opts: StartMdnsOptions = {}): Promise<
             port,
             txt: txt as unknown as Record<string, string>,
         });
+        if (!installAddressFilter(published)) {
+            uyari("mdns", "adres süzgeci takılamadı, ilan bütün ağ kartlarının adresini taşıyacak");
+        }
 
         setState({
             active: true,
