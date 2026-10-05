@@ -24,6 +24,8 @@ import { startShiftCloseScheduler } from './jobs/machine-shift-close.job';
 import { startLicensePoll, stopLicensePoll } from './jobs/license-poll.job';
 import { startLicenseDoorbell, stopLicenseDoorbell } from './jobs/license-doorbell.job';
 import { startPatronCloudJobs, stopPatronCloudJobs } from './jobs/patron-cloud.jobs';
+import { startErrorReportJob, stopErrorReportJob } from './jobs/error-report.job';
+import { recordServerError } from './services/error-report.service';
 import { initLicenseEngine } from './services/license.service';
 import { preloadEncryptedModules } from './lib/license/encrypted-module-router';
 import { AuditService } from './services/audit.service';
@@ -239,6 +241,8 @@ function startLanListener(): Server {
     // Patron bulutu (eşitleme + gelen kutusu): yalnız ÜRETİM sınıfı + `patron-bulut` hakkı + kiradaki
     // aralık varken dışarı çıkar (fail-closed); aksi hâlde tek işi günlük işaret budamasıdır.
     if (!VERIFYING) startPatronCloudJobs();
+    // Hata raporları: varsayılan KAPALI (onay yoksa toplanmaz/gönderilmez); doğrulama kipinde gönderim de yok.
+    if (!VERIFYING) startErrorReportJob();
 
     void AuditService.logEvent({
         category: "SYSTEM",
@@ -330,6 +334,7 @@ function gracefulShutdown(signal: string, exitCode = 0): void {
             flushLatencyNow().catch(() => {}),
             stopMdnsAdvertiser(),
             flushLoginLockoutPersistence().catch(() => {}),
+            stopErrorReportJob(),
         ]),
         new Promise((resolve) => setTimeout(resolve, 2000).unref()),
     ]).finally(() => {
@@ -387,6 +392,7 @@ process.on("message", (msg) => {
 //     kapan; süreç yöneticisi (pm2 ya da hizmette SCM kurtarma eylemi) yeniden başlatır.
 process.on("unhandledRejection", (reason) => {
     hata("unhandled-rejection", "Yakalanmamış promise reddi", reason);
+    recordServerError(reason, { component: "surec", code: "UNHANDLED_REJECTION" });
     void AuditService.logEvent({
         category: "SYSTEM",
         action: "UNHANDLED_REJECTION",
@@ -398,6 +404,7 @@ process.on("unhandledRejection", (reason) => {
 });
 process.on("uncaughtException", (err) => {
     hata("uncaught-exception", "Yakalanmamış istisna — süreç kapanıyor", err);
+    recordServerError(err, { component: "surec", code: "UNCAUGHT_EXCEPTION" });
     // F12: crash izini (kim/ne patlattı) boşta senaryoda bile kaydet — audit
     // yazımını ~2sn tavanla BEKLE, sonra exitCode=1 ile kapan (pm2 crash'i
     // normal restart'tan ayırt edebilsin; forceTimer'ın

@@ -30,10 +30,11 @@ import {
   toStackFrames,
 } from "../lib/error-report/sanitize";
 import { AppError } from "../utils/app-error";
+import { ERROR_REPORT_CONSENT_SETTING_KEY } from "../constants/reserved-settings";
 import { systemSettingService } from "./system-setting.service";
 import { egressTransport, vendorPost, type VendorTransport } from "./helpers/license-wire.helper";
 
-export const ERROR_REPORT_CONSENT_KEY = "errorReports.consent";
+export const ERROR_REPORT_CONSENT_KEY = ERROR_REPORT_CONSENT_SETTING_KEY;
 /** Bellekte birikebilecek en çok grup (akış başına); dolunca yeni grup sayılır ama tutulmaz. */
 export const ERROR_BUFFER_MAX_GROUPS = 200;
 /** DB'de gönderilmemiş en çok grup (çevrimdışı birikimin üst sınırı). */

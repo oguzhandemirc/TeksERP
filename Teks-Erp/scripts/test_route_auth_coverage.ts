@@ -189,7 +189,13 @@ const EXEMPT: Record<string, string> = {
  * izin kodu yazmak, o kodu taşımayan hesabın zorunlu parola değişimini imkânsız kılardı.
  * Uç kümesi `test_parola_degisimi_zorunlu §5a` ile TAM üç olarak sabit.
  */
-const BARE_CHAIN_BASELINE = 15;
+/**
+ * ⚠️ 15 → 16 (2026-10-06, plan 3.6, BİLİNÇLİ): `POST /api/hata-raporlari/istemci` yalnız `verifyToken` taşır —
+ * her ekran (panel/tablet) kendi hatasını bildirebilmeli; izin kodu yazmak hatayı en çok görecek operatörü
+ * susturur. Uç iş verisi okumaz/yazmaz: KATI gövde (mesaj alanı yok), onay yoksa hiçbir şey almaz, kullanıcı
+ * başına hız sınırlı — `scripts/test_hata_raporu.ts` ölçer.
+ */
+const BARE_CHAIN_BASELINE = 16;
 
 /** Körlük zemini: tarayıcı boşa düşerse "ihlal yok" ile "hiçbir şeye bakılmadı" aynı yeşile çıkmasın. */
 const MIN_ROUTE_LAYERS = 400;
