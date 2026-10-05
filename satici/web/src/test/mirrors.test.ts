@@ -445,7 +445,7 @@ describe("güncelleme (Dağıtım v2) sözlüğü ve desenleri aynası", () => {
 
 describe("arayüzün çağırdığı her uç sunucuda var", () => {
   // Satıcı tablosu başka dosyadan yayılan parçaları da taşır (`...SUPPORT_PORTAL_ROUTES`): her yayılan tablo bu listede.
-  const VENDOR_ROUTE_FILES = ["http/portal-routes.ts", "http/key-routes.ts", "http/hardware-routes.ts", "http/distribution-routes.ts", "http/support-routes.ts", "http/notification-routes.ts"];
+  const VENDOR_ROUTE_FILES = ["http/portal-routes.ts", "http/key-routes.ts", "http/hardware-routes.ts", "http/distribution-routes.ts", "http/support-routes.ts", "http/error-report-routes.ts", "http/notification-routes.ts"];
   const vendor = [...VENDOR_ROUTE_FILES.flatMap(serverRoutes), ...sessionRoutes()];
   const dealer = [...serverRoutes("http/dealer-routes.ts"), ...sessionRoutes()];
   const calls = clientCalls();
