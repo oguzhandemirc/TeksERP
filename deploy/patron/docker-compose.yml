@@ -80,8 +80,10 @@ services:
       PATRON_WEB_DIZINI: /uygulama/web
       KURULUM_KAYNAGI: ${KURULUM_KAYNAGI:-satici}
       SATICI_IC_API_URL: http://${SATICI_IC_API_IP:?SATICI_IC_API_IP gerekli}:4612
-      # İstemci IP'si (hız sınırı anahtarı) Cloudflare başlığından; köken yalnız CF'ye açılana dek taklit edilebilir (runbook §11).
+      # İstemci IP'si (hız sınırı anahtarı) Cloudflare başlığından — YALNIZ Traefik'in XFF son halkası Cloudflare aralığındaysa;
+      # kökene doğrudan gelen istek kendi adresiyle sayılır. IC_VEKIL_AGLARI olmazsa herkes Traefik'in tek adresinde birleşir.
       VEKIL_IP_BASLIGI: cf-connecting-ip
+      IC_VEKIL_AGLARI: ${KENAR_AGI}
       # Bildirimler (B5): varsayılan kapali = bugünkü davranış. `gercek` VAPID konusu ister; VAPID anahtar çifti
       # anahtar biriminde ÖNCEDEN üretilmiş olmalı (birim salt okunur — runbook §2.1).
       BILDIRIM_KIPI: ${BILDIRIM_KIPI:-kapali}

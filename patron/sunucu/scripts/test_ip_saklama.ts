@@ -31,7 +31,7 @@ async function olay(o: Ortam, tesisId: string, event: string, entityId: string) 
 const ipOf = (summary: unknown): unknown => (summary && typeof summary === "object" ? (summary as Record<string, unknown>).ip : undefined);
 
 async function main(): Promise<void> {
-  const o = await ortamKur({ VEKIL_IP_BASLIGI: BASLIK });
+  const o = await ortamKur({ VEKIL_IP_BASLIGI: BASLIK, GUVENILIR_VEKIL_AGLARI: "127.0.0.1/32,::1/128" });
   const a = await tesisKur(o);
   const b = await tesisKur(o);
   try {

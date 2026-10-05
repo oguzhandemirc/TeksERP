@@ -15054,3 +15054,9 @@ Negatif sondalar (tetik md5(prosrc) ve dosya md5 ile geri alındı):
 **Ek — testfabrika emekli (kullanıcı kararları 2026-10-05).**
 - [PROFİL] testfabrika TAŞINMAZ, EMEKLİ olur: tamamen kaldırılır (thinkpad-1'deki test kurulumu dahil); yerine ileride SIFIRDAN yeni bir test kurulumu üretim lisans sunucusunda "test" güncelleme grubunda yapılır. Hazırlık satıcısı portalsız ve fabrikasız kalır, yalnız lisans sunucusunun kendi sürüm denemesi içindir. Ara dönem için komut satırı aracı YAZILMAZ (testfabrika için lisans işlemi yapılmaz). Kaldırma işinin kendisi (VDS'te `html/testfabrika`, kanal, thinkpad) AYRI adımdır, bu notla yapılmadı. `docs/ops/LISANS-DEVREYE-ALMA-TESTFABRIKA.md` yeni test kurulumu için şablon olarak kalır.
 - [PROFİL] Yeni müşteri senaryosu (`docs/ops/SENARYO-YENI-MUSTERI.md`, demofabrika provası) ÜRETİM lisans sunucusunda, demo müşteri "test" grubunda koşar.
+
+## 2026-10-05 — Patron bulutunda vekil başlığına güven zinciri (6.2 internet kenarı, ilk dilim) [ÇEKİRDEK]
+
+**Ölçüm.** Patron sunucusu `cf-connecting-ip`'i KOŞULSUZ okuyordu; Traefik router'ında Cloudflare ipallowlist yok ⇒ kökene doğrudan gelen istek her seferinde başka başlık yazıp giriş (20/dk), davet (20/dk) ve `/v1` (600/dk) IP sınırını atlayabiliyor, giriş kaydına sahte IP yazdırabiliyordu. Satıcının genel dinleyicisinde aynı kural zaten vardı (D9).
+**Karar.** Satıcının kuralı patrona taşındı: başlık yalnız güvenilen kenardan (`GUVENILIR_VEKIL_AGLARI`, yoksa Cloudflare) gelen bağlantıda; iç vekil (`IC_VEKIL_AGLARI=${KENAR_AGI}`) arkasında XFF son halkasıyla. Compose iki satırı birlikte verir — iç vekil ağı eksikse bütün istemciler Traefik'in tek adresinde birleşip ortak kovayı paylaşırdı (fabrikaların `/v1` eşitlemesi dahil). Sayısal eşikler değişmedi.
+**Açık (karar bekler).** Traefik'te GENEL/patron router'larına Cloudflare ipallowlist; kenar düzeyinde ikinci hız sınırı; Node zaman aşımları; Cloudflare panelindeki kuralların ölçümü.

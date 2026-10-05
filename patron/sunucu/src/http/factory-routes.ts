@@ -60,7 +60,7 @@ export function createFactoryRouter(ctx: CloudContext): Router {
     res.set({ "Cache-Control": "no-store", "X-Content-Type-Options": "nosniff" });
     next();
   });
-  router.use(rateLimit({ perMinute: ctx.config.V1_HIZ_DK, proxyHeader: ctx.config.VEKIL_IP_BASLIGI }));
+  router.use(rateLimit({ perMinute: ctx.config.V1_HIZ_DK, config: ctx.config }));
 
   router.post(SYNC_PATHS.SYNC.replace("/v1", ""), async (req: Request, res: Response) => {
     const r = await authenticated(ctx, req, SYNC_PATHS.SYNC);

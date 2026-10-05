@@ -173,7 +173,7 @@ async function parolaBolumu(o: Ortam, h: TestHesabi): Promise<void> {
 
 async function main(): Promise<void> {
   // Giriş hız sınırı (IP başına, gerçek saat) bu bekçinin onlarca girişini kesmesin — kilit ölçülüyor.
-  const o = await ortamKur({ GIRIS_HIZ_DK: "1000", VEKIL_IP_BASLIGI: IP_BASLIGI });
+  const o = await ortamKur({ GIRIS_HIZ_DK: "1000", VEKIL_IP_BASLIGI: IP_BASLIGI, GUVENILIR_VEKIL_AGLARI: "127.0.0.1/32,::1/128" });
   const k = await tesisKur(o);
   try {
     await dbSeddi(o, k.tesisId);
