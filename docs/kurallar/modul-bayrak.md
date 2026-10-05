@@ -142,8 +142,8 @@ Backend: `test_lisans_modul_tavani`, `test_auto_draft_shipment`, `test_emanet`, 
 
 ## Arşiv notları (tam metin, gerekçe ve ölçüm)
 
-- 2026-09-02 · 2026-09-02/03 — Modül anahtarları P1: `finance.enabled` kalıbı beş modüle çoğaldı, üretim kapıya TERFİ etti, g — `CLAUDE-NOT-ARSIVI.md:2033-2056`
-- 2026-09-03 · 2026-09-03 — Tamlık bekçisi + kurulum profilleri (P6): profil dosyası pakete HİÇ GİRMİYORDU — `CLAUDE-NOT-ARSIVI.md:2134-2144`
-- 2026-09-03 · 2026-09-03 — Dilim 2 davranış bayrakları: varsayılan = BUGÜN, ve "çıkışsız kapı" bir tasarım hatasıdır — `CLAUDE-NOT-ARSIVI.md:2185-2203`
-- 2026-09-04 · 2026-09-04 — [PROFİL] Sistem hub'ı üçe bölündü: satıcı anahtarı ≠ fabrika tercihi ≠ makine bakımı — `CLAUDE-NOT-ARSIVI.md:2217-2276`
-- 2026-09-04 · 2026-09-04 — [ÇEKİRDEK] Kapalı modülün bayrağı ÇİZİLMEZ: satış sınırı ekranda görünür olmalı — `CLAUDE-NOT-ARSIVI.md:2277-2344`
+- 2026-09-02 · 2026-09-02/03 — Modül anahtarları P1: `finance.enabled` kalıbı beş modüle çoğaldı, üretim kapıya TERFİ etti, g — `arsiv/2026-09.md`
+- 2026-09-03 · 2026-09-03 — Tamlık bekçisi + kurulum profilleri (P6): profil dosyası pakete HİÇ GİRMİYORDU — `arsiv/2026-09.md`
+- 2026-09-03 · 2026-09-03 — Dilim 2 davranış bayrakları: varsayılan = BUGÜN, ve "çıkışsız kapı" bir tasarım hatasıdır — `arsiv/2026-09.md`
+- 2026-09-04 · 2026-09-04 — [PROFİL] Sistem hub'ı üçe bölündü: satıcı anahtarı ≠ fabrika tercihi ≠ makine bakımı — `arsiv/2026-09.md`
+- 2026-09-04 · 2026-09-04 — [ÇEKİRDEK] Kapalı modülün bayrağı ÇİZİLMEZ: satış sınırı ekranda görünür olmalı — `arsiv/2026-09.md`

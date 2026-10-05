@@ -15,7 +15,7 @@ Kanonik kaynak **kod + `CLAUDE.md` dosyaları**dır. 2026-09-05 yeniden yapılan
 | Alan → bekçi (test) haritası | `Teks-Erp/docs/BEKCI-HARITASI.md` |
 | Domain terimleri | `docs/SOZLUK.md` |
 | Alt proje çalışma düzeni | `Teks-Erp/CLAUDE.md` · `Electron/CLAUDE.md` · `mobil/CLAUDE.md` |
-| Karar notlarının TAM metni, gerekçe, ölçüm | `docs/history/CLAUDE-NOT-ARSIVI.md` (ezilen notlar `⚠️ GEÇERSİZ/KISMEN` bloğu taşır) |
+| Karar notlarının TAM metni, gerekçe, ölçüm | `docs/history/arsiv/<YYYY-MM>.md` (dizin: `docs/history/CLAUDE-NOT-ARSIVI.md`; ezilen notlar `⚠️ GEÇERSİZ/KISMEN` bloğu taşır) |
 | Derin mimari referans | `Teks-Erp/ARCHITECTURE.md` (§7–§10 canlı; envanter sayıları bayat) |
 
 ## Klasörler
@@ -41,7 +41,7 @@ Kanonik kaynak **kod + `CLAUDE.md` dosyaları**dır. 2026-09-05 yeniden yapılan
 
 ## Yeni karar notu nasıl yazılır
 
-1. Tam metin `docs/history/CLAUDE-NOT-ARSIVI.md`'ye (tarih + `[ÇEKİRDEK]`/`[PROFİL]`).
+1. Tam metin `docs/history/arsiv/<YYYY-MM>.md`'ye (notun ayının dosyası; tarih + `[ÇEKİRDEK]`/`[PROFİL]`).
 2. İlgili `docs/kurallar/<alan>.md`'ye TEK kural satırı (emir kipi, kanıt anchor'ı).
 3. Her alanda geçerli bir değişmezse kök `CLAUDE.md` § Çekirdek değişmezler'e tek satır.
 4. Bir kural iptal edilince eski cümle silinir, arşivdeki nota `⚠️ GEÇERSİZ` bloğu konur.

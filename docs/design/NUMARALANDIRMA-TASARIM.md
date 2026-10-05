@@ -1,6 +1,6 @@
 # Numaralandırma Şablonları — tasarım
 
-> Canlı tasarım belgesi. Kural özeti `docs/kurallar/numaralandirma.md`, karar hikâyesi `docs/history/CLAUDE-NOT-ARSIVI.md` 2026-09-22. Faz A · B · C indi; Faz D kâğıtta.
+> Canlı tasarım belgesi. Kural özeti `docs/kurallar/numaralandirma.md`, karar hikâyesi `docs/history/arsiv/2026-09.md` 2026-09-22. Faz A · B · C indi; Faz D kâğıtta.
 
 ## §0 Problem
 

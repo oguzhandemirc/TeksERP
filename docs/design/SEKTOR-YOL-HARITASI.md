@@ -1,6 +1,6 @@
 # Sektör yol haritası — eksik hareket/transaction tabloları
 
-> **Ürün belgesi, mühendislik planı DEĞİL.** Kaynak: 2026-09-11 ultracode taraması — 13 tekstil iş alanı, 138 ajan, her bulgu ayrıca şemada çürütülmeye çalışıldı (yanlış pozitif elendi). Doktrin ve bugünkü defter envanteri: `docs/kurallar/defter.md`. Hikâye: `docs/history/CLAUDE-NOT-ARSIVI.md` 2026-09-10 / 2026-09-11.
+> **Ürün belgesi, mühendislik planı DEĞİL.** Kaynak: 2026-09-11 ultracode taraması — 13 tekstil iş alanı, 138 ajan, her bulgu ayrıca şemada çürütülmeye çalışıldı (yanlış pozitif elendi). Doktrin ve bugünkü defter envanteri: `docs/kurallar/defter.md`. Hikâye: `docs/history/arsiv/2026-09.md` 2026-09-10 / 2026-09-11.
 
 > ⚠️ Bu belge **karar vermez, seçenek sunar.** Hiçbir madde onaylanmış iş değildir. `kim için` sütunu dürüsttür: `sektör geneli` = bugünkü fabrikanın hiç yapmadığı iş.
 

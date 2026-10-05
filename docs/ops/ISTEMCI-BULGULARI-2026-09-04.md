@@ -322,7 +322,7 @@ Sebep 1 ve 2 kapandı. Kural iki istemcide **tek metin** olarak yaşıyor
 - `installationId` **null** dönen sunucuda (eski sürüm) eski davranış birebir
   korunur: adres bazlı, birleştirme YOK.
 
-Ayrıntı ve negatif sondalar: `docs/history/CLAUDE-NOT-ARSIVI.md` → 2026-09-04.
+Ayrıntı ve negatif sondalar: `docs/history/arsiv/2026-09.md` → 2026-09-04.
 **Fabrika ağı topolojisi bölümü (aşağıda) hâlâ AÇIK** — ölçüm sahada yapılacak.
 
 ### Fabrika ağı — ayrı bir risk, ölçülemedi

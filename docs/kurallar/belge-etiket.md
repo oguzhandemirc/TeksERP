@@ -185,13 +185,13 @@ Backend: `test_belge_sablon_temizleyici`, `test_belge_baslik_harf`, `test_belge_
 
 ## Arşiv notları (tam metin, gerekçe ve ölçüm)
 
-- 2026-10-01 · 2026-10-01 — Güvenlik denetimi G2: PDF penceresi, panel kabuğu, belge şablonu izin listesi — `CLAUDE-NOT-ARSIVI.md`
-- 2026-09-26 · 2026-09-26 — Belgelerde ticari yuvarlama; yuvarlama rejimi donmuş zarfta damgalanır — `CLAUDE-NOT-ARSIVI.md`
-- 2026-09-25 · 2026-09-25 — Aynı belgenin PDF'i ile Excel'i aynı kolon/değer çözücüsünden türer (sevk irsaliyesi) — `CLAUDE-NOT-ARSIVI.md`
-- 2026-09-10 · 2026-09-10 — Sevk irsaliyesi: liste sayfalarına kimlik şeridi + tek seferlik kâğıt boyu — `CLAUDE-NOT-ARSIVI.md`
+- 2026-10-01 · 2026-10-01 — Güvenlik denetimi G2: PDF penceresi, panel kabuğu, belge şablonu izin listesi — `arsiv/2026-10.md`
+- 2026-09-26 · 2026-09-26 — Belgelerde ticari yuvarlama; yuvarlama rejimi donmuş zarfta damgalanır — `arsiv/2026-09.md`
+- 2026-09-25 · 2026-09-25 — Aynı belgenin PDF'i ile Excel'i aynı kolon/değer çözücüsünden türer (sevk irsaliyesi) — `arsiv/2026-09.md`
+- 2026-09-10 · 2026-09-10 — Sevk irsaliyesi: liste sayfalarına kimlik şeridi + tek seferlik kâğıt boyu — `arsiv/2026-09.md`
 
 - 2026-07-30 · 2026-07-30 — çuval notu + çuval etiketi + tek dokunuş tartı — `CLAUDE-NOT-ARSIVI.md:28-35`
 - 2026-08-05 · 2026-08-05 — BELGE YERLEŞİMİ: A5 yoğunluk profili + ALAN BAZLI punto/kalınlık — `CLAUDE-NOT-ARSIVI.md:267-284`
 - 2026-08-13 · 2026-08-13 — KESİMDE KAT SESSİZCE DÜŞÜYORDU: mutationFn gövdesi alanı geçirmiyordu — `CLAUDE-NOT-ARSIVI.md:192-202`
-- 2026-09-04 · 2026-09-04 — Sevk belgesinde MÜŞTERİDEKİ ürün adı: veri vardı, belge yolu yoktu [PROFİL/ÇEKİRDEK karma] — `CLAUDE-NOT-ARSIVI.md:2484-2574`
-- 2026-09-10 · 2026-09-10 — Fabrika prod log'undan üç bulgu (belge önizleme izni ① + baskı audit kimliği ②) [ÇEKİRDEK] — `CLAUDE-NOT-ARSIVI.md` §2026-09-10
+- 2026-09-04 · 2026-09-04 — Sevk belgesinde MÜŞTERİDEKİ ürün adı: veri vardı, belge yolu yoktu [PROFİL/ÇEKİRDEK karma] — `arsiv/2026-09.md`
+- 2026-09-10 · 2026-09-10 — Fabrika prod log'undan üç bulgu (belge önizleme izni ① + baskı audit kimliği ②) [ÇEKİRDEK] — `arsiv/2026-09.md` §2026-09-10

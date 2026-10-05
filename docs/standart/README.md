@@ -14,7 +14,7 @@ Repo belgeleri bugüne kadar **olay-türevliydi**: her kural bir arızadan doğd
 
 Üçü birbirine **bağlanır, kopyalanmaz**. Standart bir yasağı tekrar etmez; ona işaret eder. Bir cümle iki yerde yaşıyorsa biri bayatlayacak demektir.
 
-Karar hikâyeleri (tarih, ölçüm, hangi alternatif neden reddedildi) `docs/history/CLAUDE-NOT-ARSIVI.md`'de. Standart dosyaları **hikâye taşımaz**: kural tek cümle, emir kipi.
+Karar hikâyeleri (tarih, ölçüm, hangi alternatif neden reddedildi) `docs/history/arsiv/<YYYY-MM>.md`'de (dizin: `docs/history/CLAUDE-NOT-ARSIVI.md`). Standart dosyaları **hikâye taşımaz**: kural tek cümle, emir kipi.
 
 ## Dosyalar
 

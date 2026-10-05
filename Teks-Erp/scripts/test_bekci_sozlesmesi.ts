@@ -278,14 +278,14 @@ const KURESEL_YAZIM_TABAN = 0;
 
   // CANLI ÖLÇÜM — sentetik değil: yardımcı, BUGÜNKÜ en büyük belgeyi okuyabiliyor mu?
   // (Sonda burada "1 MB'a çekip ENOBUFS göster" değil, DOĞRUDAN gerçek dosyadır:
-  //  arşiv 1 MB'ı zaten aştı, yani varsayılan tamponla bu çağrı ÇÖKERDİ.)
+  //  2026-09 arşiv dosyası 1 MB'ı zaten aştı, yani varsayılan tamponla bu çağrı ÇÖKERDİ.)
   let arsivBayt = 0;
   let arsivHata = "";
   try {
     // ⚠️ BAYT ölçülür, KARAKTER değil: `maxBuffer` bayt sayar ve Türkçe metinde ikisi
     // AYRILIR (bu dosya 966.514 karakter ama 1.050.551 bayt — ilk yazımda eşik karakterle
     // karşılaştırıldı ve kontrol haksız kırmızı verdi).
-    arsivBayt = Buffer.byteLength(git(["show", "HEAD:docs/history/CLAUDE-NOT-ARSIVI.md"], { cwd: join(SCRIPTS_DIR, "..", "..") }), "utf8");
+    arsivBayt = Buffer.byteLength(git(["show", ":docs/history/arsiv/2026-09.md"], { cwd: join(SCRIPTS_DIR, "..", "..") }), "utf8");
   } catch (e) { arsivHata = String((e as Error).message).slice(0, 120); }
   check("⭐ yardımcı 1 MB'ı AŞAN arşivi okuyabiliyor (varsayılan tamponla ÇÖKERDİ)",
     arsivBayt > 1_048_576, arsivHata || `${arsivBayt} bayt`);

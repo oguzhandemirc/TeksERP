@@ -86,10 +86,10 @@ Backend: `test_kisa_kimlik_ozet`, `test_lisans_kapisi`, `test_audit_depth`, `tes
 
 ## Arşiv notları (tam metin, gerekçe ve ölçüm)
 
-- 2026-10-01 · 2026-10-01 — Kısa kimlikler (hızlı PIN + QR kart) özetli saklanır: anahtar halkası LICENSE_DIR'de, yedeğe mühürlü emanet, tembel + betikli dönüşüm, kalıcı giriş kilidi, yalnız onaylı cihaz bayrağı (G21-K) [ÇEKİRDEK] + [PROFİL] — `CLAUDE-NOT-ARSIVI.md` §2026-10-01 G21-K
-- 2026-09-01 · 2026-09-01 — Patron modülü: fabrikaya GELEN PORT AÇMADAN uzaktan takip (GEÇERSİZ → 2026-09-29/30) — `CLAUDE-NOT-ARSIVI.md:1791-2032`
-- 2026-09-30 · 2026-09-30 — Eski tünel emekliliği (B6) [ÇEKİRDEK] — `CLAUDE-NOT-ARSIVI.md` §2026-09-30 B6
-- 2026-09-10 · 2026-09-10 — Fabrika prod log'undan üç bulgu (kapanış teşhisi ③) [ÇEKİRDEK] — `CLAUDE-NOT-ARSIVI.md` §2026-09-10
-- 2026-09-10 · 2026-09-10 — Künyesiz istemci görünmezdi: sürüm UA'dan okunuyor [ÇEKİRDEK] — `CLAUDE-NOT-ARSIVI.md` §2026-09-10 künyesiz
-- 2026-09-17 · 2026-09-17 — Oturum kaydına istemci sürümü: künye ilk kez kalıcı satıra yazıldı, §1 üç kollu oldu [ÇEKİRDEK] — `CLAUDE-NOT-ARSIVI.md` §2026-09-17 oturum sürümü
-- 2026-09-28 · 2026-09-28 — Müşteri adı koddan çıktı: firma adı sunucudan, yedek nötr; mevcut kurulumun adı migration ile dondu [ÇEKİRDEK] — `CLAUDE-NOT-ARSIVI.md` §2026-09-28 firma adı
+- 2026-10-01 · 2026-10-01 — Kısa kimlikler (hızlı PIN + QR kart) özetli saklanır: anahtar halkası LICENSE_DIR'de, yedeğe mühürlü emanet, tembel + betikli dönüşüm, kalıcı giriş kilidi, yalnız onaylı cihaz bayrağı (G21-K) [ÇEKİRDEK] + [PROFİL] — `arsiv/2026-10.md` §2026-10-01 G21-K
+- 2026-09-01 · 2026-09-01 — Patron modülü: fabrikaya GELEN PORT AÇMADAN uzaktan takip (GEÇERSİZ → 2026-09-29/30) — `arsiv/2026-09.md`
+- 2026-09-30 · 2026-09-30 — Eski tünel emekliliği (B6) [ÇEKİRDEK] — `arsiv/2026-09.md` §2026-09-30 B6
+- 2026-09-10 · 2026-09-10 — Fabrika prod log'undan üç bulgu (kapanış teşhisi ③) [ÇEKİRDEK] — `arsiv/2026-09.md` §2026-09-10
+- 2026-09-10 · 2026-09-10 — Künyesiz istemci görünmezdi: sürüm UA'dan okunuyor [ÇEKİRDEK] — `arsiv/2026-09.md` §2026-09-10 künyesiz
+- 2026-09-17 · 2026-09-17 — Oturum kaydına istemci sürümü: künye ilk kez kalıcı satıra yazıldı, §1 üç kollu oldu [ÇEKİRDEK] — `arsiv/2026-09.md` §2026-09-17 oturum sürümü
+- 2026-09-28 · 2026-09-28 — Müşteri adı koddan çıktı: firma adı sunucudan, yedek nötr; mevcut kurulumun adı migration ile dondu [ÇEKİRDEK] — `arsiv/2026-09.md` §2026-09-28 firma adı

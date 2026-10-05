@@ -13,7 +13,7 @@
     "runtimeVersion kanal kimliği DEĞİLDİR (JS↔native uyum kimliği): çakışma denetimine girmez, mobil/app.json ile eşit olmak zorundadır.",
     "backend.guvenCapasi = kanalın lisans SATICISI/kök bağı (uretim | hazirlik): backend paketi YALNIZ o kipin kök + PAKET anahtarlarına güvenir (derleme sabiti + native ve güncelleyici `hazirlik-capasi` özelliği; paketle.ps1 -Musteri ile). Üretim kanalı daima uretim; demo/deneme müşterisi üretim satıcısından lisans alıyorsa uretim. Değişimi yeniden derleme + satıcı değişimidir, davranış bayrağı değil.",
     "backend.lisansSunucusu = kanalın lisans satıcısının kökeni (backend LICENSE_SERVER_URL; https://host[:port]) — güven çapasının AYNASI: uretim çapası daima üretim satıcısı (= backend varsayılanı vendor-url.ts, check-kanallar ölçer), hazirlik çapası hazırlık satıcısı. Paket PAKET.json backendLisansSunucusu olarak taşır; pm2 → hizmet geçişi (deploy/gecis/gecis.ps1) kurulumun etkin değerini buna karşı ölçer (uyuşmazlıkta kuru uyarır, uygula durur).",
-    "Bekçi: node scripts/check-kanallar.mjs (+ --sonda) · yayın kapıları: node scripts/test_kanal_yayin_kapisi.mjs. Kural: docs/kurallar/surum-yayin.md; karar: docs/history/CLAUDE-NOT-ARSIVI.md 2026-09-27 testfabrika D1."
+    "Bekçi: node scripts/check-kanallar.mjs (+ --sonda) · yayın kapıları: node scripts/test_kanal_yayin_kapisi.mjs. Kural: docs/kurallar/surum-yayin.md; karar: docs/history/arsiv/2026-09.md 2026-09-27 testfabrika D1."
   ],
   "varsayilan": "adnansahin",
   "kanallar": {

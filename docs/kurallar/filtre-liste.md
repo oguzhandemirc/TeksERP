@@ -128,4 +128,4 @@ Backend: `test_bare_filter_param`, `test_item_allowed_filter`, `test_filter_mult
 - 2026-08-06 · 2026-08-06 — SAYFA İÇİ ARAMA (Ctrl+F) KALDIRILDI — `CLAUDE-NOT-ARSIVI.md:285-286`
 - 2026-08-06 · 2026-08-06 — FİLTRELERDE ÇOKLU SEÇİM: "CSV de bir string'dir" ve üç ayrı arıza modu — `CLAUDE-NOT-ARSIVI.md:296-306`
 - 2026-08-12 · 2026-08-12 — GİRİŞ İZLENEBİLİRLİĞİ: "kim, nereden girdi" + kişiye özel listeler — `CLAUDE-NOT-ARSIVI.md:163-175`
-- 2026-08-27 · 2026-08-27 — Sipariş görünürlüğü: şerit + altı rapor + iptal sebebi + kalem iptali — `CLAUDE-NOT-ARSIVI.md:1521-1655`
+- 2026-08-27 · 2026-08-27 — Sipariş görünürlüğü: şerit + altı rapor + iptal sebebi + kalem iptali — `arsiv/2026-08.md`

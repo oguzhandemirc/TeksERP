@@ -110,4 +110,4 @@ Backend: `test_default_defect_type`, `test_panel_station_kind_aynasi`, `test_fin
 
 - 2026-08-02 · 2026-08-02 — koşullu etiket elemanı, `showIf` — `CLAUDE-NOT-ARSIVI.md:36-44`
 - 2026-08-06 · 2026-08-06 — FİLTRELERDE ÇOKLU SEÇİM: "CSV de bir string'dir" ve üç ayrı arıza modu — `CLAUDE-NOT-ARSIVI.md:296-306`
-- 2026-09-03 · 2026-09-03 — Kalite = istasyon YETENEĞİ (P4 Faz A): boğaz TEK DEĞİL İKİZ — `CLAUDE-NOT-ARSIVI.md:2116-2133`
+- 2026-09-03 · 2026-09-03 — Kalite = istasyon YETENEĞİ (P4 Faz A): boğaz TEK DEĞİL İKİZ — `arsiv/2026-09.md`

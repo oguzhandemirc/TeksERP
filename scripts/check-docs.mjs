@@ -428,10 +428,13 @@ if (kodCapalari.length) {
 // İKİ KEZ yazar ve kimse fark etmez — 2026-09-23'te bir iniş ağacında tam bu
 // oldu (K15 notu iki kopya). Başlık arşivde bir KİMLİKTİR: aynı başlık iki kez
 // geçemez.
-const arsivYolu = join(REPO_ROOT, "docs/history/CLAUDE-NOT-ARSIVI.md");
-if (existsSync(arsivYolu)) {
-  const basliklar = readFileSync(arsivYolu, "utf8")
-    .split("\n")
+// Notlar aylık dosyalarda (`docs/history/arsiv/<YYYY-MM>.md`); kimlik TÜM dosyalar boyunca tekildir.
+const arsivDizini = join(REPO_ROOT, "docs/history/arsiv");
+if (existsSync(arsivDizini)) {
+  const basliklar = readdirSync(arsivDizini)
+    .filter((f) => /^\d{4}-\d{2}\.md$/.test(f))
+    .sort()
+    .flatMap((f) => readFileSync(join(arsivDizini, f), "utf8").split("\n"))
     .filter((l) => l.startsWith("## "))
     .map((l) => l.trim());
   const sayac = new Map();

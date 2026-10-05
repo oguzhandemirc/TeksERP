@@ -35,7 +35,7 @@
 // Boş sütunlu bir rapor yüzeyi eklemek yanıltıcı olurdu (2026-08-09'da tam bu
 // sebeple iki rapor kaldırılmıştı). İleride istenirse ÖN KOŞUL: `AuditService`in
 // ORDER UPDATE'te `changes` alanını doldurması. Tam not:
-// docs/history/CLAUDE-NOT-ARSIVI.md → 2026-08-27 sipariş görünürlüğü.
+// docs/history/arsiv/2026-08.md → 2026-08-27 sipariş görünürlüğü.
 //
 // ⚠️ DAMGASIZ ESKİ İPTALLER: `cancelledAt` bu tarihte eklendi; öncesinde iptal
 // edilmiş siparişlerde NULL'dur ve dönem raporuna GİRMEZ. Sayıları ayrıca

@@ -140,8 +140,8 @@ Backend: `test_jwt_sir_kapisi`, `test_izin_db_kaynagi`, `test_parola_degisimi_zo
 
 ## Arşiv notları (tam metin, gerekçe ve ölçüm)
 
-- 2026-10-01 · 2026-10-01 — Güvenlik dilimi G20: fabrika JWT sırrı ret listesi (uyarır, durdurmaz), istek yetkisi DB'den, token daima süreli, ilk kurulum parolası ve zorunlu parola değişimi [ÇEKİRDEK] — `CLAUDE-NOT-ARSIVI.md` §2026-10-01 G20
-- 2026-10-01 · 2026-10-01 — Kısa kimlikler (hızlı PIN + QR kart) özetli saklanır: anahtar halkası LICENSE_DIR'de, yedeğe mühürlü emanet, tembel + betikli dönüşüm, kalıcı giriş kilidi, yalnız onaylı cihaz bayrağı (G21-K) [ÇEKİRDEK] + [PROFİL] — `CLAUDE-NOT-ARSIVI.md` §2026-10-01 G21-K
+- 2026-10-01 · 2026-10-01 — Güvenlik dilimi G20: fabrika JWT sırrı ret listesi (uyarır, durdurmaz), istek yetkisi DB'den, token daima süreli, ilk kurulum parolası ve zorunlu parola değişimi [ÇEKİRDEK] — `arsiv/2026-10.md` §2026-10-01 G20
+- 2026-10-01 · 2026-10-01 — Kısa kimlikler (hızlı PIN + QR kart) özetli saklanır: anahtar halkası LICENSE_DIR'de, yedeğe mühürlü emanet, tembel + betikli dönüşüm, kalıcı giriş kilidi, yalnız onaylı cihaz bayrağı (G21-K) [ÇEKİRDEK] + [PROFİL] — `arsiv/2026-10.md` §2026-10-01 G21-K
 - 2026-08-06 · 2026-08-06 — YETKİ DENETİMİ: rol şablonları da KODA taşındı; "izin DB'ye gelir ama kimseye ATANMAZ" boşluğu ar — `CLAUDE-NOT-ARSIVI.md:287-295`
-- 2026-08-26 · 2026-08-26 (akşam) — Sebep listesi büyüyünce Kaydet ekran dışında kalıyordu + sıra artık sürüklenerek KALICI — `CLAUDE-NOT-ARSIVI.md:1377-1444`
-- 2026-09-03 · 2026-09-03 — Ayar şifresi P3: ikinci kapı BAŞLIKTA, hash `set()` dışında, kilit kovası girişten AYRI, kapsam " — `CLAUDE-NOT-ARSIVI.md:2096-2115`
+- 2026-08-26 · 2026-08-26 (akşam) — Sebep listesi büyüyünce Kaydet ekran dışında kalıyordu + sıra artık sürüklenerek KALICI — `arsiv/2026-08.md`
+- 2026-09-03 · 2026-09-03 — Ayar şifresi P3: ikinci kapı BAŞLIKTA, hash `set()` dışında, kilit kovası girişten AYRI, kapsam " — `arsiv/2026-09.md`

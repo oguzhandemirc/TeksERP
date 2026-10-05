@@ -120,7 +120,10 @@ function borcBloklari(): Array<{ dosya: string; satir: number; blok: string }> {
   for (const ad of readdirSync(KURALLAR).filter((f) => f.endsWith(".md"))) {
     hedefler.push([`docs/kurallar/${ad}`, join(KURALLAR, ad)]);
   }
-  hedefler.push(["docs/history/CLAUDE-NOT-ARSIVI.md", join(KOK, "docs/history/CLAUDE-NOT-ARSIVI.md")]);
+  const arsivDizini = join(KOK, "docs/history/arsiv");
+  for (const ad of readdirSync(arsivDizini).filter((f) => /^\d{4}-\d{2}\.md$/.test(f)).sort()) {
+    hedefler.push([`docs/history/arsiv/${ad}`, join(arsivDizini, ad)]);
+  }
   const betikler = join(KOK, "Teks-Erp", "scripts");
   // ⚠️ KAPI KENDİNİ TARAMAZ — "araç gözlenenin içinde" sınıfı, ölçüldü: ilk
   // koşumda tek bulgu BU DOSYANIN KENDİ `check(...)` etiketiydi (`**BORÇ:**`

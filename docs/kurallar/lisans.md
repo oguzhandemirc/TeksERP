@@ -1,6 +1,6 @@
 # Lisans · Kod koruma · Satıcı platformu
 
-> Alan kural dosyası — bu alana dokunmadan ÖNCE okunur. Alan 2026-09-29'da doğdu (kod koruma + lisanslama planı). Hikâye, ölçüm ve gerekçe arşivde (`docs/history/CLAUDE-NOT-ARSIVI.md`, 2026-09-29 notları); burada yalnız bugün geçerli kural. Sınıf: **[ÇEKİRDEK]** her kurulumda aynı · **[PROFİL]** bu fabrikanın seçimi.
+> Alan kural dosyası — bu alana dokunmadan ÖNCE okunur. Alan 2026-09-29'da doğdu (kod koruma + lisanslama planı). Hikâye, ölçüm ve gerekçe arşivde (`docs/history/arsiv/2026-09.md`, 2026-09-29 notları); burada yalnız bugün geçerli kural. Sınıf: **[ÇEKİRDEK]** her kurulumda aynı · **[PROFİL]** bu fabrikanın seçimi.
 > Tasarım: `docs/design/LISANS-KOD-KORUMA.md` (Plan A) · `docs/design/PATRON-BULUTU.md` (Plan B) · kanonik protokol `docs/design/LISANS-PROTOKOLU.md` (tek kaynak kod: `Teks-Erp/src/lib/license/protocol/`; plan adı → kod adı §12a) · v2 eki `docs/design/LISANS-V2-CEVRIMDISI-KIRA.md` (ödenmiş tarih · ara imzacı + iptal · belirsizlik merdiveni · parmak izi v2; kullanıcı kararları §6, dilimler §5 — kodu inmemiş v2 satırları aşağıda `bekçi YOK` dalı + `Kapanır:` koşuluyla borçtur). Kod adları İngilizce, tel şeması anahtarları ve kod DEĞERLERİ Türkçe.
 
 ## Ortak (fabrika + satıcı + istemciler)

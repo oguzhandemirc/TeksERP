@@ -2,7 +2,7 @@
 
 > Saha isteği (adnansahin): sevkiyat elemanı panelde cariyi seçer, carinin altında **sevk partisi** açar, partinin içinde **çuval açar**, çuvala top okutur; parti içindeki her çuval bir **ambalaj numarası** taşır; partinin bir alt kümesi sevk edilir, parti yaşamaya devam eder. Tablet bu fazda DIŞARIDA (kullanıcı kararı: yalnız Electron).
 >
-> Karar sahibi: kullanıcı (2026-09-21 oturumu, sekiz şıklı seçim). Uygulama kararları bu belgede; kural satırları `docs/kurallar/sevkiyat.md`, hikâye `docs/history/CLAUDE-NOT-ARSIVI.md`.
+> Karar sahibi: kullanıcı (2026-09-21 oturumu, sekiz şıklı seçim). Uygulama kararları bu belgede; kural satırları `docs/kurallar/sevkiyat.md`, hikâye `docs/history/arsiv/2026-09.md`.
 
 ## 0. Sektör karşılaştırması (ölçüldü)
 

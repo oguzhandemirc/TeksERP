@@ -9,7 +9,7 @@ Kök `CLAUDE.md` her oturumda yüklenir ve boyut kapısı vardır (`scripts/chec
 
 ## Üç kat, üç yazım
 
-1. **Arşiv — tam metin:** `docs/history/CLAUDE-NOT-ARSIVI.md` sonuna `## YYYY-MM-DD — Başlık [ÇEKİRDEK|PROFİL]`. İçerik: saha sorusu/ölçüm → karar → gerekçe → kod çapaları (`dosya:satır`) → bekçi → migration/izin/APK gerekiyor mu (üç kapı). Sınıf ölçütü: defter semantiği, veri bütünlüğü, idempotency, kilit sırası, fail-closed, sır hijyeni = ÇEKİRDEK; rota/istasyon/bayrak/sayısal ayar = PROFİL (`docs/design/MODUL-BAYRAK-TASARIM.md` §11).
+1. **Arşiv — tam metin:** `docs/history/arsiv/<YYYY-MM>.md` (notun ayı; dosya yoksa açılır ve `docs/history/CLAUDE-NOT-ARSIVI.md` dizin tablosuna satır girer) SONUNA `## YYYY-MM-DD — Başlık [ÇEKİRDEK|PROFİL]`. İçerik: saha sorusu/ölçüm → karar → gerekçe → kod çapaları (`dosya:satır`) → bekçi → migration/izin/APK gerekiyor mu (üç kapı). Sınıf ölçütü: defter semantiği, veri bütünlüğü, idempotency, kilit sırası, fail-closed, sır hijyeni = ÇEKİRDEK; rota/istasyon/bayrak/sayısal ayar = PROFİL (`docs/design/MODUL-BAYRAK-TASARIM.md` §11).
 2. **Alan dosyası — tek kural satırı:** `docs/kurallar/<alan>.md` ilgili bölüme (Değişmezler/Yasaklar/Tuzaklar/Reçeteler/Kararlar): `- **[ÇEKİRDEK]** <emir kipinde tek cümle, kendi başına anlaşılır> · bekçi: \`<dosya>\` <sub>(arşiv:YYYY-MM-DD)</sub>`. Alan yoksa `docs/kurallar/README.md` tablosuna yeni satır + yeni dosya.
 3. **Kök `CLAUDE.md` — yalnız her alanda geçerli değişmez:** § Çekirdek değişmezler'e tek satır. Kök alan dizini yalnız `Alan | Dosya` taşır; alanın kısa özeti gerekiyorsa `docs/kurallar/README.md` tablosunda güncelle (≤160 karakter). Kök büyüyorsa bir şey alan dosyasına inmelidir.
 

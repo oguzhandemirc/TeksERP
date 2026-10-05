@@ -83,5 +83,5 @@ Backend: `test_goods_receipt`, `test_production_flow_columns`, `test_semi_finish
 
 ## Arşiv notları (tam metin, gerekçe ve ölçüm)
 
-- 2026-08-26 · 2026-08-26 — Yarı mamul: filtre yetmedi, sekme oldu · ham stoktan iş emri açılamıyordu — `CLAUDE-NOT-ARSIVI.md:1011-1116`
-- 2026-08-27 · 2026-08-27 (ikinci tur) — Yarı mamul ayrımı Kanban'a ve tablete taşındı + Kanban'ın ESKİ sapması — `CLAUDE-NOT-ARSIVI.md:1656-1729`
+- 2026-08-26 · 2026-08-26 — Yarı mamul: filtre yetmedi, sekme oldu · ham stoktan iş emri açılamıyordu — `arsiv/2026-08.md`
+- 2026-08-27 · 2026-08-27 (ikinci tur) — Yarı mamul ayrımı Kanban'a ve tablete taşındı + Kanban'ın ESKİ sapması — `arsiv/2026-08.md`

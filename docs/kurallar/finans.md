@@ -93,4 +93,4 @@ Backend: `test_cari_ekstre_sirasi`, `test_cek_bordro_hareket`, `test_cek_bordro_
 ## Arşiv notları (tam metin, gerekçe ve ölçüm)
 
 - 2026-08-02 · 2026-08-02 — brüt kuralı LİSTE yüzeyine de uzandı + muhasebe ekranı tamamlandı — `CLAUDE-NOT-ARSIVI.md:53-61`
-- 2026-09-23 · İki SAAT: ms düzeyinde sıralama karşılaştırması tek saatten — `CLAUDE-NOT-ARSIVI.md:11359-11383`
+- 2026-09-23 · İki SAAT: ms düzeyinde sıralama karşılaştırması tek saatten — `arsiv/2026-09.md`

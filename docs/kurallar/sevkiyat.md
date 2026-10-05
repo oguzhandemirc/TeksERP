@@ -178,5 +178,5 @@ Backend: `test_sevk_partisi`, `test_shipment_destination_chain`, `test_shipment_
 - 2026-08-05 · 2026-08-05 — SEVKİ GERİ AL (STORNO) ≠ İADE + çuval bazlı TOPLU İADE tek belgeyle — `CLAUDE-NOT-ARSIVI.md:251-266`
 - 2026-08-05 · 2026-08-05 — PARTİ NO KÂĞIDA BASILIR + refakat kartı "bayat" bayrağı — `CLAUDE-NOT-ARSIVI.md:230-240`
 - 2026-08-21 · 2026-08-21 akşam — Tutarlılık taraması: "türetilmiş alan / ayrışan yüzey" sınıfı kapatıldı):** `WorkOrder.type — `CLAUDE-NOT-ARSIVI.md:464-468`
-- 2026-08-22 · 2026-08-22 — SEVK KAPISI = BAYRAĞIN EKRANI; storno kapalı rejimde sevkiyatı KAPATIR — `CLAUDE-NOT-ARSIVI.md:473-480`
-- 2026-08-25 · 2026-08-25 (akşam) — Mobil "Yeniden Üretime Al" + Fason Kabul boşluğunun GERÇEK sebebi — `CLAUDE-NOT-ARSIVI.md:840-891`
+- 2026-08-22 · 2026-08-22 — SEVK KAPISI = BAYRAĞIN EKRANI; storno kapalı rejimde sevkiyatı KAPATIR — `arsiv/2026-09.md`
+- 2026-08-25 · 2026-08-25 (akşam) — Mobil "Yeniden Üretime Al" + Fason Kabul boşluğunun GERÇEK sebebi — `arsiv/2026-08.md`
