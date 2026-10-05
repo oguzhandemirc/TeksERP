@@ -64,7 +64,8 @@ const zincirOzeti = (z: Zincir | null): string =>
 async function araUret<F extends RolFabrika>(b: G4Baglami<F>, a: AdimYuzu, ad: string): Promise<AraImzaci | null> {
   const kid = `ara-2026-${100 + Math.floor(Math.random() * 899)}`;
   const parola = `Senaryo-Ara-${randomBytes(9).toString("base64url")}!9`;
-  const r = anahtarCli(b, ["ara-uret", `--kid=${kid}`, `--kok=${b.kokKid}`, `--dizin=${b.anahtarDizini}`], `${b.kokParolasi}\n${parola}\n${parola}\n`);
+  // Ömür 120 g sabit: L36 dünyayı ara bitişine sarar; yıllık ömür (395) senaryonun ALT/İNDİRME'sini aşar.
+  const r = anahtarCli(b, ["ara-uret", `--kid=${kid}`, `--kok=${b.kokKid}`, `--dizin=${b.anahtarDizini}`, "--gun=120"], `${b.kokParolasi}\n${parola}\n${parola}\n`);
   b.kidEkle(kid);
   await bekle(3_000);
   const an = await b.portal.istek("GET", "/anahtarlar");

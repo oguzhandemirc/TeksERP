@@ -13,7 +13,7 @@
 //   npx tsx scripts/anahtar.ts indirme-uret --kid=ind-2026 --kok=kok-2026-1 [--gun=365]
 //   npx tsx scripts/anahtar.ts bayi-uret --kid=bayi-ornek --bayi-id=<uuid> --moduller=a.enabled,b.enabled
 //                                        --siniflar=URETIM --kok=kok-2026-1 [--gun=365]
-//   npx tsx scripts/anahtar.ts ara-uret --kid=ara-2026-1 --kok=kok-2026-1 [--siniflar=URETIM,DR,DEMO,TEST] [--gun=120]
+//   npx tsx scripts/anahtar.ts ara-uret --kid=ara-2026-1 --kok=kok-2026-1 [--siniflar=URETIM,DR,DEMO,TEST] [--gun=395]
 //       HAK ARA İMZACISI (G4): kök imzalı `HAK` sertifikası + ara parolasıyla sarılı dosya (<kid>.ara.json). Stdin: kök
 //       parolası, sonra ara parolası (yeni + tekrar; kökten FARKLI olmalı — ara parolası portalda VDS'te yazılır).
 //   npx tsx scripts/anahtar.ts iptal-uret --kok=kok-2026-1 --kok-dizin=<kökün dizini> --cikti=<dosya> [--onceki=<önceki iptal belgesi>]
@@ -268,11 +268,11 @@ async function generateDealer(flags: Map<string, string>): Promise<void> {
 
 /** Ara imzacının varsayılan sınıfları (tören parametresi); kökün yetkisiyle kesişir. */
 const INTERMEDIATE_DEFAULT_CLASSES: readonly LicenseClass[] = ["URETIM", "DR", "DEMO", "TEST"];
-/** Ara imzacı · ALT · İNDİRME dönem ömrü (G4 §2.4: 90 + 30 gün örtüşme). */
-const PERIOD_DAYS = 120;
+/** Ara imzacı · ALT · İNDİRME dönem ömrü: yılda bir tören (365) + 30 gün örtüşme; `uretim-toren.mjs` DONEM_GUN ile aynı. */
+const PERIOD_DAYS = 395;
 
 /**
- * HAK ARA İMZACISI: kök imzalı `HAK` sertifikası (sınıflar kökün alt kümesi, ≤ 120 gün) + ara parolasıyla sarılı
+ * HAK ARA İMZACISI: kök imzalı `HAK` sertifikası (sınıflar kökün alt kümesi, ≤ 395 gün) + ara parolasıyla sarılı
  * özel yarı. Ara parolası KÖK PAROLASINDAN FARKLI olmalı: ara parolası VDS'te portal formunda yazılır, kök parolası
  * VDS'e hiç gitmez. Dosya üstüne yazılmaz (rotasyon yeni kid'dir).
  */

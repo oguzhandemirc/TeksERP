@@ -579,7 +579,7 @@ Portal yalnız bu kurulumdadır (tek portal `portal.etkiliyazilim.com`; bugün h
 
 - **Bellek tavanları:** hazırlık satıcısı 2026-10-05'te kaldırıldı; eski ~3 GB tavan toplamından (fiziksel bellek 2972 MB) onun payı düştü; kalan toplam yeniden ölçülmedi.
 - **PAKET ara kopyası VDS'te:** parolalı (paket parolası ≠ kök parolası); USB kopyası alınınca kaldırılabilir (§13.4-4). Kök parolası portalda yazıldığı için iki parola ayrıdır — portal ele geçse paket anahtarı açılmaz.
-- **ALT sertifikası 180 gün:** bitişten önce rotasyon ([`URETIM-SATICI-TOREN.md`](URETIM-SATICI-TOREN.md) §6); satıcı anahtar birimini dakikada bir yeniden okur. ⚠️ Lisans v2 (G4) inince ALT · ara imzacı · İNDİRME 120 gün ve üç ayda bir `donem` töreni (L2-3).
+- **ALT sertifikası 180 gün:** bitişten önce rotasyon ([`URETIM-SATICI-TOREN.md`](URETIM-SATICI-TOREN.md) §6); satıcı anahtar birimini dakikada bir yeniden okur. ⚠️ Lisans v2 (G4) inince ALT · ara imzacı · İNDİRME 395 gün ve yılda bir `donem` töreni (L2-3; yıllık düzen 2026-10-06).
 - `cf-connecting-ip` taklidi ve kök anahtarın VDS'te (parolalı) durması §11'deki gibi (kök için ⚠️ lisans v2: A düzeniyle VDS'ten kaldırılır).
 
 ## 14. İlk kurulum dağıtımı — tek arşiv, derleme deposu, tek bağlantı
