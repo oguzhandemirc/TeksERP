@@ -2,6 +2,8 @@
 
 > ⚠️ **testfabrika EMEKLİ (kullanıcı kararı 2026-10-05):** testfabrika taşınmaz, tamamen kaldırılır (thinkpad-1'deki test kurulumu dahil); kaldırma (VDS, kanal, thinkpad) ayrı bir iştir ve bu belgeyle yapılmaz. Bu runbook, üretim lisans sunucusunda "test" güncelleme grubunda SIFIRDAN kurulacak yeni test kurulumu için ŞABLONDUR; aşağıdaki testfabrika adları ve kurulum kayıtları tarihîdir.
 >
+> ⚠️ **Hazırlık satıcısı da EMEKLİ (2026-10-05):** `lisans-test.etkiliyazilim.com`, hazırlık satıcısının VDS kurulumu, anahtar dizini (`~/.tekserp/satici-hazirlik*`) ve DNS kaydı silindi; testfabrika yayın ağacı `/home/yayinci/emekli/testfabrika-html-20261005`e taşındı (yeni test kurulumu çalışınca silinir). Aşağıdaki hazırlık satıcısı adımları (adres, `ORTAM=hazirlik`, hazırlık anahtarları, `hazirlik` türlü kanal) tarihtir; şablonun yeni test kurulumu için hangi kanal/anahtar düzeniyle yeniden yazılacağı kod işinde (3.1) ve yeni test kurulumunda (3.8) belirlenir.
+>
 > **Durum:** YAZILDI, UYGULANMADI (dilim R2, 2026-09-30). İniş A2 `origin/main`e indikten sonra bir operasyon ajanının ADIM ADIM izleyeceği tek kaynak. Sıra PAZARLIK DIŞIDIR (§1 → §9); bir adım kırmızıysa bir sonrakine geçilmez, §9'a bakılır.
 >
 > **Neden önce testfabrika:** kullanıcı kuralı — her sunucu işlemi ve lisans devreye alma önce kendi test sunucumuzda (thinkpad-1) uçtan uca ölçülür, kanıtla adnansahin'e taşınır; gözlem kipi → sonra zorlama (Faz 4, kullanıcı cümlesiyle). Takvim kapısı YOK: T4 gözlemi paralel koşar, fazı bekletmez.

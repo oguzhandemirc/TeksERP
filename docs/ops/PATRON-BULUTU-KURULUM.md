@@ -1,6 +1,7 @@
 # Patron bulutu — tekserp-vds kurulum runbook'u
 
-> **Durum (2026-09-30):** tekserp-vds'te **KURULU** — `tekserp-patron:f446424bbedf` (ilk kurulum `55203d9708ba`, yükseltmeler §13a · §13b), hazırlık satıcısının iç API ağına bağlı (§11 ilk madde: gerçek fabrika eşitlemesi BEKLENMEZ), `https://patron.etkiliyazilim.com` yanıt veriyor. Kurulum kaydı §13; yerel duman kaydı §12.
+> **Durum (2026-09-30):** tekserp-vds'te **KURULU** — `tekserp-patron:f446424bbedf` (ilk kurulum `55203d9708ba`, yükseltmeler §13a · §13b), o gün hazırlık satıcısının iç API ağına bağlıydı (§11 ilk madde), `https://patron.etkiliyazilim.com` yanıt veriyor. Kurulum kaydı §13; yerel duman kaydı §12.
+> **Hazırlık izleri temizlendi (2026-10-05):** hazırlık satıcısı emekli ve verisi silindi; patron iç API'si ÜRETİM satıcısına bağlı (ölçüldü 2026-10-05: ağ `tekserp-satici-uretim-ic-api`, `.env`'de hazırlık değeri yok — §14 uygulanmış). Deneme tesisi "Etkili Yazılım Hazırlık" (`c0f70948…`) önce PASİF yapıldı, sonra `tesis.js imha` ile imha edildi (hesap 1 · hesap audit'i 4 · tesis 1; imha kaydı `facility_destructions`ta, yedekten düşme 2026-11-09); patron üretim DB'sinde tesis 0. Eski hazırlık env yedeği (VDS) ve davet dosyası (Mac) silindi. §0–§13'teki hazırlık anlatımı (ağ adı, sır kopyası, deneme tesisi) tarihtir; `deploy/patron/ornek.env`teki hazırlık örneği kod işinde (3.1).
 > Yapıtlar: [`deploy/patron/`](../../deploy/patron/) (compose · Dockerfile · imaj derleme · yalıtım denetimi · duman). Sözleşme: [`PATRON-BULUTU-ESITLEME.md`](../design/PATRON-BULUTU-ESITLEME.md). Alan kuralları: [`kurallar/patron-bulutu.md`](../kurallar/patron-bulutu.md) § Dağıtım. Emsal ve paylaşılan adımlar: [`SATICI-KURULUM.md`](SATICI-KURULUM.md) (satıcı ÖNCE kurulu olmalı — patron onun iç API ağına katılır).
 > **Değişmez:** her VDS yazımından ÖNCE ve SONRA `deploy/vds-dogrula.sh` → *adnansahin baytları AYNI* (salt okuma, çıkış 0). Fark çıkarsa dur. Traefik **yeniden başlatılmaz**.
 
@@ -219,7 +220,7 @@ Satıcı tarafı `SATICI-KURULUM.md` §5b'dedir: ağ (`IC_API_AGI`), sabit adres
 
 ## 11. Açık riskler
 
-- **Hazırlık satıcısı yalnız TEST/DEMO imzalar**, patron eşitlemeyi yalnız `URETIM` sınıfından kabul eder → `SATICI_IC_API_AGI=tekserp-satici-hazirlik-ic-api` ile kurulu patron web/giriş/hesap yönetimi için doğrulanabilir, ama fabrikadan gerçek eşitleme **üretim satıcısı** (ayrı compose, `ORTAM=uretim`) kurulup patron onun ağına bağlanınca akar (ağ adı + iki adres + sır değişir, §10) — geçiş adımları §14.
+- **(Tarih — 2026-10-05'ten beri hazırlık satıcısı yok, patron üretim satıcısına bağlı.)** **Hazırlık satıcısı yalnız TEST/DEMO imzalar**, patron eşitlemeyi yalnız `URETIM` sınıfından kabul eder → `SATICI_IC_API_AGI=tekserp-satici-hazirlik-ic-api` ile kurulu patron web/giriş/hesap yönetimi için doğrulanabilir, ama fabrikadan gerçek eşitleme **üretim satıcısı** (ayrı compose, `ORTAM=uretim`) kurulup patron onun ağına bağlanınca akar (ağ adı + iki adres + sır değişir, §10) — geçiş adımları §14.
 - **Bildirim çıkışı yok:** kenar/ic internal, ic-api internal → patron dış dünyaya bağlanamaz. B5 (Expo push · FCM · APNs · web push) dış çıkış ister: yalnız çıkışa izinli ayrı bir ağ ya da vekil — ayrı karar, bu yığında YOK (bilerek; ilk kurulum sıfır çıkışla başlar).
 - **`cf-connecting-ip` taklit edilebilir** — köken (VDS:443) yalnız Cloudflare IP'lerine açılana dek doğrudan köke gelen istek başlığı uydurabilir; etkisi IP başına hız sınırının (giriş, `/v1`) atlatılmasıdır. Giriş ayrıca hesap başına kilitlidir (`GIRIS_ESIGI` → `KILIT_DK`), `/v1` her istek kurulum imzalıdır. Kalıcı çare satıcıyla aynı (Faz 3a, köken CF'ye kapatma).
 - **`patron-totp.key` tek noktadır:** kaybı bütün hesapların yeniden daveti demektir → VDS dışı kopya (USB) + şifreli yedek (§7). Konteyner kaçışı anahtarı okur (kök FS salt okunur, yetenek yok; kabul edilen risk).
@@ -285,7 +286,7 @@ Satıcı tarafı `SATICI-KURULUM.md` §5b'dedir: ağ (`IC_API_AGI`), sabit adres
 
 ## 14. İç API kaynağını hazırlıktan ÜRETİM satıcısına çevirme
 
-> **Durum:** HAZIRLANDI, UYGULANMADI (2026-09-30). Patron aynı anda TEK satıcının `ic-api` ağına bağlanır (compose'da tek `ic-api` ağı); geçiş = ağ adı + iki adres + sır kopyası + patronun yeniden yaratılması. Önkoşul: üretim satıcısı kurulu ([`SATICI-KURULUM.md`](SATICI-KURULUM.md) §13, günlükte `ic=4612`). VDS yazımıdır — kullanıcının "uygula" cümlesiyle; önce ve sonra `deploy/vds-dogrula.sh` ✅, Traefik yeniden başlatılmaz.
+> **Durum:** HAZIRLANDI 2026-09-30; UYGULANMIŞ (ölçüldü 2026-10-05: patron `tekserp-satici-uretim-ic-api` ağında, hazırlık satıcısı ve ağı kaldırıldı — adım 8'deki deneme tesisi imha edildi, başlıktaki kutu). Patron aynı anda TEK satıcının `ic-api` ağına bağlanır (compose'da tek `ic-api` ağı); geçiş = ağ adı + iki adres + sır kopyası + patronun yeniden yaratılması. Önkoşul: üretim satıcısı kurulu ([`SATICI-KURULUM.md`](SATICI-KURULUM.md) §13, günlükte `ic=4612`). VDS yazımıdır — kullanıcının "uygula" cümlesiyle; önce ve sonra `deploy/vds-dogrula.sh` ✅, Traefik yeniden başlatılmaz.
 
 `v() { ssh -p 2222 oguzhan@80.253.255.188 "$@"; }` · `P=/opt/stack/apps/tekserp-patron-uretim` · `Y=tekserp-satici-yedek:<üretim satıcısı sha>` (yardımcı konteyner) · `T=$(mktemp -d)`.
 

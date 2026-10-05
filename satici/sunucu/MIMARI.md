@@ -43,7 +43,7 @@ node ../../scripts/agir-is.mjs -- npx tsx scripts/run-all-tests.ts [ad-parçası
 
 > Kural: kimlikli satır: üretim anahtar kümesi yalnız tören aracıyla (`bekçi: test_uretim_toren.ts`).
 
-**VDS kurulumu** (compose · imaj · yalıtım denetimi · yedek): `deploy/satici/` + runbook `docs/ops/SATICI-KURULUM.md` — imaj Mac'te HEAD'den derlenir, VDS'te kaynak yok; hazırlık anahtarları `~/.tekserp/satici-hazirlik/` (repo dışı). ÜRETİM anahtar kümesi YALNIZ tören aracıyla (`deploy/satici/uretim-toren.mjs` → `~/.tekserp/satici-uretim/`, runbook `docs/ops/URETIM-SATICI-TOREN.md`); üretim satıcısı aynı compose, `ORTAM=uretim` (runbook §13).
+**VDS kurulumu** (compose · imaj · yalıtım denetimi · yedek): `deploy/satici/` + runbook `docs/ops/SATICI-KURULUM.md` — imaj Mac'te HEAD'den derlenir, VDS'te kaynak yok; hazırlık satıcısı 2026-10-05 emekli (anahtar dizini silindi; `ORTAM=hazirlik` kipi kodda 3.1'e dek). ÜRETİM anahtar kümesi YALNIZ tören aracıyla (`deploy/satici/uretim-toren.mjs` → `~/.tekserp/satici-uretim/`, runbook `docs/ops/URETIM-SATICI-TOREN.md`); üretim satıcısı aynı compose, `ORTAM=uretim` (runbook §13).
 
 ### İç API
 

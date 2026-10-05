@@ -221,7 +221,7 @@ Geçiş adları ve lisans satıcısını paketin KENDİ kimliğinden çözer (`P
 - **PIN/kart özeti:** §1 madde 5 (G21-K).
 
 Ölçüm, sonekli kanallar için: thinkpad-1 geçişli kurulumunun `.env`inde `LICENSE_SERVER_URL` yok, kurulum üretim satıcısına bakıyor.
-- testfabrika (`lisans-test`) geçişinde `-LisansSunucusuYaz` gerekir.
+- testfabrika (`lisans-test`) geçişinde `-LisansSunucusuYaz` gerekirdi (tarih: testfabrika ve hazırlık satıcısı 2026-10-05 emekli).
 - demofabrika'nın kanal değeri üretim satıcısıdır, yani varsayılanla aynı; orada satır gerekmez.
 
 ## 9. demofabrika

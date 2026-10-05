@@ -1,12 +1,14 @@
 # Satıcı (lisans) sunucusu — tekserp-vds kurulum runbook'u
 
-> **Durum (2026-09-29):** hazırlık satıcısı tekserp-vds'te **KURULU** — `ORTAM=hazirlik`, imaj `tekserp-satici:0ca31403525a`, `https://lisans-test.etkiliyazilim.com` yanıt veriyor; kurulum kaydı ve ölçümler §12 (o gün geri döngü kipi + tünel).
-> **Portal tüneli KAPANDI (D5, 2026-10-05 — kodda ve bu runbook'ta):** portalın tek yolu internetten ERİŞİM ve yalnız ÜRETİM satıcısında ([`PORTAL-GENEL-ERISIM.md`](PORTAL-GENEL-ERISIM.md)); hazırlık satıcısının portalı YOK. VDS'teki hazırlık kurulumu §4a uygulanana dek eski imaj + geri döngü örtüsüyle koşar. Kullanıcıya kalan: §4a (VDS, "uygula" cümlesiyle) ve sudo gerektiren adımlar (§12 "sudo'suz kurulum").
+> **EMEKLİ (2026-10-05) — hazırlık satıcısı kaldırıldı, verisi geri dönüşsüz silindi.** §0–§12 hazırlık kurulumunu (`ORTAM=hazirlik`, `lisans-test.etkiliyazilim.com`) anlatır ve yalnız TARİHTİR, uygulanmaz; geçerli kurulum §13 (üretim) + §14. §13'ün atıf yaptığı ortak yöntem (§2 imaj/`.env`/yalıtım denetimi, §5b iç API, §5c bildirimler, §8 "Sürüm yükseltme") hazırlık değerleri üretiminkilerle okunarak geçerlidir. VDS'te konteynerler, DB hacmi, yedekler, ağlar (kenar ağı hariç) ve imaj silindi, `lisans-test` DNS kaydı yok; kalan sudo adımı kullanıcıda bekliyor (kenar ağı `tekserp-satici-hazirlik-kenar` + Traefik compose satırı + `/opt/stack/apps/tekserp-satici-hazirlik` + `/srv/tekserp-satici-{yedek,dosya}/hazirlik`). Compose'un `ORTAM=hazirlik` kipi kodda kalır (3.1). Kayıt: [`arsiv/2026-10.md`](../history/arsiv/2026-10.md) "2026-10-05 — Hazırlık satıcısı emekli".
+> **Portal tüneli KAPANDI (D5, 2026-10-05):** portalın tek yolu internetten ERİŞİM ve yalnız ÜRETİM satıcısında ([`PORTAL-GENEL-ERISIM.md`](PORTAL-GENEL-ERISIM.md)); §4a artık uygulanmaz (çevrilecek hazırlık kurulumu yok).
 > Yapıtlar: [`deploy/satici/`](../../deploy/satici/) (compose · Dockerfile · imaj derleme · yalıtım denetimi · VDS birimleri). Protokol: [`LISANS-PROTOKOLU.md`](../design/LISANS-PROTOKOLU.md). Alan kuralları: [`kurallar/lisans.md`](../kurallar/lisans.md). Sunucu envanteri: [`SUNUCU-ENVANTERI.md`](SUNUCU-ENVANTERI.md).
 > **Üretim (2026-09-30):** `ORTAM=uretim` · `lisans.etkiliyazilim.com` — §13'te HAZIRLANDI, UYGULANMADI; anahtar töreni YAPILDI 2026-09-30 ([`URETIM-SATICI-TOREN.md`](URETIM-SATICI-TOREN.md) §7), üretim kökü + PAKET anahtarı güven çapasına yazıldı (çapa dilimi `lisans/capa`; açık yarılar §10).
 > **Değişmez:** her VDS yazımından ÖNCE ve SONRA `deploy/vds-dogrula.sh` → *adnansahin baytları AYNI* (salt okuma, çıkış 0). Fark çıkarsa dur.
 
 ## 0. Kapsam
+
+> EMEKLİ (2026-10-05) — §0–§12 hazırlık kurulumunun tarihi; başlıktaki kutuya bakın.
 
 | Kurulur | Kurulmaz |
 |---|---|
@@ -113,6 +115,8 @@ ssh tekserp-vds 'docker version --format "{{.Server.Version}}"; docker compose v
 Satıcı portalının TEK yolu internetten ERİŞİM'dir (Cloudflare Access + parola + TOTP, 4613 — [`PORTAL-GENEL-ERISIM.md`](PORTAL-GENEL-ERISIM.md)) ve YALNIZ ÜRETİM satıcısındadır (§13.9). Hazırlık satıcısının portalı YOKTUR: hazırlık yalnız satıcının kendi yeni sürümünü denemek içindir (otomatik test + ölçüm); ona fabrika bağlanmaz — testfabrika emekli, yeni test kurulumu üretim satıcısında "test" güncelleme grubunda sıfırdan kurulur, kaldırma ayrı adım (kullanıcı kararı 2026-10-05). Tailscale satıcı için KULLANILMAZ; VDS yönetimi SSH genel adresten (2222) sürer. Kod tarafında tailnet dinleyicisi (4611), `docker-compose.loopback.yml`, `portal-tunel`, `portal-baglan.mjs` ve `tekserp-satici-tailnet@` birimi kalktı; compose denetimi kalıntıyı Ⓚ ile reddeder.
 
 ### 4a. Eski (geri döngü kipli) kurulumu tünelsize çevirme — VDS YAZIMI, UYGULANMADI (kullanıcının "uygula" cümlesiyle)
+
+> EMEKLİ (2026-10-05) — çevrilecek hazırlık kurulumu kalmadı; tarih.
 
 `v() { ssh tekserp-vds "$@"; }` · `K=/opt/stack/apps/tekserp-satici-<ortam>`; kurulu her ortam için tekrarlanır. Docker işleri `oguzhan`ın docker grubuyla; iptables/systemd işleri sudo ister (etkileşimli `ssh -t`). Önkoşul: üretimde internet yolu doğrulanmış (giriş + pano + bir yazma + `ERISIM_YAZMA` denetim satırı) ve yeni imaj D5'i içeren main'den derlenmiş. **Yeni imaj ile yeni compose AYNI adımda iner:** eski loopback örtüsü yeni imajla kalırsa `portal-tunel` çökme döngüsüne girer.
 
@@ -364,7 +368,7 @@ Etkinleşmemiş kurulum hiçbir durumda dışarı istek atmaz (`test_lisans_moto
 
 ## 12. Kurulum kaydı — 2026-09-29 (hazırlık, geri döngü kipi)
 
-> Tarihî kayıt: geri döngü kipi, `portal-tunel` ve tünelden ölçümler 2026-10-05'te emekli (D5, §4).
+> Tarihî kayıt: geri döngü kipi, `portal-tunel` ve tünelden ölçümler 2026-10-05'te emekli (D5, §4); hazırlık satıcısının kendisi de 2026-10-05'te kaldırıldı (başlıktaki kutu).
 
 - **Taban:** `vds-dogrula.sh`'ın 09-28 11:08 tabanı adnansahin 1.3.7 yayınından (09-28 22:09, yayın defterinde) önce alınmıştı → betik o yayını fark gösterir, kurulumla ilgisi yok. Kurulumdan hemen önce aynı ölçümle yeni taban alındı (420 adnansahin dosyası · kök electron · defter/nginx/compose), kurulum sonrası **✅ AYNI**. `adnansahin/electron/latest.yml` 200, özet `ae919241…` önce/sonra aynı; Traefik yeniden başlatılmadı (`StartedAt` 2026-09-01, `RestartCount` 0).
 - **VDS:** Docker 29.7.2 · compose v5.5.0 · 2972 MB bellek (kurulum öncesi kullanılabilir 2398, sonrası 2251 MB) · disk 55 GB boş · mevcut ağlar 172.17/18/19 (satıcınınkiler çakışmaz) · tailscaled yok.
@@ -378,6 +382,8 @@ Etkinleşmemiş kurulum hiçbir durumda dışarı istek atmaz (`test_lisans_moto
 - **Yedek:** döngü açılışta ilk yedeği aldı + elle `tek`; `satici_20260929_164008.dump.tkenc` + `anahtarlar_20260929_164008.tar.tkenc` Mac'e (`~/.tekserp/satici-hazirlik-yedek/`, 0600) bayt-eşit çekildi ve özel yarıyla açıldı: 25 tablo verisi (`kanal`, `portal_kullanici` dahil), anahtar arşivi dört dosya kaynakla bayt-eşit.
 
 ## 13. Üretim satıcısı — `ORTAM=uretim` · `lisans.etkiliyazilim.com`
+
+> **Hazırlık emekli (2026-10-05):** bu bölümdeki hazırlık atıfları (§13.0 hazırlığın `.env`'i ve `--diger-env`, §13.1/§13.4 Traefik kenar ağı satırının kopyalanması, §13.6 `lisans-test` satırı, §13.8 imaj notu, §13.9 "hazırlığa bağlıysa") kurulum gününün durumunu anlatır. Yeniden kurulumda hazırlık satırı yoktur; `compose-denetle`nin `--diger-env` gereksinimi ve kenar ağı kalıbı kod işinde (3.1) çözülür.
 
 > **Durum:** HAZIRLANDI, UYGULANMADI (2026-09-30). Aynı `docker-compose.yml` + ZORUNLU `docker-compose.portal-genel.yml` (portalın tek yolu, §13.9), ayrı proje: `tekserp-satici-uretim` — konteyner/ağ/DB hacmi adları `ORTAM`'dan, host yolları · alt ağlar · sır grubu `.env`'den ([`deploy/satici/ornek-uretim.env`](../../deploy/satici/ornek-uretim.env)). Hazırlık satıcısı yerinde kalır; ikisi yan yana koşar.
 > **adnansahin ETKİLENMEZ:** SAHINSRV'ye ve adnansahin kanalına hiçbir yazım yok; VDS'te `html/adnansahin/**` yalnız salt okunur `/yayin` bağıyla görünür (hazırlıkla aynı); DNS kaydı açılsa da etkinleşmemiş kurulum satıcıya istek atmaz (§9). Her VDS yazımından ÖNCE ve SONRA `deploy/vds-dogrula.sh` ✅; Traefik **yeniden başlatılmaz**.
@@ -530,7 +536,7 @@ node deploy/satici/compose-denetle.mjs --env-file ~/.tekserp/satici-uretim-vds.e
 | Tarayıcı: `https://portal.etkiliyazilim.com` → e-posta kodu → §13.4-10 kullanıcısıyla parola + TOTP → pano | izinli e-posta | giriş 200; **Sistem sağlığı** kartı: Güven çapası Gömülü · **geçerli alt sertifika 1** · indirme anahtarı Var · anahtar uyarısı Yok · JWKS Taze ([`PORTAL-GENEL-ERISIM.md`](PORTAL-GENEL-ERISIM.md) §6) |
 | `curl -m 5 http://80.253.255.188:4611/` · VDS'te `ss -ltn \| grep 4611` | internet · VDS | zaman aşımı/red · boş |
 | `v "cd $K && docker compose ps"` · `docker stats --no-stream` | VDS | `satici` · `satici-db` · `satici-yedek` · `satici-jwks` `healthy`/`Up`; sınırlar compose'daki gibi |
-| `curl -s https://lisans-test.etkiliyazilim.com/saglik` | internet | `{"success":true}` — hazırlık etkilenmedi |
+| ~~`curl -s https://lisans-test.etkiliyazilim.com/saglik`~~ | internet | kurulum gününde `{"success":true}` — hazırlık 2026-10-05 emekli, satır uygulanmaz |
 | `curl -sI https://guncelleme.etkiliyazilim.com/adnansahin/electron/latest.yml` + `deploy/vds-dogrula.sh` | Mac | kurulum öncesiyle aynı durum kodu · adnansahin AYNI |
 | İç API kapısı (§7'deki geçici konteyner, `--network tekserp-satici-uretim-ic-api --ip 172.31.251.35`, `<IC_API_IP>` = `172.31.251.34`) | VDS | Bearer'lı `404 BULUNAMADI` · Bearer'sız `401 IC_KIMLIK_GECERSIZ`; `--ip`siz ikisi de `404` |
 | Yedek açılır mı (§13.7) | Mac | `pg_restore --list` dolu; anahtar arşivi `anahtarlar/` ile bayt-eşit |
@@ -571,7 +577,7 @@ Portal yalnız bu kurulumdadır (tek portal `portal.etkiliyazilim.com`; bugün h
 
 ### 13.10 Açık riskler
 
-- **Bellek tavanları:** hazırlık + üretim satıcısı + patron + güncelleme tavanları toplamı (~3 GB) fiziksel belleği (2972 MB) aşar; gerçek kullanım düşüktür (§12, patron §13). Yük altında sorun görülürse hazırlık satıcısı durdurulabilir (kullanıcı kararı; testfabrika üretime geçtikten sonra).
+- **Bellek tavanları:** hazırlık satıcısı 2026-10-05'te kaldırıldı; eski ~3 GB tavan toplamından (fiziksel bellek 2972 MB) onun payı düştü; kalan toplam yeniden ölçülmedi.
 - **PAKET ara kopyası VDS'te:** parolalı (paket parolası ≠ kök parolası); USB kopyası alınınca kaldırılabilir (§13.4-4). Kök parolası portalda yazıldığı için iki parola ayrıdır — portal ele geçse paket anahtarı açılmaz.
 - **ALT sertifikası 180 gün:** bitişten önce rotasyon ([`URETIM-SATICI-TOREN.md`](URETIM-SATICI-TOREN.md) §6); satıcı anahtar birimini dakikada bir yeniden okur. ⚠️ Lisans v2 (G4) inince ALT · ara imzacı · İNDİRME 120 gün ve üç ayda bir `donem` töreni (L2-3).
 - `cf-connecting-ip` taklidi ve kök anahtarın VDS'te (parolalı) durması §11'deki gibi (kök için ⚠️ lisans v2: A düzeniyle VDS'ten kaldırılır).

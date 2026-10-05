@@ -170,7 +170,7 @@ Yedek şifreleme parolası **sunucuda YOK** — fabrikada ve parola yöneticisin
 - [`ELECTRON-OTOMATIK-GUNCELLEME.md`](ELECTRON-OTOMATIK-GUNCELLEME.md) — panel güncellemesi
 - [`MOBIL-UZAKTAN-GUNCELLEME.md`](MOBIL-UZAKTAN-GUNCELLEME.md) — tablet güncellemesi
 - [`YEDEK-GERI-YUKLEME-TATBIKATI.md`](YEDEK-GERI-YUKLEME-TATBIKATI.md) — geri yükleme provası
-- [`SATICI-KURULUM.md`](SATICI-KURULUM.md) — satıcı (lisans) sunucusu: ayrı compose projesi, port yayını yok, şifreli yedek; hazırlık KURULU ve portalsız, üretim §13 (portal örtüsü zorunlu); eski kurulumu tünelsize çevirme §4a
+- [`SATICI-KURULUM.md`](SATICI-KURULUM.md) — satıcı (lisans) sunucusu: ayrı compose projesi, port yayını yok, şifreli yedek; VDS'te yalnız üretim satıcısı (§13; portal örtüsü zorunlu) — hazırlık satıcısı 2026-10-05 emekli, verisi silindi (§0–§12 tarih)
 - [`PORTAL-GENEL-ERISIM.md`](PORTAL-GENEL-ERISIM.md) — satıcı portalının internetten yolu (`portal.etkiliyazilim.com`): Cloudflare Access + parola + TOTP, kök parolası dahil bütün satıcı işlemleri (2026-10-04; 2026-10-05'ten beri portalın TEK yolu, yalnız üretim satıcısında — tünel D5'te kalktı); Cloudflare API sırası, DNS, doğrulama
 - [`LISANS-DEVREYE-ALMA-TESTFABRIKA.md`](LISANS-DEVREYE-ALMA-TESTFABRIKA.md) — lisansı testfabrika'da devreye alma sırası; testfabrika emekli (kullanıcı kararı 2026-10-05, kaldırma ayrı adım), belge üretim satıcısında "test" grubunda kurulacak yeni test kurulumu için şablon (satıcı A2 imajı → yayıncı → korumalı backend → yayın → portal → gözlem kipinde etkinleştirme → Senaryo T); salt-okuma aşama doğrulayıcısı
 
@@ -182,7 +182,7 @@ Yedek şifreleme parolası **sunucuda YOK** — fabrikada ve parola yöneticisin
       eşleşmeyen bir çift TLS'i tamamen düşürür.
 - [x] ~~DNS: `guncelleme` A kaydı → `80.253.255.188`~~ — **çevrildi ve doğrulandı**
       (işaretli istek yeni sunucunun erişim kaydında görüldü)
-- [ ] **Köken Cloudflare'e kapalı DEĞİL** — 2026-09-30 ölçüldü: CF dışı IP'den `curl -sk --resolve lisans-test.etkiliyazilim.com:443:80.253.255.188 …/saglik` → 200. Satıcı portalının genel yönlendiricisi CF `ipallowlist` taşır ([`PORTAL-GENEL-ERISIM.md`](PORTAL-GENEL-ERISIM.md)); diğer yönlendiriciler için daraltma ayrı karar.
+- [ ] **Köken Cloudflare'e kapalı DEĞİL** — 2026-09-30 ölçüldü (o gün `lisans-test` üzerinden; o kayıt 2026-10-05'te silindi, aynı köken): CF dışı IP'den `curl -sk --resolve lisans-test.etkiliyazilim.com:443:80.253.255.188 …/saglik` → 200; yeniden ölçüm `lisans.etkiliyazilim.com` ile yapılır. Satıcı portalının genel yönlendiricisi CF `ipallowlist` taşır ([`PORTAL-GENEL-ERISIM.md`](PORTAL-GENEL-ERISIM.md)); diğer yönlendiriciler için daraltma ayrı karar.
 - [ ] **Cloudflare SSL kipi → "Full (strict)"** — şu an "Full": CF↔origin bacağı
       şifreli ama kimliği doğrulanmıyor. Gerçek Origin CA sertifikası artık
       yerinde olduğu için sıkılaştırılabilir.

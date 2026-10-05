@@ -372,7 +372,7 @@ Takvim kapısı yoktur; her adımın kapısı bir ölçüm ya da kullanıcı cü
 
 1. **A düzeni (şimdi):** kök VDS'ten kaldırılır. Kopyalar doğrulanınca, kullanıcının "uygula" cümlesiyle.
 2. **G3 inişi:** `inis/guvenlik-g` → main.
-3. **Satıcı hazırlık** (`lisans-test`): L2-3 · L2-4 · L2-11; hazırlık kökünün ara imzacı töreni.
+3. **Satıcı hazırlık** (`lisans-test`): L2-3 · L2-4 · L2-11; hazırlık kökünün ara imzacı töreni. (Hazırlık satıcısı 2026-10-05 emekli; hazırlık ortamı provaları — §2.6 md. 5 dahil — yapılmaz.)
 4. **testfabrika** (hazırlık çapası, thinkpad-1): L2-5…L2-7 ve L2-10.
    - Parmak izi yolları salt okumayla ölçülür.
    - Senaryolar önce gözlem kipinde, sonra `zorla`da koşulur (yanlış pozitif 0).

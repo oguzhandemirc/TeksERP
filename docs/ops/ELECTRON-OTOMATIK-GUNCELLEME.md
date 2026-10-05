@@ -359,7 +359,7 @@ Repoya, log'a, sürüm notuna GİRMEZ. Dosya yoksa / izinleri gevşekse / biçim
 
 **Taze CLI belirteci (3bc, tercih edilen):** `~/.tekserp/yayin-belirteci-kaynagi.json` (600) varsa betik
 her kanal/ürün için satıcı CLI'ından (`anahtar.ts indirme-belirteci`, ≤ 70 dk) taze belirteç üretir —
-hazırlıkta yerel anahtar dizini, üretimde VDS'teki satıcı konteyneri (ssh). Kaynak dosyası yoksa yukarıdaki
+VDS'teki üretim satıcısı konteyneri (ssh; hazırlık satıcısı 2026-10-05 emekli). Kaynak dosyası yoksa yukarıdaki
 dosya belirteci kullanılır; kaynak dosyası bozuksa ya da CLI başarısızsa betik DURUR (`docs/kurallar/surum-yayin.md`).
 
 | Betik (3c' öncesi satır) | Ne okuyordu | Neden | Şimdi |

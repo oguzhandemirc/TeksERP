@@ -162,7 +162,7 @@ Portal ayrıca: N gün / tarihe uzat · kalıcıya çevir (HAK, kök parolası) 
 
 **1f. Portal web** (`satici/web`): Pano · Müşteriler → Tesisler → Kurulumlar · Kurulum detayı (hak/kira/parmak izi/yoklama/sağlık/sürümler/eylem defteri) · Lisans üret-yenile (kök parolası istemi) · Yaptırım (katalog, planlı eylem, taksit) · Taşıma/DR talepleri · Kopya uyarıları · Anahtarlar · Portal kullanıcıları · Bayiler · Denetim defteri · Altyapı + sır künyesi (sırrın kendisi değil: hangi anahtar, nerede, son rotasyon).
 
-**Çıkış ölçütü:** Senaryo L yerelde yeşil → thinkpad-1 + VDS'te `lisans-test` konteyneri (VDS yazımı öncesi/sonrası `vds-dogrula.sh` adnansahin baytları AYNI) üzerinde gözlem kipi başlar ve SÜREKLİ ölçülür (parmak izi kararlılığı, yoklama başarı oranı, yanlış pozitif = 0) — Faz 2 bunu BEKLEMEZ, gözlem paralel koşar.
+**Çıkış ölçütü:** Senaryo L yerelde yeşil → thinkpad-1 + VDS'te `lisans-test` konteyneri (tarih: hazırlık satıcısı ve testfabrika 2026-10-05 emekli; VDS yazımı öncesi/sonrası `vds-dogrula.sh` adnansahin baytları AYNI) üzerinde gözlem kipi başlar ve SÜREKLİ ölçülür (parmak izi kararlılığı, yoklama başarı oranı, yanlış pozitif = 0) — Faz 2 bunu BEKLEMEZ, gözlem paralel koşar.
 
 ### Faz 2 — Kod koruma (backend) + Linux Docker yapıtı
 

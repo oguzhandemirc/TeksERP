@@ -23,7 +23,7 @@ Kök/ara imzacı parolası, TOTP tohumu ve başka kullanıcının parolası Clou
 | Giriş yöntemi (IdP) | **YOK** → One-time PIN eklenecek | yönetici, salt okuma |
 | Access uygulaması | **YOK** | yönetici, salt okuma |
 | `portal.etkiliyazilim.com` DNS kaydı | **YOK** (`dig +short` boş) | Mac |
-| Köken Cloudflare'e kapalı mı? | **HAYIR** — Mac'ten (CF dışı IP) `curl -sk --resolve lisans-test.etkiliyazilim.com:443:80.253.255.188 https://lisans-test.etkiliyazilim.com/saglik` → **200**; Traefik'te CF IP daraltması yok. Bu yüzden 2. ve 3. kapı ŞART | Mac |
+| Köken Cloudflare'e kapalı mı? | **HAYIR** — Mac'ten (CF dışı IP) `curl -sk --resolve lisans.etkiliyazilim.com:443:80.253.255.188 https://lisans.etkiliyazilim.com/saglik` → **200** (2026-09-30 ölçümü `lisans-test` ile yapıldı, o kayıt 2026-10-05'te silindi; köken aynı); Traefik'te CF IP daraltması yok. Bu yüzden 2. ve 3. kapı ŞART | Mac |
 | Köken sertifikası | Cloudflare Origin CA `*.etkiliyazilim.com` → `portal.` kapsanır | `SATICI-KURULUM.md` §1 |
 | Satıcının dış bağlantısı | **YOK ve öyle KALIR** (yönetici kararı B, 2026-09-30: anahtar tutan konteynere çıkış açılmaz) → Access imza anahtarlarını `satici-jwks` yan konteyneri çeker, satıcı dosyayı salt okunur okur (§4, §5) | `deploy/satici/docker-compose*.yml` |
 
@@ -37,7 +37,7 @@ ACCOUNT_ID=<hesap kimliği>            # sır değil
 ZONE_ID=<etkiliyazilim.com bölge kimliği>
 TAKIM=gentle-snow-a8b9.cloudflareaccess.com
 HOST=portal.etkiliyazilim.com
-VDS_IP=80.253.255.188                 # lisans-test ile aynı köken (SUNUCU-ENVANTERI.md)
+VDS_IP=80.253.255.188                 # lisans ile aynı köken (SUNUCU-ENVANTERI.md)
 read -rs IZINLI_EPOSTALAR; export IZINLI_EPOSTALAR   # virgülle ayrık; ekrana basılmaz
 umask 077; H="$(mktemp)"; printf 'Authorization: Bearer %s\nContent-Type: application/json\n' "$(cat ~/.tekserp/sirlar/cloudflare-token.txt)" > "$H"
 cf() { curl -sS -H @"$H" "$@"; }      # iş bitince: rm -f "$H"
