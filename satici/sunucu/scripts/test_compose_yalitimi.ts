@@ -20,12 +20,16 @@
 //      docker-compose.loopback.yml (repoda yok) → çıkış 1 (2 DEĞİL), Ⓚ ön denetim · ESKİ loopback örtüsü (portal-tunel'li,
 //      aynı adla) yeni compose'a bindirilir → Ⓚ ❌ (R4: imaj ile compose aynı adımda iner) · üretimde portal-genel yok →
 //      Ⓞ · hazırlığa portal-genel → Ⓞ · öteki ortamın .env'inde TAILNET_* → Ⓚ öteki — her biri kendi satırıyla ❌.
+//   §6 KENAR ZİNCİRİ (Traefik): eksik Cloudflare aralığı · ters zincir · hız seddi yok · ipstrategy · sahtelenebilir
+//      hız anahtarı · uygulamanın altında sed (⑦k) · portal zinciri genelinkinden farklı (⑬f) — her biri kendi satırıyla ❌.
 // ⭐ KALICI SONDA (her koşumda): §2'nin gevşetme örtüleri · §3'ün Ⓑ sondaları · §4'ün sondaları · §5'in tünel/portal
-//    sondaları kendi satırıyla ❌; üç kurgu 0 ihlal — her şeyi reddeden denetim geçemez.
+//    sondaları · §6'nın kenar zinciri sondaları kendi satırıyla ❌; üç kurgu 0 ihlal — her şeyi reddeden denetim geçemez.
 // NEGATİF SONDA (D5 tünel kapatma T2, 2026-10-05, compose-denetle.mjs'te dosya DIŞI, cp + shasum ile geri alındı):
 //   ① yayın listesi boşa çekildi → §5 4611 ❌ (84/85) · EMEKLI_SERVISLER boş → §5 portal-tunel · R4 eski örtü ❌ (83/85) ·
 //   Ⓞ beklenen = örtü var mı → §5 üretimde örtü yok · hazırlığa örtü ❌ (83/85) · tunelAnahtari hep false → §5 TAILNET_BIND ·
 //   R4 · .env TAILNET_* · öteki .env TAILNET_* ❌ (81/85) · B: ece294986'daki eski (iki kipli) denetim → 24 ❌ (61/85).
+// NEGATİF SONDA (Traefik kenar zinciri, 2026-10-06, kenar-zinciri.mjs'te dosya DIŞI, cp + shasum ile geri alındı):
+//   kenarZinciriSorunlari hep [] döner → §6'nın yedi sondası ❌ (85/92).
 // Koşum: node ../../scripts/agir-is.mjs -- npx tsx scripts/test_compose_yalitimi.ts   (DB GEREKMEZ)
 // =============================================================================
 import { spawnSync } from "node:child_process";
@@ -356,6 +360,25 @@ function main(): void {
     const portalliH = yaz("s5-hazirlik-portalli.env", `${hazirlikMetni}\nCOMPOSE_FILE=docker-compose.yml:docker-compose.portal-genel.yml\n${portal("hazirlik", "172.31.255.0/29")}`);
     const pH = denetle(portalliH, { diger: uretim });
     kontrol("§5 ⭐ hazırlığa portal-genel örtüsü → çıkış 1, Ⓞ ❌ (tek portal üretimde)", pH.status === 1 && /^❌ Ⓞ hazırlıkta portal YOK[^\n]* — ortam hazirlik · portal-genel VAR$/m.test(pH.cikti), `${pH.status} · ${kirmizi(pH).join(" | ").slice(0, 200)}`);
+
+    console.log("\n§6 kenar zinciri (⑦k genel · ⑬f portal) — Traefik ara katmanı gevşerse kendi satırıyla kırmızı (çıkış 1)");
+    const Y = "traefik.http.routers.tekserp-satici-${ORTAM}";
+    const M = "traefik.http.middlewares.tekserp-satici-${ORTAM}";
+    const etiketOrtusu = (satirlar: readonly string[]) => `services:\n  satici:\n    labels:\n${satirlar.map((s) => `      - "${s}"`).join("\n")}\n`;
+    const zincirSondalari: [string, readonly string[], RegExp][] = [
+      ["Cloudflare listesinden bir aralık eksik", [`${M}-cf.ipallowlist.sourcerange=173.245.48.0/20,103.21.244.0/22`], /^❌ ⑦k [^\n]*ipallowlist 2 kaynak ↔ 22 Cloudflare aralığı/m],
+      ["zincir ters sırada (önce hız, sonra allowlist)", [`${Y}.middlewares=tekserp-satici-\${ORTAM}-hiz,tekserp-satici-\${ORTAM}-cf`], /^❌ ⑦k [^\n]*ipallowlist 0 kaynak/m],
+      ["genel yönlendiricide hız seddi yok", [`${Y}.middlewares=tekserp-satici-\${ORTAM}-cf`], /^❌ ⑦k [^\n]*iki halka değil/m],
+      ["allowlist başlıktan okur (ipstrategy)", [`${M}-cf.ipallowlist.ipstrategy.depth=1`], /^❌ ⑦k [^\n]*ipstrategy taşıyor/m],
+      ["hız anahtarı sahtelenebilir başlık", [`${M}-hiz.ratelimit.sourcecriterion.requestheadername=X-Forwarded-For`], /^❌ ⑦k [^\n]*yalnız Cf-Connecting-Ip/m],
+      ["hız seddi uygulamanın altında", [`${M}-hiz.ratelimit.average=1`], /^❌ ⑦k [^\n]*average 1 < taban 4\/sn/m],
+      ["portal zinciri genelinkinden farklı", [`${Y}-portal.middlewares=tekserp-satici-\${ORTAM}-cf`], /^❌ ⑬f [^\n]*iki halka değil/m],
+    ];
+    for (const [ad, satirlar, desen] of zincirSondalari) {
+      const f = yaz(`s6-${ad.replace(/[^a-z0-9]+/gi, "-").slice(0, 50)}.yml`, etiketOrtusu(satirlar));
+      const k = denetle(uretim, { diger: hazirlik, dosyalar: [...temel, f] });
+      kontrol(`§6 ${ad} → çıkış 1, kendi satırı ❌`, k.status === 1 && desen.test(k.cikti), `${k.status} · ${kirmizi(k).join(" | ").slice(0, 240) || ozet(k)}`);
+    }
   } finally {
     rmSync(tmp, { recursive: true, force: true });
   }

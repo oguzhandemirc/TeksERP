@@ -43,11 +43,13 @@
 //      örtünün çıkış ağı (üyesi yalnız örtünün yan konteyneri) — ④b/④c.
 //      ⑦ BÜTÜN Traefik yönlendiricilerini ölçer: küme = genel (+ örtününkiler), her biri Host + websecure + tls;
 //      birden çok hizmette her yönlendirici hizmetine AÇIKÇA bağlı, genel → 4610; hizmet portları yalnız beyanlı
-//      (4610 + örtününkiler) — emekli tünel portu 4611 ve iç API 4612 OLAMAZ.
+//      (4610 + örtününkiler) — emekli tünel portu 4611 ve iç API 4612 OLAMAZ. ⑦k genel yönlendiricinin kenar zinciri
+//      (deploy/traefik/kenar-zinciri.mjs): Cloudflare ipallowlist = CLOUDFLARE_NETWORKS birebir, ardından Cf-Connecting-Ip
+//      anahtarlı cömert hız seddi.
 //   ⑬ PORTAL-GENEL: PORT_ERISIM 4613 · ERISIM_BIND = kenar adresi · 4613 yayımlanmaz · Access ayarı biçimli · JWKS bağı
 //      satıcıda salt okunur, yan konteynerde yazılır, create_host_path yok, anahtar/dağıtım birimlerinin dışında ·
 //      `satici-jwks` satıcı imajı + çekici giriş noktası, sırsız/bağsız/portsuz/etiketsiz, yalnız `jwks-cikis`te ·
-//      `jwks-cikis` internal değil, tek üyeli · portal yönlendiricisi 4613'e, ipallowlist = CLOUDFLARE_NETWORKS birebir ·
+//      `jwks-cikis` internal değil, tek üyeli · portal yönlendiricisi 4613'e, kenar zinciri genelinkiyle AYNI iki halka ·
 //      ⑬g yan konteyner ortamı ALLOWLIST · ⑬h `jwks-cikis` alt ağı = .env'deki JWKS_CIKIS_AGI (DOCKER-USER kuralının ağı).
 //   Ⓑ BİLDİRİM (`docker-compose.bildirim.yml`: dosya COMPOSE_FILE'da ya da `satici-bildirim` servisi) — satıcı dış
 //      bağlantısız kalır, dışarı YALNIZ en az yetkili gönderici çıkar: Ⓑ0 dosya ↔ servis · Ⓑ1 internal olmayan ağlar
@@ -73,6 +75,7 @@ import { spawnSync } from "node:child_process";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { kenarZinciriSorunlari } from "../traefik/kenar-zinciri.mjs";
 import { fileURLToPath } from "node:url";
 
 const burasi = path.dirname(fileURLToPath(import.meta.url));
@@ -493,6 +496,8 @@ const hizmetPortu = Object.fromEntries(Object.entries(etiket).flatMap(([k, v]) =
   const izinliPort = ["4610", ...aktif.flatMap((o) => o.hizmetPortlari)];
   const kotuPort = Object.entries(hizmetPortu).filter(([, pt]) => !izinliPort.includes(pt));
   kontrol("⑦ Traefik hizmet portları yalnız genel (4610) + örtülerinki — emekli tünel 4611 / iç API 4612 ASLA", kotuPort.length === 0, kotuPort.map(([h, pt]) => `${h}:${pt}`).join(", ") || Object.values(hizmetPortu).join(", "));
+  const zincir = kenarZinciriSorunlari(etiket, cfg.name, cloudflareAglari(), { saniyeBasi: 4 });
+  kontrol("⑦k genel yönlendirici kenar zinciri: Cloudflare ipallowlist (CLOUDFLARE_NETWORKS birebir) → Cf-Connecting-Ip hız seddi", zincir.length === 0, zincir.join(" · ") || etiket[`traefik.http.routers.${cfg.name}.middlewares`]);
 }
 const db = cfg.services?.["satici-db"] ?? {};
 kontrol("⑦ DB portsuz ve yalnız iç ağda", (db.ports ?? []).length === 0 && JSON.stringify(Object.keys(db.networks ?? {})) === '["ic"]', Object.keys(db.networks ?? {}).join(", "));
@@ -620,12 +625,11 @@ function portalGenelDenetle(c) {
   const r = `${c.name}-portal`;
   const h = e[`traefik.http.routers.${r}.service`] ?? "";
   const ara = e[`traefik.http.routers.${r}.middlewares`] ?? "";
-  const kaynaklar = String(e[`traefik.http.middlewares.${ara}.ipallowlist.sourcerange`] ?? "").split(",").map((x) => x.trim()).filter(Boolean).sort();
-  const cf = cloudflareAglari();
-  kontrol("⑬f portal yönlendiricisi: PORTAL_HOST Host kuralı · hizmeti 4613 · ipallowlist kaynakları CLOUDFLARE_NETWORKS ile BİREBİR",
+  const zincir = kenarZinciriSorunlari(e, r, cloudflareAglari(), { saniyeBasi: 4 });
+  kontrol("⑬f portal yönlendiricisi: PORTAL_HOST Host kuralı · hizmeti 4613 · kenar zinciri genel yönlendiricininkiyle AYNI (Cloudflare ipallowlist → hız seddi)",
     /^Host\(`[a-z0-9.-]+`\)$/.test(e[`traefik.http.routers.${r}.rule`] ?? "") && e[`traefik.http.services.${h}.loadbalancer.server.port`] === "4613" &&
-      !ara.includes(",") && cf !== null && JSON.stringify(kaynaklar) === JSON.stringify([...cf].sort()),
-    `${e[`traefik.http.routers.${r}.rule`] ?? "kural YOK"} · hizmet ${h || "YOK"} · ${kaynaklar.length} kaynak ↔ ${cf === null ? "CLOUDFLARE_NETWORKS OKUNAMADI" : `${cf.length} Cloudflare aralığı`}`);
+      zincir.length === 0 && ara === (e[`traefik.http.routers.${c.name}.middlewares`] ?? ""),
+    `${e[`traefik.http.routers.${r}.rule`] ?? "kural YOK"} · hizmet ${h || "YOK"} · ${zincir.join(" · ") || ara}`);
   // Ortam ALLOWLIST'i: çekicinin okuduğu üç anahtar (+ NODE_ENV); vekil/CA/NODE_OPTIONS gibi her fazla anahtar ihlal.
   const jIzinli = {
     CF_ACCESS_TAKIM_ALANI: (v) => v === alan,

@@ -2,8 +2,8 @@
 # TeksERP VDS — traefik  (2026-09-01)
 # =============================================================================
 # ⚠️ ESKİ SUNUCUDAN FARKI: ACME (Let's Encrypt) çözücüleri KALDIRILDI.
-# Bu makine yalnız guncelleme.etkiliyazilim.com'u servis eder ve o sertifika
-# Cloudflare Origin CA'dır (dynamic/tls.yml). ACME'yi taşımak, Cloudflare API
+# Bütün alan adları (guncelleme · lisans · portal · patron) *.etkiliyazilim.com
+# Cloudflare Origin CA sertifikasıyla servis edilir (dynamic/tls.yml). ACME'yi taşımak, Cloudflare API
 # anahtarını (cf.env) bu makineye de koymak demekti — servis etmediğimiz bir
 # özellik için fazladan bir sır. Gerekirse geri eklenir.
 global:
@@ -20,6 +20,14 @@ entryPoints:
           scheme: https
   websecure:
     address: ":443"
+    # Değerler Traefik v3.5 varsayılanıdır, sürüm yükseltmesi sessizce değiştirmesin diye yazılı.
+    # writeTimeout 0 ŞART: 140 MB kurulum dosyası Cloudflare üzerinden ~30 dk, /v1/zil SSE saatlerce sürer.
+    # readTimeout başlık + gövde okumasını sınırlar (slowloris); en uzun meşru gövde okuması ~1,3 sn ölçüldü.
+    transport:
+      respondingTimeouts:
+        readTimeout: 60s
+        writeTimeout: 0s
+        idleTimeout: 180s
 
 providers:
   file:
