@@ -43,3 +43,11 @@ export function parseCardCode(cardCode: string): { userId: string; secret: strin
   const m = CARD_CODE_RE.exec((cardCode ?? "").trim());
   return m ? { userId: m[1]!.toLowerCase(), secret: m[2]!.toLowerCase() } : null;
 }
+
+/**
+ * Satırdaki GEÇERLİ özet. Bu sürüm özet yazarken düz kolonu hep boşaltır; ikisi birden doluysa
+ * düzü özetten SONRA geri alınmış eski backend yazmıştır ⇒ düz esastır, özet bayattır.
+ */
+export function liveDigest(plain: string | null | undefined, digest: string | null | undefined): string | null {
+  return plain != null ? null : (digest ?? null);
+}

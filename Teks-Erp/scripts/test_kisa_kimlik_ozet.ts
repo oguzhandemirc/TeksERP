@@ -20,6 +20,8 @@
 //      parolası) ve kâğıt müşteri anahtarı geri koyar → PIN/kart çalışır; toplu PIN sıfırlama
 //      emaneti olmayan makinede yeni PIN verir; yedek şifrelemesi kapalıyken emanet doğmaz
 //   §8 sızıntı: audit yüklerinde verilen PIN/kart sırrı yok
+//   §9 geri al → eski backend düz yazar → yeniden yükselt: düz değer doluysa özet BAYATTIR —
+//      eski PIN/kart geçmez, yeni düz PIN/kart çalışır; iki kişide tanımlı PIN kimseyi açmaz
 //
 // KALICI sondalar (her biri ilgili ⭐ kontrolü kırmızıya çevirmeli):
 //   duz-kalir      §3 dönüşümden sonra bir düz değeri geri yazar
@@ -27,6 +29,7 @@
 //   kilit-bellekte §5 yeniden başlatmadan önce kalıcı kovaları siler (eski bellek-içi davranış)
 //   cihaz-var      §6 cihazsız isteğe sahte cihaz takar
 //   emanetsiz      §7 emaneti mühürlemeden yeni makineye geçer
+//   bayat-ozet     §9 eski PIN yerine yeni PIN'i dener (reddedilmesi beklenen giriş geçer)
 // =============================================================================
 import prisma, { pool } from "../src/lib/prisma"; // İLK import: dotenv → JWT_SECRET/DATABASE_URL
 import fs from "node:fs";
@@ -457,6 +460,46 @@ async function main(): Promise<void> {
     check("§7r yedek şifrelemesi kapalıyken emanet DOĞMAZ (durum bildirilir)", kapali.state === "kapali" && kapali.sealed.length === 0);
     const bsrc = fs.readFileSync(path.join(KOK, "src/services/backup.service.ts"), "utf8");
     check("§7s gece yedeği emaneti tazeliyor ve tabloyu dökümden DIŞLAMIYOR", bsrc.includes("ShortCredentialAdminService.syncEscrow()") && !/exclude-table|--exclude-table-data|short_credential_key_escrows/.test(bsrc));
+
+    // ═══ §9 GERİ AL → ESKİ BACKEND DÜZ YAZAR → YENİDEN YÜKSELT (bayat özet) ═══
+    // §8'den önce koşar ki verilen değerler sızıntı taramasına girsin.
+    console.log("\n=== §9 geri alıp yeniden yükseltme: bayat özet ===");
+    const rx = await yeniKullanici("yeniden");
+    const eskiPin = (await AuthService.setQuickPin(rx.id, {}, aktor.id)).pin!;
+    const eskiKart = (await AuthService.rotateCardToken(rx.id, aktor.id)).cardCode;
+    verilenDegerler.push(eskiPin, eskiKart.split(":")[2]!);
+    // Eski backend benzetimi: özet kolonunu tanımaz, yeni PIN/kartı DÜZ yazar; özet satırda kalır.
+    const yeniDuzPin = await bosPin(new Set(verilenDegerler));
+    const yeniDuzSir = createHash("md5").update(`g21-yeniden-${stamp}`).digest("hex");
+    verilenDegerler.push(yeniDuzPin, yeniDuzSir);
+    await prisma.user.update({ where: { id: rx.id }, data: { quickPin: yeniDuzPin, cardToken: yeniDuzSir } });
+    const bayatOzet = (await prisma.user.findUnique({ where: { id: rx.id }, select: { quickPinDigest: true } }))?.quickPinDigest;
+    const credR = await AuthService.getUserCredentials(rx.id);
+    check("§9a kimlik durumu düz (yeni) değeri esas alır", credR.quickPinStorage === "DUZ", String(credR.quickPinStorage));
+    const g9eski = await attempt(() => AuthService.loginWithQuickPin(SONDA === "bayat-ozet" ? yeniDuzPin : eskiPin));
+    check("⭐ §9b eski backend'de değiştirilen ESKİ PIN reddedilir (bayat özet geçmez)", !g9eski.ok);
+    const g9yeni = await attempt(() => AuthService.loginWithQuickPin(yeniDuzPin));
+    check("⭐ §9c eski backend'de verilen YENİ PIN çalışır", g9yeni.ok && g9yeni.value.user.userId === rx.id);
+    const st9 = await prisma.user.findUnique({ where: { id: rx.id } });
+    check("§9d girişten sonra özet yeni PIN'e döndü, düz boş", st9?.quickPin === null && !!st9?.quickPinDigest && !!bayatOzet && st9.quickPinDigest !== bayatOzet);
+    const g9eski2 = await attempt(() => AuthService.loginWithQuickPin(eskiPin));
+    check("§9e dönüşümden sonra da eski PIN reddedilir", !g9eski2.ok);
+    const g9kEski = await attempt(() => AuthService.loginWithCard(eskiKart));
+    check("⭐ §9f eski backend'de yenilenen ESKİ kart reddedilir", !g9kEski.ok);
+    const g9kYeni = await attempt(() => AuthService.loginWithCard(`TEKSU:${rx.id}:${yeniDuzSir}`));
+    check("⭐ §9g eski backend'de basılan YENİ kart çalışır", g9kYeni.ok && g9kYeni.value.user.userId === rx.id);
+    // Eski backend benzersizliği yalnız düz kolonda ölçtüğü için A'nın (özetli) PIN'ini B'ye verebilir.
+    const ra = await yeniKullanici("cakisma-a");
+    const rb = await yeniKullanici("cakisma-b");
+    const ortakPin = (await AuthService.setQuickPin(ra.id, {}, aktor.id)).pin!;
+    verilenDegerler.push(ortakPin);
+    await prisma.user.update({ where: { id: rb.id }, data: { quickPin: ortakPin } });
+    const g9c = await attempt(() => AuthService.loginWithQuickPin(ortakPin));
+    check(
+      "⭐ §9h iki kişide tanımlı PIN kimseyi açmaz (fail-closed)",
+      !g9c.ok && errCode(g9c.err).code === "QUICK_PIN_AMBIGUOUS",
+      g9c.ok ? `açılan: ${g9c.value.user.userId === ra.id ? "A" : "B"}` : String(errCode(g9c.err).code),
+    );
 
     // ═══ §8 SIZINTI ═══
     console.log("\n=== §8 sızıntı ===");

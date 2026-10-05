@@ -31,6 +31,7 @@ import {
   digestKid,
   digestQuickPin,
   digestsEqual,
+  liveDigest,
   parseCardCode,
 } from "../lib/short-credential/digest";
 import { countForeignDigests, requireKeyRing, ShortCredentialService } from "./short-credential.service";
@@ -211,12 +212,13 @@ export class AuthService {
     });
     const user = row && row.isActive ? { id: row.id, username: row.username, tokenVersion: row.tokenVersion } : null;
     let ok = false;
-    if (row && row.isActive && row.cardTokenDigest) {
+    const cardDigest = liveDigest(row?.cardToken, row?.cardTokenDigest);
+    if (row && row.isActive && cardDigest) {
       const ring = getShortCredentialKeyRing();
-      const kid = digestKid(row.cardTokenDigest);
+      const kid = digestKid(cardDigest);
       const key = ring.ok && kid ? ringKeyByKid(ring.ring, kid) : null;
       if (!key) throw keyMismatchError("card");
-      ok = digestsEqual(row.cardTokenDigest, digestCardSecret(key, row.id, parsed.secret));
+      ok = digestsEqual(cardDigest, digestCardSecret(key, row.id, parsed.secret));
     } else if (row && row.isActive && row.cardToken) {
       // Dönüşüm koşulana dek düz kolon SALT OKUNUR (geçiş yedeği); yazılmaz.
       ok = plainEquals(row.cardToken.toLowerCase(), parsed.secret);
@@ -224,7 +226,7 @@ export class AuthService {
     if (!ok || !user) {
       throw AppError.unauthorized("Kart geçersiz veya iptal edilmiş — yöneticiden yeni kart isteyin");
     }
-    const legacyCard = row?.cardTokenDigest ? null : (row?.cardToken ?? null);
+    const legacyCard = row?.cardToken ?? null;
     if (legacyCard) {
       const result = await this.issueToken(user, ctx);
       await ShortCredentialService.convertOnLogin(user.id, "card", legacyCard).catch(() => false);
@@ -254,20 +256,29 @@ export class AuthService {
     }
     const ring = getShortCredentialKeyRing();
     const candidates = ring.ok ? ring.ring.keys.map((k) => digestQuickPin(k, normalized)) : [];
-    if (candidates.length > 0) {
-      const hit = await prisma.user.findFirst({
-        where: { quickPinDigest: { in: candidates }, isActive: true },
-        select: { id: true, username: true, tokenVersion: true, quickPinDigest: true },
-      });
-      if (hit && candidates.some((c) => digestsEqual(c, hit.quickPinDigest ?? ""))) {
-        return this.issueToken({ id: hit.id, username: hit.username, tokenVersion: hit.tokenVersion }, ctx);
-      }
-    }
+    // Düz değeri olan satırın özeti bayattır (`liveDigest`) — özet yolu yalnız düzü boş satırı tanır.
+    const hit = candidates.length > 0
+      ? await prisma.user.findFirst({
+          where: { quickPinDigest: { in: candidates }, quickPin: null, isActive: true },
+          select: { id: true, username: true, tokenVersion: true, quickPinDigest: true },
+        })
+      : null;
+    const digestHit = hit && candidates.some((c) => digestsEqual(c, hit.quickPinDigest ?? "")) ? hit : null;
     // Dönüşüm koşulana dek düz kolon SALT OKUNUR (geçiş yedeği); yazılmaz.
     const legacy = await prisma.user.findFirst({
       where: { quickPin: normalized, isActive: true },
       select: { id: true, username: true, tokenVersion: true },
     });
+    if (digestHit && legacy && legacy.id !== digestHit.id) {
+      // Geri alınmış eski backend benzersizliği yalnız düz kolonda ölçtü: PIN iki kişide. Kimse açılmaz.
+      throw AppError.unauthorized(
+        "Bu PIN birden çok kişide tanımlı — yöneticinizden yeni hızlı PIN isteyin",
+        { code: "QUICK_PIN_AMBIGUOUS" },
+      );
+    }
+    if (digestHit) {
+      return this.issueToken({ id: digestHit.id, username: digestHit.username, tokenVersion: digestHit.tokenVersion }, ctx);
+    }
     if (legacy) {
       const result = await this.issueToken(legacy, ctx);
       await ShortCredentialService.convertOnLogin(legacy.id, "pin", normalized).catch(() => false);
@@ -407,12 +418,12 @@ export class AuthService {
       quickPinSet,
       quickPinSetAt: user.quickPinSetAt,
       quickPinRevealed: issued.pin !== null,
-      quickPinKeyOk: keyOk(user.quickPinDigest),
-      quickPinStorage: user.quickPinDigest !== null ? ("OZET" as const) : user.quickPin !== null ? ("DUZ" as const) : null,
+      quickPinKeyOk: keyOk(liveDigest(user.quickPin, user.quickPinDigest)),
+      quickPinStorage: user.quickPin !== null ? ("DUZ" as const) : user.quickPinDigest !== null ? ("OZET" as const) : null,
       cardSet,
       cardIssuedAt: user.cardIssuedAt,
       cardRevealed: issued.card !== null,
-      cardKeyOk: keyOk(user.cardTokenDigest),
+      cardKeyOk: keyOk(liveDigest(user.cardToken, user.cardTokenDigest)),
       cardLegacy: user.cardToken !== null || (user.cardTokenDigest !== null && user.cardTokenLegacy),
       revealExpiresAt: (() => {
         const t = Math.max(issued.pin?.until ?? 0, issued.card?.until ?? 0);
