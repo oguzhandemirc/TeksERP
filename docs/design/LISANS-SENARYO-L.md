@@ -31,6 +31,7 @@ PG_BIN_DIR=<sunucuyla aynı ana sürüm pg istemcisi> \
   node ../scripts/agir-is.mjs -- npx tsx scripts/senaryo-ly.ts
 ```
 
+- `PG_BIN_DIR` zorunludur: verilmezse ya da istemci sunucudan yeni ana sürümse yedek adımı başlamaz ve L6 · L7 · L31 · L37 kırmızı olur (yerel DB 16 ⇒ Mac'te `/opt/homebrew/opt/postgresql@16/bin`).
 - Dört DB de `_test` ile biter; üç fabrika DB'si ad + hacim kapısından (`fixtureHedefEngeli` · `hacimHedefEngeli`), satıcı DB'si ad kapısından geçer; `tekserp_fabrika_*` her durumda RED. Fabrika DB'leri migrate edilmiş ve `admin` kullanıcısı olan temiz fikstürlerdir; satıcı DB'si satıcı şemasıyla migrate edilmiştir.
 - Kopya makineler (B, B2) kendi rol DB'sinde koşar: `<ana>_<rol>_test` YOKSA koşucu açar (boş + `migrate deploy` + `seed`; ilk açılış konsola 🆕 basar — adı DROP listesine yazın) ve her koşumda o DB'nin `license.trace`ini siler (taze makine). Fabrika DB'leri boş + `migrate deploy` + `npx prisma db seed` (admin/123123) ile hazırlanır.
 - `--son=L8`: o adımdan sonra durur (hata ayıklama). `--json=<dosya>`: adım sonuçları. `SENARYO_LOG_SAKLA=1`: süreç logları geçici kökte kalır.
