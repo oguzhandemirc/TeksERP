@@ -38,6 +38,7 @@ import { adoptFromRejected, adoptOffered, refreshLicenseRevocation, revocationOf
 import { logLeaseAccepted, sanctionView, verifyResponseDocuments } from "./helpers/license-accept.helper";
 import { syncSupportAfterPoll } from "./support-sync.service";
 import { updateReportField } from "./update-status.service";
+import { systemSettingService } from "./system-setting.service";
 import { refreshUpdaterIntentQuietly } from "./update-intent.service";
 import { isVerificationMode } from "../lib/dogrulama-kipi";
 import {
@@ -99,6 +100,19 @@ function skewSeconds(): number | undefined {
   return ms === null ? undefined : Math.max(-1e9, Math.min(1e9, Math.round(ms / 1000)));
 }
 
+/**
+ * K10 — açık modül adları (yapılandırma, iş verisi DEĞİL). Okunamazsa ya da liste boşsa alan hiç gitmez: eski satıcı KATI
+ * şemayla reddeder (satıcı önce) ve yoklama bu yüzden düşmez.
+ */
+async function openModulesField(): Promise<{ acikModuller?: string[] }> {
+  try {
+    const keys = await systemSettingService.getOpenModuleKeys();
+    return keys.length > 0 ? { acikModuller: keys } : {};
+  } catch {
+    return {};
+  }
+}
+
 /** Yoklama gövdesi — protokolün KATI şemasından geçer (allowlist dışı alan kod yolunda patlar). */
 export async function buildPollBody(nowMs: number = Date.now()): Promise<ReturnType<typeof PollRequestSchema.parse>> {
   const snap = getLicenseSnapshot(nowMs);
@@ -134,6 +148,8 @@ export async function buildPollBody(nowMs: number = Date.now()): Promise<ReturnT
     ...updateReportField(),
     ...capabilitiesField(),
     ...pollV2Fields(snap),
+    // Açık modül adları (K10): okunamazsa alan gitmez; satıcı ÖNCE kabul eder.
+    ...(await openModulesField()),
   });
 }
 

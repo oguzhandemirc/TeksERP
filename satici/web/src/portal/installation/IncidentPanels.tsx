@@ -211,6 +211,18 @@ export function HealthPanel({ detail }: { detail: InstallationDetail }) {
           <p className="muted">Henüz yoklama gelmedi.</p>
         )}
       </Section>
+      <Section title="Açık modüller (fabrikanın bildirdiği)">
+        {inst.acikModuller ? (
+          <KeyValues
+            items={[
+              ["Açık modüller", inst.acikModuller.length > 0 ? inst.acikModuller.map((m) => <code key={m}>{m}</code>).flatMap((c, i) => (i === 0 ? [c] : [" · ", c])) : "Hiçbiri açık değil"],
+              ["Bildirim zamanı", fmtDateTime(inst.acikModullerZamani ?? null)],
+            ]}
+          />
+        ) : (
+          <p className="muted" data-testid="acik-moduller-bilinmiyor">Bilinmiyor — fabrika henüz bildirmedi (eski sürüm olabilir).</p>
+        )}
+      </Section>
       <Section title="Kabul edilen parmak izi">
         {fp ? (
           <KeyValues items={(["f1", "f2", "f3", "f4", "f5"] as const).map((k) => [k.toUpperCase(), fp[k] ? <code key={k}>{shortId(fp[k], 12)}…</code> : <span className="muted">ölçülemedi</span>] as const)} />

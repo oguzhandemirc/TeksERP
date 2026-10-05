@@ -13,6 +13,7 @@ import {
   PROTOCOL_VERSION,
   VersionTextSchema,
   UuidSchema,
+  ModuleKeySchema,
 } from "./belgeler";
 import { UpdateReportSchema } from "./guncelleme";
 import { FINGERPRINT_FACTORS } from "./parmak-izi";
@@ -229,6 +230,11 @@ export const PollRequestSchema = z.strictObject({
   belirsizlik: UncertaintySummarySchema.optional(),
   durumKaydi: StateRecordSummarySchema.optional(),
   parmakIziKayip: LostFactorListSchema.optional(),
+  /**
+   * K10 — fabrikada AÇIK (bayrak ∧ lisans tavanı) modül adları (`finance.enabled` …). Ad YAPILANDIRMADIR, iş verisi
+   * değil; alan yoksa fabrika bildirmiyor (portal "bilinmiyor" der). Yalnız doluysa gider; satıcı ÖNCE.
+   */
+  acikModuller: z.array(ModuleKeySchema).max(64).refine((l) => new Set(l).size === l.length, "Modül listesinde tekrar var").optional(),
 });
 
 /**

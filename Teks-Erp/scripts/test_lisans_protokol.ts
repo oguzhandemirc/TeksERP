@@ -558,6 +558,9 @@ function govdeBolumu(): void {
   if (typeof saglik === "object" && saglik !== null) Object.assign(saglik, { kullanicilar: ["ali"] });
   check("§5b ⭐ sağlık özetine allowlist dışı anahtar RED", !PollRequestSchema.safeParse(sizinti).success);
   check("§5c kök gövdeye allowlist dışı anahtar RED", !PollRequestSchema.safeParse({ ...yoklaGovdesi(), siparisler: [] }).success);
+  const modulGovde = (l: unknown) => PollRequestSchema.safeParse({ ...yoklaGovdesi(), acikModuller: l }).success;
+  check("§5c2 K10: `acikModuller` OPSİYONEL (yok = eski fabrika) ve modül adı listesini kabul eder", modulGovde(undefined) && modulGovde([]) && modulGovde(["finance.enabled", "production.enabled"]));
+  check("§5c3 K10 karşı: serbest metin · yinelenen ad · liste olmayan · 64'ten uzun liste RED", !modulGovde(["Müşteri Adı Ltd"]) && !modulGovde(["finance.enabled", "finance.enabled"]) && !modulGovde("finance.enabled") && !modulGovde(Array.from({ length: 65 }, (_, k) => `modul${k}.enabled`)));
   const yanit = { v: 1, hak: null, kira: kiraBas(f), indirmeBelirtecleri: [], sunucuSaati: msToIso(SIMDI), yeniBilgi: 1 };
   check("§5d yanıtta tanınmayan bilgi alanı kabul (ileri uyum)", LicenseResponseSchema.safeParse(yanit).success);
   check("§5e çevrimdışı istek zarf taşır", OfflineRequestSchema.safeParse({ v: 1, zarf: "abc" }).success);
