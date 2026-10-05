@@ -98,6 +98,10 @@ jobs:
       # kırılır. Zero-dep, DB'siz, ağsız; kapı ve kalıcı sondalar (--sonda) aynı adımda.
       - name: Yayın okumaları belirteçli/SSH (3c')
         run: node scripts/check-yayin-okuma.mjs && node scripts/check-yayin-okuma.mjs --sonda
+      # Tek ortak paket O1: dağıtım kaydı (kapalı şema · grup zinciri · türetim · eski kanaldan ayrılık) ve
+      # eski kanal kaydının (adnansahin) bayt-donukluğu. Zero-dep, DB'siz, ağsız; sığ klonda çapa kolu ⏭ beyanlı.
+      - name: Dağıtım kaydı + eski kanal donuk (O1)
+        run: node scripts/check-dagitim.mjs && node scripts/check-dagitim.mjs --sonda && node scripts/test_eski_kanal_donuk.mjs && node scripts/test_eski_kanal_donuk.mjs --sonda
 
   # ===========================================================================
   # BACKEND — Express + Prisma; Postgres service + migrate deploy + seed + test

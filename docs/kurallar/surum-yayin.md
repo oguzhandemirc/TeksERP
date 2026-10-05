@@ -141,7 +141,7 @@
 
 Backend: `test_backend_surum`, `test_client_policy`, `test_client_registry`, `test_db_copy`, `test_migration_hygiene`, `test_mobile_update`, `test_offsite_sweep`
 
-Kök (zero-dep, DB'siz, ağsız — `node scripts/<ad>`): `check-kanallar.mjs` (+ `--sonda`), `check-yayin-okuma.mjs` (+ `--sonda`), `test_kanal_yayin_kapisi.mjs`, `test_surum.mjs`, `check-surum-notlari.mjs`
+Kök (zero-dep, DB'siz, ağsız — `node scripts/<ad>`): `check-dagitim.mjs` (+ `--sonda`; tek ortak paketin `deploy/dagitim.json` kaydı), `test_eski_kanal_donuk.mjs` (+ `--sonda`; `deploy/kanallar.json` bayt-donuk), `check-kanallar.mjs` (+ `--sonda`), `check-yayin-okuma.mjs` (+ `--sonda`), `test_kanal_yayin_kapisi.mjs`, `test_surum.mjs`, `check-surum-notlari.mjs`
 
 Panel imzalı künye: `test_panel_imza` (Teks-Erp) · `panel-kunye.test.ts` · `updater-imza-akisi.test.ts` · `update-imza-arayuz.test.tsx` (Electron) · `test_kanal_yayin_kapisi.mjs` §8 (kök)
 

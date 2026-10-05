@@ -1,0 +1,24 @@
+{
+  "_aciklama": [
+    "TEK ORTAK PAKETİN DAĞITIM KAYDI — sürüm başına tek paketin kimliği ve güncelleme grupları (docs/design/TEK-ORTAK-PAKET.md §2.1).",
+    "DAVRANIŞ TAŞIMAZ ve MÜŞTERİ TAŞIMAZ: şema KAPALI anahtar kümesidir; firma adı lisanstan, grup kiradan gelir.",
+    "Yayın adresleri ve VDS yolları buraya YAZILMAZ: scripts/lib/dagitim.mjs onları indirmeKoku/vdsKoku/defterKoku + grup + üründen türetir.",
+    "gruplar = terfi zinciri (test → oncu → genel); grup kodu belirtecin yol önekidir ve DEĞİŞMEZ; 'ota' ayrılmıştır (Worker takma adı /ota/<rv>/manifest).",
+    "Eski kanal kaydı deploy/kanallar.json BAYT-DONUKTUR (adnansahin); bu kayıt onun hiçbir adresini ve kimliğini paylaşmaz.",
+    "Bekçiler: node scripts/check-dagitim.mjs (+ --sonda) · node scripts/test_eski_kanal_donuk.mjs (+ --sonda)."
+  ],
+  "urun": {
+    "panel": { "appId": "com.etkiliyazilim.tekserp", "urunAdi": "TeksERP", "paketAdi": "tekserp-panel" },
+    "tablet": { "androidPaket": "com.etkiliyazilim.tekserp", "gorunenAd": "TeksERP", "runtimeVersion": "55.0", "otaSertifika": "keystore/ota-certs-ortak/certificate.pem" },
+    "backend": { "urunAdi": "TeksERP Sunucu", "hizmetAdi": "TeksERP-Backend" }
+  },
+  "indirmeKoku": "https://indir.etkiliyazilim.com/",
+  "vdsKoku": "/opt/stack/apps/tekserp-indir/html",
+  "defterKoku": "/opt/stack/apps/tekserp-indir/defter",
+  "lisansSunucusu": "https://lisans.etkiliyazilim.com",
+  "gruplar": [
+    { "kod": "test", "ad": "Test", "terfiKaynagi": null },
+    { "kod": "oncu", "ad": "Öncü", "terfiKaynagi": "test" },
+    { "kod": "genel", "ad": "Genel", "terfiKaynagi": "oncu" }
+  ]
+}

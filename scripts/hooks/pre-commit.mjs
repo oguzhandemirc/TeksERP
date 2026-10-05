@@ -31,6 +31,7 @@ import { deftereYaz } from "./lib/kapi-defteri.mjs";
 import { etkilenenProjeler, stagedFiles } from "./lib/staged.mjs";
 import { agirSurecSayisi, slotAl } from "./lib/semafor.mjs";
 import { kanalBekcisiTetigi } from "../lib/kanallar.mjs";
+import { dagitimBekcisiTetigi } from "../lib/dagitim.mjs";
 
 const REPO = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
 // Kapı defteri: wt BASENAME'i (wt-0c · Teks-Erp), tam yol ve kimlik yok — lib/kapi-defteri.mjs.
@@ -267,6 +268,13 @@ if (staged.some((f) => SURUM_NOTU_YOLLARI.has(f))) {
 if (staged.some(kanalBekcisiTetigi)) {
   adimlar.push({ ad: "kanal kayıt defteri", cwd: ".", cmd: ["node", ["scripts/check-kanallar.mjs"]] });
   adimlar.push({ ad: "kanal yayın kapıları", cwd: ".", cmd: ["node", ["scripts/test_kanal_yayin_kapisi.mjs"]], gitEnvSil: true });
+}
+
+// DAĞITIM KAYDI (tek ortak paket O1): eski kanal kaydı bayt-donuktur — adım KOŞULSUZ, çünkü
+// silme `staged` (ACMR) listesine girmez; ~0,1 sn. Git ortamı SİLİNMEZ: index kolu commit edilecek baytı okur.
+adimlar.push({ ad: "eski kanal kaydı donuk", cwd: ".", cmd: ["node", ["scripts/test_eski_kanal_donuk.mjs"]] });
+if (staged.some(dagitimBekcisiTetigi)) {
+  adimlar.push({ ad: "dağıtım kaydı", cwd: ".", cmd: ["node", ["scripts/check-dagitim.mjs"]] });
 }
 
 if (adimlar.length === 0) process.exit(0);
