@@ -59,11 +59,11 @@ export function evaluateMaintenance(
     const text = "Bu sürüm bakım süreniz bittikten sonra çıktı";
     if (nowMs < end) {
       const left = remainingDays(end, nowMs);
-      out.push({ code: "BAKIM_IHLALI", tier: "EK_SURE", daysLeft: left, banner: warnBanner(`${text}; ${left} gün içinde bakımı yenileyin ya da hak ettiğiniz sürüme dönün.`) });
+      out.push({ code: "BAKIM_IHLALI", tier: "EK_SURE", daysLeft: left, banner: warnBanner(`${text}; ${left} gün içinde bakımı yenilemek için satıcınızla görüşün.`) });
     } else if (!g.internetVar) {
       out.push({ code: "BAKIM_IHLALI", tier: "KISITLI", banner: dangerBanner(`${text}: program kısıtlı kipte.`) });
     } else {
-      out.push({ code: "BAKIM_IHLALI", tier: "EK_SURE", daysLeft: 0, banner: warnBanner(`${text}; bakımı yenileyin.`) });
+      out.push({ code: "BAKIM_IHLALI", tier: "EK_SURE", daysLeft: 0, banner: warnBanner(`${text}; bakımı yenilemek için satıcınızla görüşün.`) });
     }
   }
   if (nowMs > maintenanceEnd) out.push({ code: "BAKIM_BITTI" });

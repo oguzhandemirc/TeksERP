@@ -422,6 +422,9 @@ function bakimBolumu(): void {
   check("§12a bakım içinde çıkmış sürüm → NORMAL, yalnız güncelleme kesilir", a.hesaplananKademe === "NORMAL" && !a.uygulanan.guncellemeIzni && nedenVar(a, "BAKIM_BITTI"), ozet(a));
   const b = durum({ hak: bitmis, girdi: { derlemeTarihiMs: SIMDI - 2 * DAY_MS } });
   check("§12b bakım SONRASI çıkmış sürüm → EK_SÜRE (28 gün)", b.hesaplananKademe === "EK_SURE" && b.ekSureKalanGun === 28, ozet(b));
+  const bMetin = b.hesaplanan.bant?.metin ?? "";
+  check("§12b-K8 bakım ihlali bandı müşterinin yapabileceği şeyi söyler: satıcıyla görüşme", bMetin.includes("bakımı yenilemek için satıcınızla görüşün"), bMetin);
+  check("§12b-K8 negatif sonda: eski 'hak ettiğiniz sürüme dönün' cümlesi yok", !bMetin.includes("hak ettiğiniz sürüme dön"), bMetin);
   const ihlal = { hak: { bakimBitis: msToIso(SIMDI - 60 * DAY_MS) }, girdi: { derlemeTarihiMs: SIMDI - 40 * DAY_MS } };
   const c = durum({ ...ihlal, kira: eskiKira(2, -20).kira, saat: eskiKira(2, -20).saat });
   check("§12c ihlalde 30 gün geçti + son alışveriş 2 gün önce → KISITLI", c.hesaplananKademe === "KISITLI" && nedenVar(c, "BAKIM_IHLALI"), ozet(c));
