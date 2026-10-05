@@ -52,6 +52,7 @@ import {
   ConnectVekili,
   bayiAnahtariUret,
   bekle,
+  erisimDuzeneginiYukle,
   fabrikaBaslat,
   saticiBaslat,
   saticiYardimcisi,
@@ -290,17 +291,14 @@ async function main(): Promise<number> {
     DATABASE_URL: saticiUrl,
     SATICI_ERISIM_GUNLUGU: "0",
     PORT_GENEL: "0",
-    PORT_TAILNET: "0",
     GENEL_BIND: "127.0.0.1",
-    TAILNET_BIND: "127.0.0.1",
-    // Portal 127.0.0.1'den çağrılır: geri döngü yalnız bu bayrakla tailnet kaynağı (satıcıda varsayılan kapalı).
-    TAILNET_LOOPBACK: "1",
     BAKIM_ARALIGI_SN: "2",
     KOPYA_PENCERE_SN: "20",
     PORTAL_GIRIS_HIZ_DK: "1000",
     PORTAL_OTURUM_BOSTA_DK: "1440",
     PORTAL_OTURUM_AZAMI_SAAT: "72",
   };
+  const { ERISIM_BASLIGI, erisimJetonu, erisimOrtami } = await erisimDuzeneginiYukle();
   const havuzlar = new Map<string, Pool>();
   const db = (url: string): Pool => {
     let p = havuzlar.get(url);
@@ -437,13 +435,14 @@ async function main(): Promise<number> {
   let cikis = 0;
   try {
     satici = await saticiBaslat({
-      env: { ...saticiEnv, ANAHTAR_DIZINI: hz.dizin, GUVEN_CAPASI_DOSYASI: hz.capaDosyasi },
+      // Portal yalnız ERİŞİM dinleyicisinden: koşucu satıcı bekçilerinin düzeneğini (sahte takım alanı + JWKS dosyası) kurar.
+      env: { ...saticiEnv, ...erisimOrtami(), ANAHTAR_DIZINI: hz.dizin, GUVEN_CAPASI_DOSYASI: hz.capaDosyasi },
       saat: { duvarMs: 0, monoMs: 0 },
       logDosyasi: path.join(logDizini, "satici.log"),
     });
-    // T1b: senaryo ERİŞİM düzeneğini (satici/sunucu scripts/lib/test-ortam.ts `erisimOrtami`) kurana dek portal kapalıdır.
-    if (!satici.portal) throw new Error("satıcı portalı (ERİŞİM) kapalı — senaryo ERİŞİM düzeneğini kurmalı");
-    portal = new PortalIstemcisi(satici.portal, "/portal/api", hz.yonetici, saticiSimdi);
+    if (!satici.portal) throw new Error("satıcı portalı (ERİŞİM) kapalı — PORT_ERISIM + Access ayarı satıcı sürecine verilmedi");
+    // Jeton satıcının (kaydırılmış) saatine göre basılır: exp/iat doğrulamasını satıcı kendi saatiyle yapar.
+    portal = new PortalIstemcisi(satici.portal, "/portal/api", hz.yonetici, saticiSimdi, () => ({ [ERISIM_BASLIGI]: erisimJetonu({ simdiMs: saticiSimdi() }) }));
     console.log(`🏪 Satıcı: genel ${satici.genel} · portal ${satici.portal}`);
 
     const A = await yeniFabrika("A", anaUrl, PARMAK_IZLERI.A);

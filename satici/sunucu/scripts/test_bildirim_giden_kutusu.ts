@@ -183,7 +183,7 @@ const bekle = (ms: number) => new Promise((r) => setTimeout(r, ms));
 interface Ortam {
   readonly prisma: Prisma;
   readonly genel: string;
-  readonly tailnet: string;
+  readonly portal: string;
   readonly cerez: string;
   readonly a: KurulumFiksturu;
   readonly aAnahtar: TestAnahtari;
@@ -218,7 +218,7 @@ const tasi = (o: Ortam, anahtar: TestAnahtari) =>
 const devral = (o: Ortam) =>
   imzaliPost(o.genel, ENDPOINTS.DR_TAKEOVER, { kurulumId: o.dr.kurulumId, amac: "dr-devral", anahtar: o.drAnahtar, govde: { v: 1, anaKurulumId: o.a.kurulumId, gerekce: `${KANARYA}-DR` } });
 
-const deneme = (o: Ortam, token: string) => portalIstek(o.tailnet, "/portal/api/bildirimler/deneme", { cerez: o.cerez, govde: { clientToken: token } });
+const deneme = (o: Ortam, token: string) => portalIstek(o.portal, "/portal/api/bildirimler/deneme", { cerez: o.cerez, govde: { clientToken: token } });
 
 async function planliEylem(o: Ortam) {
   const s = await import("../src/services/sanction.service");
@@ -477,7 +477,7 @@ async function denemeHizi(o: Ortam, ilkToken: string, ikinci: { cerez: string })
   const tekrar = await deneme(o, ilkToken);
   kontrol("§5b ✓K aynı işlem kimliğinin tekrarı pencerede de YANITI alır (201 · idempotent-replay) — sınır tekrar oynatmayı bozmaz", tekrar.status === 201 && tekrar.basliklar.get("idempotent-replay") === "true", `${tekrar.status}`);
   const baska = randomUUID();
-  const b = await portalIstek(o.tailnet, "/portal/api/bildirimler/deneme", { cerez: ikinci.cerez, govde: { clientToken: baska } });
+  const b = await portalIstek(o.portal, "/portal/api/bildirimler/deneme", { cerez: ikinci.cerez, govde: { clientToken: baska } });
   kontrol("§5c başka kullanıcı etkilenmez (201, iki kanal satırı)", b.status === 201 && (await prisma.bildirim.count({ where: { tekillikAnahtari: `DENEME:${baska}` } })) === 2, `${b.status}`);
   const s = new CooldownLimiter(300_000);
   const t0 = 1_000_000;
@@ -522,9 +522,9 @@ async function main(): Promise<void> {
     await etkin(dr, drAnahtar);
     const yonetici = await portalKullaniciAc(ctx, "SATICI_YONETICI");
     kullanicilar.push(yonetici.id);
-    const cerez = (await portalGiris(sunucu.tailnet, "/portal/api", yonetici)).cerez ?? "";
+    const cerez = (await portalGiris(sunucu.portal, "/portal/api", yonetici)).cerez ?? "";
     const fpYabanci = digestFingerprint({ ...HAM_PARMAK_IZI, f1: "{0a0b0c0d-0e0f-4a4b-9c9d-0e0f0a0b0c0d}", f2: "99999999-8888-7777-6666-555555555555", f3: "KANARYADISK" }, f.tuz);
-    const o: Ortam = { prisma, genel: sunucu.genel, tailnet: sunucu.tailnet, cerez, a, aAnahtar, dr, drAnahtar, fpYabanci, fpSahip: f.parmakIzi, sonKira };
+    const o: Ortam = { prisma, genel: sunucu.genel, portal: sunucu.portal, cerez, a, aAnahtar, dr, drAnahtar, fpYabanci, fpSahip: f.parmakIzi, sonKira };
     const x = await ayniTx(o);
     tokenler.push(x.token);
     await ayniTxSonra(o, x);
@@ -537,7 +537,7 @@ async function main(): Promise<void> {
     await govdeSiniri(o, ornekler, b, bAnahtar);
     const ikinciKullanici = await portalKullaniciAc(ctx, "SATICI_YONETICI");
     kullanicilar.push(ikinciKullanici.id);
-    const ikinciCerez = (await portalGiris(sunucu.tailnet, "/portal/api", ikinciKullanici)).cerez ?? "";
+    const ikinciCerez = (await portalGiris(sunucu.portal, "/portal/api", ikinciKullanici)).cerez ?? "";
     tokenler.push(...(await denemeHizi(o, x.token, { cerez: ikinciCerez })));
   } catch (err) {
     kontrol("beklenmeyen hata", false, err instanceof Error ? (err.stack ?? err.message) : String(err));

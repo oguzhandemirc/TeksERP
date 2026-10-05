@@ -17,7 +17,7 @@ import path from "node:path";
 import vm from "node:vm";
 import { SHA256_JS, UPLOAD_JS } from "../src/http/upload-page-script";
 import { dagitimOrtamiKur, genelIstek, sha256 } from "./lib/dagitim-ortam";
-import { hedefDbKapisi, kapat, kontrol, portalIstek, sonuc } from "./lib/test-ortam";
+import { hedefDbKapisi, kapat, kontrol, portalFetch, portalIstek, sonuc } from "./lib/test-ortam";
 
 const MB = 1024 * 1024;
 
@@ -96,8 +96,8 @@ async function main(): Promise<void> {
     kontrol("§5b parça dizini silindi", !existsSync(path.join(d.dizin.dosya, "parca", ov.oturumId)));
     const tm2 = await jsonPost(`/oturum/${ov.oturumId}/tamamla`, {});
     kontrol("§5c tamamlama tekrarı aynı dosyayı döndürür (idempotent)", tm2.status === 200 && (tm2.json.data as { dosyaId: string }).dosyaId === tv.dosyaId);
-    const ham = await portalIstek(d.sunucu.tailnet, `/portal/api/ham/dosyalar/${tv.dosyaId}`, { cerez: d.operator.cerez });
-    const hamBody = await fetch(`${d.sunucu.tailnet}/portal/api/ham/dosyalar/${tv.dosyaId}`, { headers: { Cookie: d.operator.cerez } }).then(async (r) => Buffer.from(await r.arrayBuffer()));
+    const ham = await portalIstek(d.sunucu.portal, `/portal/api/ham/dosyalar/${tv.dosyaId}`, { cerez: d.operator.cerez });
+    const hamBody = await portalFetch(`${d.sunucu.portal}/portal/api/ham/dosyalar/${tv.dosyaId}`, { headers: { Cookie: d.operator.cerez } }).then(async (r) => Buffer.from(await r.arrayBuffer()));
     kontrol("§5d satıcı gelen dosyayı portaldan indirir, gövde birebir", ham.status === 200 && sha256(hamBody) === sha256(kaynak));
     const yuklendi = await prisma.dagitimDefteri.count({ where: { dosyaId: tv.dosyaId, olay: "DOSYA_YUKLENDI" } });
     kontrol("§5e defter DOSYA_YUKLENDI (bir kez)", yuklendi === 1, `${yuklendi}`);
@@ -117,8 +117,8 @@ async function main(): Promise<void> {
     const go = await d.p("POST", "/dagitim/giden-oturum", { musteriId: d.musteriId, dosyaAdi: "Kurulum Kılavuzu.pdf", boyut: giden.length, sha256: sha256(giden) }, d.operator.cerez);
     const gid = go.veri.oturumId as string;
     const put = (i: number, v: Buffer, cerez = d.operator.cerez) =>
-      fetch(`${d.sunucu.tailnet}/portal/api/ham/giden-oturum/${gid}/parca/${i}`, { method: "PUT", headers: { Cookie: cerez, "Content-Type": "application/octet-stream", "X-Parca-Sha256": sha256(v) }, body: new Uint8Array(v) });
-    const cerezsiz = await fetch(`${d.sunucu.tailnet}/portal/api/ham/giden-oturum/${gid}/parca/0`, { method: "PUT", body: new Uint8Array(giden.subarray(0, MB)) });
+      portalFetch(`${d.sunucu.portal}/portal/api/ham/giden-oturum/${gid}/parca/${i}`, { method: "PUT", headers: { Cookie: cerez, "Content-Type": "application/octet-stream", "X-Parca-Sha256": sha256(v) }, body: new Uint8Array(v) });
+    const cerezsiz = await portalFetch(`${d.sunucu.portal}/portal/api/ham/giden-oturum/${gid}/parca/0`, { method: "PUT", body: new Uint8Array(giden.subarray(0, MB)) });
     const g0 = await put(0, giden.subarray(0, MB));
     const g1 = await put(1, giden.subarray(MB));
     const gt = await d.p("POST", `/dagitim/giden-oturum/${gid}/tamamla`, {}, d.operator.cerez);

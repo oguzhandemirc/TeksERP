@@ -37,6 +37,7 @@ import {
   type Fikstur,
   type TestAnahtari,
 } from "../../../../Teks-Erp/scripts/lib/lisans-fikstur";
+import { ERISIM_BASLIGI, ERISIM_EPOSTA, ERISIM_TAKIM_ALANI, erisimJetonu, erisimOrtami } from "./erisim-duzenegi";
 import { loadConfig } from "../../src/config";
 import { passwordBuffer, subKeyFileFor, wrapPrivateKey, writeKeyFileExclusive } from "../../src/keys/key-files";
 import { KeyStore } from "../../src/keys/key-store";
@@ -134,8 +135,6 @@ export interface CalisanSunucu {
   readonly genel: string;
   /** Satıcı portalı = ERİŞİM dinleyicisi; istek yardımcıları (portalIstek · portalGiris · portalFetch) JWT'yi ekler. */
   readonly portal: string;
-  /** @deprecated T1b: `portal` — taşıma bitince silinir (aynı ERİŞİM adresi; tünel yok). */
-  readonly tailnet: string;
   /** İç API dinleyicisi; ortak sır dosyası verilmediyse null (dinleyici AÇILMAZ). */
   readonly ic: string | null;
   readonly surec: ChildProcess;
@@ -189,9 +188,6 @@ export function sunucuBaslat(ortam: AnahtarOrtami, ekOrtam: Record<string, strin
         resolve({
           genel: `http://127.0.0.1:${m[1]}`,
           get portal() {
-            return portalAdresi();
-          },
-          get tailnet() {
             return portalAdresi();
           },
           ic: m[2] === "kapali" ? null : `http://127.0.0.1:${m[2]}`,
@@ -608,47 +604,8 @@ export function kiraIdOf(json: Record<string, unknown>): string {
 }
 
 // ---------------------------------------------------------------- ERİŞİM düzeneği (satıcı portalının tek yolu)
-// Süreç başına TEK RSA-2048 anahtarı ve TEK JWKS dosyası (süreç başında yazılır, çıkışta silinir — yaş tavanı ısırmaz).
-// Takım alanı ve AUD sahtedir; sunucu ağa çıkmaz. Jeton her istekte taze basılır (exp +1 sa).
-export const ERISIM_TAKIM_ALANI = "bekci.cloudflareaccess.com";
-export const ERISIM_EPOSTA = "bekci@ornek.test";
-export const ERISIM_BASLIGI = "cf-access-jwt-assertion";
-
-interface ErisimAnahtari {
-  readonly ozel: KeyObject;
-  readonly kid: string;
-  readonly aud: string;
-  readonly jwksDosyasi: string;
-}
-let erisimAnahtari: ErisimAnahtari | null = null;
-
-function erisimAnahtar(): ErisimAnahtari {
-  if (erisimAnahtari) return erisimAnahtari;
-  const { privateKey, publicKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
-  const kid = `bekci-${randomUUID().slice(0, 8)}`;
-  const dizin = mkdtempSync(path.join(os.tmpdir(), "satici-erisim-"));
-  process.once("exit", () => rmSync(dizin, { recursive: true, force: true }));
-  const jwksDosyasi = path.join(dizin, "certs.json");
-  const jwk = publicKey.export({ format: "jwk" });
-  writeFileSync(jwksDosyasi, `${JSON.stringify({ keys: [{ kid, kty: "RSA", n: jwk.n, e: jwk.e, alg: "RS256", use: "sig" }] })}\n`);
-  erisimAnahtari = { ozel: privateKey, kid, aud: randomBytes(32).toString("hex"), jwksDosyasi };
-  return erisimAnahtari;
-}
-
-/** Bu sürecin düzeneğine göre geçerli Access JWT'si (gerçek RS256). */
-export function erisimJetonu(g: { eposta?: string } = {}): string {
-  const a = erisimAnahtar();
-  const sn = Math.floor(Date.now() / 1000);
-  const b64u = (x: unknown): string => Buffer.from(JSON.stringify(x)).toString("base64url");
-  const govde = `${b64u({ alg: "RS256", kid: a.kid, typ: "JWT" })}.${b64u({ aud: [a.aud], email: g.eposta ?? ERISIM_EPOSTA, sub: "bekci", iss: `https://${ERISIM_TAKIM_ALANI}`, iat: sn - 5, nbf: sn - 5, exp: sn + 3600, type: "app" })}`;
-  return `${govde}.${sign("sha256", Buffer.from(govde), a.ozel).toString("base64url")}`;
-}
-
-/** Sunucunun ERİŞİM ayarları (gerçek süreç ortamı ya da `loadConfig` girdisi). */
-export function erisimOrtami(): Record<string, string> {
-  const a = erisimAnahtar();
-  return { PORT_ERISIM: "0", ERISIM_BIND: "127.0.0.1", CF_ACCESS_TAKIM_ALANI: ERISIM_TAKIM_ALANI, CF_ACCESS_AUD: a.aud, CF_ACCESS_JWKS_DOSYASI: a.jwksDosyasi };
-}
+// Anahtar · JWKS · jeton `erisim-duzenegi.ts`te (yalnız node: bağımlı yaprak — Teks-Erp senaryosu da içe aktarır).
+export { ERISIM_BASLIGI, ERISIM_EPOSTA, ERISIM_TAKIM_ALANI, erisimJetonu, erisimOrtami };
 
 /** Düzeneğin ERİŞİM adresleri: istek yardımcıları yalnız bunlara JWT ekler (bayi/genel adresine asla). */
 const erisimTabanlari = new Set<string>();
@@ -673,8 +630,6 @@ export function portalFetch(url: string, init: RequestInit = {}): Promise<Respon
 export interface PortalSunuculari {
   /** Satıcı portalı = ERİŞİM uygulaması (/portal/api); istek yardımcıları JWT'yi ekler. */
   readonly portal: string;
-  /** @deprecated T1b: `portal` — taşıma bitince silinir (aynı ERİŞİM adresi; tünel yok). */
-  readonly tailnet: string;
   /** Genel dinleyici (bayi alt-portalı /bayi/api, /v1/*). */
   readonly genel: string;
   kapat(): Promise<void>;
@@ -702,7 +657,6 @@ export async function portalSunuculariKur(ctx: VendorContext): Promise<PortalSun
   const kapat = (s: http.Server) => new Promise<void>((r) => (s.closeAllConnections(), s.close(() => r())));
   return {
     portal,
-    tailnet: portal,
     genel: `http://127.0.0.1:${genelAdresi.port}`,
     kapat: async () => {
       await kapat(e);

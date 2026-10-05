@@ -11,6 +11,7 @@ import http from "node:http";
 import https from "node:https";
 import net from "node:net";
 import path from "node:path";
+import { pathToFileURL } from "node:url";
 
 export const TEKS_KOKU = path.resolve(__dirname, "..", "..");
 export const SATICI_KOKU = path.resolve(TEKS_KOKU, "..", "satici", "sunucu");
@@ -118,6 +119,18 @@ function surecDurdur(surec: ChildProcess): Promise<void> {
 }
 
 // ---------------------------------------------------------------- satıcı sunucusu
+/** Satıcı bekçilerinin ERİŞİM düzeneği (`satici/sunucu/scripts/lib/erisim-duzenegi.ts`) — tek kaynak, kopyalanmaz. */
+export interface ErisimDuzenegi {
+  readonly ERISIM_BASLIGI: string;
+  erisimJetonu(g?: { eposta?: string; simdiMs?: number }): string;
+  erisimOrtami(): Record<string, string>;
+}
+
+/** Dinamik içe aktarma: satıcı kökü bu projenin `rootDir`'inin dışındadır (tip kontrolü dosyayı derleme kapsamına çekmesin). */
+export async function erisimDuzeneginiYukle(): Promise<ErisimDuzenegi> {
+  return (await import(pathToFileURL(path.join(SATICI_KOKU, "scripts", "lib", "erisim-duzenegi.ts")).href)) as ErisimDuzenegi;
+}
+
 export interface SaticiSureci {
   readonly genel: string;
   /** Satıcı portalı = ERİŞİM dinleyicisi (tünel yok); ortamda PORT_ERISIM + Access ayarı yoksa null. */
@@ -125,6 +138,16 @@ export interface SaticiSureci {
   saat(k: SaatKaydirmasi): Promise<void>;
   durdur(): Promise<void>;
   log(): string;
+}
+
+/**
+ * ERİŞİM JWKS dosyasının yazım zamanını satıcının (kaydırılmış) saatine çeker: sunucu, kaynağın yaşını KENDİ saatiyle
+ * ölçer ve 7 günü aşan kümeyi reddeder; koşucu saati günlerce ileri alınca dosya "bayat" görünmesin.
+ */
+function jwksSaatineCek(dosya: string | undefined, k: SaatKaydirmasi): void {
+  if (!dosya) return;
+  const t = (Date.now() + k.duvarMs) / 1000;
+  fs.utimesSync(dosya, t, t);
 }
 
 export function saticiBaslat(g: { env: NodeJS.ProcessEnv; saat: SaatKaydirmasi; logDosyasi: string }): Promise<SaticiSureci> {
@@ -153,7 +176,10 @@ export function saticiBaslat(g: { env: NodeJS.ProcessEnv; saat: SaatKaydirmasi; 
       resolve({
         genel: `http://127.0.0.1:${m[1]}`,
         portal: m[2] === "kapali" ? null : `http://127.0.0.1:${m[2]}`,
-        saat: (k) => saatGonder(surec, k),
+        saat: async (k) => {
+          await saatGonder(surec, k);
+          jwksSaatineCek(g.env.CF_ACCESS_JWKS_DOSYASI, k);
+        },
         durdur: () => surecDurdur(surec),
         log: () => log,
       });

@@ -48,7 +48,7 @@ async function main(): Promise<void> {
   try {
     const yonetici = await portalKullaniciAc(ctx, "SATICI_YONETICI");
     kullanicilar.push(yonetici.id);
-    const giris = await portalGiris(sunucu.tailnet, "/portal/api", yonetici);
+    const giris = await portalGiris(sunucu.portal, "/portal/api", yonetici);
     const cerez = giris.cerez!;
     const k = await kurulumFiksturu(ctx);
     kurulumlar.push(k.kurulumDbId);
@@ -61,9 +61,9 @@ async function main(): Promise<void> {
     const kademe = async () => (await computeSanctionState(prisma, k.kurulumDbId)).kademe;
 
     console.log("\n§1 K4/K5 yazarak ikinci onay");
-    const onaysiz = await portalIstek(sunucu.tailnet, yol("agir-yaptirim"), { cerez, govde: { clientToken: randomUUID(), kademe: "K4", sebep: "sözleşme ihlali" } });
-    const yanlis = await portalIstek(sunucu.tailnet, yol("agir-yaptirim"), { cerez, govde: { clientToken: randomUUID(), kademe: "K4", sebep: "sözleşme ihlali", onay: "TKS-2026-9999" } });
-    const kucukHarf = await portalIstek(sunucu.tailnet, yol("agir-yaptirim"), { cerez, govde: { clientToken: randomUUID(), kademe: "K5", sebep: "tam durdurma", onay: k.lisansNo.toLowerCase() } });
+    const onaysiz = await portalIstek(sunucu.portal, yol("agir-yaptirim"), { cerez, govde: { clientToken: randomUUID(), kademe: "K4", sebep: "sözleşme ihlali" } });
+    const yanlis = await portalIstek(sunucu.portal, yol("agir-yaptirim"), { cerez, govde: { clientToken: randomUUID(), kademe: "K4", sebep: "sözleşme ihlali", onay: "TKS-2026-9999" } });
+    const kucukHarf = await portalIstek(sunucu.portal, yol("agir-yaptirim"), { cerez, govde: { clientToken: randomUUID(), kademe: "K5", sebep: "tam durdurma", onay: k.lisansNo.toLowerCase() } });
     kontrol(
       "§1a onaysız / yanlış numara / küçük harf → 400 IKINCI_ONAY_GEREKLI",
       [onaysiz, yanlis, kucukHarf].every((y) => y.status === 400 && y.kod === "IKINCI_ONAY_GEREKLI"),
@@ -71,40 +71,40 @@ async function main(): Promise<void> {
     );
     kontrol("§1b reddedilen ağır eylemler deftere satır YAZMAZ", (await defter()).length === 0);
     const k4Govde = { clientToken: randomUUID(), kademe: "K4", sebep: "sözleşme ihlali", onay: k.lisansNo, mesaj: "Lisans askıda" };
-    const k4 = await portalIstek(sunucu.tailnet, yol("agir-yaptirim"), { cerez, govde: k4Govde });
+    const k4 = await portalIstek(sunucu.portal, yol("agir-yaptirim"), { cerez, govde: k4Govde });
     kontrol("§1c ✓K lisans numarası AYNEN → 201 + kademe K4", k4.status === 201 && (await kademe()) === "K4", `${k4.status} ${k4.kod ?? ""}`);
     const k4Satir = await prisma.yaptirimEylemi.findUniqueOrThrow({ where: { id: k4.veri.id as string } });
     kontrol("§1d defter satırında sebep + yapan (satici:<kullanıcı>)", k4Satir.sebep === "sözleşme ihlali" && k4Satir.yapan === `satici:${yonetici.kullaniciAdi}`, k4Satir.yapan);
-    const k4Hafif = await portalIstek(sunucu.tailnet, yol("yaptirim"), { cerez, govde: { clientToken: randomUUID(), kademe: "K4", sebep: "arka kapı" } });
+    const k4Hafif = await portalIstek(sunucu.portal, yol("yaptirim"), { cerez, govde: { clientToken: randomUUID(), kademe: "K4", sebep: "arka kapı" } });
     kontrol("§1e hafif uçtan K4 geçmez → 400 (şema: yalnız K0–K3)", k4Hafif.status === 400 && k4Hafif.kod === "GOVDE_GECERSIZ", `${k4Hafif.status}`);
 
     console.log("\n§2 işlem kimliği (idempotency)");
-    const tekrar = await portalIstek(sunucu.tailnet, yol("agir-yaptirim"), { cerez, govde: k4Govde });
+    const tekrar = await portalIstek(sunucu.portal, yol("agir-yaptirim"), { cerez, govde: k4Govde });
     kontrol("§2a aynı kimlik + aynı gövde → aynı yanıt (aynı eylem id), Idempotent-Replay", tekrar.status === 201 && tekrar.veri.id === k4.veri.id && tekrar.basliklar.get("idempotent-replay") === "true");
     kontrol("§2b tekrar deftere ikinci satır YAZMAZ", (await defter()).length === 1);
-    const cakisan = await portalIstek(sunucu.tailnet, yol("agir-yaptirim"), { cerez, govde: { ...k4Govde, sebep: "başka sebep" } });
+    const cakisan = await portalIstek(sunucu.portal, yol("agir-yaptirim"), { cerez, govde: { ...k4Govde, sebep: "başka sebep" } });
     kontrol("§2c aynı kimlik + BAŞKA gövde → 409 ISLEM_KIMLIGI_CAKISTI", cakisan.status === 409 && cakisan.kod === "ISLEM_KIMLIGI_CAKISTI", `${cakisan.status} ${cakisan.kod}`);
-    const baskaYol = await portalIstek(sunucu.tailnet, yol("yaptirim"), { cerez, govde: { clientToken: k4Govde.clientToken, kademe: "K0", sebep: "x" } });
+    const baskaYol = await portalIstek(sunucu.portal, yol("yaptirim"), { cerez, govde: { clientToken: k4Govde.clientToken, kademe: "K0", sebep: "x" } });
     kontrol("§2d aynı kimlik BAŞKA uçta → 409 ISLEM_KIMLIGI_CAKISTI", baskaYol.status === 409 && baskaYol.kod === "ISLEM_KIMLIGI_CAKISTI");
-    const yeniKimlik = await portalIstek(sunucu.tailnet, yol("agir-yaptirim"), { cerez, govde: { ...k4Govde, clientToken: randomUUID() } });
+    const yeniKimlik = await portalIstek(sunucu.portal, yol("agir-yaptirim"), { cerez, govde: { ...k4Govde, clientToken: randomUUID() } });
     kontrol("§2e ✓K yeni kimlik + aynı gövde → YENİ satır", yeniKimlik.status === 201 && yeniKimlik.veri.id !== k4.veri.id && (await defter()).length === 2);
-    const kimliksiz = await portalIstek(sunucu.tailnet, yol("yaptirim"), { cerez, govde: { kademe: "K0", sebep: "x" } });
+    const kimliksiz = await portalIstek(sunucu.portal, yol("yaptirim"), { cerez, govde: { kademe: "K0", sebep: "x" } });
     kontrol("§2f işlem kimliği olmayan yazma → 400", kimliksiz.status === 400, `${kimliksiz.status}`);
 
     console.log("\n§3 geri al = ters kayıt (silme yok)");
-    await portalIstek(sunucu.tailnet, `/portal/api/yaptirimlar/${yeniKimlik.veri.id as string}/geri-al`, { cerez, govde: { clientToken: randomUUID(), sebep: "mükerrer eylem" } });
+    await portalIstek(sunucu.portal, `/portal/api/yaptirimlar/${yeniKimlik.veri.id as string}/geri-al`, { cerez, govde: { clientToken: randomUUID(), sebep: "mükerrer eylem" } });
     const oncekiSatirlar = (await defter()).map((r) => r.id);
-    const geri = await portalIstek(sunucu.tailnet, `/portal/api/yaptirimlar/${k4.veri.id as string}/geri-al`, { cerez, govde: { clientToken: randomUUID(), sebep: "ödeme alındı" } });
+    const geri = await portalIstek(sunucu.portal, `/portal/api/yaptirimlar/${k4.veri.id as string}/geri-al`, { cerez, govde: { clientToken: randomUUID(), sebep: "ödeme alındı" } });
     const sonrakiSatirlar = await defter();
     const geriSatir = sonrakiSatirlar.find((r) => r.id === geri.veri.id);
     kontrol("§3a geri al → 201 GERI_AL satırı, hedefe bağlı", geri.status === 201 && geriSatir?.tur === "GERI_AL" && geriSatir.geriAlinanEylemId === k4.veri.id, `${geri.status}`);
     kontrol("§3b ileri satır YERİNDE (hiçbir satır silinmedi, defter büyüdü)", oncekiSatirlar.every((id) => sonrakiSatirlar.some((r) => r.id === id)) && sonrakiSatirlar.length === oncekiSatirlar.length + 1);
     kontrol("§3c ✓K geri alınan K4'ler kademeden düştü (kademe yok)", (await kademe()) === null);
-    const ikinciGeri = await portalIstek(sunucu.tailnet, `/portal/api/yaptirimlar/${k4.veri.id as string}/geri-al`, { cerez, govde: { clientToken: randomUUID(), sebep: "tekrar" } });
+    const ikinciGeri = await portalIstek(sunucu.portal, `/portal/api/yaptirimlar/${k4.veri.id as string}/geri-al`, { cerez, govde: { clientToken: randomUUID(), sebep: "tekrar" } });
     kontrol("§3d aynı eylem ikinci kez geri alınamaz → 409 DURUM_CAKISMASI", ikinciGeri.status === 409 && ikinciGeri.kod === "DURUM_CAKISMASI", `${ikinciGeri.status} ${ikinciGeri.kod}`);
-    const tersinTersi = await portalIstek(sunucu.tailnet, `/portal/api/yaptirimlar/${geri.veri.id as string}/geri-al`, { cerez, govde: { clientToken: randomUUID(), sebep: "x" } });
+    const tersinTersi = await portalIstek(sunucu.portal, `/portal/api/yaptirimlar/${geri.veri.id as string}/geri-al`, { cerez, govde: { clientToken: randomUUID(), sebep: "x" } });
     kontrol("§3e ters satırın kendisi geri alınamaz → 400", tersinTersi.status === 400, `${tersinTersi.status}`);
-    const k5 = await portalIstek(sunucu.tailnet, yol("agir-yaptirim"), { cerez, govde: { clientToken: randomUUID(), kademe: "K5", sebep: "ödeme yok", onay: k.lisansNo } });
+    const k5 = await portalIstek(sunucu.portal, yol("agir-yaptirim"), { cerez, govde: { clientToken: randomUUID(), kademe: "K5", sebep: "ödeme yok", onay: k.lisansNo } });
     kontrol("§3f K5 (onaylı) → 201 + kademe K5", k5.status === 201 && (await kademe()) === "K5");
     let silmeReddi = "";
     try {
@@ -121,9 +121,9 @@ async function main(): Promise<void> {
     kontrol("§3g DB seddi: defter satırı silinemez ve düzeltilemez", /Defter satırı/.test(silmeReddi) && /Defter satırı/.test(duzeltmeReddi));
 
     console.log("\n§4 sebep zorunlu · denetim · zil");
-    const sebepsiz = await portalIstek(sunucu.tailnet, yol("yaptirim"), { cerez, govde: { clientToken: randomUUID(), kademe: "K1", sebep: "   " } });
+    const sebepsiz = await portalIstek(sunucu.portal, yol("yaptirim"), { cerez, govde: { clientToken: randomUUID(), kademe: "K1", sebep: "   " } });
     kontrol("§4a boşluktan ibaret sebep → 400", sebepsiz.status === 400, `${sebepsiz.status}`);
-    const k3 = await portalIstek(sunucu.tailnet, yol("yaptirim"), { cerez, govde: { clientToken: randomUUID(), kademe: "K3", kisitlamaGun: 7, sebep: "30 gün gecikme" } });
+    const k3 = await portalIstek(sunucu.portal, yol("yaptirim"), { cerez, govde: { clientToken: randomUUID(), kademe: "K3", kisitlamaGun: 7, sebep: "30 gün gecikme" } });
     const k3Tarih = (k3.veri.parametre as { kisitlamaTarihi?: string } | undefined)?.kisitlamaTarihi;
     const k3Gun = k3Tarih ? (Date.parse(k3Tarih) - Date.now()) / 86_400_000 : -1;
     kontrol("§4b K3 7 gün → kısıtlama tarihi ~7 gün sonra", k3.status === 201 && k3Gun > 6.9 && k3Gun < 7.1, k3Gun.toFixed(2));
@@ -136,9 +136,9 @@ async function main(): Promise<void> {
     console.log("\n§5 geri sayımı 7 günden kısa K3 = AĞIR yaptırım");
     const operator = await portalKullaniciAc(ctx, "SATICI_OPERATOR");
     kullanicilar.push(operator.id);
-    const opCerez = (await portalGiris(sunucu.tailnet, "/portal/api", operator)).cerez!;
-    const op = (u: string, govde: object) => portalIstek(sunucu.tailnet, u, { cerez: opCerez, govde: { clientToken: randomUUID(), ...govde } });
-    const yon = (u: string, govde: object) => portalIstek(sunucu.tailnet, u, { cerez, govde: { clientToken: randomUUID(), ...govde } });
+    const opCerez = (await portalGiris(sunucu.portal, "/portal/api", operator)).cerez!;
+    const op = (u: string, govde: object) => portalIstek(sunucu.portal, u, { cerez: opCerez, govde: { clientToken: randomUUID(), ...govde } });
+    const yon = (u: string, govde: object) => portalIstek(sunucu.portal, u, { cerez, govde: { clientToken: randomUUID(), ...govde } });
     const satirSayisi = (await defter()).length;
     const opKisa = await op(yol("yaptirim"), { kademe: "K3", kisitlamaGun: 3, sebep: "kısa geri sayım" });
     const opTarih = await op(yol("yaptirim"), { kademe: "K3", kisitlamaTarihi: new Date(Date.now() + 2 * 86_400_000).toISOString(), sebep: "kısa tarih" });

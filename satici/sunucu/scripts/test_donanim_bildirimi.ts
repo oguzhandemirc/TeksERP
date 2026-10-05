@@ -1,6 +1,6 @@
 // =============================================================================
 // DONANIM DEĞİŞİKLİĞİ BİLDİRİMİ + ZAYIF TANIMA LİSTESİ (lisans v2 K8 · L2-11) — donanım değişikliği lisansı iptal ETMEZ,
-// öğrenilir. Satıcı uygulamaları süreç içinde (genel + tailnet), kendi _test DB'si.
+// öğrenilir. Satıcı uygulamaları süreç içinde (genel + ERİŞİM), kendi _test DB'si.
 //   §1 saf politika: kümenin kuralı (zayıf küme → `zayif`) · öğrenme (güçlülerden ≥ 2; f1 + f5 tutup güçlüler tutmuyorsa
 //      HAYIR; zayıf kümede zayıf kural) · portalın etken etken karşılaştırması
 //   §2 `POST /v1/donanim` güçlüler tutuyor: kendiliğinden ONAYLANDI + yeni kümeyi taşıyan kira (zincir ucu ilerler, kural
@@ -158,9 +158,9 @@ async function main(): Promise<void> {
     console.log("\n§4 portal kararı");
     const op = await portalKullaniciAc(ctx, "SATICI_OPERATOR");
     kullanicilar.push(op.id);
-    const giris = await portalGiris(sunucular.tailnet, "/portal/api", op);
+    const giris = await portalGiris(sunucular.portal, "/portal/api", op);
     const cerez = giris.cerez ?? "";
-    const liste = await portalIstek(sunucular.tailnet, "/portal/api/donanim-talepleri?durum=BEKLIYOR", { cerez });
+    const liste = await portalIstek(sunucular.portal, "/portal/api/donanim-talepleri?durum=BEKLIYOR", { cerez });
     const satirlar = ((liste.veri as { items?: Record<string, unknown>[] }).items ?? []).filter((r) => r.kurulumId === k.kurulumDbId);
     const satir = satirlar[0] as { id?: string; karsilastirma?: { etkenler?: Record<string, string>; tutanGuclu?: number }; parmakIzi?: unknown } | undefined;
     kontrol("§4a liste: talep etken etken karşılaştırmayla (f2 · f3 · f4 FARKLI, tutan güçlü 0), tuzlu özet YOK",
@@ -168,9 +168,9 @@ async function main(): Promise<void> {
         satir.parmakIzi === undefined && !JSON.stringify(liste.json).includes(ucuncu.f4!),
       `${liste.status} ${JSON.stringify(satir?.karsilastirma?.etkenler ?? {})}`);
     const talepId = y2.success ? y2.data.talepId : "";
-    const sebepsiz = await portalIstek(sunucular.tailnet, `/portal/api/donanim-talepleri/${talepId}/onayla`, { cerez, govde: { clientToken: crypto.randomUUID(), sebep: " " } });
-    const onay = await portalIstek(sunucular.tailnet, `/portal/api/donanim-talepleri/${talepId}/onayla`, { cerez, govde: { clientToken: crypto.randomUUID(), sebep: "müşteri sunucuyu yeniledi (fatura görüldü)" } });
-    const ikinci = await portalIstek(sunucular.tailnet, `/portal/api/donanim-talepleri/${talepId}/reddet`, { cerez, govde: { clientToken: crypto.randomUUID(), sebep: "geç kalan karar" } });
+    const sebepsiz = await portalIstek(sunucular.portal, `/portal/api/donanim-talepleri/${talepId}/onayla`, { cerez, govde: { clientToken: crypto.randomUUID(), sebep: " " } });
+    const onay = await portalIstek(sunucular.portal, `/portal/api/donanim-talepleri/${talepId}/onayla`, { cerez, govde: { clientToken: crypto.randomUUID(), sebep: "müşteri sunucuyu yeniledi (fatura görüldü)" } });
+    const ikinci = await portalIstek(sunucular.portal, `/portal/api/donanim-talepleri/${talepId}/reddet`, { cerez, govde: { clientToken: crypto.randomUUID(), sebep: "geç kalan karar" } });
     kontrol("§4b sebepsiz 400 · onay 200 · ikinci karar 409 DURUM_CAKISMASI",
       sebepsiz.status === 400 && onay.status === 200 && (onay.veri as { durum?: string }).durum === "ONAYLANDI" && ikinci.status === 409 && ikinci.kod === "DURUM_CAKISMASI",
       `${sebepsiz.status}/${onay.status} ${onay.kod ?? ""}/${ikinci.status} ${ikinci.kod ?? ""}`);
@@ -181,7 +181,7 @@ async function main(): Promise<void> {
       p4.status === 200 && (kiraYuku(p4.json).parmakIzi as Fingerprint).f2 === ucuncu.f2 && (await uyusmaz(k)) === 0, `${p4.status} ${p4.kod ?? ""}`);
     const b5 = await bildir(k, a, { ...ucuncu, f2: ozet("baska"), f3: ozet("baska3") });
     const y5 = HardwareReportResponseSchema.safeParse(b5.json);
-    const ret = await portalIstek(sunucular.tailnet, `/portal/api/donanim-talepleri/${y5.success ? y5.data.talepId : ""}/reddet`, { cerez, govde: { clientToken: crypto.randomUUID(), sebep: "müşteri bilgisi yok" } });
+    const ret = await portalIstek(sunucular.portal, `/portal/api/donanim-talepleri/${y5.success ? y5.data.talepId : ""}/reddet`, { cerez, govde: { clientToken: crypto.randomUUID(), sebep: "müşteri bilgisi yok" } });
     kontrol("§4e ret 200 REDDEDILDI, kabul edilen küme DEĞİŞMEDİ, kurulum kaydı PARMAK_IZI_REDDEDILDI",
       y5.success && y5.data.durum === "BEKLIYOR" && ret.status === 200 && JSON.stringify(await kabul(k)) === JSON.stringify(ucuncu) &&
         (await prisma.kurulumKaydi.count({ where: { kurulumId: k.kurulumDbId, olay: "PARMAK_IZI_REDDEDILDI" } })) === 1,

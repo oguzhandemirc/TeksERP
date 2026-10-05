@@ -104,13 +104,13 @@ async function main(): Promise<void> {
 
     const yonetici = await portalKullaniciAc(ctx, "SATICI_OPERATOR");
     kullanicilar.push(yonetici.id);
-    const g = await portalGiris(sunucu.tailnet, "/portal/api", yonetici);
+    const g = await portalGiris(sunucu.portal, "/portal/api", yonetici);
     const cerez = g.cerez ?? "";
-    const det = await portalIstek(sunucu.tailnet, `/portal/api/kurulumlar/${k.kurulumDbId}`, { cerez });
+    const det = await portalIstek(sunucu.portal, `/portal/api/kurulumlar/${k.kurulumDbId}`, { cerez });
     const kk = (det.veri.kurulumKaydi ?? []) as Array<{ olay: string; kaynakKayitId: string | null }>;
     kontrol("§1f ⭐ portal kurulum ayrıntısı kurulum kayıtlarını taşır", det.status === 200 && kk.filter((r) => r.olay === "BACKEND_KURULDU").length === 2, `${det.status}`);
 
-    await destekBolumu({ prisma, genel: sunucu.genel, tailnet: sunucu.tailnet, k, anahtar, cerez, yokla, ziller });
+    await destekBolumu({ prisma, genel: sunucu.genel, portal: sunucu.portal, k, anahtar, cerez, yokla, ziller });
   } catch (err) {
     kontrol("beklenmeyen hata", false, err instanceof Error ? err.stack ?? err.message : String(err));
   } finally {
@@ -127,7 +127,7 @@ async function main(): Promise<void> {
 interface DestekGirdi {
   readonly prisma: Prisma;
   readonly genel: string;
-  readonly tailnet: string;
+  readonly portal: string;
   readonly k: { kurulumDbId: string; kurulumId: string };
   readonly anahtar: TestAnahtari;
   readonly cerez: string;
@@ -166,23 +166,23 @@ async function destekBolumu(g: DestekGirdi): Promise<void> {
 
   console.log("\n§3 portal destek kutusu");
   const talep = await prisma.destekTalebi.findFirstOrThrow({ where: { kurulumId: k.kurulumDbId, talepId } });
-  const liste = await portalIstek(g.tailnet, "/portal/api/destek?durum=ACIK", { cerez });
+  const liste = await portalIstek(g.portal, "/portal/api/destek?durum=ACIK", { cerez });
   const items = (liste.veri.items ?? []) as Array<{ id: string; talepNo: string }>;
   kontrol("§3a liste (durum süzmesi sunucuda) talebi taşır", liste.status === 200 && items.some((i) => i.id === talep.id && i.talepNo === no), `${liste.status}`);
-  const ayr = await portalIstek(g.tailnet, `/portal/api/destek/${talep.id}`, { cerez });
+  const ayr = await portalIstek(g.portal, `/portal/api/destek/${talep.id}`, { cerez });
   kontrol("§3b ayrıntı: sağlık özeti + defter satırları, ek İKİLİSİ ayrıntıda YOK", ayr.status === 200 && ayr.veri.saglik !== undefined && Array.isArray(ayr.veri.olaylar) && !("ek" in ayr.veri));
-  const ek = await portalIstek(g.tailnet, `/portal/api/destek/${talep.id}/ek`, { cerez });
+  const ek = await portalIstek(g.portal, `/portal/api/destek/${talep.id}/ek`, { cerez });
   kontrol("§3c ek ayrı uçtan (tür + base64 aynı bayt)", ek.status === 200 && ek.veri.tur === "image/png" && ek.veri.veri === PNG_1X1);
 
   const token = randomUUID();
   const zilOnce = g.ziller.length;
-  const yan = await portalIstek(g.tailnet, `/portal/api/destek/${talep.id}/yanitla`, { cerez, govde: { clientToken: token, metin: "Tartı sürücüsünü 1.3.3 ile güncelleyin." } });
+  const yan = await portalIstek(g.portal, `/portal/api/destek/${talep.id}/yanitla`, { cerez, govde: { clientToken: token, metin: "Tartı sürücüsünü 1.3.3 ile güncelleyin." } });
   kontrol("§3d ⭐ yanıt: durum YANITLANDI + defter YANIT", yan.status === 200 && (await prisma.destekTalebi.findUniqueOrThrow({ where: { id: talep.id } })).durum === "YANITLANDI"
     && (await prisma.destekOlayi.count({ where: { talepId: talep.id, tur: "YANIT" } })) === 1, `${yan.status} ${yan.kod ?? ""}`);
   await new Promise((r) => setTimeout(r, 300));
   const zilYeni = g.ziller.slice(zilOnce).map((p) => JSON.parse(p) as { k: string; konu: string });
   kontrol("§3e ⭐ yanıt kuruluma zil `destek` çalar (COMMIT'te)", zilYeni.some((z) => z.k === k.kurulumDbId && z.konu === "destek"), JSON.stringify(zilYeni));
-  const tekrar = await portalIstek(g.tailnet, `/portal/api/destek/${talep.id}/yanitla`, { cerez, govde: { clientToken: token, metin: "Tartı sürücüsünü 1.3.3 ile güncelleyin." } });
+  const tekrar = await portalIstek(g.portal, `/portal/api/destek/${talep.id}/yanitla`, { cerez, govde: { clientToken: token, metin: "Tartı sürücüsünü 1.3.3 ile güncelleyin." } });
   kontrol("§3f aynı işlem kimliği: tekrar yanıtı, eylem ikinci kez KOŞMAZ", tekrar.status === 200 && tekrar.basliklar.get("idempotent-replay") === "true"
     && (await prisma.destekOlayi.count({ where: { talepId: talep.id, tur: "YANIT" } })) === 1);
 
@@ -191,11 +191,11 @@ async function destekBolumu(g: DestekGirdi): Promise<void> {
   const bu = destek.find((d) => d.talepId === talepId);
   kontrol("§3g ⭐ yanıt yoklama YANITINDA fabrikaya döner (talepId · durum · yanıt metni)", py.status === 200 && bu?.durum === "YANITLANDI" && bu.yanitlar.some((x) => x.metin.includes("1.3.3")), `${py.status} ${destek.length}`);
 
-  const kap = await portalIstek(g.tailnet, `/portal/api/destek/${talep.id}/kapat`, { cerez, govde: { clientToken: randomUUID(), not: "Sürücü güncellendi, kapatıldı." } });
+  const kap = await portalIstek(g.portal, `/portal/api/destek/${talep.id}/kapat`, { cerez, govde: { clientToken: randomUUID(), not: "Sürücü güncellendi, kapatıldı." } });
   kontrol("§3h kapanış: KAPANDI + defter KAPATILDI", kap.status === 200 && (await prisma.destekTalebi.findUniqueOrThrow({ where: { id: talep.id } })).durum === "KAPANDI"
     && (await prisma.destekOlayi.count({ where: { talepId: talep.id, tur: "KAPATILDI" } })) === 1);
-  const gec = await portalIstek(g.tailnet, `/portal/api/destek/${talep.id}/yanitla`, { cerez, govde: { clientToken: randomUUID(), metin: "geç yanıt" } });
-  const ikinci = await portalIstek(g.tailnet, `/portal/api/destek/${talep.id}/kapat`, { cerez, govde: { clientToken: randomUUID(), not: null } });
+  const gec = await portalIstek(g.portal, `/portal/api/destek/${talep.id}/yanitla`, { cerez, govde: { clientToken: randomUUID(), metin: "geç yanıt" } });
+  const ikinci = await portalIstek(g.portal, `/portal/api/destek/${talep.id}/kapat`, { cerez, govde: { clientToken: randomUUID(), not: null } });
   kontrol("§3i ⭐ kapalı talebe yanıt ve ikinci kapanış 409 (atomik claim)", gec.status === 409 && gec.kod === "DURUM_CAKISMASI" && ikinci.status === 409, `${gec.status} ${ikinci.status}`);
   const py2 = await g.yokla();
   const bu2 = ((py2.json.destek ?? []) as SupportTicketUpdate[]).find((d) => d.talepId === talepId);

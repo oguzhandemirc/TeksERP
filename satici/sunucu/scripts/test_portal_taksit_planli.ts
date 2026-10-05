@@ -44,8 +44,8 @@ async function main(): Promise<void> {
   try {
     const yonetici = await portalKullaniciAc(ctx, "SATICI_OPERATOR");
     kullanicilar.push(yonetici.id);
-    const cerez = (await portalGiris(sunucu.tailnet, "/portal/api", yonetici)).cerez!;
-    const api = (yol: string, govde?: unknown) => portalIstek(sunucu.tailnet, `/portal/api${yol}`, { cerez, govde });
+    const cerez = (await portalGiris(sunucu.portal, "/portal/api", yonetici)).cerez!;
+    const api = (yol: string, govde?: unknown) => portalIstek(sunucu.portal, `/portal/api${yol}`, { cerez, govde });
     const bitis = async (kurulumDbId: string) => (await prisma.hak.findFirstOrThrow({ where: { kurulumId: kurulumDbId, aktif: true } })).gecerlilikBitis?.getTime() ?? null;
     const simdi = Date.now();
 
