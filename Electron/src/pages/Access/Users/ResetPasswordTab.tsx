@@ -65,8 +65,9 @@ export function ResetPasswordTab({ userId, username }: Props) {
             <span className="font-mono">{username}</span> için yeni şifre
           </p>
           <p className="mt-0.5 text-xs text-muted-foreground">
-            Eski şifre sorulmaz; yeni şifre en az {PASSWORD_MIN_LENGTH} karakter olmalı. Kullanıcıya
-            yeni şifreyi güvenli bir kanaldan ileteceğini unutma.
+            Eski şifre sorulmaz; yeni şifre en az {PASSWORD_MIN_LENGTH} karakter olmalı. Bu şifre
+            geçicidir: kullanıcı ilk girişte (panel ya da tablet) kendi şifresini belirlemeden devam
+            edemez. Geçici şifreyi güvenli bir kanaldan ilet.
           </p>
         </div>
       </div>
@@ -98,7 +99,7 @@ export function ResetPasswordTab({ userId, username }: Props) {
       {done && (
         <div className="flex items-center gap-2 rounded-md border border-success/40 bg-success/10 p-2 text-xs text-success">
           <CheckCircle2 className="h-3.5 w-3.5" />
-          Şifre başarıyla güncellendi. Kullanıcı yeni şifreyle giriş yapabilir.
+          Şifre sıfırlandı. Kullanıcı geçici şifreyle girip kendi şifresini belirleyecek.
         </div>
       )}
 

@@ -56,6 +56,8 @@ const loginSchema = z.object({
   // İkinci faktör — yalnız hesabında TOTP açık kullanıcıdan istenir. Üst sınır:
   // kurtarma kodu yolunda bcrypt.compare çağrılır, sınırsız metin CPU yakar.
   totpCode: z.string().trim().min(1).max(64).optional(),
+  // Tablet zorunlu parola değişimi adımını taşıyor — değişim bekleyen hesap kısıtlı token alır.
+  passwordChangeCapable: z.boolean().optional(),
 });
 
 const loginCardSchema = z.object({
@@ -147,9 +149,14 @@ export class AuthController {
    *               totpCode:
    *                 type: string
    *                 description: Hesabında TOTP açık kullanıcı için 6 haneli kod ya da kurtarma kodu
+   *               passwordChangeCapable:
+   *                 type: boolean
+   *                 description: Tablet zorunlu parola değişimi adımını taşıyor; değişim bekleyen hesap kısıtlı token alır
    *     responses:
    *       200:
-   *         description: Başarılı giriş
+   *         description: Başarılı giriş (mustChangePassword true ise token yalnız me/logout/change-password'e geçer)
+   *       403:
+   *         description: PASSWORD_CHANGE_REQUIRED (değişim adımı olmayan tablet) ya da CHANNEL_DENIED
    *       401:
    *         description: Geçersiz kimlik bilgisi ya da TOTP_INVALID
    *       409:
@@ -223,6 +230,7 @@ export class AuthController {
       confirmKick: body.confirmKick,
       totpCode: body.totpCode,
       clientVersion: resolveClientVersion(req),
+      passwordChangeCapable: body.passwordChangeCapable,
     };
 
     try {

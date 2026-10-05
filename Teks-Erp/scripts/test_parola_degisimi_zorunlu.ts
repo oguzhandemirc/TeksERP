@@ -11,6 +11,9 @@
 //   §3 Satıcı (sistem) hesabı kendi parolasını bu uçtan değiştiremez (403).
 //   §4 İlk yönetici parolası: verilmezse 16 karakter rastgele + zorunlu değişim; politika
 //      dışı değer reddedilir; geçerli değer zorunlu değişimle doğar.
+//   §6 Yönetici sıfırlaması (POST /admin/users/:id/reset-password): başkasının parolası →
+//      bayrak açılır (audit `requireChange`), değişim adımlı tablet kısıtlı token alıp kendi
+//      parolasını belirler; kendi parolası ve satıcı hesabı bayrak doğurmaz.
 //   §5 Statik: beyanlı uç kümesi tam üç · admin uçlarında 6 karakter kuralı yok · panel
 //      politika aynası backend'e eşit · kurulum betiklerinde sabit parola yok · iki compose
 //      ILK_YONETICI_PAROLASI geçirir · sabit geliştirme parolası yalnız `--gelistirme`le.
@@ -27,6 +30,7 @@ import { AuthService, PASSWORD_CHANGE_REQUIRED_CODE } from "../src/services/auth
 import { SETTING_KEYS, invalidateFeatureFlagsCache } from "../src/services/system-setting.service";
 import { PASSWORD_MAX_BYTES, PASSWORD_MIN_LENGTH, passwordPolicyViolation } from "../src/constants/password-policy";
 import { ilkYoneticiParolasi } from "../src/lib/ilk-yonetici-parolasi";
+import { PermissionManagementService } from "../src/services/permission-management.service";
 
 let pass = 0;
 let fail = 0;
@@ -98,7 +102,16 @@ async function dinamik(): Promise<void> {
     },
     select: { id: true },
   });
-  const userIds = [user.id, sistem.id];
+  const sfrUser = await prisma.user.create({
+    data: {
+      username: `TEST-pdz-sfr-${ts}`,
+      passwordHash: await AuthService.hashPassword(ilkParola),
+      fullName: "TEST Sıfırlanan",
+      permissions: { create: { permissionId: rollRead.id } },
+    },
+    select: { id: true, username: true },
+  });
+  const userIds = [user.id, sistem.id, sfrUser.id];
 
   const server = app.listen(0, "127.0.0.1");
   await new Promise<void>((r) => server.once("listening", () => r()));
@@ -129,7 +142,9 @@ async function dinamik(): Promise<void> {
     invalidateFeatureFlagsCache();
     await prisma.session.deleteMany({ where: { userId: { in: userIds } } });
     await prisma.systemLog.deleteMany({
-      where: { OR: [{ userId: { in: userIds } }, { recordId: { in: [...userIds, username] } }] },
+      where: {
+        OR: [{ userId: { in: userIds } }, { recordId: { in: [...userIds, username, sfrUser.username] } }],
+      },
     });
     await prisma.userPermission.deleteMany({ where: { userId: { in: userIds } } });
     await prisma.user.deleteMany({ where: { id: { in: userIds } } });
@@ -146,10 +161,11 @@ async function dinamik(): Promise<void> {
     );
     const tablet = await call("POST", "/api/auth/login", null, { username, password: ilkParola, clientType: "mobile" });
     check(
-      "§1b tablet parola girişi 403 PASSWORD_CHANGE_REQUIRED (Türkçe mesaj)",
+      "§1b değişim adımı bildirmeyen (eski) tablet parola girişi 403 PASSWORD_CHANGE_REQUIRED + güncelleme cümlesi",
       tablet.status === 403 &&
         tablet.body.details?.code === PASSWORD_CHANGE_REQUIRED_CODE &&
-        /parola/i.test(tablet.body.message ?? ""),
+        /parola/i.test(tablet.body.message ?? "") &&
+        /tablet/i.test(tablet.body.message ?? ""),
       `status=${tablet.status} code=${String(tablet.body.details?.code)}`,
     );
     await prisma.systemSetting.upsert({
@@ -161,9 +177,19 @@ async function dinamik(): Promise<void> {
     const { pin } = await AuthService.setQuickPin(user.id, {}, undefined);
     const pinHata = await hataYakala(() => AuthService.loginWithQuickPin(pin ?? "", { clientType: "mobile" }));
     check(
-      "§1c tablet hızlı PIN girişi 403 PASSWORD_CHANGE_REQUIRED",
-      pinHata?.statusCode === 403 && pinHata?.details?.code === PASSWORD_CHANGE_REQUIRED_CODE,
+      "§1c tablet hızlı PIN girişi 403 PASSWORD_CHANGE_REQUIRED + adımın kullanıcı adı",
+      pinHata?.statusCode === 403 &&
+        pinHata?.details?.code === PASSWORD_CHANGE_REQUIRED_CODE &&
+        (pinHata?.details as { username?: string } | undefined)?.username === username,
       JSON.stringify(pinHata?.details ?? null),
+    );
+    const pinYetenekli = await hataYakala(() =>
+      AuthService.loginWithQuickPin(pin ?? "", { clientType: "mobile", passwordChangeCapable: true }),
+    );
+    check(
+      "§1c2 PIN girişinde değişim adımı bildirimi token AÇMAZ (yalnız parolalı giriş)",
+      pinYetenekli?.statusCode === 403 && pinYetenekli?.details?.code === PASSWORD_CHANGE_REQUIRED_CODE,
+      JSON.stringify(pinYetenekli?.details ?? null),
     );
     const me = await call("GET", "/api/auth/me", panelToken);
     check(
@@ -182,6 +208,25 @@ async function dinamik(): Promise<void> {
       "§1f izinli iş ucu (/api/rolls) da 403 PASSWORD_CHANGE_REQUIRED",
       rolls.status === 403 && rolls.body.details?.code === PASSWORD_CHANGE_REQUIRED_CODE,
       `status=${rolls.status}`,
+    );
+
+    const tabletAdim = await call("POST", "/api/auth/login", null, {
+      username,
+      password: ilkParola,
+      clientType: "mobile",
+      passwordChangeCapable: true,
+    });
+    const tabletToken = String(tabletAdim.body.data?.token ?? "");
+    check(
+      "§1g değişim adımlı tablet parola girişi 200 + mustChangePassword:true + token",
+      tabletAdim.status === 200 && tabletAdim.body.data?.mustChangePassword === true && tabletToken.length > 0,
+      `status=${tabletAdim.status}`,
+    );
+    const tabletRolls = await call("GET", "/api/rolls?limit=1", tabletToken);
+    check(
+      "§1h tablet kısıtlı token'ı iş ucunda 403 PASSWORD_CHANGE_REQUIRED",
+      tabletRolls.status === 403 && tabletRolls.body.details?.code === PASSWORD_CHANGE_REQUIRED_CODE,
+      `status=${tabletRolls.status}`,
     );
 
     // ── §2 kendi parolasını değiştirme ─────────────────────────────────────────
@@ -248,6 +293,88 @@ async function dinamik(): Promise<void> {
     check("§2i eski token 401", eskiToken.status === 401, `status=${eskiToken.status}`);
     const tabletYeni = await call("POST", "/api/auth/login", null, { username, password: yeniParola, clientType: "mobile" });
     check("§2j yeni parolayla tablet girişi 200", tabletYeni.status === 200, `status=${tabletYeni.status}`);
+
+    // ── §6 yönetici sıfırlaması ─────────────────────────────────────────────────
+    const geciciParola = `Gecici-Parola-${ts}`;
+    const sfrOnce = await prisma.user.findUniqueOrThrow({
+      where: { id: sfrUser.id },
+      select: { tokenVersion: true, mustChangePassword: true },
+    });
+    await PermissionManagementService.resetUserPassword(sfrUser.id, geciciParola, user.id);
+    const sfrSonra = await prisma.user.findUniqueOrThrow({
+      where: { id: sfrUser.id },
+      select: { tokenVersion: true, mustChangePassword: true },
+    });
+    check(
+      "§6a başkasının parolasını sıfırlamak bayrağı açar + tokenVersion +1",
+      !sfrOnce.mustChangePassword && sfrSonra.mustChangePassword && sfrSonra.tokenVersion === sfrOnce.tokenVersion + 1,
+      JSON.stringify(sfrSonra),
+    );
+    let sfrAudit: { newData: Prisma.JsonValue; userId: string | null } | null = null;
+    for (let i = 0; i < 20 && !sfrAudit; i++) {
+      sfrAudit = await prisma.systemLog.findFirst({
+        where: { tableName: "USER_PASSWORD", recordId: sfrUser.id },
+        select: { newData: true, userId: true },
+      });
+      if (!sfrAudit) await new Promise((r) => setTimeout(r, 100));
+    }
+    const sfrAuditMetni = JSON.stringify(sfrAudit?.newData ?? null);
+    check(
+      "§6b sıfırlama audit'i yapanı ve requireChange:true'yu taşır, parolayı taşımaz",
+      sfrAudit?.userId === user.id &&
+        (sfrAudit?.newData as { requireChange?: boolean } | null)?.requireChange === true &&
+        !sfrAuditMetni.includes(geciciParola),
+      sfrAuditMetni,
+    );
+    const sfrPanel = await call("POST", "/api/auth/login", null, {
+      username: sfrUser.username,
+      password: geciciParola,
+      clientType: "electron",
+    });
+    check(
+      "§6c sıfırlanan hesap panel girişinde mustChangePassword:true",
+      sfrPanel.status === 200 && sfrPanel.body.data?.mustChangePassword === true,
+      `status=${sfrPanel.status}`,
+    );
+    const sfrTablet = await call("POST", "/api/auth/login", null, {
+      username: sfrUser.username,
+      password: geciciParola,
+      clientType: "mobile",
+      passwordChangeCapable: true,
+    });
+    const sfrTabletToken = String(sfrTablet.body.data?.token ?? "");
+    const sfrDegis = await call("POST", "/api/auth/change-password", sfrTabletToken, {
+      currentPassword: geciciParola,
+      newPassword: yeniParola,
+    });
+    const sfrBayrak = await prisma.user.findUniqueOrThrow({
+      where: { id: sfrUser.id },
+      select: { mustChangePassword: true },
+    });
+    check(
+      "§6d tablet kısıtlı token'la kendi parolasını belirler → bayrak iner",
+      sfrTablet.status === 200 && sfrDegis.status === 200 && !sfrBayrak.mustChangePassword,
+      `giriş=${sfrTablet.status} değişim=${sfrDegis.status}`,
+    );
+    const sfrYeni = await call("POST", "/api/auth/login", null, {
+      username: sfrUser.username,
+      password: yeniParola,
+      clientType: "mobile",
+    });
+    check(
+      "§6e yeni parolayla eski tablet bile normal girer (mustChangePassword:false)",
+      sfrYeni.status === 200 && sfrYeni.body.data?.mustChangePassword === false,
+      `status=${sfrYeni.status}`,
+    );
+    await PermissionManagementService.resetUserPassword(sfrUser.id, geciciParola, sfrUser.id);
+    const kendi = await prisma.user.findUniqueOrThrow({
+      where: { id: sfrUser.id },
+      select: { mustChangePassword: true },
+    });
+    check("§6f kendi parolasını sıfırlayan bayrak doğurmaz", !kendi.mustChangePassword);
+    await PermissionManagementService.resetUserPassword(sistem.id, geciciParola, user.id);
+    const sis6 = await prisma.user.findUniqueOrThrow({ where: { id: sistem.id }, select: { mustChangePassword: true } });
+    check("§6g satıcı hesabının sıfırlanması bayrak doğurmaz (kendi uçtan değiştiremez)", !sis6.mustChangePassword);
 
     // ── §3 satıcı hesabı ───────────────────────────────────────────────────────
     const sis = await hataYakala(() => AuthService.changeOwnPassword(sistem.id, ilkParola, yeniParola));
