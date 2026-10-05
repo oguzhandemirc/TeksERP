@@ -377,7 +377,7 @@ Kapsam yetmezse genişletmek ayrı karardır → KARAR K-9.
 ### 8.2 Emekliler
 
 - **testfabrika:** kanal kaydı donuk dosyada kalır. Yayın ağacı VDS `~/emekli/testfabrika-html-20261005`. Silinmesi ayrı iş (kullanıcı cümlesiyle, yeni test kurulumu çalışınca).
-- **demofabrika:** kaldırıldı. Satıcıdaki kanal satırı ve kurulum kaydı `aktif=false`; D0 ölçer, O2 uygular.
+- **demofabrika:** kaldırıldı. Satıcıdaki kanal satırı ve kurulum kaydı `aktif=false` olur; O2 uygular. D0 (§8.5): ikisi de bugün etkin; kurulum `ETKIN`, son yoklama 2026-10-05 21:59 UTC.
 - **Hazırlık satıcısı:** emekli (2026-10-05). Kod izleri O14'te kalkar.
 
 ### 8.3 Sıra
@@ -406,6 +406,21 @@ Kapsam yetmezse genişletmek ayrı karardır → KARAR K-9.
   6. `test` grubuna yeni panel/tablet sürümü → kendiliğinden güncellenir.
 - "Önce test, sonra fabrika" kuralının hedefi budur. Bu kurulum çalışmadan hiçbir müşteri grubuna (`oncu`/`genel`) yayın yapılmaz.
 - adnansahin'in yeni sisteme alınması Faz 4'tür (yedekten kur; bu belgenin kapsamı dışı). O gün adnansahin satıcıda bir kurulum + grup alır. Aynı makineye kurulursa pm2 düzeni (port 4000) ile çakışma Faz 4 provasının konusudur.
+
+### 8.5 D0 ölçümü (2026-10-06, salt okuma)
+
+Üretim satıcısı: `tekserp-satici-uretim-db`, `BEGIN READ ONLY … ROLLBACK`, son migration `20261005120000_bildirim_bakim_bitisi_olayi`.
+
+| Ölçülen | Sonuç | Tasarıma etkisi |
+|---|---|---|
+| `kanal` satırları | TEK satır: `demofabrika` ("demofabrika-thinkpad"), **`tur=uretim`**, `guncelSurumler={}` | `test`/`oncu`/`genel` satırlarının hiçbiri yok; O2 üçünü de ekler. Satıcıda `adnansahin` ve `testfabrika` satırı hiç yok. adnansahin satıcıya bağlı değil (Faz 4), bu yüzden O2 onu etkileyemez. |
+| Kanal başına kurulum | `demofabrika`: 1 kurulum; `DEMO`, `ETKIN`, `aktif=true`; tesis "test-fabrika"; son yoklama 2026-10-05 21:59 UTC; 105 kira, sonuncusu aynı dakika | §8.2'nin `aktif=false` adımı bugün uygulanmış DEĞİL. O2 migration'ı kanalı (yeni `aktif` sütunu) ve kurulumu pasife alır. Kurulum `ETKIN` kaldığı sürece kira yolu ona kira basmaya devam eder; O2 pasif kurulumun kira/belirteç davranışını ölçmeli. |
+| `kanal` sütunları | `id, kod, ad, tur, guncelSurumler, createdAt, updatedAt` (`sira` ve `aktif` yok) | §3.1'deki sütun ekleme gerekli, tasarım değişmez. |
+| `AnahtarTuru='HAZIRLIK_KOK'` | 0 satır (anahtar kaydı: KOK 1 · ALT 1+1 emekli · INDIRME 1+1 emekli · ARA 1) | O14 veri taşımaz; enum değeri DB'de kalır, yazan yol kalkar (§7 aynen). |
+| `KanalTuru='hazirlik'` | 0 satır | O14c'nin "yeni yazım yok" bekçisi bugünkü veriyle çelişmez. |
+| 3.9 D1–D3 `main`de mi | **HAYIR**: üçü de yalnız `gece/paket-anahtar-d13` dalında (commit konuları "PAKET anahtarı kökün altında — D1" · "PAKET zinciri D2" · "PAKET zinciri D3"); `origin/main` = `2d5aeccd6` | O11a ve O14a bu yüzden bekler (bağımlılık sütunu aynen geçerli). O1–O10 ve O12–O13 bu bağımlılığı taşımaz. |
+| adnansahin eski kanalı | `indirme-kapisi-olc.mjs --adnansahin`: 9/9 belirteçsiz 200 (O1 öncesi ve sonrası) | Taban korunuyor. |
+| demofabrika K3 (önceki cevap) | **ÖLÇÜLEMEDİ**: thinkpad-1 tailnet'te çevrimiçi, ama bu Mac'ten SSH yolu kurulu değil (host anahtarı ve hesap yok). Kod yolu ölçüldü: sihirbaz `:976` kutuyu `oncekiAgIzinli`den kurar. Bu değer `KayitliAgAyari` sırasıyla `kurulum\kurulum.json` (`ag`) → `durum.json` (`ag`) → `cevap-onceki.json` (`api`) → `cevap.json` (`api`) kaynaklarından okunur (`kurulum-ortak.ps1:489`). | Tasarım değişmez: O12 kutuyu tümden kaldırır, kaynak hangisi olursa olsun. Kesin kaynak O17'de thinkpad-1 üzerinde ölçülür (kullanıcıyla). |
 
 ## 9. Dilimler
 
