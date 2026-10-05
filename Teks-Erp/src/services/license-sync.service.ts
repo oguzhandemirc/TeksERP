@@ -16,6 +16,7 @@ import {
 } from "../lib/license/protocol";
 import { getLicenseStore, saveLease, saveLicenseIdentity, saveTransfer } from "../lib/license/store";
 import { capabilitiesField } from "../lib/license/capabilities";
+import { adoptPackageRevocation } from "../lib/license/package-revocation-store";
 import { measureFingerprint } from "../lib/license/fingerprint";
 import { cacheFromRecordCopy, cacheToRecordCopy } from "../lib/license/fingerprint-cache";
 import { setFingerprintCacheCopy, startAccumulationForLease } from "../lib/license/record-writer";
@@ -168,6 +169,8 @@ export async function acceptLicenseResponse(
   const ctx = requireReady();
   const parsed = LicenseResponseSchema.safeParse(raw);
   if (!parsed.success) throw invalidResponse("Lisans yanıtı biçimsiz.");
+  // Kök imzalı PAKET iptal listesi kiradan bağımsızdır: doğrulanır ve daha yeniyse sessizce benimsenir.
+  adoptPackageRevocation(parsed.data.paketIptal);
   const offer = revocationOffer(parsed.data.iptal);
   try {
     return acceptVerifiedResponse(parsed.data, ctx, offer, { source, userId, arrival });

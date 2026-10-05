@@ -30,6 +30,21 @@ describe("Lisans ekranı — paket bütünlüğü kartı", () => {
     expect(screen.queryByText("İlk uyuşmazlık")).toBeNull();
   });
 
+  it("zincirli pakette imzalayan sertifika ve iptal uyarısı görünür; eski backend alanı yoksa satır yok", () => {
+    const { unmount } = renderWithProviders(<LicenseIntegrityCard b={base} />);
+    expect(screen.queryByTestId("lisans-paket-sertifikasi")).toBeNull();
+    expect(screen.queryByTestId("lisans-butunluk-uyari")).toBeNull();
+    unmount();
+    renderWithProviders(
+      <LicenseIntegrityCard
+        b={{ ...base, sertifika: { kid: "pkt-2026-1", sertifikaId: "1c1c1c1c-1c1c-4c1c-8c1c-1c1c1c1c1c1c", bitis: "2027-03-01T00:00:00.000Z", iptal: true }, uyari: "BUTUNLUK_SERTIFIKA_IPTAL" }}
+      />,
+    );
+    expect(screen.getByTestId("lisans-paket-sertifikasi").textContent).toBe("pkt-2026-1");
+    expect(screen.getByTestId("lisans-butunluk-uyari").textContent).toMatch(/sonradan iptal edildi/);
+    expect(screen.getByText("Uyuşuyor")).toBeTruthy();
+  });
+
   it("uyuşmazlıkta bulgu Türkçe, fazla sayısı ve ek sürenin başladığı ilk uyuşmazlık görünür", () => {
     renderWithProviders(
       <LicenseIntegrityCard

@@ -173,7 +173,8 @@ export interface LicenseCore {
   digestFingerprint(raw: RawFingerprint, salt: Uint8Array): Fingerprint;
   /** OS etkenleri (f1..f4, çok yollu) + çağıranın F5'i → yalnız tuzlu özet ve okuma raporu. */
   collectFingerprint(salt: Uint8Array, f5: string | null): Promise<CollectedFingerprint>;
-  verifyIntegrity(manifest: unknown, root: string, keys?: readonly PackageKey[]): Promise<CoreResult<IntegrityReport>>;
+  /** `roots` verilmezse çekirdeğin gömülü kökleri; `pkt-*` imzalı liste YERLEŞİK kipte kökle doğrulanır (yalnız testler verir). */
+  verifyIntegrity(manifest: unknown, root: string, keys?: readonly PackageKey[], roots?: readonly RootKey[]): Promise<CoreResult<IntegrityReport>>;
   unwrapModuleKey(wrap: unknown, privateKeyX: string, modul: string): CoreResult<{ readonly anahtar: string }>;
   /** Faz 2d: anahtar YALNIZ doğrulanmış kira + HAK'tan (bağlı, modül HAK'ta, dondurulmamış, kid eşit). */
   unwrapLeaseModuleKey(g: LeaseModuleKeyRequest): CoreResult<{ readonly anahtar: string; readonly surum: number }>;
@@ -288,8 +289,8 @@ export const tsLicenseCore: LicenseCore = Object.freeze({
     const os = await collectOsOutcomes();
     return collectedFrom(os.platform, os.outcomes, salt, f5);
   },
-  async verifyIntegrity(manifest: unknown, root: string, keys?: readonly PackageKey[]): Promise<CoreResult<IntegrityReport>> {
-    return { ok: true, value: await verifyIntegrity(manifest, root, keys) };
+  async verifyIntegrity(manifest: unknown, root: string, keys?: readonly PackageKey[], roots?: readonly RootKey[]): Promise<CoreResult<IntegrityReport>> {
+    return { ok: true, value: await verifyIntegrity(manifest, root, keys, { roots: roots ?? ROOT_PUBLIC_KEYS, mode: "YERLESIK" }) };
   },
   unwrapModuleKey(wrap: unknown, privateKeyX: string, modul: string): CoreResult<{ anahtar: string }> {
     return unwrapModuleKey(wrap, privateKeyX, modul);

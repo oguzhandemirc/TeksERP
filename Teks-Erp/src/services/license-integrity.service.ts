@@ -5,6 +5,7 @@ import { uyari } from "../lib/logger";
 import { decideForClass, runIntegrityCheck } from "../lib/license/integrity-check";
 import { getIntegrityOutcome, integrityCheckTarget, setIntegrityOutcome } from "../lib/license/integrity-state";
 import { NATIVE_REQUIRED, getLicenseCore } from "../lib/license/native";
+import { loadPackageRevocation } from "../lib/license/package-revocation-store";
 import { getLicenseSnapshot, invalidateLicenseSnapshot } from "../lib/license/runtime";
 import { saveEntitlement } from "../lib/license/store";
 import { evaluateLicenseTransitions } from "./license-trail.service";
@@ -20,7 +21,14 @@ function entitlementClassNow(): string | null {
  */
 export async function refreshLicenseIntegrity(): Promise<void> {
   const { root, keys } = integrityCheckTarget();
-  const o = await runIntegrityCheck({ root, keys, required: NATIVE_REQUIRED, core: getLicenseCore(), entitlementClass: entitlementClassNow() });
+  const o = await runIntegrityCheck({
+    root,
+    keys,
+    required: NATIVE_REQUIRED,
+    core: getLicenseCore(),
+    entitlementClass: entitlementClassNow(),
+    packageRevocation: loadPackageRevocation(),
+  });
   setIntegrityOutcome(decideForClass(o, entitlementClassNow()) ?? o);
   evaluateLicenseTransitions();
 }

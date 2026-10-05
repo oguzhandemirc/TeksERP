@@ -4,7 +4,7 @@
 // anahtarının sınıf kuralını ekler.
 import { readFile } from "node:fs/promises";
 import path from "node:path";
-import { isoToMs } from "./protocol";
+import { CHAINED_INTEGRITY_FILE, LICENSE_CLASSES, isoToMs, type RootKey, type VerifiedPackageRevocation } from "./protocol";
 import {
   PACKAGE_PUBLIC_KEYS,
   readIntegrityList,
@@ -17,6 +17,7 @@ import { walkIntegrityScope } from "./integrity-list";
 import type { LicenseCore } from "./license-core";
 import type { IntegrityStatus } from "./state-rules";
 import { INTEGRITY_FILE, STAGING_PACKAGE_CLASSES, isStagingPackageKid } from "./integrity-scope";
+import { ROOT_PUBLIC_KEYS } from "./trust-anchor";
 import { BUILD_WATERMARK, watermarkMatches, type BuildWatermark } from "./watermark";
 
 /** Çekirdeğin dışındaki (TS ikinci katman) bütünlük kodları. */
@@ -31,6 +32,19 @@ export const INTEGRITY_GUARD_CODES = [
   /** Zorunlu kipte imzalı listedeki bir dosya okunamıyor: değişmiş sayılır (kilitli/izinsiz dosya denetimi atlatamaz). */
   "BUTUNLUK_OKUNAMAYAN",
 ] as const;
+
+/** Karar GEÇERLİ kalır ama gösterilir: kurulu paketin PAKET sertifikası sonradan iptal edilmiş (YERLEŞİK kip). */
+export const INTEGRITY_CERT_REVOKED_WARNING = "BUTUNLUK_SERTIFIKA_IPTAL";
+
+/** Zincirli (`pkt-*`) listenin imzacısı — kök imzalı PAKET sertifikasından. */
+export interface IntegritySigner {
+  readonly sertifikaId: string;
+  readonly kid: string;
+  readonly kokKid: string;
+  readonly siniflar: readonly string[];
+  readonly bitis: string;
+  readonly iptal: boolean;
+}
 export type IntegrityGuardCode = (typeof INTEGRITY_GUARD_CODES)[number];
 
 const EXTRA_LIST_CAP = 50;
@@ -111,6 +125,10 @@ export interface IntegrityOutcome {
   readonly yukleyiciBayraklari: readonly LoaderInjection[];
   /** Kararın sınıftan bağımsız girdisi; yeni HAK'ın sınıfıyla karar dosyalar yeniden okunmadan verilir (`decideForClass`). */
   readonly olcum: PackageMeasurement | null;
+  /** Zincirli listenin imzacısı; `paket-*` listede null. */
+  readonly sertifika: IntegritySigner | null;
+  /** Kararı değiştirmeyen uyarı (`INTEGRITY_CERT_REVOKED_WARNING`); yoksa null. */
+  readonly uyari: string | null;
   readonly denetlendi: string;
 }
 
@@ -122,6 +140,7 @@ export interface PackageMeasurement {
   /** İkinci katmanın imzalı kapsamda bulduğu FAZLA girdiler (tavanlı) ve tam sayısı. */
   readonly ekFazla: readonly string[];
   readonly ekFazlaSayisi: number;
+  readonly sertifika: IntegritySigner | null;
   readonly filigran: BuildWatermark | null;
   /** Zorunlu kip (korumalı paket): okunamayan listeli dosya DEĞİŞMİŞ sayılır (G12 §3.3). */
   readonly zorunlu?: boolean;
@@ -135,6 +154,10 @@ export interface IntegrityCheckInput {
   readonly core: LicenseCore;
   /** Verilmezse çekirdeğin GÖMÜLÜ PAKET çapası ve ikinci katmanda bu derlemenin `PACKAGE_PUBLIC_KEYS`i; yalnız testler verir. */
   readonly keys?: readonly PackageKey[];
+  /** Zincirli liste için kökler: verilmezse çekirdekte gömülü, ikinci katmanda `ROOT_PUBLIC_KEYS`; yalnız testler verir. */
+  readonly roots?: readonly RootKey[];
+  /** Elde doğrulanmış PAKET iptal listesi (`package-revocation-store.ts`); iptal YERLEŞİK kipte yalnız uyarıdır. */
+  readonly packageRevocation?: VerifiedPackageRevocation | null;
   /** Doğrulanmış HAK'ın sınıfı; HAK yoksa null. */
   readonly entitlementClass: string | null;
   /** Bayt kodu filigranı (varsayılan bu derlemeninki); yalnız testler verir. */
@@ -145,15 +168,31 @@ export interface IntegrityCheckInput {
 }
 
 function outcome(o: Partial<IntegrityOutcome> & Pick<IntegrityOutcome, "durum" | "kod">, nowMs: number): IntegrityOutcome {
-  return { kid: null, kunye: null, rapor: null, fazla: [], fazlaSayisi: 0, yukleyiciBayraklari: [], olcum: null, ...o, denetlendi: new Date(nowMs).toISOString() };
+  return {
+    kid: null,
+    kunye: null,
+    rapor: null,
+    fazla: [],
+    fazlaSayisi: 0,
+    yukleyiciBayraklari: [],
+    olcum: null,
+    sertifika: null,
+    uyari: null,
+    ...o,
+    denetlendi: new Date(nowMs).toISOString(),
+  };
 }
 
+/** Önce zincirli liste (`butunluk-zincir.jws`), yoksa bugünkü `butunluk.jws`. */
 async function readList(root: string): Promise<string | null> {
-  try {
-    return (await readFile(path.join(root, INTEGRITY_FILE), "utf8")).trim();
-  } catch {
-    return null;
+  for (const file of [CHAINED_INTEGRITY_FILE, INTEGRITY_FILE]) {
+    try {
+      return (await readFile(path.join(root, file), "utf8")).trim();
+    } catch {
+      // sıradaki dosya
+    }
   }
+  return null;
 }
 
 /**
@@ -205,14 +244,19 @@ async function checkPackageFiles(g: IntegrityCheckInput): Promise<IntegrityOutco
   if (token === null) {
     return g.required ? outcome({ durum: "GECERSIZ", kod: "BUTUNLUK_LISTE_YOK" }, now) : outcome({ durum: "KAPSAM_DISI", kod: null }, now);
   }
-  const r = await g.core.verifyIntegrity(token, g.root, g.keys);
+  const r = await g.core.verifyIntegrity(token, g.root, g.keys, g.roots);
   if (!r.ok) return outcome({ durum: "OLCULEMEDI", kod: r.code }, now);
   const rapor = r.value;
   if (rapor.paket === null) return outcome({ durum: rapor.durum, kod: rapor.kod, rapor }, now);
 
   // Çekirdeğin "imza geçerli"sine ve imzasız başlık okumasına güvenilmez: kid ve kapsam yalnız TS'te doğrulanmış yükten.
-  const signed = verifySignedManifest(token, g.keys ?? PACKAGE_PUBLIC_KEYS);
+  const zincir = { roots: g.roots ?? ROOT_PUBLIC_KEYS, mode: "YERLESIK" as const, revocation: g.packageRevocation ?? null };
+  const signed = verifySignedManifest(token, g.keys ?? PACKAGE_PUBLIC_KEYS, zincir);
   if (!signed.ok) return outcome({ durum: "GECERSIZ", kod: "BUTUNLUK_IMZA", rapor }, now);
+  const c = signed.chain;
+  const sertifika: IntegritySigner | null = c
+    ? { sertifikaId: c.certificate.sertifikaId, kid: c.certificate.kid, kokKid: c.rootKid, siniflar: [...c.certificate.siniflar], bitis: c.certificate.bitis, iptal: c.revoked }
+    : null;
   const extra = await extraEntries(signed.manifest, g.root);
   const measurement: PackageMeasurement = {
     kid: signed.kid,
@@ -222,6 +266,7 @@ async function checkPackageFiles(g: IntegrityCheckInput): Promise<IntegrityOutco
     ekFazlaSayisi: extra.length,
     filigran: g.watermark === undefined ? BUILD_WATERMARK : g.watermark,
     zorunlu: g.required,
+    sertifika,
   };
   return decidePackage(measurement, g.entitlementClass, now);
 }
@@ -233,17 +278,24 @@ async function checkPackageFiles(g: IntegrityCheckInput): Promise<IntegrityOutco
 function decidePackage(m: PackageMeasurement, entitlementClass: string | null, now: number): IntegrityOutcome {
   const { kid, rapor } = m;
   const shown = m.ekFazlaSayisi > 0 ? m.ekFazla : rapor.fazla;
-  const base = { kid, rapor, olcum: m, fazla: shown.slice(0, EXTRA_LIST_CAP), fazlaSayisi: Math.max(m.ekFazlaSayisi, rapor.fazlaSayisi) };
+  const cert = m.sertifika;
+  const base = { kid, rapor, olcum: m, sertifika: cert, fazla: shown.slice(0, EXTRA_LIST_CAP), fazlaSayisi: Math.max(m.ekFazlaSayisi, rapor.fazlaSayisi) };
   const kunye = { derlemeTarihi: m.paket.derlemeTarihi, musteri: m.paket.musteri, paketId: m.paket.paketId, surum: m.paket.surum };
 
   if (kid !== null && isStagingPackageKid(kid)) {
     if (entitlementClass === null) return outcome({ ...base, durum: "OLCULEMEDI", kod: "BUTUNLUK_SINIF_BILINMIYOR" }, now);
     if (!STAGING_PACKAGE_CLASSES.includes(entitlementClass)) return outcome({ ...base, durum: "GECERSIZ", kod: "BUTUNLUK_HAZIRLIK_ANAHTARI" }, now);
   }
+  // Zincirli listede hazırlık kuralı sertifikanın sınıflarından: bütün sınıfları kapsamayan sertifika dar yetkilidir.
+  if (cert !== null && !LICENSE_CLASSES.every((c) => cert.siniflar.includes(c))) {
+    if (entitlementClass === null) return outcome({ ...base, durum: "OLCULEMEDI", kod: "BUTUNLUK_SINIF_BILINMIYOR" }, now);
+    if (!cert.siniflar.includes(entitlementClass)) return outcome({ ...base, durum: "GECERSIZ", kod: "BUTUNLUK_HAZIRLIK_ANAHTARI" }, now);
+  }
   if (!watermarkMatches(m.filigran, kunye)) return outcome({ ...base, durum: "GECERSIZ", kod: "BUTUNLUK_FILIGRAN" }, now);
   if (rapor.durum === "GECERLI" && m.ekFazlaSayisi > 0) return outcome({ ...base, kunye, durum: "GECERSIZ", kod: "BUTUNLUK_FAZLA" }, now);
   if (m.zorunlu === true && rapor.durum === "OLCULEMEDI" && rapor.okunamayanSayisi > 0) {
     return outcome({ ...base, kunye, durum: "GECERSIZ", kod: "BUTUNLUK_OKUNAMAYAN" }, now);
   }
-  return outcome({ ...base, kunye, durum: rapor.durum, kod: rapor.kod }, now);
+  const uyari = cert?.iptal === true && rapor.durum === "GECERLI" ? INTEGRITY_CERT_REVOKED_WARNING : null;
+  return outcome({ ...base, kunye, durum: rapor.durum, kod: rapor.kod, uyari }, now);
 }

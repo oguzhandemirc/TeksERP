@@ -192,6 +192,10 @@ export interface LicenseIntegrity {
   sayilar: { dosya: number; eksik: number; degisik: number; fazla: number; okunamayan: number } | null;
   /** Bu paketin ilk uyuşmazlığı: ek süre buradan sayılır, yalnız yeni paket sıfırlar. */
   ilkUyusmazlik: string | null;
+  /** Zincirli paket listesinin PAKET sertifikası (eski backend göndermez). */
+  sertifika?: { kid: string; sertifikaId: string; bitis: string; iptal: boolean } | null;
+  /** Kararı değiştirmeyen uyarı kodu (eski backend göndermez). */
+  uyari?: string | null;
 }
 
 /** `donanim`: donanım değişikliği bildirimi zarfla (K8) — eski backend 400 döner (amaç tanınmaz). */
