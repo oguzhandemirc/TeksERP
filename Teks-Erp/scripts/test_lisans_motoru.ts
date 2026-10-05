@@ -45,6 +45,9 @@
 //      tekrar eden yanıt durum kaydını (taban dahil) değiştirmez
 //   ⭐ doğrulama kipi YAN ETKİSİZ (§34): açılış + kapanış sonrası lisans dizini + DB izi + iptal kopyası bayt-eşit, yoklama
 //      yok; karşı: aynı açılış normal kipte yazar (ölçüm kör değil)
+//   ⭐ yanıt istek bağı (6.3c, §35): sahte satıcı bağ kipleriyle — doğru bağ kabul · yanlış nonce ve soyulmuş bağ RED
+//      (yoklama · donanım · etkinleştirme; kira değişmez, protokol kodu ayrıntıda) · taşınmış yanıt (zarf · uzatma dosyası)
+//      bayraklı bağsız kirayı kabul eder · eski satıcı (bayraksız, bağsız) kabul
 //
 // NEGATİF SONDA — dosya DIŞI mutasyon (cp + shasum ile birebir geri alındı; sonuçlar commit
 // mesajında): M1 persistAccumulation bozuk kayıtta sıfırdan başlatır · M2 kabulde kurulum
@@ -1667,6 +1670,94 @@ async function telBolumu(x: Hazir): Promise<void> {
   }
 }
 
+// ── §35 yanıt istek bağı (6.3c) ───────────────────────────────────────────────
+/** Hata kodu + protokol kodu (`LICENSE_RESPONSE_INVALID/YANIT_NONCE_UYUSMAZ`). */
+async function protokolKodu(p: Promise<unknown>): Promise<string> {
+  try {
+    await p;
+    return "HATA_YOK";
+  } catch (e) {
+    const d = (e as { details?: { code?: string; protocolCode?: string } }).details;
+    return [d?.code, d?.protocolCode].filter(Boolean).join("/") || String(e);
+  }
+}
+
+async function yanitBagiBolumu(x: Hazir): Promise<void> {
+  console.log("\n§35 — yanıt istek bağı (6.3c): canlı yanıt isteğin nonce'una bağlı; oynatılan/soyulmuş RED; eski satıcı ve taşınmış yanıt kabul");
+  const kiraNo = () => getLicenseSnapshot().lease?.document.kiraId;
+  try {
+    x.satici.yanitBagi = "DOGRU";
+    const a = await pollLicenseOnce();
+    check("§35a ⭐ DOGRU: bağlı canlı yoklama yanıtı KABUL, kira bağ beyan eder", a.outcome === "BASARILI" && getLicenseSnapshot().lease?.document.yanitBagli === true, `${a.outcome} ${a.code ?? ""}`);
+    const k0 = kiraNo();
+    x.satici.yanitBagi = "YANLIS_NONCE";
+    const b = await pollLicenseOnce();
+    check("§35b ⭐ YANLIS_NONCE (oynatılan yanıt): yoklama BASARISIZ LICENSE_RESPONSE_INVALID, kira değişmez", b.outcome === "BASARISIZ" && b.code === "LICENSE_RESPONSE_INVALID" && kiraNo() === k0, `${b.outcome} ${b.code ?? ""}`);
+    x.satici.yanitBagi = "SOYULMUS";
+    const c = await pollLicenseOnce();
+    check("§35c ⭐ SOYULMUS (bayraklı kira, bağ yok): yoklama BASARISIZ LICENSE_RESPONSE_INVALID, kira değişmez", c.outcome === "BASARISIZ" && c.code === "LICENSE_RESPONSE_INVALID" && kiraNo() === k0, `${c.outcome} ${c.code ?? ""}`);
+    x.satici.donanimDurumu = "ONAYLANDI";
+    x.satici.yanitBagi = "YANLIS_NONCE";
+    const d = await protokolKodu(reportHardwareChange(null, null));
+    check("§35d ⭐ donanım ONAYLANDI + yanlış nonce → LICENSE_RESPONSE_INVALID/YANIT_NONCE_UYUSMAZ, kira değişmez", d === "LICENSE_RESPONSE_INVALID/YANIT_NONCE_UYUSMAZ" && kiraNo() === k0, d);
+    x.satici.yanitBagi = "SOYULMUS";
+    const e = await protokolKodu(reportHardwareChange(null, null));
+    check("§35e ⭐ donanım ONAYLANDI + bağ soyulmuş → LICENSE_RESPONSE_INVALID/YANIT_BAGI_YOK, kira değişmez", e === "LICENSE_RESPONSE_INVALID/YANIT_BAGI_YOK" && kiraNo() === k0, e);
+    x.satici.yanitBagi = "DOGRU";
+    const iz = olaylar.length;
+    const g = await protokolKodu(reportHardwareChange(null, null));
+    const kabul = olaylar.slice(iz).find((o) => o.action === "LICENSE_LEASE_ACCEPTED")?.payload as { kaynak?: string } | undefined;
+    check("§35f donanım ONAYLANDI + DOGRU → yeni kira kabul (kaynak 'donanim')", g === "HATA_YOK" && kiraNo() !== k0 && kabul?.kaynak === "donanim", `${g} ${String(kabul?.kaynak)}`);
+    x.satici.yanitBagi = "SOYULMUS";
+    const k1 = kiraNo();
+    const zarf = await zarfiTasi(x, (await buildOfflineRequest({ amac: "yokla" })).istekGovdesi);
+    const zarfBagi = zarf.status === 200 && "yanitBagi" in (JSON.parse(zarf.body) as Record<string, unknown>);
+    const zk = await protokolKodu(acceptOfflineResponse(zarf.body, "cevrimdisi", null));
+    check(
+      "§35g ⭐ çevrimdışı zarf (TAŞINMIŞ): bayraklı bağsız kira KABUL — bağ denetimi yalnız canlı alışverişte (zarf yanıtında bağ yok)",
+      zarf.status === 200 && !zarfBagi && zk === "HATA_YOK" && kiraNo() !== k1 && getLicenseSnapshot().lease?.document.yanitBagli === true,
+      `${zarf.status} bağ=${String(zarfBagi)} ${zk}`,
+    );
+    const k2 = kiraNo();
+    const simdi = msToIso(Date.now());
+    const dosya = { v: 1, hak: hakBas(x.f), kira: kiraBas(x.f, { parmakIzi: x.f.parmakIzi, zorlama: false, verilis: simdi, sunucuSaati: simdi, yanitBagli: true }), indirmeBelirtecleri: [], sunucuSaati: simdi };
+    const dk = await protokolKodu(acceptOfflineResponse(JSON.stringify(dosya), "dosya", null));
+    check("§35h uzatma dosyası (TAŞINMIŞ): bayraklı bağsız kira KABUL", dk === "HATA_YOK" && kiraNo() !== k2, dk);
+    x.satici.yanitBagi = "YOK";
+    const k3 = kiraNo();
+    const y = await pollLicenseOnce();
+    check(
+      "§35i ⭐ YOK (eski satıcı / satıcı geri alındı): bağsız bayraksız yanıt KABUL — bayraklı kira tutan fabrika da aniden durmaz",
+      y.outcome === "BASARILI" && kiraNo() !== k3 && getLicenseSnapshot().lease?.document.yanitBagli === undefined,
+      `${y.outcome} ${y.code ?? ""}`,
+    );
+  } finally {
+    x.satici.yanitBagi = "YOK";
+    x.satici.donanimDurumu = "BEKLIYOR";
+    await pollLicenseOnce();
+  }
+}
+
+/** EN SONDA koşar: yeni makinede etkinleşme satıcının kayıtlı kurulum anahtarını değiştirir. */
+async function yanitBagiEtkinlestirmeBolumu(x: Hazir): Promise<void> {
+  console.log("\n§35' — etkinleştirme yanıtının istek bağı (yeni makine)");
+  try {
+    yeniden(path.join(GECICI, "bag-yanlis-nonce"));
+    await kabulEt();
+    x.satici.yanitBagi = "YANLIS_NONCE";
+    const j = await protokolKodu(activateLicense(x.satici.kod, null));
+    check("§35j ⭐ etkinleştirme yanıtı başka nonce'a bağlı → LICENSE_RESPONSE_INVALID/YANIT_NONCE_UYUSMAZ, etkinleşmez", j === "LICENSE_RESPONSE_INVALID/YANIT_NONCE_UYUSMAZ" && !getLicenseSnapshot().activated, j);
+    yeniden(path.join(GECICI, "bag-dogru"));
+    await kabulEt();
+    x.satici.yanitBagi = "DOGRU";
+    const k = await protokolKodu(activateLicense(x.satici.kod, null));
+    check("§35k ⭐ DOGRU: etkinleştirme KABUL, kira bağ beyan eder", k === "HATA_YOK" && getLicenseSnapshot().activated && getLicenseSnapshot().lease?.document.yanitBagli === true, k);
+  } finally {
+    x.satici.yanitBagi = "YOK";
+    yeniden(x.dizin);
+  }
+}
+
 async function motorBolumu(): Promise<void> {
   console.log("\n§15 — motor dayanıklılığı (D5): kimlik gelmezse pes etmez; sağlıkta başlamadı/çalışıyor");
   const olcum = getMeasuredFingerprint();
@@ -1959,6 +2050,7 @@ async function main(): Promise<void> {
     await saatCanliBolumu(hazir);
     await donanimBildirimiBolumu(hazir);
     await telBolumu(hazir);
+    await yanitBagiBolumu(hazir);
     gozlemSayaciBolumu();
     await zilGeriCekilmeBolumu(hazir);
     ortamBolumu();
@@ -1968,6 +2060,7 @@ async function main(): Promise<void> {
     await tasimaBolumu(hazir);
     await hakButunlukBolumu(hazir);
     await etkinlestirmeButunlukBolumu(hazir);
+    await yanitBagiEtkinlestirmeBolumu(hazir);
     sozlesmeBolumu();
   } catch (e) {
     fail++;
