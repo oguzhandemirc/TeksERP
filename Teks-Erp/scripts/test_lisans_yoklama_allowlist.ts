@@ -40,6 +40,7 @@ import { flushLicenseTraceWrites } from "../src/lib/license/accumulation";
 import { LICENSE_TRACE_SETTING_KEY } from "../src/constants/reserved-settings";
 import { MODULE_SETTING_KEYS } from "../src/constants/module-flags";
 import { fiksturKur, hakBas, kiraBas, type Fikstur } from "./lib/lisans-fikstur";
+import { recordSignedSkew } from "../src/lib/license/signed-skew";
 
 const engel = hedefDbEngeli();
 if (engel) {
@@ -63,7 +64,7 @@ const IZINLI_ANAHTARLAR = new Set([
   // Faz 2d: kurulumun X25519 AÇIK anahtarı (modül anahtarlarının alıcısı) — sır değil, iş verisi değil.
   "sifrelemeAnahtari",
   "durum", "gecerlilik", "nedenler", "kip", "hesaplananKademe", "uygulananKademe",
-  "saat", "duvar", "guvenilir", "bulgu", "saticiSapmaSn",
+  "saat", "duvar", "guvenilir", "bulgu", "saticiSapmaSn", "imzaliSapmaSn",
   "ortam", "platform", "mimari", "isletimSistemi", "nodeSurum", "uygulamaSurum", "derlemeTarihi", "konteyner", "installationId",
   "saglik", "calismaSn", "dbBoyutBayt", "yedek", "hukum", "yasSaat", "offsite", "yapilandirildi", "ok", "eksikSayisi",
   "diskDolulukYuzde", "auditYazmaHatasi", "havuzZamanAsimi", "istemciler", "tur", "adet", "isHatalari", "is",
@@ -155,6 +156,8 @@ async function hazirla(): Promise<{ f: Fikstur; dbKimligi: string; ornekler: { i
   );
   // Satıcı saati sapması ölçülmüş olsun: `saticiSapmaSn` beyanlı anahtar olarak gövdede görünsün.
   recordVendorClockSkew(-20 * 60_000);
+  // İmzalı saat sapması da ölçülmüş olsun (canlı kabulün ölçtüğü değer): `imzaliSapmaSn` beyanlı anahtar.
+  recordSignedSkew(Date.now() - 7 * 60_000);
   const ornekler = { istemci: `TEST-kurulum-${randomUUID()}`, kullanici: randomUUID(), hataMetni: "GIZLI-HATA-METNI C:\\gizli\\yol\\tekserp_20260929.dump" };
   touchClient({ instanceId: ornekler.istemci, kind: "electron", version: "1.2.3", userId: ornekler.kullanici });
   touchClient({ instanceId: `${ornekler.istemci}-2`, kind: "mobil", version: null, userId: null });
@@ -216,9 +219,9 @@ async function main(): Promise<void> {
       !PollRequestSchema.safeParse({ ...gercek, acikModuller: ["Müşteri Adı Ltd"] }).success && !PollRequestSchema.safeParse({ ...gercek, acikModuller: ["finance.enabled", "finance.enabled"] }).success && PollRequestSchema.safeParse({ ...gercek, acikModuller: undefined }).success,
     );
     check(
-      "§1d ortam.installationId = DB kimliği (yalnız bilgi), saat.saticiSapmaSn ölçülen sapma; lisans kimliği gövdede YOK (imzalı başlıkta)",
-      govde.ortam.installationId === dbKimligi && govde.saat.saticiSapmaSn === -1200 && dbKimligi !== f.kurulumId && !metin.includes(f.kurulumId),
-      `${govde.ortam.installationId?.slice(0, 8)} / ${String(govde.saat.saticiSapmaSn)}`,
+      "§1d ortam.installationId = DB kimliği (yalnız bilgi), saat.saticiSapmaSn + saat.imzaliSapmaSn ölçülen sapma; lisans kimliği gövdede YOK (imzalı başlıkta)",
+      govde.ortam.installationId === dbKimligi && govde.saat.saticiSapmaSn === -1200 && Math.abs((govde.saat.imzaliSapmaSn ?? 0) - 420) <= 5 && dbKimligi !== f.kurulumId && !metin.includes(f.kurulumId),
+      `${govde.ortam.installationId?.slice(0, 8)} / ${String(govde.saat.saticiSapmaSn)} / ${String(govde.saat.imzaliSapmaSn)}`,
     );
 
     console.log("\n§2 — iş/kişisel veri taraması");

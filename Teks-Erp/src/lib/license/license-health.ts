@@ -6,6 +6,7 @@ import { integrityReason } from "./integrity-check";
 import { getLicenseCoreStatus } from "./native";
 import { BUILD_WATERMARK } from "./watermark";
 import { BUILD_ANCHOR_MODE } from "./trust-anchor";
+import { currentSignedSkew } from "./signed-skew";
 
 /** `/api/admin/health` lisans bloğu — durum ÖZETİ (belge içeriği ve anahtar yok). */
 export function licenseHealthBlock(): Record<string, unknown> {
@@ -33,6 +34,8 @@ export function licenseHealthBlock(): Record<string, unknown> {
       butunlukKod: getIntegrityOutcome()?.kod ?? null,
       butunlukNeden: integrityReason(getIntegrityOutcome()),
       paketId: BUILD_WATERMARK?.paketId ?? null,
+      // İmzalı kira saatinden sapma (yalnız bilgi; kademeye girmez).
+      saatSapmasi: currentSignedSkew(),
     };
   } catch {
     return { hazir: false, motor: motor.durum, motorNeden: motor.neden };

@@ -20,6 +20,7 @@ import { measureFingerprint } from "../lib/license/fingerprint";
 import { cacheFromRecordCopy, cacheToRecordCopy } from "../lib/license/fingerprint-cache";
 import { setFingerprintCacheCopy, startAccumulationForLease } from "../lib/license/record-writer";
 import type { LeaseArrival } from "../lib/license/saat";
+import { __resetSignedSkewForTests, recordSignedSkew, signedSkewSecondsForWire } from "../lib/license/signed-skew";
 import { acceptNewEntitlement } from "./license-integrity.service";
 import {
   getLicenseConfig,
@@ -118,6 +119,7 @@ export async function buildPollBody(nowMs: number = Date.now()): Promise<ReturnT
   const snap = getLicenseSnapshot(nowMs);
   const s = snap.state;
   const saticiSapmaSn = skewSeconds();
+  const signedSkewSn = signedSkewSecondsForWire();
   return PollRequestSchema.parse({
     v: 1,
     // Zincir ucu: kira dosyası silinmiş/eskisiyle değiştirilmişse durum kaydının bildiği son kabul.
@@ -138,6 +140,7 @@ export async function buildPollBody(nowMs: number = Date.now()): Promise<ReturnT
       guvenilir: msToIso(s.saat.trustedMs),
       bulgu: s.saat.finding,
       ...(saticiSapmaSn === undefined ? {} : { saticiSapmaSn }),
+      ...(signedSkewSn === undefined ? {} : { imzaliSapmaSn: signedSkewSn }),
     },
     ortam: buildEnvironment(),
     saglik: await buildPollHealthSummary(),
@@ -225,6 +228,8 @@ function acceptVerifiedResponse(
   startAccumulationForLease({ lease: leaseDoc, entitlement, licenseId, iptalSira: offer.picked?.view.document.sira ?? null, arrival: who.arrival });
   if (resp.hak && resp.hak !== ctx.store.entitlementJws) acceptNewEntitlement(resp.hak);
   saveLease(resp.kira);
+  // Yalnız canlı yeni kira ölçer: taşınmış kiranın (dosya/QR) imzalı saati geçmiştedir, sapma sayılmaz.
+  if (who.arrival === "CANLI") recordSignedSkew(isoToMs(leaseDoc.sunucuSaati));
   setDownloadTokens(resp.indirmeBelirtecleri);
   if (getLicenseStore()?.transfer) saveTransfer(null);
   recordPollOutcome({ ok: true });
@@ -352,4 +357,5 @@ export async function sendTransfer(
 /** Test-only. */
 export function __resetLicenseSyncForTests(): void {
   doorbellKick = null;
+  __resetSignedSkewForTests();
 }

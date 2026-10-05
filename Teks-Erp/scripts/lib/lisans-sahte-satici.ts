@@ -49,6 +49,8 @@ export interface SahteSatici {
   sonrakiYanitGecikmesiMs: number;
   /** Satıcının saati = duvar + bu kayma (D4: ±10 dk dışı istek ISTEK_ZAMAN alır). */
   saatKaymasiMs: number;
+  /** Kiranın İMZALI `sunucuSaati` gerçek saatten bu kadar sapar (imzalı saat sapması sondası; verilis gerçek kalır). */
+  kiraSaatiKaymasiMs: number;
   /** ISTEK_ZAMAN gövdesine `sunucuSaati` konur mu (false = eski satıcı). */
   sunucuSaatiDondur: boolean;
   /** Dönen `sunucuSaati` gerçek saatinden bu kadar sapar (düzeltilmiş deneme de reddedilsin — "bir kez" sondası). */
@@ -171,6 +173,7 @@ export async function sahteSaticiBaslat(f: Fikstur): Promise<SahteSatici> {
     iptal: null,
     sonrakiYanitGecikmesiMs: 0,
     saatKaymasiMs: 0,
+    kiraSaatiKaymasiMs: 0,
     sunucuSaatiDondur: true,
     sunucuSaatiYalaniMs: 0,
     zilOmruMs: 0,
@@ -193,7 +196,7 @@ export async function sahteSaticiBaslat(f: Fikstur): Promise<SahteSatici> {
       kurulumAnahtarKimligi: installationKeyId(kayitliAnahtar ?? f.kurulum.x),
       parmakIzi,
       verilis: msToIso(simdi),
-      sunucuSaati: msToIso(simdi),
+      sunucuSaati: msToIso(simdi + s.kiraSaatiKaymasiMs),
       bitis: msToIso(simdi + 29 * 86_400_000),
       zorlama: false,
       ...s.kiraEk,
