@@ -87,6 +87,8 @@
 // D8e-1c (§34; kaynakta mutasyon, md5 eşit geri alındı): Y1 kip dalı açılış yazımından sonraya → §34b (durum.json, iz) ·
 // Y2 kapanış kapısı kalktı → §34b (durum.json, iz) · Y3 iptal onarım kapısı kalktı → §34b (iptal) · Y4 parmak izi önbellek
 // kapısı kalktı → §34b (parmak-izi-onbellek.json) — dördü de kırmızı, geri alınınca yeşil.
+// 6.3c (§35; kaynakta mutasyon, git hash-object eşit geri alındı): N1 nonce karşılaştırması kalktı → 3 ❌ (§35b · d · j) ·
+// N2 bayraklı-bağsız kabul → 2 ❌ (§35c · e) · N3 bağ denetimi taşınmış yanıta da → 2 ❌ (§35g · h).
 // ⭐ KALICI SONDA ✓K1 (her koşumda): bilinmeyen kod genel mesaja düşer — §8a'nın "her kodun kendi
 // mesajı var" karşılaştırıcısı kör değil.
 // =============================================================================
@@ -1694,20 +1696,25 @@ async function yanitBagiBolumu(x: Hazir): Promise<void> {
     const b = await pollLicenseOnce();
     check("§35b ⭐ YANLIS_NONCE (oynatılan yanıt): yoklama BASARISIZ LICENSE_RESPONSE_INVALID, kira değişmez", b.outcome === "BASARISIZ" && b.code === "LICENSE_RESPONSE_INVALID" && kiraNo() === k0, `${b.outcome} ${b.code ?? ""}`);
     x.satici.yanitBagi = "SOYULMUS";
+    // Her adım kendi öncesine bakar: bir adımın sızan kabulü sonrakini kırmızıya boyamasın (sonda tek adımı göstersin).
+    const kc = kiraNo();
     const c = await pollLicenseOnce();
-    check("§35c ⭐ SOYULMUS (bayraklı kira, bağ yok): yoklama BASARISIZ LICENSE_RESPONSE_INVALID, kira değişmez", c.outcome === "BASARISIZ" && c.code === "LICENSE_RESPONSE_INVALID" && kiraNo() === k0, `${c.outcome} ${c.code ?? ""}`);
+    check("§35c ⭐ SOYULMUS (bayraklı kira, bağ yok): yoklama BASARISIZ LICENSE_RESPONSE_INVALID, kira değişmez", c.outcome === "BASARISIZ" && c.code === "LICENSE_RESPONSE_INVALID" && kiraNo() === kc, `${c.outcome} ${c.code ?? ""}`);
     x.satici.donanimDurumu = "ONAYLANDI";
     x.satici.yanitBagi = "YANLIS_NONCE";
+    const kd = kiraNo();
     const d = await protokolKodu(reportHardwareChange(null, null));
-    check("§35d ⭐ donanım ONAYLANDI + yanlış nonce → LICENSE_RESPONSE_INVALID/YANIT_NONCE_UYUSMAZ, kira değişmez", d === "LICENSE_RESPONSE_INVALID/YANIT_NONCE_UYUSMAZ" && kiraNo() === k0, d);
+    check("§35d ⭐ donanım ONAYLANDI + yanlış nonce → LICENSE_RESPONSE_INVALID/YANIT_NONCE_UYUSMAZ, kira değişmez", d === "LICENSE_RESPONSE_INVALID/YANIT_NONCE_UYUSMAZ" && kiraNo() === kd, d);
     x.satici.yanitBagi = "SOYULMUS";
+    const ke = kiraNo();
     const e = await protokolKodu(reportHardwareChange(null, null));
-    check("§35e ⭐ donanım ONAYLANDI + bağ soyulmuş → LICENSE_RESPONSE_INVALID/YANIT_BAGI_YOK, kira değişmez", e === "LICENSE_RESPONSE_INVALID/YANIT_BAGI_YOK" && kiraNo() === k0, e);
+    check("§35e ⭐ donanım ONAYLANDI + bağ soyulmuş → LICENSE_RESPONSE_INVALID/YANIT_BAGI_YOK, kira değişmez", e === "LICENSE_RESPONSE_INVALID/YANIT_BAGI_YOK" && kiraNo() === ke, e);
     x.satici.yanitBagi = "DOGRU";
+    const kf = kiraNo();
     const iz = olaylar.length;
     const g = await protokolKodu(reportHardwareChange(null, null));
     const kabul = olaylar.slice(iz).find((o) => o.action === "LICENSE_LEASE_ACCEPTED")?.payload as { kaynak?: string } | undefined;
-    check("§35f donanım ONAYLANDI + DOGRU → yeni kira kabul (kaynak 'donanim')", g === "HATA_YOK" && kiraNo() !== k0 && kabul?.kaynak === "donanim", `${g} ${String(kabul?.kaynak)}`);
+    check("§35f donanım ONAYLANDI + DOGRU → yeni kira kabul (kaynak 'donanim')", g === "HATA_YOK" && kiraNo() !== kf && kabul?.kaynak === "donanim", `${g} ${String(kabul?.kaynak)}`);
     x.satici.yanitBagi = "SOYULMUS";
     const k1 = kiraNo();
     const zarf = await zarfiTasi(x, (await buildOfflineRequest({ amac: "yokla" })).istekGovdesi);

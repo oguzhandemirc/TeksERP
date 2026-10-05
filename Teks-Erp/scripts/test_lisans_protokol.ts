@@ -71,6 +71,8 @@
 //   + 2: JWS alg denetimi kaldırıldı → §1b · §1c · §11d2 · §11d4 · başlık allowlist'i kaldırıldı → §1g · §1h ·
 //   §11d3 (yeni belge türleri — iptal, ara imzalı HAK — ortak JWS katmanından geçiyor).
 //   Her mutasyonun UYGULANDIĞI (sha farkı) ve geri alındığı (sha eşitliği) ayrıca ölçüldü.
+//   6.3c (§16; kaynakta mutasyon, git hash-object eşit geri alındı): N1 nonce karşılaştırması kalktı → 3 ❌ (§16b · b2 · e2)
+//   · N2 bayraklı kira + bağ yok kabul → 1 ❌ (§16d).
 // ⚠️ Gerekli mi (reçete md. 20): kapı doğduğu gün ağaçta ısırılacak bir kusur YOKTU (klasör
 //   bu dilimde doğdu); gerekçe ÖLÇÜLMEDİ — satıcı/fabrika dilimleri buna karşı yazılacak.
 // =============================================================================

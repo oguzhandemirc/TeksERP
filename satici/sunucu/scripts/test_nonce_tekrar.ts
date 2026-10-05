@@ -9,6 +9,8 @@
 // §6 (6.3c) YANIT İSTEK BAĞI: canlı uçların (etkinleştir · yokla) lisans yanıtı `yanitBagi` taşır — kirayı (`kiraOzeti`)
 //    isteğin nonce'una ALT imzasıyla bağlar, kira `yanitBagli: true` beyan eder; başka nonce'la doğrulama
 //    `YANIT_NONCE_UYUSMAZ`; zarf ucu (`/v1/cevrimdisi`) bağ basmaz; aynı kirayı yeniden veren tekrar yolu TAZE bağ basar.
+//    NEGATİF SONDA (kaynakta mutasyon, git hash-object eşit geri alındı): ayna `yanit-bagi.ts`te nonce karşılaştırması
+//    kalktı → 1 ❌ (§6c) · `bindLiveResponse` bağ basmaz → 5 ❌ (§6a · b · c · d · g) · kirada `yanitBagli` yok → 1 ❌ (§6e).
 // ⭐ KALICI SONDA ✓K2 (her koşumda): (1) aynı nonce BAŞKA kurulumda kabul (ad alanı kurulum başına —
 //    kapı "nonce'u küresel reddet" diye kör olsaydı kırmızı); (2) DB'ye doğrudan ikinci satır P2002.
 // Koşum: npx tsx scripts/test_nonce_tekrar.ts
