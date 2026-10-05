@@ -27,12 +27,12 @@ pub struct RootKey {
     pub classes: Vec<String>,
 }
 
-struct AnchorEntry {
-    key: [u8; 32],
+pub(crate) struct AnchorEntry {
+    pub(crate) key: [u8; 32],
     classes: Vec<String>,
 }
 
-type Anchor = HashMap<String, AnchorEntry>;
+pub(crate) type Anchor = HashMap<String, AnchorEntry>;
 
 fn root_kid_re() -> &'static Regex {
     static RE: OnceLock<Regex> = OnceLock::new();
@@ -40,7 +40,7 @@ fn root_kid_re() -> &'static Regex {
 }
 
 /// Çapayı doğrular: boş liste, biçimsiz kid/anahtar ve TEST/DEMO dışına taşan hazırlık kökü RED.
-fn prepare_trust_anchor(roots: &[RootKey]) -> Outcome<Anchor> {
+pub(crate) fn prepare_trust_anchor(roots: &[RootKey]) -> Outcome<Anchor> {
     if roots.is_empty() {
         return fail(code::GUVEN_CAPASI_BOS, "Güven çapası boş: bu derlemede kök açık anahtarı yok");
     }

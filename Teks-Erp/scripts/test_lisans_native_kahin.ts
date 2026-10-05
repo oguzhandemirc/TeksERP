@@ -80,6 +80,8 @@ import {
   OFFLINE_HORIZON_SHORT_CLASS_DAYS,
   PRODUCTION_ROOT_PUBLIC_KEYS,
   REVOCATION_MAX_ENTRIES,
+  REVOCATION_USAGES,
+  PACKAGE_ACCEPT_TOLERANCE_DAYS,
   STRONG_FINGERPRINT_FACTORS,
   PROTOCOL_ERROR_CODES,
   STAGING_ROOT_PUBLIC_KEYS,
@@ -274,6 +276,7 @@ export function rustSayiSabiti(kaynak: string, ad: string): number {
 export function v2SabitFarklari(rust: (dosya: string) => string): string[] {
   const listeler: ReadonlyArray<readonly [string, string, readonly string[]]> = [
     ["schema.rs", "CERT_USAGES", CERT_USAGES],
+    ["schema.rs", "REVOCATION_USAGES", REVOCATION_USAGES],
     ["schema.rs", "CLOSING_LEASE_REASONS", CLOSING_LEASE_REASONS],
     ["schema.rs", "FINGERPRINT_RULES", FINGERPRINT_RULES],
     ["fingerprint.rs", "STRONG_FACTORS", STRONG_FINGERPRINT_FACTORS],
@@ -283,6 +286,7 @@ export function v2SabitFarklari(rust: (dosya: string) => string): string[] {
     ["schema.rs", "OFFLINE_HORIZON_DEALER_DAYS", OFFLINE_HORIZON_DEALER_DAYS],
     ["schema.rs", "OFFLINE_HORIZON_SHORT_CLASS_DAYS", OFFLINE_HORIZON_SHORT_CLASS_DAYS],
     ["schema.rs", "REVOCATION_MAX_ENTRIES", REVOCATION_MAX_ENTRIES],
+    ["paket_zinciri.rs", "PACKAGE_ACCEPT_TOLERANCE_DAYS", PACKAGE_ACCEPT_TOLERANCE_DAYS],
     ["fingerprint.rs", "V1_MIN_MATCHES", FINGERPRINT_THRESHOLD.minMatches],
     ["fingerprint.rs", "V1_MIN_MEASURABLE", FINGERPRINT_THRESHOLD.minMeasurable],
     ["fingerprint.rs", "V2_MIN_MATCHES", FINGERPRINT_V2_THRESHOLD.minMatches],
@@ -603,12 +607,13 @@ function bolum0(): void {
   const kidOnek = /pub const KID_PREFIX: &str = "([^"]+)";/.exec(rustKaynak("module_key.rs"));
   check("§0g' modül anahtarı kimlik öneki aynı (Faz 2d)", kidOnek?.[1] === MODULE_KEY_KID_PREFIX, kidOnek?.[1] ?? "yok");
 
-  const rustDosyalar = ["jws.rs", "schema.rs", "chain.rs", "iso.rs", "integrity.rs", "integrity_list.rs", "module_key.rs"].map(rustKaynak);
+  const rustDosyalar = ["jws.rs", "schema.rs", "chain.rs", "iso.rs", "integrity.rs", "integrity_list.rs", "module_key.rs", "paket_zinciri.rs"].map(rustKaynak);
   const tsKaynaklar = [
     "src/lib/license/protocol/belgeler.ts",
     "src/lib/license/protocol/jws.ts",
     "src/lib/license/protocol/anahtar-zinciri.ts",
     "src/lib/license/protocol/parmak-izi.ts",
+    "src/lib/license/protocol/paket-zinciri.ts",
     "src/lib/license/integrity.ts",
     "src/lib/license/integrity-list.ts",
   ].map((p) => oku(path.join(TEKS, p)));
@@ -660,7 +665,7 @@ function bolum0(): void {
     `rust ${rustListeDosyasi} ${rustAzami} ${bayt}`,
   );
   const v2Fark = v2SabitFarklari(rustKaynak);
-  check("§0l lisans v2 sabitleri Rust = TS (kullanımlar · kapanış · kurallar · güçlü etkenler · ufuk · iptal tavanı · eşikler)", v2Fark.length === 0, v2Fark.join(" | ") || "12 sabit");
+  check("§0l lisans v2 sabitleri Rust = TS (kullanımlar · iptal kullanımları · kapanış · kurallar · güçlü etkenler · ufuk · iptal tavanı · PAKET toleransı · eşikler)", v2Fark.length === 0, v2Fark.join(" | ") || "14 sabit");
 }
 
 /**
@@ -800,6 +805,14 @@ function kapsamGereken(): string[] {
   return [...(rustKodKumesi(outcome, "PROTOCOL") ?? []), ...(rustKodKumesi(outcome, "CORE") ?? [])].filter((c) => !PLATFORM_KODLARI.includes(c));
 }
 
+/** PAKET zinciri vektörlerinin (`test_paket_zinciri` üretir, Rust `tekserp-dogrulama/tests/paket_zinciri.rs` okur) kodları. */
+function paketZinciriKodlari(): string[] {
+  const yol = path.join(TEKS, "native", "test-vektorleri", "paket-zinciri.json");
+  if (!existsSync(yol)) return [];
+  const d = JSON.parse(oku(yol)) as { kayitlar?: { beklenen?: { ok?: boolean; code?: string } }[] };
+  return (d.kayitlar ?? []).flatMap((k) => (k.beklenen?.ok === false && k.beklenen.code ? [k.beklenen.code] : []));
+}
+
 /** v2 beklenenlerinde geçen hata kodları (`{ok:false, code}`). */
 function v2BeklenenKodlar(kayitlar: readonly VektorV2Kaydi[]): Set<string> {
   const R = z.object({ ok: z.literal(false), code: z.string() });
@@ -816,9 +829,9 @@ async function bolum2(dosya: VektorDosyasi | null, dosyaV2: VektorV2Dosyasi | nu
     dosya.kayitlar.length >= 200 && farklar.length === 0,
     farklar.length ? `${farklar.length} fark — ${farkOzeti(farklar)} · yeniden üret: --vektor-yaz` : `${dosya.kayitlar.length} kayıt`,
   );
-  const kodlar = new Set([...beklenenKodlar(dosya.kayitlar), ...v2BeklenenKodlar(dosyaV2?.kayitlar ?? [])]);
+  const kodlar = new Set([...beklenenKodlar(dosya.kayitlar), ...v2BeklenenKodlar(dosyaV2?.kayitlar ?? []), ...paketZinciriKodlari()]);
   const eksik = kapsamGereken().filter((c) => !kodlar.has(c));
-  check("§2c native'in üretebildiği her kod en az bir beklenende geçiyor (v1 ∪ v2)", eksik.length === 0, eksik.length ? `eksik: ${eksik.join(", ")}` : `${kodlar.size} kod`);
+  check("§2c native'in üretebildiği her kod en az bir beklenende geçiyor (v1 ∪ v2 ∪ paket-zinciri.json)", eksik.length === 0, eksik.length ? `eksik: ${eksik.join(", ")}` : `${kodlar.size} kod`);
   const turler = ["jws", "sertifika", "hak", "kira", "bag", "modul"] as const;
   const eksikTur = turler.filter((t) => {
     const k = dosya.kayitlar.filter((x) => x.vektor.tur === t);
