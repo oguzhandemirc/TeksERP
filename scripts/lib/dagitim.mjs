@@ -271,6 +271,8 @@ export const TUKETICILER = Object.freeze([
   // O7: tablet ortak kimliği (app.config.js argümansız yolu + build-apk); türetim eşitliği test_tablet_ortak_paket.
   'mobil/scripts/lib/ortak-kimlik.cjs',
   'mobil/src/test/update-feed-url.test.ts',
+  'scripts/test_tablet_ortak_paket.mjs',
+  'Teks-Erp/scripts/test_mobile_update.ts',
 ]);
 
 /** İki dağıtım bekçisinin okuduğu dosyalar — commit tetiği bunları kapsar (okunandan dar olamaz). */

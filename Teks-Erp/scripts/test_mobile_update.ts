@@ -356,6 +356,24 @@ async function main(): Promise<void> {
     }
   }
 
+  // ---------------------------------------------------------------- §11
+  // Tek ortak paket (O7): tabletin gömülü güncelleme adresi grup-nötr Worker takma adıdır
+  // (`<indirmeKoku>ota/<rv>/manifest`); aynı `ota/<rv>/manifest` yolunu bu servis /updates altında sunar.
+  // İki ucun yol biçimi ve rv'si aynı kayıttan türemeli — biri kayarsa güncelleme sessizce hiç gelmez.
+  console.log("\n§11 — Ortak paket güncelleme adresi ↔ servisin ota/<rv>/manifest yolu");
+  {
+    const dagitim = JSON.parse(fs.readFileSync(path.join(REPO_KOK, "deploy/dagitim.json"), "utf8"));
+    const ortak = require(path.join(MOBIL, "scripts/lib/ortak-kimlik.cjs")).ortakKimlik(dagitim);
+    const rvOrtak: string = dagitim.urun.tablet.runtimeVersion;
+    check("ortak adres = indirmeKoku + ota/<rv>/manifest", ortak.guncellemeUrl === `${dagitim.indirmeKoku}ota/${rvOrtak}/manifest`, ortak.guncellemeUrl);
+    const yol = new URL(ortak.guncellemeUrl).pathname;
+    check("adres yolu servisin ota/<rv>/manifest biçiminde", /^\/ota\/[0-9]+\.[0-9]+\/manifest$/.test(yol), yol);
+    // Servis bu yolu `/updates` altında aynı biçimle tanır (yayını olmayan rv → 404, 400 değil: yol biçimi geçerli).
+    const r = await fetch(`${taban}/updates${yol.replace(`/${rvOrtak}/`, "/99.8/")}`);
+    check("servis ortak adres biçimini tanır (yayını olmayan rv → 404)", r.status === 404, `status=${r.status}`);
+    check("ortak rv eski kanal rv'sinden ayrı (yan yana kurulumda güncelleme karışmaz)", rvOrtak !== RV, `${rvOrtak} ≠ ${RV}`);
+  }
+
   server.close();
 }
 
