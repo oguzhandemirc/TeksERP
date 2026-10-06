@@ -897,7 +897,7 @@ const ozet = (agac) => IZLENEN.map((rel) => {
 }).join(',');
 const SURUM = JSON.parse(fs.readFileSync(path.join(KOK, 'Electron/package.json'), 'utf8')).version;
 
-function paketleSenaryosu(argumanlar, { ref = null, mutasyon = null, agacMutasyon = null, terfi, kirliBirak = false } = {}) {
+function paketleSenaryosu(argumanlar, { ref = null, mutasyon = null, agacMutasyon = null, terfi, kirliBirak = false, ortamEk = {} } = {}) {
   const o = ortam();
   const agac = agacKur(o, { ref });
   // adnansahin paketlemesi bugünden sonra terfi şartı ister: yeni betikte varsayılan KURULUR (bkz. yayinSenaryosu).
@@ -915,7 +915,7 @@ function paketleSenaryosu(argumanlar, { ref = null, mutasyon = null, agacMutasyo
   // (`kirliBirak` = bilerek kirli bırak — temiz-ağaç kapısının kendi sondası).
   if ((agacMutasyon || mutasyon) && !kirliBirak) tabanCommit(agac, 'sonda mutasyonu');
   const once = ozet(agac);
-  const r = kos(o, path.join(agac, 'deploy/electron-paketle.sh'), argumanlar, { cwd: agac });
+  const r = kos(o, path.join(agac, 'deploy/electron-paketle.sh'), argumanlar, { cwd: agac, ortamEk });
   return { o, r, agac, once, sonra: ozet(agac) };
 }
 /** Derlenen paketin kimliği — yayıncının okuduğu yüklemle aynı kaynaktan (asar dahil). */
@@ -1065,6 +1065,59 @@ const npmCagrisi = (o) => o.cagrilar().find((c) => c.arac === 'npm' && /^run bui
   const y2 = kos(s.o, path.join(s.agac, 'deploy/electron-yayinla.sh'), ['--musteri=testfabrika', SURUM, '--kuru'], { cwd: s.agac });
   ol('2h3 ⭐ paketlemeden SONRA yeni commit (HEAD ilerledi) → yayın DURUR (derlenen commit\'te yapılır)',
     y2.kod !== 0 && /DERLEME BAĞI KOPUK/.test(y2.cikti), y2.cikti.slice(-400));
+}
+
+// O5 — TEK ORTAK PAKET: argümansız paketleme (kimlik dağıtım kaydından, çıktı release/ortak/<sürüm>/).
+{
+  const s = paketleSenaryosu([SURUM]);
+  const d = derlenen(s.agac, 'ortak');
+  const n = npmCagrisi(s.o);
+  const dosyalar = Object.fromEntries(PANEL_DINLENME_DOSYALARI.map((r) => {
+    const y = path.join(s.agac, r);
+    return [r, fs.existsSync(y) ? fs.readFileSync(y, 'utf8') : undefined];
+  }));
+  const k = ortakKimlik(dosyalar);
+  const dk = path.join(s.agac, 'Electron/release/ortak', SURUM, 'derleme.json');
+  let kunye = null;
+  try { kunye = JSON.parse(fs.readFileSync(dk, 'utf8')); } catch { kunye = null; }
+  ol(`2o ortak ${SURUM} (kodsuz) → çıkış 0, çıktı release/ortak/${SURUM}/`, s.r.kod === 0 && d !== null, s.r.cikti.slice(-600));
+  ol('2o dinlenme dosyaları BAYT BAYT aynı kaldı', s.once === s.sonra);
+  ol('2o gömülü kimlik ortak: url = ortak feed · updater önbelleği · "TeksERP.exe" · paketin package.json · AUMID · sunucu null · etiket null',
+    d !== null && d.yml.includes(`url: ${k.feed}`) && d.yml.includes('updaterCacheDirName: tekserp-panel-updater') &&
+      d.exeler.join() === `${k.urunAdi}.exe` && d.exeler.join() === 'TeksERP.exe' && d.paket.name === k.paketAdi && d.paket.productName === k.urunAdi &&
+      d.main.includes(`"${k.appId}"`) && d.arayuz.includes('const erpUrl = null') && d.arayuz.includes('const label = null') &&
+      !d.main.includes('adnan-sahin') && !d.main.includes('testfabrika'), JSON.stringify(d)?.slice(0, 600));
+  ol('2o derleyici: TEKSERP_KANAL YOK (kanal:null) + electron-builder -c.* = panelOrtakDerlemeAyarlari(ortak kimlik)',
+    n?.kanal === null && Object.entries(panelOrtakDerlemeAyarlari(k)).every(([a, v]) => n.args.includes(`-c.${a}=${v}`)), JSON.stringify(n));
+  ol('2o derleme künyesi kanal:null · commit = HEAD', kunye?.kanal === null && kunye?.commit === basOf(s.agac), JSON.stringify(kunye));
+  ol('2o yayın önerilmez (ortak yayın O10a)', !/electron-yayinla\.sh/.test(s.r.cikti));
+}
+{
+  const s = paketleSenaryosu([]);
+  ol('2o2 sürümsüz ortak → DUR (sürüm elle), derleme YOK', s.r.kod !== 0 && !s.o.cagrilar().some((c) => c.arac === 'npm') && s.once === s.sonra, s.r.cikti.slice(-400));
+}
+{
+  // SONDA: ortak derleyicide `env -u TEKSERP_KANAL` sökülür ve ortamda eski kanal sızar → paket eski kimlikle doğar, kapı DURDURUR.
+  const s = paketleSenaryosu([SURUM], { mutasyon: (m) => m.replaceAll('env -u TEKSERP_KANAL npm run', 'npm run'), ortamEk: { TEKSERP_KANAL: 'adnansahin' } });
+  ol('2o3 ⭐ SONDA: ortak derlemede ortam temizliği düşer + TEKSERP_KANAL=adnansahin sızarsa → paket kapısı DURDURUR (eski kimlikli ortak paket çıkamaz)',
+    s.r.kod !== 0 && Boolean(npmCagrisi(s.o)) && /ortak kimlikte değil|ortak kimli/.test(s.r.cikti), s.r.cikti.slice(-600));
+  const pozitif = paketleSenaryosu([SURUM], { ortamEk: { TEKSERP_KANAL: 'adnansahin' } });
+  ol('2o3b pozitif ikiz: temizlik yerindeyken aynı sızıntı ortak paketi BOZMAZ (env -u)', pozitif.r.kod === 0 && npmCagrisi(pozitif.o)?.kanal === null, pozitif.r.cikti.slice(-400));
+}
+{
+  // SONDA: ağaçta package.json appId eski → dinlenme kapısı derlemeden önce DURDURUR.
+  const s = paketleSenaryosu([SURUM], { agacMutasyon: (agac) => {
+    const y = path.join(agac, 'Electron/package.json');
+    const p = JSON.parse(fs.readFileSync(y, 'utf8'));
+    p.build.appId = 'com.etkiliyazilim.adnan-sahin-erp';
+    fs.writeFileSync(y, `${JSON.stringify(p, null, 2)}\n`);
+  } });
+  ol('2o4 ⭐ SONDA: dinlenme tabanında appId eski → ortak paketleme dinlenme kapısında DURUR, derleme YOK',
+    s.r.kod !== 0 && !s.o.cagrilar().some((c) => c.arac === 'npm') && /build\.appId/.test(s.r.cikti), s.r.cikti.slice(-500));
+}
+{
+  const s = paketleSenaryosu(['--terfi-atla', SURUM]);
+  ol('2o5 --terfi-atla ortakta RED (terfi grup yayınında), derleme YOK', s.r.kod !== 0 && !s.o.cagrilar().some((c) => c.arac === 'npm') && /terfi-atla/.test(s.r.cikti), s.r.cikti.slice(-400));
 }
 
 /* ------------------------------------------------------------------ *
