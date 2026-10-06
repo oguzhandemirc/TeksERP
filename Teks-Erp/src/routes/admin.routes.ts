@@ -751,7 +751,9 @@ const resetPasswordSchema = z.object({
  *   post:
  *     tags: [Admin]
  *     summary: Kullanıcı şifresini sıfırla (admin)
- *     description: Eski şifre sorulmaz; yalnızca admin:users yetkisi yeterli.
+ *     description: >
+ *       Eski şifre sorulmaz; yalnızca admin:users yetkisi yeterli. Verilen parola geçicidir —
+ *       hedef ilk girişte yeni parola belirler (mustChangePassword; kendi hesabı ve satıcı hesabı hariç).
  *     security: [{ bearerAuth: [] }]
  */
 router.post(

@@ -24,6 +24,8 @@ export interface LoginResponse {
   data: {
     token: string;
     user: JwtPayload;
+    /** true → token yalnız parola değiştirme ucuna geçer; uygulamaya girilmez, değişim adımı açılır. */
+    mustChangePassword?: boolean;
   };
   message: string;
 }

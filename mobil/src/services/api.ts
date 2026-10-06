@@ -101,8 +101,8 @@ export function isDeviceNotApproved(err: unknown): boolean {
   return e?.status === 403 && e?.details?.code === 'DEVICE_NOT_APPROVED';
 }
 
-/** Hesap parola değişimi bekliyor (403 PASSWORD_CHANGE_REQUIRED) mı? Değişim yalnız panelde
- *  yapılır; giriş yöntemi kapalı DEĞİLDİR — ekran seçimi korur, sunucunun cümlesini gösterir. */
+/** Hesap parola değişimi bekliyor (403 PASSWORD_CHANGE_REQUIRED) mı? Giriş yöntemi kapalı
+ *  DEĞİLDİR — ekran seçimi korur; PIN/kart cevabı kullanıcı adı taşırsa değişim adımı açılır. */
 export function isPasswordChangeRequired(err: unknown): boolean {
   const e = err as { status?: number; details?: { code?: string } } | null;
   return e?.status === 403 && e?.details?.code === 'PASSWORD_CHANGE_REQUIRED';
@@ -139,7 +139,8 @@ apiClient.interceptors.request.use(async (config) => {
   // restart gerekmeden anında geçer.
   config.baseURL = getCurrentBaseUrl();
   const token = await resolveAuthToken();
-  if (token) config.headers.Authorization = `Bearer ${token}`;
+  // Açık başlık (zorunlu parola değişiminin kısıtlı token'ı) oturum token'ına ezilmez.
+  if (token && !config.headers.Authorization) config.headers.Authorization = `Bearer ${token}`;
   // Backend bu header'ı Device → Machine'a çözer; rolMovement/rollOperation kayıtlarına yazılır.
   try {
     const deviceId = await getOrCreateDeviceId();
