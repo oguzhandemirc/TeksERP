@@ -18,6 +18,7 @@ import {
   bayraklardanAyarlar,
   disaAktarmaHedefEngeli,
   evrenHatalari,
+  matrisHedefEngeli,
   profilAdlari,
   profilHatalari,
   profilOku,
@@ -98,6 +99,8 @@ async function main(): Promise<void> {
   check("sonda: dışa aktarma fabrika yedeği sınıfını RED (`_test` ekli olsa da)", engel("tekserp_fabrika_0923") && engel("tekserp_fabrika_kopya_test"));
   check("sonda: dışa aktarma matris seed DB'sini RED", engel("tekserp_pm_kapali_test"));
   check("dışa aktarma kendi kopyasını KABUL eder", !engel("tekserp_o13b_kaynak_test"));
+  const mEngel = (ad: string): boolean => matrisHedefEngeli(ad) !== null;
+  check("sonda: matris DROP hedefi yalnız `tekserp_pm_<profil>_test`", mEngel("tekserp") && mEngel("tekserp_demo") && mEngel("tekserp_son_test") && mEngel("tekserp_pm_x_test; DROP") && !mEngel("tekserp_pm_kapali_test"));
   const suz = bayraklardanAyarlar({ financeEnabled: true, license: { x: 1 }, settingsPasswordHash: "h", loginMethods: { a: 1 }, factoryTimezone: "dilim", labelCopies: 2 });
   check(
     "dışa aktarma süzgeci: allowlist girer; sır · profil-dışı · çıktıya özgü anahtar girmez",

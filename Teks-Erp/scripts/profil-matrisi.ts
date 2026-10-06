@@ -27,14 +27,14 @@ import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { Pool } from "pg";
+import { PG_SESSION_OPTIONS } from "../src/lib/pg-session";
 import { hepsiAcikAyarlar } from "./lib/hepsi-acik";
-import { PROFIL_DIZINI, profilAdlari, profilHatalari, profilOku } from "./lib/profil";
+import { matrisHedefEngeli, PROFIL_DIZINI, profilAdlari, profilHatalari, profilOku } from "./lib/profil";
 import { sunucuAc } from "./lib/test-sunucusu";
 import { profilOzeti, raporYolu } from "../../scripts/lib/profil-raporu.mjs";
 
 const TEKS = join(__dirname, "..");
 const BIN = join(TEKS, "node_modules", ".bin");
-const PM_DB_DESENI = /^tekserp_pm_[a-z0-9]+_test$/;
 
 type Sonuc = "YESIL" | "KIRMIZI";
 interface Adim { ad: string; sonuc: Sonuc; sureMs: number; ozet: string; log?: string }
@@ -61,10 +61,11 @@ function kos(komut: string, arglar: string[], ortam: NodeJS.ProcessEnv, logYolu:
 }
 
 async function dbYenidenKur(pgUrl: string, dbAdi: string): Promise<void> {
-  if (!PM_DB_DESENI.test(dbAdi)) ret(`'${dbAdi}' matris DB adı desenine uymuyor — DROP reddedildi.`);
+  const engel = matrisHedefEngeli(dbAdi);
+  if (engel) ret(engel);
   const yonetim = new URL(pgUrl);
   yonetim.pathname = "/postgres";
-  const havuz = new Pool({ connectionString: yonetim.toString(), max: 1 });
+  const havuz = new Pool({ connectionString: yonetim.toString(), max: 1, options: PG_SESSION_OPTIONS });
   try {
     await havuz.query(`DROP DATABASE IF EXISTS "${dbAdi}" WITH (FORCE)`);
     await havuz.query(`CREATE DATABASE "${dbAdi}"`);

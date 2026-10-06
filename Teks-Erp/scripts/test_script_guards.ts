@@ -73,7 +73,15 @@ const KAPI = "assertGelistirmeVeritabani(";
  * ⚠️ §5 BU KÜMEYİ KULLANMAZ ve bilinçli: orası "şu testler GELİŞTİRME kapısı
  * taşısın" diyen ADLI bir listedir; hedefini fabrikada kuran bir betik değildir.
  */
-const KAPILAR = [KAPI, "hedefDbEngeli(", "fixtureHedefEngeli(", "hacimHedefEngeli("];
+// Profil araçlarının kendi hedef kapıları (lib/profil.ts): dışa aktarma `_test` kopyası, matris `tekserp_pm_*_test`.
+const KAPILAR = [
+  KAPI,
+  "hedefDbEngeli(",
+  "fixtureHedefEngeli(",
+  "hacimHedefEngeli(",
+  "disaAktarmaHedefEngeli(",
+  "matrisHedefEngeli(",
+];
 const kapiliMi = (kod: string): boolean => KAPILAR.some((k) => kod.includes(k));
 
 /** `$executeRaw` / `$executeRawUnsafe` çağrısı — argümanı TEK düz literal ise yakalar. */

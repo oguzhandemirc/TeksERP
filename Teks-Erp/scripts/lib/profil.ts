@@ -111,6 +111,12 @@ export function disaAktarmaHedefEngeli(dbAdi: string, yasakAdlar: ReadonlySet<st
   return null;
 }
 
+/** Profil matrisinin DROP/CREATE hedefi: yalnız kendi adlandırdığı `tekserp_pm_<profil>_test`. Kaçış YOK. */
+export const PM_DB_DESENI = /^tekserp_pm_[a-z0-9]+_test$/;
+export function matrisHedefEngeli(dbAdi: string): string | null {
+  return PM_DB_DESENI.test(dbAdi) ? null : `'${dbAdi}' matris DB adı desenine uymuyor — DROP reddedildi.`;
+}
+
 export interface DisaAktarimSonucu {
   ayarlar: Record<string, AyarDegeri>;
   /** Çıktıda olup profile GİRMEYEN anahtarlar → neden. */
