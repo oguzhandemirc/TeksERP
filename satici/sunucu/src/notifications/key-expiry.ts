@@ -1,6 +1,6 @@
 // İMZA ANAHTARI SÜRESİ (K4) — kullanım başına (ALT · ara imzacı · İNDİRME) yüklü en yeni sertifikanın bitişine 30 /
 // 15 / 7 / 1 gün kala `ANAHTAR_SURESI_BITIYOR` bildirimi: 30 gün kala tören günüdür. Tekillik anahtarı kid + eşik:
-// aynı eşik ikinci satır doğurmaz. Tören atlanırsa 120. günde kira, HAK ve indirme belirteci basılamaz.
+// aynı eşik ikinci satır doğurmaz. Tören atlanırsa sertifika bitince kira, HAK ve indirme belirteci basılamaz.
 import { DAY_MS, isoToMs } from "../lisans-protokol";
 import type { KeyStore } from "../keys/key-store";
 import { lockKeySet } from "../lib/locks";

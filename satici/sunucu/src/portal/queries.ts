@@ -7,6 +7,7 @@ import type { Db } from "../lib/prisma";
 import { currentCeiling, dealerUsage } from "../services/dealer.service";
 import { computeSanctionState } from "../services/lease.service";
 import { userView } from "./users.service";
+import { signedSkewFromPoll } from "./signed-skew-view";
 
 export interface Page<T> {
   readonly items: T[];
@@ -183,6 +184,7 @@ export async function installationDetail(db: Db, id: string, g: { dealerId?: str
     yaptirimDefteri: sanctions,
     kiralar: leases,
     yoklamalar: polls,
+    saatSapmasi: signedSkewFromPoll(polls[0] ?? null),
     kopyaUyarilari: await db.kopyaUyarisi.findMany({ where: { kurulumId: inst.id }, orderBy: [{ createdAt: "desc" }, { id: "desc" }], take: 50 }),
     tasimaTalepleri: await db.tasimaTalebi.findMany({
       where: { kurulumId: inst.id },

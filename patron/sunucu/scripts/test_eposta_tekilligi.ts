@@ -8,11 +8,11 @@
 //   §4 davet e-postayı TUTMAZ: C'de bekleyen DAVETLİ varken başka tesiste etkinleştirme engellenmez · giriş
 //      DAVETLİ/PASİF satırı aday saymaz
 //   §5 aynı tesiste PASİF olmayan iki hesap aynı e-postayı taşıyamaz (409 EPOSTA_KULLANIMDA) · arşivlenenin
-//      e-postası aynı tesiste yeniden davet edilir · DB seddi: kısmi UNIQUE'ler doğrudan SQL'le de geçilmez
+//      e-postası aynı tesiste yeniden davet edilir · DB seddi: tesis içi kısmi UNIQUE + merkez giriş dizini UNIQUE doğrudan SQL'le de geçilmez
 // Koşum: npx tsx scripts/test_eposta_tekilligi.ts
 // =============================================================================
 import { randomUUID } from "node:crypto";
-import { withTesis } from "../src/lib/tenant";
+import { withCentral, withTesis } from "../src/lib/tenant";
 import { TEST_PAROLASI, api, hesapKur, kontrol, ortamKur, sonuc, temizleTesis, tesisKur, totpKodu, type Ortam, type TestHesabi, type Yanit } from "./lib/test-ortam";
 
 const YONETICI = ["bulut:hesap:yonet", "bulut:siparis:oku"];
@@ -35,7 +35,7 @@ async function giris(o: Ortam, eposta: string, sir: string): Promise<Yanit> {
   return api(o, "POST", "/api/oturum/ac", { govde: { eposta, parola: TEST_PAROLASI, totp: totpKodu(sir, o.saat.simdi()) } });
 }
 
-const hesapDurumu = async (o: Ortam, tesisId: string, id: string) => withTesis(o.goc.prisma, { tesisId }, async (tx) => (await tx.account.findUniqueOrThrow({ where: { id } })).status);
+const hesapDurumu = async (o: Ortam, tesisId: string, id: string) => withTesis(o.goc, { tesisId }, async (tx) => (await tx.account.findUniqueOrThrow({ where: { id } })).status);
 
 async function main(): Promise<void> {
   const o = await ortamKur({ GIRIS_HIZ_DK: "1000" });
@@ -63,7 +63,7 @@ async function main(): Promise<void> {
     kontrol("§2a ⭐ onay → 409 DAVET_ETKINLESTIRILEMEDI", r2.onay.status === 409 && r2.onay.json.details?.code === "DAVET_ETKINLESTIRILEMEDI", `${r2.onay.status} ${r2.onay.json.details?.code}`);
     kontrol("§2b ileti başka tesisi/hesabı ANMAZ (tesis adı · 'zaten var' · 'başka tesis' yok)", !/Bekçi A|zaten var|başka (bir )?tesis/i.test(ileti) && ileti.length > 0, ileti);
     kontrol("§2c B'deki hesap DAVETLİ kalır · A'daki hesap AKTİF", (await hesapDurumu(o, b.tesisId, hesapB)) === "DAVETLI" && (await hesapDurumu(o, a.tesisId, ortak.accountId)) === "AKTIF");
-    const izB = await withTesis(o.goc.prisma, { tesisId: b.tesisId }, (tx) => tx.accountAudit.findFirst({ where: { tesisId: b.tesisId, entityId: hesapB, event: "DAVET_ETKINLESTIRILEMEDI" } }));
+    const izB = await withTesis(o.goc, { tesisId: b.tesisId }, (tx) => tx.accountAudit.findFirst({ where: { tesisId: b.tesisId, entityId: hesapB, event: "DAVET_ETKINLESTIRILEMEDI" } }));
     kontrol("§2d B'nin ayak izi sebepsiz (özette tesis/hesap bilgisi yok)", izB !== null && (izB.summary === null || JSON.stringify(izB.summary) === "{}" || JSON.stringify(izB.summary) === "null"), JSON.stringify(izB?.summary));
     const girisA = await giris(o, ortak.eposta, ortak.sir);
     kontrol("§2e e-posta hâlâ A'daki etkin hesaba çözülür", girisA.status === 200 && (girisA.json.data as { tesisId?: string }).tesisId === a.tesisId);
@@ -93,13 +93,17 @@ async function main(): Promise<void> {
     const yeniden = await davet(o, ya, ortak.eposta);
     kontrol("§5b arşivlenenin e-postası aynı tesiste (A) yeniden davet edilir → 201", yeniden.status === 201, `${yeniden.status}`);
     const sed = async (tesisId: string, status: "DAVETLI" | "AKTIF") =>
-      withTesis(o.goc.prisma, { tesisId }, (tx) =>
+      withTesis(o.goc, { tesisId }, (tx) =>
         tx.$executeRaw`INSERT INTO accounts (id, tesis_id, email, name, permissions, status, password_hash, totp_secret_sealed, totp_last_step, updated_at)
           VALUES (gen_random_uuid(), ${tesisId}::uuid, ${ortak.eposta}, 'Sed', '{}', ${status}::"AccountStatus", 'scrypt$x', 'x', 1, now())`,
       ).then(() => "gecti", (e: Error) => /accounts_\w+_key/.exec(e.message)?.[0] ?? e.message.slice(0, 80));
     const tesisIci = await sed(b.tesisId, "DAVETLI");
-    const genel = await sed(c.tesisId, "AKTIF");
-    kontrol("§5c ⭐ DB seddi: aynı tesiste ikinci PASİF-olmayan satır (tesis_email) · başka tesiste ikinci ETKİN satır (email_etkin) doğrudan SQL'le de RED", tesisIci === "accounts_tesis_email_key" && genel === "accounts_email_etkin_key", `${tesisIci} · ${genel}`);
+    // Bulut geneli etkin tekillik tesis DB'lerinin ÜSTÜNDE: merkez giriş dizininde e-posta özeti başına tek satır.
+    const ozet = o.anahtar.emailDigest(ortak.eposta);
+    const genel = await withCentral(o.goc, {}, (tx) =>
+      tx.$executeRaw`INSERT INTO login_routes (email_digest, tesis_id, account_id) VALUES (${ozet}, ${c.tesisId}::uuid, gen_random_uuid())`,
+    ).then(() => "gecti", (e: Error) => /login_routes_\w+_key/.exec(e.message)?.[0] ?? e.message.slice(0, 80));
+    kontrol("§5c ⭐ DB seddi: aynı tesiste ikinci PASİF-olmayan satır (tesis_email) · başka tesiste ikinci ETKİN satır (merkez giriş dizini, email_digest) doğrudan SQL'le de RED", tesisIci === "accounts_tesis_email_key" && genel === "login_routes_email_digest_key", `${tesisIci} · ${genel}`);
   } finally {
     for (const t of [a, b, c]) await temizleTesis(o, t.tesisId);
     await o.kapat();

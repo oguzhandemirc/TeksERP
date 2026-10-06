@@ -10,6 +10,7 @@ import {
   PollRequestSchema,
   TransferRequestSchema,
   TransferResponseSchema,
+  checkLiveResponseBinding,
   isoToMs,
   msToIso,
   type LicenseResponse,
@@ -20,7 +21,8 @@ import { adoptPackageRevocation } from "../lib/license/package-revocation-store"
 import { measureFingerprint } from "../lib/license/fingerprint";
 import { cacheFromRecordCopy, cacheToRecordCopy } from "../lib/license/fingerprint-cache";
 import { setFingerprintCacheCopy, startAccumulationForLease } from "../lib/license/record-writer";
-import type { LeaseArrival } from "../lib/license/saat";
+import { __resetSignedSkewForTests, recordSignedSkew, signedSkewSecondsForWire } from "../lib/license/signed-skew";
+
 import { acceptNewEntitlement } from "./license-integrity.service";
 import { seedCompanyNameQuietly } from "./licensee-company-name.service";
 import { refreshMdnsTxt } from "../jobs/mdns-advertiser.job";
@@ -41,6 +43,7 @@ import { adoptFromRejected, adoptOffered, refreshLicenseRevocation, revocationOf
 import { logLeaseAccepted, sanctionView, verifyResponseDocuments } from "./helpers/license-accept.helper";
 import { syncSupportAfterPoll } from "./support-sync.service";
 import { updateReportField } from "./update-status.service";
+import { systemSettingService } from "./system-setting.service";
 import { refreshUpdaterIntentQuietly } from "./update-intent.service";
 import { isVerificationMode } from "../lib/dogrulama-kipi";
 import {
@@ -50,6 +53,7 @@ import {
   encryptionKeyField,
   installRecordsField,
   invalidResponse,
+  liveArrival,
   pollV2Fields,
   licenseError,
   requireReady,
@@ -57,6 +61,7 @@ import {
   vendorFailureToError,
   vendorPost,
   type ReadyContext,
+  type ResponseArrival,
   type VendorResult,
   type VendorTransport,
 } from "./helpers/license-wire.helper";
@@ -102,11 +107,25 @@ function skewSeconds(): number | undefined {
   return ms === null ? undefined : Math.max(-1e9, Math.min(1e9, Math.round(ms / 1000)));
 }
 
+/**
+ * K10 — açık modül adları (yapılandırma, iş verisi DEĞİL). Okunamazsa ya da liste boşsa alan hiç gitmez: eski satıcı KATI
+ * şemayla reddeder (satıcı önce) ve yoklama bu yüzden düşmez.
+ */
+async function openModulesField(): Promise<{ acikModuller?: string[] }> {
+  try {
+    const keys = await systemSettingService.getOpenModuleKeys();
+    return keys.length > 0 ? { acikModuller: keys } : {};
+  } catch {
+    return {};
+  }
+}
+
 /** Yoklama gövdesi — protokolün KATI şemasından geçer (allowlist dışı alan kod yolunda patlar). */
 export async function buildPollBody(nowMs: number = Date.now()): Promise<ReturnType<typeof PollRequestSchema.parse>> {
   const snap = getLicenseSnapshot(nowMs);
   const s = snap.state;
   const saticiSapmaSn = skewSeconds();
+  const signedSkewSn = signedSkewSecondsForWire();
   return PollRequestSchema.parse({
     v: 1,
     // Zincir ucu: kira dosyası silinmiş/eskisiyle değiştirilmişse durum kaydının bildiği son kabul.
@@ -127,6 +146,7 @@ export async function buildPollBody(nowMs: number = Date.now()): Promise<ReturnT
       guvenilir: msToIso(s.saat.trustedMs),
       bulgu: s.saat.finding,
       ...(saticiSapmaSn === undefined ? {} : { saticiSapmaSn }),
+      ...(signedSkewSn === undefined ? {} : { imzaliSapmaSn: signedSkewSn }),
     },
     ortam: buildEnvironment(),
     saglik: await buildPollHealthSummary(),
@@ -137,6 +157,8 @@ export async function buildPollBody(nowMs: number = Date.now()): Promise<ReturnT
     ...updateReportField(),
     ...capabilitiesField(),
     ...pollV2Fields(snap),
+    // Açık modül adları (K10): okunamazsa alan gitmez; satıcı ÖNCE kabul eder.
+    ...(await openModulesField()),
   });
 }
 
@@ -159,13 +181,14 @@ export function onLicenseActivated(fn: () => void): void {
  * kirayla aynıysa kabul (otorite imzalı kira). Yazım sırası kimlik → durum → HAK → kira (yarım kalan
  * yazım bir sonraki yoklamada kendini onarır). İmza doğrulaması BURADA — panel/telefon yanıtı taklit edemez.
  * G4: kira ve HAK eldeki ile gelen iptal belgesinin yenisiyle doğrulanır; kabulde o belge benimsenir, rette
- * yalnız eldeki kiranın ALT'ına dokunmuyorsa (`adoptFromRejected`).
+ * yalnız eldeki kiranın ALT'ına dokunmuyorsa (`adoptFromRejected`). Canlı yanıt, kendi isteğinin nonce'una bağlı
+ * olmalıdır (`checkLiveResponseBinding`, 6.3c) — araya girip eski ya da başka bir yanıtı oynatmak RED.
  */
 export async function acceptLicenseResponse(
   raw: unknown,
   source: LeaseSource,
-  /** Canlı alışveriş mi, elle taşınan yanıt mı (`LeaseArrival`) — çağıran söyler; kaynak adı tek başına ayırmaz (`donanim` iki yolda). */
-  arrival: LeaseArrival,
+  /** Canlı alışveriş (isteğin nonce'uyla) mı, elle taşınan yanıt mı — çağıran söyler; kaynak adı tek başına ayırmaz (`donanim` iki yolda). */
+  delivery: ResponseArrival,
   userId: string | null = null,
 ): Promise<{ yeniKira: boolean; kiraId: string }> {
   const ctx = requireReady();
@@ -176,7 +199,7 @@ export async function acceptLicenseResponse(
   const offer = revocationOffer(parsed.data.iptal);
   let accepted: { yeniKira: boolean; kiraId: string };
   try {
-    accepted = acceptVerifiedResponse(parsed.data, ctx, offer, { source, userId, arrival });
+    accepted = acceptVerifiedResponse(parsed.data, ctx, offer, { source, userId, delivery });
   } catch (err) {
     adoptFromRejected(offer, source);
     throw err;
@@ -191,10 +214,22 @@ function acceptVerifiedResponse(
   resp: LicenseResponse,
   ctx: ReadyContext,
   offer: RevocationOffer,
-  who: { readonly source: LeaseSource; readonly userId: string | null; readonly arrival: LeaseArrival },
+  g: { readonly source: LeaseSource; readonly userId: string | null; readonly delivery: ResponseArrival },
 ): { yeniKira: boolean; kiraId: string } {
   const { lease, entitlement, licenseId } = verifyResponseDocuments(resp, ctx, offer.picked?.jws ?? null);
   const leaseDoc = lease.document;
+  if (g.delivery !== "TASINMIS") {
+    const bound = checkLiveResponseBinding(getLicenseConfig().roots, {
+      lease: leaseDoc,
+      leaseToken: resp.kira,
+      binding: resp.yanitBagi,
+      nonce: g.delivery.nonce,
+      sinif: entitlement.document.sinif,
+      revocation: offer.picked?.view ?? null,
+    });
+    if (!bound.ok) throw invalidResponse(`Yanıt bu isteğe bağlı değil: ${bound.message}`, bound.code);
+  }
+  const who = { source: g.source, userId: g.userId, arrival: g.delivery === "TASINMIS" ? ("TASINMIS" as const) : ("CANLI" as const) };
   const before = getLicenseSnapshot();
   const known = before.lastKnownLease;
   if (known && known.kiraId === leaseDoc.kiraId) {
@@ -219,6 +254,8 @@ function acceptVerifiedResponse(
   startAccumulationForLease({ lease: leaseDoc, entitlement, licenseId, iptalSira: offer.picked?.view.document.sira ?? null, arrival: who.arrival });
   if (resp.hak && resp.hak !== ctx.store.entitlementJws) acceptNewEntitlement(resp.hak);
   saveLease(resp.kira);
+  // Yalnız canlı yeni kira ölçer: taşınmış kiranın (dosya/QR) imzalı saati geçmiştedir, sapma sayılmaz.
+  if (who.arrival === "CANLI") recordSignedSkew(isoToMs(leaseDoc.sunucuSaati));
   setDownloadTokens(resp.indirmeBelirtecleri);
   if (getLicenseStore()?.transfer) saveTransfer(null);
   recordPollOutcome({ ok: true });
@@ -277,7 +314,7 @@ async function pollOnce(transport: VendorTransport): Promise<{ outcome: PollOutc
   // Destek (3d-2): yanıtın `destek` alanı + giden kutusu — kira alışverişi kuyruğunun DIŞINDA, yoklamayı düşürmez.
   void syncSupportAfterPoll(result.json, transport);
   try {
-    const accepted = await acceptLicenseResponse(result.json, "yoklama", "CANLI");
+    const accepted = await acceptLicenseResponse(result.json, "yoklama", liveArrival(result));
     if (!accepted.yeniKira) {
       recordPollOutcome({ ok: false, code: "KIRA_YENILENMEDI" });
       return { outcome: "BASARISIZ", code: "KIRA_YENILENMEDI" };
@@ -333,7 +370,7 @@ export async function sendTransfer(
   if (!parsed.success) throw invalidResponse("Taşıma yanıtı biçimsiz.");
   const t = parsed.data;
   if (t.durum === "ONAYLANDI" && t.lisans) {
-    await acceptLicenseResponse(t.lisans, "tasima", "CANLI");
+    await acceptLicenseResponse(t.lisans, "tasima", liveArrival(r));
     return { durum: t.durum, talepId: t.talepId, lisansAlindi: true };
   }
   const istendi = getLicenseStore()?.transfer?.istendi ?? msToIso(Date.now());
@@ -346,4 +383,5 @@ export async function sendTransfer(
 /** Test-only. */
 export function __resetLicenseSyncForTests(): void {
   doorbellKick = null;
+  __resetSignedSkewForTests();
 }

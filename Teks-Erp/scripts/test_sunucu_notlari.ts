@@ -94,6 +94,8 @@ const OTOMATIK_YAZIMLAR: readonly { yer: string; sinif: Sinif; zarfUyarisi: bool
   { yer: "Electron/src/pages/Operations/WorkOrders/CoveragePanel.tsx::workOrderService.getCoverage", sinif: "PREVIEW_ON_OPEN", zarfUyarisi: false },
   { yer: "Electron/src/pages/Operations/WorkOrders/ManualMoveModal.tsx::workOrderService.getManualMovePreview", sinif: "PREVIEW_ON_OPEN", zarfUyarisi: false },
   { yer: "Electron/src/providers/PreferencesProvider.tsx::savePreferences", sinif: "AUTOSAVE", zarfUyarisi: false },
+  // Hata ekranı açılınca bildirim (3.6): yanıt `{ alindi }`, zarf uyarısı yok; çağrı `suppressErrorToast` taşır.
+  { yer: "Electron/src/components/RouteErrorFallback.tsx::reportClientError", sinif: "PREVIEW_ON_OPEN", zarfUyarisi: false },
 ];
 /** Dedektörün GÖRMEDİĞİ (store/mutation/olay dolaylaması) ama elle izlenmiş otomatik yazımlar. */
 const ELLE_IZLENEN: readonly { servis: string; sinif: Sinif; nerede: string; zarfUyarisi: boolean }[] = [

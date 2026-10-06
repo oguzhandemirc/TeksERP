@@ -109,6 +109,9 @@ export const ERISIM_PORTAL_ROTALARI: ReadonlySet<string> = new Set([
   "GET /destek/:id/ek",
   "POST /destek/:id/yanitla",
   "POST /destek/:id/kapat",
+  // hata raporları — müşteri onaylı, kişisel verisiz grup özetleri (salt-okuma)
+  "GET /hata-raporlari",
+  "GET /hata-raporlari/:id",
   // bildirimler — kanal durumu + son bildirimler (bildirim:oku) · deneme bildirimi (bildirim:yonet); kanal sırrı taşımaz
   "GET /bildirimler",
   "GET /bildirimler/durum",

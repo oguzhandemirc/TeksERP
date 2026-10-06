@@ -62,10 +62,12 @@ export function ServerDiscoveryList({
 }: ServerDiscoveryListProps) {
   const [progress, setProgress] = useState<{ tried: number; total: number } | null>(null);
   const [found, setFound] = useState<DiscoveredServer[] | null>(null);
+  const [tlsBlocked, setTlsBlocked] = useState<string | null>(null);
 
   const search = useCallback(async (): Promise<DiscoveredServer[]> => {
     setFound(null);
     setProgress(null);
+    setTlsBlocked(null);
     try {
       const pinned = await getPinnedInstallationId();
       const res = await discoverServers({
@@ -82,6 +84,7 @@ export function ServerDiscoveryList({
         extraPorts: true,
         onProgress: setProgress,
       });
+      setTlsBlocked(res.tlsBlocked);
       return res.candidates;
     } catch {
       return [];
@@ -148,6 +151,13 @@ export function ServerDiscoveryList({
             Adresi biliyorsanız elle yazıp &quot;Bağlantıyı Test Et&quot; deyin.
           </Text>
         </View>
+      )}
+
+      {/* Sabitli sunucu doğrulanamadı → HTTP'ye bilerek düşülmedi; sebep görünür olmalı. */}
+      {!searching && tlsBlocked && (
+        <Text testID="tls-blocked" style={styles.itemDanger}>
+          Şifreli bağlantı doğrulanamadı — {tlsBlocked}. Güvenlik için şifresiz bağlantıya geçilmedi.
+        </Text>
       )}
 
       {!searching && found && found.length > 0 && (

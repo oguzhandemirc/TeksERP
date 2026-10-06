@@ -69,6 +69,9 @@ export interface Installation {
   readonly platform: string | null;
   readonly sonOrtam: Record<string, unknown> | null;
   readonly sonSaglik: Record<string, unknown> | null;
+  /** K10: fabrikanın son yoklamada bildirdiği AÇIK modül adları; null = fabrika bildirmedi (eski sürüm). */
+  readonly acikModuller?: readonly string[] | null;
+  readonly acikModullerZamani?: string | null;
   readonly sonYoklamaZamani: string | null;
   readonly etkinlesmeZamani: string | null;
   readonly aktif: boolean;
@@ -348,6 +351,8 @@ export interface InstallationDetail {
   readonly yaptirimDefteri?: SanctionAction[];
   readonly kiralar?: Lease[];
   readonly yoklamalar?: PollRow[];
+  /** Son yoklamanın İMZALI saat sapması (sn; + = fabrika saati ileride); null = bildirilmedi (eski sürüm / ölçülmedi). */
+  readonly saatSapmasi?: { readonly sapmaSn: number; readonly uyari: boolean; readonly esikSn: number; readonly an: string } | null;
   readonly kopyaUyarilari?: CopyAlert[];
   readonly tasimaTalepleri?: TransferRequest[];
   readonly planliEylemler?: PlannedAction[];

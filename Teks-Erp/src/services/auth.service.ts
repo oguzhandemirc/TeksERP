@@ -58,20 +58,33 @@ export interface LoginContext {
    * cevaplayan bir GÖZLEMdir.
    */
   clientVersion?: string | null;
+  /**
+   * Tablet istemcisi zorunlu parola değişimi adımını taşıyor mu? Yalnız PAROLALI girişte
+   * okunur: true ise değişim bekleyen hesap kısıtlı token alır (panel gibi); yoksa 403.
+   * Güvenlik sınırı DEĞİLDİR — token'ı daraltan `verifyToken`dur.
+   */
+  passwordChangeCapable?: boolean;
 }
+
+/** Token'ı hangi kimlik bilgisi açtı — zorunlu değişim dalı yönteme göre ayrışır. */
+type LoginVia = "password" | "quick-pin" | "card";
 
 /** Gövdeden gelen istemci türü. `undefined` = mobil (tarihsel varsayılan). */
 export type LoginClientType = "electron" | "mobile" | "web";
 
-/** Giriş çıktısı. `mustChangePassword` yalnız panel girişinde true olabilir (tablete 403). */
+/** Giriş çıktısı. `mustChangePassword` panelde ve değişim adımını taşıyan tabletin parolalı girişinde true olabilir. */
 export type LoginResult = { token: string; user: JwtPayload; mustChangePassword: boolean };
 
 export const PASSWORD_CHANGE_REQUIRED_CODE = "PASSWORD_CHANGE_REQUIRED";
 export const PASSWORD_CHANGE_REQUIRED_MESSAGE =
   "Parolanızı değiştirmeniz gerekiyor. Yeni parola belirlemeden devam edilemez.";
 export const CURRENT_PASSWORD_INVALID_CODE = "CURRENT_PASSWORD_INVALID";
-const PASSWORD_CHANGE_REQUIRED_MESSAGE_MOBILE =
-  "Bu hesabın parolası değiştirilmeli. Önce yönetim panelinden giriş yapıp yeni parola belirleyin.";
+/** Değişim adımı taşımayan (eski) tabletin parolalı girişi. */
+const PASSWORD_CHANGE_REQUIRED_MESSAGE_LEGACY_TABLET =
+  "Bu hesabın parolası değiştirilmeli. Bu tablet sürümü parola değiştiremiyor — tableti güncelleyin ya da yönetim panelinden giriş yapıp yeni parola belirleyin.";
+/** Hızlı PIN / kart: parola elde değil — kullanıcı adı + geçici parolayla girişe yönlendirir. */
+const PASSWORD_CHANGE_REQUIRED_MESSAGE_SHORT_ID =
+  "Bu hesabın parolası değiştirilmeli. Kullanıcı adı ve size verilen parolayla giriş yapıp yeni parola belirleyin.";
 
 /**
  * MASAÜSTÜ SINIFI istemci mi (Electron paneli ya da tarayıcıdaki web paneli)?
@@ -181,7 +194,8 @@ export class AuthService {
 
     return this.issueToken(
       { id: user.id, username: user.username, tokenVersion: user.tokenVersion },
-      ctx
+      ctx,
+      "password",
     );
   }
 
@@ -228,11 +242,11 @@ export class AuthService {
     }
     const legacyCard = row?.cardToken ?? null;
     if (legacyCard) {
-      const result = await this.issueToken(user, ctx);
+      const result = await this.issueToken(user, ctx, "card");
       await ShortCredentialService.convertOnLogin(user.id, "card", legacyCard).catch(() => false);
       return result;
     }
-    return this.issueToken(user, ctx);
+    return this.issueToken(user, ctx, "card");
   }
 
   /**
@@ -277,10 +291,10 @@ export class AuthService {
       );
     }
     if (digestHit) {
-      return this.issueToken({ id: digestHit.id, username: digestHit.username, tokenVersion: digestHit.tokenVersion }, ctx);
+      return this.issueToken({ id: digestHit.id, username: digestHit.username, tokenVersion: digestHit.tokenVersion }, ctx, "quick-pin");
     }
     if (legacy) {
-      const result = await this.issueToken(legacy, ctx);
+      const result = await this.issueToken(legacy, ctx, "quick-pin");
       await ShortCredentialService.convertOnLogin(legacy.id, "pin", normalized).catch(() => false);
       return result;
     }
@@ -466,7 +480,8 @@ export class AuthService {
       username: string;
       tokenVersion: number;
     },
-    ctx?: LoginContext
+    ctx: LoginContext | undefined,
+    via: LoginVia,
   ): Promise<LoginResult> {
     // Patron bulutu teknik kullanıcısının GİRİŞ YÖNTEMİ YOKTUR: parolası panelden sıfırlansa ya da PIN/kart verilse
     // bile oturum açılmaz (tek token üreticisi burası; mesaj genel — hesabın varlığını doğrulamaz).
@@ -475,16 +490,27 @@ export class AuthService {
     }
     const permissions = await this.getEffectivePermissions(user.id);
 
-    // Zorunlu parola değişimi yalnız panelde yapılabilir: tablete token verilseydi her istek
-    // 403 alırdı. Panel token'ı alır ama verifyToken onu parola değiştirme ucuna daraltır.
+    // Zorunlu parola değişimi: panel ve değişim adımını taşıyan tabletin PAROLALI girişi token
+    // alır, verifyToken onu parola değiştirme ucuna daraltır. Eski tablet ve PIN/kart token
+    // almaz (alsaydı her istek 403 alırdı); PIN/kart cevabı adımın kullanıcı adını taşır.
     const flags = await prisma.user.findUnique({
       where: { id: user.id },
       select: { mustChangePassword: true },
     });
     const mustChangePassword = flags?.mustChangePassword === true;
-    if (mustChangePassword && !isDesktopClient(ctx?.clientType)) {
-      throw AppError.forbidden(PASSWORD_CHANGE_REQUIRED_MESSAGE_MOBILE, {
+    if (
+      mustChangePassword &&
+      !isDesktopClient(ctx?.clientType) &&
+      !(via === "password" && ctx?.passwordChangeCapable === true)
+    ) {
+      if (via === "password") {
+        throw AppError.forbidden(PASSWORD_CHANGE_REQUIRED_MESSAGE_LEGACY_TABLET, {
+          code: PASSWORD_CHANGE_REQUIRED_CODE,
+        });
+      }
+      throw AppError.forbidden(PASSWORD_CHANGE_REQUIRED_MESSAGE_SHORT_ID, {
         code: PASSWORD_CHANGE_REQUIRED_CODE,
+        username: user.username,
       });
     }
 

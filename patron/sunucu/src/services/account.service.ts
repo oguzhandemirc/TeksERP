@@ -149,7 +149,7 @@ export async function createAccount(ctx: CloudContext, s: SessionContext, input:
   requireAdmin(s);
   const email = normalizeEmail(input.eposta);
   const permissions = resolvePermissionInput(input);
-  const invite = createInvite(ctx.now(), ctx.config.DAVET_GECERLILIK_SAAT);
+  const invite = createInvite(s.tesisId, ctx.now(), ctx.config.DAVET_GECERLILIK_SAAT);
   try {
     return await executeWrite(ctx.app, {
       tesisId: s.tesisId,
@@ -253,7 +253,7 @@ export async function resetAccount(ctx: CloudContext, s: SessionContext, id: str
   requireAdmin(s);
   if (id === s.accountId) throw stateConflict("Kendi hesabınızı sıfırlayamazsınız; parolanızı Profil'den değiştirin");
   const nowMs = ctx.now();
-  const invite = createInvite(nowMs, ctx.config.DAVET_GECERLILIK_SAAT);
+  const invite = createInvite(s.tesisId, nowMs, ctx.config.DAVET_GECERLILIK_SAAT);
   return executeWrite(ctx.app, {
     tesisId: s.tesisId,
     accountId: s.accountId,

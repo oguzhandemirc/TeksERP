@@ -467,6 +467,8 @@ export async function temizleKurulumlar(kurulumDbIdleri: readonly string[], kidl
     const talepAnahtarlari = (await tx.tasimaTalebi.findMany({ where: w, select: { yeniAnahtarKimligi: true } })).map((t) => `kid:${t.yeniAnahtarKimligi}`);
     await tx.nonceDefteri.deleteMany({ where: { kapsam: { in: talepAnahtarlari } } });
     await tx.yoklama.deleteMany({ where: w });
+    await tx.hataRaporuGrubu.deleteMany({ where: w });
+    await tx.hataRaporuPartisi.deleteMany({ where: w });
     await tx.kopyaUyarisi.deleteMany({ where: w });
     await tx.tasimaTalebi.deleteMany({ where: w });
     // Donanım / zayıf tanıma onay talepleri (K8): denetim ayak izi talep id'siyle.

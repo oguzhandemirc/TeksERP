@@ -10,6 +10,7 @@
 #   lisans\ - backups\ - yedek-anahtar\ - veri\ - logs\ - mobil-guncelleme\ - rclone\ - pgsql\ornek.json -
 #   kurulum\kurulum.json + gunluk\ - %ProgramData%\TeksERP[-kanal]\guncelleme\ (guncelleme oncesi yedekler).
 #   Ayni kok ve veriyle yeniden kurulum = ONARIM (veri dizini dolu -> initdb kosmaz, kayitli port korunur).
+# DOKUNULMAYAN: Windows saat esitlemesi (kurulumun actigi NTP acik kalir; onceki ayar kurulum.json saat.onceki).
 # BAGLANTI (junction) yalniz [IO.Directory]::Delete ile silinir: Remove-Item -Recurse HEDEFINI bosaltirdi.
 #   powershell -NoProfile -ExecutionPolicy Bypass -File kaldir.ps1 -Kok C:\TeksERP
 # CIKIS: 0 (adim dusse de devam eder, sonda ACIK liste) - 1 yonetici degil / kok gecersiz.
@@ -107,6 +108,21 @@ try {
     }
   }
 
+  # 2b) Sunucu simgesi: oturum acilisi kaydi + calisan simge (kullanici oturumlarinda) + <kok>\tepsi\.
+  AdimDene "sunucu simgesi" {
+    $run = "HKLM:\Software\Microsoft\Windows\CurrentVersion\Run"
+    $isim = "TeksERP-Tepsi$($ad.sonek)"
+    $tepsiBetik = (Join-Path $kok "tepsi\tepsi.ps1")
+    $kayit = (Get-ItemProperty -LiteralPath $run -Name $isim -ErrorAction SilentlyContinue)
+    if ($kayit -and "$($kayit.$isim)".ToLowerInvariant().Contains($tepsiBetik.ToLowerInvariant())) { Remove-ItemProperty -LiteralPath $run -Name $isim; Ok "oturum acilisi kaydi kaldirildi: $isim" }
+    elseif ($kayit) { Uyar "$isim kaydi baska bir kok gosteriyor - DOKUNULMADI" }
+    foreach ($pr in @(Get-CimInstance Win32_Process -Filter "Name = 'powershell.exe'" -ErrorAction SilentlyContinue)) {
+      if ("$($pr.CommandLine)".ToLowerInvariant().Contains($tepsiBetik.ToLowerInvariant())) { Stop-Process -Id $pr.ProcessId -Force -ErrorAction SilentlyContinue; Ok "calisan simge kapatildi (pid $($pr.ProcessId))" }
+    }
+    $p = Join-Path $kok "tepsi"
+    if (Test-Path -LiteralPath $p) { if (ReparseMi $p) { throw "tepsi dizini baglanti - DOKUNULMADI" }; Remove-Item -LiteralPath $p -Recurse -Force; Ok "silindi: $p" }
+  }
+
   # 3) Program dizinleri - YALNIZ bu liste. Baglantilar ozyinelemesiz silinir.
   AdimDene "current baglantisi" {
     $c = Join-Path $kok "current"
@@ -145,6 +161,8 @@ try {
   foreach ($k in $korunan) { Write-Host "    - $k"; [void](GunlugeYaz "KORUNDU" $k) }
   Write-Host "  Ayni kok ve veriyle yeniden kurulum ONARIM olur. Veriyi silmek ayri ve bilincli bir karardir:" -ForegroundColor Yellow
   Write-Host "  once son yedegi baska makinede GERI YUKLEYEREK dogrulayin, sonra dizinleri elle silin." -ForegroundColor Yellow
+  # Saat esitlemesi GERI ALINMAZ: acik NTP makine icin guvenli varsayilandir; ilk kurulumun onceki ayari kurulum.json'da.
+  Write-Host "  Windows saat esitlemesi (NTP) oldugu gibi birakildi; kurulum oncesi ayar: kurulum\kurulum.json (saat.onceki)."
 } catch {
   $cikis = 1
   if (-not "$($_.Exception.Message)".StartsWith("KURULUM_DUR:")) { Write-Host ("  X  " + (Maskele "$($_.Exception.Message)")) -ForegroundColor Red }

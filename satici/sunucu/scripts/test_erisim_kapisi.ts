@@ -754,12 +754,15 @@ async function main(): Promise<void> {
   console.log("\n§5 compose (Traefik ipallowlist = Cloudflare aralıkları · satıcı dış bağlantısız · yan konteyner)");
   const composeYolu = path.join(__dirname, "..", "..", "..", "deploy", "satici", "docker-compose.portal-genel.yml");
   const compose = readFileSync(composeYolu, "utf8");
-  const aralik = /ipallowlist\.sourcerange=([^"\n]+)/.exec(compose)?.[1]?.split(",").map((x) => x.trim()) ?? [];
-  const fark = [...aralik.filter((x) => !CLOUDFLARE_NETWORKS.includes(x)), ...CLOUDFLARE_NETWORKS.filter((x) => !aralik.includes(x))];
-  kontrol("§5a portal yönlendiricisinin kaynak listesi CLOUDFLARE_NETWORKS ile birebir", aralik.length > 0 && fark.length === 0, fark.join(",") || `${aralik.length} aralık`);
+  // Kenar zincirinin halkaları ana dosyada TEK yerde (genel yönlendiriciyle ortak); portal örtüsü onlara bağlanır.
+  const anaCompose = readFileSync(path.join(path.dirname(composeYolu), "docker-compose.yml"), "utf8");
   const R = "routers\\.tekserp-satici-\\$\\{ORTAM\\}-portal";
   const mw = new RegExp(`${R}\\.middlewares=([^\\s"]+)`).exec(compose)?.[1] ?? "";
-  const mwTanimli = mw !== "" && compose.includes(`middlewares.${mw}.ipallowlist.sourcerange=`);
+  const ilkHalka = mw.split(",")[0] ?? "";
+  const aralik = ilkHalka === "" ? [] : (new RegExp(`middlewares\\.${ilkHalka.replace(/[$.{}]/g, "\\$&")}\\.ipallowlist\\.sourcerange=([^"\\n]+)`).exec(`${compose}\n${anaCompose}`)?.[1]?.split(",").map((x) => x.trim()) ?? []);
+  const fark = [...aralik.filter((x) => !CLOUDFLARE_NETWORKS.includes(x)), ...CLOUDFLARE_NETWORKS.filter((x) => !aralik.includes(x))];
+  kontrol("§5a portal yönlendiricisinin İLK halkası (ipallowlist) kaynak listesi CLOUDFLARE_NETWORKS ile birebir", aralik.length > 0 && fark.length === 0, fark.join(",") || `${aralik.length} aralık`);
+  const mwTanimli = aralik.length > 0;
   kontrol(
     "§5b portal yönlendiricisi: Host kuralı · kendi servisi 4613 · ipallowlist ara katmanı BAĞLI · ana yönlendirici kendi servisine açık bağlı",
     new RegExp(`${R}\\.rule=Host\\(\`\\$\\{PORTAL_HOST`).test(compose) &&

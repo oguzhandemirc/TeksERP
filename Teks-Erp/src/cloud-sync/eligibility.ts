@@ -2,7 +2,7 @@
 // FAIL-CLOSED: belirsizlik GÖNDERMEZ ve ÇEKMEZ — modül tavanının fail-open'ının bilinçli tersi (yeni dış kanal).
 // Lisans kademesi (KISITLI · DURDURULMUS) eşitlemeyi DURDURMAZ (§1.6); gelen kutusu yazmadır, `inboxWritesAllowed` sorar.
 import { getLicenseInstallationId, getLicenseSnapshot, type LicenseSnapshot } from "../lib/license/runtime";
-import { isoToMs } from "../lib/license/protocol";
+import { isCloudSenderClass, isoToMs } from "../lib/license/protocol";
 import { isOpenInTier } from "../constants/license-routes";
 import { getCloudUrl } from "./cloud-url";
 
@@ -52,7 +52,8 @@ export function evaluateCloudEligibility(
   // uyuşmaz) aslının verisini buluta taşıyamaz.
   if (snap.state.gecerlilik === "OLCULEMEDI") return { ok: false, reason: "LISANS_OLCULEMEDI" };
   if (snap.state.gecerlilik !== "GECERLI" || hak.kurulumId !== installationId) return { ok: false, reason: "LISANS_GECERSIZ" };
-  if (hak.sinif !== "URETIM") return { ok: false, reason: "SINIF_URETIM_DEGIL" };
+  // Ad tarihsel (eski panel etiketi bu kodu tanır); anlamı "sınıf gönderici kümesinde değil".
+  if (!isCloudSenderClass(hak.sinif)) return { ok: false, reason: "SINIF_URETIM_DEGIL" };
   if (!hak.moduller.includes(PATRON_CLOUD_ENTITLEMENT)) return { ok: false, reason: "PATRON_BULUT_HAKKI_YOK" };
   if (kira.devredildi || snap.state.devredildi) return { ok: false, reason: "DEVREDILDI" };
   const ends = kira.patronBulutBitis === null ? null : isoToMs(kira.patronBulutBitis);

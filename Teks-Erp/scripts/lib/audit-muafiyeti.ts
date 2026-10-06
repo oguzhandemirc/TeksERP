@@ -42,6 +42,8 @@ export interface AuditMuafiyeti {
 export const AUDIT_EXEMPT_MODELS: AuditMuafiyeti[] = [
   { model: "UserPreference", sinif: "KULLANICI_TERCIHI",
     gerekce: "kullanıcının kendi panel tercihi (kolon düzeni, filtre); hiçbir iş kararına ve hiçbir rapora girmez — kökün TEK beyanlı istisnası buydu" },
+  { model: "ErrorReportEntry", sinif: "TELEMETRI",
+    gerekce: "hata raporu kuyruğu (budanır); onayın kendisi SystemSetting üzerinden audit'li, kuyruk satırları hiçbir sayıya girmez" },
   { model: "EndpointLatencyDaily", sinif: "TELEMETRI",
     gerekce: "uç gecikme özeti; `defter.md` § Telemetri ≠ defter sınıfı, yaşa göre budanır ve TEK okuyucusu kendi servisidir" },
   { model: "LoginLockoutBucket", sinif: "KIMLIK_AKISI",

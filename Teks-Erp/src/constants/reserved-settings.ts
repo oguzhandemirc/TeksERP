@@ -93,6 +93,13 @@ export const LICENSE_TRACE_SETTING_KEY = "license.trace";
 export const LICENSE_REVOCATION_SETTING_KEY = "license.revocation";
 
 /**
+ * Hata raporu ONAYI (`services/error-report.service.ts`): müşterinin "hata raporları satıcıya gitsin" kararı.
+ * Tek yazma yüzeyi ayar şifreli `PUT /api/hata-raporlari/onay`; ham uçtan yazılabilseydi onay ayar şifresi
+ * kapısını atlayarak açılırdı. Okuması serbest (sır değil).
+ */
+export const ERROR_REPORT_CONSENT_SETTING_KEY = "errorReports.consent";
+
+/**
  * `PUT /api/admin/settings/:key` ucunun REDDETTİĞİ anahtarlar.
  *
  * Kümeye ek olarak ön ek kuralı da uygulanır (`isReservedSettingKey`) — küme
@@ -107,6 +114,7 @@ export const RESERVED_SETTING_KEYS: ReadonlySet<string> = new Set([
   FACTORY_TIMEZONE_SETTING_KEY,
   LICENSE_TRACE_SETTING_KEY,
   LICENSE_REVOCATION_SETTING_KEY,
+  ERROR_REPORT_CONSENT_SETTING_KEY,
 ]);
 
 /** `security.` ile başlıyor mu — liste/dışa-aktarım süzgeçlerinin yüklemi. */

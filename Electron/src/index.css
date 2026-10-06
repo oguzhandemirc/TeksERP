@@ -269,7 +269,15 @@
 .attention-pulse.attention-info { --attention: var(--info); }
 .attention-pulse.attention-warning { --attention: var(--warning); }
 
+/* Lisans bandı: yeni mesaja geçişte metin aşağıdan solarak girer (key değişince yeniden oynar). */
+@keyframes lisans-bandi-gecis {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.lisans-bandi-gecis { animation: lisans-bandi-gecis 0.35s ease-out; }
+
 @media (prefers-reduced-motion: reduce) {
+  .lisans-bandi-gecis { animation: none !important; }
   .blob-1, .blob-2, .blob-3, .live-dot, .live-dot::after, .attention-pulse {
     animation: none !important;
   }

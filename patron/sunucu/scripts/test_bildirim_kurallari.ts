@@ -110,7 +110,7 @@ async function main(): Promise<void> {
     await ayarYaz(o, fin, ayar({ esikler: { gecikenKalemUst: null }, sessiz: simdikiSessiz(o.saat.simdi(), 30) }));
     await tur(o, k.tesisId, tf);
     const dogan = (await bildirimler(o, k.tesisId, "cek-vadesi")).filter((n) => n.accountId === fin.accountId).at(-1)!;
-    await withTesis(o.goc.prisma, { tesisId: k.tesisId }, (tx) => tx.account.update({ where: { id: fin.accountId }, data: { permissions: ["bulut:ozet:oku"] } }));
+    await withTesis(o.goc, { tesisId: k.tesisId }, (tx) => tx.account.update({ where: { id: fin.accountId }, data: { permissions: ["bulut:ozet:oku"] } }));
     const once = tf.sent.length;
     o.saat.ilerlet(40 * 60_000);
     await tur(o, k.tesisId, tf);
@@ -134,7 +134,7 @@ async function gelenKutusuBolumu(o: Ortam, tesisId: string, yazar: TestHesabi, b
   const t = new RecordingTransport();
   const tokYazar = await cihazKaydet(o, yazar);
   const mesajId = randomUUID();
-  await withTesis(o.goc.prisma, { tesisId }, (tx) =>
+  await withTesis(o.goc, { tesisId }, (tx) =>
     tx.inboxMessage.create({ data: { tesisId, messageId: mesajId, kind: "SIPARIS", body: {}, accountId: yazar.accountId, accountName: "Bekçi", status: "ISLENDI", processedAt: new Date(o.saat.simdi()), result: { siparisId: randomUUID() } } }),
   );
   await tur(o, tesisId, t);

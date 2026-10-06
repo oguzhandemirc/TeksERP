@@ -13,6 +13,7 @@ import {
   PROTOCOL_VERSION,
   VersionTextSchema,
   UuidSchema,
+  ModuleKeySchema,
 } from "./belgeler";
 import { UpdateReportSchema } from "./guncelleme";
 import { FINGERPRINT_FACTORS } from "./parmak-izi";
@@ -28,6 +29,8 @@ export const ENDPOINTS = {
   SUPPORT: "/v1/destek",
   /** Donanım değişikliği bildirimi (K8) — gövde `donanim.ts`. */
   HARDWARE: "/v1/donanim",
+  /** Müşteri onaylı hata raporu — gövde `hata-raporu.ts`. */
+  ERROR_REPORT: "/v1/hata-raporu",
 } as const;
 
 export const VALIDITY_VALUES = ["GECERLI", "GECERSIZ", "OLCULEMEDI"] as const;
@@ -39,6 +42,8 @@ export const LICENSE_MODES = ["gozlem", "zorla"] as const;
 export type LicenseMode = (typeof LICENSE_MODES)[number];
 
 export const POLL_DEFAULT_MINUTES = 60;
+/** İmzalı saat sapması uyarı eşiği (sn): sunucu duvar saati − satıcının imzalı kira saati; yalnız bilgi, kademeye girmez. */
+export const SIGNED_SKEW_WARN_SECONDS = 300;
 export const DOORBELL_HEARTBEAT_SECONDS = 25;
 export const DOORBELL_EVENT_NAME = "zil";
 export const DOORBELL_TOPICS = ["lisans", "gelen-kutusu", "ozet", "rapor", "guncelleme", "destek"] as const;
@@ -215,6 +220,8 @@ export const PollRequestSchema = z.strictObject({
     bulgu: z.enum(["SAAT_ILERI", "SAAT_GERI"]).nullable(),
     /** Son `ISTEK_ZAMAN` yanıtından ölçülen duvar − satıcı saati (sn); yok = ölçülmedi. Bilgidir, kademeye girmez. */
     saticiSapmaSn: z.number().int().min(-1e9).max(1e9).optional(),
+    /** Son CANLI kira kabulünde imzalı `kira.sunucuSaati`nden ölçülen duvar − imzalı saat (sn); yok = ölçülmedi. Bilgidir; satıcı ÖNCE. */
+    imzaliSapmaSn: z.number().int().min(-1e9).max(1e9).optional(),
   }),
   ortam: EnvironmentSchema,
   saglik: HealthSummarySchema,
@@ -229,6 +236,11 @@ export const PollRequestSchema = z.strictObject({
   belirsizlik: UncertaintySummarySchema.optional(),
   durumKaydi: StateRecordSummarySchema.optional(),
   parmakIziKayip: LostFactorListSchema.optional(),
+  /**
+   * K10 — fabrikada AÇIK (bayrak ∧ lisans tavanı) modül adları (`finance.enabled` …). Ad YAPILANDIRMADIR, iş verisi
+   * değil; alan yoksa fabrika bildirmiyor (portal "bilinmiyor" der). Yalnız doluysa gider; satıcı ÖNCE.
+   */
+  acikModuller: z.array(ModuleKeySchema).max(64).refine((l) => new Set(l).size === l.length, "Modül listesinde tekrar var").optional(),
 });
 
 /**
@@ -268,6 +280,9 @@ export const LicenseResponseSchema = z.object({
   iptal: JwsTextSchema.optional().catch(undefined),
   /** Güncel PAKET sertifikası iptal listesi (`tekserp-paketiptal`) — ayrıca kökle doğrulanır; biçimsizse yok sayılır. */
   paketIptal: JwsTextSchema.optional().catch(undefined),
+
+  /** İstek bağı (`tekserp-yanit`, 6.3c): canlı yanıtta kirayı isteğin nonce'una bağlar; eski satıcı göndermez. */
+  yanitBagi: JwsTextSchema.optional(),
 });
 
 /**

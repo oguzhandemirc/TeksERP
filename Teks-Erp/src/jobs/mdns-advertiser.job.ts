@@ -232,6 +232,7 @@ function makeTxt(installationId: string | null): AdvertisedTxt {
         companyName: live.companyName,
         version: APP_VERSION,
         apiBasePath: "/api",
+        tlsPort: live.tls?.port ?? null,
     });
 }
 

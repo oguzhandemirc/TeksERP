@@ -21,7 +21,7 @@ import {
   MODULE_PROFILES,
   MODULE_PROFILE_IDS,
 } from "../constants/module-profiles";
-import { FACTORY_TIMEZONE_SETTING_KEY, isReservedSettingKey, PROFILE_STAMP_SETTING_KEY } from "../constants/reserved-settings";
+import { ERROR_REPORT_CONSENT_SETTING_KEY, FACTORY_TIMEZONE_SETTING_KEY, isReservedSettingKey, PROFILE_STAMP_SETTING_KEY } from "../constants/reserved-settings";
 import { passwordPolicyViolation } from "../constants/password-policy";
 import { requireSettingsPassword } from "../middlewares/settings-password.middleware";
 import {
@@ -751,7 +751,9 @@ const resetPasswordSchema = z.object({
  *   post:
  *     tags: [Admin]
  *     summary: Kullanıcı şifresini sıfırla (admin)
- *     description: Eski şifre sorulmaz; yalnızca admin:users yetkisi yeterli.
+ *     description: >
+ *       Eski şifre sorulmaz; yalnızca admin:users yetkisi yeterli. Verilen parola geçicidir —
+ *       hedef ilk girişte yeni parola belirler (mustChangePassword; kendi hesabı ve satıcı hesabı hariç).
  *     security: [{ bearerAuth: [] }]
  */
 router.post(
@@ -1556,6 +1558,12 @@ router.put(
       if (key === FACTORY_TIMEZONE_SETTING_KEY) {
         throw AppError.badRequest(
           "Fabrika saat dilimi yalnız önizlemeli saat dilimi ucundan değiştirilir",
+          { code: "SETTING_KEY_RESERVED", key },
+        );
+      }
+      if (key === ERROR_REPORT_CONSENT_SETTING_KEY) {
+        throw AppError.badRequest(
+          "Hata raporu onayı yalnız Hata raporları kartından (ayar şifresiyle) değiştirilir",
           { code: "SETTING_KEY_RESERVED", key },
         );
       }

@@ -584,6 +584,22 @@ function LisansSunucusuKarari([string]$kanal, [string]$varsayilan, [string]$giri
   return [ordered]@{ etkili = $etkili; kaynak = $kaynak; kaynakMetni = $metin; yaz = [bool]$yaz; kanal = $kanal; varsayilan = $varsayilan; uyarilar = @($u) }
 }
 
+# --- Saat esitlemesi (karar 2026-10-02): saf karar; uygulayici kurulum.ps1 SaatEsitlemesi ------------------
+# Etki alanindaki makinenin saati etki alani denetleyicisinindir: DOKUNULMAZ. Disinda Windows Time otomatik
+# baslar ve NTP'den esitler; zaten NTP/AllSync esitleyen + otomatik baslayan hizmete DOKUNULMAZ, kayitli NTP
+# sunucusu korunur (bos ise Windows varsayilani). Onceki ayar kayda girer; kaldirma geri ALMAZ.
+$script:SAAT_VARSAYILAN_NTP = "time.windows.com,0x9"
+function SaatEsitlemeKarari([bool]$etkiAlaninda, [string]$tip, [string]$ntpSunucu, [string]$baslangic) {
+  $onceki = [ordered]@{ tip = "$tip".Trim(); ntpSunucu = "$ntpSunucu".Trim(); baslangic = "$baslangic".Trim() }
+  if ($etkiAlaninda) { return [ordered]@{ eylem = "DOKUNMA"; neden = "etki-alani"; sunucu = $null; onceki = $onceki } }
+  $esitler = @("NTP", "ALLSYNC") -ccontains $onceki.tip.ToUpperInvariant()
+  $otomatik = $onceki.baslangic -ceq "Auto"
+  if ($esitler -and $otomatik) { return [ordered]@{ eylem = "DOKUNMA"; neden = "zaten-ntp"; sunucu = $onceki.ntpSunucu; onceki = $onceki } }
+  if ($esitler) { return [ordered]@{ eylem = "HIZMET_OTOMATIK"; neden = "hizmet-otomatik-degil"; sunucu = $onceki.ntpSunucu; onceki = $onceki } }
+  $sunucu = $(if ($onceki.ntpSunucu) { $onceki.ntpSunucu } else { $script:SAAT_VARSAYILAN_NTP })
+  return [ordered]@{ eylem = "NTP_AC"; neden = "esitleme-kapali"; sunucu = $sunucu; onceki = $onceki }
+}
+
 # --- Portlar (D4 b.4.5: kural deploy/pg/lib/pg-ornegi.mjs portSec ile AYNI; vektorler bekcide) ----
 # Doner: @{ port = <int> ; neden = "..." } ya da @{ hata = "..." }.
 function PortSec([int[]]$mesgul, [int]$baslangic, [int]$bitis, $onceki, $istenen) {

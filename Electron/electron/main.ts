@@ -10,6 +10,7 @@ import { appEntryArgument } from "@shared/app-origin";
 import { setTrustedAppEntry } from "./security/trusted-ipc.js";
 import { guardWebContents, installPermissionPolicy } from "./security/web-contents-guard.js";
 import { openExternalSafely } from "./security/external-open.js";
+import { installLanTlsVerifier } from "./security/lan-tls-pin.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const isDev = !app.isPackaged;
@@ -126,6 +127,8 @@ app.whenReady().then(async () => {
   }
 
   installPermissionPolicy(session.defaultSession);
+  // Fabrika ağında TLS: sabitli parmak izli kendinden imzalı sertifika kabul edilir, gerisi Chromium'un kararı.
+  installLanTlsVerifier(session.defaultSession);
   registerIpcHandlers();
   // Sunucu keşfi — ATEŞLE VE UNUT, splash'i BEKLETMEZ. Splash videosu zaten
   // ~16 sn'ye kadar zaman veriyor (finishSplash'in emniyet supabı) ve keşif

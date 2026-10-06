@@ -36,16 +36,16 @@ async function expoTasiyici(): Promise<void> {
 }
 
 async function kuyrugaKoy(o: Ortam, tesisId: string, accountId: string, dedupKey: string): Promise<void> {
-  await withTesis(o.goc.prisma, { tesisId }, (tx) => tx.notification.create({ data: { tesisId, accountId, kind: "geciken-siparis", dedupKey, title: "Bekçi", body: "Bekçi", nextAttemptAt: new Date(o.saat.simdi()) } }));
+  await withTesis(o.goc, { tesisId }, (tx) => tx.notification.create({ data: { tesisId, accountId, kind: "geciken-siparis", dedupKey, title: "Bekçi", body: "Bekçi", nextAttemptAt: new Date(o.saat.simdi()) } }));
 }
 
 const satir = async (o: Ortam, tesisId: string, key: string) => {
   const n = (await bildirimler(o, tesisId)).find((x) => x.dedupKey === key)!;
-  const due = await withTesis(o.goc.prisma, { tesisId }, (tx) => tx.notification.findFirst({ where: { tesisId, dedupKey: key }, select: { receiptDueAt: true } }));
+  const due = await withTesis(o.goc, { tesisId }, (tx) => tx.notification.findFirst({ where: { tesisId, dedupKey: key }, select: { receiptDueAt: true } }));
   return { ...n, d: readDeliveries(n.deliveries), due: due?.receiptDueAt ?? null };
 };
 const aktif = (o: Ortam, tesisId: string, accountId: string) =>
-  withTesis(o.goc.prisma, { tesisId }, (tx) => tx.pushDevice.findMany({ where: { tesisId, accountId }, orderBy: { id: "asc" }, select: { id: true, token: true, active: true } }));
+  withTesis(o.goc, { tesisId }, (tx) => tx.pushDevice.findMany({ where: { tesisId, accountId }, orderBy: { id: "asc" }, select: { id: true, token: true, active: true } }));
 
 async function makbuzTuru(o: Ortam, tesisId: string): Promise<void> {
   console.log("\n§2 makbuz turu");
@@ -112,7 +112,7 @@ async function deneme(o: Ortam, kapali: Ortam, tesisId: string): Promise<void> {
   const r5 = await gonder(kh, kapali);
   kontrol("§3f kip kapalıyken → 409 (BILDIRIM_KAPALI; bugünkü davranış)", r5.status === 409 && r5.json.details?.neden === "BILDIRIM_KAPALI", `${r5.status}`);
   kontrol("§3g deneme bildirim geçmişine/kuyruğuna yazılmaz", (await bildirimler(o, tesisId)).length === once);
-  const iz = await withTesis(o.goc.prisma, { tesisId }, (tx) => tx.accountAudit.count({ where: { tesisId, event: "BILDIRIM_DENEME" } }));
+  const iz = await withTesis(o.goc, { tesisId }, (tx) => tx.accountAudit.count({ where: { tesisId, event: "BILDIRIM_DENEME" } }));
   kontrol("§3h ayak izi account_audit'te (iki başarılı deneme)", iz === 2, String(iz));
   kontrol("§3i oturumsuz → 401", (await api(o, "POST", "/api/bildirim/deneme", { govde: {} })).status === 401);
 }

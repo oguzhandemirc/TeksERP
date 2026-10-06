@@ -265,6 +265,8 @@ export async function issueLease(tx: Tx, ctx: VendorContext, g: IssueLeaseInput)
     hakOzeti: jwsDigest(delivered.belge),
     ...(revocation ? { iptalSira: revocation.sira } : {}),
     ...(closing ? { kapanis: closing.reason } : {}),
+    // Canlı uçlar bu kirayı isteğin nonce'una bağlı teslim eder (6.3c): bağı soyulmuş canlı yanıtı fabrika reddeder.
+    yanitBagli: true,
   };
   const token = signDocument({ typ: TYP.KIRA, schema: LeaseSchema, payload, key: { kid: key.kid, privateKey: key.privateKey } });
   await tx.kira.create({

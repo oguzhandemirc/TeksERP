@@ -20,7 +20,8 @@
 #                yedek sifreleme (musteri anahtari dosyaya)
 #     Hizmetler  hizmet\backend-hizmeti.ps1 -Uygula (kayit -> ACL) - hizmet\guncelleyici-hizmeti.ps1 -Uygula -
 #                gece yedegi gorevi (<KOK>\yedekle.ps1) - guvenlik duvari (API yalniz LocalSubnet; eski Tailscale izni yalniz onarimda kayittan,
-#                mDNS; PG'ye kural YOK) - baslat: /health 200 UP/UP/surum - guncelleyici durum.json
+#                mDNS; PG'ye kural YOK) - saat esitlemesi (etki alani disinda W32Time NTP; etki alaninda dokunulmaz) -
+#                baslat: /health 200 UP/UP/surum - guncelleyici durum.json
 #     Sirlar     YALNIZ sihirbaz: STDIN'den JSON (satici parolasi + PIN, yedek parolasi) -> araclara STDIN'den;
 #                musteri yedek anahtari ekranda gosterilecekse SONUC satirinda doner. Gunluge sir GIRMEZ.
 #     Dogrulama  hizmetler - saglik - izin katalogu (boot uzlastirmasi) - ACL olcumu - kurulum.json
@@ -724,6 +725,63 @@ function AsamaBackend {
   DurumYaz $kok $d
 }
 
+# Saat esitlemesi (karar SaatEsitlemeKarari'dan): etki alanindaki makineye DOKUNULMAZ; disinda Windows Time
+# otomatik baslar ve NTP'den esitler. Isletim sisteminin esitlemesi acilir, saat elle ayarlanmaz. Sonuc yeniden
+# OLCULUR; kurulamazsa UYARI (lisans isletim sistemi saatine guvenmez, kurulum DURMAZ). Ilk kosunun onceki
+# ayari kayitta kalir (onarim ezmez); kaldirma ayari geri ALMAZ.
+function SaatEsitlemesi($d) {
+  $okuSaat = {
+    $p = Get-ItemProperty -LiteralPath "HKLM:\SYSTEM\CurrentControlSet\Services\W32Time\Parameters" -ErrorAction SilentlyContinue
+    $s = Get-CimInstance Win32_Service -Filter "Name='W32Time'" -ErrorAction SilentlyContinue
+    return [pscustomobject]@{ tip = "$($p.Type)"; sunucu = "$($p.NtpServer)"; baslangic = "$($s.StartMode)"; calisiyor = ("$($s.State)" -ceq "Running"); var = [bool]$s }
+  }
+  $cs = Get-CimInstance Win32_ComputerSystem -ErrorAction SilentlyContinue
+  $o = & $okuSaat
+  if (-not $cs -or -not $o.var) { Uyar "saat esitlemesi olculemedi (etki alani / Windows Time hizmeti okunamadi) - Windows saat ayarlarinda 'Saati otomatik ayarla'yi acin"; return }
+  $k = SaatEsitlemeKarari ([bool]$cs.PartOfDomain) $o.tip $o.sunucu $o.baslangic
+  if (-not $d.PSObject.Properties["saat"]) {
+    $d | Add-Member -NotePropertyName saat -NotePropertyValue ([pscustomobject]@{ eylem = $k.eylem; neden = $k.neden; sunucu = $k.sunucu; onceki = [pscustomobject]$k.onceki; zaman = (Get-Date).ToUniversalTime().ToString("o") })
+  }
+  if ($k.eylem -ceq "DOKUNMA") {
+    if ($k.neden -ceq "etki-alani") { Bilgi "saat: makine etki alaninda ($($cs.Domain)) - saat etki alani denetleyicisinden gelir, DOKUNULMADI" }
+    else { Ok "saat: Windows Time zaten NTP ile esitliyor ($($k.sunucu)) - DOKUNULMADI" }
+    return
+  }
+  try {
+    Set-Service -Name W32Time -StartupType Automatic
+    if (-not (& $okuSaat).calisiyor) { Start-Service -Name W32Time }
+    if ($k.eylem -ceq "NTP_AC") {
+      $r = NativeKos "w32tm.exe" @("/config", "/manualpeerlist:$($k.sunucu)", "/syncfromflags:manual", "/update")
+      if ($r.kod -ne 0) { throw "w32tm /config cikis $($r.kod): $($r.cikti)" }
+    }
+  } catch { Uyar "saat esitlemesi ayarlanamadi: $($_.Exception.Message) - Windows saat ayarlarinda 'Saati otomatik ayarla'yi acin"; return }
+  $son = & $okuSaat
+  $olc = SaatEsitlemeKarari $false $son.tip $son.sunucu $son.baslangic
+  if ($olc.eylem -ceq "DOKUNMA" -and $son.calisiyor) { Ok "saat: Windows Time NTP ile esitliyor ($($olc.sunucu)) - hizmet otomatik (onceki: tip '$($k.onceki.tip)', baslangic '$($k.onceki.baslangic)')" }
+  else { Uyar "saat esitlemesi olculemedi: tip '$($son.tip)', baslangic '$($son.baslangic)', calisiyor $($son.calisiyor) - Windows saat ayarlarinda 'Saati otomatik ayarla'yi acin" }
+}
+
+# SUNUCU SIMGESI (bildirim alani): tepsi.ps1 -> <kok>\tepsi\ (SYSTEM + Administrators tam, Users YALNIZ okuma/calistirma:
+# kullanici oturumunda calisan betik kullanici tarafindan DEGISTIRILEMEZ) + HKLM Run kaydi (her kullanici oturumunda
+# baslar; yonetici istemez). Yalniz backend'in 127.0.0.1 /health/tepsi ucunu okur. Kozmetik: hata kurulumu DURDURMAZ.
+function TepsiKur([string]$kok, $d, [int]$port) {
+  try {
+    $kaynak = Join-Path $PSScriptRoot "tepsi.ps1"
+    if (-not (Test-Path -LiteralPath $kaynak)) { Uyar "tepsi.ps1 pakette yok - sunucu simgesi kurulmadi"; return }
+    $dizin = Join-Path $kok "tepsi"
+    if (-not (Test-Path -LiteralPath $dizin)) { New-Item -ItemType Directory -Path $dizin -Force | Out-Null }
+    if (ReparseMi $dizin) { Uyar "tepsi dizini bir baglanti noktasi - sunucu simgesi kurulmadi: $dizin"; return }
+    $r = NativeKos "icacls.exe" @($dizin, "/inheritance:r", "/grant:r", "*S-1-5-18:(OI)(CI)F", "*S-1-5-32-544:(OI)(CI)F", "*S-1-5-32-545:(OI)(CI)RX")
+    if ($r.kod -ne 0) { Uyar "tepsi dizini izni yazilamadi (icacls $($r.kod)) - sunucu simgesi kurulmadi"; return }
+    Copy-Item -LiteralPath $kaynak -Destination (Join-Path $dizin "tepsi.ps1") -Force
+    $ps = Join-Path $env:SystemRoot "System32\WindowsPowerShell\v1.0\powershell.exe"
+    $komut = "`"$ps`" -NoProfile -NonInteractive -WindowStyle Hidden -ExecutionPolicy Bypass -File `"$(Join-Path $dizin 'tepsi.ps1')`" -Port $port"
+    $run = "HKLM:\Software\Microsoft\Windows\CurrentVersion\Run"
+    Set-ItemProperty -LiteralPath $run -Name "TeksERP-Tepsi$($d.adlar.sonek)" -Value $komut -Type String
+    Ok "sunucu simgesi: $dizin (oturum acilinca baslar; port $port)"
+  } catch { Uyar "sunucu simgesi kurulamadi: $($_.Exception.Message)" }
+}
+
 function AsamaHizmetler {
   Baslik "Hizmetler - kayit, izin, gorev, guvenlik duvari, baslat"
   $C = CevabiYukle
@@ -765,6 +823,9 @@ function AsamaHizmetler {
   $pgAcik = @(Get-NetFirewallPortFilter -Protocol TCP -ErrorAction SilentlyContinue | Where-Object { "$($_.LocalPort)" -ceq "$($d.portlar.pg)" } | Get-NetFirewallRule -ErrorAction SilentlyContinue | Where-Object { "$($_.Direction)" -ceq "Inbound" -and "$($_.Action)" -ceq "Allow" -and "$($_.Enabled)" -ceq "True" })
   if ($pgAcik.Count) { Uyar "PostgreSQL portuna ($($d.portlar.pg)) GELEN izin kurali var: $($pgAcik[0].DisplayName) - PG yalniz 127.0.0.1'i dinler ama kural kapatilmali" }
 
+  # Saat: etki alani disinda Windows Time NTP (karar 2026-10-02); program saati ayarlamaz.
+  SaatEsitlemesi $d
+
   # Baslat: backend -> /health 200 UP/UP/surum; guncelleyici -> durum.json.
   Start-Service -Name "$($d.adlar.backend)"
   if (-not (HizmetBekle "$($d.adlar.backend)" "Running" 60)) { Dur "$($d.adlar.backend) baslamadi - $kok\logs\hizmet.log" }
@@ -785,6 +846,7 @@ function AsamaHizmetler {
     if ("$($g.kuruluSurum)" -cne "$($d.paket.surum)") { Uyar "guncelleyici kurulu surumu $($g.kuruluSurum) goruyor (beklenen $($d.paket.surum))" }
     else { Ok "guncelleyici: durum $($g.durum) - karar $($g.karar.karar)/$($g.karar.neden) (lisans etkinlesince politika gelir)" }
   }
+  TepsiKur $kok $d $apiPort
   AsamaBitti $d "Hizmetler"
   DurumYaz $kok $d
 }
@@ -907,6 +969,7 @@ function AsamaDogrulama {
     pg = [ordered]@{ veriDizini = "$($d.pg.veriDizini)"; surum = "$($d.pg.surum)"; derleme = "$($d.pg.derleme)" }
     guvenlikDuvari = @("TeksERP API $($d.portlar.api)", "$($d.adlar.mdnsKurali)")
     ag = $(if ($d.PSObject.Properties["ag"]) { $d.ag } else { $null })
+    saat = $(if ($d.PSObject.Properties["saat"]) { $d.saat } else { $null })
     uyarilar = @($script:Uyarilar); acik = $acik
   }
   MetinYaz (Join-Path $kok "kurulum\kurulum.json") (($kayit | ConvertTo-Json -Depth 6) + "`n")

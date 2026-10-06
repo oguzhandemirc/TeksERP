@@ -311,6 +311,10 @@ model Kurulum {
   sonGuncellemeRaporu         Json?
   sonGuncellemeRaporuZamani   DateTime?      @db.Timestamptz
 
+  /// K10 — fabrikanın son yoklamada bildirdiği AÇIK modül adları (yapılandırma; DURUM). null = fabrika bildirmedi (eski sürüm) → portal "bilinmiyor".
+  acikModuller        Json?
+  acikModullerZamani  DateTime? @db.Timestamptz
+
   platform         String?   @db.VarChar(10)
   sonOrtam         Json?
   sonSaglik        Json?
@@ -339,6 +343,8 @@ model Kurulum {
   bildirimler            Bildirim[]
   hakKokTalepleri        HakKokTalebi[]
   donanimTalepleri       DonanimTalebi[]
+  hataRaporuGruplari     HataRaporuGrubu[]
+  hataRaporuPartileri    HataRaporuPartisi[]
 
   @@index([tesisId])
   @@index([kanalKodu])
@@ -856,6 +862,51 @@ model DestekOlayi {
 
   @@index([talepId, createdAt])
   @@map("destek_olayi")
+}
+
+/// HATA RAPORU grubu — müşteri onaylı, kişisel verisiz hata özeti (`POST /v1/hata-raporu`). TELEMETRİ:
+/// son görülmesinden saklama günü sonra budanır; hiçbir iş kararı ve sayı bu satırdan türemez.
+model HataRaporuGrubu {
+  id           String   @id @default(uuid()) @db.Uuid
+  kurulumId    String   @db.Uuid
+  /// `errorReportGroupKey` (sha256 hex) — satıcı gövdeden YENİDEN hesaplar, fabrikanın beyanına güvenmez.
+  grupAnahtari String   @db.Char(64)
+  kaynak       String   @db.VarChar(10)
+  surum        String   @db.VarChar(60)
+  kod          String   @db.VarChar(60)
+  sinif        String   @db.VarChar(60)
+  bilesen      String   @db.VarChar(40)
+  yol          String?  @db.VarChar(200)
+  yigin        String[] @db.VarChar(160)
+  sayi         Int
+  ilk          DateTime @db.Timestamptz
+  son          DateTime @db.Timestamptz
+  createdAt    DateTime @default(now()) @db.Timestamptz
+  updatedAt    DateTime @updatedAt @db.Timestamptz
+
+  kurulum Kurulum @relation(fields: [kurulumId], references: [id])
+
+  @@unique([kurulumId, grupAnahtari])
+  @@index([kurulumId, son])
+  @@index([son])
+  @@map("hata_raporu_grubu")
+}
+
+/// Hata raporu gönderim partisi — `(kurulum, partiId)` tekrarı sayacı ikinci kez artırmasın diye (TELEMETRİ, budanır).
+model HataRaporuPartisi {
+  id          String   @id @default(uuid()) @db.Uuid
+  kurulumId   String   @db.Uuid
+  partiId     String   @db.Uuid
+  kayitSayisi Int
+  kabul       Int
+  dusurulen   Int
+  createdAt   DateTime @default(now()) @db.Timestamptz
+
+  kurulum Kurulum @relation(fields: [kurulumId], references: [id])
+
+  @@unique([kurulumId, partiId])
+  @@index([createdAt])
+  @@map("hata_raporu_partisi")
 }
 
 /// Modül anahtarı KASASI (Faz 2d): şifreli modül paketinin AES-256 anahtarı, kasa anahtarıyla

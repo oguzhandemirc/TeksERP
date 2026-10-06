@@ -10,7 +10,7 @@ const DAY = 86_400_000;
 const sub = (endpoint: string) => JSON.stringify({ endpoint, keys: { p256dh: "B".repeat(87), auth: "A".repeat(22) } });
 
 async function kuyrugaKoy(o: Ortam, tesisId: string, accountId: string, dedupKey: string): Promise<void> {
-  await withTesis(o.goc.prisma, { tesisId }, (tx) =>
+  await withTesis(o.goc, { tesisId }, (tx) =>
     tx.notification.create({ data: { tesisId, accountId, kind: "geciken-siparis", dedupKey, title: "Bekçi", body: "Bekçi", nextAttemptAt: new Date(o.saat.simdi()) } }),
   );
 }
@@ -36,7 +36,7 @@ async function teslim(o: Ortam, tesisId: string): Promise<void> {
   t.forced.set(tok, { kind: "GECERSIZ_CIHAZ", code: "EXPO_CIHAZ_KAYITSIZ" });
   await kuyrugaKoy(o, tesisId, h.accountId, "bekci:gecersiz");
   await deliverDue(o.ctx, t, tesisId, o.saat.simdi());
-  const cihaz = await withTesis(o.goc.prisma, { tesisId }, (tx) => tx.pushDevice.findFirst({ where: { tesisId, accountId: h.accountId } }));
+  const cihaz = await withTesis(o.goc, { tesisId }, (tx) => tx.pushDevice.findFirst({ where: { tesisId, accountId: h.accountId } }));
   const satir = (await bildirimler(o, tesisId)).find((n) => n.dedupKey === "bekci:gecersiz")!;
   kontrol("§5a ⭐ geçersiz cihaz pasife çekilir, tek cihazsa bildirim BASARISIZ", cihaz?.active === false && satir.status === "BASARISIZ", `${String(cihaz?.active)}/${satir.status}`);
   const tok2 = await cihazKaydet(o, h);
@@ -76,7 +76,7 @@ async function budama(o: Ortam, tesisId: string, h: TestHesabi): Promise<void> {
   await kuyrugaKoy(o, tesisId, h.accountId, "bekci:bekleyen-eski");
   const simdi = o.saat.simdi();
   const eski = new Date(simdi - (o.ctx.config.BILDIRIM_SAKLAMA_GUN + 1) * DAY);
-  await withTesis(o.goc.prisma, { tesisId }, (tx) => tx.$executeRaw`UPDATE notifications SET updated_at = ${eski}::timestamptz WHERE tesis_id = ${tesisId}::uuid`);
+  await withTesis(o.goc, { tesisId }, (tx) => tx.$executeRaw`UPDATE notifications SET updated_at = ${eski}::timestamptz WHERE tesis_id = ${tesisId}::uuid`);
   await runDaily(o.ctx, simdi);
   const kalan = await bildirimler(o, tesisId);
   kontrol("§7a sonuçlanmış eski satırlar budandı", !kalan.some((n) => ["GONDERILDI", "BASARISIZ", "ATLANDI"].includes(n.status)), kalan.map((n) => n.status).join(","));

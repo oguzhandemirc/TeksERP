@@ -13,7 +13,7 @@
 //      (ezilmez) · grup/başkalarına açık üst dizin
 //   §4 GERÇEK PAKET aracı (varsayılan PAKET_KOMUTU): tören onunla uçtan uca; araç ön yoklamada çökerse KIRMIZI
 //      (atlama yok — eksik modül/önkoşul da çökmedir, "atlandı" gerçek bir kırılmayı örter)
-//   §6 DÖNEM TÖRENİ (`donem`, G4 §2.4): yeni ALT · ara imzacı · İNDİRME (120 gün) + iptal belgesi (ilk dönem sıra 1,
+//   §6 DÖNEM TÖRENİ (`donem`, G4 §2.4): yeni ALT · ara imzacı · İNDİRME (395 gün = yıllık + 30 örtüşme; ekranda sonraki tören = en erken bitiş − 30) + iptal belgesi (ilk dönem sıra 1,
 //      `--iptal` ile sıra + 1 ve önceki satırlar) + kuyruktaki HAK'ların kök imzası → KÖKSÜZ VDS paketi (künye + SHA256SUMS,
 //      700/600); paketin anahtarları köke karşı geçerli; ara parolası kökünkinden ayrı; ilk tören dizini dokunulmaz;
 //      RED (paket yazılmadan): ara = kök parolası · yanlış kök parolası · eşleşmeyen ara · bilinmeyen/kök --iptal ·
@@ -513,7 +513,7 @@ async function main(): Promise<void> {
       kontrol("§4a gerçek PAKET aracı ön yoklamada çökmedi (üretim kid'ini tanıyor, parolalı dosya yazıyor)", false, `çıkış ${yok.status} ${[yokAsil, ...yokSatirlar.slice(-3)].filter(Boolean).join(" | ").slice(0, 500)}`);
     }
 
-    console.log("\n§6 DÖNEM TÖRENİ (G4 §2.4) — ara imzacı · ALT · İNDİRME 120 gün · iptal belgesi · kök kuyruğu, KÖKSÜZ paket");
+    console.log("\n§6 DÖNEM TÖRENİ (G4 §2.4) — ara imzacı · ALT · İNDİRME 395 gün · iptal belgesi · kök kuyruğu, KÖKSÜZ paket");
     const donemler = path.join(D, "donemler");
     const donemDizinleri = () => (existsSync(donemler) ? readdirSync(donemler).sort() : []);
     const kuyrukYuku = {
@@ -571,11 +571,15 @@ async function main(): Promise<void> {
     const pks = KeyStore.load({ ANAHTAR_DIZINI: path.join(P, "anahtarlar"), GUVEN_CAPASI_DOSYASI: capaYolu });
     const simdi = Date.now();
     const gunSay = (x: { baslangic: string; bitis: string }) => Math.round((Date.parse(x.bitis) - Date.parse(x.baslangic)) / 86_400_000);
-    kontrol("§6f paketin anahtarları KÖKE karşı geçerli: kira ALT · İNDİRME · ARA (URETIM) seçilir, üçü de 120 gün, ara sınıfları URETIM·DR·DEMO·TEST, uyarı yok",
+    kontrol("§6f paketin anahtarları KÖKE karşı geçerli: kira ALT · İNDİRME · ARA (URETIM) seçilir, üçü de 395 gün (yıllık tören + 30 örtüşme), ara sınıfları URETIM·DR·DEMO·TEST, uyarı yok",
       pks.leaseKeyFor("URETIM", simdi)?.kid === `alt-${YIL}-2` && pks.downloadKey(simdi)?.kid === `ind-${YIL}-2` && pks.intermediateFor("URETIM", simdi)?.kid === `ara-${YIL}-1` &&
-        [dk.yeni.alt, dk.yeni.ara, dk.yeni.indirme].every((x) => gunSay(x) === 120) && JSON.stringify([...dk.yeni.ara.siniflar].sort()) === JSON.stringify(["DEMO", "DR", "TEST", "URETIM"]) &&
+        [dk.yeni.alt, dk.yeni.ara, dk.yeni.indirme].every((x) => gunSay(x) === 395) && JSON.stringify([...dk.yeni.ara.siniflar].sort()) === JSON.stringify(["DEMO", "DR", "TEST", "URETIM"]) &&
         pks.warnings.filter((w) => !w.startsWith("Güven çapası DOSYADAN")).length === 0,
       pks.warnings.join(" | "));
+    const enErken = Math.min(...[dk.yeni.alt, dk.yeni.ara, dk.yeni.indirme].map((x) => Date.parse(x.bitis)));
+    const sonrakiToren = new Date(enErken - 30 * 86_400_000).toISOString().slice(0, 10);
+    const sonrakiSatir = /SONRAKİ\s+dönem töreni (\d{4}-\d{2}-\d{2})/.exec(d1.cikti)?.[1];
+    kontrol("§6f' ekran sonraki dönem törenini basar: en erken bitişten 30 gün önce (≈ 1 yıl sonra)", sonrakiSatir === sonrakiToren && Math.round((Date.parse(sonrakiToren) - simdi) / 86_400_000) >= 364, `${sonrakiSatir ?? "-"} beklenen ${sonrakiToren}`);
     const araDosya = readWrappedKeyFile(path.join(P, "anahtarlar", `ara-${YIL}-1.ara.json`));
     const araAcik = await unwrapPrivateKey(araDosya, passwordBuffer(ARA_PAROLA)).then((r) => (r.fill(0), true), () => false);
     let araKokle = "";
@@ -600,7 +604,7 @@ async function main(): Promise<void> {
       `${d1.yoklama} yoklama`);
     const dkc = JSON.parse(readFileSync(path.join(P, "DONEM-KUNYE.json"), "utf8")) as { capaSatirlari: Record<string, string> };
     const w6 = await workerSatiriOlc(dkc.capaSatirlari, dk.yeni.indirme);
-    kontrol("§6k' ⭐ dönem künyesinin CF Worker satırı (L2-8): yeni İNDİRME'nin kid · x · 120 günlük penceresi + güncelleme grupları; Worker ayarı onu KABUL eder", w6.ok, w6.detay);
+    kontrol("§6k' ⭐ dönem künyesinin CF Worker satırı (L2-8): yeni İNDİRME'nin kid · x · 395 günlük penceresi + güncelleme grupları; Worker ayarı onu KABUL eder", w6.ok, w6.detay);
     kontrol("§6k'' ⭐ dönem Sonraki adımlar: CF Worker adımı anahtar birimine kurmadan ÖNCE (örtüşmeli geçiş)", sonra(d1.cikti, "CF Worker", "Anahtar birimine kur"), "");
 
     const d2 = await tore(["donem", `--dizin=${D}`, `--yil=${YIL}`, ET, `--iptal=ara-${YIL}-1`, "--neden=bekçi acil iptal"], ucParola(KOK_PAROLA, `${ARA_PAROLA}-2`), {}, ev);

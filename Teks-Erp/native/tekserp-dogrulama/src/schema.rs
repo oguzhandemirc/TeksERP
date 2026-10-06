@@ -435,6 +435,7 @@ pub fn lease(v: &Value) -> Result<Map<String, Value>, String> {
     let is_rule = |x: &Value| is_one_of(x, &FINGERPRINT_RULES);
     let is_closing = |x: &Value| is_one_of(x, &CLOSING_LEASE_REASONS);
     let is_revocation_seq = |x: &Value| is_int(x, Some(1.0), Some(MAX_SAFE));
+    let is_true = |x: &Value| x.as_bool() == Some(true);
     let out = object_with_nested(
         v,
         &[
@@ -465,6 +466,7 @@ pub fn lease(v: &Value) -> Result<Map<String, Value>, String> {
             opt("kapanis", &is_closing),
             opt("hakOzeti", &is_digest),
             opt("iptalSira", &is_revocation_seq),
+            opt("yanitBagli", &is_true),
         ],
         &[
             ("parmakIzi", &fingerprint),

@@ -6,16 +6,20 @@
 //   ① hiçbir servis port yayımlamaz (tek giriş Traefik; kenar ağı internal)
 //   ② docker soketi hiçbir servise bağlı değil
 //   ③ her servis: salt okunur kök FS · cap_drop ALL · no-new-privileges · root olmayan kullanıcı ·
-//      bellek + CPU + süreç sınırı; uzun ömürlü servislerin bellek tavanı toplamı ≤ 1 GiB (VDS 3 GB)
+//      bellek + CPU + süreç sınırı; uzun ömürlü servislerin bellek tavanı toplamı ≤ 1120 MiB (VDS 3 GB;
+//      PATRON-TESIS-DB §13 KARAR-1: hazırlayıcının 96 MiB'ı)
 //   ④ kenar + ic internal; TEK dış ağ satıcının ic-api'si ve ona yalnız `patron` katılır (`web` yok);
 //      compose'un kurduğu internal OLMAYAN tek ağ `cikis` (B5 bildirim çıkışı) ve ona YALNIZ `patron` katılır
 //   ⑤ anahtar birimi her bağlandığı yerde salt okunur
 //   ⑥ köprü ağları 100.64/10 ve 127/8 DIŞINDA · ⑥b kenarda dinamik aralık alt ağda, patronun sabit
 //      adresi aralığın DIŞINDA (Traefik patronun adresini kapamasın)
 //   ⑦ Traefik etiketi yalnız `patron`de, kenar ağını gösterir; kural Host + iç ad alanı dışlaması
-//      (web-static.ts IC_ONEKLER); patron YALNIZ kenar adresinde dinler (BIND); DB portsuz, yalnız ic'te
-//   ⑧ sırlar: göç parolası sunucuya BAĞLANMAZ (yalnız DB · göç · yedek); çalışma parolaları yalnız
-//      sunucu + göç; iç API belirteci yalnız sunucu; ortamda düz parola/belirteç yok
+//      (web-static.ts IC_ONEKLER); patron YALNIZ kenar adresinde dinler (BIND); DB portsuz, yalnız ic'te ·
+//      ⑦k kenar zinciri (deploy/traefik/kenar-zinciri.mjs): Cloudflare ipallowlist = rate-limit.ts CLOUDFLARE_NETWORKS
+//      birebir, ardından Cf-Connecting-Ip anahtarlı cömert hız seddi (uygulamanın /v1 sınırının altına inmez)
+//   ⑧ sırlar: göç parolası sunucuya BAĞLANMAZ (yalnız DB · göç · hazırlayıcı · yedek); çalışma parolaları yalnız
+//      sunucu + göç; iç API belirteci yalnız sunucu; tesis rol anahtarı yalnız sunucu · göç · hazırlayıcı (yedek
+//      almaz); hazırlayıcı yalnız ic ağında ve dinleyicisiz; ortamda düz parola/belirteç yok
 //   ⑨ SATICIYLA UYUM (--satici-env): ic-api ağ adı, satıcı iç adresi ve PATRON_IC_IP satıcınınkiyle AYNI;
 //      SIR_GID satıcınınkinden FARKLI; patronun kenar ve çıkış ağları satıcının hiçbir ağıyla (kenar · ic-api · JWKS ve
 //      bildirim çıkışı — satıcı .env'inde tanımlıysa) çakışmaz
@@ -26,6 +30,7 @@
 import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import path from "node:path";
+import { kenarZinciriSorunlari } from "../traefik/kenar-zinciri.mjs";
 import { fileURLToPath } from "node:url";
 
 const burasi = path.dirname(fileURLToPath(import.meta.url));
@@ -106,7 +111,7 @@ const servisler = Object.entries(cfg.services ?? {});
 const aglar = cfg.networks ?? {};
 const patron = cfg.services?.patron ?? {};
 const ortam = patron.environment ?? {};
-const beklenen = ["patron-db", "patron", "patron-goc", "patron-yedek"];
+const beklenen = ["patron-db", "patron", "patron-goc", "patron-hazirla", "patron-yedek"];
 kontrol(
   `körlük zemini: ${beklenen.length} servis çözüldü (${beklenen.join(" · ")})`,
   servisler.length === beklenen.length && beklenen.every((a) => a in (cfg.services ?? {})),
@@ -137,7 +142,8 @@ for (const [ad, s] of servisler) {
 }
 const surekli = servisler.filter(([, s]) => !(s.profiles ?? []).length);
 const toplam = surekli.reduce((t, [, s]) => t + bayt(s.mem_limit), 0);
-kontrol("③ uzun ömürlü servislerin bellek tavanı toplamı ≤ 1 GiB", Number.isFinite(toplam) && toplam <= 1024 ** 3, `${Math.round(toplam / 1024 ** 2)} MiB (${surekli.map(([a]) => a).join(" + ")})`);
+const BUTCE_MIB = 1120;
+kontrol(`③ uzun ömürlü servislerin bellek tavanı toplamı ≤ ${BUTCE_MIB} MiB`, Number.isFinite(toplam) && toplam <= BUTCE_MIB * 1024 ** 2, `${Math.round(toplam / 1024 ** 2)} MiB (${surekli.map(([a]) => a).join(" + ")})`);
 
 // ④ ağlar
 for (const anahtar of ["kenar", "ic"]) kontrol(`④ ${anahtar} ağı internal`, aglar[anahtar]?.internal === true, aglar[anahtar]?.name ?? "YOK");
@@ -179,13 +185,21 @@ const kurallar = Object.entries(et).filter(([k]) => /^traefik\.http\.routers\..+
 kontrol("⑦ tek yönlendirici: Host + iç ad alanı dışlaması (ic|yonetim)", kurallar.length === 1 && /^Host\(`[a-z0-9.-]+`\) && !PathRegexp\(`\^\/\(ic\|yonetim\)\(\/\|\$\$?\)`\)$/.test(kurallar[0]), kurallar.join(" | ") || "YOK");
 const hizmetPortu = Object.entries(et).find(([k]) => /\.loadbalancer\.server\.port$/.test(k))?.[1];
 kontrol("⑦ yönlendirici 4620'ye, websecure + TLS", String(hizmetPortu) === "4620" && Object.entries(et).some(([k, v]) => k.endsWith(".entrypoints") && v === "websecure") && Object.entries(et).some(([k, v]) => k.endsWith(".tls") && String(v) === "true"), `port ${hizmetPortu ?? "YOK"}`);
+{
+  const yon = Object.keys(et).map((k) => /^traefik\.http\.routers\.([^.]+)\.rule$/.exec(k)?.[1]).find(Boolean) ?? "";
+  const zincir = kenarZinciriSorunlari(et, yon, cloudflareAglari(), { saniyeBasi: 20 });
+  kontrol("⑦k kenar zinciri: Cloudflare ipallowlist (CLOUDFLARE_NETWORKS birebir) → Cf-Connecting-Ip hız seddi", zincir.length === 0, zincir.join(" · ") || String(et[`traefik.http.routers.${yon}.middlewares`]));
+}
 kontrol("⑦ patron YALNIZ kenar adresinde dinler (BIND = kenar IP, PORT 4620)", ortam.BIND === kenarIp && kenarIp !== "" && String(ortam.PORT) === "4620", `BIND=${ortam.BIND ?? "YOK"} · kenar=${kenarIp || "YOK"}`);
 const db = cfg.services?.["patron-db"] ?? {};
 kontrol("⑦ DB portsuz ve yalnız ic ağında", (db.ports ?? []).length === 0 && JSON.stringify(Object.keys(db.networks ?? {})) === '["ic"]', Object.keys(db.networks ?? {}).join(", "));
 
 // ⑧ sırlar
 const sahipler = (sir) => servisler.filter(([, s]) => sirlari(s).includes(sir)).map(([a]) => a).sort().join(",");
-kontrol("⑧ göç parolası YALNIZ DB · göç · yedek (sunucuya bağlanmaz)", sahipler("goc_parolasi") === "patron-db,patron-goc,patron-yedek", sahipler("goc_parolasi") || "hiçbiri");
+kontrol("⑧ göç parolası YALNIZ DB · göç · hazırlayıcı · yedek (sunucuya bağlanmaz)", sahipler("goc_parolasi") === "patron-db,patron-goc,patron-hazirla,patron-yedek", sahipler("goc_parolasi") || "hiçbiri");
+kontrol("⑧ tesis rol anahtarı yalnız sunucu · göç · hazırlayıcı (yedek almaz)", sahipler("tesis_rol_anahtari") === "patron,patron-goc,patron-hazirla", sahipler("tesis_rol_anahtari") || "hiçbiri");
+const hazirla = cfg.services?.["patron-hazirla"] ?? {};
+kontrol("⑧ hazırlayıcı yalnız ic ağında, portsuz, Traefik etiketsiz", JSON.stringify(Object.keys(hazirla.networks ?? {})) === '["ic"]' && (hazirla.ports ?? []).length === 0 && !Object.keys(hazirla.labels ?? {}).some((k) => k.startsWith("traefik.")), Object.keys(hazirla.networks ?? {}).join(", ") || "YOK");
 for (const sir of ["uygulama_parolasi", "esitleme_parolasi"]) kontrol(`⑧ ${sir} yalnız sunucu + göç`, sahipler(sir) === "patron,patron-goc", sahipler(sir) || "hiçbiri");
 kontrol("⑧ iç API belirteci yalnız sunucuda", sahipler("ic_api_belirteci") === "patron", sahipler("ic_api_belirteci") || "hiçbiri");
 const duzSir = servisler.flatMap(([a, s]) => Object.keys(s.environment ?? {}).filter((k) => /PAROLA|PASSWORD|BELIRTEC|SECRET|DATABASE_URL/.test(k) && !/_FILE$|DOSYASI$/.test(k)).map((k) => `${a}.${k}`));
@@ -220,3 +234,15 @@ if (!saticiEnv) {
 
 console.log(`\n=== ${gecti} geçti, ${ihlal} ihlal${olculemedi ? `, ${olculemedi} ölçülemedi` : ""} ===`);
 process.exit(ihlal > 0 ? 1 : olculemedi > 0 ? 2 : 0);
+
+/** CLOUDFLARE_NETWORKS'ün patrondaki tek kaynağı `rate-limit.ts`; okunamazsa null (⑦k ölçülemez → kırmızı). */
+function cloudflareAglari() {
+  try {
+    const kaynak = readFileSync(path.join(burasi, "..", "..", "patron", "sunucu", "src", "http", "rate-limit.ts"), "utf8");
+    const govde = /CLOUDFLARE_NETWORKS[^=]*=\s*\[([\s\S]*?)\]/.exec(kaynak)?.[1] ?? "";
+    const liste = [...govde.matchAll(/"([^"]+)"/g)].map((m) => m[1]);
+    return liste.length > 0 ? liste : null;
+  } catch {
+    return null;
+  }
+}

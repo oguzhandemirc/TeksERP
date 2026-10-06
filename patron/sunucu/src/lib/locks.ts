@@ -9,6 +9,8 @@ export const LOCK_NAMESPACES = {
   ACCOUNT_ADMIN: 9202,
   /** (tesis, işlem kimliği) başına: gelen kutusu mesajı · rapor isteği · cihaz kaydı tekrarları sıraya girer. */
   CLIENT_TOKEN: 9203,
+  /** Merkez giriş dizini: e-posta özeti başına (davet onayı). Sıra: önce LOGIN_ROUTE (merkez), sonra ACCOUNT_ADMIN (tesis). */
+  LOGIN_ROUTE: 9204,
 } as const;
 
 export type LockName = keyof typeof LOCK_NAMESPACES;

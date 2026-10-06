@@ -58,6 +58,7 @@ const EXEMPT: Record<string, string> = {
   // Güncelleyicinin sağlık sondası (Dağıtım v2, GUNCELLEYICI.md §8.7): SYSTEM hizmeti oturum taşıyamaz. Koruma
   // kimlik değil ADRESTİR — yalnız döngü adresinden doğrudan (vekil başlıksız) gelen istek cevap alır, dışarıya
   // 404; `lisans{kip,butunluk,cekirdek}` bu yüzden donmuş public `/health`e girmez. Bekçi: test_yerel_saglik.
+  "GET /health/tepsi": "sunucu simgesinin durum ucu; yalnız döngü adresine cevap verir (dışarıya 404), sır taşımaz",
   "GET /health/yerel": "güncelleyicinin yerel sağlık sondası; yalnız döngü adresine cevap verir (dışarıya 404)",
   // Servis keşfi kimlik ucu: istemci HENÜZ HANGİ SUNUCUYA bağlanacağını
   // bilmiyorken çağırır — guard takılamaz (/health ile birebir aynı gerekçe).
@@ -189,7 +190,13 @@ const EXEMPT: Record<string, string> = {
  * izin kodu yazmak, o kodu taşımayan hesabın zorunlu parola değişimini imkânsız kılardı.
  * Uç kümesi `test_parola_degisimi_zorunlu §5a` ile TAM üç olarak sabit.
  */
-const BARE_CHAIN_BASELINE = 15;
+/**
+ * ⚠️ 15 → 16 (2026-10-06, plan 3.6, BİLİNÇLİ): `POST /api/hata-raporlari/istemci` yalnız `verifyToken` taşır —
+ * her ekran (panel/tablet) kendi hatasını bildirebilmeli; izin kodu yazmak hatayı en çok görecek operatörü
+ * susturur. Uç iş verisi okumaz/yazmaz: KATI gövde (mesaj alanı yok), onay yoksa hiçbir şey almaz, kullanıcı
+ * başına hız sınırlı — `scripts/test_hata_raporu_fabrika.ts` ölçer.
+ */
+const BARE_CHAIN_BASELINE = 16;
 
 /** Körlük zemini: tarayıcı boşa düşerse "ihlal yok" ile "hiçbir şeye bakılmadı" aynı yeşile çıkmasın. */
 const MIN_ROUTE_LAYERS = 400;

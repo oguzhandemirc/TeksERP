@@ -8,6 +8,7 @@
 import { spawnSync } from "node:child_process";
 import { readdirSync } from "node:fs";
 import path from "node:path";
+import { sweepTestFacilityDbs } from "./lib/tesis-db-temizlik";
 import { hedefDbKapisi } from "./lib/test-ortam";
 
 const DIZIN = __dirname;
@@ -23,27 +24,40 @@ if (dosyalar.length === 0) {
   console.error(`⛔ Koşulacak bekçi yok${filtre ? ` ("${filtre}" eşleşmedi)` : ""}`);
   process.exit(2);
 }
-console.log(`Patron bulutu bekçileri — hedef DB ${db} — ${dosyalar.length} dosya\n`);
-const kirmizi: string[] = [];
-for (const d of dosyalar) {
-  const t0 = Date.now();
-  const r = spawnSync(process.execPath, ["--import", "tsx", path.join(DIZIN, d)], {
-    cwd: path.resolve(DIZIN, ".."),
-    env: process.env,
-    encoding: "utf8",
-    timeout: SURE_SINIRI_MS,
-    maxBuffer: 32 * 1024 * 1024,
-  });
-  const sn = ((Date.now() - t0) / 1000).toFixed(1);
-  const ok = r.status === 0 && !r.error;
-  console.log(`${ok ? "✅" : "❌"} ${d} (${sn}s)`);
-  if (!ok) {
-    kirmizi.push(d);
-    const out = `${r.stdout ?? ""}${r.stderr ?? ""}`;
-    const satirlar = out.split("\n").filter((l) => /❌|Error|HATA|hata/.test(l)).slice(0, 12);
-    for (const s of satirlar) console.log(`     ↳ ${s.trim().slice(0, 300)}`);
-    if (r.error) console.log(`     ↳ ${r.error.message}`);
-  }
+async function main(): Promise<void> {
+  // Önceki turların (çöken bekçi, elle ölçüm) tesis DB artıkları: yalnız bu `_test` merkezine ait adlar.
+  const supurulen = await sweepTestFacilityDbs(process.env.GOC_DATABASE_URL!);
+  console.log(`Patron bulutu bekçileri — hedef DB ${db} — ${dosyalar.length} dosya · süpürülen tesis DB ${supurulen}\n`);
+  runAll();
 }
-console.log(`\n=== ${dosyalar.length - kirmizi.length}/${dosyalar.length} yeşil${kirmizi.length ? ` — kırmızı: ${kirmizi.join(", ")}` : ""} ===`);
-process.exit(kirmizi.length > 0 ? 1 : 0);
+
+function runAll(): void {
+  const kirmizi: string[] = [];
+  for (const d of dosyalar) {
+    const t0 = Date.now();
+    const r = spawnSync(process.execPath, ["--import", "tsx", path.join(DIZIN, d)], {
+      cwd: path.resolve(DIZIN, ".."),
+      env: process.env,
+      encoding: "utf8",
+      timeout: SURE_SINIRI_MS,
+      maxBuffer: 32 * 1024 * 1024,
+    });
+    const sn = ((Date.now() - t0) / 1000).toFixed(1);
+    const ok = r.status === 0 && !r.error;
+    console.log(`${ok ? "✅" : "❌"} ${d} (${sn}s)`);
+    if (!ok) {
+      kirmizi.push(d);
+      const out = `${r.stdout ?? ""}${r.stderr ?? ""}`;
+      const satirlar = out.split("\n").filter((l) => /❌|Error|HATA|hata/.test(l)).slice(0, 12);
+      for (const s of satirlar) console.log(`     ↳ ${s.trim().slice(0, 300)}`);
+      if (r.error) console.log(`     ↳ ${r.error.message}`);
+    }
+  }
+  console.log(`\n=== ${dosyalar.length - kirmizi.length}/${dosyalar.length} yeşil${kirmizi.length ? ` — kırmızı: ${kirmizi.join(", ")}` : ""} ===`);
+  process.exit(kirmizi.length > 0 ? 1 : 0);
+}
+
+main().catch((err: Error) => {
+  console.error(`⛔ Tesis DB süpürmesi başarısız: ${err.message}`);
+  process.exit(2);
+});

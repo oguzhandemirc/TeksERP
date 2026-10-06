@@ -67,6 +67,7 @@ export const LOCAL_INTERVENTION_CAUSE_LABEL: Record<string, string> = {
   SIRA_GERILEDI: "Durum kaydı sırası geriledi",
   SIRA_SIFIRLANDI: "Durum kaydı sıfırlandı (izler silinmiş)",
   LISANS_IZI_KAYIP: "Lisans izi kayıp — kira, durum kaydı ya da DB izinden en az biri yok",
+  IPTAL_BELGESI_KAYIP: "İptal belgesi kayıp — iki kopya da gereken sıranın altında",
   BELIRSIZLIK: "Süren ölçülemedi > 7 gün",
   SAAT_SAPMASI: "Saat sapması ≥ 1 saat",
   YETENEK_DUSUSU: "Yetenek düşüşü (HAK teslim edilmedi, kök imzası kuyrukta)",

@@ -754,6 +754,8 @@ const CHECK_CONSTRAINTS: Array<{ table: string; name: string; notValid?: string;
   { table: "factory_timezone_periods", name: "factory_timezone_periods_timezone_not_blank" },
   // Dağıtım v2 (D7, migration 20261001030000): güncelleme onayının türü kapalı küme (HEMEN · PENCERE · GERI_AL).
   { table: "update_approvals", name: "update_approvals_choice_check" },
+  // Hata raporu kuyruğu (3.6, migration 20261006120000): grup sayacı en az 1 (boş grup yazılmaz).
+  { table: "error_report_entries", name: "error_report_entries_count_check" },
 ];
 
 // ─────────────────────────────────────────────────────────────────────────────

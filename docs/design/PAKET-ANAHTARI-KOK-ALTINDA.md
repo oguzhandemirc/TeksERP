@@ -264,6 +264,6 @@ Her dilimde yalnız o dilimin bekçileri koşulur; D9 sonunda tam koşum.
 6. **Sıra:** 3.9'un kodu tek ortak paketten (3.1) ve yeni indirme adresinden (3.2) önce mi insin? Öneri: doğrulayıcılar (D1–D3) 3.1'den ÖNCE iner; yeni adres baştan yalnız yeni düzenle açılır, çift imza yalnız eski adreste yaşar.
    **KARAR (2026-10-06): evet — doğrulayıcılar (D1–D3) 3.1'den ÖNCE iner; yeni adres baştan yalnız yeni düzenle açılır, çift imza yalnız eski adreste yaşar.**
 7. **Panel ve tablet:** panel ile tablet güncellemelerini imzalayan ayrı anahtar da (bugün iki tane, biri yedek) ileride aynı "kökün altında, süreli" düzene alınsın mı? Öneri evet, ama ayrı iş olarak.
-   **KARAR (2026-10-06): evet, ama AYRI iş — panel/tablet imza anahtarları aynı düzene ayrı dilimde alınır; 3.9'un kapsamı dışında kalır.**
+   **KARAR (2026-10-06): evet, ama AYRI iş — panel/tablet imza anahtarları aynı düzene ayrı dilimde alınır; 3.9'un kapsamı dışında kalır.**  Tasarım: [ISTEMCI-ANAHTARI-KOK-ALTINDA.md](ISTEMCI-ANAHTARI-KOK-ALTINDA.md).
 8. **Yıllık tören günü:** yıllık paket belgesi yenilemesi üç ayda bir yapılan anahtar töreninin birine eklensin mi (ana parola bir kez yazılır)? Öneri evet.
    **KARAR (2026-10-06): evet, daha da ileri — kullanıcı aynı gece bütün anahtar yenilemelerini YILDA BİR dönem töreninde topladı (ara imzacı/ALT/İNDİRME de 1 yıla çıkıyor; o ayrı işte kodlanıyor). Yıllık PAKET adımı bu tek yıllık törenin parçasıdır, ana parola bir kez yazılır.**

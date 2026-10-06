@@ -6,6 +6,7 @@
 // BUDAMA BEYANI — yaşa göre SİLİNEN tablolar yalnız bunlardır (hiçbir iş kararı okumaz; bekçi:
 // scripts/test_satici_kapilari.ts): TELEMETRİ nonce_defteri (sonKullanim geçti) · yoklama (saklama günü) ·
 // portal_oturumu (bitişinden saklama günü sonra) · portal_islemi (işlem kimliği; saklama günü sonra) ·
+// hata_raporu_grubu (son görülmesinden saklama günü sonra) · hata_raporu_partisi (doğuşundan saklama günü sonra) ·
 // AYAK İZİ denetim (günde bir: başarısız giriş 90 gün, diğeri 2 yıl — yönetici kararı h).
 // GÖVDE BUDAMASI (satır SİLİNMEZ): dagitim_dosyasi gövdesi saklama süresi dolunca diskten silinir, satır +
 // defter kalır (distribution/retention.ts BODY_PRUNED_MODELS); yarım yükleme oturumu TERK olur, parçaları silinir.
@@ -16,10 +17,11 @@ import { prisma } from "../lib/prisma";
 import type { VendorContext } from "./context";
 import { abandonStaleSessions, pruneExpiredBodies } from "../distribution/retention";
 import { scanTimedNotifications } from "../notifications/scanner";
+import { pruneErrorReports } from "./error-report.service";
 import { scanKeyExpiry } from "../notifications/key-expiry";
 import { runDuePlannedActions, runOverdueInstallments } from "./sanction.service";
 
-export const PRUNED_MODELS = ["nonceDefteri", "yoklama", "portalOturumu", "portalIslemi", "denetim"] as const;
+export const PRUNED_MODELS = ["nonceDefteri", "yoklama", "portalOturumu", "portalIslemi", "denetim", "hataRaporuGrubu", "hataRaporuPartisi"] as const;
 
 /** Kısa saklanan denetim sınıfı: başarısız/reddedilen giriş denemeleri (kaba kuvvet gürültüsü). */
 export const AUDIT_FAILED_LOGIN_EVENTS = ["PORTAL_GIRIS_BASARISIZ", "PORTAL_GIRIS_REDDEDILDI"] as const;
@@ -124,6 +126,7 @@ export class MaintenanceScheduler {
         ["portal oturumu budaması", () => prunePortalSessions(nowMs, this.ctx.config.PORTAL_OTURUM_SAKLAMA_GUN)],
         ["portal işlem kimliği budaması", () => prunePortalActions(nowMs, this.ctx.config.PORTAL_ISLEM_SAKLAMA_GUN)],
         ["denetim budaması", () => this.pruneAuditDaily(nowMs)],
+        ["hata raporu budaması", () => pruneErrorReports(nowMs, this.ctx.config.HATA_RAPORU_SAKLAMA_GUN)],
         ["dağıtım gövde budaması", () => pruneExpiredBodies(this.ctx.config, nowMs)],
         ["yarım yükleme temizliği", () => abandonStaleSessions(this.ctx.config, nowMs)],
         ["planlı eylemler", () => runDuePlannedActions(nowMs)],

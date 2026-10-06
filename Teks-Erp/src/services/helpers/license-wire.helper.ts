@@ -9,6 +9,7 @@ import {
   REQUEST_HEADER,
   VendorErrorResponseSchema,
   VersionTextSchema,
+  generateNonce,
   isInstallationIdOptional,
   isoToMs,
   signRequest,
@@ -51,7 +52,8 @@ export const egressTransport: VendorTransport = async (req) => {
 };
 
 export type VendorResult =
-  | { readonly ok: true; readonly json: unknown }
+  /** `nonce`: yanıtı alınan (son) imzalı isteğin nonce'u — canlı lisans yanıtının istek bağı buna eşleşmeli (6.3c). */
+  | { readonly ok: true; readonly json: unknown; readonly nonce: string }
   | { readonly ok: false; readonly status: number; readonly code: string; readonly vendorTimeMs?: number };
 
 // ── Hatalar (TR mesaj + `details.code`) ─────────────────────────────────────────
@@ -146,10 +148,25 @@ export function requestIdentityFor(ctx: ReadyContext, purpose: RequestPurpose): 
  * `path`: isteğin gittiği uç (`ENDPOINTS` / `SYNC_PATHS` sabiti, alan karşı tarafın doğruladığıyla AYNI) imzaya girer —
  * imzalı istek başka uca yeniden oynatılamaz (`ISTEK_YOL`); `yol` tanımayan eski doğrulayıcı alanı yok sayar.
  */
-export function signedHeaders(ctx: ReadyContext, purpose: RequestPurpose, bodyText: string, to: { readonly path: string; readonly nowMs?: number }): Record<string, string> {
-  const key = { privateKey: ctx.key.privateKey, nowMs: to.nowMs ?? Date.now() };
+export function signedHeaders(
+  ctx: ReadyContext,
+  purpose: RequestPurpose,
+  bodyText: string,
+  to: { readonly path: string; readonly nowMs?: number; readonly nonce?: string },
+): Record<string, string> {
+  const key = { privateKey: ctx.key.privateKey, nowMs: to.nowMs ?? Date.now(), ...(to.nonce === undefined ? {} : { nonce: to.nonce }) };
   const token = signRequest({ installationId: requestIdentityFor(ctx, purpose), purpose, body: bodyText, key, path: to.path });
   return { "content-type": "application/json", accept: "application/json", [REQUEST_HEADER]: token };
+}
+
+/**
+ * Lisans yanıtının geliş yolu: canlı alışveriş yanıtın cevapladığı isteğin nonce'unu taşır (istek bağı, 6.3c) — nonce'suz
+ * canlı kabul derlenmez; taşınmış yanıt (dosya · QR · zarf) bağ denetlenmeden gelir.
+ */
+export type ResponseArrival = { readonly arrival: "CANLI"; readonly nonce: string } | "TASINMIS";
+
+export function liveArrival(result: { readonly nonce: string }): ResponseArrival {
+  return { arrival: "CANLI", nonce: result.nonce };
 }
 
 /** Satıcının hata gövdesinden kod + (ISTEK_ZAMAN'da) İMZASIZ satıcı saati. */
@@ -186,9 +203,10 @@ export async function vendorPost(path: string, purpose: RequestPurpose, body: Ve
   const base = requireVendorUrl();
   const send = async (nowMs: number): Promise<VendorResult> => {
     const text = JSON.stringify(typeof body === "function" ? await (body as () => unknown)() : body);
+    const nonce = generateNonce();
     let res: VendorHttpResponse;
     try {
-      res = await transport({ url: `${base}${path}`, method: "POST", headers: signedHeaders(ctx, purpose, text, { path, nowMs }), body: text });
+      res = await transport({ url: `${base}${path}`, method: "POST", headers: signedHeaders(ctx, purpose, text, { path, nowMs, nonce }), body: text });
     } catch (err) {
       return { ok: false, status: 0, code: err instanceof EgressError ? err.code : "EGRESS_NETWORK" };
     }
@@ -199,7 +217,7 @@ export async function vendorPost(path: string, purpose: RequestPurpose, body: Ve
       } catch {
         json = null;
       }
-      return { ok: true, json };
+      return { ok: true, json, nonce };
     }
     const e = readVendorError(res.status, res.body);
     return { ok: false, status: res.status, code: e.code, vendorTimeMs: e.vendorTimeMs };

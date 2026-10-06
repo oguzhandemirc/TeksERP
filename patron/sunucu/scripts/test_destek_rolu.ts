@@ -17,7 +17,7 @@ import { randomBytes, randomUUID } from "node:crypto";
 import { Client } from "pg";
 import { CLOUD_TABLES, SUPPORT_FUNCTIONS, SUPPORT_GRANTS, supportRoleName } from "../src/lib/db-grants";
 import { withTesis } from "../src/lib/tenant";
-import { hesapKur, girdi, imzali, kontrol, ortamKur, paket, sonuc, temizleTesis, tesisKur, type Ortam, type TestKurulumu } from "./lib/test-ortam";
+import { hesapKur, girdi, imzali, kontrol, ortamKur, paket, sonuc, temizleTesis, tesisKur, tesisUrl, type Ortam, type TestKurulumu } from "./lib/test-ortam";
 
 const SIR_KOLONU = /^(password_hash|totp_secret_sealed|totp_last_step|invite_token_hash|token_hash|token)$/;
 
@@ -130,12 +130,14 @@ async function main(): Promise<void> {
   const o = await ortamKur();
   const a = await tesisKur(o);
   const b = await tesisKur(o);
-  const db = decodeURIComponent(new URL(process.env.GOC_DATABASE_URL!).pathname.slice(1));
+  // Destek rolü tesis DB'sine özgüdür (`<tesis DB>_destek`); merkezdeki destek rolü hiçbir tabloyu okuyamaz.
+  const gocA = tesisUrl(o, a.tesisId, "goc");
+  const db = decodeURIComponent(new URL(gocA).pathname.slice(1));
   const rol = supportRoleName(db);
   const parola = randomBytes(24).toString("hex");
-  const goc = await istemci(process.env.GOC_DATABASE_URL!);
+  const goc = await istemci(gocA);
   const destekUrl = (() => {
-    const u = new URL(process.env.GOC_DATABASE_URL!);
+    const u = new URL(gocA);
     u.username = rol;
     u.password = parola;
     return u.toString();
@@ -146,7 +148,15 @@ async function main(): Promise<void> {
     const hB = await hesapKur(o, b.tesisId, ["bulut:hesap:yonet"]);
     await fikstur(o, a, "A");
     await fikstur(o, b, "B");
-    await rolBolumu(goc, rol, decodeURIComponent(new URL(o.ctx.config.DATABASE_URL).username), decodeURIComponent(new URL(o.ctx.config.ESITLEME_DATABASE_URL).username));
+    await rolBolumu(goc, rol, decodeURIComponent(new URL(tesisUrl(o, a.tesisId, "uygulama")).username), decodeURIComponent(new URL(tesisUrl(o, a.tesisId, "esitleme")).username));
+    const merkez = await istemci(process.env.GOC_DATABASE_URL!);
+    try {
+      const merkezRol = supportRoleName(decodeURIComponent(new URL(process.env.GOC_DATABASE_URL!).pathname.slice(1)));
+      const okur = await merkez.query<{ t: string }>("SELECT t FROM unnest($1::text[]) t WHERE has_any_column_privilege($2, t, 'SELECT')", [[...CLOUD_TABLES], merkezRol]);
+      kontrol("§1m merkezin destek rolü hiçbir tabloyu OKUYAMAZ (kiracı verisi tesis DB'lerinde)", okur.rowCount === 0, okur.rows.map((x) => x.t).join(",") || "temiz");
+    } finally {
+      await merkez.end();
+    }
 
     await goc.query(`ALTER ROLE "${rol}" LOGIN PASSWORD '${parola}'`);
     const d = await istemci(destekUrl);
@@ -192,13 +202,13 @@ async function main(): Promise<void> {
     kontrol("§3a yazma · silme · boşaltma · kendi erişim kaydını okuma/değiştirme: hepsi permission denied", gecen.length === 0, gecen.join(",") || `${yazmalar.length} deneme`);
 
     console.log("\n§4 erişim kaydı");
-    const kayit = await withTesis(o.goc.prisma, { tesisId: a.tesisId }, (tx) => tx.supportAccess.findMany({ where: { tesisId: a.tesisId }, orderBy: { createdAt: "asc" } }));
+    const kayit = await withTesis(o.goc, { tesisId: a.tesisId }, (tx) => tx.supportAccess.findMany({ where: { tesisId: a.tesisId }, orderBy: { createdAt: "asc" } }));
     const k0 = kayit[0];
     kontrol("§4a hatalı açılışlar kayıt bırakmaz; tek kayıt: kim · talep · gerekçe · kapsam · 60 dk bitiş", kayit.length === 1 && k0?.dbUser === rol && k0.ticket === "DST-2026-0042" && k0.scope.startsWith("projection_rows") && k0.expiresAt.getTime() - k0.createdAt.getTime() === 3_600_000, JSON.stringify(kayit.map((x) => [x.dbUser, x.ticket])));
     const kapat = await dene(d, "SELECT public.destek_kapat() AS n");
     const sonra = await dene(d, "SELECT count(*)::int AS n FROM projection_rows");
     kontrol("§4b destek_kapat izni kapatır; sonraki sorgu HATA (fail-closed)", kapat.rows[0]?.n === 1 && sonra.hata !== null, sonra.hata?.slice(0, 50));
-    const kapali = await withTesis(o.goc.prisma, { tesisId: a.tesisId }, (tx) => tx.supportAccess.findUnique({ where: { id: k0!.id } }));
+    const kapali = await withTesis(o.goc, { tesisId: a.tesisId }, (tx) => tx.supportAccess.findUnique({ where: { id: k0!.id } }));
     kontrol("§4c kayıtta kapanış damgası + nedeni", kapali?.closedAt !== null && kapali?.closeReason === "KAPATILDI");
     const sil = await dene(goc, "DELETE FROM support_access WHERE id = $1", [k0!.id]);
     const degis = await dene(goc, "UPDATE support_access SET ticket = 'DEGISTI' WHERE id = $1", [k0!.id]);

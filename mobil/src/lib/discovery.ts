@@ -13,6 +13,8 @@
  */
 
 /** Kimlik ucunun yolu — taban adresin KÖKÜNE eklenir (`/api` ZATEN içinde). */
+import type { TlsAdvert } from './lan-tls';
+
 export const DISCOVERY_IDENTITY_PATH = "/api/discovery/identity";
 
 /** Varsayılan port artık KEŞİF-İKİZ bloğunda, `DISCOVERY_PORTS`ten türer. */
@@ -43,6 +45,8 @@ export interface DiscoveredServer {
   identity: ServerIdentity | null;
   rttMs: number;
   matchesPinned: IdentityMatch;
+  /** Sunucunun şifreli bağlantı ilanı (kimlik yükündeki `tls`); güven kaynağı DEĞİL. */
+  tls?: TlsAdvert | null;
 }
 
 // ---------------------------------------------------------------------------

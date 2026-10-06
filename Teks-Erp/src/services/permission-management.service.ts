@@ -60,6 +60,14 @@ function normalizeFullName(name: string): string {
   return name.trim().replace(/\s+/g, " ");
 }
 
+/** Yönetici sıfırlaması zorunlu parola değişimi doğurur mu? Kendi parolası ve satıcı hesabı hariç. */
+export function resetRequiresPasswordChange(
+  target: { id: string; isSystemAccount: boolean },
+  actorUserId: string | undefined,
+): boolean {
+  return !target.isSystemAccount && target.id !== actorUserId;
+}
+
 export class PermissionManagementService {
   // ---------------------------------------------------------------------------
   // Yetki kataloğu — admin UI grid'i için
@@ -454,6 +462,12 @@ export class PermissionManagementService {
   // ---------------------------------------------------------------------------
   // Admin şifre sıfırlama — eski şifre sorulmaz
   // ---------------------------------------------------------------------------
+  /**
+   * Yöneticinin verdiği parola GEÇİCİDİR: hedef ilk girişte kendi parolasını belirlemek
+   * zorundadır (`mustChangePassword`). İki muafiyet: kendi parolasını sıfırlayan (başka
+   * kimse görmedi) ve satıcı hesabı (parolası yalnız kurulum aracından değişir — bayrak
+   * onu kilitlerdi).
+   */
   static async resetUserPassword(
     userId: string,
     newPassword: string,
@@ -461,18 +475,25 @@ export class PermissionManagementService {
   ) {
     const user = await prisma.user.findUnique({
       where: { id: userId },
-      select: { id: true, username: true },
+      select: { id: true, username: true, isSystemAccount: true },
     });
     if (!user) throw AppError.notFound("Kullanıcı bulunamadı");
     const violation = passwordPolicyViolation(newPassword);
     if (violation) throw AppError.badRequest(violation, { code: "PASSWORD_POLICY" });
 
+    const requireChange = resetRequiresPasswordChange(user, actorUserId);
     const passwordHash = await bcrypt.hash(newPassword, 10);
-    // Şifre sıfırlandı → mevcut tüm oturumları düşür (tokenVersion bump).
-    await prisma.user.update({
-      where: { id: userId },
-      data: { passwordHash, tokenVersion: { increment: 1 } },
+    // Parola + bayrak + tokenVersion TEK yazımda; bayrak kararı okunan hesap türüne bağlı
+    // olduğu için tür WHERE'de (arada değiştiyse 409).
+    const claimed = await prisma.user.updateMany({
+      where: { id: userId, isSystemAccount: user.isSystemAccount },
+      data: { passwordHash, mustChangePassword: requireChange, tokenVersion: { increment: 1 } },
     });
+    if (claimed.count === 0) {
+      throw AppError.conflict("Hesap bu sırada değişti. Sayfayı yenileyip tekrar deneyin.", {
+        code: "PASSWORD_RESET_CONFLICT",
+      });
+    }
     // Session registry'yi de temizle (tokenVersion ile birlikte — anlık iptalin ikinci
     // katmanı: eski token hem tokenVersion hem revokedAt'ten düşer). Best-effort.
     await SessionRegistryService.revokeAllForUser(userId, "PASSWORD_RESET").catch(
@@ -484,8 +505,9 @@ export class PermissionManagementService {
       action: "UPDATE",
       tableName: "USER_PASSWORD",
       recordId: userId,
-      newData: { username: user.username, resetByAdmin: true },
+      newData: { username: user.username, resetByAdmin: true, requireChange },
     });
+    return { requireChange };
   }
 
   // ---------------------------------------------------------------------------

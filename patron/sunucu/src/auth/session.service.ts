@@ -18,7 +18,8 @@ import { loginThrottleFor } from "./login-throttle";
 import { assertPasswordStrength, burnPasswordCheck, hashPassword, verifyPassword } from "./password";
 import { verifyTotp } from "./totp";
 
-const TOKEN_PATTERN = /^[A-Za-z0-9_-]{43}$/;
+/** Oturum/davet belirteci: `<tesis kimliği 22 hane base64url>.<rastgele 43>`; özet belirtecin TAMAMINDAN. */
+export const TOKEN_PATTERN = /^[A-Za-z0-9_-]{22}\.[A-Za-z0-9_-]{43}$/;
 const TOUCH_INTERVAL_MS = 60_000;
 
 export interface SessionContext {
@@ -40,9 +41,20 @@ export function tokenDigest(token: string): string {
   return createHash("sha256").update(token, "utf8").digest("hex");
 }
 
-export function newToken(): { token: string; digest: string } {
-  const token = randomBytes(32).toString("base64url");
+/** Belirteç ön eki tesisi taşır: istek doğru tesis DB'sine yönlenir; ön eki değiştirilmiş belirteç hiçbir satırla eşleşmez. */
+export function newToken(tesisId: string): { token: string; digest: string } {
+  const prefix = Buffer.from(tesisId.replace(/-/g, ""), "hex").toString("base64url");
+  if (prefix.length !== 22) throw new Error("Belirteç ön eki için tesis kimliği UUID olmalı");
+  const token = `${prefix}.${randomBytes(32).toString("base64url")}`;
   return { token, digest: tokenDigest(token) };
+}
+
+/** Belirtecin tesis kimliği (biçimsizse null). */
+export function tokenTesis(token: string): string | null {
+  if (!TOKEN_PATTERN.test(token)) return null;
+  const hex = Buffer.from(token.slice(0, 22), "base64url").toString("hex");
+  if (hex.length !== 32) return null;
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
 }
 
 export function sessionProjections(permissions: ReadonlySet<CloudPermission>): string[] {
@@ -107,7 +119,7 @@ export async function login(ctx: CloudContext, g: LoginInput): Promise<{ token: 
     await registerFailure(ctx, account, nowMs, g.ip);
     return failAfterFloor(startedMs);
   }
-  const { token, digest } = newToken();
+  const { token, digest } = newToken(account.tesisId);
   const expiresAt = new Date(nowMs + ctx.config.OTURUM_AZAMI_GUN * 86_400_000);
   const session = await withTesis(ctx.app, { tesisId: account.tesisId }, async (tx) => {
     const facts = await loadServiceFacts(tx, account.tesisId);
@@ -149,11 +161,12 @@ export async function login(ctx: CloudContext, g: LoginInput): Promise<{ token: 
 
 /** Bearer belirtecinden oturum: kapalı · süresi dolmuş · hesap AKTİF değil · hizmet KAPALI (90 gün doldu) → null. */
 export async function resolveSession(ctx: CloudContext, token: string | undefined): Promise<SessionContext | null> {
-  if (!token || !TOKEN_PATTERN.test(token)) return null;
+  const tesisId = token ? tokenTesis(token) : null;
+  if (!token || !tesisId) return null;
   const nowMs = ctx.now();
   const digest = tokenDigest(token);
-  const row = await withLookup(ctx.app, { kind: "oturum", value: digest }, (tx) => tx.session.findUnique({ where: { tokenHash: digest } }));
-  if (!row || row.closedAt) return null;
+  const row = await withLookup(ctx.app, { kind: "oturum", value: digest, tesisId }, (tx) => tx.session.findUnique({ where: { tokenHash: digest } }));
+  if (!row || row.closedAt || row.tesisId !== tesisId) return null;
   return withTesis(ctx.app, { tesisId: row.tesisId }, async (tx) => {
     const idleLimit = row.lastUsedAt.getTime() + ctx.config.OTURUM_BOSTA_SAAT * 3_600_000;
     if (row.expiresAt.getTime() <= nowMs || idleLimit <= nowMs) {

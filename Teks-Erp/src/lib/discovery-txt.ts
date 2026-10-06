@@ -27,6 +27,8 @@ export interface AdvertisedTxt {
     ver: string;
     /** API taban yolu. */
     path: string;
+    /** HTTPS (LAN TLS) portu; dinleyici yoksa alan HİÇ konmaz. Parmak izi TXT'ye girmez (bütçe + güven eşleştirmede). */
+    tp?: string;
 }
 
 /** Tek UDP paketinde rahat taşınan güvenli üst sınır. */
@@ -48,6 +50,7 @@ export interface BuildTxtInput {
     companyName: string;
     version: string;
     apiBasePath: string;
+    tlsPort?: number | null;
 }
 
 /**
@@ -66,6 +69,7 @@ export function buildAdvertisedTxt(input: BuildTxtInput): AdvertisedTxt {
     // Kimlik yoksa alanı HİÇ koyma. Boş string koymak, istemci tarafında
     // "kimlik var ama boş" ile "kimlik yok" ayrımını kaybettirirdi.
     if (input.installationId) txt.iid = input.installationId;
+    if (input.tlsPort) txt.tp = String(input.tlsPort);
 
     // Bütçeyi aşarsa firma adını kırp (en uzun ve en az kritik alan).
     while (encodedTxtLength(txt) > TXT_BUDGET_BYTES && txt.co.length > 8) {

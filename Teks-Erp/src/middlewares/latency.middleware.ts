@@ -49,7 +49,7 @@ function normalizeKeyPath(path: string): string {
  *  originalUrl'den route path'inin segment sayısı düşülerek yeniden kurulur.
  *  Kök route'ta ('/') tüm originalUrl öneğe girer — 'GET /' çöküşü olmaz.
  *  Her iki kaynak da somut değer içerebilir → nihai anahtar normalize edilir. */
-function mountPrefix(req: Request, routePath: string): string {
+export function mountPrefix(req: Request, routePath: string): string {
   if (req.baseUrl) return req.baseUrl;
   const originalPath = (req.originalUrl ?? "").split("?")[0].replace(/\/+$/, "");
   const routeSegs = routePath.split("/").filter(Boolean);

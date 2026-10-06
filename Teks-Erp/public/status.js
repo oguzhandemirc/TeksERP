@@ -157,7 +157,32 @@
     }
   }
 
+  // Şifreli bağlantı kodu (docs/design/LAN-TLS.md §4b): kullanıcının gözle karşılaştıracağı kod yalnız
+  // sunucu bilgisayarının kendisinde gösterilir — ağdan açılan sayfanın içeriğine araya giren karışabilir.
+  function isLoopback(h) {
+    h = String(h || "").replace(/^\[|\]$/g, "").toLowerCase();
+    return h === "localhost" || h === "::1" || /^127\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(h);
+  }
+  async function showTls() {
+    try {
+      var r = await fetch("/api/discovery/identity", { cache: "no-store" });
+      var j = await r.json();
+      var fp = j && j.tls && typeof j.tls.fingerprint === "string" ? j.tls.fingerprint : null;
+      if (!fp) return;
+      document.getElementById("tlsRow").hidden = false;
+      setText(
+        "tlsfp",
+        isLoopback(location.hostname)
+          ? (fp.toUpperCase().match(/.{1,4}/g) || []).join(" ")
+          : "yalnız sunucu bilgisayarının kendisinde gösterilir (http://localhost:" + (location.port || "80") + "/)",
+      );
+    } catch (e) {
+      /* kimlik ucu yoksa satır gizli kalır */
+    }
+  }
+
   document.getElementById("addr").textContent = location.host;
+  showTls();
   refresh();
   setInterval(refresh, 5000);
 })();

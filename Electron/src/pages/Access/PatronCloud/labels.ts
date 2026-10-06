@@ -8,7 +8,7 @@ export const INELIGIBLE_LABELS: Record<CloudIneligibleReason, string> = {
   KIRA_YOK: "Geçerli lisans kirası yok.",
   LISANS_GECERSIZ: "Lisans geçerli değil (bu makineye ait değil ya da süresi dolmuş).",
   LISANS_OLCULEMEDI: "Lisans geçerliliği ölçülemedi (makine bilgisi okunamadı).",
-  SINIF_URETIM_DEGIL: "Lisans sınıfı buluta gönderemez (yalnız üretim kurulumu gönderir).",
+  SINIF_URETIM_DEGIL: "Lisans sınıfı buluta gönderemez (yalnız üretim, barındırılan ve demo kurulumu gönderir).",
   PATRON_BULUT_HAKKI_YOK: "Lisansta patron bulutu hakkı yok.",
   ABONELIK_YOK: "Patron bulutu aboneliği tanımlı değil ya da bitti.",
   DEVREDILDI: "Bu kurulum devredildi; bulut bağlantısı yeni kurulumdadır.",

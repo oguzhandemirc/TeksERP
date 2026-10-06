@@ -30,6 +30,7 @@ import { APP_VERSION } from "../lib/app-version";
 import { currentLicenseeName } from "../lib/license/licensee-name";
 import { DEFAULT_COMPANY_NAME } from "../constants/company";
 import { getCachedInstallationIdentity } from "../jobs/installation-identity.job";
+import { getLanTlsAdvert, type LanTlsAdvert } from "../lib/lan-tls/listener";
 
 /** Keşif sözleşmesinin sürümü. İstemci buna bakıp dallanır (ikinci bir 404 probu atmadan). */
 export const DISCOVERY_VERSION = 1;
@@ -52,6 +53,8 @@ export interface DiscoveryIdentityPayload {
     protocol: "http";
     apiPort: number;
     apiBasePath: "/api";
+    /** HTTPS dinleyicisi (LAN_TLS_MODE dual/required); null = yalnız HTTP. Parmak izi güven kaynağı DEĞİL, eşleştirmede doğrulanır. */
+    tls: LanTlsAdvert | null;
     time: string;
 }
 
@@ -77,6 +80,7 @@ export function buildDiscoveryIdentity(): DiscoveryIdentityPayload {
         protocol: "http",
         apiPort: cachedPort,
         apiBasePath: "/api",
+        tls: getLanTlsAdvert(),
         time: new Date().toISOString(),
     };
 }

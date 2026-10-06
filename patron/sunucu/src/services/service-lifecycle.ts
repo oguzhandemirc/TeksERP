@@ -11,7 +11,7 @@
 import type { Facility, Installation } from "@prisma/client";
 import { recordAudit } from "../lib/audit";
 import type { Tx } from "../lib/db";
-import { withMaintenanceList, withTesis } from "../lib/tenant";
+import { listReadyFacilities, withTesis } from "../lib/tenant";
 import type { CloudContext } from "./context";
 
 export const CLOUD_MODULE_KEY = "patron-bulut";
@@ -101,13 +101,17 @@ export async function refreshServiceEnd(ctx: CloudContext, tesisId: string, nowM
 
 /** Bakım tiki: her tesisin damgası tazelenir; salt okuma süresi dolmuş (imha bekleyen) tesisler döner. */
 export async function refreshAllServiceEnds(ctx: CloudContext, nowMs: number): Promise<{ stamped: number; reopened: number; awaitingDestruction: string[] }> {
-  const ids = await withMaintenanceList(ctx.sync, (tx) => tx.facility.findMany({ select: { tesisId: true }, orderBy: { tesisId: "asc" } }));
   const out = { stamped: 0, reopened: 0, awaitingDestruction: [] as string[] };
-  for (const { tesisId } of ids) {
-    const change = await refreshServiceEnd(ctx, tesisId, nowMs);
-    if (change === "DAMGALANDI") out.stamped++;
-    if (change === "ACILDI") out.reopened++;
-    if ((await facilityServiceState(ctx, tesisId, nowMs))?.phase === "KAPALI") out.awaitingDestruction.push(tesisId);
+  for (const tesisId of await listReadyFacilities(ctx.sync)) {
+    try {
+      const change = await refreshServiceEnd(ctx, tesisId, nowMs);
+      if (change === "DAMGALANDI") out.stamped++;
+      if (change === "ACILDI") out.reopened++;
+      if ((await facilityServiceState(ctx, tesisId, nowMs))?.phase === "KAPALI") out.awaitingDestruction.push(tesisId);
+    } catch (err) {
+      // Bir tesisin DB'si bakımda/göçü geride: öteki tesislerin damgası sürer.
+      console.error(`[patron] hizmet damgası tesis ${tesisId}: ${(err as { code?: string }).code ?? (err as Error).message}`);
+    }
   }
   return out;
 }

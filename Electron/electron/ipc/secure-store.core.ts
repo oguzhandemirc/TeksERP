@@ -4,6 +4,7 @@
 // =============================================================================
 import { UPDATE_FEED_OVERRIDE_KEY } from "@shared/update-feed";
 import { LAST_DISCOVERY_KEY, PINNED_IDENTITY_KEY } from "@shared/discovery";
+import { TLS_PIN_KEY } from "@shared/lan-tls";
 import { AUTH_TOKEN_STORE_KEY } from "@shared/download-token";
 
 /**
@@ -16,6 +17,8 @@ export const MAIN_ONLY_KEYS: ReadonlySet<string> = new Set([
   UPDATE_FEED_OVERRIDE_KEY,
   PINNED_IDENTITY_KEY,
   LAST_DISCOVERY_KEY,
+  // Renderer sertifika sabitini YAZAMAZ: sabitleme yalnız ana sürecin kendi el sıkışmasıyla (lan-tls-pin.ts).
+  TLS_PIN_KEY,
 ]);
 
 /** Şifreleme yokken DİSKE DÜZ YAZILMAYAN gizli anahtarlar (yalnız süreç belleğinde tutulur). */

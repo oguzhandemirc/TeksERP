@@ -36,6 +36,9 @@
 //      kapanış K3 · HAK bayt bağı `hakOzeti`) · parmak izi v2 (kayıp = uyuşmazlık · güçlülerden ≥ 2 · zayıf
 //      kural · boş küme ÖLÇÜLEMEDİ · DR · tanıma · öğrenme) · İSTEK yol bağı + donanım amacı/gövdesi/yanıtı ·
 //      gövde ekleri (açık yetenek listesi · KATI ek nesneler · HAK özeti · yanıtta iptal, biçimsizi yok sayılır)
+//   §16 yanıt istek bağı (6.3c): doğru bağ BAGLI · yanlış nonce · başka kira · bağ yok + bayraklı kira RED ·
+//      bağ yok + bayraksız (eski satıcı) BAGSIZ · typ · imza · sınıfa yetkisiz ALT · INDIRME · iptal · kid ≠
+//      gömülü sertifika · sertifikasız · `yanitBagli` yalnız true ve şemada korunur · yanıt alanı · kodlar
 //
 // NEGATİF SONDA — dosya DIŞI mutasyon zinciri (bir kezlik, ✓B; her biri cp + shasum ile
 // birebir geri alındı; sayılar commit mesajında):
@@ -68,10 +71,12 @@
 //   + 2: JWS alg denetimi kaldırıldı → §1b · §1c · §11d2 · §11d4 · başlık allowlist'i kaldırıldı → §1g · §1h ·
 //   §11d3 (yeni belge türleri — iptal, ara imzalı HAK — ortak JWS katmanından geçiyor).
 //   Her mutasyonun UYGULANDIĞI (sha farkı) ve geri alındığı (sha eşitliği) ayrıca ölçüldü.
+//   6.3c (§16; kaynakta mutasyon, git hash-object eşit geri alındı): N1 nonce karşılaştırması kalktı → 3 ❌ (§16b · b2 · e2)
+//   · N2 bayraklı kira + bağ yok kabul → 1 ❌ (§16d).
 // ⚠️ Gerekli mi (reçete md. 20): kapı doğduğu gün ağaçta ısırılacak bir kusur YOKTU (klasör
 //   bu dilimde doğdu); gerekçe ÖLÇÜLMEDİ — satıcı/fabrika dilimleri buna karşı yazılacak.
 // =============================================================================
-import { createHmac, generateKeyPairSync, randomUUID } from "node:crypto";
+import { createHmac, generateKeyPairSync, randomUUID, type KeyObject } from "node:crypto";
 import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import ts from "typescript";
@@ -140,6 +145,11 @@ import {
   digestFingerprint,
   openEnvelope,
   wrapEnvelope,
+  signResponseBinding,
+  verifyResponseBinding,
+  checkLiveResponseBinding,
+  type CertificateDoc,
+  type LicenseClass,
   type Fingerprint,
   type Result,
   type RootKey,
@@ -584,6 +594,9 @@ function govdeBolumu(): void {
   if (typeof saglik === "object" && saglik !== null) Object.assign(saglik, { kullanicilar: ["ali"] });
   check("§5b ⭐ sağlık özetine allowlist dışı anahtar RED", !PollRequestSchema.safeParse(sizinti).success);
   check("§5c kök gövdeye allowlist dışı anahtar RED", !PollRequestSchema.safeParse({ ...yoklaGovdesi(), siparisler: [] }).success);
+  const modulGovde = (l: unknown) => PollRequestSchema.safeParse({ ...yoklaGovdesi(), acikModuller: l }).success;
+  check("§5c2 K10: `acikModuller` OPSİYONEL (yok = eski fabrika) ve modül adı listesini kabul eder", modulGovde(undefined) && modulGovde([]) && modulGovde(["finance.enabled", "production.enabled"]));
+  check("§5c3 K10 karşı: serbest metin · yinelenen ad · liste olmayan · 64'ten uzun liste RED", !modulGovde(["Müşteri Adı Ltd"]) && !modulGovde(["finance.enabled", "finance.enabled"]) && !modulGovde("finance.enabled") && !modulGovde(Array.from({ length: 65 }, (_, k) => `modul${k}.enabled`)));
   const yanit = { v: 1, hak: null, kira: kiraBas(f), indirmeBelirtecleri: [], sunucuSaati: msToIso(SIMDI), yeniBilgi: 1 };
   check("§5d yanıtta tanınmayan bilgi alanı kabul (ileri uyum)", LicenseResponseSchema.safeParse(yanit).success);
   check("§5e çevrimdışı istek zarf taşır", OfflineRequestSchema.safeParse({ v: 1, zarf: "abc" }).success);
@@ -942,6 +955,50 @@ function govdeV2Bolumu(): void {
   check("§15j iptal türü kayıt defterinde", TYP.IPTAL === "tekserp-iptal");
 }
 
+function yanitBagiBolumu(): void {
+  console.log("\n§16 — yanıt istek bağı (6.3c): canlı kira isteğin nonce'una ALT imzasıyla bağlı");
+  const altSert = (ek: Partial<CertificateDoc> = {}, konu = f.alt) => sertifikaBas(f.kok, sertifikaYuku(f, konu, "ALT", ek));
+  const kiraT = kiraBas(f, { yanitBagli: true });
+  const kiraD = verifyLease(kiraT, f.kokler);
+  if (!kiraD.ok) throw new Error(`bağlı kira fikstürü kurulamadı: ${kiraD.code}`);
+  const nonce = generateNonce();
+  const bag = (g: { lease?: string; nonce?: string; kid?: string; privateKey?: KeyObject; certificate?: string } = {}) =>
+    signResponseBinding({ lease: g.lease ?? kiraT, nonce: g.nonce ?? nonce, nowMs: SIMDI, key: { kid: g.kid ?? f.alt.kid, privateKey: g.privateKey ?? f.alt.privateKey, certificate: g.certificate ?? altSert() } });
+  const dogrula = (t: unknown, g: { sinif?: LicenseClass; revocation?: VerifiedRevocation | null } = {}) =>
+    verifyResponseBinding(t, f.kokler, { lease: kiraT, nonce, sinif: g.sinif ?? "URETIM", revocation: g.revocation });
+  const canli = (binding: string | undefined, g: { leaseToken?: string; yanitBagli?: boolean; n?: string } = {}) => {
+    const lt = g.leaseToken ?? (g.yanitBagli === false ? kiraBas(f) : kiraT);
+    const ld = verifyLease(lt, f.kokler);
+    if (!ld.ok) throw new Error(`kira fikstürü kurulamadı: ${ld.code}`);
+    return checkLiveResponseBinding(f.kokler, { lease: ld.value.document, leaseToken: lt, binding, nonce: g.n ?? nonce, sinif: "URETIM" });
+  };
+  const sonuc = (r: Result<string>) => (r.ok ? r.value : r.code);
+  beklenen("§16a doğru bağ: bu kira + bu nonce", dogrula(bag()), "OK");
+  check("§16a2 canlı karar: bağ doğrulandı → BAGLI", sonuc(canli(bag())) === "BAGLI", sonuc(canli(bag())));
+  beklenen("§16b ⭐ başka isteğin nonce'u (oynatılan yanıt)", dogrula(bag({ nonce: generateNonce() })), "YANIT_NONCE_UYUSMAZ");
+  check("§16b2 ⭐ canlı karar: yanlış nonce RED", sonuc(canli(bag(), { n: generateNonce() })) === "YANIT_NONCE_UYUSMAZ", sonuc(canli(bag(), { n: generateNonce() })));
+  beklenen("§16c ⭐ bağ başka kiraya (kira takası)", dogrula(bag({ lease: kiraBas(f, { yanitBagli: true }) })), "YANIT_BAGI_UYUSMAZ");
+  check("§16d ⭐ bağ yok + kira bağ beyan ediyor → RED (bağ soyulmuş)", sonuc(canli(undefined)) === "YANIT_BAGI_YOK", sonuc(canli(undefined)));
+  check("§16e karşı: bağ yok + bayraksız (eski satıcı) kira → BAGSIZ kabul", sonuc(canli(undefined, { yanitBagli: false })) === "BAGSIZ", sonuc(canli(undefined, { yanitBagli: false })));
+  const eski = kiraBas(f);
+  check("§16e2 bayraksız kira + bağ varsa yine doğrulanır (yanlış nonce RED)", sonuc(canli(bag({ lease: eski, nonce: generateNonce() }), { leaseToken: eski })) === "YANIT_NONCE_UYUSMAZ");
+  beklenen("§16f typ karışması: kira JWS'i bağ yerine", dogrula(kiraT), "JWS_TYP");
+  beklenen("§16g imza bozuk (aynı kid, başka anahtar)", dogrula(bag({ privateKey: anahtarUret(f.alt.kid).privateKey })), "JWS_IMZA");
+  beklenen("§16h ⭐ sınıfa yetkisiz alt anahtar (TEST sertifikası, ÜRETİM HAK'ı)", dogrula(bag({ certificate: altSert({ siniflar: siniflar("TEST") }) })), "YANIT_BAGI_UYUSMAZ");
+  beklenen("§16h2 karşı: aynı sertifika TEST sınıfında geçer", dogrula(bag({ certificate: altSert({ siniflar: siniflar("TEST") }) }), { sinif: "TEST" }), "OK");
+  const ind = anahtarUret("ind-2026-1");
+  beklenen("§16i indirme anahtarı bağ basamaz", dogrula(bag({ kid: ind.kid, privateKey: ind.privateKey, certificate: sertifikaBas(f.kok, sertifikaYuku(f, ind, "INDIRME")) })), "SERTIFIKA_KULLANIM");
+  beklenen("§16j ⭐ iptal edilmiş ALT anahtarının bağı", dogrula(bag(), { revocation: iptalli(f.hakId, f.alt.kid, "ALT") }), "SERTIFIKA_IPTAL");
+  beklenen("§16k gömülü sertifika başka anahtarın (kid ≠ imzalayan)", dogrula(bag({ certificate: altSert({}, anahtarUret("alt-2026-2")) })), "JWS_KID");
+  beklenen("§16l kök anahtar sertifikasız bağ basamaz (alt sertifika zorunlu)", dogrula(hamImzala(TYP.YANIT_BAGI, f.kok, { v: 1, kiraOzeti: jwsDigest(kiraT), istekNonce: nonce, verilis: msToIso(SIMDI) })), "BELGE_SEMA");
+  beklenen("§16m kira `yanitBagli: false` biçimsiz (yalnız true ya da yok)", verifyLease(hamImzala(TYP.KIRA, f.alt, { ...kiraYuku(f), yanitBagli: false }), f.kokler), "BELGE_SEMA");
+  check("§16n ⭐ `yanitBagli` şema çıktısında KORUNUR (strip etseydi bağ soyulması görünmezdi)", kiraD.value.document.yanitBagli === true);
+  const yanit = { v: 1, hak: null, kira: kiraT, indirmeBelirtecleri: [], sunucuSaati: msToIso(SIMDI) };
+  const tasir = LicenseResponseSchema.safeParse({ ...yanit, yanitBagi: bag() });
+  check("§16o yanıt bağı taşır · eski yanıt (alansız) geçer · biçimsiz bağ yanıtı düşürür", tasir.success && typeof tasir.data.yanitBagi === "string" && LicenseResponseSchema.safeParse(yanit).success && !LicenseResponseSchema.safeParse({ ...yanit, yanitBagi: 42 }).success);
+  check("§16p üç yeni kod tanımlı · bağ türü kayıt defterinde", ["YANIT_BAGI_YOK", "YANIT_BAGI_UYUSMAZ", "YANIT_NONCE_UYUSMAZ"].every((c) => (PROTOCOL_ERROR_CODES as readonly string[]).includes(c)) && TYP.YANIT_BAGI === "tekserp-yanit");
+}
+
 kapalilik();
 capaKipleri();
 derlemeCapasi();
@@ -961,5 +1018,6 @@ kiraBagiBolumu();
 parmakIziV2Bolumu();
 yolDonanimBolumu();
 govdeV2Bolumu();
+yanitBagiBolumu();
 console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
 process.exit(fail > 0 ? 1 : 0);

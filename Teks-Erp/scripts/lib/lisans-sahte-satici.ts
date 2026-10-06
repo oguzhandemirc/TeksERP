@@ -13,6 +13,7 @@ import { randomUUID } from "node:crypto";
 import {
   ActivateRequestSchema,
   ENDPOINTS,
+  generateNonce,
   HardwareReportRequestSchema,
   OfflineRequestSchema,
   PollRequestSchema,
@@ -23,6 +24,7 @@ import {
   openEnvelope,
   parseJws,
   readRequestIdentity,
+  signResponseBinding,
   verifyAcceptance,
   verifyRequest,
   type Fingerprint,
@@ -43,12 +45,20 @@ export interface SahteSatici {
   hakEk: Partial<EntitlementDoc>;
   /** Verilirse HAK yerine bu metin döner (ara imzalı HAK senaryosu); null = `hakBas(f, hakEk)`. */
   hakMetni: string | null;
+  /**
+   * Canlı yanıtın istek bağı (6.3c): YOK = eski satıcı (bağ da kira bayrağı da yok) · DOGRU = isteğin nonce'una bağ ·
+   * YANLIS_NONCE = başka nonce'a bağ (oynatılan yanıt) · SOYULMUS = kira bağ beyan eder ama yanıt bağ taşımaz.
+   * Bayraklı kiplerde kira `yanitBagli: true`; zarfla gelen (çevrimdışı) yanıt hiçbir kipte bağ taşımaz.
+   */
+  yanitBagi: "YOK" | "DOGRU" | "YANLIS_NONCE" | "SOYULMUS";
   /** Her lisans yanıtına konan iptal belgesi (G4 `iptal` alanı); null = alan yok (eski satıcı). */
   iptal: string | null;
   /** >0 ise SIRADAKİ yoklamanın kirası hemen basılır ama yanıtı bu kadar ms bekletilir (yarış sondası). */
   sonrakiYanitGecikmesiMs: number;
   /** Satıcının saati = duvar + bu kayma (D4: ±10 dk dışı istek ISTEK_ZAMAN alır). */
   saatKaymasiMs: number;
+  /** Kiranın İMZALI `sunucuSaati` gerçek saatten bu kadar sapar (imzalı saat sapması sondası; verilis gerçek kalır). */
+  kiraSaatiKaymasiMs: number;
   /** ISTEK_ZAMAN gövdesine `sunucuSaati` konur mu (false = eski satıcı). */
   sunucuSaatiDondur: boolean;
   /** Dönen `sunucuSaati` gerçek saatinden bu kadar sapar (düzeltilmiş deneme de reddedilsin — "bir kez" sondası). */
@@ -169,8 +179,10 @@ export async function sahteSaticiBaslat(f: Fikstur): Promise<SahteSatici> {
     hakEk: {},
     hakMetni: null,
     iptal: null,
+    yanitBagi: "YOK",
     sonrakiYanitGecikmesiMs: 0,
     saatKaymasiMs: 0,
+    kiraSaatiKaymasiMs: 0,
     sunucuSaatiDondur: true,
     sunucuSaatiYalaniMs: 0,
     zilOmruMs: 0,
@@ -185,7 +197,8 @@ export async function sahteSaticiBaslat(f: Fikstur): Promise<SahteSatici> {
     kabuller: [],
   };
   const talepId = randomUUID();
-  const lisansYaniti = (parmakIzi: Fingerprint, ek: Record<string, unknown> = {}): string => {
+  /** `istek`: canlı uçta imzalı istek (bağ onun nonce'una); null = zarfla geldi (bağ yok). */
+  const lisansYaniti = (parmakIzi: Fingerprint, istek: unknown, ek: Record<string, unknown> = {}): string => {
     const simdi = Date.now();
     const kira = kiraBas(f, {
       kiraId: randomUUID(),
@@ -193,13 +206,25 @@ export async function sahteSaticiBaslat(f: Fikstur): Promise<SahteSatici> {
       kurulumAnahtarKimligi: installationKeyId(kayitliAnahtar ?? f.kurulum.x),
       parmakIzi,
       verilis: msToIso(simdi),
-      sunucuSaati: msToIso(simdi),
+      sunucuSaati: msToIso(simdi + s.kiraSaatiKaymasiMs),
       bitis: msToIso(simdi + 29 * 86_400_000),
       zorlama: false,
+      ...(s.yanitBagi === "YOK" ? {} : { yanitBagli: true as const }),
       ...s.kiraEk,
     });
     const iptal = s.iptal === null ? {} : { iptal: s.iptal };
-    return JSON.stringify({ v: 1, hak: s.hakMetni ?? hakBas(f, s.hakEk), kira, indirmeBelirtecleri: [], sunucuSaati: msToIso(simdi), ...iptal, ...ek });
+    const bag = istek === null || s.yanitBagi === "YOK" || s.yanitBagi === "SOYULMUS" ? {} : { yanitBagi: yanitBagiBas(kira, istek, simdi) };
+    return JSON.stringify({ v: 1, hak: s.hakMetni ?? hakBas(f, s.hakEk), kira, indirmeBelirtecleri: [], sunucuSaati: msToIso(simdi), ...iptal, ...bag, ...ek });
+  };
+  /** Bağ, kirayı imzalayan ALT anahtarla ve kiranın gömdüğü sertifikayla basılır (gerçek satıcının `leaseKeyFor`u gibi). */
+  const yanitBagiBas = (kira: string, istek: unknown, simdi: number): string => {
+    const kp = parseJws(kira);
+    const ip = parseJws(istek);
+    const sertifika = kp.ok ? (kp.value.payload as { altSertifika?: unknown }).altSertifika : undefined;
+    const istekNonce = ip.ok ? (ip.value.payload as { nonce?: unknown }).nonce : undefined;
+    if (typeof sertifika !== "string" || typeof istekNonce !== "string") throw new Error("sahte satıcı: yanıt bağı kurulamadı");
+    const nonce = s.yanitBagi === "YANLIS_NONCE" ? generateNonce() : istekNonce;
+    return signResponseBinding({ lease: kira, nonce, nowMs: simdi, key: { kid: f.alt.kid, privateKey: f.alt.privateKey, certificate: sertifika } });
   };
   /** Doğrulanamayan istek: zaman reddinde (D4) satıcı kendi saatini İMZASIZ döner. */
   const reddet = (res: http.ServerResponse, d: { kod: string | null }, simdi: number): void => {
@@ -261,6 +286,7 @@ export async function sahteSaticiBaslat(f: Fikstur): Promise<SahteSatici> {
       const json = JSON.parse(govde.toString("utf8")) as { kurulumId?: unknown };
       s.istekler.push({ amac, kimlik: d.kimlik, govdeKimligi: typeof json.kurulumId === "string" ? json.kurulumId : null, imzaliYol: imzaliYolu(token), uc: yol });
       if (!d.ok) return reddet(res, d, simdi);
+      const canliIstek = yol === ENDPOINTS.OFFLINE ? null : token;
       if (amac === "etkinlestir") {
         const b = ActivateRequestSchema.safeParse(json);
         if (!b.success) return hata(res, 400, "GOVDE_GECERSIZ");
@@ -273,7 +299,7 @@ export async function sahteSaticiBaslat(f: Fikstur): Promise<SahteSatici> {
         s.sayac.etkinlestir++;
         kayitliAnahtar = d.x;
         res.writeHead(200, { "content-type": "application/json" });
-        return res.end(lisansYaniti(b.data.parmakIzi, { kurulumId: f.kurulumId, kodTuru: "ilk" }));
+        return res.end(lisansYaniti(b.data.parmakIzi, canliIstek, { kurulumId: f.kurulumId, kodTuru: "ilk" }));
       }
       if (amac === "tasima") {
         const b = TransferRequestSchema.safeParse(json);
@@ -288,7 +314,7 @@ export async function sahteSaticiBaslat(f: Fikstur): Promise<SahteSatici> {
         if (!b.success) return hata(res, 400, "GOVDE_GECERSIZ");
         s.sayac.donanim++;
         s.donanimGovdeleri.push(json);
-        const lisans = s.donanimDurumu === "ONAYLANDI" ? (JSON.parse(lisansYaniti(b.data.parmakIzi)) as unknown) : null;
+        const lisans = s.donanimDurumu === "ONAYLANDI" ? (JSON.parse(lisansYaniti(b.data.parmakIzi, canliIstek)) as unknown) : null;
         res.writeHead(200, { "content-type": "application/json" });
         return res.end(JSON.stringify({ v: 1, talepId: randomUUID(), durum: s.donanimDurumu, lisans }));
       }
@@ -296,7 +322,7 @@ export async function sahteSaticiBaslat(f: Fikstur): Promise<SahteSatici> {
       s.yoklamaGovdeleri.push(json);
       if (!p.success) return hata(res, 400, "GOVDE_GECERSIZ");
       s.sayac.yokla++;
-      const yanit = lisansYaniti(p.data.parmakIzi);
+      const yanit = lisansYaniti(p.data.parmakIzi, canliIstek);
       const gecikme = s.sonrakiYanitGecikmesiMs;
       s.sonrakiYanitGecikmesiMs = 0;
       if (gecikme > 0) await new Promise((r) => setTimeout(r, gecikme));

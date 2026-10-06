@@ -1,0 +1,40 @@
+name: traefik
+
+services:
+  socket-proxy:
+    image: nginx:alpine
+    container_name: docker-socket-proxy
+    mem_limit: 64m
+    memswap_limit: 96m
+    restart: unless-stopped
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./docker-proxy.conf:/etc/nginx/nginx.conf:ro
+    networks: [socketproxy]
+
+  traefik:
+    image: traefik:v3.5
+    container_name: traefik
+    mem_limit: 192m
+    memswap_limit: 256m
+    restart: unless-stopped
+    depends_on: [socket-proxy]
+    ports:
+      - "80:80"
+      - "443:443"
+      - "127.0.0.1:8080:8080"   # dashboard: sadece localhost, SSH tuneli ile
+    volumes:
+      - ./traefik.yml:/etc/traefik/traefik.yml:ro
+      - ./dynamic:/etc/traefik/dynamic:ro
+      - ./certs:/certs:ro
+    networks: [web, socketproxy, tekserp-patron-uretim-kenar, tekserp-satici-uretim-kenar]  # patron kenar ağı: docs/ops/PATRON-BULUTU-KURULUM.md §13 · üretim satıcısı (lisans) — §13.4-6
+
+networks:
+  web:
+    external: true
+  socketproxy:
+    internal: true
+  tekserp-patron-uretim-kenar:
+    external: true
+  tekserp-satici-uretim-kenar:
+    external: true

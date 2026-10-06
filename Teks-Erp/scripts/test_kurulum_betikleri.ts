@@ -40,10 +40,18 @@
 //      fail-closed; ön ölçüm + OnKosul aynı işlev) · F3 eski paket TEK girişten (`EskiPaketOlcumu`) ve engel ön ölçüm
 //      SAYFASINDA görünür · F4-B geçişle kurulmuş düzen ayrı sınıf GECISLI (`GecisliDuzen`: geçiş günlüğü + current), DURUR,
 //      yabancı klasör eski mesajla; metin runbook (docs/ops/GECIS-PM2-HIZMET.md §5/§7) ile tutarlı.
-//   §14 varsayılan güncelleme adresi (O11a) = deploy/dagitim.json indirmeKoku (sonda / yok): sihirbaz, cevap şeması,
+//   §14 saat eşitlemesi (karar 2026-10-02): karar TEK saf işlevde (kurulum-ortak.ps1 SaatEsitlemeKarari; harness §1
+//      `saat.*` vektörleri) — etki alanındaki makineye DOKUNULMAZ, dışında W32Time otomatik + NTP (kayıtlı sunucu korunur);
+//      uygulayıcı (kurulum.ps1 SaatEsitlemesi) PartOfDomain'i ölçer, DOKUNMA'da yazmadan döner, w32tm yalnız NTP_AC'de ve
+//      yalnız orada, sonucu YENİDEN ölçer, kurulamazsa UYARI (DUR değil), önceki ayar durum/kurulum.json'a (onarım ezmez);
+//      /resync · Set-Date yok; kaldırma dokunmaz ve önceki ayarın yerini söyler; sihirbaz özeti söyler.
+//   §15 sunucu simgesi (bildirim alanı, 2026-10-06): tepsi.ps1 setup içeriğinde · kurulum <kök>\tepsi\ (Users YALNIZ okuma) +
+//      HKLM Run kaydı, aşama sonunda · kaldırıcı kaydı + çalışan simgeyi + dizini siler · betik yalnız 127.0.0.1 /health/tepsi'yi
+//      OKUR (ağ dinlemez, dosya/kayıt yazmaz, süreç başlatmaz), ASCII; saf işlevler harness §1'de (`tepsi.*`)
+//   §16 varsayılan güncelleme adresi (O11a) = deploy/dagitim.json indirmeKoku (sonda / yok): sihirbaz, cevap şeması,
 //      örnek cevap, güncelleyici betiği aynı değer; onarımda kayıttaki ESKİ kanal adresi yenisine döner, başka kayıt korunur.
 //      Geçiş aracı (deploy/gecis/gecis.ps1) eski adreste kalır ve adresi güncelleyici betiğine açıkça geçirir.
-//   §15 O12 Tailscale (100.64.0.0/10) müşteri kurulumunda yok: sihirbaz kutusu, cevap seçeneği, onarım ön doldurması
+//   §17 O12 Tailscale (100.64.0.0/10) müşteri kurulumunda yok: sihirbaz kutusu, cevap seçeneği, onarım ön doldurması
 //      (K3 kod yolu) kapalı; kayıttaki eski izin onarımda korunur, özet + karar uyarır.
 // NEGATİF SONDA (✓K, her koşumda): §2–§11 yüklemleri bellekte bozulmuş kopyalara koşar (mutasyonun
 //   UYGULANDIĞI ölçülür); §1 için kurulum-ortak.ps1'in bozulmuş kopyası harness'e verilir (pwsh varsa).
@@ -72,6 +80,7 @@ const YOL = {
   kurulum: "deploy/kurulum/kurulum.ps1",
   ortak: "deploy/kurulum/kurulum-ortak.ps1",
   kaldir: "deploy/kurulum/kaldir.ps1",
+  tepsi: "deploy/kurulum/tepsi.ps1",
   onOlcum: "deploy/kurulum/on-olcum.ps1",
   iss: "deploy/kurulum/tekserp-kurulum.iss",
   sema: "deploy/kurulum/cevap-semasi.json",
@@ -333,7 +342,7 @@ function olc(k: Kaynaklar): Bulgular {
 
   // §6 — kaldırma veriyi korur
   for (const s of kodSatirlari(kal)) {
-    if (/Remove-Item/.test(s.kod)) {
+    if (/Remove-Item\b/.test(s.kod)) {
       if (!/Remove-Item -LiteralPath \$(p|y) /.test(s.kod)) ekle("§6", `Remove-Item izinli program yolu dışında (satır ${s.no})`);
       if (KORUNAN.test(s.kod)) ekle("§6", `Remove-Item korunan bir yolu adlandırıyor (satır ${s.no})`);
     }
@@ -353,7 +362,7 @@ function olc(k: Kaynaklar): Bulgular {
 
   // §8 — setup.exe içeriği
   const kaynaklar = [...k.iss.matchAll(/^Source: "([^"]+)"; DestDir: "([^"]+)"/gm)].map((m) => ({ src: m[1]!, dst: m[2]! }));
-  const gerekli = new Set<string>(["kurulum.ps1", "kurulum-ortak.ps1", "on-olcum.ps1", "kaldir.ps1", "cevap-semasi.json", "ornek-cevap.json", "..\\pg\\pg-sablon.mjs"]);
+  const gerekli = new Set<string>(["kurulum.ps1", "kurulum-ortak.ps1", "on-olcum.ps1", "kaldir.ps1", "tepsi.ps1", "cevap-semasi.json", "ornek-cevap.json", "..\\pg\\pg-sablon.mjs"]);
   for (const t of [k.kurulum, k.onOlcum]) for (const m of t.matchAll(/Join-Path \$PG_DIZINI "([^"]+)"/g)) gerekli.add(`..\\pg\\${m[1]}`);
   // Nokta-kaynak edilen komşu betikler (kanal adları TEK kaynak hizmet\kanal-adlari.ps1 - geçiş aynısını paketten okur).
   const noktaKaynak = new Set<string>();
@@ -510,27 +519,70 @@ function olc(k: Kaynaklar): Bulgular {
   if (!/ag = \$\(if \(\$d\.PSObject\.Properties\["ag"\]\)/.test(dog)) ekle("§13", "kurulum.json uygulanan ağ ayarını kaydetmiyor (sonraki onarımın kaydı) (F1)");
   const iOnceki = hazir.indexOf("cevap-onceki.json', False)"), iYeni = hazir.indexOf("SaveStringToFile(KurulumCevabi");
   if (iOnceki < 0 || iYeni < 0 || iOnceki > iYeni || !/if \(Onarim or Yarim\) and FileExists\(KurulumCevabi\) then/.test(hazir)) ekle("§13", "setup onarımda önceki cevabı yenisini yazmadan saklamıyor (eski kurulumların tek ağ kaydı) (F1)");
+  // §14 saat eşitlemesi (karar 2026-10-02): etki alanına DOKUNMA, dışında W32Time NTP; saat elle ayarlanmaz
+  const se = psGovde(kur, "SaatEsitlemesi") ?? "";
+  if (!se) ekle("§14", "kurulum.ps1'de SaatEsitlemesi işlevi yok");
+  if (!/\$k = SaatEsitlemeKarari \(\[bool\]\$cs\.PartOfDomain\) /.test(se) || !/Get-CimInstance Win32_ComputerSystem/.test(se)) ekle("§14", "SaatEsitlemesi kararı etki alanı üyeliğini (PartOfDomain) ölçerek vermiyor");
+  const iDokunma = se.indexOf('if ($k.eylem -ceq "DOKUNMA") {'), iDonus = se.indexOf("return", iDokunma), iYaz = se.indexOf("Set-Service");
+  if (iDokunma < 0 || iDonus < 0 || iYaz < 0 || iDonus > iYaz) ekle("§14", "DOKUNMA kararında (etki alanı / zaten NTP) hizmete yazmadan dönmüyor");
+  if (!/if \(\$k\.eylem -ceq "NTP_AC"\) \{\s*\n\s*\$r = NativeKos "w32tm\.exe" @\("\/config", "\/manualpeerlist:\$\(\$k\.sunucu\)", "\/syncfromflags:manual", "\/update"\)/.test(se)) ekle("§14", "w32tm /config yalnız NTP_AC kararında, kararın sunucusuyla koşmuyor");
+  if (!/\$olc = SaatEsitlemeKarari \$false \$son\.tip/.test(se) || !/if \(\$olc\.eylem -ceq "DOKUNMA" -and \$son\.calisiyor\) \{ Ok /.test(se)) ekle("§14", "uygulama sonrası sonuç yeniden ÖLÇÜLMÜYOR (tip + otomatik + çalışıyor)");
+  if (/\bDur\b/.test(se)) ekle("§14", "saat eşitlemesi kurulumu DURDURUYOR (karar: yalnız UYARI)");
+  if (!/if \(-not \$d\.PSObject\.Properties\["saat"\]\) \{/.test(se)) ekle("§14", "onarım ilk kurulumun önceki saat ayarı kaydını eziyor");
+  const iSaatCagri = hiz.indexOf("SaatEsitlemesi $d"), iHizBitti = hiz.indexOf('AsamaBitti $d "Hizmetler"');
+  if (iSaatCagri < 0 || iHizBitti < 0 || iSaatCagri > iHizBitti) ekle("§14", "Hizmetler aşaması SaatEsitlemesi'ni (durum kaydından önce) çağırmıyor");
+  if (!/saat = \$\(if \(\$d\.PSObject\.Properties\["saat"\]\) \{ \$d\.saat \}/.test(dog)) ekle("§14", "kurulum.json saat kaydını (önceki ayar) taşımıyor");
+  // w32tm yalnız SaatEsitlemesi'nde; /resync ve elle saat ayarı hiçbir kurulum betiğinde yok
+  for (const [ad, t] of [["kurulum.ps1", kur], ["kurulum-ortak.ps1", ort], ["kaldir.ps1", kal]] as const)
+    for (const s of kodSatirlari(t))
+      if (/w32tm/i.test(s.kod) && !(ad === "kurulum.ps1" && s.islev === "SaatEsitlemesi")) ekle("§14", `${ad}:${s.no} w32tm SaatEsitlemesi dışında`);
+  for (const ad of ["kurulum", "ortak", "kaldir", "onOlcum"] as const)
+    if (/\/resync|Set-Date|\bSetSystemTime\b|\bSetLocalTime\b/i.test(k[ad].split("\n").filter((l) => !/^\s*#/.test(l)).join("\n"))) ekle("§14", `${YOL[ad]} saati elle ayarlıyor (/resync · Set-Date · SetSystemTime)`);
+  if (/W32Time|w32tm/i.test(kal.satirlar.map((s) => s.kod).join("\n")) || !/saat\.onceki/.test(k.kaldir)) ekle("§14", "kaldırma saat eşitlemesine dokunuyor ya da önceki ayarın yerini söylemiyor (karar: geri alınmaz)");
+  if (!/'Saat eşitlemesi: etki alanına bağlı değilse Windows saati NTP ile otomatik eşitlenir; etki alanındaysa dokunulmaz'/.test(pasGovde(k.iss, "UpdateReadyMemo") ?? "")) ekle("§14", "sihirbaz özeti saat eşitlemesini söylemiyor");
+  // §15 — sunucu simgesi (bildirim alanı)
+  const tp = psTara(k.tepsi);
+  if (!/^Source: "tepsi\.ps1"; DestDir: "\{app\}\\kurulum\\deploy\\kurulum"/m.test(k.iss)) ekle("§15", "tepsi.ps1 setup içeriğinde değil ({app}\\kurulum\\deploy\\kurulum)");
+  const tk = psGovde(kur, "TepsiKur") ?? "";
+  const hz = psGovde(kur, "AsamaHizmetler") ?? "";
+  if (!tk) ekle("§15", "kurulum.ps1'de TepsiKur yok");
+  const iT = hz.indexOf("TepsiKur $kok $d $apiPort"), iB = hz.indexOf('AsamaBitti $d "Hizmetler"');
+  if (iT < 0 || iB < 0 || iT > iB) ekle("§15", "AsamaHizmetler TepsiKur'u çağırmıyor ya da AsamaBitti'den SONRA çağırıyor");
+  const users = [...tk.matchAll(/S-1-5-32-545:\(OI\)\(CI\)(\w+)/g)].map((m) => m[1]);
+  if (users.length !== 1 || users[0] !== "RX") ekle("§15", "tepsi dizininde Users YALNIZ okuma/çalıştırma (RX) değil — kullanıcı oturumunda çalışan betik değiştirilebilir olur");
+  if (!/\/inheritance:r/.test(tk) || !/\*S-1-5-18:\(OI\)\(CI\)F/.test(tk) || !/\*S-1-5-32-544:\(OI\)\(CI\)F/.test(tk)) ekle("§15", "tepsi dizini miras kesilip SYSTEM+Administrators'a verilmiyor");
+  if (!/Set-ItemProperty -LiteralPath \$run -Name "TeksERP-Tepsi\$\(\$d\.adlar\.sonek\)"/.test(tk) || !/HKLM:\\Software\\Microsoft\\Windows\\CurrentVersion\\Run/.test(tk)) ekle("§15", "oturum açılışı HKLM Run kaydıyla (kullanıcı başına yönetici istemeyen) kurulmuyor");
+  if (/RunLevel|Register-ScheduledTask|New-Service|sc\.exe/.test(tk)) ekle("§15", "TepsiKur yükseltilmiş görev/hizmet kuruyor (simge yönetici istemez)");
+  const kk = k.kaldir;
+  if (!/Remove-ItemProperty -LiteralPath \$run -Name \$isim/.test(kk) || !/Stop-Process -Id \$pr\.ProcessId/.test(kk) || !/Remove-Item -LiteralPath \$p -Recurse -Force/.test(kk)) ekle("§15", "kaldırıcı Run kaydını + çalışan simgeyi + <kök>\\tepsi\\ dizinini kaldırmıyor");
+  if (!/\$istek = \[System\.Net\.HttpWebRequest\]::Create\("http:\/\/127\.0\.0\.1:\$Port\/health\/tepsi"\)/.test(k.tepsi)) ekle("§15", "simge yalnız http://127.0.0.1:<port>/health/tepsi'yi okumuyor");
+  if (tp.satirlar.filter((x) => /https?:\/\//.test(x.kod)).length !== 1) ekle("§15", "simgede 127.0.0.1 /health/tepsi dışında ağ adresi var");
+  for (const s2 of tp.satirlar) {
+    if (/HttpListener|TcpListener|UdpClient|Start-Process|Invoke-Expression|\biex\b|Set-Content|Out-File|Add-Content|WriteAllText|Remove-Item|New-Item|Set-ItemProperty|New-NetFirewallRule|Invoke-RestMethod|Invoke-WebRequest|DownloadString/.test(s2.kod)) ekle("§15", `simge salt okunur/dinlemez değil (satır ${s2.no}): ${s2.kod.trim().slice(0, 60)}`);
+  }
+  if (/[^\x00-\x7F]/.test(k.tepsi)) ekle("§15", "tepsi.ps1 ASCII dışı karakter taşıyor (PS 5.1 BOM'suz UTF-8'i ANSI okur; Türkçe \\uXXXX ile)");
+  if (!/\[switch\]\$YalnizIslevler/.test(k.tepsi) || !/if \(\$YalnizIslevler\) \{ return \}/.test(k.tepsi)) ekle("§15", "tepsi.ps1 -YalnizIslevler (harness vektörleri) kapısı yok");
   // O12: Tailscale (100.64.0.0/10) müşteri kurulumunda yok — sihirbaz kutusu, cevap seçeneği ve onarım ön doldurması (K3 kod yolu) kapalı;
   // kayıttaki eski izin onarımda korunur ve özet + karar uyarır.
-  if (/Tailscale ağından|AgSayfasi\.Add\([^)]*100\.64/.test(k.iss)) ekle("§15", "sihirbazda Tailscale kutusu var");
-  if (/AgSayfasi\.Values\[\d\] := Pos\('100\.64/.test(k.iss)) ekle("§15", "sihirbaz onarımda kutuyu önceki kayıttan kuruyor (K3 kod yolu)");
+  if (/Tailscale ağından|AgSayfasi\.Add\([^)]*100\.64/.test(k.iss)) ekle("§17", "sihirbazda Tailscale kutusu var");
+  if (/AgSayfasi\.Values\[\d\] := Pos\('100\.64/.test(k.iss)) ekle("§17", "sihirbaz onarımda kutuyu önceki kayıttan kuruyor (K3 kod yolu)");
   const izinliSayfa = pasGovde(k.iss, "AgSayfaIzinli") ?? "", cevapJs = pasGovde(k.iss, "CevapJson") ?? "";
-  if (!/Result := 'LocalSubnet';/.test(izinliSayfa) || /100\.64/.test(izinliSayfa) || /100\.64/.test(cevapJs) || !/Izinli := '"LocalSubnet"';/.test(cevapJs)) ekle("§15", "sihirbaz cevabı LocalSubnet dışında izinli adres yazabiliyor");
+  if (!/Result := 'LocalSubnet';/.test(izinliSayfa) || /100\.64/.test(izinliSayfa) || /100\.64/.test(cevapJs) || !/Izinli := '"LocalSubnet"';/.test(cevapJs)) ekle("§17", "sihirbaz cevabı LocalSubnet dışında izinli adres yazabiliyor");
   const agoz14 = pasGovde(k.iss, "AgOzeti") ?? "";
-  if (!/if Pos\('100\.64\.0\.0\/10', Izinli\) > 0 then\s*\n\s*Result := Result \+ 'UYARI: bu kurulumda eski Tailscale izni/.test(agoz14)) ekle("§15", "özet kayıttaki eski Tailscale iznini uyarmıyor");
+  if (!/if Pos\('100\.64\.0\.0\/10', Izinli\) > 0 then\s*\n\s*Result := Result \+ 'UYARI: bu kurulumda eski Tailscale izni/.test(agoz14)) ekle("§17", "özet kayıttaki eski Tailscale iznini uyarmıyor");
   let semaIzinli: { secenek?: unknown; kayitEski?: unknown; varsayilan?: unknown } = {}, ornekIzinli: unknown = null;
   try {
     semaIzinli = (JSON.parse(k.sema) as { alanlar: Record<string, typeof semaIzinli> }).alanlar["api.izinliAdresler"] ?? {};
     ornekIzinli = (JSON.parse(k.ornek) as { api?: { izinliAdresler?: unknown } }).api?.izinliAdresler ?? null;
   } catch {
-    ekle("§15", "şema/örnek JSON okunamadı");
+    ekle("§17", "şema/örnek JSON okunamadı");
   }
   const esit = (x: unknown, y: string[]): boolean => JSON.stringify(x) === JSON.stringify(y);
-  if (!esit(semaIzinli.secenek, ["LocalSubnet"]) || !esit(semaIzinli.varsayilan, ["LocalSubnet"])) ekle("§15", "şema cevapta LocalSubnet dışında izinli adres kabul ediyor");
-  if (!esit(semaIzinli.kayitEski, ["100.64.0.0/10"])) ekle("§15", "şema kayıttaki eski Tailscale iznini tanımıyor (onarım erişimi daraltır)");
-  if (!esit(ornekIzinli, ["LocalSubnet"])) ekle("§15", "örnek cevap LocalSubnet dışında izinli adres taşıyor");
-  if (!/\$t = AgKayitTanimi \$sema\.alanlar\."api\.\$a"/.test(psGovde(ort, "KayitliAgAyari") ?? "") || !/eski Tailscale izni/.test(psGovde(ort, "AgKarari") ?? "")) ekle("§15", "kayıt okuyucu eski izni tanımıyor ya da karar uyarmıyor");
-  // §14 — varsayılan güncelleme adresi dağıtım kaydından (indirmeKoku, sonda / yok); dört yüz aynı değeri taşır
+  if (!esit(semaIzinli.secenek, ["LocalSubnet"]) || !esit(semaIzinli.varsayilan, ["LocalSubnet"])) ekle("§17", "şema cevapta LocalSubnet dışında izinli adres kabul ediyor");
+  if (!esit(semaIzinli.kayitEski, ["100.64.0.0/10"])) ekle("§17", "şema kayıttaki eski Tailscale iznini tanımıyor (onarım erişimi daraltır)");
+  if (!esit(ornekIzinli, ["LocalSubnet"])) ekle("§17", "örnek cevap LocalSubnet dışında izinli adres taşıyor");
+  if (!/\$t = AgKayitTanimi \$sema\.alanlar\."api\.\$a"/.test(psGovde(ort, "KayitliAgAyari") ?? "") || !/eski Tailscale izni/.test(psGovde(ort, "AgKarari") ?? "")) ekle("§17", "kayıt okuyucu eski izni tanımıyor ya da karar uyarmıyor");
+  // §16 — varsayılan güncelleme adresi dağıtım kaydından (indirmeKoku, sonda / yok); dört yüz aynı değeri taşır
   let yeni: string | null = null;
   try {
     const koku = (JSON.parse(k.dagitim) as { indirmeKoku?: unknown }).indirmeKoku;
@@ -538,11 +590,11 @@ function olc(k: Kaynaklar): Bulgular {
   } catch {
     /* aşağıda bulgu */
   }
-  if (!yeni) ekle("§14", "deploy/dagitim.json indirmeKoku okunamadı (https://<ana makine>/) — varsayılan türetilemez");
+  if (!yeni) ekle("§16", "deploy/dagitim.json indirmeKoku okunamadı (https://<ana makine>/) — varsayılan türetilemez");
   else {
-    if (yeni === ESKI_GUNCELLEME) ekle("§14", "dağıtım kaydının indirmeKoku eski kanal adresi");
+    if (yeni === ESKI_GUNCELLEME) ekle("§16", "dağıtım kaydının indirmeKoku eski kanal adresi");
     const ld = (m: string): string => m.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-    if (!new RegExp(`^\\s*VARSAYILAN_GUNCELLEME = '${ld(yeni)}';$`, "m").test(k.iss)) ekle("§14", `sihirbazın VARSAYILAN_GUNCELLEME'si dağıtım kaydından değil (beklenen ${yeni})`);
+    if (!new RegExp(`^\\s*VARSAYILAN_GUNCELLEME = '${ld(yeni)}';$`, "m").test(k.iss)) ekle("§16", `sihirbazın VARSAYILAN_GUNCELLEME'si dağıtım kaydından değil (beklenen ${yeni})`);
     let sema: unknown, ornek: unknown;
     try {
       sema = (JSON.parse(k.sema) as { alanlar?: Record<string, { varsayilan?: unknown }> }).alanlar?.["guncelleme.sunucu"]?.varsayilan;
@@ -550,16 +602,16 @@ function olc(k: Kaynaklar): Bulgular {
     } catch {
       /* aşağıda bulgu */
     }
-    if (sema !== yeni) ekle("§14", `cevap şemasının guncelleme.sunucu varsayılanı dağıtım kaydından değil (${String(sema)})`);
-    if (ornek !== yeni) ekle("§14", `örnek cevabın guncelleme.sunucu'su dağıtım kaydından değil (${String(ornek)})`);
+    if (sema !== yeni) ekle("§16", `cevap şemasının guncelleme.sunucu varsayılanı dağıtım kaydından değil (${String(sema)})`);
+    if (ornek !== yeni) ekle("§16", `örnek cevabın guncelleme.sunucu'su dağıtım kaydından değil (${String(ornek)})`);
     const gp = psTara(k.guncelleyici).satirlar.find((x) => /\[string\]\$GuncellemeSunucusu\s*=/.test(x.kod))?.kod ?? "";
-    if (!gp.includes(`"${yeni}"`)) ekle("§14", `guncelleyici-hizmeti.ps1 -GuncellemeSunucusu varsayılanı dağıtım kaydından değil (${gp.trim() || "satır yok"})`);
+    if (!gp.includes(`"${yeni}"`)) ekle("§16", `guncelleyici-hizmeti.ps1 -GuncellemeSunucusu varsayılanı dağıtım kaydından değil (${gp.trim() || "satır yok"})`);
   }
   // Onarım: kayıttaki ESKİ varsayılan yeni adrese döner; başka (elle girilmiş) kayıt korunur
   const sod14 = pasGovde(k.iss, "SayfalariOlcumleDoldur") ?? "";
   if (!new RegExp(`^\\s*ESKI_GUNCELLEME = '${ESKI_GUNCELLEME.replace(/\./g, "\\.")}';$`, "m").test(k.iss) ||
     !/if Lowercase\(Olc\('oncekiGuncellemeSunucusu'\)\) = ESKI_GUNCELLEME then GelismisSayfasi\.Values\[0\] := VARSAYILAN_GUNCELLEME\s*\n\s*else if Olc\('oncekiGuncellemeSunucusu'\) <> '' then GelismisSayfasi\.Values\[0\] := Olc\('oncekiGuncellemeSunucusu'\);/.test(sod14))
-    ekle("§14", "sihirbaz onarımda kayıttaki eski güncelleme adresini koruyor (ortak paket eski adresten güncellenmez)");
+    ekle("§16", "sihirbaz onarımda kayıttaki eski güncelleme adresini koruyor (ortak paket eski adresten güncellenmez)");
   return b;
 }
 
@@ -570,9 +622,10 @@ function pwshVar(): boolean {
   const r = spawnSync("pwsh", ["-NoProfile", "-NonInteractive", "-Command", "$PSVersionTable.PSVersion.Major"], { encoding: "utf8", timeout: 60_000 });
   return !r.error && r.status === 0 && Number((r.stdout ?? "").trim()) >= 7;
 }
-function harness(ortak?: string): { kod: number | null; satirlar: string[] } {
+function harness(ortak?: string, tepsi?: string): { kod: number | null; satirlar: string[] } {
   const arg = ["-NoProfile", "-NonInteractive", "-File", join(KOK, "deploy", "test", "kurulum.harness.ps1")];
   if (ortak) arg.push("-Ortak", ortak);
+  if (tepsi) arg.push("-Tepsi", tepsi);
   const r = spawnSync("pwsh", arg, { encoding: "utf8", timeout: 180_000 });
   return { kod: r.status, satirlar: `${r.stdout ?? ""}\n${r.stderr ?? ""}`.split(/\r?\n/).map((s) => s.trimEnd()) };
 }
@@ -582,6 +635,10 @@ const LISANS_KONTROLLERI = ["bos-alan-kanaldan", "uretim-kanali-satir-yazmaz", "
 const KURULU_KONTROLLERI = ["kurulu.yalniz-kayit", "kurulu.gecmisin-SON-satiri", "kurulu.bayat-kayit-yerine-guncelleyici", "kurulu.current-baglantisi", "kurulu.eski-paket-DUR"];
 /** D8e-3b: eski paket tek giriş · geçişli düzen · kanal hizmetinin kökü · ağ ayarı kayıttan. */
 const D8E3B_KONTROLLERI = ["eskipaket.olcum-tek-giris", "gecisli.duzen-tanir", "gecisli.tek-isaret-yetmez-yabanci-eski-mesaj", "ag.kayit-eski-cevaptan", "ag.kayit-oncelik", "ag.kayit-gecersiz-yok-sayilir", "ag.onarim-sessiz-kayit-korunur", "ag.onarim-eski-tailscale-uyarir", "ag.onarim-tailscalesiz-uyarisiz", "ag.onarim-cevap-uygulanmaz", "ag.cevap-tailscale-red", "ag.yeni-kurulum-cevaptan", "hizmetkok.ayni-kok-gecer", "hizmetkok.baska-kok-durur", "hizmetkok.okunamaz-durur", "hizmetkok.uc-hizmet-olculur"];
+/** Saat eşitlemesi kararı (2026-10-02): etki alanı DOKUNMA · zaten NTP DOKUNMA · hizmet otomatik · kapalı → NTP · önceki kayıtta. */
+const SAAT_KONTROLLERI = ["etki-alani-dokunmaz", "zaten-ntp-dokunmaz", "ntp-hizmet-otomatik", "kapali-ntp-acar", "onceki-kayda-girer"].map((c) => `saat.${c}`);
+/** Sunucu simgesi (tepsi.ps1 saf işlevleri). */
+const TEPSI_KONTROLLERI = ["renk-backendden-aynen", "taninmayan-yanit-kirmizi", "kisa-kesinti-onceki-korunur", "guncelleme-yeniden-basliyor-sari", "ipucu-63-sinir", "yuzde"].map((c) => `tepsi.${c}`);
 const CEVAP_KONTROLLERI = ["ornek-gecerli", "varsayilanlar", "surum-zorunlu", "surum-yanlis", "bilinmeyen-alan", "sir-alan-red", "sir-adi-dar", "tur-sayi", "sayi-aralik", "tur-mantik", "tur-yol", "desen", "secenek-liste", "bos", "sema-sirsiz"];
 function durum(satirlar: string[], ad: string): "OK" | "HATA" | "YOK" {
   if (satirlar.includes(`OK ${ad}`)) return "OK";
@@ -605,7 +662,7 @@ if (eksik.length === 0) {
 
   // §1
   console.log("\n§1 harness — kurulum-ortak.ps1 saf işlevleri gerçek kabukta");
-  if (!pwshVar()) defter.atla("§1 harness", "pwsh 7 yok", CEVAP_KONTROLLERI.length + 7 + KURULU_KONTROLLERI.length + LISANS_KONTROLLERI.length + D8E3B_KONTROLLERI.length);
+  if (!pwshVar()) defter.atla("§1 harness", "pwsh 7 yok", CEVAP_KONTROLLERI.length + 7 + KURULU_KONTROLLERI.length + LISANS_KONTROLLERI.length + D8E3B_KONTROLLERI.length + SAAT_KONTROLLERI.length + TEPSI_KONTROLLERI.length);
   else {
     const h = harness();
     const vek = JSON.parse(readFileSync(join(KOK, "deploy/pg/pg-sablon-vektorleri.json"), "utf8")) as { port: Array<{ ad: string }> };
@@ -628,10 +685,12 @@ if (eksik.length === 0) {
       ...KURULU_KONTROLLERI,
       ...LISANS_KONTROLLERI,
       ...D8E3B_KONTROLLERI,
+      ...SAAT_KONTROLLERI,
+      ...TEPSI_KONTROLLERI,
     ];
     if (trAtla) defter.atla("§1 tr-TR kültürü", "pwsh kültür verisi yok (InvariantGlobalization)", CEVAP_KONTROLLERI.length);
     const kotu = beklenen.filter((a) => durum(h.satirlar, a) !== "OK");
-    check(`§1 ⭐ harness: ${beklenen.length} kontrolün HEPSİ OK (cevap şeması iki kültürde · portSec ${vek.port.length} D4 vektörü · .env · JSON · maske · sürüm önceliği ${surumVek.length} güncelleyici vektörü · gerçek kurulu sürüm + eski paket engeli · lisans satıcısı ${LISANS_KONTROLLERI.length} karar vektörü · D8e-3b ${D8E3B_KONTROLLERI.length}: eski paket tek giriş · geçişli düzen · hizmet kökü · ağ kaydı)`, h.kod === 0 && kotu.length === 0,
+    check(`§1 ⭐ harness: ${beklenen.length} kontrolün HEPSİ OK (cevap şeması iki kültürde · portSec ${vek.port.length} D4 vektörü · .env · JSON · maske · sürüm önceliği ${surumVek.length} güncelleyici vektörü · gerçek kurulu sürüm + eski paket engeli · lisans satıcısı ${LISANS_KONTROLLERI.length} karar vektörü · D8e-3b ${D8E3B_KONTROLLERI.length}: eski paket tek giriş · geçişli düzen · hizmet kökü · ağ kaydı · saat eşitlemesi ${SAAT_KONTROLLERI.length})`, h.kod === 0 && kotu.length === 0,
       kotu.length ? kotu.map((a) => `${a}=${durum(h.satirlar, a)}`).join(" · ") : `çıkış ${h.kod}`);
   }
 
@@ -648,9 +707,11 @@ if (eksik.length === 0) {
     ["§9", "CI: tetikler, doğrulayıcı üretim derlemesi, iki derleme, boru öz-sınaması, PS 5.1, kuru koşu"],
     ["§11", "sihirbaz deneyimi: ölçüm görünür + açılış hafif · eski paket iki kapıda · onarım metinleri · ölçülen yapılacaklar"],
     ["§12", "lisans satıcısı kanaldan: tek karar işlevi · boş alan = kanal (ön doldurma + özet) · farklı değer UYARI · .env karardan · Dogrulama ölçer"],
-    ["§14", "varsayılan güncelleme adresi dağıtım kaydından (indirmeKoku): sihirbaz · cevap şeması · örnek cevap · güncelleyici betiği; onarımda kayıttaki eski adres yenisine döner"],
+    ["§16", "varsayılan güncelleme adresi dağıtım kaydından (indirmeKoku): sihirbaz · cevap şeması · örnek cevap · güncelleyici betiği; onarımda kayıttaki eski adres yenisine döner"],
     ["§13", "onarım/kurulum güvenliği (D8e-3b): F1 ağ ayarı kayıttan (ön doldurma · özet etkili · OnKosul korur · kural karardan · önceki cevap saklanır) · F2 başka köke bağlı / ölçülemeyen kanal hizmeti engel+DUR · F3 eski paket tek giriş + sayfada engel · F4-B geçişli düzen GECISLI, DUR"],
-    ["§15", "O12 Tailscale müşteri kurulumunda yok: sihirbazda kutu yok · onarım ön doldurması kayıttan kutu kurmaz (K3) · cevap/örnek yalnız LocalSubnet · şema eski izni yalnız kayıtta tanır · özet + karar uyarır"],
+    ["§14", "saat eşitlemesi: karar PartOfDomain ölçerek · DOKUNMA yazmaz · w32tm yalnız NTP_AC · sonuç yeniden ölçülür · UYARI (DUR değil) · onarım önceki kaydı ezmez · /resync/Set-Date yok · kaldırma dokunmaz · özet söyler"],
+    ["§15", "sunucu simgesi: setup içeriğinde · kurulum (Users salt okuma + HKLM Run) · kaldırıcı siler · yalnız 127.0.0.1 /health/tepsi OKUR (dinlemez/yazmaz/başlatmaz) · ASCII"],
+    ["§17", "O12 Tailscale müşteri kurulumunda yok: sihirbazda kutu yok · onarım ön doldurması kayıttan kutu kurmaz (K3) · cevap/örnek yalnız LocalSubnet · şema eski izni yalnız kayıtta tanır · özet + karar uyarır"],
   ];
   console.log("");
   for (const [bolum, ne] of BOLUMLER) check(`${bolum} ⭐ ${ne}`, !(b[bolum]?.length), (b[bolum] ?? []).join(" · "));
@@ -671,6 +732,15 @@ if (eksik.length === 0) {
     { ad: "S10 Paket aşaması iskeletten ÖNCE sır yazıyor", dosya: "kurulum", eski: `  JunctionKur $current $hedef\n`, yeni: `  JunctionKur $current $hedef\n  EnvYaz (Join-Path $kok "yapilandirma\\.env") "A=b"\n`, bolum: "§4", parca: "AsamaPaket iskeletten ÖNCE sır" },
     { ad: "S11 backend güncelleyiciden sonra kaydediliyor", dosya: "kurulum", eski: `  [void](BackendHizmetBetigi $kok $d @("-Uygula"))\n  [void](GuncelleyiciHizmetBetigi $kok $d $C @("-Uygula"))`, yeni: `  [void](GuncelleyiciHizmetBetigi $kok $d $C @("-Uygula"))\n  [void](BackendHizmetBetigi $kok $d @("-Uygula"))`, bolum: "§4", parca: "Hizmetler sırası" },
     { ad: "S12 sihirbaz aşama tablosu kaydı (Backend↔PostgreSQL)", dosya: "iss", eski: "    3: Result := 'PostgreSQL';\n    4: Result := 'Backend';", yeni: "    3: Result := 'Backend';\n    4: Result := 'PostgreSQL';", bolum: "§4", parca: "aşama tablosu" },
+    { ad: "S76 simge ağ dinliyor (HttpListener)", dosya: "tepsi", eski: `$bildirim.Visible = $true\n`, yeni: `$bildirim.Visible = $true\n$dinle = New-Object System.Net.HttpListener\n`, bolum: "§15", parca: "salt okunur/dinlemez değil" },
+    { ad: "S77 simge yerel adres yerine ağdan okuyor", dosya: "tepsi", eski: `"http://127.0.0.1:$Port/health/tepsi"`, yeni: `"http://sunucu:$Port/health/tepsi"`, bolum: "§15", parca: "yalnız http://127.0.0.1" },
+    { ad: "S78 tepsi dizininde Users'a yazma izni", dosya: "kurulum", eski: `*S-1-5-32-545:(OI)(CI)RX`, yeni: `*S-1-5-32-545:(OI)(CI)M`, bolum: "§15", parca: "Users YALNIZ okuma" },
+    { ad: "S79 kaldırıcı Run kaydını silmiyor", dosya: "kaldir", eski: `Remove-ItemProperty -LiteralPath $run -Name $isim;`, yeni: ``, bolum: "§15", parca: "Run kaydını" },
+    { ad: "S80 kurulum TepsiKur'u çağırmıyor", dosya: "kurulum", eski: `  TepsiKur $kok $d $apiPort\n`, yeni: ``, bolum: "§15", parca: "TepsiKur'u çağırmıyor" },
+    { ad: "S81 simge dosya yazıyor", dosya: "tepsi", eski: `$ErrorActionPreference = "Stop"\n`, yeni: `$ErrorActionPreference = "Stop"\nSet-Content -Path x -Value y\n`, bolum: "§15", parca: "salt okunur/dinlemez değil" },
+    { ad: "S82 setup içeriğinden tepsi.ps1 düşmüş", dosya: "iss", eski: `Source: "tepsi.ps1"; DestDir: "{app}\\kurulum\\deploy\\kurulum"; Flags: ignoreversion\n`, yeni: ``, bolum: "§15", parca: "setup içeriğinde" },
+    { ad: "S83 tepsi.ps1 ASCII dışı", dosya: "tepsi", eski: `# TeksERP SUNUCU SIMGESI (bildirim alani)`, yeni: `# TeksERP SUNUCU SİMGESİ (bildirim alani)`, bolum: "§15", parca: "ASCII dışı" },
+    { ad: "S84 kurulum tepsi dizinini Users'a açık bırakıyor (miras)", dosya: "kurulum", eski: `"/inheritance:r", "/grant:r", "*S-1-5-18`, yeni: `"/grant:r", "*S-1-5-18`, bolum: "§15", parca: "miras kesilip" },
     { ad: "S13 ikinci çağrı noktası (D6 betiği doğrudan)", dosya: "kurulum", eski: `  $acik = @()\n`, yeni: `  & (Join-Path $kok "current\\hizmet\\backend-hizmeti.ps1") -Kok $kok\n  $acik = @()\n`, bolum: "§5", parca: "backend-hizmeti.ps1 BackendHizmetBetigi dışında" },
     { ad: "S14 kurulum hizmet kaydı yazıyor (hizmet-kur)", dosya: "kurulum", eski: `  $acik = @()\n`, yeni: `  & "$kok\\current\\runtime\\tekserp-hizmet.exe" hizmet-kur --ad x\n  $acik = @()\n`, bolum: "§5", parca: "hizmet-kur" },
     { ad: "S15 kaldırma yapılandırmayı siliyor", dosya: "kaldir", eski: `  AdimDene "yedekle.ps1" {`, yeni: `  Remove-Item -LiteralPath (Join-Path $kok "yapilandirma") -Recurse -Force\n  AdimDene "yedekle.ps1" {`, bolum: "§6", parca: "Remove-Item" },
@@ -711,11 +781,11 @@ if (eksik.length === 0) {
     { ad: "S53 {tmp}'e hizmet\\ açılmıyor (ön ölçüm kanal-adlari.ps1'i bulamaz)", dosya: "iss", eski: "    ExtractTemporaryFiles('{app}\\kurulum\\deploy\\hizmet\\*');\n", yeni: "", bolum: "§8", parca: "{tmp}'e açmıyor" },
     { ad: "S52 özet LisansOzeti'ni çağırmıyor (eski 'varsayılan' metni)", dosya: "iss", eski: "  S := S + LisansOzeti(NewLine);", yeni: "  S := S + 'Lisans sunucusu: varsayılan' + NewLine;", bolum: "§12", parca: "LisansOzeti" },
     { ad: "S54 F1 sihirbaz onarımda Ağ sayfasını kayıttan doldurmuyor (profil düşer)", dosya: "iss", eski: "      AgSayfasi.Values[0] := Pos('Domain', Olc('oncekiAgProfiller')) > 0;\n", yeni: "", bolum: "§13", parca: "Ağ sayfasını kayıttan" },
-    { ad: "S73 O12 sihirbaza Tailscale kutusu geri döner", dosya: "iss", eski: "  AgSayfasi.Add('Etki alanı (Domain) ağ profilinde açık');\n", yeni: "  AgSayfasi.Add('Tailscale ağından da erişilsin (100.64.0.0/10)');\n  AgSayfasi.Add('Etki alanı (Domain) ağ profilinde açık');\n", bolum: "§15", parca: "Tailscale kutusu var" },
-    { ad: "S74 O12 onarım kutuyu önceki kayıttan kurar (K3 kod yolu)", dosya: "iss", eski: "    if Olc('oncekiAgMdns') <> '' then AgSayfasi.Values[2]", yeni: "    if Olc('oncekiAgIzinli') <> '' then AgSayfasi.Values[0] := Pos('100.64.0.0/10', Olc('oncekiAgIzinli')) > 0;\n    if Olc('oncekiAgMdns') <> '' then AgSayfasi.Values[2]", bolum: "§15", parca: "K3 kod yolu" },
-    { ad: "S75 O12 sihirbaz cevabına Tailscale yazar", dosya: "iss", eski: "  Izinli := '\"LocalSubnet\"';\n", yeni: "  Izinli := '\"LocalSubnet\", \"100.64.0.0/10\"';\n", bolum: "§15", parca: "LocalSubnet dışında izinli adres yazabiliyor" },
-    { ad: "S76 O12 şema cevapta Tailscale'i kabul eder (sessiz kip RED düşer)", dosya: "sema", eski: '"secenek": ["LocalSubnet"], "kayitEski"', yeni: '"secenek": ["LocalSubnet", "100.64.0.0/10"], "kayitEski"', bolum: "§15", parca: "LocalSubnet dışında izinli adres kabul" },
-    { ad: "S77 O12 özet eski Tailscale iznini uyarmaz", dosya: "iss", eski: "  if Pos('100.64.0.0/10', Izinli) > 0 then\n", yeni: "  if False then\n", bolum: "§15", parca: "eski Tailscale iznini uyarmıyor" },
+    { ad: "S91 O12 sihirbaza Tailscale kutusu geri döner", dosya: "iss", eski: "  AgSayfasi.Add('Etki alanı (Domain) ağ profilinde açık');\n", yeni: "  AgSayfasi.Add('Tailscale ağından da erişilsin (100.64.0.0/10)');\n  AgSayfasi.Add('Etki alanı (Domain) ağ profilinde açık');\n", bolum: "§17", parca: "Tailscale kutusu var" },
+    { ad: "S92 O12 onarım kutuyu önceki kayıttan kurar (K3 kod yolu)", dosya: "iss", eski: "    if Olc('oncekiAgMdns') <> '' then AgSayfasi.Values[2]", yeni: "    if Olc('oncekiAgIzinli') <> '' then AgSayfasi.Values[0] := Pos('100.64.0.0/10', Olc('oncekiAgIzinli')) > 0;\n    if Olc('oncekiAgMdns') <> '' then AgSayfasi.Values[2]", bolum: "§17", parca: "K3 kod yolu" },
+    { ad: "S93 O12 sihirbaz cevabına Tailscale yazar", dosya: "iss", eski: "  Izinli := '\"LocalSubnet\"';\n", yeni: "  Izinli := '\"LocalSubnet\", \"100.64.0.0/10\"';\n", bolum: "§17", parca: "LocalSubnet dışında izinli adres yazabiliyor" },
+    { ad: "S94 O12 şema cevapta Tailscale'i kabul eder (sessiz kip RED düşer)", dosya: "sema", eski: '"secenek": ["LocalSubnet"], "kayitEski"', yeni: '"secenek": ["LocalSubnet", "100.64.0.0/10"], "kayitEski"', bolum: "§17", parca: "LocalSubnet dışında izinli adres kabul" },
+    { ad: "S95 O12 özet eski Tailscale iznini uyarmaz", dosya: "iss", eski: "  if Pos('100.64.0.0/10', Izinli) > 0 then\n", yeni: "  if False then\n", bolum: "§17", parca: "eski Tailscale iznini uyarmıyor" },
     { ad: "S55 F1 özet sayfanın seçimini yazıyor (etkili kayıt değil)", dosya: "iss", eski: "    if Olc('oncekiAgIzinli') <> '' then Izinli := Olc('oncekiAgIzinli');\n", yeni: "", bolum: "§13", parca: "ETKİLİ ağ erişimini" },
     { ad: "S56 F1 OnKosul ağ kaydını okumuyor (sessiz onarım LocalSubnet'e daralır)", dosya: "kurulum", eski: "  if ($onarim -or $yarim) { $agKayit = KayitliAgAyari $kok $script:CevapSemasi }\n", yeni: "", bolum: "§13", parca: "ağ ayarını kayıttan korumuyor" },
     { ad: "S57 F1 Hizmetler kuralı ham cevaptan kuruyor", dosya: "kurulum", eski: "-RemoteAddress @($ag.izinliAdresler)", yeni: '-RemoteAddress @($C["api.izinliAdresler"])', bolum: "§13", parca: "ham cevaptan kuruyor" },
@@ -728,12 +798,21 @@ if (eksik.length === 0) {
     { ad: "S64 F4-B OnKosul geçişli düzeni yabancı sayıyor", dosya: "kurulum", eski: "    if ($gd) { Dur $gd.metin }\n", yeni: "", bolum: "§13", parca: "geçişle kurulmuş düzeni tanımadan" },
     { ad: "S65 F4-B ön ölçüm geçişli düzeni tanımıyor", dosya: "onOlcum", eski: "      $gd = GecisliDuzen $kok\n", yeni: "      $gd = $null\n", bolum: "§13", parca: "geçişli düzeni tanımıyor" },
     { ad: "S66 F4-B sihirbaz geçişli engelini göstermiyor", dosya: "iss", eski: "  if Gecisli then\n    Result := Result + '- Bu klasör pm2", yeni: "  if False then\n    Result := Result + '- Bu klasör pm2", bolum: "§13", parca: "engel olarak göstermiyor" },
-    { ad: "S67 sihirbaz varsayılanı eski adrese döndü", dosya: "iss", eski: "  VARSAYILAN_GUNCELLEME = 'https://indir.etkiliyazilim.com';", yeni: `  VARSAYILAN_GUNCELLEME = '${ESKI_GUNCELLEME}';`, bolum: "§14", parca: "VARSAYILAN_GUNCELLEME" },
-    { ad: "S68 cevap şeması varsayılanı eski adrese döndü", dosya: "sema", eski: '"varsayilan": "https://indir.etkiliyazilim.com"', yeni: `"varsayilan": "${ESKI_GUNCELLEME}"`, bolum: "§14", parca: "cevap şemasının" },
-    { ad: "S69 örnek cevap eski adrese döndü", dosya: "ornek", eski: '"sunucu": "https://indir.etkiliyazilim.com"', yeni: `"sunucu": "${ESKI_GUNCELLEME}"`, bolum: "§14", parca: "örnek cevabın" },
-    { ad: "S70 güncelleyici betiği varsayılanı eski adrese döndü", dosya: "guncelleyici", eski: '[string]$GuncellemeSunucusu = "https://indir.etkiliyazilim.com"', yeni: `[string]$GuncellemeSunucusu = "${ESKI_GUNCELLEME}"`, bolum: "§14", parca: "guncelleyici-hizmeti.ps1" },
-    { ad: "S71 dağıtım kaydı başka köke taşındı, yüzeyler eskide kaldı", dosya: "dagitim", eski: '"indirmeKoku": "https://indir.etkiliyazilim.com/"', yeni: '"indirmeKoku": "https://dagit.etkiliyazilim.com/"', bolum: "§14", parca: "VARSAYILAN_GUNCELLEME" },
-    { ad: "S72 sihirbaz onarımda kayıttaki eski adresi koruyor", dosya: "iss", eski: "    if Lowercase(Olc('oncekiGuncellemeSunucusu')) = ESKI_GUNCELLEME then GelismisSayfasi.Values[0] := VARSAYILAN_GUNCELLEME\n    else if", yeni: "    if", bolum: "§14", parca: "eski güncelleme adresini koruyor" },
+    { ad: "S67 saat: PartOfDomain ölçülmeden karar", dosya: "kurulum", eski: "$k = SaatEsitlemeKarari ([bool]$cs.PartOfDomain) ", yeni: "$k = SaatEsitlemeKarari $false ", bolum: "§14", parca: "PartOfDomain" },
+    { ad: "S68 saat: DOKUNMA kararında hizmete yazılıyor", dosya: "kurulum", eski: "    else { Ok \"saat: Windows Time zaten NTP ile esitliyor ($($k.sunucu)) - DOKUNULMADI\" }\n    return\n", yeni: "    else { Ok \"saat: Windows Time zaten NTP ile esitliyor ($($k.sunucu)) - DOKUNULMADI\" }\n", bolum: "§14", parca: "yazmadan dönmüyor" },
+    { ad: "S69 saat: w32tm NTP_AC kapısı dışında", dosya: "kurulum", eski: "if ($k.eylem -ceq \"NTP_AC\") {", yeni: "if ($true) {", bolum: "§14", parca: "yalnız NTP_AC" },
+    { ad: "S70 saat: sonuç yeniden ölçülmüyor", dosya: "kurulum", eski: "$olc = SaatEsitlemeKarari $false $son.tip", yeni: "$olc = $k; $null = $son.tip", bolum: "§14", parca: "yeniden ÖLÇÜLMÜYOR" },
+    { ad: "S71 saat: Hizmetler çağırmıyor", dosya: "kurulum", eski: "  SaatEsitlemesi $d\n", yeni: "", bolum: "§14", parca: "çağırmıyor" },
+    { ad: "S72 saat: kurulum /resync ile saati zorluyor", dosya: "kurulum", eski: "\"/syncfromflags:manual\", \"/update\")", yeni: "\"/syncfromflags:manual\", \"/update\"); NativeKos \"w32tm.exe\" @(\"/resync\")", bolum: "§14", parca: "saati elle ayarlıyor" },
+    { ad: "S73 saat: kaldırma eşitlemeyi kapatıyor", dosya: "kaldir", eski: "  # 4) Korunanlar - adlariyla.\n", yeni: "  Set-Service -Name W32Time -StartupType Manual\n  # 4) Korunanlar - adlariyla.\n", bolum: "§14", parca: "kaldırma saat eşitlemesine dokunuyor" },
+    { ad: "S74 saat: onarım önceki ayar kaydını eziyor", dosya: "kurulum", eski: "if (-not $d.PSObject.Properties[\"saat\"]) {", yeni: "if ($true) {", bolum: "§14", parca: "eziyor" },
+    { ad: "S75 saat: sihirbaz özeti söylemiyor", dosya: "iss", eski: "  S := S + 'Saat eşitlemesi:", yeni: "  S := S + 'Saat:", bolum: "§14", parca: "özeti saat" },
+    { ad: "S85 sihirbaz varsayılanı eski adrese döndü", dosya: "iss", eski: "  VARSAYILAN_GUNCELLEME = 'https://indir.etkiliyazilim.com';", yeni: `  VARSAYILAN_GUNCELLEME = '${ESKI_GUNCELLEME}';`, bolum: "§16", parca: "VARSAYILAN_GUNCELLEME" },
+    { ad: "S86 cevap şeması varsayılanı eski adrese döndü", dosya: "sema", eski: '"varsayilan": "https://indir.etkiliyazilim.com"', yeni: `"varsayilan": "${ESKI_GUNCELLEME}"`, bolum: "§16", parca: "cevap şemasının" },
+    { ad: "S87 örnek cevap eski adrese döndü", dosya: "ornek", eski: '"sunucu": "https://indir.etkiliyazilim.com"', yeni: `"sunucu": "${ESKI_GUNCELLEME}"`, bolum: "§16", parca: "örnek cevabın" },
+    { ad: "S88 güncelleyici betiği varsayılanı eski adrese döndü", dosya: "guncelleyici", eski: '[string]$GuncellemeSunucusu = "https://indir.etkiliyazilim.com"', yeni: `[string]$GuncellemeSunucusu = "${ESKI_GUNCELLEME}"`, bolum: "§16", parca: "guncelleyici-hizmeti.ps1" },
+    { ad: "S89 dağıtım kaydı başka köke taşındı, yüzeyler eskide kaldı", dosya: "dagitim", eski: '"indirmeKoku": "https://indir.etkiliyazilim.com/"', yeni: '"indirmeKoku": "https://dagit.etkiliyazilim.com/"', bolum: "§16", parca: "VARSAYILAN_GUNCELLEME" },
+    { ad: "S90 sihirbaz onarımda kayıttaki eski adresi koruyor", dosya: "iss", eski: "    if Lowercase(Olc('oncekiGuncellemeSunucusu')) = ESKI_GUNCELLEME then GelismisSayfasi.Values[0] := VARSAYILAN_GUNCELLEME\n    else if", yeni: "    if", bolum: "§16", parca: "eski güncelleme adresini koruyor" },
     { ad: "S21 CI boru sonucunu ölçmüyor", dosya: "is", eski: `if ($r -notmatch "(?m)^BORU=TAMAM\\r?$")`, yeni: `if ($false)`, bolum: "§9", parca: "boru öz-sınaması" },
     { ad: "S22 CI test çapalı doğrulayıcıyı kabul ediyor", dosya: "is", eski: `$k.testCapasi -ne $false`, yeni: `$false`, bolum: "§9", parca: "doğrulayıcı üretim derlemesi" },
   ];
@@ -768,14 +847,18 @@ if (eksik.length === 0) {
       { ad: "H14 eski/kanal-dışı paket fail-closed değil ama UYARI düştü", eski: "$u += \"paket lisans saticisinin", yeni: "$null = \"paket lisans saticisinin", kontrol: "lisans.eski-paket-uyarir-durmaz" },
       { ad: "H15 üretim kanalında varsayılana eşit satır yazılıyor (gecis.ps1 kuralı)", eski: "-and ($etkili -cne $vars)", yeni: "", kontrol: "lisans.uretim-kanali-satir-yazmaz" },
       { ad: "H16 F1 kayıt okuyucu eski kurulumun cevabını okumuyor (Tailscale düşer)", eski: ', @("kurulum\\cevap.json", "api"))', yeni: ")", kontrol: "ag.kayit-eski-cevaptan" },
-      { ad: "H23 O12 kayıt okuyucu eski Tailscale iznini tanımıyor (onarım erişimi daraltır)", eski: '      $t = AgKayitTanimi $sema.alanlar."api.$a"', yeni: '      $t = $sema.alanlar."api.$a"', kontrol: "ag.kayit-eski-cevaptan" },
-      { ad: "H24 O12 kayıttaki eski Tailscale izni uyarısız korunuyor", eski: "      if ($eski.Count) { $u +=", yeni: "      if ($false) { $u +=", kontrol: "ag.onarim-eski-tailscale-uyarir" },
+      { ad: "H27 O12 kayıt okuyucu eski Tailscale iznini tanımıyor (onarım erişimi daraltır)", eski: '      $t = AgKayitTanimi $sema.alanlar."api.$a"', yeni: '      $t = $sema.alanlar."api.$a"', kontrol: "ag.kayit-eski-cevaptan" },
+      { ad: "H28 O12 kayıttaki eski Tailscale izni uyarısız korunuyor", eski: "      if ($eski.Count) { $u +=", yeni: "      if ($false) { $u +=", kontrol: "ag.onarim-eski-tailscale-uyarir" },
       { ad: "H17 F1 onarımda cevap/varsayılan kayda yeğleniyor (erişim daralır)", eski: "    if ($kayit -and $null -ne $kayit[$a]) {", yeni: "    if ($false) {", kontrol: "ag.onarim-sessiz-kayit-korunur" },
       { ad: "H18 F2 başka köke bağlı hizmet geçiyor", eski: "    if (-not (YolKokAltinda $y $kok)) {", yeni: "    if ($false) {", kontrol: "hizmetkok.baska-kok-durur" },
       { ad: "H19 F2 ImagePath okunamazken geçiyor (fail-open)", eski: `  if (-not $p.Count -or "$($p[0])" -cnotmatch '^[A-Za-z]:\\\\') {`, yeni: "  if ($false) {", kontrol: "hizmetkok.okunamaz-durur" },
       { ad: "H20 F2 önek tuzağı (C:\\TeksERP ⊂ C:\\TeksERP-testfabrika)", eski: '$y.StartsWith($k + "\\", [StringComparison]::Ordinal)', yeni: "$y.StartsWith($k, [StringComparison]::Ordinal)", kontrol: "hizmetkok.baska-kok-durur" },
       { ad: "H21 F3 tek giriş eski paketi sınıflamıyor", eski: '  if ($e) { $s = $(if ((SurumKarsilastir $ku.surum $paketSurum) -eq 1)', yeni: '  if ($false) { $s = $(if ((SurumKarsilastir $ku.surum $paketSurum) -eq 1)', kontrol: "eskipaket.olcum-tek-giris" },
       { ad: "H22 F4-B tek işaret (yalnız geçiş günlüğü) GECISLI sayılıyor", eski: '  if (-not (ReparseMi (Join-Path $kok "current"))) { return $null }', yeni: "", kontrol: "gecisli.tek-isaret-yetmez-yabanci-eski-mesaj" },
+      { ad: "H23 saat: etki alanındaki makineye dokunuluyor", eski: "  if ($etkiAlaninda) { return", yeni: "  if ($false) { return", kontrol: "saat.etki-alani-dokunmaz" },
+      { ad: "H24 saat: kayıtlı NTP sunucusu ezilip varsayılana dönülüyor", eski: "$sunucu = $(if ($onceki.ntpSunucu) { $onceki.ntpSunucu } else", yeni: "$sunucu = $(if ($false) { $onceki.ntpSunucu } else", kontrol: "saat.kapali-ntp-acar" },
+      { ad: "H25 saat: zaten NTP olan makine yeniden yapılandırılıyor", eski: "  if ($esitler -and $otomatik) { return", yeni: "  if ($false) { return", kontrol: "saat.zaten-ntp-dokunmaz" },
+      { ad: "H26 saat: yalnız hizmeti elle başlayan NTP makinesi açılmıyor", eski: "  if ($esitler) { return [ordered]@{ eylem = \"HIZMET_OTOMATIK\"", yeni: "  if ($esitler) { return [ordered]@{ eylem = \"DOKUNMA\"", kontrol: "saat.ntp-hizmet-otomatik" },
       { ad: "H11 eski paket engeli düştü (yeni kurulu sürüme eski paket)", eski: "  if ($c -gt 0) { return \"bu kokte kurulu surum", yeni: "  if ($c -gt 1) { return \"bu kokte kurulu surum", kontrol: "kurulu.eski-paket-DUR" },
     ];
     // Ham dosya (CRLF çıkışında da): desenler TEK satırlık olmalı — "\n" içeren desen CRLF ağaçta bayat görünür.
@@ -797,6 +880,25 @@ if (eksik.length === 0) {
         }
         check(`✓K ${h.ad} → harness '${h.kontrol}' HATA`, d === "HATA" && r.kod === 1, `durum ${d} · çıkış ${r.kod}`);
       }
+      // Sunucu simgesi: tepsi.ps1'in bozulmuş kopyası -Tepsi ile harness'e verilir.
+      const tasil = readFileSync(join(KOK, YOL.tepsi), "utf8");
+      const TSONDALAR: HSonda[] = [
+        { ad: "T1 tanınmayan yanıt kırmızı sayılmıyor", eski: "if (-not $gecerli) {", yeni: "if ($false) {", kontrol: "tepsi.taninmayan-yanit-kirmizi" },
+        { ad: "T2 kısa kesintide önceki karar korunmuyor", eski: "if ($ardisikHata -lt 3 -and $null -ne $onceki)", yeni: "if ($ardisikHata -lt 0 -and $null -ne $onceki)", kontrol: "tepsi.kisa-kesinti-onceki-korunur" },
+        { ad: "T3 yeniden başlama sarısı hiç kırmızıya dönmüyor", eski: "$onceki.surucu -eq $true -and $ardisikHata -lt 120", yeni: "$onceki.surucu -eq $true -and $ardisikHata -lt 99999999", kontrol: "tepsi.guncelleme-yeniden-basliyor-sari" },
+        { ad: "T4 ipucu 63 sınırını aşıyor", eski: "if ($m.Length -gt 63)", yeni: "if ($m.Length -gt 6300)", kontrol: "tepsi.ipucu-63-sinir" },
+        { ad: "T5 yüzde 100'ü aşıyor", eski: "[math]::Min(100,", yeni: "[math]::Min(1000,", kontrol: "tepsi.yuzde" },
+      ];
+      for (const h of TSONDALAR) {
+        if (!tasil.includes(h.eski)) {
+          check(`✓K ${h.ad}`, false, "MUTASYON UYGULANMADI (desen kaynakta yok — sonda bayat)");
+          continue;
+        }
+        const dosya = join(dizin, "tepsi.ps1");
+        writeFileSync(dosya, tasil.replace(h.eski, () => h.yeni));
+        const r = harness(undefined, dosya);
+        check(`✓K ${h.ad} → harness '${h.kontrol}' HATA`, durum(r.satirlar, h.kontrol) === "HATA" && r.kod === 1, `durum ${durum(r.satirlar, h.kontrol)} · çıkış ${r.kod}`);
+      }
       // Pozitif kontrol: bozulmamış KOPYA aynı harness'te yeşil (sonda düzeneğinin kendisi geçerli).
       const dosya = join(dizin, "kurulum-ortak.ps1");
       copyFileSync(join(KOK, YOL.ortak), dosya);
@@ -805,7 +907,7 @@ if (eksik.length === 0) {
     } finally {
       rmSync(dizin, { recursive: true, force: true });
     }
-  } else defter.atla("✓K harness sondaları", "pwsh 7 yok", 25);
+  } else defter.atla("✓K harness sondaları", "pwsh 7 yok", 23 + 2 + 4 + 5);
 }
 
 console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız${defter.ozetEki()} ===`);

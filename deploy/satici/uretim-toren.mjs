@@ -28,8 +28,8 @@
 //       Salt okuma: izinler (dizin 700 · dosya 600) + dosya özetleri künyeyle aynı mı.
 //   node deploy/satici/uretim-toren.mjs donem [--dizin=…] [--etiket=<ad>] [--kuyruk=<kuyruk.json>] [--iptal=<kid>[,…]]
 //                                            [--neden=<metin>] [--ara-siniflar=URETIM,DR,DEMO,TEST] [--yil=<YYYY>] [--kok=<kid>]
-//       ÜÇ AYLIK DÖNEM TÖRENİ (G4 §2.4, K4): kök parolası BİR kez + YENİ ara imzacı parolası (iki kez, kökten FARKLI) →
-//       yeni ALT · HAK ara imzacısı · İNDİRME (her biri 120 gün = 90 + 30 örtüşme) · iptal belgesi (ilk törende sıra 1;
+//       YILLIK DÖNEM TÖRENİ (G4 §2.4, K4): kök parolası BİR kez + YENİ ara imzacı parolası (iki kez, kökten FARKLI) →
+//       yeni ALT · HAK ara imzacısı · İNDİRME (her biri 395 gün = 365 + 30 örtüşme) · iptal belgesi (ilk törende sıra 1;
 //       `--iptal` verilirse sıra + 1, önceki satırlar taşınır; yoksa önceki belge AYNEN) · kuyruktaki kök imzası bekleyen
 //       HAK'lar (`--kuyruk`, VDS'ten `anahtar.js kuyruk-disa-aktar`) → `<dizin>/donemler/<damga>/vds-paketi/` (KÖK YOK;
 //       DONEM-KUNYE.json + SHA256SUMS). Yarım dizinde kurulur, sonda TEK rename; ortada düşerse hiçbir şey kalmaz.
@@ -731,7 +731,7 @@ Bu dosyada SIR YOKTUR. Parolalar hiçbir dosyaya yazılmaz.
 ## Rotasyon (hiçbir araç var olan dosyanın üstüne yazmaz — rotasyon yeni kid'dir)
 
 - ALT (sertifika ${k.alt.bitis.slice(0, 10)}): \`cd satici/sunucu && npx tsx scripts/anahtar.ts alt-uret --kid=alt-<yıl>-<n> --kok=${k.kok.kid} --dizin=${hedef}/anahtarlar\` → VDS anahtar birimine kopya; satıcı dakikada bir yeniden okur. Sonra kurtarma arşivi yenilenir (runbook).
-- İNDİRME (sertifika ${k.indirme.bitis.slice(0, 10)}): üç aylık dönem töreni (\`uretim-toren.mjs donem\`) yenisini üretir; künyedeki \`CF_WORKER_INDIRME\` satırı CF Worker İNDİRME listesine VDS'ten ÖNCE eklenir (runbook §8).
+- İNDİRME (sertifika ${k.indirme.bitis.slice(0, 10)}): yıllık dönem töreni (\`uretim-toren.mjs donem\`) yenisini üretir; künyedeki \`CF_WORKER_INDIRME\` satırı CF Worker İNDİRME listesine VDS'ten ÖNCE eklenir (runbook §8).
 - PAKET (yıllık): \`${paketElle("paket-<yıl>", `${hedef}/paket`)}\` (repo kökünden; parolayı araç sorar) + güven çapası sürümü.
 `;
 }
@@ -805,7 +805,9 @@ function dogrula(hedef) {
 }
 
 // ---------------------------------------------------------------- dönem töreni (G4 §2.4)
-const DONEM_GUN = 120;
+// Yılda bir tören: 365 gün + 30 gün örtüşme (sonraki tören = bitiş − 30 gün; satıcı uyarısı da o gün başlar).
+const DONEM_ORTUSME_GUN = 30;
+const DONEM_GUN = 365 + DONEM_ORTUSME_GUN;
 const DONEM_KUNYE = "DONEM-KUNYE.json";
 const DONEM_SINIFLAR = ["URETIM", "TEST", "DR", "DEMO", "BAYI", "BARINDIRILAN"];
 
@@ -917,7 +919,7 @@ async function donem(bayraklar) {
   console.log("TeksERP satıcısı — dönem töreni (G4)");
   console.log(`  kaynak : ${kay.commit} (temiz · ${kay.dayanak} · npm ls ${kay.npmLs})`);
   console.log(`  dizin  : ${hedef} · kök ${kokKid}`);
-  console.log(`  yeni   : ${kid.alt} · ${kid.ara} · ${kid.ind} (${DONEM_GUN} gün = 90 + 30 örtüşme)`);
+  console.log(`  yeni   : ${kid.alt} · ${kid.ara} · ${kid.ind} (${DONEM_GUN} gün = 365 + ${DONEM_ORTUSME_GUN} örtüşme)`);
   console.log(`  iptal  : ${yeniIptal ? `YENİ belge, sıra ${(onceki?.sira ?? 0) + 1}${iptalKidleri.length ? ` — iptal: ${iptalKidleri.join(", ")}` : ""}` : `önceki belge aynen (sıra ${onceki.sira})`}`);
   console.log(`  kuyruk : ${kuyruk ? `${kuyruk.adet} HAK kökle imzalanacak (${kuyruk.yol})` : "verilmedi"}`);
   console.log(`  Worker : indirmeListesi.${worker.liste} · kanallar ${worker.kanallar.join(", ")}`);
@@ -1055,6 +1057,8 @@ function donemOzetiBas(son, k) {
   console.log(`  KUYRUK   ${k.kuyruk.imzalanan} HAK kökle imzalandı`);
   console.log(`  EMEKLİYE ${k.emekliye.join(", ") || "(yok)"}`);
   console.log(`  paket    ${P} (KÖK YOK · ${Object.keys(k.ozetler).length} dosya · SHA256SUMS)`);
+  const enErkenBitis = Math.min(...[k.yeni.alt, k.yeni.ara, k.yeni.indirme].map((x) => Date.parse(x.bitis)));
+  console.log(`  SONRAKİ  dönem töreni ${kisa(new Date(enErkenBitis - DONEM_ORTUSME_GUN * 86_400_000).toISOString())} (en erken bitişten ${DONEM_ORTUSME_GUN} gün önce)`);
   console.log("\nSonraki adımlar (docs/ops/URETIM-SATICI-TOREN.md §8):");
   console.log("  1. Ara imzacı parolası → parola yöneticisi (kâğıda DEĞİL). Kök parolası kâğıtta kalır.");
   console.log(`  2. CF Worker — anahtar birimine kurmadan ÖNCE (satıcı yeni İNDİRME'yi yüklendiği dakika basar): TKL_INDIRME_AYAR.indirmeListesi.${k.capaSatirlari.CF_WORKER_LISTESI}'e EKLE → Deploy (eski satır kalır, penceresi kendiliğinden kapanır)`);
@@ -1063,6 +1067,8 @@ function donemOzetiBas(son, k) {
   console.log("  4. Anahtar birimine kur (anahtarlar/* → 0600, 10001) · içe aktar: … anahtar.js donem-ice-aktar < ice-aktar.json");
   console.log("  5. 1 dk sonra portal Anahtarlar: yeni ALT/ARA/İNDİRME yüklü; İptal belgeleri: dağıtılan sıra = paketinki");
   console.log(`  6. Eski özel yarılar: … anahtar.js emekliye-ayir --kid=${k.emekliye.join(",") || "<yok>"} (önce kuru, sonra --uygula) · VDS'teki paket kopyası silinir (shred).`);
+  // PAKET anahtarı yenilemesi yıllık törene katılacak (iş listesi 3.9); o inene dek ayrı adım.
+  console.log("  7. PAKET anahtarı: iş listesi 3.9 (kök altında sertifikalı paket anahtarı) inince bu törenin adımı olur; o güne dek runbook §6 PAKET satırı.");
 }
 
 async function main() {

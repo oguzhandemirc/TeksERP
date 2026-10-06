@@ -16,7 +16,11 @@ import { SecretBox } from "../../src/auth/secret-box";
 import { hotp, totpStep } from "../../src/auth/totp";
 import { loadConfig } from "../../src/config";
 import { createApp } from "../../src/http/app";
-import { closeDatabase, createDatabase, type Database } from "../../src/lib/db";
+import { FacilityDbKey, FACILITY_DB_KEY_FILE } from "../../src/auth/facility-db-key";
+import { TesisDbRouter } from "../../src/lib/tesis-db";
+import { databaseOf, facilityDbName, facilityRoles, withDatabase } from "../../src/lib/tesis-db-ad";
+import { prepareFacilityDb } from "../../src/lib/tesis-db-hazirlik";
+import { expectedSchemaVersion } from "../../src/lib/tesis-goc";
 import { loadEnvFile } from "../../src/lib/env";
 import { withTesis } from "../../src/lib/tenant";
 import { REQUEST_HEADER, publicKeyX, signRequest } from "../../src/lisans-protokol";
@@ -27,6 +31,7 @@ import { createNotificationRuntime } from "../../src/services/notification-sched
 import { inviteFacilityAdmin, openFacility, registerInstallation } from "../../src/services/vendor-admin.service";
 import { acceptInvite, confirmInvite } from "../../src/auth/invite.service";
 import { applyRoles } from "../db-rolleri";
+import { dropTestFacilityDb } from "./tesis-db-temizlik";
 
 export const PATRON_KOKU = path.resolve(__dirname, "..", "..");
 
@@ -80,13 +85,27 @@ export class KayitliZil implements Doorbell {
 
 export interface Ortam {
   readonly ctx: CloudContext;
-  readonly goc: Database;
-  readonly app: Database;
-  readonly sync: Database;
+  /** Göç rolü (tablo sahibi) yönlendiricisi — satıcı CLI'sinin yaptığını yapar. */
+  readonly goc: TesisDbRouter;
+  readonly app: TesisDbRouter;
+  readonly sync: TesisDbRouter;
+  /** Bu ortamın tesis DB anahtarı (rol parolaları; hazırlayıcı ve sunucu aynısını kullanır). */
+  readonly anahtar: FacilityDbKey;
   readonly saat: Saat;
   readonly zil: KayitliZil;
   readonly adres: string;
   kapat(): Promise<void>;
+}
+
+let ortakAnahtar: FacilityDbKey | null = null;
+
+/** Süreç başına TEK tesis DB anahtarı: aynı bekçideki iki ortam (ör. iki bildirim kipi) aynı tesis DB'sine bağlanır. */
+function surecAnahtari(): FacilityDbKey {
+  if (ortakAnahtar) return ortakAnahtar;
+  const dizin = mkdtempSync(path.join(os.tmpdir(), "patron-bekci-anahtar-"));
+  process.on("exit", () => rmSync(dizin, { recursive: true, force: true }));
+  ortakAnahtar = FacilityDbKey.load(path.join(dizin, FACILITY_DB_KEY_FILE), { create: true });
+  return ortakAnahtar;
 }
 
 export async function ortamKur(ekOrtam: Record<string, string> = {}, fetchImpl?: typeof fetch, doorbell?: Doorbell): Promise<Ortam> {
@@ -94,17 +113,19 @@ export async function ortamKur(ekOrtam: Record<string, string> = {}, fetchImpl?:
   await applyRoles(process.env);
   const dizin = mkdtempSync(path.join(os.tmpdir(), "patron-bekci-"));
   const config = loadConfig({ ...process.env, ANAHTAR_DIZINI: dizin, ...ekOrtam }, PATRON_KOKU);
-  const goc = createDatabase(process.env.GOC_DATABASE_URL!, "goc", 4);
-  const app = createDatabase(config.DATABASE_URL, "uygulama", 6);
-  const sync = createDatabase(config.ESITLEME_DATABASE_URL, "esitleme", 6);
   const saat = new Saat();
   const zil = new KayitliZil();
+  const anahtar = surecAnahtari();
+  const schemaVersion = expectedSchemaVersion();
+  const goc = new TesisDbRouter({ role: "goc", centralUrl: process.env.GOC_DATABASE_URL!, key: anahtar, schemaVersion, cacheSeconds: 0 });
+  const app = new TesisDbRouter({ role: "uygulama", centralUrl: config.DATABASE_URL, key: anahtar, schemaVersion });
+  const sync = new TesisDbRouter({ role: "esitleme", centralUrl: config.ESITLEME_DATABASE_URL, key: anahtar, schemaVersion });
   const ctx: CloudContext = {
     config,
-    app: app.prisma,
-    sync: sync.prisma,
+    app,
+    sync,
     secrets: SecretBox.load(dizin, { create: true }),
-    directory: new InstallationDirectory(sync.prisma, config, fetchImpl),
+    directory: new InstallationDirectory(sync, config, fetchImpl),
     doorbell: doorbell ?? zil,
     now: saat.simdi,
     notifications: createNotificationRuntime(config),
@@ -117,14 +138,15 @@ export async function ortamKur(ekOrtam: Record<string, string> = {}, fetchImpl?:
     goc,
     app,
     sync,
+    anahtar,
     saat,
     zil,
     adres,
     kapat: async () => {
       await new Promise<void>((r) => server.close(() => r()));
-      await closeDatabase(app);
-      await closeDatabase(sync);
-      await closeDatabase(goc);
+      await app.close();
+      await sync.close();
+      await goc.close();
       rmSync(dizin, { recursive: true, force: true });
     },
   };
@@ -145,7 +167,8 @@ export async function tesisKur(
   const kurulumId = randomUUID();
   const { privateKey } = generateKeyPairSync("ed25519");
   const acikAnahtar = publicKeyX(privateKey);
-  await openFacility(o.goc.prisma, { tesisId, name: g.ad ?? `Bekçi Tesisi ${tesisId.slice(0, 8)}`, ...(g.saklamaAy === undefined ? {} : { retentionMonths: g.saklamaAy }) });
+  await tesisDbHazirla(o, tesisId);
+  await openFacility(o.goc, { tesisId, name: g.ad ?? `Bekçi Tesisi ${tesisId.slice(0, 8)}`, ...(g.saklamaAy === undefined ? {} : { retentionMonths: g.saklamaAy }) });
   await ekKurulum(o, tesisId, { kurulumId, privateKey, sinif: g.sinif, patronBulut: g.patronBulut, bitis: g.bitis });
   return { tesisId, kurulumId, privateKey, acikAnahtar };
 }
@@ -159,7 +182,7 @@ export async function ekKurulum(
   const privateKey = g.privateKey ?? generateKeyPairSync("ed25519").privateKey;
   const acikAnahtar = publicKeyX(privateKey);
   await registerInstallation(
-    o.goc.prisma,
+    o.goc,
     {
       tesisId,
       installationId: kurulumId,
@@ -192,11 +215,11 @@ export async function hesapKur(o: Ortam, tesisId: string, izinler: readonly stri
   const eposta = `bekci-${randomUUID().slice(0, 12)}@ornek.test`;
   // Fikstür hesabı satıcı yolundan doğar; tesiste aktif yönetici olabileceği için açık zorlamayla (denetime yazılır).
   const zorla = { talep: "BEKCI-FIKSTUR", gerekce: "bekçi fikstürü: test hesabı" };
-  const davet = await inviteFacilityAdmin(o.goc.prisma, { tesisId, email: eposta, name: "Bekçi Hesabı", validHours: 24, zorla }, o.saat.simdi());
+  const davet = await inviteFacilityAdmin(o.goc, { tesisId, email: eposta, name: "Bekçi Hesabı", validHours: 24, zorla }, o.saat.simdi());
   const kabul = await acceptInvite(o.ctx, { token: davet.token, password: TEST_PAROLASI });
   o.saat.ilerlet(31_000);
   await confirmInvite(o.ctx, { token: davet.token, totp: totpKodu(kabul.totpSirri, o.saat.simdi()) });
-  await withTesis(o.goc.prisma, { tesisId }, (tx) => tx.account.update({ where: { id: davet.accountId }, data: { permissions: [...izinler] } }));
+  await withTesis(o.goc, { tesisId }, (tx) => tx.account.update({ where: { id: davet.accountId }, data: { permissions: [...izinler] } }));
   const hesap: TestHesabi = { accountId: davet.accountId, eposta, sir: kabul.totpSirri, belirtec: "" };
   hesap.belirtec = await girisYap(o, hesap);
   return hesap;
@@ -245,33 +268,26 @@ export async function imzali(
   return { status: res.status, json: text ? (JSON.parse(text) as Yanit["json"]) : { success: false }, headers: res.headers, baslik, ham };
 }
 
-/** Test tesisinin bütün satırları (çocuktan ebeveyne). Yalnız `_test` DB'de, yalnız bekçinin kendi tesisi. */
+/** Ham `pg` bekçileri için tesis DB URL'i (rolün türetilmiş parolasıyla; göç rolü kendi kimliğiyle). */
+export function tesisUrl(o: Pick<Ortam, "anahtar" | "ctx">, tesisId: string, rol: "uygulama" | "esitleme" | "goc"): string {
+  const merkezUrl = rol === "uygulama" ? o.ctx.config.DATABASE_URL : rol === "esitleme" ? o.ctx.config.ESITLEME_DATABASE_URL : process.env.GOC_DATABASE_URL!;
+  const database = facilityDbName(databaseOf(merkezUrl), tesisId);
+  if (rol === "goc") return withDatabase(merkezUrl, database);
+  const roles = facilityRoles(database);
+  const user = rol === "uygulama" ? roles.app : roles.sync;
+  return withDatabase(merkezUrl, database, { user, password: o.anahtar.rolePassword(user) });
+}
+
+/** Bekçi tesisinin DB'sini hazırlar (sunucunun satıcı CLI'sinden önce yaptığı `tesis-db hazirla`). */
+export async function tesisDbHazirla(o: Pick<Ortam, "anahtar">, tesisId: string): Promise<void> {
+  const r = await prepareFacilityDb({ gocUrl: process.env.GOC_DATABASE_URL!, key: o.anahtar, owner: "bekci" }, tesisId);
+  if (r.kind !== "hazir" && r.kind !== "zaten-hazir") throw new Error(`Bekçi tesis DB'si hazırlanamadı (${tesisId}): ${JSON.stringify(r)}`);
+}
+
+/** Test tesisinin DB'si, rolleri ve merkez satırları. Yalnız `_test` merkezinde, yalnız bekçinin kendi tesisi. */
 export async function temizleTesis(o: Ortam, tesisId: string): Promise<void> {
-  await withTesis(o.goc.prisma, { tesisId }, async (tx) => {
-    await tx.session.deleteMany({ where: { tesisId } });
-    await tx.pushDevice.deleteMany({ where: { tesisId } });
-    await tx.notification.deleteMany({ where: { tesisId } });
-    await tx.notificationPreference.deleteMany({ where: { tesisId } });
-    await tx.notificationDefaults.deleteMany({ where: { tesisId } });
-    await tx.accountAudit.deleteMany({ where: { tesisId } });
-    await tx.operationReceipt.deleteMany({ where: { tesisId } });
-    await tx.inboxMessage.deleteMany({ where: { tesisId } });
-    await tx.reportRequest.deleteMany({ where: { tesisId } });
-    await tx.$executeRaw`DELETE FROM report_results WHERE tesis_id = ${tesisId}::uuid`;
-    await tx.$executeRaw`DELETE FROM projection_rows WHERE tesis_id = ${tesisId}::uuid`;
-    await tx.syncWatermark.deleteMany({ where: { tesisId } });
-    await tx.packageReceipt.deleteMany({ where: { tesisId } });
-    await tx.syncState.deleteMany({ where: { tesisId } });
-    await tx.fullSyncRun.deleteMany({ where: { tesisId } });
-    await tx.requestNonce.deleteMany({ where: { tesisId } });
-    await tx.account.deleteMany({ where: { tesisId } });
-    await tx.installation.deleteMany({ where: { tesisId } });
-    await tx.facility.deleteMany({ where: { tesisId } });
-    // Değiştirilemez kayıtlar (imha kaydı · destek erişim kaydı): tetikleyiciyi YALNIZ bu tx'te susturarak (süper kullanıcı, _test DB).
-    await tx.$executeRaw`SET LOCAL session_replication_role = replica`;
-    await tx.$executeRaw`DELETE FROM facility_destructions WHERE tesis_id = ${tesisId}::uuid`;
-    await tx.$executeRaw`DELETE FROM support_access WHERE tesis_id = ${tesisId}::uuid`;
-  });
+  for (const r of [o.app, o.sync, o.goc]) await r.forget(tesisId);
+  await dropTestFacilityDb(process.env.GOC_DATABASE_URL!, tesisId);
 }
 
 /** Anahtar sırasından bağımsız JSON (jsonb saklı yanıt anahtarları yeniden sıralar; anlam aynı). */

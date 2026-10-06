@@ -14,6 +14,12 @@ import { authService, type LoginMethod } from '../../services/auth.service';
 import { useAlphaKeyboardPref } from './useAlphaKeyboardPref';
 import { sanitizeAlphaInput, sanitizeNumericInput } from './loginInput';
 import { isLoginLocked, isLoginMethodDisabled } from '../../services/api';
+import PasswordChangeModal from './PasswordChangeModal';
+import {
+  passwordChangeUsername,
+  usePasswordChangeStep,
+  type PasswordChangeRequest,
+} from './usePasswordChangeStep';
 import { authActions } from '../../services/authActions';
 import { pinServerIdentityAfterLogin } from '../../services/serverIdentity';
 import { useSessionConflict } from '../../hooks/useSessionConflict';
@@ -100,6 +106,27 @@ export default function LoginScreen({ lock }: { lock?: LoginLockContext } = {}) 
   const [pickerVisible, setPickerVisible] = useState(false);
   // Kilit modunda "sunucu ayarları" modalı (kilitken navigate edilemez → modal).
   const [serverSettingsOpen, setServerSettingsOpen] = useState(false);
+  const passwordStep = usePasswordChangeStep();
+  const openStep = passwordStep.open;
+  // Değişimden sonraki asıl giriş düşerse (ağ · oturum çakışması) hata giriş ekranında görünür.
+  const openPasswordStep = useCallback(
+    (req: PasswordChangeRequest) => {
+      setError('');
+      openStep({
+        ...req,
+        resume: async (newPassword) => {
+          try {
+            await req.resume(newPassword);
+          } catch (e) {
+            const msg = e instanceof Error ? e.message : 'Giriş yapılamadı.';
+            setError(msg);
+            Toast.show({ type: 'error', text1: 'Giriş başarısız', text2: msg, visibilityTime: 6000 });
+          }
+        },
+      });
+    },
+    [openStep],
+  );
 
   // Giriş yöntemleri (auth.loginMethods ayarı — public uç): ekran ÖNCELİKLİ
   // yöntemle açılır; diğer etkin yöntemler "Diğer giriş yöntemlerini dene"
@@ -223,6 +250,21 @@ export default function LoginScreen({ lock }: { lock?: LoginLockContext } = {}) 
       setError('');
       try {
         const res = await authActions.password(user.username, rawPin, requestConfirm);
+        if (res.data.mustChangePassword === true) {
+          // Kısıtlı token: uygulamaya girilmez, önce yeni parola; sonra yeni parolayla gerçek giriş.
+          setPin('');
+          openPasswordStep({
+            username: user.username,
+            currentPassword: rawPin,
+            token: res.data.token,
+            resume: async (newPassword) => {
+              const again = await authActions.password(user.username, newPassword, requestConfirm);
+              if (!lock) Toast.show({ type: 'success', text1: 'Parolanız değiştirildi', text2: user.fullName });
+              await handleAuthed(again, user.fullName);
+            },
+          });
+          return;
+        }
         void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
         if (!lock) Toast.show({ type: 'success', text1: 'Hoş geldin', text2: user.fullName });
         // fullName seçili MobileUser'dan gelir (banner ismi gösterir).
@@ -237,7 +279,7 @@ export default function LoginScreen({ lock }: { lock?: LoginLockContext } = {}) 
         setSubmitting(false);
       }
     },
-    [handleAuthed, lock, requestConfirm],
+    [handleAuthed, lock, requestConfirm, openPasswordStep],
   );
 
   // Yöntem 403'ü (panelden kapatılmış) → yerel seçimi bırak + ayarı ANINDA tazele;
@@ -273,6 +315,18 @@ export default function LoginScreen({ lock }: { lock?: LoginLockContext } = {}) 
         setError(msg);
         setPin('');
         handleMethodDisabled(e);
+        const pendingUser = passwordChangeUsername(e);
+        if (pendingUser) {
+          // Parola sıfırlanmış: geçici parolayla yenisini belirle, sonra aynı PIN'le gir.
+          openPasswordStep({
+            username: pendingUser,
+            resume: async () => {
+              const again = await authActions.quickPin(rawPin, requestConfirm);
+              await handleAuthed(again, again.data.user.fullName);
+            },
+          });
+          return;
+        }
         // Deneme kilidi (429 LOGIN_LOCKED) → interceptor ZATEN net toast gösterdi;
         // inline hata yeterli, genel "Giriş başarısız" toast'ını tekrarlama.
         if (!isLoginLocked(e))
@@ -281,7 +335,7 @@ export default function LoginScreen({ lock }: { lock?: LoginLockContext } = {}) 
         setSubmitting(false);
       }
     },
-    [handleAuthed, lock, handleMethodDisabled, requestConfirm],
+    [handleAuthed, lock, handleMethodDisabled, requestConfirm, openPasswordStep],
   );
 
   // QR personel kartıyla giriş — okutma başarılıysa PIN'siz doğrudan token alınır.
@@ -300,6 +354,17 @@ export default function LoginScreen({ lock }: { lock?: LoginLockContext } = {}) 
         const msg = e instanceof Error ? e.message : 'Kart okunamadı.';
         setError(msg);
         handleMethodDisabled(e);
+        const pendingUser = passwordChangeUsername(e);
+        if (pendingUser) {
+          openPasswordStep({
+            username: pendingUser,
+            resume: async () => {
+              const again = await authActions.card(cardCode.trim(), requestConfirm);
+              await handleAuthed(again, again.data.user.fullName);
+            },
+          });
+          return;
+        }
         // Deneme kilidi (429 LOGIN_LOCKED) → interceptor ZATEN net toast gösterdi;
         // inline hata yeterli, genel "Giriş başarısız" toast'ını tekrarlama.
         if (!isLoginLocked(e))
@@ -308,7 +373,7 @@ export default function LoginScreen({ lock }: { lock?: LoginLockContext } = {}) 
         setSubmitting(false);
       }
     },
-    [handleAuthed, lock, handleMethodDisabled, requestConfirm],
+    [handleAuthed, lock, handleMethodDisabled, requestConfirm, openPasswordStep],
   );
 
   // 6 hane dolunca yönteme göre gönder: 'pin' = salt hızlı-PIN (kullanıcı yok);
@@ -958,6 +1023,15 @@ export default function LoginScreen({ lock }: { lock?: LoginLockContext } = {}) 
 
       {/* 'notify' politikasında SESSION_EXISTS onayı — kick modda hiç görünmez. */}
       {conflictModal}
+
+      {/* Yönetici parolayı sıfırladı → kendi parolasını belirlemeden girilmez. */}
+      <PasswordChangeModal
+        pending={passwordStep.pending}
+        submitting={passwordStep.submitting}
+        error={passwordStep.error}
+        onSubmit={(input) => void passwordStep.submit(input)}
+        onCancel={passwordStep.cancel}
+      />
 
       {/* Sürüm + güncellik: giriş ekranı, "hangi sürümdeyim / güncel miyim"
           sorusunun sorulduğu yer. Sahada telefonla destek isteyen kişiye

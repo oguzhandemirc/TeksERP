@@ -1,6 +1,6 @@
 // KÖK İMZASI KUYRUĞU (lisans v2 · G4): yetenek bildirmeyen derlemenin HAK değişikliği kök imzası bekler; dönem töreninde
 // Mac'te imzalanır (`kuyruk-disa-aktar` → `kuyruk-imzala` → `donem-ice-aktar`). ACİL talep: yetenek düşüşünde fabrika kira
-// alamadı (genişlik kapısı) — üç aylık tören beklenmeden imzalanmalı; liste ACİL olanları ayrıca en üstte gösterir.
+// alamadı (genişlik kapısı) — yıllık tören beklenmeden imzalanmalı; liste ACİL olanları ayrıca en üstte gösterir.
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
@@ -32,7 +32,7 @@ function CeremonyGuide() {
         </li>
       </ol>
       <p className="muted small">
-        Ayrıntı ve komutlar: <code>{CEREMONY_RUNBOOK}</code>. ACİL talepte üç aylık töreni beklemeyin: fabrika elindeki kirayla ödenmiş tarihe dek çalışır ama yeni
+        Ayrıntı ve komutlar: <code>{CEREMONY_RUNBOOK}</code>. ACİL talepte yıllık töreni beklemeyin: fabrika elindeki kirayla ödenmiş tarihe dek çalışır ama yeni
         kira alamaz.
       </p>
     </Section>

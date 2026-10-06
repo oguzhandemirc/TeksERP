@@ -6,7 +6,8 @@
 //       uyarı (kira verilir), ikinci pencerede sürerse EŞLEŞMEYEN tarafa kira yok (403
 //       KIRA_VERILMEDI); sahip taraf hiç reddedilmez — asla anında durdurma.
 // Ek: kabul edilen küme yalnız güçlü etkenlerden (F2 · F3 · F4) ≥ 2 tutan değişimde kayar (K8 — §5c; f1 + f5 tutup
-// güçlüler tutmayan VM/disk kopyası kaymaz ve uyarı alır §5d; kayıp etken eski değerini korur §5e; çatal açıkken asla) · kabul edilen
+// güçlüler tutmayan VM/disk kopyası kaymaz ve uyarı alır §5d; kayıp etken eski değerini korur §5e; v2 alıcıda uyarı kiranın kuralıyla,
+// ret v1 eşiğiyle §5f–§5h; çatal açıkken asla) · kabul edilen
 // kümeyle ESLESMEDI (kopyalanan LICENSE_DIR) → uyarı, ikinci pencerede red; satıcı uyarıyı kapatıp
 // kümeyi kabul edince (meşru donanım değişimi) kira döner · ardışık "yakala" → ayırt edilemeyen
 // kopya uyarısı (yalnız uyarı) · D2s: sunulan kira bu kurulumun kira defterinde yoksa YABANCI_KIRA, raporlanan
@@ -16,7 +17,7 @@
 // yaptırımda yeni kira ama AYNI tarih; uç ilerlemez) · §10 taşınmış anahtar ve iptal kurulum kapanışı (olay geç fark
 // edilse de tam ek süre — aniden durmaz) ·
 // §11 YABANCI_HAK (kimlik/sürüm defterde yok ya da bayt özeti tutmuyor; doğru özet susar) · §12 YEREL_MUDAHALE
-// (sıra geriledi/sıfırlandı · lisans izi kayıp · belirsizlik · saat sapması; yeni neden başına bildirim; çatal tarafı
+// (sıra geriledi/sıfırlandı · lisans izi kayıp · iptal belgesi kayıp §12g2–g4 · belirsizlik · saat sapması; yeni neden başına bildirim; çatal tarafı
 // sırayı yazamaz) + yetenek kaydı · §13 uzatma dosyası ucu (dosya yüklenmeden ebeveynle gelen → tekrar/olağan, yakala değil).
 // Sunucu kısa kopya penceresiyle kalkar (KOPYA_PENCERE_SN=2) — ikinci pencere beklenerek ölçülür.
 // ⭐ KALICI SONDA ✓K4 (her koşumda): sahip taraf ikinci pencerede de 200 alır (kapı "çatalda herkesi
@@ -27,6 +28,8 @@
 //    doğurmaz · uzatma dosyası ucu olmayan zincirde ebeveynle gelen YAKALA kalır.
 // Koşum: npx tsx scripts/test_kira_zinciri.ts
 // =============================================================================
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { DAY_MS, ENDPOINTS, digestFingerprint, jwsDigest, parseJws, type Fingerprint } from "../src/lisans-protokol";
 import { HAM_PARMAK_IZI, kurulumAnahtariUret, type TestAnahtari } from "../../../Teks-Erp/scripts/lib/lisans-fikstur";
 import {
@@ -45,6 +48,7 @@ import {
   type CalisanSunucu,
   type Yanit,
 } from "./lib/test-ortam";
+import { REVOCATION_LOST_FINDING, TRACE_LOST_FINDING } from "../src/services/local-intervention";
 
 const PENCERE_SN = 2;
 const bekle = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -241,14 +245,25 @@ async function main(): Promise<void> {
     kontrol("§12f belirsizlik > 7 g ve saat sapması ≥ 1 sa → iki yeni neden (6 → 10)", m6y.status === 200 && (await nedenler()).includes("BELIRSIZLIK") && (await nedenler()).includes("SAAT_SAPMASI") && (await bildirimler()).length === 10);
     const kisa = await yoklaV2(km.kurulumId, an, kiraOf(m6y)!.kiraId, fpA, { ...P_YETENEK, belirsizlik: { birikenMs: 6 * DAY_MS, ilk: null }, saticiSapmaSn: 3599 });
     kontrol("§12g ✓K eşik altı belirsizlik (6 g) ve sapma (3599 sn) yeni neden doğurmaz", kisa.status === 200 && (await bildirimler()).length === 10);
-    const eski = await yokla(km.kurulumId, an, kiraOf(kisa)!.kiraId, fpA);
+    // L2-13 (b): iptal belgesinin iki kopyası da gereken sıranın altında (fabrika IPTAL_BELGESI_KAYIP) → yerel müdahale nedeni.
+    const ipt = await yoklaV2(km.kurulumId, an, kiraOf(kisa)!.kiraId, fpA, { ...P_YETENEK, nedenler: ["IPTAL_BELGESI_KAYIP"] });
+    const iptB = await bildirimler();
+    kontrol("§12g2 ⭐ IPTAL_BELGESI_KAYIP → yeni neden + iki kanal bildirimi (10 → 12, referans etiketi); kira yine verilir",
+      ipt.status === 200 && (await nedenler()).includes("IPTAL_BELGESI_KAYIP") && iptB.length === 12 && iptB.some((b) => String((b.govde as { referans?: string }).referans).startsWith("İptal belgesi kayıp")),
+      `${ipt.status} ${(await nedenler()).join()} · ${iptB.length}`);
+    const ipt2 = await yoklaV2(km.kurulumId, an, kiraOf(ipt)!.kiraId, fpA, { ...P_YETENEK, nedenler: ["IPTAL_BELGESI_KAYIP", "SAAT_KAYIK"] });
+    kontrol("§12g3 ✓K süren neden ve neden sayılmayan bulgu (SAAT_KAYIK) yeni bildirim doğurmaz (12)", ipt2.status === 200 && (await bildirimler()).length === 12);
+    const fabrikaKodlari = readFileSync(resolve(__dirname, "../../../Teks-Erp/src/lib/license/state-rules.ts"), "utf8").split("export const REASON_CODES")[1]?.split("] as const")[0] ?? "";
+    kontrol("§12g4 satıcının okuduğu bulgu kodları fabrikanın REASON_CODES listesinde (LISANS_IZI_KAYIP · IPTAL_BELGESI_KAYIP)",
+      [TRACE_LOST_FINDING, REVOCATION_LOST_FINDING].every((c) => fabrikaKodlari.includes(`"${c}"`)));
+    const eski = await yokla(km.kurulumId, an, kiraOf(ipt2)!.kiraId, fpA);
     kontrol("§12h yeteneği bildirmeyen (eski sürüme dönen) fabrika → yetenekler boşalır (kayıt satırı)", eski.status === 200 && (await durum()).yetenekler.length === 0 && (await prisma.kurulumKaydi.count({ where: { kurulumId: km.kurulumDbId, olay: "YETENEKLER" } })) === 2);
     await yoklaV2(km.kurulumId, an, kiraOf(eski)!.kiraId, fpA, { ...P_YETENEK, durumKaydi: { ...kayit, sira: 20 } });
     const once = (await durum()).sonDurumSirasi;
     const klon = await yoklaV2(km.kurulumId, an, m0, fpB, { ...P_YETENEK, durumKaydi: { ...kayit, sira: 1 } });
     kontrol(
       "§12i ✓K çatal tarafı (klon, sıra 1) satıcının sırasını (20) YAZAMAZ ve yerel müdahale nedeni doğurmaz",
-      klon.status === 200 && once === 20 && (await durum()).sonDurumSirasi === 20 && (await bildirimler()).length === 10,
+      klon.status === 200 && once === 20 && (await durum()).sonDurumSirasi === 20 && (await bildirimler()).length === 12,
       `${String(once)} → ${String((await durum()).sonDurumSirasi)}`,
     );
     // K7'de fabrika KİRASIZ kayıt bildirir (geçerli, sıra 0; fabrika kuralı) — "kayıt yok" (null) ile aynı neden: sıfırlandı.
@@ -379,6 +394,31 @@ async function main(): Promise<void> {
     kontrol("§5e kayıp etken (f4 okunamıyor) kümeden SİLİNMEZ (eski değer korunur), kayıp listesi portal notu olarak kurulumda, kira kuralı standart",
       o2y.status === 200 && (instO.kabulEdilenParmakIzi as Fingerprint).f4 === ucDegisti.f4 && instO.sonKayipEtkenler.join() === "f4" && kiraYuku(o2y.json).parmakIziKurali === "standart",
       `${o2y.status} ${o2y.kod ?? ""} kayip=${instO.sonKayipEtkenler.join()}`);
+
+    // L2-13 (a): eşik altı v2 uyuşmazlığı — iki GÜÇLÜ etken (F2 · F4, anakart) değişti, f1 · f3 · f5 tutuyor: v1 ESLESTI, standart
+    // kural ESLESMEDI. Uyarı kiranın kuralıyla (v2 alıcı), ret (K6) v1 eşiğiyle → ikinci pencerede de kira verilir.
+    const anakart = digestFingerprint({ ...HAM_PARMAK_IZI, f2: "12345678-ABCD-4EF0-8123-456789ABCDEF", f4: "YENIANAKART77" }, f.tuz);
+    const V2_FP = { yetenekler: ["parmak-izi-v2"] };
+    const anahtarAk = kurulumAnahtariUret();
+    const { k: kAk, t0: ak0 } = await etkinlestir(anahtarAk);
+    const ak1 = await yoklaV2(kAk.kurulumId, anahtarAk, ak0, anakart, V2_FP);
+    const akUyari = () => prisma.kopyaUyarisi.findMany({ where: { kurulumId: kAk.kurulumDbId, tur: "PARMAK_IZI_UYUSMAZ" } });
+    kontrol("§5f ⭐ v2 alıcı, eşik altı uyuşmazlık (F2 + F4) → 200 + PARMAK_IZI_UYUSMAZ (kiranın kuralıyla), küme KAYMAZ",
+      ak1.status === 200 && (await akUyari()).length === 1 && kiraYuku(ak1.json).parmakIziKurali === "standart" &&
+        JSON.stringify((await prisma.kurulum.findUniqueOrThrow({ where: { id: kAk.kurulumDbId } })).kabulEdilenParmakIzi) === JSON.stringify(fpA),
+      `${ak1.status} ${ak1.kod ?? ""}`);
+    await bekle(PENCERE_SN * 1000 + 300);
+    const ak2 = await yoklaV2(kAk.kurulumId, anahtarAk, kiraOf(ak1)!.kiraId, anakart, V2_FP);
+    const akSon = await akUyari();
+    kontrol("§5g ⭐ ikinci pencerede de 200 (K6 ret eşiği v1: eşik altı uyuşmazlık kira reddi doğurmaz), uyarıda red yok",
+      ak2.status === 200 && akSon.length === 1 && akSon[0]!.redZamani === null && akSon[0]!.gorulmeSayisi === 2,
+      `${ak2.status} ${ak2.kod ?? ""}`);
+    const anahtarAkE = kurulumAnahtariUret();
+    const { k: kAkE, t0: akE0 } = await etkinlestir(anahtarAkE);
+    const akE1 = await yokla(kAkE.kurulumId, anahtarAkE, akE0, anakart);
+    kontrol("§5h ✓K yeteneksiz (eski) fabrika aynı değişimde uyarı ALMAZ (v1 kuralı; eski satıcıyla sıfır fark)",
+      akE1.status === 200 && (await prisma.kopyaUyarisi.count({ where: { kurulumId: kAkE.kurulumDbId, tur: "PARMAK_IZI_UYUSMAZ" } })) === 0,
+      `${akE1.status} ${akE1.kod ?? ""}`);
 
     console.log("\n§6 kopyalanan LICENSE_DIR — kabul edilen kümeyle ESLESMEDI");
     const anahtar3 = kurulumAnahtariUret();

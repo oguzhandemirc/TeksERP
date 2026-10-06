@@ -26,11 +26,34 @@ export const DEFAULT_LOGIN_METHODS: LoginMethodsConfig = {
 
 export const authService = {
   /** clientType='mobile' HER giriş gövdesine eklenir (backend same-type policy).
-   *  confirmKick opsiyonel — 'notify' çakışmasını onaylayınca true ile tekrarlanır. */
+   *  confirmKick opsiyonel — 'notify' çakışmasını onaylayınca true ile tekrarlanır.
+   *  passwordChangeCapable: bu sürüm zorunlu parola değişimi adımını taşır — değişim
+   *  bekleyen hesap 403 yerine kısıtlı token + `mustChangePassword` alır. */
   login: (credentials: LoginRequest): Promise<LoginResponse> =>
     apiClient
-      .post<LoginResponse>('/auth/login', { clientType: 'mobile', ...credentials })
+      .post<LoginResponse>('/auth/login', {
+        clientType: 'mobile',
+        passwordChangeCapable: true,
+        ...credentials,
+      })
       .then((r) => r.data),
+
+  /** Kendi parolasını değiştir — zorunlu değişimin kısıtlı token'ıyla (kalıcı depoda değil).
+   *  Başarıda sunucu hesabın bütün oturumlarını kapatır; istemci yeni parolayla yeniden girer. */
+  changePassword: (token: string, currentPassword: string, newPassword: string): Promise<void> =>
+    apiClient
+      .post(
+        '/auth/change-password',
+        { currentPassword, newPassword },
+        { headers: { Authorization: `Bearer ${token}` } },
+      )
+      .then(() => undefined),
+
+  /** Kısıtlı token'ın oturumunu kapat (değişimden vazgeçince; best-effort). */
+  logoutToken: (token: string): Promise<void> =>
+    apiClient
+      .post('/auth/logout', {}, { headers: { Authorization: `Bearer ${token}` } })
+      .then(() => undefined),
 
   /** QR personel kartıyla giriş — yalnız "card" yöntemi etkinken (aksi 403). */
   loginWithCard: (cardCode: string, confirmKick?: boolean): Promise<LoginResponse> =>

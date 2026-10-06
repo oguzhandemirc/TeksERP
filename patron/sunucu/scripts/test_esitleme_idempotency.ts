@@ -7,22 +7,25 @@
 //   §4 TAM işaretle-süpür: son parça gelince pakette olmayan satır düşer; eksik parçada düşmez
 //   §5 kapılar: alan sınıfı (kök satırda tutar) RET · bilinmeyen projeksiyon RET · gzip · gelecek ufuk
 //      400 · eski sözleşme 400 · kurulum uyuşmazlığı 400 · TEST sınıfı 403 · abonelik bitti 403 ·
-//      imzasız 401 · paket kilidi doluyken 409 PAKET_ISLENIYOR
+//      imzasız 401 · paket kilidi doluyken 409 PAKET_ISLENIYOR · gönderici sınıflar (§5r–§5u): DEMO/BARINDIRILAN
+//      + patron-bulut kabul, DR/BAYI 403 SINIF_GONDEREMEZ, DEMO modülsüz 403, sınıf kapısı tek kaynaktan
 //   §6 uzlaştırma: eşit küme istenen yok · farklı küme istenen TAM (UZLASTIRMA) · ANLIK yazımı
 //   §7 (L2-1) İSTEK yol bağı: bütün uçlarda amaç `esitle` olduğu için imzalı `yol` isteği ucuna bağlar —
 //      başka uç için imzalanmış istek 401 `ISTEK_YOL`, etki yok; yol taşımayan (eski fabrika) istek değişmez
 // Koşum: npx tsx scripts/test_esitleme_idempotency.ts
 // =============================================================================
 import { randomUUID } from "node:crypto";
+import { readFileSync } from "node:fs";
+import path from "node:path";
 import { Client } from "pg";
 import { withTesis } from "../src/lib/tenant";
 import { LOCK_NAMESPACES } from "../src/lib/locks";
-import { girdi, imzali, kanonik, kontrol, ortamKur, paket, sonuc, temizleTesis, tesisKur, type Ortam, type TestKurulumu } from "./lib/test-ortam";
+import { girdi, imzali, kanonik, kontrol, ortamKur, paket, sonuc, temizleTesis, tesisKur, tesisUrl, type Ortam, type TestKurulumu } from "./lib/test-ortam";
 
 type SyncBody = { kabul: { projeksiyon: string }[]; ret: { projeksiyon: string; kod: string }[]; istenen: { projeksiyon: string; neden: string }[]; sozlesmeUyarisi: unknown; ufukTarihi: Record<string, string> };
 
 async function satir(o: Ortam, tesisId: string, projection: string, id: string) {
-  return withTesis(o.goc.prisma, { tesisId, projections: [projection] }, (tx) =>
+  return withTesis(o.goc, { tesisId, projections: [projection] }, (tx) =>
     tx.projectionRow.findUnique({ where: { tesisId_projection_recordId: { tesisId, projection, recordId: id } } }),
   );
 }
@@ -42,7 +45,7 @@ async function idempotency(o: Ortam, k: TestKurulumu): Promise<void> {
   kontrol("§1a ilk paket 200 + kabul", r1.status === 200 && (r1.json as unknown as SyncBody).kabul.length === 1, `${r1.status}`);
   kontrol("§1b aynı paket tekrarı 200 + AYNI yanıt (anlamca birebir)", r2.status === 200 && kanonik(r2.json) === kanonik(r1.json));
   kontrol("§1c ikinci etki yok (updated_at değişmedi)", once !== null && sonra !== null && once.updatedAt.getTime() === sonra.updatedAt.getTime());
-  const makbuz = await withTesis(o.goc.prisma, { tesisId: k.tesisId }, (tx) => tx.packageReceipt.count({ where: { tesisId: k.tesisId, packageId: p.paketId } }));
+  const makbuz = await withTesis(o.goc, { tesisId: k.tesisId }, (tx) => tx.packageReceipt.count({ where: { tesisId: k.tesisId, packageId: p.paketId } }));
   kontrol("§1d tek makbuz", makbuz === 1);
   const baska = { ...p, kayitlar: [girdi("urun", { yaz: [{ id, kod: "U1", ad: "DEĞİŞTİ" }], yeni: { t: iso(ufuk), k: "000000000001" } })] };
   const r3 = await imzali(o, k, "/v1/esitle", { govde: baska });
@@ -144,7 +147,8 @@ async function kapilar(o: Ortam, k: TestKurulumu): Promise<void> {
   } finally {
     for (const x of [test, bitmis, haksiz]) await temizleTesis(o, x.tesisId);
   }
-  const kilitci = new Client({ connectionString: o.ctx.config.ESITLEME_DATABASE_URL });
+  await gondericiSiniflar(o, ufuk);
+  const kilitci = new Client({ connectionString: tesisUrl(o, k.tesisId, "esitleme") });
   await kilitci.connect();
   try {
     await kilitci.query("BEGIN");
@@ -194,12 +198,39 @@ async function yolBagi(o: Ortam, k: TestKurulumu): Promise<void> {
   const p = () => paket(k, { ufuk: new Date(ufuk), kayitlar: [girdi("urun", { yaz: [{ id: randomUUID(), kod: "Y1", ad: "Yol" }], yeni: { t: iso(ufuk), k: "000000000901" } })] });
   const yanlis = p();
   const r1 = await imzali(o, k, "/v1/esitle", { govde: yanlis, imzaYolu: "/v1/gelen-kutusu/al" });
-  const makbuz = await withTesis(o.goc.prisma, { tesisId: k.tesisId }, (tx) => tx.packageReceipt.count({ where: { tesisId: k.tesisId, packageId: yanlis.paketId } }));
+  const makbuz = await withTesis(o.goc, { tesisId: k.tesisId }, (tx) => tx.packageReceipt.count({ where: { tesisId: k.tesisId, packageId: yanlis.paketId } }));
   kontrol("§7a ⭐ gelen kutusu ucu için imzalanmış istek eşitleme ucunda → 401 ISTEK_YOL, paket işlenmedi", r1.status === 401 && r1.json.details?.code === "ISTEK_YOL" && makbuz === 0, `${r1.status} ${r1.json.details?.code ?? ""} · makbuz ${makbuz}`);
   const r2 = await imzali(o, k, "/v1/esitle", { govde: p(), imzaYolu: "/v1/esitle" });
   kontrol("§7b kendi ucu için imzalanmış istek → 200", r2.status === 200, `${r2.status}`);
   const r3 = await imzali(o, k, "/v1/esitle", { govde: p() });
   kontrol("§7c yol taşımayan (eski fabrika) istek değişmeden → 200", r3.status === 200, `${r3.status}`);
+}
+
+/** §5r–§5u gönderici sınıf kümesi (tek kaynak `CLOUD_SENDER_CLASSES`): beklenen tablo burada SABİT — kümeden çıkan sınıf kırmızı. */
+async function gondericiSiniflar(o: Ortam, ufuk: number): Promise<void> {
+  const kurulumlar: TestKurulumu[] = [];
+  try {
+    for (const sinif of ["DEMO", "BARINDIRILAN"] as const) {
+      const k = await tesisKur(o, { sinif });
+      kurulumlar.push(k);
+      const r = await imzali(o, k, "/v1/esitle", { govde: paket(k, { ufuk: new Date(ufuk) }) });
+      kontrol(`§5r ${sinif} + patron-bulut → 200 (bulut kabul eder)`, r.status === 200, `${r.status} ${r.json.details?.code ?? ""}`);
+    }
+    for (const sinif of ["DR", "BAYI"] as const) {
+      const k = await tesisKur(o, { sinif });
+      kurulumlar.push(k);
+      const r = await imzali(o, k, "/v1/esitle", { govde: paket(k, { ufuk: new Date(ufuk) }) });
+      kontrol(`§5s ${sinif} → 403 SINIF_GONDEREMEZ`, r.status === 403 && r.json.details?.code === "SINIF_GONDEREMEZ", `${r.status}`);
+    }
+    const demoHaksiz = await tesisKur(o, { sinif: "DEMO", patronBulut: false });
+    kurulumlar.push(demoHaksiz);
+    const r = await imzali(o, demoHaksiz, "/v1/esitle", { govde: paket(demoHaksiz, { ufuk: new Date(ufuk) }) });
+    kontrol("§5t DEMO modülsüz → 403 PATRON_BULUT_KAPALI", r.status === 403 && r.json.details?.code === "PATRON_BULUT_KAPALI", `${r.status}`);
+  } finally {
+    for (const x of kurulumlar) await temizleTesis(o, x.tesisId);
+  }
+  const kaynak = readFileSync(path.join(__dirname, "..", "src", "services", "installation-auth.ts"), "utf8");
+  kontrol("§5u bulut kapısının sınıf denetimi tek kaynaktan (isCloudSenderClass; sınıf literali yok)", kaynak.includes("isCloudSenderClass(inst.licenseClass)") && !/licenseClass\s*[!=]==/.test(kaynak) && !/"URETIM"/.test(kaynak));
 }
 
 async function main(): Promise<void> {

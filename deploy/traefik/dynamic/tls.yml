@@ -1,0 +1,10 @@
+# Statik (ACME disi) sertifikalar — Cloudflare Origin CA.
+# ⚠️ Origin CA'ya YALNIZ Cloudflare Edge guvenir → bu kaydin Cloudflare'de
+#    proxy'si (turuncu bulut) ACIK olmak ZORUNDA. DNS-only'ye cevrilirse
+#    electron-updater sertifikayi reddeder ve guncelleme SESSIZCE durur.
+tls:
+  certificates:
+    - certFile: /certs/etkiliyazilim.crt
+      keyFile: /certs/etkiliyazilim.key
+      stores:
+        - default

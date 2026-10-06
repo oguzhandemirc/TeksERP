@@ -45,6 +45,9 @@
 //      tekrar eden yanıt durum kaydını (taban dahil) değiştirmez
 //   ⭐ doğrulama kipi YAN ETKİSİZ (§34): açılış + kapanış sonrası lisans dizini + DB izi + iptal kopyası bayt-eşit, yoklama
 //      yok; karşı: aynı açılış normal kipte yazar (ölçüm kör değil)
+//   ⭐ yanıt istek bağı (6.3c, §35): sahte satıcı bağ kipleriyle — doğru bağ kabul · yanlış nonce ve soyulmuş bağ RED
+//      (yoklama · donanım · etkinleştirme; kira değişmez, protokol kodu ayrıntıda) · taşınmış yanıt (zarf · uzatma dosyası)
+//      bayraklı bağsız kirayı kabul eder · eski satıcı (bayraksız, bağsız) kabul
 //
 // NEGATİF SONDA — dosya DIŞI mutasyon (cp + shasum ile birebir geri alındı; sonuçlar commit
 // mesajında): M1 persistAccumulation bozuk kayıtta sıfırdan başlatır · M2 kabulde kurulum
@@ -84,6 +87,8 @@
 // D8e-1c (§34; kaynakta mutasyon, md5 eşit geri alındı): Y1 kip dalı açılış yazımından sonraya → §34b (durum.json, iz) ·
 // Y2 kapanış kapısı kalktı → §34b (durum.json, iz) · Y3 iptal onarım kapısı kalktı → §34b (iptal) · Y4 parmak izi önbellek
 // kapısı kalktı → §34b (parmak-izi-onbellek.json) — dördü de kırmızı, geri alınınca yeşil.
+// 6.3c (§35; kaynakta mutasyon, git hash-object eşit geri alındı): N1 nonce karşılaştırması kalktı → 3 ❌ (§35b · d · j) ·
+// N2 bayraklı-bağsız kabul → 2 ❌ (§35c · e) · N3 bağ denetimi taşınmış yanıta da → 2 ❌ (§35g · h).
 // ⭐ KALICI SONDA ✓K1 (her koşumda): bilinmeyen kod genel mesaja düşer — §8a'nın "her kodun kendi
 // mesajı var" karşılaştırıcısı kör değil.
 // =============================================================================
@@ -163,6 +168,7 @@ import {
   updateProxySettings,
 } from "../src/services/license.service";
 import { buildPollBody, pollLicenseOnce, refreshLicenseDbFacts } from "../src/services/license-sync.service";
+import { currentSignedSkew } from "../src/lib/license/signed-skew";
 import { buildHardwareReportBody, reportHardwareChange } from "../src/services/license-hardware.service";
 import { awaitIntegrityRefreshForTests, refreshLicenseIntegrity } from "../src/services/license-integrity.service";
 import { configureIntegrityForTests, getIntegrityOutcome } from "../src/lib/license/integrity-state";
@@ -699,6 +705,54 @@ async function saatKaymasiBolumu(x: Hazir): Promise<void> {
     "§11h karşı: saat tutarlıya dönünce düzeltmesiz damga kabul → SAAT_KAYIK kalkar",
     r4.outcome === "BASARILI" && x.satici.sayac.zaman === z3 && !s4.nedenler.some((n) => n.kod === "SAAT_KAYIK"),
     `${r4.outcome} ${s4.nedenler.map((n) => n.kod).join(",")}`,
+  );
+  // İmzalı saat sapması (§B-3): canlı yeni kiranın imzalı `sunucuSaati`nden ölçülür; yalnız bilgi, kademeye girmez.
+  const imzOnce = getLicenseSnapshot().state;
+  x.satici.kiraSaatiKaymasiMs = -7 * 60_000;
+  const r5 = await pollLicenseOnce();
+  const s5 = getLicenseSnapshot().state;
+  const imz = currentSignedSkew();
+  check("§11i ⭐ canlı yeni kira imzalı saati 7 dk geride → sapma UYARI ≈ +420 sn", r5.outcome === "BASARILI" && imz.durum === "UYARI" && Math.abs((imz.sapmaSn ?? 0) - 420) <= 5, `${r5.outcome} ${imz.durum} ${imz.sapmaSn}`);
+  check(
+    "§11j ⭐ karşı: imzalı sapma kademe/geçerlilik/nedenlere GİRMEZ",
+    s5.hesaplananKademe === imzOnce.hesaplananKademe && s5.gecerlilik === imzOnce.gecerlilik && s5.nedenler.map((n) => n.kod).join() === imzOnce.nedenler.map((n) => n.kod).join(),
+    `${imzOnce.gecerlilik}/${imzOnce.hesaplananKademe}/${imzOnce.nedenler.map((n) => n.kod).join()} → ${s5.gecerlilik}/${s5.hesaplananKademe}/${s5.nedenler.map((n) => n.kod).join()}`,
+  );
+  const saglikSapma = (licenseHealthBlock().saatSapmasi ?? null) as { durum?: string; sapmaSn?: number } | null;
+  check("§11k sağlık bloğunda saatSapmasi UYARI", saglikSapma?.durum === "UYARI" && Math.abs((saglikSapma.sapmaSn ?? 0) - 420) <= 5, JSON.stringify(saglikSapma));
+  const saatBandiMi = (b: { metin: string }): boolean => b.metin.startsWith("Sunucu saati lisans sunucusunun imzalı saatinden");
+  const durumUcu = getLicenseStatus(true);
+  const saatBandi = durumUcu.ayrinti ? durumUcu.bantlar.find(saatBandiMi) : undefined;
+  check(
+    "§11l ⭐ /durum bantlar[] saat bandını taşır (ayrı alan değil) ve bant = bantlar[0]",
+    !!saatBandi && saatBandi.ton === "bilgi" && saatBandi.metin.includes("7 dk ileride") && durumUcu.ayrinti && durumUcu.bant === durumUcu.bantlar[0] && !("saatSapmasi" in durumUcu),
+    saatBandi?.metin ?? "bant yok",
+  );
+  const sonrakiGovde = await buildPollBody();
+  check("§11m sonraki yoklama gövdesinde saat.imzaliSapmaSn ≈ +420", Math.abs((sonrakiGovde.saat.imzaliSapmaSn ?? 0) - 420) <= 5, String(sonrakiGovde.saat.imzaliSapmaSn));
+  x.satici.kiraSaatiKaymasiMs = -4 * 60_000;
+  await pollLicenseOnce();
+  const imz4 = currentSignedSkew();
+  const durum4 = getLicenseStatus(true);
+  check(
+    "§11n karşı: eşik altı (4 dk) → TUTARLI, saat bandı kalkar, alan yine gider",
+    imz4.durum === "TUTARLI" && Math.abs((imz4.sapmaSn ?? 0) - 240) <= 5 && durum4.ayrinti && !durum4.bantlar.some(saatBandiMi) && (await buildPollBody()).saat.imzaliSapmaSn !== undefined,
+    `${imz4.durum} ${imz4.sapmaSn}`,
+  );
+  x.satici.kiraSaatiKaymasiMs = 0;
+  await pollLicenseOnce();
+  // Taşınmış kira (dosya/QR) ölçmez: imzalı saati geçmiştedir.
+  const tasOnce = currentSignedSkew();
+  const tasKiraOnce = getLicenseSnapshot().lease?.document.kiraId;
+  const tasSimdi = Date.now();
+  const tasKira = kiraBas(x.f, { parmakIzi: currentFingerprintDigest(), zorlama: false, verilis: msToIso(tasSimdi), sunucuSaati: msToIso(tasSimdi - 7 * 60_000) });
+  await acceptOfflineResponse({ v: 1, hak: getLicenseStore()?.entitlementJws ?? hakBas(x.f), kira: tasKira, indirmeBelirtecleri: [], sunucuSaati: msToIso(tasSimdi) }, "aktarma", null);
+  const tasSonra = currentSignedSkew();
+  const tasKiraSonra = getLicenseSnapshot().lease?.document.kiraId;
+  check(
+    "§11o karşı: taşınmış kira imzalı sapmayı ölçmez (ölçüm anı değişmez, TUTARLI kalır)",
+    tasKiraOnce !== tasKiraSonra && tasOnce.olcumAni !== null && tasSonra.olcumAni === tasOnce.olcumAni && tasSonra.durum === "TUTARLI",
+    `kira ${tasKiraOnce?.slice(0, 8)}→${tasKiraSonra?.slice(0, 8)} · ${tasOnce.olcumAni} → ${tasSonra.olcumAni} ${tasSonra.durum}`,
   );
 }
 
@@ -1687,6 +1741,99 @@ async function telBolumu(x: Hazir): Promise<void> {
   }
 }
 
+// ── §35 yanıt istek bağı (6.3c) ───────────────────────────────────────────────
+/** Hata kodu + protokol kodu (`LICENSE_RESPONSE_INVALID/YANIT_NONCE_UYUSMAZ`). */
+async function protokolKodu(p: Promise<unknown>): Promise<string> {
+  try {
+    await p;
+    return "HATA_YOK";
+  } catch (e) {
+    const d = (e as { details?: { code?: string; protocolCode?: string } }).details;
+    return [d?.code, d?.protocolCode].filter(Boolean).join("/") || String(e);
+  }
+}
+
+async function yanitBagiBolumu(x: Hazir): Promise<void> {
+  console.log("\n§35 — yanıt istek bağı (6.3c): canlı yanıt isteğin nonce'una bağlı; oynatılan/soyulmuş RED; eski satıcı ve taşınmış yanıt kabul");
+  const kiraNo = () => getLicenseSnapshot().lease?.document.kiraId;
+  try {
+    x.satici.yanitBagi = "DOGRU";
+    const a = await pollLicenseOnce();
+    check("§35a ⭐ DOGRU: bağlı canlı yoklama yanıtı KABUL, kira bağ beyan eder", a.outcome === "BASARILI" && getLicenseSnapshot().lease?.document.yanitBagli === true, `${a.outcome} ${a.code ?? ""}`);
+    const k0 = kiraNo();
+    x.satici.yanitBagi = "YANLIS_NONCE";
+    const b = await pollLicenseOnce();
+    check("§35b ⭐ YANLIS_NONCE (oynatılan yanıt): yoklama BASARISIZ LICENSE_RESPONSE_INVALID, kira değişmez", b.outcome === "BASARISIZ" && b.code === "LICENSE_RESPONSE_INVALID" && kiraNo() === k0, `${b.outcome} ${b.code ?? ""}`);
+    x.satici.yanitBagi = "SOYULMUS";
+    // Her adım kendi öncesine bakar: bir adımın sızan kabulü sonrakini kırmızıya boyamasın (sonda tek adımı göstersin).
+    const kc = kiraNo();
+    const c = await pollLicenseOnce();
+    check("§35c ⭐ SOYULMUS (bayraklı kira, bağ yok): yoklama BASARISIZ LICENSE_RESPONSE_INVALID, kira değişmez", c.outcome === "BASARISIZ" && c.code === "LICENSE_RESPONSE_INVALID" && kiraNo() === kc, `${c.outcome} ${c.code ?? ""}`);
+    x.satici.donanimDurumu = "ONAYLANDI";
+    x.satici.yanitBagi = "YANLIS_NONCE";
+    const kd = kiraNo();
+    const d = await protokolKodu(reportHardwareChange(null, null));
+    check("§35d ⭐ donanım ONAYLANDI + yanlış nonce → LICENSE_RESPONSE_INVALID/YANIT_NONCE_UYUSMAZ, kira değişmez", d === "LICENSE_RESPONSE_INVALID/YANIT_NONCE_UYUSMAZ" && kiraNo() === kd, d);
+    x.satici.yanitBagi = "SOYULMUS";
+    const ke = kiraNo();
+    const e = await protokolKodu(reportHardwareChange(null, null));
+    check("§35e ⭐ donanım ONAYLANDI + bağ soyulmuş → LICENSE_RESPONSE_INVALID/YANIT_BAGI_YOK, kira değişmez", e === "LICENSE_RESPONSE_INVALID/YANIT_BAGI_YOK" && kiraNo() === ke, e);
+    x.satici.yanitBagi = "DOGRU";
+    const kf = kiraNo();
+    const iz = olaylar.length;
+    const g = await protokolKodu(reportHardwareChange(null, null));
+    const kabul = olaylar.slice(iz).find((o) => o.action === "LICENSE_LEASE_ACCEPTED")?.payload as { kaynak?: string } | undefined;
+    check("§35f donanım ONAYLANDI + DOGRU → yeni kira kabul (kaynak 'donanim')", g === "HATA_YOK" && kiraNo() !== kf && kabul?.kaynak === "donanim", `${g} ${String(kabul?.kaynak)}`);
+    x.satici.yanitBagi = "SOYULMUS";
+    const k1 = kiraNo();
+    const zarf = await zarfiTasi(x, (await buildOfflineRequest({ amac: "yokla" })).istekGovdesi);
+    const zarfBagi = zarf.status === 200 && "yanitBagi" in (JSON.parse(zarf.body) as Record<string, unknown>);
+    const zk = await protokolKodu(acceptOfflineResponse(zarf.body, "cevrimdisi", null));
+    check(
+      "§35g ⭐ çevrimdışı zarf (TAŞINMIŞ): bayraklı bağsız kira KABUL — bağ denetimi yalnız canlı alışverişte (zarf yanıtında bağ yok)",
+      zarf.status === 200 && !zarfBagi && zk === "HATA_YOK" && kiraNo() !== k1 && getLicenseSnapshot().lease?.document.yanitBagli === true,
+      `${zarf.status} bağ=${String(zarfBagi)} ${zk}`,
+    );
+    const k2 = kiraNo();
+    const simdi = msToIso(Date.now());
+    const dosya = { v: 1, hak: hakBas(x.f), kira: kiraBas(x.f, { parmakIzi: x.f.parmakIzi, zorlama: false, verilis: simdi, sunucuSaati: simdi, yanitBagli: true }), indirmeBelirtecleri: [], sunucuSaati: simdi };
+    const dk = await protokolKodu(acceptOfflineResponse(JSON.stringify(dosya), "dosya", null));
+    check("§35h uzatma dosyası (TAŞINMIŞ): bayraklı bağsız kira KABUL", dk === "HATA_YOK" && kiraNo() !== k2, dk);
+    x.satici.yanitBagi = "YOK";
+    const k3 = kiraNo();
+    const y = await pollLicenseOnce();
+    check(
+      "§35i ⭐ YOK (eski satıcı / satıcı geri alındı): bağsız bayraksız yanıt KABUL — bayraklı kira tutan fabrika da aniden durmaz",
+      y.outcome === "BASARILI" && kiraNo() !== k3 && getLicenseSnapshot().lease?.document.yanitBagli === undefined,
+      `${y.outcome} ${y.code ?? ""}`,
+    );
+  } finally {
+    x.satici.yanitBagi = "YOK";
+    x.satici.donanimDurumu = "BEKLIYOR";
+    await pollLicenseOnce();
+  }
+}
+
+/** EN SONDA koşar: yeni makinede etkinleşme satıcının kayıtlı kurulum anahtarını değiştirir. */
+async function yanitBagiEtkinlestirmeBolumu(x: Hazir): Promise<void> {
+  console.log("\n§35' — etkinleştirme yanıtının istek bağı (yeni makine)");
+  try {
+    yeniden(path.join(GECICI, "bag-yanlis-nonce"));
+    await kabulEt();
+    x.satici.yanitBagi = "YANLIS_NONCE";
+    const j = await protokolKodu(activateLicense(x.satici.kod, null));
+    check("§35j ⭐ etkinleştirme yanıtı başka nonce'a bağlı → LICENSE_RESPONSE_INVALID/YANIT_NONCE_UYUSMAZ, etkinleşmez", j === "LICENSE_RESPONSE_INVALID/YANIT_NONCE_UYUSMAZ" && !getLicenseSnapshot().activated, j);
+    yeniden(path.join(GECICI, "bag-dogru"));
+    await kabulEt();
+    x.satici.yanitBagi = "DOGRU";
+    const k = await protokolKodu(activateLicense(x.satici.kod, null));
+    check("§35k ⭐ DOGRU: etkinleştirme KABUL, kira bağ beyan eder", k === "HATA_YOK" && getLicenseSnapshot().activated && getLicenseSnapshot().lease?.document.yanitBagli === true, k);
+  } finally {
+    x.satici.yanitBagi = "YOK";
+    yeniden(x.dizin);
+  }
+}
+
 async function motorBolumu(): Promise<void> {
   console.log("\n§15 — motor dayanıklılığı (D5): kimlik gelmezse pes etmez; sağlıkta başlamadı/çalışıyor");
   const olcum = getMeasuredFingerprint();
@@ -1979,6 +2126,7 @@ async function main(): Promise<void> {
     await saatCanliBolumu(hazir);
     await donanimBildirimiBolumu(hazir);
     await telBolumu(hazir);
+    await yanitBagiBolumu(hazir);
     gozlemSayaciBolumu();
     await zilGeriCekilmeBolumu(hazir);
     ortamBolumu();
@@ -1988,6 +2136,7 @@ async function main(): Promise<void> {
     await tasimaBolumu(hazir);
     await hakButunlukBolumu(hazir);
     await etkinlestirmeButunlukBolumu(hazir);
+    await yanitBagiEtkinlestirmeBolumu(hazir);
     sozlesmeBolumu();
   } catch (e) {
     fail++;

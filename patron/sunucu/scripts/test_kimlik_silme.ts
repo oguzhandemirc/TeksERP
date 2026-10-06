@@ -23,11 +23,11 @@ const GUN = 86_400_000;
 const YONETICI = ["bulut:hesap:yonet", "bulut:cari:yaz", "bulut:siparis:oku"];
 
 async function hesap(o: Ortam, tesisId: string, id: string) {
-  return withTesis(o.goc.prisma, { tesisId }, (tx) => tx.account.findUnique({ where: { id } }));
+  return withTesis(o.goc, { tesisId }, (tx) => tx.account.findUnique({ where: { id } }));
 }
 
 async function sayim(o: Ortam, tesisId: string, accountId: string) {
-  return withTesis(o.goc.prisma, { tesisId }, async (tx) => ({
+  return withTesis(o.goc, { tesisId }, async (tx) => ({
     oturum: await tx.session.count({ where: { tesisId, accountId } }),
     cihaz: await tx.pushDevice.count({ where: { tesisId, accountId } }),
     gelenKutusu: await tx.inboxMessage.findMany({ where: { tesisId, accountId }, select: { accountName: true, accountId: true } }),
@@ -58,7 +58,7 @@ async function main(): Promise<void> {
     kontrol("§1a PASIF geçişi kapanış anını AYNI claim'de yazar", r.status === 200 && h1?.status === "PASIF" && h1.closedAt?.getTime() === kapanis, h1?.closedAt?.toISOString());
     kontrol("§1b kapanışta oturum kapanır (oturum 401)", (await api(o, "GET", "/api/oturum", { belirtec: hedef.belirtec })).status === 401);
     await durum(o, yonetici.belirtec, kilitli.accountId, "KILITLI");
-    const check = await withTesis(o.goc.prisma, { tesisId: a.tesisId }, (tx) => tx.account.update({ where: { id: kilitli.accountId }, data: { closedAt: new Date() } })).then(() => "gecti", (e: Error) => /accounts_\w+_check/.exec(e.message)?.[0] ?? e.message.slice(0, 60));
+    const check = await withTesis(o.goc, { tesisId: a.tesisId }, (tx) => tx.account.update({ where: { id: kilitli.accountId }, data: { closedAt: new Date() } })).then(() => "gecti", (e: Error) => /accounts_\w+_check/.exec(e.message)?.[0] ?? e.message.slice(0, 60));
     kontrol("§1c DB CHECK: PASIF olmayan hesaba kapanış anı yazılamaz (çift yüklem)", /accounts_closed_pair_check/.test(check), check.slice(0, 80));
 
     console.log("\n§2 30. gün sınırı");
@@ -79,7 +79,7 @@ async function main(): Promise<void> {
     kontrol("§3e gelen kutusu: yazar adı tombstone, hesap kimliği aynı (iz kırılmaz)", s3.gelenKutusu.length === 1 && s3.gelenKutusu[0]!.accountName === tombstoneName(hedef.accountId) && s3.gelenKutusu[0]!.accountId === hedef.accountId);
     const liste = await api(o, "GET", "/api/gelen-kutusu", { belirtec: yonetici.belirtec });
     kontrol("§3f yönetici listesinde yazar 'Silinmiş hesap #…'", ((liste.json.data as { kayitlar: { hesapAdi: string }[] }).kayitlar ?? []).some((k) => k.hesapAdi === tombstoneName(hedef.accountId)));
-    const iz = await withTesis(o.goc.prisma, { tesisId: a.tesisId }, (tx) => tx.accountAudit.findFirst({ where: { tesisId: a.tesisId, event: "HESAP_KIMLIGI_SILINDI", entityId: hedef.accountId } }));
+    const iz = await withTesis(o.goc, { tesisId: a.tesisId }, (tx) => tx.accountAudit.findFirst({ where: { tesisId: a.tesisId, event: "HESAP_KIMLIGI_SILINDI", entityId: hedef.accountId } }));
     kontrol("§3g ayak izi HESAP_KIMLIGI_SILINDI (kategoriler + sayılar, kimlik içeriği yok)", iz?.actor === "sistem" && JSON.stringify(iz.summary).includes('"cihaz":1') && !JSON.stringify(iz.summary).includes(hedef.eposta));
 
     console.log("\n§4 kapsam");
@@ -92,7 +92,7 @@ async function main(): Promise<void> {
     console.log("\n§5 yeniden tanımlama kapısı");
     const duzenle = await api(o, "PATCH", `/api/hesaplar/${hedef.accountId}`, { belirtec: yonetici.belirtec, govde: { clientToken: randomUUID(), ad: "Geri Getirilen Ad" } });
     kontrol("§5a arşivdeki hesap düzenlenemez (409)", duzenle.status === 409 && duzenle.json.details?.code === "DURUM_CAKISMASI", String(duzenle.status));
-    const sir = await withTesis(o.goc.prisma, { tesisId: a.tesisId }, (tx) => tx.account.update({ where: { id: hedef.accountId }, data: { passwordHash: "scrypt$x" } })).then(() => "gecti", (e: Error) => /accounts_\w+_check/.exec(e.message)?.[0] ?? e.message.slice(0, 60));
+    const sir = await withTesis(o.goc, { tesisId: a.tesisId }, (tx) => tx.account.update({ where: { id: hedef.accountId }, data: { passwordHash: "scrypt$x" } })).then(() => "gecti", (e: Error) => /accounts_\w+_check/.exec(e.message)?.[0] ?? e.message.slice(0, 60));
     kontrol("§5b DB CHECK: kimliği silinmiş hesaba parola yazılamaz", /accounts_purged_no_secret_check/.test(sir), sir.slice(0, 80));
 
     console.log("\n§6 e-posta yeniden kullanımı");
@@ -103,7 +103,7 @@ async function main(): Promise<void> {
     const kopya = await api(o, "POST", "/api/hesaplar", { belirtec: yonetici.belirtec, govde: { clientToken: randomUUID(), eposta: kapanacak.eposta, ad: "Kopya", sablon: "SATIS" } });
     kontrol("§6b PASİF olmayan kopya varken aynı e-posta → 409 EPOSTA_KULLANIMDA", kopya.status === 409 && kopya.json.details?.code === "EPOSTA_KULLANIMDA", String(kopya.status));
     await purgeClosedIdentities(o.ctx, a.tesisId, o.saat.simdi() + IDENTITY_PURGE_DAYS * GUN);
-    const yeniDavet = await withTesis(o.goc.prisma, { tesisId: a.tesisId }, (tx) => tx.account.findFirst({ where: { tesisId: a.tesisId, email: kapanacak.eposta, status: "DAVETLI" } }));
+    const yeniDavet = await withTesis(o.goc, { tesisId: a.tesisId }, (tx) => tx.account.findFirst({ where: { tesisId: a.tesisId, email: kapanacak.eposta, status: "DAVETLI" } }));
     kontrol("§6c kimlik silmesi yeni daveti etkilemez (e-posta yeni satırda kalır, eski satır tombstone)", yeniDavet !== null && (await hesap(o, a.tesisId, kapanacak.accountId))?.email === tombstoneEmail(kapanacak.accountId));
 
     console.log("\n§7 işlem makbuzu: kimlik tombstone, makbuz ve tekrar sözleşmesi KALIR (ISLEM_SAKLAMA_GUN > 30 iken de)");
@@ -125,7 +125,7 @@ async function main(): Promise<void> {
     const diger = await yonet("PATCH", `/api/hesaplar/${kilitli.accountId}`, { clientToken: randomUUID(), ad: digerAd });
     const kodlar = [adla, yazi, kilit, sifirla, kapat, davet, dKapat, diger].map((x) => x.status);
     if (kodlar.join(",") !== "200,201,200,200,200,201,200,200") throw new Error(`§7 fikstür: ${kodlar.join(",")}`);
-    const makbuzlar = () => withTesis(o.goc.prisma, { tesisId: a.tesisId }, (tx) => tx.operationReceipt.findMany({ where: { tesisId: a.tesisId }, orderBy: [{ createdAt: "asc" }, { id: "asc" }] }));
+    const makbuzlar = () => withTesis(o.goc, { tesisId: a.tesisId }, (tx) => tx.operationReceipt.findMany({ where: { tesisId: a.tesisId }, orderBy: [{ createdAt: "asc" }, { id: "asc" }] }));
     const kimlikler = [m.eposta, mAd, dEposta, dAd];
     const tasiyan = (rows: Awaited<ReturnType<typeof makbuzlar>>) => rows.filter((r) => kimlikler.some((k) => JSON.stringify(r.response).includes(k)));
     const once = await makbuzlar();
@@ -166,7 +166,7 @@ async function main(): Promise<void> {
       `${tekrar.status} · ${cakisma.status} ${cakisma.json.details?.code ?? ""}`,
     );
     kontrol("§7g başka hesabın makbuzu dokunulmaz (adı ve e-postası aynen)", kalan.some((r) => JSON.stringify(r.response).includes(digerAd) && JSON.stringify(r.response).includes(kilitli.eposta)));
-    const iz7 = await withTesis(o.goc.prisma, { tesisId: a.tesisId }, (tx) => tx.accountAudit.findFirst({ where: { tesisId: a.tesisId, event: "HESAP_KIMLIGI_SILINDI", entityId: m.accountId } }));
+    const iz7 = await withTesis(o.goc, { tesisId: a.tesisId }, (tx) => tx.accountAudit.findFirst({ where: { tesisId: a.tesisId, event: "HESAP_KIMLIGI_SILINDI", entityId: m.accountId } }));
     kontrol("§7h ayak izi silinen hesabın makbuz sayısını taşır (5), kimlik içeriği yok", (iz7?.summary as { makbuz?: number } | null)?.makbuz === 5 && !JSON.stringify(iz7?.summary).includes(m.eposta), JSON.stringify(iz7?.summary));
   } finally {
     await temizleTesis(o, a.tesisId);

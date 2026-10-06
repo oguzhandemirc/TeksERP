@@ -2,7 +2,7 @@
 //   *.kok.json     — KÖK (`kok-*` ailesi; parolalı; burada yalnız AÇIK yarısı okunur)
 //   *.bayi.json    — BAYİ (bayinin parolasıyla sarılı; yalnız açık yarı + sertifika)
 //   *.anahtar.json — ALT (kira) / İNDİRME (parolasız 0600 + kök imzalı sertifika)
-//   *.ara.json     — HAK ARA İMZACISI (G4; parolalı + kök imzalı `HAK` sertifikası; 120 gün, dönem töreninde yenilenir)
+//   *.ara.json     — HAK ARA İMZACISI (G4; parolalı + kök imzalı `HAK` sertifikası; 395 gün, yıllık dönem töreninde yenilenir)
 //   *.sertifika.json — EMEKLİ anahtar: özel yarısı silinmiş ALT · İNDİRME · ARA'nın açık yarısı + sertifikası (yalnız künye)
 // Çapa: gömülü üretim kökleri (GUVEN_CAPASI=uretim; fabrika derlemesinin güvendiği küme — ayna); yalnız bekçiler için
 // GUVEN_CAPASI_DOSYASI.

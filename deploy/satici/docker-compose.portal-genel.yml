@@ -9,9 +9,9 @@
 # Dört kapı, dıştan içe (biri düşse de öteki fail-closed kalır):
 #   1. Cloudflare Access — e-posta tek kullanımlık kodu, izinli e-posta listesi (kenarda).
 #   2. Traefik — portal yönlendiricisi YALNIZ Cloudflare kenar aralıklarından gelen bağlantıyı kabul eder
-#      (ipallowlist, varsayılan strateji = TCP karşı ucu; başlık okunmaz). Neden: köken 2026-09-30'da Cloudflare
-#      dışından doğrudan 200 veriyordu (ölçüldü). Liste `satici/sunucu/src/http/client-address.ts`
-#      CLOUDFLARE_NETWORKS ile BİREBİR (bekçi test_erisim_kapisi §5 ölçer) — değişirse ikisi birlikte.
+#      (ipallowlist, varsayılan strateji = TCP karşı ucu; başlık okunmaz) ve kaba hız seddinden geçer. İki halka
+#      ana dosyada TEK yerde tanımlıdır (genel yönlendiriciyle ortak `tekserp-satici-${ORTAM}-cf` · `-hiz`); liste
+#      `satici/sunucu/src/http/client-address.ts` CLOUDFLARE_NETWORKS ile BİREBİR (bekçi test_erisim_kapisi §5).
 #   3. Satıcının ERİŞİM dinleyicisi (4613, kenar adresi, port YAYIMLANMAZ) — her istekte Access JWT'si (RS256 ·
 #      AUD · iss · süre · e-posta); yoksa 404. Access ayarı eksikse dinleyici her isteğe 404 (genel portal KAPALI).
 #   4. Portal parolası + TOTP; bu yolda YALNIZ izin listesindeki rotalar (satici/sunucu/src/http/erisim-rotalari.ts,
@@ -54,9 +54,8 @@ services:
       - traefik.http.routers.tekserp-satici-${ORTAM}-portal.entrypoints=websecure
       - traefik.http.routers.tekserp-satici-${ORTAM}-portal.tls=true
       - traefik.http.routers.tekserp-satici-${ORTAM}-portal.service=tekserp-satici-${ORTAM}-portal
-      - traefik.http.routers.tekserp-satici-${ORTAM}-portal.middlewares=tekserp-satici-${ORTAM}-portal-cf
+      - traefik.http.routers.tekserp-satici-${ORTAM}-portal.middlewares=tekserp-satici-${ORTAM}-cf,tekserp-satici-${ORTAM}-hiz
       - traefik.http.services.tekserp-satici-${ORTAM}-portal.loadbalancer.server.port=4613
-      - "traefik.http.middlewares.tekserp-satici-${ORTAM}-portal-cf.ipallowlist.sourcerange=173.245.48.0/20,103.21.244.0/22,103.22.200.0/22,103.31.4.0/22,141.101.64.0/18,108.162.192.0/18,190.93.240.0/20,188.114.96.0/20,197.234.240.0/22,198.41.128.0/17,162.158.0.0/15,104.16.0.0/13,104.24.0.0/14,172.64.0.0/13,131.0.72.0/22,2400:cb00::/32,2606:4700::/32,2803:f800::/32,2405:b500::/32,2405:8100::/32,2a06:98c0::/29,2c0f:f248::/32"
 
   satici-jwks:
     image: ${SATICI_IMAJ:?SATICI_IMAJ gerekli}

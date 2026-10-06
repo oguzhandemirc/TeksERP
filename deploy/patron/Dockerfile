@@ -46,10 +46,10 @@ RUN npx prisma generate \
  && npx prisma version \
  && npx tsc -p tsconfig.json \
  && npx tsc --ignoreConfig --outDir dist-cli --rootDir . --target es2022 --module commonjs --esModuleInterop \
-      --strict --skipLibCheck --resolveJsonModule --types node scripts/tesis.ts scripts/db-rolleri.ts \
+      --strict --skipLibCheck --resolveJsonModule --types node scripts/tesis.ts scripts/db-rolleri.ts scripts/tesis-db.ts \
  && npm prune --omit=dev \
  && test -f dist/server.js && test -f dist/http/web-static.js \
- && test -f dist-cli/scripts/tesis.js && test -f dist-cli/scripts/db-rolleri.js \
+ && test -f dist-cli/scripts/tesis.js && test -f dist-cli/scripts/db-rolleri.js && test -f dist-cli/scripts/tesis-db.js \
  && ls node_modules/@prisma/engines | grep -q '^schema-engine-'
 
 # -----------------------------------------------------------------------------

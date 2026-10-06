@@ -26,12 +26,12 @@ async function girisIp(o: Ortam, h: Pick<TestHesabi, "eposta" | "sir">, ip: stri
 }
 
 async function olay(o: Ortam, tesisId: string, event: string, entityId: string) {
-  return withTesis(o.goc.prisma, { tesisId }, (tx) => tx.accountAudit.findFirst({ where: { tesisId, event, entityId }, orderBy: [{ createdAt: "desc" }, { id: "desc" }] }));
+  return withTesis(o.goc, { tesisId }, (tx) => tx.accountAudit.findFirst({ where: { tesisId, event, entityId }, orderBy: [{ createdAt: "desc" }, { id: "desc" }] }));
 }
 const ipOf = (summary: unknown): unknown => (summary && typeof summary === "object" ? (summary as Record<string, unknown>).ip : undefined);
 
 async function main(): Promise<void> {
-  const o = await ortamKur({ VEKIL_IP_BASLIGI: BASLIK });
+  const o = await ortamKur({ VEKIL_IP_BASLIGI: BASLIK, GUVENILIR_VEKIL_AGLARI: "127.0.0.1/32,::1/128" });
   const a = await tesisKur(o);
   const b = await tesisKur(o);
   try {
@@ -46,7 +46,7 @@ async function main(): Promise<void> {
     kontrol("§1c hatalı parola 401", (await girisIp(o, h, "198.51.100.9", "yanlis-parola-deneme")) === 401);
     const basarisiz = await olay(o, a.tesisId, "GIRIS_BASARISIZ", h.accountId);
     kontrol("§1d GIRIS_BASARISIZ IP taşır", ipOf(basarisiz?.summary) === "198.51.100.9", JSON.stringify(basarisiz?.summary));
-    await withTesis(o.goc.prisma, { tesisId: a.tesisId }, (tx) => tx.account.update({ where: { id: kilitlenecek.accountId }, data: { status: "KILITLI" } }));
+    await withTesis(o.goc, { tesisId: a.tesisId }, (tx) => tx.account.update({ where: { id: kilitlenecek.accountId }, data: { status: "KILITLI" } }));
     await girisIp(o, kilitlenecek, "192.0.2.44");
     const red = await olay(o, a.tesisId, "GIRIS_REDDEDILDI", kilitlenecek.accountId);
     kontrol("§1e GIRIS_REDDEDILDI (kilitli hesap) IP taşır", ipOf(red?.summary) === "192.0.2.44", JSON.stringify(red?.summary));
@@ -62,7 +62,7 @@ async function main(): Promise<void> {
     kontrol("§2b tam 30. gün: IP alanı SİLİNİR (pozitif sınır)", n >= 3 && ipOf(sonra?.summary) === undefined, `${n} satır`);
     kontrol("§2c olay satırı ve öteki alanları KALIR", sonra?.event === "GIRIS" && JSON.stringify(sonra.summary).includes("oturumId") && JSON.stringify(sonra.summary).includes("istemci"));
     kontrol("§2d başarısız/reddedilen olaylar da IP'siz, satırları duruyor", ipOf((await olay(o, a.tesisId, "GIRIS_BASARISIZ", h.accountId))?.summary) === undefined && ipOf((await olay(o, a.tesisId, "GIRIS_REDDEDILDI", kilitlenecek.accountId))?.summary) === undefined);
-    const davet = await withTesis(o.goc.prisma, { tesisId: a.tesisId }, (tx) => tx.accountAudit.count({ where: { tesisId: a.tesisId, event: "YONETICI_DAVET" } }));
+    const davet = await withTesis(o.goc, { tesisId: a.tesisId }, (tx) => tx.accountAudit.count({ where: { tesisId: a.tesisId, event: "YONETICI_DAVET" } }));
     kontrol("§2e IP'siz olaylar dokunulmadı", davet >= 2);
     kontrol("§2f başka tesisin giriş IP'si etkilenmedi", ipOf((await olay(o, b.tesisId, "GIRIS", hb.accountId))?.summary) === "192.0.2.200");
 

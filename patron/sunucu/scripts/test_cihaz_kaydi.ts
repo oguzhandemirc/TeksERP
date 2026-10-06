@@ -27,7 +27,7 @@ async function main(): Promise<void> {
     kontrol("§1b aynı belirteç → AYNI satır", r2.status === 201 && (r2.json.data as Cihaz).id === c1.id);
     kontrol("§1c yanıt push belirtecini geri SIZDIRMAZ", !JSON.stringify(r1.json).includes(belirtec));
     const r3 = await api(o, "POST", "/api/cihazlar", { belirtec: b.belirtec, govde: { platform: "android", belirtec } });
-    const sahip = await withTesis(o.goc.prisma, { tesisId: k.tesisId }, (tx) => tx.pushDevice.findUnique({ where: { id: c1.id } }));
+    const sahip = await withTesis(o.goc, { tesisId: k.tesisId }, (tx) => tx.pushDevice.findUnique({ where: { id: c1.id } }));
     kontrol("§1d başka hesap aynı cihazdan → satır ona geçer", (r3.json.data as Cihaz).id === c1.id && sahip?.accountId === b.accountId);
 
     console.log("\n§2 liste · kaldır");
@@ -38,7 +38,7 @@ async function main(): Promise<void> {
     kontrol("§2b başkasının cihazı → 404", baskasi.status === 404);
     const k1 = await api(o, "POST", `/api/cihazlar/${c1.id}/kaldir`, { belirtec: b.belirtec, govde: {} });
     const k2 = await api(o, "POST", `/api/cihazlar/${c1.id}/kaldir`, { belirtec: b.belirtec, govde: {} });
-    const satir = await withTesis(o.goc.prisma, { tesisId: k.tesisId }, (tx) => tx.pushDevice.findUnique({ where: { id: c1.id } }));
+    const satir = await withTesis(o.goc, { tesisId: k.tesisId }, (tx) => tx.pushDevice.findUnique({ where: { id: c1.id } }));
     kontrol("§2c kaldır = soft (satır durur, aktif=false); tekrar aynı sonuç", k1.status === 200 && k2.status === 200 && satir !== null && satir.active === false);
     const kotu = await api(o, "POST", "/api/cihazlar", { belirtec: a.belirtec, govde: { platform: "symbian", belirtec } });
     kontrol("§2d biçimsiz platform 400", kotu.status === 400);

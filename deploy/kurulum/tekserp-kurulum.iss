@@ -81,7 +81,7 @@ Name: "tr"; MessagesFile: "compiler:Languages\Turkish.isl"
 [Messages]
 WelcomeLabel2=Bu sihirbaz TeksERP sunucusunu (uygulama, kendi PostgreSQL örneği ve güncelleyici) Windows hizmetleri olarak kurar.%n%nBu programın yanında tekserp-backend-*.zip, postgresql-*.zip ve pg.json bulunmalıdır.%n%nAynı klasöre yeniden kurulum ONARIM olur; yarıda kalan kurulum kaldığı yerden sürer. Veriler hiçbir adımda silinmez.
 SelectDirLabel3=Program, yapılandırma ve günlükler bu klasöre kurulur (yalnız harf, rakam ve noktalama; boşluksuz). Veritabanı verisinin yeri sonraki sayfalarda ayrıca seçilir.
-ConfirmUninstall=TeksERP sunucusunun PROGRAMI kaldırılacak: hizmetler, sürümler, gece yedeği görevi ve güvenlik duvarı kuralları.%n%nVERİLER KORUNUR: veritabanı, yedekler, yapılandırma, lisans ve günlükler silinmez; aynı klasöre yeniden kurulum bu veriye bağlanır.%n%nDevam edilsin mi?
+ConfirmUninstall=TeksERP sunucusunun PROGRAMI kaldırılacak: hizmetler, sürümler, gece yedeği görevi ve güvenlik duvarı kuralları (Windows saat eşitlemesi açık kalır).%n%nVERİLER KORUNUR: veritabanı, yedekler, yapılandırma, lisans ve günlükler silinmez; aynı klasöre yeniden kurulum bu veriye bağlanır.%n%nDevam edilsin mi?
 
 [Files]
 Source: "{#DogrulayiciExe}"; DestDir: "{app}\kurulum\araclar"; DestName: "tekserp-guncelleyici.exe"; Flags: ignoreversion
@@ -91,6 +91,7 @@ Source: "..\hizmet\kanal-adlari.ps1"; DestDir: "{app}\kurulum\deploy\hizmet"; Fl
 Source: "..\hizmet\sema-hizasi.ps1"; DestDir: "{app}\kurulum\deploy\hizmet"; Flags: ignoreversion
 Source: "on-olcum.ps1"; DestDir: "{app}\kurulum\deploy\kurulum"; Flags: ignoreversion
 Source: "kaldir.ps1"; DestDir: "{app}\kurulum\deploy\kurulum"; Flags: ignoreversion
+Source: "tepsi.ps1"; DestDir: "{app}\kurulum\deploy\kurulum"; Flags: ignoreversion
 Source: "cevap-semasi.json"; DestDir: "{app}\kurulum\deploy\kurulum"; Flags: ignoreversion
 Source: "ornek-cevap.json"; DestDir: "{app}\kurulum\deploy\kurulum"; Flags: ignoreversion
 Source: "..\pg\pg-ornegi.json"; DestDir: "{app}\kurulum\deploy\pg"; Flags: ignoreversion
@@ -1212,6 +1213,7 @@ begin
     S := S + 'Yedek: ŞİFRESİZ' + NewLine;
   end;
   S := S + 'Gece yedeği: ' + YedekSayfasi.Values[3] + NewLine + 'Güncelleme sunucusu: ' + GelismisSayfasi.Values[0] + NewLine;
+  S := S + 'Saat eşitlemesi: etki alanına bağlı değilse Windows saati NTP ile otomatik eşitlenir; etki alanındaysa dokunulmaz' + NewLine;
   if GelismisSayfasi.Values[1] <> '' then S := S + 'HTTP vekili: ' + GelismisSayfasi.Values[1] + NewLine;
   S := S + LisansOzeti(NewLine);
   if ProfilDegeri <> '' then S := S + 'Profil: ' + ProfilDegeri + NewLine;

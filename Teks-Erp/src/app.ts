@@ -13,6 +13,8 @@ import { redactSecretQueryParams } from "./utils/url-redaction";
 import prisma from "./lib/prisma";
 import { buildRichHealth } from "./lib/health-snapshot";
 import { isDirectLoopback, localLicenseHealth } from "./lib/yerel-saglik";
+import { trayStatus } from "./lib/tepsi-durumu";
+import { readUpdater } from "./lib/license/updater-ipc";
 
 // Tüm res.json() çıktısında Prisma Decimal → number çevirir
 // (Decimal.prototype.toJSON override'ı). Aksi halde Decimal'ler client'a string
@@ -120,6 +122,7 @@ import clientPolicyRoutes from "./routes/client-policy.routes";
 import licenseRoutes from "./routes/license.routes";
 import updateRoutes from "./routes/update.routes";
 import supportRoutes from "./routes/support.routes";
+import errorReportRoutes from "./routes/error-report.routes";
 import patronCloudRoutes from "./routes/patron-cloud.routes";
 const app: Express = express();
 
@@ -412,6 +415,25 @@ app.get("/health/yerel", async (req: Request, res: Response) => {
   res.status(200).json({ status: "UP", db, version: appVersion, time: new Date().toISOString(), ...(lisans ? { lisans } : {}) });
 });
 
+/**
+ * Sunucu simgesi (bildirim alanı) durumu — yalnız döngü adresine cevap verir (dışarıya 404); renk kararı
+ * `lib/tepsi-durumu.ts`te, çıktı sır/yol/güncelleyici iletisi taşımaz.
+ */
+app.get("/health/tepsi", async (req: Request, res: Response) => {
+  if (!isDirectLoopback(req.socket.remoteAddress, req.headers)) {
+    res.status(404).json({ success: false, message: `Endpoint bulunamadı: ${req.method} ${req.originalUrl}` });
+    return;
+  }
+  let db: "UP" | "DOWN" = "DOWN";
+  try {
+    await prisma.$queryRaw`SELECT 1`;
+    db = "UP";
+  } catch {
+    db = "DOWN";
+  }
+  res.status(200).json(trayStatus({ db, surum: appVersion, lisansKipi: localLicenseHealth()?.kip ?? null, read: readUpdater(), nowMs: Date.now() }));
+});
+
 // =============================================================================
 // Hız sınırı (OPT-IN — RATE_LIMIT_ENABLED)
 // =============================================================================
@@ -602,6 +624,8 @@ app.use("/api/license", licenseRoutes);
 app.use("/api/guncelleme", updateRoutes);
 // Destek talepleri (3d-2): panel → satıcı `/v1/destek`; yanıtlar zil `destek` + yoklamayla döner.
 app.use("/api/destek", supportRoutes);
+// Hata raporları (3.6): onay (varsayılan KAPALI, ayar şifreli) + panel/tablet hata kaydı; gönderim `jobs/error-report.job.ts`.
+app.use("/api/hata-raporlari", errorReportRoutes);
 // Patron bulutu (fabrika yüzeyi): teknik kullanıcı + salt okunur bulut hesapları. Gelen kutusu işi `jobs/cloud-inbox.job.ts`.
 app.use("/api/patron-bulut", patronCloudRoutes);
 

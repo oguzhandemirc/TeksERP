@@ -75,6 +75,10 @@ const EnvSchema = z.object({
   /** Pencere içinde bu kadar "yakala" = ayırt edilemeyen kopya uyarısı. */
   YAKALA_UYARI_ESIGI: positiveInt(2, 100).default(3),
   YOKLAMA_SAKLAMA_GUN: positiveInt(1, 3650).default(90),
+  /** Hata raporu (telemetri): grup son görülmesinden, parti doğuşundan bu kadar gün sonra budanır. */
+  HATA_RAPORU_SAKLAMA_GUN: positiveInt(1, 3650).default(90),
+  /** Kurulum başına en çok hata grubu — dolunca YENİ grup alınmaz, var olanın sayacı sürer. */
+  HATA_RAPORU_KURULUM_AZAMI_GRUP: positiveInt(10, 100_000).default(2000),
   BAKIM_ARALIGI_SN: positiveInt(1, 3600).default(60),
   ETKINLESTIRME_KODU_GUN: positiveInt(1, 365).default(30),
   QR_HIZ_SINIRI_DK: positiveInt(1, 10000).default(30),

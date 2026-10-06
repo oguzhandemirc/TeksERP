@@ -2,11 +2,26 @@
 // DURDURUR (fail-closed). Üç DB URL'i üç ayrı roldür: göç (tablo sahibi; yalnız migration/CLI),
 // uygulama (hesap API'si; projeksiyona YAZAMAZ) ve eşitleme (fabrika kanalı). Sır (iç API belirteci,
 // DB parolaları) günlüğe yazılmaz.
+import { isIPv4, isIPv6 } from "node:net";
 import path from "node:path";
 import { z } from "zod";
 
 const port = z.coerce.number().int().min(0).max(65535);
 const positiveInt = (min: number, max: number) => z.coerce.number().int().min(min).max(max);
+
+function isCidr(text: string): boolean {
+  const [net, bits, extra] = text.split("/");
+  if (extra !== undefined || !net || bits === undefined || !/^\d{1,3}$/.test(bits)) return false;
+  const n = Number(bits);
+  if (isIPv4(net)) return n <= 32;
+  if (isIPv6(net)) return n <= 128;
+  return false;
+}
+
+const cidrList = z
+  .string()
+  .transform((v) => v.split(",").map((x) => x.trim()).filter(Boolean))
+  .refine((list) => list.every(isCidr), "CIDR listesi biçimsiz (ör. 10.0.0.0/8, fd00::/8)");
 
 const EnvSchema = z
   .object({
@@ -18,6 +33,8 @@ const EnvSchema = z
     BIND: z.string().min(1).default("127.0.0.1"),
     /** TOTP sırlarının sarma anahtarı burada (`patron-totp.key`, 0600) — DB'de DEĞİL. */
     ANAHTAR_DIZINI: z.string().min(1).default("anahtarlar"),
+    /** Tesis DB rol parolalarının + giriş dizini özetinin anahtarı (üretim sırrı, salt okunur); yoksa `ANAHTAR_DIZINI/patron-tesis-db.key`. */
+    TESIS_ROL_ANAHTARI_DOSYASI: z.preprocess((v) => (v === "" ? undefined : v), z.string().min(1).optional()),
     /** Web sürümünün derlenmiş çıktısı (`expo export --platform web`); verilirse `/` altında sunulur, yoksa yalnız API. */
     PATRON_WEB_DIZINI: z.string().min(1).optional(),
     /** Kurulum kaydının kaynağı: `kayit` (satıcı CLI'siyle DB'ye yazılmış) · `satici` (iç API + önbellek). */
@@ -26,7 +43,12 @@ const EnvSchema = z
     SATICI_IC_API_BELIRTECI: z.string().min(32).optional(),
     /** Satıcı iç API önbelleğinin TAZELİK süresi; süre dolunca yeniden sorulur, ulaşılamazsa bayat kayıt kullanılır. */
     KURULUM_ONBELLEK_DK: positiveInt(1, 1440).default(5),
+    /** İstemci adresini taşıyan vekil başlığı; YALNIZ güvenilen kenar ağından gelen bağlantıda okunur. */
     VEKIL_IP_BASLIGI: z.string().min(1).optional(),
+    /** Başlığa güvenilen kenar vekilleri (CIDR, virgüllü); verilmezse yerleşik Cloudflare aralıkları. */
+    GUVENILIR_VEKIL_AGLARI: cidrList.optional(),
+    /** Kenar ile patron arasındaki iç vekiller (Traefik köprü ağı); güven kararı X-Forwarded-For'un SON halkasına göre. */
+    IC_VEKIL_AGLARI: cidrList.default([]),
     /** Oturum: boşta kalma (saat) ve mutlak ömür (gün) — patron uygulaması telefonda uzun oturum ister. */
     OTURUM_BOSTA_SAAT: positiveInt(1, 720).default(168),
     OTURUM_AZAMI_GUN: positiveInt(1, 90).default(30),

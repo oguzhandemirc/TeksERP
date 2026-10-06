@@ -54,7 +54,8 @@ async function main(): Promise<void> {
     const afterCreate = await ReasonPresetService.list({ kind: ReasonPresetKind.MACHINE_STOP });
     check("§2c yeni sebep sona doğar → işaretsiz", afterCreate.find((r) => r.id === yeni.id)?.quickPick === false);
     const ids = afterCreate.map((r) => r.id);
-    const allIds = (await prisma.reasonPreset.findMany({ where: { kind: ReasonPresetKind.MACHINE_STOP }, select: { id: true } })).map((r) => r.id);
+    // Servisin liste sırasıyla okunur: sırasız findMany fiziksel sırayı verir, "eski 4. sıradaki" iddiasını kaydırır.
+    const allIds = (await prisma.reasonPreset.findMany({ where: { kind: ReasonPresetKind.MACHINE_STOP }, orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }], select: { id: true } })).map((r) => r.id);
     const reordered = [yeni.id, ...allIds.filter((id) => id !== yeni.id)];
     await ReasonPresetService.reorder(ReasonPresetKind.MACHINE_STOP, reordered);
     const afterReorder = await ReasonPresetService.list({ kind: ReasonPresetKind.MACHINE_STOP });

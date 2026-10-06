@@ -62,6 +62,9 @@ export const ALWAYS_OPEN_ROUTES: readonly LicenseRouteRule[] = [
   // Kilitli kurulum da satıcıya ulaşabilmeli: destek talebi kurtarma yoludur, iş verisi yazmaz.
   { method: "*", path: "/api/destek", reason: "satıcıya destek talebi aç / talepleri gör (kurtarma yolu)" },
   { method: "GET", path: "/api/destek/:id", reason: "destek talebi ve satıcı yanıtları (kurtarma yolu)" },
+  // Müşteri onayı her kademede geri alınabilmeli (kişisel veri kararı); iş verisi yazmaz.
+  { method: "PUT", path: "/api/hata-raporlari/onay", reason: "hata raporu onayı ver / geri al (müşteri kararı her kademede)" },
+  { method: "POST", path: "/api/hata-raporlari/istemci", reason: "panel/tablet hata kaydı (telemetri; onaylıysa); iş verisi yazmaz — K5 ekranı da çöker" },
 ];
 
 /** KISITLI kipte AYRICA açık yazmalar (okuma zaten serbest). Beyan dışı her yazma RED. */

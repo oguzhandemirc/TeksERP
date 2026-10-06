@@ -48,6 +48,10 @@ import { readSecureValue, writeSecureValue } from "./secure-store.ipc.js";
 import { browseMdns } from "../discovery/mdns-browser.js";
 import { scanSubnet } from "../discovery/subnet-scan.js";
 import { probeIdentity } from "../discovery/probe.js";
+import { routeFor } from "../../shared/lan-tls.js";
+import { readTlsPins } from "../security/lan-tls-pin.js";
+import { verifyHttpsCandidate } from "../discovery/tls-candidate.js";
+import { registerLanTlsIpc } from "./lan-tls.ipc.js";
 
 /** Electron'daki API adresi anahtarı — `src/lib/api-config.ts` ile AYNI olmalı. */
 const API_BASE_URL_KEY = "config.apiBaseUrl";
@@ -71,6 +75,7 @@ function emptyState(): DiscoveryState {
     mdns: { available: false, error: null, hits: 0 },
     scan: { ran: false, targets: 0, open: 0, ports: [], skippedReason: null },
     pinnedInstallationId: null,
+    tlsBlocked: null,
     error: null,
   };
 }
@@ -101,27 +106,47 @@ function readRecentUrls(): string[] {
   }
 }
 
-/** `http://host:port[/api]` → `{host, port}`. Çözülemezse null. */
-function splitUrl(url: string): { host: string; port: number } | null {
-  const m = /^https?:\/\/([^:/\s]+)(?::(\d+))?/i.exec((url ?? "").trim());
-  if (!m || !m[1]) return null;
-  return { host: m[1], port: m[2] ? Number(m[2]) : DISCOVERY_DEFAULT_PORT };
+/** `http(s)://host:port[/api]` → `{scheme, host, port}`. Çözülemezse null. */
+function splitUrl(url: string): { scheme: "http" | "https"; host: string; port: number } | null {
+  const m = /^(https?):\/\/([^:/\s]+)(?::(\d+))?/i.exec((url ?? "").trim());
+  if (!m || !m[1] || !m[2]) return null;
+  return {
+    scheme: m[1].toLowerCase() === "https" ? "https" : "http",
+    host: m[2],
+    port: m[3] ? Number(m[3]) : DISCOVERY_DEFAULT_PORT,
+  };
 }
 
-/** Bir adresi doğrular ve aday nesnesine çevirir. Aday değilse null. */
+/** Sabit varken HTTP'ye düşülmediğinin tanısı — kullanıcıya "neden bulunamadı" cevabı. */
+function noteTlsBlocked(host: string, reason: string): void {
+  state.tlsBlocked = `${host}: ${reason}`;
+  log.warn(`[lan-tls] ${host}: ${reason} — HTTP'ye düşülmedi`);
+}
+
+
+/** Bir adresi doğrular ve aday nesnesine çevirir. Aday değilse null. Sabitli kurulum HTTP adayı OLAMAZ. */
 async function verify(
   host: string,
   port: number,
   via: DiscoverySource,
   pinnedId: string | null,
   timeoutMs = 2000,
+  scheme: "http" | "https" = "http",
 ): Promise<DiscoveredServer | null> {
+  const ctx = { host, via, pinnedId, timeoutMs, onBlocked: noteTlsBlocked };
+  if (scheme === "https") return verifyHttpsCandidate(ctx, port);
   const baseUrl = baseUrlOf(host, port);
   // Yedek portta kimlik ŞART — `/health` UP diyen yabancı bir servis aday olamaz.
   const res = await probeIdentity(baseUrl, timeoutMs, {
     requireIdentity: identityRequiredForPort(port),
   });
   if (!res) return null;
+  const route = routeFor(readTlsPins(), res.identity?.installationId ?? null, res.tls);
+  if (route.kind === "blocked") {
+    noteTlsBlocked(host, route.reason);
+    return null;
+  }
+  if (route.kind === "https") return verifyHttpsCandidate(ctx, route.port);
   return {
     baseUrl,
     host,
@@ -182,7 +207,7 @@ async function runDiscovery(timeoutMs: number, mode: DiscoveryMode): Promise<Dis
     const key = `${parts.host}:${parts.port}`;
     if (seenAddr.has(key)) return;
     seenAddr.add(key);
-    knownProbes.push(verify(parts.host, parts.port, via, pinnedId, 1500).then(collect));
+    knownProbes.push(verify(parts.host, parts.port, via, pinnedId, 1500, parts.scheme).then(collect));
   };
   const recentUrls = readRecentUrls().map((u) => u.trim());
   const viaOf = (u: string): DiscoverySource =>
@@ -208,6 +233,12 @@ async function runDiscovery(timeoutMs: number, mode: DiscoveryMode): Promise<Dis
       mdnsProbes.push(
         verify(h, hit.port || DISCOVERY_DEFAULT_PORT, "mdns", pinnedId, 2000).then(collect),
       );
+      // `required` kipte HTTP LAN'a kapalıdır; ilanın TLS portu yalnız sabit varsa denenir.
+      const tp = Number(typeof hit.txt.tp === "string" ? hit.txt.tp : NaN);
+      if (Number.isInteger(tp) && tp > 0 && readTlsPins().length > 0 && !seenAddr.has(`${h}:${tp}`)) {
+        seenAddr.add(`${h}:${tp}`);
+        mdnsProbes.push(verify(h, tp, "mdns", pinnedId, 2000, "https").then(collect));
+      }
     }
   });
 
@@ -308,7 +339,7 @@ async function runDiscovery(timeoutMs: number, mode: DiscoveryMode): Promise<Dis
 }
 
 /** Adresi yerel kasaya yazar (kayıtlı + son kullanılanlar). */
-function applyAddress(baseUrl: string, reason: "single" | "pin-moved"): void {
+function applyAddress(baseUrl: string, reason: "single" | "pin-moved" | "tls"): void {
   try {
     writeSecureValue(API_BASE_URL_KEY, baseUrl);
     const recent = [baseUrl, ...readRecentUrls().filter((u) => u !== baseUrl)].slice(0, 6);
@@ -338,7 +369,7 @@ export async function startDiscoveryIfNeeded(): Promise<void> {
     if (stored) {
       const parts = splitUrl(stored);
       if (parts) {
-        const ok = await verify(parts.host, parts.port, "stored", pinnedId, 1500);
+        const ok = await verify(parts.host, parts.port, "stored", pinnedId, 1500, parts.scheme);
         if (ok && ok.matchesPinned !== "mismatch") {
           state = {
             ...emptyState(),
@@ -347,6 +378,8 @@ export async function startDiscoveryIfNeeded(): Promise<void> {
             groups: groupByInstallation([ok], bySourceRank),
             finishedAt: Date.now(),
           };
+          // Sabitli kurulum kayıtlı HTTP adresinde bulunduysa adres HTTPS'e yükselir (sabitsizde dokunulmaz).
+          if (ok.baseUrl.startsWith("https:") && !/^https:/i.test(stored.trim())) applyAddress(ok.baseUrl, "tls");
           log.info(`[discovery] kayıtlı adres cevap verdi, keşif gerekmedi: ${stored}`);
           return;
         }
@@ -393,8 +426,18 @@ export function registerDiscoveryIpc(): void {
     if (typeof baseUrl !== "string") return null;
     const parts = splitUrl(baseUrl);
     if (!parts) return null;
-    return verify(parts.host, parts.port, "stored", readPinnedId(), 5000);
+    return verify(parts.host, parts.port, "stored", readPinnedId(), 5000, parts.scheme);
   });
+
+  registerLanTlsIpc({
+    onPinned: (installationId) => {
+      state.pinnedInstallationId = installationId;
+    },
+    onUnpinned: () => {
+      state.tlsBlocked = null;
+    },
+  });
+
 
   handleTrusted("discovery:pin", (_e, installationId: string | null) => {
     if (installationId === null) {

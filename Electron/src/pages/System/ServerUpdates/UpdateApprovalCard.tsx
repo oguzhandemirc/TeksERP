@@ -1,14 +1,9 @@
 import { useState } from "react";
-import { useQueryClient } from "@tanstack/react-query";
-import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/forms/ConfirmDialog";
-import { apiErrorText } from "@/lib/api-error";
-import { useAttemptToken } from "@/lib/attemptToken";
-import { serverUpdateService } from "@/services/serverUpdateService";
 import type { UpdateApprovalChoice, UpdateInterval, UpdatePolicyMode, UpdateStatus } from "@/types/server-update";
 import { InfoRow, LicenseCard as UpdateCard, when } from "../License/LicenseParts";
-import { SERVER_UPDATE_KEY } from "./hooks";
+import { useApprovalSubmit } from "./approvalSubmit";
 
 const TIMING_TEXT = { HEMEN: "Şimdi kur", PENCERE: "Bu gece kur" } as const;
 
@@ -51,24 +46,9 @@ export function actionText(kind: UpdateApprovalChoice, surum: string, mode: Upda
 
 /** Tek karar düğmesi — kendi deneme token'ıyla (aynı karar ağ hatasından sonra yinelenirse aynı token). */
 function ApprovalAction({ kind, surum, mode, window }: { kind: UpdateApprovalChoice; surum: string; mode: UpdatePolicyMode | null; window: UpdateInterval | null }) {
-  const qc = useQueryClient();
-  const attempt = useAttemptToken();
   const [open, setOpen] = useState(false);
   const t = actionText(kind, surum, mode, window);
-  const submit = async () => {
-    try {
-      const r = await serverUpdateService.approve({ clientToken: attempt.token(), surum, zamanlama: kind });
-      attempt.onSuccess();
-      setOpen(false);
-      if (r.niyet.yazildi) toast.success(t.done);
-      else toast.warning(`Karar kaydedildi ama güncelleyiciye henüz iletilemedi (${r.niyet.kod ?? "bilinmiyor"}); bir sonraki yoklamada yeniden denenir.`);
-    } catch (err) {
-      attempt.onFailure(err);
-      toast.error(apiErrorText(err, "Güncelleme kararı kaydedilemedi."));
-    } finally {
-      await qc.invalidateQueries({ queryKey: SERVER_UPDATE_KEY });
-    }
-  };
+  const submit = useApprovalSubmit(kind, surum, t.done, () => setOpen(false));
   return (
     <>
       <Button size="sm" variant={kind === "GERI_AL" ? "outline" : kind === "HEMEN" ? "default" : "secondary"} onClick={() => setOpen(true)}>

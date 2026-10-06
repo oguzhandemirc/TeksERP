@@ -128,6 +128,15 @@ services:
       - traefik.http.routers.tekserp-satici-${ORTAM}.entrypoints=websecure
       - traefik.http.routers.tekserp-satici-${ORTAM}.tls=true
       - traefik.http.services.tekserp-satici-${ORTAM}.loadbalancer.server.port=4610
+      # Kenar zinciri (genel + örtülü portal yönlendiricisi aynı iki halkayı taşır; sıra önemli — deploy/traefik/kenar-zinciri.mjs):
+      # 1) yalnız Cloudflare kenarı (TCP karşı ucu; liste satici/sunucu/src/http/client-address.ts CLOUDFLARE_NETWORKS ile birebir)
+      # 2) kaba hız seddi gerçek istemci başına (Cf-Connecting-Ip); uygulamanın /v1 sınırının (120/dk) ~10 katı — yoklamayı kesmez.
+      - traefik.http.routers.tekserp-satici-${ORTAM}.middlewares=tekserp-satici-${ORTAM}-cf,tekserp-satici-${ORTAM}-hiz
+      - "traefik.http.middlewares.tekserp-satici-${ORTAM}-cf.ipallowlist.sourcerange=173.245.48.0/20,103.21.244.0/22,103.22.200.0/22,103.31.4.0/22,141.101.64.0/18,108.162.192.0/18,190.93.240.0/20,188.114.96.0/20,197.234.240.0/22,198.41.128.0/17,162.158.0.0/15,104.16.0.0/13,104.24.0.0/14,172.64.0.0/13,131.0.72.0/22,2400:cb00::/32,2606:4700::/32,2803:f800::/32,2405:b500::/32,2405:8100::/32,2a06:98c0::/29,2c0f:f248::/32"
+      - traefik.http.middlewares.tekserp-satici-${ORTAM}-hiz.ratelimit.average=20
+      - traefik.http.middlewares.tekserp-satici-${ORTAM}-hiz.ratelimit.period=1s
+      - traefik.http.middlewares.tekserp-satici-${ORTAM}-hiz.ratelimit.burst=600
+      - traefik.http.middlewares.tekserp-satici-${ORTAM}-hiz.ratelimit.sourcecriterion.requestheadername=Cf-Connecting-Ip
 
   # Göç TEK SEFERLİK ve ELLE (`--profile goc run --rm satici-goc`): geri alınamaz eşik, önce yedek.
   satici-goc:

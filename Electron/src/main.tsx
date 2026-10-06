@@ -3,6 +3,7 @@ import React from "react";
 import ReactDOM from "react-dom/client";
 import { App } from "./App";
 import { bootstrapApiBaseUrl } from "@/lib/api-config";
+import { installGlobalErrorReporting } from "@/lib/error-report";
 import "@fontsource/plus-jakarta-sans/400.css";
 import "@fontsource/plus-jakarta-sans/500.css";
 import "@fontsource/plus-jakarta-sans/600.css";
@@ -22,6 +23,7 @@ if (platform) document.documentElement.classList.add(`platform-${platform === "d
    Hızlı yerel okuma; render'ı yalnız bu süre kadar bekletir. */
 async function bootstrap(): Promise<void> {
   await bootstrapApiBaseUrl();
+  installGlobalErrorReporting();
   ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
     <React.StrictMode>
       <App />

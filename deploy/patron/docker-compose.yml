@@ -14,8 +14,9 @@ name: tekserp-patron-${ORTAM:?ORTAM gerekli (uretim)}
 #           (PATRON_IC_IP — satıcının kaynak kapısı yalnız bu /32'yi kabul eder). Patron burada DİNLEMEZ.
 #   cikis   (internal DEĞİL) YALNIZ patron → bildirim sağlayıcıları (Expo push · web push, B5). Patron burada
 #           DİNLEMEZ (BIND = kenar adresi); DB, göç ve yedek bu ağa KATILMAZ (compose-denetle ④).
-# Üç DB rolü (patron/sunucu/scripts/db-rolleri.ts): göç (tablo sahibi; yalnız patron-goc + yedek) ·
-# uygulama · eşitleme (RLS'i atlayamaz; sunucu yalnız bu ikisini alır). Parolalar docker secret'ı.
+# Üç DB rolü (patron/sunucu/scripts/db-rolleri.ts): göç (tablo sahibi; yalnız patron-goc · patron-hazirla · yedek) ·
+# uygulama · eşitleme (RLS'i atlayamaz; sunucu yalnız bu ikisini alır). Parolalar docker secret'ı. Her tesisin AYRI
+# veritabanı ve kendi iki rolü vardır (PATRON-TESIS-DB); o rollerin parolası `tesis_rol_anahtari`ndan türetilir.
 # Docker soketi hiçbir servise BAĞLANMAZ. Kök FS salt okunur · root olmayan kullanıcı · yetenek yok ·
 # cgroup CPU/bellek/süreç sınırı (patron satıcıyı ve güncelleme yayınını aç bırakamasın).
 # =============================================================================
@@ -80,13 +81,15 @@ services:
       PATRON_WEB_DIZINI: /uygulama/web
       KURULUM_KAYNAGI: ${KURULUM_KAYNAGI:-satici}
       SATICI_IC_API_URL: http://${SATICI_IC_API_IP:?SATICI_IC_API_IP gerekli}:4612
-      # İstemci IP'si (hız sınırı anahtarı) Cloudflare başlığından; köken yalnız CF'ye açılana dek taklit edilebilir (runbook §11).
+      # İstemci IP'si (hız sınırı anahtarı) Cloudflare başlığından — YALNIZ Traefik'in XFF son halkası Cloudflare aralığındaysa;
+      # kökene doğrudan gelen istek kendi adresiyle sayılır. IC_VEKIL_AGLARI olmazsa herkes Traefik'in tek adresinde birleşir.
       VEKIL_IP_BASLIGI: cf-connecting-ip
+      IC_VEKIL_AGLARI: ${KENAR_AGI}
       # Bildirimler (B5): varsayılan kapali = bugünkü davranış. `gercek` VAPID konusu ister; VAPID anahtar çifti
       # anahtar biriminde ÖNCEDEN üretilmiş olmalı (birim salt okunur — runbook §2.1).
       BILDIRIM_KIPI: ${BILDIRIM_KIPI:-kapali}
       BILDIRIM_VAPID_KONU: ${BILDIRIM_VAPID_KONU:-}
-    secrets: [uygulama_parolasi, esitleme_parolasi, ic_api_belirteci]
+    secrets: [uygulama_parolasi, esitleme_parolasi, ic_api_belirteci, tesis_rol_anahtari]
     volumes:
       # Anahtar birimi SALT OKUNUR: patron-totp.key önceden üretilir (runbook §2.1); yoksa açılış DURUR.
       - ${ANAHTAR_DIZINI_HOST:?ANAHTAR_DIZINI_HOST gerekli}:/anahtarlar:ro
@@ -115,9 +118,19 @@ services:
       - traefik.http.routers.tekserp-patron-${ORTAM}.entrypoints=websecure
       - traefik.http.routers.tekserp-patron-${ORTAM}.tls=true
       - traefik.http.services.tekserp-patron-${ORTAM}.loadbalancer.server.port=4620
+      # Kenar zinciri, sıra önemli (deploy/traefik/kenar-zinciri.mjs): 1) yalnız Cloudflare kenarı (TCP karşı ucu; liste
+      # patron/sunucu/src/http/rate-limit.ts CLOUDFLARE_NETWORKS ile birebir) 2) kaba hız seddi gerçek istemci başına
+      # (Cf-Connecting-Ip); uygulamanın /v1 sınırının (600/dk) 3 katı — eşitlemeyi ve web açılışını kesmez.
+      - traefik.http.routers.tekserp-patron-${ORTAM}.middlewares=tekserp-patron-${ORTAM}-cf,tekserp-patron-${ORTAM}-hiz
+      - "traefik.http.middlewares.tekserp-patron-${ORTAM}-cf.ipallowlist.sourcerange=173.245.48.0/20,103.21.244.0/22,103.22.200.0/22,103.31.4.0/22,141.101.64.0/18,108.162.192.0/18,190.93.240.0/20,188.114.96.0/20,197.234.240.0/22,198.41.128.0/17,162.158.0.0/15,104.16.0.0/13,104.24.0.0/14,172.64.0.0/13,131.0.72.0/22,2400:cb00::/32,2606:4700::/32,2803:f800::/32,2405:b500::/32,2405:8100::/32,2a06:98c0::/29,2c0f:f248::/32"
+      - traefik.http.middlewares.tekserp-patron-${ORTAM}-hiz.ratelimit.average=30
+      - traefik.http.middlewares.tekserp-patron-${ORTAM}-hiz.ratelimit.period=1s
+      - traefik.http.middlewares.tekserp-patron-${ORTAM}-hiz.ratelimit.burst=900
+      - traefik.http.middlewares.tekserp-patron-${ORTAM}-hiz.ratelimit.sourcecriterion.requestheadername=Cf-Connecting-Ip
 
   # Göç + rol hizalaması TEK SEFERLİK ve ELLE (`--profile goc run --rm patron-goc`): geri alınamaz eşik, önce yedek.
-  # Satıcı CLI'si (tesis · kurulum · ilk yönetici) aynı konteynerden: `run --rm patron-goc node dist-cli/scripts/tesis.js …`
+  # Sıra: merkez göçü (Prisma) → merkez rolleri → HAZIR her tesis DB'sine eksik göçler + yetki hizası (tek tek).
+  # Satıcı CLI'si (tesis · kurulum · ilk yönetici · imha) aynı konteynerden: `run --rm patron-goc node dist-cli/scripts/tesis.js …`
   patron-goc:
     <<: *sertlik
     image: ${PATRON_IMAJ}
@@ -127,8 +140,8 @@ services:
     group_add: ["${SIR_GID}"]
     depends_on:
       patron-db: { condition: service_healthy }
-    command: ["sh", "-c", "node node_modules/prisma/build/index.js migrate deploy && node dist-cli/scripts/db-rolleri.js"]
-    secrets: [goc_parolasi, uygulama_parolasi, esitleme_parolasi]
+    command: ["sh", "-c", "node node_modules/prisma/build/index.js migrate deploy && node dist-cli/scripts/db-rolleri.js && node dist-cli/scripts/tesis-db.js goc"]
+    secrets: [goc_parolasi, uygulama_parolasi, esitleme_parolasi, tesis_rol_anahtari]
     tmpfs:
       - /tmp:mode=1777
     networks: [ic]
@@ -136,6 +149,28 @@ services:
     mem_limit: 384m
     memswap_limit: 384m
     pids_limit: 100
+
+  # Tesis DB hazırlayıcısı: sunucunun yazdığı ISTENDI satırlarını yoklar, DB + roller + göç + yetki kurar (göç rolü).
+  # Dinleyici YOK, yalnız ic ağı. Prisma CLI çağırmaz (göç koşucusu düz SQL) ⇒ küçük bellek.
+  patron-hazirla:
+    <<: *sertlik
+    image: ${PATRON_IMAJ}
+    container_name: tekserp-patron-${ORTAM}-hazirla
+    user: "10001:10001"
+    group_add: ["${SIR_GID}"]
+    depends_on:
+      patron-db: { condition: service_healthy }
+    environment:
+      NODE_OPTIONS: --max-old-space-size=64
+    command: ["node", "dist-cli/scripts/tesis-db.js", "izle", "--aralik=10"]
+    secrets: [goc_parolasi, tesis_rol_anahtari]
+    tmpfs:
+      - /tmp:mode=1777
+    networks: [ic]
+    cpus: 0.25
+    mem_limit: 96m
+    memswap_limit: 96m
+    pids_limit: 50
 
   patron-yedek:
     <<: *sertlik
@@ -173,6 +208,10 @@ secrets:
   # Satıcı ↔ patron ortak Bearer'ı: satıcının dosyasının patron dizinindeki KOPYASI (ortak birim yok; runbook §3).
   ic_api_belirteci:
     file: ${IC_API_BELIRTEC_DOSYASI_HOST:?IC_API_BELIRTEC_DOSYASI_HOST gerekli}
+  # Tesis rol parolalarının + giriş dizini özetinin anahtarı (32 bayt base64url; ÖNCEDEN üretilir — runbook).
+  # Yedek konteyneri ALMAZ: parolalar türetilir, anahtar kaybı veri kaybı değil (`tesis-db goc` yeniden yazar).
+  tesis_rol_anahtari:
+    file: ${TESIS_ROL_ANAHTARI_DOSYASI_HOST:?TESIS_ROL_ANAHTARI_DOSYASI_HOST gerekli}
 
 volumes:
   patron-pg:

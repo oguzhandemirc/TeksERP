@@ -49,6 +49,7 @@ import { ORDER_MAX, ORDER_MIN, VERSION_PATTERN } from "../portal/pages/Channels"
 import { UPDATE_GROUP_LABEL, defaultGroupFor } from "../shared/update-groups";
 import { CLOUD_RETENTION_DEFAULT, CLOUD_RETENTION_MONTHS, SYNC_MINUTES_DEFAULT, SYNC_MINUTES_MAX, SYNC_MINUTES_MIN } from "../shared/cloud-settings";
 import { ACCEPTANCE_EVENT } from "../portal/installation/AcceptancePanel";
+import { CEREMONY_LEAD_DAYS, CEREMONY_USAGES, KEY_EXPIRY_WARNING_DAYS } from "../portal/pages/Guide";
 import {
   RELEASE_VERSION_PATTERN,
   UPDATE_DECISION_LABEL,
@@ -378,6 +379,18 @@ function schemaRegex(src: string, name: string): string {
 }
 
 describe("eşikler ve biçim desenleri aynası", () => {
+  it("kılavuzun tören takvimi: uyarı eşikleri + kullanımlar (key-expiry.ts), tören günü = ilk eşik = tören aracının örtüşmesi", () => {
+    const src = read("notifications/key-expiry.ts");
+    const m = /export const KEY_EXPIRY_WARNING_DAYS = \[([^\]]*)\]/.exec(src);
+    if (!m) throw new Error("KEY_EXPIRY_WARNING_DAYS bulunamadı");
+    const server = m[1]!.split(",").map((x) => Number(x.trim()));
+    expect([...KEY_EXPIRY_WARNING_DAYS]).toEqual(server);
+    expect([...CEREMONY_USAGES].sort()).toEqual([.../export type ExpiringKeyUsage = ([^;]+);/.exec(src)![1]!.matchAll(/"([^"]+)"/g)].map((x) => x[1]!).sort());
+    const toren = readFileSync(path.resolve(__dirname, "../../../../deploy/satici/uretim-toren.mjs"), "utf8");
+    expect(CEREMONY_LEAD_DAYS).toBe(numberConst(toren, /const DONEM_ORTUSME_GUN = (\d+);/));
+    expect(CEREMONY_LEAD_DAYS).toBe(Math.max(...server));
+  });
+
   it("ağır K3 eşiği ve taksit kısıtlama varsayılanı (sanction.service.ts)", () => {
     const src = read("services/sanction.service.ts");
     expect(HEAVY_K3_MIN_DAYS).toBe(numberConst(src, /export const HEAVY_K3_MIN_DAYS = (\d+);/));
@@ -474,7 +487,7 @@ describe("güncelleme (Dağıtım v2) sözlüğü ve desenleri aynası", () => {
 
 describe("arayüzün çağırdığı her uç sunucuda var", () => {
   // Satıcı tablosu başka dosyadan yayılan parçaları da taşır (`...SUPPORT_PORTAL_ROUTES`): her yayılan tablo bu listede.
-  const VENDOR_ROUTE_FILES = ["http/portal-routes.ts", "http/key-routes.ts", "http/hardware-routes.ts", "http/distribution-routes.ts", "http/support-routes.ts", "http/notification-routes.ts"];
+  const VENDOR_ROUTE_FILES = ["http/portal-routes.ts", "http/key-routes.ts", "http/hardware-routes.ts", "http/distribution-routes.ts", "http/support-routes.ts", "http/error-report-routes.ts", "http/notification-routes.ts"];
   const vendor = [...VENDOR_ROUTE_FILES.flatMap(serverRoutes), ...sessionRoutes()];
   const dealer = [...serverRoutes("http/dealer-routes.ts"), ...sessionRoutes()];
   const calls = clientCalls();

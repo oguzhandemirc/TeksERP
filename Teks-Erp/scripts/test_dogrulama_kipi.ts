@@ -63,7 +63,7 @@ function acilis(): void {
   check("§2d ⭐ atlanan işler `if (!VERIFYING)` ardında", korumasiz.length === 0, korumasiz.join(", ") || `${VERIFICATION_SKIPPED_JOBS.length} iş`);
   const kosulsuzDegil = VERIFICATION_KEPT_JOBS.filter((c) => new RegExp(`if \\([^)]*VERIFYING[^)]*\\)[^\\n]*${c}\\(`).test(govde));
   check("§2e koşan işler koşulsuz (uzlaştırma doğrulamada da ölçülür)", kosulsuzDegil.length === 0, kosulsuzDegil.join(", ") || "temiz");
-  check("§2f ⭐ HOST doğrulamada 127.0.0.1 (`.env` genişletemez)", /const HOST = VERIFYING \? "127\.0\.0\.1" : process\.env\.HOST \|\| "0\.0\.0\.0";/.test(src));
+  check("§2f ⭐ HOST doğrulamada 127.0.0.1 (`.env` genişletemez)", /const LAN_HOST = VERIFYING \? "127\.0\.0\.1" : process\.env\.HOST \|\| "0\.0\.0\.0";/.test(src) && /const HOST = LAN_TLS\.httpHost;/.test(src));
   check("§2g kip tek kaynaktan (`isVerificationMode`)", /const VERIFYING = isVerificationMode\(\);/.test(src));
 }
 

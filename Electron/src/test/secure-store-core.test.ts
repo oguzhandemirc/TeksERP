@@ -133,8 +133,8 @@ describe("şifreleme YOKKEN gizli anahtar fail-closed", () => {
 });
 
 describe("yalnız ana sürecin anahtarları renderer'dan yazılamaz", () => {
-  it("liste beyanlı ve ölçülen üç anahtar; gizli anahtar kümesi tek", () => {
-    expect([...MAIN_ONLY_KEYS].sort()).toEqual(["config.lastDiscovery", "config.serverIdentity", UPDATE_FEED_OVERRIDE_KEY].sort());
+  it("liste beyanlı ve ölçülen dört anahtar; gizli anahtar kümesi tek", () => {
+    expect([...MAIN_ONLY_KEYS].sort()).toEqual(["config.lastDiscovery", "config.serverIdentity", "config.serverTlsPin", UPDATE_FEED_OVERRIDE_KEY].sort());
     expect([...SECRET_KEYS]).toEqual([AUTH_TOKEN_STORE_KEY]);
   });
 
