@@ -41,7 +41,7 @@ function ol(ad, kosul, ayrinti = '') {
   if (kosul) { basarili += 1; console.log(`  ✓ ${ad}`); } else { hatalar.push(ad); console.log(`  ✗ ${ad}${ayrinti ? `\n      ${String(ayrinti).replace(/\n/g, '\n      ')}` : ''}`); }
 }
 
-/* ---- sahte APK yapıtaşları (test_kanal_yayin_kapisi.mjs §5 ile aynı biçim) ---- */
+/* ---- sahte APK yapıtaşları (test_grup_yayin_tablet.mjs ile aynı biçim) ---- */
 const SERT_KANAL = `-----BEGIN CERTIFICATE-----
 MIIBlzCCAT2gAwIBAgIUflh7ucW2BFPsCatHKIKPJkPevBswCgYIKoZIzj0EAwIw
 IDEeMBwGA1UEAwwVdGVrc2VycC1iZWtjaS1zYWh0ZS0xMCAXDTI2MTAwMTA0NTAz

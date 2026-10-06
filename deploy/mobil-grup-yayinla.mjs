@@ -2,7 +2,7 @@
 /**
  * TeksERP Tablet — TEK ORTAK PAKETİ bir güncelleme grubuna yayınlar / terfi ettirir (OTA paketi ve APK).
  *
- * Eski kanal yayıncısı (`deploy/mobil-yayinla.mjs --musteri=…`) BAYT-DONUKTUR ve bu betik onun yerine geçmez: grup
+ * Eski kanal yayıncısı EMEKLİ (`eski-kanal-son` etiketinde; acil yol docs/ops/ESKI-KANAL-ACIL.md) ve bu betik onun yerine geçmez: grup
  * yayını yalnız dağıtım kaydındaki gruplara (`deploy/dagitim.json`: test → oncu → genel) gider; eski kanal kodu hedef
  * olamaz. Panelin ikizi: `deploy/electron-grup-yayinla.sh` (terfi hükmü `scripts/lib/grup-yayin.mjs`, ortak kitaplık).
  *
@@ -40,8 +40,7 @@ import { GRUP_ALT_DIZINI, OrtakOtaIhlali, grupManifestiUret, ortakImzaAnahtari, 
 import { zipGirdisiOku } from '../mobil/scripts/lib/zip.mjs';
 import { PANEL_KUNYE_ADI, apkKunyeYolu, derlemeBagiDenetimi, derlemeKunyesiOku, dosyaOzeti, temizAgacDenetimi } from '../scripts/lib/derleme-bagi.mjs';
 import { GrupIhlali, TABLET_ARTEFAKT_GORELI, grupCoz, grupHedefi, grupTerfiKapisi, uzakSha256 } from '../scripts/lib/grup-yayin.mjs';
-import { terfiKaynagi } from '../scripts/lib/dagitim.mjs';
-import { Olculemedi } from '../scripts/lib/kanallar.mjs';
+import { Olculemedi, terfiKaynagi } from '../scripts/lib/dagitim.mjs';
 import { etiketAt } from '../scripts/lib/surum.mjs';
 import { cumleDenetle, istanbulSaati, terfiAtlaKaydi, terfiAtlaMesaji, terfiRaporu } from '../scripts/lib/terfi.mjs';
 import { yayinSonrasiBildir } from '../scripts/lib/yayin-bildirim.mjs';
@@ -78,7 +77,7 @@ const arg = (ad) => {
 const BILINEN = ['grup', 'paket', 'apk', 'kuru', 'dogrula', 'anahtar', 'ota-anahtar', 'terfi-atla', 'profil-matrisi-atla', 'zorunlu', 'notlar'];
 for (const a of argv) {
   const ad = a.replace(/^--/, '').split('=')[0];
-  if (a === '--musteri' || a.startsWith('--musteri=')) dur('--musteri eski kanal yayıncısının argümanıdır (deploy/mobil-yayinla.mjs)', 'Grup yayını --grup=<test|oncu|genel> alır.');
+  if (a === '--musteri' || a.startsWith('--musteri=')) dur('--musteri emekli eski kanal yayıncısının argümanıdır (eski-kanal-son etiketi, docs/ops/ESKI-KANAL-ACIL.md)', 'Grup yayını --grup=<test|oncu|genel> alır.');
   if (!a.startsWith('--') || !BILINEN.includes(ad)) {
     if (!yayinEzmeleri({ argv: [a] }).length) dur(`Tanınmayan seçenek: ${a}`, `Bilinenler: ${BILINEN.map((x) => `--${x}`).join(' ')}`);
   }
@@ -470,7 +469,7 @@ async function apkYayinla(apkYolu) {
   if (a.guncellemeAcik !== 'true') sorunlar.push(`expo-updates ENABLED "${a.guncellemeAcik ?? 'yok'}" (beklenen true)`);
   if (a.guncellemeAdresi !== KIMLIK.guncellemeUrl) sorunlar.push(`EXPO_UPDATE_URL "${a.guncellemeAdresi ?? 'yok'}" ≠ "${KIMLIK.guncellemeUrl}"`);
   if (!a.sertifikaPem || sertifikaParmakIzi(a.sertifikaPem) !== beklenenIz) sorunlar.push('gömülü OTA sertifikası ortak paketinki değil');
-  if (sorunlar.length) dur('APK ORTAK PAKETİN KİMLİĞİNİ TAŞIMIYOR — yüklenmez', ...sorunlar.map((x) => `• ${x}`), 'Eski kanal APK\'sı (adnansahin) bu yoldan yüklenmez: deploy/mobil-yayinla.mjs.');
+  if (sorunlar.length) dur('APK ORTAK PAKETİN KİMLİĞİNİ TAŞIMIYOR — yüklenmez', ...sorunlar.map((x) => `• ${x}`), 'Eski kanal APK\'sı bu yoldan yüklenmez (eski yol emekli: docs/ops/ESKI-KANAL-ACIL.md).');
   if (!a.surumAdi || !SURUM_BICIMI.test(a.surumAdi) || !Number.isInteger(a.surumKodu) || a.surumKodu < 1) {
     dur('ÖLÇÜLEMEDİ — APK sürümü okunamadı', `versionName: ${a.surumAdi ?? '(yok)'} · versionCode: ${a.surumKodu ?? '(yok)'}`);
   }

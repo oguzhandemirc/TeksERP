@@ -25,8 +25,7 @@ import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 
-import { AYRILMIS_GRUP_KODLARI, ESKI_KAYIT_REL, GRUP_KODU_DESENI, KAYIT_REL, KOK, Olculemedi as DagitimOlculemedi, grupZinciri, kayitAyristir, terfiKaynagi, turet } from './dagitim.mjs';
-import { Olculemedi } from './kanallar.mjs';
+import { AYRILMIS_GRUP_KODLARI, ESKI_KAYIT_REL, GRUP_KODU_DESENI, KAYIT_REL, KOK, Olculemedi, grupZinciri, kayitAyristir, terfiKaynagi, turet } from './dagitim.mjs';
 import { dosyaOzeti } from './derleme-bagi.mjs';
 import { cumleDenetle } from './kullanici-cumlesi.mjs';
 import { gitOlgulari, kaynakSurumleri, terfiHukmu } from './terfi.mjs';
@@ -98,7 +97,7 @@ export function dagitimKaydi(kok = KOK) {
   try {
     return kayitAyristir(fs.readFileSync(path.join(kok, KAYIT_REL), 'utf8'));
   } catch (e) {
-    if (e instanceof DagitimOlculemedi) throw new Olculemedi(e.message);
+    if (e instanceof Olculemedi) throw e;
     throw new Olculemedi(`${KAYIT_REL} okunamadı: ${e.message}`);
   }
 }
@@ -124,7 +123,7 @@ export function grupCoz(grup, { kok = KOK, kayit, eskiKodlar } = {}) {
   const eski = eskiKodlar ?? eskiKanalKodlari(kok);
   if (eski.includes(g)) {
     throw new GrupIhlali(`"${g}" ESKİ KANAL kodu — grup yayınının hedefi olamaz`, [
-      'Eski kanallar (deploy/kanallar.json) kendi yayın yolundan çıkar (deploy/electron-yayinla.sh --musteri=…); grup yayını yalnız dağıtım kaydındaki gruplara gider.',
+      'Eski kanallar (deploy/kanallar.json) bu yoldan yayın almaz (eski yayın yolu emekli: eski-kanal-son etiketi, docs/ops/ESKI-KANAL-ACIL.md); grup yayını yalnız dağıtım kaydındaki gruplara gider.',
     ]);
   }
   const k = kayit ?? dagitimKaydi(kok);
@@ -266,7 +265,7 @@ export function grupTerfiKapisi({ grup, urun, surum, atla, kuru = false, dizin, 
       else kaynakOnay = { grup: kaynak, etiket: gitOlgulari({ kod: kaynak, urun, surum, kok }).terfiEtiketi };
     }
   } catch (e) {
-    if (e instanceof Olculemedi || e instanceof DagitimOlculemedi) return { sonuc: 'olculemedi', satirlar: [`git: ${e.message}`] };
+    if (e instanceof Olculemedi) return { sonuc: 'olculemedi', satirlar: [`git: ${e.message}`] };
     throw e;
   }
   let kaynaklar = null;

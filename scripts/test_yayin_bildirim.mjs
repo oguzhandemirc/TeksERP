@@ -88,8 +88,8 @@ try {
   console.log('\n§4 kancalar');
   const oku = (p) => fs.readFileSync(path.join(KOK, p), 'utf8');
   const bulgu = [
-    ...kancaBulgulari('electron-yayinla.sh', oku('deploy/electron-yayinla.sh'), { cagri: 'yayin-bildirim.mjs" bildir-yayin', sonrasinda: '# --- YAYIN DEFTERİ', durdurmaz: /\|\| echo/ }),
-    ...kancaBulgulari('mobil-yayinla.mjs', oku('deploy/mobil-yayinla.mjs'), { cagri: 'await yayinSonrasiBildir(', sonrasinda: 'etiketAt(\'tablet\'' }),
+    ...kancaBulgulari('electron-grup-yayinla.sh', oku('deploy/electron-grup-yayinla.sh'), { cagri: 'yayin-bildirim.mjs" bildir-yayin', sonrasinda: '# --- YAYIN DEFTERİ', durdurmaz: /\|\| echo/ }),
+    ...kancaBulgulari('mobil-grup-yayinla.mjs', oku('deploy/mobil-grup-yayinla.mjs'), { cagri: 'await yayinSonrasiBildir(', sonrasinda: 'etiketAt(\'tablet\'' }),
     ...kancaBulgulari('kanal-kapisi.mjs', oku('scripts/kanal-kapisi.mjs'), { cagri: 'void yayinBildirVeBas(', sonrasinda: 'terfiAtlaKaydi({' }),
   ];
   kontrol('§4a üç kanca yardımcıyı yayından/kayıttan SONRA çağırır, kabuk kancası hatayı yutar', bulgu.length === 0, bulgu.join(' | '));

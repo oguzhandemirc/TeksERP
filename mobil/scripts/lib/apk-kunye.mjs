@@ -120,7 +120,7 @@ export function withApkBlock(s, token) {
   return { ...geri, [APK_KUNYE_ALANI]: { v: APK_DOC_VERSION, bildirim: token } };
 }
 
-// ── Yayın kapısı yüklemleri (`deploy/mobil-yayinla.mjs`) ─────────────────────
+// ── Yayın kapısı yüklemleri (`deploy/mobil-grup-yayinla.mjs`) ─────────────────────
 /** Tabletin JS paketine gömülen çapa — depo köküne göre. */
 export const APK_CAPA_REL = 'mobil/src/lib/apk-imza-capasi.json';
 

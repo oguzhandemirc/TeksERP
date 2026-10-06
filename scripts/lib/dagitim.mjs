@@ -344,7 +344,6 @@ export const TUKETICILER = Object.freeze([
   'Dockerfile',
   'docs/ops/deploy-demo-izin-listesi.txt',
   'deploy/electron-paketle.sh',
-  'scripts/test_kanal_yayin_kapisi.mjs',
   // O7: tablet ortak kimliği (app.config.js argümansız yolu + build-apk); türetim eşitliği test_tablet_ortak_paket.
   'mobil/scripts/lib/ortak-kimlik.cjs',
   'mobil/src/test/update-feed-url.test.ts',

@@ -30,7 +30,6 @@ import { sirala } from "./lib/adim-sirasi.mjs";
 import { deftereYaz } from "./lib/kapi-defteri.mjs";
 import { etkilenenProjeler, stagedFiles } from "./lib/staged.mjs";
 import { agirSurecSayisi, slotAl } from "./lib/semafor.mjs";
-import { kanalBekcisiTetigi } from "../lib/kanallar.mjs";
 import { dagitimBekcisiTetigi } from "../lib/dagitim.mjs";
 import { panelKimlikTetigi } from "../lib/panel-kimlik.mjs";
 
@@ -262,15 +261,6 @@ if (staged.some((f) => SURUM_NOTU_YOLLARI.has(f))) {
   });
 }
 
-// KANAL KAPILARI (testfabrika D2): dağıtım kanalı kimliğine ya da yayın betiklerine dokunan
-// commit iki kanal bekçisini görür — ikisi de zero-dep/DB'siz/ağsız, CI dışında yalnız burada
-// koşarlar. Tetik bekçilerin OKUDUĞU kümeden türer (`kanalBekcisiTetigi`, elle sayılmaz);
-// kapsamını check-kanallar §6 ve test_kanal_yayin_kapisi 5i ölçer (okunandan dar olamaz).
-if (staged.some(kanalBekcisiTetigi)) {
-  adimlar.push({ ad: "kanal kayıt defteri", cwd: ".", cmd: ["node", ["scripts/check-kanallar.mjs"]] });
-  adimlar.push({ ad: "kanal yayın kapıları", cwd: ".", cmd: ["node", ["scripts/test_kanal_yayin_kapisi.mjs"]], gitEnvSil: true });
-}
-
 // DAĞITIM KAYDI (tek ortak paket O1): eski kanal kaydı bayt-donuktur — adım KOŞULSUZ, çünkü
 // silme `staged` (ACMR) listesine girmez; ~0,1 sn. Git ortamı SİLİNMEZ: index kolu commit edilecek baytı okur.
 adimlar.push({ ad: "eski kanal kaydı donuk", cwd: ".", cmd: ["node", ["scripts/test_eski_kanal_donuk.mjs"]] });
@@ -305,7 +295,14 @@ if (staged.some((f) => TABLET_ORTAK_TETIK.includes(f) || f.startsWith("mobil/scr
 }
 
 // GRUP YAYINI (O10a · O10b · O11b): ortak grup kitaplığı üç ürünün kapısıdır — kitaplık/terfi değişince üç bekçi birden.
-const GRUP_KITAPLIGI = new Set(["scripts/lib/grup-yayin.mjs", "scripts/lib/terfi.mjs"]);
+// Ortak yayın kitaplıkları (eski kanal kapıları emekli olunca — O15 — tetikleri buraya geçti): üç grup bekçisi onları koşturur.
+const GRUP_KITAPLIGI = new Set([
+  "scripts/lib/grup-yayin.mjs", "scripts/lib/terfi.mjs", "scripts/lib/derleme-bagi.mjs", "scripts/lib/panel-imza-kapisi.mjs",
+  "scripts/lib/panel-kimlik.mjs", "scripts/lib/yayin-okuma.mjs", "scripts/lib/yayin-hedefi.mjs", "scripts/lib/yayin-bildirim.mjs",
+  "scripts/lib/surum.mjs", "scripts/lib/kullanici-cumlesi.mjs", "scripts/lib/dagitim.mjs",
+  "Electron/electron/guncelleme/kunye-jws.mjs", "Electron/electron/guncelleme/panel-kunye.mjs", "Electron/electron/guncelleme/latest-yml.mjs",
+  "mobil/scripts/lib/apk-kunye.mjs", "mobil/scripts/lib/apk-kimlik.mjs", "mobil/scripts/lib/manifest.mjs", "mobil/scripts/lib/zip.mjs",
+]);
 const GRUP_YAYIN_DOSYALARI = new Set([
   "deploy/backend-yayinla.mjs", "scripts/lib/backend-yayin.mjs",
   "Teks-Erp/scripts/backend-bildirim.ts", "scripts/test_backend_yayin.mjs",

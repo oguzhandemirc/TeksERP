@@ -11,11 +11,12 @@
 //   · rotasyon kilidi (yayın, ssh okuması): yeni sürümün imzalayanı YAYINDAKİ sürümün künyesindeki çapada olmalı
 //     (sahadaki panel bir sonraki sürümü kendi gömülü çapasıyla doğrular).
 // Sonuç üç değerli değil dört: uyumlu · imzasiz (imzalanabilir) · ihlal · ÖLÇÜLEMEDİ (`Olculemedi` fırlatılır).
-// Bekçi: scripts/test_kanal_yayin_kapisi.mjs §8 (sahte ssh/scp/curl ile yayın betiğinin kendisi).
+// Bekçi: scripts/test_grup_yayin_kapisi.mjs (sahte ssh/scp/curl ile grup yayın betiğinin kendisi).
 // =============================================================================
 import fs from 'node:fs';
 import path from 'node:path';
-import { KOK, Olculemedi, tirnakliGecer } from './kanallar.mjs';
+import { KOK, Olculemedi } from './dagitim.mjs';
+import { tirnakliGecer } from './panel-kimlik.mjs';
 import { checkProductionAnchor, parseJws } from '../../Electron/electron/guncelleme/kunye-jws.mjs';
 import { PANEL_RELEASE_TYP, checkUpdateInfo, verifyArtifactFile, verifyReleaseBlock } from '../../Electron/electron/guncelleme/panel-kunye.mjs';
 import { parseLatestYml } from '../../Electron/electron/guncelleme/latest-yml.mjs';

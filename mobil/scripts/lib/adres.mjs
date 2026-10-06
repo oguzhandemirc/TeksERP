@@ -1,8 +1,8 @@
 // =============================================================================
 // TeksERP Mobil — sunucu adresi çözümü (TEK KAYNAK)
 // =============================================================================
-// Hem `build-apk.mjs` (kurulum dosyası) hem `yayinla-ota.mjs` (uzaktan
-// güncelleme paketi) bu dosyayı kullanır.
+// Hem `build-apk.mjs` (kurulum dosyası) hem `deploy/mobil-grup-yayinla.mjs` (yayın
+// kapısı) bu dosyayı kullanır.
 //
 // ⚠️ NEDEN TEK KAYNAK: iki script farklı sırayla adres çözseydi, aynı gün
 // derlenen APK ile yayınlanan paket FARKLI sunucuya bakabilirdi. Bu ayrışma

@@ -9,7 +9,8 @@
 //   node scripts/grup-yayin-kapisi.mjs terfi <grup> <ürün> <sürüm> [--dizin=<ortak paket>] [--kuru] [--terfi-atla=<cümle>]
 //   node scripts/grup-yayin-kapisi.mjs derleme-bagi <ortak paket dizini> <sürüm>   # künye ↔ exe ↔ asar ↔ HEAD (grup-nötr)
 //   node scripts/grup-yayin-kapisi.mjs hazirla <grup> <ortak paket dizini> <sürüm> # grup künye dizini → stdout
-//   node scripts/grup-yayin-kapisi.mjs capa <ortak paket dizini>            # panel imza çapası dolu + pakete gömülü
+//   node scripts/grup-yayin-kapisi.mjs capa [<ortak paket dizini>]          # panel imza çapası dolu (+ dizin verilirse pakete gömülü)
+//   node scripts/grup-yayin-kapisi.mjs temiz-agac                          # paketleme/yayın öncesi: ağaç temiz mi → stdout'a HEAD commit'i
 //   node scripts/grup-yayin-kapisi.mjs imza <grup> <grup dizini>            # künye (kanal = GRUP) panelin kabul edeceği künye mi (3 = imzasız)
 //   node scripts/grup-yayin-kapisi.mjs rotasyon <grup> <grup dizini> <yayındaki latest.yml>
 //   node scripts/grup-yayin-kapisi.mjs imza-uzak <grup> <latest.yml>        # kenardan okunan künye (3 = imzasız)
@@ -22,10 +23,10 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
-import { Olculemedi as DagitimOlculemedi, terfiKaynagi } from './lib/dagitim.mjs';
-import { PANEL_KUNYE_ADI, derlemeBagiDenetimi, derlemeKunyesiOku, dosyaOzeti } from './lib/derleme-bagi.mjs';
+import { Olculemedi, terfiKaynagi } from './lib/dagitim.mjs';
+import { PANEL_KUNYE_ADI, derlemeBagiDenetimi, derlemeKunyesiOku, dosyaOzeti, temizAgacDenetimi } from './lib/derleme-bagi.mjs';
 import { GrupIhlali, grupCoz, grupDizini, grupHedefi, grupTerfiKapisi } from './lib/grup-yayin.mjs';
-import { Olculemedi, panelArtefaktKimligi } from './lib/kanallar.mjs';
+import { panelArtefaktKimligi } from './lib/panel-kimlik.mjs';
 import { etiketAt } from './lib/surum.mjs';
 import { cumleDenetle, terfiAtlaKaydi, terfiAtlaMesaji, terfiRaporu } from './lib/terfi.mjs';
 import { ezmeSatirlari, yayinEzmeleri } from './lib/yayin-hedefi.mjs';
@@ -41,7 +42,7 @@ function dur(baslik, satirlar, kod) {
 }
 
 function hataDur(e) {
-  if (e instanceof Olculemedi || e instanceof DagitimOlculemedi) dur(`ÖLÇÜLEMEDİ — ${e.message}`, ['Ölçülemeyen kapı geçmiş kapı değildir: DUR.'], 2);
+  if (e instanceof Olculemedi) dur(`ÖLÇÜLEMEDİ — ${e.message}`, ['Ölçülemeyen kapı geçmiş kapı değildir: DUR.'], 2);
   if (e?.satirlar) dur(e.message, e.satirlar, 1);
   dur(`beklenmeyen hata: ${e?.stack ?? e}`, [], 2);
 }
@@ -142,6 +143,14 @@ async function main(argv) {
       if (h.sonuc === 'uyumlu') return void console.log(`  ✓ ${h.satirlar[0]}`);
       dur(h.sonuc === 'imzasiz' ? 'YAYINDAKİ KÜNYE İMZASIZ' : 'YAYINDAKİ KÜNYE GEÇERSİZ', h.satirlar, h.sonuc === 'imzasiz' ? 3 : 1);
     }
+    if (komut === 'temiz-agac') {
+      const h = temizAgacDenetimi();
+      if (h.sonuc === 'temiz') {
+        for (const x of h.satirlar) console.error(`  ✓ ${x}`);
+        return void console.log(h.commit);
+      }
+      dur(h.sonuc === 'kirli' ? 'ÇALIŞMA AĞACI TEMİZ DEĞİL' : 'ÖLÇÜLEMEDİ — çalışma ağacı okunamadı', h.satirlar, h.sonuc === 'kirli' ? 1 : 2);
+    }
     if (komut === 'surum-etiketi') {
       const [urun, surum, grup, cumle] = r;
       const c = cumle ? cumleDenetle(cumle).cumle : '';
@@ -166,7 +175,7 @@ async function main(argv) {
       }[t.durum];
       return void console.log(m + (t.not ? ` — ${t.not}` : ''));
     }
-    dur(`bilinmeyen komut: ${komut ?? '(yok)'}`, ['grup · hedef · terfi · derleme-bagi · hazirla · capa · imza · rotasyon · imza-uzak · surum-etiketi · terfi-atla-kaydi'], 2);
+    dur(`bilinmeyen komut: ${komut ?? '(yok)'}`, ['grup · hedef · terfi · derleme-bagi · hazirla · capa · temiz-agac · imza · rotasyon · imza-uzak · surum-etiketi · terfi-atla-kaydi'], 2);
   } catch (e) {
     if (e instanceof GrupIhlali) dur(e.message, e.satirlar, 1);
     hataDur(e);

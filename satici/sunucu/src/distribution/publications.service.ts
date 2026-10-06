@@ -1,4 +1,4 @@
-// YAYIN BİLDİRİMİ — yayın betikleri (electron-yayinla.sh · mobil-yayinla.mjs · kanal-kapisi terfi) yayın/terfi
+// YAYIN BİLDİRİMİ — yayın betikleri (electron-grup-yayinla.sh · mobil-grup-yayinla.mjs · backend-yayinla.mjs) yayın/terfi
 // SONRASI imzalı bildirim gönderir; satıcı yayıncı anahtarıyla doğrular ve `yayin_bildirimi` defterine yazar.
 // Bildirim kimliği İÇERİKTEN türer: aynı olayın tekrarı (yeniden deneme, paketle+yayınla) aynı satırı döndürür.
 // Bildirim yalnız GÖRÜNÜM ve defterdir: `kanal.guncelSurumler`i (kiraya akan) OTOMATİK DEĞİŞTİRMEZ.

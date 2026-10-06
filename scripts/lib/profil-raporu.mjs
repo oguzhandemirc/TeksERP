@@ -20,7 +20,7 @@ export const RAPOR_DIZINI = path.join(homedir(), '.tekserp', 'derleme-kayitlari'
 export const PROFIL_DIZINI_REL = 'Teks-Erp/scripts/test-profilleri';
 export const KACIS_BAYRAGI = '--profil-matrisi-atla';
 /** Kapıyı çağırması gereken yayın betikleri: dağıtım kaydının tüketicisi olan bu desendeki her dosya. */
-export const YAYIN_BETIGI_DESENI = /^(deploy\/[^/]*yayinla[^/]*|mobil\/scripts\/yayinla-ota\.mjs)$/;
+export const YAYIN_BETIGI_DESENI = /^deploy\/[^/]*yayinla[^/]*$/;
 /** Çağrı izi: betik bu iki addan birini taşımalı (lib ya da CLI). */
 export const KAPI_IZLERI = Object.freeze(['profilMatrisiKapisi', 'profil-matrisi-kapisi.mjs']);
 

@@ -19,16 +19,17 @@
 
 import fs from 'node:fs';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 
-export const KOK = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
+import { KOK, Olculemedi } from './dagitim.mjs';
+import { PANEL_BASLIK_YER_TUTUCU, asarOku, panelArtefaktKimligi, panelKaynakFarki, tirnakliGecer } from './panel-kimlik.mjs';
+
+// Ortak yolun da kullandığı ölçüm araçları dağıtım/panel kitaplıklarında yaşar; burada yalnız yeniden dışa aktarılır.
+export { KOK, Olculemedi, PANEL_BASLIK_YER_TUTUCU, asarOku, panelArtefaktKimligi, panelKaynakFarki, tirnakliGecer };
 export const KAYIT_REL = 'deploy/kanallar.json';
 
 /** URL yol segmenti olacak: küçük harf, rakam, tire (paketle regex'i ∩ feed.cjs regex'i). */
 export const KOD_DESENI = /^[a-z0-9][a-z0-9-]{1,30}$/;
 
-/** Okunamadı / çözülemedi — "ihlal yok" ile karışmasın diye ayrı tip. */
-export class Olculemedi extends Error {}
 
 const TURLER = new Set(['uretim', 'hazirlik']);
 const KOK_ANAHTARLARI = ['_aciklama', 'varsayilan', 'kanallar'];
@@ -324,14 +325,6 @@ function json(dosyalar, rel) {
   }
 }
 
-function yakala(dosyalar, rel, desen, neyi) {
-  const m = dosyalar[rel];
-  if (typeof m !== 'string') throw new Olculemedi(`${rel} okunamadı`);
-  const r = desen.exec(m);
-  if (!r) throw new Olculemedi(`${rel}: ${neyi} bulunamadı (yeri/biçimi değişti — bekçiyi güncelle)`);
-  return r[1];
-}
-
 const fark = (liste, neresi, gercek, beklenen) => {
   if (gercek !== beklenen) liste.push(`${neresi} = "${gercek}" — kanal "${beklenen}" bekliyor`);
 };
@@ -351,58 +344,10 @@ export const PANEL_SABIT_DOSYALAR = [
   'deploy/dagitim.json', 'scripts/lib/dagitim.mjs', 'scripts/lib/panel-kimlik.mjs', 'scripts/panel-kimlik-kapisi.mjs',
 ];
 
-/** index.html `<title>` yer tutucusu — `Electron/build-identity.ts` derlemede pencere başlığıyla değiştirir. */
-export const PANEL_BASLIK_YER_TUTUCU = '%TEKSERP_WINDOW_TITLE%';
 /** Eski kanal derlemesini electron-vite'a (Vite sanal modülü) taşıyan ortam değişkeni. */
 export const PANEL_KANAL_ORTAMI = 'TEKSERP_KANAL';
 /** Paket açıklaması (NSIS kurulum dosyasının FileDescription'ı) ürün adından türer. */
 export const panelAciklamasi = (kanal) => `${kanal.panel.urunAdi} — Admin Panel by Etkili Yazılım`;
-
-const yorumsuz = (m) => m.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
-const esc = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-/** Metinde `değer` TIRNAKLI bir dize olarak geçiyor mu (önek/alt dize eşleşmesi değil). */
-export const tirnakliGecer = (metin, deger) => new RegExp(`(["'\`])${esc(deger)}\\1`).test(metin);
-
-/**
- * Kaynak dosyalar kimliği KANALDAN alıyor mu — hiçbir kanalın literal kimliği yok, bağ noktaları yerinde.
- * Bağ noktası bulunamazsa ÖLÇÜLEMEDİ (yer/biçim değişti); literal ya da yanlış bağ KIRMIZI.
- */
-export function panelKaynakFarki(kayit, dosyalar) {
-  const f = [];
-  const kanallar = Object.entries(kayit?.kanallar ?? {});
-  const oku = (rel) => {
-    if (typeof dosyalar[rel] !== 'string') throw new Olculemedi(`${rel} okunamadı`);
-    return dosyalar[rel];
-  };
-  const main = yorumsuz(oku('Electron/electron/main.ts'));
-  if (!/setAppUserModelId\(/.test(main)) throw new Olculemedi('Electron/electron/main.ts: setAppUserModelId çağrısı bulunamadı (yeri değişti — bekçiyi güncelle)');
-  if (!/\bnew BrowserWindow\(\{[\s\S]*?\btitle:/.test(main)) throw new Olculemedi('Electron/electron/main.ts: BrowserWindow `title:` bulunamadı');
-  if (!/from\s+["']@shared\/channel["']/.test(main)) f.push('Electron/electron/main.ts kimliği @shared/channel\'dan almıyor');
-  if (!/setAppUserModelId\(\s*APP_ID\s*\)/.test(main)) f.push('Electron/electron/main.ts setAppUserModelId kanaldan değil (`APP_ID` bekleniyor)');
-  if (!/\btitle:\s*WINDOW_TITLE\s*,/.test(main)) f.push('Electron/electron/main.ts pencere başlığı kanaldan değil (`title: WINDOW_TITLE` bekleniyor)');
-  if (!/"page-title-updated"[\s\S]{0,120}?preventDefault\(\)/.test(main)) {
-    f.push('Electron/electron/main.ts sayfa <title>\'ının pencere başlığını ezmesini engellemiyor (`page-title-updated` → preventDefault)');
-  }
-  for (const [kod, k] of kanallar) {
-    for (const [alan, v] of [['appId', k?.panel?.appId], ['urunAdi', k?.panel?.urunAdi]]) {
-      if (typeof v === 'string' && v && tirnakliGecer(main, v)) f.push(`Electron/electron/main.ts "${kod}" kanalının ${alan} literalini taşıyor ("${v}") — kimlik kanaldan gelir`);
-    }
-  }
-  const baslik = yakala(dosyalar, 'Electron/index.html', /<title>([^<]*)<\/title>/, '<title>');
-  if (baslik !== PANEL_BASLIK_YER_TUTUCU) f.push(`Electron/index.html <title> = "${baslik}" — yer tutucu ${PANEL_BASLIK_YER_TUTUCU} bekleniyor (başlık derlemede kanaldan)`);
-  const splash = yakala(dosyalar, 'Electron/resources/splash.html', /<title>([^<]*)<\/title>/, '<title>');
-  for (const [kod, k] of kanallar) {
-    if (k?.panel?.urunAdi && splash.includes(k.panel.urunAdi)) f.push(`Electron/resources/splash.html <title> "${kod}" kanalının ürün adını taşıyor — kanaldan bağımsız olmalı`);
-  }
-  if (!/from\s+["']virtual:tekserp-channel["']/.test(oku('Electron/shared/channel.ts'))) {
-    f.push('Electron/shared/channel.ts kimliği derleme sanal modülünden (virtual:tekserp-channel) almıyor');
-  }
-  const derleme = oku('Electron/build-identity.ts');
-  for (const [ne, iz] of [['kayıt defteri', 'deploy/kanallar.json'], ['kanal ortamı', PANEL_KANAL_ORTAMI], ['başlık yer tutucusu', PANEL_BASLIK_YER_TUTUCU]]) {
-    if (!derleme.includes(iz)) f.push(`Electron/build-identity.ts ${ne} izini (${iz}) taşımıyor`);
-  }
-  return f;
-}
 
 /** `release/<kod>/${version}` — electron-builder makrosu `${version}` harfiyen. */
 export const panelCiktiDeseni = (kod) => `release/${kod}/\${version}`;
@@ -531,110 +476,6 @@ export function dosyalariOku(yollar, kok = KOK) {
     }
   }
   return d;
-}
-
-/* ------------------------------------------------------------------ *
- * PANEL ARTEFAKTININ kimliği — yayıncı çalışma ağacına değil pakete bakar
- * ------------------------------------------------------------------ */
-
-/**
- * Asar arşivinden seçilen dosyaları okur (zero-dep). Biçim: [u32 4][u32 başlık turşusu boyu]
- * [u32 yük boyu][u32 JSON boyu][JSON başlık]…; veri 8 + turşu boyundan başlar, girdi
- * `{size, offset}` (offset dize). `unpacked` girdi arşivde değildir, okunmaz.
- */
-export function asarOku(yol, sec) {
-  let fd;
-  try {
-    fd = fs.openSync(yol, 'r');
-  } catch {
-    throw new Olculemedi(`paket arşivi okunamadı: ${yol}`);
-  }
-  try {
-    const bas = Buffer.alloc(16);
-    if (fs.readSync(fd, bas, 0, 16, 0) !== 16 || bas.readUInt32LE(0) !== 4) throw new Error('asar başlığı değil');
-    const tursu = bas.readUInt32LE(4);
-    const uzunluk = bas.readUInt32LE(12);
-    if (uzunluk <= 0 || uzunluk > tursu) throw new Error('başlık boyu tutarsız');
-    const hb = Buffer.alloc(uzunluk);
-    fs.readSync(fd, hb, 0, uzunluk, 16);
-    const baslik = JSON.parse(hb.toString('utf8'));
-    const taban = 8 + tursu;
-    const cikti = {};
-    const gez = (n, on) => {
-      for (const [ad, alt] of Object.entries(n.files ?? {})) {
-        const p = `${on}${ad}`;
-        if (alt.files) gez(alt, `${p}/`);
-        else if (sec(p) && !alt.unpacked && typeof alt.size === 'number') {
-          const b = Buffer.alloc(alt.size);
-          fs.readSync(fd, b, 0, alt.size, taban + Number(alt.offset));
-          cikti[p] = b;
-        }
-      }
-    };
-    gez(baslik, '');
-    return cikti;
-  } catch (e) {
-    throw new Olculemedi(`paket arşivi (${yol}) çözülemedi: ${e.message}`);
-  } finally {
-    fs.closeSync(fd);
-  }
-}
-
-/**
- * `release/<kod>/<sürüm>` dizinindeki derlemenin kendi kimliği.
- *   · `win-unpacked/resources/app-update.yml` — güncelleme adresi + updater önbellek adı;
- *   · `win-unpacked/<ürün adı>.exe` — kurulum dizini, kısayol, görev çubuğu adı;
- *   · `resources/app.asar` → paketin package.json'ı (`name`, `productName` → userData) ile
- *     derlenmiş ana süreç/arayüz: çalışma anında KULLANILAN adres/AUMID oradadır
- *     (updater `setFeedURL`le app-update.yml'i ezer — yalnız yml'e bakan kapı kör kalırdı).
- * Aynı dizindeki Setup.exe aynı derlemenin çıktısıdır (paketleme dizini derlemeden önce siler).
- */
-export function panelArtefaktKimligi(dizin) {
-  const yml = path.join(dizin, 'win-unpacked', 'resources', 'app-update.yml');
-  let metin;
-  try {
-    metin = fs.readFileSync(yml, 'utf8');
-  } catch {
-    throw new Olculemedi(`paketin gömülü güncelleme yapılandırması okunamadı: ${yml}`);
-  }
-  const satir = (ad) => {
-    const r = new RegExp(`^${ad}:[ \\t]*(.+?)[ \\t\\r]*$`, 'm').exec(metin);
-    return r ? r[1].replace(/^['"]|['"]$/g, '') : null;
-  };
-  const url = satir('url');
-  const updaterCacheDirName = satir('updaterCacheDirName');
-  if (!url || !updaterCacheDirName) {
-    throw new Olculemedi(`${yml}: url / updaterCacheDirName satırı yok — paket kimliği çözülemedi`);
-  }
-  let exeler;
-  try {
-    exeler = fs.readdirSync(path.join(dizin, 'win-unpacked')).filter((f) => f.toLowerCase().endsWith('.exe'));
-  } catch {
-    throw new Olculemedi(`${path.join(dizin, 'win-unpacked')} okunamadı`);
-  }
-  const asarYol = path.join(dizin, 'win-unpacked', 'resources', 'app.asar');
-  const icerik = asarOku(asarYol, (p) => p === 'package.json' || p === 'out/main/main.js' ||
-    (p.startsWith('out/renderer/') && /\.(js|html)$/.test(p)));
-  if (!icerik['package.json'] || !icerik['out/main/main.js'] || !icerik['out/renderer/index.html']) {
-    throw new Olculemedi(`${asarYol}: package.json / out/main/main.js / out/renderer/index.html yok — paket kimliği çözülemedi`);
-  }
-  let paket;
-  try {
-    paket = JSON.parse(icerik['package.json'].toString('utf8'));
-  } catch (e) {
-    throw new Olculemedi(`${asarYol} package.json ayrıştırılamadı: ${e.message}`);
-  }
-  const arayuzJs = Object.keys(icerik).filter((p) => p.startsWith('out/renderer/') && p.endsWith('.js')).sort();
-  return {
-    url,
-    updaterCacheDirName,
-    exeler,
-    // gitCommit: paketlemenin `-c.extraMetadata.gitCommit` ile gömdüğü derleme commit'i (G22 derleme bağı).
-    paket: { name: paket.name, productName: paket.productName, gitCommit: typeof paket.gitCommit === 'string' ? paket.gitCommit : null },
-    anaSurec: icerik['out/main/main.js'].toString('utf8'),
-    arayuz: arayuzJs.map((p) => icerik[p].toString('utf8')).join('\n'),
-    arayuzBasligi: /<title>([^<]*)<\/title>/.exec(icerik['out/renderer/index.html'].toString('utf8'))?.[1] ?? null,
-  };
 }
 
 /** Artefakt ↔ kanal. Boş dizi = paket bu kanalındır (ve başka hiçbir kanalın kimliğini taşımaz). */

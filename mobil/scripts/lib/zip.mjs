@@ -1,7 +1,7 @@
 // =============================================================================
 // TeksERP Mobil — APK (=ZIP) içinden tek girdi okuma (TEK KAYNAK)
 // =============================================================================
-// `build-apk.mjs` (derleme sonrası doğrulama) ve `deploy/mobil-yayinla.mjs`
+// `build-apk.mjs` (derleme sonrası doğrulama) ve `deploy/mobil-grup-yayinla.mjs`
 // (yayından önce artefakt kimliği) aynı soruyu soruyor; okuyucu tek.
 // =============================================================================
 

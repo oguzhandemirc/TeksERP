@@ -15,9 +15,8 @@ import path from 'node:path';
 
 import { KAYIT_REL, ESKI_KAYIT_REL, Olculemedi, dosyalariOku } from './lib/dagitim.mjs';
 import { PANEL_KUNYE_ADI, derlemeKunyesiYaz } from './lib/derleme-bagi.mjs';
-import { Olculemedi as KanalOlculemedi, panelArtefaktKimligi, panelKaynakFarki } from './lib/kanallar.mjs';
 import {
-  PANEL_DINLENME_DOSYALARI, ortakKimlik, panelDinlenmeFarki, panelOrtakArtefaktFarki, panelOrtakDerlemeArgumanlari, panelTabaniniYaz,
+  PANEL_DINLENME_DOSYALARI, panelArtefaktKimligi, panelKaynakFarki, ortakKimlik, panelDinlenmeFarki, panelOrtakArtefaktFarki, panelOrtakDerlemeArgumanlari, panelTabaniniYaz,
 } from './lib/panel-kimlik.mjs';
 
 function dur(baslik, satirlar, kod) {
@@ -80,6 +79,6 @@ function main([komut, dizin, surum, commit]) {
 try {
   main(process.argv.slice(2));
 } catch (e) {
-  if (e instanceof Olculemedi || e instanceof KanalOlculemedi) dur(`ÖLÇÜLEMEDİ — ${e.message}`, ['Ölçülemeyen kapı geçmiş kapı değildir: DUR.'], 2);
+  if (e instanceof Olculemedi) dur(`ÖLÇÜLEMEDİ — ${e.message}`, ['Ölçülemeyen kapı geçmiş kapı değildir: DUR.'], 2);
   dur(`beklenmeyen hata: ${e?.stack ?? e}`, [], 2);
 }

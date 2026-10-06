@@ -4,14 +4,14 @@
 // =============================================================================
 // Satıcı Mac'inde koşar; özel anahtar CI'a, pakete ve VDS'e GİRMEZ. Panel kod imzası (Authenticode) yokken
 // güncellemenin bütünlük kanıtı budur: künyesi doğrulanamayan güncelleme panelde İNDİRİLMEZ ve KURULMAZ.
-// Yayın betiği (`deploy/electron-yayinla.sh`) imzasız künyeyi YÜKLEMEZ; bu komutu kendisi çağırır.
+// Yayın betiği (`deploy/electron-grup-yayinla.sh`) imzasız künyeyi YÜKLEMEZ; bu komutu kendisi çağırır.
 //
 //   npx tsx scripts/panel-imza.ts imzala --musteri=<kod> [--surum=<x.y.z>] --anahtar=<dosya>
 //   npx tsx scripts/panel-imza.ts dogrula --musteri=<kod> [--surum=<x.y.z>]
 //   npx tsx scripts/panel-imza.ts anahtar-uret --kid=panel-<yıl>[-<n>] [--dizin=~/.tekserp/panel-uretim] [--json]
 //   npx tsx scripts/panel-imza.ts apk-imzala --musteri=<kod> --apk=<yol.apk> --kunye=<surum.json> --anahtar=<dosya>
 //   npx tsx scripts/panel-imza.ts apk-dogrula --musteri=<kod> --apk=<yol.apk> --kunye=<surum.json>
-//   (apk-*: surum.json'u `deploy/mobil-yayinla.mjs` yazar ve bu komutu kendisi çağırır; çapa mobil/src/lib/apk-imza-capasi.json)
+//   (apk-*: surum.json'u `deploy/mobil-grup-yayinla.mjs` yazar ve bu komutu kendisi çağırır; çapa mobil/src/lib/apk-imza-capasi.json)
 //   Ortak: [--dizin-paket=<release/<kod>/<sürüm> dizini>] (varsayılan Electron/release/<kod>/<sürüm>)
 //          [--capa=<çapa json>]  YALNIZ bekçi — gerçek çapa Electron/electron/guncelleme/imza-capasi.json
 //

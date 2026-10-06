@@ -208,7 +208,7 @@ function ortam({ betik = null } = {}) {
   fs.writeFileSync(log, '');
   const agac = path.join(d, 'agac');
   for (const rel of ['scripts/lib', 'Electron/electron/guncelleme', 'Teks-Erp/scripts/test-profilleri']) dizinKopya(agac, rel);
-  for (const rel of ['deploy/dagitim.json', 'deploy/kanallar.json', 'scripts/grup-yayin-kapisi.mjs', 'scripts/kanal-kapisi.mjs', 'scripts/profil-matrisi-kapisi.mjs']) dosyaKopya(agac, rel);
+  for (const rel of ['deploy/dagitim.json', 'deploy/kanallar.json', 'scripts/grup-yayin-kapisi.mjs', 'scripts/profil-matrisi-kapisi.mjs']) dosyaKopya(agac, rel);
   dosyaKopya(agac, 'deploy/electron-grup-yayinla.sh', betik ?? fs.readFileSync(path.join(KOK, 'deploy/electron-grup-yayinla.sh'), 'utf8'));
   fs.chmodSync(path.join(agac, 'deploy/electron-grup-yayinla.sh'), 0o755);
   // Sürüm notu / ortak kimlik kapılarının kendi bekçileri var; burada ölçülen onlar değil (beyanlı saplama).
@@ -464,7 +464,7 @@ function betikIhlalleri(metin) {
   const yer = (d) => kod.search(d);
   const ilkAg = Math.min(...[/^\s*scp /m].map(yer).filter((x) => x >= 0));
   for (const [ad, d] of [['profil matrisi kapısı', /profil-matrisi-kapisi\.mjs/], ['terfi kapısı', /grup-yayin-kapisi\.mjs" terfi /], ['derleme bağı', /grup-yayin-kapisi\.mjs" derleme-bagi /],
-    ['sürüm notu kapısı', /check-surum-notlari\.mjs/], ['temiz ağaç', /kanal-kapisi\.mjs" temiz-agac/], ['künye kapısı', /grup-yayin-kapisi\.mjs" imza /], ['rotasyon kilidi', /grup-yayin-kapisi\.mjs" rotasyon /],
+    ['sürüm notu kapısı', /check-surum-notlari\.mjs/], ['temiz ağaç', /grup-yayin-kapisi\.mjs" temiz-agac/], ['künye kapısı', /grup-yayin-kapisi\.mjs" imza /], ['rotasyon kilidi', /grup-yayin-kapisi\.mjs" rotasyon /],
     ['grup/eski kanal kapısı', /grup-yayin-kapisi\.mjs" grup /], ['hedef kayıttan', /grup-yayin-kapisi\.mjs" hedef /]]) {
     const i = yer(d);
     if (i < 0) f.push(`${ad} çağrısı YOK`);

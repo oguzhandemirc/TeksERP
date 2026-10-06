@@ -110,7 +110,7 @@ const PANEL_SONRAKI_ADIMLAR = [
   "Sonraki adımlar (panel çapası):",
   "  cd Teks-Erp && node ../scripts/agir-is.mjs -- npx tsx scripts/run-all-tests.ts panel_imza",
   "  cd Electron && node ../scripts/agir-is.mjs -- npx vitest run src/test/panel-kunye.test.ts src/test/updater-imza-akisi.test.ts",
-  "  node scripts/agir-is.mjs -- node scripts/test_kanal_yayin_kapisi.mjs   (§8 panel imzalı künye)",
+  "  node scripts/agir-is.mjs -- node scripts/test_grup_yayin_kapisi.mjs   (panel grup künyesi)",
   "Sonra: YENİ panel sürümü (çapa derlemede gömülür) — önce testfabrika; imzalı ilk sürüm eski panellere NORMAL gelir.",
 ];
 
@@ -118,7 +118,7 @@ const TABLET_SONRAKI_ADIMLAR = [
   "Sonraki adımlar (tablet çapası):",
   "  cd Teks-Erp && node ../scripts/agir-is.mjs -- npx tsx scripts/run-all-tests.ts panel_imza   (§4 tablet kâhini)",
   "  cd mobil && node ../scripts/agir-is.mjs -- npx jest src/services/apkKunye.test.ts src/services/appUpdate.apk.test.ts",
-  "  node scripts/agir-is.mjs -- node scripts/test_kanal_yayin_kapisi.mjs   (§3 tablet imzalı künye)",
+  "  node scripts/agir-is.mjs -- node scripts/test_grup_yayin_tablet.mjs   (tablet grup künyesi)",
   "Sonra: OTA (çapa JS paketinde) — önce testfabrika; APK yayını ancak çapalı OTA sahadayken imzalı künyeyle.",
 ];
 

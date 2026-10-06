@@ -285,7 +285,7 @@ process.exit(97);
   }
   // Geçici depo: kapının kendi dosyaları (KOK = depo) + kayıt defteri.
   const depo = path.join(T, 'depo');
-  for (const rel of ['scripts/kanal-kapisi.mjs', 'scripts/lib/kanallar.mjs', 'scripts/lib/surum.mjs', 'scripts/lib/terfi.mjs', 'scripts/lib/kullanici-cumlesi.mjs', 'scripts/lib/yayin-okuma.mjs', 'scripts/lib/yayin-hedefi.mjs', 'scripts/lib/derleme-bagi.mjs', 'scripts/lib/backend-yayin.mjs', 'deploy/kanallar.json']) {
+  for (const rel of ['scripts/kanal-kapisi.mjs', 'scripts/lib/kanallar.mjs', 'scripts/lib/surum.mjs', 'scripts/lib/terfi.mjs', 'scripts/lib/kullanici-cumlesi.mjs', 'scripts/lib/yayin-okuma.mjs', 'scripts/lib/yayin-hedefi.mjs', 'scripts/lib/derleme-bagi.mjs', 'scripts/lib/backend-yayin.mjs', 'scripts/lib/dagitim.mjs', 'scripts/lib/panel-kimlik.mjs', 'deploy/kanallar.json']) {
     fs.mkdirSync(path.dirname(path.join(depo, rel)), { recursive: true });
     fs.copyFileSync(path.join(KOK, rel), path.join(depo, rel));
   }
@@ -395,7 +395,7 @@ process.exit(97);
   const sondaYukle = async (degistir) => {
     const d = path.join(T, `sonda-${Math.random().toString(36).slice(2)}`);
     fs.mkdirSync(d);
-    for (const f of ['kanallar.mjs', 'surum.mjs', 'yayin-okuma.mjs', 'backend-yayin.mjs', 'kullanici-cumlesi.mjs']) fs.copyFileSync(path.join(KOK, 'scripts/lib', f), path.join(d, f));
+    for (const f of ['kanallar.mjs', 'dagitim.mjs', 'panel-kimlik.mjs', 'surum.mjs', 'yayin-okuma.mjs', 'backend-yayin.mjs', 'kullanici-cumlesi.mjs']) fs.copyFileSync(path.join(KOK, 'scripts/lib', f), path.join(d, f));
     const once = fs.readFileSync(path.join(KOK, 'scripts/lib/terfi.mjs'), 'utf8');
     const sonra = degistir(once);
     if (sonra === once) throw new Error('sonda mutasyonu UYGULANMADI');

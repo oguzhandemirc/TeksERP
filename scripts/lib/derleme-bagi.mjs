@@ -15,7 +15,7 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 
-import { KOK, Olculemedi } from './kanallar.mjs';
+import { KOK, Olculemedi } from './dagitim.mjs';
 import { terfiEtiketAdi } from './surum.mjs';
 
 export const DERLEME_KUNYESI_SURUMU = 1;

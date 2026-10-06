@@ -109,9 +109,9 @@ try {
   const yayinTuketicileri = TUKETICILER.filter((f) => YAYIN_BETIGI_DESENI.test(f));
   const eksikler = baglantiEksikleri(TUKETICILER, oku);
   kontrol('§3 dağıtım kaydını okuyan her yayın betiği kapıyı çağırır', eksikler.length === 0, eksikler.join(' | ') || `${yayinTuketicileri.length} yayın betiği tüketici`);
-  const sahte = { 'deploy/electron-yayinla.sh': 'kanal yayını\n', 'mobil/scripts/yayinla-ota.mjs': "node scripts/profil-matrisi-kapisi.mjs --grup=$g\n", 'scripts/lib/terfi.mjs': 'x' };
+  const sahte = { 'deploy/ornek-yayinla.sh': 'kapısız yayın\n', 'deploy/ornek-kapili-yayinla.mjs': "node scripts/profil-matrisi-kapisi.mjs --grup=$g\n", 'scripts/lib/terfi.mjs': 'x' };
   const sahteEksik = baglantiEksikleri(Object.keys(sahte), (r) => sahte[r]);
-  kontrol('§3 sonda: kapıyı çağırmayan yayın betiği KIRMIZI, çağıran ve desen dışı olan sayılmaz', sahteEksik.length === 1 && sahteEksik[0].startsWith('deploy/electron-yayinla.sh'), sahteEksik.join(' | '));
+  kontrol('§3 sonda: kapıyı çağırmayan yayın betiği KIRMIZI, çağıran ve desen dışı olan sayılmaz', sahteEksik.length === 1 && sahteEksik[0].startsWith('deploy/ornek-yayinla.sh'), sahteEksik.join(' | '));
   kontrol('§3 sonda: okunamayan tüketici KIRMIZI', baglantiEksikleri(['deploy/backend-yayinla.mjs'], () => undefined).length === 1);
 
   // ── §4 rapor yazarı ────────────────────────────────────────────────────────

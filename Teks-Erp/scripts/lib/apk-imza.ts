@@ -1,5 +1,5 @@
 // TABLET APK KÜNYESİ — yayın makinesi tarafı (imza aracı `scripts/panel-imza.ts apk-imzala` + bekçisi `test_panel_imza` §4).
-// Künyenin biçimi/doğrulaması TEK kaynaktan: `mobil/scripts/lib/apk-kunye.mjs` (yayın kapısı `deploy/mobil-yayinla.mjs`
+// Künyenin biçimi/doğrulaması TEK kaynaktan: `mobil/scripts/lib/apk-kunye.mjs` (yayın kapısı `deploy/mobil-grup-yayinla.mjs`
 // de onu okur; tabletin saf JS doğrulayıcısıyla eşdeğerliği mobil jest çapraz kâhininde). Anahtar açma panel aracıyla
 // ORTAK (aynı anahtar kararı: PAKET ya da `panel-<yıl>`). Her imza YAZILMADAN ÖNCE geri doğrulanır.
 import { createHash } from "node:crypto";

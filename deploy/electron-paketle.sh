@@ -94,14 +94,14 @@ fi
 # --- PANEL İMZA ÇAPASI — derlemeden ÖNCE ------------------------------------
 # Panel güncellemeyi yalnız gömülü çapadaki anahtarla imzalanmış künyeyle kurar (Electron/electron/guncelleme/).
 # Çapası boş ya da bozuk panel HİÇBİR güncellemeyi doğrulayamaz (çıkışsız kapı) → paketlenmez.
-node "$kok/scripts/kanal-kapisi.mjs" panel-capa \
+node "$kok/scripts/grup-yayin-kapisi.mjs" capa \
   || hata "Panel imza çapası kullanılamaz — paket üretilmedi (anahtar kararı + guven-capasi-ekle.ts panel)."
 
 # --- TEMİZ AĞAÇ (G22) — derlemeden ve dosya yazmadan ÖNCE -----------------------
 # Paket commit'lenmemiş/izlenmeyen içerik taşımaz: derleme commit'i pakete (asar package.json `gitCommit`) ve yanındaki
 # derleme künyesine (derleme.json) yazılır; yayıncı onu HEAD'e ve terfi etiketine bağlar. Tek istisna paketlemenin
 # kendi yazdığı sürüm alanı (Electron/package.json version). Çıkış 1 kirli, 2 ölçülemedi — ikisi de DURDURUR.
-derleme_commit=$(node "$kok/scripts/kanal-kapisi.mjs" temiz-agac) \
+derleme_commit=$(node "$kok/scripts/grup-yayin-kapisi.mjs" temiz-agac) \
   || hata "Çalışma ağacı temiz değil ya da okunamadı — paket üretilmedi (yukarıdaki satırlar)."
 
 cd "$electron_dir"
@@ -309,7 +309,7 @@ node "$kok/scripts/kanal-kapisi.mjs" panel-yayin "$musteri" "$electron_dir/$rel"
   || hata "Derlenen paketin kimliği '$musteri' kanalıyla birebir değil — yayınlama."
 fi
 # Çapa ve künye doğrulayıcısı ana sürece GERÇEKTEN gömüldü mü (kaynak değil, çıktı okunur).
-node "$kok/scripts/kanal-kapisi.mjs" panel-capa "$musteri" "$electron_dir/$rel" \
+node "$kok/scripts/grup-yayin-kapisi.mjs" capa "$electron_dir/$rel" \
   || hata "Derlenen panel imza çapasını taşımıyor — yayınlama."
 
 setup="$rel/TeksERP-$surum-Setup.exe"
@@ -317,7 +317,7 @@ setup="$rel/TeksERP-$surum-Setup.exe"
 [ -f "$rel/latest.yml" ] || hata "latest.yml üretilmemiş — package.json > build.publish eksik olabilir."
 
 # --- DERLEME KÜNYESİ (G22) — derleme sırasında ağaç/HEAD değişmediyse ----------------
-son_commit=$(node "$kok/scripts/kanal-kapisi.mjs" temiz-agac) \
+son_commit=$(node "$kok/scripts/grup-yayin-kapisi.mjs" temiz-agac) \
   || hata "Derleme sırasında çalışma ağacı değişti — paket güvenilmez, yayınlama."
 [ "$son_commit" = "$derleme_commit" ] || hata "Derleme sırasında HEAD değişti ($derleme_commit → $son_commit) — paket güvenilmez, yayınlama."
 if [ "$ortak" = "1" ]; then

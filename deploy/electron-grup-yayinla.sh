@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # =============================================================================
 # TEK ORTAK PANEL PAKETİNİ bir güncelleme grubuna yayınlar / terfi ettirir (macOS/Linux; Windows'ta Git Bash/WSL).
-# Eski kanal yayıncısı (`deploy/electron-yayinla.sh --musteri=…`) BAYT-DONUKTUR ve bu betik onun yerine geçmez:
+# Eski kanal yayıncısı EMEKLİ (`eski-kanal-son` etiketinde; acil yol docs/ops/ESKI-KANAL-ACIL.md) ve bu betik onun yerine geçmez:
 # grup yayını yalnız dağıtım kaydındaki gruplara (`deploy/dagitim.json`: test → oncu → genel) gider; eski kanal kodu
 # hedef olamaz. Paket `deploy/electron-paketle.sh <sürüm>` ile BİR kez derlenir (Electron/release/ortak/<sürüm>).
 #
@@ -48,7 +48,7 @@ for a in "$@"; do
     --terfi-atla=*) terfi_atla="${a#--terfi-atla=}"; terfi_atla_verildi=1 ;;
     --terfi-atla) terfi_atla=""; terfi_atla_verildi=1 ;;
     --profil-matrisi-atla=*) profil_atla="${a#--profil-matrisi-atla=}"; profil_atla_verildi=1 ;;
-    --musteri=*|--musteri) hata "--musteri eski kanal yayıncısının argümanıdır (deploy/electron-yayinla.sh); grup yayını --grup=<test|oncu|genel> alır." ;;
+    --musteri=*|--musteri) hata "--musteri emekli eski kanal yayıncısının argümanıdır (eski-kanal-son etiketi, docs/ops/ESKI-KANAL-ACIL.md); grup yayını --grup=<test|oncu|genel> alır." ;;
     -*) hata "Tanınmayan seçenek: $a" ;;
     *)
       [ -z "$surum_arg" ] || hata "Fazla argüman: $a"
@@ -125,7 +125,7 @@ if [ "$denetim_kipi" = "0" ]; then
   node "$kok/scripts/check-surum-notlari.mjs" --panel="$surum" \
     || hata "Sürüm notu kapısı kırmızı — $surum için operatör notu yok ya da kuralları ihlal ediyor (yükleme yapılmadı)."
   # TEMİZ AĞAÇ — HEAD yayınlanan commit olmalı (kirli ağaçta HEAD yayınlanan şey değildir).
-  node "$kok/scripts/kanal-kapisi.mjs" temiz-agac > /dev/null \
+  node "$kok/scripts/grup-yayin-kapisi.mjs" temiz-agac > /dev/null \
     || hata "Çalışma ağacı temiz değil — yükleme yapılmadı."
   # ARTEFAKT OTORİTESİ — paket gerçekten ORTAK kimlikte mi, imza çapası gömülü mü, künye HEAD'e bağlı mı (ssh'tan ÖNCE)
   node "$kok/scripts/panel-kimlik-kapisi.mjs" paket "$rel" \

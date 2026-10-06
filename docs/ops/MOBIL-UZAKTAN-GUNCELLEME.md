@@ -380,7 +380,7 @@ Güncelleme: internet). İkisinin farklı olması normaldir; ekran bunu uyarı o
 | `Teks-Erp/scripts/test_panel_imza.ts` §3h–k · §4 | `guven-capasi-ekle.ts tablet` · `panel-imza.ts apk-imzala/apk-dogrula` uçtan uca |
 | `scripts/test_kanal_yayin_kapisi.mjs` §3G6 | Yayın kapıları: imzasız OTA · OTA sertifikası · tablet çapası · imzasız künye · rotasyon · yükleme sırası |
 | `mobil/scripts/build-apk.mjs` | Manifest'te feed adresi + runtimeVersion + **kod imzalama sertifikası** · APK'nın mührü |
-| `mobil/scripts/yayinla-ota.mjs` | Bundle'daki ERP adresi · native parmak izi ↔ runtimeVersion · imzanın sertifikayla doğrulanması |
+| `yayinla-ota.mjs [eski-kanal-son etiketinde, mobil/scripts/ altında]` | Bundle'daki ERP adresi · native parmak izi ↔ runtimeVersion · imzanın sertifikayla doğrulanması |
 
 Hepsi negatif sondayla kırmızı verdiği ölçülerek yazıldı.
 
