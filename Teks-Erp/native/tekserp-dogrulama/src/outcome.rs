@@ -42,6 +42,11 @@ pub mod code {
     pub const BELGE_ILERI_TARIHLI: &str = "BELGE_ILERI_TARIHLI";
     pub const KIRA_HAK_UYUSMAZ: &str = "KIRA_HAK_UYUSMAZ";
     pub const KIRA_SINIF_YETKISIZ: &str = "KIRA_SINIF_YETKISIZ";
+    /// PAKET anahtarı kökün altında (`paket_zinciri.rs`): sertifika yok · zaman · iptal · sınıf.
+    pub const PAKET_SERTIFIKA_YOK: &str = "PAKET_SERTIFIKA_YOK";
+    pub const PAKET_SERTIFIKA_ZAMAN: &str = "PAKET_SERTIFIKA_ZAMAN";
+    pub const PAKET_SERTIFIKA_IPTAL: &str = "PAKET_SERTIFIKA_IPTAL";
+    pub const PAKET_SERTIFIKA_SINIF: &str = "PAKET_SERTIFIKA_SINIF";
 
     /// Çekirdeğe özgü kodlar (protokol kümesinde YOK; TS aynası `native.ts` `CORE_ERROR_CODES`).
     pub const CAPA_ENJEKSIYONU_KAPALI: &str = "CAPA_ENJEKSIYONU_KAPALI";
@@ -87,6 +92,10 @@ pub mod code {
         BELGE_ILERI_TARIHLI,
         KIRA_HAK_UYUSMAZ,
         KIRA_SINIF_YETKISIZ,
+        PAKET_SERTIFIKA_YOK,
+        PAKET_SERTIFIKA_ZAMAN,
+        PAKET_SERTIFIKA_IPTAL,
+        PAKET_SERTIFIKA_SINIF,
     ];
 
     pub const CORE: &[&str] = &[

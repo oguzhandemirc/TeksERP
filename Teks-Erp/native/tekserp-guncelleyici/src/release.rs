@@ -9,10 +9,11 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 use std::cmp::Ordering;
 use std::sync::OnceLock;
+use tekserp_dogrulama::iso;
 use tekserp_dogrulama::jsonx::{js_number, utf16_len};
 use tekserp_dogrulama::outcome::{code as proto, Fail, Outcome};
+use tekserp_dogrulama::paket_zinciri::{verify_package_signed, PackageChainSigner, PackageTrust};
 use tekserp_dogrulama::schema::{self, is_bool, is_int, is_iso, is_nullable, is_str_matching, is_string_len, is_uuid, object, req};
-use tekserp_dogrulama::{b64, iso, jws};
 
 /// Belge türleri (TS `TYP.SURUM` · `TYP.PG`).
 pub const TYP_SURUM: &str = "tekserp-surum";
@@ -28,6 +29,8 @@ pub const CLOCK_SKEW_MS: f64 = 10.0 * 60.0 * 1000.0;
 pub const RELEASE_POINTER_FILE: &str = "son.json";
 pub const RELEASE_MANIFEST_FILE: &str = "surum.json";
 pub const PG_POINTER_FILE: &str = "pg.json";
+/// Zincirli (`pkt-*`) işaretçiler eskisinin YANINDA; eski güncelleyici bunları hiç okumaz (eski dosya KATI kalır).
+pub use tekserp_dogrulama::paket_zinciri::{CHAINED_PG_POINTER_FILE, CHAINED_RELEASE_MANIFEST_FILE, CHAINED_RELEASE_POINTER_FILE};
 
 /// Sözleşmenin kendi hata kodları (TS `PROTOCOL_ERROR_CODES`'a Dağıtım v2 ile eklenenler).
 pub mod code {
@@ -40,6 +43,7 @@ pub mod code {
 
 struct Patterns {
     package_kid: Regex,
+    signer_kid: Regex,
     sha256_hex: Regex,
     artifact_name: Regex,
     commit: Regex,
@@ -52,6 +56,7 @@ fn patterns() -> &'static Patterns {
     static P: OnceLock<Patterns> = OnceLock::new();
     P.get_or_init(|| Patterns {
         package_kid: Regex::new(r"^paket-[a-z0-9-]{1,40}$").expect("paket kid"),
+        signer_kid: Regex::new(r"^(paket|pkt)-[a-z0-9-]{1,40}$").expect("imzaci kid"),
         sha256_hex: Regex::new(r"^[0-9a-f]{64}$").expect("sha256"),
         artifact_name: Regex::new(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,115}\.zip$").expect("paket adi"),
         commit: Regex::new(r"^[0-9a-f]{7,40}$").expect("commit"),
@@ -68,6 +73,11 @@ pub fn release_pointer_path(kanal: &str) -> String {
     format!("/{kanal}/{UPDATE_PRODUCT}/{RELEASE_POINTER_FILE}")
 }
 
+/// `/<kanal>/backend/son-zincir.json` — `son.json`ın zincirli ikizi (önce o okunur).
+pub fn chained_release_pointer_path(kanal: &str) -> String {
+    format!("/{kanal}/{UPDATE_PRODUCT}/{CHAINED_RELEASE_POINTER_FILE}")
+}
+
 /// `/<kanal>/backend/<sürüm>/<dosya>` — sürüm dizini DEĞİŞMEZ.
 pub fn release_file_path(kanal: &str, surum: &str, dosya: &str) -> String {
     format!("/{kanal}/{UPDATE_PRODUCT}/{surum}/{dosya}")
@@ -80,11 +90,6 @@ pub fn pg_release_file_path(kanal: &str, surum: &str, derleme: u32, dosya: &str)
 
 pub fn is_package_kid(kid: &str) -> bool {
     patterns().package_kid.is_match(kid)
-}
-
-/// TS `packageKeyLookup`: biçimsiz kid/anahtar sessizce dışarıda.
-fn package_key<'a>(keys: &'a [(String, String)]) -> impl Fn(&str) -> Option<[u8; 32]> + 'a {
-    move |kid: &str| keys.iter().filter(|(k, _)| is_package_kid(k)).find(|(k, _)| k == kid).and_then(|(_, x)| b64::decode_exact::<32>(x))
 }
 
 // ── İşaretçi ─────────────────────────────────────────────────────────────────────────────────────
@@ -207,7 +212,7 @@ pub fn release_manifest_schema(v: &Value) -> Result<Map<String, Value>, String> 
     let is_product = |x: &Value| x.as_str() == Some(UPDATE_PRODUCT);
     let is_platform = |x: &Value| matches!(x, Value::String(s) if UPDATE_PLATFORMS.contains(&s.as_str()));
     let is_commit = |x: &Value| is_str_matching(x, &patterns().commit);
-    let is_kid = |x: &Value| matches!(x, Value::String(s) if is_package_kid(s));
+    let is_kid = |x: &Value| is_str_matching(x, &patterns().signer_kid);
     let is_min_source = |x: &Value| is_nullable(x, &schema::is_release_version);
     let is_migrations = |x: &Value| is_int(x, Some(0.0), Some(100_000.0));
     let any_object = |x: &Value| x.is_object();
@@ -324,6 +329,9 @@ pub struct ReleaseManifest {
     pub runtime: RuntimeInfo,
     pub notlar: Notes,
     pub zorunlu: bool,
+    /// `pkt-*` imzalı bildirimde imzalayan PAKET sertifikasının kimliği (yükte değil, doğrulamadan; bellekte kalır).
+    #[serde(skip)]
+    pub signer_certificate: Option<String>,
 }
 
 /// Doğrulanmış belge: şemanın ATILMIŞ çıktısı (TS'in döndürdüğüyle aynı JSON) + tipli hâli.
@@ -331,34 +339,42 @@ pub struct ReleaseManifest {
 pub struct Checked<T> {
     pub shaped: Map<String, Value>,
     pub doc: T,
+    /// `pkt-*` imzalı belgede imzalayan PAKET sertifikası (iptal işareti dahil); `paket-*`te `None`.
+    pub chain: Option<PackageChainSigner>,
 }
 
-fn typed<T: serde::de::DeserializeOwned>(shaped: Map<String, Value>) -> Outcome<Checked<T>> {
+fn typed<T: serde::de::DeserializeOwned>(shaped: Map<String, Value>, chain: Option<PackageChainSigner>) -> Outcome<Checked<T>> {
     match serde_json::from_value::<T>(Value::Object(shaped.clone())) {
-        Ok(doc) => Ok(Checked { shaped, doc }),
+        Ok(doc) => Ok(Checked { shaped, doc, chain }),
         Err(e) => Err(Fail { code: proto::BELGE_SEMA, message: format!("Belge tipe dönüşmedi: {e}") }),
     }
 }
 
-/// Sıra (TS `verifyReleaseManifest` ile aynı kod): JWS (typ · kid · imza) → şema → imzalayan =
-/// `paketImzaKid` → kanal. `keys` ÇAĞIRANIN süzdüğü kümedir (hazırlık anahtarı yalnız TEST/DEMO'da).
-pub fn verify_release_manifest(token: &Value, keys: &[(String, String)], kanal: &str) -> Outcome<Checked<ReleaseManifest>> {
-    let parsed = jws::verify(token, TYP_SURUM, package_key(keys))?;
-    let shaped = schema::decode(release_manifest_schema, &parsed.payload)?;
-    if shaped.get("paketImzaKid").and_then(Value::as_str) != Some(parsed.header.kid.as_str()) {
+/// Sıra (TS `verifyReleaseManifest` ile aynı kod): JWS (typ · kid · imza; `pkt-*` ise PAKET sertifikası zinciri) →
+/// şema → imzalayan = `paketImzaKid` → kanal. `trust.keys` ÇAĞIRANIN süzdüğü kümedir (hazırlık anahtarı yalnız TEST/DEMO'da).
+pub fn verify_release_manifest(token: &Value, trust: &PackageTrust, kanal: &str) -> Outcome<Checked<ReleaseManifest>> {
+    let signed = verify_package_signed(token, TYP_SURUM, trust)?;
+    let shaped = schema::decode(release_manifest_schema, &signed.payload)?;
+    if shaped.get("paketImzaKid").and_then(Value::as_str) != Some(signed.kid.as_str()) {
         return Err(Fail { code: code::SURUM_ANAHTAR, message: "Bildirimi imzalayan anahtar paketImzaKid değil".into() });
     }
     let channel = shaped.get("kanal").and_then(Value::as_str).unwrap_or_default().to_string();
     if channel != kanal {
         return Err(Fail { code: code::SURUM_KANAL, message: format!("Bildirim {channel} kanalının, kurulum {kanal} kanalında") });
     }
-    typed(shaped)
+    let mut checked: Checked<ReleaseManifest> = typed(shaped, signed.chain)?;
+    checked.doc.signer_certificate =
+        checked.chain.as_ref().and_then(|c| c.certificate.get("sertifikaId")).and_then(Value::as_str).map(str::to_string);
+    Ok(checked)
 }
 
 /// Açılan paketin imzalı künyesinden (`butunluk.jws` + imzalayan kid) bağ için gereken alanlar.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PackageIdentity {
     pub kid: String,
+    /// `pkt-*` imzalı listede imzalayan PAKET sertifikasının kimliği; `paket-*`te `None`.
+    #[serde(default, rename = "sertifikaId", skip_serializing_if = "Option::is_none")]
+    pub certificate_id: Option<String>,
     #[serde(rename = "paketId")]
     pub package_id: String,
     pub urun: String,
@@ -373,6 +389,10 @@ pub fn check_package_binding(m: &ReleaseManifest, p: &PackageIdentity) -> Outcom
     let mut off = vec![];
     if p.kid != m.signer_kid {
         off.push("kid");
+    }
+    // `pkt-*`: bildirimi ve listeyi AYNI PAKET sertifikası imzalamalı (kid aynı, sertifika kimliği de).
+    if p.certificate_id != m.signer_certificate {
+        off.push("sertifika");
     }
     if p.package_id != m.paket.package_id {
         off.push("paketId");
@@ -448,11 +468,11 @@ pub struct PgPackageManifest {
     pub published_at: String,
 }
 
-/// Sıra: JWS (typ · kid · imza) → şema. Anahtar kümesi bildirimdekiyle aynı süzgeçten.
-pub fn verify_pg_package_manifest(token: &Value, keys: &[(String, String)]) -> Outcome<Checked<PgPackageManifest>> {
-    let parsed = jws::verify(token, TYP_PG, package_key(keys))?;
-    let shaped = schema::decode(pg_package_manifest_schema, &parsed.payload)?;
-    typed(shaped)
+/// Sıra: JWS (typ · kid · imza; `pkt-*` ise zincir) → şema. Güven bildirimdekiyle aynı süzgeçten.
+pub fn verify_pg_package_manifest(token: &Value, trust: &PackageTrust) -> Outcome<Checked<PgPackageManifest>> {
+    let signed = verify_package_signed(token, TYP_PG, trust)?;
+    let shaped = schema::decode(pg_package_manifest_schema, &signed.payload)?;
+    typed(shaped, signed.chain)
 }
 
 /// Bildirimin PG hedefi bu künyenin paketi mi (çizgi · sürüm · derleme · paket · içerik · ICU birebir).

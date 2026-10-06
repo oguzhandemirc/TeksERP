@@ -54,6 +54,14 @@ export const PROTOCOL_ERROR_CODES = [
   "PAKET_BAGI",
   /** PG paketi künyesi backend bildiriminin PG hedefiyle bağlanmıyor (farklı ana sürüm dahil). */
   "PG_BAGI",
+  /** `pkt-*` kid'li paket belgesi yükünde kök imzalı PAKET sertifikası ya da imza zamanı yok. */
+  "PAKET_SERTIFIKA_YOK",
+  /** PAKET sertifikası imza anında geçerli değildi ya da (KABUL) bitişi + 180 gün geçti. */
+  "PAKET_SERTIFIKA_ZAMAN",
+  /** PAKET sertifikası PAKET iptal belgesinde (KABUL kipinde RED, YERLEŞİK kipte uyarı). */
+  "PAKET_SERTIFIKA_IPTAL",
+  /** Kurulumun sınıfı PAKET sertifikasının sınıf kümesinde değil (ya da sınıf bilinmiyor). */
+  "PAKET_SERTIFIKA_SINIF",
 ] as const;
 export type ProtocolErrorCode = (typeof PROTOCOL_ERROR_CODES)[number];
 

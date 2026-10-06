@@ -57,6 +57,7 @@ import {
   setIntegrityOutcome,
 } from "../src/lib/license/integrity-state";
 import type { IntegrityOutcome } from "../src/lib/license/integrity-check";
+import { bolum8 } from "./lib/butunluk-zincir-bolum";
 
 let pass = 0;
 let fail = 0;
@@ -336,7 +337,7 @@ function bolum3(): void {
   const P1 = randomUUID();
   const P2 = randomUUID();
   const sonuc = (durum: IntegrityOutcome["durum"], derleme: string | null, paketId: string | null = P1): IntegrityOutcome => ({
-    durum, kod: null, kid: A.kid, fazla: [], fazlaSayisi: 0, yukleyiciBayraklari: [], olcum: null, denetlendi: new Date(NOW).toISOString(),
+    durum, kod: null, kid: A.kid, fazla: [], fazlaSayisi: 0, yukleyiciBayraklari: [], olcum: null, sertifika: null, uyari: null, denetlendi: new Date(NOW).toISOString(),
     rapor: paketId
       ? { durum: durum === "GECERSIZ" ? "GECERSIZ" : "GECERLI", kod: null, dosyaSayisi: 1, eksik: [], eksikSayisi: 0, degisik: [], degisikSayisi: 0, okunamayan: [], okunamayanSayisi: 0, fazla: [], fazlaSayisi: 0,
           paket: { paketId, urun: "backend", surum: "2.12.0", derlemeTarihi: derleme ?? "2026-09-01T00:00:00.000Z", musteri: null } }
@@ -656,6 +657,10 @@ async function main(): Promise<void> {
     await bolum5b();
     await bolum6();
     await bolum7();
+    const zincirCores: { core: LicenseCore; ek: string }[] = [{ core: tsLicenseCore, ek: "ts" }];
+    if (n.status.kaynak === "native" && n.status.kunye.testCapasi) zincirCores.push({ core: n.core, ek: "native" });
+    else ATLAMA.atla("§8 native kolu", "test çapalı native derlemesi yok — `cd native/lisans-cekirdek && npm run derle`", 8);
+    await bolum8({ check, temp: TEMP, paketKur: async (ad) => { const k = paket(ad); await imzala(k, A); return k; }, girdi }, zincirCores);
   } finally {
     rmSync(TEMP, { recursive: true, force: true });
   }

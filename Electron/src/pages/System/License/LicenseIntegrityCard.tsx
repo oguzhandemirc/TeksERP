@@ -29,6 +29,7 @@ const CODE_LABEL: Readonly<Record<string, string | undefined>> = {
   BUTUNLUK_SINIF_BILINMIYOR: "Kurulum sınıfı bilinmiyor (etkinleştirme bekleniyor)",
   BUTUNLUK_FILIGRAN: "Program filigranı imzalı paketle uyuşmuyor",
   BUTUNLUK_YUKLEYICI: "Program kod enjekte eden başlatma bayrağıyla çalışıyor (--require/--import/--inspect)",
+  BUTUNLUK_SERTIFIKA_IPTAL: "Paketi imzalayan sertifika sonradan iptal edildi (kurulu paket çalışmaya devam eder; yeni sürüm kurun)",
 };
 
 function statusVariant(s: IntegrityStatus): "secondary" | "destructive" | "outline" {
@@ -70,6 +71,21 @@ export function LicenseIntegrityCard({ b }: { b: LicenseIntegrity | undefined })
         <InfoRow label="Dosyalar">
           {n.dosya} dosya · {n.eksik} eksik · {n.degisik} değişmiş · {n.fazla} fazla
           {n.okunamayan > 0 ? ` · ${n.okunamayan} okunamadı` : ""}
+        </InfoRow>
+      )}
+      {b.sertifika && (
+        <InfoRow label="İmzalayan sertifika">
+          <span className="font-mono text-xs" data-testid="lisans-paket-sertifikasi">
+            {b.sertifika.kid}
+          </span>
+          <span className="block text-xs text-muted-foreground">bitiş {when(b.sertifika.bitis)}</span>
+        </InfoRow>
+      )}
+      {b.uyari && (
+        <InfoRow label="Uyarı">
+          <span className="text-amber-600" data-testid="lisans-butunluk-uyari">
+            {CODE_LABEL[b.uyari] ?? b.uyari}
+          </span>
         </InfoRow>
       )}
       {b.ilkUyusmazlik && <InfoRow label="İlk uyuşmazlık">{when(b.ilkUyusmazlik)}</InfoRow>}

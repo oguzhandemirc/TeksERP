@@ -132,7 +132,7 @@ const VersionField = z.literal(PROTOCOL_VERSION);
  * kuralı, iptal) YALNIZ bildiren kuruluma gider. Liste AÇIK biçimli dizgedir (kapalı enum değil): tanımadığı
  * yeteneği satıcı yok sayar, yeni fabrika eski satıcıdan 400 almaz.
  */
-export const LICENSE_CAPABILITIES = Object.freeze(["hak-ara", "odenmis-tarih", "iptal", "parmak-izi-v2"] as const);
+export const LICENSE_CAPABILITIES = Object.freeze(["hak-ara", "odenmis-tarih", "iptal", "parmak-izi-v2", "paket-zinciri"] as const);
 export type LicenseCapability = (typeof LICENSE_CAPABILITIES)[number];
 const CapabilitySchema = z.string().regex(/^[a-z][a-z0-9-]{1,39}$/);
 export const CapabilityListSchema = z
@@ -266,6 +266,8 @@ export const LicenseResponseSchema = z.object({
   kodTuru: z.enum(ACTIVATION_CODE_KINDS).optional().catch(undefined),
   /** Güncel iptal belgesi (`tekserp-iptal`, G4) — ayrıca doğrulanır; biçimsizse yok sayılır, kirayı düşürmez. */
   iptal: JwsTextSchema.optional().catch(undefined),
+  /** Güncel PAKET sertifikası iptal listesi (`tekserp-paketiptal`) — ayrıca kökle doğrulanır; biçimsizse yok sayılır. */
+  paketIptal: JwsTextSchema.optional().catch(undefined),
 });
 
 /**

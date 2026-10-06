@@ -213,10 +213,10 @@ export function nativeCore(b: NativeBinding): LicenseCore {
         return UNMEASURED;
       }
     },
-    verifyIntegrity: async (manifest: unknown, root: string, keys?: readonly PackageKey[]): Promise<CoreResult<IntegrityReport>> => {
+    verifyIntegrity: async (manifest: unknown, root: string, keys?: readonly PackageKey[], roots?: readonly RootKey[]): Promise<CoreResult<IntegrityReport>> => {
       let text: string;
       try {
-        text = await b.verifyIntegrity(JSON.stringify({ manifest, root, ...(keys === undefined ? {} : { keys }) }));
+        text = await b.verifyIntegrity(JSON.stringify({ manifest, root, ...(keys === undefined ? {} : { keys }), ...anchorField(roots) }));
       } catch {
         return UNAVAILABLE_INTEGRITY;
       }

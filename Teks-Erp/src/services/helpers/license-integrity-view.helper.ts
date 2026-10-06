@@ -26,5 +26,7 @@ export function integritySection(snap: LicenseSnapshot): LicenseDetail["butunluk
       ? { dosya: r.dosyaSayisi, eksik: r.eksikSayisi, degisik: r.degisikSayisi, fazla: Math.max(r.fazlaSayisi, o?.fazlaSayisi ?? 0), okunamayan: r.okunamayanSayisi }
       : null,
     ilkUyusmazlik: snap.integrityFirstMismatchMs === null ? null : msToIso(snap.integrityFirstMismatchMs),
+    sertifika: o?.sertifika ? { kid: o.sertifika.kid, sertifikaId: o.sertifika.sertifikaId, bitis: o.sertifika.bitis, iptal: o.sertifika.iptal } : null,
+    uyari: o?.uyari ?? null,
   };
 }

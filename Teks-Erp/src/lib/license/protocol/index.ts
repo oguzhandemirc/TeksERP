@@ -16,3 +16,4 @@ export * from "./guncelleme-ortak";
 export * from "./guncelleme-pg";
 export * from "./guncelleme";
 export * from "./guncelleme-karar";
+export * from "./paket-zinciri";

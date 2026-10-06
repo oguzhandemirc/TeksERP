@@ -15,8 +15,10 @@ pub const PROTOCOL_VERSION: f64 = 1.0;
 pub const LICENSE_CLASSES: [&str; 6] = ["URETIM", "TEST", "DR", "DEMO", "BAYI", "BARINDIRILAN"];
 pub const STAGING_ROOT_CLASSES: [&str; 2] = ["TEST", "DEMO"];
 pub const SANCTION_LEVELS: [&str; 6] = ["K0", "K1", "K2", "K3", "K4", "K5"];
-/// `HAK`: HAK ara imzacısı (G4) — kök → ara sertifika (`ara-`) → HAK.
-pub const CERT_USAGES: [&str; 4] = ["ALT", "INDIRME", "BAYI", "HAK"];
+/// `HAK`: HAK ara imzacısı (G4) — kök → ara sertifika (`ara-`) → HAK. `PAKET`: paket belgesi imzacısı (`pkt-`).
+pub const CERT_USAGES: [&str; 5] = ["ALT", "INDIRME", "BAYI", "HAK", "PAKET"];
+/// `tekserp-iptal` satırının kullanımları — PAKET YOK (iptali ayrı belgede, `paket_zinciri::TYP_PAKET_IPTAL`).
+pub const REVOCATION_USAGES: [&str; 4] = ["ALT", "INDIRME", "BAYI", "HAK"];
 pub const DAY_MS: f64 = 86_400_000.0;
 pub const LEASE_MAX_DAYS: f64 = 45.0;
 pub const GRACE_MAX_DAYS: f64 = 60.0;
@@ -47,6 +49,7 @@ struct Patterns {
     version: Regex,
     license_no: Regex,
     cert_kid: Regex,
+    package_cert_kid: Regex,
     module_key_id: Regex,
     wrapped_key: Regex,
     release_version: Regex,
@@ -70,6 +73,7 @@ fn patterns() -> &'static Patterns {
         version: Regex::new(r"^[0-9]{1,4}\.[0-9]{1,4}\.[0-9]{1,6}([-+][0-9A-Za-z.-]{1,40})?$").expect("surum"),
         license_no: Regex::new(r"^TKS-[0-9]{4}-[0-9]{4,6}$").expect("lisansNo"),
         cert_kid: Regex::new(r"^[a-z]+-[a-z0-9-]{1,60}$").expect("sertifika kid"),
+        package_cert_kid: Regex::new(r"^pkt-[a-z0-9-]{1,60}$").expect("pkt"),
         module_key_id: Regex::new(r"^mk-[A-Za-z0-9_-]{22}$").expect("modul kid"),
         wrapped_key: Regex::new(r"^[A-Za-z0-9_-]{64}$").expect("sarili"),
         release_version: Regex::new(r"^[0-9]{1,4}\.[0-9]{1,4}\.[0-9]{1,6}(-[0-9A-Za-z]{1,20}(\.[0-9A-Za-z]{1,20}){0,3})?$").expect("yayin surumu"),
@@ -500,6 +504,7 @@ pub fn sub_kid_prefix(usage: &str) -> Option<&'static str> {
         "INDIRME" => Some("ind-"),
         "BAYI" => Some("bayi-"),
         "HAK" => Some("ara-"),
+        "PAKET" => Some("pkt-"),
         _ => None,
     }
 }
@@ -548,7 +553,7 @@ pub fn certificate(v: &Value) -> Result<Map<String, Value>, String> {
 /// İptal satırı (`RevocationEntrySchema`, z.object): kid öneki kullanımla uyuşmalı.
 fn revocation_entry(v: &Value) -> Option<Value> {
     let is_kid = |x: &Value| is_str_matching(x, &patterns().cert_kid);
-    let is_usage = |x: &Value| is_one_of(x, &CERT_USAGES);
+    let is_usage = |x: &Value| is_one_of(x, &REVOCATION_USAGES);
     let is_reason = |x: &Value| is_string_len(x, 0, 200);
     let out = object(
         v,
@@ -579,6 +584,37 @@ pub fn revocation(v: &Value) -> Result<Map<String, Value>, String> {
         v,
         &[req("v", &is_v), req("iptalId", &is_uuid), req("sira", &is_seq), req("verilis", &is_iso), req("iptaller", &is_array)],
         &[("iptaller", &revocation_entries)],
+    )
+}
+
+/// PAKET iptal satırı (TS `PackageRevocationSchema` satırı, z.object): kid `pkt-`, kullanım alanı yok.
+fn package_revocation_entry(v: &Value) -> Option<Value> {
+    let is_kid = |x: &Value| is_str_matching(x, &patterns().package_cert_kid);
+    let is_reason = |x: &Value| is_string_len(x, 0, 200);
+    object(v, &[req("kid", &is_kid), req("sertifikaId", &is_uuid), req("tarih", &is_iso), req("neden", &is_reason)], false)
+        .ok()
+        .map(Value::Object)
+}
+
+fn package_revocation_entries(v: &Value) -> Option<Value> {
+    let Value::Array(items) = v else { return None };
+    if items.len() > REVOCATION_MAX_ENTRIES {
+        return None;
+    }
+    let shaped: Vec<Value> = items.iter().map(package_revocation_entry).collect::<Option<_>>()?;
+    let ids: Vec<Value> = shaped.iter().map(|e| e.get("sertifikaId").cloned().unwrap_or(Value::Null)).collect();
+    unique_strings(&ids).then_some(Value::Array(shaped))
+}
+
+/// PAKET İPTALİ — TS `PackageRevocationSchema` (`tekserp-paketiptal`; `revocation`ın aynısı, satır yalnız `pkt-`).
+pub fn package_revocation(v: &Value) -> Result<Map<String, Value>, String> {
+    let is_v = |x: &Value| js_number(x) == Some(PROTOCOL_VERSION);
+    let is_seq = |x: &Value| is_int(x, Some(1.0), Some(MAX_SAFE));
+    let is_array = |x: &Value| x.is_array();
+    object_with_nested(
+        v,
+        &[req("v", &is_v), req("iptalId", &is_uuid), req("sira", &is_seq), req("verilis", &is_iso), req("iptaller", &is_array)],
+        &[("iptaller", &package_revocation_entries)],
     )
 }
 

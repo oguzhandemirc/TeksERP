@@ -22,6 +22,7 @@ use sha2::{Digest, Sha256};
 use std::io::Read;
 use std::path::{Path, PathBuf};
 use tekserp_dogrulama::jws;
+use tekserp_dogrulama::paket_zinciri::{PackageMode, PackageTrust};
 
 /// Kurulumun kendi kodları (tel sözleşmesi değil — setup betiği gösterir). Paket/imza/bağ hatalarında
 /// güncelleyicinin kodu (`codes::*`, sözleşmenin `JWS_*` · `BELGE_*` · `PG_BAGI`) olduğu gibi döner.
@@ -86,14 +87,19 @@ fn acma_hatasi(hedef: &Path, mesaj: String) -> KurulumHatasi {
 
 /// Backend paketi: güvenli açma (göreli yol · bağlantı girdisi RED · boy tavanı) → `butunluk.jws` PAKET
 /// anahtarıyla + imzalı listedeki HER dosya GEÇERLİ (§1.5 madde 2) → künye ürünü backend.
-pub fn backend_paketi(zip: &Path, hedef: &Path, keys: &[(String, String)]) -> Result<Value, KurulumHatasi> {
+pub fn backend_paketi(zip: &Path, hedef: &Path, trust: &PackageTrust) -> Result<Value, KurulumHatasi> {
     hedef_hazir(hedef)?;
     let boy = std::fs::metadata(zip).map_err(|e| hata(kod::GIRDI, format!("paket okunamadı ({}): {e}", zip.display())))?.len();
     if boy == 0 || boy > release::PACKAGE_MAX_BYTES {
         return Err(hata(kod::PAKET_ACILAMADI, format!("paket boyu sınır dışı: {boy} B")));
     }
     let stats = package::extract_real(zip, hedef, &ExtractLimits::default()).map_err(|m| acma_hatasi(hedef, m))?;
-    let id = package::verify_dir(hedef, &RealFs, keys).map_err(|e| temizle(hedef, e.code, e.message))?;
+    // Setup (V5) KABUL kipindedir ve kira yoktur: iptal yalnız paketin getirdiğinden (paket kökü, kapsam dışı).
+    let mut trust = trust.clone();
+    if let Some(r) = paket_iptali(hedef, &trust.roots) {
+        trust.revocation = tekserp_dogrulama::paket_zinciri::pick_newer_package_revocation(trust.revocation.take(), Some(r));
+    }
+    let id = package::verify_dir(hedef, &RealFs, &trust, None).map_err(|e| temizle(hedef, e.code, e.message))?;
     if id.urun != release::UPDATE_PRODUCT {
         return Err(temizle(hedef, kod::URUN, format!("paket ürünü \"{}\" (beklenen {})", id.urun, release::UPDATE_PRODUCT)));
     }
@@ -113,11 +119,11 @@ pub fn backend_paketi(zip: &Path, hedef: &Path, keys: &[(String, String)]) -> Re
 
 /// Onarım: daha önce açılmış sürüm dizini yeniden ölçülür (`butunluk.jws` + imzalı listedeki her dosya).
 /// Dizin kurulu sistemin parçasıdır — hata olsa da SİLİNMEZ; karar çağıranındır (yeniden açma).
-pub fn surum_dizini(dizin: &Path, keys: &[(String, String)]) -> Result<Value, KurulumHatasi> {
+pub fn surum_dizini(dizin: &Path, trust: &PackageTrust) -> Result<Value, KurulumHatasi> {
     if !dizin.is_dir() {
         return Err(hata(kod::GIRDI, format!("sürüm dizini yok: {}", dizin.display())));
     }
-    let id = package::verify_dir(dizin, &RealFs, keys).map_err(|e| hata(e.code, e.message))?;
+    let id = package::verify_dir(dizin, &RealFs, trust, None).map_err(|e| hata(e.code, e.message))?;
     if id.urun != release::UPDATE_PRODUCT {
         return Err(hata(kod::URUN, format!("paket ürünü \"{}\" (beklenen {})", id.urun, release::UPDATE_PRODUCT)));
     }
@@ -152,7 +158,7 @@ fn icu_surumleri(dizin: &Path) -> Vec<String> {
 /// PG paketi: künye (`tekserp-pg`) imzası + şema → zip boyu ve sha256'sı künyeyle birebir → güvenli açma →
 /// her dosya içerik manifestosuna, manifesto künyenin `icerikSha256`sına karşı (listede olmayan dosya RED)
 /// → `bin\icuuc<N>.dll` tek ve künyenin ICU'su (§1.6, D4 §3.5 · §5 U0–U2).
-pub fn pg_paketi(kunye: &Path, zip: &Path, hedef: &Path, keys: &[(String, String)]) -> Result<Value, KurulumHatasi> {
+pub fn pg_paketi(kunye: &Path, zip: &Path, hedef: &Path, trust: &PackageTrust) -> Result<Value, KurulumHatasi> {
     hedef_hazir(hedef)?;
     let km = std::fs::metadata(kunye).map_err(|e| hata(kod::GIRDI, format!("PG künyesi okunamadı ({}): {e}", kunye.display())))?;
     if km.len() > KUNYE_TAVANI {
@@ -161,7 +167,7 @@ pub fn pg_paketi(kunye: &Path, zip: &Path, hedef: &Path, keys: &[(String, String
     let text = std::fs::read_to_string(kunye).map_err(|e| hata(kod::GIRDI, format!("PG künyesi okunamadı: {e}")))?;
     let token = Value::String(release::read_release_pointer(&text).map_err(|f| hata(f.code, f.message))?);
     let kid = jws::parse(&token).map(|p| p.header.kid).map_err(|f| hata(f.code, f.message))?;
-    let k = release::verify_pg_package_manifest(&token, keys).map_err(|f| hata(f.code, f.message))?.doc;
+    let k = release::verify_pg_package_manifest(&token, trust).map_err(|f| hata(f.code, f.message))?.doc;
     let boy = std::fs::metadata(zip).map_err(|e| hata(kod::GIRDI, format!("PG paketi okunamadı ({}): {e}", zip.display())))?.len();
     if boy != k.paket.boyut {
         return Err(hata(crate::codes::PAKET_OZETI, format!("PG paketi {boy} B, künye {} B", k.paket.boyut)));
@@ -197,13 +203,41 @@ fn bayrak(args: &[String], ad: &str) -> Option<PathBuf> {
 }
 
 /// CLI girişi: `kurulum-paket` · `kurulum-pg` · `kurulum-dizin`. Dönüş çıkış kodudur (0 tamam · 3 doğrulama · 2 kullanım).
+/// Setup'ın güveni: gömülü çapa, SÜZGEÇSİZ (sınıf yok); yeni paket KABUL kipinde "şimdi" = sistem saati (kira yok),
+/// kurulu dizinin onarımı YERLEŞİK.
+pub fn kurulum_guveni(anchor: &TrustAnchor, mode: PackageMode, now_ms: f64) -> PackageTrust {
+    PackageTrust {
+        keys: anchor.package_keys.clone(),
+        roots: anchor.roots.clone(),
+        mode,
+        now_ms: (mode == PackageMode::Kabul).then_some(now_ms),
+        revocation: None,
+        install_class: None,
+    }
+}
+
+/// Açılan paketin kökündeki PAKET iptal belgesi (kökle doğrulanırsa).
+fn paket_iptali(
+    dizin: &Path,
+    roots: &[tekserp_dogrulama::chain::RootKey],
+) -> Option<tekserp_dogrulama::paket_zinciri::VerifiedPackageRevocation> {
+    let p = dizin.join(tekserp_dogrulama::paket_zinciri::PACKAGE_REVOCATION_FILE);
+    if std::fs::metadata(&p).ok()?.len() > KUNYE_TAVANI * 2 {
+        return None;
+    }
+    let text = std::fs::read_to_string(&p).ok()?;
+    tekserp_dogrulama::paket_zinciri::verify_package_revocation(&Value::String(text.trim().to_string()), roots).ok()
+}
+
 pub fn komut(command: &str, args: &[String]) -> Result<u32, String> {
-    let keys = TrustAnchor::for_process()?.package_keys;
+    let anchor = TrustAnchor::for_process()?;
+    let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(f64::NAN, |d| d.as_millis() as f64);
+    let kabul = kurulum_guveni(&anchor, PackageMode::Kabul, now);
     let gerek = |ad: &str| bayrak(args, ad).ok_or_else(|| format!("{command}: {ad} <yol> gerekli"));
     let sonuc = match command {
-        "kurulum-paket" => backend_paketi(&gerek("--zip")?, &gerek("--hedef")?, &keys),
-        "kurulum-pg" => pg_paketi(&gerek("--kunye")?, &gerek("--zip")?, &gerek("--hedef")?, &keys),
-        "kurulum-dizin" => surum_dizini(&gerek("--dizin")?, &keys),
+        "kurulum-paket" => backend_paketi(&gerek("--zip")?, &gerek("--hedef")?, &kabul),
+        "kurulum-pg" => pg_paketi(&gerek("--kunye")?, &gerek("--zip")?, &gerek("--hedef")?, &kabul),
+        "kurulum-dizin" => surum_dizini(&gerek("--dizin")?, &kurulum_guveni(&anchor, PackageMode::Yerlesik, now)),
         _ => return Err(format!("bilinmeyen kurulum komutu: {command}")),
     };
     match sonuc {

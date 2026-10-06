@@ -4,7 +4,6 @@
 // (`Teks-Erp/native/test-vektorleri/guncelleme-*.json`) aynalar.
 import type { KeyObject } from "node:crypto";
 import { z } from "zod";
-import { verifyJws } from "./jws";
 import {
   ChannelCodeSchema,
   IsoTimeSchema,
@@ -18,7 +17,8 @@ import {
   signDocument,
 } from "./belgeler";
 import type { DownloadProduct } from "./indirme";
-import { ArtifactSchema, PackageKidSchema, UPDATE_PLATFORMS, isPackageKid, packageKeyLookup, type PackagePublicKey } from "./guncelleme-ortak";
+import { ArtifactSchema, PackageSignerKidSchema, UPDATE_PLATFORMS, isPackageKid, type PackagePublicKey } from "./guncelleme-ortak";
+import { verifyPackageSigned, type PackageTrust } from "./paket-zinciri";
 import { PgRequirementSchema } from "./guncelleme-pg";
 import { CLOCK_SKEW_MS, failure, forwardFailure, isoToMs, success, type Result } from "./ortak";
 
@@ -55,7 +55,7 @@ export const ReleaseManifestSchema = z
     /** Paket zip'i: sürüm dizininde `ad`; `paketId` açılan paketin künyesindekiyle aynı olmalı. */
     paket: ArtifactSchema.extend({ paketId: UuidSchema }),
     /** Paketin dosya listesini imzalayan PAKET anahtarı = bu bildirimi imzalayan anahtar. */
-    paketImzaKid: PackageKidSchema,
+    paketImzaKid: PackageSignerKidSchema,
     /** Doğrudan geçişin en eski kaynak sürümü; daha eski kurulum önce ara sürüme sabitlenir. null = sınır yok. */
     minKaynakSurum: ReleaseVersionSchema.nullable(),
     gocSayisi: z.number().int().min(0).max(100_000),
@@ -85,19 +85,19 @@ export function signReleaseManifest(g: {
 }
 
 /**
- * Sıra (Rust aynası aynı sırayla aynı kodu verir): JWS (typ · kid · imza) → şema → imzalayan = `paketImzaKid`
- * → kanal. `keys` ÇAĞIRANIN süzdüğü kümedir: hazırlık anahtarını yalnız TEST/DEMO kurulumu verir.
+ * Sıra (Rust aynası aynı sırayla aynı kodu verir): JWS (typ · kid · imza; `pkt-*` ise PAKET sertifikası zinciri) → şema
+ * → imzalayan = `paketImzaKid` → kanal. `keys` ÇAĞIRANIN süzdüğü kümedir: hazırlık anahtarını yalnız TEST/DEMO kurulumu
+ * verir. `zincir` verilmezse `pkt-*` imzalı bildirim kök olmadığı için düşer (GUVEN_CAPASI_BOS).
  */
 export function verifyReleaseManifest(
   token: unknown,
-  g: { readonly keys: readonly PackagePublicKey[]; readonly kanal: string },
+  g: { readonly keys: readonly PackagePublicKey[]; readonly kanal: string; readonly zincir?: Omit<PackageTrust, "keys"> },
 ): Result<ReleaseManifest> {
-  const lookup = packageKeyLookup(g.keys);
-  const j = verifyJws(token, { typ: TYP.SURUM, findKey: (kid) => lookup.get(kid) });
+  const j = verifyPackageSigned(token, TYP.SURUM, { roots: [], mode: "YERLESIK", ...g.zincir, keys: g.keys });
   if (!j.ok) return forwardFailure(j);
   const b = decodeDocument(ReleaseManifestSchema, j.value.payload);
   if (!b.ok) return forwardFailure(b);
-  if (j.value.header.kid !== b.value.paketImzaKid) return failure("SURUM_ANAHTAR", "Bildirimi imzalayan anahtar paketImzaKid değil");
+  if (j.value.kid !== b.value.paketImzaKid) return failure("SURUM_ANAHTAR", "Bildirimi imzalayan anahtar paketImzaKid değil");
   if (b.value.kanal !== g.kanal) return failure("SURUM_KANAL", `Bildirim ${b.value.kanal} kanalının, kurulum ${g.kanal} kanalında`);
   return success(b.value);
 }

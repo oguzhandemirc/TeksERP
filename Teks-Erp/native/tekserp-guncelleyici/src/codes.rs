@@ -63,6 +63,15 @@ pub const GERI_YUKLEME_HATASI: &str = "GERI_YUKLEME_HATASI";
 pub const GERI_DONUS_SAGLIKSIZ: &str = "GERI_DONUS_SAGLIKSIZ";
 pub const KESINTI: &str = "KESINTI";
 pub const IC_HATA: &str = "IC_HATA";
+/// PAKET anahtarı kökün altında (`tekserp_dogrulama::paket_zinciri`): `pkt-*` imzalı belgede kök imzalı PAKET
+/// sertifikası ya da imza zamanı yok.
+pub const PAKET_SERTIFIKA_YOK: &str = "PAKET_SERTIFIKA_YOK";
+/// PAKET sertifikası imza anında geçerli değildi ya da (yeni paket) bitişinden 180 günden fazla geçti.
+pub const PAKET_SERTIFIKA_ZAMAN: &str = "PAKET_SERTIFIKA_ZAMAN";
+/// PAKET sertifikası PAKET iptal belgesinde — yeni paket kurulmaz (kurulu paket yalnız uyarı).
+pub const PAKET_SERTIFIKA_IPTAL: &str = "PAKET_SERTIFIKA_IPTAL";
+/// Kurulumun sınıfı PAKET sertifikasının sınıf kümesinde değil (ya da HAK yok, sınıf bilinmiyor).
+pub const PAKET_SERTIFIKA_SINIF: &str = "PAKET_SERTIFIKA_SINIF";
 
 /// Güncelleyicinin kendine özgü hizmet çıkış kodu: yeni ikiliyle yeniden başlatılmak için (§10).
 pub const EXIT_SELF_UPDATE: u32 = 20;
@@ -74,6 +83,14 @@ pub fn report_code(internal: &str) -> &'static str {
             "INDIRME_HATASI"
         }
         c if c.starts_with("JWS_") || c.starts_with("BELGE_") || c.starts_with("SURUM_") || c == MANIFEST_GECERSIZ => "IMZA_GECERSIZ",
+        // Zincir: PAKET sertifikası ve onu imzalayan kök (sözleşmenin kendi kodları).
+        c if c.starts_with("PAKET_SERTIFIKA_")
+            || c.starts_with("SERTIFIKA_")
+            || c.starts_with("KOK_")
+            || c.starts_with("GUVEN_CAPASI_") =>
+        {
+            "IMZA_GECERSIZ"
+        }
         PAKET_OZETI => "PAKET_OZETI",
         "PAKET_BAGI" | "PG_BAGI" => "PAKET_BAGI",
         BUTUNLUK_GECERSIZ | PAKET_YOL => "BUTUNLUK_GECERSIZ",
@@ -135,5 +152,23 @@ mod tests {
         assert_eq!(report_code(SAGLIK_ZAMAN_ASIMI), "SAGLIK_HATASI");
         assert_eq!(report_code(SAGLIK_HIZMET_DUSTU), "SAGLIK_HATASI");
         assert_eq!(report_code(DOSYA_KILITLI), "DOSYA_KILITLI");
+        for c in [
+            PAKET_SERTIFIKA_YOK,
+            PAKET_SERTIFIKA_ZAMAN,
+            PAKET_SERTIFIKA_IPTAL,
+            PAKET_SERTIFIKA_SINIF,
+            "KOK_BILINMIYOR",
+            "SERTIFIKA_KULLANIM",
+        ] {
+            assert_eq!(report_code(c), "IMZA_GECERSIZ", "{c}");
+        }
+        for (ours, proto) in [
+            (PAKET_SERTIFIKA_YOK, tekserp_dogrulama::outcome::code::PAKET_SERTIFIKA_YOK),
+            (PAKET_SERTIFIKA_ZAMAN, tekserp_dogrulama::outcome::code::PAKET_SERTIFIKA_ZAMAN),
+            (PAKET_SERTIFIKA_IPTAL, tekserp_dogrulama::outcome::code::PAKET_SERTIFIKA_IPTAL),
+            (PAKET_SERTIFIKA_SINIF, tekserp_dogrulama::outcome::code::PAKET_SERTIFIKA_SINIF),
+        ] {
+            assert_eq!(ours, proto, "durum kodu sözleşme kodunun aynısı");
+        }
     }
 }

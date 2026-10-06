@@ -12,6 +12,7 @@ use crate::iso;
 use crate::jsonx::{js_number, utf16_len};
 use crate::jws;
 use crate::outcome::code;
+use crate::paket_zinciri::{self, PackageTrust};
 use regex::Regex;
 use serde_json::{json, Map, Value};
 use sha2::{Digest, Sha256};
@@ -250,10 +251,36 @@ pub fn verify(manifest: &Value, root: &str, keys: &[(String, String)]) -> Value 
         Ok(p) => p,
         Err(e) => return report("GECERSIZ", Some(e.code), 0, &empty, Value::Null),
     };
-    let m = match decode_manifest(&parsed.payload) {
-        Ok(m) => m,
-        Err(c) => return report("GECERSIZ", Some(c), 0, &empty, Value::Null),
+    if paket_zinciri::carries_package_chain_fields(&parsed.payload) {
+        return report("GECERSIZ", Some(code::BELGE_SEMA), 0, &empty, Value::Null);
+    }
+    match decode_manifest(&parsed.payload) {
+        Ok(m) => measure(m, root),
+        Err(c) => report("GECERSIZ", Some(c), 0, &empty, Value::Null),
+    }
+}
+
+/// TS `verifyIntegrity(manifest, root, keys, zincir)`: `pkt-*` imzalı liste kök imzalı PAKET sertifikasına dayanır
+/// (gömülü liste boş olsa da doğrulanır); aksi bugünkü `verify` AYNEN.
+pub fn verify_trusted(manifest: &Value, root: &str, trust: &PackageTrust) -> Value {
+    let chained = jws::parse(manifest).is_ok_and(|p| paket_zinciri::is_chain_package_kid(&p.header.kid));
+    if !chained {
+        return verify(manifest, root, &trust.keys);
+    }
+    let empty = Buckets::default();
+    let signed = match paket_zinciri::verify_package_signed(manifest, TYP_BUTUNLUK, trust) {
+        Ok(s) => s,
+        Err(e) => return report("GECERSIZ", Some(e.code), 0, &empty, Value::Null),
     };
+    match decode_manifest(&signed.payload) {
+        Ok(m) => measure(m, root),
+        Err(c) => report("GECERSIZ", Some(c), 0, &empty, Value::Null),
+    }
+}
+
+/// İmzası ve şeması geçmiş listeye karşı `root` altındaki dosyalar.
+fn measure(m: Manifest, root: &str) -> Value {
+    let empty = Buckets::default();
     let total = m.list.count;
     let root_path = Path::new(root);
     if !root_path.is_dir() {

@@ -177,6 +177,10 @@ export interface LicenseDetail {
     anahtar: string | null;
     sayilar: { dosya: number; eksik: number; degisik: number; fazla: number; okunamayan: number } | null;
     ilkUyusmazlik: string | null;
+    /** Zincirli (`pkt-*`) listenin PAKET sertifikası; `paket-*` listede null. */
+    sertifika: { kid: string; sertifikaId: string; bitis: string; iptal: boolean } | null;
+    /** Kararı değiştirmeyen uyarı kodu (ör. `BUTUNLUK_SERTIFIKA_IPTAL`). */
+    uyari: string | null;
   };
   /** G4 güven zinciri: HAK imzacısı (+ ara sertifikası), kiranın ALT'ı, iptal belgesinin hâli. */
   readonly zincir: LicenseChainView;

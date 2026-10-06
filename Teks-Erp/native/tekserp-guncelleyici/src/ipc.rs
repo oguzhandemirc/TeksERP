@@ -257,6 +257,10 @@ pub struct StatusDoc {
     pub tick_s: u64,
     #[serde(rename = "guncelleyiciSurum")]
     pub updater_version: String,
+    /// Bu ikili PAKET sertifika zincirini (`pkt-*`) doğrular — backend kira isteğinde `paket-zinciri` yeteneğini
+    /// yalnız bu doğruyken söyler. Eski güncelleyici alanı yazmaz (okuyucuda yok = false).
+    #[serde(rename = "paketZinciri", default)]
+    pub package_chain: bool,
     #[serde(rename = "kuruluSurum")]
     pub installed_version: Option<String>,
     #[serde(rename = "durum")]
@@ -319,6 +323,7 @@ impl StatusDoc {
             liveness_threshold_s: 0,
             tick_s: 0,
             updater_version: env!("CARGO_PKG_VERSION").into(),
+            package_chain: true,
             installed_version: None,
             state,
             version: None,

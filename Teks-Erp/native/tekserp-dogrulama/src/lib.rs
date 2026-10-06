@@ -15,4 +15,5 @@ pub mod iso;
 pub mod jsonx;
 pub mod jws;
 pub mod outcome;
+pub mod paket_zinciri;
 pub mod schema;

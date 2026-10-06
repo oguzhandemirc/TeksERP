@@ -7,6 +7,7 @@
 use serde_json::{json, Value};
 use std::collections::BTreeMap;
 use std::path::PathBuf;
+use tekserp_dogrulama::paket_zinciri::PackageTrust;
 use tekserp_dogrulama::schema;
 use tekserp_guncelleyici::decision::{self, InstalledPg, UpdatePolicy};
 use tekserp_guncelleyici::ipc::UpdateResult;
@@ -43,13 +44,18 @@ fn typed<T: serde::de::DeserializeOwned>(v: &Value, what: &str) -> T {
 /// Bir kaydın BUGÜNKÜ Rust sonucu (TS `guncellemeDegerlendir` karşılığı); tanınmayan tür `None`.
 fn evaluate(v: &Value) -> Option<Value> {
     Some(match v["tur"].as_str()? {
-        "bildirim" => {
-            outcome(release::verify_release_manifest(&v["token"], &keys_of(&v["keys"]), v["kanal"].as_str().unwrap_or_default()), |c| {
-                Value::Object(c.shaped)
-            })
-        }
+        "bildirim" => outcome(
+            release::verify_release_manifest(
+                &v["token"],
+                &PackageTrust::embedded(keys_of(&v["keys"])),
+                v["kanal"].as_str().unwrap_or_default(),
+            ),
+            |c| Value::Object(c.shaped),
+        ),
         "isaretci" => outcome(release::read_release_pointer(v["metin"].as_str().unwrap_or_default()), Value::String),
-        "pg-kunye" => outcome(release::verify_pg_package_manifest(&v["token"], &keys_of(&v["keys"])), |c| Value::Object(c.shaped)),
+        "pg-kunye" => outcome(release::verify_pg_package_manifest(&v["token"], &PackageTrust::embedded(keys_of(&v["keys"]))), |c| {
+            Value::Object(c.shaped)
+        }),
         "pg-bagi" => {
             let req: PgRequirement = typed(&v["gereksinim"], "gereksinim");
             let k: PgPackageManifest = typed(&v["kunye"], "künye");

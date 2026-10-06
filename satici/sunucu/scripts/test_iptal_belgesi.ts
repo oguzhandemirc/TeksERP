@@ -64,7 +64,7 @@ function cli(argv: string[], g: { input?: string; env?: Record<string, string> }
 }
 
 /** Sertifikanın iptal satırı (kid + kimlik + kullanım). */
-function satir(konu: TestAnahtari, kullanim: CertificateDoc["kullanim"], sertifikaId: string = randomUUID()): RevocationDoc["iptaller"][number] {
+function satir(konu: TestAnahtari, kullanim: RevocationDoc["iptaller"][number]["kullanim"], sertifikaId: string = randomUUID()): RevocationDoc["iptaller"][number] {
   return { kid: konu.kid, sertifikaId, kullanim, tarih: msToIso(Date.now()), neden: "bekçi" };
 }
 

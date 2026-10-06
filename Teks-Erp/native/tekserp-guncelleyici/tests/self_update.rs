@@ -5,6 +5,7 @@ mod common;
 
 use common::*;
 use std::path::PathBuf;
+use tekserp_dogrulama::paket_zinciri::PackageTrust;
 use tekserp_guncelleyici::selfupdate::{self, Startup};
 use tekserp_guncelleyici::trust::ANCHOR_MODE;
 
@@ -38,8 +39,8 @@ fn setup(tag: &str, packaged: Option<String>) -> (World, PathBuf) {
     (w, own)
 }
 
-fn keys(w: &World) -> Vec<(String, String)> {
-    vec![("paket-2026".to_string(), x_of(&w.keys.package))]
+fn keys(w: &World) -> PackageTrust {
+    PackageTrust::embedded(vec![("paket-2026".to_string(), x_of(&w.keys.package))])
 }
 
 fn stage(w: &World, own: &std::path::Path, own_version: &str) -> Result<bool, String> {

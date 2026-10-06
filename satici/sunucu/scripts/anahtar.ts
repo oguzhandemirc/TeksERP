@@ -335,7 +335,8 @@ function certificateTokenOf(file: string): string {
   return raw.sertifika;
 }
 
-const CERT_USAGE_OF_FILE: Readonly<Record<string, CertUsage>> = {
+// PAKET sertifikası buraya girmez: iptali ayrı belgededir (`tekserp-paketiptal`).
+const CERT_USAGE_OF_FILE: Readonly<Record<string, RevocationDoc["iptaller"][number]["kullanim"]>> = {
   "tekserp-alt-anahtar": "ALT",
   "tekserp-indirme-anahtar": "INDIRME",
   "tekserp-ara-anahtar": "HAK",
@@ -374,7 +375,7 @@ async function generateRevocation(flags: Map<string, string>): Promise<void> {
     if (!cert.ok) throw new CliError(`Sertifika bu kökle doğrulanamadı (${cert.code}): ${file}`);
     const doc = cert.value.document;
     if (entries.some((e) => e.sertifikaId === doc.sertifikaId)) continue;
-    entries.push({ kid: doc.kid, sertifikaId: doc.sertifikaId, kullanim: doc.kullanim, tarih: new Date(now).toISOString(), neden: neden || "dönem töreni" });
+    entries.push({ kid: doc.kid, sertifikaId: doc.sertifikaId, kullanim: usage, tarih: new Date(now).toISOString(), neden: neden || "dönem töreni" });
   }
   if (entries.length > REVOCATION_MAX_ENTRIES) throw new CliError(`İptal satırı en çok ${REVOCATION_MAX_ENTRIES}`);
   const payload: RevocationDoc = { v: 1, iptalId: randomUUID(), sira: (previous?.sira ?? 0) + 1, verilis: new Date(now).toISOString(), iptaller: entries };

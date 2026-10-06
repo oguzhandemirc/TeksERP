@@ -55,6 +55,8 @@ export const UpdaterStatusDocSchema = z.object({
   planlanan: Short(40),
   politika: z.object({ kip: z.string().max(20), izin: z.boolean(), neden: Short(60) }).nullable().optional(),
   guncelleyiciSurum: Short(40),
+  /** Güncelleyici PAKET sertifika zincirini (`pkt-*`) doğrular; eski güncelleyici yazmaz. */
+  paketZinciri: z.boolean().optional(),
   zaman: Short(40),
 });
 export type UpdaterStatusDoc = z.infer<typeof UpdaterStatusDocSchema>;

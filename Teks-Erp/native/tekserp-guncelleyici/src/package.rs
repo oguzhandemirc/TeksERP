@@ -7,6 +7,7 @@ use crate::release::PackageIdentity;
 use serde_json::Value;
 use std::io::Read;
 use std::path::Path;
+use tekserp_dogrulama::paket_zinciri::{self, PackageTrust};
 use tekserp_dogrulama::{integrity, jws};
 
 #[derive(Debug, Clone, Copy)]
@@ -80,17 +81,32 @@ fn perr(code: &'static str, message: impl Into<String>) -> PkgError {
     PkgError { code, message: message.into() }
 }
 
-/// Açılmış dizini doğrular (sözleşme §1.5 madde 2): `butunluk.jws` bu kurulumun PAKET anahtar
-/// kümesiyle (hazırlık anahtarı yalnız TEST/DEMO'da — çağıran süzer) ve dosya listesi GEÇERLİ; dönen
-/// künye bildirimle `release::check_package_binding`e girer (madde 3).
-pub fn verify_dir(dir: &Path, fs: &dyn crate::env::Fs, keys: &[(String, String)]) -> Result<PackageIdentity, PkgError> {
+/// Dizinin doğrulanacak imzalı listesi: imzalayan biliniyorsa (bildirimin `paketImzaKid`i) ONUN ailesinin dosyası;
+/// bilinmiyorsa (kurulu dizin · setup) zincirli dosya varsa o, yoksa (geçiş) eskisi.
+fn integrity_file_for(dir: &Path, fs: &dyn crate::env::Fs, signer: Option<&str>) -> &'static str {
+    let chained = match signer {
+        Some(kid) => paket_zinciri::is_chain_package_kid(kid),
+        None => fs.exists(&dir.join(paket_zinciri::CHAINED_INTEGRITY_FILE)),
+    };
+    if chained {
+        paket_zinciri::CHAINED_INTEGRITY_FILE
+    } else {
+        integrity_file()
+    }
+}
+
+/// Açılmış dizini doğrular (sözleşme §1.5 madde 2): imzalı liste bu kurulumun güveniyle (gömülü `paket-*` kümesi —
+/// hazırlık anahtarı yalnız TEST/DEMO'da, çağıran süzer — ya da `pkt-*` ise kök imzalı PAKET sertifikası) ve dosya
+/// listesi GEÇERLİ; dönen künye bildirimle `release::check_package_binding`e girer (madde 3).
+pub fn verify_dir(dir: &Path, fs: &dyn crate::env::Fs, trust: &PackageTrust, signer: Option<&str>) -> Result<PackageIdentity, PkgError> {
+    let file = integrity_file_for(dir, fs, signer);
     let jws_text = fs
-        .read(&dir.join(integrity_file()))
-        .map_err(|e| perr(codes::BUTUNLUK_GECERSIZ, format!("butunluk.jws okunamadı: {e}")))
-        .and_then(|b| String::from_utf8(b).map_err(|_| perr(codes::BUTUNLUK_GECERSIZ, "butunluk.jws UTF-8 değil")))?;
+        .read(&dir.join(file))
+        .map_err(|e| perr(codes::BUTUNLUK_GECERSIZ, format!("{file} okunamadı: {e}")))
+        .and_then(|b| String::from_utf8(b).map_err(|_| perr(codes::BUTUNLUK_GECERSIZ, format!("{file} UTF-8 değil"))))?;
     let token = Value::String(jws_text.trim().to_string());
     let kid = jws::parse(&token).map(|p| p.header.kid).map_err(|f| perr(codes::BUTUNLUK_GECERSIZ, f.message))?;
-    let report = integrity::verify(&token, &dir.to_string_lossy(), keys);
+    let report = integrity::verify_trusted(&token, &dir.to_string_lossy(), trust);
     if report.get("durum").and_then(Value::as_str) != Some("GECERLI") {
         let kod = report.get("kod").and_then(Value::as_str).unwrap_or("?");
         let ornek = ["eksik", "degisik", "fazla", "okunamayan"]
@@ -107,8 +123,15 @@ pub fn verify_dir(dir: &Path, fs: &dyn crate::env::Fs, keys: &[(String, String)]
     }
     let pkg = &report["paket"];
     let s = |k: &str| pkg.get(k).and_then(Value::as_str).map(str::to_string);
+    // Rapor imzalayanı taşımaz: GEÇERLİ listede sertifikayı (zaten doğrulanmış) yükten okuruz.
+    let certificate_id = paket_zinciri::is_chain_package_kid(&kid)
+        .then(|| paket_zinciri::verify_package_signed(&token, integrity::TYP_BUTUNLUK, trust).ok())
+        .flatten()
+        .and_then(|s| s.chain)
+        .and_then(|c| c.certificate.get("sertifikaId").and_then(Value::as_str).map(str::to_string));
     Ok(PackageIdentity {
         kid,
+        certificate_id,
         package_id: s("paketId").unwrap_or_default(),
         urun: s("urun").unwrap_or_default(),
         surum: s("surum").unwrap_or_default(),
@@ -139,9 +162,9 @@ pub fn file_digest(fs: &dyn crate::env::Fs, p: &Path) -> std::io::Result<String>
 
 /// İmzalı listedeki bir dosyanın beklenen özeti (`rel` POSIX göreli yol). Dizin ÖNCE bütünüyle
 /// doğrulanır (imza + liste özeti + her dosya); listede olmayan dosya RED.
-pub fn signed_file_digest(dir: &Path, fs: &dyn crate::env::Fs, keys: &[(String, String)], rel: &str) -> Result<String, PkgError> {
+pub fn signed_file_digest(dir: &Path, fs: &dyn crate::env::Fs, trust: &PackageTrust, rel: &str) -> Result<String, PkgError> {
     use tekserp_dogrulama::integrity_list as list;
-    verify_dir(dir, fs, keys)?;
+    verify_dir(dir, fs, trust, None)?;
     let bytes =
         fs.read(&dir.join(list::LIST_FILE)).map_err(|e| perr(codes::BUTUNLUK_GECERSIZ, format!("{} okunamadı: {e}", list::LIST_FILE)))?;
     let count = bytes.iter().filter(|b| **b == b'\n').count();

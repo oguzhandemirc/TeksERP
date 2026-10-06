@@ -15,6 +15,7 @@ use crate::outcome::{code, Fail, Outcome};
 use crate::paths;
 use crate::schema::LICENSE_CLASSES;
 use serde_json::{json, Value};
+use tekserp_dogrulama::paket_zinciri::{PackageMode, PackageTrust};
 
 /// Arayüz sürümü: istek/yanıt biçimi kırılınca artar; yükleyici eşit değilse native'i KULLANMAZ (3: künyede çapa
 /// kipi). Lisans v2 (G4 + parmak izi v2) G3 yayınlanmadan indiği için AYNI numarada: yeni uçları taşımayan eski
@@ -337,7 +338,13 @@ pub fn verify_integrity(req: &Value) -> Value {
             })
             .unwrap_or_default(),
     };
-    ok(integrity::verify(&token(req, "manifest"), root, &keys))
+    // `pkt-*` imzalı liste kurulu paketin kendisidir: YERLEŞİK kip (zaman/iptal kararı ikinci katmanda); `paket-*` bugünkü yol.
+    let roots = match roots_from(req) {
+        Ok(r) => r,
+        Err(f) => return err(f),
+    };
+    let trust = PackageTrust { keys, roots, mode: PackageMode::Yerlesik, now_ms: None, revocation: None, install_class: None };
+    ok(integrity::verify_trusted(&token(req, "manifest"), root, &trust))
 }
 
 pub fn unwrap_module_key(req: &Value) -> Value {

@@ -15,6 +15,7 @@ use crate::trust;
 use crate::version;
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
+use tekserp_dogrulama::paket_zinciri::PackageTrust;
 use tekserp_hizmet::contract;
 use tekserp_hizmet::timefmt;
 
@@ -123,10 +124,10 @@ pub fn mark_healthy(env: &Env, layout: &Layout, own_exe: &Path, own_version: &st
     }
 }
 
-/// Paketteki ikili daha yeniyse yerleştirir; `true` = hizmet yeniden başlamalı. `keys` = kurulumun
-/// PAKET anahtar kümesi (backend paketini doğrulayanla aynı).
-pub fn stage(env: &Env, layout: &Layout, own_exe: &Path, current_dir: &Path, keys: &[(String, String)]) -> Result<bool, String> {
-    stage_with_version(env, layout, own_exe, current_dir, env!("CARGO_PKG_VERSION"), keys)
+/// Paketteki ikili daha yeniyse yerleştirir; `true` = hizmet yeniden başlamalı. `trust` = kurulumun PAKET güveni,
+/// YERLEŞİK kip (kurulu dizin; backend paketini doğrulayan kümeyle aynı).
+pub fn stage(env: &Env, layout: &Layout, own_exe: &Path, current_dir: &Path, trust: &PackageTrust) -> Result<bool, String> {
+    stage_with_version(env, layout, own_exe, current_dir, env!("CARGO_PKG_VERSION"), trust)
 }
 
 pub fn stage_with_version(
@@ -135,14 +136,14 @@ pub fn stage_with_version(
     own_exe: &Path,
     current_dir: &Path,
     own_version: &str,
-    keys: &[(String, String)],
+    trust: &PackageTrust,
 ) -> Result<bool, String> {
     let candidate = current_dir.join(contract::path::RUNTIME).join(contract::path::UPDATER_EXE);
     if !env.fs.exists(&candidate) {
         return Ok(false);
     }
     let rel = format!("{}/{}", contract::path::RUNTIME, contract::path::UPDATER_EXE);
-    let want = package::signed_file_digest(current_dir, env.fs.as_ref(), keys, &rel)
+    let want = package::signed_file_digest(current_dir, env.fs.as_ref(), trust, &rel)
         .map_err(|e| format!("paketteki ikili imzalı listeyle doğrulanamadı ({}): {}", e.code, e.message))?;
     if package::file_digest(env.fs.as_ref(), own_exe).is_ok_and(|own| own == want) {
         return Ok(false);
