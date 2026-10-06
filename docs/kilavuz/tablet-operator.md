@@ -11,7 +11,8 @@ Bu belge referans üretim akışını anlatır: ham giriş (KK1) → kurşun + K
    - Ekranda görünmeyen yöntem için **Diğer giriş yöntemlerini dene**.
 2. Giriş sonrası "Bölüm Seçimi" ekranı gelir. Yalnız yetkiniz olan ve fabrikada açık bölümler kartlar halinde görünür. Hiç kart yoksa "Görünür bölüm yok" yazar: yetkili olduğunuz bölüm yönetim panelinden kapatılmıştır.
 3. Sağ üstteki kullanıcı menüsünden: **Ayarlar**, **Bölüm değiştir**, **Kilitle / operatör değiştir**, **Çıkış**.
-4. Sunucuya bağlanılamıyorsa girişteki dişli simgesi ("Sunucu ayarları") → "API Sunucusu" ekranı: [sorun-giderme.md](sorun-giderme.md) bölüm 1.
+4. Yönetici parolanızı sıfırladıysa ilk girişte (parola, PIN ya da kartla) "Parolanız sıfırlandı" penceresi açılır: **Size verilen parola** (PIN/kartla girdiyseniz), **Yeni parola** ve **Yeni parola (tekrar)** alanlarını doldurup **Parolayı değiştir**'e basın; değiştirmeden içeri girilmez ve sonra aynı yöntemle girersiniz.
+5. Sunucuya bağlanılamıyorsa girişteki dişli simgesi ("Sunucu ayarları") → "API Sunucusu" ekranı: [sorun-giderme.md](sorun-giderme.md) bölüm 1.
 
 Tablet ilk kez bağlanıyorsa "Cihaz Atama Bekliyor" ekranı çıkar. Ekranın altındaki **CİHAZ KİMLİĞİ**ni yöneticiye söyleyin; yönetici panelden onaylar.
 

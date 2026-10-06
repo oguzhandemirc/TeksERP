@@ -12,8 +12,11 @@
 
 **Sürekli kopuyorsa:** Wi-Fi kapsama alanı ve sunucunun kablolu bağlı olduğunu kontrol edin. Tablette kayıtlar bağlantı yokken beklemeye alınır ve bağlantı gelince gider; bekleyen kaydı silmeden bağlantıyı düzeltin.
 
+**Şifreli bağlantı (yalnız panel):** şifreli bağlantı açıkken sunucuya bağlanılamıyorsa panel şifresize düşmez. Sunucu açık ve ağ sağlamsa **Şifreli bağlantıyı kaldır** ile şifresize dönüp ([panel-yonetici.md](panel-yonetici.md) bölüm 10) yöneticiye haber verin.
+
 ## 2. Giriş sorunları
 
+- Yönetici parolanızı sıfırladıysa ilk girişte "Yeni parola belirleyin" (tablette "Size verilen parola") ekranı çıkar: yöneticinin verdiği parolayı ve kendi yeni parolanızı girip **Parolayı değiştir**'e basın; PIN/kartla girişte de aynısı olur.
 - "Parolalar eşleşmiyor.": parola değişiminde iki alan aynı olmalı; yeni parola en az 10 karakterdir.
 - PIN veya kart birkaç kez yanlış girilirse hesap kısa süre kilitlenir (Şirket & Güvenlik ayarındaki "İzin verilen yanlış deneme" ve "Ceza süresi"); bekleyin ya da yöneticiden Yetkilendirme → Kullanıcılar → kullanıcı → **Hızlı PIN** sekmesinden yeni PIN isteyin.
 - "Doğrulama kodu" kabul edilmiyorsa telefonun saatinin doğru olduğundan emin olun; kod kaybolduysa yöneticiye başvurun.
@@ -36,7 +39,8 @@ Düzeltme adımları:
 2. "Etkinleştirme"/"Yenileme" kartında kod verildiyse kodu yazıp **Etkinleştir**.
 3. Sunucu internete çıkamıyorsa kartta **Bu bilgisayar üzerinden etkinleştir / yenile** (panelin ağından geçer) ya da "İnternet yoksa: portaldan alınan uzatma dosyası" ile dosyayı yükleyin.
 4. "Lisans doğrulanamadı; sistem yöneticinize ya da destek hattına başvurun." çıkarsa sunucu saatini ([sunucu-bilgisayari.md](sunucu-bilgisayari.md) bölüm 3) ve internet bağlantısını kontrol edin, sonra destek talebi açın.
-5. Lisans sahibi/no gibi bilgiler Sistem → **Hakkında** karosundadır; satıcıya bu bilgiyi verin.
+5. Mavi şeritte "Sunucu saati lisans sunucusunun imzalı saatinden … ileride/geride" yazıyorsa lisans bozulmamıştır; yalnız saat kaymıştır. Sunucu bilgisayarında Saat ayarını otomatik yapın ([sunucu-bilgisayari.md](sunucu-bilgisayari.md) bölüm 3).
+6. Lisans sahibi/no gibi bilgiler Sistem → **Hakkında** karosundadır; satıcıya bu bilgiyi verin.
 
 ## 4. Güncelleme geri alındı
 
@@ -45,8 +49,8 @@ Sunucu güncellemesi sorun çıkarsa kendiliğinden eski sürüme döner. Sistem
 - **Geri dönüldü** — güncelleme yarıda kesildi ve eski sürüme dönüldü; veri korunur, program çalışmaya devam eder. "Sorun" satırı sebebi yazar (ör. "Yeni sürüm sağlık denetiminden geçemedi", "Dosya kilitli — başka bir program kullanıyor", "Disk dolu", "Güncelleme öncesi yedek alınamadı"). Sebebi giderin (disk boşaltmak, kilitleyen programı kapatmak gibi); "Geçmiş" kartında kayıtlar durur. Sebep belli değilse Destek talebi açın.
 - **Başarısız — müdahale gerekiyor** ve "Son güncelleme geri alınamadı — müdahale gerekiyor" başlığı: güncelleyici yeni onay gelene dek işlem yapmaz. Yeniden denemeyin; Sistem → **Destek**ten talep açıp satıcıya bildirin. Veri, güncelleme öncesi alınan yedekle korunur.
 - "Güncelleyici yanıt vermiyor" ya da "Bu sunucuda güncelleyici kurulu değil": Hizmetlerde **TeksERP-Guncelleyici**'nin çalıştığına bakın ([sunucu-bilgisayari.md](sunucu-bilgisayari.md) bölüm 1).
-- Güncelleme sürerken panel ve tabletler birkaç dakika bağlanamaz; bu normaldir.
+- Güncelleme sürerken panel ve tabletler birkaç dakika bağlanamaz; bu normaldir. Sunucu bilgisayarında sağ alttaki simge güncelleme sürerken sarı olur, hata olursa kırmızı; simgeye tıklayınca sebep yazar ([sunucu-bilgisayari.md](sunucu-bilgisayari.md) bölüm 1).
 
 ## 5. Destek talebi nasıl açılır
 
-Sistem → **Destek** → "Yeni destek talebi" → **Konu**, **Açıklama**, istenirse **Ekran görüntüsü ekle** → **Talebi gönder**. Yanıt aynı sayfada "Satıcı yanıtları"nda görünür. Hata raporunun müşteri onayıyla otomatik iletilmesi bu sürümde yoktur.
+Sistem → **Destek** → "Yeni destek talebi" → **Konu**, **Açıklama**, istenirse **Ekran görüntüsü ekle** → **Talebi gönder**. Yanıt aynı sayfada "Satıcı yanıtları"nda görünür. Onay verirseniz hataların türü/yeri/sürümü satıcıya kendiliğinden de gider: Sistem → **Destek** → **Hata raporları** kartı ([panel-yonetici.md](panel-yonetici.md) bölüm 9; varsayılan kapalı).

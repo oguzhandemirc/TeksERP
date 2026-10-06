@@ -4,9 +4,9 @@ Fabrika personeli ve yönetici için kısa kılavuz. Her adım "Menü → ... �
 
 | Belge | Kimin için | İçerik |
 |---|---|---|
-| [panel-yonetici.md](panel-yonetici.md) | Yönetici (bilgisayardaki panel) | İlk giriş, kullanıcı ve yetki, modüller, ayarlar, yedek, sunucu durumu ve güncelleme onayı, lisans, destek talebi |
+| [panel-yonetici.md](panel-yonetici.md) | Yönetici (bilgisayardaki panel) | İlk giriş, kullanıcı ve yetki, modüller, ayarlar, yedek, sunucu durumu ve güncelleme onayı, lisans bandı, destek talebi, hata raporu onayı, şifreli bağlantı |
 | [tablet-operator.md](tablet-operator.md) | Saha operatörü (tablet) | Giriş, ham giriş (KK1), kurşun/KK2, tambur, depo, çuval ve sevkiyat |
-| [sunucu-bilgisayari.md](sunucu-bilgisayari.md) | Sunucu bilgisayarına bakan kişi | Hizmetler, kapatıp açma, saat, yedeğin yeri |
+| [sunucu-bilgisayari.md](sunucu-bilgisayari.md) | Sunucu bilgisayarına bakan kişi | Sağ alt sunucu simgesi (yeşil/sarı/kırmızı), hizmetler, kapatıp açma, saat eşitlemesi, yedeğin yeri |
 | [sorun-giderme.md](sorun-giderme.md) | Herkes | Sunucu bulunamıyor, lisans uyarıları, güncelleme geri alındı |
 
 ## Okurken bilinmesi gerekenler

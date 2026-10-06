@@ -5,7 +5,7 @@ Panel, yönetici bilgisayarındaki TeksERP uygulamasıdır. Aşağıdaki menü y
 ## 1. İlk giriş ve zorunlu parola değişimi
 
 1. Panel açılınca giriş ekranı gelir. **Kullanıcı adı** ve **Şifre** yazın, **Giriş Yap** düğmesine basın.
-2. Hesap kurulumda üretilmiş bir parolayla açıldıysa "Yeni parola belirleyin" ekranı çıkar. **Yeni parola** ve **Yeni parola (tekrar)** alanlarına en az 10 karakterlik yeni parolayı yazıp **Parolayı değiştir** düğmesine basın. Vazgeçerseniz **Vazgeç** ile giriş ekranına dönersiniz; parola değişmeden devam edilemez.
+2. Hesap kurulumda üretilmiş bir parolayla açıldıysa ya da yönetici parolanızı sıfırladıysa "Yeni parola belirleyin" ekranı çıkar. **Yeni parola** ve **Yeni parola (tekrar)** alanlarına en az 10 karakterlik yeni parolayı yazıp **Parolayı değiştir** düğmesine basın. Vazgeçerseniz **Vazgeç** ile giriş ekranına dönersiniz; parola değişmeden devam edilemez.
 3. Hesapta iki adımlı doğrulama varsa "Doğrulama kodu" ekranı açılır; telefondaki uygulamanın 6 haneli kodunu yazın. Henüz kurmadıysanız "İki adımlı doğrulama" ekranı sizi yönlendirir: kareyi uygulamayla okutun, kodu girin, kurtarma kodlarını güvenli bir yere kaydedip "Kurtarma kodlarımı güvenli bir yere kaydettim." kutusunu işaretleyin.
 4. Giriş ekranında "Sunucuya ulaşılamadı" çıkarsa [sorun-giderme.md](sorun-giderme.md) bölüm 1.
 
@@ -17,7 +17,7 @@ Sol menü → **Yönetim → Yetkilendirme**. Bu sayfada iki grup vardır: "Kull
 
 **Mevcut kullanıcı:** Kullanıcılar listesinde satıra tıklayın; açılan pencerede sekmeler:
 - **Yetkiler** — yetkileri tek tek verin ya da sağdaki **Şablon Uygula** bölümünden bir şablonu **Ekle** (mevcut yetkilere ekler) veya **Değiştir** (yerine koyar) ile uygulayın.
-- **Şifre Sıfırla** — kullanıcının parolasını yenileyin.
+- **Şifre Sıfırla** — kullanıcının parolasını yenileyin. Başka bir kullanıcının parolasını sıfırladığınızda o kişi **ilk girişte yeni parola belirlemek zorundadır**: panelde "Yeni parola belirleyin" ekranı ([bölüm 1](#1-ilk-giriş-ve-zorunlu-parola-değişimi)), tablette "Size verilen parola" / "Yeni parola" / "Yeni parola (tekrar)" alanlı pencere çıkar; **Parolayı değiştir** denmeden içeri girilmez (PIN ya da kartla girişte de aynı pencere çıkar). Kendi parolanızı sıfırlarsanız bu zorunluluk yoktur. Yeni parolayı kullanıcıya iletin; sıfırlama kullanıcının açık oturumlarını kapatır.
 - **Personel Kartı** — **Kart Oluştur**; kartı **Yazdır**. Kaybolursa **Yeniden bas**.
 - **Hızlı PIN** — tablette giriş için 6 haneli PIN: **Ata** (elle yazılan), **Rastgele Üret**, **Kaldır**. PIN yalnız verildiği an gösterilir; operatöre o anda iletin.
 - **İki Adımlı** — iki adımlı doğrulama ayarı.
@@ -67,10 +67,12 @@ Geri yükleme canlı veritabanını yedek anına döndürür ve sonraki değişi
 - Politika "Onaylı" ise yeni sürüm gelince "Onay" kartında seçersiniz: **Şimdi kur** (bir dakika içinde başlar; kurulum sürerken panel ve tabletler sunucuya birkaç dakika bağlanamaz) ya da **Bu gece kur** (güncelleme penceresinde). Verilen onayı **Onayı geri al** (Onaylı kip) veya **Pencereye bırak** (Otomatik kip) ile geri alırsınız. Bu düğmeler lisans yönetme yetkisi ister.
 - Güncelleyici önce yedek alır, kurar, sağlık denetimi yapar; sorun çıkarsa eski sürüme kendiliğinden döner (sonuç "Geri dönüldü"). "Başarısız — müdahale gerekiyor" görünürse [sorun-giderme.md](sorun-giderme.md) bölüm 4.
 - Mesai saatinde "Şimdi kur" yerine "Bu gece kur" seçmek daha güvenlidir.
+- **Güncelleme onay istemi:** onaylı politikada yeni sürüm hazır olunca, lisans yönetme yetkisi olan hesapta panel açıkken "Sunucu güncellemesi hazır" penceresi kendiliğinden çıkar (kurulu ve yeni sürüm, sürüm notu; kritikse "Kritik güncelleme" rozeti). **Şimdi güncelle** onay verir (bir dakika içinde kurulur; bağlantı birkaç dakika kesilir), **Sonra** pencereyi yalnız bu oturum için kapatır, hiçbir şey kaydetmez. Bekleyen sürüm Sunucu Güncellemeleri sayfasında beklemeye devam eder.
+- **İlerleme penceresi:** güncelleme başlayınca panelde kendiliğinden "Sunucu … sürümüne güncelleniyor" penceresi açılır ve adımları işaretler; sunucu yeniden başlarken bağlantı geçici kopar ve kendiliğinden gelir. Bitince pencere kapanır ve "Sunucu … sürümüne güncellendi" (geri dönüldüyse "Güncelleme geri alındı, sistem eski sürümde çalışıyor") bildirimi çıkar. "Güncelleme tamamlanamadı — müdahale gerekiyor" yazarsa [sorun-giderme.md](sorun-giderme.md) bölüm 4.
 
 ## 7. Lisans bandı
 
-Panelin üstünde renkli ince bir şerit çıkabilir. Mavi bilgi, sarı uyarı, kırmızı tehlikedir; metni ve (varsa) kalan gün sayısını ("Ek süre: N gün" ya da "Kısıtlamaya N gün") gösterir. Lisansın tam durumu Sistem → **Lisans** karosundadır: durum, hak ve modüller, **Lisansı şimdi yokla**, "Etkinleştirme"/"Yenileme" kartı (etkinleştirme kodunu girip **Etkinleştir**). Kademeler: Normal → Uyarı → Ek süre → Kısıtlı kip → Durduruldu. Her kademede okuma, rapor, dışa aktarma ve yedek açık kalır. Ayrıntı: [sorun-giderme.md](sorun-giderme.md) bölüm 3.
+Panelin üstünde renkli ince bir şerit çıkabilir. Mavi bilgi, sarı uyarı, kırmızı tehlikedir; metni ve (varsa) kalan gün sayısını ("Ek süre: N gün" ya da "Kısıtlamaya N gün") gösterir. Şerit tek alandır: aynı anda birden çok mesaj varsa mesajlar **sırayla, yaklaşık 6 saniyede bir** döner ve sağda "1/2" gibi sıra sayısı görünür; farenin okunu şeridin üstünde tutarsanız dönüş durur, okuyabilirsiniz. Şeritte lisans mesajları dışında **saat sapması** gibi sistem bilgileri de olabilir (mavi; sebebi ve çözümü [sunucu-bilgisayari.md](sunucu-bilgisayari.md) bölüm 3). Lisansın tam durumu Sistem → **Lisans** karosundadır: durum, hak ve modüller, **Lisansı şimdi yokla**, "Etkinleştirme"/"Yenileme" kartı (etkinleştirme kodunu girip **Etkinleştir**). Kademeler: Normal → Uyarı → Ek süre → Kısıtlı kip → Durduruldu. Her kademede okuma, rapor, dışa aktarma ve yedek açık kalır. Ayrıntı: [sorun-giderme.md](sorun-giderme.md) bölüm 3.
 
 ## 8. Destek talebi
 
@@ -78,4 +80,14 @@ Sistem → **Destek** → "Yeni destek talebi": **Konu** ve **Açıklama** yazı
 
 ## 9. Hata raporu onayı
 
-Bu sürümde hata raporunu müşteri onayıyla otomatik ileten bir ekran yoktur (planlı). Şimdilik sorunu yukarıdaki **Destek** talebiyle bildirin.
+Sistem → **Destek** sayfasında **Hata raporları** kartı vardır (ayar yetkisi ister; kartın sağ üstündeki anahtar **Hata raporlarını gönder**). **Varsayılan KAPALIdır**: siz açmadıkça hiçbir şey toplanmaz ve gönderilmez. Anahtarı açarken ayar şifresi sorulabilir. Açıkken programdaki (sunucu, panel ve tablet) hataların yalnız **türü, yeri ve sürümü** satıcıya gider; hata mesajı, kullanıcı adı, müşteri ya da sipariş bilgisi **gönderilmez**. Kartta açanın adı ve saati, "Bekleyen" ve "Gönderilen" sayıları ile her grubun satırı (tür · yer · sürüm · kaç kez · son zaman; "Bekliyor" / "Gönderildi") görünür; yani neyin gittiğini her zaman buradan görürsünüz. Kapatmak için anahtarı kapatın. Sorunu anlatmak için yine **Destek** talebi açabilirsiniz (bölüm 8).
+
+## 10. Fabrika ağında şifreli bağlantı (yalnız panel)
+
+Panel ile sunucu arasındaki bağlantı varsayılan olarak şifresizdir (http). Sunucuda şifreli bağlantı **kurulumu yapan tarafından açılmışsa** panelde şifreli (https) bağlantıya geçebilirsiniz; **varsayılan kapalıdır** ve kapalıyken aşağıdaki bölüm panelde hiç görünmez ya da "sunucu şifreli bağlantı sunmuyor" der. Bu sürümde **yalnız panel** için vardır; tablet bu sürümde şifresiz bağlanmaya devam eder.
+1. Sistem → **Bu Bilgisayar** (ya da giriş ekranında **Adresi Elle Gir**) → "Sunucu Adresi" penceresindeki "Şifreli bağlantı kapalı" kutusunda **Şifreli bağlantıya geç**'e basın.
+2. Panel sunucunun sertifika kodunu (parmak izi) gösterir. Panel sunucu bilgisayarının kendisindeyse kod doğrudan alınır ve tekrar **Şifreli bağlantıya geç** yeter.
+3. Başka bir bilgisayardaysanız ekrandaki kodu **sunucu bilgisayarında görünen kodla** (aynı pencere ya da tarayıcıda `http://localhost:4000/` durum sayfası) harf harf karşılaştırın; birebir aynıysa "Kodlar birebir aynı" kutusunu işaretleyip **Onayla ve şifreli bağlantıya geç**'e basın. **Tek harf bile farklıysa onaylamayın** ve sistem yöneticisine haber verin: ağda araya giren biri olabilir. Panel "ilan edilen kod ile sunulan sertifika farklı" derse sabitleme teklif edilmez.
+4. Geçince "Şifreli bağlantıya geçildi." görünür ve kutu "Şifreli bağlantı açık" olur; kod kutuda durur.
+5. Geri dönmek için **Şifreli bağlantıyı kaldır** → onay penceresinde **Kaldır**. Panel şifresiz adrese döner; yeniden geçmek için kodu yeniden karşılaştırmanız gerekir.
+Şifreli bağlantı açıkken panel kodu sabit tutar; sunucu sertifikası değişirse panel bağlanmaz (şifresize düşmez) ve satıcıya ya da sistem yöneticisine başvurmanız gerekir.

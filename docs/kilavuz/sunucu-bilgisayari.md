@@ -4,7 +4,13 @@ Sunucu bilgisayarı fabrikadaki program verisini tutan Windows bilgisayarıdır.
 
 ## 1. Çalıştığını nasıl anlarım
 
-- Bu sürümde sağ alttaki bildirim alanında (saatin yanında) TeksERP'ye ait bir simge ya da renk göstergesi **yoktur**. Çalışma durumu aşağıdaki yollarla izlenir.
+- **Sunucu simgesi:** sunucu bilgisayarında sağ alttaki bildirim alanında (saatin yanında; gizliyse yukarı oku ile açılan kutuda) yuvarlak bir TeksERP simgesi durur. Renkleri:
+  - **Yeşil** — sunucu çalışıyor, bir şey yapmanız gerekmez.
+  - **Sarı** — dikkat: örneğin lisans uyarısı, yeni sürümün onay beklemesi, güncelleme sürüyor ya da güncelleyici yanıt vermiyor.
+  - **Kırmızı** — sorun: veritabanına ulaşılamıyor, lisans kısıtlı kipte, güncelleyici hata ile durdu ya da sunucuya hiç ulaşılamıyor (hizmet kapalı olabilir).
+  Simgeye **sol tıklayınca** "TeksERP Sunucu" durum penceresi açılır ve sarı/kırmızı sebepler Türkçe cümlelerle yazılır; **sağ tık → Durum** aynı pencereyi açar, **sağ tık → Simgeyi kapat** simgeyi o oturum için kapatır. Simge yalnız gösterir, hiçbir ayarı değiştirmez.
+  Güncelleme başlayınca simge "Güncelleme başladı." balonu verir ve **"TeksERP güncelleniyor"** penceresi kendiliğinden açılır (çubuk ilerlemeyi gösterir); bilgisayarı kapatmayın, bitince pencere kendisi kapanır. Güncelleme hatayla biterse balon "durum için simgeye tıklayın" der.
+  Simge kurulumla gelir ve her kullanıcı oturumu açılışında başlar; kurulumdan hemen sonra görünmez, **bilgisayarda bir sonraki oturum açılışında** belirir. Görünmüyorsa oturumu kapatıp yeniden açın.
 - Panelden: Sol menü → **Yönetim → Sistem** → **Sunucu Durumu**. Sayfa açılıyor ve "Çalışma süresi", "Son yedek" doluysa sunucu çalışıyordur. Üstte "Dikkat gerekiyor" bandı varsa satırlara bakın (disk, yedek, bağlantı).
 - Bilgisayarda: Windows Başlat → **Hizmetler** (services.msc) → şu hizmetler "Çalışıyor" olmalıdır:
   - **TeksERP-Backend** — programın kendisi
@@ -26,6 +32,8 @@ Sunucunun saati doğru olmalıdır: kayıtların zamanı ve lisans süresi buna 
 - Windows → Ayarlar → **Saat ve dil → Tarih ve saat** → "Saati otomatik ayarla" **Açık** olsun ve **Şimdi eşitle**'ye basılabilir.
 - Saati elle değiştirmeyin. Program saati değiştirmez; fark büyürse lisans uyarısı çıkabilir ([sorun-giderme.md](sorun-giderme.md) bölüm 3).
 - Sunucu bir etki alanındaysa saat etki alanından gelir; ayrıca bir şey yapmayın.
+- **Kurulumda kendiliğinden:** kurulum, bilgisayar etki alanında **değilse** Windows saat hizmetini (Windows Time) otomatik başlatıp internet saat sunucusundan (NTP) eşitler; zaten eşitliyorsa dokunmaz. Etki alanındaki bilgisayara hiç dokunulmaz. Sonuç kurulum çıktısında "saat:" satırı olarak yazılır; "saat eşitlemesi ölçülemedi" uyarısı çıkarsa yukarıdaki Windows ayarını elle açın.
+- **Saat sapması bandı:** sunucu saati satıcının imzalı saatinden belirgin ayrılırsa panelin üstündeki şeritte mavi bilgi çıkar: "Sunucu saati lisans sunucusunun imzalı saatinden … ileride/geride. Sunucuda Windows saat eşitlemesini (Saati otomatik ayarla) denetleyin…". Yukarıdaki iki adımı uygulayın; program saati kendisi değiştirmez. Ayrıntı: [sorun-giderme.md](sorun-giderme.md) bölüm 3.
 
 ## 4. Yedek nerede
 
