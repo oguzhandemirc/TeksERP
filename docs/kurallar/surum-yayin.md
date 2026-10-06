@@ -156,4 +156,5 @@ Panel imzalı künye: `test_panel_imza` (Teks-Erp) · `panel-kunye.test.ts` · `
 - 2026-09-03 · 2026-09-03 — Süperadmin doğuşu P8: iki yol iki sır yüzeyi; sessiz kilitlenme kabul edilemez — `arsiv/2026-09.md`
 
 - 2026-10-01 · Dağıtım v2 D5 (1/2): backend paketinin imzalı kapsamı (hizmet\ · gecis\ · runtime\ Rust ikilileri) + PG tek kaynağı (pg-surumu.json backendEnAz)
+- **[ÇEKİRDEK]** Grup yayını yalnız `deploy/electron-grup-yayinla.sh --grup=test|oncu|genel` ile yapılır: hedef dağıtım kaydından türer (eski kanal kodu ve ezme RED), kapılar ilk yazan ağ işinden önce koşar, oncu/genel terfi etiketi + kaynak özet eşitliği ister (genel için ayrı ikinci onay), künye grup adıyla yeniden imzalanır, `latest.yml` EN SON yüklenir; `test_grup_yayin_kapisi.mjs` ölçer.
 - 2026-10-01 · G22 yayın hijyeni: hedef yalnız kanal kaydından · uzak komut konumsal argüman · derleme bağı (temiz ağaç, künye, HEAD + terfi) · APK sürümü dosyadan · üretim PAKET imzası CI kökeni ister, kaçış yalnız kullanıcı cümlesiyle

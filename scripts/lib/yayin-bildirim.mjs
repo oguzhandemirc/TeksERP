@@ -124,11 +124,13 @@ export function uretimKanaliMi(kanal, kayitDosyasi = path.join(KOK, KAYIT_REL)) 
  * Yayın SONRASI tek giriş: YAYIN + (kaçış cümlesi varsa TERFI_ATLANDI, yoksa üretim kanalında TERFI — terfi etiketi
  * yayından önce kapıda doğrulandı). Yapılandırma yoksa tek satır basar. ASLA fırlatmaz.
  */
-export async function yayinSonrasiBildir({ urun, kanal, surum, ayrinti = {}, terfiAtla }, secenek = {}) {
+export async function yayinSonrasiBildir({ urun, kanal, surum, ayrinti = {}, terfiAtla, terfiEtiketi }, secenek = {}) {
   const ayar = 'ayar' in secenek ? secenek.ayar : ayarOku();
   const s = { ...secenek, ayar };
   const olaylar = [{ olay: 'YAYIN', urun, kanal, surum, ayrinti }];
   if (terfiAtla !== undefined && terfiAtla !== '') olaylar.push({ olay: 'TERFI_ATLANDI', urun, kanal, surum, ayrinti: { cumle: terfiAtla } });
+  // Grup yayını (O10a): terfi alan grubu (oncu/genel) yayıncı bildirir; eski kanal kaydı grup adını bilmez.
+  else if (terfiEtiketi) olaylar.push({ olay: 'TERFI', urun, kanal, surum, ayrinti: { etiket: terfiEtiketi } });
   else if (uretimKanaliMi(kanal, secenek.kayitDosyasi)) olaylar.push({ olay: 'TERFI', urun, kanal, surum, ayrinti: { etiket: `terfi/${kanal}/${urun}-v${surum}` } });
   if (!ayar) return [await yayinBildirVeBas(olaylar[0], s)];
   const sonuc = [];
@@ -153,7 +155,7 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.a
     }
   } else if (komut === 'bildir-yayin') {
     const ayrinti = Object.fromEntries(['tur', 'sha16', 'boyut', 'vc'].map((k) => [k, argOku(argv, k)]).filter(([, v]) => v !== undefined));
-    await yayinSonrasiBildir({ urun: argOku(argv, 'urun'), kanal: argOku(argv, 'kanal'), surum: argOku(argv, 'surum'), ayrinti, terfiAtla: argOku(argv, 'terfi-atla') });
+    await yayinSonrasiBildir({ urun: argOku(argv, 'urun'), kanal: argOku(argv, 'kanal'), surum: argOku(argv, 'surum'), ayrinti, terfiAtla: argOku(argv, 'terfi-atla'), terfiEtiketi: argOku(argv, 'terfi-etiketi') });
     process.exit(0);
   } else if (komut === 'bildir') {
     const ayrinti = Object.fromEntries(AYRINTI_ANAHTARLARI.map((k) => [k, argOku(argv, k)]).filter(([, v]) => v !== undefined));

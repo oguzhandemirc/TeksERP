@@ -33,12 +33,13 @@ const KAPSAM = [
 /** Tarama bu sayının altında dosya görürse ÖLÇÜLEMEDİ (kapsam kaydı ya da okuma kırık). */
 const TARAMA_TABANI = 25;
 /** Varlığı zorunlu: sanksiyonlu tanımlar + yayın zincirinin okuyucuları. */
-const ZORUNLU = ['scripts/lib/yayin-okuma.mjs', 'deploy/electron-yayinla.sh', 'deploy/mobil-yayinla.mjs',
+const ZORUNLU = ['scripts/lib/yayin-okuma.mjs', 'deploy/electron-yayinla.sh', 'deploy/electron-grup-yayinla.sh', 'deploy/mobil-yayinla.mjs',
   'deploy/electron-paketle.sh', 'scripts/lib/terfi.mjs', 'scripts/lib/surum.mjs'];
 
 /** Sanksiyonlu tanımlar — satır birebir; yalnız bu satırdaki çağrı sayılmaz. */
 const SANKSIYON = {
   'deploy/electron-yayinla.sh': /^belirtecli_curl\(\) \{ curl -H "@\$BELIRTEC_BASLIK" "\$@"; \}$/,
+  'deploy/electron-grup-yayinla.sh': /^belirtecli_curl\(\) \{ curl -H "@\$BELIRTEC_BASLIK" "\$@"; \}$/,
   'scripts/lib/yayin-okuma.mjs': /^ {2}return fetch\(url, \{ \.\.\.secenek, headers: basliklar \}\);$/,
 };
 
@@ -149,17 +150,19 @@ function sanksiyonDenetimi(d, kirmizi) {
     if (!yo.includes('export const indirmeBasliklari = (url) => ({ [INDIRME_BASLIGI]: belirtecOku(url) });')) kirmizi.push('yayin-okuma.mjs: indirmeBasliklari belirteci belirtecOku\'dan (fail-closed) almıyor');
     if (say(yo, /throw new BelirtecYok\(/) < 4) kirmizi.push('yayin-okuma.mjs: belirtecOku fail-closed dalları eksik (yok · dosya değil · izin · biçim)');
   }
-  const ey = d['deploy/electron-yayinla.sh'];
-  if (typeof ey === 'string') {
-    if (say(ey, SANKSIYON['deploy/electron-yayinla.sh']) !== 1) kirmizi.push('electron-yayinla.sh: belirtecli_curl tanımı yok ya da -H "@$BELIRTEC_BASLIK" taşımıyor');
+  for (const kabuk of ['deploy/electron-yayinla.sh', 'deploy/electron-grup-yayinla.sh']) {
+    const ey = d[kabuk];
+    if (typeof ey !== 'string') continue;
+    const ad = kabuk.split('/').pop();
+    if (say(ey, SANKSIYON[kabuk]) !== 1) kirmizi.push(`${ad}: belirtecli_curl tanımı yok ya da -H "@$BELIRTEC_BASLIK" taşımıyor`);
     const bas = ey.indexOf('baslikDosyasiYaz(');
     const ilkScp = ey.search(/^\s*scp /m);
     // Uzak komutlar `uzak` yardımcısından geçer (`ssh -T "$SSH_HEDEF" bash -s --`): ilk ssh, yardımcının tanımı ya da ilk
     // doğrudan çağrıdır. Hiç bulunamazsa sıra ölçülemez — kapı sessizce geçmesin diye kırmızı.
     const ilkSsh = ey.search(/^\s*ssh\b[^\n]*"\$SSH_HEDEF"/m);
-    if (ilkSsh < 0) kirmizi.push('electron-yayinla.sh: ssh çağrısı ("$SSH_HEDEF") bulunamadı — belirteç sırası ölçülemedi (desen değişti, bekçiyi güncelle)');
-    if (bas < 0) kirmizi.push('electron-yayinla.sh: belirteç başlık dosyası (baslikDosyasiYaz) üretilmiyor');
-    else if ((ilkScp >= 0 && bas > ilkScp) || (ilkSsh >= 0 && bas > ilkSsh)) kirmizi.push('electron-yayinla.sh: belirteç denetimi ilk ssh/scp\'den SONRA — yüklemeden ÖNCE olmalı');
+    if (ilkSsh < 0) kirmizi.push(`${ad}: ssh çağrısı ("$SSH_HEDEF") bulunamadı — belirteç sırası ölçülemedi (desen değişti, bekçiyi güncelle)`);
+    if (bas < 0) kirmizi.push(`${ad}: belirteç başlık dosyası (baslikDosyasiYaz) üretilmiyor`);
+    else if ((ilkScp >= 0 && bas > ilkScp) || (ilkSsh >= 0 && bas > ilkSsh)) kirmizi.push(`${ad}: belirteç denetimi ilk ssh/scp'den SONRA — yüklemeden ÖNCE olmalı`);
   }
   const my = d['deploy/mobil-yayinla.mjs'];
   if (typeof my === 'string') {
@@ -178,6 +181,8 @@ function sondalar(taban, tabanYollar) {
   const degis = (d, rel, a, b) => { d[rel] = (d[rel] ?? '').replace(a, b); };
   const S = [
     ['P0 bugünkü ağaç → YEŞİL', 'yesil', () => {}],
+    ['N1g electron-grup-yayinla.sh\'a çıplak curl okuması → KIRMIZI', 'kirmizi', (d) => degis(d, 'deploy/electron-grup-yayinla.sh', 'yayindaki=$(belirtecli_curl -fsS', 'yayindaki=$(curl -fsS'), 'electron-grup-yayinla.sh:'],
+    ['N2g grup betiğinde belirtecli_curl -H başlığını kaybetti → KIRMIZI', 'kirmizi', (d) => degis(d, 'deploy/electron-grup-yayinla.sh', 'curl -H "@$BELIRTEC_BASLIK" "$@"', 'curl "$@"'), 'belirtecli_curl'],
     ['N1 electron-yayinla.sh\'a çıplak curl okuması → KIRMIZI', 'kirmizi', (d) => degis(d, 'deploy/electron-yayinla.sh', 'yayindaki=$(belirtecli_curl -fsS', 'yayindaki=$(curl -fsS'), 'electron-yayinla.sh:'],
     ['N2 belirtecli_curl -H başlığını kaybetti → KIRMIZI', 'kirmizi', (d) => degis(d, 'deploy/electron-yayinla.sh', 'curl -H "@$BELIRTEC_BASLIK" "$@"', 'curl "$@"'), 'belirtecli_curl'],
     ['N3 mobil-yayinla.mjs\'e çıplak fetch → KIRMIZI', 'kirmizi', (d) => degis(d, 'deploy/mobil-yayinla.mjs', 'const r = await belirtecliFetch(url, { method: yontem', 'const r = await fetch(url, { method: yontem'), 'mobil-yayinla.mjs:'],

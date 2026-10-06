@@ -326,7 +326,7 @@ if [ "$ortak" = "1" ]; then
   mb=$(( $(wc -c < "$setup") / 1024 / 1024 ))
   echo ""
   echo "HAZIR — ORTAK PAKET / $surum (${mb} MB) · $rel"
-  echo "  Yayın bu dilimde YOK: grup yayını + terfi O10a'da gelir (TEK-ORTAK-PAKET.md §9). Eski kanal yayıncısı bu paketi tanımaz."
+  echo "  Yayın: deploy/electron-grup-yayinla.sh --grup=test|oncu|genel (eski kanal yayıncısı bu paketi tanımaz)."
   exit 0
 fi
 node "$kok/scripts/kanal-kapisi.mjs" panel-derleme-kunyesi "$musteri" "$electron_dir/$rel" "$surum" "$derleme_commit" \
