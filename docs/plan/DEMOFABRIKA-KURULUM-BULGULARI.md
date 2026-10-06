@@ -32,15 +32,9 @@
 - [ ] 3.0 Test yükü önerisine kullanıcı onayı (§E) — tasarımdan önce
 - [ ] 3.1 Tek ortak paket tasarım + uygulama; K2 firma adı, K3 Tailscale kutusu/gömülü adres
 - [ ] 3.2 İndirme kapısı yeni alt adresle (§D-1)
-<<<<<<< HEAD
 - [ ] 3.3 Panel 1.4.3: sunucu durumu ekranı + canlı güncelleme penceresi + tablet bandı (§E) — 2026-10-06 KOD: Sunucu Durumu bölümü + ilerleme penceresi hazır; KALAN: güncelleyici durum sayfası (backend kapalıyken), kurulum geçmişi/aşamaları, tablet bandı (arşiv 2026-10)
-- [ ] 3.4 Sunucu bilgisayarında sağ alt simge (§E)
-- [x] 3.5 Sunucu saati (§B-3) — 2026-10-06, dal `gece/sunucu-saati` (NTP · imzalı sapma · portal · bekçi); birleşmedi; sıra: SATICI ÖNCE, sonra fabrika
-=======
-- [ ] 3.3 Panel 1.4.3: sunucu durumu ekranı + canlı güncelleme penceresi + tablet bandı (§E)
 - [x] 3.4 Sunucu bilgisayarında sağ alt simge (§E) — PowerShell + WinForms, `/health/tepsi` (arşiv 2026-10-06); Windows'ta gerçek deneme bekler
-- [ ] 3.5 Sunucu saati (§B-3)
->>>>>>> gece/tepsi-simgesi
+- [x] 3.5 Sunucu saati (§B-3) — 2026-10-06, dal `gece/sunucu-saati` (NTP · imzalı sapma · portal · bekçi); birleşmedi; sıra: SATICI ÖNCE, sonra fabrika
 - [ ] 3.6 Hata raporları (§E)
 
 - [ ] 3.5 Sunucu saati (§B-3)
