@@ -187,7 +187,7 @@ Yerleri:
   - defter: `<defterKoku>/<grup>-<ürün>-YAYIN-DEFTERI.tsv`
 
   Bugünkü `yayin` bloğu türetimden ayrışabildiği için bekçi istiyordu; türetince ayrışacak bir şey kalmaz.
-- Paket adı/appId seçimi ve `runtimeVersion` sıçraması → KARAR K-1 / K-2.
+- Paket adı/appId seçimi ve `runtimeVersion` sıçraması → K-1 / K-2 (onaylandı 2026-10-07).
 - Grup listesi ile satıcının grup satırları aynı küme olmalı; bekçi bunu migration metni ile kayıt üzerinden ölçer (§3.1).
 
 ### 2.2 Ürün başına hedef
@@ -195,7 +195,7 @@ Yerleri:
 | Ürün | Derleme | Kimlik çalışma anında nereden | Güncelleme |
 |---|---|---|---|
 | Panel | `deploy/electron-paketle.sh` argümansız; çıktı `release/ortak/<v>/` | firma adı: backend (lisans adı); grup: belirteç yanıtı `grup`; TEST/DEMO rozeti: lisans sınıfı | `https://indir…/<grup>/electron/` + `X-TKL-Indirme`; grup yoksa denetim yapılmaz ("grup bilinmiyor") |
-| Tablet | `build-apk.mjs` / `yayinla-ota.mjs` paketlemede argümansız | ERP adresi: keşif / elle IP / (bulutta) QR; grup: belirteç yanıtı | OTA: gömülü `https://indir…/ota/<rv>/manifest` (Worker takma adı) + `tkl`; APK: `https://indir…/<grup>/mobil/apk/surum.json` |
+| Tablet | `build-apk.mjs` / `yayinla-ota.mjs` paketlemede argümansız | ERP adresi: keşif / elle IP / (bulutta) QR; grup: belirteç yanıtı | OTA: gömülü `https://indir…/ota/<rv>/manifest` (Worker takma adı) + `tkl`; APK: Google Play gizli yayını (K-14 — tek kurulum ve native güncelleme yolu; `/<grup>/mobil/apk/` ortak tablette kullanılmaz) |
 | Backend | `paketle.ps1` argümansız; `PAKET.json backendKanal: null`, hizmet `TeksERP-Backend` | kurulum kimliği `LICENSE_DIR`; firma adı ve grup kiradan/HAK'tan | güncelleyici `guncellemeSunucusu=https://indir.etkiliyazilim.com` + kira `kanal.kod` (değişiklik YOK) |
 | Kurulum arşivi | `kurulum-arsivi.mjs` argümansız, sürüm başına TEK arşiv | — | portal ilk kurulum bağlantısı aynı arşivi verir |
 | Patron | değişmez | — | mağaza |
@@ -221,8 +221,8 @@ Yerleri:
 - `tur` kolonu DB'de kalır; yeni satır `uretim` yazar, kod okumaz. `KanalTuru.hazirlik` değeri kalır, yazan yol kalkar (§7).
 - Eski kanal satırları (`demofabrika`…) silinmez (FK `Restrict`, defter-öncelikli): `aktif=false` olur. Pasif kanala yeni kurulum açılmaz ve kurulum taşınmaz; okuma ve filo görünümü sürer.
 - Yazma yolu: `requireChannel` yalnız `aktif` ve `dagitim.json` grubu olan kodu kabul eder. Bayi tavanının `kanallar` listesi de aynı kümeye süzülür.
-- Varsayılan grup → KARAR K-3 (öneri: sınıf `TEST` → `test`, diğerleri → `genel`).
-- Kim değiştirir → KARAR K-4 (öneri: yalnız satıcı tarafı kurulum düzenleme yetkisi; bayi grup değiştiremez, kendi tavanındaki gruplara kurulum açabilir).
+- Varsayılan grup → K-3 (varsayılan uygulandı: sınıf `TEST` → `test`, diğerleri → `genel`).
+- Kim değiştirir → K-4 (onaylandı 2026-10-07: yalnız satıcı tarafı kurulum düzenleme yetkisi; bayi grup değiştiremez, kendi tavanındaki gruplara kurulum açabilir).
 - Grup değişimi bugünkü gibi `kurulum_kaydi`na yazılır, sonra zil çalar. Fabrika yeni kirayı alır; sonraki denetimde panel, tablet ve güncelleyici yeni grubu görür.
 - **Grup değişince geri sürüm yoktur.** Yeni gruptaki sürüm kuruludan eskiyse panel künyenin "kurulu sürümden yeni" kuralı, tablet `versionCode` kıyası, güncelleyici sürüm kıyası nedeniyle hiçbir şey kurmaz. Kurulum hedef grup yetişene dek bekler. Bu davranış belgelenir ve portal grup değişiminde bunu uyarı olarak yazar.
 - `guncelSurumler` grup başınadır. İstemci politikasının `currentVersion`ı kiradan gruba göre gelir; kural değişmez.
@@ -247,7 +247,7 @@ Yerleri:
 
 - Takma ad Worker'ın içinde çözülür. Kaynağa giden istek yeniden yazılmış yoldur; önbellek anahtarı gerçek yoldur. `DEGISKEN_DOSYA` deseni takma adı da kapsar (`/manifest$`).
 - Ayar: `indirmeListesi.uretim` → kid × `kanallar: ["test","oncu","genel"]`. `hazirlik: []` (§7'de alan kalkar). `gecisListesi: []`.
-- `ind-2026` kabul edilsin mi → KARAR K-5.
+- `ind-2026` yeni adreste kabul EDİLMEZ → K-5 (onaylandı 2026-10-07).
 - Rota `indir.etkiliyazilim.com/*`, fail-closed (3.2 notu §3).
 - `guncelleme.etkiliyazilim.com`a rota BAĞLANMAZ.
 
@@ -267,7 +267,7 @@ Yerleri:
   - `terfi/<grup>/<ürün>-vX` açıklamalı etiketi, mesajı kullanıcının onay cümlesi + saat;
   - kaynak grupta yayındaki sürüm ≥ X;
   - kaynak artefaktın özeti = yüklenecek artefaktın özeti.
-- `genel` ayrı onay mı ister → KARAR K-6 (öneri: evet, ayrı etiket).
+- `genel` ayrı onay ister → K-6 (onaylandı 2026-10-07: ayrı etiket).
 - Kaçış yalnız `--terfi-atla="<cümle>"`.
 - K-6 uygulaması (O10a): `genel` için `oncu` etiketi de HEAD'de olmalı ve iki etiketin cümleleri farklı olmalı; test grubu etiketsizdir. Künye hedef grup adıyla yeniden imzalanır, paket baytı aynı kalır.
 - Sürüm notunun onayı ilk terfi etiketidir (`oncu`). Kök CLAUDE.md'deki "hazırlık kanalı" sözcükleri §9 O16'da güncellenir; değişiklik kullanıcı onayıyla yapılır.
@@ -404,7 +404,7 @@ Kapsam yetmezse genişletmek ayrı karardır → KARAR K-9.
   2. setup.exe (ortak kurulum arşivi);
   3. panelden etkinleştirme;
   4. keşifte firma adı görünür;
-  5. ortak tablet APK'sı → sunucuyu keşifle bulur;
+  5. ortak tablet Play gizli yayınından (test kanalı) kurulur → sunucuyu keşifle bulur (K-14);
   6. `test` grubuna yeni panel/tablet sürümü → kendiliğinden güncellenir.
 - "Önce test, sonra fabrika" kuralının hedefi budur. Bu kurulum çalışmadan hiçbir müşteri grubuna (`oncu`/`genel`) yayın yapılmaz.
 - adnansahin'in yeni sisteme alınması Faz 4'tür (yedekten kur; bu belgenin kapsamı dışı). O gün adnansahin satıcıda bir kurulum + grup alır. Aynı makineye kurulursa pm2 düzeni (port 4000) ile çakışma Faz 4 provasının konusudur.
@@ -480,56 +480,65 @@ Her dilim tek ajana sığar (≤ ~1 bağlam), kendi bekçilerini koşar, sonunda
 - Ardından: O11a → O11b (3.9 D5+D8 ile).
 - En son: O15 → O14a → O14b → O14c → O16 → O17.
 
-## 10. Açık KARAR'lar (sade dil; varsayılan uygulanır, kullanıcı değiştirebilir)
+## 10. KARAR'lar (sade dil)
+
+Kullanıcı 2026-10-07: K-1, K-2, K-6 ve K-14 kendisi onayladı; K-4 ve K-5 3.2 (indirme kapısı) kararlarıyla onaylandı; geri kalanında **varsayılan uygulandı** (kullanıcı ileride değiştirebilir). Arşiv: `docs/history/arsiv/2026-10.md` → "2026-10-07 — İstemci imza anahtarı, tablet dağıtımı…".
 
 - **K-1 — Yeni uygulama adları:** panel ve tablet yeni ortak adla gelsin: `com.etkiliyazilim.tekserp`, ekranda "TeksERP".
-  - Varsayılan: evet.
+  - **ONAYLANDI** (kullanıcı 2026-10-07).
   - Neden: adnansahin'deki uygulamalar eski adlarıyla aynı makinede yan yana çalışmaya devam eder, ona dokunulmaz.
-  - Dikkat: tablet adı Google Play'e bir kez yüklenince bir daha değiştirilemez.
+  - Dikkat: tablet paket adı Google Play'e bir kez yüklenince bir daha değiştirilemez (K-14).
 - **K-2 — Tablet sürüm kimliği:** ortak tablet yeni bir "uygulama çekirdeği numarası" (`runtimeVersion` 55.0) ve yeni bir güncelleme imza anahtarı ile başlasın.
-  - Varsayılan: evet.
-  - Anahtar Mac'te bir kez üretilir; sizinle birlikte, parolası sizde olur.
+  - **ONAYLANDI** (kullanıcı 2026-10-07).
+  - Anahtar Mac'te kullanıcıyla birlikte üretilir, parolası kullanıcıdadır; "yeni güncelleme imza anahtarı" = OTA kökü + yıllık OTA yaprağı (+ yedek yaprak), `ISTEMCI-ANAHTARI-KOK-ALTINDA.md` §3.1, §3.6. 2026-10-07 itibarıyla ÜRETİLMEDİ.
 - **K-3 — Yeni fabrikanın varsayılan grubu:**
   - Deneme (TEST) lisansı "test" grubuna, diğerleri "genel" grubuna düşsün; portaldan değiştirilebilsin.
-  - Varsayılan: evet.
+  - Varsayılan uygulandı.
 - **K-4 — Grubu kim değiştirir:**
   - Yalnız bizim taraftaki yöneticiler (portalda kurulum düzenleme yetkisi olanlar).
   - Bayi grup değiştiremez; yalnız kendisine izin verilen gruplarda kurulum açabilir.
-  - Varsayılan: evet.
+  - **ONAYLANDI** (kullanıcı 2026-10-07, 3.2 kararı: bir tesisin grubunu yalnız bizim portal yöneticilerimiz değiştirir).
 - **K-5 — Eski indirme imza anahtarı (`ind-2026`):** yeni adreste kabul edilmesin; yalnız `ind-2026-2`.
-  - Varsayılan: kabul edilmez.
+  - **ONAYLANDI** (kullanıcı 2026-10-07, 3.2 kararı): `ind-2026` yeni adreste kabul edilmez.
   - Neden: satıcı artık onunla imzalamıyor; kabul etmemek açık kapıyı küçültür.
 - **K-6 — "Genel" gruba çıkış ayrı onay mı:**
   - Evet: "öncü"ye çıkış bir onay, "genel"e çıkış ikinci bir onay ister (ayrı onay etiketi).
-  - Varsayılan: evet.
+  - **ONAYLANDI** (kullanıcı 2026-10-07).
 - **K-7 — Ekrandaki ad ve belgedeki unvan:**
   - Ağda görünen ve giriş ekranındaki ad hep lisanstaki addır.
   - Belge ve etiketteki firma unvanı ilk kurulumda lisanstan gelir, sonra fabrika panelden düzenleyebilir.
-  - Varsayılan: bu ayrım.
+  - Varsayılan uygulandı: bu ayrım.
   - Alternatif: ikisi de hep lisanstan olur, fabrika düzenleyemez.
 - **K-8 — Fabrika ayar profillerinin yeri:**
   - Her müşterinin ayar düzeni test dosyası olarak kodun yanında (`scripts/test-profilleri/`) tutulur.
   - Yalnız ayarlar girer; iş verisi ve parola girmez.
   - Fabrika yedeğinin kopyasından çıkarılır.
-  - Varsayılan: evet.
+  - Varsayılan uygulandı.
 - **K-9 — Her profilde ne koşsun:**
   - Bütün testler her profilde koşmaz (eski testler "her şey kapalı" varsayar, yalancı kırmızı verir).
   - Her profilde açılış, ekran/uç kapıları, belge önizlemesi, veri tutarlılığı ve bir üretim akışı denemesi koşar.
   - Tam takım bugünkü gibi "her şey kapalı"da koşar.
-  - Varsayılan: evet.
+  - Varsayılan uygulandı.
 - **K-10 — Paket anahtarı provası:**
   - 3.9 provası "hazırlık kökü"yle tasarlanmıştı; o kök koddan kalkıyor.
   - Prova, yalnız test için derlenmiş bir paketle (dışarıdan güven listesi alan sürüm) yapılsın.
-  - Varsayılan: evet.
+  - Varsayılan uygulandı.
 - **K-11 — İkinci prova kurulumu nerede:**
   - "Aynı paket iki fabrikada iki ayrı ad/grup gösteriyor" ölçümü için ikinci bir kurulum gerekir.
-  - Varsayılan: thinkpad-1'de sanal makine; yoksa Mac'te Windows sanal makinesi. Sizinle seçilir.
+  - Varsayılan uygulandı: thinkpad-1'de sanal makine; yoksa Mac'te Windows sanal makinesi. Yer prova günü kullanıcıyla seçilir.
 - **K-12 — Eski yayın betikleri:**
   - adnansahin'e güncelleme gönderilmeyeceği için eski kanal betikleri koddan kaldırılır.
   - Son çalıştıkları hâl `eski-kanal-son` etiketinde saklanır; acil bir durumda oradan kullanılır.
-  - Kanal kayıt dosyası ve sunucudaki eski klasör olduğu gibi kalır.
-  - Varsayılan: evet.
+  - Kanal kayıt dosyası ve sunucudaki eski klasör olduğu gibi kalır; adnansahin taşındığı gün eski klasör silinmez, ARŞİVE alınır (3.2 kararı, kullanıcı 2026-10-07).
+  - Varsayılan uygulandı.
 - **K-13 — pm2'den hizmete geçiş aracı (`gecis.ps1`):**
   - Artık hedefi yok: adnansahin yedekten sıfırdan kurulacak, testfabrika emekli.
   - Bu işte dokunulmaz, ayrı bir temizlik işinde kaldırılır.
-  - Varsayılan: dokunulmaz.
+  - Varsayılan uygulandı: dokunulmaz.
+- **K-14 — Fabrika tableti nereden kurulur:** Google Play gizli yayını (Managed Google Play; uygulama yalnız bizim fabrikalarımıza görünür).
+  - **ONAYLANDI** (kullanıcı 2026-10-07; `ISTEMCI-ANAHTARI-KOK-ALTINDA.md` §8 karar 5). 2026-10-03'teki "Play, APK yolu yedek" kararının yerini alır.
+  - Uygulama mührünü Google tutar (Play App Signing); bizde yalnız yükleme anahtarı kalır.
+  - Uygulamanın kendi APK'sını indirip kurma yolu Play'de kullanılamaz: büyük/native güncelleme Play'den, JS güncellemesi OTA ile uygulama içinden gelir.
+  - Siteden kurulan tablet Play'den güncellenemez ⇒ ortak tablet için TEK kurulum yolu Play'dir; ortak tablet APK'sı siteye (`/<grup>/mobil/apk/`) yayınlanmaz.
+  - Play incelemesi internetten erişilebilen bir demo sunucu + deneme hesabı ister.
+  - Sonraki iş (kod, bu kararla yapılmadı): O8'in ortak tabletteki APK künyesi/kurulum yolu ve O10b'nin `--apk` dalı ortak tablette kapatılır; Play test kanallarının gruplara (test · oncu · genel) eşlenmesi Play yayın akışına yazılır.

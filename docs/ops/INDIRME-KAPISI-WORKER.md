@@ -1,6 +1,6 @@
 # İndirme kapısı Worker'ı — kurulum, prova, geçiş, geri alma
 
-> **Durum (ölçüldü 2026-10-06):** kod ve bekçi hazır, **YAYIN YAPILMADI** — Cloudflare hesabında Worker ve rota yok, dosyalar belirteçsiz iniyor. **Kapı eski `guncelleme.etkiliyazilim.com`da AÇILMAZ** (kullanıcı kararı 2026-10-03, `docs/plan/DEMOFABRIKA-KURULUM-BULGULARI.md` §D-1): yeni alt adreste (öneri `indir.etkiliyazilim.com`) tek ortak paketle (plan 3.1) birlikte açılır, klasörler güncelleme grubuna göredir (`/test` · `/oncu` · `/genel`); eski adres adnansahin için kapı DIŞINDA aynen kalır — o ana makineye rota bağlanmaz. testfabrika ve hazırlık satıcısı emekli (2026-10-05): `indirmeListesi.hazirlik` boş.
+> **Durum (ölçüldü 2026-10-06):** kod ve bekçi hazır, **YAYIN YAPILMADI** — Cloudflare hesabında Worker ve rota yok, dosyalar belirteçsiz iniyor. **Kapı eski `guncelleme.etkiliyazilim.com`da AÇILMAZ** (kullanıcı kararı 2026-10-03, `docs/plan/DEMOFABRIKA-KURULUM-BULGULARI.md` §D-1): yeni alt adreste (`indir.etkiliyazilim.com`, karar 2026-10-07) tek ortak paketle (plan 3.1) birlikte açılır, klasörler güncelleme grubuna göredir (`/test` · `/oncu` · `/genel`); eski adres adnansahin için kapı DIŞINDA aynen kalır — o ana makineye rota bağlanmaz. testfabrika ve hazırlık satıcısı emekli (2026-10-05): `indirmeListesi.hazirlik` boş.
 > **adnansahin belirteç GÖNDERMEZ:** sahadaki panel 1.3.7 · tablet OTA 1.0.12 · APK 1.0.0 · backend 2.11.2 belirteç kodundan (panel 3b · tablet 3c · fabrika ucu, hepsi 2026-09-29) ÖNCEDİR; adnansahin'e yeni güncelleme gönderilmez, yeni sisteme sonra alınır (kullanıcı kararı 2026-10-06) ⇒ `guncelleme.etkiliyazilim.com`a Worker rotası BAĞLANMAZ.
 > **İstemci zinciri (dilim 3bc):** fabrika ucu `GET /api/license/indirme-belirteci?urun=electron|mobil` süresi dolmuş belirteci vermez, dolmaya < 15 dk kalmışsa yoklamayı dürter; panel (`updater.ipc.ts` + `/download-token`) her denetimde `X-TKL-Indirme`, tablet (`mobil/src/services/downloadToken.service.ts`) her OTA denetiminden önce `tkl` extra param + APK isteğinde başlık, açılışta native denetim bayat paramla 403 alırsa JS 5 sn sonra tazeleyip yeniden dener; belirteç alınamazsa HER İKİSİ BAŞLIKSIZ ister (geçiş listesi). Yayın betikleri önce taze CLI belirteci (`docs/kurallar/surum-yayin.md`). Senaryo L22/L24 bu zinciri gerçek Worker modülüyle koşar.
 > **İNDİRME listesi (L2-8, lisans v2 §2.1/§2.5):** Worker anahtarları tek listeden okur (`uretim`; tek satıcı — başka liste adı 503); her satır kid × izinli kanal kümesi × pencere (sertifikanınki) taşır. Dönem töreni (yılda bir) yapıştırılacak satırı hazır basar — §8. Eski `anahtarlar: [{kid, x}]` biçimi kısıtsız olarak BİR Worker sürümü daha tanınır.
@@ -141,6 +141,13 @@ Satıcı yeni İNDİRME anahtarını anahtar birimine kurulduğu DAKİKA kullanm
 - `varlikBelirteci` gerçek tablette ölçülmeden açılmaz.
 
 ## 11. Yeni adres `indir.etkiliyazilim.com` — tek ortak paket (O9; yayın 3.2, kullanıcıyla)
+
+- **3.2 kararları (kullanıcı 2026-10-07):**
+  - Adres `indir.etkiliyazilim.com`.
+  - Gruplar (klasörler) `test` · `oncu` · `genel`.
+  - `ind-2026` yeni adreste kabul EDİLMEZ (K-5); ayarda yalnız `ind-2026-2` ve sonraki dönem satırları.
+  - Bir tesisin grubunu yalnız bizim portal yöneticilerimiz (kurulum düzenleme yetkisi) değiştirir; bayi değiştiremez (K-4).
+  - adnansahin yeni sisteme taşındığı gün eski adresin VDS klasörü (`tekserp-guncelleme/html/adnansahin`) SİLİNMEZ, ARŞİVE alınır; eski adresin kapanışı o günün ayrı adımıdır.
 
 - **Eski adres değişmez:** `guncelleme.etkiliyazilim.com`a rota BAĞLANMAZ (adnansahin eski adresten belirteçsiz alır). Yayından önce ve sonra `node Teks-Erp-wt/indirme-kapisi-olc.mjs --adnansahin` → 9/9.
 - **Rota:** `indir.etkiliyazilim.com/*` (adın tamamı), *Request limit failure mode* = **Fail closed**. Klasöre bağlı dar rota `//<grup>/…` ve `%..` biçimleriyle atlanır (ölçüldü 2026-10-06); §4'teki kanal başına rota yeni adreste KULLANILMAZ.
