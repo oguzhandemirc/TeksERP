@@ -22,7 +22,7 @@
 
 **Faz 2 — demofabrika kusurları (§A)**
 - [x] 2.1 K5 — DEMO lisansı bitişsiz kaydedilemesin — 45 gün sınırı YOK (kullanıcı kararı 2026-10-05), yalnız bitiş zorunlu
-- [ ] 2.2 K11 — panelde backend güncellemesi onay ekranı (panel 1.4.3; ilk backend güncellemesinden önce)
+- [x] 2.2 K11 — panelde backend güncellemesi onay ekranı: KOD hazır (2026-10-06, dal gece/panel-143: kabuk onay istemi; ekran D7'de vardı, 1.4.2 etiketi ondan öncedir); panel 1.4.3 YAYINI bekliyor (ilk backend güncellemesinden önce)
 - [ ] 2.3 K4 — müşterinin kendi yönetici hesabını açma adımı
 - [ ] 2.4 K6 bant önceliği · K9 bakım bitişi bildirimi · K8 yanlış mesaj · K7 "yenilendi" mesajı · K10 portalda açık modüller
 - [ ] 2.5 K1 — kullanılmayan ağ adreslerinin duyurulmaması
@@ -32,7 +32,7 @@
 - [ ] 3.0 Test yükü önerisine kullanıcı onayı (§E) — tasarımdan önce
 - [ ] 3.1 Tek ortak paket tasarım + uygulama; K2 firma adı, K3 Tailscale kutusu/gömülü adres
 - [ ] 3.2 İndirme kapısı yeni alt adresle (§D-1)
-- [ ] 3.3 Panel 1.4.3: sunucu durumu ekranı + canlı güncelleme penceresi + tablet bandı (§E)
+- [ ] 3.3 Panel 1.4.3: sunucu durumu ekranı + canlı güncelleme penceresi + tablet bandı (§E) — 2026-10-06 KOD: Sunucu Durumu bölümü + ilerleme penceresi hazır; KALAN: güncelleyici durum sayfası (backend kapalıyken), kurulum geçmişi/aşamaları, tablet bandı (arşiv 2026-10)
 - [ ] 3.4 Sunucu bilgisayarında sağ alt simge (§E)
 - [x] 3.5 Sunucu saati (§B-3) — 2026-10-06, dal `gece/sunucu-saati` (NTP · imzalı sapma · portal · bekçi); birleşmedi; sıra: SATICI ÖNCE, sonra fabrika
 - [ ] 3.6 Hata raporları (§E)

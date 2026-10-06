@@ -3,6 +3,8 @@ import { LicenseBanner } from "./LicenseBanner";
 import { FactoryTimezoneBanner } from "./FactoryTimezoneBanner";
 import { FactoryAdminCard } from "./FactoryAdminCard";
 import { ServerOfflineBanner } from "./ServerOfflineBanner";
+import { UpdateProgressWindow } from "@/pages/System/ServerUpdates/UpdateProgressWindow";
+import { UpdateApprovalPrompt } from "@/pages/System/ServerUpdates/UpdateApprovalPrompt";
 
 /** Üst çubuğun altındaki şerit yığını — sıra görünür sıradır. */
 export function ShellBanners() {
@@ -17,6 +19,10 @@ export function ShellBanners() {
       {/* Destek hesabında, fabrika yöneticisi yokken — uyarır, engellemez. */}
       <FactoryAdminCard />
       <ServerOfflineBanner />
+      {/* Backend güncellemesi onay istemi (yalnız license:manage; Sonra = bu oturumda sus). */}
+      <UpdateApprovalPrompt />
+      {/* Güncelleme sürerken kendiliğinden açılan/kapanan ilerleme penceresi (modal değil). */}
+      <UpdateProgressWindow />
     </>
   );
 }

@@ -16,6 +16,7 @@ import {
   fmtBackupAge,
   type Alert,
 } from "./serverHealth";
+import { ServerUpdateSection } from "../ServerUpdates/ServerUpdateSection";
 import { factoryLocaleString, factoryLocaleTimeString } from "@/lib/factory-time";
 
 function InfoRow({ label, value, danger }: { label: string; value: string; danger?: boolean }) {
@@ -168,6 +169,8 @@ export function ServerStatusPage() {
             />
           </div>
         </section>
+
+        <ServerUpdateSection db={data?.db ?? null} />
 
         {/* İkincil bilgiler */}
         <section>
