@@ -2,6 +2,7 @@ import { Component, useState, type ErrorInfo, type ReactNode } from "react";
 import { AlertOctagon, RefreshCw, Home, ChevronDown, ChevronUp, Copy, Check } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { factoryLocaleTimeString } from "@/lib/factory-time";
+import { reportClientError } from "@/lib/error-report";
 
 interface Props {
   children: ReactNode;
@@ -128,6 +129,7 @@ export class ErrorBoundary extends Component<Props, State> {
 
   componentDidCatch(error: Error, info: ErrorInfo) {
     console.error("[ErrorBoundary]", error, info.componentStack);
+    reportClientError(error, "ekran");
   }
 
   render() {

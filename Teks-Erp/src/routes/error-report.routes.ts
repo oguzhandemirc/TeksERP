@@ -7,6 +7,7 @@
 // =============================================================================
 import { Router, type NextFunction, type Request, type Response } from "express";
 import { z } from "zod";
+import { readClientVersionHeader } from "../constants/client-info";
 import { verifyToken } from "../middlewares/auth.middleware";
 import { requirePermission } from "../middlewares/rbac.middleware";
 import { requireSettingsPassword } from "../middlewares/settings-password.middleware";
@@ -124,7 +125,7 @@ router.put("/onay", requirePermission("admin:settings"), requireSettingsPassword
  *             required: [kaynak]
  *             properties:
  *               kaynak: { type: string, enum: [panel, tablet] }
- *               surum: { type: string, maxLength: 40 }
+ *               surum: { type: string, maxLength: 40, description: "yoksa X-Client-Version başlığı" }
  *               kod: { type: string, maxLength: 60 }
  *               sinif: { type: string, maxLength: 60 }
  *               bilesen: { type: string, maxLength: 60 }
@@ -141,7 +142,7 @@ router.post("/istemci", async (req: Request, res: Response, next: NextFunction) 
     if (!userKey) throw AppError.unauthorized("Oturum gerekli");
     let alindi = false;
     if (errorReportConsentGiven() && allowClientError(userKey, Date.now())) {
-      recordError({ source: b.kaynak, version: b.surum ?? null, code: b.kod, errorClass: b.sinif, component: b.bilesen, route: b.yol ?? null, stack: b.yigin });
+      recordError({ source: b.kaynak, version: b.surum ?? readClientVersionHeader(req.headers), code: b.kod, errorClass: b.sinif, component: b.bilesen, route: b.yol ?? null, stack: b.yigin });
       alindi = true;
     }
     res.status(200).json({ success: true, data: { alindi } });

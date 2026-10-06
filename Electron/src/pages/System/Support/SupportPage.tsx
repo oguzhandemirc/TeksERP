@@ -2,6 +2,8 @@ import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { PageBody, PageShell } from "@/components/layout/PageShell";
+import { useRoleAccess } from "@/hooks/useRoleAccess";
+import { ErrorReportsCard } from "./ErrorReportsCard";
 import { SupportForm } from "./SupportForm";
 import { SUPPORT_LIST_KEY, SupportTicketDetail, SupportTicketList } from "./SupportTickets";
 
@@ -13,6 +15,7 @@ import { SUPPORT_LIST_KEY, SupportTicketDetail, SupportTicketList } from "./Supp
 export function SupportPage() {
   const qc = useQueryClient();
   const [selected, setSelected] = useState<string | null>(null);
+  const { hasPermission } = useRoleAccess();
   return (
     <PageShell>
       <PageHeader title="Destek" />
@@ -27,7 +30,10 @@ export function SupportPage() {
             />
             <SupportTicketList selectedId={selected} onSelect={setSelected} />
           </div>
-          <div>{selected ? <SupportTicketDetail id={selected} /> : <p className="text-sm text-muted-foreground">Ayrıntı için bir talep seçin.</p>}</div>
+          <div className="space-y-4">
+            {selected ? <SupportTicketDetail id={selected} /> : <p className="text-sm text-muted-foreground">Ayrıntı için bir talep seçin.</p>}
+            {hasPermission("admin:settings") ? <ErrorReportsCard /> : null}
+          </div>
         </div>
       </PageBody>
     </PageShell>

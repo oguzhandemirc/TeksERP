@@ -1,4 +1,6 @@
+import { useEffect } from "react";
 import { useRouteError, isRouteErrorResponse } from "react-router-dom";
+import { reportClientError } from "@/lib/error-report";
 import { ErrorFallbackUI } from "@/components/ErrorBoundary";
 import { factoryLocaleTimeString } from "@/lib/factory-time";
 
@@ -6,6 +8,10 @@ import { factoryLocaleTimeString } from "@/lib/factory-time";
 export function RouteErrorFallback() {
   const routeError = useRouteError();
   const errorTime = factoryLocaleTimeString(new Date(), "tr-TR");
+  // 404 gibi yönlendirici yanıtı hata değildir; yalnız gerçek istisna bildirilir.
+  useEffect(() => {
+    if (routeError instanceof Error) reportClientError(routeError, "ekran");
+  }, [routeError]);
 
   let error: Error;
   if (routeError instanceof Error) {
