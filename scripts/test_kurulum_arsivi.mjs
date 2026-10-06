@@ -216,7 +216,7 @@ let ILK_SHA = null;
   check('§1g doğrulayıcı TEK kez `ortak-dogrula`: --guven-capasi=uretim · --pg-kunye · --zip · kanal/grup argümanı YOK',
     r.iz.length === 1 && d.length === 1 && f['guven-capasi'] === 'uretim' && !('kanal' in f) && !('kanal-turu' in f) && !('grup' in f) && f['pg-kunye'] === PGJSON && f.zip === BACKEND && f['pg-cizgi'] === String(GERCEK.cizgi) && f['pg-en-az'] === GERCEK.backendEnAz,
     JSON.stringify(r.iz).slice(0, 300));
-  check('§1h ortamdaki TEKSERP_TEST_PAKET_CAPASI doğrulayıcıya GEÇMEZ (yalnız gerçek üretim çapası)', r.iz.length === 1 && r.iz[0].testCapasi === null, JSON.stringify(r.iz[0]?.testCapasi));
+  check('§1h ortamdaki TEKSERP_TEST_PAKET_CAPASI doğrulayıcıya GEÇMEZ ve --capa verilmez (yalnız gerçek üretim çapası)', r.iz.length === 1 && r.iz[0].testCapasi === null && !('capa' in f), JSON.stringify(r.iz[0]?.testCapasi));
 }
 
 // §2 belirlenimlilik · §3 ezmez

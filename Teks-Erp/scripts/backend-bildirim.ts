@@ -299,7 +299,9 @@ function pgDogrula(f: Bayraklar): void {
 // ── Ortak paket (kurulum arşivi, O11a) ──────────────────────────────────────
 /** Ortak paketin bütünlüğü + künyesi; grup-nötr (arşiv sürüm başına TEK), bildirim kurmaz. */
 async function ortakDogrula(f: Bayraklar): Promise<void> {
-  const capa = capaOku(f, "uretim");
+  // Kip yalnız üretim; test çapası bekçi içindir (çağıran arşivci onu ortamdan siler, --capa geçirmez).
+  if (gerek(f, "guven-capasi") !== "uretim") throw new CliError("ortak paket yalnız ÜRETİM çapasıyla doğrulanır (--guven-capasi=uretim)");
+  const capa = capaOku(f, null);
   const pg = pgGereksinimi(f, capa);
   const zip = path.resolve(gerek(f, "zip"));
   const cikti = path.resolve(gerek(f, "cikti"));
