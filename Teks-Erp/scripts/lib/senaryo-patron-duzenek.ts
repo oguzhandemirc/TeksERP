@@ -46,7 +46,7 @@ export interface PatronDbUrlleri {
   readonly sync: string;
 }
 
-/** Patron DB'leri `patron/sunucu/.env`den (kopyalanmaz, okunur); üçü de AYNI `_test` DB olmalı. */
+/** Patron MERKEZ DB'si `patron/sunucu/.env`den (kopyalanmaz, okunur); üçü de AYNI `_test` merkezi göstermeli. */
 export function patronDbUrlleri(): PatronDbUrlleri {
   const dosya = path.join(PATRON_KOKU, ".env");
   const e = fs.existsSync(dosya) ? dotenvParse(fs.readFileSync(dosya)) : {};
@@ -80,6 +80,7 @@ export interface Duzenek {
   readonly kurulum: IcKurulum;
   readonly yonetici: BulutHesabi;
   readonly fdb: Pool;
+  /** Bu koşumun TESİS DB'si: göç rolü (tablo sahibi, RLS'siz sayım) ve uygulama rolü (RLS'li okuma). */
   readonly bdb: Pool;
   readonly adb: Pool;
   /** Adımlar arası paylaşılan kimlikler (P2 carisi, ürün…). */
@@ -119,8 +120,6 @@ export async function duzenekKur(): Promise<Duzenek> {
   fs.mkdirSync(logDizini);
   console.log(`🗂  Geçici kök: ${kok}`);
   const fdb = new Pool({ connectionString: fabrikaUrl, max: 3, options: PG_SESSION_OPTIONS });
-  const bdb = new Pool({ connectionString: patronUrl.goc, max: 3, options: PG_SESSION_OPTIONS });
-  const adb = new Pool({ connectionString: patronUrl.app, max: 2, options: PG_SESSION_OPTIONS });
   // Yeni tesis → fabrikanın eşitleme zinciri baştan (kendi `_test` DB'si; yalnız zincir durumu).
   const silinen = await fdb.query(`DELETE FROM sync_watermarks`);
   if (silinen.rowCount) console.log(`🧹 önceki koşumun ${silinen.rowCount} filigranı silindi (yeni tesis, yeni zincir)`);
@@ -163,6 +162,8 @@ export async function duzenekKur(): Promise<Duzenek> {
     BILDIRIM_KIPI: "sahte",
     BILDIRIM_ARALIGI_SN: "5",
   };
+  // `tesis-ac` sunucudan önce koşar ve tesis rol parolalarının anahtarını bu dizinde üretir.
+  fs.mkdirSync(patronEnv.ANAHTAR_DIZINI!, { recursive: true, mode: 0o700 });
   const roller = spawnSync(process.execPath, ["--import", "tsx", "scripts/db-rolleri.ts"], { cwd: PATRON_KOKU, env: patronEnv, encoding: "utf8", timeout: 60_000 });
   if (roller.status !== 0) throw new Error(`patron db-rolleri düştü: ${roller.stderr || roller.stdout}`);
   const ac = spawnSync(process.execPath, ["--import", "tsx", "scripts/tesis.ts", "tesis-ac", `--tesis=${tesisId}`, `--ad=Senaryo P Tekstil ${tesisId.slice(0, 6)}`, "--saklama=13"], {
@@ -172,6 +173,10 @@ export async function duzenekKur(): Promise<Duzenek> {
     timeout: 60_000,
   });
   if (ac.status !== 0) throw new Error(`tesis-ac düştü: ${ac.stderr || ac.stdout}`);
+  const tesisDb = tesisDbUrlleri(patronEnv, tesisId);
+  console.log(`🏭 Bulut tesis DB'si: ${dbAdi(tesisDb.goc)}`);
+  const bdb = new Pool({ connectionString: tesisDb.goc, max: 3, options: PG_SESSION_OPTIONS });
+  const adb = new Pool({ connectionString: tesisDb.app, max: 2, options: PG_SESSION_OPTIONS });
   const patron = await patronBaslat(patronEnv, path.join(logDizini, "patron.log"));
 
   const fabrika = await fabrikaBaslat({
@@ -242,8 +247,12 @@ export async function duzenekKur(): Promise<Duzenek> {
       await d.patron.durdur().catch(() => undefined);
       await satici.kapat().catch(() => undefined);
       await ic.kapat().catch(() => undefined);
-      await tesisTemizle(bdb, tesisId).catch((err: Error) => console.log(`⚠️ bulut tesis temizliği: ${err.message}`));
       for (const p of [fdb, bdb, adb]) await p.end().catch(() => undefined);
+      try {
+        tesisKoprusu(patronEnv, "temizle", tesisId);
+      } catch (err) {
+        console.log(`⚠️ bulut tesis temizliği: ${(err as Error).message}`);
+      }
       // Fikstür topları süreç içi Prisma ile doğar (yalnız kullanıldıysa bağlıdır).
       await (await import("../../src/lib/prisma")).default.$disconnect().catch(() => undefined);
       if (basarili) fs.rmSync(kok, { recursive: true, force: true });
@@ -253,16 +262,18 @@ export async function duzenekKur(): Promise<Duzenek> {
   return d;
 }
 
-/** Bulut `_test` DB'sinde yalnız BU koşumun tesisi (göç rolü); başka tesisin satırına dokunmaz. */
-async function tesisTemizle(bdb: Pool, tesisId: string): Promise<void> {
-  const r = await bdb.query<{ t: string }>(
-    `SELECT c.table_name AS t FROM information_schema.columns c WHERE c.table_schema = 'public' AND c.column_name = 'tesis_id'`,
-  );
-  const tablolar = r.rows.map((x) => x.t).filter((t) => t !== "facilities");
-  for (let tur = 0; tur < 3; tur++) {
-    for (const t of tablolar) await bdb.query(`DELETE FROM "${t}" WHERE tesis_id = $1`, [tesisId]).catch(() => undefined);
-  }
-  await bdb.query(`DELETE FROM facilities WHERE tesis_id = $1`, [tesisId]);
+/** Patron tarafı köprüsü (`patron/sunucu/scripts/lib/senaryo-tesis-db.ts`): ad, rol ve parola türetimi TEK kaynakta kalır. */
+function tesisKoprusu(env: NodeJS.ProcessEnv, komut: "url" | "temizle", tesisId: string): string {
+  const r = spawnSync(process.execPath, ["--import", "tsx", "scripts/lib/senaryo-tesis-db.ts", komut, tesisId], { cwd: PATRON_KOKU, env, encoding: "utf8", timeout: 60_000 });
+  if (r.status !== 0) throw new Error(`tesis DB köprüsü (${komut}) düştü: ${r.stderr || r.error?.message || r.status}`);
+  return r.stdout;
+}
+
+/** Bu koşumun tesis DB'si: göç rolü + uygulama rolü (parola test anahtarından türer, yalnız bellekte). */
+function tesisDbUrlleri(env: NodeJS.ProcessEnv, tesisId: string): { goc: string; app: string } {
+  const u = JSON.parse(tesisKoprusu(env, "url", tesisId)) as { goc?: string; app?: string };
+  if (!u.goc || !u.app || !dbAdi(u.goc).startsWith(`${dbAdi(env.GOC_DATABASE_URL ?? "")}_t`)) throw new Error("tesis DB köprüsü beklenmeyen URL döndü");
+  return { goc: u.goc, app: u.app };
 }
 
 export { bekle };

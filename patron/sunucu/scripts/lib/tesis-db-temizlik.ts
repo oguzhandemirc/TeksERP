@@ -6,7 +6,7 @@ import { ident } from "../../src/lib/db-roles";
 import { PG_SESSION_OPTIONS } from "../../src/lib/pg-session";
 import { databaseOf, facilityDbName, facilityRoles, isFacilityDbOf } from "../../src/lib/tesis-db-ad";
 
-function testCentral(gocUrl: string): string {
+export function testCentral(gocUrl: string): string {
   const central = databaseOf(gocUrl);
   if (!central.endsWith("_test") || central.startsWith("tekserp_fabrika_")) throw new Error(`Temizlik yalnız _test merkezinde: ${central}`);
   return central;
