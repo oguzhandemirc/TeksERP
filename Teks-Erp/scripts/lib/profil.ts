@@ -92,3 +92,42 @@ export function evrenHatalari(semaAnahtarlari: readonly string[]): string[] {
   }
   return hata;
 }
+
+// ── DIŞA AKTARMA (O13b) — gerçek fabrika profili, yedeğin `_test` kopyasından ──────
+
+/** Üretilmiş profillerin adları; dışa aktarma bunların üstüne yazamaz. */
+export const URETILMIS_PROFILLER: ReadonlySet<string> = new Set(["kapali", "acik"]);
+
+/**
+ * Dışa aktarma hedefi: yalnız `_test` ile biten, oturumun kendi kopyası. Fabrika yedeği
+ * sınıfı (`tekserp_fabrika_*`), bilinen canlı/dev adları ve matrisin seed DB'leri RED.
+ * Kaçış YOK: bu araç yazmaz, yanlış hedefin tek bedeli yanlış profildir. Boş = geçer.
+ */
+export function disaAktarmaHedefEngeli(dbAdi: string, yasakAdlar: ReadonlySet<string>): string | null {
+  if (!/^[a-z0-9_]+_test$/.test(dbAdi)) return `hedef DB '${dbAdi}' '_test' ile bitmiyor — yedeği kendi tekserp_<oturum>_test kopyana geri yükle`;
+  if (dbAdi.startsWith("tekserp_fabrika_")) return `hedef DB '${dbAdi}' fabrika yedeği sınıfında — ona script koşulmaz, kendi kopyanı aç`;
+  if (yasakAdlar.has(dbAdi)) return `hedef DB '${dbAdi}' canlı/dev kopya olarak biliniyor`;
+  if (/^tekserp_pm_/.test(dbAdi)) return `hedef DB '${dbAdi}' profil matrisinin seed DB'si — fabrika ayarı taşımaz`;
+  return null;
+}
+
+export interface DisaAktarimSonucu {
+  ayarlar: Record<string, AyarDegeri>;
+  /** Çıktıda olup profile GİRMEYEN anahtarlar → neden. */
+  atlanan: Record<string, string>;
+}
+
+/** `getFeatureFlags()` çıktısından allowlist süzgeci; sır sınıfı ad ve ilkel olmayan değer girmez. */
+export function bayraklardanAyarlar(bayraklar: Record<string, unknown>): DisaAktarimSonucu {
+  const ayarlar: Record<string, AyarDegeri> = {};
+  const atlanan: Record<string, string> = {};
+  for (const k of Object.keys(bayraklar).sort()) {
+    const v = bayraklar[k];
+    if (SIR_DESENI.test(k)) atlanan[k] = "sır sınıfı ad";
+    else if (k in PROFIL_DISI_ANAHTARLAR) atlanan[k] = `profil dışı: ${PROFIL_DISI_ANAHTARLAR[k]}`;
+    else if (!PROFIL_ALLOWLIST.has(k)) atlanan[k] = "allowlist dışı (yazılabilir ayar değil)";
+    else if (!(v === null || ["boolean", "number", "string"].includes(typeof v))) atlanan[k] = "değer ilkel değil";
+    else ayarlar[k] = v as AyarDegeri;
+  }
+  return { ayarlar, atlanan };
+}

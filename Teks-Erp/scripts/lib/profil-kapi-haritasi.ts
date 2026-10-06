@@ -5,8 +5,8 @@
 // kümesinden TÜRER (`beklenenModulDurumu`): kapalı modül → 403 `details.code ===
 // "MODULE_DISABLED"`, açık modül → 2xx. Bağımlılık `MODULE_DEPENDENCIES` + okuma
 // kapısının elle ölçtüğü geçişli zincirdir (devere → iplik → ticaret).
-// ⚠️ `scripts/test_module_flag_off.ts` MODULLER tablosunun sondaları bunun İKİZİDİR;
-// ikisi birlikte değişir (tabloyu ortak lib'e taşımak O13b'nin borcudur).
+// `scripts/test_module_flag_off.ts` MODULLER tablosu sondalarını buradan okur
+// (`modulUclari`); uç listesi yalnız bu dosyada yazılır.
 // =============================================================================
 import { MODULE_DEPENDENCIES } from "../../src/constants/module-flags";
 
@@ -26,6 +26,13 @@ export const MODUL_SONDALARI: readonly ModulSondasi[] = [
   { alan: "depoMultiEnabled", uclar: ["/api/warehouse-transfers"] },
   { alan: "productionEnabled", uclar: ["/api/routes", "/api/product-recipes", "/api/work-orders", "/api/production-balance"] },
 ];
+
+/** Modülün sonda uçları; tabloda olmayan modül → atar (sessiz boş liste kapısızlıktır). */
+export function modulUclari(alan: string): string[] {
+  const s = MODUL_SONDALARI.find((m) => m.alan === alan);
+  if (!s || s.uclar.length === 0) throw new Error(`modül kapısı haritasında '${alan}' için sonda yok`);
+  return [...s.uclar];
+}
 
 /** Okuma kapısının elle ölçtüğü ek zincir: devere iplik ister (iplik ticareti ister). */
 const EK_BAGIMLILIK: Readonly<Record<string, string>> = { devereEnabled: "iplikEnabled" };

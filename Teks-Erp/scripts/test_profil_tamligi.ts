@@ -7,12 +7,22 @@
 // ② açık değerler şemadan geçer, boolean bayrak ancak gerekçeli istisnayla `true` olmaz,
 // dokuz modül açık ve bağımlılıkları sağlıyor · ③ diskteki profiller biçim/allowlist/sır
 // kurallarına uyar; `kapali` boş, `acik` tablodan ÜRETİLMİŞ (elle sapma kırmızı) ·
-// ④ negatif sondalar: ihlalli girdiler gerçekten RED almalı (yüklem kördür diye yeşil olmasın).
+// ④ negatif sondalar: ihlalli girdiler gerçekten RED almalı (yüklem kördür diye yeşil olmasın) ·
+// ⑤ dışa aktarma (`profil-disa-aktar.ts`): `_test` hedef kapısı + allowlist süzgeci, sondalı.
 // Çalıştır: npx tsx scripts/test_profil_tamligi.ts
 // =============================================================================
 import { MODULE_DEPENDENCIES, MODULE_FLAG_KEYS } from "../src/constants/module-flags";
 import { HEPSI_ACIK, hepsiAcikAyarlar } from "./lib/hepsi-acik";
-import { evrenHatalari, profilAdlari, profilHatalari, profilOku } from "./lib/profil";
+import { FIXTURE_OLMAYAN_DB } from "./lib/hedef-db-kapisi";
+import {
+  bayraklardanAyarlar,
+  disaAktarmaHedefEngeli,
+  evrenHatalari,
+  profilAdlari,
+  profilHatalari,
+  profilOku,
+  URETILMIS_PROFILLER,
+} from "./lib/profil";
 
 let pass = 0;
 let fail = 0;
@@ -55,6 +65,8 @@ async function main(): Promise<void> {
   // ── ③ diskteki profiller ───────────────────────────────────────────────────
   const adlar = profilAdlari();
   check("kapali ve acik profilleri var", adlar.includes("kapali") && adlar.includes("acik"), adlar.join(", "));
+  const gercek = adlar.filter((a) => !URETILMIS_PROFILLER.has(a));
+  check("en az bir gerçek fabrika profili var (yedek kopyasından)", gercek.length > 0, gercek.join(", ") || "yok");
   for (const ad of adlar) {
     const p = profilOku(ad);
     const h = profilHatalari(p, updateSchema);
@@ -79,6 +91,19 @@ async function main(): Promise<void> {
   check("sonda: geçerli profil KABUL (yüklem her şeyi reddetmiyor)", !reddi({ financeEnabled: true }));
   check("sonda: tabloda karşılığı olmayan yeni şema anahtarı KIRMIZI", evrenHatalari([...semaAnahtarlari, "yeniBayrakEnabled"]).length > 0);
   check("sonda: şemadan düşen anahtar ölü satır olarak KIRMIZI", evrenHatalari(semaAnahtarlari.filter((k) => k !== "financeEnabled")).length > 0);
+
+  // ── ⑤ DIŞA AKTARMA ─────────────────────────────────────────────────────────
+  const engel = (ad: string): boolean => disaAktarmaHedefEngeli(ad, FIXTURE_OLMAYAN_DB) !== null;
+  check("sonda: dışa aktarma `_test` ile bitmeyen hedefi RED", engel("tekserp_demo") && engel("tekserp") && engel("tekserp_test_x"));
+  check("sonda: dışa aktarma fabrika yedeği sınıfını RED (`_test` ekli olsa da)", engel("tekserp_fabrika_0923") && engel("tekserp_fabrika_kopya_test"));
+  check("sonda: dışa aktarma matris seed DB'sini RED", engel("tekserp_pm_kapali_test"));
+  check("dışa aktarma kendi kopyasını KABUL eder", !engel("tekserp_o13b_kaynak_test"));
+  const suz = bayraklardanAyarlar({ financeEnabled: true, license: { x: 1 }, settingsPasswordHash: "h", loginMethods: { a: 1 }, factoryTimezone: "dilim", labelCopies: 2 });
+  check(
+    "dışa aktarma süzgeci: allowlist girer; sır · profil-dışı · çıktıya özgü anahtar girmez",
+    JSON.stringify(suz.ayarlar) === JSON.stringify({ financeEnabled: true, labelCopies: 2 }) && Object.keys(suz.atlanan).length === 4,
+    JSON.stringify(suz.ayarlar),
+  );
 
   console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
   process.exit(fail === 0 ? 0 : 1);
