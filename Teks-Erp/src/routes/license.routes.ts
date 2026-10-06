@@ -114,7 +114,7 @@ router.get("/durum", verifyTokenIfPresent, (req: Request, res: Response) => {
  *       - { in: query, name: urun, required: true, schema: { type: string, enum: [electron, mobil, backend] } }
  *       - { in: query, name: kanal, required: false, schema: { type: string } }
  *     responses:
- *       200: { description: "{ yolOneki, belirtec, gecerlilikSonu }" }
+ *       200: { description: "{ yolOneki, belirtec, gecerlilikSonu, grup } — grup yalnız doğrulanmış kiradan (test · oncu · genel), değilse null" }
  *       403: { description: Güncelleme dondurulmuş (LICENSE_UPDATES_FROZEN) }
  *       404: { description: Belirteç yok (LICENSE_DOWNLOAD_TOKEN_UNAVAILABLE) }
  */

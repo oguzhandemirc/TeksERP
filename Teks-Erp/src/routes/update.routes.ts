@@ -23,7 +23,7 @@ router.use(verifyToken, requireAnyPermission("license:view", "license:manage"));
  *     summary: Backend güncelleme durumu (kurulu sürüm, kiradaki politika, güncelleyici canlılığı, bekleyen sürüm, onay, son deneme, geçmiş)
  *     security: [{ bearerAuth: [] }]
  *     responses:
- *       200: { description: "UpdateStatus — { kuruluSurum, kanal, politika, donuk, sonrakiPencere, indirmeBelirteci, guncelleyici, bekleyen, son, yerel, gecmis, karar, canlilik, onay, eylemler }" }
+ *       200: { description: "UpdateStatus — { kuruluSurum, kanal, grup, politika, donuk, sonrakiPencere, indirmeBelirteci, guncelleyici, bekleyen, son, yerel, gecmis, karar, canlilik, onay, eylemler }" }
  *       401: { description: Token geçersiz }
  *       403: { description: license:view ya da license:manage yok }
  */
