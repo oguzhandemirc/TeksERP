@@ -193,7 +193,7 @@ const EXEMPT: Record<string, string> = {
  * ⚠️ 15 → 16 (2026-10-06, plan 3.6, BİLİNÇLİ): `POST /api/hata-raporlari/istemci` yalnız `verifyToken` taşır —
  * her ekran (panel/tablet) kendi hatasını bildirebilmeli; izin kodu yazmak hatayı en çok görecek operatörü
  * susturur. Uç iş verisi okumaz/yazmaz: KATI gövde (mesaj alanı yok), onay yoksa hiçbir şey almaz, kullanıcı
- * başına hız sınırlı — `scripts/test_hata_raporu.ts` ölçer.
+ * başına hız sınırlı — `scripts/test_hata_raporu_fabrika.ts` ölçer.
  */
 const BARE_CHAIN_BASELINE = 16;
 
