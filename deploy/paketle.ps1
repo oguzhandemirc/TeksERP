@@ -163,7 +163,7 @@ function HizmetIkilisiOlc([string]$yol, [string]$beklenenAd, [string]$capaKipi) 
     }
     # G3: guncelleyicinin gomulu capa kipi paketin (bayt kodu, kanaldan) kipiyle AYNI olmali (konak capa tasimaz).
     if ($beklenenAd -eq "tekserp-guncelleyici" -and $j.capaKipi -cne $capaKipi) {
-      Fail "$beklenenAd capa kipi '$($j.capaKipi)', paket '$capaKipi' (hazirlik kanali: npm run derle:hizmetler:win:hazirlik + -HizmetIkiliDizini)"
+      Fail "$beklenenAd capa kipi '$($j.capaKipi)', paket '$capaKipi' (uretim derlemesi: npm run derle:hizmetler:win + -HizmetIkiliDizini)"
     }
     $surum = [string]$j.surum
   }
@@ -473,7 +473,7 @@ if ($Korumali) {
   # G3: native'in gomulu capa kipi bayt kodunun kipiyle (build-korumali kanaldan yazar) AYNI olmali;
   # uyusmazsa paket acilista cekirdeksiz kalirdi. Paketin kendi Node'u .node'u yukleyip kunyesini okur.
   & $runtimeNode (Join-Path (Join-Path $proj "scripts") "native-capa-kipi.mjs") (Join-Path (Join-Path $stage "native") $natAd) (Join-Path (Join-Path $proj "dist") "server-kunye.json")
-  if ($LASTEXITCODE -ne 0) { Fail "native lisans cekirdeginin guven capasi kipi paketinkiyle uyusmuyor (yukarida). Hazirlik kanali: npm run derle:win:hazirlik + -NativeYol." }
+  if ($LASTEXITCODE -ne 0) { Fail "native lisans cekirdeginin guven capasi kipi paketinkiyle uyusmuyor (yukarida). Uretim derlemesi: npm run derle:win:uretim + -NativeYol." }
   Write-Host "  native      : native\$natAd (lisans cekirdegi - zorunlu kip)"
 }
 

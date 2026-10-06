@@ -156,11 +156,12 @@ fn copy_changed_after_verification_is_never_executed() {
     assert!(read(&own).contains("0.1.0"));
 }
 
-/// G3: güven çapası kurulumun kimliğidir — paketteki daha yeni güncelleyici öteki kipte (ya da kipsiz) ise
-/// yerleşmez; SYSTEM ikilisi kendini güncellemeyle hazırlık ↔ üretim arasında geçemez.
+/// G3: güven çapası kurulumun kimliğidir — paketteki daha yeni güncelleyici başka kipte (eski `hazirlik` künyesi)
+/// ya da kipsiz ise yerleşmez; SYSTEM ikilisi kendini güncellemeyle çapa kipini değiştiremez.
 #[test]
 fn other_anchor_mode_binary_is_refused() {
-    let other = if ANCHOR_MODE == "uretim" { "hazirlik" } else { "uretim" };
+    assert_eq!(ANCHOR_MODE, "uretim");
+    let other = "hazirlik";
     for (tag, mode) in [("oteki-kip", Some(other)), ("kipsiz", None)] {
         let (w, own) = setup(tag, Some(exe_json_mode("tekserp-guncelleyici", "9.9.9", mode)));
         let r = stage(&w, &own, "0.1.0");

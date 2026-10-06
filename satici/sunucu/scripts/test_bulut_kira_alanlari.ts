@@ -9,7 +9,7 @@
 // Koşum: npx tsx scripts/test_bulut_kira_alanlari.ts
 // =============================================================================
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { cpSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
@@ -161,7 +161,7 @@ async function kiraVeIcApi(ortam: AnahtarOrtami, temizlenecek: string[]): Promis
   }
 }
 
-async function yayinci(ortam: AnahtarOrtami): Promise<void> {
+async function yayinci(ortam: AnahtarOrtami, cliDizin: string): Promise<void> {
   console.log("\n§4 yayıncı indirme belirteci");
   const now = Date.now();
   const anahtarlar = [{ kid: ortam.f.ind.kid, x: ortam.f.ind.x }];
@@ -175,7 +175,7 @@ async function yayinci(ortam: AnahtarOrtami): Promise<void> {
     at(() => publisherTokens(ortam.ctx.keys, { channels: ["x"], minutes: 71, nowMs: now })) && at(() => publisherTokens(ortam.ctx.keys, { channels: ["x"], minutes: 0, nowMs: now })) &&
     at(() => publisherTokens(ortam.ctx.keys, { channels: ["Kötü Kanal"], minutes: 5, nowMs: now })) && at(() => publisherTokens(ortam.ctx.keys, { channels: [], minutes: 5, nowMs: now })));
   const cli = (argv: string[]) => spawnSync(process.execPath, ["--import", "tsx", "scripts/anahtar.ts", "indirme-belirteci", ...argv], {
-    cwd: SUNUCU, encoding: "utf8", timeout: 60_000, env: { ...process.env, GUVEN_CAPASI_DOSYASI: ortam.capaDosyasi, ANAHTAR_DIZINI: ortam.dizin },
+    cwd: SUNUCU, encoding: "utf8", timeout: 60_000, env: { ...process.env, GUVEN_CAPASI_DOSYASI: ortam.capaDosyasi, ANAHTAR_DIZINI: cliDizin },
   });
   const r = cli(["--kanal=testfabrika", "--dk=5"]);
   let json: { v?: number; belirtecler?: { yolOneki: string; belirtec: string }[] } = {};
@@ -193,7 +193,7 @@ interface YayinOkuma {
   BelirtecYok: new (...a: unknown[]) => Error;
 }
 
-async function yayinKaynagi(ortam: AnahtarOrtami): Promise<void> {
+async function yayinKaynagi(ortam: AnahtarOrtami, cliDizin: string): Promise<void> {
   console.log("\n§5 yayın betiği belirteç kaynağı (scripts/lib/yayin-okuma.mjs)");
   const tmp = mkdtempSync(path.join(os.tmpdir(), "yayin-kaynak-"));
   const kaynak = path.join(tmp, "kaynak.json");
@@ -211,7 +211,7 @@ async function yayinKaynagi(ortam: AnahtarOrtami): Promise<void> {
     const DOSYA = "d".repeat(40);
     writeFileSync(dosya, DOSYA, { mode: 0o600 });
     kontrol("§5a ✓K kaynak yapılandırılmamış → dosya belirteci (bugünkü davranış)", yo.belirtecOku("https://g.test/testfabrika/electron/latest.yml") === DOSYA);
-    writeFileSync(kaynak, JSON.stringify({ tur: "yerel", dizin: ortam.dizin }), { mode: 0o600 });
+    writeFileSync(kaynak, JSON.stringify({ tur: "yerel", dizin: cliDizin }), { mode: 0o600 });
     const e = yo.belirtecOku("https://g.test/testfabrika/electron/latest.yml");
     const m = yo.belirtecOku("/testfabrika/mobil/ota/1.0.0/manifest");
     const de = dogrula(e);
@@ -227,7 +227,7 @@ async function yayinKaynagi(ortam: AnahtarOrtami): Promise<void> {
     writeFileSync(kaynak, JSON.stringify({ tur: "ssh", hedef: "h", komut: "x; rm -rf /" }), { mode: 0o600 });
     const enjeksiyon = yok(() => yo.belirtecOku("/adnansahin/electron/latest.yml"));
     rmSync(kaynak);
-    writeFileSync(kaynak, JSON.stringify({ tur: "yerel", dizin: ortam.dizin }), { mode: 0o644 });
+    writeFileSync(kaynak, JSON.stringify({ tur: "yerel", dizin: cliDizin }), { mode: 0o644 });
     const gevsek = yok(() => yo.belirtecOku("/adnansahin/electron/latest.yml"));
     kontrol("§5f tanınmayan tür · kabuk karakterli uzak komut · 0644 kaynak dosyası → DUR", tanimsiz && enjeksiyon && gevsek, `${tanimsiz}/${enjeksiyon}/${gevsek}`);
   } finally {
@@ -242,12 +242,17 @@ async function main(): Promise<void> {
   saf();
   const ortam = await anahtarOrtamiKur();
   const temizlenecek: string[] = [];
+  // Yayıncı CLI'ı dosya çapasını yalnız kip çözülmezken alır; fikstürün `kok-*` kökleri kipi `uretim`e çözerdi
+  // (üretim dosya çapası reddeder) → CLI köksüz kopyayı okur (İNDİRME anahtarı kök dosyası istemez).
+  const cliDizin = mkdtempSync(path.join(os.tmpdir(), "satici-yayinci-"));
+  for (const ad of readdirSync(ortam.dizin)) if (!ad.endsWith(".kok.json")) cpSync(path.join(ortam.dizin, ad), path.join(cliDizin, ad), { recursive: true });
   try {
     await kiraVeIcApi(ortam, temizlenecek);
-    await yayinci(ortam);
-    await yayinKaynagi(ortam);
+    await yayinci(ortam, cliDizin);
+    await yayinKaynagi(ortam, cliDizin);
   } finally {
     await temizleKurulumlar(temizlenecek, ortam.kidler);
+    rmSync(cliDizin, { recursive: true, force: true });
     ortam.temizle();
     await kapat();
   }

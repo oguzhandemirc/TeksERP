@@ -449,8 +449,8 @@ async function bolum4(): Promise<void> {
     kipDenetimi(uretim, { zaman: "x" }),
   ];
   check(
-    "§4j ⭐ paketleme kip denetimi (native-capa-kipi.mjs): aynı kip 0 · künye başka kip ister 1 · test çapalı ikili 1 · künyede kip yok 2 (ölçülemedi)",
-    JSON.stringify(sonuclar) === JSON.stringify([0, 1, 1, 2]),
+    "§4j ⭐ paketleme kip denetimi (native-capa-kipi.mjs): aynı kip 0 · künye eski hazırlık kipi 2 (tek kip, tanınmaz) · test çapalı ikili 1 · künyede kip yok 2 (ölçülemedi)",
+    JSON.stringify(sonuclar) === JSON.stringify([0, 2, 1, 2]),
     JSON.stringify(sonuclar),
   );
 }

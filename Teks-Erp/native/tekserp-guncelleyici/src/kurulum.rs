@@ -7,16 +7,14 @@
 //!   kurulum-pg    --kunye <pg.json> --zip <PG zip> --hedef <YOK olan dizin>
 //!   kurulum-dizin --dizin <açılmış sürüm dizini>     (onarım: var olan dizini yeniden ölçer, SİLMEZ)
 //!
-//! Anahtar kümesi gömülü çapanın BÜTÜN PAKET anahtarlarıdır: kurulumda HAK (sınıf) henüz yoktur. Hazırlık
-//! anahtarı (`paket-hazirlik*`) çıktıda `hazirlikAnahtari: true` diye söylenir — üretim sınıfı kurulumda
-//! backend o paketi zaten GEÇERSİZ sayar; sınıf kararı lisansındır, kurulum yalnız uyarır.
+//! Anahtar kümesi gömülü çapanın BÜTÜN PAKET anahtarlarıdır (tek kip; kurulumda HAK — sınıf — henüz yoktur).
 //! Çıktı stdout'a TEK satır JSON. Doğrulama hatasında `{"tamam":false,"kod","mesaj"}` + çıkış 3 ve
 //! hedef dizin SİLİNİR (yarım/kurcalı içerik kullanılmasın); kullanım hatası çıkış 2.
 use crate::env::{self, Fs, RealFs};
 use crate::package::{self, ExtractLimits};
 use crate::pgminor;
 use crate::release;
-use crate::trust::{self, TrustAnchor};
+use crate::trust::TrustAnchor;
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 use std::io::Read;
@@ -109,7 +107,6 @@ pub fn backend_paketi(zip: &Path, hedef: &Path, trust: &PackageTrust) -> Result<
         "surum": id.surum,
         "paketId": id.package_id,
         "kid": id.kid,
-        "hazirlikAnahtari": trust::is_staging_package_kid(&id.kid),
         "musteri": id.musteri,
         "derlemeTarihi": id.built_at,
         "dosya": stats.files,
@@ -133,7 +130,6 @@ pub fn surum_dizini(dizin: &Path, trust: &PackageTrust) -> Result<Value, Kurulum
         "surum": id.surum,
         "paketId": id.package_id,
         "kid": id.kid,
-        "hazirlikAnahtari": trust::is_staging_package_kid(&id.kid),
         "musteri": id.musteri,
         "derlemeTarihi": id.built_at,
     }))
@@ -191,7 +187,6 @@ pub fn pg_paketi(kunye: &Path, zip: &Path, hedef: &Path, trust: &PackageTrust) -
         "derleme": k.derleme,
         "icuSurum": k.icu,
         "kid": kid,
-        "hazirlikAnahtari": trust::is_staging_package_kid(&kid),
         "paketAdi": k.paket.ad,
         "dosya": n,
         "acilan": stats.files,

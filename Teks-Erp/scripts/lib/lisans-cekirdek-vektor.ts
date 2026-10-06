@@ -366,6 +366,8 @@ function sertifikaVektorleri(f: Fikstur): Vektor[] {
     v("çapa sınıfsız", alt, { roots: [kokAnahtari(f.kok, [])] }),
     // Eski hazırlık ailesi (`hazirlik-*`) çapada biçim düzeyinde RED — sınıfı ne olursa olsun.
     v("çapada hazirlik-* kök kid'i (eski hazırlık ailesi)", alt, { roots: [{ kid: "hazirlik-fikstur-1", x: f.dar.x, classes: ["TEST", "URETIM"] }] }),
+    // Ayırt edici: yalnız TEST/DEMO sınıflı hazırlık kökü eski iki kipli native'te GEÇERDİ; tek kipte o da RED.
+    v("çapada hazirlik-* kök kid'i, yalnız TEST/DEMO", alt, { roots: [{ kid: "hazirlik-fikstur-1", x: f.dar.x, classes: ["TEST", "DEMO"] }] }),
     v("çapa anahtarı biçimsiz", alt, { roots: [{ kid: f.kok.kid, x: "abc", classes: ["URETIM"] }] }),
     ...kiplere(v("gömülü çapa: kök tanınmıyor", sertifikaBas(capaDisiKok(), sertifikaYuku(f, f.alt, "ALT")), { roots: null })),
     ...kiplere(v("gömülü çapa: eski hazırlık kökü kid'i, yabancı imza", sertifikaBas(anahtarUret(ESKI_HAZIRLIK_KOK_KIDI), sertifikaYuku(f, f.alt, "ALT", { siniflar: ["TEST"] })), { roots: null })),

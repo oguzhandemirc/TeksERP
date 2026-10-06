@@ -7,13 +7,10 @@
   "scripts": {
     "derle": "node scripts/derle.mjs yerel",
     "derle:uretim": "node scripts/derle.mjs yerel --uretim",
-    "derle:hazirlik": "node scripts/derle.mjs yerel --hazirlik",
     "derle:win": "node scripts/derle.mjs win-x64",
     "derle:win:uretim": "node scripts/derle.mjs win-x64 --uretim",
-    "derle:win:hazirlik": "node scripts/derle.mjs win-x64 --hazirlik",
     "derle:linux": "node scripts/derle.mjs linux-x64",
     "derle:linux:uretim": "node scripts/derle.mjs linux-x64 --uretim",
-    "derle:linux:hazirlik": "node scripts/derle.mjs linux-x64 --hazirlik",
     "denetle": "node ../scripts/kapi.mjs denetle",
     "test": "node ../scripts/kapi.mjs test"
   },

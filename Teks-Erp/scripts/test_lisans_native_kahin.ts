@@ -8,8 +8,8 @@
 // NE ÖLÇER: native çekirdek (`native/lisans-cekirdek` + ortak `native/tekserp-dogrulama`, Rust + napi-rs) TS protokolünün AYNASIDIR;
 // ayrışırsa fabrika aynı belgeyi iki yolda farklı doğrular ve hata sessizdir.
 //   §0 STATİK aynalar (native gerekmez): Rust kod kümeleri ⊆/= TS · yer tutucu listesi · Windows
-//      sondası satır satır · gömülü çapanın üretim kök + PAKET listeleri = TS listeleri ve üretim `cfg`siyle
-//      kapılı; TS'te hazırlık çapası YOK (tek kip) · arayüz sürümü ·
+//      sondası satır satır · gömülü çapanın üretim kök + PAKET listeleri = TS listeleri, bloklar `cfg` kapısız
+//      ve anchor.rs'te özellik kapısı yok; TS'te hazırlık çapası YOK (tek kip) · arayüz sürümü ·
 //      HKDF öneki · Rust'taki HER regex TS kaynağında (ya da canlı Zod deseninde) birebir var ·
 //      iki derleme sabiti geliştirmede kapalı (native zorunlu değil · çapa kipi üretim) · Rust'taki her
 //      belge türü (TYP_*) protokolün TYP kayıt defterinde aynı ad/değerle (bütünlük türü dahil) · aynanın
@@ -507,9 +507,9 @@ function bolum2v2(dosya: VektorV2Dosyasi | null): void {
   );
 }
 
-/** `anchor.rs`te kipin blok adları ve blokların önündeki `cfg` kapısı (emekli hazırlık bloğu O14b'de kalkar; TS onu okumaz). */
-const RS_BLOKLAR: Readonly<Record<TrustAnchorMode, { readonly kok: string; readonly paket: string; readonly kapi: string }>> = {
-  uretim: { kok: "PRODUCTION_ROOTS", paket: "PRODUCTION_PACKAGE_KEYS", kapi: '#[cfg(not(feature = "hazirlik-capasi"))]' },
+/** `anchor.rs`te kipin blok adları; çapa tek kip olduğundan bloklar `cfg` kapısızdır (kapı = ikinci kip izi). */
+const RS_BLOKLAR: Readonly<Record<TrustAnchorMode, { readonly kok: string; readonly paket: string }>> = {
+  uretim: { kok: "PRODUCTION_ROOTS", paket: "PRODUCTION_PACKAGE_KEYS" },
 };
 
 interface RsBlok<T> {
@@ -539,18 +539,15 @@ export function gomuluCapa(anchor: string): Record<TrustAnchorMode, { kok: RsBlo
   return Object.fromEntries(TRUST_ANCHOR_MODES.map((k) => [k, kip(k)])) as ReturnType<typeof gomuluCapa>;
 }
 
-/** `anchor.rs` kip sabitleri: MODE ve kullanılan liste her kipte kendi bloğuna bağlı (cfg kapısıyla). */
+/** `anchor.rs` kip sabitleri: MODE tek kipin adı, gömülü çapa fonksiyonları doğrudan kipin bloklarını okur. */
 function kipBaglari(anchor: string): string[] {
   const eksik: string[] = [];
   for (const k of TRUST_ANCHOR_MODES) {
-    const { kok, paket, kapi } = RS_BLOKLAR[k];
-    const beklenen = [
-      `${kapi}\npub const MODE: &str = "${k}";`,
-      `${kapi}\nconst ROOTS: &[(&str, &str, &[&str])] = ${kok};`,
-      `${kapi}\nconst PACKAGE_KEYS: &[(&str, &str)] = ${paket};`,
-    ];
-    for (const b of beklenen) if (!anchor.includes(b)) eksik.push(b.replace("\n", " "));
+    const { kok, paket } = RS_BLOKLAR[k];
+    const beklenen = [`pub const MODE: &str = "${k}";`, `    ${kok}\n        .iter()`, `    ${paket}.iter()`];
+    for (const b of beklenen) if (!anchor.includes(b)) eksik.push(b.replace(/\n\s*/, " "));
   }
+  if (/hazirlik-capasi|cfg\(feature/.test(anchor)) eksik.push("anchor.rs'te özellik kapısı (`cfg(feature …)` / `hazirlik-capasi`) var");
   return eksik;
 }
 
@@ -594,13 +591,13 @@ function bolum0(): void {
     check(`§0e gömülü ${kip} kök çapası (${RS_BLOKLAR[kip].kok}) = TS ${kip} listesi`, !!kok && tsKokler.length > 0 && jsonEsit(kok.ogeler, tsKokler), `${tsKokler.length} kök`);
     check(`§0e' gömülü ${kip} PAKET çapası (${RS_BLOKLAR[kip].paket}) = TS ${kip} listesi`, !!paket && tsPaket.length > 0 && jsonEsit(paket.ogeler, tsPaket), `${tsPaket.length} anahtar`);
     check(
-      `§0e'' ⭐ ${kip} blokları yalnız ${kip} derlemesinde var (\`${RS_BLOKLAR[kip].kapi}\`)`,
-      kok?.kapi === RS_BLOKLAR[kip].kapi && paket?.kapi === RS_BLOKLAR[kip].kapi,
+      `§0e'' ⭐ ${kip} blokları cfg kapısız (tek kip — özellikle seçilen ikinci çapa yok)`,
+      !!kok && !!paket && kok.kapi === null && paket.kapi === null,
       `kök ${kok?.kapi ?? "kapısız"} · PAKET ${paket?.kapi ?? "kapısız"}`,
     );
   }
   const baglar = kipBaglari(anchor);
-  check("§0e''' kip sabitleri: MODE · ROOTS · PACKAGE_KEYS üretim bloğuna bağlı", baglar.length === 0, baglar.join(" | ") || `${TRUST_ANCHOR_MODES.length * 3} bağ`);
+  check("§0e''' kip sabitleri: MODE = uretim · gömülü kök/PAKET fonksiyonları üretim bloklarını okur · özellik kapısı yok", baglar.length === 0, baglar.join(" | ") || `${TRUST_ANCHOR_MODES.length * 3} bağ`);
 
   const abi = /pub const ABI: u32 = (\d+);/.exec(rustKaynak("api.rs"));
   check("§0f arayüz sürümü Rust = NATIVE_ABI", Number(abi?.[1]) === NATIVE_ABI, `rust ${abi?.[1]} · ts ${NATIVE_ABI}`);
@@ -622,12 +619,8 @@ function bolum0(): void {
   const zodDesenleri = [z.iso.datetime()._zod.def.pattern?.source, z.uuid()._zod.def.pattern?.source].filter((s): s is string => !!s);
   const tsKume = new Set([...tsKaynaklar.flatMap(tsDesenleri), ...zodDesenleri].map(desenNormal));
   const rust = rustDesenleri(rustDosyalar);
-  // Geçici, beyanlı istisna: Rust zincir kid deseni tek kipe O14b'de iner (TS O14a'da indi). Rust inince §0h' kırmızı → satır silinir.
-  const O14B_BEKLEYEN = new Set(["^(kok|hazirlik)-[a-z0-9-]{1,40}$"].map(desenNormal));
-  const yetim = rust.filter((d) => !tsKume.has(desenNormal(d)) && !O14B_BEKLEYEN.has(desenNormal(d)));
+  const yetim = rust.filter((d) => !tsKume.has(desenNormal(d)));
   check("§0h Rust'taki HER regex TS kaynağında ya da canlı Zod deseninde birebir", rust.length >= 12 && yetim.length === 0, yetim.length ? `yetim: ${yetim.join(" · ")}` : `${rust.length} desen`);
-  const bayatIstisna = [...O14B_BEKLEYEN].filter((d) => !rust.some((r) => desenNormal(r) === d));
-  check("§0h' O14b geçici istisnası hâlâ Rust'ta (bayat istisna kırmızı — Rust inince satırı sil)", bayatIstisna.length === 0, bayatIstisna.join(" · ") || `${O14B_BEKLEYEN.size} bekleyen`);
   check("§0i derleme sabiti geliştirmede KAPALI (native zorunlu değil)", NATIVE_REQUIRED === false);
   check(
     "§0i' çapa kipi sabiti geliştirmede TANIMSIZ → üretim; derlemenin çapası üretim listeleri (hazırlık yok)",
@@ -1067,22 +1060,26 @@ async function bolum8(dosya: VektorDosyasi | null): Promise<void> {
   const sentetikFark = typFarklari(sentetik, { HAK: "tekserp-hak", BUTUNLUK: "tekserp-butunluk" });
   check("§8g TYP aynası değişmiş değeri ve kayıt defterinde olmayan türü yakalar, eşitte susar", sentetik.length === 3 && sentetikFark.length === 2 && typFarklari(sentetik.slice(0, 1), { HAK: "tekserp-hak" }).length === 0, sentetikFark.join(" · "));
   const iki = [{ kid: "paket-2026", x: "a" }, { kid: "paket-2027", x: "b" }];
-  const kapi = RS_BLOKLAR.uretim.kapi;
   const duzenler = [
-    `${kapi}\npub const PRODUCTION_PACKAGE_KEYS: &[(&str, &str)] = &[("paket-2026", "a")];`,
-    `${kapi}\npub const PRODUCTION_PACKAGE_KEYS: &[(&str, &str)] =\n    &[("paket-2026", "a"), ("paket-2027", "b")];`,
-    `${kapi}\npub const PRODUCTION_PACKAGE_KEYS: &[(&str, &str)] = &[\n    ("paket-2026", "a"),\n    ("paket-2027", "b"),\n];`,
+    `pub const PRODUCTION_PACKAGE_KEYS: &[(&str, &str)] = &[("paket-2026", "a")];`,
+    `pub const PRODUCTION_PACKAGE_KEYS: &[(&str, &str)] =\n    &[("paket-2026", "a"), ("paket-2027", "b")];`,
+    `pub const PRODUCTION_PACKAGE_KEYS: &[(&str, &str)] = &[\n    ("paket-2026", "a"),\n    ("paket-2027", "b"),\n];`,
   ].map((d) => gomuluCapa(d).uretim.paket);
   check(
-    "§8h gömülü PAKET bloğu üç rustfmt düzeninde de okunur (tek satır · `=` sonrası · dikey), cfg kapısıyla; blok yoksa null",
+    "§8h gömülü PAKET bloğu üç rustfmt düzeninde de okunur (tek satır · `=` sonrası · dikey), kapısız; blok yoksa null",
     jsonEsit(duzenler[0]?.ogeler, iki.slice(0, 1)) &&
       jsonEsit(duzenler[1]?.ogeler, iki) &&
       jsonEsit(duzenler[2]?.ogeler, iki) &&
-      duzenler.every((d) => d?.kapi === kapi) &&
+      duzenler.every((d) => d?.kapi === null) &&
       gomuluCapa("pub const X: u8 = 1;").uretim.paket === null,
   );
-  const kapisiz = gomuluCapa(`pub const PRODUCTION_ROOTS: &[(&str, &str, &[&str])] = &[("kok-2026-1", "a", &["TEST"])];`).uretim.kok;
-  check("§8i cfg kapısı olmayan blok kapısız okunur (§0e'' onu kırmızı sayar)", kapisiz?.kapi === null && kapisiz.ogeler.length === 1);
+  const kapili = gomuluCapa(`#[cfg(not(feature = "hazirlik-capasi"))]\npub const PRODUCTION_ROOTS: &[(&str, &str, &[&str])] = &[("kok-2026-1", "a", &["TEST"])];`).uretim.kok;
+  const sahteBag = kipBaglari(`#[cfg(feature = "hazirlik-capasi")]\npub const MODE: &str = "uretim";\n    PRODUCTION_ROOTS\n        .iter()\n    PRODUCTION_PACKAGE_KEYS.iter()`);
+  check(
+    "§8i cfg kapılı blok kapısıyla okunur (§0e'' kırmızı sayar) · özellik kapısı taşıyan anchor.rs §0e''' kırmızı",
+    kapili?.kapi === '#[cfg(not(feature = "hazirlik-capasi"))]' && kapili.ogeler.length === 1 && sahteBag.length === 1,
+    sahteBag.join(" | "),
+  );
   const eskiKipli = { tur: "hak", ad: "x", token: "a.b.c", roots: null, kip: "hazirlik" } as unknown as Vektor;
   check(
     "§8j kip süzgeci: tanınmayan (eski hazırlık) kipli kayıt üretimde koşmaz, üretim kipli koşar, kipsiz kayıt her kipte",
