@@ -299,14 +299,14 @@ Yerleri:
 ### 6.1 Profil nedir
 
 - **Profil:** bir fabrikanın AYAR DÜZENİ. İçeriği:
-  - `system_settings`teki izinli anahtarlar: dokuz modül anahtarı + davranış bayrakları + sayısal ayarlar;
+  - ayar anahtarları: on modül anahtarı + davranış bayrakları + sayısal ayarlar. Anahtar uzayı `PATCH /api/feature-flags` şemasının alan adlarıdır (camelCase), DB anahtarı değil; uygulama `setFeatureFlags` servisinden geçer, dışa aktarma (O13b) `getFeatureFlags()` çıktısını okur. Nesne/liste değerliler (`loginMethods`, belge tasarımı, `reportsClosedKeys`) bu dilimde profil dışıdır (`scripts/lib/hepsi-acik.ts` `PROFIL_DISI_ANAHTARLAR`);
   - saat dilimi dönemi.
 - **Kapsam dışı:**
   - iş verisi;
   - ana veri (rota, istasyon kataloğu — seed fikstürü onları üretir);
   - sırlar: ayar şifresi özeti, belirteçler, `quickPin`. Allowlist OPT-IN'dir; yeni anahtar dışarıda doğar.
 - Biçim: `Teks-Erp/scripts/test-profilleri/<ad>.json` → `{ ad, kaynak, alinma, ayarlar: {anahtar: değer} }`. Bu dizin pakete girmez (`scripts/`).
-- Profil adı müşterinin kısa kodudur (`adnansahin`). `test_musteri_adi_kodda_yok` kapsamı ürün kodudur; bu dizin zaten dışındadır, ayrıca beyan gerekmez. Kod boşluksuz olduğu için eşleşmez.
+- Profil adı NÖTR kısa koddur (`f1`, `f2` …); müşteri kodu ↔ profil eşlemesi repo DIŞINDA durur (`~/.tekserp/profil-eslemesi.json`). `test_musteri_adi_kodda_yok` §4 profil dosya adlarında ve metinlerinde üretim kanalının adını ve kodunu arar (1e kararı 2026-10-06, O13b).
 - Profilleri kim/nerede tutar → KARAR K-8.
 
 ### 6.2 Üç profil sınıfı
@@ -315,14 +315,14 @@ Yerleri:
 2. **`acik`**: her modül açık, her boolean bayrak `true`. Enum/sayı bayraklarında değer "en geniş değer" tablosundan gelir (`scripts/lib/hepsi-acik.ts`).
    - Tamlık bekçisi: tabloda karşılığı olmayan her bayrak anahtarı KIRMIZI. Yeni bayrak reçetesine (`RECETELER.md`) "hepsi-açık değerini yaz" adımı eklenir.
    - `MODULE_DEPENDENCIES` ve birbirini dışlayan bayraklar tablo beyanıyla çözülür.
-3. **Gerçek fabrika profilleri**: her canlı müşterinin profili. İlk profil `adnansahin`dir.
-   - Kaynak, fabrika dökümünün KOPYASIdır: `tekserp_<oturum>_test`e geri yükle → `profil-disa-aktar.ts`.
-   - Canlı `.env` ya da canlı DB'ye karşı KOŞULMAZ (`GELISTIRME-DONGUSU.md`). Araç hedef DB adının `_test` ile bittiğini ölçer, yoksa durur.
+3. **Gerçek fabrika profilleri**: her canlı müşterinin profili. İlk profil `f1`dir (fabrikanın 2026-09-26 dökümünden).
+   - Kaynak, fabrika dökümünün KOPYASIdır: `tekserp_<oturum>_test`e geri yükle → `migrate deploy` → `profil-disa-aktar.ts` (bağlantı salt okuma, ölçülür; `--sonda`).
+   - Canlı `.env` ya da canlı DB'ye karşı KOŞULMAZ (`GELISTIRME-DONGUSU.md`). Araç hedef DB adının `_test` ile bittiğini ölçer, `tekserp_fabrika_*` sınıfını ve matris DB'lerini reddeder; kaçışı yoktur.
    - Yeni müşteri kurulduğunda profili aynı araçla, ilk yedeğinin kopyasından eklenir.
 
 ### 6.3 Matris koşucusu: ne koşar
 
-Bütün `npm test` YALNIZ `kapali` profilde koşar; bugünkü gibi tam kapsamdır. Var olan testler tabanın varsayılan olduğunu varsayar, başka tabanda fikstürden kırmızı verir. Matris, her profilde profile duyarsız bir **P-takımı** koşar (O13a dilimi yazacak: Teks-Erp/scripts altında profil-matrisi.ts, `agir-is` ile). Her profil için sırasıyla:
+Bütün `npm test` YALNIZ `kapali` profilde koşar; bugünkü gibi tam kapsamdır. Var olan testler tabanın varsayılan olduğunu varsayar, başka tabanda fikstürden kırmızı verir. Matris, her profilde profile duyarsız bir **P-takımı** koşar (`Teks-Erp/scripts/profil-matrisi.ts`, `agir-is` ile; HTTP ayağı `Teks-Erp/scripts/profil-ptakimi.ts`). Her profil için sırasıyla:
 
 1. taze `tekserp_<oturum>_p_<profil>_test` DB → `migrate deploy` → seed → profilin ayarları (servis katmanından, uçtan değil);
 2. açılış sağlığı (`bekci-http` düzeninde 127.0.0.1 test sunucusu);
@@ -335,8 +335,9 @@ Kapsam yetmezse genişletmek ayrı karardır → KARAR K-9.
 
 ### 6.4 Sürüme bağ
 
-- Test grubuna her yayın, aynı commit'te üretilmiş yeşil bir profil matrisi raporu ister: `~/.tekserp/derleme-kayitlari/profil-matrisi-<commit>.json`. İçeriği: profil listesi, her profilin sonucu, `scripts/test-profilleri/` özeti.
-- Rapor yok, kırmızı ya da ölçülemedi → DUR. Üç sonuçlu kapı; mevcut kapı ilkesiyle aynı.
+- Kök grubun (zincirde `terfiKaynagi: null`, bugün `test`) DIŞINDAKİ bir gruba her yayın, aynı commit'te TEMİZ ağaçta üretilmiş yeşil bir profil matrisi raporu ister: `~/.tekserp/derleme-kayitlari/profil-matrisi-<commit>.json`. İçeriği: commit, `agacTemiz`, profil listesi, her profilin sonucu ve dosya özeti, `scripts/test-profilleri/` özeti. Kök grup muaftır (1e kararı 2026-10-06: test grubu matrisin kendisinin ilk sahasıdır).
+- Rapor yok, bozuk ya da başka commit'in → ÖLÇÜLEMEDİ = DUR; kirli ağaç, kırmızı profil, eksik/fazla ya da rapordan sonra değişmiş profil → İHLAL. Kaçış yalnız kullanıcının cümlesiyle `--profil-matrisi-atla="<cümle>"`; çağıran cümleyi yayın defterine yazar.
+- Yüklem `scripts/lib/profil-raporu.mjs`, CLI `scripts/profil-matrisi-kapisi.mjs` (0 geçti/muaf/atlandı · 1 ihlal · 2 ölçülemedi). Grup yayını yapan betik (O10a/O10b/O11b) dağıtım kaydının tüketicisi olur ve kapıyı çağırmak zorundadır: `scripts/test_profil_raporu_kapisi.mjs` §3.
 
 ## 7. Hazırlık kökünün ve satıcısının koddan kaldırılması
 
@@ -460,7 +461,7 @@ Her dilim tek ajana sığar (≤ ~1 bağlam), kendi bekçilerini koşar, sonunda
 | **O11b** | Backend yayını + terfi | `deploy/backend-yayinla.mjs` · `scripts/lib/backend-yayin.mjs` · `Teks-Erp/scripts/backend-bildirim.ts` (`--kanal`=grup; zincir imzası) | `test_backend_yayin.mjs` · `test_yayin_bildirim.mjs` · `test_grup_yayin_kapisi.mjs` (backend) | `son.json` hedef grup için imzalı; zincirsiz bildirim `indir`e YÜKLENMEZ | O11a, O10a; 3.9 D5 (araçlar) + D8 (ilk PAKET sertifikası, kullanıcıyla) | eski güncelleyici sürümü yeni sistemde yok |
 | **O12** | Tailscale kutusu kalkar — YAPILDI 2026-10-06 (dal `gece/ortak-paket-o4-o12`; şema `kayitEski` eski izni yalnız kayıttan tanır; K3 kod yolu — onarım ön doldurması — kapandı, kesin kaynak ölçümü O17'de) | `tekserp-kurulum.iss` · `cevap-semasi.json` · `kurulum.ps1` / `kurulum-ortak.ps1` (`AgKarari` uyarısı) | `test_kurulum_betikleri` (`ag.*` bölümü) · `test_sunucu_betikleri` | sihirbazda kutu yok; sessiz kipte `100.64.0.0/10` RED; onarımda kayıttaki değer korunur + uyarı; K3 kapanır | — | eski setup yeni arşivde yok |
 | **O13a** | Profil biçimi + kapalı/açık + koşucu | `Teks-Erp/scripts/test-profilleri/{kapali,acik}.json` · `scripts/lib/hepsi-acik.ts` · `scripts/lib/profil.ts` (biçim, allowlist) · `scripts/profil-matrisi.ts` (P-takımı) · `docs/RECETELER.md` bayrak reçetesine adım | yeni `test_profil_tamligi` (her bayrağın açık-değeri var; allowlist dışı anahtar RED; sır anahtarı RED) · matris kendi koşumu | iki profilde P-takımı yeşil; rapor dosyası üretir | — | — |
-| **O13b** | Gerçek profiller + yayın kapısı | `scripts/profil-disa-aktar.ts` (yalnız `_test` DB) · `scripts/test-profilleri/adnansahin.json` (döküm kopyasından) · rapor biçimi + yayın betiklerinde okuyucu (`scripts/lib/profil-raporu.mjs`) | `test_profil_tamligi` · dışa aktarma aracının `_test` kapısı negatif sondası | adnansahin profili P-takımından geçer; rapor yoksa yayın ÖLÇÜLEMEDİ = DUR | O13a | — |
+| **O13b** | Gerçek profiller + yayın kapısı — YAPILDI 2026-10-06 (dal `gece/ortak-paket-o13b`; profil adı nötr `f1`, eşleme repo dışı; kapı kök grubu muaf tutar; yayın betiklerine bağlantı O10a/O10b/O11b'de, tüketici bekçisiyle zorunlu) | `scripts/profil-disa-aktar.ts` (yalnız `_test` DB) · `scripts/test-profilleri/f1.json` (döküm kopyasından) · rapor biçimi + yayın betiklerinde okuyucu (`scripts/lib/profil-raporu.mjs`) | `test_profil_tamligi` · dışa aktarma aracının `_test` kapısı negatif sondası | adnansahin profili P-takımından geçer; rapor yoksa yayın ÖLÇÜLEMEDİ = DUR | O13a | — |
 | **O14a** | Hazırlık: TS protokol + aynalar | §7 tablosunun TS satırları + satıcı/patron protokol aynaları · `guven-capasi-ekle.ts` · `build-korumali-imza.ts` · kâhin vektörleri | `test_lisans_protokol` · `test_guven_capasi_ekle` · `test_lisans_native_kahin` · ayna eşitlik bekçileri · `test_lisans_satici_adresi` | tek çapa kipi; `hazirlik-` kid'i biçim düzeyinde RED | 3.9 D1–D3 main'de; O15 | yeni sistemde hazırlık kipli kurulum yok (D0) |
 | **O14b** | Hazırlık: native + CI | `Teks-Erp/native/*` (`anchor.rs`, `trust.rs`, `policy.rs`, `Cargo.toml` özellikleri, `derle.mjs`, `package.json` betikleri, vektörler) · `.github/workflows/ci.yml` · `deploy/paketle.ps1` hazırlık yolları | `cd Teks-Erp/native && npm run denetle && npm test` (tek kip + `test-anchor`) · `native-capa-kipi.mjs` | cargo tek kipte yeşil; künye `capaKipi` yalnız `uretim` | O14a | — |
 | **O14c** | Hazırlık: satıcı + araçlar + Worker alanı | `deploy/satici/*` (compose `ORTAM`, `ornek.env`, `compose-denetle.mjs`) · `satici/sunucu/src/keys/key-store.ts` · satıcı web etiketleri · `Electron/shared/license-relay.ts` · `Teks-Erp/docker/korumali/teslim-paketle.sh` · `deploy/lisans-devreye/` kalkar · Worker `indirmeListesi.hazirlik` kalkar | satıcı `test_guven_capasi_kipi` · `compose-denetle` · `license-relay.test.ts` · Worker bekçisi · yeni yazım bekçisi (`HAZIRLIK_KOK`/`hazirlik` enum yazımı yok) | kodda (a)/(b) anlamlı `hazirlik` izi yalnız migration'larda ve donuk `kanallar.json`da | O14a; O9 | satıcı önce dağıtılır (kendi ortamı tek kip) |

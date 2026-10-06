@@ -18,6 +18,9 @@
 // (değişmez geçmiş) ve sürüm notları kapsam DIŞIDIR. Kanal kodu (`adnansahin`)
 // bir dağıtım kimliğidir, ad değildir — boşluksuz olduğu için eşleşmez.
 //
+// §4 TEST PROFİLLERİ (`scripts/test-profilleri/*.json`): dosya adı ve her metin değeri
+// üretim kanalının ne adını ne KODUNU taşır — profil kısa koddur (`f1`), eşleme repo dışında.
+//
 // İstisna BEYANLIDIR (`ISTISNA`: "yol::literal" → gerekçe) ve iki yönlüdür:
 // eşleşmeyen (ölü) istisna da KIRMIZI. Bugün boştur.
 //
@@ -71,6 +74,28 @@ function adlar(): string[] {
     if (kok.includes(" ")) out.add(kok);
   }
   return [...out];
+}
+
+/** Üretim kanal KODLARI (katlanmış) — yalnız §4 için; ürün kodunda kod bir dağıtım kimliğidir. */
+function kodlar(): string[] {
+  const kayit = JSON.parse(fs.readFileSync(path.join(REPO, "deploy/kanallar.json"), "utf8")) as {
+    kanallar: Record<string, { tur: string }>;
+  };
+  return Object.entries(kayit.kanallar).filter(([, k]) => k.tur === "uretim").map(([kod]) => katla(kod));
+}
+
+const PROFIL_DIZINI = "Teks-Erp/scripts/test-profilleri";
+
+/** Profil dosyasının adında ya da herhangi bir metin değerinde aranan iz varsa ihlaller. */
+function profilIzleri(dosyaAdi: string, icerik: unknown, aranan: readonly string[]): string[] {
+  const metinler: string[] = [dosyaAdi];
+  const gez = (v: unknown): void => {
+    if (typeof v === "string") metinler.push(v);
+    else if (Array.isArray(v)) v.forEach(gez);
+    else if (v && typeof v === "object") for (const [k, x] of Object.entries(v)) { metinler.push(k); gez(x); }
+  };
+  gez(icerik);
+  return metinler.filter((m) => aranan.some((a) => katla(m).includes(a))).map((m) => `${dosyaAdi}: "${m.slice(0, 80)}"`);
 }
 
 function dosyalar(kok: string): string[] {
@@ -133,6 +158,23 @@ function main(): void {
   }
   console.log(`Taranan: ${dosyaSay} dosya · ${literalSay} literal`);
   check("§2 ürün kodunda müşteri adı literali YOK", ihlal.length === 0, ihlal.length ? `\n   ${ihlal.join("\n   ")}` : "");
+  // §4 test profilleri: ad + kod.
+  const izler = [...aranan, ...kodlar()];
+  check("§4a kanal kaydı en az bir üretim kodu verdi", kodlar().length > 0);
+  const profiller = fs.readdirSync(path.join(REPO, PROFIL_DIZINI)).filter((f) => f.endsWith(".json"));
+  check("§4b test profilleri tarandı", profiller.length > 0, `${profiller.length} dosya`);
+  const profilIhlal = profiller.flatMap((f) =>
+    profilIzleri(f, JSON.parse(fs.readFileSync(path.join(REPO, PROFIL_DIZINI, f), "utf8")), izler),
+  );
+  check("§4c test profillerinde müşteri adı/kodu YOK", profilIhlal.length === 0, profilIhlal.join(" | "));
+  const sondaKod = kodlar()[0] ?? "";
+  check(
+    "§4d sonda: müşteri kodlu dosya adı ve metin değeri KIRMIZI",
+    profilIzleri(`${sondaKod}.json`, {}, izler).length === 1 &&
+      profilIzleri("f9.json", { kaynak: `${sondaKod} yedeği` }, izler).length === 1 &&
+      profilIzleri("f9.json", { kaynak: "nötr" }, izler).length === 0,
+  );
+
   const olu = Object.keys(ISTISNA).filter((i) => !kullanilanIstisna.has(i));
   check("§3 ölü istisna yok (iki yönlü)", olu.length === 0, olu.join(", "));
 

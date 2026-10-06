@@ -295,7 +295,8 @@ export const BACKEND_GRUPLAR_REL = 'Teks-Erp/src/lib/license/update-group.ts';
 
 /**
  * `deploy/dagitim.json`ı okuyan ürün/yayın dosyaları — BEYANLI. Bekçi ağaçta kaydın adını taşıyan
- * her kod dosyasını bu liste + bekçi dosyalarıyla kıyaslar (iki yönlü).
+ * her kod dosyasını bu liste + bekçi dosyalarıyla kıyaslar (iki yönlü). Yayın betikleri buraya girince
+ * profil matrisi kapısını çağırmak zorundadır (`test_profil_raporu_kapisi.mjs` §3).
  * O5 (panel ortak kimlik): derleme kimlik çözücüsü + bekçisi, paketleme kapısı kitaplığı, eski kanal
  * kitaplığının kopya listesi (sahte derleme ağacı kaydı taşısın), demo imajı (web paneli aynı çözücüden).
  */
@@ -303,6 +304,7 @@ export const TUKETICILER = Object.freeze([
   'Electron/build-identity.ts',
   'Electron/src/test/update-feed-url.test.ts',
   'scripts/lib/panel-kimlik.mjs',
+  'scripts/lib/profil-raporu.mjs',
   'scripts/lib/kanallar.mjs',
   'Dockerfile',
   'docs/ops/deploy-demo-izin-listesi.txt',

@@ -93,6 +93,7 @@ import {
 import { atlamaDefteri } from "./lib/atlama";
 import { hedefDbAdi, hedefDbEngeli } from "./lib/hedef-db-kapisi";
 import { httpBekciKapisi } from "./lib/http-bekci-kapisi";
+import { modulUclari } from "./lib/profil-kapi-haritasi";
 
 const BASE = process.env.TEST_API_URL ?? "http://localhost:4101";
 const SRC = join(__dirname, "..", "src");
@@ -141,7 +142,7 @@ interface ModulTanimi {
   modulKodu: string;
   /** Kapı satırının ölçüleceği route dosyaları (`src/` göreli). */
   routeDosyalari: string[];
-  /** HTTP sondaları — bayrak kapalıyken 403, açıkken 2xx beklenir. */
+  /** HTTP sondaları — bayrak kapalıyken 403, açıkken 2xx beklenir; tek kaynak `lib/profil-kapi-haritasi.ts`. */
   sondalar: string[];
   /**
    * Bağımlı modül ise: kapı ÖNCE ön koşulu ölçer, yani ön koşul kapalıyken
@@ -163,7 +164,7 @@ const MODULLER: ModulTanimi[] = [
       "routes/stock-count.routes.ts",
       "routes/goods-receipt.routes.ts",
     ],
-    sondalar: ["/api/stock-counts", "/api/item-prices", "/api/purchase-orders", "/api/goods-receipts"],
+    sondalar: modulUclari("ticaretEnabled"),
   },
   {
     alan: "iplikEnabled",
@@ -172,7 +173,7 @@ const MODULLER: ModulTanimi[] = [
     okuyucu: "readIplikEnabled",
     modulKodu: "iplik",
     routeDosyalari: ["routes/yarn.routes.ts"],
-    sondalar: ["/api/yarn/stocks"],
+    sondalar: modulUclari("iplikEnabled"),
     onKosul: { alan: "ticaretEnabled", beklenenModulKodu: "ticaret" },
   },
   {
@@ -186,7 +187,7 @@ const MODULLER: ModulTanimi[] = [
     okuyucu: "readDevereEnabled",
     modulKodu: "devere",
     routeDosyalari: ["routes/warp-spec.routes.ts"],
-    sondalar: ["/api/warp-specs"],
+    sondalar: modulUclari("devereEnabled"),
     onKosul: { alan: "iplikEnabled", beklenenModulKodu: "iplik" },
   },
   {
@@ -206,7 +207,7 @@ const MODULLER: ModulTanimi[] = [
       "routes/reports/dokuma.report.routes.ts",
       "routes/machine-spec.routes.ts",
     ],
-    sondalar: ["/api/weaving-orders"],
+    sondalar: modulUclari("dokumaEnabled"),
     onKosul: { alan: "productionEnabled", beklenenModulKodu: "production" },
   },
   {
@@ -216,7 +217,7 @@ const MODULLER: ModulTanimi[] = [
     okuyucu: "readDepoMultiEnabled",
     modulKodu: "depoMulti",
     routeDosyalari: ["routes/warehouse-transfer.routes.ts"],
-    sondalar: ["/api/warehouse-transfers"],
+    sondalar: modulUclari("depoMultiEnabled"),
   },
   {
     alan: "productionEnabled",
@@ -236,7 +237,7 @@ const MODULLER: ModulTanimi[] = [
       "routes/batch.routes.ts",
       "routes/station-capability.routes.ts",
     ],
-    sondalar: ["/api/routes", "/api/product-recipes", "/api/work-orders", "/api/production-balance"],
+    sondalar: modulUclari("productionEnabled"),
   },
 ];
 
