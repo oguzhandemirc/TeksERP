@@ -44,6 +44,7 @@ import {
 import ConfirmDialog from '../../../components/ConfirmDialog';
 import { ServerDiscoveryList } from '../../../components/ServerDiscoveryList';
 import { LanTlsCard } from '../../../components/LanTlsCard';
+import { httpSwitchBlock, type HttpSwitchBlock } from '../../../services/lanTlsSwitchGuard';
 import { useBusyAction } from '../../../hooks/useBusyAction';
 import {
   SETTINGS_COLORS as COLORS,
@@ -181,12 +182,23 @@ export default function ServerSettingsScreen() {
     onConfirm: () => void;
   } | null>(null);
 
-  const save = () => {
+  // Sabitli sunucuya şifresiz adresle geçiş engellenir; kart o sabiti "kaldır"a açar.
+  const [tlsBlock, setTlsBlock] = useState<HttpSwitchBlock | null>(null);
+
+  const save = async () => {
     if (!host.trim()) {
       Toast.show({ type: 'error', text1: 'IP / host boş olamaz' });
       return;
     }
     const url = normalizeUrl(rawUrl);
+    setSaving(true);
+    const block = await httpSwitchBlock(url).finally(() => setSaving(false));
+    setTlsBlock(block);
+    if (block) {
+      setTesting({ status: 'fail', message: block.reason });
+      Toast.show({ type: 'error', text1: 'Şifresiz adrese geçilemez', text2: block.reason });
+      return;
+    }
     setConfirmState({
       title: 'Sunucu adresini değiştir?',
       body: `Yeni adres:\n${url}\n\nUygulama bu adrese bağlanmaya başlayacak. Yanlış adres bağlantıyı keser.`,
@@ -416,7 +428,7 @@ export default function ServerSettingsScreen() {
             busyLabel="Kaydediliyor…"
             busy={saving}
             disabled={testEdiliyor}
-            onPress={save}
+            onPress={() => void save()}
             style={styles.btnHalf}
           />
         </View>
@@ -452,7 +464,7 @@ export default function ServerSettingsScreen() {
         )}
       </View>
 
-      <LanTlsCard />
+      <LanTlsCard blocked={tlsBlock && tlsBlock.url === normalizeUrl(rawUrl) ? tlsBlock : null} />
 
       <ConfirmDialog
         kind="destructive"

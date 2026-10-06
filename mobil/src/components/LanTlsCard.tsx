@@ -25,7 +25,13 @@ function activePin(pins: readonly TlsPin[], url: string): TlsPin | null {
   return pins.find((x) => String(x.port) === p.port) ?? null;
 }
 
-function useLanTlsActions() {
+/** Ayar ekranında engellenen şifresiz geçiş: kart o sunucunun sabitini gösterir, kaldırınca bu adrese geçer. */
+export interface LanTlsBlocked {
+  pin: TlsPin;
+  url: string;
+}
+
+function useLanTlsActions(blocked: LanTlsBlocked | null) {
   const baseUrl = useBaseUrlStore((s) => s.baseUrl);
   const recentUrls = useBaseUrlStore((s) => s.recentUrls);
   const setCustomUrl = useBaseUrlStore((s) => s.setCustomUrl);
@@ -63,14 +69,16 @@ function useLanTlsActions() {
     [baseUrl, native, setCustomUrl],
   );
 
-  const active = activePin(pins, baseUrl);
+  const blockedPin = blocked ? (pins.find((p) => p.installationId === blocked.pin.installationId) ?? null) : null;
+  const active = blockedPin ?? activePin(pins, baseUrl);
   const unpin = useCallback(async () => {
     if (!active) return;
     setPins(await removeTlsPins(active.installationId));
-    const fallback = httpFallbackUrl(parseUrlParts(baseUrl).host, recentUrls, DEFAULT_PORT);
+    const fallback =
+      blockedPin && blocked ? blocked.url : httpFallbackUrl(parseUrlParts(baseUrl).host, recentUrls, DEFAULT_PORT);
     await setCustomUrl(fallback);
     Toast.show({ type: 'success', text1: 'Şifreli bağlantı kaldırıldı', text2: `Şifresiz adres: ${fallback}` });
-  }, [active, baseUrl, recentUrls, setCustomUrl]);
+  }, [active, blocked, blockedPin, baseUrl, recentUrls, setCustomUrl]);
 
   return { native, hasPins: pins.length > 0, active, onScan, unpin };
 }
@@ -93,8 +101,8 @@ function ActivePinView({ pin, onRemove }: { pin: TlsPin; onRemove: () => void })
   );
 }
 
-export function LanTlsCard() {
-  const { native, hasPins, active, onScan, unpin } = useLanTlsActions();
+export function LanTlsCard({ blocked = null }: { blocked?: LanTlsBlocked | null } = {}) {
+  const { native, hasPins, active, onScan, unpin } = useLanTlsActions(blocked);
   const [scanning, setScanning] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
   if (!native && !hasPins) return null;

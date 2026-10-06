@@ -12,6 +12,7 @@ import {
   nativePinState,
   parseTlsPins,
   parseTlsQr,
+  pinBlockingHttp,
   type TlsPin,
 } from './lan-tls';
 
@@ -109,6 +110,26 @@ describe('native katmana itilen küme (D5)', () => {
   });
 });
 
+describe('sabitli sunucuya şifresiz geçiş (kullanıcı kararı 2026-10-07)', () => {
+  const cur = { scheme: 'https', host: '192.168.1.50', port: 4443 };
+  it('aynı makine + http → sabit döner (host büyük/küçük harf fark etmez)', () => {
+    expect(pinBlockingHttp([PIN], cur, { scheme: 'http', host: '192.168.1.50', installationId: null })).toBe(PIN);
+    expect(pinBlockingHttp([PIN], { ...cur, host: 'Sunucu' }, { scheme: 'http', host: 'sunucu', installationId: null })).toBe(PIN);
+  });
+  it('başka adres ama aynı kurulum kimliği + http → sabit döner', () => {
+    expect(pinBlockingHttp([PIN], cur, { scheme: 'http', host: '192.168.1.77', installationId: IID })).toBe(PIN);
+  });
+  it('https, başka sunucu, sabitsiz tablet → serbest', () => {
+    expect(pinBlockingHttp([PIN], cur, { scheme: 'https', host: '192.168.1.50', installationId: IID })).toBeNull();
+    expect(pinBlockingHttp([PIN], cur, { scheme: 'http', host: '192.168.1.60', installationId: null })).toBeNull();
+    expect(pinBlockingHttp([PIN], cur, { scheme: 'http', host: '192.168.1.60', installationId: '9'.repeat(8) + IID.slice(8) })).toBeNull();
+    expect(pinBlockingHttp([], cur, { scheme: 'http', host: '192.168.1.50', installationId: IID })).toBeNull();
+  });
+  it('geçerli adres şifresizse host tek başına engel değildir', () => {
+    expect(pinBlockingHttp([PIN], { ...cur, scheme: 'http' }, { scheme: 'http', host: '192.168.1.50', installationId: null })).toBeNull();
+  });
+});
+
 // İKİZ: mobil Electron'u import edemez; aynı adlı işlevler metin olarak aynı kalmalı.
 const ELECTRON = resolve(__dirname, '../../../Electron/shared/lan-tls.ts');
 const TWINS = [
@@ -119,6 +140,7 @@ const TWINS = [
   'pinsForInstallation',
   'routeFor',
   'withPin',
+  'pinBlockingHttp',
   'buildTlsQr',
   'parseTlsQr',
 ];
@@ -152,6 +174,9 @@ describe('ikiz: Electron/shared/lan-tls.ts', () => {
   it('QR öneki ve parmak izi kalıbı aynı', () => {
     expect(ele).toContain('export const TLS_QR_PREFIX = "teks-erp-tls:1:";');
     expect(ele).toContain('const HEX64 = /^[0-9a-f]{64}$/;');
+    const reason = (src: string) => /export const HTTP_TO_PINNED_REASON = (".*");/.exec(src)?.[1] ?? null;
+    expect(reason(mob)).not.toBeNull();
+    expect(reason(ele)).toBe(reason(mob));
   });
   it('panelin ürettiği QR biçimi tablette ayrışır', () => {
     expect(parseTlsQr(`teks-erp-tls:1:${IID}:${FP}:4443`)).toEqual({ installationId: IID, advert: { port: 4443, fingerprint: FP } });

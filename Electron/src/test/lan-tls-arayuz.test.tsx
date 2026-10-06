@@ -2,9 +2,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { TlsObservation } from "@shared/ipc-contract";
-import { formatFingerprintGroups, parseTlsQr, type TlsPin } from "@shared/lan-tls";
+import type { DiscoveredServer } from "@shared/discovery";
+import { HTTP_TO_PINNED_REASON, formatFingerprintGroups, parseTlsQr, type TlsPin } from "@shared/lan-tls";
 import { LanTlsSection } from "@/components/settings/LanTlsSection";
-import { activePinFor, httpFallbackUrl, planTlsSwitch, tabletTlsQr } from "@/lib/lan-tls-ui";
+import { activePinFor, httpFallbackUrl, httpSwitchBlock, planTlsSwitch, tabletTlsQr } from "@/lib/lan-tls-ui";
 
 /**
  * FABRİKA AĞINDA TLS — PANEL ARAYÜZÜ (docs/design/LAN-TLS.md §4, §6).
@@ -58,6 +59,40 @@ describe("etkin sabit, dönüş adresi, tablet QR'ı", () => {
     expect(tabletTlsQr([], "https://192.168.1.50:4443")).toBeNull();
     const qr = tabletTlsQr([PIN], "https://192.168.1.50:4443");
     expect(parseTlsQr(qr!)).toEqual({ installationId: IID, advert: { port: 4443, fingerprint: FP } });
+  });
+});
+
+describe("sabitli sunucuya şifresiz geçiş (kullanıcı kararı 2026-10-07)", () => {
+  const ACTIVE = "https://192.168.1.50:4443";
+  function fakeApi(pins: TlsPin[], installationId: string | null) {
+    const probe = vi.fn(async (): Promise<DiscoveredServer | null> =>
+      installationId
+        ? ({ identity: { installationId } } as unknown as DiscoveredServer)
+        : null,
+    );
+    return { tlsPins: async () => pins, probe };
+  }
+  it("sabitli makine + http → engellenir, cümle kararlaştırılan", async () => {
+    const block = await httpSwitchBlock(fakeApi([PIN], null), "http://192.168.1.50:4000", ACTIVE);
+    expect(block?.reason).toBe("Bu sunucuya şifreli bağlanılıyor; şifresiz adrese geçmek için önce 'Şifreli bağlantıyı kaldır'");
+    expect(block?.reason).toBe(HTTP_TO_PINNED_REASON);
+    expect(block?.pin).toEqual(PIN);
+  });
+  it("başka adresteki aynı kurulum + http → engellenir", async () => {
+    expect(await httpSwitchBlock(fakeApi([PIN], IID), "http://192.168.1.77:4000", ACTIVE)).not.toBeNull();
+  });
+  it("sabitli makine + https (aynı parmak izi) → serbest, yoklama yok", async () => {
+    const api = fakeApi([PIN], IID);
+    expect(await httpSwitchBlock(api, ACTIVE, ACTIVE)).toBeNull();
+    expect(api.probe).not.toHaveBeenCalled();
+  });
+  it("başka sunucu + http → serbest", async () => {
+    expect(await httpSwitchBlock(fakeApi([PIN], "99999999-2222-3333-4444-555555555555"), "http://192.168.1.60:4000", ACTIVE)).toBeNull();
+    expect(await httpSwitchBlock(fakeApi([PIN], null), "http://192.168.1.60:4000", ACTIVE)).toBeNull();
+  });
+  it("sabit kaldırıldıktan sonra http serbest; köprü yoksa kapı yok", async () => {
+    expect(await httpSwitchBlock(fakeApi([], IID), "http://192.168.1.50:4000", ACTIVE)).toBeNull();
+    expect(await httpSwitchBlock(undefined, "http://192.168.1.50:4000", ACTIVE)).toBeNull();
   });
 });
 
@@ -140,5 +175,34 @@ describe("Şifreli bağlantı bölümü", () => {
     delete (window as unknown as { api?: unknown }).api;
     const { container } = render(<LanTlsSection url="http://x:4000" recent={[]} onAddressChanged={vi.fn()} />);
     expect(container).toBeEmptyDOMElement();
+  });
+});
+
+describe("engellenen şifresiz geçiş — bölüm", () => {
+  afterEach(() => {
+    delete (window as unknown as { api?: unknown }).api;
+  });
+  it("sabit görünür, kaldırınca yazılan http adresine geçer", async () => {
+    let pins: TlsPin[] = [PIN];
+    const tlsUnpin = vi.fn(async () => {
+      pins = [];
+    });
+    (window as unknown as { api: unknown }).api = {
+      discovery: { tlsObserve: async () => null, tlsPin: vi.fn(), tlsUnpin, tlsPins: async () => pins },
+    };
+    const onChanged = vi.fn();
+    render(
+      <LanTlsSection
+        url="http://192.168.1.77:4000"
+        recent={[]}
+        onAddressChanged={onChanged}
+        blocked={{ pin: PIN, url: "http://192.168.1.77:4000" }}
+      />,
+    );
+    expect(await screen.findByTestId("lan-tls-active-fp")).toHaveTextContent(formatFingerprintGroups(FP));
+    await userEvent.click(screen.getByRole("button", { name: "Şifreli bağlantıyı kaldır" }));
+    await userEvent.click(await screen.findByRole("button", { name: "Kaldır" }));
+    await waitFor(() => expect(tlsUnpin).toHaveBeenCalledWith(IID));
+    await waitFor(() => expect(onChanged).toHaveBeenCalledWith("http://192.168.1.77:4000"));
   });
 });

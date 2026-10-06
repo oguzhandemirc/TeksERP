@@ -4,8 +4,8 @@
  * kullanıcıya hangi adımın gösterileceğini seçer.
  */
 import { DISCOVERY_DEFAULT_PORT } from "@shared/discovery";
-import type { TlsObservation } from "@shared/ipc-contract";
-import { buildTlsQr, isLoopbackHost, type TlsPin } from "@shared/lan-tls";
+import type { DiscoveryApi, TlsObservation } from "@shared/ipc-contract";
+import { HTTP_TO_PINNED_REASON, buildTlsQr, isLoopbackHost, pinBlockingHttp, type TlsPin } from "@shared/lan-tls";
 import { splitApiBaseUrl } from "@/lib/api-config";
 
 export type TlsSwitchPlan =
@@ -66,4 +66,29 @@ export function tabletTlsQr(pins: readonly TlsPin[], activeUrl: string): string 
   const pin = activePinFor(pins, activeUrl);
   if (!pin) return null;
   return buildTlsQr(pin.installationId, { port: pin.port, fingerprint: pin.fingerprint });
+}
+
+export type HttpSwitchBlock = { pin: TlsPin; url: string; reason: string };
+
+/**
+ * Elle kaydedilen şifresiz adres sabitli sunucuya mı gidiyor (aynı makine ya da aynı kurulum kimliği):
+ * öyleyse engel döner — kullanıcı önce sabiti "Şifreli bağlantıyı kaldır" ile açıkça kaldırır.
+ */
+export async function httpSwitchBlock(
+  api: Pick<DiscoveryApi, "tlsPins" | "probe"> | undefined,
+  targetUrl: string,
+  activeUrl: string,
+): Promise<HttpSwitchBlock | null> {
+  const target = splitApiBaseUrl(targetUrl);
+  if (!api?.tlsPins || target.protocol !== "http" || !target.host) return null;
+  const pins = await api.tlsPins();
+  if (pins.length === 0) return null;
+  const cur = splitApiBaseUrl(activeUrl);
+  const current = { scheme: cur.protocol, host: cur.host, port: Number(cur.port) };
+  const block = (pin: TlsPin | null) => (pin ? { pin, url: targetUrl, reason: HTTP_TO_PINNED_REASON } : null);
+  const byHost = pinBlockingHttp(pins, current, { scheme: target.protocol, host: target.host, installationId: null });
+  if (byHost) return block(byHost);
+  const server = await api.probe(targetUrl).catch(() => null);
+  const installationId = server?.identity?.installationId ?? null;
+  return block(pinBlockingHttp(pins, current, { scheme: target.protocol, host: target.host, installationId }));
 }

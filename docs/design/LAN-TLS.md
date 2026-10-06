@@ -56,6 +56,8 @@ Reddedilenler: keşiften/ilk girişten otomatik sabitleme (TOFU) · IP'ye bağl�
 
 **Ortak kural:** sabitlenmiş sunucuda HTTPS başarısızsa istemci HTTP'ye DÜŞMEZ — sessiz düşüş, saldırgana "HTTPS'i boz" demektir. Sabit yoksa bugünkü gibi HTTP.
 
+**Elle şifresiz adres (kullanıcı kararı 2026-10-07):** sabitli sunucuya (aynı makine ya da adresin bildirdiği kurulum kimliği bir sabitinki) `http://` adresi kaydedilmez — "Bu sunucuya şifreli bağlanılıyor; şifresiz adrese geçmek için önce 'Şifreli bağlantıyı kaldır'"; şifresize geçiş yalnız o eylemle. Başka sunucuya geçiş serbesttir (sabit sunucu başınadır, yeni sunucu sabitsiz başlar). Karar ikiz `pinBlockingHttp`te (panel ve tablet aynı metin).
+
 **Panel (Electron 42) — native paket gerekmez:**
 - `session.defaultSession.setCertificateVerifyProc`: sertifikanın SHA-256'sı pin kümesindeyse `0` (kabul), değilse `-3` (Chromium'un kendi kararı — dış https adresleri normal CA ile doğrulanmaya devam eder, kendinden imzalı yabancı sertifika reddedilir).
 - Ana süreç probu (`node:https`) sertifikayı kabul edip parmak izini yalnız GÖZLEM olarak döner; güven kararı vermez.

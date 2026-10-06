@@ -26,6 +26,7 @@ import {
 } from '../store/baseUrlStore';
 
 import { ServerDiscoveryList } from './ServerDiscoveryList';
+import { httpSwitchBlock } from '../services/lanTlsSwitchGuard';
 
 const COLORS = {
   bgDarker: '#0a1120',
@@ -115,6 +116,13 @@ export default function ServerAddressSheet({
     setSaving(true);
     try {
       const url = normalizeUrl(rawUrl);
+      // Sabitli sunucuya şifresiz adresle geçilmez; sabit Ayarlar → API Sunucusu'nda açıkça kaldırılır.
+      const block = await httpSwitchBlock(url);
+      if (block) {
+        setTesting({ status: 'fail', message: block.reason });
+        Toast.show({ type: 'error', text1: 'Şifresiz adrese geçilemez', text2: block.reason });
+        return;
+      }
       await setCustomUrl(url);
       void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       Toast.show({ type: 'success', text1: 'Sunucu adresi kaydedildi', text2: url });

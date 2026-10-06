@@ -73,6 +73,28 @@ export function routeFor(pins: readonly TlsPin[], installationId: string | null,
   return { kind: 'https', port: advert.port, pins: mine };
 }
 
+export const HTTP_TO_PINNED_REASON = "Bu sunucuya şifreli bağlanılıyor; şifresiz adrese geçmek için önce 'Şifreli bağlantıyı kaldır'";
+
+/**
+ * Elle yazılan şifresiz adres sabitli sunucuya mı gidiyor: geçerli adres sabitli https ve host aynı, ya da
+ * adresin bildirdiği kurulum kimliği bir sabitin kimliği. Öyleyse o sabit döner ve geçiş engellenir (HTTP'ye
+ * sessiz düşüş yok); başka sunucu serbesttir — sabit sunucu başınadır.
+ */
+export function pinBlockingHttp(
+  pins: readonly TlsPin[],
+  current: { scheme: string; host: string; port: number },
+  target: { scheme: string; host: string; installationId: string | null },
+): TlsPin | null {
+  if (target.scheme !== 'http' || pins.length === 0) return null;
+  const host = target.host.trim().toLowerCase();
+  if (current.scheme === 'https' && host !== '' && current.host.trim().toLowerCase() === host) {
+    const here = pins.find((p) => p.port === current.port);
+    if (here) return here;
+  }
+  if (!target.installationId) return null;
+  return pinsForInstallation(pins, target.installationId)[0] ?? null;
+}
+
 export function withPin(pins: readonly TlsPin[], pin: TlsPin): TlsPin[] {
   return [...pins.filter((p) => p.installationId !== pin.installationId), pin];
 }

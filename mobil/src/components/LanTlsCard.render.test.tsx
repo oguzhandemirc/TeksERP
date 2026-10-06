@@ -37,6 +37,19 @@ jest.mock('./BarcodeScannerModal', () => {
   };
 });
 
+jest.mock('./ConfirmDialog', () => {
+  const { Pressable: P, Text: T } = jest.requireActual('react-native');
+  return {
+    __esModule: true,
+    default: ({ visible, onConfirm, confirmLabel }: { visible: boolean; onConfirm: () => void; confirmLabel: string }) =>
+      visible ? (
+        <P testID="onay" onPress={onConfirm}>
+          <T>{confirmLabel}</T>
+        </P>
+      ) : null,
+  };
+});
+
 const probeMock = probeServer as jest.MockedFunction<typeof probeServer>;
 const nativeMock = lanTlsNative as jest.MockedFunction<typeof lanTlsNative>;
 
@@ -109,4 +122,22 @@ it('başka sunucunun QR\'ı → hiçbir şey yazılmaz', async () => {
   });
   expect(setPinState).not.toHaveBeenCalled();
   expect(setCustomUrl).not.toHaveBeenCalled();
+});
+
+it('engellenen şifresiz geçiş: kart o sabiti gösterir, kaldırınca yazılan http adresine geçer', async () => {
+  const pin = { installationId: IID, fingerprint: FP, port: 4443, via: 'qr' as const, pinnedAt: '' };
+  mockMem.set('api_server_tls_pins', JSON.stringify([pin]));
+  render(
+    <PaperProvider>
+      <LanTlsCard blocked={{ pin, url: 'http://192.168.1.77:4000/api' }} />
+    </PaperProvider>,
+  );
+  await act(async () => undefined);
+  expect(screen.getByTestId('lan-tls-active-fp')).toBeTruthy();
+  fireEvent.press(screen.getByTestId('lan-tls-kaldir'));
+  await act(async () => {
+    fireEvent.press(screen.getByTestId('onay'));
+  });
+  expect(mockMem.has('api_server_tls_pins')).toBe(false);
+  expect(setCustomUrl).toHaveBeenCalledWith('http://192.168.1.77:4000/api');
 });

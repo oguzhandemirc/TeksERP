@@ -17,6 +17,8 @@ interface Props {
   recent: string[];
   /** Adres şifreli/şifresiz kanala geçti ve kaydedildi. */
   onAddressChanged: (url: string) => void;
+  /** Kaydı engellenen şifresiz geçiş: bölüm o sunucunun sabitini gösterir, kaldırınca bu adrese geçer. */
+  blocked?: { pin: TlsPin; url: string } | null;
 }
 
 async function saveAddress(url: string): Promise<void> {
@@ -24,7 +26,7 @@ async function saveAddress(url: string): Promise<void> {
   applyApiBaseUrl(url);
 }
 
-function useLanTls(api: DiscoveryApi | undefined, { url, recent, onAddressChanged }: Props) {
+function useLanTls(api: DiscoveryApi | undefined, { url, recent, onAddressChanged, blocked }: Props) {
   const [pins, setPins] = useState<TlsPin[]>([]);
   const [plan, setPlan] = useState<TlsSwitchPlan | null>(null);
   const [busy, setBusy] = useState(false);
@@ -39,7 +41,9 @@ function useLanTls(api: DiscoveryApi | undefined, { url, recent, onAddressChange
   }, [api]);
   useEffect(() => setPlan(null), [url]);
 
-  const active = url ? activePinFor(pins, url) : null;
+  const blockedPin = blocked ? (pins.find((p) => p.installationId === blocked.pin.installationId) ?? null) : null;
+  const active = blockedPin ?? (url ? activePinFor(pins, url) : null);
+  const fallback = blockedPin && blocked ? blocked.url : httpFallbackUrl(url, recent);
 
   const observe = async () => {
     if (!api || !url) return;
@@ -79,7 +83,6 @@ function useLanTls(api: DiscoveryApi | undefined, { url, recent, onAddressChange
     if (!api || !active) return false;
     try {
       await api.tlsUnpin(active.installationId);
-      const fallback = httpFallbackUrl(url, recent);
       await saveAddress(fallback);
       setPins(await api.tlsPins());
       toast.success("Şifreli bağlantı kaldırıldı.", { description: `Şifresiz adrese dönüldü: ${fallback} — bağlantıyı test edin.` });
@@ -91,7 +94,7 @@ function useLanTls(api: DiscoveryApi | undefined, { url, recent, onAddressChange
     }
   };
 
-  return { active, plan, busy, observe, pin, unpin };
+  return { active, fallback, plan, busy, observe, pin, unpin };
 }
 
 function FingerprintLine({ hex, testId }: { hex: string; testId: string }) {
@@ -145,7 +148,7 @@ function SwitchPlanView({ plan, busy, onPin }: { plan: TlsSwitchPlan; busy: bool
  */
 export function LanTlsSection(props: Props) {
   const api = typeof window !== "undefined" ? window.api?.discovery : undefined;
-  const { active, plan, busy, observe, pin, unpin } = useLanTls(api, props);
+  const { active, fallback, plan, busy, observe, pin, unpin } = useLanTls(api, props);
   const [unpinOpen, setUnpinOpen] = useState(false);
   if (!api?.tlsObserve) return null;
 
@@ -178,7 +181,7 @@ export function LanTlsSection(props: Props) {
         open={unpinOpen}
         onOpenChange={setUnpinOpen}
         title="Şifreli bağlantı kaldırılsın mı?"
-        description={`Bu bilgisayar sunucuya yeniden şifresiz (HTTP) bağlanacak: ${httpFallbackUrl(props.url, props.recent)}. Yeniden şifreli bağlantıya geçmek için kodu tekrar karşılaştırmanız gerekir.`}
+        description={`Bu bilgisayar sunucuya yeniden şifresiz (HTTP) bağlanacak: ${fallback}. Yeniden şifreli bağlantıya geçmek için kodu tekrar karşılaştırmanız gerekir.`}
         confirmLabel="Kaldır"
         destructive
         onConfirm={async () => {

@@ -5,6 +5,7 @@ import { CheckCircle2, History, Loader2, Radar, RotateCcw, X, XCircle } from "lu
 import { useServerDiscovery } from "@/hooks/useServerDiscovery";
 import { ServerDiscoveryPanel } from "./ServerDiscoveryPanel";
 import { LanTlsSection } from "./LanTlsSection";
+import { httpSwitchBlock, type HttpSwitchBlock } from "@/lib/lan-tls-ui";
 import {
   Dialog,
   DialogContent,
@@ -63,6 +64,8 @@ export function ApiEndpointDialog({ open, onOpenChange }: Props) {
   const [recent, setRecent] = useState<string[]>([]);
   const [test, setTest] = useState<TestState>({ status: "idle" });
   const [saving, setSaving] = useState(false);
+  // Sabitli sunucuya şifresiz adresle geçiş engellenir; bölüm o sabiti "kaldır"a açar.
+  const [tlsBlock, setTlsBlock] = useState<HttpSwitchBlock | null>(null);
 
   // Açılışta o an aktif adresi parçala + son kullanılanları yükle.
   useEffect(() => {
@@ -146,6 +149,13 @@ export function ApiEndpointDialog({ open, onOpenChange }: Props) {
     }
     setSaving(true);
     try {
+      const block = await httpSwitchBlock(window.api?.discovery, target, getActiveApiBaseUrl());
+      setTlsBlock(block);
+      if (block) {
+        setTest({ status: "fail", message: block.reason });
+        toast.error("Şifresiz adrese geçilemez.", { description: block.reason });
+        return;
+      }
       await setStoredApiBaseUrl(target);
       applyApiBaseUrl(target);
       await pushRecentApiBaseUrl(target);
@@ -249,6 +259,7 @@ export function ApiEndpointDialog({ open, onOpenChange }: Props) {
           <LanTlsSection
             url={composed}
             recent={recent}
+            blocked={tlsBlock && tlsBlock.url === composed ? tlsBlock : null}
             onAddressChanged={(url) => {
               setParts(splitApiBaseUrl(url));
               setTest({ status: "idle" });
