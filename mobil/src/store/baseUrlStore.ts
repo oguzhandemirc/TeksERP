@@ -51,12 +51,23 @@ function getDevHost(): string | null {
   return host;
 }
 
+/**
+ * Derlemenin önerdiği adres: geliştirmede dev-host, eski kanal paketinde gömülü `EXPO_PUBLIC_API_URL`.
+ * İkisi de yoksa (ortak paket) BOŞ = "sunucu bilinmiyor" → ilk açılış "Sunucuyu bul" ekranı;
+ * `localhost`a düşülmez (tablette localhost hiçbir zaman ERP değildir).
+ */
+export function autoUrlFrom(envApiUrl: string | undefined, devHost: string | null): string {
+  if (devHost) return `http://${devHost}:${BACKEND_PORT}/api`;
+  return envApiUrl?.trim() ? envApiUrl : '';
+}
+
 export function computeAutoUrl(): string {
-  const envApiUrl = process.env.EXPO_PUBLIC_API_URL;
-  const devHost = __DEV__ ? getDevHost() : null;
-  return devHost
-    ? `http://${devHost}:${BACKEND_PORT}/api`
-    : (envApiUrl ?? `http://localhost:${BACKEND_PORT}/api`);
+  return autoUrlFrom(process.env.EXPO_PUBLIC_API_URL, __DEV__ ? getDevHost() : null);
+}
+
+/** Bağlanılacak sunucu adresi var mı (yoksa uygulama "Sunucuyu bul" ekranında durur). */
+export function hasServerAddress(baseUrl: string): boolean {
+  return baseUrl.trim() !== '';
 }
 
 export function normalizeUrl(input: string): string {

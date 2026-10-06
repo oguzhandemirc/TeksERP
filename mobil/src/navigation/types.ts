@@ -1,6 +1,8 @@
 import type { MobileScreenKey } from '../types/permissions';
 
 export type RootStackParamList = {
+  /** İlk açılış: sunucu adresi yok (ortak paket ERP adresi taşımaz) → keşif / elle adres. */
+  ServerSetup: undefined;
   Pairing: undefined;
   Login: undefined;
   Main: undefined;

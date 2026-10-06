@@ -7,6 +7,8 @@
 // ⚠️ `apiClient` KULLANILMAZ: global 401/lisans interceptor'ları arka plandaki güncelleme denetimini
 // operatöre "oturum düştü"/lisans uyarısı olarak gösterirdi. Uç onaylı cihazı da kabul eder, yani
 // giriş öncesi de çalışır. Belirteç loglanmaz, diske yazılmaz.
+// Yanıtın `grup` alanı (tek ortak paket O3/O8) ortak paketin APK künye adresini kurar; eski backend alanı
+// göndermez → null (ortak paket güncelleme denetlemez, eski kanal grubu hiç okumaz).
 // =============================================================================
 
 import * as Updates from 'expo-updates';
@@ -20,6 +22,14 @@ export const OTA_EXTRA_PARAM_KEY = 'tkl';
 const TIMEOUT_MS = 5_000;
 const JWS_PATTERN = /^[A-Za-z0-9_-]{2,}\.[A-Za-z0-9_-]{2,}\.[A-Za-z0-9_-]{2,}$/;
 const MAX_TOKEN_LENGTH = 8192;
+/** Grup kodu biçimi (backend `update-group.ts` GROUP_CODE); küme backend'de süzülür, tablet yalnız biçimi tutar. */
+const GROUP_CODE = /^[a-z0-9][a-z0-9-]{0,39}$/;
+
+export interface DownloadGrant {
+  belirtec: string;
+  /** Kurulumun güncelleme grubu (doğrulanmış kiradan); yok/biçimsiz → null. */
+  grup: string | null;
+}
 
 export interface DownloadTokenDeps {
   baseUrl: () => string;
@@ -35,8 +45,8 @@ const defaultDeps: DownloadTokenDeps = {
   fetchImpl: (...a) => fetch(...a),
 };
 
-/** Belirteci backend'den alır; her hata (yok · 403 K1 · 404 · zaman aşımı · biçimsiz) → null. Asla atmaz. */
-export async function fetchDownloadToken(d: DownloadTokenDeps = defaultDeps): Promise<string | null> {
+/** Belirteç + grup; her hata (yok · 403 K1 · 404 · zaman aşımı · biçimsiz belirteç) → null. Asla atmaz. */
+export async function fetchDownloadGrant(d: DownloadTokenDeps = defaultDeps): Promise<DownloadGrant | null> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
   try {
@@ -50,14 +60,21 @@ export async function fetchDownloadToken(d: DownloadTokenDeps = defaultDeps): Pr
     if (!session && !device) return null;
     const res = await d.fetchImpl(`${base}/license/indirme-belirteci?urun=mobil`, { headers, signal: controller.signal });
     if (!res.ok) return null;
-    const body = (await res.json()) as { data?: { belirtec?: unknown } } | null;
+    const body = (await res.json()) as { data?: { belirtec?: unknown; grup?: unknown } } | null;
     const token = body?.data?.belirtec;
-    return typeof token === 'string' && token.length <= MAX_TOKEN_LENGTH && JWS_PATTERN.test(token) ? token : null;
+    if (!(typeof token === 'string' && token.length <= MAX_TOKEN_LENGTH && JWS_PATTERN.test(token))) return null;
+    const grup = body?.data?.grup;
+    return { belirtec: token, grup: typeof grup === 'string' && GROUP_CODE.test(grup) ? grup : null };
   } catch {
     return null;
   } finally {
     clearTimeout(timer);
   }
+}
+
+/** Yalnız belirteç (eski çağıranlar); grup gerekmiyorsa. */
+export async function fetchDownloadToken(d: DownloadTokenDeps = defaultDeps): Promise<string | null> {
+  return (await fetchDownloadGrant(d))?.belirtec ?? null;
 }
 
 /**

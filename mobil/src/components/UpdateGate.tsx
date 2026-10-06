@@ -30,6 +30,7 @@ import {
   bekleyenYazimSayisi,
   guvenliYenile,
   kuruluVersionName,
+  otaKimlik,
 } from '../services/appUpdate.service';
 import type { ApkDoc } from '../services/apkKunye';
 import { refreshOtaDownloadToken } from '../services/downloadToken.service';
@@ -65,7 +66,9 @@ export default function UpdateGate() {
     sonSorma.current = Date.now();
     try {
       // Taze indirme belirteci (3c) — alınamazsa param silinir, istek bugünkü gibi başlıksız.
-      await refreshOtaDownloadToken();
+      const belirtec = await refreshOtaDownloadToken();
+      // Ortak pakette takma ad belirteçsiz 403'tür: grup bilinmeden denetlenmez.
+      if (!belirtec && otaKimlik().ortakPaket) return;
       const sonuc = await Updates.checkForUpdateAsync();
       if (sonuc.isAvailable) await Updates.fetchUpdateAsync();
     } catch {

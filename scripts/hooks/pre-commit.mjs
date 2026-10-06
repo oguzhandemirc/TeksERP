@@ -293,6 +293,17 @@ if (staged.some(panelKimlikTetigi)) {
   adimlar.push({ ad: "panel ortak kimliği", cwd: ".", cmd: ["node", ["scripts/test_panel_kimlik.mjs"]] });
 }
 
+// TEK ORTAK PAKET O7: tablet ortak kimliği (kayıt ↔ ortak-kimlik.cjs ↔ app.config.js ↔ build-apk ortak yolu).
+// Zero-dep, ağsız; tetik yalnız kimliği üreten/ölçen dosyalar (kapı ~birkaç sn: build-apk'yı geçici ağaçta koşar).
+const TABLET_ORTAK_TETIK = [
+  "mobil/scripts/lib/ortak-kimlik.cjs", "mobil/scripts/build-apk.mjs", "mobil/app.config.js", "mobil/app.json",
+  "deploy/dagitim.json", "scripts/test_tablet_ortak_paket.mjs",
+];
+// Bekçi build-apk'yı geçici ağaçta koşar: mobil/scripts ve scripts/lib altı okunan kümedir (elle sayılmaz).
+if (staged.some((f) => TABLET_ORTAK_TETIK.includes(f) || f.startsWith("mobil/scripts/") || f.startsWith("scripts/lib/"))) {
+  adimlar.push({ ad: "tablet ortak paket kimliği", cwd: ".", cmd: ["node", ["scripts/test_tablet_ortak_paket.mjs"]], gitEnvSil: true });
+}
+
 if (adimlar.length === 0) process.exit(0);
 
 // UCUZ KAYIT ADIMLARI ÖNCE (doküman · mandallar · hijyen · kapının kendisi), ağırlar

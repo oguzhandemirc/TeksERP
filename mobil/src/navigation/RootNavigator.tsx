@@ -6,7 +6,7 @@ import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { useAuthStore } from '../store/authStore';
 import { useDeviceStore } from '../store/deviceStore';
-import { useBaseUrlStore } from '../store/baseUrlStore';
+import { getCurrentBaseUrl, hasServerAddress, useBaseUrlStore } from '../store/baseUrlStore';
 import { useDeviceSettingsStore } from '../store/deviceSettingsStore';
 import { useSessionStore } from '../store/sessionStore';
 import { setUnauthorizedHandler, setWorkSessionRequiredHandler } from '../services/api';
@@ -16,6 +16,7 @@ import { shouldShowPairingGate } from './pairingGate';
 import { getOrCreateDeviceId } from '../utils/deviceId';
 import { usePermissions } from '../hooks/usePermission';
 import LoginScreen from '../screens/Auth/LoginScreen';
+import ServerSetupScreen from '../screens/Auth/ServerSetupScreen';
 import AwaitingAssignmentScreen from '../screens/Auth/AwaitingAssignmentScreen';
 import NoAccessScreen from '../screens/Common/NoAccessScreen';
 import SettingsScreen from '../screens/Common/SettingsScreen';
@@ -46,6 +47,8 @@ export default function RootNavigator() {
   } = useDeviceStore();
   const initBaseUrl = useBaseUrlStore((s) => s.init);
   const baseUrlLoaded = useBaseUrlStore((s) => s.isLoaded);
+  // Ortak paket ERP adresi taşımaz: adres yokken hiçbir istek atılmaz, "Sunucuyu bul" ekranı açılır.
+  const hasServer = useBaseUrlStore((s) => hasServerAddress(s.baseUrl));
   const initDeviceSettings = useDeviceSettingsStore((s) => s.init);
   const { hasAnyMobileScreen } = usePermissions();
 
@@ -55,6 +58,7 @@ export default function RootNavigator() {
     useQuery({
       queryKey: ['device', 'assignment-required'],
       queryFn: deviceService.getAssignmentRequired,
+      enabled: hasServer,
       staleTime: 5 * 60 * 1000,
     }).data ?? false;
 
@@ -67,7 +71,7 @@ export default function RootNavigator() {
   const assignment = useQuery({
     queryKey: ['device', 'status'],
     queryFn: deviceService.getStatus,
-    enabled: assignmentRequired,
+    enabled: hasServer && assignmentRequired,
     // Hata halinde 30sn'e geriler — ölü/boğulmuş sunucuda sık poll askıda soket
     // biriktirip yükü büyütmesin; sunucu toparlanınca normal tempoya döner.
     // Sık poll'un TEK gerekçesi "onay anında hızlı geç"tir; sunucu kapının
@@ -107,6 +111,8 @@ export default function RootNavigator() {
     let announceFailures = 0;
     const announce = async () => {
       if (disposed) return;
+      // Adres yoksa denenmez; adres kaydedilince aşağıdaki abonelik yeniden başlatır.
+      if (!hasServerAddress(getCurrentBaseUrl())) return;
       try {
         const deviceId = await getOrCreateDeviceId();
         await deviceService.announce({ deviceId });
@@ -122,6 +128,16 @@ export default function RootNavigator() {
     void initDeviceSettings();
     loadStoredAuth();
     void initBaseUrl().then(() => void announce());
+    // İlk açılışta adres sonradan girilir: boş → dolu geçişinde hemen bildir (adresi olan kurulumda hiç tetiklenmez).
+    const unsubBaseUrl = useBaseUrlStore.subscribe((state, prev) => {
+      if (!prev.isLoaded || hasServerAddress(prev.baseUrl) || !hasServerAddress(state.baseUrl)) return;
+      if (announceRetry) {
+        clearTimeout(announceRetry);
+        announceRetry = null;
+      }
+      announceFailures = 0;
+      void announce();
+    });
 
     const appStateSub = AppState.addEventListener('change', (state) => {
       if (state === 'active') {
@@ -161,6 +177,7 @@ export default function RootNavigator() {
       disposed = true;
       if (announceRetry) clearTimeout(announceRetry);
       appStateSub.remove();
+      unsubBaseUrl();
     };
   }, []);
 
@@ -205,7 +222,9 @@ export default function RootNavigator() {
   return (
     <NavigationContainer ref={rootNavigationRef}>
       <Stack.Navigator key={factoryTimezone} screenOptions={{ headerShown: false, animation: 'fade' }}>
-        {showPairingGate ? (
+        {!hasServer ? (
+          <Stack.Screen name="ServerSetup" component={ServerSetupScreen} />
+        ) : showPairingGate ? (
           <Stack.Screen name="Pairing" component={AwaitingAssignmentScreen} />
         ) : !user ? (
           <Stack.Screen name="Login" component={LoginScreen} />

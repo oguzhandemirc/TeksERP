@@ -108,6 +108,22 @@ export function bundleAdresOlcumu(metin, beklenenAdres) {
   return { gecenSayi, bulunanlar, yabanciIp };
 }
 
+/**
+ * Ortak paketin bundle'ında ERP adresi YOK: sayısal IP'li, portlu ya da tailnet (`.ts.net`) bir `/api`
+ * adresi = bir fabrikanın sunucusu gömülmüş (bayat .env, ortam sızıntısı). Yerel geri dönüş
+ * (localhost) bugün koddadır ve sunucu bulma ekranı gelene dek (O8) bilgi olarak geçer.
+ */
+const YEREL_HOSTLAR = new Set(['localhost', '127.0.0.1', '0.0.0.0', '10.0.2.2']);
+export function ortakBundleAdresleri(metin) {
+  const { bulunanlar } = bundleAdresOlcumu(metin, null);
+  const gomulu = bulunanlar.filter((u) => {
+    const m = /^https?:\/\/([A-Za-z0-9._-]+)(:\d{2,5})?\/api$/.exec(u);
+    if (!m || YEREL_HOSTLAR.has(m[1].toLowerCase())) return false;
+    return /^(?:\d{1,3}\.){3}\d{1,3}$/.test(m[1]) || Boolean(m[2]) || /\.ts\.net$/i.test(m[1]);
+  });
+  return { gomulu, diger: bulunanlar.filter((u) => !gomulu.includes(u)) };
+}
+
 /* ================================================================== *
  * GÜNCELLEME KANALI — API ADRESİNDEN AYRI
  * ================================================================== *

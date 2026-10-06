@@ -2,20 +2,20 @@ import React from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import Constants from 'expo-constants';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { resolveChannelLabel } from '../lib/channelLabel';
+import { useChannelLabel } from '../hooks/useChannelLabel';
 import { colors } from '../theme/tokens';
 
 /** Durum çubuğu boyu raporlanmayan cihazda da etiket okunabilsin. */
 const MIN_HEIGHT = 16;
 
 /**
- * Hazırlık (test) kanalının işareti — gerçek verinin KOPYASINA gerçek iş girilmesin.
+ * Test/demo kurulumunun işareti (eski kanal etiketi ya da lisans sınıfı) — gerçek iş girilmesin.
  * Her ekranın üstünde, durum çubuğu şeridine MUTLAK biner ve dokunmayı yutmaz: hiçbir
  * ekranın yerleşimini itmez, yatay/dikey fark etmez. Üretim kanalında hiç çizilmez.
  */
 export default function ChannelStrip({ config = Constants.expoConfig }: { config?: { extra?: unknown } | null }) {
   const insets = useSafeAreaInsets();
-  const label = resolveChannelLabel(config);
+  const label = useChannelLabel(config);
   if (!label) return null;
   return (
     <View

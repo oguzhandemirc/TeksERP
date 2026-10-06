@@ -26,7 +26,7 @@ import { Platform } from 'react-native';
 import Constants from 'expo-constants';
 
 import { queryClient } from '../offline/queryClient';
-import { downloadTokenHeaders, refreshOtaDownloadToken } from './downloadToken.service';
+import { DOWNLOAD_TOKEN_HEADER, downloadTokenHeaders, fetchDownloadGrant, refreshOtaDownloadToken } from './downloadToken.service';
 import { formatFactory } from '../lib/factory-time';
 import apkAnchorJson from '../lib/apk-imza-capasi.json';
 import { apkDownloadUrl, feedChannel, verifyApkFile, verifyApkRelease, type AnchorKey, type ApkDoc } from './apkKunye';
@@ -48,8 +48,10 @@ export interface OtaKimlik {
   gomulu: boolean;
   /** Güncelleme sunucusunun APK'ya gömülü adresi (manifest ucu). */
   sunucu: string | null;
-  /** Güncelleme kanalının kökü — APK künyesi de buradan okunur. */
+  /** Güncelleme kanalının kökü — eski kanalda APK künyesi de buradan okunur (ortak pakette indirme kökü). */
   feedTabani: string | null;
+  /** Tek ortak paket mi (grup-nötr OTA takma adı): APK kökü ve OTA belirteci gruba bağlıdır. */
+  ortakPaket: boolean;
 }
 
 /** Kullanıcıya gösterilecek kısa paket etiketi: `#a1b2c3d4 · 26.08 14:10`. */
@@ -80,6 +82,7 @@ export function otaKimlik(): OtaKimlik {
     gomulu: Updates.isEmbeddedLaunch,
     sunucu,
     feedTabani: feedTabaniCoz(sunucu),
+    ortakPaket: ortakPaketKoku(sunucu) !== null,
   };
 }
 
@@ -87,7 +90,7 @@ export function otaKimlik(): OtaKimlik {
  * `…/mobil/ota/54.2/manifest` → `…/mobil/`
  *
  * ⚠️ Güncelleme kanalının kökü AYRI BİR AYARDAN OKUNMAZ, gömülü manifest
- * adresinden TÜRETİLİR. Sebep tek kaynak: ikinci bir değişken olsaydı biri
+ * adresinden TÜRETİLİR. Sebep tek source: ikinci bir değişken olsaydı biri
  * güncellenip diğeri unutulabilirdi ve APK künyesi başka bir sunucudan
  * okunurdu. Türetilmiş olduğu için "APK'ya gömülü, tabletten değiştirilemez"
  * özelliğini de miras alır.
@@ -98,8 +101,31 @@ export function feedTabaniCoz(manifestAdresi: string | null): string | null {
   return m ? m[1] : null;
 }
 
+/**
+ * Ortak paketin gömülü adresi grup-nötr Worker takma adıdır: `https://<ana makine>/ota/<rv>/manifest` → kök.
+ * Eski kanal adresi (`…/<kanal>/mobil/ota/…`) bu biçimde değildir → null.
+ */
+export function ortakPaketKoku(manifestAdresi: string | null): string | null {
+  if (!manifestAdresi) return null;
+  const m = /^(https:\/\/[^/]+\/)ota\/[^/]+\/manifest\/?$/.exec(manifestAdresi.trim());
+  return m ? m[1] : null;
+}
+
+const GRUP_KODU = /^[a-z0-9][a-z0-9-]{0,39}$/;
+
+/**
+ * APK künyesinin kökü. Eski kanal: gömülü adresten (grup yok sayılır, bugünkü yol). Ortak paket:
+ * kök + belirteç yanıtındaki grup (`<kök><grup>/mobil/`); grup yoksa null = denetim yapılmaz.
+ */
+export function apkFeedTabani(manifestAdresi: string | null, grup: string | null): string | null {
+  const kok = ortakPaketKoku(manifestAdresi);
+  if (!kok) return feedTabaniCoz(manifestAdresi);
+  return grup && GRUP_KODU.test(grup) ? `${kok}${grup}/mobil/` : null;
+}
+
 export type OtaKontrolSonuc =
   | { durum: 'kapali' }
+  | { durum: 'grupBilinmiyor' }
   | { durum: 'guncel' }
   | { durum: 'indirildi' }
   | { durum: 'hata'; mesaj: string };
@@ -113,7 +139,9 @@ export async function otaKontrolEtVeIndir(): Promise<OtaKontrolSonuc> {
   if (!Updates.isEnabled) return { durum: 'kapali' };
   try {
     // Manifest isteği taze indirme belirteciyle (3c); alınamazsa başlıksız — bugünkü davranış.
-    await refreshOtaDownloadToken();
+    // Ortak pakette takma ad belirteçsiz 403'tür: grup bilinmeden denetim yapılmaz.
+    const belirtec = await refreshOtaDownloadToken();
+    if (!belirtec && otaKimlik().ortakPaket) return { durum: 'grupBilinmiyor' };
     const sonuc = await Updates.checkForUpdateAsync();
     if (!sonuc.isAvailable) return { durum: 'guncel' };
     const indirme = await Updates.fetchUpdateAsync();
@@ -239,6 +267,27 @@ export interface ApkDurum {
   verified?: ApkDoc | null;
   /** Daha yeni sürüm sunuldu ama künyesi doğrulanamadı (güvenlik reddi) — ekranda TR uyarı. */
   rejection?: { code: string; message: string } | null;
+  /** Yalnız ortak pakette: belirteç yanıtındaki güncelleme grubu (yoksa null). */
+  grup?: string | null;
+  /** Ortak pakette grup alınamadı (lisans etkin değil / sunucuya ulaşılamadı) → künye denetlenmedi. */
+  grupBilinmiyor?: boolean;
+}
+
+interface ApkSource {
+  taban: string | null;
+  headers: () => Promise<Record<string, string>>;
+  /** Ortak paketse belirteç yanıtının grubu; eski kanalda alan yok. */
+  ortak?: { grup: string | null };
+}
+
+/** APK künye/indirme kaynağı: eski kanalda gömülü kök + bugünkü başlık çağrısı; ortak pakette tek belirteç isteği. */
+async function resolveApkSource(): Promise<ApkSource> {
+  const sunucu = otaKimlik().sunucu;
+  if (!ortakPaketKoku(sunucu)) return { taban: feedTabaniCoz(sunucu), headers: () => downloadTokenHeaders() };
+  const izin = await fetchDownloadGrant();
+  const tokenHeaders: Record<string, string> = izin ? { [DOWNLOAD_TOKEN_HEADER]: izin.belirtec } : {};
+  const grup = izin?.grup ?? null;
+  return { taban: apkFeedTabani(sunucu, grup), headers: async () => tokenHeaders, ortak: { grup } };
 }
 
 /** Tabletin JS paketine gömülü APK künyesi çapası (OTA kod imzasıyla korunur). */
@@ -269,15 +318,21 @@ const KUNYE_TIMEOUT_MS = 15_000;
  * kimliksizdir; token/cihaz başlığına ihtiyaç yok.
  */
 export async function apkDurumu(): Promise<ApkDurum> {
+  const source = await resolveApkSource();
+  const d = await checkRelease(source);
+  return source.ortak ? { ...d, grup: source.ortak.grup, grupBilinmiyor: !source.taban } : d;
+}
+
+async function checkRelease(source: ApkSource): Promise<ApkDurum> {
   const kurulu = kuruluVersionCode();
-  const taban = otaKimlik().feedTabani;
+  const taban = source.taban;
   if (!taban) return { kunye: null, kurulu, yeniVarMi: false };
 
   try {
     const kontrol = new AbortController();
     const zamanlayici = setTimeout(() => kontrol.abort(), KUNYE_TIMEOUT_MS);
     try {
-      const yanit = await fetch(`${taban}apk/surum.json`, { signal: kontrol.signal, headers: await downloadTokenHeaders() });
+      const yanit = await fetch(`${taban}apk/surum.json`, { signal: kontrol.signal, headers: await source.headers() });
       if (!yanit.ok) return { kunye: null, kurulu, yeniVarMi: false };
       const ham = (await yanit.json()) as Partial<ApkKunye>;
       // Statik künyede `varMi` alanı yok — dosyanın VARLIĞI yayının kendisidir.
@@ -332,7 +387,8 @@ export async function apkIndirVeKur(
   onIlerleme?: (oran: number, stage?: 'download' | 'verify') => void,
 ): Promise<ApkKurulumSonuc> {
   if (Platform.OS !== 'android') return { durum: 'desteklenmiyor' };
-  const taban = otaKimlik().feedTabani;
+  const source = await resolveApkSource();
+  const taban = source.taban;
   if (!taban || feedChannel(taban) !== doc.kanal) return { durum: 'hata', mesaj: 'Kurulum dosyası bu tabletin kanalına ait değil; kurulmadı.' };
 
   const hedef = `${FileSystem.cacheDirectory}tekserp-guncelleme.apk`;
@@ -343,7 +399,7 @@ export async function apkIndirVeKur(
     const indirici = FileSystem.createDownloadResumable(
       apkDownloadUrl(taban, doc),
       hedef,
-      { headers: await downloadTokenHeaders() },
+      { headers: await source.headers() },
       (p) => {
         if (onIlerleme && p.totalBytesExpectedToWrite > 0) {
           onIlerleme(p.totalBytesWritten / p.totalBytesExpectedToWrite, 'download');

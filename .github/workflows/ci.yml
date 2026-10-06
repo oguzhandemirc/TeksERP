@@ -102,6 +102,9 @@ jobs:
       # eski kanal kaydının (adnansahin) bayt-donukluğu. Zero-dep, DB'siz, ağsız; sığ klonda çapa kolu ⏭ beyanlı.
       - name: Dağıtım kaydı + eski kanal donuk (O1) + profil matrisi yayın kapısı (O13b)
         run: node scripts/check-dagitim.mjs && node scripts/check-dagitim.mjs --sonda && node scripts/test_eski_kanal_donuk.mjs && node scripts/test_eski_kanal_donuk.mjs --sonda && node scripts/test_profil_raporu_kapisi.mjs && node scripts/test_panel_kimlik.mjs && node scripts/test_grup_yayin_kapisi.mjs
+      # Tek ortak paket O7: tablet ortak kimliği (kayıt ↔ ortak-kimlik.cjs ↔ app.config.js ↔ build-apk ortak yolu).
+      - name: Tablet ortak paket kimliği (O7)
+        run: node scripts/test_tablet_ortak_paket.mjs && node scripts/test_tablet_ortak_paket.mjs --sonda
 
   # ===========================================================================
   # BACKEND — Express + Prisma; Postgres service + migrate deploy + seed + test

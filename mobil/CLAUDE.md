@@ -10,12 +10,13 @@ npx tsc --noEmit · npm test (jest --runInBand, 85 dosya / 854 vaka / ~17 sn —
 npm run yayinla:check -- --musteri=<kod>        # OTA mı APK mı? (native parmak izi)
 npm run yayinla -- --musteri=<kod>              # OTA (JS-only, ~%90); ERP adresi + kimlik + imza anahtarı kanaldan
 TEKSERP_KANAL=<kod> npx expo prebuild --platform android --clean --no-install   # kanal değişince android/ yeniden
-npm run build:apk -- --musteri=<kod>            # native değişti → APK; ./gradlew ELLE ÇAĞIRMA
+npm run build:apk                               # ORTAK PAKET (argümansız; kimlik deploy/dagitim.json'dan, ERP adresi GÖMÜLMEZ; OTA sertifikası yoksa DURUR)
+npm run build:apk -- --musteri=<kod>            # ESKİ KANAL (adnansahin) APK; ./gradlew ELLE ÇAĞIRMA
 node ../deploy/mobil-yayinla.mjs --musteri=<kod> --paket=ota-cikti/<kod>/<rv>/<damga>   # yükleme (manifest EN SON)
 ```
 
 - **Sahaya çıkış:** kanalı değişikliğin cinsi belirler; `--musteri` HER komutta zorunlu (kapı beklenen değeri argümandan alır — `musteri.json` yalnız dinlenme işaretçisidir); kanal kimliği (paket adı · görünen ad · güncelleme adresi · OTA sertifikası · görünür etiket) derleme anında `TEKSERP_KANAL` ile `app.config.js`ten gelir, `app.json` kanal için YAZILMAZ; ERP adresi kanalın kaydından (`deploy/kanallar.json`), açık verilen adres kanalınkiyle eşit olmalı, koda gömülü varsayılan YOK; her kanalın OTA anahtarı ayrı (`keystore/ota-keys[-<kod>]/`); `runtimeVersion` native kimliğidir (artmazsa yeni JS eski native'i çağırır, tüm tabletler çöker); OTA turunda `versionCode`a dokunulmaz; `keystore/` git dışı, kaybı = her tablette sil+kur; `usesCleartextTraffic` `expo-build-properties` altında. Reçete ve tuzaklar: `docs/kurallar/surum-yayin.md`, `docs/ops/MOBIL-UZAKTAN-GUNCELLEME.md`.
-- **API adresi:** `EXPO_PUBLIC_API_URL` → `src/constants/api.ts` (dev-host'tan türetir) → axios `baseURL`; derleme anında gömülür. JWT `expo-secure-store`; her istek `Authorization: Bearer`; cache `@tanstack/react-query` (+ persist: offline mutasyon kuyruğu). Sunucu politikası `GET /api/client-policy/mobil` fail-open, iki eksen (`minVersion` + `minPaketTarihi`).
+- **API adresi:** `EXPO_PUBLIC_API_URL` → `store/baseUrlStore.autoUrlFrom` (dev-host'tan türetir; tek kural, `constants/api.ts` onu okur) → axios `baseURL`; eski kanalda derleme anında gömülür, ortak pakette YOK → adres boş, ilk ekran "Sunucuyu bul" (`screens/Auth/ServerSetupScreen.tsx`; `localhost`a düşülmez). JWT `expo-secure-store`; her istek `Authorization: Bearer`; cache `@tanstack/react-query` (+ persist: offline mutasyon kuyruğu). Sunucu politikası `GET /api/client-policy/mobil` fail-open, iki eksen (`minVersion` + `minPaketTarihi`).
 
 ## Klasör yapısı
 

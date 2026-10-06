@@ -507,6 +507,8 @@ export const KANAL_BEKCI_DOSYALARI = [...new Set([
   'scripts/lib/panel-imza-kapisi.mjs', 'Electron/electron/guncelleme/kunye-jws.mjs', 'Electron/electron/guncelleme/panel-kunye.mjs',
   'Electron/electron/guncelleme/latest-yml.mjs',
   'mobil/scripts/lib/apk-kunye.mjs', 'mobil/src/lib/apk-imza-capasi.json',
+  // Tek ortak paket O7: app.config.js'in argümansız yolu ve build-apk'nın ortak yolu (kanal bekçileri onları da koşturur).
+  'mobil/scripts/lib/ortak-kimlik.cjs', 'scripts/lib/dagitim.mjs',
 ])];
 /** YOKLUĞU ölçülen dosyalar (O5: kalkmış panel müşteri işaretçisi) — geri gelirse (A) bekçiler koşar; diskte olmaları beklenmez. */
 export const KANAL_BEKCI_YOKLUK_DOSYALARI = ['Electron/shared/musteri.json'];

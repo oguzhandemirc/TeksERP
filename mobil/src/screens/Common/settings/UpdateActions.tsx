@@ -22,6 +22,10 @@ import { Icon } from 'react-native-paper';
 import type { OtaKontrolSonuc } from '../../../services/appUpdate.service';
 import { SETTINGS_COLORS as COLORS, SettingsActionButton, settingsStyles } from './settingsUi';
 
+/** Ortak pakette grup fabrika sunucusunun lisansından gelir; alınamazsa güncelleme denetlenmez. */
+export const GRUP_BILINMIYOR =
+  'Güncelleme grubu fabrika sunucusundan alınamadı (lisans etkin değil ya da sunucuya ulaşılamadı); güncelleme denetlenmedi.';
+
 export interface UpdateActionsProps {
   /** Uzaktan güncelleme bu kurulumda açık mı (dev derlemede kapalı). */
   etkin: boolean;
@@ -83,6 +87,9 @@ export function UpdateActions({
           )}
           {sonuc?.durum === 'indirildi' && (
             <DurumSatiri tur="iyi" ikon="package-down" metin="Yeni sürüm indirildi." />
+          )}
+          {sonuc?.durum === 'grupBilinmiyor' && (
+            <DurumSatiri tur="notr" ikon="information" metin={GRUP_BILINMIYOR} />
           )}
           {sonuc?.durum === 'kapali' && (
             <DurumSatiri

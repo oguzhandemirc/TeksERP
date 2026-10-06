@@ -1823,7 +1823,11 @@ const buildApk = (o, args, { ortamEk = {} } = {}) => kos(o, process.execPath, [p
 {
   const o = ortam();
   const r = buildApk(o, [`--verify-only=${apk(o)}`]);
-  ol('6a --musteri yok → DUR (derleme niyetsiz koşmaz)', r.kod !== 0 && /HANGİ KANAL İÇİN DERLENİYOR/.test(r.cikti), r.cikti.slice(-300));
+  // O7: `--musteri` yok = ORTAK PAKET niyeti; eski kanalın APK'sı ortak kimliğe karşı ölçülür ve DURUR
+  // (sertifika yoksa daha önce, anahtar töreni mesajıyla). Ortak yolun kendi bekçisi: test_tablet_ortak_paket.
+  ol('6a --musteri yok → ORTAK PAKET yolu; eski kanal APK\'sı geçmez (eski kimliğe sessizce düşmez)',
+    r.kod !== 0 && /RELEASE APK \(ORTAK PAKET\)/.test(r.cikti) && /ORTAK OTA SERTİFİKASI YOK|APK ORTAK PAKETİN KİMLİĞİNİ TAŞIMIYOR/.test(r.cikti)
+      && !/HANGİ KANAL İÇİN DERLENİYOR/.test(r.cikti), r.cikti.slice(-300));
 }
 {
   const o = ortam();

@@ -2,7 +2,7 @@ import React from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import Constants from 'expo-constants';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { resolveChannelLabel } from '../lib/channelLabel';
+import { useChannelLabel } from '../hooks/useChannelLabel';
 import { bannerToShow, type LicenseBanner as Banner } from '../lib/license';
 import { useLicenseStatus } from '../hooks/useLicenseStatus';
 import { colors } from '../theme/tokens';
@@ -50,12 +50,8 @@ export function LicenseBannerView({
 
 export default function LicenseBanner() {
   const { data } = useLicenseStatus();
-  return (
-    <LicenseBannerView
-      banner={bannerToShow(data)}
-      channelLabel={resolveChannelLabel(Constants.expoConfig)}
-    />
-  );
+  const channelLabel = useChannelLabel(Constants.expoConfig);
+  return <LicenseBannerView banner={bannerToShow(data)} channelLabel={channelLabel} />;
 }
 
 const styles = StyleSheet.create({
