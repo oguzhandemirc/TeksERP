@@ -66,6 +66,7 @@ Reddedilenler: keşiften/ilk girişten otomatik sabitleme (TOFU) · IP'ye bağl�
 - Yol (i), öneri: depo içinde Expo config eklentisi + küçük Kotlin modülü (yeni npm paketi yok, native kod var). Yol (ii): hazır pinleme paketleri (`react-native-ssl-public-key-pinning` vb.) OkHttp `CertificatePinner` kullanır; o zincir doğrulamasından SONRA çalıştığı için kendinden imzalıda işe yaramaz.
 - Ayrı OkHttp istemcisi kuran yollar da kapsamda: `expo-file-system` indirmesi (APK güncelleme), görsel yükleyici.
 - `usesCleartextTraffic` `dual` boyunca açık kalır; `required`a geçen kurulumda kapatılması ayrı karar.
+- JS katmanı (D4) native katmandan önce iner ve ona bağlıdır: native modül (`TeksErpLanTls`) yoksa QR'dan sabit YAZILMAZ ve kart görünmez — yazılsaydı ya bağlantı kesilirdi ya da sahte güvenlik hissi doğardı. QR, bağlı sunucunun kimliği ve ilanıyla çapraz denetlenir (kurulum kimliği ya da kod/port farklıysa red).
 
 ## 7. Kurulum adımı
 
@@ -77,8 +78,8 @@ Kurulum sihirbazının son sayfası ve `kur.ps1` sonu parmak izini ve durum sayf
 |---|---|---|
 | D1 | Bu not | ✅ |
 | D2 | Backend: sertifika üretimi/saklama, `LAN_TLS_MODE` dinleyicileri, kimlik ucunda `tls`, bekçi `test_lan_tls` + `test_lan_tls_http` | ✅ |
-| D3 | Panel: doğrulama kancası + pin deposu + https probu + onay diyaloğu + tablet QR'ı | sırada |
-| D4 | Tablet: QR okuma + pin deposu (JS, OTA ile gider) | sırada |
+| D3 | Panel: doğrulama kancası + pin deposu + https probu + onay diyaloğu + tablet QR'ı | ✅ |
+| D4 | Tablet: QR okuma + pin deposu + keşifte engel (JS, OTA ile gider; native yokken etkisiz) | ✅ |
 | D5 | Tablet: native zorlama (OkHttp) | **ONAY bekler** |
-| D6 | Durum sayfası + kurulum sihirbazı/`kur.ps1` parmak izi | sırada |
+| D6 | Durum sayfası (✅, yalnız döngü adresinde) + kurulum sihirbazı/`kur.ps1` parmak izi (sırada) | kısmen |
 | D7 | Sertifika yenileme (sonraki parmak izi) | sırada |
