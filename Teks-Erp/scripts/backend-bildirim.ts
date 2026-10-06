@@ -10,6 +10,8 @@
 //       [--cizgi --surum --derleme --icu]: künye alanları deploy/pg/pg-surumu.json'dan (TEK KAYNAK); verilen argüman
 //       kayıttan farklıysa DUR. Zip'te TEK `bin/icuuc<N>.dll` olmalı ve N = kaydın icuSurum'u.
 //   npx tsx scripts/backend-bildirim.ts pg-dogrula --kunye=<pg.json> --zip=<PG sahne zip> --guven-capasi=<kip> --cikti=<dizin>
+//   npx tsx scripts/backend-bildirim.ts ortak-dogrula --zip=<paket.zip> --guven-capasi=uretim --pg-cizgi=<16> --pg-en-az=<16.9>
+//       [--pg-kunye=<pg.json>] --cikti=<dizin>   (kurulum arşivi, O11a: ORTAK paket — kanal/grup yok, bildirim KURULMAZ)
 //
 // PAKET çapası kanalın çapa KİPİNDEN (G3; yayıncı kanal kaydının `backend.guvenCapasi`sını verir): o kanalın
 // kurulumları yalnız o kipin PAKET anahtarlarına güvenir — öteki kipin imzalı paketi/PG künyesi burada DURUR.
@@ -21,6 +23,8 @@
 //   güncellemesi olmaz). Çıktı `<cikti>/sonuc.json` + imzada `<cikti>/surum.json` (işaretçi).
 // pg-imzala: PG sahne zip'inin boyu/özeti ölçülür; içerik özeti zip'teki `TEKSERP-ICERIK.sha256`dan ÖLÇÜLÜR (elle
 //   yazılmaz), `bin/icuuc<icu>.dll` aranır; künye imzalanır → `<cikti>/pg.json` + `<cikti>/sonuc.json`.
+// ortak-dogrula: ortak paketi (PAKET.json backendKanal null, künye müşterisiz) ÜRETİM çapasıyla TAM denetler; hazırlık
+//   anahtarı, PROVA ve test çapası RED. Zincirli (`pkt-*`) liste burada kök almaz → düşer (O11b/3.9 D5 açar).
 // pg-dogrula: künyenin imzası (PAKET çapası) + zip'in boyu/özeti künyeyle birebir → `<cikti>/sonuc.json` (yayıncı okur).
 // Test çapası (`--capa=<json>` ya da ortam `TEKSERP_TEST_PAKET_CAPASI`) YALNIZ bekçiler içindir ve backend
 // bildiriminde YALNIZ hazırlık kanalında kabul edilir; gerçek çapa `packagePublicKeysFor(<kanalın kipi>)`.
@@ -292,12 +296,47 @@ function pgDogrula(f: Bayraklar): void {
   console.error(`✓ pg-dogrula: PostgreSQL ${k.value.surum}-${k.value.derleme} · ${olcu.ad} künyeyle birebir`);
 }
 
+// ── Ortak paket (kurulum arşivi, O11a) ──────────────────────────────────────
+/** Ortak paketin bütünlüğü + künyesi; grup-nötr (arşiv sürüm başına TEK), bildirim kurmaz. */
+async function ortakDogrula(f: Bayraklar): Promise<void> {
+  const capa = capaOku(f, "uretim");
+  const pg = pgGereksinimi(f, capa);
+  const zip = path.resolve(gerek(f, "zip"));
+  const cikti = path.resolve(gerek(f, "cikti"));
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "tekserp-ortak-"));
+  try {
+    execFileSync("unzip", ["-q", zip, "-d", tmp]);
+    const kunye = JSON.parse(fs.readFileSync(path.join(tmp, "PAKET.json"), "utf8").replace(/^﻿/, "")) as PaketKunyesi;
+    if (kunye.korumali !== true) throw new CliError("yalnız KORUMALI paket (PAKET.json korumali=true)");
+    if (kunye.korumaHedef !== "win-x64") throw new CliError(`paket hedefi win-x64 değil: ${String(kunye.korumaHedef)}`);
+    if (kunye.backendKanal !== null) throw new CliError(`paket "${String(kunye.backendKanal)}" kanalı için üretilmiş — ortak arşive yalnız ortak paket girer (paketle.ps1 argümansız)`);
+    if (kunye.prova === true) throw new CliError("PROVA paketi ortak arşive girmez");
+    const jws = fs.readFileSync(path.join(tmp, INTEGRITY_FILE), "utf8").trim();
+    const rapor = await verifyIntegrity(jws, tmp, capa);
+    if (rapor.durum !== "GECERLI" || !rapor.paket) throw new CliError(`paket bütünlüğü ${rapor.durum} (${rapor.kod ?? "?"}) — imzasız/kurcalı paket arşive girmez`);
+    const baslik = parseJws(jws);
+    if (!baslik.ok) throw new CliError(`butunluk.jws ayrıştırılamadı: ${baslik.code}`);
+    const kid = baslik.value.header.kid;
+    if (isStagingPackageKid(kid)) throw new CliError(`paket HAZIRLIK anahtarıyla (${kid}) imzalı — ortak paket yalnız üretim anahtarıyla`);
+    const p = rapor.paket;
+    if (p.urun !== "backend") throw new CliError(`künye ürünü backend değil: ${p.urun}`);
+    if (p.surum !== kunye.uygulamaSurumu) throw new CliError(`künye sürümü (${p.surum}) PAKET.json uygulamaSurumu (${String(kunye.uygulamaSurumu)}) ile aynı değil`);
+    if (p.musteri !== null) throw new CliError(`künye müşterisi ${p.musteri} — ortak paket müşteri taşımaz (filigran kurulumda)`);
+    fs.mkdirSync(cikti, { recursive: true });
+    fs.writeFileSync(path.join(cikti, "sonuc.json"), `${JSON.stringify({ v: 1, kip: "ortak-dogrula", surum: p.surum, paketId: p.paketId, paketImzaKid: kid, pg, uyarilar: [] }, null, 2)}\n`);
+    console.error(`✓ ortak-dogrula: backend ${p.surum} · kid ${kid}${pg.hedef ? ` · PG hedefi ${pg.hedef.surum}-${pg.hedef.derleme}` : " · PG hedefi yok"}`);
+  } finally {
+    fs.rmSync(tmp, { recursive: true, force: true });
+  }
+}
+
 async function main(): Promise<void> {
   const { command, flags } = args(process.argv.slice(2));
   if (command === "dogrula" || command === "imzala") return backend(command, flags);
+  if (command === "ortak-dogrula") return ortakDogrula(flags);
   if (command === "pg-imzala") return pgImzala(flags);
   if (command === "pg-dogrula") return pgDogrula(flags);
-  throw new CliError("komut: dogrula | imzala | pg-imzala | pg-dogrula");
+  throw new CliError("komut: dogrula | imzala | ortak-dogrula | pg-imzala | pg-dogrula");
 }
 
 main().catch((e: unknown) => {

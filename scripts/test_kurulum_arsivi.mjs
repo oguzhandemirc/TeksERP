@@ -3,15 +3,17 @@
 // BEKÇİ — KURULUM ARŞİVİ (deploy/kurulum/kurulum-arsivi.mjs) · zero-dep, DB'siz, AĞSIZ
 // =============================================================================
 // Müşteriye portalda TEK bağlantıyla giden arşiv bu betikten doğar. Betik GÖLGE bir kökte GERÇEK süreç olarak koşar:
-// deploy/kurulum + deploy/pg + scripts/lib + kanallar.json + satıcının storage.ts kopyası; PG kaydı sahte PG zip'ine
+// deploy/kurulum + deploy/pg + scripts/lib + dagitim.json (+ kanal-adlari.ps1, vendor-url.ts) + satıcının storage.ts
+// kopyası — eski kanal kaydı (kanallar.json) gölgede YOKTUR (ortak arşiv onu okumaz, O11a); PG kaydı sahte PG zip'ine
 // göre yazılır (yapısı gerçek kayıttan); imza doğrulayıcısı (`Teks-Erp/scripts/backend-bildirim.ts`) gölgede KAYIT
 // TUTAN bir koçandır (çağrı argümanları + ortamdaki test çapası deftere düşer, senaryoya göre geçerli/geçersiz döner) —
 // gerçek imza kriptografisi test_backend_yayin'in alanıdır, burada betiğin onu DOĞRU çağırıp sonucuna UYDUĞU ölçülür.
 //   §1 mutlu yol: 0 · arşiv + .sha256 · bağımsız araçla (zipinfo/unzip/shasum) DÜZ kök, 7 girdi, zip/exe "stor",
-//      SHA256SUMS tutar · BENIOKU BOM+CRLF+setup adı · doğrulayıcı TEK kez `dogrula` + kanalın çapası (--guven-capasi,
-//      --kanal, --kanal-turu, --pg-kunye) · ortamdaki TEKSERP_TEST_PAKET_CAPASI doğrulayıcıya GEÇMEZ · sahne/yarım kalmaz
+//      SHA256SUMS tutar · BENIOKU BOM+CRLF+setup adı · doğrulayıcı TEK kez `ortak-dogrula` + ÜRETİM çapası (--guven-capasi,
+//      --pg-kunye; kanal/grup argümanı YOK) · ortamdaki TEKSERP_TEST_PAKET_CAPASI doğrulayıcıya GEÇMEZ · sahne/yarım kalmaz
 //   §2 aynı girdi → aynı bayt · §3 var olan arşiv ezilmez (2)
-//   §4 kapılar (her biri DUR, arşiv bırakılmaz): kanal · pg.json özeti · imzasız · imza geçersiz · imzalı künye başka PG ·
+//   §4 kapılar (her biri DUR, arşiv bırakılmaz): ortak paket değil (kanallı / boş dize) · filigranda müşteri/kurulum ·
+//      hizmet adı dağıtım kaydından farklı · --musteri kalktı (2) · pg.json özeti · imzasız · imza geçersiz · imzalı künye başka PG ·
 //      çapa kipi · korumasız · PROVA paketi · hizmet ikilisi · boru-sınaması setup · PE değil · pg.json adı · tkpub (özel
 //      anahtar · sağlama) · PG zip kayıttan sapar · girdi iki kez / yok / aynı dosya iki girdi · çıktı depo içinde
 //   §5 --prova: imzasız backend → 0, ad `-PROVA-IMZASIZ`, uyarı; pg.json yalnız `pg-dogrula`yla; geçersiz imza uyarı kalır
@@ -74,7 +76,7 @@ function zipYap(hedef, dosyalar) {
 // ---------------------------------------------------------------- gölge kök
 const G = yol('kok');
 for (const rel of ['deploy/kurulum', 'deploy/pg', 'scripts/lib']) fs.cpSync(path.join(KOK, rel), path.join(G, rel), { recursive: true });
-for (const rel of ['deploy/kanallar.json', 'satici/sunucu/src/distribution/storage.ts']) yaz(path.join(G, rel), fs.readFileSync(path.join(KOK, rel)));
+for (const rel of ['deploy/dagitim.json', 'deploy/hizmet/kanal-adlari.ps1', 'Teks-Erp/src/lib/license/vendor-url.ts', 'satici/sunucu/src/distribution/storage.ts']) yaz(path.join(G, rel), fs.readFileSync(path.join(KOK, rel)));
 const BETIK = path.join(G, 'deploy/kurulum/kurulum-arsivi.mjs');
 // tsx koçanı: .ts'yi düz ES modülü olarak yükler (koçan tipsiz JS'tir); gerçek tsx gölgeye girmez.
 yaz(path.join(G, 'Teks-Erp/node_modules/tsx/package.json'), '{"name":"tsx","version":"0.0.0-bekci","type":"module","exports":{".":"./index.mjs"}}\n');
@@ -89,7 +91,9 @@ const senaryo = process.env.BEKCI_TS_SENARYO || 'gecerli';
 if (senaryo === 'gecersiz') { console.error('✖ paket bütünlüğü GECERSIZ (IMZA) — imzasız/kurcalı paket yayınlanmaz'); process.exit(2); }
 const pg = JSON.parse(Buffer.from(JSON.parse(fs.readFileSync(f['pg-kunye'] ?? f.kunye, 'utf8')).bildirim.split('.')[1], 'base64url').toString());
 const paket = senaryo === 'baska-pg' ? { ...pg.paket, sha256: '0'.repeat(64) } : pg.paket;
-fs.writeFileSync(f.cikti + '/sonuc.json', JSON.stringify({ v: 1, kip: komut, bildirim: { surum: process.env.BEKCI_TS_SURUM, kanal: f.kanal, paketImzaKid: 'paket-sahte', pg: { hedef: { paket } } }, kunye: pg, uyarilar: [] }));
+fs.writeFileSync(f.cikti + '/sonuc.json', JSON.stringify(komut === 'ortak-dogrula'
+  ? { v: 1, kip: komut, surum: process.env.BEKCI_TS_SURUM, paketImzaKid: 'paket-sahte', pg: { hedef: { paket } }, uyarilar: [] }
+  : { v: 1, kip: komut, kunye: pg }));
 console.error('✓ ' + komut + ' (koçan)');
 `);
 
@@ -115,8 +119,8 @@ yaz(path.join(G, 'deploy/pg/pg-surumu.json'), `${JSON.stringify(KAYIT, null, 2)}
 const PG_AD = `postgresql-${GERCEK.surum}-${GERCEK.derleme}-tekserp.zip`;
 
 // ---------------------------------------------------------------- girdiler
-const KANAL = 'demofabrika';
-const KAYITLAR = JSON.parse(fs.readFileSync(path.join(KOK, 'deploy/kanallar.json'), 'utf8')).kanallar[KANAL];
+const DAGITIM = JSON.parse(fs.readFileSync(path.join(KOK, 'deploy/dagitim.json'), 'utf8'));
+const HIZMET_ADI = DAGITIM.urun.backend.hizmetAdi;
 const SURUM = '9.9.9';
 const b64 = (o) => Buffer.from(JSON.stringify(o)).toString('base64url');
 function pgKunye(paket, ek = {}) {
@@ -130,11 +134,11 @@ function tkpub() {
 const HIZMET = pe('tekserp-hizmet');
 const GUNC = pe('tekserp-guncelleyici');
 function backendZip(hedef, { paket = {}, kunye = {}, imzali = true, ek = {}, cikar = [] } = {}) {
-  const p = { ad: 'tekserp-backend', commit: 'a'.repeat(40), backendKanal: KANAL, backendHizmetAdi: KAYITLAR.backend.hizmetAdi, korumali: true, korumaHedef: 'win-x64', prova: false,
+  const p = { ad: 'tekserp-backend', commit: 'a'.repeat(40), backendKanal: null, backendHizmetAdi: HIZMET_ADI, korumali: true, korumaHedef: 'win-x64', prova: false,
     uygulamaSurumu: SURUM, butunlukKid: imzali ? 'paket-sahte' : null, hizmetIkilileri: { 'tekserp-hizmet.exe': { boyut: HIZMET.length }, 'tekserp-guncelleyici.exe': { boyut: GUNC.length } }, ...paket };
   const d = {
     'PAKET.json': `﻿${JSON.stringify(p, null, 2)}\n`,
-    'dist/server-kunye.json': JSON.stringify({ urun: 'backend', musteri: KANAL, guvenCapasi: KAYITLAR.backend.guvenCapasi, zaman: '2026-10-01T10:00:00.000Z', ...kunye }),
+    'dist/server-kunye.json': JSON.stringify({ urun: 'backend', musteri: null, kurulumId: null, guvenCapasi: 'uretim', zaman: '2026-10-01T10:00:00.000Z', ...kunye }),
     'dist/server.jsc': 'jsc',
     'runtime/node.exe': pe('node'),
     'runtime/tekserp-hizmet.exe': HIZMET,
@@ -160,7 +164,7 @@ fs.writeFileSync(TKPUB, tkpub());
 
 const IZ = yol('ts-iz.jsonl');
 function kos(ozel = {}, { senaryo = 'gecerli', cikti = yol('cikti', String(Math.random()).slice(2)), prova = false, tsxYok = false, args = null } = {}) {
-  const g = { '--setup': SETUP, '--backend': BACKEND, '--pg': PG, '--pg-kunye': PGJSON, '--tkpub': TKPUB, '--musteri': KANAL, '--cikti': cikti, ...ozel };
+  const g = { '--setup': SETUP, '--backend': BACKEND, '--pg': PG, '--pg-kunye': PGJSON, '--tkpub': TKPUB, '--cikti': cikti, ...ozel };
   const argv = args ?? [...Object.entries(g).filter(([, v]) => v !== null).flatMap(([k, v]) => [k, v]), ...(prova ? ['--prova'] : [])];
   fs.rmSync(IZ, { force: true });
   const tsx = path.join(G, 'Teks-Erp/node_modules/tsx');
@@ -174,7 +178,7 @@ function kos(ozel = {}, { senaryo = 'gecerli', cikti = yol('cikti', String(Math.
     if (tsxYok) fs.renameSync(`${tsx}.yok`, tsx);
   }
 }
-const ARSIV = `TeksERP-Kurulum-${KANAL}-${SURUM}.zip`;
+const ARSIV = `TeksERP-Kurulum-${SURUM}.zip`;
 
 console.log(`test_kurulum_arsivi — kurulum arşivi (gölge kök, sahte PG ${ADLAR.length} dosya, doğrulayıcı koçanı)\n`);
 
@@ -183,7 +187,7 @@ let ILK_SHA = null;
 {
   const r = kos();
   const a = path.join(r.dizin, ARSIV);
-  check('§1a çıkış 0 · SONUC: ARSIV-HAZIR · çıktıda yalnız arşiv + .sha256 (sahne/yarım yok)', r.kod === 0 && /SONUC: ARSIV-HAZIR/.test(r.cikti) && JSON.stringify(r.dosyalar.sort()) === JSON.stringify([ARSIV, `${ARSIV}.sha256`]), `kod ${r.kod} · ${r.dosyalar.join(',')} · ${r.cikti.slice(-300)}`);
+  check('§1a çıkış 0 · SONUC: ARSIV-HAZIR · çıktıda yalnız arşiv + .sha256 (sahne/yarım yok) · gölgede kanallar.json YOK', !fs.existsSync(path.join(G, 'deploy/kanallar.json')) && r.kod === 0 && /SONUC: ARSIV-HAZIR/.test(r.cikti) && JSON.stringify(r.dosyalar.sort()) === JSON.stringify([ARSIV, `${ARSIV}.sha256`]), `kod ${r.kod} · ${r.dosyalar.join(',')} · ${r.cikti.slice(-300)}`);
   if (fs.existsSync(a)) {
     ILK_SHA = sha(fs.readFileSync(a));
     const zi = arac('zipinfo', [a]).stdout.split('\n').filter((l) => /^[-d]r/.test(l));
@@ -207,12 +211,12 @@ let ILK_SHA = null;
     const ben = fs.readFileSync(path.join(ac, 'BENIOKU.txt'));
     check('§1f BENIOKU: UTF-8 BOM + CRLF + "Tümünü ayıkla" + setup adı', ben.subarray(0, 3).equals(Buffer.from([0xef, 0xbb, 0xbf])) && ben.includes('\r\n') && ben.toString('utf8').includes('Tümünü ayıkla') && ben.toString('utf8').includes('TeksERP-Kurulum-9.9.9.exe'), ben.toString('utf8').slice(0, 120));
   }
-  const d = r.iz.filter((x) => x.komut === 'dogrula');
+  const d = r.iz.filter((x) => x.komut === 'ortak-dogrula');
   const f = d[0]?.f ?? {};
-  check('§1g doğrulayıcı TEK kez `dogrula`: --guven-capasi = kanalın çapası · --kanal · --kanal-turu · --pg-kunye · --zip',
-    r.iz.length === 1 && d.length === 1 && f['guven-capasi'] === KAYITLAR.backend.guvenCapasi && f.kanal === KANAL && f['kanal-turu'] === KAYITLAR.tur && f['pg-kunye'] === PGJSON && f.zip === BACKEND && f['pg-cizgi'] === String(GERCEK.cizgi) && f['pg-en-az'] === GERCEK.backendEnAz,
+  check('§1g doğrulayıcı TEK kez `ortak-dogrula`: --guven-capasi=uretim · --pg-kunye · --zip · kanal/grup argümanı YOK',
+    r.iz.length === 1 && d.length === 1 && f['guven-capasi'] === 'uretim' && !('kanal' in f) && !('kanal-turu' in f) && !('grup' in f) && f['pg-kunye'] === PGJSON && f.zip === BACKEND && f['pg-cizgi'] === String(GERCEK.cizgi) && f['pg-en-az'] === GERCEK.backendEnAz,
     JSON.stringify(r.iz).slice(0, 300));
-  check('§1h ortamdaki TEKSERP_TEST_PAKET_CAPASI doğrulayıcıya GEÇMEZ (yalnız kanalın gerçek çapası)', r.iz.length === 1 && r.iz[0].testCapasi === null, JSON.stringify(r.iz[0]?.testCapasi));
+  check('§1h ortamdaki TEKSERP_TEST_PAKET_CAPASI doğrulayıcıya GEÇMEZ (yalnız gerçek üretim çapası)', r.iz.length === 1 && r.iz[0].testCapasi === null, JSON.stringify(r.iz[0]?.testCapasi));
 }
 
 // §2 belirlenimlilik · §3 ezmez
@@ -232,14 +236,19 @@ function dur(ad, r, desen, { tsBos = true, kod = 1 } = {}) {
 }
 {
   const g = (ad, o) => backendZip(path.join(yol('b', ad), path.basename(BACKEND)), o);
-  dur('§4a kanal uyuşmazlığı', kos({ '--backend': g('kanal', { paket: { backendKanal: 'testfabrika' } }) }), /KANAL UYUŞMAZLIĞI/);
+  dur('§4a eski kanal paketi (backendKanal adnansahin)', kos({ '--backend': g('kanal', { paket: { backendKanal: 'adnansahin' } }) }), /ORTAK PAKET DEĞİL/);
+  dur('§4a2 O11a öncesi kanal-dışı paket (backendKanal boş dize)', kos({ '--backend': g('bos', { paket: { backendKanal: '' } }) }), /ORTAK PAKET DEĞİL/);
+  dur('§4a3 filigranda müşteri (eski yol derlemesi)', kos({ '--backend': g('filigran', { kunye: { musteri: 'adnansahin' } }) }), /filigranda müşteri\/kurulum/);
+  dur('§4a4 filigranda kurulum kimliği', kos({ '--backend': g('kurulum', { kunye: { kurulumId: '6f1c2a3b-4d5e-4f60-8a7b-9c0d1e2f3a4b' } }) }), /filigranda müşteri\/kurulum/);
+  dur('§4a5 hizmet adı son ekli (kanal kimliği)', kos({ '--backend': g('sonek', { paket: { backendHizmetAdi: `${HIZMET_ADI}-test` } }) }), /dağıtım kaydı/);
+  dur('§4a6 --musteri verildi (kalktı)', kos({ '--musteri': 'adnansahin' }), /--musteri kalktı/, { kod: 2 });
   const pgj = yol('pgj', 'pg.json');
   yaz(pgj, pgKunye({ ad: PG_AD, boyut: PG_VERI.length, sha256: 'f'.repeat(64) }));
   dur('§4b pg.json özeti PG zip\'ine uymuyor', kos({ '--pg-kunye': pgj }), /pg\.json özeti PG zip'ine UYMUYOR/);
   dur('§4c imzasız backend (butunluk.jws yok)', kos({ '--backend': g('imzasiz', { imzali: false }) }), /İMZASIZ/);
   dur('§4d imza geçersiz (doğrulayıcı reddeder)', kos({}, { senaryo: 'gecersiz' }), /İMZA DOĞRULANAMADI/, { tsBos: false });
   dur('§4e imzalı künye başka PG zip\'ini gösterir', kos({}, { senaryo: 'baska-pg' }), /başka bir PG zip/, { tsBos: false });
-  dur('§4f derlemenin çapa kipi kanalınkinden farklı', kos({ '--backend': g('capa', { kunye: { guvenCapasi: 'hazirlik' } }) }), /çapa kipi/);
+  dur('§4f derlemenin çapa kipi üretim değil', kos({ '--backend': g('capa', { kunye: { guvenCapasi: 'hazirlik' } }) }), /çapa kipi/);
   dur('§4g korumasız paket', kos({ '--backend': g('korumasiz', { paket: { korumali: false } }) }), /KORUMALI win-x64 değil/);
   dur('§4h PROVA paketi (bayraksız)', kos({ '--backend': g('prova', { paket: { prova: true } }) }), /PROVA paketi/);
   dur('§4i hizmet ikilisi zip\'te yok', kos({ '--backend': g('ikili', { cikar: ['runtime/tekserp-guncelleyici.exe'] }) }), /hizmet ikilisi zip'te yok/);
@@ -263,7 +272,7 @@ function dur(ad, r, desen, { tsBos = true, kod = 1 } = {}) {
   const pgjf = yol('p', 'pg.json');
   yaz(pgjf, pgKunye({ ad: PG_AD, boyut: fs.statSync(pgFazla).size, sha256: sha(fs.readFileSync(pgFazla)) }));
   dur('§4p PG zip kayıttan sapar (pg-paketle --dogrula)', kos({ '--pg': pgFazla, '--pg-kunye': pgjf }), /PG zip kayıtla eşit değil/);
-  dur('§4q girdi iki kez', kos({}, { args: ['--setup', SETUP, '--backend', BACKEND, '--pg', PG, '--pg', PG, '--pg-kunye', PGJSON, '--musteri', KANAL, '--cikti', yol('c-iki')] }), /TEK verilir/, { kod: 2 });
+  dur('§4q girdi iki kez', kos({}, { args: ['--setup', SETUP, '--backend', BACKEND, '--pg', PG, '--pg', PG, '--pg-kunye', PGJSON, '--cikti', yol('c-iki')] }), /TEK verilir/, { kod: 2 });
   dur('§4r girdi yok', kos({ '--pg': path.join(GIRDI, 'postgresql-yok.zip') }), /--pg yok/);
   dur('§4s aynı dosya iki girdiye', kos({ '--tkpub': PGJSON }), /AYNI dosya/);
   dur('§4t çıktı depo içinde', kos({ '--cikti': path.join(G, 'deploy', 'kurulum', 'cikti') }), /depo içinde olamaz/, { kod: 2 });
@@ -273,13 +282,13 @@ function dur(ad, r, desen, { tsBos = true, kod = 1 } = {}) {
 {
   const imzasiz = backendZip(path.join(yol('pr'), path.basename(BACKEND)), { imzali: false, paket: { prova: true } });
   const r = kos({ '--backend': imzasiz }, { prova: true });
-  const ad = `TeksERP-Kurulum-${KANAL}-${SURUM}-PROVA-IMZASIZ.zip`;
+  const ad = `TeksERP-Kurulum-${SURUM}-PROVA-IMZASIZ.zip`;
   check('§5a --prova + imzasız + PROVA paketi → 0, ad -PROVA-IMZASIZ, iki [PROVA] uyarısı, SONUC: PROVA-ARSIVI', r.kod === 0 && r.dosyalar.includes(ad) && (r.cikti.match(/\[PROVA\]/g) ?? []).length === 2 && /SONUC: PROVA-ARSIVI/.test(r.cikti), `kod ${r.kod} · ${r.dosyalar.join(',')} · ${r.cikti.slice(-300)}`);
-  check('§5b imzasız backend\'de pg.json yalnız `pg-dogrula`yla (kanalın çapası), test çapası geçmez', r.iz.length === 1 && r.iz[0].komut === 'pg-dogrula' && r.iz[0].f['guven-capasi'] === KAYITLAR.backend.guvenCapasi && r.iz[0].testCapasi === null, JSON.stringify(r.iz).slice(0, 200));
+  check('§5b imzasız backend\'de pg.json yalnız `pg-dogrula`yla (üretim çapası), test çapası geçmez', r.iz.length === 1 && r.iz[0].komut === 'pg-dogrula' && r.iz[0].f['guven-capasi'] === 'uretim' && r.iz[0].testCapasi === null, JSON.stringify(r.iz).slice(0, 200));
   const g = kos({}, { prova: true, senaryo: 'gecersiz' });
   check('§5c --prova kipinde geçersiz imza UYARI kalır (0), ad yine -PROVA-IMZASIZ', g.kod === 0 && g.dosyalar.includes(ad) && /\[PROVA\] İMZA DOĞRULANAMADI/.test(g.cikti), `kod ${g.kod}`);
   const k = kos({ '--backend': backendZip(path.join(yol('pr2'), path.basename(BACKEND)), { paket: { backendKanal: 'testfabrika' } }) }, { prova: true });
-  check('§5d --prova yapısal kapıları GEVŞETMEZ (kanal uyuşmazlığı yine DUR)', k.kod === 1 && /KANAL UYUŞMAZLIĞI/.test(k.cikti), `kod ${k.kod}`);
+  check('§5d --prova yapısal kapıları GEVŞETMEZ (eski kanal paketi yine DUR)', k.kod === 1 && /ORTAK PAKET DEĞİL/.test(k.cikti), `kod ${k.kod}`);
 }
 
 // §6 desenler tek kaynak + üretilen arşivde çakışma yok
@@ -311,6 +320,22 @@ function dur(ad, r, desen, { tsBos = true, kod = 1 } = {}) {
 {
   const r = kos({}, { tsxYok: true });
   dur('§7 doğrulayıcı koşamaz (tsx yok)', r, /ÖLÇÜLEMEDİ/, { kod: 2, tsBos: true });
+}
+
+// §8 dağıtım kaydı tek kaynak: okunamazsa ÖLÇÜLEMEDİ, ortak kimliği bozuksa DUR (kanal kaydına sessiz dönüş yok)
+{
+  const k = path.join(G, 'deploy/dagitim.json');
+  const asil = fs.readFileSync(k);
+  try {
+    fs.rmSync(k);
+    dur('§8a dağıtım kaydı yok', kos(), /ÖLÇÜLEMEDİ/, { kod: 2 });
+    const o = JSON.parse(asil.toString('utf8'));
+    o.urun.backend.hizmetAdi = `${HIZMET_ADI}-test`;
+    fs.writeFileSync(k, JSON.stringify(o));
+    dur('§8b dağıtım kaydında hizmet adı son ekli', kos(), /dağıtım kaydı: .*soneksiz taban/);
+  } finally {
+    fs.writeFileSync(k, asil);
+  }
 }
 
 console.log(`\n=== Sonuç: ${gecti} geçti, ${kaldi} başarısız ===`);
