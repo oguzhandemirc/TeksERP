@@ -15,12 +15,12 @@ import { TotpAccountService } from "../services/totp-account.service";
 import {
   readDevicePairingRequired,
   readLoginMethods,
-  readCompanyName,
   readShortCredentialApprovedDeviceOnly,
 } from "../services/system-setting.service";
 import { parseCardCode } from "../lib/short-credential/digest";
 import { SessionRegistryService } from "../services/session-registry.service";
 import { isSuspendedBeforeLogin } from "../services/license-view.service";
+import { screenCompanyName } from "../lib/license/licensee-name";
 import { AppError } from "../utils/app-error";
 import {
   resolveLoginLockoutKeys,
@@ -458,7 +458,8 @@ export class AuthController {
   static async loginMethods(_req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const methods = await readLoginMethods();
-      const companyName = await readCompanyName();
+      // Giriş ekranındaki ad lisanstan (K-7); belge unvanı `company.name` ayrı kalır.
+      const companyName = screenCompanyName();
       // K5 giriş ekranı sinyali: kimliksize verilen tek lisans bilgisi (yalnız zorla + DURDURULMUŞ).
       const lisansDurduruldu = isSuspendedBeforeLogin();
       res.status(200).json({ success: true, data: { ...methods, companyName, lisansDurduruldu } });

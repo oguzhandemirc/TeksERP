@@ -211,10 +211,8 @@ function startLanListener(): Server {
     // Kapalı rapor listesindeki BAYAT anahtarlar (katalogdan çıkmış rapor) ve bozuk
     // satır boot'ta TEK SEFER duyurulur; job yazmaz — liste temizliği süperadmin kararı.
     void warnStaleReportKeys();
-    // Keşif ucunun bellek kopyası (firma adı + port). İstek yolunda DB'ye
-    // gidilmediği için burada bir kez doldurulur; firma adı sonradan değişirse
-    // bir sonraki restart'ta tazelenir (keşif için yeterli hassasiyet).
-    void refreshDiscoveryCache(Number(PORT));
+    // Keşif ucunun port kopyası; firma adı istek anında bellekteki lisanstan okunur.
+    refreshDiscoveryCache(Number(PORT));
     // Servis ilanı — "ben buradayım". Her arızada sessizce kapanır (ilanın
     // kendisi de fail-open); istemcide alt ağ taraması yedeği var.
     if (!VERIFYING) void startMdnsAdvertiser({ port: Number(PORT) });

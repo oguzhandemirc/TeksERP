@@ -33,7 +33,7 @@
 import os from "os";
 import { APP_VERSION } from "../lib/app-version";
 import { buildAdvertisedTxt, type AdvertisedTxt } from "../lib/discovery-txt";
-import { whenIdentityReady } from "./installation-identity.job";
+import { getCachedInstallationIdentity, whenIdentityReady } from "./installation-identity.job";
 import { DISCOVERY_VERSION, buildDiscoveryIdentity } from "../services/discovery.service";
 import { bilgi, uyari } from "../lib/logger";
 import { filterAdvertisedRecords, type DnsRecordLike } from "../lib/lan-addresses";
@@ -241,6 +241,16 @@ async function refreshTxtWhenIdentityArrives(): Promise<void> {
         const late = await whenIdentityReady(60_000);
         if (!late || !published?.updateTxt) return;
         published.updateTxt(makeTxt(late.installationId) as unknown as Record<string, string>);
+    } catch {
+        /* best-effort */
+    }
+}
+
+/** Lisans adı değişince (HAK kabulü) TXT'yi yeniler — ilan HTTP kimliğiyle aynı adı söylesin. Hata yutulur. */
+export function refreshMdnsTxt(): void {
+    try {
+        if (!published?.updateTxt) return;
+        published.updateTxt(makeTxt(getCachedInstallationIdentity()?.installationId ?? null) as unknown as Record<string, string>);
     } catch {
         /* best-effort */
     }

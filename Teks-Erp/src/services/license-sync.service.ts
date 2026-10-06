@@ -22,6 +22,8 @@ import { cacheFromRecordCopy, cacheToRecordCopy } from "../lib/license/fingerpri
 import { setFingerprintCacheCopy, startAccumulationForLease } from "../lib/license/record-writer";
 import type { LeaseArrival } from "../lib/license/saat";
 import { acceptNewEntitlement } from "./license-integrity.service";
+import { seedCompanyNameQuietly } from "./licensee-company-name.service";
+import { refreshMdnsTxt } from "../jobs/mdns-advertiser.job";
 import {
   getLicenseConfig,
   getLicenseSnapshot,
@@ -172,12 +174,17 @@ export async function acceptLicenseResponse(
   // Kök imzalı PAKET iptal listesi kiradan bağımsızdır: doğrulanır ve daha yeniyse sessizce benimsenir.
   adoptPackageRevocation(parsed.data.paketIptal);
   const offer = revocationOffer(parsed.data.iptal);
+  let accepted: { yeniKira: boolean; kiraId: string };
   try {
-    return acceptVerifiedResponse(parsed.data, ctx, offer, { source, userId, arrival });
+    accepted = acceptVerifiedResponse(parsed.data, ctx, offer, { source, userId, arrival });
   } catch (err) {
     adoptFromRejected(offer, source);
     throw err;
   }
+  // K-7: lisans adı ağdaki ilana hemen, belge unvanına yalnız ilk kez (satır yoksa ya da nötrse) geçer.
+  refreshMdnsTxt();
+  await seedCompanyNameQuietly();
+  return accepted;
 }
 
 function acceptVerifiedResponse(

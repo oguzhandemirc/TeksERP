@@ -12,7 +12,7 @@ export type LoginMethod = 'list' | 'pin' | 'card';
 export interface LoginMethodsConfig {
   enabled: LoginMethod[];
   primary: LoginMethod;
-  /** Firma adı — public login-methods ucundan (company.name ayarı). Login/kilit
+  /** Firma adı — public login-methods ucundan (lisans adı; lisanssızsa nötr ürün adı). Login/kilit
    *  başlığında marka satırı olarak gösterilir. */
   companyName?: string;
   /** Giriş öncesi K5 sinyali: yalnız zorlama kipinde lisans DURDURULMUŞKEN true (eski backend göndermez). */

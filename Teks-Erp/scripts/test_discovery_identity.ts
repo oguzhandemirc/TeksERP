@@ -61,6 +61,7 @@ const IDENTITY_FIELDS = [
   "installationId",
   "serverName",
   "companyName",
+  "etkin",
   "version",
   "protocol",
   "apiPort",

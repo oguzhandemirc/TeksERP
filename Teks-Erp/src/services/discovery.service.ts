@@ -26,9 +26,9 @@
 // =============================================================================
 
 import os from "os";
-import prisma from "../lib/prisma";
 import { APP_VERSION } from "../lib/app-version";
-import { SETTING_KEYS, DEFAULT_COMPANY_NAME } from "./system-setting.service";
+import { currentLicenseeName } from "../lib/license/licensee-name";
+import { DEFAULT_COMPANY_NAME } from "../constants/company";
 import { getCachedInstallationIdentity } from "../jobs/installation-identity.job";
 
 /** Keşif sözleşmesinin sürümü. İstemci buna bakıp dallanır (ikinci bir 404 probu atmadan). */
@@ -44,8 +44,10 @@ export interface DiscoveryIdentityPayload {
     installationId: string | null;
     /** Sunucu bilgisayarının ağdaki adı — "hangi kutu" sorusunun cevabı. */
     serverName: string;
-    /** Firmanın adı — çok adaylı seçicide ANA ayırt edici alan. */
+    /** Firmanın adı — çok adaylı seçicide ANA ayırt edici alan. Kaynak lisans (HAK `musteri.ad`), `company.name` DEĞİL. */
     companyName: string;
+    /** Kurulum lisanslı mı; false iken `companyName` nötr ürün adıdır. */
+    etkin: boolean;
     version: string;
     protocol: "http";
     apiPort: number;
@@ -53,8 +55,6 @@ export interface DiscoveryIdentityPayload {
     time: string;
 }
 
-/** Bellekteki firma adı. `refreshDiscoveryCache` tazeler; DB'ye ASLA istek anında gidilmez. */
-let cachedCompanyName = DEFAULT_COMPANY_NAME;
 let cachedPort = Number(process.env.PORT) || 4000;
 
 /**
@@ -64,12 +64,15 @@ let cachedPort = Number(process.env.PORT) || 4000;
  */
 export function buildDiscoveryIdentity(): DiscoveryIdentityPayload {
     const identity = getCachedInstallationIdentity();
+    // Lisans adı bellekteki doğrulanmış HAK'tan okunur (DB'siz); HAK sonradan gelirse restart beklemez.
+    const licensee = currentLicenseeName();
     return {
         product: "TeksERP",
         discoveryVersion: DISCOVERY_VERSION,
         installationId: identity?.installationId ?? null,
         serverName: os.hostname(),
-        companyName: cachedCompanyName,
+        companyName: (licensee ?? DEFAULT_COMPANY_NAME).slice(0, COMPANY_NAME_MAX),
+        etkin: licensee !== null,
         version: APP_VERSION,
         protocol: "http",
         apiPort: cachedPort,
@@ -78,27 +81,12 @@ export function buildDiscoveryIdentity(): DiscoveryIdentityPayload {
     };
 }
 
-/**
- * Firma adını DB'den tazeler. Boot'ta ve periyodik olarak çağrılır — istek
- * yolunda ASLA. Hata yutulur: keşif, firma adı bayat diye durmaz.
- */
-export async function refreshDiscoveryCache(port?: number): Promise<void> {
+/** Portu belleğe alır. Boot'ta çağrılır — istek yolunda ASLA. Firma adı artık lisanstan, DB'den okunmaz. */
+export function refreshDiscoveryCache(port?: number): void {
     if (typeof port === "number" && Number.isFinite(port)) cachedPort = port;
-    try {
-        const row = await prisma.systemSetting.findUnique({
-            where: { key: SETTING_KEYS.COMPANY_NAME },
-        });
-        const raw = row?.value;
-        if (typeof raw === "string" && raw.trim()) {
-            cachedCompanyName = raw.trim().slice(0, COMPANY_NAME_MAX);
-        }
-    } catch {
-        /* best-effort — varsayılan/önceki ad kalır */
-    }
 }
 
 /** Test-only: bellek durumunu sıfırlar. */
 export function __resetDiscoveryCacheForTests(): void {
-    cachedCompanyName = DEFAULT_COMPANY_NAME;
     cachedPort = Number(process.env.PORT) || 4000;
 }
