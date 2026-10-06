@@ -1,7 +1,7 @@
 // YOKLAMA — saatlik (ya da zil üzerine) kira yenileme. Kimlik kapısı (authenticateRequest) bekleyen taşıma
 // anahtarını 409, taşınmış/iptal edilmiş anahtarı 403 ile ZATEN durdurmuştur — kapanış kirasını anlayan istemcide
 // (`allowEnded`) bu anahtar `ended` ile gelir ve kapanış kirası alır (K6); aksi hâlde burada yalnız güncel anahtar.
-// Kira verildikten SONRA (ayrı, idempotent adımlar): fabrikanın kurulum kayıtları ve güncelleme raporu deftere/duruma
+// Kira verildikten SONRA (ayrı, idempotent adımlar): fabrikanın kurulum kayıtları, güncelleme raporu ve açık modül adları deftere/duruma
 // yazılır, yanıta kurulumun destek güncellemeleri eklenir — hiçbiri kirayı düşüremez (hata yutulur, sonraki yoklama tekrarlar).
 import type { LicenseResponse, PollRequest, SupportTicketUpdate } from "../lisans-protokol";
 import { prisma } from "../lib/prisma";
@@ -9,6 +9,7 @@ import { closeEndedKey } from "./closing-lease";
 import type { VendorContext } from "./context";
 import type { AuthenticatedRequest } from "./installation-auth";
 import { recordInstallHistory } from "./install-record.service";
+import { recordOpenModules } from "./open-modules";
 import { pollV2Report } from "./local-intervention";
 import { renewLease } from "./renewal.service";
 import { supportUpdatesFor } from "./support.service";
@@ -43,6 +44,11 @@ export async function processPoll(
     await recordUpdateReport(prisma, { installationDbId: auth.installation.id, kid: auth.kid, report: body.guncelleme, nowMs });
   } catch (err) {
     console.error(`[yoklama] güncelleme raporu yazılamadı: ${err instanceof Error ? err.message : String(err)}`);
+  }
+  try {
+    await recordOpenModules(prisma, { installationDbId: auth.installation.id, modules: body.acikModuller, nowMs });
+  } catch (err) {
+    console.error(`[yoklama] açık modüller yazılamadı: ${err instanceof Error ? err.message : String(err)}`);
   }
   let destek: SupportTicketUpdate[] = [];
   try {

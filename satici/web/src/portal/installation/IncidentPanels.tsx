@@ -179,6 +179,23 @@ export function IncidentsPanel({ detail, onChanged }: { detail: InstallationDeta
   );
 }
 
+/** İmzalı saat sapması metni: + = fabrika saati ileride. */
+function fmtSkew(sn: number): string {
+  const abs = Math.abs(sn);
+  const size = abs < 120 ? `${abs} sn` : `${Math.round(abs / 60)} dk`;
+  return sn === 0 ? "0 sn" : `${size} ${sn > 0 ? "ileride" : "geride"}`;
+}
+
+function SignedSkewCell({ v }: { v: InstallationDetail["saatSapmasi"] }) {
+  if (!v) return <span className="muted" data-testid="imzali-saat-bilinmiyor">Bildirilmedi (eski sürüm ya da yeniden başlatmadan beri ölçülmedi)</span>;
+  return (
+    <span>
+      {fmtSkew(v.sapmaSn)}
+      {v.uyari ? <> <Badge tone="warn">Eşik {Math.round(v.esikSn / 60)} dk aşıldı — saat eşitlemesini denetleyin</Badge></> : null}
+    </span>
+  );
+}
+
 function num(v: unknown): number | undefined {
   return typeof v === "number" && Number.isFinite(v) ? v : undefined;
 }
@@ -205,10 +222,23 @@ export function HealthPanel({ detail }: { detail: InstallationDetail }) {
               ["Audit yazma hatası", String(num(h.auditYazmaHatasi) ?? "—")],
               ["İstemciler", clients.length ? clients.map((c) => `${c.tur ?? "?"} ${c.surum ?? ""} ×${c.adet ?? 0}`).join(", ") : "—"],
               ["Platform", `${String(env.isletimSistemi ?? inst.platform ?? "—")} · Node ${String(env.nodeSurum ?? "—")}`],
+              ["İmzalı saat sapması", <SignedSkewCell key="saat" v={detail.saatSapmasi ?? null} />],
             ]}
           />
         ) : (
           <p className="muted">Henüz yoklama gelmedi.</p>
+        )}
+      </Section>
+      <Section title="Açık modüller (fabrikanın bildirdiği)">
+        {inst.acikModuller ? (
+          <KeyValues
+            items={[
+              ["Açık modüller", inst.acikModuller.length > 0 ? inst.acikModuller.map((m) => <code key={m}>{m}</code>).flatMap((c, i) => (i === 0 ? [c] : [" · ", c])) : "Hiçbiri açık değil"],
+              ["Bildirim zamanı", fmtDateTime(inst.acikModullerZamani ?? null)],
+            ]}
+          />
+        ) : (
+          <p className="muted" data-testid="acik-moduller-bilinmiyor">Bilinmiyor — fabrika henüz bildirmedi (eski sürüm olabilir).</p>
         )}
       </Section>
       <Section title="Kabul edilen parmak izi">
@@ -230,6 +260,7 @@ export function HealthPanel({ detail }: { detail: InstallationDetail }) {
             { header: "Kademe (hesaplanan / uygulanan)", render: (r) => `${String(r.durum.hesaplananKademe ?? "—")} / ${String(r.durum.uygulananKademe ?? "—")}` },
             { header: "Kip", render: (r) => String(r.durum.kip ?? "—") },
             { header: "Reddedilecek istek", render: (r) => String(r.gozlem.reddedilecekIstek ?? "—"), className: "num-col" },
+            { header: "İmzalı saat sapması", render: (r) => (typeof r.saat.imzaliSapmaSn === "number" ? fmtSkew(r.saat.imzaliSapmaSn) : "—") },
           ]}
         />
       </Section>

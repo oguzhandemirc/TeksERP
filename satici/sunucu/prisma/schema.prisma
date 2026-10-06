@@ -302,6 +302,10 @@ model Kurulum {
   sonGuncellemeRaporu         Json?
   sonGuncellemeRaporuZamani   DateTime?      @db.Timestamptz
 
+  /// K10 — fabrikanın son yoklamada bildirdiği AÇIK modül adları (yapılandırma; DURUM). null = fabrika bildirmedi (eski sürüm) → portal "bilinmiyor".
+  acikModuller        Json?
+  acikModullerZamani  DateTime? @db.Timestamptz
+
   platform         String?   @db.VarChar(10)
   sonOrtam         Json?
   sonSaglik        Json?

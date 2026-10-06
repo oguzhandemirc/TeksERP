@@ -72,6 +72,7 @@ import {
 } from "../src/lib/license/protocol";
 import {
   OBSERVE_EFFECT,
+  OBSERVE_INFO_BANNER_CODES,
   REASON_CODES,
   REASON_VALIDITY,
   toDocResult,
@@ -442,6 +443,26 @@ function bakimBolumu(): void {
   check("§12h-K9 sınır: bitişe tam 30 gün → hatırlatma bandı var", sinir.hesaplanan.bant?.metin.includes("30 gün sonra bitiyor") === true, sinir.hesaplanan.bant?.metin ?? "bant yok");
   const ihlalBant = b.hesaplanan.bant;
   check("§12b-K9 ihlal bandı (EK_SURE) bilgi bandını gölgeler: daha şiddetli bant kazanır", ihlalBant?.ton === "uyari" && ihlalBant.metin.includes("bakım süreniz bittikten sonra çıktı"), ihlalBant?.metin ?? "bant yok");
+  // K9 — gözlemde bakım hatırlatması görünür (beyanlı istisna: yalnız OBSERVE_INFO_BANNER_CODES)
+  const gk = { kira: { zorlama: false } };
+  const gGozlem = durum({ ...gk, hak: { bakimBitis: msToIso(SIMDI + 10 * DAY_MS) } });
+  check("§12i-K9 ⭐ GÖZLEMDE bitişe 10 gün → uygulanan bilgi bandı var, kademe NORMAL, güncelleme/tavan sıfır fark", gGozlem.kip === "gozlem" && gGozlem.uygulanan.bant?.ton === "bilgi" && gGozlem.uygulanan.bant.metin.includes("10 gün sonra bitiyor") && gGozlem.uygulananKademe === "NORMAL" && gGozlem.uygulanan.guncellemeIzni && !gGozlem.uygulanan.modulTavani.applies, ozet(gGozlem));
+  const gBitti = durum({ ...gk, hak: bitmis, girdi: { derlemeTarihiMs: SIMDI - 30 * DAY_MS } });
+  check("§12j-K9 gözlemde bakım bitti → bilgi bandı görünür", gBitti.uygulanan.bant?.metin.includes("yeni sürümler için bakımı yenileyin") === true, ozet(gBitti));
+  const gIhlal = durum({ ...gk, ...ihlal });
+  check("§12k-K9 negatif sonda: gözlemde bakım İHLALİ (uyarı bandı) hâlâ uygulanmaz — yalnız bilgi bandı istisna", gIhlal.uygulanan.bant?.ton !== "uyari" && gIhlal.uygulanan.bant?.ton !== "tehlike" && gIhlal.uygulananKademe === "NORMAL" && gIhlal.hesaplanan.bant !== null && gIhlal.uygulanan.bantlar.every((x) => x.ton === "bilgi"), ozet(gIhlal));
+  const gUzak = durum({ ...gk, hak: { bakimBitis: msToIso(SIMDI + 31 * DAY_MS) } });
+  check("§12l-K9 karşı: gözlemde pencere dışı → uygulanan etki tam OBSERVE_EFFECT (bant yok)", gUzak.uygulanan === OBSERVE_EFFECT);
+  const gOdeme = durum({ ...kirasiz({ sonKiraSaat: 240, girdi: { sonKiraZorlamasi: false } }) });
+  check("§12m-K9 kapalı küme: gözlemde ek süre bandı (bakım dışı) uygulanmaz", gOdeme.uygulanan.bantlar.length === 0, ozet(gOdeme));
+  check("§12n-K9 küme yalnız bakım bilgi kodları", [...OBSERVE_INFO_BANNER_CODES].sort().join() === "BAKIM_BITIYOR,BAKIM_BITTI");
+  // K6 — çoklu bant
+  const coklu = durum({ ...ihlal, kira: eskiKira(2, -20).kira, saat: eskiKira(2, -20).saat });
+  check("§12o-K6 zorlamada birden çok bant: bantlar şiddete göre azalan, bant = bantlar[0], metinler tekil", coklu.uygulanan.bantlar.length >= 1 && coklu.uygulanan.bant === coklu.uygulanan.bantlar[0] && new Set(coklu.uygulanan.bantlar.map((x) => x.metin)).size === coklu.uygulanan.bantlar.length, JSON.stringify(coklu.uygulanan.bantlar.map((x) => x.ton)));
+  const v2i = v2({ pGun: 20, kiraSaat: 240, vade: 15 });
+  const ikili = durum(Object.assign({}, v2i, { hak: { ...(v2i.hak as object), bakimBitis: msToIso(SIMDI + 10 * DAY_MS) } }));
+  const tonlar = ikili.uygulanan.bantlar.map((x) => x.ton);
+  check("§12p-K6 iki bilgi bandı (ödeme + bakım) birlikte taşınır", tonlar.length >= 2 && ikili.uygulanan.bant === ikili.uygulanan.bantlar[0], JSON.stringify(ikili.uygulanan.bantlar.map((x) => x.metin)));
   const e = durum({ girdi: { derlemeTarihiMs: null } });
   check("§12e derleme tarihi yok → bilgi nedeni, kademe NORMAL", nedenVar(e, "DERLEME_TARIHI_YOK") && e.hesaplananKademe === "NORMAL", ozet(e));
 }

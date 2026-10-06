@@ -159,6 +159,7 @@ import {
   updateProxySettings,
 } from "../src/services/license.service";
 import { buildPollBody, pollLicenseOnce, refreshLicenseDbFacts } from "../src/services/license-sync.service";
+import { currentSignedSkew } from "../src/lib/license/signed-skew";
 import { buildHardwareReportBody, reportHardwareChange } from "../src/services/license-hardware.service";
 import { awaitIntegrityRefreshForTests, refreshLicenseIntegrity } from "../src/services/license-integrity.service";
 import { configureIntegrityForTests, getIntegrityOutcome } from "../src/lib/license/integrity-state";
@@ -679,6 +680,54 @@ async function saatKaymasiBolumu(x: Hazir): Promise<void> {
     "§11h karşı: saat tutarlıya dönünce düzeltmesiz damga kabul → SAAT_KAYIK kalkar",
     r4.outcome === "BASARILI" && x.satici.sayac.zaman === z3 && !s4.nedenler.some((n) => n.kod === "SAAT_KAYIK"),
     `${r4.outcome} ${s4.nedenler.map((n) => n.kod).join(",")}`,
+  );
+  // İmzalı saat sapması (§B-3): canlı yeni kiranın imzalı `sunucuSaati`nden ölçülür; yalnız bilgi, kademeye girmez.
+  const imzOnce = getLicenseSnapshot().state;
+  x.satici.kiraSaatiKaymasiMs = -7 * 60_000;
+  const r5 = await pollLicenseOnce();
+  const s5 = getLicenseSnapshot().state;
+  const imz = currentSignedSkew();
+  check("§11i ⭐ canlı yeni kira imzalı saati 7 dk geride → sapma UYARI ≈ +420 sn", r5.outcome === "BASARILI" && imz.durum === "UYARI" && Math.abs((imz.sapmaSn ?? 0) - 420) <= 5, `${r5.outcome} ${imz.durum} ${imz.sapmaSn}`);
+  check(
+    "§11j ⭐ karşı: imzalı sapma kademe/geçerlilik/nedenlere GİRMEZ",
+    s5.hesaplananKademe === imzOnce.hesaplananKademe && s5.gecerlilik === imzOnce.gecerlilik && s5.nedenler.map((n) => n.kod).join() === imzOnce.nedenler.map((n) => n.kod).join(),
+    `${imzOnce.gecerlilik}/${imzOnce.hesaplananKademe}/${imzOnce.nedenler.map((n) => n.kod).join()} → ${s5.gecerlilik}/${s5.hesaplananKademe}/${s5.nedenler.map((n) => n.kod).join()}`,
+  );
+  const saglikSapma = (licenseHealthBlock().saatSapmasi ?? null) as { durum?: string; sapmaSn?: number } | null;
+  check("§11k sağlık bloğunda saatSapmasi UYARI", saglikSapma?.durum === "UYARI" && Math.abs((saglikSapma.sapmaSn ?? 0) - 420) <= 5, JSON.stringify(saglikSapma));
+  const saatBandiMi = (b: { metin: string }): boolean => b.metin.startsWith("Sunucu saati lisans sunucusunun imzalı saatinden");
+  const durumUcu = getLicenseStatus(true);
+  const saatBandi = durumUcu.ayrinti ? durumUcu.bantlar.find(saatBandiMi) : undefined;
+  check(
+    "§11l ⭐ /durum bantlar[] saat bandını taşır (ayrı alan değil) ve bant = bantlar[0]",
+    !!saatBandi && saatBandi.ton === "bilgi" && saatBandi.metin.includes("7 dk ileride") && durumUcu.ayrinti && durumUcu.bant === durumUcu.bantlar[0] && !("saatSapmasi" in durumUcu),
+    saatBandi?.metin ?? "bant yok",
+  );
+  const sonrakiGovde = await buildPollBody();
+  check("§11m sonraki yoklama gövdesinde saat.imzaliSapmaSn ≈ +420", Math.abs((sonrakiGovde.saat.imzaliSapmaSn ?? 0) - 420) <= 5, String(sonrakiGovde.saat.imzaliSapmaSn));
+  x.satici.kiraSaatiKaymasiMs = -4 * 60_000;
+  await pollLicenseOnce();
+  const imz4 = currentSignedSkew();
+  const durum4 = getLicenseStatus(true);
+  check(
+    "§11n karşı: eşik altı (4 dk) → TUTARLI, saat bandı kalkar, alan yine gider",
+    imz4.durum === "TUTARLI" && Math.abs((imz4.sapmaSn ?? 0) - 240) <= 5 && durum4.ayrinti && !durum4.bantlar.some(saatBandiMi) && (await buildPollBody()).saat.imzaliSapmaSn !== undefined,
+    `${imz4.durum} ${imz4.sapmaSn}`,
+  );
+  x.satici.kiraSaatiKaymasiMs = 0;
+  await pollLicenseOnce();
+  // Taşınmış kira (dosya/QR) ölçmez: imzalı saati geçmiştedir.
+  const tasOnce = currentSignedSkew();
+  const tasKiraOnce = getLicenseSnapshot().lease?.document.kiraId;
+  const tasSimdi = Date.now();
+  const tasKira = kiraBas(x.f, { parmakIzi: currentFingerprintDigest(), zorlama: false, verilis: msToIso(tasSimdi), sunucuSaati: msToIso(tasSimdi - 7 * 60_000) });
+  await acceptOfflineResponse({ v: 1, hak: getLicenseStore()?.entitlementJws ?? hakBas(x.f), kira: tasKira, indirmeBelirtecleri: [], sunucuSaati: msToIso(tasSimdi) }, "aktarma", null);
+  const tasSonra = currentSignedSkew();
+  const tasKiraSonra = getLicenseSnapshot().lease?.document.kiraId;
+  check(
+    "§11o karşı: taşınmış kira imzalı sapmayı ölçmez (ölçüm anı değişmez, TUTARLI kalır)",
+    tasKiraOnce !== tasKiraSonra && tasOnce.olcumAni !== null && tasSonra.olcumAni === tasOnce.olcumAni && tasSonra.durum === "TUTARLI",
+    `kira ${tasKiraOnce?.slice(0, 8)}→${tasKiraSonra?.slice(0, 8)} · ${tasOnce.olcumAni} → ${tasSonra.olcumAni} ${tasSonra.durum}`,
   );
 }
 

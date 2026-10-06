@@ -40,6 +40,11 @@
 //      fail-closed; ön ölçüm + OnKosul aynı işlev) · F3 eski paket TEK girişten (`EskiPaketOlcumu`) ve engel ön ölçüm
 //      SAYFASINDA görünür · F4-B geçişle kurulmuş düzen ayrı sınıf GECISLI (`GecisliDuzen`: geçiş günlüğü + current), DURUR,
 //      yabancı klasör eski mesajla; metin runbook (docs/ops/GECIS-PM2-HIZMET.md §5/§7) ile tutarlı.
+//   §14 saat eşitlemesi (karar 2026-10-02): karar TEK saf işlevde (kurulum-ortak.ps1 SaatEsitlemeKarari; harness §1
+//      `saat.*` vektörleri) — etki alanındaki makineye DOKUNULMAZ, dışında W32Time otomatik + NTP (kayıtlı sunucu korunur);
+//      uygulayıcı (kurulum.ps1 SaatEsitlemesi) PartOfDomain'i ölçer, DOKUNMA'da yazmadan döner, w32tm yalnız NTP_AC'de ve
+//      yalnız orada, sonucu YENİDEN ölçer, kurulamazsa UYARI (DUR değil), önceki ayar durum/kurulum.json'a (onarım ezmez);
+//      /resync · Set-Date yok; kaldırma dokunmaz ve önceki ayarın yerini söyler; sihirbaz özeti söyler.
 // NEGATİF SONDA (✓K, her koşumda): §2–§11 yüklemleri bellekte bozulmuş kopyalara koşar (mutasyonun
 //   UYGULANDIĞI ölçülür); §1 için kurulum-ortak.ps1'in bozulmuş kopyası harness'e verilir (pwsh varsa).
 //   ÜÇ SONUÇ: kaynak okunamazsa ÖLÇÜLEMEDİ (kırmızı), pwsh yoksa §1 ATLANIR (beyanlı, TEKSERP_STRICT'te kırmızı).
@@ -501,6 +506,27 @@ function olc(k: Kaynaklar): Bulgular {
   if (!/ag = \$\(if \(\$d\.PSObject\.Properties\["ag"\]\)/.test(dog)) ekle("§13", "kurulum.json uygulanan ağ ayarını kaydetmiyor (sonraki onarımın kaydı) (F1)");
   const iOnceki = hazir.indexOf("cevap-onceki.json', False)"), iYeni = hazir.indexOf("SaveStringToFile(KurulumCevabi");
   if (iOnceki < 0 || iYeni < 0 || iOnceki > iYeni || !/if \(Onarim or Yarim\) and FileExists\(KurulumCevabi\) then/.test(hazir)) ekle("§13", "setup onarımda önceki cevabı yenisini yazmadan saklamıyor (eski kurulumların tek ağ kaydı) (F1)");
+  // §14 saat eşitlemesi (karar 2026-10-02): etki alanına DOKUNMA, dışında W32Time NTP; saat elle ayarlanmaz
+  const se = psGovde(kur, "SaatEsitlemesi") ?? "";
+  if (!se) ekle("§14", "kurulum.ps1'de SaatEsitlemesi işlevi yok");
+  if (!/\$k = SaatEsitlemeKarari \(\[bool\]\$cs\.PartOfDomain\) /.test(se) || !/Get-CimInstance Win32_ComputerSystem/.test(se)) ekle("§14", "SaatEsitlemesi kararı etki alanı üyeliğini (PartOfDomain) ölçerek vermiyor");
+  const iDokunma = se.indexOf('if ($k.eylem -ceq "DOKUNMA") {'), iDonus = se.indexOf("return", iDokunma), iYaz = se.indexOf("Set-Service");
+  if (iDokunma < 0 || iDonus < 0 || iYaz < 0 || iDonus > iYaz) ekle("§14", "DOKUNMA kararında (etki alanı / zaten NTP) hizmete yazmadan dönmüyor");
+  if (!/if \(\$k\.eylem -ceq "NTP_AC"\) \{\s*\n\s*\$r = NativeKos "w32tm\.exe" @\("\/config", "\/manualpeerlist:\$\(\$k\.sunucu\)", "\/syncfromflags:manual", "\/update"\)/.test(se)) ekle("§14", "w32tm /config yalnız NTP_AC kararında, kararın sunucusuyla koşmuyor");
+  if (!/\$olc = SaatEsitlemeKarari \$false \$son\.tip/.test(se) || !/if \(\$olc\.eylem -ceq "DOKUNMA" -and \$son\.calisiyor\) \{ Ok /.test(se)) ekle("§14", "uygulama sonrası sonuç yeniden ÖLÇÜLMÜYOR (tip + otomatik + çalışıyor)");
+  if (/\bDur\b/.test(se)) ekle("§14", "saat eşitlemesi kurulumu DURDURUYOR (karar: yalnız UYARI)");
+  if (!/if \(-not \$d\.PSObject\.Properties\["saat"\]\) \{/.test(se)) ekle("§14", "onarım ilk kurulumun önceki saat ayarı kaydını eziyor");
+  const iSaatCagri = hiz.indexOf("SaatEsitlemesi $d"), iHizBitti = hiz.indexOf('AsamaBitti $d "Hizmetler"');
+  if (iSaatCagri < 0 || iHizBitti < 0 || iSaatCagri > iHizBitti) ekle("§14", "Hizmetler aşaması SaatEsitlemesi'ni (durum kaydından önce) çağırmıyor");
+  if (!/saat = \$\(if \(\$d\.PSObject\.Properties\["saat"\]\) \{ \$d\.saat \}/.test(dog)) ekle("§14", "kurulum.json saat kaydını (önceki ayar) taşımıyor");
+  // w32tm yalnız SaatEsitlemesi'nde; /resync ve elle saat ayarı hiçbir kurulum betiğinde yok
+  for (const [ad, t] of [["kurulum.ps1", kur], ["kurulum-ortak.ps1", ort], ["kaldir.ps1", kal]] as const)
+    for (const s of kodSatirlari(t))
+      if (/w32tm/i.test(s.kod) && !(ad === "kurulum.ps1" && s.islev === "SaatEsitlemesi")) ekle("§14", `${ad}:${s.no} w32tm SaatEsitlemesi dışında`);
+  for (const ad of ["kurulum", "ortak", "kaldir", "onOlcum"] as const)
+    if (/\/resync|Set-Date|\bSetSystemTime\b|\bSetLocalTime\b/i.test(k[ad].split("\n").filter((l) => !/^\s*#/.test(l)).join("\n"))) ekle("§14", `${YOL[ad]} saati elle ayarlıyor (/resync · Set-Date · SetSystemTime)`);
+  if (/W32Time|w32tm/i.test(kal.satirlar.map((s) => s.kod).join("\n")) || !/saat\.onceki/.test(k.kaldir)) ekle("§14", "kaldırma saat eşitlemesine dokunuyor ya da önceki ayarın yerini söylemiyor (karar: geri alınmaz)");
+  if (!/'Saat eşitlemesi: etki alanına bağlı değilse Windows saati NTP ile otomatik eşitlenir; etki alanındaysa dokunulmaz'/.test(pasGovde(k.iss, "UpdateReadyMemo") ?? "")) ekle("§14", "sihirbaz özeti saat eşitlemesini söylemiyor");
   return b;
 }
 
@@ -523,6 +549,8 @@ const LISANS_KONTROLLERI = ["bos-alan-kanaldan", "uretim-kanali-satir-yazmaz", "
 const KURULU_KONTROLLERI = ["kurulu.yalniz-kayit", "kurulu.gecmisin-SON-satiri", "kurulu.bayat-kayit-yerine-guncelleyici", "kurulu.current-baglantisi", "kurulu.eski-paket-DUR"];
 /** D8e-3b: eski paket tek giriş · geçişli düzen · kanal hizmetinin kökü · ağ ayarı kayıttan. */
 const D8E3B_KONTROLLERI = ["eskipaket.olcum-tek-giris", "gecisli.duzen-tanir", "gecisli.tek-isaret-yetmez-yabanci-eski-mesaj", "ag.kayit-eski-cevaptan", "ag.kayit-oncelik", "ag.kayit-gecersiz-yok-sayilir", "ag.onarim-sessiz-kayit-korunur", "ag.onarim-cevap-uygulanmaz", "ag.yeni-kurulum-cevaptan", "hizmetkok.ayni-kok-gecer", "hizmetkok.baska-kok-durur", "hizmetkok.okunamaz-durur", "hizmetkok.uc-hizmet-olculur"];
+/** Saat eşitlemesi kararı (2026-10-02): etki alanı DOKUNMA · zaten NTP DOKUNMA · hizmet otomatik · kapalı → NTP · önceki kayıtta. */
+const SAAT_KONTROLLERI = ["etki-alani-dokunmaz", "zaten-ntp-dokunmaz", "ntp-hizmet-otomatik", "kapali-ntp-acar", "onceki-kayda-girer"].map((c) => `saat.${c}`);
 const CEVAP_KONTROLLERI = ["ornek-gecerli", "varsayilanlar", "surum-zorunlu", "surum-yanlis", "bilinmeyen-alan", "sir-alan-red", "sir-adi-dar", "tur-sayi", "sayi-aralik", "tur-mantik", "tur-yol", "desen", "secenek-liste", "bos", "sema-sirsiz"];
 function durum(satirlar: string[], ad: string): "OK" | "HATA" | "YOK" {
   if (satirlar.includes(`OK ${ad}`)) return "OK";
@@ -546,7 +574,7 @@ if (eksik.length === 0) {
 
   // §1
   console.log("\n§1 harness — kurulum-ortak.ps1 saf işlevleri gerçek kabukta");
-  if (!pwshVar()) defter.atla("§1 harness", "pwsh 7 yok", CEVAP_KONTROLLERI.length + 7 + KURULU_KONTROLLERI.length + LISANS_KONTROLLERI.length + D8E3B_KONTROLLERI.length);
+  if (!pwshVar()) defter.atla("§1 harness", "pwsh 7 yok", CEVAP_KONTROLLERI.length + 7 + KURULU_KONTROLLERI.length + LISANS_KONTROLLERI.length + D8E3B_KONTROLLERI.length + SAAT_KONTROLLERI.length);
   else {
     const h = harness();
     const vek = JSON.parse(readFileSync(join(KOK, "deploy/pg/pg-sablon-vektorleri.json"), "utf8")) as { port: Array<{ ad: string }> };
@@ -569,10 +597,11 @@ if (eksik.length === 0) {
       ...KURULU_KONTROLLERI,
       ...LISANS_KONTROLLERI,
       ...D8E3B_KONTROLLERI,
+      ...SAAT_KONTROLLERI,
     ];
     if (trAtla) defter.atla("§1 tr-TR kültürü", "pwsh kültür verisi yok (InvariantGlobalization)", CEVAP_KONTROLLERI.length);
     const kotu = beklenen.filter((a) => durum(h.satirlar, a) !== "OK");
-    check(`§1 ⭐ harness: ${beklenen.length} kontrolün HEPSİ OK (cevap şeması iki kültürde · portSec ${vek.port.length} D4 vektörü · .env · JSON · maske · sürüm önceliği ${surumVek.length} güncelleyici vektörü · gerçek kurulu sürüm + eski paket engeli · lisans satıcısı ${LISANS_KONTROLLERI.length} karar vektörü · D8e-3b ${D8E3B_KONTROLLERI.length}: eski paket tek giriş · geçişli düzen · hizmet kökü · ağ kaydı)`, h.kod === 0 && kotu.length === 0,
+    check(`§1 ⭐ harness: ${beklenen.length} kontrolün HEPSİ OK (cevap şeması iki kültürde · portSec ${vek.port.length} D4 vektörü · .env · JSON · maske · sürüm önceliği ${surumVek.length} güncelleyici vektörü · gerçek kurulu sürüm + eski paket engeli · lisans satıcısı ${LISANS_KONTROLLERI.length} karar vektörü · D8e-3b ${D8E3B_KONTROLLERI.length}: eski paket tek giriş · geçişli düzen · hizmet kökü · ağ kaydı · saat eşitlemesi ${SAAT_KONTROLLERI.length})`, h.kod === 0 && kotu.length === 0,
       kotu.length ? kotu.map((a) => `${a}=${durum(h.satirlar, a)}`).join(" · ") : `çıkış ${h.kod}`);
   }
 
@@ -590,6 +619,7 @@ if (eksik.length === 0) {
     ["§11", "sihirbaz deneyimi: ölçüm görünür + açılış hafif · eski paket iki kapıda · onarım metinleri · ölçülen yapılacaklar"],
     ["§12", "lisans satıcısı kanaldan: tek karar işlevi · boş alan = kanal (ön doldurma + özet) · farklı değer UYARI · .env karardan · Dogrulama ölçer"],
     ["§13", "onarım/kurulum güvenliği (D8e-3b): F1 ağ ayarı kayıttan (ön doldurma · özet etkili · OnKosul korur · kural karardan · önceki cevap saklanır) · F2 başka köke bağlı / ölçülemeyen kanal hizmeti engel+DUR · F3 eski paket tek giriş + sayfada engel · F4-B geçişli düzen GECISLI, DUR"],
+    ["§14", "saat eşitlemesi: etki alanına dokunmaz · dışında W32Time NTP + otomatik · w32tm yalnız NTP_AC · sonuç yeniden ölçülür · UYARI, DUR değil · önceki ayar kayıtta · /resync yok · kaldırma dokunmaz · özet söyler"],
   ];
   console.log("");
   for (const [bolum, ne] of BOLUMLER) check(`${bolum} ⭐ ${ne}`, !(b[bolum]?.length), (b[bolum] ?? []).join(" · "));
@@ -662,6 +692,15 @@ if (eksik.length === 0) {
     { ad: "S64 F4-B OnKosul geçişli düzeni yabancı sayıyor", dosya: "kurulum", eski: "    if ($gd) { Dur $gd.metin }\n", yeni: "", bolum: "§13", parca: "geçişle kurulmuş düzeni tanımadan" },
     { ad: "S65 F4-B ön ölçüm geçişli düzeni tanımıyor", dosya: "onOlcum", eski: "      $gd = GecisliDuzen $kok\n", yeni: "      $gd = $null\n", bolum: "§13", parca: "geçişli düzeni tanımıyor" },
     { ad: "S66 F4-B sihirbaz geçişli engelini göstermiyor", dosya: "iss", eski: "  if Gecisli then\n    Result := Result + '- Bu klasör pm2", yeni: "  if False then\n    Result := Result + '- Bu klasör pm2", bolum: "§13", parca: "engel olarak göstermiyor" },
+    { ad: "S67 saat: PartOfDomain ölçülmeden karar", dosya: "kurulum", eski: "$k = SaatEsitlemeKarari ([bool]$cs.PartOfDomain) ", yeni: "$k = SaatEsitlemeKarari $false ", bolum: "§14", parca: "PartOfDomain" },
+    { ad: "S68 saat: DOKUNMA kararında hizmete yazılıyor", dosya: "kurulum", eski: "    else { Ok \"saat: Windows Time zaten NTP ile esitliyor ($($k.sunucu)) - DOKUNULMADI\" }\n    return\n", yeni: "    else { Ok \"saat: Windows Time zaten NTP ile esitliyor ($($k.sunucu)) - DOKUNULMADI\" }\n", bolum: "§14", parca: "yazmadan dönmüyor" },
+    { ad: "S69 saat: w32tm NTP_AC kapısı dışında", dosya: "kurulum", eski: "if ($k.eylem -ceq \"NTP_AC\") {", yeni: "if ($true) {", bolum: "§14", parca: "yalnız NTP_AC" },
+    { ad: "S70 saat: sonuç yeniden ölçülmüyor", dosya: "kurulum", eski: "$olc = SaatEsitlemeKarari $false $son.tip", yeni: "$olc = $k; $null = $son.tip", bolum: "§14", parca: "yeniden ÖLÇÜLMÜYOR" },
+    { ad: "S71 saat: Hizmetler çağırmıyor", dosya: "kurulum", eski: "  SaatEsitlemesi $d\n", yeni: "", bolum: "§14", parca: "çağırmıyor" },
+    { ad: "S72 saat: kurulum /resync ile saati zorluyor", dosya: "kurulum", eski: "\"/syncfromflags:manual\", \"/update\")", yeni: "\"/syncfromflags:manual\", \"/update\"); NativeKos \"w32tm.exe\" @(\"/resync\")", bolum: "§14", parca: "saati elle ayarlıyor" },
+    { ad: "S73 saat: kaldırma eşitlemeyi kapatıyor", dosya: "kaldir", eski: "  # 4) Korunanlar - adlariyla.\n", yeni: "  Set-Service -Name W32Time -StartupType Manual\n  # 4) Korunanlar - adlariyla.\n", bolum: "§14", parca: "kaldırma saat eşitlemesine dokunuyor" },
+    { ad: "S74 saat: onarım önceki ayar kaydını eziyor", dosya: "kurulum", eski: "if (-not $d.PSObject.Properties[\"saat\"]) {", yeni: "if ($true) {", bolum: "§14", parca: "eziyor" },
+    { ad: "S75 saat: sihirbaz özeti söylemiyor", dosya: "iss", eski: "  S := S + 'Saat eşitlemesi:", yeni: "  S := S + 'Saat:", bolum: "§14", parca: "özeti saat" },
     { ad: "S21 CI boru sonucunu ölçmüyor", dosya: "is", eski: `if ($r -notmatch "(?m)^BORU=TAMAM\\r?$")`, yeni: `if ($false)`, bolum: "§9", parca: "boru öz-sınaması" },
     { ad: "S22 CI test çapalı doğrulayıcıyı kabul ediyor", dosya: "is", eski: `$k.testCapasi -ne $false`, yeni: `$false`, bolum: "§9", parca: "doğrulayıcı üretim derlemesi" },
   ];
@@ -702,6 +741,10 @@ if (eksik.length === 0) {
       { ad: "H20 F2 önek tuzağı (C:\\TeksERP ⊂ C:\\TeksERP-testfabrika)", eski: '$y.StartsWith($k + "\\", [StringComparison]::Ordinal)', yeni: "$y.StartsWith($k, [StringComparison]::Ordinal)", kontrol: "hizmetkok.baska-kok-durur" },
       { ad: "H21 F3 tek giriş eski paketi sınıflamıyor", eski: '  if ($e) { $s = $(if ((SurumKarsilastir $ku.surum $paketSurum) -eq 1)', yeni: '  if ($false) { $s = $(if ((SurumKarsilastir $ku.surum $paketSurum) -eq 1)', kontrol: "eskipaket.olcum-tek-giris" },
       { ad: "H22 F4-B tek işaret (yalnız geçiş günlüğü) GECISLI sayılıyor", eski: '  if (-not (ReparseMi (Join-Path $kok "current"))) { return $null }', yeni: "", kontrol: "gecisli.tek-isaret-yetmez-yabanci-eski-mesaj" },
+      { ad: "H23 saat: etki alanındaki makineye dokunuluyor", eski: "  if ($etkiAlaninda) { return", yeni: "  if ($false) { return", kontrol: "saat.etki-alani-dokunmaz" },
+      { ad: "H24 saat: kayıtlı NTP sunucusu ezilip varsayılana dönülüyor", eski: "$sunucu = $(if ($onceki.ntpSunucu) { $onceki.ntpSunucu } else", yeni: "$sunucu = $(if ($false) { $onceki.ntpSunucu } else", kontrol: "saat.kapali-ntp-acar" },
+      { ad: "H25 saat: zaten NTP olan makine yeniden yapılandırılıyor", eski: "  if ($esitler -and $otomatik) { return", yeni: "  if ($false) { return", kontrol: "saat.zaten-ntp-dokunmaz" },
+      { ad: "H26 saat: yalnız hizmeti elle başlayan NTP makinesi açılmıyor", eski: "  if ($esitler) { return [ordered]@{ eylem = \"HIZMET_OTOMATIK\"", yeni: "  if ($esitler) { return [ordered]@{ eylem = \"DOKUNMA\"", kontrol: "saat.ntp-hizmet-otomatik" },
       { ad: "H11 eski paket engeli düştü (yeni kurulu sürüme eski paket)", eski: "  if ($c -gt 0) { return \"bu kokte kurulu surum", yeni: "  if ($c -gt 1) { return \"bu kokte kurulu surum", kontrol: "kurulu.eski-paket-DUR" },
     ];
     // Ham dosya (CRLF çıkışında da): desenler TEK satırlık olmalı — "\n" içeren desen CRLF ağaçta bayat görünür.
@@ -731,7 +774,7 @@ if (eksik.length === 0) {
     } finally {
       rmSync(dizin, { recursive: true, force: true });
     }
-  } else defter.atla("✓K harness sondaları", "pwsh 7 yok", 23);
+  } else defter.atla("✓K harness sondaları", "pwsh 7 yok", 27);
 }
 
 console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız${defter.ozetEki()} ===`);

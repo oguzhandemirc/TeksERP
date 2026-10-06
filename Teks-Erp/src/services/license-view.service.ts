@@ -35,6 +35,7 @@ import type { FactorReport } from "../lib/license/fingerprint";
 import { integritySection } from "./helpers/license-integrity-view.helper";
 import { chainSection, type LicenseChainView } from "./helpers/license-chain-view.helper";
 import type { IntegrityStatus } from "../lib/license/state-rules";
+import { bannerFields } from "../lib/license/process-banners";
 
 // ── Durum özeti (herkes) ────────────────────────────────────────────────────────
 export interface LicenseStatusSummary {
@@ -42,7 +43,10 @@ export interface LicenseStatusSummary {
   readonly kip: LicenseMode;
   /** UYGULANAN kademe — gözlemde daima NORMAL (sıfır fark). */
   readonly kademe: StateTier;
+  /** Tek bant (eski istemci): en şiddetli = `bantlar[0]`. */
   readonly bant: Banner | null;
+  /** Tüm bantlar (şiddete göre azalan; lisans + `PROCESS_INFO_BANNERS`); yeni panel tek alanda sırayla döndürür. */
+  readonly bantlar: readonly Banner[];
   /** Yalnız uygulanan kademe EK_SURE iken dolu. */
   readonly ekSureKalanGun: number | null;
   /** Yalnız zorlamada (K3 geri sayımı) dolu. */
@@ -65,7 +69,7 @@ export function getLicenseStatus(authenticated: boolean): LicenseStatusResponse 
     ayrinti: true,
     kip: s.kip,
     kademe: s.uygulananKademe,
-    bant: s.uygulanan.bant,
+    ...bannerFields(s.uygulanan.bantlar),
     ekSureKalanGun: s.uygulananKademe === "EK_SURE" ? s.ekSureKalanGun : null,
     kisitlamaKalanGun: s.kip === "zorla" ? s.kisitlamaKalanGun : null,
     guncellemeIzni: s.uygulanan.guncellemeIzni,
