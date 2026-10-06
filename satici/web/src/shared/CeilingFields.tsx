@@ -4,6 +4,7 @@
 import { CLASS_LABEL, MODULE_LABEL, label } from "./labels";
 import type { Ceiling, Channel } from "./types";
 import { Field } from "./ui";
+import { selectableGroups } from "./update-groups";
 
 export interface CeilingDraft {
   readonly modules: string[];
@@ -50,7 +51,7 @@ export function ceilingBody(d: CeilingDraft): Record<string, unknown> {
 export function ceilingSummary(c: Ceiling | null): string {
   if (!c) return "Tavan yok";
   const parts = [`${c.kurulumAdedi} kurulum`, c.siniflar.map((s) => label(CLASS_LABEL, s)).join(", "), `${c.moduller.length} modül`];
-  parts.push(c.kanallar.length ? `kanal: ${c.kanallar.join(", ")}` : "kanal yok");
+  parts.push(c.kanallar.length ? `grup: ${c.kanallar.join(", ")}` : "grup yok");
   parts.push(c.kaliciIzni ? "kalıcı izni var" : "kalıcı izni yok");
   parts.push(`bakım ≤ ${c.bakimAyTavani} ay`);
   return parts.join(" · ");
@@ -74,6 +75,9 @@ export function CeilingFields({
   channels: readonly Channel[];
 }) {
   const set = (patch: Partial<CeilingDraft>) => onChange({ ...draft, ...patch });
+  // Tavana yalnız aktif grup yazılır (sunucu reddeder); tavanda kalmış emekli kanal kaldırılabilsin diye görünür.
+  const groups = selectableGroups(channels);
+  const visible = channels.filter((c) => groups.includes(c.kod) || draft.channels.includes(c.kod));
   return (
     <>
       <div className="field">
@@ -102,13 +106,13 @@ export function CeilingFields({
         <input type="number" min={0} max={100000} value={draft.count} onChange={(e) => set({ count: e.target.value })} />
       </Field>
       <div className="field">
-        <span className="field-label">Kanallar (bayi yalnız bunlarda kurulum açar; boş = açamaz)</span>
-        {channels.length === 0 ? <span className="field-hint">Kanal kataloğu boş: önce Kanallar ekranında kanal açın.</span> : null}
+        <span className="field-label">Güncelleme grupları (bayi yalnız bunlarda kurulum açar; boş = açamaz)</span>
+        {groups.length === 0 ? <span className="field-hint">Aktif güncelleme grubu yok (satıcı sunucusu migration'ı uygulanmamış olabilir).</span> : null}
         <div className="checks">
-          {channels.map((c) => (
+          {visible.map((c) => (
             <label key={c.kod} className="check">
               <input type="checkbox" checked={draft.channels.includes(c.kod)} onChange={() => set({ channels: toggle(draft.channels, c.kod) })} />
-              {c.ad} ({c.kod})
+              {c.ad} ({c.kod}){groups.includes(c.kod) ? "" : " — emekli kanal, kaldırın"}
             </label>
           ))}
         </div>

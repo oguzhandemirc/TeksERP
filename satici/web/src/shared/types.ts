@@ -405,13 +405,17 @@ export interface ChannelVersions {
   readonly tablet?: string;
 }
 
-/** Dağıtım kanalı (GET /kanallar). `kod` kimliktir, değişmez. */
+/** Güncelleme grubu satırı (GET /kanallar; eski adıyla kanal). `kod` kimliktir, değişmez. */
 export interface Channel {
   readonly id: string;
   readonly kod: string;
   readonly ad: string;
   readonly tur: ChannelKind;
   readonly guncelSurumler: ChannelVersions;
+  /** Terfi sırası (test 1 · oncu 2 · genel 3); emekli satırda null. */
+  readonly sira: number | null;
+  /** false = emekli kanal: yeni kurulum almaz, indirme belirteci basmaz, kira sürer. */
+  readonly aktif: boolean;
   readonly kurulumSayisi: number;
   readonly createdAt: string;
   readonly updatedAt: string;

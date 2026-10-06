@@ -1,7 +1,7 @@
-// SÜRÜMLER / KANALLAR / TERFİ — kanal başına: kiraya akan kayıtlı güncel sürümler · güncelleme sunucusunda
+// SÜRÜMLER / GÜNCELLEME GRUPLARI / TERFİ — grup (ve emekli kanal) başına: kiraya akan kayıtlı güncel sürümler · güncelleme sunucusunda
 // YAYINDA olan (salt-okunur yayın kökü: latest.yml · OTA manifesti · APK künyesi) · yayın defteri TSV ·
 // yayın betiklerinin imzalı bildirimleri. Yayın kökü okunamazsa "ölçülemedi" — boş liste "yayın yok" değildir.
-// Bildirim kayıtlı sürümü DEĞİŞTİRMEZ; ayrışma burada görünür, kayıtlı sürümü Kanallar ekranı değiştirir.
+// Bildirim kayıtlı sürümü DEĞİŞTİRMEZ; ayrışma burada görünür, kayıtlı sürümü Güncelleme grupları ekranı değiştirir.
 import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useWrite } from "../../shared/attempt";
@@ -11,7 +11,8 @@ import { useGet } from "../../shared/hooks";
 import { label } from "../../shared/labels";
 import { useApi, useCan } from "../../shared/session";
 import { Badge, Button, ErrorText, Field, Modal, ModalActions, PageTitle, QueryState, Section, Table } from "../../shared/ui";
-import { NOTICE_EVENT_LABEL, type ChannelRelease, type Publisher, type ReleaseOverview } from "../distribution/types";
+import { groupName } from "../../shared/update-groups";
+import { NOTICE_EVENT_LABEL, type ChannelRelease, type LedgerRow, type Publisher, type ReleaseOverview } from "../distribution/types";
 
 export const ROOT_STATE_TEXT: Record<ReleaseOverview["yayinKoku"], string> = {
   OLCULDU: "Yayın kökü okundu",
@@ -48,16 +49,23 @@ export function ReleasesPage() {
   const selected = data?.kanallar.find((c) => c.kod === open) ?? null;
   return (
     <>
-      <PageTitle title="Sürümler" sub="Kanal başına kayıtlı güncel sürüm, yayında olan ve yayın/terfi bildirimleri." />
+      <PageTitle title="Sürümler" sub="Güncelleme grubu başına kayıtlı güncel sürüm, yayında olan ve yayın/terfi bildirimleri." />
       <QueryState isLoading={overview.isLoading} error={overview.error} />
       {data ? (
-        <Section title="Kanallar" actions={<Badge tone={data.yayinKoku === "OLCULDU" ? "ok" : "warn"}>{ROOT_STATE_TEXT[data.yayinKoku]}</Badge>}>
+        <Section title="Güncelleme grupları" actions={<Badge tone={data.yayinKoku === "OLCULDU" ? "ok" : "warn"}>{ROOT_STATE_TEXT[data.yayinKoku]}</Badge>}>
           <Table
             rows={data.kanallar}
             rowKey={(c) => c.kod}
-            empty="Kanal yok"
+            empty="Güncelleme grubu yok"
             columns={[
-              { header: "Kanal", render: (c) => `${c.kod}${c.kayitli ? ` (${c.kayitli.tur})` : ""}` },
+              {
+                header: "Grup",
+                render: (c) => (
+                  <>
+                    {groupName(c.kod)} {c.grup ? null : <Badge tone="warn">{c.kayitli ? "Emekli kanal" : "Kayıtsız dizin"}</Badge>}
+                  </>
+                ),
+              },
               { header: "Kayıtlı (kiraya akan)", render: registered },
               { header: "Yayında", render: published },
               { header: "Son bildirim", render: lastNotice },
@@ -72,24 +80,32 @@ export function ReleasesPage() {
   );
 }
 
+function LedgerSection({ title, rows }: { title: string; rows: readonly LedgerRow[] | null }) {
+  return (
+    <Section title={title}>
+      {rows === null ? <p className="muted">Yayın defteri ölçülemedi (kök bağlı değil ya da dosya yok).</p> : null}
+      <Table
+        rows={rows ?? []}
+        rowKey={(r) => `${r.zaman}-${r.sha16}`}
+        empty="Defter satırı yok"
+        columns={[
+          { header: "Zaman", render: (r) => r.zaman },
+          { header: "Sürüm", render: (r) => r.surum },
+          { header: "Yapan", render: (r) => r.yapan },
+          { header: "Özet", render: (r) => r.sha16 },
+          { header: "Not", render: (r) => r.not ?? "" },
+        ]}
+      />
+    </Section>
+  );
+}
+
 function ChannelDetail({ channel }: { channel: ChannelRelease }) {
   return (
     <>
-      <Section title={`${channel.kod} — yayın defteri (son satırlar)`}>
-        {channel.defter === null ? <p className="muted">Yayın defteri ölçülemedi (kök bağlı değil ya da dosya yok).</p> : null}
-        <Table
-          rows={channel.defter ?? []}
-          rowKey={(r) => `${r.zaman}-${r.sha16}`}
-          empty="Defter satırı yok"
-          columns={[
-            { header: "Zaman", render: (r) => r.zaman },
-            { header: "Sürüm", render: (r) => r.surum },
-            { header: "Yapan", render: (r) => r.yapan },
-            { header: "Özet", render: (r) => r.sha16 },
-            { header: "Not", render: (r) => r.not ?? "" },
-          ]}
-        />
-      </Section>
+      <LedgerSection title={`${channel.kod} — panel yayın defteri (son satırlar)`} rows={channel.defter} />
+      {channel.grup ? <LedgerSection title={`${channel.kod} — tablet yayın defteri (son satırlar)`} rows={channel.defterTablet} /> : null}
+      <LedgerSection title={`${channel.kod} — backend yayın defteri (son satırlar)`} rows={channel.defterBackend} />
       <Section title={`${channel.kod} — bildirimler`}>
         <Table
           rows={channel.bildirimler}

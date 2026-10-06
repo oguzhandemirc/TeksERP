@@ -7,6 +7,7 @@ import { ConfirmAction } from "../../shared/ConfirmAction";
 import { EntitlementPanel } from "../../shared/EntitlementPanel";
 import { fmtDateTime } from "../../shared/format";
 import { InstallationFormModal } from "../../shared/forms";
+import { groupName, selectableGroups } from "../../shared/update-groups";
 import { useChannels, useGet } from "../../shared/hooks";
 import { CLASS_LABEL, INSTALLATION_STATUS_LABEL, label } from "../../shared/labels";
 import { useApi, useCan } from "../../shared/session";
@@ -92,7 +93,7 @@ export function InstallationDetailPage() {
             ["Lisans kimliği (kurulumId)", <code key="k">{inst.kurulumId}</code>],
             ["Durum", <Badge key="d" tone={statusTone(inst.durum)}>{label(INSTALLATION_STATUS_LABEL, inst.durum)}</Badge>],
             ["Sınıf", label(CLASS_LABEL, inst.sinif)],
-            ["Kanal", inst.kanalKodu],
+            ["Güncelleme grubu", groupName(inst.kanalKodu)],
             ["Kip", inst.zorlama ? "Zorla" : "Gözlem"],
             ["Kayıt", inst.aktif ? "Aktif" : "Pasif"],
             ["Etkinleşme", fmtDateTime(inst.etkinlesmeZamani)],
@@ -157,8 +158,8 @@ export function InstallationDetailPage() {
           classes={catalog.data.siniflar}
           installation={inst}
           allowPollInterval
-          channelOptions={channels.channels.map((c) => c.kod)}
-          noChannelText="Kayıtlı kanal yok: önce Kanallar ekranında kanal açın (yönetici)."
+          channelOptions={selectableGroups(channels.channels)}
+          noChannelText="Aktif güncelleme grubu yok: satıcı sunucusunun migration'ı uygulanmamış olabilir (yönetici)."
           onClose={() => setDialog(null)}
           onSaved={refresh}
         />

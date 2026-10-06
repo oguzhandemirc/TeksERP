@@ -60,7 +60,7 @@ export function BayiInstallationsPage() {
           classes={tavan.siniflar}
           allowPollInterval={false}
           channelOptions={tavan.kanallar}
-          noChannelText="Tavanınızda kanal yok: kurulum açmak için satıcıdan kanal ataması isteyin."
+          noChannelText="Tavanınızda güncelleme grubu yok: kurulum açmak için satıcıdan grup ataması isteyin."
           onClose={() => setParam("yeni", null)}
           onSaved={(i) => {
             void queryClient.invalidateQueries({ queryKey: ["kurulumlar"] });

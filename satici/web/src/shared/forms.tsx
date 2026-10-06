@@ -8,6 +8,7 @@ import { dateInputToIso, fmtDate, isoToDateInput } from "./format";
 import { CLASS_LABEL, MODULE_LABEL, PRODUCTION_MODULE_KEY, label } from "./labels";
 import { OnceSecretModal } from "./OnceSecret";
 import { useApi, useCan } from "./session";
+import { defaultGroupFor, groupName } from "./update-groups";
 import { isValidityEndRequired } from "./validity";
 import type { ActivationCodeCreated, Customer, EntitlementSummary, Installation, Ref, Site } from "./types";
 import { Button, ErrorText, Field, Modal, ModalActions } from "./ui";
@@ -174,9 +175,9 @@ export function InstallationFormModal({
   installation?: Installation;
   /** Yoklama aralığı yalnız satıcıda. */
   allowPollInterval: boolean;
-  /** Seçilebilir kanal kodları (satıcıda kanal kataloğu, bayide tavandaki kanallar). */
+  /** Seçilebilir güncelleme grupları (satıcıda aktif gruplar, bayide tavandaki gruplar). */
   channelOptions: readonly string[];
-  /** Seçilebilir kanal yokken gösterilen yönlendirme. */
+  /** Seçilebilir grup yokken gösterilen yönlendirme. */
   noChannelText: string;
   onClose: () => void;
   onSaved: (i: Installation) => void;
@@ -189,14 +190,21 @@ export function InstallationFormModal({
   const [sync, setSync] = useState(String(installation?.esitlemeAraligiDk ?? SYNC_MINUTES_DEFAULT));
   const [retention, setRetention] = useState(retentionValue(installation ? installation.bulutSaklamaAy : CLOUD_RETENTION_DEFAULT));
   const write = useWrite<Installation>((body) => (installation ? api.patch(`/kurulumlar/${installation.id}`, body) : api.post("/kurulumlar", body)));
-  // Düzenlenen kurulumun bugünkü kanalı listede olmasa da (ör. bayi tavanından çıkmış) seçili görünür.
-  const channelChoices = installation && !channelOptions.includes(installation.kanalKodu) ? [installation.kanalKodu, ...channelOptions] : channelOptions;
+  // Düzenlenen kurulumun bugünkü grubu listede olmasa da (emekli kanal ya da tavandan çıkmış) seçili görünür.
+  const currentRetired = installation !== undefined && !channelOptions.includes(installation.kanalKodu);
+  const channelChoices = installation && currentRetired ? [installation.kanalKodu, ...channelOptions] : channelOptions;
+  const groupChanged = installation !== undefined && channel !== installation.kanalKodu;
   const submit = async () => {
-    const body: Record<string, unknown> = { kanalKodu: channel.trim(), ad: name.trim() || null };
+    // Boş grup gönderilmez (sunucu sınıftan seçer); düzenlemede grup yalnız değiştiyse gider.
+    const body: Record<string, unknown> = { ad: name.trim() || null };
     if (!installation) {
       body.tesisId = siteId;
       body.sinif = cls;
-    } else if (cls !== installation.sinif) body.sinif = cls;
+      if (channel) body.kanalKodu = channel;
+    } else {
+      if (cls !== installation.sinif) body.sinif = cls;
+      if (groupChanged) body.kanalKodu = channel;
+    }
     if (allowPollInterval) {
       body.yoklamaAraligiDk = Number(poll);
       body.esitlemeAraligiDk = Number(sync);
@@ -217,17 +225,21 @@ export function InstallationFormModal({
           ))}
         </select>
       </Field>
-      <Field label="Kanal" hint="Güncelleme kanalı; yalnız kayıtlı kanal seçilir (kurulum kanala bağlıdır).">
+      <Field label="Güncelleme grubu" hint="Kurulum hangi sürümleri hangi sırayla alır (test → öncü → genel).">
         <select value={channel} onChange={(e) => setChannel(e.target.value)}>
-          <option value="">— Kanal seçin —</option>
+          {installation ? null : <option value="">Sınıftan: {groupName(defaultGroupFor(cls))}</option>}
           {channelChoices.map((c) => (
             <option key={c} value={c}>
-              {c}
+              {groupName(c)}
+              {installation && currentRetired && c === installation.kanalKodu ? " — emekli kanal" : ""}
             </option>
           ))}
         </select>
       </Field>
       {channelOptions.length === 0 ? <p className="error">{noChannelText}</p> : null}
+      {groupChanged ? (
+        <p className="field-hint">Geri sürüm yok: kurulum daha geride bir gruba alınırsa o grup kurulumun sürümüne yetişene dek güncelleme almaz; sonraki yoklamada yeni grup kiraya geçer.</p>
+      ) : null}
       <Field label="Ad (isteğe bağlı)">
         <input value={name} maxLength={200} onChange={(e) => setName(e.target.value)} />
       </Field>
@@ -257,7 +269,7 @@ export function InstallationFormModal({
         <Button onClick={onClose} disabled={write.pending}>
           Vazgeç
         </Button>
-        <Button variant="primary" onClick={submit} disabled={write.pending || !channel.trim()}>
+        <Button variant="primary" onClick={submit} disabled={write.pending}>
           Kaydet
         </Button>
       </ModalActions>

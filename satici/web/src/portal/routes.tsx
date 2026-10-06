@@ -40,7 +40,7 @@ export const PORTAL_NAV: readonly NavItem[] = [
   { to: "/destek", label: "Destek kutusu", permission: "portal:oku" },
   { to: "/bildirimler", label: "Bildirimler", permission: "bildirim:oku" },
   { to: "/bayiler", label: "Bayiler", permission: "portal:oku" },
-  { to: "/kanallar", label: "Kanallar", permission: "portal:oku" },
+  { to: "/kanallar", label: "Güncelleme grupları", permission: "portal:oku" },
   { to: "/surumler", label: "Sürümler", permission: "portal:oku" },
   { to: "/filo", label: "Filo", permission: "portal:oku" },
   { to: "/bakim-bitecek", label: "Bakım bitişleri", permission: "portal:oku" },

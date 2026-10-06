@@ -45,7 +45,8 @@ import {
 import { PORTAL_PERMISSIONS } from "../shared/permissions";
 import { HEAVY_K3_MIN_DAYS, INSTALLMENT_DEFAULT_RESTRICTION_DAYS } from "../shared/sanctions";
 import { VALIDITY_END_REQUIRED_CLASSES } from "../shared/validity";
-import { CHANNEL_CODE_PATTERN, CHANNEL_KIND_LABEL, VERSION_PATTERN } from "../portal/pages/Channels";
+import { CHANNEL_KIND_LABEL, ORDER_MAX, ORDER_MIN, VERSION_PATTERN } from "../portal/pages/Channels";
+import { UPDATE_GROUP_LABEL, defaultGroupFor } from "../shared/update-groups";
 import { CLOUD_RETENTION_DEFAULT, CLOUD_RETENTION_MONTHS, SYNC_MINUTES_DEFAULT, SYNC_MINUTES_MAX, SYNC_MINUTES_MIN } from "../shared/cloud-settings";
 import { ACCEPTANCE_EVENT } from "../portal/installation/AcceptancePanel";
 import {
@@ -224,10 +225,25 @@ describe("katalog ekran adları", () => {
     expect(Object.keys(CHANNEL_HEALTH_LABEL).filter((k) => !states.includes(k))).toEqual([]);
   });
 
-  it("her kanal türünün ekran adı var", () => {
-    const kinds = listStrings(read("services/channel.service.ts"), "export const CHANNEL_KINDS");
-    expect(kinds.length).toBeGreaterThan(0);
-    expect(kinds.filter((k) => !(k in CHANNEL_KIND_LABEL))).toEqual([]);
+  it("her kanal türünün ekran adı var (Prisma KanalTuru, iki yönlü)", () => {
+    twoWay(prismaEnum("KanalTuru"), CHANNEL_KIND_LABEL);
+  });
+
+  it("güncelleme grupları sunucu UPDATE_GROUPS ile aynı küme ve aynı terfi sırası (channel.service.ts)", () => {
+    const groups = listStrings(read("services/channel.service.ts"), "export const UPDATE_GROUPS");
+    expect(groups.length).toBeGreaterThan(1);
+    expect(Object.keys(UPDATE_GROUP_LABEL)).toEqual(groups);
+  });
+
+  it("K-3 varsayılan grup sunucu defaultGroupFor ile aynı; sıra sınırı cleanOrder ile aynı", () => {
+    const src = read("services/channel.service.ts");
+    const m = /export function defaultGroupFor\([^)]*\)[^{]*\{\s*return licenseClass === "([A-Z]+)" \? "([a-z]+)" : "([a-z]+)";/.exec(src);
+    expect(m, "defaultGroupFor gövdesi beklenen biçimde değil").not.toBeNull();
+    const [, cls, special, other] = m!;
+    for (const c of prismaEnum("LisansSinifi")) expect(defaultGroupFor(c)).toBe(c === cls ? special : other);
+    const o = /order < (\d+) \|\| order > (\d+)/.exec(src);
+    expect(o, "cleanOrder sınırı bulunamadı").not.toBeNull();
+    expect([ORDER_MIN, ORDER_MAX]).toEqual([Number(o![1]), Number(o![2])]);
   });
 });
 
@@ -392,9 +408,8 @@ describe("eşikler ve biçim desenleri aynası", () => {
     expect(ACCEPTANCE_EVENT).toBe(m![1]);
   });
 
-  it("kanal kodu ve sürüm metni desenleri (lisans-protokol/belgeler.ts)", () => {
+  it("sürüm metni deseni (lisans-protokol/belgeler.ts)", () => {
     const src = read("lisans-protokol/belgeler.ts");
-    expect(CHANNEL_CODE_PATTERN.source).toBe(schemaRegex(src, "ChannelCodeSchema"));
     expect(VERSION_PATTERN.source).toBe(schemaRegex(src, "VersionTextSchema"));
   });
 });

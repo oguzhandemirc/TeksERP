@@ -1,6 +1,7 @@
-// KANALLAR — dağıtım kanalı ana verisi (kod · ad · tür · güncel sürümler). Kurulum kanala bağlıdır
-// ve bayi tavanı kanal listesi taşır; `kod` kimliktir, açıldıktan sonra DEĞİŞMEZ (indirme yolunun
-// öneki). Güncel sürümler kiraya gider; fabrika bir sonraki yoklamada görür. Yazma yalnız yönetici.
+// GÜNCELLEME GRUPLARI (eski adıyla kanal) — satıcının `kanal` satırı: test · oncu · genel, terfi sırasıyla.
+// Gruplar migration'la doğar, portaldan AÇILMAZ; kod ve tür değişmez. Düzenlenen: ad · sıra · güncel sürümler
+// (kiraya gider; fabrika bir sonraki yoklamada görür). Grup olmayan eski satır EMEKLİdir: yeni kurulum almaz,
+// indirme belirteci basmaz, kirası sürer. Yazma yalnız yönetici (kanal:yonet).
 import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useWrite } from "../../shared/attempt";
@@ -8,12 +9,14 @@ import { fmtDate } from "../../shared/format";
 import { useChannels } from "../../shared/hooks";
 import { useApi, useCan } from "../../shared/session";
 import type { Channel, ChannelKind, ChannelVersions } from "../../shared/types";
+import { groupName } from "../../shared/update-groups";
 import { Badge, Button, ErrorText, Field, Modal, ModalActions, PageTitle, QueryState, Section, Table } from "../../shared/ui";
 
-/** Sunucunun `ChannelCodeSchema`sı (lisans-protokol/belgeler.ts) — ayna bekçisi: mirrors.test.ts. */
-export const CHANNEL_CODE_PATTERN = /^[a-z0-9][a-z0-9-]{0,39}$/;
 /** Sunucunun `VersionTextSchema`sı (X.Y.Z, isteğe bağlı ön sürüm eki). */
 export const VERSION_PATTERN = /^\d{1,4}\.\d{1,4}\.\d{1,6}([-+][0-9A-Za-z.-]{1,40})?$/;
+/** Sunucunun `cleanOrder` sınırı (1–99 tam sayı; boş = sırasız). */
+export const ORDER_MIN = 1;
+export const ORDER_MAX = 99;
 
 export const CHANNEL_KIND_LABEL: Record<ChannelKind, string> = { uretim: "Üretim", hazirlik: "Hazırlık" };
 const PRODUCTS = [
@@ -27,89 +30,76 @@ function versionsSummary(v: ChannelVersions): string {
   return parts.length ? parts.join(" · ") : "—";
 }
 
-type Dialog = { kind: "create" } | { kind: "edit"; channel: Channel } | null;
-
 export function ChannelsPage() {
   const canManage = useCan("kanal:yonet");
   const queryClient = useQueryClient();
   const list = useChannels();
-  const [dialog, setDialog] = useState<Dialog>(null);
+  const [editing, setEditing] = useState<Channel | null>(null);
   const done = () => {
-    setDialog(null);
+    setEditing(null);
     void queryClient.invalidateQueries({ queryKey: ["kanallar"] });
   };
   return (
     <>
       <PageTitle
-        title="Kanallar"
-        sub="Kurulum yalnız kayıtlı kanalda açılır; bayi yalnız tavanındaki kanallarda kurulum açar."
-        actions={canManage ? <Button variant="primary" onClick={() => setDialog({ kind: "create" })}>Yeni kanal</Button> : null}
+        title="Güncelleme grupları"
+        sub="Kurulum bir güncelleme grubuna bağlıdır (test → öncü → genel); grup açılmaz, yalnız adı, sırası ve güncel sürümleri düzenlenir. Emekli kanal yeni kurulum almaz ve indirme bağlantısı vermez."
       />
       <Section title="Liste">
         <QueryState isLoading={list.isLoading} error={list.error} />
         <Table
           rows={list.channels}
           rowKey={(r) => r.id}
-          empty="Kanal yok — kurulum açmak için önce kanal açın"
+          empty="Güncelleme grubu yok (satıcı sunucusu migration'ı uygulanmamış)"
           columns={[
-            { header: "Kod", render: (r) => <code>{r.kod}</code> },
+            { header: "Sıra", render: (r) => r.sira ?? "—", className: "num-col" },
+            { header: "Grup", render: (r) => <code>{r.kod}</code> },
             { header: "Ad", render: (r) => r.ad },
-            { header: "Tür", render: (r) => <Badge tone={r.tur === "uretim" ? "info" : "neutral"}>{CHANNEL_KIND_LABEL[r.tur] ?? r.tur}</Badge> },
+            { header: "Durum", render: (r) => (r.aktif ? <Badge tone="ok">Aktif</Badge> : <Badge tone="warn">Emekli</Badge>) },
+            { header: "Tür", render: (r) => CHANNEL_KIND_LABEL[r.tur] ?? r.tur },
             { header: "Güncel sürümler", render: (r) => versionsSummary(r.guncelSurumler) },
             { header: "Kurulum", render: (r) => r.kurulumSayisi, className: "num-col" },
             { header: "Kayıt", render: (r) => fmtDate(r.createdAt) },
-            { header: "", render: (r) => (canManage ? <Button variant="ghost" onClick={() => setDialog({ kind: "edit", channel: r })}>Düzenle</Button> : null) },
+            { header: "", render: (r) => (canManage ? <Button variant="ghost" onClick={() => setEditing(r)}>Düzenle</Button> : null) },
           ]}
         />
       </Section>
-      {dialog ? <ChannelModal channel={dialog.kind === "edit" ? dialog.channel : undefined} onClose={() => setDialog(null)} onDone={done} /> : null}
+      {editing ? <ChannelModal channel={editing} onClose={() => setEditing(null)} onDone={done} /> : null}
     </>
   );
 }
 
-function ChannelModal({ channel, onClose, onDone }: { channel?: Channel; onClose: () => void; onDone: () => void }) {
+function ChannelModal({ channel, onClose, onDone }: { channel: Channel; onClose: () => void; onDone: () => void }) {
   const api = useApi();
-  const [code, setCode] = useState(channel?.kod ?? "");
-  const [name, setName] = useState(channel?.ad ?? "");
-  const [kind, setKind] = useState<ChannelKind>(channel?.tur ?? "uretim");
+  const [name, setName] = useState(channel.ad);
+  const [order, setOrder] = useState(channel.sira === null ? "" : String(channel.sira));
   const [versions, setVersions] = useState<Record<(typeof PRODUCTS)[number][0], string>>({
-    backend: channel?.guncelSurumler.backend ?? "",
-    panel: channel?.guncelSurumler.panel ?? "",
-    tablet: channel?.guncelSurumler.tablet ?? "",
+    backend: channel.guncelSurumler.backend ?? "",
+    panel: channel.guncelSurumler.panel ?? "",
+    tablet: channel.guncelSurumler.tablet ?? "",
   });
-  const write = useWrite<Channel>((b) => (channel ? api.patch(`/kanallar/${channel.id}`, b) : api.post("/kanallar", b)));
-  const codeOk = channel !== undefined || CHANNEL_CODE_PATTERN.test(code.trim());
+  const write = useWrite<Channel>((b) => api.patch(`/kanallar/${channel.id}`, b));
+  const orderNum = order.trim() === "" ? null : Number(order.trim());
+  const orderOk = orderNum === null || (Number.isInteger(orderNum) && orderNum >= ORDER_MIN && orderNum <= ORDER_MAX);
   const versionsOk = PRODUCTS.every(([k]) => versions[k].trim() === "" || VERSION_PATTERN.test(versions[k].trim()));
-  const ok = codeOk && name.trim() !== "" && versionsOk;
+  const ok = name.trim() !== "" && orderOk && versionsOk;
   const submit = async () => {
     // Boş bırakılan ürün anahtarı gönderilmez: kira o ürün için sürüm bildirmez.
     const guncelSurumler = Object.fromEntries(PRODUCTS.filter(([k]) => versions[k].trim()).map(([k]) => [k, versions[k].trim()]));
-    const body: Record<string, unknown> = { ad: name.trim(), tur: kind, guncelSurumler };
-    if (!channel) body.kod = code.trim();
-    if ((await write.run(body)).ok) onDone();
+    if ((await write.run({ ad: name.trim(), sira: orderNum, guncelSurumler })).ok) onDone();
   };
   return (
-    <Modal title={channel ? `Kanal: ${channel.kod}` : "Yeni kanal"} onClose={onClose} busy={write.pending}>
-      {channel ? (
-        <p className="muted">Kanal kodu değişmez (indirme yolunun öneki ve kurulumların bağı).</p>
-      ) : (
-        <Field label="Kod" hint="Küçük harf, rakam, tire; en çok 40 karakter (ör. adnansahin, testfabrika). Sonradan değişmez.">
-          <input value={code} maxLength={40} spellCheck={false} autoComplete="off" onChange={(e) => setCode(e.target.value)} />
-        </Field>
-      )}
-      {!codeOk && code.trim() ? <p className="error">Kod yalnız küçük harf, rakam ve tire içerebilir; harf ya da rakamla başlar.</p> : null}
+    <Modal title={`Güncelleme grubu: ${groupName(channel.kod)}`} onClose={onClose} busy={write.pending}>
+      <p className="muted">
+        Grup kodu ve türü değişmez (indirme yolunun öneki ve kurulumların bağı).{channel.aktif ? "" : " Bu kanal emeklidir: yeni kurulum almaz, indirme bağlantısı vermez."}
+      </p>
       <Field label="Ad">
         <input value={name} maxLength={200} onChange={(e) => setName(e.target.value)} />
       </Field>
-      <Field label="Tür">
-        <select value={kind} onChange={(e) => setKind(e.target.value as ChannelKind)}>
-          {(Object.keys(CHANNEL_KIND_LABEL) as ChannelKind[]).map((k) => (
-            <option key={k} value={k}>
-              {CHANNEL_KIND_LABEL[k]}
-            </option>
-          ))}
-        </select>
+      <Field label="Sıra" hint={`Terfi zincirindeki yeri (${ORDER_MIN}–${ORDER_MAX}); boş = sırasız.`}>
+        <input type="number" min={ORDER_MIN} max={ORDER_MAX} value={order} onChange={(e) => setOrder(e.target.value)} />
       </Field>
+      {!orderOk ? <p className="error">Sıra {ORDER_MIN}–{ORDER_MAX} arası tam sayı olmalı.</p> : null}
       <div className="field">
         <span className="field-label">Güncel sürümler (kiraya gider; boş = bildirilmez)</span>
         <div className="toolbar">

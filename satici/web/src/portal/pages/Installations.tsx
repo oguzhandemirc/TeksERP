@@ -3,6 +3,7 @@ import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import { fmtDateTime } from "../../shared/format";
 import { InstallationFormModal } from "../../shared/forms";
+import { selectableGroups } from "../../shared/update-groups";
 import { useChannels, useGet, usePaged } from "../../shared/hooks";
 import { CLASS_LABEL, INSTALLATION_STATUS_LABEL, label } from "../../shared/labels";
 import { useCan } from "../../shared/session";
@@ -81,8 +82,8 @@ export function InstallationsPage() {
           siteId={siteId}
           classes={catalog.data.siniflar}
           allowPollInterval
-          channelOptions={channels.channels.map((c) => c.kod)}
-          noChannelText="Kayıtlı kanal yok: önce Kanallar ekranında kanal açın (yönetici)."
+          channelOptions={selectableGroups(channels.channels)}
+          noChannelText="Aktif güncelleme grubu yok: satıcı sunucusunun migration'ı uygulanmamış olabilir (yönetici)."
           onClose={() => setParam("yeni", null)}
           onSaved={(i) => {
             void queryClient.invalidateQueries({ queryKey: ["kurulumlar"] });

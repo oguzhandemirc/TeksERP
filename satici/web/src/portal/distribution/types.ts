@@ -105,15 +105,36 @@ export interface Published {
   readonly degisti: string | null;
 }
 
+export interface LedgerRow {
+  readonly zaman: string;
+  readonly surum: string;
+  readonly yapan: string;
+  readonly sha16: string;
+  readonly boyut: string;
+  readonly not: string | null;
+}
+
 export interface ChannelRelease {
   readonly kod: string;
-  readonly kayitli: { readonly ad: string; readonly tur: string; readonly guncelSurumler: Record<string, string | undefined> } | null;
+  /** Kod bir güncelleme grubu mu (test · oncu · genel); değilse emekli/kayıtsız kanal, eski defter adları. */
+  readonly grup: boolean;
+  readonly kayitli: {
+    readonly ad: string;
+    readonly tur: string;
+    readonly sira: number | null;
+    readonly aktif: boolean;
+    readonly guncelSurumler: Record<string, string | undefined>;
+  } | null;
   readonly yayinda: {
     readonly panel: Published | null;
     readonly tabletOta: readonly (Published & { readonly runtime: string })[];
     readonly tabletApk: (Published & { readonly vc: number | null }) | null;
   } | null;
-  readonly defter: readonly { zaman: string; surum: string; yapan: string; sha16: string; boyut: string; not: string | null }[] | null;
+  /** Panel defteri (grupta `<grup>-panel-…`, emekli kanalda eski ad); null = ölçülemedi. */
+  readonly defter: readonly LedgerRow[] | null;
+  /** Tablet defteri yalnız grupta. */
+  readonly defterTablet: readonly LedgerRow[] | null;
+  readonly defterBackend: readonly LedgerRow[] | null;
   readonly bildirimler: readonly Notice[];
 }
 
