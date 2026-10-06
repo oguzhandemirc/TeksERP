@@ -11,7 +11,9 @@
 //      kökünün kid'i ve açık yarısı listede yok · ⭐ eski hazirlik-* kid'li kök çapaya biçim düzeyinde
 //      giremez (TEST/DEMO sınıfıyla da) · ⭐ hazirlik-* kid'iyle imzalı HAK/kira üretim çapasında RED
 //   §0'' derlemenin çapası: tek kip, derleme sabiti YOK, `trust-anchor.ts` ortamdan/dosyadan OKUMAZ, kip
-//      listelerinin TEK okuyucusu, hazırlık sabitleri src'de hiçbir yerde (src taraması + ✓K sentetik sonda)
+//      listelerinin TEK okuyucusu, hazırlık sabitleri src'de hiçbir yerde (src taraması + ✓K sentetik sonda) ·
+//      §0y ⭐ `src/lib/license` KODUNDA hazırlık izi yok (AST: dizge/şablon literali `hazirlik` · `staging`/`hazirlik`
+//      adlı tanımlayıcı; yorum serbest — reddi anlatır) · §0z ✓K tarayıcı literal ve tanımlayıcıyı yakalar, yorumda susar
 //   §1 JWS: geçerli · alg none · alg HS256 (anahtar karışması) · typ yanlış/eksik · kid
 //      bilinmez · başlıkta gömülü anahtar/crit · gövde/imza kurcalı · kanonik olmayan
 //      base64 · uzunluk tavanı · v:2 · süresi dolmuş · ±10 dk tolerans · indirme yolu
@@ -72,6 +74,7 @@
 import { createHmac, generateKeyPairSync, randomUUID } from "node:crypto";
 import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
+import ts from "typescript";
 import {
   CLOSING_LEASE_REASONS,
   ENDPOINTS,
@@ -308,6 +311,40 @@ function derlemeCapasi(): void {
   check("§0w ⭐ çapa kipinin TEK okuyucusu trust-anchor.ts; kip listelerini başka src dosyası seçmez, hazırlık sabiti/derleme sabiti hiçbir yerde", ihlal.length === 0 && Object.keys(dosyalar).length > 100, ihlal.join(" · ") || `${Object.keys(dosyalar).length} dosya`);
   const sentetik = kipOkuyuculari({ "services/x.ts": "verifyEntitlement(t, STAGING_ROOT_PUBLIC_KEYS)", "lib/y.ts": "const k = process.env.__TEKSERP_GUVEN_CAPASI__", "lib/z.ts": "ROOT_PUBLIC_KEYS" });
   check("§0x ✓K tarayıcı yabancı kip okuyucusunu yakalar (liste · sabit), derlemenin çapasını kullanan dosyada susar", sentetik.length === 2, sentetik.join(" · "));
+  const lisans = srcDosyalari(join(__dirname, "../src/lib/license"));
+  const izler = Object.entries(lisans).flatMap(([yol, metin]) => hazirlikIzleri(yol, metin));
+  check(
+    "§0y ⭐ src/lib/license kodunda hazırlık izi YOK (hazirlik literali · staging/hazirlik tanımlayıcısı; tek kip)",
+    izler.length === 0 && Object.keys(lisans).length > 40,
+    izler.join(" · ") || `${Object.keys(lisans).length} dosya`,
+  );
+  const sonda = hazirlikIzleri(
+    "x.ts",
+    [
+      '// eski `hazirlik-capasi` reddedilir',
+      "/** paket-hazirlik kalktı */",
+      'const a = "hazirlik";',
+      "const b = `paket-hazirlik-${n}`;",
+      "export const STAGING_ROOT_PUBLIC_KEYS = [];",
+      "function isHazirlikKid() {}",
+      'const c = "kok-2026-1";',
+    ].join("\n"),
+  );
+  check("§0z ✓K hazırlık izi tarayıcısı literali (dizge · şablon) ve tanımlayıcıyı yakalar, yorumda ve üretim literalinde susar", sonda.length === 4, sonda.join(" · "));
+}
+
+/** Kodda (yorum hariç) hazırlık izi: `hazirlik` içeren dizge/şablon literali ya da `staging`/`hazirlik` adlı tanımlayıcı. */
+function hazirlikIzleri(yol: string, metin: string): string[] {
+  const out: string[] = [];
+  const kaynak = ts.createSourceFile(yol, metin, ts.ScriptTarget.Latest, true);
+  const gez = (n: ts.Node): void => {
+    const satir = (): number => kaynak.getLineAndCharacterOfPosition(n.getStart(kaynak)).line + 1;
+    if ((ts.isStringLiteralLike(n) || ts.isTemplateLiteralToken(n)) && /hazirlik/i.test(n.text)) out.push(`${yol}:${satir()} "${n.text}"`);
+    else if (ts.isIdentifier(n) && /staging|hazirlik/i.test(n.text)) out.push(`${yol}:${satir()} ${n.text}`);
+    ts.forEachChild(n, gez);
+  };
+  gez(kaynak);
+  return out;
 }
 
 function parca(nesne: unknown): string {

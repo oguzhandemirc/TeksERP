@@ -7,7 +7,7 @@
 //   §0 kâhin — `TYP.PANEL` = panelin typ'i (kayıt defterinde tekil) · protokol `signJws` ile panel `signReleaseDoc`
 //      BAYT-EŞİT · bozulmuş belgelerde protokol `verifyJws` ile panel `verifyJwsWithAnchor` AYNI kodu verir
 //   §1 anahtar dosyası — (b) panel anahtarı parolalı (0600, sürüm 2, düz özel yarı YOK) ve açılır; yanlış parola ·
-//      (a) üretim PAKET anahtarı açılır; hazırlık PAKET (parolasız) · gevşek izin · düz `d` · depo içine yazım ·
+//      (a) üretim PAKET anahtarı açılır; parolasız (test) PAKET · gevşek izin · düz `d` · depo içine yazım ·
 //      ezme · biçim dışı kid → RED
 //   §2 imza aracı uçtan uca (gerçek CLI, parola stdin) — imzala → latest.yml künyeli ve panel KABUL eder; çapada
 //      olmayan anahtar · kurulum dosyası latest.yml'den farklı · argv'de parola · gerçek (boş) çapa → RED ve
@@ -136,8 +136,8 @@ async function bolum1(): Promise<{ panelDosyasi: string; panelX: string }> {
   const paket = writePackageKey(dizin("paket"), await generateWrappedPackageKey("paket-2099", Buffer.from(PAROLA)));
   const pa = await openPanelSigningKey(paket, pw);
   check("§1d (a) üretim PAKET anahtarı (paket-<yıl>, parolalı) panel künyesini imzalamak için açılır", pa.kid === "paket-2099");
-  const hazirlik = writePackageKey(dizin("hazirlik"), generatePackageKey("paket-hazirlik", ["TEST", "DEMO"]));
-  check("§1e hazırlık PAKET anahtarı (parolasız) → RED", (await reddeder(() => openPanelSigningKey(hazirlik, pw), /ÜRETİM PAKET/)) === null);
+  const parolasiz = writePackageKey(dizin("parolasiz"), generatePackageKey("paket-fikstur", ["TEST", "DEMO"]));
+  check("§1e parolasız (üretim dışı test) PAKET anahtarı → RED", (await reddeder(() => openPanelSigningKey(parolasiz, pw), /ÜRETİM PAKET/)) === null);
   const gevsek = path.join(dizin("gevsek"), "panel-2099.panel.json");
   copyFileSync(dosya, gevsek);
   chmodSync(gevsek, 0o644);
@@ -274,7 +274,7 @@ function bolum3(anahtar: { panelDosyasi: string; panelX: string }): void {
   for (const [ad, argv, beklenen] of [
     ["PAKET çapasında olmayan paket- kid'i", ["panel", "--kid=paket-2098", `--x=${xOf(generateKeyPairSync("ed25519").privateKey)}`], 1],
     ["biçim dışı kid (panel-fikstur)", ["panel", "--kid=panel-fikstur", `--x=${xOf(generateKeyPairSync("ed25519").privateKey)}`], 1],
-    ["hazırlık PAKET kid'i", ["panel", "--paket-kid=paket-hazirlik"], 1],
+    ["eski hazırlık PAKET kid'i (çapada yok)", ["panel", "--paket-kid=paket-hazirlik"], 1],
     ["aynı kid BAŞKA anahtar (rotasyon yeni kid'dir)", ["panel", "--kid=panel-2099", `--x=${xOf(generateKeyPairSync("ed25519").privateKey)}`], 1],
     ["kid/x yok", ["panel"], 64],
   ] as const) {

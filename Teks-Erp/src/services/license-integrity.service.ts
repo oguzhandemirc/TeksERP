@@ -20,10 +20,11 @@ function entitlementClassNow(): string | null {
  * verilir (denetim sürerken kabul edilen HAK eski sınıfın kararıyla ezilmesin); sonuç durumu hemen değerlendirilir.
  */
 export async function refreshLicenseIntegrity(): Promise<void> {
-  const { root, keys } = integrityCheckTarget();
+  const { root, keys, roots } = integrityCheckTarget();
   const o = await runIntegrityCheck({
     root,
     keys,
+    roots,
     required: NATIVE_REQUIRED,
     core: getLicenseCore(),
     entitlementClass: entitlementClassNow(),

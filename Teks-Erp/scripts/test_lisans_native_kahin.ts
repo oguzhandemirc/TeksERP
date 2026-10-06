@@ -622,8 +622,12 @@ function bolum0(): void {
   const zodDesenleri = [z.iso.datetime()._zod.def.pattern?.source, z.uuid()._zod.def.pattern?.source].filter((s): s is string => !!s);
   const tsKume = new Set([...tsKaynaklar.flatMap(tsDesenleri), ...zodDesenleri].map(desenNormal));
   const rust = rustDesenleri(rustDosyalar);
-  const yetim = rust.filter((d) => !tsKume.has(desenNormal(d)));
+  // Geçici, beyanlı istisna: Rust zincir kid deseni tek kipe O14b'de iner (TS O14a'da indi). Rust inince §0h' kırmızı → satır silinir.
+  const O14B_BEKLEYEN = new Set(["^(kok|hazirlik)-[a-z0-9-]{1,40}$"].map(desenNormal));
+  const yetim = rust.filter((d) => !tsKume.has(desenNormal(d)) && !O14B_BEKLEYEN.has(desenNormal(d)));
   check("§0h Rust'taki HER regex TS kaynağında ya da canlı Zod deseninde birebir", rust.length >= 12 && yetim.length === 0, yetim.length ? `yetim: ${yetim.join(" · ")}` : `${rust.length} desen`);
+  const bayatIstisna = [...O14B_BEKLEYEN].filter((d) => !rust.some((r) => desenNormal(r) === d));
+  check("§0h' O14b geçici istisnası hâlâ Rust'ta (bayat istisna kırmızı — Rust inince satırı sil)", bayatIstisna.length === 0, bayatIstisna.join(" · ") || `${O14B_BEKLEYEN.size} bekleyen`);
   check("§0i derleme sabiti geliştirmede KAPALI (native zorunlu değil)", NATIVE_REQUIRED === false);
   check(
     "§0i' çapa kipi sabiti geliştirmede TANIMSIZ → üretim; derlemenin çapası üretim listeleri (hazırlık yok)",

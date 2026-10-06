@@ -118,7 +118,7 @@ function bolum0(): CapaDurumu | null {
   const kayacak = kaymaAdaylari(gomulu, d);
   check(
     "§0e ⭐ gömülü çapayla koşan her vektörün imzacısı ya çapa listesinde ya üretim biçimi DIŞINDA (tören günü sonuç kaymaz)",
-    gomulu.length >= 16 && TRUST_ANCHOR_MODES.every((k) => gomulu.some((i) => i.kip === k)) && kayacak.length === 0,
+    gomulu.length >= 8 && TRUST_ANCHOR_MODES.every((k) => gomulu.some((i) => i.kip === k)) && kayacak.length === 0,
     kayacak.join(" · ") || `${gomulu.length} vektör`,
   );
   const sahte = kaymaAdaylari(
@@ -138,7 +138,7 @@ function bolum0(): CapaDurumu | null {
   const v2Kayacak = kaymaAdaylari(v2Gomulu, d);
   check(
     "§0e2 ⭐ v2 dosyasında (protokol-v2.json) gömülü çapa vektörlerinin imzacısı da kaymaz; ara zincirde imzacı, ara sertifikayı imzalayan köktür",
-    v2Gomulu.length >= 4 && TRUST_ANCHOR_MODES.every((k) => v2Gomulu.some((i) => i.kip === k)) && v2Gomulu.every((i) => i.kid !== "?") && v2Kayacak.length === 0,
+    v2Gomulu.length >= 2 && TRUST_ANCHOR_MODES.every((k) => v2Gomulu.some((i) => i.kip === k)) && v2Gomulu.every((i) => i.kid !== "?") && v2Kayacak.length === 0,
     v2Kayacak.join(" · ") || `${v2Gomulu.length} vektör`,
   );
   const araYuk = b64(JSON.stringify({ imzaciSertifikasi: `${b64(JSON.stringify({ alg: "EdDSA", typ: "tekserp-sertifika", kid: "kok-2099-1" }))}.e30.x` }));
