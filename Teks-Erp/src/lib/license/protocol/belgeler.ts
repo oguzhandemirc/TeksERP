@@ -70,6 +70,8 @@ export const REQUEST_PURPOSES = [
   "dr-devral",
   /** Panelden "donanım değişikliğini bildir" (K8) — `POST /v1/donanim` ya da zarfla QR yolu. */
   "donanim",
+  /** Müşteri onaylı hata raporu — `POST /v1/hata-raporu`; yoklamaya karışmaz. */
+  "hata-raporu",
 ] as const;
 export type RequestPurpose = (typeof REQUEST_PURPOSES)[number];
 /**

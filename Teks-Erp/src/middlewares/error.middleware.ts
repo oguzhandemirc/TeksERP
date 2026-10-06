@@ -16,6 +16,8 @@ import { AuditService } from "../services/audit.service";
 import { classifyPoolTimeout, recordPoolTimeout, getPoolHealth } from "../lib/pool-health";
 import "../types/express-augment";
 import { hata, uyari } from "../lib/logger";
+import { recordServerError } from "../services/error-report.service";
+import { mountPrefix } from "./latency.middleware";
 import {
   ORDER_LINE_ON_ARCHIVED_ITEM_MESSAGE,
   ROLL_ON_ARCHIVED_COLOR_MESSAGE,
@@ -402,6 +404,25 @@ function respondServerBusy(res: Response): void {
   res.status(503).json({ success: false, message: SERVER_BUSY_MESSAGE });
 }
 
+/** Eşleşen uç ŞABLONU (`/api/rolls/:id`) — somut yol (`originalUrl`) rapora girmez; önek arındırıcıda `:p`'ye iner. */
+function routeTemplateOf(req: Request): string | null {
+  const path = (req as Request & { route?: { path?: unknown } }).route?.path;
+  if (typeof path !== "string") return null;
+  return `${mountPrefix(req, path)}${path === "/" ? "" : path}` || "/";
+}
+
+/** Hata raporu (onaylıysa): yanıt 5xx ve meşguliyet (503) değilse kaydedilir; asla fırlatmaz. */
+function noteServerErrorOnFinish(err: unknown, req: Request, res: Response): void {
+  try {
+    const route = routeTemplateOf(req);
+    res.once("finish", () => {
+      if (res.statusCode >= 500 && res.statusCode !== 503) recordServerError(err, { route });
+    });
+  } catch {
+    /* fail-silent */
+  }
+}
+
 export const errorHandler = (
   err: Error,
   req: Request,
@@ -427,6 +448,8 @@ export const errorHandler = (
     _next(err); // Express finalhandler: başlıklar gönderilmişse soketi yok eder.
     return;
   }
+
+  noteServerErrorOnFinish(err, req, res);
 
   // Known operational errors
   if (err instanceof AppError) {

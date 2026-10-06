@@ -45,6 +45,9 @@ export const BUDANAN_DEFTER_DISI: Array<{ model: string; sinif: "DURUM" | "TELEM
   { model: "LoginLockoutBucket", sinif: "DURUM",
     gerekce: "giriş deneme kilidi kovasının kalıcı kopyası; bellekteki harita otoritedir, satır yalnız yeniden başlatmada geri yüklenir. Boşta kalan (bloğu bitmiş, son denemesi saklama süresinden eski) satır hiçbir sayıya ve karara girmez — ceza merdiveni o süre içinde zaten çürür",
     silen: ["src/services/helpers/login-lockout-store.helper.ts"] },
+  { model: "ErrorReportEntry", sinif: "TELEMETRI",
+    gerekce: "müşteri onaylı hata raporu kuyruğu (kişisel verisiz grup özeti); satıcıya gönderilir, hiçbir iş kararı ve raporlanan sayı bu satırdan türemez — silinince yalnız panelin \"ne gönderildi\" listesi kısalır",
+    silen: ["src/services/error-report.service.ts"] },
 ];
 let pass = 0;
 let fail = 0;

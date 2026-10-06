@@ -120,6 +120,7 @@ import clientPolicyRoutes from "./routes/client-policy.routes";
 import licenseRoutes from "./routes/license.routes";
 import updateRoutes from "./routes/update.routes";
 import supportRoutes from "./routes/support.routes";
+import errorReportRoutes from "./routes/error-report.routes";
 import patronCloudRoutes from "./routes/patron-cloud.routes";
 const app: Express = express();
 
@@ -602,6 +603,8 @@ app.use("/api/license", licenseRoutes);
 app.use("/api/guncelleme", updateRoutes);
 // Destek talepleri (3d-2): panel → satıcı `/v1/destek`; yanıtlar zil `destek` + yoklamayla döner.
 app.use("/api/destek", supportRoutes);
+// Hata raporları (3.6): onay (varsayılan KAPALI, ayar şifreli) + panel/tablet hata kaydı; gönderim `jobs/error-report.job.ts`.
+app.use("/api/hata-raporlari", errorReportRoutes);
 // Patron bulutu (fabrika yüzeyi): teknik kullanıcı + salt okunur bulut hesapları. Gelen kutusu işi `jobs/cloud-inbox.job.ts`.
 app.use("/api/patron-bulut", patronCloudRoutes);
 

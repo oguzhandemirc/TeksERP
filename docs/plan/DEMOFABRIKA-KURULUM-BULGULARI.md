@@ -36,6 +36,9 @@
 - [ ] 3.4 Sunucu bilgisayarında sağ alt simge (§E)
 - [x] 3.5 Sunucu saati (§B-3) — 2026-10-06, dal `gece/sunucu-saati` (NTP · imzalı sapma · portal · bekçi); birleşmedi; sıra: SATICI ÖNCE, sonra fabrika
 - [ ] 3.6 Hata raporları (§E)
+
+- [ ] 3.5 Sunucu saati (§B-3)
+- [x] 3.6 Hata raporları (§E) — dal `gece/hata-raporlari` (satıcı ucu + portal, fabrika kuyruğu/onay/uçlar, panel kartı, tablet işleyicisi; arşiv 2026-10-06)
 - [ ] 3.7 Fabrika tableti Google Play'de (§E)
 - [ ] 3.8 testfabrika emekli (taşınmaz); yeni test kurulumu sıfırdan üretim lisans sunucusunda "test" güncelleme grubunda yapılır; hazırlık satıcısı 2026-10-05'te emekli edildi ve verisi silindi (kod ayrımı 3.1); testfabrika kaldırma (VDS + thinkpad) ayrı adım (kullanıcı kararı 2026-10-05)
 - [ ] 3.9 Paket anahtarı kökün altına alınır: paket anahtarı kök imzalı sertifikayla ve kısa ömürlü (ör. 1 yıl) olur, kaybı/çalınması kökle yeni sertifika + iptalle kapanır, fabrikaya elle kurulum gerekmez; güncelleyici (Rust) zincirle doğrular, geçişte çift imza (kullanıcı kararı 2026-10-05; yedek anahtar ve parola bölme şimdilik YAPILMAZ, donanım anahtarı bütçe yok)

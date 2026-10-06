@@ -10861,6 +10861,39 @@ model SupportTicketReply {
   @@map("support_ticket_replies")
 }
 
+/// HATA RAPORU KUYRUĞU — müşteri onaylı, kişisel verisiz hata GRUBU (satıcıya `POST /v1/hata-raporu`).
+/// TELEMETRİ (audit muaf, budanır): hiçbir iş kararı ve raporlanan sayı bu satırdan türemez. Alanlar protokolün
+/// allowlist'idir (`hata-raporu.ts`); ham mesaj/gövde/kullanıcı/IP buraya hiç yazılmaz. Durum: bekliyor
+/// (`pendingKey` dolu; aynı grup sayaç artırır) → partide (`batchId`, gönderilene dek aynı partiyle yeniden denenir)
+/// → gönderildi (`sentAt`). Onay geri alınınca gönderilmemiş satırlar silinir.
+model ErrorReportEntry {
+  id            String    @id @default(uuid()) @db.Uuid
+  /// Bekleyen grubun anahtarı (`errorReportGroupKey`); partiye alınınca NULL — yeni hata yeni satır açar.
+  pendingKey    String?   @unique @db.Char(64)
+  groupKey      String    @db.Char(64)
+  source        String    @db.VarChar(10)
+  version       String    @db.VarChar(60)
+  code          String    @db.VarChar(60)
+  errorClass    String    @db.VarChar(60)
+  component     String    @db.VarChar(40)
+  routeTemplate String?   @db.VarChar(200)
+  stackFrames   String[]  @db.VarChar(160)
+  count         Int
+  firstAt       DateTime  @db.Timestamptz
+  lastAt        DateTime  @db.Timestamptz
+  batchId       String?   @db.Uuid
+  sentAt        DateTime? @db.Timestamptz
+  sendAttempts  Int       @default(0)
+  /// Son gönderim hatasının KODU (ham metin değil).
+  lastErrorCode String?   @db.VarChar(60)
+  createdAt     DateTime  @default(now()) @db.Timestamptz
+  updatedAt     DateTime  @updatedAt @db.Timestamptz
+
+  @@index([sentAt, batchId])
+  @@index([createdAt])
+  @@map("error_report_entries")
+}
+
 /// İLK KURULUM SÖZLEŞME KABULÜ (Ek-7) — ekleme-yalnız: satır değişmez, silinmez; yeni kabul yeni satırdır.
 /// Kurulum ANAHTARINA (`installationKeyId`) bağlıdır: anahtar değişince (taşıma · yeni makine · DB kopyası) eski
 /// kabul geçmez. Geçerli kabul = bu anahtarın EN SON satırı ∧ güncel metin. `document` KURULUM imzalı kabul belgesi

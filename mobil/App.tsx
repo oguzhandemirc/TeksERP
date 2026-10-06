@@ -26,6 +26,7 @@ import {
   PERSIST_MAX_AGE_MS,
 } from './src/offline/queryClient';
 import { registerStationMutationDefaults } from './src/offline/mutations';
+import { installGlobalErrorReporting } from './src/lib/errorReport';
 import { isPersistedQueryKey, shouldPersistMutation } from './src/offline/persistPolicy';
 import { FLAGS_KEY } from './src/hooks/useFeatureFlags';
 import { colors } from './src/theme/tokens';
@@ -39,6 +40,7 @@ import LicenseSuspendedGate from './src/components/lock/LicenseSuspendedGate';
 import { LICENSE_STATUS_KEY } from './src/hooks/useLicenseStatus';
 
 registerStationMutationDefaults();
+installGlobalErrorReporting();
 
 // Android'de operatör sistem fontunu büyütse de barkod/metraj/tablo alanları
 // taşmasın diye global cap. 1.3x'e kadar serbest (erişilebilirlik korunur),

@@ -11,6 +11,7 @@ import { CustomersPage } from "./pages/Customers";
 import { DashboardPage } from "./pages/Dashboard";
 import { DealerDetailPage } from "./pages/DealerDetail";
 import { DealersPage } from "./pages/Dealers";
+import { ErrorReportGroupsPage, ErrorReportsPage } from "./pages/ErrorReports";
 import { FilesPage } from "./pages/Files";
 import { FleetPage } from "./pages/Fleet";
 import { GuidePage } from "./pages/Guide";
@@ -39,6 +40,7 @@ export const PORTAL_NAV: readonly NavItem[] = [
   { to: "/kok-kuyrugu", label: "Kök imzası kuyruğu", permission: "portal:oku" },
   { to: "/dr", label: "DR", permission: "portal:oku" },
   { to: "/destek", label: "Destek kutusu", permission: "portal:oku" },
+  { to: "/hata-raporlari", label: "Hata raporları", permission: "portal:oku" },
   { to: "/bildirimler", label: "Bildirimler", permission: "bildirim:oku" },
   { to: "/bayiler", label: "Bayiler", permission: "portal:oku" },
   { to: "/kanallar", label: "Kanallar", permission: "portal:oku" },
@@ -71,6 +73,8 @@ export const PORTAL_ROUTES: RouteObject[] = [
       { path: "dr", element: <DrPage /> },
       { path: "destek", element: <SupportPage /> },
       { path: "destek/:id", element: <SupportDetailPage /> },
+      { path: "hata-raporlari", element: <ErrorReportsPage /> },
+      { path: "hata-raporlari/:id", element: <ErrorReportGroupsPage /> },
       { path: "bildirimler", element: <NotificationsPage /> },
       { path: "bayiler", element: <DealersPage /> },
       { path: "bayiler/:id", element: <DealerDetailPage /> },
