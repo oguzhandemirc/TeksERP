@@ -13,20 +13,142 @@
 // (`codesigning:configure`) app.json'a DEĞERLENDİRİLMİŞ yapılandırmayı geri
 // yazabiliyor ve bu 2026-08-26'da `enabled`ı sessizce `false` yaptı. O hâliyle
 // derlenen APK hiç güncelleme almazdı; hiçbir yerde de görünmezdi.
+//
+// ⚠️ İKİ DERLEME KİMLİĞİ (tek ortak paket O7): argümansız derleme = TEK ORTAK PAKET (kimlik
+// `deploy/dagitim.json`dan, `scripts/lib/ortak-kimlik.cjs`); `TEKSERP_KANAL=<kod>` = eski kanal
+// (adnansahin) — çıktısı DONDURULMUŞ özete karşı bayt-donuk ölçülür.
 // =============================================================================
 
+import crypto from 'node:crypto';
 import fs from 'fs';
 import path from 'path';
 
 const KOK = path.join(__dirname, '..', '..');
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const feed = require(path.join(KOK, 'scripts/lib/feed.cjs'));
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const ortakLib = require(path.join(KOK, 'scripts/lib/ortak-kimlik.cjs'));
 const appJson = JSON.parse(fs.readFileSync(path.join(KOK, 'app.json'), 'utf8')).expo;
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const appConfig = require(path.join(KOK, 'app.config.js'));
 const musteri = JSON.parse(fs.readFileSync(path.join(KOK, 'musteri.json'), 'utf8'));
+const dagitim = JSON.parse(fs.readFileSync(path.join(KOK, '..', 'deploy', 'dagitim.json'), 'utf8'));
+const kanalKaydi = JSON.parse(fs.readFileSync(path.join(KOK, '..', 'deploy', 'kanallar.json'), 'utf8'));
 
-describe('güncelleme kanalı adresi', () => {
+function ortamla<T>(degiskenler: Record<string, string | undefined>, fn: () => T): T {
+  const eski: Record<string, string | undefined> = {};
+  for (const [k, v] of Object.entries(degiskenler)) {
+    eski[k] = process.env[k];
+    if (v === undefined) delete process.env[k];
+    else process.env[k] = v;
+  }
+  try {
+    return fn();
+  } finally {
+    for (const [k, v] of Object.entries(eski)) {
+      if (v === undefined) delete process.env[k];
+      else process.env[k] = v;
+    }
+  }
+}
+const cfg = (kod?: string, ek: Record<string, string | undefined> = {}) =>
+  ortamla({ TEKSERP_KANAL: kod, EXPO_PUBLIC_UPDATE_URL: undefined, ...ek }, () =>
+    appConfig({ config: JSON.parse(JSON.stringify(appJson)) }),
+  );
+
+// =============================================================================
+// TEK ORTAK PAKET — argümansız derleme
+// =============================================================================
+describe('ortak paket kimliği (argümansız derleme)', () => {
+  const t = dagitim.urun.tablet;
+  const ortak = cfg(undefined);
+
+  it('kimlik deploy/dagitim.json\'dan gelir (paket adı · ad · runtimeVersion · sertifika)', () => {
+    expect(ortak.name).toBe(t.gorunenAd);
+    expect(ortak.android.package).toBe(t.androidPaket);
+    expect(ortak.ios.bundleIdentifier).toBe(t.androidPaket);
+    expect(ortak.runtimeVersion).toBe(t.runtimeVersion);
+    expect(ortak.updates.codeSigningCertificate).toBe(`./${t.otaSertifika}`);
+    expect(ortakLib.ortakYapilandirmaFarki(ortak)).toEqual([]);
+  });
+
+  it('gömülü adres grup-nötr Worker takma adıdır: <indirmeKoku>ota/<rv>/manifest', () => {
+    expect(ortak.updates.url).toBe(`${dagitim.indirmeKoku}ota/${t.runtimeVersion}/manifest`);
+    expect(ortak.updates.url).toMatch(/^https:\/\/[^/]+\/ota\/[0-9]+\.[0-9]+\/manifest$/);
+  });
+
+  it('güncelleme AÇIK, kod imzası ortak anahtarın kid\'ini gösterir (eski kanalınkini değil)', () => {
+    expect(ortak.updates.enabled).toBe(true);
+    expect(ortak.updates.codeSigningMetadata?.keyid).toBe(ortakLib.ortakKimlik().anahtarKimligi);
+    expect(ortak.updates.codeSigningMetadata?.keyid).not.toBe(appJson.updates.codeSigningMetadata?.keyid);
+    expect(ortak.updates.codeSigningMetadata?.alg).toBe('rsa-v1_5-sha256');
+  });
+
+  it('eski kanallarla paket adı · güncelleme adresi · OTA sertifikası · anahtar PAYLAŞMAZ (yan yana kurulur)', () => {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const kanalLib = require(path.join(KOK, 'scripts/lib/kanal.cjs'));
+    const anahtar = ortakLib.ortakKimlik().otaAnahtar;
+    for (const kod of Object.keys(kanalKaydi.kanallar)) {
+      const e = cfg(kod);
+      expect([kod, e.android.package === ortak.android.package]).toEqual([kod, false]);
+      expect([kod, e.updates.url === ortak.updates.url]).toEqual([kod, false]);
+      expect([kod, e.updates.codeSigningCertificate === ortak.updates.codeSigningCertificate]).toEqual([kod, false]);
+      expect([kod, kanalLib.otaImzaYollari(kanalKaydi.kanallar[kod]).anahtar === anahtar]).toEqual([kod, false]);
+    }
+  });
+
+  it('OTA özel anahtar yolu sertifikanın aynası (ota-certs-<ad> → ota-keys-<ad>)', () => {
+    const k = ortakLib.ortakKimlik();
+    expect(k.otaAnahtar).toBe(k.otaSertifika.replace('ota-certs-', 'ota-keys-').replace('certificate.pem', 'private-key.pem'));
+  });
+
+  it('görünür etiket derlemeden DOĞMAZ (TEST/DEMO lisans sınıfından gelir)', () => {
+    expect(ortak.extra?.gorunurEtiket).toBeUndefined();
+    const etiketli = ortamla({ EXPO_PUBLIC_UPDATE_URL: undefined, TEKSERP_KANAL: undefined }, () =>
+      appConfig({ config: { ...JSON.parse(JSON.stringify(appJson)), extra: { gorunurEtiket: 'TEST', baska: 1 } } }),
+    );
+    expect(etiketli.extra).toEqual({ baska: 1 });
+  });
+
+  it('EXPO_PUBLIC_UPDATE_URL ile adres EZİLEMEZ (gürültülü düşer)', () => {
+    expect(() => cfg(undefined, { EXPO_PUBLIC_UPDATE_URL: 'https://indir.etkiliyazilim.com/test/mobil/' })).toThrow(/EXPO_PUBLIC_UPDATE_URL/);
+  });
+
+  it('SONDA: eksik/biçimsiz kayıt yerleşik değere sapmaz, düşer', () => {
+    const bozuk = (m: (o: typeof dagitim) => void) => {
+      const o = JSON.parse(JSON.stringify(dagitim));
+      m(o);
+      return () => ortakLib.ortakKimlik(o);
+    };
+    expect(bozuk((o) => delete o.urun.tablet.androidPaket)).toThrow(/androidPaket/);
+    expect(bozuk((o) => (o.urun.tablet.otaSertifika = 'keystore/ota-certs/certificate.pem'))).toThrow(/otaSertifika/);
+    expect(bozuk((o) => (o.urun.tablet.runtimeVersion = '55'))).toThrow(/runtimeVersion/);
+    expect(bozuk((o) => (o.indirmeKoku = 'https://indir.etkiliyazilim.com/test/'))).toThrow(/indirmeKoku/);
+  });
+
+  it('SONDA: eski kanalın yapılandırması ortak paket SAYILMAZ (fark yüklemi kör değil)', () => {
+    const f = ortakLib.ortakYapilandirmaFarki(cfg(kanalKaydi.varsayilan));
+    expect(f.some((x: string) => x.startsWith('android.package'))).toBe(true);
+    expect(f.some((x: string) => x.startsWith('updates.url'))).toBe(true);
+    expect(f.some((x: string) => x.startsWith('runtimeVersion'))).toBe(true);
+    expect(ortakLib.ortakYapilandirmaFarki({ ...ortak, extra: { gorunurEtiket: 'TEST' } }, { herkese: true }))
+      .toEqual([expect.stringMatching(/^extra\.gorunurEtiket/)]);
+  });
+
+  // Ortak anahtar çifti anahtar töreninde (kullanıcıyla) üretilir; o güne dek dosya yoktur. Gerçek
+  // kapı derlemedir (build-apk ortak yolu sertifikasız DURUR); burada yalnız TEKSERP_STRICT=1 ölçer.
+  const ortakSertifikaTesti = process.env.TEKSERP_STRICT === '1' ? it : it.skip;
+  ortakSertifikaTesti('ortak OTA sertifikası ve özel anahtarı GERÇEKTEN var (TEKSERP_STRICT=1)', () => {
+    const k = ortakLib.ortakKimlik();
+    expect(fs.existsSync(path.join(KOK, k.otaSertifika))).toBe(true);
+    expect(fs.existsSync(path.join(KOK, k.otaAnahtar))).toBe(true);
+  });
+});
+
+// =============================================================================
+// ESKİ KANAL — feed.cjs (deploy/mobil-yayinla.mjs ve kanal derlemesi okur)
+// =============================================================================
+describe('güncelleme kanalı adresi (eski kanal)', () => {
   it('müşteri kodu URL yolu olarak güvenli', () => {
     // Kod doğrudan adrese giriyor: büyük harf/Türkçe karakter/boşluk sessizce
     // 404 üretirdi (Electron'da `Ş`+boşluk taşıyan dosya adı tam bunu yaptı).
@@ -55,7 +177,7 @@ describe('güncelleme kanalı adresi', () => {
   });
 
   it('APK\'ya gömülen adres SABİTTEN türetilir', () => {
-    const uretilen = appConfig({ config: appJson }).updates.url;
+    const uretilen = cfg(musteri.kod).updates.url;
     expect(uretilen).toBe(feed.manifestUrl(feed.MOBIL_FEED_URL, appJson.runtimeVersion));
   });
 
@@ -63,8 +185,8 @@ describe('güncelleme kanalı adresi', () => {
     // Bu bir güvenlik özelliğidir: istemci indirme aşamasında runtimeVersion'ı
     // doğrulamaz; yanlış sürüm gelirse indirir, eler ve SESSİZCE eski sürümle
     // açılır. Sürüm adreste olunca her APK yalnız kendi paketini görebilir.
-    const uretilen = appConfig({ config: appJson }).updates.url;
-    expect(uretilen).toContain(`/ota/${appJson.runtimeVersion}/`);
+    expect(cfg(musteri.kod).updates.url).toContain(`/ota/${appJson.runtimeVersion}/`);
+    expect(cfg(undefined).updates.url).toContain(`/ota/${dagitim.urun.tablet.runtimeVersion}/`);
   });
 
   it('güncelleme AÇIK ve kod imzalama yapılandırılmış', () => {
@@ -115,6 +237,8 @@ describe('güncelleme kanalı adresi', () => {
     // sessizce başka yere bakar.
     const src = fs.readFileSync(path.join(KOK, 'app.config.js'), 'utf8');
     expect(src).not.toMatch(/updates\s*:[\s\S]*EXPO_PUBLIC_API_URL/);
+    // Ortak paket ERP adresini hiç bilmez (tablet sunucuyu çalışma anında bulur).
+    expect(fs.readFileSync(path.join(KOK, 'scripts/lib/ortak-kimlik.cjs'), 'utf8')).not.toMatch(/EXPO_PUBLIC_API_URL|erpAdresi/);
   });
 
   it('APK dosya adı kalıbı ASCII ve boşluksuz', () => {
@@ -138,29 +262,25 @@ describe('kanal derlemesi (TEKSERP_KANAL)', () => {
   const kayit = JSON.parse(fs.readFileSync(path.join(KOK, '..', 'deploy', 'kanallar.json'), 'utf8'));
   const kodlar = Object.keys(kayit.kanallar);
 
-  function ortamla<T>(degiskenler: Record<string, string | undefined>, fn: () => T): T {
-    const eski: Record<string, string | undefined> = {};
-    for (const [k, v] of Object.entries(degiskenler)) {
-      eski[k] = process.env[k];
-      if (v === undefined) delete process.env[k];
-      else process.env[k] = v;
-    }
-    try {
-      return fn();
-    } finally {
-      for (const [k, v] of Object.entries(eski)) {
-        if (v === undefined) delete process.env[k];
-        else process.env[k] = v;
-      }
-    }
-  }
-  const cfg = (kod?: string) =>
-    ortamla({ TEKSERP_KANAL: kod, EXPO_PUBLIC_UPDATE_URL: undefined }, () =>
-      appConfig({ config: JSON.parse(JSON.stringify(appJson)) }),
-    );
+  // Eski kanal derlemesi BAYT-DONUK (adnansahin'e zarar verme): değerlendirilmiş yapılandırma, sürüm alanları
+  // (`version` · `android.versionCode` — her yayın turunda artar) hariç, O7 öncesi ölçülen özete eşit.
+  // Değişti ⇒ adnansahin APK'sı/OTA'sı bu commit'ten FARKLI çıkar; bilinçliyse özet kullanıcı kararıyla güncellenir.
+  const ESKI_KANAL_OZETI = '2070d29fbd0dc6943827c3b3c272b271e83ca4bf2ea1c1d1d7bc1cdd26e12234';
+  const eskiOzet = (c: { version?: string; android?: { versionCode?: number } }) => {
+    const k = JSON.parse(JSON.stringify(c));
+    delete k.version;
+    delete k.android.versionCode;
+    return crypto.createHash('sha256').update(JSON.stringify(k)).digest('hex');
+  };
 
-  it('varsayılan kanalın çıktısı dinlenmedekiyle BİREBİR (anahtar sırası dahil)', () => {
-    expect(JSON.stringify(cfg(kayit.varsayilan))).toBe(JSON.stringify(cfg(undefined)));
+  it('varsayılan (eski) kanalın çıktısı DONDURULMUŞ özetle BİREBİR (anahtar sırası dahil)', () => {
+    expect(eskiOzet(cfg(kayit.varsayilan))).toBe(ESKI_KANAL_OZETI);
+  });
+
+  it('SONDA: özet kör değil — tek alan değişince tutmaz, sürüm alanları değişince tutar', () => {
+    const c = cfg(kayit.varsayilan);
+    expect(eskiOzet({ ...c, runtimeVersion: '54.3' })).not.toBe(ESKI_KANAL_OZETI);
+    expect(eskiOzet({ ...c, version: '9.9.9', android: { ...c.android, versionCode: 999 } })).toBe(ESKI_KANAL_OZETI);
   });
 
   it.each(kodlar)('%s kanalı kayıt defterindeki kimliği üretir', (kod) => {

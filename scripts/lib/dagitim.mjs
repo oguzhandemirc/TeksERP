@@ -265,9 +265,13 @@ export const SATICI_GRUP_MIGRATION_REL = 'satici/sunucu/prisma/migrations/202610
 
 /**
  * `deploy/dagitim.json`ı okuyan ürün/yayın dosyaları — BEYANLI. Bekçi ağaçta kaydın adını taşıyan
- * her kod dosyasını bu liste + bekçi dosyalarıyla kıyaslar (iki yönlü). O1'de tüketici yok.
+ * her kod dosyasını bu liste + bekçi dosyalarıyla kıyaslar (iki yönlü).
  */
-export const TUKETICILER = Object.freeze([]);
+export const TUKETICILER = Object.freeze([
+  // O7: tablet ortak kimliği (app.config.js argümansız yolu + build-apk); türetim eşitliği test_tablet_ortak_paket.
+  'mobil/scripts/lib/ortak-kimlik.cjs',
+  'mobil/src/test/update-feed-url.test.ts',
+]);
 
 /** İki dağıtım bekçisinin okuduğu dosyalar — commit tetiği bunları kapsar (okunandan dar olamaz). */
 export const DAGITIM_BEKCI_DOSYALARI = Object.freeze([

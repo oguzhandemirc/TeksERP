@@ -1,35 +1,24 @@
 // =============================================================================
 // TeksERP Mobil — dinamik Expo yapılandırması
 // =============================================================================
-// `app.json` STATİK gerçekleri taşır (ad, paket adı, izinler, runtimeVersion,
-// kod imzalama sertifikası) — DİNLENMEDE varsayılan kanalın kimliğiyle. Bu dosya
-// dinlenmede tek bir şeyi enjekte eder: uygulamanın GÜNCELLEMEYİ alacağı adres.
+// İKİ DERLEME KİMLİĞİ (tek ortak paket O7, docs/design/TEK-ORTAK-PAKET.md §2.2):
 //
-// ⚠️ KANAL DERLEMESİ: derleme betikleri `TEKSERP_KANAL=<kod>` koyar; o zaman
-// kanalın bütün kimliği (paket adı · görünen ad · güncelleme adresi · OTA
-// sertifikası · görünür etiket) `deploy/kanallar.json`dan uygulanır
-// (`scripts/lib/kanal.cjs`). app.json kanal için YAZILMAZ (parmak izi girdisi).
+// • ARGÜMANSIZ (ortamda `TEKSERP_KANAL` yok) = TEK ORTAK PAKET. Kimlik (paket adı · görünen ad ·
+//   runtimeVersion · OTA sertifikası + kid · güncelleme adresi) dağıtım kaydından
+//   `scripts/lib/ortak-kimlik.cjs` ile uygulanır. Güncelleme adresi grup-nötr Worker takma adıdır
+//   (`https://indir…/ota/<rv>/manifest`; Worker belirtecin grubuna yönlendirir). ERP adresi
+//   GÖMÜLMEZ — tablet sunucuyu çalışma anında bulur.
 //
-// ⚠️ GÜNCELLEME ADRESİ, API ADRESİNDEN BAĞIMSIZDIR (2026-08-26 kararı).
-// Uygulama ERP'ye fabrika ağından bağlanır (`EXPO_PUBLIC_API_URL`,
-// `192.168.1.250:4000`) ama güncellemeyi İNTERNETTEN, masaüstü panelinin de
-// kullandığı sunucudan alır. Tabletlerin wifi + LAN üzerinden internet erişimi
-// her zaman var; iki ayrı güncelleme kanalı işletmenin karşılığı yoktu.
+// • `TEKSERP_KANAL=<kod>` = ESKİ KANAL DERLEMESİ (adnansahin, bayt-donuk). Kanalın kimliği
+//   `deploy/kanallar.json`dan (`scripts/lib/kanal.cjs`). `app.json` bu kanalın dinlenme kimliğini
+//   taşır ve kanal için YAZILMAZ (native parmak izi girdisi); eski kanal yolu O15'te emekli olur.
 //
-// ⚠️ BU, AYNI GÜN VERİLEN "TEK KAYNAK `EXPO_PUBLIC_API_URL`" KARARININ
-// BİLİNÇLİ OLARAK TERSİNE ÇEVRİLMESİDİR. Burada gördüğün iki ayrı adres bir
-// tutarsızlık değil: artık İKİ kanal var ve her biri kendi tek kaynağından
-// gelir (`scripts/lib/feed.cjs` ↔ `EXPO_PUBLIC_API_URL`). Hiçbir kod birini
-// diğerinden türetmez, dolayısıyla ayrışabilecek bir şey de yoktur.
-// "Bunu birleştireyim" diye düşünüyorsan önce şunu sor: fabrika sunucusu
-// kapalıyken ya da tablet başka bir ağdayken güncelleme nasıl gelecek?
+// ⚠️ GÜNCELLEME ADRESİ, API ADRESİNDEN BAĞIMSIZDIR (2026-08-26 kararı): ERP fabrika ağından,
+// güncelleme internetten gelir; hiçbir kod birini diğerinden türetmez.
 //
-// ⚠️ Adres derleme anında AndroidManifest'e gömülür, tabletten
-// DEĞİŞTİRİLEMEZ. Yanlış giderse çözüm DNS'tir (alan adı bizim
-// kontrolümüzde) — bu yüzden `disableAntiBrickingMeasures` açmaya gerek yok.
+// ⚠️ Adres derleme anında AndroidManifest'e gömülür, tabletten DEĞİŞTİRİLEMEZ. Yanlış giderse
+// çözüm DNS'tir — bu yüzden `disableAntiBrickingMeasures` açmaya gerek yok.
 // =============================================================================
-
-const { guncellemeAdresiCoz, manifestUrl } = require('./scripts/lib/feed.cjs');
 
 module.exports = ({ config }) => {
   const runtimeVersion = String(config.runtimeVersion ?? '').trim();
@@ -50,13 +39,7 @@ module.exports = ({ config }) => {
     return kanalYapilandirmasi(config, kanalKodu, runtimeVersion);
   }
 
-  const { deger: feed } = guncellemeAdresiCoz(process.env.EXPO_PUBLIC_UPDATE_URL);
-
-  return {
-    ...config,
-    updates: {
-      ...(config.updates ?? {}),
-      url: manifestUrl(feed, runtimeVersion),
-    },
-  };
+  // Tembel yükleme: eski kanal derlemesinin yüklediği modül kümesi değişmesin.
+  const { ortakYapilandirmasi } = require('./scripts/lib/ortak-kimlik.cjs');
+  return ortakYapilandirmasi(config);
 };
