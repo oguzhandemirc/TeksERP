@@ -4,6 +4,7 @@ import { toast } from "sonner";
 import { CheckCircle2, History, Loader2, Radar, RotateCcw, X, XCircle } from "lucide-react";
 import { useServerDiscovery } from "@/hooks/useServerDiscovery";
 import { ServerDiscoveryPanel } from "./ServerDiscoveryPanel";
+import { LanTlsSection } from "./LanTlsSection";
 import {
   Dialog,
   DialogContent,
@@ -244,6 +245,16 @@ export function ApiEndpointDialog({ open, onOpenChange }: Props) {
               </>
             )}
           </p>
+
+          <LanTlsSection
+            url={composed}
+            recent={recent}
+            onAddressChanged={(url) => {
+              setParts(splitApiBaseUrl(url));
+              setTest({ status: "idle" });
+              void getRecentApiBaseUrls().then(setRecent);
+            }}
+          />
 
           {/* Ağda bulunanlar — "Son kullanılanlar"ın ÜSTÜNDE: keşfedilen canlı
               sunucu, geçmişte yazılmış bir adresten daha güncel bir bilgidir. */}

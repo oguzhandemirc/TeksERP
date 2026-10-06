@@ -43,6 +43,7 @@ import {
 } from '../../../store/baseUrlStore';
 import ConfirmDialog from '../../../components/ConfirmDialog';
 import { ServerDiscoveryList } from '../../../components/ServerDiscoveryList';
+import { LanTlsCard } from '../../../components/LanTlsCard';
 import { useBusyAction } from '../../../hooks/useBusyAction';
 import {
   SETTINGS_COLORS as COLORS,
@@ -447,6 +448,8 @@ export default function ServerSettingsScreen() {
           </>
         )}
       </View>
+
+      <LanTlsCard />
 
       <ConfirmDialog
         kind="destructive"

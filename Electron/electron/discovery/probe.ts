@@ -13,20 +13,45 @@
  * bağımlılık eklemeye değmez.
  */
 import http from "node:http";
+import https from "node:https";
+import { createHash } from "node:crypto";
+import type { TLSSocket } from "node:tls";
 import {
   DISCOVERY_IDENTITY_PATH,
   parseIdentityPayload,
   type ServerIdentity,
 } from "../../shared/discovery.js";
+import { parseTlsAdvert, type TlsAdvert } from "../../shared/lan-tls.js";
 
 export interface ProbeResult {
   identity: ServerIdentity | null;
   rttMs: number;
+  /** Sunucunun keşif yükündeki TLS ilanı (güven kaynağı DEĞİL). */
+  tls: TlsAdvert | null;
+  /** https probunda el sıkışmada GÖZLENEN sertifikanın parmak izi; http'de null. Kararı çağıran verir. */
+  observedFingerprint: string | null;
 }
 
 interface RawResponse {
   status: number;
   body: string;
+  observedFingerprint: string | null;
+}
+
+/**
+ * https probu sertifikayı KABUL EDER ve parmak izini gözlem olarak döner: kendinden imzalı sertifika
+ * zincirle doğrulanamaz, güven kararı sabitle karşılaştırmadadır (docs/design/LAN-TLS.md §6).
+ */
+function requestFor(url: string, timeoutMs: number, onRes: (res: http.IncomingMessage) => void): http.ClientRequest {
+  if (!url.startsWith("https:")) return http.get(url, { timeout: timeoutMs }, onRes);
+  return https.get(url, { timeout: timeoutMs, rejectUnauthorized: false }, onRes);
+}
+
+function peerFingerprint(res: http.IncomingMessage): string | null {
+  const sock = res.socket as TLSSocket | null;
+  if (!sock || typeof sock.getPeerCertificate !== "function") return null;
+  const raw = sock.getPeerCertificate(false)?.raw;
+  return raw ? createHash("sha256").update(raw).digest("hex") : null;
 }
 
 /** Tek GET. Asla throw etmez; ulaşılamazsa null. */
@@ -39,7 +64,8 @@ function get(url: string, timeoutMs: number): Promise<RawResponse | null> {
       resolve(r);
     };
     try {
-      const req = http.get(url, { timeout: timeoutMs }, (res) => {
+      const req = requestFor(url, timeoutMs, (res) => {
+        const observedFingerprint = peerFingerprint(res);
         const chunks: Buffer[] = [];
         // Kötü niyetli/yanlış bir servis sonsuz gövde akıtabilir — 64 KB'de kes.
         let size = 0;
@@ -53,7 +79,7 @@ function get(url: string, timeoutMs: number): Promise<RawResponse | null> {
           chunks.push(c);
         });
         res.on("end", () =>
-          done({ status: res.statusCode ?? 0, body: Buffer.concat(chunks).toString("utf8") }),
+          done({ status: res.statusCode ?? 0, body: Buffer.concat(chunks).toString("utf8"), observedFingerprint }),
         );
         res.on("error", () => done(null));
       });
@@ -92,8 +118,16 @@ export async function probeIdentity(
   const res = await get(`${root}${DISCOVERY_IDENTITY_PATH}`, timeoutMs);
   if (res && res.status === 200) {
     try {
-      const identity = parseIdentityPayload(JSON.parse(res.body));
-      if (identity) return { identity, rttMs: Date.now() - started };
+      const body = JSON.parse(res.body) as { tls?: unknown } | null;
+      const identity = parseIdentityPayload(body);
+      if (identity) {
+        return {
+          identity,
+          rttMs: Date.now() - started,
+          tls: parseTlsAdvert(body?.tls),
+          observedFingerprint: res.observedFingerprint,
+        };
+      }
     } catch {
       /* gövde JSON değil → aşağıdaki /health yoluna düş */
     }
@@ -109,5 +143,5 @@ export async function probeIdentity(
   } catch {
     return null;
   }
-  return { identity: null, rttMs: Date.now() - started };
+  return { identity: null, rttMs: Date.now() - started, tls: null, observedFingerprint: health.observedFingerprint };
 }

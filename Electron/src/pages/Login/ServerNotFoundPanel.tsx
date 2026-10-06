@@ -3,6 +3,7 @@ import { Loader2, Radar, ServerCrash, Settings2 } from "lucide-react";
 import { toast } from "sonner";
 import type { DiscoveredServer } from "@shared/ipc-contract";
 import { Button } from "@/components/ui/button";
+import { Callout } from "@/components/ui/callout";
 import { ServerDiscoveryPanel } from "@/components/settings/ServerDiscoveryPanel";
 import { useServerDiscovery } from "@/hooks/useServerDiscovery";
 import { connectToDiscoveredServer } from "@/lib/server-identity";
@@ -61,6 +62,14 @@ export function ServerNotFoundPanel({
           </p>
         </div>
       </div>
+
+      {/* Sabitli sunucu doğrulanamadı → HTTP'ye bilerek düşülmedi; kullanıcı sebebi görmeli. */}
+      {state?.tlsBlocked && (
+        <Callout tone="danger" title="Şifreli bağlantı doğrulanamadı" className="text-left">
+          <span data-testid="tls-blocked">{state.tlsBlocked}</span>. Güvenlik için şifresiz bağlantıya geçilmedi.
+          Sunucu şifreli bağlantıyı kapattıysa Sunucu Adresi ekranından şifreli bağlantıyı kaldırın.
+        </Callout>
+      )}
 
       {(state?.candidates.length ?? 0) > 0 ? (
         <ServerDiscoveryPanel

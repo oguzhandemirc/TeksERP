@@ -56,7 +56,8 @@ function handlerChannels(src: string): string[] {
 describe("keşif IPC zinciri", () => {
   const contractSrc = read("shared/ipc-contract.ts");
   const preloadSrc = read("electron/preload.ts");
-  const handlerSrc = read("electron/ipc/discovery.ipc.ts");
+  // Şifreli bağlantı kanalları (discovery:tls*) aynı kayıtla `lan-tls.ipc.ts`te.
+  const handlerSrc = read("electron/ipc/discovery.ipc.ts") + read("electron/ipc/lan-tls.ipc.ts");
   const indexSrc = read("electron/ipc/index.ts");
 
   const members = contractMembers(contractSrc);

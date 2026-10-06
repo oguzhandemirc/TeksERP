@@ -39,13 +39,19 @@ import { bootFactoryTimezone } from "./services/factory-timezone.service";
 import { shutdownChannel } from "./lib/hizmet-duzeni";
 import { listenShutdownChannel } from "./lib/kapanis-kanali";
 import { isVerificationMode } from "./lib/dogrulama-kipi";
+import { readLanTlsConfig } from "./lib/lan-tls/config";
+import { startLanTlsListener, stopLanTlsListener } from "./lib/lan-tls/listener";
 
 const PORT = process.env.PORT || 4000;
 // 0.0.0.0 = tüm ağ arayüzlerinden dinle (tablet/diğer cihazlar LAN üzerinden erişebilsin).
 // HOST env ile override edilebilir (örn. sadece localhost'a kısıtlamak için 127.0.0.1).
 // Doğrulama kipinde (güncelleyicinin `--dogrulama` başlatması) yalnız döngü adresi — `.env` bunu genişletemez.
 const VERIFYING = isVerificationMode();
-const HOST = VERIFYING ? "127.0.0.1" : process.env.HOST || "0.0.0.0";
+const LAN_HOST = VERIFYING ? "127.0.0.1" : process.env.HOST || "0.0.0.0";
+// LAN TLS (docs/design/LAN-TLS.md): varsayılan `off` = yalnız HTTP. `required`da HTTP yalnız döngü adresinde.
+// Doğrulama kipinde TLS dinleyicisi açılmaz (yalnız 127.0.0.1 HTTP).
+const LAN_TLS = readLanTlsConfig(VERIFYING ? { ...process.env, LAN_TLS_MODE: "off" } : process.env, LAN_HOST, (m) => uyari("lan-tls", m));
+const HOST = LAN_TLS.httpHost;
 
 // =============================================================================
 // TEK-PROCESS INVARIANT (load-bearing) — cluster/PM2-cluster/worker_threads YOK.
@@ -121,6 +127,21 @@ async function warnIfAuditGuardDisabled(): Promise<void> {
     }
 }
 
+function startLanTls(): void {
+  startLanTlsListener(app, LAN_TLS, LAN_HOST, {
+    info: (m) => bilgi("lan-tls", m),
+    warn: (m) => uyari("lan-tls", m),
+    error: (m, e) => hata("lan-tls", m, e),
+  });
+}
+
+function lanTlsBanner(): void {
+  if (LAN_TLS.mode === "off") return;
+  satir("--------------------------------------------------------");
+  satir(`  LAN TLS: kip ${LAN_TLS.mode} · https port ${LAN_TLS.port}`
+      + (LAN_TLS.mode === "required" ? " · HTTP yalnız 127.0.0.1" : ""));
+}
+
 function startLanListener(): Server {
   return app.listen(Number(PORT), HOST, () => {
     const allLan = getLanAddresses();
@@ -135,7 +156,8 @@ function startLanListener(): Server {
         satir("  Ağ     : (aktif LAN IPv4 adresi bulunamadı)");
     } else {
         for (const { iface, address } of lan.usable) {
-            satir(`  Ağ     : http://${address}:${PORT}   [${iface}]`);
+            if (LAN_TLS.mode !== "required") satir(`  Ağ     : http://${address}:${PORT}   [${iface}]`);
+            if (LAN_TLS.mode !== "off") satir(`  Ağ     : https://${address}:${LAN_TLS.port}   [${iface}]`);
         }
     }
     for (const { iface, address, reason } of lan.excluded) {
@@ -166,6 +188,7 @@ function startLanListener(): Server {
             ? `açık (${rl.windowMs / 1000}sn · yazma ${rl.writeMax} · giriş ${rl.loginMax})`
             : "kapalı"}`);
     }
+    lanTlsBanner();
     if (VERIFYING) {
         satir("--------------------------------------------------------");
         satir("  DOĞRULAMA KİPİ: yalnız 127.0.0.1 — zamanlayıcılar ve dış bağlantılar başlatılmadı");
@@ -254,6 +277,7 @@ function startLanListener(): Server {
             env: process.env.APP_ENV ?? process.env.NODE_ENV ?? "development",
             nodeVersion: process.version,
             dogrulamaKipi: VERIFYING,
+            lanTls: LAN_TLS.mode,
         },
     });
 });
@@ -267,6 +291,7 @@ void bootFactoryTimezone({
   warn: (m, e) => uyari("saat-dilimi", m, e),
 }).then(
   () => {
+    startLanTls();
     lanListener = startLanListener();
   },
   (err: unknown) => {
@@ -339,6 +364,7 @@ function gracefulShutdown(signal: string, exitCode = 0): void {
         new Promise((resolve) => setTimeout(resolve, 2000).unref()),
     ]).finally(() => {
         shutdownPhase = "dinleyiciler kapatılıyor";
+        stopLanTlsListener();
         server.close(() => {
             shutdownPhase = "DB kapatılıyor";
             bilgi("shutdown", "Sunucu kapandı.");

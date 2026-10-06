@@ -7,7 +7,8 @@
 
 // Keşif aday tipi saf mantık dosyasında yaşıyor (orada test edilebiliyor);
 // burada yeniden tanımlamak iki kopya demek olurdu.
-import type { DiscoveredServer, ServerGroup } from "./discovery";
+import type { DiscoveredServer, ServerGroup, ServerIdentity } from "./discovery";
+import type { TlsAdvert, TlsPin, TlsPinVia } from "./lan-tls";
 import type { LicenseRelayRequest, LicenseRelayResult } from "./license-relay";
 import type { ScreenshotResult } from "./screenshot";
 
@@ -327,7 +328,7 @@ export interface DiscoveryState {
   /** Aynı sunucular, TÜM adresleriyle — kullanıcı isterse adresi buradan seçer. */
   groups: ServerGroup<DiscoveredServer>[];
   /** main otomatik uyguladıysa dolu — renderer bunu kullanıcıya bildirir. */
-  applied: { baseUrl: string; reason: "single" | "pin-moved" } | null;
+  applied: { baseUrl: string; reason: "single" | "pin-moved" | "tls" } | null;
   mdns: { available: boolean; error: string | null; hits: number };
   /**
    * `skippedReason` dolu = tarama BİLEREK koşmadı (gürültü emniyeti).
@@ -341,8 +342,20 @@ export interface DiscoveryState {
     skippedReason: string | null;
   };
   pinnedInstallationId: string | null;
+  /** Şifreli bağlantı sabitli ama sunucu doğrulanamadı → HTTP'ye DÜŞÜLMEDİ; kullanıcıya gösterilen sebep. */
+  tlsBlocked: string | null;
   error: string | null;
 }
+
+/** Şifreli bağlantıya geçmeden önce sunucunun HTTPS'te sunduğu sertifikanın gözlemi (güven kararı değil). */
+export interface TlsObservation {
+  host: string;
+  advert: TlsAdvert | null;
+  observedFingerprint: string | null;
+  identity: ServerIdentity | null;
+}
+
+export type TlsPinResult = { ok: true; baseUrl: string } | { ok: false; reason: string };
 
 export interface DiscoveryApi {
   /** O anki durum. ⚠️ PULL: push kanalı BİLEREK yok (splash→renderer geçişi listener'ları düşürür). */
@@ -353,6 +366,13 @@ export interface DiscoveryApi {
   probe: (baseUrl: string) => Promise<DiscoveredServer | null>;
   /** Sunucu kimliğini bu makineye sabitler (null = sabitlemeyi kaldır). */
   pin: (installationId: string | null) => Promise<void>;
+  /** Sunucunun HTTPS sertifikasını gözlemler (parmak izini kullanıcıya göstermek için). */
+  tlsObserve: (baseUrl: string) => Promise<TlsObservation | null>;
+  /** Sertifikayı sabitler: ana süreç el sıkışmayı yeniden yapar, parmak izi eşit olmalı. Başarıda https adresi döner. */
+  tlsPin: (req: { baseUrl: string; fingerprint: string; via: TlsPinVia }) => Promise<TlsPinResult>;
+  /** Kurulumun şifreli bağlantı sabitini kaldırır (kullanıcının açık kararı). */
+  tlsUnpin: (installationId: string | null) => Promise<void>;
+  tlsPins: () => Promise<TlsPin[]>;
 }
 
 /** Lisans panel aktarması — backend dışarı çıkamıyorsa imzalı isteği satıcıya taşır. */

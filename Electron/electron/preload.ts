@@ -28,6 +28,10 @@ const api: ApiBridge = {
     start: (opts) => ipcRenderer.invoke("discovery:start", opts),
     probe: (baseUrl: string) => ipcRenderer.invoke("discovery:probe", baseUrl),
     pin: (installationId: string | null) => ipcRenderer.invoke("discovery:pin", installationId),
+    tlsObserve: (baseUrl: string) => ipcRenderer.invoke("discovery:tlsObserve", baseUrl),
+    tlsPin: (req) => ipcRenderer.invoke("discovery:tlsPin", req),
+    tlsUnpin: (installationId: string | null) => ipcRenderer.invoke("discovery:tlsUnpin", installationId),
+    tlsPins: () => ipcRenderer.invoke("discovery:tlsPins"),
   },
   appInfo: {
     version: () => ipcRenderer.invoke("app:version"),
