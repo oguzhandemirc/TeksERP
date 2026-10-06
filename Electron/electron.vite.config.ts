@@ -2,10 +2,10 @@ import { resolve } from "node:path";
 import { defineConfig, externalizeDepsPlugin } from "electron-vite";
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
-import { buildChannelCode, channelPlugin, panelChannel } from "./build-channel";
+import { buildIdentity, channelPlugin } from "./build-identity";
 
-// Kanal kimliği derleme ANINDA kayıttan (deploy/kanallar.json) — ağaca yazılmaz; bkz. build-channel.ts.
-const channel = panelChannel(buildChannelCode(process.env));
+// Paket kimliği derleme ANINDA kayıttan (ortak: dağıtım kaydı; eski kanal yolu: TEKSERP_KANAL) — bkz. build-identity.ts.
+const channel = buildIdentity(process.env);
 
 export default defineConfig(({ command }) => ({
   main: {

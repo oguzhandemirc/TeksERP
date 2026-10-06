@@ -198,6 +198,29 @@ export function turet(kayit) {
   return { gruplar, otaTakmaAd: `${k}${AYRILMIS_GRUP_KODLARI[0]}/${rv}/manifest` };
 }
 
+/** Ortak panelin çıktı dizini (electron-builder makrosu `${version}` harfiyen) — kanal kodu taşımaz. */
+export const PANEL_CIKTI_DESENI = 'release/ortak/${version}';
+
+/**
+ * Ortak panelin paket kimliği (O5): appId · ürün adı · paket adı · açıklama · dinlenme grubu ve onun
+ * güncelleme adresi. Dinlenme grubu terfi zincirinin köküdür (`test`): grup akışı (O6) gelene dek
+ * paketin gömülü adresi odur. `package.json` tabanı, derleme argümanları ve Vite sanal modülü buradan doğar.
+ */
+export function panelKimligi(kayit) {
+  const o = gecerliKayit(kayit);
+  const grup = grupZinciri(o.gruplar).zincir[0];
+  const p = o.urun.panel;
+  return {
+    grup,
+    appId: p.appId,
+    urunAdi: p.urunAdi,
+    paketAdi: p.paketAdi,
+    aciklama: `${p.urunAdi} — Admin Panel by Etkili Yazılım`,
+    feed: turet(o).gruplar[grup].panel.feed,
+    cikti: PANEL_CIKTI_DESENI,
+  };
+}
+
 /** Grubun terfi kaynağı (kök grup → null); kayıtlı olmayan grup → atar (fail-closed). */
 export function terfiKaynagi(kayit, grup) {
   const o = gecerliKayit(kayit);
@@ -265,9 +288,20 @@ export const SATICI_GRUP_MIGRATION_REL = 'satici/sunucu/prisma/migrations/202610
 
 /**
  * `deploy/dagitim.json`ı okuyan ürün/yayın dosyaları — BEYANLI. Bekçi ağaçta kaydın adını taşıyan
- * her kod dosyasını bu liste + bekçi dosyalarıyla kıyaslar (iki yönlü). O1'de tüketici yok.
+ * her kod dosyasını bu liste + bekçi dosyalarıyla kıyaslar (iki yönlü).
+ * O5 (panel ortak kimlik): derleme kimlik çözücüsü + bekçisi, paketleme kapısı kitaplığı, eski kanal
+ * kitaplığının kopya listesi (sahte derleme ağacı kaydı taşısın), demo imajı (web paneli aynı çözücüden).
  */
-export const TUKETICILER = Object.freeze([]);
+export const TUKETICILER = Object.freeze([
+  'Electron/build-identity.ts',
+  'Electron/src/test/update-feed-url.test.ts',
+  'scripts/lib/panel-kimlik.mjs',
+  'scripts/lib/kanallar.mjs',
+  'Dockerfile',
+  'docs/ops/deploy-demo-izin-listesi.txt',
+  'deploy/electron-paketle.sh',
+  'scripts/test_kanal_yayin_kapisi.mjs',
+]);
 
 /** İki dağıtım bekçisinin okuduğu dosyalar — commit tetiği bunları kapsar (okunandan dar olamaz). */
 export const DAGITIM_BEKCI_DOSYALARI = Object.freeze([

@@ -38,9 +38,7 @@ import {
   panelArtefaktFarki,
   panelArtefaktKimligi,
   panelDerlemeArgumanlari,
-  panelIsaretciFarki,
   panelKaynakFarki,
-  panelSabitKimlikFarki,
   varsayilanLisansSunucusu,
 } from './lib/kanallar.mjs';
 import { cumleDenetle, terfiAtlaKaydi, terfiKapisi, terfiRaporu } from './lib/terfi.mjs';
@@ -53,6 +51,8 @@ import fs from 'node:fs';
 // Panel künye kapısı GECİKMELİ yüklenir: panel komutları dışındaki her komut (kanal · terfi · backend…) panelin
 // doğrulayıcı modüllerine (Electron/electron/guncelleme/) bağlı kalmasın — o komutları kopyalayan bekçiler de.
 const panelImzaKapisi = () => import('./lib/panel-imza-kapisi.mjs');
+// Ortak panel kimliği (dağıtım kaydı) yalnız panel-paketle'de yüklenir — aynı gerekçe.
+const panelKimlik = () => import('./lib/panel-kimlik.mjs');
 import { yayinBildirVeBas } from './lib/yayin-bildirim.mjs';
 
 function dur(baslik, satirlar, kod) {
@@ -67,7 +67,7 @@ async function panelCapaDenetle(kod, dizin) {
   const { panelCapaFarki, panelCapaPaketFarki, panelCapasi } = await panelImzaKapisi();
   const liste = panelCapasi();
   const f = panelCapaFarki(liste);
-  if (!f.length && kod && dizin) f.push(...panelCapaPaketFarki(panelArtefaktKimligi(dizin).anaSurec, liste));
+  if (!f.length && dizin) f.push(...panelCapaPaketFarki(panelArtefaktKimligi(dizin).anaSurec, liste));
   if (f.length) {
     dur('PANEL İMZA ÇAPASI KULLANILAMAZ — paket hiçbir güncellemeyi doğrulayamaz (çıkışsız kapı)', [
       ...f,
@@ -84,6 +84,24 @@ async function panelKomutu(komut, [kod, dizin, ek]) {
     if (kod) kanalCoz(kod);
     const liste = await panelCapaDenetle(kod, dizin);
     return void console.log(`  ✓ panel imza çapası: ${liste.map((k) => k.kid).join(', ')}${dizin ? ' · pakete gömülü' : ''}`);
+  }
+  if (komut === 'panel-paketle') {
+    // Kimlik derleme ANINDA enjekte edilir; ağaç yalnız ezilen TABANDIR ve dinlenmede olmalı — taban
+    // O5'ten beri TEK ORTAK kimliktir (dağıtım kaydı), eski kanal paketinin kimliği yalnız `-c.*` + TEKSERP_KANAL'dan.
+    const { kayit, kanal } = kanalCoz(kod);
+    const { PANEL_DINLENME_DOSYALARI, panelDinlenmeFarki } = await panelKimlik();
+    const f = [
+      ...panelDinlenmeFarki(dosyalariOku(PANEL_DINLENME_DOSYALARI)).map((x) => `dinlenme (ortak): ${x}`),
+      ...panelKaynakFarki(kayit, dosyalariOku(PANEL_SABIT_DOSYALAR)),
+    ];
+    if (f.length) {
+      dur(`AĞAÇ "${kod}" KANALI İÇİN PAKETLENEMEZ — kimlik kaynağı kanal değil ya da ağaç dinlenmede değil`, [
+        ...f,
+        'Paketleme kimliği ağaca YAZMAZ, derleme anında enjekte eder; literal kimlik taşıyan kaynak o enjeksiyonu',
+        'göremez ve paket başka kanalın kimliğiyle doğar (aynı makinede o kanalın kurulumu/verisi/güncelleyicisi).',
+      ], 1);
+    }
+    return void console.log(`  ✓ kanal "${kod}" (${kanal.tur}) · ağaç dinlenmede (ortak taban) · kimlik derlemede kanaldan`);
   }
   kanalCoz(kod);
   if (komut === 'panel-imza') {
@@ -113,7 +131,7 @@ async function panelKomutu(komut, [kod, dizin, ek]) {
   }
 }
 
-const PANEL_KOMUTLARI = new Set(['panel-capa', 'panel-imza', 'panel-rotasyon', 'panel-imza-uzak']);
+const PANEL_KOMUTLARI = new Set(['panel-capa', 'panel-paketle', 'panel-imza', 'panel-rotasyon', 'panel-imza-uzak']);
 
 function hataDur(e) {
   if (e instanceof Olculemedi) dur(`ÖLÇÜLEMEDİ — ${e.message}`, ['Ölçülemeyen kapı geçmiş kapı değildir: DUR.'], 2);
@@ -131,26 +149,6 @@ function main(argv) {
     if (komut === 'kanal') {
       const { kanal } = kanalCoz(kod);
       console.log(`  ✓ kanal "${kod}" (${kanal.tur}) kayıtlı`);
-      return;
-    }
-    if (komut === 'panel-paketle') {
-      // Kimlik derleme ANINDA enjekte edilir; ağaç yalnız ezilen TABANDIR ve dinlenmede olmalı.
-      const { kayit, kanal } = kanalCoz(kod);
-      const vk = kayit.varsayilan;
-      const d = dosyalariOku(PANEL_SABIT_DOSYALAR);
-      const f = [
-        ...panelSabitKimlikFarki(kayit.kanallar[vk], d).map((x) => `dinlenme ("${vk}"): ${x}`),
-        ...panelIsaretciFarki(vk, kayit.kanallar[vk], d).map((x) => `dinlenme ("${vk}"): ${x}`),
-        ...panelKaynakFarki(kayit, d),
-      ];
-      if (f.length) {
-        dur(`AĞAÇ "${kod}" KANALI İÇİN PAKETLENEMEZ — kimlik kaynağı kanal değil ya da ağaç dinlenmede değil`, [
-          ...f,
-          'Paketleme kimliği ağaca YAZMAZ, derleme anında enjekte eder; literal kimlik taşıyan kaynak o enjeksiyonu',
-          'göremez ve paket başka kanalın kimliğiyle doğar (aynı makinede o kanalın kurulumu/verisi/güncelleyicisi).',
-        ], 1);
-      }
-      console.log(`  ✓ kanal "${kod}" (${kanal.tur}) · ağaç dinlenmede ("${vk}") · kimlik derlemede kanaldan`);
       return;
     }
     if (komut === 'backend-paketle') {

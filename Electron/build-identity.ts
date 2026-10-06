@@ -1,39 +1,46 @@
 /**
- * DERLEME KANALI — panelin dağıtım kimliği derleme ANINDA `deploy/kanallar.json`dan gelir.
+ * DERLEME KİMLİĞİ — panelin paket kimliği derleme ANINDA kayıttan gelir, kaynağa yazılmaz.
  *
- * Kimlik çalışma ağacına YAZILMAZ: `deploy/electron-paketle.sh <kod>` kanalı `TEKSERP_KANAL`
- * ortam değişkeniyle verir, bu dosya onu kayıttan çözer ve üç yapılandırma (electron-vite,
- * web derlemesi, vitest) aynı çözümü kullanır. Değişken yoksa kanal dinlenme işaretçisidir
- * (`shared/musteri.json` → `varsayilan`), yani geliştirme ve testler bugünkü kimlikle koşar.
+ * Varsayılan (argümansız paketleme, geliştirme, testler): TEK ORTAK kimlik `deploy/dagitim.json`
+ * (`panelKimligi`, scripts/lib/dagitim.mjs). Firma adı lisanstan, grup kiradan gelir; derleme
+ * müşteri bilmez.
+ *
+ * ESKİ KANAL YOLU (yalnız `deploy/electron-paketle.sh <kod>`; O15'te kalkar): `TEKSERP_KANAL` verilirse
+ * kimlik donuk `deploy/kanallar.json`daki o kanaldan çözülür — çıktısı bugünkü kanal paketiyle aynıdır.
  *
  * Kod `import { … } from "virtual:tekserp-channel"` ile okur (sarmalayıcı `shared/channel.ts`):
  * adlı dışa aktarımlar ağaç sallamaya girer, yalnız KULLANILAN değer pakete gömülür.
- * Bilinmeyen kanal derlemeyi durdurur (fail-closed); ağ ve dosya yazımı yok.
+ * Bilinmeyen kanal / geçersiz kayıt derlemeyi durdurur (fail-closed); ağ ve dosya yazımı yok.
  */
 import type { Plugin } from "vite";
 import registry from "../deploy/kanallar.json";
-import pointer from "./shared/musteri.json";
+import dagitim from "../deploy/dagitim.json";
+import { kayitHatalari, panelKimligi } from "../scripts/lib/dagitim.mjs";
 
-/** Kanalı taşıyan ortam değişkeni — `deploy/electron-paketle.sh` her derlemede açıkça verir. */
+/** Eski kanal yolunu seçen ortam değişkeni — yalnız `deploy/electron-paketle.sh <kod>` verir. */
 export const CHANNEL_ENV = "TEKSERP_KANAL";
 /** `index.html` `<title>` yer tutucusu; derlemede pencere başlığıyla değiştirilir. */
 export const TITLE_PLACEHOLDER = "%TEKSERP_WINDOW_TITLE%";
 export const VIRTUAL_MODULE = "virtual:tekserp-channel";
 const RESOLVED_VIRTUAL_MODULE = `\0${VIRTUAL_MODULE}`;
 
-/** Kayıt defterindeki bir kanalın panelin ihtiyaç duyduğu alt kümesi. */
-export interface PanelChannel {
+/** Derlenen panelin kimliği (sanal modülün alanları). */
+export interface PanelIdentity {
+  /** Güncelleme grubu/kanalı — künyenin `kanal` alanıyla kıyaslanır. Ortakta dinlenme grubu. */
   code: string;
   name: string;
-  /** Hazırlık kanalında görünür işaret ("TEST FABRİKA"); üretimde `null` → hiçbir şey çizilmez. */
+  /** Görünür deneme işareti; ortakta ve üretim kanalında `null` → hiçbir şey çizilmez. */
   label: string | null;
   appId: string;
   productName: string;
   packageName: string;
-  erpUrl: string;
+  /** Keşif bulamazsa denenen sunucu; ortakta YOK (adres keşiften / elle girişten). */
+  erpUrl: string | null;
   updateFeedUrl: string;
   windowTitle: string;
 }
+/** Geriye uyum adı (eski kanal yolu). */
+export type PanelChannel = PanelIdentity;
 
 interface RegistryChannel {
   ad: string;
@@ -49,8 +56,26 @@ export function windowTitleOf(productName: string, label: string | null): string
   return label ? `${label} · ${productName}` : productName;
 }
 
-/** Tanınmayan kod = hata (derleme durur). */
-export function panelChannel(code: string): PanelChannel {
+/** Tek ortak kimlik — `deploy/dagitim.json`; kayıt geçersizse derleme durur. */
+export function sharedIdentity(kayit: unknown = dagitim): PanelIdentity {
+  const h = kayitHatalari(kayit);
+  if (h.length) throw new Error(`deploy/dagitim.json GEÇERSİZ — ${h[0]}${h.length > 1 ? ` (+${h.length - 1})` : ""}`);
+  const k = panelKimligi(kayit);
+  return {
+    code: k.grup,
+    name: k.urunAdi,
+    label: null,
+    appId: k.appId,
+    productName: k.urunAdi,
+    packageName: k.paketAdi,
+    erpUrl: null,
+    updateFeedUrl: k.feed,
+    windowTitle: windowTitleOf(k.urunAdi, null),
+  };
+}
+
+/** ESKİ KANAL YOLU: tanınmayan kod = hata (derleme durur). */
+export function panelChannel(code: string): PanelIdentity {
   const c = Object.prototype.hasOwnProperty.call(channels, code) ? channels[code] : undefined;
   if (!c) {
     throw new Error(`BİLİNMEYEN KANAL "${code}" — deploy/kanallar.json kayıtlı kanallar: ${Object.keys(channels).join(", ")}`);
@@ -68,19 +93,20 @@ export function panelChannel(code: string): PanelChannel {
   };
 }
 
-/** Kayıtlı kanal kodları (testler her kanalı ayrı ölçer). */
+/** Eski kayıtlı kanal kodları (testler her kanalı ayrı ölçer). */
 export const registeredChannelCodes = (): string[] => Object.keys(channels);
 
-/** Derlenen kanal: ortam değişkeni varsa o, yoksa dinlenme işaretçisi. */
-export function buildChannelCode(env: Record<string, string | undefined>): string {
-  return env[CHANNEL_ENV] || pointer.kod;
+/** Derlenen kimlik: `TEKSERP_KANAL` varsa eski kanal yolu, yoksa tek ortak kimlik. */
+export function buildIdentity(env: Record<string, string | undefined>): PanelIdentity {
+  const kod = env[CHANNEL_ENV];
+  return kod ? panelChannel(kod) : sharedIdentity();
 }
 
 const escapeHtml = (s: string): string =>
   s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 
 /** Sanal modülün kaynağı — her alan ayrı adlı dışa aktarım (ağaç sallama kullanılmayanı atar). */
-export function virtualModuleSource(ch: PanelChannel): string {
+export function virtualModuleSource(ch: PanelIdentity): string {
   return (Object.entries(ch) as Array<[string, string | null]>)
     .map(([k, v]) => `export const ${k} = ${JSON.stringify(v)};`)
     .join("\n");
@@ -90,7 +116,7 @@ export function virtualModuleSource(ch: PanelChannel): string {
  * Vite eklentisi: `virtual:tekserp-channel` modülünü üretir ve `index.html` başlığını yazar.
  * Yer tutucu bulunamazsa derleme durur — başlık sessizce eski kimlikte kalmasın.
  */
-export function channelPlugin(ch: PanelChannel): Plugin {
+export function channelPlugin(ch: PanelIdentity): Plugin {
   return {
     name: "tekserp-channel",
     resolveId: (id) => (id === VIRTUAL_MODULE ? RESOLVED_VIRTUAL_MODULE : null),
@@ -99,7 +125,7 @@ export function channelPlugin(ch: PanelChannel): Plugin {
       order: "pre",
       handler: (html) => {
         if (!html.includes(TITLE_PLACEHOLDER)) {
-          throw new Error(`index.html <title> yer tutucusu (${TITLE_PLACEHOLDER}) yok — pencere başlığı kanaldan yazılamıyor`);
+          throw new Error(`index.html <title> yer tutucusu (${TITLE_PLACEHOLDER}) yok — pencere başlığı kayıttan yazılamıyor`);
         }
         return html.split(TITLE_PLACEHOLDER).join(escapeHtml(ch.windowTitle));
       },

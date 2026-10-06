@@ -1,10 +1,10 @@
 {
-  "name": "adnan-sahin-erp-admin",
-  "productName": "Adnan Şahin ERP",
+  "name": "tekserp-panel",
+  "productName": "TeksERP",
   "version": "1.4.2",
   "private": true,
   "type": "module",
-  "description": "Adnan Şahin ERP — Admin Panel by Etkili Yazılım",
+  "description": "TeksERP — Admin Panel by Etkili Yazılım",
   "author": {
     "name": "Etkili Yazılım",
     "email": "info@etkiliyazilim.com"
@@ -114,13 +114,13 @@
     "vitest-axe": "^0.1.0"
   },
   "build": {
-    "appId": "com.etkiliyazilim.adnan-sahin-erp",
-    "productName": "Adnan Şahin ERP",
+    "appId": "com.etkiliyazilim.tekserp",
+    "productName": "TeksERP",
     "asar": true,
     "publish": [
       {
         "provider": "generic",
-        "url": "https://guncelleme.etkiliyazilim.com/adnansahin/electron/",
+        "url": "https://indir.etkiliyazilim.com/test/electron/",
         "channel": "latest"
       }
     ],
@@ -131,7 +131,7 @@
       "**/node_modules/bindings/**"
     ],
     "directories": {
-      "output": "release/adnansahin/${version}",
+      "output": "release/ortak/${version}",
       "buildResources": "resources"
     },
     "files": [
@@ -184,13 +184,13 @@
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
-      "shortcutName": "Adnan Şahin ERP",
+      "shortcutName": "TeksERP",
       "runAfterFinish": true,
       "deleteAppDataOnUninstall": false,
       "installerIcon": "resources/TeksERP-LOGO.ico",
       "uninstallerIcon": "resources/TeksERP-LOGO.ico",
       "installerHeaderIcon": "resources/TeksERP-LOGO.ico",
-      "uninstallDisplayName": "Adnan Şahin ERP",
+      "uninstallDisplayName": "TeksERP",
       "menuCategory": "Etkili Yazılım"
     },
     "linux": {

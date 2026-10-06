@@ -337,37 +337,26 @@ const fark = (liste, neresi, gercek, beklenen) => {
 };
 
 /**
- * Panel kimliğinin çalışma ağacındaki izleri. Kimlik ağaca YAZILMAZ: paketleme onu
- * derleme ANINDA enjekte eder (`panelDerlemeAyarlari` → electron-builder `-c.*`,
- * `Electron/build-channel.ts` → Vite sanal modülü). Ağaçta iki tür iz kalır:
- *   · package.json alanları — ezilen TABAN, dinlenmede `varsayilan` kanalın değeri;
- *   · kaynak dosyalar — kimliği kanaldan ALIR, literal taşımaz (literal ezmeyi görmez).
+ * Panel kimliğinin çalışma ağacındaki izleri. Kimlik ağaca YAZILMAZ: paketleme onu derleme ANINDA
+ * enjekte eder (eski kanal yolunda `panelDerlemeAyarlari` → electron-builder `-c.*`,
+ * `Electron/build-identity.ts` → Vite sanal modülü). Ağaçta iki tür iz kalır:
+ *   · package.json alanları — ezilen TABAN; dinlenmede TEK ORTAK kimlik (dağıtım kaydı, O5) —
+ *     ölçümü `scripts/lib/panel-kimlik.mjs` `panelDinlenmeFarki`;
+ *   · kaynak dosyalar — kimliği kayıttan ALIR, literal taşımaz (literal ezmeyi görmez).
+ * Dağıtım kaydı ve kitaplıkları da listededir: eski kanal derlemesi aynı çözücüden geçer.
  */
 export const PANEL_SABIT_DOSYALAR = [
   'Electron/package.json', 'Electron/electron/main.ts', 'Electron/index.html', 'Electron/resources/splash.html',
-  'Electron/shared/musteri.json', 'Electron/shared/channel.ts', 'Electron/build-channel.ts',
+  'Electron/shared/channel.ts', 'Electron/build-identity.ts',
+  'deploy/dagitim.json', 'scripts/lib/dagitim.mjs', 'scripts/lib/panel-kimlik.mjs', 'scripts/panel-kimlik-kapisi.mjs',
 ];
 
-/** index.html `<title>` yer tutucusu — `Electron/build-channel.ts` derlemede pencere başlığıyla değiştirir. */
+/** index.html `<title>` yer tutucusu — `Electron/build-identity.ts` derlemede pencere başlığıyla değiştirir. */
 export const PANEL_BASLIK_YER_TUTUCU = '%TEKSERP_WINDOW_TITLE%';
-/** Derleme kanalını electron-vite'a (Vite sanal modülü) taşıyan ortam değişkeni. */
+/** Eski kanal derlemesini electron-vite'a (Vite sanal modülü) taşıyan ortam değişkeni. */
 export const PANEL_KANAL_ORTAMI = 'TEKSERP_KANAL';
 /** Paket açıklaması (NSIS kurulum dosyasının FileDescription'ı) ürün adından türer. */
 export const panelAciklamasi = (kanal) => `${kanal.panel.urunAdi} — Admin Panel by Etkili Yazılım`;
-
-/** Dinlenmedeki package.json kimlik alanları ↔ kanal (bekçi: `varsayilan`; paketleme: taban temiz mi). */
-export function panelSabitKimlikFarki(kanal, dosyalar) {
-  const f = [];
-  const p = json(dosyalar, 'Electron/package.json');
-  fark(f, 'Electron/package.json name', p.name, kanal.panel.paketAdi);
-  fark(f, 'Electron/package.json productName', p.productName, kanal.panel.urunAdi);
-  fark(f, 'Electron/package.json description', p.description, panelAciklamasi(kanal));
-  fark(f, 'Electron/package.json build.productName', p.build?.productName, kanal.panel.urunAdi);
-  fark(f, 'Electron/package.json build.appId', p.build?.appId, kanal.panel.appId);
-  fark(f, 'Electron/package.json build.nsis.shortcutName', p.build?.nsis?.shortcutName, kanal.panel.urunAdi);
-  fark(f, 'Electron/package.json build.nsis.uninstallDisplayName', p.build?.nsis?.uninstallDisplayName, kanal.panel.urunAdi);
-  return f;
-}
 
 const yorumsuz = (m) => m.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
 const esc = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -408,25 +397,10 @@ export function panelKaynakFarki(kayit, dosyalar) {
   if (!/from\s+["']virtual:tekserp-channel["']/.test(oku('Electron/shared/channel.ts'))) {
     f.push('Electron/shared/channel.ts kimliği derleme sanal modülünden (virtual:tekserp-channel) almıyor');
   }
-  const derleme = oku('Electron/build-channel.ts');
+  const derleme = oku('Electron/build-identity.ts');
   for (const [ne, iz] of [['kayıt defteri', 'deploy/kanallar.json'], ['kanal ortamı', PANEL_KANAL_ORTAMI], ['başlık yer tutucusu', PANEL_BASLIK_YER_TUTUCU]]) {
-    if (!derleme.includes(iz)) f.push(`Electron/build-channel.ts ${ne} izini (${iz}) taşımıyor`);
+    if (!derleme.includes(iz)) f.push(`Electron/build-identity.ts ${ne} izini (${iz}) taşımıyor`);
   }
-  return f;
-}
-
-/** Dinlenmedeki panel işaretçileri — `varsayilan` kanalı göstermeli (musteri.json yalnız KOD taşır). */
-export function panelIsaretciFarki(kod, kanal, dosyalar) {
-  const f = [];
-  const p = json(dosyalar, 'Electron/package.json');
-  const m = json(dosyalar, 'Electron/shared/musteri.json');
-  const anahtar = esitKumeler(Object.keys(m), ['kod']);
-  if (anahtar.fazla.length || anahtar.eksik.length) {
-    f.push(`Electron/shared/musteri.json yalnız {kod} taşır — kimlik kayıt defterinden (fazla: ${anahtar.fazla.join(',') || '-'} · eksik: ${anahtar.eksik.join(',') || '-'})`);
-  }
-  fark(f, 'Electron/shared/musteri.json kod', m.kod, kod);
-  fark(f, 'Electron/package.json build.publish[0].url', p.build?.publish?.[0]?.url, kanal.yayin.panelFeed);
-  fark(f, 'Electron/package.json build.directories.output', p.build?.directories?.output, panelCiktiDeseni(kod));
   return f;
 }
 
@@ -435,7 +409,7 @@ export const panelCiktiDeseni = (kod) => `release/${kod}/\${version}`;
 
 /**
  * electron-builder'a derleme ANINDA verilen kimlik (`-c.<anahtar>=<değer>`). package.json'daki
- * taban ne olursa olsun paketin kimliği buradan doğar; `varsayilan` kanal için taban ile birebir.
+ * taban (O5: tek ortak kimlik) ne olursa olsun eski kanal paketinin kimliği buradan doğar.
  * `extraMetadata` paketin İÇİNDEKİ package.json'dır: `name` → güncelleyici önbelleği,
  * `productName` → çalışma anı adı ve userData dizini.
  */
@@ -534,9 +508,11 @@ export const KANAL_BEKCI_DOSYALARI = [...new Set([
   'Electron/electron/guncelleme/latest-yml.mjs',
   'mobil/scripts/lib/apk-kunye.mjs', 'mobil/src/lib/apk-imza-capasi.json',
 ])];
+/** YOKLUĞU ölçülen dosyalar (O5: kalkmış panel müşteri işaretçisi) — geri gelirse (A) bekçiler koşar; diskte olmaları beklenmez. */
+export const KANAL_BEKCI_YOKLUK_DOSYALARI = ['Electron/shared/musteri.json'];
 /** Bu yola dokunan commit kanal bekçilerini koşar (`scripts/hooks/pre-commit.mjs`). */
 export function kanalBekcisiTetigi(rel) {
-  if (KANAL_BEKCI_DOSYALARI.includes(rel)) return true;
+  if (KANAL_BEKCI_DOSYALARI.includes(rel) || KANAL_BEKCI_YOKLUK_DOSYALARI.includes(rel)) return true;
   const i = rel.lastIndexOf('/');
   const dizin = rel.slice(0, i);
   return YAYIN_YOLU_DESENLERI.some((d) => d.dizin === dizin && d.ad.test(rel.slice(i + 1)));

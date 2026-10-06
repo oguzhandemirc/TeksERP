@@ -2,7 +2,7 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { defineConfig } from "vitest/config";
 import react from "@vitejs/plugin-react";
-import { buildChannelCode, channelPlugin, panelChannel } from "./build-channel";
+import { buildIdentity, channelPlugin } from "./build-identity";
 
 // ESM config — __dirname yok; import.meta.url'den türet (no-undef'i de giderir).
 const rootDir = dirname(fileURLToPath(import.meta.url));
@@ -17,8 +17,8 @@ const rootDir = dirname(fileURLToPath(import.meta.url));
 // kırmızıyı keser; bayraksız (CI, elle `npm test`) 5 sn kalır — asıl sınır boş koşucuda.
 const KAPI_KIPI = process.env.TEKSERP_KAPI_ADIMI === "commit";
 
-// Testler derlemenin gördüğü kanalı görür: `TEKSERP_KANAL` (paketleme adımı) ya da dinlenme işaretçisi.
-const channel = panelChannel(buildChannelCode(process.env));
+// Testler derlemenin gördüğü kimliği görür: `TEKSERP_KANAL` (eski kanal paketleme adımı) ya da tek ortak kimlik.
+const channel = buildIdentity(process.env);
 
 export default defineConfig({
   plugins: [react(), channelPlugin(channel)],

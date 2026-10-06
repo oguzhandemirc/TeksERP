@@ -25,7 +25,8 @@
 # 1) PANEL — Electron kod tabanının WEB hedefi (vite.config.web.ts)
 # ---------------------------------------------------------------------------
 FROM node:22-bookworm-slim AS panel
-# Depo düzeni korunur: `build-channel.ts` kanal kaydını `../deploy/kanallar.json`dan okur.
+# Depo düzeni korunur: `build-identity.ts` ortak kimliği `../deploy/dagitim.json` + `../scripts/lib/dagitim.mjs`ten,
+# eski kanal yolunu `../deploy/kanallar.json`dan okur.
 WORKDIR /repo/Electron
 COPY Electron/package.json Electron/package-lock.json ./
 # ⚠️ `--ignore-scripts`: Electron paketi ve native donanım modülleri
@@ -33,6 +34,8 @@ COPY Electron/package.json Electron/package-lock.json ./
 # kullanılmıyor, derlemede yalnız zaman ve hata riski üretirler.
 RUN npm ci --ignore-scripts
 COPY deploy/kanallar.json /repo/deploy/kanallar.json
+COPY deploy/dagitim.json /repo/deploy/dagitim.json
+COPY scripts/lib/dagitim.mjs /repo/scripts/lib/dagitim.mjs
 COPY Electron/ ./
 RUN npm run build:web
 

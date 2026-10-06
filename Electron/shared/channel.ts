@@ -1,9 +1,10 @@
 /**
- * BU PAKETİN DAĞITIM KANALI — kimliğin kod içindeki TEK kaynağı.
+ * BU PAKETİN DAĞITIM KİMLİĞİ — kimliğin kod içindeki TEK kaynağı.
  *
- * Değerler derleme ANINDA `deploy/kanallar.json`dan gelir (`build-channel.ts` → Vite sanal
- * modülü); bu dosya elle düzenlenecek bir değer taşımaz. Paketleme: `./deploy/electron-paketle.sh <kod>`.
- * Hangi değerin nerede kullanıldığı paketten okunarak doğrulanır (`scripts/kanal-kapisi.mjs panel-yayin`).
+ * Değerler derleme ANINDA kayıttan gelir (`build-identity.ts` → Vite sanal modülü): varsayılan tek ortak
+ * kimlik (dağıtım kaydı), eski kanal yolunda (`TEKSERP_KANAL`) `deploy/kanallar.json`. Bu dosya elle
+ * düzenlenecek bir değer taşımaz. Paketleme: `./deploy/electron-paketle.sh [sürüm]` (ortak).
+ * Hangi değerin pakete gömüldüğü paketten okunarak doğrulanır (`scripts/panel-kimlik-kapisi.mjs paket`).
  */
 export {
   code as CHANNEL_CODE,

@@ -54,9 +54,10 @@ import zlib from 'node:zlib';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
 import {
-  asarOku, kanalBekcisiTetigi, kanalCoz, tabletSabitKimlikFarki, panelSabitKimlikFarki, panelDerlemeAyarlari, dosyalariOku,
+  asarOku, kanalBekcisiTetigi, kanalCoz, tabletSabitKimlikFarki, panelDerlemeAyarlari, dosyalariOku,
   TABLET_SABIT_DOSYALAR, PANEL_SABIT_DOSYALAR,
 } from './lib/kanallar.mjs';
+import { PANEL_DINLENME_DOSYALARI, ortakKimlik, panelDinlenmeFarki, panelOrtakDerlemeAyarlari } from './lib/panel-kimlik.mjs';
 import { bundleAdresOlcumu } from '../mobil/scripts/lib/adres.mjs';
 import { zipGirdisiOku } from '../mobil/scripts/lib/zip.mjs';
 import { apkKimligi, axmlOgeleri } from '../mobil/scripts/lib/apk-kimlik.mjs';
@@ -264,12 +265,20 @@ if (arac === 'npm') {
   // Kayıt öncesi bir ref'te (--eski) ağaçta kayıt yok: o ref'in gömdüğü kimlik bugünkü kaydın aynı kanalıdır.
   const kayitYolu = fs.existsSync('../deploy/kanallar.json') ? '../deploy/kanallar.json' : process.env.KANAL_KAYDI_YEDEK;
   const kayit = JSON.parse(fs.readFileSync(kayitYolu, 'utf8'));
-  const kod = process.env.TEKSERP_KANAL || JSON.parse(fs.readFileSync('shared/musteri.json', 'utf8')).kod;
+  // Ortamsız derleme TEK ORTAK kimliği gömer (build-identity.ts, O5); eski ref'te işaretçi (musteri.json) varsa o.
+  let k;
+  if (process.env.TEKSERP_KANAL) k = kayit.kanallar[process.env.TEKSERP_KANAL];
+  else if (fs.existsSync('shared/musteri.json')) k = kayit.kanallar[JSON.parse(fs.readFileSync('shared/musteri.json', 'utf8')).kod];
+  else {
+    const { panelKimligi } = await import(new URL('file://' + path.resolve('../scripts/lib/dagitim.mjs')).href);
+    const o = panelKimligi(JSON.parse(fs.readFileSync('../deploy/dagitim.json', 'utf8')));
+    k = { panel: { appId: o.appId, urunAdi: o.urunAdi, paketAdi: o.paketAdi, erpAdresi: null }, yayin: { panelFeed: o.feed }, gorunurEtiket: null };
+  }
   const { asarYaz, gomuluKimlik } = await import(process.env.ASAR_YAZ);
   // electron-vite çapa JSON'unu ana sürece gömer (guncelleme-dogrulama.ts → imza-capasi.json).
   const capaYolu = 'electron/guncelleme/imza-capasi.json';
   const capa = fs.existsSync(capaYolu) ? JSON.parse(fs.readFileSync(capaYolu, 'utf8')).anahtarlar : [];
-  asarYaz(path.join(res, 'app.asar'), gomuluKimlik(kayit.kanallar[kod], meta, capa));
+  asarYaz(path.join(res, 'app.asar'), gomuluKimlik(k, meta, capa));
   const exe = 'TeksERP-' + meta.version + '-Setup.exe';
   const govde = Buffer.from('SAHTE-SETUP ' + meta.name + ' ' + meta.version + ' ' + cfg.publish[0].url);
   fs.writeFileSync(path.join(cikti, exe), govde);
@@ -317,7 +326,7 @@ export function gomuluKimlik(k, meta, capa = []) {
     'out/main/main.js': 'const appId = "' + k.panel.appId + '"; const updateFeedUrl = "' + k.yayin.panelFeed + '"; const windowTitle = "' + baslik + '";' +
       (capa.length ? ' const panelKunyeTuru = "tekserp-panel"; const anahtarlar = ' + JSON.stringify(capa) + ';' : ''),
     'out/renderer/index.html': '<title>' + baslik + '</title>',
-    'out/renderer/assets/index-sahte.js': 'const erpUrl = "' + k.panel.erpAdresi + '"; const label = ' + JSON.stringify(k.gorunurEtiket) + ';',
+    'out/renderer/assets/index-sahte.js': 'const erpUrl = ' + JSON.stringify(k.panel.erpAdresi) + '; const label = ' + JSON.stringify(k.gorunurEtiket) + ';',
   };
 }
 `);
@@ -958,15 +967,17 @@ const npmCagrisi = (o) => o.cagrilar().find((c) => c.arac === 'npm' && /^run bui
     d !== null && d.yml.includes(`url: ${YAYIN_HOST}adnansahin/electron/`) && d.yml.includes('updaterCacheDirName: adnan-sahin-erp-admin-updater') &&
       d.exeler.join() === 'Adnan Şahin ERP.exe' && d.paket.name === 'adnan-sahin-erp-admin' && d.paket.productName === 'Adnan Şahin ERP' &&
       d.main.includes('"com.etkiliyazilim.adnan-sahin-erp"') && d.arayuz.includes('"http://192.168.1.250:4000"') && d.arayuz.includes('const label = null'));
-  // Enjekte edilen değerler ağaçtaki tabanla birebir: varsayilan kanal için ezme bir şey DEĞİŞTİRMEZ.
+  // O5: dinlenme tabanı TEK ORTAK kimliktir; eski kanal paketinin kimliğinin HER alanı `-c.*` + TEKSERP_KANAL'dan
+  // gelir — tabandan hiçbir değer pakete sızmaz (yukarıdaki gömülü kimlik bunu çıktıdan ölçer).
   const ayar = panelDerlemeAyarlari('adnansahin', kanalCoz('adnansahin').kanal);
   const taban = {
     appId: p.build.appId, productName: p.build.productName, 'extraMetadata.name': p.name, 'extraMetadata.productName': p.productName,
     'extraMetadata.description': p.description, 'nsis.shortcutName': p.build.nsis.shortcutName,
     'nsis.uninstallDisplayName': p.build.nsis.uninstallDisplayName, 'publish.url': p.build.publish[0].url, 'directories.output': p.build.directories.output,
   };
-  ol('2c ⭐ adnansahin için enjekte edilen HER kimlik değeri package.json tabanıyla birebir (ezme = no-op)',
-    JSON.stringify(ayar) === JSON.stringify(taban) && n?.kanal === 'adnansahin', `${JSON.stringify(ayar)}\n${JSON.stringify(taban)}`);
+  ol('2c ⭐ adnansahin: kimliğin HER alanı derleyiciye -c.* ile verildi (taban ortak, ezme tam) + TEKSERP_KANAL=adnansahin',
+    Object.entries(ayar).every(([a, v]) => n?.args.includes(`-c.${a}=${v}`)) && n?.kanal === 'adnansahin' &&
+      Object.keys(ayar).every((a) => ayar[a] !== taban[a]), `${JSON.stringify(ayar)}\n${JSON.stringify(taban)}`);
   ol('2c yayın komutu önerisi --musteri taşıyor', /electron-yayinla\.sh --musteri=adnansahin/.test(s.r.cikti));
   if (ESKI) {
     const e = paketleSenaryosu(['adnansahin', SURUM], { ref: ESKI });
@@ -996,7 +1007,7 @@ const npmCagrisi = (o) => o.cagrilar().find((c) => c.arac === 'npm' && /^run bui
   // SONDA: electron-vite bacağı düşerse app-update.yml doğru ama ana süreç başka kanalın AUMID/adresini taşır.
   const s = paketleSenaryosu(['testfabrika', SURUM], { mutasyon: (m) => m.replaceAll('TEKSERP_KANAL="$musteri" npm run', 'npm run') });
   ol('2e ⭐ SONDA: TEKSERP_KANAL (kod içi kimlik) düşerse → derleme sonrası kapı ana süreçteki yabancı kimliği yakalar',
-    s.r.kod !== 0 && Boolean(npmCagrisi(s.o)) && /ana süreç/.test(s.r.cikti) && /adnansahin/.test(s.r.cikti), s.r.cikti.slice(-600));
+    s.r.kod !== 0 && Boolean(npmCagrisi(s.o)) && /ana süreç/.test(s.r.cikti) && /testfabrika/.test(s.r.cikti), s.r.cikti.slice(-600));
 }
 {
   // Kaynak literal kimlik taşıyorsa enjeksiyon onu göremez: kapı HİÇBİR ŞEY yazmadan ve derlemeden önce durur.
@@ -1628,8 +1639,8 @@ const parmakIzi = (cikti) => /Native parmak izi : ([0-9a-f]+)/.exec(cikti)?.[1] 
 console.log('\n§5 — ortak yüklemler');
 {
   const d = dosyalariOku([...TABLET_SABIT_DOSYALAR, ...PANEL_SABIT_DOSYALAR]);
-  ol('5a adnansahin: ağacın panel + tablet kimliği kayıtla birebir',
-    panelSabitKimlikFarki(kanalCoz('adnansahin').kanal, d).length === 0 && tabletSabitKimlikFarki(kanalCoz('adnansahin').kanal, d).length === 0);
+  ol('5a ağacın panel tabanı ORTAK kimlik (O5), tablet kimliği adnansahin kaydıyla birebir',
+    panelDinlenmeFarki(dosyalariOku(PANEL_DINLENME_DOSYALARI)).length === 0 && tabletSabitKimlikFarki(kanalCoz('adnansahin').kanal, d).length === 0);
   const tf = tabletSabitKimlikFarki(kanalCoz('testfabrika').kanal, d);
   ol('5b testfabrika kimliği app.json\'da YOK — app.json dinlenme (varsayilan) kimliğidir, kanal derleme anında enjekte edilir',
     tf.some((x) => x.includes('android.package')) && tf.some((x) => x.includes('codeSigningCertificate')), tf.join('\n'));

@@ -8,12 +8,14 @@
 Dockerfile
 .dockerignore
 deploy/kanallar.json
+deploy/dagitim.json
+scripts/lib/dagitim.mjs
 
 Electron/package.json
 Electron/package-lock.json
 Electron/index.html
 Electron/vite.config.web.ts
-Electron/build-channel.ts
+Electron/build-identity.ts
 Electron/tsconfig.json
 Electron/tsconfig.web.json
 Electron/tsconfig.node.json

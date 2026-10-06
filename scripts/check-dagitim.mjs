@@ -292,7 +292,7 @@ function sondalar(taban, tabanOkuyanlar) {
     ['N27 hizmet adı değişti → beyanlı istisna kullanılmıyor → KIRMIZI', 'kirmizi', kayitta((o) => { o.urun.backend.hizmetAdi = 'TeksERP-Sunucu'; }), 'kullanılmayan ayrılık istisnası'],
     ['N28 lisansSunucusu backend varsayılanından ayrıştı → KIRMIZI', 'kirmizi', kayitta((o) => { o.lisansSunucusu = 'https://lisans2.etkiliyazilim.com'; }), '§5'],
     ['N29 indirme kökü http:// → KIRMIZI', 'kirmizi', kayitta((o) => { o.indirmeKoku = 'http://indir.etkiliyazilim.com/'; }), 'indirmeKoku'],
-    ['N30 beyansız tüketici (Electron/build-identity.ts) → KIRMIZI', 'kirmizi', (d, c) => { c.okuyanlar.push('Electron/build-identity.ts'); }, 'beyansız tüketici'],
+    ['N30 beyansız tüketici (mobil/app.config.js) → KIRMIZI', 'kirmizi', (d, c) => { c.okuyanlar.push('mobil/app.config.js'); }, 'beyansız tüketici'],
     ['N31 ölü tüketici beyanı → KIRMIZI', 'kirmizi', (d, c) => { c.ek.tuketiciler = ['mobil/scripts/build-apk.mjs']; }, 'ölü tüketici'],
     ['N32 commit kancasından dağıtım adımı söküldü → KIRMIZI', 'kirmizi', (d) => { d[KAPI_KANCASI_REL] = d[KAPI_KANCASI_REL].replace('staged.some(dagitimBekcisiTetigi)', 'false'); }, 'dağıtım kaydı adımı yok'],
     ['N33 donma adımı koşula alındı (girintili) → KIRMIZI', 'kirmizi', (d) => {

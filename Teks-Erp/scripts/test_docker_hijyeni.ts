@@ -279,9 +279,10 @@ console.log("\n=== §4 docs/ops/deploy-demo.sh aktarımı ===\n");
   });
   check("§4f ⭐ kök Dockerfile'ın her COPY kaynağı aktarım kümesinde", kaynaklar.length > 5 && eksik.length === 0,
     eksik.join(", ") || `${kaynaklar.length} kaynak`);
-  const kanal = oku("Electron/build-channel.ts").match(/from\s+"\.\.\/(deploy\/[^"]+)"/);
-  check("§4g panel derlemesinin depo-dışı girdisi (build-channel → deploy/) kümede",
-    !!kanal && kume.includes(kanal[1]), kanal?.[1] ?? "desen bulunamadı");
+  const disGirdiler = [...oku("Electron/build-identity.ts").matchAll(/from\s+"\.\.\/((?:deploy|scripts)\/[^"]+)"/g)].map((m) => m[1]);
+  const disEksik = disGirdiler.filter((g) => !kume.includes(g));
+  check("§4g panel derlemesinin depo-dışı girdileri (build-identity → deploy/ · scripts/) kümede",
+    disGirdiler.length >= 3 && disEksik.length === 0, disEksik.join(", ") || disGirdiler.join(", ") || "desen bulunamadı");
 
   const reset = oku("docs/ops/demo-reset.sh").split("\n").filter((l) => !/^\s*#/.test(l)).join("\n");
   check("§4h demo-reset seed'leri çalışma imajında (`compose run … tsx`) koşturmaz",
