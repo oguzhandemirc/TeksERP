@@ -13,6 +13,7 @@ import { DealerDetailPage } from "./pages/DealerDetail";
 import { DealersPage } from "./pages/Dealers";
 import { FilesPage } from "./pages/Files";
 import { FleetPage } from "./pages/Fleet";
+import { GuidePage } from "./pages/Guide";
 import { HardwareRequestsPage } from "./pages/HardwareRequests";
 import { InstallationsPage } from "./pages/Installations";
 import { MaintenanceDuePage } from "./pages/MaintenanceDue";
@@ -49,6 +50,7 @@ export const PORTAL_NAV: readonly NavItem[] = [
   { to: "/denetim", label: "Denetim defteri", permission: "denetim:oku" },
   { to: "/anahtarlar", label: "Anahtarlar", permission: "anahtar:oku" },
   { to: "/iptal-belgeleri", label: "İptal belgeleri", permission: "anahtar:oku" },
+  { to: "/kilavuz", label: "Kılavuz", permission: "portal:oku" },
 ];
 
 export const PORTAL_ROUTES: RouteObject[] = [
@@ -81,6 +83,7 @@ export const PORTAL_ROUTES: RouteObject[] = [
       { path: "denetim", element: <AuditPage /> },
       { path: "anahtarlar", element: <KeysPage /> },
       { path: "iptal-belgeleri", element: <RevocationsPage /> },
+      { path: "kilavuz", element: <GuidePage /> },
       { path: "hesabim", element: <AccountPage /> },
       { path: "*", element: <NotFoundPage /> },
     ],

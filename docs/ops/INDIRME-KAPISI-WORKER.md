@@ -2,7 +2,7 @@
 
 > **Durum (2026-09-29, dilim 3a):** kod ve bekçi hazır, **YAYIN YAPILMADI.** Worker'ı panele yapıştırmak, rota bağlamak, ayarı yazmak ve origin'i daraltmak kullanıcı cümlesiyle yapılır ("yayınla"); her adım ÖNCE testfabrika kanalında, sonra adnansahin'de.
 > **İstemci zinciri (dilim 3bc):** fabrika ucu `GET /api/license/indirme-belirteci?urun=electron|mobil` süresi dolmuş belirteci vermez, dolmaya < 15 dk kalmışsa yoklamayı dürter; panel (`updater.ipc.ts` + `/download-token`) her denetimde `X-TKL-Indirme`, tablet (`mobil/src/services/downloadToken.service.ts`) her OTA denetiminden önce `tkl` extra param + APK isteğinde başlık, açılışta native denetim bayat paramla 403 alırsa JS 5 sn sonra tazeleyip yeniden dener; belirteç alınamazsa HER İKİSİ BAŞLIKSIZ ister (geçiş listesi). Yayın betikleri önce taze CLI belirteci (`docs/kurallar/surum-yayin.md`). Senaryo L22/L24 bu zinciri gerçek Worker modülüyle koşar.
-> **İNDİRME listesi (L2-8, lisans v2 §2.1/§2.5):** Worker anahtarları çapa kipi başına AYRI iki listeden okur (`uretim` · `hazirlik`); her satır kid × izinli kanal kümesi × pencere (sertifikanınki) taşır. Dönem töreni (üç ayda bir) yapıştırılacak satırı hazır basar — §8. Eski `anahtarlar: [{kid, x}]` biçimi kısıtsız olarak BİR Worker sürümü daha tanınır.
+> **İNDİRME listesi (L2-8, lisans v2 §2.1/§2.5):** Worker anahtarları çapa kipi başına AYRI iki listeden okur (`uretim` · `hazirlik`); her satır kid × izinli kanal kümesi × pencere (sertifikanınki) taşır. Dönem töreni (yılda bir) yapıştırılacak satırı hazır basar — §8. Eski `anahtarlar: [{kid, x}]` biçimi kısıtsız olarak BİR Worker sürümü daha tanınır.
 > **Kod:** `deploy/guncelleme-sunucusu/worker/indirme-kapisi.js` · **Kâhin:** `Teks-Erp/src/lib/license/protocol/indirme.ts` · **Bekçi:** `Teks-Erp/scripts/test_indirme_kapisi.ts` · **Sözleşme:** `docs/design/LISANS-PROTOKOLU.md` (İNDİRME) · plan Faz 3a (`docs/design/LISANS-KOD-KORUMA.md`).
 
 ## 0. Ne yapar, ne yapmaz
@@ -93,7 +93,7 @@ Kapanış TAKVİMLE değil ÖLÇÜMLE verilir (bitiş tarihi yalnız emniyet sü
 3. **Rota kaldırma:** rotayı sil → her şey BUGÜNKÜ gibi anonim açılır. Bu kapıyı bilinçli olarak açmaktır; yalnız kullanıcı cümlesiyle ve kısa süre için.
 - 503 `AYAR_GECERSIZ` görülürse sebep yazım hatasıdır: ayarı önceki geçerli hâline döndür (1).
 
-## 8. Anahtar döndürme — dönem töreninden sonra (üç ayda bir)
+## 8. Anahtar döndürme — dönem töreninden sonra (yılda bir)
 
 Satıcı yeni İNDİRME anahtarını anahtar birimine kurulduğu DAKİKA kullanmaya başlar (en yeni geçerli sertifika). Bu yüzden Worker listesi yeni satırı ÖNCE taşır; eski satır yerinde kalır ve penceresi (sertifikasının bitişi + 10 dk) dolunca kendiliğinden kapanır — örtüşme 30 gündür. Sıra tören runbook'unda: [`URETIM-SATICI-TOREN.md`](URETIM-SATICI-TOREN.md) §8 adım 4 (VDS'e kurmadan önce).
 

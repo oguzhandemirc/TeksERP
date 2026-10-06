@@ -13,9 +13,9 @@
 | İnternetsiz çalışma | kira ömrü (≤ 45 g) + ek süre (30 g) ⇒ ~60–75 gün | **ödenmiş tarihe (P) dek** tam çalışır. P'den sonra 30 g ek süre, sonra kısıtlı. P−30 g bilgi bandı yalnız internetsizken ya da P sözleşme sonuyken çıkar |
 | Kira bitişi | ek süre çapası | yalnız TAZELİK bilgisi (yaptırım, sürüm, belirteç); çapa değil |
 | Lisans dosyası silinir/bozulur | çapa HAK verilişi + 30 g; kira ve durum birlikte silinirse kip gözleme düşer | 14 g UYARI (çalışma süresi) → 30 g EK_SURE → KISITLI. Üç iz birden silinirse hemen EK_SURE. Kip alt sınırı HAK'ta. Satıcıya "yerel müdahale şüphesi" gider |
-| Kök anahtar | VDS'te parolalı; bütün HAK'ları ve sertifikaları imzalar; süresiz, iptalsiz | Mac'te çevrimdışı. Üç ayda bir törende ara sertifikaları, iptal belgesini ve eski derleme HAK'larını imzalar |
-| HAK imzacısı | kök (ya da bayi) | VDS'te **ara imzacı**: 120 g, sınıflı, iptal edilebilir; portal bugünkü gibi çalışır. Süresiz ufuk verebilir; bu bilinçli kabul edilen bir risktir (K2) |
-| ALT / İNDİRME | 180 g / 365 g, iptalsiz | 120 g / 120 g (üç aylık tören + 30 g örtüşme), iptal belgesiyle |
+| Kök anahtar | VDS'te parolalı; bütün HAK'ları ve sertifikaları imzalar; süresiz, iptalsiz | Mac'te çevrimdışı. Yılda bir törende ara sertifikaları, iptal belgesini ve eski derleme HAK'larını imzalar |
+| HAK imzacısı | kök (ya da bayi) | VDS'te **ara imzacı**: 395 g, sınıflı, iptal edilebilir; portal bugünkü gibi çalışır. Süresiz ufuk verebilir; bu bilinçli kabul edilen bir risktir (K2) |
+| ALT / İNDİRME | 180 g / 365 g, iptalsiz | 395 g / 395 g (yıllık tören + 30 g örtüşme), iptal belgesiyle |
 | Belirsizlik (ölçülemedi) | yalnız UYARI; modül tavanını kaldırır | çalışma süresiyle birikir: 14 g → EK_SURE → KISITLI; tavan HAK'tan sürer |
 | Parmak izi | okunamayan etken sayılmaz; ≥ 3 eşleşme yeter | etken birden çok yoldan okunur. 24 saat okunamayan etken "kayıp" sayılır ve uyuşmazlıktır. Eşik: ≥ 3 eşleşme ve güçlü etkenlerden ≥ 2. Eşiğin altı: 14 g → EK_SURE → KISITLI. Zayıf tanınan kurulum satıcı onayıyla etkinleşir |
 
@@ -164,9 +164,9 @@ Kalan risk: çalınan ara imzacının internetsiz kuruluma bastığı süresiz H
 
 ### 2.4 Dönemsel kök töreni (K4)
 
-- **Sıklık:** üç ayda bir (90 g), Mac'te ~20 dk. `uretim-toren.mjs` dosyasına yeni `donem` alt komutu eklenir. Yıllık maliyet ~1–1,5 saat.
+- **Sıklık:** yılda bir (kullanıcı kararı 2026-10-06; önce üç ayda bir / 120 g idi), Mac'te ~20 dk (`uretim-toren.mjs donem`). Sonraki tören = en erken bitiş − 30 g. PAKET anahtarı yenilemesi de bu törene girer (iş listesi 3.9).
 - **Her törende:**
-  - yeni ALT, ara imzacı ve İNDİRME (her biri 120 g, yani 30 g örtüşme);
+  - yeni ALT, ara imzacı ve İNDİRME (her biri 395 g = 365 + 30 g örtüşme);
   - değiştiyse yeni iptal belgesi (`sira + 1`);
   - kuyrukta bekleyen kök imzalı HAK'lar (§2.6).
 
@@ -387,7 +387,7 @@ Takvim kapısı yoktur; her adımın kapısı bir ölçüm ya da kullanıcı cü
 | K1 | Hatırlatma bandı | yalnız internetsizken (son başarılı alışveriş 7 günden eski) ya da P sözleşme sonuyken | §1.3 |
 | K2 | 400 günü aşan / süresiz ufuk | **ara imzacı da imzalayabilir.** Ara imzacı çalınırsa süresiz sahte HAK üretilebilir ve iptal yalnız çevrimiçi fabrikaya ulaşır; bu risk bilinçli kabul edildi. Önlemler: sınıf kısıtı, portalda ikinci onay + defter, `YABANCI_HAK` tespiti, iptalin kirayla yayılması, 120 g ömür | §1.1 · §1.6 · §2.2 |
 | K3 | İkinci anahtar | "son 24 saatte başarılı alışveriş yok"; etkinleşmemiş kurulum da kapsanır | §1.2 · §3.3 |
-| K4 | Tören sıklığı | üç ayda bir. ALT · ara imzacı · İNDİRME 120 g (30 g örtüşme). Uyarı 30 / 15 / 7 / 1 gün kala | §2.1 · §2.4 |
+| K4 | Tören sıklığı | yılda bir (2026-10-06; önce üç ayda bir). ALT · ara imzacı · İNDİRME 395 g (30 g örtüşme). Uyarı 30 / 15 / 7 / 1 gün kala | §2.1 · §2.4 |
 | K5 | Taksitte P | sıradaki taksitin tarihi | §1.1 |
 | K6 | Kopya ikinci pencere, taşınan anahtar | imzalı kapanış kirası (K3 + ek süre) | §1.2 |
 | K7 | Üç iz birden silinirse | hemen EK_SURE (14 günlük UYARI atlanır) | §3.1-4 · Z8 |
