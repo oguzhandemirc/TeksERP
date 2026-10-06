@@ -253,6 +253,32 @@ export function eskiKanalAyrimi(kayit, eski, istisnalar = []) {
   return [...new Set(h)];
 }
 
+/** Hizmet adlarının tek çekirdeği (setup + geçiş): soneksiz taban = makinedeki tek kurulum. */
+export const KANAL_ADLARI_REL = 'deploy/hizmet/kanal-adlari.ps1';
+
+/**
+ * Ortak backend paketinin kimliği (`paketle.ps1` argümansız, O11a) — paket kanal/müşteri TAŞIMAZ.
+ * Hizmet adı soneksiz tabana eşit olmalı (son ek kanal kimliğidir, ortak pakette yeri yok); lisans
+ * satıcısı backend varsayılanına eşit olmalı (kurulum etkin değeri buna karşı ölçer). Okunamayan → Olculemedi.
+ * Dönüş: `paketle.ps1`in okuduğu KEY=VALUE çiftleri.
+ */
+export function backendPaketKimligi(kayit, vendorMetni, kanalAdlariMetni) {
+  const o = gecerliKayit(kayit);
+  const vm = typeof vendorMetni === 'string' ? /^export const DEFAULT_LICENSE_SERVER_URL = "([^"]+)";$/m.exec(vendorMetni) : null;
+  if (!vm) throw new Olculemedi(`${VENDOR_URL_REL} DEFAULT_LICENSE_SERVER_URL okunamadı`);
+  const tm = typeof kanalAdlariMetni === 'string' ? /^\s*\$taban = "([^"]+)"\s*$/m.exec(kanalAdlariMetni) : null;
+  if (!tm) throw new Olculemedi(`${KANAL_ADLARI_REL} hizmet adı tabanı ($taban) okunamadı`);
+  const b = o.urun.backend;
+  if (b.hizmetAdi !== tm[1]) throw new Error(`urun.backend.hizmetAdi "${b.hizmetAdi}" soneksiz taban "${tm[1]}" değil (${KANAL_ADLARI_REL}) — son ek kanal kimliğidir, ortak pakette olamaz`);
+  if (o.lisansSunucusu !== vm[1]) throw new Error(`lisansSunucusu (${o.lisansSunucusu}) backend varsayılanı (${vm[1]}) değil — kurulumun etkin değeri ayrışırdı`);
+  return {
+    TEKSERP_BACKEND_URUN: b.urunAdi,
+    TEKSERP_HIZMET_ADI: b.hizmetAdi,
+    TEKSERP_LISANS_SUNUCUSU: o.lisansSunucusu,
+    TEKSERP_LISANS_VARSAYILAN: vm[1],
+  };
+}
+
 /** Bekçinin (check-dagitim) okuduğu, kodda yaşayan sabit kaynaklar. */
 export const VENDOR_URL_REL = 'Teks-Erp/src/lib/license/vendor-url.ts';
 export const SATICI_INDIRME_REL = 'satici/sunucu/src/lisans-protokol/indirme.ts';
@@ -267,15 +293,15 @@ export const BACKEND_GRUPLAR_REL = 'Teks-Erp/src/lib/license/update-group.ts';
 
 /**
  * `deploy/dagitim.json`ı okuyan ürün/yayın dosyaları — BEYANLI. Bekçi ağaçta kaydın adını taşıyan
- * her kod dosyasını bu liste + bekçi dosyalarıyla kıyaslar (iki yönlü). O1'de tüketici yok.
+ * her kod dosyasını bu liste + bekçi dosyalarıyla kıyaslar (iki yönlü).
  */
-export const TUKETICILER = Object.freeze([]);
+export const TUKETICILER = Object.freeze(['scripts/dagitim-kapisi.mjs']);
 
 /** İki dağıtım bekçisinin okuduğu dosyalar — commit tetiği bunları kapsar (okunandan dar olamaz). */
 export const DAGITIM_BEKCI_DOSYALARI = Object.freeze([
   KAYIT_REL, ESKI_KAYIT_REL, 'scripts/lib/dagitim.mjs', 'scripts/check-dagitim.mjs', 'scripts/test_eski_kanal_donuk.mjs',
   VENDOR_URL_REL, SATICI_INDIRME_REL, WORKER_REL, KAPI_KANCASI_REL, CI_REL, SATICI_GRUPLAR_REL, SATICI_GRUP_MIGRATION_REL,
-  BACKEND_GRUPLAR_REL, 'docs/design/TEK-ORTAK-PAKET.md',
+  BACKEND_GRUPLAR_REL, KANAL_ADLARI_REL, 'docs/design/TEK-ORTAK-PAKET.md',
 ]);
 
 export function dagitimBekcisiTetigi(rel) {
