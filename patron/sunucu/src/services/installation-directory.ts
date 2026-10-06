@@ -4,11 +4,12 @@
 //   · `satici` — satıcı İÇ API'si (iç ağ, bearer); sonuç `installations` tablosunda önbelleklenir.
 //     Önbellek TAZELİKTİR, geçerlilik değil: süre dolunca yeniden sorulur; satıcıya ulaşılamazsa BAYAT
 //     kayıtla devam edilir; hiç dolmadıysa RED (fail-closed). Satıcının 404'ü kaydı pasife çeker.
-import type { Installation, PrismaClient } from "@prisma/client";
+import type { Installation } from "@prisma/client";
 import type { CloudConfig } from "../config";
 import { installationKeyId } from "../lisans-protokol";
-import { withLookup, withTesis } from "../lib/tenant";
+import { withCentral, withLookup, withTesis } from "../lib/tenant";
 import { VendorInstallationSchema, type VendorInstallation } from "../wire/satici-ic";
+import type { TesisDbRouter } from "../lib/tesis-db";
 
 export interface InstallationRecord {
   readonly installationId: string;
@@ -48,11 +49,23 @@ export function safeKeyId(x: string): string | null {
   }
 }
 
+/**
+ * Kurulum → tesis yönlendirmesi (merkez `installation_routes`): ilk yazan bağlar, var olan bağ DEĞİŞMEZ.
+ * Kurulum başka tesise bağlıysa false (çağıran REDDEDER) — kurulum kimliği tesis değiştirerek başka DB'ye taşınamaz.
+ */
+export async function bindInstallationRoute(router: TesisDbRouter, installationId: string, tesisId: string): Promise<boolean> {
+  const bound = await withCentral(router, {}, async (tx) => {
+    await tx.$executeRaw`INSERT INTO installation_routes (kurulum_id, tesis_id) VALUES (${installationId}::uuid, ${tesisId}::uuid) ON CONFLICT (kurulum_id) DO NOTHING`;
+    return tx.installationRoute.findUnique({ where: { installationId }, select: { tesisId: true } });
+  });
+  return bound?.tesisId === tesisId.toLowerCase();
+}
+
 type VendorAnswer = { readonly kind: "ok"; readonly value: VendorInstallation } | { readonly kind: "yok" } | { readonly kind: "ulasilamadi"; readonly reason: string };
 
 export class InstallationDirectory {
   constructor(
-    private readonly db: PrismaClient,
+    private readonly db: TesisDbRouter,
     private readonly config: Pick<CloudConfig, "KURULUM_KAYNAGI" | "SATICI_IC_API_URL" | "SATICI_IC_API_BELIRTECI" | "KURULUM_ONBELLEK_DK">,
     private readonly fetchImpl: typeof fetch = fetch,
   ) {}
@@ -67,7 +80,10 @@ export class InstallationDirectory {
     const fresh = cached && cached.source === "SATICI" && cached.refreshedAt.getTime() + this.config.KURULUM_ONBELLEK_DK * 60_000 > nowMs;
     if (cached && fresh) return toRecord(cached, false);
     const answer = await this.askVendor(installationId);
-    if (answer.kind === "ok") return toRecord(await this.persist(answer.value, nowMs), false);
+    if (answer.kind === "ok") {
+      const row = await this.persist(answer.value, nowMs);
+      return row ? toRecord(row, false) : null;
+    }
     if (answer.kind === "yok") {
       if (cached) await withTesis(this.db, { tesisId: cached.tesisId }, (tx) => tx.installation.update({ where: { id: cached.id }, data: { active: false, refreshedAt: new Date(nowMs) } }));
       return null;
@@ -99,7 +115,13 @@ export class InstallationDirectory {
     }
   }
 
-  private persist(v: VendorInstallation, nowMs: number): Promise<Installation> {
+  /** Yönlendirme bağı → tesis DB isteği (yoksa ISTENDI; hazır değilse `withTesis` 503) → tesis DB'sine önbellek. */
+  private async persist(v: VendorInstallation, nowMs: number): Promise<Installation | null> {
+    if (!(await bindInstallationRoute(this.db, v.kurulumId, v.tesis.id))) {
+      console.warn(`[patron] kurulum ${v.kurulumId} başka tesise bağlı; satıcının yeni tesis cevabı RED`);
+      return null;
+    }
+    await this.db.requestFacility(v.tesis.id);
     const now = new Date(nowMs);
     const fields = {
       publicKeyX: v.acikAnahtar,

@@ -1,5 +1,6 @@
 // =============================================================================
-// DB ROLLERİ — uygulama + eşitleme rolünü kurar/hizalar ve yetkileri `src/lib/db-grants.ts`ten verir.
+// DB ROLLERİ (MERKEZ) — uygulama + eşitleme rolünü kurar/hizalar ve MERKEZ yetkilerini `src/lib/db-grants.ts`ten
+// verir (yalnız yönlendirme tabloları). Tesis DB'lerinin rolleri/yetkileri hazırlayıcıdadır (`tesis-db-hazirlik.ts`).
 //   npx tsx scripts/db-rolleri.ts            (her `prisma migrate deploy`dan SONRA; idempotent)
 // Roller KÜME düzeyindedir, migration'a girmez. Ad + parola çalışma URL'lerinden (`DATABASE_URL`,
 // `ESITLEME_DATABASE_URL`) okunur, işlemi GÖÇ rolü (`GOC_DATABASE_URL`, tablo sahibi) yapar.
@@ -9,17 +10,9 @@
 // =============================================================================
 import { Client } from "pg";
 import { loadEnvFile } from "../src/lib/env";
-import {
-  APP_COLUMN_GRANTS,
-  APP_GRANTS,
-  CLOUD_TABLES,
-  SUPPORT_GRANTS,
-  SYNC_COLUMN_GRANTS,
-  SYNC_GRANTS,
-  supportRoleName,
-  type ColumnGrants,
-  type Privilege,
-} from "../src/lib/db-grants";
+import { MERKEZ_APP_GRANTS, MERKEZ_SYNC_COLUMN_GRANTS, MERKEZ_SYNC_GRANTS, supportRoleName } from "../src/lib/db-grants";
+import { applySupportRole, ensureLoginRole, grantAll, ident, markDatabase } from "../src/lib/db-roles";
+import { CENTRAL_MARK, assertCentralName } from "../src/lib/tesis-db-ad";
 
 const ROLE_NAME = /^[a-z_][a-z0-9_]{0,62}$/;
 
@@ -41,58 +34,10 @@ export function databaseName(url: string): string {
   return decodeURIComponent(new URL(url).pathname.replace(/^\//, ""));
 }
 
-const ident = (s: string): string => `"${s.replace(/"/g, '""')}"`;
-const literal = (s: string): string => `'${s.replace(/'/g, "''")}'`;
-
-async function ensureRole(client: Client, role: RoleSpec): Promise<void> {
-  const exists = await client.query("SELECT 1 FROM pg_roles WHERE rolname = $1", [role.name]);
-  const attrs = "LOGIN NOSUPERUSER NOBYPASSRLS NOCREATEDB NOCREATEROLE NOINHERIT";
-  const verb = exists.rowCount === 0 ? "CREATE" : "ALTER";
-  await client.query(`${verb} ROLE ${ident(role.name)} WITH ${attrs} PASSWORD ${literal(role.password)}`);
-}
-
-/** Tablo REVOKE'u kolon yetkilerini de geri alır (PG) ⇒ beyandan düşen kolon yetkisi DB'de kalmaz. */
-async function grantAll(client: Client, role: string, grants: Readonly<Record<string, readonly Privilege[]>>, columnGrants: ColumnGrants): Promise<void> {
-  await client.query(`REVOKE ALL ON ALL TABLES IN SCHEMA public FROM ${ident(role)}`);
-  await client.query(`GRANT USAGE ON SCHEMA public TO ${ident(role)}`);
-  for (const [table, privileges] of Object.entries(grants)) {
-    if (!CLOUD_TABLES.includes(table)) throw new Error(`Yetki listesinde bilinmeyen tablo: ${table}`);
-    await client.query(`GRANT ${privileges.join(", ")} ON ${ident(table)} TO ${ident(role)}`);
-  }
-  for (const [table, byPrivilege] of Object.entries(columnGrants)) {
-    if (!CLOUD_TABLES.includes(table)) throw new Error(`Kolon yetki listesinde bilinmeyen tablo: ${table}`);
-    for (const [privilege, columns] of Object.entries(byPrivilege)) {
-      if (!columns || columns.length === 0) continue;
-      if (grants[table]?.includes(privilege as Privilege)) throw new Error(`${table}: ${privilege} hem tablo hem kolon düzeyinde beyanlı`);
-      await client.query(`GRANT ${privilege} (${columns.map(ident).join(", ")}) ON ${ident(table)} TO ${ident(role)}`);
-    }
-  }
-}
-
-/**
- * Destek rolü (Ek-6/B §3.2): göç NOLOGIN kurar (politikalar adıyla anar); burada özellikleri sertleşir ve
- * yetkileri SUPPORT_GRANTS'ten verilir. LOGIN'e DOKUNULMAZ — giriş yetkisi runbook'la açılır/kapanır.
- */
-async function applySupportRole(client: Client, database: string): Promise<string> {
-  const role = supportRoleName(database);
-  const exists = await client.query("SELECT 1 FROM pg_roles WHERE rolname = $1", [role]);
-  if (exists.rowCount === 0) throw new Error(`Destek rolü ${role} yok — önce \`prisma migrate deploy\``);
-  await client.query(`ALTER ROLE ${ident(role)} WITH NOSUPERUSER NOBYPASSRLS NOCREATEDB NOCREATEROLE NOREPLICATION NOINHERIT`);
-  await client.query(`GRANT CONNECT ON DATABASE ${ident(database)} TO ${ident(role)}`);
-  await client.query(`REVOKE ALL ON ALL TABLES IN SCHEMA public FROM ${ident(role)}`);
-  await client.query(`GRANT USAGE ON SCHEMA public TO ${ident(role)}`);
-  for (const [table, columns] of Object.entries(SUPPORT_GRANTS)) {
-    if (!CLOUD_TABLES.includes(table)) throw new Error(`Destek yetki listesinde bilinmeyen tablo: ${table}`);
-    const target = columns === "*" ? "" : ` (${columns.map(ident).join(", ")})`;
-    await client.query(`GRANT SELECT${target} ON ${ident(table)} TO ${ident(role)}`);
-  }
-  return role;
-}
-
 export async function applyRoles(env: NodeJS.ProcessEnv = process.env): Promise<{ app: string; sync: string; database: string }> {
   const goc = env.GOC_DATABASE_URL;
   if (!goc || !env.DATABASE_URL || !env.ESITLEME_DATABASE_URL) throw new Error("GOC_DATABASE_URL, DATABASE_URL ve ESITLEME_DATABASE_URL zorunlu");
-  const database = databaseName(goc);
+  const database = assertCentralName(databaseName(goc));
   if (database.startsWith("tekserp_fabrika_")) throw new Error("Fabrika verisi sınıfındaki DB'ye rol kurulmaz");
   for (const u of [env.DATABASE_URL, env.ESITLEME_DATABASE_URL]) {
     if (databaseName(u) !== database) throw new Error("Çalışma URL'leri göç URL'iyle AYNI veritabanını göstermeli");
@@ -104,13 +49,15 @@ export async function applyRoles(env: NodeJS.ProcessEnv = process.env): Promise<
   const client = new Client({ connectionString: goc });
   await client.connect();
   try {
-    await ensureRole(client, app);
-    await ensureRole(client, sync);
+    await ensureLoginRole(client, app.name, app.password);
+    await ensureLoginRole(client, sync.name, sync.password);
     await client.query(`REVOKE CONNECT ON DATABASE ${ident(database)} FROM PUBLIC`);
     await client.query(`GRANT CONNECT ON DATABASE ${ident(database)} TO ${ident(app.name)}, ${ident(sync.name)}`);
-    await grantAll(client, app.name, APP_GRANTS, APP_COLUMN_GRANTS);
-    await grantAll(client, sync.name, SYNC_GRANTS, SYNC_COLUMN_GRANTS);
-    await applySupportRole(client, database);
+    // Merkezde yalnız yönlendirme yetkileri; kiracı tabloları merkezde boş + yetkisiz (tesis DB'leri hazırlayıcıda).
+    await grantAll(client, app.name, MERKEZ_APP_GRANTS, {});
+    await grantAll(client, sync.name, MERKEZ_SYNC_GRANTS, MERKEZ_SYNC_COLUMN_GRANTS);
+    await applySupportRole(client, database, supportRoleName(database), {});
+    await markDatabase(client, database, CENTRAL_MARK);
   } finally {
     await client.end();
   }

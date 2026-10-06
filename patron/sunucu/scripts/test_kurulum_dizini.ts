@@ -1,7 +1,7 @@
 // =============================================================================
 // KURULUM DİZİNİ BEKÇİSİ — `KURULUM_KAYNAGI=satici` (satıcı iç API'si + önbellek), SAHTE satıcıya karşı:
 //   §1 önbellek HİÇ dolmadı + satıcıya ulaşılamıyor → RED (401 KURULUM_BILINMIYOR; fail-closed)
-//   §2 satıcı yanıtı → kurulum + tesis önbelleğe yazılır (kaynak SATICI), istek 200; iç API belirteci taşınır
+//   §2 satıcı yanıtı → yönlendirme bağı + tesis DB isteği (hazır değilken 503) → kurulum + tesis önbelleğe yazılır (kaynak SATICI), istek 200; iç API belirteci taşınır
 //   §3 TTL içinde satıcı sorulmaz · §4 TTL doldu + satıcı yok → BAYAT kayıtla devam (tazelik ≠ geçerlilik)
 //   §5 satıcı yanıtı sözleşme dışı → bayat kayıt (yanıt kaydı EZMEZ) · §6 satıcı 404 → kayıt pasif, RED
 //   §7 satıcı sınıfı TEST derse 403 SINIF_GONDEREMEZ (hak satıcıdan)
@@ -12,9 +12,9 @@ import { generateKeyPairSync, randomUUID } from "node:crypto";
 import http from "node:http";
 import type { AddressInfo } from "node:net";
 import { publicKeyX } from "../src/lisans-protokol";
-import { withTesis } from "../src/lib/tenant";
+import { withCentral, withTesis } from "../src/lib/tenant";
 import { VendorDoorbell } from "../src/services/doorbell";
-import { api, hesapKur, imzali, kontrol, ortamKur, paket, sonuc, temizleTesis } from "./lib/test-ortam";
+import { api, hesapKur, imzali, kontrol, ortamKur, paket, sonuc, temizleTesis, tesisDbHazirla } from "./lib/test-ortam";
 
 const BELIRTEC = "bekci-ic-api-belirteci-" + "x".repeat(24);
 
@@ -74,8 +74,14 @@ async function main(): Promise<void> {
 
     console.log("\n§2 satıcı yanıt veriyor");
     s.mod = "acik";
+    // Bilinmeyen tesis: satıcı yanıtı yönlendirmeyi bağlar + tesis DB'sini İSTER; hazırlanana dek 503 (merkeze düşmez).
+    const r2a = await gonder();
+    const istek = await withCentral(o.goc, {}, (tx) => tx.facilityDatabase.findUnique({ where: { tesisId } }));
+    const bag = await withCentral(o.goc, {}, (tx) => tx.installationRoute.findUnique({ where: { installationId: kurulumId } }));
+    kontrol("§2-a tesis DB'si yokken 503 TEKRAR_DENEYIN · hazırlık isteği ISTENDI · kurulum → tesis bağı merkezde", r2a.status === 503 && r2a.json.details?.code === "TEKRAR_DENEYIN" && istek?.status === "ISTENDI" && bag?.tesisId === tesisId, `${r2a.status} ${istek?.status ?? "-"}`);
+    await tesisDbHazirla(o, tesisId);
     const r2 = await gonder();
-    const kayit = await withTesis(o.goc.prisma, { tesisId }, async (tx) => ({
+    const kayit = await withTesis(o.goc, { tesisId }, async (tx) => ({
       kurulum: await tx.installation.findUnique({ where: { installationId: kurulumId } }),
       tesis: await tx.facility.findUnique({ where: { tesisId } }),
     }));
@@ -99,7 +105,7 @@ async function main(): Promise<void> {
     s.mod = "bozuk";
     o.saat.ilerlet(6 * 60_000);
     const r5 = await gonder();
-    const hala = await withTesis(o.goc.prisma, { tesisId }, (tx) => tx.installation.findUnique({ where: { installationId: kurulumId } }));
+    const hala = await withTesis(o.goc, { tesisId }, (tx) => tx.installation.findUnique({ where: { installationId: kurulumId } }));
     kontrol("§5a biçimsiz yanıt kaydı EZMEZ; bayat kayıtla 200", r5.status === 200 && hala?.publicKeyX === x);
 
     console.log("\n§7 satıcı sınıfı TEST");
@@ -124,7 +130,7 @@ async function main(): Promise<void> {
     s.mod = "yok";
     o.saat.ilerlet(6 * 60_000);
     const r6 = await gonder();
-    const pasif = await withTesis(o.goc.prisma, { tesisId }, (tx) => tx.installation.findUnique({ where: { installationId: kurulumId } }));
+    const pasif = await withTesis(o.goc, { tesisId }, (tx) => tx.installation.findUnique({ where: { installationId: kurulumId } }));
     kontrol("§6a satıcı kurulumu tanımıyor → 401 ve kayıt pasif", r6.status === 401 && pasif?.active === false);
   } finally {
     await temizleTesis(o, tesisId);

@@ -3,7 +3,7 @@
 // tesis yöneticisinin daveti. Tesis yöneticisi ekibini kendisi yönetir; satıcı yalnız ilk yöneticiyi
 // açar ve yönetici kalmadığında sıfırlar — tesiste AKTİF yönetici varken yönetici daveti/yükseltmesi RED,
 // yalnız açık zorlama (talep no + gerekçe) ile ve denetime yazılarak. Her eylem `satici-cli` aktörüyle düşer.
-import type { LicenseClass, PrismaClient } from "@prisma/client";
+import type { LicenseClass } from "@prisma/client";
 import { createInvite } from "../auth/invite.service";
 import { normalizeEmail } from "../auth/session.service";
 import { ROLE_TEMPLATES } from "../catalog/permissions";
@@ -14,12 +14,13 @@ import { uniqueViolationOn } from "../lib/prisma-errors";
 import { withTesis } from "../lib/tenant";
 import type { Tx } from "../lib/db";
 import { ADMIN_PERMISSION, assertEmailFreeInFacility, emailInUseHere } from "./account.service";
-import { safeKeyId } from "./installation-directory";
+import { bindInstallationRoute, safeKeyId } from "./installation-directory";
+import type { TesisDbRouter } from "../lib/tesis-db";
 
 export const VENDOR_ACTOR = "satici-cli";
 export const RETENTION_CHOICES: readonly (number | null)[] = [3, 13, 25, null];
 
-export async function openFacility(db: PrismaClient, g: { tesisId: string; name: string; retentionMonths?: number | null }) {
+export async function openFacility(db: TesisDbRouter, g: { tesisId: string; name: string; retentionMonths?: number | null }) {
   if (g.retentionMonths !== undefined && !RETENTION_CHOICES.includes(g.retentionMonths)) throw new CloudError(400, "GOVDE_GECERSIZ", "Saklama 3, 13, 25 ay ya da 'tumu' olmalı");
   const row = await withTesis(db, { tesisId: g.tesisId }, (tx) =>
     tx.facility.upsert({
@@ -32,7 +33,7 @@ export async function openFacility(db: PrismaClient, g: { tesisId: string; name:
   return row;
 }
 
-export async function setFacilityStatus(db: PrismaClient, g: { tesisId: string; status: "AKTIF" | "PASIF" }) {
+export async function setFacilityStatus(db: TesisDbRouter, g: { tesisId: string; status: "AKTIF" | "PASIF" }) {
   const r = await withTesis(db, { tesisId: g.tesisId }, (tx) => tx.facility.updateMany({ where: { tesisId: g.tesisId }, data: { status: g.status } }));
   if (r.count === 0) throw notFound("Tesis");
   await recordAudit(db, { tesisId: g.tesisId, actor: VENDOR_ACTOR, event: `TESIS_${g.status}`, entity: "Facility", entityId: g.tesisId });
@@ -49,7 +50,7 @@ export interface InstallationInput {
   readonly active?: boolean;
 }
 
-export async function registerInstallation(db: PrismaClient, g: InstallationInput, nowMs: number = Date.now()) {
+export async function registerInstallation(db: TesisDbRouter, g: InstallationInput, nowMs: number = Date.now()) {
   if (!publicKeyFromX(g.publicKeyX)) throw new CloudError(400, "GOVDE_GECERSIZ", "Kurulum açık anahtarı biçimsiz (Ed25519 x, base64url)");
   const fields = {
     publicKeyX: g.publicKeyX,
@@ -62,6 +63,7 @@ export async function registerInstallation(db: PrismaClient, g: InstallationInpu
     source: "KAYIT" as const,
     refreshedAt: new Date(nowMs),
   };
+  if (!(await bindInstallationRoute(db, g.installationId, g.tesisId))) throw new CloudError(409, "KURULUM_BASKA_TESISTE", "Bu kurulum başka bir tesise kayıtlı; kurulum tesis değiştiremez");
   const row = await withTesis(db, { tesisId: g.tesisId }, (tx) =>
     tx.installation.upsert({ where: { installationId: g.installationId }, create: { tesisId: g.tesisId, installationId: g.installationId, ...fields }, update: fields }),
   );
@@ -110,8 +112,8 @@ const overrideSummary = (override: VendorOverride | undefined, active: number) =
   override ? { zorla: true, talep: override.talep, gerekce: override.gerekce, aktifYonetici: active } : undefined;
 
 /** İlk tesis yöneticisi (Patron şablonu). Davet belirteci BİR KEZ döner; repoya/loga yazılmaz. */
-export async function inviteFacilityAdmin(db: PrismaClient, g: { tesisId: string; email: string; name: string; validHours: number; zorla?: VendorOverride }, nowMs: number = Date.now()) {
-  const invite = createInvite(nowMs, g.validHours);
+export async function inviteFacilityAdmin(db: TesisDbRouter, g: { tesisId: string; email: string; name: string; validHours: number; zorla?: VendorOverride }, nowMs: number = Date.now()) {
+  const invite = createInvite(g.tesisId, nowMs, g.validHours);
   const email = normalizeEmail(g.email);
   try {
     const { account, active } = await withTesis(db, { tesisId: g.tesisId, lock: { name: "ACCOUNT_ADMIN", key: g.tesisId } }, async (tx) => {
@@ -133,8 +135,8 @@ export async function inviteFacilityAdmin(db: PrismaClient, g: { tesisId: string
 }
 
 /** Yönetici kalmadığında kurtarma: hesabı sıfırlayıp yönetici olarak yeniden davet eder (oturumlar kapanır). */
-export async function reinviteAdmin(db: PrismaClient, g: { tesisId: string; email: string; validHours: number; zorla?: VendorOverride }, nowMs: number = Date.now()) {
-  const invite = createInvite(nowMs, g.validHours);
+export async function reinviteAdmin(db: TesisDbRouter, g: { tesisId: string; email: string; validHours: number; zorla?: VendorOverride }, nowMs: number = Date.now()) {
+  const invite = createInvite(g.tesisId, nowMs, g.validHours);
   const email = normalizeEmail(g.email);
   const { account, active } = await withTesis(db, { tesisId: g.tesisId, lock: { name: "ACCOUNT_ADMIN", key: g.tesisId } }, async (tx) => {
     // Aynı tesiste aynı e-postalı PASİF satır(lar) da olabilir; hedef PASİF OLMAYAN tek hesaptır.

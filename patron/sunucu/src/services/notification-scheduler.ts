@@ -3,7 +3,8 @@
 // `sahte` → kayıtlı sahte gönderici (ağ yok) · `gercek` → Expo + web push (VAPID). Canlı deneme mağaza hesapları ve
 // patron VDS kurulumu sonrasına bırakıldı (runbook notu); yerelde gerçek gönderim DENENMEZ.
 import type { CloudConfig } from "../config";
-import { withMaintenanceList } from "../lib/tenant";
+import { listReadyFacilities, withTesis } from "../lib/tenant";
+import { perFacility } from "./maintenance";
 import { ExpoTransport, RecordingTransport, RoutingTransport, WebPushTransport, type PushTransport } from "../push/transports";
 import { VapidKeys } from "../push/vapid";
 import type { CloudContext } from "./context";
@@ -28,21 +29,24 @@ export function createNotificationRuntime(config: CloudConfig): NotificationRunt
 }
 
 export async function runNotificationRound(ctx: CloudContext, transport: PushTransport, nowMs: number): Promise<{ created: number } & DeliveryTotals & ReceiptTotals> {
-  const facilities = await withMaintenanceList(ctx.app, (tx) => tx.facility.findMany({ where: { status: "AKTIF" }, select: { tesisId: true }, orderBy: { tesisId: "asc" } }));
   const total = { created: 0, sent: 0, skipped: 0, deferred: 0, retried: 0, failed: 0, checked: 0, invalid: 0 };
-  for (const f of facilities) {
-    // Hizmet bitince (salt okuma) bildirim üretilmez ve gönderilmez: eşitleme durdu, "veri gelmiyor" yanıltır.
-    if ((await facilityServiceState(ctx, f.tesisId, nowMs))?.phase !== "ACIK") continue;
-    total.created += await generateForFacility(ctx, f.tesisId, nowMs);
-    const d = await deliverDue(ctx, transport, f.tesisId, nowMs);
-    total.sent += d.sent;
-    total.skipped += d.skipped;
-    total.deferred += d.deferred;
-    total.retried += d.retried;
-    total.failed += d.failed;
-    const r = await checkReceipts(ctx, transport, f.tesisId, nowMs);
-    total.checked += r.checked;
-    total.invalid += r.invalid;
+  for (const tesisId of await listReadyFacilities(ctx.app)) {
+    await perFacility(tesisId, "bildirim", async () => {
+      const f = await withTesis(ctx.app, { tesisId }, (tx) => tx.facility.findFirst({ where: { tesisId, status: "AKTIF" }, select: { tesisId: true } }));
+      if (!f) return;
+      // Hizmet bitince (salt okuma) bildirim üretilmez ve gönderilmez: eşitleme durdu, "veri gelmiyor" yanıltır.
+      if ((await facilityServiceState(ctx, tesisId, nowMs))?.phase !== "ACIK") return;
+      total.created += await generateForFacility(ctx, tesisId, nowMs);
+      const d = await deliverDue(ctx, transport, tesisId, nowMs);
+      total.sent += d.sent;
+      total.skipped += d.skipped;
+      total.deferred += d.deferred;
+      total.retried += d.retried;
+      total.failed += d.failed;
+      const r = await checkReceipts(ctx, transport, tesisId, nowMs);
+      total.checked += r.checked;
+      total.invalid += r.invalid;
+    });
   }
   return total;
 }

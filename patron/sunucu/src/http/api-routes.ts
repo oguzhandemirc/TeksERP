@@ -240,7 +240,7 @@ export const API_ROUTES: readonly ApiRouteDef[] = [
 function bearer(req: Request): string | undefined {
   const h = req.get("authorization");
   if (!h) return undefined;
-  const m = /^Bearer ([A-Za-z0-9_-]{43})$/.exec(h.trim());
+  const m = /^Bearer ([A-Za-z0-9_-]{22}\.[A-Za-z0-9_-]{43})$/.exec(h.trim());
   return m?.[1];
 }
 

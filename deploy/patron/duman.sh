@@ -3,6 +3,7 @@
 # Patron bulutu YEREL DUMANI — imaj-derle.sh'in yüklediği imajları kendi projesiyle (tekserp-patron-duman)
 # kaldırır, YALNIZ 127.0.0.1'e yayımlar, kendi DB konteynerini kullanır; VDS'e/satıcıya dokunmaz.
 #   deploy/patron/duman.sh kur <sha>      → yığın + göç + tesis/davet + HTTP ölçümleri + uygulama dumanı + yedek
+#                                           (merkez + tesis dökümü açılır)
 #   deploy/patron/duman.sh sifirla <sha>  → compose down -v (YALNIZ bu proje) + durum dizini; imajlar KALIR
 #   deploy/patron/duman.sh kaldir <sha>   → sifirla + YALNIZ bu iki imaj
 # Durum dizini (sırlar, anahtar, yedek) $TMPDIR altında, 0700; sırlar ekrana basılmaz.
@@ -37,6 +38,7 @@ mkdir -p "$D/sirlar" "$D/anahtarlar" "$D/yedek-alici" "$D/yedek"
 for s in goc uygulama esitleme; do openssl rand -hex 32 > "$D/sirlar/$s-parolasi"; done
 : > "$D/sirlar/ic-api-belirteci"   # boş = iç API kapalı (kayıt kipi)
 node -e 'process.stdout.write(require("crypto").randomBytes(32).toString("base64url")+"\n")' > "$D/anahtarlar/patron-totp.key"
+node -e 'process.stdout.write(require("crypto").randomBytes(32).toString("base64url")+"\n")' > "$D/sirlar/tesis-rol-anahtari"
 chmod 755 "$D" "$D/sirlar" "$D/anahtarlar" "$D/yedek-alici" "$D/yedek"; chmod 644 "$D"/sirlar/* "$D/anahtarlar/patron-totp.key"
 docker run --rm --network none -v "$D:/d" --entrypoint node "$YIMAJ" /arac/yedek-sifrele.cjs \
   anahtar-uret --ad patron --dizin /d/yedek-alici --ozel-cikti /d/yedek-ozel.txt >/dev/null 2>&1
@@ -57,6 +59,7 @@ GOC_PAROLA_DOSYASI=$D/sirlar/goc-parolasi
 UYGULAMA_PAROLA_DOSYASI=$D/sirlar/uygulama-parolasi
 ESITLEME_PAROLA_DOSYASI=$D/sirlar/esitleme-parolasi
 IC_API_BELIRTEC_DOSYASI_HOST=$D/sirlar/ic-api-belirteci
+TESIS_ROL_ANAHTARI_DOSYASI_HOST=$D/sirlar/tesis-rol-anahtari
 ANAHTAR_DIZINI_HOST=$D/anahtarlar
 YEDEK_ALICI_DIZINI_HOST=$D/yedek-alici
 YEDEK_DIZINI_HOST=$D/yedek
@@ -78,7 +81,7 @@ dc --profile goc run --rm patron-goc node dist-cli/scripts/tesis.js yonetici-dav
 [ -s "$D/davet" ] || { echo "⛔ davet belirteci alınamadı" >&2; exit 1; }
 
 echo "→ sunucu + yedek"
-dc up -d --wait patron patron-yedek
+dc up -d --wait patron patron-hazirla patron-yedek
 
 echo "→ HTTP (yalnız 127.0.0.1)"
 h() { curl -s -o /dev/null -D - "$URL$1" | tr -d '\r'; }
@@ -111,5 +114,10 @@ DOKUM=$(ls "$D/yedek" | grep '^patron_.*\.dump\.tkenc$' | head -1)
 docker run --rm --network none -v "$D:/d" --entrypoint sh "$YIMAJ" -c \
   "node /arac/yedek-sifrele.cjs coz --girdi /d/yedek/$DOKUM --cikti /tmp/p.dump --anahtar /d/yedek-ozel.txt >/dev/null && pg_restore --list /tmp/p.dump | grep -c 'TABLE DATA'" \
   | sed 's/^/  açılan dökümde tablo verisi: /'
-docker stats --no-stream --format '{{.Name}} {{.MemUsage}} {{.CPUPerc}} {{.PIDs}}' tekserp-patron-duman tekserp-patron-duman-db tekserp-patron-duman-yedek
+TDOKUM=$(ls "$D/yedek" | grep "^tesis_${TESIS}_.*\.dump\.tkenc\$" | head -1)
+[ -n "$TDOKUM" ] || { echo "⛔ tesis dökümü yok (tesis_${TESIS}_*)" >&2; exit 1; }
+docker run --rm --network none -v "$D:/d" --entrypoint sh "$YIMAJ" -c \
+  "node /arac/yedek-sifrele.cjs coz --girdi /d/yedek/$TDOKUM --cikti /tmp/t.dump --anahtar /d/yedek-ozel.txt >/dev/null && pg_restore --list /tmp/t.dump | grep -c 'TABLE DATA'" \
+  | sed 's/^/  açılan TESİS dökümünde tablo verisi: /'
+docker stats --no-stream --format '{{.Name}} {{.MemUsage}} {{.CPUPerc}} {{.PIDs}}' tekserp-patron-duman tekserp-patron-duman-db tekserp-patron-duman-hazirla tekserp-patron-duman-yedek
 echo "✅ duman tamam — kaldırmak için: deploy/patron/duman.sh kaldir $SHA"

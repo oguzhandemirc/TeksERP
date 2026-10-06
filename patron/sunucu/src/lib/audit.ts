@@ -1,8 +1,9 @@
 // Bulut denetimi (`account_audit`) — AYAK İZİ, defter değil: iş kararı buradan okunmaz; yazım
 // best-effort ve iş tx'inin DIŞINDA (kendi kiracı kapsamında). Özete sır girmez: parola, TOTP,
 // davet/oturum belirteci, gelen kutusu gövdesi, projeksiyon verisi.
-import type { Prisma, PrismaClient } from "@prisma/client";
+import type { Prisma } from "@prisma/client";
 import { withTesis } from "./tenant";
+import type { TesisDbRouter } from "./tesis-db";
 
 let failures = 0;
 
@@ -19,7 +20,7 @@ export interface AuditEntry {
   readonly summary?: Prisma.InputJsonValue;
 }
 
-export async function recordAudit(db: PrismaClient, entry: AuditEntry): Promise<void> {
+export async function recordAudit(db: TesisDbRouter, entry: AuditEntry): Promise<void> {
   try {
     await withTesis(db, { tesisId: entry.tesisId }, (tx) =>
       tx.accountAudit.create({

@@ -4,13 +4,14 @@
 // Gövde kapısı: aynı kimlik başka hesap/eylem/gövdeyle gelirse 409 ISLEM_KIMLIGI_CAKISTI.
 // Sır alanları gövde özetine GİRMEZ; saklanan yanıt sırsızdır (`stored`).
 import { createHash } from "node:crypto";
-import type { OperationReceipt, Prisma, PrismaClient } from "@prisma/client";
+import type { OperationReceipt, Prisma } from "@prisma/client";
 import { recordAudit, type AuditEntry } from "./audit";
 import type { Tx } from "./db";
 import { CloudError } from "./errors";
 import type { LockSpec } from "./locks";
 import { isUniqueViolation } from "./prisma-errors";
 import { withTesis } from "./tenant";
+import type { TesisDbRouter } from "./tesis-db";
 
 /** Gövde özetine ve hiçbir kayda girmeyen alanlar. */
 export const SECRET_BODY_KEYS: ReadonlySet<string> = new Set(["parola", "mevcutParola", "yeniParola", "totp", "davet"]);
@@ -68,7 +69,7 @@ function replay(row: OperationReceipt, spec: Pick<WriteSpec<unknown>, "accountId
 
 type Outcome<R> = { readonly kind: "replay"; readonly row: OperationReceipt } | { readonly kind: "done"; readonly result: R; readonly status: number; readonly data: unknown };
 
-export async function executeWrite<R>(db: PrismaClient, spec: WriteSpec<R>): Promise<WriteResult> {
+export async function executeWrite<R>(db: TesisDbRouter, spec: WriteSpec<R>): Promise<WriteResult> {
   const digest = bodyDigestOf(spec.body);
   let outcome: Outcome<R>;
   try {

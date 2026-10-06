@@ -49,6 +49,11 @@ export const TYP = {
 
 export const LICENSE_CLASSES = ["URETIM", "TEST", "DR", "DEMO", "BAYI", "BARINDIRILAN"] as const;
 export type LicenseClass = (typeof LICENSE_CLASSES)[number];
+/** Patron bulutuna veri GÖNDEREBİLEN sınıflar — fabrika ön koşulu ve bulutun kurulum kapısı bu tek kaynaktan okur. */
+export const CLOUD_SENDER_CLASSES: readonly LicenseClass[] = ["URETIM", "BARINDIRILAN", "DEMO"];
+export function isCloudSenderClass(sinif: string): boolean {
+  return (CLOUD_SENDER_CLASSES as readonly string[]).includes(sinif);
+}
 export const SANCTION_LEVELS = ["K0", "K1", "K2", "K3", "K4", "K5"] as const;
 export type SanctionLevel = (typeof SANCTION_LEVELS)[number];
 /**

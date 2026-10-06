@@ -6,8 +6,9 @@
 // NE ÖLÇER: gerçek eşitleme turu SAHTE BULUTA karşı (yerel HTTP; imzalı istek protokolün
 // doğrulayıcısıyla, gövde KATI sözleşme şemasıyla denetlenir; bulut zincir · sürüm anı ·
 // TAM işaretle-süpür kurallarını referans olarak uygular):
-//   ⭐ ön koşul FAIL-CLOSED: TEST sınıfı · hak yok · abonelik bitti/yok · aralık yok ·
-//      DEVREDİLDİ · ÖLÇÜLEMEDİ · bulut adresi yok → dışarı SIFIR istek (P8 · P10)
+//   ⭐ ön koşul FAIL-CLOSED: TEST/DR/BAYI sınıfı · DEMO modülsüz · hak yok · abonelik bitti/yok · aralık yok ·
+//      DEVREDİLDİ · ÖLÇÜLEMEDİ · bulut adresi yok → dışarı SIFIR istek (P8 · P10); DEMO ve BARINDIRILAN
+//      + patron-bulut ön koşulu AÇAR (gönderici sınıf kümesi tek kaynak `CLOUD_SENDER_CLASSES`)
 //   ⭐ ilk tur TAM: her açık projeksiyon `tam` parçalarıyla, önceki filigran null; istek
 //      imzalı (amaç esitle, gövde özeti SIKIŞTIRILMIŞ baytlardan), gzip
 //   ⭐ artımlı tur yalnız değişeni taşır, zincir `önceki = son onaylanan`
@@ -30,6 +31,7 @@
 // "imza geçerli" ölçümü kör değil.
 // =============================================================================
 import fs from "node:fs";
+import path from "node:path";
 import { randomUUID } from "node:crypto";
 import { gzipSync } from "node:zlib";
 import prisma, { pool } from "../src/lib/prisma";
@@ -101,6 +103,17 @@ async function onKosulBolumu(lisans: BulutLisans, bulut: SahteBulut): Promise<vo
     check(`§1 ${ad} → ${neden}`, !e.ok && e.reason === neden && o.status === "GONDERILMEDI", `${e.ok ? "UYGUN" : e.reason} · ${o.status}`);
   };
   await bekle("TEST sınıfı", () => lisans.lisansiYaz({ sinif: "TEST" }), "SINIF_URETIM_DEGIL");
+  await bekle("DR sınıfı", () => lisans.lisansiYaz({ sinif: "DR" }), "SINIF_URETIM_DEGIL");
+  await bekle("BAYI sınıfı", () => lisans.lisansiYaz({ sinif: "BAYI" }), "SINIF_URETIM_DEGIL");
+  await bekle("DEMO sınıfı, patron-bulut modülsüz", () => lisans.lisansiYaz({ sinif: "DEMO", moduller: ["production.enabled", "finance.enabled"] }), "PATRON_BULUT_HAKKI_YOK");
+  // Gönderici sınıflar (tek kaynak `CLOUD_SENDER_CLASSES`): beklenen tablo burada SABİT — kümeden çıkarılan sınıf kırmızı.
+  for (const sinif of ["DEMO", "BARINDIRILAN"] as const) {
+    lisans.lisansiYaz({ sinif });
+    const g = evaluateCloudEligibility(getLicenseSnapshot(), Date.now(), getCloudUrl().url, getLicenseInstallationId());
+    check(`§1 ${sinif} sınıfı + patron-bulut → gönderir (ön koşul açık)`, g.ok, g.ok ? "UYGUN" : g.reason);
+  }
+  const kaynak = fs.readFileSync(path.join(__dirname, "..", "src", "cloud-sync", "eligibility.ts"), "utf8");
+  check("§1 ön koşulun sınıf kapısı tek kaynaktan (isCloudSenderClass; sınıf literali yok)", kaynak.includes("isCloudSenderClass(hak.sinif)") && !/sinif\s*[!=]==/.test(kaynak) && !/"URETIM"/.test(kaynak));
   await bekle("patron-bulut hakkı yok", () => lisans.lisansiYaz({ moduller: ["production.enabled", "finance.enabled"] }), "PATRON_BULUT_HAKKI_YOK");
   await bekle("abonelik bitmiş", () => lisans.lisansiYaz({}, { patronBulutBitis: msToIso(Date.now() - DAY_MS) }), "ABONELIK_YOK");
   await bekle("abonelik yok", () => lisans.lisansiYaz({}, { patronBulutBitis: null }), "ABONELIK_YOK");

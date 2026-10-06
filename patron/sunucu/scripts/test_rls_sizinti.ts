@@ -1,5 +1,6 @@
 // =============================================================================
-// RLS SIZINTI BEKÇİSİ — çok kiracılı tek DB'de kiracı yalıtımı DB DÜZEYİNDE (sözleşme §9.2–9.3).
+// RLS SIZINTI BEKÇİSİ — tesis DB'sinin İÇİNDE kiracı yalıtımı DB DÜZEYİNDE (sözleşme §9.2–9.3; ikinci katman —
+// birinci katman tesis başına ayrı DB, `test_tesis_db_yalitimi`). Merkezde yalnız yönlendirme yetkileri (§1 merkez).
 // Ham `pg` bağlantısıyla (uygulama katmanı atlanarak) ölçer; kapı SQL'dedir, koda güvenilmez:
 //   §1 şema: her tablo RLS ENABLE + FORCE + `tesis_yalitimi`; tablo kümesi ↔ CLOUD_TABLES ↔ migration
 //      listesi birebir; rol yetkileri (tablo + KOLON düzeyi) ↔ db-grants.ts BİREBİR; iki rol NOSUPERUSER NOBYPASSRLS.
@@ -19,9 +20,9 @@ import { randomUUID } from "node:crypto";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { Client } from "pg";
-import { APP_COLUMN_GRANTS, APP_GRANTS, CLOUD_TABLES, SYNC_COLUMN_GRANTS, SYNC_GRANTS, type ColumnGrants } from "../src/lib/db-grants";
+import { APP_COLUMN_GRANTS, APP_GRANTS, CLOUD_TABLES, MERKEZ_APP_GRANTS, MERKEZ_SYNC_COLUMN_GRANTS, MERKEZ_SYNC_GRANTS, ROUTING_TABLES, SYNC_COLUMN_GRANTS, SYNC_GRANTS, type ColumnGrants } from "../src/lib/db-grants";
 import { NO_TENANT, withTesis } from "../src/lib/tenant";
-import { PATRON_KOKU, hesapKur, imzali, kontrol, ortamKur, paket, girdi, sonuc, temizleTesis, tesisKur, type Ortam } from "./lib/test-ortam";
+import { PATRON_KOKU, hesapKur, imzali, kontrol, ortamKur, paket, girdi, sonuc, temizleTesis, tesisKur, tesisUrl, type Ortam } from "./lib/test-ortam";
 
 async function istemci(url: string): Promise<Client> {
   const c = new Client({ connectionString: url, options: "-c timezone=UTC" });
@@ -49,21 +50,25 @@ async function kapsamda<T>(c: Client, ayar: Record<string, string>, fn: () => Pr
   }
 }
 
-async function semaBolumu(o: Ortam): Promise<void> {
-  console.log("\n§1 şema: RLS + FORCE + politika + yetkiler");
-  const goc = await istemci(process.env.GOC_DATABASE_URL!);
+type RolBeyani = readonly [label: string, role: string, want: Readonly<Record<string, readonly string[]>>, wantColumns: ColumnGrants];
+
+/** §1 bir DB'de (merkez ya da tesis): şema aynıdır, yetkiler DB'nin sınıfına göre beyandan. */
+async function semaBolumu(etiket: string, gocUrl: string, roller: readonly RolBeyani[]): Promise<void> {
+  console.log(`\n§1 şema (${etiket}): RLS + FORCE + politika + yetkiler`);
+  const goc = await istemci(gocUrl);
   try {
     const t = await goc.query<{ relname: string; rls: boolean; force: boolean }>(
       `SELECT c.relname, c.relrowsecurity AS rls, c.relforcerowsecurity AS force FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
         WHERE n.nspname = 'public' AND c.relkind = 'r' AND c.relname <> '_prisma_migrations' ORDER BY 1`,
     );
     const tables = t.rows.map((r) => r.relname);
-    kontrol("§1a DB tablo kümesi = CLOUD_TABLES", JSON.stringify(tables) === JSON.stringify([...CLOUD_TABLES].sort()), tables.length + " tablo");
-    const eksik = t.rows.filter((r) => !r.rls || !r.force).map((r) => r.relname);
-    kontrol("§1b her tabloda RLS ENABLE + FORCE", eksik.length === 0, eksik.join(",") || "hepsi");
+    kontrol(`§1a ${etiket}: DB tablo kümesi = CLOUD_TABLES`, JSON.stringify(tables) === JSON.stringify([...CLOUD_TABLES].sort()), tables.length + " tablo");
+    const kiraci = t.rows.filter((r) => !ROUTING_TABLES.includes(r.relname));
+    const eksik = kiraci.filter((r) => !r.rls || !r.force).map((r) => r.relname);
+    kontrol(`§1b ${etiket}: her kiracı tablosunda RLS ENABLE + FORCE`, eksik.length === 0, eksik.join(",") || "hepsi");
     const pol = await goc.query<{ tablename: string }>(`SELECT tablename FROM pg_policies WHERE policyname = 'tesis_yalitimi'`);
     const polSet = new Set(pol.rows.map((r) => r.tablename));
-    kontrol("§1c her tabloda tesis_yalitimi politikası", tables.every((x) => polSet.has(x)));
+    kontrol(`§1c ${etiket}: her kiracı tablosunda tesis_yalitimi politikası`, kiraci.every((x) => polSet.has(x.relname)));
     // Bütün migration'ların RLS döngü listelerinin birleşimi (yeni tabloyu getiren migration kendi listesini taşır).
     const migDir = path.join(PATRON_KOKU, "prisma/migrations");
     const migTables = readdirSync(migDir)
@@ -73,12 +78,10 @@ async function semaBolumu(o: Ortam): Promise<void> {
         return [...dizi.matchAll(/'([a-z_]+)'/g)].map((m) => m[1]!);
       })
       .sort();
-    kontrol("§1d migration RLS listeleri (birleşim) = CLOUD_TABLES", JSON.stringify(migTables) === JSON.stringify([...CLOUD_TABLES].sort()), `${migTables.length}/${CLOUD_TABLES.length}`);
-    for (const [label, url, want, wantColumns] of [
-      ["uygulama", o.ctx.config.DATABASE_URL, APP_GRANTS, APP_COLUMN_GRANTS],
-      ["eşitleme", o.ctx.config.ESITLEME_DATABASE_URL, SYNC_GRANTS, SYNC_COLUMN_GRANTS],
-    ] as const) {
-      const role = decodeURIComponent(new URL(url).username);
+    const kiraciTablolari = CLOUD_TABLES.filter((x) => !ROUTING_TABLES.includes(x)).sort();
+    kontrol("§1d migration RLS listeleri (birleşim) = CLOUD_TABLES − yönlendirme", JSON.stringify(migTables) === JSON.stringify(kiraciTablolari), `${migTables.length}/${kiraciTablolari.length}`);
+    for (const [label0, role, want, wantColumns] of roller) {
+      const label = `${etiket} ${label0}`;
       const g = await goc.query<{ table_name: string; privilege_type: string }>(
         `SELECT table_name, privilege_type FROM information_schema.role_table_grants WHERE grantee = $1 AND table_schema = 'public'`,
         [role],
@@ -109,9 +112,9 @@ async function semaBolumu(o: Ortam): Promise<void> {
   }
 }
 
-async function ayarsizBolumu(o: Ortam): Promise<void> {
-  console.log("\n§2 app.tesis_id ayarsız/sıfırlanmış → HATA, sıfır satır");
-  const c = await istemci(o.ctx.config.DATABASE_URL);
+async function ayarsizBolumu(o: Ortam, a: { tesisId: string }): Promise<void> {
+  console.log("\n§2 app.tesis_id ayarsız/sıfırlanmış → HATA, sıfır satır (tesis DB'si)");
+  const c = await istemci(tesisUrl(o, a.tesisId, "uygulama"));
   try {
     let hepsiHata = true;
     for (const t of ["accounts", "projection_rows", "inbox_messages", "facilities", "installations"]) {
@@ -131,8 +134,8 @@ async function ayarsizBolumu(o: Ortam): Promise<void> {
 }
 
 async function capraz(o: Ortam, a: { tesisId: string; hesap: string; eposta: string }, b: { tesisId: string; hesap: string }): Promise<void> {
-  console.log("\n§3 tesis A kapsamında B görünmez · WITH CHECK · ön-kiracı arama");
-  const c = await istemci(o.ctx.config.DATABASE_URL);
+  console.log("\n§3 tesis A'nın DB'sinde B görünmez · WITH CHECK · ön-kiracı arama (RLS ikinci katman)");
+  const c = await istemci(tesisUrl(o, a.tesisId, "uygulama"));
   try {
     const ayarA = { "app.tesis_id": a.tesisId, "app.projeksiyonlar": "siparis,siparis.finans" };
     const hesaplar = await kapsamda(c, ayarA, () => c.query<{ tesis_id: string }>("SELECT tesis_id FROM accounts"));
@@ -160,7 +163,7 @@ async function capraz(o: Ortam, a: { tesisId: string; hesap: string; eposta: str
 
 async function alanIzni(o: Ortam, a: { tesisId: string }): Promise<void> {
   console.log("\n§4 alan izni (RESTRICTIVE): izinsiz alt satır doğrudan SQL'le de 0");
-  const c = await istemci(o.ctx.config.DATABASE_URL);
+  const c = await istemci(tesisUrl(o, a.tesisId, "uygulama"));
   try {
     const n = async (liste: string, proj: string) =>
       (await kapsamda(c, { "app.tesis_id": a.tesisId, "app.projeksiyonlar": liste }, () => c.query<{ n: number }>("SELECT count(*)::int AS n FROM projection_rows WHERE projection = $1", [proj]))).rows[0]!.n;
@@ -176,8 +179,8 @@ async function alanIzni(o: Ortam, a: { tesisId: string }): Promise<void> {
 
 async function rolAyrimi(o: Ortam, a: { tesisId: string }): Promise<void> {
   console.log("\n§5 rol ayrımı");
-  const app = await istemci(o.ctx.config.DATABASE_URL);
-  const sync = await istemci(o.ctx.config.ESITLEME_DATABASE_URL);
+  const app = await istemci(tesisUrl(o, a.tesisId, "uygulama"));
+  const sync = await istemci(tesisUrl(o, a.tesisId, "esitleme"));
   try {
     const yaz = await kapsamda(app, { "app.tesis_id": a.tesisId, "app.projeksiyonlar": "siparis" }, () =>
       hataVerir(app, "INSERT INTO projection_rows (tesis_id, projection, record_id, data, version_at, sort_at) VALUES ($1, 'siparis', gen_random_uuid(), '{}', now(), now())", [a.tesisId]),
@@ -227,7 +230,8 @@ async function yardimci(o: Ortam, a: { tesisId: string }): Promise<void> {
   kontrol("§6a sıfır UUID ile withTesis RED", await red(() => withTesis(o.ctx.app, { tesisId: NO_TENANT }, async () => 1)));
   kontrol("§6b biçimsiz tesis RED", await red(() => withTesis(o.ctx.app, { tesisId: "x' OR 1=1 --" }, async () => 1)));
   kontrol("§6c '*' projeksiyon RED", await red(() => withTesis(o.ctx.app, { tesisId: a.tesisId, projections: ["*"] }, async () => 1)));
-  kontrol("§6d kapsamsız Prisma sorgusu (uygulama rolü) HATA", await red(() => o.ctx.app.account.findMany({ take: 1 })));
+  kontrol("§6d kapsamsız Prisma sorgusu (uygulama rolü, tesis DB'si) HATA", await red(() => o.ctx.app.withFacilityClient(a.tesisId, (db) => db.account.findMany({ take: 1 }))));
+  kontrol("§6d2 merkezde kiracı tablosu (uygulama rolü) HATA", await red(() => o.ctx.app.centralClient.account.findMany({ take: 1 })));
   const ok = await withTesis(o.ctx.app, { tesisId: a.tesisId }, (tx) => tx.account.count());
   kontrol("§6e kapsamlı sorgu çalışır", ok >= 1, `${ok} hesap`);
 }
@@ -281,8 +285,16 @@ async function main(): Promise<void> {
       const r = await imzali(o, k, "/v1/esitle", { govde: p });
       if (r.status !== 200) throw new Error(`fikstür paketi: ${r.status} ${JSON.stringify(r.json)}`);
     }
-    await semaBolumu(o);
-    await ayarsizBolumu(o);
+    const kullanici = (url: string) => decodeURIComponent(new URL(url).username);
+    await semaBolumu("merkez", process.env.GOC_DATABASE_URL!, [
+      ["uygulama", kullanici(o.ctx.config.DATABASE_URL), MERKEZ_APP_GRANTS, {}],
+      ["eşitleme", kullanici(o.ctx.config.ESITLEME_DATABASE_URL), MERKEZ_SYNC_GRANTS, MERKEZ_SYNC_COLUMN_GRANTS],
+    ]);
+    await semaBolumu("tesis A", tesisUrl(o, kA.tesisId, "goc"), [
+      ["uygulama", kullanici(tesisUrl(o, kA.tesisId, "uygulama")), APP_GRANTS, APP_COLUMN_GRANTS],
+      ["eşitleme", kullanici(tesisUrl(o, kA.tesisId, "esitleme")), SYNC_GRANTS, SYNC_COLUMN_GRANTS],
+    ]);
+    await ayarsizBolumu(o, kA);
     await capraz(o, { tesisId: kA.tesisId, hesap: hA.accountId, eposta: hA.eposta }, { tesisId: kB.tesisId, hesap: hB.accountId });
     await alanIzni(o, kA);
     await rolAyrimi(o, kA);

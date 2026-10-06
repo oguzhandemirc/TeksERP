@@ -142,11 +142,11 @@ async function main(): Promise<void> {
     const yonS = (await api(o, "GET", `/api/raporlar/${idS}`, { belirtec: yonetici.belirtec })).json.data as { durum?: string; sonuc?: unknown };
     const sevkS = (await api(o, "GET", `/api/raporlar/${idS}`, { belirtec: sevkci.belirtec })).json.data as { sonuc?: unknown };
     kontrol("§3d ⭐ aynı ailenin (sales) sipariş izniyle sevkiyat karnesi sonucu GÖRÜLMEZ; sevkiyat izinli yazar görür", yonS.durum === "HAZIR" && yonS.sonuc === null && sevkS.sonuc !== null && sevkS.sonuc !== undefined);
-    const sonucId = await withTesis(o.goc.prisma, { tesisId: k.tesisId }, async (tx) => (await tx.reportRequest.findUniqueOrThrow({ where: { id: idS } })).resultId!);
+    const sonucId = await withTesis(o.goc, { tesisId: k.tesisId }, async (tx) => (await tx.reportRequest.findUniqueOrThrow({ where: { id: idS } })).resultId!);
     const goruyor = async (izinler: string[], id: string) =>
       withTesis(o.ctx.app, { tesisId: k.tesisId, projections: sessionProjections(effectivePermissions(izinler)) }, (tx) => tx.reportResult.findUnique({ where: { id } }));
     kontrol("§3e ⭐ RLS (uygulama rolü, ham kapsam): sipariş izniyle sevkiyat karnesi satırı 0 · sevkiyat izniyle 1", (await goruyor(["bulut:rapor:oku", "bulut:siparis:oku"], sonucId)) === null && (await goruyor(["bulut:rapor:oku", "bulut:sevkiyat:oku"], sonucId)) !== null);
-    const eskiId = await withTesis(o.goc.prisma, { tesisId: k.tesisId }, async (tx) =>
+    const eskiId = await withTesis(o.goc, { tesisId: k.tesisId }, async (tx) =>
       (await tx.reportResult.create({ data: { tesisId: k.tesisId, reportKey: "sales/shipment-scorecard", projection: "rapor.sales", paramsDigest: "x".repeat(64), data: {}, computedAt: new Date(), sourceHorizon: new Date() } })).id,
     );
     kontrol(

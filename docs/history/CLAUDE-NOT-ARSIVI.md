@@ -37,4 +37,5 @@
 
 | 2026-10 | [`arsiv/2026-10.md`](arsiv/2026-10.md) | 53 | dağıtım v2, tek ana dal/tek paket, patron DB-per-tesis, satıcı portalı, hazırlık satıcısı emekliliği, panel tek bant alanı, sunucu saati |
 
+
 | 2026-10 | [`arsiv/2026-10.md`](arsiv/2026-10.md) | 54 | dağıtım v2, tek ana dal/tek paket, patron DB-per-tesis, satıcı portalı, hazırlık satıcısı emekliliği |

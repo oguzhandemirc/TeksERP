@@ -42,7 +42,7 @@ export async function cihazKaydet(o: Ortam, h: TestHesabi, belirtec = `ExponentP
 
 /** Anlık projeksiyon satırı (fabrikanın paketiyle aynı biçim: record_id sıfır UUID). */
 export async function anlikYaz(o: Ortam, tesisId: string, projeksiyon: string, veri: unknown): Promise<void> {
-  await withTesis(o.goc.prisma, { tesisId, projections: [projeksiyon] }, (tx) => tx.$executeRaw`
+  await withTesis(o.goc, { tesisId, projections: [projeksiyon] }, (tx) => tx.$executeRaw`
     INSERT INTO projection_rows (tesis_id, projection, record_id, data, version_at, sort_at, updated_at)
     VALUES (${tesisId}::uuid, ${projeksiyon}, ${NO_TENANT}::uuid, ${JSON.stringify(veri)}::jsonb, now(), now(), now())
     ON CONFLICT (tesis_id, projection, record_id) DO UPDATE SET data = EXCLUDED.data, updated_at = now()`);
@@ -69,5 +69,5 @@ export interface BildirimSatiri {
 }
 
 export async function bildirimler(o: Ortam, tesisId: string, kind?: string): Promise<BildirimSatiri[]> {
-  return withTesis(o.goc.prisma, { tesisId }, (tx) => tx.notification.findMany({ where: { tesisId, ...(kind ? { kind } : {}) }, orderBy: [{ createdAt: "asc" }, { id: "asc" }] }));
+  return withTesis(o.goc, { tesisId }, (tx) => tx.notification.findMany({ where: { tesisId, ...(kind ? { kind } : {}) }, orderBy: [{ createdAt: "asc" }, { id: "asc" }] }));
 }

@@ -16,7 +16,7 @@ import { Client } from "pg";
 import { CLOUD_PERMISSIONS, ROLE_TEMPLATES, effectivePermissions } from "../src/catalog/permissions";
 import { PROJECTION_CATALOG, ROOT_PROJECTIONS } from "../src/catalog/projections";
 import { sessionProjections } from "../src/auth/session.service";
-import { api, girdi, hesapKur, imzali, kontrol, ortamKur, paket, sonuc, temizleTesis, tesisKur, type Ortam, type TestHesabi, type TestKurulumu } from "./lib/test-ortam";
+import { api, girdi, hesapKur, imzali, kontrol, ortamKur, paket, sonuc, temizleTesis, tesisKur, tesisUrl, type Ortam, type TestHesabi, type TestKurulumu } from "./lib/test-ortam";
 
 type Liste = { kayitlar: { id: string; kayit: Record<string, unknown>; finans?: Record<string, unknown> | null; kisisel?: Record<string, unknown> | null }[] };
 
@@ -113,7 +113,7 @@ async function patron(o: Ortam, h: TestHesabi, ids: { siparis: string }): Promis
 async function dbDuzeyi(o: Ortam, k: TestKurulumu, ids: { siparis: string }): Promise<void> {
   console.log("\n§5 DB düzeyi (ham SQL, hesabın kümesiyle)");
   const liste = sessionProjections(effectivePermissions(ROLE_TEMPLATES.SATIS)).join(",");
-  const c = new Client({ connectionString: o.ctx.config.DATABASE_URL });
+  const c = new Client({ connectionString: tesisUrl(o, k.tesisId, "uygulama") });
   await c.connect();
   try {
     await c.query("BEGIN");

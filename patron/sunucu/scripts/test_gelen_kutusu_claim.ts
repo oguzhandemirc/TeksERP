@@ -196,7 +196,7 @@ async function yazarBolumu(o: Ortam): Promise<void> {
       JSON.stringify(alinan) === JSON.stringify([m3, m6, m7].sort()),
       `${alinan.length} alındı`,
     );
-    const durumlar = await withTesis(o.goc.prisma, { tesisId: y.tesisId }, (tx) => tx.inboxMessage.findMany({ where: { tesisId: y.tesisId, messageId: { in: [m1, m2, m4, m5] } } }));
+    const durumlar = await withTesis(o.goc, { tesisId: y.tesisId }, (tx) => tx.inboxMessage.findMany({ where: { tesisId: y.tesisId, messageId: { in: [m1, m2, m4, m5] } } }));
     kontrol(
       "§7c ⭐ dört mesaj REDDEDILDI · kod YAZAR_YETKISIZ · işlenme anı dolu · sahip kurulum yok",
       durumlar.length === 4 && durumlar.every((m) => m.status === "REDDEDILDI" && (m.result as { kod?: string } | null)?.kod === "YAZAR_YETKISIZ" && m.processedAt !== null && m.ownerInstallationId === null),
@@ -205,7 +205,7 @@ async function yazarBolumu(o: Ortam): Promise<void> {
     const gor = await api(o, "GET", `/api/gelen-kutusu/${m1}`, { belirtec: yon.belirtec });
     const gv = gor.json.data as { durum?: string; sonuc?: { mesaj?: string } };
     kontrol("§7d ret yöneticiye TR iletiyle görünür", gv.durum === "REDDEDILDI" && /fabrikaya iletilmedi/.test(gv.sonuc?.mesaj ?? ""), gv.sonuc?.mesaj ?? "");
-    const iz = await withTesis(o.goc.prisma, { tesisId: y.tesisId }, (tx) => tx.accountAudit.findMany({ where: { tesisId: y.tesisId, event: "GELEN_KUTUSU_REDDEDILDI" } }));
+    const iz = await withTesis(o.goc, { tesisId: y.tesisId }, (tx) => tx.accountAudit.findMany({ where: { tesisId: y.tesisId, event: "GELEN_KUTUSU_REDDEDILDI" } }));
     kontrol("§7e ayak izi: dört GELEN_KUTUSU_REDDEDILDI (aktör bulut)", iz.length === 4 && iz.every((x) => x.actor === "bulut"), String(iz.length));
     const tekrar = await imzali(o, y, "/v1/gelen-kutusu/al", { govde: { v: 1, enFazla: 20 } });
     const sonucRet = await imzali(o, y, "/v1/gelen-kutusu/sonuc", { govde: { v: 1, sonuclar: [{ mesajId: m1, durum: "ISLENDI", varlikId: randomUUID() }] } });

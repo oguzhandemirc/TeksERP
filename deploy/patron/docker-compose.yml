@@ -14,8 +14,9 @@ name: tekserp-patron-${ORTAM:?ORTAM gerekli (uretim|hazirlik)}
 #           (PATRON_IC_IP — satıcının kaynak kapısı yalnız bu /32'yi kabul eder). Patron burada DİNLEMEZ.
 #   cikis   (internal DEĞİL) YALNIZ patron → bildirim sağlayıcıları (Expo push · web push, B5). Patron burada
 #           DİNLEMEZ (BIND = kenar adresi); DB, göç ve yedek bu ağa KATILMAZ (compose-denetle ④).
-# Üç DB rolü (patron/sunucu/scripts/db-rolleri.ts): göç (tablo sahibi; yalnız patron-goc + yedek) ·
-# uygulama · eşitleme (RLS'i atlayamaz; sunucu yalnız bu ikisini alır). Parolalar docker secret'ı.
+# Üç DB rolü (patron/sunucu/scripts/db-rolleri.ts): göç (tablo sahibi; yalnız patron-goc · patron-hazirla · yedek) ·
+# uygulama · eşitleme (RLS'i atlayamaz; sunucu yalnız bu ikisini alır). Parolalar docker secret'ı. Her tesisin AYRI
+# veritabanı ve kendi iki rolü vardır (PATRON-TESIS-DB); o rollerin parolası `tesis_rol_anahtari`ndan türetilir.
 # Docker soketi hiçbir servise BAĞLANMAZ. Kök FS salt okunur · root olmayan kullanıcı · yetenek yok ·
 # cgroup CPU/bellek/süreç sınırı (patron satıcıyı ve güncelleme yayınını aç bırakamasın).
 # =============================================================================
@@ -88,7 +89,7 @@ services:
       # anahtar biriminde ÖNCEDEN üretilmiş olmalı (birim salt okunur — runbook §2.1).
       BILDIRIM_KIPI: ${BILDIRIM_KIPI:-kapali}
       BILDIRIM_VAPID_KONU: ${BILDIRIM_VAPID_KONU:-}
-    secrets: [uygulama_parolasi, esitleme_parolasi, ic_api_belirteci]
+    secrets: [uygulama_parolasi, esitleme_parolasi, ic_api_belirteci, tesis_rol_anahtari]
     volumes:
       # Anahtar birimi SALT OKUNUR: patron-totp.key önceden üretilir (runbook §2.1); yoksa açılış DURUR.
       - ${ANAHTAR_DIZINI_HOST:?ANAHTAR_DIZINI_HOST gerekli}:/anahtarlar:ro
@@ -128,7 +129,8 @@ services:
       - traefik.http.middlewares.tekserp-patron-${ORTAM}-hiz.ratelimit.sourcecriterion.requestheadername=Cf-Connecting-Ip
 
   # Göç + rol hizalaması TEK SEFERLİK ve ELLE (`--profile goc run --rm patron-goc`): geri alınamaz eşik, önce yedek.
-  # Satıcı CLI'si (tesis · kurulum · ilk yönetici) aynı konteynerden: `run --rm patron-goc node dist-cli/scripts/tesis.js …`
+  # Sıra: merkez göçü (Prisma) → merkez rolleri → HAZIR her tesis DB'sine eksik göçler + yetki hizası (tek tek).
+  # Satıcı CLI'si (tesis · kurulum · ilk yönetici · imha) aynı konteynerden: `run --rm patron-goc node dist-cli/scripts/tesis.js …`
   patron-goc:
     <<: *sertlik
     image: ${PATRON_IMAJ}
@@ -138,8 +140,8 @@ services:
     group_add: ["${SIR_GID}"]
     depends_on:
       patron-db: { condition: service_healthy }
-    command: ["sh", "-c", "node node_modules/prisma/build/index.js migrate deploy && node dist-cli/scripts/db-rolleri.js"]
-    secrets: [goc_parolasi, uygulama_parolasi, esitleme_parolasi]
+    command: ["sh", "-c", "node node_modules/prisma/build/index.js migrate deploy && node dist-cli/scripts/db-rolleri.js && node dist-cli/scripts/tesis-db.js goc"]
+    secrets: [goc_parolasi, uygulama_parolasi, esitleme_parolasi, tesis_rol_anahtari]
     tmpfs:
       - /tmp:mode=1777
     networks: [ic]
@@ -147,6 +149,28 @@ services:
     mem_limit: 384m
     memswap_limit: 384m
     pids_limit: 100
+
+  # Tesis DB hazırlayıcısı: sunucunun yazdığı ISTENDI satırlarını yoklar, DB + roller + göç + yetki kurar (göç rolü).
+  # Dinleyici YOK, yalnız ic ağı. Prisma CLI çağırmaz (göç koşucusu düz SQL) ⇒ küçük bellek.
+  patron-hazirla:
+    <<: *sertlik
+    image: ${PATRON_IMAJ}
+    container_name: tekserp-patron-${ORTAM}-hazirla
+    user: "10001:10001"
+    group_add: ["${SIR_GID}"]
+    depends_on:
+      patron-db: { condition: service_healthy }
+    environment:
+      NODE_OPTIONS: --max-old-space-size=64
+    command: ["node", "dist-cli/scripts/tesis-db.js", "izle", "--aralik=10"]
+    secrets: [goc_parolasi, tesis_rol_anahtari]
+    tmpfs:
+      - /tmp:mode=1777
+    networks: [ic]
+    cpus: 0.25
+    mem_limit: 96m
+    memswap_limit: 96m
+    pids_limit: 50
 
   patron-yedek:
     <<: *sertlik
@@ -184,6 +208,10 @@ secrets:
   # Satıcı ↔ patron ortak Bearer'ı: satıcının dosyasının patron dizinindeki KOPYASI (ortak birim yok; runbook §3).
   ic_api_belirteci:
     file: ${IC_API_BELIRTEC_DOSYASI_HOST:?IC_API_BELIRTEC_DOSYASI_HOST gerekli}
+  # Tesis rol parolalarının + giriş dizini özetinin anahtarı (32 bayt base64url; ÖNCEDEN üretilir — runbook).
+  # Yedek konteyneri ALMAZ: parolalar türetilir, anahtar kaybı veri kaybı değil (`tesis-db goc` yeniden yazar).
+  tesis_rol_anahtari:
+    file: ${TESIS_ROL_ANAHTARI_DOSYASI_HOST:?TESIS_ROL_ANAHTARI_DOSYASI_HOST gerekli}
 
 volumes:
   patron-pg:
