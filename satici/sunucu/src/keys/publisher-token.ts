@@ -1,6 +1,6 @@
 // YAYINCI İNDİRME belirteçleri — yayın betiklerinin kenar (CF Worker) doğrulaması için. Kurulum kiraya
 // eşlik eden belirteçle AYNI biçimdedir (kanal + ürün öneki + ≤ 70 dk); kurulum kimliği yerine sabit
-// yayıncı kimliği taşır. Özel anahtar yalnız satıcının İNDİRME anahtarıdır (hazırlık ya da VDS).
+// yayıncı kimliği taşır. Özel anahtar yalnız satıcının İNDİRME anahtarıdır (VDS).
 import { ChannelCodeSchema, DOWNLOAD_MAX_TTL_MS, DOWNLOAD_PRODUCTS, msToIso, signDownloadToken } from "../lisans-protokol";
 import type { KeyStore } from "./key-store";
 

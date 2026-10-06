@@ -140,6 +140,7 @@ enum KopyaUyariDurumu {
 
 enum AnahtarTuru {
   KOK
+  /// EMEKLİ DEĞER: hazırlık kökü (TEK-ORTAK-PAKET §7) — PG değer düşürmez; yazan yol yok, bekçi yeni yazımı reddeder.
   HAZIRLIK_KOK
   ALT
   INDIRME
@@ -180,6 +181,7 @@ enum GuncellemeKipi {
 /// Dağıtım kanalının türü — `deploy/kanallar.json` `tur` değerleriyle aynı sözlük.
 enum KanalTuru {
   uretim
+  /// EMEKLİ DEĞER: hazırlık kanalı (TEK-ORTAK-PAKET §7) — PG değer düşürmez; yazan yol yok, bekçi yeni yazımı reddeder.
   hazirlik
 }
 

@@ -95,7 +95,7 @@ export interface AnahtarOrtami {
   temizle(): void;
 }
 
-/** Geçici anahtar dizini: parolalı üretim + hazırlık kökü, ALT ve İNDİRME (kök imzalı), çapa dosyası. */
+/** Geçici anahtar dizini: parolalı iki kök (bütün sınıflar + dar TEST/DEMO), ALT ve İNDİRME (kök imzalı), çapa dosyası. */
 export async function anahtarOrtamiKur(simdi: number = Date.now(), ekOrtam: Record<string, string> = {}): Promise<AnahtarOrtami> {
   const f = fiksturKur(simdi);
   const dizin = mkdtempSync(path.join(os.tmpdir(), "satici-bekci-"));
@@ -230,7 +230,7 @@ export interface KurulumFiksturu {
  * (fikstür grubu ne açar ne değiştirir ne siler). Başka bir kod EMEKLİ kanal satırıdır (`aktif=false`, demofabrika
  * benzeri): kurulum alamaz, yalnız okuma/görünüm bekçileri kullanır. Aynı kod her koşumda yeniden kullanılır (upsert).
  */
-export async function kanalFiksturu(kod: string, tur: "uretim" | "hazirlik" = "uretim"): Promise<string> {
+export async function kanalFiksturu(kod: string): Promise<string> {
   const { prisma } = await import("../../src/lib/prisma");
   const { isUpdateGroup } = await import("../../src/services/channel.service");
   if (isUpdateGroup(kod)) {
@@ -238,7 +238,7 @@ export async function kanalFiksturu(kod: string, tur: "uretim" | "hazirlik" = "u
     if (!row?.aktif) throw new Error(`Güncelleme grubu satırı yok ya da pasif: ${kod} (migration 20261006120000_guncelleme_gruplari)`);
     return kod;
   }
-  await prisma.kanal.upsert({ where: { kod }, create: { kod, ad: `Bekçi emekli kanalı ${kod}`, tur, aktif: false }, update: {} });
+  await prisma.kanal.upsert({ where: { kod }, create: { kod, ad: `Bekçi emekli kanalı ${kod}`, tur: "uretim", aktif: false }, update: {} });
   return kod;
 }
 

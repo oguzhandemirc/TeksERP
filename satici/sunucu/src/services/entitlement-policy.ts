@@ -107,7 +107,7 @@ export function installationCapabilities(installation: { readonly yetenekler: un
 
 /**
  * Yetenek kapısı (SAF): `hak-ara` bildiren kuruluma geçerli ara imzacı; yoksa (ya da yetenek yoksa) VDS'te duran kök
- * (hazırlık · A düzeni); o da yoksa kök kuyruğu. Yeni biçim (ara imzalı HAK) eski derlemeye ASLA gitmez: onu yalnız
+ * (A düzeni); o da yoksa kök kuyruğu. Yeni biçim (ara imzalı HAK) eski derlemeye ASLA gitmez: onu yalnız
  * `hak-ara` bildiren kurulum alır.
  */
 export function planEntitlementSigner(keys: KeyStore, licenseClass: LicenseClass, capabilities: readonly string[], nowMs: number): EntitlementSignerPlan {

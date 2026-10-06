@@ -45,7 +45,7 @@ import {
 import { PORTAL_PERMISSIONS } from "../shared/permissions";
 import { HEAVY_K3_MIN_DAYS, INSTALLMENT_DEFAULT_RESTRICTION_DAYS } from "../shared/sanctions";
 import { VALIDITY_END_REQUIRED_CLASSES } from "../shared/validity";
-import { CHANNEL_KIND_LABEL, ORDER_MAX, ORDER_MIN, VERSION_PATTERN } from "../portal/pages/Channels";
+import { ORDER_MAX, ORDER_MIN, VERSION_PATTERN } from "../portal/pages/Channels";
 import { UPDATE_GROUP_LABEL, defaultGroupFor } from "../shared/update-groups";
 import { CLOUD_RETENTION_DEFAULT, CLOUD_RETENTION_MONTHS, SYNC_MINUTES_DEFAULT, SYNC_MINUTES_MAX, SYNC_MINUTES_MIN } from "../shared/cloud-settings";
 import { ACCEPTANCE_EVENT } from "../portal/installation/AcceptancePanel";
@@ -225,8 +225,9 @@ describe("katalog ekran adları", () => {
     expect(Object.keys(CHANNEL_HEALTH_LABEL).filter((k) => !states.includes(k))).toEqual([]);
   });
 
-  it("her kanal türünün ekran adı var (Prisma KanalTuru, iki yönlü)", () => {
-    twoWay(prismaEnum("KanalTuru"), CHANNEL_KIND_LABEL);
+  it("kanal türünün canlı değeri yalnız `uretim` (Prisma KanalTuru; `hazirlik` emekli değer — ekranda tür sütunu yok)", () => {
+    expect(retiredEnumValues("KanalTuru")).toEqual(["hazirlik"]);
+    expect(prismaEnum("KanalTuru")).toEqual(["uretim"]);
   });
 
   it("güncelleme grupları sunucu UPDATE_GROUPS ile aynı küme ve aynı terfi sırası (channel.service.ts)", () => {
@@ -247,12 +248,24 @@ describe("katalog ekran adları", () => {
   });
 });
 
-/** Prisma şemasındaki bir enum'un değerleri (belge yorumları `///` atlanır). */
-function prismaEnum(name: string): string[] {
+/** Prisma şemasındaki bir enum gövdesinin kırpılmış satırları (değerler + `///` belge yorumları). */
+function prismaEnumLines(name: string): string[] {
   const schema = readFileSync(path.resolve(SERVER_SRC, "../prisma/schema.prisma"), "utf8");
   const m = new RegExp(`\\nenum ${name} \\{([\\s\\S]*?)\\n\\}`).exec(schema);
   if (!m) throw new Error(`enum ${name} bulunamadı`);
-  return m[1]!.split("\n").map((l) => l.trim()).filter((l) => /^[A-Za-z_]+$/.test(l));
+  return m[1]!.split("\n").map((l) => l.trim());
+}
+
+/** `/// EMEKLİ DEĞER` işaretli değerler: DB'de kalır, yazan yok — ekran adı haritasına girmez. */
+function retiredEnumValues(name: string): string[] {
+  const lines = prismaEnumLines(name);
+  return lines.filter((l, i) => /^[A-Za-z_]+$/.test(l) && (lines[i - 1] ?? "").startsWith("/// EMEKLİ DEĞER"));
+}
+
+/** Prisma enum'unun CANLI değerleri (emekli değerler hariç). */
+function prismaEnum(name: string): string[] {
+  const retired = retiredEnumValues(name);
+  return prismaEnumLines(name).filter((l) => /^[A-Za-z_]+$/.test(l) && !retired.includes(l));
 }
 
 /** Ekran adı haritası sunucu kümesiyle İKİ YÖNLÜ birebir (eksik değer ham kod basar, fazla anahtar ölü etikettir). */
@@ -328,6 +341,7 @@ describe("lisans v2 — enum ve küme ekran adları (sunucu kaynağı, iki yönl
   it("anahtar türü/durumu = Prisma AnahtarTuru/AnahtarDurumu (ARA dahil)", () => {
     const kinds = prismaEnum("AnahtarTuru");
     expect(kinds).toContain("ARA");
+    expect(retiredEnumValues("AnahtarTuru")).toHaveLength(1);
     twoWay(kinds, KEY_KIND_LABEL);
     twoWay(prismaEnum("AnahtarDurumu"), KEY_STATUS_LABEL);
   });

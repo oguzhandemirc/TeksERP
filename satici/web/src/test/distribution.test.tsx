@@ -114,7 +114,7 @@ describe("ilk kurulum bağlantısı", () => {
   });
 });
 
-const RELEASES_EMPTY = { yayinKoku: "BAGLI_DEGIL", kanallar: [{ kod: "testfabrika", kayitli: { ad: "Test", tur: "hazirlik", guncelSurumler: { panel: "1.3.9" } }, yayinda: null, defter: null, bildirimler: [] }] };
+const RELEASES_EMPTY = { yayinKoku: "BAGLI_DEGIL", kanallar: [{ kod: "testfabrika", kayitli: { ad: "Test", tur: "uretim", guncelSurumler: { panel: "1.3.9" } }, yayinda: null, defter: null, bildirimler: [] }] };
 
 function openReleases(role: "SATICI_OPERATOR" | "SATICI_YONETICI", overview: unknown) {
   return renderApp({

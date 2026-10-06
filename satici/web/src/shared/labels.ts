@@ -139,7 +139,6 @@ export const SIGNER_PLAN_REASON_LABEL: Record<string, string> = {
 /** Satıcı imza anahtarının türü / künye durumu — Prisma `AnahtarTuru` / `AnahtarDurumu` aynası. */
 export const KEY_KIND_LABEL: Record<string, string> = {
   KOK: "Kök",
-  HAZIRLIK_KOK: "Hazırlık kökü",
   ALT: "Alt (kira imzası)",
   INDIRME: "İndirme belirteci",
   BAYI: "Bayi",

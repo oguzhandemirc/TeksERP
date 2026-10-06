@@ -396,7 +396,8 @@ export interface Ceiling {
   readonly createdAt: string;
 }
 
-export type ChannelKind = "uretim" | "hazirlik";
+/** Prisma `KanalTuru`nun CANLI değeri — `hazirlik` DB'de emekli değerdir (yazan yok, TEK-ORTAK-PAKET §7). */
+export type ChannelKind = "uretim";
 
 /** Kiraya giden güncel sürümler (X.Y.Z); boş anahtar = bildirilmez. */
 export interface ChannelVersions {

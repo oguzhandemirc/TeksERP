@@ -8,7 +8,7 @@ import { useWrite } from "../../shared/attempt";
 import { fmtDate } from "../../shared/format";
 import { useChannels } from "../../shared/hooks";
 import { useApi, useCan } from "../../shared/session";
-import type { Channel, ChannelKind, ChannelVersions } from "../../shared/types";
+import type { Channel, ChannelVersions } from "../../shared/types";
 import { groupName } from "../../shared/update-groups";
 import { Badge, Button, ErrorText, Field, Modal, ModalActions, PageTitle, QueryState, Section, Table } from "../../shared/ui";
 
@@ -18,7 +18,6 @@ export const VERSION_PATTERN = /^\d{1,4}\.\d{1,4}\.\d{1,6}([-+][0-9A-Za-z.-]{1,4
 export const ORDER_MIN = 1;
 export const ORDER_MAX = 99;
 
-export const CHANNEL_KIND_LABEL: Record<ChannelKind, string> = { uretim: "Üretim", hazirlik: "Hazırlık" };
 const PRODUCTS = [
   ["backend", "Backend"],
   ["panel", "Panel"],
@@ -56,7 +55,6 @@ export function ChannelsPage() {
             { header: "Grup", render: (r) => <code>{r.kod}</code> },
             { header: "Ad", render: (r) => r.ad },
             { header: "Durum", render: (r) => (r.aktif ? <Badge tone="ok">Aktif</Badge> : <Badge tone="warn">Emekli</Badge>) },
-            { header: "Tür", render: (r) => CHANNEL_KIND_LABEL[r.tur] ?? r.tur },
             { header: "Güncel sürümler", render: (r) => versionsSummary(r.guncelSurumler) },
             { header: "Kurulum", render: (r) => r.kurulumSayisi, className: "num-col" },
             { header: "Kayıt", render: (r) => fmtDate(r.createdAt) },

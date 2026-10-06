@@ -10,7 +10,7 @@ import { CATALOG, INSTALLATION_DB_ID, installationDetail } from "./fixtures";
 import { renderApp, sessionFor, writes } from "./harness";
 
 const HAK_ID = "5b0c6a4e-2222-4000-8000-000000000002";
-const KOK: SigningPlan = { imzaci: "KOK", kid: "hazirlik-2026-1", neden: null, bekleyenTalep: null };
+const KOK: SigningPlan = { imzaci: "KOK", kid: "kok-2026-1", neden: null, bekleyenTalep: null };
 
 function detail(sinif: string, g: { noHak?: boolean; kalici?: boolean; gecerlilikBitis?: string | null } = {}): InstallationDetail {
   const d = installationDetail();
