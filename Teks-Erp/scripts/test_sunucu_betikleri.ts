@@ -604,7 +604,7 @@ function sifreleIhlalleri(paketle: string, isAkisi: string): string[] {
   const sondalar: Array<[string, string, string]> = [
     ["CI reddi silindi", pk.replace(/^\s*if \(\$env:CI -or \$env:GITHUB_ACTIONS\) \{ Fail .*\r?\n/m, ""), wf],
     ["varsayılan şifreli", pk.replace(/\$sifreArg = @\(\)/, '$sifreArg = @("--sifrele=hepsi")'), wf],
-    ["çağrıdan düştü", pk.replace(" @filigranArg @sifreArg", " @filigranArg"), wf],
+    ["çağrıdan düştü", pk.replace(' --cikti="$proj\\dist" @sifreArg', ' --cikti="$proj\\dist"'), wf],
     ["iş akışı şifreliyor", pk, wf.replace("--cikti=../koruma-cikti/dist", "--cikti=../koruma-cikti/dist --sifrele=hepsi")],
   ];
   for (const [ad, p2, w2] of sondalar) {
@@ -1221,28 +1221,22 @@ function donmusIhlalleri(dosya: string, metin: string, beklenen: string): string
     [...ihlal.map((v) => `ihlal ${v}`), ...kapanan.map((v) => `borç kapanmış, BORC listesinden çıkar: ${v}`)].join(" · "));
 }
 
-// §32 — ORTAK PAKET (tek ortak paket O11a): argümansız `paketle.ps1` kimliği dağıtım kaydından alır
-//   (`dagitim-kapisi.mjs backend-paketle`, argümansız), PAKET.json'a kanal/müşteri yazmaz (`backendKanal` null),
-//   -Kurulum'u reddeder (filigran kurulumda); bayt kodunun filigranına müşteri/kurulum yalnız eski kanal
-//   yolunda (-Musteri) girer ve o yol O15'e dek AYNEN kalır; CI iş akışı müşteri girdisi taşımaz.
+// §32 — ORTAK PAKET (tek ortak paket O11a; eski kanal yolu O15'te emekli): `paketle.ps1` kimliği koşulsuz dağıtım
+//   kaydından alır (`dagitim-kapisi.mjs backend-paketle`, argümansız), PAKET.json'a kanal/müşteri yazmaz
+//   (`backendKanal` null), emekli -Musteri/-Kurulum en başta DURUR, filigrana müşteri/kurulum girmez
+//   (build-korumali iki argümanı da reddeder); CI iş akışı müşteri girdisi taşımaz.
 function ortakPaketIhlalleri(paketle: string, isAkisi: string, korumali: string, imza: string): string[] {
   const kod = psTara(paketle).satirlar.map((x) => x.kod).join("\n");
   const ih: string[] = [];
-  const blok = /^if \(\$Musteri\) \{\n([\s\S]*?)^\} else \{\n([\s\S]*?)^\}/m.exec(kod);
-  if (!blok) return ["kimlik bloğu (if ($Musteri) … else …) bulunamadı (körlük)"];
-  const [, eski, ortak] = blok as unknown as [string, string, string];
-  if (!/& node \(Join-Path \$repo "scripts\/kanal-kapisi\.mjs"\) backend-paketle \$Musteri\s*$/m.test(eski)) ih.push("eski kanal yolu (kanal-kapisi backend-paketle $Musteri) bozuldu — O15'e dek AYNEN kalır");
-  if (!/^\s*\$dagitimCik = & node \(Join-Path \$repo "scripts\/dagitim-kapisi\.mjs"\) backend-paketle\s*$/m.test(ortak)) ih.push("ortak yol kimliği dağıtım kapısından (argümansız) almıyor");
-  if (!/^\s*if \(\$LASTEXITCODE -ne 0\) \{ Fail "dagitim kapisi/m.test(ortak)) ih.push("dağıtım kapısı düşünce paketleme durmuyor");
-  if (!/^\s*if \(\$Kurulum\) \{ Fail /m.test(ortak)) ih.push("ortak yol -Kurulum'u reddetmiyor (kurulum kimliği pakete girerdi)");
-  if (/kanal-kapisi\.mjs|kanallar\.json/.test(ortak)) ih.push("ortak yol eski kanal kaydına bakıyor");
-  if (!/^\s*backendKanal\s*= \$\(if \(\$Musteri\) \{ \$Musteri \} else \{ \$null \}\)\s*$/m.test(kod)) ih.push("PAKET.json backendKanal ortak pakette null değil ([string] parametre boş dize olur)");
-  const filigran = kod.split("\n").filter((l) => /\$filigranArg \+=/.test(l));
-  if (filigran.length !== 2 || !filigran.some((l) => /^\s*if \(\$Musteri\) \{ \$filigranArg \+= "--musteri=\$Musteri" \}\s*$/.test(l)) || !filigran.some((l) => /^\s*if \(\$Kurulum\) \{ \$filigranArg \+= "--kurulum=\$Kurulum" \}\s*$/.test(l))) {
-    ih.push("filigran argümanları yalnız -Musteri/-Kurulum verilince geçmiyor");
-  }
+  if (!/^if \(\$Musteri -or \$Kurulum\) \{ Fail "EMEKLI ESKI KANAL ARGUMANI/m.test(kod)) ih.push("emekli -Musteri/-Kurulum en üst düzeyde DURMUYOR");
+  if (!/^\$dagitimCik = & node \(Join-Path \$repo "scripts\/dagitim-kapisi\.mjs"\) backend-paketle\s*$/m.test(kod)) ih.push("kimlik koşulsuz dağıtım kapısından (argümansız) alınmıyor");
+  if (!/^if \(\$LASTEXITCODE -ne 0\) \{ Fail "dagitim kapisi/m.test(kod)) ih.push("dağıtım kapısı düşünce paketleme durmuyor");
+  if (/kanal-kapisi\.mjs|kanallar\.json/.test(kod)) ih.push("paketleme eski kanal kaydına/kapısına bakıyor");
+  if (!/^\s*backendKanal\s*= \$null\s*$/m.test(kod)) ih.push("PAKET.json backendKanal ortak pakette null değil");
+  if (/filigranArg|--musteri=|--kurulum=/.test(kod)) ih.push("build-korumali'ye müşteri/kurulum filigranı geçiyor");
   if (/inputs\.musteri|--musteri|\bmusteri:/.test(isAkisi)) ih.push("CI iş akışı müşteri girdisi taşıyor (ortak paket müşteri taşımaz)");
-  if (!/if \(kurulumId !== null && musteri === null\) throw /.test(korumali)) ih.push("build-korumali --kurulum'u --musteri'siz kabul ediyor");
+  if (!/for \(const eski of \['musteri', 'kurulum'\]\) \{\n\s*if \(arg\(eski\) !== null\) throw new Error\(`EMEKLİ ESKİ KANAL ARGÜMANI/.test(korumali)) ih.push("build-korumali emekli --musteri/--kurulum'u reddetmiyor");
+  if (/kanallar\.mjs|kanalCoz/.test(korumali)) ih.push("build-korumali eski kanal kaydını okuyor");
   if (!/if \(kanal === null && \(arg\("musteri"\) !== null \|\| arg\("kurulum"\) !== null\)\) throw /.test(imza)) ih.push("imza aracı ortak pakete --musteri/--kurulum yazıyor");
   return ih;
 }
@@ -1252,15 +1246,15 @@ function ortakPaketIhlalleri(paketle: string, isAkisi: string, korumali: string,
   const bk = readFileSync(join(KOK, "Teks-Erp/scripts/build-korumali.mjs"), "utf8");
   const im = readFileSync(join(KOK, "Teks-Erp/scripts/build-korumali-imza.ts"), "utf8");
   const ih = ortakPaketIhlalleri(pk, wf, bk, im);
-  check("§32 ⭐ ortak paket: kimlik dağıtım kaydından, backendKanal null, -Kurulum yok, filigran yalnız eski yolda, CI müşterisiz", ih.length === 0, ih.join(" | ") || "temiz");
+  check("§32 ⭐ ortak paket: kimlik koşulsuz dağıtım kaydından, backendKanal null, emekli -Musteri/-Kurulum DUR, filigran müşterisiz, CI müşterisiz", ih.length === 0, ih.join(" | ") || "temiz");
   const sondalar: Array<[string, string, string, string, string]> = [
-    ["ortak yol kanal kapısına döndü", pk.replace('"scripts/dagitim-kapisi.mjs") backend-paketle', '"scripts/kanal-kapisi.mjs") backend-paketle adnansahin'), wf, bk, im],
-    ["ortak yol -Kurulum'u kabul eder", pk.replace(/^\s*if \(\$Kurulum\) \{ Fail "-Kurulum yalniz.*\r?\n/m, ""), wf, bk, im],
-    ["backendKanal boş dize", pk.replace("backendKanal    = $(if ($Musteri) { $Musteri } else { $null })", "backendKanal    = $Musteri"), wf, bk, im],
-    ["filigrana koşulsuz müşteri", pk.replace('if ($Musteri) { $filigranArg += "--musteri=$Musteri" }', '$filigranArg += "--musteri=$Musteri"'), wf, bk, im],
-    ["eski yol söküldü", pk.replace('"scripts/kanal-kapisi.mjs") backend-paketle $Musteri', '"scripts/dagitim-kapisi.mjs") backend-paketle'), wf, bk, im],
+    ["kimlik kanal kapısına döndü", pk.replace('"scripts/dagitim-kapisi.mjs") backend-paketle', '"scripts/kanal-kapisi.mjs") backend-paketle adnansahin'), wf, bk, im],
+    ["emekli argüman reddi söküldü", pk.replace(/^if \(\$Musteri -or \$Kurulum\) \{ Fail "EMEKLI.*\r?\n/m, ""), wf, bk, im],
+    ["backendKanal müşteriye döndü", pk.replace(/backendKanal(\s*)= \$null/, "backendKanal$1= $$Musteri"), wf, bk, im],
+    ["filigrana müşteri geri", pk.replace("--cikti=\"$proj\\dist\" @sifreArg", "--cikti=\"$proj\\dist\" --musteri=$Musteri @sifreArg"), wf, bk, im],
     ["CI müşteri girdisi geri", pk, wf.replace("--cikti=../koruma-cikti/dist", "--cikti=../koruma-cikti/dist ${MUSTERI:+--musteri=$MUSTERI}"), bk, im],
-    ["build-korumali kurulum kapısı silindi", pk, wf, bk.replace(/^\s*if \(kurulumId !== null && musteri === null\) throw .*\n/m, ""), im],
+    ["build-korumali emekli reddi silindi", pk, wf, bk.replace(/^\s*if \(arg\(eski\) !== null\) throw .*\n/m, ""), im],
+    ["build-korumali kanal kaydına döndü", pk, wf, bk.replace("const guvenCapasi = 'uretim';", "const guvenCapasi = (await import('../../scripts/lib/kanallar.mjs')).kanalCoz('x');"), im],
     ["imza aracı ortak pakete müşteri yazar", pk, wf, bk, im.replace(/^\s*if \(kanal === null && \(arg\("musteri"\).*\n/m, "")],
   ];
   for (const [ad, p2, w2, b2, i2] of sondalar) {

@@ -22,10 +22,10 @@
 //
 // KULLANIM (Teks-Erp/ içinden, ağır iş sarmalayıcısıyla):
 //   node ../scripts/agir-is.mjs -- node scripts/build-korumali.mjs [--hedef=win-x64|linux-x64] [--cikti=dist]
-//     [--musteri=<kanal kodu> [--kurulum=<uuid>]]   (yalnız ESKİ kanal yolu; imza ayrı adım: scripts/build-korumali-imza.ts)
-//     Argümansız = ORTAK paket: filigranda musteri ve kurulumId null (filigran kurulumda, lisanstan) — O11a.
-//     Güven çapası kipi KANALDAN (`deploy/kanallar.json` backend.guvenCapasi): --musteri yoksa ÜRETİM. Bayt koduna
-//     sabit olarak girer (`__TEKSERP_GUVEN_CAPASI__`); paketteki native aynı kiple derlenmiş olmalı (derle:*:<kip>).
+//     Tek ortak paket: filigranda musteri ve kurulumId null (filigran kurulumda, lisanstan) — O11a; imza ayrı adım
+//     (scripts/build-korumali-imza.ts). Eski kanal argümanları (--musteri/--kurulum) emekli: `eski-kanal-son` etiketi.
+//     Güven çapası kipi ÜRETİM; bayt koduna sabit olarak girer (`__TEKSERP_GUVEN_CAPASI__`); paketteki native aynı
+//     kiple derlenmiş olmalı (derle:*:<kip>).
 //     [--sifrele=hepsi|<paket,…>] [--modul-anahtar-dizini=<yol>]   (Faz 2d şifreli modül; varsayılan ŞİFRESİZ)
 //   Ortam: KORUMA_ARSIV_DIZINI (varsayılan ~/.tekserp/kaynak-haritalari) — REPO DIŞI.
 // =============================================================================
@@ -50,17 +50,6 @@ function arg(ad, varsayilan = null) {
   const p = process.argv.find((a) => a === `--${ad}` || a.startsWith(`--${ad}=`));
   if (!p) return varsayilan;
   return p.includes('=') ? p.slice(p.indexOf('=') + 1) : true;
-}
-
-/**
- * Kanalın güven çapası kipi (`backend.guvenCapasi`). Kayıt defteri yalnız kanal verilince okunur (Docker sahnesi
- * kanal-dışı derler ve kaydı taşımaz); okunamayan/kırmızı kayıt ya da bilinmeyen kanal derlemeyi DURDURUR.
- */
-async function kanalGuvenCapasi(kod) {
-  const { kanalCoz } = await import('../../scripts/lib/kanallar.mjs');
-  const kip = kanalCoz(kod).kanal.backend.guvenCapasi;
-  if (kip !== 'uretim' && kip !== 'hazirlik') throw new Error(`kanal ${kod} backend.guvenCapasi tanınmıyor: ${kip}`);
-  return kip;
 }
 
 /** Host'un ürettiği .jsc hangi hedefe ait — win-x64 · linux-x64; başka her şey null (üretilemez). */
@@ -97,18 +86,18 @@ async function main() {
   // --- 0. Derleme künyesi + filigran (Faz 2e) -------------------------------------
   // Derleme anı ve paket kimliği ÖNCE doğar: bayt kodu sabitine (filigran) ve imzalı listeye
   // (build-korumali-imza.ts, `derlemeTarihi`/`paketId`) aynı değer girer. Ortak pakette müşteri/kurulum
-  // null; yalnız eski kanal yolu (paketle.ps1 -Musteri [-Kurulum]) verir. Kişisel veri taşımaz.
+  // null (alanlar künye biçimi için kalır). Kişisel veri taşımaz.
   const zaman = new Date().toISOString();
   const paketId = crypto.randomUUID();
-  const musteri = typeof arg('musteri') === 'string' ? arg('musteri') : null;
-  const kurulumId = typeof arg('kurulum') === 'string' ? arg('kurulum') : null;
-  if (musteri !== null && !/^[a-z0-9][a-z0-9-]{0,39}$/.test(musteri)) throw new Error(`--musteri biçimsiz: ${musteri}`);
-  if (kurulumId !== null && musteri === null) throw new Error('--kurulum yalnız --musteri ile (eski kanal yolu) — ortak paket kurulum kimliği taşımaz');
-  if (kurulumId !== null && !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(kurulumId)) throw new Error('--kurulum UUID değil');
+  for (const eski of ['musteri', 'kurulum']) {
+    if (arg(eski) !== null) throw new Error(`EMEKLİ ESKİ KANAL ARGÜMANI: --${eski} — tek ortak paket müşteri/kurulum kimliği taşımaz (eski kanal: docs/ops/ESKI-KANAL-ACIL.md)`);
+  }
+  const musteri = null;
+  const kurulumId = null;
   const filigran = { musteri, kurulumId, paketId, derlemeTarihi: zaman };
-  // Güven çapası kipi kanalın satıcı/kök bağından; kanal-dışı paket ÜRETİM çapasıyla doğar (hazırlık köküne güvenmez).
-  const guvenCapasi = musteri === null ? 'uretim' : await kanalGuvenCapasi(musteri);
-  console.log(`  güven çapası: ${guvenCapasi}${musteri === null ? ' (ortak paket → üretim)' : ` (kanal ${musteri})`}`);
+  // Ortak paket ÜRETİM çapasıyla doğar (hazırlık köküne güvenmez).
+  const guvenCapasi = 'uretim';
+  console.log(`  güven çapası: ${guvenCapasi} (ortak paket)`);
 
   // --- 0b. Şifreli modüller (Faz 2d) — YALNIZ --sifrele ile; varsayılan bugünkü şifresiz paket -----
   // Modül kendi dosyalarıyla ayrı pakete bölünür, hazırlık anahtarıyla (0600, REPO DIŞI) AES-256-GCM

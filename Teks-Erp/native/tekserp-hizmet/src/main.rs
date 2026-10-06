@@ -5,8 +5,8 @@
 //!   hizmet-kur --kok <KOK> [--ad <ad>] [--pg-hizmeti <ad> | --pg-yok]   kaydet/güncelle (yönetici)
 //!   hizmet-kaldir [--ad <ad>]           durdur + sil (yönetici)
 //!
-//! `--ad` yoksa `TeksERP-Backend`; aynı makinedeki ikinci kanal kanal kaydının `backend.hizmetAdi`ni
-//! verir (`kanal-kapisi.mjs backend-paketle` → `TEKSERP_HIZMET_ADI`).
+//! `--ad` yoksa `TeksERP-Backend`; paket adı dağıtım kaydının `urun.backend.hizmetAdi`nden gelir
+//! (`dagitim-kapisi.mjs backend-paketle` → `TEKSERP_HIZMET_ADI`).
 //!   kunye                               {ad, surum, hedef} JSON
 //!
 //! Sözleşme: docs/design/GUNCELLEYICI.md §4.2–§4.3.

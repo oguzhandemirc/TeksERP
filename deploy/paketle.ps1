@@ -76,9 +76,9 @@ param(
   [string]$Surum,
   # Yayin provasi paketi - baslik "PROVA KIPI".
   [switch]$Prova,
-  # ESKI KANAL YOLU (kanallar.json backend blogu; adnansahin pm2, donuk - O15'te kalkar). VERILMEZSE
-  # ORTAK PAKET: kimlik deploy/dagitim.json'dan (dagitim-kapisi.mjs), paket musteri/kanal TASIMAZ;
-  # firma adi lisanstan, guncelleme grubu kiradan, filigran kurulumda (TEK-ORTAK-PAKET.md O11a).
+  # EMEKLI (eski kanal yolu, eski-kanal-son etiketi): verilirse DUR. Paket TEK ORTAK pakettir:
+  # kimlik deploy/dagitim.json'dan (dagitim-kapisi.mjs), musteri/kanal TASIMAZ; firma adi lisanstan,
+  # guncelleme grubu kiradan, filigran kurulumda (TEK-ORTAK-PAKET.md O11a).
   [string]$Musteri,
   # KORUMALI paket: esbuild minify + isim karartma -> bytenode .jsc + paketin
   # kendi runtime node ikilisi + yorumsuz Prisma semasi. Bayt kodu OS/mimari/V8'e
@@ -88,8 +88,7 @@ param(
   # Korumali paketin hedef platformu (bayt kodu kilidi). Bugun yalniz win-x64
   # sahaya cikiyor; linux-x64 Docker yapiti ayri dilim (2f).
   [ValidateSet("win-x64", "linux-x64")][string]$Hedef = "win-x64",
-  # Korumali paketin filigranina girecek kurulum kimligi (UUID). YALNIZ eski kanal yolunda (-Musteri);
-  # ortak paket kurulum kimligi tasimaz (filigran kurulumda).
+  # EMEKLI (eski kanal yolu): verilirse DUR - ortak paket kurulum kimligi tasimaz (filigran kurulumda).
   [string]$Kurulum,
   # Native lisans cekirdegi (URETIM derlemesi, test capasiz). Verilmezse
   # Teks-Erp\native\lisans-cekirdek\dist-uretim\<dosya> (CI/cargo-xwin ciktisi).
@@ -134,6 +133,8 @@ function SahneyiTemizle {
 function Fail($m) { Write-Host ""; Write-Host "  X $m" -ForegroundColor Red; SahneyiTemizle; exit 1 }
 trap { SahneyiTemizle; break }
 function Adim($m) { Write-Host ""; Write-Host "$m" -ForegroundColor Cyan }
+# Emekli eski kanal argumanlari hicbir sey yapilmadan durur (eski kanal: docs/ops/ESKI-KANAL-ACIL.md).
+if ($Musteri -or $Kurulum) { Fail "EMEKLI ESKI KANAL ARGUMANI: -Musteri/-Kurulum - bu agac yalniz tek ortak paketi uretir. Eski kanal: docs/ops/ESKI-KANAL-ACIL.md (eski-kanal-son etiketi)." }
 
 # Hizmet ikilisi pakete OLCULEREK girer: Windows PE32+ x64, uretim derlemesi (test capasi YOK: capayi
 # ortamdan okuyan `test-anchor` derlemesi SYSTEM guncelleyicisinde guven kokunu disariya acardi) ve
@@ -212,52 +213,27 @@ if ($kirli) {
 }
 Write-Host "  dal=$dal  commit=$commit"
 
-# --- Musteri (kanal) kimligi ------------------------------------------------
-# -Musteri <kod>: paket kanalin kimligini (pm2 adi + urun adi) kanallar.json
-# backend blogundan alir (kanal-kapisi.mjs dogrular; bilinmeyen kanal = DUR).
-# Kimlik pakete FILIGRAN olur (PAKET.json); YOKSA kanal-disi paket + uyari.
-$backendPm2 = $null
+# --- Ortak paket kimligi (O11a) ---------------------------------------------
+# Kimlik dagitim kaydindan (dagitim-kapisi.mjs); musteri/kanal/kurulum TASINMAZ (backendKanal null).
+# Eski kanal yolu (-Musteri/-Kurulum) emekli: docs/ops/ESKI-KANAL-ACIL.md (eski-kanal-son etiketi).
 $backendUrun = $null
 $backendHizmet = $null
 $backendLisans = $null
 $lisansVarsayilan = $null
-if ($Musteri) {
-  Write-Host ""
-  Write-Host "  musteri=$Musteri (kanal kimligi kanallar.json backend blogundan)"
-  $kanalCik = & node (Join-Path $repo "scripts/kanal-kapisi.mjs") backend-paketle $Musteri
-  if ($LASTEXITCODE -ne 0) { Fail "kanal kapisi: '$Musteri' kanali dogrulanamadi (yukaridaki cikti)." }
-  foreach ($satir in @($kanalCik)) {
-    if ($satir -cmatch '^TEKSERP_PM2_AD=(.+)$') { $backendPm2 = $Matches[1] }
-    elseif ($satir -cmatch '^TEKSERP_BACKEND_URUN=(.+)$') { $backendUrun = $Matches[1] }
-    elseif ($satir -cmatch '^TEKSERP_HIZMET_ADI=(.+)$') { $backendHizmet = $Matches[1] }
-    elseif ($satir -cmatch '^TEKSERP_LISANS_SUNUCUSU=(.+)$') { $backendLisans = $Matches[1] }
-    elseif ($satir -cmatch '^TEKSERP_LISANS_VARSAYILAN=(.+)$') { $lisansVarsayilan = $Matches[1] }
-  }
-  if (-not $backendLisans -or -not $lisansVarsayilan) { Fail "kanal kapisi lisans satici kimligini (lisansSunucusu/varsayilan) vermedi." }
-  if (-not $backendPm2 -or -not $backendUrun -or -not $backendHizmet) { Fail "kanal kapisi backend kimligini (pm2Ad/urunAdi/hizmetAdi) vermedi." }
-  # Hizmet adi setup.exe'de SCM adi, olay kaynagi ve NT SERVICE\<ad> olur (GUNCELLEYICI.md §4.2 ad kurali).
-  if ($backendHizmet -cnotmatch '^[A-Za-z0-9][A-Za-z0-9._-]{0,79}$') { Fail "kanal kaydinin backend.hizmetAdi gecersiz: $backendHizmet" }
-  Write-Host "    pm2 adi : $backendPm2"
-  Write-Host "    hizmet  : $backendHizmet"
-  Write-Host "    urun    : $backendUrun"
-} else {
-  # ORTAK PAKET (O11a): kimlik dagitim kaydindan; musteri/kanal/kurulum TASINMAZ (backendKanal null).
-  if ($Kurulum) { Fail "-Kurulum yalniz eski kanal yolunda (-Musteri) verilir - ortak paket kurulum kimligi tasimaz, filigran kurulumda." }
-  Write-Host ""
-  Write-Host "  ORTAK PAKET (kimlik deploy/dagitim.json; firma adi lisanstan, grup kiradan)"
-  $dagitimCik = & node (Join-Path $repo "scripts/dagitim-kapisi.mjs") backend-paketle
-  if ($LASTEXITCODE -ne 0) { Fail "dagitim kapisi: ortak backend kimligi dogrulanamadi (yukaridaki cikti)." }
-  foreach ($satir in @($dagitimCik)) {
-    if ($satir -cmatch '^TEKSERP_BACKEND_URUN=(.+)$') { $backendUrun = $Matches[1] }
-    elseif ($satir -cmatch '^TEKSERP_HIZMET_ADI=(.+)$') { $backendHizmet = $Matches[1] }
-    elseif ($satir -cmatch '^TEKSERP_LISANS_SUNUCUSU=(.+)$') { $backendLisans = $Matches[1] }
-    elseif ($satir -cmatch '^TEKSERP_LISANS_VARSAYILAN=(.+)$') { $lisansVarsayilan = $Matches[1] }
-  }
-  if (-not $backendUrun -or -not $backendHizmet -or -not $backendLisans -or -not $lisansVarsayilan) { Fail "dagitim kapisi ortak kimligi (urunAdi/hizmetAdi/lisansSunucusu/varsayilan) eksik verdi." }
-  if ($backendHizmet -cnotmatch '^[A-Za-z0-9][A-Za-z0-9._-]{0,79}$') { Fail "dagitim kaydinin backend.hizmetAdi gecersiz: $backendHizmet" }
-  Write-Host "    hizmet  : $backendHizmet"
-  Write-Host "    urun    : $backendUrun"
+Write-Host ""
+Write-Host "  ORTAK PAKET (kimlik deploy/dagitim.json; firma adi lisanstan, grup kiradan)"
+$dagitimCik = & node (Join-Path $repo "scripts/dagitim-kapisi.mjs") backend-paketle
+if ($LASTEXITCODE -ne 0) { Fail "dagitim kapisi: ortak backend kimligi dogrulanamadi (yukaridaki cikti)." }
+foreach ($satir in @($dagitimCik)) {
+  if ($satir -cmatch '^TEKSERP_BACKEND_URUN=(.+)$') { $backendUrun = $Matches[1] }
+  elseif ($satir -cmatch '^TEKSERP_HIZMET_ADI=(.+)$') { $backendHizmet = $Matches[1] }
+  elseif ($satir -cmatch '^TEKSERP_LISANS_SUNUCUSU=(.+)$') { $backendLisans = $Matches[1] }
+  elseif ($satir -cmatch '^TEKSERP_LISANS_VARSAYILAN=(.+)$') { $lisansVarsayilan = $Matches[1] }
 }
+if (-not $backendUrun -or -not $backendHizmet -or -not $backendLisans -or -not $lisansVarsayilan) { Fail "dagitim kapisi ortak kimligi (urunAdi/hizmetAdi/lisansSunucusu/varsayilan) eksik verdi." }
+if ($backendHizmet -cnotmatch '^[A-Za-z0-9][A-Za-z0-9._-]{0,79}$') { Fail "dagitim kaydinin backend.hizmetAdi gecersiz: $backendHizmet" }
+Write-Host "    hizmet  : $backendHizmet"
+Write-Host "    urun    : $backendUrun"
 
 # --- Surum numarasi ---------------------------------------------------------
 # ⚠ YAMA hanesi OTOMATIK artar; taban GIT ETIKETI (`backend-v*`). Panel/tablet
@@ -366,17 +342,14 @@ KORUMALI paket .jsc'yi HEDEF platformda uretir: '$Hedef' bu hostta ($($PSVersion
   Write-Host "  runtime     : $rtAlt (paketin kendi Node'u - .jsc BUNUNLA uretilir + acilir)"
   # build-korumali: dist\server.js (KUCUK YUKLEYICI) + dist\server.jsc (bayt kodu) +
   # dist\server-kunye.json (V8/platform/mimari kapisi). Kaynak haritasi REPO DISI arsive.
-  # Filigran (Faz 2e): musteri + kurulum kimligi bayt kodu sabitine ve derleme kunyesine girer.
-  $filigranArg = @()
-  if ($Musteri) { $filigranArg += "--musteri=$Musteri" }
-  if ($Kurulum) { $filigranArg += "--kurulum=$Kurulum" }
+  # Filigran (Faz 2e): ortak pakette musteri + kurulum null (filigran kurulumda).
   $sifreArg = @()
   if ($Sifrele) {
     $sifreArg += "--sifrele=$SifreliPaketler"
     if ($anahtarTam) { $sifreArg += "--modul-anahtar-dizini=$anahtarTam" }
     Write-Host "  sifreli modul: $SifreliPaketler (anahtar paket DISI; pakete yalniz dist\moduller\*.tkmod girer)"
   }
-  & $runtimeNode (Join-Path $proj "scripts\build-korumali.mjs") --hedef=$Hedef --cikti="$proj\dist" @filigranArg @sifreArg
+  & $runtimeNode (Join-Path $proj "scripts\build-korumali.mjs") --hedef=$Hedef --cikti="$proj\dist" @sifreArg
   if ($LASTEXITCODE -ne 0) { Fail "KORUMALI DERLEME BASARISIZ - paket uretilmedi (runtime Node ile)." }
   if (-not (Test-Path "$proj\dist\server.js"))  { Fail "dist\server.js (yukleyici) yok - build-korumali bozuk." }
   if (-not (Test-Path "$proj\dist\server.jsc")) { Fail "dist\server.jsc (bayt kodu) yok - host hedefe uymadi." }
@@ -667,14 +640,14 @@ $manifest = [ordered]@{
   commit          = $commit
   dal             = $dal
   calismaAgaciTemiz = [bool](-not $kirli)
-  # Kanal (musteri) kimligi - yalniz eski kanal yolunda; ORTAK pakette null (grup kiradan, firma lisanstan).
-  backendKanal    = $(if ($Musteri) { $Musteri } else { $null })
+  # Kanal (musteri) kimligi - ortak pakette null (grup kiradan, firma lisanstan); alan PAKET.json bicimi icin kalir.
+  backendKanal    = $null
   backendUrun     = $backendUrun
-  backendPm2Ad    = $backendPm2
-  # Hizmet duzeni (Dagitim v2): setup.exe backend hizmetini bu adla kaydeder (ortak: dagitim kaydi; eski: kanal kaydi).
+  backendPm2Ad    = $null
+  # Hizmet duzeni (Dagitim v2): setup.exe backend hizmetini bu adla kaydeder (dagitim kaydi).
   backendHizmetAdi = $backendHizmet
-  # Kanalin lisans saticisi (kanal kaydi backend.lisansSunucusu) + bu derlemenin varsayilani (vendor-url.ts):
-  # setup/gecis kurulumun etkin LICENSE_SERVER_URL'sini bunlarla olcer (ortak: dagitim kaydi lisansSunucusu).
+  # Lisans saticisi (dagitim kaydi lisansSunucusu) + bu derlemenin varsayilani (vendor-url.ts):
+  # setup/gecis kurulumun etkin LICENSE_SERVER_URL'sini bunlarla olcer.
   backendLisansSunucusu = $backendLisans
   lisansSunucusuVarsayilan = $lisansVarsayilan
   # runtime\ altindaki Rust hizmet ikilileri {surum, boyut, sha256}; korumali olmayan pakette null.

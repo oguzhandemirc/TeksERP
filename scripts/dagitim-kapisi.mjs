@@ -6,8 +6,8 @@
 //
 //   node scripts/dagitim-kapisi.mjs backend-paketle   # ortak backend paketinin kimliği → KEY=VALUE (argümansız; müşteri/kanal YOK)
 //
-// Eski kanal yolu (`paketle.ps1 -Musteri <kod>` → `scripts/kanal-kapisi.mjs backend-paketle`) ayrıdır ve
-// bu dosyadan hiçbir şey okumaz; o yol O15'te kalkar.
+// Paketleme kimliğinin tek kaynağı budur; eski kanal yolu (`paketle.ps1 -Musteri`) O15'te emekli oldu
+// (`eski-kanal-son` etiketi, docs/ops/ESKI-KANAL-ACIL.md).
 // =============================================================================
 
 import { KANAL_ADLARI_REL, KAYIT_REL, Olculemedi, VENDOR_URL_REL, backendPaketKimligi, dosyalariOku, kayitAyristir } from './lib/dagitim.mjs';
