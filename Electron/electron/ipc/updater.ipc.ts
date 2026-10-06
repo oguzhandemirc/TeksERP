@@ -3,10 +3,7 @@ import { app, BrowserWindow, net } from "electron";
 import electronUpdater from "electron-updater";
 import log from "electron-log/main.js";
 import type { UpdateStatus } from "@shared/ipc-contract";
-import { CHANNEL_CODE } from "@shared/channel";
 import {
-  DEFAULT_UPDATE_FEED_URL,
-  GROUP_FLOW,
   UPDATE_FEED_OVERRIDE_KEY,
   feedGroupOf,
   groupFeedUrl,
@@ -49,18 +46,18 @@ let status: UpdateStatus = {
   currentVersion: app.getVersion(),
   lastCheckedAt: null,
   // Ortak pakette grup bilinmeden adres yoktur (dinlenme grubunun gömülü adresi gösterilmez).
-  feedUrl: GROUP_FLOW ? "" : DEFAULT_UPDATE_FEED_URL,
+  feedUrl: "",
   feedUrlOverridden: false,
   enabled: false,
   imzaReddi: null,
-  ...(GROUP_FLOW ? { grup: null } : {}),
+  grup: null,
 };
 
 /**
- * Bu denetimin künyesinin taşıması gereken kanal: eski kanal yolunda gömülü kod; ortak pakette feed'i seçen
- * kiradaki güncelleme grubu (`applyFeedUrl` yazar). `null` → doğrulayıcı künyeyi kabul etmez.
+ * Bu denetimin künyesinin taşıması gereken kanal: feed'i seçen kiradaki güncelleme grubu (`applyFeedUrl`
+ * yazar). `null` → doğrulayıcı künyeyi kabul etmez.
  */
-let expectedChannel: string | null = GROUP_FLOW ? null : CHANNEL_CODE;
+let expectedChannel: string | null = null;
 
 /** Durum değişimini sakla + AÇIK TÜM pencerelere yayınla. */
 function publish(patch: Partial<UpdateStatus>): UpdateStatus {
@@ -121,13 +118,11 @@ function readOverride(): string | null {
 }
 
 /**
- * Bu denetimin feed'i. Eski kanal yolu: ezme ya da gömülü adres. Ortak paket: kiradaki grubun adresi; grup
- * bilinmiyorsa `null` (denetim yok). Ezme yalnız AYNI grubun yolundaysa uygulanır — başka grubun yolu
+ * Bu denetimin feed'i: kiradaki grubun adresi; grup bilinmiyorsa `null` (denetim yok). Ezme yalnız AYNI grubun yolundaysa uygulanır — başka grubun yolu
  * (kira değişmiş, eski ezme kalmış) kiradaki grubu ezemez.
  */
 function resolveFeedUrl(grup: string | null): { url: string; overridden: boolean } | null {
   const override = readOverride();
-  if (!GROUP_FLOW) return override ? { url: override, overridden: true } : { url: DEFAULT_UPDATE_FEED_URL, overridden: false };
   const base = groupFeedUrl(grup);
   if (!base) return null;
   if (override && feedGroupOf(override) === grup) return { url: override, overridden: true };
@@ -145,8 +140,7 @@ function displayedFeed(grup: string | null): { feedUrl: string; feedUrlOverridde
 
 /**
  * Çözülen adresi autoUpdater'a uygula ve duruma yansıt. Her denetimde fabrikanın backend'inden taze
- * indirme belirteci istenir (3b); eski kanal yolunda alınamazsa başlıksız — bugünkü davranış. Ortak pakette
- * grup da bu yanıttan gelir (yalnız doğrulanmış kiradan, O3); grup yoksa feed kurulmaz → `false`.
+ * indirme belirteci istenir (3b); grup da bu yanıttan gelir (yalnız doğrulanmış kiradan, O3); grup yoksa feed kurulmaz → `false`.
  */
 async function applyFeedUrl(): Promise<boolean> {
   const grant = await fetchDownloadToken({
@@ -154,16 +148,16 @@ async function applyFeedUrl(): Promise<boolean> {
     authToken: readSecureValue(AUTH_TOKEN_STORE_KEY),
     fetchImpl: (u, init) => net.fetch(u, init),
   });
-  const grup = GROUP_FLOW ? (grant?.grup ?? null) : null;
+  const grup = grant?.grup ?? null;
   const feed = resolveFeedUrl(grup);
   if (!feed) {
     expectedChannel = null;
     publish({ ...displayedFeed(null), grup: null });
     return false;
   }
-  expectedChannel = GROUP_FLOW ? grup : CHANNEL_CODE;
+  expectedChannel = grup;
   updater().setFeedURL(feedOptions(feed.url, grant?.belirtec ?? null));
-  publish({ feedUrl: feed.url, feedUrlOverridden: feed.overridden, ...(GROUP_FLOW ? { grup } : {}) });
+  publish({ feedUrl: feed.url, feedUrlOverridden: feed.overridden, grup });
   return true;
 }
 

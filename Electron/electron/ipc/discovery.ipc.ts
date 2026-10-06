@@ -43,7 +43,6 @@ import {
   type DiscoverySource,
   type ServerIdentity,
 } from "../../shared/discovery.js";
-import { DEFAULT_ERP_URL } from "@shared/channel";
 import type { DiscoveryState } from "../../shared/ipc-contract.js";
 import { readSecureValue, writeSecureValue } from "./secure-store.ipc.js";
 import { browseMdns } from "../discovery/mdns-browser.js";
@@ -188,7 +187,7 @@ async function runDiscovery(timeoutMs: number, mode: DiscoveryMode): Promise<Dis
   const recentUrls = readRecentUrls().map((u) => u.trim());
   const viaOf = (u: string): DiscoverySource =>
     u === storedUrl?.trim() ? "stored" : recentUrls.includes(u) ? "recent" : "default";
-  for (const u of discoveryPriorityUrls([storedUrl, ...recentUrls], DEFAULT_ERP_URL)) {
+  for (const u of discoveryPriorityUrls([storedUrl, ...recentUrls], null)) {
     pushKnown(u, viaOf(u));
   }
   pushKnown(`http://localhost:${DISCOVERY_DEFAULT_PORT}`, "localhost");

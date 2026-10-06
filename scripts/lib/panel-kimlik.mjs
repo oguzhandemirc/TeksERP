@@ -83,8 +83,15 @@ export function panelDinlenmeFarki(dosyalar) {
   for (const iz of [`../${KAYIT_REL}`, 'panelKimligi']) {
     if (!cozucu.includes(iz)) f.push(`${PANEL_KIMLIK_COZUCU_REL} dağıtım kaydı izini (${iz}) taşımıyor — ortak kimlik kayıttan çözülmüyor`);
   }
+  // Eski kanal yolu emekli: çözücü donuk kaydı ya da kanal ortamını yeniden okursa paket bir fabrikanın kimliğini taşıyabilir.
+  for (const iz of ESKI_YOL_IZLERI) {
+    if (cozucu.includes(iz)) f.push(`${PANEL_KIMLIK_COZUCU_REL} emekli eski kanal yolunun izini (${iz}) taşıyor — kimlik yalnız dağıtım kaydından`);
+  }
   return f;
 }
+
+/** Emekli eski kanal yolunun derleme izleri — çözücüde GEÇMEMELİ. */
+export const ESKI_YOL_IZLERI = Object.freeze([ESKI_KAYIT_REL, 'TEKSERP_KANAL']);
 
 /** electron-builder'a derleme ANINDA verilen ortak kimlik (`-c.<anahtar>=<değer>`). */
 export function panelOrtakDerlemeAyarlari(k) {
@@ -215,8 +222,9 @@ export function panelKaynakFarki(kayit, dosyalar) {
     f.push('Electron/shared/channel.ts kimliği derleme sanal modülünden (virtual:tekserp-channel) almıyor');
   }
   const derleme = oku('Electron/build-identity.ts');
-  for (const [ne, iz] of [['kayıt defteri', 'deploy/kanallar.json'], ['kanal ortamı', 'TEKSERP_KANAL'], ['başlık yer tutucusu', PANEL_BASLIK_YER_TUTUCU]]) {
-    if (!derleme.includes(iz)) f.push(`Electron/build-identity.ts ${ne} izini (${iz}) taşımıyor`);
+  if (!derleme.includes(PANEL_BASLIK_YER_TUTUCU)) f.push(`Electron/build-identity.ts başlık yer tutucusu izini (${PANEL_BASLIK_YER_TUTUCU}) taşımıyor`);
+  for (const iz of ESKI_YOL_IZLERI) {
+    if (derleme.includes(iz)) f.push(`Electron/build-identity.ts emekli eski kanal yolunun izini (${iz}) taşıyor`);
   }
   return f;
 }

@@ -57,7 +57,7 @@ async function createMainWindow(): Promise<void> {
     resizable: false,
     minWidth: 1100,
     minHeight: 700,
-    // Kanaldan (deploy/kanallar.json, derleme anında) — hazırlık kanalında etiketi de taşır.
+    // Dağıtım kaydından (derleme anında, build-identity.ts).
     title: WINDOW_TITLE,
     icon: iconPath,
     backgroundColor: "#000",

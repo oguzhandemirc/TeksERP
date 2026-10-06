@@ -282,8 +282,7 @@ export interface UpdateStatus {
    */
   imzaReddi?: UpdateSignatureRejection | null;
   /**
-   * Ortak paketin güncelleme grubu (kiradan, indirme belirteci yanıtı). `null` = bilinmiyor → denetlenmez.
-   * Eski kanal paketinde alan YOK (`undefined`): feed gömülü kanaldır.
+   * Güncelleme grubu (kiradan, indirme belirteci yanıtı). `null` = bilinmiyor → denetlenmez.
    */
   grup?: string | null;
 }

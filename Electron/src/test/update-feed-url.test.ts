@@ -1,25 +1,15 @@
 import { describe, it, expect } from "vitest";
 import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { DEFAULT_UPDATE_FEED_URL, MUSTERI_KODU, UPDATE_BASE_URL } from "@shared/update-feed";
-import { APP_ID, CHANNEL_CODE, CHANNEL_LABEL, DEFAULT_ERP_URL, PRODUCT_NAME, WINDOW_TITLE } from "@shared/channel";
-import {
-  CHANNEL_ENV,
-  TITLE_PLACEHOLDER,
-  buildIdentity,
-  channelPlugin,
-  panelChannel,
-  registeredChannelCodes,
-  sharedIdentity,
-  virtualModuleSource,
-  windowTitleOf,
-} from "../../build-identity";
+import { DEFAULT_UPDATE_FEED_URL } from "@shared/update-feed";
+import { APP_ID, CHANNEL_CODE, PRODUCT_NAME, WINDOW_TITLE } from "@shared/channel";
+import { TITLE_PLACEHOLDER, channelPlugin, sharedIdentity, virtualModuleSource } from "../../build-identity";
 
 /**
  * Panelin paket kimliğini ve yayın adresinin kopyalarını birbirine kilitler (tek ortak paket O5).
  *
- * Kimlik derleme ANINDA kayıttan gelir: varsayılan TEK ORTAK kimlik (`deploy/dagitim.json`), eski kanal
- * yolunda (`TEKSERP_KANAL=<kod>`, yalnız `deploy/electron-paketle.sh <kod>`) donuk `deploy/kanallar.json`.
+ * Kimlik derleme ANINDA kayıttan gelir: TEK ORTAK kimlik (`deploy/dagitim.json`). Donuk eski kanal kaydı
+ * (`deploy/kanallar.json`) yalnız AYRILIK için okunur: ortak paket adnansahin paneliyle çakışmamalı.
  * electron-builder'a `-c.*` ile, koda Vite sanal modülüyle (`shared/channel.ts`). Ağaçtaki `package.json`
  * dinlenme tabanıdır ve ORTAK kimliği taşır; müşteri işaretçisi (`shared/musteri.json`) yoktur.
  *
@@ -48,28 +38,22 @@ const dagitim = JSON.parse(readFileSync(resolve(process.cwd(), "../deploy/dagiti
 const eski = JSON.parse(readFileSync(resolve(process.cwd(), "../deploy/kanallar.json"), "utf-8")) as {
   kanallar: Record<string, { ad: string; panel: { appId: string; urunAdi: string; paketAdi: string }; yayin: { panelFeed: string } }>;
 };
-const eskiKanalYolu = Boolean(process.env[CHANNEL_ENV]);
 const kokGrup = dagitim.gruplar.find((g) => g.terfiKaynagi === null)!.kod;
 
-describe("derlenen kimlik — varsayılan tek ortak, TEKSERP_KANAL yalnız eski kanal yolu", () => {
-  it("gömülü kimlik derleme ortamının kimliğiyle birebir (appId · ürün adı · adres · başlık · etiket · sunucu)", () => {
-    const k = buildIdentity(process.env);
+describe("derlenen kimlik — tek ortak", () => {
+  it("gömülü kimlik ortak kimlikle birebir (appId · ürün adı · adres · başlık)", () => {
+    const k = sharedIdentity();
     expect(CHANNEL_CODE).toBe(k.code);
-    expect(MUSTERI_KODU).toBe(CHANNEL_CODE);
     expect(APP_ID).toBe(k.appId);
     expect(PRODUCT_NAME).toBe(k.productName);
     expect(DEFAULT_UPDATE_FEED_URL).toBe(k.updateFeedUrl);
     expect(WINDOW_TITLE).toBe(k.windowTitle);
-    expect(CHANNEL_LABEL).toBe(k.label);
-    expect(DEFAULT_ERP_URL).toBe(k.erpUrl);
   });
 
-  it.skipIf(eskiKanalYolu)("⭐ ortamsız derleme TEK ORTAK kimliği gömer (müşteri bilmez)", () => {
+  it("⭐ derleme TEK ORTAK kimliği gömer (müşteri bilmez)", () => {
     expect(APP_ID).toBe(dagitim.urun.panel.appId);
     expect(PRODUCT_NAME).toBe(dagitim.urun.panel.urunAdi);
     expect(WINDOW_TITLE).toBe(dagitim.urun.panel.urunAdi);
-    expect(CHANNEL_LABEL).toBeNull();
-    expect(DEFAULT_ERP_URL).toBeNull();
     expect(CHANNEL_CODE).toBe(kokGrup);
     expect(DEFAULT_UPDATE_FEED_URL).toBe(`${dagitim.indirmeKoku}${kokGrup}/electron/`);
   });
@@ -79,18 +63,15 @@ describe("derlenen kimlik — varsayılan tek ortak, TEKSERP_KANAL yalnız eski 
     expect(k).toEqual({
       code: kokGrup,
       name: dagitim.urun.panel.urunAdi,
-      label: null,
       appId: dagitim.urun.panel.appId,
       productName: dagitim.urun.panel.urunAdi,
       packageName: dagitim.urun.panel.paketAdi,
-      erpUrl: null,
       updateFeedUrl: `${dagitim.indirmeKoku}${kokGrup}/electron/`,
       windowTitle: dagitim.urun.panel.urunAdi,
       // Grup akışı (O6): her grubun feed'i indirme kökünden, terfi sırasıyla.
       groupFeeds: Object.fromEntries(dagitim.gruplar.map((g) => [g.kod, `${dagitim.indirmeKoku}${g.kod}/electron/`])),
     });
-    expect(Object.keys(k.groupFeeds!)[0]).toBe(kokGrup);
-    expect(buildIdentity({})).toEqual(k);
+    expect(Object.keys(k.groupFeeds)[0]).toBe(kokGrup);
     // Kayıttaki değer tek kaynaktır: kopya kayıtta appId değişirse kimlik de değişir.
     expect(sharedIdentity({ ...dagitim, urun: { ...dagitim.urun, panel: { ...dagitim.urun.panel, appId: "com.ornek.baska" } } }).appId).toBe(
       "com.ornek.baska",
@@ -114,48 +95,12 @@ describe("derlenen kimlik — varsayılan tek ortak, TEKSERP_KANAL yalnız eski 
   });
 });
 
-describe("eski kanal yolu (TEKSERP_KANAL; O15'te kalkar) — çıktısı bugünkü kanal paketiyle aynı", () => {
-  it("her eski kanal çözülür: adres eski kökten türer, başlık ürün adını (ve varsa etiketi) taşır", () => {
-    const kodlar = registeredChannelCodes();
-    expect(kodlar.length).toBeGreaterThanOrEqual(2);
-    for (const kod of kodlar) {
-      const k = panelChannel(kod);
-      expect(k.updateFeedUrl, kod).toBe(`${UPDATE_BASE_URL}${kod}/electron/`);
-      expect(k.appId, kod).toBe(eski.kanallar[kod]!.panel.appId);
-      expect(k.windowTitle, kod).toContain(k.productName);
-      if (k.label) expect(k.windowTitle, kod).toContain(k.label);
-      else expect(k.windowTitle, kod).toBe(k.productName);
-      // ⭐ eski kanal grup akışına girmez: feed ve künye kanalı gömülü değer (adnansahin davranışı değişmez).
-      expect(k.groupFeeds, kod).toBeNull();
-    }
-  });
-
-  it("TEKSERP_KANAL verilirse eski kanal, tanınmayan kod derlemeyi DURDURUR", () => {
-    expect(buildIdentity({ [CHANNEL_ENV]: "testfabrika" }).code).toBe("testfabrika");
-    expect(buildIdentity({ [CHANNEL_ENV]: "testfabrika" })).toEqual(panelChannel("testfabrika"));
-    expect(buildIdentity({ [CHANNEL_ENV]: "" })).toEqual(sharedIdentity());
-    expect(() => panelChannel("testfabirka")).toThrow(/BİLİNMEYEN KANAL/);
-    expect(() => buildIdentity({ [CHANNEL_ENV]: "testfabirka" })).toThrow(/BİLİNMEYEN KANAL/);
-  });
-
-  it.runIf(eskiKanalYolu)("eski kanal derlemesinde adres kanal KODUNDAN türer", () => {
-    expect(DEFAULT_UPDATE_FEED_URL).toBe(`${UPDATE_BASE_URL}${CHANNEL_CODE}/electron/`);
-  });
-
-  it("⭐ etiket yoksa başlık ürün adının kendisi", () => {
-    expect(windowTitleOf("TeksERP", null)).toBe("TeksERP");
-    expect(windowTitleOf("TeksERP Test Fabrika", "TEST FABRİKA")).toBe("TEST FABRİKA · TeksERP Test Fabrika");
-  });
-});
-
 describe("sanal modül ve başlık", () => {
   it("sanal modül her alanı adlı dışa aktarım olarak verir (ağaç sallama kullanılmayanı atar)", () => {
     const src = virtualModuleSource(sharedIdentity());
     expect(src).toContain(`export const appId = ${JSON.stringify(dagitim.urun.panel.appId)};`);
-    expect(src).toContain("export const label = null;");
-    expect(src).toContain("export const erpUrl = null;");
+    expect(src).not.toMatch(/export const (label|erpUrl) /);
     expect(src).not.toMatch(/export default/);
-    expect(virtualModuleSource(panelChannel("testfabrika"))).toContain('export const label = "TEST FABRİKA";');
   });
 
   it("⭐ index.html başlığı kayıttan yazılır; yer tutucu yoksa derleme durur", () => {

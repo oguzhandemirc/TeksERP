@@ -283,7 +283,7 @@ console.log("\n=== §4 docs/ops/deploy-demo.sh aktarımı ===\n");
   const disGirdiler = [...oku("Electron/build-identity.ts").matchAll(/from\s+"\.\.\/((?:deploy|scripts)\/[^"]+)"/g)].map((m) => m[1]);
   const disEksik = disGirdiler.filter((g) => !kume.includes(g));
   check("§4g panel derlemesinin depo-dışı girdileri (build-identity → deploy/ · scripts/) kümede",
-    disGirdiler.length >= 3 && disEksik.length === 0, disEksik.join(", ") || disGirdiler.join(", ") || "desen bulunamadı");
+    disGirdiler.length >= 2 && disEksik.length === 0, disEksik.join(", ") || disGirdiler.join(", ") || "desen bulunamadı");
 
   const reset = oku("docs/ops/demo-reset.sh").split("\n").filter((l) => !/^\s*#/.test(l)).join("\n");
   check("§4h demo-reset seed'leri çalışma imajında (`compose run … tsx`) koşturmaz",

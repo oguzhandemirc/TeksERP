@@ -3,7 +3,7 @@ import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vite
 import { parseUpdateInfo } from "electron-updater/out/providers/Provider";
 import type { UpdateStatus } from "@shared/ipc-contract";
 import { CHANNEL_CODE } from "@shared/channel";
-import { ALLOWED_UPDATE_HOST, DEFAULT_UPDATE_FEED_URL, GROUP_FLOW, UPDATE_FEED_OVERRIDE_KEY, groupFeedUrl } from "@shared/update-feed";
+import { ALLOWED_UPDATE_HOST, DEFAULT_UPDATE_FEED_URL, UPDATE_FEED_OVERRIDE_KEY, groupFeedUrl } from "@shared/update-feed";
 import { API_BASE_URL_STORE_KEY, AUTH_TOKEN_STORE_KEY, DOWNLOAD_TOKEN_HEADER } from "@shared/download-token";
 import { buildReleaseDoc, signReleaseDoc } from "../../electron/guncelleme/panel-kunye.mjs";
 import { withReleaseBlock } from "../../electron/guncelleme/latest-yml.mjs";
@@ -12,7 +12,7 @@ import { withReleaseBlock } from "../../electron/guncelleme/latest-yml.mjs";
  * GRUP AKIŞI (tek ortak paket, TEK-ORTAK-PAKET §3.4 / O6) — gerçek `registerUpdaterIpc`, sahte electron/electron-updater.
  * ⭐ Feed ve künyenin beklenen kanalı kiradaki GÜNCELLEME GRUBUndan (indirme belirteci yanıtı `grup`): grup değişince
  * sonraki denetim yeni gruptan, başka grubun (dinlenme grubu dahil) künyesi KUNYE_KANAL, grup yoksa denetim YOK.
- * Yalnız ortak derlemede koşar; eski kanal yolunun akışı `updater-imza-akisi.test.ts`te (iki kipte).
+ * İmzalı künye akışının genel iddiaları `updater-imza-akisi.test.ts`te.
  */
 const h = vi.hoisted(() => {
   const listeners = new Map<string, Array<(...a: unknown[]) => unknown>>();
@@ -59,7 +59,7 @@ const AD = `TeksERP-${YENI}-Setup.exe`;
 const GOVDE = Buffer.from("imzali kurulum ".repeat(64));
 /** Kiranın grubu — dinlenme grubu DEĞİL (gömülü adresle karışmasın). */
 const GRUP = "oncu";
-const IZINLI = GROUP_FLOW ? groupFeedUrl(GRUP)! : DEFAULT_UPDATE_FEED_URL;
+const IZINLI = groupFeedUrl(GRUP)!;
 const TOKEN = "eyJhbGciOiJFZERTQSJ9.eyJ2IjoxfQ.c2lnbmF0dXJl";
 const GIRIS = "file:///C:/Program%20Files/TeksERP/resources/app.asar/out/renderer/index.html";
 const UYGULAMA = { senderFrame: { url: `${GIRIS}#/ayarlar`, parent: null } };
@@ -103,7 +103,7 @@ beforeAll(() => {
 beforeEach(() => vi.useFakeTimers({ toFake: ["setTimeout", "setInterval"] }));
 afterEach(() => vi.useRealTimers());
 
-describe.skipIf(!GROUP_FLOW)("⭐ grup akışı (ortak paket) — feed ve künye kanalı kiradaki gruptan", () => {
+describe("⭐ grup akışı (ortak paket) — feed ve künye kanalı kiradaki gruptan", () => {
   const sonFeed = () => h.updater.setFeedURL.mock.calls.at(-1)?.[0] as { url: string; requestHeaders?: Record<string, string> };
   const kontrol = () => h.handlers.get("updater:check")!(UYGULAMA) as Promise<UpdateStatus>;
 

@@ -65,6 +65,8 @@ const negatifler = [
   ['N6 ana süreçte ortak appId literali', (d) => { d[PANEL_MAIN_REL] += `\nsetAppUserModelId("${k.appId}");\n`; }, /literalini/],
   ['N7 kimlik çözücü kayıt izini taşımıyor', (d) => { d[PANEL_KIMLIK_COZUCU_REL] = d[PANEL_KIMLIK_COZUCU_REL].replaceAll('panelKimligi', 'xx'); }, /izini/],
   ['N8 paket adı (updater önbelleği kökü) eski', (d) => paketDegistir(d, (p) => { p.name = 'adnan-sahin-erp-admin'; }), /name/],
+  ['N9 kimlik çözücü emekli eski kanal kaydını yeniden okuyor', (d) => { d[PANEL_KIMLIK_COZUCU_REL] += `\nimport registry from "../deploy/kanallar.json";\n`; }, /emekli eski kanal/],
+  ['N10 kimlik çözücü TEKSERP_KANAL ortamına bakıyor', (d) => { d[PANEL_KIMLIK_COZUCU_REL] += `\nconst kod = process.env.TEKSERP_KANAL;\n`; }, /emekli eski kanal/],
 ];
 for (const [ad, mut, desen] of negatifler) {
   const d = kopya();

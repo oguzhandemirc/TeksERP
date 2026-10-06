@@ -7,7 +7,6 @@
 
 Dockerfile
 .dockerignore
-deploy/kanallar.json
 deploy/dagitim.json
 scripts/lib/dagitim.mjs
 

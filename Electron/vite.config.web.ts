@@ -22,13 +22,13 @@ import { readFileSync } from "node:fs";
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
-import { buildIdentity, channelPlugin } from "./build-identity";
+import { channelPlugin, sharedIdentity } from "./build-identity";
 
 /** Renderer sürümü — `X-Client-Version` başlığına gömülür (`src/lib/client-info.ts`); dev ve build'de aynı. */
 const APP_VERSION = (JSON.parse(readFileSync(new URL("./package.json", import.meta.url), "utf-8")) as { version: string }).version;
 
-/** Paket kimliği (başlık) kayıttan — `TEKSERP_KANAL` yoksa tek ortak kimlik; bkz. build-identity.ts. */
-const channel = buildIdentity(process.env);
+/** Paket kimliği (başlık) dağıtım kaydından — tek ortak kimlik; bkz. build-identity.ts. */
+const channel = sharedIdentity();
 
 export default defineConfig(({ command }) => ({
   plugins: [react(), tailwindcss(), channelPlugin(channel)],

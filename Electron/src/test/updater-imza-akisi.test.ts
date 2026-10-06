@@ -5,8 +5,7 @@ import { join } from "node:path";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { parseUpdateInfo } from "electron-updater/out/providers/Provider";
 import type { UpdateStatus } from "@shared/ipc-contract";
-import { CHANNEL_CODE } from "@shared/channel";
-import { DEFAULT_UPDATE_FEED_URL, GROUP_FLOW, UPDATE_FEED_OVERRIDE_KEY, groupFeedUrl } from "@shared/update-feed";
+import { UPDATE_FEED_OVERRIDE_KEY, groupFeedUrl } from "@shared/update-feed";
 import { API_BASE_URL_STORE_KEY, AUTH_TOKEN_STORE_KEY, DOWNLOAD_TOKEN_HEADER } from "@shared/download-token";
 import { buildReleaseDoc, signReleaseDoc } from "../../electron/guncelleme/panel-kunye.mjs";
 import { withReleaseBlock } from "../../electron/guncelleme/latest-yml.mjs";
@@ -22,7 +21,7 @@ import { withReleaseBlock } from "../../electron/guncelleme/latest-yml.mjs";
  * ⭐ İDDİA 3: güncelleme adresi ezmesi yalnız https + kanal kaydının ana makinesi + `/<kanal>/electron/`;
  * kural YAZARKEN ve OKURKEN ana süreçte; indirme belirteci yalnız izinli adrese.
  * İDDİA 4: kanallar gönderen denetimli tek geçitten (`handleTrusted`/`onTrusted`); yabancı belge işleyiciye ulaşamaz.
- * Grup akışının (ortak paket) kendi iddiaları: `updater-grup-akisi.test.ts`. Dosya iki derlemede koşar (ortamsız = ortak · `TEKSERP_KANAL=adnansahin` = eski kanal, davranışı bugünkü).
+ * Grup akışının kendi iddiaları: `updater-grup-akisi.test.ts`.
  */
 const h = vi.hoisted(() => {
   const listeners = new Map<string, Array<(...a: unknown[]) => unknown>>();
@@ -79,9 +78,9 @@ const DIZIN = mkdtempSync(join(tmpdir(), "updater-imza-"));
 const DOSYA = join(DIZIN, AD);
 /** Ortak pakette kiranın grubu (dinlenme grubu DEĞİL olsun diye `oncu`: gömülü adresle karışmasın). */
 const GRUP = "oncu";
-const IZINLI = GROUP_FLOW ? groupFeedUrl(GRUP)! : DEFAULT_UPDATE_FEED_URL;
-/** Künyenin taşıması gereken kanal: ortakta kiradaki grup, eski kanalda gömülü kod. */
-const BEKLENEN = GROUP_FLOW ? GRUP : CHANNEL_CODE;
+const IZINLI = groupFeedUrl(GRUP)!;
+/** Künyenin taşıması gereken kanal: kiradaki grup. */
+const BEKLENEN = GRUP;
 const TOKEN = "eyJhbGciOiJFZERTQSJ9.eyJ2IjoxfQ.c2lnbmF0dXJl";
 const izin = (grup: string | null = GRUP) => ({ ok: true, status: 200, json: async () => ({ success: true, data: { belirtec: TOKEN, grup } }) });
 const GIRIS = "file:///C:/Program%20Files/TeksERP/resources/app.asar/out/renderer/index.html";
@@ -112,8 +111,7 @@ const akis = () => h.sent.map((s) => s.state).filter((s, i, a) => i === 0 || a[i
 const tik = () => new Promise<void>((r) => setImmediate(r));
 
 /**
- * Gerçek `registerUpdaterIpc`. Eski kanal: belirteç yok (404, bugünkü başlıksız denetim). Ortak: oturum + belirteç
- * kiradaki grubu (`GRUP`) taşır; açılıştaki feed kurulumu bitene dek beklenir (künyenin kanalı oradan gelir).
+ * Gerçek `registerUpdaterIpc`. Oturum + belirteç kiradaki grubu (`GRUP`) taşır; açılıştaki feed kurulumu bitene dek beklenir (künyenin kanalı oradan gelir).
  */
 async function kur({ grup = GRUP as string | null } = {}) {
   vi.resetModules();
@@ -122,11 +120,9 @@ async function kur({ grup = GRUP as string | null } = {}) {
   h.updater.installerPath = null;
   h.updater.autoDownload = true;
   h.fetchMock.mockReset().mockResolvedValue({ ok: false, status: 404, json: async () => ({}) });
-  if (GROUP_FLOW) {
-    h.store.set(API_BASE_URL_STORE_KEY, "http://10.0.0.5:4000");
-    h.store.set(AUTH_TOKEN_STORE_KEY, "jwt");
-    h.fetchMock.mockResolvedValue(izin(grup));
-  }
+  h.store.set(API_BASE_URL_STORE_KEY, "http://10.0.0.5:4000");
+  h.store.set(AUTH_TOKEN_STORE_KEY, "jwt");
+  h.fetchMock.mockResolvedValue(izin(grup));
   for (const f of [h.updater.setFeedURL, h.updater.checkForUpdates, h.updater.downloadUpdate, h.updater.quitAndInstall]) f.mockClear();
   const m = await import("../../electron/ipc/updater.ipc");
   const guvenilir = await import("../../electron/security/trusted-ipc");
@@ -205,7 +201,7 @@ describe("imzalı künye — doğrulama düşerse TR uyarı + kurulum YOK", () =
 
   it("başka kanalın künyesi → KUNYE_KANAL · çapada olmayan anahtar → JWS_KID", async () => {
     await kur();
-    const baska = GROUP_FLOW ? "genel" : CHANNEL_CODE === "testfabrika" ? "adnansahin" : "testfabrika";
+    const baska = "genel";
     h.emit("update-available", bilgi(latestYml({ kanal: baska })));
     reddedildi("KUNYE_KANAL");
     await kur();

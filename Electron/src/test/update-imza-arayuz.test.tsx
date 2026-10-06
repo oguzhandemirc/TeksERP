@@ -3,7 +3,7 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { toast } from "sonner";
 import type { UpdateStatus } from "@shared/ipc-contract";
-import { DEFAULT_UPDATE_FEED_URL, GROUP_FLOW, GROUP_UNKNOWN_TEXT } from "@shared/update-feed";
+import { DEFAULT_UPDATE_FEED_URL, GROUP_UNKNOWN_TEXT } from "@shared/update-feed";
 import { elleDenetimBildirimi } from "@/lib/updater-bildirim";
 import { useAuthStore } from "@/store/auth";
 import type { JwtPayload } from "@/types/auth";
@@ -113,10 +113,10 @@ describe("grup akışı (ortak paket) — grup bilinmiyorsa denetim yok, durum m
     kur({ state: "up-to-date", grup: "oncu" }, ["settings:workstation"]);
     render(<UpdateSection />);
     expect(await screen.findByText("En güncel sürüm kurulu.")).toBeInTheDocument();
-    if (GROUP_FLOW) expect(screen.getByText("oncu")).toBeInTheDocument();
+    expect(screen.getByText("oncu")).toBeInTheDocument();
   });
 
-  it("⭐ elle denetim baloncuğu: grup yok → 'sunucuya ulaşılamadı' DEMEZ, grup metnini söyler; eski kanal (alan yok) bugünkü gibi", () => {
+  it("⭐ elle denetim baloncuğu: grup yok → 'sunucuya ulaşılamadı' DEMEZ, grup metnini söyler; grup alanı yoksa 'ulaşılamadı'", () => {
     const temel = { currentVersion: "1.4.3", lastCheckedAt: null, feedUrl: "", feedUrlOverridden: false, enabled: true } as const;
     expect(elleDenetimBildirimi({ ...temel, state: "idle", grup: null })).toMatchObject({ baslik: "Denetlenmedi", aciklama: GROUP_UNKNOWN_TEXT });
     expect(elleDenetimBildirimi({ ...temel, state: "idle" })?.aciklama).toMatch(/ulaşılamadı/);

@@ -1,5 +1,3 @@
-import { CHANNEL_LABEL, CHANNEL_NAME } from "@shared/channel";
-import { GROUP_FLOW } from "@shared/update-feed";
 import { useLicenseStatus } from "@/hooks/useLicenseStatus";
 import type { LicenseClass } from "@/types/license";
 
@@ -10,9 +8,8 @@ import type { LicenseClass } from "@/types/license";
  * ⚠️ NEDEN VAR: deneme kurulumunun ekranları fabrikayla birebir aynıdır; işaret olmadan kullanıcı hangi
  * programda olduğunu ayırt edemez ve gerçek işi denemeye girer. Etiket GÖSTERİMDİR, davranış değildir.
  *
- * Kaynak: eski kanal paketinde derleme anında kanal kaydı (`deploy/kanallar.json` → `gorunurEtiket`; üretim
- * kanalında `null` → bugünkü görünüm birebir). Tek ortak pakette paket kimseyi tanımaz: işaret LİSANS
- * SINIFINDAN gelir (oturum açılınca; giriş ekranında lisans özeti yok → çizilmez).
+ * Kaynak: tek ortak paket kimseyi tanımaz — işaret LİSANS SINIFINDAN gelir (oturum açılınca; giriş
+ * ekranında lisans özeti yok → çizilmez).
  */
 const SINIF_ETIKETI: Partial<Record<LicenseClass, string>> = { TEST: "TEST", DEMO: "DEMO" };
 
@@ -23,11 +20,9 @@ export function licenseClassLabel(sinif: LicenseClass | null | undefined): strin
 
 export function ChannelBadge() {
   const sinif = useLicenseStatus()?.sinif;
-  const label = CHANNEL_LABEL ?? (GROUP_FLOW ? licenseClassLabel(sinif) : null);
+  const label = licenseClassLabel(sinif);
   if (!label) return null;
-  const title = CHANNEL_LABEL
-    ? `${CHANNEL_NAME} — deneme kanalı. Burada gerçek iş girilmez.`
-    : `Bu kurulumun lisansı ${label} sınıfında — deneme kurulumu. Burada gerçek iş girilmez.`;
+  const title = `Bu kurulumun lisansı ${label} sınıfında — deneme kurulumu. Burada gerçek iş girilmez.`;
   return (
     <span
       data-channel-badge=""

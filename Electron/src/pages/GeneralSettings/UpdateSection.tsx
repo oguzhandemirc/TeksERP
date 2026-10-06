@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Callout } from "@/components/ui/callout";
 import type { UpdateStatus } from "@shared/ipc-contract";
-import { ALLOWED_UPDATE_HOST, GROUP_FLOW, GROUP_UNKNOWN_TEXT, validateFeedOverride } from "@shared/update-feed";
+import { ALLOWED_UPDATE_HOST, GROUP_UNKNOWN_TEXT, validateFeedOverride } from "@shared/update-feed";
 import { useUpdater } from "@/hooks/useUpdater";
 import { useRoleAccess } from "@/hooks/useRoleAccess";
 import { SETTINGS_ADMIN_PERMISSION } from "./settings-config";
@@ -170,7 +170,7 @@ export function UpdateSection() {
             <Input
               value={draft}
               onChange={(e) => setDraft(e.target.value)}
-              placeholder={`https://${ALLOWED_UPDATE_HOST}/<${GROUP_FLOW ? "grup" : "kanal"}>/electron/`}
+              placeholder={`https://${ALLOWED_UPDATE_HOST}/<grup>/electron/`}
               className="h-8 min-w-[280px] flex-1 font-mono text-xs"
             />
             <Button size="sm" onClick={handleSaveUrl}>
@@ -187,15 +187,11 @@ export function UpdateSection() {
               <p className="text-[11px] text-muted-foreground">
                 {status.feedUrlOverridden
                   ? "Bu bilgisayara özel adres (varsayılan değil)."
-                  : GROUP_FLOW
-                    ? "Varsayılan adres — lisanstaki güncelleme grubundan."
-                    : "Varsayılan adres — uygulamayla birlikte gelir."}
+                  : "Varsayılan adres — lisanstaki güncelleme grubundan."}
               </p>
-              {GROUP_FLOW && (
-                <p className="text-[11px] text-muted-foreground" data-guncelleme-grubu="">
-                  Güncelleme grubu: <span className="font-mono">{status.grup ?? "bilinmiyor"}</span>
-                </p>
-              )}
+              <p className="text-[11px] text-muted-foreground" data-guncelleme-grubu="">
+                Güncelleme grubu: <span className="font-mono">{status.grup ?? "bilinmiyor"}</span>
+              </p>
             </div>
             {canEditFeed && (
               <div className="flex items-center gap-2">

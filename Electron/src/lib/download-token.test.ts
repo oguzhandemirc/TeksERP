@@ -9,7 +9,7 @@ import {
   feedOptions,
   fetchDownloadToken,
 } from "@shared/download-token";
-import { DEFAULT_UPDATE_FEED_URL, GROUP_FLOW, groupFeedUrl } from "@shared/update-feed";
+import { DEFAULT_UPDATE_FEED_URL, groupFeedUrl } from "@shared/update-feed";
 
 // İNDİRME BELİRTECİ (3b) — panel her güncelleme denetiminden önce fabrikanın backend'inden belirteç
 // alır ve electron-updater'a başlık verir; alınamazsa BAŞLIKSIZ (bugünkü davranış). Main süreç
@@ -114,7 +114,7 @@ describe("updater.ipc — her denetimde belirteç", () => {
   });
   afterEach(() => vi.useRealTimers());
 
-  it("oturum varken denetim başlıklı (ortak: kiradaki grubun adresine), belirteç alınamayınca eski kanal başlıksız, ortak denetimsiz", async () => {
+  it("oturum varken denetim başlıklı (kiradaki grubun adresine), belirteç alınamayınca denetimsiz", async () => {
     const { registerUpdaterIpc } = await import("../../electron/ipc/updater.ipc");
     const { setTrustedAppEntry } = await import("../../electron/security/trusted-ipc");
     const giris = "file:///C:/Program%20Files/TeksERP/resources/app.asar/out/renderer/index.html";
@@ -128,13 +128,12 @@ describe("updater.ipc — her denetimde belirteç", () => {
     await check();
     const son = () => h.updater.setFeedURL.mock.calls.at(-1)?.[0] as { url: string; requestHeaders?: Record<string, string> };
     expect(son().requestHeaders).toEqual({ [DOWNLOAD_TOKEN_HEADER]: TOKEN });
-    expect(son().url).toBe(GROUP_FLOW ? groupFeedUrl("genel") : DEFAULT_UPDATE_FEED_URL);
+    expect(son().url).toBe(groupFeedUrl("genel"));
     expect(h.fetchMock).toHaveBeenCalledWith("http://10.0.0.5:4000/api/license/indirme-belirteci?urun=electron", expect.anything());
 
     h.fetchMock.mockResolvedValue(fail(403));
     const once = h.updater.setFeedURL.mock.calls.length;
     await check();
-    if (GROUP_FLOW) expect(h.updater.setFeedURL.mock.calls.length, "grup yok → feed kurulmaz").toBe(once);
-    else expect(son().requestHeaders).toBeUndefined();
+    expect(h.updater.setFeedURL.mock.calls.length, "grup yok → feed kurulmaz").toBe(once);
   });
 });

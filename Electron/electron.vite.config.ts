@@ -2,10 +2,10 @@ import { resolve } from "node:path";
 import { defineConfig, externalizeDepsPlugin } from "electron-vite";
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
-import { buildIdentity, channelPlugin } from "./build-identity";
+import { channelPlugin, sharedIdentity } from "./build-identity";
 
-// Paket kimliği derleme ANINDA kayıttan (ortak: dağıtım kaydı; eski kanal yolu: TEKSERP_KANAL) — bkz. build-identity.ts.
-const channel = buildIdentity(process.env);
+// Paket kimliği derleme ANINDA dağıtım kaydından — bkz. build-identity.ts.
+const channel = sharedIdentity();
 
 export default defineConfig(({ command }) => ({
   main: {
@@ -39,11 +39,11 @@ export default defineConfig(({ command }) => ({
   renderer: {
     root: ".",
     plugins: [react(), tailwindcss(), channelPlugin(channel)],
-    // Keşif sonuç vermezse bağlanılan sunucu kanaldan; geliştirmede `.env` (localhost) geçerli kalır.
-    // Açık `VITE_API_BASE_URL` ortamı bugünkü gibi önceliklidir — paketleme kapısı paketi kanalla ölçer.
+    // Ortak paket sunucu adresi GÖMMEZ (adres keşiften / elle girişten); geliştirmede `.env` (localhost) geçerli kalır.
+    // Açık `VITE_API_BASE_URL` ortamı önceliklidir — paketleme kapısı paketin İÇİNİ ölçer.
     define:
       command === "build"
-        ? { "import.meta.env.VITE_API_BASE_URL": JSON.stringify(process.env.VITE_API_BASE_URL ?? channel.erpUrl) }
+        ? { "import.meta.env.VITE_API_BASE_URL": JSON.stringify(process.env.VITE_API_BASE_URL ?? null) }
         : {},
     resolve: {
       alias: {
