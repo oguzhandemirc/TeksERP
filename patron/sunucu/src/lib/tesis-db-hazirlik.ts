@@ -158,3 +158,64 @@ export async function pendingFacilityDbs(gocUrl: string, limit = 5): Promise<str
     await c.end().catch(() => undefined);
   }
 }
+
+export type FacilityMigration =
+  | { readonly tesisId: string; readonly database: string; readonly kind: "guncel" | "uygulandi"; readonly applied: readonly string[]; readonly schemaVersion: string; readonly checksumDrift: readonly string[] }
+  | { readonly tesisId: string; readonly database: string; readonly kind: "hata"; readonly message: string };
+
+/** Tek HAZIR tesis DB'sine eksik göçler + yetki hizası; sonuç merkez satırına (şema sürümü ya da göç hatası). */
+export async function migrateFacilityDb(deps: Pick<PrepareDeps, "gocUrl" | "migrations">, central: Client, tesisId: string): Promise<FacilityMigration> {
+  const database = facilityDbName(databaseOf(deps.gocUrl), tesisId);
+  try {
+    const facility = client(withDatabase(deps.gocUrl, database));
+    await facility.connect();
+    let r;
+    try {
+      r = await migrateDatabase(facility, deps.migrations ?? readMigrations());
+      await alignFacilityGrants(facility, database);
+    } finally {
+      await facility.end().catch(() => undefined);
+    }
+    await central.query(
+      `UPDATE facility_databases SET schema_version = $2, migrated_at = now(), migration_error = NULL, updated_at = now() WHERE tesis_id = $1::uuid AND status = 'HAZIR'`,
+      [tesisId, r.schemaVersion],
+    );
+    return { tesisId, database, kind: r.applied.length > 0 ? "uygulandi" : "guncel", applied: r.applied, schemaVersion: r.schemaVersion, checksumDrift: r.checksumDrift };
+  } catch (err) {
+    const message = shortError(err);
+    await central.query(`UPDATE facility_databases SET migration_error = $2, updated_at = now() WHERE tesis_id = $1::uuid`, [tesisId, message]).catch(() => undefined);
+    return { tesisId, database, kind: "hata", message };
+  }
+}
+
+/**
+ * Bütün HAZIR tesis DB'leri, TEK TEK (§7): bir tesisin hatası raporlanır, ötekiler sürer; şeması geride kalan
+ * tesis sunucuda 503 alır (veri bozulmaz). Merkez bundan ÖNCE Prisma CLI + `db-rolleri` ile göç etmiş olmalıdır.
+ */
+export async function migrateFacilityDbs(deps: Pick<PrepareDeps, "gocUrl" | "migrations">, only?: readonly string[]): Promise<FacilityMigration[]> {
+  const central = client(deps.gocUrl);
+  await central.connect();
+  try {
+    const rows = await central.query<{ tesis_id: string }>(`SELECT tesis_id FROM facility_databases WHERE status = 'HAZIR' ORDER BY created_at, tesis_id`);
+    const out: FacilityMigration[] = [];
+    for (const row of rows.rows) {
+      if (only && !only.includes(row.tesis_id)) continue;
+      out.push(await migrateFacilityDb(deps, central, row.tesis_id));
+    }
+    return out;
+  } finally {
+    await central.end().catch(() => undefined);
+  }
+}
+
+/** Merkezin şeması beklenen sürümde mi (göç rolüyle; `goc` komutu önce bunu ister). */
+export async function centralSchemaVersion(gocUrl: string): Promise<string | null> {
+  const c = client(gocUrl);
+  await c.connect();
+  try {
+    const r = await c.query<{ n: string }>(`SELECT migration_name AS n FROM "_prisma_migrations" WHERE finished_at IS NOT NULL AND rolled_back_at IS NULL ORDER BY migration_name DESC LIMIT 1`);
+    return r.rows[0]?.n ?? null;
+  } finally {
+    await c.end().catch(() => undefined);
+  }
+}

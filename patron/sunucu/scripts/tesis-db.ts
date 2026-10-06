@@ -3,6 +3,9 @@
 //   npx tsx scripts/tesis-db.ts hazirla --tesis=<uuid>   (tek tesis, eşzamanlı; yarım kalan tamamlanır)
 //   npx tsx scripts/tesis-db.ts izle [--aralik=10]       (ISTENDI satırlarını yoklar — `patron-hazirla` servisi)
 //   npx tsx scripts/tesis-db.ts durum                    (tesis DB'lerinin durumu; sır basmaz)
+//   npx tsx scripts/tesis-db.ts goc                      (HAZIR tesis DB'lerine eksik göçler, TEK TEK; merkez ÖNCE
+//        `prisma migrate deploy` + `db-rolleri` ile — `patron-goc` zinciri; bir tesisin hatası ötekini durdurmaz,
+//        rapor basılır, hata varsa çıkış 1)
 // Anahtar: `TESIS_ROL_ANAHTARI_DOSYASI` (üretim sırrı) ya da `ANAHTAR_DIZINI/patron-tesis-db.key`.
 // =============================================================================
 import { Client } from "pg";
@@ -11,7 +14,8 @@ import { FacilityDbKey, facilityDbKeyPath } from "../src/auth/facility-db-key";
 import { loadEnvFile } from "../src/lib/env";
 import { PG_SESSION_OPTIONS } from "../src/lib/pg-session";
 import { assertCentralName, databaseOf } from "../src/lib/tesis-db-ad";
-import { pendingFacilityDbs, prepareFacilityDb, type PrepareDeps, type PrepareOutcome } from "../src/lib/tesis-db-hazirlik";
+import { centralSchemaVersion, migrateFacilityDbs, pendingFacilityDbs, prepareFacilityDb, type PrepareDeps, type PrepareOutcome } from "../src/lib/tesis-db-hazirlik";
+import { expectedSchemaVersion } from "../src/lib/tesis-goc";
 
 function args(argv: readonly string[]): Record<string, string> {
   const out: Record<string, string> = {};
@@ -64,6 +68,27 @@ async function status(gocUrl: string): Promise<void> {
   }
 }
 
+async function migrateAll(deps: PrepareDeps): Promise<number> {
+  const expected = expectedSchemaVersion();
+  const central = await centralSchemaVersion(deps.gocUrl);
+  if (central !== expected) {
+    console.error(`⛔ merkez şeması ${central ?? "yok"} ≠ beklenen ${expected} — önce \`prisma migrate deploy\` + \`db-rolleri\``);
+    return 1;
+  }
+  const report = await migrateFacilityDbs(deps);
+  let failed = 0;
+  for (const r of report) {
+    if (r.kind === "hata") {
+      failed++;
+      console.log(`⛔ ${r.tesisId} ${r.database}: ${r.message}`);
+    } else {
+      console.log(`✅ ${r.tesisId} ${r.database}: ${r.kind === "uygulandi" ? `${r.applied.length} göç uygulandı` : "güncel"} · şema ${r.schemaVersion}${r.checksumDrift.length ? ` · ⚠️ sağlama farkı: ${r.checksumDrift.join(",")}` : ""}`);
+    }
+  }
+  console.log(`PATRON_TESIS_GOC tesis=${report.length} hata=${failed}`);
+  return failed > 0 ? 1 : 0;
+}
+
 async function watch(deps: PrepareDeps, seconds: number): Promise<void> {
   let stop = false;
   const wake: { fn: (() => void) | null } = { fn: null };
@@ -111,8 +136,10 @@ async function main(): Promise<number> {
     case "durum":
       await status(deps.gocUrl);
       return 0;
+    case "goc":
+      return migrateAll(deps);
     default:
-      console.error("Kullanım: tesis-db.ts hazirla --tesis=<uuid> | izle [--aralik=10] | durum");
+      console.error("Kullanım: tesis-db.ts hazirla --tesis=<uuid> | izle [--aralik=10] | durum | goc");
       return 2;
   }
 }
