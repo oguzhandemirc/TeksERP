@@ -96,7 +96,7 @@ export function signPgPackageManifest(g: {
   return signDocument({ typ: TYP.PG, schema: PgPackageManifestSchema, payload: g.payload, key: g.key });
 }
 
-/** Sıra: JWS (typ · kid · imza; `pkt-*` ise zincir) → şema. Anahtar kümesi çağıranın (hazırlık anahtarı yalnız TEST/DEMO'da). */
+/** Sıra: JWS (typ · kid · imza; `pkt-*` ise zincir) → şema. Anahtar kümesi çağıranın (bu derlemenin PAKET çapası). */
 export function verifyPgPackageManifest(
   token: unknown,
   g: { readonly keys: readonly PackagePublicKey[]; readonly zincir?: Omit<PackageTrust, "keys"> },

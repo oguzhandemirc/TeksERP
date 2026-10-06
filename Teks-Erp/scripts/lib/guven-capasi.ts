@@ -1,14 +1,12 @@
 // Güven çapası dosyalarının AYRIŞTIRICISI + ÜRETİCİSİ — `scripts/guven-capasi-ekle.ts` (CLI) ve bekçisi
-// (`test_guven_capasi_ekle.ts`) ortak kullanır. Çapa İKİ kiptir (üretim · hazırlık) ve her kipin kök + PAKET listesi
-// dört yerden TEK listeyle yazılır: TS kök çapası (+ satıcı ve patron bayt-eşit aynası), TS PAKET çapası, native
-// gömülü çapa (`anchor.rs`, rustfmt düzeniyle; her kipin bloğu kendi `cfg`siyle kapılı). Anahtarın kipi kid'inden
-// çıkar — `kok-*`/`paket-<yıl>` üretim, `hazirlik-*`/`paket-hazirlik*` hazırlık; iki liste hiçbir kid ya da anahtarı
-// paylaşamaz. Biçim beklenenden saparsa (elle düzenleme) ayrıştırıcı DURUR: metne tahminle ekleme yapılmaz.
+// (`test_guven_capasi_ekle.ts`) ortak kullanır. Çapa TEK kiptir (üretim): kök + PAKET listesi dört yerden TEK
+// listeyle yazılır — TS kök çapası (+ satıcı ve patron bayt-eşit aynası), TS PAKET çapası, native gömülü çapa
+// (`anchor.rs`, rustfmt düzeniyle). Kid biçimi `kok-*` / `paket-<yıl>`; başka biçim çapaya giremez. Biçim beklenenden
+// saparsa (elle düzenleme) ayrıştırıcı DURUR: metne tahminle ekleme yapılmaz.
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import {
   LICENSE_CLASSES,
-  STAGING_ROOT_CLASSES,
   TRUST_ANCHOR_MODES,
   prepareTrustAnchor,
   publicKeyFromX,
@@ -17,7 +15,7 @@ import {
   type RootKey,
   type TrustAnchorMode,
 } from "../../src/lib/license/protocol";
-import { isProductionPackageKid, isStagingPackageKid } from "../../src/lib/license/integrity-scope";
+import { isProductionPackageKid } from "../../src/lib/license/integrity-scope";
 import type { PackageKey } from "../../src/lib/license/integrity";
 import { PRODUCTION_SIGNER_KID } from "../../../Electron/electron/guncelleme/kunye-jws.mjs";
 
@@ -33,31 +31,28 @@ export const CAPA_DOSYALARI = Object.freeze({
 export const CAPA_BLOKLARI: Readonly<Record<TrustAnchorMode, { readonly kokTs: string; readonly paketTs: string; readonly kokRs: string; readonly paketRs: string }>> =
   Object.freeze({
     uretim: { kokTs: "PRODUCTION_ROOT_PUBLIC_KEYS", paketTs: "PRODUCTION_PACKAGE_PUBLIC_KEYS", kokRs: "PRODUCTION_ROOTS", paketRs: "PRODUCTION_PACKAGE_KEYS" },
-    hazirlik: { kokTs: "STAGING_ROOT_PUBLIC_KEYS", paketTs: "STAGING_PACKAGE_PUBLIC_KEYS", kokRs: "STAGING_ROOTS", paketRs: "STAGING_PACKAGE_KEYS" },
   });
 
-/** Kök kid'i: üretim `kok-<yıl>-<n>` · hazırlık `hazirlik-<yıl>-<n>` (satıcı `anahtar.ts kok-uret` ile aynı biçim). */
-export const KOK_KID_BICIMI = /^(?:kok|hazirlik)-\d{4}-\d{1,3}$/;
+/** Kök kid'i `kok-<yıl>-<n>` (satıcı `anahtar.ts kok-uret` ile aynı biçim). */
+export const KOK_KID_BICIMI = /^kok-\d{4}-\d{1,3}$/;
 const PAKET_KID_ZEMIN = /^paket-[a-z0-9-]{1,40}$/;
 
 /**
- * Çapaya girebilecek PAKET kid'i mi: üretim (`paket-<yıl>[-<n>]`) ya da hazırlık (`paket-hazirlik…`) — iki kural
- * `integrity-scope.ts`te; fikstür kid'leri (`paket-fikstur`) bu kuralın DIŞINDADIR.
+ * Çapaya girebilecek PAKET kid'i mi: üretim (`paket-<yıl>[-<n>]`, kural `integrity-scope.ts`te); fikstür kid'leri
+ * (`paket-fikstur`) bu kuralın DIŞINDADIR.
  */
 export function paketKidGecerli(kid: string): boolean {
-  return PAKET_KID_ZEMIN.test(kid) && (isProductionPackageKid(kid) || isStagingPackageKid(kid));
+  return PAKET_KID_ZEMIN.test(kid) && isProductionPackageKid(kid);
 }
 
 /** Kök kid'inin kipi (biçim dışıysa null). */
 export function kokKipi(kid: string): TrustAnchorMode | null {
-  if (!KOK_KID_BICIMI.test(kid)) return null;
-  return kid.startsWith("hazirlik-") ? "hazirlik" : "uretim";
+  return KOK_KID_BICIMI.test(kid) ? "uretim" : null;
 }
 
 /** PAKET kid'inin kipi (biçim dışıysa null). */
 export function paketKipi(kid: string): TrustAnchorMode | null {
-  if (!paketKidGecerli(kid)) return null;
-  return isStagingPackageKid(kid) ? "hazirlik" : "uretim";
+  return paketKidGecerli(kid) ? "uretim" : null;
 }
 
 export class CapaHatasi extends Error {
@@ -165,8 +160,8 @@ function ayniListe(a: readonly (RootKey | PackageKey)[], b: readonly (RootKey | 
 }
 
 /**
- * Depo kökündeki dört yeri ayrıştırır ve birbirine karşı DENETLER: aynalar kaynakla bayt-eşit, native çapa her
- * kipte TS listesiyle aynı sırada aynı, her liste yalnız kendi kipinin kid'lerini taşır. Tutarsız başlangıçta ekleme
+ * Depo kökündeki dört yeri ayrıştırır ve birbirine karşı DENETLER: aynalar kaynakla bayt-eşit, native çapa TS
+ * listesiyle aynı sırada aynı, liste yalnız üretim biçiminde kid taşır. Tutarsız başlangıçta ekleme
  * yapılmaz (önce bekçiler).
  */
 export function capaDurumuOku(kok: string): CapaDurumu {
@@ -202,7 +197,7 @@ export function capaDurumuOku(kok: string): CapaDurumu {
     if (!ayniListe(rsKokler, kokler[kip])) throw new CapaHatasi("BICIM", `anchor.rs ${ad.kokRs} ≠ ${ad.kokTs} — önce test_lisans_native_kahin §0e`);
     if (!ayniListe(rsPaketler, paketler[kip])) throw new CapaHatasi("BICIM", `anchor.rs ${ad.paketRs} ≠ ${ad.paketTs} — önce test_lisans_native_kahin §0e'`);
     const yabanci = [...kokler[kip].filter((r) => kokKipi(r.kid) !== kip), ...paketler[kip].filter((k) => paketKipi(k.kid) !== kip)].map((k) => k.kid);
-    if (yabanci.length) throw new CapaHatasi("BICIM", `${kip} listesinde başka kipin kid'i: ${yabanci.join(", ")} (elle düzenlenmiş?)`);
+    if (yabanci.length) throw new CapaHatasi("BICIM", `${kip} listesinde biçim dışı kid: ${yabanci.join(", ")} (elle düzenlenmiş?)`);
   }
   return { kokler, paketler, metin: { kokTs, paketTs, anchorRs } };
 }
@@ -220,19 +215,16 @@ export function acikAnahtarGecerli(x: string): boolean {
 }
 
 export function kokDogrula(r: RootKey): void {
-  if (!KOK_KID_BICIMI.test(r.kid)) throw new CapaHatasi("GECERSIZ", `kök kid'i biçimsiz: ${r.kid} (kok-<yıl>-<n> ya da hazirlik-<yıl>-<n>)`);
+  if (!KOK_KID_BICIMI.test(r.kid)) throw new CapaHatasi("GECERSIZ", `kök kid'i biçimsiz: ${r.kid} (kok-<yıl>-<n>)`);
   if (!acikAnahtarGecerli(r.x)) throw new CapaHatasi("GECERSIZ", `${r.kid}: açık anahtar geçerli bir Ed25519 açık anahtarı değil`);
   const siniflar = r.classes as readonly string[];
   if (siniflar.length === 0 || new Set(siniflar).size !== siniflar.length || siniflar.some((c) => !(LICENSE_CLASSES as readonly string[]).includes(c))) {
     throw new CapaHatasi("GECERSIZ", `${r.kid}: sınıf listesi boş, tekrarlı ya da tanınmayan (${siniflar.join(",")})`);
   }
-  if (r.kid.startsWith("hazirlik-") && r.classes.some((c) => !STAGING_ROOT_CLASSES.includes(c))) {
-    throw new CapaHatasi("GECERSIZ", `${r.kid}: hazırlık kökü yalnız ${STAGING_ROOT_CLASSES.join("/")} imzalar`);
-  }
 }
 
 export function paketDogrula(k: PackageKey): void {
-  if (!paketKidGecerli(k.kid)) throw new CapaHatasi("GECERSIZ", `PAKET kid'i biçimsiz: ${k.kid} (paket-<yıl>[-<n>] ya da paket-hazirlik…)`);
+  if (!paketKidGecerli(k.kid)) throw new CapaHatasi("GECERSIZ", `PAKET kid'i biçimsiz: ${k.kid} (paket-<yıl>[-<n>])`);
   if (!acikAnahtarGecerli(k.x)) throw new CapaHatasi("GECERSIZ", `${k.kid}: açık anahtar geçerli bir Ed25519 açık anahtarı değil`);
 }
 
@@ -246,7 +238,7 @@ export interface EklemePlani {
   readonly dosyalar: ReadonlyMap<string, string>;
 }
 
-/** İki kipin BİRLEŞİMİNDE arar: kid ya da anahtar iki listeyi paylaşamaz (bir anahtar tek kid, tek kip). */
+/** Bütün kip listelerinin BİRLEŞİMİNDE arar: bir anahtar tek kid taşır. */
 function ayniAnahtarVar<T extends { kid: string; x: string }>(listeler: KipListesi<T>, yeni: T, esit: (a: T, b: T) => boolean): boolean {
   return listedeAyniAnahtarVar(TRUST_ANCHOR_MODES.flatMap((k) => listeler[k]), yeni, esit);
 }
@@ -332,7 +324,7 @@ export function panelCapasiOku(kok: string, dosya: IstemciCapaDosyasi = PANEL_CA
 /**
  * Panel çapasına anahtar: (a) törenle PAKET çapasına girmiş üretim PAKET anahtarı (`paket-<yıl>`, AYNI açık yarı
  * — yeni PAKET anahtarı buradan çapaya giremez) ya da (b) ayrı panel yayın anahtarı (`panel-<yıl>[-<n>]`).
- * Hazırlık/fikstür kid'i RED; aynı kid + aynı anahtar → değişiklik yok; çakışma → RED. Yeni satır SONA.
+ * Fikstür ya da biçim dışı kid RED; aynı kid + aynı anahtar → değişiklik yok; çakışma → RED. Yeni satır SONA.
  * Tablet APK künyesi çapası (`TABLET_CAPA_DOSYASI`) AYNI kurallarla — aynı anahtar kararı iki istemciye de.
  */
 export function panelEklePlani(d: CapaDurumu, p: PanelCapaDurumu, yeni: PackageKey): EklemePlani {

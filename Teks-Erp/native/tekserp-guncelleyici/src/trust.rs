@@ -33,8 +33,7 @@ impl TrustAnchor {
 
 pub const TEST_ANCHOR: bool = cfg!(feature = "test-anchor");
 
-/// Gömülü çapanın kipi (`uretim` | `hazirlik`, ortak crate'in `hazirlik-capasi` özelliğinden): künyede `capaKipi`;
-/// kendini güncelleme kipi DEĞİŞTİRMEZ, paketleme paketin kipiyle kıyaslar.
+/// Gömülü çapanın kipi (tek kip, `uretim`): künyede `capaKipi`; paketleme paketin kipiyle kıyaslar.
 pub const ANCHOR_MODE: &str = anchor::MODE;
 
 /// `{roots:[{kid,x,classes}], packageKeys:[{kid,x}]}` — lisans çekirdeğinin `builtinAnchor` biçimi.
@@ -65,11 +64,3 @@ fn from_json_file(p: &std::path::Path) -> Result<TrustAnchor, String> {
         .ok_or("packageKeys biçimsiz")?;
     Ok(TrustAnchor { roots, package_keys })
 }
-
-/// Hazırlık PAKET anahtarı (`paket-hazirlik*`) — TS `isStagingPackageKid` aynası; yalnız TEST/DEMO
-/// sınıfında geçer (TS `STAGING_PACKAGE_CLASSES`).
-pub fn is_staging_package_kid(kid: &str) -> bool {
-    kid == "paket-hazirlik" || kid.starts_with("paket-hazirlik-")
-}
-
-pub const STAGING_PACKAGE_CLASSES: [&str; 2] = ["TEST", "DEMO"];

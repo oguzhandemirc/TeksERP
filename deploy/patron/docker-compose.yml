@@ -1,4 +1,4 @@
-name: tekserp-patron-${ORTAM:?ORTAM gerekli (uretim|hazirlik)}
+name: tekserp-patron-${ORTAM:?ORTAM gerekli (uretim)}
 
 # =============================================================================
 # TeksERP PATRON BULUTU — tekserp-vds · /opt/stack/apps/tekserp-patron-<ortam>/

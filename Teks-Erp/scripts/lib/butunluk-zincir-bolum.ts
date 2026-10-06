@@ -1,5 +1,5 @@
 // `test_lisans_butunluk` §8 — zincirli (`pkt-*`) bütünlük listesi backend'de (PAKET-ANAHTARI-KOK-ALTINDA.md D3):
-// liste sırası, YERLEŞİK kip (iptal yalnız uyarı), sertifika sınıfından hazırlık kuralı, PAKET iptal deposu ve
+// liste sırası, YERLEŞİK kip (iptal yalnız uyarı), sertifika sınıfından dar yetki kuralı, PAKET iptal deposu ve
 // güncelleyiciye bağlı `paket-zinciri` yeteneği. TS ve (varsa) test çapalı native çekirdekle koşulur.
 import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
@@ -19,7 +19,7 @@ import {
 } from "../../src/lib/license/protocol";
 import { IntegrityManifestSchema, INTEGRITY_TYP } from "../../src/lib/license/integrity";
 import { INTEGRITY_FILE } from "../../src/lib/license/integrity-scope";
-import { INTEGRITY_CERT_REVOKED_WARNING, runIntegrityCheck, type IntegrityCheckInput } from "../../src/lib/license/integrity-check";
+import { INTEGRITY_CERT_REVOKED_WARNING, decideForClass, runIntegrityCheck, type IntegrityCheckInput } from "../../src/lib/license/integrity-check";
 import type { LicenseCore } from "../../src/lib/license/license-core";
 import { loadLicenseStoreSync } from "../../src/lib/license/store";
 import { adoptPackageRevocation, loadPackageRevocation } from "../../src/lib/license/package-revocation-store";
@@ -103,8 +103,14 @@ async function sinifKurali(o: ZincirOrtami, core: LicenseCore, ek: string): Prom
   const g = (entitlementClass: string | null) => runIntegrityCheck(o.girdi(k, { core, roots: f.kokler, entitlementClass }));
   const yok = await g(null);
   o.check(`§8f [${ek}] dar sertifika + sınıf bilinmiyor → SINIF_BILINMIYOR`, yok.durum === "OLCULEMEDI" && yok.kod === "BUTUNLUK_SINIF_BILINMIYOR", `${yok.durum} ${yok.kod}`);
+  const pencere = decideForClass(yok, "TEST");
+  o.check(
+    `§8f' [${ek}] etkinleştirme penceresi: sınıf bilinmiyorken OLCULEMEDI/künyesiz → TEST HAK'ıyla GECERLI + imzalı künye`,
+    yok.kunye === null && pencere?.durum === "GECERLI" && pencere.kunye !== null,
+    `${yok.kod} → ${pencere?.durum}`,
+  );
   const disari = await g("URETIM");
-  o.check(`§8g [${ek}] dar sertifika + sınıf dışında → HAZIRLIK_ANAHTARI`, disari.durum === "GECERSIZ" && disari.kod === "BUTUNLUK_HAZIRLIK_ANAHTARI", `${disari.durum} ${disari.kod}`);
+  o.check(`§8g [${ek}] dar sertifika + sınıf dışında → SINIF_YETKISIZ`, disari.durum === "GECERSIZ" && disari.kod === "BUTUNLUK_SINIF_YETKISIZ", `${disari.durum} ${disari.kod}`);
   const icinde = await g("TEST");
   o.check(`§8h [${ek}] dar sertifika + sınıf içinde → GECERLI`, icinde.durum === "GECERLI", `${icinde.durum} ${icinde.kod}`);
 }

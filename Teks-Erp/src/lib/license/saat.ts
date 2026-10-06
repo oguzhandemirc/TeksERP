@@ -147,13 +147,9 @@ export const SanctionSnapshotSchema = z.object({
 });
 export type SanctionSnapshot = z.infer<typeof SanctionSnapshotSchema>;
 
-/** Kök türü: HAK'ı imzalayan zincirin kökü üretim mi hazırlık mı (sınıf pininin parçası). */
-export const ROOT_KINDS = ["kok", "hazirlik"] as const;
+/** Kök türü: tek aile (`kok-*`). Alan durum kaydı biçimi için kalır; başka değerli eski pin şemada RED. */
+export const ROOT_KINDS = ["kok"] as const;
 export type RootKind = (typeof ROOT_KINDS)[number];
-
-export function rootKindOf(rootKid: string): RootKind {
-  return rootKid.startsWith("hazirlik-") ? "hazirlik" : "kok";
-}
 
 /** Son kabul edilen HAK'ın pini: yerel dosya daha eski sürüme ya da başka sınıfa/köke dönerse geri alma sayılır. */
 export const EntitlementPinSchema = z.object({

@@ -2,7 +2,7 @@
 // durumuna giden iki türevi: ölçüm sonucu ve ek süre çapası. Çapa imzalı durum kaydında kalıcıdır ve
 // ait olduğu paketId'yle yazılır: yeniden başlatmak, kirayı yenilemek ya da dosyaları kısa süre geri
 // yüklemek ek süreyi uzatmaz; yalnız yeni imzalı paket kurulunca sıfırlanır.
-import { isoToMs, msToIso } from "./protocol";
+import { isoToMs, msToIso, type RootKey } from "./protocol";
 import type { IntegrityOutcome } from "./integrity-check";
 import type { PackageKey } from "./integrity";
 import type { IntegrityStatus } from "./state-rules";
@@ -13,17 +13,27 @@ import { NATIVE_REQUIRED } from "./native";
 let integrity: IntegrityOutcome | null = null;
 /** Bu süreçte görülen ilk uyuşmazlık ve ait olduğu imzalı paket (yalnız paket DEĞİŞİNCE sıfırlanır). */
 let firstMismatch: { readonly ms: number; readonly paketId: string | null } | null = null;
-let testTarget: { readonly root?: string; readonly keys?: readonly PackageKey[] } | null = null;
+interface IntegrityTestTarget {
+  readonly root?: string;
+  readonly keys?: readonly PackageKey[];
+  /** Zincirli (`pkt-*`) listenin PAKET sertifikasını doğrulayan kök çapası (fikstür kökü). */
+  readonly roots?: readonly RootKey[];
+}
+let testTarget: IntegrityTestTarget | null = null;
 
-/** Test-only (Senaryo L): denetlenecek kök ve PAKET anahtarı. Zorunlu kipte (korumalı paket) YOK SAYILIR. */
-export function configureIntegrityForTests(t: { readonly root?: string; readonly keys?: readonly PackageKey[] } | null): void {
+/** Test-only (Senaryo L): denetlenecek kök, PAKET anahtarı ve kök çapası. Zorunlu kipte (korumalı paket) YOK SAYILIR. */
+export function configureIntegrityForTests(t: IntegrityTestTarget | null): void {
   testTarget = t;
 }
 
-/** Denetim hedefi: paket kökü = süreç kökü (`app/`), gömülü PAKET çapası. */
-export function integrityCheckTarget(required: boolean = NATIVE_REQUIRED): { readonly root: string; readonly keys: readonly PackageKey[] | undefined } {
-  if (required || testTarget === null) return { root: process.cwd(), keys: undefined };
-  return { root: testTarget.root ?? process.cwd(), keys: testTarget.keys };
+/** Denetim hedefi: paket kökü = süreç kökü (`app/`), gömülü PAKET + kök çapası. */
+export function integrityCheckTarget(required: boolean = NATIVE_REQUIRED): {
+  readonly root: string;
+  readonly keys: readonly PackageKey[] | undefined;
+  readonly roots: readonly RootKey[] | undefined;
+} {
+  if (required || testTarget === null) return { root: process.cwd(), keys: undefined, roots: undefined };
+  return { root: testTarget.root ?? process.cwd(), keys: testTarget.keys, roots: testTarget.roots };
 }
 
 /** İmzası doğrulanmış listenin paket kimliği; imza/şema düşmüşse null (paket bilinmiyor). */

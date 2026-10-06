@@ -7,12 +7,6 @@ publish.workspace = true
 description = "TeksERP ORTAK doğrulama: JWS/EdDSA, güven zinciri, belge şemaları, gömülü çapa, PAKET bütünlük listesi"
 license.workspace = true
 
-[features]
-# Gömülü çapa kipi (`src/anchor.rs`): özelliksiz ÜRETİM kökleri + PAKET anahtarları, bu özellik YALNIZ hazırlık
-# olanları. Lisans çekirdeği ve güncelleyici kendi `hazirlik-capasi`larıyla buraya iletir; iki liste tek ikilide
-# birleşmez. Kip SEÇİMDİR (toplamsal değil): üretim ve hazırlık ikilileri AYRI cargo çağrılarıyla derlenir.
-hazirlik-capasi = []
-
 [dependencies]
 ed25519-dalek.workspace = true
 sha2.workspace = true

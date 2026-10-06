@@ -1,9 +1,7 @@
-//! G3 — güncelleyicinin GÖMÜLÜ çapası tek kiptir ve lisans çekirdeğininkiyle AYNI kaynaktır (ortak
-//! `tekserp_dogrulama::anchor`, özellik `hazirlik-capasi`): üretim derlemesi hazırlık PAKET/kök imzalı belgeyi
-//! REDDEDER, hazırlık derlemesi üretim imzalı olanı. Test çapası değil, derlemenin gerçek gömülü çapası koşar;
-//! gerçek özel yarı gerekmez: öteki kipin kid'i çapada YOKTUR → `JWS_KID` / `KOK_BILINMIYOR`; kendi kipinin kid'i
-//! yabancı anahtarla imzalanınca kid TANINIR ve yalnız imza düşer — testin ayırt ettiği budur.
-//! İki kipte koşar: `cargo test` (üretim) ve `cargo test --features hazirlik-capasi` (`native/scripts/kapi.mjs test`).
+//! G3 — güncelleyicinin GÖMÜLÜ çapası tek kiptir (üretim) ve lisans çekirdeğininkiyle AYNI kaynaktır (ortak
+//! `tekserp_dogrulama::anchor`): eski hazırlık ailesinin PAKET/kök kid'i imzalı belge REDDEDİLİR. Test çapası değil,
+//! derlemenin gerçek gömülü çapası koşar; gerçek özel yarı gerekmez: emekli kid çapada YOKTUR → `JWS_KID` /
+//! `KOK_BILINMIYOR`; kendi kid'i yabancı anahtarla imzalanınca kid TANINIR ve yalnız imza düşer — testin ayırt ettiği budur.
 mod common;
 
 use common::*;
@@ -16,30 +14,20 @@ use tekserp_guncelleyici::codes;
 use tekserp_guncelleyici::kurulum;
 use tekserp_guncelleyici::policy;
 use tekserp_guncelleyici::release;
-use tekserp_guncelleyici::trust::{self, TrustAnchor, ANCHOR_MODE};
-
-const STAGING: bool = cfg!(feature = "hazirlik-capasi");
+use tekserp_guncelleyici::trust::{TrustAnchor, ANCHOR_MODE};
 
 /// Yabancı imzalayan: hiçbir çapada olmayan anahtar.
 fn stranger() -> SigningKey {
     SigningKey::from_bytes(&[0x5a; 32])
 }
 
-/// Öteki kip ailesinin temsilci kid'leri (bu derlemenin çapasında OLMAMALI).
+/// Emekli hazırlık ailesinin temsilci kid'leri (gömülü çapada OLMAMALI).
 fn foreign_package_kid() -> &'static str {
-    if STAGING {
-        "paket-2026"
-    } else {
-        "paket-hazirlik"
-    }
+    "paket-hazirlik"
 }
 
 fn foreign_root_kid() -> &'static str {
-    if STAGING {
-        "kok-2026-1"
-    } else {
-        "hazirlik-2026-1"
-    }
+    "hazirlik-2026-1"
 }
 
 fn own_package_kid() -> String {
@@ -54,7 +42,7 @@ fn payload_of(token: &str) -> Value {
 #[test]
 fn builtin_anchor_is_the_shared_single_mode_anchor() {
     assert_eq!(ANCHOR_MODE, anchor::MODE);
-    assert_eq!(ANCHOR_MODE, if STAGING { "hazirlik" } else { "uretim" });
+    assert_eq!(ANCHOR_MODE, "uretim");
     let a = TrustAnchor::builtin();
     let roots: Vec<_> = a.roots.iter().map(|r| (r.kid.clone(), r.x.clone(), r.classes.clone())).collect();
     let shared: Vec<_> = anchor::builtin_roots().into_iter().map(|r| (r.kid, r.x, r.classes)).collect();
@@ -62,30 +50,32 @@ fn builtin_anchor_is_the_shared_single_mode_anchor() {
     assert_eq!(a.package_keys, anchor::builtin_package_keys(), "güncelleyicinin PAKET anahtarları ortak crate'inkiler değil");
     assert!(!a.roots.is_empty() && !a.package_keys.is_empty(), "{ANCHOR_MODE} çapası boş");
     for r in &a.roots {
-        assert_eq!(r.kid.starts_with("hazirlik-"), STAGING, "{ANCHOR_MODE} çapasında öteki kipin kökü: {}", r.kid);
+        assert!(r.kid.starts_with("kok-"), "{ANCHOR_MODE} çapasında yabancı aile kökü: {}", r.kid);
     }
     for (kid, _) in &a.package_keys {
-        assert_eq!(trust::is_staging_package_kid(kid), STAGING, "{ANCHOR_MODE} çapasında öteki kipin PAKET anahtarı: {kid}");
+        assert!(
+            kid.starts_with("paket-") && !kid.starts_with("paket-hazirlik"),
+            "{ANCHOR_MODE} çapasında yabancı aile PAKET anahtarı: {kid}"
+        );
     }
     assert!(!a.package_keys.iter().any(|(k, _)| k == foreign_package_kid()));
     assert!(!a.roots.iter().any(|r| r.kid == foreign_root_kid()));
 }
 
-/// Sürüm bildirimi (`surum.json`, PAKET imzalı): öteki kipin PAKET kid'i → `JWS_KID`. Sınıf TEST verilir — politika
-/// hazırlık anahtarını bu sınıfta kümeye ALIR; red yalnız çapadan gelmeli.
+/// Sürüm bildirimi (`surum.json`, PAKET imzalı): emekli hazırlık PAKET kid'i → `JWS_KID` (red çapadan gelir; sınıf süzgeci yok).
 #[test]
 fn foreign_mode_package_signed_manifest_is_rejected() {
-    let keys = PackageTrust::embedded(policy::package_keys(&TrustAnchor::builtin(), Some("TEST")));
+    let keys = PackageTrust::embedded(policy::package_keys(&TrustAnchor::builtin()));
     let zip = b"paket".to_vec();
     let verify = |kid: &str| {
         let token = sign_manifest(&stranger(), kid, &manifest_payload(kid, NEW, &zip, None));
         release::verify_release_manifest(&Value::String(token), &keys, CHANNEL).map(|_| ()).map_err(|f| f.code)
     };
-    assert_eq!(verify(foreign_package_kid()), Err(code::JWS_KID), "{ANCHOR_MODE} güncelleyicisi öteki kipin PAKET imzasını tanımamalı");
-    assert_eq!(verify(&own_package_kid()), Err(code::JWS_IMZA), "kendi kipinin kid'i tanınır, yalnız imza düşer");
+    assert_eq!(verify(foreign_package_kid()), Err(code::JWS_KID), "{ANCHOR_MODE} güncelleyicisi emekli hazırlık PAKET imzasını tanımamalı");
+    assert_eq!(verify(&own_package_kid()), Err(code::JWS_IMZA), "kendi kid'i tanınır, yalnız imza düşer");
 }
 
-/// İlk kurulum doğrulayıcısı (`kurulum-paket`, gömülü çapanın BÜTÜN PAKET anahtarları): öteki kipin PAKET imzalı
+/// İlk kurulum doğrulayıcısı (`kurulum-paket`, gömülü çapanın BÜTÜN PAKET anahtarları): emekli hazırlık PAKET imzalı
 /// paketi açılmaz, hedef dizin kalmaz. Kod `BUTUNLUK_GECERSIZ`, iç neden iletide (`(JWS_KID)` / `(JWS_IMZA)`).
 #[test]
 fn foreign_mode_package_integrity_is_rejected_by_installer() {
@@ -111,19 +101,19 @@ fn foreign_mode_package_integrity_is_rejected_by_installer() {
     assert_eq!(
         reason(run("oteki", foreign_package_kid())),
         Some(code::JWS_KID),
-        "{ANCHOR_MODE} kurulum doğrulayıcısı öteki kipin paketini açmamalı"
+        "{ANCHOR_MODE} kurulum doğrulayıcısı emekli hazırlık paketini açmamalı"
     );
-    assert_eq!(reason(run("kendi", &own_package_kid())), Some(code::JWS_IMZA), "kendi kipinin kid'i tanınır, yalnız imza düşer");
+    assert_eq!(reason(run("kendi", &own_package_kid())), Some(code::JWS_IMZA), "kendi kid'i tanınır, yalnız imza düşer");
 }
 
-/// Kira zincirinin kökü (HAK kökle imzalı): öteki kipin kök kid'i → `KOK_BILINMIYOR`.
+/// Kira zincirinin kökü (HAK kökle imzalı): emekli hazırlık kök kid'i → `KOK_BILINMIYOR`.
 #[test]
 fn foreign_mode_root_signed_entitlement_is_rejected() {
     let keys = Keys {
         root: stranger(),
         alt: SigningKey::from_bytes(&[2; 32]),
         package: SigningKey::from_bytes(&[3; 32]),
-        staging: SigningKey::from_bytes(&[4; 32]),
+        legacy: SigningKey::from_bytes(&[4; 32]),
     };
     let (_, hak) = lease_and_entitlement(&keys, &LeaseOpts::default(), T0);
     let doc = payload_of(&hak.expect("HAK"));
@@ -133,8 +123,8 @@ fn foreign_mode_root_signed_entitlement_is_rejected() {
             .map(|_| ())
             .map_err(|f| f.code)
     };
-    assert_eq!(verify(foreign_root_kid()), Err(code::KOK_BILINMIYOR), "{ANCHOR_MODE} güncelleyicisi öteki kipin kökünü tanımamalı");
+    assert_eq!(verify(foreign_root_kid()), Err(code::KOK_BILINMIYOR), "{ANCHOR_MODE} güncelleyicisi emekli hazırlık kökünü tanımamalı");
     let own = roots.first().expect("gömülü kök").kid.clone();
-    assert_ne!(verify(&own), Err(code::KOK_BILINMIYOR), "kendi kipinin kökü tanınır (imza düşer)");
+    assert_ne!(verify(&own), Err(code::KOK_BILINMIYOR), "kendi kökü tanınır (imza düşer)");
     assert!(verify(&own).is_err());
 }

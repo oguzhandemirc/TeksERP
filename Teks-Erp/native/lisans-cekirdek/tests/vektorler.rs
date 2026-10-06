@@ -3,8 +3,8 @@
 //! burada native API'den geçer ve her sonuç TS'in beklenen sonucuna EŞİT olmalıdır. İstek biçimi
 //! `src/lib/license/native-adapter.ts`in kurduğuyla aynıdır — ölçülen yüzey, Node'un gördüğü yüzey.
 //!
-//! Koşum: `cargo test --no-default-features --features test-anchor` (vektörler test çapası ister) ve aynı komut
-//! `hazirlik-capasi` ile — gömülü çapa vektörleri (`kip`) yalnız kendi kipiyle derlenmiş çekirdekte koşar.
+//! Koşum: `cargo test --no-default-features --features test-anchor` (vektörler test çapası ister). Çapa tek kiptir:
+//! gömülü çapa vektörünün `kip`i bu derlemenin kipi olmalıdır (başka kip = kırmızı, atlanmaz).
 #![cfg(feature = "test-anchor")]
 
 use lisans_cekirdek::{anchor, api, b64, iso, jsonx, jws};
@@ -13,7 +13,7 @@ use std::path::PathBuf;
 use std::sync::atomic::{AtomicU64, Ordering};
 
 const VEKTOR_BICIMI: u64 = 2;
-/// Bir kipin gömülü çapa vektörü bundan azsa kip koşumu kanıt sayılmaz (boş küme yeşil vermesin).
+/// Gömülü çapa vektörü bundan azsa koşum kanıt sayılmaz (boş küme yeşil vermesin).
 const MIN_MODE_VECTORS: usize = 8;
 /// `protokol-v2.json` biçimi (TS `VEKTOR_V2_BICIMI`).
 const VEKTOR_V2_BICIMI: u64 = 1;
@@ -24,9 +24,11 @@ const V2_NATIVE_TYPES: [&str; 10] =
 const V2_NOT_NATIVE: [&str; 1] = ["istek"];
 const MIN_V2_MODE_VECTORS: usize = 2;
 
-/// Gömülü çapa vektörü öteki kipin çapasıyla beklenmiştir; bu derlemede koşmaz.
-fn applies_to_this_build(v: &Value) -> bool {
-    v.get("kip").and_then(Value::as_str).is_none_or(|k| k == anchor::MODE)
+/// Gömülü çapa vektörü mü — öyleyse kipi bu derlemeninki olmalı (tek kip; eski hazırlık kipli vektör kırmızı).
+fn is_mode_vector(v: &Value) -> bool {
+    let Some(k) = v.get("kip") else { return false };
+    assert_eq!(k.as_str(), Some(anchor::MODE), "başka kipli gömülü çapa vektörü: {}", v["ad"]);
+    true
 }
 
 fn vector_file_named(name: &str) -> Value {
@@ -159,10 +161,7 @@ fn every_vector_matches_ts_oracle() {
     let mut mismatches = Vec::new();
     let mut mode_vectors = 0usize;
     for r in records {
-        if !applies_to_this_build(&r["vektor"]) {
-            continue;
-        }
-        if r["vektor"].get("kip").is_some() {
+        if is_mode_vector(&r["vektor"]) {
             mode_vectors += 1;
         }
         let got = evaluate(&r["vektor"]);
@@ -273,14 +272,11 @@ fn every_v2_vector_matches_ts_oracle() {
     let (mut mode_vectors, mut skipped) = (0usize, 0usize);
     for r in records {
         let v = &r["vektor"];
-        if !applies_to_this_build(v) {
-            continue;
-        }
         let Some(got) = evaluate_v2(v) else {
             skipped += 1;
             continue;
         };
-        if v.get("kip").is_some() {
+        if is_mode_vector(v) {
             mode_vectors += 1;
         }
         *ran.entry(v["tur"].as_str().unwrap_or("?").to_string()).or_default() += 1;

@@ -20,10 +20,10 @@ import {
   type LicenseClass,
   type RevocationDoc,
 } from "./belgeler";
-import { STAGING_ROOT_CLASSES, type RootKey } from "./kok-anahtarlar";
+import type { RootKey } from "./kok-anahtarlar";
 import { CLOCK_SKEW_MS, success, failure, forwardFailure, isoToMs, type Result } from "./ortak";
 
-const ROOT_KID_PATTERN = /^(kok|hazirlik)-[a-z0-9-]{1,40}$/;
+const ROOT_KID_PATTERN = /^kok-[a-z0-9-]{1,40}$/;
 const CLASS_SET: ReadonlySet<string> = new Set(LICENSE_CLASSES);
 
 interface AnchorEntry {
@@ -69,7 +69,7 @@ export interface EntitlementVerifyOptions extends ChainOptions {
   readonly nowMs?: number;
 }
 
-/** Çapayı doğrular: boş liste, biçimsiz kid/anahtar ve TEST/DEMO dışına taşan hazırlık kökü RED. */
+/** Çapayı doğrular: boş liste, `kok-` ailesi dışı ya da tekrarlı kid ve biçimsiz anahtar/sınıf RED. */
 export function prepareTrustAnchor(roots: readonly RootKey[]): Result<ReadonlyMap<string, AnchorEntry>> {
   if (roots.length === 0) return failure("GUVEN_CAPASI_BOS", "Güven çapası boş: bu derlemede kök açık anahtarı yok");
   const lookup = new Map<string, AnchorEntry>();
@@ -81,9 +81,6 @@ export function prepareTrustAnchor(roots: readonly RootKey[]): Result<ReadonlyMa
     if (!key) return failure("GUVEN_CAPASI_BICIM", `Kök açık anahtarı biçimsiz: ${root.kid}`);
     if (root.classes.length === 0 || root.classes.some((s) => !CLASS_SET.has(s))) {
       return failure("GUVEN_CAPASI_BICIM", `Kökün sınıf listesi geçersiz: ${root.kid}`);
-    }
-    if (root.kid.startsWith("hazirlik-") && root.classes.some((s) => !STAGING_ROOT_CLASSES.includes(s))) {
-      return failure("GUVEN_CAPASI_BICIM", `Hazırlık kökü yalnız TEST/DEMO sınıflarına yetkili olabilir: ${root.kid}`);
     }
     lookup.set(root.kid, { key, classes: Object.freeze([...root.classes]) });
   }

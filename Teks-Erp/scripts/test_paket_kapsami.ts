@@ -16,8 +16,8 @@
 //      güncelleyicinin çapa kipi = paketin (bayt kodu künyesi `guvenCapasi`, G3)
 //   §6 PAKET.json `backendHizmetAdi` dağıtım kaydından (dagitim-kapisi TEKSERP_HIZMET_ADI) · `backendLisansSunucusu` +
 //      `lisansSunucusuVarsayilan` (TEKSERP_LISANS_*; yoksa Fail) · `hizmetIkilileri`
-//   §7 CI (korumali-paket.yml) win-x64 kolunda iki ikiliyi test çapasız, bayt kodunun çapa KİPİYLE derler (G3:
-//      hazırlık → `hazirlik-capasi`, künye `capaKipi` ölçülür) ve yapıta koyar
+//   §7 CI (korumali-paket.yml) win-x64 kolunda iki ikiliyi test çapasız ve TEK çapa kipinde derler (G3: bayt kodu
+//      künyesi `uretim` değilse DUR, `hazirlik-capasi` özelliği yok, künye `capaKipi` ölçülür) ve yapıta koyar
 //   §8 gerçek imza kapsamı işlevi (`packageScope` + `listScopedFiles`) sahte bir paket ağacında
 //      hizmet\ · gecis\ · runtime\*.exe dosyalarını LİSTEYE alır
 // NEGATİF SONDA (✓K, her koşumda): §2–§7 yüklemleri bellekte bozulmuş kopyalara koşar; her sonda
@@ -206,9 +206,10 @@ function olc(d: Dosyalar): Olcum {
   if (!/testCapasi/.test(ci)) k("§7", "CI güncelleyicinin künyesinde testCapasi=false ölçmüyor");
   if (!/koruma-cikti\/runtime\/tekserp-guncelleyici\.exe/.test(ci) || !/koruma-cikti\/runtime\/tekserp-hizmet\.exe/.test(ci)) k("§7", "iki ikili yapıtın runtime\\ dizinine konmuyor");
   if (/--features[^\n]*test-anchor/.test(ci)) k("§7", "korumalı paket iş akışı test-anchor özelliğiyle derliyor");
-  if (!/\.guvenCapasi/.test(ci) || !/"tekserp-guncelleyici\/hazirlik-capasi"/.test(ci) || !/\$k\.capaKipi -cne \$kip\)/.test(ci)) {
-    k("§7", "CI güncelleyiciyi bayt kodunun çapa kipiyle derleyip künyesinde capaKipi ölçmüyor (G3)");
+  if (!/\.guvenCapasi/.test(ci) || !/if \(\$kip -cne "uretim"\) \{ Write-Error [^\n]*; exit 1 \}/.test(ci) || !/\$k\.capaKipi -cne \$kip\)/.test(ci)) {
+    k("§7", "CI bayt kodunun çapa kipini (tek kip uretim) denetleyip güncelleyici künyesinde capaKipi ölçmüyor (G3)");
   }
+  if (/hazirlik-capasi/.test(ci)) k("§7", "korumalı paket iş akışında emekli `hazirlik-capasi` özelliği var (çapa tek kip)");
   return { kirmizi, olculemedi };
 }
 
@@ -269,6 +270,8 @@ function sondalar(taban: Dosyalar): void {
     ["N14 güncelleyici çapa kipi denetimi gevşedi → KIRMIZI (§5, G3)", "kirmizi", metin(PAKETLE, /(\$j\.capaKipi -cne \$capaKipi\) \{\s*\n\s*)Fail /, "$1Write-Host "), "§5"],
     ["N15 ikililere paketin çapa kipi verilmiyor → KIRMIZI (§5, G3)", "kirmizi", metin(PAKETLE, "$HIZMET_IKILILERI[$ikiliAd] $paketCapaKipi", "$HIZMET_IKILILERI[$ikiliAd]"), "§5"],
     ["N16 CI güncelleyicinin capaKipi ölçümü kalktı → KIRMIZI (§7, G3)", "kirmizi", metin(KORUMALI_CI, "$k.capaKipi -cne $kip)", "$false)"), "§7"],
+    ["N17 CI tek kip kapısı gevşedi (hazırlık kipi de kabul) → KIRMIZI (§7)", "kirmizi", metin(KORUMALI_CI, 'if ($kip -cne "uretim") {', 'if ($kip -cne "uretim" -and $kip -cne "hazirlik") {'), "§7"],
+    ["N18 CI emekli hazirlik-capasi özelliğiyle derliyor → KIRMIZI (§7)", "kirmizi", metin(KORUMALI_CI, "cargo build --release --locked -p tekserp-guncelleyici -p tekserp-hizmet", "cargo build --release --locked -p tekserp-guncelleyici -p tekserp-hizmet --features tekserp-guncelleyici/hazirlik-capasi"), "§7"],
     ["O1 paketle.ps1 okunamadı → ÖLÇÜLEMEDİ", "olculemedi", (d) => { d[PAKETLE] = undefined; }],
     ["O2 $ALT_BETIKLER listesi kayboldu → ÖLÇÜLEMEDİ (§1)", "olculemedi", metin(PAKETLE, "$ALT_BETIKLER = @(", "$ALT_BETIKLER_ESKI = @("), "§1"],
   ];

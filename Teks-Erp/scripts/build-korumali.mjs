@@ -24,8 +24,7 @@
 //   node ../scripts/agir-is.mjs -- node scripts/build-korumali.mjs [--hedef=win-x64|linux-x64] [--cikti=dist]
 //     Tek ortak paket: filigranda musteri ve kurulumId null (filigran kurulumda, lisanstan) — O11a; imza ayrı adım
 //     (scripts/build-korumali-imza.ts). Eski kanal argümanları (--musteri/--kurulum) emekli: `eski-kanal-son` etiketi.
-//     Güven çapası kipi ÜRETİM; bayt koduna sabit olarak girer (`__TEKSERP_GUVEN_CAPASI__`); paketteki native aynı
-//     kiple derlenmiş olmalı (derle:*:<kip>).
+//     Güven çapası tek kiptir (üretim, koda gömülü — derleme sabiti yok).
 //     [--sifrele=hepsi|<paket,…>] [--modul-anahtar-dizini=<yol>]   (Faz 2d şifreli modül; varsayılan ŞİFRESİZ)
 //   Ortam: KORUMA_ARSIV_DIZINI (varsayılan ~/.tekserp/kaynak-haritalari) — REPO DIŞI.
 // =============================================================================
@@ -146,11 +145,10 @@ async function main() {
     legalComments: 'none',
     logLevel: 'warning',
     metafile: true,
-    // Korumalı derlemede native lisans çekirdeği ZORUNLU (TS'e düşülmez) + filigran + güven çapası kipi bayt kodu sabiti.
+    // Korumalı derlemede native lisans çekirdeği ZORUNLU (TS'e düşülmez) + filigran bayt kodu sabiti.
     define: {
       __TEKSERP_NATIVE_REQUIRED__: 'true',
       __TEKSERP_FILIGRAN__: JSON.stringify(JSON.stringify(filigran)),
-      __TEKSERP_GUVEN_CAPASI__: JSON.stringify(guvenCapasi),
     },
     plugins: [cekirdekEklentisi({ proj: PROJ, paketler: sifreliPaketler, ev })],
   });
@@ -187,7 +185,7 @@ async function main() {
     cjsSha256: cjsSha,
     jscUretildi: false,
     nativeZorunlu: true,              // korumalı derlemede native çekirdek her zaman zorunlu (define ile aynı)
-    guvenCapasi,                      // bayt kodunun güvendiği çapa kipi (define ile aynı); imza aracı anahtar ailesini buna göre seçer
+    guvenCapasi,                      // çapa kipi (tek değer: uretim); paketleme native künyesini buna karşı ölçer
     sifreliModuller: sifreliKunye,
   };
 

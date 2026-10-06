@@ -1,8 +1,8 @@
-// Güven çapası: kök açık anahtarları ve her kökün imzalayabileceği sınıflar — derleme kipine göre İKİ liste.
+// Güven çapası: kök açık anahtarları ve her kökün imzalayabileceği sınıflar — TEK kip (üretim).
 import type { LicenseClass } from "./belgeler";
 
 export interface RootKey {
-  /** `kok-<yıl>-<n>` üretim, `hazirlik-<yıl>-<n>` hazırlık kökü. */
+  /** `kok-<yıl>-<n>`; başka aile (eski `hazirlik-*` dahil) çapada biçim düzeyinde reddedilir. */
   readonly kid: string;
   /** Ham 32 baytlık Ed25519 açık anahtarı, base64url. */
   readonly x: string;
@@ -10,10 +10,10 @@ export interface RootKey {
 }
 
 /**
- * Çapa kipi: ÜRETİM derlemesi yalnız üretim köklerine, HAZIRLIK derlemesi yalnız hazırlık köklerine güvenir; iki
- * liste hiçbir derlemede birleşmez (daha az korunan hazırlık kökünün imzası üretim kurulumunda geçmesin).
+ * Çapa kipi: tek değer. Küme native künyesinin `capaKipi` alanını da süzer — başka kiple derlenmiş bir ikili
+ * (ör. eski `hazirlik-capasi`) yükleyicide reddedilir.
  */
-export const TRUST_ANCHOR_MODES = Object.freeze(["uretim", "hazirlik"] as const);
+export const TRUST_ANCHOR_MODES = Object.freeze(["uretim"] as const);
 export type TrustAnchorMode = (typeof TRUST_ANCHOR_MODES)[number];
 
 /**
@@ -28,27 +28,14 @@ export const PRODUCTION_ROOT_PUBLIC_KEYS: readonly RootKey[] = Object.freeze([
   }),
 ]);
 
-/** Hazırlık kökleri (`hazirlik-<yıl>-<n>`) — yalnız TEST/DEMO; aynı betikle eklenir. */
-export const STAGING_ROOT_PUBLIC_KEYS: readonly RootKey[] = Object.freeze([
-  Object.freeze({
-    kid: "hazirlik-2026-1",
-    x: "705hChzAL045Gp-XoG6SaUKAW8muK1SFcW0Vpwhf-mo",
-    classes: Object.freeze<LicenseClass[]>(["TEST", "DEMO"]),
-  }),
-]);
-
 const NO_ROOTS: readonly RootKey[] = Object.freeze([]);
 
 export function isTrustAnchorMode(v: unknown): v is TrustAnchorMode {
-  return v === "uretim" || v === "hazirlik";
+  return v === "uretim";
 }
 
 /** Kipin kök çapası. Doğrulama fonksiyonları çapayı ARGÜMAN alır; tanınmayan kip boş çapadır (fail-closed). */
 export function rootPublicKeysFor(mode: TrustAnchorMode): readonly RootKey[] {
   if (mode === "uretim") return PRODUCTION_ROOT_PUBLIC_KEYS;
-  if (mode === "hazirlik") return STAGING_ROOT_PUBLIC_KEYS;
   return NO_ROOTS;
 }
-
-/** Hazırlık kökü ÜRETİM imzalayamaz; çapa bu kümeyi aşan bir hazırlık kökünü reddeder. */
-export const STAGING_ROOT_CLASSES: readonly LicenseClass[] = Object.freeze(["TEST", "DEMO"]);

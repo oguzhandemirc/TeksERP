@@ -556,9 +556,9 @@ jobs:
         run: node ../scripts/kapi.mjs test
       - name: Native derleme (linux-x64-gnu, test çapalı)
         run: npx napi build --platform --release --no-js --features test-anchor --output-dir dist
-      # G3: kâhinin §9 kip çapraz sondası gerçek üretim ve hazırlık ikililerini ister (STRICT'te yoksa kırmızı).
-      - name: Native derleme (linux-x64-gnu, üretim + hazırlık çapalı)
-        run: npx napi build --platform --release --no-js --output-dir dist-uretim && npx napi build --platform --release --no-js --features hazirlik-capasi --output-dir dist-hazirlik
+      # G3: kâhinin §9 sondası gerçek üretim ikilisini ister (STRICT'te yoksa kırmızı); çapa tek kip.
+      - name: Native derleme (linux-x64-gnu, üretim çapalı)
+        run: npx napi build --platform --release --no-js --output-dir dist-uretim
       - name: Kâhin bekçisi (TS ↔ gerçek .node)
         run: npx tsx scripts/test_lisans_native_kahin.ts
         working-directory: Teks-Erp

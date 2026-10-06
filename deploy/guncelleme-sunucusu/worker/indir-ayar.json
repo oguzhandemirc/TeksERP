@@ -3,8 +3,7 @@
   "indirmeListesi": {
     "uretim": [
       { "kid": "ind-2026-2", "x": "Jk5C_hKxebblK4N8us5Vi29UeBDpyV_Q_9qGsMWp6oc", "kanallar": ["test", "oncu", "genel"], "baslangic": "2026-10-05T13:10:06.530Z", "bitis": "2027-02-02T13:10:06.530Z" }
-    ],
-    "hazirlik": []
+    ]
   },
   "gecisListesi": [],
   "varlikBelirteci": false,

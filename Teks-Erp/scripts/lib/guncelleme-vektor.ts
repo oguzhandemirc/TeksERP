@@ -133,7 +133,7 @@ function bildirimYuku(ek: Partial<ReleaseManifest> = {}): ReleaseManifest {
     derlemeTarihi: "2026-09-30T18:00:00.000Z",
     yayinZamani: "2026-09-30T20:00:00.000Z",
     paket: { ad: "tekserp-backend-2.11.0.zip", boyut: 187_654_321, sha256: "0ae68406b42d7725661da979b1403ec9926da205c6770827f33aac9d8f26e821", paketId: "6f1c2b8e-3a4d-4e5f-9a0b-1c2d3e4f5a6b" },
-    paketImzaKid: "paket-hazirlik",
+    paketImzaKid: "paket-2027",
     minKaynakSurum: "2.9.0",
     gocSayisi: 251,
     pg: PG_GEREKSINIM,
@@ -209,7 +209,7 @@ function vektorler(anahtar: TestAnahtari, yabanci: TestAnahtari, uretim: TestAna
   const pgImzala = (y: Record<string, unknown>, typ = "tekserp-pg", k: TestAnahtari = anahtar) => signJws({ typ, kid: k.kid, payload: y, privateKey: k.privateKey });
   const pgGecerli = signPgPackageManifest({ payload: pgKunyeYuku(), key: { kid: anahtar.kid, privateKey: anahtar.privateKey } });
   const [pbas, , pimza] = pgGecerli.split(".");
-  const paket: PackageIdentity = { kid: "paket-hazirlik", paketId: bildirimYuku().paket.paketId, urun: "backend", surum: "2.11.0", derlemeTarihi: "2026-09-30T18:00:00.000Z", musteri: "testfabrika" };
+  const paket: PackageIdentity = { kid: "paket-2027", paketId: bildirimYuku().paket.paketId, urun: "backend", surum: "2.11.0", derlemeTarihi: "2026-09-30T18:00:00.000Z", musteri: "testfabrika" };
   return [
     // ── bildirim ──
     { tur: "bildirim", ad: "geçerli bildirim", token: gecerli, keys, kanal: "testfabrika" },
@@ -383,7 +383,7 @@ const DOSYA_TURLERI: Record<GuncellemeVektorDosyasi, readonly GuncellemeVektoru[
 
 /** Taze anahtarlarla bütün kayıtlar, dosyalarına bölünmüş. */
 export function guncellemeVektorleriKur(): Record<GuncellemeVektorDosyasi, GuncellemeVektorKaydi[]> {
-  const liste = vektorler(anahtarUret("paket-hazirlik"), anahtarUret("paket-yabanci"), anahtarUret("paket-2026"));
+  const liste = vektorler(anahtarUret("paket-2027"), anahtarUret("paket-yabanci"), anahtarUret("paket-2026"));
   const out: Record<GuncellemeVektorDosyasi, GuncellemeVektorKaydi[]> = {
     "guncelleme-surum.json": [],
     "guncelleme-kira.json": [],

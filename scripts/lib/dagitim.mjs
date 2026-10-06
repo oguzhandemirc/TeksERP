@@ -325,6 +325,7 @@ export const BACKEND_GRUPLAR_REL = 'Teks-Erp/src/lib/license/update-group.ts';
  * profil matrisi kapısını çağırmak zorundadır (`test_profil_raporu_kapisi.mjs` §3).
  * O5 (panel ortak kimlik): derleme kimlik çözücüsü + bekçisi, paketleme kapısı kitaplığı, eski kanal
  * kitaplığının kopya listesi (sahte derleme ağacı kaydı taşısın), demo imajı (web paneli aynı çözücüden).
+ * Satıcı töreni CF Worker İNDİRME satırının kanal kümesini (= gruplar) buradan alır; bekçisi aynısını ölçer (O14c).
  */
 export const TUKETICILER = Object.freeze([
   'Electron/build-identity.ts',
@@ -352,6 +353,7 @@ export const TUKETICILER = Object.freeze([
   'scripts/dagitim-kapisi.mjs', 'deploy/paketle.ps1', 'deploy/kurulum/kurulum-arsivi.mjs', 'scripts/test_kurulum_arsivi.mjs',
   'Teks-Erp/scripts/test_kurulum_betikleri.ts',
   'deploy/backend-yayinla.mjs', 'scripts/test_backend_yayin.mjs',
+  'deploy/satici/uretim-toren.mjs', 'satici/sunucu/scripts/test_uretim_toren.ts',
 ]);
 
 /** İki dağıtım bekçisinin okuduğu dosyalar — commit tetiği bunları kapsar (okunandan dar olamaz). */

@@ -25,7 +25,7 @@
 //      kiradaki kümeye göre · ONAYLANDI kirası doğrulanıp kabul · eski satıcı BULUNAMADI · etkinleşmemiş 409
 //   ⭐ motor pes etmez, sağlıkta durum (D5) · gözlem sayacı istek başına · zil fırtınası yok ·
 //      ortam künyesinde makine adı yok · kapalı kalan makineye sahte SAAT_İLERİ yok · taşıma onayı kod bekler (D8)
-//   ⭐ yeni HAK kabul edilince bütünlük HEMEN yeniden koşar (hazırlık anahtarının sınıf kararı, §22)
+//   ⭐ yeni HAK kabul edilince bütünlük HEMEN yeniden koşar (dar PAKET sertifikasının sınıf kararı, §22)
 //   ⭐ ilk etkinleştirmede sınıf kararı yeniden denetimi beklemez: yanıt · yoklama gövdesi · satıcıya giden
 //      yoklama GECERLI; bütünlük sonucu durumu tik beklemeden değerlendirir (§23)
 //   ⭐ G12 (L2-6): DB izi kopya (§26) · K7 kirasız kayıt, tespit anı sonraki yazımlarda da kalıcı (§27) · anahtar
@@ -122,10 +122,14 @@ import {
   msToIso,
   openEnvelope,
   parseJws,
+  signChainedPackageDocument,
   verifyRequest,
+  CHAINED_INTEGRITY_FILE,
   type Fingerprint,
   type LeaseDoc,
 } from "../src/lib/license/protocol";
+import { INTEGRITY_TYP, IntegrityManifestSchema } from "../src/lib/license/integrity";
+import { INTEGRITY_FILE } from "../src/lib/license/integrity-scope";
 import {
   buildEnvironment,
   currentFingerprintDigest,
@@ -333,8 +337,8 @@ function yeniden(dizin: string): void {
 
 /** EN SONDA koşar: HAK sınıfını değiştirir (sonraki bölümler URETIM HAK'ına dayanır). */
 async function hakButunlukBolumu(x: Hazir): Promise<void> {
-  console.log("\n§22 — yeni HAK kabul edilince bütünlük HEMEN yeniden koşar (hazırlık anahtarının sınıf kararı)");
-  const hazirlik = await hazirlikPaketi();
+  console.log("\n§22 — yeni HAK kabul edilince bütünlük HEMEN yeniden koşar (dar PAKET sertifikasının sınıf kararı)");
+  const dar = await darPaketi(x.f);
   try {
     await refreshLicenseIntegrity();
     const once = getIntegrityOutcome()?.kod ?? null;
@@ -345,8 +349,8 @@ async function hakButunlukBolumu(x: Hazir): Promise<void> {
     await awaitIntegrityRefreshForTests();
     const sonra = getIntegrityOutcome();
     check(
-      "§22a ⭐ ÜRETİM HAK'ında hazırlık imzası RED → TEST sınıflı yeni HAK kabul edilir edilmez bütünlük yeniden koşar (günlük tur beklenmez)",
-      once === "BUTUNLUK_HAZIRLIK_ANAHTARI" && sonra?.durum === "GECERLI",
+      "§22a ⭐ ÜRETİM HAK'ında dar (TEST/DEMO) sertifikalı imza RED → TEST sınıflı yeni HAK kabul edilir edilmez bütünlük yeniden koşar (günlük tur beklenmez)",
+      once === "BUTUNLUK_SINIF_YETKISIZ" && sonra?.durum === "GECERLI",
       `önce ${once} · sonra ${sonra?.durum}/${sonra?.kod}`,
     );
     const b = getLicenseDetail().butunluk;
@@ -358,20 +362,20 @@ async function hakButunlukBolumu(x: Hazir): Promise<void> {
     );
   } finally {
     configureIntegrityForTests(null);
-    fs.rmSync(hazirlik, { recursive: true, force: true });
+    fs.rmSync(dar, { recursive: true, force: true });
   }
 }
 
 /**
- * §22'den SONRA: etkinleşmemiş yeni makinede hazırlık paketi (sınıf bilinmiyor → OLCULEMEDI) ve ilk etkinleştirme.
+ * §22'den SONRA: etkinleşmemiş yeni makinede dar sertifikalı paket (sınıf bilinmiyor → OLCULEMEDI) ve ilk etkinleştirme.
  * Arka plandaki yeniden denetim BEKLENMEDEN yanıt, yoklama gövdesi ve satıcıya giden yoklama yeni sınıfın kararını taşır.
  */
 async function etkinlestirmeButunlukBolumu(x: Hazir): Promise<void> {
   console.log("\n§23 — ilk etkinleştirmede bütünlük kararı HEMEN yeni HAK'ın sınıfıyla (yanıt · yoklama gövdesi · ayak izi)");
-  const hazirlik = await hazirlikPaketi();
+  const dar = await darPaketi(x.f);
   const onceki = { kod: x.satici.kod, hakEk: x.satici.hakEk };
   try {
-    yeniden(path.join(GECICI, "hazirlik-makine"));
+    yeniden(path.join(GECICI, "dar-makine"));
     await kabulEt();
     await refreshLicenseIntegrity();
     const once = getIntegrityOutcome();
@@ -400,7 +404,7 @@ async function etkinlestirmeButunlukBolumu(x: Hazir): Promise<void> {
     );
     await awaitIntegrityRefreshForTests();
     const iz = olaylar.length;
-    fs.appendFileSync(path.join(hazirlik, "dist", "server.js"), "// yama\n");
+    fs.appendFileSync(path.join(dar, "dist", "server.js"), "// yama\n");
     await refreshLicenseIntegrity();
     const gecis = olaylar.slice(iz).find((o) => o.action === "LICENSE_STATE_CHANGED")?.payload as { yeni?: { gecerlilik?: string } } | undefined;
     check(
@@ -412,20 +416,36 @@ async function etkinlestirmeButunlukBolumu(x: Hazir): Promise<void> {
     x.satici.kod = onceki.kod;
     x.satici.hakEk = onceki.hakEk;
     configureIntegrityForTests(null);
-    fs.rmSync(hazirlik, { recursive: true, force: true });
+    fs.rmSync(dar, { recursive: true, force: true });
     yeniden(x.dizin);
   }
 }
 
-/** Hazırlık PAKET anahtarıyla imzalı küçük paket; bütünlük hedefi olarak kurulur (sınıf kuralı HAK'a bağlı). */
-async function hazirlikPaketi(): Promise<string> {
-  const kok = fs.mkdtempSync(path.join(os.tmpdir(), "lisans-motor-hazirlik-"));
+/**
+ * Dar (TEST/DEMO) PAKET sertifikasıyla zincirli imzalı küçük paket; bütünlük hedefi olarak kurulur (sınıf kuralı
+ * sertifikanın sınıflarından, karar HAK'a bağlı). Sertifikayı fikstür kökü imzalar — hedefe kök çapası verilir.
+ */
+async function darPaketi(f: Fikstur): Promise<string> {
+  const kok = fs.mkdtempSync(path.join(os.tmpdir(), "lisans-motor-dar-"));
   fs.mkdirSync(path.join(kok, "dist"));
-  fs.writeFileSync(path.join(kok, "dist", "server.js"), "// hazırlık paketi\n");
-  const k = generatePackageKey("paket-hazirlik-motor", ["TEST"]);
+  fs.writeFileSync(path.join(kok, "dist", "server.js"), "// dar sertifikalı paket\n");
+  const k = generatePackageKey("paket-fikstur", ["TEST"]);
   const key = { kid: k.kid, x: k.x, privateKey: createPrivateKey({ key: { kty: "OKP", crv: "Ed25519", x: k.x, d: k.d }, format: "jwk" }) };
   await signPackageDirectory({ root: kok, key, urun: "backend", surum: "2.12.0", derlemeTarihi: new Date().toISOString(), musteri: null });
-  configureIntegrityForTests({ root: kok, keys: [{ kid: k.kid, x: k.x }] });
+  const eski = parseJws(fs.readFileSync(path.join(kok, INTEGRITY_FILE), "utf8").trim());
+  if (!eski.ok) throw new Error("imzalı liste çözülemedi");
+  const pkt = anahtarUret("pkt-2026-8");
+  const token = signChainedPackageDocument({
+    typ: INTEGRITY_TYP,
+    schema: IntegrityManifestSchema,
+    payload: IntegrityManifestSchema.parse(eski.value.payload),
+    key: pkt,
+    certificate: sertifikaBas(f.kok, sertifikaYuku(f, pkt, "PAKET", { siniflar: ["TEST", "DEMO"] })),
+    signedAt: new Date().toISOString(),
+  });
+  fs.writeFileSync(path.join(kok, CHAINED_INTEGRITY_FILE), `${token}\n`);
+  fs.rmSync(path.join(kok, INTEGRITY_FILE));
+  configureIntegrityForTests({ root: kok, roots: f.kokler });
   return kok;
 }
 

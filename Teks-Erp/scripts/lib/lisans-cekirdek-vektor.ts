@@ -28,6 +28,9 @@ import type { CoreResult, JwsKey, LicenseCore } from "../../src/lib/license/lice
 import { packagePublicKeysFor, type PackageKey } from "../../src/lib/license/integrity";
 import { butunlukVektorleri } from "./lisans-butunluk-vektor";
 import { kipKokKidi, kiplere } from "./lisans-vektor-kip";
+
+/** Emekli hazırlık çapasının kök kid'i: tek kipte hiçbir derleme onu tanımaz (`KOK_BILINMIYOR`). */
+const ESKI_HAZIRLIK_KOK_KIDI = "hazirlik-2026-1";
 import { moduleKeyId, wrapModuleKey } from "../../src/lib/license/module-key";
 import {
   HAM_PARMAK_IZI,
@@ -342,8 +345,8 @@ function sertifikaVektorleri(f: Fikstur): Vektor[] {
     v("bitiş 7 kesir hanesi, tam sınır (kesme)", ham({ bitis: "2027-03-18T00:00:00.9999999Z" }), { atMs: Date.parse("2027-03-18T00:00:00.999Z") + CLOCK_SKEW_MS }),
     v("kullanım farklı", alt, { usage: "BAYI" }),
     v("tanınmayan kök", sertifikaBas(yabanci, sertifikaYuku(f, f.alt, "ALT"))),
-    v("hazırlık kökü ÜRETİM sınıfı veremez", sertifikaBas(f.hazirlik, sertifikaYuku(f, f.alt, "ALT", { siniflar: ["URETIM"] }))),
-    v("hazırlık kökü TEST verebilir", sertifikaBas(f.hazirlik, sertifikaYuku(f, f.alt, "ALT", { siniflar: ["TEST"] }))),
+    v("dar kök ÜRETİM sınıfı veremez", sertifikaBas(f.dar, sertifikaYuku(f, f.alt, "ALT", { siniflar: ["URETIM"] }))),
+    v("dar kök TEST verebilir", sertifikaBas(f.dar, sertifikaYuku(f, f.alt, "ALT", { siniflar: ["TEST"] }))),
     v("kid öneki kullanımla uyuşmuyor", ham({ kid: "ind-2026" })),
     v("ALT sertifikasında bayi tavanı", ham({ bayi: { bayiId: randomUUID(), moduller: [] } })),
     v("bitiş başlangıçtan önce", ham({ bitis: yuk.baslangic })),
@@ -361,10 +364,13 @@ function sertifikaVektorleri(f: Fikstur): Vektor[] {
     v("çapa kid biçimsiz", alt, { roots: [{ kid: "KOK-1", x: f.kok.x, classes: ["URETIM"] }] }),
     v("çapa kid tekrarlı", alt, { roots: [kokAnahtari(f.kok, ["URETIM"]), kokAnahtari(f.kok, ["TEST"])] }),
     v("çapa sınıfsız", alt, { roots: [kokAnahtari(f.kok, [])] }),
-    v("çapada hazırlık kökü ÜRETİM'e genişletilmiş", alt, { roots: [kokAnahtari(f.hazirlik, ["TEST", "URETIM"])] }),
+    // Eski hazırlık ailesi (`hazirlik-*`) çapada biçim düzeyinde RED — sınıfı ne olursa olsun.
+    v("çapada hazirlik-* kök kid'i (eski hazırlık ailesi)", alt, { roots: [{ kid: "hazirlik-fikstur-1", x: f.dar.x, classes: ["TEST", "URETIM"] }] }),
+    // Ayırt edici: yalnız TEST/DEMO sınıflı hazırlık kökü eski iki kipli native'te GEÇERDİ; tek kipte o da RED.
+    v("çapada hazirlik-* kök kid'i, yalnız TEST/DEMO", alt, { roots: [{ kid: "hazirlik-fikstur-1", x: f.dar.x, classes: ["TEST", "DEMO"] }] }),
     v("çapa anahtarı biçimsiz", alt, { roots: [{ kid: f.kok.kid, x: "abc", classes: ["URETIM"] }] }),
     ...kiplere(v("gömülü çapa: kök tanınmıyor", sertifikaBas(capaDisiKok(), sertifikaYuku(f, f.alt, "ALT")), { roots: null })),
-    ...kiplere(v("gömülü çapa: hazırlık kökü kid'i, yabancı imza", sertifikaBas(anahtarUret(kipKokKidi("hazirlik")), sertifikaYuku(f, f.alt, "ALT", { siniflar: ["TEST"] })), { roots: null })),
+    ...kiplere(v("gömülü çapa: eski hazırlık kökü kid'i, yabancı imza", sertifikaBas(anahtarUret(ESKI_HAZIRLIK_KOK_KIDI), sertifikaYuku(f, f.alt, "ALT", { siniflar: ["TEST"] })), { roots: null })),
     ...kiplere(v("gömülü çapa: üretim kökü kid'i, yabancı imza", sertifikaBas(anahtarUret(kipKokKidi("uretim")), sertifikaYuku(f, f.alt, "ALT")), { roots: null })),
   ];
 }
@@ -390,8 +396,8 @@ function hakVektorleri(f: Fikstur): Vektor[] {
   return [
     v("geçerli kök imzalı ÜRETİM", hakBas(f)),
     v("tanınmayan alan atılır (iç içe dahil)", ham({ fazla: 1, musteri: { id: f.musteriId, ad: "Deneme", fazla: true } })),
-    v("hazırlık kökü TEST", hakBas(f, { sinif: "TEST" }, f.hazirlik)),
-    v("hazırlık kökü ÜRETİM imzalayamaz", ham({ sinif: "URETIM" }, f.hazirlik)),
+    v("dar kök TEST", hakBas(f, { sinif: "TEST" }, f.dar)),
+    v("dar kök ÜRETİM imzalayamaz", ham({ sinif: "URETIM" }, f.dar)),
     v("kök imzalı HAK bayi sertifikası taşıyamaz", ham({ bayiId, bayiSertifikasi: bayiSertifikasi(f, bayiId) })),
     v("bayi imzalı tavan içinde", bayiHak()),
     v("bayi imzalı tavan dışı modül", bayiHak({ moduller: ["production.enabled", "iplik.enabled"] })),
@@ -432,7 +438,7 @@ function hakVektorleri(f: Fikstur): Vektor[] {
     v("çapa boş", hakBas(f), []),
     v("çözümsüz metin", "a.b.c"),
     ...kiplere(v("gömülü çapa: kök tanınmıyor", hakBas(f, {}, capaDisiKok()), null)),
-    ...kiplere(v("gömülü çapa: hazırlık kökü kid'iyle TEST HAK, yabancı imza", hakBas(f, { sinif: "TEST" }, anahtarUret(kipKokKidi("hazirlik"))), null)),
+    ...kiplere(v("gömülü çapa: eski hazırlık kökü kid'iyle TEST HAK, yabancı imza", hakBas(f, { sinif: "TEST" }, anahtarUret(ESKI_HAZIRLIK_KOK_KIDI)), null)),
     ...kiplere(v("gömülü çapa: üretim kökü kid'iyle ÜRETİM HAK, yabancı imza", hakBas(f, {}, anahtarUret(kipKokKidi("uretim"))), null)),
   ];
 }
@@ -491,8 +497,8 @@ function kiraVektorleri(f: Fikstur): Vektor[] {
     ...kiplere(v("gömülü çapa: alt sertifikanın kökü tanınmıyor", kiraBas(f, { altSertifika: sertifikaBas(capaDisiKok(), sertifikaYuku(f, f.alt, "ALT")) }), null)),
     ...kiplere(
       v(
-        "gömülü çapa: alt sertifikası hazırlık kökü kid'li, yabancı imza",
-        kiraBas(f, { altSertifika: sertifikaBas(anahtarUret(kipKokKidi("hazirlik")), sertifikaYuku(f, f.alt, "ALT", { siniflar: ["TEST"] })) }),
+        "gömülü çapa: alt sertifikası eski hazırlık kökü kid'li, yabancı imza",
+        kiraBas(f, { altSertifika: sertifikaBas(anahtarUret(ESKI_HAZIRLIK_KOK_KIDI), sertifikaYuku(f, f.alt, "ALT", { siniflar: ["TEST"] })) }),
         null,
       ),
     ),
@@ -572,7 +578,7 @@ function bagVektorleri(f: Fikstur): Vektor[] {
     v("başka HAK", kiraBas(f, { hakId: randomUUID() }), hakBas(f)),
     v("alt anahtar ÜRETİM'e yetkisiz", kiraBas(f, { altSertifika: testAlt }), hakBas(f)),
     v("kira bozuk", "a.b.c", hakBas(f)),
-    v("HAK bozuk", kiraBas(f), hakBas(f, {}, f.hazirlik)),
+    v("HAK bozuk", kiraBas(f), hakBas(f, {}, f.dar)),
   ];
 }
 

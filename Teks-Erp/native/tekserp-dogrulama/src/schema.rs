@@ -13,7 +13,6 @@ use std::sync::OnceLock;
 
 pub const PROTOCOL_VERSION: f64 = 1.0;
 pub const LICENSE_CLASSES: [&str; 6] = ["URETIM", "TEST", "DR", "DEMO", "BAYI", "BARINDIRILAN"];
-pub const STAGING_ROOT_CLASSES: [&str; 2] = ["TEST", "DEMO"];
 pub const SANCTION_LEVELS: [&str; 6] = ["K0", "K1", "K2", "K3", "K4", "K5"];
 /// `HAK`: HAK ara imzacısı (G4) — kök → ara sertifika (`ara-`) → HAK. `PAKET`: paket belgesi imzacısı (`pkt-`).
 pub const CERT_USAGES: [&str; 5] = ["ALT", "INDIRME", "BAYI", "HAK", "PAKET"];

@@ -28,12 +28,12 @@ export const VARSAYILAN_AYAR = Object.freeze({
    */
   anahtarlar: [],
   /**
-   * İNDİRME listesi — çapa kipi başına AYRI (G3): üretim satıcısının anahtarları `uretim`e, hazırlığınki `hazirlik`e.
+   * İNDİRME listesi — tek satıcı, tek liste `uretim` (başka liste adı ayarı GEÇERSİZ kılar ⇒ 503).
    * Satır: { kid, x, kanallar: ["<kanal>", …], baslangic: ISO Z, bitis: ISO Z } (pencere = sertifikanınki).
    * Belirteç yalnız kid listedeyse, kanalı satırın kümesindeyse ve şimdi pencerede (±10 dk) ise geçer.
-   * Bir kanal iki listede birden olamaz; kid ve açık anahtar bütün satırlarda (eski biçim dahil) tekildir.
+   * kid ve açık anahtar bütün satırlarda (eski biçim dahil) tekildir.
    */
-  indirmeListesi: Object.freeze({ uretim: Object.freeze([]), hazirlik: Object.freeze([]) }),
+  indirmeListesi: Object.freeze({ uretim: Object.freeze([]) }),
   /** Süreli anonim geçiş — yalnız BUGÜNKÜ sürüm dosyaları: [{ yol | onek, bitis: ISO Z }]. */
   gecisListesi: [],
   /** true: manifest yanıtına varlık belirteci yazılır ve OTA varlıkları da kapılanır. */
@@ -60,7 +60,7 @@ const ONBELLEK_AZAMI_SN = 365 * 24 * 60 * 60;
 // Sertifika ömrünün tavanı (`satici/sunucu/scripts/anahtar.ts` `--gun` ≤ 730): daha uzun pencere yazım hatasıdır.
 const PENCERE_AZAMI_MS = 730 * 24 * 60 * 60 * 1000;
 const KANAL_AZAMI = 64;
-const LISTE_ADLARI = ["uretim", "hazirlik"];
+const LISTE_ADLARI = ["uretim"];
 const LISTE_SATIRI_ALANLARI = new Set(["kid", "x", "kanallar", "baslangic", "bitis"]);
 const BASLIK_ALANLARI = new Set(["alg", "typ", "kid"]);
 const AYAR_ALANLARI = new Set(Object.keys(VARSAYILAN_AYAR));
@@ -154,14 +154,13 @@ export function ayarCoz(ham, simdiMs) {
 }
 
 /**
- * İNDİRME listesini doğrular. Döner `{ ok: true, satirlar }` (iki listenin satırları, kopya) ya da `{ ok: false, neden }`.
+ * İNDİRME listesini doğrular. Döner `{ ok: true, satirlar }` (listenin satırları, kopya) ya da `{ ok: false, neden }`.
  * `kidler`/`xler` eski biçimin kümeleridir; satırlar onlara eklenir (tekillik bütün kaynaklarda).
  */
 function listeCoz(ham, kidler, xler) {
   const gecersiz = (neden) => ({ ok: false, neden });
   if (!duzNesne(ham)) return gecersiz("indirmeListesi nesne değil");
   for (const ad of Object.keys(ham)) if (!LISTE_ADLARI.includes(ad)) return gecersiz(`indirmeListesi: tanınmayan liste: ${ad}`);
-  const listeKanallari = new Map(LISTE_ADLARI.map((ad) => [ad, new Set()]));
   const satirlar = [];
   for (const ad of LISTE_ADLARI) {
     const liste = ham[ad];
@@ -181,13 +180,9 @@ function listeCoz(ham, kidler, xler) {
       if (!(sure > 0) || sure > PENCERE_AZAMI_MS) return gecersiz(`${s.kid}: pencere boş, ters ya da 730 günden uzun`);
       kidler.add(s.kid);
       xler.add(s.x);
-      for (const kanal of k) listeKanallari.get(ad).add(kanal);
       satirlar.push({ kid: s.kid, x: s.x, kanallar: [...k], baslangic: s.baslangic, bitis: s.bitis });
     }
   }
-  const [uretim, hazirlik] = LISTE_ADLARI.map((ad) => listeKanallari.get(ad));
-  const ortak = [...uretim].find((kanal) => hazirlik.has(kanal));
-  if (ortak !== undefined) return gecersiz(`kanal iki listede (uretim + hazirlik): ${ortak}`);
   return { ok: true, satirlar };
 }
 

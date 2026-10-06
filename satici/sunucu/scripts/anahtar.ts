@@ -8,7 +8,6 @@
 //
 // Kullanım (satici/sunucu içinden):
 //   npx tsx scripts/anahtar.ts kok-uret --kid=kok-2026-1 [--siniflar=URETIM,TEST,DR,DEMO,BAYI,BARINDIRILAN]
-//   npx tsx scripts/anahtar.ts kok-uret --kid=hazirlik-2026-1            (yalnız TEST,DEMO)
 //   npx tsx scripts/anahtar.ts alt-uret --kid=alt-2026-1 --kok=kok-2026-1 [--siniflar=…] [--gun=180]
 //   npx tsx scripts/anahtar.ts indirme-uret --kid=ind-2026 --kok=kok-2026-1 [--gun=365]
 //   npx tsx scripts/anahtar.ts bayi-uret --kid=bayi-ornek --bayi-id=<uuid> --moduller=a.enabled,b.enabled
@@ -27,7 +26,7 @@
 //       Eski ALT · İNDİRME · ARA anahtarının ÖZEL yarısını siler, açık yarı + sertifikası <kid>.sertifika.json olarak
 //       kalır; aynı türde daha yeni anahtar yoksa RED. Varsayılan KURU: yalnız ne yapılacağını listeler.
 //   npx tsx scripts/anahtar.ts sirlar-uret   (portal TOTP sarma anahtarı + etkinleştirme kodu sırrı + modül kasası anahtarı; VAR olan korunur)
-//   npx tsx scripts/anahtar.ts indirme-belirteci --kanal=testfabrika[,adnansahin] [--dk=60] [--capa=uretim|hazirlik]
+//   npx tsx scripts/anahtar.ts indirme-belirteci --kanal=testfabrika[,adnansahin] [--dk=60] [--capa=uretim]
 //       YAYINCI indirme belirteçleri (kanal × electron/mobil, ≤ 70 dk). Parola istemez (İNDİRME alt anahtarı).
 //       Çapa kipi: --capa > GUVEN_CAPASI (konteyner ortamı) > anahtar dizinindeki köklerin tek ailesi; belirsizse RED.
 //       Çıktı stdout'a TEK satır JSON: {"v":1,"belirtecler":[{kanal,yolOneki,belirtec,exp}]} — yayın betiği
@@ -46,7 +45,6 @@ import {
   LICENSE_CLASSES,
   ModuleKeySchema,
   REVOCATION_MAX_ENTRIES,
-  STAGING_ROOT_CLASSES,
   TYP,
   UuidSchema,
   decodeDocument,
@@ -178,10 +176,8 @@ function certificateFor(g: {
 // ---------------------------------------------------------------- komutlar
 async function generateRoot(flags: Map<string, string>): Promise<void> {
   const kid = required(flags, "kid");
-  const staging = kid.startsWith("hazirlik-");
-  if (!/^(kok|hazirlik)-\d{4}-\d{1,3}$/.test(kid)) throw new CliError("Kök kid biçimi: kok-<yıl>-<n> ya da hazirlik-<yıl>-<n>");
-  const classes = classList(flags.get("siniflar"), staging ? STAGING_ROOT_CLASSES : LICENSE_CLASSES);
-  if (staging && classes.some((c) => !STAGING_ROOT_CLASSES.includes(c))) throw new CliError("Hazırlık kökü yalnız TEST/DEMO imzalar");
+  if (!/^kok-\d{4}-\d{1,3}$/.test(kid)) throw new CliError("Kök kid biçimi: kok-<yıl>-<n>");
+  const classes = classList(flags.get("siniflar"), LICENSE_CLASSES);
   const dir = keyDir(flags);
   const target = path.join(dir, `${kid}.kok.json`);
   if (existsSync(target)) throw new CliError(`${target} zaten var — rotasyon yeni kid ile yapılır`);
@@ -278,7 +274,7 @@ const PERIOD_DAYS = 120;
  */
 async function generateIntermediate(flags: Map<string, string>): Promise<void> {
   const kid = required(flags, "kid");
-  if (!/^ara-(?:hazirlik-)?\d{4}-\d{1,3}$/.test(kid)) throw new CliError("Ara imzacı kid biçimi: ara-<yıl>-<n> (hazırlık kökünde ara-hazirlik-<yıl>-<n>)");
+  if (!/^ara-\d{4}-\d{1,3}$/.test(kid)) throw new CliError("Ara imzacı kid biçimi: ara-<yıl>-<n>");
   const rootKid = required(flags, "kok");
   const dir = keyDir(flags);
   const target = path.join(dir, `${kid}.ara.json`);
@@ -590,8 +586,8 @@ function publisherDownloadTokens(flags: Map<string, string>): void {
   const minutes = flags.has("dk") ? Number(flags.get("dk")) : PUBLISHER_DEFAULT_MINUTES;
   const dosya = process.env.GUVEN_CAPASI_DOSYASI || undefined;
   const kip = flags.get("capa") ?? process.env.GUVEN_CAPASI ?? anchorModeOfKeyDir(dir) ?? undefined;
-  if (kip !== undefined && kip !== "uretim" && kip !== "hazirlik") throw new CliError(`Güven çapası kipi tanınmıyor: ${kip} (uretim|hazirlik)`);
-  if (kip === undefined && !dosya) throw new CliError("Güven çapası kipi belirsiz: --capa=uretim|hazirlik (anahtar dizininde tek aileden kök yok)");
+  if (kip !== undefined && kip !== "uretim") throw new CliError(`Güven çapası kipi tanınmıyor: ${kip} (yalnız uretim)`);
+  if (kip === undefined && !dosya) throw new CliError("Güven çapası kipi belirsiz: --capa=uretim (anahtar dizininde kok-* kök yok)");
   let keys: KeyStore;
   try {
     keys = KeyStore.load({ ANAHTAR_DIZINI: dir, GUVEN_CAPASI: kip, GUVEN_CAPASI_DOSYASI: dosya });

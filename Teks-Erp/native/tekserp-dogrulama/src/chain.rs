@@ -6,7 +6,7 @@ use crate::iso;
 use crate::jsonx::js_number;
 use crate::jws::{self, Parsed};
 use crate::outcome::{code, fail, Fail, Outcome};
-use crate::schema::{self, LICENSE_CLASSES, OFFLINE_HORIZON_DEALER_DAYS, OFFLINE_HORIZON_SHORT_CLASS_DAYS, STAGING_ROOT_CLASSES};
+use crate::schema::{self, LICENSE_CLASSES, OFFLINE_HORIZON_DEALER_DAYS, OFFLINE_HORIZON_SHORT_CLASS_DAYS};
 use regex::Regex;
 use serde_json::{json, Map, Value};
 use std::collections::HashMap;
@@ -36,10 +36,10 @@ pub(crate) type Anchor = HashMap<String, AnchorEntry>;
 
 fn root_kid_re() -> &'static Regex {
     static RE: OnceLock<Regex> = OnceLock::new();
-    RE.get_or_init(|| Regex::new(r"^(kok|hazirlik)-[a-z0-9-]{1,40}$").expect("kök kid"))
+    RE.get_or_init(|| Regex::new(r"^kok-[a-z0-9-]{1,40}$").expect("kök kid"))
 }
 
-/// Çapayı doğrular: boş liste, biçimsiz kid/anahtar ve TEST/DEMO dışına taşan hazırlık kökü RED.
+/// Çapayı doğrular: boş liste, `kok-` ailesi dışı ya da tekrarlı kid ve biçimsiz anahtar/sınıf RED.
 pub(crate) fn prepare_trust_anchor(roots: &[RootKey]) -> Outcome<Anchor> {
     if roots.is_empty() {
         return fail(code::GUVEN_CAPASI_BOS, "Güven çapası boş: bu derlemede kök açık anahtarı yok");
@@ -54,9 +54,6 @@ pub(crate) fn prepare_trust_anchor(roots: &[RootKey]) -> Outcome<Anchor> {
         };
         if root.classes.is_empty() || root.classes.iter().any(|c| !LICENSE_CLASSES.contains(&c.as_str())) {
             return fail(code::GUVEN_CAPASI_BICIM, format!("Kökün sınıf listesi geçersiz: {}", root.kid));
-        }
-        if root.kid.starts_with("hazirlik-") && root.classes.iter().any(|c| !STAGING_ROOT_CLASSES.contains(&c.as_str())) {
-            return fail(code::GUVEN_CAPASI_BICIM, format!("Hazırlık kökü yalnız TEST/DEMO sınıflarına yetkili olabilir: {}", root.kid));
         }
         lookup.insert(root.kid.clone(), AnchorEntry { key, classes: root.classes.clone() });
     }

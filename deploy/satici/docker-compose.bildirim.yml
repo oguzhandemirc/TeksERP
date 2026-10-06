@@ -1,8 +1,7 @@
 # =============================================================================
 # Satıcı — BİLDİRİM YAN KONTEYNERİ (örtü; ana dosyanın ÜSTÜNE bindirilir)
 # =============================================================================
-# `.env`: hazırlık COMPOSE_FILE=docker-compose.yml:docker-compose.bildirim.yml · üretim (portal örtüsüyle üçü birden)
-#         docker-compose.yml:docker-compose.portal-genel.yml:docker-compose.bildirim.yml. Runbook: docs/ops/SATICI-KURULUM.md §5c.
+# `.env`: COMPOSE_FILE=docker-compose.yml:docker-compose.portal-genel.yml:docker-compose.bildirim.yml (portal örtüsüyle üçü birden). Runbook: docs/ops/SATICI-KURULUM.md §5c.
 #
 # Satıcı DIŞ BAĞLANTISIZ kalır (anahtar tutuyor): olay, satıcının kendi tx'inde giden kutusuna (`bildirim` tablosu)
 # satır yazar. E-posta (Resend HTTP API) ve Telegram (Bot API) çağrısını YALNIZ bu servis yapar — satıcıyla AYNI

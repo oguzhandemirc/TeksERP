@@ -1,7 +1,7 @@
 // Çalışan backend'in BÜTÜNLÜK DENETİMİ (açılışta + günlük). İmza, dosya özeti ve FAZLA dosya lisans
 // çekirdeğinde (üretimde native); bu dosya ikinci katmandır: imzayı bu derlemenin PAKET çapasıyla YENİDEN
-// doğrular, FAZLA'yı imzalı kapsamda yeniden arar (yamalı çekirdek "geçerli" dese de) ve hazırlık PAKET
-// anahtarının sınıf kuralını ekler.
+// doğrular, FAZLA'yı imzalı kapsamda yeniden arar (yamalı çekirdek "geçerli" dese de) ve dar zincir
+// sertifikasının HAK sınıfı yetkisini uygular.
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { CHAINED_INTEGRITY_FILE, LICENSE_CLASSES, isoToMs, type RootKey, type VerifiedPackageRevocation } from "./protocol";
@@ -16,7 +16,7 @@ import {
 import { walkIntegrityScope } from "./integrity-list";
 import type { LicenseCore } from "./license-core";
 import type { IntegrityStatus } from "./state-rules";
-import { INTEGRITY_FILE, STAGING_PACKAGE_CLASSES, isStagingPackageKid } from "./integrity-scope";
+import { INTEGRITY_FILE } from "./integrity-scope";
 import { ROOT_PUBLIC_KEYS } from "./trust-anchor";
 import { BUILD_WATERMARK, watermarkMatches, type BuildWatermark } from "./watermark";
 
@@ -25,7 +25,8 @@ export const INTEGRITY_GUARD_CODES = [
   "BUTUNLUK_LISTE_YOK",
   "BUTUNLUK_IMZA",
   "BUTUNLUK_FAZLA",
-  "BUTUNLUK_HAZIRLIK_ANAHTARI",
+  /** Zincirli listenin sertifikası bu kurulumun HAK sınıfına yetkili değil (dar sertifika). */
+  "BUTUNLUK_SINIF_YETKISIZ",
   "BUTUNLUK_SINIF_BILINMIYOR",
   "BUTUNLUK_FILIGRAN",
   "BUTUNLUK_YUKLEYICI",
@@ -272,7 +273,7 @@ async function checkPackageFiles(g: IntegrityCheckInput): Promise<IntegrityOutco
 }
 
 /**
- * Ölçümden karar (tek sıra): hazırlık anahtarının sınıf kuralı → filigran → ikinci katman FAZLA → (zorunlu kipte)
+ * Ölçümden karar (tek sıra): dar sertifikanın sınıf kuralı → filigran → ikinci katman FAZLA → (zorunlu kipte)
  * okunamayan listeli dosya = değişmiş → çekirdek raporu.
  */
 function decidePackage(m: PackageMeasurement, entitlementClass: string | null, now: number): IntegrityOutcome {
@@ -282,14 +283,10 @@ function decidePackage(m: PackageMeasurement, entitlementClass: string | null, n
   const base = { kid, rapor, olcum: m, sertifika: cert, fazla: shown.slice(0, EXTRA_LIST_CAP), fazlaSayisi: Math.max(m.ekFazlaSayisi, rapor.fazlaSayisi) };
   const kunye = { derlemeTarihi: m.paket.derlemeTarihi, musteri: m.paket.musteri, paketId: m.paket.paketId, surum: m.paket.surum };
 
-  if (kid !== null && isStagingPackageKid(kid)) {
-    if (entitlementClass === null) return outcome({ ...base, durum: "OLCULEMEDI", kod: "BUTUNLUK_SINIF_BILINMIYOR" }, now);
-    if (!STAGING_PACKAGE_CLASSES.includes(entitlementClass)) return outcome({ ...base, durum: "GECERSIZ", kod: "BUTUNLUK_HAZIRLIK_ANAHTARI" }, now);
-  }
-  // Zincirli listede hazırlık kuralı sertifikanın sınıflarından: bütün sınıfları kapsamayan sertifika dar yetkilidir.
+  // Zincirli listede sınıf kuralı sertifikanın sınıflarından: bütün sınıfları kapsamayan sertifika dar yetkilidir.
   if (cert !== null && !LICENSE_CLASSES.every((c) => cert.siniflar.includes(c))) {
     if (entitlementClass === null) return outcome({ ...base, durum: "OLCULEMEDI", kod: "BUTUNLUK_SINIF_BILINMIYOR" }, now);
-    if (!cert.siniflar.includes(entitlementClass)) return outcome({ ...base, durum: "GECERSIZ", kod: "BUTUNLUK_HAZIRLIK_ANAHTARI" }, now);
+    if (!cert.siniflar.includes(entitlementClass)) return outcome({ ...base, durum: "GECERSIZ", kod: "BUTUNLUK_SINIF_YETKISIZ" }, now);
   }
   if (!watermarkMatches(m.filigran, kunye)) return outcome({ ...base, durum: "GECERSIZ", kod: "BUTUNLUK_FILIGRAN" }, now);
   if (rapor.durum === "GECERLI" && m.ekFazlaSayisi > 0) return outcome({ ...base, kunye, durum: "GECERSIZ", kod: "BUTUNLUK_FAZLA" }, now);

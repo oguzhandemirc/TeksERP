@@ -35,7 +35,7 @@
 //      https; dosya birimi yayın kökünün/anahtar biriminin içinde değil; üç bağ YALNIZ satıcıda
 //   ⑩ GENEL_KOK_ADRESI'nin makinesi Traefik Host kuralıyla aynı (/d · /y bağlantısı başka ortama gitmesin)
 //   ⑪ satıcı gömülü güven çapasıyla koşar: GUVEN_CAPASI_DOSYASI YOK (yalnız test) · NODE_ENV=production ·
-//      GUVEN_CAPASI = projenin ORTAMI (üretim satıcısı hazırlık köküne güvenmez)
+//      GUVEN_CAPASI = uretim (tek güven çapası kipi)
 //   Ⓞ ÖRTÜLER (ana dosyanın üstüne bindirilen kipler; algı + beklenen servisler + kendi denetimleri, ORTULER listesi):
 //      portal-genel (`docker-compose.portal-genel.yml`: `satici-jwks` servisi ya da satıcıda PORT_ERISIM) → ⑬.
 //      Ⓞ TEK PORTAL (kullanıcı kararı 2026-10-05): portal-genel örtüsü ÜRETİMDE ZORUNLU (portalın tek yolu), HAZIRLIKTA YOK.
@@ -58,13 +58,8 @@
 //      imajı + gönderici komutu · Ⓑ7 çıkış alt ağı 100.64/10 · 127/8 · satıcı ağları · patron ağlarıyla (--patron-env;
 //      verilmezse ÖLÇÜLMEDİ) çakışmaz · Ⓑ7b çıkış alt ağı = .env'deki BILDIRIM_CIKIS_AGI = betiğin kural koyduğu ağ ·
 //      Ⓑ8 dns iki sabit IPv4 = `vds/bildirim-cikis.sh`in 53'ü açtığı adresler (betiğin varsayılanı + .env'deki BILDIRIM_DNS_1/2).
-//   ⑫ İKİ ORTAM YAN YANA (--diger-env <öteki ortamın .env'i>): proje/DB hacmi/Host/genel kök/sır grubu farklı,
-//      köprü alt ağları çakışmaz, host bağları ve sır dosyaları ortak ya da iç içe değil (tek istisna salt
-//      okunur yayın kökü), öteki ortamda da port yayını ve tünel kalıntısı yok — üretim hazırlığın anahtarını/DB'sini
-//      ASLA bağlamasın.
-//      Verilmezse ⑫ ÖLÇÜLMEDİ diye basılır (geçti sayılmaz); ORTAM=uretim'de çıkış 2 (hazırlığın yanına kurulur).
 //
-// Kullanım: node deploy/satici/compose-denetle.mjs --env-file <.env> [-f <compose> ...] [--diger-env <.env>] [--patron-env <.env>]
+// Kullanım: node deploy/satici/compose-denetle.mjs --env-file <.env> [-f <compose> ...] [--patron-env <.env>]
 //   --patron-env: patron bulutunun .env'i (deploy/patron/docker-compose.yml onunla çözülür) — Ⓑ7'nin patron ayağı.
 //   -f verilmezse .env'deki COMPOSE_FILE (":" ayrık, bu dizine göre) — yoksa docker-compose.yml.
 // Çıkış: 0 temiz · 1 ihlal (Ⓚ kalıntısı yüzünden config çözülemese de) · 2 ölçülemedi (docker yok / config çözülemedi).
@@ -82,10 +77,9 @@ const al = (ad) => {
   return i >= 0 ? args[i + 1] : undefined;
 };
 const envDosyasi = al("--env-file");
-const digerEnv = al("--diger-env");
 const patronEnv = al("--patron-env");
-if (!envDosyasi || (args.includes("--diger-env") && !digerEnv) || (args.includes("--patron-env") && !patronEnv)) {
-  console.error("kullanım: compose-denetle.mjs --env-file <.env> [-f <compose> ...] [--diger-env <.env>] [--patron-env <.env>]");
+if (!envDosyasi || (args.includes("--patron-env") && !patronEnv)) {
+  console.error("kullanım: compose-denetle.mjs --env-file <.env> [-f <compose> ...] [--patron-env <.env>]");
   process.exit(2);
 }
 const acikF = args.flatMap((a, i) => (a === "-f" && args[i + 1] ? [args[i + 1]] : []));
@@ -158,7 +152,6 @@ function coz(env, fDosyalari) {
   return { cfg: JSON.parse(r.stdout), dosyalar };
 }
 kalintiOnDenetle(envDosyasi, acikF, "bu ortam");
-if (digerEnv) kalintiOnDenetle(digerEnv, [], `öteki ortam (${path.basename(digerEnv)})`);
 const { cfg, dosyalar: composeDosyalari } = coz(envDosyasi, acikF);
 
 function ipv4(s) {
@@ -181,7 +174,7 @@ function cakisir(cidr, yasak) {
 }
 
 const servisler = Object.entries(cfg.services ?? {});
-const projeOrtamiAdi = /^tekserp-satici-(uretim|hazirlik)$/.exec(String(cfg.name ?? ""))?.[1] ?? null;
+const projeOrtamiAdi = /^tekserp-satici-(uretim)$/.exec(String(cfg.name ?? ""))?.[1] ?? null;
 
 // Ⓑ bildirim örtüsü — gönderici yan konteyneri satıcının TEK dış bağlantısıdır; sırrı, ağı ve imajı burada ölçülür.
 const BILDIRIM_ORTU_DOSYASI = "docker-compose.bildirim.yml";
@@ -263,14 +256,12 @@ kontrol("① hiçbir servis port yayımlamaz", yayinlayan.length === 0,
   kontrol(`Ⓚ çözülmüş yapılandırmada tünel kalıntısı yok (${EMEKLI_SERVISLER.join(", ")} servisi · tailnet ağı · TAILNET_*/PORT_TAILNET ortamı)`, iz.length === 0, iz.join(" · "));
 }
 
-// Ⓞ tek portal — portal-genel örtüsü üretimde zorunlu (portalın tek yolu), hazırlıkta yasak (kullanıcı kararı 2026-10-05).
+// Ⓞ tek portal — portal-genel örtüsü üretimde zorunlu (portalın tek yolu), tek ortam (kullanıcı kararı 2026-10-05).
 {
   const portalVar = aktif.some((o) => o.ad === "portal-genel");
   const beklenenPortal = projeOrtamiAdi === "uretim";
   kontrol(
-    projeOrtamiAdi === "hazirlik"
-      ? "Ⓞ hazırlıkta portal YOK: portal-genel örtüsü (satici-jwks · PORT_ERISIM) bindirilmemiş — tek portal üretimde"
-      : "Ⓞ üretimde portal-genel örtüsü ZORUNLU (satici-jwks + PORT_ERISIM) — portalın tek yolu",
+    "Ⓞ üretimde portal-genel örtüsü ZORUNLU (satici-jwks + PORT_ERISIM) — portalın tek yolu",
     projeOrtamiAdi !== null && portalVar === beklenenPortal,
     `ortam ${projeOrtamiAdi ?? `TANINMADI (${cfg.name})`} · portal-genel ${portalVar ? "VAR" : "YOK"}`,
   );
@@ -716,7 +707,7 @@ function bildirimDenetle(c) {
   kontrol("Ⓑ7 bildirim-cikis alt ağı 100.64/10 ve 127/8 dışında, satıcının öteki ağlarıyla çakışmaz", alt !== "" && ayrilmis.length === 0 && saticiCakisan.length === 0, `${alt || "alt ağ YOK"}${[...ayrilmis, ...saticiCakisan].length ? ` ↔ ${[...ayrilmis, ...saticiCakisan].join(", ")}` : ""}`);
   if (!patronEnv) {
     olculmedi++;
-    console.log(`⏭ Ⓑ7 bildirim-cikis ↔ patron ağları ÖLÇÜLMEDİ (--patron-env verilmedi) — geçti SAYILMAZ${c.name === "tekserp-satici-uretim" ? "; ÜRETİMDE ZORUNLU (çıkış 2)" : ""}`);
+    console.log(`⏭ Ⓑ7 bildirim-cikis ↔ patron ağları ÖLÇÜLMEDİ (--patron-env verilmedi) — geçti SAYILMAZ; ZORUNLU (çıkış 2)`);
   } else {
     const p = coz(patronEnv, [path.join(burasi, "..", "patron", "docker-compose.yml")]).cfg;
     const pAltlar = altlar(p.networks);
@@ -801,51 +792,11 @@ for (const o of aktif) {
 // ⑪ gömülü güven çapası
 {
   const ortam = satici.environment ?? {};
-  const projeOrtami = /^tekserp-satici-(uretim|hazirlik)$/.exec(String(cfg.name ?? ""))?.[1] ?? null;
+  const projeOrtami = /^tekserp-satici-(uretim)$/.exec(String(cfg.name ?? ""))?.[1] ?? null;
   kontrol("⑪ GUVEN_CAPASI_DOSYASI YOK (gömülü çapa; dosya çapası yalnız test) · NODE_ENV=production · GUVEN_CAPASI = projenin ORTAMI",
     !("GUVEN_CAPASI_DOSYASI" in ortam) && ortam.NODE_ENV === "production" && projeOrtami !== null && ortam.GUVEN_CAPASI === projeOrtami,
     `GUVEN_CAPASI_DOSYASI=${ortam.GUVEN_CAPASI_DOSYASI ?? "yok"} · NODE_ENV=${ortam.NODE_ENV ?? "YOK"} · GUVEN_CAPASI=${ortam.GUVEN_CAPASI ?? "YOK"} · proje ${projeOrtami ?? cfg.name}`);
 }
 
-// ⑫ iki ortam yan yana
-const uretim = cfg.name === "tekserp-satici-uretim";
-if (!digerEnv) {
-  olculmedi++;
-  console.log(`⏭ ⑫ ortamlar arası çakışma ÖLÇÜLMEDİ (--diger-env verilmedi) — geçti SAYILMAZ${uretim ? "; ÜRETİM hazırlığın yanına kurulur → ZORUNLU (çıkış 2)" : ""}`);
-} else {
-  const o = coz(digerEnv, []).cfg;
-  const bu = (c) => ({
-    proje: c.name,
-    pg: c.volumes?.["satici-pg"]?.name,
-    host: genelKural(c),
-    kokAdres: String(c.services?.satici?.environment?.GENEL_KOK_ADRESI ?? ""),
-    gid: JSON.stringify(c.services?.satici?.group_add ?? []),
-    agAdlari: Object.values(c.networks ?? {}).map((n) => n.name),
-    altAglar: Object.values(c.networks ?? {}).flatMap((n) => (n.ipam?.config ?? []).map((x) => x.subnet).filter(Boolean)),
-    baglar: Object.values(c.services ?? {}).flatMap((sv) => (sv.volumes ?? []).filter((v) => v.type === "bind").map((v) => ({ kaynak: v.source, hedef: v.target }))),
-    sirlar: Object.values(c.secrets ?? {}).map((x) => x.file).filter(Boolean),
-    portlar: Object.values(c.services ?? {}).flatMap((sv) => (sv.ports ?? []).map((p) => `${p.host_ip ?? "0.0.0.0"}:${p.published}`)),
-    kalinti: [
-      ...Object.keys(c.services ?? {}).filter((x) => EMEKLI_SERVISLER.includes(x)),
-      ...Object.entries(c.networks ?? {}).filter(([x, n]) => /tailnet/i.test(`${x} ${n.name ?? ""}`)).map(([x]) => `ağ ${x}`),
-    ],
-  });
-  const a = bu(cfg);
-  const b = bu(o);
-  console.log(`\n⑫ öteki ortam: ${b.proje} (${path.basename(digerEnv)})`);
-  kontrol("⑫a proje · DB hacmi · Traefik Host · genel kök · sır grubu FARKLI", a.proje !== b.proje && a.pg !== b.pg && a.host !== b.host && a.kokAdres !== b.kokAdres && a.gid !== b.gid,
-    `${a.proje}/${b.proje} · ${a.pg}/${b.pg} · ${a.host}/${b.host} · gid ${a.gid}/${b.gid}`);
-  const ortakAg = a.agAdlari.filter((n) => b.agAdlari.includes(n));
-  kontrol("⑫b ağ adları ortak değil", ortakAg.length === 0, ortakAg.join(", "));
-  const cakisan = a.altAglar.flatMap((x) => b.altAglar.filter((y) => cakisir(x, y)).map((y) => `${x}↔${y}`));
-  kontrol("⑫c köprü alt ağları çakışmaz", cakisan.length === 0, cakisan.join(", ") || `${a.altAglar.join(" ")} | ${b.altAglar.join(" ")}`);
-  const icIce = (x, y) => x === y || x.startsWith(`${y.replace(/\/$/, "")}/`) || y.startsWith(`${x.replace(/\/$/, "")}/`);
-  const ortakBag = a.baglar.flatMap((x) => b.baglar.filter((y) => icIce(x.kaynak, y.kaynak) && !(x.hedef === "/yayin" && y.hedef === "/yayin")).map((y) => `${x.kaynak}→${x.hedef} ↔ ${y.kaynak}→${y.hedef}`));
-  kontrol("⑫d host bağları ortak/iç içe değil (anahtar · yedek · alıcı · dosya · derleme; yalnız /yayin ortak)", ortakBag.length === 0, ortakBag.join(" | "));
-  const ortakSir = a.sirlar.filter((x) => b.sirlar.some((y) => icIce(x, y)));
-  kontrol("⑫e sır dosyaları (DB parolası · iç API belirteci) ortak değil", ortakSir.length === 0, ortakSir.join(", "));
-  kontrol("⑫f öteki ortam da port yayımlamaz ve tünel kalıntısı taşımaz (portal-tunel · tailnet ağı)", b.portlar.length === 0 && b.kalinti.length === 0, [...b.portlar, ...b.kalinti].join(", "));
-}
-
 console.log(`\n=== ${gecti} geçti, ${ihlal} ihlal${olculmedi ? `, ${olculmedi} ölçülmedi` : ""} ===`);
-process.exit(ihlal > 0 ? 1 : olculmedi > 0 && uretim ? 2 : 0);
+process.exit(ihlal > 0 ? 1 : olculmedi > 0 ? 2 : 0);

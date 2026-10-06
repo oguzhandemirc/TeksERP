@@ -15,7 +15,7 @@ import { renderApp, sessionFor, writes, type Handler } from "./harness";
 
 const HAK_ID = "5b0c6a4e-2222-4000-8000-000000000002";
 const ARA: SigningPlan = { imzaci: "ARA", kid: "ara-2026-1", neden: null, bekleyenTalep: null };
-const KOK: SigningPlan = { imzaci: "KOK", kid: "hazirlik-2026-1", neden: null, bekleyenTalep: null };
+const KOK: SigningPlan = { imzaci: "KOK", kid: "kok-2026-1", neden: null, bekleyenTalep: null };
 const KUYRUK: SigningPlan = { imzaci: "KUYRUK", kid: null, neden: "YETENEK_YOK", bekleyenTalep: null };
 
 function detail(over: { sinif?: string; ufuk?: number | null } = {}): InstallationDetail {

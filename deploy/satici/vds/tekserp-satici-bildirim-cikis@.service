@@ -1,4 +1,4 @@
-# /etc/systemd/system/tekserp-satici-bildirim-cikis@.service — örnek: tekserp-satici-bildirim-cikis@hazirlik
+# /etc/systemd/system/tekserp-satici-bildirim-cikis@.service — örnek: tekserp-satici-bildirim-cikis@uretim
 # Açılışta Docker'dan SONRA bildirim yan konteynerinin çıkış kurallarını (DOCKER-USER + INPUT) koyar
 # (bildirim-cikis.sh). Satıcıyı ve Docker'ı BEKLETMEZ; kural yoksa yalnız bildirim çıkışı geniştir (açık risk §11).
 [Unit]

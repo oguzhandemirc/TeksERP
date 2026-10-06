@@ -92,7 +92,6 @@ fs.writeFileSync(path.join(SAHTE, 'vds'), vdsCikti());
 
 // Yerel dosyalar
 const D = '/opt/stack/apps/tekserp-satici-uretim/derlemeler';
-const DH = '/opt/stack/apps/tekserp-satici-hazirlik/derlemeler';
 const AD = 'TeksERP-Kurulum-demofabrika-9.9.9.zip';
 const VERI = crypto.randomBytes(70_000);
 const DOSYA = yol('girdi', AD);
@@ -183,8 +182,8 @@ console.log('test_derleme_koy — satıcının derleme deposuna koyma (sahte ssh
   const prova = yol('girdi', 'TeksERP-Kurulum-demofabrika-9.9.9-PROVA-IMZASIZ.zip');
   fs.writeFileSync(prova, 'p');
   const c = kos(['--ortam', 'uretim', '--dosya', prova]);
-  const ch = kos(['--ortam', 'hazirlik', '--dosya', prova], { olcum: olcum({ d: DH }) });
-  check('§4b PROVA adı üretime → DUR 1 (ssh yok) · hazırlığa → geçer', c.kod === 1 && c.log.length === 0 && /PROVA/.test(c.cikti) && ch.kod === 0, `üretim ${c.kod} · hazırlık ${ch.kod} ${ch.cikti.slice(-200)}`);
+  const ch = kos(['--ortam', 'hazirlik', '--dosya', prova]);
+  check('§4b PROVA adı üretime → DUR 1 (ssh yok) · emekli hazırlık ortamı → kullanım 2, ssh yok', c.kod === 1 && c.log.length === 0 && /PROVA/.test(c.cikti) && ch.kod === 2 && ch.log.length === 0, `üretim ${c.kod} · hazırlık ${ch.kod}`);
   const bozuk = yol('girdi', 'TeksERP-Kurulum-x-1.0.0.zip');
   fs.writeFileSync(bozuk, 'yarim');
   fs.writeFileSync(`${bozuk}.sha256`, `${'c'.repeat(64)}  TeksERP-Kurulum-x-1.0.0.zip\n`);

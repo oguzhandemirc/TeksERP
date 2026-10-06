@@ -11,7 +11,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 
 const [nativeYol, kunyeYol] = process.argv.slice(2);
-const KIPLER = ['uretim', 'hazirlik'];
+const KIPLER = ['uretim']; // tek kip; eski `hazirlik` künyesi tanınmaz → ÖLÇÜLEMEDİ (paket durur)
 
 function olculemedi(neden) {
   console.error(`  ✖ çapa kipi ÖLÇÜLEMEDİ: ${neden}`);

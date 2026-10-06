@@ -93,7 +93,7 @@ async function main(): Promise<void> {
     await s("get", "/katalog", "/katalog", 200);
     const knAc = await portalIstek(sunucu.portal, "/portal/api/kanallar", { cerez, govde: { clientToken: randomUUID(), kod: "yeni-grup", ad: "x", tur: "uretim" } });
     const knSurumBozuk = await portalIstek(sunucu.portal, `/portal/api/kanallar/${grupOnce.id}`, { cerez, yontem: "PATCH", govde: { clientToken: randomUUID(), guncelSurumler: { panel: "1.3", web: "1.0.0" } } });
-    const knTur = await portalIstek(sunucu.portal, `/portal/api/kanallar/${grupOnce.id}`, { cerez, yontem: "PATCH", govde: { clientToken: randomUUID(), tur: "hazirlik" } });
+    const knTur = await portalIstek(sunucu.portal, `/portal/api/kanallar/${grupOnce.id}`, { cerez, yontem: "PATCH", govde: { clientToken: randomUUID(), tur: "uretim" } });
     kontrol("§1k0 portal grup AÇMAZ (POST /kanallar yok → 404); tür portaldan yazılmaz (KATI gövde → 400); sürüm şeması dışı → 400",
       knAc.status === 404 && knTur.status === 400 && knSurumBozuk.status === 400, `${knAc.status}/${knTur.status}/${knSurumBozuk.status}`);
     await s("patch", "/kanallar/:id", `/kanallar/${grupOnce.id}`, 200, { ad: "Öncü (uçlar)", sira: 2, guncelSurumler: { backend: "2.11.2", panel: "1.3.2" } });

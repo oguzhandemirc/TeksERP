@@ -279,7 +279,8 @@ pub struct Keys {
     pub root: SigningKey,
     pub alt: SigningKey,
     pub package: SigningKey,
-    pub staging: SigningKey,
+    /// Emekli hazırlık PAKET anahtarı (`paket-hazirlik`) — çapada YOK; onunla imzalı paket reddedilmeli.
+    pub legacy: SigningKey,
 }
 
 fn key(seed: u8) -> SigningKey {
@@ -946,7 +947,7 @@ pub fn intent(approval: Option<Value>) -> Value {
 
 pub struct Setup {
     pub lease: LeaseOpts,
-    pub package_signer_staging: bool,
+    pub package_signer_legacy: bool,
     pub customer: Option<&'static str>,
     pub extra_file_in_scope: bool,
     pub manifest_extra: Option<Value>,
@@ -957,7 +958,7 @@ impl Default for Setup {
     fn default() -> Self {
         Setup {
             lease: LeaseOpts::default(),
-            package_signer_staging: false,
+            package_signer_legacy: false,
             customer: Some(CHANNEL),
             extra_file_in_scope: false,
             manifest_extra: None,
@@ -991,10 +992,10 @@ impl World {
         let data = dir.join("programdata");
         std::fs::create_dir_all(&root).unwrap();
         let layout = Layout::new(&root, &data);
-        let keys = Keys { root: key(1), alt: key(2), package: key(3), staging: key(4) };
+        let keys = Keys { root: key(1), alt: key(2), package: key(3), legacy: key(4) };
         let anchor = TrustAnchor {
             roots: vec![RootKey { kid: "kok-test-1".into(), x: x_of(&keys.root), classes: vec!["URETIM".into(), "TEST".into()] }],
-            package_keys: vec![("paket-2026".into(), x_of(&keys.package)), ("paket-hazirlik".into(), x_of(&keys.staging))],
+            package_keys: vec![("paket-2026".into(), x_of(&keys.package))],
         };
         // Kurulu sürüm + current
         for (p, c) in version_files(OLD) {
@@ -1022,7 +1023,7 @@ impl World {
         }
         // Yeni paket + imzalı bildirim + işaretçiler (sunucuda)
         let files = version_files(NEW);
-        let (signer, kid) = if s.package_signer_staging { (&keys.staging, "paket-hazirlik") } else { (&keys.package, "paket-2026") };
+        let (signer, kid) = if s.package_signer_legacy { (&keys.legacy, "paket-hazirlik") } else { (&keys.package, "paket-2026") };
         let mut all = files.clone();
         all.extend(integrity_files(&files, NEW, signer, kid, s.customer));
         if s.extra_file_in_scope {

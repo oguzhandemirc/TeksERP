@@ -40,7 +40,7 @@ RUN npm ci --no-audit --no-fund
 COPY sunucu/ ./
 # generate: istemci + bu platformun şema motoru indirilir (çalışma anında ağ YOK — iç ağ internal).
 # Portal kullanıcı CLI'ı (ilk yönetici · kurtarma), anahtar CLI'ı (VDS'te yalnız `indirme-belirteci` işler: yayıncı
-# indirme belirteci, kök parolası istemez; anahtar birimi salt okunur) ve modül anahtarı CLI'ı (2d: hazırlıkta üretilen
+# indirme belirteci, kök parolası istemez; anahtar birimi salt okunur) ve modül anahtarı CLI'ı (2d: üretilen
 # anahtar dosyasını `ice-aktar` ile kasaya alır) imajda derlenmiş durur: VDS'te tsx/kaynak yok. Her biri `test -f` kapısında.
 # `dist/jwks-cekici.js`: portal genel erişim örtüsünün yan konteyneri (`satici-jwks`) AYNI imajla koşar.
 RUN npx prisma generate \

@@ -110,9 +110,9 @@ export function butunlukVektorleri(f: Fikstur): Vektor[] {
     hamListe("liste: fazla sütun", `${s0}\t1\tdist/a.js\tx\n`),
     v("kök dizin yok", imzali(), { kok: "yok" }),
     v("çapa boş", imzali(), { keys: [] }),
-    // Kid üretim/hazırlık biçiminde DEĞİL (test_lisans_butunluk §2a): çapaya giren gerçek anahtar bu vektörü kaydıramaz.
+    // Kid üretim biçiminde DEĞİL (test_lisans_butunluk §2a): çapaya giren gerçek anahtar bu vektörü kaydıramaz.
     ...kiplere(v("gömülü çapa: test paket anahtarı tanınmıyor", imzali({}, { imzalayan: anahtarUret("paket-fikstur") }), { keys: null })),
-    ...kiplere(v("gömülü çapa: hazırlık PAKET kid'i, yabancı imza", imzali({}, { imzalayan: anahtarUret(kipPaketKidi("hazirlik")) }), { keys: null })),
+    ...kiplere(v("gömülü çapa: eski hazırlık PAKET kid'i, yabancı imza", imzali({}, { imzalayan: anahtarUret("paket-hazirlik") }), { keys: null })),
     ...kiplere(v("gömülü çapa: üretim PAKET kid'i, yabancı imza", imzali({}, { imzalayan: anahtarUret(kipPaketKidi("uretim")) }), { keys: null })),
     v("çapa kid biçimsiz", imzali(), { keys: [{ kid: "PAKET-1", x: paket.x }] }),
     v("çapa kid tekrarlı", imzali(), { keys: [...keys, ...keys] }),

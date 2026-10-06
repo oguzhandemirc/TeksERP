@@ -24,9 +24,9 @@ fn anahtar(tohum: u8) -> SigningKey {
     SigningKey::from_bytes(&[tohum; 32])
 }
 
-/// Gömülü çapanın yerine test kümesi: üretim + hazırlık PAKET anahtarı.
-fn kume(paket: &SigningKey, hazirlik: &SigningKey) -> PackageTrust {
-    PackageTrust::embedded(vec![("paket-2026".into(), x_of(paket)), ("paket-hazirlik".into(), x_of(hazirlik))])
+/// Gömülü çapanın yerine test kümesi: üretim PAKET anahtarı (tek kip).
+fn kume(paket: &SigningKey) -> PackageTrust {
+    PackageTrust::embedded(vec![("paket-2026".into(), x_of(paket))])
 }
 
 fn backend_zip(dir: &Path, imzalayan: &SigningKey, kid: &str, kurcala: bool, ek: &[(String, Vec<u8>)]) -> PathBuf {
@@ -113,38 +113,40 @@ fn pg_paketi(
 #[test]
 fn backend_paketi_dogrulanir_ve_acilir() {
     let d = gecici("backend-ok");
-    let (p, h) = (anahtar(3), anahtar(4));
+    let p = anahtar(3);
     let z = backend_zip(&d, &p, "paket-2026", false, &[]);
     let hedef = d.join("surumler").join(".kurulum-1");
     std::fs::create_dir_all(hedef.parent().unwrap()).unwrap();
-    let v = kurulum::backend_paketi(&z, &hedef, &kume(&p, &h)).expect("geçerli paket");
+    let v = kurulum::backend_paketi(&z, &hedef, &kume(&p)).expect("geçerli paket");
     assert_eq!(v["surum"], NEW);
     assert_eq!(v["paketId"], PACKAGE_ID);
     assert_eq!(v["kid"], "paket-2026");
-    assert_eq!(v["hazirlikAnahtari"], false);
+    assert!(v.get("hazirlikAnahtari").is_none(), "tek kip: çıktı hazırlık alanı taşımaz");
     assert_eq!(v["musteri"], CHANNEL);
     assert!(hedef.join("dist").join("server.js").is_file() && hedef.join("butunluk.jws").is_file());
 }
 
 #[test]
-fn hazirlik_anahtari_soylenir() {
+fn emekli_hazirlik_kidli_paket_acilmaz() {
     let d = gecici("backend-hazirlik");
     let (p, h) = (anahtar(3), anahtar(4));
     let z = backend_zip(&d, &h, "paket-hazirlik", false, &[]);
     let hedef = d.join("hedef");
-    let v = kurulum::backend_paketi(&z, &hedef, &kume(&p, &h)).expect("hazırlık imzalı paket açılır");
-    assert_eq!(v["hazirlikAnahtari"], true, "hazırlık anahtarı çıktıda söylenmeli (üretim sınıfı onu reddeder)");
+    let e = kurulum::backend_paketi(&z, &hedef, &kume(&p)).unwrap_err();
+    assert_eq!(e.kod, "BUTUNLUK_GECERSIZ", "{e:?}");
+    assert!(e.mesaj.contains("(JWS_KID)"), "emekli kid kümede yok: {e:?}");
+    assert!(!hedef.exists(), "reddedilen paketin hedefi kalmamalı");
 }
 
 #[test]
 fn var_olan_hedefe_acilmaz_ve_ona_dokunulmaz() {
     let d = gecici("backend-hedef-var");
-    let (p, h) = (anahtar(3), anahtar(4));
+    let p = anahtar(3);
     let z = backend_zip(&d, &p, "paket-2026", false, &[]);
     let hedef = d.join("hedef");
     std::fs::create_dir_all(&hedef).unwrap();
     std::fs::write(hedef.join("veri.txt"), "dokunma").unwrap();
-    let e = kurulum::backend_paketi(&z, &hedef, &kume(&p, &h)).unwrap_err();
+    let e = kurulum::backend_paketi(&z, &hedef, &kume(&p)).unwrap_err();
     assert_eq!(e.kod, kod::HEDEF_VAR);
     assert_eq!(std::fs::read_to_string(hedef.join("veri.txt")).unwrap(), "dokunma");
 }
@@ -152,9 +154,9 @@ fn var_olan_hedefe_acilmaz_ve_ona_dokunulmaz() {
 #[test]
 fn goreli_hedef_reddedilir() {
     let d = gecici("backend-goreli");
-    let (p, h) = (anahtar(3), anahtar(4));
+    let p = anahtar(3);
     let z = backend_zip(&d, &p, "paket-2026", false, &[]);
-    let e = kurulum::backend_paketi(&z, Path::new("goreli-hedef"), &kume(&p, &h)).unwrap_err();
+    let e = kurulum::backend_paketi(&z, Path::new("goreli-hedef"), &kume(&p)).unwrap_err();
     assert_eq!(e.kod, kod::GIRDI);
     assert!(!Path::new("goreli-hedef").exists());
 }
@@ -162,10 +164,10 @@ fn goreli_hedef_reddedilir() {
 #[test]
 fn kurcali_paket_reddedilir_ve_hedef_silinir() {
     let d = gecici("backend-kurcali");
-    let (p, h) = (anahtar(3), anahtar(4));
+    let p = anahtar(3);
     let z = backend_zip(&d, &p, "paket-2026", true, &[]);
     let hedef = d.join("hedef");
-    let e = kurulum::backend_paketi(&z, &hedef, &kume(&p, &h)).unwrap_err();
+    let e = kurulum::backend_paketi(&z, &hedef, &kume(&p)).unwrap_err();
     assert_eq!(e.kod, "BUTUNLUK_GECERSIZ", "{e:?}");
     assert!(!hedef.exists(), "doğrulanamayan içerik silinmeli");
 }
@@ -173,10 +175,10 @@ fn kurcali_paket_reddedilir_ve_hedef_silinir() {
 #[test]
 fn bilinmeyen_anahtarla_imzali_paket_reddedilir() {
     let d = gecici("backend-yabanci");
-    let (p, h) = (anahtar(3), anahtar(4));
+    let p = anahtar(3);
     let z = backend_zip(&d, &anahtar(9), "paket-2026", false, &[]);
     let hedef = d.join("hedef");
-    let e = kurulum::backend_paketi(&z, &hedef, &kume(&p, &h)).unwrap_err();
+    let e = kurulum::backend_paketi(&z, &hedef, &kume(&p)).unwrap_err();
     assert_eq!(e.kod, "BUTUNLUK_GECERSIZ", "{e:?}");
     assert!(!hedef.exists());
 }
@@ -184,10 +186,10 @@ fn bilinmeyen_anahtarla_imzali_paket_reddedilir() {
 #[test]
 fn kapsamda_fazla_dosya_reddedilir() {
     let d = gecici("backend-fazla");
-    let (p, h) = (anahtar(3), anahtar(4));
+    let p = anahtar(3);
     let z = backend_zip(&d, &p, "paket-2026", false, &[("runtime/kacak.exe".into(), b"MZ".to_vec())]);
     let hedef = d.join("hedef");
-    let e = kurulum::backend_paketi(&z, &hedef, &kume(&p, &h)).unwrap_err();
+    let e = kurulum::backend_paketi(&z, &hedef, &kume(&p)).unwrap_err();
     assert_eq!(e.kod, "BUTUNLUK_GECERSIZ", "{e:?}");
     assert!(!hedef.exists());
 }
@@ -195,11 +197,11 @@ fn kapsamda_fazla_dosya_reddedilir() {
 #[test]
 fn yol_kacisi_girdisi_reddedilir() {
     let d = gecici("backend-yol");
-    let (p, h) = (anahtar(3), anahtar(4));
+    let p = anahtar(3);
     let z = backend_zip(&d, &p, "paket-2026", false, &[("../kacak.txt".into(), b"x".to_vec())]);
     let hedef = d.join("ic").join("hedef");
     std::fs::create_dir_all(hedef.parent().unwrap()).unwrap();
-    let e = kurulum::backend_paketi(&z, &hedef, &kume(&p, &h)).unwrap_err();
+    let e = kurulum::backend_paketi(&z, &hedef, &kume(&p)).unwrap_err();
     assert_eq!(e.kod, "PAKET_YOL", "{e:?}");
     assert!(!hedef.exists() && !d.join("ic").join("kacak.txt").exists());
 }
@@ -207,11 +209,11 @@ fn yol_kacisi_girdisi_reddedilir() {
 #[test]
 fn pg_paketi_dogrulanir() {
     let d = gecici("pg-ok");
-    let (p, h) = (anahtar(3), anahtar(4));
+    let p = anahtar(3);
     let (k, z) = pg_paketi(&d, &p, "paket-2026", &["67"], "67", false);
     let hedef = d.join("pgsql").join(".kurulum-1");
     std::fs::create_dir_all(hedef.parent().unwrap()).unwrap();
-    let v: Value = kurulum::pg_paketi(&k, &z, &hedef, &kume(&p, &h)).expect("geçerli PG paketi");
+    let v: Value = kurulum::pg_paketi(&k, &z, &hedef, &kume(&p)).expect("geçerli PG paketi");
     assert_eq!(
         (v["surum"].as_str(), v["derleme"].as_u64(), v["icuSurum"].as_str(), v["cizgi"].as_u64()),
         (Some("16.15"), Some(4), Some("67"), Some(16))
@@ -223,14 +225,14 @@ fn pg_paketi_dogrulanir() {
 #[test]
 fn pg_zip_ozeti_tutmazsa_acilmaz() {
     let d = gecici("pg-ozet");
-    let (p, h) = (anahtar(3), anahtar(4));
+    let p = anahtar(3);
     let (k, z) = pg_paketi(&d, &p, "paket-2026", &["67"], "67", false);
     let mut b = std::fs::read(&z).unwrap();
     let son = b.len() - 30;
     b[son] ^= 0xFF;
     std::fs::write(&z, b).unwrap();
     let hedef = d.join("hedef");
-    let e = kurulum::pg_paketi(&k, &z, &hedef, &kume(&p, &h)).unwrap_err();
+    let e = kurulum::pg_paketi(&k, &z, &hedef, &kume(&p)).unwrap_err();
     assert_eq!(e.kod, "PAKET_OZETI");
     assert!(!hedef.exists(), "özet tutmayan zip AÇILMAZ");
 }
@@ -238,10 +240,10 @@ fn pg_zip_ozeti_tutmazsa_acilmaz() {
 #[test]
 fn pg_manifest_disi_dosya_reddedilir() {
     let d = gecici("pg-fazla");
-    let (p, h) = (anahtar(3), anahtar(4));
+    let p = anahtar(3);
     let (k, z) = pg_paketi(&d, &p, "paket-2026", &["67"], "67", true);
     let hedef = d.join("hedef");
-    let e = kurulum::pg_paketi(&k, &z, &hedef, &kume(&p, &h)).unwrap_err();
+    let e = kurulum::pg_paketi(&k, &z, &hedef, &kume(&p)).unwrap_err();
     assert_eq!(e.kod, "PG_PAKET", "{e:?}");
     assert!(e.mesaj.contains("kacak.dll"), "{}", e.mesaj);
     assert!(!hedef.exists());
@@ -250,24 +252,24 @@ fn pg_manifest_disi_dosya_reddedilir() {
 #[test]
 fn pg_icu_kunyeyle_ayni_ve_tek_olmali() {
     let d = gecici("pg-icu");
-    let (p, h) = (anahtar(3), anahtar(4));
+    let p = anahtar(3);
     let (k, z) = pg_paketi(&d, &p, "paket-2026", &["70"], "67", false);
-    let e = kurulum::pg_paketi(&k, &z, &d.join("h1"), &kume(&p, &h)).unwrap_err();
+    let e = kurulum::pg_paketi(&k, &z, &d.join("h1"), &kume(&p)).unwrap_err();
     assert_eq!(e.kod, "PG_BAGI", "{e:?}");
     assert!(!d.join("h1").exists());
     let d2 = gecici("pg-icu-iki");
     let (k2, z2) = pg_paketi(&d2, &p, "paket-2026", &["67", "70"], "67", false);
-    let e2 = kurulum::pg_paketi(&k2, &z2, &d2.join("h2"), &kume(&p, &h)).unwrap_err();
+    let e2 = kurulum::pg_paketi(&k2, &z2, &d2.join("h2"), &kume(&p)).unwrap_err();
     assert_eq!(e2.kod, "PG_BAGI", "iki ICU: {e2:?}");
 }
 
 #[test]
 fn pg_kunyesi_bilinmeyen_anahtarla_reddedilir() {
     let d = gecici("pg-yabanci");
-    let (p, h) = (anahtar(3), anahtar(4));
+    let p = anahtar(3);
     let (k, z) = pg_paketi(&d, &anahtar(9), "paket-2026", &["67"], "67", false);
     let hedef = d.join("hedef");
-    let e = kurulum::pg_paketi(&k, &z, &hedef, &kume(&p, &h)).unwrap_err();
+    let e = kurulum::pg_paketi(&k, &z, &hedef, &kume(&p)).unwrap_err();
     assert!(e.kod.starts_with("JWS_"), "{e:?}");
     assert!(!hedef.exists());
 }
@@ -275,45 +277,45 @@ fn pg_kunyesi_bilinmeyen_anahtarla_reddedilir() {
 #[test]
 fn pg_kunyesi_bicimsizse_reddedilir() {
     let d = gecici("pg-bicimsiz");
-    let (p, h) = (anahtar(3), anahtar(4));
+    let p = anahtar(3);
     let (k, z) = pg_paketi(&d, &p, "paket-2026", &["67"], "67", false);
     std::fs::write(&k, "{\"v\":1}").unwrap();
-    let e = kurulum::pg_paketi(&k, &z, &d.join("hedef"), &kume(&p, &h)).unwrap_err();
+    let e = kurulum::pg_paketi(&k, &z, &d.join("hedef"), &kume(&p)).unwrap_err();
     assert_eq!(e.kod, "SURUM_ISARETCI", "{e:?}");
 }
 
 #[test]
 fn acilmis_dizin_yeniden_olculur_ve_hatada_silinmez() {
     let d = gecici("dizin");
-    let (p, h) = (anahtar(3), anahtar(4));
+    let p = anahtar(3);
     let z = backend_zip(&d, &p, "paket-2026", false, &[]);
     let hedef = d.join("surum");
-    kurulum::backend_paketi(&z, &hedef, &kume(&p, &h)).expect("açılır");
-    let v = kurulum::surum_dizini(&hedef, &kume(&p, &h)).expect("açılmış dizin geçerli");
+    kurulum::backend_paketi(&z, &hedef, &kume(&p)).expect("açılır");
+    let v = kurulum::surum_dizini(&hedef, &kume(&p)).expect("açılmış dizin geçerli");
     assert_eq!((v["surum"].as_str(), v["paketId"].as_str()), (Some(NEW), Some(PACKAGE_ID)));
     std::fs::write(hedef.join("dist").join("server.js"), "// kurcalandi").unwrap();
-    let e = kurulum::surum_dizini(&hedef, &kume(&p, &h)).unwrap_err();
+    let e = kurulum::surum_dizini(&hedef, &kume(&p)).unwrap_err();
     assert_eq!(e.kod, "BUTUNLUK_GECERSIZ", "{e:?}");
     assert!(hedef.join("dist").join("server.js").is_file(), "kurulu dizin SİLİNMEZ (karar çağıranın)");
-    assert_eq!(kurulum::surum_dizini(&d.join("yok"), &kume(&p, &h)).unwrap_err().kod, kod::GIRDI);
+    assert_eq!(kurulum::surum_dizini(&d.join("yok"), &kume(&p)).unwrap_err().kod, kod::GIRDI);
 }
 
 #[test]
 fn baska_urunun_imzali_paketi_reddedilir() {
     let d = gecici("urun");
-    let (p, h) = (anahtar(3), anahtar(4));
+    let p = anahtar(3);
     // Kontrol: aynı yardımcıyla "backend" ürünü GEÇER (sonda yardımcının kendisini değil ürün kapısını ölçer).
     let iyi = urunlu_zip(&d, &p, "backend");
-    kurulum::backend_paketi(&iyi, &d.join("h-iyi"), &kume(&p, &h)).expect("aynı yardımcıyla backend paketi geçer");
+    kurulum::backend_paketi(&iyi, &d.join("h-iyi"), &kume(&p)).expect("aynı yardımcıyla backend paketi geçer");
     let z = urunlu_zip(&d, &p, "electron");
     let hedef = d.join("hedef");
-    let e = kurulum::backend_paketi(&z, &hedef, &kume(&p, &h)).unwrap_err();
+    let e = kurulum::backend_paketi(&z, &hedef, &kume(&p)).unwrap_err();
     assert_eq!(e.kod, kod::URUN, "{e:?}");
     assert!(!hedef.exists(), "başka ürünün açılmış içeriği silinmeli");
     // Onarım yolu (açılmış dizin) da ürünü ölçer: aynı içerik elle açılır; dizin SİLİNMEZ.
     let ac = d.join("acilmis");
     zip::ZipArchive::new(std::fs::File::open(&z).unwrap()).unwrap().extract(&ac).unwrap();
-    let e2 = kurulum::surum_dizini(&ac, &kume(&p, &h)).unwrap_err();
+    let e2 = kurulum::surum_dizini(&ac, &kume(&p)).unwrap_err();
     assert_eq!(e2.kod, kod::URUN, "{e2:?}");
     assert!(ac.join("dist").join("server.js").is_file(), "onarımda kurulu dizin silinmez");
 }

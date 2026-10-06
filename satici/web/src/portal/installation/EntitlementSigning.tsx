@@ -79,7 +79,7 @@ export function useSigningPlan(entitlementId: string) {
 
 function planSummary(plan: SigningPlan): string {
   if (plan.imzaci === "KUYRUK") return `${SIGNER_PLAN_LABEL.KUYRUK} — ${label(SIGNER_PLAN_REASON_LABEL, plan.neden)}; değişiklik dönem töreninde Mac'te kökle imzalanır`;
-  const why = plan.imzaci === "ARA" ? "kurulum ara imzalı HAK'ı tanıyor" : "kök bu sunucuda yüklü (hazırlık düzeni)";
+  const why = plan.imzaci === "ARA" ? "kurulum ara imzalı HAK'ı tanıyor" : "kök bu sunucuda yüklü";
   return `${label(SIGNER_PLAN_LABEL, plan.imzaci)} (${plan.kid ?? "—"}) — ${why}`;
 }
 

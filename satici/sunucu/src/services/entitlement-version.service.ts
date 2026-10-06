@@ -1,6 +1,6 @@
 // HAK SÜRÜMÜ — her yapısal değişiklik (modül tavanı · kalıcı · bakım bitişi · çevrimdışı ufuk · kip alt sınırı) YENİ
 // İMZALI SÜRÜMDÜR: alanlar ve sürüm aynı tx'te yazılır. İmzacı yetenek kapısından çıkar (G4 §2.6): `hak-ara` bildiren
-// kuruluma VDS'teki ara imzacı (ara parolası formdan); bildirmeyene kök — kök VDS'te yalnız hazırlıkta/A düzeninde durur;
+// kuruluma VDS'teki ara imzacı (ara parolası formdan); bildirmeyene kök — kök VDS'te yalnız A düzeninde durur;
 // yoksa değişiklik KÖK KUYRUĞUNA girer (`hak_kok_talebi`) ve dönem töreninde Mac'te imzalanır (`root-queue.service.ts`).
 // İmza tx DIŞINDA hazırlanır (parola alt sürecin stdin'ine), sonra kurulum kilidi altında deftere yazılır.
 import type { Hak, HakKokTalebi, HakSurumu, Kurulum, Musteri, Prisma, Tesis } from "@prisma/client";

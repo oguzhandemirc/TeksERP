@@ -40,11 +40,11 @@ const LOOPBACK_HOSTS = new Set(["localhost", "127.0.0.1", "[::1]"]);
 
 /**
  * Satıcının YAPILANDIRILMIŞ ana makineleri — aktarma yalnız bunlara gider (D12). Backend
- * `lib/license/vendor-url.ts` varsayılanı (üretim) + hazırlık satıcısı; ayna bekçisi
+ * `lib/license/vendor-url.ts` varsayılanı (tek satıcı: üretim); ayna bekçisi
  * `license-relay.test.ts`. Hedefi backend söyler ama panel ona güvenmez: kurcalanmış bir
  * backend paneli fabrika ağından rastgele bir adrese POST atan bir vekile çeviremesin.
  */
-export const LICENSE_VENDOR_HOSTS: readonly string[] = ["lisans.etkiliyazilim.com", "lisans-test.etkiliyazilim.com"];
+export const LICENSE_VENDOR_HOSTS: readonly string[] = ["lisans.etkiliyazilim.com"];
 
 export interface RelayTargetPolicy {
   /** Döngü adresi (sahte/yerel satıcı) — yalnız paketlenmemiş geliştirme derlemesinde. */

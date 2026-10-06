@@ -4,7 +4,7 @@
 // Satıcı Mac'inde koşar; imza anahtarı CI'a ve pakete GİRMEZ. Yayıncı `deploy/backend-yayinla.mjs` çağırır.
 //
 //   npx tsx scripts/backend-bildirim.ts dogrula --zip=<paket.zip> --kanal=<kod> --kanal-turu=<uretim|hazirlik>
-//       --guven-capasi=<uretim|hazirlik> --pg-cizgi=<16> --pg-en-az=<16.9> [--pg-kunye=<pg.json>] --ozet-dosyasi=<txt> --cikti=<dizin> [--min-kaynak=<sürüm>] [--zorunlu]
+//       --guven-capasi=uretim --pg-cizgi=<16> --pg-en-az=<16.9> [--pg-kunye=<pg.json>] --ozet-dosyasi=<txt> --cikti=<dizin> [--min-kaynak=<sürüm>] [--zorunlu]
 //   npx tsx scripts/backend-bildirim.ts imzala  … aynı … --anahtar=<PAKET anahtar dosyası>
 //   npx tsx scripts/backend-bildirim.ts pg-imzala --zip=<PG sahne zip> --anahtar=<PAKET anahtar dosyası> --cikti=<dizin>
 //       [--cizgi --surum --derleme --icu]: künye alanları deploy/pg/pg-surumu.json'dan (TEK KAYNAK); verilen argüman
@@ -58,7 +58,7 @@ import {
   isTrustAnchorMode,
 } from "../src/lib/license/protocol";
 import { packagePublicKeysFor, verifyIntegrity, type PackageKey } from "../src/lib/license/integrity";
-import { INTEGRITY_FILE, isStagingPackageKid } from "../src/lib/license/integrity-scope";
+import { INTEGRITY_FILE } from "../src/lib/license/integrity-scope";
 import { openPackageKey } from "./lib/butunluk-imza";
 import { CliError, args, askPassword } from "./lib/cli-girdi";
 
@@ -77,7 +77,7 @@ function gerek(f: Bayraklar, ad: string): string {
 /** Kanalın çapa kipi (zorunlu; tanınmayan kip RED — örtük üretim/birleşik çapa yok). Üretim kanalı yalnız üretim. */
 function capaKipi(f: Bayraklar, kanalTuru: string | null): TrustAnchorMode {
   const kip = gerek(f, "guven-capasi");
-  if (!isTrustAnchorMode(kip)) throw new CliError(`--guven-capasi uretim | hazirlik (gelen: ${kip})`);
+  if (!isTrustAnchorMode(kip)) throw new CliError(`--guven-capasi uretim (tek çapa kipi; gelen: ${kip})`);
   if (kanalTuru === "uretim" && kip !== "uretim") throw new CliError("üretim kanalı yalnız ÜRETİM çapasıyla yayınlanır (kanal kaydı backend.guvenCapasi)");
   return kip;
 }
@@ -164,7 +164,7 @@ interface AcilanPaket {
 }
 
 /** Kanala özel paket (eski yol): künye kanal/müşteriyle bağlanır. */
-async function kanalPaketiAc(tmp: string, g: BackendGirdisi, uyarilar: string[]): Promise<AcilanPaket> {
+async function kanalPaketiAc(tmp: string, g: BackendGirdisi): Promise<AcilanPaket> {
   const kunye = JSON.parse(fs.readFileSync(path.join(tmp, "PAKET.json"), "utf8").replace(/^﻿/, "")) as PaketKunyesi;
   if (kunye.korumali !== true) throw new CliError("yalnız KORUMALI paket yayınlanır (PAKET.json korumali=true)");
   if (kunye.korumaHedef !== "win-x64") throw new CliError(`paket hedefi win-x64 değil: ${String(kunye.korumaHedef)}`);
@@ -176,9 +176,6 @@ async function kanalPaketiAc(tmp: string, g: BackendGirdisi, uyarilar: string[])
   const baslik = parseJws(jws);
   if (!baslik.ok) throw new CliError(`butunluk.jws ayrıştırılamadı: ${baslik.code}`);
   const kid = baslik.value.header.kid;
-  if (isStagingPackageKid(kid) && g.kanalTuru === "uretim") {
-    uyarilar.push(`paket HAZIRLIK anahtarıyla (${kid}) imzalı: bu kanaldaki ÜRETİM sınıfı kurulumlar onu REDDEDER (yalnız TEST/DEMO kurar)`);
-  }
   const p = rapor.paket;
   if (p.urun !== "backend") throw new CliError(`künye ürünü backend değil: ${p.urun}`);
   if (p.surum !== kunye.uygulamaSurumu) throw new CliError(`künye sürümü (${p.surum}) PAKET.json uygulamaSurumu (${String(kunye.uygulamaSurumu)}) ile aynı değil`);
@@ -187,11 +184,11 @@ async function kanalPaketiAc(tmp: string, g: BackendGirdisi, uyarilar: string[])
 }
 
 /** Paketi açar, bütünlüğünü ve künyesini denetler; bildirim yükünü kurar (imzasız). */
-async function bildirimKur(g: BackendGirdisi, uyarilar: string[]): Promise<ReleaseManifest> {
+async function bildirimKur(g: BackendGirdisi): Promise<ReleaseManifest> {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "tekserp-bildirim-"));
   try {
     execFileSync("unzip", ["-q", g.zip, "-d", tmp]);
-    const ac = g.ortak ? await ortakPaketiAc(tmp, g.capa, "ortak gruba") : await kanalPaketiAc(tmp, g, uyarilar);
+    const ac = g.ortak ? await ortakPaketiAc(tmp, g.capa, "ortak gruba") : await kanalPaketiAc(tmp, g);
     const { kunye, p, kid } = ac;
     if (typeof kunye.commit !== "string" || typeof kunye.runtimeNodeSurumu !== "string" || typeof kunye.migrationSayisi !== "number") {
       throw new CliError("PAKET.json commit / runtimeNodeSurumu / migrationSayisi eksik");
@@ -224,7 +221,7 @@ async function backend(komut: "dogrula" | "imzala", f: Bayraklar): Promise<void>
   const g = backendGirdisi(f);
   const cikti = path.resolve(gerek(f, "cikti"));
   const uyarilar: string[] = [];
-  const yuk = await bildirimKur(g, uyarilar);
+  const yuk = await bildirimKur(g);
   fs.mkdirSync(cikti, { recursive: true });
   let bildirim: string | null = null;
   if (komut === "imzala") {
@@ -335,7 +332,6 @@ async function ortakPaketiAc(tmp: string, capa: readonly PackageKey[], hedef: st
   const baslik = parseJws(jws);
   if (!baslik.ok) throw new CliError(`butunluk.jws ayrıştırılamadı: ${baslik.code}`);
   const kid = baslik.value.header.kid;
-  if (isStagingPackageKid(kid)) throw new CliError(`paket HAZIRLIK anahtarıyla (${kid}) imzalı — ortak paket yalnız üretim anahtarıyla`);
   const p = rapor.paket;
   if (p.urun !== "backend") throw new CliError(`künye ürünü backend değil: ${p.urun}`);
   if (p.surum !== kunye.uygulamaSurumu) throw new CliError(`künye sürümü (${p.surum}) PAKET.json uygulamaSurumu (${String(kunye.uygulamaSurumu)}) ile aynı değil`);

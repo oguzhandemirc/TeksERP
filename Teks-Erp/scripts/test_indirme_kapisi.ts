@@ -21,9 +21,10 @@
 //      cacheEverything + 404 tutulmaz, değişken dosyada cf yok
 //   §7 varsayılan dışa aktarım: gerçek saat + `env.TKL_INDIRME_AYAR` (dize ve nesne)
 //   §8 İNDİRME listesi (L2-8): kid × kanal × pencere — §0'a parite satırları (INDIRME_KANAL · INDIRME_PENCERE ·
-//      ±10 dk · yarım/biçimsiz pencere · dize kanal tuzağı · aynı kid ilk satır) + HTTP: üretim/hazırlık ayrımı iki
-//      yönde (G3) · pencere sınırları · örtüşmeli döndürme (eski kid penceresiyle kendiliğinden kapanır) · eski biçim
-//      kısıtsız (bir sürüm) · 22 geçersiz liste ayarı 503 (her biri geçerli komşusuyla) · env dize · runbook şablonu
+//      ±10 dk · yarım/biçimsiz pencere · dize kanal tuzağı · aynı kid ilk satır) + HTTP: tek liste `uretim`, satır
+//      kendi kanal kümesine bağlı (iki yönde) · pencere sınırları · örtüşmeli döndürme (eski kid penceresiyle
+//      kendiliğinden kapanır) · eski biçim kısıtsız (bir sürüm) · geçersiz liste ayarları 503 (eski `hazirlik` listesi
+//      dahil; her biri geçerli komşusuyla) · env dize · runbook şablonu
 //   §9 backend/ öneki (Dağıtım v2): Worker ürün kümesi = kâhin `DOWNLOAD_PRODUCTS` · backend belirteci
 //      yalnız backend/ altında · başka ürünün belirteci backend/de RED · son.json değişken, zip değişmez
 //   §10 tek ortak paket (O9): grup-nötr OTA takma adı `/ota/<rv>/manifest` — belirteçsiz 403 · grup YALNIZ
@@ -539,34 +540,34 @@ async function bolum7(w: WorkerModulu): Promise<void> {
 }
 
 
-// §8 — İNDİRME listesi (L2-8): kid × kanal × pencere, üretim/hazırlık listeleri ayrı.
-const HZR = anahtarUret("ind-hazirlik-2026");
-const HZR_KANAL = "hazirlik-kanal";
+// §8 — İNDİRME listesi (L2-8): kid × kanal × pencere; tek liste `uretim`, her satır kendi kanal kümesine bağlı.
+const IKN = anahtarUret("ind-ikinci-2026");
+const IKN_KANAL = "ikinci-kanal";
 const RUNBOOK = path.join(REPO, "docs/ops/INDIRME-KAPISI-WORKER.md");
 function basK(kanal: string, anahtar: TestAnahtari, simdi = SIMDI, urun: "electron" | "mobil" = "electron"): string {
   return signDownloadToken({ payload: { ...yuk(urun, {}, kanal), exp: msToIso(simdi + 60 * DAKIKA) }, key: { kid: anahtar.kid, privateKey: anahtar.privateKey }, nowMs: simdi });
 }
-function listeAyari(w: WorkerModulu, uretim: unknown, hazirlik: unknown, ek: Ayar = {}): Ayar {
-  return { ...w.VARSAYILAN_AYAR, anahtarlar: [], indirmeListesi: { uretim, hazirlik }, ...ek };
+function listeAyari(w: WorkerModulu, uretim: unknown, ek: Ayar = {}): Ayar {
+  return { ...w.VARSAYILAN_AYAR, anahtarlar: [], indirmeListesi: { uretim }, ...ek };
 }
 const exeK = (kanal: string) => `/${kanal}/electron/TeksERP-Setup-1.3.2.exe`;
 
 async function bolum8(w: WorkerModulu): Promise<void> {
-  console.log("\n§8 — İNDİRME listesi: kid × kanal × pencere · üretim/hazırlık ayrımı · döndürme · fail-closed ayar");
+  console.log("\n§8 — İNDİRME listesi: kid × kanal × pencere · satır kanal kümesi · döndürme · fail-closed ayar");
   const iki = "uretim-iki";
-  const a = listeAyari(w, [satir(IND, { kanallar: [KANAL, iki] })], [satir(HZR, { kanallar: [HZR_KANAL] })]);
-  check("§8a varsayılan ayarda liste boş ve iki ayrı dizi", JSON.stringify(w.VARSAYILAN_AYAR.indirmeListesi) === JSON.stringify({ uretim: [], hazirlik: [] }) && w.ayarCoz(w.VARSAYILAN_AYAR, SIMDI).ok);
+  const a = listeAyari(w, [satir(IND, { kanallar: [KANAL, iki] }), satir(IKN, { kanallar: [IKN_KANAL] })]);
+  check("§8a varsayılan ayarda tek liste `uretim`, boş", JSON.stringify(w.VARSAYILAN_AYAR.indirmeListesi) === JSON.stringify({ uretim: [] }) && w.ayarCoz(w.VARSAYILAN_AYAR, SIMDI).ok);
   await kabul(w, "§8b üretim satırı: kanal kümede, pencere içinde", a, istek(exeK(KANAL), bsl(basK(KANAL, IND))));
   await kabul(w, "§8b' aynı anahtar kümedeki ikinci kanal", a, istek(exeK(iki), bsl(basK(iki, IND))));
-  await ret(w, "§8c ⭐ hazırlık anahtarı üretim kanalına (G3)", a, istek(exeK(KANAL), bsl(basK(KANAL, HZR))), "INDIRME_KANAL");
-  await kabul(w, "§8c' hazırlık anahtarı kendi kanalına", a, istek(exeK(HZR_KANAL), bsl(basK(HZR_KANAL, HZR))));
-  await ret(w, "§8d ⭐ üretim anahtarı hazırlık kanalına (G3, öbür yön)", a, istek(exeK(HZR_KANAL), bsl(basK(HZR_KANAL, IND))), "INDIRME_KANAL");
+  await ret(w, "§8c ⭐ ikinci satırın anahtarı birinci satırın kanalına", a, istek(exeK(KANAL), bsl(basK(KANAL, IKN))), "INDIRME_KANAL");
+  await kabul(w, "§8c' ikinci satırın anahtarı kendi kanalına", a, istek(exeK(IKN_KANAL), bsl(basK(IKN_KANAL, IKN))));
+  await ret(w, "§8d ⭐ birinci satırın anahtarı ikinci satırın kanalına (öbür yön)", a, istek(exeK(IKN_KANAL), bsl(basK(IKN_KANAL, IND))), "INDIRME_KANAL");
   await ret(w, "§8e tanınmayan kid (listede yok)", a, istek(exeK(KANAL), bsl(basK(KANAL, YABANCI))), "JWS_KID");
-  await kabul(w, "§8e' aynı kid listeye girince", listeAyari(w, [satir(IND), satir(YABANCI)], []), istek(exeK(KANAL), bsl(basK(KANAL, YABANCI))));
+  await kabul(w, "§8e' aynı kid listeye girince", listeAyari(w, [satir(IND), satir(YABANCI)]), istek(exeK(KANAL), bsl(basK(KANAL, YABANCI))));
 
   const bas0 = SIMDI + GUN;
   const bit0 = SIMDI + 121 * GUN;
-  const p = listeAyari(w, [satir(IND, { baslangic: msToIso(bas0), bitis: msToIso(bit0) })], []);
+  const p = listeAyari(w, [satir(IND, { baslangic: msToIso(bas0), bitis: msToIso(bit0) })]);
   await ret(w, "§8f pencere başlamadı (1 gün önce)", p, istek(exeK(KANAL), bsl(basK(KANAL, IND))), "INDIRME_PENCERE");
   await ret(w, "§8f' başlangıçtan 11 dk önce", p, istek(exeK(KANAL), bsl(basK(KANAL, IND, bas0 - 11 * DAKIKA))), "INDIRME_PENCERE", 403, bas0 - 11 * DAKIKA);
   await kabul(w, "§8f'' başlangıçtan 9 dk önce (tolerans)", p, istek(exeK(KANAL), bsl(basK(KANAL, IND, bas0 - 9 * DAKIKA))), bas0 - 9 * DAKIKA);
@@ -578,7 +579,7 @@ async function bolum8(w: WorkerModulu): Promise<void> {
   const r = listeAyari(w, [
     satir(IND, { baslangic: msToIso(toren - 90 * GUN), bitis: msToIso(toren + 30 * GUN) }),
     satir(IND2, { baslangic: msToIso(toren), bitis: msToIso(toren + 120 * GUN) }),
-  ], []);
+  ]);
   const t1 = toren + 60 * DAKIKA;
   await kabul(w, "§8h örtüşme: eski kid tören sonrası hâlâ geçer", r, istek(exeK(KANAL), bsl(basK(KANAL, IND, t1))), t1);
   await kabul(w, "§8h' örtüşme: yeni kid tören anından itibaren geçer", r, istek(exeK(KANAL), bsl(basK(KANAL, IND2, t1))), t1);
@@ -586,7 +587,7 @@ async function bolum8(w: WorkerModulu): Promise<void> {
   await ret(w, "§8i eski kid penceresi kendiliğinden kapandı (satır silinmeden)", r, istek(exeK(KANAL), bsl(basK(KANAL, IND, t2))), "INDIRME_PENCERE", 403, t2);
   await kabul(w, "§8i' yeni kid aynı anda geçer", r, istek(exeK(KANAL), bsl(basK(KANAL, IND2, t2))), t2);
 
-  const eski = { ...w.VARSAYILAN_AYAR, anahtarlar: [acik(IND2)], indirmeListesi: { uretim: [satir(IND)], hazirlik: [] } };
+  const eski = { ...w.VARSAYILAN_AYAR, anahtarlar: [acik(IND2)], indirmeListesi: { uretim: [satir(IND)] } };
   await kabul(w, "§8j eski biçim (bir sürüm) liste ile birlikte: eski kid kısıtsız, başka kanal", eski, istek(exeK("baska-kanal"), bsl(basK("baska-kanal", IND2))));
   await ret(w, "§8j' liste satırı aynı ayarda kanalına bağlı", eski, istek(exeK("baska-kanal"), bsl(basK("baska-kanal", IND))), "INDIRME_KANAL");
 
@@ -595,28 +596,28 @@ async function bolum8(w: WorkerModulu): Promise<void> {
   const S = (ek: Partial<Record<string, unknown>> = {}) => ({ ...satir(IND), ...ek });
   const alansiz = (o: Record<string, unknown>, alan: string) => Object.fromEntries(Object.entries(o).filter(([k]) => k !== alan));
   const gecersizler: [string, Ayar, Ayar][] = [
-    ["indirmeListesi dizi", { ...w.VARSAYILAN_AYAR, indirmeListesi: [] }, listeAyari(w, [], [])],
-    ["indirmeListesi null", { ...w.VARSAYILAN_AYAR, indirmeListesi: null }, listeAyari(w, [satir(IND)], [])],
-    ["tanınmayan liste adı", { ...w.VARSAYILAN_AYAR, indirmeListesi: { uretim: [satir(IND)], hazirlik: [], test: [] } }, listeAyari(w, [satir(IND)], [])],
-    ["hazırlık listesi eksik", { ...w.VARSAYILAN_AYAR, indirmeListesi: { uretim: [satir(IND)] } }, listeAyari(w, [satir(IND)], [])],
-    ["liste dizi değil", listeAyari(w, { 0: satir(IND) }, []), listeAyari(w, [satir(IND)], [])],
-    ["satırda tanınmayan alan", listeAyari(w, [S({ sinif: "URETIM" })], []), listeAyari(w, [S()], [])],
-    ["satırda bitiş yok", listeAyari(w, [alansiz(S(), "bitis")], []), listeAyari(w, [S()], [])],
-    ["kid ind- değil", listeAyari(w, [{ ...S(), kid: ALT.kid, x: ALT.x }], []), listeAyari(w, [S()], [])],
-    ["x biçimsiz", listeAyari(w, [S({ x: "AAAA" })], []), listeAyari(w, [S()], [])],
-    ["kanallar boş", listeAyari(w, [S({ kanallar: [] })], []), listeAyari(w, [S()], [])],
-    ["kanallar dize", listeAyari(w, [S({ kanallar: KANAL })], []), listeAyari(w, [S()], [])],
-    ["kanal biçimsiz (büyük harf)", listeAyari(w, [S({ kanallar: [KANAL, "Deneme"] })], []), listeAyari(w, [S({ kanallar: [KANAL, "deneme"] })], [])],
-    ["kanal iki kez", listeAyari(w, [S({ kanallar: [KANAL, KANAL] })], []), listeAyari(w, [S({ kanallar: [KANAL] })], [])],
-    ["başlangıç tarihsiz saat yok", listeAyari(w, [S({ baslangic: "2026-09-29" })], []), listeAyari(w, [S()], [])],
-    ["pencere ters (bitiş < başlangıç)", listeAyari(w, [S({ baslangic: msToIso(SIMDI + GUN), bitis: msToIso(SIMDI - GUN) })], []), listeAyari(w, [S()], [])],
-    ["pencere 731 gün", listeAyari(w, [S({ baslangic: msToIso(SIMDI - GUN), bitis: msToIso(SIMDI + 730 * GUN) })], []), listeAyari(w, [S({ baslangic: msToIso(SIMDI - GUN), bitis: msToIso(SIMDI + 729 * GUN) })], [])],
-    ["aynı kid iki listede", listeAyari(w, [S()], [{ ...satir(IND, { kanallar: [HZR_KANAL] }), x: HZR.x }]), listeAyari(w, [S()], [satir(HZR, { kanallar: [HZR_KANAL] })])],
-    ["aynı kid eski biçimde ve listede", listeAyari(w, [S()], [], { anahtarlar: [acik(IND)] }), listeAyari(w, [S()], [], { anahtarlar: [acik(IND2)] })],
-    ["aynı açık anahtar iki kid'de", listeAyari(w, [S(), { ...satir(IND2), x: IND.x }], []), listeAyari(w, [S(), satir(IND2)], [])],
-    ["⭐ kanal iki listede (G3)", listeAyari(w, [S()], [satir(HZR, { kanallar: [HZR_KANAL, KANAL] })]), listeAyari(w, [S()], [satir(HZR, { kanallar: [HZR_KANAL] })])],
-    ["eski biçim satırı kanal taşıyor (yanlış diziye yapıştırma)", listeAyari(w, [], [], { anahtarlar: [satir(IND)] }), listeAyari(w, [satir(IND)], [])],
-    ["eski biçim + listede aynı açık anahtar", listeAyari(w, [S()], [], { anahtarlar: [{ kid: IND2.kid, x: IND.x }] }), listeAyari(w, [S()], [], { anahtarlar: [acik(IND2)] })],
+    ["indirmeListesi dizi", { ...w.VARSAYILAN_AYAR, indirmeListesi: [] }, listeAyari(w, [])],
+    ["indirmeListesi null", { ...w.VARSAYILAN_AYAR, indirmeListesi: null }, listeAyari(w, [satir(IND)])],
+    ["tanınmayan liste adı", { ...w.VARSAYILAN_AYAR, indirmeListesi: { uretim: [satir(IND)], test: [] } }, listeAyari(w, [satir(IND)])],
+    ["⭐ eski `hazirlik` listesi (boş da olsa; tek liste)", { ...w.VARSAYILAN_AYAR, indirmeListesi: { uretim: [satir(IND)], hazirlik: [] } }, listeAyari(w, [satir(IND)])],
+    ["üretim listesi eksik", { ...w.VARSAYILAN_AYAR, indirmeListesi: {} }, listeAyari(w, [satir(IND)])],
+    ["liste dizi değil", listeAyari(w, { 0: satir(IND) }), listeAyari(w, [satir(IND)])],
+    ["satırda tanınmayan alan", listeAyari(w, [S({ sinif: "URETIM" })]), listeAyari(w, [S()])],
+    ["satırda bitiş yok", listeAyari(w, [alansiz(S(), "bitis")]), listeAyari(w, [S()])],
+    ["kid ind- değil", listeAyari(w, [{ ...S(), kid: ALT.kid, x: ALT.x }]), listeAyari(w, [S()])],
+    ["x biçimsiz", listeAyari(w, [S({ x: "AAAA" })]), listeAyari(w, [S()])],
+    ["kanallar boş", listeAyari(w, [S({ kanallar: [] })]), listeAyari(w, [S()])],
+    ["kanallar dize", listeAyari(w, [S({ kanallar: KANAL })]), listeAyari(w, [S()])],
+    ["kanal biçimsiz (büyük harf)", listeAyari(w, [S({ kanallar: [KANAL, "Deneme"] })]), listeAyari(w, [S({ kanallar: [KANAL, "deneme"] })])],
+    ["kanal iki kez", listeAyari(w, [S({ kanallar: [KANAL, KANAL] })]), listeAyari(w, [S({ kanallar: [KANAL] })])],
+    ["başlangıç tarihsiz saat yok", listeAyari(w, [S({ baslangic: "2026-09-29" })]), listeAyari(w, [S()])],
+    ["pencere ters (bitiş < başlangıç)", listeAyari(w, [S({ baslangic: msToIso(SIMDI + GUN), bitis: msToIso(SIMDI - GUN) })]), listeAyari(w, [S()])],
+    ["pencere 731 gün", listeAyari(w, [S({ baslangic: msToIso(SIMDI - GUN), bitis: msToIso(SIMDI + 730 * GUN) })]), listeAyari(w, [S({ baslangic: msToIso(SIMDI - GUN), bitis: msToIso(SIMDI + 729 * GUN) })])],
+    ["aynı kid iki satırda", listeAyari(w, [S(), { ...satir(IND, { kanallar: [IKN_KANAL] }), x: IKN.x }]), listeAyari(w, [S(), satir(IKN, { kanallar: [IKN_KANAL] })])],
+    ["aynı kid eski biçimde ve listede", listeAyari(w, [S()], { anahtarlar: [acik(IND)] }), listeAyari(w, [S()], { anahtarlar: [acik(IND2)] })],
+    ["aynı açık anahtar iki kid'de", listeAyari(w, [S(), { ...satir(IND2), x: IND.x }]), listeAyari(w, [S(), satir(IND2)])],
+    ["eski biçim satırı kanal taşıyor (yanlış diziye yapıştırma)", listeAyari(w, [], { anahtarlar: [satir(IND)] }), listeAyari(w, [satir(IND)])],
+    ["eski biçim + listede aynı açık anahtar", listeAyari(w, [S()], { anahtarlar: [{ kid: IND2.kid, x: IND.x }] }), listeAyari(w, [S()], { anahtarlar: [acik(IND2)] })],
   ];
   for (const [ad, bozuk, komsu] of gecersizler) {
     await ret(w, `§8k ayar geçersiz: ${ad}`, bozuk, istek(yml, gecerli), "AYAR_GECERSIZ", 503);
@@ -624,7 +625,7 @@ async function bolum8(w: WorkerModulu): Promise<void> {
     // Komşu ayar GEÇERLİ olmalı: kabul (200) ya da belirtecin kendi kodu (ör. boş listede JWS_KID) — 503 değil.
     check(`§8k' geçerli komşu: ${ad}`, y.status !== 503 && (y.status === 200 ? o.cagrilar.length === 1 : o.cagrilar.length === 0), `${y.status} ${kodu(y)}`);
   }
-  await kabul(w, "§8l geçmiş pencereli satır ayarı GEÇERSİZ KILMAZ (temizlik ayrı)", listeAyari(w, [satir(IND2, { baslangic: msToIso(SIMDI - 200 * GUN), bitis: msToIso(SIMDI - 80 * GUN) }), S()], []), istek(yml, gecerli));
+  await kabul(w, "§8l geçmiş pencereli satır ayarı GEÇERSİZ KILMAZ (temizlik ayrı)", listeAyari(w, [satir(IND2, { baslangic: msToIso(SIMDI - 200 * GUN), bitis: msToIso(SIMDI - 80 * GUN) }), S()]), istek(yml, gecerli));
 
   // Varsayılan dışa aktarım: panel değişkeni JSON dizesi, gerçek saat.
   const eskiFetch = globalThis.fetch;
@@ -633,9 +634,9 @@ async function bolum8(w: WorkerModulu): Promise<void> {
   try {
     const simdi = Date.now();
     const satirSimdi = { kid: IND.kid, x: IND.x, kanallar: [KANAL], baslangic: msToIso(simdi - GUN), bitis: msToIso(simdi + 119 * GUN) };
-    const env = { TKL_INDIRME_AYAR: JSON.stringify({ indirmeListesi: { uretim: [satirSimdi], hazirlik: [] } }) };
+    const env = { TKL_INDIRME_AYAR: JSON.stringify({ indirmeListesi: { uretim: [satirSimdi] } }) };
     const y1 = await w.default.fetch(istek(exeK(KANAL), bsl(basK(KANAL, IND, simdi))), env);
-    const y2 = await w.default.fetch(istek(exeK(HZR_KANAL), bsl(basK(HZR_KANAL, IND, simdi))), env);
+    const y2 = await w.default.fetch(istek(exeK(IKN_KANAL), bsl(basK(IKN_KANAL, IND, simdi))), env);
     check("§8m env dize JSON (yalnız indirmeListesi): kanal içi 200, kanal dışı 403 INDIRME_KANAL", y1.status === 200 && y2.status === 403 && kodu(y2) === "INDIRME_KANAL", `${y1.status} ${kodu(y1)} / ${y2.status} ${kodu(y2)}`);
   } finally {
     globalThis.fetch = eskiFetch;
@@ -647,7 +648,7 @@ async function bolum8(w: WorkerModulu): Promise<void> {
   let sablon: Ayar | null = null;
   if (blok) {
     let n = 0;
-    const xler = [IND.x, HZR.x, IND2.x, YABANCI.x];
+    const xler = [IND.x, IKN.x, IND2.x, YABANCI.x];
     const dolu = blok
       .replace(/"x": "<[^"]*>"/g, () => `"x": "${xler[n++ % xler.length]}"`)
       .replace(/"baslangic": "<[^"]*>"/g, `"baslangic": "${msToIso(SIMDI - GUN)}"`)
@@ -695,7 +696,7 @@ const TAKMA = "/ota/55.0/manifest";
 async function bolum10(w: WorkerModulu): Promise<void> {
   console.log("\n§10 — OTA takma adı · zincirli işaretçiler · yeni adres ayarı (K-5)");
   const gruplar = [...UPDATE_GROUPS];
-  const a = listeAyari(w, [satir(IND_YENI, { kanallar: gruplar })], []);
+  const a = listeAyari(w, [satir(IND_YENI, { kanallar: gruplar })]);
   const tb = (kanal: string, urun: "electron" | "mobil" = "mobil", anahtar = IND_YENI) => basK(kanal, anahtar, SIMDI, urun);
   await ret(w, "§10a ⭐ takma ad belirteçsiz", a, istek(TAKMA), "INDIRME_BELIRTEC_YOK");
   for (const g of gruplar) {
@@ -709,7 +710,7 @@ async function bolum10(w: WorkerModulu): Promise<void> {
   const { y: cy, o: co } = await kapidan(w, a, istek(TAKMA, bsl(capraz)));
   check("§10d kanalı test, öneki oncu olan belirteç takma adda RED (şema ya da önek)", cy.status === 403 && co.cagrilar.length === 0, `${cy.status} ${kodu(cy)}`);
   await ret(w, "§10e listede olmayan grup (demofabrika) belirteci", a, istek(TAKMA, bsl(tb("demofabrika"))), "INDIRME_KANAL");
-  const gecisli = listeAyari(w, [satir(IND_YENI, { kanallar: gruplar })], [], { gecisListesi: [{ yol: "/test/mobil/ota/55.0/manifest", bitis: msToIso(SIMDI + GUN) }] });
+  const gecisli = listeAyari(w, [satir(IND_YENI, { kanallar: gruplar })], { gecisListesi: [{ yol: "/test/mobil/ota/55.0/manifest", bitis: msToIso(SIMDI + GUN) }] });
   await kabul(w, "§10f' gerçek yol geçiş listesinde: belirteçsiz 200 (kıyas)", gecisli, istek("/test/mobil/ota/55.0/manifest"));
   await ret(w, "§10f ⭐ geçiş listesi takma adda uygulanmaz", gecisli, istek(TAKMA), "INDIRME_BELIRTEC_YOK");
   const bicimler = ["//ota/55.0/manifest", "/%6fta/55.0/manifest", "/OTA/55.0/manifest", "/ota/55.0//manifest", "/ota//55.0/manifest",
@@ -745,7 +746,7 @@ async function bolum10(w: WorkerModulu): Promise<void> {
     check("§10o yeni adres ayarı okunur", false, String(e));
     return;
   }
-  const liste = ham.indirmeListesi as { uretim?: AnahtarSatiri[]; hazirlik?: unknown[] } | undefined;
+  const liste = ham.indirmeListesi as { uretim?: AnahtarSatiri[] } | undefined;
   const uretim = Array.isArray(liste?.uretim) ? liste.uretim : [];
   const yeniSatir = uretim.find((r) => r.kid === IND_YENI.kid);
   const orta = yeniSatir ? Date.parse(String(yeniSatir.baslangic)) + GUN : SIMDI;
@@ -754,8 +755,8 @@ async function bolum10(w: WorkerModulu): Promise<void> {
   check("§10p ⭐ K-5: emekli kid (ind-2026) yeni adres ayarında YOK", uretim.length > 0 && uretim.every((r) => r.kid !== IND_EMEKLI.kid), uretim.map((r) => r.kid).join(", "));
   const kumeler = uretim.map((r) => JSON.stringify(r.kanallar));
   check("§10q her satırın kanalları = backend UPDATE_GROUPS (dağıtım zinciri)", kumeler.every((k) => k === JSON.stringify(gruplar)), kumeler.join(" · "));
-  check("§10r eski biçim (anahtarlar), hazırlık listesi, geçiş listesi BOŞ",
-    JSON.stringify(ham.anahtarlar) === "[]" && JSON.stringify(liste?.hazirlik) === "[]" && JSON.stringify(ham.gecisListesi) === "[]", JSON.stringify({ a: ham.anahtarlar, h: liste?.hazirlik, g: ham.gecisListesi }));
+  check("§10r eski biçim (anahtarlar) ve geçiş listesi BOŞ; liste adı yalnız `uretim`",
+    JSON.stringify(ham.anahtarlar) === "[]" && Object.keys(liste ?? {}).join() === "uretim" && JSON.stringify(ham.gecisListesi) === "[]", JSON.stringify({ a: ham.anahtarlar, l: Object.keys(liste ?? {}), g: ham.gecisListesi }));
   // Davranış: aynı ayar, satırların açık anahtarı test anahtarıyla değiştirilmiş (özel yarı yalnız satıcıda).
   const kopya = { ...w.VARSAYILAN_AYAR, ...ham, indirmeListesi: { ...liste, uretim: uretim.map((r) => (r.kid === IND_YENI.kid ? { ...r, x: IND_YENI.x } : r)) } };
   const an = (kanal: string, anahtar: TestAnahtari) => signDownloadToken({ payload: { ...yuk("mobil", {}, kanal), exp: msToIso(orta + 60 * DAKIKA) }, key: { kid: anahtar.kid, privateKey: anahtar.privateKey }, nowMs: orta });

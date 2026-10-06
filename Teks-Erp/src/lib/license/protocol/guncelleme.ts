@@ -86,8 +86,8 @@ export function signReleaseManifest(g: {
 
 /**
  * Sıra (Rust aynası aynı sırayla aynı kodu verir): JWS (typ · kid · imza; `pkt-*` ise PAKET sertifikası zinciri) → şema
- * → imzalayan = `paketImzaKid` → kanal. `keys` ÇAĞIRANIN süzdüğü kümedir: hazırlık anahtarını yalnız TEST/DEMO kurulumu
- * verir. `zincir` verilmezse `pkt-*` imzalı bildirim kök olmadığı için düşer (GUVEN_CAPASI_BOS).
+ * → imzalayan = `paketImzaKid` → kanal. `keys` ÇAĞIRANIN verdiği kümedir (bu derlemenin
+ * PAKET çapası). `zincir` verilmezse `pkt-*` imzalı bildirim kök olmadığı için düşer (GUVEN_CAPASI_BOS).
  */
 export function verifyReleaseManifest(
   token: unknown,

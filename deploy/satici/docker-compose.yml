@@ -1,18 +1,16 @@
-name: tekserp-satici-${ORTAM:?ORTAM gerekli (hazirlik|uretim)}
+name: tekserp-satici-${ORTAM:?ORTAM gerekli (uretim)}
 
 # =============================================================================
 # TeksERP SATICI (lisans) sunucusu — tekserp-vds · /opt/stack/apps/tekserp-satici-<ortam>/
 # =============================================================================
 # Runbook: docs/ops/SATICI-KURULUM.md (kurulum · doğrulama · geri alma). Bu dosya sunucuya ELLE
-# kopyalanır; değerler yanındaki `.env`ten. İki ortam, AYNI dosya, ayrı proje:
-#   ORTAM=hazirlik (ornek.env)       lisans-test.etkiliyazilim.com · yalnız TEST/DEMO imzalayan hazırlık kökü
-#   ORTAM=uretim   (ornek-uretim.env) lisans.etkiliyazilim.com · üretim kökü (tören) — runbook §13
-# Konteyner/ağ/DB hacmi adları ORTAM'dan türer; host yolları, alt ağlar ve sır grubu .env'de ayrıdır
-# (compose-denetle.mjs --diger-env iki ortamın çakışmadığını ölçer).
+# kopyalanır; değerler yanındaki `.env`ten (ornek-uretim.env). Tek ortam: ORTAM=uretim
+# (lisans.etkiliyazilim.com · üretim kökü, tören — runbook §13); proje, konteyner, ağ ve DB hacmi adları ORTAM'dan
+# türer; host yolları, alt ağlar ve sır grubu .env'dedir.
 #
 # Üç ağ, üçü de internal — yalnız `ic-api` patron konteyneriyle ORTAK; hiçbiri güncelleme/kiracıyla değil.
-# Satıcı HİÇBİR portu yayımlamaz ve dış bağlantısı yoktur; portal yalnız üretimde, `docker-compose.portal-genel.yml`
-# örtüsüyle Traefik + Cloudflare Access arkasından açılır (hazırlıkta portal YOK — denetim Ⓞ).
+# Satıcı HİÇBİR portu yayımlamaz ve dış bağlantısı yoktur; portal `docker-compose.portal-genel.yml`
+# örtüsüyle Traefik + Cloudflare Access arkasından açılır (üretimde zorunlu — denetim Ⓞ).
 #   kenar   (internal) Traefik ↔ satıcının GENEL dinleyicisi (/v1/*, /q, /bayi/api) ve (örtüyle) ERİŞİM dinleyicisi.
 #                      Traefik bu ağa runbook adımıyla bağlanır; `web` ağına satıcı KATILMAZ.
 #   ic      (internal) satıcı ↔ kendi PG16'sı ↔ yedek işi. Port yayını YOK.
@@ -81,8 +79,8 @@ services:
       PORT_GENEL: "4610"
       GENEL_BIND: ${KENAR_IP:?KENAR_IP gerekli}
       ANAHTAR_DIZINI: /anahtarlar
-      # Gömülü güven çapası kipi = ortam: üretim satıcısı yalnız üretim köklerine, hazırlık yalnız hazırlık köklerine güvenir.
-      GUVEN_CAPASI: ${ORTAM}
+      # Gömülü güven çapası TEK kiptir (üretim); denetim ⑪ değeri ölçer.
+      GUVEN_CAPASI: uretim
       # İstemci IP'si Cloudflare başlığından (hız sınırı). Başlık YALNIZ güvenilen kenardan gelen bağlantıda okunur:
       # soket Traefik'tir (kenar ağı) → güven kararı Traefik'in X-Forwarded-For'a yazdığı son halka CF aralığındaysa.
       VEKIL_IP_BASLIGI: cf-connecting-ip

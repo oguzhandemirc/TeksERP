@@ -7,7 +7,7 @@
 // olmalı ve commit'i yapıtın künyesindeki (`dist/server-kunye.json`) ve paketin (PAKET.json) commit'i olmalı.
 // Üç sonuç: uyumlu · ihlal · ÖLÇÜLEMEDİ (okunamayan koşu geçmiş kapı değildir).
 // KAÇIŞ (kullanıcı kararı 2026-10-01) yalnız KULLANICININ CÜMLESİYLE: CI koşusu yokken üretim imzası
-// `--ci-atla="<cümle>"` ister; boş/kısa/kalıp dışı cümle RED, `--ci-kosu` ile birlikte RED, hazırlık anahtarında RED.
+// `--ci-atla="<cümle>"` ister; boş/kısa/kalıp dışı cümle RED, `--ci-kosu` ile birlikte RED, üretim dışı (test) anahtarda RED.
 // Cümle + saat + makine + HEAD imzalı künyeye (`ciKokeni` ek anahtarı) girer; yayıncı görünce uyarır, defterine yazar.
 // =============================================================================
 import { execFileSync } from "node:child_process";
@@ -84,7 +84,7 @@ export type CiKokeniKaydi =
 /** `--ci-atla` hükmü — kaçış yalnız üretim anahtarında, koşu verilmemişken ve kullanıcının geçerli cümlesiyle. */
 export function ciAtlaHukmu(o: { ham: string; uretim: boolean; kosuVar: boolean }): { sonuc: "uyumlu" | "ihlal"; cumle: string; satirlar: string[] } {
   if (!o.uretim) {
-    return { sonuc: "ihlal", cumle: "", satirlar: ["hazırlık anahtarında kaçış gerekmez (CI kökeni isteğe bağlı) — --ci-atla bu anahtarla verilemez"] };
+    return { sonuc: "ihlal", cumle: "", satirlar: ["üretim dışı (test) anahtarda kaçış gerekmez (CI kökeni isteğe bağlı) — --ci-atla bu anahtarla verilemez"] };
   }
   if (o.kosuVar) {
     return { sonuc: "ihlal", cumle: "", satirlar: ["--ci-kosu ile --ci-atla birlikte verilemez — koşu varsa ölçülür, kaçış yalnız koşu YOKKEN"] };

@@ -111,7 +111,7 @@ fn lease_is_the_authority() {
         root: ed25519_dalek::SigningKey::from_bytes(&[9; 32]),
         alt: ed25519_dalek::SigningKey::from_bytes(&[2; 32]),
         package: ed25519_dalek::SigningKey::from_bytes(&[3; 32]),
-        staging: ed25519_dalek::SigningKey::from_bytes(&[4; 32]),
+        legacy: ed25519_dalek::SigningKey::from_bytes(&[4; 32]),
     };
     let (lease_text, _) = lease_and_entitlement(&fake, &LeaseOpts::default(), T0);
     std::fs::write(w.layout.root.join("lisans").join("kira.jws"), lease_text).unwrap();
@@ -195,16 +195,15 @@ fn pinning_reads_the_pinned_version_and_never_goes_past_it() {
     untouched(&w, "hedef-disi");
 }
 
+/// Tek kip: emekli hazırlık PAKET kid'i (`paket-hazirlik`) gömülü çapada yok — hangi sınıfta olursa olsun RED.
 #[test]
-fn staging_package_key_only_for_test_class() {
-    rejected("hazirlik-uretim", Setup { package_signer_staging: true, ..Setup::default() }, "JWS_KID");
-    let w = World::new(
+fn retired_staging_package_kid_is_rejected_for_every_class() {
+    rejected("hazirlik-uretim", Setup { package_signer_legacy: true, ..Setup::default() }, "JWS_KID");
+    rejected(
         "hazirlik-test",
-        Setup { package_signer_staging: true, lease: LeaseOpts { class: "TEST", ..LeaseOpts::default() }, ..Setup::default() },
+        Setup { package_signer_legacy: true, lease: LeaseOpts { class: "TEST", ..LeaseOpts::default() }, ..Setup::default() },
+        "JWS_KID",
     );
-    w.run_to_rest(0);
-    assert_eq!(w.state(), Some(State::Succeeded), "TEST sınıfında hazırlık anahtarı geçer");
-    assert_invariants(&w, "hazırlık/TEST");
 }
 
 #[test]

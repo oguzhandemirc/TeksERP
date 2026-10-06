@@ -1,7 +1,7 @@
 // =============================================================================
 // Şifreli modül paketi MÜHÜRLEYİCİ (Faz 2d) — build-korumali.mjs `--sifrele` çağırır.
 // =============================================================================
-// Düz modül CJS'ini hazırlık makinesindeki modül anahtarıyla (0600, REPO DIŞI; satıcı CLI'ı
+// Düz modül CJS'ini satıcı tören makinesindeki modül anahtarıyla (0600, REPO DIŞI; satıcı CLI'ı
 // `satici/sunucu/scripts/modul-anahtari.ts uret` üretir) AES-256-GCM ile `.tkmod` paketine çevirir.
 // Modülün en yüksek sürümlü anahtar dosyası kullanılır; anahtar yoksa derleme DÜŞER (fail-closed).
 //
@@ -13,7 +13,8 @@ import path from "node:path";
 import { parseModuleKeyFile } from "../src/lib/license/protocol";
 import { openModulePackage, sealModulePackage } from "../src/lib/license/encrypted-module";
 
-export const MODULE_KEY_DIR_DEFAULT = path.join(os.homedir(), ".tekserp", "satici-hazirlik", "modul-anahtarlari");
+// Varsayılan = satıcı töreninin dizini (`deploy/satici/uretim-toren.mjs` `<dizin>/modul-anahtarlari`).
+export const MODULE_KEY_DIR_DEFAULT = path.join(os.homedir(), ".tekserp", "satici-uretim", "modul-anahtarlari");
 
 function arg(name: string): string | null {
   const p = process.argv.find((a) => a.startsWith(`--${name}=`));

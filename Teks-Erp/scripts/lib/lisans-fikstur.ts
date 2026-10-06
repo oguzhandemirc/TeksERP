@@ -59,7 +59,8 @@ export interface Fikstur {
   readonly musteriId: string;
   readonly tesisId: string;
   readonly kok: TestAnahtari;
-  readonly hazirlik: TestAnahtari;
+  /** Sınıfı DAR kök (yalnız TEST/DEMO) — kökün sınıf satırı zinciri sınırlar (KOK_SINIF_YETKISIZ). */
+  readonly dar: TestAnahtari;
   readonly alt: TestAnahtari;
   readonly ind: TestAnahtari;
   readonly bayi: TestAnahtari;
@@ -68,22 +69,22 @@ export interface Fikstur {
   readonly kurulum: TestAnahtari;
   readonly tuz: Buffer;
   readonly parmakIzi: Fingerprint;
-  /** Üretim kökü (tüm sınıflar) + hazırlık kökü (TEST/DEMO). */
+  /** Tam kök (tüm sınıflar) + dar kök (TEST/DEMO). */
   readonly kokler: RootKey[];
 }
 
 /**
- * Fikstür köklerinin kid'leri gerçek çapadaki (üretim `kok-2026-1`, hazırlık `hazirlik-2026-1`) hiçbir kid'le aynı
- * olamaz ve üretim biçimi (`<tür>-<yıl>-<n>`) DIŞINDADIR: gömülü çapayla koşan doğrulamada ÇARPIŞMAZ, çapa betiğine
- * de giremez (bekçi `test_guven_capasi_ekle` §0g). Önek sınıf kuralını taşır (`hazirlik-` yalnız TEST/DEMO).
+ * Fikstür köklerinin kid'leri gerçek çapadaki (`kok-2026-1`) hiçbir kid'le aynı olamaz ve üretim biçimi
+ * (`<tür>-<yıl>-<n>`) DIŞINDADIR: gömülü çapayla koşan doğrulamada ÇARPIŞMAZ, çapa betiğine de giremez (bekçi
+ * `test_guven_capasi_ekle` §0g). İkisi de tek çapa ailesindendir (`kok-`); sınıf sınırı kid'de değil satırdadır.
  */
 export const FIKSTUR_KOK_KID = "kok-fikstur-1";
-export const FIKSTUR_HAZIRLIK_KID = "hazirlik-fikstur-1";
+export const FIKSTUR_DAR_KID = "kok-fikstur-dar-1";
 
 export function fiksturKur(simdi: number): Fikstur {
   const tuz = Buffer.alloc(32, 7);
   const kok = anahtarUret(FIKSTUR_KOK_KID);
-  const hazirlik = anahtarUret(FIKSTUR_HAZIRLIK_KID);
+  const dar = anahtarUret(FIKSTUR_DAR_KID);
   return {
     simdi,
     kurulumId: randomUUID(),
@@ -91,7 +92,7 @@ export function fiksturKur(simdi: number): Fikstur {
     musteriId: randomUUID(),
     tesisId: randomUUID(),
     kok,
-    hazirlik,
+    dar,
     alt: anahtarUret("alt-2026-1"),
     ind: anahtarUret("ind-2026"),
     bayi: anahtarUret("bayi-b1"),
@@ -101,7 +102,7 @@ export function fiksturKur(simdi: number): Fikstur {
     parmakIzi: digestFingerprint(HAM_PARMAK_IZI, tuz),
     kokler: [
       { kid: kok.kid, x: kok.x, classes: [...LICENSE_CLASSES] },
-      { kid: hazirlik.kid, x: hazirlik.x, classes: ["TEST", "DEMO"] },
+      { kid: dar.kid, x: dar.x, classes: ["TEST", "DEMO"] },
     ],
   };
 }

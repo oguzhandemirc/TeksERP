@@ -5,16 +5,16 @@
 // anahtarı gerekmez). NE ÖLÇER:
 //   §1 imzalı yük + liste dosyası: geçerli · kurcalanmış · eksik · FAZLA (kapsamda / dışında /
 //      node_modules / sembolik bağ; ÇEKİRDEKTE, TS ikinci katman) · migration SQL · liste dosyası
-//      kurcalı/silinmiş · imzasız · yanlış anahtar · liste yok · hazırlık anahtarı ÜRETİM'de · filigran ·
+//      kurcalı/silinmiş · imzasız · yanlış anahtar · liste yok · eski hazırlık PAKET kid'i gömülü çapada YOK · filigran ·
 //      yeni HAK: aynı ölçümün kararı yeni sınıfla (`decideForClass`) o sınıfla tam denetime eşit (§1q–§1s) ·
 //      ⭐ yalancı çekirdek (imza denetlemeden "geçerli" der): ikinci katman imzayı TS'te yeniden doğrular,
 //      imzasız başlıktan kid okumaz → GECERSIZ BUTUNLUK_IMZA (§1t)
-//   §2 çapa: iki kipin PAKET listesi (üretimde yalnız paket-<yıl>, hazırlıkta yalnız paket-hazirlik*), derlemenin
-//      çapası geliştirmede üretim listesi, hazırlık kid'i sınıf kuralında; kapsam
+//   §2 çapa: tek kip — PAKET listesi yalnız paket-<yıl>, hazırlık listesi YOK, derlemenin çapası üretim listesi,
+//      paket-hazirlik* üretim kid kuralının dışında; kapsam
 //   §3 merdiven + künye + çapa kalıcılığı (saf): uyuşma damgayı silmez, yalnız yeni paketId sıfırlar
 //   §4 native'e bağlama: motor çekirdekten geçer; zorunlu kipte TS'e düşme YOK; `.node` dlopen
 //      ÖNCESİ imzalı listeye karşı (liste yok / yanlış anahtar / kurcalanmış → çekirdek YOK); korumalı derleme
-//      çapa kipini kanaldan tanımlar; ⭐ üretim derlemesi imzalı listedeki hazırlık ikilisini de AÇMAZ (§4i)
+//      sabitlerini tanımlar, çapa kipi sabiti YOK (tek kip); paketleme native kip denetimi (§4j)
 //   §5 imza aracı: öz-denetim, liste JWS tavanına takılmaz, derleme künyesi, node_modules'süz paket
 //   §5' şifreli modül paketleri (.tkmod, 2d) imzalı kapsamda: değişen UYUSMAZ, sonradan beliren FAZLA
 //   §7 korumalı yükleyici: execArgv/NODE_OPTIONS enjeksiyon bayrağı → GECERSIZ BUTUNLUK_YUKLEYICI (dosya raporu korunur, geliştirme etkilenmez)
@@ -33,11 +33,11 @@ import {
   INTEGRITY_TYP,
   PACKAGE_PUBLIC_KEYS,
   PRODUCTION_PACKAGE_PUBLIC_KEYS,
-  STAGING_PACKAGE_PUBLIC_KEYS,
   verifyIntegrity,
   type PackageKey,
 } from "../src/lib/license/integrity";
-import { INTEGRITY_FILE, INTEGRITY_SCOPE_DIRS, INTEGRITY_SCOPE_FILES, isProductionPackageKid, isStagingPackageKid } from "../src/lib/license/integrity-scope";
+import { INTEGRITY_FILE, INTEGRITY_SCOPE_DIRS, INTEGRITY_SCOPE_FILES, isProductionPackageKid } from "../src/lib/license/integrity-scope";
+import * as butunlukModulu from "../src/lib/license/integrity";
 import { INTEGRITY_LIST_FILE } from "../src/lib/license/integrity-list";
 import { MODULE_PACKAGE_EXT } from "../src/lib/license/encrypted-module";
 import { decideForClass, detectLoaderInjection, integrityReason, runIntegrityCheck, type IntegrityCheckInput } from "../src/lib/license/integrity-check";
@@ -215,16 +215,24 @@ async function okunamayanDosya(k: string, core: LicenseCore, ek: string): Promis
 }
 
 async function bolum1b(): Promise<void> {
-  console.log("\n§1' hazırlık anahtarı sınıf kuralı + filigran");
+  console.log("\n§1' eski hazırlık PAKET kid'i + filigran");
   const k = paket("s1b");
   await imzala(k, H, { musteri: "testfabrika", paketId: "6f1c2a3b-4d5e-4f60-8a7b-9c0d1e2f3a4b" });
   const g = (o: Partial<IntegrityCheckInput>) => runIntegrityCheck(girdi(k, { keys: keysOf(H), ...o }));
   const uretim = await g({ entitlementClass: "URETIM" });
   const test = await g({ entitlementClass: "TEST" });
-  const demo = await g({ entitlementClass: "DEMO" });
-  const bilinmez = await g({ entitlementClass: null });
-  check("§1j hazırlık anahtarı: ÜRETİM'de GECERSIZ BUTUNLUK_HAZIRLIK_ANAHTARI, künye güvenilmez", uretim.durum === "GECERSIZ" && uretim.kod === "BUTUNLUK_HAZIRLIK_ANAHTARI" && uretim.kunye === null);
-  check("§1k hazırlık anahtarı: TEST/DEMO'da GECERLI · sınıf bilinmiyorsa OLCULEMEDI", test.durum === "GECERLI" && demo.durum === "GECERLI" && bilinmez.durum === "OLCULEMEDI" && bilinmez.kod === "BUTUNLUK_SINIF_BILINMIYOR");
+  const gomuluTest = await g({ keys: undefined, entitlementClass: "TEST" });
+  const gomuluUretim = await g({ keys: undefined, entitlementClass: "URETIM" });
+  check(
+    "§1j ⭐ eski hazırlık PAKET kid'i (paket-hazirlik) gömülü çapada YOK: TEST'te de ÜRETİM'de de GECERSIZ, künye güvenilmez",
+    gomuluTest.durum === "GECERSIZ" && gomuluUretim.durum === "GECERSIZ" && gomuluTest.kunye === null && gomuluUretim.kunye === null,
+    `${gomuluTest.kod} · ${gomuluUretim.kod}`,
+  );
+  check(
+    "§1k kid ailesine özel sınıf kuralı YOK (kapı gömülü çapadır): aynı anahtar çapada açıkça verilirse ÜRETİM'de de TEST'te de GECERLI",
+    uretim.durum === "GECERLI" && test.durum === "GECERLI",
+    `${uretim.durum}/${uretim.kod} · ${test.durum}/${test.kod}`,
+  );
   const esit = await g({ entitlementClass: "TEST", watermark: { musteri: "testfabrika", kurulumId: null, paketId: "6f1c2a3b-4d5e-4f60-8a7b-9c0d1e2f3a4b", derlemeTarihi: null } });
   const baska = await g({ entitlementClass: "TEST", watermark: { musteri: "baskafabrika", kurulumId: null, paketId: "6f1c2a3b-4d5e-4f60-8a7b-9c0d1e2f3a4b", derlemeTarihi: null } });
   const baskaPaket = await g({ entitlementClass: "TEST", watermark: { musteri: "testfabrika", kurulumId: null, paketId: randomUUID(), derlemeTarihi: null } });
@@ -258,8 +266,9 @@ async function bolum1c(): Promise<void> {
   check("§1q ⭐ sınıfsız ölçümün kararı TEST/DEMO/URETIM/null · filigran · enjeksiyon · FAZLA'da o sınıfla tam denetime EŞİT, `denetlendi` ölçüm anı", kotu.length === 0, kotu.join(" | ") || `${farklar.length} durum eşit`);
   const bilinmez = await g({ entitlementClass: null });
   const test = decideForClass(bilinmez, "TEST");
-  check("§1r etkinleştirme penceresi: sınıf bilinmiyorken OLCULEMEDI/künyesiz → TEST HAK'ıyla GECERLI + imzalı künye (derleme tarihi)",
-    bilinmez.durum === "OLCULEMEDI" && bilinmez.kunye === null && test?.durum === "GECERLI" && test.kunye?.derlemeTarihi === "2026-09-29T20:00:00.000Z", `${bilinmez.kod} → ${test?.durum}`);
+  // Etkinleştirme penceresi (sınıf bilinmiyor → OLCULEMEDI) yalnız dar zincir sertifikasında doğar: §8f'.
+  check("§1r zincirsiz listede kid ailesine bağlı pencere YOK: sınıf bilinmese de GECERLI + imzalı künye; yeni sınıfla karar aynı",
+    bilinmez.durum === "GECERLI" && bilinmez.kunye?.derlemeTarihi === "2026-09-29T20:00:00.000Z" && test?.durum === "GECERLI" && test.kunye?.derlemeTarihi === "2026-09-29T20:00:00.000Z", `${bilinmez.durum}/${bilinmez.kod} → ${test?.durum}`);
   rmSync(path.join(k, INTEGRITY_FILE));
   const listesiz = await g({ entitlementClass: null });
   check("§1s ölçümü olmayan sonuç (liste yok) yeniden kararlanmaz → null (tam denetim beklenir)", listesiz.olcum === null && decideForClass(listesiz, "TEST") === null, `${listesiz.kod}`);
@@ -296,16 +305,15 @@ async function bolum1d(): Promise<void> {
 function bolum2(): void {
   console.log("\n§2 çapa");
   check(
-    "§2a ⭐ iki kipin PAKET listesi dolu; üretim listesinde YALNIZ paket-<yıl>, hazırlık listesinde YALNIZ paket-hazirlik* (iki liste ayrık)",
-    PRODUCTION_PACKAGE_PUBLIC_KEYS.length > 0 &&
-      STAGING_PACKAGE_PUBLIC_KEYS.length > 0 &&
-      PRODUCTION_PACKAGE_PUBLIC_KEYS.every((k) => isProductionPackageKid(k.kid)) &&
-      STAGING_PACKAGE_PUBLIC_KEYS.every((k) => isStagingPackageKid(k.kid)) &&
-      PRODUCTION_PACKAGE_PUBLIC_KEYS.every((p) => STAGING_PACKAGE_PUBLIC_KEYS.every((s) => s.x !== p.x)),
-    `üretim ${PRODUCTION_PACKAGE_PUBLIC_KEYS.map((k) => k.kid).join(",")} · hazırlık ${STAGING_PACKAGE_PUBLIC_KEYS.map((k) => k.kid).join(",")}`,
+    "§2a ⭐ PAKET çapası tek kip: üretim listesi dolu ve YALNIZ paket-<yıl>; hazırlık listesi (STAGING_PACKAGE_PUBLIC_KEYS) YOK",
+    PRODUCTION_PACKAGE_PUBLIC_KEYS.length > 0 && PRODUCTION_PACKAGE_PUBLIC_KEYS.every((k) => isProductionPackageKid(k.kid)) && !("STAGING_PACKAGE_PUBLIC_KEYS" in butunlukModulu),
+    `üretim ${PRODUCTION_PACKAGE_PUBLIC_KEYS.map((k) => k.kid).join(",")}`,
   );
-  check("§2a' derlemenin PAKET çapası geliştirmede (kip sabiti tanımsız) ÜRETİM listesi — hazırlık anahtarı yok", PACKAGE_PUBLIC_KEYS === PRODUCTION_PACKAGE_PUBLIC_KEYS && !PACKAGE_PUBLIC_KEYS.some((k) => isStagingPackageKid(k.kid)));
-  check("§2b hazırlık kid'i sınıf kuralında (paket-hazirlik*), üretim kid'i değil", isStagingPackageKid("paket-hazirlik") && isStagingPackageKid("paket-hazirlik-2") && !isStagingPackageKid("paket-2027") && !isStagingPackageKid("paket-hazirlikx"));
+  check("§2a' derlemenin PAKET çapası geliştirmede ÜRETİM listesi", PACKAGE_PUBLIC_KEYS === PRODUCTION_PACKAGE_PUBLIC_KEYS);
+  check(
+    "§2b üretim kid kuralı paket-<yıl>[-<n>]: eski paket-hazirlik* ailesi ve fikstür kid'i kuralın DIŞINDA",
+    isProductionPackageKid("paket-2027") && isProductionPackageKid("paket-2027-2") && !isProductionPackageKid("paket-hazirlik") && !isProductionPackageKid("paket-hazirlik-2") && !isProductionPackageKid("paket-fikstur"),
+  );
   check("§2c kapsam dizinleri dist/ + native/ + runtime/ + node_modules/ + prisma/migrations/ içerir", ["dist", "native", "runtime", "node_modules", "prisma/migrations"].every((d) => INTEGRITY_SCOPE_DIRS.includes(d)));
   check("§2d ecosystem.config.js kapsamda DEĞİL (kur.ps1 yükseltmede sunucununkini korur)", !INTEGRITY_SCOPE_FILES.includes("ecosystem.config.js"));
 }
@@ -387,8 +395,11 @@ async function bolum4(): Promise<void> {
   check("§4b çekirdek YOKken motor TS'e düşmez: HAK/kira GECERSIZ(CEKIRDEK_YOK)", d.hak.status === "GECERSIZ" && d.hak.code === "CEKIRDEK_YOK" && d.kira.status === "GECERSIZ" && d.kira.code === "CEKIRDEK_YOK");
   const kb = oku("scripts/build-korumali.mjs");
   check(
-    "§4c korumalı derleme __TEKSERP_NATIVE_REQUIRED__=true + filigran + çapa kipi (kanaldan) sabitlerini tanımlar",
-    /__TEKSERP_NATIVE_REQUIRED__:\s*'true'/.test(kb) && /__TEKSERP_FILIGRAN__:\s*JSON\.stringify/.test(kb) && /__TEKSERP_GUVEN_CAPASI__:\s*JSON\.stringify\(guvenCapasi\)/.test(kb),
+    "§4c korumalı derleme __TEKSERP_NATIVE_REQUIRED__=true + filigran sabitlerini tanımlar; çapa kipi sabiti YOK (tek kip) ve üretim dışı kanal çapası DURUR",
+    /__TEKSERP_NATIVE_REQUIRED__:\s*'true'/.test(kb) &&
+      /__TEKSERP_FILIGRAN__:\s*JSON\.stringify/.test(kb) &&
+      !/__TEKSERP_GUVEN_CAPASI__/.test(kb) &&
+      /if \(kip !== 'uretim'\) throw new Error/.test(kb),
   );
   const pk = oku("../deploy/paketle.ps1");
   const kur = oku("../deploy/kur.ps1");
@@ -425,11 +436,6 @@ async function bolum4(): Promise<void> {
   const r3 = yukle(keysOf(A));
   check("§4h imzalı listedeki üretim .node → native yüklenir (zorunlu kip)", r3.status.kaynak === "native" && r3.core.source === "native", neden(r3));
 
-  const hazirlik = path.join(TEKS, "native", "lisans-cekirdek", "dist-hazirlik", dosya);
-  if (!existsSync(hazirlik)) {
-    ATLAMA.atla("§4i–§4j hazırlık ikilisi zorunlu kipte + paketleme kip denetimi", "native hazırlık derlemesi yok — `cd native/lisans-cekirdek && npm run derle:hazirlik`", 2);
-    return;
-  }
   const kipDenetimi = (node: string, kunye: unknown): number | null => {
     const kf = path.join(TEMP, `kunye-${randomUUID()}.json`);
     writeFileSync(kf, JSON.stringify(kunye));
@@ -438,26 +444,14 @@ async function bolum4(): Promise<void> {
   const test = path.join(TEKS, "native", "lisans-cekirdek", "dist", dosya);
   const sonuclar = [
     kipDenetimi(uretim, { guvenCapasi: "uretim" }),
-    kipDenetimi(hazirlik, { guvenCapasi: "hazirlik" }),
     kipDenetimi(uretim, { guvenCapasi: "hazirlik" }),
-    kipDenetimi(hazirlik, { guvenCapasi: "uretim" }),
     existsSync(test) ? kipDenetimi(test, { guvenCapasi: "uretim" }) : 1,
     kipDenetimi(uretim, { zaman: "x" }),
   ];
   check(
-    "§4j ⭐ paketleme kip denetimi (native-capa-kipi.mjs): aynı kip 0 · üretim baytına hazırlık ikilisi ve tersi 1 · test çapalı ikili 1 · künyede kip yok 2 (ölçülemedi)",
-    JSON.stringify(sonuclar) === JSON.stringify([0, 0, 1, 1, 1, 2]),
+    "§4j ⭐ paketleme kip denetimi (native-capa-kipi.mjs): aynı kip 0 · künye eski hazırlık kipi 2 (tek kip, tanınmaz) · test çapalı ikili 1 · künyede kip yok 2 (ölçülemedi)",
+    JSON.stringify(sonuclar) === JSON.stringify([0, 2, 1, 2]),
     JSON.stringify(sonuclar),
-  );
-  const kh = paket("s4h");
-  copyFileSync(hazirlik, path.join(kh, "native", dosya));
-  await imzala(kh, A);
-  const uretimde = loadLicenseCoreFrom({ required: true, cwd: kh, env: {}, platform: process.platform, arch: process.arch, packageKeys: keysOf(A) });
-  const hazirlikta = loadLicenseCoreFrom({ required: true, cwd: kh, env: {}, platform: process.platform, arch: process.arch, packageKeys: keysOf(A), anchorMode: "hazirlik" });
-  check(
-    "§4i ⭐ imzalı listede olsa da hazırlık çapalı .node ÜRETİM derlemesinde açılmaz (CAPA_UYUSMAZ, çekirdek YOK) · hazırlık derlemesi açar",
-    uretimde.status.kaynak === "yok" && neden(uretimde) === "CAPA_UYUSMAZ" && hazirlikta.status.kaynak === "native",
-    `${neden(uretimde)} · ${neden(hazirlikta)}`,
   );
 }
 
@@ -554,7 +548,7 @@ async function bolum6(): Promise<void> {
   check("§6d teslim dosyası eksikken imza ATILMAZ (ne .jws ne liste dosyası)", /teslim dosyası eksik: \.env\.ornek/.test(hata) && !existsSync(r.file) && !existsSync(r.listFile), hata.slice(0, 80));
   writeFileSync(path.join(dir, ".env.ornek"), "A=1\n");
   const anahtarDizini = path.join(TEMP, "anahtar6");
-  const kf = writePackageKey(anahtarDizini, generatePackageKey("paket-hazirlik", ["TEST", "DEMO"]));
+  const kf = writePackageKey(anahtarDizini, generatePackageKey("paket-fikstur", ["TEST", "DEMO"]));
   const cli = spawnSync(process.execPath, ["--import", "tsx", "scripts/build-korumali-imza.ts", "belge", `--belge=${belge}`, `--anahtar=${kf}`], { cwd: TEKS, encoding: "utf8", timeout: 60_000 });
   check("§6e ⭐ CLI `belge` (teslim-paketle.sh'in çağrısı) .jws + liste dosyası yazar", cli.status === 0 && existsSync(r.file) && existsSync(r.listFile), `${cli.status} ${(cli.stderr || cli.stdout).trim().slice(0, 100)}`);
 }

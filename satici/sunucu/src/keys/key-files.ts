@@ -1,5 +1,5 @@
 // Satıcı anahtar dosyaları.
-//   KÖK / hazırlık kökü / BAYİ / HAK ARA İMZACISI: özel yarı scrypt(parola) → AES-256-GCM ile SARILI (parolasız okunamaz);
+//   KÖK / BAYİ / HAK ARA İMZACISI: özel yarı scrypt(parola) → AES-256-GCM ile SARILI (parolasız okunamaz);
 //     ek veri (AAD) tür + kid + açık yarı + sınıfları bağlar — alanlar kopartılıp başka dosyaya takılamaz.
 //     Sarmanın TEK uygulaması protokoldedir (`lisans-protokol/anahtar-sarma.ts`; imza aracının PAKET anahtarı da onu kullanır).
 //   ALT (kira) / İNDİRME: otomatik imza için parolasız, 0600; kök imzalı sertifika dosyanın içinde.

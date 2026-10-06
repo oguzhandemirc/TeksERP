@@ -5,22 +5,24 @@
 //
 // NE ÖLÇER:
 //   §1 çözüm tablosu: verilmezse/boşsa ÜRETİM satıcısı (https://lisans.etkiliyazilim.com) ·
-//      hazırlık adresi aynen · `kapali` → dışarı çıkış yok · yalnız köken (şema + host[:port]);
+//      başka köken (yerel prova satıcısı) aynen · `kapali` → dışarı çıkış yok · yalnız köken (şema + host[:port]);
 //      yol/sorgu/kimlik bilgisi/düz HTTP (döngü adresi hariç)/şemasız değer → null (fail-closed)
-//   §2 varsayılan kendiyle tutarlı (HTTPS köken) ve hazırlık adresinden AYRI host
-//   §3 ⭐ gerçek modül açılışı: ayrı süreçte ortam verilmeden / hazırlık adresiyle / `kapali` ile
+//   §2 varsayılan kendiyle tutarlı (HTTPS köken); tek satıcı — emekli `lisans-test` adı kodda yok
+//   §3 ⭐ gerçek modül açılışı: ayrı süreçte ortam verilmeden / başka kökenle / `kapali` ile
 //      motorun `getLicenseConfig().vendorUrl`i beklenen değeri taşır (çözüm yolu gerçekten bu fonksiyon)
 //   §4 ⭐ tek kaynak: `src/` altında `LICENSE_SERVER_URL` ortam okuması ve satıcı alan adı
-//      literali YALNIZ `lib/license/vendor-url.ts`te (ikinci okuyucu = ayrışan adres)
+//      literali YALNIZ `lib/license/vendor-url.ts`te (ikinci okuyucu = ayrışan adres); §4c emekli
+//      hazırlık satıcısının adı (`lisans-test`) src'de hiç yok
 // Etkinleşmemiş kurulumun varsayılan adresle bile dışarı çıkmadığı `test_lisans_motoru §2b`de.
 //
 // NEGATİF SONDA — dosya DIŞI mutasyon zinciri (bir kezlik, ✓B; cp + shasum ile birebir geri alındı):
 //   B1  http-egress döngü dışı düz HTTP'ye izin verir      → 1 ❌ (§1 http)
 //   B2  motor ham ortamı okur (eski readVendorUrl)        → 3 ❌ (§3a verilmezse · §3c kapali · §4a)
 //   B3  src'de ikinci `process.env.LICENSE_SERVER_URL`      → 1 ❌ (§4a)
+//   B4  vendor-url.ts.e `lisans-test` adı (yorum)          → 1 ❌ (§4c)
 // =============================================================================
 import { spawnSync } from "node:child_process";
-import { readFileSync, readdirSync, statSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import path from "node:path";
 import { DEFAULT_LICENSE_SERVER_URL, LICENSE_SERVER_DISABLED, resolveVendorUrl } from "../src/lib/license/vendor-url";
 
@@ -32,7 +34,7 @@ function check(label: string, ok: boolean, detay = ""): void {
   console.log(`${ok ? "✅" : "❌"} ${label}${detay ? ` — ${detay}` : ""}`);
 }
 
-const HAZIRLIK = "https://lisans-test.etkiliyazilim.com";
+const BASKA = "https://x.ornek.com";
 const KOK = path.resolve(__dirname, "..");
 
 function cozumTablosu(): void {
@@ -41,18 +43,18 @@ function cozumTablosu(): void {
     ["verilmezse üretim satıcısı", undefined, DEFAULT_LICENSE_SERVER_URL, "varsayilan"],
     ["boş dizge üretim satıcısı", "", DEFAULT_LICENSE_SERVER_URL, "varsayilan"],
     ["yalnız boşluk üretim satıcısı", "   ", DEFAULT_LICENSE_SERVER_URL, "varsayilan"],
-    ["hazırlık adresi aynen", HAZIRLIK, HAZIRLIK, "ortam"],
-    ["sondaki eğik çizgi kökene iner", `${HAZIRLIK}/`, HAZIRLIK, "ortam"],
-    ["açık port korunur", "https://lisans-test.etkiliyazilim.com:8443", "https://lisans-test.etkiliyazilim.com:8443", "ortam"],
+    ["başka köken aynen", BASKA, BASKA, "ortam"],
+    ["sondaki eğik çizgi kökene iner", `${BASKA}/`, BASKA, "ortam"],
+    ["açık port korunur", "https://x.ornek.com:8443", "https://x.ornek.com:8443", "ortam"],
     ["kapali → dışarı çıkış yok", LICENSE_SERVER_DISABLED, null, "kapali"],
     ["KAPALI (büyük harf) → dışarı çıkış yok", "KAPALI", null, "kapali"],
     ["döngü adresine düz HTTP (geliştirme) kabul", "http://127.0.0.1:4610", "http://127.0.0.1:4610", "ortam"],
-    ["http (döngü dışı) RED", "http://lisans-test.etkiliyazilim.com", null, "gecersiz"],
-    ["yol taşıyan adres RED", `${HAZIRLIK}/v1`, null, "gecersiz"],
-    ["sorgu taşıyan adres RED", `${HAZIRLIK}/?x=1`, null, "gecersiz"],
-    ["kimlik bilgili adres RED", "https://kullanici:parola@lisans-test.etkiliyazilim.com", null, "gecersiz"],
-    ["şemasız alan adı RED", "lisans-test.etkiliyazilim.com", null, "gecersiz"],
-    ["başka şema RED", "ftp://lisans-test.etkiliyazilim.com", null, "gecersiz"],
+    ["http (döngü dışı) RED", "http://x.ornek.com", null, "gecersiz"],
+    ["yol taşıyan adres RED", `${BASKA}/v1`, null, "gecersiz"],
+    ["sorgu taşıyan adres RED", `${BASKA}/?x=1`, null, "gecersiz"],
+    ["kimlik bilgili adres RED", "https://kullanici:parola@x.ornek.com", null, "gecersiz"],
+    ["şemasız alan adı RED", "x.ornek.com", null, "gecersiz"],
+    ["başka şema RED", "ftp://x.ornek.com", null, "gecersiz"],
   ];
   for (const [ad, girdi, url, kaynak] of vakalar) {
     const r = resolveVendorUrl(girdi);
@@ -64,7 +66,7 @@ function varsayilanTutarli(): void {
   console.log("\n§2 — varsayılan adres");
   const r = resolveVendorUrl(DEFAULT_LICENSE_SERVER_URL);
   check("§2a varsayılan HTTPS köken ve kendiyle tutarlı", r.url === DEFAULT_LICENSE_SERVER_URL && DEFAULT_LICENSE_SERVER_URL.startsWith("https://"), DEFAULT_LICENSE_SERVER_URL);
-  check("§2b hazırlık satıcısı üretimden AYRI host", new URL(HAZIRLIK).host !== new URL(DEFAULT_LICENSE_SERVER_URL).host);
+  check("§2b tek satıcı: varsayılan host lisans.etkiliyazilim.com", new URL(DEFAULT_LICENSE_SERVER_URL).host === "lisans.etkiliyazilim.com", DEFAULT_LICENSE_SERVER_URL);
 }
 
 function acilis(): void {
@@ -84,8 +86,8 @@ function acilis(): void {
   };
   const yok = kos(undefined);
   check("§3a ⭐ ortam verilmezse açılışta üretim satıcısı", yok?.u === DEFAULT_LICENSE_SERVER_URL && yok?.s === "varsayilan", JSON.stringify(yok));
-  const hz = kos(HAZIRLIK);
-  check("§3b hazırlık adresiyle açılış hazırlık satıcısını gösterir", hz?.u === HAZIRLIK && hz?.s === "ortam", JSON.stringify(hz));
+  const hz = kos(BASKA);
+  check("§3b başka kökenle açılış o kökeni gösterir", hz?.u === BASKA && hz?.s === "ortam", JSON.stringify(hz));
   const kapali = kos("kapali");
   check("§3c ⭐ `kapali` ile açılışta satıcı adresi YOK", kapali !== null && kapali.u === null && kapali.s === "kapali", JSON.stringify(kapali));
 }
@@ -107,16 +109,22 @@ function tekKaynak(): void {
   check("§4 körlük zemini: src tarandı", dosyalar.length >= 300, `${dosyalar.length} dosya`);
   const okuyan: string[] = [];
   const literal: string[] = [];
+  const emekli: string[] = [];
   for (const d of dosyalar) {
     const metin = readFileSync(d, "utf8");
     const goreli = path.relative(src, d);
     const okuma = metin.match(/env(?:\.LICENSE_SERVER_URL|\[\s*["']LICENSE_SERVER_URL["']\s*\])/g)?.length ?? 0;
     if (okuma > 0) okuyan.push(`${goreli}×${okuma}`);
     if (/lisans(?:-test)?\.etkiliyazilim\.com/.test(metin)) literal.push(goreli);
+    if (/lisans-test\.etkiliyazilim\.com/.test(metin)) emekli.push(goreli);
   }
   const TEK = path.join("lib", "license", "vendor-url.ts");
   check("§4a ⭐ LICENSE_SERVER_URL ortam okuması yalnız vendor-url.ts'te ve bir kez", okuyan.length === 1 && okuyan[0] === `${TEK}×1`, okuyan.join(", ") || "HİÇ YOK");
   check("§4b satıcı alan adı literali yalnız vendor-url.ts'te", literal.length === 1 && literal[0] === TEK, literal.join(", ") || "HİÇ YOK");
+  // Panel aktarma izin listesi (Electron/shared) de aynı adı taşımaz: ayna bekçisi yalnız üretim makinesini bekler.
+  const aktarma = path.join(KOK, "..", "Electron", "shared", "license-relay.ts");
+  if (existsSync(aktarma) && /lisans-test\.etkiliyazilim\.com/.test(readFileSync(aktarma, "utf8"))) emekli.push("Electron/shared/license-relay.ts");
+  check("§4c ⭐ emekli hazırlık satıcısı adı (lisans-test) src'de ve panel aktarma listesinde yok — tek satıcı", emekli.length === 0, emekli.join(", "));
 }
 
 cozumTablosu();

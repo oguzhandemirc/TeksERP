@@ -73,7 +73,7 @@ const SNAPSHOT_TTL_MS = 30_000;
 export interface LicenseRuntimeConfig {
   /** Satıcı lisans sunucusu kökü (`vendor-url.ts`); null ise dışarı hiç çıkılmaz. */
   readonly vendorUrl: string | null;
-  /** Güven çapası — derlemenin kipinden `ROOT_PUBLIC_KEYS` (`trust-anchor.ts`; üretim derlemesinde hazırlık kökü YOK). */
+  /** Güven çapası — derlemenin kipinden `ROOT_PUBLIC_KEYS` (`trust-anchor.ts`; tek kip: yalnız `kok-*` kökleri). */
   readonly roots: readonly RootKey[];
 }
 

@@ -28,15 +28,12 @@
 //       Salt okuma: izinler (dizin 700 · dosya 600) + dosya özetleri künyeyle aynı mı.
 //   node deploy/satici/uretim-toren.mjs donem [--dizin=…] [--etiket=<ad>] [--kuyruk=<kuyruk.json>] [--iptal=<kid>[,…]]
 //                                            [--neden=<metin>] [--ara-siniflar=URETIM,DR,DEMO,TEST] [--yil=<YYYY>] [--kok=<kid>]
-//                                            [--karsi-dizin=<öteki ortamın tören dizini>]
 //       ÜÇ AYLIK DÖNEM TÖRENİ (G4 §2.4, K4): kök parolası BİR kez + YENİ ara imzacı parolası (iki kez, kökten FARKLI) →
 //       yeni ALT · HAK ara imzacısı · İNDİRME (her biri 120 gün = 90 + 30 örtüşme) · iptal belgesi (ilk törende sıra 1;
 //       `--iptal` verilirse sıra + 1, önceki satırlar taşınır; yoksa önceki belge AYNEN) · kuyruktaki kök imzası bekleyen
 //       HAK'lar (`--kuyruk`, VDS'ten `anahtar.js kuyruk-disa-aktar`) → `<dizin>/donemler/<damga>/vds-paketi/` (KÖK YOK;
 //       DONEM-KUNYE.json + SHA256SUMS). Yarım dizinde kurulur, sonda TEK rename; ortada düşerse hiçbir şey kalmaz.
-//       Ortam kök dosyasının kimliğinden (`kok-*` üretim · `hazirlik-*` hazırlık; bayrak YOK); hazırlıkta kid'ler
-//       `alt|ara|ind-hazirlik-<yıl>-<n>`. Yeni kid karşı ortamın kalıbında ya da anahtar kümesinde (`--karsi-dizin`,
-//       varsayılan öteki ortamın `~/.tekserp/satici-*` dizini) ise parola sorulmadan RED.
+//       Tek satıcı, tek kök ailesi: kök `kok-*` olmalı (başka aile parola sorulmadan RED); yeni kid'ler `alt|ara|ind-<yıl>-<n>`.
 // Çıkış: 0 tamam · 1 hata (hedefe hiçbir şey yazılmadı) · 2 kullanım/önkoşul.
 // =============================================================================
 import { spawn, spawnSync } from "node:child_process";
@@ -45,15 +42,14 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { KAYIT_REL, Olculemedi, grupZinciri, kayitAyristir, kayitHatalari } from "../../scripts/lib/dagitim.mjs";
 
 const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
 const SATICI = path.join(REPO, "satici", "sunucu");
 const TEKS = path.join(REPO, "Teks-Erp");
 const VARSAYILAN_DIZIN = "~/.tekserp/satici-uretim";
-// Ortam başına Mac'teki tören dizini: dönem töreni KARŞI ortamın anahtar kümesini buradan okur (`--karsi-dizin` ezer).
-const ORTAM_DIZINI = { uretim: "~/.tekserp/satici-uretim", hazirlik: "~/.tekserp/satici-hazirlik" };
-// Dönem kid'i ortamın KALIBINDADIR; iki kalıp ayrıktır (hazırlık ALT/ARA/İND'si üretiminkiyle aynı kid'i alamaz).
-const ORTAM_KID_KALIBI = { uretim: /^(alt|ara|ind)-\d{4}-\d{1,3}$/, hazirlik: /^(alt|ara|ind)-hazirlik-\d{4}-\d{1,3}$/ };
+// Kök kimliği: protokolün kök kid kalıbı (`kok-*`); başka aile tanınmaz.
+const KOK_KID = /^kok-[a-z0-9-]{1,40}$/;
 const MIN_PAROLA = 12;
 const ALT_SURE_MS = 120_000;
 const USB_KLASORU = "tekserp-satici-uretim";
@@ -69,7 +65,7 @@ const PAKET_KOMUTU = "Teks-Erp/scripts/build-korumali-imza.ts anahtar-uret --kid
 const PAROLA_ARG = /^--[^=]*(parola|password|sifre|secret)/i;
 const KOMUTLAR = {
   toren: ["dizin", "yil", "alt-gun", "ind-gun", "moduller", "usb", "etiket", "paket-komutu"],
-  donem: ["dizin", "etiket", "kuyruk", "iptal", "neden", "ara-siniflar", "yil", "kok", "karsi-dizin"],
+  donem: ["dizin", "etiket", "kuyruk", "iptal", "neden", "ara-siniflar", "yil", "kok"],
   "usb-kopyala": ["dizin", "usb"],
   dogrula: ["dizin"],
 };
@@ -277,59 +273,28 @@ async function kosVeDenetle(ad, cwd, betik, argv, parolalar, gizliler) {
 const sha256 = (dosya) => crypto.createHash("sha256").update(fs.readFileSync(dosya)).digest("hex");
 const jsonOku = (dosya) => JSON.parse(fs.readFileSync(dosya, "utf8"));
 
-/**
- * Kökün ORTAMI kök dosyasının KENDİ kimliğinden çözülür, argümanla ezilemez: `hazirlik-*` (sınıfları yalnız TEST/DEMO)
- * hazırlık, `kok-*` üretim. Dosyadaki kid istenenden farklıysa ya da sınıflar kimlikle çelişirse parola sorulmadan RED.
- */
-function kokOrtami(kokDosya, istenenKid) {
+/** Kök dosyasının KENDİ kimliği istenen kök ve `kok-*` ailesinden olmalı; değilse parola sorulmadan RED. */
+function kokDenetle(kokDosya, istenenKid) {
   const kok = jsonOku(kokDosya);
-  if (kok.kid !== istenenKid) throw new TorenHatasi(`Kök dosyasının kimliği (${kok.kid}) istenen kök (${istenenKid}) değil — ortam çözülemedi`, 2);
-  if (/^kok-/.test(kok.kid)) return "uretim";
-  const siniflar = Array.isArray(kok.siniflar) ? kok.siniflar : [];
-  if (/^hazirlik-/.test(kok.kid) && siniflar.length > 0 && siniflar.every((c) => c === "TEST" || c === "DEMO")) return "hazirlik";
-  throw new TorenHatasi(`Kök ${kok.kid} ortamı belirsiz: hazırlık kökü yalnız TEST/DEMO taşır (${siniflar.join("·") || "sınıf yok"})`, 2);
+  if (kok.kid !== istenenKid) throw new TorenHatasi(`Kök dosyasının kimliği (${kok.kid}) istenen kök (${istenenKid}) değil`, 2);
+  if (!KOK_KID.test(kok.kid)) throw new TorenHatasi(`Kök ${kok.kid} kök ailesinde değil (kok-*) — tören durduruldu`, 2);
 }
 
 /**
- * Yeni kid'ler KARŞI ortamın kalıbında ya da anahtar kümesinde olamaz (fail-closed): iki satıcı aynı kid'i basarsa
- * CF Worker aynı kid'i iki listede görür ve bütün indirmeleri 503'le durdurur, sertifika/iptal kayıtları karışır.
- * Küme: karşı ortamın tören dizinindeki ilk anahtarlar + dönem paketleri (dizin yoksa yalnız kalıp ölçülür).
+ * CF Worker İNDİRME listesi (L2-8): tek liste `uretim`; satırın kanal kümesi = güncelleme grupları, terfi sırasıyla
+ * (`deploy/dagitim.json`, kitaplığın doğrulamasıyla). Kayıt okunamaz/geçersizse satır kurulamaz → parola sorulmadan RED.
  */
-function karsiOrtamDenetle(ortam, kidler, karsiDizin) {
-  const karsi = ortam === "uretim" ? "hazirlik" : "uretim";
-  for (const k of kidler) {
-    if (!ORTAM_KID_KALIBI[ortam].test(k) || ORTAM_KID_KALIBI[karsi].test(k)) {
-      throw new TorenHatasi(`Yeni kid ${k} ${ortam === "uretim" ? "ÜRETİM" : "HAZIRLIK"} kalıbında değil (karşı ortamla çakışabilir) — tören durduruldu, hiçbir anahtar üretilmedi`, 2);
-    }
+function workerListesi() {
+  let kayit;
+  try {
+    kayit = kayitAyristir(fs.existsSync(path.join(REPO, KAYIT_REL)) ? fs.readFileSync(path.join(REPO, KAYIT_REL), "utf8") : undefined);
+  } catch (e) {
+    if (e instanceof Olculemedi) throw new TorenHatasi(`${e.message} — CF Worker İNDİRME satırı kurulamaz`, 2);
+    throw e;
   }
-  if (!lstatYa(karsiDizin)?.isDirectory()) return { dizin: karsiDizin, adet: null };
-  const kume = new Set();
-  for (const d of anahtarDizinleri(karsiDizin)) {
-    for (const ad of fs.readdirSync(d)) {
-      const m = /^((?:alt|ara|ind)-[a-z0-9-]+)\.(anahtar|ara|sertifika)\.json$/.exec(ad);
-      if (m) kume.add(m[1]);
-    }
-  }
-  const cakisan = kidler.filter((k) => kume.has(k));
-  if (cakisan.length > 0) {
-    throw new TorenHatasi(`Yeni kid ${cakisan.join(", ")} KARŞI ortamın (${karsi}) anahtar kümesinde var: ${karsiDizin} — tören durduruldu, hiçbir anahtar üretilmedi`, 2);
-  }
-  return { dizin: karsiDizin, adet: kume.size };
-}
-
-/**
- * CF Worker İNDİRME listesi (L2-8): kökün ortamı listeyi (`uretim` | `hazirlik`), `deploy/kanallar.json`da o kipe
- * (`backend.guvenCapasi`) bağlı kanallar satırın kanal kümesini verir. Kanal yoksa satır kurulamaz → parola sorulmadan RED.
- */
-function workerListesi(liste) {
-  const kayit = path.join(REPO, "deploy", "kanallar.json");
-  if (!fs.existsSync(kayit)) throw new TorenHatasi(`Kanal kaydı yok: ${kayit} — CF Worker İNDİRME satırı kurulamaz`, 2);
-  const kanallar = Object.entries(jsonOku(kayit).kanallar ?? {})
-    .filter(([, k]) => k?.backend?.guvenCapasi === liste)
-    .map(([kod]) => kod)
-    .sort();
-  if (kanallar.length === 0) throw new TorenHatasi(`deploy/kanallar.json'da ${liste} çapalı kanal yok — CF Worker İNDİRME satırı kurulamaz`, 2);
-  return { liste, kanallar };
+  const hatalar = kayitHatalari(kayit);
+  if (hatalar.length > 0) throw new TorenHatasi(`${KAYIT_REL} geçersiz (${hatalar[0]}) — CF Worker İNDİRME satırı kurulamaz`, 2);
+  return { liste: "uretim", kanallar: grupZinciri(kayit.gruplar).zincir };
 }
 
 /** Panelde `TKL_INDIRME_AYAR.indirmeListesi.<liste>` dizisine OLDUĞU GİBİ yapıştırılan satır; pencere sertifikanınki. */
@@ -518,7 +483,7 @@ async function toren(bayraklar) {
   const paketSablonu = bayraklar.get("paket-komutu") || PAKET_KOMUTU;
   const kay = onkosullar(hedef, usb, bayraklar.get("etiket"));
   paketKomutu(paketSablonu, kid.paket, "{dizin}");
-  const worker = workerListesi("uretim");
+  const worker = workerListesi();
   const toplam = usb ? 11 : 10;
   const adim = (n, baslik) => process.stdout.write(`[${n}/${toplam}] ${baslik}\n`);
 
@@ -853,15 +818,12 @@ function anahtarDizinleri(kok) {
   return [path.join(kok, "anahtarlar"), ...paketler].filter((d) => lstatYa(d)?.isDirectory());
 }
 
-/**
- * `alt|ara|ind-[hazirlik-]<yıl>[-<n>]` → tür başına bu yılın sıradaki numarası (`ind-2026` · `ind-hazirlik-2026` ilk biçim = 1).
- * İki biçim de sayılır: hazırlık dizininde önekli ilk anahtarlar ve önceki öneksiz dönemler numarayı ilerletir.
- */
+/** `alt|ara|ind-<yıl>[-<n>]` → tür başına bu yılın sıradaki numarası (`ind-2026` ilk biçim = 1). */
 function siradakiNumaralar(kok, yil) {
   const enBuyuk = { alt: 0, ara: 0, ind: 0 };
   for (const d of anahtarDizinleri(kok)) {
     for (const ad of fs.readdirSync(d)) {
-      const m = /^(alt|ara|ind)-(?:hazirlik-)?(\d{4})(?:-(\d{1,3}))?\.(anahtar|ara|sertifika)\.json$/.exec(ad);
+      const m = /^(alt|ara|ind)-(\d{4})(?:-(\d{1,3}))?\.(anahtar|ara|sertifika)\.json$/.exec(ad);
       if (m && Number(m[2]) === yil) enBuyuk[m[1]] = Math.max(enBuyuk[m[1]], m[3] ? Number(m[3]) : 1);
     }
   }
@@ -915,12 +877,13 @@ async function donem(bayraklar) {
   if ((st.mode & 0o077) !== 0) throw new TorenHatasi(`Tören dizini grup/başkalarına açık (${(st.mode & 0o777).toString(8)}): ${hedef} — chmod 700`, 2);
   const kunyeYolu = path.join(hedef, KUNYE);
   const kokKid = bayraklar.get("kok") ?? (fs.existsSync(kunyeYolu) ? jsonOku(kunyeYolu).kok?.kid : undefined);
-  if (typeof kokKid !== "string" || !/^(kok|hazirlik)-[a-z0-9-]{1,40}$/.test(kokKid)) throw new TorenHatasi("Kök kimliği belirsiz: künyede yok — --kok=<kid> ver", 2);
+  if (typeof kokKid !== "string") throw new TorenHatasi("Kök kimliği belirsiz: künyede yok — --kok=<kid> ver", 2);
+  if (!KOK_KID.test(kokKid)) throw new TorenHatasi(`Kök ${kokKid} kök ailesinde değil (kok-*) — tören durduruldu`, 2);
   const K = path.join(hedef, "anahtarlar");
   const kokDosya = path.join(K, `${kokKid}.kok.json`);
   if (!fs.existsSync(kokDosya)) throw new TorenHatasi(`Kök dosyası yok: ${kokDosya}`, 2);
-  const ortam = kokOrtami(kokDosya, kokKid);
-  const worker = workerListesi(ortam);
+  kokDenetle(kokDosya, kokKid);
+  const worker = workerListesi();
   const yil = Number(bayraklar.get("yil") ?? new Date().getUTCFullYear());
   if (!Number.isInteger(yil) || yil < 2026 || yil > 2099) throw new TorenHatasi("--yil 2026–2099 olmalı", 2);
   const araSiniflar = bayraklar.get("ara-siniflar");
@@ -937,11 +900,7 @@ async function donem(bayraklar) {
   const neden = bayraklar.get("neden") ?? (iptalKidleri.length ? "olağan dışı tören" : "");
   if (neden.length > 200) throw new TorenHatasi("--neden en çok 200 karakter", 2);
   const no = siradakiNumaralar(hedef, yil);
-  const onek = ortam === "hazirlik" ? "hazirlik-" : "";
-  const kid = { alt: `alt-${onek}${yil}-${no.alt}`, ara: `ara-${onek}${yil}-${no.ara}`, ind: `ind-${onek}${yil}-${no.ind}` };
-  const karsiDizin = evYolu(bayraklar.get("karsi-dizin") || ORTAM_DIZINI[ortam === "uretim" ? "hazirlik" : "uretim"]);
-  if (karsiDizin === hedef) throw new TorenHatasi(`--karsi-dizin tören dizininin kendisi: ${karsiDizin}`, 2);
-  const karsiKume = karsiOrtamDenetle(ortam, Object.values(kid), karsiDizin);
+  const kid = { alt: `alt-${yil}-${no.alt}`, ara: `ara-${yil}-${no.ara}`, ind: `ind-${yil}-${no.ind}` };
   const onceki = oncekiIptal(hedef);
   const yeniIptal = !onceki || iptalDosyalari.length > 0;
   const donemler = path.join(hedef, "donemler");
@@ -957,8 +916,7 @@ async function donem(bayraklar) {
 
   console.log("TeksERP satıcısı — dönem töreni (G4)");
   console.log(`  kaynak : ${kay.commit} (temiz · ${kay.dayanak} · npm ls ${kay.npmLs})`);
-  console.log(`  dizin  : ${hedef} · kök ${kokKid} · ortam ${ortam === "uretim" ? "ÜRETİM" : "HAZIRLIK"} (kökün kimliğinden)`);
-  console.log(`  karşı  : ${karsiKume.adet === null ? `${karsiKume.dizin} yok — yalnız kalıp ayrımı ölçüldü` : `${karsiKume.dizin} · ${karsiKume.adet} kid, çakışma yok`}`);
+  console.log(`  dizin  : ${hedef} · kök ${kokKid}`);
   console.log(`  yeni   : ${kid.alt} · ${kid.ara} · ${kid.ind} (${DONEM_GUN} gün = 90 + 30 örtüşme)`);
   console.log(`  iptal  : ${yeniIptal ? `YENİ belge, sıra ${(onceki?.sira ?? 0) + 1}${iptalKidleri.length ? ` — iptal: ${iptalKidleri.join(", ")}` : ""}` : `önceki belge aynen (sıra ${onceki.sira})`}`);
   console.log(`  kuyruk : ${kuyruk ? `${kuyruk.adet} HAK kökle imzalanacak (${kuyruk.yol})` : "verilmedi"}`);

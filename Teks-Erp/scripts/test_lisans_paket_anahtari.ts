@@ -9,15 +9,16 @@
 //      düz özel yarı yok, `--json` tek satır) → `imzala` → anahtar geçici çapa kopyasına eklenince bütünlük
 //      GEÇERLİ, gerçek çapada değil
 //   §2 RET (her biri taze dizinde, iz bırakmaz): argv'de parola · yanlış parola · var olanın üstüne yazma ·
-//      parola tekrarı uyuşmaz · zayıf parola · stdin boş · depo içine üretim anahtarı · hazırlık/üretim karışması
-//      (parolalı dosyada hazırlık kid'i · parolasız dosyada üretim kid'i · parolalı dosyada düz özel yarı)
-//   §3 hazırlık akışı DEĞİŞMEDİ: kid'siz `anahtar-uret` parolasız dosya yazar, imza parola sormaz
-//   §4 (G3) anahtar AİLESİ = derlemenin çapa kipi (`dist/server-kunye.json` `guvenCapasi`): üretim çapalı pakete
-//      hazırlık anahtarı · hazırlık çapalıya üretim anahtarı → parola SORULMADAN RED, imza yok; uyan aile imzalar
+//      parola tekrarı uyuşmaz · zayıf parola · stdin boş · depo içine üretim anahtarı · test/üretim karışması
+//      (parolalı dosyada üretim dışı kid · parolasız dosyada üretim kid'i · parolalı dosyada düz özel yarı)
+//   §3 hazırlık akışı KALKTI: kid'siz `anahtar-uret` ve eski `paket-hazirlik` kid'i RED, dosya yazılmaz
+//   §4 (G3) anahtar AİLESİ = derlemenin çapa kipi (`dist/server-kunye.json` `guvenCapasi`, tek kip uretim): üretim
+//      çapalı pakete üretim dışı (test) anahtar · eski hazırlık çapalı künye → parola SORULMADAN RED, imza yok;
+//      üretim + üretim anahtarı imzalar
 //   §5 (G22/ALT-9) CI KÖKENİ: üretim anahtarıyla imza `--ci-kosu` ister; koşu `korumali-paket.yml` · başarılı · `main`
 //      · commit = yapıtın künyesi değilse ya da okunamazsa parola sorulmadan RED (sahte `gh` PATH'te, ağ yok);
 //      KAÇIŞ (kullanıcı kararı 2026-10-01) `--ci-atla="<cümle>"`: boş/kısa/kalıp dışı · `--ci-kosu` ile birlikte ·
-//      hazırlık anahtarında → RED; geçerli cümle + saat + makine + HEAD imzalı yüke (`ciKokeni`) girer, imza GEÇERLİ;
+//      üretim dışı (test) anahtarda → RED; geçerli cümle + saat + makine + HEAD imzalı yüke (`ciKokeni`) girer, imza GEÇERLİ;
 //      koşulu imzada koşu kaydı (`ciKokeni.kip = "kosu"`) yüke girer
 // ⭐ KALICI SONDA ✓K: §0c tek-uygulama tarayıcısı sentetik kripto satırını yakalar; §2 ret dalları her koşumda.
 // Koşum: node ../scripts/agir-is.mjs -- npx tsx scripts/test_lisans_paket_anahtari.ts
@@ -257,7 +258,7 @@ function bolum2(): void {
     const r = imzala(kok, f, `${PAROLA}\n`);
     check(`§2e ${ad} → çıkış 1, imza YOK`, r.kod === 1 && beklenen.test(r.hata) && !existsSync(path.join(kok, INTEGRITY_FILE)), `çıkış ${r.kod} ${r.hata.trim().slice(0, 70)}`);
   };
-  karisma("parolalı dosyada hazırlık kid'i", (k) => ({ ...k, kid: "paket-hazirlik" }), /yalnız üretim PAKET kid'i/);
+  karisma("parolalı dosyada üretim dışı kid (eski paket-hazirlik)", (k) => ({ ...k, kid: "paket-hazirlik" }), /yalnız üretim PAKET kid'i/);
   karisma("parolalı dosyada düz özel yarı alanı", (k) => ({ ...k, d: "AAAA" }), /biçimsiz/);
   {
     const d = dizin("duz-uretim");
@@ -269,53 +270,52 @@ function bolum2(): void {
 }
 
 // ── §3 ───────────────────────────────────────────────────────────────────────
+/** Parolasız TEST anahtarı (üretim dışı aile) — yalnız bekçinin; CLI artık parolasız anahtar üretmez. */
+function testAnahtari(): string {
+  return writePackageKey(dizin("test-anahtar"), generatePackageKey("paket-test", ["TEST", "DEMO"]));
+}
+
 function bolum3(): void {
-  console.log("\n§3 hazırlık akışı değişmedi");
+  console.log("\n§3 hazırlık akışı kalktı");
+  const eskiDizin = path.join(TEMP, "ev", ".tekserp", "satici-hazirlik");
   const r = cli(["anahtar-uret"]);
-  const dosya = path.join(TEMP, "ev", ".tekserp", "satici-hazirlik", "paket-hazirlik.paket.json");
-  const k = existsSync(dosya) ? (JSON.parse(readFileSync(dosya, "utf8")) as Record<string, unknown>) : {};
-  check("§3a kid'siz anahtar-uret: çıkış 0, varsayılan hazırlık dizini, sürüm 1 parolasız (stdin okunmadı)", r.kod === 0 && k.surum === 1 && typeof k.d === "string" && k.kid === "paket-hazirlik", `çıkış ${r.kod} ${r.hata.trim().slice(0, 60)}`);
-  if (!existsSync(dosya)) return;
-  const kok = paket();
-  const imza = imzala(kok, dosya, "");
-  check("§3b hazırlık anahtarıyla imza parola SORMAZ (stdin boş): çıkış 0, butunluk.jws yazıldı", imza.kod === 0 && existsSync(path.join(kok, INTEGRITY_FILE)), `çıkış ${imza.kod} ${imza.hata.trim().slice(0, 60)}`);
+  check("§3a ⭐ kid'siz anahtar-uret → çıkış 1 (kid zorunlu), varsayılan hazırlık dizini YAZILMADI", r.kod === 1 && /--kid=paket-<yıl>/.test(r.hata) && !existsSync(eskiDizin), `çıkış ${r.kod} ${r.hata.trim().slice(0, 80)}`);
+  const r2 = cli(["anahtar-uret", "--kid=paket-hazirlik"]);
+  check("§3b ⭐ --kid=paket-hazirlik → çıkış 1 (yalnız üretim ailesi), dosya YOK", r2.kod === 1 && /kid biçimi/.test(r2.hata) && !existsSync(eskiDizin), `çıkış ${r2.kod} ${r2.hata.trim().slice(0, 80)}`);
 }
 
 // ── §4 ───────────────────────────────────────────────────────────────────────
 /** Künyeli paket kökü: build-korumali'nin yazdığı `dist/server-kunye.json` (çapa kipiyle). */
-function kunyeliPaket(kip: "uretim" | "hazirlik"): string {
+function kunyeliPaket(kip: string): string {
   const kok = paket();
   writeFileSync(path.join(kok, "dist", "server-kunye.json"), `${JSON.stringify({ zaman: "2026-10-01T00:00:00.000Z", guvenCapasi: kip, commit: KUNYE_COMMIT })}\n`);
   return kok;
 }
 
 function bolum4(): void {
-  console.log("\n§4 anahtar ailesi = derlemenin çapa kipi (G3)");
-  const hazirlik = path.join(TEMP, "ev", ".tekserp", "satici-hazirlik", "paket-hazirlik.paket.json");
+  console.log("\n§4 anahtar ailesi = derlemenin çapa kipi (G3, tek kip)");
+  const test = testAnahtari();
   const { dosya: uretim } = uretimAnahtari("paket-2098");
-  if (!existsSync(hazirlik) || !existsSync(uretim)) {
-    check("§4 körlük zemini: iki aile anahtarı üretildi", false, `${existsSync(hazirlik)} · ${existsSync(uretim)}`);
+  if (!existsSync(test) || !existsSync(uretim)) {
+    check("§4 körlük zemini: iki aile anahtarı üretildi", false, `${existsSync(test)} · ${existsSync(uretim)}`);
     return;
   }
   const k1 = kunyeliPaket("uretim");
-  const r1 = imzala(k1, hazirlik, "");
-  check("§4a ⭐ üretim çapalı pakete HAZIRLIK anahtarı → çıkış 1, imza YOK", r1.kod === 1 && /anahtar ailesi/.test(r1.hata) && !existsSync(path.join(k1, INTEGRITY_FILE)), `çıkış ${r1.kod} ${r1.hata.trim().slice(0, 90)}`);
+  const r1 = imzala(k1, test, "");
+  check("§4a ⭐ üretim çapalı pakete TEST (üretim dışı) anahtar → çıkış 1, imza YOK", r1.kod === 1 && /anahtar ailesi/.test(r1.hata) && !existsSync(path.join(k1, INTEGRITY_FILE)), `çıkış ${r1.kod} ${r1.hata.trim().slice(0, 90)}`);
   const k2 = kunyeliPaket("hazirlik");
   const r2 = imzala(k2, uretim, "");
   check(
-    "§4b ⭐ hazırlık çapalı pakete ÜRETİM anahtarı → parola SORULMADAN çıkış 1 (stdin boş), imza YOK",
-    r2.kod === 1 && /anahtar ailesi/.test(r2.hata) && !/parola/i.test(r2.hata) && !existsSync(path.join(k2, INTEGRITY_FILE)),
+    "§4b ⭐ eski hazırlık çapalı künye + ÜRETİM anahtarı → parola SORULMADAN çıkış 1 (stdin boş), imza YOK",
+    r2.kod === 1 && /anahtar ailesi/.test(r2.hata) && /hazırlık kipi kalktı/.test(r2.hata) && !/parola/i.test(r2.hata) && !existsSync(path.join(k2, INTEGRITY_FILE)),
     `çıkış ${r2.kod} ${r2.hata.trim().slice(0, 90)}`,
   );
+  const k4 = kunyeliPaket("hazirlik");
+  const r4 = imzala(k4, test, "");
+  check("§4b' eski hazırlık çapalı künye + TEST anahtarı → çıkış 1, imza YOK (eski uyan aile artık imzalamaz)", r4.kod === 1 && /hazırlık kipi kalktı/.test(r4.hata) && !existsSync(path.join(k4, INTEGRITY_FILE)), `çıkış ${r4.kod} ${r4.hata.trim().slice(0, 90)}`);
   const k3 = kunyeliPaket("uretim");
   const r3 = imzala(k3, uretim, `${PAROLA}\n`);
-  const k4 = kunyeliPaket("hazirlik");
-  const r4 = imzala(k4, hazirlik, "");
-  check(
-    "§4c karşı kontrol: uyan aile imzalar (üretim + parola · hazırlık parolasız)",
-    r3.kod === 0 && existsSync(path.join(k3, INTEGRITY_FILE)) && r4.kod === 0 && existsSync(path.join(k4, INTEGRITY_FILE)),
-    `üretim ${r3.kod} ${r3.hata.trim().slice(0, 50)} · hazırlık ${r4.kod} ${r4.hata.trim().slice(0, 50)}`,
-  );
+  check("§4c karşı kontrol: üretim çapası + üretim anahtarı (parolayla) imzalar", r3.kod === 0 && existsSync(path.join(k3, INTEGRITY_FILE)), `üretim ${r3.kod} ${r3.hata.trim().slice(0, 50)}`);
 }
 
 // ── §5 ───────────────────────────────────────────────────────────────────────
@@ -334,7 +334,7 @@ async function bolum5(): Promise<void> {
     ["paket başka commit'te birleştirilmiş", {}, true, "deadbeef"],
   ];
   for (const [ad, o, uretim, pc] of sondalar) check(`§5b ⭐ ${ad} → ihlal`, kip(o, uretim, pc) === "ihlal");
-  check("§5c hazırlık anahtarında dal serbest (feature dalı yapıtı imzalanabilir)", kip({ head_branch: "dagitim/w2-taban" }, false) === "uyumlu");
+  check("§5c üretim dışı (test) anahtarda dal serbest (feature dalı yapıtı imzalanabilir)", kip({ head_branch: "dagitim/w2-taban" }, false) === "uyumlu");
   check("§5d künyede commit yok → ÖLÇÜLEMEDİ", ciKokeniHukmu({ kosu: UYAN_KOSU, kunyeCommit: undefined, paketCommit: null, uretim: true }).sonuc === "olculemedi");
 
   // CLI — kapı parola sorulmadan ÖNCE durur (stdin'deki parola okunmaz, imza yazılmaz).
@@ -353,14 +353,14 @@ async function bolum5(): Promise<void> {
   red("koşu başka commit'ten", ["--ci-kosu=4242"], { SAHTE_GH_KOSU: JSON.stringify({ ...UYAN_KOSU, head_sha: "e".repeat(40) }) }, /TUTMUYOR/);
   red("koşu okunamıyor (gh hata)", ["--ci-kosu=4242"], { SAHTE_GH_HATA: "1" }, /ÖLÇÜLEMEDİ/);
   red("--ci-kosu biçimsiz", ["--ci-kosu=12;id"], {}, /biçimsiz/);
-  const hazirlik = path.join(TEMP, "ev", ".tekserp", "satici-hazirlik", "paket-hazirlik.paket.json");
-  if (existsSync(hazirlik)) {
+  const testKey = testAnahtari();
+  if (existsSync(testKey)) {
     const kok = paket();
-    const r = imzala(kok, hazirlik, "", []);
-    check("§5f hazırlık anahtarı --ci-kosu'suz: UYARI basar, imzalar (bugünkü hazırlık akışı)", r.kod === 0 && /CI kökeni ÖLÇÜLMEDİ/.test(r.hata) && existsSync(path.join(kok, INTEGRITY_FILE)), `çıkış ${r.kod} ${r.hata.trim().slice(0, 80)}`);
+    const r = imzala(kok, testKey, "", []);
+    check("§5f üretim dışı (test) anahtar --ci-kosu'suz (künyesiz paket): UYARI basar, imzalar", r.kod === 0 && /CI kökeni ÖLÇÜLMEDİ/.test(r.hata) && existsSync(path.join(kok, INTEGRITY_FILE)), `çıkış ${r.kod} ${r.hata.trim().slice(0, 80)}`);
     const kok2 = paket();
-    const r2 = imzala(kok2, hazirlik, "", ["--ci-atla=CI kırık ama kullanıcı imzalamamı istedi"]);
-    check("§5g ⭐ hazırlık anahtarında --ci-atla → çıkış 1, imza YOK (kaçış gerekmez)", r2.kod === 1 && /kaçış gerekmez/.test(r2.hata) && !existsSync(path.join(kok2, INTEGRITY_FILE)), `çıkış ${r2.kod} ${r2.hata.trim().slice(0, 120)}`);
+    const r2 = imzala(kok2, testKey, "", ["--ci-atla=CI kırık ama kullanıcı imzalamamı istedi"]);
+    check("§5g ⭐ üretim dışı (test) anahtarda --ci-atla → çıkış 1, imza YOK (kaçış gerekmez)", r2.kod === 1 && /kaçış gerekmez/.test(r2.hata) && !existsSync(path.join(kok2, INTEGRITY_FILE)), `çıkış ${r2.kod} ${r2.hata.trim().slice(0, 120)}`);
   }
   await bolum5Kacis(dosya);
 }

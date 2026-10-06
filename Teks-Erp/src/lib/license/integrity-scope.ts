@@ -37,17 +37,6 @@ export const INTEGRITY_SCOPE_FILES: readonly string[] = Object.freeze([
   "bakim-rolu.ps1",
 ]);
 
-/**
- * Hazırlık PAKET anahtarı yalnız TEST/DEMO paketlerini imzalar (üretim anahtarı `paket-<yıl>`,
- * Mac'te parolalı — ayrı tören). Sınıf kararı HAK'tan: ÜRETİM kurulumunda hazırlık imzası RED.
- */
-export const STAGING_PACKAGE_KID_PREFIX = "paket-hazirlik";
-export const STAGING_PACKAGE_CLASSES: readonly string[] = Object.freeze(["TEST", "DEMO"]);
-
-export function isStagingPackageKid(kid: string): boolean {
-  return kid === STAGING_PACKAGE_KID_PREFIX || kid.startsWith(`${STAGING_PACKAGE_KID_PREFIX}-`);
-}
-
 /** Üretim PAKET anahtarının kid'i: `paket-<yıl>`, yıl içi rotasyonda `-<n>`; anahtar parolalıdır (tören). */
 export function isProductionPackageKid(kid: string): boolean {
   return /^paket-\d{4}(?:-\d{1,3})?$/.test(kid);

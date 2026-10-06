@@ -6,7 +6,7 @@
 //! backend'in yazabildiği dizindir: okuma bağlantı izlemez ve boy sınırlıdır; içerik yalnız imzası tuttuğu için geçerlidir.
 use crate::codes;
 use crate::env::Fs;
-use crate::trust::{self, TrustAnchor};
+use crate::trust::TrustAnchor;
 use serde_json::{Map, Value};
 use std::path::Path;
 use tekserp_dogrulama::paket_zinciri::{self, PackageMode, PackageTrust, VerifiedPackageRevocation};
@@ -89,23 +89,22 @@ pub fn load(fs: &dyn Fs, license_dir: &Path, anchor: &TrustAnchor) -> LicenseVie
     LicenseView { lease: Some(doc), problem: None, channel, frozen, maintenance_end_ms, class, lease_issued_ms, package_revocation }
 }
 
-/// Bu kurulumun kabul ettiği PAKET anahtarları (TS `integrity-scope` süzgeci): hazırlık anahtarı
-/// (`paket-hazirlik*`) yalnız TEST/DEMO sınıfında kümeye girer; sınıf bilinmiyorsa DIŞARIDA.
-pub fn package_keys(anchor: &TrustAnchor, class: Option<&str>) -> Vec<(String, String)> {
-    let staging_ok = class.is_some_and(|c| trust::STAGING_PACKAGE_CLASSES.contains(&c));
-    anchor.package_keys.iter().filter(|(kid, _)| staging_ok || !trust::is_staging_package_kid(kid)).cloned().collect()
+/// Bu kurulumun kabul ettiği PAKET anahtarları: gömülü çapanın bütün PAKET anahtarları (tek kip; sınıfa göre
+/// süzgeç yok — dar zincir sertifikasının sınıf yetkisi `package_trust`in sınıfıyla ölçülür).
+pub fn package_keys(anchor: &TrustAnchor) -> Vec<(String, String)> {
+    anchor.package_keys.clone()
 }
 
 /// Paket belgelerinin güveni (sözleşme `PAKET-ANAHTARI-KOK-ALTINDA.md` §2.3): KABUL (dışarıdan gelen aday · paket ·
 /// PG künyesi) "şimdi"yi max(sistem saati, kira verilişi) alır; YERLEŞİK (kurulu dizin) zamana ve iptale sert bakmaz.
-/// Sınıf HAK'tan: bilinmiyorsa zincirli belge RED (gömülü kümedeki hazırlık süzgeciyle aynı ölçü).
+/// Sınıf HAK'tan: bilinmiyorsa zincirli belge RED.
 pub fn package_trust(anchor: &TrustAnchor, lic: &LicenseView, mode: PackageMode, system_now_ms: f64) -> PackageTrust {
     let now_ms = match mode {
         PackageMode::Kabul => Some(lic.lease_issued_ms.map_or(system_now_ms, |issued| issued.max(system_now_ms))),
         PackageMode::Yerlesik => None,
     };
     PackageTrust {
-        keys: package_keys(anchor, lic.class.as_deref()),
+        keys: package_keys(anchor),
         roots: anchor.roots.clone(),
         mode,
         now_ms,
