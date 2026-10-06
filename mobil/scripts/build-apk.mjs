@@ -44,13 +44,21 @@
  * gürültülü biçimde durur. "Belki doğrudur" diye APK bırakmaz — doğrulama
  * başarısızsa üretilen dosya kanonik yolundan taşınır (aşağıya bkz.).
  *
+ * ORTAK PAKET (tek ortak paket O7): `--musteri` VERİLMEZSE derlenen TEK ORTAK PAKETTİR — kimlik
+ * dağıtım kaydından (`scripts/lib/ortak-kimlik.cjs`), ERP adresi GÖMÜLMEZ (tablet sunucuyu çalışma
+ * anında bulur), güncelleme adresi grup-nötr Worker takma adı. Terfi bu derlemede değil, grup yayınında.
+ * OTA sertifikası yoksa (anahtar töreni yapılmadıysa) derleme DURUR ve üretim komutunu basar.
+ *
  * KANAL (2026-09-27): `--musteri=<kod>` hedef kanaldır (niyet); kimlik — paket adı,
  * görünen ad, güncelleme adresi, OTA sertifikası, ERP adresi — `deploy/kanallar.json`dan.
  * Çocuk süreçlere `TEKSERP_KANAL` geçer (app.config.js kimliği onunla uygular); APK'nın
  * kendi kimliği derlemeden SONRA ölçülür, hedef kanalınki değilse paket reddedilir.
  *
  * Kullanım:
- *   npm run build:apk -- --musteri=<kod>                    # ERP adresi kanal kaydından
+ *   npm run build:apk                                       # ORTAK PAKET (argümansız)
+ *   npm run build:apk:check                                 # ortak paket ön kontrolü, derleme YOK
+ *   npm run build:apk:verify                                # mevcut APK'yı ortak kimliğe karşı denetle
+ *   npm run build:apk -- --musteri=<kod>                    # ESKİ KANAL; ERP adresi kanal kaydından
  *   npm run build:apk -- --musteri=<kod> --api-url=<adres>  # açık adres kanalınkiyle EŞİT olmalı
  *   npm run build:apk:check -- --musteri=<kod>              # yalnız ön kontrol, derleme YOK
  *   npm run build:apk:verify -- --musteri=<kod>             # mevcut APK'yı kanala karşı denetle
@@ -76,10 +84,13 @@ import {
   ENV_DOSYALARI,
   manifestUrl,
   bundleAdresOlcumu,
+  ortakBundleAdresleri,
 } from './lib/adres.mjs';
 import { zipGirdisiOku } from './lib/zip.mjs';
 import { ApkOlculemedi, apkKimligi, sertifikaParmakIzi } from './lib/apk-kimlik.mjs';
 import { KANAL_ORTAM, tabletYapilandirmaFarki } from './lib/kanal.cjs';
+import { anahtarToreniKomutu, ortakKaydiOku, ortakKimlik, ortakYapilandirmaFarki } from './lib/ortak-kimlik.cjs';
+import { kayitHatalari, KAYIT_REL as DAGITIM_REL, turet } from '../../scripts/lib/dagitim.mjs';
 import { KAYIT_REL, Olculemedi, erpAdresiEsit, kanalCoz } from '../../scripts/lib/kanallar.mjs';
 import { terfiKapisi, terfiRaporu } from '../../scripts/lib/terfi.mjs';
 import { apkKunyeYolu, derlemeKunyesiYaz, temizAgacDenetimi } from '../../scripts/lib/derleme-bagi.mjs';
@@ -538,7 +549,7 @@ function onbellekleriTemizle() {
 function gradleKos(adres) {
   const ortam = derlemeOrtami();
   baslik('(2/4) DERLEME — ./gradlew assembleRelease');
-  bilgi(`Gömülecek adres: ${adres}`);
+  bilgi(`Gömülecek adres: ${adres ?? '(YOK — ortak paket ERP adresi gömmez; .env* dosyaları okunmaz)'}`);
   bilgi('(Bu adım birkaç dakika sürer; önbellek silindiği için bundle sıfırdan üretilir.)\n');
 
   const win = process.platform === 'win32';
@@ -560,14 +571,7 @@ function gradleKos(adres) {
     // ⚠️ SDK ve JDK AÇIKÇA geçiyor: kabuk profilinde `export` olmasa da derleme
     // koşar. Kullanıcının `.zshrc`ine bağımlı bir derleme, yeni makinede ve
     // otomasyonda sessizce düşer.
-    env: {
-      ...process.env,
-      EXPO_PUBLIC_API_URL: adres,
-      ANDROID_HOME: ortam.sdk,
-      ANDROID_SDK_ROOT: ortam.sdk,
-      JAVA_HOME: ortam.jdk,
-      PATH: `${path.join(ortam.jdk, 'bin')}${path.delimiter}${process.env.PATH ?? ''}`,
-    },
+    env: derlemeEnv(adres, ortam),
   });
 
   if (sonuc.error) {
@@ -580,6 +584,26 @@ function gradleKos(adres) {
       'APK üretilmedi — sahaya kurulacak paket YOK.',
     );
   }
+}
+
+/**
+ * Gradle'ın ortamı. Ortak pakette (`adres` null) ERP adresi ortamdan SİLİNİR ve `EXPO_NO_DOTENV=1`
+ * ile `.env*` dosyaları hiç yüklenmez — `.env.local`daki geliştirme adresi bundle'a inline olamaz.
+ */
+function derlemeEnv(adres, ortam) {
+  const env = {
+    ...process.env,
+    EXPO_PUBLIC_API_URL: adres,
+    ANDROID_HOME: ortam.sdk,
+    ANDROID_SDK_ROOT: ortam.sdk,
+    JAVA_HOME: ortam.jdk,
+    PATH: `${path.join(ortam.jdk, 'bin')}${path.delimiter}${process.env.PATH ?? ''}`,
+  };
+  if (adres === null) {
+    delete env.EXPO_PUBLIC_API_URL;
+    env.EXPO_NO_DOTENV = '1';
+  }
+  return env;
 }
 
 /* ------------------------------------------------------------------ *
@@ -605,9 +629,8 @@ function apkyiReddet(apkYolu) {
   }
 }
 
-function apkDogrula(beklenenAdres, { derlemeBaslangici, apkYolu = APK_PATH } = {}) {
-  baslik('(3/4) DOĞRULAMA — APK içindeki bundle');
-
+/** APK'daki release bundle'ı okur (yok/eski/okunamaz → APK taşınır, DUR). Metin `latin1` (Hermes ASCII dizeleri). */
+function bundleOku(apkYolu, derlemeBaslangici) {
   if (!fs.existsSync(apkYolu)) {
     dur('APK üretilmedi', `Beklenen yol: ${apkYolu}`, 'Gradle "BUILD SUCCESSFUL" dese bile paket yok — çıktıyı incele.');
   }
@@ -637,6 +660,12 @@ function apkDogrula(beklenenAdres, { derlemeBaslangici, apkYolu = APK_PATH } = {
     apkyiReddet(apkYolu);
     dur('APK içindeki JS bundle okunamadı', hata ?? 'bilinmeyen sebep', `APK: ${apkYolu}`);
   }
+  return { stat, veri };
+}
+
+function apkDogrula(beklenenAdres, { derlemeBaslangici, apkYolu = APK_PATH } = {}) {
+  baslik('(3/4) DOĞRULAMA — APK içindeki bundle');
+  const { stat, veri } = bundleOku(apkYolu, derlemeBaslangici);
 
   // NOT (tuzak): release bundle'ı Hermes bytecode'dur. SAF ASCII dizeler
   // string tablosunda düz metin durur ve aranabilir; Türkçe özel karakterli
@@ -710,7 +739,7 @@ function apkDogrula(beklenenAdres, { derlemeBaslangici, apkYolu = APK_PATH } = {
  * Bu, `usesCleartextTraffic`in 2026-08-15'te ısırdığı tuzağın birebir aynısı:
  * "prebuild çıktısı git dışıdır, elde kalan klasör doğru görünür".
  */
-function guncellemeKapisi(kod, kanal) {
+function prebuildKimligiOku() {
   const manifestYol = path.join(ANDROID_DIR, 'app/src/main/AndroidManifest.xml');
   let manifest;
   try {
@@ -731,18 +760,6 @@ function guncellemeKapisi(kod, kanal) {
     );
     return re2.exec(manifest)?.[1] ?? null;
   };
-
-  const appCfg = JSON.parse(fs.readFileSync(path.join(PROJECT_ROOT, 'app.json'), 'utf8')).expo;
-  const rvBeklenen = String(appCfg.runtimeVersion ?? '');
-
-  // ⚠️⚠️ BEKLENEN KİMLİK AĞAÇTAN DEĞİL, KOMUT ARGÜMANINDAN (kanal kaydı) GELİR.
-  //
-  // Bu, kapının çalışmasının TEK sebebi: `app.config.js` adresi aynı kaynaktan
-  // türetseydi ve beklenen de oradan gelseydi, yanlış kanal ikisinde de aynı yanlışı
-  // söyler ve kapı geçerdi. GENEL KURAL: beklenen değeri, gerçek değerle AYNI
-  // kaynaktan alan bir kapı, o kaynağın yanlış olmasını yakalayamaz — beklenen değer
-  // bağımsız bir NİYETTEN (`--musteri`) çözülür.
-  const beklenenUrl = manifestUrl(kanal.yayin.mobilFeed, rvBeklenen);
 
   // ⚠️ Manifest değeri LİTERAL OLMAYABİLİR: expo-updates `runtimeVersion`i
   // `@string/expo_runtime_version` kaynak referansı olarak yazar. Doğrudan
@@ -776,7 +793,6 @@ function guncellemeKapisi(kod, kanal) {
   const sertifika = oku('expo.modules.updates.CODE_SIGNING_CERTIFICATE');
   const imzaMeta = oku('expo.modules.updates.CODE_SIGNING_METADATA');
   bilgi(`Manifest KOD İMZASI     : ${sertifika ? 'sertifika gömülü' : '(YOK)'}`);
-  bilgi(`Beklenen kanal          : ${kod} (komut argümanından)`);
 
   // Prebuild çıktısının KİMLİĞİ: paket adı + görünen ad + gömülü OTA sertifikası.
   // Kanal değişince `android/` yeniden üretilmeden derlenen APK eski kanalın kimliğiyle doğardı.
@@ -793,22 +809,46 @@ function guncellemeKapisi(kod, kanal) {
   };
   const paket = dosyadan('app/build.gradle', /applicationId\s+['"]([^'"]+)['"]/);
   const uygulamaAdi = dosyadan('app/src/main/res/values/strings.xml', /<string name="app_name"[^>]*>([^<]*)<\/string>/);
-  const beklenenIz = kanalSertifikaIzi(kanal);
   bilgi(`Prebuild paket adı      : ${paket ?? '(yok)'}`);
   bilgi(`Prebuild görünen ad     : ${uygulamaAdi ?? '(yok)'}`);
+  const gomuluIz = sertifika ? sertifikaParmakIzi(xmlCoz(sertifika)) : null;
+  return { url, rv, acik, sertifika, imzaMeta, paket, uygulamaAdi, gomuluIz };
+}
 
+/** Prebuild kimliğinin ORTAK sorunları (kimlikten bağımsız): güncelleme açık + imza gömülü. */
+function prebuildTemelSorunlari(p) {
   const sorunlar = [];
-  if (acik !== 'true') sorunlar.push(`ENABLED "${acik ?? 'yok'}" (beklenen: true)`);
+  if (p.acik !== 'true') sorunlar.push(`ENABLED "${p.acik ?? 'yok'}" (beklenen: true)`);
   // ⚠️ Paket internetten geliyor: imzasız bir APK, sunucuya sızan birinin
   // sahadaki HER tablete istediği kodu göndermesi demektir. Sertifika APK'ya
   // gömülü DEĞİLSE istemci imzayı hiç KONTROL ETMEZ (FileDownloader.kt:559).
-  if (!sertifika) sorunlar.push('CODE_SIGNING_CERTIFICATE yok — istemci imzayı hiç kontrol etmez');
-  if (!imzaMeta) sorunlar.push('CODE_SIGNING_METADATA yok');
+  if (!p.sertifika) sorunlar.push('CODE_SIGNING_CERTIFICATE yok — istemci imzayı hiç kontrol etmez');
+  if (!p.imzaMeta) sorunlar.push('CODE_SIGNING_METADATA yok');
+  return sorunlar;
+}
+
+function guncellemeKapisi(kod, kanal) {
+  const { url, rv, paket, uygulamaAdi, sertifika, gomuluIz, ...p } = prebuildKimligiOku();
+  bilgi(`Beklenen kanal          : ${kod} (komut argümanından)`);
+  const appCfg = JSON.parse(fs.readFileSync(path.join(PROJECT_ROOT, 'app.json'), 'utf8')).expo;
+  const rvBeklenen = String(appCfg.runtimeVersion ?? '');
+
+  // ⚠️⚠️ BEKLENEN KİMLİK AĞAÇTAN DEĞİL, KOMUT ARGÜMANINDAN (kanal kaydı) GELİR.
+  //
+  // Bu, kapının çalışmasının TEK sebebi: `app.config.js` adresi aynı kaynaktan
+  // türetseydi ve beklenen de oradan gelseydi, yanlış kanal ikisinde de aynı yanlışı
+  // söyler ve kapı geçerdi. GENEL KURAL: beklenen değeri, gerçek değerle AYNI
+  // kaynaktan alan bir kapı, o kaynağın yanlış olmasını yakalayamaz — beklenen değer
+  // bağımsız bir NİYETTEN (`--musteri`) çözülür.
+  const beklenenUrl = manifestUrl(kanal.yayin.mobilFeed, rvBeklenen);
+  const beklenenIz = kanalSertifikaIzi(kanal);
+
+  const sorunlar = prebuildTemelSorunlari({ ...p, sertifika });
   if (url !== beklenenUrl) sorunlar.push(`EXPO_UPDATE_URL "${url ?? 'yok'}" ≠ "${beklenenUrl}"`);
   if (paket !== kanal.tablet.androidPaket) sorunlar.push(`applicationId "${paket ?? 'yok'}" ≠ "${kanal.tablet.androidPaket}"`);
   if (uygulamaAdi !== kanal.tablet.gorunenAd) sorunlar.push(`app_name "${uygulamaAdi ?? 'yok'}" ≠ "${kanal.tablet.gorunenAd}"`);
   if (!beklenenIz) sorunlar.push(`kanalın OTA sertifikası okunamadı: ${kanal.tablet.otaSertifika} (keystore/ git dışıdır — yedekten geri koy)`);
-  else if (sertifika && sertifikaParmakIzi(xmlCoz(sertifika)) !== beklenenIz) {
+  else if (sertifika && gomuluIz !== beklenenIz) {
     sorunlar.push(`gömülü OTA sertifikası "${kod}" kanalınınki değil (${kanal.tablet.otaSertifika})`);
   }
   if (rvBeklenen && rv !== rvBeklenen)
@@ -1130,9 +1170,10 @@ function ozet(adres, s, stat, apkYolu = APK_PATH, { kod, kanal } = {}) {
   baslik('(4/4) HAZIR');
   bilgi(`APK      : ${apkYolu}`);
   if (kanal) bilgi(`Kanal    : ${kod} — ${kanal.tablet.androidPaket} · "${kanal.tablet.gorunenAd}"`);
+  else bilgi('Kimlik   : ORTAK PAKET (dağıtım kaydından)');
   bilgi(`Boyut    : ${(stat.size / 1024 / 1024).toFixed(1)} MB`);
   bilgi(`Sürüm    : ${s.gradleVersionName ?? '?'} (versionCode ${s.gradleVersionCode ?? '?'})`);
-  bilgi(`Sunucu   : ${adres}   ← bundle içinde doğrulandı`);
+  bilgi(adres ? `Sunucu   : ${adres}   ← bundle içinde doğrulandı` : 'Sunucu   : (yok — ortak paket; bundle\'da ERP adresi olmadığı doğrulandı)');
   bilgi(`SHA-256  : ${sha}`);
   bilgi(`Zaman    : ${stat.mtime.toLocaleString('tr-TR')}`);
   console.log('');
@@ -1141,7 +1182,204 @@ function ozet(adres, s, stat, apkYolu = APK_PATH, { kod, kanal } = {}) {
   console.log('');
 }
 
+/* ------------------------------------------------------------------ *
+ * ORTAK PAKET (tek ortak paket O7) — `--musteri` yoksa
+ * ------------------------------------------------------------------ */
+
+/**
+ * Ortak kimlik: kayıt TAM doğrulamadan (dagitim.mjs) geçer, kimlik ortak-kimlik.cjs'ten türer ve
+ * güncelleme adresi kaydın kendi türetimiyle (Worker takma adı) eşit olmalı. Ortamda eski kanal
+ * varsa (`TEKSERP_KANAL`) app.config.js eski kimliği gömerdi → DUR.
+ */
+function ortakHedefCoz() {
+  const ortamdaki = String(process.env[KANAL_ORTAM] ?? '').trim();
+  if (ortamdaki) {
+    dur('KANAL ÇELİŞKİSİ', 'komutta           : (yok — ortak paket)', `${KANAL_ORTAM} ortamı : ${ortamdaki}`,
+      `Ortak paket derlenirken ${KANAL_ORTAM} olamaz: app.config.js eski kanalın kimliğini gömerdi.`,
+      `Eski kanal derlemesi isteniyorsa: npm run build:apk -- --musteri=${ortamdaki}`);
+  }
+  let kayit;
+  let k;
+  try {
+    kayit = ortakKaydiOku();
+    const h = kayitHatalari(kayit);
+    if (h.length) dur(`DAĞITIM KAYDI GEÇERSİZ (${DAGITIM_REL})`, ...h);
+    k = ortakKimlik(kayit);
+  } catch (e) {
+    dur(`ÖLÇÜLEMEDİ — ortak paket kimliği çözülemedi (${DAGITIM_REL})`, String(e?.message ?? e));
+  }
+  const takmaAd = turet(kayit).otaTakmaAd;
+  if (k.guncellemeUrl !== takmaAd) {
+    dur('ORTAK GÜNCELLEME ADRESİ KAYDIN TÜRETİMİYLE AYRIŞTI', `ortak-kimlik.cjs : ${k.guncellemeUrl}`, `dagitim.mjs      : ${takmaAd}`);
+  }
+  return k;
+}
+
+/** Ortak paket ERP adresi taşımaz: açık verilen adres bir niyet hatasıdır (sessizce yok sayılmaz). */
+function ortakAdresKapisi() {
+  const verilen = [
+    arg('api-url') !== undefined ? `--api-url=${arg('api-url')}` : null,
+    process.env.EXPO_PUBLIC_API_URL?.trim() ? `EXPO_PUBLIC_API_URL=${process.env.EXPO_PUBLIC_API_URL.trim()}` : null,
+  ].filter(Boolean);
+  if (verilen.length) {
+    dur('ORTAK PAKET ERP ADRESİ GÖMMEZ', ...verilen.map((x) => `verilen: ${x}`), '',
+      'Tek paket her fabrikaya gider; tablet sunucuyu çalışma anında bulur (keşif / elle adres).',
+      'Bir kanalın adresini gömmek isteniyorsa eski kanal derlemesi: --musteri=<kod>.');
+  }
+}
+
+/** Ortak OTA sertifikasının DER parmak izi; yoksa anahtar töreni komutuyla DUR (fail-closed). */
+function ortakSertifikaIzi(k) {
+  const yol = path.join(PROJECT_ROOT, k.otaSertifika);
+  let iz = null;
+  try {
+    iz = sertifikaParmakIzi(fs.readFileSync(yol, 'utf8'));
+  } catch {
+    iz = null;
+  }
+  if (!iz) {
+    dur('ORTAK OTA SERTİFİKASI YOK — anahtar töreni yapılmadı ya da keystore/ geri konmadı',
+      `Beklenen: ${yol}`, '',
+      'Sertifikasız APK güncelleme imzasını doğrulayamaz; derleme bu yüzden DURUR.',
+      'Anahtar çifti Mac\'te BİR KEZ, kullanıcıyla üretilir (şifreli yedeğin parolası kullanıcıda):',
+      ...anahtarToreniKomutu(k).map((x) => `  ${x}`),
+      'Sonra şifreli yedeği yenile (mobil/keystore-yedek.README.md).');
+  }
+  return iz;
+}
+
+/** Prebuild çıktısı (android/) ortak kimliği mi taşıyor — beklenen değer kayıttan, ağaçtan değil. */
+function ortakGuncellemeKapisi(k) {
+  const { url, rv, paket, uygulamaAdi, sertifika, gomuluIz, ...p } = prebuildKimligiOku();
+  bilgi('Beklenen kimlik         : ORTAK PAKET (dağıtım kaydından)');
+  const beklenenIz = ortakSertifikaIzi(k);
+  const sorunlar = prebuildTemelSorunlari({ ...p, sertifika });
+  if (url !== k.guncellemeUrl) sorunlar.push(`EXPO_UPDATE_URL "${url ?? 'yok'}" ≠ "${k.guncellemeUrl}"`);
+  if (paket !== k.androidPaket) sorunlar.push(`applicationId "${paket ?? 'yok'}" ≠ "${k.androidPaket}"`);
+  if (uygulamaAdi !== k.gorunenAd) sorunlar.push(`app_name "${uygulamaAdi ?? 'yok'}" ≠ "${k.gorunenAd}"`);
+  if (sertifika && gomuluIz !== beklenenIz) sorunlar.push(`gömülü OTA sertifikası ortak paketinki değil (${k.otaSertifika})`);
+  if (rv !== k.runtimeVersion) sorunlar.push(`EXPO_RUNTIME_VERSION "${rv ?? 'yok'}" ≠ dağıtım kaydı "${k.runtimeVersion}"`);
+  if (sorunlar.length) {
+    dur('ANDROIDMANIFEST ORTAK PAKETE HAZIR DEĞİL', ...sorunlar.map((x) => `• ${x}`), '',
+      'Sebep neredeyse her zaman: android/ eski bir kanalla (TEKSERP_KANAL) ya da eski kayıtla üretildi.',
+      'Çözüm (kimlik değişiminde --clean şart: paket adı Kotlin dizinlerini de değiştirir):',
+      '  npx expo prebuild --platform android --clean --no-install   (ortamda TEKSERP_KANAL OLMADAN)',
+      '  sonra tekrar: npm run build:apk');
+  }
+  bilgi('✔ Uzaktan güncelleme yapılandırması ortak paketle tutarlı.');
+}
+
+/** APK'nın KENDİSİ ortak paketin mi (paket adı · güncelleme adresi · sertifika · çalışma anı yapılandırması). */
+function ortakApkKimlikKapisi(apkYolu, k) {
+  baslik("ORTAK PAKET KİMLİĞİ — APK'nın kendisinden");
+  let a;
+  try {
+    a = apkKimligi(apkYolu);
+  } catch (e) {
+    if (!(e instanceof ApkOlculemedi)) throw e;
+    apkyiReddet(apkYolu);
+    dur('ÖLÇÜLEMEDİ — APK kimliği okunamadı', e.message, 'Kimliği ölçülemeyen paket sahaya kurulmaz.');
+  }
+  const beklenenIz = ortakSertifikaIzi(k);
+  bilgi(`Paket adı (applicationId): ${a.paket}`);
+  bilgi(`Güncelleme adresi        : ${a.guncellemeAdresi ?? '(yok)'}`);
+  bilgi(`OTA sertifikası          : ${a.sertifikaPem ? 'gömülü' : '(YOK)'}`);
+  const sorunlar = [];
+  if (a.paket !== k.androidPaket) sorunlar.push(`paket adı "${a.paket}" ≠ "${k.androidPaket}"`);
+  if (a.guncellemeAcik !== 'true') sorunlar.push(`expo-updates ENABLED "${a.guncellemeAcik ?? 'yok'}" (beklenen true)`);
+  if (a.guncellemeAdresi !== k.guncellemeUrl) sorunlar.push(`EXPO_UPDATE_URL "${a.guncellemeAdresi ?? 'yok'}" ≠ "${k.guncellemeUrl}"`);
+  if (!a.sertifikaPem || sertifikaParmakIzi(a.sertifikaPem) !== beklenenIz) sorunlar.push(`gömülü OTA sertifikası ortak paketinki değil (${k.otaSertifika})`);
+  if (!a.appConfig) sorunlar.push('assets/app.config yok ya da okunamadı — çalışma anı kimliği ÖLÇÜLEMEDİ');
+  else sorunlar.push(...ortakYapilandirmaFarki(a.appConfig, { herkese: true }, k).map((x) => `assets/app.config ${x}`));
+  if (sorunlar.length) {
+    apkyiReddet(apkYolu);
+    dur('APK ORTAK PAKETİN KİMLİĞİNİ TAŞIMIYOR', ...sorunlar.map((x) => `• ${x}`), '',
+      `Derleme ortamında ${KANAL_ORTAM} vardı ya da android/ eski kanalla üretildi.`,
+      'APK kanonik yolundan taşındı — SAHAYA KURMA.');
+  }
+  bilgi("✔ APK ortak paketin kimliğini taşıyor.");
+}
+
+function ortakApkAdresDogrula(apkYolu, derlemeBaslangici) {
+  baslik('(3/4) DOĞRULAMA — APK içindeki bundle (ortak paket: ERP adresi YOK)');
+  const { stat, veri } = bundleOku(apkYolu, derlemeBaslangici);
+  const { gomulu, diger } = ortakBundleAdresleri(veri.toString('latin1'));
+  bilgi(`Bundle boyutu   : ${(veri.length / 1024 / 1024).toFixed(1)} MB`);
+  if (gomulu.length) {
+    apkyiReddet(apkYolu);
+    dur('ORTAK PAKETİN BUNDLE\'INDA ERP ADRESİ VAR', `Gömülü : ${gomulu.join(', ')}`, '',
+      'Tek paket her fabrikaya gider; bir fabrikanın adresi bundle\'a inline olmuş (ortam ya da .env sızıntısı).',
+      'APK kanonik yolundan taşındı — SAHAYA KURMA.');
+  }
+  if (diger.length) bilgi(`Diğer /api dizeleri (bilgi): ${diger.join(', ')}`);
+  bilgi('✔ Bundle\'da ERP adresi yok.');
+  return stat;
+}
+
+async function ortakMain() {
+  const k = ortakHedefCoz();
+  ortakAdresKapisi();
+  baslik('TeksERP Mobil — RELEASE APK (ORTAK PAKET)');
+  bilgi(`Kimlik        : ${k.androidPaket} · "${k.gorunenAd}" · runtimeVersion ${k.runtimeVersion}`);
+  bilgi(`Güncelleme    : ${k.guncellemeUrl}  (Worker belirtecin grubuna yönlendirir)`);
+  bilgi(`OTA imzası    : ${k.otaSertifika} · kid "${k.anahtarKimligi}"`);
+  bilgi('ERP adresi    : GÖMÜLMEZ (tablet sunucuyu çalışma anında bulur)');
+  ortakSertifikaIzi(k);
+
+  if (SADECE_KONTROL) {
+    const sCheck = surumBas();
+    surumNotuKapisi(sCheck);
+    const agacCheck = temizAgacDenetimi();
+    if (agacCheck.sonuc === 'temiz') bilgi(agacCheck.satirlar[0]);
+    else uyari(`${agacCheck.satirlar.join('\n     ')}\n     (--check: uyarı — gerçek derleme bu ağaçta APK ÜRETMEZ)`);
+    if (fs.existsSync(path.join(ANDROID_DIR, 'app/src/main/AndroidManifest.xml'))) ortakGuncellemeKapisi(k);
+    else uyari('android/ klasörü yok — uzaktan güncelleme yapılandırması denetlenemedi.');
+    baslik('DERLEME ORTAMI');
+    const ortamCheck = derlemeOrtami();
+    bilgi(`Android SDK : ${ortamCheck.sdk}`);
+    bilgi(`Java (JDK)  : ${ortamCheck.jdk}`);
+    console.log('\n  ✔ Ön kontrol tamam (--check): ortak kimlik, sürüm, güncelleme yapılandırması ve derleme ortamı tutarlı. Derleme YAPILMADI.\n');
+    return;
+  }
+
+  if (SADECE_DOGRULA) {
+    const ozelYol = arg('verify-only');
+    const hedef = ozelYol ? path.resolve(process.cwd(), ozelYol) : APK_PATH;
+    if (!fs.existsSync(hedef)) dur('Doğrulanacak APK bulunamadı', hedef, 'Önce derle: npm run build:apk');
+    if (hedef !== APK_PATH) uyari(`Kanonik yol dışındaki APK denetleniyor: ${hedef}`);
+    ortakApkKimlikKapisi(hedef, k);
+    const sVerify = surumBas();
+    const stat = ortakApkAdresDogrula(hedef);
+    imzaKapisi(hedef);
+    ozet(null, sVerify, stat, hedef);
+    return;
+  }
+
+  androidVarMi();
+  const s = surumBas();
+  surumNotuKapisi(s);
+  ortakGuncellemeKapisi(k);
+  const agac = temizAgacDenetimi();
+  if (agac.sonuc !== 'temiz') {
+    dur(agac.sonuc === 'kirli' ? 'APK DERLENMEZ — çalışma ağacı temiz değil' : 'ÖLÇÜLEMEDİ — çalışma ağacı okunamadı', ...agac.satirlar);
+  }
+  bilgi(agac.satirlar[0]);
+  fs.rmSync(apkKunyeYolu(APK_PATH), { force: true });
+
+  const derlemeBaslangici = Date.now();
+  onbellekleriTemizle();
+  gradleKos(null);
+  const stat = ortakApkAdresDogrula(APK_PATH, derlemeBaslangici);
+  ortakApkKimlikKapisi(APK_PATH, k);
+  imzaKapisi(APK_PATH);
+  // Künyenin kanalı null = ortak paket; grup yayında bağlanır (O10b).
+  derlemeKunyesiBirak(null, agac.commit);
+  ozet(null, s, stat, APK_PATH);
+}
+
 async function main() {
+  // Niyet: `--musteri` yoksa ortak paket (eski kanal yolu aşağıda, değişmedi).
+  if (arg('musteri') === undefined) return ortakMain();
   const { kod, kanal } = kanalKapisi();
   const { deger, kaynak } = adresiCozPaylasilan(arg('api-url'), PROJECT_ROOT, {
     kod,
