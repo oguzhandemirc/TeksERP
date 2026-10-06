@@ -7,7 +7,6 @@ paths:
   - "surum-notlari.json"
   - "mobil/scripts/**"
   - "mobil/app.json"
-  - "mobil/musteri.json"
   - "Electron/shared/**"
   - "Electron/electron/updater*"
   - "Electron/electron/**/update*"

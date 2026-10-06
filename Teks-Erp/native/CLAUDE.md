@@ -14,7 +14,7 @@
 - `tekserp-dogrulama` TS protokolünün (`Teks-Erp/src/lib/license/protocol/`) AYNASIDIR: kural önce TS'te değişir, sonra burada; eşlik `lisans-cekirdek`in vektör testi ve kâhin bekçisiyle (`Teks-Erp/scripts/test_lisans_native_kahin.ts`, kaynak metni iki crate'ten okur) ölçülür. Modül dosya adları iki crate'te TEKİLDİR (kâhin §0l).
 - Güncelleme sözleşmesinin (`protocol/guncelleme*.ts`) aynası güncelleyicidedir (`release.rs` · `decision.rs` · `version.rs`; kiranın `guncelleme` şeması ortak `schema.rs`te): ortak vektörler `test-vektorleri/guncelleme-*.json` TS kâhininin çıktısıdır, ELLE düzenlenmez (üretici D1'in TS kâhini, `--vektor-yaz`); Rust eşliği `tekserp-guncelleyici/tests/sozlesme_vektorleri.rs` + `tekserp-dogrulama/tests/guncelleme_kira.rs`.
 - `tekserp-hizmet/src/envfile.rs` backend'in `.env` okuyucusunun (dotenv, kilit dosyasındaki sürüm) AYNASIDIR: kural dotenv'den gelir, burada icat edilmez (içerikten hata yok, biçimsiz satır sessiz); ortak vektörler `test-vektorleri/env-dosyasi.json` gerçek dotenv'in çıktısıdır (üreten `Teks-Erp/scripts/test_env_okuyucu.ts --vektor-yaz`), ELLE düzenlenmez; Rust eşliği `tekserp-hizmet/tests/env_dosyasi_vektorleri.rs` + `tekserp-guncelleyici/tests/ayar_env.rs` (zorunlu anahtar → `AYAR_EKSIK`).
-- Güven çapası YALNIZ derlemeye gömülüdür (`tekserp-dogrulama/src/anchor.rs`, `Teks-Erp/scripts/guven-capasi-ekle.ts` yazar) ve TEK kaynaktır — açık anahtar başka bir `.rs`te durmaz (kâhin §0m). Çapa İKİ kiptir, bir ikili TEK kipi taşır: özelliksiz ÜRETİM, `hazirlik-capasi` HAZIRLIK (özellik ortak crate'te; `lisans-cekirdek` ve `tekserp-guncelleyici` kendi `hazirlik-capasi`larıyla iletir). Kip SEÇİMDİR, toplamsal değil: iki kip AYNI cargo çağrısında derlenmez (özellik birleşmesi hepsini hazırlığa çeker). Hizmet ikilileri çapayı dışarıdan ALMAZ; `test-anchor` benzeri enjeksiyon yalnız test derlemesinde.
+- Güven çapası YALNIZ derlemeye gömülüdür (`tekserp-dogrulama/src/anchor.rs`, `Teks-Erp/scripts/guven-capasi-ekle.ts` yazar) ve TEK kaynaktır — açık anahtar başka bir `.rs`te durmaz (kâhin §0m). Çapa TEK kiptir (üretim); `hazirlik-capasi` özelliği kalktı. Hizmet ikilileri çapayı dışarıdan ALMAZ; `test-anchor` yalnız test derlemesinde.
 - C bağımlılığı eklenmez (saf Rust; Windows API'leri `windows-sys`/`windows-service`); yeni crate yönetici onayıyla.
 - Tanımlayıcılar İngilizce; tel/şema anahtarları, kod değerleri, günlük/ileti metinleri Türkçe.
 
@@ -30,10 +30,9 @@
 
 | Komut | Ne |
 |---|---|
-| `npm run denetle` | `cargo fmt --all --check` + clippy (uyarı = hata): bütün alan · lisans çekirdeği napi'siz — ikisi de İKİ çapa kipinde · hizmet crate'leri `x86_64-pc-windows-msvc` hedefinde (yalnız denetim; hedef std'si yoksa ⏭ beyan) |
-| `npm test` | `cargo test` bütün alan (lisans çekirdeği napi'siz + test çapasıyla; güncelleyicinin öldür-yeniden başlat paketi ~1 dk) + HAZIRLIK kipinde ortak crate · güncelleyicinin `capa_kipi` + `self_update` testleri · lisans çekirdeği |
+| `npm run denetle` | `cargo fmt --all --check` + clippy (uyarı = hata): bütün alan · lisans çekirdeği napi'siz · hizmet crate'leri `x86_64-pc-windows-msvc` hedefinde (yalnız denetim; hedef std'si yoksa ⏭ beyan) |
+| `npm test` | `cargo test` bütün alan (lisans çekirdeği napi'siz + test çapasıyla; güncelleyicinin öldür-yeniden başlat paketi ~1 dk) · güncelleyicinin `capa_kipi` + `self_update` testleri · lisans çekirdeği |
 | `npm run derle:hizmetler:win` | Mac'ten iki Windows ikilisi (cargo-xwin, CRT statik, ÜRETİM çapası) → `target/x86_64-pc-windows-msvc/release/` — thinkpad-1 provası için; CI yapıtı `native-windows.yml` |
-| `npm run derle:hizmetler:win:hazirlik` | aynı, HAZIRLIK çapalı güncelleyici (`hazirlik-capasi`) → AYRI hedef dizin `target/hazirlik/x86_64-pc-windows-msvc/release/` (hazırlık kanalının paketi: `paketle.ps1 -HizmetIkiliDizini` bu dizin) |
 
 Tanı (Windows'ta, yönetici): `tekserp-guncelleyici.exe durum --kok <KOK> [--veri <VERİ>]` · `tur --kok <KOK>` (tek tur ön planda; yarım işlemi de sonuçlandırır) · `tekserp-hizmet.exe on-planda --kok <KOK> [--ad <ad>] [--dogrulama]` (stdin'e satır = durdur). Hizmet adları parametredir (`--ad`; aynı makinede ikinci kanal — `docs/design/GUNCELLEYICI.md` §4.2).
 
