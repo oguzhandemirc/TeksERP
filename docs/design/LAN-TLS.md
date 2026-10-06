@@ -50,7 +50,7 @@ Reddedilenler: keşiften/ilk girişten otomatik sabitleme (TOFU) · IP'ye bağl�
 - Sertifika yüklenemezse `dual` HTTP ile sürer; `required` LAN'a hiç açılmaz (fail-closed, banner + log hatası). Kaçış: kipi `dual`/`off` yapıp yeniden başlatmak.
 - **HSTS AÇILMAZ.** LAN TLS `HTTPS_ENABLED`den bağımsızdır; HSTS sabitli istemcinin `dual`daki HTTP'ye dönüşünü kalıcı kilitlerdi.
 - **Eski istemci ne yapar:** `off`/`dual`da hiçbir şey değişmez: HTTP aynı portta, yanıtlar aynı, kimlik yükünde yalnız ek `tls` alanı var ve eski ayrıştırıcı tanımadığı alanı atar (`parseIdentityPayload` — ölçüldü). `required`da eski panel/tablet (adnansahin'in dondurulmuş panel 1.3.7 / tablet 1.0.12 dahil) **bağlanamaz** ("sunucu bulunamadı"). Bu yüzden `required` yalnız bütün istemciler sabitli sürüme geçip `dual`da HTTPS'ten bağlandığı ölçüldükten sonra açılır. adnansahin dondurulmuştur, bu sunucu sürümünü almaz. `minVersion` değişmez.
-- **Geri dönüş:** `.env`de `LAN_TLS_MODE=off` (ya da `dual`) + yeniden başlat; sertifika dosyaları silinmez, pinler geçerli kalır.
+- **Geri dönüş:** `.env`de `LAN_TLS_MODE=off` (ya da `dual`) + yeniden başlat; sertifika dosyaları silinmez, pinler geçerli kalır. `dual`a dönüş sorunsuzdur (HTTPS sürer, sabitli istemci bağlı kalır). **Bilinen boşluk:** `off`a dönüşte HTTPS kapanır ve sabitli istemci tasarım gereği HTTP'ye düşmediği için bağlanamaz — sabit o istemcide elle kaldırılır (panel: Sunucu Adresi → "Şifreli bağlantıyı kaldır"; tablet: aynı eylem ayarlarda).
 
 ## 6. İstemcide sabitleme
 
