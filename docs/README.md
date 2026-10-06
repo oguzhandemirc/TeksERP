@@ -14,6 +14,7 @@ Kanonik kaynak **kod + `CLAUDE.md` dosyaları**dır. 2026-09-05 yeniden yapılan
 | Yerel geliştirme (env, DB, tek bekçi, sunucu) | `docs/GELISTIRME-DONGUSU.md` |
 | Alan → bekçi (test) haritası | `Teks-Erp/docs/BEKCI-HARITASI.md` |
 | Domain terimleri | `docs/SOZLUK.md` |
+| Personel ve yönetici kullanım kılavuzu (panel · tablet · sunucu bilgisayarı · sorun giderme) | `docs/kilavuz/README.md` |
 | Alt proje çalışma düzeni | `Teks-Erp/CLAUDE.md` · `Electron/CLAUDE.md` · `mobil/CLAUDE.md` |
 | Karar notlarının TAM metni, gerekçe, ölçüm | `docs/history/arsiv/<YYYY-MM>.md` (dizin: `docs/history/CLAUDE-NOT-ARSIVI.md`; ezilen notlar `⚠️ GEÇERSİZ/KISMEN` bloğu taşır) |
 | Derin mimari referans | `Teks-Erp/ARCHITECTURE.md` (§7–§10 canlı; envanter sayıları bayat) |
