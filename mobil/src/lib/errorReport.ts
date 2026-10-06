@@ -1,6 +1,7 @@
 // HATA RAPORU (tablet) — yakalanmamış JS hatası backend'e `POST /api/hata-raporlari/istemci` ile bildirilir.
 // MESAJ METNİ GÖNDERİLMEZ: yalnız sınıf (`err.name`), yığın (backend dosya:satır'a indirir) ve ekran adı. Onay
 // backend'dedir (varsayılan KAPALI); oturum yoksa istek atılmaz; bildirim asla fırlatmaz, önceki işleyici korunur.
+import Constants from 'expo-constants';
 import { apiClient } from '../services/api';
 import { useAuthStore } from '../store/authStore';
 import { rootNavigationRef } from '../navigation/navigationRef';
@@ -12,6 +13,7 @@ const STACK_MAX = 16_000;
 
 export interface ClientErrorBody {
   readonly kaynak: 'tablet';
+  readonly surum?: string;
   readonly sinif?: string;
   readonly bilesen?: string;
   readonly yigin?: string;
@@ -20,7 +22,9 @@ export interface ClientErrorBody {
 /** Ham hatadan istek gövdesi — allowlist; `message` ve başka hiçbir alan okunmaz. */
 export function buildClientErrorBody(err: unknown, component: string | null): ClientErrorBody {
   const e = err as { name?: unknown; stack?: unknown } | null;
-  const body: { kaynak: 'tablet'; sinif?: string; bilesen?: string; yigin?: string } = { kaynak: 'tablet' };
+  const body: { kaynak: 'tablet'; surum?: string; sinif?: string; bilesen?: string; yigin?: string } = { kaynak: 'tablet' };
+  const version = Constants.expoConfig?.version;
+  if (typeof version === 'string' && version) body.surum = version.slice(0, 40);
   if (typeof e?.name === 'string' && e.name) body.sinif = e.name.slice(0, 60);
   if (component) body.bilesen = component.slice(0, 60);
   if (typeof e?.stack === 'string' && e.stack) body.yigin = stripMessageLine(e.stack).slice(0, STACK_MAX);

@@ -65,6 +65,11 @@ const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms
  * Sürüm henüz okunmadıysa en çok `VERSION_WAIT_MS` beklenir; dolmazsa istek sürümsüz gider —
  * sunucu defteri sürümü "yeni değer geldiğinde" günceller, ilk dolu değerde satır düzelir.
  */
+/** Okunmuş panel sürümü (henüz okunmadıysa null) — hata raporu gövdesi için. */
+export function knownClientVersion(): string | null {
+  return versionCache;
+}
+
 export async function applyClientInfoHeaders(
   set: (name: string, value: string) => void,
 ): Promise<void> {

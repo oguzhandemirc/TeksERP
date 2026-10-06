@@ -12,7 +12,7 @@ const hata = (): Error => {
   e.stack = `TypeError: ${GIZLI}\n    at Sevkiyat (http://localhost:5174/src/pages/Shipping/List.tsx:42:7)`;
   return e;
 };
-const IZINLI = new Set(["kaynak", "sinif", "bilesen", "yol", "yigin"]);
+const IZINLI = new Set(["kaynak", "surum", "sinif", "bilesen", "yol", "yigin"]);
 
 describe("panel hata raporu", () => {
   beforeEach(() => {

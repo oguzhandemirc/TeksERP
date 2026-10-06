@@ -7,6 +7,7 @@
 import apiClient from "@/services/apiClient";
 import { useAuthStore } from "@/store/auth";
 import { useTabsStore } from "@/store/tabs";
+import { knownClientVersion } from "@/lib/client-info";
 
 export const CLIENT_ERROR_ENDPOINT = "/api/hata-raporlari/istemci";
 /** İstemci başına dakikada en çok bu kadar bildirim (backend de kullanıcı başına sınırlar). */
@@ -15,6 +16,7 @@ const STACK_MAX = 16_000;
 
 export interface ClientErrorBody {
   readonly kaynak: "panel";
+  readonly surum?: string;
   readonly sinif?: string;
   readonly bilesen?: string;
   readonly yol?: string;
@@ -24,7 +26,9 @@ export interface ClientErrorBody {
 /** Ham hatadan istek gövdesi — allowlist; `message` ve başka hiçbir alan okunmaz. */
 export function buildClientErrorBody(err: unknown, route: string | null, component?: string): ClientErrorBody {
   const e = err as { name?: unknown; stack?: unknown } | null;
-  const body: { kaynak: "panel"; sinif?: string; bilesen?: string; yol?: string; yigin?: string } = { kaynak: "panel" };
+  const body: { kaynak: "panel"; surum?: string; sinif?: string; bilesen?: string; yol?: string; yigin?: string } = { kaynak: "panel" };
+  const version = knownClientVersion();
+  if (version) body.surum = version.slice(0, 40);
   if (typeof e?.name === "string" && e.name) body.sinif = e.name.slice(0, 60);
   if (component) body.bilesen = component.slice(0, 60);
   if (route) body.yol = route.split(/[?#]/)[0]!.slice(0, 400);

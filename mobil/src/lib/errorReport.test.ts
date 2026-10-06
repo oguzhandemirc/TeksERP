@@ -19,7 +19,7 @@ function hata(): Error {
   e.stack = `TypeError: ${GIZLI}\n    at Kk1Scan (index.android.bundle:42:7)`;
   return e;
 }
-const IZINLI = new Set(['kaynak', 'sinif', 'bilesen', 'yigin']);
+const IZINLI = new Set(['kaynak', 'surum', 'sinif', 'bilesen', 'yigin']);
 
 beforeEach(() => {
   mockPost.mockReset();

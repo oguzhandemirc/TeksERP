@@ -348,7 +348,7 @@ async function main(): Promise<void> {
     }
     const ozet = await call("GET", "/api/hata-raporlari", tok);
     check("§8h özet ucu onay + sayılar döner", ozet.status === 200 && typeof ozet.body.data?.["bekleyen"] === "number" && typeof (ozet.body.data?.["onay"] as { acik?: unknown } | undefined)?.acik === "boolean");
-    check("§8i onay ucu her kademede, istemci kaydı kısıtlı kipte açık", ["KISITLI", "DURDURULMUS"].every((k) => isOpenInTier(k as "KISITLI", "PUT", "/api/hata-raporlari/onay")) && isOpenInTier("KISITLI", "POST", "/api/hata-raporlari/istemci"));
+    check("§8i onay ucu ve istemci kaydı her kademede açık (K5 ekranı da çöker)", ["KISITLI", "DURDURULMUS"].every((k) => isOpenInTier(k as "KISITLI", "PUT", "/api/hata-raporlari/onay") && isOpenInTier(k as "KISITLI", "POST", "/api/hata-raporlari/istemci")));
   } catch (e) {
     fail++;
     console.log(`❌ beklenmeyen hata — ${e instanceof Error ? e.stack : String(e)}`);
