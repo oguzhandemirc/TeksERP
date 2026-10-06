@@ -4,7 +4,7 @@
 //   kapısı: yalnız URETIM sınıfı + `patron-bulut` modülü + bitmemiş abonelik + DEVREDİLMEMİŞ ⑤ tesisin
 //   hizmet aşaması ACIK (tesis kapatıldıysa kanal da kapalı — `service-lifecycle.ts`).
 // Kiracı İSTEKTEN değil kurulumdan çözülür (`tesisId` gövdeden ALINMAZ — sözleşme §9.2).
-import { CLOCK_SKEW_MS, UuidSchema, isoToMs, readRequestIdentity, verifyRequest, type RequestDoc } from "../lisans-protokol";
+import { CLOCK_SKEW_MS, UuidSchema, isCloudSenderClass, isoToMs, readRequestIdentity, verifyRequest, type RequestDoc } from "../lisans-protokol";
 import { CloudError, requestRejected } from "../lib/errors";
 import { isUniqueViolation } from "../lib/prisma-errors";
 import { withTesis } from "../lib/tenant";
@@ -22,8 +22,8 @@ export interface FactoryCaller {
 
 /** Eşitleme hakkı (sözleşme §1.4 — bulut İKİNCİ kapıdır; fabrika zaten göndermez). */
 export function cloudEntitlementError(inst: InstallationRecord, nowMs: number): CloudError | null {
-  if (inst.licenseClass !== "URETIM") {
-    return new CloudError(403, "SINIF_GONDEREMEZ", "Bu kurulumun lisans sınıfı patron bulutuna veri gönderemez (yalnız üretim)");
+  if (!isCloudSenderClass(inst.licenseClass)) {
+    return new CloudError(403, "SINIF_GONDEREMEZ", "Bu kurulumun lisans sınıfı patron bulutuna veri gönderemez (yalnız üretim, barındırılan ve demo)");
   }
   const until = inst.cloudUntil?.getTime() ?? 0;
   if (!inst.modules.includes(CLOUD_MODULE_KEY) || until <= nowMs || inst.handedOver) {
