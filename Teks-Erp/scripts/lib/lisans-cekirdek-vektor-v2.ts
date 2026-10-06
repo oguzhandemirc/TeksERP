@@ -275,7 +275,7 @@ function araZinciri(f: Fikstur): VektorV2[] {
     v("ara: ALT sertifikası gömülü (kullanım)", araHakBas(f, {}, { sertifika: altSert, imzalayan: f.alt })),
     v("ara: hem bayi hem ara sertifikası", hamImzala(TYP.HAK, f.ara, { ...hakYuku(f), bayiId: f.musteriId, bayiSertifikasi: bayiSert, imzaciSertifikasi: araSertifikasi(f) })),
     v("ara: sertifikayı tanınmayan kök imzalamış", araHakBas(f, {}, { sertifika: araSertifikasi(f, {}, anahtarUret("kok-2099-3")) })),
-    v("ara: hazırlık kökü ÜRETİM yetkili ara sertifika basamaz", araHakBas(f, {}, { sertifika: araSertifikasi(f, { siniflar: ["URETIM"] }, f.hazirlik) })),
+    v("ara: dar kök ÜRETİM yetkili ara sertifika basamaz", araHakBas(f, {}, { sertifika: araSertifikasi(f, { siniflar: ["URETIM"] }, f.dar) })),
     v("ara: sertifikada kid öneki ara- değil", araHakBas(f, {}, { sertifika: hamImzala(TYP.SERTIFIKA, f.kok, { ...sertifikaYuku(f, f.bayi, "HAK") }), imzalayan: f.bayi })),
     v("ara: imzaciSertifikasi metin değil (kök yolu dışı → tanınmayan imzacı)", hamImzala(TYP.HAK, f.ara, { ...hakYuku(f), imzaciSertifikasi: 7 })),
     { tur: "kira2", ad: "ara: HAK sertifikası kira imzalayamaz", token: kiraBas(f, { altSertifika: araSertifikasi(f) }, f.ara), roots: f.kokler },

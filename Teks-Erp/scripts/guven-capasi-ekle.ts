@@ -1,11 +1,10 @@
 // =============================================================================
 // GÜVEN ÇAPASI — tören sonrası kök / PAKET AÇIK anahtarını çapaya ekler (deterministik)
 // =============================================================================
-// Tek komut, dört yer, kipin tek listesi: çapa İKİ kiptir ve anahtar kid'inin kipine gider — `kok-*`/`paket-<yıl>`
-// ÜRETİM, `hazirlik-*`/`paket-hazirlik*` HAZIRLIK listesine (üretim derlemesi hazırlık anahtarına hiç güvenmez).
-// Yerler: TS kök çapası (`PRODUCTION_`/`STAGING_ROOT_PUBLIC_KEYS`, + satıcı ve patron protokol aynası, bayt-eşit
-// kopya) · TS PAKET çapası (`…_PACKAGE_PUBLIC_KEYS`) · native gömülü çapa (`anchor.rs`, rustfmt düzeni, kipin
-// `cfg` kapılı bloğu). Yalnız AÇIK yarı okunur: parola istemez, özel yarıya dokunmaz, hiçbir sır basmaz.
+// Tek komut, dört yer, tek liste: çapa TEK kiptir (üretim) ve yalnız `kok-*` / `paket-<yıl>` kid'i kabul eder.
+// Yerler: TS kök çapası (`PRODUCTION_ROOT_PUBLIC_KEYS`, + satıcı ve patron protokol aynası, bayt-eşit kopya) ·
+// TS PAKET çapası (`PRODUCTION_PACKAGE_PUBLIC_KEYS`) · native gömülü çapa (`anchor.rs`, rustfmt düzeni, üretim
+// bloğu). Yalnız AÇIK yarı okunur: parola istemez, özel yarıya dokunmaz, hiçbir sır basmaz.
 //
 //   npx tsx scripts/guven-capasi-ekle.ts kok --dosya=<kid>.kok.json [--yaz]
 //   npx tsx scripts/guven-capasi-ekle.ts kok --kid=kok-2026-1 --x=<base64url> --siniflar=URETIM,DR,… [--yaz]
@@ -20,9 +19,9 @@
 // `tablet` altıncı: tabletin APK künyesi imza çapası (mobil/src/lib/apk-imza-capasi.json). İkisi aynı kid ailesi.
 //
 // Varsayılan KURU: planı basar, dosya yazmaz; `--yaz` yazar. Aynı kid + aynı anahtar zaten çapadaysa
-// değişiklik yok (idempotent); aynı kid başka anahtar/sınıf ya da aynı anahtar başka kid → RED, iki kipin
-// listesi birlikte aranır (rotasyon YENİ kid'dir, satır değiştirilmez). Yeni satır kipin listesinin SONUNA
-// eklenir. Başlangıçta dört yer tutarsızsa (ayna farkı, anchor.rs ≠ TS, listede başka kipin kid'i, elle
+// değişiklik yok (idempotent); aynı kid başka anahtar/sınıf ya da aynı anahtar başka kid → RED (rotasyon YENİ
+// kid'dir, satır değiştirilmez). Yeni satır listenin SONUNA eklenir. Başlangıçta dört yer tutarsızsa (ayna
+// farkı, anchor.rs ≠ TS, listede biçim dışı kid, elle
 // bozulmuş biçim) HİÇBİR ŞEY yazılmaz.
 // Çıkış: 0 tamam (plan / yazıldı / zaten var) · 1 geçersiz ya da çakışma · 2 biçim (betik güncellenmeli) · 64 kullanım.
 // Bekçi: test_guven_capasi_ekle (betik bugünkü dört dosyayı bayt-eşit yeniden üretir + geçici kopyada davranış).
@@ -79,7 +78,7 @@ function planla(argv: readonly string[], d: CapaDurumu, kok: string): { plan: Ek
     const hedef = komut === "panel" ? PANEL_CAPA_DOSYASI : TABLET_CAPA_DOSYASI;
     const ac = dosya ? acikAlanlar(dosya, "tekserp-panel-anahtar") : null;
     const paketKid = arg(argv, "paket-kid");
-    const kaynak = paketKid ? [...d.paketler.uretim, ...d.paketler.hazirlik].find((k) => k.kid === paketKid) : null;
+    const kaynak = paketKid ? d.paketler.uretim.find((k) => k.kid === paketKid) : null;
     if (paketKid && !kaynak) throw new CapaHatasi("GECERSIZ", `${paketKid} PAKET çapasında yok`);
     const kid = ac?.kid ?? kaynak?.kid ?? arg(argv, "kid");
     const x = ac?.x ?? kaynak?.x ?? arg(argv, "x");
@@ -125,13 +124,13 @@ const TABLET_SONRAKI_ADIMLAR = [
 const SONRAKI_ADIMLAR = [
   "Sonraki adımlar (sabiti OKUYAN her bekçi — kök kural):",
   "  cd Teks-Erp && node ../scripts/agir-is.mjs -- npx tsx scripts/run-all-tests.ts lisans_protokol   (protokol §0' + ayna)",
-  "  node ../scripts/agir-is.mjs -- npx tsx scripts/test_lisans_native_kahin.ts --vektor-yaz          (gömülü çapa vektörleri kipin İLK kid'iyle)",
-  "  node ../scripts/agir-is.mjs -- npx tsx scripts/run-all-tests.ts lisans_native_kahin              (§0e gömülü çapa · §2e/§2f kipler)",
+  "  node ../scripts/agir-is.mjs -- npx tsx scripts/test_lisans_native_kahin.ts --vektor-yaz          (gömülü çapa vektörleri listenin İLK kid'iyle)",
+  "  node ../scripts/agir-is.mjs -- npx tsx scripts/run-all-tests.ts lisans_native_kahin              (§0e gömülü çapa)",
   "  node ../scripts/agir-is.mjs -- npx tsx scripts/run-all-tests.ts lisans_butunluk                  (§2 PAKET çapası)",
   "  node ../scripts/agir-is.mjs -- npx tsx scripts/run-all-tests.ts guven_capasi_ekle",
-  "  cd native && npm run denetle && npm test                                                          (rustfmt + clippy + cargo test, bütün çalışma alanı, iki kip)",
+  "  cd native && npm run denetle && npm test                                                          (rustfmt + clippy + cargo test, bütün çalışma alanı)",
   "  satici/sunucu ve patron/sunucu: npx tsc --noEmit (ayna)",
-  "Sonra: native .node VE güncelleyici ikilisi o kipte YENİDEN derlenir (gömülü çapa ikisinde de: tekserp-dogrulama; üretim özelliksiz · hazırlık `hazirlik-capasi`) → yeni backend paketi; satıcı/patron imajı yeni aynayla.",
+  "Sonra: native .node VE güncelleyici ikilisi YENİDEN derlenir (gömülü çapa ikisinde de: tekserp-dogrulama) → yeni backend paketi; satıcı/patron imajı yeni aynayla.",
   "Belgeler: docs/kurallar/lisans.md (güven çapası satırı) · docs/design/LISANS-PROTOKOLU.md §0 tablosu · docs/ops/SATICI-KURULUM.md anahtar tablosu.",
 ];
 

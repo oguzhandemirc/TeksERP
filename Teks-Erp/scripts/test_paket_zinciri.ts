@@ -129,8 +129,8 @@ function sertifika(konu: TestAnahtari, ek: Parameters<typeof sertifikaYuku>[3] =
 }
 const SERT = sertifika(PKT);
 const SERT_TEST = sertifika(PKT, { siniflar: ["TEST", "DEMO"] as LicenseClass[] });
-const SERT_HAZIRLIK = sertifika(PKT, { siniflar: ["TEST"] as LicenseClass[] }, f.hazirlik);
-const SERT_HAZIRLIK_ASAN = sertifika(PKT, { siniflar: ["URETIM"] as LicenseClass[] }, f.hazirlik);
+const SERT_HAZIRLIK = sertifika(PKT, { siniflar: ["TEST"] as LicenseClass[] }, f.dar);
+const SERT_HAZIRLIK_ASAN = sertifika(PKT, { siniflar: ["URETIM"] as LicenseClass[] }, f.dar);
 const SERT_IND = sertifika(anahtarUret("ind-2026-9"), {}, f.kok, "INDIRME");
 const BITIS = isoToMs(SERT.yuk.bitis);
 
@@ -190,7 +190,7 @@ const VAKALAR: { vektor: Vektor; kod: string }[] = [
   { kod: "PAKET_SERTIFIKA_SINIF", vektor: { tur: "paket-imza", ad: "sınıf bilinmiyor (null)", token: GECERLI, typ: TYP.SURUM, guven: guven({ sinif: null }) } },
   { kod: "OK", vektor: { tur: "paket-imza", ad: "eski paket-* sınıf süzgecinden etkilenmez", token: hamImzala(TYP.SURUM, ESKI, YUK), typ: TYP.SURUM, guven: guven({ sinif: null }) } },
   { kod: "OK", vektor: { tur: "paket-iptal", ad: "geçerli", token: IPTAL, roots: f.kokler } },
-  { kod: "OK", vektor: { tur: "paket-iptal", ad: "hazırlık kökü imzalar", token: paketIptalBas(f.hazirlik, paketIptalYuku([IPTAL_SATIRI])), roots: f.kokler } },
+  { kod: "OK", vektor: { tur: "paket-iptal", ad: "hazırlık kökü imzalar", token: paketIptalBas(f.dar, paketIptalYuku([IPTAL_SATIRI])), roots: f.kokler } },
   { kod: "KOK_BILINMIYOR", vektor: { tur: "paket-iptal", ad: "pkt anahtarı imzalayamaz", token: hamImzala(TYP.PAKET_IPTAL, PKT, paketIptalYuku([IPTAL_SATIRI])), roots: f.kokler } },
   { kod: "JWS_TYP", vektor: { tur: "paket-iptal", ad: "tekserp-iptal türü kabul edilmez", token: hamImzala(TYP.IPTAL, f.kok, paketIptalYuku([IPTAL_SATIRI])), roots: f.kokler } },
   { kod: "BELGE_SEMA", vektor: { tur: "paket-iptal", ad: "satır kid pkt- değil", token: hamImzala(TYP.PAKET_IPTAL, f.kok, paketIptalYuku([{ ...IPTAL_SATIRI, kid: "alt-2026-1" }])), roots: f.kokler } },

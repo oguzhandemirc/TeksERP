@@ -25,7 +25,7 @@ const CODE_LABEL: Readonly<Record<string, string | undefined>> = {
   BUTUNLUK_OKUNAMAYAN: "Listedeki dosyalar okunamıyor (korumalı pakette değişmiş sayılır)",
   BUTUNLUK_IMZA: "İmzalı dosya listesinin imzası doğrulanamadı",
   BUTUNLUK_CAPA_BOS: "Paket imza anahtarı yok",
-  BUTUNLUK_HAZIRLIK_ANAHTARI: "Hazırlık imzası üretim kurulumunda geçersiz",
+  BUTUNLUK_SINIF_YETKISIZ: "Paket imzası bu kurulumun lisans sınıfına yetkili değil",
   BUTUNLUK_SINIF_BILINMIYOR: "Kurulum sınıfı bilinmiyor (etkinleştirme bekleniyor)",
   BUTUNLUK_FILIGRAN: "Program filigranı imzalı paketle uyuşmuyor",
   BUTUNLUK_YUKLEYICI: "Program kod enjekte eden başlatma bayrağıyla çalışıyor (--require/--import/--inspect)",

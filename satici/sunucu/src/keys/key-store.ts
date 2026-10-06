@@ -14,7 +14,6 @@ import { z } from "zod";
 import {
   CLOCK_SKEW_MS,
   LICENSE_CLASSES,
-  STAGING_ROOT_CLASSES,
   isoToMs,
   parseJws,
   prepareTrustAnchor,
@@ -116,14 +115,12 @@ function listFiles(dir: string, suffix: string): string[] {
 }
 
 /**
- * Anahtar dizinindeki köklerin TEK ailesi (`kok-*` → uretim, `hazirlik-*` → hazirlik); karışık ya da kök yoksa null.
+ * Anahtar dizinindeki kökler yalnız `kok-*` ailesindense uretim; başka aile (eski `hazirlik-*`) ya da kök yoksa null.
  * Yalnız ortamı olmayan CLI kolaylığıdır (yerel anahtar dizini); sunucu kipi yapılandırmadan alır.
  */
 export function anchorModeOfKeyDir(dir: string): TrustAnchorMode | null {
   const kids = listFiles(dir, ".kok.json").map((f) => path.basename(f, ".kok.json"));
-  const modes = new Set(kids.map((k) => (k.startsWith("hazirlik-") ? "hazirlik" : k.startsWith("kok-") ? "uretim" : "?")));
-  if (modes.size !== 1 || modes.has("?")) return null;
-  return modes.has("hazirlik") ? "hazirlik" : "uretim";
+  return kids.length > 0 && kids.every((k) => k.startsWith("kok-")) ? "uretim" : null;
 }
 
 /** Çapa ve kaynağı: dosya çapası yalnız üretim DIŞINDA; gömülü çapa ortamın kipinden; kip yoksa RED. */
@@ -132,7 +129,7 @@ function resolveAnchor(config: Pick<VendorConfig, "GUVEN_CAPASI" | "GUVEN_CAPASI
     if (config.GUVEN_CAPASI === "uretim") throw new Error("Üretim satıcısı (GUVEN_CAPASI=uretim) dosyadan güven çapası kabul etmez");
     return { anchor: AnchorFileSchema.parse(JSON.parse(readFileSync(config.GUVEN_CAPASI_DOSYASI, "utf8"))), anchorSource: "dosya" };
   }
-  if (!config.GUVEN_CAPASI) throw new Error("Güven çapası kipi yok: GUVEN_CAPASI=uretim|hazirlik (compose ORTAM'dan) ya da yalnız test için GUVEN_CAPASI_DOSYASI");
+  if (!config.GUVEN_CAPASI) throw new Error("Güven çapası kipi yok: GUVEN_CAPASI=uretim (compose ORTAM'dan) ya da yalnız test için GUVEN_CAPASI_DOSYASI");
   return { anchor: rootPublicKeysFor(config.GUVEN_CAPASI), anchorSource: "gomulu" };
 }
 
@@ -225,13 +222,9 @@ export class KeyStore {
     return this.newest(this.subKeys.filter((k) => k.kind === "INDIRME" && certValidAt(k.document, nowMs)));
   }
 
-  /** HAK'ı imzalayacak kök dosyası: TEST/DEMO'da varsa hazırlık kökü, yoksa sınıfa yetkili üretim kökü. */
+  /** HAK'ı imzalayacak kök dosyası: çapadaki, sınıfa yetkili üretim kökü. */
   rootFileFor(cls: LicenseClass): WrappedKeyInfo | null {
     const usable = this.wrapped.filter((w) => w.kind !== "BAYI" && w.inAnchor && w.classes.includes(cls));
-    if (STAGING_ROOT_CLASSES.includes(cls)) {
-      const staging = usable.find((w) => w.kind === "HAZIRLIK_KOK");
-      if (staging) return staging;
-    }
     return usable.find((w) => w.kind === "KOK") ?? null;
   }
 

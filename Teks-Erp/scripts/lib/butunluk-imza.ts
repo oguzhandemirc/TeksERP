@@ -13,7 +13,6 @@ import {
   INTEGRITY_FILE,
   fileEntries,
   isProductionPackageKid,
-  isStagingPackageKid,
   listScopedFiles,
   packageScope,
 } from "../../src/lib/license/integrity-scope";
@@ -25,7 +24,7 @@ export interface PackageKeyFile {
   readonly surum: 1;
   readonly kid: string;
   readonly x: string;
-  /** Ham Ed25519 özel anahtarı (base64url). Yalnız hazırlık/test anahtarı parolasızdır (0600); üretim anahtarı sürüm 2. */
+  /** Ham Ed25519 özel anahtarı (base64url). Yalnız bekçilerin test anahtarı parolasızdır (0600); üretim anahtarı sürüm 2. */
   readonly d: string;
   readonly siniflar: readonly string[];
   readonly olusturma: string;
@@ -84,7 +83,7 @@ function plainKey(k: Record<string, unknown>): OpenedPackageKey {
   if (k.tur !== PACKAGE_KEY_KIND || k.surum !== 1 || typeof k.kid !== "string" || typeof k.x !== "string" || typeof k.d !== "string") {
     throw new Error("PAKET anahtar dosyası biçimsiz");
   }
-  // Üretim kid'i parolasız dosyada bulunamaz: hazırlık biçimiyle üretim anahtarı karıştırılmasın.
+  // Üretim kid'i parolasız dosyada bulunamaz: test biçimiyle üretim anahtarı karıştırılmasın.
   if (isProductionPackageKid(k.kid)) throw new Error(`üretim PAKET kid'i (${k.kid}) parolasız dosyada olamaz — anahtar-uret ile parolalı üretilir`);
   const privateKey = createPrivateKey({ key: { kty: "OKP", crv: "Ed25519", x: k.x, d: k.d }, format: "jwk" });
   if (publicKeyX(privateKey) !== k.x) throw new Error("anahtar dosyasında x ile d uyuşmuyor");
@@ -93,7 +92,7 @@ function plainKey(k: Record<string, unknown>): OpenedPackageKey {
 
 const B64U = /^[A-Za-z0-9_-]+$/;
 
-/** Sürüm 2 dosyasının alanları KATI: fazla alan (ör. düz `d`) ya da hazırlık kid'i RED. */
+/** Sürüm 2 dosyasının alanları KATI: fazla alan (ör. düz `d`) ya da üretim dışı kid RED. */
 function wrappedKeyOf(k: Record<string, unknown>): WrappedPackageKeyFile {
   const kdf = k.kdf as Record<string, unknown> | undefined;
   const alanlar = ["tur", "surum", "kid", "siniflar", "x", "kdf", "iv", "sifreli", "etiket", "olusturma"];
@@ -112,14 +111,14 @@ function wrappedKeyOf(k: Record<string, unknown>): WrappedPackageKeyFile {
     [kdf.N, kdf.r, kdf.p].every((n) => Number.isInteger(n)) &&
     (kdf.N as number) >= 1 << 14 && (kdf.N as number) <= 1 << 17 && (kdf.r as number) >= 1 && (kdf.r as number) <= 32 && (kdf.p as number) >= 1 && (kdf.p as number) <= 16;
   if (!ok) throw new Error("parolalı PAKET anahtar dosyası biçimsiz");
-  // Hazırlık kid'i parolalı biçimde bulunamaz: iki biçim kid sınıfına bağlı, karıştırılmaz.
+  // Üretim dışı kid parolalı biçimde bulunamaz: iki biçim kid sınıfına bağlı, karıştırılmaz.
   if (!isProductionPackageKid(k.kid as string)) {
-    throw new Error(`parolalı biçim yalnız üretim PAKET kid'i (paket-<yıl>) taşır${isStagingPackageKid(k.kid as string) ? " — hazırlık kid'i parolasızdır" : ""}: ${String(k.kid)}`);
+    throw new Error(`parolalı biçim yalnız üretim PAKET kid'i (paket-<yıl>) taşır: ${String(k.kid)}`);
   }
   return k as unknown as WrappedPackageKeyFile;
 }
 
-/** Parolasız (hazırlık/test) anahtar. Parolalı üretim anahtarı burada AÇILMAZ — `openPackageKey`. */
+/** Parolasız (bekçi test) anahtar. Parolalı üretim anahtarı burada AÇILMAZ — `openPackageKey`. */
 export function readPackageKey(file: string): OpenedPackageKey {
   const k = readKeyJson(file);
   if (k.surum === 2) throw new Error("parolalı üretim PAKET anahtarı — openPackageKey ile (parola sorularak) açılır");
@@ -138,7 +137,7 @@ export function packageKeyInfo(file: string): { readonly kid: string; readonly x
 }
 
 /**
- * İki biçimi de açar: parolasız (hazırlık) doğrudan; parolalıysa parolayı `askPassword`tan ister — açılan ham
+ * İki biçimi de açar: parolasız (test) doğrudan; parolalıysa parolayı `askPassword`tan ister — açılan ham
  * özel yarı ve parola Buffer'ı iş bitince SIFIRLANIR. Yanlış parola: `KeyFileError` YANLIS_PAROLA.
  */
 export async function openPackageKey(file: string, askPassword: (kid: string) => Promise<Buffer>): Promise<OpenedPackageKey> {

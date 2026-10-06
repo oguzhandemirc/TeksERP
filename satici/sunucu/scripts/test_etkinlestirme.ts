@@ -149,7 +149,7 @@ async function main(): Promise<void> {
     kontrol("§4d kira defterde (zincir kökü)", kiraSatiri.karar === "ETKINLESTIRME" && kiraSatiri.oncekiKiraId === null);
     const kunye = await prisma.anahtarKaydi.findMany();
     const kunyeMetni = JSON.stringify(kunye);
-    const ozelYarilar = [f.kok, f.alt, f.ind, f.hazirlik].map((a) => String(a.privateKey.export({ format: "jwk" }).d));
+    const ozelYarilar = [f.kok, f.alt, f.ind, f.dar].map((a) => String(a.privateKey.export({ format: "jwk" }).d));
     kontrol("§4e anahtar künyesi: açık yarılar var, ÖZEL yarı YOK", kunye.some((a) => a.kid === f.alt.kid) && ozelYarilar.every((d) => !kunyeMetni.includes(d)));
     const denetim = await prisma.denetim.findMany({ where: { varlikId: k.kurulumDbId } });
     const denetimMetni = JSON.stringify(denetim);

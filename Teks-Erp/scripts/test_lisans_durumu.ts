@@ -26,7 +26,7 @@
 //   P0 (D4 saat kayması bilgidir):
 //   P1 SAAT_KAYIK geçerlilik etkisi ÖLÇÜLEMEDİ yapıldı           → 1 ❌ (§6d)
 //   F1a (D2 geri alma · D4 · saat kapalı süre kredisi · D1 okunamayan belge):
-//   P2 geri alma denetimi (evaluateRollback) kaldırıldı          → 6 ❌ (§15a/b/e/f/g/h)
+//   P2 geri alma denetimi (evaluateRollback) kaldırıldı          → 5 ❌ (§15a/b/e/g/h)
 //   P3 SAAT_KAYIK kademe taşıdı (UYARI)                          → 1 ❌ (§6e)
 //   P4 üst eşik kapalı süre kredisini yok saydı                  → 1 ❌ (§5f)
 //   P5 okunamayan kira YOK sayıldı (KIRA_YOK)                    → 1 ❌ (§16a)
@@ -81,6 +81,7 @@ import {
   type LicenseStateInput,
 } from "../src/lib/license/state";
 import {
+  EntitlementPinSchema,
   accumulatedRuntime,
   verifyStateRecord,
   signStateRecord,
@@ -499,8 +500,8 @@ function geriAlmaBolumu(): void {
   check("§15d karşı: kira kayıttakinden YENİ → kira otoritedir (yaptırım kalkmış olabilir)", !nedenVar(yeni, "KIRA_GERI_ALINDI") && yeni.hesaplananKademe === "NORMAL", ozet(yeni));
   const sinif = durum({ girdi: { sonHak: { ...pin, sinif: "DEMO" } } });
   check("§15e ⭐ HAK sınıf pini ters (kayıt DEMO, disk ÜRETİM) → KIRA_GERI_ALINDI (SINIF)", sinif.nedenler.some((n) => n.kod === "KIRA_GERI_ALINDI" && n.ayrinti === "SINIF") && sinif.gecerlilik === "OLCULEMEDI", ozet(sinif));
-  const kok = durum({ girdi: { sonHak: { ...pin, kokTuru: "hazirlik" } } });
-  check("§15f ⭐ kök türü pini ters (kayıt hazırlık kökü, disk üretim kökü) → KIRA_GERI_ALINDI (KOK)", kok.nedenler.some((n) => n.kod === "KIRA_GERI_ALINDI" && n.ayrinti === "KOK"), ozet(kok));
+  const eskiKok = EntitlementPinSchema.safeParse({ ...pin, kokTuru: "hazirlik" });
+  check("§15f ⭐ eski hazırlık kök türlü pin şemada RED (tek kök ailesi; durum kaydı açılmaz → fail-closed)", !eskiKok.success && EntitlementPinSchema.safeParse(pin).success);
   const surum = durum({ girdi: { sonHak: { ...pin, surum: 3 } } });
   check("§15g diskteki HAK kayıttaki sürümden ESKİ → KIRA_GERI_ALINDI (HAK_SURUM)", surum.nedenler.some((n) => n.kod === "KIRA_GERI_ALINDI" && n.ayrinti === "HAK_SURUM"), ozet(surum));
   const tavan = durum({ hak: { moduller: ["finance.enabled", "iplik.enabled"] }, girdi: { sonHak: { ...pin, sinif: "DEMO" } } });

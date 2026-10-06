@@ -5,7 +5,7 @@ import { CLOCK_SKEW_MS, isoToMs, msToIso, type LeaseDoc, type VerifiedEntitlemen
 import { sanctionSnapshotOf } from "./state-rules";
 import { rememberAnchor } from "./state-rules-time";
 import { revocationPin } from "./state-rules-revocation";
-import { rootKindOf, type EntitlementPin, type LeaseClockAnchor, type StateRecord, type TraceKind } from "./saat";
+import { type EntitlementPin, type LeaseClockAnchor, type StateRecord, type TraceKind } from "./saat";
 import type { IntegrityRecordPatch } from "./integrity-state";
 
 export function entitlementPinOf(entitlement: VerifiedEntitlement): EntitlementPin {
@@ -14,7 +14,7 @@ export function entitlementPinOf(entitlement: VerifiedEntitlement): EntitlementP
     hakId: d.hakId,
     surum: d.surum,
     sinif: d.sinif,
-    kokTuru: rootKindOf(entitlement.signer.rootKid),
+    kokTuru: "kok",
     moduller: [...d.moduller],
     ...(d.kipAltSiniri ? { kipAltSiniri: d.kipAltSiniri } : {}),
   };

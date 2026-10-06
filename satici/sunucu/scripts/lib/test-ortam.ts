@@ -105,8 +105,8 @@ export async function anahtarOrtamiKur(simdi: number = Date.now(), ekOrtam: Reco
     await wrapPrivateKey({ tur: "tekserp-kok-anahtar", kid: f.kok.kid, siniflar: f.kokler[0]!.classes }, f.kok.privateKey, parola()),
   );
   writeKeyFileExclusive(
-    path.join(dizin, `${f.hazirlik.kid}.kok.json`),
-    await wrapPrivateKey({ tur: "tekserp-kok-anahtar", kid: f.hazirlik.kid, siniflar: ["TEST", "DEMO"] }, f.hazirlik.privateKey, parola()),
+    path.join(dizin, `${f.dar.kid}.kok.json`),
+    await wrapPrivateKey({ tur: "tekserp-kok-anahtar", kid: f.dar.kid, siniflar: ["TEST", "DEMO"] }, f.dar.privateKey, parola()),
   );
   writeKeyFileExclusive(
     path.join(dizin, `${f.alt.kid}.anahtar.json`),
@@ -127,7 +127,7 @@ export async function anahtarOrtamiKur(simdi: number = Date.now(), ekOrtam: Reco
     moduleVault: ModuleKeyVault.load(dizin, { create: true }),
     codeHasher: ActivationCodeHasher.load(dizin, { create: true }),
   };
-  const kidler = [f.kok.kid, f.hazirlik.kid, f.alt.kid, f.ind.kid];
+  const kidler = [f.kok.kid, f.dar.kid, f.alt.kid, f.ind.kid];
   return { f, dizin, capaDosyasi, ctx, kidler, temizle: () => rmSync(dizin, { recursive: true, force: true }) };
 }
 

@@ -2,16 +2,15 @@
 // okunamayan depo dosyası ve satıcı saati sapması. Her biri bulgu listesine satır ekleyen saf
 // değerlendirici; birleştirme `state.ts`te.
 import { CLOCK_SKEW_MS, isoToMs, type VerifiedEntitlement, type VerifiedLease } from "./protocol";
-import { rootKindOf, type EntitlementPin } from "./saat";
+import type { EntitlementPin } from "./saat";
 import { UNMEASURED_BANNER, type Finding, type LicenseStateInput } from "./state-rules";
 
-/** Pin ters mi: başka HAK, daha eski sürüm, başka sınıf ya da başka kök türü. */
+/** Pin ters mi: başka HAK, daha eski sürüm ya da başka sınıf. */
 export function entitlementPinBroken(entitlement: VerifiedEntitlement, pin: EntitlementPin): string | null {
   const d = entitlement.document;
   if (d.hakId !== pin.hakId) return "HAK";
   if (d.surum < pin.surum) return "HAK_SURUM";
   if (d.sinif !== pin.sinif) return "SINIF";
-  if (rootKindOf(entitlement.signer.rootKid) !== pin.kokTuru) return "KOK";
   return null;
 }
 

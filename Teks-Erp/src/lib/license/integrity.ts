@@ -56,21 +56,15 @@ export const PRODUCTION_PACKAGE_PUBLIC_KEYS: readonly PackageKey[] = Object.free
   Object.freeze({ kid: "paket-2026", x: "j7xjeBy3BGQu38IZrvaaJJFcQ0OJCp22z8fUNiYwaCM" }),
 ]);
 
-/** Hazırlık PAKET anahtarları (`paket-hazirlik*`, parolasız) — yalnız hazırlık derlemesinde ve TEST/DEMO kurulumunda. */
-export const STAGING_PACKAGE_PUBLIC_KEYS: readonly PackageKey[] = Object.freeze([
-  Object.freeze({ kid: "paket-hazirlik", x: "auFAoNnXZDIWdyLJ5EVsakwMquIa_GHqCyKxZHz16Z8" }),
-]);
-
 const NO_PACKAGE_KEYS: readonly PackageKey[] = Object.freeze([]);
 
 /** Kipin PAKET çapası; tanınmayan kip boş çapadır (fail-closed). */
 export function packagePublicKeysFor(mode: TrustAnchorMode): readonly PackageKey[] {
   if (mode === "uretim") return PRODUCTION_PACKAGE_PUBLIC_KEYS;
-  if (mode === "hazirlik") return STAGING_PACKAGE_PUBLIC_KEYS;
   return NO_PACKAGE_KEYS;
 }
 
-/** Bu derlemenin PAKET çapası (kip `trust-anchor.ts`): üretim derlemesi hazırlık anahtarıyla imzalı listeyi tanımaz. */
+/** Bu derlemenin PAKET çapası (kip `trust-anchor.ts`): listede olmayan anahtarla imzalı liste tanınmaz. */
 export const PACKAGE_PUBLIC_KEYS: readonly PackageKey[] = packagePublicKeysFor(BUILD_ANCHOR_MODE);
 
 const PACKAGE_KID = /^paket-[a-z0-9-]{1,40}$/;

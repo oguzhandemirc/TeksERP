@@ -3,7 +3,6 @@
 // =============================================================================
 // Satıcı Mac'inde koşar; imza anahtarı CI'a ve pakete GİRMEZ. Kapsam: src/lib/license/integrity-scope.ts.
 //
-//   npx tsx scripts/build-korumali-imza.ts anahtar-uret [--kid=paket-hazirlik] [--dizin=~/.tekserp/satici-hazirlik]   (hazırlık, parolasız)
 //   npx tsx scripts/build-korumali-imza.ts anahtar-uret --kid=paket-<yıl>[-<n>] [--dizin=~/.tekserp/satici-uretim] [--json]
 //       ÜRETİM (tören): parolalı (kök dosyasıyla aynı sarma, `protocol/anahtar-sarma.ts`); parola iki kez — TTY'de
 //       gizli istem, TTY yoksa stdin'in ilk iki satırı. Çıktı `<dizin>/<kid>.paket.json` (0600, var olanı ezmez).
@@ -16,17 +15,17 @@
 // `zip` kipi: zip'i açar, sürüm/müşteri/derleme künyesini PAKET.json + dist/server-kunye.json'dan okur,
 // imzalar, `butunluk.jws` + `butunluk-liste.txt`i ekler ve PAKET.json'daki dosya sayısını iki artırır
 // (kur.ps1 sayım kapısı).
-// Hazırlık anahtarı (`paket-hazirlik`) yalnız TEST/DEMO paketleri içindir: ÜRETİM kurulumu onu reddeder.
-// Anahtar AİLESİ derlemenin çapa kipine uymalı (G3, `dist/server-kunye.json` `guvenCapasi`): üretim çapalı pakete
-// yalnız `paket-<yıl>`, hazırlık çapalıya yalnız `paket-hazirlik*` — uymazsa parola sorulmadan RED (paket açılışta
-// imzalı listeyi tanımaz, çekirdeksiz kalırdı).
+// Anahtar üretimi yalnız üretim ailesidir (`paket-<yıl>`, parolalı); parolasız anahtar yalnız bekçilerin test anahtarıdır.
+// Anahtar AİLESİ derlemenin çapa kipine uymalı (G3, `dist/server-kunye.json` `guvenCapasi`): tek kip `uretim`, pakete
+// yalnız `paket-<yıl>`; başka kip (eski `hazirlik`) ya da başka aile parola sorulmadan RED (paket açılışta imzalı
+// listeyi tanımaz, çekirdeksiz kalırdı).
 // CI KÖKENİ (G22/ALT-9): `.jsc` CI'da derlenir, Mac gözle denetleyemez — üretim anahtarıyla (`paket-<yıl>`) imza
 // `--ci-kosu=<id>` ister ve parola sorulmadan ÖNCE koşu ölçülür: `korumali-paket.yml`, başarıyla bitmiş, `main`
 // dalı, commit'i yapıtın künyesindeki (`dist/server-kunye.json`) ve PAKET.json'unki (`scripts/lib/ci-kokeni.ts`).
-// Hazırlık anahtarında koşu verilirse ölçülür (dal serbest), verilmezse uyarı basılır.
+// Üretim dışı (test) anahtarda koşu verilirse ölçülür (dal serbest), verilmezse uyarı basılır.
 // KAÇIŞ (kullanıcı kararı 2026-10-01): koşu YOKKEN üretim imzası yalnız `--ci-atla="<kullanıcının cümlesi>"` ile;
 // cümle + saat + makine + HEAD imzalı yüke (`ciKokeni`) girer, yayıncı (`deploy/backend-yayinla.mjs`) uyarır ve
-// defterine yazar. Hazırlık anahtarında `--ci-atla` RED (kaçış gerekmez).
+// defterine yazar. Üretim dışı (test) anahtarda `--ci-atla` RED (kaçış gerekmez).
 // Parolalı anahtarla imzada (`imzala` · `zip` · `belge`) parola TTY'den ya da stdin'in satırından sorulur;
 // parola argümandan/ortamdan ASLA alınmaz (`--parola…` biçimli argüman çıkış 2 ile reddedilir).
 // =============================================================================
@@ -36,11 +35,9 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import {
-  generatePackageKey,
   generateWrappedPackageKey,
   openPackageKey,
   packageKeyInfo,
-  readPackageKey,
   signManifestDocument,
   signPackageDirectory,
   writePackageKey,
@@ -48,7 +45,7 @@ import {
 import { CliError, args, askPassword } from "./lib/cli-girdi";
 import { git } from "./lib/git";
 import { type CiKokeniKaydi, ciAtlaHukmu, ciKokeniHukmu, ciKosusuOku } from "./lib/ci-kokeni";
-import { STAGING_PACKAGE_CLASSES, STAGING_PACKAGE_KID_PREFIX, isProductionPackageKid, isStagingPackageKid } from "../src/lib/license/integrity-scope";
+import { isProductionPackageKid } from "../src/lib/license/integrity-scope";
 import { INTEGRITY_LIST_FILE } from "../src/lib/license/integrity-list";
 import { istanbulSaati } from "../../scripts/lib/kullanici-cumlesi.mjs";
 
@@ -82,16 +79,9 @@ function icinde(dizin: string, kok: string): boolean {
 }
 
 async function keygen(): Promise<void> {
-  const kid = arg("kid") ?? STAGING_PACKAGE_KID_PREFIX;
-  if (isStagingPackageKid(kid)) {
-    const dir = home(arg("dizin") ?? "~/.tekserp/satici-hazirlik");
-    const file = writePackageKey(dir, generatePackageKey(kid, STAGING_PACKAGE_CLASSES));
-    const k = readPackageKey(file);
-    console.log(`✓ ${file} (0600)`);
-    console.log(`  PACKAGE_PUBLIC_KEYS girdisi: { kid: "${k.kid}", x: "${k.x}" }`);
-    return;
-  }
-  if (!isProductionPackageKid(kid)) throw new Error(`kid biçimi: paket-hazirlik[-…] (hazırlık, parolasız) ya da paket-<yıl>[-<n>] (üretim, parolalı): ${kid}`);
+  const kid = arg("kid");
+  if (typeof kid !== "string") throw new Error("--kid=paket-<yıl>[-<n>] zorunlu (parolasız hazırlık anahtarı kalktı)");
+  if (!isProductionPackageKid(kid)) throw new Error(`kid biçimi: paket-<yıl>[-<n>] (üretim, parolalı): ${kid}`);
   const dir = path.resolve(home(arg("dizin") ?? "~/.tekserp/satici-uretim"));
   if (icinde(dir, DEPO_KOKU)) throw new Error(`üretim PAKET anahtarı depo içine yazılmaz: ${dir}`);
   const hedef = path.join(dir, `${kid}.paket.json`);
@@ -142,7 +132,7 @@ function depoHead(): string {
 
 /**
  * ALT-9 — yapıtın CI kökeni; üretim anahtarında `--ci-kosu` ya da kullanıcının cümlesiyle `--ci-atla` zorunlu,
- * parola sorulmadan ÖNCE ölçülür. Dönen kayıt imzalı yüke girer (hazırlıkta koşusuz: null).
+ * parola sorulmadan ÖNCE ölçülür. Dönen kayıt imzalı yüke girer (üretim dışı test anahtarında koşusuz: null).
  */
 function ciKokeniDenetle(kunye: Record<string, unknown>, keyFile: string, paketCommit: string | null): CiKokeniKaydi | null {
   const kid = packageKeyInfo(keyFile).kid;
@@ -164,7 +154,7 @@ function ciKokeniDenetle(kunye: Record<string, unknown>, keyFile: string, paketC
           ` — koşu yoksa yalnız kullanıcının cümlesiyle: --ci-atla="<cümle>" — imza atılmadı`,
       );
     }
-    console.warn(`⚠ CI kökeni ÖLÇÜLMEDİ (hazırlık anahtarı ${kid}, --ci-kosu verilmedi)`);
+    console.warn(`⚠ CI kökeni ÖLÇÜLMEDİ (üretim dışı test anahtarı ${kid}, --ci-kosu verilmedi)`);
     return null;
   }
   const kosu = ciKosusuOku(id);
@@ -176,7 +166,7 @@ function ciKokeniDenetle(kunye: Record<string, unknown>, keyFile: string, paketC
   return { kip: "kosu", kosu: Number(id), dal: String(kosu.head_branch), commit: String(kosu.head_sha) };
 }
 
-/** Derlemenin çapa kipi ile anahtarın ailesi uyuşmalı; künyede kip yoksa (G3 öncesi derleme) uyarı. */
+/** Derlemenin çapa kipi `uretim` olmalı ve anahtar üretim ailesinden; künyede kip yoksa (G3 öncesi derleme) uyarı. */
 function anahtarAilesiDenetle(kunye: Record<string, unknown>, keyFile: string): void {
   const kip = kunye.guvenCapasi;
   const kid = packageKeyInfo(keyFile).kid;
@@ -184,8 +174,8 @@ function anahtarAilesiDenetle(kunye: Record<string, unknown>, keyFile: string): 
     console.warn(`⚠ künyede çapa kipi yok (G3 öncesi derleme) — ${kid} anahtar ailesi denetlenmedi`);
     return;
   }
-  const uyar = kip === "uretim" ? isProductionPackageKid(kid) : kip === "hazirlik" ? isStagingPackageKid(kid) : false;
-  if (!uyar) throw new Error(`anahtar ailesi derlemenin çapa kipine uymuyor: paket ${String(kip)} çapalı, anahtar ${kid} — ${kip === "uretim" ? "paket-<yıl>" : "paket-hazirlik"} anahtarıyla imzala`);
+  if (kip !== "uretim") throw new Error(`anahtar ailesi denetlenemez: paket ${String(kip)} çapalı — yalnız uretim çapası imzalanır (hazırlık kipi kalktı)`);
+  if (!isProductionPackageKid(kid)) throw new Error(`anahtar ailesi derlemenin çapa kipine uymuyor: paket uretim çapalı, anahtar ${kid} — paket-<yıl> anahtarıyla imzala`);
 }
 
 async function signDir(o: DirOptions): Promise<string> {

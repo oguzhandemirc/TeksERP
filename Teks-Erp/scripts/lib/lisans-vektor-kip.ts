@@ -5,9 +5,9 @@ import { packagePublicKeysFor } from "../../src/lib/license/integrity";
 import type { Vektor } from "./lisans-cekirdek-vektor";
 
 /**
- * Gömülü çapa vektörünü İKİ kipe çoğaltır: aynı belge, her kipin kendi çapasıyla beklenir. Kipin GERÇEK kid'iyle
- * yabancı anahtarın imzaladığı belge kendi kipinde imzada (`JWS_IMZA`), öteki kipte kid'de (`KOK_BILINMIYOR` ·
- * `JWS_KID`) düşer — üretim derlemesinin hazırlık kid'ini hiç TANIMADIĞI (ve tersi) böyle ölçülür.
+ * Gömülü çapa vektörünü her kipe (bugün tek: üretim) çoğaltır: aynı belge kipin kendi çapasıyla beklenir. Kipin
+ * GERÇEK kid'iyle yabancı anahtarın imzaladığı belge imzada (`JWS_IMZA`) düşer; çapada olmayan kid (eski
+ * `hazirlik-*` dahil) kid'de (`KOK_BILINMIYOR` · `JWS_KID`) düşer.
  */
 export function kiplere<T extends Vektor>(v: T): T[] {
   return TRUST_ANCHOR_MODES.map((kip) => ({ ...v, ad: `${v.ad} [${kip}]`, kip }));

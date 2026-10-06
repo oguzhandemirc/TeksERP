@@ -8,8 +8,8 @@
 // NE ÖLÇER: native çekirdek (`native/lisans-cekirdek` + ortak `native/tekserp-dogrulama`, Rust + napi-rs) TS protokolünün AYNASIDIR;
 // ayrışırsa fabrika aynı belgeyi iki yolda farklı doğrular ve hata sessizdir.
 //   §0 STATİK aynalar (native gerekmez): Rust kod kümeleri ⊆/= TS · yer tutucu listesi · Windows
-//      sondası satır satır · gömülü çapanın DÖRT listesi = TS üretim/hazırlık kök + PAKET listeleri ve her
-//      liste kendi kipinin `cfg`siyle kapılı (öteki kipin baytı ikiliye girmez) · arayüz sürümü ·
+//      sondası satır satır · gömülü çapanın üretim kök + PAKET listeleri = TS listeleri ve üretim `cfg`siyle
+//      kapılı; TS'te hazırlık çapası YOK (tek kip) · arayüz sürümü ·
 //      HKDF öneki · Rust'taki HER regex TS kaynağında (ya da canlı Zod deseninde) birebir var ·
 //      iki derleme sabiti geliştirmede kapalı (native zorunlu değil · çapa kipi üretim) · Rust'taki her
 //      belge türü (TYP_*) protokolün TYP kayıt defterinde aynı ad/değerle (bütünlük türü dahil) · aynanın
@@ -21,10 +21,10 @@
 //   §2 vektör dosyası (`native/lisans-cekirdek/test-vektorleri/protokol.json`, `cargo test` de okur):
 //      her kaydın beklenen sonucu BUGÜNKÜ TS protokolüyle aynı (bayat vektör yok) · native'in
 //      üretebildiği her kod en az bir beklenende geçiyor (kapsam) · her türde geçer + kalır · her gömülü
-//      çapa vektörü iki kipte de kayıtlı ve kipler ayrışıyor (aynı belge iki kipte farklı sonuç)
+//      çapa vektörü üretim kipinde kayıtlı; eski hazırlık kid'i tanınmaz, üretim kid'iyle yabancı imza imzada düşer
 //   §2'' LİSANS v2 vektörleri (`test-vektorleri/protokol-v2.json`, L2-1; `cargo test` de okur, L2-2): biçim · her
 //      kaydın beklenen sonucu BUGÜNKÜ TS protokolüyle aynı · 11 tür · sonuç türlerinde geçer + kalır · yeni beş
-//      protokol kodu beklenende · parmak izi kurallarında sonuç çeşitliliği · gömülü çapa v2 vektörleri iki kipte ·
+//      protokol kodu beklenende · parmak izi kurallarında sonuç çeşitliliği · gömülü çapa v2 vektörleri üretim kipinde ·
 //      §2''h TS ÇEKİRDEĞİ (LicenseCore v2 yüzeyi: iptal · nowMs · parmak izi kuralı) protokolle aynı karar.
 //      §2c kapsamı iki dosyanın birleşimidir (v2 kodları yalnız v2 dosyasında). Yeniden üret: `--vektor-yaz [--yalniz-v2]`
 //   §0d' · §0d'' · §1i · §2''' PARMAK İZİ ÇOK YOLLU TOPLAYICI (L2-10): yol tablosu TS `FINGERPRINT_PATH_LINES` = Rust
@@ -36,20 +36,19 @@
 //      ufuk sınırları · iptal satır tavanı · v1/v2 eşikleri)
 //   §3–§7 NATIVE (yoksa "⏭ ATLANDI — native yok", sayıyla; canlı çapa ÖLÇÜLMEDİ, yeşil sayılmaz): künye/ayna
 //      listeleri canlı · ⭐ gömülü çapa CANLI (§3d: derlenmiş her .node'un `builtinAnchor()`ı — yüklenen · `dist` ·
-//      `dist-uretim` · `dist-hazirlik` · paket yolu — KENDİ kipinin TS çapasıyla birebir, dizin kipi doğru; bayat
+//      `dist-uretim` · paket yolu — KENDİ kipinin TS çapasıyla birebir, dizin kipi doğru; bayat
 //      ikili kırmızı) · kayıtlı vektörler native'de beklenenle aynı (kendi kipininkiler) · CANLI (taze anahtarlı)
 //      vektörlerde TS = native · §4b/§5b aynısı lisans v2 vektörlerinde (istek ailesi hariç: native istek doğrulamaz) ·
 //      bu makinede parmak izi toplama TS = native · zorunlu kip test derlemesini reddeder / üretim derlemesi çapa
 //      enjeksiyonunu reddeder
-//   §9 ⭐ KİP ÇAPRAZ SONDASI (gerçek `dist-uretim` + `dist-hazirlik` ikilileri; yoksa ATLANDI, STRICT'te kırmızı):
-//      her ikili kendi kipinin gömülü çapa vektörlerini beklenen sonuçla verir — üretim ikilisi hazırlık kid'iyle
-//      imzalı belgeyi TANIMAZ, hazırlık ikilisi üretim kid'iyle imzalıyı tanımaz · dışarıdan çapayı reddeder ·
-//      TS yükleyicisi öteki kipin ikilisini açmaz (CAPA_UYUSMAZ) · §9e kendi kipinin v2 gömülü çapa vektörleri
+//   §9 ⭐ ÜRETİM İKİLİSİ SONDASI (gerçek `dist-uretim` ikilisi; yoksa ATLANDI, STRICT'te kırmızı): ikili kendi
+//      kipinin gömülü çapa vektörlerini beklenen sonuçla verir — eski hazırlık kid'iyle imzalı belgeyi TANIMAZ ·
+//      dışarıdan çapayı reddeder · §9e kendi kipinin v2 gömülü çapa vektörleri
 //   §8 ⭐ KALICI SONDA ✓K (her koşumda): karşılaştırıcı farkı ısırır, eşitte susar · bayatlık
 //      denetimi mutasyona uğramış beklenenle kırmızı · kapsam denetimi eksik kodu yakalar ·
 //      regex aynası değişmiş deseni yakalar · TYP aynası değişmiş/kayıtsız türü yakalar · gömülü
 //      çapa blokları üç rustfmt düzeninde de okunur (ikinci anahtar `&[`i alt satıra taşır) · kip süzgeci
-//      öteki kipin kaydını atlar · §8k v2 bayatlık mutasyonu yakalar · §8l tek yönlü tür denetimi · §8m v2 çekirdek
+//      tanınmayan kipin kaydını atlar · §8k v2 bayatlık mutasyonu yakalar · §8l tek yönlü tür denetimi · §8m v2 çekirdek
 //      karşılaştırıcısı mutasyonu yakalar · §8n v2 sabit aynası değişmiş/eksik sabiti yakalar, eşitte susar
 //   §10 ⭐ KÖPRÜ SONDASI (L2-7): motorun köprüsü (`core-bridge.ts`) iptal metnini ve "şimdi"yi çekirdeğe AYNEN geçirir —
 //      ARA'sı iptal edilen HAK SERTIFIKA_IPTAL, geçmiş "şimdi" BELGE_ILERI_TARIHLI, ALT'ı iptal edilen kira SERTIFIKA_IPTAL;
@@ -84,7 +83,6 @@ import {
   PACKAGE_ACCEPT_TOLERANCE_DAYS,
   STRONG_FINGERPRINT_FACTORS,
   PROTOCOL_ERROR_CODES,
-  STAGING_ROOT_PUBLIC_KEYS,
   TRUST_ANCHOR_MODES,
   TYP,
   b64uDecode,
@@ -113,10 +111,11 @@ import {
   INTEGRITY_TYP,
   PACKAGE_PUBLIC_KEYS,
   PRODUCTION_PACKAGE_PUBLIC_KEYS,
-  STAGING_PACKAGE_PUBLIC_KEYS,
   packagePublicKeysFor,
 } from "../src/lib/license/integrity";
 import { BUILD_ANCHOR_MODE, ROOT_PUBLIC_KEYS } from "../src/lib/license/trust-anchor";
+import * as protokolModulu from "../src/lib/license/protocol";
+import * as butunlukModulu from "../src/lib/license/integrity";
 import { MODULE_KEY_HKDF_PREFIX } from "../src/lib/license/module-key";
 import { WINDOWS_PROBE_LINES } from "../src/lib/license/fingerprint-os";
 import { FINGERPRINT_PATH_LINES } from "../src/lib/license/fingerprint-paths";
@@ -494,7 +493,11 @@ function bolum2v2(dosya: VektorV2Dosyasi | null): void {
   check("§2''f parmak izi: standart kuralda ESLESTI+ESLESMEDI, zayıf kuralda üç sonuç, v1 satırları da var", karar("standart").size === 2 && karar("zayif").size === 3 && karar("v1").size >= 2);
   const kipli = dosya.kayitlar.filter((k) => "kip" in k.vektor && k.vektor.kip !== undefined);
   const kipler = new Set(kipli.map((k) => ("kip" in k.vektor ? k.vektor.kip : undefined)));
-  check("§2''g gömülü çapa v2 vektörleri iki kipte de kayıtlı", kipli.length >= 4 && kipler.size === 2, `${kipli.length} kayıt`);
+  check(
+    "§2''g gömülü çapa v2 vektörleri yalnız tanınan kipte (üretim) kayıtlı",
+    kipli.length >= 2 && kipler.size === TRUST_ANCHOR_MODES.length && [...kipler].every((k) => isTrustAnchorMode(k)),
+    `${kipli.length} kayıt`,
+  );
   const cekirdek = v2CekirdekKayitlari(dosya.kayitlar);
   const cekirdekFark = v2CekirdekFarklari(tsLicenseCore, cekirdek);
   check(
@@ -504,10 +507,9 @@ function bolum2v2(dosya: VektorV2Dosyasi | null): void {
   );
 }
 
-/** `anchor.rs`te kipin blok adları ve blokların önündeki `cfg` kapısı (öteki kipin baytı ikiliye girmesin). */
+/** `anchor.rs`te kipin blok adları ve blokların önündeki `cfg` kapısı (emekli hazırlık bloğu O14b'de kalkar; TS onu okumaz). */
 const RS_BLOKLAR: Readonly<Record<TrustAnchorMode, { readonly kok: string; readonly paket: string; readonly kapi: string }>> = {
   uretim: { kok: "PRODUCTION_ROOTS", paket: "PRODUCTION_PACKAGE_KEYS", kapi: '#[cfg(not(feature = "hazirlik-capasi"))]' },
-  hazirlik: { kok: "STAGING_ROOTS", paket: "STAGING_PACKAGE_KEYS", kapi: '#[cfg(feature = "hazirlik-capasi")]' },
 };
 
 interface RsBlok<T> {
@@ -531,10 +533,10 @@ function rsBlok<T>(anchor: string, ad: string, tur: "kok" | "paket", uret: (m: R
 const rsKok = (m: RegExpMatchArray) => ({ kid: m[1], x: m[2], classes: [...m[3].matchAll(/"([^"]+)"/g)].map((c) => c[1]) });
 const rsPaket = (m: RegExpMatchArray) => ({ kid: m[1], x: m[2] });
 
-/** Gömülü çapanın dört bloğu (kip → kök + PAKET); bulunamayan blok null. */
+/** Gömülü çapanın kip blokları (kip → kök + PAKET); bulunamayan blok null. */
 export function gomuluCapa(anchor: string): Record<TrustAnchorMode, { kok: RsBlok<ReturnType<typeof rsKok>> | null; paket: RsBlok<ReturnType<typeof rsPaket>> | null }> {
   const kip = (k: TrustAnchorMode) => ({ kok: rsBlok(anchor, RS_BLOKLAR[k].kok, "kok", rsKok), paket: rsBlok(anchor, RS_BLOKLAR[k].paket, "paket", rsPaket) });
-  return { uretim: kip("uretim"), hazirlik: kip("hazirlik") };
+  return Object.fromEntries(TRUST_ANCHOR_MODES.map((k) => [k, kip(k)])) as ReturnType<typeof gomuluCapa>;
 }
 
 /** `anchor.rs` kip sabitleri: MODE ve kullanılan liste her kipte kendi bloğuna bağlı (cfg kapısıyla). */
@@ -598,7 +600,7 @@ function bolum0(): void {
     );
   }
   const baglar = kipBaglari(anchor);
-  check("§0e''' kip sabitleri: MODE · ROOTS · PACKAGE_KEYS her kipte kendi bloğuna bağlı", baglar.length === 0, baglar.join(" | ") || "6 bağ");
+  check("§0e''' kip sabitleri: MODE · ROOTS · PACKAGE_KEYS üretim bloğuna bağlı", baglar.length === 0, baglar.join(" | ") || `${TRUST_ANCHOR_MODES.length * 3} bağ`);
 
   const abi = /pub const ABI: u32 = (\d+);/.exec(rustKaynak("api.rs"));
   check("§0f arayüz sürümü Rust = NATIVE_ABI", Number(abi?.[1]) === NATIVE_ABI, `rust ${abi?.[1]} · ts ${NATIVE_ABI}`);
@@ -629,9 +631,9 @@ function bolum0(): void {
     `${BUILD_ANCHOR_MODE} · ${ROOT_PUBLIC_KEYS.map((r) => r.kid).join(",")} · ${PACKAGE_PUBLIC_KEYS.map((k) => k.kid).join(",")}`,
   );
   check(
-    "§0i'' iki kipin listeleri AYRIK (ortak kid ya da açık anahtar yok)",
-    PRODUCTION_ROOT_PUBLIC_KEYS.every((p) => STAGING_ROOT_PUBLIC_KEYS.every((s) => s.kid !== p.kid && s.x !== p.x)) &&
-      PRODUCTION_PACKAGE_PUBLIC_KEYS.every((p) => STAGING_PACKAGE_PUBLIC_KEYS.every((s) => s.kid !== p.kid && s.x !== p.x)),
+    "§0i'' ⭐ TS çapası TEK kip: TRUST_ANCHOR_MODES = [uretim], protokol ve bütünlük modülünde hazırlık listesi (STAGING_*) YOK",
+    jsonEsit([...TRUST_ANCHOR_MODES], ["uretim"]) && !("STAGING_ROOT_PUBLIC_KEYS" in protokolModulu) && !("STAGING_PACKAGE_PUBLIC_KEYS" in butunlukModulu),
+    TRUST_ANCHOR_MODES.join(","),
   );
 
   const yollar = rustDosyaYollari().sort();
@@ -639,12 +641,12 @@ function bolum0(): void {
   const adlar = yollar.map((y) => path.basename(y)).filter((a) => a !== "lib.rs");
   const tekrarli = adlar.filter((a, i) => adlar.indexOf(a) !== i);
   check("§0l Rust modül dosya adları iki crate'te tekil (lisans-cekirdek · tekserp-dogrulama)", adlar.length >= 15 && tekrarli.length === 0, tekrarli.join(",") || `${adlar.length} dosya`);
-  const capaX = [...PRODUCTION_ROOT_PUBLIC_KEYS, ...STAGING_ROOT_PUBLIC_KEYS, ...PRODUCTION_PACKAGE_PUBLIC_KEYS, ...STAGING_PACKAGE_PUBLIC_KEYS].map((k) => k.x);
+  const capaX = [...PRODUCTION_ROOT_PUBLIC_KEYS, ...PRODUCTION_PACKAGE_PUBLIC_KEYS].map((k) => k.x);
   const ortakCapa = rustKaynak("anchor.rs");
   const kopyalar = capaKopyalari(path.join(TEKS, "native"), capaX);
   check(
-    "§0m ⭐ çapa TEK KAYNAK: dört listenin açık anahtarları native ağacında yalnız `tekserp-dogrulama/src/anchor.rs`te (güncelleyici/çekirdek kopyası yok)",
-    capaX.length >= 4 && capaX.every((x) => ortakCapa.includes(x)) && kopyalar.length === 0,
+    "§0m ⭐ çapa TEK KAYNAK: kök + PAKET listelerinin açık anahtarları native ağacında yalnız `tekserp-dogrulama/src/anchor.rs`te (güncelleyici/çekirdek kopyası yok)",
+    capaX.length >= 2 && capaX.every((x) => ortakCapa.includes(x)) && kopyalar.length === 0,
     kopyalar.length ? `kopya: ${kopyalar.join(" · ")}` : `${capaX.length} anahtar`,
   );
   const tumRust = yollar.map(oku);
@@ -761,13 +763,6 @@ async function bolum1(): Promise<void> {
         identityRejection({ ...id, platform: "freebsd" }, gelistirme)?.neden === "KUNYE_UYUSMAZ" &&
         identityRejection({ ...id, arch: "ia32" }, gelistirme)?.neden === "KUNYE_UYUSMAZ",
     );
-    check(
-      "§1g' ⭐ çapa kipi: üretim derlemesi (varsayılan) hazırlık çapalı native'i AÇMAZ (zorunlu da geliştirme de CAPA_UYUSMAZ) · hazırlık derlemesi üretim çapalıyı açmaz · aynı kip kabul",
-      identityRejection({ ...id, capaKipi: "hazirlik" }, zorunlu)?.neden === "CAPA_UYUSMAZ" &&
-        identityRejection({ ...id, capaKipi: "hazirlik" }, gelistirme)?.neden === "CAPA_UYUSMAZ" &&
-        identityRejection(id, { ...zorunlu, anchorMode: "hazirlik" })?.neden === "CAPA_UYUSMAZ" &&
-        identityRejection({ ...id, capaKipi: "hazirlik" }, { ...zorunlu, anchorMode: "hazirlik" }) === null,
-    );
 
     const islev = () => "";
     const v1Islevleri = ["kunye", "builtinAnchor", "verifyJws", "verifyCertificate", "verifyEntitlement", "verifyLease", "checkLeaseBinding", "normalizeFactor", "digestFingerprint", "unwrapModuleKey", "unwrapLeaseModuleKey", "protectLocal", "unprotectLocal", "collectFingerprint", "verifyIntegrity"];
@@ -788,6 +783,12 @@ async function bolum1(): Promise<void> {
     check(
       "§1i ⭐ parmak izi yol tablosunu künyesinde taşımayan eski ABI-3 ikilisi açılmaz (künye sözleşme dışı → YUKLENEMEDI), tam künye açılır",
       parseNativeIdentity(JSON.stringify(kunyeEski)) === null && parseNativeIdentity(JSON.stringify(kunyeTam)) !== null,
+    );
+    check(
+      "§1g' ⭐ çapa kipi tek: eski hazırlık çapalı ikilinin künyesi (capaKipi hazirlik) sözleşme dışı → açılmaz; üretim künyesi açılır ve aynı kipte kabul",
+      parseNativeIdentity(JSON.stringify({ ...kunyeTam, capaKipi: "hazirlik" })) === null &&
+        parseNativeIdentity(JSON.stringify(kunyeTam))?.capaKipi === "uretim" &&
+        identityRejection({ ...id, capaKipi: "uretim" }, gelistirme) === null,
     );
 
     const aday = nativeCandidates(secenek({ cwd: bos, env: { [NATIVE_PATH_ENV]: sahte } }));
@@ -840,34 +841,32 @@ async function bolum2(dosya: VektorDosyasi | null, dosyaV2: VektorV2Dosyasi | nu
   });
   check("§2d her doğrulama türünde hem GEÇER hem KALIR vektör var", eksikTur.length === 0, eksikTur.join(", ") || "6 tür");
 
-  // Gömülü çapa vektörleri: her biri bir kip taşır, iki kipte de kayıtlı; aynı belge iki kipte AYRIŞIR.
+  // Gömülü çapa vektörleri: her biri tanınan bir kip (üretim) taşır; eski hazırlık kipli kayıt kalmadı.
   const gomulu = dosya.kayitlar.filter((k) => gomuluMu(k.vektor));
   const kipsiz = gomulu.filter((k) => !("kip" in k.vektor) || !isTrustAnchorMode(k.vektor.kip));
   const kipli = (kip: TrustAnchorMode) =>
     new Map(gomulu.filter((k) => "kip" in k.vektor && k.vektor.kip === kip).map((k) => [`${k.vektor.tur} · ${k.vektor.ad.replace(/ \[[a-z]+\]$/, "")}`, k.beklenen]));
   const u = kipli("uretim");
-  const h = kipli("hazirlik");
-  const ayniAdlar = u.size === h.size && [...u.keys()].every((a) => h.has(a));
-  check("§2e her gömülü çapa vektörü kip taşır ve İKİ kipte de kayıtlı", kipsiz.length === 0 && ayniAdlar && u.size >= 8, `${kipsiz.length} kipsiz · üretim ${u.size} · hazırlık ${h.size}`);
+  check("§2e her gömülü çapa vektörü tanınan kip (üretim) taşır", kipsiz.length === 0 && u.size >= 8, `${kipsiz.length} kipsiz/tanınmayan kipli · üretim ${u.size}`);
   const kod = (b: unknown): string | undefined => {
     const r = z.object({ ok: z.literal(false), code: z.string() }).safeParse(b);
     if (r.success) return r.data.code;
     return z.object({ ok: z.literal(true), value: z.object({ kod: z.string().nullable() }) }).safeParse(b).data?.value.kod ?? undefined;
   };
-  // Kendi kipinde kid tanınır ama imza yabancı (JWS_IMZA); öteki kipte kid HİÇ tanınmaz — hazırlık anahtarının
-  // sahibi bile üretim derlemesine belge geçiremez (ve tersi).
-  const beklenenler: ReadonlyArray<readonly [string, string, string]> = [
-    ["hak · gömülü çapa: hazırlık kökü kid'iyle TEST HAK, yabancı imza", "KOK_BILINMIYOR", "JWS_IMZA"],
-    ["hak · gömülü çapa: üretim kökü kid'iyle ÜRETİM HAK, yabancı imza", "JWS_IMZA", "KOK_BILINMIYOR"],
-    ["sertifika · gömülü çapa: hazırlık kökü kid'i, yabancı imza", "KOK_BILINMIYOR", "JWS_IMZA"],
-    ["sertifika · gömülü çapa: üretim kökü kid'i, yabancı imza", "JWS_IMZA", "KOK_BILINMIYOR"],
-    ["kira · gömülü çapa: alt sertifikası hazırlık kökü kid'li, yabancı imza", "KOK_BILINMIYOR", "JWS_IMZA"],
-    ["butunluk · gömülü çapa: hazırlık PAKET kid'i, yabancı imza", "JWS_KID", "JWS_IMZA"],
-    ["butunluk · gömülü çapa: üretim PAKET kid'i, yabancı imza", "JWS_IMZA", "JWS_KID"],
+  // Üretim kid'i tanınır ama imza yabancı (JWS_IMZA); eski hazırlık kid'i HİÇ tanınmaz — emekli hazırlık
+  // anahtarının sahibi bile üretim derlemesine belge geçiremez.
+  const beklenenler: ReadonlyArray<readonly [string, string]> = [
+    ["hak · gömülü çapa: eski hazırlık kökü kid'iyle TEST HAK, yabancı imza", "KOK_BILINMIYOR"],
+    ["hak · gömülü çapa: üretim kökü kid'iyle ÜRETİM HAK, yabancı imza", "JWS_IMZA"],
+    ["sertifika · gömülü çapa: eski hazırlık kökü kid'i, yabancı imza", "KOK_BILINMIYOR"],
+    ["sertifika · gömülü çapa: üretim kökü kid'i, yabancı imza", "JWS_IMZA"],
+    ["kira · gömülü çapa: alt sertifikası eski hazırlık kökü kid'li, yabancı imza", "KOK_BILINMIYOR"],
+    ["butunluk · gömülü çapa: eski hazırlık PAKET kid'i, yabancı imza", "JWS_KID"],
+    ["butunluk · gömülü çapa: üretim PAKET kid'i, yabancı imza", "JWS_IMZA"],
   ];
-  const sapan = beklenenler.filter(([ad, uk, hk]) => kod(u.get(ad)) !== uk || kod(h.get(ad)) !== hk).map(([ad]) => `${ad}: üretim ${kod(u.get(ad))} · hazırlık ${kod(h.get(ad))}`);
+  const sapan = beklenenler.filter(([ad, uk]) => kod(u.get(ad)) !== uk).map(([ad, uk]) => `${ad}: üretim ${kod(u.get(ad))} (beklenen ${uk})`);
   check(
-    "§2f ⭐ kipler ayrışıyor: üretim kipinde hazırlık kid'i tanınmaz (KOK_BILINMIYOR/JWS_KID), hazırlık kipinde üretim kid'i tanınmaz; kendi kipinde yalnız imza düşer",
+    "§2f ⭐ üretim kipinde eski hazırlık kid'i tanınmaz (KOK_BILINMIYOR/JWS_KID); üretim kid'iyle yabancı imza yalnız imzada düşer",
     sapan.length === 0,
     sapan.join(" | ") || `${beklenenler.length} çift`,
   );
@@ -891,8 +890,8 @@ function adayKipi(o: LoaderOptions): TrustAnchorMode | undefined {
   }
 }
 
-/** Dizin adının söylediği kip — derleme betiği `--uretim`i `dist-uretim/`e, `--hazirlik`i `dist-hazirlik/`e yazar. */
-const DIZIN_KIPI: Readonly<Record<string, TrustAnchorMode>> = { "dist-uretim": "uretim", "dist-hazirlik": "hazirlik" };
+/** Dizin adının söylediği kip — derleme betiği `--uretim`i `dist-uretim/`e yazar. */
+const DIZIN_KIPI: Readonly<Record<string, TrustAnchorMode>> = { "dist-uretim": "uretim" };
 
 function tsCapasi(kip: TrustAnchorMode): unknown {
   return {
@@ -935,12 +934,12 @@ async function bolum3ile7(dosya: VektorDosyasi | null, dosyaV2: VektorV2Dosyasi 
       kunye.modulKidOneki === MODULE_KEY_KID_PREFIX,
   );
   // §3d CANLI çapa: yüklenen ikili + geliştirme dizinlerindeki öteki derlemeler (test çapalı `dist` · üretim `dist-uretim` ·
-  // hazırlık `dist-hazirlik` · paket yolu) — hangisi varsa hepsi, her biri KENDİ kipinin TS çapasıyla; kip dizinle tutmalı.
+  // paket yolu) — hangisi varsa hepsi, her biri KENDİ kipinin TS çapasıyla; kip dizinle tutmalı.
   const dosyaAdi = nativeFileName(process.platform, process.arch) ?? "";
   const derlemeler = [
     ...new Set([
       yukle.status.dosya,
-      ...["dist", "dist-uretim", "dist-hazirlik"].map((d) => path.join(NATIVE_DIZIN, d, dosyaAdi)),
+      ...["dist", "dist-uretim"].map((d) => path.join(NATIVE_DIZIN, d, dosyaAdi)),
       path.join(TEKS, "native", dosyaAdi),
     ]),
   ].filter((f) => existsSync(f));
@@ -959,7 +958,7 @@ async function bolum3ile7(dosya: VektorDosyasi | null, dosyaV2: VektorV2Dosyasi 
   check(
     "§3d ⭐ CANLI çapa: derlenmiş her .node'un builtinAnchor() = KENDİ kipinin TS kök + PAKET listeleri (birebir), kip dizinle tutarlı",
     derlemeler.length >= 1 && capaFarki.length === 0,
-    capaFarki.length ? `BAYAT/AYRIŞIK (yeniden derle: npm run derle · derle:uretim · derle:hazirlik): ${capaFarki.join(" | ")}` : derlemeler.map((f) => path.relative(TEKS, f)).join(" · "),
+    capaFarki.length ? `BAYAT/AYRIŞIK (yeniden derle: npm run derle · derle:uretim): ${capaFarki.join(" | ")}` : derlemeler.map((f) => path.relative(TEKS, f)).join(" · "),
   );
   // §3c yerel koruma (Faz 2d önbelleği): Windows'ta DPAPI gidiş-dönüş, başka platformda KORUMA_YOK (TS de).
   const koruma = native.protectLocal(b64uEncode(Buffer.from("tekserp-onbellek-sondasi")));
@@ -1010,7 +1009,7 @@ async function bolum3ile7(dosya: VektorDosyasi | null, dosyaV2: VektorV2Dosyasi 
     return;
   }
 
-  console.log(`\n§4 kayıtlı vektörler native'de (${kunye.capaKipi} kipinin gömülü çapa kayıtları dahil, öteki kipinki hariç)`);
+  console.log(`\n§4 kayıtlı vektörler native'de (${kunye.capaKipi} kipinin gömülü çapa kayıtları dahil)`);
   if (dosya) {
     const kayitlar = dosya.kayitlar.filter((k) => k.vektor.tur !== "tarih" && kipteKosar(k.vektor, kunye.capaKipi));
     const farklar = await kayitlariKarsilastir(native, kayitlar);
@@ -1078,12 +1077,14 @@ async function bolum8(dosya: VektorDosyasi | null): Promise<void> {
       duzenler.every((d) => d?.kapi === kapi) &&
       gomuluCapa("pub const X: u8 = 1;").uretim.paket === null,
   );
-  const kapisiz = gomuluCapa(`pub const STAGING_ROOTS: &[(&str, &str, &[&str])] = &[("hazirlik-2026-1", "a", &["TEST"])];`).hazirlik.kok;
+  const kapisiz = gomuluCapa(`pub const PRODUCTION_ROOTS: &[(&str, &str, &[&str])] = &[("kok-2026-1", "a", &["TEST"])];`).uretim.kok;
   check("§8i cfg kapısı olmayan blok kapısız okunur (§0e'' onu kırmızı sayar)", kapisiz?.kapi === null && kapisiz.ogeler.length === 1);
-  const suzgec = { tur: "hak", ad: "x", token: "a.b.c", roots: null, kip: "hazirlik" } as const;
+  const eskiKipli = { tur: "hak", ad: "x", token: "a.b.c", roots: null, kip: "hazirlik" } as unknown as Vektor;
   check(
-    "§8j kip süzgeci: kayıt yalnız kendi kipinde koşar, kipsiz kayıt her kipte",
-    kipteKosar(suzgec, "hazirlik") && !kipteKosar(suzgec, "uretim") && kipteKosar({ tur: "hak", ad: "y", token: "a.b.c", roots: [] }, "uretim"),
+    "§8j kip süzgeci: tanınmayan (eski hazırlık) kipli kayıt üretimde koşmaz, üretim kipli koşar, kipsiz kayıt her kipte",
+    !kipteKosar(eskiKipli, "uretim") &&
+      kipteKosar({ tur: "hak", ad: "x", token: "a.b.c", roots: null, kip: "uretim" }, "uretim") &&
+      kipteKosar({ tur: "hak", ad: "y", token: "a.b.c", roots: [] }, "uretim"),
   );
 }
 
@@ -1125,17 +1126,17 @@ function bolum8v2(dosya: VektorV2Dosyasi | null): void {
 }
 
 /**
- * §9 KİP ÇAPRAZ SONDASI: gerçek üretim ve hazırlık ikilileri (paketin taşıdığı derlemeler) kendi kiplerinin gömülü
+ * §9 ÜRETİM İKİLİSİ SONDASI: gerçek üretim ikilisi (paketin taşıdığı derleme) kendi kipinin gömülü
  * çapa vektörlerini koşar; dışarıdan çapa veremediğimiz için ölçüm yalnız gömülü çapayladır — sorulan da tam olarak o.
  */
 async function bolum9(dosya: VektorDosyasi | null, dosyaV2: VektorV2Dosyasi | null): Promise<void> {
-  console.log("\n§9 ⭐ kip çapraz sondası (gerçek dist-uretim + dist-hazirlik ikilileri)");
+  console.log("\n§9 ⭐ üretim ikilisi sondası (gerçek dist-uretim ikilisi)");
   const ad = nativeFileName(process.platform, process.arch);
   for (const kip of TRUST_ANCHOR_MODES) {
-    const dizin = kip === "uretim" ? "dist-uretim" : "dist-hazirlik";
+    const dizin = `dist-${kip}`;
     const ikili = ad ? path.join(NATIVE_DIZIN, dizin, ad) : null;
     if (!ikili || !existsSync(ikili) || !dosya) {
-      ATLAMA.atla(`§9 ${kip} ikilisi`, `${dizin}/${ad ?? "?"} yok — derle: cd native/lisans-cekirdek && npm run derle:${kip}`, 5);
+      ATLAMA.atla(`§9 ${kip} ikilisi`, `${dizin}/${ad ?? "?"} yok — derle: cd native/lisans-cekirdek && npm run derle:${kip}`, 4);
       continue;
     }
     const secenek: LoaderOptions = { required: false, cwd: TEKS, env: { [NATIVE_PATH_ENV]: ikili }, platform: process.platform, arch: process.arch };
@@ -1147,9 +1148,8 @@ async function bolum9(dosya: VektorDosyasi | null, dosyaV2: VektorV2Dosyasi | nu
     check(`§9a ${dizin} ikilisi ${kip} çapalı ve test çapasız`, y.status.kunye.capaKipi === kip && !y.status.kunye.testCapasi, `${y.status.kunye.capaKipi} · test ${y.status.kunye.testCapasi}`);
     const kayitlar = dosya.kayitlar.filter((k) => "kip" in k.vektor && k.vektor.kip === kip);
     const farklar = await kayitlariKarsilastir(y.core, kayitlar);
-    const oteki: TrustAnchorMode = kip === "uretim" ? "hazirlik" : "uretim";
     check(
-      `§9b ⭐ ${kip} ikilisi kendi kipinin ${kayitlar.length} gömülü çapa vektöründe beklenen sonucu verir (${oteki} kid'iyle imzalı belge TANINMAZ)`,
+      `§9b ⭐ ${kip} ikilisi kendi kipinin ${kayitlar.length} gömülü çapa vektöründe beklenen sonucu verir (eski hazırlık kid'iyle imzalı belge TANINMAZ)`,
       kayitlar.length >= 8 && farklar.length === 0,
       farklar.length ? `${farklar.length} fark — ${farkOzeti(farklar)}` : "",
     );
@@ -1161,12 +1161,6 @@ async function bolum9(dosya: VektorDosyasi | null, dosyaV2: VektorV2Dosyasi | nu
       `§9e ${kip} ikilisi kendi kipinin ${kipliV2.length} v2 gömülü çapa vektöründe (ara sertifika · iptal) beklenen sonucu verir`,
       kipliV2.length >= 2 && farkV2.length === 0,
       farkV2.length ? `${farkV2.length} fark — ${farkOzeti(farkV2)}` : "",
-    );
-    const ters = loadLicenseCoreFrom({ ...secenek, anchorMode: oteki });
-    check(
-      `§9d ⭐ ${oteki} derlemesinin yükleyicisi ${kip} ikilisini AÇMAZ (CAPA_UYUSMAZ)`,
-      ters.status.kaynak !== "native" && "neden" in ters.status && ters.status.neden === "CAPA_UYUSMAZ",
-      "neden" in ters.status ? ters.status.neden : ters.status.kaynak,
     );
   }
 }

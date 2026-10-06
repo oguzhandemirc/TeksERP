@@ -48,7 +48,7 @@ export interface NativeIdentity {
   readonly hedef: string;
   readonly profil: string;
   readonly testCapasi: boolean;
-  /** Gömülü çapanın kipi (`hazirlik-capasi` özelliği → hazirlik). */
+  /** Gömülü çapanın kipi; `TRUST_ANCHOR_MODES` dışı değer (eski hazırlık kipi dahil) künye şemasında RED. */
   readonly capaKipi: TrustAnchorMode;
   readonly protokolKodlari: readonly string[];
   readonly cekirdekKodlari: readonly string[];

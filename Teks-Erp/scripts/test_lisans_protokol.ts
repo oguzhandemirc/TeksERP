@@ -6,19 +6,17 @@
 // NE ÖLÇER: `src/lib/license/protocol/` sözleşmesi — satıcı sunucusu ve fabrika motoru
 // bu klasörü DONMUŞ kontrat olarak kullanır; burada kırmızı, iki tarafın ayrışması demektir.
 //   §0 klasör KAPALI (yalnız node:crypto + zod + kardeş dosya), değişken modül durumu yok,
-//      src'de anahtar malzemesi yok, iki kipin çapası donuk ve geçerli, tanınmayan kip boş çapa (fail-closed)
-//   §0' çapanın İKİ kipi: üretim listesi yalnız kok-*, hazırlık listesi yalnız hazirlik-* (ikisi de dolu,
-//      ayrık) · hazırlık sınıfları ⊆ {TEST, DEMO} · derin donuk · hazırlık satırıyla ÜRETİM/DR/BAYI/
-//      BARINDIRILAN HAK'ı ve ÜRETİM yetkili alt sertifika RED, TEST geçer · başka anahtar gerçek açık
-//      yarıda RED · ÜRETİM'e genişletilmiş çapa RED · ⭐ hazırlık kökünün SAHİBİNİN HAK'ı/kirası üretim
-//      çapasında KOK_BILINMIYOR, üretim kökünün sahibininki hazırlık çapasında KOK_BILINMIYOR
-//   §0'' derlemenin çapası: kip derleme sabitinden (geliştirmede üretim), `trust-anchor.ts` ortamdan/dosyadan
-//      OKUMAZ, sabitin ve kip listelerinin TEK okuyucusu (src taraması + ✓K sentetik sonda)
+//      src'de anahtar malzemesi yok, tek kipin çapası donuk ve geçerli, tanınmayan kip boş çapa (fail-closed)
+//   §0' TEK çapa kipi (hazırlık kalktı): liste yalnız kok-<yıl>-<n>, dolu, derin donuk · eski hazırlık
+//      kökünün kid'i ve açık yarısı listede yok · ⭐ eski hazirlik-* kid'li kök çapaya biçim düzeyinde
+//      giremez (TEST/DEMO sınıfıyla da) · ⭐ hazirlik-* kid'iyle imzalı HAK/kira üretim çapasında RED
+//   §0'' derlemenin çapası: tek kip, derleme sabiti YOK, `trust-anchor.ts` ortamdan/dosyadan OKUMAZ, kip
+//      listelerinin TEK okuyucusu, hazırlık sabitleri src'de hiçbir yerde (src taraması + ✓K sentetik sonda)
 //   §1 JWS: geçerli · alg none · alg HS256 (anahtar karışması) · typ yanlış/eksik · kid
 //      bilinmez · başlıkta gömülü anahtar/crit · gövde/imza kurcalı · kanonik olmayan
 //      base64 · uzunluk tavanı · v:2 · süresi dolmuş · ±10 dk tolerans · indirme yolu
 //   §2 zincir: alt sertifika imza anında geçerli (sonradan dolan kirayı öldürmez) ·
-//      süresi geçmiş alt sertifika · yanlış kullanım · hazırlık kökü ÜRETİM imzalayamaz ·
+//      süresi geçmiş alt sertifika · yanlış kullanım · dar kök ÜRETİM imzalayamaz · eski aile kid'i RED ·
 //      bayi tavanı (modül/sınıf/kimlik) · boş çapa · kira↔HAK bağı · kira ömür tavanı
 //   §3 İSTEK: tolerans · gövde özeti · amaç · anahtar · kurulum · typ karışması · nonce
 //      defteri 20 dk penceresi · zarf
@@ -110,11 +108,10 @@ import {
   OfflineRequestSchema,
   DAY_MS,
   PRODUCTION_ROOT_PUBLIC_KEYS,
-  STAGING_ROOT_PUBLIC_KEYS,
   TRUST_ANCHOR_MODES,
+  isTrustAnchorMode,
   rootPublicKeysFor,
   LICENSE_CLASSES,
-  STAGING_ROOT_CLASSES,
   LicenseResponseSchema,
   NonceLedger,
   CLOCK_SKEW_MS,
@@ -226,64 +223,56 @@ function vekilli(capa: readonly RootKey[], kid: string, x: string): RootKey[] {
   return capa.map((k) => (k.kid === kid ? { ...k, x } : k));
 }
 
+/** Eski hazırlık kökünün (2026-10-05'te emekli) kimliği — listeye geri dönmediği ölçülür. */
+const ESKI_HAZIRLIK_KOKU = Object.freeze({ kid: "hazirlik-2026-1", x: "705hChzAL045Gp-XoG6SaUKAW8muK1SFcW0Vpwhf-mo" });
+
 /**
- * Çapanın İKİ kipi. Özel yarı repoda olmadığından davranış sondası listenin gerçek kid + sınıf satırını kullanır,
- * yalnız açık yarısını fikstür anahtarıyla değiştirir (vekil = o kökün sahibi); gerçek açık yarının kullanıldığı
- * ayrıca ölçülür (§0o). Asıl soru §0s/§0t: kökün SAHİBİ öteki kipin derlemesine belge geçirebilir mi?
+ * TEK çapa kipi. Özel yarı repoda olmadığından davranış sondası listenin gerçek kid + sınıf satırını kullanır,
+ * yalnız açık yarısını fikstür anahtarıyla değiştirir (vekil = o kökün sahibi). Asıl soru §0q/§0s: eski hazırlık
+ * ailesinden bir kök ya da onun imzası bu derlemeye girebilir mi?
  */
 function capaKipleri(): void {
-  console.log("\n§0' — güven çapası İKİ kip: üretim listesi hazırlık kökü TAŞIMAZ, hazırlık listesi yalnız TEST/DEMO");
-  const tum = [...PRODUCTION_ROOT_PUBLIC_KEYS, ...STAGING_ROOT_PUBLIC_KEYS];
+  console.log("\n§0' — güven çapası TEK kip: yalnız kok-*; eski hazırlık ailesi biçim düzeyinde RED");
+  const tum = [...PRODUCTION_ROOT_PUBLIC_KEYS];
   const kidler = tum.map((r) => r.kid);
-  const bicimsiz = kidler.filter((k) => !/^(kok|hazirlik)-\d{4}-\d{1,3}$/.test(k));
-  check("§0i iki listedeki her kid kok-/hazirlik-<yıl>-<n> biçiminde ve tekrarsız", bicimsiz.length === 0 && new Set(kidler).size === kidler.length, bicimsiz.join(", ") || kidler.join(", "));
+  const bicimsiz = kidler.filter((k) => !/^kok-\d{4}-\d{1,3}$/.test(k));
+  check("§0i listedeki her kid kok-<yıl>-<n> biçiminde ve tekrarsız", bicimsiz.length === 0 && new Set(kidler).size === kidler.length, bicimsiz.join(", ") || kidler.join(", "));
   check(
-    "§0j ⭐ üretim listesi YALNIZ kok-* (hazırlık kökü YOK) · hazırlık listesi YALNIZ hazirlik-* · körlük zemini: ikisi de dolu, hazırlıkta hazirlik-2026-1",
-    PRODUCTION_ROOT_PUBLIC_KEYS.length > 0 &&
-      STAGING_ROOT_PUBLIC_KEYS.some((r) => r.kid === "hazirlik-2026-1") &&
-      PRODUCTION_ROOT_PUBLIC_KEYS.every((r) => r.kid.startsWith("kok-")) &&
-      STAGING_ROOT_PUBLIC_KEYS.every((r) => r.kid.startsWith("hazirlik-")),
-    `üretim ${PRODUCTION_ROOT_PUBLIC_KEYS.map((r) => r.kid).join(",")} · hazırlık ${STAGING_ROOT_PUBLIC_KEYS.map((r) => r.kid).join(",")}`,
+    "§0j ⭐ liste dolu, kipler kümesi tek değer (uretim); eski hazırlık kökünün kid'i ve açık yarısı listede YOK",
+    tum.length > 0 &&
+      TRUST_ANCHOR_MODES.length === 1 &&
+      TRUST_ANCHOR_MODES[0] === "uretim" &&
+      tum.every((r) => r.kid !== ESKI_HAZIRLIK_KOKU.kid && r.x !== ESKI_HAZIRLIK_KOKU.x),
+    `${kidler.join(",")} · kipler ${TRUST_ANCHOR_MODES.join(",")}`,
   );
-  const tasan = STAGING_ROOT_PUBLIC_KEYS.filter((r) => r.classes.length === 0 || r.classes.some((c) => !STAGING_ROOT_CLASSES.includes(c)));
-  check("§0k ⭐ hazırlık köklerinin sınıfları ⊆ {TEST, DEMO} (ÜRETİM yok)", tasan.length === 0, tasan.map((r) => `${r.kid}: ${r.classes.join("+")}`).join(" · ") || "temiz");
-  check("§0l iki liste DERİN donuk (her satır ve sınıf listesi)", tum.every((r) => Object.isFrozen(r) && Object.isFrozen(r.classes)));
-  check("§0r iki liste AYRIK: ortak kid ya da açık anahtar yok", PRODUCTION_ROOT_PUBLIC_KEYS.every((p) => STAGING_ROOT_PUBLIC_KEYS.every((s) => s.kid !== p.kid && s.x !== p.x)));
-  const yasakSiniflar = LICENSE_CLASSES.filter((c) => !STAGING_ROOT_CLASSES.includes(c));
-  for (const r of STAGING_ROOT_PUBLIC_KEYS) {
-    const vekil = anahtarUret(r.kid);
-    const capa = vekilli(STAGING_ROOT_PUBLIC_KEYS, r.kid, vekil.x);
-    const gecen = yasakSiniflar.filter((s) => kod(verifyEntitlement(hakBas(f, { sinif: s }, vekil), capa)) !== "KOK_SINIF_YETKISIZ");
-    check(`§0m ⭐ ${r.kid} ${yasakSiniflar.join("/")} HAK'ı imzalayamaz (listenin kendi sınıf satırıyla)`, gecen.length === 0, gecen.join(", ") || `${yasakSiniflar.length} sınıf KOK_SINIF_YETKISIZ`);
-    beklenen(`§0n ${r.kid} TEST HAK'ı imzalayabilir (karşı kontrol)`, verifyEntitlement(hakBas(f, { sinif: "TEST" }, vekil), capa), "OK");
-    beklenen(`§0o ${r.kid} adına başka anahtarla basılmış HAK gerçek hazırlık listesinde RED (açık yarı gerçekten kullanılıyor)`, verifyEntitlement(hakBas(f, { sinif: "TEST" }, vekil), STAGING_ROOT_PUBLIC_KEYS), "JWS_IMZA");
-    const altUretim = sertifikaBas(vekil, sertifikaYuku(f, f.alt, "ALT", { siniflar: siniflar("URETIM") }));
-    beklenen(`§0p ${r.kid} ÜRETİM yetkili alt sertifika basamaz`, verifyLease(kiraBas(f, { altSertifika: altUretim }), capa), "KOK_SINIF_YETKISIZ");
-    // Asıl tehdit: hazırlık kökünün özel yarısı sızdı. Sahibinin bastığı DEMO HAK'ı ve TEST kirası hazırlık çapasında
-    // geçer (karşı kontrol) ama üretim çapasında kid HİÇ tanınmaz.
-    const demo = hakBas(f, { sinif: "DEMO" }, vekil);
-    const altTest = sertifikaBas(vekil, sertifikaYuku(f, f.alt, "ALT", { siniflar: siniflar("TEST", "DEMO") }));
-    beklenen(`§0s karşı kontrol: ${r.kid} sahibinin DEMO HAK'ı hazırlık çapasında GEÇER`, verifyEntitlement(demo, capa), "OK");
-    beklenen(`§0s ⭐ ${r.kid} sahibinin DEMO HAK'ı ÜRETİM çapasında RED (kök tanınmaz)`, verifyEntitlement(demo, PRODUCTION_ROOT_PUBLIC_KEYS), "KOK_BILINMIYOR");
-    beklenen(`§0s ⭐ ${r.kid} sahibinin alt sertifikasıyla kira ÜRETİM çapasında RED`, verifyLease(kiraBas(f, { altSertifika: altTest }), PRODUCTION_ROOT_PUBLIC_KEYS), "KOK_BILINMIYOR");
+  check("§0k ⭐ eski kip adı kip değil: isTrustAnchorMode(\"hazirlik\") false, çapası BOŞ", !isTrustAnchorMode("hazirlik") && rootPublicKeysFor("hazirlik" as TrustAnchorMode).length === 0);
+  check("§0l liste DERİN donuk (her satır ve sınıf listesi)", tum.every((r) => Object.isFrozen(r) && Object.isFrozen(r.classes)));
+  const eskiAile = anahtarUret(ESKI_HAZIRLIK_KOKU.kid);
+  for (const classes of [siniflar("TEST", "DEMO"), siniflar("TEST")]) {
+    beklenen(`§0q ⭐ eski hazirlik-* kid'li kök (${classes.join("+")}) çapada biçim düzeyinde RED`, prepareTrustAnchor([{ kid: eskiAile.kid, x: eskiAile.x, classes }]), "GUVEN_CAPASI_BICIM");
   }
+  const karisik = [...PRODUCTION_ROOT_PUBLIC_KEYS, { kid: eskiAile.kid, x: eskiAile.x, classes: siniflar("TEST", "DEMO") }];
+  beklenen("§0q' ⭐ üretim listesine eklenen eski aile satırı BÜTÜN çapayı düşürür (sessizce atlanmaz)", prepareTrustAnchor(karisik), "GUVEN_CAPASI_BICIM");
+  beklenen("§0q'' ⭐ o çapayla geçerli imzalı TEST HAK'ı da RED (çapa önce düşer)", verifyEntitlement(hakBas(f, { sinif: "TEST" }, eskiAile), karisik), "GUVEN_CAPASI_BICIM");
+  const altTest = sertifikaBas(eskiAile, sertifikaYuku(f, f.alt, "ALT", { siniflar: siniflar("TEST", "DEMO") }));
+  beklenen("§0s ⭐ hazirlik-* kid'iyle imzalı DEMO HAK'ı ÜRETİM çapasında RED (kök tanınmaz)", verifyEntitlement(hakBas(f, { sinif: "DEMO" }, eskiAile), PRODUCTION_ROOT_PUBLIC_KEYS), "KOK_BILINMIYOR");
+  beklenen("§0s ⭐ hazirlik-* kökünün alt sertifikasıyla kira ÜRETİM çapasında RED", verifyLease(kiraBas(f, { altSertifika: altTest }), PRODUCTION_ROOT_PUBLIC_KEYS), "KOK_BILINMIYOR");
   for (const r of PRODUCTION_ROOT_PUBLIC_KEYS) {
     const vekil = anahtarUret(r.kid);
     const hak = hakBas(f, { sinif: "TEST" }, vekil);
     beklenen(`§0t karşı kontrol: ${r.kid} sahibinin HAK'ı üretim çapasında GEÇER`, verifyEntitlement(hak, vekilli(PRODUCTION_ROOT_PUBLIC_KEYS, r.kid, vekil.x)), "OK");
-    beklenen(`§0t ⭐ ${r.kid} sahibinin HAK'ı HAZIRLIK çapasında RED (hazırlık derlemesi üretim belgesini tanımaz)`, verifyEntitlement(hak, STAGING_ROOT_PUBLIC_KEYS), "KOK_BILINMIYOR");
+    beklenen(`§0o ${r.kid} adına başka anahtarla basılmış HAK gerçek listede RED (açık yarı gerçekten kullanılıyor)`, verifyEntitlement(hak, PRODUCTION_ROOT_PUBLIC_KEYS), "JWS_IMZA");
   }
-  const genis = STAGING_ROOT_PUBLIC_KEYS.map((k) => ({ ...k, classes: [...k.classes, "URETIM" as const] }));
-  beklenen("§0q ⭐ hazırlık listesindeki kök ÜRETİM'e genişletilirse çapa RED", prepareTrustAnchor(genis), "GUVEN_CAPASI_BICIM");
 }
 
 /** src altında çapa kipini seçen/okuyan yer: sabitin, kip listelerinin ve seçicilerin TEK sahibi. */
 const KIP_SAHIPLERI: ReadonlyArray<readonly [RegExp, readonly string[]]> = [
-  [/__TEKSERP_GUVEN_CAPASI__/, ["lib/license/trust-anchor.ts"]],
+  [/__TEKSERP_GUVEN_CAPASI__/, []],
+  [/\bSTAGING_(?:ROOT|PACKAGE)_/, []],
   [/\brootPublicKeysFor\(/, ["lib/license/trust-anchor.ts", "lib/license/protocol/kok-anahtarlar.ts"]],
   [/\bpackagePublicKeysFor\(/, ["lib/license/integrity.ts"]],
-  [/\b(?:PRODUCTION|STAGING)_ROOT_PUBLIC_KEYS\b/, ["lib/license/protocol/kok-anahtarlar.ts"]],
-  [/\b(?:PRODUCTION|STAGING)_PACKAGE_PUBLIC_KEYS\b/, ["lib/license/integrity.ts"]],
+  [/\bPRODUCTION_ROOT_PUBLIC_KEYS\b/, ["lib/license/protocol/kok-anahtarlar.ts"]],
+  [/\bPRODUCTION_PACKAGE_PUBLIC_KEYS\b/, ["lib/license/integrity.ts"]],
 ];
 
 /** Göreli yol → içerik; kip okuyucusu sahibinin dışında geçerse ihlal satırı. */
@@ -306,17 +295,17 @@ function srcDosyalari(kok: string, alt = ""): Record<string, string> {
 }
 
 function derlemeCapasi(): void {
-  console.log("\n§0'' — derlemenin çapası: kip derleme sabitinden, ortamdan OKUNMAZ, tek okuyucu");
+  console.log("\n§0'' — derlemenin çapası: tek kip, derleme sabiti yok, ortamdan OKUNMAZ, tek okuyucu");
   check(
-    "§0u geliştirmede (sabit tanımsız) derleme kipi üretim; ROOT_PUBLIC_KEYS = üretim listesi (hazırlık kökü yok)",
+    "§0u derleme kipi üretim; ROOT_PUBLIC_KEYS = üretim listesi (hazırlık kökü yok)",
     BUILD_ANCHOR_MODE === "uretim" && ROOT_PUBLIC_KEYS === PRODUCTION_ROOT_PUBLIC_KEYS && !ROOT_PUBLIC_KEYS.some((r) => r.kid.startsWith("hazirlik-")),
   );
   const kaynak = readFileSync(join(__dirname, "../src/lib/license/trust-anchor.ts"), "utf8");
   const okuma = ["process.env", "readFileSync", "require(", "import(", "existsSync"].filter((d) => kaynak.includes(d));
-  check("§0v ⭐ trust-anchor.ts kipi ortamdan ya da dosyadan OKUMAZ (yalnız derleme sabiti)", okuma.length === 0 && kaynak.includes("__TEKSERP_GUVEN_CAPASI__"), okuma.join(", ") || "temiz");
+  check("§0v ⭐ trust-anchor.ts kipi ortamdan, dosyadan ya da derleme sabitinden OKUMAZ (tek kip koda gömülü)", okuma.length === 0 && !kaynak.includes("__TEKSERP_GUVEN_CAPASI__"), okuma.join(", ") || "temiz");
   const dosyalar = srcDosyalari(join(__dirname, "../src"));
   const ihlal = kipOkuyuculari(dosyalar);
-  check("§0w ⭐ çapa kipinin TEK okuyucusu trust-anchor.ts; kip listelerini başka src dosyası seçmez", ihlal.length === 0 && Object.keys(dosyalar).length > 100, ihlal.join(" · ") || `${Object.keys(dosyalar).length} dosya`);
+  check("§0w ⭐ çapa kipinin TEK okuyucusu trust-anchor.ts; kip listelerini başka src dosyası seçmez, hazırlık sabiti/derleme sabiti hiçbir yerde", ihlal.length === 0 && Object.keys(dosyalar).length > 100, ihlal.join(" · ") || `${Object.keys(dosyalar).length} dosya`);
   const sentetik = kipOkuyuculari({ "services/x.ts": "verifyEntitlement(t, STAGING_ROOT_PUBLIC_KEYS)", "lib/y.ts": "const k = process.env.__TEKSERP_GUVEN_CAPASI__", "lib/z.ts": "ROOT_PUBLIC_KEYS" });
   check("§0x ✓K tarayıcı yabancı kip okuyucusunu yakalar (liste · sabit), derlemenin çapasını kullanan dosyada susar", sentetik.length === 2, sentetik.join(" · "));
 }
@@ -412,17 +401,17 @@ function zincirBolumu(): void {
   const yabanciKok = anahtarUret("kok-2099-1");
   const yabanciAlt = sertifikaBas(yabanciKok, sertifikaYuku(f, f.alt, "ALT"));
   beklenen("§2f tanınmayan kökün sertifikası RED", verifyLease(kiraBas(f, { altSertifika: yabanciAlt }), f.kokler), "KOK_BILINMIYOR");
-  beklenen("§2g ⭐ hazırlık kökü ÜRETİM HAK'ı imzalayamaz", verifyEntitlement(hakBas(f, {}, f.hazirlik), f.kokler), "KOK_SINIF_YETKISIZ");
-  beklenen("§2h hazırlık kökü TEST HAK'ı imzalayabilir", verifyEntitlement(hakBas(f, { sinif: "TEST" }, f.hazirlik), f.kokler), "OK");
-  const hazirlikUretim = [{ kid: f.hazirlik.kid, x: f.hazirlik.x, classes: siniflar("TEST", "URETIM") }];
-  beklenen("§2i ⭐ ÜRETİM yetkili tanımlanmış hazırlık kökü çapada RED", prepareTrustAnchor(hazirlikUretim), "GUVEN_CAPASI_BICIM");
-  const hazirlikAlt = sertifikaBas(f.hazirlik, sertifikaYuku(f, f.alt, "ALT", { siniflar: siniflar("URETIM") }));
-  beklenen("§2j hazırlık kökü ÜRETİM yetkili alt sertifika basamaz", verifyLease(kiraBas(f, { altSertifika: hazirlikAlt }), f.kokler), "KOK_SINIF_YETKISIZ");
-  const testAlt = sertifikaBas(f.hazirlik, sertifikaYuku(f, f.alt, "ALT", { siniflar: siniflar("TEST", "DEMO") }));
+  beklenen("§2g ⭐ dar kök (TEST/DEMO) ÜRETİM HAK'ı imzalayamaz", verifyEntitlement(hakBas(f, {}, f.dar), f.kokler), "KOK_SINIF_YETKISIZ");
+  beklenen("§2h dar kök TEST HAK'ı imzalayabilir", verifyEntitlement(hakBas(f, { sinif: "TEST" }, f.dar), f.kokler), "OK");
+  const eskiAileKoku = [{ kid: "hazirlik-fikstur-1", x: f.dar.x, classes: siniflar("TEST", "DEMO") }];
+  beklenen("§2i ⭐ eski hazirlik-* aile kid'li kök (aynı anahtar, dar sınıf) çapada RED", prepareTrustAnchor(eskiAileKoku), "GUVEN_CAPASI_BICIM");
+  const darAlt = sertifikaBas(f.dar, sertifikaYuku(f, f.alt, "ALT", { siniflar: siniflar("URETIM") }));
+  beklenen("§2j dar kök ÜRETİM yetkili alt sertifika basamaz", verifyLease(kiraBas(f, { altSertifika: darAlt }), f.kokler), "KOK_SINIF_YETKISIZ");
+  const testAlt = sertifikaBas(f.dar, sertifikaYuku(f, f.alt, "ALT", { siniflar: siniflar("TEST", "DEMO") }));
   const testKira = verifyLease(kiraBas(f, { altSertifika: testAlt }), f.kokler);
   if (testKira.ok && hak.ok) {
-    beklenen("§2k ⭐ hazırlık alt anahtarı ÜRETİM HAK'ına kira veremez", checkLeaseBinding(testKira.value, hak.value), "KIRA_SINIF_YETKISIZ");
-  } else check("§2k hazırlık kirası kurulamadı", false, kod(testKira));
+    beklenen("§2k ⭐ dar kökün alt anahtarı ÜRETİM HAK'ına kira veremez", checkLeaseBinding(testKira.value, hak.value), "KIRA_SINIF_YETKISIZ");
+  } else check("§2k dar kök kirası kurulamadı", false, kod(testKira));
   beklenen("§2l boş çapa: geçerli HAK bile RED", verifyEntitlement(hakBas(f), []), "GUVEN_CAPASI_BOS");
   const surumKira = verifyLease(kiraBas(f, { hakSurum: 2 }), f.kokler);
   if (surumKira.ok && hak.ok) beklenen("§2m kira HAK'ın başka sürümüne ait → RED", checkLeaseBinding(surumKira.value, hak.value), "KIRA_HAK_UYUSMAZ");
@@ -687,7 +676,7 @@ function araZincirBolumu(): void {
   const bayiSert = sertifikaBas(f.kok, sertifikaYuku(f, f.bayi, "BAYI", { bayi: { bayiId: f.musteriId, moduller: [] } }));
   beklenen("§8g hem bayi hem ara sertifikası taşıyan HAK", verifyEntitlement(hamImzala(TYP.HAK, f.ara, { ...hakYuku(f), bayiId: f.musteriId, bayiSertifikasi: bayiSert, imzaciSertifikasi: araSertifikasi(f) }), f.kokler), "BELGE_SEMA");
   beklenen("§8h ara sertifikayı tanınmayan kök imzalamış", verifyEntitlement(araHakBas(f, {}, { sertifika: araSertifikasi(f, {}, anahtarUret("kok-2099-3")) }), f.kokler), "KOK_BILINMIYOR");
-  beklenen("§8i ⭐ hazırlık kökü ÜRETİM yetkili ara sertifika basamaz", verifyEntitlement(araHakBas(f, {}, { sertifika: araSertifikasi(f, { siniflar: siniflar("URETIM") }, f.hazirlik) }), f.kokler), "KOK_SINIF_YETKISIZ");
+  beklenen("§8i ⭐ dar kök ÜRETİM yetkili ara sertifika basamaz", verifyEntitlement(araHakBas(f, {}, { sertifika: araSertifikasi(f, { siniflar: siniflar("URETIM") }, f.dar) }), f.kokler), "KOK_SINIF_YETKISIZ");
   const yanlisOnek = hamImzala(TYP.SERTIFIKA, f.kok, { ...sertifikaYuku(f, f.bayi, "HAK") });
   beklenen("§8j HAK sertifikasında kid öneki ara- değil", verifyEntitlement(araHakBas(f, {}, { sertifika: yanlisOnek, imzalayan: f.bayi }), f.kokler), "BELGE_SEMA");
   const hakSert = araSertifikasi(f);
