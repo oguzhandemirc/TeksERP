@@ -91,6 +91,7 @@ Source: "..\hizmet\kanal-adlari.ps1"; DestDir: "{app}\kurulum\deploy\hizmet"; Fl
 Source: "..\hizmet\sema-hizasi.ps1"; DestDir: "{app}\kurulum\deploy\hizmet"; Flags: ignoreversion
 Source: "on-olcum.ps1"; DestDir: "{app}\kurulum\deploy\kurulum"; Flags: ignoreversion
 Source: "kaldir.ps1"; DestDir: "{app}\kurulum\deploy\kurulum"; Flags: ignoreversion
+Source: "tepsi.ps1"; DestDir: "{app}\kurulum\deploy\kurulum"; Flags: ignoreversion
 Source: "cevap-semasi.json"; DestDir: "{app}\kurulum\deploy\kurulum"; Flags: ignoreversion
 Source: "ornek-cevap.json"; DestDir: "{app}\kurulum\deploy\kurulum"; Flags: ignoreversion
 Source: "..\pg\pg-ornegi.json"; DestDir: "{app}\kurulum\deploy\pg"; Flags: ignoreversion

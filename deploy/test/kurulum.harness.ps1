@@ -13,7 +13,7 @@
 # CIKTI: "OK <ad>" / "HATA <ad>: <ayrinti>" / "ATLA <ad>: <sebep>" + "=== Sonuc: N gecti, M basarisiz ===".
 # Cikis: 0 hepsi gecti - 1 en az bir HATA.
 # =============================================================================
-param([string]$Ortak, [string]$Sema, [string]$Ornek, [string]$Vektor, [string]$PgOrnek, [string]$SurumVektor)
+param([string]$Ortak, [string]$Sema, [string]$Ornek, [string]$Vektor, [string]$PgOrnek, [string]$SurumVektor, [string]$Tepsi)
 $ErrorActionPreference = "Stop"
 $depo = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
 if (-not $Ortak) { $Ortak = Join-Path $depo "deploy\kurulum\kurulum-ortak.ps1" }
@@ -21,6 +21,7 @@ if (-not $Sema) { $Sema = Join-Path $depo "deploy\kurulum\cevap-semasi.json" }
 if (-not $Ornek) { $Ornek = Join-Path $depo "deploy\kurulum\ornek-cevap.json" }
 if (-not $Vektor) { $Vektor = Join-Path $depo "deploy\pg\pg-sablon-vektorleri.json" }
 if (-not $PgOrnek) { $PgOrnek = Join-Path $depo "deploy\pg\pg-ornegi.json" }
+if (-not $Tepsi) { $Tepsi = Join-Path $depo "deploy\kurulum\tepsi.ps1" }
 if (-not $SurumVektor) { $SurumVektor = Join-Path $depo "Teks-Erp\native\test-vektorleri\guncelleme-karar.json" }
 . $Ortak
 
@@ -298,6 +299,29 @@ $a = SaatEsitlemeKarari $false "NoSync" "" "Disabled"
 $b = SaatEsitlemeKarari $false "NT5DS" "kendi.ornek.local,0x8" "Manual"
 Olc "saat.kapali-ntp-acar" ($a.eylem -ceq "NTP_AC" -and $a.sunucu -ceq "time.windows.com,0x9" -and $b.eylem -ceq "NTP_AC" -and $b.sunucu -ceq "kendi.ornek.local,0x8") ((SaatOz $a) + " / " + (SaatOz $b))
 Olc "saat.onceki-kayda-girer" ($b.onceki.tip -ceq "NT5DS" -and $b.onceki.ntpSunucu -ceq "kendi.ornek.local,0x8" -and $b.onceki.baslangic -ceq "Manual") ("tip $($b.onceki.tip) sunucu $($b.onceki.ntpSunucu) baslangic $($b.onceki.baslangic)")
+# Sunucu simgesi (tepsi.ps1 saf islevleri): renk karari backend'de, simge yalniz gosterir; tanimayan cevap FAIL-CLOSED
+# KIRMIZI; kisa kesinti onceki karari korur; guncelleme surerken yeniden baslama SARI (sonra KIRMIZI).
+. $Tepsi -YalnizIslevler
+$ty = { param($renk, $surucu) ('{"v":1,"renk":"' + $renk + '","baslik":"B","nedenler":["n1"],"guncelleme":{"surucu":' + $surucu + ',"adim":null,"hedefSurum":"2.1.0","ilerleme":{"indirilen":50,"toplam":200}}}') | ConvertFrom-Json }
+$t1 = TepsiKarar (& $ty "YESIL" "false") 0 $null
+$t2 = TepsiKarar (& $ty "SARI" "true") 0 $null
+Olc "tepsi.renk-backendden-aynen" ($t1.renk -ceq "YESIL" -and -not $t1.surucu -and $null -eq $t1.ilerleme -and $t2.renk -ceq "SARI" -and $t2.surucu -and $t2.hedef -ceq "2.1.0") ("yesil: $($t1.renk)/$($t1.surucu) sari: $($t2.renk)/$($t2.surucu)/$($t2.hedef)")
+$bozuk = @('{"v":1,"renk":"MAVI","baslik":"B","nedenler":[]}', '{"v":2,"renk":"YESIL","baslik":"B","nedenler":[]}', '{"renk":"YESIL"}', '{"v":1,"renk":"yesil"}')
+$bk2 = @($bozuk | ForEach-Object { (TepsiKarar ($_ | ConvertFrom-Json) 0 $t1).renk })
+Olc "tepsi.taninmayan-yanit-kirmizi" (@($bk2 | Where-Object { $_ -ceq "KIRMIZI" }).Count -eq 4) ("renkler: $($bk2 -join ',')")
+$kes = TepsiKarar $null 2 $t1
+$kes3 = TepsiKarar $null 3 $t1
+Olc "tepsi.kisa-kesinti-onceki-korunur" ($kes.renk -ceq "YESIL" -and $kes3.renk -ceq "KIRMIZI") ("2 hata: $($kes.renk) / 3 hata: $($kes3.renk)")
+$yb = TepsiKarar $null 5 $t2
+$yb2 = TepsiKarar $null 120 $t2
+$yb3 = TepsiKarar $null 50 $null
+Olc "tepsi.guncelleme-yeniden-basliyor-sari" ($yb.renk -ceq "SARI" -and $yb.surucu -and $yb2.renk -ceq "KIRMIZI" -and -not $yb2.surucu -and $yb3.renk -ceq "KIRMIZI") ("5 hata: $($yb.renk)/$($yb.surucu) 120 hata: $($yb2.renk) onceksiz: $($yb3.renk)")
+$uz = TepsiIpucu @{ baslik = ("x" * 200) }
+Olc "tepsi.ipucu-63-sinir" ($uz.Length -le 63 -and (TepsiIpucu @{ baslik = "kisa" }) -ceq "kisa") ("uzunluk: $($uz.Length)")
+$y1 = TepsiYuzde ('{"indirilen":50,"toplam":200}' | ConvertFrom-Json)
+$y2 = TepsiYuzde ('{"indirilen":5,"toplam":0}' | ConvertFrom-Json)
+$y3 = TepsiYuzde ('{"indirilen":900,"toplam":200}' | ConvertFrom-Json)
+Olc "tepsi.yuzde" ($y1 -eq 25 -and $null -eq $y2 -and $y3 -eq 100 -and $null -eq (TepsiYuzde $null)) ("25: $y1 / toplam0: $y2 / tavan: $y3")
 
 Write-Output "=== Sonuc: $($script:gecti) gecti, $($script:kaldi) basarisiz ==="
 if ($script:kaldi -gt 0) { exit 1 }

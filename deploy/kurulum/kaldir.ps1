@@ -108,6 +108,21 @@ try {
     }
   }
 
+  # 2b) Sunucu simgesi: oturum acilisi kaydi + calisan simge (kullanici oturumlarinda) + <kok>\tepsi\.
+  AdimDene "sunucu simgesi" {
+    $run = "HKLM:\Software\Microsoft\Windows\CurrentVersion\Run"
+    $isim = "TeksERP-Tepsi$($ad.sonek)"
+    $tepsiBetik = (Join-Path $kok "tepsi\tepsi.ps1")
+    $kayit = (Get-ItemProperty -LiteralPath $run -Name $isim -ErrorAction SilentlyContinue)
+    if ($kayit -and "$($kayit.$isim)".ToLowerInvariant().Contains($tepsiBetik.ToLowerInvariant())) { Remove-ItemProperty -LiteralPath $run -Name $isim; Ok "oturum acilisi kaydi kaldirildi: $isim" }
+    elseif ($kayit) { Uyar "$isim kaydi baska bir kok gosteriyor - DOKUNULMADI" }
+    foreach ($pr in @(Get-CimInstance Win32_Process -Filter "Name = 'powershell.exe'" -ErrorAction SilentlyContinue)) {
+      if ("$($pr.CommandLine)".ToLowerInvariant().Contains($tepsiBetik.ToLowerInvariant())) { Stop-Process -Id $pr.ProcessId -Force -ErrorAction SilentlyContinue; Ok "calisan simge kapatildi (pid $($pr.ProcessId))" }
+    }
+    $p = Join-Path $kok "tepsi"
+    if (Test-Path -LiteralPath $p) { if (ReparseMi $p) { throw "tepsi dizini baglanti - DOKUNULMADI" }; Remove-Item -LiteralPath $p -Recurse -Force; Ok "silindi: $p" }
+  }
+
   # 3) Program dizinleri - YALNIZ bu liste. Baglantilar ozyinelemesiz silinir.
   AdimDene "current baglantisi" {
     $c = Join-Path $kok "current"

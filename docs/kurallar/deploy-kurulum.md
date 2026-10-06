@@ -163,6 +163,7 @@
 ## Doğrulama turu ekleri (eski CLAUDE.md ↔ yeni yapı karşılaştırması, 2026-09-05)
 
 - **[ÇEKİRDEK]** Geri yükleme KOPYALARINDA otomatik retention YOKTUR ve `_old_` veritabanlarının silme ucu YOK — temizlik elle yapılır (silme allowlist'i `isRestoreCopyName`). <sub>(eski Teks-Erp/CLAUDE.md Operasyonel Bakım)</sub>
+- **[ÇEKİRDEK]** Sunucu simgesi (`deploy/kurulum/tepsi.ps1`, PowerShell + WinForms) yönetici istemez, güncelleyicinin korumalı dizinine DOKUNMAZ: yalnız backend'in döngü adresi ucunu (`GET /health/tepsi`, dışarıya 404) OKUR, renk kararı `lib/tepsi-durumu.ts`te; kurulum `<kök>\tepsi\` (Users yalnız RX) + HKLM Run, kaldırıcı siler; `test_kurulum_betikleri` §14 + `test_tepsi_durumu`. <sub>(arşiv 2026-10-06)</sub>
 
 ## Bekçiler — bu alana dokununca koş
 
@@ -170,13 +171,14 @@
 
 **Ne ölçtükleri, DB gerektirip gerektirmedikleri ve bayatlık işaretleri: `Teks-Erp/docs/BEKCI-HARITASI.md` → bu alanın bölümü.** ⚠️ = orada gerekçesi yazılı bayatlık şüphesi.
 
-Backend: `test_sunucu_betikleri`, `test_hizmet_duzeni`, `test_env_okuyucu`, `test_sema_hizasi`, `test_gecis`, `test_kurulum_betikleri`, `test_paket_kapsami`, `test_bakim_rolu`, `test_deploy_log_rotation`, `test_deploy_move_retry`, `test_audit_depth`, `test_audit_followups`, `test_backend_surum`, `test_barcode_reservation`, `test_batch_number_format`, `test_cash_period_close`, `test_check_violation_mapping`, `test_client_policy`, `test_client_registry`, `test_db_copy`, `test_db_invariants`, `test_fold_contract`, `test_guarded_hard_remove`, `test_hard_delete_guard_coverage`, `test_master_data_merge_fk_coverage`, `test_master_data_merge_race`, `test_master_data_name_dup`, `test_migration_hygiene`, `test_mobile_update`, `test_module_grandfathering`, `test_offsite_sweep`, `test_phase6_reporterror_concurrency`, `test_qc2_idempotency`⚠️, `test_quality_scorecard`, `test_raw_sql_hygiene`, `test_record_provenance`, `test_report_day_boundary`, `test_roll_barcode`, `test_roll_entry_station`, `test_schema_drift`, `test_script_guards`, `test_timestamptz_contract`, `test_traveler_print_active_card`, `test_yarn_stock`
+Backend: `test_sunucu_betikleri`, `test_hizmet_duzeni`, `test_env_okuyucu`, `test_sema_hizasi`, `test_gecis`, `test_kurulum_betikleri`, `test_tepsi_durumu`, `test_paket_kapsami`, `test_bakim_rolu`, `test_deploy_log_rotation`, `test_deploy_move_retry`, `test_audit_depth`, `test_audit_followups`, `test_backend_surum`, `test_barcode_reservation`, `test_batch_number_format`, `test_cash_period_close`, `test_check_violation_mapping`, `test_client_policy`, `test_client_registry`, `test_db_copy`, `test_db_invariants`, `test_fold_contract`, `test_guarded_hard_remove`, `test_hard_delete_guard_coverage`, `test_master_data_merge_fk_coverage`, `test_master_data_merge_race`, `test_master_data_name_dup`, `test_migration_hygiene`, `test_mobile_update`, `test_module_grandfathering`, `test_offsite_sweep`, `test_phase6_reporterror_concurrency`, `test_qc2_idempotency`⚠️, `test_quality_scorecard`, `test_raw_sql_hygiene`, `test_record_provenance`, `test_report_day_boundary`, `test_roll_barcode`, `test_roll_entry_station`, `test_schema_drift`, `test_script_guards`, `test_timestamptz_contract`, `test_traveler_print_active_card`, `test_yarn_stock`
 
 Native (cargo, `cd Teks-Erp/native && npm test`; commit kapısında koşar, cargo yoksa ⏭ beyanla): `tekserp-hizmet/tests/env_dosyasi_vektorleri.rs` (`.env` okuyucusunun dotenv eşliği) · `tekserp-guncelleyici/tests/ayar_env.rs` (zorunlu anahtar → `AYAR_EKSIK`) · `tekserp-guncelleyici/tests/sema_hizasi.rs` (şema ileride → `SEMA_ILERIDE`, ölçülemedi → `SEMA_OLCULEMEDI` bilgi + sürer, ortak vektörler)
 
 İstemci: `GuncellemeDugmesi.test.tsx`⚠️, `surum-notlari.test.ts`⚠️, `version-compare.test.ts`⚠️, `clients-utils.test.ts`, `update-check-interval.test.ts`, `update-feed-url.test.ts`, `update-gate-escape.test.ts`, `UpdateActions.test.tsx`, `appUpdate.service.test.ts`, `clientPolicy.service.test.ts`, `surumNotlari.test.ts`, `update-feed-url.test.ts`
 
 ## Arşiv notları (tam metin, gerekçe ve ölçüm)
+- 2026-10-06 · Sunucu simgesi (bildirim alanı): PowerShell + WinForms, durum backend'in döngü ucundan (`/health/tepsi`), güncelleyici dizini kapalı kaldı [ÇEKİRDEK] — `arsiv/2026-10.md` §2026-10-06
 - 2026-10-02 · Tek kurulum arşivi (yönetici kararı TEK ARŞİV): setup'ın kararları arşivden önce, satıcının derleme deposuna KURU → `--uygula` koyma, var olan derleme ezilmez [ÇEKİRDEK] — `arsiv/2026-10.md` §2026-10-02 tek kurulum arşivi
 
 - 2026-10-02 · Dağıtım v2 D8e runbook: thinkpad-1 ölçümleri (geçiş 24–29 sn, ilk pencere 0,91 sn, icacls 87), geçiş kanal kimliği, F4-B, G21-K geri alma kuralı, elle `current` yasağı, araçta LICENSE_DIR [ÇEKİRDEK] + [PROFİL] — `arsiv/2026-10.md` §2026-10-02 D8e runbook
