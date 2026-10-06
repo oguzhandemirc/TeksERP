@@ -10,7 +10,8 @@ npx tsc --noEmit · npm test (jest --runInBand, 85 dosya / 854 vaka / ~17 sn —
 npm run yayinla:check -- --musteri=<kod>        # OTA mı APK mı? (native parmak izi)
 npm run yayinla -- --musteri=<kod>              # OTA (JS-only, ~%90); ERP adresi + kimlik + imza anahtarı kanaldan
 TEKSERP_KANAL=<kod> npx expo prebuild --platform android --clean --no-install   # kanal değişince android/ yeniden
-npm run build:apk -- --musteri=<kod>            # native değişti → APK; ./gradlew ELLE ÇAĞIRMA
+npm run build:apk                               # ORTAK PAKET (argümansız; kimlik deploy/dagitim.json'dan, ERP adresi GÖMÜLMEZ; OTA sertifikası yoksa DURUR)
+npm run build:apk -- --musteri=<kod>            # ESKİ KANAL (adnansahin) APK; ./gradlew ELLE ÇAĞIRMA
 node ../deploy/mobil-yayinla.mjs --musteri=<kod> --paket=ota-cikti/<kod>/<rv>/<damga>   # yükleme (manifest EN SON)
 ```
 
