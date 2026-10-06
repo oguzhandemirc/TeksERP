@@ -198,7 +198,9 @@ const
   C_ILETI_KALDIR = 1;
   C_SURUCU_CIKARILABILIR = 2;
   PS_ARGS = '-NoProfile -NonInteractive -ExecutionPolicy Bypass -File ';
-  VARSAYILAN_GUNCELLEME = 'https://guncelleme.etkiliyazilim.com';
+  // Varsayılan = dağıtım kaydının indirme kökü (sonda / yok; test_kurulum_betikleri §14 ölçer); eski adres yalnız kayıttaki izi tanır.
+  VARSAYILAN_GUNCELLEME = 'https://indir.etkiliyazilim.com';
+  ESKI_GUNCELLEME = 'https://guncelleme.etkiliyazilim.com';
   VERI_ACIKLAMASI = 'Veritabanı dosyaları bu dizinde tutulur: yerel, SABİT bir NTFS diski seçin (öneri: D:). Dizin YOK ya da BOŞ olmalı; dolu dizine kurulmaz, veri silinmez.';
 
 var
@@ -967,7 +969,9 @@ begin
   // Lisans sunucusu yoksa paketin kanalından (paketLisans; boş = kanal), kullanıcının girdiği değer ezilmez.
   if Onarim or Yarim then
   begin
-    if Olc('oncekiGuncellemeSunucusu') <> '' then GelismisSayfasi.Values[0] := Olc('oncekiGuncellemeSunucusu');
+    // Ortak paket eski kanal adresinden güncellenmez: kayıttaki eski varsayılan yenisine döner.
+    if Lowercase(Olc('oncekiGuncellemeSunucusu')) = ESKI_GUNCELLEME then GelismisSayfasi.Values[0] := VARSAYILAN_GUNCELLEME
+    else if Olc('oncekiGuncellemeSunucusu') <> '' then GelismisSayfasi.Values[0] := Olc('oncekiGuncellemeSunucusu');
     if Olc('oncekiVekil') <> '' then GelismisSayfasi.Values[1] := Olc('oncekiVekil');
     if Olc('oncekiLisansOkundu') = '1' then GelismisSayfasi.Values[2] := Olc('oncekiLisansSunucusu')
     else if GelismisSayfasi.Values[2] = '' then GelismisSayfasi.Values[2] := Olc('paketLisans');

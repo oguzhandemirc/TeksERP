@@ -33,7 +33,7 @@ param(
   # Ayni makinede ikinci kanal: guncelleyicinin kendi veri koku (backend'in TEKSERP_GUNCELLEME_DIZINI = <veri>\guncelleme).
   [string]$VeriDizini,
   [string]$BackendHizmeti = "TeksERP-Backend",
-  [string]$GuncellemeSunucusu = "https://guncelleme.etkiliyazilim.com",
+  [string]$GuncellemeSunucusu = "https://indir.etkiliyazilim.com",
   [string]$Vekil,
   [switch]$Uygula
 )

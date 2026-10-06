@@ -40,6 +40,9 @@
 //      fail-closed; ön ölçüm + OnKosul aynı işlev) · F3 eski paket TEK girişten (`EskiPaketOlcumu`) ve engel ön ölçüm
 //      SAYFASINDA görünür · F4-B geçişle kurulmuş düzen ayrı sınıf GECISLI (`GecisliDuzen`: geçiş günlüğü + current), DURUR,
 //      yabancı klasör eski mesajla; metin runbook (docs/ops/GECIS-PM2-HIZMET.md §5/§7) ile tutarlı.
+//   §14 varsayılan güncelleme adresi (O11a) = deploy/dagitim.json indirmeKoku (sonda / yok): sihirbaz, cevap şeması,
+//      örnek cevap, güncelleyici betiği aynı değer; onarımda kayıttaki ESKİ kanal adresi yenisine döner, başka kayıt korunur.
+//      Geçiş aracı (deploy/gecis/gecis.ps1) eski adreste kalır ve adresi güncelleyici betiğine açıkça geçirir.
 // NEGATİF SONDA (✓K, her koşumda): §2–§11 yüklemleri bellekte bozulmuş kopyalara koşar (mutasyonun
 //   UYGULANDIĞI ölçülür); §1 için kurulum-ortak.ps1'in bozulmuş kopyası harness'e verilir (pwsh varsa).
 //   ÜÇ SONUÇ: kaynak okunamazsa ÖLÇÜLEMEDİ (kırmızı), pwsh yoksa §1 ATLANIR (beyanlı, TEKSERP_STRICT'te kırmızı).
@@ -75,7 +78,11 @@ const YOL = {
   pgOrnegi: "deploy/pg/pg-ornegi.json",
   pgSablon: "deploy/pg/pg-sablon.mjs",
   gecisRunbook: "docs/ops/GECIS-PM2-HIZMET.md",
+  guncelleyici: "deploy/hizmet/guncelleyici-hizmeti.ps1",
+  dagitim: "deploy/dagitim.json",
 } as const;
+/** Kanal düzeninin güncelleme adresi: ortak kurulumda varsayılan OLAMAZ, yalnız kayıttaki eski izi tanımak için anılır. */
+const ESKI_GUNCELLEME = "https://guncelleme.etkiliyazilim.com";
 type Ad = keyof typeof YOL;
 type Kaynaklar = Record<Ad, string>;
 
@@ -501,6 +508,36 @@ function olc(k: Kaynaklar): Bulgular {
   if (!/ag = \$\(if \(\$d\.PSObject\.Properties\["ag"\]\)/.test(dog)) ekle("§13", "kurulum.json uygulanan ağ ayarını kaydetmiyor (sonraki onarımın kaydı) (F1)");
   const iOnceki = hazir.indexOf("cevap-onceki.json', False)"), iYeni = hazir.indexOf("SaveStringToFile(KurulumCevabi");
   if (iOnceki < 0 || iYeni < 0 || iOnceki > iYeni || !/if \(Onarim or Yarim\) and FileExists\(KurulumCevabi\) then/.test(hazir)) ekle("§13", "setup onarımda önceki cevabı yenisini yazmadan saklamıyor (eski kurulumların tek ağ kaydı) (F1)");
+  // §14 — varsayılan güncelleme adresi dağıtım kaydından (indirmeKoku, sonda / yok); dört yüz aynı değeri taşır
+  let yeni: string | null = null;
+  try {
+    const koku = (JSON.parse(k.dagitim) as { indirmeKoku?: unknown }).indirmeKoku;
+    if (typeof koku === "string" && /^https:\/\/[^/]+\/$/.test(koku)) yeni = koku.slice(0, -1);
+  } catch {
+    /* aşağıda bulgu */
+  }
+  if (!yeni) ekle("§14", "deploy/dagitim.json indirmeKoku okunamadı (https://<ana makine>/) — varsayılan türetilemez");
+  else {
+    if (yeni === ESKI_GUNCELLEME) ekle("§14", "dağıtım kaydının indirmeKoku eski kanal adresi");
+    const ld = (m: string): string => m.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    if (!new RegExp(`^\\s*VARSAYILAN_GUNCELLEME = '${ld(yeni)}';$`, "m").test(k.iss)) ekle("§14", `sihirbazın VARSAYILAN_GUNCELLEME'si dağıtım kaydından değil (beklenen ${yeni})`);
+    let sema: unknown, ornek: unknown;
+    try {
+      sema = (JSON.parse(k.sema) as { alanlar?: Record<string, { varsayilan?: unknown }> }).alanlar?.["guncelleme.sunucu"]?.varsayilan;
+      ornek = (JSON.parse(k.ornek) as { guncelleme?: { sunucu?: unknown } }).guncelleme?.sunucu;
+    } catch {
+      /* aşağıda bulgu */
+    }
+    if (sema !== yeni) ekle("§14", `cevap şemasının guncelleme.sunucu varsayılanı dağıtım kaydından değil (${String(sema)})`);
+    if (ornek !== yeni) ekle("§14", `örnek cevabın guncelleme.sunucu'su dağıtım kaydından değil (${String(ornek)})`);
+    const gp = psTara(k.guncelleyici).satirlar.find((x) => /\[string\]\$GuncellemeSunucusu\s*=/.test(x.kod))?.kod ?? "";
+    if (!gp.includes(`"${yeni}"`)) ekle("§14", `guncelleyici-hizmeti.ps1 -GuncellemeSunucusu varsayılanı dağıtım kaydından değil (${gp.trim() || "satır yok"})`);
+  }
+  // Onarım: kayıttaki ESKİ varsayılan yeni adrese döner; başka (elle girilmiş) kayıt korunur
+  const sod14 = pasGovde(k.iss, "SayfalariOlcumleDoldur") ?? "";
+  if (!new RegExp(`^\\s*ESKI_GUNCELLEME = '${ESKI_GUNCELLEME.replace(/\./g, "\\.")}';$`, "m").test(k.iss) ||
+    !/if Lowercase\(Olc\('oncekiGuncellemeSunucusu'\)\) = ESKI_GUNCELLEME then GelismisSayfasi\.Values\[0\] := VARSAYILAN_GUNCELLEME\s*\n\s*else if Olc\('oncekiGuncellemeSunucusu'\) <> '' then GelismisSayfasi\.Values\[0\] := Olc\('oncekiGuncellemeSunucusu'\);/.test(sod14))
+    ekle("§14", "sihirbaz onarımda kayıttaki eski güncelleme adresini koruyor (ortak paket eski adresten güncellenmez)");
   return b;
 }
 
@@ -589,6 +626,7 @@ if (eksik.length === 0) {
     ["§9", "CI: tetikler, doğrulayıcı üretim derlemesi, iki derleme, boru öz-sınaması, PS 5.1, kuru koşu"],
     ["§11", "sihirbaz deneyimi: ölçüm görünür + açılış hafif · eski paket iki kapıda · onarım metinleri · ölçülen yapılacaklar"],
     ["§12", "lisans satıcısı kanaldan: tek karar işlevi · boş alan = kanal (ön doldurma + özet) · farklı değer UYARI · .env karardan · Dogrulama ölçer"],
+    ["§14", "varsayılan güncelleme adresi dağıtım kaydından (indirmeKoku): sihirbaz · cevap şeması · örnek cevap · güncelleyici betiği; onarımda kayıttaki eski adres yenisine döner"],
     ["§13", "onarım/kurulum güvenliği (D8e-3b): F1 ağ ayarı kayıttan (ön doldurma · özet etkili · OnKosul korur · kural karardan · önceki cevap saklanır) · F2 başka köke bağlı / ölçülemeyen kanal hizmeti engel+DUR · F3 eski paket tek giriş + sayfada engel · F4-B geçişli düzen GECISLI, DUR"],
   ];
   console.log("");
@@ -662,6 +700,12 @@ if (eksik.length === 0) {
     { ad: "S64 F4-B OnKosul geçişli düzeni yabancı sayıyor", dosya: "kurulum", eski: "    if ($gd) { Dur $gd.metin }\n", yeni: "", bolum: "§13", parca: "geçişle kurulmuş düzeni tanımadan" },
     { ad: "S65 F4-B ön ölçüm geçişli düzeni tanımıyor", dosya: "onOlcum", eski: "      $gd = GecisliDuzen $kok\n", yeni: "      $gd = $null\n", bolum: "§13", parca: "geçişli düzeni tanımıyor" },
     { ad: "S66 F4-B sihirbaz geçişli engelini göstermiyor", dosya: "iss", eski: "  if Gecisli then\n    Result := Result + '- Bu klasör pm2", yeni: "  if False then\n    Result := Result + '- Bu klasör pm2", bolum: "§13", parca: "engel olarak göstermiyor" },
+    { ad: "S67 sihirbaz varsayılanı eski adrese döndü", dosya: "iss", eski: "  VARSAYILAN_GUNCELLEME = 'https://indir.etkiliyazilim.com';", yeni: `  VARSAYILAN_GUNCELLEME = '${ESKI_GUNCELLEME}';`, bolum: "§14", parca: "VARSAYILAN_GUNCELLEME" },
+    { ad: "S68 cevap şeması varsayılanı eski adrese döndü", dosya: "sema", eski: '"varsayilan": "https://indir.etkiliyazilim.com"', yeni: `"varsayilan": "${ESKI_GUNCELLEME}"`, bolum: "§14", parca: "cevap şemasının" },
+    { ad: "S69 örnek cevap eski adrese döndü", dosya: "ornek", eski: '"sunucu": "https://indir.etkiliyazilim.com"', yeni: `"sunucu": "${ESKI_GUNCELLEME}"`, bolum: "§14", parca: "örnek cevabın" },
+    { ad: "S70 güncelleyici betiği varsayılanı eski adrese döndü", dosya: "guncelleyici", eski: '[string]$GuncellemeSunucusu = "https://indir.etkiliyazilim.com"', yeni: `[string]$GuncellemeSunucusu = "${ESKI_GUNCELLEME}"`, bolum: "§14", parca: "guncelleyici-hizmeti.ps1" },
+    { ad: "S71 dağıtım kaydı başka köke taşındı, yüzeyler eskide kaldı", dosya: "dagitim", eski: '"indirmeKoku": "https://indir.etkiliyazilim.com/"', yeni: '"indirmeKoku": "https://dagit.etkiliyazilim.com/"', bolum: "§14", parca: "VARSAYILAN_GUNCELLEME" },
+    { ad: "S72 sihirbaz onarımda kayıttaki eski adresi koruyor", dosya: "iss", eski: "    if Lowercase(Olc('oncekiGuncellemeSunucusu')) = ESKI_GUNCELLEME then GelismisSayfasi.Values[0] := VARSAYILAN_GUNCELLEME\n    else if", yeni: "    if", bolum: "§14", parca: "eski güncelleme adresini koruyor" },
     { ad: "S21 CI boru sonucunu ölçmüyor", dosya: "is", eski: `if ($r -notmatch "(?m)^BORU=TAMAM\\r?$")`, yeni: `if ($false)`, bolum: "§9", parca: "boru öz-sınaması" },
     { ad: "S22 CI test çapalı doğrulayıcıyı kabul ediyor", dosya: "is", eski: `$k.testCapasi -ne $false`, yeni: `$false`, bolum: "§9", parca: "doğrulayıcı üretim derlemesi" },
   ];

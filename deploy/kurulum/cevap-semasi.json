@@ -20,7 +20,7 @@
     "api.izinliAdresler": { "tur": "liste", "varsayilan": ["LocalSubnet"], "secenek": ["LocalSubnet", "100.64.0.0/10"], "en_az_oge": 1 },
     "api.agProfilleri": { "tur": "liste", "varsayilan": ["Domain", "Private"], "secenek": ["Domain", "Private"], "en_az_oge": 1 },
     "api.mdns": { "tur": "mantik", "varsayilan": true },
-    "guncelleme.sunucu": { "tur": "metin", "varsayilan": "https://guncelleme.etkiliyazilim.com", "desen": "^https://[A-Za-z0-9.-]{1,120}(:[0-9]{1,5})?$" },
+    "guncelleme.sunucu": { "tur": "metin", "varsayilan": "https://indir.etkiliyazilim.com", "desen": "^https://[A-Za-z0-9.-]{1,120}(:[0-9]{1,5})?$" },
     "guncelleme.vekil": { "tur": "metin", "bos": true, "varsayilan": null, "desen": "^http://[A-Za-z0-9.-]{1,120}:[0-9]{1,5}$" },
     "lisans.saticiAdresi": { "tur": "metin", "bos": true, "varsayilan": null, "desen": "^https://[A-Za-z0-9.-]{1,120}(:[0-9]{1,5})?$" },
     "profil": { "tur": "metin", "bos": true, "varsayilan": null, "secenek": ["basit", "standart", "perde", "perde-dokuma", "dokuma", "tam"] },
