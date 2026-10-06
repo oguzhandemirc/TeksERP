@@ -10,13 +10,14 @@
 //      satır dökümde YOK · başka tesisin verisi YOK · alt satır/bilinmeyen küme 404 · anlık CSV 400 · sırsız
 //      hesap görünümü · ayak izi DISA_AKTARIM · SALT_OKUNUR'da açık
 //   §6 imha: ACIK'ta RED · SALT_OKUNUR'da talepsiz RED, talepli kuru koşum hiçbir şey silmez · KAPALI'da uygula →
-//      tesisin bütün satırları sıfır, başka tesis dokunulmaz, imha kaydı yazıldı ve DEĞİŞTİRİLEMEZ
+//      tesis DB'si + rolleri düşer, yönlendirme kalkar, başka tesis dokunulmaz, tutanak MERKEZDE ve DEĞİŞTİRİLEMEZ,
+//      destek kaydı merkeze kopya, ikinci uygula 409 · yarıda kalan imha aynı komutla tamamlanır
 // Koşum: npx tsx scripts/test_hizmet_sonu.ts
 // =============================================================================
 import { randomUUID } from "node:crypto";
 import { Client } from "pg";
 import { withTesis } from "../src/lib/tenant";
-import { destroyFacility, DESTRUCTION_STEPS } from "../src/services/facility-destruction";
+import { destroyFacility } from "../src/services/facility-destruction";
 import { READ_ONLY_DAYS, refreshServiceEnd, serviceState, type ServiceFacts } from "../src/services/service-lifecycle";
 import { setFacilityStatus } from "../src/services/vendor-admin.service";
 import { TEST_PAROLASI, api, girdi, girisYap, hesapKur, imzali, kontrol, ortamKur, paket, sonuc, temizleTesis, tesisKur, tesisUrl, totpKodu, type Ortam, type TestKurulumu } from "./lib/test-ortam";
@@ -174,6 +175,7 @@ async function disaAktarma(o: Ortam, a: TestKurulumu, ids: { siparisId: string }
 async function imha(o: Ortam, a: TestKurulumu, b: TestKurulumu): Promise<void> {
   console.log("\n§6 imha (satıcı CLI servisi)");
   const red = async (fn: () => Promise<unknown>) => fn().then(() => "gecti", (e: Error & { code?: string }) => e.code ?? e.message);
+  const merkez = o.goc.centralClient;
   kontrol("§6a hizmet ACIK iken imha RED — yazılı erken talep olsa BİLE (başka tesis)", (await red(() => destroyFacility(o.goc, { tesisId: b.tesisId, operator: "Bekçi", earlyRequestRef: "YAZI-ACIK", apply: false }, o.saat.simdi()))) === "DURUM_CAKISMASI");
   const saymaB = async () => withTesis(o.goc, { tesisId: b.tesisId }, async (tx) => (await tx.projectionRow.count({ where: { tesisId: b.tesisId } })) + (await tx.account.count({ where: { tesisId: b.tesisId } })));
   const bOnce = await saymaB();
@@ -183,18 +185,20 @@ async function imha(o: Ortam, a: TestKurulumu, b: TestKurulumu): Promise<void> {
   const kuru = await destroyFacility(o.goc, { tesisId: a.tesisId, operator: "Bekçi", earlyRequestRef: "YAZI-2026-01", apply: false }, o.saat.simdi());
   const hala = await withTesis(o.goc, { tesisId: a.tesisId }, (tx) => tx.projectionRow.count({ where: { tesisId: a.tesisId } }));
   kontrol("§6c talepli KURU KOŞUM: sayar, silmez", !kuru.applied && (kuru.counts.projection_rows ?? 0) > 0 && hala === kuru.counts.projection_rows && kuru.reason === "ERKEN_TALEP");
+  const destekId = randomUUID();
+  await destekKaydi(tesisUrl(o, a.tesisId, "goc"), a.tesisId, destekId);
   o.saat.ayarla(f!.serviceEndedAt!.getTime() + READ_ONLY_DAYS * GUN);
+  const db = o.goc.databaseFor(a.tesisId);
   const r = await destroyFacility(o.goc, { tesisId: a.tesisId, operator: "Bekçi Operatör", apply: true }, o.saat.simdi());
-  const kalan = await withTesis(o.goc, { tesisId: a.tesisId }, async (tx) => {
-    let n = 0;
-    for (const step of DESTRUCTION_STEPS) n += await step.count(tx, { tesisId: a.tesisId });
-    return n;
-  });
-  kontrol("§6d KAPALI'da uygula: tesisin BÜTÜN tablolarında 0 satır", r.applied && r.reason === "SURE_DOLDU" && kalan === 0, `kalan ${kalan}`);
+  const iz = await imhaIzi(o, a.tesisId, db);
+  kontrol("§6d KAPALI'da uygula: tesis DB'si ve üç rolü YOK, durum IMHA_EDILDI, yönlendirme satırları silindi", r.applied && r.reason === "SURE_DOLDU" && iz.db === 0 && iz.rol === 0 && iz.durum === "IMHA_EDILDI" && iz.yon === 0, JSON.stringify(iz));
+  const bulunamadi = await red(() => withTesis(o.app, { tesisId: a.tesisId }, (tx) => tx.facility.count()));
+  const fabrika = await imzali(o, a, "/v1/esitle", { govde: paket(a, { ufuk: new Date(o.saat.simdi() - 60_000) }) });
+  kontrol("§6d2 imha edilen tesis merkeze DÜŞMEZ: dizin önbelleği bayatken bile kiracı kapsamı 404 (bağlantı hatası değil), fabrika kanalı 4xx", bulunamadi === "BULUNAMADI" && fabrika.status >= 400 && fabrika.status < 500, `${bulunamadi} · ${fabrika.status}`);
   kontrol("§6e başka tesis dokunulmadı", (await saymaB()) === bOnce);
-  const kayit = await withTesis(o.goc, { tesisId: a.tesisId }, (tx) => tx.facilityDestruction.findFirst({ where: { tesisId: a.tesisId } }));
-  kontrol("§6f imha kaydı: neden · işleyen · sayılar · yedekten düşme (+35 gün)", kayit?.reason === "SURE_DOLDU" && kayit.operator === "Bekçi Operatör" && (kayit.deletedCounts as Record<string, number>).facilities === 1 && kayit.backupClearBy.getTime() === o.saat.simdi() + 35 * GUN);
-  const c = new Client({ connectionString: tesisUrl(o, a.tesisId, "goc"), options: "-c timezone=UTC" });
+  const kayit = await merkez.facilityDestruction.findFirst({ where: { tesisId: a.tesisId } });
+  kontrol("§6f imha kaydı MERKEZDE: neden · işleyen · sayılar · yedekten düşme (+35 gün)", kayit?.id === r.recordId && kayit.reason === "SURE_DOLDU" && kayit.operator === "Bekçi Operatör" && (kayit.deletedCounts as Record<string, number>).facilities === 1 && kayit.backupClearBy.getTime() === o.saat.simdi() + 35 * GUN);
+  const c = new Client({ connectionString: process.env.GOC_DATABASE_URL!, options: "-c timezone=UTC" });
   await c.connect();
   try {
     const guncelle = await c.query("UPDATE facility_destructions SET operator = 'x' WHERE tesis_id = $1", [a.tesisId]).then(() => "gecti", (e: Error) => e.message);
@@ -202,6 +206,59 @@ async function imha(o: Ortam, a: TestKurulumu, b: TestKurulumu): Promise<void> {
     kontrol("§6g imha kaydı DEĞİŞTİRİLEMEZ ve SİLİNEMEZ (tablo sahibi dahil)", /değiştirilemez/.test(guncelle) && /değiştirilemez/.test(sil), `${guncelle.slice(0, 50)} | ${sil.slice(0, 50)}`);
   } finally {
     await c.end();
+  }
+  const destek = await merkez.supportAccess.findUnique({ where: { id: destekId } });
+  kontrol("§6h destek erişim kaydı merkeze kopyalandı (SİLİNEMEZ kayıt imhada KALIR)", destek?.tesisId === a.tesisId && destek.ticket === "DESTEK-BEKCI");
+  const ikinci = await red(() => destroyFacility(o.goc, { tesisId: a.tesisId, operator: "Bekçi", apply: true }, o.saat.simdi()));
+  kontrol("§6i ikinci uygula 409, ikinci tutanak YOK", ikinci === "DURUM_CAKISMASI" && (await merkez.facilityDestruction.count({ where: { tesisId: a.tesisId } })) === 1, ikinci);
+  await yaridaKalan(o);
+}
+
+/** Destek erişim kaydı (göç rolü doğrudan; `destek_ac` oturuma bağlı izin açar, burada yalnız satır gerekir). */
+async function destekKaydi(url: string, tesisId: string, id: string): Promise<void> {
+  const c = new Client({ connectionString: url, options: "-c timezone=UTC" });
+  await c.connect();
+  try {
+    await c.query("SELECT set_config('app.tesis_id', $1, false)", [tesisId]);
+    await c.query(
+      "INSERT INTO support_access (id, tesis_id, db_user, pid, backend_start, ticket, reason, scope, expires_at, closed_at, close_reason) VALUES ($1, $2, 'bekci_destek', 1, now(), 'DESTEK-BEKCI', 'bekçi', 'siparis', now() + interval '1 hour', now(), 'KAPATILDI')",
+      [id, tesisId],
+    );
+  } finally {
+    await c.end();
+  }
+}
+
+async function imhaIzi(o: Ortam, tesisId: string, db: string): Promise<{ db: number; rol: number; durum: string | undefined; yon: number }> {
+  const merkez = o.goc.centralClient;
+  const n = async (q: string, p: unknown[]) => (await merkez.$queryRawUnsafe<{ n: number }[]>(q, ...p))[0]!.n;
+  return {
+    db: await n("SELECT count(*)::int AS n FROM pg_database WHERE datname = $1", [db]),
+    rol: await n("SELECT count(*)::int AS n FROM pg_roles WHERE rolname IN ($1, $2, $3)", [`${db}_uyg`, `${db}_esit`, `${db}_destek`]),
+    durum: (await merkez.facilityDatabase.findUnique({ where: { tesisId } }))?.status,
+    yon: (await merkez.installationRoute.count({ where: { tesisId } })) + (await merkez.loginRoute.count({ where: { tesisId } })),
+  };
+}
+
+/** §6j yarıda kalan imha (claim yazıldı, DB düşmedi): aynı komut planla tamamlar, tutanak plandaki kimlikle. */
+async function yaridaKalan(o: Ortam): Promise<void> {
+  const c = await tesisKur(o);
+  try {
+    const merkez = o.goc.centralClient;
+    const recordId = randomUUID();
+    const plan = { recordId, facilityName: "Yarıda", phase: "KAPALI", serviceEndedAt: new Date(o.saat.simdi() - GUN).toISOString(), readOnlyUntil: new Date(o.saat.simdi()).toISOString(), reason: "SURE_DOLDU", requestRef: null, operator: "Bekçi Yarıda", backupClearBy: new Date(o.saat.simdi() + 35 * GUN).toISOString(), counts: null };
+    await merkez.facilityDatabase.updateMany({ where: { tesisId: c.tesisId, status: "HAZIR" }, data: { status: "IMHA_SURUYOR", destructionPlan: plan } });
+    o.goc.invalidate(c.tesisId);
+    const kuru = await destroyFacility(o.goc, { tesisId: c.tesisId, operator: "Başkası", apply: false }, o.saat.simdi());
+    const db = o.goc.databaseFor(c.tesisId);
+    const once = await imhaIzi(o, c.tesisId, db);
+    kontrol("§6j1 yarıda kalan imhada kuru koşum hiçbir şey yapmaz", !kuru.applied && once.db === 1 && once.durum === "IMHA_SURUYOR", JSON.stringify(once));
+    const r = await destroyFacility(o.goc, { tesisId: c.tesisId, operator: "Başkası", apply: true }, o.saat.simdi());
+    const iz = await imhaIzi(o, c.tesisId, db);
+    const kayit = await merkez.facilityDestruction.findMany({ where: { tesisId: c.tesisId } });
+    kontrol("§6j2 aynı komut kaldığı yerden tamamlar (kapı yeniden sorulmaz; plan + plandaki kimlik)", r.applied && r.recordId === recordId && iz.db === 0 && iz.rol === 0 && iz.durum === "IMHA_EDILDI" && kayit.length === 1 && kayit[0]!.operator === "Bekçi Yarıda" && (kayit[0]!.deletedCounts as Record<string, number>).facilities === 1, JSON.stringify(iz));
+  } finally {
+    await temizleTesis(o, c.tesisId);
   }
 }
 

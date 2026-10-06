@@ -2,7 +2,8 @@
 # Patron konteyner girişi: DB URL'lerini ve satıcı iç API belirtecini docker SECRET dosyalarından kurar,
 # komutu çalıştırır — sırlar imaj yapılandırmasına ve `docker inspect`e girmez. Üç rol, üç parola:
 #   uygulama + eşitleme  → sunucu (DATABASE_URL · ESITLEME_DATABASE_URL)
-#   göç (tablo sahibi)   → YALNIZ bağlıysa (patron-goc: migrate deploy · db-rolleri · tesis CLI'si)
+#   göç (tablo sahibi)   → YALNIZ bağlıysa (patron-goc: migrate deploy · db-rolleri · tesis-db goc · tesis CLI'si;
+#                          patron-hazirla: tesis-db izle)
 # Parolalar URL güvenli olmalı (onaltılık üretilir; runbook §3).
 set -eu
 
@@ -29,6 +30,11 @@ fi
 if [ -z "${GOC_DATABASE_URL:-}" ] && [ -e "$S/goc_parolasi" ]; then
   GOC_DATABASE_URL="postgresql://patron_goc:$(parola goc_parolasi)@$DB"
   export GOC_DATABASE_URL
+fi
+# Tesis rol anahtarı (sunucu · göç · hazırlayıcı): sır bağlıysa yolu verilir; anahtarın kendisi ortama girmez.
+if [ -z "${TESIS_ROL_ANAHTARI_DOSYASI:-}" ] && [ -e "$S/tesis_rol_anahtari" ]; then
+  TESIS_ROL_ANAHTARI_DOSYASI="$S/tesis_rol_anahtari"
+  export TESIS_ROL_ANAHTARI_DOSYASI
 fi
 # Boş sır dosyası = iç API kapalı (KURULUM_KAYNAGI=kayit); biçim denetimi sunucunun yapılandırmasında.
 if [ -z "${SATICI_IC_API_BELIRTECI:-}" ] && [ -s "$S/ic_api_belirteci" ]; then

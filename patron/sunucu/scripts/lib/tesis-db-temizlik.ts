@@ -1,5 +1,5 @@
 // Bekçi tesis DB'lerinin temizliği — YALNIZ `_test` merkezine ait `<merkez>_t<16 onaltılık>` adları (fabrika
-// verisi sınıfı ve başka merkezin DB'si asla). Veritabanı + üç tesis rolü + merkezdeki yönlendirme satırları.
+// verisi sınıfı ve başka merkezin DB'si asla). Veritabanı + üç tesis rolü + merkezdeki yönlendirme ve imha satırları.
 // Koşucu her turun başında süpürür (çöken bekçinin artığı ve elle açılmış ölçüm DB'leri dahil).
 import { Client } from "pg";
 import { ident } from "../../src/lib/db-roles";
@@ -29,6 +29,17 @@ export async function dropTestFacilityDb(gocUrl: string, tesisId: string): Promi
     await c.query("DELETE FROM installation_routes WHERE tesis_id = $1::uuid", [tesisId]);
     await c.query("DELETE FROM login_routes WHERE tesis_id = $1::uuid", [tesisId]);
     await c.query("DELETE FROM facility_databases WHERE tesis_id = $1::uuid", [tesisId]);
+    // İmha bekçisinin merkeze yazdığı tutanak + destek kopyası (değiştirilemezlik tetikleyicisi yalnız bu tx'te susar).
+    await c.query("BEGIN");
+    try {
+      await c.query("SET LOCAL session_replication_role = replica");
+      await c.query("DELETE FROM facility_destructions WHERE tesis_id = $1::uuid", [tesisId]);
+      await c.query("DELETE FROM support_access WHERE tesis_id = $1::uuid", [tesisId]);
+      await c.query("COMMIT");
+    } catch (err) {
+      await c.query("ROLLBACK");
+      throw err;
+    }
   } finally {
     await c.end();
   }
@@ -51,6 +62,11 @@ export async function sweepTestFacilityDbs(gocUrl: string): Promise<number> {
     await c.query("DELETE FROM installation_routes");
     await c.query("DELETE FROM login_routes");
     await c.query("DELETE FROM facility_databases");
+    await c.query("BEGIN");
+    await c.query("SET LOCAL session_replication_role = replica");
+    await c.query("DELETE FROM facility_destructions");
+    await c.query("DELETE FROM support_access");
+    await c.query("COMMIT");
     return names.length;
   } finally {
     await c.end();

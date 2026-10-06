@@ -44,6 +44,14 @@ interface DirectoryRow {
   readonly schemaVersion: string | null;
 }
 
+/** Bağlantı sınıfı hata (Prisma P10xx; DB yok / rol kimliği reddedildi): iş kuralı değil, hedef DB'nin kendisi. */
+function isConnectionClass(err: unknown): boolean {
+  const code = (err as { code?: unknown } | null)?.code;
+  if (typeof code === "string" && /^P10\d\d$/.test(code)) return true;
+  const message = err instanceof Error ? err.message : "";
+  return /3D000|28P01|database "[^"]+" does not exist|password authentication failed/.test(message);
+}
+
 export class TesisDbRouter {
   readonly role: RouterRole;
   readonly central: Database;
@@ -67,6 +75,12 @@ export class TesisDbRouter {
   /** Merkez istemcisi — yalnız `lib/tenant.ts` (`withCentral`) ve bu dosya kullanır. */
   get centralClient(): PrismaClient {
     return this.central.prisma;
+  }
+
+  /** Göç rolünün tesis DB URL'i (imha ve bakım CLI'si; dizin durumuna BAKMAZ). Yalnız göç rolü yönlendiricisinde. */
+  adminUrlFor(tesisId: string): string {
+    if (this.role !== "goc") throw new Error("Tesis DB yönetim URL'i yalnız göç rolünde");
+    return withDatabase(this.o.centralUrl, this.databaseFor(tesisId));
   }
 
   /** Tesis DB'sinin adı (kimlikten türetilir). */
@@ -139,9 +153,17 @@ export class TesisDbRouter {
     entry.inUse++;
     try {
       return await fn(entry.db.prisma);
+    } catch (err) {
+      // Dizin önbelleği bayatken (≤ önbellek süresi) imha edilen DB'ye bağlanılamaz: dizin taze okunur, 500 değil 404.
+      if (!isConnectionClass(err)) throw err;
+      this.invalidate(tesisId);
+      const row = await this.directoryRow(tesisId);
+      if (row && row.status !== "IMHA_SURUYOR" && row.status !== "IMHA_EDILDI") throw err;
     } finally {
       entry.inUse--;
     }
+    await this.forget(tesisId);
+    throw notFound("Tesis");
   }
 
   invalidate(tesisId: string): void {

@@ -6,7 +6,8 @@
 //   ① hiçbir servis port yayımlamaz (tek giriş Traefik; kenar ağı internal)
 //   ② docker soketi hiçbir servise bağlı değil
 //   ③ her servis: salt okunur kök FS · cap_drop ALL · no-new-privileges · root olmayan kullanıcı ·
-//      bellek + CPU + süreç sınırı; uzun ömürlü servislerin bellek tavanı toplamı ≤ 1 GiB (VDS 3 GB)
+//      bellek + CPU + süreç sınırı; uzun ömürlü servislerin bellek tavanı toplamı ≤ 1120 MiB (VDS 3 GB;
+//      PATRON-TESIS-DB §13 KARAR-1: hazırlayıcının 96 MiB'ı)
 //   ④ kenar + ic internal; TEK dış ağ satıcının ic-api'si ve ona yalnız `patron` katılır (`web` yok);
 //      compose'un kurduğu internal OLMAYAN tek ağ `cikis` (B5 bildirim çıkışı) ve ona YALNIZ `patron` katılır
 //   ⑤ anahtar birimi her bağlandığı yerde salt okunur
@@ -14,8 +15,9 @@
 //      adresi aralığın DIŞINDA (Traefik patronun adresini kapamasın)
 //   ⑦ Traefik etiketi yalnız `patron`de, kenar ağını gösterir; kural Host + iç ad alanı dışlaması
 //      (web-static.ts IC_ONEKLER); patron YALNIZ kenar adresinde dinler (BIND); DB portsuz, yalnız ic'te
-//   ⑧ sırlar: göç parolası sunucuya BAĞLANMAZ (yalnız DB · göç · yedek); çalışma parolaları yalnız
-//      sunucu + göç; iç API belirteci yalnız sunucu; ortamda düz parola/belirteç yok
+//   ⑧ sırlar: göç parolası sunucuya BAĞLANMAZ (yalnız DB · göç · hazırlayıcı · yedek); çalışma parolaları yalnız
+//      sunucu + göç; iç API belirteci yalnız sunucu; tesis rol anahtarı yalnız sunucu · göç · hazırlayıcı (yedek
+//      almaz); hazırlayıcı yalnız ic ağında ve dinleyicisiz; ortamda düz parola/belirteç yok
 //   ⑨ SATICIYLA UYUM (--satici-env): ic-api ağ adı, satıcı iç adresi ve PATRON_IC_IP satıcınınkiyle AYNI;
 //      SIR_GID satıcınınkinden FARKLI; patronun kenar ve çıkış ağları satıcının hiçbir ağıyla (kenar · ic-api · JWKS ve
 //      bildirim çıkışı — satıcı .env'inde tanımlıysa) çakışmaz
@@ -106,7 +108,7 @@ const servisler = Object.entries(cfg.services ?? {});
 const aglar = cfg.networks ?? {};
 const patron = cfg.services?.patron ?? {};
 const ortam = patron.environment ?? {};
-const beklenen = ["patron-db", "patron", "patron-goc", "patron-yedek"];
+const beklenen = ["patron-db", "patron", "patron-goc", "patron-hazirla", "patron-yedek"];
 kontrol(
   `körlük zemini: ${beklenen.length} servis çözüldü (${beklenen.join(" · ")})`,
   servisler.length === beklenen.length && beklenen.every((a) => a in (cfg.services ?? {})),
@@ -137,7 +139,8 @@ for (const [ad, s] of servisler) {
 }
 const surekli = servisler.filter(([, s]) => !(s.profiles ?? []).length);
 const toplam = surekli.reduce((t, [, s]) => t + bayt(s.mem_limit), 0);
-kontrol("③ uzun ömürlü servislerin bellek tavanı toplamı ≤ 1 GiB", Number.isFinite(toplam) && toplam <= 1024 ** 3, `${Math.round(toplam / 1024 ** 2)} MiB (${surekli.map(([a]) => a).join(" + ")})`);
+const BUTCE_MIB = 1120;
+kontrol(`③ uzun ömürlü servislerin bellek tavanı toplamı ≤ ${BUTCE_MIB} MiB`, Number.isFinite(toplam) && toplam <= BUTCE_MIB * 1024 ** 2, `${Math.round(toplam / 1024 ** 2)} MiB (${surekli.map(([a]) => a).join(" + ")})`);
 
 // ④ ağlar
 for (const anahtar of ["kenar", "ic"]) kontrol(`④ ${anahtar} ağı internal`, aglar[anahtar]?.internal === true, aglar[anahtar]?.name ?? "YOK");
@@ -185,7 +188,10 @@ kontrol("⑦ DB portsuz ve yalnız ic ağında", (db.ports ?? []).length === 0 &
 
 // ⑧ sırlar
 const sahipler = (sir) => servisler.filter(([, s]) => sirlari(s).includes(sir)).map(([a]) => a).sort().join(",");
-kontrol("⑧ göç parolası YALNIZ DB · göç · yedek (sunucuya bağlanmaz)", sahipler("goc_parolasi") === "patron-db,patron-goc,patron-yedek", sahipler("goc_parolasi") || "hiçbiri");
+kontrol("⑧ göç parolası YALNIZ DB · göç · hazırlayıcı · yedek (sunucuya bağlanmaz)", sahipler("goc_parolasi") === "patron-db,patron-goc,patron-hazirla,patron-yedek", sahipler("goc_parolasi") || "hiçbiri");
+kontrol("⑧ tesis rol anahtarı yalnız sunucu · göç · hazırlayıcı (yedek almaz)", sahipler("tesis_rol_anahtari") === "patron,patron-goc,patron-hazirla", sahipler("tesis_rol_anahtari") || "hiçbiri");
+const hazirla = cfg.services?.["patron-hazirla"] ?? {};
+kontrol("⑧ hazırlayıcı yalnız ic ağında, portsuz, Traefik etiketsiz", JSON.stringify(Object.keys(hazirla.networks ?? {})) === '["ic"]' && (hazirla.ports ?? []).length === 0 && !Object.keys(hazirla.labels ?? {}).some((k) => k.startsWith("traefik.")), Object.keys(hazirla.networks ?? {}).join(", ") || "YOK");
 for (const sir of ["uygulama_parolasi", "esitleme_parolasi"]) kontrol(`⑧ ${sir} yalnız sunucu + göç`, sahipler(sir) === "patron,patron-goc", sahipler(sir) || "hiçbiri");
 kontrol("⑧ iç API belirteci yalnız sunucuda", sahipler("ic_api_belirteci") === "patron", sahipler("ic_api_belirteci") || "hiçbiri");
 const duzSir = servisler.flatMap(([a, s]) => Object.keys(s.environment ?? {}).filter((k) => /PAROLA|PASSWORD|BELIRTEC|SECRET|DATABASE_URL/.test(k) && !/_FILE$|DOSYASI$/.test(k)).map((k) => `${a}.${k}`));

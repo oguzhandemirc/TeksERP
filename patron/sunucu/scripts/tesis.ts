@@ -10,8 +10,9 @@
 //        (ikisi de tesiste AKTİF hesap yöneticisi varken REDDEDİLİR; zorunluysa yalnız
 //        `--zorla --talep=<talep no> --gerekce="…"` ile — talep ve gerekçe bulut denetimine yazılır)
 //   npx tsx scripts/tesis.ts imha --tesis=<uuid> --isleyen="Ad Soyad" [--erken-talep=<talep no>] [--uygula]
-//        (Ek-6/A §4.3: KURU KOŞUM varsayılan — tablo başına silinecek satır; `--uygula` tek tx'te siler ve imha
-//        kaydını yazar. Hizmet açıkken ASLA; salt okuma süresi dolmadan yalnız yazılı erken talep numarasıyla.)
+//        (Ek-6/A §4.3: KURU KOŞUM varsayılan — tablo başına silinecek satır; `--uygula` tesisin veritabanını düşürür,
+//        destek erişim kayıtlarını merkeze kopyalar ve imha kaydını merkeze yazar; yarıda kalan aynı komutla tamamlanır.
+//        Hizmet açıkken ASLA; salt okuma süresi dolmadan yalnız yazılı erken talep numarasıyla.)
 // Tesis/kurulum kimlikleri SATICIDAN gelir (HAK'taki `tesis.id` · `kurulumId`), burada uydurulmaz.
 // Davet belirteci YALNIZ bu komutun çıktısında, BİR KEZ basılır; repoya/loga/denetime yazılmaz.
 // Satıcı iç API'si kurulunca (`KURULUM_KAYNAGI=satici`) kurulum kaydı oradan dolar; bu CLI yine
@@ -24,7 +25,7 @@ import { TesisDbRouter } from "../src/lib/tesis-db";
 import { prepareFacilityDb } from "../src/lib/tesis-db-hazirlik";
 import { expectedSchemaVersion } from "../src/lib/tesis-goc";
 import { cliDeps } from "./tesis-db";
-import { destroyFacility, sweepAfterDestruction } from "../src/services/facility-destruction";
+import { destroyFacility } from "../src/services/facility-destruction";
 import { inviteFacilityAdmin, openFacility, overrideFromArgs, registerInstallation, reinviteAdmin, setFacilityStatus } from "../src/services/vendor-admin.service";
 
 function args(argv: readonly string[]): Record<string, string> {
@@ -107,8 +108,7 @@ async function main(): Promise<void> {
           console.log("   Uygulamak için aynı komutu --uygula ile yeniden koşun.");
           break;
         }
-        const late = await sweepAfterDestruction(db, tesisId);
-        console.log(`✅ imha tamam — tesis ${r.tesisId}; kayıt ${r.recordId}${Object.keys(late).length ? ` (geç düşen satır ikinci geçişte silindi: ${JSON.stringify(late)})` : ""}`);
+        console.log(`✅ imha tamam — tesis ${r.tesisId}; veritabanı düşürüldü; kayıt ${r.recordId}`);
         console.log("   İmha tutanağı verisi (Ek-6/A §4.5; satıcı kayıtlarında saklanır, yedekten geri yüklemede yeniden koşulur):");
         console.log(JSON.stringify({ tesisId: r.tesisId, tesis: r.facilityName, neden: r.reason, hizmetBitisi: r.serviceEndedAt, saltOkunurBitis: r.readOnlyUntil, silinen: r.counts, yedektenDusme: r.backupClearBy, kayitId: r.recordId }, null, 2));
         break;
