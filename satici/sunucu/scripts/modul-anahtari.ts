@@ -2,7 +2,7 @@
 // Modül anahtarı CLI'ı (Faz 2d) — şifreli modül paketinin AES-256 anahtarı.
 // =============================================================================
 // `uret`: yeni anahtarı DERLEME makinesindeki dosyaya yazar (0600, üstüne yazmaz; varsayılan dizin
-//   ~/.tekserp/satici-hazirlik/modul-anahtarlari — REPO DIŞI). `build-korumali.mjs --sifrele` bu
+//   ~/.tekserp/satici-uretim/modul-anahtarlari = tören dizini — REPO DIŞI). `build-korumali.mjs --sifrele` bu
 //   dosyayla paketi şifreler.
 // `ice-aktar`: aynı dosyayı satıcı KASASINA alır (DB'de kasa anahtarıyla sarılı; tekrar güvenli) —
 //   kira basımında HAK'taki, dondurulmamış modüle kurulumun X25519'una sarılı gider.
@@ -24,7 +24,7 @@ import { ModuleKeySchema, moduleKeyId, parseModuleKeyFile } from "../src/lisans-
 import type { VendorContext } from "../src/services/context";
 import { CliError, args } from "./lib/cli-girdi";
 
-export const MODULE_KEY_DIR_DEFAULT = path.join(os.homedir(), ".tekserp", "satici-hazirlik", "modul-anahtarlari");
+export const MODULE_KEY_DIR_DEFAULT = path.join(os.homedir(), ".tekserp", "satici-uretim", "modul-anahtarlari");
 
 /** Anahtar dosyasını okur ve kid'in anahtarın özeti olduğunu doğrular (kurcalanmış dosya kabul edilmez). */
 export function readModuleKeyFile(file: string): { modul: string; surum: number; kid: string; anahtar: Buffer } {

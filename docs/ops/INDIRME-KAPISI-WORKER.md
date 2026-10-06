@@ -2,7 +2,7 @@
 
 > **Durum (2026-09-29, dilim 3a):** kod ve bekçi hazır, **YAYIN YAPILMADI.** Worker'ı panele yapıştırmak, rota bağlamak, ayarı yazmak ve origin'i daraltmak kullanıcı cümlesiyle yapılır ("yayınla"); her adım ÖNCE testfabrika kanalında, sonra adnansahin'de.
 > **İstemci zinciri (dilim 3bc):** fabrika ucu `GET /api/license/indirme-belirteci?urun=electron|mobil` süresi dolmuş belirteci vermez, dolmaya < 15 dk kalmışsa yoklamayı dürter; panel (`updater.ipc.ts` + `/download-token`) her denetimde `X-TKL-Indirme`, tablet (`mobil/src/services/downloadToken.service.ts`) her OTA denetiminden önce `tkl` extra param + APK isteğinde başlık, açılışta native denetim bayat paramla 403 alırsa JS 5 sn sonra tazeleyip yeniden dener; belirteç alınamazsa HER İKİSİ BAŞLIKSIZ ister (geçiş listesi). Yayın betikleri önce taze CLI belirteci (`docs/kurallar/surum-yayin.md`). Senaryo L22/L24 bu zinciri gerçek Worker modülüyle koşar.
-> **İNDİRME listesi (L2-8, lisans v2 §2.1/§2.5):** Worker anahtarları çapa kipi başına AYRI iki listeden okur (`uretim` · `hazirlik`); her satır kid × izinli kanal kümesi × pencere (sertifikanınki) taşır. Dönem töreni (üç ayda bir) yapıştırılacak satırı hazır basar — §8. Eski `anahtarlar: [{kid, x}]` biçimi kısıtsız olarak BİR Worker sürümü daha tanınır.
+> **İNDİRME listesi (L2-8, lisans v2 §2.1/§2.5):** Worker anahtarları tek listeden okur (`uretim`; tek satıcı — başka liste adı 503); her satır kid × izinli kanal kümesi × pencere (sertifikanınki) taşır. Dönem töreni (üç ayda bir) yapıştırılacak satırı hazır basar — §8. Eski `anahtarlar: [{kid, x}]` biçimi kısıtsız olarak BİR Worker sürümü daha tanınır.
 > **Kod:** `deploy/guncelleme-sunucusu/worker/indirme-kapisi.js` · **Kâhin:** `Teks-Erp/src/lib/license/protocol/indirme.ts` · **Bekçi:** `Teks-Erp/scripts/test_indirme_kapisi.ts` · **Sözleşme:** `docs/design/LISANS-PROTOKOLU.md` (İNDİRME) · plan Faz 3a (`docs/design/LISANS-KOD-KORUMA.md`).
 
 ## 0. Ne yapar, ne yapmaz
@@ -29,8 +29,7 @@ Worker değişkeni (panelde Settings → Variables and Secrets; tür JSON ya da 
 ```json
 {
   "indirmeListesi": {
-    "uretim": [{ "kid": "ind-2026", "x": "<43 karakter base64url>", "kanallar": ["adnansahin", "demofabrika"], "baslangic": "<ISO Z>", "bitis": "<ISO Z>" }],
-    "hazirlik": [{ "kid": "ind-hazirlik-2026", "x": "<43 karakter base64url>", "kanallar": ["testfabrika"], "baslangic": "<ISO Z>", "bitis": "<ISO Z>" }]
+    "uretim": [{ "kid": "ind-2026-2", "x": "<43 karakter base64url>", "kanallar": ["test", "oncu", "genel"], "baslangic": "<ISO Z>", "bitis": "<ISO Z>" }]
   },
   "gecisListesi": [
     { "yol": "/testfabrika/electron/latest.yml", "bitis": "2026-11-15T00:00:00Z" },
@@ -41,9 +40,9 @@ Worker değişkeni (panelde Settings → Variables and Secrets; tür JSON ya da 
 }
 ```
 
-- **İNDİRME listesi:** `uretim` dizisine üretim satıcısının (kök `kok-*`), `hazirlik` dizisine hazırlık satıcısının (kök `hazirlik-*`) İNDİRME anahtarları girer (hazırlık satıcısı 2026-10-05 emekli: dizi boş kalır, listenin kendisi kodda 3.1'e dek durur) — G3 çapa ayrımının kenardaki karşılığı. Satır alanlarının HEPSİ zorunludur: `kid` (`ind-…`) · `x` · `kanallar` (1–64 kanal kodu; `deploy/kanallar.json`da `backend.guvenCapasi` o listeye eşit kanallar) · `baslangic` / `bitis` (sertifikanın penceresi, ISO `Z`, en çok 730 gün). Belirteç YALNIZ kid listedeyse, belirtecin kanalı satırın kümesindeyse ve şimdi pencere içindeyse (±10 dk) geçer; değilse 403 `JWS_KID` · `INDIRME_KANAL` · `INDIRME_PENCERE`. Penceresi geçmiş satır ayarı bozmaz (temizlik §8).
+- **İNDİRME listesi:** `uretim` dizisine satıcının (kök `kok-*`) İNDİRME anahtarları girer; eski `hazirlik` dizisi ayarda bulunursa (boş da olsa) ayar GEÇERSİZ (503) — Worker ile ayar BİRLİKTE yayınlanır (tek ortak paket O14c). Satır alanlarının HEPSİ zorunludur: `kid` (`ind-…`) · `x` · `kanallar` (1–64 kanal kodu; güncelleme grupları, `deploy/dagitim.json` `gruplar`) · `baslangic` / `bitis` (sertifikanın penceresi, ISO `Z`, en çok 730 gün). Belirteç YALNIZ kid listedeyse, belirtecin kanalı satırın kümesindeyse ve şimdi pencere içindeyse (±10 dk) geçer; değilse 403 `JWS_KID` · `INDIRME_KANAL` · `INDIRME_PENCERE`. Penceresi geçmiş satır ayarı bozmaz (temizlik §8).
 - **Eski biçim (`anahtarlar`):** `[{kid, x}]` — kanal ve pencere KISITSIZ; yalnız L2-8 öncesi ayarın bir Worker sürümü daha çalışması için. Yeni anahtar buraya YAZILMAZ; satır yalnız `kid` + `x` taşıyabilir (kanallı satır buraya yapıştırılırsa 503). Bir sonraki Worker sürümünde kalkar.
-- **Fail-closed:** tanınmayan alan (üst düzeyde, listede, satırda), biçimsiz anahtar, çift kid ya da aynı `x` iki satırda (eski biçim dahil), aynı kanal iki listede, boş/biçimsiz/çift kanal kümesi, eksik/ters/730 günden uzun pencere, `yol`+`onek` birlikte, `bitis`siz ya da 90 günden uzak bitişli geçiş satırı, `/<kanal>/<ürün>/`dan sığ önek ⇒ AYAR GEÇERSİZ ⇒ kapsamdaki her istek **503 `AYAR_GECERSIZ`**. Kapsam dışı etkilenmez. Sessiz gevşeme yoktur: yazım hatası kapıyı açmaz, kapatır — bu yüzden Deploy'dan ÖNCE §8 adım 2'deki yerel denetim koşulur.
+- **Fail-closed:** tanınmayan alan (üst düzeyde, listede, satırda), biçimsiz anahtar, çift kid ya da aynı `x` iki satırda (eski biçim dahil), `uretim` dışında liste adı, boş/biçimsiz/çift kanal kümesi, eksik/ters/730 günden uzun pencere, `yol`+`onek` birlikte, `bitis`siz ya da 90 günden uzak bitişli geçiş satırı, `/<kanal>/<ürün>/`dan sığ önek ⇒ AYAR GEÇERSİZ ⇒ kapsamdaki her istek **503 `AYAR_GECERSIZ`**. Kapsam dışı etkilenmez. Sessiz gevşeme yoktur: yazım hatası kapıyı açmaz, kapatır — bu yüzden Deploy'dan ÖNCE §8 adım 2'deki yerel denetim koşulur.
 - `yol` tam eşleşmedir; `onek` önekin ALTINDAKİ dosyaları kapsar (önekin kendisini değil). İkisi de kaçış dizisi (`..` · `//` · `%2e` · `%2f` · `%5c` · `%00` · `\`) taşıyamaz.
 - `varlikBelirteci` (varsayılan **kapalı**): kapalıyken OTA varlıkları (`/<kanal>/mobil/ota/<rv>/<damga>/…`) anonim geçer — içerik adreslidir, kapı manifesttedir (tasarım §3c geri çekilmesi). Açıkken varlıklar da kapılanır ve belirteçle alınan manifestin imza DIŞI `extensions.assetRequestHeaders` alanına her varlık anahtarı için aynı belirteç yazılır (Worker yeni belirteç basamaz). Açmadan önce thinkpad-1 + gerçek tablette ölç (tablet varlık isteğine başlığı ekliyor mu).
 
@@ -97,18 +96,15 @@ Kapanış TAKVİMLE değil ÖLÇÜMLE verilir (bitiş tarihi yalnız emniyet sü
 
 Satıcı yeni İNDİRME anahtarını anahtar birimine kurulduğu DAKİKA kullanmaya başlar (en yeni geçerli sertifika). Bu yüzden Worker listesi yeni satırı ÖNCE taşır; eski satır yerinde kalır ve penceresi (sertifikasının bitişi + 10 dk) dolunca kendiliğinden kapanır — örtüşme 30 gündür. Sıra tören runbook'unda: [`URETIM-SATICI-TOREN.md`](URETIM-SATICI-TOREN.md) §8 adım 4 (VDS'e kurmadan önce).
 
-1. Tören çıktısındaki iki satırı al (ekranda "CF Worker" adımı ya da `DONEM-KUNYE.json` → `capaSatirlari`): `CF_WORKER_LISTESI` (`uretim` | `hazirlik`) ve `CF_WORKER_INDIRME` (tek satır JSON). Yapıştırma birimi şudur — `<liste>` dizisinin SONUNA bir eleman:
+1. Tören çıktısındaki iki satırı al (ekranda "CF Worker" adımı ya da `DONEM-KUNYE.json` → `capaSatirlari`): `CF_WORKER_LISTESI` (`uretim`) ve `CF_WORKER_INDIRME` (tek satır JSON). Yapıştırma birimi şudur — `<liste>` dizisinin SONUNA bir eleman:
 
 <!-- indirme-listesi-sablonu -->
 ```json
 {
   "indirmeListesi": {
     "uretim": [
-      { "kid": "ind-2026", "x": "<eski satır, olduğu gibi kalır>", "kanallar": ["adnansahin", "demofabrika"], "baslangic": "<eski satır>", "bitis": "<eski satır>" },
-      { "kid": "ind-2026-2", "x": "<künye CF_WORKER_INDIRME satırı — olduğu gibi yapıştır>", "kanallar": ["adnansahin", "demofabrika"], "baslangic": "<künye>", "bitis": "<künye>" }
-    ],
-    "hazirlik": [
-      { "kid": "ind-hazirlik-2026", "x": "<hazırlık satırı>", "kanallar": ["testfabrika"], "baslangic": "<hazırlık>", "bitis": "<hazırlık>" }
+      { "kid": "ind-2026-2", "x": "<eski satır, olduğu gibi kalır>", "kanallar": ["test", "oncu", "genel"], "baslangic": "<eski satır>", "bitis": "<eski satır>" },
+      { "kid": "ind-2027-1", "x": "<künye CF_WORKER_INDIRME satırı — olduğu gibi yapıştır>", "kanallar": ["test", "oncu", "genel"], "baslangic": "<künye>", "bitis": "<künye>" }
     ]
   }
 }
@@ -133,7 +129,7 @@ Satıcı yeni İNDİRME anahtarını anahtar birimine kurulduğu DAKİKA kullanm
 | `JWS_BICIM` · `JWS_BASLIK` · `JWS_ALG` · `JWS_TYP` · `JWS_KID` · `JWS_IMZA` | 403 | protokol kodları (`LISANS-PROTOKOLU.md` §1) |
 | `BELGE_SURUM` · `BELGE_SEMA` · `BELGE_SURESI_DOLDU` · `INDIRME_OMUR` | 403 | belge sürümü/şeması, süre (±10 dk), ömür > 70 dk |
 | `INDIRME_PENCERE` | 403 | belirteci imzalayan kid'in liste satırı şu an pencere dışında (başlamadı ya da bitti, ±10 dk) — döndürmede yeni satır eklenmemiş ya da eski satır dolmuş |
-| `INDIRME_KANAL` | 403 | belirtecin kanalı, imzalayan kid'in satırındaki kanal kümesinde değil — çoğunlukla satır yanlış listede (hazırlık anahtarı üretim kanalına) ya da yeni kanal satıra eklenmemiş |
+| `INDIRME_KANAL` | 403 | belirtecin kanalı, imzalayan kid'in satırındaki kanal kümesinde değil — çoğunlukla yeni grup satıra eklenmemiş |
 | `YONTEM` | 405 | kapsamda GET/HEAD dışı yöntem |
 | `AYAR_GECERSIZ` | 503 | `TKL_INDIRME_AYAR` geçersiz (§2) |
 
@@ -147,6 +143,6 @@ Satıcı yeni İNDİRME anahtarını anahtar birimine kurulduğu DAKİKA kullanm
 
 - **Eski adres değişmez:** `guncelleme.etkiliyazilim.com`a rota BAĞLANMAZ (adnansahin eski adresten belirteçsiz alır). Yayından önce ve sonra `node Teks-Erp-wt/indirme-kapisi-olc.mjs --adnansahin` → 9/9.
 - **Rota:** `indir.etkiliyazilim.com/*` (adın tamamı), *Request limit failure mode* = **Fail closed**. Klasöre bağlı dar rota `//<grup>/…` ve `%..` biçimleriyle atlanır (ölçüldü 2026-10-06); §4'teki kanal başına rota yeni adreste KULLANILMAZ.
-- **Ayar:** `TKL_INDIRME_AYAR` = `deploy/guncelleme-sunucusu/worker/indir-ayar.json` (yalnız açık anahtar; dosyaya yorum YAZILMAZ — tanınmayan alan 503). Satırın `kanallar`ı = güncelleme grupları (test · oncu · genel), `anahtarlar`/`hazirlik`/`gecisListesi` boş (yeni adreste eski istemci yok). **K-5:** `ind-2026` satırı YOK — onunla imzalı belirteç `JWS_KID`. Döndürmede yeni satır bu dosyaya eklenir, bekçi (`test_indirme_kapisi` §10) geçince panele yapıştırılır.
+- **Ayar:** `TKL_INDIRME_AYAR` = `deploy/guncelleme-sunucusu/worker/indir-ayar.json` (yalnız açık anahtar; dosyaya yorum YAZILMAZ — tanınmayan alan 503). Satırın `kanallar`ı = güncelleme grupları (test · oncu · genel), `anahtarlar`/`gecisListesi` boş, liste adı yalnız `uretim` (yeni adreste eski istemci yok). **K-5:** `ind-2026` satırı YOK — onunla imzalı belirteç `JWS_KID`. Döndürmede yeni satır bu dosyaya eklenir, bekçi (`test_indirme_kapisi` §10) geçince panele yapıştırılır.
 - **OTA takma adı:** tablet `/ota/<rv>/manifest` ister (grup-nötr, `runtimeVersion` biçimi `55.0`). Belirteç ZORUNLU, geçiş listesi uygulanmaz; Worker yolu belirtecin kanalından `/<grup>/mobil/ota/<rv>/manifest`e çevirir, gerçek yol belirtecin `yolOneki`nin altında olmalı. Origin isteği ve önbellek anahtarı gerçek yoldur (manifest değişken: kenarda tutulmaz). Başka her yazım (`//ota/…`, `/%6fta/…`, büyük harf, sonek, `manifest-<damga>`) 403 `INDIRME_YOL`; `ota` grup adı olamaz (`deploy/dagitim.json` ayrılmış ad, `check-dagitim` §3 Worker önekini ölçer).
 - **Prova (yayın günü):** belirteçsiz `/ota/55.0/manifest` → 403 `INDIRME_BELIRTEC_YOK`; test kurulumunun `?urun=mobil` belirteciyle → 200 ve gövde `/test/mobil/ota/55.0/manifest` ile aynı; aynı belirteçle `/oncu/mobil/…` → 403 `INDIRME_YOL`; `//ota/55.0/manifest` → 403.

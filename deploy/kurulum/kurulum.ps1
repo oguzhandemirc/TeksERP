@@ -374,7 +374,7 @@ function AsamaOnKosul {
   }
   if ($yarim -and $yarim.PSObject.Properties["asamalar"]) {
     foreach ($p in $yarim.asamalar.PSObject.Properties) { if ($p.Name -cne "OnKosul") { $plan.asamalar[$p.Name] = $p.Value } }
-    foreach ($a in @("paketId", "kid", "hazirlikAnahtari")) { if ($yarim.paket.PSObject.Properties[$a]) { $plan.paket[$a] = $yarim.paket.$a } }
+    foreach ($a in @("paketId", "kid")) { if ($yarim.paket.PSObject.Properties[$a]) { $plan.paket[$a] = $yarim.paket.$a } }
   }
   DurumYaz $kok $plan
   $d = DurumOku $kok
@@ -414,7 +414,6 @@ function AsamaPaket {
     Move-Item -LiteralPath $gecici -Destination $hedef
     Ok "paket dogrulandi ($($j.dosya) dosya, imza $($j.kid)) ve acildi: $hedef"
   }
-  if ($j.hazirlikAnahtari -eq $true) { Uyar "paket HAZIRLIK anahtariyla ($($j.kid)) imzali: yalniz TEST/DEMO sinifi lisansla calisir, URETIM lisansi onu GECERSIZ sayar" }
   if ($j.musteri -and $d.paket.kanal -and ("$($j.musteri)" -cne "$($d.paket.kanal)")) { Dur "imzali kunyenin kanali ($($j.musteri)) PAKET.json'dakinden ($($d.paket.kanal)) farkli" }
   [void](AdlariCoz "$($d.adlar.backend)" "$($j.musteri)" (JsonOku (Join-Path $PG_DIZINI "pg-ornegi.json")))
   foreach ($rel in @("runtime\node.exe", "runtime\tekserp-hizmet.exe", "runtime\tekserp-guncelleyici.exe", "dist\server.js", "hizmet\backend-hizmeti.ps1", "hizmet\guncelleyici-hizmeti.ps1", "yedekle.ps1", "bakim-rolu.ps1", "dist\tools\superadmin-olustur.cjs", "dist\tools\yedek-sifrele.cjs", "node_modules\prisma\build\index.js")) {
@@ -424,7 +423,6 @@ function AsamaPaket {
   Ok "current -> surumler\$surum"
   $d.paket | Add-Member -NotePropertyName paketId -NotePropertyValue "$($j.paketId)" -Force
   $d.paket | Add-Member -NotePropertyName kid -NotePropertyValue "$($j.kid)" -Force
-  $d.paket | Add-Member -NotePropertyName hazirlikAnahtari -NotePropertyValue ($j.hazirlikAnahtari -eq $true) -Force
   # Dizin iskeleti + iyi bilinen SID'lerle korumali ACL - SIR (.env, parola) YAZILMADAN ONCE (D6 sozlesmesi).
   [void](BackendHizmetBetigi $kok $d @("-Uygula", "-YalnizIskelet"))
   AsamaBitti $d "Paket"

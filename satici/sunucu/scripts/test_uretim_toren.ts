@@ -18,10 +18,10 @@
 //      700/600); paketin anahtarları köke karşı geçerli; ara parolası kökünkinden ayrı; ilk tören dizini dokunulmaz;
 //      RED (paket yazılmadan): ara = kök parolası · yanlış kök parolası · eşleşmeyen ara · bilinmeyen/kök --iptal ·
 //      biçimsiz kuyruk · argv'de parola
-//   §7 TEK KİP: hazırlık kökü doğmaz — `kok-uret --kid=hazirlik-<yıl>-1` biçim düzeyinde RED, dizine dosya yazılmaz
-//      (törenin kendi hazırlık dalı O14c'de kalkar)
-//   §1o' · §6k' CF Worker İNDİRME satırı (L2-8): künyedeki tek satır JSON = sertifikanın kid · x · penceresi + kanallar.json'un
-//      o çapa kipindeki kanalları, liste adı `CF_WORKER_LISTESI`; Worker'ın `ayarCoz`u satırı kabul eder · §1o'' · §6k''
+//   §7 TEK KİP: hazırlık kökü doğmaz — `kok-uret --kid=hazirlik-<yıl>-1` biçim düzeyinde RED, dizine dosya yazılmaz ·
+//      ⭐ dönem töreni `hazirlik-*` kök dosyasıyla parola sorulmadan RED (dönem dizini doğmaz) · eski `--karsi-dizin` RED
+//   §1o' · §6k' CF Worker İNDİRME satırı (L2-8): künyedeki tek satır JSON = sertifikanın kid · x · penceresi + güncelleme
+//      grupları (`deploy/dagitim.json`), liste adı `CF_WORKER_LISTESI` = `uretim`; Worker'ın `ayarCoz`u satırı kabul eder · §1o'' · §6k''
 //      "Sonraki adımlar"da CF Worker adımı VDS'e kurmadan ÖNCE (satıcı yeni İNDİRME'yi yüklendiği dakika basar)
 //   §5 KAYNAK (parola sorulmadan RED): kirli ağaç (izlenen değişiklik · izlenmeyen dosya) · HEAD origin/main'de değil ·
 //      etiket başka commit'i gösteriyor · npm ls hatalı; origin/main'deki HEAD etiketsiz GEÇER; künye tam sha + kilit özetleri
@@ -52,7 +52,7 @@ let TOREN = "";
 const ETIKET = "toren-sonda";
 const ET = `--etiket=${ETIKET}`;
 /** Kopyaya giren yollar: törenin koşturduğu araçlar + onların kaynakları (kök `scripts/lib`: PAKET aracı oradan import eder). */
-const KLON_YOLLARI = [".gitignore", "deploy/satici", "deploy/kanallar.json", "scripts/lib", "satici/sunucu", "Teks-Erp/src", "Teks-Erp/scripts", "Teks-Erp/package.json", "Teks-Erp/package-lock.json", "Teks-Erp/tsconfig.json"];
+const KLON_YOLLARI = [".gitignore", "deploy/satici", "deploy/kanallar.json", "deploy/dagitim.json", "scripts/lib", "satici/sunucu", "Teks-Erp/src", "Teks-Erp/scripts", "Teks-Erp/package.json", "Teks-Erp/package-lock.json", "Teks-Erp/tsconfig.json"];
 const gitK = (args: string[]) => spawnSync("git", ["-C", KLON, "-c", "user.name=bekci", "-c", "user.email=bekci@ornek.test", ...args], { encoding: "utf8" });
 
 /**
@@ -90,21 +90,18 @@ function sonra(metin: string, a: string, b: string): boolean {
 
 /**
  * Künyenin CF Worker satırı Worker'ın İNDİRME listesine olduğu gibi yapıştırılabilir mi: tek satır JSON, alanları
- * künyedeki sertifikayla aynı, kanallar `deploy/kanallar.json`un o çapa kipindeki kanalları, Worker `ayarCoz` kabul eder.
+ * künyedeki sertifikayla aynı, kanallar güncelleme grupları (`deploy/dagitim.json`), liste `uretim`, Worker `ayarCoz` kabul eder.
  */
 async function workerSatiriOlc(
   satirlar: Record<string, string>,
   ind: { kid: string; x: string; baslangic?: string; bitis?: string },
-  liste: "uretim" | "hazirlik",
 ): Promise<{ ok: boolean; detay: string }> {
+  const liste = "uretim";
   const w = (await import(pathToFileURL(path.join(REPO, "deploy/guncelleme-sunucusu/worker/indirme-kapisi.js")).href)) as {
     ayarCoz: (ham: unknown, simdiMs: number) => { ok: boolean; neden?: string };
     VARSAYILAN_AYAR: Record<string, unknown>;
   };
-  const kanallar = Object.entries((JSON.parse(readFileSync(path.join(REPO, "deploy/kanallar.json"), "utf8")) as { kanallar: Record<string, { backend?: { guvenCapasi?: string } }> }).kanallar)
-    .filter(([, k]) => k.backend?.guvenCapasi === liste)
-    .map(([kod]) => kod)
-    .sort();
+  const kanallar = (JSON.parse(readFileSync(path.join(REPO, "deploy/dagitim.json"), "utf8")) as { gruplar: { kod: string }[] }).gruplar.map((g) => g.kod);
   let satir: Record<string, unknown> | null = null;
   try {
     satir = JSON.parse(satirlar.CF_WORKER_INDIRME ?? "") as Record<string, unknown>;
@@ -113,7 +110,7 @@ async function workerSatiriOlc(
   }
   const beklenen = { kid: ind.kid, x: ind.x, kanallar, baslangic: ind.baslangic, bitis: ind.bitis };
   const ayni = JSON.stringify(satir) === JSON.stringify(beklenen) && !satirlar.CF_WORKER_INDIRME!.includes("\n");
-  const cozum = w.ayarCoz({ ...w.VARSAYILAN_AYAR, indirmeListesi: { uretim: [], hazirlik: [], [liste]: [satir] } }, Date.now());
+  const cozum = w.ayarCoz({ ...w.VARSAYILAN_AYAR, indirmeListesi: { [liste]: [satir] } }, Date.now());
   return {
     ok: kanallar.length > 0 && satirlar.CF_WORKER_LISTESI === liste && ayni && cozum.ok,
     detay: `liste ${satirlar.CF_WORKER_LISTESI} · kanallar ${kanallar.join(",")} · ${ayni ? "alanlar aynı" : `FARK ${satirlar.CF_WORKER_INDIRME}`} · Worker ${cozum.ok ? "kabul" : cozum.neden}`,
@@ -377,8 +374,8 @@ async function main(): Promise<void> {
     );
     kontrol("§1o künye çapa satırları: kök (bütün sınıflar) · paket · CF Worker İNDİRME",
       k.capaSatirlari.ROOT_PUBLIC_KEYS!.includes(k.kok.x) && k.capaSatirlari.PACKAGE_PUBLIC_KEYS!.includes(`paket-${YIL}`) && k.capaSatirlari.CF_WORKER_INDIRME!.includes(k.indirme.x));
-    const w1 = await workerSatiriOlc(k.capaSatirlari, k.indirme, "uretim");
-    kontrol("§1o' ⭐ CF Worker satırı (L2-8): liste `uretim`, kid · x · pencere künyedeki sertifikanın, kanallar = kanallar.json'un üretim çapalı kanalları; Worker ayarı onu KABUL eder",
+    const w1 = await workerSatiriOlc(k.capaSatirlari, k.indirme);
+    kontrol("§1o' ⭐ CF Worker satırı (L2-8): liste `uretim`, kid · x · pencere künyedeki sertifikanın, kanallar = güncelleme grupları (dagitim.json); Worker ayarı onu KABUL eder",
       w1.ok, w1.detay);
     kontrol("§1o'' Sonraki adımlar: CF Worker adımı VDS adımından ÖNCE (satıcı yüklendiği an basar)", sonra(t.cikti, "CF Worker", "VDS: anahtar birimi"));
 
@@ -602,8 +599,8 @@ async function main(): Promise<void> {
       !d1.parolaGoruldu && d1.yoklama >= 5 && paketSirlari.every((x) => !d1.cikti.includes(x)) && [`alt-${YIL}-2`, `ara-${YIL}-1`, `ind-${YIL}-2`, "Sonraki adımlar", "emekliye-ayir"].every((x) => d1.cikti.includes(x)),
       `${d1.yoklama} yoklama`);
     const dkc = JSON.parse(readFileSync(path.join(P, "DONEM-KUNYE.json"), "utf8")) as { capaSatirlari: Record<string, string> };
-    const w6 = await workerSatiriOlc(dkc.capaSatirlari, dk.yeni.indirme, "uretim");
-    kontrol("§6k' ⭐ dönem künyesinin CF Worker satırı (L2-8): yeni İNDİRME'nin kid · x · 120 günlük penceresi + üretim kanalları; Worker ayarı onu KABUL eder", w6.ok, w6.detay);
+    const w6 = await workerSatiriOlc(dkc.capaSatirlari, dk.yeni.indirme);
+    kontrol("§6k' ⭐ dönem künyesinin CF Worker satırı (L2-8): yeni İNDİRME'nin kid · x · 120 günlük penceresi + güncelleme grupları; Worker ayarı onu KABUL eder", w6.ok, w6.detay);
     kontrol("§6k'' ⭐ dönem Sonraki adımlar: CF Worker adımı anahtar birimine kurmadan ÖNCE (örtüşmeli geçiş)", sonra(d1.cikti, "CF Worker", "Anahtar birimine kur"), "");
 
     const d2 = await tore(["donem", `--dizin=${D}`, `--yil=${YIL}`, ET, `--iptal=ara-${YIL}-1`, "--neden=bekçi acil iptal"], ucParola(KOK_PAROLA, `${ARA_PAROLA}-2`), {}, ev);
@@ -647,6 +644,15 @@ async function main(): Promise<void> {
     kontrol("§7a ⭐ `kok-uret --kid=hazirlik-<yıl>-1` RED (kök kid biçimi `kok-<yıl>-<n>`), dizine hiçbir dosya yazılmaz",
       hKok.status !== 0 && /Kök kid biçimi: kok-<yıl>-<n>/.test(hKok.stderr) && readdirSync(HA).length === 0,
       `${hKok.status} ${hKok.stderr.trim().slice(0, 120)} · ${readdirSync(HA).join(",")}`);
+    // Eski hazırlık kökü dosyası elle konmuş bir tören dizini: dönem töreni onu ortam saymaz (tek kök ailesi).
+    const hKid = `hazirlik-${YIL}-1`;
+    writeFileSync(path.join(HA, `${hKid}.kok.json`), JSON.stringify({ tur: "tekserp-kok-anahtar", kid: hKid, siniflar: ["TEST", "DEMO"] }), { mode: 0o600 });
+    const hDonem = await tore(["donem", `--dizin=${HZ}`, `--kok=${hKid}`, `--yil=${YIL}`, ET], ucParola(KOK_PAROLA, ARA_PAROLA), {}, ev);
+    kontrol("§7b ⭐ dönem töreni `hazirlik-*` kökle parola SORULMADAN RED (çıkış 2), dönem dizini doğmaz",
+      hDonem.status === 2 && /kök ailesinde değil \(kok-\*\)/.test(hDonem.cikti) && !/\[1\/8\]/.test(hDonem.cikti) && !existsSync(path.join(HZ, "donemler")),
+      `${hDonem.status} ${hDonem.cikti.trim().split("\n").pop()?.slice(0, 140)}`);
+    const karsi = await tore(["donem", `--dizin=${D}`, `--yil=${YIL}`, ET, `--karsi-dizin=${HZ}`], "", {}, ev);
+    kontrol("§7c eski `--karsi-dizin` bayrağı tanınmaz (karşı ortam yok) → çıkış 2", karsi.status === 2 && /Tanınmayan argüman: --karsi-dizin/.test(karsi.cikti), `${karsi.status} ${karsi.cikti.trim().split("\n").pop()?.slice(0, 140)}`);
 
     console.log("\n§5 KAYNAK — kirli ağaç, origin/main dışı HEAD, yanlış etiket, npm ls (parola SORULMADAN RED)");
     const H5 = path.join(tmp, "kaynak-hedef");

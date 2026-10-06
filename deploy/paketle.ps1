@@ -95,11 +95,11 @@ param(
   [string]$NativeYol,
   # SIFRELI MODUL (Faz 2d): yalniz -Korumali ile; build-korumali.mjs --sifrele'ye gecer. Verilmezse
   # bugunku SIFRESIZ korumali paket. Muhurleme anahtari (modul anahtari dosyasi) REPO, PAKET ve CI
-  # DISIDIR: hazirlik makinesinde `modul-anahtari.ts uret` ile dogar; CI'da -Sifrele reddedilir.
+  # DISIDIR: satici toren makinesinde (Mac) `modul-anahtari.ts uret` ile dogar; CI'da -Sifrele reddedilir.
   [switch]$Sifrele,
   # Sifrelenecek paketler: "hepsi" ya da katalogdaki paket adlari (virgullu).
   [string]$SifreliPaketler = "hepsi",
-  # Modul anahtari dizini (verilmezse build-korumali'nin varsayilani ~/.tekserp/satici-hazirlik/modul-anahtarlari).
+  # Modul anahtari dizini (verilmezse build-korumali'nin varsayilani ~/.tekserp/satici-uretim/modul-anahtarlari).
   [string]$ModulAnahtarDizini,
   # HIZMET IKILILERI (Dagitim v2): tekserp-hizmet.exe + tekserp-guncelleyici.exe'nin durdugu dizin.
   # Verilmezse Teks-Erp\native\target\release (yerel `cargo build --release`). CI: korumali-paket.yml

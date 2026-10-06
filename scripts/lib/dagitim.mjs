@@ -267,9 +267,10 @@ export const BACKEND_GRUPLAR_REL = 'Teks-Erp/src/lib/license/update-group.ts';
 
 /**
  * `deploy/dagitim.json`ı okuyan ürün/yayın dosyaları — BEYANLI. Bekçi ağaçta kaydın adını taşıyan
- * her kod dosyasını bu liste + bekçi dosyalarıyla kıyaslar (iki yönlü). O1'de tüketici yok.
+ * her kod dosyasını bu liste + bekçi dosyalarıyla kıyaslar (iki yönlü).
+ * Satıcı töreni CF Worker İNDİRME satırının kanal kümesini (= gruplar) buradan alır; bekçisi aynısını ölçer (O14c).
  */
-export const TUKETICILER = Object.freeze([]);
+export const TUKETICILER = Object.freeze(['deploy/satici/uretim-toren.mjs', 'satici/sunucu/scripts/test_uretim_toren.ts']);
 
 /** İki dağıtım bekçisinin okuduğu dosyalar — commit tetiği bunları kapsar (okunandan dar olamaz). */
 export const DAGITIM_BEKCI_DOSYALARI = Object.freeze([
