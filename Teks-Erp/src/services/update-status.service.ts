@@ -28,6 +28,7 @@ import {
   type UPDATER_STATES,
 } from "../lib/license/protocol";
 import { getDownloadTokens, getLicenseSnapshot } from "../lib/license/runtime";
+import { updateGroupOf, type UpdateGroup } from "../lib/license/update-group";
 import {
   UPDATER_HISTORY_LIMIT,
   UpdaterDecisionBlockSchema,
@@ -207,6 +208,8 @@ export function updateReportField(read: UpdaterRead = readUpdater()): { guncelle
 export interface UpdateStatus {
   readonly kuruluSurum: string;
   readonly kanal: string | null;
+  /** Güncelleme grubu — kira kanalı üç gruptan biriyse; pasif/eski kanal ve kira yok → null. */
+  readonly grup: UpdateGroup | null;
   readonly politika: (Omit<LeaseUpdatePolicy, "araliklar"> & { readonly pencere: UpdateWindowRule | null; readonly kaynak: "KIRA" | "VARSAYILAN" }) | null;
   readonly donuk: boolean;
   readonly sonrakiPencere: { readonly baslangic: string; readonly bitis: string } | null;
@@ -267,6 +270,7 @@ export function updateStatusFrom(g: {
   return {
     kuruluSurum: g.kuruluSurum,
     kanal,
+    grup: updateGroupOf(kanal),
     politika: policy,
     donuk: frozen,
     sonrakiPencere: nextWindow,
