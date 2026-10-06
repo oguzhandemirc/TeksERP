@@ -10,7 +10,6 @@ import {
   PollRequestSchema,
   TransferRequestSchema,
   TransferResponseSchema,
-  checkLiveResponseBinding,
   isoToMs,
   msToIso,
   type LicenseResponse,
@@ -22,7 +21,6 @@ import { measureFingerprint } from "../lib/license/fingerprint";
 import { cacheFromRecordCopy, cacheToRecordCopy } from "../lib/license/fingerprint-cache";
 import { setFingerprintCacheCopy, startAccumulationForLease } from "../lib/license/record-writer";
 import { __resetSignedSkewForTests, recordSignedSkew, signedSkewSecondsForWire } from "../lib/license/signed-skew";
-
 import { acceptNewEntitlement } from "./license-integrity.service";
 import { seedCompanyNameQuietly } from "./licensee-company-name.service";
 import { refreshMdnsTxt } from "../jobs/mdns-advertiser.job";
@@ -40,7 +38,7 @@ import {
 } from "../lib/license/runtime";
 import { evaluateLicenseTransitions, refreshLicenseTrace } from "./license-trail.service";
 import { adoptFromRejected, adoptOffered, refreshLicenseRevocation, revocationOffer, type RevocationOffer } from "./license-revocation.service";
-import { logLeaseAccepted, sanctionView, verifyResponseDocuments } from "./helpers/license-accept.helper";
+import { assertLiveResponseBinding, logLeaseAccepted, sanctionView, verifyResponseDocuments } from "./helpers/license-accept.helper";
 import { syncSupportAfterPoll } from "./support-sync.service";
 import { updateReportField } from "./update-status.service";
 import { systemSettingService } from "./system-setting.service";
@@ -219,15 +217,7 @@ function acceptVerifiedResponse(
   const { lease, entitlement, licenseId } = verifyResponseDocuments(resp, ctx, offer.picked?.jws ?? null);
   const leaseDoc = lease.document;
   if (g.delivery !== "TASINMIS") {
-    const bound = checkLiveResponseBinding(getLicenseConfig().roots, {
-      lease: leaseDoc,
-      leaseToken: resp.kira,
-      binding: resp.yanitBagi,
-      nonce: g.delivery.nonce,
-      sinif: entitlement.document.sinif,
-      revocation: offer.picked?.view ?? null,
-    });
-    if (!bound.ok) throw invalidResponse(`Yanıt bu isteğe bağlı değil: ${bound.message}`, bound.code);
+    assertLiveResponseBinding(resp, { lease: leaseDoc, sinif: entitlement.document.sinif, nonce: g.delivery.nonce, revocation: offer.picked?.view ?? null });
   }
   const who = { source: g.source, userId: g.userId, arrival: g.delivery === "TASINMIS" ? ("TASINMIS" as const) : ("CANLI" as const) };
   const before = getLicenseSnapshot();

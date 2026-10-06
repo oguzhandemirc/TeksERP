@@ -108,6 +108,24 @@ async function offline(ctx: VendorContext, raw: Buffer, limit: ScopeLimit) {
   return isPlainObject(inner) && "kod" in inner ? activation(call) : poll({ ...call, purposes: ["yokla", "cevrimdisi"] });
 }
 
+/** DR devralma: imzalı istek + ön denetim (kurulum ↔ talep) → devralma; canlı yanıt isteğin nonce'una bağlanır. */
+async function drTakeover(ctx: VendorContext, req: Request, limit: ReturnType<typeof scopeLimiter>): Promise<unknown> {
+  const nowMs = Date.now();
+  const body = rawBodyOf(req.body);
+  const parsed = parseStrict(DrTakeoverRequestSchema, parseJsonBody(body));
+  const header = req.get(REQUEST_HEADER);
+  const auth = await authenticateRequest({
+    header,
+    rawBody: body,
+    purposes: ["dr-devral"],
+    nowMs,
+    limit,
+    path: ENDPOINTS.DR_TAKEOVER,
+    precheck: (a) => drTakeoverPrecheck(a.installation, parsed, nowMs),
+  });
+  return bindLiveResponse(ctx, await processDrTakeover(ctx, auth, parsed, nowMs), header, Date.now());
+}
+
 export function createPublicApp(ctx: VendorContext, hub: DoorbellHub | null): Express {
   const app = express();
   app.disable("x-powered-by");
@@ -154,20 +172,7 @@ export function createPublicApp(ctx: VendorContext, hub: DoorbellHub | null): Ex
   });
 
   app.post(ENDPOINTS.DR_TAKEOVER, raw, async (req: Request, res: Response) => {
-    const nowMs = Date.now();
-    const body = rawBodyOf(req.body);
-    const parsed = parseStrict(DrTakeoverRequestSchema, parseJsonBody(body));
-    const header = req.get(REQUEST_HEADER);
-    const auth = await authenticateRequest({
-      header,
-      rawBody: body,
-      purposes: ["dr-devral"],
-      nowMs,
-      limit,
-      path: ENDPOINTS.DR_TAKEOVER,
-      precheck: (a) => drTakeoverPrecheck(a.installation, parsed, nowMs),
-    });
-    res.json(await bindLiveResponse(ctx, await processDrTakeover(ctx, auth, parsed, nowMs), header, Date.now()));
+    res.json(await drTakeover(ctx, req, limit));
   });
 
   // DESTEK: gövde küçük ek (≤1 MB görüntü, base64) taşıyabilir — yalnız bu uçta daha geniş ham sınır.

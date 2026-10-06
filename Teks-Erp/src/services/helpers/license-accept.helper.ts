@@ -1,6 +1,16 @@
 // Satıcı yanıtının KABULÜNE yardımcılar: kira + HAK doğrulaması (seçilen iptal belgesiyle zincir, kurulum/anahtar bağı, kira ↔ HAK
 // bağı; HAK'ın "şimdi"si gelen kiranın imzalı sunucu saatini de kapsar — saati geri fabrika taze HAK'ı reddetmesin) ve ayak izi.
-import { isoToMs, type LeaseDoc, type LicenseResponse, type SanctionLevel, type VerifiedEntitlement, type VerifiedLease } from "../../lib/license/protocol";
+import {
+  checkLiveResponseBinding,
+  isoToMs,
+  type LeaseDoc,
+  type LicenseClass,
+  type LicenseResponse,
+  type SanctionLevel,
+  type VerifiedEntitlement,
+  type VerifiedLease,
+  type VerifiedRevocation,
+} from "../../lib/license/protocol";
 import { coreCheckLeaseBinding, coreVerifyEntitlement, coreVerifyLease } from "../../lib/license/core-bridge";
 import { getLedgerHighWaterMs, getLicenseConfig, getLicenseSnapshot, type LicenseSnapshot } from "../../lib/license/runtime";
 import { currentAccumulation, verificationFloorOf } from "../../lib/license/accumulation";
@@ -11,6 +21,15 @@ export interface VerifiedLicenseResponse {
   readonly lease: VerifiedLease;
   readonly entitlement: VerifiedEntitlement;
   readonly licenseId: string;
+}
+
+/** Canlı yanıt kendi isteğinin nonce'una bağlı olmalı (6.3c) — araya girip eski ya da başka bir yanıtı oynatmak RED. */
+export function assertLiveResponseBinding(
+  resp: LicenseResponse,
+  g: { readonly lease: LeaseDoc; readonly sinif: LicenseClass; readonly nonce: string; readonly revocation: VerifiedRevocation | null },
+): void {
+  const bound = checkLiveResponseBinding(getLicenseConfig().roots, { ...g, leaseToken: resp.kira, binding: resp.yanitBagi });
+  if (!bound.ok) throw invalidResponse(`Yanıt bu isteğe bağlı değil: ${bound.message}`, bound.code);
 }
 
 /** Atar (`LICENSE_RESPONSE_INVALID`): kira/HAK doğrulanamaz, başka kuruluma/anahtara ait ya da birbirine bağlı değil. */

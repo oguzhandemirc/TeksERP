@@ -395,11 +395,11 @@ async function bolum4(): Promise<void> {
   check("§4b çekirdek YOKken motor TS'e düşmez: HAK/kira GECERSIZ(CEKIRDEK_YOK)", d.hak.status === "GECERSIZ" && d.hak.code === "CEKIRDEK_YOK" && d.kira.status === "GECERSIZ" && d.kira.code === "CEKIRDEK_YOK");
   const kb = oku("scripts/build-korumali.mjs");
   check(
-    "§4c korumalı derleme __TEKSERP_NATIVE_REQUIRED__=true + filigran sabitlerini tanımlar; çapa kipi sabiti YOK (tek kip) ve üretim dışı kanal çapası DURUR",
+    "§4c korumalı derleme __TEKSERP_NATIVE_REQUIRED__=true + filigran sabitlerini tanımlar; çapa kipi sabiti YOK (tek kip), ortak paketin kipi koda gömülü `uretim` (kanal kaydı okunmaz)",
     /__TEKSERP_NATIVE_REQUIRED__:\s*'true'/.test(kb) &&
       /__TEKSERP_FILIGRAN__:\s*JSON\.stringify/.test(kb) &&
       !/__TEKSERP_GUVEN_CAPASI__/.test(kb) &&
-      /if \(kip !== 'uretim'\) throw new Error/.test(kb),
+      /^\s*const guvenCapasi = 'uretim';$/m.test(kb) && !/kanalCoz|guvenCapasi\s*=\s*musteri/.test(kb),
   );
   const pk = oku("../deploy/paketle.ps1");
   const kur = oku("../deploy/kur.ps1");
