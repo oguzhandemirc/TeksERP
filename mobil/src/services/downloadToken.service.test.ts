@@ -1,6 +1,6 @@
 // =============================================================================
-// Bekçi: tablet indirme belirteci (3c) — belirteç backend'den alınır, OTA isteğine `tkl` extra param,
-// APK isteğine `X-TKL-Indirme` başlığı olarak gider; alınamazsa başlıksız (bugünkü davranış) ve saklı
+// Bekçi: tablet indirme belirteci (3c) — belirteç backend'den alınır, OTA isteğine `tkl` extra param
+// olarak gider; alınamazsa başlıksız (bugünkü davranış) ve saklı
 // param SİLİNİR. Bağlama kolu: OTA denetimi (servis + UpdateGate) belirteci denetimden ÖNCE tazeler.
 //
 // NEGATİF SONDA (ölçüldü): otaKontrolEtVeIndir'den tazeleme çağrısı çıkarılınca §3 KIRMIZI;
@@ -13,8 +13,6 @@ import { join } from 'path';
 // jest.mock çağrıları babel-jest ile en üste taşınır; fabrikalar mock* değişkenlerine yalnız çağrı anında dokunur.
 import { otaKontrolEtVeIndir } from './appUpdate.service';
 import {
-  DOWNLOAD_TOKEN_HEADER,
-  downloadTokenHeaders,
   fetchDownloadGrant,
   fetchDownloadToken,
   refreshOtaDownloadToken,
@@ -34,8 +32,6 @@ jest.mock('expo-updates', () => ({
   fetchUpdateAsync: jest.fn(),
   setExtraParamAsync: (k: string, v: string | null) => mockSetExtra(k, v),
 }));
-jest.mock('expo-file-system/legacy', () => ({ cacheDirectory: '/tmp/' }));
-jest.mock('expo-intent-launcher', () => ({ startActivityAsync: jest.fn() }));
 jest.mock('expo-constants', () => ({ __esModule: true, default: { expoConfig: {} } }));
 jest.mock('./api', () => ({ apiClient: { get: jest.fn() }, resolveAuthToken: jest.fn(async () => null) }));
 jest.mock('../store/baseUrlStore', () => ({ getCurrentBaseUrl: () => '' }));
@@ -113,18 +109,12 @@ describe('§1b fetchDownloadGrant — grup (tek ortak paket O8)', () => {
   });
 });
 
-describe('§2 OTA param ve APK başlığı', () => {
+describe('§2 OTA param', () => {
   it('belirteç varsa tkl yazılır; yoksa saklı param SİLİNİR (null)', async () => {
     await refreshOtaDownloadToken(bag());
     expect(mockSetExtra).toHaveBeenLastCalledWith('tkl', BELIRTEC);
     await refreshOtaDownloadToken(bag({ fetchImpl: jest.fn(async () => yanit(403, {})) as unknown as typeof fetch }));
     expect(mockSetExtra).toHaveBeenLastCalledWith('tkl', null);
-  });
-
-  it('APK başlığı X-TKL-Indirme; belirteç yoksa boş nesne', async () => {
-    expect(DOWNLOAD_TOKEN_HEADER).toBe('X-TKL-Indirme');
-    expect(await downloadTokenHeaders(bag())).toEqual({ 'X-TKL-Indirme': BELIRTEC });
-    expect(await downloadTokenHeaders(bag({ authToken: async () => null, deviceId: async () => null }))).toEqual({});
   });
 });
 

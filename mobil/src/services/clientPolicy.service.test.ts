@@ -34,7 +34,7 @@ describe('surumKarsilastir', () => {
 describe('politikaDegerlendir — APK ekseni', () => {
   it('eski APK eskidir', () => {
     expect(politikaDegerlendir({ politika: POL, apkSurumu: '2.9.7', paketTarihi: null }))
-      .toEqual({ eski: true, sebep: 'apk' });
+      .toEqual({ eski: true, sebep: 'native' });
   });
   it('eşit/yeni APK eski değildir', () => {
     expect(politikaDegerlendir({ politika: POL, apkSurumu: '2.9.8', paketTarihi: null }).eski)
@@ -72,13 +72,13 @@ describe('politikaDegerlendir — PAKET ekseni (mobile özel)', () => {
       .toBe(false);
   });
 
-  it('APK de paket de eskiyse sebep APK (çözüm kurulum dosyası)', () => {
+  it('native de paket de eskiyse sebep native (çözüm Play)', () => {
     const d = politikaDegerlendir({
       politika: polPaket,
       apkSurumu: '2.9.7',
       paketTarihi: new Date('2026-08-01T00:00:00.000Z'),
     });
-    expect(d.sebep).toBe('apk');
+    expect(d.sebep).toBe('native');
   });
 
   it('bozuk tarih yok sayılır (fail-open)', () => {
@@ -98,7 +98,7 @@ describe('FAIL-OPEN', () => {
 });
 
 describe('kilitlenmeliMi — KOŞULLU kilit', () => {
-  const eski = { eski: true, sebep: 'apk' as const };
+  const eski = { eski: true, sebep: 'native' as const };
 
   it('düzeltme hazırsa ve kuyruk boşsa kilitler', () => {
     expect(kilitlenmeliMi({ durum: eski, duzeltmeHazir: true, bekleyenYazim: 0 })).toBe(true);

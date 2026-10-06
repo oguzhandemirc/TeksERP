@@ -1,20 +1,17 @@
 // =============================================================================
-// BEKÇİ: uzaktan güncelleme — yenileme kapısı + sürüm karşılaştırması
+// BEKÇİ: uzaktan güncelleme — yenileme kapısı
 // =============================================================================
-// ⚠️ NEDEN: buradaki iki hata da SESSİZDİR ve sahada geri dönüşü yoktur.
+// ⚠️ NEDEN: buradaki hata SESSİZDİR ve sahada geri dönüşü yoktur.
 //
-//  1) Yenileme, gönderilmemiş kayıt varken yapılırsa (`reloadAsync` JS'i
+//  Yenileme, gönderilmemiş kayıt varken yapılırsa (`reloadAsync` JS'i
 //     öldürür) uçuştaki KK1 girişi / tambur kesimi yarıda kalır. Sonuç bir
 //     hata değil, EKSİK KAYITTIR — ve olay anından saatler sonra fark edilir,
 //     o noktada sebebi bulunamaz. Kural kullanıcı tercihinin istisnası değil,
-//     veri kaybı önlemesidir.
-//
-//  2) Sürüm karşılaştırması ada göre yapılırsa ("2.9.10" < "2.9.9" sözlüksel
-//     olarak DOĞRUDUR) tablet yeni sürümü hiç görmez ve sonsuza kadar eski
-//     kalır — üstelik hiçbir hata basmaz.
+//     veri kaybı önlemesidir. (Sürüm adının sayısal karşılaştırması
+//     `clientPolicy.service.test.ts`te.)
 // =============================================================================
 
-import { apkYeniMi, yenilemeAkisi, type YenilemeBagimlilik } from './appUpdate.service';
+import { yenilemeAkisi, type YenilemeBagimlilik } from './appUpdate.service';
 
 // Servis modülü native/ağ bağımlılıkları taşır; test yalnız SAF çekirdeği
 // ölçer, o yüzden hepsi susturulur.
@@ -28,8 +25,6 @@ jest.mock('expo-updates', () => ({
   checkForUpdateAsync: jest.fn(),
   fetchUpdateAsync: jest.fn(),
 }));
-jest.mock('expo-file-system/legacy', () => ({ cacheDirectory: '/tmp/' }));
-jest.mock('expo-intent-launcher', () => ({ startActivityAsync: jest.fn() }));
 jest.mock('expo-constants', () => ({ __esModule: true, default: { expoConfig: {} } }));
 jest.mock('./api', () => ({ apiClient: { get: jest.fn() } }));
 jest.mock('../offline/queryClient', () => ({
@@ -85,28 +80,5 @@ describe('yenilemeAkisi — yenileme kapısı', () => {
     await expect(yenilemeAkisi(d)).resolves.toBe('kapali');
     expect(yenile).not.toHaveBeenCalled();
     expect(uyu).not.toHaveBeenCalled();
-  });
-});
-
-describe('apkYeniMi — sürüm karşılaştırması', () => {
-  it('sunucudaki versionCode büyükse yeni sayar', () => {
-    expect(apkYeniMi({ varMi: true, versionCode: 54 }, 53)).toBe(true);
-  });
-
-  it('eşit ya da küçükse yeni saymaz (geri sürüm ittirmez)', () => {
-    expect(apkYeniMi({ varMi: true, versionCode: 53 }, 53)).toBe(false);
-    expect(apkYeniMi({ varMi: true, versionCode: 52 }, 53)).toBe(false);
-  });
-
-  it('yayın yoksa yeni saymaz', () => {
-    expect(apkYeniMi(null, 53)).toBe(false);
-    expect(apkYeniMi({ varMi: false }, 53)).toBe(false);
-  });
-
-  it('SAYISAL karşılaştırır — ada göre olsaydı 2.9.10 < 2.9.9 çıkardı', () => {
-    // versionName 2.9.10 ↔ vc 60, kurulu 2.9.9 ↔ vc 59.
-    expect(apkYeniMi({ varMi: true, versionCode: 60, versionName: '2.9.10' }, 59)).toBe(true);
-    // Sözlüksel karşılaştırmanın yanlış cevabı burada kanıtlanır:
-    expect('2.9.10' > '2.9.9').toBe(false);
   });
 });

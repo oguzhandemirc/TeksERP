@@ -26,18 +26,17 @@ import * as Updates from 'expo-updates';
 
 import { useBaseUrlStore } from '../../../store/baseUrlStore';
 import {
-  apkDurumu,
-  apkIndirVeKur,
-  apkTemizle,
   bekleyenYazimSayisi,
+  fetchUpdateGroup,
   guvenliYenile,
   kuruluVersionName,
   otaKimlik,
   otaKontrolEtVeIndir,
   paketEtiketi,
-  type ApkDurum,
+  type UpdateGroupInfo,
   type OtaKontrolSonuc,
 } from '../../../services/appUpdate.service';
+import { PLAY_GUNCELLE_MESAJI, playStoreAc, uygulamaPaketi } from '../../../services/playStore';
 import { useBusyAction } from '../../../hooks/useBusyAction';
 import {
   SETTINGS_COLORS as COLORS,
@@ -72,19 +71,17 @@ export default function UpdateSettingsScreen() {
 
   const [otaSonuc, setOtaSonuc] = useState<OtaKontrolSonuc | null>(null);
   const [sonDenetleme, setSonDenetleme] = useState<string | null>(null);
-  const [apk, setApk] = useState<ApkDurum | null>(null);
-  const [apkIsleniyor, setApkIsleniyor] = useState(false);
-  const [apkOran, setApkOran] = useState(0);
-  const [apkVerifying, setApkVerifying] = useState(false);
-  const [apkHata, setApkHata] = useState<string | null>(null);
+  const [grup, setGrup] = useState<UpdateGroupInfo | null>(null);
+  const [playHata, setPlayHata] = useState<string | null>(null);
+  const paket = uygulamaPaketi();
   const [yenileniyor, setYenileniyor] = useState(false);
 
   const apiSunucu = baseUrl.replace(/^https?:\/\//i, '').replace(/\/api\/?$/i, '');
   const otaSunucu = sunucuGoster(kimlik.sunucu);
 
   useEffect(() => {
-    void apkDurumu().then(setApk);
-  }, []);
+    if (kimlik.ortakPaket) void fetchUpdateGroup().then(setGrup);
+  }, [kimlik.ortakPaket]);
 
   // Denetleme: asgari 2 sn döner (`useBusyAction`) — sunucu 40 ms'de cevap
   // verdiğinde düğme bir kare yanıp sönüyor ve operatör bastığından emin
@@ -144,29 +141,11 @@ export default function UpdateSettingsScreen() {
     });
   }, []);
 
-  const apkKur = useCallback(async () => {
-    // Kurulum YALNIZ imzası doğrulanmış künyeyle (adres de oradan türer, `indirmeUrl` kullanılmaz).
-    const doc = apk?.verified;
-    if (!doc) return;
-    setApkIsleniyor(true);
-    setApkHata(null);
-    setApkOran(0);
-    setApkVerifying(false);
-    const s = await apkIndirVeKur(doc, (oran, stage) => {
-      setApkOran(oran);
-      setApkVerifying(stage === 'verify');
-    });
-    if (s.durum === 'hata') {
-      setApkHata(s.mesaj);
-      Toast.show({
-        type: 'error',
-        text1: 'Kurulum dosyası kurulmadı',
-        text2: s.mesaj,
-      });
-      await apkTemizle();
-    }
-    setApkIsleniyor(false);
-  }, [apk]);
+  const playAc = useCallback(async () => {
+    setPlayHata(null);
+    const s = await playStoreAc();
+    if (s === 'acilamadi') setPlayHata("Play Store açılamadı — tabletteki Play Store'dan TeksERP'i güncelleyin.");
+  }, []);
 
   const bekleyen = bekleyenYazimSayisi();
 
@@ -197,7 +176,7 @@ export default function UpdateSettingsScreen() {
         <Satir etiket="ERP (fabrika ağı)" deger={apiSunucu || '—'} />
         <Satir etiket="Güncelleme (internet)" deger={otaSunucu} />
         {kimlik.ortakPaket && (
-          <Satir etiket="Güncelleme grubu" deger={apk === null ? '…' : (apk.grup ?? 'bilinmiyor')} />
+          <Satir etiket="Güncelleme grubu" deger={grup === null ? '…' : (grup.grup ?? 'bilinmiyor')} />
         )}
         <Text style={settingsStyles.hint}>
           Bunlar iki ayrı bağlantıdır ve farklı olmaları normaldir. Üretim
@@ -235,45 +214,25 @@ export default function UpdateSettingsScreen() {
         />
       </View>
 
-      {/* ------------------------------------------------ Kurulum dosyası */}
+      {/* ------------------------------------------------ Google Play */}
       <View style={settingsStyles.card}>
-        <Text style={settingsStyles.label}>KURULUM DOSYASI</Text>
+        <Text style={settingsStyles.label}>YENİ SÜRÜM (GOOGLE PLAY)</Text>
         <Text style={settingsStyles.subtitle}>
-          Yalnız yeni cihaz özelliği/izin geldiğinde gerekir. İndirip &quot;Yükle&quot;ye
-          basmanız yeterli — uygulama silinmez, veriler korunur.
+          Yeni cihaz özelliği/izin gerektiren sürümler Google Play&apos;den gelir; uygulama kendi
+          kurulum dosyasını indirmez. Veriler korunur.
         </Text>
-
-        {apk?.yeniVarMi ? (
-          <>
-            <Satir
-              etiket="Yeni sürüm"
-              deger={`${apk.kunye?.versionName ?? '?'} (${apk.kunye?.versionCode})`}
-            />
-            {!!apk.kunye?.boyut && (
-              <Satir etiket="Boyut" deger={`${(apk.kunye.boyut / 1048576).toFixed(1)} MB`} />
-            )}
-            {!!apk.kunye?.notlar && (
-              <Text style={settingsStyles.hint}>{apk.kunye.notlar}</Text>
-            )}
-            {apkHata && <Text style={styles.durumKotu}>{apkHata}</Text>}
-            <SettingsActionButton
-              tone="primary"
-              icon="download"
-              label="İndir ve kur"
-              busyLabel={`${apkVerifying ? 'Doğrulanıyor' : 'İndiriliyor'}… %${Math.round(apkOran * 100)}`}
-              busy={apkIsleniyor}
-              onPress={() => void apkKur()}
-              style={styles.dugme}
-            />
-          </>
-        ) : apk?.rejection ? (
-          <Text style={styles.durumKotu}>{apk.rejection.message}</Text>
-        ) : apk?.grupBilinmiyor ? (
-          <Text style={styles.durumNotr}>{GRUP_BILINMIYOR}</Text>
+        <Text style={settingsStyles.hint}>{PLAY_GUNCELLE_MESAJI}</Text>
+        {playHata && <Text style={styles.durumKotu}>{playHata}</Text>}
+        {paket ? (
+          <SettingsActionButton
+            tone="primary"
+            icon="google-play"
+            label="Play Store'u aç"
+            onPress={() => void playAc()}
+            style={styles.dugme}
+          />
         ) : (
-          <Text style={styles.durumIyi}>
-            {apk === null ? 'Kontrol ediliyor…' : 'Kurulum dosyası güncel.'}
-          </Text>
+          <Text style={styles.durumNotr}>Uygulama paket adı okunamadı — Play Store&apos;da &quot;TeksERP&quot;i arayın.</Text>
         )}
       </View>
     </SettingsPage>
@@ -313,7 +272,6 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.bgDarker,
   },
   bantMetin: { flex: 1, minWidth: 0, color: COLORS.text, fontSize: 12, lineHeight: 17 },
-  durumIyi: { color: COLORS.success, fontSize: 14, marginTop: 10, fontWeight: '600' },
   durumKotu: { color: COLORS.error, fontSize: 13, marginTop: 10 },
   durumNotr: { color: COLORS.subtext, fontSize: 14, marginTop: 10 },
   dugme: { marginTop: 16, borderRadius: 10 },

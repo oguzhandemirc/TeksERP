@@ -5,11 +5,12 @@
 //
 //  1) UZAKTAN GÜNCELLEME (OTA) — ekran/kural/düzeltme. Sunucudan JS paketi
 //     iner, kurulum YOK, operatör hiçbir şey yapmaz. Değişikliklerin ~%90'ı.
-//     Taşıyıcı: `expo-updates` + `Teks-Erp/src/routes/mobile-update.routes.ts`.
+//     Taşıyıcı: `expo-updates` (grup-nötr takma ad + indirme belirteci).
 //
-//  2) KURULUM DOSYASI (APK) — yeni native modül, yeni izin, Expo yükseltmesi.
-//     Uzaktan gönderilemez; indirilip Android'in kurulum ekranından geçmesi
-//     gerekir. Yılda birkaç kez.
+//  2) NATIVE GÜNCELLEME — yeni native modül, yeni izin, Expo yükseltmesi.
+//     Ortak tablette YALNIZ Google Play gizli yayınından gelir (K-14); uygulama
+//     kendi APK'sını indirip kurmaz (Play politikası), yalnız Play sayfasını
+//     açar (`playStore.ts`).
 //
 // ⚠️ İKİSİNİ AYIRAN ÇİZGİ `runtimeVersion`'dır. Sunucu, tabletin taşıdığı
 // runtimeVersion'a uymayan paketi GÖNDERMEZ (fail-closed). Yani (2)'yi
@@ -18,18 +19,11 @@
 // =============================================================================
 
 import * as Updates from 'expo-updates';
-import * as FileSystem from 'expo-file-system/legacy';
-// Yeni dosya API'si (parça parça okuma) — native yarısı aynı paketin ikinci modülü, 2026-08-27'den beri her APK'da.
-import { File } from 'expo-file-system';
-import * as IntentLauncher from 'expo-intent-launcher';
-import { Platform } from 'react-native';
 import Constants from 'expo-constants';
 
 import { queryClient } from '../offline/queryClient';
-import { DOWNLOAD_TOKEN_HEADER, downloadTokenHeaders, fetchDownloadGrant, refreshOtaDownloadToken } from './downloadToken.service';
+import { fetchDownloadGrant, refreshOtaDownloadToken } from './downloadToken.service';
 import { formatFactory } from '../lib/factory-time';
-import apkAnchorJson from '../lib/apk-imza-capasi.json';
-import { apkDownloadUrl, feedChannel, verifyApkFile, verifyApkRelease, type AnchorKey, type ApkDoc } from './apkKunye';
 
 /* ------------------------------------------------------------------ *
  * 1) UZAKTAN GÜNCELLEME
@@ -48,9 +42,7 @@ export interface OtaKimlik {
   gomulu: boolean;
   /** Güncelleme sunucusunun APK'ya gömülü adresi (manifest ucu). */
   sunucu: string | null;
-  /** Güncelleme kanalının kökü — eski kanalda APK künyesi de buradan okunur (ortak pakette indirme kökü). */
-  feedTabani: string | null;
-  /** Tek ortak paket mi (grup-nötr OTA takma adı): APK kökü ve OTA belirteci gruba bağlıdır. */
+  /** Tek ortak paket mi (grup-nötr OTA takma adı): OTA denetimi indirme belirtecine (grup) bağlıdır. */
   ortakPaket: boolean;
 }
 
@@ -81,24 +73,8 @@ export function otaKimlik(): OtaKimlik {
     paketTarihi: Updates.createdAt,
     gomulu: Updates.isEmbeddedLaunch,
     sunucu,
-    feedTabani: feedTabaniCoz(sunucu),
     ortakPaket: ortakPaketKoku(sunucu) !== null,
   };
-}
-
-/**
- * `…/mobil/ota/54.2/manifest` → `…/mobil/`
- *
- * ⚠️ Güncelleme kanalının kökü AYRI BİR AYARDAN OKUNMAZ, gömülü manifest
- * adresinden TÜRETİLİR. Sebep tek source: ikinci bir değişken olsaydı biri
- * güncellenip diğeri unutulabilirdi ve APK künyesi başka bir sunucudan
- * okunurdu. Türetilmiş olduğu için "APK'ya gömülü, tabletten değiştirilemez"
- * özelliğini de miras alır.
- */
-export function feedTabaniCoz(manifestAdresi: string | null): string | null {
-  if (!manifestAdresi) return null;
-  const m = /^(.*\/)ota\/[^/]+\/manifest\/?$/.exec(manifestAdresi.trim());
-  return m ? m[1] : null;
 }
 
 /**
@@ -109,18 +85,6 @@ export function ortakPaketKoku(manifestAdresi: string | null): string | null {
   if (!manifestAdresi) return null;
   const m = /^(https:\/\/[^/]+\/)ota\/[^/]+\/manifest\/?$/.exec(manifestAdresi.trim());
   return m ? m[1] : null;
-}
-
-const GRUP_KODU = /^[a-z0-9][a-z0-9-]{0,39}$/;
-
-/**
- * APK künyesinin kökü. Eski kanal: gömülü adresten (grup yok sayılır, bugünkü yol). Ortak paket:
- * kök + belirteç yanıtındaki grup (`<kök><grup>/mobil/`); grup yoksa null = denetim yapılmaz.
- */
-export function apkFeedTabani(manifestAdresi: string | null, grup: string | null): string | null {
-  const kok = ortakPaketKoku(manifestAdresi);
-  if (!kok) return feedTabaniCoz(manifestAdresi);
-  return grup && GRUP_KODU.test(grup) ? `${kok}${grup}/mobil/` : null;
 }
 
 export type OtaKontrolSonuc =
@@ -235,218 +199,24 @@ export async function guvenliYenile(
 }
 
 /* ------------------------------------------------------------------ *
- * 2) KURULUM DOSYASI (APK)
+ * 2) NATIVE GÜNCELLEME — Google Play (K-14)
  * ------------------------------------------------------------------ */
 
-export interface ApkKunye {
-  varMi: boolean;
-  versionCode?: number;
-  versionName?: string;
-  boyut?: number;
-  sha256?: string | null;
-  zorunlu?: boolean;
-  notlar?: string | null;
-  indirmeUrl?: string;
-}
-
-/** Tablette kurulu APK'nın versionCode'u. */
-export function kuruluVersionCode(): number {
-  const v = Constants.expoConfig?.android?.versionCode;
-  return typeof v === 'number' ? v : 0;
-}
-
+/** Kurulu uygulamanın sürüm adı (sürüm politikası ve sürüm notları bunu okur). */
 export function kuruluVersionName(): string {
   return Constants.expoConfig?.version ?? '?';
 }
 
-export interface ApkDurum {
-  yeniVarMi: boolean;
-  kunye: ApkKunye | null;
-  kurulu: number;
-  /** İmzası doğrulanmış künye — kurulum YALNIZ bununla yapılır (`indirmeUrl` kullanılmaz). */
-  verified?: ApkDoc | null;
-  /** Daha yeni sürüm sunuldu ama künyesi doğrulanamadı (güvenlik reddi) — ekranda TR uyarı. */
-  rejection?: { code: string; message: string } | null;
-  /** Yalnız ortak pakette: belirteç yanıtındaki güncelleme grubu (yoksa null). */
-  grup?: string | null;
-  /** Ortak pakette grup alınamadı (lisans etkin değil / sunucuya ulaşılamadı) → künye denetlenmedi. */
-  grupBilinmiyor?: boolean;
+export interface UpdateGroupInfo {
+  /** Belirteç yanıtındaki güncelleme grubu (doğrulanmış kiradan); yoksa null. */
+  grup: string | null;
+  /** Grup alınamadı (lisans etkin değil / sunucuya ulaşılamadı) → OTA denetimi yapılmaz. */
+  bilinmiyor: boolean;
 }
 
-interface ApkSource {
-  taban: string | null;
-  headers: () => Promise<Record<string, string>>;
-  /** Ortak paketse belirteç yanıtının grubu; eski kanalda alan yok. */
-  ortak?: { grup: string | null };
-}
-
-/** APK künye/indirme kaynağı: eski kanalda gömülü kök + bugünkü başlık çağrısı; ortak pakette tek belirteç isteği. */
-async function resolveApkSource(): Promise<ApkSource> {
-  const sunucu = otaKimlik().sunucu;
-  if (!ortakPaketKoku(sunucu)) return { taban: feedTabaniCoz(sunucu), headers: () => downloadTokenHeaders() };
+/** Tabletin güncelleme grubu — kaynak YALNIZ backend'in indirme belirteci yanıtıdır (lisans/kira). */
+export async function fetchUpdateGroup(): Promise<UpdateGroupInfo> {
   const izin = await fetchDownloadGrant();
-  const tokenHeaders: Record<string, string> = izin ? { [DOWNLOAD_TOKEN_HEADER]: izin.belirtec } : {};
   const grup = izin?.grup ?? null;
-  return { taban: apkFeedTabani(sunucu, grup), headers: async () => tokenHeaders, ortak: { grup } };
-}
-
-/** Tabletin JS paketine gömülü APK künyesi çapası (OTA kod imzasıyla korunur). */
-const APK_ANCHOR: readonly AnchorKey[] = apkAnchorJson.anahtarlar;
-
-/**
- * Sunucudaki kurulum dosyası künyesini okur.
- *
- * ⚠️ KARŞILAŞTIRMA `versionCode` İLEDİR, `versionName` ile DEĞİL: Android'in
- * kurulum kapısı da onu kullanır. Ada bakan bir karşılaştırma ("2.9.10" <
- * "2.9.9") sözlüksel sıralamaya düşerdi.
- */
-/** Saf karşılaştırma — sunucudaki künye tabletteki kurulumdan yeni mi. */
-export function apkYeniMi(kunye: ApkKunye | null, kurulu: number): boolean {
-  if (!kunye?.varMi) return false;
-  return (kunye.versionCode ?? 0) > kurulu;
-}
-
-/** Künye okuma zaman aşımı — internet, LAN'dan yavaştır. */
-const KUNYE_TIMEOUT_MS = 15_000;
-
-/**
- * Kurulum dosyası künyesini GÜNCELLEME KANALINDAN okur.
- *
- * ⚠️ `apiClient` KULLANILMAZ: o, fabrika ERP sunucusuna gider ve adresi
- * tabletten değiştirilebilir. Kurulum dosyası ERP'de değil güncelleme
- * kanalında (internet) durur — masaüstü panelindeki düzenin aynısı. Uç zaten
- * kimliksizdir; token/cihaz başlığına ihtiyaç yok.
- */
-export async function apkDurumu(): Promise<ApkDurum> {
-  const source = await resolveApkSource();
-  const d = await checkRelease(source);
-  return source.ortak ? { ...d, grup: source.ortak.grup, grupBilinmiyor: !source.taban } : d;
-}
-
-async function checkRelease(source: ApkSource): Promise<ApkDurum> {
-  const kurulu = kuruluVersionCode();
-  const taban = source.taban;
-  if (!taban) return { kunye: null, kurulu, yeniVarMi: false };
-
-  try {
-    const kontrol = new AbortController();
-    const zamanlayici = setTimeout(() => kontrol.abort(), KUNYE_TIMEOUT_MS);
-    try {
-      const yanit = await fetch(`${taban}apk/surum.json`, { signal: kontrol.signal, headers: await source.headers() });
-      if (!yanit.ok) return { kunye: null, kurulu, yeniVarMi: false };
-      const ham = (await yanit.json()) as Partial<ApkKunye>;
-      // Statik künyede `varMi` alanı yok — dosyanın VARLIĞI yayının kendisidir.
-      const kunye: ApkKunye = { ...ham, varMi: typeof ham.versionCode === 'number' };
-      if (!apkYeniMi(kunye, kurulu)) return { kunye, kurulu, yeniVarMi: false, verified: null, rejection: null };
-      // Yeni sürüm sunuluyor: kurulum YALNIZ imzası doğrulanan künyeyle (çapa · kanal · surum.json bağı).
-      const d = verifyApkRelease(ham, { keys: APK_ANCHOR, channel: feedChannel(taban) });
-      if (!d.ok) {
-        console.warn(`[apk] güncelleme künyesi REDDEDİLDİ kod=${d.code} vc=${String(kunye.versionCode)}`);
-        return { kunye, kurulu, yeniVarMi: false, verified: null, rejection: { code: d.code, message: d.message } };
-      }
-      return { kunye, kurulu, yeniVarMi: d.value.versionCode > kurulu, verified: d.value, rejection: null };
-    } finally {
-      clearTimeout(zamanlayici);
-    }
-  } catch {
-    // Ulaşılamadı → "yeni sürüm yok". Güncelleme kontrolü hiçbir zaman
-    // operatörün işini durduran bir hata üretmemeli.
-    return { kunye: null, kurulu, yeniVarMi: false };
-  }
-}
-
-export type ApkKurulumSonuc =
-  | { durum: 'basladi' }
-  | { durum: 'desteklenmiyor' }
-  | { durum: 'hata'; mesaj: string };
-
-/** İndirilen dosyayı parça parça (256 KB) okuyan okuyucu — belleğe tek seferde alınmaz; parçalar arası ekran nefes alır. */
-function openChunkReader(uri: string): { read: () => Uint8Array; close: () => void } {
-  const handle = new File(uri).open();
-  return { read: () => handle.readBytes(1 << 18), close: () => handle.close() };
-}
-
-/**
- * APK'yı indirir, imzalı künyeyle DOĞRULAR ve ancak sonra Android'in kurulum ekranını açar.
- *
- * ⚠️ İndirme adresi künyeden DEĞİL, gömülü kanal kökü + imzalı dosya adından türer (belirteç yalnız kanal
- * sunucusuna gider); inen dosyanın boyu + sha256'sı imzalı künyedekiyle aynı değilse dosya silinir, kurulum
- * ekranı AÇILMAZ (`apkKunye.ts`).
- *
- * ⚠️ SESSİZ KURULUM DEĞİLDİR ve olamaz: uygulamanın kendisi paket kuramaz,
- * yalnız kurulum ekranını AÇAR — son "Yükle" dokunuşu operatördedir. Her
- * tablette bir kez de "bu kaynaktan kuruluma izin ver" onayı gerekir.
- * (Sessiz kurulum ancak cihaz yönetimi/MDM ile mümkündür — ayrı karar.)
- *
- * ⚠️ `content://` ZORUNLU: Android 7'den beri `file://` URI'siyle açılan
- * kurulum `FileUriExposedException` ile ÇÖKER. `getContentUriAsync` yalnız
- * `expo-file-system/legacy` altında var (SDK 54'te yeni API'de yok).
- */
-export async function apkIndirVeKur(
-  doc: ApkDoc,
-  onIlerleme?: (oran: number, stage?: 'download' | 'verify') => void,
-): Promise<ApkKurulumSonuc> {
-  if (Platform.OS !== 'android') return { durum: 'desteklenmiyor' };
-  const source = await resolveApkSource();
-  const taban = source.taban;
-  if (!taban || feedChannel(taban) !== doc.kanal) return { durum: 'hata', mesaj: 'Kurulum dosyası bu tabletin kanalına ait değil; kurulmadı.' };
-
-  const hedef = `${FileSystem.cacheDirectory}tekserp-guncelleme.apk`;
-  try {
-    // Aynı addaki bayat dosya kurulumu sessizce ESKİ sürüme çevirir.
-    await FileSystem.deleteAsync(hedef, { idempotent: true });
-
-    const indirici = FileSystem.createDownloadResumable(
-      apkDownloadUrl(taban, doc),
-      hedef,
-      { headers: await source.headers() },
-      (p) => {
-        if (onIlerleme && p.totalBytesExpectedToWrite > 0) {
-          onIlerleme(p.totalBytesWritten / p.totalBytesExpectedToWrite, 'download');
-        }
-      },
-    );
-    const sonuc = await indirici.downloadAsync();
-    if (!sonuc?.uri) return { durum: 'hata', mesaj: 'Dosya indirilemedi' };
-
-    let check: Awaited<ReturnType<typeof verifyApkFile>>;
-    try {
-      const reader = openChunkReader(sonuc.uri);
-      try {
-        check = await verifyApkFile(doc, reader.read, (ratio) => onIlerleme?.(ratio, 'verify'));
-      } finally {
-        reader.close();
-      }
-    } catch (e) {
-      check = { ok: false, code: 'DOSYA_OKUNAMADI', message: `İndirilen kurulum dosyası okunamadı; kurulmadı. (${e instanceof Error ? e.message : String(e)})` };
-    }
-    if (!check.ok) {
-      console.warn(`[apk] indirilen dosya REDDEDİLDİ kod=${check.code} vc=${doc.versionCode}`);
-      await FileSystem.deleteAsync(hedef, { idempotent: true });
-      return { durum: 'hata', mesaj: check.message };
-    }
-
-    const contentUri = await FileSystem.getContentUriAsync(sonuc.uri);
-    await IntentLauncher.startActivityAsync('android.intent.action.INSTALL_PACKAGE', {
-      data: contentUri,
-      type: 'application/vnd.android.package-archive',
-      // 1 = FLAG_GRANT_READ_URI_PERMISSION — kurulum servisi dosyayı bu izinle
-      // okur; verilmezse kurulum "dosya açılamadı" ile sessizce düşer.
-      flags: 1,
-    });
-    return { durum: 'basladi' };
-  } catch (e) {
-    return { durum: 'hata', mesaj: e instanceof Error ? e.message : String(e) };
-  }
-}
-
-/** İndirilen kurulum dosyasını temizler (kurulum sonrası / iptalde). */
-export async function apkTemizle(): Promise<void> {
-  try {
-    await FileSystem.deleteAsync(`${FileSystem.cacheDirectory}tekserp-guncelleme.apk`, {
-      idempotent: true,
-    });
-  } catch {
-    /* temizlik best-effort */
-  }
+  return { grup, bilinmiyor: grup === null };
 }

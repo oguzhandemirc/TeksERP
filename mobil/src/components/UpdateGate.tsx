@@ -1,7 +1,7 @@
 // =============================================================================
 // TeksERP Mobil — uzaktan güncelleme kapısı
 // =============================================================================
-// Görünmez bileşen. İki iş yapar:
+// Görünmez bileşen. Üç iş yapar:
 //
 //  1) Uygulama ÖN PLANA döndüğünde güncelleme sorar (açılışta zaten
 //     `checkAutomatically: ON_LOAD` soruyor). Fabrikada tablet vardiya boyunca
@@ -11,6 +11,11 @@
 //  2) İndirilmiş güncelleme varsa UYGULAR (kullanıcı kararı: "hemen yenilesin").
 //     Tek kapı: gönderilmemiş istasyon kaydı varken yenilemez — bkz.
 //     `guvenliYenile`. Tavan dolarsa yenileme atlanır, paket kaybolmaz.
+//
+//  3) Sunucu daha yeni bir NATIVE sürüm bekliyorsa (minVersion) Play'i gösterir:
+//     ortak tablet kendi APK'sını indirip kurmaz (K-14, Play politikası); kalıcı
+//     şerit + "Play Store'u aç". Kilit YOK — Play'de sürümün hazır olup olmadığı
+//     tabletten ölçülemez ve çıkışı ölçülemeyen kilit üretim durmasıdır.
 //
 // ⚠️ Yenileme sırasında kısa bir örtü basılır. Bunun sebebi estetik değil:
 // `reloadAsync` uygulamayı aniden yeniden başlatır ve operatör hiçbir açıklama
@@ -25,14 +30,12 @@ import * as Updates from 'expo-updates';
 import { useAuthStore } from '../store/authStore';
 
 import {
-  apkDurumu,
-  apkIndirVeKur,
   bekleyenYazimSayisi,
   guvenliYenile,
   kuruluVersionName,
   otaKimlik,
 } from '../services/appUpdate.service';
-import type { ApkDoc } from '../services/apkKunye';
+import { PLAY_GUNCELLE_MESAJI, playStoreAc, uygulamaPaketi } from '../services/playStore';
 import { refreshOtaDownloadToken } from '../services/downloadToken.service';
 import {
   kilitlenmeliMi,
@@ -50,11 +53,7 @@ const LAUNCH_RETRY_DELAY_MS = 5 * 1000;
 export default function UpdateGate() {
   const { isUpdatePending } = Updates.useUpdates();
   const [politikaDurum, setPolitikaDurum] = useState<PolitikaDurumu>({ eski: false, sebep: null });
-  const [apkHazir, setApkHazir] = useState(false);
-  // Kurulum YALNIZ imzası doğrulanmış künyeyle; red/hata metni operatöre gösterilir (kurulum yok).
-  const [apkDoc, setApkDoc] = useState<ApkDoc | null>(null);
-  const [apkWarning, setApkWarning] = useState<string | null>(null);
-  const [kuruluyor, setKuruluyor] = useState(false);
+  const [playUyari, setPlayUyari] = useState<string | null>(null);
   const [yenileniyor, setYenileniyor] = useState(false);
   const sonSorma = useRef(0);
   const yenilemeBasladi = useRef(false);
@@ -86,15 +85,6 @@ export default function UpdateGate() {
       paketTarihi: Updates.createdAt,
     });
     setPolitikaDurum(durum);
-    // Kilit KOŞULLU: "düzeltme kurulabilir mi" sorusunun cevabı sebebe göre
-    // farklı yerde — paket ekseninde indirilmiş güncelleme, APK ekseninde
-    // sunucudaki kurulum dosyası.
-    if (durum.sebep === 'apk') {
-      const a = await apkDurumu();
-      setApkHazir(a.yeniVarMi);
-      setApkDoc(a.verified ?? null);
-      setApkWarning(a.rejection?.message ?? null);
-    }
   }, []);
 
   useEffect(() => {
@@ -163,9 +153,38 @@ export default function UpdateGate() {
     );
   }
 
-  const duzeltmeHazir = politikaDurum.sebep === 'apk' ? apkHazir : isUpdatePending;
   const bekleyen = bekleyenYazimSayisi();
-  const kilit = kilitlenmeliMi({ durum: politikaDurum, duzeltmeHazir, bekleyenYazim: bekleyen });
+
+  // NATIVE ESKİ — çözüm Play'dedir; tablet indirip kurmaz, kilitlemez (şerit dokunmayı geçirir).
+  if (politikaDurum.eski && politikaDurum.sebep === 'native') {
+    const paket = uygulamaPaketi();
+    return (
+      <View style={styles.serit} pointerEvents="box-none">
+        <Text style={styles.seritMetin}>{PLAY_GUNCELLE_MESAJI}</Text>
+        {playUyari ? <Text style={styles.seritMetin}>{playUyari}</Text> : null}
+        {paket ? (
+          <Button
+            mode="contained"
+            icon="google-play"
+            buttonColor={colors.brand}
+            style={styles.seritDugme}
+            contentStyle={styles.seritDugmeIc}
+            accessibilityLabel="Play Store'u aç"
+            onPress={() => {
+              setPlayUyari(null);
+              void playStoreAc().then((s) => {
+                if (s === 'acilamadi') setPlayUyari("Play Store açılamadı — tabletteki Play Store'dan TeksERP'i güncelleyin.");
+              });
+            }}
+          >
+            Play Store&apos;u aç
+          </Button>
+        ) : null}
+      </View>
+    );
+  }
+
+  const kilit = kilitlenmeliMi({ durum: politikaDurum, duzeltmeHazir: isUpdatePending, bekleyenYazim: bekleyen });
 
   // KİLİT — yalnız düzeltme gerçekten kurulabilirken ve kuyruk boşken.
   if (kilit) {
@@ -173,31 +192,15 @@ export default function UpdateGate() {
       <View style={styles.ortu} pointerEvents="auto">
         <Text style={styles.baslik}>Güncelleme gerekli</Text>
         <Text style={styles.alt}>
-          {politikaDurum.sebep === 'apk'
-            ? 'Sunucu daha yeni bir uygulama sürümü bekliyor. Kurulum dosyası hazır.'
-            : 'Sunucu daha yeni bir sürüm bekliyor. Güncelleme indirildi, uygulanmayı bekliyor.'}
+          Sunucu daha yeni bir sürüm bekliyor. Güncelleme indirildi, uygulanmayı bekliyor.
         </Text>
-        {politikaDurum.sebep === 'apk' && apkWarning ? <Text style={styles.uyari}>{apkWarning}</Text> : null}
         <Button
           mode="contained"
-          loading={kuruluyor}
-          disabled={kuruluyor}
           buttonColor={colors.brand}
           style={styles.dugme}
-          onPress={() => {
-            if (politikaDurum.sebep === 'apk') {
-              if (!apkDoc) return;
-              setKuruluyor(true);
-              setApkWarning(null);
-              void apkIndirVeKur(apkDoc)
-                .then((s) => setApkWarning(s.durum === 'hata' ? s.mesaj : null))
-                .finally(() => setKuruluyor(false));
-            } else {
-              void guvenliYenile();
-            }
-          }}
+          onPress={() => void guvenliYenile()}
         >
-          {politikaDurum.sebep === 'apk' ? 'İndir ve kur' : 'Şimdi yenile'}
+          Şimdi yenile
         </Button>
       </View>
     );
@@ -209,9 +212,7 @@ export default function UpdateGate() {
     return (
       <View style={styles.serit} pointerEvents="box-none">
         <Text style={styles.seritMetin}>
-          {politikaDurum.sebep === 'apk' && apkWarning
-            ? `Sürümünüz eski · ${apkWarning}`
-            : bekleyen > 0
+          {bekleyen > 0
               ? `Sürümünüz eski · ${bekleyen} kayıt gönderilince güncellenecek`
               : 'Sürümünüz eski · güncelleme indirilir indirilmez uygulanacak'}
         </Text>
@@ -234,7 +235,6 @@ const styles = StyleSheet.create({
   },
   baslik: { color: '#fff', fontSize: 20, fontWeight: '700' },
   alt: { color: '#c7cbe0', fontSize: 15, textAlign: 'center', paddingHorizontal: 32 },
-  uyari: { color: colors.dangerContainer, fontSize: 14, textAlign: 'center', paddingHorizontal: 32 },
   dugme: { marginTop: 20, borderRadius: 10, minWidth: 200 },
   // Şerit ekranın ÜSTÜNDE ve dokunmayı geçirir (box-none): operatör çalışmaya
   // devam edebilmeli — bu, kilidin bilinçli olarak yumuşatılmış hâli.
@@ -249,5 +249,7 @@ const styles = StyleSheet.create({
     zIndex: 9998,
     elevation: 9998,
   },
-  seritMetin: { color: '#fff', fontSize: 13, fontWeight: '600', textAlign: 'center' },
+  seritMetin: { color: '#fff', fontSize: 14, fontWeight: '600', textAlign: 'center' },
+  seritDugme: { alignSelf: 'center', marginTop: 6, borderRadius: 10 },
+  seritDugmeIc: { height: 56, paddingHorizontal: 12 },
 });

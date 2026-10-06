@@ -7,7 +7,7 @@
 // alan SESSİZCE düşer (görünmez, en tehlikelisi).
 //
 // ⚠️ MOBİLDE İKİ SÜRÜM EKSENİ VAR — masaüstünde yok:
-//   · APK sürümü (`versionName`) → yalnız kurulum dosyası değişince artar
+//   · Native sürüm (`versionName`) → yalnız Play'den yeni sürüm kurulunca artar
 //   · Uzak paket tarihi (`Updates.createdAt`) → her OTA yayınında ilerler
 // JS düzeltmesi `versionName`i DEĞİŞTİRMEDEN sahaya gider. Yani "2.9.8 görünen"
 // bir tabletin JS'i haftalarca eski olabilir. Tek eksenli bir kapı bunu ifade
@@ -59,7 +59,7 @@ export function surumKarsilastir(a: string, b: string): number {
   return 0;
 }
 
-export type EskilikSebebi = 'apk' | 'paket' | null;
+export type EskilikSebebi = 'native' | 'paket' | null;
 
 export interface PolitikaDurumu {
   /** Tablet politikanın altında mı. */
@@ -71,9 +71,9 @@ export interface PolitikaDurumu {
 /**
  * Tabletin politikayı karşılayıp karşılamadığına karar verir.
  *
- * ⚠️ SIRA ÖNEMLİ: önce APK ekseni bakılır. İkisi birden eskiyse çözüm kurulum
- * dosyasıdır (uzaktan güncelleme onu düzeltemez) — operatöre "indir ve kur"
- * demek, "yenile" demekten doğrudur.
+ * ⚠️ SIRA ÖNEMLİ: önce native eksen bakılır. İkisi birden eskiyse çözüm Play'deki
+ * yeni sürümdür (uzaktan güncelleme onu düzeltemez) — operatöre "Play'den
+ * güncelleyin" demek, "yenile" demekten doğrudur.
  */
 export function politikaDegerlendir(args: {
   politika: IstemciPolitikasi | null;
@@ -85,7 +85,7 @@ export function politikaDegerlendir(args: {
   if (!politika) return { eski: false, sebep: null };
 
   if (surumKarsilastir(apkSurumu, politika.minVersion) < 0) {
-    return { eski: true, sebep: 'apk' };
+    return { eski: true, sebep: 'native' };
   }
 
   if (politika.minPaketTarihi) {
