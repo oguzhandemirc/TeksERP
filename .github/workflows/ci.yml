@@ -101,7 +101,7 @@ jobs:
       # Tek ortak paket O1: dağıtım kaydı (kapalı şema · grup zinciri · türetim · eski kanaldan ayrılık) ve
       # eski kanal kaydının (adnansahin) bayt-donukluğu. Zero-dep, DB'siz, ağsız; sığ klonda çapa kolu ⏭ beyanlı.
       - name: Dağıtım kaydı + eski kanal donuk (O1)
-        run: node scripts/check-dagitim.mjs && node scripts/check-dagitim.mjs --sonda && node scripts/test_eski_kanal_donuk.mjs && node scripts/test_eski_kanal_donuk.mjs --sonda
+        run: node scripts/check-dagitim.mjs && node scripts/check-dagitim.mjs --sonda && node scripts/test_eski_kanal_donuk.mjs && node scripts/test_eski_kanal_donuk.mjs --sonda && node scripts/test_panel_kimlik.mjs
 
   # ===========================================================================
   # BACKEND — Express + Prisma; Postgres service + migrate deploy + seed + test

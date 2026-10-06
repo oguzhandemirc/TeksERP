@@ -32,6 +32,7 @@ import { etkilenenProjeler, stagedFiles } from "./lib/staged.mjs";
 import { agirSurecSayisi, slotAl } from "./lib/semafor.mjs";
 import { kanalBekcisiTetigi } from "../lib/kanallar.mjs";
 import { dagitimBekcisiTetigi } from "../lib/dagitim.mjs";
+import { panelKimlikTetigi } from "../lib/panel-kimlik.mjs";
 
 const REPO = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
 // Kapı defteri: wt BASENAME'i (wt-0c · Teks-Erp), tam yol ve kimlik yok — lib/kapi-defteri.mjs.
@@ -275,6 +276,12 @@ if (staged.some(kanalBekcisiTetigi)) {
 adimlar.push({ ad: "eski kanal kaydı donuk", cwd: ".", cmd: ["node", ["scripts/test_eski_kanal_donuk.mjs"]] });
 if (staged.some(dagitimBekcisiTetigi)) {
   adimlar.push({ ad: "dağıtım kaydı", cwd: ".", cmd: ["node", ["scripts/check-dagitim.mjs"]] });
+}
+
+// PANEL ORTAK KİMLİĞİ (tek ortak paket O5): dinlenme tabanı · çözücü · paketleme betiği · kapının kendisi. Zero-dep, ağsız (~0,3 sn);
+// tetik bekçinin OKUDUĞU kümeden türer (`panelKimlikTetigi`), kablosunu bekçi kendisi ölçer.
+if (staged.some(panelKimlikTetigi)) {
+  adimlar.push({ ad: "panel ortak kimliği", cwd: ".", cmd: ["node", ["scripts/test_panel_kimlik.mjs"]] });
 }
 
 if (adimlar.length === 0) process.exit(0);
