@@ -578,6 +578,8 @@ const KURULU_KONTROLLERI = ["kurulu.yalniz-kayit", "kurulu.gecmisin-SON-satiri",
 const D8E3B_KONTROLLERI = ["eskipaket.olcum-tek-giris", "gecisli.duzen-tanir", "gecisli.tek-isaret-yetmez-yabanci-eski-mesaj", "ag.kayit-eski-cevaptan", "ag.kayit-oncelik", "ag.kayit-gecersiz-yok-sayilir", "ag.onarim-sessiz-kayit-korunur", "ag.onarim-cevap-uygulanmaz", "ag.yeni-kurulum-cevaptan", "hizmetkok.ayni-kok-gecer", "hizmetkok.baska-kok-durur", "hizmetkok.okunamaz-durur", "hizmetkok.uc-hizmet-olculur"];
 /** Saat eşitlemesi kararı (2026-10-02): etki alanı DOKUNMA · zaten NTP DOKUNMA · hizmet otomatik · kapalı → NTP · önceki kayıtta. */
 const SAAT_KONTROLLERI = ["etki-alani-dokunmaz", "zaten-ntp-dokunmaz", "ntp-hizmet-otomatik", "kapali-ntp-acar", "onceki-kayda-girer"].map((c) => `saat.${c}`);
+/** Sunucu simgesi (tepsi.ps1 saf işlevleri). */
+const TEPSI_KONTROLLERI = ["renk-backendden-aynen", "taninmayan-yanit-kirmizi", "kisa-kesinti-onceki-korunur", "guncelleme-yeniden-basliyor-sari", "ipucu-63-sinir", "yuzde"].map((c) => `tepsi.${c}`);
 const CEVAP_KONTROLLERI = ["ornek-gecerli", "varsayilanlar", "surum-zorunlu", "surum-yanlis", "bilinmeyen-alan", "sir-alan-red", "sir-adi-dar", "tur-sayi", "sayi-aralik", "tur-mantik", "tur-yol", "desen", "secenek-liste", "bos", "sema-sirsiz"];
 function durum(satirlar: string[], ad: string): "OK" | "HATA" | "YOK" {
   if (satirlar.includes(`OK ${ad}`)) return "OK";
@@ -601,8 +603,7 @@ if (eksik.length === 0) {
 
   // §1
   console.log("\n§1 harness — kurulum-ortak.ps1 saf işlevleri gerçek kabukta");
-  if (!pwshVar()) defter.atla("§1 harness", "pwsh 7 yok", CEVAP_KONTROLLERI.length + 7 + KURULU_KONTROLLERI.length + LISANS_KONTROLLERI.length + D8E3B_KONTROLLERI.length + SAAT_KONTROLLERI.length);
-  if (!pwshVar()) defter.atla("§1 harness", "pwsh 7 yok", CEVAP_KONTROLLERI.length + 7 + KURULU_KONTROLLERI.length + LISANS_KONTROLLERI.length + D8E3B_KONTROLLERI.length + TEPSI_KONTROLLERI.length);
+  if (!pwshVar()) defter.atla("§1 harness", "pwsh 7 yok", CEVAP_KONTROLLERI.length + 7 + KURULU_KONTROLLERI.length + LISANS_KONTROLLERI.length + D8E3B_KONTROLLERI.length + SAAT_KONTROLLERI.length + TEPSI_KONTROLLERI.length);
   else {
     const h = harness();
     const vek = JSON.parse(readFileSync(join(KOK, "deploy/pg/pg-sablon-vektorleri.json"), "utf8")) as { port: Array<{ ad: string }> };
@@ -648,7 +649,7 @@ if (eksik.length === 0) {
     ["§11", "sihirbaz deneyimi: ölçüm görünür + açılış hafif · eski paket iki kapıda · onarım metinleri · ölçülen yapılacaklar"],
     ["§12", "lisans satıcısı kanaldan: tek karar işlevi · boş alan = kanal (ön doldurma + özet) · farklı değer UYARI · .env karardan · Dogrulama ölçer"],
     ["§13", "onarım/kurulum güvenliği (D8e-3b): F1 ağ ayarı kayıttan (ön doldurma · özet etkili · OnKosul korur · kural karardan · önceki cevap saklanır) · F2 başka köke bağlı / ölçülemeyen kanal hizmeti engel+DUR · F3 eski paket tek giriş + sayfada engel · F4-B geçişli düzen GECISLI, DUR"],
-  } else defter.atla("✓K harness sondaları", "pwsh 7 yok", 23 + 4 + 5);
+    ["§15", "sunucu simgesi: setup içeriğinde · kurulum (Users salt okuma + HKLM Run) · kaldırıcı siler · yalnız 127.0.0.1 /health/tepsi OKUR (dinlemez/yazmaz/başlatmaz) · ASCII"],
   ];
   console.log("");
   for (const [bolum, ne] of BOLUMLER) check(`${bolum} ⭐ ${ne}`, !(b[bolum]?.length), (b[bolum] ?? []).join(" · "));
@@ -669,15 +670,15 @@ if (eksik.length === 0) {
     { ad: "S10 Paket aşaması iskeletten ÖNCE sır yazıyor", dosya: "kurulum", eski: `  JunctionKur $current $hedef\n`, yeni: `  JunctionKur $current $hedef\n  EnvYaz (Join-Path $kok "yapilandirma\\.env") "A=b"\n`, bolum: "§4", parca: "AsamaPaket iskeletten ÖNCE sır" },
     { ad: "S11 backend güncelleyiciden sonra kaydediliyor", dosya: "kurulum", eski: `  [void](BackendHizmetBetigi $kok $d @("-Uygula"))\n  [void](GuncelleyiciHizmetBetigi $kok $d $C @("-Uygula"))`, yeni: `  [void](GuncelleyiciHizmetBetigi $kok $d $C @("-Uygula"))\n  [void](BackendHizmetBetigi $kok $d @("-Uygula"))`, bolum: "§4", parca: "Hizmetler sırası" },
     { ad: "S12 sihirbaz aşama tablosu kaydı (Backend↔PostgreSQL)", dosya: "iss", eski: "    3: Result := 'PostgreSQL';\n    4: Result := 'Backend';", yeni: "    3: Result := 'Backend';\n    4: Result := 'PostgreSQL';", bolum: "§4", parca: "aşama tablosu" },
-    { ad: "S76 simge ağ dinliyor (HttpListener)", dosya: "tepsi", eski: `$bildirim.Visible = $true\n`, yeni: `$bildirim.Visible = $true\n$dinle = New-Object System.Net.HttpListener\n`, bolum: "§14", parca: "salt okunur/dinlemez değil" },
-    { ad: "S77 simge yerel adres yerine ağdan okuyor", dosya: "tepsi", eski: `"http://127.0.0.1:$Port/health/tepsi"`, yeni: `"http://sunucu:$Port/health/tepsi"`, bolum: "§14", parca: "yalnız http://127.0.0.1" },
-    { ad: "S78 tepsi dizininde Users'a yazma izni", dosya: "kurulum", eski: `*S-1-5-32-545:(OI)(CI)RX`, yeni: `*S-1-5-32-545:(OI)(CI)M`, bolum: "§14", parca: "Users YALNIZ okuma" },
-    { ad: "S79 kaldırıcı Run kaydını silmiyor", dosya: "kaldir", eski: `Remove-ItemProperty -LiteralPath $run -Name $isim;`, yeni: ``, bolum: "§14", parca: "Run kaydını" },
-    { ad: "S80 kurulum TepsiKur'u çağırmıyor", dosya: "kurulum", eski: `  TepsiKur $kok $d $apiPort\n`, yeni: ``, bolum: "§14", parca: "TepsiKur'u çağırmıyor" },
-    { ad: "S81 simge dosya yazıyor", dosya: "tepsi", eski: `$ErrorActionPreference = "Stop"\n`, yeni: `$ErrorActionPreference = "Stop"\nSet-Content -Path x -Value y\n`, bolum: "§14", parca: "salt okunur/dinlemez değil" },
-    { ad: "S82 setup içeriğinden tepsi.ps1 düşmüş", dosya: "iss", eski: `Source: "tepsi.ps1"; DestDir: "{app}\\kurulum\\deploy\\kurulum"; Flags: ignoreversion\n`, yeni: ``, bolum: "§14", parca: "setup içeriğinde" },
-    { ad: "S83 tepsi.ps1 ASCII dışı", dosya: "tepsi", eski: `# TeksERP SUNUCU SIMGESI (bildirim alani)`, yeni: `# TeksERP SUNUCU SİMGESİ (bildirim alani)`, bolum: "§14", parca: "ASCII dışı" },
-    { ad: "S84 kurulum tepsi dizinini Users'a açık bırakıyor (miras)", dosya: "kurulum", eski: `"/inheritance:r", "/grant:r", "*S-1-5-18`, yeni: `"/grant:r", "*S-1-5-18`, bolum: "§14", parca: "miras kesilip" },
+    { ad: "S76 simge ağ dinliyor (HttpListener)", dosya: "tepsi", eski: `$bildirim.Visible = $true\n`, yeni: `$bildirim.Visible = $true\n$dinle = New-Object System.Net.HttpListener\n`, bolum: "§15", parca: "salt okunur/dinlemez değil" },
+    { ad: "S77 simge yerel adres yerine ağdan okuyor", dosya: "tepsi", eski: `"http://127.0.0.1:$Port/health/tepsi"`, yeni: `"http://sunucu:$Port/health/tepsi"`, bolum: "§15", parca: "yalnız http://127.0.0.1" },
+    { ad: "S78 tepsi dizininde Users'a yazma izni", dosya: "kurulum", eski: `*S-1-5-32-545:(OI)(CI)RX`, yeni: `*S-1-5-32-545:(OI)(CI)M`, bolum: "§15", parca: "Users YALNIZ okuma" },
+    { ad: "S79 kaldırıcı Run kaydını silmiyor", dosya: "kaldir", eski: `Remove-ItemProperty -LiteralPath $run -Name $isim;`, yeni: ``, bolum: "§15", parca: "Run kaydını" },
+    { ad: "S80 kurulum TepsiKur'u çağırmıyor", dosya: "kurulum", eski: `  TepsiKur $kok $d $apiPort\n`, yeni: ``, bolum: "§15", parca: "TepsiKur'u çağırmıyor" },
+    { ad: "S81 simge dosya yazıyor", dosya: "tepsi", eski: `$ErrorActionPreference = "Stop"\n`, yeni: `$ErrorActionPreference = "Stop"\nSet-Content -Path x -Value y\n`, bolum: "§15", parca: "salt okunur/dinlemez değil" },
+    { ad: "S82 setup içeriğinden tepsi.ps1 düşmüş", dosya: "iss", eski: `Source: "tepsi.ps1"; DestDir: "{app}\\kurulum\\deploy\\kurulum"; Flags: ignoreversion\n`, yeni: ``, bolum: "§15", parca: "setup içeriğinde" },
+    { ad: "S83 tepsi.ps1 ASCII dışı", dosya: "tepsi", eski: `# TeksERP SUNUCU SIMGESI (bildirim alani)`, yeni: `# TeksERP SUNUCU SİMGESİ (bildirim alani)`, bolum: "§15", parca: "ASCII dışı" },
+    { ad: "S84 kurulum tepsi dizinini Users'a açık bırakıyor (miras)", dosya: "kurulum", eski: `"/inheritance:r", "/grant:r", "*S-1-5-18`, yeni: `"/grant:r", "*S-1-5-18`, bolum: "§15", parca: "miras kesilip" },
     { ad: "S13 ikinci çağrı noktası (D6 betiği doğrudan)", dosya: "kurulum", eski: `  $acik = @()\n`, yeni: `  & (Join-Path $kok "current\\hizmet\\backend-hizmeti.ps1") -Kok $kok\n  $acik = @()\n`, bolum: "§5", parca: "backend-hizmeti.ps1 BackendHizmetBetigi dışında" },
     { ad: "S14 kurulum hizmet kaydı yazıyor (hizmet-kur)", dosya: "kurulum", eski: `  $acik = @()\n`, yeni: `  & "$kok\\current\\runtime\\tekserp-hizmet.exe" hizmet-kur --ad x\n  $acik = @()\n`, bolum: "§5", parca: "hizmet-kur" },
     { ad: "S15 kaldırma yapılandırmayı siliyor", dosya: "kaldir", eski: `  AdimDene "yedekle.ps1" {`, yeni: `  Remove-Item -LiteralPath (Join-Path $kok "yapilandirma") -Recurse -Force\n  AdimDene "yedekle.ps1" {`, bolum: "§6", parca: "Remove-Item" },
@@ -831,8 +832,7 @@ if (eksik.length === 0) {
     } finally {
       rmSync(dizin, { recursive: true, force: true });
     }
-  } else defter.atla("✓K harness sondaları", "pwsh 7 yok", 27);
-  } else defter.atla("✓K harness sondaları", "pwsh 7 yok", 23 + 5);
+  } else defter.atla("✓K harness sondaları", "pwsh 7 yok", 23 + 4 + 5);
 }
 
 console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız${defter.ozetEki()} ===`);
