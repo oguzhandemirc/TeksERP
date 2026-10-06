@@ -7,7 +7,7 @@
 //   §6 CLI negatif yollar (ağ YOK) · §7 betik kaynağı: kapılar ve sıra (negatif sondalı)
 // ÇIKIŞ: 0 yeşil · 1 KIRMIZI.   node scripts/test_grup_yayin_tablet.mjs
 // =============================================================================
-import { spawnSync } from 'node:child_process';
+import { execFileSync, spawnSync } from 'node:child_process';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -16,7 +16,7 @@ import { createRequire } from 'node:module';
 
 import { KOK } from './lib/dagitim.mjs';
 import { TABLET_ARTEFAKT_GORELI, grupTerfiKapisi } from './lib/grup-yayin.mjs';
-import { OrtakOtaIhlali, grupManifestiUret, ortakImzaAnahtari, ortakNativeParmakIzi, ortakPaketDenetimi, parmakIziHukmu } from '../mobil/scripts/lib/ortak-ota.mjs';
+import { ORTAK_PARMAK_IZI_ALG, OrtakOtaIhlali, grupManifestiUret, ortakImzaAnahtari, ortakNativeParmakIzi, ortakPaketDenetimi, parmakIziHukmu, yerelNativeKaynakIzi } from '../mobil/scripts/lib/ortak-ota.mjs';
 import { multipartDogrula } from '../mobil/scripts/lib/manifest.mjs';
 
 const require = createRequire(import.meta.url);
@@ -97,10 +97,25 @@ const pi = ortakNativeParmakIzi(cfg, { a: '1' });
 ol('§4 parmak izi: versionCode değişince AYNI', ortakNativeParmakIzi({ ...cfg, android: { ...cfg.android, versionCode: 99 } }, { a: '1' }) === pi);
 ol('§4 sonda: plugin değişince FARKLI', ortakNativeParmakIzi({ ...cfg, plugins: ['p', 'q'] }, { a: '1' }) !== pi);
 ol('§4 sonda: bağımlılık değişince FARKLI', ortakNativeParmakIzi(cfg, { a: '2' }) !== pi);
-const on = { alg: 3, parmakIzi: pi, runtimeVersion: '55.0' };
+ol('§4 sonda: depo içi native kaynak değişince FARKLI', ortakNativeParmakIzi(cfg, { a: '1' }, '1:aa') !== ortakNativeParmakIzi(cfg, { a: '1' }, '1:bb'));
+{
+  const kok = path.join(GECICI, 'yerel-native');
+  fs.mkdirSync(path.join(kok, 'modules/m/android'), { recursive: true });
+  fs.writeFileSync(path.join(kok, 'modules/m/android/A.kt'), 'class A');
+  execFileSync('git', ['init', '-q'], { cwd: kok });
+  execFileSync('git', ['add', '.'], { cwd: kok });
+  const i1 = yerelNativeKaynakIzi(kok);
+  fs.writeFileSync(path.join(kok, 'modules/m/android/Izlenmeyen.kt'), 'class B');
+  const i2 = yerelNativeKaynakIzi(kok);
+  fs.writeFileSync(path.join(kok, 'modules/m/android/A.kt'), 'class A2');
+  const i3 = yerelNativeKaynakIzi(kok);
+  ol('§4 yerel native: izlenmeyen dosya (derleme çıktısı) özeti değiştirmez', i1 === i2);
+  ol('§4 sonda: izlenen Kotlin içeriği değişince özet FARKLI', i1 !== i3);
+}
+const on = { alg: ORTAK_PARMAK_IZI_ALG, parmakIzi: pi, runtimeVersion: '55.0' };
 ol('§4 hüküm: ilk · aynı · rv değişti', parmakIziHukmu({ onceki: null, simdiki: pi, runtimeVersion: '55.0' }).sonuc === 'ilk' && parmakIziHukmu({ onceki: on, simdiki: pi, runtimeVersion: '55.0' }).sonuc === 'ayni' && parmakIziHukmu({ onceki: on, simdiki: 'x', runtimeVersion: '56.0' }).sonuc === 'rv-degisti');
 ol('§4 sonda: native değişti + runtimeVersion aynı → İHLAL (sahadaki tabletler çöker)', parmakIziHukmu({ onceki: on, simdiki: 'degisti', runtimeVersion: '55.0' }).sonuc === 'ihlal');
-ol('§4 sonda: algoritma farkı kıyaslanamaz (native değişti DEĞİL)', parmakIziHukmu({ onceki: { ...on, alg: 2 }, simdiki: 'x', runtimeVersion: '55.0' }).sonuc === 'alg');
+ol('§4 sonda: algoritma farkı kıyaslanamaz (native değişti DEĞİL)', parmakIziHukmu({ onceki: { ...on, alg: 3 }, simdiki: 'x', runtimeVersion: '55.0' }).sonuc === 'alg');
 
 // §5
 ol('§5 artefakt yolu: apk ve ota grup dizinine göre', TABLET_ARTEFAKT_GORELI.apk({ surum: '1.2.3', vc: 9 }) === 'apk/TeksERP-1.2.3-vc9.apk' && TABLET_ARTEFAKT_GORELI.ota({ rv: '55.0', damga: DAMGA, bundle: BUNDLE }) === `ota/55.0/${DAMGA}/${BUNDLE}`);

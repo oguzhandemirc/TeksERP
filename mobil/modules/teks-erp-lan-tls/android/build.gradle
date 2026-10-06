@@ -1,0 +1,22 @@
+// Fabrika ağında TLS — tabletin native zorlama katmanı (docs/design/LAN-TLS.md §6, D5).
+// Depo içi yerel Expo modülü (mobil/modules/ otomatik bağlanır); yeni bağımlılık YOK — OkHttp
+// react-android'den gelir.
+plugins {
+  id 'com.android.library'
+  id 'expo-module-gradle-plugin'
+}
+
+group = 'com.tekserp'
+version = '1.0.0'
+
+android {
+  namespace "com.tekserp.lantls"
+  defaultConfig {
+    versionCode 1
+    versionName '1.0.0'
+  }
+}
+
+dependencies {
+  implementation 'com.facebook.react:react-android'
+}

@@ -38,6 +38,7 @@ import ChannelStrip from './src/components/ChannelStrip';
 import LicenseBanner from './src/components/LicenseBanner';
 import LicenseSuspendedGate from './src/components/lock/LicenseSuspendedGate';
 import { LICENSE_STATUS_KEY } from './src/hooks/useLicenseStatus';
+import { startLanTlsNativeSync } from './src/services/lanTlsPins';
 
 registerStationMutationDefaults();
 installGlobalErrorReporting();
@@ -86,6 +87,11 @@ export default function App() {
       }
     });
     return () => sub.remove();
+  }, []);
+
+  // Şifreli bağlantı sabitleri native katmana (D5): adres yüklenince ve her adres değişiminde itilir.
+  useEffect(() => {
+    startLanTlsNativeSync();
   }, []);
 
   // Etiket Stüdyosu v2 geçişi: eski kind-anahtarlı şablon cache'i ('@label-template:*')

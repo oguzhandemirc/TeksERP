@@ -11,6 +11,7 @@
 // Bekçi: scripts/test_grup_yayin_tablet.mjs
 // =============================================================================
 
+import { execFileSync } from 'node:child_process';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -137,13 +138,31 @@ export function grupManifestiUret({ paketDizin, kunye, expoConfig, feed, anahtar
 /**
  * Native parmak izi, DEĞERLENDİRİLMİŞ ortak yapılandırmadan (`app.config.js` çıktısı): `app.json` eski kanalın
  * kimliğini taşır, ortak paketin paket adı/runtime'ı ondan gelmez — o yüzden app.json'un ham android bloğu hash'lenmez.
- * Kapsam eski algoritmayla aynı (bağımlılıklar · plugins · android − versionCode).
+ * Kapsam: bağımlılıklar · plugins · android − versionCode · depo içi native kaynak (`yerelNativeKaynakIzi`; alg 4).
  */
-export const ORTAK_PARMAK_IZI_ALG = 3;
-export function ortakNativeParmakIzi(degerlendirilmis, bagimliliklar) {
+export const ORTAK_PARMAK_IZI_ALG = 4;
+export function ortakNativeParmakIzi(degerlendirilmis, bagimliliklar, yerelNative = null) {
   const { versionCode: _vc, ...androidKalan } = degerlendirilmis?.android ?? {};
-  const girdi = JSON.stringify({ bagimliliklar, plugins: degerlendirilmis?.plugins, android: androidKalan, runtimeVersion: degerlendirilmis?.runtimeVersion });
+  const girdi = JSON.stringify({ bagimliliklar, plugins: degerlendirilmis?.plugins, android: androidKalan, runtimeVersion: degerlendirilmis?.runtimeVersion, yerelNative });
   return crypto.createHash('sha256').update(girdi).digest('hex').slice(0, 16);
+}
+
+/**
+ * Depo içi native kaynağın özeti: `modules/` (yerel Expo modülleri, ör. TeksErpLanTls Kotlin'i) ve `plugins/`
+ * altındaki git'te izlenen dosyaların yolu + içeriği. Bağımlılık/plugin listesi bu dosyaların içeriğini görmez;
+ * görmezse Kotlin değişikliği runtimeVersion artmadan OTA'ya sızar. git okunamazsa kapı ölçemez → hata.
+ */
+export function yerelNativeKaynakIzi(kok) {
+  const liste = execFileSync('git', ['ls-files', '-z', '--', 'modules', 'plugins'], { cwd: kok, encoding: 'utf8' })
+    .split('\0')
+    .filter(Boolean)
+    .sort();
+  const h = crypto.createHash('sha256');
+  for (const f of liste) {
+    h.update(f).update('\0');
+    h.update(crypto.createHash('sha256').update(fs.readFileSync(path.join(kok, f))).digest('hex')).update('\n');
+  }
+  return `${liste.length}:${h.digest('hex').slice(0, 16)}`;
 }
 
 /**

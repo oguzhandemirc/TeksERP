@@ -28,7 +28,7 @@ import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 
 import { PANEL_KUNYE_ADI, derlemeKunyesiYaz, temizAgacDenetimi } from '../../scripts/lib/derleme-bagi.mjs';
-import { ORTAK_PARMAK_IZI_ALG, OrtakOtaIhlali, ortakNativeParmakIzi, ortakPaketDenetimi, parmakIziHukmu } from './lib/ortak-ota.mjs';
+import { ORTAK_PARMAK_IZI_ALG, OrtakOtaIhlali, ortakNativeParmakIzi, ortakPaketDenetimi, parmakIziHukmu, yerelNativeKaynakIzi } from './lib/ortak-ota.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const require = createRequire(import.meta.url);
@@ -76,7 +76,7 @@ function degerlendirilmisYapilandirma() {
 
 function parmakIziKapisi(cfg, rv) {
   const pkg = JSON.parse(fs.readFileSync(path.join(PROJECT_ROOT, 'package.json'), 'utf8'));
-  const simdiki = ortakNativeParmakIzi(cfg, pkg.dependencies);
+  const simdiki = ortakNativeParmakIzi(cfg, pkg.dependencies, yerelNativeKaynakIzi(PROJECT_ROOT));
   let onceki = null;
   try {
     onceki = JSON.parse(fs.readFileSync(PARMAK_IZI_DOSYA, 'utf8'));

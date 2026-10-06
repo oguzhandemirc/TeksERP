@@ -1,24 +1,17 @@
 // Tabletin şifreli bağlantı sabit deposu (docs/design/LAN-TLS.md §6). Sabit cihazın güvenli deposunda
-// (expo-secure-store) durur. Bağlantıyı ZORLAYAN katman native'dir (D5: OkHttp'a parmak izi denetleyen
-// TrustManager); o katman yoksa sabit yazılmaz — bkz. decideQrPin.
-import { NativeModules } from 'react-native';
+// (expo-secure-store) durur ve GERÇEĞİN KAYNAĞIDIR. Bağlantıyı ZORLAYAN katman native'dir (D5: OkHttp'a
+// parmak izi denetleyen TrustManager, `lanTlsNative.ts`); o katman yoksa sabit yazılmaz — bkz. decideQrPin.
+// Native kendi kalıcı kopyasını açılışta JS'ten önce yükler (ilk istek de sabitle gider); JS her açılışta,
+// her sabit değişikliğinde ve her adres değişikliğinde güncel kümeyi yeniden iter.
 import { storage } from '../utils/storage';
-import { parseTlsPins, withPin, type TlsPin } from '../lib/lan-tls';
+import { nativePinState, parseTlsPins, withPin, type TlsPin } from '../lib/lan-tls';
+import { parseUrlParts, useBaseUrlStore } from '../store/baseUrlStore';
+import { lanTlsNative } from './lanTlsNative';
 
 const TLS_PINS_KEY = 'api_server_tls_pins';
 
-/** D5'in native modülü (planlanan ad). Yoksa bu sürüm şifreli bağlantıyı zorlayamaz. */
-interface LanTlsNative {
-  setPins: (json: string) => Promise<void>;
-}
-
-function nativeModule(): LanTlsNative | null {
-  const m = (NativeModules as Record<string, unknown>).TeksErpLanTls as Partial<LanTlsNative> | undefined;
-  return m && typeof m.setPins === 'function' ? (m as LanTlsNative) : null;
-}
-
 export function lanTlsNativeAvailable(): boolean {
-  return nativeModule() !== null;
+  return lanTlsNative() !== null;
 }
 
 export async function getTlsPins(): Promise<TlsPin[]> {
@@ -29,10 +22,26 @@ export async function getTlsPins(): Promise<TlsPin[]> {
   }
 }
 
+// İtmeler sıraya girer ve her biri o anki depo + adresi okur: geç kalan eski bir itme yenisini ezemez.
+let pushChain: Promise<void> = Promise.resolve();
+
+/** Güncel sabit kümesini native katmana iter. Native yoksa hiçbir şey yapmaz. */
+export function pushNativePinState(): Promise<void> {
+  const run = async () => {
+    const native = lanTlsNative();
+    if (!native) return;
+    const state = nativePinState(await getTlsPins(), parseUrlParts(useBaseUrlStore.getState().baseUrl));
+    await native.setPinState(state.fingerprints, state.endpoints);
+  };
+  const next = pushChain.then(run, run);
+  pushChain = next.catch(() => undefined);
+  return next;
+}
+
 async function writePins(pins: TlsPin[]): Promise<void> {
   if (pins.length === 0) await storage.deleteItem(TLS_PINS_KEY);
   else await storage.setItem(TLS_PINS_KEY, JSON.stringify(pins));
-  await nativeModule()?.setPins(JSON.stringify(pins));
+  await pushNativePinState();
 }
 
 /** Aynı kurulumun eski sabiti yerini yeniye bırakır. */
@@ -46,4 +55,34 @@ export async function removeTlsPins(installationId: string | null): Promise<TlsP
   const next = (await getTlsPins()).filter((p) => p.installationId !== installationId);
   await writePins(next);
   return next;
+}
+
+let syncStarted = false;
+
+/**
+ * Açılışta bir kez: adres deposu yüklenince kümeyi iter, sonra her adres değişikliğinde yeniden iter.
+ * Adres yüklenmeden itilmez (boş adres sabitli ucu geçici olarak düşürürdü). Native yoksa etkisiz.
+ */
+export function startLanTlsNativeSync(): void {
+  if (syncStarted || !lanTlsNative()) return;
+  syncStarted = true;
+  const push = () => {
+    pushNativePinState().catch((e: unknown) => {
+      console.warn('[lan-tls] sabit kümesi native katmana iletilemedi', e);
+    });
+  };
+  let last: string | null = null;
+  const onState = (s: { isLoaded: boolean; baseUrl: string }) => {
+    if (!s.isLoaded || s.baseUrl === last) return;
+    last = s.baseUrl;
+    push();
+  };
+  useBaseUrlStore.subscribe(onState);
+  onState(useBaseUrlStore.getState());
+}
+
+/** Yalnız testler için: modül düzeyi durumu sıfırlar. */
+export function __resetLanTlsSyncForTests(): void {
+  syncStarted = false;
+  pushChain = Promise.resolve();
 }

@@ -82,6 +82,6 @@ Reddedilenler: keşiften/ilk girişten otomatik sabitleme (TOFU) · IP'ye bağl�
 | D2 | Backend: sertifika üretimi/saklama, `LAN_TLS_MODE` dinleyicileri, kimlik ucunda `tls`, bekçi `test_lan_tls` + `test_lan_tls_http` | ✅ |
 | D3 | Panel: doğrulama kancası + pin deposu + https probu + onay diyaloğu + tablet QR'ı | ✅ |
 | D4 | Tablet: QR okuma + pin deposu + keşifte engel (JS, OTA ile gider; native yokken etkisiz) | ✅ |
-| D5 | Tablet: native zorlama (OkHttp) | **ONAY bekler** |
+| D5 | Tablet: native zorlama (OkHttp) — yerel Expo modülü `mobil/modules/teks-erp-lan-tls` (config eklentisi yerine otomatik bağlama + `ApplicationLifecycleListener`, `MainApplication`a dokunulmaz): RN istemci fabrikası + WebSocket'e parmak izi `TrustManager`/`HostnameVerifier` + sabitli makineye şifresiz istek kesicisi (yalnız kimlik yoklaması geçer); küme JS'ten itilir, native kendi kopyasını açılışta yükler; `expo-file-system`/`expo-audio`/`expo-updates` kendi istemcileri sistem CA'sıyla kalır (sabitli kendinden imzalı sunucuya ulaşamaz, atlatamaz). JVM denetimi `jvm-check.mjs`; OTA parmak izine depo içi native kaynak girdi (alg 4) | ✅ derlendi · gerçek tablette deneme bekler |
 | D6 | Durum sayfası (yalnız döngü adresinde) + yeni kurulum `dual` + kurulum sonu (sihirbaz son sayfası, `kurulum.ps1`) parmak izi ve durum sayfası; bekçi `test_kurulum_betikleri` §18 + harness `lantls.*` (Windows denemesi bekler) | ✅ |
 | D7 | Sertifika yenileme (sonraki parmak izi) | sırada |

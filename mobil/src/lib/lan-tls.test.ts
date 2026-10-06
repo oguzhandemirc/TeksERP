@@ -9,6 +9,7 @@ import {
   buildTlsQr,
   decideQrPin,
   httpFallbackUrl,
+  nativePinState,
   parseTlsPins,
   parseTlsQr,
   type TlsPin,
@@ -89,6 +90,22 @@ describe('depo ve dönüş adresi', () => {
   it('dönüş: aynı sunucunun son http adresi, yoksa varsayılan port', () => {
     expect(httpFallbackUrl('10.0.0.5', ['http://10.0.0.9:4000/api', 'http://10.0.0.5:4010/api'], 4000)).toBe('http://10.0.0.5:4010');
     expect(httpFallbackUrl('10.0.0.5', [], 4000)).toBe('http://10.0.0.5:4000');
+  });
+});
+
+describe('native katmana itilen küme (D5)', () => {
+  const https = { scheme: 'https' as const, host: '192.168.1.50', port: '4443' };
+  it('parmak izleri tekil ve sıralı; sabit yoksa boş', () => {
+    expect(nativePinState([], https)).toEqual({ fingerprints: [], endpoints: [] });
+    const p2 = { ...PIN, installationId: null, fingerprint: OTHER };
+    expect(nativePinState([p2, PIN, PIN], https).fingerprints).toEqual([FP, OTHER]);
+  });
+  it('sabitli uç yalnız https + sabitin portu; host küçük harfe iner', () => {
+    expect(nativePinState([PIN], https).endpoints).toEqual(['192.168.1.50:4443']);
+    expect(nativePinState([PIN], { ...https, host: 'SUNUCU' }).endpoints).toEqual(['sunucu:4443']);
+    expect(nativePinState([PIN], { ...https, scheme: 'http' }).endpoints).toEqual([]);
+    expect(nativePinState([PIN], { ...https, port: '4444' }).endpoints).toEqual([]);
+    expect(nativePinState([PIN], { ...https, host: ' ' }).endpoints).toEqual([]);
   });
 });
 

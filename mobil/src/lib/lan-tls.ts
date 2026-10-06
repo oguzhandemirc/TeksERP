@@ -121,6 +121,26 @@ export function parseTlsPins(raw: string | null | undefined): TlsPin[] {
   }
 }
 
+/** Native zorlama katmanına itilen küme: kabul edilen parmak izleri + şifreli bağlanılan sabitli uç. */
+export interface NativePinState {
+  fingerprints: string[];
+  endpoints: string[];
+}
+
+/**
+ * Sabitli uç = geçerli API adresi https ve portu bir sabitin portu (kart `activePin` ile aynı ölçüt).
+ * Native o uca sabit dışı sertifikayı reddeder, o makineye şifresiz istek göndermez.
+ */
+export function nativePinState(
+  pins: readonly TlsPin[],
+  current: { scheme: 'http' | 'https'; host: string; port: string },
+): NativePinState {
+  const fingerprints = [...new Set(pins.map((p) => p.fingerprint))].sort();
+  const host = current.host.trim().toLowerCase();
+  const pinnedHere = current.scheme === 'https' && host !== '' && pins.some((p) => String(p.port) === current.port);
+  return { fingerprints, endpoints: pinnedHere ? [`${host}:${current.port}`] : [] };
+}
+
 export type QrPinDecision =
   | { ok: true; pin: TlsPin; baseUrl: string }
   | { ok: false; reason: string };
