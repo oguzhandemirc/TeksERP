@@ -76,9 +76,9 @@ param(
   [string]$Surum,
   # Yayin provasi paketi - baslik "PROVA KIPI".
   [switch]$Prova,
-  # Musteri/kanal kodu (kanallar.json backend blogu). Kok kural "musteri kodu
-  # ARGUMANDAN" Faz 2b'de backend'e de genisledi. YOKSA bugunku davranis
-  # (kanal-disi tek zip) korunur - AMA uyarilir. Kimlik pakete filigran olur.
+  # ESKI KANAL YOLU (kanallar.json backend blogu; adnansahin pm2, donuk - O15'te kalkar). VERILMEZSE
+  # ORTAK PAKET: kimlik deploy/dagitim.json'dan (dagitim-kapisi.mjs), paket musteri/kanal TASIMAZ;
+  # firma adi lisanstan, guncelleme grubu kiradan, filigran kurulumda (TEK-ORTAK-PAKET.md O11a).
   [string]$Musteri,
   # KORUMALI paket: esbuild minify + isim karartma -> bytenode .jsc + paketin
   # kendi runtime node ikilisi + yorumsuz Prisma semasi. Bayt kodu OS/mimari/V8'e
@@ -88,7 +88,8 @@ param(
   # Korumali paketin hedef platformu (bayt kodu kilidi). Bugun yalniz win-x64
   # sahaya cikiyor; linux-x64 Docker yapiti ayri dilim (2f).
   [ValidateSet("win-x64", "linux-x64")][string]$Hedef = "win-x64",
-  # Korumali paketin filigranina girecek kurulum kimligi (UUID; lisans kimligi). Opsiyonel.
+  # Korumali paketin filigranina girecek kurulum kimligi (UUID). YALNIZ eski kanal yolunda (-Musteri);
+  # ortak paket kurulum kimligi tasimaz (filigran kurulumda).
   [string]$Kurulum,
   # Native lisans cekirdegi (URETIM derlemesi, test capasiz). Verilmezse
   # Teks-Erp\native\lisans-cekirdek\dist-uretim\<dosya> (CI/cargo-xwin ciktisi).
@@ -240,9 +241,22 @@ if ($Musteri) {
   Write-Host "    hizmet  : $backendHizmet"
   Write-Host "    urun    : $backendUrun"
 } else {
+  # ORTAK PAKET (O11a): kimlik dagitim kaydindan; musteri/kanal/kurulum TASINMAZ (backendKanal null).
+  if ($Kurulum) { Fail "-Kurulum yalniz eski kanal yolunda (-Musteri) verilir - ortak paket kurulum kimligi tasimaz, filigran kurulumda." }
   Write-Host ""
-  Write-Host "  ! UYARI: -Musteri verilmedi - KANAL-DISI paket (bugunku davranis korunur)." -ForegroundColor Yellow
-  Write-Host "    Kanal kimligi (pm2 adi/urun adi) icin: paketle.ps1 -Musteri <kanal-kodu>" -ForegroundColor Yellow
+  Write-Host "  ORTAK PAKET (kimlik deploy/dagitim.json; firma adi lisanstan, grup kiradan)"
+  $dagitimCik = & node (Join-Path $repo "scripts/dagitim-kapisi.mjs") backend-paketle
+  if ($LASTEXITCODE -ne 0) { Fail "dagitim kapisi: ortak backend kimligi dogrulanamadi (yukaridaki cikti)." }
+  foreach ($satir in @($dagitimCik)) {
+    if ($satir -cmatch '^TEKSERP_BACKEND_URUN=(.+)$') { $backendUrun = $Matches[1] }
+    elseif ($satir -cmatch '^TEKSERP_HIZMET_ADI=(.+)$') { $backendHizmet = $Matches[1] }
+    elseif ($satir -cmatch '^TEKSERP_LISANS_SUNUCUSU=(.+)$') { $backendLisans = $Matches[1] }
+    elseif ($satir -cmatch '^TEKSERP_LISANS_VARSAYILAN=(.+)$') { $lisansVarsayilan = $Matches[1] }
+  }
+  if (-not $backendUrun -or -not $backendHizmet -or -not $backendLisans -or -not $lisansVarsayilan) { Fail "dagitim kapisi ortak kimligi (urunAdi/hizmetAdi/lisansSunucusu/varsayilan) eksik verdi." }
+  if ($backendHizmet -cnotmatch '^[A-Za-z0-9][A-Za-z0-9._-]{0,79}$') { Fail "dagitim kaydinin backend.hizmetAdi gecersiz: $backendHizmet" }
+  Write-Host "    hizmet  : $backendHizmet"
+  Write-Host "    urun    : $backendUrun"
 }
 
 # --- Surum numarasi ---------------------------------------------------------
@@ -653,14 +667,14 @@ $manifest = [ordered]@{
   commit          = $commit
   dal             = $dal
   calismaAgaciTemiz = [bool](-not $kirli)
-  # Kanal (musteri) kimligi - FILIGRAN. -Musteri verilmediyse null (kanal-disi).
-  backendKanal    = $Musteri
+  # Kanal (musteri) kimligi - yalniz eski kanal yolunda; ORTAK pakette null (grup kiradan, firma lisanstan).
+  backendKanal    = $(if ($Musteri) { $Musteri } else { $null })
   backendUrun     = $backendUrun
   backendPm2Ad    = $backendPm2
-  # Hizmet duzeni (Dagitim v2): setup.exe backend hizmetini bu adla kaydeder (kanal kaydi backend.hizmetAdi).
+  # Hizmet duzeni (Dagitim v2): setup.exe backend hizmetini bu adla kaydeder (ortak: dagitim kaydi; eski: kanal kaydi).
   backendHizmetAdi = $backendHizmet
   # Kanalin lisans saticisi (kanal kaydi backend.lisansSunucusu) + bu derlemenin varsayilani (vendor-url.ts):
-  # gecis.ps1 kurulumun etkin LICENSE_SERVER_URL'sini bunlarla olcer. Kanal-disi pakette null.
+  # setup/gecis kurulumun etkin LICENSE_SERVER_URL'sini bunlarla olcer (ortak: dagitim kaydi lisansSunucusu).
   backendLisansSunucusu = $backendLisans
   lisansSunucusuVarsayilan = $lisansVarsayilan
   # runtime\ altindaki Rust hizmet ikilileri {surum, boyut, sha256}; korumali olmayan pakette null.

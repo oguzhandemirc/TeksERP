@@ -101,8 +101,8 @@ const YAYIN_YOLLARI = {
   'mobil/scripts/yayinla-ota.mjs': { sinif: 'kapili', terfi: true, derleme: 'paketle' },
   'mobil/scripts/build-apk.mjs': { sinif: 'kapili', terfi: true, derleme: 'paketle' },
   'deploy/electron-yayinla.ps1': { sinif: 'saplama' },
-  // Backend zip: -Musteri <kod> ile kanal kimliği (pm2Ad/urunAdi) alır → 'kapılı'
-  //   (Faz 2b: müşteri kodu argümandan, kök kuralı backend'e genişledi). Paketleme terfi
+  // Backend zip: ESKİ yol -Musteri <kod> kanal kimliğini (pm2Ad/urunAdi) buradan alır → 'kapılı' (O15'te kalkar);
+  //   argümansız ORTAK paket kimliği dağıtım kaydından alır (scripts/dagitim-kapisi.mjs, O11a). Paketleme terfi
   //   ARAMAZ: üretim kanalına çıkış YAYINDA kapılıdır (backend-yayinla.mjs, K5).
   'deploy/paketle.ps1': { sinif: 'kapili' },
   // Dağıtım v2: backend kanal yayını (imzalı bildirim + paket → VDS, son.json EN SON).

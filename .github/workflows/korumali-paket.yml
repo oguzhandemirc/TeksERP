@@ -18,13 +18,9 @@ name: Korumalı paket (.jsc)
 # yalnız yayın hazırlığında gerekir, her commit'te değil).
 # =============================================================================
 
+# ORTAK PAKET (tek ortak paket O11a): müşteri/kanal girdisi YOK — yapıt müşteri taşımaz, filigran kurulumda.
 on:
   workflow_dispatch:
-    inputs:
-      musteri:
-        description: "Müşteri/kanal kodu (deploy/kanallar.json backend bloğu; boşsa kanal-dışı)"
-        required: false
-        default: ""
 
 permissions:
   contents: read
@@ -64,14 +60,13 @@ jobs:
         run: node scripts/koruma-runtime-indir.mjs ${{ matrix.hedef }} koruma-cikti
 
       # Kaynak haritası REPO DIŞI — pakete girmez, yığın çözümü için ayrı artefakt.
-      # Kanal verilirse güven çapası kipi kanal kaydından bayt koduna girer (G3); boşsa kanal-dışı → üretim.
+      # Ortak paket: güven çapası kipi ÜRETİM (G3), filigranda müşteri/kurulum null.
       - name: Korumalı derleme (esbuild minify → bytenode .jsc)
         working-directory: Teks-Erp
         shell: bash
         env:
           KORUMA_ARSIV_DIZINI: ${{ runner.temp }}/koruma-arsiv
-          MUSTERI: ${{ inputs.musteri }}
-        run: node scripts/build-korumali.mjs --hedef=${{ matrix.hedef }} --cikti=../koruma-cikti/dist ${MUSTERI:+--musteri=$MUSTERI}
+        run: node scripts/build-korumali.mjs --hedef=${{ matrix.hedef }} --cikti=../koruma-cikti/dist
 
       # .jsc GERÇEKTEN üretildi mi (host==hedef): künyeden ölç, üretilmediyse DUR.
       - name: .jsc üretimini doğrula
