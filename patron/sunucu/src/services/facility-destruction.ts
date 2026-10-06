@@ -3,11 +3,11 @@
 // imha talebi (§4.2); hizmet ACIK iken ASLA. Kuru koşum varsayılandır (tablo başına sayı); uygulama tek tx'te tesisin
 // BÜTÜN bulut verisini çocuktan ebeveyne siler ve imha kaydını (`facility_destructions`) AYNI tx'te yazar.
 // Silinmeyenler beyanlıdır (`RETAINED_TABLES`); her tablo ya silinir ya gerekçeyle kalır (bekçi iki yönlü ölçer).
-import type { PrismaClient } from "@prisma/client";
 import type { Tx } from "../lib/db";
 import { CloudError, notFound } from "../lib/errors";
 import { withTesis } from "../lib/tenant";
 import { loadServiceFacts, observedEnd, serviceState, type ServicePhase } from "./service-lifecycle";
+import type { TesisDbRouter } from "../lib/tesis-db";
 
 /** Yedek döngüsü: günlük yedek 30 gün tutulur (`YEDEK_SAKLA_GUN`) + 5 gün pay ⇒ son yedekten düşme (Ek-6/A §4.4). */
 export const BACKUP_CLEAR_DAYS = 35;
@@ -92,7 +92,7 @@ async function countAll(tx: Tx, where: Where): Promise<Record<string, number>> {
   return out;
 }
 
-export async function destroyFacility(db: PrismaClient, g: DestructionInput, nowMs: number = Date.now()): Promise<DestructionReport> {
+export async function destroyFacility(db: TesisDbRouter, g: DestructionInput, nowMs: number = Date.now()): Promise<DestructionReport> {
   const where = { tesisId: g.tesisId };
   return withTesis(db, { tesisId: g.tesisId, lock: { name: "ACCOUNT_ADMIN", key: g.tesisId }, timeoutMs: 300_000 }, async (tx) => {
     const facility = await tx.facility.findUnique({ where: { tesisId: g.tesisId } });
@@ -130,7 +130,7 @@ export async function destroyFacility(db: PrismaClient, g: DestructionInput, now
 }
 
 /** İmhadan sonra kalan satır (ör. yarışta geç düşen ayak izi) — sıfır değilse ikinci geçiş siler. */
-export async function sweepAfterDestruction(db: PrismaClient, tesisId: string): Promise<Record<string, number>> {
+export async function sweepAfterDestruction(db: TesisDbRouter, tesisId: string): Promise<Record<string, number>> {
   return withTesis(db, { tesisId }, async (tx) => {
     const left = await countAll(tx, { tesisId });
     const out: Record<string, number> = {};

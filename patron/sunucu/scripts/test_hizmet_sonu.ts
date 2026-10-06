@@ -19,7 +19,7 @@ import { withTesis } from "../src/lib/tenant";
 import { destroyFacility, DESTRUCTION_STEPS } from "../src/services/facility-destruction";
 import { READ_ONLY_DAYS, refreshServiceEnd, serviceState, type ServiceFacts } from "../src/services/service-lifecycle";
 import { setFacilityStatus } from "../src/services/vendor-admin.service";
-import { TEST_PAROLASI, api, girdi, girisYap, hesapKur, imzali, kontrol, ortamKur, paket, sonuc, temizleTesis, tesisKur, totpKodu, type Ortam, type TestKurulumu } from "./lib/test-ortam";
+import { TEST_PAROLASI, api, girdi, girisYap, hesapKur, imzali, kontrol, ortamKur, paket, sonuc, temizleTesis, tesisKur, tesisUrl, totpKodu, type Ortam, type TestKurulumu } from "./lib/test-ortam";
 
 const GUN = 86_400_000;
 const TUM_OKUMA = ["bulut:siparis:oku", "bulut:fiyat:oku", "bulut:cari:oku", "bulut:ozet:oku", "bulut:hesap:yonet", "bulut:siparis:yaz", "bulut:cari:yaz", "bulut:rapor:oku"];
@@ -73,14 +73,14 @@ async function indir(o: Ortam, belirtec: string, yol: string): Promise<{ status:
 async function damga(o: Ortam, k: TestKurulumu): Promise<void> {
   console.log("\n§2 damga — tek yazar");
   const bitis = o.saat.simdi() + 2 * GUN;
-  await withTesis(o.goc.prisma, { tesisId: k.tesisId }, (tx) => tx.installation.update({ where: { installationId: k.kurulumId }, data: { cloudUntil: new Date(bitis) } }));
+  await withTesis(o.goc, { tesisId: k.tesisId }, (tx) => tx.installation.update({ where: { installationId: k.kurulumId }, data: { cloudUntil: new Date(bitis) } }));
   kontrol("§2a açıkken damga yazılmaz", (await refreshServiceEnd(o.ctx, k.tesisId, o.saat.simdi())) === null);
   o.saat.ayarla(bitis + 60_000);
   kontrol("§2b kapanınca DAMGALANDI", (await refreshServiceEnd(o.ctx, k.tesisId, o.saat.simdi())) === "DAMGALANDI");
-  const f = await withTesis(o.goc.prisma, { tesisId: k.tesisId }, (tx) => tx.facility.findUnique({ where: { tesisId: k.tesisId } }));
+  const f = await withTesis(o.goc, { tesisId: k.tesisId }, (tx) => tx.facility.findUnique({ where: { tesisId: k.tesisId } }));
   kontrol("§2c damga = kira bitişi (gözlem anı değil)", f?.serviceEndedAt?.getTime() === bitis, f?.serviceEndedAt?.toISOString());
   kontrol("§2d tekrar tur etkisiz", (await refreshServiceEnd(o.ctx, k.tesisId, o.saat.simdi())) === null);
-  const iz = await withTesis(o.goc.prisma, { tesisId: k.tesisId }, (tx) => tx.accountAudit.count({ where: { tesisId: k.tesisId, event: "HIZMET_SONA_ERDI" } }));
+  const iz = await withTesis(o.goc, { tesisId: k.tesisId }, (tx) => tx.accountAudit.count({ where: { tesisId: k.tesisId, event: "HIZMET_SONA_ERDI" } }));
   kontrol("§2e ayak izi HIZMET_SONA_ERDI (bir kez)", iz === 1);
 }
 
@@ -108,7 +108,7 @@ async function pasifTesis(o: Ortam): Promise<void> {
     const h = await hesapKur(o, k.tesisId, TUM_OKUMA);
     const once = await imzali(o, k, "/v1/esitle", { govde: paket(k, { ufuk: new Date(o.saat.simdi() - 60_000) }) });
     kontrol("§3g kapanıştan önce fabrika kanalı açık (kontrol)", once.status === 200, String(once.status));
-    await setFacilityStatus(o.goc.prisma, { tesisId: k.tesisId, status: "PASIF" });
+    await setFacilityStatus(o.goc, { tesisId: k.tesisId, status: "PASIF" });
     const sonra = await imzali(o, k, "/v1/esitle", { govde: paket(k, { ufuk: new Date(o.saat.simdi() - 30_000) }) });
     kontrol("§3h tesis PASIF → fabrika kanalı 403 (kira hâlâ geçerli olsa da)", sonra.status === 403 && sonra.json.details?.code === "PATRON_BULUT_KAPALI", String(sonra.status));
     const oturum = await api(o, "GET", "/api/oturum", { belirtec: h.belirtec });
@@ -120,7 +120,7 @@ async function pasifTesis(o: Ortam): Promise<void> {
 
 async function kapali(o: Ortam, k: TestKurulumu, yonetici: { belirtec: string; eposta: string; sir: string }): Promise<void> {
   console.log("\n§4 KAPALI — 90. gün sınırı");
-  const f = await withTesis(o.goc.prisma, { tesisId: k.tesisId }, (tx) => tx.facility.findUnique({ where: { tesisId: k.tesisId } }));
+  const f = await withTesis(o.goc, { tesisId: k.tesisId }, (tx) => tx.facility.findUnique({ where: { tesisId: k.tesisId } }));
   const sinir = f!.serviceEndedAt!.getTime() + READ_ONLY_DAYS * GUN;
   // Oturumun kendi ömrü (30 gün) aşımı karıştırmasın: sınırdan hemen önce taze giriş (giriş saati 31 sn ilerletir).
   o.saat.ayarla(sinir - 60_000);
@@ -167,34 +167,34 @@ async function disaAktarma(o: Ortam, a: TestKurulumu, ids: { siparisId: string }
   kontrol("§5m hesaplar sırsız (parola/TOTP/davet alanı yok)", hesaplar.status === 200 && !/password|totp|invite|parola|sirri|belirtec/i.test(hesaplar.text), hesaplar.text.slice(0, 120));
   const yetkisiz = await api(o, "GET", "/api/disa-aktar", { belirtec: (await hesapKur(o, a.tesisId, ["bulut:siparis:oku"])).belirtec });
   kontrol("§5n hesap yöneticisi olmayan 403", yetkisiz.status === 403 && yetkisiz.json.details?.code === "YETKISIZ");
-  const iz = await withTesis(o.goc.prisma, { tesisId: a.tesisId }, (tx) => tx.accountAudit.count({ where: { tesisId: a.tesisId, event: "DISA_AKTARIM" } }));
+  const iz = await withTesis(o.goc, { tesisId: a.tesisId }, (tx) => tx.accountAudit.count({ where: { tesisId: a.tesisId, event: "DISA_AKTARIM" } }));
   kontrol("§5o her tamamlanan döküm ayak izi (DISA_AKTARIM)", iz >= 6, String(iz));
 }
 
 async function imha(o: Ortam, a: TestKurulumu, b: TestKurulumu): Promise<void> {
   console.log("\n§6 imha (satıcı CLI servisi)");
   const red = async (fn: () => Promise<unknown>) => fn().then(() => "gecti", (e: Error & { code?: string }) => e.code ?? e.message);
-  kontrol("§6a hizmet ACIK iken imha RED — yazılı erken talep olsa BİLE (başka tesis)", (await red(() => destroyFacility(o.goc.prisma, { tesisId: b.tesisId, operator: "Bekçi", earlyRequestRef: "YAZI-ACIK", apply: false }, o.saat.simdi()))) === "DURUM_CAKISMASI");
-  const saymaB = async () => withTesis(o.goc.prisma, { tesisId: b.tesisId }, async (tx) => (await tx.projectionRow.count({ where: { tesisId: b.tesisId } })) + (await tx.account.count({ where: { tesisId: b.tesisId } })));
+  kontrol("§6a hizmet ACIK iken imha RED — yazılı erken talep olsa BİLE (başka tesis)", (await red(() => destroyFacility(o.goc, { tesisId: b.tesisId, operator: "Bekçi", earlyRequestRef: "YAZI-ACIK", apply: false }, o.saat.simdi()))) === "DURUM_CAKISMASI");
+  const saymaB = async () => withTesis(o.goc, { tesisId: b.tesisId }, async (tx) => (await tx.projectionRow.count({ where: { tesisId: b.tesisId } })) + (await tx.account.count({ where: { tesisId: b.tesisId } })));
   const bOnce = await saymaB();
-  const f = await withTesis(o.goc.prisma, { tesisId: a.tesisId }, (tx) => tx.facility.findUnique({ where: { tesisId: a.tesisId } }));
+  const f = await withTesis(o.goc, { tesisId: a.tesisId }, (tx) => tx.facility.findUnique({ where: { tesisId: a.tesisId } }));
   o.saat.ayarla(f!.serviceEndedAt!.getTime() + 10 * GUN);
-  kontrol("§6b SALT_OKUNUR'da talepsiz imha RED", (await red(() => destroyFacility(o.goc.prisma, { tesisId: a.tesisId, operator: "Bekçi", apply: true }, o.saat.simdi()))) === "DURUM_CAKISMASI");
-  const kuru = await destroyFacility(o.goc.prisma, { tesisId: a.tesisId, operator: "Bekçi", earlyRequestRef: "YAZI-2026-01", apply: false }, o.saat.simdi());
-  const hala = await withTesis(o.goc.prisma, { tesisId: a.tesisId }, (tx) => tx.projectionRow.count({ where: { tesisId: a.tesisId } }));
+  kontrol("§6b SALT_OKUNUR'da talepsiz imha RED", (await red(() => destroyFacility(o.goc, { tesisId: a.tesisId, operator: "Bekçi", apply: true }, o.saat.simdi()))) === "DURUM_CAKISMASI");
+  const kuru = await destroyFacility(o.goc, { tesisId: a.tesisId, operator: "Bekçi", earlyRequestRef: "YAZI-2026-01", apply: false }, o.saat.simdi());
+  const hala = await withTesis(o.goc, { tesisId: a.tesisId }, (tx) => tx.projectionRow.count({ where: { tesisId: a.tesisId } }));
   kontrol("§6c talepli KURU KOŞUM: sayar, silmez", !kuru.applied && (kuru.counts.projection_rows ?? 0) > 0 && hala === kuru.counts.projection_rows && kuru.reason === "ERKEN_TALEP");
   o.saat.ayarla(f!.serviceEndedAt!.getTime() + READ_ONLY_DAYS * GUN);
-  const r = await destroyFacility(o.goc.prisma, { tesisId: a.tesisId, operator: "Bekçi Operatör", apply: true }, o.saat.simdi());
-  const kalan = await withTesis(o.goc.prisma, { tesisId: a.tesisId }, async (tx) => {
+  const r = await destroyFacility(o.goc, { tesisId: a.tesisId, operator: "Bekçi Operatör", apply: true }, o.saat.simdi());
+  const kalan = await withTesis(o.goc, { tesisId: a.tesisId }, async (tx) => {
     let n = 0;
     for (const step of DESTRUCTION_STEPS) n += await step.count(tx, { tesisId: a.tesisId });
     return n;
   });
   kontrol("§6d KAPALI'da uygula: tesisin BÜTÜN tablolarında 0 satır", r.applied && r.reason === "SURE_DOLDU" && kalan === 0, `kalan ${kalan}`);
   kontrol("§6e başka tesis dokunulmadı", (await saymaB()) === bOnce);
-  const kayit = await withTesis(o.goc.prisma, { tesisId: a.tesisId }, (tx) => tx.facilityDestruction.findFirst({ where: { tesisId: a.tesisId } }));
+  const kayit = await withTesis(o.goc, { tesisId: a.tesisId }, (tx) => tx.facilityDestruction.findFirst({ where: { tesisId: a.tesisId } }));
   kontrol("§6f imha kaydı: neden · işleyen · sayılar · yedekten düşme (+35 gün)", kayit?.reason === "SURE_DOLDU" && kayit.operator === "Bekçi Operatör" && (kayit.deletedCounts as Record<string, number>).facilities === 1 && kayit.backupClearBy.getTime() === o.saat.simdi() + 35 * GUN);
-  const c = new Client({ connectionString: process.env.GOC_DATABASE_URL, options: "-c timezone=UTC" });
+  const c = new Client({ connectionString: tesisUrl(o, a.tesisId, "goc"), options: "-c timezone=UTC" });
   await c.connect();
   try {
     const guncelle = await c.query("UPDATE facility_destructions SET operator = 'x' WHERE tesis_id = $1", [a.tesisId]).then(() => "gecti", (e: Error) => e.message);
@@ -234,7 +234,7 @@ async function main(): Promise<void> {
 /** B tesisini kapanışa götür (kira bitişi geçmiş + damga) ve bir yönetici oturumu aç. */
 async function hesapKapaliIcin(o: Ortam, b: TestKurulumu) {
   const h = await hesapKur(o, b.tesisId, TUM_OKUMA);
-  await withTesis(o.goc.prisma, { tesisId: b.tesisId }, (tx) => tx.installation.update({ where: { installationId: b.kurulumId }, data: { cloudUntil: new Date(o.saat.simdi() - 1_000) } }));
+  await withTesis(o.goc, { tesisId: b.tesisId }, (tx) => tx.installation.update({ where: { installationId: b.kurulumId }, data: { cloudUntil: new Date(o.saat.simdi() - 1_000) } }));
   await refreshServiceEnd(o.ctx, b.tesisId, o.saat.simdi());
   return h;
 }

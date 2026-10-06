@@ -18,7 +18,7 @@ const GUN = 86_400_000;
 const iso = (ms: number) => new Date(ms).toISOString();
 
 async function satirVar(o: Ortam, tesisId: string, projection: string, id: string): Promise<boolean> {
-  const r = await withTesis(o.goc.prisma, { tesisId, projections: [projection] }, (tx) =>
+  const r = await withTesis(o.goc, { tesisId, projections: [projection] }, (tx) =>
     tx.projectionRow.findUnique({ where: { tesisId_projection_recordId: { tesisId, projection, recordId: id } } }),
   );
   return r !== null;
@@ -59,7 +59,7 @@ async function main(): Promise<void> {
 
     // telemetri fikstürü (3 aylık tesis)
     const eski = new Date(o.saat.simdi() - 800 * GUN);
-    await withTesis(o.goc.prisma, { tesisId: uc.tesisId }, async (tx) => {
+    await withTesis(o.goc, { tesisId: uc.tesisId }, async (tx) => {
       await tx.requestNonce.create({ data: { tesisId: uc.tesisId, installationId: uc.kurulumId, nonce: "bekci-eski-nonce-000000", expiresAt: new Date(o.saat.simdi() - GUN) } });
       await tx.packageReceipt.create({ data: { tesisId: uc.tesisId, packageId: randomUUID(), installationId: uc.kurulumId, bodyDigest: "x".repeat(64), response: {}, createdAt: eski } });
       await tx.accountAudit.create({ data: { tesisId: uc.tesisId, actor: "giris", event: "GIRIS_BASARISIZ", entity: "Account", createdAt: new Date(o.saat.simdi() - 100 * GUN) } });
@@ -72,7 +72,7 @@ async function main(): Promise<void> {
     });
     const tombstoneId = randomUUID();
     const tazeTombstone = randomUUID();
-    await withTesis(o.goc.prisma, { tesisId: uc.tesisId }, async (tx) => {
+    await withTesis(o.goc, { tesisId: uc.tesisId }, async (tx) => {
       await tx.$executeRaw`INSERT INTO projection_rows (tesis_id, projection, record_id, data, version_at, deleted_at, sort_at)
         VALUES (${uc.tesisId}::uuid, 'renk', ${tombstoneId}::uuid, '{}', now(), ${new Date(o.saat.simdi() - 8 * GUN)}, now()),
                (${uc.tesisId}::uuid, 'renk', ${tazeTombstone}::uuid, '{}', now(), ${new Date(o.saat.simdi() - 2 * GUN)}, now())`;
@@ -100,7 +100,7 @@ async function main(): Promise<void> {
     kontrol("§3b 2 günlük mezar taşı KALDI (geç gelen eski paket diriltemesin)", await satirVar(o, uc.tesisId, "renk", tazeTombstone));
 
     console.log("\n§4 telemetri + ayak izi");
-    const sayim = await withTesis(o.goc.prisma, { tesisId: uc.tesisId }, async (tx) => ({
+    const sayim = await withTesis(o.goc, { tesisId: uc.tesisId }, async (tx) => ({
       nonce: await tx.requestNonce.count({ where: { tesisId: uc.tesisId, nonce: "bekci-eski-nonce-000000" } }),
       makbuz: await tx.packageReceipt.count({ where: { tesisId: uc.tesisId, createdAt: eski } }),
       basarisiz: await tx.accountAudit.count({ where: { tesisId: uc.tesisId, event: "GIRIS_BASARISIZ" } }),

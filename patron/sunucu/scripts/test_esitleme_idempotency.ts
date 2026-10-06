@@ -17,12 +17,12 @@ import { randomUUID } from "node:crypto";
 import { Client } from "pg";
 import { withTesis } from "../src/lib/tenant";
 import { LOCK_NAMESPACES } from "../src/lib/locks";
-import { girdi, imzali, kanonik, kontrol, ortamKur, paket, sonuc, temizleTesis, tesisKur, type Ortam, type TestKurulumu } from "./lib/test-ortam";
+import { girdi, imzali, kanonik, kontrol, ortamKur, paket, sonuc, temizleTesis, tesisKur, tesisUrl, type Ortam, type TestKurulumu } from "./lib/test-ortam";
 
 type SyncBody = { kabul: { projeksiyon: string }[]; ret: { projeksiyon: string; kod: string }[]; istenen: { projeksiyon: string; neden: string }[]; sozlesmeUyarisi: unknown; ufukTarihi: Record<string, string> };
 
 async function satir(o: Ortam, tesisId: string, projection: string, id: string) {
-  return withTesis(o.goc.prisma, { tesisId, projections: [projection] }, (tx) =>
+  return withTesis(o.goc, { tesisId, projections: [projection] }, (tx) =>
     tx.projectionRow.findUnique({ where: { tesisId_projection_recordId: { tesisId, projection, recordId: id } } }),
   );
 }
@@ -42,7 +42,7 @@ async function idempotency(o: Ortam, k: TestKurulumu): Promise<void> {
   kontrol("§1a ilk paket 200 + kabul", r1.status === 200 && (r1.json as unknown as SyncBody).kabul.length === 1, `${r1.status}`);
   kontrol("§1b aynı paket tekrarı 200 + AYNI yanıt (anlamca birebir)", r2.status === 200 && kanonik(r2.json) === kanonik(r1.json));
   kontrol("§1c ikinci etki yok (updated_at değişmedi)", once !== null && sonra !== null && once.updatedAt.getTime() === sonra.updatedAt.getTime());
-  const makbuz = await withTesis(o.goc.prisma, { tesisId: k.tesisId }, (tx) => tx.packageReceipt.count({ where: { tesisId: k.tesisId, packageId: p.paketId } }));
+  const makbuz = await withTesis(o.goc, { tesisId: k.tesisId }, (tx) => tx.packageReceipt.count({ where: { tesisId: k.tesisId, packageId: p.paketId } }));
   kontrol("§1d tek makbuz", makbuz === 1);
   const baska = { ...p, kayitlar: [girdi("urun", { yaz: [{ id, kod: "U1", ad: "DEĞİŞTİ" }], yeni: { t: iso(ufuk), k: "000000000001" } })] };
   const r3 = await imzali(o, k, "/v1/esitle", { govde: baska });
@@ -144,7 +144,7 @@ async function kapilar(o: Ortam, k: TestKurulumu): Promise<void> {
   } finally {
     for (const x of [test, bitmis, haksiz]) await temizleTesis(o, x.tesisId);
   }
-  const kilitci = new Client({ connectionString: o.ctx.config.ESITLEME_DATABASE_URL });
+  const kilitci = new Client({ connectionString: tesisUrl(o, k.tesisId, "esitleme") });
   await kilitci.connect();
   try {
     await kilitci.query("BEGIN");
@@ -194,7 +194,7 @@ async function yolBagi(o: Ortam, k: TestKurulumu): Promise<void> {
   const p = () => paket(k, { ufuk: new Date(ufuk), kayitlar: [girdi("urun", { yaz: [{ id: randomUUID(), kod: "Y1", ad: "Yol" }], yeni: { t: iso(ufuk), k: "000000000901" } })] });
   const yanlis = p();
   const r1 = await imzali(o, k, "/v1/esitle", { govde: yanlis, imzaYolu: "/v1/gelen-kutusu/al" });
-  const makbuz = await withTesis(o.goc.prisma, { tesisId: k.tesisId }, (tx) => tx.packageReceipt.count({ where: { tesisId: k.tesisId, packageId: yanlis.paketId } }));
+  const makbuz = await withTesis(o.goc, { tesisId: k.tesisId }, (tx) => tx.packageReceipt.count({ where: { tesisId: k.tesisId, packageId: yanlis.paketId } }));
   kontrol("§7a ⭐ gelen kutusu ucu için imzalanmış istek eşitleme ucunda → 401 ISTEK_YOL, paket işlenmedi", r1.status === 401 && r1.json.details?.code === "ISTEK_YOL" && makbuz === 0, `${r1.status} ${r1.json.details?.code ?? ""} · makbuz ${makbuz}`);
   const r2 = await imzali(o, k, "/v1/esitle", { govde: p(), imzaYolu: "/v1/esitle" });
   kontrol("§7b kendi ucu için imzalanmış istek → 200", r2.status === 200, `${r2.status}`);

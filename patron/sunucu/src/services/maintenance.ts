@@ -1,5 +1,5 @@
-// BAKIM İŞİ — süreç içi zamanlayıcı (dakikalık tik + günde bir budama). Tesis listesi bakım kipinde,
-// her satır işi o tesisin kiracı kapsamında (RLS) koşar.
+// BAKIM İŞİ — süreç içi zamanlayıcı (dakikalık tik + günde bir budama). Tesis listesi merkezden (HAZIR tesis
+// DB'leri), her satır işi o tesisin DB'sinde ve kiracı kapsamında (RLS) koşar; bir tesisin hatası ötekini durdurmaz.
 //   · Tik: süresi dolan claim'ler — gelen kutusu ISLENIYOR → BEKLIYOR (fabrikanın makbuzu tekrarı
 //     idempotent kılar); rapor HESAPLANIYOR → BEKLIYOR (bir kez), ikincide HATA `ZAMAN_ASIMI`; hizmet
 //     bitiş damgası (`service-lifecycle.ts`); kapanıştan 30 gün geçen hesabın kimlik silmesi; 30 günü dolan
@@ -13,7 +13,7 @@ import { allProjectionNames, ROOT_PROJECTIONS, type RootProjection } from "../ca
 import { allReportProjections } from "../catalog/reports";
 import { recordAudit } from "../lib/audit";
 import type { Tx } from "../lib/db";
-import { withMaintenanceList, withTesis } from "../lib/tenant";
+import { listReadyFacilities, withCentral, withTesis } from "../lib/tenant";
 import type { CloudContext } from "./context";
 import { refreshAllServiceEnds } from "./service-lifecycle";
 
@@ -31,6 +31,7 @@ export const PRUNED_TABLES = {
   operation_receipts: "ISLEM_SAKLAMA_GUN (işlem kimliği penceresi)",
   account_audit: "ayak izi: başarısız giriş DENETIM_GIRIS_SAKLAMA_GUN · diğerleri DENETIM_SAKLAMA_GUN",
   notifications: "sonuçlanmış (GONDERILDI · BASARISIZ · ATLANDI) + BILDIRIM_SAKLAMA_GUN (telemetri; olay kimliği günlük/olay başına, pencere ondan uzun)",
+  login_routes: "merkez giriş dizini: hedef hesap kendi tesis DB'sinde artık ETKİN değil (yönlendirme önbelleği, kişisel veri taşımaz)",
 } as const;
 
 const DAY_MS = 86_400_000;
@@ -101,8 +102,23 @@ function monthsBefore(nowMs: number, months: number): Date {
   return d;
 }
 
+/** Tesis başına iş: hata günlüğe düşer, öteki tesisler sürer (tesis DB'si bakımda/göçü geride olabilir). */
+export async function perFacility<T>(tesisId: string, label: string, fn: () => Promise<T>): Promise<T | null> {
+  try {
+    return await fn();
+  } catch (err) {
+    console.error(`[patron] bakım (${label}) tesis ${tesisId}: ${(err as { code?: string }).code ?? (err as Error).message}`);
+    return null;
+  }
+}
+
 async function listFacilities(ctx: CloudContext): Promise<{ tesisId: string; retentionMonths: number | null }[]> {
-  return withMaintenanceList(ctx.sync, (tx) => tx.facility.findMany({ select: { tesisId: true, retentionMonths: true }, orderBy: { tesisId: "asc" } }));
+  const out: { tesisId: string; retentionMonths: number | null }[] = [];
+  for (const tesisId of await listReadyFacilities(ctx.sync)) {
+    const f = await perFacility(tesisId, "liste", () => withTesis(ctx.sync, { tesisId }, (tx) => tx.facility.findUnique({ where: { tesisId }, select: { tesisId: true, retentionMonths: true } })));
+    if (f) out.push(f);
+  }
+  return out;
 }
 
 // ---------------------------------------------------------------- tik: claim süresi
@@ -111,7 +127,7 @@ export async function expireClaims(ctx: CloudContext, nowMs: number): Promise<{ 
   const now = new Date(nowMs);
   const total = { inbox: 0, reportRetry: 0, reportFailed: 0 };
   for (const f of await listFacilities(ctx)) {
-    await withTesis(ctx.sync, { tesisId: f.tesisId }, async (tx) => {
+    await perFacility(f.tesisId, "claim", () => withTesis(ctx.sync, { tesisId: f.tesisId }, async (tx) => {
       total.inbox += (
         await tx.inboxMessage.updateMany({ where: { tesisId: f.tesisId, status: "ISLENIYOR", claimUntil: { lt: now } }, data: { status: "BEKLIYOR", ownerInstallationId: null, claimUntil: null } })
       ).count;
@@ -127,7 +143,7 @@ export async function expireClaims(ctx: CloudContext, nowMs: number): Promise<{ 
           data: { status: "HATA", errorCode: "ZAMAN_ASIMI", claimUntil: null, completedAt: now },
         })
       ).count;
-    });
+    }));
   }
   return total;
 }
@@ -274,11 +290,25 @@ export async function stripAgedIps(ctx: CloudContext, tesisId: string, nowMs: nu
   );
 }
 
+/** Merkez giriş dizini: hedefi kendi tesis DB'sinde artık ETKİN olmayan (ya da hiç olmayan) satır silinir. */
+export async function pruneLoginRoutes(ctx: CloudContext, tesisId: string): Promise<number> {
+  const routes = await withCentral(ctx.sync, {}, (tx) => tx.loginRoute.findMany({ where: { tesisId }, select: { id: true, accountId: true } }));
+  if (routes.length === 0) return 0;
+  const active = await withTesis(ctx.sync, { tesisId }, (tx) =>
+    tx.account.findMany({ where: { tesisId, id: { in: routes.map((r) => r.accountId) }, status: { in: ["AKTIF", "KILITLI"] } }, select: { id: true } }),
+  );
+  const keep = new Set(active.map((a) => a.id));
+  const stale = routes.filter((r) => !keep.has(r.accountId)).map((r) => r.id);
+  if (stale.length === 0) return 0;
+  return withCentral(ctx.sync, {}, async (tx) => (await tx.loginRoute.deleteMany({ where: { id: { in: stale }, tesisId } })).count);
+}
+
 export async function runDaily(ctx: CloudContext, nowMs: number): Promise<number> {
   let n = 0;
   for (const f of await listFacilities(ctx)) {
-    n += await pruneSyncTables(ctx, f, nowMs);
-    n += await pruneAccountTables(ctx, f, nowMs);
+    n += (await perFacility(f.tesisId, "eşitleme budaması", () => pruneSyncTables(ctx, f, nowMs))) ?? 0;
+    n += (await perFacility(f.tesisId, "hesap budaması", () => pruneAccountTables(ctx, f, nowMs))) ?? 0;
+    n += (await perFacility(f.tesisId, "giriş dizini", () => pruneLoginRoutes(ctx, f.tesisId))) ?? 0;
   }
   return n;
 }
@@ -310,8 +340,8 @@ export class MaintenanceScheduler {
       const service = await refreshAllServiceEnds(this.ctx, nowMs);
       let purged = 0;
       for (const f of await listFacilities(this.ctx)) {
-        purged += await purgeClosedIdentities(this.ctx, f.tesisId, nowMs);
-        await stripAgedIps(this.ctx, f.tesisId, nowMs);
+        purged += (await perFacility(f.tesisId, "kimlik silme", () => purgeClosedIdentities(this.ctx, f.tesisId, nowMs))) ?? 0;
+        await perFacility(f.tesisId, "IP alanı", () => stripAgedIps(this.ctx, f.tesisId, nowMs));
       }
       if (purged > 0) console.log(`[patron] bakım: ${purged} kapanmış hesabın kimliği silindi (Ek-6/A §2.5)`);
       const day = new Date(nowMs).toISOString().slice(0, 10);

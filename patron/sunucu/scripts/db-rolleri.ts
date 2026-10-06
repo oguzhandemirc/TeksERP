@@ -1,5 +1,6 @@
 // =============================================================================
-// DB ROLLERİ — uygulama + eşitleme rolünü kurar/hizalar ve yetkileri `src/lib/db-grants.ts`ten verir.
+// DB ROLLERİ (MERKEZ) — uygulama + eşitleme rolünü kurar/hizalar ve MERKEZ yetkilerini `src/lib/db-grants.ts`ten
+// verir (yalnız yönlendirme tabloları). Tesis DB'lerinin rolleri/yetkileri hazırlayıcıdadır (`tesis-db-hazirlik.ts`).
 //   npx tsx scripts/db-rolleri.ts            (her `prisma migrate deploy`dan SONRA; idempotent)
 // Roller KÜME düzeyindedir, migration'a girmez. Ad + parola çalışma URL'lerinden (`DATABASE_URL`,
 // `ESITLEME_DATABASE_URL`) okunur, işlemi GÖÇ rolü (`GOC_DATABASE_URL`, tablo sahibi) yapar.
@@ -9,17 +10,8 @@
 // =============================================================================
 import { Client } from "pg";
 import { loadEnvFile } from "../src/lib/env";
-import {
-  APP_COLUMN_GRANTS,
-  APP_GRANTS,
-  MERKEZ_APP_GRANTS,
-  MERKEZ_SYNC_COLUMN_GRANTS,
-  MERKEZ_SYNC_GRANTS,
-  SYNC_COLUMN_GRANTS,
-  SYNC_GRANTS,
-  supportRoleName,
-} from "../src/lib/db-grants";
-import { applySupportRole, ensureLoginRole, grantAll, ident, markDatabase, mergeGrants } from "../src/lib/db-roles";
+import { MERKEZ_APP_GRANTS, MERKEZ_SYNC_COLUMN_GRANTS, MERKEZ_SYNC_GRANTS, supportRoleName } from "../src/lib/db-grants";
+import { applySupportRole, ensureLoginRole, grantAll, ident, markDatabase } from "../src/lib/db-roles";
 import { CENTRAL_MARK, assertCentralName } from "../src/lib/tesis-db-ad";
 
 const ROLE_NAME = /^[a-z_][a-z0-9_]{0,62}$/;
@@ -61,10 +53,10 @@ export async function applyRoles(env: NodeJS.ProcessEnv = process.env): Promise<
     await ensureLoginRole(client, sync.name, sync.password);
     await client.query(`REVOKE CONNECT ON DATABASE ${ident(database)} FROM PUBLIC`);
     await client.query(`GRANT CONNECT ON DATABASE ${ident(database)} TO ${ident(app.name)}, ${ident(sync.name)}`);
-    // Geçiş: tesis tabloları yönlendirici devreye girene dek merkezde de yetkili kalır.
-    await grantAll(client, app.name, mergeGrants(APP_GRANTS, MERKEZ_APP_GRANTS), APP_COLUMN_GRANTS);
-    await grantAll(client, sync.name, mergeGrants(SYNC_GRANTS, MERKEZ_SYNC_GRANTS), { ...SYNC_COLUMN_GRANTS, ...MERKEZ_SYNC_COLUMN_GRANTS });
-    await applySupportRole(client, database, supportRoleName(database));
+    // Merkezde yalnız yönlendirme yetkileri; kiracı tabloları merkezde boş + yetkisiz (tesis DB'leri hazırlayıcıda).
+    await grantAll(client, app.name, MERKEZ_APP_GRANTS, {});
+    await grantAll(client, sync.name, MERKEZ_SYNC_GRANTS, MERKEZ_SYNC_COLUMN_GRANTS);
+    await applySupportRole(client, database, supportRoleName(database), {});
     await markDatabase(client, database, CENTRAL_MARK);
   } finally {
     await client.end();

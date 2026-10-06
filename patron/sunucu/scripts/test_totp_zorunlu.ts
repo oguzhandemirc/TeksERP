@@ -23,7 +23,7 @@ async function dbSeddi(o: Ortam, tesisId: string): Promise<void> {
   console.log("\n§1 DB seddi");
   let red = false;
   try {
-    await withTesis(o.goc.prisma, { tesisId }, (tx) =>
+    await withTesis(o.goc, { tesisId }, (tx) =>
       tx.account.create({ data: { tesisId, email: `sed-${randomUUID().slice(0, 8)}@ornek.test`, name: "Sed", permissions: [], status: "AKTIF", passwordHash: "scrypt$x" } }),
     );
   } catch (err) {
@@ -35,7 +35,7 @@ async function dbSeddi(o: Ortam, tesisId: string): Promise<void> {
 async function davetBolumu(o: Ortam, tesisId: string): Promise<void> {
   console.log("\n§2 davet akışı");
   const eposta = `davetli-${randomUUID().slice(0, 8)}@Ornek.Test`;
-  const d = await inviteFacilityAdmin(o.goc.prisma, { tesisId, email: eposta, name: "Davetli Yönetici", validHours: 24 }, o.saat.simdi());
+  const d = await inviteFacilityAdmin(o.goc, { tesisId, email: eposta, name: "Davetli Yönetici", validHours: 24 }, o.saat.simdi());
   const inc = await api(o, "POST", "/api/davet/incele", { govde: { davet: d.token } });
   kontrol("§2a incele: e-posta küçük harfe normalleşmiş, tesis adı", inc.status === 200 && (inc.json.data as { eposta?: string }).eposta === eposta.toLowerCase());
   const zayif = await api(o, "POST", "/api/davet/kabul", { govde: { davet: d.token, parola: "kisa" } });
@@ -108,7 +108,7 @@ async function girisBolumu(o: Ortam, tesisId: string, h: TestHesabi): Promise<vo
   o.saat.ilerlet((o.ctx.config.KILIT_DK + 1) * 60_000);
   const acildi = await kaynaktan(o, A, { eposta: h.eposta, parola: TEST_PAROLASI, totp: totpKodu(h.sir, o.saat.simdi()) });
   kontrol("§3i kilit bitince aynı kaynaktan doğru üçlü girer", acildi.status === 200);
-  const olaylar = await withTesis(o.goc.prisma, { tesisId }, (tx) =>
+  const olaylar = await withTesis(o.goc, { tesisId }, (tx) =>
     tx.accountAudit.findMany({ where: { tesisId, entityId: h.accountId, event: { in: ["HESAP_GECICI_KILIT", "GIRIS_REDDEDILDI"] } } }),
   );
   const kilitOlayi = olaylar.find((x) => x.event === "HESAP_GECICI_KILIT")?.summary as { kapsam?: string; ip?: string } | undefined;
@@ -145,7 +145,7 @@ async function yonetimBolumu(o: Ortam, tesisId: string, yonetici: TestHesabi, uy
   const eski = await api(o, "GET", "/api/oturum", { belirtec: uye.belirtec });
   kontrol("§4i sıfırla → DAVETLI + yeni davet, eski oturum 401", sifirla.status === 200 && (sifirla.json.data as { hesap?: { durum?: string } }).hesap?.durum === "DAVETLI" && eski.status === 401);
   // son yönetici: yöneticinin kendi izinlerinden hesap:yonet düşürülürse tesiste AKTİF yönetici kalmaz
-  const adminler = await withTesis(o.goc.prisma, { tesisId }, (tx) => tx.account.findMany({ where: { tesisId, status: "AKTIF", permissions: { has: "bulut:hesap:yonet" } } }));
+  const adminler = await withTesis(o.goc, { tesisId }, (tx) => tx.account.findMany({ where: { tesisId, status: "AKTIF", permissions: { has: "bulut:hesap:yonet" } } }));
   const digerleri = adminler.filter((a) => a.id !== yonetici.accountId);
   for (const a of digerleri) {
     await api(o, "PATCH", `/api/hesaplar/${a.id}`, { belirtec: yonetici.belirtec, govde: { clientToken: randomUUID(), izinler: ["bulut:siparis:oku"] } });

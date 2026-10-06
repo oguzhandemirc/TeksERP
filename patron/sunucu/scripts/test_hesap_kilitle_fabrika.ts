@@ -40,7 +40,7 @@ async function main(): Promise<void> {
     kontrol("§1b hesap KILITLI döner", p1.success && p1.data.hesap.durum === "KILITLI" && p1.data.hesap.id === okur.accountId);
     const sonra = await api(o, "GET", "/api/oturum", { belirtec: okur.belirtec });
     kontrol("§1c kilitlenen hesabın oturumu kullanılamaz", sonra.status === 401, `${sonra.status}`);
-    const acik = await withTesis(o.goc.prisma, { tesisId: k.tesisId }, (tx) => tx.session.count({ where: { accountId: okur.accountId, closedAt: null } }));
+    const acik = await withTesis(o.goc, { tesisId: k.tesisId }, (tx) => tx.session.count({ where: { accountId: okur.accountId, closedAt: null } }));
     kontrol("§1d oturum satırı KAPATILDI (yalnız durum kapısına güvenilmez)", acik === 0, `açık ${acik}`);
 
     console.log("\n§2 işlem kimliği");
@@ -56,7 +56,7 @@ async function main(): Promise<void> {
     console.log("\n§4 kiracı sınırı");
     const r5 = await kilitle(o, k, disari.accountId);
     kontrol("§4 başka tesisin hesabı → 404 BULUNAMADI", r5.status === 404 && r5.json.details?.code === "BULUNAMADI", `${r5.status}`);
-    const disariDurum = await withTesis(o.goc.prisma, { tesisId: yabanci.tesisId }, (tx) => tx.account.findUnique({ where: { id: disari.accountId }, select: { status: true } }));
+    const disariDurum = await withTesis(o.goc, { tesisId: yabanci.tesisId }, (tx) => tx.account.findUnique({ where: { id: disari.accountId }, select: { status: true } }));
     kontrol("§4b başka tesisin hesabı DOKUNULMADI (AKTIF)", disariDurum?.status === "AKTIF", String(disariDurum?.status));
 
     console.log("\n§5 son aktif yönetici");
@@ -68,7 +68,7 @@ async function main(): Promise<void> {
     console.log("\n§6 gövde + denetim");
     const r8 = await imzali(o, k, YOL, { govde: { v: 1, hesapId: y2.accountId, islemKimligi: randomUUID(), isteyen: "x", tesisId: yabanci.tesisId } });
     kontrol("§6a tanınmayan anahtar → 400 GOVDE_GECERSIZ", r8.status === 400 && r8.json.details?.code === "GOVDE_GECERSIZ", `${r8.status}`);
-    const iz = await withTesis(o.goc.prisma, { tesisId: k.tesisId }, (tx) => tx.accountAudit.findMany({ where: { tesisId: k.tesisId, event: "HESAP_KILITLI", entityId: okur.accountId } }));
+    const iz = await withTesis(o.goc, { tesisId: k.tesisId }, (tx) => tx.accountAudit.findMany({ where: { tesisId: k.tesisId, event: "HESAP_KILITLI", entityId: okur.accountId } }));
     kontrol("§6b denetim: aktör fabrika:<kurulumId>, kaynak fabrika", iz.length === 1 && iz[0]!.actor === `fabrika:${k.kurulumId}`, iz.map((x) => x.actor).join(","));
   } finally {
     await temizleTesis(o, k.tesisId);
