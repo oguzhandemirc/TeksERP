@@ -12,6 +12,8 @@
 //     node ../scripts/agir-is.mjs -- npx tsx scripts/profil-matrisi.ts [--profil kapali,acik]
 //   --profil <a,b>     yalnız bu profiller (varsayılan: test-profilleri/ altındaki hepsi)
 //   --rapor-yolu <yol> raporu buraya yaz (varsayılan ~/.tekserp/derleme-kayitlari/profil-matrisi-<commit>.json)
+// Rapor `agacTemiz` taşır; yayın kapısı (`scripts/profil-matrisi-kapisi.mjs`) yalnız temiz ağaçta,
+// bütün profilleri yeşil raporu kabul eder.
 //   --sonda            negatif sonda: P-takımı bir kapı beklentisi BİLEREK bozulur, koşucunun
 //                      KIRMIZI vermesi beklenir (verirse çıkış 0, vermezse 1); rapor yazılmaz
 //   --acik-yaz         `acik.json`u `lib/hepsi-acik.ts`ten yeniden üret ve çık
@@ -20,14 +22,15 @@
 //    (ad deseni ölçülür); başka hiçbir DB'ye dokunulmaz.
 // =============================================================================
 import { spawnSync } from "node:child_process";
-import { createHash, randomBytes } from "node:crypto";
+import { randomBytes } from "node:crypto";
 import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
-import { homedir, tmpdir } from "node:os";
+import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { Pool } from "pg";
 import { hepsiAcikAyarlar } from "./lib/hepsi-acik";
 import { PROFIL_DIZINI, profilAdlari, profilHatalari, profilOku } from "./lib/profil";
 import { sunucuAc } from "./lib/test-sunucusu";
+import { profilOzeti, raporYolu } from "../../scripts/lib/profil-raporu.mjs";
 
 const TEKS = join(__dirname, "..");
 const BIN = join(TEKS, "node_modules", ".bin");
@@ -42,9 +45,8 @@ function ret(mesaj: string): never {
   process.exit(2);
 }
 
-function sha(metin: string): string {
-  return createHash("sha256").update(metin).digest("hex").slice(0, 16);
-}
+/** Rapor ile yayın kapısı (`scripts/lib/profil-raporu.mjs`) aynı özeti hesaplar. */
+const sha = profilOzeti;
 
 function sonSatir(metin: string, desen: RegExp): string {
   return [...metin.split("\n")].reverse().find((l) => desen.test(l))?.trim() ?? "";
@@ -140,6 +142,12 @@ function gitKisa(): string {
   return r.status === 0 ? r.stdout.trim() : "bilinmiyor";
 }
 
+/** Koşu başında ağaç temiz mi: kirli ağaçta üretilen rapor commit'i temsil etmez (kapı reddeder). */
+function agacTemizMi(): boolean {
+  const r = spawnSync("git", ["status", "--porcelain"], { cwd: TEKS, encoding: "utf8" });
+  return r.status === 0 && r.stdout.trim() === "";
+}
+
 async function main(): Promise<void> {
   const argv = process.argv.slice(2);
   const bayrakDegeri = (ad: string): string | undefined => {
@@ -168,6 +176,8 @@ async function main(): Promise<void> {
     if (h.length > 0) ret(`profil '${ad}' geçersiz: ${h.join("; ")}`);
   }
 
+  const agacTemiz = agacTemizMi();
+  const commitBasta = gitKisa();
   const logDizini = mkdtempSync(join(tmpdir(), "tekserp-profil-matrisi-log-"));
   console.log(`🧪 Profil matrisi: ${istenen.join(", ")}${sonda ? " (NEGATİF SONDA)" : ""} · loglar: ${logDizini}`);
   const sonuclar: ProfilSonucu[] = [];
@@ -191,12 +201,14 @@ async function main(): Promise<void> {
   const commit = gitKisa();
   const rapor = {
     commit,
+    // Koşu sırasında commit değiştiyse rapor hiçbir commit'i temsil etmez.
+    agacTemiz: agacTemiz && commit === commitBasta && agacTemizMi(),
     uretildi: new Date().toISOString(),
     sonuc: kirmizi.length === 0 ? "YESIL" : "KIRMIZI",
     profiller: sonuclar.map((s) => ({ ad: s.ad, db: s.db, sonuc: s.sonuc, profilOzeti: s.profilOzeti, adimlar: s.adimlar.map(({ ad, sonuc, sureMs, ozet }) => ({ ad, sonuc, sureMs, ozet })) })),
     profilDizini: Object.fromEntries(hepsi.map((ad) => [ad, sha(readFileSync(join(PROFIL_DIZINI, `${ad}.json`), "utf8"))])),
   };
-  const yol = bayrakDegeri("--rapor-yolu") ?? join(homedir(), ".tekserp", "derleme-kayitlari", `profil-matrisi-${commit}.json`);
+  const yol = bayrakDegeri("--rapor-yolu") ?? raporYolu(commit);
   mkdirSync(dirname(yol), { recursive: true });
   writeFileSync(yol, `${JSON.stringify(rapor, null, 2)}\n`);
   console.log(`📄 rapor: ${yol}`);

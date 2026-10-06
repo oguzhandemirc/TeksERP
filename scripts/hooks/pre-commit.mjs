@@ -276,6 +276,15 @@ adimlar.push({ ad: "eski kanal kaydı donuk", cwd: ".", cmd: ["node", ["scripts/
 if (staged.some(dagitimBekcisiTetigi)) {
   adimlar.push({ ad: "dağıtım kaydı", cwd: ".", cmd: ["node", ["scripts/check-dagitim.mjs"]] });
 }
+// PROFİL MATRİSİ YAYIN KAPISI (O13b): tetik = bekçinin okuduğu dosyalar (kapı kitaplığı, CLI, rapor
+// yazarı, cümle yüklemi) + dağıtım kaydı tetiği (tüketici listesi ve grup zinciri oradan okunur).
+const PROFIL_KAPISI_DOSYALARI = new Set([
+  "scripts/lib/profil-raporu.mjs", "scripts/profil-matrisi-kapisi.mjs", "scripts/test_profil_raporu_kapisi.mjs",
+  "scripts/lib/kullanici-cumlesi.mjs", "Teks-Erp/scripts/profil-matrisi.ts",
+]);
+if (staged.some((f) => PROFIL_KAPISI_DOSYALARI.has(f) || dagitimBekcisiTetigi(f))) {
+  adimlar.push({ ad: "profil matrisi yayın kapısı", cwd: ".", cmd: ["node", ["scripts/test_profil_raporu_kapisi.mjs"]], gitEnvSil: true });
+}
 
 if (adimlar.length === 0) process.exit(0);
 

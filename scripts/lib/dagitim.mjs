@@ -265,9 +265,10 @@ export const SATICI_GRUP_MIGRATION_REL = 'satici/sunucu/prisma/migrations/202610
 
 /**
  * `deploy/dagitim.json`ı okuyan ürün/yayın dosyaları — BEYANLI. Bekçi ağaçta kaydın adını taşıyan
- * her kod dosyasını bu liste + bekçi dosyalarıyla kıyaslar (iki yönlü). O1'de tüketici yok.
+ * her kod dosyasını bu liste + bekçi dosyalarıyla kıyaslar (iki yönlü). Yayın betikleri buraya girince
+ * profil matrisi kapısını çağırmak zorundadır (`test_profil_raporu_kapisi.mjs` §3).
  */
-export const TUKETICILER = Object.freeze([]);
+export const TUKETICILER = Object.freeze(['scripts/lib/profil-raporu.mjs']);
 
 /** İki dağıtım bekçisinin okuduğu dosyalar — commit tetiği bunları kapsar (okunandan dar olamaz). */
 export const DAGITIM_BEKCI_DOSYALARI = Object.freeze([
