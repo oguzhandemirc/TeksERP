@@ -1,19 +1,24 @@
 // =============================================================================
-// GRUP YAYINI — güncelleme grubuna (test → oncu → genel) çıkışın kapıları · zero-dep (O10a)
+// GRUP YAYINI — güncelleme grubuna (test → oncu → genel) çıkışın TEK kitaplığı · zero-dep (O10a · O10b · O11b)
 // =============================================================================
-// Ortak paket (`release/ortak/<sürüm>`) bir kez derlenir ve gruplara AYNI baytlarla çıkar; her gruba çıkışta
-// künye o grubun adıyla yeniden imzalanır (paket dosyası bayt-eşit kalır). Hedef (VDS dizini · adres · defter)
-// YALNIZ `deploy/dagitim.json`dan türer; eski kanal kaydı (`deploy/kanallar.json`) buradan okunur ama hiçbir
-// zaman hedef olamaz (grup adı eski kanal kodu olamaz). Terfi şartları `scripts/lib/terfi.mjs`in hükmüyle
-// AYNI yüklemden geçer; bu dosya yalnız grup zincirine uyarlar:
+// Üç ürün (panel · tablet · backend) aynı kapılardan geçer; ürüne özgü olan yalnız ARTEFAKT tablosudur (aşağıda).
+// Ortak paket bir kez derlenir ve gruplara AYNI baytlarla çıkar; her gruba çıkışta künye o grubun adıyla yeniden
+// imzalanır (paket dosyası bayt-eşit kalır). Hedef (VDS dizini · adres · defter) YALNIZ `deploy/dagitim.json`dan
+// türer; eski kanal kaydı (`deploy/kanallar.json`) buradan okunur ama hiçbir zaman hedef olamaz (grup adı eski kanal
+// kodu olamaz). Terfi şartları `scripts/lib/terfi.mjs`in hükmüyle AYNI yüklemden geçer; bu dosya grup zincirine uyarlar:
 //   · test (kök grup): terfi etiketi İSTEMEZ (sürüm notu kapısı · temiz ağaç · derleme künyesi · profil matrisi
-//     raporu yayın betiğinde ayrıca koşar);
+//     raporu yayın betiğinde ayrıca koşar — `scripts/profil-matrisi-kapisi.mjs`, üç yayıncı da onu çağırır);
 //   · oncu/genel: HEAD == <ürün>-vX · terfi/<grup>/<ürün>-vX açıklamalı etiket (onay cümlesi + saat) ·
 //     kaynak grupta yayındaki sürüm ≥ X · kaynak grubun artefaktının özeti = yüklenecek artefaktın özeti;
 //   · K-6: kaynağı da terfi etiketli bir gruba (genel) çıkış İKİNCİ, AYRI onay ister — kaynak grubun onay etiketi
 //     de HEAD'de olmalı ve iki etiketin cümlesi aynı olamaz.
 // Üç sonuç: uyumlu · ihlal · ÖLÇÜLEMEDİ (ölçülemeyen şart geçmiş şart değildir).
-// Bekçi: scripts/test_grup_yayin_kapisi.mjs
+//
+// ⚠️ YENİ ADRES KAPISI (fail-closed): yeni adrese (indir.etkiliyazilim.com) GERÇEK yükleme, 3.9 D5 (zincirli `pkt-*`
+//    imzalı listenin kökle doğrulanması + üretim imzası araçları) ve D8 (ilk PAKET sertifikası, kullanıcıyla) YAPILMADAN
+//    çıkmaz. `--kuru` (ağsız) ve `--dogrula` (salt okuma) bu kapıdan etkilenmez. Kapıyı AÇMAK = D5 + D8 işini bitiren
+//    dilimin `YENI_ADRES_KAPISI.acik`ı bir kararla `true` yapması; bekçi kapalıyken yüklemenin DURDUĞUNU ölçer.
+// Bekçiler: scripts/test_grup_yayin_kapisi.mjs (panel) · scripts/test_grup_yayin_tablet.mjs · scripts/test_backend_yayin.mjs §3G
 // =============================================================================
 
 import { spawnSync } from 'node:child_process';
@@ -25,7 +30,7 @@ import { Olculemedi } from './kanallar.mjs';
 import { dosyaOzeti } from './derleme-bagi.mjs';
 import { cumleDenetle } from './kullanici-cumlesi.mjs';
 import { gitOlgulari, kaynakSurumleri, terfiHukmu } from './terfi.mjs';
-import { etiketAdi, terfiEtiketAdi } from './surum.mjs';
+import { ayristir, etiketAdi, terfiEtiketAdi } from './surum.mjs';
 import { GUVENLI_YOL, SSH_HEDEF_VARSAYILAN } from './yayin-okuma.mjs';
 import { uzakDegerDenetle } from './yayin-hedefi.mjs';
 
@@ -48,10 +53,36 @@ export const TABLET_ARTEFAKT_GORELI = Object.freeze({
   },
 });
 
-/** Ürünün yüklenen ANA artefaktı (özet eşitliği bununla ölçülür); O11b backend'i ekler. Tablet iki türlüdür (yukarıda). */
-export const ARTEFAKT_ADI = Object.freeze({
-  panel: (surum) => `TeksERP-${surum}-Setup.exe`,
-  tablet: (surum, ek = {}) => TABLET_ARTEFAKT_GORELI.apk({ surum, vc: ek.vc }),
+export const YENI_ADRES_KAPISI = Object.freeze({
+  acik: false,
+  sart: Object.freeze([
+    '3.9 D5: PAKET zincirli (pkt-*) imzalı listenin kökle doğrulanması + üretim imzası araçları',
+    '3.9 D8: ilk PAKET sertifikası (kullanıcıyla yıllık tören)',
+  ]),
+});
+
+/** Kapı kapalıysa DUR satırları, açıksa boş dizi. */
+export function yeniAdresKapisiSatirlari(kapi = YENI_ADRES_KAPISI) {
+  if (kapi.acik === true) return [];
+  return [
+    'Yeni adrese (indir.etkiliyazilim.com) GERÇEK yayın kapalı — şu işler bitmeden açılmaz:',
+    ...kapi.sart.map((s) => `  • ${s}`),
+    'Denemek için: --kuru (ağsız) ya da --dogrula (salt okuma). Kapı scripts/lib/grup-yayin.mjs YENI_ADRES_KAPISI.',
+  ];
+}
+
+/**
+ * ARTEFAKT tablosu — ürün başına, terfide özet eşitliği (④) ölçülen ANA artefakt. Yol, kaynak grubun ürün dizinine göre.
+ *   kaynak: 'dizin'   → yerel dosya ortak paket dizininde (`dizin` + yol) · 'cagiran' → çağıran `artefakt` verir
+ *   olculmez          → özet eşitliği beyanlı olarak henüz yok (gerekçeyle); YENI_ADRES_KAPISI açılınca ÖLÇÜLEMEDİ olur
+ */
+export const ARTEFAKT = Object.freeze({
+  panel: Object.freeze({ kaynak: 'dizin', goreli: (surum) => `TeksERP-${surum}-Setup.exe` }),
+  tablet: Object.freeze({ kaynak: 'cagiran', goreli: (surum, ek = {}) => TABLET_ARTEFAKT_GORELI.apk({ surum, vc: ek.vc }) }),
+  backend: Object.freeze({
+    kaynak: null,
+    olculmez: 'backend paketinin kaynak grup özeti henüz ölçülmüyor — gerçek yükleme YENI_ADRES_KAPISI ile kapalı; kapıyı açan dilim (D5 + D8) bu satırı tanımlar',
+  }),
 });
 
 /** Kapının ihlal hatası: `satirlar` ile (kanal-kapisi'nin `hataDur`u ile aynı sözleşme). */
@@ -83,7 +114,7 @@ export function eskiKanalKodlari(kok = KOK) {
 
 /**
  * Hedef grup geçerli mi: biçim · eski kanal kodu DEĞİL · kayıtlı grup. Fail-closed; hata `GrupIhlali` ya da ÖLÇÜLEMEDİ.
- * @returns {{kayit: object, zincir: string[]}}
+ * @returns {{kayit: object, zincir: string[], kaynak: string|null}}
  */
 export function grupCoz(grup, { kok = KOK, kayit, eskiKodlar } = {}) {
   const g = String(grup ?? '');
@@ -100,7 +131,7 @@ export function grupCoz(grup, { kok = KOK, kayit, eskiKodlar } = {}) {
   const { zincir, hatalar } = grupZinciri(k.gruplar);
   if (hatalar.length) throw new Olculemedi(`${KAYIT_REL} grup zinciri geçersiz: ${hatalar[0]}`);
   if (!zincir.includes(g)) throw new GrupIhlali(`"${g}" ${KAYIT_REL} içinde kayıtlı bir güncelleme grubu değil`, [`Kayıtlı gruplar: ${zincir.join(' → ')}`]);
-  return { kayit: k, zincir };
+  return { kayit: k, zincir, kaynak: terfiKaynagi(k, g) };
 }
 
 /**
@@ -128,7 +159,7 @@ export function grupYayinBlogu(grup, secenek = {}) {
     yayin: {
       panelFeed: t.panel.feed, vdsPanel: t.panel.vds, panelManifest: t.panel.manifest,
       mobilFeed: t.tablet.feed, vdsMobil: t.tablet.vds, otaManifest: t.tablet.otaManifest, apkKunye: t.tablet.apkKunye,
-      backendFeed: t.backend.feed, vdsBackend: t.backend.vds, backendManifest: t.backend.manifest,
+      backendFeed: t.backend.feed, vdsBackend: t.backend.vds, backendManifest: t.backend.manifest, backendDefter: t.backend.defter,
     },
   };
 }
@@ -160,8 +191,10 @@ const sade = (c) => c.toLocaleLowerCase('tr').replace(/\s+/g, ' ').trim();
 
 /**
  * Hüküm — saf. `terfiHukmu`nun üzerine iki grup şartı ekler (kaçışta ve kök grupta eklenmez):
- *   ④ kaynak artefaktın özeti = yüklenecek artefaktın özeti (`ozet`: `{yerel, kaynak}`; null = ölçülmedi/kuru)
- *   ⑤ K-6: kaynak grup da onay etiketli ise o etiket HEAD'de ve cümlesi bu grubunkinden FARKLI (`kaynakOnay`)
+ *   ④ kaynak artefaktın özeti = yüklenecek artefaktın özeti (`ozet`: `{yerel, kaynak}`; null = kuru kip;
+ *      `{olculmez}` = ürünün ARTEFAKT satırında beyanlı olarak yok)
+ *   ⑤ K-6: kaynak grup da onay etiketli ise o etiket HEAD'de ve cümlesi bu grubunkinden FARKLI (`kaynakOnay`:
+ *      `{grup, etiket}`; `{grup, olculemedi}` = kaynak grubun git olgusu ölçülemedi)
  * @returns {{sonuc: 'uyumlu'|'ihlal'|'olculemedi', gerekmez?: boolean, atlandi?: object, satirlar: string[]}}
  */
 export function grupTerfiHukmu({ grup, urun, surum, kaynak, git, kaynaklar, atla, ozet = null, kaynakOnay = null }) {
@@ -171,13 +204,15 @@ export function grupTerfiHukmu({ grup, urun, surum, kaynak, git, kaynaklar, atla
   const olculemedi = [];
   const tamam = [];
   if (ozet === null) tamam.push(`④ kaynak artefaktın özeti ÖLÇÜLMEDİ (kuru kip: ağ yok) — gerçek yayında ölçülür`);
+  else if (ozet.olculmez) tamam.push(`④ ${urun}: kaynak artefakt özeti ÖLÇÜLMEDİ — ${ozet.olculmez}`);
   else if (ozet.kaynak.durum === 'var') {
     if (ozet.kaynak.sha256 === ozet.yerel) tamam.push(`④ ${kaynak} grubundaki artefakt = yüklenecek artefakt (sha256 ${ozet.yerel.slice(0, 16)}…)`);
     else ihlal.push(`④ ${kaynak} grubundaki artefaktın özeti (${ozet.kaynak.sha256.slice(0, 16)}…) yüklenecek artefaktınkinden (${ozet.yerel.slice(0, 16)}…) FARKLI — test edilen bayt bu değil; paketi ${kaynak} grubuna çıkan haliyle terfi ettir`);
   } else if (ozet.kaynak.durum === 'yok') ihlal.push(`④ ${kaynak} grubunda ${urun} ${surum} artefaktı YOK — önce ${kaynak} grubuna çıkar ve test et`);
   else olculemedi.push(`④ ${kaynak} grubundaki artefaktın özeti OKUNAMADI — ${ozet.kaynak.neden}`);
 
-  if (kaynakOnay !== null) {
+  if (kaynakOnay?.olculemedi) olculemedi.push(`⑤ K-6: ${kaynakOnay.grup} onay etiketi ÖLÇÜLEMEDİ — ${kaynakOnay.olculemedi}`);
+  else if (kaynakOnay !== null) {
     const te = terfiEtiketAdi(kaynakOnay.grup, urun, surum);
     const bu = git?.terfiEtiketi;
     const buCumle = bu ? cumleDenetle(bu.mesaj) : null;
@@ -196,32 +231,42 @@ export function grupTerfiHukmu({ grup, urun, surum, kaynak, git, kaynaklar, atla
 }
 
 /**
- * Kapının tamamı: grup + git + kaynak grup olgularını toplar, hükmü verir. Okunamayan her şey ÖLÇÜLEMEDİ
+ * Kapının tamamı (üç ürün): grup + git + kaynak grup olgularını toplar, hükmü verir. Okunamayan her şey ÖLÇÜLEMEDİ
  * (fırlatmaz); eski kanal kodu / bilinmeyen grup İHLAL.
- * @param {{grup: string, urun: string, surum: string, atla?: string, kuru?: boolean, dizin?: string, kok?: string,
- *   kayit?: object, eskiKodlar?: string[], oku?: Function, ozetOku?: Function, artefakt?: {yerel: string, goreli: string}}} o
- *   `dizin`: ortak paket dizini (panel özeti için) · `artefakt`: ürünün artefaktı panel dışındaysa (tablet) yerel
- *   dosya + kaynak grubun ürün dizinine göre yolu — verilmezse panelin `ARTEFAKT_ADI` kuralı uygulanır
+ * @param {{grup: string, urun: 'panel'|'tablet'|'backend', surum: string, atla?: string, kuru?: boolean, dizin?: string,
+ *   kok?: string, kayit?: object, eskiKodlar?: string[], oku?: Function, ozetOku?: Function,
+ *   artefakt?: {yerel: string, goreli: string}, git?: object, kaynakGit?: object|null, adresKapisi?: object}} o
+ *   `dizin`: ortak paket dizini (ARTEFAKT.kaynak='dizin') · `artefakt`: yerel dosya + kaynak grubun ürün dizinine göre
+ *   yolu (ARTEFAKT.kaynak='cagiran', tablet: APK ya da OTA bundle) · `git`/`kaynakGit`: bekçi için enjekte git olguları
+ *   (`git` verilip K-6 gereken yerde `kaynakGit` verilmezse ⑤ ÖLÇÜLEMEDİ — gerçek depoya düşülmez)
  */
-export function grupTerfiKapisi({ grup, urun, surum, atla, kuru = false, dizin, kok = KOK, kayit, eskiKodlar, oku, ozetOku = uzakSha256, artefakt }) {
+export function grupTerfiKapisi({ grup, urun, surum, atla, kuru = false, dizin, kok = KOK, kayit, eskiKodlar, oku, ozetOku = uzakSha256, artefakt, git, kaynakGit, adresKapisi = YENI_ADRES_KAPISI }) {
   let zincir;
+  let kaynak;
   try {
-    ({ kayit, zincir } = grupCoz(grup, { kok, kayit, eskiKodlar }));
+    ({ kayit, zincir, kaynak } = grupCoz(grup, { kok, kayit, eskiKodlar }));
   } catch (e) {
     if (e instanceof Olculemedi) return { sonuc: 'olculemedi', satirlar: [e.message] };
     if (e instanceof GrupIhlali) return { sonuc: 'ihlal', satirlar: [e.message, ...e.satirlar] };
     throw e;
   }
-  const kaynak = terfiKaynagi(kayit, grup);
+  const tablo = Object.prototype.hasOwnProperty.call(ARTEFAKT, urun) ? ARTEFAKT[urun] : null;
+  if (!tablo) return { sonuc: 'olculemedi', satirlar: [`bilinmeyen ürün "${urun ?? ''}" (${Object.keys(ARTEFAKT).join(' | ')})`] };
   if (!kaynak || atla !== undefined) return grupTerfiHukmu({ grup, urun, surum, kaynak, git: null, kaynaklar: null, atla });
   if (!zincir.includes(kaynak)) return { sonuc: 'olculemedi', satirlar: [`terfi kaynağı "${kaynak}" kayıtta yok`] };
-  let git;
-  let kaynakGit = null;
+  if (!ayristir(surum)) return { sonuc: 'olculemedi', satirlar: [`sürüm "${surum ?? ''}" ayrıştırılamadı — terfi şartları hangi sürüm için ölçülecek belirsiz`] };
+  const k6 = Boolean(terfiKaynagi(kayit, kaynak));
+  let olgu = git;
+  let kaynakOnay = null;
   try {
-    git = gitOlgulari({ kod: grup, urun, surum, kok });
-    if (terfiKaynagi(kayit, kaynak)) kaynakGit = gitOlgulari({ kod: kaynak, urun, surum, kok });
+    if (!olgu) olgu = gitOlgulari({ kod: grup, urun, surum, kok });
+    if (k6) {
+      if (kaynakGit !== undefined) kaynakOnay = { grup: kaynak, etiket: kaynakGit?.terfiEtiketi ?? null };
+      else if (git) kaynakOnay = { grup: kaynak, olculemedi: 'kaynak grubun git olgusu verilmedi (enjekte git yalnız hedef grup için)' };
+      else kaynakOnay = { grup: kaynak, etiket: gitOlgulari({ kod: kaynak, urun, surum, kok }).terfiEtiketi };
+    }
   } catch (e) {
-    if (e instanceof Olculemedi) return { sonuc: 'olculemedi', satirlar: [`git: ${e.message}`] };
+    if (e instanceof Olculemedi || e instanceof DagitimOlculemedi) return { sonuc: 'olculemedi', satirlar: [`git: ${e.message}`] };
     throw e;
   }
   let kaynaklar = null;
@@ -229,31 +274,39 @@ export function grupTerfiKapisi({ grup, urun, surum, atla, kuru = false, dizin, 
   if (!kuru) {
     try {
       kaynaklar = kaynakGrupSurumleri(kaynak, urun, { kok, kayit, eskiKodlar, oku });
-      let yerelYol;
-      let goreli;
-      if (artefakt) {
-        ({ yerel: yerelYol, goreli } = artefakt);
-        if (!yerelYol || !goreli) throw new Olculemedi('artefakt: yerel dosya ve kaynak grup yolu birlikte verilmeli');
-      } else {
-        if (urun === 'tablet') throw new Olculemedi('tablet artefaktı (APK ya da OTA bundle) verilmedi (özet eşitliği ölçülemez)');
-        goreli = ARTEFAKT_ADI[urun]?.(surum);
-        if (!goreli) throw new Olculemedi(`"${urun}" ürününün artefakt adı henüz tanımlı değil (özet eşitliği ölçülemez)`);
-        if (!dizin) throw new Olculemedi('özet eşitliği için ortak paket dizini verilmedi (--dizin=)');
-        yerelYol = path.join(dizin, goreli);
-      }
-      const yerel = dosyaOzeti(yerelYol).sha256;
-      ozet = { yerel, kaynak: ozetOku(`${grupHedefi(kaynak, urun, { kok, kayit, eskiKodlar }).vds}/${goreli}`) };
+      ozet = artefaktOzeti({ urun, tablo, surum, kaynak, dizin, artefakt, kok, kayit, eskiKodlar, ozetOku, adresKapisi });
     } catch (e) {
       if (e instanceof Olculemedi) return { sonuc: 'olculemedi', satirlar: [e.message] };
       throw e;
     }
   }
-  const kaynakOnay = kaynakGit ? { grup: kaynak, etiket: kaynakGit.terfiEtiketi } : null;
-  return grupTerfiHukmu({ grup, urun, surum, kaynak, git, kaynaklar, atla, ozet, kaynakOnay });
+  return grupTerfiHukmu({ grup, urun, surum, kaynak, git: olgu, kaynaklar, atla, ozet, kaynakOnay });
+}
+
+/** ④'ün olgusu: ARTEFAKT satırına göre yerel dosyanın ve kaynak gruptaki eşinin özeti (ölçülemeyen = Olculemedi atar). */
+function artefaktOzeti({ urun, tablo, surum, kaynak, dizin, artefakt, kok, kayit, eskiKodlar, ozetOku, adresKapisi }) {
+  if (tablo.olculmez) {
+    if (adresKapisi.acik === true) throw new Olculemedi(`${urun} artefaktının özet eşitliği tanımlı değil ve yeni adres kapısı AÇIK — ARTEFAKT.${urun} tanımlanmadan terfi ölçülemez`);
+    return { olculmez: tablo.olculmez };
+  }
+  let yerelYol;
+  let goreli;
+  if (artefakt) {
+    ({ yerel: yerelYol, goreli } = artefakt);
+    if (!yerelYol || !goreli) throw new Olculemedi('artefakt: yerel dosya ve kaynak grup yolu birlikte verilmeli');
+  } else if (tablo.kaynak === 'cagiran') {
+    throw new Olculemedi(urun === 'tablet' ? 'tablet artefaktı (APK ya da OTA bundle) verilmedi (özet eşitliği ölçülemez)' : `${urun} artefaktı verilmedi (özet eşitliği ölçülemez)`);
+  } else {
+    goreli = tablo.goreli(surum);
+    if (!dizin) throw new Olculemedi('özet eşitliği için ortak paket dizini verilmedi (--dizin=)');
+    yerelYol = path.join(dizin, goreli);
+  }
+  const yerel = dosyaOzeti(yerelYol).sha256;
+  return { yerel, kaynak: ozetOku(`${grupHedefi(kaynak, urun, { kok, kayit, eskiKodlar }).vds}/${goreli}`) };
 }
 
 /** Paketin grup künyesi için ayrı çalışma dizini: paket baytları SEMBOLİK bağ (kopya değil), `latest.yml` kopya. */
-export function grupDizini(ortakDizin, grup, { surum, setupAdi = ARTEFAKT_ADI.panel(surum) } = {}) {
+export function grupDizini(ortakDizin, grup, { surum, setupAdi = ARTEFAKT.panel.goreli(surum) } = {}) {
   if (!GRUP_KODU_DESENI.test(String(grup))) throw new GrupIhlali(`grup kodu biçimsiz: ${grup}`);
   const hedef = path.join(ortakDizin, '_grup', grup);
   fs.rmSync(hedef, { recursive: true, force: true });

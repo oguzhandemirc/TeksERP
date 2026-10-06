@@ -225,6 +225,8 @@ async function signZip(): Promise<void> {
     const surum = paket.uygulamaSurumu;
     if (typeof surum !== "string") throw new Error("PAKET.json uygulamaSurumu yok");
     const kanal = typeof paket.backendKanal === "string" ? paket.backendKanal : null;
+    // Ortak paket (backendKanal null) müşteri/kurulum taşımaz: filigran kurulumda, imzalı yüke de girmez.
+    if (kanal === null && (arg("musteri") !== null || arg("kurulum") !== null)) throw new Error("ortak paket (PAKET.json backendKanal null) --musteri/--kurulum almaz — filigran kurulumda");
     const kid = await signDir({ root: tmp, keyFile, surum, musteri: arg("musteri") ?? kanal, paketCommit: typeof paket.commit === "string" ? paket.commit : null });
     const updated = { ...paket, dosyaSayisi: Number(paket.dosyaSayisi) + 2, butunlukKid: kid };
     fs.writeFileSync(path.join(tmp, "PAKET.json"), `${JSON.stringify(updated, null, 2)}\n`);

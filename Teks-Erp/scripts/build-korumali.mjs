@@ -22,7 +22,8 @@
 //
 // KULLANIM (Teks-Erp/ içinden, ağır iş sarmalayıcısıyla):
 //   node ../scripts/agir-is.mjs -- node scripts/build-korumali.mjs [--hedef=win-x64|linux-x64] [--cikti=dist]
-//     [--musteri=<kanal kodu>] [--kurulum=<uuid>]   (filigran; imza ayrı adım: scripts/build-korumali-imza.ts)
+//     [--musteri=<kanal kodu> [--kurulum=<uuid>]]   (yalnız ESKİ kanal yolu; imza ayrı adım: scripts/build-korumali-imza.ts)
+//     Argümansız = ORTAK paket: filigranda musteri ve kurulumId null (filigran kurulumda, lisanstan) — O11a.
 //     Güven çapası kipi KANALDAN (`deploy/kanallar.json` backend.guvenCapasi): --musteri yoksa ÜRETİM. Bayt koduna
 //     sabit olarak girer (`__TEKSERP_GUVEN_CAPASI__`); paketteki native aynı kiple derlenmiş olmalı (derle:*:<kip>).
 //     [--sifrele=hepsi|<paket,…>] [--modul-anahtar-dizini=<yol>]   (Faz 2d şifreli modül; varsayılan ŞİFRESİZ)
@@ -95,18 +96,19 @@ async function main() {
 
   // --- 0. Derleme künyesi + filigran (Faz 2e) -------------------------------------
   // Derleme anı ve paket kimliği ÖNCE doğar: bayt kodu sabitine (filigran) ve imzalı listeye
-  // (build-korumali-imza.ts, `derlemeTarihi`/`paketId`) aynı değer girer. Müşteri/kurulum
-  // kimliği argümandan (paketle.ps1 -Musteri/-Kurulum); kişisel veri taşımaz.
+  // (build-korumali-imza.ts, `derlemeTarihi`/`paketId`) aynı değer girer. Ortak pakette müşteri/kurulum
+  // null; yalnız eski kanal yolu (paketle.ps1 -Musteri [-Kurulum]) verir. Kişisel veri taşımaz.
   const zaman = new Date().toISOString();
   const paketId = crypto.randomUUID();
   const musteri = typeof arg('musteri') === 'string' ? arg('musteri') : null;
   const kurulumId = typeof arg('kurulum') === 'string' ? arg('kurulum') : null;
   if (musteri !== null && !/^[a-z0-9][a-z0-9-]{0,39}$/.test(musteri)) throw new Error(`--musteri biçimsiz: ${musteri}`);
+  if (kurulumId !== null && musteri === null) throw new Error('--kurulum yalnız --musteri ile (eski kanal yolu) — ortak paket kurulum kimliği taşımaz');
   if (kurulumId !== null && !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(kurulumId)) throw new Error('--kurulum UUID değil');
   const filigran = { musteri, kurulumId, paketId, derlemeTarihi: zaman };
   // Güven çapası kipi kanalın satıcı/kök bağından; kanal-dışı paket ÜRETİM çapasıyla doğar (hazırlık köküne güvenmez).
   const guvenCapasi = musteri === null ? 'uretim' : await kanalGuvenCapasi(musteri);
-  console.log(`  güven çapası: ${guvenCapasi}${musteri === null ? ' (kanal-dışı → üretim)' : ` (kanal ${musteri})`}`);
+  console.log(`  güven çapası: ${guvenCapasi}${musteri === null ? ' (ortak paket → üretim)' : ` (kanal ${musteri})`}`);
 
   // --- 0b. Şifreli modüller (Faz 2d) — YALNIZ --sifrele ile; varsayılan bugünkü şifresiz paket -----
   // Modül kendi dosyalarıyla ayrı pakete bölünür, hazırlık anahtarıyla (0600, REPO DIŞI) AES-256-GCM

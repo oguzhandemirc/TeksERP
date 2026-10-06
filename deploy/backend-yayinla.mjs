@@ -25,7 +25,17 @@
  *    `--pg-cizgi`/`--pg-en-az` geriye uyum için kabul edilir ama kayıttan FARKLIYSA DUR; `--pg-kunye`nin ve
  *    `--pg-yayinla` paketinin künyesi kaydın sürüm/derleme/ICU'su değilse DUR (sessiz sapma yok).
  *
+ * ⚠️ GRUP YAYINI (O11b, TEK-ORTAK-PAKET §3.3/§3.5): `--grup=<test|oncu|genel>` ORTAK paketi (`backendKanal` null, künye
+ *    müşterisiz) `deploy/dagitim.json` grubunun `<indirmeKoku><grup>/backend/` dizinine yükler; `--musteri` ile birlikte
+ *    verilmez (eski kanal yolu bayt-donuk kalır). Hedef/adres/defter YALNIZ dağıtım kaydından (`scripts/lib/grup-yayin.mjs`).
+ *    Terfi: test kök (etiket istemez); oncu/genel `terfi/<grup>/backend-vX` açıklamalı etiketi + kaynak grupta yayındaki
+ *    sürüm ≥ X (K-6: genel kendi etiketini ister). Ağaç temiz · künye commit'i == HEAD · profil matrisi raporu
+ *    (`scripts/profil-matrisi-kapisi.mjs`, kök grup muaf). YENİ ADRESE GERÇEK YÜKLEME 3.9 D5 + D8 olmadan KAPALI
+ *    (`YENI_ADRES_KAPISI`, fail-closed): yalnız --kuru ve --dogrula açıktır.
+ *
  * Kullanım:
+ *   node deploy/backend-yayinla.mjs --grup=<grup> --paket=<ortak imzalı zip> --anahtar=<PAKET anahtarı>
+ *        [--terfi-atla="<cümle>"] [--profil-matrisi-atla="<cümle>"] [--min-kaynak=<sürüm>] [--zorunlu] [--kuru]
  *   node deploy/backend-yayinla.mjs --musteri=<kod> --paket=<imzalı zip> --anahtar=<PAKET anahtar dosyası>
  *        [--pg-kunye=<pg.json>] [--min-kaynak=<sürüm>] [--zorunlu] [--kuru] [--terfi-atla="<cümle>"]
  *   node deploy/backend-yayinla.mjs --musteri=<kod> --pg-yayinla --pg-paket=<PG sahne zip> --pg-kunye=<pg.json> [--kuru]
@@ -45,6 +55,8 @@ import { cumleDenetle, istanbulSaati, terfiAtlaKaydi, terfiKapisi, terfiRaporu }
 import { BelirtecYok, belirtecOku, belirtecliFetch, yayinOku } from '../scripts/lib/yayin-okuma.mjs';
 import { ezmeSatirlari, yayinEzmeleri, yayinHedefi } from '../scripts/lib/yayin-hedefi.mjs';
 import { yayinSonrasiBildir } from '../scripts/lib/yayin-bildirim.mjs';
+import { SSH_HEDEF_VARSAYILAN } from '../scripts/lib/yayin-okuma.mjs';
+import { grupCoz, grupHedefi, grupTerfiKapisi, grupYayinBlogu, yeniAdresKapisiSatirlari } from '../scripts/lib/grup-yayin.mjs';
 import { Olculemedi as PgOlculemedi, SURUM_REL as PG_KAYIT_REL, jsonOku as pgJsonOku, surumKaydiHatalari } from './pg/lib/pg-ornegi.mjs';
 import {
   SURUM_DESENI,
@@ -87,21 +99,43 @@ const TERFI_ATLA = argv.some((a) => a === '--terfi-atla' || a.startsWith('--terf
 }
 if (argv.some((a) => /^--(parola|password|sifre)/.test(a))) dur('Parola argümandan ALINMAZ', 'PAKET anahtarının parolası TTY\'de sorulur ya da stdin\'den okunur.');
 
-const MUSTERI = arg('musteri');
-if (!MUSTERI) dur('HANGİ KANALA YAYINLANIYOR?', '`--musteri=<kod>` zorunludur — hedef dizin, feed ve defter kanal kaydından çözülür.');
+const GRUP = arg('grup');
+if (GRUP !== undefined && arg('musteri') !== undefined) dur('İKİ HEDEF BİRDEN', '`--grup` (ortak paket, dağıtım kaydı) ile `--musteri` (eski kanal kaydı) birlikte verilmez.');
+if (GRUP === '') dur('GRUP BOŞ', '`--grup=<test|oncu|genel>`');
+const MUSTERI = GRUP ?? arg('musteri');
+if (!MUSTERI) dur('HANGİ KANALA/GRUBA YAYINLANIYOR?', '`--musteri=<kod>` (eski kanal kaydı) ya da `--grup=<grup>` (dağıtım kaydı) zorunludur — hedef dizin, feed ve defter kayıttan çözülür.');
 let KANAL;
 let KAYIT;
-try {
-  ({ kanal: KANAL, kayit: KAYIT } = kanalCoz(MUSTERI));
-} catch (e) {
-  if (e instanceof Olculemedi) dur(`KANAL KAYIT DEFTERİ ÖLÇÜLEMEDİ (${KAYIT_REL})`, e.message);
-  dur(e.message, ...(e.satirlar ?? []));
-}
 let SSH_HEDEF;
-try {
-  SSH_HEDEF = yayinHedefi(MUSTERI, 'backend', { kayit: KAYIT }).ssh;
-} catch (e) {
-  dur(`YAYIN HEDEFİ ÇÖZÜLEMEDİ (${KAYIT_REL})`, e.message, ...(e.satirlar ?? []));
+if (GRUP !== undefined) {
+  // Yeni adres: gerçek yükleme D5 + D8 olmadan KAPALI (fail-closed); --kuru/--dogrula ağa yazmaz.
+  if (!KURU && !argv.includes('--dogrula')) {
+    const kapali = yeniAdresKapisiSatirlari();
+    if (kapali.length) dur('YENİ ADRESE GERÇEK YAYIN KAPALI — hiçbir şey yüklenmedi', ...kapali);
+    if (process.env.TEKSERP_TEST_PAKET_CAPASI) dur('TEST ÇAPASI ortamda — gerçek yayın yapılmaz', 'TEKSERP_TEST_PAKET_CAPASI yalnız bekçi içindir; ortamdan kaldır.');
+  }
+  try {
+    const { kayit, kaynak } = grupCoz(GRUP);
+    const h = grupHedefi(GRUP, 'backend', { kayit });
+    KANAL = { tur: 'uretim', backend: { guvenCapasi: 'uretim' }, yayin: { ...grupYayinBlogu(GRUP, { kayit }).yayin, vdsBackend: h.vds, backendDefter: h.defter }, terfiKaynagi: kaynak };
+    KAYIT = { kanallar: { [GRUP]: KANAL } };
+  } catch (e) {
+    if (e instanceof Olculemedi) dur('DAĞITIM KAYDI ÖLÇÜLEMEDİ', e.message);
+    dur(e.message, ...(e.satirlar ?? []));
+  }
+  SSH_HEDEF = SSH_HEDEF_VARSAYILAN;
+} else {
+  try {
+    ({ kanal: KANAL, kayit: KAYIT } = kanalCoz(MUSTERI));
+  } catch (e) {
+    if (e instanceof Olculemedi) dur(`KANAL KAYIT DEFTERİ ÖLÇÜLEMEDİ (${KAYIT_REL})`, e.message);
+    dur(e.message, ...(e.satirlar ?? []));
+  }
+  try {
+    SSH_HEDEF = yayinHedefi(MUSTERI, 'backend', { kayit: KAYIT }).ssh;
+  } catch (e) {
+    dur(`YAYIN HEDEFİ ÇÖZÜLEMEDİ (${KAYIT_REL})`, e.message, ...(e.satirlar ?? []));
+  }
 }
 
 /* ------------------------------------------------------------------ *
@@ -259,7 +293,9 @@ const SURUM = String(kunye.uygulamaSurumu ?? '');
 if (!SURUM_DESENI.test(SURUM)) dur(`Paket sürümü yayınlanabilir biçimde değil: "${SURUM}"`, 'x.y.z ya da x.y.z-ön.sürüm (+yapı eki yok).');
 const PROVA = kunye.prova === true;
 if (PROVA && KANAL.tur !== 'hazirlik') dur(`PROVA paketi "${MUSTERI}" (${KANAL.tur}) kanalına yayınlanmaz`, 'Prova yalnız hazırlık kanalında denenir.');
-if (kunye.backendKanal !== MUSTERI) dur(`Paket "${kunye.backendKanal}" kanalı için üretilmiş`, `Hedef "${MUSTERI}" — paketle.ps1 -Musteri ${MUSTERI} ile üret.`);
+if (GRUP !== undefined) {
+  if (kunye.backendKanal !== null) dur(`Paket "${kunye.backendKanal}" kanalı için üretilmiş — gruba yalnız ORTAK paket çıkar`, 'paketle.ps1 argümansız (ortak paket) ile üret.');
+} else if (kunye.backendKanal !== MUSTERI) dur(`Paket "${kunye.backendKanal}" kanalı için üretilmiş`, `Hedef "${MUSTERI}" — paketle.ps1 -Musteri ${MUSTERI} ile üret.`);
 
 console.log(`\n${BAR}\n  BACKEND ${SURUM} → ${MUSTERI} (${KANAL.tur})${KURU ? ' — KURU' : ''}\n${BAR}`);
 const belge = path.join(KOK, 'docs', 'surumler', `backend-${PROVA ? cekirdekSurum(SURUM) : SURUM}.md`);
@@ -274,17 +310,50 @@ if (!ozet) {
 }
 bilgi(`✓ sürüm notu: ${fs.existsSync(belge) ? path.relative(KOK, belge) : '(prova)'} · özet ${ozet.length} karakter`);
 
+/**
+ * Grup yayını ön kapıları (§3.5/§6.4): ağaç temiz (kuruda uyarı) · künye commit'i == HEAD · profil matrisi raporu
+ * (kök grup muaf; kaçış `--profil-matrisi-atla` yalnız kullanıcının cümlesiyle). Ölçülemeyen şart geçmiş şart değildir.
+ */
+function grupOnKapilari(kunyeNesnesi) {
+  const git = (...a) => execFileSync('git', a, { cwd: KOK, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim();
+  let head;
+  let kirli;
+  try {
+    head = git('rev-parse', 'HEAD');
+    kirli = git('status', '--porcelain') !== '';
+  } catch (e) {
+    dur('GIT OKUNAMADI — grup yayını ölçülemedi', String(e.message ?? e).slice(0, 200));
+  }
+  if (kirli) {
+    if (!KURU) dur('AĞAÇ KİRLİ — HEAD yayınlanan şey değildir', 'Commit et ya da temiz ağaçta derle (git status).');
+    bilgi('⚠ ağaç kirli (kuru: yalnız uyarı; gerçek yayında DUR)');
+  } else bilgi('✓ ağaç temiz');
+  const kc = String(kunyeNesnesi.commit ?? '');
+  if (!/^[0-9a-f]{7,40}$/.test(kc) || !head.startsWith(kc)) {
+    dur(`DERLEME KÜNYESİ HEAD'E BAĞLANMIYOR — paket commit "${kc}" ≠ HEAD ${head.slice(0, 12)}`, 'Paket yayınlanacak commit\'ten derlenir (künye commit\'i HEAD olmalı).');
+  }
+  bilgi(`✓ künye commit'i == HEAD (${head.slice(0, 12)})`);
+  const r = spawnSync(process.execPath, [path.join(KOK, 'scripts/profil-matrisi-kapisi.mjs'), `--grup=${GRUP}`, `--commit=${head}`,
+    ...(arg('profil-matrisi-atla') !== undefined ? [`--profil-matrisi-atla=${arg('profil-matrisi-atla')}`] : [])], { cwd: KOK, encoding: 'utf8' });
+  const cikis = `${r.stdout ?? ''}${r.stderr ?? ''}`.trim().split('\n').filter((x) => !x.startsWith('PROFIL_MATRISI_KAPISI\t'));
+  if (r.status !== 0) dur(`PROFİL MATRİSİ KAPISI DURDURDU (${GRUP})`, ...cikis.map((x) => x.trim()));
+  for (const x of cikis.slice(0, 2)) bilgi(x.trim());
+}
+
 /* ------------------------------------------------------------------ *
  * 2) Terfi kapısı (K5) — yüklemeden ÖNCE
  * ------------------------------------------------------------------ */
 
-const terfi = terfiKapisi({ kod: MUSTERI, urun: 'backend', surum: SURUM, atla: TERFI_ATLA, kuru: KURU });
+const terfi = GRUP !== undefined
+  ? grupTerfiKapisi({ grup: GRUP, urun: 'backend', surum: SURUM, atla: TERFI_ATLA, kuru: KURU })
+  : terfiKapisi({ kod: MUSTERI, urun: 'backend', surum: SURUM, atla: TERFI_ATLA, kuru: KURU });
 const terfiSatirlari = terfiRaporu(terfi, { kod: MUSTERI, urun: 'backend', surum: SURUM });
 if (terfi.sonuc !== 'uyumlu') {
   dur(terfiSatirlari[0].replace(/^✖ /, ''), ...terfiSatirlari.slice(1).map((s) => s.trim()),
     terfi.sonuc === 'ihlal' ? 'Acil kaçış yalnız kullanıcının cümlesiyle: --terfi-atla="<cümle>"' : 'Ölçülemeyen şart geçmiş şart değildir.');
 }
 for (const s of terfiSatirlari) bilgi(s);
+if (GRUP !== undefined) grupOnKapilari(kunye);
 
 /* ------------------------------------------------------------------ *
  * 3) Bildirim — paket TAM denetlenir; kuru kipte imzasız
@@ -295,6 +364,7 @@ const ozetDosyasi = path.join(CIKTI, 'ozet.txt');
 fs.writeFileSync(ozetDosyasi, ozet);
 const aracArg = [
   '--import', 'tsx', 'scripts/backend-bildirim.ts', KURU ? 'dogrula' : 'imzala',
+  ...(GRUP !== undefined ? ['--ortak'] : []),
   `--zip=${PAKET}`, `--kanal=${MUSTERI}`, `--kanal-turu=${KANAL.tur}`, `--guven-capasi=${KANAL.backend.guvenCapasi}`, `--pg-cizgi=${PG_CIZGI}`, `--pg-en-az=${PG_EN_AZ}`,
   `--ozet-dosyasi=${ozetDosyasi}`, `--cikti=${CIKTI}`,
   ...(PG_KUNYE ? [`--pg-kunye=${PG_KUNYE}`] : []),

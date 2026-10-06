@@ -304,6 +304,27 @@ if (staged.some((f) => TABLET_ORTAK_TETIK.includes(f) || f.startsWith("mobil/scr
   adimlar.push({ ad: "tablet ortak paket kimliği", cwd: ".", cmd: ["node", ["scripts/test_tablet_ortak_paket.mjs"]], gitEnvSil: true });
 }
 
+// GRUP YAYINI (O10a · O10b · O11b): ortak grup kitaplığı üç ürünün kapısıdır — kitaplık/terfi değişince üç bekçi birden.
+const GRUP_KITAPLIGI = new Set(["scripts/lib/grup-yayin.mjs", "scripts/lib/terfi.mjs"]);
+const GRUP_YAYIN_DOSYALARI = new Set([
+  "deploy/backend-yayinla.mjs", "scripts/lib/backend-yayin.mjs",
+  "Teks-Erp/scripts/backend-bildirim.ts", "scripts/test_backend_yayin.mjs",
+]);
+const PANEL_GRUP_DOSYALARI = new Set(["deploy/electron-grup-yayinla.sh", "scripts/grup-yayin-kapisi.mjs", "scripts/test_grup_yayin_kapisi.mjs"]);
+const TABLET_GRUP_DOSYALARI = new Set([
+  "deploy/mobil-grup-yayinla.mjs", "mobil/scripts/lib/ortak-ota.mjs", "mobil/scripts/yayinla-ota-ortak.mjs", "scripts/test_grup_yayin_tablet.mjs",
+]);
+const grupTetigi = (kume) => staged.some((f) => kume.has(f) || GRUP_KITAPLIGI.has(f));
+if (grupTetigi(GRUP_YAYIN_DOSYALARI)) {
+  adimlar.push({ ad: "backend grup yayını", cwd: ".", cmd: ["node", ["scripts/test_backend_yayin.mjs"]], gitEnvSil: true });
+}
+if (grupTetigi(PANEL_GRUP_DOSYALARI)) {
+  adimlar.push({ ad: "panel grup yayını", cwd: ".", cmd: ["node", ["scripts/test_grup_yayin_kapisi.mjs"]], gitEnvSil: true });
+}
+if (grupTetigi(TABLET_GRUP_DOSYALARI)) {
+  adimlar.push({ ad: "tablet grup yayını", cwd: ".", cmd: ["node", ["scripts/test_grup_yayin_tablet.mjs"]], gitEnvSil: true });
+}
+
 if (adimlar.length === 0) process.exit(0);
 
 // UCUZ KAYIT ADIMLARI ÖNCE (doküman · mandallar · hijyen · kapının kendisi), ağırlar

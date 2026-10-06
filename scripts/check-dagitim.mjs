@@ -19,6 +19,9 @@
 //   §7 satıcı grup aynaları (O2): `UPDATE_GROUPS` sabiti = zincir (sırasıyla); grup migration'ının INSERT satırları
 //      (kod × sira 1..n) ve iki `NOT IN`/`IN` kümesi = zincir — kayıt, kod ve DB satırı tek küme
 //      + fabrika aynası (O3): backend `UPDATE_GROUPS` (indirme belirteci yanıtının `grup` kümesi) = zincir
+//   §8 ortak backend paketinin kimliği (O11a): `paketle.ps1`in argümansız yolunun çağırdığı türetim
+//      (`backendPaketKimligi`) ağaçta koşar — hizmet adı `kanal-adlari.ps1`in soneksiz tabanı, lisans satıcısı
+//      backend varsayılanı
 //
 // ÜÇ SONUÇ: 0 yeşil · 1 kırmızı · 2 ÖLÇÜLEMEDİ. Cırcır değil (taban yok).
 //   node scripts/check-dagitim.mjs          # dinlenme durumu
@@ -32,6 +35,7 @@ import {
   CI_REL,
   DAGITIM_BEKCI_DOSYALARI,
   ESKI_KAYIT_REL,
+  KANAL_ADLARI_REL,
   KAPI_KANCASI_REL,
   KAYIT_REL,
   KOK,
@@ -44,6 +48,7 @@ import {
   URUNLER,
   VENDOR_URL_REL,
   WORKER_REL,
+  backendPaketKimligi,
   dagitimBekcisiTetigi,
   dosyalariOku,
   eskiKanalAyrimi,
@@ -68,15 +73,15 @@ const SABLON = {
 const TAKMA_AD_SABLONU = '{k}ota/{rv}/manifest';
 
 /**
- * Ayrılık istisnaları — BEYANLI. adnansahin bugün pm2'de koşar (`tekserp-backend-yeni`), Windows hizmeti
- * yoktur; kayıttaki `TeksERP-Backend` geçiş aracının (gecis.ps1, K-13: dokunulmaz) hedef adıdır. adnansahin
- * yeni sisteme yedekten kurulduğunda (Faz 4) ortak hizmet adını alır.
+ * Ayrılık istisnaları — BEYANLI. adnansahin pm2'de koşar (`tekserp-backend-yeni`), Windows hizmeti yoktur;
+ * kayıttaki `TeksERP-Backend` geçiş aracının (gecis.ps1, K-13: dokunulmaz) hedef adıdır. O11a KARARI: ortak
+ * hizmet adı soneksiz taban kalır (§8) — makinede tek kurulumun adıdır; adnansahin Faz 4'te aynı adı alır.
  */
 const AYRILIK_ISTISNALARI = [
-  { alan: 'backend.hizmetAdi', kanal: 'adnansahin', gerekce: 'adnansahin pm2de, hizmet yok; Faz 4te ortak hizmet adına geçer (TEK-ORTAK-PAKET.md §8.4)' },
+  { alan: 'backend.hizmetAdi', kanal: 'adnansahin', gerekce: 'adnansahin pm2de, hizmet yok; ortak ad soneksiz taban (O11a KARARI); Faz 4te aynı adı alır (TEK-ORTAK-PAKET.md §8.4)' },
 ];
 
-const OKUNAN = [KAYIT_REL, ESKI_KAYIT_REL, VENDOR_URL_REL, SATICI_INDIRME_REL, WORKER_REL, KAPI_KANCASI_REL, CI_REL, SATICI_GRUPLAR_REL, SATICI_GRUP_MIGRATION_REL, BACKEND_GRUPLAR_REL];
+const OKUNAN = [KAYIT_REL, ESKI_KAYIT_REL, VENDOR_URL_REL, KANAL_ADLARI_REL, SATICI_INDIRME_REL, WORKER_REL, KAPI_KANCASI_REL, CI_REL, SATICI_GRUPLAR_REL, SATICI_GRUP_MIGRATION_REL, BACKEND_GRUPLAR_REL];
 
 const sablonDoldur = (s, y) => s.replaceAll('{k}', y.k).replaceAll('{g}', y.g).replaceAll('{v}', y.v).replaceAll('{d}', y.d).replaceAll('{rv}', y.rv);
 
@@ -189,6 +194,13 @@ function olc(d, okuyanlar, ek = {}) {
   const m = typeof d[VENDOR_URL_REL] === 'string' ? /^export const DEFAULT_LICENSE_SERVER_URL = "([^"]+)";$/m.exec(d[VENDOR_URL_REL]) : null;
   if (!m) s.olculemedi.push(`§5 ${VENDOR_URL_REL} DEFAULT_LICENSE_SERVER_URL okunamadı`);
   else if (m[1] !== kayit.lisansSunucusu) s.kirmizi.push(`§5 lisansSunucusu (${kayit.lisansSunucusu}) backend varsayılanı (${m[1]}) değil`);
+
+  // §8 ortak backend paketinin kimliği (paketleyici aynı yüklemi çağırır)
+  try {
+    backendPaketKimligi(kayit, d[VENDOR_URL_REL], d[KANAL_ADLARI_REL]);
+  } catch (e) {
+    (e instanceof Olculemedi ? s.olculemedi : s.kirmizi).push(`§8 ${e.message}`);
+  }
 
   // §7 satıcı grup aynaları
   try {
@@ -337,6 +349,11 @@ function sondalar(taban, tabanOkuyanlar) {
     ['N42 Worker OTA takma ad öneki kayıttan ayrıştı (/guncel/) → KIRMIZI', 'kirmizi', (d) => {
       d[WORKER_REL] = d[WORKER_REL].replace('export const OTA_TAKMA_AD_ONEKI = "/ota/";', 'export const OTA_TAKMA_AD_ONEKI = "/guncel/";');
     }, '§3 Worker OTA takma ad öneki'],
+    ['N43 ortak hizmet adı son ekli (TeksERP-Backend-test: kanal kimliği pakete döner) → KIRMIZI', 'kirmizi', kayitta((o) => { o.urun.backend.hizmetAdi = 'TeksERP-Backend-test'; }), '§8 urun.backend.hizmetAdi'],
+    ['N44 kanal-adlari.ps1 tabanı kayıttan ayrıştı (TeksERP-Sunucu) → KIRMIZI', 'kirmizi', (d) => {
+      d[KANAL_ADLARI_REL] = d[KANAL_ADLARI_REL].replace('$taban = "TeksERP-Backend"', '$taban = "TeksERP-Sunucu"');
+    }, '§8 urun.backend.hizmetAdi'],
+    ['O10 kanal-adlari.ps1 tabanı okunamadı → ÖLÇÜLEMEDİ', 'olculemedi', (d) => { d[KANAL_ADLARI_REL] = d[KANAL_ADLARI_REL].replace('$taban = ', '$kok = '); }],
     ['O1 kayıt bozuk JSON → ÖLÇÜLEMEDİ', 'olculemedi', (d) => { d[KAYIT_REL] = d[KAYIT_REL].slice(0, 40); }],
     ['O2 vendor-url.ts varsayılan sabitinin adı değişti → ÖLÇÜLEMEDİ', 'olculemedi', (d) => { d[VENDOR_URL_REL] = d[VENDOR_URL_REL].replace('DEFAULT_LICENSE_SERVER_URL', 'VARSAYILAN_SATICI'); }],
     ['O3 Worker URUN_DIZINLERI adı değişti → ÖLÇÜLEMEDİ', 'olculemedi', (d) => { d[WORKER_REL] = d[WORKER_REL].replace('export const URUN_DIZINLERI', 'export const DIZINLER'); }],
