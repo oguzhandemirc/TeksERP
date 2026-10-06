@@ -4,7 +4,7 @@
   "_dosyaSayisi": 1492,
   "kurallar": {
     "max-lines": 90,
-    "max-lines-per-function": 297,
+    "max-lines-per-function": 291,
     "max-params": 47
   }
 }
