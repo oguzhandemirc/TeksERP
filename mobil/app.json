@@ -20,7 +20,7 @@
       },
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false,
-      "package": "com.teks.erp.mobil",
+      "package": "com.etkiliyazilim.tekserp",
       "versionCode": 57,
       "usesCleartextTraffic": true,
       "permissions": [
@@ -41,7 +41,7 @@
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.teks.erp.mobil",
+      "bundleIdentifier": "com.etkiliyazilim.tekserp",
       "infoPlist": {
         "NSAppTransportSecurity": {
           "NSAllowsArbitraryLoads": true
@@ -80,16 +80,17 @@
       "expo-asset",
       "./plugins/withReleaseKeystore"
     ],
-    "runtimeVersion": "54.2",
+    "runtimeVersion": "55.0",
     "updates": {
       "enabled": true,
       "checkAutomatically": "ON_LOAD",
       "fallbackToCacheTimeout": 0,
-      "codeSigningCertificate": "./keystore/ota-certs/certificate.pem",
+      "codeSigningCertificate": "./keystore/ota-certs-ortak/certificate.pem",
       "codeSigningMetadata": {
-        "keyid": "main",
+        "keyid": "ortak",
         "alg": "rsa-v1_5-sha256"
-      }
+      },
+      "url": "https://indir.etkiliyazilim.com/ota/55.0/manifest"
     }
   }
 }

@@ -54,6 +54,24 @@ const cfg = (ek: Record<string, string | undefined> = {}) =>
 // =============================================================================
 // TEK ORTAK PAKET — argümansız derleme
 // =============================================================================
+// Eski kanalın (adnansahin) kimliği — `eski-kanal-son` etiketindeki değerler; ortak paketle ÇAKIŞMAMASI ölçülür.
+const ESKI_KANAL = {
+  paket: 'com.teks.erp.mobil',
+  runtimeVersion: '54.2',
+  sertifika: './keystore/ota-certs/certificate.pem',
+  kid: 'main',
+};
+const eskiYapilandirma = () => {
+  const c = JSON.parse(JSON.stringify(appJson));
+  c.android.package = ESKI_KANAL.paket;
+  c.ios.bundleIdentifier = ESKI_KANAL.paket;
+  c.runtimeVersion = ESKI_KANAL.runtimeVersion;
+  c.updates.codeSigningCertificate = ESKI_KANAL.sertifika;
+  c.updates.codeSigningMetadata.keyid = ESKI_KANAL.kid;
+  c.updates.url = 'https://guncelleme.etkiliyazilim.com/adnansahin/mobil/ota/54.2/manifest';
+  return c;
+};
+
 describe('ortak paket kimliği (argümansız derleme)', () => {
   const t = dagitim.urun.tablet;
   const ortak = cfg();
@@ -67,6 +85,15 @@ describe('ortak paket kimliği (argümansız derleme)', () => {
     expect(ortakLib.ortakYapilandirmaFarki(ortak)).toEqual([]);
   });
 
+  it('app.json taban dosyası kayıtla AYNI kimliği taşır (eski kanal değerleri yalnız eski-kanal-son etiketinde)', () => {
+    expect(appJson.android.package).toBe(t.androidPaket);
+    expect(appJson.ios.bundleIdentifier).toBe(t.androidPaket);
+    expect(appJson.runtimeVersion).toBe(t.runtimeVersion);
+    expect(appJson.updates.codeSigningCertificate).toBe(`./${t.otaSertifika}`);
+    expect(appJson.updates.codeSigningMetadata?.keyid).toBe(ortakLib.ortakKimlik().anahtarKimligi);
+    expect(appJson.updates.url).toBe(ortak.updates.url);
+  });
+
   it('gömülü adres grup-nötr Worker takma adıdır: <indirmeKoku>ota/<rv>/manifest', () => {
     expect(ortak.updates.url).toBe(`${dagitim.indirmeKoku}ota/${t.runtimeVersion}/manifest`);
     expect(ortak.updates.url).toMatch(/^https:\/\/[^/]+\/ota\/[0-9]+\.[0-9]+\/manifest$/);
@@ -75,14 +102,14 @@ describe('ortak paket kimliği (argümansız derleme)', () => {
   it('güncelleme AÇIK, kod imzası ortak anahtarın kid\'ini gösterir (eski kanalınkini değil)', () => {
     expect(ortak.updates.enabled).toBe(true);
     expect(ortak.updates.codeSigningMetadata?.keyid).toBe(ortakLib.ortakKimlik().anahtarKimligi);
-    expect(ortak.updates.codeSigningMetadata?.keyid).not.toBe(appJson.updates.codeSigningMetadata?.keyid);
+    expect(ortak.updates.codeSigningMetadata?.keyid).not.toBe(ESKI_KANAL.kid);
     expect(ortak.updates.codeSigningMetadata?.alg).toBe('rsa-v1_5-sha256');
   });
 
-  it('eski kanalın dinlenme kimliğiyle (app.json) paket adı · OTA sertifikası · anahtar PAYLAŞMAZ (yan yana kurulur)', () => {
-    expect(ortak.android.package).not.toBe(appJson.android.package);
-    expect(ortak.updates.codeSigningCertificate).not.toBe(appJson.updates.codeSigningCertificate);
-    const eskiAnahtar = appJson.updates.codeSigningCertificate
+  it('eski kanalın kimliğiyle paket adı · OTA sertifikası · anahtar PAYLAŞMAZ (yan yana kurulur)', () => {
+    expect(ortak.android.package).not.toBe(ESKI_KANAL.paket);
+    expect(ortak.updates.codeSigningCertificate).not.toBe(ESKI_KANAL.sertifika);
+    const eskiAnahtar = ESKI_KANAL.sertifika
       .replace(/^\.\//, '').replace('ota-certs', 'ota-keys').replace('certificate.pem', 'private-key.pem');
     expect(ortakLib.ortakKimlik().otaAnahtar).not.toBe(eskiAnahtar);
   });
@@ -121,8 +148,8 @@ describe('ortak paket kimliği (argümansız derleme)', () => {
     expect(bozuk((o) => (o.indirmeKoku = 'https://indir.etkiliyazilim.com/test/'))).toThrow(/indirmeKoku/);
   });
 
-  it('SONDA: eski kanalın dinlenme yapılandırması (app.json) ortak paket SAYILMAZ (fark yüklemi kör değil)', () => {
-    const f = ortakLib.ortakYapilandirmaFarki(JSON.parse(JSON.stringify(appJson)));
+  it('SONDA: eski kanalın yapılandırması ortak paket SAYILMAZ (fark yüklemi kör değil)', () => {
+    const f = ortakLib.ortakYapilandirmaFarki(eskiYapilandirma());
     expect(f.some((x: string) => x.startsWith('android.package'))).toBe(true);
     expect(f.some((x: string) => x.startsWith('updates.url'))).toBe(true);
     expect(f.some((x: string) => x.startsWith('runtimeVersion'))).toBe(true);

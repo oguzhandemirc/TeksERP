@@ -3,8 +3,8 @@
 // =============================================================================
 // Argümansız derleme (build-apk, `expo prebuild`) bu kimlikle doğar: paket adı · görünen ad ·
 // runtimeVersion · OTA sertifikası · grup-nötr güncelleme adresi (Worker takma adı). Değerler
-// YALNIZ kayıttadır (KARAR K-1/K-2 tek yerden değişir); app.json'daki kimlik alanları eski kanalın
-// (adnansahin) dinlenme değerleridir ve derlemede bu modülce EZİLİR (native parmak izi için yerinde).
+// YALNIZ kayıttadır (KARAR K-1/K-2 tek yerden değişir); app.json'daki kimlik alanları bu kaydın
+// taban aynasıdır (eski kanal değerleri `eski-kanal-son` etiketinde) ve derlemede bu modülce yine uygulanır.
 //
 // ⚠️ CommonJS BİLİNÇLİ: `app.config.js` Expo tarafından `require` edilir. Kaydın TAM doğrulaması
 // `scripts/lib/dagitim.mjs` `kayitHatalari`ndadır (build-apk önce onu çağırır); burada okuma +
