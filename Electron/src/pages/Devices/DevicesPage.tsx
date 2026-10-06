@@ -14,6 +14,7 @@ import { safeFormat } from "@/lib/format";
 import { deviceService } from "./service";
 import type { DeviceListItem } from "./types";
 import { ApproveAssignDialog } from "./ApproveAssignDialog";
+import { TabletTlsQrButton } from "./TabletTlsQrButton";
 import { DeviceRow, deviceKindLabel } from "./DeviceRow";
 import {
   DeviceFilterBar,
@@ -99,6 +100,7 @@ export function DevicesPage() {
         title="Cihazlar"
         actions={
           <>
+            <TabletTlsQrButton />
             <RefreshButton queryKey={QUERY_KEY} />
             <ListExportMenu
               name="Cihazlar"
