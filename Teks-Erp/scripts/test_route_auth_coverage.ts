@@ -58,6 +58,7 @@ const EXEMPT: Record<string, string> = {
   // Güncelleyicinin sağlık sondası (Dağıtım v2, GUNCELLEYICI.md §8.7): SYSTEM hizmeti oturum taşıyamaz. Koruma
   // kimlik değil ADRESTİR — yalnız döngü adresinden doğrudan (vekil başlıksız) gelen istek cevap alır, dışarıya
   // 404; `lisans{kip,butunluk,cekirdek}` bu yüzden donmuş public `/health`e girmez. Bekçi: test_yerel_saglik.
+  "GET /health/tepsi": "sunucu simgesinin durum ucu; yalnız döngü adresine cevap verir (dışarıya 404), sır taşımaz",
   "GET /health/yerel": "güncelleyicinin yerel sağlık sondası; yalnız döngü adresine cevap verir (dışarıya 404)",
   // Servis keşfi kimlik ucu: istemci HENÜZ HANGİ SUNUCUYA bağlanacağını
   // bilmiyorken çağırır — guard takılamaz (/health ile birebir aynı gerekçe).

@@ -33,7 +33,7 @@
 - [ ] 3.1 Tek ortak paket tasarım + uygulama; K2 firma adı, K3 Tailscale kutusu/gömülü adres
 - [ ] 3.2 İndirme kapısı yeni alt adresle (§D-1)
 - [ ] 3.3 Panel 1.4.3: sunucu durumu ekranı + canlı güncelleme penceresi + tablet bandı (§E)
-- [ ] 3.4 Sunucu bilgisayarında sağ alt simge (§E)
+- [x] 3.4 Sunucu bilgisayarında sağ alt simge (§E) — PowerShell + WinForms, `/health/tepsi` (arşiv 2026-10-06); Windows'ta gerçek deneme bekler
 - [ ] 3.5 Sunucu saati (§B-3)
 - [ ] 3.6 Hata raporları (§E)
 - [ ] 3.7 Fabrika tableti Google Play'de (§E)

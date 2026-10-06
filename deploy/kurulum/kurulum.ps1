@@ -726,6 +726,27 @@ function AsamaBackend {
   DurumYaz $kok $d
 }
 
+# SUNUCU SIMGESI (bildirim alani): tepsi.ps1 -> <kok>\tepsi\ (SYSTEM + Administrators tam, Users YALNIZ okuma/calistirma:
+# kullanici oturumunda calisan betik kullanici tarafindan DEGISTIRILEMEZ) + HKLM Run kaydi (her kullanici oturumunda
+# baslar; yonetici istemez). Yalniz backend'in 127.0.0.1 /health/tepsi ucunu okur. Kozmetik: hata kurulumu DURDURMAZ.
+function TepsiKur([string]$kok, $d, [int]$port) {
+  try {
+    $kaynak = Join-Path $PSScriptRoot "tepsi.ps1"
+    if (-not (Test-Path -LiteralPath $kaynak)) { Uyar "tepsi.ps1 pakette yok - sunucu simgesi kurulmadi"; return }
+    $dizin = Join-Path $kok "tepsi"
+    if (-not (Test-Path -LiteralPath $dizin)) { New-Item -ItemType Directory -Path $dizin -Force | Out-Null }
+    if (ReparseMi $dizin) { Uyar "tepsi dizini bir baglanti noktasi - sunucu simgesi kurulmadi: $dizin"; return }
+    $r = NativeKos "icacls.exe" @($dizin, "/inheritance:r", "/grant:r", "*S-1-5-18:(OI)(CI)F", "*S-1-5-32-544:(OI)(CI)F", "*S-1-5-32-545:(OI)(CI)RX")
+    if ($r.kod -ne 0) { Uyar "tepsi dizini izni yazilamadi (icacls $($r.kod)) - sunucu simgesi kurulmadi"; return }
+    Copy-Item -LiteralPath $kaynak -Destination (Join-Path $dizin "tepsi.ps1") -Force
+    $ps = Join-Path $env:SystemRoot "System32\WindowsPowerShell\v1.0\powershell.exe"
+    $komut = "`"$ps`" -NoProfile -NonInteractive -WindowStyle Hidden -ExecutionPolicy Bypass -File `"$(Join-Path $dizin 'tepsi.ps1')`" -Port $port"
+    $run = "HKLM:\Software\Microsoft\Windows\CurrentVersion\Run"
+    Set-ItemProperty -LiteralPath $run -Name "TeksERP-Tepsi$($d.adlar.sonek)" -Value $komut -Type String
+    Ok "sunucu simgesi: $dizin (oturum acilinca baslar; port $port)"
+  } catch { Uyar "sunucu simgesi kurulamadi: $($_.Exception.Message)" }
+}
+
 function AsamaHizmetler {
   Baslik "Hizmetler - kayit, izin, gorev, guvenlik duvari, baslat"
   $C = CevabiYukle
@@ -787,6 +808,7 @@ function AsamaHizmetler {
     if ("$($g.kuruluSurum)" -cne "$($d.paket.surum)") { Uyar "guncelleyici kurulu surumu $($g.kuruluSurum) goruyor (beklenen $($d.paket.surum))" }
     else { Ok "guncelleyici: durum $($g.durum) - karar $($g.karar.karar)/$($g.karar.neden) (lisans etkinlesince politika gelir)" }
   }
+  TepsiKur $kok $d $apiPort
   AsamaBitti $d "Hizmetler"
   DurumYaz $kok $d
 }

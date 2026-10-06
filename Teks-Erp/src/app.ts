@@ -13,6 +13,8 @@ import { redactSecretQueryParams } from "./utils/url-redaction";
 import prisma from "./lib/prisma";
 import { buildRichHealth } from "./lib/health-snapshot";
 import { isDirectLoopback, localLicenseHealth } from "./lib/yerel-saglik";
+import { trayStatus } from "./lib/tepsi-durumu";
+import { readUpdater } from "./lib/license/updater-ipc";
 
 // Tüm res.json() çıktısında Prisma Decimal → number çevirir
 // (Decimal.prototype.toJSON override'ı). Aksi halde Decimal'ler client'a string
@@ -410,6 +412,25 @@ app.get("/health/yerel", async (req: Request, res: Response) => {
   }
   const lisans = localLicenseHealth();
   res.status(200).json({ status: "UP", db, version: appVersion, time: new Date().toISOString(), ...(lisans ? { lisans } : {}) });
+});
+
+/**
+ * Sunucu simgesi (bildirim alanı) durumu — yalnız döngü adresine cevap verir (dışarıya 404); renk kararı
+ * `lib/tepsi-durumu.ts`te, çıktı sır/yol/güncelleyici iletisi taşımaz.
+ */
+app.get("/health/tepsi", async (req: Request, res: Response) => {
+  if (!isDirectLoopback(req.socket.remoteAddress, req.headers)) {
+    res.status(404).json({ success: false, message: `Endpoint bulunamadı: ${req.method} ${req.originalUrl}` });
+    return;
+  }
+  let db: "UP" | "DOWN" = "DOWN";
+  try {
+    await prisma.$queryRaw`SELECT 1`;
+    db = "UP";
+  } catch {
+    db = "DOWN";
+  }
+  res.status(200).json(trayStatus({ db, surum: appVersion, lisansKipi: localLicenseHealth()?.kip ?? null, read: readUpdater(), nowMs: Date.now() }));
 });
 
 // =============================================================================
