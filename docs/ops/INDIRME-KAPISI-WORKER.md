@@ -1,13 +1,14 @@
 # İndirme kapısı Worker'ı — kurulum, prova, geçiş, geri alma
 
-> **Durum (2026-09-29, dilim 3a):** kod ve bekçi hazır, **YAYIN YAPILMADI.** Worker'ı panele yapıştırmak, rota bağlamak, ayarı yazmak ve origin'i daraltmak kullanıcı cümlesiyle yapılır ("yayınla"); her adım ÖNCE testfabrika kanalında, sonra adnansahin'de.
+> **Durum (ölçüldü 2026-10-06):** kod ve bekçi hazır, **YAYIN YAPILMADI** — Cloudflare hesabında Worker ve rota yok, dosyalar belirteçsiz iniyor. **Kapı eski `guncelleme.etkiliyazilim.com`da AÇILMAZ** (kullanıcı kararı 2026-10-03, `docs/plan/DEMOFABRIKA-KURULUM-BULGULARI.md` §D-1): yeni alt adreste (öneri `indir.etkiliyazilim.com`) tek ortak paketle (plan 3.1) birlikte açılır, klasörler güncelleme grubuna göredir (`/test` · `/oncu` · `/genel`); eski adres adnansahin için kapı DIŞINDA aynen kalır — o ana makineye rota bağlanmaz. testfabrika ve hazırlık satıcısı emekli (2026-10-05): `indirmeListesi.hazirlik` boş.
+> **adnansahin belirteç GÖNDERMEZ:** sahadaki panel 1.3.7 · tablet OTA 1.0.12 · APK 1.0.0 · backend 2.11.2 belirteç kodundan (panel 3b · tablet 3c · fabrika ucu, hepsi 2026-09-29) ÖNCEDİR; adnansahin'e yeni güncelleme gönderilmez, yeni sisteme sonra alınır (kullanıcı kararı 2026-10-06) ⇒ `guncelleme.etkiliyazilim.com`a Worker rotası BAĞLANMAZ.
 > **İstemci zinciri (dilim 3bc):** fabrika ucu `GET /api/license/indirme-belirteci?urun=electron|mobil` süresi dolmuş belirteci vermez, dolmaya < 15 dk kalmışsa yoklamayı dürter; panel (`updater.ipc.ts` + `/download-token`) her denetimde `X-TKL-Indirme`, tablet (`mobil/src/services/downloadToken.service.ts`) her OTA denetiminden önce `tkl` extra param + APK isteğinde başlık, açılışta native denetim bayat paramla 403 alırsa JS 5 sn sonra tazeleyip yeniden dener; belirteç alınamazsa HER İKİSİ BAŞLIKSIZ ister (geçiş listesi). Yayın betikleri önce taze CLI belirteci (`docs/kurallar/surum-yayin.md`). Senaryo L22/L24 bu zinciri gerçek Worker modülüyle koşar.
 > **İNDİRME listesi (L2-8, lisans v2 §2.1/§2.5):** Worker anahtarları çapa kipi başına AYRI iki listeden okur (`uretim` · `hazirlik`); her satır kid × izinli kanal kümesi × pencere (sertifikanınki) taşır. Dönem töreni (yılda bir) yapıştırılacak satırı hazır basar — §8. Eski `anahtarlar: [{kid, x}]` biçimi kısıtsız olarak BİR Worker sürümü daha tanınır.
 > **Kod:** `deploy/guncelleme-sunucusu/worker/indirme-kapisi.js` · **Kâhin:** `Teks-Erp/src/lib/license/protocol/indirme.ts` · **Bekçi:** `Teks-Erp/scripts/test_indirme_kapisi.ts` · **Sözleşme:** `docs/design/LISANS-PROTOKOLU.md` (İNDİRME) · plan Faz 3a (`docs/design/LISANS-KOD-KORUMA.md`).
 
 ## 0. Ne yapar, ne yapmaz
 
-- `guncelleme.etkiliyazilim.com` üzerinde `/<kanal>/electron/*`, `/<kanal>/mobil/*` ve `/<kanal>/backend/*` (Dağıtım v2 — backend paketleri ve sürüm işaretçisi, `docs/design/GUNCELLEYICI.md` §1) isteklerini İNDİRME belirteciyle kapılar; ürün kümesi kâhinin `DOWNLOAD_PRODUCTS`ıyla birebir (`URUN_DIZINLERI`, bekçi §8a). Belirteç fabrikanın KENDİ backend'inden gelir (`GET /api/license/indirme-belirteci`), Ed25519 imzalıdır, kanal + ürün önekine ve kuruluma bağlıdır, ömrü ≤ 70 dk.
+- Yeni indirme adresinde (`indir.etkiliyazilim.com`, §D-1; eski `guncelleme.etkiliyazilim.com` kapı dışında) `/<kanal>/electron/*`, `/<kanal>/mobil/*` ve `/<kanal>/backend/*` (Dağıtım v2 — backend paketleri ve sürüm işaretçisi, `docs/design/GUNCELLEYICI.md` §1) isteklerini İNDİRME belirteciyle kapılar; ürün kümesi kâhinin `DOWNLOAD_PRODUCTS`ıyla birebir (`URUN_DIZINLERI`, bekçi §8a). Belirteç fabrikanın KENDİ backend'inden gelir (`GET /api/license/indirme-belirteci`), Ed25519 imzalıdır, kanal + ürün önekine ve kuruluma bağlıdır, ömrü ≤ 70 dk.
 - Belirteç üç yoldan okunur, bu sırayla: başlık `X-TKL-Indirme` (panel, electron-updater `requestHeaders`) · tabletin manifest isteğindeki `Expo-Extra-Params` başlığında `tkl` anahtarı (`Updates.setExtraParamAsync`) · sorgu `?t=`. İlk bulunan karar verir.
 - Doğrulanan istek origin'e (VDS nginx) **belirteçsiz** gider: `?t=`, `X-TKL-Indirme` ve `Expo-Extra-Params` düşer, `Range` korunur ⇒ önbellek belirteç başına bölünmez.
 - Önbellek: değişmez dosya (exe · blockmap · apk · OTA varlığı) `cacheEverything` + `cacheTtlByStatus` (200–299 `onbellekSn`, 404 bir saniye, 5xx hiç — bir hafta tutulan 404 dersi, `deploy/guncelleme-sunucusu/README.md` ①); değişken dosya (`*.yml` · `manifest` · `surum.json` · backend `son.json`) cf seçeneksiz — origin'in `no-cache`i geçerli kalır.
@@ -29,12 +30,12 @@ Worker değişkeni (panelde Settings → Variables and Secrets; tür JSON ya da 
 ```json
 {
   "indirmeListesi": {
-    "uretim": [{ "kid": "ind-2026", "x": "<43 karakter base64url>", "kanallar": ["adnansahin", "demofabrika"], "baslangic": "<ISO Z>", "bitis": "<ISO Z>" }],
-    "hazirlik": [{ "kid": "ind-hazirlik-2026", "x": "<43 karakter base64url>", "kanallar": ["testfabrika"], "baslangic": "<ISO Z>", "bitis": "<ISO Z>" }]
+    "uretim": [{ "kid": "ind-2026-2", "x": "<43 karakter base64url>", "kanallar": ["test", "oncu", "genel"], "baslangic": "<ISO Z>", "bitis": "<ISO Z>" }],
+    "hazirlik": []
   },
   "gecisListesi": [
-    { "yol": "/testfabrika/electron/latest.yml", "bitis": "2026-11-15T00:00:00Z" },
-    { "onek": "/testfabrika/mobil/ota/1.0.0/1759000000000/", "bitis": "2026-11-15T00:00:00Z" }
+    { "yol": "/genel/electron/latest.yml", "bitis": "2026-12-15T00:00:00Z" },
+    { "onek": "/genel/mobil/ota/54.2/1790804528727/", "bitis": "2026-12-15T00:00:00Z" }
   ],
   "varlikBelirteci": false,
   "onbellekSn": 604800
@@ -45,7 +46,7 @@ Worker değişkeni (panelde Settings → Variables and Secrets; tür JSON ya da 
 - **Eski biçim (`anahtarlar`):** `[{kid, x}]` — kanal ve pencere KISITSIZ; yalnız L2-8 öncesi ayarın bir Worker sürümü daha çalışması için. Yeni anahtar buraya YAZILMAZ; satır yalnız `kid` + `x` taşıyabilir (kanallı satır buraya yapıştırılırsa 503). Bir sonraki Worker sürümünde kalkar.
 - **Fail-closed:** tanınmayan alan (üst düzeyde, listede, satırda), biçimsiz anahtar, çift kid ya da aynı `x` iki satırda (eski biçim dahil), aynı kanal iki listede, boş/biçimsiz/çift kanal kümesi, eksik/ters/730 günden uzun pencere, `yol`+`onek` birlikte, `bitis`siz ya da 90 günden uzak bitişli geçiş satırı, `/<kanal>/<ürün>/`dan sığ önek ⇒ AYAR GEÇERSİZ ⇒ kapsamdaki her istek **503 `AYAR_GECERSIZ`**. Kapsam dışı etkilenmez. Sessiz gevşeme yoktur: yazım hatası kapıyı açmaz, kapatır — bu yüzden Deploy'dan ÖNCE §8 adım 2'deki yerel denetim koşulur.
 - `yol` tam eşleşmedir; `onek` önekin ALTINDAKİ dosyaları kapsar (önekin kendisini değil). İkisi de kaçış dizisi (`..` · `//` · `%2e` · `%2f` · `%5c` · `%00` · `\`) taşıyamaz.
-- `varlikBelirteci` (varsayılan **kapalı**): kapalıyken OTA varlıkları (`/<kanal>/mobil/ota/<rv>/<damga>/…`) anonim geçer — içerik adreslidir, kapı manifesttedir (tasarım §3c geri çekilmesi). Açıkken varlıklar da kapılanır ve belirteçle alınan manifestin imza DIŞI `extensions.assetRequestHeaders` alanına her varlık anahtarı için aynı belirteç yazılır (Worker yeni belirteç basamaz). Açmadan önce thinkpad-1 + gerçek tablette ölç (tablet varlık isteğine başlığı ekliyor mu).
+- `varlikBelirteci` (varsayılan **kapalı**): kapalıyken OTA varlıkları (`/<kanal>/mobil/ota/<rv>/<damga>/…`) anonim geçer — içerik adreslidir, kapı manifesttedir (tasarım §3c geri çekilmesi). Açıkken varlıklar da kapılanır ve belirteçle alınan manifestin imza DIŞI `extensions.assetRequestHeaders` alanına her varlık anahtarı için aynı belirteç yazılır (Worker yeni belirteç basamaz). Açmadan önce bir test kurulumu + gerçek tablette ölç (tablet varlık isteğine başlığı ekliyor mu).
 
 ## 3. Panelden yapıştırma (wrangler yok)
 
@@ -54,20 +55,20 @@ Worker değişkeni (panelde Settings → Variables and Secrets; tür JSON ya da 
 3. Settings → Variables → `TKL_INDIRME_AYAR` (§2). Uyumluluk tarihi güncel kalsın (WebCrypto `Ed25519` standart adıyla).
 4. Rota henüz BAĞLAMA — §4 provası önce.
 
-## 4. Prova — önce testfabrika, rota yalnız o kanala
+## 4. Prova — yeni adreste, önce `test` grubu
 
-1. Rota: `guncelleme.etkiliyazilim.com/testfabrika/*` → `tekserp-indirme-kapisi`. adnansahin yolu bu aşamada Worker'a HİÇ girmez.
+1. Rota: `indir.etkiliyazilim.com/*` → `tekserp-indirme-kapisi` — ana makinenin TAMAMI (yol önekli dar rota `//<grup>/…` ve `/%xx…` biçimleriyle atlatılabilir; origin bunları sunar, ölçüldü 2026-10-06). `guncelleme.etkiliyazilim.com`a rota BAĞLANMAZ (§D-1).
 2. **Rota "fail closed":** Workers Routes → rota → *Request limit failure mode* = **Fail closed (block)**. Ücretsiz planın günlük 100 bin istek sınırı aşılırsa Worker atlanıp dosyalar AÇILMASIN; aşımda istemci o gün hata alır, ertesi gün devam eder (güncelleme ertelenir, kapı delinmez). Bütçe: panel yoklaması `latest.yml` başına 1 istek + indirmede exe/blockmap birkaç istek; tablet manifest başına 1 + varlıklar. Kullanımı Workers Analytics'ten günlük izle.
-3. Ölç (thinkpad-1'in backend'inden belirteç al: oturumla `GET /api/license/indirme-belirteci?urun=electron`):
-   - belirteçsiz `curl -sI …/testfabrika/electron/latest.yml` → **403**, `x-tkl-kod: INDIRME_BELIRTEC_YOK`;
-   - `-H "X-TKL-Indirme: <belirteç>"` → **200**; aynı dosya `?t=<belirteç>` → 200; `HEAD` → 200;
-   - electron belirteciyle `/testfabrika/mobil/apk/surum.json` → 403 `INDIRME_YOL`; başka kanal yolu → 403 `INDIRME_YOL`;
+3. Ölç (belirteç: yayıncı CLI'ı `anahtar.js indirme-belirteci --kanal=test --dk=60` — `~/.tekserp/yayin-belirteci-kaynagi.json`daki komut; belirteç ekrana basılmaz):
+   - belirteçsiz `curl -sI …/test/electron/latest.yml` → **403**, `x-tkl-kod: INDIRME_BELIRTEC_YOK`;
+   - `-H "X-TKL-Indirme: <belirteç>"` → **200**; aynı dosya `?t=<belirteç>` → 200; `HEAD` → 200; biçimsiz belirteç → 403 `JWS_BICIM`;
+   - electron belirteciyle `/test/mobil/apk/surum.json` → 403 `INDIRME_YOL`; başka grup yolu → 403 `INDIRME_KANAL`/`INDIRME_YOL`;
    - exe'yi İKİ AYRI belirteçle iste: ikincisinde `cf-cache-status: HIT` (önbellek belirteç başına bölünmüyor);
-   - `%65lectron` ve `//testfabrika/electron/…` biçimleri → 403;
-   - backend: `GET /api/license/indirme-belirteci?urun=backend` belirteciyle `/testfabrika/backend/son.json` → 200 (`cf-cache-status` DYNAMIC/BYPASS — değişken), sürüm zip'i → 200 ve ikinci belirteçle HIT; electron belirteciyle `/testfabrika/backend/son.json` → 403 `INDIRME_YOL`;
-   - panel (thinkpad-1) güncelleme denetimi ve tablet OTA uçtan uca yeşil.
+   - `/test/%65lectron/…`, `//test/electron/…` → 403;
+   - backend belirteciyle `/test/backend/son.json` → kapıdan geçer; electron belirteciyle → 403 `INDIRME_YOL`;
+   - eski adres değişmedi: `guncelleme.etkiliyazilim.com/adnansahin/electron/latest.yml` belirteçsiz → 200, `X-TKL-Kod` yok.
    Bu adım Senaryo L15'in "WebCrypto çalışma zamanı" kısmını kapatır (bekçi Node'un WebCrypto'sunu ölçer, workerd'i değil).
-4. Yeşilse adnansahin için aynı adımlar; sonra rota tek satıra genişler: `guncelleme.etkiliyazilim.com/*` (kapsam dışı yollar Worker'dan aynen geçer).
+4. Yeşilse `oncu` ve `genel` grupları aynı adımlarla; satırların `kanallar` kümesi grupları taşır.
 
 ## 5. Origin yalnız Cloudflare'i kabul eder
 
@@ -76,7 +77,7 @@ Worker yalnız Cloudflare üzerinden gelen isteği görür; VDS'e doğrudan (IP 
 - Traefik'te güncelleme servisinin yönlendiricisine `ipAllowList` ara katmanı: `sourceRange` = Cloudflare'in yayımladığı aralıklar (`https://www.cloudflare.com/ips-v4` · `ips-v6`). Traefik doğrudan CF kenarının TCP bağlantısını gördüğü için varsayılan `ipStrategy` (uzak adres) doğrudur; `depth` KULLANMA (başlık sahtelenebilir).
 - Aralıklar değişebilir: listeyi değişiklik günlüğüyle yaz, `vds-dogrula.sh` tabanına ekle.
 - Daha güçlü seçenek (ücretsiz): Authenticated Origin Pulls — origin yalnız CF'nin istemci sertifikasını taşıyan TLS'i kabul eder. IP listesiyle birlikte kullanılabilir.
-- Ölç: VDS dışından `curl -sk --resolve guncelleme.etkiliyazilim.com:443:<VDS-IP> https://guncelleme.etkiliyazilim.com/testfabrika/electron/latest.yml` → **403/bağlantı reddi**; aynı adres CF üzerinden belirteçle → 200. Bu VDS değişikliği ayrı ve kullanıcı cümlesiyle yapılır; SAHINSRV'e dokunmaz.
+- Ölç: VDS dışından `curl -sk --resolve indir.etkiliyazilim.com:443:<VDS-IP> https://indir.etkiliyazilim.com/test/electron/latest.yml` → **403/bağlantı reddi**; aynı adres CF üzerinden belirteçle → 200. Bu VDS değişikliği ayrı ve kullanıcı cümlesiyle yapılır; SAHINSRV'e dokunmaz.
 
 ## 6. Yayılım ölçümü — geçiş listesi ne zaman kapanır
 
@@ -104,12 +105,10 @@ Satıcı yeni İNDİRME anahtarını anahtar birimine kurulduğu DAKİKA kullanm
 {
   "indirmeListesi": {
     "uretim": [
-      { "kid": "ind-2026", "x": "<eski satır, olduğu gibi kalır>", "kanallar": ["adnansahin", "demofabrika"], "baslangic": "<eski satır>", "bitis": "<eski satır>" },
-      { "kid": "ind-2026-2", "x": "<künye CF_WORKER_INDIRME satırı — olduğu gibi yapıştır>", "kanallar": ["adnansahin", "demofabrika"], "baslangic": "<künye>", "bitis": "<künye>" }
+      { "kid": "ind-2026", "x": "<eski satır, olduğu gibi kalır>", "kanallar": ["test", "oncu", "genel"], "baslangic": "<eski satır>", "bitis": "<eski satır>" },
+      { "kid": "ind-2026-2", "x": "<künye CF_WORKER_INDIRME satırı — olduğu gibi yapıştır>", "kanallar": ["test", "oncu", "genel"], "baslangic": "<künye>", "bitis": "<künye>" }
     ],
-    "hazirlik": [
-      { "kid": "ind-hazirlik-2026", "x": "<hazırlık satırı>", "kanallar": ["testfabrika"], "baslangic": "<hazırlık>", "bitis": "<hazırlık>" }
-    ]
+    "hazirlik": []
   }
 }
 ```
