@@ -1,7 +1,7 @@
 // Çalışan backend'in BÜTÜNLÜK DENETİMİ (açılışta + günlük). İmza, dosya özeti ve FAZLA dosya lisans
 // çekirdeğinde (üretimde native); bu dosya ikinci katmandır: imzayı bu derlemenin PAKET çapasıyla YENİDEN
-// doğrular, FAZLA'yı imzalı kapsamda yeniden arar (yamalı çekirdek "geçerli" dese de) ve hazırlık PAKET
-// anahtarının sınıf kuralını ekler.
+// doğrular, FAZLA'yı imzalı kapsamda yeniden arar (yamalı çekirdek "geçerli" dese de) ve dar zincir
+// sertifikasının HAK sınıfı yetkisini uygular.
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { CHAINED_INTEGRITY_FILE, LICENSE_CLASSES, isoToMs, type RootKey, type VerifiedPackageRevocation } from "./protocol";

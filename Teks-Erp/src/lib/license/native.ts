@@ -154,7 +154,7 @@ export interface LoadedCore {
 
 /**
  * Künye kabul kararı (saf): arayüz sürümü + platform + mimari eşit olmalı; gömülü çapa kipi bu derlemeninkiyle aynı
- * olmalı (üretim derlemesi hazırlık çapalı native'i açmaz, tersi de); zorunlu kipte test çapalı derleme RED.
+ * olmalı (başka kiple derlenmiş native açılmaz); zorunlu kipte test çapalı derleme RED.
  */
 export function identityRejection(
   id: Pick<NativeIdentity, "abi" | "platform" | "arch" | "testCapasi" | "capaKipi">,
@@ -172,7 +172,7 @@ export function identityRejection(
 /**
  * İKİNCİ DENETİM NOKTASI: native kendi bütünlüğünü doğrulayamaz (yamalı `.node` her şeyi "geçerli"
  * diyebilir). Zorunlu kipte `.node` AÇILMADAN ÖNCE (dlopen yamalı kodu çalıştırır) paket kökündeki
- * imzalı listeye karşı bu derlemenin PAKET çapasıyla (üretim derlemesinde hazırlık anahtarı YOK) TS
+ * imzalı listeye karşı bu derlemenin PAKET çapasıyla TS
  * protokolüyle denetlenir; liste yok/geçersiz/uyuşmaz → çekirdek YOK.
  */
 export function packagedNativeRejection(

@@ -2,7 +2,7 @@
 // (bekçi test_lisans_satici_adresi §4). Etkinleşmemiş kurulum adres ne olursa olsun dışarı çıkmaz.
 import { isEgressTargetAllowed } from "../http-egress";
 
-/** Ortam verilmezse ÜRETİM satıcısı; hazırlık kurulumu `LICENSE_SERVER_URL` ile hazırlık satıcısını gösterir. */
+/** Tek satıcı: ortam verilmezse bu adres; `LICENSE_SERVER_URL` yalnız yerel prova/bekçi satıcısını gösterir. */
 export const DEFAULT_LICENSE_SERVER_URL = "https://lisans.etkiliyazilim.com";
 /** `LICENSE_SERVER_URL=kapali`: satıcıya hiç çıkılmaz (çevrimdışı kurulum, geliştirme makinesi). */
 export const LICENSE_SERVER_DISABLED = "kapali";
