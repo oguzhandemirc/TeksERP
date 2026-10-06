@@ -4,7 +4,14 @@ import electronUpdater from "electron-updater";
 import log from "electron-log/main.js";
 import type { UpdateStatus } from "@shared/ipc-contract";
 import { CHANNEL_CODE } from "@shared/channel";
-import { DEFAULT_UPDATE_FEED_URL, UPDATE_FEED_OVERRIDE_KEY, validateFeedOverride } from "@shared/update-feed";
+import {
+  DEFAULT_UPDATE_FEED_URL,
+  GROUP_FLOW,
+  UPDATE_FEED_OVERRIDE_KEY,
+  feedGroupOf,
+  groupFeedUrl,
+  validateFeedOverride,
+} from "@shared/update-feed";
 import { API_BASE_URL_STORE_KEY, AUTH_TOKEN_STORE_KEY, feedOptions, fetchDownloadToken } from "@shared/download-token";
 import { createUpdateVerifier, panelAnchor, type UpdateRejection, type UpdateVerifier } from "../guncelleme/guncelleme-dogrulama";
 import {
@@ -41,11 +48,19 @@ let status: UpdateStatus = {
   state: "idle",
   currentVersion: app.getVersion(),
   lastCheckedAt: null,
-  feedUrl: DEFAULT_UPDATE_FEED_URL,
+  // Ortak pakette grup bilinmeden adres yoktur (dinlenme grubunun gömülü adresi gösterilmez).
+  feedUrl: GROUP_FLOW ? "" : DEFAULT_UPDATE_FEED_URL,
   feedUrlOverridden: false,
   enabled: false,
   imzaReddi: null,
+  ...(GROUP_FLOW ? { grup: null } : {}),
 };
+
+/**
+ * Bu denetimin künyesinin taşıması gereken kanal: eski kanal yolunda gömülü kod; ortak pakette feed'i seçen
+ * kiradaki güncelleme grubu (`applyFeedUrl` yazar). `null` → doğrulayıcı künyeyi kabul etmez.
+ */
+let expectedChannel: string | null = GROUP_FLOW ? null : CHANNEL_CODE;
 
 /** Durum değişimini sakla + AÇIK TÜM pencerelere yayınla. */
 function publish(patch: Partial<UpdateStatus>): UpdateStatus {
@@ -92,33 +107,64 @@ function toTurkishError(err: unknown): string {
 }
 
 /**
- * Ezme adresi geçerliyse onu, değilse derlemeye gömülü varsayılanı döndürür. Kural OKURKEN de uygulanır
- * (`validateFeedOverride`: https · kanal kaydının ana makinesi · `/<kanal>/electron/`) — kasaya başka bir yoldan
- * yazılmış ya da eski sürümün kabul ettiği (http, yabancı ana makine) değer sessizce yok sayılır.
+ * Kasadaki ezme adresi — kural OKURKEN de uygulanır (`validateFeedOverride`: https · izinli ana makine ·
+ * `/<kanal|grup>/electron/`); kasaya başka bir yoldan yazılmış ya da eski sürümün kabul ettiği (http, yabancı
+ * ana makine) değer sessizce yok sayılır. Makineyi güncellemesiz bırakmaktansa varsayılana dönmek doğru.
  */
-function resolveFeedUrl(): { url: string; overridden: boolean } {
+function readOverride(): string | null {
   const raw = readSecureValue(UPDATE_FEED_OVERRIDE_KEY);
-  if (!raw) return { url: DEFAULT_UPDATE_FEED_URL, overridden: false };
+  if (!raw) return null;
   const v = validateFeedOverride(raw);
-  if (v.ok) return { url: v.url, overridden: true };
-  // Makineyi güncellemesiz bırakmaktansa varsayılana dönmek doğru; yanlış adres Ayarlar ekranında görünür.
+  if (v.ok) return v.url;
   log.warn("[updater] geçersiz feed URL ezmesi yok sayıldı:", v.reason);
-  return { url: DEFAULT_UPDATE_FEED_URL, overridden: false };
+  return null;
+}
+
+/**
+ * Bu denetimin feed'i. Eski kanal yolu: ezme ya da gömülü adres. Ortak paket: kiradaki grubun adresi; grup
+ * bilinmiyorsa `null` (denetim yok). Ezme yalnız AYNI grubun yolundaysa uygulanır — başka grubun yolu
+ * (kira değişmiş, eski ezme kalmış) kiradaki grubu ezemez.
+ */
+function resolveFeedUrl(grup: string | null): { url: string; overridden: boolean } | null {
+  const override = readOverride();
+  if (!GROUP_FLOW) return override ? { url: override, overridden: true } : { url: DEFAULT_UPDATE_FEED_URL, overridden: false };
+  const base = groupFeedUrl(grup);
+  if (!base) return null;
+  if (override && feedGroupOf(override) === grup) return { url: override, overridden: true };
+  if (override) log.warn("[updater] ezme adresi başka güncelleme grubunun; kiradaki grubun adresi kullanılıyor");
+  return { url: base, overridden: false };
+}
+
+/** Denetim yokken ekranda görünen adres: grup bilinmiyorsa yalnız (varsa) ezme. */
+function displayedFeed(grup: string | null): { feedUrl: string; feedUrlOverridden: boolean } {
+  const r = resolveFeedUrl(grup);
+  if (r) return { feedUrl: r.url, feedUrlOverridden: r.overridden };
+  const override = readOverride();
+  return { feedUrl: override ?? "", feedUrlOverridden: override !== null };
 }
 
 /**
  * Çözülen adresi autoUpdater'a uygula ve duruma yansıt. Her denetimde fabrikanın backend'inden taze
- * indirme belirteci istenir (3b); alınamazsa başlıksız — bugünkü davranış (@shared/download-token).
+ * indirme belirteci istenir (3b); eski kanal yolunda alınamazsa başlıksız — bugünkü davranış. Ortak pakette
+ * grup da bu yanıttan gelir (yalnız doğrulanmış kiradan, O3); grup yoksa feed kurulmaz → `false`.
  */
-async function applyFeedUrl(): Promise<void> {
-  const { url, overridden } = resolveFeedUrl();
-  const token = await fetchDownloadToken({
+async function applyFeedUrl(): Promise<boolean> {
+  const grant = await fetchDownloadToken({
     apiBaseUrl: readSecureValue(API_BASE_URL_STORE_KEY),
     authToken: readSecureValue(AUTH_TOKEN_STORE_KEY),
     fetchImpl: (u, init) => net.fetch(u, init),
   });
-  updater().setFeedURL(feedOptions(url, token));
-  publish({ feedUrl: url, feedUrlOverridden: overridden });
+  const grup = GROUP_FLOW ? (grant?.grup ?? null) : null;
+  const feed = resolveFeedUrl(grup);
+  if (!feed) {
+    expectedChannel = null;
+    publish({ ...displayedFeed(null), grup: null });
+    return false;
+  }
+  expectedChannel = GROUP_FLOW ? grup : CHANNEL_CODE;
+  updater().setFeedURL(feedOptions(feed.url, grant?.belirtec ?? null));
+  publish({ feedUrl: feed.url, feedUrlOverridden: feed.overridden, ...(GROUP_FLOW ? { grup } : {}) });
+  return true;
 }
 
 /**
@@ -141,8 +187,9 @@ async function check(): Promise<UpdateStatus> {
 
   const calisan = (async () => {
     try {
-      await applyFeedUrl();
-      await updater().checkForUpdates();
+      if (await applyFeedUrl()) await updater().checkForUpdates();
+      // Grup bilinmiyor: denetim yok. Süren indirmenin görünümüne dokunulmaz.
+      else if (status.state !== "available" && status.state !== "downloading") publish({ state: "idle", error: undefined });
     } catch (err) {
       // checkForUpdates hem reject eder hem "error" olayı yayar; ikisi de aynı
       // duruma yazdığı için burada ekstra bir şey yapmaya gerek yok.
@@ -239,20 +286,15 @@ async function setFeedOverride(next: string | null): Promise<UpdateStatus> {
     writeSecureValue(UPDATE_FEED_OVERRIDE_KEY, v.url);
   } else deleteSecureValue(UPDATE_FEED_OVERRIDE_KEY);
   if (status.enabled) await applyFeedUrl();
-  else {
-    const r = resolveFeedUrl();
-    publish({ feedUrl: r.url, feedUrlOverridden: r.overridden });
-  }
+  else publish(displayedFeed(status.grup ?? null));
   return status;
 }
 
 export function registerUpdaterIpc(): void {
   const packaged = app.isPackaged;
-  const { url, overridden } = resolveFeedUrl();
   publish({
     enabled: packaged,
-    feedUrl: url,
-    feedUrlOverridden: overridden,
+    ...displayedFeed(null),
     currentVersion: app.getVersion(),
   });
 
@@ -270,7 +312,7 @@ export function registerUpdaterIpc(): void {
 
   verifier = createUpdateVerifier({
     keys: panelAnchor,
-    channel: CHANNEL_CODE,
+    channel: () => expectedChannel,
     installedVersion: app.getVersion(),
     removeFile: (p) => unlink(p),
   });

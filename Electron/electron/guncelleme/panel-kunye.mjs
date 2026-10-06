@@ -264,7 +264,7 @@ const MESSAGES = Object.freeze({
   JWS_IMZA: "Sunulan güncellemenin imzası doğrulanamadı; güvenlik nedeniyle kurulmadı.",
   BELGE_SURUM: "Sunulan güncellemenin künye sürümü bu panelce bilinmiyor; kurulmadı.",
   BELGE_SEMA: "Sunulan güncellemenin künyesi eksik ya da geçersiz alan taşıyor; kurulmadı.",
-  KUNYE_KANAL: "Sunulan güncelleme başka bir müşterinin kanalına ait; kurulmadı.",
+  KUNYE_KANAL: "Sunulan güncelleme bu panelin güncelleme kanalına (grubuna) ait değil; kurulmadı.",
   KUNYE_SURUM: "Sürüm dosyası (latest.yml) imzalı künyeyle uyuşmuyor; kurulmadı.",
   KUNYE_ESKI: "Sunulan güncelleme kurulu sürümden yeni değil (eski sürüm yeniden sunulmuş); kurulmadı.",
   KUNYE_DOSYA: "Sunulan kurulum dosyası imzalı künyedekiyle aynı değil; kurulmadı.",

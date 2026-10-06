@@ -3,7 +3,8 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { toast } from "sonner";
 import type { UpdateStatus } from "@shared/ipc-contract";
-import { DEFAULT_UPDATE_FEED_URL } from "@shared/update-feed";
+import { DEFAULT_UPDATE_FEED_URL, GROUP_FLOW, GROUP_UNKNOWN_TEXT } from "@shared/update-feed";
+import { elleDenetimBildirimi } from "@/lib/updater-bildirim";
 import { useAuthStore } from "@/store/auth";
 import type { JwtPayload } from "@/types/auth";
 import { UpdateSection } from "@/pages/GeneralSettings/UpdateSection";
@@ -99,5 +100,25 @@ describe("güncelleme adresi ezmesi — yalnız admin:settings", () => {
     await user.type(kutu, DEFAULT_UPDATE_FEED_URL.slice(0, -1));
     await user.click(screen.getByRole("button", { name: "Kaydet" }));
     await waitFor(() => expect(setFeedUrl).toHaveBeenCalledWith(DEFAULT_UPDATE_FEED_URL));
+  });
+});
+
+describe("grup akışı (ortak paket) — grup bilinmiyorsa denetim yok, durum metni", () => {
+  it("⭐ Ayarlar: grup null + idle → grup metni (hata tonu değil), adres '—'; grup biliniyorsa gösterilir", async () => {
+    kur({ state: "idle", grup: null, feedUrl: "" }, ["settings:workstation"]);
+    const { unmount } = render(<UpdateSection />);
+    expect(await screen.findByText(GROUP_UNKNOWN_TEXT)).toBeInTheDocument();
+    expect(screen.getByText("—")).toBeInTheDocument();
+    unmount();
+    kur({ state: "up-to-date", grup: "oncu" }, ["settings:workstation"]);
+    render(<UpdateSection />);
+    expect(await screen.findByText("En güncel sürüm kurulu.")).toBeInTheDocument();
+    if (GROUP_FLOW) expect(screen.getByText("oncu")).toBeInTheDocument();
+  });
+
+  it("⭐ elle denetim baloncuğu: grup yok → 'sunucuya ulaşılamadı' DEMEZ, grup metnini söyler; eski kanal (alan yok) bugünkü gibi", () => {
+    const temel = { currentVersion: "1.4.3", lastCheckedAt: null, feedUrl: "", feedUrlOverridden: false, enabled: true } as const;
+    expect(elleDenetimBildirimi({ ...temel, state: "idle", grup: null })).toMatchObject({ baslik: "Denetlenmedi", aciklama: GROUP_UNKNOWN_TEXT });
+    expect(elleDenetimBildirimi({ ...temel, state: "idle" })?.aciklama).toMatch(/ulaşılamadı/);
   });
 });

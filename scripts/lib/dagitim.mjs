@@ -203,20 +203,25 @@ export const PANEL_CIKTI_DESENI = 'release/ortak/${version}';
 
 /**
  * Ortak panelin paket kimliği (O5): appId · ürün adı · paket adı · açıklama · dinlenme grubu ve onun
- * güncelleme adresi. Dinlenme grubu terfi zincirinin köküdür (`test`): grup akışı (O6) gelene dek
- * paketin gömülü adresi odur. `package.json` tabanı, derleme argümanları ve Vite sanal modülü buradan doğar.
+ * güncelleme adresi. Dinlenme grubu terfi zincirinin köküdür (`test`) ve yalnız gömülü taban adrestir;
+ * çalışan panel kiradaki grubun adresini `grupFeedleri`nden seçer (O6). `package.json` tabanı, derleme
+ * argümanları ve Vite sanal modülü buradan doğar.
  */
 export function panelKimligi(kayit) {
   const o = gecerliKayit(kayit);
-  const grup = grupZinciri(o.gruplar).zincir[0];
+  const zincir = grupZinciri(o.gruplar).zincir;
+  const grup = zincir[0];
   const p = o.urun.panel;
+  const t = turet(o).gruplar;
   return {
     grup,
+    // Grup akışı (O6): panel feed'i kiradaki gruptan seçer; adresler yalnız bu türetimden.
+    grupFeedleri: Object.fromEntries(zincir.map((g) => [g, t[g].panel.feed])),
     appId: p.appId,
     urunAdi: p.urunAdi,
     paketAdi: p.paketAdi,
     aciklama: `${p.urunAdi} — Admin Panel by Etkili Yazılım`,
-    feed: turet(o).gruplar[grup].panel.feed,
+    feed: t[grup].panel.feed,
     cikti: PANEL_CIKTI_DESENI,
   };
 }

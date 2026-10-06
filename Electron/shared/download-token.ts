@@ -2,7 +2,8 @@
 // belirteç alır ve electron-updater'a `X-TKL-Indirme` başlığı olarak verir (latest.yml + exe + blockmap).
 // Belirteç alınamazsa denetim BAŞLIKSIZ yapılır (bugünkü davranış): Worker açılana dek sorunsuz, sonra
 // geçiş listesi. Belirteç loglanmaz, diske yazılmaz, YALNIZ izinli güncelleme adresine gider
-// (`isAllowedUpdateUrl`). Sözleşme: docs/ops/INDIRME-KAPISI-WORKER.md.
+// (`isAllowedUpdateUrl`). Yanıtın `grup` alanı (O3) ortak paketin güncelleme grubudur: biçimsizse null, küme
+// denetimi feed seçiminde (`groupFeedUrl`). Sözleşme: docs/ops/INDIRME-KAPISI-WORKER.md.
 import { isAllowedUpdateUrl } from "./update-feed";
 
 export const DOWNLOAD_TOKEN_HEADER = "X-TKL-Indirme";
@@ -14,6 +15,14 @@ export const API_BASE_URL_STORE_KEY = "config.apiBaseUrl";
 
 const JWS_PATTERN = /^[A-Za-z0-9_-]{2,}\.[A-Za-z0-9_-]{2,}\.[A-Za-z0-9_-]{2,}$/;
 const MAX_TOKEN_LENGTH = 8192;
+const GROUP_PATTERN = /^[a-z0-9][a-z0-9-]{0,39}$/;
+
+/** Backend'in verdiği indirme izni: belirteç + (yalnız doğrulanmış kiradan) güncelleme grubu. */
+export interface DownloadGrant {
+  readonly belirtec: string;
+  /** Kiranın güncelleme grubu; kira yok / grup değil / biçimsiz → null (ortak paket denetlemez). */
+  readonly grup: string | null;
+}
 
 export interface DownloadTokenInput {
   /** Kayıtlı backend adresi (ör. `http://192.168.1.10:4000`); yoksa belirteç istenmez. */
@@ -35,8 +44,8 @@ export function downloadTokenUrl(apiBaseUrl: string | null): string | null {
   }
 }
 
-/** Belirteci backend'den alır; her hata (yok · 4xx/5xx · zaman aşımı · biçimsiz) → null. Asla atmaz. */
-export async function fetchDownloadToken(g: DownloadTokenInput): Promise<string | null> {
+/** Belirteci (+ grubu) backend'den alır; her hata (yok · 4xx/5xx · zaman aşımı · biçimsiz belirteç) → null. Asla atmaz. */
+export async function fetchDownloadToken(g: DownloadTokenInput): Promise<DownloadGrant | null> {
   const url = downloadTokenUrl(g.apiBaseUrl);
   if (!url || !g.authToken) return null;
   const controller = new AbortController();
@@ -49,9 +58,11 @@ export async function fetchDownloadToken(g: DownloadTokenInput): Promise<string 
       redirect: "error",
     });
     if (!res.ok) return null;
-    const body = (await res.json()) as { data?: { belirtec?: unknown } } | null;
+    const body = (await res.json()) as { data?: { belirtec?: unknown; grup?: unknown } } | null;
     const token = body?.data?.belirtec;
-    return typeof token === "string" && token.length <= MAX_TOKEN_LENGTH && JWS_PATTERN.test(token) ? token : null;
+    if (typeof token !== "string" || token.length > MAX_TOKEN_LENGTH || !JWS_PATTERN.test(token)) return null;
+    const grup = body?.data?.grup;
+    return { belirtec: token, grup: typeof grup === "string" && GROUP_PATTERN.test(grup) ? grup : null };
   } catch {
     return null;
   } finally {

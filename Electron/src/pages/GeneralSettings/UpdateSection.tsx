@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Callout } from "@/components/ui/callout";
 import type { UpdateStatus } from "@shared/ipc-contract";
-import { validateFeedOverride } from "@shared/update-feed";
+import { ALLOWED_UPDATE_HOST, GROUP_FLOW, GROUP_UNKNOWN_TEXT, validateFeedOverride } from "@shared/update-feed";
 import { useUpdater } from "@/hooks/useUpdater";
 import { useRoleAccess } from "@/hooks/useRoleAccess";
 import { SETTINGS_ADMIN_PERMISSION } from "./settings-config";
@@ -28,6 +28,8 @@ function describe(s: UpdateStatus): {
   if (!s.enabled) {
     return { text: "Geliştirme modunda çalışıyor — otomatik güncelleme kapalı.", tone: "muted" };
   }
+  // Ortak paket: grup kiradan gelmedi → denetim yapılmadı (hata değil, bekleyen ön koşul).
+  if (s.grup === null && s.state === "idle") return { text: GROUP_UNKNOWN_TEXT, tone: "muted" };
   switch (s.state) {
     case "checking":
       return { text: "Kontrol ediliyor…", tone: "muted" };
@@ -168,7 +170,7 @@ export function UpdateSection() {
             <Input
               value={draft}
               onChange={(e) => setDraft(e.target.value)}
-              placeholder="https://guncelleme…/<kanal>/electron/"
+              placeholder={`https://${ALLOWED_UPDATE_HOST}/<${GROUP_FLOW ? "grup" : "kanal"}>/electron/`}
               className="h-8 min-w-[280px] flex-1 font-mono text-xs"
             />
             <Button size="sm" onClick={handleSaveUrl}>
@@ -181,12 +183,19 @@ export function UpdateSection() {
         ) : (
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div className="min-w-0 space-y-0.5">
-              <div className="truncate font-mono text-xs">{status.feedUrl}</div>
+              <div className="truncate font-mono text-xs">{status.feedUrl || "—"}</div>
               <p className="text-[11px] text-muted-foreground">
                 {status.feedUrlOverridden
                   ? "Bu bilgisayara özel adres (varsayılan değil)."
-                  : "Varsayılan adres — uygulamayla birlikte gelir."}
+                  : GROUP_FLOW
+                    ? "Varsayılan adres — lisanstaki güncelleme grubundan."
+                    : "Varsayılan adres — uygulamayla birlikte gelir."}
               </p>
+              {GROUP_FLOW && (
+                <p className="text-[11px] text-muted-foreground" data-guncelleme-grubu="">
+                  Güncelleme grubu: <span className="font-mono">{status.grup ?? "bilinmiyor"}</span>
+                </p>
+              )}
             </div>
             {canEditFeed && (
               <div className="flex items-center gap-2">

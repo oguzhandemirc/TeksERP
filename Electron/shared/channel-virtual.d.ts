@@ -9,4 +9,5 @@ declare module "virtual:tekserp-channel" {
   export const erpUrl: string | null;
   export const updateFeedUrl: string;
   export const windowTitle: string;
+  export const groupFeeds: Readonly<Record<string, string>> | null;
 }

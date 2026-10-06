@@ -1,4 +1,4 @@
-import { CHANNEL_CODE, CHANNEL_NAME, UPDATE_FEED_URL } from "./channel";
+import { CHANNEL_CODE, CHANNEL_NAME, UPDATE_FEED_URL, UPDATE_GROUP_FEEDS } from "./channel";
 
 /**
  * Bu paketin ait olduğu MÜŞTERİ (dağıtım kanalı) — güncelleme kanalını belirleyen tek değer.
@@ -20,7 +20,7 @@ import { CHANNEL_CODE, CHANNEL_NAME, UPDATE_FEED_URL } from "./channel";
 export const MUSTERI_KODU = CHANNEL_CODE;
 export const MUSTERI_ADI = CHANNEL_NAME;
 
-/** Tüm müşterilerin ortak yayın kökü. */
+/** ESKİ KANAL YOLUNUN yayın kökü (`deploy/kanallar.json`, check-kanallar §3); ortak paket bunu kullanmaz. */
 export const UPDATE_BASE_URL = "https://guncelleme.etkiliyazilim.com/";
 
 /**
@@ -54,6 +54,8 @@ export const UPDATE_BASE_URL = "https://guncelleme.etkiliyazilim.com/";
  * çevrilirse istemci doğrudan origin'e bağlanır, sertifikayı reddeder ve
  * güncelleme SESSİZCE durur (panelde "sertifika kabul edilmedi" yazar).
  */
+// Ortak pakette bu, dinlenme grubunun gömülü adresidir (electron-builder tabanı, izinli ana makinenin kaynağı);
+// çalışan panel feed'i kiradaki gruptan seçer (`GROUP_FLOW`, `groupFeedUrl`).
 export const DEFAULT_UPDATE_FEED_URL: string = UPDATE_FEED_URL;
 
 /**
@@ -71,20 +73,37 @@ export const DEFAULT_UPDATE_FEED_URL: string = UPDATE_FEED_URL;
 export const UPDATE_FEED_OVERRIDE_KEY = "config.updateFeedUrl";
 
 /**
- * Güncelleme adresine izin verilen TEK ana makine — kanal kaydından türer
- * (`deploy/kanallar.json` → gömülü varsayılan adres; bütün kanallar aynı köke
- * bağlıdır, `scripts/check-kanallar.mjs` §3). Liste koda yazılmaz.
+ * Güncelleme adresine izin verilen TEK ana makine — gömülü adresten türer (ortak: dağıtım kaydının
+ * `indirmeKoku`, bütün gruplar aynı kökte; eski kanal: `deploy/kanallar.json`, check-kanallar §3).
+ * Liste koda yazılmaz; indirme belirteci başlığı yalnız bu ana makineye gider.
  */
 export const ALLOWED_UPDATE_HOST: string = new URL(DEFAULT_UPDATE_FEED_URL).host;
 
-const FEED_PATH_PATTERN = /^\/[a-z0-9][a-z0-9-]{0,39}\/electron\/$/;
+const FEED_PATH_PATTERN = /^\/([a-z0-9][a-z0-9-]{0,39})\/electron\/$/;
+
+/**
+ * GRUP AKIŞI (tek ortak paket, TEK-ORTAK-PAKET §3.4): ortak pakette feed ve künyenin beklenen kanalı
+ * fabrikanın doğrulanmış kirasındaki GÜNCELLEME GRUBUndan gelir (indirme belirteci yanıtı `grup`); grup
+ * bilinmiyorsa güncelleme denetlenmez. Eski kanal yolunda `false`: feed ve künye kanalı gömülü değerdir.
+ */
+export const GROUP_FLOW: boolean = UPDATE_GROUP_FEEDS !== null;
+
+/** Grup kodu → o grubun panel feed'i (dağıtım kaydından); tanınmayan/biçimsiz → null. Eski kanalda daima null. */
+export function groupFeedUrl(grup: unknown): string | null {
+  if (!UPDATE_GROUP_FEEDS || typeof grup !== "string") return null;
+  return Object.prototype.hasOwnProperty.call(UPDATE_GROUP_FEEDS, grup) ? (UPDATE_GROUP_FEEDS[grup] ?? null) : null;
+}
+
+/** Grup bilinmediği için denetim yapılmadığında operatöre görünen cümle (Ayarlar + elle denetim baloncuğu). */
+export const GROUP_UNKNOWN_TEXT =
+  "Güncelleme grubu bilinmiyor: sunucuya bağlanıp oturum açıldığında ve lisans etkinken denetlenir.";
 
 export type FeedOverrideCheck = { ok: true; url: string } | { ok: false; reason: string };
 
 /**
  * Ezme adresinin kuralı: yalnız `https:` · ana makine kanal kaydından türeyen
- * güncelleme sunucusu · yol `/<kanal>/electron/` · kullanıcı adı/parola, port,
- * sorgu ve parça YOK. Döndürdüğü `url` normalize edilmiş biçimdir (sonda `/`).
+ * güncelleme sunucusu · yol `/<kanal>/electron/` (ortak pakette `<kanal>` dağıtım kaydının
+ * güncelleme gruplarından biri) · kullanıcı adı/parola, port, sorgu ve parça YOK. Döndürdüğü `url` normalize edilmiş biçimdir (sonda `/`).
  *
  * Neden bu kadar dar: adres electron-updater'ın paketi indirdiği yerdir ve
  * fabrikanın indirme belirteci de oraya gider. Düz http ağdaki aracıya, başka ana
@@ -103,8 +122,16 @@ export function validateFeedOverride(raw: string): FeedOverrideCheck {
   if (u.host !== ALLOWED_UPDATE_HOST) return { ok: false, reason: `Yalnız ${ALLOWED_UPDATE_HOST} adresine izin verilir.` };
   if (u.search || u.hash) return { ok: false, reason: "Adres sorgu (?) ya da parça (#) taşıyamaz." };
   const path = u.pathname.endsWith("/") ? u.pathname : `${u.pathname}/`;
-  if (!FEED_PATH_PATTERN.test(path)) return { ok: false, reason: "Yol /<kanal>/electron/ biçiminde olmalı." };
+  const seg = FEED_PATH_PATTERN.exec(path)?.[1];
+  if (!seg) return { ok: false, reason: `Yol /<${GROUP_FLOW ? "grup" : "kanal"}>/electron/ biçiminde olmalı.` };
+  if (GROUP_FLOW && !groupFeedUrl(seg)) return { ok: false, reason: `Tanınmayan güncelleme grubu: ${seg}.` };
   return { ok: true, url: `https://${u.host}${path}` };
+}
+
+/** Geçerli feed adresinin grubu/kanalı (`/<x>/electron/` yolundaki `x`); geçersiz adres → null. */
+export function feedGroupOf(url: string): string | null {
+  const v = validateFeedOverride(url);
+  return v.ok ? (FEED_PATH_PATTERN.exec(new URL(v.url).pathname)?.[1] ?? null) : null;
 }
 
 /** Bu adrese güncelleme isteği (ve indirme belirteci) gidebilir mi? */

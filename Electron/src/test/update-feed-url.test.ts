@@ -86,7 +86,10 @@ describe("derlenen kimlik — varsayılan tek ortak, TEKSERP_KANAL yalnız eski 
       erpUrl: null,
       updateFeedUrl: `${dagitim.indirmeKoku}${kokGrup}/electron/`,
       windowTitle: dagitim.urun.panel.urunAdi,
+      // Grup akışı (O6): her grubun feed'i indirme kökünden, terfi sırasıyla.
+      groupFeeds: Object.fromEntries(dagitim.gruplar.map((g) => [g.kod, `${dagitim.indirmeKoku}${g.kod}/electron/`])),
     });
+    expect(Object.keys(k.groupFeeds!)[0]).toBe(kokGrup);
     expect(buildIdentity({})).toEqual(k);
     // Kayıttaki değer tek kaynaktır: kopya kayıtta appId değişirse kimlik de değişir.
     expect(sharedIdentity({ ...dagitim, urun: { ...dagitim.urun, panel: { ...dagitim.urun.panel, appId: "com.ornek.baska" } } }).appId).toBe(
@@ -122,6 +125,8 @@ describe("eski kanal yolu (TEKSERP_KANAL; O15'te kalkar) — çıktısı bugünk
       expect(k.windowTitle, kod).toContain(k.productName);
       if (k.label) expect(k.windowTitle, kod).toContain(k.label);
       else expect(k.windowTitle, kod).toBe(k.productName);
+      // ⭐ eski kanal grup akışına girmez: feed ve künye kanalı gömülü değer (adnansahin davranışı değişmez).
+      expect(k.groupFeeds, kod).toBeNull();
     }
   });
 

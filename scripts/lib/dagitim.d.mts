@@ -1,7 +1,7 @@
 // `dagitim.mjs`in TypeScript tüketicilerine (Electron derleme kimliği) açılan yüzü — yalnız kullanılan dışa aktarımlar.
 
 export interface PanelKimligi {
-  /** Dinlenme grubu = terfi zincirinin kökü; grup akışı (O6) gelene dek gömülü adresin grubu. */
+  /** Dinlenme grubu = terfi zincirinin kökü; gömülü taban adresin grubu (çalışan panel kiradaki grubu izler). */
   grup: string;
   appId: string;
   urunAdi: string;
@@ -9,6 +9,8 @@ export interface PanelKimligi {
   aciklama: string;
   /** `<indirmeKoku><grup>/electron/` */
   feed: string;
+  /** Grup → `<indirmeKoku><grup>/electron/`, terfi zinciri sırasıyla (grup akışı, O6). */
+  grupFeedleri: Record<string, string>;
   /** `release/ortak/${version}` */
   cikti: string;
 }

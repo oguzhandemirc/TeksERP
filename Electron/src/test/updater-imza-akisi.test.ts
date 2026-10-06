@@ -6,7 +6,7 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } 
 import { parseUpdateInfo } from "electron-updater/out/providers/Provider";
 import type { UpdateStatus } from "@shared/ipc-contract";
 import { CHANNEL_CODE } from "@shared/channel";
-import { DEFAULT_UPDATE_FEED_URL, UPDATE_FEED_OVERRIDE_KEY } from "@shared/update-feed";
+import { DEFAULT_UPDATE_FEED_URL, GROUP_FLOW, UPDATE_FEED_OVERRIDE_KEY, groupFeedUrl } from "@shared/update-feed";
 import { API_BASE_URL_STORE_KEY, AUTH_TOKEN_STORE_KEY, DOWNLOAD_TOKEN_HEADER } from "@shared/download-token";
 import { buildReleaseDoc, signReleaseDoc } from "../../electron/guncelleme/panel-kunye.mjs";
 import { withReleaseBlock } from "../../electron/guncelleme/latest-yml.mjs";
@@ -22,6 +22,7 @@ import { withReleaseBlock } from "../../electron/guncelleme/latest-yml.mjs";
  * ⭐ İDDİA 3: güncelleme adresi ezmesi yalnız https + kanal kaydının ana makinesi + `/<kanal>/electron/`;
  * kural YAZARKEN ve OKURKEN ana süreçte; indirme belirteci yalnız izinli adrese.
  * İDDİA 4: kanallar gönderen denetimli tek geçitten (`handleTrusted`/`onTrusted`); yabancı belge işleyiciye ulaşamaz.
+ * Grup akışının (ortak paket) kendi iddiaları: `updater-grup-akisi.test.ts`. Dosya iki derlemede koşar (ortamsız = ortak · `TEKSERP_KANAL=adnansahin` = eski kanal, davranışı bugünkü).
  */
 const h = vi.hoisted(() => {
   const listeners = new Map<string, Array<(...a: unknown[]) => unknown>>();
@@ -76,14 +77,19 @@ const AD = `TeksERP-${YENI}-Setup.exe`;
 const GOVDE = Buffer.from("imzali kurulum ".repeat(4096));
 const DIZIN = mkdtempSync(join(tmpdir(), "updater-imza-"));
 const DOSYA = join(DIZIN, AD);
-const IZINLI = DEFAULT_UPDATE_FEED_URL;
+/** Ortak pakette kiranın grubu (dinlenme grubu DEĞİL olsun diye `oncu`: gömülü adresle karışmasın). */
+const GRUP = "oncu";
+const IZINLI = GROUP_FLOW ? groupFeedUrl(GRUP)! : DEFAULT_UPDATE_FEED_URL;
+/** Künyenin taşıması gereken kanal: ortakta kiradaki grup, eski kanalda gömülü kod. */
+const BEKLENEN = GROUP_FLOW ? GRUP : CHANNEL_CODE;
 const TOKEN = "eyJhbGciOiJFZERTQSJ9.eyJ2IjoxfQ.c2lnbmF0dXJl";
+const izin = (grup: string | null = GRUP) => ({ ok: true, status: 200, json: async () => ({ success: true, data: { belirtec: TOKEN, grup } }) });
 const GIRIS = "file:///C:/Program%20Files/TeksERP/resources/app.asar/out/renderer/index.html";
 /** Uygulama belgesinin ana çerçevesinden gelen IPC olayı (gönderen denetimi geçer). */
 const UYGULAMA = { senderFrame: { url: `${GIRIS}#/ayarlar`, parent: null } };
 const YABANCI = { senderFrame: { url: "file://saldirgan/pay/index.html", parent: null } };
 
-function latestYml({ imza = true, kanal = CHANNEL_CODE, kid = KID } = {}): string {
+function latestYml({ imza = true, kanal = BEKLENEN, kid = KID } = {}): string {
   const sha = createHash("sha512").update(GOVDE).digest();
   const yml = `version: ${YENI}\nfiles:\n  - url: ${AD}\n    sha512: ${sha.toString("base64")}\n    size: ${GOVDE.length}\npath: ${AD}\nsha512: ${sha.toString("base64")}\nreleaseDate: '2026-10-01T01:00:00.000Z'\n`;
   if (!imza) return yml;
@@ -105,18 +111,30 @@ const durum = () => h.handlers.get("updater:status")!(UYGULAMA) as UpdateStatus;
 const akis = () => h.sent.map((s) => s.state).filter((s, i, a) => i === 0 || a[i - 1] !== s);
 const tik = () => new Promise<void>((r) => setImmediate(r));
 
-async function kur() {
+/**
+ * Gerçek `registerUpdaterIpc`. Eski kanal: belirteç yok (404, bugünkü başlıksız denetim). Ortak: oturum + belirteç
+ * kiradaki grubu (`GRUP`) taşır; açılıştaki feed kurulumu bitene dek beklenir (künyenin kanalı oradan gelir).
+ */
+async function kur({ grup = GRUP as string | null } = {}) {
   vi.resetModules();
   for (const m of [h.handlers, h.onHandlers, h.listeners, h.store]) m.clear();
   h.sent.length = 0;
   h.updater.installerPath = null;
   h.updater.autoDownload = true;
   h.fetchMock.mockReset().mockResolvedValue({ ok: false, status: 404, json: async () => ({}) });
+  if (GROUP_FLOW) {
+    h.store.set(API_BASE_URL_STORE_KEY, "http://10.0.0.5:4000");
+    h.store.set(AUTH_TOKEN_STORE_KEY, "jwt");
+    h.fetchMock.mockResolvedValue(izin(grup));
+  }
   for (const f of [h.updater.setFeedURL, h.updater.checkForUpdates, h.updater.downloadUpdate, h.updater.quitAndInstall]) f.mockClear();
   const m = await import("../../electron/ipc/updater.ipc");
   const guvenilir = await import("../../electron/security/trusted-ipc");
   guvenilir.setTrustedAppEntry(GIRIS);
   m.registerUpdaterIpc();
+  // Açılıştaki `applyFeedUrl` (belirteç isteği + feed) mikro görevlerde biter.
+  await tik();
+  await tik();
   return guvenilir;
 }
 
@@ -187,7 +205,8 @@ describe("imzalı künye — doğrulama düşerse TR uyarı + kurulum YOK", () =
 
   it("başka kanalın künyesi → KUNYE_KANAL · çapada olmayan anahtar → JWS_KID", async () => {
     await kur();
-    h.emit("update-available", bilgi(latestYml({ kanal: CHANNEL_CODE === "testfabrika" ? "adnansahin" : "testfabrika" })));
+    const baska = GROUP_FLOW ? "genel" : CHANNEL_CODE === "testfabrika" ? "adnansahin" : "testfabrika";
+    h.emit("update-available", bilgi(latestYml({ kanal: baska })));
     reddedildi("KUNYE_KANAL");
     await kur();
     h.emit("update-available", bilgi(latestYml({ kid: "panel-yabanci" })));
@@ -276,7 +295,7 @@ describe("güncelleme adresi ezmesi — ana süreç kuralı (yazarken + okurken)
     await kur();
     h.store.set(API_BASE_URL_STORE_KEY, "http://10.0.0.5:4000");
     h.store.set(AUTH_TOKEN_STORE_KEY, "jwt");
-    h.fetchMock.mockResolvedValue({ ok: true, status: 200, json: async () => ({ success: true, data: { belirtec: TOKEN } }) });
+    h.fetchMock.mockResolvedValue(izin());
     h.store.set(UPDATE_FEED_OVERRIDE_KEY, "http://10.0.0.9/adnansahin/electron/");
     await h.handlers.get("updater:check")!(UYGULAMA);
     const son = h.updater.setFeedURL.mock.calls.at(-1)?.[0] as { url: string; requestHeaders?: Record<string, string> };

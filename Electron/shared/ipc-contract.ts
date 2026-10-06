@@ -281,6 +281,11 @@ export interface UpdateStatus {
    * `kod` kapalı küme (`electron/guncelleme/panel-kunye.mjs` `RELEASE_ERROR_CODES`), metin `error`da.
    */
   imzaReddi?: UpdateSignatureRejection | null;
+  /**
+   * Ortak paketin güncelleme grubu (kiradan, indirme belirteci yanıtı). `null` = bilinmiyor → denetlenmez.
+   * Eski kanal paketinde alan YOK (`undefined`): feed gömülü kanaldır.
+   */
+  grup?: string | null;
 }
 
 export interface UpdateSignatureRejection {

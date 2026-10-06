@@ -28,7 +28,11 @@ export type VerifyStep = { readonly ok: true } | { readonly ok: false; readonly 
 
 export interface UpdateVerifierDeps {
   readonly keys: () => readonly AnchorKey[];
-  readonly channel: string;
+  /**
+   * Künyenin taşıması gereken kanal, denetim ANINDA okunur: eski kanal yolunda gömülü kod, ortak pakette bu
+   * denetimin feed'ini seçen kiradaki güncelleme grubu. `null` (grup bilinmiyor) → künye kabul edilmez.
+   */
+  readonly channel: () => string | null;
   readonly installedVersion: string;
   /** Künyeyle eşleşmeyen indirmeyi önbellekten siler (en iyi çaba). */
   readonly removeFile: (filePath: string) => Promise<void>;
@@ -62,7 +66,9 @@ export function createUpdateVerifier(deps: UpdateVerifierDeps): UpdateVerifier {
     checkInfo(info) {
       expected = null;
       verified = null;
-      const r = verifyUpdateInfo(info, { keys: deps.keys(), channel: deps.channel, installedVersion: deps.installedVersion });
+      const channel = deps.channel();
+      if (channel === null) return rejected("KUNYE_KANAL", versionOf(info));
+      const r = verifyUpdateInfo(info, { keys: deps.keys(), channel, installedVersion: deps.installedVersion });
       if (!r.ok) return rejected(r.code, versionOf(info));
       expected = r.value.doc;
       return { ok: true };

@@ -15,4 +15,5 @@ export {
   erpUrl as DEFAULT_ERP_URL,
   updateFeedUrl as UPDATE_FEED_URL,
   windowTitle as WINDOW_TITLE,
+  groupFeeds as UPDATE_GROUP_FEEDS,
 } from "virtual:tekserp-channel";

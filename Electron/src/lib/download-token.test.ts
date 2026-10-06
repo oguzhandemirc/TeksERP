@@ -9,7 +9,7 @@ import {
   feedOptions,
   fetchDownloadToken,
 } from "@shared/download-token";
-import { DEFAULT_UPDATE_FEED_URL } from "@shared/update-feed";
+import { DEFAULT_UPDATE_FEED_URL, GROUP_FLOW, groupFeedUrl } from "@shared/update-feed";
 
 // İNDİRME BELİRTECİ (3b) — panel her güncelleme denetiminden önce fabrikanın backend'inden belirteç
 // alır ve electron-updater'a başlık verir; alınamazsa BAŞLIKSIZ (bugünkü davranış). Main süreç
@@ -43,7 +43,8 @@ vi.mock("../../electron/ipc/secure-store.ipc.js", () => ({
 }));
 
 const TOKEN = "eyJhbGciOiJFZERTQSJ9.eyJ2IjoxfQ.c2lnbmF0dXJl";
-const ok = (belirtec: unknown) => ({ ok: true, status: 200, json: async () => ({ success: true, data: { belirtec } }) }) as unknown as Response;
+const ok = (belirtec: unknown, grup?: unknown) =>
+  ({ ok: true, status: 200, json: async () => ({ success: true, data: { belirtec, ...(grup === undefined ? {} : { grup }) } }) }) as unknown as Response;
 const fail = (status: number) => ({ ok: false, status, json: async () => ({ success: false }) }) as unknown as Response;
 
 describe("indirme belirteci (saf)", () => {
@@ -56,7 +57,7 @@ describe("indirme belirteci (saf)", () => {
 
   it("oturumla alınır; Bearer + yönlendirme yok", async () => {
     const f = vi.fn(async () => ok(TOKEN));
-    await expect(fetchDownloadToken({ apiBaseUrl: "http://s:4000", authToken: "jwt", fetchImpl: f })).resolves.toBe(TOKEN);
+    await expect(fetchDownloadToken({ apiBaseUrl: "http://s:4000", authToken: "jwt", fetchImpl: f })).resolves.toEqual({ belirtec: TOKEN, grup: null });
     const [url, init] = f.mock.calls[0] as unknown as [string, RequestInit];
     expect(url).toBe("http://s:4000/api/license/indirme-belirteci?urun=electron");
     expect((init.headers as Record<string, string>).Authorization).toBe("Bearer jwt");
@@ -74,6 +75,15 @@ describe("indirme belirteci (saf)", () => {
     expect(await fetchDownloadToken({ apiBaseUrl: "http://s", authToken: "jwt", fetchImpl: async () => { throw new Error("ECONNREFUSED"); } })).toBeNull();
     const asili = (_u: string, init: RequestInit) => new Promise<Response>((_r, rej) => init.signal?.addEventListener("abort", () => rej(new Error("abort"))));
     expect(await fetchDownloadToken({ apiBaseUrl: "http://s", authToken: "jwt", fetchImpl: asili, timeoutMs: 10 })).toBeNull();
+  });
+
+  it("⭐ grup (O3) yanıttan: biçimli değer geçer, biçimsiz/eksik → null; grup belirteçsiz izin doğurmaz", async () => {
+    const al = (r: Response) => fetchDownloadToken({ apiBaseUrl: "http://s", authToken: "jwt", fetchImpl: async () => r });
+    expect(await al(ok(TOKEN, "oncu"))).toEqual({ belirtec: TOKEN, grup: "oncu" });
+    for (const kotu of [null, 7, "", "Test", "../genel", "a".repeat(41), "test/electron"]) {
+      expect(await al(ok(TOKEN, kotu)), String(kotu)).toEqual({ belirtec: TOKEN, grup: null });
+    }
+    expect(await al(ok(null, "test"))).toBeNull();
   });
 
   it("feed seçenekleri: belirteç varsa başlık, yoksa bugünkü gibi başlıksız", () => {
@@ -104,7 +114,7 @@ describe("updater.ipc — her denetimde belirteç", () => {
   });
   afterEach(() => vi.useRealTimers());
 
-  it("oturum varken denetim başlıklı, belirteç alınamayınca başlıksız", async () => {
+  it("oturum varken denetim başlıklı (ortak: kiradaki grubun adresine), belirteç alınamayınca eski kanal başlıksız, ortak denetimsiz", async () => {
     const { registerUpdaterIpc } = await import("../../electron/ipc/updater.ipc");
     const { setTrustedAppEntry } = await import("../../electron/security/trusted-ipc");
     const giris = "file:///C:/Program%20Files/TeksERP/resources/app.asar/out/renderer/index.html";
@@ -112,16 +122,19 @@ describe("updater.ipc — her denetimde belirteç", () => {
     const uygulama = { senderFrame: { url: giris, parent: null } };
     h.store.set(API_BASE_URL_STORE_KEY, "http://10.0.0.5:4000");
     h.store.set(AUTH_TOKEN_STORE_KEY, "jwt");
-    h.fetchMock.mockResolvedValue(ok(TOKEN));
+    h.fetchMock.mockResolvedValue(ok(TOKEN, "genel"));
     registerUpdaterIpc();
     const check = () => h.handlers.get("updater:check")!(uygulama);
     await check();
-    const son = () => h.updater.setFeedURL.mock.calls.at(-1)?.[0] as { requestHeaders?: Record<string, string> };
+    const son = () => h.updater.setFeedURL.mock.calls.at(-1)?.[0] as { url: string; requestHeaders?: Record<string, string> };
     expect(son().requestHeaders).toEqual({ [DOWNLOAD_TOKEN_HEADER]: TOKEN });
+    expect(son().url).toBe(GROUP_FLOW ? groupFeedUrl("genel") : DEFAULT_UPDATE_FEED_URL);
     expect(h.fetchMock).toHaveBeenCalledWith("http://10.0.0.5:4000/api/license/indirme-belirteci?urun=electron", expect.anything());
 
     h.fetchMock.mockResolvedValue(fail(403));
+    const once = h.updater.setFeedURL.mock.calls.length;
     await check();
-    expect(son().requestHeaders).toBeUndefined();
+    if (GROUP_FLOW) expect(h.updater.setFeedURL.mock.calls.length, "grup yok → feed kurulmaz").toBe(once);
+    else expect(son().requestHeaders).toBeUndefined();
   });
 });

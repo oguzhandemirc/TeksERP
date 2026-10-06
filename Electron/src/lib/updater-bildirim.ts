@@ -1,6 +1,7 @@
 import { toast } from "sonner";
 import type { UpdateStatus } from "@shared/ipc-contract";
 import { UPDATE_CHECK_INTERVAL_LABEL } from "@shared/update-schedule";
+import { GROUP_UNKNOWN_TEXT } from "@shared/update-feed";
 
 /**
  * ELLE DENETLEMENİN SONUÇ BİLDİRİMİ — TEK KAYNAK (2026-09-04 kullanıcı isteği).
@@ -41,6 +42,10 @@ export function elleDenetimBildirimi(
   sonuc: UpdateStatus | null | undefined,
 ): GuncellemeBildirimi | null {
   if (sonuc && !sonuc.enabled) return null;
+  // Ortak paket: grup bilinmediği için denetim yapılmadı — "sunucuya ulaşılamadı" demek yanlış teşhis olurdu.
+  if (sonuc?.grup === null && sonuc.state === "idle") {
+    return { tur: "notr", baslik: "Denetlenmedi", aciklama: GROUP_UNKNOWN_TEXT };
+  }
 
   switch (sonuc?.state) {
     case "up-to-date":

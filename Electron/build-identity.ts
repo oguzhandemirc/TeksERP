@@ -38,6 +38,11 @@ export interface PanelIdentity {
   erpUrl: string | null;
   updateFeedUrl: string;
   windowTitle: string;
+  /**
+   * Güncelleme grubu → panel feed'i (terfi sırasıyla). Ortakta dolu: feed kiradaki gruptan seçilir, künye
+   * o grubun adını taşımalıdır. Eski kanal yolunda `null`: feed ve künye kanalı gömülü değerdir.
+   */
+  groupFeeds: Readonly<Record<string, string>> | null;
 }
 /** Geriye uyum adı (eski kanal yolu). */
 export type PanelChannel = PanelIdentity;
@@ -71,6 +76,7 @@ export function sharedIdentity(kayit: unknown = dagitim): PanelIdentity {
     erpUrl: null,
     updateFeedUrl: k.feed,
     windowTitle: windowTitleOf(k.urunAdi, null),
+    groupFeeds: { ...k.grupFeedleri },
   };
 }
 
@@ -90,6 +96,7 @@ export function panelChannel(code: string): PanelIdentity {
     erpUrl: c.panel.erpAdresi,
     updateFeedUrl: c.yayin.panelFeed,
     windowTitle: windowTitleOf(c.panel.urunAdi, c.gorunurEtiket),
+    groupFeeds: null,
   };
 }
 
@@ -107,7 +114,7 @@ const escapeHtml = (s: string): string =>
 
 /** Sanal modülün kaynağı — her alan ayrı adlı dışa aktarım (ağaç sallama kullanılmayanı atar). */
 export function virtualModuleSource(ch: PanelIdentity): string {
-  return (Object.entries(ch) as Array<[string, string | null]>)
+  return (Object.entries(ch) as Array<[string, unknown]>)
     .map(([k, v]) => `export const ${k} = ${JSON.stringify(v)};`)
     .join("\n");
 }
