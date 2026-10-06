@@ -305,25 +305,28 @@ async function main(): Promise<void> {
   }
 
   // ---------------------------------------------------------------- §10
-  // Her dağıtım kanalının OTA anahtarı AYRIDIR: yanlış klasöre yüklenen paket "başka sunucuya
-  // bağlanır" yerine "güncelleme gelmez"e iner. GERÇEK kanal anahtarlarıyla ölçülür (mobil/keystore,
-  // git dışı): imza yayın betiğinin üreticisiyle atılır, LAN ikizinden servis edilir ve istemcinin
-  // yaptığı doğrulamayla (keyid iki kanalda da "main" — ayrımı yalnız anahtar yapar) her kanalın
+  // Her OTA anahtar çifti AYRIDIR (ortak paket · eski kanallar): yanlış klasöre yüklenen paket "başka
+  // sunucuya bağlanır" yerine "güncelleme gelmez"e iner. GERÇEK anahtarlarla ölçülür (mobil/keystore,
+  // git dışı; çiftler `ota-certs[-<ad>]` ↔ `ota-keys[-<ad>]` dizin aynasından): imza yayın betiğinin
+  // üreticisiyle atılır, LAN ikizinden servis edilir ve istemcinin yaptığı doğrulamayla her çiftin
   // sertifikasına karşı sınanır.
-  console.log("\n§10 — Kanal imzası: kanalın anahtarıyla imzalı paketi YALNIZ kendi tabletleri kabul eder");
+  console.log("\n§10 — OTA imzası: bir anahtarla imzalı paketi YALNIZ o anahtarın tabletleri kabul eder");
   {
-    const kayit = JSON.parse(fs.readFileSync(path.join(REPO_KOK, "deploy/kanallar.json"), "utf8"));
-    const kanalLib = require(path.join(MOBIL, "scripts/lib/kanal.cjs"));
     const uretici = await import(path.join(MOBIL, "scripts/lib/manifest.mjs"));
-    const malzeme = Object.keys(kayit.kanallar).map((kod) => {
-      const y = kanalLib.otaImzaYollari(kayit.kanallar[kod]);
-      return { kod, anahtar: path.join(MOBIL, y.anahtar), sertifika: path.join(MOBIL, y.sertifika) };
-    });
+    const keystore = path.join(MOBIL, "keystore");
+    const malzeme = (fs.existsSync(keystore) ? fs.readdirSync(keystore) : [])
+      .map((ad) => /^ota-certs(-[a-z0-9-]+)?$/.exec(ad))
+      .filter((m): m is RegExpExecArray => m !== null)
+      .map((m) => ({
+        kod: m[1] ? m[1].slice(1) : "varsayilan",
+        sertifika: path.join(keystore, m[0], "certificate.pem"),
+        anahtar: path.join(keystore, `ota-keys${m[1] ?? ""}`, "private-key.pem"),
+      }));
     const eksik = malzeme.filter((m) => !fs.existsSync(m.anahtar) || !fs.existsSync(m.sertifika));
-    if (eksik.length && process.env.TEKSERP_STRICT !== "1") {
-      console.log(`  ℹ️  atlandı — imza malzemesi bu makinede yok (${eksik.map((m) => m.kod).join(", ")}); TEKSERP_STRICT=1 ile zorunlu`);
+    if ((eksik.length || malzeme.length < 2) && process.env.TEKSERP_STRICT !== "1") {
+      console.log(`  ℹ️  atlandı — imza malzemesi bu makinede yok/eksik (${malzeme.length} çift; eksik: ${eksik.map((m) => m.kod).join(", ") || "-"}); TEKSERP_STRICT=1 ile zorunlu`);
     } else {
-      check("her kanalın OTA anahtarı + sertifikası var", eksik.length === 0, eksik.map((m) => m.kod).join(", "));
+      check("en az iki OTA anahtar çifti var ve her çift tam", malzeme.length >= 2 && eksik.length === 0, eksik.map((m) => m.kod).join(", "));
       const KANAL_RV = "99.1";
       fs.mkdirSync(path.join(kok, "ota", KANAL_RV), { recursive: true });
       for (const imzalayan of malzeme) {

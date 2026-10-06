@@ -47,10 +47,6 @@ const IZINLI = {
   'deploy/kur.ps1': [{ desen: /Invoke-WebRequest "http:\/\/localhost:\$script:saglikPort\/health"/, gerekce: 'kurulan backend\'in yerel /health yoklaması (sunucuda)' }],
   'scripts/koruma-runtime-indir.mjs': [{ desen: /await fetch\(hedef\.url, \{ redirect: 'follow' \}\)/, gerekce: 'Node çalışma zamanı resmî kaynaktan; deploy/node-surumu.json SHA256\'sıyla doğrulanır' }],
   'deploy/pg/pg-ikili-dogrula.mjs': [{ desen: /const yanit = await fetch\(url, \{ redirect: 'follow' \}\);/, gerekce: 'PostgreSQL ikilisi resmî EDB kaynağından; deploy/pg/pg-surumu.json boyut + SHA256\'sıyla doğrulanır' }],
-  'mobil/scripts/build-apk.mjs': [
-    { desen: /^import https from 'node:https';$/, gerekce: 'derleme öncesi ERP backend /health yoklaması (fabrika adresi)' },
-    { desen: /^import http from 'node:http';$/, gerekce: 'derleme öncesi ERP backend /health yoklaması (fabrika adresi)' },
-  ],
   'mobil/scripts/surucu/api.mjs': [{ desen: /await fetch\(`\$\{this\.taban\}\$\{yol\}`/, gerekce: 'e2e tablet sürücüsü — ERP backend API\'si' }],
   'mobil/scripts/surucu/guzergah.mjs': [{ desen: /await fetch\(`\$\{ortam\.apiUrl\}\/health`\)/, gerekce: 'e2e tablet sürücüsü — ERP backend /health' }],
 };

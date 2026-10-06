@@ -1,5 +1,5 @@
 // Bekçi: test/demo kurulumunun görünür işareti — üretimde HİÇ çizilmez, işaretliyken dokunmayı yutmaz.
-// Tek ortak paket O8: derleme etiketi yoksa etiket lisans SINIFINDAN (TEST/DEMO); derleme etiketi önceliklidir.
+// Tek ortak paket O8: etiket lisans SINIFINDAN (TEST/DEMO); derleme etiket taşımaz.
 // NEGATİF SONDA (ölçüldü): useChannelLabel lisans durumunu okumayınca §2 KIRMIZI; LICENSE_CLASS_LABELS'a
 // URETIM eklenince §3 KIRMIZI.
 import React from 'react';
@@ -19,13 +19,13 @@ function durum(sinif: LicenseClass | null): LicenseStatusResponse {
   };
 }
 
-function renderStrip(config: { extra?: unknown } | null, lisans?: LicenseStatusResponse) {
+function renderStrip(lisans?: LicenseStatusResponse) {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   if (lisans) qc.setQueryData(LICENSE_STATUS_KEY, lisans);
   return render(
     <QueryClientProvider client={qc}>
       <SafeAreaProvider initialMetrics={metrics}>
-        <ChannelStrip config={config} />
+        <ChannelStrip />
       </SafeAreaProvider>
     </QueryClientProvider>,
   );
@@ -33,39 +33,28 @@ function renderStrip(config: { extra?: unknown } | null, lisans?: LicenseStatusR
 
 describe('ChannelStrip', () => {
   it('§1 üretim kanalında (etiket yok, lisans yok) hiçbir şey çizmez', () => {
-    renderStrip({});
+    renderStrip();
     expect(screen.queryByTestId('kanal-seridi')).toBeNull();
   });
 
-  it('§1b eski kanal etiketi durum çubuğu şeridinde, dokunmayı yutmaz', () => {
-    renderStrip({ extra: { gorunurEtiket: 'TEST FABRİKA' } });
+  it('§2 TEST / DEMO lisansı şeridi durum çubuğuna çizer, dokunmayı yutmaz', () => {
+    renderStrip(durum('TEST'));
+    expect(screen.getByText('TEST KURULUMU')).toBeTruthy();
     const strip = screen.getByTestId('kanal-seridi');
-    expect(screen.getByText('TEST FABRİKA')).toBeTruthy();
     expect(strip.props.pointerEvents).toBe('none');
     const style = Object.assign({}, ...[strip.props.style].flat(2).filter(Boolean));
     expect(style.position).toBe('absolute');
     expect(style.height).toBe(24);
-  });
-
-  it('§2 ortak paket (derleme etiketi yok): TEST / DEMO lisansı şeridi çizer', () => {
-    renderStrip({}, durum('TEST'));
-    expect(screen.getByText('TEST KURULUMU')).toBeTruthy();
     screen.unmount();
-    renderStrip({}, durum('DEMO'));
+    renderStrip(durum('DEMO'));
     expect(screen.getByText('DEMO KURULUMU')).toBeTruthy();
   });
 
   it('§3 üretim lisansı / sınıfsız / ayrıntısız yanıt → çizilmez (adnansahin görünümü)', () => {
     for (const l of [durum('URETIM'), durum(null), { ayrinti: false } as const]) {
-      renderStrip({}, l);
+      renderStrip(l);
       expect(screen.queryByTestId('kanal-seridi')).toBeNull();
       screen.unmount();
     }
-  });
-
-  it('§4 derleme etiketi lisans sınıfından önce gelir', () => {
-    renderStrip({ extra: { gorunurEtiket: 'TEST FABRİKA' } }, durum('DEMO'));
-    expect(screen.getByText('TEST FABRİKA')).toBeTruthy();
-    expect(screen.queryByText('DEMO KURULUMU')).toBeNull();
   });
 });

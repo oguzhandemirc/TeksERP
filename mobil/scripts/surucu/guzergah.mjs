@@ -13,8 +13,7 @@
 // backend host 10.0.2.2'ye çevrilir (emülatör → Mac host). Uygulama A3 adımında "API Sunucusu"
 // ekranından o adrese ayarlanır (kullanıcının 4000'ine istek gitmez).
 //
-// `--seri=<adb seri>` (yoksa tek cihaz), `--paket=<uygulama paketi>` (varsayılan test paketi) ya da
-// `--kanal=<kod>` (paket adı `deploy/kanallar.json`dan; ör. testfabrika),
+// `--seri=<adb seri>` (yoksa tek cihaz), `--paket=<uygulama paketi>` (varsayılan test paketi),
 // `--host=<backend host>` (varsayılan emülatörde 10.0.2.2, gerçek cihazda Mac LAN IP).
 // =============================================================================
 import { createRequire } from 'node:module';
@@ -48,14 +47,9 @@ const ortam = JSON.parse(readFileSync(ORTAM_DOSYASI, 'utf-8'));
 const seri = arg('seri') ?? cihazlar()[0]?.seri;
 if (!seri) dur('bağlı cihaz yok (adb devices)');
 const emu = seri.startsWith('emulator-');
-const kanalKodu = arg('kanal');
 const paketArg = arg('paket');
-// Kanal verilirse paket adı kayıt defterinden (elle yazılan ikinci kopya yok); ikisi çelişirse dur.
-const kanalPaketi = kanalKodu
-  ? createRequire(import.meta.url)('../lib/kanal.cjs').kanalKaydiOku(kanalKodu).tablet.androidPaket
-  : null;
-if (kanalPaketi && paketArg && paketArg !== kanalPaketi) dur(`--paket=${paketArg} ↔ --kanal=${kanalKodu} (${kanalPaketi}) çelişiyor`);
-const paket = kanalPaketi ?? paketArg ?? 'com.teks.erp.mobil.test';
+if (arg('kanal')) dur('--kanal emekli (eski kanal düzeni) — uygulama paketini --paket=<ad> ile ver');
+const paket = paketArg ?? 'com.teks.erp.mobil.test';
 
 // Backend adresi: emülatör host'a 10.0.2.2 ile ulaşır; gerçek cihazda Mac LAN IP verilmeli.
 const backendHost = arg('host', emu ? '10.0.2.2' : null);

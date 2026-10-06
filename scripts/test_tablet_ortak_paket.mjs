@@ -9,9 +9,9 @@
 //   §1 ortak-kimlik.cjs ↔ kayıt: her alan kayıttan bağımsız yeniden türetilmiş değerle eşit; güncelleme adresi
 //      grup-nötr Worker takma adı = dagitim.mjs `turet().otaTakmaAd`; kid + anahtar yolu sertifika dizininden
 //   §2 app.config.js argümansız (TEKSERP_KANAL yok) → değerlendirilmiş yapılandırma ortak kimlikle farksız
-//   §3 build-apk.mjs ortak yol (geçici ağaç, ağsız, `--yoklama-yok`): ortak APK geçer ama mühürde durur · bundle'da ERP
+//   §3 build-apk.mjs ortak yol (geçici ağaç, ağsız): ortak APK geçer ama mühürde durur · bundle'da ERP
 //      adresi · eski kimlikli APK · yabancı sertifika · gorunurEtiket · TEKSERP_KANAL · --api-url · sertifikasız ağaç ·
-//      şema dışı kayıt → DUR; `--check` android/ ortak paketle tutarlı mı
+//      şema dışı kayıt · emekli eski kanal argümanı → DUR; `--check` android/ ortak paketle tutarlı mı
 //   --sonda: §1/§2 yüklemleri enjekte edilmiş bozuk girdilerle KIRMIZIYA düşer (kalıcı negatif sonda)
 //
 // Üç sonuç: 0 yeşil · 1 kırmızı · 2 ÖLÇÜLEMEDİ.   node scripts/test_tablet_ortak_paket.mjs [--sonda]
@@ -242,7 +242,7 @@ function agacKur({ sert = SERT_KANAL, kayitDegistir = null, android = null } = {
   const agac = path.join(GECICI, `agac-${sayac}`);
   fs.cpSync(path.join(KOK, 'scripts/lib'), path.join(agac, 'scripts/lib'), { recursive: true });
   fs.cpSync(path.join(KOK, 'mobil/scripts'), path.join(agac, 'mobil/scripts'), { recursive: true });
-  for (const rel of ['mobil/app.json', 'mobil/app.config.js', 'mobil/package.json', 'mobil/musteri.json', 'deploy/kanallar.json', 'surum-notlari.json']) {
+  for (const rel of ['mobil/app.json', 'mobil/app.config.js', 'mobil/package.json', 'deploy/kanallar.json', 'surum-notlari.json']) {
     fs.mkdirSync(path.dirname(path.join(agac, rel)), { recursive: true });
     fs.copyFileSync(path.join(KOK, rel), path.join(agac, rel));
   }
@@ -276,7 +276,7 @@ function apk(agac, { paket = kimlik.androidPaket, url = kimlik.guncellemeUrl, bu
   return y;
 }
 function buildApk(agac, args, ortamEk = {}) {
-  const r = spawnSync(process.execPath, [path.join(agac, 'mobil/scripts/build-apk.mjs'), '--yoklama-yok', ...args], {
+  const r = spawnSync(process.execPath, [path.join(agac, 'mobil/scripts/build-apk.mjs'), ...args], {
     cwd: path.join(agac, 'mobil'), encoding: 'utf8', timeout: 120_000, env: { ...TEMIZ_ENV, ...ortamEk },
   });
   return { kod: r.status, cikti: `${r.stdout ?? ''}${r.stderr ?? ''}` };
@@ -310,7 +310,7 @@ const dogrula = (agac, y, ortamEk) => buildApk(agac, [`--verify-only=${y}`], ort
 }
 {
   const a = agacKur(); const r = dogrula(a, apk(a), { TEKSERP_KANAL: 'adnansahin' });
-  ol('3f ortamda TEKSERP_KANAL → KANAL ÇELİŞKİSİ', r.kod !== 0 && /KANAL ÇELİŞKİSİ/.test(r.cikti), r.cikti.slice(-400));
+  ol('3f ortamda TEKSERP_KANAL → EMEKLİ ESKİ KANAL ORTAMI', r.kod !== 0 && /EMEKLİ ESKİ KANAL ORTAMI/.test(r.cikti), r.cikti.slice(-400));
 }
 {
   const a = agacKur(); const r = buildApk(a, ['--api-url=http://192.168.1.250:4000/api', `--verify-only=${apk(a)}`]);
@@ -324,6 +324,11 @@ const dogrula = (agac, y, ortamEk) => buildApk(agac, [`--verify-only=${y}`], ort
 {
   const a = agacKur({ kayitDegistir: (k) => { k.urun.tablet.musteriAdi = 'x'; } }); const r = dogrula(a, apk(a));
   ol('3i dagitim.json şema dışı anahtar → DAĞITIM KAYDI GEÇERSİZ', r.kod !== 0 && /DAĞITIM KAYDI GEÇERSİZ/.test(r.cikti), r.cikti.slice(-500));
+}
+for (const arg of ['--musteri=adnansahin', '--terfi-atla=x', '--yoklama-yok']) {
+  const a = agacKur(); const r = buildApk(a, [arg, `--verify-only=${apk(a)}`]);
+  ol(`3j ${arg.split('=')[0]} → EMEKLİ ESKİ KANAL ARGÜMANI (hiçbir şey yapılmadan)`,
+    r.kod !== 0 && /EMEKLİ ESKİ KANAL ARGÜMANI/.test(r.cikti) && !/RELEASE APK/.test(r.cikti), r.cikti.slice(-400));
 }
 const AJ = JSON.parse(fs.readFileSync(path.join(KOK, 'mobil/app.json'), 'utf8')).expo;
 const androidYaz = ({ url = kimlik.guncellemeUrl, paket = kimlik.androidPaket, ad = kimlik.gorunenAd } = {}) => (dir) => {

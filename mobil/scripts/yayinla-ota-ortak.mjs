@@ -2,7 +2,7 @@
 /**
  * TeksERP Mobil — TEK ORTAK PAKETİN uzaktan güncelleme (OTA) paketi üreticisi (O10b).
  *
- * `yayinla-ota.mjs` eski kanal yolunun (adnansahin) bayt-donuk üreticisidir; bu betik YALNIZ ortak paketi üretir:
+ * Eski kanal üreticisi (`yayinla-ota.mjs`) emekli — `eski-kanal-son` etiketi; bu betik YALNIZ ortak paketi üretir:
  *   · kimlik (runtimeVersion · OTA imza kimliği · sertifika) `app.json`dan DEĞİL ortak kimlikten gelir
  *     (`scripts/lib/ortak-kimlik.cjs`, kaynak `deploy/dagitim.json`); `app.json` eski kanalın dinlenme kimliğini taşır;
  *   · ERP adresi GÖMÜLMEZ: `EXPO_PUBLIC_API_URL` ortamdan silinir, `.env*` yüklenmez (`EXPO_NO_DOTENV=1`);

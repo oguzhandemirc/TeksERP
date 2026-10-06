@@ -3,14 +3,13 @@
 // =============================================================================
 // Argümansız derleme (build-apk, `expo prebuild`) bu kimlikle doğar: paket adı · görünen ad ·
 // runtimeVersion · OTA sertifikası · grup-nötr güncelleme adresi (Worker takma adı). Değerler
-// YALNIZ kayıttadır (KARAR K-1/K-2 tek yerden değişir); app.json eski kanalın (adnansahin)
-// dinlenme kimliğini taşımaya devam eder — eski kanal derlemesi bayt-donuk kalsın diye.
+// YALNIZ kayıttadır (KARAR K-1/K-2 tek yerden değişir); app.json'daki kimlik alanları eski kanalın
+// (adnansahin) dinlenme değerleridir ve derlemede bu modülce EZİLİR (native parmak izi için yerinde).
 //
 // ⚠️ CommonJS BİLİNÇLİ: `app.config.js` Expo tarafından `require` edilir. Kaydın TAM doğrulaması
 // `scripts/lib/dagitim.mjs` `kayitHatalari`ndadır (build-apk önce onu çağırır); burada okuma +
 // tablet bloğunun biçimi + türetim yaşar. Türetimin dagitim.mjs `turet`iyle eşitliğini
 // `scripts/test_tablet_ortak_paket.mjs` ölçer.
-// ⚠️ feed.cjs'i require ETMEZ: o modül yüklenirken eski kanalın işaretçisini (musteri.json) okur.
 // =============================================================================
 
 const fs = require('node:fs');

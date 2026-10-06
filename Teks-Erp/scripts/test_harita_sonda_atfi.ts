@@ -48,7 +48,8 @@ const EN_AZ_SATIR = 1000; // 2026-09-14: 1766 satır; yarısı düşerse tablo k
 // 538 → 531 (2026-09-14, entegratör 1e): birleşik ağaçta ölçüldü (yedi hücre sınıflandı).
 // 509 → 508 (2026-09-28, iniş 1e-rk-inis): birleşik ağaçta ölçüldü (gerçek 508).
 // 501 → 500 (2026-10-06, O13b): main'de gerçek 502 idi (taban aşılmış); hücre sınıflandı, gerçek 500.
-const DUZ_TABAN = 500;
+// 500 → 498 (2026-10-06, O15): segmented-buttons-row iki satırı sondayla sınıflandı.
+const DUZ_TABAN = 498;
 
 let pass = 0;
 let fail = 0;

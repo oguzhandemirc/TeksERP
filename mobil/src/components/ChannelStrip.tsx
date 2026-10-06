@@ -1,6 +1,5 @@
 import React from 'react';
 import { StyleSheet, Text, View } from 'react-native';
-import Constants from 'expo-constants';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useChannelLabel } from '../hooks/useChannelLabel';
 import { colors } from '../theme/tokens';
@@ -9,13 +8,13 @@ import { colors } from '../theme/tokens';
 const MIN_HEIGHT = 16;
 
 /**
- * Test/demo kurulumunun işareti (eski kanal etiketi ya da lisans sınıfı) — gerçek iş girilmesin.
+ * Test/demo kurulumunun işareti (lisans sınıfı) — gerçek iş girilmesin.
  * Her ekranın üstünde, durum çubuğu şeridine MUTLAK biner ve dokunmayı yutmaz: hiçbir
  * ekranın yerleşimini itmez, yatay/dikey fark etmez. Üretim kanalında hiç çizilmez.
  */
-export default function ChannelStrip({ config = Constants.expoConfig }: { config?: { extra?: unknown } | null }) {
+export default function ChannelStrip() {
   const insets = useSafeAreaInsets();
-  const label = useChannelLabel(config);
+  const label = useChannelLabel();
   if (!label) return null;
   return (
     <View

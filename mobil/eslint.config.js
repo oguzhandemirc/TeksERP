@@ -158,7 +158,7 @@ module.exports = defineConfig([
   },
 
   // ── 2) Node CommonJS dosyaları ────────────────────────────────────────────
-  // `scripts/lib/feed.cjs` bilinçli olarak CJS'tir (app.config.js `.mjs`
+  // `scripts/lib/*.cjs` bilinçli olarak CJS'tir (app.config.js `.mjs`
   // require edemez, script'ler ESM — `.cjs` ikisinden de okunur). Expo preset'i
   // `__dirname`'i yalnız metro.config.js için tanımlıyor; tek komuta geçilince
   // bu dosya `no-undef` ile KIRMIZI veriyordu (E-04'ün tek gerçek error'ı).

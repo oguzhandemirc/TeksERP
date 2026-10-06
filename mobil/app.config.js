@@ -1,17 +1,12 @@
 // =============================================================================
 // TeksERP Mobil — dinamik Expo yapılandırması
 // =============================================================================
-// İKİ DERLEME KİMLİĞİ (tek ortak paket O7, docs/design/TEK-ORTAK-PAKET.md §2.2):
-//
-// • ARGÜMANSIZ (ortamda `TEKSERP_KANAL` yok) = TEK ORTAK PAKET. Kimlik (paket adı · görünen ad ·
-//   runtimeVersion · OTA sertifikası + kid · güncelleme adresi) dağıtım kaydından
-//   `scripts/lib/ortak-kimlik.cjs` ile uygulanır. Güncelleme adresi grup-nötr Worker takma adıdır
-//   (`https://indir…/ota/<rv>/manifest`; Worker belirtecin grubuna yönlendirir). ERP adresi
-//   GÖMÜLMEZ — tablet sunucuyu çalışma anında bulur.
-//
-// • `TEKSERP_KANAL=<kod>` = ESKİ KANAL DERLEMESİ (adnansahin, bayt-donuk). Kanalın kimliği
-//   `deploy/kanallar.json`dan (`scripts/lib/kanal.cjs`). `app.json` bu kanalın dinlenme kimliğini
-//   taşır ve kanal için YAZILMAZ (native parmak izi girdisi); eski kanal yolu O15'te emekli olur.
+// TEK ORTAK PAKET (O7, docs/design/TEK-ORTAK-PAKET.md §2.2): kimlik (paket adı · görünen ad ·
+// runtimeVersion · OTA sertifikası + kid · güncelleme adresi) dağıtım kaydından
+// `scripts/lib/ortak-kimlik.cjs` ile uygulanır. Güncelleme adresi grup-nötr Worker takma adıdır
+// (`https://indir…/ota/<rv>/manifest`; Worker belirtecin grubuna yönlendirir). ERP adresi
+// GÖMÜLMEZ — tablet sunucuyu çalışma anında bulur. Eski kanal derlemesi (`TEKSERP_KANAL`) emekli:
+// `eski-kanal-son` etiketi.
 //
 // ⚠️ GÜNCELLEME ADRESİ, API ADRESİNDEN BAĞIMSIZDIR (2026-08-26 kararı): ERP fabrika ağından,
 // güncelleme internetten gelir; hiçbir kod birini diğerinden türetmez.
@@ -31,15 +26,16 @@ module.exports = ({ config }) => {
     );
   }
 
-  const kanalKodu = String(process.env.TEKSERP_KANAL ?? '').trim();
-  if (kanalKodu) {
-    // Tembel yükleme: dinlenmede yapılandırmanın yüklediği modül kümesi (Expo
-    // parmak izinin kaynağı) değişmesin.
-    const { kanalYapilandirmasi } = require('./scripts/lib/kanal.cjs');
-    return kanalYapilandirmasi(config, kanalKodu, runtimeVersion);
+  // Eski kanal alışkanlığı (`TEKSERP_KANAL=<kod> npx expo prebuild`) sessizce ortak kimlikle
+  // derlenmesin: eski kanal derlemesi yalnız `eski-kanal-son` etiketinden yapılır.
+  const eskiKanal = String(process.env.TEKSERP_KANAL ?? '').trim();
+  if (eskiKanal) {
+    throw new Error(
+      `EMEKLİ ESKİ KANAL ORTAMI: TEKSERP_KANAL=${eskiKanal} — bu ağaç yalnız tek ortak paketi derler. ` +
+        'Eski kanal derlemesi: docs/ops/ESKI-KANAL-ACIL.md (eski-kanal-son etiketi).',
+    );
   }
 
-  // Tembel yükleme: eski kanal derlemesinin yüklediği modül kümesi değişmesin.
   const { ortakYapilandirmasi } = require('./scripts/lib/ortak-kimlik.cjs');
   return ortakYapilandirmasi(config);
 };
