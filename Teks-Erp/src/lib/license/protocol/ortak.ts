@@ -62,6 +62,13 @@ export const PROTOCOL_ERROR_CODES = [
   "PAKET_SERTIFIKA_IPTAL",
   /** Kurulumun sınıfı PAKET sertifikasının sınıf kümesinde değil (ya da sınıf bilinmiyor). */
   "PAKET_SERTIFIKA_SINIF",
+
+  /** Canlı lisans yanıtı istek bağı taşımıyor ama kira bağla teslim edildiğini beyan ediyor (bağ soyulmuş). */
+  "YANIT_BAGI_YOK",
+  /** Yanıt bağı bu yanıtın kirasına bağlı değil ya da imzalayanı kiranın sınıfına yetkisiz. */
+  "YANIT_BAGI_UYUSMAZ",
+  /** Yanıt bağı başka bir isteğin nonce'unu taşıyor — eski/başka yanıtın tekrar oynatılması. */
+  "YANIT_NONCE_UYUSMAZ",
 ] as const;
 export type ProtocolErrorCode = (typeof PROTOCOL_ERROR_CODES)[number];
 

@@ -278,6 +278,9 @@ export const LicenseResponseSchema = z.object({
   iptal: JwsTextSchema.optional().catch(undefined),
   /** Güncel PAKET sertifikası iptal listesi (`tekserp-paketiptal`) — ayrıca kökle doğrulanır; biçimsizse yok sayılır. */
   paketIptal: JwsTextSchema.optional().catch(undefined),
+
+  /** İstek bağı (`tekserp-yanit`, 6.3c): canlı yanıtta kirayı isteğin nonce'una bağlar; eski satıcı göndermez. */
+  yanitBagi: JwsTextSchema.optional(),
 });
 
 /**

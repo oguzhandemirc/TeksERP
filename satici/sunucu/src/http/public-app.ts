@@ -26,6 +26,7 @@ import { drTakeoverPrecheck, processDrTakeover } from "../services/dr.service";
 import { handleHardwareReport } from "../services/hardware.service";
 import { authenticateRequest } from "../services/installation-auth";
 import { processPoll } from "../services/poll.service";
+import { bindLiveHardwareResponse, bindLiveResponse } from "../services/response-binding";
 import { openSupportTicket } from "../services/support.service";
 import { handleTransferRequest } from "../services/transfer.service";
 import { parseJsonBody, parseStrict, rawBodyOf } from "./body";
@@ -121,12 +122,17 @@ export function createPublicApp(ctx: VendorContext, hub: DoorbellHub | null): Ex
   // İstemci adresi başına sınır: gövde okunmadan, imza doğrulanmadan ÖNCE (en ucuz kapı).
   app.use("/v1", rateLimit({ perMinute: ctx.config.V1_HIZ_IP_DK, trust }));
 
+  // Canlı uçların lisans yanıtı isteğin nonce'una bağlanır (6.3c); zarf ucu (`/v1/cevrimdisi`) bağsız kalır.
   app.post(ENDPOINTS.ACTIVATE, raw, async (req: Request, res: Response) => {
-    res.json(await activation({ ctx, header: req.get(REQUEST_HEADER), raw: rawBodyOf(req.body), nowMs: Date.now(), limit, path: ENDPOINTS.ACTIVATE }));
+    const header = req.get(REQUEST_HEADER);
+    const response = await activation({ ctx, header, raw: rawBodyOf(req.body), nowMs: Date.now(), limit, path: ENDPOINTS.ACTIVATE });
+    res.json(await bindLiveResponse(ctx, response, header, Date.now()));
   });
 
   app.post(ENDPOINTS.POLL, raw, async (req: Request, res: Response) => {
-    res.json(await poll({ ctx, header: req.get(REQUEST_HEADER), raw: rawBodyOf(req.body), nowMs: Date.now(), limit, purposes: ["yokla"], path: ENDPOINTS.POLL }));
+    const header = req.get(REQUEST_HEADER);
+    const response = await poll({ ctx, header, raw: rawBodyOf(req.body), nowMs: Date.now(), limit, purposes: ["yokla"], path: ENDPOINTS.POLL });
+    res.json(await bindLiveResponse(ctx, response, header, Date.now()));
   });
 
   app.post(ENDPOINTS.OFFLINE, raw, async (req: Request, res: Response) => {
@@ -134,7 +140,9 @@ export function createPublicApp(ctx: VendorContext, hub: DoorbellHub | null): Ex
   });
 
   app.post(ENDPOINTS.HARDWARE, raw, async (req: Request, res: Response) => {
-    res.json(await hardwareReport({ ctx, header: req.get(REQUEST_HEADER), raw: rawBodyOf(req.body), nowMs: Date.now(), limit, path: ENDPOINTS.HARDWARE }));
+    const header = req.get(REQUEST_HEADER);
+    const response = await hardwareReport({ ctx, header, raw: rawBodyOf(req.body), nowMs: Date.now(), limit, path: ENDPOINTS.HARDWARE });
+    res.json(await bindLiveHardwareResponse(ctx, response, header, Date.now()));
   });
 
   app.post(ENDPOINTS.TRANSFER, raw, async (req: Request, res: Response) => {
@@ -147,8 +155,9 @@ export function createPublicApp(ctx: VendorContext, hub: DoorbellHub | null): Ex
     const nowMs = Date.now();
     const body = rawBodyOf(req.body);
     const parsed = parseStrict(DrTakeoverRequestSchema, parseJsonBody(body));
+    const header = req.get(REQUEST_HEADER);
     const auth = await authenticateRequest({
-      header: req.get(REQUEST_HEADER),
+      header,
       rawBody: body,
       purposes: ["dr-devral"],
       nowMs,
@@ -156,7 +165,7 @@ export function createPublicApp(ctx: VendorContext, hub: DoorbellHub | null): Ex
       path: ENDPOINTS.DR_TAKEOVER,
       precheck: (a) => drTakeoverPrecheck(a.installation, parsed, nowMs),
     });
-    res.json(await processDrTakeover(ctx, auth, parsed, nowMs));
+    res.json(await bindLiveResponse(ctx, await processDrTakeover(ctx, auth, parsed, nowMs), header, Date.now()));
   });
 
   // DESTEK: gövde küçük ek (≤1 MB görüntü, base64) taşıyabilir — yalnız bu uçta daha geniş ham sınır.
