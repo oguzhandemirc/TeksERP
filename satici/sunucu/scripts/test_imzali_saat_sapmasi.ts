@@ -40,7 +40,7 @@ async function uctanUca(t: { kurulumlar: string[]; kidler: string[]; kullanicila
   const sunucu = await sunucuBaslat(ortam);
   const portal = await portalSunuculariKur(ortam.ctx);
   try {
-    const k = await kurulumFiksturu(ortam.ctx, { kanal: "bekci-saat" });
+    const k = await kurulumFiksturu(ortam.ctx);
     t.kurulumlar.push(k.kurulumDbId);
     const anahtar = kurulumAnahtariUret();
     t.kidler.push(anahtar.kid);

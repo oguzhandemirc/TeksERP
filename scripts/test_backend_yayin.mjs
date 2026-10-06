@@ -209,11 +209,15 @@ function tsx(args, secenek = {}) {
   return execFileSync(process.execPath, ['--import', 'tsx', ...args], { cwd: TEKS, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], ...secenek });
 }
 
-/** Test PAKET anahtarı (hazırlık biçimi, parolasız) + çapa dosyası. */
+/** Test PAKET anahtarı (üretim dışı fikstür kid'i, parolasız; CLI yalnız üretim anahtarı üretir) + çapa dosyası. */
 function anahtarKur() {
   const dizin = path.join(GECICI, 'anahtar');
-  tsx(['scripts/build-korumali-imza.ts', 'anahtar-uret', '--kid=paket-hazirlik-bekci', `--dizin=${dizin}`]);
-  const dosya = path.join(dizin, 'paket-hazirlik-bekci.paket.json');
+  const betik = path.join(GECICI, 'test-anahtari.ts');
+  fs.writeFileSync(betik, `import { generatePackageKey, writePackageKey } from ${JSON.stringify(path.join(TEKS, 'scripts/lib/butunluk-imza.ts'))};
+writePackageKey(${JSON.stringify(dizin)}, generatePackageKey('paket-bekci', ['TEST']));
+`);
+  tsx([betik]);
+  const dosya = path.join(dizin, 'paket-bekci.paket.json');
   const k = JSON.parse(fs.readFileSync(dosya, 'utf8'));
   const capa = path.join(GECICI, 'capa.json');
   fs.writeFileSync(capa, JSON.stringify([{ kid: k.kid, x: k.x }]));
@@ -493,7 +497,7 @@ function bolum3ortak() {
   ol('§3O3 kanallı paket (backendKanal testfabrika) → DUR', r3.kod !== 0 && /yalnız ortak paket girer/.test(r3.err) && r3.sonuc === null, r3.err.slice(-200));
   const hazirlik = ortakPaketKur('o4', { surum: '9.9.12', kid: 'paket-hazirlik-ortak' });
   const r4 = dogrula(hazirlik.zip, ['--guven-capasi=uretim', `--capa=${hazirlik.capa}`]);
-  ol('§3O4 hazırlık kid\'iyle imzalı (bütünlük GEÇERLİ) → DUR', r4.kod !== 0 && /HAZIRLIK anahtarıyla/.test(r4.err) && r4.sonuc === null, r4.err.slice(-200));
+  ol('§3O4 emekli hazırlık kid\'iyle imzalı (bütünlük GEÇERLİ) → DUR (ortak paket yalnız üretim anahtar ailesi)', r4.kod !== 0 && /yalnız üretim anahtar ailesiyle/.test(r4.err) && r4.sonuc === null, r4.err.slice(-200));
   const prova = ortakPaketKur('o5', { surum: '9.9.13-prova.1', prova: true });
   const r5 = dogrula(prova.zip, ['--guven-capasi=uretim', `--capa=${prova.capa}`]);
   ol('§3O5 PROVA paketi → DUR', r5.kod !== 0 && /PROVA paketi ortak arşive girmez/.test(r5.err) && r5.sonuc === null, r5.err.slice(-200));
@@ -540,7 +544,7 @@ function bolum3grup() {
   ol('§3G4 kanallı paket (backendKanal dolu) gruba çıkmaz → DUR', r4.kod !== 0 && /gruba yalnız ORTAK paket çıkar/.test(r4.cikti) && hicYazmadi(r4), r4.cikti.slice(-300));
   const hazirlik = ortakPaketKur('g5', { surum: SURUM, kid: 'paket-hazirlik-ortak', commit: head.slice(0, 8) });
   const r5 = yayinla(grup(hazirlik, 'test', ['--kuru']), ortamCapa(hazirlik));
-  ol('§3G5 hazırlık kid\'iyle imzalı ortak paket → DUR (bildirim aracı)', r5.kod !== 0 && /HAZIRLIK anahtarıyla/.test(r5.cikti) && hicYazmadi(r5), r5.cikti.slice(-300));
+  ol('§3G5 emekli hazırlık kid\'iyle imzalı ortak paket → DUR (bildirim aracı, yalnız üretim anahtar ailesi)', r5.kod !== 0 && /yalnız üretim anahtar ailesiyle/.test(r5.cikti) && hicYazmadi(r5), r5.cikti.slice(-300));
   const prova = ortakPaketKur('g6', { surum: '2.14.0-prova.1', prova: true, commit: head.slice(0, 8) });
   const r6 = yayinla(grup(prova, 'test', ['--kuru']), ortamCapa(prova));
   ol('§3G6 PROVA paketi gruba çıkmaz → DUR', r6.kod !== 0 && /PROVA paketi/.test(r6.cikti) && hicYazmadi(r6), r6.cikti.slice(-300));
@@ -663,24 +667,38 @@ function bolum3capa(zip) {
   const kipsiz = dogrula(['--kanal-turu=hazirlik'], { TEKSERP_TEST_PAKET_CAPASI: ORTAK.capa });
   ol('§3G1 kip verilmeden → DUR (örtük çapa yok)', kipsiz.status !== 0 && /--guven-capasi/.test(kipsiz.stderr), kipsiz.stderr.slice(-200));
   const taninmayan = dogrula(['--kanal-turu=hazirlik', '--guven-capasi=test'], { TEKSERP_TEST_PAKET_CAPASI: ORTAK.capa });
-  ol('§3G2 tanınmayan kip → DUR', taninmayan.status !== 0 && /uretim \| hazirlik/.test(taninmayan.stderr), taninmayan.stderr.slice(-200));
-  const uretimHazirlik = dogrula(['--kanal-turu=uretim', '--guven-capasi=hazirlik']);
-  ol('§3G3 üretim kanalı hazırlık çapasıyla → DUR', uretimHazirlik.status !== 0 && /yalnız ÜRETİM çapasıyla/.test(uretimHazirlik.stderr), uretimHazirlik.stderr.slice(-200));
-  // Gerçek hazırlık kid'iyle (`paket-hazirlik`) atılık anahtar: gerçek çapalar kid'i ya TANIMAZ (öteki kip) ya
-  // tanıyıp imzayı düşürür (kendi kipi) — iki hüküm ayrışınca aracın kipin listesini kullandığı ölçülür.
-  const dizin = path.join(GECICI, 'anahtar-gercek-kid');
-  tsx(['scripts/build-korumali-imza.ts', 'anahtar-uret', '--kid=paket-hazirlik', `--dizin=${dizin}`]);
-  const gercekKid = paketKur('pg3', { surum: '9.9.9-prova.9', kanal: 'testfabrika', prova: true, anahtar: path.join(dizin, 'paket-hazirlik.paket.json') });
+  ol('§3G2 tanınmayan kip → DUR', taninmayan.status !== 0 && /tek çapa kipi; gelen: test/.test(taninmayan.stderr), taninmayan.stderr.slice(-200));
+  const emekli = dogrula(['--kanal-turu=uretim', '--guven-capasi=hazirlik']);
+  ol('§3G3 emekli hazırlık kipi → DUR (tek kip: uretim)', emekli.status !== 0 && /tek çapa kipi; gelen: hazirlik/.test(emekli.stderr), emekli.stderr.slice(-200));
   const dogrulaZip = (z, ek) => spawnSync(process.execPath, ['--import', 'tsx', 'scripts/backend-bildirim.ts', 'dogrula', `--zip=${z}`, '--kanal=testfabrika',
     '--pg-cizgi=16', '--pg-en-az=16.9', `--ozet-dosyasi=${ozet}`, `--cikti=${path.join(GECICI, `capa-${Math.random().toString(36).slice(2)}`)}`, ...ek], { cwd: TEKS, encoding: 'utf8' });
-  const uretimCapasi = dogrulaZip(gercekKid, ['--kanal-turu=hazirlik', '--guven-capasi=uretim']);
-  ol('§3G4 ⭐ üretim kipinin GERÇEK PAKET çapası hazırlık kid\'iyle (paket-hazirlik) imzalı paketi REDDEDER — kid TANINMAZ',
-    uretimCapasi.status !== 0 && /bütünlüğü GECERSIZ \(JWS_KID\)/.test(uretimCapasi.stderr), uretimCapasi.stderr.slice(-200));
-  const hazirlikCapasi = dogrulaZip(gercekKid, ['--kanal-turu=hazirlik', '--guven-capasi=hazirlik']);
-  ol("§3G4' hazırlık kipinin gerçek çapası aynı kid'i TANIR, yalnız imza düşer (JWS_IMZA) — araç kipin listesini kullanıyor",
-    hazirlikCapasi.status !== 0 && /bütünlüğü GECERSIZ \(JWS_IMZA\)/.test(hazirlikCapasi.stderr), hazirlikCapasi.stderr.slice(-200));
-  const kontrol = dogrula(['--kanal-turu=hazirlik', '--guven-capasi=hazirlik'], { TEKSERP_TEST_PAKET_CAPASI: ORTAK.capa });
-  ol('§3G5 kontrol: aynı paket kipin (test) çapasıyla GEÇER — §3G4\'ün reddi çapadan', kontrol.status === 0, kontrol.stderr.slice(-200));
+  const yabanci = dogrulaZip(zip, ['--kanal-turu=hazirlik', '--guven-capasi=uretim']);
+  ol('§3G4 ⭐ GERÇEK üretim PAKET çapası yabancı kid\'li (test anahtarı) paketi REDDEDER — kid TANINMAZ (JWS_KID)',
+    yabanci.status !== 0 && /bütünlüğü GECERSIZ \(JWS_KID\)/.test(yabanci.stderr), yabanci.stderr.slice(-200));
+  // Gerçek üretim kid'iyle atılık (parolalı) anahtar: çapa kid'i TANIR, yalnız imza düşer — aracın üretim listesini kullandığı ölçülür.
+  const dizin = path.join(GECICI, 'anahtar-gercek-kid');
+  const kok = paketKoku('pg3', { surum: '9.9.9-prova.9', kanal: 'testfabrika', prova: true });
+  const betik = path.join(GECICI, 'gercek-kid-imza.ts');
+  fs.writeFileSync(betik, `import { generateWrappedPackageKey, openPackageKey, signPackageDirectory, writePackageKey } from ${JSON.stringify(path.join(TEKS, 'scripts/lib/butunluk-imza.ts'))};
+import { PRODUCTION_PACKAGE_PUBLIC_KEYS } from ${JSON.stringify(path.join(TEKS, 'src/lib/license/integrity.ts'))};
+(async () => {
+const kid = PRODUCTION_PACKAGE_PUBLIC_KEYS[0].kid;
+const parola = () => Buffer.from('bekci-atilik-parola');
+const dosya = writePackageKey(${JSON.stringify(dizin)}, await generateWrappedPackageKey(kid, parola()));
+const key = await openPackageKey(dosya, async () => parola());
+await signPackageDirectory({ root: ${JSON.stringify(kok)}, key, urun: 'backend', surum: '9.9.9-prova.9', derlemeTarihi: '2026-09-30T10:00:00.000Z',
+  musteri: 'testfabrika', ciKokeni: { kip: 'kosu', kosu: 1, dal: 'main', commit: '91c79ebd' } });
+console.log(kid);
+})().catch((e) => { console.error(e); process.exit(1); });
+`);
+  const gercekKidAdi = tsx([betik]).trim();
+  const gercekKid = path.join(GECICI, 'pg3.zip');
+  execFileSync('zip', ['-q', '-r', '-X', gercekKid, '.'], { cwd: kok });
+  const imzaDuser = dogrulaZip(gercekKid, ['--kanal-turu=hazirlik', '--guven-capasi=uretim']);
+  ol(`§3G4' üretim çapası gerçek kid'i (${gercekKidAdi}) TANIR, yalnız imza düşer (JWS_IMZA) — araç üretim listesini kullanıyor`,
+    imzaDuser.status !== 0 && /bütünlüğü GECERSIZ \(JWS_IMZA\)/.test(imzaDuser.stderr), imzaDuser.stderr.slice(-200));
+  const kontrol = dogrula(['--kanal-turu=hazirlik', '--guven-capasi=uretim'], { TEKSERP_TEST_PAKET_CAPASI: ORTAK.capa });
+  ol('§3G5 kontrol: aynı paket test çapasıyla GEÇER — §3G4\'ün reddi çapadan', kontrol.status === 0, kontrol.stderr.slice(-200));
 }
 
 /** PG paketi (sözleşme sürümü 2): ayrı değişmez dizin, ayrı künye; backend bildirimi hedefi künyeden alır. */

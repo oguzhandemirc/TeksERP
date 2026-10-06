@@ -48,7 +48,6 @@ const OKUYUCU_IZINLI = Object.freeze({
   'scripts/test_grup_yayin_kapisi.mjs': 'okur · geçici ağaca kopyalar (aynı neden)',
   'scripts/test_tablet_ortak_paket.mjs': 'okur · geçici ağaca kopyalar (aynı neden)',
   'scripts/test_kurulum_arsivi.mjs': 'anar · ortak arşiv gölgesinde YOKLUĞU ölçülür',
-  'deploy/satici/uretim-toren.mjs': 'okur · CF Worker İNDİRME satırı kanal kümesi — O14c\'ye kadar beyanlı',
   'satici/sunucu/scripts/test_uretim_toren.ts': 'okur · üretim töreni bekçisi — O14c\'ye kadar beyanlı',
   'deploy/gecis/gecis.ps1': 'anar · geçiş betiği mesajı — K-13 DOKUNULMAZ',
   'deploy/dagitim.json': 'anar · açıklama: eski kayıt bayt-donuk, adres/kimlik paylaşılmaz',

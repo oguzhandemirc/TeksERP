@@ -58,7 +58,7 @@ import {
   isTrustAnchorMode,
 } from "../src/lib/license/protocol";
 import { packagePublicKeysFor, verifyIntegrity, type PackageKey } from "../src/lib/license/integrity";
-import { INTEGRITY_FILE } from "../src/lib/license/integrity-scope";
+import { INTEGRITY_FILE, isProductionPackageKid } from "../src/lib/license/integrity-scope";
 import { openPackageKey } from "./lib/butunluk-imza";
 import { CliError, args, askPassword } from "./lib/cli-girdi";
 
@@ -332,6 +332,7 @@ async function ortakPaketiAc(tmp: string, capa: readonly PackageKey[], hedef: st
   const baslik = parseJws(jws);
   if (!baslik.ok) throw new CliError(`butunluk.jws ayrıştırılamadı: ${baslik.code}`);
   const kid = baslik.value.header.kid;
+  if (!isProductionPackageKid(kid)) throw new CliError(`paket ${kid} anahtarıyla imzalı — ortak paket yalnız üretim anahtar ailesiyle (paket-<yıl>)`);
   const p = rapor.paket;
   if (p.urun !== "backend") throw new CliError(`künye ürünü backend değil: ${p.urun}`);
   if (p.surum !== kunye.uygulamaSurumu) throw new CliError(`künye sürümü (${p.surum}) PAKET.json uygulamaSurumu (${String(kunye.uygulamaSurumu)}) ile aynı değil`);
