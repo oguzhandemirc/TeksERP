@@ -297,7 +297,8 @@ export const BACKEND_GRUPLAR_REL = 'Teks-Erp/src/lib/license/update-group.ts';
  * profil matrisi kapısını çağırmak zorundadır (`test_profil_raporu_kapisi.mjs` §3).
  */
 export const TUKETICILER = Object.freeze(['scripts/dagitim-kapisi.mjs', 'deploy/paketle.ps1', 'deploy/kurulum/kurulum-arsivi.mjs', 'scripts/test_kurulum_arsivi.mjs',
-  'Teks-Erp/scripts/test_kurulum_betikleri.ts', 'scripts/lib/profil-raporu.mjs']);
+  'Teks-Erp/scripts/test_kurulum_betikleri.ts', 'scripts/lib/profil-raporu.mjs',
+  'deploy/backend-yayinla.mjs', 'scripts/lib/grup-yayin.mjs', 'scripts/test_backend_yayin.mjs']);
 
 /** İki dağıtım bekçisinin okuduğu dosyalar — commit tetiği bunları kapsar (okunandan dar olamaz). */
 export const DAGITIM_BEKCI_DOSYALARI = Object.freeze([

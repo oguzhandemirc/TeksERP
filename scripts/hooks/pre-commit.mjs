@@ -286,6 +286,15 @@ if (staged.some((f) => PROFIL_KAPISI_DOSYALARI.has(f) || dagitimBekcisiTetigi(f)
   adimlar.push({ ad: "profil matrisi yayın kapısı", cwd: ".", cmd: ["node", ["scripts/test_profil_raporu_kapisi.mjs"]], gitEnvSil: true });
 }
 
+// GRUP YAYINI (O11b): backend yayıncısı, grup kitaplığı, bildirim aracı ve bekçisi (sahte uzak harness'i).
+const GRUP_YAYIN_DOSYALARI = new Set([
+  "deploy/backend-yayinla.mjs", "scripts/lib/grup-yayin.mjs", "scripts/lib/backend-yayin.mjs", "scripts/lib/terfi.mjs",
+  "Teks-Erp/scripts/backend-bildirim.ts", "scripts/test_backend_yayin.mjs",
+]);
+if (staged.some((f) => GRUP_YAYIN_DOSYALARI.has(f))) {
+  adimlar.push({ ad: "backend grup yayını", cwd: ".", cmd: ["node", ["scripts/test_backend_yayin.mjs"]], gitEnvSil: true });
+}
+
 if (adimlar.length === 0) process.exit(0);
 
 // UCUZ KAYIT ADIMLARI ÖNCE (doküman · mandallar · hijyen · kapının kendisi), ağırlar
