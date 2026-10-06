@@ -17,7 +17,8 @@
 //      gerçek aktarım kümesiyle ölçülür; Dockerfile'ın her COPY kaynağı kümede var.
 //   §5 korumalı Linux imajı (Faz 2f) DURAĞAN: izin listesi `*` ile başlar, çalışma aşaması
 //      root değil + bağlamdan yalnız docker/ betikleri, machine-id silinir; compose ro/127/seed 0.
-//      §5c teslim künyesi 2e aracıyla imzalanır: anahtar yoksa paket yok, .jws SHA256SUMS'ta.
+//      §5c teslim künyesi 2e aracıyla imzalanır: anahtar açıkça verilir (varsayılan yol yok, boşsa DUR), yoksa paket yok,
+//      künye müşterisiz, .jws SHA256SUMS'ta.
 //   §6 satıcı imajı (G2/G3) DURAĞAN: `satici/sunucu/scripts/` altındaki her CLI `dist-cli`'a derlenir ve
 //      `test -f` kapısında; compose'da `/dosyalar` yazılır, `/derlemeler` + `/yayin` salt okunur (⑨'un docker'sız ikizi).
 // =============================================================================
@@ -342,6 +343,11 @@ function teslimImzaStatik(betik: string): string[] {
   const imza = kod.search(/build-korumali-imza\.ts belge --belge="\$CIKTI\/PAKET-DOCKER\.json" --anahtar="\$ANAHTAR"/);
   if (imza < 0) ih.push("künye imza aracına verilmiyor");
   if (!/\[ -f "\$ANAHTAR" \] \|\| \{[^}]*exit 1; \}/.test(kod)) ih.push("anahtar yokken paket üretimi durmuyor");
+  // Anahtar AÇIKÇA verilir: varsayılan yol yok, boş değer durur (fail-closed); künye müşteri taşımaz.
+  if (!/^ANAHTAR="\$\{TEKSERP_PAKET_ANAHTARI:-\}"$/m.test(kod)) ih.push("anahtarın varsayılan yolu var (açıkça verilmeli)");
+  const bos = kod.search(/\[ -n "\$ANAHTAR" \] \|\| \{[^}]*exit 1; \}/), dosya = kod.search(/\[ -f "\$ANAHTAR" \]/);
+  if (bos < 0 || dosya < 0 || bos > dosya) ih.push("anahtar verilmediğinde paket üretimi durmuyor");
+  if (/TEKSERP_MUSTERI/.test(kod) || !/^\s*musteri: null,/m.test(kod)) ih.push("künye müşteriyi ortamdan okuyor (ortak paket müşterisiz)");
   const ozet = kod.search(/for f in [^;\n]*PAKET-DOCKER\.json\.jws; do/);
   if (ozet < 0) ih.push("imza dosyası SHA256SUMS'a girmiyor");
   if (!/for f in [^;\n]*butunluk-liste\.txt[^;\n]*; do/.test(kod)) ih.push("imzalı liste dosyası SHA256SUMS'a girmiyor");
@@ -357,6 +363,9 @@ function teslimImzaStatik(betik: string): string[] {
     ["anahtarsız devam", t.replace(/imzasız teslim paketi üretilmez" >&2; exit 1; \}/, 'imzasız teslim paketi üretilmez" >&2; }')],
     ["jws özetsiz", t.replace("PAKET-DOCKER.json PAKET-DOCKER.json.jws; do", "PAKET-DOCKER.json; do")],
     ["liste özetsiz", t.replace(".env.ornek butunluk-liste.txt PAKET-DOCKER.json", ".env.ornek PAKET-DOCKER.json")],
+    ["varsayılan anahtar yolu geri", t.replace('ANAHTAR="${TEKSERP_PAKET_ANAHTARI:-}"', 'ANAHTAR="${TEKSERP_PAKET_ANAHTARI:-$HOME/.tekserp/satici-hazirlik/paket-hazirlik.paket.json}"')],
+    ["boş anahtar kapısı silindi", t.replace(/^\[ -n "\$ANAHTAR" \].*\n/m, "")],
+    ["TEKSERP_MUSTERI geri", t.replace("  musteri: null,", "  musteri: process.env.TEKSERP_MUSTERI || null,")],
   ];
   for (const [ad, m] of sondalar) {
     check(`§5c sonda: ${ad} → kırmızı`, m !== t && teslimImzaStatik(m).length > 0, m !== t ? "" : "MUTASYON UYGULANMADI");
