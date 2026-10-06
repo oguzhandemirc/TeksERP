@@ -17,6 +17,7 @@ import {
   type Validity,
 } from "../lib/license/protocol";
 import { getLicenseStore, type PendingTransfer, type StoreProblem } from "../lib/license/store";
+import { updateGroupOf, type UpdateGroup } from "../lib/license/update-group";
 import {
   getDoorbellStatus,
   getDownloadTokens,
@@ -288,11 +289,10 @@ export function getLicenseDetail(): LicenseDetail {
 }
 
 // ── İndirme belirteci (onaylı cihaz ya da kimlikli kullanıcı) ───────────────────
-export interface LicenseDownloadToken {
-  readonly yolOneki: string;
-  readonly belirtec: string;
-  readonly gecerlilikSonu: string | null;
-}
+export type DownloadTokenCore = { readonly yolOneki: string; readonly belirtec: string; readonly gecerlilikSonu: string | null };
+
+/** Uç yanıtı: belirteç + kurulumun güncelleme grubu (yalnız doğrulanmış kiradan; grup değilse null). */
+export type LicenseDownloadToken = DownloadTokenCore & { readonly grup: UpdateGroup | null };
 
 /** Bu kadar süresi kalan belirteç yine verilir ama yoklama dürtülür (bir sonraki kiranın belirteci gelsin). */
 export const DOWNLOAD_TOKEN_REFRESH_MARGIN_MS = 15 * 60 * 1000;
@@ -300,7 +300,7 @@ export const DOWNLOAD_TOKEN_REFRESH_MARGIN_MS = 15 * 60 * 1000;
 export type DownloadTokenDecision =
   | { readonly kind: "frozen" }
   | { readonly kind: "none"; readonly nudge: true }
-  | { readonly kind: "ok"; readonly token: LicenseDownloadToken; readonly nudge: boolean };
+  | { readonly kind: "ok"; readonly token: DownloadTokenCore; readonly nudge: boolean };
 
 /**
  * SAF karar: güncelleme donuksa (K1) hiç belirteç yok; önekteki saklı belirteç yoksa, süresi okunamıyorsa ya
@@ -336,7 +336,7 @@ export function getDownloadToken(g: { urun: DownloadProduct; kanal?: string | nu
   if (d.kind === "none") {
     throw licenseError(404, "LICENSE_DOWNLOAD_TOKEN_UNAVAILABLE", "İndirme belirteci yok (kurulum etkin değil ya da yoklama bekleniyor).");
   }
-  return d.token;
+  return { ...d.token, grup: updateGroupOf(snap.lease?.document.kanal.kod) };
 }
 
 // ── Proxy okuması ───────────────────────────────────────────────────────────────

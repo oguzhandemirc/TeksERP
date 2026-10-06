@@ -26,6 +26,12 @@
 //      kısıtsız (bir sürüm) · 22 geçersiz liste ayarı 503 (her biri geçerli komşusuyla) · env dize · runbook şablonu
 //   §9 backend/ öneki (Dağıtım v2): Worker ürün kümesi = kâhin `DOWNLOAD_PRODUCTS` · backend belirteci
 //      yalnız backend/ altında · başka ürünün belirteci backend/de RED · son.json değişken, zip değişmez
+//   §10 tek ortak paket (O9): grup-nötr OTA takma adı `/ota/<rv>/manifest` — belirteçsiz 403 · grup YALNIZ
+//      belirteçten (her grubun belirteci kendi gerçek yoluna, origin isteği gerçek yol) · başka ürünün/önekin
+//      belirteci RED · geçiş listesi takma adda uygulanmaz · `//`, `%..`, büyük harf, sonek bicimleri kapılı ·
+//      zincirli işaretçiler (`son-zincir.json` · `surum-zincir.json` · `pg-zincir.json`) değişken · yeni adres
+//      ayarı (`worker/indir-ayar.json`): geçerli, kanallar = backend `UPDATE_GROUPS`, eski biçim/hazırlık/geçiş
+//      boş, K-5 — `ind-2026` listede YOK ve onunla imzalı belirteç RED
 // ÖLÇMEDİĞİ: Cloudflare çalışma zamanı (workerd). WebCrypto Ed25519 burada Node'unkidir;
 // kenar ölçümü runbook'un prova adımında (docs/ops/INDIRME-KAPISI-WORKER.md).
 // =============================================================================
@@ -45,6 +51,8 @@ import {
   type DownloadPublicKey,
 } from "../src/lib/license/protocol";
 import { anahtarUret, hamImzala, type TestAnahtari } from "./lib/lisans-fikstur";
+import { CHAINED_PG_POINTER_FILE, CHAINED_RELEASE_MANIFEST_FILE, CHAINED_RELEASE_POINTER_FILE } from "../src/lib/license/protocol/paket-zinciri";
+import { UPDATE_GROUPS } from "../src/lib/license/update-group";
 
 const REPO = path.resolve(__dirname, "..", "..");
 const WORKER_YOLU = path.join(REPO, "deploy/guncelleme-sunucusu/worker/indirme-kapisi.js");
@@ -679,6 +687,83 @@ async function bolum9(w: WorkerModulu): Promise<void> {
   check("§9j benzer ad (backendx) kapsam dışı, aynen geçer", y.status === 200 && o3.cagrilar.length === 1);
 }
 
+// §10 — tek ortak paket (O9): grup-nötr OTA takma adı + yeni adresin ayarı (K-5).
+const YENI_AYAR = path.join(REPO, "deploy/guncelleme-sunucusu/worker/indir-ayar.json");
+const IND_YENI = anahtarUret("ind-2026-2");
+const IND_EMEKLI = anahtarUret("ind-2026");
+const TAKMA = "/ota/55.0/manifest";
+async function bolum10(w: WorkerModulu): Promise<void> {
+  console.log("\n§10 — OTA takma adı · zincirli işaretçiler · yeni adres ayarı (K-5)");
+  const gruplar = [...UPDATE_GROUPS];
+  const a = listeAyari(w, [satir(IND_YENI, { kanallar: gruplar })], []);
+  const tb = (kanal: string, urun: "electron" | "mobil" = "mobil", anahtar = IND_YENI) => basK(kanal, anahtar, SIMDI, urun);
+  await ret(w, "§10a ⭐ takma ad belirteçsiz", a, istek(TAKMA), "INDIRME_BELIRTEC_YOK");
+  for (const g of gruplar) {
+    const o = await kabul(w, `§10b ${g} belirteci → takma ad`, a, istek(TAKMA, bsl(tb(g))));
+    const c = o.cagrilar[0];
+    check(`§10b' ⭐ origin isteği ${g} grubunun GERÇEK yolu, belirteçsiz, önbelleksiz`,
+      c?.url === `${KOK}/${g}/mobil/ota/55.0/manifest` && !c.basliklar.has("x-tkl-indirme") && c.init === undefined, c?.url ?? "çağrı yok");
+  }
+  await ret(w, "§10c electron belirteci takma adda", a, istek(TAKMA, bsl(tb("test", "electron"))), "INDIRME_YOL");
+  const capraz = hamImzala(TYP.INDIRME, IND_YENI, { ...yuk("mobil", {}, "test"), yolOneki: "/oncu/mobil/" });
+  const { y: cy, o: co } = await kapidan(w, a, istek(TAKMA, bsl(capraz)));
+  check("§10d kanalı test, öneki oncu olan belirteç takma adda RED (şema ya da önek)", cy.status === 403 && co.cagrilar.length === 0, `${cy.status} ${kodu(cy)}`);
+  await ret(w, "§10e listede olmayan grup (demofabrika) belirteci", a, istek(TAKMA, bsl(tb("demofabrika"))), "INDIRME_KANAL");
+  const gecisli = listeAyari(w, [satir(IND_YENI, { kanallar: gruplar })], [], { gecisListesi: [{ yol: "/test/mobil/ota/55.0/manifest", bitis: msToIso(SIMDI + GUN) }] });
+  await kabul(w, "§10f' gerçek yol geçiş listesinde: belirteçsiz 200 (kıyas)", gecisli, istek("/test/mobil/ota/55.0/manifest"));
+  await ret(w, "§10f ⭐ geçiş listesi takma adda uygulanmaz", gecisli, istek(TAKMA), "INDIRME_BELIRTEC_YOK");
+  const bicimler = ["//ota/55.0/manifest", "/%6fta/55.0/manifest", "/OTA/55.0/manifest", "/ota/55.0//manifest", "/ota//55.0/manifest",
+    "/ota/55.0/manifest/", "/ota/55.0/%6danifest", "/ota/55.0/manifest-1790619945836", "/ota/abc/manifest", "/ota/55.0/x/manifest",
+    "/ota/%E0%A4%A/manifest", "/ota", "/ota/", "/ota/55.0/manifest%2F..%2F..%2Ftest%2Fmobil%2Fapk%2Fx.apk"];
+  for (const yol of bicimler) await ret(w, `§10g ⭐ takma ad biçimi ${yol} (geçerli belirteçle bile)`, a, istek(yol, bsl(tb("test"))), "INDIRME_YOL");
+  await ret(w, "§10g' kodlanmış takma ad belirteçsiz de kapılı", a, istek("/%6fta/55.0/manifest"), "INDIRME_YOL");
+  await ret(w, "§10h takma ad POST", a, istek(TAKMA, {}, "POST"), "YONTEM", 405);
+  await kabul(w, "§10i takma ad HEAD belirteçle", a, istek(TAKMA, bsl(tb("oncu")), "HEAD"));
+  const ot = await kabul(w, "§10j takma ad ?t=", a, istek(`${TAKMA}?t=${encodeURIComponent(tb("genel"))}`));
+  check("§10j' origin'e ?t= gitmez", ot.cagrilar[0]?.url === `${KOK}/genel/mobil/ota/55.0/manifest`, ot.cagrilar[0]?.url ?? "");
+  await kabul(w, "§10k takma ad Expo-Extra-Params tkl (tabletin yolu)", a, istek(TAKMA, { "Expo-Extra-Params": `tkl="${tb("test")}"` }));
+  const dolmus = signDownloadToken({ payload: { ...yuk("mobil", {}, "test"), exp: msToIso(SIMDI + 5 * DAKIKA) }, key: { kid: IND_YENI.kid, privateKey: IND_YENI.privateKey }, nowMs: SIMDI });
+  await ret(w, "§10l süresi dolmuş belirteç takma adda", a, istek(TAKMA, bsl(dolmus)), "BELGE_SURESI_DOLDU", 403, SIMDI + 20 * DAKIKA);
+  for (const yol of ["/otax/a", "/ot/55.0/manifest", "/otamobil/55.0/manifest"]) {
+    const r = istek(yol, {}, "POST");
+    const { y, o } = await kapidan(w, a, r);
+    check(`§10m benzer ad ${yol} kapsam dışı, aynen geçer`, y.status === 200 && o.cagrilar.length === 1 && o.cagrilar[0]!.istek === r);
+  }
+  const beB = signDownloadToken({ payload: yuk("backend", {}, "test"), key: { kid: IND_YENI.kid, privateKey: IND_YENI.privateKey }, nowMs: SIMDI });
+  for (const ad of [CHAINED_RELEASE_POINTER_FILE, `2.20.0/${CHAINED_RELEASE_MANIFEST_FILE}`, CHAINED_PG_POINTER_FILE]) {
+    const o = await kabul(w, `§10n zincirli işaretçi ${ad}`, a, istek(`/test/backend/${ad}`, bsl(beB)));
+    check(`§10n' ⭐ ${ad} DEĞİŞKEN: cf seçeneği YOK`, o.cagrilar[0]?.init === undefined);
+  }
+  const zo = await kabul(w, "§10n'' zincir paketi zip (kıyas)", a, istek("/test/backend/2.20.0/tekserp-backend-2.20.0.zip", bsl(beB)));
+  check("§10n''' zip DEĞİŞMEZ: kenar önbelleği", zo.cagrilar[0]?.init?.cf?.cacheEverything === true);
+
+  // Yeni adresin ayarı — panele yapıştırılacak metin bu dosyadır.
+  let ham: Record<string, unknown> | null = null;
+  try {
+    ham = JSON.parse(readFileSync(YENI_AYAR, "utf8")) as Record<string, unknown>;
+  } catch (e) {
+    check("§10o yeni adres ayarı okunur", false, String(e));
+    return;
+  }
+  const liste = ham.indirmeListesi as { uretim?: AnahtarSatiri[]; hazirlik?: unknown[] } | undefined;
+  const uretim = Array.isArray(liste?.uretim) ? liste.uretim : [];
+  const yeniSatir = uretim.find((r) => r.kid === IND_YENI.kid);
+  const orta = yeniSatir ? Date.parse(String(yeniSatir.baslangic)) + GUN : SIMDI;
+  const cozum = w.ayarCoz({ ...w.VARSAYILAN_AYAR, ...ham }, orta);
+  check("§10o yeni adres ayarı Worker'da GEÇERLİ (pencere içinde)", cozum.ok, cozum.neden ?? "");
+  check("§10p ⭐ K-5: emekli kid (ind-2026) yeni adres ayarında YOK", uretim.length > 0 && uretim.every((r) => r.kid !== IND_EMEKLI.kid), uretim.map((r) => r.kid).join(", "));
+  const kumeler = uretim.map((r) => JSON.stringify(r.kanallar));
+  check("§10q her satırın kanalları = backend UPDATE_GROUPS (dağıtım zinciri)", kumeler.every((k) => k === JSON.stringify(gruplar)), kumeler.join(" · "));
+  check("§10r eski biçim (anahtarlar), hazırlık listesi, geçiş listesi BOŞ",
+    JSON.stringify(ham.anahtarlar) === "[]" && JSON.stringify(liste?.hazirlik) === "[]" && JSON.stringify(ham.gecisListesi) === "[]", JSON.stringify({ a: ham.anahtarlar, h: liste?.hazirlik, g: ham.gecisListesi }));
+  // Davranış: aynı ayar, satırların açık anahtarı test anahtarıyla değiştirilmiş (özel yarı yalnız satıcıda).
+  const kopya = { ...w.VARSAYILAN_AYAR, ...ham, indirmeListesi: { ...liste, uretim: uretim.map((r) => (r.kid === IND_YENI.kid ? { ...r, x: IND_YENI.x } : r)) } };
+  const an = (kanal: string, anahtar: TestAnahtari) => signDownloadToken({ payload: { ...yuk("mobil", {}, kanal), exp: msToIso(orta + 60 * DAKIKA) }, key: { kid: anahtar.kid, privateKey: anahtar.privateKey }, nowMs: orta });
+  await kabul(w, "§10s yeni ayarda ind-2026-2 belirteci takma adda", kopya, istek(TAKMA, bsl(an("test", IND_YENI))), orta);
+  await ret(w, "§10t ⭐ K-5: ind-2026 ile imzalı belirteç yeni adreste RED", kopya, istek(TAKMA, bsl(an("test", IND_EMEKLI))), "JWS_KID", 403, orta);
+  await ret(w, "§10u yeni ayarda eski kanal (demofabrika) belirteci RED", kopya, istek("/demofabrika/mobil/apk/surum.json", bsl(an("demofabrika", IND_YENI))), "INDIRME_KANAL", 403, orta);
+}
+
 async function main(): Promise<void> {
   const w = await yukle<WorkerModulu>(WORKER_YOLU);
   const u = await yukle<UreticiModulu>(MANIFEST_URETICI);
@@ -692,6 +777,7 @@ async function main(): Promise<void> {
   await bolum7(w);
   await bolum8(w);
   await bolum9(w);
+  await bolum10(w);
   console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
   process.exit(fail === 0 ? 0 : 1);
 }
