@@ -4,6 +4,7 @@
  * Sunucu kendinden imzalı sertifika sunar; panel onu adresle değil sertifika DER'inin SHA-256
  * parmak iziyle tanır. Parmak izi keşiften ya da ilk girişten SABİTLENMEZ (TOFU): yalnız
  * döngü adresinden, kullanıcı gözle karşılaştırıp onaylayınca ya da tablet QR'ıyla.
+ * İKİZ: parmak izi/ilan/kanal/QR işlevleri `mobil/src/lib/lan-tls.ts`te metin olarak aynıdır (bekçi: mobil `lan-tls.test.ts`).
  */
 
 export const TLS_PIN_KEY = "config.serverTlsPin";

@@ -41,6 +41,8 @@ import {
   type DiscoveryMode,
   type ServerGroup,
 } from '../lib/discovery';
+import { applyTlsRoute, parseTlsAdvert } from '../lib/lan-tls';
+import { getTlsPins } from './lanTlsPins';
 
 /** Tek adres için bekleme. Wi-Fi'de çok kısası YANLIŞ "sunucu yok" üretir. */
 const PROBE_TIMEOUT_MS = 900;
@@ -111,6 +113,8 @@ export interface DiscoveryResult {
   scan: { ran: boolean; tried: number; ports: number[]; skippedReason: string | null };
   /** Cihazın kendi ağ bilgisi okunabildi mi. */
   network: { address: string | null; subnet: string | null };
+  /** Şifreli bağlantı sabitli ama sunucu doğrulanamadı → aday düşürüldü; kullanıcıya gösterilen sebep. */
+  tlsBlocked: string | null;
 }
 
 /** `http://host:port[/api]` → parçalar. Çözülemezse null. */
@@ -151,7 +155,8 @@ export async function probeServer(
   const res = await get(DISCOVERY_IDENTITY_PATH);
   if (res && res.status === 200) {
     try {
-      const identity = parseIdentityPayload(JSON.parse(res.body));
+      const body = JSON.parse(res.body) as unknown;
+      const identity = parseIdentityPayload(body);
       if (identity) {
         return {
           baseUrl: root,
@@ -160,6 +165,7 @@ export async function probeServer(
           identity,
           rttMs: Date.now() - started,
           matchesPinned: compareIdentity(pinnedId, identity.installationId),
+          tls: parseTlsAdvert((body as { tls?: unknown }).tls),
         };
       }
     } catch {
@@ -366,11 +372,14 @@ export async function discoverServers(opts: DiscoveryOptions = {}): Promise<Disc
 
   // Sıra: ÖNCE tekilleştir (sunucu başına en iyi adres), SONRA sırala. Tersi,
   // aynı sunucunun iki adresini iki ayrı satır gibi sıralar.
-  const groups = groupByInstallation(found);
+  // Sabitli kurulumun adayı https'e yükselir ya da engellenir (HTTP'ye sessiz düşüş yok).
+  const routed = applyTlsRoute(found, await getTlsPins());
+  const groups = groupByInstallation(routed.list);
   return {
-    candidates: rankCandidates(dedupeCandidates(found)),
+    candidates: rankCandidates(dedupeCandidates(routed.list)),
     groups,
     scan: { ran: scanRan, tried, ports, skippedReason },
     network: { address, subnet },
+    tlsBlocked: routed.blocked,
   };
 }

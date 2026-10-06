@@ -42,7 +42,7 @@ export function TabletTlsQrButton() {
           <DialogHeader>
             <DialogTitle>Tablet için şifreli bağlantı</DialogTitle>
             <DialogDescription>
-              Tablette Ayarlar → Sunucu → “Şifreli bağlantı QR'ı okut” ile bu kodu okutun. Tablet sunucuyu bu
+              Tablette Ayarlar → API Sunucusu → “Şifreli bağlantı QR'ı okut” ile bu kodu okutun (tablet bu sunucuya bağlıyken). Tablet sunucuyu bu
               sertifika koduyla tanır; kod başka bir sunucunun koduyla değiştirilemez.
             </DialogDescription>
           </DialogHeader>
