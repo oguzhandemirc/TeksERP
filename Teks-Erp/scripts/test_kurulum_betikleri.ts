@@ -493,7 +493,7 @@ function olc(k: Kaynaklar): Bulgular {
   if (!/N := StrToIntDef\(Olc\('hizmetKokSayisi'\), 0\);\s*\n\s*for I := 1 to N do/.test(eng13) || !/köküne bağlı; bu klasöre kurulum\/onarım yapılamaz/.test(eng13) || !/ölçülemedi; kurulum\/onarım yapılamaz/.test(eng13)) ekle("§13", "sihirbaz kanal hizmeti kök engelini (başka kök / ölçülemedi) göstermiyor (F2)");
   // F1: ağ ayarı onarım/devamda kayıttan
   if (!/\$ag = KayitliAgAyari \$kok /.test(k.onOlcum) || !/\$o\["oncekiAgIzinli"\]/.test(k.onOlcum) || !/\$o\["oncekiAgProfiller"\]/.test(k.onOlcum) || !/\$o\["oncekiAgMdns"\]/.test(k.onOlcum)) ekle("§13", "ön ölçüm kayıttaki ağ ayarını sihirbaza vermiyor (F1)");
-  if (!/AgSayfasi\.Values\[0\] := Pos\('100\.64\.0\.0\/10', Olc\('oncekiAgIzinli'\)\) > 0;/.test(sod13) || !/AgSayfasi\.Values\[1\] := Pos\('Domain', Olc\('oncekiAgProfiller'\)\) > 0;/.test(sod13) || !/AgSayfasi\.Values\[3\] := Olc\('oncekiAgMdns'\) = '1';/.test(sod13)) ekle("§13", "sihirbaz onarımda Ağ sayfasını kayıttan doldurmuyor (varsayılan LocalSubnet Tailscale'i daraltır) (F1)");
+  if (!/AgSayfasi\.Values\[0\] := Pos\('Domain', Olc\('oncekiAgProfiller'\)\) > 0;/.test(sod13) || !/AgSayfasi\.Values\[1\] := Pos\('Private', Olc\('oncekiAgProfiller'\)\) > 0;/.test(sod13) || !/AgSayfasi\.Values\[2\] := Olc\('oncekiAgMdns'\) = '1';/.test(sod13)) ekle("§13", "sihirbaz onarımda Ağ sayfasını kayıttan doldurmuyor (varsayılan profil/mDNS kayıttakini daraltır) (F1)");
   const agoz = pasGovde(k.iss, "AgOzeti") ?? "";
   if (!/AgOzeti\(NewLine\)/.test(pasGovde(k.iss, "UpdateReadyMemo") ?? "") || !/if Olc\('oncekiAgIzinli'\) <> '' then Izinli := Olc\('oncekiAgIzinli'\);/.test(agoz) || !/UYGULANMAZ/.test(agoz)) ekle("§13", "özet ETKİLİ ağ erişimini (onarımda kayıttaki) yazmıyor ya da sayfa farkını uyarmıyor (F1)");
   if (!/if \(\$onarim -or \$yarim\) \{ \$agKayit = KayitliAgAyari \$kok /.test(onk) || !/\$agK = AgKarari \$C \$script:CevapHam \$agKayit /.test(onk) || !/foreach \(\$x in \$agK\.uyarilar\) \{ Uyar \$x \}/.test(onk) || !/ag = \$agK\.ag/.test(onk)) ekle("§13", "OnKosul ağ ayarını kayıttan korumuyor (sessiz onarım varsayılana düşer) (F1)");
@@ -501,6 +501,26 @@ function olc(k: Kaynaklar): Bulgular {
   if (!/ag = \$\(if \(\$d\.PSObject\.Properties\["ag"\]\)/.test(dog)) ekle("§13", "kurulum.json uygulanan ağ ayarını kaydetmiyor (sonraki onarımın kaydı) (F1)");
   const iOnceki = hazir.indexOf("cevap-onceki.json', False)"), iYeni = hazir.indexOf("SaveStringToFile(KurulumCevabi");
   if (iOnceki < 0 || iYeni < 0 || iOnceki > iYeni || !/if \(Onarim or Yarim\) and FileExists\(KurulumCevabi\) then/.test(hazir)) ekle("§13", "setup onarımda önceki cevabı yenisini yazmadan saklamıyor (eski kurulumların tek ağ kaydı) (F1)");
+  // O12: Tailscale (100.64.0.0/10) müşteri kurulumunda yok — sihirbaz kutusu, cevap seçeneği ve onarım ön doldurması (K3 kod yolu) kapalı;
+  // kayıttaki eski izin onarımda korunur ve özet + karar uyarır.
+  if (/Tailscale ağından|AgSayfasi\.Add\([^)]*100\.64/.test(k.iss)) ekle("§14", "sihirbazda Tailscale kutusu var");
+  if (/AgSayfasi\.Values\[\d\] := Pos\('100\.64/.test(k.iss)) ekle("§14", "sihirbaz onarımda kutuyu önceki kayıttan kuruyor (K3 kod yolu)");
+  const izinliSayfa = pasGovde(k.iss, "AgSayfaIzinli") ?? "", cevapJs = pasGovde(k.iss, "CevapJson") ?? "";
+  if (!/Result := 'LocalSubnet';/.test(izinliSayfa) || /100\.64/.test(izinliSayfa) || /100\.64/.test(cevapJs) || !/Izinli := '"LocalSubnet"';/.test(cevapJs)) ekle("§14", "sihirbaz cevabı LocalSubnet dışında izinli adres yazabiliyor");
+  const agoz14 = pasGovde(k.iss, "AgOzeti") ?? "";
+  if (!/if Pos\('100\.64\.0\.0\/10', Izinli\) > 0 then\s*\n\s*Result := Result \+ 'UYARI: bu kurulumda eski Tailscale izni/.test(agoz14)) ekle("§14", "özet kayıttaki eski Tailscale iznini uyarmıyor");
+  let semaIzinli: { secenek?: unknown; kayitEski?: unknown; varsayilan?: unknown } = {}, ornekIzinli: unknown = null;
+  try {
+    semaIzinli = (JSON.parse(k.sema) as { alanlar: Record<string, typeof semaIzinli> }).alanlar["api.izinliAdresler"] ?? {};
+    ornekIzinli = (JSON.parse(k.ornek) as { api?: { izinliAdresler?: unknown } }).api?.izinliAdresler ?? null;
+  } catch {
+    ekle("§14", "şema/örnek JSON okunamadı");
+  }
+  const esit = (x: unknown, y: string[]): boolean => JSON.stringify(x) === JSON.stringify(y);
+  if (!esit(semaIzinli.secenek, ["LocalSubnet"]) || !esit(semaIzinli.varsayilan, ["LocalSubnet"])) ekle("§14", "şema cevapta LocalSubnet dışında izinli adres kabul ediyor");
+  if (!esit(semaIzinli.kayitEski, ["100.64.0.0/10"])) ekle("§14", "şema kayıttaki eski Tailscale iznini tanımıyor (onarım erişimi daraltır)");
+  if (!esit(ornekIzinli, ["LocalSubnet"])) ekle("§14", "örnek cevap LocalSubnet dışında izinli adres taşıyor");
+  if (!/\$t = AgKayitTanimi \$sema\.alanlar\."api\.\$a"/.test(psGovde(ort, "KayitliAgAyari") ?? "") || !/eski Tailscale izni/.test(psGovde(ort, "AgKarari") ?? "")) ekle("§14", "kayıt okuyucu eski izni tanımıyor ya da karar uyarmıyor");
   return b;
 }
 
@@ -522,7 +542,7 @@ function harness(ortak?: string): { kod: number | null; satirlar: string[] } {
 const LISANS_KONTROLLERI = ["bos-alan-kanaldan", "uretim-kanali-satir-yazmaz", "esit-elle-uyarisiz", "farkli-elle-UYARI", "farkli-elle-yazilir", "eski-paket-uyarir-durmaz", "onarim-kayit-korunur", "onarim-satirsiz-varsayilan-UYARI", "onarim-cevap-uygulanmaz"].map((c) => `lisans.${c}`);
 const KURULU_KONTROLLERI = ["kurulu.yalniz-kayit", "kurulu.gecmisin-SON-satiri", "kurulu.bayat-kayit-yerine-guncelleyici", "kurulu.current-baglantisi", "kurulu.eski-paket-DUR"];
 /** D8e-3b: eski paket tek giriş · geçişli düzen · kanal hizmetinin kökü · ağ ayarı kayıttan. */
-const D8E3B_KONTROLLERI = ["eskipaket.olcum-tek-giris", "gecisli.duzen-tanir", "gecisli.tek-isaret-yetmez-yabanci-eski-mesaj", "ag.kayit-eski-cevaptan", "ag.kayit-oncelik", "ag.kayit-gecersiz-yok-sayilir", "ag.onarim-sessiz-kayit-korunur", "ag.onarim-cevap-uygulanmaz", "ag.yeni-kurulum-cevaptan", "hizmetkok.ayni-kok-gecer", "hizmetkok.baska-kok-durur", "hizmetkok.okunamaz-durur", "hizmetkok.uc-hizmet-olculur"];
+const D8E3B_KONTROLLERI = ["eskipaket.olcum-tek-giris", "gecisli.duzen-tanir", "gecisli.tek-isaret-yetmez-yabanci-eski-mesaj", "ag.kayit-eski-cevaptan", "ag.kayit-oncelik", "ag.kayit-gecersiz-yok-sayilir", "ag.onarim-sessiz-kayit-korunur", "ag.onarim-eski-tailscale-uyarir", "ag.onarim-tailscalesiz-uyarisiz", "ag.onarim-cevap-uygulanmaz", "ag.cevap-tailscale-red", "ag.yeni-kurulum-cevaptan", "hizmetkok.ayni-kok-gecer", "hizmetkok.baska-kok-durur", "hizmetkok.okunamaz-durur", "hizmetkok.uc-hizmet-olculur"];
 const CEVAP_KONTROLLERI = ["ornek-gecerli", "varsayilanlar", "surum-zorunlu", "surum-yanlis", "bilinmeyen-alan", "sir-alan-red", "sir-adi-dar", "tur-sayi", "sayi-aralik", "tur-mantik", "tur-yol", "desen", "secenek-liste", "bos", "sema-sirsiz"];
 function durum(satirlar: string[], ad: string): "OK" | "HATA" | "YOK" {
   if (satirlar.includes(`OK ${ad}`)) return "OK";
@@ -590,6 +610,7 @@ if (eksik.length === 0) {
     ["§11", "sihirbaz deneyimi: ölçüm görünür + açılış hafif · eski paket iki kapıda · onarım metinleri · ölçülen yapılacaklar"],
     ["§12", "lisans satıcısı kanaldan: tek karar işlevi · boş alan = kanal (ön doldurma + özet) · farklı değer UYARI · .env karardan · Dogrulama ölçer"],
     ["§13", "onarım/kurulum güvenliği (D8e-3b): F1 ağ ayarı kayıttan (ön doldurma · özet etkili · OnKosul korur · kural karardan · önceki cevap saklanır) · F2 başka köke bağlı / ölçülemeyen kanal hizmeti engel+DUR · F3 eski paket tek giriş + sayfada engel · F4-B geçişli düzen GECISLI, DUR"],
+    ["§14", "O12 Tailscale müşteri kurulumunda yok: sihirbazda kutu yok · onarım ön doldurması kayıttan kutu kurmaz (K3) · cevap/örnek yalnız LocalSubnet · şema eski izni yalnız kayıtta tanır · özet + karar uyarır"],
   ];
   console.log("");
   for (const [bolum, ne] of BOLUMLER) check(`${bolum} ⭐ ${ne}`, !(b[bolum]?.length), (b[bolum] ?? []).join(" · "));
@@ -649,7 +670,12 @@ if (eksik.length === 0) {
     { ad: "S51 özet boş alanı kanal saymıyor", dosya: "iss", eski: "  else if Etkili = '' then Etkili := Kanal;", yeni: "  else if False then Etkili := Kanal;", bolum: "§12", parca: "boş alanı" },
     { ad: "S53 {tmp}'e hizmet\\ açılmıyor (ön ölçüm kanal-adlari.ps1'i bulamaz)", dosya: "iss", eski: "    ExtractTemporaryFiles('{app}\\kurulum\\deploy\\hizmet\\*');\n", yeni: "", bolum: "§8", parca: "{tmp}'e açmıyor" },
     { ad: "S52 özet LisansOzeti'ni çağırmıyor (eski 'varsayılan' metni)", dosya: "iss", eski: "  S := S + LisansOzeti(NewLine);", yeni: "  S := S + 'Lisans sunucusu: varsayılan' + NewLine;", bolum: "§12", parca: "LisansOzeti" },
-    { ad: "S54 F1 sihirbaz onarımda Ağ sayfasını kayıttan doldurmuyor (Tailscale düşer)", dosya: "iss", eski: "    if Olc('oncekiAgIzinli') <> '' then AgSayfasi.Values[0] := Pos('100.64.0.0/10', Olc('oncekiAgIzinli')) > 0;\n", yeni: "", bolum: "§13", parca: "Ağ sayfasını kayıttan" },
+    { ad: "S54 F1 sihirbaz onarımda Ağ sayfasını kayıttan doldurmuyor (profil düşer)", dosya: "iss", eski: "      AgSayfasi.Values[0] := Pos('Domain', Olc('oncekiAgProfiller')) > 0;\n", yeni: "", bolum: "§13", parca: "Ağ sayfasını kayıttan" },
+    { ad: "S67 O12 sihirbaza Tailscale kutusu geri döner", dosya: "iss", eski: "  AgSayfasi.Add('Etki alanı (Domain) ağ profilinde açık');\n", yeni: "  AgSayfasi.Add('Tailscale ağından da erişilsin (100.64.0.0/10)');\n  AgSayfasi.Add('Etki alanı (Domain) ağ profilinde açık');\n", bolum: "§14", parca: "Tailscale kutusu var" },
+    { ad: "S68 O12 onarım kutuyu önceki kayıttan kurar (K3 kod yolu)", dosya: "iss", eski: "    if Olc('oncekiAgMdns') <> '' then AgSayfasi.Values[2]", yeni: "    if Olc('oncekiAgIzinli') <> '' then AgSayfasi.Values[0] := Pos('100.64.0.0/10', Olc('oncekiAgIzinli')) > 0;\n    if Olc('oncekiAgMdns') <> '' then AgSayfasi.Values[2]", bolum: "§14", parca: "K3 kod yolu" },
+    { ad: "S69 O12 sihirbaz cevabına Tailscale yazar", dosya: "iss", eski: "  Izinli := '\"LocalSubnet\"';\n", yeni: "  Izinli := '\"LocalSubnet\", \"100.64.0.0/10\"';\n", bolum: "§14", parca: "LocalSubnet dışında izinli adres yazabiliyor" },
+    { ad: "S70 O12 şema cevapta Tailscale'i kabul eder (sessiz kip RED düşer)", dosya: "sema", eski: '"secenek": ["LocalSubnet"], "kayitEski"', yeni: '"secenek": ["LocalSubnet", "100.64.0.0/10"], "kayitEski"', bolum: "§14", parca: "LocalSubnet dışında izinli adres kabul" },
+    { ad: "S71 O12 özet eski Tailscale iznini uyarmaz", dosya: "iss", eski: "  if Pos('100.64.0.0/10', Izinli) > 0 then\n", yeni: "  if False then\n", bolum: "§14", parca: "eski Tailscale iznini uyarmıyor" },
     { ad: "S55 F1 özet sayfanın seçimini yazıyor (etkili kayıt değil)", dosya: "iss", eski: "    if Olc('oncekiAgIzinli') <> '' then Izinli := Olc('oncekiAgIzinli');\n", yeni: "", bolum: "§13", parca: "ETKİLİ ağ erişimini" },
     { ad: "S56 F1 OnKosul ağ kaydını okumuyor (sessiz onarım LocalSubnet'e daralır)", dosya: "kurulum", eski: "  if ($onarim -or $yarim) { $agKayit = KayitliAgAyari $kok $script:CevapSemasi }\n", yeni: "", bolum: "§13", parca: "ağ ayarını kayıttan korumuyor" },
     { ad: "S57 F1 Hizmetler kuralı ham cevaptan kuruyor", dosya: "kurulum", eski: "-RemoteAddress @($ag.izinliAdresler)", yeni: '-RemoteAddress @($C["api.izinliAdresler"])', bolum: "§13", parca: "ham cevaptan kuruyor" },
@@ -696,6 +722,8 @@ if (eksik.length === 0) {
       { ad: "H14 eski/kanal-dışı paket fail-closed değil ama UYARI düştü", eski: "$u += \"paket lisans saticisinin", yeni: "$null = \"paket lisans saticisinin", kontrol: "lisans.eski-paket-uyarir-durmaz" },
       { ad: "H15 üretim kanalında varsayılana eşit satır yazılıyor (gecis.ps1 kuralı)", eski: "-and ($etkili -cne $vars)", yeni: "", kontrol: "lisans.uretim-kanali-satir-yazmaz" },
       { ad: "H16 F1 kayıt okuyucu eski kurulumun cevabını okumuyor (Tailscale düşer)", eski: ', @("kurulum\\cevap.json", "api"))', yeni: ")", kontrol: "ag.kayit-eski-cevaptan" },
+      { ad: "H23 O12 kayıt okuyucu eski Tailscale iznini tanımıyor (onarım erişimi daraltır)", eski: '      $t = AgKayitTanimi $sema.alanlar."api.$a"', yeni: '      $t = $sema.alanlar."api.$a"', kontrol: "ag.kayit-eski-cevaptan" },
+      { ad: "H24 O12 kayıttaki eski Tailscale izni uyarısız korunuyor", eski: "      if ($eski.Count) { $u +=", yeni: "      if ($false) { $u +=", kontrol: "ag.onarim-eski-tailscale-uyarir" },
       { ad: "H17 F1 onarımda cevap/varsayılan kayda yeğleniyor (erişim daralır)", eski: "    if ($kayit -and $null -ne $kayit[$a]) {", yeni: "    if ($false) {", kontrol: "ag.onarim-sessiz-kayit-korunur" },
       { ad: "H18 F2 başka köke bağlı hizmet geçiyor", eski: "    if (-not (YolKokAltinda $y $kok)) {", yeni: "    if ($false) {", kontrol: "hizmetkok.baska-kok-durur" },
       { ad: "H19 F2 ImagePath okunamazken geçiyor (fail-open)", eski: `  if (-not $p.Count -or "$($p[0])" -cnotmatch '^[A-Za-z]:\\\\') {`, yeni: "  if ($false) {", kontrol: "hizmetkok.okunamaz-durur" },
@@ -731,7 +759,7 @@ if (eksik.length === 0) {
     } finally {
       rmSync(dizin, { recursive: true, force: true });
     }
-  } else defter.atla("✓K harness sondaları", "pwsh 7 yok", 23);
+  } else defter.atla("✓K harness sondaları", "pwsh 7 yok", 25);
 }
 
 console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız${defter.ozetEki()} ===`);

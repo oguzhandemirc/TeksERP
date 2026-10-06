@@ -871,14 +871,13 @@ begin
   AgSayfasi := CreateInputOptionPage(PortSayfasi.ID, 'Ağ ve güvenlik duvarı', 'API portuna kimler erişebilir?',
     'API portu yalnız yerel alt ağa (LocalSubnet) açılır; Genel (Public) ağ profiline açılmaz. PostgreSQL için gelen kural AÇILMAZ.',
     False, False);
-  AgSayfasi.Add('Tailscale ağından da erişilsin (100.64.0.0/10)');
+  // Uzak ağ (Tailscale) seçeneği YOK: müşteri sunucusu yalnız kendi yerel ağına açılır (O12).
   AgSayfasi.Add('Etki alanı (Domain) ağ profilinde açık');
   AgSayfasi.Add('Özel (Private) ağ profilinde açık');
   AgSayfasi.Add('Yerel ağda otomatik bulma (mDNS, UDP 5353)');
-  AgSayfasi.Values[0] := False;
+  AgSayfasi.Values[0] := True;
   AgSayfasi.Values[1] := True;
   AgSayfasi.Values[2] := True;
-  AgSayfasi.Values[3] := True;
   SaticiSayfasi := CreateInputQueryPage(AgSayfasi.ID, 'Satıcı hesabı', 'Destek (süperadmin) hesabı',
     'Parola ve PIN dosyaya, günlüğe, komut satırına yazılmaz; kuruluma kayıt dışı bir boruyla aktarılır. Boş bırakırsanız hesap kurulum sonunda konsoldan kurulur.');
   SaticiSayfasi.Add('Kullanıcı adı (3-50; harf, rakam . _ -):', False);
@@ -973,13 +972,13 @@ begin
     else if GelismisSayfasi.Values[2] = '' then GelismisSayfasi.Values[2] := Olc('paketLisans');
     GelismisSayfasi.Edits[2].Enabled := Olc('oncekiLisansOkundu') <> '1';
     // Ağ sayfası kayıttan (kurulum.json/durum.json ag ya da önceki cevap): varsayılan kayıttaki erişimi daraltmasın.
-    if Olc('oncekiAgIzinli') <> '' then AgSayfasi.Values[0] := Pos('100.64.0.0/10', Olc('oncekiAgIzinli')) > 0;
+    // İzinli adresler sayfada seçilmez; kayıttaki eski izin özette uyarıyla görünür (AgOzeti).
     if Olc('oncekiAgProfiller') <> '' then
     begin
-      AgSayfasi.Values[1] := Pos('Domain', Olc('oncekiAgProfiller')) > 0;
-      AgSayfasi.Values[2] := Pos('Private', Olc('oncekiAgProfiller')) > 0;
+      AgSayfasi.Values[0] := Pos('Domain', Olc('oncekiAgProfiller')) > 0;
+      AgSayfasi.Values[1] := Pos('Private', Olc('oncekiAgProfiller')) > 0;
     end;
-    if Olc('oncekiAgMdns') <> '' then AgSayfasi.Values[3] := Olc('oncekiAgMdns') = '1';
+    if Olc('oncekiAgMdns') <> '' then AgSayfasi.Values[2] := Olc('oncekiAgMdns') = '1';
     GelismisKayittan := True;
   end
   else if GelismisKayittan then
@@ -988,10 +987,9 @@ begin
     GelismisSayfasi.Values[1] := '';
     GelismisSayfasi.Values[2] := Olc('paketLisans');
     GelismisSayfasi.Edits[2].Enabled := True;
-    AgSayfasi.Values[0] := False;
+    AgSayfasi.Values[0] := True;
     AgSayfasi.Values[1] := True;
     AgSayfasi.Values[2] := True;
-    AgSayfasi.Values[3] := True;
     GelismisKayittan := False;
   end
   else if GelismisSayfasi.Values[2] = '' then GelismisSayfasi.Values[2] := Olc('paketLisans');
@@ -1048,7 +1046,7 @@ begin
   end
   else if CurPageID = AgSayfasi.ID then
   begin
-    if not AgSayfasi.Values[1] and not AgSayfasi.Values[2] then Result := Hata('En az bir ağ profili (Etki alanı ya da Özel) seçilmeli.');
+    if not AgSayfasi.Values[0] and not AgSayfasi.Values[1] then Result := Hata('En az bir ağ profili (Etki alanı ya da Özel) seçilmeli.');
   end
   else if CurPageID = SaticiSayfasi.ID then
   begin
@@ -1154,14 +1152,13 @@ end;
 function AgSayfaIzinli: String;
 begin
   Result := 'LocalSubnet';
-  if AgSayfasi.Values[0] then Result := Result + ',100.64.0.0/10';
 end;
 
 function AgSayfaProfiller: String;
 begin
   Result := '';
-  if AgSayfasi.Values[1] then Result := 'Domain';
-  if AgSayfasi.Values[2] then
+  if AgSayfasi.Values[0] then Result := 'Domain';
+  if AgSayfasi.Values[1] then
   begin
     if Result <> '' then Result := Result + ',';
     Result := Result + 'Private';
@@ -1175,7 +1172,7 @@ var Izinli, Profiller, Mdns, SayfaMdns, Kaynak, Goster: String;
 begin
   Izinli := AgSayfaIzinli;
   Profiller := AgSayfaProfiller;
-  if AgSayfasi.Values[3] then SayfaMdns := '1' else SayfaMdns := '0';
+  if AgSayfasi.Values[2] then SayfaMdns := '1' else SayfaMdns := '0';
   Mdns := SayfaMdns;
   Kaynak := '';
   if (Onarim or Yarim) and (Olc('oncekiAgKaynak') <> '') then
@@ -1185,13 +1182,12 @@ begin
     if Olc('oncekiAgMdns') <> '' then Mdns := Olc('oncekiAgMdns');
     Kaynak := '; kayıttan: ' + Olc('oncekiAgKaynak');
   end;
-  if Izinli = 'LocalSubnet,100.64.0.0/10' then Goster := 'LocalSubnet + Tailscale'
-  else if Izinli = '100.64.0.0/10' then Goster := 'yalnız Tailscale'
-  else Goster := Izinli;
-  Goster := Goster + ' · profil ' + Profiller + ' · mDNS ';
+  Goster := Izinli + ' · profil ' + Profiller + ' · mDNS ';
   if Mdns = '1' then Goster := Goster + 'açık' else Goster := Goster + 'kapalı';
   Result := 'API portu: ' + PortSayfasi.Values[0] + ' (' + Goster + Kaynak + ')' + NewLine;
-  if (Izinli <> AgSayfaIzinli) or (Profiller <> AgSayfaProfiller) or (Mdns <> SayfaMdns) then
+  if Pos('100.64.0.0/10', Izinli) > 0 then
+    Result := Result + 'UYARI: bu kurulumda eski Tailscale izni (100.64.0.0/10) var; müşteri kurulumunda olmamalı. Onarım erişimi daraltmaz, kayıttaki izin korunur.' + NewLine;
+  if (Profiller <> AgSayfaProfiller) or (Mdns <> SayfaMdns) then
     Result := Result + 'UYARI: Ağ sayfasındaki seçim kayıttan farklı - onarım ağ ayarını kayıttan korur; sayfadaki değişiklik UYGULANMAZ.' + NewLine;
 end;
 
@@ -1225,10 +1221,9 @@ function CevapJson: String;
 var Izinli, Profiller, Musteri, Etkili: String; Sifre: Boolean;
 begin
   Izinli := '"LocalSubnet"';
-  if AgSayfasi.Values[0] then Izinli := Izinli + ', "100.64.0.0/10"';
   Profiller := '';
-  if AgSayfasi.Values[1] then Profiller := '"Domain"';
-  if AgSayfasi.Values[2] then
+  if AgSayfasi.Values[0] then Profiller := '"Domain"';
+  if AgSayfasi.Values[1] then
   begin
     if Profiller <> '' then Profiller := Profiller + ', ';
     Profiller := Profiller + '"Private"';
@@ -1243,7 +1238,7 @@ begin
     '  "kok": ' + JsonMetin(Kok) + ',' + #13#10 +
     '  "paket": { "backend": ' + JsonYaDaNull(Olc('paketDosya')) + ', "pg": ' + JsonYaDaNull(Olc('pgDosya')) + ', "pgKunye": ' + JsonYaDaNull(Olc('pgKunyeDosya')) + ' },' + #13#10 +
     '  "pg": { "veriDizini": ' + JsonMetin(RemoveBackslashUnlessRoot(VeriSayfasi.Values[0])) + ', "port": ' + IntToStr(PortDegeri(PortSayfasi.Values[1])) + ', "defenderDislamasi": true },' + #13#10 +
-    '  "api": { "port": ' + IntToStr(PortDegeri(PortSayfasi.Values[0])) + ', "izinliAdresler": [' + Izinli + '], "agProfilleri": [' + Profiller + '], "mdns": ' + JsonMantik(AgSayfasi.Values[3]) + ' },' + #13#10 +
+    '  "api": { "port": ' + IntToStr(PortDegeri(PortSayfasi.Values[0])) + ', "izinliAdresler": [' + Izinli + '], "agProfilleri": [' + Profiller + '], "mdns": ' + JsonMantik(AgSayfasi.Values[2]) + ' },' + #13#10 +
     '  "guncelleme": { "sunucu": ' + JsonMetin(GelismisSayfasi.Values[0]) + ', "vekil": ' + JsonYaDaNull(GelismisSayfasi.Values[1]) + ' },' + #13#10 +
     '  "lisans": { "saticiAdresi": ' + JsonYaDaNull(GelismisSayfasi.Values[2]) + ' },' + #13#10 +
     '  "profil": ' + JsonYaDaNull(ProfilDegeri) + ',' + #13#10 +

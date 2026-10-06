@@ -476,8 +476,13 @@ function HizmetKokEngelleri($adlar, [string]$kok, [scriptblock]$okuyucu) {
 #   kurulum\kurulum.json "ag" > kurulum\durum.json "ag" > kurulum\cevap-onceki.json "api" (setup onarimda yeni cevabi
 #   yazmadan once saklar) > kurulum\cevap.json "api" (eski kurulumlar: tek kayit). Semaya uymayan alan yok sayilir.
 # Listeler semanin secenek SIRASIYLA (karsilastirma ve gosterim kararli). Doner: @{ izinliAdresler; agProfilleri; mdns;
-# kaynak } (bilinmeyen alan $null) ya da $null.
+# kaynak } (bilinmeyen alan $null) ya da $null. Semanin kayitEski degerleri (Tailscale 100.64.0.0/10) YALNIZ kayittan
+# taninir: cevapta RED, kayitta korunur (onarim daraltmaz) ve AgKarari uyarir.
 $script:AG_ALANLARI = @("izinliAdresler", "agProfilleri", "mdns")
+function AgKayitTanimi($tanim) {
+  if ($tanim.tur -cne "liste" -or -not $tanim.PSObject.Properties["kayitEski"]) { return $tanim }
+  return [pscustomobject]@{ tur = $tanim.tur; en_az_oge = $tanim.en_az_oge; secenek = @(@($tanim.secenek) + @($tanim.kayitEski)) }
+}
 function AgKanonik($deger, $tanim) {
   if ($tanim.tur -ceq "liste") { return , @(@($tanim.secenek) | Where-Object { @($deger) -ccontains $_ }) }
   return $deger
@@ -499,7 +504,7 @@ function KayitliAgAyari([string]$kok, $sema) {
     foreach ($a in $script:AG_ALANLARI) {
       $r[$a] = $null
       if (-not $n.PSObject.Properties[$a]) { continue }
-      $t = $sema.alanlar."api.$a"
+      $t = AgKayitTanimi $sema.alanlar."api.$a"
       $v = $n.$a
       if ($t.tur -ceq "liste") { $v = @($v) }
       if (AlanDogrula "api.$a" $v $t) { continue }
@@ -525,6 +530,8 @@ function AgKarari($deger, $ham, $kayit, $sema) {
       $r[$a] = $kayit[$a]
       $kayittan += $a
       if ($verildi -and (AgMetni $c) -cne (AgMetni $kayit[$a])) { $u += "cevaptaki api.$a ($(AgMetni $c)) UYGULANMADI: onarim ag ayarini kayittan korur ($(AgMetni $kayit[$a]), $($kayit.kaynak))" }
+      $eski = @(@($kayit[$a]) | Where-Object { $t.PSObject.Properties["kayitEski"] -and @($t.kayitEski) -ccontains $_ })
+      if ($eski.Count) { $u += "kayitta eski Tailscale izni var (api.$a $(AgMetni $eski), $($kayit.kaynak)): musteri kurulumunda olmamali; onarim erisimi daraltmaz, izin korunur - kaldirmak icin guvenlik duvari kuralini elle daraltin" }
     } else { $r[$a] = $c }
   }
   $r["kaynak"] = $(if ($kayittan.Count) { "kayit ($($kayit.kaynak))" } else { "cevap" })

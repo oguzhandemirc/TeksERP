@@ -252,14 +252,23 @@ try {
   $kayit = @{ izinliAdresler = @("LocalSubnet", "100.64.0.0/10"); agProfilleri = @("Domain", "Private"); mdns = $true; kaynak = "cevap.json" }
   $h = '{"v": 1}' | ConvertFrom-Json
   $k = AgKarari (CevapDogrula $h $semaNesne).deger $h $kayit $semaNesne
-  Olc "ag.onarim-sessiz-kayit-korunur" ((AgMetni $k.ag.izinliAdresler) -ceq "LocalSubnet,100.64.0.0/10" -and "$($k.ag.kaynak)".StartsWith("kayit") -and @($k.uyarilar).Count -eq 0) ("ag: $(AgMetni $k.ag.izinliAdresler) ($($k.ag.kaynak)) uyari $(@($k.uyarilar).Count)")
+  $u = "$(@($k.uyarilar) -join ' || ')"
+  Olc "ag.onarim-sessiz-kayit-korunur" ((AgMetni $k.ag.izinliAdresler) -ceq "LocalSubnet,100.64.0.0/10" -and "$($k.ag.kaynak)".StartsWith("kayit") -and -not $u.Contains("UYGULANMADI")) ("ag: $(AgMetni $k.ag.izinliAdresler) ($($k.ag.kaynak)) uyari: $u")
+  # O12: kayittaki eski Tailscale izni KORUNUR ama uyarilir (tek uyari; Tailscale'siz kayit uyarisiz).
+  Olc "ag.onarim-eski-tailscale-uyarir" (@($k.uyarilar).Count -eq 1 -and $u.Contains("eski Tailscale izni") -and $u.Contains("100.64.0.0/10")) ("uyari: $u")
+  $kd = AgKarari (CevapDogrula $h $semaNesne).deger $h @{ izinliAdresler = @("LocalSubnet"); agProfilleri = @("Domain"); mdns = $true; kaynak = "kurulum.json" } $semaNesne
+  Olc "ag.onarim-tailscalesiz-uyarisiz" ((AgMetni $kd.ag.izinliAdresler) -ceq "LocalSubnet" -and @($kd.uyarilar).Count -eq 0) ("ag: $(AgMetni $kd.ag.izinliAdresler) uyari $(@($kd.uyarilar).Count)")
   $h = '{"v": 1, "api": {"izinliAdresler": ["LocalSubnet"], "mdns": true}}' | ConvertFrom-Json
   $k = AgKarari (CevapDogrula $h $semaNesne).deger $h $kayit $semaNesne
   $u = "$(@($k.uyarilar) -join ' || ')"
-  Olc "ag.onarim-cevap-uygulanmaz" ((AgMetni $k.ag.izinliAdresler) -ceq "LocalSubnet,100.64.0.0/10" -and @($k.uyarilar).Count -eq 1 -and $u.Contains("UYGULANMADI") -and $u.Contains("api.izinliAdresler")) ("ag: $(AgMetni $k.ag.izinliAdresler) uyari: $u")
-  $h = '{"v": 1, "api": {"izinliAdresler": ["LocalSubnet", "100.64.0.0/10"], "mdns": false}}' | ConvertFrom-Json
+  Olc "ag.onarim-cevap-uygulanmaz" ((AgMetni $k.ag.izinliAdresler) -ceq "LocalSubnet,100.64.0.0/10" -and @($k.uyarilar).Count -eq 2 -and $u.Contains("UYGULANMADI") -and $u.Contains("api.izinliAdresler")) ("ag: $(AgMetni $k.ag.izinliAdresler) uyari: $u")
+  # O12: Tailscale cevapta secenek DEGIL (sessiz kip RED, fail-closed); yeni kurulum yalniz LocalSubnet.
+  $h = '{"v": 1, "api": {"izinliAdresler": ["LocalSubnet", "100.64.0.0/10"]}}' | ConvertFrom-Json
+  $cv = CevapDogrula $h $semaNesne
+  Olc "ag.cevap-tailscale-red" (@($cv.hatalar).Count -ge 1 -and "$(@($cv.hatalar) -join ' ')".Contains("100.64.0.0/10")) ("hatalar: $(@($cv.hatalar) -join ' | ')")
+  $h = '{"v": 1, "api": {"izinliAdresler": ["LocalSubnet"], "mdns": false}}' | ConvertFrom-Json
   $k = AgKarari (CevapDogrula $h $semaNesne).deger $h $null $semaNesne
-  Olc "ag.yeni-kurulum-cevaptan" ((AgMetni $k.ag.izinliAdresler) -ceq "LocalSubnet,100.64.0.0/10" -and (AgMetni $k.ag.agProfilleri) -ceq "Domain,Private" -and $k.ag.mdns -eq $false -and $k.ag.kaynak -ceq "cevap" -and @($k.uyarilar).Count -eq 0) ("ag: $(AgMetni $k.ag.izinliAdresler) $(AgMetni $k.ag.agProfilleri) $(AgMetni $k.ag.mdns) ($($k.ag.kaynak))")
+  Olc "ag.yeni-kurulum-cevaptan" ((AgMetni $k.ag.izinliAdresler) -ceq "LocalSubnet" -and (AgMetni $k.ag.agProfilleri) -ceq "Domain,Private" -and $k.ag.mdns -eq $false -and $k.ag.kaynak -ceq "cevap" -and @($k.uyarilar).Count -eq 0) ("ag: $(AgMetni $k.ag.izinliAdresler) $(AgMetni $k.ag.agProfilleri) $(AgMetni $k.ag.mdns) ($($k.ag.kaynak))")
 } finally { Remove-Item -LiteralPath $gk -Recurse -Force -ErrorAction SilentlyContinue }
 
 # Kanal hizmetinin koku (FAIL-CLOSED): ayni kok gecer - baska kok durur - ImagePath okunamaz/cozulemez durur.

@@ -19,7 +19,7 @@
 #                goc adlari = paket - bakim rolu (bakim-rolu.ps1) -
 #                yedek sifreleme (musteri anahtari dosyaya)
 #     Hizmetler  hizmet\backend-hizmeti.ps1 -Uygula (kayit -> ACL) - hizmet\guncelleyici-hizmeti.ps1 -Uygula -
-#                gece yedegi gorevi (<KOK>\yedekle.ps1) - guvenlik duvari (API yalniz LocalSubnet [+Tailscale],
+#                gece yedegi gorevi (<KOK>\yedekle.ps1) - guvenlik duvari (API yalniz LocalSubnet; eski Tailscale izni yalniz onarimda kayittan,
 #                mDNS; PG'ye kural YOK) - baslat: /health 200 UP/UP/surum - guncelleyici durum.json
 #     Sirlar     YALNIZ sihirbaz: STDIN'den JSON (satici parolasi + PIN, yedek parolasi) -> araclara STDIN'den;
 #                musteri yedek anahtari ekranda gosterilecekse SONUC satirinda doner. Gunluge sir GIRMEZ.
@@ -347,7 +347,7 @@ function AsamaOnKosul {
   Ok "lisans sunucusu: $(if ($lis.etkili) { $lis.etkili } else { 'derleme varsayilani' }) ($($lis.kaynakMetni))$(if ($lis.yaz) { ' - .env satiri yazilacak' })"
 
   # Ag ayari (API guvenlik duvari): onarim/devamda KAYITTAN (kurulum-ortak.ps1 KayitliAgAyari + AgKarari) - varsayilan
-  # (LocalSubnet) kayittaki erisimi (or. Tailscale) DARALTMAZ; cevapta acikca verilen farkli deger uyarilir.
+  # (LocalSubnet) kayittaki erisimi DARALTMAZ; cevapta acikca verilen farkli deger ve kayittaki eski Tailscale izni uyarilir.
   $agKayit = $null
   if ($onarim -or $yarim) { $agKayit = KayitliAgAyari $kok $script:CevapSemasi }
   $agK = AgKarari $C $script:CevapHam $agKayit $script:CevapSemasi
@@ -751,7 +751,7 @@ function AsamaHizmetler {
     Ok "gorev: $gorev her gun $($C['yedek.saat']) (SYSTEM)"
   } else { Bilgi "gorev zaten var, DOKUNULMADI: $gorev" }
 
-  # Guvenlik duvari: API yalniz secili profiller + LocalSubnet [+ Tailscale]; mDNS (kesif); PG'ye kural YOK.
+  # Guvenlik duvari: API yalniz secili profiller + LocalSubnet (onarimda kayittaki eski izin korunur); mDNS (kesif); PG'ye kural YOK.
   # Ayar OnKosul KARARINDAN (durum ag: onarim/devamda kayittan); karar tasimayan eski durum.json -> cevap.
   $ag = $(if ($d.PSObject.Properties["ag"] -and $d.ag) { $d.ag } else { [pscustomobject]@{ izinliAdresler = @($C["api.izinliAdresler"]); agProfilleri = @($C["api.agProfilleri"]); mdns = $C["api.mdns"] } })
   $apiPort = [int]$d.portlar.api

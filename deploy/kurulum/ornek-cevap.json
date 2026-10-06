@@ -13,7 +13,7 @@
   },
   "api": {
     "port": 4000,
-    "izinliAdresler": ["LocalSubnet", "100.64.0.0/10"],
+    "izinliAdresler": ["LocalSubnet"],
     "agProfilleri": ["Domain", "Private"],
     "mdns": true
   },
