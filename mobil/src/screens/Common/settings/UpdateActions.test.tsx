@@ -111,6 +111,12 @@ describe('UpdateActions — denetle düğmesi kaybolmaz', () => {
     expect(screen.getByText(/internete bağlı mı/i)).toBeTruthy();
   });
 
+  it('ortak pakette grup bilinmiyorsa "internet" DEMEZ, sebebi (lisans/sunucu) söyler', () => {
+    ciz({ sonuc: { durum: 'grupBilinmiyor' } });
+    expect(screen.getByText(/Güncelleme grubu fabrika sunucusundan alınamadı/)).toBeTruthy();
+    expect(screen.queryByText(/internete bağlı mı/i)).toBeNull();
+  });
+
   it('meşgulken etiket ne olduğunu söyler', () => {
     ciz({ denetleniyor: true });
     expect(screen.getByText('Denetleniyor…')).toBeTruthy();

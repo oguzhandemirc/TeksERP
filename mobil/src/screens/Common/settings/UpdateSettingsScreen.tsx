@@ -45,7 +45,7 @@ import {
   SettingsPage,
   settingsStyles,
 } from './settingsUi';
-import { UpdateActions } from './UpdateActions';
+import { GRUP_BILINMIYOR, UpdateActions } from './UpdateActions';
 import { formatFactory } from '../../../lib/factory-time';
 
 /**
@@ -108,6 +108,8 @@ export default function UpdateSettingsScreen() {
           });
         } else if (s.durum === 'guncel') {
           Toast.show({ type: 'info', text1: 'Uygulama güncel', text2: 'Yeni sürüm yok.' });
+        } else if (s.durum === 'grupBilinmiyor') {
+          Toast.show({ type: 'info', text1: 'Güncelleme grubu bilinmiyor', text2: GRUP_BILINMIYOR });
         } else if (s.durum === 'kapali') {
           Toast.show({
             type: 'info',
@@ -194,6 +196,9 @@ export default function UpdateSettingsScreen() {
         <Text style={settingsStyles.label}>BAĞLANTILAR</Text>
         <Satir etiket="ERP (fabrika ağı)" deger={apiSunucu || '—'} />
         <Satir etiket="Güncelleme (internet)" deger={otaSunucu} />
+        {kimlik.ortakPaket && (
+          <Satir etiket="Güncelleme grubu" deger={apk === null ? '…' : (apk.grup ?? 'bilinmiyor')} />
+        )}
         <Text style={settingsStyles.hint}>
           Bunlar iki ayrı bağlantıdır ve farklı olmaları normaldir. Üretim
           kayıtları fabrika sunucusuna gider; güncellemeler internetten gelir.
@@ -263,6 +268,8 @@ export default function UpdateSettingsScreen() {
           </>
         ) : apk?.rejection ? (
           <Text style={styles.durumKotu}>{apk.rejection.message}</Text>
+        ) : apk?.grupBilinmiyor ? (
+          <Text style={styles.durumNotr}>{GRUP_BILINMIYOR}</Text>
         ) : (
           <Text style={styles.durumIyi}>
             {apk === null ? 'Kontrol ediliyor…' : 'Kurulum dosyası güncel.'}
@@ -308,5 +315,6 @@ const styles = StyleSheet.create({
   bantMetin: { flex: 1, minWidth: 0, color: COLORS.text, fontSize: 12, lineHeight: 17 },
   durumIyi: { color: COLORS.success, fontSize: 14, marginTop: 10, fontWeight: '600' },
   durumKotu: { color: COLORS.error, fontSize: 13, marginTop: 10 },
+  durumNotr: { color: COLORS.subtext, fontSize: 14, marginTop: 10 },
   dugme: { marginTop: 16, borderRadius: 10 },
 });

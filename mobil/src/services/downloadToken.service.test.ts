@@ -15,6 +15,7 @@ import { otaKontrolEtVeIndir } from './appUpdate.service';
 import {
   DOWNLOAD_TOKEN_HEADER,
   downloadTokenHeaders,
+  fetchDownloadGrant,
   fetchDownloadToken,
   refreshOtaDownloadToken,
   type DownloadTokenDeps,
@@ -97,6 +98,21 @@ describe('§1 fetchDownloadToken', () => {
   });
 });
 
+describe('§1b fetchDownloadGrant — grup (tek ortak paket O8)', () => {
+  const ile = (data: unknown) => bag({ fetchImpl: jest.fn(async () => yanit(200, { data })) as unknown as typeof fetch });
+  it('grup biçimliyse aynen döner', async () => {
+    expect(await fetchDownloadGrant(ile({ belirtec: BELIRTEC, grup: 'test' }))).toEqual({ belirtec: BELIRTEC, grup: 'test' });
+  });
+  it('eski backend (alan yok) / null / biçimsiz grup → grup null, belirteç korunur', async () => {
+    for (const grup of [undefined, null, '', 'Test', '../genel', 'a'.repeat(41), 7]) {
+      expect(await fetchDownloadGrant(ile({ belirtec: BELIRTEC, grup }))).toEqual({ belirtec: BELIRTEC, grup: null });
+    }
+  });
+  it('belirteç biçimsizse grup tek başına dönmez', async () => {
+    expect(await fetchDownloadGrant(ile({ belirtec: 'duz-metin', grup: 'test' }))).toBeNull();
+  });
+});
+
 describe('§2 OTA param ve APK başlığı', () => {
   it('belirteç varsa tkl yazılır; yoksa saklı param SİLİNİR (null)', async () => {
     await refreshOtaDownloadToken(bag());
@@ -126,9 +142,12 @@ describe('§4 UpdateGate — kaynak bağlaması', () => {
   const src = readFileSync(join(__dirname, '../components/UpdateGate.tsx'), 'utf8');
   it('sor(): tazeleme checkForUpdateAsync\'ten önce; açılışta gecikmeli yeniden deneme var', () => {
     const tazele = src.indexOf('await refreshOtaDownloadToken()');
+    // Ortak pakette belirteçsiz denetim yok (O8): kapı tazelemeyle denetim ARASINDA.
+    const kapi = src.indexOf('if (!belirtec && otaKimlik().ortakPaket) return;');
+    expect(kapi).toBeGreaterThan(tazele);
     const denetim = src.indexOf('Updates.checkForUpdateAsync()');
     expect(tazele).toBeGreaterThan(-1);
-    expect(denetim).toBeGreaterThan(tazele);
+    expect(denetim).toBeGreaterThan(kapi);
     expect(src).toMatch(/setTimeout\(\(\) => void sor\(\), LAUNCH_RETRY_DELAY_MS\)/);
   });
 });
