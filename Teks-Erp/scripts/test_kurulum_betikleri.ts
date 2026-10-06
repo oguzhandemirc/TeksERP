@@ -28,7 +28,7 @@
 //      (ön ölçüm engeli + OnKosul DurumYaz'dan ÖNCE DUR); onarım metinleri (Göz at kilidi, veri sayfası, kayıttaki
 //      lisans sunucusu, özette kip); satıcı hesabı / lisans "yapılacak"ı ölçülür
 //   §12 lisans satıcısı KANALDAN (D8e, yönetici K1=A): boş alan = paketin kanalı (PAKET.json backendLisansSunucusu =
-//      kanallar.json backend.lisansSunucusu); karar TEK işlevde (kurulum-ortak.ps1 LisansSunucusuKarari: OnKosul kararı +
+//      dağıtım kaydının lisansSunucusu); karar TEK işlevde (kurulum-ortak.ps1 LisansSunucusuKarari: OnKosul kararı +
 //      .env satırı + Dogrulama ölçümü; harness §1 vektörleri); farklı elle değer ENGELLEMEZ, UYARIR (özet + günlük + sonuç);
 //      onarımda kayıttaki .env korunur; satır yalnız derleme varsayılanından farklıysa (gecis.ps1 ile aynı kural).
 //      BEYANLI İSTİSNA: PAKET.json'da alan yoksa (eski paket) bugünkü davranış + uyarı — fail-closed DEĞİL, eski paketler

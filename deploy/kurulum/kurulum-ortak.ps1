@@ -578,7 +578,7 @@ function LisansSunucusuKarari([string]$kanal, [string]$varsayilan, [string]$giri
   } elseif ($etkili -cne $kan) {
     $ad = $(if ($kaynak -ceq "cevap") { "girilen" } elseif ($kaynak -cmatch '^kayit') { "kayittaki" } else { "etkin" })
     $duzelt = $(if ($kaynak -cmatch '^kayit') { "duzeltmek icin yapilandirma\.env'e LICENSE_SERVER_URL=$kan yazip backend hizmetini yeniden baslatin" } else { "yanlissa lisans sunucusu alanini bos birakin (bos = kanal)" })
-    $u += "lisans sunucusu kanal kaydindan FARKLI: beklenen $kan (kanal $kanalAdi, deploy/kanallar.json), $ad $goster - kurulum surer; $duzelt"
+    $u += "lisans sunucusu kanal kaydindan FARKLI: beklenen $kan (kanal $kanalAdi, dagitim kaydi), $ad $goster - kurulum surer; $duzelt"
   }
   $yaz = ($kaynak -ceq "cevap" -or $kaynak -ceq "kanal") -and [bool](LisansKoken $etkili) -and ($etkili -cne $vars)
   return [ordered]@{ etkili = $etkili; kaynak = $kaynak; kaynakMetni = $metin; yaz = [bool]$yaz; kanal = $kanal; varsayilan = $varsayilan; uyarilar = @($u) }

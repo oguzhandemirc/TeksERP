@@ -9,6 +9,9 @@
 //   §3 pin'in kendi doğrulaması: pin, çapa commit'indeki dosyanın özetine ve tasarım belgesindeki
 //      kısaltmaya eşit — dosya ile pin aynı commit'te birlikte "güncellenirse" de kırmızı.
 //      Çapa commit'i sığ klonda yoksa §3a ⏭ beyanla atlanır (belge kolu yine ölçer).
+//   §4 OKUYUCU İZİN LİSTESİ (O15): kaydı adıyla anan ya da `ESKI_KAYIT_REL` ile okuyan her kod dosyası
+//      (`.md` ve `docs/` dışı, git grep) aşağıdaki listede GEREKÇESİYLE beyanlıdır. İki yönlü: beyansız yeni
+//      okuyucu KIRMIZI (eski yol geri sızmasın), artık okumayan beyan KIRMIZI (liste yalnız küçülür).
 //
 // ÜÇ SONUÇ: 0 yeşil · 1 KIRMIZI (bayt değişti / silindi) · 2 ÖLÇÜLEMEDİ (okunamadı, git yok).
 //   node scripts/test_eski_kanal_donuk.mjs          # dinlenme durumu
@@ -27,6 +30,33 @@ const PIN = Object.freeze({ sha256: '9fbdd74874492d058e8f3d61914727ef7d02424a938
 /** Pin'in ölçüldüğü commit (`origin/main`, 2026-10-06). */
 const CAPA_COMMIT = '2d5aeccd6261456a3f958e8f3dd81db5781445ba';
 const BELGE_REL = 'docs/design/TEK-ORTAK-PAKET.md';
+
+/**
+ * §4 — eski kanal kaydını okuyan/anan kod dosyaları. Yeni satır eklemek bir KARARDIR (gerekçe yazılır); eski
+ * yayın yolu emeklidir (eski-kanal-son etiketi, docs/ops/ESKI-KANAL-ACIL.md) ve kayda yeni okuyucu gerekmez.
+ */
+const OKUYUCU_IZINLI = Object.freeze({
+  'scripts/lib/dagitim.mjs': 'okur · ESKI_KAYIT_REL tek tanımı (ayrılık denetiminin kaynağı)',
+  'scripts/check-dagitim.mjs': 'okur · §4 ayrılık: dağıtım kaydı eski kanalın hiçbir kimliğini paylaşmaz',
+  'scripts/lib/grup-yayin.mjs': 'okur · eski kanal kodu grup adı olarak REDDEDİLİR',
+  'scripts/lib/panel-kimlik.mjs': 'okur · karışık kimlik: ortak panel paketi eski kanal kimliği taşımaz',
+  'scripts/panel-kimlik-kapisi.mjs': 'okur · aynı karışık kimlik kapısının CLI\'si',
+  'scripts/test_panel_kimlik.mjs': 'okur · panel kimlik bekçisi (+ N9 sondası metni)',
+  'Electron/src/test/update-feed-url.test.ts': 'okur · ortak panel adnansahin paneliyle çakışmaz (ayrılık)',
+  'Teks-Erp/scripts/test_musteri_adi_kodda_yok.ts': 'okur · müşteri adı bekçisinin ad listesi',
+  'scripts/test_backend_yayin.mjs': 'okur · geçici ağaca kopyalar (grup-yayin eski kod reddi için)',
+  'scripts/test_grup_yayin_kapisi.mjs': 'okur · geçici ağaca kopyalar (aynı neden)',
+  'scripts/test_tablet_ortak_paket.mjs': 'okur · geçici ağaca kopyalar (aynı neden)',
+  'scripts/test_kurulum_arsivi.mjs': 'anar · ortak arşiv gölgesinde YOKLUĞU ölçülür',
+  'deploy/satici/uretim-toren.mjs': 'okur · CF Worker İNDİRME satırı kanal kümesi — O14c\'ye kadar beyanlı',
+  'satici/sunucu/scripts/test_uretim_toren.ts': 'okur · üretim töreni bekçisi — O14c\'ye kadar beyanlı',
+  'deploy/gecis/gecis.ps1': 'anar · geçiş betiği mesajı — K-13 DOKUNULMAZ',
+  'deploy/dagitim.json': 'anar · açıklama: eski kayıt bayt-donuk, adres/kimlik paylaşılmaz',
+  'Teks-Erp/scripts/test_env_not_tracked.ts': 'anar · izlenen .env gerekçe metni',
+  'satici/sunucu/prisma/schema.prisma': 'anar · kanal türü enum sözlüğü yorumu',
+  'scripts/hooks/hizli-mandallar.mjs': 'anar · ad bekçisinin açıklaması',
+});
+const OKUYUCU_DESENI = 'kanallar\\.json|ESKI_KAYIT_REL';
 
 const ozet = (b) => createHash('sha256').update(b).digest('hex');
 const kisaltma = (sha) => `${sha.slice(0, 8)}…${sha.slice(-6)}`;
@@ -71,6 +101,17 @@ function capaOku() {
   }
 }
 
+/** §4 girdisi: deseni taşıyan izlenen kod dosyaları (bekçinin kendisi hariç). */
+function okuyanlarOku() {
+  try {
+    const cikti = git(['grep', '-l', '-E', OKUYUCU_DESENI, '--', '.', ':!*.md', ':!docs/', `:!${ESKI_KAYIT_REL}`, ':!scripts/test_eski_kanal_donuk.mjs']).toString();
+    return cikti.split('\n').filter(Boolean).sort();
+  } catch (e) {
+    if (e.status === 1) return []; // git grep: eşleşme yok
+    return { hata: String(e.stderr ?? e.message).trim().split('\n')[0] };
+  }
+}
+
 function belgeOku() {
   try {
     return fs.readFileSync(path.join(KOK, BELGE_REL), 'utf8');
@@ -80,7 +121,7 @@ function belgeOku() {
 }
 
 /** Saf ölçüm: girdiler enjekte edilebilir (sondalar). */
-function olc({ agac, indeks, capa, belge, pin = PIN }) {
+function olc({ agac, indeks, capa, belge, okuyanlar, pin = PIN, izinli = OKUYUCU_IZINLI }) {
   const s = { kirmizi: [], olculemedi: [], bilgi: [] };
   const bayt = (ad, v) => {
     if (Buffer.isBuffer(v)) {
@@ -103,6 +144,14 @@ function olc({ agac, indeks, capa, belge, pin = PIN }) {
     if (!belge.includes(kisaltma(pin.sha256))) s.kirmizi.push(`§3b ${BELGE_REL} pin kısaltmasını (${kisaltma(pin.sha256)}) taşımıyor — pin ile tasarım ayrıştı`);
     else s.bilgi.push(`§3b tasarım belgesi pini taşıyor`);
   } else s.olculemedi.push(`§3b ${BELGE_REL} okunamadı (${belge?.hata ?? 'bilinmeyen'})`);
+
+  if (Array.isArray(okuyanlar)) {
+    const beyansiz = okuyanlar.filter((f) => !Object.hasOwn(izinli, f));
+    const olu = Object.keys(izinli).filter((f) => !okuyanlar.includes(f));
+    for (const f of beyansiz) s.kirmizi.push(`§4 beyansız okuyucu: ${f} eski kanal kaydını (${ESKI_KAYIT_REL} / ESKI_KAYIT_REL) anıyor — eski yayın yolu emekli; gerekmiyorsa kaldır, gerekiyorsa OKUYUCU_IZINLI'ye gerekçesiyle ekle`);
+    for (const f of olu) s.kirmizi.push(`§4 ölü beyan: ${f} artık eski kanal kaydını anmıyor — OKUYUCU_IZINLI'den çıkar (liste yalnız küçülür)`);
+    if (!beyansiz.length && !olu.length) s.bilgi.push(`§4 okuyucular beyanlı (${okuyanlar.length})`);
+  } else s.olculemedi.push(`§4 okuyucular ölçülemedi (${okuyanlar?.hata ?? 'bilinmeyen'})`);
   return s;
 }
 
@@ -129,6 +178,9 @@ function sondalar(taban) {
     ['O1 ağaçta okuma hatası (EACCES) → ÖLÇÜLEMEDİ', 'olculemedi', (g) => { g.agac = { hata: 'EACCES' }; }],
     ['O2 git yok → ÖLÇÜLEMEDİ', 'olculemedi', (g) => { g.indeks = { hata: 'git deposu değil / git yok' }; }],
     ['O3 tasarım belgesi okunamadı → ÖLÇÜLEMEDİ', 'olculemedi', (g) => { g.belge = { hata: 'ENOENT' }; }],
+    ['N9 ⭐ yeni dosya eski kanal kaydını okuyor → KIRMIZI (§4 beyansız)', 'kirmizi', (g) => { g.okuyanlar = [...g.okuyanlar, 'deploy/yeni-eski-yol.mjs'].sort(); }, '§4 beyansız okuyucu: deploy/yeni-eski-yol.mjs'],
+    ['N10 beyanlı okuyucu artık okumuyor → KIRMIZI (§4 ölü beyan)', 'kirmizi', (g) => { g.okuyanlar = g.okuyanlar.filter((f) => f !== 'scripts/lib/grup-yayin.mjs'); }, '§4 ölü beyan: scripts/lib/grup-yayin.mjs'],
+    ['O4 git grep koşamadı → ÖLÇÜLEMEDİ', 'olculemedi', (g) => { g.okuyanlar = { hata: 'git grep yok' }; }],
   ];
   let gecti = 0;
   const kaldi = [];
@@ -150,7 +202,7 @@ function sondalar(taban) {
 }
 
 function main() {
-  const girdi = { agac: agacOku(), indeks: indeksOku(), capa: capaOku(), belge: belgeOku() };
+  const girdi = { agac: agacOku(), indeks: indeksOku(), capa: capaOku(), belge: belgeOku(), okuyanlar: okuyanlarOku() };
   if (process.argv.includes('--sonda')) {
     console.log('test_eski_kanal_donuk — kalıcı sondalar (bellekteki kopyalara karşı)\n');
     // Sonda tabanı = DONUK baytlar; ağaç değiştiyse sonda değil asıl ölçüm konuşur.
