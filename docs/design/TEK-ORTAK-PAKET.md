@@ -299,7 +299,7 @@ Yerleri:
 ### 6.1 Profil nedir
 
 - **Profil:** bir fabrikanın AYAR DÜZENİ. İçeriği:
-  - `system_settings`teki izinli anahtarlar: dokuz modül anahtarı + davranış bayrakları + sayısal ayarlar;
+  - ayar anahtarları: on modül anahtarı + davranış bayrakları + sayısal ayarlar. Anahtar uzayı `PATCH /api/feature-flags` şemasının alan adlarıdır (camelCase), DB anahtarı değil; uygulama `setFeatureFlags` servisinden geçer, dışa aktarma (O13b) `getFeatureFlags()` çıktısını okur. Nesne/liste değerliler (`loginMethods`, belge tasarımı, `reportsClosedKeys`) bu dilimde profil dışıdır (`scripts/lib/hepsi-acik.ts` `PROFIL_DISI_ANAHTARLAR`);
   - saat dilimi dönemi.
 - **Kapsam dışı:**
   - iş verisi;
@@ -322,7 +322,7 @@ Yerleri:
 
 ### 6.3 Matris koşucusu: ne koşar
 
-Bütün `npm test` YALNIZ `kapali` profilde koşar; bugünkü gibi tam kapsamdır. Var olan testler tabanın varsayılan olduğunu varsayar, başka tabanda fikstürden kırmızı verir. Matris, her profilde profile duyarsız bir **P-takımı** koşar (O13a dilimi yazacak: Teks-Erp/scripts altında profil-matrisi.ts, `agir-is` ile). Her profil için sırasıyla:
+Bütün `npm test` YALNIZ `kapali` profilde koşar; bugünkü gibi tam kapsamdır. Var olan testler tabanın varsayılan olduğunu varsayar, başka tabanda fikstürden kırmızı verir. Matris, her profilde profile duyarsız bir **P-takımı** koşar (`Teks-Erp/scripts/profil-matrisi.ts`, `agir-is` ile; HTTP ayağı `Teks-Erp/scripts/profil-ptakimi.ts`). Her profil için sırasıyla:
 
 1. taze `tekserp_<oturum>_p_<profil>_test` DB → `migrate deploy` → seed → profilin ayarları (servis katmanından, uçtan değil);
 2. açılış sağlığı (`bekci-http` düzeninde 127.0.0.1 test sunucusu);
