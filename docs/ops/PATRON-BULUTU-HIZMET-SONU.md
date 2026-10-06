@@ -31,15 +31,16 @@ Bakım işi her gün günlüğe `imha bekleyen tesis (salt okuma süresi doldu �
 # VDS, patron dizininde — göç konteyneri (tablo sahibi) ile; önce KURU KOŞUM:
 sudo docker compose --profile goc run --rm --no-deps patron-goc \
   node dist-cli/scripts/tesis.js imha --tesis=<tesis uuid> --isleyen="Ad Soyad"
-# Çıktı: aşama, neden (SURE_DOLDU | ERKEN_TALEP), tablo başına silinecek satır sayısı. Doğruysa:
+# Çıktı: aşama, neden (SURE_DOLDU | ERKEN_TALEP), tablo başına gidecek satır sayısı. Doğruysa:
 sudo docker compose --profile goc run --rm --no-deps patron-goc \
   node dist-cli/scripts/tesis.js imha --tesis=<tesis uuid> --isleyen="Ad Soyad" --uygula
 ```
 
 - Kapılar: aşama ACIK iken **asla** (409). SALT_OKUNUR'da yalnız Lisans Alan'ın **yazılı erken imha talebiyle**: `--erken-talep=<talep/yazı no>` (Ek-6/A §4.2). KAPALI'da talep gerekmez.
-- Tek tx: tesisin bütün bulut satırları çocuktan ebeveyne silinir (`DESTRUCTION_STEPS`); aynı tx'te imha kaydı `facility_destructions` yazılır (tesis · ad · neden · talep no · işleyen · hizmet bitişi · tablo başına silinen sayı · yedekten düşme tarihi = imha + 35 gün). Kayıt değiştirilemez ve silinemez (DB tetikleyicisi); en az 3 yıl durur.
-- Uygulama sonrası ikinci geçiş, yarışta geç düşen satırı (örn. ayak izi) siler ve çıktıda söyler.
+- Uygulama tesisin **veritabanını bütünüyle düşürür** (tesis başına ayrı DB, `docs/design/PATRON-TESIS-DB.md` §8): `facility_databases` HAZIR → IMHA_SURUYOR (plan merkezde; yönlendirme durur) → tesis rollerinin bağlanma yetkisi geri alınır, açık bağlantılar kesilir → tablo başına son sayım (`DESTRUCTION_STEPS`) plana → destek erişim kayıtları merkeze kopyalanır → `DROP DATABASE` + üç tesis rolü → imha kaydı `facility_destructions` MERKEZE (tesis · ad · neden · talep no · işleyen · hizmet bitişi · tablo başına sayı · yedekten düşme tarihi = imha + 35 gün) + yönlendirme satırları silinir → IMHA_EDILDI. Kayıt değiştirilemez ve silinemez (DB tetikleyicisi); en az 3 yıl durur.
+- Yarıda kalan imha (bağlantı koptu, konteyner düştü) **aynı `--uygula` komutuyla** kaldığı yerden tamamlanır; kapı yeniden sorulmaz (veri kısmen gitmiş olabilir), tutanak plandaki kimlikle tek kez yazılır. İmha edilmiş tesiste komut 409 döner.
 - Çıktıdaki JSON **imha tutanağının verisidir** (Ek-6/A §4.5): satıcının kayıtlarına konur, Lisans Alan'a tutanak olarak verilir.
-- **Yedekten geri yükleme** (Ek-6/A §4.4): imhadan sonraki 35 gün içinde bir yedek geri yüklenirse, geri yüklemenin hemen ardından tutanaklardaki her tesis için bu komut YENİDEN koşulur (geri yüklenen veride aşama KAPALI ise talepsiz; erken imha idiyse aynı `--erken-talep` ile) ve yeniden imha tutanağa eklenir.
-- Silinmeyen: `facility_destructions` (imha kaydının kendisi). Fabrika tarafına (Kurulum verisi, gelen kutusu makbuzları) dokunulmaz.
+- **Yedek:** imha edilmiş tesisin dökümleri (`tesis_<id>_*.dump.tkenc`) en-az-N kuralından muaftır, yalnız yaşa göre budanır ⇒ en geç `YEDEK_SAKLA_GUN` (30) içinde yedekten de düşer.
+- **Yedekten geri yükleme** (Ek-6/A §4.4): imhadan sonraki 35 gün içinde imhadan ÖNCEKİ bir merkez yedeği geri yüklenirse o tesis HAZIR görünür ama DB'si yoktur — aynı tarihli tesis dökümü de geri yüklenir (`pg_restore --no-owner --no-acl -d <tesis DB>`, ardından `patron-goc`), sonra tutanaktaki her tesis için bu komut YENİDEN koşulur (geri yüklenen veride aşama KAPALI ise talepsiz; erken imha idiyse aynı `--erken-talep` ile) ve yeniden imha tutanağa eklenir.
+- Kalan (merkezde): `facility_destructions` (imha kaydının kendisi) ve `support_access` kopyası (destek erişim kaydı silinemez, Ek-6/B §3.2). Fabrika tarafına (Kurulum verisi, gelen kutusu makbuzları) dokunulmaz.
 - Satıcı kipinde (`KURULUM_KAYNAGI=satici`) bu kurulum imzalı istek atarsa kurulum dizini tesis satırını yeniden kurar (boş); aşama KAPALI olduğundan erişim açılmaz, komut tekrar koşulabilir.

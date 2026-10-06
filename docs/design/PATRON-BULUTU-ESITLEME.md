@@ -439,6 +439,8 @@ Hesap kaydı yazar → zil `gelen-kutusu` → fabrika `POST /v1/gelen-kutusu/al 
 
 ## 9. Bulut veri modeli ve RLS (B2 taslağı)
 
+> **KISMEN GEÇERSİZ (2026-10-06):** "çok kiracılı tek DB" cümleleri `docs/design/PATRON-TESIS-DB.md` ile değişti — her tesis kendi DB'sinde, merkez yalnız yönlendirme; RLS politikaları her tesis DB'sinde ikinci savunma olarak aynen durur.
+
 ### 9.1 Depolama biçimi
 Tek genel tablo, projeksiyon başına ifade indeksleri — sözleşme N−1 esnekliği ve tek RLS politikası için:
 ```sql
