@@ -98,6 +98,41 @@ function JsonAscii([string]$s) {
 # KEY=deger; tirnak YOK, deger bosluksuz, '#' ve ters bolu YOK (yollar '/' ile). Kurulumun yazdigi her satir.
 $script:ENV_SATIRI = '^[A-Z_][A-Z0-9_]*=[^\s"''#\\]*$'
 function EnvSatiriGecerli([string]$satir) { return ($satir -cmatch $script:ENV_SATIRI) }
+# Onarim/devam .env'i YENIDEN YAZMAZ: yalniz DATABASE_URL degisir; diger her satir (LAN_TLS_* dahil) AYNEN kalir, satir EKLENMEZ.
+function EnvDatabaseUrlYenile($satirlar, [string]$dbUrl) {
+  return @(@($satirlar) | ForEach-Object { if ($_ -cmatch '^\s*DATABASE_URL\s*=') { "DATABASE_URL=$dbUrl" } else { $_ } })
+}
+
+# --- Fabrika aginda TLS (docs/design/LAN-TLS.md b.5, b.7) --------------------------------------------------
+# Kod varsayilani off (bugunku davranis); YENI kurulumun .env'i dual yazar (kullanici karari 2026-10-07). Yalniz .env'i
+# ILK KEZ yazan dal cagirir; port satiri yazilmaz (backend varsayilani 4443 = burasi). Ayni port: sessiz baska port yok.
+$script:LAN_TLS_VARSAYILAN_PORT = 4443
+function LanTlsYeniKurulum([int]$apiPort) {
+  $p = $script:LAN_TLS_VARSAYILAN_PORT
+  if ($apiPort -eq $p) { return [ordered]@{ hata = "API portu $apiPort sifreli baglanti portuyla (HTTPS $p) ayni - cevap dosyasinda api.port ile baska port verin"; port = $p; satirlar = @() } }
+  return [ordered]@{ hata = $null; port = $p; satirlar = @("LAN_TLS_MODE=dual") }
+}
+# .env'deki LAN_TLS_MODE degeri sifreli dinleyici BEKLETIR mi (yalniz olcum suresi icin; karar backend'indir).
+function LanTlsBeyanli([string]$deger) {
+  $v = "$deger".Trim()
+  return [bool]($v -and $v -cnotmatch '^(?i:off|kapali|kapal.)$')
+}
+# Kimlik ucunun (GET /api/discovery/identity, DONGU adresinden - guven koku a) tls alani: { port, fingerprint }.
+# Bicimsiz/eksik -> $null. Gosterim 4'lu buyuk harf gruplar (durum sayfasi ve tablet ile ayni).
+function LanTlsKimliktenOku($kimlik) {
+  if ($null -eq $kimlik -or -not $kimlik.PSObject.Properties["tls"] -or $null -eq $kimlik.tls) { return $null }
+  $port = 0
+  if (-not [int]::TryParse("$($kimlik.tls.port)", [ref]$port) -or $port -lt 1 -or $port -gt 65535) { return $null }
+  $fp = "$($kimlik.tls.fingerprint)"
+  if ($fp -cnotmatch '^[0-9a-fA-F]{64}$') { return $null }
+  $fp = $fp.ToLowerInvariant()
+  return [ordered]@{ port = $port; parmakIzi = $fp; gosterim = (ParmakIziGrupla $fp) }
+}
+function ParmakIziGrupla([string]$hex) {
+  $u = $hex.ToUpperInvariant()
+  $g = for ($i = 0; $i -lt $u.Length; $i += 4) { $u.Substring($i, [math]::Min(4, $u.Length - $i)) }
+  return (@($g) -join " ")
+}
 
 # --- Cevap dosyasi (sema: deploy/kurulum/cevap-semasi.json) ------------------------------------
 # Sema duz anahtarli (nokta yolu): her alanin turu, varsayilani, deseni. Cevapta SEMADA OLMAYAN

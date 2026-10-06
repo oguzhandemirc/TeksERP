@@ -53,6 +53,11 @@
 //      Geçiş aracı (deploy/gecis/gecis.ps1) eski adreste kalır ve adresi güncelleyici betiğine açıkça geçirir.
 //   §17 O12 Tailscale (100.64.0.0/10) müşteri kurulumunda yok: sihirbaz kutusu, cevap seçeneği, onarım ön doldurması
 //      (K3 kod yolu) kapalı; kayıttaki eski izin onarımda korunur, özet + karar uyarır.
+//   §18 LAN TLS (kullanıcı kararı 2026-10-07, docs/design/LAN-TLS.md D6): YENİ .env `LAN_TLS_MODE=dual` alır (yalnız .env'i
+//      ilk kez yazan dal, karar tek işlevde `LanTlsYeniKurulum`; harness `lantls.*`); onarım/devam .env'e satır EKLEMEZ,
+//      var olanı DEĞİŞTİRMEZ (`EnvDatabaseUrlYenile` yalnız DATABASE_URL); .env'e dokunan öteki yollar (geçiş, donmuş pm2,
+//      hizmet, bakım rolü) LAN_TLS yazmaz; HTTPS kuralı ÖLÇÜMDEN (kimlik ucu) ve API ile aynı profil/adreslerle, kaldırıcının
+//      listesinde; Dogrulama kodu (SHA-256) + durum sayfası adresini sonuca yazar, sihirbazın son sayfası gösterir.
 // NEGATİF SONDA (✓K, her koşumda): §2–§11 yüklemleri bellekte bozulmuş kopyalara koşar (mutasyonun
 //   UYGULANDIĞI ölçülür); §1 için kurulum-ortak.ps1'in bozulmuş kopyası harness'e verilir (pwsh varsa).
 //   ÜÇ SONUÇ: kaynak okunamazsa ÖLÇÜLEMEDİ (kırmızı), pwsh yoksa §1 ATLANIR (beyanlı, TEKSERP_STRICT'te kırmızı).
@@ -91,6 +96,12 @@ const YOL = {
   gecisRunbook: "docs/ops/GECIS-PM2-HIZMET.md",
   guncelleyici: "deploy/hizmet/guncelleyici-hizmeti.ps1",
   dagitim: "deploy/dagitim.json",
+  // §18: .env'e dokunan öteki yollar (yalnız OKUNUR — donmuş pm2 dosyaları değişmez)
+  gecis: "deploy/gecis/gecis.ps1",
+  kur: "deploy/kur.ps1",
+  ilkKurulum: "deploy/ilk-kurulum.ps1",
+  backendHizmeti: "deploy/hizmet/backend-hizmeti.ps1",
+  bakimRolu: "deploy/bakim-rolu.ps1",
 } as const;
 /** Kanal düzeninin güncelleme adresi: ortak kurulumda varsayılan OLAMAZ, yalnız kayıttaki eski izi tanımak için anılır. */
 const ESKI_GUNCELLEME = "https://guncelleme.etkiliyazilim.com";
@@ -612,6 +623,46 @@ function olc(k: Kaynaklar): Bulgular {
   if (!new RegExp(`^\\s*ESKI_GUNCELLEME = '${ESKI_GUNCELLEME.replace(/\./g, "\\.")}';$`, "m").test(k.iss) ||
     !/if Lowercase\(Olc\('oncekiGuncellemeSunucusu'\)\) = ESKI_GUNCELLEME then GelismisSayfasi\.Values\[0\] := VARSAYILAN_GUNCELLEME\s*\n\s*else if Olc\('oncekiGuncellemeSunucusu'\) <> '' then GelismisSayfasi\.Values\[0\] := Olc\('oncekiGuncellemeSunucusu'\);/.test(sod14))
     ekle("§16", "sihirbaz onarımda kayıttaki eski güncelleme adresini koruyor (ortak paket eski adresten güncellenmez)");
+
+  // §18 — LAN TLS: yeni .env dual, onarım .env'e dokunmaz, HTTPS kuralı kimlik ucundan, kod + durum sayfası sonuca ve son sayfaya
+  {
+    const pg18 = psGovde(kur, "AsamaPostgreSQL") ?? "";
+    const yeniBas = pg18.indexOf("if (-not (Test-Path -LiteralPath $envYolu)) {");
+    const onarimBas = pg18.indexOf("} elseif ($yeniEnv) {");
+    const onarimSon = pg18.indexOf("$cred = Join-Path $pgSetup", onarimBas);
+    const yeniDal = yeniBas >= 0 && onarimBas > yeniBas ? pg18.slice(yeniBas, onarimBas) : "";
+    const onarimDal = onarimBas >= 0 && onarimSon > onarimBas ? pg18.slice(onarimBas, onarimSon) : "";
+    if (!yeniDal || !onarimDal) ekle("§18", "AsamaPostgreSQL'de yeni .env / onarım dalları bulunamadı (ÖLÇÜLEMEDİ)");
+    if (!artan(sira(yeniDal, ["$lt = LanTlsYeniKurulum ([int]$d.portlar.api)", "if ($lt.hata) { Dur $lt.hata }", "$satirlar += @($lt.satirlar)", 'EnvYaz $envYolu (($satirlar -join'])))
+      ekle("§18", "yeni .env LAN_TLS_MODE=dual almıyor (LanTlsYeniKurulum satırları EnvYaz'dan önce eklenmiyor)");
+    if (!/\$yeni = EnvDatabaseUrlYenile \(\[IO\.File\]::ReadAllLines\(\$envYolu\)\) \$dbUrl\s*\n\s*EnvYaz \$envYolu \(\(\$yeni -join/.test(onarimDal) || /LAN_TLS|LanTls/.test(onarimDal))
+      ekle("§18", "onarım dalı .env'e EnvDatabaseUrlYenile dışında dokunuyor (LAN_TLS satırı ekleyebilir/değiştirebilir)");
+    const kurYaz = kur.satirlar.filter((x) => /LAN_TLS_MODE=|LAN_TLS_PORT=/.test(x.kod));
+    if (kurYaz.length) ekle("§18", `kurulum.ps1 LAN_TLS satırını LanTlsYeniKurulum dışında kuruyor (satır ${kurYaz.map((x) => x.no).join(",")})`);
+    const ortYaz = ort.satirlar.filter((x) => /LAN_TLS_MODE=|LAN_TLS_PORT=/.test(x.kod));
+    const ltF = ort.fonksiyonlar.find((f) => f.ad === "LanTlsYeniKurulum");
+    if (!ltF || ortYaz.some((x) => x.no < ltF.bas || x.no > ltF.son)) ekle("§18", "kurulum-ortak.ps1 LAN_TLS satırını LanTlsYeniKurulum dışında kuruyor");
+    if (!/satirlar = @\("LAN_TLS_MODE=dual"\)/.test(psGovde(ort, "LanTlsYeniKurulum") ?? "")) ekle("§18", "LanTlsYeniKurulum yeni kurulumun kipini dual yazmıyor");
+    for (const ad of ["gecis", "kur", "ilkKurulum", "backendHizmeti", "bakimRolu", "guncelleyici"] as const) {
+      if (/LAN_TLS/.test(k[ad])) ekle("§18", `${YOL[ad]} LAN_TLS'e dokunuyor (var olan kurulumun kipi yalnız kullanıcının .env düzenlemesiyle değişir)`);
+    }
+    const onk18 = psGovde(kur, "AsamaOnKosul") ?? "";
+    if (!artan(sira(onk18, ["$lt = LanTlsYeniKurulum $apiPort", "if ($lt.hata) { Dur $lt.hata }", "DurumYaz $kok $plan"]))) ekle("§18", "OnKosul API/HTTPS port çakışmasını yazmadan ÖNCE durdurmuyor");
+    const hz18 = psGovde(kur, "AsamaHizmetler") ?? "";
+    if (!artan(sira(hz18, ["SaglikBekle $apiPort", "$lo = LanTlsOlc $apiPort", "if ($lo.tls) {", '$tlsKural = "TeksERP HTTPS $($lo.tls.port)"', "New-NetFirewallRule -DisplayName $tlsKural -Direction Inbound -Protocol TCP -LocalPort $lo.tls.port -Action Allow -Profile @($ag.agProfilleri) -RemoteAddress @($ag.izinliAdresler)", "$d | Add-Member -NotePropertyName guvenlikDuvari -NotePropertyValue $kurallar", 'AsamaBitti $d "Hizmetler"'])))
+      ekle("§18", "HTTPS kuralı ölçümden (kimlik ucu) ve API ile aynı profil/adreslerle açılmıyor ya da kaldırıcının listesine (durum guvenlikDuvari) girmiyor");
+    if (!/\$k\.PSObject\.Properties\["guvenlikDuvari"\]/.test(k.kaldir) || !/"kurulum\\durum\.json"/.test(k.kaldir)) ekle("§18", "kaldırıcı kural listesini kurulum/durum.json guvenlikDuvari'ndan okumuyor (HTTPS kuralı kalır)");
+    const dg18 = psGovde(kur, "AsamaDogrulama") ?? "";
+    if (!/\$lo = LanTlsOlc \(\[int\]\$d\.portlar\.api\) \$envYolu/.test(dg18) || !/guvenlikDuvari = \$kurallar/.test(dg18) || !/if \(\$tls\) \{ \$kurallar \+= "TeksERP HTTPS \$\(\$tls\.port\)" \}/.test(dg18))
+      ekle("§18", "Dogrulama şifreli dinleyiciyi ölçmüyor ya da HTTPS kuralını kurulum.json listesine yazmıyor");
+    if (!/durumSayfasi = \$durumSayfasi/.test(dg18) || !/\["tlsParmakIzi"\] = \$tls\.gosterim/.test(dg18) || !/\$durumSayfasi = "http:\/\/localhost:\$\(\$d\.portlar\.api\)\/"/.test(dg18))
+      ekle("§18", "Dogrulama kod (SHA-256) ve durum sayfası adresini sonuca yazmıyor");
+    if (!/Write-Host "  Sifreli baglanti kodu \(SHA-256, HTTPS \$\(\$tls\.port\)\): \$\(\$tls\.gosterim\)"/.test(dg18) || !/Write-Host "  Durum sayfasi \(yalniz bu bilgisayarda acin\): \$durumSayfasi"/.test(dg18))
+      ekle("§18", "Dogrulama kodu ve durum sayfasını ekrana basmıyor (sessiz kip / bayi)");
+    const sm18 = pasGovde(k.iss, "SonucMetniKur") ?? "";
+    if (!/\(KurulumHatasi = ''\) and \(SonucOku\(SonIni, 'kurulum\.tlsParmakIzi'\) <> ''\) then/.test(sm18) || !/'  ' \+ SonucOku\(SonIni, 'kurulum\.tlsParmakIzi'\) \+ #13#10/.test(sm18) ||
+      !/\(KurulumHatasi = ''\) and \(SonucOku\(SonIni, 'kurulum\.durumSayfasi'\) <> ''\) then\s*\n\s*S := S \+ 'Durum sayfası : ' \+ SonucOku\(SonIni, 'kurulum\.durumSayfasi'\)/.test(sm18)) ekle("§18", "sihirbazın son sayfası şifreli bağlantı kodunu ve durum sayfası adresini göstermiyor");
+  }
   return b;
 }
 
@@ -639,6 +690,8 @@ const D8E3B_KONTROLLERI = ["eskipaket.olcum-tek-giris", "gecisli.duzen-tanir", "
 const SAAT_KONTROLLERI = ["etki-alani-dokunmaz", "zaten-ntp-dokunmaz", "ntp-hizmet-otomatik", "kapali-ntp-acar", "onceki-kayda-girer"].map((c) => `saat.${c}`);
 /** Sunucu simgesi (tepsi.ps1 saf işlevleri). */
 const TEPSI_KONTROLLERI = ["renk-backendden-aynen", "taninmayan-yanit-kirmizi", "kisa-kesinti-onceki-korunur", "guncelleme-yeniden-basliyor-sari", "ipucu-63-sinir", "yuzde"].map((c) => `tepsi.${c}`);
+/** LAN TLS (2026-10-07): yeni .env dual · API/HTTPS port çakışması DUR · onarım .env'i aynen · beyan · kod gösterimi · biçimsiz kimlik. */
+const LANTLS_KONTROLLERI = ["yeni-kurulum-dual", "api-portu-cakisirsa-dur", "onarim-env-dokunulmaz", "beyan", "kimlik-kod-gosterimi", "kimlik-bicimsiz-yok"].map((c) => `lantls.${c}`);
 const CEVAP_KONTROLLERI = ["ornek-gecerli", "varsayilanlar", "surum-zorunlu", "surum-yanlis", "bilinmeyen-alan", "sir-alan-red", "sir-adi-dar", "tur-sayi", "sayi-aralik", "tur-mantik", "tur-yol", "desen", "secenek-liste", "bos", "sema-sirsiz"];
 function durum(satirlar: string[], ad: string): "OK" | "HATA" | "YOK" {
   if (satirlar.includes(`OK ${ad}`)) return "OK";
@@ -662,7 +715,7 @@ if (eksik.length === 0) {
 
   // §1
   console.log("\n§1 harness — kurulum-ortak.ps1 saf işlevleri gerçek kabukta");
-  if (!pwshVar()) defter.atla("§1 harness", "pwsh 7 yok", CEVAP_KONTROLLERI.length + 7 + KURULU_KONTROLLERI.length + LISANS_KONTROLLERI.length + D8E3B_KONTROLLERI.length + SAAT_KONTROLLERI.length + TEPSI_KONTROLLERI.length);
+  if (!pwshVar()) defter.atla("§1 harness", "pwsh 7 yok", CEVAP_KONTROLLERI.length + 7 + KURULU_KONTROLLERI.length + LISANS_KONTROLLERI.length + D8E3B_KONTROLLERI.length + SAAT_KONTROLLERI.length + TEPSI_KONTROLLERI.length + LANTLS_KONTROLLERI.length);
   else {
     const h = harness();
     const vek = JSON.parse(readFileSync(join(KOK, "deploy/pg/pg-sablon-vektorleri.json"), "utf8")) as { port: Array<{ ad: string }> };
@@ -687,10 +740,11 @@ if (eksik.length === 0) {
       ...D8E3B_KONTROLLERI,
       ...SAAT_KONTROLLERI,
       ...TEPSI_KONTROLLERI,
+      ...LANTLS_KONTROLLERI,
     ];
     if (trAtla) defter.atla("§1 tr-TR kültürü", "pwsh kültür verisi yok (InvariantGlobalization)", CEVAP_KONTROLLERI.length);
     const kotu = beklenen.filter((a) => durum(h.satirlar, a) !== "OK");
-    check(`§1 ⭐ harness: ${beklenen.length} kontrolün HEPSİ OK (cevap şeması iki kültürde · portSec ${vek.port.length} D4 vektörü · .env · JSON · maske · sürüm önceliği ${surumVek.length} güncelleyici vektörü · gerçek kurulu sürüm + eski paket engeli · lisans satıcısı ${LISANS_KONTROLLERI.length} karar vektörü · D8e-3b ${D8E3B_KONTROLLERI.length}: eski paket tek giriş · geçişli düzen · hizmet kökü · ağ kaydı · saat eşitlemesi ${SAAT_KONTROLLERI.length})`, h.kod === 0 && kotu.length === 0,
+    check(`§1 ⭐ harness: ${beklenen.length} kontrolün HEPSİ OK (cevap şeması iki kültürde · portSec ${vek.port.length} D4 vektörü · .env · JSON · maske · sürüm önceliği ${surumVek.length} güncelleyici vektörü · gerçek kurulu sürüm + eski paket engeli · lisans satıcısı ${LISANS_KONTROLLERI.length} karar vektörü · D8e-3b ${D8E3B_KONTROLLERI.length}: eski paket tek giriş · geçişli düzen · hizmet kökü · ağ kaydı · saat eşitlemesi ${SAAT_KONTROLLERI.length} · LAN TLS ${LANTLS_KONTROLLERI.length})`, h.kod === 0 && kotu.length === 0,
       kotu.length ? kotu.map((a) => `${a}=${durum(h.satirlar, a)}`).join(" · ") : `çıkış ${h.kod}`);
   }
 
@@ -711,6 +765,7 @@ if (eksik.length === 0) {
     ["§13", "onarım/kurulum güvenliği (D8e-3b): F1 ağ ayarı kayıttan (ön doldurma · özet etkili · OnKosul korur · kural karardan · önceki cevap saklanır) · F2 başka köke bağlı / ölçülemeyen kanal hizmeti engel+DUR · F3 eski paket tek giriş + sayfada engel · F4-B geçişli düzen GECISLI, DUR"],
     ["§14", "saat eşitlemesi: karar PartOfDomain ölçerek · DOKUNMA yazmaz · w32tm yalnız NTP_AC · sonuç yeniden ölçülür · UYARI (DUR değil) · onarım önceki kaydı ezmez · /resync/Set-Date yok · kaldırma dokunmaz · özet söyler"],
     ["§15", "sunucu simgesi: setup içeriğinde · kurulum (Users salt okuma + HKLM Run) · kaldırıcı siler · yalnız 127.0.0.1 /health/tepsi OKUR (dinlemez/yazmaz/başlatmaz) · ASCII"],
+    ["§18", "LAN TLS: yeni .env dual (tek karar) · onarım .env'e satır eklemez/değiştirmez · öteki yollar LAN_TLS yazmaz · HTTPS kuralı ölçümden, kaldırıcı listesinde · kod + durum sayfası sonuçta, ekranda ve son sayfada"],
     ["§17", "O12 Tailscale müşteri kurulumunda yok: sihirbazda kutu yok · onarım ön doldurması kayıttan kutu kurmaz (K3) · cevap/örnek yalnız LocalSubnet · şema eski izni yalnız kayıtta tanır · özet + karar uyarır"],
   ];
   console.log("");
@@ -815,6 +870,12 @@ if (eksik.length === 0) {
     { ad: "S90 sihirbaz onarımda kayıttaki eski adresi koruyor", dosya: "iss", eski: "    if Lowercase(Olc('oncekiGuncellemeSunucusu')) = ESKI_GUNCELLEME then GelismisSayfasi.Values[0] := VARSAYILAN_GUNCELLEME\n    else if", yeni: "    if", bolum: "§16", parca: "eski güncelleme adresini koruyor" },
     { ad: "S21 CI boru sonucunu ölçmüyor", dosya: "is", eski: `if ($r -notmatch "(?m)^BORU=TAMAM\\r?$")`, yeni: `if ($false)`, bolum: "§9", parca: "boru öz-sınaması" },
     { ad: "S22 CI test çapalı doğrulayıcıyı kabul ediyor", dosya: "is", eski: `$k.testCapasi -ne $false`, yeni: `$false`, bolum: "§9", parca: "doğrulayıcı üretim derlemesi" },
+    { ad: "S96 LAN TLS: yeni .env dual satırını almıyor", dosya: "kurulum", eski: "    $satirlar += @($lt.satirlar)\n", yeni: "", bolum: "§18", parca: "yeni .env LAN_TLS_MODE=dual almıyor" },
+    { ad: "S97 LAN TLS: onarım var olan .env'e dual ekliyor", dosya: "kurulum", eski: "$yeni = EnvDatabaseUrlYenile ([IO.File]::ReadAllLines($envYolu)) $dbUrl", yeni: '$yeni = @(EnvDatabaseUrlYenile ([IO.File]::ReadAllLines($envYolu)) $dbUrl) + @("LAN_TLS_MODE=dual")', bolum: "§18", parca: "onarım dalı .env'e" },
+    { ad: "S98 LAN TLS: geçiş aracı var olan kurulumun kipini değiştiriyor", dosya: "gecis", eski: "\n", yeni: '\n$null = "LAN_TLS_MODE=dual"\n', bolum: "§18", parca: "deploy/gecis/gecis.ps1 LAN_TLS'e dokunuyor" },
+    { ad: "S99 LAN TLS: HTTPS kuralı her adrese açık", dosya: "kurulum", eski: "-LocalPort $lo.tls.port -Action Allow -Profile @($ag.agProfilleri) -RemoteAddress @($ag.izinliAdresler)", yeni: "-LocalPort $lo.tls.port -Action Allow -Profile Any", bolum: "§18", parca: "HTTPS kuralı ölçümden" },
+    { ad: "S100 LAN TLS: son sayfa kodu göstermiyor", dosya: "iss", eski: "SonucOku(SonIni, 'kurulum.tlsParmakIzi') <> ''", yeni: "False", bolum: "§18", parca: "son sayfası şifreli bağlantı kodunu" },
+    { ad: "S101 LAN TLS: Dogrulama kodu sonuca yazmıyor", dosya: "kurulum", eski: '$script:SonucKaydi["kurulum"]["tlsParmakIzi"] = $tls.gosterim', yeni: "$null = $tls.gosterim", bolum: "§18", parca: "kod (SHA-256) ve durum sayfası adresini sonuca" },
   ];
   for (const s of SONDALAR) {
     const kopya: Kaynaklar = { ...k };
@@ -859,6 +920,11 @@ if (eksik.length === 0) {
       { ad: "H24 saat: kayıtlı NTP sunucusu ezilip varsayılana dönülüyor", eski: "$sunucu = $(if ($onceki.ntpSunucu) { $onceki.ntpSunucu } else", yeni: "$sunucu = $(if ($false) { $onceki.ntpSunucu } else", kontrol: "saat.kapali-ntp-acar" },
       { ad: "H25 saat: zaten NTP olan makine yeniden yapılandırılıyor", eski: "  if ($esitler -and $otomatik) { return", yeni: "  if ($false) { return", kontrol: "saat.zaten-ntp-dokunmaz" },
       { ad: "H26 saat: yalnız hizmeti elle başlayan NTP makinesi açılmıyor", eski: "  if ($esitler) { return [ordered]@{ eylem = \"HIZMET_OTOMATIK\"", yeni: "  if ($esitler) { return [ordered]@{ eylem = \"DOKUNMA\"", kontrol: "saat.ntp-hizmet-otomatik" },
+      { ad: "H29 LAN TLS: yeni kurulum dual yerine off yazıyor", eski: 'satirlar = @("LAN_TLS_MODE=dual")', yeni: 'satirlar = @("LAN_TLS_MODE=off")', kontrol: "lantls.yeni-kurulum-dual" },
+      { ad: "H30 LAN TLS: onarım var olan .env'e satır ekliyor", eski: "return @(@($satirlar) | ForEach-Object {", yeni: 'return @(@($satirlar) + @("LAN_TLS_MODE=dual") | ForEach-Object {', kontrol: "lantls.onarim-env-dokunulmaz" },
+      { ad: "H31 LAN TLS: onarım var olan LAN_TLS_MODE satırını değiştiriyor", eski: '{ "DATABASE_URL=$dbUrl" } else { $_ } })', yeni: '{ "DATABASE_URL=$dbUrl" } elseif ($_ -cmatch \'^LAN_TLS_MODE=\') { "LAN_TLS_MODE=dual" } else { $_ } })', kontrol: "lantls.onarim-env-dokunulmaz" },
+      { ad: "H32 LAN TLS: API portu HTTPS portuyla çakışınca sessizce sürüyor", eski: "  if ($apiPort -eq $p) { return", yeni: "  if ($false) { return", kontrol: "lantls.api-portu-cakisirsa-dur" },
+      { ad: "H33 LAN TLS: kod gösterimi grupları bozuk", eski: "$i += 4)", yeni: "$i += 8)", kontrol: "lantls.kimlik-kod-gosterimi" },
       { ad: "H11 eski paket engeli düştü (yeni kurulu sürüme eski paket)", eski: "  if ($c -gt 0) { return \"bu kokte kurulu surum", yeni: "  if ($c -gt 1) { return \"bu kokte kurulu surum", kontrol: "kurulu.eski-paket-DUR" },
     ];
     // Ham dosya (CRLF çıkışında da): desenler TEK satırlık olmalı — "\n" içeren desen CRLF ağaçta bayat görünür.
@@ -907,7 +973,7 @@ if (eksik.length === 0) {
     } finally {
       rmSync(dizin, { recursive: true, force: true });
     }
-  } else defter.atla("✓K harness sondaları", "pwsh 7 yok", 23 + 2 + 4 + 5);
+  } else defter.atla("✓K harness sondaları", "pwsh 7 yok", 23 + 2 + 4 + 5 + 5);
 }
 
 console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız${defter.ozetEki()} ===`);

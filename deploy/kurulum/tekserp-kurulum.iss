@@ -1404,6 +1404,14 @@ begin
       'Sorunu giderip bu kurulum programını AYNI klasörle yeniden çalıştırın: kaldığı yerden sürer, veri silinmez.' + #13#10;
   if SonIni <> '' then
   begin
+    // LAN-TLS.md §4a/§4b: adres ve kod Dogrulama'nın döngü adresinden ölçtüğü değer; boşsa satır yok.
+    if (KurulumHatasi = '') and (SonucOku(SonIni, 'kurulum.durumSayfasi') <> '') then
+      S := S + 'Durum sayfası : ' + SonucOku(SonIni, 'kurulum.durumSayfasi') + '  (yalnız bu bilgisayarda açın)' + #13#10;
+    if (KurulumHatasi = '') and (SonucOku(SonIni, 'kurulum.tlsParmakIzi') <> '') then
+      S := S + #13#10 + 'ŞİFRELİ BAĞLANTI KODU (SHA-256, HTTPS ' + SonucOku(SonIni, 'kurulum.tlsPort') + '):' + #13#10 +
+        '  ' + SonucOku(SonIni, 'kurulum.tlsParmakIzi') + #13#10 +
+        'Panel başka bir bilgisayardan ilk kez şifreli bağlanırken bu kodu gösterir;' + #13#10 +
+        'birebir aynı değilse ONAYLAMAYIN. Kod durum sayfasında da görünür.' + #13#10#13#10;
     if SonucOku(SonIni, 'gunluk') <> '' then S := S + 'Günlük        : ' + SonucOku(SonIni, 'gunluk') + #13#10;
     N := StrToIntDef(SonucOku(SonIni, 'acikSayisi'), 0);
     if N > 0 then

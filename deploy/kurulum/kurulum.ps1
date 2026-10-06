@@ -14,17 +14,19 @@
 #                ozeti + icerik manifestosu + tek ICU) pgsql\<surum>-<derleme>'ye - pgsql\bin baglantisi -
 #                initdb (parola ACL'li gecici dosyadan) - tekserp.conf + pg_hba.conf (pg-sablon.mjs) -
 #                pg_ctl register (sanal hesap) - veri dizini ACL (KAYITTAN SONRA) - baslat + olcum - roller
-#                + DB + DB ayarlari - .env + db-credentials.json - ornek.json (postgres parolasi DPAPI initdb'den once)
+#                + DB + DB ayarlari - .env (yalniz YOKSA yazilir; yeni kurulum LAN_TLS_MODE=dual, onarim yalniz DATABASE_URL)
+#                + db-credentials.json - ornek.json (postgres parolasi DPAPI initdb'den once)
 #     Backend    sema hizasi (goc ONCESI, hizmet\sema-hizasi.ps1) + prisma migrate deploy (paketin kendi Node'u) +
 #                goc adlari = paket - bakim rolu (bakim-rolu.ps1) -
 #                yedek sifreleme (musteri anahtari dosyaya)
 #     Hizmetler  hizmet\backend-hizmeti.ps1 -Uygula (kayit -> ACL) - hizmet\guncelleyici-hizmeti.ps1 -Uygula -
 #                gece yedegi gorevi (<KOK>\yedekle.ps1) - guvenlik duvari (API yalniz LocalSubnet; eski Tailscale izni yalniz onarimda kayittan,
 #                mDNS; PG'ye kural YOK) - saat esitlemesi (etki alani disinda W32Time NTP; etki alaninda dokunulmaz) -
-#                baslat: /health 200 UP/UP/surum - guncelleyici durum.json
+#                baslat: /health 200 UP/UP/surum - HTTPS kurali (yalniz sifreli dinleyici OLCULURSE) - guncelleyici durum.json
 #     Sirlar     YALNIZ sihirbaz: STDIN'den JSON (satici parolasi + PIN, yedek parolasi) -> araclara STDIN'den;
 #                musteri yedek anahtari ekranda gosterilecekse SONUC satirinda doner. Gunluge sir GIRMEZ.
-#     Dogrulama  hizmetler - saglik - izin katalogu (boot uzlastirmasi) - ACL olcumu - kurulum.json
+#     Dogrulama  hizmetler - saglik - izin katalogu (boot uzlastirmasi) - ACL olcumu - sifreli baglanti kodu (SHA-256)
+#                + durum sayfasi adresi (sonuca ve ekrana) - kurulum.json
 #   Hepsi = OnKosul..Dogrulama (Sirlar haric) - bayinin sessiz kipi.
 #
 # KULLANIM (YONETICI; 5.1 yurutme ilkesi icin -ExecutionPolicy Bypass):
@@ -229,6 +231,22 @@ function EnvDeger($satirlar, $ad) {
   return $null
 }
 
+# Sifreli dinleyici OLCULUR, beyandan cikarilmaz: kimlik ucunun tls alani yalniz HTTPS gercekten dinlerken dolar.
+# .env bekletiyorsa (LanTlsBeyanli) $sn saniye yoklanir; beyansizda tek okuma. Dongu adresi = guven koku a.
+# Donus: @{ tls = $null | @{port; parmakIzi; gosterim}; beyan = .env istiyor mu } - eksikligi cagiran soyler.
+function LanTlsOlc([int]$apiPort, [string]$envYolu, [int]$sn) {
+  $beyan = LanTlsBeyanli "$(EnvDeger ([IO.File]::ReadAllLines($envYolu)) 'LAN_TLS_MODE')"
+  $bitis = (Get-Date).AddSeconds($(if ($beyan) { $sn } else { 0 }))
+  while ($true) {
+    $c = SaglikOku $apiPort "/api/discovery/identity"
+    if ($c.kod -eq 200) { try { $t = LanTlsKimliktenOku ($c.govde | ConvertFrom-Json); if ($t) { return @{ tls = $t; beyan = $beyan } } } catch { } }
+    if ((Get-Date) -ge $bitis) { break }
+    Start-Sleep -Seconds 1
+  }
+  return @{ tls = $null; beyan = $beyan }
+}
+$script:LAN_TLS_EKSIK = "yapilandirma\.env sifreli baglanti istiyor ama HTTPS dinleyicisi olculemedi - HTTP calisiyor; logs\backend-err.log (port mesgul ya da lisans\lan-tls okunamiyor)"
+
 # =============================================================================
 # ASAMALAR
 # =============================================================================
@@ -355,6 +373,19 @@ function AsamaOnKosul {
   foreach ($x in $agK.uyarilar) { Uyar $x }
   Ok "ag: API $(AgMetni $agK.ag.izinliAdresler) - profil $(AgMetni $agK.ag.agProfilleri) - mDNS $(AgMetni $agK.ag.mdns) ($($agK.ag.kaynak))"
 
+  # Sifreli baglanti (LAN TLS): yalniz .env'i ILK KEZ yazacak kurulum dual alir; var olan .env'e (onarim/devam) dokunulmaz.
+  if (Test-Path -LiteralPath $envYolu -PathType Leaf) {
+    $ltKayit = "$(EnvDeger ([IO.File]::ReadAllLines($envYolu)) 'LAN_TLS_MODE')"
+    $lanTlsPlan = [ordered]@{ yeniEnv = $false; kip = $(if ($ltKayit) { $ltKayit } else { $null }) }
+    Bilgi "sifreli baglanti: kayittaki yapilandirma\.env korunur (LAN_TLS_MODE $(if ($ltKayit) { "= $ltKayit" } else { 'satiri yok = kapali' }))"
+  } else {
+    $lt = LanTlsYeniKurulum $apiPort
+    if ($lt.hata) { Dur $lt.hata }
+    if (PortDinleniyorMu $lt.port) { Uyar "HTTPS portu $($lt.port) MESGUL - sifreli baglanti acilamayacak, HTTP calisir (portu bosaltip backend hizmetini yeniden baslatin)" }
+    $lanTlsPlan = [ordered]@{ yeniEnv = $true; kip = "dual"; port = $lt.port }
+    Ok "sifreli baglanti: dual (HTTP $apiPort + HTTPS $($lt.port)) - yeni .env"
+  }
+
   $plan = [ordered]@{
     v = $KURULUM_BICIMI; mod = $(if ($onarim) { "onarim" } elseif ($yarim) { "devam" } else { "kurulum" }); kok = $kok
     girdiler = [ordered]@{ backend = $zip; pg = $pgZip; pgKunye = $pgKunye }
@@ -364,6 +395,7 @@ function AsamaOnKosul {
     pg = [ordered]@{ veriDizini = $veri; surum = "$($pgSurum.surum)"; derleme = "$($pgSurum.derleme)"; cizgi = "$($pgSurum.cizgi)"; icu = "$($pgSurum.yayin.'win-x64'.icuSurum)"; ramMB = $ramMB }
     lisans = [ordered]@{ etkili = $lis.etkili; kaynak = $lis.kaynak; yaz = $lis.yaz; kanal = $lis.kanal; varsayilan = $lis.varsayilan }
     ag = $agK.ag
+    lanTls = $lanTlsPlan
     asamalar = [ordered]@{}
   }
   if ($Kuru) {
@@ -635,11 +667,13 @@ function AsamaPostgreSQL {
     if ($d.lisans.yaz -eq $true) { $satirlar += "LICENSE_SERVER_URL=$($d.lisans.etkili)" }
     if ($C["profil"]) { $satirlar += "TEKSERP_PROFIL=$($C['profil'])" }
     if ($C["yedek.sifreleme"] -eq $true) { $satirlar += "BACKUP_KEY_DIR=$((Join-Path $kok 'yedek-anahtar') -creplace '\\', '/')" }
+    $lt = LanTlsYeniKurulum ([int]$d.portlar.api)
+    if ($lt.hata) { Dur $lt.hata }
+    $satirlar += @($lt.satirlar)
     EnvYaz $envYolu (($satirlar -join "`n") + "`n")
-    Ok ".env yazildi (yapilandirma\; JWT_SECRET bu makinede uretildi)"
+    Ok ".env yazildi (yapilandirma\; JWT_SECRET bu makinede uretildi; sifreli baglanti dual)"
   } elseif ($yeniEnv) {
-    $l = [IO.File]::ReadAllLines($envYolu)
-    $yeni = @($l | ForEach-Object { if ($_ -cmatch '^\s*DATABASE_URL\s*=') { "DATABASE_URL=$dbUrl" } else { $_ } })
+    $yeni = EnvDatabaseUrlYenile ([IO.File]::ReadAllLines($envYolu)) $dbUrl
     EnvYaz $envYolu (($yeni -join "`n") + "`n")
     Ok ".env DATABASE_URL yenilendi (onarim; diger satirlar korundu)"
   }
@@ -836,6 +870,18 @@ function AsamaHizmetler {
     Dur "backend saglikli degil ($($s.son)) - logs\backend-err.log"
   }
   Ok "backend: /health UP - db UP - surum $($d.paket.surum)"
+  # HTTPS kurali OLCUMDEN (backend gercekten dinliyorsa), API ile ayni profil + adresler; kaldirici durum/kurulum.json'dan siler.
+  $kurallar = @($apiKural, "$($d.adlar.mdnsKurali)")
+  $lo = LanTlsOlc $apiPort (Join-Path $kok "yapilandirma\.env") 30
+  if ($lo.tls) {
+    $tlsKural = "TeksERP HTTPS $($lo.tls.port)"
+    $kurallar += $tlsKural
+    if (-not (Get-NetFirewallRule -DisplayName $tlsKural -ErrorAction SilentlyContinue)) {
+      New-NetFirewallRule -DisplayName $tlsKural -Direction Inbound -Protocol TCP -LocalPort $lo.tls.port -Action Allow -Profile @($ag.agProfilleri) -RemoteAddress @($ag.izinliAdresler) | Out-Null
+      Ok "guvenlik duvari: $tlsKural ($(@($ag.agProfilleri) -join ',') - $(@($ag.izinliAdresler) -join ','))"
+    } else { Bilgi "kural zaten var, DOKUNULMADI: $tlsKural" }
+  } elseif ($lo.beyan) { Bilgi $script:LAN_TLS_EKSIK }
+  $d | Add-Member -NotePropertyName guvenlikDuvari -NotePropertyValue $kurallar -Force
   Start-Service -Name "$($d.adlar.guncelleyici)"
   if (-not (HizmetBekle "$($d.adlar.guncelleyici)" "Running" 60)) { Dur "$($d.adlar.guncelleyici) baslamadi - $kok\guncelleyici\gunluk" }
   $durum = Join-Path "$($d.adlar.veriKoku)" "guncelleme\durum\durum.json"
@@ -963,22 +1009,37 @@ function AsamaDogrulama {
   $lis = Join-Path $kok "lisans"
   if ((Test-Path -LiteralPath (Join-Path $lis "hak.jws") -PathType Leaf) -and (Test-Path -LiteralPath (Join-Path $lis "kurulum-kimligi.json") -PathType Leaf)) { Ok "lisans etkin (lisans\hak.jws + kurulum-kimligi.json)" }
   else { $acik += "lisans: panelden Sistem > Lisans > etkinlestirme kodu (kurulum anahtari backend ilk acilista uretti)" }
+  # Sifreli baglanti kodu + durum sayfasi (LAN-TLS.md b.4 a/b): kullanici panelin gosterdigi kodu bununla karsilastirir.
+  $durumSayfasi = "http://localhost:$($d.portlar.api)/"
+  $lo = LanTlsOlc ([int]$d.portlar.api) $envYolu 30
+  $tls = $lo.tls
+  if ($tls) { Ok "sifreli baglanti: HTTPS $($tls.port) - kod (SHA-256) $($tls.gosterim)" }
+  elseif ($lo.beyan) { Uyar $script:LAN_TLS_EKSIK }
+  $kurallar = @("TeksERP API $($d.portlar.api)", "$($d.adlar.mdnsKurali)")
+  if ($tls) { $kurallar += "TeksERP HTTPS $($tls.port)" }
   $kayit = [ordered]@{
     v = $KURULUM_BICIMI; zaman = (Get-Date).ToUniversalTime().ToString("o"); kok = $kok
     paket = $d.paket; adlar = $d.adlar; portlar = $d.portlar
     pg = [ordered]@{ veriDizini = "$($d.pg.veriDizini)"; surum = "$($d.pg.surum)"; derleme = "$($d.pg.derleme)" }
-    guvenlikDuvari = @("TeksERP API $($d.portlar.api)", "$($d.adlar.mdnsKurali)")
+    guvenlikDuvari = $kurallar
+    lanTls = $(if ($tls) { [ordered]@{ port = $tls.port; parmakIzi = $tls.parmakIzi } } else { $null })
     ag = $(if ($d.PSObject.Properties["ag"]) { $d.ag } else { $null })
     saat = $(if ($d.PSObject.Properties["saat"]) { $d.saat } else { $null })
     uyarilar = @($script:Uyarilar); acik = $acik
   }
   MetinYaz (Join-Path $kok "kurulum\kurulum.json") (($kayit | ConvertTo-Json -Depth 6) + "`n")
   $script:SonucKaydi["acik"] = $acik
-  $script:SonucKaydi["kurulum"] = [ordered]@{ surum = "$($d.paket.surum)"; api = [int]$d.portlar.api; pg = [int]$d.portlar.pg; backend = "$($d.adlar.backend)"; guncelleyici = "$($d.adlar.guncelleyici)"; postgresql = "$($d.adlar.pg)" }
+  $script:SonucKaydi["kurulum"] = [ordered]@{ surum = "$($d.paket.surum)"; api = [int]$d.portlar.api; pg = [int]$d.portlar.pg; backend = "$($d.adlar.backend)"; guncelleyici = "$($d.adlar.guncelleyici)"; postgresql = "$($d.adlar.pg)"; durumSayfasi = $durumSayfasi }
+  if ($tls) { $script:SonucKaydi["kurulum"]["tlsPort"] = [int]$tls.port; $script:SonucKaydi["kurulum"]["tlsParmakIzi"] = $tls.gosterim }
   AsamaBitti $d "Dogrulama"
   DurumYaz $kok $d
   Write-Host ""
   Write-Host "  KURULUM TAMAM - backend $($d.paket.surum) - http://<sunucu>:$($d.portlar.api) - PG 127.0.0.1:$($d.portlar.pg)" -ForegroundColor Green
+  Write-Host "  Durum sayfasi (yalniz bu bilgisayarda acin): $durumSayfasi" -ForegroundColor Green
+  if ($tls) {
+    Write-Host "  Sifreli baglanti kodu (SHA-256, HTTPS $($tls.port)): $($tls.gosterim)" -ForegroundColor Green
+    Write-Host "    Panel baska bilgisayardan ilk kez sifreli baglanirken bu kodu gosterir - birebir ayni degilse ONAYLAMAYIN." -ForegroundColor Green
+  }
   foreach ($a in $acik) { Write-Host "    - ACIK: $a" -ForegroundColor Yellow }
 }
 

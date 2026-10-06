@@ -70,9 +70,9 @@ Reddedilenler: keşiften/ilk girişten otomatik sabitleme (TOFU) · IP'ye bağl�
 
 ## 7. Kurulum adımı
 
-Kurulum sihirbazının son sayfası ve `kur.ps1` sonu parmak izini ve durum sayfası adresini basar (D6).
-
 **Karar (kullanıcı 2026-10-07):** YENİ kurulumun kipi `dual`dır. Kod varsayılanı `off` KALIR ("bayrak varsayılanı = bugünkü davranış"); `dual`ı kurulum aracı yeni kurulumun `.env`ine yazar. Var olan kurulumun kipine kurulum dokunmaz.
+
+**Uygulama (D6):** yeni kurulum (`deploy/kurulum/kurulum.ps1`, `.env` yokken) `.env`e `LAN_TLS_MODE=dual` yazar (port satırı yazılmaz, 4443; API portu 4443 ise kurulum durur). Onarım/devam ve güncelleme var olan `.env`e LAN_TLS satırı eklemez, olanı değiştirmez. HTTPS güvenlik duvarı kuralı ölçümden (kimlik ucu `tls` doluysa), API ile aynı profil/adreslerle. Dogrulama kodu (SHA-256, 4'lü gruplar) döngü adresindeki kimlik ucundan okur; kod ve durum sayfası adresi (`http://localhost:<PORT>/`) ekrana, sonuç INI'sine ve sihirbazın son sayfasına gider. pm2 yolu (`kur.ps1`, `ilk-kurulum.ps1`) donmuştur, bu özelliği almaz.
 
 ## 8. Dilimler
 
@@ -83,5 +83,5 @@ Kurulum sihirbazının son sayfası ve `kur.ps1` sonu parmak izini ve durum sayf
 | D3 | Panel: doğrulama kancası + pin deposu + https probu + onay diyaloğu + tablet QR'ı | ✅ |
 | D4 | Tablet: QR okuma + pin deposu + keşifte engel (JS, OTA ile gider; native yokken etkisiz) | ✅ |
 | D5 | Tablet: native zorlama (OkHttp) | **ONAY bekler** |
-| D6 | Durum sayfası (✅, yalnız döngü adresinde) + kurulum sihirbazı/`kur.ps1` parmak izi (sırada) | kısmen |
+| D6 | Durum sayfası (yalnız döngü adresinde) + yeni kurulum `dual` + kurulum sonu (sihirbaz son sayfası, `kurulum.ps1`) parmak izi ve durum sayfası; bekçi `test_kurulum_betikleri` §18 + harness `lantls.*` (Windows denemesi bekler) | ✅ |
 | D7 | Sertifika yenileme (sonraki parmak izi) | sırada |
