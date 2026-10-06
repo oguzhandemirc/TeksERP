@@ -72,7 +72,7 @@ const MANDALLAR = [
   "test_p2002_hedef_tek_kaynak", // P2002 hedefi (`meta.target`) yalnız src/utils/p2002.ts'te okunur (AST; takma ad + yapı çözme; yorum sayılmaz) · DB'siz · ~1 sn · taban 0 sert (26., 2026-09-23)
   "test_bekci_ayar_geri_alma", // global ayar (sistem ayarı · modül bayrağı · numara serisi) yazan bekçi geri almayı `finally`de yapar (AST · sınıf + anahtar düzeyi) · DB'siz · ~1,5 sn · taban 0 sert (27., 2026-09-24)
   "test_audit_okuma_kaynagi", // audit yalnız ayak izi: system_logs okuyan backend işlevi + audit ucu çağıran istemci dosyası beyanlı, borç cırcırı (AST) · src + scripts/lib + Electron/src + mobil/src · ağaç · ~1 sn · §2/§6b sert (28., 2026-09-25)
-  "test_musteri_adi_kodda_yok", // üretim kanalının müşteri adı ürün koduna metin olarak gömülmez (ad listesi deploy/kanallar.json'dan) · Teks-Erp/src + Electron/src + mobil/src · DB'siz · ~1,6 sn · istisna listesi boş, kullanılmayan istisna da kırmızı (33., 2026-09-28)
+  "test_musteri_adi_kodda_yok", // üretim kanalının müşteri adı ürün koduna metin olarak gömülmez (ad listesi deploy/kanallar.json'dan) · Teks-Erp/src + Electron/src + mobil/src + test profilleri (ad+kod) · DB'siz · ~1,6 sn · istisna listesi boş, kullanılmayan istisna da kırmızı (33., 2026-09-28)
   "test_lisans_kabul_metni", // sözleşme kabul metni tek kaynaktan: docs/hukuk/KABUL-METNI.md §2 ⇄ üretilmiş katalog + gösterim metni bayt-eşit (belge değişip üretici koşulmadıysa kırmızı) · docs/hukuk + Teks-Erp/src/lib/license · DB'siz · ~0,3 sn (34., yönetici kararı 2026-09-30)
 ];
 

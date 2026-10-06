@@ -40,12 +40,13 @@ import {
 import prisma from "../src/lib/prisma";
 import { ACTIVE_SACK_ALLOCATION } from "../src/services/helpers/sack-allocation.helper";
 import { roleGrade } from "./fixture-quality-grade";
-import { SETTING_KEYS } from "../src/services/system-setting.service";
+import { SETTING_KEYS, readPackingLotRequired } from "../src/services/system-setting.service";
 import { InventoryService } from "../src/services/inventory.service";
 import { WorkOrderService } from "../src/services/workorder.service";
 import { KursunQcService } from "../src/services/kursun-qc.service";
 import { TamburService } from "../src/services/tambur.service";
 import { ShippingService } from "../src/services/shipping.service";
+import { PackingGroupService } from "../src/services/packing-group.service";
 import { ensureTestAdmin } from "./fixture-test-user";
 
 const inv = new InventoryService();
@@ -81,6 +82,7 @@ const createdWoIds: string[] = [];
 const createdOrderIds: string[] = [];
 const createdShipmentIds: string[] = [];
 const createdSackIds: string[] = [];
+const createdPackingGroupIds: string[] = [];
 const createdCustomerIds: string[] = [];
 
 // ── Yardımcılar ─────────────────────────────────────────────────────────────
@@ -394,7 +396,15 @@ async function main(): Promise<void> {
   await pinAyar("shipping.confirmationEnabled", true, "TEST — sevk onayı bayrağı");
 
   // 7.1 — Müşteriye çuval aç (çuval MÜŞTERİYE ait) + kesilen topu çuvala okut.
-  const openRes = (await ship.openSack({ customerId: customer.id }, userId)) as { data: { id: string } };
+  // Profil matrisi (`profil-matrisi.ts`): sevk partisi ZORUNLU profilde çuval partide açılır —
+  // bayrağı pinleyip gizlemek profili sınamaz; kapalı profilde (varsayılan) bu dal koşmaz.
+  let packingGroupId: string | null = null;
+  if (await readPackingLotRequired()) {
+    const grup = await PackingGroupService.createWithSacks({ customerId: customer.id, sackIds: [], userId });
+    packingGroupId = grup.data.id;
+    createdPackingGroupIds.push(packingGroupId);
+  }
+  const openRes = (await ship.openSack({ customerId: customer.id, packingGroupId }, userId)) as { data: { id: string } };
   const sackId = openRes.data.id;
   createdSackIds.push(sackId);
   await ship.scanIntoSack({ sackId, barcode: shipChildBarcode }, userId);
@@ -462,6 +472,7 @@ async function cleanup(): Promise<void> {
     await prisma.sack.deleteMany({ where: { id: { in: createdSackIds } } }).catch(() => {});
     await prisma.shipmentOrder.deleteMany({ where: { shipmentId: { in: createdShipmentIds } } }).catch(() => {});
     await prisma.shipment.deleteMany({ where: { id: { in: createdShipmentIds } } }).catch(() => {});
+    await prisma.packingGroup.deleteMany({ where: { id: { in: createdPackingGroupIds } } }).catch(() => {});
 
     if (createdRollIds.length > 0) {
       await prisma.rollVariance.deleteMany({ where: { rollId: { in: createdRollIds } } }).catch(() => {});

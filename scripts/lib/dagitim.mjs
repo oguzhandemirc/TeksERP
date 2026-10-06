@@ -293,10 +293,11 @@ export const BACKEND_GRUPLAR_REL = 'Teks-Erp/src/lib/license/update-group.ts';
 
 /**
  * `deploy/dagitim.json`ı okuyan ürün/yayın dosyaları — BEYANLI. Bekçi ağaçta kaydın adını taşıyan
- * her kod dosyasını bu liste + bekçi dosyalarıyla kıyaslar (iki yönlü).
+ * her kod dosyasını bu liste + bekçi dosyalarıyla kıyaslar (iki yönlü). Yayın betikleri buraya girince
+ * profil matrisi kapısını çağırmak zorundadır (`test_profil_raporu_kapisi.mjs` §3).
  */
 export const TUKETICILER = Object.freeze(['scripts/dagitim-kapisi.mjs', 'deploy/paketle.ps1', 'deploy/kurulum/kurulum-arsivi.mjs', 'scripts/test_kurulum_arsivi.mjs',
-  'Teks-Erp/scripts/test_kurulum_betikleri.ts']);
+  'Teks-Erp/scripts/test_kurulum_betikleri.ts', 'scripts/lib/profil-raporu.mjs']);
 
 /** İki dağıtım bekçisinin okuduğu dosyalar — commit tetiği bunları kapsar (okunandan dar olamaz). */
 export const DAGITIM_BEKCI_DOSYALARI = Object.freeze([

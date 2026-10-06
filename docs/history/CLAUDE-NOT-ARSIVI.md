@@ -33,4 +33,4 @@
 |---|---|---|---|
 | 2026-08 | [`arsiv/2026-08.md`](arsiv/2026-08.md) | 13 | 25–27 Ağustos: saha deploy arızaları, sebep penceresi, sipariş görünürlüğü, yarı mamul (eski kısa Ağustos/Temmuz notları 2026-09'daki "Kökten taşınan tam metinler" bölümünde) |
 | 2026-09 | [`arsiv/2026-09.md`](arsiv/2026-09.md) | 409 | defter-öncelikli mimari, bekçi/ölçüm dersleri, numaralandırma, finans, patron, lisans; "Kökten taşınan tam metinler" |
-| 2026-10 | [`arsiv/2026-10.md`](arsiv/2026-10.md) | 56 | dağıtım v2, tek ana dal/tek paket (güncelleme grupları), patron DB-per-tesis, satıcı portalı, hazırlık satıcısı emekliliği |
+| 2026-10 | [`arsiv/2026-10.md`](arsiv/2026-10.md) | 57 | dağıtım v2, tek ana dal/tek paket (güncelleme grupları), patron DB-per-tesis, satıcı portalı, hazırlık satıcısı emekliliği |
