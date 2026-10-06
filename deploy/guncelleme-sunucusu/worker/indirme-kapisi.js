@@ -11,7 +11,9 @@
 // ayrışırsa kâhin kazanır. Bekçi: `Teks-Erp/scripts/test_indirme_kapisi.ts`.
 // KURULUM · GERİ ALMA: `docs/ops/INDIRME-KAPISI-WORKER.md` (panelden yapıştırılır;
 // wrangler yok). Rota FAIL CLOSED olmalı: Worker atlanırsa dosyalar AÇILMAZ.
-// Kapsam DIŞI her istek olduğu gibi geçer.
+// Kapsam DIŞI her istek olduğu gibi geçer. Grup-nötr OTA takma adı `/ota/<rv>/manifest` (tek ortak paket
+// §3.3): grup YALNIZ doğrulanmış belirteçten çözülür, geçiş listesi uygulanmaz; adnansahin'in eski adresinde
+// bu Worker yoktur.
 // =============================================================================
 
 /**
@@ -42,6 +44,9 @@ export const VARSAYILAN_AYAR = Object.freeze({
 
 /** Kanal başına ürün dizinleri — kâhin `DOWNLOAD_PRODUCTS` (protocol/belgeler.ts) ile birebir (bekçi §8). */
 export const URUN_DIZINLERI = Object.freeze(["electron", "mobil", "backend"]);
+
+/** OTA takma adının öneki — dağıtım kaydının `otaTakmaAd` türetimiyle aynı (check-dagitim §3); `ota` grup adı olamaz. */
+export const OTA_TAKMA_AD_ONEKI = "/ota/";
 
 const TYP = "tekserp-indirme";
 const JWS_ALG = "EdDSA";
@@ -278,10 +283,14 @@ export function yolIzinli(belge, yol) {
 }
 
 const KAPSAM = new RegExp(`^\\/[^/]+\\/(${URUN_DIZINLERI.join("|")})(\\/|$)`, "i");
+const TAKMA_AD_KAPSAMI = new RegExp(`^${OTA_TAKMA_AD_ONEKI.slice(0, -1)}(\\/|$)`, "i");
+// Kanonik biçim tek: runtimeVersion dağıtım kaydıyla aynı biçimde (`55.0`); başka her yazım 403.
+const TAKMA_AD = new RegExp(`^${OTA_TAKMA_AD_ONEKI}([0-9]{1,6}\\.[0-9]{1,6})\\/manifest$`);
 const OTA_MANIFEST = /^\/[^/]+\/mobil\/ota\/[^/]+\/manifest(-[0-9]+)?$/;
 const OTA_VARLIK = /^\/[^/]+\/mobil\/ota\/[^/]+\/[0-9]+\/[^?#]+$/;
-// `son.json` backend kanalının en yeni sürüm işaretçisi: her yayında değişir, kenarda tutulmaz.
-const DEGISKEN_DOSYA = /(\.ya?ml|\/manifest(-[0-9]+)?|\/surum\.json|\/son\.json)$/i;
+// `son.json` backend kanalının en yeni sürüm işaretçisi: her yayında değişir, kenarda tutulmaz; zincirli
+// ikizleri (`son-zincir.json` · `surum-zincir.json` · `pg-zincir.json`, protocol/paket-zinciri.ts) de öyle.
+const DEGISKEN_DOSYA = /(\.ya?ml|\/manifest(-[0-9]+)?|\/surum\.json|\/son\.json|\/(son|surum|pg)-zincir\.json)$/i;
 
 /**
  * Kapsam kararı, origin'in (nginx) GÖRECEĞİ yolda verilir: yüzde kodu çözülür, ters bölü
@@ -289,14 +298,22 @@ const DEGISKEN_DOSYA = /(\.ya?ml|\/manifest(-[0-9]+)?|\/surum\.json|\/son\.json)
  * Çözülemeyen yol kapsamda sayılır (fail-closed).
  */
 export function kapsamdaMi(yol) {
-  let cozulmus;
+  const katli = katla(yol);
+  return katli === null || KAPSAM.test(katli) || KAPSAM.test(yol) || TAKMA_AD_KAPSAMI.test(katli) || TAKMA_AD_KAPSAMI.test(yol);
+}
+
+/** Takma ad uzayında mı (`/ota/…`, her yazımıyla — kodlanmış, çift bölü, büyük harf, çözülemeyen)? */
+export function takmaAdMi(yol) {
+  const katli = katla(yol);
+  return TAKMA_AD_KAPSAMI.test(yol) || (katli !== null && TAKMA_AD_KAPSAMI.test(katli));
+}
+
+function katla(yol) {
   try {
-    cozulmus = decodeURIComponent(yol);
+    return decodeURIComponent(yol).replace(/\\/g, "/").replace(/\/{2,}/g, "/");
   } catch {
-    return true;
+    return null;
   }
-  const katli = cozulmus.replace(/\\/g, "/").replace(/\/{2,}/g, "/");
-  return KAPSAM.test(katli) || KAPSAM.test(yol);
 }
 
 /** OTA varlığı mı (içerik adresli paket dosyası)? Kaçış dizisi taşıyan yol varlık SAYILMAZ. */
@@ -387,8 +404,9 @@ function gecisteMi(ayar, yol, simdiMs) {
 }
 
 /** Origin'e giden istek belirteçsizdir: önbellek anahtarı belirteç başına bölünmez, iz loga düşmez. */
-function kaynakIstegi(request, url) {
+function kaynakIstegi(request, url, hedefYol) {
   const hedef = new URL(url.toString());
+  if (hedefYol !== url.pathname) hedef.pathname = hedefYol;
   if (hedef.searchParams.has("t")) hedef.searchParams.delete("t");
   const basliklar = new Headers(request.headers);
   basliklar.delete(BELIRTEC_BASLIGI);
@@ -469,6 +487,22 @@ async function varlikBelirteciYaz(yanit, belirtec) {
   return new Response(yeni, { status: yanit.status, headers: basliklar });
 }
 
+/**
+ * `/ota/<rv>/manifest` → `/<belirteç.kanal>/mobil/ota/<rv>/manifest`. Belirteç ZORUNLU (geçiş listesi yok);
+ * gerçek yol belirtecin `yolOneki`nin altında olmalı. Origin isteği ve önbellek anahtarı gerçek yoldur.
+ */
+async function takmaAd(request, url, ayar, simdiMs, teslim) {
+  const m = TAKMA_AD.exec(url.pathname);
+  if (!m) return redYaniti("INDIRME_YOL", 403);
+  const belirtec = belirteciBul(request, url);
+  if (!belirtec) return redYaniti("INDIRME_BELIRTEC_YOK", 403);
+  const d = await belirteciDogrula(belirtec, { anahtarlar: ayar.dogrulamaAnahtarlari, simdiMs });
+  if (!d.ok) return redYaniti(d.kod, 403);
+  const gercek = `/${d.belge.kanal}/mobil/ota/${m[1]}/manifest`;
+  if (!yolIzinli(d.belge, gercek)) return redYaniti("INDIRME_YOL", 403);
+  return teslim(belirtec, gercek);
+}
+
 const MESAJ = {
   403: "İndirme izni yok: geçerli bir indirme belirteci gerekli.",
   405: "Bu yolda yalnız GET ve HEAD kabul edilir.",
@@ -496,12 +530,13 @@ export function kapiOlustur({ ayar: hamAyar, fetchImpl = (r, i) => fetch(r, i), 
     if (!cozum.ok) return redYaniti("AYAR_GECERSIZ", 503);
     const ayar = cozum.ayar;
     if (request.method !== "GET" && request.method !== "HEAD") return redYaniti("YONTEM", 405);
-    const teslim = async (belirtec) => {
-      const cf = onbellekSecenegi(yol, ayar);
-      const yanit = await fetchImpl(kaynakIstegi(request, url), cf ? { cf } : undefined);
-      const yaz = belirtec && ayar.varlikBelirteci && request.method === "GET" && OTA_MANIFEST.test(yol);
+    const teslim = async (belirtec, hedefYol = yol) => {
+      const cf = onbellekSecenegi(hedefYol, ayar);
+      const yanit = await fetchImpl(kaynakIstegi(request, url, hedefYol), cf ? { cf } : undefined);
+      const yaz = belirtec && ayar.varlikBelirteci && request.method === "GET" && OTA_MANIFEST.test(hedefYol);
       return yaz && yanit.status === 200 ? varlikBelirteciYaz(yanit, belirtec) : yanit;
     };
+    if (takmaAdMi(yol)) return takmaAd(request, url, ayar, simdiMs, teslim);
     // Varlık belirteci kapalıyken OTA varlıkları içerik adreslidir; kapı manifesttedir (§3c).
     if (!ayar.varlikBelirteci && otaVarligiMi(yol)) return teslim(null);
     const belirtec = belirteciBul(request, url);

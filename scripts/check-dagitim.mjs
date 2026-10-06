@@ -9,7 +9,8 @@
 //   §2 terfi zinciri tek kök, doğrusal, döngüsüz; DONMUŞ küme test → oncu → genel (kullanıcı kararı 2026-10-03/06)
 //   §3 türetim: kütüphanenin ürettiği her grup × ürün adresi bu dosyadaki BAĞIMSIZ şablonla birebir;
 //      adresler ve VDS yolları ayrık; ürün dizinleri satıcı `DOWNLOAD_PRODUCTS` ve Worker `URUN_DIZINLERI` ile
-//      aynı küme; her adres Worker'ın `yolOneki` kuralına (`/<grup>/<dizin>/`) uyar
+//      aynı küme; her adres Worker'ın `yolOneki` kuralına (`/<grup>/<dizin>/`) uyar; Worker'ın OTA takma ad öneki
+//      (`OTA_TAKMA_AD_ONEKI`, O9) kaydın `otaTakmaAd` şablonuyla aynı
 //   §4 eski kanal kaydından AYRILIK: ana makine, VDS/defter kökü, grup kodu ve yan yana kurulum kimlikleri
 //      eski kanallarınkiyle kesişmez (beyanlı istisna; kullanılmayan istisna da kırmızı)
 //   §5 lisansSunucusu = backend varsayılanı (`vendor-url.ts` DEFAULT_LICENSE_SERVER_URL)
@@ -164,6 +165,10 @@ function olc(d, okuyanlar, ek = {}) {
     const bizim = Object.values(URUN_DIZINI).sort().join(',');
     if (satici.slice().sort().join(',') !== bizim) s.kirmizi.push(`§3 ürün dizinleri satıcıyla ayrıştı: satıcı ${satici.join(',')} · kayıt ${bizim}`);
     if (worker.slice().sort().join(',') !== bizim) s.kirmizi.push(`§3 ürün dizinleri Worker'la ayrıştı: Worker ${worker.join(',')} · kayıt ${bizim}`);
+    const takmaOnek = /^export const OTA_TAKMA_AD_ONEKI = "([^"]*)";$/m.exec(d[WORKER_REL] ?? '')?.[1];
+    if (takmaOnek === undefined) throw new Olculemedi(`${WORKER_REL} OTA_TAKMA_AD_ONEKI bulunamadı (sabitin adı/biçimi değişti mi?)`);
+    const beklenenOnek = `/${TAKMA_AD_SABLONU.replace('{k}', '').split('{rv}')[0]}`;
+    if (takmaOnek !== beklenenOnek) s.kirmizi.push(`§3 Worker OTA takma ad öneki (${takmaOnek}) kaydın türetiminden (${beklenenOnek}) farklı`);
   } catch (e) {
     if (e instanceof Olculemedi) s.olculemedi.push(`§3 ${e.message}`);
     else throw e;
@@ -329,6 +334,9 @@ function sondalar(taban, tabanOkuyanlar) {
     ['N41 backend UPDATE_GROUPS\'tan grup düştü (genel) → KIRMIZI', 'kirmizi', (d) => {
       d[BACKEND_GRUPLAR_REL] = d[BACKEND_GRUPLAR_REL].replace('["test", "oncu", "genel"] as const', '["test", "oncu"] as const');
     }, '§7 backend UPDATE_GROUPS'],
+    ['N42 Worker OTA takma ad öneki kayıttan ayrıştı (/guncel/) → KIRMIZI', 'kirmizi', (d) => {
+      d[WORKER_REL] = d[WORKER_REL].replace('export const OTA_TAKMA_AD_ONEKI = "/ota/";', 'export const OTA_TAKMA_AD_ONEKI = "/guncel/";');
+    }, '§3 Worker OTA takma ad öneki'],
     ['O1 kayıt bozuk JSON → ÖLÇÜLEMEDİ', 'olculemedi', (d) => { d[KAYIT_REL] = d[KAYIT_REL].slice(0, 40); }],
     ['O2 vendor-url.ts varsayılan sabitinin adı değişti → ÖLÇÜLEMEDİ', 'olculemedi', (d) => { d[VENDOR_URL_REL] = d[VENDOR_URL_REL].replace('DEFAULT_LICENSE_SERVER_URL', 'VARSAYILAN_SATICI'); }],
     ['O3 Worker URUN_DIZINLERI adı değişti → ÖLÇÜLEMEDİ', 'olculemedi', (d) => { d[WORKER_REL] = d[WORKER_REL].replace('export const URUN_DIZINLERI', 'export const DIZINLER'); }],
@@ -336,6 +344,7 @@ function sondalar(taban, tabanOkuyanlar) {
     ['O5 git grep koşamadı → ÖLÇÜLEMEDİ', 'olculemedi', (d, c) => { c.okuyanlar = null; }],
     ['O6 satıcı UPDATE_GROUPS adı değişti → ÖLÇÜLEMEDİ', 'olculemedi', (d) => { d[SATICI_GRUPLAR_REL] = d[SATICI_GRUPLAR_REL].replace('export const UPDATE_GROUPS', 'export const GRUPLAR'); }],
     ['O7 grup migration\'ı okunamadı → ÖLÇÜLEMEDİ', 'olculemedi', (d) => { d[SATICI_GRUP_MIGRATION_REL] = undefined; }],
+    ['O9 Worker OTA_TAKMA_AD_ONEKI adı değişti → ÖLÇÜLEMEDİ', 'olculemedi', (d) => { d[WORKER_REL] = d[WORKER_REL].replace('export const OTA_TAKMA_AD_ONEKI', 'export const TAKMA'); }],
     ['O8 backend grup aynası okunamadı → ÖLÇÜLEMEDİ', 'olculemedi', (d) => { d[BACKEND_GRUPLAR_REL] = undefined; }],
   ];
 
