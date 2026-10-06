@@ -10,6 +10,7 @@
  * DB'siz. Koşum: `npx tsx scripts/test_lan_tls.ts`
  */
 import fs from "node:fs";
+import vm from "node:vm";
 import os from "node:os";
 import path from "node:path";
 import tls from "node:tls";
@@ -213,6 +214,37 @@ function section5(): void {
   check("§5 web sertleştirmesi LAN_TLS_* okumaz", !/LAN_TLS/.test(whSrc));
 }
 
+// §6 Durum sayfası: gözle karşılaştırılacak kod YALNIZ sunucu bilgisayarının kendisinde (döngü adresi) görünür.
+async function runStatusPage(hostname: string, tls: unknown): Promise<{ row: boolean; fp: string }> {
+  type El = { textContent: string; hidden: boolean; className: string; classList: { add(): void; remove(): void } };
+  const els: Record<string, El> = {};
+  const el = (id: string): El =>
+    (els[id] ??= { textContent: "", hidden: id === "tlsRow", className: "", classList: { add() {}, remove() {} } });
+  const sandbox = {
+    document: { getElementById: el },
+    location: { host: `${hostname}:4000`, hostname, port: "4000" },
+    fetch: async (url: string) => {
+      if (url === "/api/discovery/identity") return { json: async () => ({ product: "TeksERP", tls }) };
+      throw new Error("yok");
+    },
+    setInterval: () => 0,
+    console,
+  };
+  vm.runInNewContext(fs.readFileSync(path.resolve(__dirname, "../public/status.js"), "utf8"), sandbox);
+  await new Promise((r) => setTimeout(r, 20));
+  return { row: !el("tlsRow").hidden, fp: el("tlsfp").textContent };
+}
+
+async function section6(): Promise<void> {
+  const fp = "ab".repeat(32);
+  const loop = await runStatusPage("127.0.0.1", { port: 4443, fingerprint: fp });
+  check("§6 durum sayfası döngü adresinde kodu 4'lü gruplarla gösterir", loop.row && loop.fp.startsWith("ABAB ABAB"), loop.fp);
+  const lan = await runStatusPage("192.168.1.50", { port: 4443, fingerprint: fp });
+  check("§6 durum sayfası ağdan açılınca kodu GÖSTERMEZ", lan.row && !/ABAB/i.test(lan.fp), lan.fp);
+  const off = await runStatusPage("127.0.0.1", null);
+  check("§6 TLS kapalıyken satır gizli", !off.row);
+}
+
 async function main(): Promise<void> {
   try {
     section1();
@@ -220,6 +252,7 @@ async function main(): Promise<void> {
     section3();
     await section4();
     section5();
+    await section6();
   } finally {
     fs.rmSync(TMP, { recursive: true, force: true });
   }

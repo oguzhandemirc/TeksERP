@@ -121,7 +121,7 @@ function SwitchPlanView({ plan, busy, onPin }: { plan: TlsSwitchPlan; busy: bool
   return (
     <div className="space-y-2">
       <p className="text-xs text-muted-foreground">
-        Aşağıdaki kodu sunucu bilgisayarındaki panelde (Sunucu Adresi → Şifreli bağlantı) görünen kodla karşılaştırın.
+        Aşağıdaki kodu sunucu bilgisayarının kendisinde görünen kodla karşılaştırın (oradaki panel: Sunucu Adresi → Şifreli bağlantı; ya da tarayıcıda http://localhost:4000/ durum sayfası).
         Tek bir harf bile farklıysa onaylamayın.
       </p>
       <FingerprintLine hex={plan.fingerprint} testId="lan-tls-observed-fp" />
