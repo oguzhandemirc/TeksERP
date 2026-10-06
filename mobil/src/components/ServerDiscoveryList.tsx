@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { ActivityIndicator, Icon, ProgressBar, TouchableRipple } from 'react-native-paper';
 import { useBusyAction } from '../hooks/useBusyAction';
@@ -48,6 +48,8 @@ export interface ServerDiscoveryListProps {
    */
   onResult?: (bulunan: DiscoveredServer[]) => void;
   disabled?: boolean;
+  /** Bileşen açılınca aramayı bir kez kendisi başlatır (ilk açılış ekranı: operatöre "ara" dedirtilmez). */
+  autoStart?: boolean;
 }
 
 export function ServerDiscoveryList({
@@ -56,6 +58,7 @@ export function ServerDiscoveryList({
   onPick,
   onResult,
   disabled,
+  autoStart,
 }: ServerDiscoveryListProps) {
   const [progress, setProgress] = useState<{ tried: number; total: number } | null>(null);
   const [found, setFound] = useState<DiscoveredServer[] | null>(null);
@@ -94,6 +97,13 @@ export function ServerDiscoveryList({
       onResult?.(adaylar);
     },
   });
+
+  const autoStarted = useRef(false);
+  useEffect(() => {
+    if (!autoStart || autoStarted.current) return;
+    autoStarted.current = true;
+    startSearch();
+  }, [autoStart, startSearch]);
 
   return (
     <View style={styles.block}>

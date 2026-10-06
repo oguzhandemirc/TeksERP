@@ -57,6 +57,9 @@ type TestResult =
   | { status: 'ok'; message: string }
   | { status: 'fail'; message: string };
 
+/** Ortak pakette gömülü adres yoktur; varsayılana dönmek ilk açılıştaki "Sunucuyu bul" ekranına götürür. */
+const NO_AUTO_URL = 'yok — "Sunucuyu bul" ekranı açılır';
+
 export default function ServerSettingsScreen() {
   const navigation = useNavigation();
   const { baseUrl, customUrl, recentUrls, setCustomUrl, reset } = useBaseUrlStore();
@@ -202,7 +205,7 @@ export default function ServerSettingsScreen() {
   const resetToAuto = () => {
     setConfirmState({
       title: 'Otomatik adrese dön?',
-      body: `Şu an:\n${customUrl ?? ''}\n\nOtomatik adres:\n${computeAutoUrl()}`,
+      body: `Şu an:\n${customUrl ?? ''}\n\nOtomatik adres:\n${computeAutoUrl() || NO_AUTO_URL}`,
       confirmLabel: 'Geri Dön',
       onConfirm: () => {
         void doResetToAuto();
@@ -422,14 +425,14 @@ export default function ServerSettingsScreen() {
         <View style={styles.infoRow}>
           <Text style={styles.infoLabel}>Şu an aktif</Text>
           <Text style={styles.infoValue} selectable>
-            {baseUrl}
+            {baseUrl || '—'}
           </Text>
         </View>
         <View style={styles.infoDivider} />
         <View style={styles.infoRow}>
           <Text style={styles.infoLabel}>Otomatik (varsayılan)</Text>
           <Text style={styles.infoValueMuted} selectable>
-            {autoUrl}
+            {autoUrl || NO_AUTO_URL}
           </Text>
         </View>
         {customUrl && (
