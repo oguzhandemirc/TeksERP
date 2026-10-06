@@ -22,7 +22,7 @@
 //   B4  vendor-url.ts.e `lisans-test` adı (yorum)          → 1 ❌ (§4c)
 // =============================================================================
 import { spawnSync } from "node:child_process";
-import { readFileSync, readdirSync, statSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import path from "node:path";
 import { DEFAULT_LICENSE_SERVER_URL, LICENSE_SERVER_DISABLED, resolveVendorUrl } from "../src/lib/license/vendor-url";
 
@@ -121,7 +121,10 @@ function tekKaynak(): void {
   const TEK = path.join("lib", "license", "vendor-url.ts");
   check("§4a ⭐ LICENSE_SERVER_URL ortam okuması yalnız vendor-url.ts'te ve bir kez", okuyan.length === 1 && okuyan[0] === `${TEK}×1`, okuyan.join(", ") || "HİÇ YOK");
   check("§4b satıcı alan adı literali yalnız vendor-url.ts'te", literal.length === 1 && literal[0] === TEK, literal.join(", ") || "HİÇ YOK");
-  check("§4c ⭐ emekli hazırlık satıcısı adı (lisans-test) src'de yok — tek satıcı", emekli.length === 0, emekli.join(", "));
+  // Panel aktarma izin listesi (Electron/shared) de aynı adı taşımaz: ayna bekçisi yalnız üretim makinesini bekler.
+  const aktarma = path.join(KOK, "..", "Electron", "shared", "license-relay.ts");
+  if (existsSync(aktarma) && /lisans-test\.etkiliyazilim\.com/.test(readFileSync(aktarma, "utf8"))) emekli.push("Electron/shared/license-relay.ts");
+  check("§4c ⭐ emekli hazırlık satıcısı adı (lisans-test) src'de ve panel aktarma listesinde yok — tek satıcı", emekli.length === 0, emekli.join(", "));
 }
 
 cozumTablosu();

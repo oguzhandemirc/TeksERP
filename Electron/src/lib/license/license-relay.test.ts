@@ -30,10 +30,10 @@ const DEV = { allowLoopback: true };
  * `{ v: 1, zarf }`, yanıt tavanlı; döngü adresi yalnız paketlenmemiş derlemede.
  */
 describe("aktarma hedefi ve gövdesi (saf)", () => {
-  it("satıcı ana makinesi (üretim + hazırlık) https + /v1/cevrimdisi kabul", () => {
+  it("satıcı ana makinesi (tek satıcı: üretim) https + /v1/cevrimdisi kabul; emekli hazırlık adı RED", () => {
     expect(validateRelayTarget(TARGET, PROD)).toBe(TARGET);
-    expect(validateRelayTarget("https://lisans-test.etkiliyazilim.com/v1/cevrimdisi", PROD)).not.toBeNull();
-    expect(validateRelayTarget("https://lisans-test.etkiliyazilim.com:8443/v1/cevrimdisi", PROD)).not.toBeNull();
+    expect(validateRelayTarget("https://lisans-test.etkiliyazilim.com/v1/cevrimdisi", PROD)).toBeNull();
+    expect(validateRelayTarget("https://lisans-test.etkiliyazilim.com:8443/v1/cevrimdisi", PROD)).toBeNull();
   });
 
   it("⭐ D12: döngü adresi yalnız geliştirmede; üretim paketinde RED", () => {
