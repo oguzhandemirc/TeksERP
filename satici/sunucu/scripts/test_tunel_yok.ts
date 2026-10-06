@@ -21,7 +21,7 @@
 //   dinleyici denetimi kaldırıldı → §5a ❌ (test_erisim_kapisi YEŞİL kaldı: aynı rolde ikinci dinleyici yok, bağı yalnız §5a
 //   ölçer) · config şemasına `PORT_TAILNET` → §2a · §3a · §3b ❌.
 // NEGATİF SONDA (T2 deploy kapsamı, 2026-10-05, dosya DIŞI, cp + shasum ile geri alındı / yeni dosya silindi):
-//   portal-tunel.cjs geri → §8a · §8b ❌ · vds/tailnet-yeni.sh → §8b ❌ · Dockerfile'a `COPY portal-tunel.cjs` · ornek.env'e
+//   portal-tunel.cjs geri → §8a · §8b ❌ · vds/tailnet-yeni.sh → §8b ❌ · Dockerfile'a `COPY portal-tunel.cjs` · ornek-uretim.env'e
 //   TAILNET_IP · docker-compose.yml'ye "4611" yorumu → §8c ❌ · compose-denetle'de EMEKLI_ORTULER boş · ön denetim çağrısı
 //   kapalı · Ⓞ beklenen = örtü var mı · çözülmüş Ⓚ bloğu silindi → §8e ❌ (her biri 16–17/18).
 // Koşum: npx tsx scripts/test_tunel_yok.ts   (yalnız (5) DB'ye dokunur, kendi _test DB'si)
@@ -181,7 +181,7 @@ async function main(): Promise<void> {
       .split("\n")
       .flatMap((l, i) => (TUNEL_IZI.test(l) ? [`${d}:${i + 1}`] : [])),
   );
-  const beklenenTaranan = ["Dockerfile", "docker-compose.bildirim.yml", "docker-compose.portal-genel.yml", "docker-compose.yml", "imaj-derle.sh", "ornek-uretim.env", "ornek.env"];
+  const beklenenTaranan = ["Dockerfile", "docker-compose.bildirim.yml", "docker-compose.portal-genel.yml", "docker-compose.yml", "imaj-derle.sh", "ornek-uretim.env"];
   kontrol(
     "§8c docker-compose*.yml · Dockerfile · imaj-derle.sh · ornek*.env metninde (yorum dahil) 4611 / tailnet / TAILNET_ / portal-tunel YOK",
     izli.length === 0 && beklenenTaranan.every((d) => taranan.includes(d)),

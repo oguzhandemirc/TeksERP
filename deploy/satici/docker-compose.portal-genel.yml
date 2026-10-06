@@ -1,8 +1,8 @@
 # =============================================================================
 # Satıcı — PORTAL GENEL ERİŞİMİ: satıcı portalı internetten (portal.<alan>), Cloudflare proxy + Access arkasında
 # =============================================================================
-# Ana dosyanın ÜSTÜNE bindirilir; portalın TEK yoludur (tünel yok). YALNIZ ÜRETİMDE ve orada ZORUNLU, hazırlıkta
-# portal YOK (tek portal — kullanıcı kararı 2026-10-05; compose-denetle Ⓞ ölçer):
+# Ana dosyanın ÜSTÜNE bindirilir; portalın TEK yoludur (tünel yok). ÜRETİMDE ZORUNLU
+# (tek portal — kullanıcı kararı 2026-10-05; compose-denetle Ⓞ ölçer):
 #   üretim : COMPOSE_FILE=docker-compose.yml:docker-compose.portal-genel.yml[:docker-compose.bildirim.yml]
 # Runbook (Cloudflare tarafı · DNS · doğrulama · geri alma): docs/ops/PORTAL-GENEL-ERISIM.md
 #

@@ -660,10 +660,10 @@ async function main(): Promise<void> {
       const r = await tore([`--dizin=${H5}`, `--yil=${YIL}`, ...argv, paketBayragi()], iki(KOK_PAROLA, PAKET_PAROLA), {}, ev);
       return [r.status === 2 && desen.test(r.cikti) && !/\[2\/10\]/.test(r.cikti) && !existsSync(H5), `${r.status} ${r.cikti.trim().split("\n").pop()?.slice(0, 140)}`];
     };
-    const ornekEnv = path.join(KLON, "deploy", "satici", "ornek.env");
+    const ornekEnv = path.join(KLON, "deploy", "satici", "ornek-uretim.env");
     writeFileSync(ornekEnv, `${readFileSync(ornekEnv, "utf8")}# kirli\n`);
     const [kirli, kirliA] = await kaynakRed([ET], /Ağaç KİRLİ/);
-    gitK(["checkout", "--", "deploy/satici/ornek.env"]);
+    gitK(["checkout", "--", "deploy/satici/ornek-uretim.env"]);
     kontrol("§5a izlenen dosyada değişiklik → RED (kirli)", kirli, kirliA);
     writeFileSync(path.join(KLON, "satici", "sunucu", "src", "sonda-izlenmeyen.ts"), "export {};\n");
     const [izsiz, izsizA] = await kaynakRed([ET], /Ağaç KİRLİ/);

@@ -1,16 +1,15 @@
 // =============================================================================
 // SATICI COMPOSE YALITIM DENETİMİ (deploy/satici/compose-denetle.mjs) — DB'siz; docker compose yoksa ÖLÇÜLEMEDİ beyanı.
 //   §1 runbook kurguları (örnek .env'lerden türetilir; portal tüneli YOK, tek portal üretimde): üretim + portal-genel
-//      (--diger-env hazırlık) · hazırlık yalnız ana dosya (⑫ ölçülmedi, çıkış 0) · hazırlık (--diger-env üretim) — hepsi
+//      (örnek COMPOSE_FILE; ölçülmeyen yalnız Ⓑ7 patron ayağı) —
 //      0 ihlal, her servis ③b/③c'den geçer; Ⓚ/Ⓞ/① satırları YEŞİL (her şeyi reddeden denetim geçemez)
 //   §2 yalıtım gevşetmesi — her örtü çıkış 1 ve KENDİ servisinin ③b/③c satırıyla: volumes_from (incelemenin örtüsü
 //      `satici-jwks: volumes_from: ["satici:ro"]`) · privileged · cap_add · pid service: · security_opt seccomp=unconfined ·
 //      network_mode service: (istisna yok) · userns host · devices · tanınmayan anahtar (ulimits)
 //   §2b ⑬c host yolu yaratma (create_host_path: true · kısa sözdizimi) her compose sürümünde kendi satırıyla ❌ — JSON izi
 //      sürüme göre ters anlam taşır (2.x false'u, 5.x true'yu düşürür); denetim kalibrasyonla okur
-//   §3 BİLDİRİM örtüsü (Ⓑ0–Ⓑ8): gerçek örtüyle üç kurgu 0 ihlal (hazırlık + bildirim · üretim + portal-genel + bildirim,
-//      --diger-env hazırlık + bildirim · aynı, --diger-env düz hazırlık) ve her Ⓑ satırı ✅; --patron-env yoksa Ⓑ7'nin
-//      patron ayağı ÖLÇÜLMEDİ (hazırlıkta çıkış 0, üretimde 2) · her Ⓑ maddesi için bozuk örtü/ortam → çıkış 1 ve KENDİ
+//   §3 BİLDİRİM örtüsü (Ⓑ0–Ⓑ8): gerçek örtüyle üretim + portal-genel + bildirim kurgusu 0 ihlal ve her Ⓑ satırı ✅; --patron-env yoksa Ⓑ7'nin
+//      patron ayağı ÖLÇÜLMEDİ (çıkış 2) · her Ⓑ maddesi için bozuk örtü/ortam → çıkış 1 ve KENDİ
 //      satırı ❌ · .env'de BILDIRIM_DNS_1 değişince compose ile betik birlikte değişir → Ⓑ8 YEŞİL · düz sır basılmaz.
 //   §4 üretim öncesi sertleştirme: yapılandırma BÜTÜN profillerle · ③d host bağı allowlist'i · ③e group_add yalnız SIR_GID ·
 //      birincil grup root değil · Ⓑ5/⑬g ortam ALLOWLIST'i · Ⓑ7b/⑬h çıkış alt ağı = .env = betik · ⑥c IPv6 — her biri
@@ -44,8 +43,8 @@ interface Kosum {
   readonly cikti: string;
 }
 
-function denetle(env: string, g: { diger?: string; dosyalar?: readonly string[] } = {}): Kosum {
-  const r = spawnSync(process.execPath, [DENETLE, "--env-file", env, ...(g.diger ? ["--diger-env", g.diger] : []), ...(g.dosyalar ?? []).flatMap((f) => ["-f", f])], {
+function denetle(env: string, g: { dosyalar?: readonly string[] } = {}): Kosum {
+  const r = spawnSync(process.execPath, [DENETLE, "--env-file", env, ...(g.dosyalar ?? []).flatMap((f) => ["-f", f])], {
     encoding: "utf8",
     timeout: 60_000,
   });
@@ -72,16 +71,12 @@ function main(): void {
       return p;
     };
     // Örnek üretim .env'inin Access satırları yer tutucudur (<takım>…); kurgu bekçi değerleriyle EZER (son atama kazanır).
-    const hazirlikMetni = imaj(readFileSync(path.join(D, "ornek.env"), "utf8"));
     const uretimMetni = `${imaj(readFileSync(path.join(D, "ornek-uretim.env"), "utf8"))}\n${portal("uretim", "172.31.251.48/29")}`;
-    const hazirlik = yaz("hazirlik.env", hazirlikMetni);
     const uretim = yaz("uretim.env", uretimMetni);
 
     console.log("\n§1 runbook kurguları — 0 ihlal (tünel yok, tek portal üretimde)");
     const kurgular: [string, Kosum, number, RegExp][] = [
-      ["§1a SATICI-KURULUM §13 üretim + portal-genel (örnek COMPOSE_FILE, --diger-env hazırlık)", denetle(uretim, { diger: hazirlik }), 0, /\d+ geçti, 0 ihlal$/],
-      ["§1b hazırlık yalnız ana dosya — portal YOK (⑫ ölçülmedi, çıkış 0)", denetle(hazirlik), 0, /\d+ geçti, 0 ihlal, 1 ölçülmedi$/],
-      ["§1c hazırlık (--diger-env üretim)", denetle(hazirlik, { diger: uretim }), 0, /\d+ geçti, 0 ihlal$/],
+      ["§1a SATICI-KURULUM §13 üretim + portal-genel (örnek COMPOSE_FILE)", denetle(uretim), 0, /\d+ geçti, 0 ihlal$/],
     ];
     for (const [ad, k, cikis, desen] of kurgular) {
       const servisSayisi = (k.cikti.match(/^✅ ③c /gm) ?? []).length;
@@ -89,9 +84,8 @@ function main(): void {
     }
     const yesilD5 = [/^✅ Ⓚ bu ortam: /m, /^✅ ① hiçbir servis port yayımlamaz/m, /^✅ Ⓚ çözülmüş yapılandırmada tünel kalıntısı yok/m, /^✅ ④b satıcının ağ kümesi tam üç ağ/m];
     const eksik1d = (k: Kosum, ozel: RegExp[]) => [...yesilD5, ...ozel].filter((d) => !d.test(k.cikti)).map(String);
-    const e1a = eksik1d(kurgular[0]![1], [/^✅ Ⓞ üretimde portal-genel örtüsü ZORUNLU/m, /^✅ Ⓚ öteki ortam /m, /^✅ ⑫f öteki ortam da port yayımlamaz/m]);
-    const e1b = eksik1d(kurgular[1]![1], [/^✅ Ⓞ hazırlıkta portal YOK/m]);
-    kontrol("§1d ✓K Ⓚ · ① · ④b · Ⓞ (üretim zorunlu / hazırlık yok) · ⑫f satırları YEŞİL basılır (kör RED değil, sessiz atlama değil)", e1a.length === 0 && e1b.length === 0, [...e1a, ...e1b].join(" ; "));
+    const e1a = eksik1d(kurgular[0]![1], [/^✅ Ⓞ üretimde portal-genel örtüsü ZORUNLU/m]);
+    kontrol("§1d ✓K Ⓚ · ① · ④b · Ⓞ (üretimde portal zorunlu) satırları YEŞİL basılır (kör RED değil, sessiz atlama değil)", e1a.length === 0, e1a.join(" ; "));
 
     console.log("\n§2 yalıtım gevşetmesi — her örtü kendi satırıyla kırmızı (çıkış 1)");
     const temel = [path.join(D, "docker-compose.yml"), path.join(D, "docker-compose.portal-genel.yml")];
@@ -109,7 +103,7 @@ function main(): void {
     ];
     for (const [ad, ortu, desen] of sondalar) {
       const f = yaz(`sonda-${ad.replace(/[^a-z0-9]+/gi, "-")}.yml`, ortu);
-      const k = denetle(uretim, { diger: hazirlik, dosyalar: [...temel, f] });
+      const k = denetle(uretim, { dosyalar: [...temel, f] });
       kontrol(`§2 ${ad} → çıkış 1, kendi satırı ❌`, k.status === 1 && desen.test(k.cikti), `${k.status} · ${kirmizi(k).join(" | ").slice(0, 200) || ozet(k)}`);
     }
 
@@ -129,7 +123,7 @@ function main(): void {
     ];
     for (const [ad, ortu, desen] of yaratmaSondalari) {
       const f = yaz(`sonda-yaratma-${ad.replace(/[^a-z0-9]+/gi, "-")}.yml`, ortu);
-      const k = denetle(uretim, { diger: hazirlik, dosyalar: [...temel, f] });
+      const k = denetle(uretim, { dosyalar: [...temel, f] });
       kontrol(`§2b ${ad} → çıkış 1, ⑬c ❌`, k.status === 1 && desen.test(k.cikti), `${k.status} · ${kirmizi(k).join(" | ").slice(0, 200) || ozet(k)}`);
     }
 
@@ -140,21 +134,17 @@ function main(): void {
     // Üretimin bildirim satırları örnekte YER AYRILMIŞ (yorumlu) — örnek tek kaynak kalsın diye açılarak kullanılır.
     const uretimBildirimMetni = uretimMetni.replace(/^# ((?:BILDIRIM|TELEGRAM|RESEND)_[A-Z0-9_]+=)/gm, "$1");
     const uretimPB = yaz("uretim-pb.env", ekle(uretimBildirimMetni, "docker-compose.yml:docker-compose.portal-genel.yml:docker-compose.bildirim.yml"));
-    const hazirlikB = yaz("hazirlik-b.env", ekle(hazirlikMetni, "docker-compose.yml:docker-compose.bildirim.yml"));
-    const denetleP = (env: string, g: { diger?: string; dosyalar?: readonly string[]; patron?: boolean } = {}): Kosum => {
+    const denetleP = (env: string, g: { dosyalar?: readonly string[]; patron?: boolean } = {}): Kosum => {
       const r = spawnSync(
         process.execPath,
-        [DENETLE, "--env-file", env, ...(g.diger ? ["--diger-env", g.diger] : []), ...(g.patron === false ? [] : ["--patron-env", PATRON]), ...(g.dosyalar ?? []).flatMap((f) => ["-f", f])],
+        [DENETLE, "--env-file", env, ...(g.patron === false ? [] : ["--patron-env", PATRON]), ...(g.dosyalar ?? []).flatMap((f) => ["-f", f])],
         { encoding: "utf8", timeout: 60_000 },
       );
       return { status: r.status, cikti: `${r.stdout ?? ""}${r.stderr ?? ""}` };
     };
-    // Üretim kurgusu öteki ortamla (hazırlık + bildirim) koşar: ⑫ ölçülmeden üretim çıkışı 2 olurdu.
-    const denetleU = (env: string, g: { dosyalar?: readonly string[]; patron?: boolean } = {}): Kosum => denetleP(env, { diger: hazirlikB, ...g });
+    const denetleU = denetleP;
     const bKurgular: [string, Kosum, number, RegExp][] = [
-      ["§3a hazırlık + bildirim (--patron-env)", denetleP(hazirlikB), 0, /\d+ geçti, 0 ihlal, 1 ölçülmedi$/],
-      ["§3b üretim + portal-genel + bildirim (--diger-env hazırlık + bildirim · --patron-env)", denetleU(uretimPB), 0, /\d+ geçti, 0 ihlal$/],
-      ["§3c üretim + portal-genel + bildirim (--diger-env düz hazırlık · --patron-env)", denetleP(uretimPB, { diger: hazirlik }), 0, /\d+ geçti, 0 ihlal$/],
+      ["§3b üretim + portal-genel + bildirim (--patron-env)", denetleP(uretimPB), 0, /\d+ geçti, 0 ihlal$/],
     ];
     const B_SATIRLARI = ["Ⓑ0", "Ⓑ1", "Ⓑ2", "Ⓑ3", "Ⓑ4", "Ⓑ5", "Ⓑ6", "Ⓑ7", "Ⓑ7b", "Ⓑ8"];
     for (const [ad, k, cikis, desen] of bKurgular) {
@@ -166,14 +156,8 @@ function main(): void {
         `${k.status} · ${ozet(k)} · eksik ${eksikB.join(",") || "yok"} · ${kirmizi(k).join(" | ").slice(0, 200)}`,
       );
     }
-    const patronsuzH = denetleP(hazirlikB, { patron: false });
-    kontrol(
-      "§3e ✓K --patron-env yoksa Ⓑ7 patron ayağı ÖLÇÜLMEDİ beyanı (geçti sayılmaz) — hazırlıkta çıkış 0",
-      patronsuzH.status === 0 && /^⏭ Ⓑ7 bildirim-cikis ↔ patron ağları ÖLÇÜLMEDİ/m.test(patronsuzH.cikti) && /0 ihlal, 2 ölçülmedi$/.test(ozet(patronsuzH)),
-      `${patronsuzH.status} · ${ozet(patronsuzH)}`,
-    );
     const patronsuzU = denetleU(uretimPB, { patron: false });
-    kontrol("§3f ✓K üretimde --patron-env yoksa çıkış 2 (ÖLÇÜLMEDİ üretimde zorunlu)", patronsuzU.status === 2 && /ÜRETİMDE ZORUNLU/.test(patronsuzU.cikti), `${patronsuzU.status} · ${ozet(patronsuzU)}`);
+    kontrol("§3f ✓K üretimde --patron-env yoksa çıkış 2 (ÖLÇÜLMEDİ zorunlu)", patronsuzU.status === 2 && /ZORUNLU \(çıkış 2\)/.test(patronsuzU.cikti), `${patronsuzU.status} · ${ozet(patronsuzU)}`);
 
     const bTemel = [...temel, BILDIRIM];
     // Ⓑ0: örtü dosyası listede ama servis başka adla → beklenen servis eksik.
@@ -315,7 +299,7 @@ function main(): void {
     ];
     for (const [ad, ortu, desenler] of tunelSondalari) {
       const f = yaz(`s5-${ad.replace(/[^a-z0-9]+/gi, "-").slice(0, 50)}.yml`, ortu);
-      const k = denetle(uretim, { diger: hazirlik, dosyalar: [...temel, f] });
+      const k = denetle(uretim, { dosyalar: [...temel, f] });
       const eksik = desenler.filter((d) => !d.test(k.cikti));
       kontrol(`§5 ${ad} → çıkış 1, kendi satır(lar)ı ❌`, k.status === 1 && eksik.length === 0, `${k.status} · eksik ${eksik.map(String).join(" ; ").slice(0, 160) || "yok"} · ${kirmizi(k).join(" | ").slice(0, 240)}`);
     }
@@ -327,35 +311,28 @@ function main(): void {
       eskiOrtu,
       'services:\n  satici:\n    environment:\n      TAILNET_BIND: "127.0.0.1"\n      TAILNET_LOOPBACK: "1"\n  portal-tunel:\n    image: ${SATICI_IMAJ}\n    network_mode: "service:satici"\n    depends_on: [satici]\n    user: "10001:10001"\n    entrypoint: ["node", "/usr/local/lib/portal-tunel.cjs"]\n    read_only: true\n    init: true\n    security_opt: ["no-new-privileges:true"]\n    cap_drop: ["ALL"]\n    cpus: 0.1\n    mem_limit: 64m\n    pids_limit: 20\n',
     );
-    const eski = denetle(uretim, { diger: hazirlik, dosyalar: [...temel, eskiOrtu] });
+    const eski = denetle(uretim, { dosyalar: [...temel, eskiOrtu] });
     const eskiEksik = [
       /^❌ Ⓚ bu ortam: [^\n]*örtü docker-compose\.loopback\.yml — yeni imajda portal-tunel YOK/m,
       /^❌ Ⓚ çözülmüş yapılandırmada tünel kalıntısı yok[^\n]* — servis portal-tunel · satici: TAILNET_BIND · satici: TAILNET_LOOPBACK$/m,
     ].filter((d) => !d.test(eski.cikti));
     kontrol("§5 ⭐ R4 eski geri döngü örtüsü (aynı adla, portal-tunel'li) yeni compose'a bindirilir → çıkış 1, Ⓚ ön + çözülmüş ❌", eski.status === 1 && eskiEksik.length === 0, `${eski.status} · eksik ${eskiEksik.map(String).join(" ; ").slice(0, 160) || "yok"} · ${kirmizi(eski).join(" | ").slice(0, 240)}`);
     const emekliEnv = yaz("s5-emekli-compose-file.env", `${uretimMetni}\nCOMPOSE_FILE=docker-compose.yml:docker-compose.loopback.yml:docker-compose.portal-genel.yml\n`);
-    const emekli = denetle(emekliEnv, { diger: hazirlik });
+    const emekli = denetle(emekliEnv);
     kontrol(
       "§5 ⭐ R4 VDS .env'i hâlâ COMPOSE_FILE'da docker-compose.loopback.yml (repoda yok) → çıkış 1 (ÖLÇÜLEMEDİ değil), Ⓚ ön ❌",
       emekli.status === 1 && /^❌ Ⓚ bu ortam: [^\n]*örtü docker-compose\.loopback\.yml/m.test(emekli.cikti) && /yapılandırma çözülmeden/.test(emekli.cikti),
       `${emekli.status} · ${kirmizi(emekli).join(" | ").slice(0, 200) || ozet(emekli)}`,
     );
     const envKalinti = yaz("s5-env-tailnet.env", `${uretimMetni}\nTAILNET_IP=127.0.0.1\nTAILNET_AGI=172.31.251.16/28\n`);
-    const envK = denetle(envKalinti, { diger: hazirlik });
+    const envK = denetle(envKalinti);
     kontrol("§5 .env'de TAILNET_IP/TAILNET_AGI kalmış → çıkış 1, Ⓚ ön ❌ (adlarıyla)", envK.status === 1 && /^❌ Ⓚ bu ortam: [^\n]* — anahtar TAILNET_IP · anahtar TAILNET_AGI$/m.test(envK.cikti), `${envK.status} · ${kirmizi(envK).join(" | ").slice(0, 200)}`);
-    const digerKalinti = yaz("s5-diger-tailnet.env", `${hazirlikMetni}\nTAILNET_KONTEYNER_IP=172.31.253.2\n`);
-    const digerK = denetle(uretim, { diger: digerKalinti });
-    kontrol("§5 öteki ortamın .env'inde TAILNET_KONTEYNER_IP → çıkış 1, Ⓚ öteki ❌", digerK.status === 1 && /^❌ Ⓚ öteki ortam \(s5-diger-tailnet\.env\): [^\n]*anahtar TAILNET_KONTEYNER_IP/m.test(digerK.cikti), `${digerK.status} · ${kirmizi(digerK).join(" | ").slice(0, 200)}`);
-    const digerPortlu = yaz("s5-diger-port.yml", 'services:\n  satici:\n    ports: ["127.0.0.1:4611:4611"]\n');
-    const digerPortEnv = yaz("s5-diger-port.env", `${hazirlikMetni}\nCOMPOSE_FILE=docker-compose.yml:${digerPortlu}\n`);
-    const digerP = denetle(uretim, { diger: digerPortEnv });
-    kontrol("§5 öteki ortam 127.0.0.1:4611 yayımlar → çıkış 1, ⑫f ❌", digerP.status === 1 && /^❌ ⑫f öteki ortam da port yayımlamaz[^\n]* — 127\.0\.0\.1:4611$/m.test(digerP.cikti), `${digerP.status} · ${kirmizi(digerP).join(" | ").slice(0, 200)}`);
     const portalsizU = yaz("s5-uretim-portalsiz.env", `${uretimMetni}\nCOMPOSE_FILE=docker-compose.yml\n`);
-    const pU = denetle(portalsizU, { diger: hazirlik });
+    const pU = denetle(portalsizU);
     kontrol("§5 ⭐ üretimde portal-genel örtüsü YOK → çıkış 1, Ⓞ ❌ (portalsız üretim)", pU.status === 1 && /^❌ Ⓞ üretimde portal-genel örtüsü ZORUNLU[^\n]* — ortam uretim · portal-genel YOK$/m.test(pU.cikti), `${pU.status} · ${kirmizi(pU).join(" | ").slice(0, 200)}`);
-    const portalliH = yaz("s5-hazirlik-portalli.env", `${hazirlikMetni}\nCOMPOSE_FILE=docker-compose.yml:docker-compose.portal-genel.yml\n${portal("hazirlik", "172.31.255.0/29")}`);
-    const pH = denetle(portalliH, { diger: uretim });
-    kontrol("§5 ⭐ hazırlığa portal-genel örtüsü → çıkış 1, Ⓞ ❌ (tek portal üretimde)", pH.status === 1 && /^❌ Ⓞ hazırlıkta portal YOK[^\n]* — ortam hazirlik · portal-genel VAR$/m.test(pH.cikti), `${pH.status} · ${kirmizi(pH).join(" | ").slice(0, 200)}`);
+    const hazirlikEnv = yaz("s5-emekli-ortam.env", uretimMetni.replace(/^ORTAM=.*$/m, "ORTAM=hazirlik"));
+    const hz = denetle(hazirlikEnv);
+    kontrol("§5 ⭐ ORTAM=hazirlik (emekli ortam) → çıkış 1, ⑪ ve Ⓞ ❌ (proje adı tanınmaz)", hz.status === 1 && /^❌ ⑪ /m.test(hz.cikti) && /^❌ Ⓞ [^\n]* TANINMADI \(tekserp-satici-hazirlik\)/m.test(hz.cikti), `${hz.status} · ${kirmizi(hz).join(" | ").slice(0, 200)}`);
   } finally {
     rmSync(tmp, { recursive: true, force: true });
   }

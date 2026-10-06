@@ -12,7 +12,7 @@
 //     özet ölçümü → geçici dizin silinir → yeniden ölçüm (satıcı konteyneri görüyor mu) → vds-dogrula (sonra, öncekiyle AYNI).
 // Aynı adlı dosya: içerik AYNIYSA dokunulmaz (iş yok), FARKLIYSA DUR — hiçbir dosya yazılmaz, üstüne yazılmaz.
 //
-//   node deploy/satici/derleme-koy.mjs --ortam uretim|hazirlik --dosya <yerel> [--dosya <yerel> …] [--uygula]
+//   node deploy/satici/derleme-koy.mjs --ortam uretim --dosya <yerel> [--dosya <yerel> …] [--uygula]
 //
 // ÇIKIŞ: 0 tamam (KURU: denetim temiz + plan · UYGULA: yazıldı ve ölçüldü) · 1 DUR · 2 ÖLÇÜLEMEDİ / kullanım.
 // Belge: docs/ops/SATICI-KURULUM.md §14 · bekçi: node scripts/test_derleme_koy.mjs
@@ -33,10 +33,9 @@ const VDS_DOGRULA = path.join(KOK, 'deploy', 'vds-dogrula.sh');
 // Yerleşim: SATICI-KURULUM.md §13 (`K=`) + ornek*.env DERLEME_DIZINI_HOST; gerçek bağ her koşumda ölçülür.
 export const ORTAMLAR = Object.freeze({
   uretim: Object.freeze({ kok: '/opt/stack/apps/tekserp-satici-uretim', satici: 'tekserp-satici-uretim', yedek: 'tekserp-satici-uretim-yedek' }),
-  hazirlik: Object.freeze({ kok: '/opt/stack/apps/tekserp-satici-hazirlik', satici: 'tekserp-satici-hazirlik', yedek: 'tekserp-satici-hazirlik-yedek' }),
 });
 const PAY = 256 * 1024 * 1024;
-const KULLANIM = 'Kullanım: --ortam uretim|hazirlik --dosya <yerel> [--dosya <yerel> …] [--uygula]';
+const KULLANIM = 'Kullanım: --ortam uretim --dosya <yerel> [--dosya <yerel> …] [--uygula]';
 
 // Konteyner içinde root olarak koşar (yalnız /g:ro ve /k bağlı): gizli ada yaz, `ln` ile yayınla — hedef varsa ln
 // düşer, hiçbir dosya ezilmez; portal noktayla başlayan adı listelemez (BUILD_NAME).
@@ -79,7 +78,7 @@ export function argAyristir(argv) {
     else a.ortam = v;
   }
   if (!a.ortam) hatalar.push('--ortam gerekli');
-  else if (!Object.hasOwn(ORTAMLAR, a.ortam)) hatalar.push(`--ortam uretim | hazirlik (gelen: ${a.ortam})`);
+  else if (!Object.hasOwn(ORTAMLAR, a.ortam)) hatalar.push(`--ortam uretim (gelen: ${a.ortam})`);
   if (!a.dosyalar.length) hatalar.push('en az bir --dosya gerekli');
   return { a, hatalar };
 }

@@ -103,7 +103,7 @@ async function main(): Promise<void> {
   const compose = readFileSync(path.join(SATICI_KOKU, "..", "..", "deploy", "satici", "docker-compose.yml"), "utf8");
   const denetim = readFileSync(path.join(SATICI_KOKU, "..", "..", "deploy", "satici", "compose-denetle.mjs"), "utf8");
   const saticiBlok = /\n {2}satici:\n([\s\S]*?)\n {2}[a-z-]+:\n/.exec(compose)?.[1] ?? "";
-  kontrol("§6a satıcı servisi kipi ORTAM'dan alır (GUVEN_CAPASI: ${ORTAM}), dosya çapası YOK", /\n {6}GUVEN_CAPASI: \$\{ORTAM\}\n/.test(saticiBlok) && !saticiBlok.includes("GUVEN_CAPASI_DOSYASI"));
+  kontrol("§6a satıcı servisi kipi SABİT `uretim` (GUVEN_CAPASI: uretim; ORTAM'dan türemez), dosya çapası YOK", /\n {6}GUVEN_CAPASI: uretim\n/.test(saticiBlok) && !saticiBlok.includes("GUVEN_CAPASI_DOSYASI"));
   kontrol("§6b compose denetimi ⑪ kipi projenin ORTAMIYLA kıyaslar", /ortam\.GUVEN_CAPASI === projeOrtami/.test(denetim) && /!\("GUVEN_CAPASI_DOSYASI" in ortam\)/.test(denetim));
 
   console.log("\n§7 CLI kip çıkarımı");
