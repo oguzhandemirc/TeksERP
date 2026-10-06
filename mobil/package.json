@@ -12,6 +12,8 @@
     "build:apk:verify": "node scripts/build-apk.mjs --verify-only",
     "yayinla": "node scripts/yayinla-ota.mjs",
     "yayinla:check": "node scripts/yayinla-ota.mjs --check",
+    "yayinla:ortak": "node scripts/yayinla-ota-ortak.mjs",
+    "yayinla:ortak:check": "node scripts/yayinla-ota-ortak.mjs --check",
     "test": "jest --runInBand",
     "test:watch": "jest --watch",
     "lint": "eslint .",

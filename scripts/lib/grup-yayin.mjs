@@ -33,9 +33,25 @@ const ADRES = /^https:\/\/[a-z0-9.-]+(?::\d+)?\/[A-Za-z0-9._/-]*$/;
 const YOK_KODU = 44;
 const SSH_ZAMAN_ASIMI_MS = 120_000;
 
-/** Ürünün yüklenen ANA artefaktı (özet eşitliği bununla ölçülür); O10b/O11b kendi ürününü ekler. */
+/**
+ * Tablet artefaktları — grubun `mobil/` dizinine göre yol. İki tür vardır ve ikisi de terfide BAYT-EŞİT kopyalanır:
+ *   apk: `apk/TeksERP-<sürüm>-vc<vc>.apk` · ota: `ota/<rv>/<damga>/<bundle>` (bundle adı içeriğin özetidir).
+ * Tabletin künyeleri (OTA manifesti · `apk/surum.json`) artefakt DEĞİL işaretçidir ve grup başına yeniden imzalanır.
+ */
+const GORELI_GUVENLI = /^[A-Za-z0-9._/-]+$/;
+export const TABLET_ARTEFAKT_GORELI = Object.freeze({
+  apk: ({ surum, vc }) => `apk/TeksERP-${surum}-vc${vc}.apk`,
+  ota: ({ rv, damga, bundle }) => {
+    const b = String(bundle);
+    if (!GORELI_GUVENLI.test(b) || b.startsWith('/') || b.split('/').includes('..')) throw new Olculemedi(`OTA bundle yolu tanınmıyor: "${bundle}"`);
+    return `ota/${rv}/${damga}/${b}`;
+  },
+});
+
+/** Ürünün yüklenen ANA artefaktı (özet eşitliği bununla ölçülür); O11b backend'i ekler. Tablet iki türlüdür (yukarıda). */
 export const ARTEFAKT_ADI = Object.freeze({
   panel: (surum) => `TeksERP-${surum}-Setup.exe`,
+  tablet: (surum, ek = {}) => TABLET_ARTEFAKT_GORELI.apk({ surum, vc: ek.vc }),
 });
 
 /** Kapının ihlal hatası: `satirlar` ile (kanal-kapisi'nin `hataDur`u ile aynı sözleşme). */
@@ -183,9 +199,11 @@ export function grupTerfiHukmu({ grup, urun, surum, kaynak, git, kaynaklar, atla
  * Kapının tamamı: grup + git + kaynak grup olgularını toplar, hükmü verir. Okunamayan her şey ÖLÇÜLEMEDİ
  * (fırlatmaz); eski kanal kodu / bilinmeyen grup İHLAL.
  * @param {{grup: string, urun: string, surum: string, atla?: string, kuru?: boolean, dizin?: string, kok?: string,
- *   kayit?: object, eskiKodlar?: string[], oku?: Function, ozetOku?: Function}} o `dizin`: ortak paket dizini (özet için)
+ *   kayit?: object, eskiKodlar?: string[], oku?: Function, ozetOku?: Function, artefakt?: {yerel: string, goreli: string}}} o
+ *   `dizin`: ortak paket dizini (panel özeti için) · `artefakt`: ürünün artefaktı panel dışındaysa (tablet) yerel
+ *   dosya + kaynak grubun ürün dizinine göre yolu — verilmezse panelin `ARTEFAKT_ADI` kuralı uygulanır
  */
-export function grupTerfiKapisi({ grup, urun, surum, atla, kuru = false, dizin, kok = KOK, kayit, eskiKodlar, oku, ozetOku = uzakSha256 }) {
+export function grupTerfiKapisi({ grup, urun, surum, atla, kuru = false, dizin, kok = KOK, kayit, eskiKodlar, oku, ozetOku = uzakSha256, artefakt }) {
   let zincir;
   try {
     ({ kayit, zincir } = grupCoz(grup, { kok, kayit, eskiKodlar }));
@@ -211,11 +229,20 @@ export function grupTerfiKapisi({ grup, urun, surum, atla, kuru = false, dizin, 
   if (!kuru) {
     try {
       kaynaklar = kaynakGrupSurumleri(kaynak, urun, { kok, kayit, eskiKodlar, oku });
-      const ad = ARTEFAKT_ADI[urun]?.(surum);
-      if (!ad) throw new Olculemedi(`"${urun}" ürününün artefakt adı henüz tanımlı değil (özet eşitliği ölçülemez)`);
-      if (!dizin) throw new Olculemedi('özet eşitliği için ortak paket dizini verilmedi (--dizin=)');
-      const yerel = dosyaOzeti(path.join(dizin, ad)).sha256;
-      ozet = { yerel, kaynak: ozetOku(`${grupHedefi(kaynak, urun, { kok, kayit, eskiKodlar }).vds}/${ad}`) };
+      let yerelYol;
+      let goreli;
+      if (artefakt) {
+        ({ yerel: yerelYol, goreli } = artefakt);
+        if (!yerelYol || !goreli) throw new Olculemedi('artefakt: yerel dosya ve kaynak grup yolu birlikte verilmeli');
+      } else {
+        if (urun === 'tablet') throw new Olculemedi('tablet artefaktı (APK ya da OTA bundle) verilmedi (özet eşitliği ölçülemez)');
+        goreli = ARTEFAKT_ADI[urun]?.(surum);
+        if (!goreli) throw new Olculemedi(`"${urun}" ürününün artefakt adı henüz tanımlı değil (özet eşitliği ölçülemez)`);
+        if (!dizin) throw new Olculemedi('özet eşitliği için ortak paket dizini verilmedi (--dizin=)');
+        yerelYol = path.join(dizin, goreli);
+      }
+      const yerel = dosyaOzeti(yerelYol).sha256;
+      ozet = { yerel, kaynak: ozetOku(`${grupHedefi(kaynak, urun, { kok, kayit, eskiKodlar }).vds}/${goreli}`) };
     } catch (e) {
       if (e instanceof Olculemedi) return { sonuc: 'olculemedi', satirlar: [e.message] };
       throw e;

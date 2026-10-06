@@ -103,6 +103,9 @@ const YAYIN_YOLLARI = {
   'deploy/electron-yayinla.ps1': { sinif: 'saplama' },
   // O10a: grup yayıncısı dağıtım kaydından çalışır, eski kanal kaydına bağlı DEĞİL; kapıları test_grup_yayin_kapisi.mjs §6 ölçer.
   'deploy/electron-grup-yayinla.sh': { sinif: 'kanal-disi', gerekce: 'güncelleme grubu yayıncısı (dağıtım kaydı); kapıları scripts/test_grup_yayin_kapisi.mjs ölçer' },
+  // O10b: tablet grup yayını — ortak OTA paketleme + grup yükleyici dağıtım kaydından çalışır; kapıları test_grup_yayin_tablet.mjs ölçer.
+  'mobil/scripts/yayinla-ota-ortak.mjs': { sinif: 'kanal-disi', gerekce: 'ortak OTA paketleme (dağıtım kaydı, manifest yok); kapıları scripts/test_grup_yayin_tablet.mjs ölçer' },
+  'deploy/mobil-grup-yayinla.mjs': { sinif: 'kanal-disi', gerekce: 'tablet güncelleme grubu yayıncısı (dağıtım kaydı); kapıları scripts/test_grup_yayin_tablet.mjs ölçer' },
   // Backend zip: -Musteri <kod> ile kanal kimliği (pm2Ad/urunAdi) alır → 'kapılı'
   //   (Faz 2b: müşteri kodu argümandan, kök kuralı backend'e genişledi). Paketleme terfi
   //   ARAMAZ: üretim kanalına çıkış YAYINDA kapılıdır (backend-yayinla.mjs, K5).

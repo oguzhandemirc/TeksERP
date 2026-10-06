@@ -309,6 +309,11 @@ export const TUKETICILER = Object.freeze([
   'scripts/grup-yayin-kapisi.mjs',
   'deploy/electron-grup-yayinla.sh',
   'scripts/test_grup_yayin_kapisi.mjs',
+  // O10b: tablet grup yayını (ortak OTA paketi + APK) — paketleme, grup manifesti kitaplığı, yükleyici, bekçi.
+  'mobil/scripts/yayinla-ota-ortak.mjs',
+  'mobil/scripts/lib/ortak-ota.mjs',
+  'deploy/mobil-grup-yayinla.mjs',
+  'scripts/test_grup_yayin_tablet.mjs',
   'scripts/lib/kanallar.mjs',
   'Dockerfile',
   'docs/ops/deploy-demo-izin-listesi.txt',
