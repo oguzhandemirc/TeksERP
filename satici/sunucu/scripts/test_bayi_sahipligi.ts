@@ -37,8 +37,8 @@ import {
   type PortalYanit,
 } from "./lib/test-ortam";
 
-const KANAL = "bekci-sahiplik-kanal";
-const KANAL_DISI = "bekci-sahiplik-disi";
+const KANAL = "genel";
+const KANAL_DISI = "oncu";
 const MODULLER = ["production.enabled", "finance.enabled"];
 
 async function main(): Promise<void> {

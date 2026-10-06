@@ -5,7 +5,8 @@
 // alma → bayi → kullanıcı → denetim → anahtar → oturum). Sonda tablo ile çağrılan küme EŞİTLENİR:
 // tabloya eklenen ama burada koşulmayan rota KIRMIZIDIR (yeni uç ölçülmeden doğmaz).
 // Yanıt hijyeni: anahtar durumu ve kullanıcı görünümü özel yarı / parola özeti / şifreli sır taşımaz.
-// Kanal: kurulum yalnız KAYITLI kanala bağlanır; kiranın `kanal.guncelSurumler`i kanal satırından gelir.
+// Kanal = güncelleme grubu: kurulum yalnız AKTİF gruba bağlanır (grup satırları migration'ın; portal grup açmaz);
+// kiranın `kanal.guncelSurumler`i grup satırından gelir (davranış: test_guncelleme_grubu).
 // ⭐ KALICI SONDA ✓K1 (her koşumda): kapsam karşılaştırıcısı sentetik eksik ve fazla kümede ısırır.
 // Koşum: npx tsx scripts/test_portal_uclar.ts
 // =============================================================================
@@ -62,7 +63,10 @@ async function main(): Promise<void> {
   const kurulumlar: string[] = [];
   const musteriler: string[] = [];
   const tesisler: string[] = [];
-  const kanal = `uclar-${randomUUID().slice(0, 8)}`;
+  const ek = randomUUID().slice(0, 8);
+  const kanal = "oncu";
+  const emekliKanal = await kanalFiksturu(`uclar-emekli-${ek}`);
+  const grupOnce = await prisma.kanal.findUniqueOrThrow({ where: { kod: kanal } });
   const sunucu = await portalSunuculariKur(ctx);
   const vendorHit = new Set<string>();
   const bildirimJetonlari: string[] = [];
@@ -87,13 +91,16 @@ async function main(): Promise<void> {
     console.log("\n§1 satıcı akışı");
     const akisBaslangici = new Date(Date.now() - 1000);
     await s("get", "/katalog", "/katalog", 200);
-    const kn = await s("post", "/kanallar", "/kanallar", 201, { kod: kanal, ad: "Uçlar kanalı", tur: "hazirlik" });
-    const knTekrar = await portalIstek(sunucu.portal, "/portal/api/kanallar", { cerez, govde: { clientToken: randomUUID(), kod: kanal, ad: "x", tur: "uretim" } });
-    const knSurumBozuk = await portalIstek(sunucu.portal, `/portal/api/kanallar/${kn.veri.id as string}`, { cerez, yontem: "PATCH", govde: { clientToken: randomUUID(), guncelSurumler: { panel: "1.3", web: "1.0.0" } } });
-    kontrol("§1k0 aynı kanal kodu → 409; sürüm şeması dışı güncel sürüm → 400", knTekrar.status === 409 && knSurumBozuk.status === 400, `${knTekrar.status}/${knSurumBozuk.status}`);
-    await s("patch", "/kanallar/:id", `/kanallar/${kn.veri.id as string}`, 200, { tur: "uretim", guncelSurumler: { backend: "2.11.2", panel: "1.3.2" } });
+    const knAc = await portalIstek(sunucu.portal, "/portal/api/kanallar", { cerez, govde: { clientToken: randomUUID(), kod: "yeni-grup", ad: "x", tur: "uretim" } });
+    const knSurumBozuk = await portalIstek(sunucu.portal, `/portal/api/kanallar/${grupOnce.id}`, { cerez, yontem: "PATCH", govde: { clientToken: randomUUID(), guncelSurumler: { panel: "1.3", web: "1.0.0" } } });
+    const knTur = await portalIstek(sunucu.portal, `/portal/api/kanallar/${grupOnce.id}`, { cerez, yontem: "PATCH", govde: { clientToken: randomUUID(), tur: "hazirlik" } });
+    kontrol("§1k0 portal grup AÇMAZ (POST /kanallar yok → 404); tür portaldan yazılmaz (KATI gövde → 400); sürüm şeması dışı → 400",
+      knAc.status === 404 && knTur.status === 400 && knSurumBozuk.status === 400, `${knAc.status}/${knTur.status}/${knSurumBozuk.status}`);
+    await s("patch", "/kanallar/:id", `/kanallar/${grupOnce.id}`, 200, { ad: "Öncü (uçlar)", sira: 2, guncelSurumler: { backend: "2.11.2", panel: "1.3.2" } });
     const knListe = await s("get", "/kanallar", "/kanallar", 200);
-    kontrol("§1k1 kanal listesinde kod · tür · güncel sürümler", JSON.stringify((knListe.veri as unknown as { kod: string; tur: string }[]).find((x) => x.kod === kanal)?.tur) === '"uretim"');
+    const gruplar = (knListe.veri as unknown as { kod: string; sira: number | null; aktif: boolean }[]).filter((x) => x.aktif);
+    kontrol("§1k1 kanal listesi: aktif olanlar yalnız üç grup, terfi sırasıyla (test 1 · oncu 2 · genel 3)",
+      gruplar.map((x) => `${x.kod}:${x.sira}`).join() === "test:1,oncu:2,genel:3", gruplar.map((x) => `${x.kod}:${x.sira}`).join());
     const m = await s("post", "/musteriler", "/musteriler", 201, { ad: "Uçlar Tekstil", vergiNo: "1234567890" });
     const mId = m.veri.id as string;
     musteriler.push(mId);
@@ -106,7 +113,8 @@ async function main(): Promise<void> {
     await s("patch", "/tesisler/:id", `/tesisler/${tId}`, 200, { ad: "Merkez Tesis" });
     await s("get", "/tesisler", `/tesisler?musteriId=${mId}`, 200);
     const kayitsiz = await portalIstek(sunucu.portal, "/portal/api/kurulumlar", { cerez, govde: { clientToken: randomUUID(), tesisId: tId, sinif: "URETIM", kanalKodu: "kayitsiz-kanal-yok" } });
-    kontrol("§1k2 kayıtlı olmayan kanala kurulum açılamaz → 400", kayitsiz.status === 400, `${kayitsiz.status} ${kayitsiz.kod ?? ""}`);
+    const emekli = await portalIstek(sunucu.portal, "/portal/api/kurulumlar", { cerez, govde: { clientToken: randomUUID(), tesisId: tId, sinif: "URETIM", kanalKodu: emekliKanal } });
+    kontrol("§1k2 grup olmayan kanala (kayıtsız · emekli satır) kurulum açılamaz → 400", kayitsiz.status === 400 && emekli.status === 400, `${kayitsiz.status} ${kayitsiz.kod ?? ""} · emekli ${emekli.status}`);
     const istemciKimligi = await portalIstek(sunucu.portal, "/portal/api/kurulumlar", { cerez, govde: { clientToken: randomUUID(), tesisId: tId, kurulumId: randomUUID(), sinif: "URETIM", kanalKodu: kanal } });
     kontrol("§1k3 lisans kimliğini istemci VEREMEZ (D14; KATI gövde) → 400", istemciKimligi.status === 400 && istemciKimligi.kod === "GOVDE_GECERSIZ", `${istemciKimligi.status} ${istemciKimligi.kod ?? ""}`);
     const k = await s("post", "/kurulumlar", "/kurulumlar", 201, { tesisId: tId, sinif: "URETIM", kanalKodu: kanal, ad: "Ana sunucu" });
@@ -138,7 +146,7 @@ async function main(): Promise<void> {
     await s("get", "/dagitim/dosyalar", `/dagitim/dosyalar?musteriId=${mId}`, 200);
     await s("get", "/dagitim/defter", `/dagitim/defter?musteriId=${mId}`, 200);
     await s("get", "/surumler", "/surumler", 200);
-    const dYk = await s("post", "/yayincilar", "/yayincilar", 201, { kid: `uclar-${kanal}`, ad: "Uçlar yayıncı", acikAnahtar: generateKeyPairSync("ed25519").publicKey.export({ format: "jwk" }).x });
+    const dYk = await s("post", "/yayincilar", "/yayincilar", 201, { kid: `uclar-${ek}`, ad: "Uçlar yayıncı", acikAnahtar: generateKeyPairSync("ed25519").publicKey.export({ format: "jwk" }).x });
     await s("get", "/yayincilar", "/yayincilar", 200);
     await s("post", "/yayincilar/:id/pasif", `/yayincilar/${dYk.veri.id as string}/pasif`, 200, { sebep: "uçlar kapsamı" });
     const hak = await s("post", "/kurulumlar/:id/hak", `/kurulumlar/${kId}/hak`, 201, { kalici: false, bakimBitis: new Date(Date.now() + 365 * DAY_MS).toISOString() });
@@ -290,9 +298,9 @@ async function main(): Promise<void> {
     const bayi = await s("post", "/bayiler", "/bayiler", 201, { ad: "Uçlar Bayi", tavan: { moduller: ["production.enabled"], siniflar: ["URETIM"], kurulumAdedi: 3 }, sebep: "sözleşme" });
     const bayiId = bayi.veri.id as string;
     bayiler.push(bayiId);
-    await kanalFiksturu("bayi-kanal");
+    await kanalFiksturu("genel");
     await s("post", "/bayiler/:id/tavan", `/bayiler/${bayiId}/tavan`, 201, {
-      tavan: { moduller: ["production.enabled", "finance.enabled"], siniflar: ["URETIM"], kurulumAdedi: 3, kanallar: ["bayi-kanal"], kaliciIzni: true, bakimAyTavani: 24 },
+      tavan: { moduller: ["production.enabled", "finance.enabled"], siniflar: ["URETIM"], kurulumAdedi: 3, kanallar: ["genel"], kaliciIzni: true, bakimAyTavani: 24 },
       sebep: "finans eklendi",
     });
     const sertifika = sertifikaBas(f.kok, sertifikaYuku(f, f.bayi, "BAYI", { siniflar: ["URETIM"], bayi: { bayiId, moduller: ["production.enabled", "finance.enabled"] } }));
@@ -377,7 +385,7 @@ async function main(): Promise<void> {
     await b("get", "/musteriler/:id", `/musteriler/${bm.veri.id as string}`, 200);
     const bt = await b("post", "/tesisler", "/tesisler", 201, { musteriId: bm.veri.id, ad: "Tesis" });
     await b("get", "/tesisler", "/tesisler", 200);
-    const bk = await b("post", "/kurulumlar", "/kurulumlar", 201, { tesisId: bt.veri.id, sinif: "URETIM", kanalKodu: "bayi-kanal" });
+    const bk = await b("post", "/kurulumlar", "/kurulumlar", 201, { tesisId: bt.veri.id, sinif: "URETIM", kanalKodu: "genel" });
     await b("get", "/kurulumlar", "/kurulumlar", 200);
     const bh = await b("post", "/kurulumlar/:id/hak", `/kurulumlar/${bk.veri.id as string}/hak`, 201, { kalici: true, bakimBitis: new Date(Date.now() + 365 * DAY_MS).toISOString() });
     await b("post", "/haklar/:id/surum", `/haklar/${bh.veri.id as string}/surum`, 201, { bayiParolasi: "uclar-bayi-parolasi", sebep: "ilk imza" });
@@ -417,10 +425,11 @@ async function main(): Promise<void> {
   } finally {
     await sunucu.kapat();
     await prisma.bildirim.deleteMany({ where: { tekillikAnahtari: { in: bildirimJetonlari.map((j) => `DENEME:${j}`) } } });
-    await temizleDagitim({ musteriler, yayinciKidler: [`uclar-${kanal}`] });
+    await temizleDagitim({ musteriler, yayinciKidler: [`uclar-${ek}`] });
+    await prisma.kanal.update({ where: { id: grupOnce.id }, data: { ad: grupOnce.ad, sira: grupOnce.sira, guncelSurumler: grupOnce.guncelSurumler as object } });
     rmSync(dagitimKoku, { recursive: true, force: true });
     await temizleKurulumlar([...kurulumlar, ...(await bayiKurulumlari(bayiler))], ortam.kidler);
-    await temizlePortal({ kullanicilar, bayiler, tesisler, musteriler, kanallar: [kanal] });
+    await temizlePortal({ kullanicilar, bayiler, tesisler, musteriler, kanallar: [kanal, emekliKanal] });
     ortam.temizle();
     await kapat();
   }

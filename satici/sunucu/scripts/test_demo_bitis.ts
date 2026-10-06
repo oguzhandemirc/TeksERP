@@ -27,7 +27,7 @@ import {
   temizlePortal,
 } from "./lib/test-ortam";
 
-const KANAL = "bekci-kanal";
+const KANAL = "genel";
 
 async function main(): Promise<void> {
   hedefDbKapisi();

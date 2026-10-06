@@ -36,7 +36,7 @@ import {
   unlockPortalUserTx,
   userView,
 } from "../portal/users.service";
-import { CHANNEL_KINDS, ChannelVersionsSchema, createChannelTx, listChannels, updateChannelTx } from "../services/channel.service";
+import { ChannelVersionsSchema, listChannels, updateChannelTx } from "../services/channel.service";
 import {
   MAX_MAINTENANCE_MONTHS,
   createDealerTx,
@@ -133,7 +133,8 @@ const InstallationCreate = z.strictObject({
   clientToken: Token,
   tesisId: z.uuid(),
   sinif: ClassEnum,
-  kanalKodu: z.string().min(1).max(40),
+  /** Güncelleme grubu; yoksa sınıftan (K-3). */
+  kanalKodu: z.string().min(1).max(40).optional(),
   ad: z.string().max(200).nullable().optional(),
   yoklamaAraligiDk: z.number().int().optional(),
   esitlemeAraligiDk: z.number().int().optional(),
@@ -245,17 +246,11 @@ const ceilingInput = (t: z.infer<typeof Ceiling>, modules: string[]): DealerCeil
   perpetualAllowed: t.kaliciIzni,
   maintenanceMonths: t.bakimAyTavani,
 });
-const ChannelCreate = z.strictObject({
-  clientToken: Token,
-  kod: ChannelCodeSchema,
-  ad: z.string().min(1).max(200),
-  tur: z.enum(CHANNEL_KINDS),
-  guncelSurumler: ChannelVersionsSchema.optional(),
-});
+// Güncelleme grubu: satırlar migration'la doğar (portal grup AÇMAZ); kod · tür · aktiflik portaldan değişmez.
 const ChannelUpdate = z.strictObject({
   clientToken: Token,
   ad: z.string().min(1).max(200).optional(),
-  tur: z.enum(CHANNEL_KINDS).optional(),
+  sira: z.number().int().nullable().optional(),
   guncelSurumler: ChannelVersionsSchema.optional(),
 });
 const DealerCreate = z.strictObject({ clientToken: Token, ad: z.string().min(1).max(200), vergiNo: TaxNo, tavan: Ceiling, sebep: Reason });
@@ -1088,24 +1083,7 @@ export const VENDOR_PORTAL_ROUTES: readonly PortalRouteDef[] = [
     },
   },
 
-  // ------------------------------------------------------------ kanal
-  {
-    method: "post",
-    path: "/kanallar",
-    permission: "kanal:yonet",
-    kimlik: "ISLEM_KIMLIGI",
-    handler: async (c) => {
-      const b = bodyOf(c, ChannelCreate);
-      return portalAction(c, {
-        action: "KANAL_EKLE",
-        clientToken: b.clientToken,
-        body: b,
-        run: (tx) => createChannelTx(tx, { code: b.kod, name: b.ad, kind: b.tur, versions: b.guncelSurumler }),
-        respond: (row) => ({ status: 201, data: row }),
-        audit: (row) => [{ event: "KANAL_EKLENDI", entity: "Kanal", entityId: row.id, summary: { kod: row.kod, tur: row.tur } }],
-      });
-    },
-  },
+  // ------------------------------------------------------------ güncelleme grubu (kanal)
   {
     method: "patch",
     path: "/kanallar/:id",
@@ -1118,7 +1096,7 @@ export const VENDOR_PORTAL_ROUTES: readonly PortalRouteDef[] = [
         action: "KANAL_GUNCELLE",
         clientToken: b.clientToken,
         body: withPath(b, id),
-        run: (tx) => updateChannelTx(tx, { channelId: id, name: b.ad, kind: b.tur, versions: b.guncelSurumler }),
+        run: (tx) => updateChannelTx(tx, { channelId: id, name: b.ad, order: b.sira, versions: b.guncelSurumler }),
         respond: (row) => ({ data: row }),
         audit: (row) => [{ event: "KANAL_GUNCELLENDI", entity: "Kanal", entityId: row.id, summary: { kod: row.kod, alanlar: Object.keys(b).filter((k) => k !== "clientToken") } }],
       });

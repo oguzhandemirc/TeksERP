@@ -45,8 +45,8 @@ const URETIM = "production.enabled";
 const FINANS = "finance.enabled";
 const TICARET = "ticaret.enabled";
 const DOKUMA = "dokuma.enabled";
-const KANAL = "bayi-kanal";
-const KANAL_DISI = "bayi-kanal-disi";
+const KANAL = "genel";
+const KANAL_DISI = "oncu";
 const yilSonra = (gun = 365): string => new Date(Date.now() + gun * DAY_MS).toISOString();
 
 const ihlal = (y: PortalYanit): string =>

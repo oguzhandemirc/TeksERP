@@ -5,7 +5,7 @@
 import { readdir, readFile, stat } from "node:fs/promises";
 import path from "node:path";
 import type { Db } from "../lib/prisma";
-import { channelVersionsForLease } from "../services/channel.service";
+import { channelVersionsForLease, isUpdateGroup } from "../services/channel.service";
 import { listNotices } from "./publications.service";
 
 const CODE = /^[a-z0-9][a-z0-9-]{0,39}$/;
@@ -95,8 +95,11 @@ export interface LedgerRow {
   readonly not: string | null;
 }
 
-/** Yayın defteri TSV'si (`defter/<kod>-YAYIN-DEFTERI.tsv`; backend `<kod>-BACKEND-YAYIN-DEFTERI.tsv`): son satırlar, en yeni önce. */
-export async function ledgerTail(root: string, code: string, rows = LEDGER_ROWS, kind: "" | "BACKEND-" = ""): Promise<LedgerRow[] | null> {
+/**
+ * Yayın defteri TSV'si, son satırlar en yeni önce. Ad: güncelleme grubunda `defter/<grup>-<panel|tablet|backend>-YAYIN-DEFTERI.tsv`
+ * (dağıtım kaydının türetimi, scripts/lib/dagitim.mjs); emekli kanalda eski ad `<kod>-YAYIN-DEFTERI.tsv` · `<kod>-BACKEND-…`.
+ */
+export async function ledgerTail(root: string, code: string, rows = LEDGER_ROWS, kind: "" | "BACKEND-" | "panel-" | "tablet-" | "backend-" = ""): Promise<LedgerRow[] | null> {
   const file = path.join(root, "defter", `${code}-${kind}YAYIN-DEFTERI.tsv`);
   let text: string;
   try {
@@ -117,9 +120,9 @@ export async function ledgerTail(root: string, code: string, rows = LEDGER_ROWS,
     .reverse();
 }
 
-/** Bütün kanallar: kanal tablosu ∪ yayın kökündeki kanal dizinleri. */
+/** Bütün kanallar: güncelleme grupları (sırayla) · emekli kanallar · yayın kökündeki kayıtsız dizinler. */
 export async function releaseOverview(db: Db, root: string | undefined) {
-  const channels = await db.kanal.findMany({ orderBy: { kod: "asc" } });
+  const channels = await db.kanal.findMany({ orderBy: [{ aktif: "desc" }, { sira: { sort: "asc", nulls: "last" } }, { kod: "asc" }] });
   let mounted = false;
   let dirs: string[] = [];
   if (root) {
@@ -130,18 +133,22 @@ export async function releaseOverview(db: Db, root: string | undefined) {
       mounted = false;
     }
   }
-  const codes = [...new Set([...channels.map((c) => c.kod), ...dirs])].sort();
+  const codes = [...new Set([...channels.map((c) => c.kod), ...dirs.filter((d) => !channels.some((c) => c.kod === d)).sort()])];
   const out = [];
   for (const kod of codes) {
     const k = channels.find((c) => c.kod === kod) ?? null;
+    const grup = isUpdateGroup(kod);
+    const read = mounted && root;
     out.push({
       kod,
-      kayitli: k ? { ad: k.ad, tur: k.tur, guncelSurumler: channelVersionsForLease(k) } : null,
+      grup,
+      kayitli: k ? { ad: k.ad, tur: k.tur, sira: k.sira, aktif: k.aktif, guncelSurumler: channelVersionsForLease(k) } : null,
       yayinda: mounted && root
         ? { panel: await panelPublished(root, kod), tabletOta: await tabletOtaPublished(root, kod), tabletApk: await tabletApkPublished(root, kod), backend: await backendPublished(root, kod) }
         : null,
-      defter: mounted && root ? await ledgerTail(root, kod) : null,
-      defterBackend: mounted && root ? await ledgerTail(root, kod, LEDGER_ROWS, "BACKEND-") : null,
+      defter: read ? await ledgerTail(root, kod, LEDGER_ROWS, grup ? "panel-" : "") : null,
+      defterTablet: read && grup ? await ledgerTail(root, kod, LEDGER_ROWS, "tablet-") : null,
+      defterBackend: read ? await ledgerTail(root, kod, LEDGER_ROWS, grup ? "backend-" : "BACKEND-") : null,
       bildirimler: await listNotices(db, { channel: kod, limit: 10 }),
     });
   }

@@ -187,15 +187,22 @@ enum KanalTuru {
 // KANAL — dağıtım kanalı (güncelleme sunucusundaki `/<kod>/electron/` · `/<kod>/mobil/` yol segmenti)
 // -----------------------------------------------------------------------------
 
-/// Kurulum bir kanala bağlıdır; kira `kanal.guncelSurumler`i buradan alır (yayın bildirimi Faz 3).
-/// `kod` kimliktir ve DEĞİŞMEZ (indirme belirtecinin yol öneki); ad · tür · güncel sürümler değişir.
+/// Kanal = GÜNCELLEME GRUBU (tek ortak paket, TEK-ORTAK-PAKET.md §3.1): satırları dağıtım kaydının grupları
+/// (`test` · `oncu` · `genel`, migration'la doğar; portal grup AÇMAZ). Kurulum bir gruba bağlıdır; kira `kanal.kod`u
+/// (= grup) ve `guncelSurumler`i buradan alır. `kod` kimliktir ve DEĞİŞMEZ (indirme belirtecinin yol öneki).
 model Kanal {
   id             String    @id @default(uuid()) @db.Uuid
   kod            String    @unique @db.VarChar(40)
   ad             String    @db.VarChar(200)
+  /// Kod OKUMAZ (hazırlık kipi emekli, §7); yeni satır `uretim` yazar.
   tur            KanalTuru
   /// `{backend?, panel?, tablet?}` sürüm metinleri — protokol KİRA `kanal.guncelSurumler` şeması.
   guncelSurumler Json      @default("{}")
+  /// Terfi zincirindeki sıra (test 1 · oncu 2 · genel 3); grup olmayan eski satırda NULL.
+  sira           Int?
+  /// false = emekli kanal (grup olmayan eski satır): yeni kurulum açılmaz, kurulum taşınmaz, indirme belirteci
+  /// basılmaz; kira sürer (lisans kapısı fabrikayı aniden durdurmaz). Silinmez (FK Restrict, defter-öncelikli).
+  aktif          Boolean   @default(true)
   createdAt      DateTime  @default(now()) @db.Timestamptz
   updatedAt      DateTime  @updatedAt @db.Timestamptz
 

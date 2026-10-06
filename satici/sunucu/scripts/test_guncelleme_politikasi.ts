@@ -170,7 +170,7 @@ async function uctanUca(temizlenecek: { kurulumlar: string[]; kidler: string[]; 
   const portal = await portalSunuculariKur(ortam.ctx);
   try {
     console.log("\n§2 uçtan uca — portal → kira → rapor → filo");
-    const k = await kurulumFiksturu(ortam.ctx, { kanal: "bekci-guncelleme" });
+    const k = await kurulumFiksturu(ortam.ctx, { kanal: "oncu" });
     temizlenecek.kurulumlar.push(k.kurulumDbId);
     const anahtar = kurulumAnahtariUret();
     temizlenecek.kidler.push(anahtar.kid);
@@ -182,7 +182,7 @@ async function uctanUca(temizlenecek: { kurulumlar: string[]; kidler: string[]; 
     let uc = kira?.kiraId ?? null;
     kontrol("§2a etkinleştirme kirası varsayılan politikayı taşır (ONAYLI, pencere yok)", kira?.guncelleme?.kip === "ONAYLI" && kira.guncelleme.pencere === null, JSON.stringify(kira?.guncelleme));
     const onekler = ((et.json.indirmeBelirtecleri ?? []) as { yolOneki: string }[]).map((t) => t.yolOneki).sort();
-    kontrol("§2b indirme belirteçleri backend/ önekini de kapsar", onekler.length === DOWNLOAD_PRODUCTS.length && onekler.includes(`/bekci-guncelleme/backend/`), onekler.join(","));
+    kontrol("§2b indirme belirteçleri backend/ önekini de kapsar", onekler.length === DOWNLOAD_PRODUCTS.length && onekler.includes(`/oncu/backend/`), onekler.join(","));
     const yokla = async (ek: Record<string, unknown> = {}): Promise<LeaseDoc | null> => {
       const y = await imzaliPost(sunucu.genel, ENDPOINTS.POLL, {
         kurulumId: k.kurulumId, amac: "yokla", anahtar,

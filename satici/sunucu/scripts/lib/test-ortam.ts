@@ -226,12 +226,19 @@ export interface KurulumFiksturu {
 }
 
 /**
- * Kurulum kanala bağlı doğar (FK): bekçi kanalı yoksa açılır. Kanal kalıcı ana veridir ve kurulum
- * kaydı yokken bırakılması zararsızdır; aynı kod her koşumda yeniden kullanılır (upsert, yarışsız).
+ * Kanal fikstürü. Güncelleme grubu (`test` · `oncu` · `genel`) migration'la VARDIR — burada yalnız varlığı doğrulanır
+ * (fikstür grubu ne açar ne değiştirir ne siler). Başka bir kod EMEKLİ kanal satırıdır (`aktif=false`, demofabrika
+ * benzeri): kurulum alamaz, yalnız okuma/görünüm bekçileri kullanır. Aynı kod her koşumda yeniden kullanılır (upsert).
  */
 export async function kanalFiksturu(kod: string, tur: "uretim" | "hazirlik" = "uretim"): Promise<string> {
   const { prisma } = await import("../../src/lib/prisma");
-  await prisma.kanal.upsert({ where: { kod }, create: { kod, ad: `Bekçi kanalı ${kod}`, tur }, update: {} });
+  const { isUpdateGroup } = await import("../../src/services/channel.service");
+  if (isUpdateGroup(kod)) {
+    const row = await prisma.kanal.findUnique({ where: { kod }, select: { aktif: true } });
+    if (!row?.aktif) throw new Error(`Güncelleme grubu satırı yok ya da pasif: ${kod} (migration 20261006120000_guncelleme_gruplari)`);
+    return kod;
+  }
+  await prisma.kanal.upsert({ where: { kod }, create: { kod, ad: `Bekçi emekli kanalı ${kod}`, tur, aktif: false }, update: {} });
   return kod;
 }
 
@@ -240,13 +247,12 @@ export async function kurulumFiksturu(
   g: { sinif?: LicenseClass; kanal?: string; moduller?: string[]; tesisId?: string; musteriId?: string } = {},
 ): Promise<KurulumFiksturu> {
   const svc = await import("../../src/services/entitlement.service");
-  await kanalFiksturu(g.kanal ?? "bekci-kanal");
   const musteriId = g.musteriId ?? (await svc.createCustomer({ name: `Bekçi Tekstil ${randomUUID().slice(0, 8)}`, actor: "bekci" })).id;
   const tesisId = g.tesisId ?? (await svc.createSite({ customerId: musteriId, name: "Merkez Tesis", actor: "bekci" })).id;
   const kurulum = await svc.createInstallation({
     siteId: tesisId,
     licenseClass: g.sinif ?? "URETIM",
-    channelCode: g.kanal ?? "bekci-kanal",
+    ...(g.kanal === undefined ? {} : { channelCode: g.kanal }),
     actor: "bekci",
   });
   const hak = await svc.createEntitlement({
@@ -770,7 +776,10 @@ export async function temizlePortal(g: {
     await tx.musteri.deleteMany({ where: { id: { in: musteriler }, tesisler: { none: {} } } });
     await tx.bayiTavani.deleteMany({ where: { bayiId: { in: bayiler } } });
     await tx.bayi.deleteMany({ where: { id: { in: bayiler } } });
-    const kanallar = (await tx.kanal.findMany({ where: { kod: { in: [...(g.kanallar ?? [])] }, kurulumlar: { none: {} } }, select: { id: true } })).map((k) => k.id);
+    // Güncelleme grubu satırı ASLA silinmez (migration'ın satırı; sonraki bekçiler ona kurulum açar).
+    const { UPDATE_GROUPS } = await import("../../src/services/channel.service");
+    const silinecek = (g.kanallar ?? []).filter((k) => !(UPDATE_GROUPS as readonly string[]).includes(k));
+    const kanallar = (await tx.kanal.findMany({ where: { kod: { in: silinecek }, kurulumlar: { none: {} } }, select: { id: true } })).map((k) => k.id);
     await tx.kanal.deleteMany({ where: { id: { in: kanallar } } });
     await tx.denetim.deleteMany({ where: { varlikId: { in: [...kullanicilar, ...bayiler, ...tesisler, ...musteriler, ...kanallar] } } });
   });

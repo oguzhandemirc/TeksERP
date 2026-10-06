@@ -162,7 +162,7 @@ async function reportInTx(tx: Tx, ctx: VendorContext, g: { installationDbId: str
     lisans: licenseResponse({
       hak: lease.entitlement.withheld ? null : lease.entitlement.belge,
       kira: lease.token,
-      tokens: downloadTokens(ctx, inst, hak, lease.sanction, g.nowMs),
+      tokens: await downloadTokens(tx, ctx, inst, hak, lease.sanction, g.nowMs),
       nowMs: g.nowMs,
       revocation: lease.revocation,
     }),

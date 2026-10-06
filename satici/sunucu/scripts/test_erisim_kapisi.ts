@@ -1184,17 +1184,17 @@ async function main(): Promise<void> {
     const izSayisi = () => prisma.denetim.count({ where: { olay: "ERISIM_YAZMA", yapan: `satici:${yonetici.kullaniciAdi}` } });
     const izOnce = await izSayisi();
     const izRotalari: PortalRouteDef[] = [
-      { method: "post", path: "/kanallar", permission: "kanal:yonet", kimlik: { muaf: "sonda" }, handler: async () => ({ status: 201, data: { sonda: true } }) },
+      { method: "patch", path: "/kanallar/:id", permission: "kanal:yonet", kimlik: { muaf: "sonda" }, handler: async () => ({ status: 201, data: { sonda: true } }) },
       { method: "get", path: "/pano", permission: "portal:oku", kimlik: "OKUMA", handler: async () => ({ data: { sonda: true } }) },
-      ...VENDOR_PORTAL_ROUTES.filter((r) => !["POST /kanallar", "GET /pano"].includes(routeKey(r.method, r.path))),
+      ...VENDOR_PORTAL_ROUTES.filter((r) => !["PATCH /kanallar/:id", "GET /pano"].includes(routeKey(r.method, r.path))),
     ];
     const eIz = await sondaKur("ERISIM", izRotalari);
-    const izYaz = await portalIstek(eIz, "/portal/api/kanallar", { cerez: eCerez, basliklar: JWT, govde: {} });
+    const izYaz = await portalIstek(eIz, `/portal/api/kanallar/${randomUUID()}`, { cerez: eCerez, basliklar: JWT, yontem: "PATCH", govde: {} });
     const izOku = await portalIstek(eIz, "/portal/api/pano", { cerez: eCerez, basliklar: JWT });
     const izSatiri = await prisma.denetim.findFirst({ where: { olay: "ERISIM_YAZMA", yapan: `satici:${yonetici.kullaniciAdi}` }, orderBy: { createdAt: "desc" } });
     kontrol(
       "§6s3 ✓K kendi denetimini yazmayan ERİŞİM yazması tek ERISIM_YAZMA satırı alır (rota · e-posta · yapan); okuma almaz",
-      izYaz.status === 201 && izOku.status === 200 && (await izSayisi()) === izOnce + 1 && (izSatiri?.ozet as Ozet)?.rota === "POST /kanallar" && (izSatiri?.ozet as Ozet)?.erisimKimligi === EPOSTA,
+      izYaz.status === 201 && izOku.status === 200 && (await izSayisi()) === izOnce + 1 && (izSatiri?.ozet as Ozet)?.rota === "PATCH /kanallar/:id" && (izSatiri?.ozet as Ozet)?.erisimKimligi === EPOSTA,
       `${izYaz.status}/${izOku.status} · ${(await izSayisi()) - izOnce} satır · ${JSON.stringify(izSatiri?.ozet ?? null)}`,
     );
     const yazOnce = await izSayisi();

@@ -246,7 +246,7 @@ async function renewInTx(tx: Tx, ctx: VendorContext, g: RenewInput): Promise<Ren
         // Tekrar AYNI kirayı verir: HAK da o kiranın bağlı olduğu sürümdür (`hakOzeti` tutsun); genişlik kapısında HAK yok.
         hak: delivered.withheld ? null : entitlementToDeliver(g.clientEntitlement, await leaseEntitlement(tx, tipRow)),
         kira: tipRow.belge,
-        tokens: downloadTokens(ctx, inst, hak, sanction, g.nowMs),
+        tokens: await downloadTokens(tx, ctx, inst, hak, sanction, g.nowMs),
         nowMs: g.nowMs,
         revocation: await leaseRevocation(tx, ctx.keys),
       }),
@@ -326,7 +326,7 @@ async function renewInTx(tx: Tx, ctx: VendorContext, g: RenewInput): Promise<Ren
     response: licenseResponse({
       hak: entitlementToDeliver(g.clientEntitlement, lease.entitlement),
       kira: lease.token,
-      tokens: downloadTokens(ctx, inst, hak, lease.sanction, g.nowMs),
+      tokens: await downloadTokens(tx, ctx, inst, hak, lease.sanction, g.nowMs),
       nowMs: g.nowMs,
       revocation: lease.revocation,
     }),

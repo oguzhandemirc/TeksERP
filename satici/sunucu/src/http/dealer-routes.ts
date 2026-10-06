@@ -36,7 +36,8 @@ const InstallationCreate = z.strictObject({
   clientToken: Token,
   tesisId: z.uuid(),
   sinif: z.enum(LICENSE_CLASSES),
-  kanalKodu: z.string().min(1).max(40),
+  /** Güncelleme grubu (tavandaki gruplardan); yoksa sınıftan (K-3). Bayi grubu sonradan DEĞİŞTİREMEZ (K-4). */
+  kanalKodu: z.string().min(1).max(40).optional(),
   ad: z.string().max(200).nullable().optional(),
 });
 const EntitlementCreate = z.strictObject({
@@ -165,7 +166,7 @@ export const DEALER_PORTAL_ROUTES: readonly PortalRouteDef[] = [
         body: b,
         run: (tx) => createDealerInstallationTx(tx, { dealerId, site, siteId: site.id, licenseClass: b.sinif, channelCode: b.kanalKodu, name: b.ad }),
         respond: (row) => ({ status: 201, data: row }),
-        audit: (row) => [{ event: "KURULUM_EKLENDI", entity: "Kurulum", entityId: row.id, summary: { sinif: row.sinif, bayiId: dealerId } }],
+        audit: (row) => [{ event: "KURULUM_EKLENDI", entity: "Kurulum", entityId: row.id, summary: { sinif: row.sinif, kanal: row.kanalKodu, bayiId: dealerId } }],
       });
     },
   },

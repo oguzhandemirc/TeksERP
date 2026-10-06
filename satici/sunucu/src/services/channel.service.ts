@@ -1,15 +1,30 @@
-// KANAL — dağıtım kanalı ana verisi (asgari): kod · ad · tür · güncel sürümler. Kurulum kanala
-// bağlıdır (FK); kira `kanal.guncelSurumler`i buradan alır. `kod` kimliktir ve DEĞİŞMEZ (indirme
-// belirtecinin yol öneki `/<kod>/…`); sert silme yok. Yayın bildirimi (güncel sürümün otomatik
-// yazılması + zil) Faz 3'te — bugün satıcı elle günceller.
-import type { Kanal, KanalTuru, Prisma } from "@prisma/client";
+// KANAL = GÜNCELLEME GRUBU (tek ortak paket, TEK-ORTAK-PAKET.md §3): satırlar `deploy/dagitim.json` gruplarıdır
+// ve migration'la doğar (portal grup açmaz). Kurulum bir gruba bağlıdır (FK); kira `kanal.kod`u (= grup) ve
+// `guncelSurumler`i buradan alır. `kod` DEĞİŞMEZ (indirme belirtecinin yol öneki `/<kod>/…`); sert silme yok.
+// Grup olmayan eski satır `aktif=false`dır: okunur, yeni kurulum almaz, indirme belirteci basmaz.
+import type { Kanal, LisansSinifi, Prisma } from "@prisma/client";
 import { z } from "zod";
 import { ChannelCodeSchema, VersionTextSchema } from "../lisans-protokol";
-import { badRequest, notFoundError, stateConflict } from "../lib/errors";
+import { badRequest, notFoundError } from "../lib/errors";
 import type { Db, Tx } from "../lib/prisma";
-import { uniqueViolationOn } from "../lib/prisma-errors";
 
-export const CHANNEL_KINDS = ["uretim", "hazirlik"] as const satisfies readonly KanalTuru[];
+/** Güncelleme grupları, terfi sırasıyla — `deploy/dagitim.json` `gruplar` ve migration satırlarıyla aynı (check-dagitim §7). */
+export const UPDATE_GROUPS = ["test", "oncu", "genel"] as const;
+export type UpdateGroup = (typeof UPDATE_GROUPS)[number];
+
+export function isUpdateGroup(code: string): code is UpdateGroup {
+  return (UPDATE_GROUPS as readonly string[]).includes(code);
+}
+
+/** K-3: grup verilmeden açılan kurulumun grubu — deneme (TEST) lisansı `test`, diğer her sınıf `genel`. */
+export function defaultGroupFor(licenseClass: LisansSinifi): UpdateGroup {
+  return licenseClass === "TEST" ? "test" : "genel";
+}
+
+/** Pasif (emekli) kanal indirme belirteci almaz: yayın kökü yalnız grupların. Kira bu yüklemden etkilenmez. */
+export function channelIssuesDownloads(channel: Pick<Kanal, "kod" | "aktif"> | null): boolean {
+  return channel !== null && channel.aktif && isUpdateGroup(channel.kod);
+}
 
 /** Protokol KİRA `kanal.guncelSurumler` alanının KATI hâli (yazımda tanınmayan anahtar RED). */
 export const ChannelVersionsSchema = z.strictObject({
@@ -28,7 +43,7 @@ export function channelVersionsForLease(channel: Pick<Kanal, "guncelSurumler"> |
 
 function cleanName(name: string): string {
   const n = name.trim();
-  if (!n || n.length > 200) throw badRequest("Kanal adı 1–200 karakter olmalı");
+  if (!n || n.length > 200) throw badRequest("Grup adı 1–200 karakter olmalı");
   return n;
 }
 
@@ -38,11 +53,13 @@ function cleanVersions(v: unknown): Prisma.InputJsonObject {
   return parsed.data;
 }
 
-/** Kurulum doğarken/kanalı değişirken: kanal KAYITLI olmalı (FK'nın okunur hatası). */
+/** Kurulum doğarken/grubu değişirken: kod bir güncelleme grubu, satırı KAYITLI ve aktif olmalı (fail-closed). */
 export async function requireChannel(db: Db, code: string): Promise<Kanal> {
-  if (!ChannelCodeSchema.safeParse(code).success) throw badRequest("Kanal kodu biçimsiz");
+  if (!ChannelCodeSchema.safeParse(code).success) throw badRequest("Güncelleme grubu kodu biçimsiz");
+  if (!isUpdateGroup(code)) throw badRequest(`Güncelleme grubu değil: ${code} (gruplar: ${UPDATE_GROUPS.join(" · ")})`);
   const channel = await db.kanal.findUnique({ where: { kod: code } });
-  if (!channel) throw badRequest(`Kanal kayıtlı değil: ${code} (önce portalda kanal açın)`);
+  if (!channel) throw badRequest(`Güncelleme grubu kayıtlı değil: ${code} (migration eksik)`);
+  if (!channel.aktif) throw badRequest(`Güncelleme grubu pasif: ${code}`);
   return channel;
 }
 
@@ -53,52 +70,42 @@ export async function findChannel(db: Db, channelId: string): Promise<Kanal> {
 }
 
 export async function listChannels(db: Db): Promise<(Kanal & { kurulumSayisi: number })[]> {
-  const rows = await db.kanal.findMany({ orderBy: [{ kod: "asc" }], include: { _count: { select: { kurulumlar: true } } } });
+  const rows = await db.kanal.findMany({
+    orderBy: [{ aktif: "desc" }, { sira: { sort: "asc", nulls: "last" } }, { kod: "asc" }],
+    include: { _count: { select: { kurulumlar: true } } },
+  });
   return rows.map(({ _count, ...k }) => ({ ...k, kurulumSayisi: _count.kurulumlar }));
-}
-
-export interface CreateChannelInput {
-  readonly code: string;
-  readonly name: string;
-  readonly kind: KanalTuru;
-  readonly versions?: unknown;
-}
-
-/** Tek satır ekleme (ebeveyni yok): kod tekilliği UNIQUE ile — yarışı kaybeden de aynı 409'u alır. */
-export async function createChannelTx(tx: Tx, g: CreateChannelInput): Promise<Kanal> {
-  if (!ChannelCodeSchema.safeParse(g.code).success) throw badRequest("Kanal kodu küçük harf/rakam/tire, en çok 40 karakter olmalı");
-  const taken = await tx.kanal.findUnique({ where: { kod: g.code }, select: { id: true } });
-  if (taken) throw stateConflict(`Bu kanal kodu kayıtlı: ${g.code}`);
-  return tx.kanal
-    .create({ data: { kod: g.code, ad: cleanName(g.name), tur: g.kind, guncelSurumler: cleanVersions(g.versions) } })
-    .catch((err: unknown) => {
-      throw uniqueViolationOn(err, "kod") ? stateConflict(`Bu kanal kodu kayıtlı: ${g.code}`) : err;
-    });
 }
 
 export interface UpdateChannelInput {
   readonly channelId: string;
   readonly name?: string;
-  readonly kind?: KanalTuru;
+  readonly order?: number | null;
   readonly versions?: unknown;
 }
 
-/** Ad · tür · güncel sürümler (kod değişmez). Kira bir sonraki yoklamada yeni sürümleri taşır. */
+function cleanOrder(order: number | null): number | null {
+  if (order === null) return null;
+  if (!Number.isInteger(order) || order < 1 || order > 99) throw badRequest("Sıra 1–99 arası tam sayı olmalı");
+  return order;
+}
+
+/** Ad · sıra · güncel sürümler (kod, tür ve aktiflik portaldan DEĞİŞMEZ). Kira bir sonraki yoklamada yeni sürümleri taşır. */
 export async function updateChannelTx(tx: Tx, g: UpdateChannelInput): Promise<Kanal> {
   const channel = await findChannel(tx, g.channelId);
   const data: Prisma.KanalUpdateInput = {
     ...(g.name === undefined ? {} : { ad: cleanName(g.name) }),
-    ...(g.kind === undefined ? {} : { tur: g.kind }),
+    ...(g.order === undefined ? {} : { sira: cleanOrder(g.order) }),
     ...(g.versions === undefined ? {} : { guncelSurumler: cleanVersions(g.versions) }),
   };
   if (Object.keys(data).length === 0) return channel;
   return tx.kanal.update({ where: { id: channel.id }, data });
 }
 
-/** Bayi tavanına yazılacak kanallar: tekrarsız, hepsi kayıtlı. */
+/** Bayi tavanına yazılacak gruplar: tekrarsız, hepsi aktif güncelleme grubu. */
 export async function cleanChannelList(db: Db, codes: readonly string[]): Promise<string[]> {
   const unique = [...new Set(codes)];
-  if (unique.length > 100) throw badRequest("En çok 100 kanal");
+  if (unique.length > 100) throw badRequest("En çok 100 grup");
   for (const code of unique) await requireChannel(db, code);
   return unique;
 }

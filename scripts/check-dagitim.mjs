@@ -15,6 +15,8 @@
 //   §5 lisansSunucusu = backend varsayılanı (`vendor-url.ts` DEFAULT_LICENSE_SERVER_URL)
 //   §6 tüketici envanteri (kaydın adını taşıyan her kod dosyası beyanlı, beyanlı her tüketici okuyor) +
 //      commit kancası ve CI kablolu + tetik okunan her dosyayı kapsar
+//   §7 satıcı grup aynaları (O2): `UPDATE_GROUPS` sabiti = zincir (sırasıyla); grup migration'ının INSERT satırları
+//      (kod × sira 1..n) ve iki `NOT IN`/`IN` kümesi = zincir — kayıt, kod ve DB satırı tek küme
 //
 // ÜÇ SONUÇ: 0 yeşil · 1 kırmızı · 2 ÖLÇÜLEMEDİ. Cırcır değil (taban yok).
 //   node scripts/check-dagitim.mjs          # dinlenme durumu
@@ -31,6 +33,8 @@ import {
   KAYIT_REL,
   KOK,
   Olculemedi,
+  SATICI_GRUP_MIGRATION_REL,
+  SATICI_GRUPLAR_REL,
   SATICI_INDIRME_REL,
   TUKETICILER,
   URUN_DIZINI,
@@ -69,7 +73,7 @@ const AYRILIK_ISTISNALARI = [
   { alan: 'backend.hizmetAdi', kanal: 'adnansahin', gerekce: 'adnansahin pm2de, hizmet yok; Faz 4te ortak hizmet adına geçer (TEK-ORTAK-PAKET.md §8.4)' },
 ];
 
-const OKUNAN = [KAYIT_REL, ESKI_KAYIT_REL, VENDOR_URL_REL, SATICI_INDIRME_REL, WORKER_REL, KAPI_KANCASI_REL, CI_REL];
+const OKUNAN = [KAYIT_REL, ESKI_KAYIT_REL, VENDOR_URL_REL, SATICI_INDIRME_REL, WORKER_REL, KAPI_KANCASI_REL, CI_REL, SATICI_GRUPLAR_REL, SATICI_GRUP_MIGRATION_REL];
 
 const sablonDoldur = (s, y) => s.replaceAll('{k}', y.k).replaceAll('{g}', y.g).replaceAll('{v}', y.v).replaceAll('{d}', y.d).replaceAll('{rv}', y.rv);
 
@@ -179,6 +183,24 @@ function olc(d, okuyanlar, ek = {}) {
   if (!m) s.olculemedi.push(`§5 ${VENDOR_URL_REL} DEFAULT_LICENSE_SERVER_URL okunamadı`);
   else if (m[1] !== kayit.lisansSunucusu) s.kirmizi.push(`§5 lisansSunucusu (${kayit.lisansSunucusu}) backend varsayılanı (${m[1]}) değil`);
 
+  // §7 satıcı grup aynaları
+  try {
+    const sabit = diziOku(d[SATICI_GRUPLAR_REL], /export const UPDATE_GROUPS = \[([^\]]*)\] as const;/, `${SATICI_GRUPLAR_REL} UPDATE_GROUPS`);
+    if (JSON.stringify(sabit) !== JSON.stringify(zincir)) s.kirmizi.push(`§7 satıcı UPDATE_GROUPS (${sabit.join(', ')}) zincirle (${zincir.join(', ')}) aynı sırada değil`);
+    const sql = typeof d[SATICI_GRUP_MIGRATION_REL] === 'string' ? d[SATICI_GRUP_MIGRATION_REL].replace(/^--.*$/gm, '') : null;
+    if (sql === null) throw new Olculemedi(`${SATICI_GRUP_MIGRATION_REL} okunamadı`);
+    const satirlar = [...sql.matchAll(/\(gen_random_uuid\(\),\s*'([^']+)',\s*'[^']*',\s*'uretim',\s*'\{\}'::jsonb,\s*(\d+),\s*true,/g)].map((m) => `${m[1]}:${m[2]}`);
+    if (satirlar.length === 0) throw new Olculemedi(`${SATICI_GRUP_MIGRATION_REL} INSERT satırları okunamadı (biçim değişti mi?)`);
+    const beklenen = zincir.map((g, i) => `${g}:${i + 1}`);
+    if (satirlar.join() !== beklenen.join()) s.kirmizi.push(`§7 grup migration'ı satırları (${satirlar.join(', ')}) zincirden (${beklenen.join(', ')}) farklı`);
+    const kumeler = [...sql.matchAll(/"kod" (?:NOT )?IN \(([^)]*)\)/g)].map((m) => [...m[1].matchAll(/'([^']+)'/g)].map((x) => x[1]).join(','));
+    if (kumeler.length < 2) throw new Olculemedi(`${SATICI_GRUP_MIGRATION_REL} grup kümeleri (IN / NOT IN) okunamadı`);
+    for (const k of kumeler) if (k !== zincir.join(',')) s.kirmizi.push(`§7 grup migration'ında küme (${k}) zincirden (${zincir.join(',')}) farklı`);
+  } catch (e) {
+    if (e instanceof Olculemedi) s.olculemedi.push(`§7 ${e.message}`);
+    else throw e;
+  }
+
   // §6 tüketici envanteri + kablolama
   if (okuyanlar === null) s.olculemedi.push('§6 git grep koşamadı — kaydı okuyan dosyalar ölçülemedi');
   else {
@@ -277,11 +299,26 @@ function sondalar(taban, tabanOkuyanlar) {
       d[KAPI_KANCASI_REL] = d[KAPI_KANCASI_REL].replace(/^adimlar\.push\(\{([^\n]*"scripts\/test_eski_kanal_donuk\.mjs")/m, 'if (false) {\n  adimlar.push({$1');
     }, 'KOŞULSUZ değil'],
     ['N34 CI\'dan donma sondası adımı silindi → KIRMIZI', 'kirmizi', (d) => { d[CI_REL] = d[CI_REL].replace('node scripts/test_eski_kanal_donuk.mjs --sonda', 'true'); }, 'CI adımı yok: node scripts/test_eski_kanal_donuk.mjs --sonda'],
+    ['N35 satıcı UPDATE_GROUPS sırası bozuldu (genel, oncu, test) → KIRMIZI', 'kirmizi', (d) => {
+      d[SATICI_GRUPLAR_REL] = d[SATICI_GRUPLAR_REL].replace('["test", "oncu", "genel"] as const', '["genel", "oncu", "test"] as const');
+    }, '§7 satıcı UPDATE_GROUPS'],
+    ['N36 satıcıya kayıtta olmayan grup (pilot) → KIRMIZI', 'kirmizi', (d) => {
+      d[SATICI_GRUPLAR_REL] = d[SATICI_GRUPLAR_REL].replace('["test", "oncu", "genel"] as const', '["test", "oncu", "genel", "pilot"] as const');
+    }, '§7 satıcı UPDATE_GROUPS'],
+    ['N37 migration satırının sırası farklı (genel 3 → 4) → KIRMIZI', 'kirmizi', (d) => {
+      d[SATICI_GRUP_MIGRATION_REL] = d[SATICI_GRUP_MIGRATION_REL].replace("'genel', 'Genel', 'uretim', '{}'::jsonb, 3,", "'genel', 'Genel', 'uretim', '{}'::jsonb, 4,");
+    }, "§7 grup migration'ı satırları"],
+    ['N38 migration emeklileştirme kümesinden grup düştü (NOT IN test, oncu) → KIRMIZI (genel pasife düşerdi)', 'kirmizi', (d) => {
+      d[SATICI_GRUP_MIGRATION_REL] = d[SATICI_GRUP_MIGRATION_REL].replace(`WHERE "kod" NOT IN ('test', 'oncu', 'genel')`, `WHERE "kod" NOT IN ('test', 'oncu')`);
+    }, "§7 grup migration'ında küme"],
+    ['N39 kayıtta grup kodu değişti, satıcı aynası değişmedi (genel → herkes) → KIRMIZI', 'kirmizi', kayitta((o) => { grup(o, 'genel').kod = 'herkes'; }), '§7'],
     ['O1 kayıt bozuk JSON → ÖLÇÜLEMEDİ', 'olculemedi', (d) => { d[KAYIT_REL] = d[KAYIT_REL].slice(0, 40); }],
     ['O2 vendor-url.ts varsayılan sabitinin adı değişti → ÖLÇÜLEMEDİ', 'olculemedi', (d) => { d[VENDOR_URL_REL] = d[VENDOR_URL_REL].replace('DEFAULT_LICENSE_SERVER_URL', 'VARSAYILAN_SATICI'); }],
     ['O3 Worker URUN_DIZINLERI adı değişti → ÖLÇÜLEMEDİ', 'olculemedi', (d) => { d[WORKER_REL] = d[WORKER_REL].replace('export const URUN_DIZINLERI', 'export const DIZINLER'); }],
     ['O4 eski kanal kaydı okunamadı → ÖLÇÜLEMEDİ', 'olculemedi', (d) => { d[ESKI_KAYIT_REL] = undefined; }],
     ['O5 git grep koşamadı → ÖLÇÜLEMEDİ', 'olculemedi', (d, c) => { c.okuyanlar = null; }],
+    ['O6 satıcı UPDATE_GROUPS adı değişti → ÖLÇÜLEMEDİ', 'olculemedi', (d) => { d[SATICI_GRUPLAR_REL] = d[SATICI_GRUPLAR_REL].replace('export const UPDATE_GROUPS', 'export const GRUPLAR'); }],
+    ['O7 grup migration\'ı okunamadı → ÖLÇÜLEMEDİ', 'olculemedi', (d) => { d[SATICI_GRUP_MIGRATION_REL] = undefined; }],
   ];
 
   let gecti = 0;

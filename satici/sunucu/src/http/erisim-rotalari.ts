@@ -79,8 +79,7 @@ export const ERISIM_PORTAL_ROTALARI: ReadonlySet<string> = new Set([
   "POST /kurulumlar/:id/dr-geri-al",
   "POST /kurulumlar/:id/iptal",
   "POST /kurulumlar/:id/iptal-geri-al",
-  // kanal · bayi (bayi anahtarı bağlama güven kökü ekler — izni yalnız yönetici rolünde)
-  "POST /kanallar",
+  // güncelleme grubu (kanal; satırlar migration'ın — portal grup açmaz) · bayi (bayi anahtarı bağlama güven kökü ekler — izni yalnız yönetici rolünde)
   "PATCH /kanallar/:id",
   "POST /bayiler",
   "POST /bayiler/:id/tavan",

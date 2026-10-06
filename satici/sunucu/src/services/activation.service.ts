@@ -108,7 +108,7 @@ async function replayOrConflict(tx: Tx, ctx: VendorContext, code: EtkinlestirmeK
     // Tekrar AYNI kirayı verir: HAK da o kiranın bağlı olduğu sürümdür (`hakOzeti` tutsun).
     hak: (await leaseEntitlement(tx, lease)).belge,
     kira: lease.belge,
-    tokens: downloadTokens(ctx, inst, hak, sanction, nowMs),
+    tokens: await downloadTokens(tx, ctx, inst, hak, sanction, nowMs),
     nowMs,
     installationId: inst.kurulumId,
     codeKind: code.tur,
@@ -217,7 +217,7 @@ export async function activateInTx(
       response: licenseResponse({
         hak: lease.entitlement.belge,
         kira: lease.token,
-        tokens: downloadTokens(ctx, fresh, hak, lease.sanction, g.nowMs),
+        tokens: await downloadTokens(tx, ctx, fresh, hak, lease.sanction, g.nowMs),
         nowMs: g.nowMs,
         installationId: fresh.kurulumId,
         codeKind: code.tur,

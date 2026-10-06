@@ -11,7 +11,7 @@ import { badRequest, notFoundError, retryConflict, stateConflict } from "../lib/
 import { CLOUD_RETENTION_DEFAULT, CLOUD_RETENTION_MONTHS, SYNC_MINUTES_DEFAULT, SYNC_MINUTES_MAX, SYNC_MINUTES_MIN } from "./cloud-entitlement";
 import { lockCustomer, lockDealers, lockInstallation } from "../lib/locks";
 import { prisma, type Db, type Tx } from "../lib/prisma";
-import { requireChannel } from "./channel.service";
+import { defaultGroupFor, requireChannel } from "./channel.service";
 import { notifyDoorbell } from "./doorbell";
 import { requireValidityEnd } from "./entitlement-policy";
 import { requireReason } from "./sanction.service";
@@ -173,7 +173,8 @@ export async function setSiteActiveTx(tx: Tx, g: { site: Tesis; active: boolean;
 export interface CreateInstallationInput {
   readonly siteId: string;
   readonly licenseClass: LisansSinifi;
-  readonly channelCode: string;
+  /** Güncelleme grubu; verilmezse sınıftan (K-3: TEST → test, diğerleri → genel). */
+  readonly channelCode?: string;
   readonly name?: string | null;
   readonly pollMinutes?: number;
   readonly syncMinutes?: number;
@@ -185,7 +186,8 @@ export interface CreateInstallationInput {
  * (`kurulumId`) burada DOĞAR (D14): dışarıdan verilmez; fabrikaya etkinleştirme yanıtıyla gider.
  */
 export async function createInstallationUnderLock(tx: Tx, g: CreateInstallationInput): Promise<Kurulum> {
-  await requireChannel(tx, g.channelCode);
+  const group = installationGroup(g);
+  await requireChannel(tx, group);
   const name = g.name === undefined || g.name === null ? null : cleanName(g.name, "Kurulum");
   const site = await tx.tesis.findUnique({ where: { id: g.siteId }, include: { musteri: true } });
   if (!site) throw notFoundError("Tesis");
@@ -195,13 +197,18 @@ export async function createInstallationUnderLock(tx: Tx, g: CreateInstallationI
       tesisId: site.id,
       kurulumId: randomUUID(),
       sinif: g.licenseClass,
-      kanalKodu: g.channelCode,
+      kanalKodu: group,
       ad: name,
       yoklamaAraligiDk: pollMinutes(g.pollMinutes) ?? 60,
       esitlemeAraligiDk: syncMinutes(g.syncMinutes) ?? SYNC_MINUTES_DEFAULT,
       bulutSaklamaAy: g.cloudRetentionMonths === undefined ? CLOUD_RETENTION_DEFAULT : cloudRetention(g.cloudRetentionMonths),
     },
   });
+}
+
+/** Kurulumun doğacağı grup: açık seçim ya da sınıfın varsayılanı (K-3). */
+export function installationGroup(g: Pick<CreateInstallationInput, "licenseClass" | "channelCode">): string {
+  return g.channelCode ?? defaultGroupFor(g.licenseClass);
 }
 
 /** Kurulum lisans kimliğiyle doğar — HAK o kimliğe imzalanır. `site` kilitsiz okunur (müşterisi değişmez). */
@@ -221,12 +228,17 @@ export interface UpdateInstallationInput {
   readonly actor: string;
 }
 
-/** Ad · kanal · yoklama/eşitleme aralığı · bulut saklama · (imzalı HAK yokken) sınıf. Kiraya giden alan değişirse zil çalar. */
+/**
+ * Ad · güncelleme grubu · yoklama/eşitleme aralığı · bulut saklama · (imzalı HAK yokken) sınıf. Kiraya giden alan değişirse
+ * zil çalar. Grup yalnız aktif bir gruba taşınır (K-4: yalnız satıcı tarafı — bayinin kurulum düzenleme yolu yok); grup
+ * değişimi geri sürüm DEMEK DEĞİLDİR: yeni gruptaki sürüm kuruludan eskiyse kurulum o grup yetişene dek bekler (§3.1).
+ */
 export async function updateInstallationTx(tx: Tx, g: UpdateInstallationInput): Promise<Kurulum> {
   await lockInstallation(tx, g.installationDbId);
   const inst = await tx.kurulum.findUnique({ where: { id: g.installationDbId } });
   if (!inst) throw notFoundError("Kurulum");
-  if (g.channelCode !== undefined) await requireChannel(tx, g.channelCode);
+  const groupChanges = g.channelCode !== undefined && g.channelCode !== inst.kanalKodu;
+  if (groupChanges) await requireChannel(tx, g.channelCode as string);
   if (g.licenseClass !== undefined && g.licenseClass !== inst.sinif) {
     const signed = await tx.hak.count({ where: { kurulumId: inst.id, guncelSurum: { gte: 1 } } });
     if (signed > 0) throw stateConflict("Sınıf imzalı HAK'ın parçası: imzalı hakkı olan kurulumun sınıfı değişmez (yeni kurulum açın)");
@@ -235,7 +247,7 @@ export async function updateInstallationTx(tx: Tx, g: UpdateInstallationInput): 
   }
   const data = {
     ...(g.name === undefined ? {} : { ad: g.name === null ? null : cleanName(g.name, "Kurulum") }),
-    ...(g.channelCode === undefined ? {} : { kanalKodu: g.channelCode }),
+    ...(groupChanges ? { kanalKodu: g.channelCode } : {}),
     ...(g.pollMinutes === undefined ? {} : { yoklamaAraligiDk: pollMinutes(g.pollMinutes) }),
     ...(g.syncMinutes === undefined ? {} : { esitlemeAraligiDk: syncMinutes(g.syncMinutes) }),
     ...(g.cloudRetentionMonths === undefined ? {} : { bulutSaklamaAy: cloudRetention(g.cloudRetentionMonths) }),
@@ -247,7 +259,8 @@ export async function updateInstallationTx(tx: Tx, g: UpdateInstallationInput): 
     .map(([k]) => k);
   if (changed.length === 0) return inst;
   const updated = await tx.kurulum.update({ where: { id: inst.id }, data });
-  await tx.kurulumKaydi.create({ data: { kurulumId: inst.id, olay: "GUNCELLENDI", ayrinti: { alanlar: changed }, yapan: g.actor } });
+  const ayrinti = changed.includes("kanalKodu") ? { alanlar: changed, grup: { onceki: inst.kanalKodu, yeni: updated.kanalKodu } } : { alanlar: changed };
+  await tx.kurulumKaydi.create({ data: { kurulumId: inst.id, olay: "GUNCELLENDI", ayrinti, yapan: g.actor } });
   if (["kanalKodu", "yoklamaAraligiDk", "esitlemeAraligiDk"].some((k) => changed.includes(k))) await notifyDoorbell(tx, inst.id, "lisans");
   return updated;
 }

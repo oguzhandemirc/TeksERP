@@ -259,6 +259,9 @@ export const SATICI_INDIRME_REL = 'satici/sunucu/src/lisans-protokol/indirme.ts'
 export const WORKER_REL = 'deploy/guncelleme-sunucusu/worker/indirme-kapisi.js';
 export const KAPI_KANCASI_REL = 'scripts/hooks/pre-commit.mjs';
 export const CI_REL = '.github/workflows/ci.yml';
+/** Satıcının grup aynaları (O2): `UPDATE_GROUPS` sabiti + grup satırlarını doğuran migration — §7 ölçer. */
+export const SATICI_GRUPLAR_REL = 'satici/sunucu/src/services/channel.service.ts';
+export const SATICI_GRUP_MIGRATION_REL = 'satici/sunucu/prisma/migrations/20261006120000_guncelleme_gruplari/migration.sql';
 
 /**
  * `deploy/dagitim.json`ı okuyan ürün/yayın dosyaları — BEYANLI. Bekçi ağaçta kaydın adını taşıyan
@@ -269,7 +272,8 @@ export const TUKETICILER = Object.freeze([]);
 /** İki dağıtım bekçisinin okuduğu dosyalar — commit tetiği bunları kapsar (okunandan dar olamaz). */
 export const DAGITIM_BEKCI_DOSYALARI = Object.freeze([
   KAYIT_REL, ESKI_KAYIT_REL, 'scripts/lib/dagitim.mjs', 'scripts/check-dagitim.mjs', 'scripts/test_eski_kanal_donuk.mjs',
-  VENDOR_URL_REL, SATICI_INDIRME_REL, WORKER_REL, KAPI_KANCASI_REL, CI_REL, 'docs/design/TEK-ORTAK-PAKET.md',
+  VENDOR_URL_REL, SATICI_INDIRME_REL, WORKER_REL, KAPI_KANCASI_REL, CI_REL, SATICI_GRUPLAR_REL, SATICI_GRUP_MIGRATION_REL,
+  'docs/design/TEK-ORTAK-PAKET.md',
 ]);
 
 export function dagitimBekcisiTetigi(rel) {

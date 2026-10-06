@@ -24,7 +24,7 @@ import {
   type IssuedActivationCode,
   type PreparedEntitlementVersion,
 } from "./entitlement.service";
-import { createInstallationUnderLock, type CreateInstallationInput } from "./master-data.service";
+import { createInstallationUnderLock, installationGroup, type CreateInstallationInput } from "./master-data.service";
 
 /** Kilit ALTINDA: müşteri hâlâ bu bayinin mi? Değilse "bulunamadı" (varlık sızdırılmaz). */
 export async function assertDealerOwnsCustomer(tx: Tx, dealerId: string, customerId: string, what = "Kayıt"): Promise<void> {
@@ -76,8 +76,9 @@ export async function createDealerInstallationTx(
   if (!dealer.aktif) throw stateConflict("Bayi pasif");
   const ceiling = await currentCeiling(tx, dealer);
   const usage = (await dealerUsage(tx, dealer.id)) + 1;
-  assertWithinCeiling(ceilingViolations(ceiling, { licenseClass: g.licenseClass, usage, channelCode: g.channelCode }));
-  return createInstallationUnderLock(tx, g);
+  const channelCode = installationGroup(g);
+  assertWithinCeiling(ceilingViolations(ceiling, { licenseClass: g.licenseClass, usage, channelCode }));
+  return createInstallationUnderLock(tx, { ...g, channelCode });
 }
 
 /**

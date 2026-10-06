@@ -29,7 +29,7 @@ import {
 import type { KeyStore } from "../keys/key-store";
 import { VendorError } from "../lib/errors";
 import type { Db, Tx } from "../lib/prisma";
-import { channelVersionsForLease } from "./channel.service";
+import { channelIssuesDownloads, channelVersionsForLease } from "./channel.service";
 import { leaseCloudFields } from "./cloud-entitlement";
 import { deliverableEntitlement, type DeliverableEntitlement, type HeldEntitlement } from "./entitlement-issue.service";
 import { installationCapabilities } from "./entitlement-policy";
@@ -287,17 +287,21 @@ export async function issueLease(tx: Tx, ctx: VendorContext, g: IssueLeaseInput)
 }
 
 /**
- * İndirme belirteçleri (kanalın electron/ · mobil/ · backend/ önekleri — `DOWNLOAD_PRODUCTS`). Verilmez: K1
- * (güncelleme donuk), bakım bitmiş (son hak edilen sürümde kalır), kurulum ETKİN değil, indirme anahtarı yok.
+ * İndirme belirteçleri (grubun electron/ · mobil/ · backend/ önekleri — `DOWNLOAD_PRODUCTS`). Verilmez: K1
+ * (güncelleme donuk), bakım bitmiş (son hak edilen sürümde kalır), kurulum ETKİN değil, kurulumun kanalı aktif bir
+ * güncelleme grubu değil (emekli kanalın yayın kökü yok — kira yine basılır), indirme anahtarı yok.
  */
-export function downloadTokens(
+export async function downloadTokens(
+  db: Db,
   ctx: VendorContext,
   installation: Kurulum,
   entitlement: Hak,
   sanction: SanctionState,
   nowMs: number,
-): { yolOneki: string; belirtec: string }[] {
+): Promise<{ yolOneki: string; belirtec: string }[]> {
   if (sanction.guncellemeDonuk || installation.durum !== "ETKIN" || entitlement.bakimBitis.getTime() < nowMs) return [];
+  const channel = await db.kanal.findUnique({ where: { kod: installation.kanalKodu }, select: { kod: true, aktif: true } });
+  if (!channelIssuesDownloads(channel)) return [];
   const key = ctx.keys.downloadKey(nowMs);
   if (!key) return [];
   const exp = msToIso(nowMs + ctx.config.INDIRME_OMUR_DK * 60_000);
