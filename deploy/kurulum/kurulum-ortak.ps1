@@ -539,7 +539,7 @@ function AgKarari($deger, $ham, $kayit, $sema) {
 }
 
 # --- Lisans saticisi (backend LICENSE_SERVER_URL): kanal kaydindan, TEK karar ---------------------
-# Kanal degeri PAKET.json backendLisansSunucusu (paketle.ps1: deploy/kanallar.json backend.lisansSunucusu), derlemenin
+# Kanal degeri PAKET.json backendLisansSunucusu (paketle.ps1: dagitim kaydinin lisansSunucusu), derlemenin
 # varsayilani lisansSunucusuVarsayilan (vendor-url.ts). kurulum.ps1 OnKosul karari, .env satiri ve Dogrulama olcumu bu
 # islevden; sihirbaz ozeti ayni kurali gosterir. Bos alan = kanal; farkli elle deger ve kayittaki farkli deger ENGELLEMEZ,
 # UYARIR. Satir yalniz etkin deger derleme varsayilanindan FARKLIYSA yazilir (gecis.ps1 ile ayni kural).

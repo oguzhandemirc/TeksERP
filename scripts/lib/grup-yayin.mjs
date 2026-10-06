@@ -84,7 +84,7 @@ export const ARTEFAKT = Object.freeze({
   }),
 });
 
-/** Kapının ihlal hatası: `satirlar` ile (kanal-kapisi'nin `hataDur`u ile aynı sözleşme). */
+/** Kapının ihlal hatası: `satirlar` ile (CLI `grup-yayin-kapisi.mjs` satırları basıp durur). */
 export class GrupIhlali extends Error {
   constructor(mesaj, satirlar = []) {
     super(mesaj);

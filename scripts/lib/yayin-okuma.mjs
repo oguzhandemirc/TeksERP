@@ -25,7 +25,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { kayitOku, Olculemedi } from './kanallar.mjs';
+import { Olculemedi } from './dagitim.mjs';
 
 export const INDIRME_BASLIGI = 'X-TKL-Indirme';
 /** Belirteç dosyasının yerini ezer (bekçiler ve doğrulama için); verilmezse ev dizinindeki dosya. */
@@ -199,10 +199,12 @@ export function baslikDosyasiYaz(hedef, url) {
 export const GUVENLI_YOL = /^\/[A-Za-z0-9._/-]+$/;
 
 /**
- * Yayın adresinin VDS dosya yolu — kanal kayıt defterinden (panelFeed↔vdsPanel,
- * mobilFeed↔vdsMobil, backendFeed↔vdsBackend); kök sabiti ikinci kez yazılmaz. Tanınmayan adres ÖLÇÜLEMEDİ.
+ * Yayın adresinin VDS dosya yolu — çağıranın verdiği yayın bloklarından (`{ kanallar: { <ad>: { yayin } } }`;
+ * grup blokları `grupYayinBlogu`ndan: panelFeed↔vdsPanel, mobilFeed↔vdsMobil, backendFeed↔vdsBackend). Örtük kayıt
+ * yok: blok verilmezse ya da adres hiçbirinin kökünde değilse ÖLÇÜLEMEDİ.
  */
-export function vdsYolu(url, kayit = kayitOku()) {
+export function vdsYolu(url, kayit) {
+  if (!kayit || typeof kayit !== 'object') throw new Olculemedi('yayın bloğu verilmedi — adres hangi grubun VDS yoluna iner belirsiz');
   const temiz = String(url ?? '').split(/[?#]/)[0];
   for (const kanal of Object.values(kayit.kanallar ?? {})) {
     const y = kanal.yayin ?? {};
@@ -213,7 +215,7 @@ export function vdsYolu(url, kayit = kayitOku()) {
       return yol;
     }
   }
-  throw new Olculemedi(`adres hiçbir kanalın yayın kökünde değil (deploy/kanallar.json): ${temiz}`);
+  throw new Olculemedi(`adres verilen yayın bloklarının hiçbirinin kökünde değil: ${temiz}`);
 }
 
 /**

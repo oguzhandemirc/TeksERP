@@ -34,7 +34,7 @@ const KAPSAM = [
 const TARAMA_TABANI = 25;
 /** Varlığı zorunlu: sanksiyonlu tanımlar + yayın zincirinin okuyucuları. */
 const ZORUNLU = ['scripts/lib/yayin-okuma.mjs', 'deploy/electron-grup-yayinla.sh', 'deploy/mobil-grup-yayinla.mjs',
-  'deploy/electron-paketle.sh', 'scripts/lib/terfi.mjs', 'scripts/lib/surum.mjs'];
+  'scripts/lib/terfi.mjs'];
 
 /** Sanksiyonlu tanımlar — satır birebir; yalnız bu satırdaki çağrı sayılmaz. */
 const SANKSIYON = {
@@ -180,7 +180,7 @@ function sondalar(taban, tabanYollar) {
     ['N2g grup betiğinde belirtecli_curl -H başlığını kaybetti → KIRMIZI', 'kirmizi', (d) => degis(d, 'deploy/electron-grup-yayinla.sh', 'curl -H "@$BELIRTEC_BASLIK" "$@"', 'curl "$@"'), 'belirtecli_curl'],
     ['N3 mobil-grup-yayinla.mjs\'e çıplak fetch → KIRMIZI', 'kirmizi', (d) => degis(d, 'deploy/mobil-grup-yayinla.mjs', "const r = await belirtecliFetch(url, { method: 'GET'", "const r = await fetch(url, { method: 'GET'"), 'mobil-grup-yayinla.mjs:'],
     ['N4 terfi.mjs curl alt süreci → KIRMIZI', 'kirmizi', (d) => degis(d, 'scripts/lib/terfi.mjs', "import { yayinOku } from './yayin-okuma.mjs';", "import { yayinOku } from './yayin-okuma.mjs';\nconst ham = (u) => execFileSync('curl', ['-sS', u]);"), 'terfi.mjs:'],
-    ['N5 surum.mjs https.get → KIRMIZI', 'kirmizi', (d) => degis(d, 'scripts/lib/surum.mjs', 'async function getir(url) {', 'async function getir(url) {\n  https.get(url);'), 'surum.mjs:'],
+    ['N5 surum.mjs https.get → KIRMIZI', 'kirmizi', (d) => degis(d, 'scripts/lib/surum.mjs', 'export function manifestGovdesindenSurum(govde) {', 'export function manifestGovdesindenSurum(govde) {\n  https.get(govde);'), 'surum.mjs:'],
     ['N6 belirtecliFetch başlık eklemiyor → KIRMIZI', 'kirmizi', (d) => degis(d, 'scripts/lib/yayin-okuma.mjs', '...indirmeBasliklari(url) }', '}'), 'indirmeBasliklari'],
     ['N7 yeni yayın betiği (deploy/yeni-yayin.sh) curl ile okuyor → KIRMIZI (keşif)', 'kirmizi', (d, y) => ekle(d, y, 'deploy/yeni-yayin.sh', 'v=$(curl -fsS https://guncelleme.etkiliyazilim.com/x/electron/latest.yml)\n'), 'yeni-yayin.sh:1'],
     ['N8 izinli site kalktı → ÖLÜ İZİN KIRMIZI (iki yönlü)', 'kirmizi', (d) => degis(d, 'scripts/koruma-runtime-indir.mjs', "await fetch(hedef.url, { redirect: 'follow' })", 'await indir(hedef.url)'), 'ÖLÜ İZİN'],

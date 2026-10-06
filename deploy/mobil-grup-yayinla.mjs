@@ -84,7 +84,7 @@ for (const a of argv) {
 }
 {
   const ezmeler = yayinEzmeleri({ argv, env: process.env });
-  if (ezmeler.length) dur('YAYIN HEDEFİ EZİLEMEZ — hiçbir şey yüklenmedi', ...ezmeSatirlari(ezmeler).map((s) => s.replace('deploy/kanallar.json kaydından', 'deploy/dagitim.json kaydından')));
+  if (ezmeler.length) dur('YAYIN HEDEFİ EZİLEMEZ — hiçbir şey yüklenmedi', ...ezmeSatirlari(ezmeler));
 }
 const KURU = arg('kuru') !== undefined;
 const DOGRULA = arg('dogrula') !== undefined;

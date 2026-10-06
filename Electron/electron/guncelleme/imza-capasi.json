@@ -1,7 +1,7 @@
 {
   "_aciklama": [
     "PANEL GÜNCELLEME İMZA ÇAPASI — panelin güncelleme künyesini (typ tekserp-panel) doğruladığı AÇIK anahtarlar.",
-    "Derleme anında ana sürece GÖMÜLÜR (electron/guncelleme/guncelleme-dogrulama.ts); boş ya da bozuk çapalı panel PAKETLENMEZ (electron-paketle.sh, kanal-kapisi.mjs panel-capa).",
+    "Derleme anında ana sürece GÖMÜLÜR (electron/guncelleme/guncelleme-dogrulama.ts); boş ya da bozuk çapalı panel PAKETLENMEZ (electron-paketle.sh, grup-yayin-kapisi.mjs capa).",
     "Satır YALNIZ 'cd Teks-Erp && npx tsx scripts/guven-capasi-ekle.ts panel …' ile eklenir. Karar (kullanıcı, 2026-10-01): AYRI istemci yayın anahtarı panel-2026 + çevrimdışı yedek panel-2026-2 (tablet çapasında da aynı ikisi); PAKET anahtarı künye imzalamaz. Hazırlık anahtarı (paket-hazirlik…) giremez.",
     "Rotasyon: yeni kid EKLENİR, eskisi örtüşme penceresinde kalır; sahadaki panelin çapasında olmayan anahtarla imzalanan sürüm o panelde KURULMAZ (yayın kapısı imzalayan kid'i yayındaki sürümün künyesiyle de ölçer).",
     "Karar ve gerekçe: docs/kurallar/surum-yayin.md (Panel) · docs/ops/ELECTRON-OTOMATIK-GUNCELLEME.md §İmzalı künye."

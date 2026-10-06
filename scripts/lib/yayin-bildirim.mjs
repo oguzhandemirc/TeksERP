@@ -1,5 +1,5 @@
 // YAYIN BİLDİRİMİ — yayın/terfi SONRASI satıcı portalına İMZALI bildirim (Faz 3d). Tek yardımcı: panel
-// (deploy/electron-yayinla.sh), tablet (deploy/mobil-yayinla.mjs) ve terfi (scripts/kanal-kapisi.mjs) buradan yollar.
+// (deploy/electron-grup-yayinla.sh), tablet (deploy/mobil-grup-yayinla.mjs) ve backend (deploy/backend-yayinla.mjs) buradan yollar.
 // ⚠️ ASLA FIRLATMAZ, yayını ASLA DURDURMAZ: yapılandırma yok → "atlandı", ağ/sunucu hatası → "başarısız" + uyarı.
 // Tel biçimi satici/sunucu/src/distribution/publications.service.ts ile aynı (bekçi: satici test_yayin_bildirimi).
 // Yapılandırma: ~/.tekserp/yayinci/ayar.json {"adres","kid","anahtar"} (repo DIŞI; TEKSERP_YAYINCI_AYAR ile başka dosya;
@@ -12,7 +12,6 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { KAYIT_REL, kayitAyristir } from './kanallar.mjs';
 
 export const BILDIRIM_TURU = 'tekserp-yayin-bildirimi';
 export const IMZA_ONEKI = 'tekserp-yayin-bildirimi.v1\n';
@@ -109,29 +108,16 @@ export async function yayinBildirVeBas(olay, secenek) {
   return s;
 }
 
-const KOK = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
-
-/** Kanal terfi alan üretim kanalı mı (kayıtta `terfiKaynagi`)? Kayıt tek ayrıştırıcıdan (`kanallar.mjs`); okunamazsa false — TERFI satırı atlanır, YAYIN yine gider. */
-export function uretimKanaliMi(kanal, kayitDosyasi = path.join(KOK, KAYIT_REL)) {
-  try {
-    return Boolean(kayitAyristir(fs.readFileSync(kayitDosyasi, 'utf8')).kanallar?.[kanal]?.terfiKaynagi);
-  } catch {
-    return false;
-  }
-}
-
 /**
- * Yayın SONRASI tek giriş: YAYIN + (kaçış cümlesi varsa TERFI_ATLANDI, yoksa üretim kanalında TERFI — terfi etiketi
- * yayından önce kapıda doğrulandı). Yapılandırma yoksa tek satır basar. ASLA fırlatmaz.
+ * Yayın SONRASI tek giriş: YAYIN + (kaçış cümlesi varsa TERFI_ATLANDI, yoksa çağıran terfi etiketini verdiyse TERFI —
+ * etiket yayından önce kapıda doğrulandı; terfi alan grubu yayıncı bilir). Yapılandırma yoksa tek satır basar. ASLA fırlatmaz.
  */
 export async function yayinSonrasiBildir({ urun, kanal, surum, ayrinti = {}, terfiAtla, terfiEtiketi }, secenek = {}) {
   const ayar = 'ayar' in secenek ? secenek.ayar : ayarOku();
   const s = { ...secenek, ayar };
   const olaylar = [{ olay: 'YAYIN', urun, kanal, surum, ayrinti }];
   if (terfiAtla !== undefined && terfiAtla !== '') olaylar.push({ olay: 'TERFI_ATLANDI', urun, kanal, surum, ayrinti: { cumle: terfiAtla } });
-  // Grup yayını (O10a): terfi alan grubu (oncu/genel) yayıncı bildirir; eski kanal kaydı grup adını bilmez.
   else if (terfiEtiketi) olaylar.push({ olay: 'TERFI', urun, kanal, surum, ayrinti: { etiket: terfiEtiketi } });
-  else if (uretimKanaliMi(kanal, secenek.kayitDosyasi)) olaylar.push({ olay: 'TERFI', urun, kanal, surum, ayrinti: { etiket: `terfi/${kanal}/${urun}-v${surum}` } });
   if (!ayar) return [await yayinBildirVeBas(olaylar[0], s)];
   const sonuc = [];
   for (const o of olaylar) sonuc.push(await yayinBildirVeBas(o, s));

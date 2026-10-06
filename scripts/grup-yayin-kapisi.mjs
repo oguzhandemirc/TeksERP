@@ -72,7 +72,7 @@ async function main(argv) {
     if (komut === 'hedef') {
       // Kabuk yükleyici hedefi buradan alır; ortamı bu süreç miras aldığı için ezme burada görülür.
       const ezmeler = yayinEzmeleri({ env: process.env });
-      if (ezmeler.length) dur('YAYIN HEDEFİ EZİLEMEZ — hiçbir şey yüklenmedi', ezmeSatirlari(ezmeler).map((s) => s.replace('deploy/kanallar.json kaydından', 'deploy/dagitim.json kaydından')), 1);
+      if (ezmeler.length) dur('YAYIN HEDEFİ EZİLEMEZ — hiçbir şey yüklenmedi', ezmeSatirlari(ezmeler), 1);
       const h = grupHedefi(r[0], r[1]);
       const kaynak = terfiKaynagi(grupCoz(r[0]).kayit, r[0]) ?? '-';
       for (const [k, v] of [['SSH_HEDEF', h.ssh], ['UZAK_DIZIN', h.vds], ['YAYIN_URL', h.feed], ['DEFTER', h.defter], ['TERFI_KAYNAGI', kaynak]]) console.log(`${k}=${v}`);

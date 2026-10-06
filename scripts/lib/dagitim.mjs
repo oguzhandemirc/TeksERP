@@ -340,7 +340,6 @@ export const TUKETICILER = Object.freeze([
   'mobil/scripts/lib/ortak-ota.mjs',
   'deploy/mobil-grup-yayinla.mjs',
   'scripts/test_grup_yayin_tablet.mjs',
-  'scripts/lib/kanallar.mjs',
   'Dockerfile',
   'docs/ops/deploy-demo-izin-listesi.txt',
   'deploy/electron-paketle.sh',

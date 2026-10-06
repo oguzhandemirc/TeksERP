@@ -4,7 +4,7 @@
 // Üç tüketici aynı kuralı buradan alır:
 //   · panel ana süreci (`guncelleme-dogrulama.ts`): indirmeden ÖNCE künyeyi, indirdikten SONRA ve kurmadan
 //     hemen ÖNCE dosyayı doğrular — doğrulanamayan güncelleme KURULMAZ (fail-closed);
-//   · yayın kapısı (`scripts/kanal-kapisi.mjs panel-imza`): imzasız/bozuk künyeli latest.yml YÜKLENMEZ;
+//   · yayın kapısı (`scripts/grup-yayin-kapisi.mjs imza`): imzasız/bozuk künyeli latest.yml YÜKLENMEZ;
 //   · imza aracı (`Teks-Erp/scripts/panel-imza.ts`): yükü kurar, imzalar, latest.yml'e yazar.
 // Künye latest.yml'in İÇİNDEDİR (`tekserp: {v, bildirim}` — Dağıtım v2 işaretçisinin biçimi; `latest-yml.mjs`):
 // electron-updater latest.yml'i js-yaml ile ayrıştırır ve tanımadığı anahtarı olduğu gibi taşır; künyeyi bilmeyen

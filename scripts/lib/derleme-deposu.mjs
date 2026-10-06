@@ -3,7 +3,7 @@
 // =============================================================================
 // Portal yalnız adı `BUILD_NAME`e uyan ve uzantısı `BUILD_EXTENSIONS`ta olan dosyayı listeler ve bağlantıya
 // bağlar (`satici/sunucu/src/distribution/storage.ts`). Kural buraya KOPYALANMAZ: kaynak metinden okunur
-// (kanallar.mjs `varsayilanLisansSunucusu` kalıbı); yeri/biçimi değişirse `Olculemedi` — çağıran DURUR.
+// (dagitim.mjs `backendPaketKimligi`nin vendor-url okuması kalıbı); yeri/biçimi değişirse `Olculemedi` — çağıran DURUR.
 // Kullananlar: `deploy/kurulum/kurulum-arsivi.mjs` (çıktı adı) · `deploy/satici/derleme-koy.mjs` (yüklenecek ad).
 // =============================================================================
 

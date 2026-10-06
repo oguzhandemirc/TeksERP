@@ -64,8 +64,6 @@ try {
   kontrol('§2b zaman aşımı başarısız ("zaman aşımı")', zamanAsimi.durum === 'basarisiz' && zamanAsimi.not === 'zaman aşımı', zamanAsimi.not);
 
   console.log('\n§3 yayın sonrası olaylar');
-  const kayit = path.join(tmp, 'kanallar.json');
-  fs.writeFileSync(kayit, JSON.stringify({ kanallar: { uretimk: { tur: 'uretim', terfiKaynagi: 'hazirlikk' }, hazirlikk: { tur: 'hazirlik' } } }));
   const giden = [];
   const topla = async (_u, o) => {
     giden.push(JSON.parse(Buffer.from(o.body).toString()));
@@ -73,16 +71,16 @@ try {
   };
   const sessiz = console.log;
   console.log = () => {};
-  await yayinSonrasiBildir({ urun: 'panel', kanal: 'uretimk', surum: '1.4.0' }, { ayar, fetchFn: topla, kayitDosyasi: kayit });
-  const uretim = giden.splice(0).map((x) => `${x.olay}:${x.ayrinti.etiket ?? ''}`);
-  await yayinSonrasiBildir({ urun: 'tablet', kanal: 'hazirlikk', surum: '2.0.0' }, { ayar, fetchFn: topla, kayitDosyasi: kayit });
-  const hazirlik = giden.splice(0).map((x) => x.olay);
-  await yayinSonrasiBildir({ urun: 'panel', kanal: 'uretimk', surum: '1.4.1', terfiAtla: 'acil düzeltme kullanıcı onayıyla' }, { ayar, fetchFn: topla, kayitDosyasi: kayit });
+  await yayinSonrasiBildir({ urun: 'panel', kanal: 'oncu', surum: '1.4.0', terfiEtiketi: 'terfi/oncu/panel-v1.4.0' }, { ayar, fetchFn: topla });
+  const terfili = giden.splice(0).map((x) => `${x.olay}:${x.ayrinti.etiket ?? ''}`);
+  await yayinSonrasiBildir({ urun: 'tablet', kanal: 'test', surum: '2.0.0' }, { ayar, fetchFn: topla });
+  const kok = giden.splice(0).map((x) => x.olay);
+  await yayinSonrasiBildir({ urun: 'panel', kanal: 'oncu', surum: '1.4.1', terfiAtla: 'acil düzeltme kullanıcı onayıyla', terfiEtiketi: 'terfi/oncu/panel-v1.4.1' }, { ayar, fetchFn: topla });
   const kacis = giden.splice(0).map((x) => x.olay);
-  const ayarsizSonuc = await yayinSonrasiBildir({ urun: 'panel', kanal: 'uretimk', surum: '1.4.2' }, { ayar: null, kayitDosyasi: kayit });
+  const ayarsizSonuc = await yayinSonrasiBildir({ urun: 'panel', kanal: 'oncu', surum: '1.4.2', terfiEtiketi: 'terfi/oncu/panel-v1.4.2' }, { ayar: null });
   console.log = sessiz;
-  kontrol('§3a üretim: YAYIN + TERFI (etiket terfi/<kanal>/<ürün>-vX)', uretim.join() === 'YAYIN:,TERFI:terfi/uretimk/panel-v1.4.0', uretim.join());
-  kontrol('§3b hazırlık: yalnız YAYIN · kaçış: YAYIN + TERFI_ATLANDI (TERFI yok)', hazirlik.join() === 'YAYIN' && kacis.join() === 'YAYIN,TERFI_ATLANDI', `${hazirlik.join()} | ${kacis.join()}`);
+  kontrol('§3a terfi etiketi verilen yayın: YAYIN + TERFI (etiket çağırandan)', terfili.join() === 'YAYIN:,TERFI:terfi/oncu/panel-v1.4.0', terfili.join());
+  kontrol('§3b etiketsiz (kök grup): yalnız YAYIN · kaçış: YAYIN + TERFI_ATLANDI (TERFI yok)', kok.join() === 'YAYIN' && kacis.join() === 'YAYIN,TERFI_ATLANDI', `${kok.join()} | ${kacis.join()}`);
   kontrol('§3c ayar yoksa tek satır (atlandı), istek yok', ayarsizSonuc.length === 1 && ayarsizSonuc[0].durum === 'atlandi');
 
   console.log('\n§4 kancalar');
@@ -90,7 +88,7 @@ try {
   const bulgu = [
     ...kancaBulgulari('electron-grup-yayinla.sh', oku('deploy/electron-grup-yayinla.sh'), { cagri: 'yayin-bildirim.mjs" bildir-yayin', sonrasinda: '# --- YAYIN DEFTERİ', durdurmaz: /\|\| echo/ }),
     ...kancaBulgulari('mobil-grup-yayinla.mjs', oku('deploy/mobil-grup-yayinla.mjs'), { cagri: 'await yayinSonrasiBildir(', sonrasinda: 'etiketAt(\'tablet\'' }),
-    ...kancaBulgulari('kanal-kapisi.mjs', oku('scripts/kanal-kapisi.mjs'), { cagri: 'void yayinBildirVeBas(', sonrasinda: 'terfiAtlaKaydi({' }),
+    ...kancaBulgulari('backend-yayinla.mjs', oku('deploy/backend-yayinla.mjs'), { cagri: 'await yayinSonrasiBildir(', sonrasinda: "bilgi('✓ kenarda son.json yüklenenle bayt bayt aynı');" }),
   ];
   kontrol('§4a üç kanca yardımcıyı yayından/kayıttan SONRA çağırır, kabuk kancası hatayı yutar', bulgu.length === 0, bulgu.join(' | '));
   const sonda = kancaBulgulari('sonda.sh', '# --- YAYIN DEFTERİ\nnode x/yayin-bildirim.mjs" bildir-yayin --urun=panel\nnext', { cagri: 'yayin-bildirim.mjs" bildir-yayin', sonrasinda: '# --- YAYIN DEFTERİ', durdurmaz: /\|\| echo/ });

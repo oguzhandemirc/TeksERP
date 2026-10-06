@@ -1,22 +1,19 @@
 // =============================================================================
 // TeksERP — TERFİ KAPISI (K5) — TEK YÜKLEM
 // =============================================================================
-// Üretim kanalı (`terfiKaynagi` taşıyan kanal, bugün adnansahin ← testfabrika)
-// yalnız hazırlık kanalında YAYINLANMIŞ ve kullanıcının ONAYLADIĞI kodu alır.
-// Üç şart, hepsi ölçülür:
-//   ① HEAD == `<ürün>-v<X>` etiketinin commit'i (ilk kanala çıkan kodun ta kendisi)
-//   ② `terfi/<kanal>/<ürün>-v<X>` AÇIKLAMALI etiketi HEAD'de ve mesajı onay cümlesini taşır
+// Terfi alan grup (dağıtım kaydında `terfiKaynagi` taşıyan grup; grup uyarlaması `scripts/lib/grup-yayin.mjs`)
+// yalnız kaynak grupta YAYINLANMIŞ ve kullanıcının ONAYLADIĞI kodu alır. Üç şart, hepsi ölçülür:
+//   ① HEAD == `<ürün>-v<X>` etiketinin commit'i (ilk gruba çıkan kodun ta kendisi)
+//   ② `terfi/<grup>/<ürün>-v<X>` AÇIKLAMALI etiketi HEAD'de ve mesajı onay cümlesini taşır
 //      (etiket commit'e bağlı → onaylanan kodu ve sürüm notu metnini dondurur)
-//   ③ kaynak kanalda yayındaki sürüm ≥ X (VDS dosya sisteminden SSH ile; okunamazsa ÖLÇÜLEMEDİ)
-// Dört paketleme/yayın betiği (electron-paketle · electron-yayinla · yayinla-ota ·
-// build-apk · mobil-yayinla) AYNI fonksiyonu çağırır; kabuk betikleri CLI'den
-// (`scripts/kanal-kapisi.mjs terfi …`).
+//   ③ kaynak grupta yayındaki sürüm ≥ X (VDS dosya sisteminden SSH ile; okunamazsa ÖLÇÜLEMEDİ)
+// Grup yükleyicileri ve `scripts/grup-yayin-kapisi.mjs` bu dosyanın olgu + hüküm işlevlerini çağırır.
 //
 // ⚠️ ÜÇ SONUÇ: uyumlu · ihlal · ÖLÇÜLEMEDİ. Ölçülemeyen şart geçmiş şart değildir.
 //
 // ⚠️ KAÇIŞ (S4) yalnız KULLANICININ CÜMLESİYLE: `--terfi-atla="<cümle>"`. Boş/kısa
 // cümle RED; geçerli cümle yayın defterine ve etiket mesajına yazılır. `terfiKaynagi`
-// olmayan kanalda kaçış anlamsızdır → RED (alışkanlık olmasın).
+// olmayan grupta (kök grup) kaçış anlamsızdır → RED (alışkanlık olmasın).
 //
 // Yayındaki sürüm SSH ile VDS'ten okunur (scripts/lib/yayin-okuma.mjs — güncelleme sunucusu
 // anonim okumaya kapalı); bekçiler PATH'e sahte `ssh` koyarak ağsız ölçer.
@@ -24,7 +21,7 @@
 
 import { execFileSync } from 'node:child_process';
 
-import { KOK, kanalCoz, Olculemedi } from './kanallar.mjs';
+import { KOK, Olculemedi } from './dagitim.mjs';
 import { ayristir, etiketAdi, karsilastir, manifestGovdesindenSurum, terfiEtiketAdi } from './surum.mjs';
 import { yayinOku } from './yayin-okuma.mjs';
 import { isaretciSurumu } from './backend-yayin.mjs';
@@ -32,14 +29,6 @@ import { cumleDenetle, istanbulSaati } from './kullanici-cumlesi.mjs';
 
 /** Cümle yüklemi `kullanici-cumlesi.mjs`te (PAKET `--ci-atla` da kullanır); eski tüketiciler buradan alır. */
 export { CUMLE_ASGARI_KARAKTER, CUMLE_ASGARI_KELIME, cumleDenetle, istanbulSaati } from './kullanici-cumlesi.mjs';
-
-export const TERFI_URUNLERI = ['panel', 'tablet', 'backend'];
-
-/** `terfiKaynagi` — yoksa null (kanal terfi istemez: hazırlık kanalı ya da tek kanallı kurulum). */
-export function terfiKaynagi(kayit, kod) {
-  const v = kayit?.kanallar?.[kod]?.terfiKaynagi;
-  return typeof v === 'string' && v ? v : null;
-}
 
 /** Kaçışın etiket mesajı — terfi etiketinde ve (yeni atılıyorsa) sürüm etiketinde aynı metin. */
 export function terfiAtlaMesaji({ kod, urun, surum, cumle, saat = istanbulSaati() }) {
@@ -206,34 +195,6 @@ export function terfiHukmu({ kod, urun, surum, kaynak, git, kaynaklar, atla }) {
   if (ihlal.length) return { sonuc: 'ihlal', satirlar };
   if (olculemedi.length) return { sonuc: 'olculemedi', satirlar };
   return { sonuc: 'uyumlu', satirlar };
-}
-
-/**
- * Kapının tamamı: olguları toplar, hükmü verir. Kayıt/git okunamazsa ÖLÇÜLEMEDİ (fırlatmaz).
- * @param {{kod: string, urun: string, surum: string, atla?: string, kuru?: boolean, kok?: string, kayit?: object, oku?: Function}} o
- */
-export function terfiKapisi({ kod, urun, surum, atla, kuru = false, kok = KOK, kayit, oku }) {
-  if (!TERFI_URUNLERI.includes(urun)) return { sonuc: 'olculemedi', satirlar: [`bilinmeyen ürün "${urun}" (${TERFI_URUNLERI.join(' | ')})`] };
-  let k;
-  try {
-    k = kanalCoz(kod, { kok, kayit }).kayit;
-  } catch (e) {
-    if (e instanceof Olculemedi) return { sonuc: 'olculemedi', satirlar: [e.message] };
-    return { sonuc: 'ihlal', satirlar: [e.message, ...(e.satirlar ?? [])] };
-  }
-  const kaynak = terfiKaynagi(k, kod);
-  if (!kaynak || atla !== undefined) return terfiHukmu({ kod, urun, surum, kaynak, git: null, kaynaklar: null, atla });
-  if (!k.kanallar[kaynak]) return { sonuc: 'olculemedi', satirlar: [`terfi kaynağı "${kaynak}" kayıtta yok`] };
-  if (!ayristir(surum)) return { sonuc: 'olculemedi', satirlar: [`sürüm "${surum ?? ''}" okunamadı/ayrıştırılamadı — terfi şartları hangi sürüm için ölçülecek belirsiz`] };
-  let git;
-  try {
-    git = gitOlgulari({ kod, urun, surum, kok });
-  } catch (e) {
-    if (e instanceof Olculemedi) return { sonuc: 'olculemedi', satirlar: [`git: ${e.message}`] };
-    throw e;
-  }
-  const kaynaklar = kuru ? null : kaynakSurumleri(k.kanallar[kaynak], urun, oku);
-  return terfiHukmu({ kod, urun, surum, kaynak, git, kaynaklar, atla });
 }
 
 /**

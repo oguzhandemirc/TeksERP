@@ -22,8 +22,6 @@
 
 import { execFileSync } from 'node:child_process';
 
-import { yayinOku } from './yayin-okuma.mjs';
-
 /* ------------------------------------------------------------------ *
  * semver aritmetiği
  * ------------------------------------------------------------------ */
@@ -215,18 +213,8 @@ export function etiketAt(onEk, surum, { mesaj } = {}) {
 }
 
 /* ------------------------------------------------------------------ *
- * Yayındaki sürümü okuma (yalnız DOĞRULAMA için)
+ * Yayın gövdesinden sürüm (okuma `scripts/lib/terfi.mjs` → `yayin-okuma.mjs`)
  * ------------------------------------------------------------------ */
-
-/**
- * Yayın dosyasını VDS dosya sisteminden SSH ile okur (scripts/lib/yayin-okuma.mjs):
- * güncelleme sunucusu anonim okumaya kapalıdır, "ne yayında" sorusunun kaynağı disktir
- * (CF önbelleği de aradan çıkar). Okunamazsa null = ÖLÇÜLEMEDİ (çağıran uyarır).
- */
-async function getir(url) {
-  const r = yayinOku(url);
-  return r.durum === 'var' ? r.govde : null;
-}
 
 /**
  * Expo manifest gövdesinden (`multipart/mixed`) sürümü çıkarır.
@@ -247,31 +235,6 @@ export function manifestGovdesindenSurum(govde) {
     const manifest = JSON.parse(manifestParcasi.slice(bas).trim());
     const v = manifest?.extra?.expoClient?.version;
     return typeof v === 'string' ? v : null;
-  } catch {
-    return null;
-  }
-}
-
-/** Panelin yayındaki sürümü — `latest.yml` içindeki `version:` satırı. */
-export async function yayindakiPanelSurumu(kanalKoku) {
-  const govde = await getir(kanalKoku.replace(/\/?$/, '/') + 'latest.yml');
-  if (!govde) return null;
-  const m = /^version:\s*(\S+)\s*$/m.exec(govde);
-  return m ? m[1].replace(/^['"]|['"]$/g, '') : null;
-}
-
-/** Tabletin yayındaki paket sürümü — OTA manifestinin `extra.expoClient`i. */
-// İkinci parametre imza uyumu için kalır: runtimeVersion manifest yolunda zaten var (…/ota/<rv>/manifest).
-export async function yayindakiTabletSurumu(manifestUrl, _runtimeVersion) {
-  return manifestGovdesindenSurum(await getir(manifestUrl));
-}
-
-/** Yayındaki KURULUM DOSYASININ (APK) künyesi. Hiç yayınlanmadıysa null. */
-export async function yayindakiApkKunyesi(kanalKoku) {
-  const govde = await getir(kanalKoku.replace(/\/?$/, '/') + 'apk/surum.json');
-  if (!govde) return null;
-  try {
-    return JSON.parse(govde);
   } catch {
     return null;
   }
