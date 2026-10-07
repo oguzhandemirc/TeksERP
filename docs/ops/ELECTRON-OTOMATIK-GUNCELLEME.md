@@ -574,15 +574,22 @@ taşır, künyeyi bilmeyen eski panel yok sayar:
 
 ```yaml
 tekserp:
-  v: 1
-  bildirim: <JWS — alg EdDSA, typ tekserp-panel, kid çapadan>
+  v: 2
+  bildirim: <JWS — alg EdDSA, typ tekserp-panel, kid `ist-*`>
+  iptal: <isteğe bağlı JWS — kök imzalı dağıtım iptali (tekserp-paketiptal)>
 ```
 
-Yük (v:1): `urun: panel` · `platform: win32-x64` · `kanal` · `surum` · `commit` · `yayinZamani` ·
-`paket {ad, boyut, sha512 (hex)}` · `capa` (bu pakete gömülü çapanın kid'leri). Tek kaynak kod:
+Blok KATIDIR (`v`, `bildirim`, `iptal?` dışı anahtar RED). v:1 blok `BELGE_SURUM` ile reddedilir.
+
+Yük (v:2): `urun: panel` · `platform: win32-x64` · `kanal` · `surum` · `commit` · `yayinZamani` ·
+`paket {ad, boyut, sha512 (hex)}` · `capa` (bu pakete gömülü KÖK kid'leri) · `imzaciSertifikasi` (kök imzalı ISTEMCI sertifikası, JWS) · `imzaZamani` (ISO; yeniden imzada değişir, `yayinZamani` değişmez). Yükün `v`si de 2 olmalıdır (blok ve yük `v`si ayrı denetlenir). Tek kaynak kod:
 `Electron/electron/guncelleme/` (`kunye-jws.mjs` · `panel-kunye.mjs` · `latest-yml.mjs` — bağımlılıksız; panel,
 yayın kapısı ve imza aracı aynı dosyaları kullanır). JWS kuralları lisans protokolünün aynasıdır (kâhin
-`Teks-Erp/scripts/test_panel_imza.ts`); `typ` protokolün `TYP.PANEL` kaydıdır.
+`Teks-Erp/scripts/test_panel_imza.ts`); `typ` protokolün `TYP.PANEL` kaydıdır. Zincir doğrulayıcısı tek kaynak `istemci-zinciri.mjs`tir.
+
+**Doğrulama sırası (panel):** blok `v` → kök çapası (künyenin `capa`sındaki kök gömülü çapada mı) → sertifika (kök tanınıyor · kullanım `ISTEMCI` · kid `ist-` · `x` = JWS anahtarı) → JWS (typ · kid · imza) → zaman: `imzaZamani` sertifika penceresinde VE `şimdi ≤ bitiş + 180 gün` → iptal → şema → kanal → sürüm/dosya bağı. Kodlar: `SERTIFIKA_GECERSIZ` · `SERTIFIKA_SURESI` · `SERTIFIKA_IPTAL` (Türkçe uyarı metniyle), ince protokol kodu `detay`ta.
+
+**Dağıtım iptali deposu:** panel iptali üç kaynaktan birleştirir — yerel `userData/lisans-iptal.jws` → indirme belirteci yanıtının `iptal` alanı (kök imzalı JWS, ≤ 32 KiB, biçimsizse null ve belirteç düşmez; `shared/download-token.ts`) → künye bloğunun `iptal`i. Her aday imzasıyla ayrıca doğrulanır (doğrulanamayan reddedilen sayılır), EN YÜKSEK `sira` kazanır, eşitte yerel kalır. Görülen iptal künye reddedilse bile yerele yazılır (geçici dosya + rename, 0600); sonraki denetimde yanıt iptalsiz gelse de iptal geri alınamaz. Depo okuma/yazma hatası yutulur (en iyi çaba: yalnız o anki kaynaklar ölçülür). İptal edilmiş sertifikayla imzalı künye `SERTIFIKA_IPTAL` ile reddedilir.
 
 **Panel ne yapar (fail-closed, görünen akış değişmedi):** `autoDownload=false` iç ayrıntıdır —
 ① `update-available`: künye çapayla doğrulanır (imza · typ · kid · kanal = panelin kanalı · sürüm = latest.yml ·
@@ -593,65 +600,35 @@ sha512'si künyeyle aynı değilse dosya silinir, `ready` olmaz. ③ kurulumdan 
 şerit `UpdateSecurityStrip` + Sistem → Güncelleme), `main.log`a `[updater] güncelleme REDDEDİLDİ kod=… surum=…`;
 panel eski sürümle çalışmaya devam eder.
 
-**Çapa:** `Electron/electron/guncelleme/imza-capasi.json` — derlemede ana sürece GÖMÜLÜR. Satır yalnız
-`cd Teks-Erp && npx tsx scripts/guven-capasi-ekle.ts panel …` ile girer (KURU; sonra `--yaz`). Boş ya da bozuk
-çapalı panel PAKETLENMEZ (`kanal-kapisi.mjs panel-capa`, derlemeden önce ve sonra) — hiçbir güncellemeyi
-doğrulayamayan panel çıkışsız kapıdır.
+**Çapa:** `Electron/electron/guncelleme/imza-capasi.json` `{kokler: [...]}` — derlemede ana sürece GÖMÜLÜR; satırlar ÜRETİM KÖKLERİDİR (`kok-<yıl>-<n>`, x ve sınıflar kök kaynağından). Satır yalnız
+`cd Teks-Erp && npx tsx scripts/guven-capasi-ekle.ts istemci-kok --kok-kid=kok-<yıl>-<n> …` ile girer (KURU; sonra `--yaz`); eski `panel` komutu 64 ile durur. Boş, bozuk ya da üretim biçimi dışı (fikstür) kökü olan panel PAKETLENMEZ
+(`kanal-kapisi.mjs panel-capa`, derlemeden önce ve sonra) — hiçbir güncellemeyi doğrulayamayan panel çıkışsız kapıdır.
 
-**Anahtar kararı (kullanıcı, 2026-10-01): AYRI istemci yayın anahtarı `panel-2026` + çevrimdışı yedek `panel-2026-2`.**
-Panel ve tablet künyesini AYNI anahtar imzalar (aynı kid ailesi; `typ`ler ayrı). PAKET anahtarı (`paket-2026`) künye
-İMZALAMAZ — biri ele geçerse öteki (backend paketleri ↔ istemci güncellemeleri) korunsun. Yedek anahtar iki çapada da
-durur ama imzalamaz: birincil kaybolur/sızarsa sahadaki bütün paneller ve tabletler onu zaten tanır (çıkışsız kapı yok).
-Anahtar üretimini KULLANICI yapar (parolalar TTY'den; hiçbir sır repoya/log'a girmez). Sıra:
-
-```bash
-cd Teks-Erp
-# 1) Birincil (Mac, parolalı) — her panel/tablet yayınında imzalar
-npx tsx scripts/panel-imza.ts anahtar-uret --kid=panel-2026
-#    → ~/.tekserp/panel-uretim/panel-2026.panel.json (0600)
-# 2) Çevrimdışı yedek — AYRI parola, AYRI dizin; çapaya eklendikten sonra Mac'ten USB'ye TAŞINIR
-npx tsx scripts/panel-imza.ts anahtar-uret --kid=panel-2026-2 --dizin=~/.tekserp/panel-yedek
-# 3) Çapalar: iki anahtar × iki çapa (panel + tablet). Önce KURU (yazılacak dosyayı ve x'i basar), x'ler
-#    anahtar-uret çıktısıyla birebirse aynı komutlar --yaz ile. Sıra korunur: önce birincil, sonra yedek.
-for c in panel tablet; do
-  npx tsx scripts/guven-capasi-ekle.ts $c --dosya=$HOME/.tekserp/panel-uretim/panel-2026.panel.json
-  npx tsx scripts/guven-capasi-ekle.ts $c --dosya=$HOME/.tekserp/panel-yedek/panel-2026-2.panel.json
-done
-# 4) Yedek dosyayı Mac'ten kaldır: ~/.tekserp/panel-yedek/ → USB; parolası kâğıtta, birincilinkinden AYRI.
-#    Birincilin parolalı kopyası da USB'ye (Mac kaybına karşı); parolası parola yöneticisinde.
-```
-
-Çapa commit'i (iki JSON dosyası) yöneticide; sonra paketleme açılır. Yayında anahtar:
-`./deploy/electron-yayinla.sh --musteri=<kod> --anahtar=$HOME/.tekserp/panel-uretim/panel-2026.panel.json`
-(ya da `TEKSERP_PANEL_IMZA_ANAHTARI`). `guven-capasi-ekle.ts panel --paket-kid=…` yolu kodda durur ama bu kararla
-KULLANILMAZ.
+**Anahtar düzeni (karar 2026-10-07, tasarım `docs/design/ISTEMCI-ANAHTARI-KOK-ALTINDA.md`):** künyeyi PAKET değil, kökün imzaladığı ISTEMCI sertifikalı `ist-<yıl>` anahtarı imzalar; yıllık yenileme çapaya DOKUNMAZ, çevrimdışı yedek `ist-<yıl>-2` aynı kökten ayrı sertifika alır. `panel-2026` düzeni (çapaya doğrudan istemci anahtarı) geçersizdir ve ortak uygulamaya hiç girmedi. İmza: `cd Teks-Erp && npx tsx scripts/panel-imza.ts imzala … --sertifika=<sertifika.json> [--iptal=<iptal.jws>]` — yalnız `ist-*` anahtar kabul edilir, `--sertifika` verilmezse `<anahtar dizini>/<kid>.sertifika.json` aranır. Anahtar/sertifika üretimi ve tören I7 işidir (parolalar TTY'den; hiçbir sır repoya/log'a girmez).
 
 **Yayın:** `electron-paketle.sh` künyeyi İMZALAMAZ (anahtar istemez). `electron-yayinla.sh`: ① `panel-imza` kapısı
 (çapa · pakete gömülü mü · imza · kanal · latest.yml bağı · exe boy + sha512 · `capa` = çapa); imzasızsa imza
 aracı çağrılır, imza sonrası kapı yeniden koşar ② ROTASYON KİLİDİ (ssh okuması): yayındaki latest.yml künyeliyse
-yeni imzalayan onun `capa`sında olmalı — sahadaki panel bir sonraki sürümü KENDİ gömülü çapasıyla doğrular
+yeni imzanın KÖKÜ onun `capa`sında olmalı (yayındaki v:1 → ihlal) — sahadaki panel bir sonraki sürümü KENDİ gömülü çapasıyla doğrular
 ③ yükleme sırası aynı (latest.yml EN SON) ④ kenardaki latest.yml yerelde imzalanan dosyayla BAYT-EŞİT.
 `--kuru` imzalamaz (imzasızı not eder, geçersizi durdurur); `--dogrula` kenardaki künyeyi denetler (künyesiz
 yayın uyarı — imza öncesi sürüm). Bekçi: `scripts/test_kanal_yayin_kapisi.mjs` §8.
 
-**Rotasyon:** yeni kid ÖNCE çapaya eklenir ve ESKİ anahtarla imzalanmış bir sürümle sahaya çıkar; ancak o sürüm
-yayındayken yeni anahtarla imzalanır (kapı aksi hâlde durur). Eski kid, onu tanıyan son panel güncellenene dek
-çapada kalır. Geride kalmış (yayındakinden eski) makineler için örtüşme penceresi geniş tutulur.
-**Birincil kaybolursa/sızarsa:** yedek `panel-2026-2` USB'den alınır ve sonraki sürümü O imzalar (yayındaki künyenin
-`capa`sında olduğu için rotasyon kilidi geçer); aynı sürümde çapadan sızan kid ÇIKARILMAZ (sahadakiler eskisiyle
-gelir) ama yeni bir yedek (`panel-2026-3`) eklenir; sızan anahtar, onu tanıyan son istemci güncellenince çapadan düşer.
+**Rotasyon kilidi (KÖK düzeyi):** `electron-yayinla.sh` ssh ile yayındaki latest.yml künyesini okur; yeni imzanın KÖKÜ yayındaki künyenin `capa`sında (kök kid'leri) olmalıdır, yayındaki künye v:1 ise ihlaldir (kapı durur). Yıllık ISTEMCI yenilemesi kök değiştirmediği için kilidi etkilemez. KÖK değişiminde yeni kök ÖNCE çapaya eklenir ve ESKİ kökle imzalı bir sürümle sahaya çıkar; ancak o sürüm yayındayken yeni kökün altındaki anahtarla imzalanır. Eski kök, onu tanıyan son panel güncellenene dek çapada kalır. Bekçi: `scripts/test_grup_yayin_kapisi.mjs` §7.
+**Birincil kaybolursa/sızarsa:** yedek ISTEMCI anahtarı (kök imzalı kendi sertifikasıyla) USB'den alınır ve sonraki sürümü O imzalar — çapa ve rotasyon kilidi değişmez; sızan anahtar için kök imzalı dağıtım iptali yayınlanır (yukarıdaki iptal deposu).
 
 **Geçiş sırası — "eski istemci ne yapar":**
-1. Anahtar üretimi + çapa satırları (yukarıdaki sıra; karar 2026-10-01: `panel-2026` + yedek `panel-2026-2`) — çapa
-   commit'i inmeden yeni panel paketlenemez.
+1. Kök çapa satırı (`istemci-kok`) + ISTEMCI anahtarı/sertifikası (I7 töreni) — çapa commit'i inmeden yeni panel paketlenemez.
 2. İlk imzalı sürüm (doğrulayıcıyı taşıyan panel) önce testfabrika'ya: yayın betiği künyeyi imzalar.
    **Eski paneller (≤ 1.4.2) künyeyi bilmez → `tekserp:` bloğunu yok sayar ve bu sürüme BUGÜNKÜ GİBİ güncellenir.**
+   v:1 künyeyi doğrulayan panel sahada yoktur; olsa bile v:2'yi `BELGE_SURUM` ile reddeder ve kurulu sürümünde çalışır
+   (geriye uyum katmanı yok). adnansahin 1.3.7 donuktur ve künyeyi hiç denetlemez.
 3. Bu sürümden sonra her panel künyesiz/geçersiz `latest.yml`i REDDEDER — bu yüzden yayın betiği imzasız künye
    yükleyemez (kapı); elle `scp` zaten yasak.
 4. Terfi: aynı akış üretim kanalına (terfi etiketi). Backend sözleşmesi değişmedi (`minVersion` yükselmez).
 
 **Sorun giderme (kodlar `panel-kunye.mjs` `RELEASE_ERROR_CODES`):** `KUNYE_YOK` imzasız yayın · `JWS_KID` çapada
-olmayan anahtar (rotasyon hatası ya da sahte) · `JWS_IMZA`/`JWS_*` bozuk/sahte imza · `KUNYE_KANAL` başka kanalın
+olmayan kök/`panel-*` kid'li künye (rotasyon hatası ya da sahte) · `BELGE_SURUM` v:1 künye · `SERTIFIKA_GECERSIZ`/`_SURESI`/`_IPTAL` sertifika zinciri, imza anı penceresi + 180 gün tolerans, iptal · `JWS_IMZA`/`JWS_*` bozuk/sahte imza · `KUNYE_KANAL` başka kanalın
 künyesi · `KUNYE_SURUM`/`KUNYE_DOSYA` latest.yml künyeyle uyuşmuyor · `KUNYE_ESKI` eski imzalı sürüm yeniden
 sunulmuş · `DOSYA_OZETI` inen dosya künyede yazan değil · `CAPA_BOS` çapasız derleme (paketleme kapısı bunu
 önler). Hepsinde panel kurmaz ve eski sürümde çalışır; yayını `--dogrula` ile denetle, sunucu tarafını incele.
