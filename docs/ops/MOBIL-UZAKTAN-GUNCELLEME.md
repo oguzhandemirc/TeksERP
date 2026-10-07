@@ -197,7 +197,7 @@ kapalı.
 Yük (v:1): `urun: tablet` · `platform: android-arm64` · `kanal` · `versionCode` · `versionName` · `commit` ·
 `yayinZamani` · `paket {ad, boyut, sha256}` (`ad` = `TeksERP-<versionName>-vc<versionCode>.apk`, yol taşımaz) ·
 `capa`. `typ` protokolün `TYP.APK` kaydıdır; JWS kuralları panel/lisans aynası. Kod: yayın tarafı
-`mobil/scripts/lib/apk-kunye.mjs` (node:crypto), tablet `mobil/src/services/apkKunye.ts` + `mobil/src/lib/kripto/`
+`mobil/scripts/lib/apk-kunye.mjs` (node:crypto), tablet doğrulayıcısı K-14'te (2026-10-07) kalktı (eski kanalda `eski-kanal-son` etiketinde)
 (Hermes'te node:crypto yok → denetlenmiş saf JS `@noble/curves` + `@noble/hashes` sarmalayıcısı — aşağıda "kripto").
 
 **Tablet ne yapar (fail-closed):** ① künyeyi okurken yeni sürüm sunuluyorsa (versionCode > kurulu) künye
@@ -375,8 +375,6 @@ Güncelleme: internet). İkisinin farklı olması normaldir; ekran bunu uyarı o
 | `mobil/src/test/update-feed-url.test.ts` | Feed adresi tek kaynak · `enabled` açık · sertifika dosyası gerçekten var · ERP adresinden bağımsızlık (7 kontrol) |
 | `mobil/src/services/appUpdate.service.test.ts` | Yenileme kapısı (bekleyen kayıt) + sürüm karşılaştırması (8 kontrol) |
 | `mobil/src/lib/kripto/kripto.test.ts` | `@noble/*` sarmalayıcısının kâhini: SHA-256/512 + Ed25519 (RFC 8032 · Wycheproof 151 vektör · node:crypto) + katı kip |
-| `mobil/src/services/apkKunye.test.ts` | APK künyesi doğrulayıcısı + yayın aracıyla çapraz kâhin |
-| `mobil/src/services/appUpdate.apk.test.ts` | Akış: imzasız/başka kanal künyesi "yeni sürüm" sayılmaz · indirme gömülü kökten · özeti tutmayan dosya silinir, kurulum ekranı açılmaz |
 | `Teks-Erp/scripts/test_panel_imza.ts` §3h–k · §4 | `guven-capasi-ekle.ts tablet` · `panel-imza.ts apk-imzala/apk-dogrula` uçtan uca |
 | `scripts/test_kanal_yayin_kapisi.mjs` §3G6 | Yayın kapıları: imzasız OTA · OTA sertifikası · tablet çapası · imzasız künye · rotasyon · yükleme sırası |
 | `mobil/scripts/build-apk.mjs` | Manifest'te feed adresi + runtimeVersion + **kod imzalama sertifikası** · APK'nın mührü |

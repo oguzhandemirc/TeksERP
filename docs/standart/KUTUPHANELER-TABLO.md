@@ -69,7 +69,7 @@ Paket `deploy/` ve `scripts/`yi TAŞIMAZ (`docs/KOD-KURALLARI.md` § deploy) —
 | Depolama | `expo-secure-store` (sır) · `@react-native-async-storage/async-storage` | — |
 | Kamera · okutma geri bildirimi | `expo-camera` 17 · `expo-haptics` + `expo-audio` | ekranlar `Haptics`i doğrudan değil `scanFeedback.signalScan` üzerinden çağırır |
 | Bluetooth | `react-native-bluetooth-classic` (3 dosya, lazy `require`) | `react-native-ble-plx` canlı ama sahipsiz — §7 |
-| Yazdırma / dosya | `expo-print` + `expo-file-system` | `expo-sharing` KULLANILMAZ (ölü); `expo-intent-launcher` çıktı (2026-10-07, K-14: uygulama içi APK kurulumu kalktı) |
+| Yazdırma / dosya | `expo-print` | `expo-sharing` KULLANILMAZ (ölü); `expo-intent-launcher` ve doğrudan `expo-file-system` bağımı çıktı (2026-10-07, K-14: uygulama içi APK kurulumu kalktı; `expo`nun geçişli bağımlılığı olarak kalır) |
 | Animasyon · klavye · sıralama | `react-native-reanimated` 4 + `react-native-worklets` · `react-native-keyboard-controller` · `react-native-sortables` | worklets reanimated 4 peer'ı |
 | Ağ · güncelleme · test | `@react-native-community/netinfo` · `expo-updates` · `jest-expo` + `@testing-library/react-native` | — |
 | İmza doğrulama · özet (saf JS kripto) | `@noble/curves` 2.4.0 + `@noble/hashes` 2.4.0 (TAM SABİT — ESM-only, [KU-12]) | yalnız `src/lib/kripto/` sarmalayıcısı (APK künyesi); `expo-crypto` native (APK ister), `tweetnacl` S < L denetlemez, `node-forge` yalnız expo CLI'ın geçişli bağımlılığı; elle yazılan doğrulayıcı GEÇİCİYDİ (§9) |

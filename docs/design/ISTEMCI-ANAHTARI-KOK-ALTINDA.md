@@ -28,7 +28,7 @@
 
 ### 1.2 Tablet APK künyesi
 
-- `apk/surum.json` içinde `tekserp: {v, bildirim}`, `typ: tekserp-apk`; doğrulayıcı bağımlılıksız TS `mobil/src/services/apkKunye.ts` (Ed25519 `src/lib/kripto`), yayın aracı aynası `mobil/scripts/lib/apk-kunye.mjs` (panelin `kunye-jws.mjs`ini içe alır).
+- `apk/surum.json` içinde `tekserp: {v, bildirim}`, `typ: tekserp-apk`; tablet doğrulayıcısı K-14'te (2026-10-07) ortak tabletten kalktı (eski kanalda `eski-kanal-son` etiketinde), yayın aracı aynası `mobil/scripts/lib/apk-kunye.mjs` (panelin `kunye-jws.mjs`ini içe alır).
 - Çapa `mobil/src/lib/apk-imza-capasi.json` = panelinkiyle AYNI iki satır (`panel-2026` · `panel-2026-2`). Çapa **JS paketinin içindedir** ⇒ onu OTA kod imzası korur: OTA anahtarını ele geçiren APK künyesi kapısını da değiştirebilir. Tabletin asıl güven kapısı OTA'dır.
 - **Ortak tablette bu yol YOK (karar 5, 2026-10-07).** Ortak tablet Google Play gizli yayınıyla dağıtılır; Play'den kurulan uygulama kendi APK'sını indirip kuramaz ⇒ native/büyük güncelleme Play'den, JS güncellemesi OTA ile uygulama içinden gelir. APK künyesi (`tekserp-apk`) ve kurulum ekranını açan güncelleme yolu yalnız adnansahin'in dondurulmuş tabletinde kalır; ortak tabletteki kodunun kaldırılması `TEK-ORTAK-PAKET.md` K-14 işidir.
 
