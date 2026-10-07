@@ -17,6 +17,31 @@
   ],
   "yayinlar": [
     {
+      "id": "2026-10-07",
+      "durum": "TASLAK — terfide kullanıcı onayı",
+      "baslik": "Tablet uygulaması Google Play'den kurulur",
+      "surumler": {
+        "tablet": "1.1.0"
+      },
+      "maddeler": [
+        {
+          "kapsam": "tablet",
+          "tip": "yeni",
+          "metin": "TeksERP tablet uygulaması artık Google Play'den kurulur; bu, Google Play'den kurulan ilk sürümdür."
+        },
+        {
+          "kapsam": "tablet",
+          "tip": "yeni",
+          "metin": "İlk açılışta “Sunucuyu bul” ekranı açılır ve tablet fabrika ağındaki sunucuyu kendiliğinden arar. Sunucu listede çıkmazsa “Adresi elle gir” ile yöneticinizden öğrendiğiniz adres yazılır."
+        },
+        {
+          "kapsam": "tablet",
+          "tip": "iyilestirme",
+          "metin": "Günlük güncellemeler uygulama açılırken kendiliğinden iner. Yeni cihaz özelliği gerektiren bir güncelleme olduğunda tablette uyarı şeridi ve “Play Store'u aç” düğmesi görünür; güncelleme Google Play'den yapılır."
+        }
+      ]
+    },
+    {
       "id": "2026-10-01",
       "durum": "TASLAK — terfide kullanıcı onayı",
       "baslik": "Lisans etkinleştirmeden önce sözleşme kabulü",
