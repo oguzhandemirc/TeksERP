@@ -60,6 +60,21 @@ Bu servisin dosyalarına dokunmaz; Cloudflare panelinden yapıştırılır. Kuru
 ve geri alma: [`docs/ops/INDIRME-KAPISI-WORKER.md`](../../docs/ops/INDIRME-KAPISI-WORKER.md).
 Kapı açıldıktan sonra origin yalnız Cloudflare'i kabul etmelidir (runbook §5).
 
+## Yeni indirme adresi — `indir/` (indir.etkiliyazilim.com, tek ortak paket)
+
+`indir/` VDS'teki **`/opt/stack/apps/tekserp-indir/`** dizininin kaynağıdır ve bu dizindeki eski siteden
+TAMAMEN ayrıdır (ayrı compose projesi `tekserp-indir`, konteyner `tekserp-indir`, yönlendirici
+`tekserp-indir`). Eski site (`tekserp-guncelleme`, adnansahin) olduğu gibi kalır.
+
+| | |
+|---|---|
+| Yol şeması | `html/<grup>/{electron,mobil,backend}/` — grup `test` · `oncu` · `genel` (dağıtım kaydı `vdsKoku`); grup-nötr `/ota/<rv>/manifest` kökende dizin DEĞİLDİR, Worker gerçek yola çevirir |
+| Sahiplik | `html/` ve `defter/` → `yayinci` (yayın betikleri `ssh tekserp-yayin` ile yazar); compose + `nginx/` → root |
+| Kenar | Traefik ara katmanları bu servisin KENDİ etiketlerinde: Cloudflare ipallowlist → Cf-Connecting-Ip hız seddi. Köken yalnız Cloudflare'i kabul eder (Worker atlanamasın); VDS içinden `--resolve …:127.0.0.1` ölçümü de 403 alır |
+| Bekçi | `node scripts/test_indir_sunucusu.mjs` (+ `--sonda`) |
+
+Kurulum ve Cloudflare adımları: [`docs/ops/INDIRME-KAPISI-WORKER.md`](../../docs/ops/INDIRME-KAPISI-WORKER.md) §11.
+
 ## Yeni müşteri eklemek
 
 ```bash

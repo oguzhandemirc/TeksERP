@@ -267,6 +267,15 @@ adimlar.push({ ad: "eski kanal kaydı donuk", cwd: ".", cmd: ["node", ["scripts/
 if (staged.some(dagitimBekcisiTetigi)) {
   adimlar.push({ ad: "dağıtım kaydı", cwd: ".", cmd: ["node", ["scripts/check-dagitim.mjs"]] });
 }
+// YENİ İNDİRME KÖKENİ (3.2): tetik = bekçinin okuduğu dosyalar (bekçi bu listenin burada aynen geçtiğini ölçer).
+const INDIR_KOKENI_TETIK = new Set([
+  "deploy/guncelleme-sunucusu/indir/docker-compose.yml", "deploy/guncelleme-sunucusu/indir/nginx/default.conf",
+  "deploy/guncelleme-sunucusu/docker-compose.yml", "satici/sunucu/src/http/client-address.ts", "mobil/scripts/lib/feed.cjs",
+  "deploy/dagitim.json", "scripts/test_indir_sunucusu.mjs", "deploy/traefik/kenar-zinciri.mjs",
+]);
+if (staged.some((f) => INDIR_KOKENI_TETIK.has(f))) {
+  adimlar.push({ ad: "indirme kökeni", cwd: ".", cmd: ["node", ["scripts/test_indir_sunucusu.mjs"]] });
+}
 // PROFİL MATRİSİ YAYIN KAPISI (O13b): tetik = bekçinin okuduğu dosyalar (kapı kitaplığı, CLI, rapor
 // yazarı, cümle yüklemi) + dağıtım kaydı tetiği (tüketici listesi ve grup zinciri oradan okunur).
 const PROFIL_KAPISI_DOSYALARI = new Set([
