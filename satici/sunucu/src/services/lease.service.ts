@@ -38,6 +38,7 @@ import { moduleKeyGrants } from "./module-key.service";
 import { leaseUpdatePolicy } from "./update-policy.service";
 import { paidThroughOf, type PaidThrough } from "./paid-through";
 import type { VendorContext } from "./context";
+import { leasePackageRevocation } from "./package-revocation.service";
 import { distributableRevocation } from "./revocation.service";
 
 export interface SanctionState {
@@ -331,15 +332,21 @@ export async function activeEntitlement(db: Db, installationDbId: string): Promi
  * Lisans yanıtı. Etkinleştirme yanıtı lisans kimliğini (`kurulumId`, D14) ve tüketilen kodun türünü taşır. İptal belgesi
  * (varsa) HER yanıta eklenir: kira `iptalSira` beyan ediyorsa fabrika en az o sıradaki belgeyi elinde tutmalı.
  */
-export function licenseResponse(g: {
-  readonly hak: string | null;
-  readonly kira: string;
-  readonly tokens: { yolOneki: string; belirtec: string }[];
-  readonly nowMs: number;
-  readonly installationId?: string;
-  readonly codeKind?: ActivationCodeKind;
-  readonly revocation?: LeaseRevocation | null;
-}): LicenseResponse {
+export async function licenseResponse(
+  db: Db,
+  keys: KeyStore,
+  g: {
+    readonly hak: string | null;
+    readonly kira: string;
+    readonly tokens: { yolOneki: string; belirtec: string }[];
+    readonly nowMs: number;
+    readonly installationId?: string;
+    readonly codeKind?: ActivationCodeKind;
+    readonly revocation?: LeaseRevocation | null;
+  },
+): Promise<LicenseResponse> {
+  // Dağıtım iptali yanıtın kendisinde seçilir (her kuruluma, yetenek kapısı yok): yanıt kuran hiçbir yol onu atlayamaz.
+  const packageRevocation = await leasePackageRevocation(db, keys);
   return LicenseResponseSchema.parse({
     v: 1,
     hak: g.hak,
@@ -349,5 +356,6 @@ export function licenseResponse(g: {
     ...(g.installationId === undefined ? {} : { kurulumId: g.installationId }),
     ...(g.codeKind === undefined ? {} : { kodTuru: g.codeKind }),
     ...(g.revocation ? { iptal: g.revocation.belge } : {}),
+    ...(packageRevocation ? { paketIptal: packageRevocation } : {}),
   });
 }

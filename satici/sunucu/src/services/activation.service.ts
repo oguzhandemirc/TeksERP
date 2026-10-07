@@ -104,7 +104,7 @@ async function replayOrConflict(tx: Tx, ctx: VendorContext, code: EtkinlestirmeK
   const lease = await tx.kira.findUniqueOrThrow({ where: { id: code.kiraId } });
   const hak = await activeEntitlement(tx, inst.id);
   const sanction = await computeSanctionState(tx, inst.id);
-  return licenseResponse({
+  return await licenseResponse(tx, ctx.keys, {
     // Tekrar AYNI kirayı verir: HAK da o kiranın bağlı olduğu sürümdür (`hakOzeti` tutsun).
     hak: (await leaseEntitlement(tx, lease)).belge,
     kira: lease.belge,
@@ -214,7 +214,7 @@ export async function activateInTx(
   return {
     kind: "activated",
     activated: {
-      response: licenseResponse({
+      response: await licenseResponse(tx, ctx.keys, {
         hak: lease.entitlement.belge,
         kira: lease.token,
         tokens: await downloadTokens(tx, ctx, fresh, hak, lease.sanction, g.nowMs),

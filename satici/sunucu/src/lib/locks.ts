@@ -84,7 +84,7 @@ export async function lockDownloadLink(tx: Tx, linkId: string): Promise<void> {
   await tx.$executeRaw`SELECT pg_advisory_xact_lock(${LOCK_NAMESPACES.DOWNLOAD_LINK}::int4, hashtext(${linkId}))`;
 }
 
-/** Satıcının anahtar kümesi: tek anahtarlı uzay (iptal sırası karşılaştırması + ekleme · anahtar süresi bildirimi). */
+/** Satıcının anahtar kümesi: tek anahtarlı uzay (iptal ve dağıtım iptali sırası karşılaştırması + ekleme · anahtar süresi bildirimi). */
 export async function lockKeySet(tx: Tx): Promise<void> {
   await tx.$executeRaw`SELECT pg_advisory_xact_lock(${LOCK_NAMESPACES.KEY_SET}::int4, 0)`;
 }

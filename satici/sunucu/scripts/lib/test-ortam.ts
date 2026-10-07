@@ -528,6 +528,17 @@ export async function temizleIptalBelgeleri(yukleyen: string): Promise<void> {
   });
 }
 
+/** Dağıtım iptali defteri fikstürü — yalnız bu bekçinin yükleyen etiketiyle yazdığı satırlar (`_test` beyanıyla). */
+export async function temizlePaketIptalBelgeleri(yukleyen: string): Promise<void> {
+  const { prisma } = await import("../../src/lib/prisma");
+  await prisma.$transaction(async (tx) => {
+    await tx.$executeRawUnsafe(`SET LOCAL satici.defter_temizlik = 'test'`);
+    const rows = await tx.paketIptalBelgesi.findMany({ where: { yukleyen }, select: { id: true } });
+    await tx.paketIptalBelgesi.deleteMany({ where: { yukleyen } });
+    await tx.denetim.deleteMany({ where: { varlikId: { in: rows.map((r) => r.id) } } });
+  });
+}
+
 export async function kapat(): Promise<void> {
   const { prisma, pool } = await import("../../src/lib/prisma");
   await prisma.$disconnect().catch(() => undefined);

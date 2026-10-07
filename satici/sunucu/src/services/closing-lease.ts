@@ -184,7 +184,7 @@ export async function closeEndedKey(
         parmakIzi: g.measured,
       },
     });
-    return licenseResponse({ hak: closing.entitlementToken, kira: closing.token, tokens: [], nowMs: g.nowMs, revocation: closing.revocation });
+    return await licenseResponse(tx, ctx.keys, { hak: closing.entitlementToken, kira: closing.token, tokens: [], nowMs: g.nowMs, revocation: closing.revocation });
   });
   if (!response) throw installationCancelled();
   return response;

@@ -461,6 +461,27 @@ model IptalBelgesi {
   @@map("iptal_belgesi")
 }
 
+/// DAĞITIM İPTALİ belgeleri (`tekserp-paketiptal`; PAKET-ANAHTARI-KOK-ALTINDA §2.4 · ISTEMCI-ANAHTARI-KOK-ALTINDA §3.4) —
+/// EKLEME-YALNIZ defter, `iptal_belgesi`nden AYRI (kendi tekdüze `sira`sı; satır `pkt-*` ya da `ist-*` sertifikası).
+/// Ters mekanizma: daha yüksek `sira`lı yeni belge (öncekinin satırlarını taşımak ZORUNLU — düşüren belge 409); satır
+/// silinmez, güncellenmez. Dağıtım kapısı yok: her kira yanıtına en yüksek sıra (`leasePackageRevocation`).
+model PaketIptalBelgesi {
+  id           String   @id @default(uuid()) @db.Uuid
+  /// Belgedeki `iptalId`.
+  iptalId      String   @unique @db.Uuid
+  sira         Int      @unique
+  /// İmzalı belge (JWS) — açık belge, sır değil.
+  belge        String
+  imzalayanKid String   @db.VarChar(64)
+  verilis      DateTime @db.Timestamptz
+  /// İptal satırlarının kimlikleri (kid) — yalnız arama; otorite belgedir.
+  kidler       String[]
+  yukleyen     String   @db.VarChar(120)
+  createdAt    DateTime @default(now()) @db.Timestamptz
+
+  @@map("paket_iptal_belgesi")
+}
+
 // -----------------------------------------------------------------------------
 // KİRA ZİNCİRİ
 // -----------------------------------------------------------------------------

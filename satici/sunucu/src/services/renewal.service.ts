@@ -207,7 +207,7 @@ async function renewInTx(tx: Tx, ctx: VendorContext, g: RenewInput): Promise<Ren
       return {
         kind: "LEASE",
         decision,
-        response: licenseResponse({ hak: closing.entitlementToken, kira: closing.token, tokens: [], nowMs: g.nowMs, revocation: closing.revocation }),
+        response: await licenseResponse(tx, ctx.keys, { hak: closing.entitlementToken, kira: closing.token, tokens: [], nowMs: g.nowMs, revocation: closing.revocation }),
       };
     }
     await recordPoll("RED_KIRA_VERILMEDI", null);
@@ -242,7 +242,7 @@ async function renewInTx(tx: Tx, ctx: VendorContext, g: RenewInput): Promise<Ren
     return {
       kind: "LEASE",
       decision,
-      response: licenseResponse({
+      response: await licenseResponse(tx, ctx.keys, {
         // Tekrar AYNI kirayı verir: HAK da o kiranın bağlı olduğu sürümdür (`hakOzeti` tutsun); genişlik kapısında HAK yok.
         hak: delivered.withheld ? null : entitlementToDeliver(g.clientEntitlement, await leaseEntitlement(tx, tipRow)),
         kira: tipRow.belge,
@@ -323,7 +323,7 @@ async function renewInTx(tx: Tx, ctx: VendorContext, g: RenewInput): Promise<Ren
   return {
     kind: "LEASE",
     decision,
-    response: licenseResponse({
+    response: await licenseResponse(tx, ctx.keys, {
       hak: entitlementToDeliver(g.clientEntitlement, lease.entitlement),
       kira: lease.token,
       tokens: await downloadTokens(tx, ctx, inst, hak, lease.sanction, g.nowMs),

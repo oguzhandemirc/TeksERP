@@ -117,7 +117,7 @@ KÖK ── PAKET iptal belgesi  tekserp-paketiptal { sira, iptaller: [{kid, ser
 - **Ayrı belge türü** `tekserp-paketiptal` (yeni `typ`; adda tire YOK — JWS `typ` deseni `^tekserp-[a-z]+$` tireyi kabul etmez, D1'de böyle uygulandı), yalnız KÖK imzalar, kendi tekdüze `sira`sı, satır `{kid (pkt-*), sertifikaId, tarih, neden}`, en çok 256 satır. Gerekçe §1.5: mevcut `tekserp-iptal`e yeni kullanım eklemek sahadaki her doğrulayıcıyı iptal belgesinden koparır. Kod paylaşımı: şema ve `pickNewer…` mantığı iptal belgesinin aynısıdır, yalnız tür ve satır kullanımı sabittir.
 - Fabrikada tek dosya: `lisans\paket-iptal.jws` (backend'in iptal deposu yazar, en yüksek `sira` kazanır, düşük olan yok sayılır — mevcut iptal kuralıyla aynı).
 - **Üç taşıma yolu**, hepsi kendini doğrular (kök imzalı) ve "en yüksek `sira`" kuralıyla birleşir:
-  1. **Kira yanıtı** — `LicenseResponse`a isteğe bağlı `paketIptal` alanı; satıcı yalnız `paket-zinciri` yeteneğini bildiren kuruluma gönderir (şema gevşek olduğu için eski fabrika zaten atar; yetenek kapısı yine de beyan içindir).
+  1. **Kira yanıtı** — `LicenseResponse`a isteğe bağlı `paketIptal` alanı; satıcı onu HER kuruluma gönderir, `paket-zinciri` yeteneğine BAKMAZ (KARAR 2026-10-07, kullanıcı: şema gevşek olduğu için eski fabrika alanı atar; yetenek kapısı, güncelleyicisi henüz bildirmemiş backend'leri iptalden mahrum bırakırdı). Satıcı dağıtım kapısı da koymaz: PAKET/ISTEMCI anahtarı tutmaz, imzaladığı hiçbir şey bu belgeyle düşmez (D4'te uygulandı).
   2. **Paketin içi** — her yeni paket kökünde o anki en yeni `paket-iptal.jws` (bütünlük kapsamı dışında; kök imzası onu korur). Güncelleyici KABUL kipinde elindekiyle paketin getirdiğinden yükseğini kullanır ve yükseği `lisans\` altına yazar.
   3. **Çevrimdışı kira yolu** — elle taşınan kira yanıtı canlı yanıtla AYNI kabul boğazından ve şemadan geçer (`Teks-Erp/src/services/license-sync.service.ts:161-171`, `iptal` alanı dahil); `paketIptal` oraya ek iş olmadan gelir.
 - Lisans çevrimdışı kuralıyla ilişki: internet kesintisi hiçbir şeyi kısaltmaz. İnternetsiz fabrika iptali ancak yeni bir paketle ya da çevrimdışı kirayla öğrenir; o arada onu koruyan sertifika ömrüdür (`bitis + tolerans`). Bu, ara imzacıdaki "iptal kirayla yayılır" kabulünün PAKET karşılığıdır.
@@ -161,7 +161,7 @@ KÖK ── PAKET iptal belgesi  tekserp-paketiptal { sira, iptaller: [{kid, ser
 
 ### 3.4 Satıcı ve dağıtım altyapısı
 
-- PAKET iptal belgesi defteri (ekleme-yalnız; `IptalBelgesi` modeline `tur` kolonu ya da ayrı model — dilimde karar, migration reçetesiyle) + `donem-ice-aktar`ın onu da alması + kira yanıtına `paketIptal`.
+- PAKET iptal belgesi defteri — **D4'te AYRI model** `PaketIptalBelgesi` (`paket_iptal_belgesi`; `iptal_belgesi`nin `sira`sı UNIQUE olduğu için `tur` kolonu iki belge türüne tek sıra dayatırdı), ekleme-yalnız (tetikleyici + `sira >= 1`) + `donem-ice-aktar`ın `paketIptal` alanı + kira yanıtına `paketIptal` (her kuruluma, §2.4).
 - Filo ekranına "paket zinciri" sütunu (yetenek); kesim kararının ölçüsü.
 - `ANAHTAR_SURESI_BITIYOR` uyarısına PAKET sertifikası (satıcı açık sertifikayı tören paketinden alır; özel yarı VDS'e gitmez).
 - Yayın görünümü (`releases.view.ts`) `son-zincir.json`ı da okur.
@@ -240,7 +240,7 @@ G0 → G1 arası en az bir sürüm geçer ki G1'in ilk zincirli paketini indiren
 | D1 | Protokol: `PAKET` kullanımı, `pkt-` öneki, `imzaZamani` + `paketSertifikasi` alanları, `tekserp-paketiptal`, zincirli doğrulayıcılar (TS + `tekserp-dogrulama`) + kâhin vektörleri | — | Opus, yüksek efor |
 | D2 | Rust güncelleyici: KABUL/YERLEŞİK, işaretçi sırası, iptal birleştirme, yetenek künyesi, durum kodları, `paket_zinciri.rs` + eski güncelleyici aynası | D1 | Opus, yüksek efor |
 | D3 | Backend + native çekirdek: V6–V8 zincirle, iptal deposu, `paket-zinciri` yeteneği, panel kartı etiketi | D1 | Opus, yüksek efor |
-| D4 | Satıcı: PAKET iptal defteri (migration reçetesi), içe aktarma, kira yanıtında `paketIptal`, filo sütunu, süre uyarısı | D1; fabrikadan ÖNCE dağıtılır | Opus, orta efor |
+| D4 | Satıcı: PAKET iptal defteri (migration reçetesi), içe aktarma, kira yanıtında `paketIptal`, filo sütunu, süre uyarısı — **defter + içe aktarma + kira yanıtı İNDİ (2026-10-07); filo sütunu, süre uyarısı ve portal görünümü borçta** | D1; fabrikadan ÖNCE dağıtılır | Opus, orta efor |
 | D5 | Araçlar: PAKET aracı `sertifika-ekle`, `anahtar.ts paket-sertifika-uret` + `paket-iptal-uret`, imza araçlarının çift çıktısı, yayın aracının iki takım + köprü donması, kurulum arşivi kapısı, Worker deseni, yayın görünümü | D1–D4 | Opus, orta efor |
 | D6 | Tören: `donem --paket`, runbook bölümü | D5 | Opus, orta efor |
 | D7 | Prova (hazırlık kökü, thinkpad): bugünkü güncelleyici ikilisi → G0 sürümü → G1 çift imzalı → kendini güncelleme → zincirle devam; iptal senaryosu; USB ile geç gelen paket (tolerans içi/dışı) | D1–D6 | Opus, orta efor |

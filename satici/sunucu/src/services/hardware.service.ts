@@ -159,7 +159,7 @@ async function reportInTx(tx: Tx, ctx: VendorContext, g: { installationDbId: str
   if (claim.count === 0) throw retryConflict();
   return {
     talep,
-    lisans: licenseResponse({
+    lisans: await licenseResponse(tx, ctx.keys, {
       hak: lease.entitlement.withheld ? null : lease.entitlement.belge,
       kira: lease.token,
       tokens: await downloadTokens(tx, ctx, inst, hak, lease.sanction, g.nowMs),

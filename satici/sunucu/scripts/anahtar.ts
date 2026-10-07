@@ -21,7 +21,8 @@
 //   npx tsx scripts/anahtar.ts kuyruk-imzala --kok=kok-2026-1 --kok-dizin=<kökün dizini> --kuyruk=<kuyruk.json> --cikti=<dosya>
 //       Kök imzası bekleyen HAK'ları (VDS'ten `kuyruk-disa-aktar`) kökle imzalar; yük AYNEN imzalanır.
 //   VDS (konteyner içinde, DB'li): `kuyruk-disa-aktar` (stdout'a kuyruk JSON'u) · `donem-ice-aktar [--dosya=<yol>]`
-//       (stdin ya da dosyadan tören paketinin ice-aktar.json'u: iptal belgesi + kök imzalı HAK'lar).
+//       (stdin ya da dosyadan tören paketinin ice-aktar.json'u: iptal belgesi + isteğe bağlı dağıtım iptali `paketIptal`
+//       (`tekserp-paketiptal`) + kök imzalı HAK'lar).
 //   npx tsx scripts/anahtar.ts emekliye-ayir --kid=<kid>[,…] [--uygula] [--dizin=…]
 //       Eski ALT · İNDİRME · ARA anahtarının ÖZEL yarısını siler, açık yarı + sertifikası <kid>.sertifika.json olarak
 //       kalır; aynı türde daha yeni anahtar yoksa RED. Varsayılan KURU: yalnız ne yapılacağını listeler.
@@ -462,15 +463,17 @@ async function readAllInput(flags: Map<string, string>): Promise<string> {
 }
 
 /**
- * VDS: tören paketinin `ice-aktar.json`ını içe aktarır — önce iptal belgesi (defter, sıra tekdüze), sonra kök imzalı
- * HAK'lar (kuyruktaki yükle birebir). Her adımın sonucu basılır; biri düşerse çıkış 1 (diğerleri yine denenir).
+ * VDS: tören paketinin `ice-aktar.json`ını içe aktarır — önce iptal belgesi, sonra dağıtım iptali (`paketIptal`; iki
+ * defter ayrı, ikisinde de sıra tekdüze), sonra kök imzalı HAK'lar (kuyruktaki yükle birebir). Her adımın sonucu
+ * basılır; biri düşerse çıkış 1 (diğerleri yine denenir). Alanı olmayan eski paket aynen içe aktarılır.
  */
 async function importPeriod(flags: Map<string, string>): Promise<void> {
-  const input = JSON.parse(await readAllInput(flags)) as { v?: unknown; tur?: unknown; iptal?: unknown; haklar?: unknown };
+  const input = JSON.parse(await readAllInput(flags)) as { v?: unknown; tur?: unknown; iptal?: unknown; paketIptal?: unknown; haklar?: unknown };
   if (input.v !== 1 || input.tur !== "tekserp-donem-ice-aktar") throw new CliError("İçe aktarma dosyası tanınmıyor (tekserp-donem-ice-aktar)");
   const ctx = await cliContext();
   const { prisma } = await import("../src/lib/prisma");
   const { importRevocation } = await import("../src/services/revocation.service");
+  const { importPackageRevocation } = await import("../src/services/package-revocation.service");
   const { importRootSignedEntitlement } = await import("../src/services/root-queue.service");
   const actor = "cli:donem-ice-aktar";
   let failed = 0;
@@ -482,6 +485,16 @@ async function importPeriod(flags: Map<string, string>): Promise<void> {
       } catch (err) {
         failed++;
         process.stdout.write(`iptal belgesi: RED — ${(err as Error).message}\n`);
+      }
+    }
+    if (input.paketIptal !== undefined && input.paketIptal !== null) {
+      try {
+        if (typeof input.paketIptal !== "string") throw new CliError("paketIptal alanı metin (JWS) değil");
+        const r = await importPackageRevocation({ token: input.paketIptal, anchor: ctx.keys.anchor, actor });
+        process.stdout.write(`dağıtım iptali sıra ${r.sira}: ${r.durum} (${r.kidler.length} anahtar)\n`);
+      } catch (err) {
+        failed++;
+        process.stdout.write(`dağıtım iptali: RED — ${(err as Error).message}\n`);
       }
     }
     for (const h of Array.isArray(input.haklar) ? (input.haklar as { talepId?: unknown; belge?: unknown }[]) : []) {

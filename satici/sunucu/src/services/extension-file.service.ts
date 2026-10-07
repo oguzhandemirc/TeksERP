@@ -56,7 +56,7 @@ export async function issueExtensionFileTx(tx: Tx, ctx: VendorContext, g: { inst
   });
   return {
     // Dosya HAK'ı HER ZAMAN taşır: internetsiz fabrikanın elindeki HAK eski olabilir, kira teslim edilen HAK'a bağlıdır.
-    dosya: licenseResponse({ hak: lease.entitlement.belge, kira: lease.token, tokens: [], nowMs: g.nowMs, revocation: lease.revocation }),
+    dosya: await licenseResponse(tx, ctx.keys, { hak: lease.entitlement.belge, kira: lease.token, tokens: [], nowMs: g.nowMs, revocation: lease.revocation }),
     dosyaAdi: extensionFileName(hak.lisansNo, g.nowMs),
     kiraId: lease.id,
     odenmisTarih: paid,
