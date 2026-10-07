@@ -6,6 +6,11 @@
 // protokolün JWS'i (Teks-Erp/src/lib/license/protocol/jws.ts) onun KÂHİNİdir. NE ÖLÇER:
 //   §0 kâhin — `TYP.PANEL` = panelin typ'i (kayıt defterinde tekil) · protokol `signJws` ile panel `signReleaseDoc`
 //      BAYT-EŞİT · bozulmuş belgelerde protokol `verifyJws` ile panel `verifyJwsWithAnchor` AYNI kodu verir
+//   §0e–§0k istemci zinciri kâhini (`istemci-zinciri.mjs`, künye v:2; ISTEMCI-ANAHTARI-KOK-ALTINDA.md §3.2–§3.4) —
+//      sabitler protokolle aynı (180 gün · saat payı · listeler · zod regex kaynağı) · imzalayıcı bayt-eşit · zincir
+//      tablosunda protokol parçalarından kurulan referansla AYNI karar (kod · ayrıntı · imzalayan · kök): ⭐ tolerans
+//      +1 ms / +1 gün RED · ⭐ `panel-*` kid'li v:2 RED · ⭐ yedek kid'li sertifika çapa değişmeden KABUL · iptal ·
+//      sertifika ve dağıtım iptali şeması zod'la aynı kod + çıktı · iptal birleştirme en yüksek `sira`, sahte yok sayılır
 //   §1 anahtar dosyası — (b) panel anahtarı parolalı (0600, sürüm 2, düz özel yarı YOK) ve açılır; yanlış parola ·
 //      (a) üretim PAKET anahtarı açılır; parolasız (test) PAKET · gevşek izin · düz `d` · depo içine yazım ·
 //      ezme · biçim dışı kid → RED
@@ -21,14 +26,64 @@
 //      surum.json · gerçek (boş) çapa → RED, dosya DEĞİŞMEZ; imzadan sonra kurcalanan alan / değiştirilen APK /
 //      başka kanal → apk-dogrula RED. (Tabletin saf JS doğrulayıcısıyla eşdeğerlik: mobil `apkKunye.test.ts` kâhini.)
 // ⭐ KALICI SONDA ✓K: §0c bozulma tablosu, §1/§2/§3 ret dalları her koşumda ısırır.
+// NEGATİF SONDA (✓B, I2 bir kezlik, 16 mutasyon hepsi ❌): tolerans 181 · ist- önek · kid eşitliği · iptal · kullanım ·
+//   uuid [1-9] · datetime ofset · çapa her aile · eşit sira kazanır · saat payı · bayi kuralı · iptal satırı yalnız pkt- ·
+//   yalnız birincil -1 · iptal süreden önce · sınıf tavanı · birleştirme sahteyi kabul.
 // Koşum: node ../scripts/agir-is.mjs -- npx tsx scripts/test_panel_imza.ts
 // =============================================================================
 import { spawnSync } from "node:child_process";
-import { createHash, generateKeyPairSync, randomBytes, type KeyObject } from "node:crypto";
+import { createHash, generateKeyPairSync, randomBytes, randomUUID, type KeyObject } from "node:crypto";
 import { chmodSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { TYP, b64uEncode, signJws, verifyJws } from "../src/lib/license/protocol";
+import { regexes as zodRegex } from "zod/v4/core";
+import {
+  CERT_USAGES,
+  CLOCK_SKEW_MS,
+  CertificateSchema,
+  DAY_MS,
+  IsoTimeSchema,
+  LICENSE_CLASSES,
+  PACKAGE_ACCEPT_TOLERANCE_DAYS,
+  PACKAGE_ACCEPT_TOLERANCE_MS,
+  PackageRevocationSchema,
+  TYP,
+  b64uEncode,
+  decodeDocument,
+  isPackageCertificateRevoked,
+  isoToMs,
+  msToIso,
+  parseJws,
+  pickNewerPackageRevocation,
+  prepareTrustAnchor,
+  signJws,
+  verifyCertificate,
+  verifyJws,
+  verifyPackageRevocation,
+  type CertUsage,
+  type CertificateDoc,
+  type LicenseClass,
+  type RootKey,
+  type VerifiedPackageRevocation,
+} from "../src/lib/license/protocol";
+import { anahtarUret, fiksturKur, hamImzala, sertifikaBas, sertifikaYuku, type TestAnahtari } from "./lib/lisans-fikstur";
+import {
+  CERT_TYP,
+  CERT_USAGES as ZINCIR_KULLANIMLARI,
+  CLIENT_ACCEPT_TOLERANCE_DAYS,
+  CLIENT_ACCEPT_TOLERANCE_MS,
+  CLOCK_SKEW_MS as ZINCIR_SAAT_PAYI,
+  DISTRIBUTION_REVOCATION_TYP,
+  ISO_DATETIME_PATTERN,
+  LICENSE_CLASSES as ZINCIR_SINIFLARI,
+  UUID_PATTERN,
+  decodeCertificate,
+  decodeDistributionRevocation,
+  mergeRevocations,
+  signClientDocument,
+  verifyClientSigned,
+  verifyDistributionRevocation,
+} from "../../Electron/electron/guncelleme/istemci-zinciri.mjs";
 import { generatePackageKey, generateWrappedPackageKey, writePackageKey } from "./lib/butunluk-imza";
 import { CAPA_DOSYALARI, PANEL_CAPA_DOSYASI, TABLET_CAPA_DOSYASI, panelCapasiOku } from "./lib/guven-capasi";
 import { DEPO_KOKU, generatePanelKey, openPanelSigningKey, writePanelKey } from "./lib/panel-imza";
@@ -108,6 +163,347 @@ function bolum0(): void {
   check(`§0c ⭐ ${tablo.length} belgelik bozulma tablosunda protokol verifyJws ile panel doğrulayıcısı AYNI sonucu verir`, farklar.length === 0, farklar.join(" · ") || "aynı");
   const ilk = verifyJwsWithAnchor(panel, { typ: PANEL_RELEASE_TYP, keys: anahtarlar });
   check("§0d körlük zemini: tablonun 'geçerli' satırı gerçekten KABUL, 'bozuk imza' gerçekten JWS_IMZA", ilk.ok && !verifyJwsWithAnchor(tablo[1]![1], { typ: PANEL_RELEASE_TYP, keys: anahtarlar }).ok);
+}
+
+// ── §0e–§0k kâhin — istemci zinciri (künye v:2) ──────────────────────────────
+// Protokolde ISTEMCI zinciri için tek fonksiyon yok: referans, tasarım §3.2'nin dediği gibi protokolün parçalarından
+// (`prepareTrustAnchor` · `verifyCertificate` · `verifyJws` · `isPackageCertificateRevoked` · 180 gün) kurulur ve
+// bağımlılıksız aynayla AYNI vektörde (kod + ayrıntı kodu + imzalayan + kök) karşılaştırılır.
+type Karar = { kod: string; detay: string; kid?: string; kok?: string };
+const Z0 = Date.parse("2099-03-01T00:00:00.000Z");
+
+function protokolKarari(token: unknown, typ: string, g: { roots: RootKey[]; nowMs: number | undefined; iptal: VerifiedPackageRevocation | null }): Karar {
+  const a = prepareTrustAnchor(g.roots);
+  if (!a.ok) return { kod: a.code === "GUVEN_CAPASI_BOS" ? "CAPA_BOS" : "CAPA_GECERSIZ", detay: a.code };
+  const p = parseJws(token);
+  if (!p.ok) return { kod: p.code, detay: p.code };
+  const { kid } = p.value.header;
+  if (p.value.header.typ !== typ) return { kod: "JWS_TYP", detay: "JWS_TYP" };
+  if (!/^ist-[a-z0-9-]{1,40}$/.test(kid)) return { kod: "JWS_KID", detay: "JWS_KID" };
+  const st = p.value.payload.imzaciSertifikasi;
+  const at = p.value.payload.imzaZamani;
+  if (typeof st !== "string" || !IsoTimeSchema.safeParse(at).success) return { kod: "SERTIFIKA_GECERSIZ", detay: "SERTIFIKA_YOK" };
+  const c = verifyCertificate(st, { roots: g.roots, usage: "ISTEMCI", atMs: isoToMs(at as string) });
+  if (!c.ok) return { kod: c.code === "SERTIFIKA_ZAMAN" ? "SERTIFIKA_SURESI" : "SERTIFIKA_GECERSIZ", detay: c.code };
+  if (c.value.document.kid !== kid) return { kod: "JWS_KID", detay: "JWS_KID" };
+  const j = verifyJws(token, { typ, findKey: (k) => (k === kid ? c.value.key : undefined) });
+  if (!j.ok) return { kod: j.code, detay: j.code };
+  const n = g.nowMs;
+  if (n === undefined || !Number.isFinite(n) || n > isoToMs(c.value.document.bitis) + PACKAGE_ACCEPT_TOLERANCE_MS) return { kod: "SERTIFIKA_SURESI", detay: "TOLERANS" };
+  if (isPackageCertificateRevoked(c.value.document, g.iptal)) return { kod: "SERTIFIKA_IPTAL", detay: "SERTIFIKA_IPTAL" };
+  return { kod: "OK", detay: "OK", kid, kok: c.value.rootKid };
+}
+
+function aynaKarari(token: unknown, typ: string, g: { roots: RootKey[]; nowMs: number | undefined; iptal: string | null }): Karar {
+  const iptal = g.iptal === null ? null : verifyDistributionRevocation(g.iptal, g.roots);
+  const r = verifyClientSigned(token, { typ, roots: g.roots, nowMs: g.nowMs, revocation: iptal && iptal.ok ? iptal.value : null });
+  return r.ok ? { kod: "OK", detay: "OK", kid: r.value.kid, kok: r.value.rootKid } : { kod: r.code, detay: r.detay };
+}
+
+const kararMetni = (k: Karar): string => [k.kod, k.detay, k.kid ?? "", k.kok ?? ""].join("/");
+
+function bolum0Zincir(): void {
+  console.log("\n§0e–§0k kâhin — istemci zinciri (kök → ISTEMCI sertifikası → künye v:2) ↔ protokol");
+  check(
+    "§0e sabitler protokolle aynı: tolerans = PAKET'in 180 günü · saat payı · sınıf ve kullanım listeleri · typ'ler · zod uuid/datetime regex'i",
+    CLIENT_ACCEPT_TOLERANCE_DAYS === PACKAGE_ACCEPT_TOLERANCE_DAYS &&
+      CLIENT_ACCEPT_TOLERANCE_MS === PACKAGE_ACCEPT_TOLERANCE_MS &&
+      ZINCIR_SAAT_PAYI === CLOCK_SKEW_MS &&
+      JSON.stringify(ZINCIR_SINIFLARI) === JSON.stringify(LICENSE_CLASSES) &&
+      JSON.stringify(ZINCIR_KULLANIMLARI) === JSON.stringify(CERT_USAGES) &&
+      CERT_TYP === TYP.SERTIFIKA &&
+      DISTRIBUTION_REVOCATION_TYP === TYP.PAKET_IPTAL &&
+      UUID_PATTERN.source === zodRegex.uuid().source &&
+      ISO_DATETIME_PATTERN.source === zodRegex.datetime({ precision: null, offset: false, local: false }).source,
+    `${CLIENT_ACCEPT_TOLERANCE_DAYS} gün`,
+  );
+
+  const f = fiksturKur(Z0);
+  const IST1 = anahtarUret("ist-2099-1");
+  const IST2 = anahtarUret("ist-2099-2");
+  const PANEL = anahtarUret("panel-2099");
+  const PAKETK = anahtarUret("paket-2099");
+  const PKT = anahtarUret("pkt-2099-1");
+  const YABANCI_KOK = anahtarUret("kok-yabanci-1");
+  const KOKLER: RootKey[] = [f.kokler[0]!];
+  const IKI_KOK: RootKey[] = [...f.kokler];
+  const sert = (konu: TestAnahtari, ek: Partial<CertificateDoc> = {}, imzalayan: TestAnahtari = f.kok, kullanim: CertUsage = "ISTEMCI") => {
+    const yuk = sertifikaYuku(f, konu, kullanim, ek);
+    return { yuk, token: sertifikaBas(imzalayan, yuk) };
+  };
+  const S1 = sert(IST1);
+  const S2 = sert(IST2);
+  const BITIS = isoToMs(S1.yuk.bitis);
+  const BAS = isoToMs(S1.yuk.baslangic);
+  const YUK = { v: 2, urun: "panel", kanal: "test", surum: "1.5.0", capa: [f.kok.kid] };
+  const kunye = (imzalayan: TestAnahtari, st: unknown, at: unknown, typ: string = TYP.PANEL, yuk: Record<string, unknown> = YUK): string =>
+    hamImzala(typ, imzalayan, { ...yuk, ...(st === undefined ? {} : { imzaciSertifikasi: st }), ...(at === undefined ? {} : { imzaZamani: at }) });
+  const iso = msToIso;
+  const iptalBas = (satirlar: Array<{ kid: string; sertifikaId: string }>, sira: number, imzalayan: TestAnahtari = f.kok, ek: Record<string, unknown> = {}): string =>
+    hamImzala(TYP.PAKET_IPTAL, imzalayan, {
+      v: 1,
+      iptalId: randomUUID(),
+      sira,
+      verilis: iso(Z0 - DAY_MS),
+      iptaller: satirlar.map((s) => ({ ...s, tarih: iso(Z0 - DAY_MS), neden: "çalındı" })),
+      ...ek,
+    });
+  const IPT_KID = iptalBas([{ kid: IST1.kid, sertifikaId: randomUUID() }], 2);
+  const IPT_ID = iptalBas([{ kid: "ist-2099-9", sertifikaId: S1.yuk.sertifikaId }], 3);
+  const IPT_PKT = iptalBas([{ kid: PKT.kid, sertifikaId: randomUUID() }], 1);
+  const IPT_IST2 = iptalBas([{ kid: IST2.kid, sertifikaId: S2.yuk.sertifikaId }], 4);
+
+  // §0f imza tarafı: aynanın imzalayıcısı protokol signJws ile bayt-eşit.
+  const imzaAni = iso(Z0 - DAY_MS);
+  const ayna = signClientDocument({ typ: TYP.PANEL, kid: IST1.kid, payload: YUK, privateKey: IST1.privateKey, certificate: S1.token, signedAt: imzaAni });
+  const protokol = signJws({ typ: TYP.PANEL, kid: IST1.kid, payload: { ...YUK, imzaciSertifikasi: S1.token, imzaZamani: imzaAni }, privateKey: IST1.privateKey });
+  check("§0f aynanın signClientDocument'ı protokol signJws ile BAYT-EŞİT (yük + imzaciSertifikasi + imzaZamani)", ayna === protokol, `${ayna.length} bayt`);
+  let imzaReddi = 0;
+  for (const g of [
+    { kid: PANEL.kid, privateKey: PANEL.privateKey, certificate: S1.token },
+    { kid: IST2.kid, privateKey: IST2.privateKey, certificate: S1.token },
+  ]) {
+    try {
+      signClientDocument({ typ: TYP.PANEL, payload: YUK, signedAt: imzaAni, ...g });
+    } catch {
+      imzaReddi++;
+    }
+  }
+  check("§0f' imzalayıcı panel-* kid'iyle ve başka anahtarın sertifikasıyla imzalamaz", imzaReddi === 2);
+
+  const GECERLI = kunye(IST1, S1.token, imzaAni);
+  const YEDEK = kunye(IST2, S2.token, imzaAni);
+  const [h, p] = GECERLI.split(".") as [string, string, string];
+  const bas = (o: unknown): string => b64uEncode(JSON.stringify(o));
+  const sTok = (ek: Partial<CertificateDoc>, konu: TestAnahtari = IST1, imzalayan: TestAnahtari = f.kok, kullanim: CertUsage = "ISTEMCI") => sert(konu, ek, imzalayan, kullanim).token;
+  const hamSert = (yuk: Record<string, unknown>, imzalayan: TestAnahtari = f.kok, typ: string = TYP.SERTIFIKA) => hamImzala(typ, imzalayan, yuk);
+  const S1Y = S1.yuk as unknown as Record<string, unknown>;
+  const kok = { roots: KOKLER, nowMs: Z0, iptal: null as string | null };
+  type Vaka = [string, unknown, { roots: RootKey[]; nowMs: number | undefined; iptal: string | null }, string, string?];
+  const vakalar: Vaka[] = [
+    ["geçerli (birincil ist-2099-1)", GECERLI, kok, "OK"],
+    ["⭐ yedek kid'li sertifika (ist-2099-2), çapa DEĞİŞMEDEN", YEDEK, kok, "OK"],
+    ["yedek kid'li, iki köklü çapa", YEDEK, { ...kok, roots: IKI_KOK }, "OK"],
+    ["⭐ panel-* kid'li v:2 (yükte ISTEMCI sertifikası)", kunye(PANEL, S1.token, imzaAni), kok, "JWS_KID"],
+    ["⭐ panel-* kid'li, sertifikasız (v:1 biçimi imza)", hamImzala(TYP.PANEL, PANEL, { ...YUK, v: 1 }), kok, "JWS_KID"],
+    ["paket-* kid'li v:2", kunye(PAKETK, S1.token, imzaAni), kok, "JWS_KID"],
+    ["pkt-* kid'li, PAKET sertifikalı", kunye(PKT, sTok({}, PKT, f.kok, "PAKET"), imzaAni), kok, "JWS_KID"],
+    ["kök kid'iyle doğrudan imza", kunye(f.kok, S1.token, imzaAni), kok, "JWS_KID"],
+    ["typ başka (tekserp-surum)", kunye(IST1, S1.token, imzaAni, TYP.SURUM), kok, "JWS_TYP"],
+    ["typ başka (tekserp-apk)", kunye(IST1, S1.token, imzaAni, TYP.APK), kok, "JWS_TYP"],
+    ["sertifika yok", kunye(IST1, undefined, imzaAni), kok, "SERTIFIKA_GECERSIZ"],
+    ["imza zamanı yok", kunye(IST1, S1.token, undefined), kok, "SERTIFIKA_GECERSIZ"],
+    ["imza zamanı ofsetli (+03:00)", kunye(IST1, S1.token, "2099-02-28T03:00:00+03:00"), kok, "SERTIFIKA_GECERSIZ"],
+    ["imza zamanı yalnız tarih", kunye(IST1, S1.token, "2099-02-28"), kok, "SERTIFIKA_GECERSIZ"],
+    ["imza zamanı sayı", kunye(IST1, S1.token, Z0), kok, "SERTIFIKA_GECERSIZ"],
+    ["imza zamanı saniyesiz (zod kabul eder)", kunye(IST1, S1.token, "2099-02-28T10:30Z"), kok, "OK"],
+    ["imza zamanı 6 haneli kesirli", kunye(IST1, S1.token, "2099-02-28T10:30:00.123456Z"), kok, "OK"],
+    ["sertifika metin değil", kunye(IST1, { a: 1 }, imzaAni), kok, "SERTIFIKA_GECERSIZ"],
+    ["sertifika bozuk JWS", kunye(IST1, "a.b.c", imzaAni), kok, "SERTIFIKA_GECERSIZ"],
+    ["sertifikayı yabancı kök imzalamış", kunye(IST1, sTok({}, IST1, YABANCI_KOK), imzaAni), kok, "SERTIFIKA_GECERSIZ"],
+    ["sertifika imzası bozuk", kunye(IST1, `${S1.token.split(".").slice(0, 2).join(".")}.${b64uEncode(Buffer.alloc(64, 9))}`, imzaAni), kok, "SERTIFIKA_GECERSIZ"],
+    ["sertifika typ'i başka (tekserp-hak)", kunye(IST1, hamSert(S1Y, f.kok, TYP.HAK), imzaAni), kok, "SERTIFIKA_GECERSIZ"],
+    ["sertifika kullanımı INDIRME (ind- kid)", kunye(IST1, sTok({}, anahtarUret("ind-2099"), f.kok, "INDIRME"), imzaAni), kok, "SERTIFIKA_GECERSIZ"],
+    ["sertifika kullanımı PAKET, kid ist- (önek uyuşmaz)", kunye(IST1, hamSert({ ...S1Y, kullanim: "PAKET" }), imzaAni), kok, "SERTIFIKA_GECERSIZ"],
+    ["sertifika kullanımı tanınmayan", kunye(IST1, hamSert({ ...S1Y, kullanim: "PANEL" }), imzaAni), kok, "SERTIFIKA_GECERSIZ"],
+    ["sertifika v:2", kunye(IST1, hamSert({ ...S1Y, v: 2 }), imzaAni), kok, "SERTIFIKA_GECERSIZ"],
+    ["sertifika bayi tavanı taşıyor", kunye(IST1, hamSert({ ...S1Y, bayi: { bayiId: randomUUID(), moduller: [] } }), imzaAni), kok, "SERTIFIKA_GECERSIZ"],
+    ["sertifika bayi alanı yok", kunye(IST1, hamSert(Object.fromEntries(Object.entries(S1Y).filter(([k]) => k !== "bayi"))), imzaAni), kok, "SERTIFIKA_GECERSIZ"],
+    ["sertifikaya tanınmayan alan eklenmiş (zod düşürür)", kunye(IST1, hamSert({ ...S1Y, ekAlan: "x" }), imzaAni), kok, "OK"],
+    ["sertifika kimliği büyük harf UUID (zod kabul eder)", kunye(IST1, hamSert({ ...S1Y, sertifikaId: (S1Y.sertifikaId as string).toUpperCase() }), imzaAni), kok, "OK"],
+    ["sertifika kimliği sürüm 9 UUID", kunye(IST1, hamSert({ ...S1Y, sertifikaId: "123e4567-e89b-92d3-a456-426614174000" }), imzaAni), kok, "SERTIFIKA_GECERSIZ"],
+    ["sertifika sınıfı boş", kunye(IST1, hamSert({ ...S1Y, siniflar: [] }), imzaAni), kok, "SERTIFIKA_GECERSIZ"],
+    ["sertifika sınıfı tekrarlı", kunye(IST1, hamSert({ ...S1Y, siniflar: ["TEST", "TEST"] }), imzaAni), kok, "SERTIFIKA_GECERSIZ"],
+    ["sertifika bitişi başlangıçtan önce", kunye(IST1, hamSert({ ...S1Y, bitis: iso(BAS - 1) }), imzaAni), kok, "SERTIFIKA_GECERSIZ"],
+    ["sertifika tarihi artık yıl dışı 29 Şubat", kunye(IST1, hamSert({ ...S1Y, baslangic: "2098-02-29T00:00:00Z" }), imzaAni), kok, "SERTIFIKA_GECERSIZ"],
+    ["sertifika açık anahtarı 42 karakter", kunye(IST1, hamSert({ ...S1Y, x: (S1Y.x as string).slice(1) }), imzaAni), kok, "SERTIFIKA_GECERSIZ"],
+    ["sertifika kid'i büyük harfli", kunye(IST1, hamSert({ ...S1Y, kid: "ist-2099-A" }), imzaAni), kok, "SERTIFIKA_GECERSIZ"],
+    ["sertifika sınıfı dar kökün yetkisini aşıyor", kunye(IST1, sTok({}, IST1, f.dar), imzaAni), { ...kok, roots: IKI_KOK }, "SERTIFIKA_GECERSIZ"],
+    ["sertifika dar kökün sınıflarında", kunye(IST1, sTok({ siniflar: ["TEST"] as LicenseClass[] }, IST1, f.dar), imzaAni), { ...kok, roots: IKI_KOK }, "OK"],
+    ["imza anı başlangıçtan saat payı kadar önce (sınır)", kunye(IST1, S1.token, iso(BAS - CLOCK_SKEW_MS)), kok, "OK"],
+    ["imza anı başlangıçtan saat payı + 1 ms önce", kunye(IST1, S1.token, iso(BAS - CLOCK_SKEW_MS - 1)), kok, "SERTIFIKA_SURESI"],
+    ["imza anı bitişten saat payı + 1 ms sonra", kunye(IST1, S1.token, iso(BITIS + CLOCK_SKEW_MS + 1)), { ...kok, nowMs: BITIS + DAY_MS }, "SERTIFIKA_SURESI"],
+    ["imza anı bitişte, şimdi bitiş + 180 gün (sınır)", kunye(IST1, S1.token, iso(BITIS)), { ...kok, nowMs: BITIS + PACKAGE_ACCEPT_TOLERANCE_MS }, "OK"],
+    ["⭐ tolerans + 1 ms", kunye(IST1, S1.token, iso(BITIS)), { ...kok, nowMs: BITIS + PACKAGE_ACCEPT_TOLERANCE_MS + 1 }, "SERTIFIKA_SURESI"],
+    ["⭐ tolerans + 1 gün", GECERLI, { ...kok, nowMs: BITIS + PACKAGE_ACCEPT_TOLERANCE_MS + DAY_MS }, "SERTIFIKA_SURESI"],
+    ["şimdi yok (KABUL kipi saat ister)", GECERLI, { ...kok, nowMs: undefined }, "SERTIFIKA_SURESI"],
+    ["şimdi NaN", GECERLI, { ...kok, nowMs: Number.NaN }, "SERTIFIKA_SURESI"],
+    ["imzalayan başka ist anahtarı, sertifika birincilin", kunye(IST2, S1.token, imzaAni), kok, "JWS_KID"],
+    ["sertifikadaki anahtar imzalayanınki değil (x başka)", kunye(IST1, sTok({ x: IST2.x }), imzaAni), kok, "JWS_IMZA"],
+    ["künye yükü imzadan sonra değişmiş", `${h}.${bas({ ...YUK, surum: "9.9.9", imzaciSertifikasi: S1.token, imzaZamani: imzaAni })}.${GECERLI.split(".")[2]}`, kok, "JWS_IMZA"],
+    ["künye imzası bozuk", `${h}.${p}.${b64uEncode(Buffer.alloc(64, 3))}`, kok, "JWS_IMZA"],
+    ["alg none", `${bas({ alg: "none", typ: TYP.PANEL, kid: IST1.kid })}.${p}.${GECERLI.split(".")[2]}`, kok, "JWS_ALG"],
+    ["başlıkta x5c", `${bas({ alg: "EdDSA", typ: TYP.PANEL, kid: IST1.kid, x5c: [] })}.${p}.${GECERLI.split(".")[2]}`, kok, "JWS_BASLIK"],
+    ["iki parça", `${h}.${p}`, kok, "JWS_BICIM"],
+    ["boş", "", kok, "JWS_BICIM"],
+    ["metin değil", 42, kok, "JWS_BICIM"],
+    ["çapa boş", GECERLI, { ...kok, roots: [] }, "CAPA_BOS"],
+    ["çapada panel-* satırı (kök olmayan)", GECERLI, { ...kok, roots: [...KOKLER, { kid: PANEL.kid, x: PANEL.x, classes: [...LICENSE_CLASSES] }] }, "CAPA_GECERSIZ"],
+    ["çapada tekrarlı kök", GECERLI, { ...kok, roots: [...KOKLER, ...KOKLER] }, "CAPA_GECERSIZ"],
+    ["çapada tanınmayan sınıf", GECERLI, { ...kok, roots: [{ ...KOKLER[0]!, classes: ["PANEL" as LicenseClass] }] }, "CAPA_GECERSIZ"],
+    ["çapada yalnız yabancı kök", GECERLI, { ...kok, roots: [{ kid: YABANCI_KOK.kid, x: YABANCI_KOK.x, classes: [...LICENSE_CLASSES] }] }, "SERTIFIKA_GECERSIZ"],
+    ["⭐ iptal: birincilin kid'i", GECERLI, { ...kok, iptal: IPT_KID }, "SERTIFIKA_IPTAL"],
+    ["iptal: birincilin sertifika kimliği (başka kid'le)", GECERLI, { ...kok, iptal: IPT_ID }, "SERTIFIKA_IPTAL"],
+    ["⭐ birincil iptalliyken yedek kabul (çapa aynı)", YEDEK, { ...kok, iptal: IPT_KID }, "OK"],
+    ["iptal yalnız pkt-* satırı → istemciye dokunmaz", GECERLI, { ...kok, iptal: IPT_PKT }, "OK"],
+    ["yedek iptalli", YEDEK, { ...kok, iptal: IPT_IST2 }, "SERTIFIKA_IPTAL"],
+    ["iptalli ve toleransı geçmiş → süre önce (§3.2 sırası)", GECERLI, { ...kok, iptal: IPT_KID, nowMs: BITIS + 200 * DAY_MS }, "SERTIFIKA_SURESI"],
+  ];
+  const farklar: string[] = [];
+  const beklenmeyen: string[] = [];
+  const protIptal = (t: string | null, roots: RootKey[]): VerifiedPackageRevocation | null => {
+    if (t === null) return null;
+    const r = verifyPackageRevocation(t, roots);
+    return r.ok ? r.value : null;
+  };
+  for (const [ad, token, g, beklenen] of vakalar) {
+    const a = protokolKarari(token, TYP.PANEL, { roots: g.roots, nowMs: g.nowMs, iptal: protIptal(g.iptal, g.roots) });
+    const b = aynaKarari(token, TYP.PANEL, g);
+    if (kararMetni(a) !== kararMetni(b)) farklar.push(`${ad}: protokol ${kararMetni(a)} ↔ ayna ${kararMetni(b)}`);
+    if (a.kod !== beklenen) beklenmeyen.push(`${ad}: beklenen ${beklenen}, protokol ${kararMetni(a)}`);
+  }
+  check(`§0g ⭐ ${vakalar.length} vakalık zincir tablosunda ayna ile protokol AYNI karar (kod · ayrıntı · imzalayan · kök)`, farklar.length === 0, farklar.join(" · ") || "aynı");
+  check(`§0g' her vakanın kodu beklenen (kâhinin kendisi de sabit: ⭐ tolerans +1 ms/+1 gün RED · panel-* v:2 RED · yedek KABUL)`, beklenmeyen.length === 0, beklenmeyen.join(" · ") || "beklenen");
+  const yedek = verifyClientSigned(YEDEK, { typ: TYP.PANEL, roots: KOKLER, nowMs: Z0, revocation: null });
+  check(
+    "§0g'' yedek künye: imzalayan ist-2099-2, kök çapadaki tek kök, dönen sertifika yedeğinki",
+    yedek.ok && yedek.value.kid === IST2.kid && yedek.value.rootKid === f.kok.kid && yedek.value.certificate.sertifikaId === S2.yuk.sertifikaId,
+  );
+
+  // §0h şema aynası: sertifika ve dağıtım iptali — protokolün zod şemasıyla aynı kod ve aynı çıktı.
+  const sertMut: Array<[string, Record<string, unknown>]> = [
+    ["geçerli", S1Y],
+    ["v yok", Object.fromEntries(Object.entries(S1Y).filter(([k]) => k !== "v"))],
+    ["v metin", { ...S1Y, v: "1" }],
+    ["v 2", { ...S1Y, v: 2 }],
+    ["sertifikaId boş", { ...S1Y, sertifikaId: "" }],
+    ["sertifikaId nil UUID", { ...S1Y, sertifikaId: "00000000-0000-0000-0000-000000000000" }],
+    ["sertifikaId max UUID", { ...S1Y, sertifikaId: "ffffffff-ffff-ffff-ffff-ffffffffffff" }],
+    ["sertifikaId max UUID büyük harf", { ...S1Y, sertifikaId: "FFFFFFFF-FFFF-FFFF-FFFF-FFFFFFFFFFFF" }],
+    ["sertifikaId varyant c", { ...S1Y, sertifikaId: "123e4567-e89b-42d3-c456-426614174000" }],
+    ["kullanim BAYI, bayi null", { ...S1Y, kullanim: "BAYI", kid: "bayi-b1" }],
+    ["kullanim BAYI, bayi dolu", { ...S1Y, kullanim: "BAYI", kid: "bayi-b1", bayi: { bayiId: randomUUID(), moduller: ["finance.enabled", "patron-bulut"] } }],
+    ["bayi modülü tekrarlı", { ...S1Y, kullanim: "BAYI", kid: "bayi-b1", bayi: { bayiId: randomUUID(), moduller: ["a", "a"] } }],
+    ["bayi modülü biçimsiz", { ...S1Y, kullanim: "BAYI", kid: "bayi-b1", bayi: { bayiId: randomUUID(), moduller: ["A.b"] } }],
+    ["bayi modülü 65 karakter", { ...S1Y, kullanim: "BAYI", kid: "bayi-b1", bayi: { bayiId: randomUUID(), moduller: [`a${"b".repeat(64)}`] } }],
+    ["bayi dizi", { ...S1Y, kullanim: "BAYI", kid: "bayi-b1", bayi: [] }],
+    ["kid 61 karakter gövde", { ...S1Y, kid: `ist-${"a".repeat(61)}` }],
+    ["kid 60 karakter gövde", { ...S1Y, kid: `ist-${"a".repeat(60)}` }],
+    ["kid alt çizgili", { ...S1Y, kid: "ist-2099_1" }],
+    ["x 44 karakter", { ...S1Y, x: `${S1Y.x as string}A` }],
+    ["x geçersiz karakter", { ...S1Y, x: `${(S1Y.x as string).slice(1)}+` }],
+    ["siniflar metin", { ...S1Y, siniflar: "TEST" }],
+    ["siniflar tanınmayan", { ...S1Y, siniflar: ["TEST", "PANEL"] }],
+    ["baslangic küçük z", { ...S1Y, baslangic: "2099-02-01T00:00:00z" }],
+    ["baslangic boşluklu", { ...S1Y, baslangic: "2099-02-01 00:00:00Z" }],
+    ["baslangic 24:00", { ...S1Y, baslangic: "2099-02-01T24:00:00Z" }],
+    ["baslangic 2096-02-29 (artık)", { ...S1Y, baslangic: "2096-02-29T00:00:00Z" }],
+    ["baslangic 2100-02-29 (artık değil)", { ...S1Y, baslangic: "2100-02-29T00:00:00Z" }],
+    ["baslangic 2000-02-29 (artık)", { ...S1Y, baslangic: "2000-02-29T00:00:00Z" }],
+    ["baslangic 31 Nisan", { ...S1Y, baslangic: "2099-04-31T00:00:00Z" }],
+    ["baslangic kesirsiz nokta", { ...S1Y, baslangic: "2099-02-01T00:00:00.Z" }],
+    ["baslangic = bitis", { ...S1Y, baslangic: S1Y.bitis }],
+    ["bitis sayı", { ...S1Y, bitis: BITIS }],
+  ];
+  const sFark: string[] = [];
+  for (const [ad, yuk] of sertMut) {
+    const a = decodeDocument(CertificateSchema, yuk);
+    const b = decodeCertificate(yuk);
+    const ka = a.ok ? `OK ${JSON.stringify(a.value)}` : a.code;
+    const kb = b.ok ? `OK ${JSON.stringify(b.value)}` : b.code;
+    if (ka !== kb) sFark.push(`${ad}: protokol ${ka.slice(0, 40)} ↔ ayna ${kb.slice(0, 40)}`);
+  }
+  check(`§0h ${sertMut.length} sertifika yükünde ayna decodeCertificate ile protokol CertificateSchema AYNI (kod + çıktı)`, sFark.length === 0, sFark.join(" · ") || "aynı");
+
+  const iptalYuku = { v: 1, iptalId: randomUUID(), sira: 5, verilis: iso(Z0), iptaller: [{ kid: IST1.kid, sertifikaId: randomUUID(), tarih: iso(Z0), neden: "x" }] };
+  const satir = iptalYuku.iptaller[0]!;
+  const iptalMut: Array<[string, Record<string, unknown>]> = [
+    ["geçerli", iptalYuku],
+    ["boş liste", { ...iptalYuku, iptaller: [] }],
+    ["pkt satırı", { ...iptalYuku, iptaller: [{ ...satir, kid: "pkt-2099-1" }] }],
+    ["alt- satırı", { ...iptalYuku, iptaller: [{ ...satir, kid: "alt-2099-1" }] }],
+    ["paket- satırı", { ...iptalYuku, iptaller: [{ ...satir, kid: "paket-2099" }] }],
+    ["kullanim alanlı satır (zod düşürür)", { ...iptalYuku, iptaller: [{ ...satir, kullanim: "ISTEMCI" }] }],
+    ["neden 200", { ...iptalYuku, iptaller: [{ ...satir, neden: "ç".repeat(200) }] }],
+    ["neden 201", { ...iptalYuku, iptaller: [{ ...satir, neden: "ç".repeat(201) }] }],
+    ["neden yok", { ...iptalYuku, iptaller: [{ kid: satir.kid, sertifikaId: satir.sertifikaId, tarih: satir.tarih }] }],
+    ["tekrarlı sertifika", { ...iptalYuku, iptaller: [satir, { ...satir, kid: IST2.kid }] }],
+    ["256 satır", { ...iptalYuku, iptaller: Array.from({ length: 256 }, () => ({ ...satir, sertifikaId: randomUUID() })) }],
+    ["257 satır", { ...iptalYuku, iptaller: Array.from({ length: 257 }, () => ({ ...satir, sertifikaId: randomUUID() })) }],
+    ["sira 0", { ...iptalYuku, sira: 0 }],
+    ["sira 1.5", { ...iptalYuku, sira: 1.5 }],
+    ["sira metin", { ...iptalYuku, sira: "5" }],
+    ["sira MAX_SAFE", { ...iptalYuku, sira: Number.MAX_SAFE_INTEGER }],
+    ["sira MAX_SAFE + 1", { ...iptalYuku, sira: Number.MAX_SAFE_INTEGER + 1 }],
+    ["v 2", { ...iptalYuku, v: 2 }],
+    ["verilis ofsetli", { ...iptalYuku, verilis: "2099-03-01T00:00:00+00:00" }],
+    ["iptaller nesne", { ...iptalYuku, iptaller: {} }],
+  ];
+  const iFark: string[] = [];
+  for (const [ad, yuk] of iptalMut) {
+    const a = decodeDocument(PackageRevocationSchema, yuk);
+    const b = decodeDistributionRevocation(yuk);
+    const ka = a.ok ? `OK ${JSON.stringify(a.value)}` : a.code;
+    const kb = b.ok ? `OK ${JSON.stringify(b.value)}` : b.code;
+    if (ka !== kb) iFark.push(`${ad}: protokol ${ka.slice(0, 40)} ↔ ayna ${kb.slice(0, 40)}`);
+  }
+  check(`§0h' ${iptalMut.length} iptal yükünde ayna ile protokol PackageRevocationSchema AYNI (kod + çıktı)`, iFark.length === 0, iFark.join(" · ") || "aynı");
+
+  // §0i iptal belgesinin imzası: yalnız çapadaki kök, kendi typ'i.
+  const iptalTablo: Array<[string, unknown, RootKey[]]> = [
+    ["geçerli", IPT_KID, KOKLER],
+    ["ist anahtarı imzalamış", iptalBas([{ kid: IST1.kid, sertifikaId: randomUUID() }], 9, IST1), KOKLER],
+    ["typ tekserp-iptal", hamImzala(TYP.IPTAL, f.kok, { v: 1, iptalId: randomUUID(), sira: 1, verilis: iso(Z0), iptaller: [] }), KOKLER],
+    ["yabancı kök", iptalBas([], 9, YABANCI_KOK), KOKLER],
+    ["dar kök imzalamış (çapada)", iptalBas([], 9, f.dar), IKI_KOK],
+    ["imza bozuk", `${IPT_KID.split(".").slice(0, 2).join(".")}.${b64uEncode(Buffer.alloc(64, 1))}`, KOKLER],
+    ["çapa boş", IPT_KID, []],
+    ["biçimsiz", "x", KOKLER],
+  ];
+  const tFark: string[] = [];
+  for (const [ad, token, roots] of iptalTablo) {
+    const a = verifyPackageRevocation(token, roots);
+    const b = verifyDistributionRevocation(token, roots);
+    const ka = a.ok ? `OK ${a.value.rootKid} ${a.value.document.sira}` : a.code;
+    const kb = b.ok ? `OK ${b.value.rootKid} ${b.value.document.sira}` : b.code;
+    if (ka !== kb) tFark.push(`${ad}: protokol ${ka} ↔ ayna ${kb}`);
+  }
+  check(`§0i ${iptalTablo.length} iptal belgesinde ayna verifyDistributionRevocation ile protokol verifyPackageRevocation AYNI`, tFark.length === 0, tFark.join(" · ") || "aynı");
+
+  // §0j iptal birleştirme: yerel → belirteç yanıtı → künye bloğu; doğrulanamayan yok sayılır, en yüksek sira kazanır.
+  const SAHTE5 = iptalBas([{ kid: IST2.kid, sertifikaId: randomUUID() }], 5, IST1);
+  const IPT3B = iptalBas([{ kid: "ist-2099-8", sertifikaId: randomUUID() }], 3);
+  const senaryolar: Array<[string, Array<{ kaynak: string; token: string | null }>, string | null]> = [
+    ["yerel 2 · sahte 5 · künye 3", [{ kaynak: "yerel", token: IPT_KID }, { kaynak: "belirtec", token: SAHTE5 }, { kaynak: "kunye", token: IPT_ID }], "kunye"],
+    ["yerel 3 · künye 2 (geri alınamaz)", [{ kaynak: "yerel", token: IPT_ID }, { kaynak: "kunye", token: IPT_KID }], "yerel"],
+    ["yerel 3 · belirteç başka 3 (eşitte önce gelen)", [{ kaynak: "yerel", token: IPT_ID }, { kaynak: "belirtec", token: IPT3B }], "yerel"],
+    ["yerel yok · belirteç 4", [{ kaynak: "yerel", token: null }, { kaynak: "belirtec", token: IPT_IST2 }], "belirtec"],
+    ["hiçbiri yok", [{ kaynak: "yerel", token: null }], null],
+    ["yalnız sahte", [{ kaynak: "kunye", token: SAHTE5 }], null],
+  ];
+  const mFark: string[] = [];
+  for (const [ad, adaylar, beklenen] of senaryolar) {
+    let ref: VerifiedPackageRevocation | null = null;
+    let refKaynak: string | null = null;
+    for (const c of adaylar) {
+      if (c.token === null) continue;
+      const v = verifyPackageRevocation(c.token, KOKLER);
+      if (!v.ok) continue;
+      if (pickNewerPackageRevocation(ref, v.value) !== ref) {
+        ref = v.value;
+        refKaynak = c.kaynak;
+      }
+    }
+    const m = mergeRevocations(KOKLER, adaylar);
+    const sahteRed = adaylar.filter((c) => c.token === SAHTE5).length === m.reddedilen.length && m.reddedilen.every((r) => r.code === "KOK_BILINMIYOR");
+    if (m.kaynak !== refKaynak || m.kaynak !== beklenen || (m.revocation?.document.iptalId ?? null) !== (ref?.document.iptalId ?? null) || !sahteRed) {
+      mFark.push(`${ad}: ayna ${m.kaynak} ↔ protokol ${refKaynak} (beklenen ${beklenen})`);
+    }
+  }
+  check(`§0j ${senaryolar.length} senaryoda iptal birleştirme protokolün pickNewerPackageRevocation'ıyla aynı kaynağı seçer, sahteyi reddedilende raporlar`, mFark.length === 0, mFark.join(" · ") || "aynı");
+  const birlesik = mergeRevocations(KOKLER, [{ kaynak: "yerel", token: IPT_PKT }, { kaynak: "kunye", token: IPT_KID }]);
+  const sonra = verifyClientSigned(GECERLI, { typ: TYP.PANEL, roots: KOKLER, nowMs: Z0, revocation: birlesik.revocation });
+  check("§0k birleşik iptal (yerel pkt-only 1 · künye ist 2) birincili RED, yedeği KABUL eder", !sonra.ok && sonra.code === "SERTIFIKA_IPTAL" && verifyClientSigned(YEDEK, { typ: TYP.PANEL, roots: KOKLER, nowMs: Z0, revocation: birlesik.revocation }).ok);
 }
 
 // ── §1 anahtar dosyaları ──────────────────────────────────────────────────────
@@ -366,6 +762,7 @@ function bolum4(anahtar: { panelDosyasi: string; panelX: string }): void {
 async function main(): Promise<void> {
   try {
     bolum0();
+    bolum0Zincir();
     const anahtar = await bolum1();
     bolum2(anahtar);
     bolum3(anahtar);
