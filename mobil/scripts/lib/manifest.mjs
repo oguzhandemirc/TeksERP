@@ -21,9 +21,13 @@
 import { Buffer } from 'node:buffer';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
+import { createRequire } from 'node:module';
 import path from 'node:path';
 
 import { MULTIPART_BOUNDARY } from './feed.cjs';
+
+const require = createRequire(import.meta.url);
+const { ZINCIR_PARCASI, istemciZinciri, pemAyir, yaprakHatalari } = require('./ota-zinciri.cjs');
 
 /* ------------------------------------------------------------------ *
  * Hash biçimleri — protokolün beklediği hâller
@@ -118,6 +122,7 @@ export function manifestKur({ paketDizin, runtimeVersion, damga, varlikTabani, e
  * etmek (alan sırası/boşluk değişebilir) imzayı geçersiz kılar.
  */
 export function imzaBasligi(govde, privateKeyPem, keyid = 'main') {
+  // `privateKeyPem`: PEM dizesi ya da (parolalı OTA yaprağında) açılmış KeyObject.
   const imza = crypto.sign('RSA-SHA256', Buffer.from(govde, 'utf8'), privateKeyPem);
   return `sig="${imza.toString('base64')}", keyid="${keyid}", alg="rsa-v1_5-sha256"`;
 }
@@ -137,27 +142,35 @@ export function imzaBasligi(govde, privateKeyPem, keyid = 'main') {
  * yayın başına değişseydi her yayında sunucu yapılandırmasına dokunmak
  * gerekirdi.
  */
-export function multipartKur({ manifest, imzaBasligiDegeri }) {
+export function multipartKur({ manifest, imzaBasligiDegeri, sertifikaZinciri = null }) {
   const govde = JSON.stringify(manifest);
 
-  if (govde.includes(MULTIPART_BOUNDARY)) {
-    // Sınırlayıcı gövdede geçerse ayrıştırıcı gövdeyi ortadan böler ve paket
-    // sessizce bozulur. Ölçülemeyen bir arızayı üretmektense yayını durdur.
-    throw new Error(
-      `Sınırlayıcı ("${MULTIPART_BOUNDARY}") manifest gövdesinde geçiyor — paket bozulurdu.`,
-    );
+  // Zincirli kipte (ortak tablet, K-2) yaprak PEM'i `certificate_chain` parçasında gider; gömülü OTA kökü
+  // zincirin son halkasıdır (expo-updates `CodeSigningConfiguration.kt:63-66`).
+  const zincir = sertifikaZinciri == null ? null : pemAyir(sertifikaZinciri).join('\n');
+  if (sertifikaZinciri != null && !zincir) throw new Error('Sertifika zinciri PEM sertifika taşımıyor — parça boş giderdi.');
+
+  for (const [ad, icerik] of [['manifest', govde], [ZINCIR_PARCASI, zincir ?? '']]) {
+    if (icerik.includes(MULTIPART_BOUNDARY)) {
+      // Sınırlayıcı gövdede geçerse ayrıştırıcı gövdeyi ortadan böler ve paket
+      // sessizce bozulur. Ölçülemeyen bir arızayı üretmektense yayını durdur.
+      throw new Error(
+        `Sınırlayıcı ("${MULTIPART_BOUNDARY}") ${ad} parçasında geçiyor — paket bozulurdu.`,
+      );
+    }
   }
 
-  const parca = (ad, icerik, ekBaslik) =>
+  const parca = (ad, icerik, ekBaslik, tip = 'application/json; charset=utf-8') =>
     `--${MULTIPART_BOUNDARY}\r\n` +
     `content-disposition: form-data; name="${ad}"\r\n` +
-    `content-type: application/json; charset=utf-8\r\n` +
+    `content-type: ${tip}\r\n` +
     (ekBaslik ? `${ekBaslik}\r\n` : '') +
     `\r\n${icerik}\r\n`;
 
   return Buffer.from(
     parca('manifest', govde, imzaBasligiDegeri ? `expo-signature: ${imzaBasligiDegeri}` : null) +
       parca('extensions', JSON.stringify({ assetRequestHeaders: {} }), null) +
+      (zincir ? parca(ZINCIR_PARCASI, zincir, null, 'application/x-pem-file') : '') +
       `--${MULTIPART_BOUNDARY}--\r\n`,
     'utf8',
   );
@@ -167,8 +180,12 @@ export function multipartKur({ manifest, imzaBasligiDegeri }) {
  * Üretilen gövdeyi, istemcinin yaptığı işi taklit ederek DOĞRULAR.
  * Yayın script'i bunu her koşumda çağırır — imzalı ama doğrulanmamış bir paket
  * yayınlamak, imzasız yayınlamaktan daha kötüdür (sahada sessizce reddedilir).
+ *
+ * `zincir: true` (ortak tablet): `sertifikaPem` APK'ya gömülü OTA KÖKÜDÜR; imzacı `certificate_chain`
+ * parçasındaki yapraktır ve zincir istemci aynasıyla (`ota-zinciri.cjs istemciZinciri`, cihaz saati = `simdi`)
+ * denetlenir — kökle doğrudan imza, süresi geçmiş yaprak, yabancı kök RED.
  */
-export function multipartDogrula(govdeBuf, sertifikaPem) {
+export function multipartDogrula(govdeBuf, sertifikaPem, { zincir = false, simdi = new Date() } = {}) {
   const metin = govdeBuf.toString('utf8');
   const parcalar = {};
   for (const blok of metin.split(`--${MULTIPART_BOUNDARY}`)) {
@@ -190,16 +207,28 @@ export function multipartDogrula(govdeBuf, sertifikaPem) {
     if (!parcalar.manifest.imza) throw new Error('Doğrulama: imza başlığı yok');
     const sig = /sig="([^"]+)"/.exec(parcalar.manifest.imza)?.[1];
     if (!sig) throw new Error('Doğrulama: imza başlığında `sig` alanı yok');
+    let anahtar = sertifikaPem;
+    if (zincir) {
+      const halkalar = pemAyir(parcalar[ZINCIR_PARCASI]?.govde);
+      try {
+        anahtar = istemciZinciri([...halkalar, String(sertifikaPem)], { simdi }).publicKey;
+      } catch (e) {
+        throw new Error(`Doğrulama: SERTİFİKA ZİNCİRİ GEÇERSİZ (${e.message}) — tablet bu paketi reddederdi`);
+      }
+      // İstemciden KATI: zincir tam olarak tek OTA yaprağıdır (CA olmayan, ≤395 gün, köke doğrudan bağlı).
+      const h = halkalar.length === 1 ? yaprakHatalari(halkalar[0], String(sertifikaPem), { simdi }) : [`zincir parçası ${halkalar.length} sertifika taşıyor — tam olarak 1 OTA yaprağı olmalı`];
+      if (h.length) throw new Error(`Doğrulama: OTA YAPRAĞI GEÇERSİZ (${h.join('; ')})`);
+    }
     const gecerli = crypto.verify(
       'RSA-SHA256',
       Buffer.from(parcalar.manifest.govde, 'utf8'),
-      crypto.createPublicKey(sertifikaPem),
+      anahtar instanceof crypto.KeyObject && anahtar.type === 'public' ? anahtar : crypto.createPublicKey(anahtar),
       Buffer.from(sig, 'base64'),
     );
     if (!gecerli) throw new Error('Doğrulama: İMZA GEÇERSİZ — tablet bu paketi reddederdi');
   }
 
-  return { manifest: man, imzali: !!parcalar.manifest.imza };
+  return { manifest: man, imzali: !!parcalar.manifest.imza, zincirli: !!parcalar[ZINCIR_PARCASI] };
 }
 
 /**

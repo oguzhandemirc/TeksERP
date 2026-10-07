@@ -39,6 +39,18 @@ paket değiştiremez, çünkü imzayı üretemez. **Her kanalın anahtarı AYRID
 tabletleri kriptografik olarak REDDEDER; yayın betiği imzanın diğer kanalların sertifikalarıyla
 reddedildiğini de ölçer.
 
+**Ortak tablet (K-2, `deploy/mobil-grup-yayinla.mjs`): sertifika ZİNCİRİ.** APK'ya OTA KÖKÜ gömülür
+(`keystore/ota-certs-ortak/certificate.pem`; RSA-3072, öz-imzalı CA, pathLen 0, EKU yok, 30 yıl; özel anahtarı
+`mobil/` dışında, kökle aynı yerde). Manifesti yıllık OTA YAPRAĞI imzalar (`keystore/ota-keys-ortak/`:
+`private-key.pem` parolalı PKCS#8 + `certificate.pem`; ≤395 gün, digitalSignature + EKU codeSigning) ve yaprak
+yanıtın `certificate_chain` parçasında gider; tablet onu `withOtaZinciri` eklentisinin yazdığı meta-data
+(`CODE_SIGNING_INCLUDE_MANIFEST_RESPONSE_CERTIFICATE_CHAIN=true`) sayesinde köke zincirler. Yayıncı parolayı yalnız
+istemden alır (TTY gizli / stdin satırı); parolasız anahtar, köke bağlanmayan ya da bitişine 30 günden az kalan
+yaprak RED. Yedek yaprak: `--ota-anahtar=<USB'deki private-key.pem>` (yanındaki `certificate.pem` okunur). Cihaz
+saatiyle toleranssız: süresi geçmiş yaprakla imzalı manifest inmez ⇒ yıllık tören yayındaki manifestleri yeni
+yaprakla yeniden imzalar. İptal yok (risk kabul). Tören komutları: malzeme yoksa derleme ve yayıncı
+basar (tek yazım `ortak-kimlik.cjs anahtarToreniKomutu`); ölçüm `cd mobil && node scripts/ota-zinciri.mjs denetle`. Gerekçe: `docs/design/ISTEMCI-ANAHTARI-KOK-ALTINDA.md` §3.1, §3.5, §6.
+
 ---
 
 ## 2. Sunucu tarafı (bir kez)
@@ -331,6 +343,7 @@ yayınla. Tersi, tabletleri indirecek bir şey olmadan kilitler.
 |---|---|---|
 | **Mühür** (APK imzası) | `mobil/keystore/tekserp-release.keystore` + `.properties` | Her tablette uygulama **silinip yeniden kurulur** |
 | **Kod imzalama** (paket imzası) — kanal başına | `mobil/keystore/ota-keys/private-key.pem` (adnansahin) · `mobil/keystore/ota-keys-testfabrika/private-key.pem` (testfabrika) | O kanalın uzaktan güncellemesi durur; yeni sertifikayla **yeni APK** gerekir |
+| **Ortak tablet OTA kökü + yaprak** (K-2) | kök sertifikası `mobil/keystore/ota-certs-ortak/` (özel anahtarı `mobil/` dışında, kökle aynı yerde) · yaprak `mobil/keystore/ota-keys-ortak/` (parolalı) · yedek yaprak USB | Yaprak: yedek yaprakla sürer, yeni yaprak törende; kök: yeni kökle Play güncellemesi (sil+kur yok) |
 
 İkisi de `keystore/` altında ve git dışında. **Yedekleri şifreleriyle birlikte repo dışında
 saklanmalı.** İmza `plugins/withReleaseKeystore.js` ile her prebuild'de yeniden yazılır

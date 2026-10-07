@@ -15,10 +15,17 @@
 const fs = require('node:fs');
 const path = require('node:path');
 
+const { OTA_YAPRAK_GUN, OTA_KOK_GUN, komutMetni, torenKomutlari } = require('./ota-zinciri.cjs');
+
 const KAYIT_YOLU = path.join(__dirname, '..', '..', '..', 'deploy', 'dagitim.json');
 /** Worker'ın grup-nötr OTA yolu `<indirmeKoku>ota/<rv>/manifest` (dagitim.mjs AYRILMIS_GRUP_KODLARI[0]). */
 const TAKMA_AD = 'ota';
-/** Ortak OTA sertifikasının biçimi; anahtar yolu ve imza anahtarı kimliği (kid) bu addan türer. */
+/** Zincir meta-data'sını yazan eklenti (K-2): ortak yapılandırmada olmazsa APK zinciri okumaz, her OTA RED. */
+const ZINCIR_EKLENTISI = './plugins/withOtaZinciri';
+/**
+ * Ortak OTA KÖKÜ sertifikasının biçimi (APK'ya gömülür; K-2/I5). Yaprak anahtarı + yaprak sertifikası
+ * `keystore/ota-keys-<ad>/` altındadır ve imza anahtarı kimliği (kid) bu addan türer.
+ */
 const SERTIFIKA_DESENI = /^keystore\/ota-certs-([a-z0-9][a-z0-9-]{0,31})\/certificate\.pem$/;
 
 function ortakKaydiOku(kayitYolu = KAYIT_YOLU) {
@@ -59,21 +66,30 @@ function ortakKimlik(kayit = ortakKaydiOku()) {
     runtimeVersion: t.runtimeVersion,
     otaSertifika: t.otaSertifika,
     otaAnahtar: `keystore/ota-keys-${m[1]}/private-key.pem`,
+    otaYaprak: `keystore/ota-keys-${m[1]}/certificate.pem`,
     anahtarKimligi: m[1],
     indirmeKoku: kok,
     guncellemeUrl: `${kok}${TAKMA_AD}/${t.runtimeVersion}/manifest`,
   };
 }
 
-/** Anahtar töreninin tek yazımı (belge, build-apk mesajı ve bekçi aynı metni kullanır). */
+/**
+ * OTA zinciri töreninin tek yazımı (belge, build-apk/yayın mesajı ve bekçi aynı metni kullanır). Argv
+ * `ota-zinciri.cjs torenKomutlari`ndan — bekçinin deneme zinciri de aynı argv ile üretilir. Kök anahtarı mobil/
+ * DIŞINDA, kökle aynı yerde ve kök parolasıyla; yaprak anahtarı istemci parolasıyla (openssl gizli sorar).
+ * Yedek yaprak ve kök anahtarının yeri I7 tören aracının işidir (ISTEMCI-ANAHTARI-KOK-ALTINDA.md §6 adım 3).
+ */
 function anahtarToreniKomutu(k = ortakKimlik()) {
-  const sertDizin = path.posix.dirname(k.otaSertifika);
-  const anahtarDizin = path.posix.dirname(k.otaAnahtar);
+  const profil = '/tmp/tekserp-ota-profil.cnf';
+  const komutlar = torenKomutlari({
+    kokAnahtar: '$OTA_KOK_ANAHTARI', kokSertifika: k.otaSertifika, yaprakAnahtar: k.otaAnahtar,
+    yaprakSertifika: k.otaYaprak, csr: '/tmp/tekserp-ota-yaprak.csr', profil, yaprakCn: `${k.gorunenAd} OTA Yaprak`,
+  }).map((a) => komutMetni(a).replaceAll('"\\$OTA_KOK_ANAHTARI"', '"$OTA_KOK_ANAHTARI"'));
   return [
-    `cd mobil && npx expo-updates codesigning:generate --key-output-directory ${anahtarDizin} ` +
-      `--certificate-output-directory ${sertDizin} --certificate-validity-duration-years 30 ` +
-      `--certificate-common-name "${k.gorunenAd}"`,
-    `chmod 600 mobil/${k.otaAnahtar}`,
+    `# OTA kökü (CA, ${OTA_KOK_GUN} gün, APK'ya gömülür) + OTA yaprağı (${OTA_YAPRAK_GUN} gün, manifesti imzalar); OTA_KOK_ANAHTARI mobil/ dışında`,
+    `cd mobil && mkdir -p ${path.posix.dirname(k.otaSertifika)} ${path.posix.dirname(k.otaAnahtar)} && node scripts/ota-zinciri.mjs profil > ${profil}`,
+    ...komutlar,
+    `chmod 600 ${k.otaAnahtar} && node scripts/ota-zinciri.mjs denetle`,
   ];
 }
 
@@ -131,6 +147,10 @@ function ortakYapilandirmaFarki(cfg, { herkese = false } = {}, k = ortakKimlik()
       String(cfg?.updates?.codeSigningCertificate ?? '').replace(/^\.\//, '') || undefined, k.otaSertifika);
     fark('updates.codeSigningMetadata.keyid', cfg?.updates?.codeSigningMetadata?.keyid, k.anahtarKimligi);
     fark('updates.enabled', cfg?.updates?.enabled, true);
+    const eklentiler = (cfg?.plugins ?? []).map((p) => (Array.isArray(p) ? p[0] : p));
+    if (!eklentiler.includes(ZINCIR_EKLENTISI)) {
+      f.push(`plugins ${ZINCIR_EKLENTISI} taşımıyor — APK OTA sertifika zincirini okumaz, ortak paket her manifesti reddeder`);
+    }
   }
   fark('extra.gorunurEtiket', cfg?.extra?.gorunurEtiket ?? null, null);
   return f;
@@ -139,6 +159,7 @@ function ortakYapilandirmaFarki(cfg, { herkese = false } = {}, k = ortakKimlik()
 module.exports = {
   KAYIT_YOLU,
   TAKMA_AD,
+  ZINCIR_EKLENTISI,
   ortakKaydiOku,
   ortakKimlik,
   anahtarToreniKomutu,

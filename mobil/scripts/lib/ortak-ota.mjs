@@ -6,6 +6,8 @@
 // (varlık adresleri `<kök><grup>/mobil/ota/<rv>/<damga>/…`), böylece paket baytı gruplar arasında AYNI kalır,
 // manifest/imza hedef grubun olur (TEK-ORTAK-PAKET.md §S3). Kimlik (runtimeVersion · imza anahtarı kimliği · sertifika)
 // `app.json`dan DEĞİL ortak kimlikten (`ortak-kimlik.cjs`) gelir.
+// İmza (K-2): manifesti parolalı OTA YAPRAĞI imzalar, yaprak `certificate_chain` parçasında gider; tablet onu APK'ya
+// gömülü OTA KÖKÜNE zincirler (`ota-zinciri.cjs`, docs/design/ISTEMCI-ANAHTARI-KOK-ALTINDA.md §3.1, §3.5).
 //
 // Saf yükümler burada, süreç/ağ işi `yayinla-ota-ortak.mjs` ve `deploy/mobil-grup-yayinla.mjs`te.
 // Bekçi: scripts/test_grup_yayin_tablet.mjs
@@ -14,6 +16,7 @@
 import { execFileSync } from 'node:child_process';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { createRequire } from 'node:module';
 
@@ -22,6 +25,7 @@ import { imzaBasligi, manifestKur, multipartDogrula, multipartKur } from './mani
 
 const require = createRequire(import.meta.url);
 const { anahtarToreniKomutu, ortakYapilandirmaFarki } = require('./ortak-kimlik.cjs');
+const Z = require('./ota-zinciri.cjs');
 
 /** Ortak paketin yerel künyesi; `ortak: true` ve manifest YOKLUĞU ortak pakettir. */
 export const PAKET_KUNYESI = 'yayin.json';
@@ -85,54 +89,106 @@ export function ortakPaketDenetimi(dizin, kimlik) {
 export const grupVarlikTabani = (feed, rv, damga) => `${String(feed).replace(/\/+$/, '')}/ota/${rv}/${damga}`;
 
 /**
- * Ortak OTA imza anahtarı + sertifikası. Yoksa fail-closed ve tören komutunu söyler; `kuru` ise KURU SAHTE bir çift
- * üretir (yalnız imza adımının çalıştığını göstermek için — çıktı asla yayına gitmez, `sahte: true`).
- * @returns {{anahtarPem: string, sertifikaPem: string, keyid: string, sahte: boolean}}
+ * Ortak OTA imza malzemesinin yolları: APK'ya gömülü OTA KÖKÜ + manifesti imzalayan OTA YAPRAĞI (anahtar + sertifika).
+ * `anahtarYolu` (yedek yaprak, USB) verilirse yaprak sertifikası o anahtarın YANINDAN okunur — aynı dizin düzeni.
  */
-export function ortakImzaAnahtari(kimlik, mobilKok, { kuru = false, anahtarYolu } = {}) {
+export function ortakImzaYollari(kimlik, mobilKok, { anahtarYolu } = {}) {
   const anahtarYol = anahtarYolu ? path.resolve(anahtarYolu) : path.join(mobilKok, kimlik.otaAnahtar);
-  const sertYol = path.join(mobilKok, kimlik.otaSertifika);
-  const var_ = fs.existsSync(anahtarYol) && fs.existsSync(sertYol);
-  if (!var_) {
-    if (kuru) {
-      const { privateKey, publicKey } = crypto.generateKeyPairSync('rsa', { modulusLength: 2048 });
-      return {
-        anahtarPem: privateKey.export({ type: 'pkcs8', format: 'pem' }),
-        sertifikaPem: publicKey.export({ type: 'spki', format: 'pem' }),
-        keyid: kimlik.anahtarKimligi,
-        sahte: true,
-      };
-    }
-    throw new OrtakOtaIhlali('ORTAK OTA İMZA ANAHTARI/SERTİFİKASI YOK — manifest imzalanamaz, yayın yapılmaz', [
-      `beklenen anahtar    : ${anahtarYol}`,
-      `beklenen sertifika  : ${sertYol}`,
-      'Anahtar çifti kullanıcıyla töreni ile üretilir (git dışı, yedekli); üretilmeden OTA yayını çıkmaz:',
-      ...anahtarToreniKomutu(kimlik).map((k) => `  ${k}`),
-    ]);
+  const yaprakYol = anahtarYolu ? path.join(path.dirname(anahtarYol), path.basename(kimlik.otaYaprak)) : path.join(mobilKok, kimlik.otaYaprak);
+  return { anahtarYol, yaprakYol, kokYol: path.join(mobilKok, kimlik.otaSertifika) };
+}
+
+/** Yaprak anahtarı var ve parolalı mı (yayıncı parolayı yalnız o zaman sorar). */
+export function ortakAnahtarParolali(yollar) {
+  try {
+    return Z.pemSifreli(fs.readFileSync(yollar.anahtarYol, 'utf8'));
+  } catch {
+    return false;
   }
-  return { anahtarPem: fs.readFileSync(anahtarYol, 'utf8'), sertifikaPem: fs.readFileSync(sertYol, 'utf8'), keyid: kimlik.anahtarKimligi, sahte: false };
 }
 
 /**
- * Hedef grubun manifesti: varlık adresleri GRUBUN, imza ortak anahtarla, gövde istemcinin yaptığı gibi doğrulanır.
- * Aynı paket farklı gruba üretilince yalnız adresler (ve imza) değişir; `id` metadata'dan türer, aynı kalır.
- * @returns {{govde: Buffer, manifest: object, imzalayan: {keyid: string, sahte: boolean}}}
+ * Ortak OTA imza malzemesi: yaprak anahtarı (açılmış KeyObject) + yaprak + kök PEM. Fail-closed: dosya yoksa tören
+ * komutuyla; yaprak anahtarı PAROLASIZSA, parola yoksa/yanlışsa, kök CA değilse, yaprak köke bağlı değilse, süresi
+ * bitmişse ya da bitişine 30 günden az kalmışsa ya da anahtar yaprağın değilse DURUR. `kuru` + malzeme yoksa ATILACAK
+ * bir deneme zinciri üretir (openssl; `sahte: true`, çıktı yayına gitmez).
+ * @returns {{anahtar: crypto.KeyObject, kokPem: string, yaprakPem: string, keyid: string, sahte: boolean, yaprakBitis: string}}
+ */
+export function ortakImzaAnahtari(kimlik, mobilKok, { kuru = false, anahtarYolu, parola, simdi = new Date() } = {}) {
+  const y = ortakImzaYollari(kimlik, mobilKok, { anahtarYolu });
+  const eksik = [y.anahtarYol, y.yaprakYol, y.kokYol].filter((p) => !fs.existsSync(p));
+  if (eksik.length) {
+    if (kuru) return denemeImzaMalzemesi(kimlik);
+    throw new OrtakOtaIhlali('ORTAK OTA İMZA MALZEMESİ YOK — manifest imzalanamaz, yayın yapılmaz', [
+      `OTA kökü (APK'ya gömülü) : ${y.kokYol}`,
+      `OTA yaprağı sertifikası  : ${y.yaprakYol}`,
+      `OTA yaprağı anahtarı     : ${y.anahtarYol}`,
+      `eksik                    : ${eksik.join(', ')}`,
+      'Zincir kullanıcıyla törende üretilir (git dışı, yedekli); üretilmeden OTA yayını çıkmaz:',
+      ...anahtarToreniKomutu(kimlik).map((k) => `  ${k}`),
+    ]);
+  }
+  const anahtarPem = fs.readFileSync(y.anahtarYol, 'utf8');
+  if (!Z.pemSifreli(anahtarPem)) {
+    throw new OrtakOtaIhlali('OTA YAPRAK ANAHTARI PAROLASIZ — imzalanmaz', [
+      `anahtar: ${y.anahtarYol}`,
+      'Yaprak anahtarı parolalı PKCS#8 olmalı (BEGIN ENCRYPTED PRIVATE KEY); tören komutu `-aes-256-cbc` ile üretir.',
+    ]);
+  }
+  if (!parola) throw new OrtakOtaIhlali('OTA YAPRAK ANAHTARI PAROLASI VERİLMEDİ — imzalanmaz', [`anahtar: ${y.anahtarYol}`]);
+  let anahtar;
+  try {
+    anahtar = crypto.createPrivateKey({ key: anahtarPem, passphrase: parola });
+  } catch {
+    throw new OrtakOtaIhlali('OTA YAPRAK ANAHTARI AÇILAMADI — parola yanlış ya da dosya bozuk', [`anahtar: ${y.anahtarYol}`]);
+  }
+  const kokPem = fs.readFileSync(y.kokYol, 'utf8');
+  const yaprakPem = fs.readFileSync(y.yaprakYol, 'utf8');
+  const h = [...Z.kokHatalari(kokPem, { simdi }), ...Z.yaprakHatalari(yaprakPem, kokPem, { simdi, esikGun: Z.OTA_YAPRAK_ESIK_GUN })];
+  if (!h.length && !Z.anahtarYaprakEslesir(anahtar, yaprakPem)) h.push(`yaprak anahtarı bu yaprak sertifikasının değil (${y.anahtarYol} ↔ ${y.yaprakYol})`);
+  if (h.length) throw new OrtakOtaIhlali('OTA SERTİFİKA ZİNCİRİ İMZAYA UYGUN DEĞİL — manifest imzalanmaz', h.map((x) => `• ${x}`));
+  return { anahtar, kokPem, yaprakPem, keyid: kimlik.anahtarKimligi, sahte: false, yaprakBitis: new crypto.X509Certificate(yaprakPem).validTo };
+}
+
+/** `--kuru`: atılacak deneme zinciri (openssl) — yalnız imza adımının çalıştığını gösterir, hiçbir yere yazılmaz. */
+function denemeImzaMalzemesi(kimlik) {
+  const dizin = fs.mkdtempSync(path.join(os.tmpdir(), 'tekserp-ota-kuru-'));
+  try {
+    const d = Z.denemeZinciriUret(dizin);
+    const anahtar = crypto.createPrivateKey({ key: d.yaprakAnahtarPem, passphrase: d.parola });
+    return { anahtar, kokPem: d.kokPem, yaprakPem: d.yaprakPem, keyid: kimlik.anahtarKimligi, sahte: true, yaprakBitis: new crypto.X509Certificate(d.yaprakPem).validTo };
+  } catch (e) {
+    throw new OrtakOtaIhlali(`KURU: deneme OTA zinciri üretilemedi (openssl gerekli): ${e.message}`);
+  } finally {
+    fs.rmSync(dizin, { recursive: true, force: true });
+  }
+}
+
+/**
+ * Hedef grubun manifesti: varlık adresleri GRUBUN, imza OTA yaprağıyla, yaprak `certificate_chain` parçasında; gövde
+ * istemcinin yaptığı gibi GÖMÜLÜ KÖKE karşı zincirle doğrulanır. Aynı paket farklı gruba üretilince yalnız adresler
+ * (ve imza) değişir; `id` metadata'dan türer, aynı kalır.
+ * @returns {{govde: Buffer, manifest: object, imzalayan: {keyid: string, sahte: boolean, yaprakBitis: string}}}
  */
 export function grupManifestiUret({ paketDizin, kunye, expoConfig, feed, anahtar }) {
   const varlikTabani = grupVarlikTabani(feed, kunye.runtimeVersion, kunye.damga);
   const manifest = manifestKur({ paketDizin, runtimeVersion: kunye.runtimeVersion, damga: kunye.damga, varlikTabani, expoConfig });
-  const govde = multipartKur({ manifest, imzaBasligiDegeri: imzaBasligi(JSON.stringify(manifest), anahtar.anahtarPem, anahtar.keyid) });
+  const govde = multipartKur({
+    manifest,
+    imzaBasligiDegeri: imzaBasligi(JSON.stringify(manifest), anahtar.anahtar, anahtar.keyid),
+    sertifikaZinciri: anahtar.yaprakPem,
+  });
   let d;
   try {
-    d = multipartDogrula(govde, anahtar.sertifikaPem);
+    d = multipartDogrula(govde, anahtar.kokPem, { zincir: true });
   } catch (e) {
-    throw new OrtakOtaIhlali(`üretilen manifest imzası sertifikayla DOĞRULANMADI: ${e.message}`);
+    throw new OrtakOtaIhlali(`üretilen manifest OTA köküne karşı DOĞRULANMADI: ${e.message}`);
   }
-  if (!d.imzali) throw new OrtakOtaIhlali('üretilen manifest imzasız');
+  if (!d.imzali || !d.zincirli) throw new OrtakOtaIhlali('üretilen manifest imzasız ya da sertifika zinciri parçasız');
   if (d.manifest.runtimeVersion !== kunye.runtimeVersion) throw new OrtakOtaIhlali('manifest runtimeVersion tutmuyor');
   const yabanci = [d.manifest.launchAsset, ...d.manifest.assets].map((v) => v.url).filter((u) => !u.startsWith(`${varlikTabani}/`));
   if (yabanci.length) throw new OrtakOtaIhlali(`manifest hedef grubun dışında adres taşıyor: ${yabanci[0]}`);
-  return { govde, manifest: d.manifest, imzalayan: { keyid: anahtar.keyid, sahte: anahtar.sahte } };
+  return { govde, manifest: d.manifest, imzalayan: { keyid: anahtar.keyid, sahte: anahtar.sahte, yaprakBitis: anahtar.yaprakBitis } };
 }
 
 /**

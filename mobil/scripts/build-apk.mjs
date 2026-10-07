@@ -72,7 +72,8 @@ import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { ortakBundleAdresleri } from './lib/adres.mjs';
 import { zipGirdisiOku } from './lib/zip.mjs';
-import { ApkOlculemedi, apkKimligi, sertifikaParmakIzi } from './lib/apk-kimlik.mjs';
+import { ApkOlculemedi, apkKimligi, metaHaritasi, protoManifestOgeleri, sertifikaParmakIzi } from './lib/apk-kimlik.mjs';
+import { ZINCIR_META, kokHatalari } from './lib/ota-zinciri.cjs';
 import { anahtarToreniKomutu, ortakKaydiOku, ortakKimlik, ortakYapilandirmaFarki } from './lib/ortak-kimlik.cjs';
 import { IMZA_ANAHTARLARI, anahtarUretimKomutu, imzaAnahtariDenetimi } from './lib/imza-anahtari.cjs';
 import { kayitHatalari, KAYIT_REL as DAGITIM_REL, turet } from '../../scripts/lib/dagitim.mjs';
@@ -493,7 +494,9 @@ function prebuildKimligiOku() {
 
   const sertifika = oku('expo.modules.updates.CODE_SIGNING_CERTIFICATE');
   const imzaMeta = oku('expo.modules.updates.CODE_SIGNING_METADATA');
+  const zincir = oku(ZINCIR_META);
   bilgi(`Manifest KOD İMZASI     : ${sertifika ? 'sertifika gömülü' : '(YOK)'}`);
+  bilgi(`Manifest OTA ZİNCİRİ    : ${zincir ?? '(yok)'}`);
 
   // Prebuild çıktısının KİMLİĞİ: paket adı + görünen ad + gömülü OTA sertifikası.
   // Kanal değişince `android/` yeniden üretilmeden derlenen APK eski kanalın kimliğiyle doğardı.
@@ -513,7 +516,8 @@ function prebuildKimligiOku() {
   bilgi(`Prebuild paket adı      : ${paket ?? '(yok)'}`);
   bilgi(`Prebuild görünen ad     : ${uygulamaAdi ?? '(yok)'}`);
   const gomuluIz = sertifika ? sertifikaParmakIzi(xmlCoz(sertifika)) : null;
-  return { url, rv, acik, sertifika, imzaMeta, paket, uygulamaAdi, gomuluIz };
+  const kokSorunlari = sertifika ? kokHatalari(xmlCoz(sertifika)) : [];
+  return { url, rv, acik, sertifika, imzaMeta, paket, uygulamaAdi, gomuluIz, zincir, kokSorunlari };
 }
 
 /** Prebuild kimliğinin ORTAK sorunları (kimlikten bağımsız): güncelleme açık + imza gömülü. */
@@ -817,8 +821,10 @@ function ortakAdresKapisi() {
 function ortakSertifikaIzi(k) {
   const yol = path.join(PROJECT_ROOT, k.otaSertifika);
   let iz = null;
+  let pem = null;
   try {
-    iz = sertifikaParmakIzi(fs.readFileSync(yol, 'utf8'));
+    pem = fs.readFileSync(yol, 'utf8');
+    iz = sertifikaParmakIzi(pem);
   } catch {
     iz = null;
   }
@@ -830,12 +836,26 @@ function ortakSertifikaIzi(k) {
       ...anahtarToreniKomutu(k).map((x) => `  ${x}`),
       'Sonra şifreli yedeği yenile (mobil/keystore-yedek.README.md).');
   }
+  // K-2: gömülen sertifika OTA KÖKÜ olmalı (CA, pathLen 0, EKU yok); eski öz-imzalı yaprak gömülürse zincir işlemez.
+  const h = kokHatalari(pem);
+  if (h.length) {
+    dur('ORTAK OTA SERTİFİKASI OTA KÖKÜ DEĞİL — APK sertifika zincirini doğrulayamaz', `Dosya: ${yol}`, ...h.map((x) => `• ${x}`), '',
+      'Kök ve yaprak törende ayrı üretilir:', ...anahtarToreniKomutu(k).map((x) => `  ${x}`));
+  }
   return iz;
+}
+
+/** Paketten okunan zincir meta-data'sı + gömülü sertifika OTA kökü mü (K-2; APK · AAB · prebuild ortak). */
+function zincirSorunlari(zincirDegeri, sertifikaPem) {
+  const f = [];
+  if (zincirDegeri !== 'true') f.push(`${ZINCIR_META} "${zincirDegeri ?? 'yok'}" (beklenen true) — tablet zincir parçasını okumaz, her OTA RED (plugins/withOtaZinciri)`);
+  if (sertifikaPem) f.push(...kokHatalari(sertifikaPem).map((x) => `gömülü sertifika: ${x}`));
+  return f;
 }
 
 /** Prebuild çıktısı (android/) ortak kimliği mi taşıyor — beklenen değer kayıttan, ağaçtan değil. */
 function ortakGuncellemeKapisi(k) {
-  const { url, rv, paket, uygulamaAdi, sertifika, gomuluIz, ...p } = prebuildKimligiOku();
+  const { url, rv, paket, uygulamaAdi, sertifika, gomuluIz, zincir, kokSorunlari, ...p } = prebuildKimligiOku();
   bilgi('Beklenen kimlik         : ORTAK PAKET (dağıtım kaydından)');
   const beklenenIz = ortakSertifikaIzi(k);
   const sorunlar = prebuildTemelSorunlari({ ...p, sertifika });
@@ -844,6 +864,7 @@ function ortakGuncellemeKapisi(k) {
   if (uygulamaAdi !== k.gorunenAd) sorunlar.push(`app_name "${uygulamaAdi ?? 'yok'}" ≠ "${k.gorunenAd}"`);
   if (sertifika && gomuluIz !== beklenenIz) sorunlar.push(`gömülü OTA sertifikası ortak paketinki değil (${k.otaSertifika})`);
   if (rv !== k.runtimeVersion) sorunlar.push(`EXPO_RUNTIME_VERSION "${rv ?? 'yok'}" ≠ dağıtım kaydı "${k.runtimeVersion}"`);
+  sorunlar.push(...zincirSorunlari(zincir, null), ...kokSorunlari.map((x) => `gömülü sertifika: ${x}`));
   if (sorunlar.length) {
     dur('ANDROIDMANIFEST ORTAK PAKETE HAZIR DEĞİL', ...sorunlar.map((x) => `• ${x}`), '',
       'Sebep neredeyse her zaman: android/ eski bir kanalla (TEKSERP_KANAL) ya da eski kayıtla üretildi.',
@@ -869,11 +890,13 @@ function ortakApkKimlikKapisi(apkYolu, k) {
   bilgi(`Paket adı (applicationId): ${a.paket}`);
   bilgi(`Güncelleme adresi        : ${a.guncellemeAdresi ?? '(yok)'}`);
   bilgi(`OTA sertifikası          : ${a.sertifikaPem ? 'gömülü' : '(YOK)'}`);
+  bilgi(`OTA sertifika zinciri    : ${a.zincirAcik ?? '(yok)'}`);
   const sorunlar = [];
   if (a.paket !== k.androidPaket) sorunlar.push(`paket adı "${a.paket}" ≠ "${k.androidPaket}"`);
   if (a.guncellemeAcik !== 'true') sorunlar.push(`expo-updates ENABLED "${a.guncellemeAcik ?? 'yok'}" (beklenen true)`);
   if (a.guncellemeAdresi !== k.guncellemeUrl) sorunlar.push(`EXPO_UPDATE_URL "${a.guncellemeAdresi ?? 'yok'}" ≠ "${k.guncellemeUrl}"`);
   if (!a.sertifikaPem || sertifikaParmakIzi(a.sertifikaPem) !== beklenenIz) sorunlar.push(`gömülü OTA sertifikası ortak paketinki değil (${k.otaSertifika})`);
+  sorunlar.push(...zincirSorunlari(a.zincirAcik, a.sertifikaPem));
   if ((a.izinler ?? []).includes(YASAK_IZIN)) sorunlar.push(`${YASAK_IZIN} izni var — ortak tablet kendi APK'sını kuramaz (K-14, app.json blockedPermissions)`);
   if (!a.appConfig) sorunlar.push('assets/app.config yok ya da okunamadı — çalışma anı kimliği ÖLÇÜLEMEDİ');
   else sorunlar.push(...ortakYapilandirmaFarki(a.appConfig, { herkese: true }, k).map((x) => `assets/app.config ${x}`));
@@ -931,8 +954,19 @@ function ortakAabDogrula(aabYolu, k, derlemeBaslangici) {
     if (!m.includes(k.androidPaket)) sorunlar.push(`manifestte ortak paket adı "${k.androidPaket}" yok`);
     if (!m.includes(k.guncellemeUrl)) sorunlar.push(`manifestte ortak güncelleme adresi "${k.guncellemeUrl}" yok`);
     if (m.includes(YASAK_IZIN)) sorunlar.push(`${YASAK_IZIN} izni var — ortak tablet kendi APK'sını kuramaz (K-14, app.json blockedPermissions)`);
-    const pem = /-----BEGIN CERTIFICATE-----[\s\S]*?-----END CERTIFICATE-----/.exec(m)?.[0];
-    if (!pem || sertifikaParmakIzi(pem) !== ortakSertifikaIzi(k)) sorunlar.push(`gömülü OTA sertifikası ortak paketinki değil (${k.otaSertifika})`);
+    // Meta-data öğe düzeyinde: protobuf manifest (aapt2 Resources.proto) çözülür; bayt araması boolean'ı ayırt edemez.
+    let meta = null;
+    try {
+      meta = metaHaritasi(protoManifestOgeleri(manifest));
+    } catch (e) {
+      sorunlar.push(`base/manifest/AndroidManifest.xml protobuf olarak çözülemedi (${e.message}) — zincir ÖLÇÜLEMEDİ`);
+    }
+    if (meta) {
+      const pem = meta['expo.modules.updates.CODE_SIGNING_CERTIFICATE'];
+      bilgi(`OTA sertifika zinciri    : ${meta[ZINCIR_META] ?? '(yok)'}`);
+      if (!pem || sertifikaParmakIzi(pem) !== ortakSertifikaIzi(k)) sorunlar.push(`gömülü OTA sertifikası ortak paketinki değil (${k.otaSertifika})`);
+      sorunlar.push(...zincirSorunlari(meta[ZINCIR_META], pem));
+    }
   }
   const cfgHam = oku('base/assets/app.config');
   if (!cfgHam) sorunlar.push('base/assets/app.config yok — çalışma anı kimliği ÖLÇÜLEMEDİ');

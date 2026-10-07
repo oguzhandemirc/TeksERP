@@ -346,6 +346,8 @@ export const TUKETICILER = Object.freeze([
   'deploy/electron-paketle.sh',
   // O7: tablet ortak kimliği (app.config.js argümansız yolu + build-apk); türetim eşitliği test_tablet_ortak_paket.
   'mobil/scripts/lib/ortak-kimlik.cjs',
+  // K-2: OTA zinciri denetim CLI'si (kök/yaprak yolları ortak kimlikten).
+  'mobil/scripts/ota-zinciri.mjs',
   'mobil/src/test/update-feed-url.test.ts',
   'scripts/test_tablet_ortak_paket.mjs',
   'Teks-Erp/scripts/test_mobile_update.ts',

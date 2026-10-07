@@ -78,7 +78,8 @@
         }
       ],
       "expo-asset",
-      "./plugins/withReleaseKeystore"
+      "./plugins/withReleaseKeystore",
+      "./plugins/withOtaZinciri"
     ],
     "runtimeVersion": "55.0",
     "updates": {

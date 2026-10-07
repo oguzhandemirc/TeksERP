@@ -7,13 +7,14 @@
 //
 // NE ÖLÇER:
 //   §1 ortak-kimlik.cjs ↔ kayıt: her alan kayıttan bağımsız yeniden türetilmiş değerle eşit; güncelleme adresi
-//      grup-nötr Worker takma adı = dagitim.mjs `turet().otaTakmaAd`; kid + anahtar yolu sertifika dizininden
+//      grup-nötr Worker takma adı = dagitim.mjs `turet().otaTakmaAd`; kid + yaprak anahtarı/sertifikası kök dizininden
 //   §2 app.config.js argümansız (TEKSERP_KANAL yok) → değerlendirilmiş yapılandırma ortak kimlikle farksız;
 //      K-14: REQUEST_INSTALL_PACKAGES izinlerde YOK ve blockedPermissions'ta VAR (Play: uygulama kendi APK'sını kuramaz)
 //   §3 build-apk.mjs ortak yol (geçici ağaç, ağsız): ortak APK geçer ama mühürde durur · bundle'da ERP
 //      adresi · eski kimlikli APK · yabancı sertifika · gorunurEtiket · TEKSERP_KANAL · --api-url · sertifikasız ağaç ·
 //      şema dışı kayıt · emekli eski kanal argümanı · kurulum izinli APK/AAB → DUR; `--check` android/ ortak paketle
-//      tutarlı mı; K-14 imza anahtarları: APK = keystore/deneme (test), AAB = keystore/play-yukleme (yükleme) — yoksa
+//      tutarlı mı; K-2: zincir meta-data'sı (APK · AAB protobuf · prebuild) ve gömülü sertifikanın OTA KÖKÜ olması
+//      (test anında üretilen atılacak RSA zincirleri); K-14 imza anahtarları: APK = keystore/deneme (test), AAB = keystore/play-yukleme (yükleme) — yoksa
 //      android/ denetiminden ÖNCE DUR + keytool komutu; öbür anahtarın ya da keystore/ kökündeki eski mührün kopyası DUR
 //   --sonda: §1/§2 yüklemleri enjekte edilmiş bozuk girdilerle KIRMIZIYA düşer (kalıcı negatif sonda)
 //
@@ -33,6 +34,7 @@ import { KAYIT_REL, KOK, turet } from './lib/dagitim.mjs';
 
 const require = createRequire(import.meta.url);
 const ORTAK = require('../mobil/scripts/lib/ortak-kimlik.cjs');
+const Z = require('../mobil/scripts/lib/ota-zinciri.cjs');
 const SONDA = process.argv.includes('--sonda');
 const GERCEK_GIT = 'git';
 const TEMIZ_ENV = Object.fromEntries(Object.entries(process.env).filter(([k]) =>
@@ -44,29 +46,12 @@ function ol(ad, kosul, ayrinti = '') {
   if (kosul) { basarili += 1; console.log(`  ✓ ${ad}`); } else { hatalar.push(ad); console.log(`  ✗ ${ad}${ayrinti ? `\n      ${String(ayrinti).replace(/\n/g, '\n      ')}` : ''}`); }
 }
 
-/* ---- sahte APK yapıtaşları (test_grup_yayin_tablet.mjs ile aynı biçim) ---- */
-const SERT_KANAL = `-----BEGIN CERTIFICATE-----
-MIIBlzCCAT2gAwIBAgIUflh7ucW2BFPsCatHKIKPJkPevBswCgYIKoZIzj0EAwIw
-IDEeMBwGA1UEAwwVdGVrc2VycC1iZWtjaS1zYWh0ZS0xMCAXDTI2MTAwMTA0NTAz
-M1oYDzIxMjYwOTA3MDQ1MDMzWjAgMR4wHAYDVQQDDBV0ZWtzZXJwLWJla2NpLXNh
-aHRlLTEwWTATBgcqhkjOPQIBBggqhkjOPQMBBwNCAARTZhs6Ki1buTYtoq0PSkcW
-d+6GLQOhtKd4fpXs2HqRg6uE2Ig+bzRD8LKeZq69fQAAwycx1exOgYsEP0KhN/BP
-o1MwUTAdBgNVHQ4EFgQUbhn1aseIZJPE31mOfQPJ93zxJFowHwYDVR0jBBgwFoAU
-bhn1aseIZJPE31mOfQPJ93zxJFowDwYDVR0TAQH/BAUwAwEB/zAKBggqhkjOPQQD
-AgNIADBFAiAwCh7GhiovwejsCV29+3eg4cSMaz6p9UhuXgtuTSoSowIhAK030NKN
-qLvA5jkZDdfpFiK0fV5ugAjzgFTm59VZ4Bp3
------END CERTIFICATE-----\n`;
-const SERT_YABANCI = `-----BEGIN CERTIFICATE-----
-MIIBlzCCAT2gAwIBAgIUSuhn5eU2yQWa431DeUZotX3i554wCgYIKoZIzj0EAwIw
-IDEeMBwGA1UEAwwVdGVrc2VycC1iZWtjaS1zYWh0ZS0yMCAXDTI2MTAwMTA0NTAz
-M1oYDzIxMjYwOTA3MDQ1MDMzWjAgMR4wHAYDVQQDDBV0ZWtzZXJwLWJla2NpLXNh
-aHRlLTIwWTATBgcqhkjOPQIBBggqhkjOPQMBBwNCAAR6dd49sLhWkopLDiCLcBx2
-nQUcWI/ABS78q26RBtNhG5T4Whxcwt+1nVOUuvOVUHjLWSNXCZeomQOfhzBHLTBM
-o1MwUTAdBgNVHQ4EFgQUpmXR20hhG3KeUHZ+5t6IJXgO1gIwHwYDVR0jBBgwFoAU
-pmXR20hhG3KeUHZ+5t6IJXgO1gIwDwYDVR0TAQH/BAUwAwEB/zAKBggqhkjOPQQD
-AgNIADBFAiBZaAQAn94UOeYS86lmJlv+EDkl71vcPEUAl8ejfSvC7QIhAI7EPfcN
-eJLdB4D4AGuTFs7CcX2bwKbS+Y4nwQ3iY6F5
------END CERTIFICATE-----\n`;
+/* ---- sahte APK yapıtaşları (test_grup_yayin_tablet.mjs ile aynı biçim) ----
+ * OTA sertifikaları test anında üretilen ATILACAK zincirlerdir (ota-zinciri.cjs denemeZinciriUret, openssl; §3 GECICI
+ * altında): SERT_KANAL = ortak ağacın OTA kökü · SERT_YABANCI = başka bir OTA kökü · SERT_YAPRAK = kökün yaprağı (CA değil). */
+let SERT_KANAL = null;
+let SERT_YABANCI = null;
+let SERT_YAPRAK = null;
 /** latest.yml'e künye: imzalayan anahtar, künyenin kanalı ve `capa` (pakete gömülü çapanın kid'leri) seçilebilir. */
 /** Asgari ZIP (APK biçimi) — merkezî dizinli; biri deflate biri stored. */
 function zipYaz(yol, girdiler) {
@@ -155,6 +140,7 @@ function kimlikFarki(kayit, k) {
   const ad = /^keystore\/ota-certs-([a-z0-9-]+)\/certificate\.pem$/.exec(t.otaSertifika)?.[1];
   e('anahtarKimligi', k.anahtarKimligi, ad);
   e('otaAnahtar', k.otaAnahtar, `keystore/ota-keys-${ad}/private-key.pem`);
+  e('otaYaprak', k.otaYaprak, `keystore/ota-keys-${ad}/certificate.pem`);
   e('guncellemeUrl (kayıt şablonu)', k.guncellemeUrl, `${kayit.indirmeKoku}ota/${t.runtimeVersion}/manifest`);
   e('guncellemeUrl (dagitim.mjs türetimi)', k.guncellemeUrl, turet(kayit).otaTakmaAd);
   // Grup-nötr: adres hiçbir grup kodunu yol öneki olarak taşımaz.
@@ -194,6 +180,7 @@ if (SONDA) {
   ol('N1 güncelleme adresi gruba gömülü → kırmızı', kimlikFarki(kayit, { ...kimlik, guncellemeUrl: `${kayit.indirmeKoku}test/mobil/ota/55.0/manifest` }).length > 0);
   ol('N2 runtimeVersion kayıttan sapmış → kırmızı', kimlikFarki(kayit, { ...kimlik, runtimeVersion: '54.2' }).length > 0);
   ol('N3 kid sertifika dizininden türemiyor → kırmızı', kimlikFarki(kayit, { ...kimlik, anahtarKimligi: 'main' }).length > 0);
+  ol('N3b OTA yaprak yolu anahtar dizininden türemiyor → kırmızı', kimlikFarki(kayit, { ...kimlik, otaYaprak: 'keystore/ota-certs-ortak/certificate.pem' }).length > 0);
   ol('N4 paket adı eski kanalın → kırmızı', kimlikFarki(kayit, { ...kimlik, androidPaket: 'com.teks.erp.mobil' }).length > 0);
   const gruplu = kopya(kayit); gruplu.gruplar.push({ kod: 'ota', ad: 'x', terfiKaynagi: 'genel' });
   let n5 = false; try { n5 = kimlikFarki(gruplu, kimlik).length > 0; } catch { n5 = true; }
@@ -206,6 +193,7 @@ if (SONDA) {
     ['kid eski', (c) => { c.updates.codeSigningMetadata.keyid = 'main'; }],
     ['sertifika eski', (c) => { c.updates.codeSigningCertificate = './keystore/ota-certs/certificate.pem'; }],
     ['görünür etiket sızmış', (c) => { c.extra = { ...(c.extra ?? {}), gorunurEtiket: 'TEST' }; }],
+    ['zincir eklentisi (withOtaZinciri) yok', (c) => { c.plugins = (c.plugins ?? []).filter((x) => (Array.isArray(x) ? x[0] : x) !== ORTAK.ZINCIR_EKLENTISI); }],
   ]) {
     const c = kopya(cfg); mut(c);
     ol(`N6 yapılandırma: ${ad} → kırmızı`, ORTAK.ortakYapilandirmaFarki(c).length > 0);
@@ -235,10 +223,13 @@ if (SONDA) {
 console.log('§1 — ortak-kimlik.cjs ↔ deploy/dagitim.json');
 {
   const f = kimlikFarki(kayit, kimlik);
-  ol('1a kimlik kayıttan türer (paket · ad · rv · sertifika · kid · anahtar yolu · adres)', f.length === 0, f.join('\n'));
+  ol('1a kimlik kayıttan türer (paket · ad · rv · OTA kökü · kid · yaprak anahtarı + sertifikası · adres)', f.length === 0, f.join('\n'));
   ol('1b güncelleme adresi grup-nötr Worker takma adı', kimlik.guncellemeUrl === `${kayit.indirmeKoku}ota/${kayit.urun.tablet.runtimeVersion}/manifest`, kimlik.guncellemeUrl);
   const yol = ORTAK.anahtarToreniKomutu(kimlik).join('\n');
-  ol('1c anahtar töreni komutu kimlikten (sertifika + anahtar dizini, chmod 600)', /codesigning:generate/.test(yol) && yol.includes('ota-keys-ortak') && yol.includes('ota-certs-ortak') && /chmod 600/.test(yol), yol);
+  ol('1c zincir töreni komutu kimlikten (openssl kök CA + parolalı yaprak · kök/yaprak dizini · chmod 600 · denetle)',
+    /openssl genpkey[^\n]*-aes-256-cbc/.test(yol) && /-extensions ota_kok[^\n]*ota-certs-ortak\/certificate\.pem/.test(yol) &&
+      /-extensions ota_yaprak[^\n]*ota-keys-ortak\/certificate\.pem/.test(yol) && /OTA_KOK_ANAHTARI/.test(yol) && /chmod 600[^\n]*ota-keys-ortak/.test(yol) &&
+      /ota-zinciri\.mjs denetle/.test(yol) && !/codesigning:generate|pass:/.test(yol), yol);
 }
 console.log('\n§2 — app.config.js argümansız = ortak kimlik');
 {
@@ -255,6 +246,15 @@ console.log('\n§2 — app.config.js argümansız = ortak kimlik');
 console.log('\n§3 — build-apk.mjs ortak yol (geçici ağaç, ağsız)');
 const GECICI = fs.mkdtempSync(path.join(os.tmpdir(), 'tablet-ortak-'));
 process.on('exit', () => fs.rmSync(GECICI, { recursive: true, force: true }));
+try {
+  const zk = Z.denemeZinciriUret(path.join(GECICI, 'zincir-kanal'));
+  SERT_KANAL = zk.kokPem;
+  SERT_YAPRAK = zk.yaprakPem;
+  SERT_YABANCI = Z.denemeZinciriUret(path.join(GECICI, 'zincir-yabanci')).kokPem;
+} catch (e) {
+  console.log(`ÖLÇÜLEMEDİ: deneme OTA zinciri üretilemedi (openssl gerekli): ${e.message}`);
+  process.exit(2);
+}
 let sayac = 0;
 const git = (cwd, ...a) => spawnSync(GERCEK_GIT, ['-c', 'user.email=bekci@test', '-c', 'user.name=bekci', ...a], { cwd, env: TEMIZ_ENV, encoding: 'utf8' });
 
@@ -294,11 +294,12 @@ function agacKur({ sert = SERT_KANAL, kayitDegistir = null, android = null } = {
 }
 
 const ORTAK_CFG = { name: kimlik.gorunenAd, android: { package: kimlik.androidPaket }, updates: { url: kimlik.guncellemeUrl } };
-function apk(agac, { paket = kimlik.androidPaket, url = kimlik.guncellemeUrl, bundle = 'hermes\u0000/api/auth/login\u0000son', sertPem = SERT_KANAL, appConfig = ORTAK_CFG, izinler = [] } = {}) {
+function apk(agac, { paket = kimlik.androidPaket, url = kimlik.guncellemeUrl, bundle = 'hermes\u0000/api/auth/login\u0000son', sertPem = SERT_KANAL, appConfig = ORTAK_CFG, izinler = [], zincir = 'true' } = {}) {
   sayac += 1;
   const y = path.join(agac, `sahte-${sayac}.apk`);
   const meta = { 'expo.modules.updates.ENABLED': 'true', 'expo.modules.updates.EXPO_UPDATE_URL': url };
   if (sertPem) meta['expo.modules.updates.CODE_SIGNING_CERTIFICATE'] = sertPem;
+  if (zincir != null) meta[Z.ZINCIR_META] = zincir;
   const g = [
     { ad: 'AndroidManifest.xml', veri: axmlYaz({ paket, meta, surumAdi: '1.0.0', surumKodu: 1, izinler }), yontem: 8 },
     { ad: 'assets/index.android.bundle', veri: Buffer.from(bundle, 'latin1'), yontem: 0 },
@@ -351,7 +352,19 @@ const dogrula = (agac, y, ortamEk) => buildApk(agac, [`--verify-only=${y}`], ort
 {
   const a = agacKur({ sert: null }); const r = dogrula(a, apk(a));
   ol('3h sertifikasız ağaç → ORTAK OTA SERTİFİKASI YOK + anahtar töreni komutu',
-    r.kod !== 0 && /ORTAK OTA SERTİFİKASI YOK/.test(r.cikti) && /codesigning:generate/.test(r.cikti), r.cikti.slice(-500));
+    r.kod !== 0 && /ORTAK OTA SERTİFİKASI YOK/.test(r.cikti) && /openssl genpkey/.test(r.cikti) && /ota-zinciri\.mjs denetle/.test(r.cikti), r.cikti.slice(-500));
+}
+{
+  const a = agacKur(); const r = dogrula(a, apk(a, { zincir: null }));
+  ol('3p K-2: zincir meta-data\'sı yok APK → DUR (tablet certificate_chain\'i okumaz)', r.kod !== 0 && /KİMLİĞİNİ TAŞIMIYOR/.test(r.cikti) &&
+    /CODE_SIGNING_INCLUDE_MANIFEST_RESPONSE_CERTIFICATE_CHAIN "yok"/.test(r.cikti), r.cikti.slice(-600));
+  const r2 = dogrula(a, apk(a, { zincir: 'false' }));
+  ol('3p2 K-2: zincir meta-data\'sı false APK → DUR', r2.kod !== 0 && /CERTIFICATE_CHAIN "false"/.test(r2.cikti), r2.cikti.slice(-600));
+}
+{
+  const a = agacKur({ sert: SERT_YAPRAK }); const r = dogrula(a, apk(a, { sertPem: SERT_YAPRAK }));
+  ol('3q K-2: ağacın OTA sertifikası kök değil (yaprak: CA değil, EKU\'lu) → OTA KÖKÜ DEĞİL, APK\'ya bakılmadan DUR',
+    r.kod !== 0 && /OTA SERTİFİKASI OTA KÖKÜ DEĞİL/.test(r.cikti) && /CA DEĞİL/.test(r.cikti) && /EKU taşıyor/.test(r.cikti), r.cikti.slice(-600));
 }
 {
   const a = agacKur({ kayitDegistir: (k) => { k.urun.tablet.musteriAdi = 'x'; } }); const r = dogrula(a, apk(a));
@@ -391,13 +404,29 @@ for (const arg of ['--musteri=adnansahin', '--terfi-atla=x', '--yoklama-yok']) {
   const r4 = buildApk(c, []);
   ol('3n4 K-14: test APK da yükleme anahtarının kopyasıyla DUR', r4.kod !== 0 && /keystore\/deneme anahtarı keystore\/play-yukleme anahtarının KOPYASI/.test(r4.cikti), r4.cikti.slice(-500));
 }
-/** Sahte AAB: base/manifest protobuf yerine kimlik dizelerini taşıyan bayt dizisi (doğrulayıcı bayt araması yapar). */
-function aab(agac, { izinler = [], paket = kimlik.androidPaket } = {}) {
+/* Asgari aapt2 protobuf AndroidManifest (Resources.proto): XmlNode{1 element} · XmlElement{3 name, 4 attribute, 5 child} ·
+ * XmlAttribute{1 namespace_uri, 2 name, 3 value, 6 compiled_item} · Item{2 str{1 value}, 7 prim{8 boolean_value}}. */
+const pbVarint = (n) => { const o = []; do { let x = n % 128; n = Math.floor(n / 128); if (n) x |= 0x80; o.push(x); } while (n); return Buffer.from(o); };
+const pbAlan = (no, veri) => { const v = Buffer.isBuffer(veri) ? veri : Buffer.from(String(veri), 'utf8'); return Buffer.concat([pbVarint(no * 8 + 2), pbVarint(v.length), v]); };
+const pbBool = (b) => pbAlan(7, Buffer.concat([pbVarint(8 * 8), pbVarint(b ? 1 : 0)]));
+const ANDROID_NS = 'http://schemas.android.com/apk/res/android';
+const pbOz = (ad, deger, { ns = ANDROID_NS, bool = null } = {}) => pbAlan(4, Buffer.concat([...(ns ? [pbAlan(1, ns)] : []), pbAlan(2, ad), pbAlan(3, deger), ...(bool == null ? [] : [pbAlan(6, pbBool(bool))])]));
+const pbOge = (ad, ozler = [], cocuklar = []) => pbAlan(1, Buffer.concat([pbAlan(3, ad), ...ozler, ...cocuklar.map((c) => pbAlan(5, c))]));
+function protoManifest({ paket, izinler = [], meta = {} }) {
+  const izin = ['android.permission.INTERNET', ...izinler].map((x) => pbOge('uses-permission', [pbOz('name', x)]));
+  const metaOge = Object.entries(meta).map(([n, v]) => pbOge('meta-data', [pbOz('name', n),
+    pbOz('value', v, { bool: v === 'true' || v === 'false' ? v === 'true' : null })]));
+  return pbOge('manifest', [pbOz('package', paket, { ns: null })], [...izin, pbOge('application', [], metaOge)]);
+}
+/** Sahte AAB: base/manifest gerçek protobuf AndroidManifest (doğrulayıcı meta-data'yı öğe düzeyinde çözer). */
+function aab(agac, { izinler = [], paket = kimlik.androidPaket, zincir = 'true', sertPem = SERT_KANAL } = {}) {
   sayac += 1;
   const y = path.join(agac, `sahte-${sayac}.aab`);
-  const man = Buffer.from(`\u0012${paket}\u0012android.permission.INTERNET\u0012${izinler.join('\u0012')}\u0012${kimlik.guncellemeUrl}\u0012${SERT_KANAL}\u0012`, 'utf8');
+  const meta = { 'expo.modules.updates.ENABLED': 'true', 'expo.modules.updates.EXPO_UPDATE_URL': kimlik.guncellemeUrl };
+  if (sertPem) meta['expo.modules.updates.CODE_SIGNING_CERTIFICATE'] = sertPem;
+  if (zincir != null) meta[Z.ZINCIR_META] = zincir;
   zipYaz(y, [
-    { ad: 'base/manifest/AndroidManifest.xml', veri: man, yontem: 8 },
+    { ad: 'base/manifest/AndroidManifest.xml', veri: protoManifest({ paket, izinler, meta }), yontem: 8 },
     { ad: 'base/assets/index.android.bundle', veri: Buffer.from('hermes\u0000/api/auth/login\u0000son', 'latin1'), yontem: 0 },
     { ad: 'base/assets/app.config', veri: Buffer.from(JSON.stringify(ORTAK_CFG)), yontem: 8 },
   ]);
@@ -414,9 +443,15 @@ function aab(agac, { izinler = [], paket = kimlik.androidPaket } = {}) {
   ol('3o3 eski kanal paket adlı AAB → DUR', r3.kod !== 0 && /AAB ORTAK PAKETİN KİMLİĞİNİ TAŞIMIYOR/.test(r3.cikti), r3.cikti.slice(-500));
   const r4 = buildApk(a, [`--verify-only=${aab(a)}`]);
   ol('3o4 AAB --aab olmadan doğrulanmaz (tür uyuşmazlığı) → DUR', r4.kod !== 0 && /Paket türü komutla uyuşmuyor/.test(r4.cikti), r4.cikti.slice(-400));
+  const r5 = buildApk(a, ['--aab', `--verify-only=${aab(a, { zincir: null })}`]);
+  ol('3o5 K-2: zincir meta-data\'sı yok AAB → DUR', r5.kod !== 0 && /AAB ORTAK PAKETİN KİMLİĞİNİ TAŞIMIYOR/.test(r5.cikti) && /CERTIFICATE_CHAIN "yok"/.test(r5.cikti), r5.cikti.slice(-600));
+  const r6 = buildApk(a, ['--aab', `--verify-only=${aab(a, { zincir: 'false' })}`]);
+  ol('3o6 K-2: zincir meta-data\'sı derlenmiş false AAB → DUR (bayt araması değil öğe çözümü)', r6.kod !== 0 && /CERTIFICATE_CHAIN "false"/.test(r6.cikti), r6.cikti.slice(-600));
+  const r7 = buildApk(a, ['--aab', `--verify-only=${aab(a, { sertPem: SERT_YABANCI })}`]);
+  ol('3o7 K-2: yabancı OTA kökü gömülü AAB → DUR', r7.kod !== 0 && /gömülü OTA sertifikası ortak paketinki değil/.test(r7.cikti), r7.cikti.slice(-600));
 }
 const AJ = JSON.parse(fs.readFileSync(path.join(KOK, 'mobil/app.json'), 'utf8')).expo;
-const androidYaz = ({ url = kimlik.guncellemeUrl, paket = kimlik.androidPaket, ad = kimlik.gorunenAd } = {}) => (dir) => {
+const androidYaz = ({ url = kimlik.guncellemeUrl, paket = kimlik.androidPaket, ad = kimlik.gorunenAd, zincir = 'true', sert = SERT_KANAL } = {}) => (dir) => {
   const yaz = (rel, s) => { fs.mkdirSync(path.dirname(path.join(dir, rel)), { recursive: true }); fs.writeFileSync(path.join(dir, rel), s); };
   yaz('app/build.gradle', `android {\n  defaultConfig {\n    applicationId '${paket}'\n    versionCode ${AJ.android.versionCode}\n    versionName "${AJ.version}"\n  }\n}\n`);
   yaz('app/src/main/res/values/strings.xml', `<resources>\n  <string name="app_name">${ad}</string>\n  <string name="expo_runtime_version">${kimlik.runtimeVersion}</string>\n</resources>\n`);
@@ -424,7 +459,8 @@ const androidYaz = ({ url = kimlik.guncellemeUrl, paket = kimlik.androidPaket, a
     `<meta-data android:name="expo.modules.updates.ENABLED" android:value="true"/>\n` +
     `<meta-data android:name="expo.modules.updates.EXPO_UPDATE_URL" android:value="${url}"/>\n` +
     `<meta-data android:name="expo.modules.updates.EXPO_RUNTIME_VERSION" android:value="@string/expo_runtime_version"/>\n` +
-    `<meta-data android:name="expo.modules.updates.CODE_SIGNING_CERTIFICATE" android:value="${SERT_KANAL.replace(/\n/g, '&#10;')}"/>\n` +
+    `<meta-data android:name="expo.modules.updates.CODE_SIGNING_CERTIFICATE" android:value="${sert.replace(/\n/g, '&#10;')}"/>\n` +
+    (zincir == null ? '' : `<meta-data android:name="${Z.ZINCIR_META}" android:value="${zincir}"/>\n`) +
     `<meta-data android:name="expo.modules.updates.CODE_SIGNING_METADATA" android:value="{&quot;keyid&quot;:&quot;ortak&quot;,&quot;alg&quot;:&quot;rsa-v1_5-sha256&quot;}"/>\n` +
     `</application>\n</manifest>\n`);
 };
@@ -433,6 +469,9 @@ const androidYaz = ({ url = kimlik.guncellemeUrl, paket = kimlik.androidPaket, a
   ol('3j --check: android/ ortak paketle tutarlı', /✔ Uzaktan güncelleme yapılandırması ortak paketle tutarlı/.test(r.cikti), r.cikti.slice(-700));
   const b = agacKur({ android: androidYaz({ url: 'https://guncelleme.etkiliyazilim.com/adnansahin/mobil/ota/54.2/manifest' }) }); const r2 = buildApk(b, ['--check']);
   ol('3j2 --check: eski URL\'li manifest → ORTAK PAKETE HAZIR DEĞİL', r2.kod !== 0 && /ANDROIDMANIFEST ORTAK PAKETE HAZIR DEĞİL/.test(r2.cikti), r2.cikti.slice(-600));
+  const c = agacKur({ android: androidYaz({ zincir: null }) }); const r3 = buildApk(c, ['--check']);
+  ol('3j3 K-2: --check: prebuild manifestinde zincir meta-data\'sı yok → ORTAK PAKETE HAZIR DEĞİL', r3.kod !== 0 && /ANDROIDMANIFEST ORTAK PAKETE HAZIR DEĞİL/.test(r3.cikti) &&
+    /CERTIFICATE_CHAIN "yok"/.test(r3.cikti), r3.cikti.slice(-600));
 }
 
 console.log('\n§4 — kablolama: commit kancası + CI bu bekçiyi koşturur');

@@ -10,7 +10,7 @@
  * olamaz. Panelin ikizi: `deploy/electron-grup-yayinla.sh` (terfi hükmü `scripts/lib/grup-yayin.mjs`, ortak kitaplık).
  *
  * Kullanım:
- *   node deploy/mobil-grup-yayinla.mjs --grup=test  --paket=mobil/ota-cikti/ortak/<rv>/<damga> [--ota-anahtar=<dosya>]
+ *   node deploy/mobil-grup-yayinla.mjs --grup=test  --paket=mobil/ota-cikti/ortak/<rv>/<damga> [--ota-anahtar=<yaprak anahtarı>]
  *   node deploy/mobil-grup-yayinla.mjs --grup=oncu  --paket=…     # test'te yayında + onay etiketi (terfi)
  *   node deploy/mobil-grup-yayinla.mjs --grup=genel --paket=…     # K-6: AYRI ikinci onay etiketi
  *   … --kuru                       # AĞ YOK — yerel kapılar + plan (imza anahtarı yoksa SAHTE anahtarla denenir, yazılmaz)
@@ -18,9 +18,12 @@
  *   … --terfi-atla="<cümle>"       # terfi kaçışı · --profil-matrisi-atla="<cümle>" profil matrisi kaçışı
  *
  * ⚠️ MANİFEST HEDEF GRUPLA ÜRETİLİR: OTA manifesti grup başına yeniden kurulur (varlık adresleri
- * `<kök><grup>/mobil/ota/<rv>/<damga>/…`) ve ortak OTA anahtarıyla imzalanır. Paket baytı (bundle · varlıklar) gruplar
- * arasında AYNI kalır; terfide kaynak grubun artefakt özeti ile yüklenecek özet eşit olmalıdır. Ortak OTA anahtarı yoksa
- * imza adımı fail-closed durur (kuru: sahte anahtarla denenir).
+ * `<kök><grup>/mobil/ota/<rv>/<damga>/…`) ve OTA YAPRAĞIYLA imzalanır; yaprak `certificate_chain` parçasında gider,
+ * tablet onu APK'ya gömülü OTA KÖKÜNE zincirler (K-2, docs/design/ISTEMCI-ANAHTARI-KOK-ALTINDA.md §3.1). Paket baytı
+ * (bundle · varlıklar) gruplar arasında AYNI kalır; terfide kaynak grubun artefakt özeti ile yüklenecek özet eşit olmalıdır.
+ * Yaprak anahtarı parolalıdır (TTY'de gizli istem, değilse stdin satırı; argümandan/ortamdan ASLA). Malzeme yoksa, yaprak
+ * köke bağlı değilse ya da bitişine 30 günden az kaldıysa imza adımı fail-closed durur (kuru: atılacak deneme zinciri).
+ * `--ota-anahtar=<dosya>` yedek yaprağı (USB) seçer; yaprak sertifikası o anahtarın yanındaki `certificate.pem`dir.
  * ⚠️ YÜKLEME SIRASI pazarlık dışı: paket/varlıklar ÖNCE, manifest EN SON (yayını açan adım). Cloudflare proxy AÇIK kalır.
  * ⚠️ OTA turunda `versionCode`a dokunulmaz (native sürüm Play'dedir; native değiştiyse runtimeVersion artar → AAB → Play).
  * ⚠️ GERÇEK YAYIN kullanıcı onayıyla yapılır. Hedef YALNIZ dağıtım kaydından türer; ssh/dizin/adres ezmesi RED.
@@ -34,7 +37,7 @@ import path from 'node:path';
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 
-import { GRUP_ALT_DIZINI, OrtakOtaIhlali, grupManifestiUret, ortakImzaAnahtari, ortakPaketDenetimi } from '../mobil/scripts/lib/ortak-ota.mjs';
+import { GRUP_ALT_DIZINI, OrtakOtaIhlali, grupManifestiUret, ortakAnahtarParolali, ortakImzaAnahtari, ortakImzaYollari, ortakPaketDenetimi } from '../mobil/scripts/lib/ortak-ota.mjs';
 import { PANEL_KUNYE_ADI, derlemeBagiDenetimi, derlemeKunyesiOku, dosyaOzeti, temizAgacDenetimi } from '../scripts/lib/derleme-bagi.mjs';
 import { GrupIhlali, TABLET_ARTEFAKT_GORELI, grupCoz, grupHedefi, grupTerfiKapisi, uzakSha256 } from '../scripts/lib/grup-yayin.mjs';
 import { Olculemedi, terfiKaynagi } from '../scripts/lib/dagitim.mjs';
@@ -264,6 +267,44 @@ function grupTerfiKaynagiVar() {
 }
 
 /* ------------------------------------------------------------------ *
+ * Yaprak anahtarı parolası — TTY'de gizli istem, değilse stdin'in ilk satırı (argüman/ortam YOK)
+ * ------------------------------------------------------------------ */
+
+function parolaSor(soru) {
+  const stdin = process.stdin;
+  if (!stdin.isTTY) {
+    return new Promise((resolve) => {
+      const parcalar = [];
+      stdin.on('data', (p) => parcalar.push(p));
+      stdin.on('end', () => {
+        const hepsi = Buffer.concat(parcalar);
+        const son = hepsi.indexOf(0x0a);
+        const satir = Buffer.from(hepsi.subarray(0, son < 0 ? hepsi.length : son)).toString('utf8').replace(/\r$/, '');
+        hepsi.fill(0);
+        resolve(Buffer.from(satir, 'utf8'));
+      });
+    });
+  }
+  return new Promise((resolve, reject) => {
+    stdin.setRawMode(true);
+    stdin.resume();
+    process.stderr.write(soru);
+    const baytlar = [];
+    const bitir = () => { stdin.off('data', onData); stdin.setRawMode(false); stdin.pause(); process.stderr.write('\n'); };
+    const onData = (parca) => {
+      for (const b of parca) {
+        if (b === 0x03) { bitir(); baytlar.fill(0); reject(new Error('İptal edildi (Ctrl+C)')); return; }
+        if (b === 0x0d || b === 0x0a) { bitir(); const c = Buffer.from(baytlar); baytlar.fill(0); resolve(c); return; }
+        if (b === 0x7f || b === 0x08) baytlar.pop();
+        else baytlar.push(b);
+      }
+      parca.fill(0);
+    };
+    stdin.on('data', onData);
+  });
+}
+
+/* ------------------------------------------------------------------ *
  * OTA paketi
  * ------------------------------------------------------------------ */
 
@@ -288,16 +329,21 @@ async function otaYayinla(paketDizin) {
   terfiKapisi(surum, { yerel: bundleYolu, goreli });
   profilMatrisiKapisi();
 
-  // İMZA — ortak OTA anahtarı; yoksa fail-closed (kuru: sahte anahtar, hiçbir şey yazılmaz).
+  // İMZA — OTA yaprağı (parolalı) + zincir; malzeme yoksa fail-closed (kuru: atılacak deneme zinciri, hiçbir şey yazılmaz).
   let uretim;
+  let parola;
   try {
-    const anahtar = ortakImzaAnahtari(KIMLIK, MOBIL, { kuru: KURU, anahtarYolu: OTA_ANAHTAR || undefined });
+    const yollar = ortakImzaYollari(KIMLIK, MOBIL, { anahtarYolu: OTA_ANAHTAR || undefined });
+    if (ortakAnahtarParolali(yollar)) parola = await parolaSor(`OTA yaprak anahtarı parolası (${yollar.anahtarYol}): `);
+    const anahtar = ortakImzaAnahtari(KIMLIK, MOBIL, { kuru: KURU, anahtarYolu: OTA_ANAHTAR || undefined, parola });
     uretim = grupManifestiUret({ paketDizin, kunye, expoConfig, feed: FEED, anahtar });
   } catch (e) {
     if (e instanceof OrtakOtaIhlali) dur(e.message, ...e.satirlar);
     throw e;
+  } finally {
+    parola?.fill(0);
   }
-  bilgi(`manifest      : '${GRUP}' grubunun varlık adresleriyle üretildi · keyid "${uretim.imzalayan.keyid}" · imza sertifikayla doğrulandı${uretim.imzalayan.sahte ? ' (KURU: SAHTE ANAHTAR — yazılmaz)' : ''}`);
+  bilgi(`manifest      : '${GRUP}' grubunun varlık adresleriyle üretildi · OTA yaprağıyla imzalı (bitiş ${uretim.imzalayan.yaprakBitis}) · zincir gömülü köke karşı doğrulandı${uretim.imzalayan.sahte ? ' (KURU: DENEME ZİNCİRİ — yazılmaz)' : ''}`);
 
   if (KURU) {
     bilgi(`[kuru] sıra       : 1) ${paketDizin} içeriği (manifest hariç) → ${UZAK_KOK}/ota/${kunye.runtimeVersion}/${kunye.damga}/  2) manifest + manifest-${kunye.damga} (EN SON)`);

@@ -2,8 +2,8 @@
 // =============================================================================
 // TABLET GRUP YAYINI BEKÇİSİ (O10b) — mobil/scripts/lib/ortak-ota.mjs + deploy/mobil-grup-yayinla.mjs · zero-dep, ağsız
 // =============================================================================
-//   §1 ortak OTA paketi denetimi (negatif sondalı) · §2 grup manifesti (bayt-eşit paket, grup adresleri, imza)
-//   §3 imza anahtarı fail-closed (kuru: sahte) · §4 native parmak izi kararı · §5 tablet artefakt yolu + terfi özeti
+//   §1 ortak OTA paketi denetimi (negatif sondalı) · §2 grup manifesti (bayt-eşit paket, grup adresleri, zincirli imza)
+//   §3 imza malzemesi fail-closed (kuru: atılacak deneme zinciri; parola, 30 gün, kök/yaprak profili) · §4 native parmak izi kararı · §5 tablet artefakt yolu + terfi özeti
 //   §6 CLI negatif yollar (ağ YOK; K-14 `--apk` reddi dahil) · §7 betik kaynağı: kapılar, sıra ve APK yolu YOK (negatif sondalı)
 // ÇIKIŞ: 0 yeşil · 1 KIRMIZI.   node scripts/test_grup_yayin_tablet.mjs
 // =============================================================================
@@ -17,10 +17,11 @@ import { createRequire } from 'node:module';
 import { KOK } from './lib/dagitim.mjs';
 import { TABLET_ARTEFAKT_GORELI, grupTerfiKapisi } from './lib/grup-yayin.mjs';
 import { ORTAK_PARMAK_IZI_ALG, OrtakOtaIhlali, grupManifestiUret, ortakImzaAnahtari, ortakNativeParmakIzi, ortakPaketDenetimi, parmakIziHukmu, yerelNativeKaynakIzi } from '../mobil/scripts/lib/ortak-ota.mjs';
-import { multipartDogrula } from '../mobil/scripts/lib/manifest.mjs';
+import { imzaBasligi, multipartDogrula, multipartKur } from '../mobil/scripts/lib/manifest.mjs';
 
 const require = createRequire(import.meta.url);
 const { ortakKimlik } = require('../mobil/scripts/lib/ortak-kimlik.cjs');
+const Z = require('../mobil/scripts/lib/ota-zinciri.cjs');
 let gecti = 0;
 const kaldi = [];
 const ol = (ad, k, d) => { if (k) { gecti += 1; console.log(`✅ ${ad}`); } else { kaldi.push(ad); console.log(`❌ ${ad}${d ? `\n   ${String(d).split('\n').slice(0, 8).join('\n   ')}` : ''}`); } };
@@ -58,9 +59,24 @@ let okunamadi = false;
 try { ortakPaketDenetimi(path.join(GECICI, 'yok'), K); } catch (e) { okunamadi = e instanceof OrtakOtaIhlali; }
 ol('§1 sonda: paket okunamaz → ÖLÇÜLEMEDİ (fırlatır)', okunamadi);
 
-// §2
-const { privateKey, publicKey } = crypto.generateKeyPairSync('rsa', { modulusLength: 2048 });
-const anahtar = { anahtarPem: privateKey.export({ type: 'pkcs8', format: 'pem' }), sertifikaPem: publicKey.export({ type: 'spki', format: 'pem' }), keyid: K.anahtarKimligi, sahte: true };
+// §2 — ATILACAK deneme zincirleri (openssl, GECICI altında; depoya girmez). Profil ekleri bozuk yaprak basar.
+const BOZUK_PROFIL = `
+[ yaprak_ca ]
+basicConstraints = critical, CA:TRUE
+keyUsage = critical, digitalSignature, keyCertSign
+extendedKeyUsage = critical, codeSigning
+[ yaprak_ekusuz ]
+basicConstraints = critical, CA:FALSE
+keyUsage = critical, digitalSignature
+`;
+const zincir = (ad, secim = {}) => Z.denemeZinciriUret(path.join(GECICI, `zincir-${ad}`), { profilEk: BOZUK_PROFIL, ...secim });
+const Zi = zincir('iyi');
+const Zy = zincir('yabanci');
+const Zca = zincir('ca', { yaprakBolum: 'yaprak_ca' });
+const Zeku = zincir('ekusuz', { yaprakBolum: 'yaprak_ekusuz' });
+const acik = (d) => crypto.createPrivateKey({ key: d.yaprakAnahtarPem, passphrase: d.parola });
+const malzeme = (d) => ({ anahtar: acik(d), kokPem: d.kokPem, yaprakPem: d.yaprakPem, keyid: K.anahtarKimligi, sahte: true, yaprakBitis: new crypto.X509Certificate(d.yaprakPem).validTo });
+const anahtar = malzeme(Zi);
 const { kunye, expoConfig } = ortakPaketDenetimi(iyi, K);
 const feedT = 'https://indir.etkiliyazilim.com/test/mobil/';
 const feedO = 'https://indir.etkiliyazilim.com/oncu/mobil/';
@@ -69,27 +85,78 @@ const mo = grupManifestiUret({ paketDizin: iyi, kunye, expoConfig, feed: feedO, 
 ol('§2 manifest hedef grubun adresleriyle kurulur (test ↔ oncu)', mt.manifest.launchAsset.url.startsWith(`${feedT}ota/`) && mo.manifest.launchAsset.url.startsWith(`${feedO}ota/`));
 ol('§2 paket baytı AYNI: bundle/varlık özetleri ve manifest id grup değişince değişmez', mt.manifest.launchAsset.hash === mo.manifest.launchAsset.hash && mt.manifest.id === mo.manifest.id);
 ol('§2 gövde grup başına farklıdır (adres + imza)', !mt.govde.equals(mo.govde));
-ol('§2 imza istemcinin yaptığı gibi sertifikayla doğrulanır', multipartDogrula(mt.govde, anahtar.sertifikaPem).imzali === true);
-const baskaSert = crypto.generateKeyPairSync('rsa', { modulusLength: 2048 }).publicKey.export({ type: 'spki', format: 'pem' });
-let kabul = false;
-try { multipartDogrula(mt.govde, baskaSert); kabul = true; } catch { kabul = false; }
-ol('§2 sonda: başka anahtarın sertifikası bu imzayı KABUL ETMEZ', !kabul);
+{
+  const d = multipartDogrula(mt.govde, Zi.kokPem, { zincir: true });
+  ol('§2 imza istemcinin yaptığı gibi GÖMÜLÜ KÖKE zincirle doğrulanır (certificate_chain = yaprak)', d.imzali && d.zincirli, JSON.stringify(d.zincirli));
+}
+// Gövdeyi verilen anahtar/zincirle yeniden imzala — sondalar aynı manifestin farklı imzalarıdır.
+const imzala = (ozel, zincirPem) => multipartKur({ manifest: mt.manifest, imzaBasligiDegeri: imzaBasligi(JSON.stringify(mt.manifest), ozel, K.anahtarKimligi), sertifikaZinciri: zincirPem });
+const red = (ad, govde, kok, re, secim = {}) => {
+  let hata = null;
+  try { multipartDogrula(govde, kok, { zincir: true, ...secim }); } catch (e) { hata = e; }
+  ol(`§2 sonda: ${ad} → multipartDogrula RED`, hata && re.test(hata.message), hata ? hata.message : 'KABUL ETTİ');
+};
+const kokAnahtar = crypto.createPrivateKey({ key: Zi.kokAnahtarPem, passphrase: Zi.parola });
+red('kökle doğrudan imza (zincir parçası yok)', imzala(kokAnahtar, null), Zi.kokPem, /kod imzalama sertifikası değil/);
+red('kökle doğrudan imza + kök zincir parçasında', imzala(kokAnahtar, Zi.kokPem), Zi.kokPem, /ZİNCİRİ GEÇERSİZ|YAPRAĞI GEÇERSİZ/);
+red('süresi geçmiş yaprak (cihaz saati +400 gün)', mt.govde, Zi.kokPem, /SÜRESİ GEÇMİŞ/, { simdi: new Date(Date.now() + 400 * 86_400_000) });
+red('yabancı kök (başka OTA köküyle derlenmiş APK)', mt.govde, Zy.kokPem, /zincirlenmiyor|ZİNCİRLENMİYOR/);
+red('yabancı köke bağlı yaprak (yaprak + imza başka zincirden)', imzala(acik(Zy), Zy.yaprakPem), Zi.kokPem, /zincirlenmiyor|ZİNCİRLENMİYOR/);
+red('CA yaprak (istemci kabul eder; yayıncı KATI)', imzala(acik(Zca), Zca.yaprakPem), Zca.kokPem, /yaprak CA OLAMAZ/);
+red('EKU codeSigning\'siz yaprak', imzala(acik(Zeku), Zeku.yaprakPem), Zeku.kokPem, /kod imzalama sertifikası değil/);
+red('zincir parçasında iki yaprak', imzala(anahtar.anahtar, `${Zi.yaprakPem}\n${Zi.yaprakPem}`), Zi.kokPem, /ZİNCİRİ GEÇERSİZ|tam olarak 1/);
+{
+  const govde = Buffer.from(mt.govde.toString('utf8').replace(/-----BEGIN CERTIFICATE-----[\s\S]*?-----END CERTIFICATE-----/, '-----BEGIN CERTIFICATE-----\nAAAA\n-----END CERTIFICATE-----'), 'utf8');
+  red('zincir parçası bozuk PEM', govde, Zi.kokPem, /GEÇERSİZ/);
+}
 let uyusmadi = false;
-try { grupManifestiUret({ paketDizin: iyi, kunye, expoConfig, feed: feedT, anahtar: { ...anahtar, sertifikaPem: baskaSert } }); } catch (e) { uyusmadi = e instanceof OrtakOtaIhlali && /DOĞRULANMADI/.test(e.message); }
-ol('§2 sonda: imza anahtarı ↔ sertifika uyuşmuyorsa üretim DURUR', uyusmadi);
+try { grupManifestiUret({ paketDizin: iyi, kunye, expoConfig, feed: feedT, anahtar: { ...anahtar, kokPem: Zy.kokPem } }); } catch (e) { uyusmadi = e instanceof OrtakOtaIhlali && /DOĞRULANMADI/.test(e.message); }
+ol('§2 sonda: imza zinciri gömülü köke bağlanmıyorsa üretim DURUR', uyusmadi);
 
-// §3
+// §3 — imza malzemesi fail-closed (kuru: atılacak deneme zinciri)
 const bos = path.join(GECICI, 'mobil-bos');
 let yokHata = null;
 try { ortakImzaAnahtari(K, bos); } catch (e) { yokHata = e; }
-ol('§3 anahtar yok → fail-closed + tören komutu', yokHata instanceof OrtakOtaIhlali && yokHata.satirlar.some((s) => /expo-updates codesigning:generate/.test(s)));
-ol('§3 kuru + anahtar yok → SAHTE anahtar (sahte: true)', ortakImzaAnahtari(K, bos, { kuru: true }).sahte === true);
-const dolu = path.join(GECICI, 'mobil-dolu');
-fs.mkdirSync(path.join(dolu, path.dirname(K.otaAnahtar)), { recursive: true });
-fs.mkdirSync(path.join(dolu, path.dirname(K.otaSertifika)), { recursive: true });
-fs.writeFileSync(path.join(dolu, K.otaAnahtar), anahtar.anahtarPem);
-fs.writeFileSync(path.join(dolu, K.otaSertifika), anahtar.sertifikaPem);
-ol('§3 anahtar+sertifika varsa gerçek (sahte: false, kid ortak kimlikten)', (() => { const a = ortakImzaAnahtari(K, dolu); return a.sahte === false && a.keyid === K.anahtarKimligi; })());
+const toren = yokHata?.satirlar?.join('\n') ?? '';
+ol('§3 malzeme yok → fail-closed + openssl zincir töreni (kök CA + parolalı yaprak + denetle)', yokHata instanceof OrtakOtaIhlali
+  && /openssl genpkey[^\n]*-aes-256-cbc/.test(toren) && /-extensions ota_kok/.test(toren) && /-extensions ota_yaprak/.test(toren)
+  && /OTA_KOK_ANAHTARI/.test(toren) && /ota-zinciri\.mjs denetle/.test(toren) && !/codesigning:generate|-pass pass:|-passin pass:/.test(toren), toren);
+{
+  const k = ortakImzaAnahtari(K, bos, { kuru: true });
+  ol('§3 kuru + malzeme yok → deneme zinciri (sahte: true, kök + yaprak hatasız)', k.sahte === true && Z.kokHatalari(k.kokPem).length === 0 && Z.yaprakHatalari(k.yaprakPem, k.kokPem).length === 0);
+}
+const dolu = (ad, d, { anahtarPem = d.yaprakAnahtarPem, kokPem = d.kokPem } = {}) => {
+  const kok = path.join(GECICI, `mobil-${ad}`);
+  for (const [goreli, icerik] of [[K.otaAnahtar, anahtarPem], [K.otaYaprak, d.yaprakPem], [K.otaSertifika, kokPem]]) {
+    fs.mkdirSync(path.join(kok, path.dirname(goreli)), { recursive: true });
+    fs.writeFileSync(path.join(kok, goreli), icerik);
+  }
+  return kok;
+};
+const iyiKok = dolu('dolu', Zi);
+ol('§3 parolalı yaprak + kök varsa gerçek (sahte: false, kid ortak kimlikten, imzalar)', (() => {
+  const a = ortakImzaAnahtari(K, iyiKok, { parola: Zi.parola });
+  return a.sahte === false && a.keyid === K.anahtarKimligi && multipartDogrula(grupManifestiUret({ paketDizin: iyi, kunye, expoConfig, feed: feedT, anahtar: a }).govde, Zi.kokPem, { zincir: true }).zincirli;
+})());
+const malzemeRed = (ad, kok, secim, re) => {
+  let e = null;
+  try { ortakImzaAnahtari(K, kok, secim); } catch (x) { e = x; }
+  const metin = e ? `${e.message}\n${(e.satirlar ?? []).join('\n')}` : 'KABUL ETTİ';
+  ol(`§3 sonda: ${ad} → imza malzemesi RED`, e instanceof OrtakOtaIhlali && re.test(metin), metin);
+};
+malzemeRed('parola verilmedi', iyiKok, {}, /PAROLASI VERİLMEDİ/);
+malzemeRed('yanlış parola', iyiKok, { parola: 'yanlis' }, /AÇILAMADI/);
+malzemeRed('korumasız (parolasız) yaprak anahtarı', dolu('parolasiz', Zi, { anahtarPem: acik(Zi).export({ type: 'pkcs8', format: 'pem' }) }), { parola: Zi.parola }, /PAROLASIZ/);
+malzemeRed('bitişine 30 günden az kalan yaprak (+370 gün)', iyiKok, { parola: Zi.parola, simdi: new Date(Date.now() + 370 * 86_400_000) }, /gün kaldı \(< 30\)/);
+malzemeRed('süresi geçmiş yaprak (+400 gün)', iyiKok, { parola: Zi.parola, simdi: new Date(Date.now() + 400 * 86_400_000) }, /SÜRESİ GEÇMİŞ/);
+malzemeRed('yabancı OTA kökü (yaprak bu köke bağlı değil)', dolu('yabanci', Zi, { kokPem: Zy.kokPem }), { parola: Zi.parola }, /ZİNCİRLENMİYOR/);
+malzemeRed('kök yerine yaprak gömülü (kök CA değil)', dolu('kok-yaprak', Zi, { kokPem: Zi.yaprakPem }), { parola: Zi.parola }, /CA DEĞİL/);
+malzemeRed('CA yaprak', dolu('ca', Zca), { parola: Zca.parola }, /yaprak CA OLAMAZ/);
+malzemeRed('EKU\'suz yaprak', dolu('ekusuz', Zeku), { parola: Zeku.parola }, /EKU codeSigning yok/);
+{
+  // Yaprak ↔ anahtar uyuşmazlığı: Zi yaprağı + kökü, Zy'nin yaprak anahtarı (parola aynı: deneme).
+  malzemeRed('yaprak anahtarı yaprağın değil', dolu('uyusmaz', Zi, { anahtarPem: Zy.yaprakAnahtarPem }), { parola: Zi.parola }, /yaprak sertifikasının değil/);
+}
 
 // §4
 const cfg = { android: { package: 'x', versionCode: 5, permissions: ['A'] }, plugins: ['p'], runtimeVersion: '55.0' };
@@ -179,6 +246,10 @@ function betikIhlalleri(metin) {
   if (/etikiliyazilim\.com|\/opt\/stack/.test(kod)) f.push('yayın/VDS kökü LİTERAL');
   if (/\bfetch\(|\bcurl\b/.test(kod.replace(/belirtecliFetch\(/g, ''))) f.push('belirteçsiz okuma');
   if (!/musteri'?\)? ?(\|\||&&)|--musteri/.test(kod)) f.push('--musteri reddi yok');
+  // K-2: yaprak anahtarı parolası yalnız istemden (TTY gizli / stdin) — argüman ya da ortam değişkeni DEĞİL.
+  if (!/ortakAnahtarParolali\(yollar\)\) parola = await parolaSor\(/.test(kod)) f.push('yaprak parolası istemi YOK');
+  if (/process\.env\.\w*(PAROLA|PASS)|'--parola|--passin|pass:/i.test(kod)) f.push('yaprak parolası argüman/ortamdan okunuyor');
+  if (!/parola\?\.fill\(0\)/.test(kod)) f.push('parola tamponu sıfırlanmıyor');
   return f;
 }
 {
@@ -195,6 +266,9 @@ function betikIhlalleri(metin) {
   mut('VDS kökü literal gömüldü', (m) => `${m}\nconst V = '/opt/stack/apps/x';\n`, /LİTERAL/);
   mut('çıplak fetch', (m) => `${m}\nawait fetch('https://x');\n`, /belirteçsiz okuma/);
   mut('--apk reddi kaldırıldı', (m) => m.replace("if (a === '--apk' || a.startsWith('--apk=')) dur(", 'if (false) dur('), /--apk reddi YOK/);
+  mut('yaprak parolası istemi söküldü', (m) => m.replace('if (ortakAnahtarParolali(yollar)) parola = await parolaSor(', 'if (false) parola = await parolaSor('), /parolası istemi YOK/);
+  mut('parola ortamdan okundu', (m) => `${m}\nconst P = process.env.TEKSERP_OTA_PAROLA;\n`, /argüman\/ortamdan/);
+  mut('parola tamponu sıfırlanmıyor', (m) => m.replace('parola?.fill(0);', ''), /sıfırlanmıyor/);
   mut('APK yükleme yolu geri eklendi', (m) => `${m}\nasync function apkYayinla(y) { scp([y], 'apk/surum.json', 'x'); }\n`, /APK yayın yolu GERİ GELDİ/);
 }
 

@@ -314,14 +314,18 @@ async function main(): Promise<void> {
   {
     const uretici = await import(path.join(MOBIL, "scripts/lib/manifest.mjs"));
     const keystore = path.join(MOBIL, "keystore");
-    const malzeme = (fs.existsSync(keystore) ? fs.readdirSync(keystore) : [])
+    let malzeme = (fs.existsSync(keystore) ? fs.readdirSync(keystore) : [])
       .map((ad) => /^ota-certs(-[a-z0-9-]+)?$/.exec(ad))
       .filter((m): m is RegExpExecArray => m !== null)
       .map((m) => ({
         kod: m[1] ? m[1].slice(1) : "varsayilan",
         sertifika: path.join(keystore, m[0], "certificate.pem"),
         anahtar: path.join(keystore, `ota-keys${m[1] ?? ""}`, "private-key.pem"),
+        // K-2 zincirli çift: `ota-certs-<ad>` OTA KÖKÜ, imzacı parolalı yaprak (yanında certificate.pem) — §12 ölçer.
+        zincirli: fs.existsSync(path.join(keystore, `ota-keys${m[1] ?? ""}`, "certificate.pem")),
       }));
+    const zincirliKokler = malzeme.filter((m) => m.zincirli);
+    malzeme = malzeme.filter((m) => !m.zincirli);
     const eksik = malzeme.filter((m) => !fs.existsSync(m.anahtar) || !fs.existsSync(m.sertifika));
     if ((eksik.length || malzeme.length < 2) && process.env.TEKSERP_STRICT !== "1") {
       console.log(`  ℹ️  atlandı — imza malzemesi bu makinede yok/eksik (${malzeme.length} çift; eksik: ${eksik.map((m) => m.kod).join(", ") || "-"}); TEKSERP_STRICT=1 ile zorunlu`);
@@ -355,7 +359,83 @@ async function main(): Promise<void> {
             kabul === beklenen,
           );
         }
+        for (const z of zincirliKokler) {
+          let kabul = true;
+          try {
+            uretici.multipartDogrula(servis, fs.readFileSync(z.sertifika, "utf8"), { zincir: true });
+          } catch {
+            kabul = false;
+          }
+          check(`"${imzalayan.kod}" anahtarıyla imzalı (zincirsiz) paket → zincirli "${z.kod}" tableti REDDEDER`, !kabul);
+        }
       }
+    }
+  }
+
+  // ---------------------------------------------------------------- §12
+  // Ortak tablet (K-2): APK'ya OTA KÖKÜ gömülü, manifesti yaprak imzalar ve yaprak `certificate_chain` parçasında
+  // gelir. Servis o parçayı da BİREBİR geçirmeli; parça düşerse tablet kökle doğrulamaya çalışır ve her OTA'yı
+  // reddeder. Zincir test anında üretilen ATILACAK zincirdir (openssl, geçici dizin).
+  console.log("\n§12 — Zincirli OTA: certificate_chain parçası servis edilir, gömülü köke zincirlenir");
+  {
+    const uretici = await import(path.join(MOBIL, "scripts/lib/manifest.mjs"));
+    const Z = require(path.join(MOBIL, "scripts/lib/ota-zinciri.cjs"));
+    let zi: { kokPem: string; yaprakPem: string; yaprakAnahtarPem: string; parola: string } | null = null;
+    let zy: { kokPem: string } | null = null;
+    try {
+      zi = Z.denemeZinciriUret(path.join(kok, "_zincir", "iyi"));
+      zy = Z.denemeZinciriUret(path.join(kok, "_zincir", "yabanci"));
+    } catch (e) {
+      check("deneme OTA zinciri üretildi (openssl)", false, (e as Error).message);
+    }
+    if (zi && zy) {
+      const ZRV = "99.2";
+      fs.mkdirSync(path.join(kok, "ota", ZRV), { recursive: true });
+      const manifest = {
+        id: crypto.randomUUID(),
+        createdAt: new Date().toISOString(),
+        runtimeVersion: ZRV,
+        launchAsset: { hash: "x", key: "x", contentType: "application/javascript", fileExtension: ".bundle", url: "https://ornek/x" },
+        assets: [],
+        metadata: {},
+        extra: {},
+      };
+      const yaprakAnahtar = crypto.createPrivateKey({ key: zi.yaprakAnahtarPem, passphrase: zi.parola });
+      const imza = uretici.imzaBasligi(JSON.stringify(manifest), yaprakAnahtar, "ortak");
+      const zincirli: Buffer = uretici.multipartKur({ manifest, imzaBasligiDegeri: imza, sertifikaZinciri: zi.yaprakPem });
+      const servisEt = async (govde: Buffer) => {
+        fs.writeFileSync(path.join(kok, "ota", ZRV, "manifest"), govde);
+        return Buffer.from(await (await fetch(`${taban}/updates/ota/${ZRV}/manifest`)).arrayBuffer());
+      };
+      const red = (govde: Buffer, kokPem: string) => {
+        try {
+          uretici.multipartDogrula(govde, kokPem, { zincir: true });
+          return false;
+        } catch {
+          return true;
+        }
+      };
+      const servis = await servisEt(zincirli);
+      check("zincirli gövde diskteki dosyayla BİREBİR servis edilir", servis.equals(zincirli));
+      check("certificate_chain parçası application/x-pem-file olarak yanıtta", /name="certificate_chain"\r\ncontent-type: application\/x-pem-file/.test(servis.toString("utf8")));
+      let d: { imzali: boolean; zincirli: boolean } | null = null;
+      try {
+        d = uretici.multipartDogrula(servis, zi.kokPem, { zincir: true });
+      } catch (e) {
+        check("servis edilen zincirli gövde gömülü köke karşı doğrulanır", false, (e as Error).message);
+      }
+      if (d) check("servis edilen zincirli gövde gömülü köke karşı doğrulanır", d.imzali && d.zincirli);
+      const parcasiz = await servisEt(uretici.multipartKur({ manifest, imzaBasligiDegeri: imza }));
+      check("SONDA: certificate_chain parçası sökülmüş gövde → RED", red(parcasiz, zi.kokPem));
+      check("SONDA: yabancı OTA kökü gömülü tablet → RED", red(servis, zy.kokPem));
+      check("SONDA: zincirsiz (eski) doğrulama kökle bu imzayı KABUL ETMEZ", (() => {
+        try {
+          uretici.multipartDogrula(servis, zi.kokPem);
+          return false;
+        } catch {
+          return true;
+        }
+      })());
     }
   }
 

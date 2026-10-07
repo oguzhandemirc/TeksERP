@@ -122,6 +122,9 @@ describe('ortak paket kimliği (argümansız derleme)', () => {
   it('OTA özel anahtar yolu sertifikanın aynası (ota-certs-<ad> → ota-keys-<ad>)', () => {
     const k = ortakLib.ortakKimlik();
     expect(k.otaAnahtar).toBe(k.otaSertifika.replace('ota-certs-', 'ota-keys-').replace('certificate.pem', 'private-key.pem'));
+    // K-2: ota-certs-<ad> APK'ya gömülen OTA KÖKÜ; manifesti imzalayan yaprak sertifikası anahtarının yanında.
+    expect(k.otaYaprak).toBe(k.otaSertifika.replace('ota-certs-', 'ota-keys-'));
+    expect(k.otaYaprak).not.toBe(k.otaSertifika);
   });
 
   it('görünür etiket derlemeden DOĞMAZ (TEST/DEMO lisans sınıfından gelir)', () => {
@@ -156,14 +159,32 @@ describe('ortak paket kimliği (argümansız derleme)', () => {
     expect(ortakLib.ortakYapilandirmaFarki({ ...ortak, extra: { gorunurEtiket: 'TEST' } }, { herkese: true }))
       .toEqual([expect.stringMatching(/^extra\.gorunurEtiket/)]);
   });
+});
 
-  // Ortak anahtar çifti anahtar töreninde (kullanıcıyla) üretilir; o güne dek dosya yoktur. Gerçek
-  // kapı derlemedir (build-apk ortak yolu sertifikasız DURUR); burada yalnız TEKSERP_STRICT=1 ölçer.
+// K-2 / I5: APK'ya OTA KÖKÜ gömülür, manifesti yaprak imzalar; zincir meta-data'sını withOtaZinciri yazar.
+describe('ortak paket OTA sertifika zinciri (K-2)', () => {
+  const ortak = cfg();
+
+  it('K-2: zincir eklentisi (withOtaZinciri) app.json\'da ve değerlendirilmiş yapılandırmada — yoksa APK zinciri okumaz', () => {
+    const ad = (p: unknown) => (Array.isArray(p) ? p[0] : p);
+    expect(appJson.plugins.map(ad)).toContain(ortakLib.ZINCIR_EKLENTISI);
+    expect((ortak.plugins ?? []).map(ad)).toContain(ortakLib.ZINCIR_EKLENTISI);
+    expect(fs.existsSync(path.join(KOK, `${ortakLib.ZINCIR_EKLENTISI}.js`))).toBe(true);
+    const eklentisiz = { ...ortak, plugins: (ortak.plugins ?? []).filter((p: unknown) => ad(p) !== ortakLib.ZINCIR_EKLENTISI) };
+    expect(ortakLib.ortakYapilandirmaFarki(eklentisiz)).toEqual([expect.stringMatching(/withOtaZinciri/)]);
+  });
+
+  // Ortak OTA zinciri (kök + yaprak) törende (kullanıcıyla) üretilir; o güne dek dosya yoktur. Gerçek
+  // kapı derleme ve yayındır (build-apk kök değilse, yayıncı zincir tutmazsa DURUR); burada yalnız TEKSERP_STRICT=1 ölçer.
   const ortakSertifikaTesti = process.env.TEKSERP_STRICT === '1' ? it : it.skip;
-  ortakSertifikaTesti('ortak OTA sertifikası ve özel anahtarı GERÇEKTEN var (TEKSERP_STRICT=1)', () => {
+  ortakSertifikaTesti('ortak OTA kökü + yaprak + parolalı yaprak anahtarı GERÇEKTEN var ve zincirlenir (TEKSERP_STRICT=1)', () => {
     const k = ortakLib.ortakKimlik();
-    expect(fs.existsSync(path.join(KOK, k.otaSertifika))).toBe(true);
-    expect(fs.existsSync(path.join(KOK, k.otaAnahtar))).toBe(true);
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const Z = require(path.join(KOK, 'scripts/lib/ota-zinciri.cjs'));
+    const oku = (r: string) => fs.readFileSync(path.join(KOK, r), 'utf8');
+    expect(Z.kokHatalari(oku(k.otaSertifika))).toEqual([]);
+    expect(Z.yaprakHatalari(oku(k.otaYaprak), oku(k.otaSertifika), { esikGun: Z.OTA_YAPRAK_ESIK_GUN })).toEqual([]);
+    expect(Z.pemSifreli(oku(k.otaAnahtar))).toBe(true);
   });
 });
 
