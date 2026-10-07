@@ -13,12 +13,13 @@
 
 1. Önce ölç: `node ../indirme-kapisi-olc.mjs --adnansahin` (repo dışı, `Teks-Erp-wt/`; beklenen 9/9) ve `deploy/vds-dogrula.sh`.
 2. `git worktree add ../acil eski-kanal-son` ve `cd ../acil`.
+   - Tablet OTA gerekiyorsa anahtarları getir ve OTA anahtarını çöz (2026-10-07'den beri yalnız şifreli durur; parola Şifreler'de "adnansahin eski OTA anahtarı"): `cp -Rp ../Teks-Erp/mobil/keystore/. mobil/keystore/` sonra `openssl pkey -in mobil/keystore/ota-keys/private-key.enc.pem -out mobil/keystore/ota-keys/private-key.pem`.
 3. Etiketteki betiklerle, yalnız istenen ürün için:
    - Panel: `./deploy/electron-paketle.sh adnansahin` sonra `./deploy/electron-yayinla.sh --musteri=adnansahin [--kuru|--dogrula]`
    - Tablet OTA: `cd mobil && npm run yayinla -- --musteri=adnansahin`, sonra `node deploy/mobil-yayinla.mjs --musteri=adnansahin --paket=…|--apk=…`
    - Backend: `pwsh deploy/paketle.ps1 -Musteri adnansahin`, sonra `node deploy/backend-yayinla.mjs --musteri=adnansahin --paket=… --anahtar=…`
 4. Sonra tekrar ölç: aynı `indirme-kapisi-olc.mjs --adnansahin` (9/9) ve `deploy/vds-dogrula.sh`; fark varsa dur ve kullanıcıya bildir.
-5. `git worktree remove ../acil`.
+5. Çözülmüş anahtarı sil (`rm -P mobil/keystore/ota-keys/private-key.pem`), sonra `git worktree remove ../acil`.
 
 ## Güncel ağaçta kalkan dosyalar (`eski-kanal-son..HEAD`)
 
