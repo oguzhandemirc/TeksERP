@@ -311,7 +311,7 @@ const GRUP_KITAPLIGI = new Set([
   "scripts/lib/panel-kimlik.mjs", "scripts/lib/yayin-okuma.mjs", "scripts/lib/yayin-hedefi.mjs", "scripts/lib/yayin-bildirim.mjs",
   "scripts/lib/surum.mjs", "scripts/lib/kullanici-cumlesi.mjs", "scripts/lib/dagitim.mjs",
   "Electron/electron/guncelleme/kunye-jws.mjs", "Electron/electron/guncelleme/panel-kunye.mjs", "Electron/electron/guncelleme/latest-yml.mjs",
-  "mobil/scripts/lib/apk-kunye.mjs", "mobil/scripts/lib/apk-kimlik.mjs", "mobil/scripts/lib/manifest.mjs", "mobil/scripts/lib/zip.mjs",
+  "mobil/scripts/lib/apk-kimlik.mjs", "mobil/scripts/lib/manifest.mjs", "mobil/scripts/lib/zip.mjs",
 ]);
 const GRUP_YAYIN_DOSYALARI = new Set([
   "deploy/backend-yayinla.mjs", "scripts/lib/backend-yayin.mjs",

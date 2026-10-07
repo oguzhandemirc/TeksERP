@@ -11,13 +11,10 @@
 //   npx tsx scripts/guven-capasi-ekle.ts paket --kid=paket-2026 --x=<base64url> [--yaz]
 //   npx tsx scripts/guven-capasi-ekle.ts paket --dosya=<kid>.paket.json [--yaz]
 //   npx tsx scripts/guven-capasi-ekle.ts istemci-kok --kok-kid=kok-<yıl>-<n> [--yaz] (panel kök çapası: TS üretim kökü AYNEN)
-//   npx tsx scripts/guven-capasi-ekle.ts tablet --paket-kid=paket-<yıl> [--yaz]       (a: PAKET anahtarı APK künyesini de imzalar)
-//   npx tsx scripts/guven-capasi-ekle.ts tablet --dosya=<kid>.panel.json [--yaz]      (b: ayrı istemci yayın anahtarı, panel-imza.ts anahtar-uret)
-//   npx tsx scripts/guven-capasi-ekle.ts tablet --kid=panel-<yıl> --x=<base64url> [--yaz]
 //   Ortak: [--kok=<depo kökü>] (varsayılan bu deponun kökü)
 // `istemci-kok` beşinci yerdir: panelin gömülü KÖK çapası (Electron/electron/guncelleme/imza-capasi.json; künye v:2'yi
-// `ist-*` sertifikalı anahtar imzalar); `tablet` altıncı: tabletin APK künyesi imza çapası (mobil/src/lib/apk-imza-capasi.json).
-// Eski `panel` komutu KALKTI (panel çapasında gömülü imzacı anahtarı yok).
+// `ist-*` sertifikalı anahtar imzalar). Eski `panel` komutu KALKTI (panel çapasında gömülü imzacı anahtarı yok); `tablet`
+// komutu KALKTI (ortak tablette APK künyesi yok, K-14).
 //
 // Varsayılan KURU: planı basar, dosya yazmaz; `--yaz` yazar. Aynı kid + aynı anahtar zaten çapadaysa
 // değişiklik yok (idempotent); aynı kid başka anahtar/sınıf ya da aynı anahtar başka kid → RED (rotasyon YENİ
@@ -34,14 +31,11 @@ import type { LicenseClass } from "../src/lib/license/protocol";
 import {
   CapaHatasi,
   PANEL_CAPA_DOSYASI,
-  TABLET_CAPA_DOSYASI,
   capaDurumuOku,
   istemciKokCapasiOku,
   istemciKokEklePlani,
   kokEklePlani,
   paketEklePlani,
-  tabletCapasiOku,
-  tabletEklePlani,
   type CapaDurumu,
   type EklemePlani,
 } from "./lib/guven-capasi";
@@ -85,16 +79,7 @@ function planla(argv: readonly string[], d: CapaDurumu, kok: string): { plan: Ek
     const r = d.kokler.uretim.find((k) => k.kid === kokKid)!;
     return { plan, ozet: `PANEL KÖK ${r.kid} [${r.classes.join(", ")}] x=${r.x}` };
   }
-  if (komut === "tablet") {
-    const ac = dosya ? acikAlanlar(dosya, "tekserp-panel-anahtar") : null;
-    const paketKid = arg(argv, "paket-kid");
-    const kaynak = paketKid ? d.paketler.uretim.find((k) => k.kid === paketKid) : null;
-    if (paketKid && !kaynak) throw new CapaHatasi("GECERSIZ", `${paketKid} PAKET çapasında yok`);
-    const kid = ac?.kid ?? kaynak?.kid ?? arg(argv, "kid");
-    const x = ac?.x ?? kaynak?.x ?? arg(argv, "x");
-    if (!kid || !x) throw new KullanimHatasi("tablet: --paket-kid=paket-<yıl> (a) · --dosya=<kid>.panel.json (b) · --kid + --x gerekli");
-    return { plan: tabletEklePlani(d, tabletCapasiOku(kok), { kid, x }), ozet: `TABLET ${kid} x=${x}` };
-  }
+  if (komut === "tablet") throw new KullanimHatasi("tablet komutu kalktı — ortak tablette APK künyesi yok (K-14)");
   if (komut === "kok") {
     const ac = dosya ? acikAlanlar(dosya, "tekserp-kok-anahtar") : null;
     const kid = ac?.kid ?? arg(argv, "kid");
@@ -112,7 +97,7 @@ function planla(argv: readonly string[], d: CapaDurumu, kok: string): { plan: Ek
     const plan = paketEklePlani(d, { kid, x });
     return { plan, ozet: `PAKET ${kid} → ${plan.kip} listesi · x=${x}` };
   }
-  throw new KullanimHatasi("komut: kok | paket | istemci-kok | tablet");
+  throw new KullanimHatasi("komut: kok | paket | istemci-kok");
 }
 
 const PANEL_SONRAKI_ADIMLAR = [
@@ -122,14 +107,6 @@ const PANEL_SONRAKI_ADIMLAR = [
   "  cd Electron && node ../scripts/agir-is.mjs -- npx vitest run src/test/panel-kunye.test.ts src/test/updater-imza-akisi.test.ts",
   "  node scripts/agir-is.mjs -- node scripts/test_grup_yayin_kapisi.mjs   (panel grup künyesi)",
   "Sonra: YENİ panel sürümü (çapa derlemede gömülür); yeni kök sahadaki panele ancak eski kökün imzaladığı sürümle ulaşır (rotasyon kök düzeyinde).",
-];
-
-const TABLET_SONRAKI_ADIMLAR = [
-  "Sonraki adımlar (tablet çapası):",
-  "  cd Teks-Erp && node ../scripts/agir-is.mjs -- npx tsx scripts/run-all-tests.ts panel_imza   (§4 tablet kâhini)",
-  "  cd mobil && node ../scripts/agir-is.mjs -- npx jest src/services/apkKunye.test.ts src/services/appUpdate.apk.test.ts",
-  "  node scripts/agir-is.mjs -- node scripts/test_grup_yayin_tablet.mjs   (tablet grup künyesi)",
-  "Sonra: OTA (çapa JS paketinde) — önce testfabrika; APK yayını ancak çapalı OTA sahadayken imzalı künyeyle.",
 ];
 
 const SONRAKI_ADIMLAR = [
@@ -164,11 +141,6 @@ export function main(argv: readonly string[]): number {
     if (plan.dosyalar.has(PANEL_CAPA_DOSYASI)) {
       istemciKokCapasiOku(kok);
       console.log(PANEL_SONRAKI_ADIMLAR.join("\n"));
-      return CIKIS.TAMAM;
-    }
-    if (plan.dosyalar.has(TABLET_CAPA_DOSYASI)) {
-      tabletCapasiOku(kok);
-      console.log(TABLET_SONRAKI_ADIMLAR.join("\n"));
       return CIKIS.TAMAM;
     }
     console.log(SONRAKI_ADIMLAR.join("\n"));

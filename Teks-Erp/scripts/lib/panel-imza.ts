@@ -7,10 +7,7 @@ import { createPublicKey, generateKeyPairSync, type KeyObject } from "node:crypt
 import fs from "node:fs";
 import path from "node:path";
 import { openSealedKey, privateKeyFromRaw, sealPrivateKey, type SealedKey } from "../../src/lib/license/protocol/anahtar-sarma";
-import { isProductionPackageKid } from "../../src/lib/license/integrity-scope";
-import { openPackageKey, PACKAGE_KEY_KIND } from "./butunluk-imza";
 import { git } from "./git";
-import { checkProductionAnchor, isSignerKid, type AnchorKey } from "../../../Electron/electron/guncelleme/kunye-jws.mjs";
 import { CLIENT_CERT_USAGE, prepareRootAnchor, verifyCertificate, type RootAnchorKey } from "../../../Electron/electron/guncelleme/istemci-zinciri.mjs";
 import {
   buildReleaseDoc,
@@ -28,8 +25,8 @@ import { parseLatestYml, withReleaseBlock } from "../../../Electron/electron/gun
 
 export const PANEL_KEY_KIND = "tekserp-panel-anahtar";
 /**
- * İstemci yayın anahtarı: `ist-<yıl>-<n>` (künye v:2 imzacısı, kök imzalı ISTEMCI sertifikalı) ya da `panel-<yıl>[-<n>]`
- * (tablet APK künyesinin gömülü çapalı ailesi). Yalnız parolalı.
+ * İstemci yayın anahtarı: `ist-<yıl>-<n>` (künye v:2 imzacısı, kök imzalı ISTEMCI sertifikalı). `panel-<yıl>[-<n>]`
+ * eski kanalın ailesidir: CLI üretmez, dosyası açılır ama künye v:2'yi imzalayamaz. Yalnız parolalı.
  */
 export const PANEL_KEY_KID = /^(?:panel-\d{4}(?:-\d{1,3})?|ist-\d{4}-\d{1,3})$/;
 /** Sertifika dosyası (`<kid>.sertifika.json`): `sertifika` alanı compact JWS (satıcının verdiği dosyayla aynı alan adı). */
@@ -89,19 +86,11 @@ function panelKeyOf(k: Record<string, unknown>): PanelKeyFile {
 }
 
 /**
- * İmza anahtarını açar — iki karar seçeneğinin ikisi de: (a) üretim PAKET anahtarı (`paket-<yıl>`, parolalı;
- * hazırlık PAKET anahtarı RED — parolasızdır) · (b) ayrı panel yayın anahtarı (`panel-…`, parolalı). Parola
- * `ask` ile (TTY ya da stdin satırı); açılan ham özel yarı ve parola Buffer'ı iş bitince sıfırlanır.
+ * İstemci imza anahtarını açar (parolalı `tekserp-panel-anahtar`). Parola `ask` ile (TTY ya da stdin satırı);
+ * açılan ham özel yarı ve parola Buffer'ı iş bitince sıfırlanır.
  */
 export async function openPanelSigningKey(file: string, ask: (kid: string) => Promise<Buffer>): Promise<OpenedSigningKey> {
   const k = readKeyJson(file);
-  if (k.tur === PACKAGE_KEY_KIND) {
-    if (typeof k.kid !== "string" || !isProductionPackageKid(k.kid)) {
-      throw new Error(`panel künyesini yalnız ÜRETİM PAKET anahtarı imzalar (paket-<yıl>); verilen: ${String(k.kid)}`);
-    }
-    const opened = await openPackageKey(file, ask);
-    return { kid: opened.kid, privateKey: opened.privateKey };
-  }
   if (k.tur !== PANEL_KEY_KIND) throw new Error(`tanınmayan anahtar dosyası türü: ${String(k.tur)}`);
   const w = panelKeyOf(k);
   const password = await ask(w.kid);
@@ -126,7 +115,7 @@ export function publicXOf(privateKey: KeyObject): string {
   return String(createPublicKey(privateKey).export({ format: "jwk" }).x);
 }
 
-/** (b) seçeneği töreni: ayrı panel yayın anahtarı üretir ve parolayla sarar (parolayı çağıran sıfırlar). */
+/** İstemci yayın anahtarı üretir ve parolayla sarar (parolayı çağıran sıfırlar). */
 export async function generatePanelKey(kid: string, password: Buffer): Promise<PanelKeyFile> {
   if (!PANEL_KEY_KID.test(kid)) throw new Error(`istemci anahtarı kid'i ist-<yıl>-<n> ya da panel-<yıl>[-<n>] biçiminde olmalı: ${kid}`);
   const { privateKey } = generateKeyPairSync("ed25519");
@@ -143,19 +132,6 @@ export function writePanelKey(dir: string, key: PanelKeyFile): string {
   const file = path.join(abs, `${key.kid}.panel.json`);
   fs.writeFileSync(file, `${JSON.stringify(key, null, 2)}\n`, { mode: 0o600, flag: "wx" });
   return file;
-}
-
-/** İmzacı çapası (`{anahtarlar: [{kid, x}]}`; tablet APK künyesi) — üretim çapası `checkProductionAnchor`dan geçmeli. */
-export function readSignerAnchor(file: string, { test = false } = {}): readonly AnchorKey[] {
-  const j = JSON.parse(fs.readFileSync(file, "utf8")) as { anahtarlar?: unknown };
-  const list = Array.isArray(j.anahtarlar) ? (j.anahtarlar as AnchorKey[]) : [];
-  if (!test) {
-    const c = checkProductionAnchor(list);
-    if (!c.ok) throw new Error(`istemci imza çapası kullanılamaz (${c.code}): ${c.message} — ${path.relative(DEPO_KOKU, file)}`);
-  } else if (!list.every((k) => isSignerKid(k.kid))) {
-    throw new Error("test çapasında künye imzalayamayacak kid var");
-  }
-  return list;
 }
 
 /** Panel kök çapası (`{kokler: [{kid, x, classes}]}`) — üretimde `kok-<yıl>-<n>` zorunlu, test kipinde yalnız geçerli kök çapası. */

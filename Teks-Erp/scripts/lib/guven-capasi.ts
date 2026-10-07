@@ -17,7 +17,6 @@ import {
 } from "../../src/lib/license/protocol";
 import { isProductionPackageKid } from "../../src/lib/license/integrity-scope";
 import type { PackageKey } from "../../src/lib/license/integrity";
-import { PRODUCTION_SIGNER_KID } from "../../../Electron/electron/guncelleme/kunye-jws.mjs";
 
 /** Depo köküne göre yollar. Aynalar kaynağın BAYT-EŞİT kopyasıdır (`test_lisans_protokol_aynasi`). */
 export const CAPA_DOSYALARI = Object.freeze({
@@ -284,25 +283,12 @@ export function paketEklePlani(d: CapaDurumu, yeni: PackageKey): EklemePlani {
   return { degisir: true, kip, dosyalar: new Map([[CAPA_DOSYALARI.paketTs, paketTs], [CAPA_DOSYALARI.anchorRs, anchorRs]]) };
 }
 
-// ── İstemci çapaları (beşinci ve altıncı yer, ayrı komutlar) ─────────────────
+// ── İstemci kök çapası (beşinci yer, ayrı komut) ─────────────────────────────
 /**
  * Panelin gömülü KÖK çapası — derlemede ana sürece girer (`guncelleme-dogrulama.ts`). Künye v:2'yi `ist-*` anahtarı
  * imzalar ve kök imzalı ISTEMCI sertifikasını taşır; çapada yalnız kök açık yarıları durur (ISTEMCI-ANAHTARI-KOK-ALTINDA §3).
  */
 export const PANEL_CAPA_DOSYASI = "Electron/electron/guncelleme/imza-capasi.json";
-/** Tabletin APK künyesi imza çapası — JS paketine girer (`appUpdate.service.ts`; OTA kod imzasıyla korunur). */
-export const TABLET_CAPA_DOSYASI = "mobil/src/lib/apk-imza-capasi.json";
-export type IstemciCapaDosyasi = typeof TABLET_CAPA_DOSYASI;
-
-export interface TabletCapaDurumu {
-  readonly liste: readonly PackageKey[];
-  readonly json: Record<string, unknown>;
-  readonly dosya: IstemciCapaDosyasi;
-}
-
-const tabletCapaMetni = (json: Record<string, unknown>, liste: readonly PackageKey[]): string =>
-  `${JSON.stringify({ ...json, anahtarlar: liste.map((k) => ({ kid: k.kid, x: k.x })) }, null, 2)}\n`;
-
 function jsonNesnesi(kok: string, dosya: string): { metin: string; o: Record<string, unknown> } {
   const metin = oku(kok, dosya);
   let json: unknown;
@@ -312,42 +298,6 @@ function jsonNesnesi(kok: string, dosya: string): { metin: string; o: Record<str
     throw new CapaHatasi("BICIM", `${dosya} JSON değil`);
   }
   return { metin, o: (typeof json === "object" && json !== null && !Array.isArray(json) ? json : {}) as Record<string, unknown> };
-}
-
-/** Tablet çapası, kesin biçim: `{_aciklama, anahtarlar: [{kid, x}]}`, `JSON.stringify(…, 2)` düzeni — elle bozulmuşsa DURUR. */
-export function tabletCapasiOku(kok: string): TabletCapaDurumu {
-  const dosya = TABLET_CAPA_DOSYASI;
-  const { metin, o } = jsonNesnesi(kok, dosya);
-  const ham = o.anahtarlar;
-  const gecerli = Array.isArray(ham) && ham.every((k) => {
-    const r = k as Record<string, unknown>;
-    return typeof k === "object" && k !== null && Object.keys(r).join(",") === "kid,x" && typeof r.kid === "string" && typeof r.x === "string";
-  });
-  if (!gecerli) throw new CapaHatasi("BICIM", `${dosya}: anahtarlar [{kid, x}] dizisi değil`);
-  const liste = (ham as PackageKey[]).map((k) => ({ kid: k.kid, x: k.x }));
-  if (tabletCapaMetni(o, liste) !== metin) throw new CapaHatasi("BICIM", `${dosya} beklenen biçimde değil (elle düzenlenmiş?) — betik güncellenmeden ekleme yapılmaz`);
-  return { liste, json: o, dosya };
-}
-
-/**
- * Tablet çapasına anahtar: (a) törenle PAKET çapasına girmiş üretim PAKET anahtarı (`paket-<yıl>`, AYNI açık yarı
- * — yeni PAKET anahtarı buradan çapaya giremez) ya da (b) ayrı istemci yayın anahtarı (`panel-<yıl>[-<n>]`).
- * Fikstür ya da biçim dışı kid RED; aynı kid + aynı anahtar → değişiklik yok; çakışma → RED. Yeni satır SONA.
- */
-export function tabletEklePlani(d: CapaDurumu, p: TabletCapaDurumu, yeni: PackageKey): EklemePlani {
-  if (!PRODUCTION_SIGNER_KID.test(yeni.kid)) {
-    throw new CapaHatasi("GECERSIZ", `istemci imza çapası kid'i paket-<yıl>[-<n>] (PAKET anahtarı) ya da panel-<yıl>[-<n>] olmalı: ${yeni.kid}`);
-  }
-  if (!acikAnahtarGecerli(yeni.x)) throw new CapaHatasi("GECERSIZ", `${yeni.kid}: açık anahtar geçerli bir Ed25519 açık anahtarı değil`);
-  if (yeni.kid.startsWith("paket-")) {
-    const pk = d.paketler.uretim.find((k) => k.kid === yeni.kid);
-    if (!pk || pk.x !== yeni.x || !isProductionPackageKid(pk.kid)) {
-      throw new CapaHatasi("GECERSIZ", `${yeni.kid} bu açık anahtarla üretim PAKET çapasında yok — (a) seçeneği yalnız törenle çapaya girmiş üretim PAKET anahtarını kullanır`);
-    }
-  }
-  // İstemci çapası tek listedir ve yalnız üretim biçiminde kid taşır (yukarıda) ⇒ planın kipi `uretim`.
-  if (listedeAyniAnahtarVar(p.liste, yeni, (a, b) => a.x === b.x)) return { degisir: false, kip: "uretim", dosyalar: new Map() };
-  return { degisir: true, kip: "uretim", dosyalar: new Map([[p.dosya, tabletCapaMetni(p.json, [...p.liste, { kid: yeni.kid, x: yeni.x }])]]) };
 }
 
 export interface IstemciKokCapaDurumu {

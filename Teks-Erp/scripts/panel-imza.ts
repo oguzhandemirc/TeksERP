@@ -1,6 +1,5 @@
 // =============================================================================
-// İSTEMCİ SÜRÜM KÜNYESİ İMZASI — panel latest.yml'e (`typ tekserp-panel`) · tablet apk/surum.json'a (`typ tekserp-apk`)
-// imzalı künye (`tekserp: {v, bildirim, iptal?}`)
+// İSTEMCİ SÜRÜM KÜNYESİ İMZASI — panel latest.yml'e (`typ tekserp-panel`) imzalı künye (`tekserp: {v, bildirim, iptal?}`)
 // =============================================================================
 // Satıcı Mac'inde koşar; özel anahtar CI'a, pakete ve VDS'e GİRMEZ. Panel kod imzası (Authenticode) yokken
 // güncellemenin bütünlük kanıtı budur: künyesi doğrulanamayan güncelleme panelde İNDİRİLMEZ ve KURULMAZ.
@@ -8,23 +7,20 @@
 //
 //   npx tsx scripts/panel-imza.ts imzala --musteri=<kod> [--surum=<x.y.z>] --anahtar=<ist-… dosyası> [--sertifika=<dosya>] [--iptal=<dosya>]
 //   npx tsx scripts/panel-imza.ts dogrula --musteri=<kod> [--surum=<x.y.z>]
-//   npx tsx scripts/panel-imza.ts anahtar-uret --kid=ist-<yıl>-<n> | panel-<yıl>[-<n>] [--dizin=~/.tekserp/panel-uretim] [--json]
+//   npx tsx scripts/panel-imza.ts anahtar-uret --kid=ist-<yıl>-<n> [--dizin=~/.tekserp/panel-uretim] [--json]
 //   npx tsx scripts/panel-imza.ts sertifika-ekle --anahtar=<ist-… .panel.json> --sertifika=<satıcının verdiği dosya> [--kok-dosyasi=<*.kok.json>]
 //       Sertifika köke bağlı, ISTEMCI, kid ve x anahtarınkiyle AYNI değilse RED; geçerse anahtarın yanına <kid>.sertifika.json.
 //   npx tsx scripts/panel-imza.ts yeniden-imzala --latest=<yayındaki latest.yml> --musteri=<grup> --anahtar=<ist-…> --cikti=<yeni latest.yml>
 //                                               [--sertifika=<dosya>] [--kok-dosyasi=<*.kok.json>]
 //       Yıllık tören: yük AYNEN, yalnız imzacı/sertifika/imzaZamani yeni; kurulum dosyası gerekmez (paket baytı değişmez).
 //   npx tsx scripts/panel-imza.ts anahtar-ac --anahtar=<dosya> [--json]   (yedeğin açılabilirlik ölçümü: kid + x, özel yarı basılmaz)
-//   npx tsx scripts/panel-imza.ts apk-imzala --musteri=<kod> --apk=<yol.apk> --kunye=<surum.json> --anahtar=<dosya>
-//   npx tsx scripts/panel-imza.ts apk-dogrula --musteri=<kod> --apk=<yol.apk> --kunye=<surum.json>
-//   (apk-*: surum.json'u `deploy/mobil-grup-yayinla.mjs` yazar ve bu komutu kendisi çağırır; çapa mobil/src/lib/apk-imza-capasi.json)
 //   Ortak: [--dizin-paket=<release/<kod>/<sürüm> dizini>] (varsayılan Electron/release/<kod>/<sürüm>)
 //          [--capa=<çapa json>]  YALNIZ bekçi — gerçek çapa Electron/electron/guncelleme/imza-capasi.json
 //
 // Panel künyesi (v:2): `ist-<yıl>-<n>` anahtarı (bu aracın `anahtar-uret`i, parolalı) + kök imzalı ISTEMCI sertifikası
 // (`--sertifika`, varsayılan anahtarın yanındaki `<kid>.sertifika.json`); çapa yalnız kökler, sertifikayı çapadaki bir
 // kök imzalamadıysa imza YAZILMAZ. `--iptal=<dosya>` (ham JWS) güncel dağıtım iptalini bloğa koyar. Tablet APK
-// künyesi: (a) üretim PAKET anahtarı ya da (b) `panel-<yıl>` anahtarı, gömülü çapayla. Parola TTY'de gizli istem,
+// künyesi ortak tablette yok (K-14; eski kanal aracı `eski-kanal-son` etiketinde). Parola TTY'de gizli istem,
 // değilse stdin satırı ya da `--parola-dosyasi=<yol>` (0600, her istenen parola bir satır); argümandan ve ortamdan ASLA
 // (`--parola…` çıkış 2). Bitişine 30 günden az kalmış ISTEMCI sertifikasıyla imza YOK (yıllık tören).
 // Çıkış: 0 tamam · 1 RED/hata · 2 kullanım.
@@ -44,13 +40,11 @@ import {
   openPanelSigningKey,
   readClientCertificate,
   readPanelAnchor,
-  readSignerAnchor,
   readPanelPackage,
   signPanelPackage,
   verifyPanelPackageText,
   writePanelKey,
 } from "./lib/panel-imza";
-import { TABLET_ANCHOR_FILE, signApkPackage, verifyApkPackage } from "./lib/apk-imza";
 
 const evYolu = (p: string): string => (p.startsWith("~/") ? path.join(os.homedir(), p.slice(2)) : p);
 
@@ -104,6 +98,8 @@ async function dogrula(f: ReadonlyMap<string, string>): Promise<void> {
 
 async function anahtarUret(f: ReadonlyMap<string, string>): Promise<void> {
   const kid = gerek(f, "kid");
+  // `panel-<yıl>` yalnız tablet APK künyesini imzalardı (K-14'te kalktı); künye v:2 imzacısı yalnız ist-*.
+  if (!kid.startsWith("ist-")) throw new CliError(`--kid ist-<yıl>-<n> biçiminde olmalı: ${kid}`);
   const dizin = path.resolve(evYolu(f.get("dizin") ?? "~/.tekserp/panel-uretim"));
   const hedef = path.join(dizin, `${kid}.panel.json`);
   if (fs.existsSync(hedef)) throw new Error(`${hedef} zaten var — rotasyon yeni kid ile yapılır`);
@@ -124,11 +120,7 @@ async function anahtarUret(f: ReadonlyMap<string, string>): Promise<void> {
     return;
   }
   console.log(`✓ ${file} (0600, parolalı — kök/PAKET dosyasıyla aynı sarma)`);
-  if (k.kid.startsWith("ist-")) {
-    console.log(`  Sertifika: kök imzalı ISTEMCI sertifikası ({sertifika: <JWS>}) şuraya konur → ${path.join(dizin, `${k.kid}.sertifika.json`)} (çapa değişmez; panel çapası kökler)`);
-  } else {
-    console.log(`  Tablet çapasına ekle: cd Teks-Erp && npx tsx scripts/guven-capasi-ekle.ts tablet --dosya=${file}   (KURU; sonra --yaz)`);
-  }
+  console.log(`  Sertifika: kök imzalı ISTEMCI sertifikası ({sertifika: <JWS>}) şuraya konur → ${path.join(dizin, `${k.kid}.sertifika.json`)} (çapa değişmez; panel çapası kökler)`);
   console.log("  ⚠ Parolalı dosyanın kopyası Mac DIŞINDA saklanır (USB + kâğıt; parola ayrı kâğıtta).");
 }
 
@@ -168,29 +160,6 @@ async function anahtarAc(f: ReadonlyMap<string, string>): Promise<void> {
   else console.log(`✓ ${key.kid} açıldı · x=${x}`);
 }
 
-function apkGirdisi(f: ReadonlyMap<string, string>) {
-  const kanal = gerek(f, "musteri");
-  if (!/^[a-z0-9][a-z0-9-]{1,30}$/.test(kanal)) throw new CliError(`--musteri kanal kodu biçiminde değil: ${kanal}`);
-  const test = f.get("capa");
-  if (test) console.error("⚠ TEST ÇAPASI kullanılıyor — yalnız bekçi içindir; yayın kapısı gerçek çapayla yeniden doğrular");
-  const anchor = test ? readSignerAnchor(path.resolve(test), { test: true }) : readSignerAnchor(TABLET_ANCHOR_FILE);
-  return { kanal, apk: path.resolve(gerek(f, "apk")), kunye: path.resolve(gerek(f, "kunye")), anchor };
-}
-
-async function apkImzala(f: ReadonlyMap<string, string>): Promise<void> {
-  const { kanal, apk, kunye, anchor } = apkGirdisi(f);
-  const key = await openPanelSigningKey(evYolu(gerek(f, "anahtar")), (kid) => askPassword(`Tablet APK künyesi imza anahtarı (${kid}) parolası: `));
-  const r = await signApkPackage({ apk, kunye, kanal, key, anchor });
-  console.log(`✓ APK künyesi imzalandı · ${kanal} ${r.doc.versionName} (vc ${r.doc.versionCode}) · ${r.doc.paket.ad} (${r.doc.paket.boyut} B, sha256 ${r.doc.paket.sha256.slice(0, 16)}…) · kid ${key.kid}`);
-}
-
-async function apkDogrula(f: ReadonlyMap<string, string>): Promise<void> {
-  const { kanal, apk, kunye, anchor } = apkGirdisi(f);
-  const r = await verifyApkPackage(JSON.parse(fs.readFileSync(kunye, "utf8")) as unknown, apk, { kanal, anchor });
-  if (!r.ok) throw new Error(`APK künyesi GEÇERSİZ (${r.code}): ${r.message}`);
-  console.log(`✓ APK künyesi geçerli · ${kanal} ${r.doc.versionName} (vc ${r.doc.versionCode}) · kid ${r.kid}`);
-}
-
 async function main(): Promise<void> {
   // Parola taşıyan argüman (`--parola=…` · `--password` …) değerine bakılmadan reddedilir.
   const { command, flags } = args(process.argv.slice(2));
@@ -200,9 +169,7 @@ async function main(): Promise<void> {
   if (command === "sertifika-ekle") return sertifikaEkle(flags);
   if (command === "yeniden-imzala") return yenidenImzala(flags);
   if (command === "anahtar-ac") return anahtarAc(flags);
-  if (command === "apk-imzala") return apkImzala(flags);
-  if (command === "apk-dogrula") return apkDogrula(flags);
-  throw new CliError("komut: imzala | dogrula | anahtar-uret | sertifika-ekle | yeniden-imzala | anahtar-ac | apk-imzala | apk-dogrula");
+  throw new CliError("komut: imzala | dogrula | anahtar-uret | sertifika-ekle | yeniden-imzala | anahtar-ac");
 }
 
 main().catch((e: unknown) => {

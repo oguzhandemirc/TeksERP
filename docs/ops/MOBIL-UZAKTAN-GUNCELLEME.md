@@ -209,7 +209,7 @@ kapalı.
 Yük (v:1): `urun: tablet` · `platform: android-arm64` · `kanal` · `versionCode` · `versionName` · `commit` ·
 `yayinZamani` · `paket {ad, boyut, sha256}` (`ad` = `TeksERP-<versionName>-vc<versionCode>.apk`, yol taşımaz) ·
 `capa`. `typ` protokolün `TYP.APK` kaydıdır; JWS kuralları panel/lisans aynası. Kod: yayın tarafı
-`mobil/scripts/lib/apk-kunye.mjs` (node:crypto), tablet doğrulayıcısı K-14'te (2026-10-07) kalktı (eski kanalda `eski-kanal-son` etiketinde)
+`apk-kunye.mjs` (node:crypto), tablet doğrulayıcısı K-14'te (2026-10-07), yayın tarafı + imza aracı + çapa 2026-10-08'de ana daldan kalktı (eski kanalda `eski-kanal-son` etiketinde)
 (Hermes'te node:crypto yok → denetlenmiş saf JS `@noble/curves` + `@noble/hashes` sarmalayıcısı — aşağıda "kripto").
 
 **Tablet ne yapar (fail-closed):** ① künyeyi okurken yeni sürüm sunuluyorsa (versionCode > kurulu) künye
@@ -221,7 +221,7 @@ imzalı dosya adından türer (belirteç yalnız kanal sunucusuna gider). ③ in
 sha256 ölçülür ("Doğrulanıyor… %"); tutmazsa dosya silinir, Android kurulum ekranı AÇILMAZ. Kurulum hâlâ
 operatörün "Yükle" dokunuşudur.
 
-**Çapa:** `mobil/src/lib/apk-imza-capasi.json` — JS paketine girer (OTA kod imzasıyla korunur, OTA ile değişebilir).
+**Çapa (eski kanal, `eski-kanal-son` etiketinde; ana dalda yok):** `apk-imza-capasi.json` — JS paketine girer (OTA kod imzasıyla korunur, OTA ile değişebilir).
 Satır yalnız `cd Teks-Erp && npx tsx scripts/guven-capasi-ekle.ts tablet …` ile girer (KURU; sonra `--yaz`).
 Anahtar kararı (kullanıcı, 2026-10-01) panelle ORTAKTIR: ayrı istemci yayın anahtarı `panel-2026` + çevrimdışı yedek
 `panel-2026-2`; ikisi de tablet çapasına girer (PAKET anahtarı künye imzalamaz). Üretim ve çapa komut sırası tek yerde:
@@ -388,7 +388,7 @@ Güncelleme: internet). İkisinin farklı olması normaldir; ekran bunu uyarı o
 | `mobil/src/test/update-feed-url.test.ts` | Feed adresi tek kaynak · `enabled` açık · sertifika dosyası gerçekten var · ERP adresinden bağımsızlık (7 kontrol) |
 | `mobil/src/services/appUpdate.service.test.ts` | Yenileme kapısı (bekleyen kayıt) + sürüm karşılaştırması (8 kontrol) |
 | `mobil/src/lib/kripto/kripto.test.ts` | `@noble/*` sarmalayıcısının kâhini: SHA-256/512 + Ed25519 (RFC 8032 · Wycheproof 151 vektör · node:crypto) + katı kip |
-| `Teks-Erp/scripts/test_panel_imza.ts` §3h–k · §4 | `guven-capasi-ekle.ts tablet` · `panel-imza.ts apk-imzala/apk-dogrula` uçtan uca |
+| `Teks-Erp/scripts/test_panel_imza.ts` §3b–d | APK künyesi kodu ana dalda YOK: `guven-capasi-ekle.ts tablet` → 64 · `panel-imza.ts apk-imzala/apk-dogrula` → 2 |
 | `scripts/test_grup_yayin_kapisi.mjs` §3G6 | Yayın kapıları: imzasız OTA · OTA sertifikası · tablet çapası · imzasız künye · rotasyon · yükleme sırası |
 | `mobil/scripts/build-apk.mjs` | Manifest'te feed adresi + runtimeVersion + **kod imzalama sertifikası** · APK'nın mührü |
 | `yayinla-ota.mjs [eski-kanal-son etiketinde, mobil/scripts/ altında]` | Bundle'daki ERP adresi · native parmak izi ↔ runtimeVersion · imzanın sertifikayla doğrulanması |
