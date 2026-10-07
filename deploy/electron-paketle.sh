@@ -45,11 +45,11 @@ echo "$istenen_surum" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+$' \
 node "$kok/scripts/panel-kimlik-kapisi.mjs" dinlenme \
   || hata "Ortak kimlik kapısı geçilmedi — yukarıdaki satırlara bak (kayıt: deploy/dagitim.json)."
 
-# --- PANEL İMZA ÇAPASI — derlemeden ÖNCE ------------------------------------
-# Panel güncellemeyi yalnız gömülü çapadaki anahtarla imzalanmış künyeyle kurar (Electron/electron/guncelleme/).
+# --- PANEL KÖK ÇAPASI — derlemeden ÖNCE -------------------------------------
+# Panel güncellemeyi yalnız gömülü köklerin ISTEMCI sertifikasıyla imzalanmış künyeyle kurar (Electron/electron/guncelleme/).
 # Çapası boş ya da bozuk panel HİÇBİR güncellemeyi doğrulayamaz (çıkışsız kapı) → paketlenmez.
 node "$kok/scripts/grup-yayin-kapisi.mjs" capa \
-  || hata "Panel imza çapası kullanılamaz — paket üretilmedi (anahtar kararı + guven-capasi-ekle.ts panel)."
+  || hata "Panel kök çapası kullanılamaz — paket üretilmedi (guven-capasi-ekle.ts istemci-kok)."
 
 # --- TEMİZ AĞAÇ (G22) — derlemeden ve dosya yazmadan ÖNCE -----------------------
 # Paket commit'lenmemiş/izlenmeyen içerik taşımaz: derleme commit'i pakete (asar package.json `gitCommit`) ve yanındaki

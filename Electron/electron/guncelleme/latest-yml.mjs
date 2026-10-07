@@ -87,8 +87,11 @@ export function parseLatestYml(text) {
   return ok(info);
 }
 
-/** Künye bloğunu latest.yml'e yazar (varsa değiştirir, yoksa sona ekler); sonuç yeniden ayrıştırılarak ölçülür. */
-export function withReleaseBlock(text, token) {
+/**
+ * Künye bloğunu latest.yml'e yazar (varsa değiştirir, yoksa sona ekler); `iptal` verilirse güncel dağıtım iptali
+ * (JWS) bloğa girer. Sonuç yeniden ayrıştırılarak ölçülür.
+ */
+export function withReleaseBlock(text, token, { iptal } = {}) {
   const p = parseLatestYml(text);
   if (!p.ok) throw new Error(`withReleaseBlock: ${p.message}`);
   const out = [];
@@ -103,9 +106,12 @@ export function withReleaseBlock(text, token) {
     out.push(line);
   }
   while (out.length && out[out.length - 1] === "") out.pop();
-  out.push(`${RELEASE_BLOCK_KEY}:`, `  v: ${RELEASE_DOC_VERSION}`, `  bildirim: ${token}`, "");
+  out.push(`${RELEASE_BLOCK_KEY}:`, `  v: ${RELEASE_DOC_VERSION}`, `  bildirim: ${token}`);
+  if (iptal !== undefined && iptal !== null) out.push(`  iptal: ${iptal}`);
+  out.push("");
   const next = out.join("\n");
   const q = parseLatestYml(next);
-  if (!q.ok || q.value[RELEASE_BLOCK_KEY]?.bildirim !== token) throw new Error("withReleaseBlock: yazılan künye geri okunamadı");
+  const back = q.ok ? q.value[RELEASE_BLOCK_KEY] : null;
+  if (!back || back.bildirim !== token || (back.iptal ?? null) !== (iptal ?? null)) throw new Error("withReleaseBlock: yazılan künye geri okunamadı");
   return next;
 }

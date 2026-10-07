@@ -3,7 +3,8 @@
 // Belirteç alınamazsa denetim BAŞLIKSIZ yapılır (bugünkü davranış): Worker açılana dek sorunsuz, sonra
 // geçiş listesi. Belirteç loglanmaz, diske yazılmaz, YALNIZ izinli güncelleme adresine gider
 // (`isAllowedUpdateUrl`). Yanıtın `grup` alanı (O3) ortak paketin güncelleme grubudur: biçimsizse null, küme
-// denetimi feed seçiminde (`groupFeedUrl`). Sözleşme: docs/ops/INDIRME-KAPISI-WORKER.md.
+// denetimi feed seçiminde (`groupFeedUrl`). `iptal` (I6a) güncel dağıtım iptali JWS'idir: imzası panelin ana
+// sürecinde doğrulanır (`mergeReleaseRevocations`); biçimsizse null ve belirteci düşürmez. Sözleşme: docs/ops/INDIRME-KAPISI-WORKER.md.
 import { isAllowedUpdateUrl } from "./update-feed";
 
 export const DOWNLOAD_TOKEN_HEADER = "X-TKL-Indirme";
@@ -15,6 +16,8 @@ export const API_BASE_URL_STORE_KEY = "config.apiBaseUrl";
 
 const JWS_PATTERN = /^[A-Za-z0-9_-]{2,}\.[A-Za-z0-9_-]{2,}\.[A-Za-z0-9_-]{2,}$/;
 const MAX_TOKEN_LENGTH = 8192;
+/** Dağıtım iptali tavanı = panelin JWS tavanı (`kunye-jws.mjs` JWS_MAX_LENGTH, 32 KiB). */
+const MAX_REVOCATION_LENGTH = 32 * 1024;
 const GROUP_PATTERN = /^[a-z0-9][a-z0-9-]{0,39}$/;
 
 /** Backend'in verdiği indirme izni: belirteç + (yalnız doğrulanmış kiradan) güncelleme grubu. */
@@ -22,6 +25,8 @@ export interface DownloadGrant {
   readonly belirtec: string;
   /** Kiranın güncelleme grubu; kira yok / grup değil / biçimsiz → null (ortak paket denetlemez). */
   readonly grup: string | null;
+  /** Güncel dağıtım iptali (kök imzalı JWS); yok / biçimsiz → null. */
+  readonly iptal: string | null;
 }
 
 export interface DownloadTokenInput {
@@ -58,11 +63,16 @@ export async function fetchDownloadToken(g: DownloadTokenInput): Promise<Downloa
       redirect: "error",
     });
     if (!res.ok) return null;
-    const body = (await res.json()) as { data?: { belirtec?: unknown; grup?: unknown } } | null;
+    const body = (await res.json()) as { data?: { belirtec?: unknown; grup?: unknown; iptal?: unknown } } | null;
     const token = body?.data?.belirtec;
     if (typeof token !== "string" || token.length > MAX_TOKEN_LENGTH || !JWS_PATTERN.test(token)) return null;
     const grup = body?.data?.grup;
-    return { belirtec: token, grup: typeof grup === "string" && GROUP_PATTERN.test(grup) ? grup : null };
+    const iptal = body?.data?.iptal;
+    return {
+      belirtec: token,
+      grup: typeof grup === "string" && GROUP_PATTERN.test(grup) ? grup : null,
+      iptal: typeof iptal === "string" && iptal.length <= MAX_REVOCATION_LENGTH && JWS_PATTERN.test(iptal) ? iptal : null,
+    };
   } catch {
     return null;
   } finally {

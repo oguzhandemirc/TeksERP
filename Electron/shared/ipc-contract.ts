@@ -279,7 +279,7 @@ export interface UpdateStatus {
   /**
    * Son GÜVENLİK reddi: imzalı künyesi doğrulanamadığı için indirilmeyen/kurulmayan güncelleme (ağ hatası
    * DEĞİL). Doğrulanan bir güncelleme ya da "güncel" sonucu temizler; arada yapılan denetimler korur.
-   * `kod` kapalı küme (`electron/guncelleme/panel-kunye.mjs` `RELEASE_ERROR_CODES`), metin `error`da.
+   * `kod` kapalı küme (`electron/guncelleme/panel-kunye.mjs` `RELEASE_ERROR_CODES`, v:2 zincir kodları `SERTIFIKA_*` dahil), metin `error`da.
    */
   imzaReddi?: UpdateSignatureRejection | null;
   /**

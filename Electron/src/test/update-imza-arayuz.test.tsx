@@ -76,6 +76,22 @@ describe("imza reddi görünür", () => {
     render(<UpdateSection />);
     expect(await screen.findByText(/imzası doğrulanamadı.*\(JWS_IMZA\)/)).toBeInTheDocument();
   });
+
+  it("künye v:2 zincir kodları (SERTIFIKA_*) şeritte ve ekranda aynı kontratla: ana sürecin TR metni + kod", async () => {
+    const { messageFor } = await import("../../electron/guncelleme/panel-kunye.mjs");
+    for (const kod of ["SERTIFIKA_GECERSIZ", "SERTIFIKA_SURESI", "SERTIFIKA_IPTAL"]) {
+      const red = { ...RED, kod };
+      kur({ state: "error", error: messageFor(kod), imzaReddi: red }, ["settings:workstation"]);
+      const serit = render(<UpdateSecurityStrip />);
+      const alert = await screen.findByRole("alert");
+      expect(alert).toHaveTextContent("KURULMADI");
+      expect(alert).toHaveTextContent(kod);
+      serit.unmount();
+      const ekran = render(<UpdateSection />);
+      expect(await screen.findByText(new RegExp(`kurulmadı.*\\(${kod}\\)`))).toBeInTheDocument();
+      ekran.unmount();
+    }
+  });
 });
 
 describe("güncelleme adresi ezmesi — yalnız admin:settings", () => {

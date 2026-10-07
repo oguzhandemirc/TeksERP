@@ -43,8 +43,12 @@ vi.mock("../../electron/ipc/secure-store.ipc.js", () => ({
 }));
 
 const TOKEN = "eyJhbGciOiJFZERTQSJ9.eyJ2IjoxfQ.c2lnbmF0dXJl";
-const ok = (belirtec: unknown, grup?: unknown) =>
-  ({ ok: true, status: 200, json: async () => ({ success: true, data: { belirtec, ...(grup === undefined ? {} : { grup }) } }) }) as unknown as Response;
+const ok = (belirtec: unknown, grup?: unknown, iptal?: unknown) =>
+  ({
+    ok: true,
+    status: 200,
+    json: async () => ({ success: true, data: { belirtec, ...(grup === undefined ? {} : { grup }), ...(iptal === undefined ? {} : { iptal }) } }),
+  }) as unknown as Response;
 const fail = (status: number) => ({ ok: false, status, json: async () => ({ success: false }) }) as unknown as Response;
 
 describe("indirme belirteci (saf)", () => {
@@ -57,7 +61,7 @@ describe("indirme belirteci (saf)", () => {
 
   it("oturumla alınır; Bearer + yönlendirme yok", async () => {
     const f = vi.fn(async () => ok(TOKEN));
-    await expect(fetchDownloadToken({ apiBaseUrl: "http://s:4000", authToken: "jwt", fetchImpl: f })).resolves.toEqual({ belirtec: TOKEN, grup: null });
+    await expect(fetchDownloadToken({ apiBaseUrl: "http://s:4000", authToken: "jwt", fetchImpl: f })).resolves.toEqual({ belirtec: TOKEN, grup: null, iptal: null });
     const [url, init] = f.mock.calls[0] as unknown as [string, RequestInit];
     expect(url).toBe("http://s:4000/api/license/indirme-belirteci?urun=electron");
     expect((init.headers as Record<string, string>).Authorization).toBe("Bearer jwt");
@@ -79,11 +83,27 @@ describe("indirme belirteci (saf)", () => {
 
   it("⭐ grup (O3) yanıttan: biçimli değer geçer, biçimsiz/eksik → null; grup belirteçsiz izin doğurmaz", async () => {
     const al = (r: Response) => fetchDownloadToken({ apiBaseUrl: "http://s", authToken: "jwt", fetchImpl: async () => r });
-    expect(await al(ok(TOKEN, "oncu"))).toEqual({ belirtec: TOKEN, grup: "oncu" });
+    expect(await al(ok(TOKEN, "oncu"))).toEqual({ belirtec: TOKEN, grup: "oncu", iptal: null });
     for (const kotu of [null, 7, "", "Test", "../genel", "a".repeat(41), "test/electron"]) {
-      expect(await al(ok(TOKEN, kotu)), String(kotu)).toEqual({ belirtec: TOKEN, grup: null });
+      expect(await al(ok(TOKEN, kotu)), String(kotu)).toEqual({ belirtec: TOKEN, grup: null, iptal: null });
     }
     expect(await al(ok(null, "test"))).toBeNull();
+  });
+
+  it("⭐ dağıtım iptali (I6a) yanıttan: JWS biçimli ≤ 32 KiB geçer; biçimsiz/eksik/çok uzun → null ve belirteci DÜŞÜRMEZ", async () => {
+    const al = (r: Response) => fetchDownloadToken({ apiBaseUrl: "http://s", authToken: "jwt", fetchImpl: async () => r });
+    const IPTAL = "eyJhbGciOiJFZERTQSJ9.eyJzaXJhIjoxfQ.aW1aYQ";
+    expect(await al(ok(TOKEN, "oncu", IPTAL))).toEqual({ belirtec: TOKEN, grup: "oncu", iptal: IPTAL });
+    expect(await al(ok(TOKEN, "oncu", `${"a".repeat(30000)}.bb.cc`))).toEqual({ belirtec: TOKEN, grup: "oncu", iptal: `${"a".repeat(30000)}.bb.cc` });
+    for (const kotu of [null, 7, "", "iki.parca", "boşluklu iptal.x.y", `${"a".repeat(33 * 1024)}.bb.cc`]) {
+      expect(await al(ok(TOKEN, "oncu", kotu)), String(kotu).slice(0, 20)).toEqual({ belirtec: TOKEN, grup: "oncu", iptal: null });
+    }
+  });
+
+  it("⭐ iki uç aynı sözleşme: backend LicenseDownloadToken `iptal: string | null` taşır, panel DownloadGrant da", () => {
+    const src = (p: string) => readFileSync(resolve(__dirname, p), "utf8");
+    expect(src("../../../Teks-Erp/src/services/license-view.service.ts")).toMatch(/LicenseDownloadToken = .*readonly iptal: string \| null/);
+    expect(src("../../shared/download-token.ts")).toMatch(/readonly iptal: string \| null;/);
   });
 
   it("feed seçenekleri: belirteç varsa başlık, yoksa bugünkü gibi başlıksız", () => {

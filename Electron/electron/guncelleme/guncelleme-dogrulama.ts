@@ -1,20 +1,29 @@
 import anchorFile from "./imza-capasi.json";
-import { messageFor, verifyArtifactFile, verifyUpdateInfo, type AnchorKey, type ReleaseDoc } from "./panel-kunye.mjs";
+import {
+  RELEASE_BLOCK_KEY,
+  mergeReleaseRevocations,
+  messageFor,
+  verifyArtifactFile,
+  verifyUpdateInfo,
+  type ReleaseDoc,
+  type RootAnchorKey,
+} from "./panel-kunye.mjs";
 
 /**
  * GÜNCELLEME DOĞRULAYICI — panel, imzasını doğrulayamadığı güncellemeyi İNDİRMEZ ve KURMAZ (fail-closed).
  *
  * Üç kapı, üç an (electron-updater'ın kendi sha512'si aynı sunucudaki latest.yml'e bağlı olduğu için bütünlük
  * kanıtı DEĞİLDİR; kanıt, yayın makinesinde imzalanan künyedir — `panel-kunye.mjs`):
- *   ① `checkInfo`        — `update-available`: latest.yml'deki imzalı künye (çapa · typ · kanal · sürüm · dosya);
+ *   ① `checkInfo`        — `update-available`: latest.yml'deki imzalı künye (kök çapası · ISTEMCI sertifikası ·
+ *     dağıtım iptali · typ · kanal · sürüm · dosya);
  *   ② `checkDownloaded`  — `update-downloaded`: inen dosyanın boyu + sha512'si künyedekiyle aynı mı;
  *   ③ `checkBeforeInstall` — kurulumdan HEMEN önce aynı dosya yeniden ölçülür (indirme ile kurulum arasında
  *     önbellek dizinindeki dosya değiştirilmiş olabilir; kurulum yönetici yetkisiyle koşar).
  */
 
-/** Derleme anında ana sürece GÖMÜLEN üretim çapası (satır yalnız `guven-capasi-ekle.ts panel` ile eklenir). */
-export function panelAnchor(): readonly AnchorKey[] {
-  return anchorFile.anahtarlar;
+/** Derleme anında ana sürece GÖMÜLEN kök çapası (satır yalnız `guven-capasi-ekle.ts istemci-kok` ile eklenir). */
+export function panelAnchor(): readonly RootAnchorKey[] {
+  return anchorFile.kokler;
 }
 
 /** Reddin operatöre ve sağlık kaydına giden yüzü — kod kapalı küme (`RELEASE_ERROR_CODES`), mesaj Türkçe. */
@@ -22,18 +31,28 @@ export interface UpdateRejection {
   readonly kod: string;
   readonly mesaj: string;
   readonly surum: string | null;
+  /** Zincir katmanının ince kodu (yalnız günlük; operatöre `mesaj` gider). */
+  readonly detay?: string;
 }
 
 export type VerifyStep = { readonly ok: true } | { readonly ok: false; readonly rejection: UpdateRejection };
 
 export interface UpdateVerifierDeps {
-  readonly keys: () => readonly AnchorKey[];
+  readonly roots: () => readonly RootAnchorKey[];
   /**
    * Künyenin taşıması gereken kanal, denetim ANINDA okunur: eski kanal yolunda gömülü kod, ortak pakette bu
    * denetimin feed'ini seçen kiradaki güncelleme grubu. `null` (grup bilinmiyor) → künye kabul edilmez.
    */
   readonly channel: () => string | null;
   readonly installedVersion: string;
+  /** Sertifika süresi/toleransı için şimdiki an. */
+  readonly nowMs: () => number;
+  /** Yerelde saklanan en yüksek sıralı dağıtım iptali (`iptal-deposu.ts`); güvenilmez girdi, yeniden doğrulanır. */
+  readonly storedRevocation: () => string | null;
+  /** Son indirme belirteci yanıtının taşıdığı dağıtım iptali (I6a). */
+  readonly tokenRevocation: () => string | null;
+  /** Birleştirmede yerelden YÜKSEK sıralı iptal kazanınca saklanır (en iyi çaba). */
+  readonly saveRevocation: (token: string) => void;
   /** Künyeyle eşleşmeyen indirmeyi önbellekten siler (en iyi çaba). */
   readonly removeFile: (filePath: string) => Promise<void>;
 }
@@ -48,8 +67,8 @@ function versionOf(info: unknown): string | null {
   return typeof v === "string" ? v : null;
 }
 
-function rejected(kod: string, surum: string | null): VerifyStep {
-  return { ok: false, rejection: { kod, mesaj: messageFor(kod), surum } };
+function rejected(kod: string, surum: string | null, detay?: string): VerifyStep {
+  return { ok: false, rejection: { kod, mesaj: messageFor(kod), surum, ...(detay && detay !== kod ? { detay } : {}) } };
 }
 
 export interface UpdateVerifier {
@@ -68,8 +87,25 @@ export function createUpdateVerifier(deps: UpdateVerifierDeps): UpdateVerifier {
       verified = null;
       const channel = deps.channel();
       if (channel === null) return rejected("KUNYE_KANAL", versionOf(info));
-      const r = verifyUpdateInfo(info, { keys: deps.keys(), channel, installedVersion: deps.installedVersion });
-      if (!r.ok) return rejected(r.code, versionOf(info));
+      const roots = deps.roots();
+      const block = typeof info === "object" && info !== null ? (info as Record<string, unknown>)[RELEASE_BLOCK_KEY] : undefined;
+      // İptal künyeden ÖNCE birleştirilir ve saklanır: künye reddedilse de görülen iptal geri alınamaz olur.
+      const merged = mergeReleaseRevocations(block, { roots, stored: deps.storedRevocation(), fromToken: deps.tokenRevocation() });
+      if (merged.token !== null && merged.kaynak !== "yerel") {
+        try {
+          deps.saveRevocation(merged.token);
+        } catch {
+          // En iyi çaba: bu denetimde yine uygulanır.
+        }
+      }
+      const r = verifyUpdateInfo(info, {
+        roots,
+        channel,
+        installedVersion: deps.installedVersion,
+        nowMs: deps.nowMs(),
+        revocation: merged.revocation,
+      });
+      if (!r.ok) return rejected(r.code, versionOf(info), r.detay);
       expected = r.value.doc;
       return { ok: true };
     },

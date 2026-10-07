@@ -17,6 +17,10 @@
 //      `paket-hazirlik*` kid'i RED) · §6 elle bozulmuş biçim / ayna farkı / listede `hazirlik-*` kökü → BICIM,
 //      yazım yok · §7 üretilen
 //      anchor.rs düzeni `rustfmt --check` temiz (rustfmt yoksa ⏭)
+//   §8 `istemci-kok` (panel KÖK çapası, künye v:2): gerçek ağaçta panel çapası kesin düzende ve her satırı TS üretim
+//      kök listesindekiyle AYNI (kid + x + sınıflar) · boş kopyada kuru koşum dokunmaz · `--yaz` kökü x + sınıflar
+//      AYNEN kopyalar ve gerçek dosyayla bayt-eşit üretir · ikinci kez değişiklik yok · listede olmayan / biçim dışı
+//      (fikstür) kök RED · çapadaki satır TS'tekinden farklı (bayat kopya) RED · elle bozulmuş düzen BICIM · argümansız 64
 // ⭐ KALICI SONDA ✓K: §5–§6 her koşumda ret ve biçim dallarını ısırtır; §0c fikstür kid'leri kuralda ret alır.
 // Koşum: node ../scripts/agir-is.mjs -- npx tsx scripts/test_guven_capasi_ekle.ts
 // =============================================================================
@@ -37,6 +41,8 @@ import {
   kokKipi,
   paketKidGecerli,
   paketKipi,
+  PANEL_CAPA_DOSYASI,
+  istemciKokCapasiOku,
   rsSabiti,
   type CapaDurumu,
 } from "./lib/guven-capasi";
@@ -419,11 +425,73 @@ function bolum7(): void {
   }
 }
 
+// ── §8 istemci-kok ───────────────────────────────────────────────────────────
+function bolum8(d: CapaDurumu): void {
+  console.log("\n§8 istemci-kok — panel kök çapası (TS üretim kökü AYNEN)");
+  const ayni = (a: RootKey, b: RootKey): boolean => a.kid === b.kid && a.x === b.x && JSON.stringify(a.classes) === JSON.stringify(b.classes);
+  let gercek: ReturnType<typeof istemciKokCapasiOku> | null = null;
+  try {
+    gercek = istemciKokCapasiOku(DEPO);
+  } catch (e) {
+    check("§8a gerçek ağacın panel kök çapası kesin düzende ayrıştırılır", false, (e as Error).message);
+    return;
+  }
+  const uretim = d.kokler.uretim;
+  check(
+    "§8a gerçek ağacın panel kök çapası kesin düzende, dolu ve her satırı TS üretim kök listesindekiyle AYNI (kid + x + sınıflar)",
+    gercek.liste.length > 0 && gercek.liste.every((r) => uretim.some((t) => ayni(t, r))),
+    gercek.liste.map((r) => r.kid).join(", ") || "BOŞ",
+  );
+  const kok = kopya();
+  try {
+    mkdirSync(path.dirname(path.join(kok, PANEL_CAPA_DOSYASI)), { recursive: true });
+    const bos = `${JSON.stringify({ ...gercek.json, kokler: [] }, null, 2)}\n`;
+    writeFileSync(path.join(kok, PANEL_CAPA_DOSYASI), bos);
+    const panel = (): string => oku(kok, PANEL_CAPA_DOSYASI);
+    const ilk = uretim[0]!;
+    const k = (argv: string[]): number => kos([...argv, `--kok=${kok}`]);
+    check("§8b kuru koşum (--yaz yok): çıkış 0, dosya aynı", k(["istemci-kok", `--kok-kid=${ilk.kid}`]) === 0 && panel() === bos);
+    const r = k(["istemci-kok", `--kok-kid=${ilk.kid}`, "--yaz"]);
+    const yazilan = istemciKokCapasiOku(kok).liste;
+    check("§8c ⭐ --yaz: kök x + sınıflar TS üretim listesinden AYNEN kopyalanır", r === 0 && yazilan.length === 1 && ayni(yazilan[0]!, ilk), JSON.stringify(yazilan));
+    if (gercek.liste.length === 1 && ayni(gercek.liste[0]!, ilk)) {
+      check("§8c2 boş kopyadan üretilen çapa gerçek ağacın dosyasıyla BAYT-EŞİT", panel() === oku(DEPO, PANEL_CAPA_DOSYASI));
+    }
+    const ara = panel();
+    check("§8d aynı kök ikinci kez → çıkış 0, değişiklik yok", k(["istemci-kok", `--kok-kid=${ilk.kid}`, "--yaz"]) === 0 && panel() === ara);
+    for (const [ad, argv, beklenen] of [
+      ["TS üretim listesinde olmayan kök (kok-2099-9)", ["istemci-kok", "--kok-kid=kok-2099-9"], 1],
+      ["biçim dışı (fikstür) kök kok-fikstur-1", ["istemci-kok", "--kok-kid=kok-fikstur-1"], 1],
+      ["kök değil (panel-2026)", ["istemci-kok", "--kok-kid=panel-2026"], 1],
+      ["--kok-kid yok", ["istemci-kok"], 64],
+      ["eski panel komutu", ["panel", "--kid=panel-2026", `--x=${taze()}`], 64],
+    ] as const) {
+      const c = k([...argv, "--yaz"]);
+      check(`§8e ${ad} → çıkış ${beklenen}, dosya aynı`, c === beklenen && panel() === ara, `çıkış ${c}`);
+    }
+    const bayat = `${JSON.stringify({ ...gercek.json, kokler: [{ kid: ilk.kid, x: taze(), classes: [...ilk.classes] }] }, null, 2)}\n`;
+    writeFileSync(path.join(kok, PANEL_CAPA_DOSYASI), bayat);
+    check("§8f çapadaki satır TS'tekinden farklı (bayat/elle değişmiş x) → çıkış 1, yazım yok", k(["istemci-kok", `--kok-kid=${ilk.kid}`, "--yaz"]) === 1 && panel() === bayat);
+    const sinifsiz = `${JSON.stringify({ ...gercek.json, kokler: [{ kid: ilk.kid, x: ilk.x, classes: ["URETIM"] }] }, null, 2)}\n`;
+    writeFileSync(path.join(kok, PANEL_CAPA_DOSYASI), sinifsiz);
+    check("§8f2 çapadaki satırın sınıfları TS'tekinden farklı → çıkış 1, yazım yok", k(["istemci-kok", `--kok-kid=${ilk.kid}`, "--yaz"]) === 1 && panel() === sinifsiz);
+    const bozuk = ara.replace('"kokler": [', '"kokler":  [');
+    writeFileSync(path.join(kok, PANEL_CAPA_DOSYASI), bozuk);
+    check("§8g elle bozulmuş düzen → çıkış 2 (BICIM), yazım yok", k(["istemci-kok", `--kok-kid=${ilk.kid}`, "--yaz"]) === 2 && panel() === bozuk);
+    const eski = `${JSON.stringify({ ...gercek.json, kokler: undefined, anahtarlar: [{ kid: "panel-2026", x: taze() }] }, null, 2)}\n`;
+    writeFileSync(path.join(kok, PANEL_CAPA_DOSYASI), eski);
+    check("§8h eski biçim ({anahtarlar}) → çıkış 2 (BICIM)", k(["istemci-kok", `--kok-kid=${ilk.kid}`, "--yaz"]) === 2 && panel() === eski);
+  } finally {
+    rmSync(kok, { recursive: true, force: true });
+  }
+}
+
 function main(): void {
   const d = bolum0();
   if (d) {
     bolum1ile4();
     bolum5ile6(d);
+    bolum8(d);
   }
   bolum7();
   console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız${ATLAMA.ozetEki()} ===`);

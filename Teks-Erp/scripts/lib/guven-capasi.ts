@@ -284,24 +284,26 @@ export function paketEklePlani(d: CapaDurumu, yeni: PackageKey): EklemePlani {
   return { degisir: true, kip, dosyalar: new Map([[CAPA_DOSYALARI.paketTs, paketTs], [CAPA_DOSYALARI.anchorRs, anchorRs]]) };
 }
 
-// ── PANEL imza çapası (beşinci yer, ayrı komut) ─────────────────────────────
-/** Panelin gömülü güncelleme imza çapası — derlemede ana sürece girer (`guncelleme-dogrulama.ts`). */
+// ── İstemci çapaları (beşinci ve altıncı yer, ayrı komutlar) ─────────────────
+/**
+ * Panelin gömülü KÖK çapası — derlemede ana sürece girer (`guncelleme-dogrulama.ts`). Künye v:2'yi `ist-*` anahtarı
+ * imzalar ve kök imzalı ISTEMCI sertifikasını taşır; çapada yalnız kök açık yarıları durur (ISTEMCI-ANAHTARI-KOK-ALTINDA §3).
+ */
 export const PANEL_CAPA_DOSYASI = "Electron/electron/guncelleme/imza-capasi.json";
 /** Tabletin APK künyesi imza çapası — JS paketine girer (`appUpdate.service.ts`; OTA kod imzasıyla korunur). */
 export const TABLET_CAPA_DOSYASI = "mobil/src/lib/apk-imza-capasi.json";
-export type IstemciCapaDosyasi = typeof PANEL_CAPA_DOSYASI | typeof TABLET_CAPA_DOSYASI;
+export type IstemciCapaDosyasi = typeof TABLET_CAPA_DOSYASI;
 
-export interface PanelCapaDurumu {
+export interface TabletCapaDurumu {
   readonly liste: readonly PackageKey[];
   readonly json: Record<string, unknown>;
   readonly dosya: IstemciCapaDosyasi;
 }
 
-const panelCapaMetni = (json: Record<string, unknown>, liste: readonly PackageKey[]): string =>
+const tabletCapaMetni = (json: Record<string, unknown>, liste: readonly PackageKey[]): string =>
   `${JSON.stringify({ ...json, anahtarlar: liste.map((k) => ({ kid: k.kid, x: k.x })) }, null, 2)}\n`;
 
-/** Kesin biçim: `{_aciklama, anahtarlar: [{kid, x}]}`, `JSON.stringify(…, 2)` düzeni — elle bozulmuşsa DURUR. */
-export function panelCapasiOku(kok: string, dosya: IstemciCapaDosyasi = PANEL_CAPA_DOSYASI): PanelCapaDurumu {
+function jsonNesnesi(kok: string, dosya: string): { metin: string; o: Record<string, unknown> } {
   const metin = oku(kok, dosya);
   let json: unknown;
   try {
@@ -309,7 +311,13 @@ export function panelCapasiOku(kok: string, dosya: IstemciCapaDosyasi = PANEL_CA
   } catch {
     throw new CapaHatasi("BICIM", `${dosya} JSON değil`);
   }
-  const o = (typeof json === "object" && json !== null && !Array.isArray(json) ? json : {}) as Record<string, unknown>;
+  return { metin, o: (typeof json === "object" && json !== null && !Array.isArray(json) ? json : {}) as Record<string, unknown> };
+}
+
+/** Tablet çapası, kesin biçim: `{_aciklama, anahtarlar: [{kid, x}]}`, `JSON.stringify(…, 2)` düzeni — elle bozulmuşsa DURUR. */
+export function tabletCapasiOku(kok: string): TabletCapaDurumu {
+  const dosya = TABLET_CAPA_DOSYASI;
+  const { metin, o } = jsonNesnesi(kok, dosya);
   const ham = o.anahtarlar;
   const gecerli = Array.isArray(ham) && ham.every((k) => {
     const r = k as Record<string, unknown>;
@@ -317,17 +325,16 @@ export function panelCapasiOku(kok: string, dosya: IstemciCapaDosyasi = PANEL_CA
   });
   if (!gecerli) throw new CapaHatasi("BICIM", `${dosya}: anahtarlar [{kid, x}] dizisi değil`);
   const liste = (ham as PackageKey[]).map((k) => ({ kid: k.kid, x: k.x }));
-  if (panelCapaMetni(o, liste) !== metin) throw new CapaHatasi("BICIM", `${dosya} beklenen biçimde değil (elle düzenlenmiş?) — betik güncellenmeden ekleme yapılmaz`);
+  if (tabletCapaMetni(o, liste) !== metin) throw new CapaHatasi("BICIM", `${dosya} beklenen biçimde değil (elle düzenlenmiş?) — betik güncellenmeden ekleme yapılmaz`);
   return { liste, json: o, dosya };
 }
 
 /**
- * Panel çapasına anahtar: (a) törenle PAKET çapasına girmiş üretim PAKET anahtarı (`paket-<yıl>`, AYNI açık yarı
- * — yeni PAKET anahtarı buradan çapaya giremez) ya da (b) ayrı panel yayın anahtarı (`panel-<yıl>[-<n>]`).
+ * Tablet çapasına anahtar: (a) törenle PAKET çapasına girmiş üretim PAKET anahtarı (`paket-<yıl>`, AYNI açık yarı
+ * — yeni PAKET anahtarı buradan çapaya giremez) ya da (b) ayrı istemci yayın anahtarı (`panel-<yıl>[-<n>]`).
  * Fikstür ya da biçim dışı kid RED; aynı kid + aynı anahtar → değişiklik yok; çakışma → RED. Yeni satır SONA.
- * Tablet APK künyesi çapası (`TABLET_CAPA_DOSYASI`) AYNI kurallarla — aynı anahtar kararı iki istemciye de.
  */
-export function panelEklePlani(d: CapaDurumu, p: PanelCapaDurumu, yeni: PackageKey): EklemePlani {
+export function tabletEklePlani(d: CapaDurumu, p: TabletCapaDurumu, yeni: PackageKey): EklemePlani {
   if (!PRODUCTION_SIGNER_KID.test(yeni.kid)) {
     throw new CapaHatasi("GECERSIZ", `istemci imza çapası kid'i paket-<yıl>[-<n>] (PAKET anahtarı) ya da panel-<yıl>[-<n>] olmalı: ${yeni.kid}`);
   }
@@ -340,5 +347,61 @@ export function panelEklePlani(d: CapaDurumu, p: PanelCapaDurumu, yeni: PackageK
   }
   // İstemci çapası tek listedir ve yalnız üretim biçiminde kid taşır (yukarıda) ⇒ planın kipi `uretim`.
   if (listedeAyniAnahtarVar(p.liste, yeni, (a, b) => a.x === b.x)) return { degisir: false, kip: "uretim", dosyalar: new Map() };
-  return { degisir: true, kip: "uretim", dosyalar: new Map([[p.dosya, panelCapaMetni(p.json, [...p.liste, { kid: yeni.kid, x: yeni.x }])]]) };
+  return { degisir: true, kip: "uretim", dosyalar: new Map([[p.dosya, tabletCapaMetni(p.json, [...p.liste, { kid: yeni.kid, x: yeni.x }])]]) };
+}
+
+export interface IstemciKokCapaDurumu {
+  readonly liste: readonly RootKey[];
+  readonly json: Record<string, unknown>;
+}
+
+const kokCapaMetni = (json: Record<string, unknown>, liste: readonly RootKey[]): string =>
+  `${JSON.stringify({ ...json, kokler: liste.map((r) => ({ kid: r.kid, x: r.x, classes: [...r.classes] })) }, null, 2)}\n`;
+
+/** Panel kök çapası, kesin biçim: `{_aciklama, kokler: [{kid, x, classes}]}`, `JSON.stringify(…, 2)` düzeni. */
+export function istemciKokCapasiOku(kok: string): IstemciKokCapaDurumu {
+  const { metin, o } = jsonNesnesi(kok, PANEL_CAPA_DOSYASI);
+  const ham = o.kokler;
+  const gecerli = Array.isArray(ham) && ham.every((k) => {
+    const r = k as Record<string, unknown>;
+    return (
+      typeof k === "object" &&
+      k !== null &&
+      Object.keys(r).join(",") === "kid,x,classes" &&
+      typeof r.kid === "string" &&
+      typeof r.x === "string" &&
+      Array.isArray(r.classes) &&
+      r.classes.every((c) => typeof c === "string")
+    );
+  });
+  if (!gecerli) throw new CapaHatasi("BICIM", `${PANEL_CAPA_DOSYASI}: kokler [{kid, x, classes}] dizisi değil`);
+  const liste = (ham as RootKey[]).map((r) => ({ kid: r.kid, x: r.x, classes: [...r.classes] }));
+  if (kokCapaMetni(o, liste) !== metin) {
+    throw new CapaHatasi("BICIM", `${PANEL_CAPA_DOSYASI} beklenen biçimde değil (elle düzenlenmiş?) — betik güncellenmeden ekleme yapılmaz`);
+  }
+  return { liste, json: o };
+}
+
+const ayniKok = (a: RootKey, b: RootKey): boolean => a.x === b.x && JSON.stringify(a.classes) === JSON.stringify(b.classes);
+
+/**
+ * Panel kök çapasına kök: YALNIZ TS üretim kök listesindeki (`PRODUCTION_ROOT_PUBLIC_KEYS`, törenle girmiş) satır,
+ * kid + x + sınıflar AYNEN kopyalanır — panel kendi başına kök kabul etmez. Listede yok / biçim dışı → RED;
+ * çapadaki satır TS listesindekinden farklıysa (kopya bayatlamış) → RED; aynı satır → değişiklik yok. Yeni satır SONA.
+ */
+export function istemciKokEklePlani(d: CapaDurumu, p: IstemciKokCapaDurumu, kokKid: string): EklemePlani {
+  if (!KOK_KID_BICIMI.test(kokKid)) throw new CapaHatasi("GECERSIZ", `kök kid'i biçimsiz: ${kokKid} (kok-<yıl>-<n>)`);
+  const uretim = d.kokler.uretim;
+  const kaynak = uretim.find((r) => r.kid === kokKid);
+  if (!kaynak) throw new CapaHatasi("GECERSIZ", `${kokKid} TS üretim kök listesinde (PRODUCTION_ROOT_PUBLIC_KEYS) yok — önce 'kok' komutuyla törenle eklenir`);
+  kokDogrula(kaynak);
+  for (const satir of p.liste) {
+    const tsde = uretim.find((r) => r.kid === satir.kid);
+    if (!tsde || !ayniKok(tsde, satir)) {
+      throw new CapaHatasi("CAKISMA", `panel kök çapasındaki ${satir.kid} TS üretim kök listesindekiyle aynı değil — çapa elle değiştirilmiş ya da bayat`);
+    }
+  }
+  const yeni = { kid: kaynak.kid, x: kaynak.x, classes: [...kaynak.classes] };
+  if (listedeAyniAnahtarVar(p.liste, yeni, ayniKok)) return { degisir: false, kip: "uretim", dosyalar: new Map() };
+  return { degisir: true, kip: "uretim", dosyalar: new Map([[PANEL_CAPA_DOSYASI, kokCapaMetni(p.json, [...p.liste, yeni])]]) };
 }

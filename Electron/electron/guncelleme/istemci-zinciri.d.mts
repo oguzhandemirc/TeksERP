@@ -79,6 +79,7 @@ export const ISO_DATETIME_PATTERN: RegExp;
 export const CLIENT_CHAIN_ERROR_CODES: readonly string[];
 export function isIsoTime(v: unknown): v is string;
 export function isClientKid(kid: unknown): boolean;
+export function isRootKid(kid: unknown): boolean;
 export function prepareRootAnchor(roots: unknown): KunyeResult<ReadonlyMap<string, { readonly key: KeyObject; readonly classes: readonly string[] }>>;
 export function decodeCertificate(payload: Record<string, unknown>): KunyeResult<CertificateDoc>;
 export function verifyCertificate(token: unknown, g: { readonly roots: unknown; readonly usage: string; readonly atMs: number }): KunyeResult<VerifiedCertificate>;

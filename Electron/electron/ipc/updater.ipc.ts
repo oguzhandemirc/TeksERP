@@ -11,6 +11,7 @@ import {
 } from "@shared/update-feed";
 import { API_BASE_URL_STORE_KEY, AUTH_TOKEN_STORE_KEY, feedOptions, fetchDownloadToken } from "@shared/download-token";
 import { createUpdateVerifier, panelAnchor, type UpdateRejection, type UpdateVerifier } from "../guncelleme/guncelleme-dogrulama";
+import { createRevocationStore } from "../guncelleme/iptal-deposu";
 import {
   UPDATE_CHECK_INTERVAL_MS,
   UPDATE_FIRST_CHECK_DELAY_MS,
@@ -58,6 +59,18 @@ let status: UpdateStatus = {
  * yazar). `null` → doğrulayıcı künyeyi kabul etmez.
  */
 let expectedChannel: string | null = null;
+
+/** Son indirme belirteci yanıtının dağıtım iptali (I6a); doğrulayıcı yerel depo + künye bloğuyla birleştirir. */
+let lastTokenRevocation: string | null = null;
+
+/** `userData` TEMBEL çözülür: modül yüklenirken `app` hazır olmayabilir (test sahtelerinde `getPath` yok). */
+const revocationStore = createRevocationStore(() => {
+  try {
+    return app.getPath("userData");
+  } catch {
+    return null;
+  }
+});
 
 /** Durum değişimini sakla + AÇIK TÜM pencerelere yayınla. */
 function publish(patch: Partial<UpdateStatus>): UpdateStatus {
@@ -149,6 +162,7 @@ async function applyFeedUrl(): Promise<boolean> {
     fetchImpl: (u, init) => net.fetch(u, init),
   });
   const grup = grant?.grup ?? null;
+  lastTokenRevocation = grant?.iptal ?? null;
   const feed = resolveFeedUrl(grup);
   if (!feed) {
     expectedChannel = null;
@@ -209,7 +223,7 @@ let installing = false;
 
 /** Güvenlik reddi: kurulum yok, TR uyarı, sağlık/teşhis için tek satır (kod + sürüm — sır yok). */
 function rejectUpdate(r: UpdateRejection): void {
-  log.warn(`[updater] güncelleme REDDEDİLDİ kod=${r.kod} surum=${r.surum ?? "-"}`);
+  log.warn(`[updater] güncelleme REDDEDİLDİ kod=${r.kod}${r.detay ? ` detay=${r.detay}` : ""} surum=${r.surum ?? "-"}`);
   const now = new Date().toISOString();
   publish({
     state: "error",
@@ -305,9 +319,13 @@ export function registerUpdaterIpc(): void {
   }
 
   verifier = createUpdateVerifier({
-    keys: panelAnchor,
+    roots: panelAnchor,
     channel: () => expectedChannel,
     installedVersion: app.getVersion(),
+    nowMs: () => Date.now(),
+    storedRevocation: () => revocationStore.read(),
+    tokenRevocation: () => lastTokenRevocation,
+    saveRevocation: (token) => revocationStore.save(token),
     removeFile: (p) => unlink(p),
   });
   updater().logger = log;

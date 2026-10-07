@@ -9,7 +9,7 @@
 //   node scripts/grup-yayin-kapisi.mjs terfi <grup> <ürün> <sürüm> [--dizin=<ortak paket>] [--kuru] [--terfi-atla=<cümle>]
 //   node scripts/grup-yayin-kapisi.mjs derleme-bagi <ortak paket dizini> <sürüm>   # künye ↔ exe ↔ asar ↔ HEAD (grup-nötr)
 //   node scripts/grup-yayin-kapisi.mjs hazirla <grup> <ortak paket dizini> <sürüm> # grup künye dizini → stdout
-//   node scripts/grup-yayin-kapisi.mjs capa [<ortak paket dizini>]          # panel imza çapası dolu (+ dizin verilirse pakete gömülü)
+//   node scripts/grup-yayin-kapisi.mjs capa [<ortak paket dizini>]          # panel kök çapası dolu (+ dizin verilirse pakete gömülü)
 //   node scripts/grup-yayin-kapisi.mjs temiz-agac                          # paketleme/yayın öncesi: ağaç temiz mi → stdout'a HEAD commit'i
 //   node scripts/grup-yayin-kapisi.mjs imza <grup> <grup dizini>            # künye (kanal = GRUP) panelin kabul edeceği künye mi (3 = imzasız)
 //   node scripts/grup-yayin-kapisi.mjs rotasyon <grup> <grup dizini> <yayındaki latest.yml>
@@ -53,7 +53,7 @@ async function capaDenetle(dizin) {
   const liste = panelCapasi();
   const f = panelCapaFarki(liste);
   if (!f.length && dizin) f.push(...panelCapaPaketFarki(panelArtefaktKimligi(dizin).anaSurec, liste));
-  if (f.length) dur('PANEL İMZA ÇAPASI KULLANILAMAZ — paket hiçbir güncellemeyi doğrulayamaz (çıkışsız kapı)', f, 1);
+  if (f.length) dur('PANEL KÖK ÇAPASI KULLANILAMAZ — paket hiçbir güncellemeyi doğrulayamaz (çıkışsız kapı)', f, 1);
   return liste;
 }
 
@@ -116,7 +116,7 @@ async function main(argv) {
     }
     if (komut === 'capa') {
       const liste = await capaDenetle(r[0]);
-      return void console.log(`  ✓ panel imza çapası: ${liste.map((k) => k.kid).join(', ')}${r[0] ? ' · pakete gömülü' : ''}`);
+      return void console.log(`  ✓ panel kök çapası: ${liste.map((k) => k.kid).join(', ')}${r[0] ? ' · pakete gömülü' : ''}`);
     }
     if (komut === 'imza' || komut === 'rotasyon' || komut === 'imza-uzak') {
       const [grup, dizin, ek] = r;
@@ -135,7 +135,7 @@ async function main(argv) {
         if (!ek) dur('rotasyon: <grup> <grup dizini> <yayındaki latest.yml> gerekli', [], 2);
         const yerel = await panelKunyeDenetimi({ kod: grup, dizin, liste: await capaDenetle(null) });
         if (yerel.sonuc !== 'uyumlu') dur('rotasyon: paketin künyesi geçerli değil', yerel.satirlar, 1);
-        const h = panelRotasyonDenetimi({ yayindaki: fs.readFileSync(ek, 'utf8'), yeniKid: yerel.kid });
+        const h = panelRotasyonDenetimi({ yayindaki: fs.readFileSync(ek, 'utf8'), yeniKok: yerel.rootKid });
         if (h.sonuc === 'uyumlu') return void console.log(`  ✓ ${h.satirlar[0]}`);
         dur('ROTASYON KİLİDİ — sahadaki paneller bu imzayı tanımaz, yüklenmez', h.satirlar, 1);
       }

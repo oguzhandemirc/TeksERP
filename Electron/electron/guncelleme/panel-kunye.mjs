@@ -6,19 +6,22 @@
 //     hemen ÖNCE dosyayı doğrular — doğrulanamayan güncelleme KURULMAZ (fail-closed);
 //   · yayın kapısı (`scripts/grup-yayin-kapisi.mjs imza`): imzasız/bozuk künyeli latest.yml YÜKLENMEZ;
 //   · imza aracı (`Teks-Erp/scripts/panel-imza.ts`): yükü kurar, imzalar, latest.yml'e yazar.
-// Künye latest.yml'in İÇİNDEDİR (`tekserp: {v, bildirim}` — Dağıtım v2 işaretçisinin biçimi; `latest-yml.mjs`):
+// Künye latest.yml'in İÇİNDEDİR (`tekserp: {v, bildirim, iptal?}` — Dağıtım v2 işaretçisinin biçimi; `latest-yml.mjs`):
 // electron-updater latest.yml'i js-yaml ile ayrıştırır ve tanımadığı anahtarı olduğu gibi taşır; künyeyi bilmeyen
 // eski panel onu yok sayar. Künye ile işaretçi TEK dosyadır ve EN SON yüklenir — aralarında yarım yayın doğmaz.
-// İmza katmanı `kunye-jws.mjs` (protokol JWS aynası). Kâhin: `Teks-Erp/scripts/test_panel_imza.ts`.
+// v:2 (ISTEMCI-ANAHTARI-KOK-ALTINDA.md §3.2): imzalayan `ist-*` anahtarıdır ve kök imzalı ISTEMCI sertifikasını yükte
+// taşır; panelin gömülü çapası yalnız KÖKLERDİR. Zincir `istemci-zinciri.mjs`, JWS katmanı `kunye-jws.mjs`.
+// v:1 (gömülü `panel-*` anahtarı) TAMAMEN RED. Kâhin: `Teks-Erp/scripts/test_panel_imza.ts`.
 // =============================================================================
 import { createHash } from "node:crypto";
 import { createReadStream } from "node:fs";
-import { anchorLookup, fail, isPlainObject, isSignerKid, ok, signJwsCompact, verifyJwsWithAnchor } from "./kunye-jws.mjs";
+import { fail, isPlainObject, ok } from "./kunye-jws.mjs";
+import { isRootKid, mergeRevocations, prepareRootAnchor, signClientDocument, verifyClientSigned } from "./istemci-zinciri.mjs";
 
 export const PANEL_RELEASE_TYP = "tekserp-panel";
-/** latest.yml'deki blok anahtarı: `tekserp: {v: 1, bildirim: <JWS>}`. */
+/** latest.yml'deki blok anahtarı: `tekserp: {v: 2, bildirim: <JWS>, iptal?: <dağıtım iptali JWS>}`. */
 export const RELEASE_BLOCK_KEY = "tekserp";
-export const RELEASE_DOC_VERSION = 1;
+export const RELEASE_DOC_VERSION = 2;
 export const RELEASE_PRODUCT = "panel";
 export const RELEASE_PLATFORM = "win32-x64";
 
@@ -32,6 +35,8 @@ const ARTIFACT_NAME_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]{0,115}\.exe$/;
 const SHA512_HEX_PATTERN = /^[0-9a-f]{128}$/;
 const ARTIFACT_MAX_BYTES = 4 * 1024 * 1024 * 1024;
 const ANCHOR_MAX = 16;
+/** Paketlenen panelin kök çapası yalnız üretim kökü taşır (`kok-<yıl>-<n>`; fikstür `kok-fikstur-*` dışarıda). */
+const PRODUCTION_ROOT_KID = /^kok-\d{4}-\d{1,3}$/;
 
 export const RELEASE_ERROR_CODES = Object.freeze([
   "CAPA_BOS",
@@ -53,13 +58,17 @@ export const RELEASE_ERROR_CODES = Object.freeze([
   "DOSYA_OZETI",
   "DOSYA_OKUNAMADI",
   "LATEST_YML_BICIM",
+  "SERTIFIKA_GECERSIZ",
+  "SERTIFIKA_SURESI",
+  "SERTIFIKA_IPTAL",
 ]);
 
 /**
- * Künye yükü (v:1). Yeni bilgi alanı v:1 içinde eklenebilir ve eski panel onu YOK SAYAR (protokolün `z.object`
- * kuralı); bilinen alanın anlamını daraltan her değişiklik `v`yi artırır. Dönen nesne yalnız bilinen alanlar.
- * `capa`: bu pakete GÖMÜLÜ çapanın kid'leri — paket kurulunca sahadaki panel BİR SONRAKİ sürümü yalnız bunlarla
- * doğrular; yayın kapısı yeni sürümün imzalayanını yayındaki künyenin `capa`sına karşı ölçer (rotasyon kilidi).
+ * Künye yükü (v:2). Yeni bilgi alanı v:2 içinde eklenebilir ve eski panel onu YOK SAYAR (protokolün `z.object`
+ * kuralı); bilinen alanın anlamını daraltan her değişiklik `v`yi artırır. Dönen nesne yalnız bilinen alanlar (zincir
+ * alanları `imzaciSertifikasi`/`imzaZamani` `verifyClientSigned`in). `capa`: bu pakete GÖMÜLÜ kök çapasının kid'leri —
+ * paket kurulunca panel BİR SONRAKİ sürümün sertifikasını yalnız bu köklerle doğrular; yayın kapısı yeni sürümün
+ * sertifikasını imzalayan kökü yayındaki künyenin `capa`sına karşı ölçer (rotasyon kilidi kök düzeyinde, §3.3).
  */
 export function decodeReleaseDoc(payload) {
   if (!isPlainObject(payload)) return fail("BELGE_SEMA", "Künye bir JSON nesnesi değil");
@@ -73,7 +82,7 @@ export function decodeReleaseDoc(payload) {
   if (typeof p.surum !== "string" || !VERSION_PATTERN.test(p.surum)) bad.push("surum");
   if (typeof p.commit !== "string" || !COMMIT_PATTERN.test(p.commit)) bad.push("commit");
   if (typeof p.yayinZamani !== "string" || !ISO_PATTERN.test(p.yayinZamani) || Number.isNaN(Date.parse(p.yayinZamani))) bad.push("yayinZamani");
-  if (!Array.isArray(p.capa) || p.capa.length === 0 || p.capa.length > ANCHOR_MAX || !p.capa.every(isSignerKid) || new Set(p.capa).size !== p.capa.length) {
+  if (!Array.isArray(p.capa) || p.capa.length === 0 || p.capa.length > ANCHOR_MAX || !p.capa.every(isRootKid) || new Set(p.capa).size !== p.capa.length) {
     bad.push("capa");
   }
   if (!a) bad.push("paket");
@@ -96,22 +105,65 @@ export function decodeReleaseDoc(payload) {
   });
 }
 
-/**
- * latest.yml'deki blok (`{v, bildirim}`, KATI — imzasız alan taşımaz) → doğrulanmış künye + imzalayan kid.
- * Sıra: blok → çapa → JWS (typ · kid · imza) → şema → kanal (künye YALNIZ kendi kanalında geçerli).
- */
-export function verifyReleaseBlock(block, { keys, channel }) {
+const BLOCK_FIELDS = new Set(["v", "bildirim", "iptal"]);
+
+/** Blok biçimi (KATI): yalnız `v` · `bildirim` (metin) · isteğe bağlı `iptal` (metin; imzası birleştirmede ölçülür). */
+function checkBlockShape(block) {
   if (block === undefined || block === null) return fail("KUNYE_YOK", "latest.yml imzalı sürüm künyesi taşımıyor");
-  if (!isPlainObject(block) || Object.keys(block).some((k) => k !== "v" && k !== "bildirim") || typeof block.bildirim !== "string") {
+  if (
+    !isPlainObject(block) ||
+    Object.keys(block).some((k) => !BLOCK_FIELDS.has(k)) ||
+    typeof block.bildirim !== "string" ||
+    (block.iptal !== undefined && typeof block.iptal !== "string")
+  ) {
     return fail("KUNYE_BICIM", "Sürüm künyesi bloğu biçimsiz");
   }
   if (block.v !== RELEASE_DOC_VERSION) return fail("BELGE_SURUM", `Desteklenmeyen künye bloğu sürümü: ${String(block.v)}`);
-  const j = verifyJwsWithAnchor(block.bildirim, { typ: PANEL_RELEASE_TYP, keys });
-  if (!j.ok) return j;
-  const d = decodeReleaseDoc(j.value.payload);
+  return ok(block);
+}
+
+/**
+ * latest.yml'deki blok → doğrulanmış künye + imzalayan (`ist-*`) + kök + sertifika. Sıra: blok → zincir (kök çapası ·
+ * JWS · ISTEMCI sertifikası · imza · 180 gün · iptal; `istemci-zinciri.mjs`) → şema → kanal (künye YALNIZ kendi
+ * kanalında geçerli). `revocation`: çağıranın birleştirdiği dağıtım iptali (`mergeReleaseRevocations`).
+ */
+export function verifyReleaseBlock(block, { roots, channel, nowMs, revocation = null }) {
+  const b = checkBlockShape(block);
+  if (!b.ok) return b;
+  const c = verifyClientSigned(block.bildirim, { typ: PANEL_RELEASE_TYP, roots, nowMs, revocation });
+  if (!c.ok) return c;
+  const d = decodeReleaseDoc(c.value.payload);
   if (!d.ok) return d;
   if (d.value.kanal !== channel) return fail("KUNYE_KANAL", `Künye "${d.value.kanal}" kanalının, bu panel "${channel}" kanalında`);
-  return ok({ doc: d.value, kid: j.value.header.kid });
+  return ok({ doc: d.value, kid: c.value.kid, rootKid: c.value.rootKid, certificate: c.value.certificate });
+}
+
+/**
+ * Dağıtım iptali birleştirme (tasarım §3.4): yerelde saklanan → indirme belirteci yanıtı → künye bloğu. En yüksek
+ * `sira` kazanır, eşitlikte önce gelen (yerel) kalır; doğrulanamayan aday yok sayılır (`reddedilen`).
+ */
+export function mergeReleaseRevocations(block, { roots, stored, fromToken }) {
+  const fromBlock = isPlainObject(block) && typeof block.iptal === "string" ? block.iptal : null;
+  return mergeRevocations(roots, [
+    { kaynak: "yerel", token: stored ?? null },
+    { kaynak: "belirtec", token: fromToken ?? null },
+    { kaynak: "kunye", token: fromBlock },
+  ]);
+}
+
+/** Kök çapası (panel): boş → CAPA_BOS; biçimsiz → CAPA_GECERSIZ. */
+function rootAnchor(roots) {
+  const a = prepareRootAnchor(roots);
+  if (a.ok) return a;
+  return fail(a.code === "GUVEN_CAPASI_BOS" ? "CAPA_BOS" : "CAPA_GECERSIZ", a.message);
+}
+
+/** Paketleme kapısı: çapa geçerli VE her kök üretim biçiminde (`kok-<yıl>-<n>`). */
+export function checkPanelRootAnchor(roots) {
+  const a = rootAnchor(roots);
+  if (!a.ok) return a;
+  const odd = roots.map((r) => r.kid).filter((kid) => !PRODUCTION_ROOT_KID.test(kid));
+  return odd.length ? fail("CAPA_GECERSIZ", `Panel kök çapasında üretim biçiminde olmayan kid: ${odd.join(", ")}`) : a;
 }
 
 /** sha512: künyede küçük harf hex, latest.yml'de base64 (electron-builder biçimi). */
@@ -178,11 +230,11 @@ export function checkNewer(doc, installedVersion) {
   return c > 0 ? ok(true) : fail("KUNYE_ESKI", `Künye sürümü ${doc.surum} kurulu ${installedVersion} sürümünden yeni değil`);
 }
 
-/** Panelin indirme ÖNCESİ tek kapısı: çapa → künye → latest.yml bağı → yenilik. */
-export function verifyUpdateInfo(info, { keys, channel, installedVersion }) {
-  const anchor = anchorLookup(keys);
+/** Panelin indirme ÖNCESİ tek kapısı: kök çapası → künye (zincir + iptal) → latest.yml bağı → yenilik. */
+export function verifyUpdateInfo(info, { roots, channel, installedVersion, nowMs, revocation = null }) {
+  const anchor = rootAnchor(roots);
   if (!anchor.ok) return anchor;
-  const r = verifyReleaseBlock(isPlainObject(info) ? info[RELEASE_BLOCK_KEY] : undefined, { keys, channel });
+  const r = verifyReleaseBlock(isPlainObject(info) ? info[RELEASE_BLOCK_KEY] : undefined, { roots, channel, nowMs, revocation });
   if (!r.ok) return r;
   const b = checkUpdateInfo(r.value.doc, info);
   if (!b.ok) return b;
@@ -226,7 +278,7 @@ export async function verifyArtifactFile(doc, filePath) {
 }
 
 // ── İmza tarafı (yayın makinesi) — panelde çağrılmaz ─────────────────────────
-/** Künye yükünü kurar ve AYNI şemadan geçirir (doğrulayan ne kabul ediyorsa imzalayan yalnız onu üretir). */
+/** Künye yükünü (zincirsiz) kurar ve AYNI şemadan geçirir (doğrulayan ne kabul ediyorsa imzalayan yalnız onu üretir). */
 export function buildReleaseDoc({ kanal, surum, commit, yayinZamani, paket, capa }) {
   const d = decodeReleaseDoc({
     v: RELEASE_DOC_VERSION,
@@ -243,11 +295,11 @@ export function buildReleaseDoc({ kanal, surum, commit, yayinZamani, paket, capa
   return d.value;
 }
 
-/** Künyeyi imzalar; yük yeniden şemadan geçer (yalnız bilinen alanlar imzalanır). */
-export function signReleaseDoc({ doc, kid, privateKey }) {
+/** Künyeyi `ist-*` anahtarıyla imzalar; yük yeniden şemadan geçer, sertifika + imza anı zincir alanı olarak eklenir. */
+export function signReleaseDoc({ doc, kid, privateKey, certificate, signedAt }) {
   const d = decodeReleaseDoc(doc);
   if (!d.ok) throw new Error(`signReleaseDoc: ${d.message}`);
-  return signJwsCompact({ typ: PANEL_RELEASE_TYP, kid, payload: d.value, privateKey });
+  return signClientDocument({ typ: PANEL_RELEASE_TYP, kid, payload: d.value, privateKey, certificate, signedAt });
 }
 
 // ── Operatör dili ────────────────────────────────────────────────────────────
@@ -271,6 +323,10 @@ const MESSAGES = Object.freeze({
   DOSYA_OZETI: "İndirilen kurulum dosyası imzalı künyeyle eşleşmiyor; kurulmadı ve silindi.",
   DOSYA_OKUNAMADI: "İndirilen kurulum dosyası okunamadı; kurulmadı.",
   LATEST_YML_BICIM: "Sürüm dosyası (latest.yml) beklenen biçimde değil; kurulmadı.",
+  SERTIFIKA_GECERSIZ: "Sunulan güncellemeyi imzalayan anahtarın sertifikası doğrulanamadı; güvenlik nedeniyle kurulmadı.",
+  SERTIFIKA_SURESI:
+    "Sunulan güncellemeyi imzalayan anahtarın sertifikası süresi dışında (süresi geçmiş olabilir ya da bu bilgisayarın saati yanlış); kurulmadı.",
+  SERTIFIKA_IPTAL: "Sunulan güncellemeyi imzalayan anahtar iptal edilmiş; güvenlik nedeniyle kurulmadı.",
 });
 
 /** Kodun operatöre görünen Türkçe karşılığı (tanınmayan kod da kurulmamış güncelleme demektir). */

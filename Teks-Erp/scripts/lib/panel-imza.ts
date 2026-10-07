@@ -1,7 +1,8 @@
 // PANEL SÜRÜM KÜNYESİ — yayın makinesi tarafı (imza aracı `scripts/panel-imza.ts` + bekçisi `test_panel_imza`).
 // Künyenin biçimi/doğrulaması TEK kaynaktan: `Electron/electron/guncelleme/*.mjs` (panelin kendi doğrulayıcısı);
 // burada yalnız anahtar dosyası (sarma `protocol/anahtar-sarma.ts` — tek uygulama), paket dizininin ölçümü ve
-// latest.yml'e yazım var. Her imza YAZILMADAN ÖNCE panelin doğrulayıcısıyla geri doğrulanır.
+// latest.yml'e yazım var. Her imza YAZILMADAN ÖNCE panelin doğrulayıcısıyla geri doğrulanır. Künye v:2: imzalayan
+// `ist-*` anahtarı, yükte kök imzalı ISTEMCI sertifikası; panel çapası yalnız kökler (ISTEMCI-ANAHTARI-KOK-ALTINDA §3).
 import { generateKeyPairSync, type KeyObject } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
@@ -10,9 +11,12 @@ import { isProductionPackageKid } from "../../src/lib/license/integrity-scope";
 import { openPackageKey, PACKAGE_KEY_KIND } from "./butunluk-imza";
 import { git } from "./git";
 import { checkProductionAnchor, isSignerKid, type AnchorKey } from "../../../Electron/electron/guncelleme/kunye-jws.mjs";
+import { prepareRootAnchor, type RootAnchorKey } from "../../../Electron/electron/guncelleme/istemci-zinciri.mjs";
 import {
   buildReleaseDoc,
+  checkPanelRootAnchor,
   checkUpdateInfo,
+  mergeReleaseRevocations,
   sha512File,
   sha512HexToBase64,
   signReleaseDoc,
@@ -23,8 +27,14 @@ import {
 import { parseLatestYml, withReleaseBlock } from "../../../Electron/electron/guncelleme/latest-yml.mjs";
 
 export const PANEL_KEY_KIND = "tekserp-panel-anahtar";
-/** Ayrı panel yayın anahtarı (b seçeneği): `panel-<yıl>[-<n>]`, yalnız parolalı. */
-export const PANEL_KEY_KID = /^panel-\d{4}(?:-\d{1,3})?$/;
+/**
+ * İstemci yayın anahtarı: `ist-<yıl>-<n>` (künye v:2 imzacısı, kök imzalı ISTEMCI sertifikalı) ya da `panel-<yıl>[-<n>]`
+ * (tablet APK künyesinin gömülü çapalı ailesi). Yalnız parolalı.
+ */
+export const PANEL_KEY_KID = /^(?:panel-\d{4}(?:-\d{1,3})?|ist-\d{4}-\d{1,3})$/;
+/** Sertifika dosyası (`<kid>.sertifika.json`): `sertifika` alanı compact JWS (satıcının verdiği dosyayla aynı alan adı). */
+export const CERT_FILE_SUFFIX = ".sertifika.json";
+const COMPACT_JWS = /^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/;
 /** Depo kökü: anahtar dosyası bunun içine yazılmaz (yanlışlıkla commit'lenmesin). */
 export const DEPO_KOKU = path.resolve(__dirname, "..", "..", "..");
 /** Panelin gömülü üretim çapası — imza aracı da yayın kapısı da BU dosyayı okur. */
@@ -52,7 +62,7 @@ function readKeyJson(file: string): Record<string, unknown> {
 
 const B64U = /^[A-Za-z0-9_-]+$/;
 
-/** Panel anahtar dosyası KATI: yalnız bilinen alanlar, parolalı sürüm 2, `panel-` kid'i. */
+/** Panel anahtar dosyası KATI: yalnız bilinen alanlar, parolalı sürüm 2, `panel-`/`ist-` kid'i. */
 function panelKeyOf(k: Record<string, unknown>): PanelKeyFile {
   const kdf = k.kdf as Record<string, unknown> | undefined;
   const alanlar = ["tur", "surum", "kid", "siniflar", "x", "kdf", "iv", "sifreli", "etiket", "olusturma"];
@@ -61,7 +71,7 @@ function panelKeyOf(k: Record<string, unknown>): PanelKeyFile {
     k.tur === PANEL_KEY_KIND &&
     k.surum === 2 &&
     typeof k.kid === "string" &&
-    /^panel-[a-z0-9-]{1,40}$/.test(k.kid) &&
+    /^(?:panel|ist)-[a-z0-9-]{1,40}$/.test(k.kid) &&
     typeof k.x === "string" && B64U.test(k.x) &&
     Array.isArray(k.siniflar) &&
     typeof k.iv === "string" && B64U.test(k.iv) &&
@@ -104,7 +114,7 @@ export async function openPanelSigningKey(file: string, ask: (kid: string) => Pr
 
 /** (b) seçeneği töreni: ayrı panel yayın anahtarı üretir ve parolayla sarar (parolayı çağıran sıfırlar). */
 export async function generatePanelKey(kid: string, password: Buffer): Promise<PanelKeyFile> {
-  if (!PANEL_KEY_KID.test(kid)) throw new Error(`panel anahtarı kid'i panel-<yıl>[-<n>] biçiminde olmalı: ${kid}`);
+  if (!PANEL_KEY_KID.test(kid)) throw new Error(`istemci anahtarı kid'i ist-<yıl>-<n> ya da panel-<yıl>[-<n>] biçiminde olmalı: ${kid}`);
   const { privateKey } = generateKeyPairSync("ed25519");
   const s = await sealPrivateKey({ tur: PANEL_KEY_KIND, kid, siniflar: [] }, privateKey, password);
   return { tur: PANEL_KEY_KIND, surum: 2, kid, siniflar: [], x: s.x, kdf: s.kdf, iv: s.iv, sifreli: s.sifreli, etiket: s.etiket, olusturma: new Date().toISOString() };
@@ -121,8 +131,8 @@ export function writePanelKey(dir: string, key: PanelKeyFile): string {
   return file;
 }
 
-/** Çapa dosyası (`{anahtarlar: [{kid, x}]}`) — üretim çapası `checkProductionAnchor`dan geçmeli. */
-export function readPanelAnchor(file: string = PANEL_ANCHOR_FILE, { test = false } = {}): readonly AnchorKey[] {
+/** İmzacı çapası (`{anahtarlar: [{kid, x}]}`; tablet APK künyesi) — üretim çapası `checkProductionAnchor`dan geçmeli. */
+export function readSignerAnchor(file: string, { test = false } = {}): readonly AnchorKey[] {
   const j = JSON.parse(fs.readFileSync(file, "utf8")) as { anahtarlar?: unknown };
   const list = Array.isArray(j.anahtarlar) ? (j.anahtarlar as AnchorKey[]) : [];
   if (!test) {
@@ -132,6 +142,29 @@ export function readPanelAnchor(file: string = PANEL_ANCHOR_FILE, { test = false
     throw new Error("test çapasında künye imzalayamayacak kid var");
   }
   return list;
+}
+
+/** Panel kök çapası (`{kokler: [{kid, x, classes}]}`) — üretimde `kok-<yıl>-<n>` zorunlu, test kipinde yalnız geçerli kök çapası. */
+export function readPanelAnchor(file: string = PANEL_ANCHOR_FILE, { test = false } = {}): readonly RootAnchorKey[] {
+  const j = JSON.parse(fs.readFileSync(file, "utf8")) as { kokler?: unknown };
+  const list = Array.isArray(j.kokler) ? (j.kokler as RootAnchorKey[]) : [];
+  const c = test ? prepareRootAnchor(list) : checkPanelRootAnchor(list);
+  if (!c.ok) throw new Error(`panel kök çapası kullanılamaz (${c.code}): ${c.message} — ${path.relative(DEPO_KOKU, file)}`);
+  return list;
+}
+
+/** Anahtarın ISTEMCI sertifikası: verilen dosya ya da anahtar dosyasının yanındaki `<kid>.sertifika.json`. */
+export function readClientCertificate(g: { readonly keyFile: string; readonly kid: string; readonly file?: string }): string {
+  const file = g.file ?? path.join(path.dirname(g.keyFile), `${g.kid}${CERT_FILE_SUFFIX}`);
+  let j: unknown;
+  try {
+    j = JSON.parse(fs.readFileSync(file, "utf8"));
+  } catch (e) {
+    throw new Error(`ISTEMCI sertifikası okunamadı (${file}): ${e instanceof Error ? e.message : String(e)}`);
+  }
+  const s = typeof j === "object" && j !== null ? (j as { sertifika?: unknown }).sertifika : undefined;
+  if (typeof s !== "string" || !COMPACT_JWS.test(s)) throw new Error(`ISTEMCI sertifika dosyası biçimsiz (sertifika alanı compact JWS değil): ${file}`);
+  return s;
 }
 
 export interface PanelPackage {
@@ -164,7 +197,11 @@ export interface SignInput {
   readonly dir: string;
   readonly kanal: string;
   readonly key: OpenedSigningKey;
-  readonly anchor: readonly AnchorKey[];
+  /** Kök imzalı ISTEMCI sertifikası (compact JWS) — `key.kid`in. */
+  readonly certificate: string;
+  /** İsteğe bağlı güncel dağıtım iptali (JWS) — künye bloğuna `iptal` olarak girer. */
+  readonly iptal?: string;
+  readonly anchor: readonly RootAnchorKey[];
   readonly commit?: string;
   readonly now?: Date;
 }
@@ -191,9 +228,10 @@ export async function signPanelPackage(g: SignInput): Promise<{ readonly doc: Re
     paket: { ad: path.basename(pkg.setupPath), boyut: olcum.size, sha512: olcum.sha512 },
     capa: g.anchor.map((k) => k.kid),
   });
-  const token = signReleaseDoc({ doc, kid: g.key.kid, privateKey: g.key.privateKey });
-  const next = withReleaseBlock(pkg.latestText, token);
-  const check = await verifyPanelPackageText(next, pkg.setupPath, { kanal: g.kanal, anchor: g.anchor });
+  const now = g.now ?? new Date();
+  const token = signReleaseDoc({ doc, kid: g.key.kid, privateKey: g.key.privateKey, certificate: g.certificate, signedAt: now.toISOString() });
+  const next = withReleaseBlock(pkg.latestText, token, { iptal: g.iptal ?? null });
+  const check = await verifyPanelPackageText(next, pkg.setupPath, { kanal: g.kanal, anchor: g.anchor, nowMs: now.getTime() });
   if (!check.ok) throw new Error(`imzalanan künye geri doğrulanamadı (${check.code}): ${check.message} — latest.yml'e YAZILMADI`);
   const tmp = `${pkg.latestPath}.imza-${process.pid}`;
   fs.writeFileSync(tmp, next, { flag: "wx" });
@@ -202,18 +240,23 @@ export async function signPanelPackage(g: SignInput): Promise<{ readonly doc: Re
 }
 
 export type PanelCheck =
-  | { readonly ok: true; readonly doc: ReleaseDoc; readonly kid: string }
-  | { readonly ok: false; readonly code: string; readonly message: string };
+  | { readonly ok: true; readonly doc: ReleaseDoc; readonly kid: string; readonly rootKid: string }
+  | { readonly ok: false; readonly code: string; readonly message: string; readonly detay?: string };
 
 /** latest.yml metni + kurulum dosyası → panelin kabul edip etmeyeceği (yayın kapısının sorusu). */
-export async function verifyPanelPackageText(text: string, setupPath: string, g: { readonly kanal: string; readonly anchor: readonly AnchorKey[] }): Promise<PanelCheck> {
+export async function verifyPanelPackageText(
+  text: string,
+  setupPath: string,
+  g: { readonly kanal: string; readonly anchor: readonly RootAnchorKey[]; readonly nowMs?: number },
+): Promise<PanelCheck> {
   const p = parseLatestYml(text);
   if (!p.ok) return p;
-  const r = verifyReleaseBlock(p.value.tekserp, { keys: g.anchor, channel: g.kanal });
+  const revocation = mergeReleaseRevocations(p.value.tekserp, { roots: g.anchor, stored: null, fromToken: null }).revocation;
+  const r = verifyReleaseBlock(p.value.tekserp, { roots: g.anchor, channel: g.kanal, nowMs: g.nowMs ?? Date.now(), revocation });
   if (!r.ok) return r;
   const b = checkUpdateInfo(r.value.doc, p.value);
   if (!b.ok) return b;
   const a = await verifyArtifactFile(r.value.doc, setupPath);
   if (!a.ok) return a;
-  return { ok: true, doc: r.value.doc, kid: r.value.kid };
+  return { ok: true, doc: r.value.doc, kid: r.value.kid, rootKid: r.value.rootKid };
 }

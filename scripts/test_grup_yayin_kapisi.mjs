@@ -10,6 +10,7 @@
 //   §4 oncu/genel: etiketsiz RED · kaynak gruptan farklı özet RED · profil matrisi kapısı yoksa RED · K-6
 //   §5 terfi: paket baytı bayt-eşit (ortak paket DEĞİŞMEZ), künye hedef grupla yeniden imzalı
 //   §6 betik kaynağı: kapı çağrıları ve sırası (negatif sondalı)
+//   §7 kök çapası + rotasyon kilidi (KÖK düzeyi): fikstür kökü RED · yayındaki v:1 / çapasında olmayan kök RED
 // ÇIKIŞ: 0 yeşil · 1 KIRMIZI.   node scripts/test_grup_yayin_kapisi.mjs
 // =============================================================================
 import { execFileSync, spawnSync } from 'node:child_process';
@@ -23,7 +24,8 @@ import { KOK } from './lib/dagitim.mjs';
 import { grupTerfiHukmu } from './lib/grup-yayin.mjs';
 import { derlemeKunyesiYaz, PANEL_KUNYE_ADI } from './lib/derleme-bagi.mjs';
 import { buildReleaseDoc, signReleaseDoc, verifyReleaseBlock } from '../Electron/electron/guncelleme/panel-kunye.mjs';
-import { parseLatestYml } from '../Electron/electron/guncelleme/latest-yml.mjs';
+import { parseLatestYml, withReleaseBlock } from '../Electron/electron/guncelleme/latest-yml.mjs';
+import { panelRotasyonDenetimi } from './lib/panel-imza-kapisi.mjs';
 
 let gecti = 0;
 const kaldi = [];
@@ -54,10 +56,28 @@ const KACIS = 'Kullanıcı bugün acil yayın istedi';
 /* ------------------------------------------------------------------ *
  * Test anahtarı + sahte araçlar
  * ------------------------------------------------------------------ */
-const { privateKey, publicKey } = crypto.generateKeyPairSync('ed25519');
-const IMZA = { kid: 'panel-2099', x: publicKey.export({ format: 'jwk' }).x };
-const IMZA_PEM = privateKey.export({ type: 'pkcs8', format: 'pem' });
-const TEST_CAPA = [IMZA];
+// Zincir: kök (üretim biçimi `kok-<yıl>-<n>`; çapa kapısı fikstür kökünü reddeder) → ISTEMCI sertifikası → `ist-*`.
+const SINIFLAR = ['URETIM', 'TEST', 'DR', 'DEMO', 'BAYI', 'BARINDIRILAN'];
+const GUN_MS = 24 * 60 * 60 * 1000;
+const b64u = (s) => Buffer.from(s).toString('base64url');
+function anahtar(kid) {
+  const { privateKey, publicKey } = crypto.generateKeyPairSync('ed25519');
+  return { kid, privateKey, x: publicKey.export({ format: 'jwk' }).x };
+}
+/** Ham compact JWS (`node:crypto`): doğrulayıcının kendi imzalayıcısı sertifika üretmez, fikstür onu körleştirmesin. */
+function hamJws(typ, imzalayan, yuk) {
+  const girdi = `${b64u(JSON.stringify({ alg: 'EdDSA', typ, kid: imzalayan.kid }))}.${b64u(JSON.stringify(yuk))}`;
+  return `${girdi}.${b64u(crypto.sign(null, Buffer.from(girdi, 'ascii'), imzalayan.privateKey))}`;
+}
+const istemciSertifikasi = (kok, ist) => hamJws('tekserp-sertifika', kok, {
+  v: 1, sertifikaId: crypto.randomUUID(), kullanim: 'ISTEMCI', kid: ist.kid, x: ist.x, siniflar: ['URETIM'],
+  baslangic: new Date(Date.now() - 30 * GUN_MS).toISOString(), bitis: new Date(Date.now() + 365 * GUN_MS).toISOString(), bayi: null,
+});
+const KOK_A = anahtar('kok-2099-1');
+const IST = anahtar('ist-2099-1');
+const SERTIFIKA = istemciSertifikasi(KOK_A, IST);
+const IST_PEM = IST.privateKey.export({ type: 'pkcs8', format: 'pem' });
+const TEST_CAPA = [{ kid: KOK_A.kid, x: KOK_A.x, classes: SINIFLAR }];
 
 const SAHTE = path.join(GECICI, 'sahte-arac.mjs');
 fs.writeFileSync(SAHTE, String.raw`
@@ -130,7 +150,7 @@ if (arac === 'curl') {
   process.exit(0);
 }
 if (arac === 'npx') {
-  // panel-imza.ts imzala taklidi: hedef GRUBUN adıyla künye (gerçek araç parola ister; burada bekçi anahtarı).
+  // panel-imza.ts imzala taklidi: hedef GRUBUN adıyla v:2 künye (gerçek araç parola ister; burada bekçinin ist-* anahtarı + sertifikası).
   const bayrak = (ad) => (a.find((x) => x.startsWith('--' + ad + '=')) ?? '').slice(ad.length + 3);
   yaz({ args: a.join(' ') });
   if (a[1] !== 'scripts/panel-imza.ts' || a[2] !== 'imzala') process.exit(97);
@@ -142,10 +162,11 @@ if (arac === 'npx') {
   const govde = fs.readFileSync(path.join(dizin, sf));
   const doc = buildReleaseDoc({
     kanal: bayrak('musteri'), surum: sf.split('-')[1], commit: 'abcdef0', yayinZamani: '2026-10-06T07:00:00.000Z',
-    paket: { ad: sf, boyut: govde.length, sha512: crypto.createHash('sha512').update(govde).digest('hex') }, capa: [process.env.IMZA_KID],
+    paket: { ad: sf, boyut: govde.length, sha512: crypto.createHash('sha512').update(govde).digest('hex') }, capa: [process.env.KOK_KID],
   });
-  const privateKey = crypto.createPrivateKey(process.env.IMZA_PEM);
-  fs.writeFileSync(yml, withReleaseBlock(fs.readFileSync(yml, 'utf8'), signReleaseDoc({ doc, kid: process.env.IMZA_KID, privateKey })));
+  const privateKey = crypto.createPrivateKey(process.env.IST_PEM);
+  const token = signReleaseDoc({ doc, kid: process.env.IST_KID, privateKey, certificate: process.env.SERTIFIKA, signedAt: new Date().toISOString() });
+  fs.writeFileSync(yml, withReleaseBlock(fs.readFileSync(yml, 'utf8'), token));
   process.exit(0);
 }
 process.exit(97);
@@ -199,7 +220,7 @@ const dosyaKopya = (agac, rel, icerik) => {
 };
 
 /** Senaryo ortamı: kendi sahte uzağı + çağrı günlüğü + gerçek betiğin kopyalandığı git ağacı + ortak paket. */
-function ortam({ betik = null } = {}) {
+function ortam({ betik = null, capa = TEST_CAPA } = {}) {
   sayac += 1;
   const d = path.join(GECICI, `s${sayac}`);
   const uzak = path.join(d, 'uzak');
@@ -214,7 +235,7 @@ function ortam({ betik = null } = {}) {
   // Sürüm notu / ortak kimlik kapılarının kendi bekçileri var; burada ölçülen onlar değil (beyanlı saplama).
   dosyaKopya(agac, 'scripts/check-surum-notlari.mjs', 'process.exit(0);\n');
   dosyaKopya(agac, 'scripts/panel-kimlik-kapisi.mjs', 'process.exit(0);\n');
-  dosyaKopya(agac, 'Electron/electron/guncelleme/imza-capasi.json', `${JSON.stringify({ anahtarlar: TEST_CAPA }, null, 2)}\n`);
+  dosyaKopya(agac, 'Electron/electron/guncelleme/imza-capasi.json', `${JSON.stringify({ kokler: capa }, null, 2)}\n`);
   dosyaKopya(agac, 'Electron/package.json', `${JSON.stringify({ name: 'tekserp-panel', version: SURUM })}\n`);
   dosyaKopya(agac, '.gitignore', 'Electron/release/\n');
   git(agac, 'init', '-q');
@@ -228,7 +249,7 @@ function ortam({ betik = null } = {}) {
   fs.writeFileSync(path.join(paket, 'win-unpacked', 'TeksERP.exe'), 'exe');
   ASAR_YAZ(path.join(res, 'app.asar'), {
     'package.json': JSON.stringify({ name: 'tekserp-panel', productName: 'TeksERP', version: SURUM, gitCommit: bas }),
-    'out/main/main.js': `const panelKunyeTuru = "tekserp-panel"; const anahtarlar = ${JSON.stringify(TEST_CAPA)};`,
+    'out/main/main.js': `const panelKunyeTuru = "tekserp-panel"; const kokler = ${JSON.stringify(TEST_CAPA)};`,
     'out/renderer/index.html': '<title>TeksERP</title>',
   });
   const ad = `TeksERP-${SURUM}-Setup.exe`;
@@ -271,7 +292,7 @@ function kos(o, args, { ortamEk = {}, anahtar = true } = {}) {
       GIT_CEILING_DIRECTORIES: GECICI,
       KUNYE_LIB: pathToFileURL(path.join(KOK, 'Electron/electron/guncelleme/panel-kunye.mjs')).href,
       YML_LIB: pathToFileURL(path.join(KOK, 'Electron/electron/guncelleme/latest-yml.mjs')).href,
-      IMZA_PEM: IMZA_PEM, IMZA_KID: IMZA.kid,
+      IST_PEM, IST_KID: IST.kid, KOK_KID: KOK_A.kid, SERTIFIKA,
       ...ortamEk,
     },
   });
@@ -281,7 +302,7 @@ const kunyeKanali = (yolu) => {
   const p = parseLatestYml(fs.readFileSync(yolu, 'utf8'));
   if (!p.ok || p.value.tekserp === null) return null;
   for (const kanal of ['test', 'oncu', 'genel']) {
-    if (verifyReleaseBlock(p.value.tekserp, { keys: TEST_CAPA, channel: kanal }).ok) return kanal;
+    if (verifyReleaseBlock(p.value.tekserp, { roots: TEST_CAPA, channel: kanal, nowMs: Date.now() }).ok) return kanal;
   }
   return null;
 };
@@ -501,6 +522,49 @@ function betikIhlalleri(metin) {
   mut('VDS kökü literal gömüldü', (m) => `${m}\nVDS=/opt/stack/apps/x\n`, /LİTERAL/);
   mut('çıplak curl', (m) => `${m}\ncurl -fsS https://x\n`, /belirteçsiz curl/);
   mut('--musteri reddi kalktı', (m) => m.replace('--musteri=*|--musteri) hata', '--musteri=*|--musteri) echo'), /--musteri reddi yok/);
+}
+
+/* ------------------------------------------------------------------ *
+ * §7 kök çapası + rotasyon kilidi (KÖK düzeyi)
+ * ------------------------------------------------------------------ */
+/** Yayındaki latest.yml taklidi: v:2 künye, verilen `capa` listesiyle (imza rotasyon kapısında doğrulanmaz). */
+const ESKI_GOVDE = Buffer.from('eski-surum');
+const ESKI_AD = 'TeksERP-9.9.8-Setup.exe';
+const ESKI_SHA = crypto.createHash('sha512').update(ESKI_GOVDE).digest('base64');
+const ESKI_YML = `version: 9.9.8\nfiles:\n  - url: ${ESKI_AD}\n    sha512: ${ESKI_SHA}\n    size: ${ESKI_GOVDE.length}\npath: ${ESKI_AD}\nsha512: ${ESKI_SHA}\n`;
+function yayindakiYml({ capa, kanal = 'test' }) {
+  const doc = buildReleaseDoc({
+    kanal, surum: '9.9.8', commit: 'abcdef0', yayinZamani: '2026-10-01T07:00:00.000Z',
+    paket: { ad: ESKI_AD, boyut: ESKI_GOVDE.length, sha512: crypto.createHash('sha512').update(ESKI_GOVDE).digest('hex') }, capa,
+  });
+  return withReleaseBlock(ESKI_YML, signReleaseDoc({ doc, kid: IST.kid, privateKey: IST.privateKey, certificate: SERTIFIKA, signedAt: new Date().toISOString() }));
+}
+{
+  const rot = (yayindaki, yeniKok = KOK_A.kid) => panelRotasyonDenetimi({ yayindaki, yeniKok });
+  ol('§7 rotasyon: kanalda yayın yok → uyumlu', rot(null).sonuc === 'uyumlu');
+  ol('§7 rotasyon: yayındaki künyesiz → uyumlu (ilk imzalı sürüm)', rot(ESKI_YML).sonuc === 'uyumlu');
+  ol('§7 rotasyon: yeni kök yayındakinin çapasında → uyumlu', rot(yayindakiYml({ capa: [KOK_A.kid] })).sonuc === 'uyumlu');
+  ol('§7 rotasyon: eski + yeni kök çapada, yeni kökle imza → uyumlu', rot(yayindakiYml({ capa: [KOK_A.kid, 'kok-2099-2'] }), 'kok-2099-2').sonuc === 'uyumlu');
+  const yabanci = rot(yayindakiYml({ capa: [KOK_A.kid] }), 'kok-2099-2');
+  ol('§7 sonda: yeni kök yayındakinin çapasında YOK → ihlal', yabanci.sonuc === 'ihlal' && /KURMAZLAR/.test(yabanci.satirlar.join(' ')), yabanci.satirlar.join('\n'));
+  // v:1 künye: sahadaki eski panelin tanıdığı tek sürüm; v:2 imzayı BELGE_SURUM'la reddeder.
+  const v1Bildirim = hamJws('tekserp-panel', IST, { v: 1, urun: 'panel', kanal: 'test', surum: '9.9.8', capa: [KOK_A.kid] });
+  const v1 = rot(`${ESKI_YML}tekserp:\n  v: 1\n  bildirim: ${v1Bildirim}\n`);
+  ol('§7 sonda: yayındaki künye v:1 → ihlal (BELGE_SURUM)', v1.sonuc === 'ihlal' && /BELGE_SURUM/.test(v1.satirlar.join(' ')), v1.satirlar.join('\n'));
+
+  // Uçtan uca: yayındaki sürümün çapası yeni imzanın kökünü taşımıyor → hiçbir şey yüklenmez.
+  const r = ortam();
+  fs.writeFileSync(r.uzakDosya('test', 'latest.yml'), yayindakiYml({ capa: ['kok-2099-9'] }));
+  const rr = kos(r, ['--grup=test']);
+  ol('§7 sonda: yayındaki çapada kök yok → ROTASYON KİLİDİ, hiçbir şey yüklenmedi', rr.kod !== 0 && /ROTASYON KİLİDİ/.test(rr.cikti) && yazanAg(r).length === 0 && !fs.existsSync(r.uzakDosya('test', r.ad)), rr.cikti);
+
+  // Fikstür kökü (üretim biçimi dışı) gömülmüş panel yayınlanmaz: hiçbir üretim imzasını doğrulayamaz.
+  const f = ortam({ capa: [{ kid: 'kok-fikstur-1', x: KOK_A.x, classes: SINIFLAR }] });
+  const rf = kos(f, ['--grup=test', '--kuru']);
+  ol('§7 sonda: çapada üretim biçimi dışı kök → RED, ağ YOK', rf.kod !== 0 && sifirAg(f) && /CAPA_GECERSIZ/.test(rf.cikti), rf.cikti);
+  const bos = ortam({ capa: [] });
+  const rb = kos(bos, ['--grup=test', '--kuru']);
+  ol('§7 sonda: boş kök çapası → RED, ağ YOK', rb.kod !== 0 && sifirAg(bos) && /CAPA_BOS/.test(rb.cikti), rb.cikti);
 }
 
 console.log(`\n=== Sonuç: ${gecti} geçti, ${kaldi.length} başarısız ===`);

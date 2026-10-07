@@ -59,6 +59,11 @@ export function isClientKid(kid) {
   return isString(kid) && CLIENT_KID_PATTERN.test(kid);
 }
 
+/** `kok-*`: kök çapasının kimlik biçimi (protokol `anahtar-zinciri.ts` ROOT_KID_PATTERN). */
+export function isRootKid(kid) {
+  return isString(kid) && ROOT_KID_PATTERN.test(kid);
+}
+
 /** Kök çapası (protokol `prepareTrustAnchor`): boş → GUVEN_CAPASI_BOS; `kok-` dışı/tekrarlı kid, biçimsiz anahtar ya da sınıf → BICIM. */
 export function prepareRootAnchor(roots) {
   if (!Array.isArray(roots) || roots.length === 0) return fail("GUVEN_CAPASI_BOS", "Güven çapası boş: bu derlemede kök açık anahtarı yok");

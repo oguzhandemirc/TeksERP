@@ -10,13 +10,14 @@
 //   npx tsx scripts/guven-capasi-ekle.ts kok --kid=kok-2026-1 --x=<base64url> --siniflar=URETIM,DR,… [--yaz]
 //   npx tsx scripts/guven-capasi-ekle.ts paket --kid=paket-2026 --x=<base64url> [--yaz]
 //   npx tsx scripts/guven-capasi-ekle.ts paket --dosya=<kid>.paket.json [--yaz]
-//   npx tsx scripts/guven-capasi-ekle.ts panel --paket-kid=paket-<yıl> [--yaz]        (a: PAKET anahtarı panel künyesini de imzalar)
-//   npx tsx scripts/guven-capasi-ekle.ts panel --dosya=<kid>.panel.json [--yaz]       (b: ayrı panel yayın anahtarı, panel-imza.ts anahtar-uret)
-//   npx tsx scripts/guven-capasi-ekle.ts panel --kid=panel-<yıl> --x=<base64url> [--yaz]
-//   npx tsx scripts/guven-capasi-ekle.ts tablet …                                    (aynı seçenekler — tablet APK künyesi çapası)
+//   npx tsx scripts/guven-capasi-ekle.ts istemci-kok --kok-kid=kok-<yıl>-<n> [--yaz] (panel kök çapası: TS üretim kökü AYNEN)
+//   npx tsx scripts/guven-capasi-ekle.ts tablet --paket-kid=paket-<yıl> [--yaz]       (a: PAKET anahtarı APK künyesini de imzalar)
+//   npx tsx scripts/guven-capasi-ekle.ts tablet --dosya=<kid>.panel.json [--yaz]      (b: ayrı istemci yayın anahtarı, panel-imza.ts anahtar-uret)
+//   npx tsx scripts/guven-capasi-ekle.ts tablet --kid=panel-<yıl> --x=<base64url> [--yaz]
 //   Ortak: [--kok=<depo kökü>] (varsayılan bu deponun kökü)
-// `panel` beşinci yerdir: panelin gömülü güncelleme imza çapası (Electron/electron/guncelleme/imza-capasi.json);
-// `tablet` altıncı: tabletin APK künyesi imza çapası (mobil/src/lib/apk-imza-capasi.json). İkisi aynı kid ailesi.
+// `istemci-kok` beşinci yerdir: panelin gömülü KÖK çapası (Electron/electron/guncelleme/imza-capasi.json; künye v:2'yi
+// `ist-*` sertifikalı anahtar imzalar); `tablet` altıncı: tabletin APK künyesi imza çapası (mobil/src/lib/apk-imza-capasi.json).
+// Eski `panel` komutu KALKTI (panel çapasında gömülü imzacı anahtarı yok).
 //
 // Varsayılan KURU: planı basar, dosya yazmaz; `--yaz` yazar. Aynı kid + aynı anahtar zaten çapadaysa
 // değişiklik yok (idempotent); aynı kid başka anahtar/sınıf ya da aynı anahtar başka kid → RED (rotasyon YENİ
@@ -35,10 +36,12 @@ import {
   PANEL_CAPA_DOSYASI,
   TABLET_CAPA_DOSYASI,
   capaDurumuOku,
+  istemciKokCapasiOku,
+  istemciKokEklePlani,
   kokEklePlani,
   paketEklePlani,
-  panelCapasiOku,
-  panelEklePlani,
+  tabletCapasiOku,
+  tabletEklePlani,
   type CapaDurumu,
   type EklemePlani,
 } from "./lib/guven-capasi";
@@ -74,16 +77,23 @@ function acikAlanlar(dosya: string, beklenenTur: string): { kid: string; x: stri
 function planla(argv: readonly string[], d: CapaDurumu, kok: string): { plan: EklemePlani; ozet: string } {
   const komut = argv[0];
   const dosya = arg(argv, "dosya");
-  if (komut === "panel" || komut === "tablet") {
-    const hedef = komut === "panel" ? PANEL_CAPA_DOSYASI : TABLET_CAPA_DOSYASI;
+  if (komut === "panel") throw new KullanimHatasi("panel komutu kalktı — panel çapası yalnız kök: istemci-kok --kok-kid=kok-<yıl>-<n>");
+  if (komut === "istemci-kok") {
+    const kokKid = arg(argv, "kok-kid");
+    if (!kokKid) throw new KullanimHatasi("istemci-kok: --kok-kid=kok-<yıl>-<n> gerekli");
+    const plan = istemciKokEklePlani(d, istemciKokCapasiOku(kok), kokKid);
+    const r = d.kokler.uretim.find((k) => k.kid === kokKid)!;
+    return { plan, ozet: `PANEL KÖK ${r.kid} [${r.classes.join(", ")}] x=${r.x}` };
+  }
+  if (komut === "tablet") {
     const ac = dosya ? acikAlanlar(dosya, "tekserp-panel-anahtar") : null;
     const paketKid = arg(argv, "paket-kid");
     const kaynak = paketKid ? d.paketler.uretim.find((k) => k.kid === paketKid) : null;
     if (paketKid && !kaynak) throw new CapaHatasi("GECERSIZ", `${paketKid} PAKET çapasında yok`);
     const kid = ac?.kid ?? kaynak?.kid ?? arg(argv, "kid");
     const x = ac?.x ?? kaynak?.x ?? arg(argv, "x");
-    if (!kid || !x) throw new KullanimHatasi(`${komut}: --paket-kid=paket-<yıl> (a) · --dosya=<kid>.panel.json (b) · --kid + --x gerekli`);
-    return { plan: panelEklePlani(d, panelCapasiOku(kok, hedef), { kid, x }), ozet: `${komut.toUpperCase()} ${kid} x=${x}` };
+    if (!kid || !x) throw new KullanimHatasi("tablet: --paket-kid=paket-<yıl> (a) · --dosya=<kid>.panel.json (b) · --kid + --x gerekli");
+    return { plan: tabletEklePlani(d, tabletCapasiOku(kok), { kid, x }), ozet: `TABLET ${kid} x=${x}` };
   }
   if (komut === "kok") {
     const ac = dosya ? acikAlanlar(dosya, "tekserp-kok-anahtar") : null;
@@ -102,15 +112,16 @@ function planla(argv: readonly string[], d: CapaDurumu, kok: string): { plan: Ek
     const plan = paketEklePlani(d, { kid, x });
     return { plan, ozet: `PAKET ${kid} → ${plan.kip} listesi · x=${x}` };
   }
-  throw new KullanimHatasi("komut: kok | paket | panel | tablet");
+  throw new KullanimHatasi("komut: kok | paket | istemci-kok | tablet");
 }
 
 const PANEL_SONRAKI_ADIMLAR = [
-  "Sonraki adımlar (panel çapası):",
+  "Sonraki adımlar (panel kök çapası):",
   "  cd Teks-Erp && node ../scripts/agir-is.mjs -- npx tsx scripts/run-all-tests.ts panel_imza",
+  "  node ../scripts/agir-is.mjs -- npx tsx scripts/run-all-tests.ts guven_capasi_ekle",
   "  cd Electron && node ../scripts/agir-is.mjs -- npx vitest run src/test/panel-kunye.test.ts src/test/updater-imza-akisi.test.ts",
   "  node scripts/agir-is.mjs -- node scripts/test_grup_yayin_kapisi.mjs   (panel grup künyesi)",
-  "Sonra: YENİ panel sürümü (çapa derlemede gömülür) — önce testfabrika; imzalı ilk sürüm eski panellere NORMAL gelir.",
+  "Sonra: YENİ panel sürümü (çapa derlemede gömülür); yeni kök sahadaki panele ancak eski kökün imzaladığı sürümle ulaşır (rotasyon kök düzeyinde).",
 ];
 
 const TABLET_SONRAKI_ADIMLAR = [
@@ -151,12 +162,12 @@ export function main(argv: readonly string[]): number {
     // Son koşul: yazılan dört yer yeniden ayrıştırılır ve birbirine eşit (aksi hâlde yarım yazım görünür).
     capaDurumuOku(kok);
     if (plan.dosyalar.has(PANEL_CAPA_DOSYASI)) {
-      panelCapasiOku(kok);
+      istemciKokCapasiOku(kok);
       console.log(PANEL_SONRAKI_ADIMLAR.join("\n"));
       return CIKIS.TAMAM;
     }
     if (plan.dosyalar.has(TABLET_CAPA_DOSYASI)) {
-      panelCapasiOku(kok, TABLET_CAPA_DOSYASI);
+      tabletCapasiOku(kok);
       console.log(TABLET_SONRAKI_ADIMLAR.join("\n"));
       return CIKIS.TAMAM;
     }

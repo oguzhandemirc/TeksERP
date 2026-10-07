@@ -11,4 +11,4 @@ export interface LatestYmlInfo {
 }
 
 export function parseLatestYml(text: unknown): KunyeResult<LatestYmlInfo>;
-export function withReleaseBlock(text: string, token: string): string;
+export function withReleaseBlock(text: string, token: string, g?: { readonly iptal?: string | null }): string;

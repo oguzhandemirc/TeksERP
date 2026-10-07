@@ -1,12 +1,13 @@
-import { createHash, generateKeyPairSync } from "node:crypto";
+import { createHash } from "node:crypto";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { parseUpdateInfo } from "electron-updater/out/providers/Provider";
 import type { UpdateStatus } from "@shared/ipc-contract";
 import { CHANNEL_CODE } from "@shared/channel";
 import { ALLOWED_UPDATE_HOST, DEFAULT_UPDATE_FEED_URL, UPDATE_FEED_OVERRIDE_KEY, groupFeedUrl } from "@shared/update-feed";
 import { API_BASE_URL_STORE_KEY, AUTH_TOKEN_STORE_KEY, DOWNLOAD_TOKEN_HEADER } from "@shared/download-token";
-import { buildReleaseDoc, signReleaseDoc } from "../../electron/guncelleme/panel-kunye.mjs";
+import { buildReleaseDoc } from "../../electron/guncelleme/panel-kunye.mjs";
 import { withReleaseBlock } from "../../electron/guncelleme/latest-yml.mjs";
+import { zincirKur } from "./helpers/istemci-zinciri-fikstur";
 
 /**
  * GRUP AKIŞI (tek ortak paket, TEK-ORTAK-PAKET §3.4 / O6) — gerçek `registerUpdaterIpc`, sahte electron/electron-updater.
@@ -21,7 +22,7 @@ const h = vi.hoisted(() => {
     handlers: new Map<string, (...a: unknown[]) => unknown>(),
     store: new Map<string, string>(),
     fetchMock: vi.fn(),
-    anchorFile: { anahtarlar: [] as Array<{ kid: string; x: string }> },
+    anchorFile: { kokler: [] as Array<{ kid: string; x: string; classes: string[] }> },
     updater: {
       setFeedURL: vi.fn(),
       checkForUpdates: vi.fn(async () => null),
@@ -52,8 +53,7 @@ vi.mock("../../electron/ipc/secure-store.ipc.js", () => ({
 }));
 vi.mock("../../electron/guncelleme/imza-capasi.json", () => ({ default: h.anchorFile }));
 
-const ANAHTAR = generateKeyPairSync("ed25519");
-const KID = "panel-fikstur";
+const Z = zincirKur();
 const YENI = "10.0.0";
 const AD = `TeksERP-${YENI}-Setup.exe`;
 const GOVDE = Buffer.from("imzali kurulum ".repeat(64));
@@ -74,9 +74,9 @@ function latestYml(kanal: string): string {
     commit: "0efe882d",
     yayinZamani: "2026-10-01T01:00:00.000Z",
     paket: { ad: AD, boyut: GOVDE.length, sha512: sha.toString("hex") },
-    capa: [KID],
+    capa: [Z.kok.kid],
   });
-  return withReleaseBlock(yml, signReleaseDoc({ doc, kid: KID, privateKey: ANAHTAR.privateKey }));
+  return withReleaseBlock(yml, Z.imzala(doc));
 }
 const bilgi = (kanal: string) =>
   parseUpdateInfo(latestYml(kanal), "latest.yml", new URL(`${IZINLI}latest.yml`)) as unknown as Record<string, unknown>;
@@ -98,7 +98,7 @@ async function kur({ grup = GRUP as string | null } = {}) {
 }
 
 beforeAll(() => {
-  h.anchorFile.anahtarlar.push({ kid: KID, x: ANAHTAR.publicKey.export({ format: "jwk" }).x as string });
+  h.anchorFile.kokler.push(...Z.roots.map((r) => ({ ...r, classes: [...r.classes] })));
 });
 beforeEach(() => vi.useFakeTimers({ toFake: ["setTimeout", "setInterval"] }));
 afterEach(() => vi.useRealTimers());
