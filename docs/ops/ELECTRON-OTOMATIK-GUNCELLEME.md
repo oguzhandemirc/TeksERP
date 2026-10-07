@@ -612,7 +612,7 @@ aracı çağrılır, imza sonrası kapı yeniden koşar ② ROTASYON KİLİDİ (
 yeni imzanın KÖKÜ onun `capa`sında olmalı (yayındaki v:1 → ihlal) — sahadaki panel bir sonraki sürümü KENDİ gömülü çapasıyla doğrular
 ③ yükleme sırası aynı (latest.yml EN SON) ④ kenardaki latest.yml yerelde imzalanan dosyayla BAYT-EŞİT.
 `--kuru` imzalamaz (imzasızı not eder, geçersizi durdurur); `--dogrula` kenardaki künyeyi denetler (künyesiz
-yayın uyarı — imza öncesi sürüm). Bekçi: `scripts/test_kanal_yayin_kapisi.mjs` §8.
+yayın uyarı — imza öncesi sürüm). Bekçi: `scripts/test_grup_yayin_kapisi.mjs` §8.
 
 **Rotasyon kilidi (KÖK düzeyi):** `electron-yayinla.sh` ssh ile yayındaki latest.yml künyesini okur; yeni imzanın KÖKÜ yayındaki künyenin `capa`sında (kök kid'leri) olmalıdır, yayındaki künye v:1 ise ihlaldir (kapı durur). Yıllık ISTEMCI yenilemesi kök değiştirmediği için kilidi etkilemez. KÖK değişiminde yeni kök ÖNCE çapaya eklenir ve ESKİ kökle imzalı bir sürümle sahaya çıkar; ancak o sürüm yayındayken yeni kökün altındaki anahtarla imzalanır. Eski kök, onu tanıyan son panel güncellenene dek çapada kalır. Bekçi: `scripts/test_grup_yayin_kapisi.mjs` §7.
 **Birincil kaybolursa/sızarsa:** yedek ISTEMCI anahtarı (kök imzalı kendi sertifikasıyla) USB'den alınır ve sonraki sürümü O imzalar — çapa ve rotasyon kilidi değişmez; sızan anahtar için kök imzalı dağıtım iptali yayınlanır (yukarıdaki iptal deposu).

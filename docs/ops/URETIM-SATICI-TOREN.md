@@ -192,6 +192,81 @@ Hepsi açık bilgi (künyeden ve çapa betiğinin kuru çıktısından; sır, pa
 - **Mac'te kalan:** `donemler/<damga>/` (700/600; ALT/İND düz, ara parolalı). USB kopyası (`usb-kopyala`) bugün yalnız ilk törenin kümesini kopyalar; dönem paketleri kapsamaz (borç — sonraki dilim).
 - **Prova kaydı (2026-10-05, Mac, sahte anahtarlar, `sat_dp_test`):** sahte ilk tören (`--dizin=<scratch>/satici-uretim`) → üretimdeki altı dosyalı birimin kopyası + dosya çapasıyla (`GUVEN_CAPASI_DOSYASI`; üretimde gömülü çapa) yerel satıcı → adım 1 `talepler: []` · adım 2 rc 0 (`alt-2026-2 · ara-2026-1 · ind-2026-2`, iptal sıra 1, EMEKLİYE `alt-2026-1, ind-2026`) · adım 3 6/6 `OK` · adım 4 yalnız yerel `ayarCoz` (`ok: true`; eski `{kid,x}` satırla RED) · adım 6 `EKLENDI` → tekrar `VARDI` · adım 7 ≤ 1 dk'da ARA `yuklu: true`, plan ARA, `dagitilanSira: 1`, kira `alt-2026-2`, indirme belirteci `ind-2026-2` · adım 8 kuru → `--uygula`, tek başına `ara-…` RED · kök dosyası birimden alınınca: plan ARA, ara parolası yerine kök parolası 400 `IMZA_PAROLASI_HATALI`, KOK isteği 409, ara parolasıyla 201 `imzalayanKid: ara-2026-1`, yoklama HAK'ı ARA sertifikalı teslim eder, satıcı köksüz yeniden açılır.
 
+## 9. Dönem töreni — ISTEMCI (panel/tablet güncelleme imzası) kısmı: `donem --istemci`
+
+> **Durum (2026-10-07):** araç hazır (`36d0c9d15`), gerçek tören henüz YAPILMADI — kullanıcıyla, Mac'te, 1.2 sonrası (tasarım: [`ISTEMCI-ANAHTARI-KOK-ALTINDA.md`](../design/ISTEMCI-ANAHTARI-KOK-ALTINDA.md) §6; iş I9). Bu bölüm §8'in yerine geçmez: `--istemci` verilirse §8'in ALT/ara/İNDİRME işi AYNI komutta yapılır, üstüne istemci imza anahtarları eklenir.
+
+**Ne üretir (sade dille):** panel ve tablet güncellemelerini imzalayan iki anahtar — **birincil** (Mac'te durur, günlük imza) ve **yedek** (yalnız USB'de; birincil kaybolursa onunla devam edilir). Ayrıca tablet güncellemesinin (OTA) iki imza sertifikası. Sonunda sahada yayında olan sürümlerin imzası yeni anahtarla yenilenir (paketin kendisi değişmez, kimse yeniden kurmaz).
+
+**Dört parola (hepsi birbirinden FARKLI, en az 12 karakter):** kök (kâğıttaki) · ara imzacı · istemci (birincil) · yedek. **Yedek parolası yalnız kâğıda yazılır**; USB'ye, Mac'e, parola yöneticisine konmaz.
+
+### 9.1 Hazırlık
+
+1. §1.3'teki gibi temiz ağaç (`origin/main`, iki projede `npm ci`) — tören bunu kendisi ölçer.
+2. **Boş/biçimlenmiş bir USB** tak (örnek `/Volumes/TOREN-USB`). Tören USB'nin Mac'in kendi diskinden AYRI bir birim olduğunu ölçer; aynı diskse durur.
+3. **Parola dosyalarını yaz** (isteğe bağlı: dosya vermezsen her parola terminalde gizli sorulur — bu daha kolaydır, dosya yalnız uzun/tekrarlı işte işe yarar). Dosyalar Mac'te GEÇİCİ dizinde durur, işin sonunda silinir:
+
+   ```bash
+   umask 077; mkdir -p ~/toren-gecici
+   # Her dosyaya TEK satır parola yaz (bir metin düzenleyiciyle ya da: read -rs P && printf '%s\n' "$P" > ~/toren-gecici/kok.txt):
+   #   ~/toren-gecici/kok.txt   ara.txt   istemci.txt   yedek.txt
+   # OTA kökü dosyası İKİ satır: kök parolası, sonra aynısı tekrar → ~/toren-gecici/ota-kok.txt
+   ls -l ~/toren-gecici        # hepsi -rw------- (0600) olmalı; değilse: chmod 600 ~/toren-gecici/*.txt
+   ```
+
+   Kural: dosya 0600, sana ait, düzenli dosya, 4 KiB'tan küçük olmalı — değilse araç parolayı OKUMADAN reddeder. **`yedek.txt` USB'nin içinde OLMAMALI** (tören reddeder).
+4. **Yayındaki kopyalar:** sahada şu an yayında olan panel/tablet sürümlerinin imzasını yenilemek için yayındaki dosyalar indirilir: `<grup>/panel/latest.yml` ve `<grup>/ota/<runtimeVersion>/manifest` düzeninde bir dizin (`<grup>` = test · oncu · genel). Yayında HİÇBİR şey yoksa dizin yerine `--yayinda-yok` verilir.
+
+### 9.2 İlk kez: OTA kökü (yılda bir DEĞİL, yalnız bir kez)
+
+OTA kökü tablet uygulamasının içine gömülür ve kolay değişmez. Yalnız ilk törende, kök parolasıyla üretilir:
+
+```bash
+node mobil/scripts/ota-zinciri.mjs kok-uret --dizin=$HOME/.tekserp/satici-uretim/anahtarlar --parola-dosyasi=$HOME/toren-gecici/ota-kok.txt
+```
+
+(Dosya vermezsen parola iki kez sorulur.) Dosya zaten varsa komut durur — sonraki yıllarda bu adım ATLANIR.
+
+### 9.3 Töreni koş
+
+```bash
+node deploy/satici/uretim-toren.mjs donem --istemci --yedek-usb=/Volumes/<USB> --yayindakiler=<indirilen dizin> \
+  --kok-parola-dosyasi=$HOME/toren-gecici/kok.txt --ara-parola-dosyasi=$HOME/toren-gecici/ara.txt \
+  --istemci-parola-dosyasi=$HOME/toren-gecici/istemci.txt --yedek-parola-dosyasi=$HOME/toren-gecici/yedek.txt
+```
+
+(`--yayindakiler=<dizin>` yerine `--yayinda-yok`; parola dosyası vermediğin parola terminalde sorulur. Kuyruk HAK'ları varsa §8'deki gibi `--kuyruk=…` da eklenir.) Beklenen: adımlar 8–11 (birincil anahtar Mac'te · yedek anahtar DOĞRUDAN USB'ye · yayındakilerin yeniden imzası · yedeğin açılış ölçümü ve "Mac'te yedek izi yok" taraması) ve 12 (VDS paketi), sonunda `✅`. **Hata olursa hedefe hiçbir şey yazılmaz** (§8'deki gibi yarım dizin silinir); ileti `yedek parola dosyası USB'de` / `USB Mac diskiyle aynı` / `parola dosyası 0600 değil` diyorsa dediğini düzelt ve komutu yeniden koş.
+
+Çıktı: Mac'te `~/.tekserp/satici-uretim/donemler/<damga>/` (`vds-paketi/istemci/` yalnız AÇIK sertifikalar + iki yaprak PEM; `DONEM-KUNYE.json` `istemci` bölümü; `istemci/YEDEK-IZI.json` yalnız Mac'te kalır, VDS'e gitmez). USB'de yeni yedek dizini + `YEDEK-KUNYE.json`; önceki yılın yedek dizinleri USB'den silinir. VDS'e aktarma §8 adım 3–9'daki gibidir (paketin `istemci/` klasörü de gider).
+
+### 9.4 Doğrula ve USB yedeğini sına
+
+```bash
+node deploy/satici/uretim-toren.mjs dogrula
+node deploy/satici/uretim-toren.mjs istemci-yedek-dogrula --yedek-usb=/Volumes/<USB> --yedek-parola-dosyasi=$HOME/toren-gecici/yedek.txt
+```
+
+- `dogrula`: izinler + özetler tutuyor mu; ayrıca **Mac'te yedek anahtarın izi OLMAMALI** (varsa kırmızı — yedek yanlışlıkla Mac'e düşmüş demektir; o kopyayı sil, USB'den yenisini üret).
+- `istemci-yedek-dogrula`: USB'deki yedek anahtar ve yaprak, yedek parolasıyla AÇILIYOR ve açık anahtarları künyedekiyle eşleşiyor mu. **Yılda bir (tören arasında da) tekrarla** — açılamayan yedek, yedek değildir. Parola dosyası vermezsen yedek parolası (kâğıttan) terminalde sorulur.
+
+### 9.5 Bitiş — parola dosyalarını SİL
+
+```bash
+rm -P ~/toren-gecici/*.txt && rmdir ~/toren-gecici
+ls ~/toren-gecici 2>&1        # "No such file or directory" görmelisin
+```
+
+`rm -P` dosyayı silmeden önce üstüne yazar (düz `rm`'den güçlüdür). Sonra USB'yi çıkar ve kâğıttan AYRI bir yere kaldır (§2: biri ele geçerse öteki tek başına işe yaramasın). Yedek parolası yalnız kâğıtta kalır.
+
+### 9.6 Sorun giderme
+
+| Belirti | Ne yap |
+|---|---|
+| `Tanınmayan argüman` | yazım hatası; parola değeri iletide basılmaz, bayrak adını denetle |
+| `bitişe < 30 gün` (imza reddi) | sertifika dönemi bitmek üzere — yeni tören gerekir (30 gün kapısı; atlatılmaz) |
+| `istemci-yedek-dogrula` RED | USB doğru mu, yedek parolası doğru mu; hâlâ açılmıyorsa yedek GEÇERSİZ sayılır → yeni tören (birincil duruyorsa yayın sürer) |
+| Birincil kayboldu/bozuldu | yayın yedekle sürer (tasarım §3.6); yeni çift sonraki törende. **Çalınma:** `ist-*` iptali henüz tören adımı değil (kod borcu, tasarım §7 I8) — yöneticiye bildir |
+
 ## Ek A — yönetici için teknik özet
 
 - **Alt süreçler:** kök/ALT/İNDİRME/sırlar `satici/sunucu/scripts/anahtar.ts` (`kok-uret` · `alt-uret` · `indirme-uret` · `sirlar-uret`), PAKET = `PAKET_KOMUTU` (tek satır, törenin başında: `Teks-Erp/scripts/build-korumali-imza.ts anahtar-uret --kid={kid} --dizin={dizin} --json` — arayüz değişirse yalnız bu satır; `--paket-komutu="…"` koşum başına ezer ve ekranda `varsayılan DEĞİL` diye görünür), modül `satici/sunucu/scripts/modul-anahtari.ts uret` (DB'siz), yedek alıcıları + sınama + kurtarma arşivi `Teks-Erp/scripts/yedek-sifrele.ts`. Kurtarma alıcısı `--parolali --parola-stdin` ile KÖK parolasına sarılır.
