@@ -9,6 +9,12 @@
 //   npx tsx scripts/panel-imza.ts imzala --musteri=<kod> [--surum=<x.y.z>] --anahtar=<ist-… dosyası> [--sertifika=<dosya>] [--iptal=<dosya>]
 //   npx tsx scripts/panel-imza.ts dogrula --musteri=<kod> [--surum=<x.y.z>]
 //   npx tsx scripts/panel-imza.ts anahtar-uret --kid=ist-<yıl>-<n> | panel-<yıl>[-<n>] [--dizin=~/.tekserp/panel-uretim] [--json]
+//   npx tsx scripts/panel-imza.ts sertifika-ekle --anahtar=<ist-… .panel.json> --sertifika=<satıcının verdiği dosya> [--kok-dosyasi=<*.kok.json>]
+//       Sertifika köke bağlı, ISTEMCI, kid ve x anahtarınkiyle AYNI değilse RED; geçerse anahtarın yanına <kid>.sertifika.json.
+//   npx tsx scripts/panel-imza.ts yeniden-imzala --latest=<yayındaki latest.yml> --musteri=<grup> --anahtar=<ist-…> --cikti=<yeni latest.yml>
+//                                               [--sertifika=<dosya>] [--kok-dosyasi=<*.kok.json>]
+//       Yıllık tören: yük AYNEN, yalnız imzacı/sertifika/imzaZamani yeni; kurulum dosyası gerekmez (paket baytı değişmez).
+//   npx tsx scripts/panel-imza.ts anahtar-ac --anahtar=<dosya> [--json]   (yedeğin açılabilirlik ölçümü: kid + x, özel yarı basılmaz)
 //   npx tsx scripts/panel-imza.ts apk-imzala --musteri=<kod> --apk=<yol.apk> --kunye=<surum.json> --anahtar=<dosya>
 //   npx tsx scripts/panel-imza.ts apk-dogrula --musteri=<kod> --apk=<yol.apk> --kunye=<surum.json>
 //   (apk-*: surum.json'u `deploy/mobil-grup-yayinla.mjs` yazar ve bu komutu kendisi çağırır; çapa mobil/src/lib/apk-imza-capasi.json)
@@ -19,7 +25,8 @@
 // (`--sertifika`, varsayılan anahtarın yanındaki `<kid>.sertifika.json`); çapa yalnız kökler, sertifikayı çapadaki bir
 // kök imzalamadıysa imza YAZILMAZ. `--iptal=<dosya>` (ham JWS) güncel dağıtım iptalini bloğa koyar. Tablet APK
 // künyesi: (a) üretim PAKET anahtarı ya da (b) `panel-<yıl>` anahtarı, gömülü çapayla. Parola TTY'de gizli istem,
-// değilse stdin satırı; argümandan ve ortamdan ASLA (`--parola…` çıkış 2).
+// değilse stdin satırı ya da `--parola-dosyasi=<yol>` (0600, her istenen parola bir satır); argümandan ve ortamdan ASLA
+// (`--parola…` çıkış 2). Bitişine 30 günden az kalmış ISTEMCI sertifikasıyla imza YOK (yıllık tören).
 // Çıkış: 0 tamam · 1 RED/hata · 2 kullanım.
 // =============================================================================
 import fs from "node:fs";
@@ -28,7 +35,12 @@ import path from "node:path";
 import { CliError, args, askPassword } from "./lib/cli-girdi";
 import {
   DEPO_KOKU,
+  attachClientCertificate,
   generatePanelKey,
+  publicXOf,
+  readPanelKeyPublic,
+  resignPanelRelease,
+  rootAnchorFromKeyFile,
   openPanelSigningKey,
   readClientCertificate,
   readPanelAnchor,
@@ -58,6 +70,8 @@ function paketDizini(f: ReadonlyMap<string, string>): { dizin: string; kanal: st
 }
 
 function capa(f: ReadonlyMap<string, string>) {
+  const kok = f.get("kok-dosyasi");
+  if (kok) return rootAnchorFromKeyFile(path.resolve(evYolu(kok)));
   const test = f.get("capa");
   if (test) console.error("⚠ TEST ÇAPASI kullanılıyor — yalnız bekçi içindir; yayın kapısı gerçek çapayla yeniden doğrular");
   return test ? readPanelAnchor(path.resolve(test), { test: true }) : readPanelAnchor();
@@ -118,6 +132,42 @@ async function anahtarUret(f: ReadonlyMap<string, string>): Promise<void> {
   console.log("  ⚠ Parolalı dosyanın kopyası Mac DIŞINDA saklanır (USB + kâğıt; parola ayrı kâğıtta).");
 }
 
+async function sertifikaEkle(f: ReadonlyMap<string, string>): Promise<void> {
+  const keyFile = evYolu(gerek(f, "anahtar"));
+  const certificate = readClientCertificate({ keyFile, kid: readPanelKeyPublic(keyFile).kid, file: evYolu(gerek(f, "sertifika")) });
+  const r = attachClientCertificate({ keyFile, certificate, anchor: capa(f) });
+  console.log(`✓ ISTEMCI sertifikası ${r.yazildi ? "eklendi" : "zaten ekli (aynı)"} · ${r.kid} · kök ${r.rootKid} · bitiş ${r.bitis.slice(0, 10)}`);
+  console.log(`  ${r.file}`);
+}
+
+async function yenidenImzala(f: ReadonlyMap<string, string>): Promise<void> {
+  const kanal = gerek(f, "musteri");
+  if (!/^[a-z0-9][a-z0-9-]{1,30}$/.test(kanal)) throw new CliError(`--musteri kanal kodu biçiminde değil: ${kanal}`);
+  const latest = path.resolve(evYolu(gerek(f, "latest")));
+  const cikti = path.resolve(evYolu(gerek(f, "cikti")));
+  if (fs.existsSync(cikti)) throw new Error(`${cikti} zaten var — üstüne yazılmaz`);
+  const anchor = capa(f);
+  const keyFile = evYolu(gerek(f, "anahtar"));
+  const kid = readPanelKeyPublic(keyFile).kid;
+  const sertifikaDosyasi = f.get("sertifika");
+  const certificate = readClientCertificate({ keyFile, kid, ...(sertifikaDosyasi ? { file: evYolu(sertifikaDosyasi) } : {}) });
+  const key = await openPanelSigningKey(keyFile, (k) => askPassword(`Panel künye imza anahtarı (${k}) parolası: `));
+  const r = resignPanelRelease({ latestText: fs.readFileSync(latest, "utf8"), kanal, key, certificate, anchor });
+  fs.writeFileSync(cikti, r.text, { flag: "wx", mode: 0o644 });
+  console.log(`✓ künye yeniden imzalandı · ${kanal} ${r.doc.surum} · ${r.oncekiKid} → ${r.yeniKid} · paket ${r.doc.paket.ad} (sha512 ${r.doc.paket.sha512.slice(0, 16)}…, değişmedi)`);
+  console.log(`  ${cikti}`);
+}
+
+async function anahtarAc(f: ReadonlyMap<string, string>): Promise<void> {
+  const keyFile = evYolu(gerek(f, "anahtar"));
+  const pub = readPanelKeyPublic(keyFile);
+  const key = await openPanelSigningKey(keyFile, (k) => askPassword(`Anahtar (${k}) parolası: `));
+  const x = publicXOf(key.privateKey);
+  if (x !== pub.x || key.kid !== pub.kid) throw new Error(`açılan özel anahtar dosyadaki açık yarıyla uyuşmuyor (${pub.kid})`);
+  if (f.has("json")) console.log(JSON.stringify({ v: 1, kid: key.kid, x, acildi: true }));
+  else console.log(`✓ ${key.kid} açıldı · x=${x}`);
+}
+
 function apkGirdisi(f: ReadonlyMap<string, string>) {
   const kanal = gerek(f, "musteri");
   if (!/^[a-z0-9][a-z0-9-]{1,30}$/.test(kanal)) throw new CliError(`--musteri kanal kodu biçiminde değil: ${kanal}`);
@@ -147,9 +197,12 @@ async function main(): Promise<void> {
   if (command === "imzala") return imzala(flags);
   if (command === "dogrula") return dogrula(flags);
   if (command === "anahtar-uret") return anahtarUret(flags);
+  if (command === "sertifika-ekle") return sertifikaEkle(flags);
+  if (command === "yeniden-imzala") return yenidenImzala(flags);
+  if (command === "anahtar-ac") return anahtarAc(flags);
   if (command === "apk-imzala") return apkImzala(flags);
   if (command === "apk-dogrula") return apkDogrula(flags);
-  throw new CliError("komut: imzala | dogrula | anahtar-uret | apk-imzala | apk-dogrula");
+  throw new CliError("komut: imzala | dogrula | anahtar-uret | sertifika-ekle | yeniden-imzala | anahtar-ac | apk-imzala | apk-dogrula");
 }
 
 main().catch((e: unknown) => {

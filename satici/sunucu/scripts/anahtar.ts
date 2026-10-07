@@ -15,6 +15,10 @@
 //   npx tsx scripts/anahtar.ts ara-uret --kid=ara-2026-1 --kok=kok-2026-1 [--siniflar=URETIM,DR,DEMO,TEST] [--gun=395]
 //       HAK ARA İMZACISI (G4): kök imzalı `HAK` sertifikası + ara parolasıyla sarılı dosya (<kid>.ara.json). Stdin: kök
 //       parolası, sonra ara parolası (yeni + tekrar; kökten FARKLI olmalı — ara parolası portalda VDS'te yazılır).
+//   npx tsx scripts/anahtar.ts istemci-sertifika-uret --x=<açık anahtar> --kid=ist-<yıl>-<n> --kok=kok-2026-1 [--kok-dizin=…] [--gun=395] --cikti=<dosya>
+//       ISTEMCI sertifikası (panel/tablet güncelleme imzacısı; ISTEMCI-ANAHTARI-KOK-ALTINDA §3.1): özel yarı satıcıya GELMEZ,
+//       yalnız açık anahtar (`panel-imza.ts anahtar-uret` çıktısının x'i) kökle imzalanır → açık {sertifika} dosyası
+//       (`panel-imza.ts sertifika-ekle` x'i yeniden ölçer). Sınıflar kökün bütün sınıfları (istemci sınıf süzgeci uygulamaz).
 //   npx tsx scripts/anahtar.ts iptal-uret --kok=kok-2026-1 --kok-dizin=<kökün dizini> --cikti=<dosya> [--onceki=<önceki iptal belgesi>]
 //                                        [--iptal=<anahtar/sertifika dosyası>[,…]] [--neden=<metin>]
 //       Sertifika İPTAL belgesi (`tekserp-iptal`, yalnız kök): önceki belgenin bütün satırları taşınır, sıra +1.
@@ -34,7 +38,8 @@
 //       (scripts/lib/yayin-okuma.mjs) okur; çıktıyı dosyaya/loga yönlendirmeyin.
 //   Ortak: [--dizin=<anahtar dizini>] (varsayılan ANAHTAR_DIZINI ya da ./anahtarlar) · [--kok-dizin=<kökün dizini>] (alt/indirme/ara:
 //   kök başka dizindeyse — dönem töreni kökü tören dizininden okur, yeni anahtarı dönem paketine yazar)
-// Stdin'den parola (TTY yoksa): her istenen parola bir satır (kök-uret: parola + tekrar).
+// Stdin'den parola (TTY yoksa): her istenen parola bir satır (kök-uret: parola + tekrar). `--parola-dosyasi=<yol>` (0600):
+// aynı satırlar dosyadan, bir kez okunur; değer hiçbir çıktıya basılmaz.
 // =============================================================================
 import { generateKeyPairSync, randomUUID, timingSafeEqual } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, readdirSync, unlinkSync } from "node:fs";
@@ -229,6 +234,25 @@ async function generateSubKey(flags: Map<string, string>, usage: "ALT" | "INDIRM
   writeKeyFileExclusive(target, subKeyFileFor(usage === "ALT" ? "tekserp-alt-anahtar" : "tekserp-indirme-anahtar", kid, privateKey, token));
   process.stdout.write(`${usage} anahtarı yazıldı: ${target} (sertifika ${cert.baslangic} → ${cert.bitis})\n`);
   if (usage === "INDIRME") process.stdout.write(`CF Worker açık anahtarı: { kid: "${kid}", x: "${cert.x}" }\n`);
+}
+
+/** ISTEMCI sertifikası: yalnız açık anahtar kökle imzalanır; çıktı açık dosya (özel yarı bu makineye hiç gelmez). */
+async function generateClientCertificate(flags: Map<string, string>): Promise<void> {
+  const kid = required(flags, "kid");
+  if (!/^ist-\d{4}-\d{1,3}$/.test(kid)) throw new CliError("ISTEMCI kid biçimi: ist-<yıl>-<n>");
+  const x = required(flags, "x");
+  if (!/^[A-Za-z0-9_-]{43}$/.test(x)) throw new CliError("--x Ed25519 açık anahtarı (43 karakter base64url) olmalı");
+  const rootKid = required(flags, "kok");
+  const target = path.resolve(required(flags, "cikti"));
+  if (existsSync(target)) throw new CliError(`${target} zaten var — üstüne yazılmaz`);
+  const dir = path.resolve(flags.get("kok-dizin") || flags.get("dizin") || process.env.ANAHTAR_DIZINI || "anahtarlar");
+  const root = rootAnchorOf(dir, rootKid);
+  const cert = certificateFor({ usage: "ISTEMCI", kid, x, classes: root.classes, validDays: days(flags, 395, 395), dealer: null });
+  const token = await signCertificate(dir, rootKid, cert);
+  const check = verifyCertificate(token, { roots: root.anchor, usage: "ISTEMCI", atMs: Date.now() });
+  if (!check.ok || check.value.document.x !== x || check.value.document.kid !== kid) throw new CliError("Üretilen ISTEMCI sertifikası geri doğrulanamadı");
+  writePublicFile(target, { sertifika: token });
+  process.stdout.write(`ISTEMCI sertifikası yazıldı: ${target} (${kid} · kök ${rootKid} · ${cert.baslangic} → ${cert.bitis})\n`);
 }
 
 async function generateDealer(flags: Map<string, string>): Promise<void> {
@@ -635,6 +659,8 @@ async function main(): Promise<void> {
       return generateIntermediate(flags);
     case "iptal-uret":
       return generateRevocation(flags);
+    case "istemci-sertifika-uret":
+      return generateClientCertificate(flags);
     case "kuyruk-imzala":
       return signRootQueue(flags);
     case "kuyruk-disa-aktar":
@@ -645,7 +671,7 @@ async function main(): Promise<void> {
       return retireKeys(flags);
     default:
       throw new CliError(
-        "Komut: kok-uret | alt-uret | indirme-uret | bayi-uret | ara-uret | iptal-uret | kuyruk-imzala | kuyruk-disa-aktar | donem-ice-aktar | emekliye-ayir | sirlar-uret | indirme-belirteci (ayrıntı dosya başında)",
+        "Komut: kok-uret | alt-uret | indirme-uret | bayi-uret | ara-uret | istemci-sertifika-uret | iptal-uret | kuyruk-imzala | kuyruk-disa-aktar | donem-ice-aktar | emekliye-ayir | sirlar-uret | indirme-belirteci (ayrıntı dosya başında)",
       );
   }
 }

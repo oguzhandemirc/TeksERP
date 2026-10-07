@@ -192,6 +192,40 @@ export function grupManifestiUret({ paketDizin, kunye, expoConfig, feed, anahtar
 }
 
 /**
+ * Yayındaki grup manifestini YENİ yaprakla yeniden imzalar (yıllık tören §6 adım 4, §3.5): eski gövde OTA köküne karşı
+ * şu an geçerli olmalı; manifest METNİ BAYT-EŞİT kalır (id · varlık adresleri · özetler — paket baytı değişmez), yalnız
+ * `expo-signature` ve `certificate_chain` yenilenir; keyid korunur. Yeni yaprak 30 gün kapısından geçmeli. Sonuç
+ * istemci aynasıyla geri doğrulanır.
+ * @returns {{govde: Buffer, manifest: object, keyid: string}}
+ */
+export function manifestYenidenImzala({ govde, kokPem, anahtar, yaprakPem, simdi = new Date() }) {
+  let eski;
+  try {
+    eski = multipartDogrula(govde, kokPem, { zincir: true, simdi });
+  } catch (e) {
+    throw new OrtakOtaIhlali(`yayındaki manifest OTA köküne karşı geçerli değil — yeniden İMZALANMAZ: ${e.message}`);
+  }
+  if (!eski.imzali || !eski.zincirli) throw new OrtakOtaIhlali('yayındaki manifest imzasız ya da zincirsiz — yeniden imzalanmaz');
+  const metin = govde.toString('utf8');
+  const manifestMetni = JSON.stringify(eski.manifest);
+  if (!metin.includes(`\r\n\r\n${manifestMetni}\r\n`)) throw new OrtakOtaIhlali('manifest metni kanonik değil — bayt-eşit yeniden imza kurulamaz');
+  const keyid = /expo-signature:[^\r\n]*keyid="([^"]+)"/i.exec(metin)?.[1];
+  if (!keyid) throw new OrtakOtaIhlali('yayındaki imza başlığında keyid yok');
+  const h = Z.yaprakHatalari(yaprakPem, kokPem, { simdi, esikGun: Z.OTA_YAPRAK_ESIK_GUN });
+  if (!h.length && !Z.anahtarYaprakEslesir(anahtar, yaprakPem)) h.push('yaprak anahtarı bu yaprak sertifikasının değil');
+  if (h.length) throw new OrtakOtaIhlali('YENİ OTA YAPRAĞI İMZAYA UYGUN DEĞİL — manifest yeniden imzalanmaz', h.map((x) => `• ${x}`));
+  const yeni = multipartKur({ manifest: eski.manifest, imzaBasligiDegeri: imzaBasligi(manifestMetni, anahtar, keyid), sertifikaZinciri: yaprakPem });
+  let d;
+  try {
+    d = multipartDogrula(yeni, kokPem, { zincir: true, simdi });
+  } catch (e) {
+    throw new OrtakOtaIhlali(`yeniden imzalanan manifest geri doğrulanamadı: ${e.message}`);
+  }
+  if (JSON.stringify(d.manifest) !== manifestMetni || !yeni.toString('utf8').includes(`\r\n\r\n${manifestMetni}\r\n`)) throw new OrtakOtaIhlali('yeniden imzada manifest değişti — yazılmadı');
+  return { govde: yeni, manifest: d.manifest, keyid };
+}
+
+/**
  * Native parmak izi, DEĞERLENDİRİLMİŞ ortak yapılandırmadan (`app.config.js` çıktısı): `app.json` eski kanalın
  * kimliğini taşır, ortak paketin paket adı/runtime'ı ondan gelmez — o yüzden app.json'un ham android bloğu hash'lenmez.
  * Kapsam: bağımlılıklar · plugins · android − versionCode · depo içi native kaynak (`yerelNativeKaynakIzi`; alg 4).

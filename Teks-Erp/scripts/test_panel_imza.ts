@@ -19,6 +19,10 @@
 //      dosyası latest.yml'den farklı · argv'de parola · gerçek kök çapası · ist- olmayan anahtar · sertifika yok ·
 //      başka anahtarın sertifikası · imzalayanı iptal eden `--iptal` → RED ve latest.yml DEĞİŞMEZ; ilgisiz iptal
 //      bloğa girer; imzadan sonra kurcalanan latest.yml → dogrula RED; yeniden imza tek blok
+//   §2o–§2z tören araçları (I7) — sertifika-ekle: köke bağlı ISTEMCI sertifikası yanına 0600, idempotent; ⭐ x başka
+//      anahtarın · başka kid · çapa dışı kök · kullanım ISTEMCI değil · farklı dosya varken → RED, yazılmaz · ⭐ 30 gün
+//      kapısı (29 gün RED, 31 gün imzalar; imzala ve yeniden-imzala) · yeniden-imzala: yük aynen, panel kabul eder;
+//      kurcalanmış · başka grup · ⭐ imzalayanı iptal edilmiş künye · var olan çıktı → RED · anahtar-ac kid + x, parola basılmaz
 //   §3 çapa aracı (geçici kopyada) — gerçek panel kök çapası biçimde · eski `panel` komutu 64 · `tablet` (a)
 //      `--paket-kid` / (b) `--dosya` ekler, idempotent, biçim dışı / ist- / hazırlık / çakışma RED, elle bozulmuş
 //      BICIM; panel kök çapası tablet yazımından etkilenmez (`istemci-kok` kendi bekçisi: test_guven_capasi_ekle §8)
@@ -91,7 +95,7 @@ import { DEPO_KOKU, generatePanelKey, openPanelSigningKey, writePanelKey } from 
 import { main as capaEkle } from "./guven-capasi-ekle";
 import { checkProductionAnchor, publicKeyFromX, verifyJwsWithAnchor } from "../../Electron/electron/guncelleme/kunye-jws.mjs";
 import { PANEL_RELEASE_TYP, buildReleaseDoc, checkPanelRootAnchor, signReleaseDoc, verifyUpdateInfo } from "../../Electron/electron/guncelleme/panel-kunye.mjs";
-import { parseLatestYml } from "../../Electron/electron/guncelleme/latest-yml.mjs";
+import { parseLatestYml, withReleaseBlock } from "../../Electron/electron/guncelleme/latest-yml.mjs";
 import { APK_RELEASE_TYP, verifyApkSurumJson } from "../../mobil/scripts/lib/apk-kunye.mjs";
 
 let pass = 0;
@@ -690,6 +694,115 @@ function bolum2(anahtar: Anahtarlar): void {
   check("§2n başka anahtarın iptali bloğa `iptal:` olarak girer, künye geçerli kalır", oi.kod === 0 && /^ {2}iptal: /m.test(oMetin), oi.cikti.trim().slice(-160));
 }
 
+// ── §2o–§2z tören araçları (I7): sertifika-ekle · 30 gün kapısı · yeniden-imzala · anahtar-ac ─────────────────
+async function bolum2Toren(anahtar: Anahtarlar): Promise<void> {
+  console.log("\n§2o–§2z tören araçları — sertifika-ekle (x eşleşmesi) · 30 gün kapısı · yeniden-imzala · anahtar-ac");
+  const simdi = Date.now();
+  const f = fiksturKur(simdi);
+  const kokler: RootKey[] = [f.kokler[0]!];
+  const capa = capaDosyasi(kokler);
+  const sertDosyasi = (token: string): string => {
+    const yol = path.join(dizin("sertifika"), "s.json");
+    writeFileSync(yol, JSON.stringify({ sertifika: token }));
+    return yol;
+  };
+  const yeniAnahtar = async (kid: string): Promise<{ dosya: string; konu: TestAnahtari }> => {
+    const dosya = writePanelKey(dizin("ist-toren"), await generatePanelKey(kid, Buffer.from(PAROLA)));
+    return { dosya, konu: { kid, x: String((JSON.parse(readFileSync(dosya, "utf8")) as { x: string }).x) } as TestAnahtari };
+  };
+  const sert = (konu: TestAnahtari, ek: Partial<CertificateDoc> = {}, imzalayan: TestAnahtari = f.kok, kullanim: CertUsage = "ISTEMCI") => sertifikaBas(imzalayan, sertifikaYuku(f, konu, kullanim, ek));
+  const ekle = (dosya: string, sertYolu: string): Kosum => cli(["sertifika-ekle", `--anahtar=${dosya}`, `--sertifika=${sertYolu}`, `--capa=${capa}`]);
+  const yanindaki = (dosya: string, kid: string) => path.join(path.dirname(dosya), `${kid}.sertifika.json`);
+
+  const a3 = await yeniAnahtar("ist-2099-3");
+  const iyi = sertDosyasi(sert(a3.konu));
+  const e1 = ekle(a3.dosya, iyi);
+  const e2 = ekle(a3.dosya, iyi);
+  const yazilan = yanindaki(a3.dosya, "ist-2099-3");
+  check("§2o sertifika-ekle: köke bağlı ISTEMCI sertifikası (kid + x anahtarınki) → anahtarın yanına 0600; aynısı ikinci kez → 0, dokunulmaz",
+    e1.kod === 0 && existsSync(yazilan) && (statSync(yazilan).mode & 0o777) === 0o600 && e2.kod === 0 && /zaten ekli/.test(e2.cikti), `${e1.kod}/${e2.kod} ${e1.cikti.trim().slice(-160)}`);
+  const sertRed = async (ad: string, token: (konu: TestAnahtari) => string, desen: RegExp): Promise<void> => {
+    const a = await yeniAnahtar("ist-2099-4");
+    const k = ekle(a.dosya, sertDosyasi(token(a.konu)));
+    check(`${ad} → RED, sertifika EKLENMEDİ`, k.kod !== 0 && desen.test(k.cikti) && !existsSync(yanindaki(a.dosya, "ist-2099-4")), `çıkış ${k.kod} ${k.cikti.trim().split("\n").pop()?.slice(0, 160)}`);
+  };
+  await sertRed("§2p ⭐ sertifika-ekle: kid aynı ama x BAŞKA anahtarın", () => sert(anahtarUret("ist-2099-4")), /sertifikadaki açık anahtar \(x\) bu anahtar dosyasınınki DEĞİL/);
+  await sertRed("§2q sertifika-ekle: sertifika başka kid'in (ist-2099-9)", (konu) => sert({ ...konu, kid: "ist-2099-9" }), /bu anahtarın değil|sertifika başka anahtarın/);
+  await sertRed("§2r sertifika-ekle: sertifikayı çapada olmayan kök imzalamış", (konu) => sert(konu, {}, anahtarUret("kok-yabanci-1")), /köke karşı doğrulanamadı \(KOK_BILINMIYOR\)/);
+  await sertRed("§2s sertifika-ekle: kullanım ISTEMCI değil (PAKET; şemayı atlayan ham imza)", (konu) => hamImzala(TYP.SERTIFIKA, f.kok, sertifikaYuku(f, konu, "PAKET")), /köke karşı doğrulanamadı \(/);
+  writeFileSync(yazilan, JSON.stringify({ sertifika: sert(a3.konu) }), { mode: 0o600 });
+  const ezme = ekle(a3.dosya, iyi);
+  check("§2t sertifika-ekle: yanında FARKLI sertifika dosyası varsa üstüne yazılmaz → RED", ezme.kod !== 0 && /üstüne yazılmaz/.test(ezme.cikti), ezme.cikti.trim().slice(-160));
+
+  // 30 gün kapısı: bitişe 29 gün kalan sertifikayla imza YOK; 31 günde var (sınır kör değil).
+  const a5 = await yeniAnahtar("ist-2099-5");
+  const s29 = sertDosyasi(sert(a5.konu, { bitis: msToIso(simdi + 29 * DAY_MS) }));
+  const s31 = sertDosyasi(sert(a5.konu, { bitis: msToIso(simdi + 31 * DAY_MS) }));
+  const p29 = paketDizini();
+  const once29 = readFileSync(p29.latest);
+  const i29 = cli(["imzala", "--musteri=test", `--dizin-paket=${p29.dizin}`, `--anahtar=${a5.dosya}`, `--sertifika=${s29}`, `--capa=${capa}`], `${PAROLA}\n`);
+  const p31 = paketDizini();
+  const i31 = cli(["imzala", "--musteri=test", `--dizin-paket=${p31.dizin}`, `--anahtar=${a5.dosya}`, `--sertifika=${s31}`, `--capa=${capa}`], `${PAROLA}\n`);
+  check("§2u ⭐ 30 gün kapısı (imzala): bitişe 29 gün kalan ISTEMCI sertifikası → RED, latest.yml DEĞİŞMEDİ; 31 gün → imzalar",
+    i29.kod !== 0 && /< 30\) — bununla İMZALANMAZ/.test(i29.cikti) && readFileSync(p29.latest).equals(once29) && i31.kod === 0, `${i29.kod}/${i31.kod} ${i29.cikti.trim().slice(-160)}`);
+
+  // Yeniden imza: ist-2099-1'in imzaladığı yayındaki künye → ist-2099-3 (yük aynen; kurulum dosyası gerekmez).
+  const p = paketDizini();
+  const ilk = cli(["imzala", "--musteri=test", `--dizin-paket=${p.dizin}`, `--anahtar=${anahtar.istDosyasi}`, `--sertifika=${sertDosyasi(sert({ kid: "ist-2099-1", x: anahtar.istX } as TestAnahtari))}`, `--capa=${capa}`], `${PAROLA}\n`);
+  const yayinda = path.join(dizin("yayinda"), "latest.yml");
+  copyFileSync(p.latest, yayinda);
+  const cikti = (): string => path.join(dizin("yeniden"), "latest.yml");
+  const yeniden = (latest: string, out: string, ek: readonly string[] = [], dosya = a3.dosya, kanal = "test"): Kosum =>
+    cli(["yeniden-imzala", `--latest=${latest}`, `--musteri=${kanal}`, `--anahtar=${dosya}`, `--cikti=${out}`, `--capa=${capa}`, ...ek], `${PAROLA}\n`);
+  const o1 = cikti();
+  const y1 = yeniden(yayinda, o1);
+  const yeniMetin = existsSync(o1) ? readFileSync(o1, "utf8") : "";
+  const yi = parseLatestYml(yeniMetin);
+  const yv = yi.ok ? verifyUpdateInfo(yi.value, { roots: kokler, channel: "test", installedVersion: "1.4.2", nowMs: Date.now() }) : null;
+  const govde = (s: string) => s.split("\ntekserp:")[0];
+  const yuk = (s: string): Record<string, unknown> => {
+    const q = parseLatestYml(s);
+    const t = q.ok ? (q.value.tekserp as { bildirim: string }).bildirim : "";
+    const { imzaZamani: _a, imzaciSertifikasi: _b, ...geri } = JSON.parse(Buffer.from(t.split(".")[1] ?? "", "base64url").toString("utf8")) as Record<string, unknown>;
+    return geri;
+  };
+  check("§2v ⭐ yeniden-imzala: panel KABUL eder, imzalayan yeni ist-2099-3, paket kaydı + künye yükü AYNEN, yayındaki dosyaya dokunulmaz",
+    ilk.kod === 0 && y1.kod === 0 && yv?.ok === true && yv.value.kid === "ist-2099-3" && govde(yeniMetin) === govde(readFileSync(yayinda, "utf8")) && JSON.stringify(yuk(yeniMetin)) === JSON.stringify(yuk(readFileSync(p.latest, "utf8"))) && readFileSync(yayinda).equals(readFileSync(p.latest)),
+    `${ilk.kod}/${y1.kod} ${y1.cikti.trim().slice(-160)}`);
+  const yenidenRed = (ad: string, k: Kosum, out: string, desen: RegExp): void =>
+    check(`${ad} → RED, çıktı YAZILMADI`, k.kod !== 0 && desen.test(k.cikti) && !existsSync(out), `çıkış ${k.kod} ${k.cikti.trim().slice(-160)}`);
+  const o29 = cikti();
+  yenidenRed("§2w ⭐ 30 gün kapısı (yeniden-imzala): 29 günlük sertifika", yeniden(yayinda, o29, [`--sertifika=${s29}`], a5.dosya), o29, /< 30\) — bununla İMZALANMAZ/);
+  const kurcali = path.join(dizin("kurcali"), "latest.yml");
+  writeFileSync(kurcali, readFileSync(yayinda, "utf8").replace(/size: (\d+)/, (_m, n: string) => `size: ${Number(n) + 1}`));
+  const ok1 = cikti();
+  yenidenRed("§2x yeniden-imzala: yayındaki latest.yml künyeyle uyuşmuyor (boy kurcalanmış)", yeniden(kurcali, ok1), ok1, /uyuşmuyor/);
+  const ok2 = cikti();
+  yenidenRed("§2x' yeniden-imzala: başka grubun künyesi (--musteri=oncu)", yeniden(yayinda, ok2, [], a3.dosya, "oncu"), ok2, /KUNYE_KANAL/);
+  const bildirimOf = (metin: string): string => {
+    const q = parseLatestYml(metin);
+    return q.ok ? String((q.value.tekserp as { bildirim?: unknown } | null)?.bildirim ?? "") : "";
+  };
+  const ilkSert = parseJws(String((JSON.parse(Buffer.from(bildirimOf(readFileSync(yayinda, "utf8")).split(".")[1]!, "base64url").toString("utf8")) as { imzaciSertifikasi: string }).imzaciSertifikasi));
+  const sertId = ilkSert.ok ? String((ilkSert.value.payload as { sertifikaId: string }).sertifikaId) : "";
+  const iptalli = path.join(dizin("iptalli"), "latest.yml");
+  const iptalJws = hamImzala(TYP.PAKET_IPTAL, f.kok, { v: 1, iptalId: randomUUID(), sira: 1, verilis: msToIso(simdi - DAY_MS), iptaller: [{ kid: "ist-2099-1", sertifikaId: sertId, tarih: msToIso(simdi - 2 * DAY_MS), neden: "çalındı" }] });
+  const blok = bildirimOf(readFileSync(yayinda, "utf8"));
+  writeFileSync(iptalli, withReleaseBlock(readFileSync(yayinda, "utf8"), blok, { iptal: iptalJws }));
+  const ok3 = cikti();
+  yenidenRed("§2y ⭐ yeniden-imzala: imzalayanı (ist-2099-1) iptal edilmiş künye — çalınan anahtarın künyesi yeniden imzalanmaz", yeniden(iptalli, ok3), ok3, /yayındaki künye geçerli değil \(SERTIFIKA_IPTAL\)/);
+  const var_ = yeniden(yayinda, o1);
+  check("§2y' yeniden-imzala: çıktı dosyası zaten var → RED, üstüne yazılmaz", var_.kod !== 0 && /zaten var/.test(var_.cikti) && readFileSync(o1, "utf8") === yeniMetin, var_.cikti.trim().slice(-120));
+
+  // anahtar-ac: yedeğin açılabilirlik ölçümü — kid + x, özel yarı ve parola basılmaz.
+  const ac = cli(["anahtar-ac", `--anahtar=${a3.dosya}`, "--json"], `${PAROLA}\n`);
+  const acJ = ac.kod === 0 ? (JSON.parse(ac.cikti.trim().split("\n").pop() ?? "{}") as { kid?: string; x?: string; acildi?: boolean }) : {};
+  const yanlis = cli(["anahtar-ac", `--anahtar=${a3.dosya}`, "--json"], "yanlis-parola-uzun-1\n");
+  check("§2z anahtar-ac: doğru parolayla {kid, x, acildi} (x dosyanınki), çıktıda parola/özel yarı YOK; yanlış parola → RED",
+    ac.kod === 0 && acJ.kid === "ist-2099-3" && acJ.x === a3.konu.x && acJ.acildi === true && !ac.cikti.includes(PAROLA) && !/"d"/.test(ac.cikti) && yanlis.kod !== 0 && /Parola hatalı/.test(yanlis.cikti),
+    `${ac.kod}/${yanlis.kod} ${yanlis.cikti.trim().slice(-120)}`);
+}
+
 // ── §3 çapa aracı ─────────────────────────────────────────────────────────────
 function kopyaKok(): string {
   const kok = dizin("depo-kopyasi");
@@ -833,6 +946,7 @@ async function main(): Promise<void> {
     bolum0Zincir();
     const anahtar = await bolum1();
     bolum2(anahtar);
+    await bolum2Toren(anahtar);
     bolum3(anahtar);
     bolum4(anahtar);
   } finally {

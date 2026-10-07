@@ -20,6 +20,13 @@
 //      biçimsiz kuyruk · argv'de parola
 //   §7 TEK KİP: hazırlık kökü doğmaz — `kok-uret --kid=hazirlik-<yıl>-1` biçim düzeyinde RED, dizine dosya yazılmaz ·
 //      ⭐ dönem töreni `hazirlik-*` kök dosyasıyla parola sorulmadan RED (dönem dizini doğmaz) · eski `--karsi-dizin` RED
+//   §8 DÖNEM --istemci (ISTEMCI-ANAHTARI-KOK-ALTINDA §6): ayrı birim (macOS RAM diski; kurulamazsa KIRMIZI) USB yerine,
+//      parolalar DOSYADAN · OTA kökü `kok-uret --parola-dosyasi` · yayındaki panel künyesi + OTA manifesti eski imzacıyla
+//      kurulur ve yeniden imzalanır (yük/metin aynen) · yedek YALNIZ ayrı birimde, Mac'te ad/özetle yok · VDS paketinde
+//      yalnız açık sertifikalar · `istemci-yedek-dogrula` (yanlış parola RED) · `dogrula` Mac'e düşen yedeği yakalar ·
+//      ⭐ parola argv/env/ekran/diskte yok, openssl'e yalnız `file:<fifo>` (PATH kayıtçısı), FIFO kalmaz · RED (anahtar
+//      üretilmeden): yedek hedefi Mac diski · yedek parola dosyası USB'de · 0644 parola dosyası · beyansız yayındakiler ·
+//      yedek = istemci parolası · ⭐ mutasyon: CA olan OTA yaprağı · yedeğin Mac'e kopyası → tören RED, yarımlar silinir
 //   §1o' · §6k' CF Worker İNDİRME satırı (L2-8): künyedeki tek satır JSON = sertifikanın kid · x · penceresi + güncelleme
 //      grupları (`deploy/dagitim.json`), liste adı `CF_WORKER_LISTESI` = `uretim`; Worker'ın `ayarCoz`u satırı kabul eder · §1o'' · §6k''
 //      "Sonraki adımlar"da CF Worker adımı VDS'e kurmadan ÖNCE (satıcı yeni İNDİRME'yi yüklendiği dakika basar)
@@ -52,7 +59,7 @@ let TOREN = "";
 const ETIKET = "toren-sonda";
 const ET = `--etiket=${ETIKET}`;
 /** Kopyaya giren yollar: törenin koşturduğu araçlar + onların kaynakları (kök `scripts/lib`: PAKET aracı oradan import eder). */
-const KLON_YOLLARI = [".gitignore", "deploy/satici", "deploy/kanallar.json", "deploy/dagitim.json", "scripts/lib", "satici/sunucu", "Teks-Erp/src", "Teks-Erp/scripts", "Teks-Erp/package.json", "Teks-Erp/package-lock.json", "Teks-Erp/tsconfig.json"];
+const KLON_YOLLARI = [".gitignore", "deploy/satici", "deploy/kanallar.json", "deploy/dagitim.json", "scripts/lib", "satici/sunucu", "Teks-Erp/src", "Teks-Erp/scripts", "Teks-Erp/package.json", "Teks-Erp/package-lock.json", "Teks-Erp/tsconfig.json", "Electron/electron/guncelleme", "mobil/scripts"];
 const gitK = (args: string[]) => spawnSync("git", ["-C", KLON, "-c", "user.name=bekci", "-c", "user.email=bekci@ornek.test", ...args], { encoding: "utf8" });
 
 /**
@@ -121,6 +128,8 @@ const YIL = "2099";
 const KOK_PAROLA = `kok-sonda-${randomBytes(9).toString("hex")}`;
 const PAKET_PAROLA = `paket-sonda-${randomBytes(9).toString("hex")}`;
 const ARA_PAROLA = `ara-sonda-${randomBytes(9).toString("hex")}`;
+/** §8 parolaları: `tore` süreç yüzeyinde bunları da arar. */
+const EK_GIZLI: string[] = [];
 const bekle = (ms: number) => new Promise((r) => setTimeout(r, ms));
 const ozet = (s: string) => createHash("sha256").update(s, "utf8").digest("hex");
 
@@ -202,7 +211,7 @@ async function tore(argv: string[], stdin: string, ekOrtam: Record<string, strin
   while (!bitti) {
     const y = surecYuzeyi();
     yoklama++;
-    if (y.includes(KOK_PAROLA) || y.includes(PAKET_PAROLA) || y.includes(ARA_PAROLA)) parolaGoruldu = true;
+    if (y.includes(KOK_PAROLA) || y.includes(PAKET_PAROLA) || y.includes(ARA_PAROLA) || EK_GIZLI.some((g) => y.includes(g))) parolaGoruldu = true;
     await Promise.race([kapandi, bekle(60)]);
   }
   await kapandi;
@@ -214,6 +223,287 @@ const dosyaListesi = (kok: string, alt = ""): string[] =>
   readdirSync(path.join(kok, alt), { withFileTypes: true }).flatMap((e) => (e.isDirectory() ? dosyaListesi(kok, alt ? `${alt}/${e.name}` : e.name) : [alt ? `${alt}/${e.name}` : e.name]));
 const yedek = (argv: string[], input = "") => spawnSync(process.execPath, ["--import", "tsx", "scripts/yedek-sifrele.ts", ...argv], { cwd: TEKS, encoding: "utf8", input, timeout: 60_000 });
 const mod = (p: string) => statSync(p).mode & 0o777;
+
+/** Ağaç dosyaları (bağ izlenmez, ≤ 1 MiB) içinde metinlerden herhangi biri geçiyor mu — sızıntı taraması. */
+function icerikTara(kokler: string[], metinler: string[], haric: string[] = []): string[] {
+  const bulunan: string[] = [];
+  const gez = (d: string) => {
+    let girdiler;
+    try {
+      girdiler = readdirSync(d, { withFileTypes: true });
+    } catch {
+      return; // geçici dizinde başka uygulamaların okunamayan dizinleri (TemporaryItems: EPERM)
+    }
+    for (const e of girdiler) {
+      const p = path.join(d, e.name);
+      if (haric.some((h) => p === h || p.startsWith(`${h}${path.sep}`))) continue;
+      if (e.isDirectory()) gez(p);
+      else if (e.isFile()) {
+        let b: Buffer;
+        try {
+          if (statSync(p).size > 1 << 20) continue;
+          b = readFileSync(p);
+        } catch {
+          continue;
+        }
+        if (metinler.some((m) => b.includes(Buffer.from(m, "utf8")))) bulunan.push(p);
+      }
+    }
+  };
+  for (const k of kokler) if (existsSync(k)) gez(k);
+  return bulunan;
+}
+
+/**
+ * §8 DÖNEM TÖRENİ --istemci (ISTEMCI-ANAHTARI-KOK-ALTINDA §6, I7): ayrı birim (macOS RAM diski) USB yerine; parolalar
+ * DOSYADAN (son kullanıcı komutunun biçimi); yayındaki bir panel künyesi + bir OTA manifesti eski imzacıyla kurulur ve
+ * tören onları birincil imzacıyla yeniden imzalar. Ayrı birim kurulamazsa KIRMIZI (atlama yok).
+ */
+async function bolum8(g: { tmp: string; D: string; A: string; ev: string }): Promise<void> {
+  console.log("\n§8 DÖNEM TÖRENİ --istemci — ISTEMCI birincil (Mac) + yedek (ayrı birim), OTA yaprakları, yayındakilerin yeniden imzası");
+  const { tmp, D, A, ev } = g;
+  const hex = () => randomBytes(9).toString("hex");
+  const IST = `ist-sonda-${hex()}`;
+  const YEDEK = `yedek-sonda-${hex()}`;
+  const ARA2 = `ara2-sonda-${hex()}`;
+  const ESKI = `eski-sonda-${hex()}`;
+  EK_GIZLI.push(IST, YEDEK, ARA2, ESKI);
+  const GIZLILER = [KOK_PAROLA, IST, YEDEK, ARA2, ESKI];
+  const kos = (cwd: string, argv: string[], input = "", ekEnv: Record<string, string> = {}) =>
+    spawnSync(process.execPath, argv, { cwd, encoding: "utf8", input, timeout: 240_000, env: { ...process.env, HOME: ev, ...ekEnv } });
+  const panelK = (argv: string[], input = "") => kos(path.join(KLON, "Teks-Erp"), ["--import", "tsx", "scripts/panel-imza.ts", ...argv], input);
+  const anahtarK = (argv: string[], input = "") => kos(path.join(KLON, "satici", "sunucu"), ["--import", "tsx", "scripts/anahtar.ts", ...argv], input);
+  const otaK = (argv: string[], input = "") => kos(KLON, [path.join(KLON, "mobil", "scripts", "ota-zinciri.mjs"), ...argv], input);
+  const sonJ = <T>(r: { stdout: string }): T => JSON.parse(r.stdout.trim().split("\n").pop() ?? "{}") as T;
+  const ozelD = (p: string) => {
+    mkdirSync(p, { recursive: true, mode: 0o700 });
+    chmodSync(p, 0o700);
+    return p;
+  };
+  const parolaDosyasi = (ad: string, icerik: string, izin = 0o600) => {
+    const f = path.join(ozelD(path.join(tmp, "parolalar")), ad);
+    writeFileSync(f, icerik, { mode: izin });
+    chmodSync(f, izin);
+    return f;
+  };
+  const donemler = path.join(D, "donemler");
+  const donemDizinleri = () => (existsSync(donemler) ? readdirSync(donemler).sort() : []);
+
+  // Ayrı birim: RAM diski (USB'nin yerine; aynı dev denetimi gerçek bir ikinci birime karşı ölçülür).
+  let ramDev = "";
+  let USB = "";
+  const birimAdi = `TKSI7${randomBytes(3).toString("hex").toUpperCase()}`;
+  if (process.platform === "darwin") {
+    const a = spawnSync("hdiutil", ["attach", "-nomount", "ram://131072"], { encoding: "utf8" });
+    ramDev = a.stdout.trim().split(/\s+/)[0] ?? "";
+    if (a.status === 0 && /^\/dev\/disk\d+$/.test(ramDev) && spawnSync("diskutil", ["erasevolume", "HFS+", birimAdi, ramDev], { encoding: "utf8" }).status === 0) USB = `/Volumes/${birimAdi}`;
+  }
+  kontrol("§8 ön: ayrı birim (RAM diski /Volumes/<ad>) kuruldu — kurulamazsa KIRMIZI, atlama yok", USB !== "" && existsSync(USB) && statSync(USB).dev !== statSync(tmp).dev, `${ramDev} ${USB}`);
+  if (!USB) {
+    if (ramDev) spawnSync("hdiutil", ["detach", ramDev, "-force"]);
+    return;
+  }
+  try {
+    const kokKid = (JSON.parse(readFileSync(path.join(D, "TOREN-KUNYE.json"), "utf8")) as { kok: { kid: string } }).kok.kid;
+    const kokDosya = path.join(A, `${kokKid}.kok.json`);
+    const kokJ = JSON.parse(readFileSync(kokDosya, "utf8")) as { kid: string; x: string; siniflar: string[] };
+    const kokler = [{ kid: kokJ.kid, x: kokJ.x, classes: kokJ.siniflar }];
+
+    // OTA kökü (ilk kez; son kullanıcı komutunun biçimi: parola dosyası, iki satır).
+    const otaKok = otaK(["kok-uret", `--dizin=${A}`, `--parola-dosyasi=${parolaDosyasi("ota-kok.txt", `${KOK_PAROLA}\n${KOK_PAROLA}\n`)}`]);
+    kontrol("§8a OTA kökü `kok-uret --parola-dosyasi` ile doğdu (KÖK parolası; anahtar parolalı, sertifika CA)", otaKok.status === 0 && existsSync(path.join(A, "ota-kok.pem")), `${otaKok.status} ${otaKok.stderr.trim().slice(-200)}`);
+    const otaKokPem = readFileSync(path.join(A, "ota-kok.pem"), "utf8");
+
+    // Yayındakiler: eski imzacıyla (geçen yılın ist- anahtarı + eski OTA yaprağı) imzalı panel künyesi + OTA manifesti.
+    const Y = ozelD(path.join(tmp, "yayindakiler"));
+    const eskiIst = ozelD(path.join(tmp, "eski-ist"));
+    const ek = panelK(["anahtar-uret", "--kid=ist-2098-1", `--dizin=${eskiIst}`, "--json"], `${ESKI}\n${ESKI}\n`);
+    const eskiKey = sonJ<{ x: string; dosya: string }>(ek);
+    const eskiSert = path.join(tmp, "eski-ist-sertifika.json");
+    const es = anahtarK(["istemci-sertifika-uret", `--x=${eskiKey.x}`, "--kid=ist-2098-1", `--kok=${kokKid}`, `--kok-dizin=${A}`, "--gun=395", `--cikti=${eskiSert}`], `${KOK_PAROLA}\n`);
+    const se = panelK(["sertifika-ekle", `--anahtar=${eskiKey.dosya}`, `--sertifika=${eskiSert}`, `--kok-dosyasi=${kokDosya}`]);
+    const pd = ozelD(path.join(tmp, "eski-paket"));
+    const govde = randomBytes(8192);
+    writeFileSync(path.join(pd, "TeksERP-1.4.3-Setup.exe"), govde);
+    const b64 = createHash("sha512").update(govde).digest("base64");
+    writeFileSync(path.join(pd, "latest.yml"), `version: 1.4.3\nfiles:\n  - url: TeksERP-1.4.3-Setup.exe\n    sha512: ${b64}\n    size: ${govde.length}\n    isAdminRightsRequired: true\npath: TeksERP-1.4.3-Setup.exe\nsha512: ${b64}\nreleaseDate: '2026-10-01T01:00:00.000Z'\n`);
+    const im = panelK(["imzala", "--musteri=test", `--dizin-paket=${pd}`, `--anahtar=${eskiKey.dosya}`, `--kok-dosyasi=${kokDosya}`], `${ESKI}\n`);
+    mkdirSync(path.join(Y, "test", "panel"), { recursive: true });
+    cpSync(path.join(pd, "latest.yml"), path.join(Y, "test", "panel", "latest.yml"));
+    const eskiOta = ozelD(path.join(tmp, "eski-ota"));
+    const ey = otaK(["yaprak-bas", `--kok-anahtar=${path.join(A, "ota-kok.anahtar.pem")}`, `--kok=${path.join(A, "ota-kok.pem")}`, `--hedef=${eskiOta}`], `${KOK_PAROLA}\n${ESKI}\n${ESKI}\n`);
+    const M = (await import(pathToFileURL(path.join(KLON, "mobil", "scripts", "lib", "manifest.mjs")).href)) as {
+      imzaBasligi: (g: string, k: unknown, keyid?: string) => string;
+      multipartKur: (g: { manifest: object; imzaBasligiDegeri: string; sertifikaZinciri?: string | null }) => Buffer;
+      multipartDogrula: (b: Buffer, kok: string, o?: { zincir?: boolean }) => { manifest: object; imzali: boolean; zincirli: boolean };
+    };
+    const manifest = { id: randomUUID(), createdAt: new Date().toISOString(), runtimeVersion: "55.0", launchAsset: { hash: "sonda", key: "bundle", contentType: "application/javascript", url: "https://indir.ornek.test/ota/55.0/1/bundle" }, assets: [], metadata: {}, extra: {} };
+    const { createPrivateKey, X509Certificate } = await import("node:crypto");
+    const eskiYaprakPem = existsSync(path.join(eskiOta, "certificate.pem")) ? readFileSync(path.join(eskiOta, "certificate.pem"), "utf8") : "";
+    const eskiManifest = eskiYaprakPem
+      ? M.multipartKur({ manifest, imzaBasligiDegeri: M.imzaBasligi(JSON.stringify(manifest), createPrivateKey({ key: readFileSync(path.join(eskiOta, "private-key.pem"), "utf8"), passphrase: ESKI }), "main"), sertifikaZinciri: eskiYaprakPem })
+      : Buffer.alloc(0);
+    mkdirSync(path.join(Y, "test", "ota", "55.0"), { recursive: true });
+    writeFileSync(path.join(Y, "test", "ota", "55.0", "manifest"), eskiManifest);
+    kontrol("§8b yayındakiler kuruldu: eski ist-2098-1 (kök sertifikalı, sertifika-ekle) künyesi + eski OTA yaprağıyla manifest",
+      [ek, es, se, im, ey].every((r) => r.status === 0) && eskiManifest.length > 0,
+      [ek, es, se, im, ey].map((r) => `${r.status} ${r.status === 0 ? "" : `${r.stderr}${r.stdout}`.trim().slice(-200)}`).join(" · "));
+
+    const pf = {
+      kok: parolaDosyasi("kok.txt", `${KOK_PAROLA}\n`),
+      ara: parolaDosyasi("ara.txt", `${ARA2}\n`),
+      ist: parolaDosyasi("istemci.txt", `${IST}\n`),
+      yedek: parolaDosyasi("yedek.txt", `${YEDEK}\n`),
+    };
+    const temel = ["donem", `--dizin=${D}`, `--yil=${YIL}`, ET, "--istemci"];
+    const pfArg = (o: Partial<typeof pf> = {}) => {
+      const p = { ...pf, ...o };
+      return [`--kok-parola-dosyasi=${p.kok}`, `--ara-parola-dosyasi=${p.ara}`, `--istemci-parola-dosyasi=${p.ist}`, `--yedek-parola-dosyasi=${p.yedek}`];
+    };
+    const usbYedek = path.join(USB, "tekserp-istemci-yedek");
+    const usbYarimYok = () => !existsSync(usbYedek) || !readdirSync(usbYedek).some((n) => n.includes(".yarim-"));
+
+    // RED — parola okunmadan / anahtar üretilmeden.
+    const onceRed = donemDizinleri();
+    const sahteUsb = ozelD(path.join(tmp, "sahte-usb"));
+    const r1 = await tore([...temel, `--yedek-usb=${sahteUsb}`, `--yayindakiler=${Y}`, ...pfArg()], "", {}, ev);
+    const usbParola = path.join(USB, "yedek-parola.txt");
+    writeFileSync(usbParola, `${YEDEK}\n`, { mode: 0o600 });
+    const r2 = await tore([...temel, `--yedek-usb=${USB}`, `--yayindakiler=${Y}`, ...pfArg({ yedek: usbParola })], "", {}, ev);
+    rmSync(usbParola);
+    const r3 = await tore([...temel, `--yedek-usb=${USB}`, `--yayindakiler=${Y}`, ...pfArg({ ist: parolaDosyasi("istemci-acik.txt", `${IST}\n`, 0o644) })], "", {}, ev);
+    const r4 = await tore([...temel, `--yedek-usb=${USB}`, ...pfArg()], "", {}, ev);
+    const r5 = await tore([...temel, `--yedek-usb=${USB}`, `--yayindakiler=${Y}`, ...pfArg({ yedek: pf.ist })], "", {}, ev);
+    const hicbirSey = () => JSON.stringify(donemDizinleri()) === JSON.stringify(onceRed) && usbYarimYok() && (!existsSync(usbYedek) || readdirSync(usbYedek).length === 0);
+    kontrol("§8c ⭐ RED, hiçbir anahtar üretilmeden: yedek hedefi Mac diski (çıkarılabilir birim değil) · ⭐ yedek parola dosyası yedek USB'sinin ÜSTÜNDE · parola dosyası 0644 · yayındakiler beyanı yok · yedek parolası = istemci parolası",
+      r1.status === 2 && /çıkarılabilir birim/.test(r1.cikti) && r2.status === 2 && /AYNI birimde/.test(r2.cikti) && r3.status === 2 && /grup\/başkalarına açık/.test(r3.cikti) &&
+        r4.status === 2 && /--yayinda-yok/.test(r4.cikti) && r5.status === 2 && /FARKLI olmalı/.test(r5.cikti) && hicbirSey(),
+      [r1, r2, r3, r4, r5].map((r) => `${r.status} ${r.cikti.trim().split("\n").pop()?.slice(0, 90)}`).join(" · "));
+
+    // Gerçek koşum: openssl süreçlerinin argv + ortamı kayda geçer (PATH önündeki saplama), FIFO dizinleri sayılır.
+    const realOpenssl = spawnSync("sh", ["-c", "command -v openssl"], { encoding: "utf8" }).stdout.trim();
+    const shim = ozelD(path.join(tmp, "shim"));
+    const argvLog = path.join(tmp, "openssl-argv.log");
+    writeFileSync(path.join(shim, "openssl"), `#!/bin/sh\nprintf 'ARGV:' >> '${argvLog}'\nfor a in "$@"; do printf ' %s' "$a" >> '${argvLog}'; done\nprintf '\\n' >> '${argvLog}'\nenv >> '${argvLog}'\nexec '${realOpenssl}' "$@"\n`, { mode: 0o700 });
+    const fifoOnce = readdirSync(os.tmpdir()).filter((n) => n.startsWith("tekserp-ota-"));
+    const once = donemDizinleri();
+    const t = await tore([...temel, `--yedek-usb=${USB}`, `--yayindakiler=${Y}`, ...pfArg()], "", { PATH: `${shim}:${process.env.PATH ?? ""}` }, ev);
+    const yeni = donemDizinleri().filter((n) => !once.includes(n));
+    const son = yeni[0] ? path.join(donemler, yeni[0]) : "";
+    kontrol("§8d dönem --istemci çıkış 0 (12 adım), TEK yeni dönem dizini, yarım kalıntı yok (Mac + USB)", t.status === 0 && yeni.length === 1 && !yeni[0]!.includes(".yarim-") && usbYarimYok() && /\[12\/12\]/.test(t.cikti), `${t.status} ${t.status === 0 ? "" : t.cikti.slice(-700)}`);
+    if (t.status !== 0 || !son) return;
+    const P = path.join(son, "vds-paketi");
+    const dk = JSON.parse(readFileSync(path.join(P, "DONEM-KUNYE.json"), "utf8")) as {
+      istemci: { birincil: { kid: string; x: string; otaYaprak: { parmakIzi: string } }; yedek: { kid: string; x: string; otaYaprak: { parmakIzi: string } }; otaKok: { parmakIzi: string }; yenidenImza: Array<{ grup: string; tur: string; dosya: string }> };
+    };
+    const ic = dk.istemci;
+    const usbSon = path.join(usbYedek, path.basename(son));
+    const usbDosyalari = existsSync(usbSon) ? dosyaListesi(usbSon).sort() : [];
+    const beklenenUsb = [`${ic.yedek.kid}.panel.json`, `${ic.yedek.kid}.sertifika.json`, "YEDEK-KUNYE.json", "ota-yaprak/certificate.pem", "ota-yaprak/private-key.pem"].sort();
+    kontrol("§8e ⭐ YEDEK yalnız ayrı birimde: tam olarak yedek anahtar + sertifika + OTA yedek yaprağı + YEDEK-KUNYE (dönem damgalı dizin)",
+      JSON.stringify(usbDosyalari) === JSON.stringify(beklenenUsb) && ic.yedek.kid === `ist-${YIL}-2` && ic.birincil.kid === `ist-${YIL}-1`, usbDosyalari.join(" "));
+    const macDosyalari = dosyaListesi(son).sort();
+    const yedekMacte = macDosyalari.filter((f) => f.includes(ic.yedek.kid) && !f.startsWith("vds-paketi/istemci/") && f.endsWith(".panel.json"));
+    const iz = JSON.parse(readFileSync(path.join(son, "istemci", "YEDEK-IZI.json"), "utf8")) as { ozetler: string[] };
+    const hashBulunan: string[] = [];
+    const gez = (d: string) => {
+      for (const e of readdirSync(d, { withFileTypes: true })) {
+        const p = path.join(d, e.name);
+        if (e.isDirectory()) gez(p);
+        else if (e.isFile() && statSync(p).size <= 1 << 20 && iz.ozetler.includes(createHash("sha256").update(readFileSync(p)).digest("hex"))) hashBulunan.push(p);
+      }
+    };
+    gez(D);
+    kontrol("§8f Mac'te birincil (anahtar + sertifika + OTA yaprağı) VAR, yedeğin hiçbir dosyası YOK (ad ve SHA-256 ile tarandı); YEDEK-IZI yalnız özet taşır",
+      macDosyalari.includes(`istemci/${ic.birincil.kid}.panel.json`) && macDosyalari.includes("istemci/ota-yaprak/private-key.pem") && yedekMacte.length === 0 && hashBulunan.length === 0 && iz.ozetler.length === 2,
+      `${yedekMacte.join(",")} ${hashBulunan.join(",")}`);
+    const vdsIstemci = dosyaListesi(path.join(P, "istemci")).sort();
+    const ozelVds = dosyaListesi(P).filter((f) => /PRIVATE KEY|tekserp-panel-anahtar/.test(readFileSync(path.join(P, f), "utf8")));
+    kontrol("§8g VDS paketi istemci/: yalnız iki AÇIK sertifika + iki yaprak PEM; pakette özel yarı izi YOK",
+      JSON.stringify(vdsIstemci) === JSON.stringify([`${ic.birincil.kid}.sertifika.json`, `${ic.yedek.kid}.sertifika.json`, "ota-yaprak-birincil.pem", "ota-yaprak-yedek.pem"].sort()) && ozelVds.length === 0,
+      `${vdsIstemci.join(" ")} · özel: ${ozelVds.join(",")}`);
+    const keyX = (f: string) => (JSON.parse(readFileSync(f, "utf8")) as { x: string }).x;
+    const parmak = (f: string) => new X509Certificate(readFileSync(f, "utf8")).fingerprint256;
+    kontrol("§8h künye istemci bölümü: iki kid · x anahtar dosyalarınınki · yaprak parmak izleri · OTA kökü parmak izi",
+      keyX(path.join(son, "istemci", `${ic.birincil.kid}.panel.json`)) === ic.birincil.x && keyX(path.join(usbSon, `${ic.yedek.kid}.panel.json`)) === ic.yedek.x &&
+        parmak(path.join(son, "istemci", "ota-yaprak", "certificate.pem")) === ic.birincil.otaYaprak.parmakIzi && parmak(path.join(usbSon, "ota-yaprak", "certificate.pem")) === ic.yedek.otaYaprak.parmakIzi &&
+        new X509Certificate(otaKokPem).fingerprint256 === ic.otaKok.parmakIzi,
+      JSON.stringify(ic.yenidenImza));
+
+    // Yeniden imza: panel künyesi (yük aynen, imzacı yeni birincil) + OTA manifesti (metin bayt-eşit, zincir yeni yaprak).
+    const PK = (await import(pathToFileURL(path.join(KLON, "Electron", "electron", "guncelleme", "panel-kunye.mjs")).href)) as { verifyUpdateInfo: (i: unknown, o: object) => { ok: boolean; value?: { kid: string; doc: unknown } } };
+    const LY = (await import(pathToFileURL(path.join(KLON, "Electron", "electron", "guncelleme", "latest-yml.mjs")).href)) as { parseLatestYml: (t: string) => { ok: boolean; value: { tekserp: { bildirim: string } } } };
+    const yeniYml = readFileSync(path.join(son, "istemci", "yeniden-imza", "test", "panel", "latest.yml"), "utf8");
+    const eskiYml = readFileSync(path.join(Y, "test", "panel", "latest.yml"), "utf8");
+    const govdesi = (s: string) => s.split("\ntekserp:")[0];
+    const yukOf = (s: string) => JSON.parse(Buffer.from(LY.parseLatestYml(s).value.tekserp.bildirim.split(".")[1]!, "base64url").toString("utf8")) as Record<string, unknown>;
+    const yv = PK.verifyUpdateInfo(LY.parseLatestYml(yeniYml).value, { roots: kokler, channel: "test", installedVersion: "1.4.2", nowMs: Date.now() });
+    // İmzacıya ait iki alan (istemci-zinciri.mjs CLIENT_CERT_FIELD · CLIENT_SIGNED_AT_FIELD) dışında yük aynen kalmalı.
+    const { imzaZamani: eskiAn, imzaciSertifikasi: _a, ...eskiYuk } = yukOf(eskiYml);
+    const { imzaZamani: yeniAn, imzaciSertifikasi: _b, ...yeniYuk } = yukOf(yeniYml);
+    kontrol("§8i ⭐ panel künyesi yeniden imzalandı: panel doğrulayıcısı KABUL eder (imzalayan yeni birincil), paket kaydı ve künye yükü AYNEN",
+      yv.ok && yv.value?.kid === ic.birincil.kid && govdesi(yeniYml) === govdesi(eskiYml) && Object.keys(eskiYuk).length > 3 && JSON.stringify(eskiYuk) === JSON.stringify(yeniYuk) && typeof eskiAn === "string" && eskiAn !== yeniAn,
+      `${yv.ok} ${yv.value?.kid} · yük ${JSON.stringify(eskiYuk) === JSON.stringify(yeniYuk) ? "aynı" : "FARK"} · alanlar ${Object.keys(yeniYuk).join(",")}`);
+    const yeniMan = readFileSync(path.join(son, "istemci", "yeniden-imza", "test", "ota", "55.0", "manifest"));
+    let otaOk = "";
+    try {
+      const d = M.multipartDogrula(yeniMan, otaKokPem, { zincir: true });
+      const zincirPem = /-----BEGIN CERTIFICATE-----[\s\S]+?-----END CERTIFICATE-----/.exec(yeniMan.toString("utf8"))?.[0] ?? "";
+      otaOk = d.imzali && d.zincirli && JSON.stringify(d.manifest) === JSON.stringify(manifest) && new X509Certificate(zincirPem).fingerprint256 === ic.birincil.otaYaprak.parmakIzi ? "ok" : "fark";
+    } catch (e) {
+      otaOk = (e as Error).message;
+    }
+    kontrol("§8j ⭐ OTA manifesti yeniden imzalandı: OTA köküne zincirli doğrulanır, manifest AYNEN, zincirdeki yaprak yeni birincil yaprak", otaOk === "ok", otaOk);
+
+    // Yedek açılabilirlik ve Mac'te yedek izi.
+    const yd = await tore(["istemci-yedek-dogrula", `--dizin=${D}`, `--yedek-usb=${USB}`, `--yedek-parola-dosyasi=${pf.yedek}`], "", {}, ev);
+    const ydYanlis = await tore(["istemci-yedek-dogrula", `--dizin=${D}`, `--yedek-usb=${USB}`, `--yedek-parola-dosyasi=${pf.ist}`], "", {}, ev);
+    kontrol("§8k `istemci-yedek-dogrula`: yedek parolasıyla 0 · ⭐ yanlış parola (istemci parolası) → RED", yd.status === 0 && /açıldı ve künyeyle aynı/.test(yd.cikti) && ydYanlis.status === 1 && /AÇILAMADI/.test(ydYanlis.cikti), `${yd.status} ${yd.cikti.trim().split("\n").pop()?.slice(0, 120)} · ${ydYanlis.status}`);
+    const dogru = spawnSync(process.execPath, [TOREN, "dogrula", `--dizin=${D}`], { encoding: "utf8", env: { ...process.env, HOME: ev } });
+    const kopya = path.join(son, "unutulan-kopya.json");
+    cpSync(path.join(usbSon, `${ic.yedek.kid}.panel.json`), kopya);
+    const bozuk = spawnSync(process.execPath, [TOREN, "dogrula", `--dizin=${D}`], { encoding: "utf8", env: { ...process.env, HOME: ev } });
+    rmSync(kopya);
+    kontrol("§8l ⭐ `dogrula`: Mac'te yedek yokken 0; yedek dosyası Mac'e kopyalanınca (başka adla) 1 — YEDEĞİ Mac'te",
+      dogru.status === 0 && /Mac'te YOK/.test(dogru.stdout) && bozuk.status === 1 && /YEDEĞİ Mac'te: .*unutulan-kopya\.json/.test(bozuk.stdout), `${dogru.status}/${bozuk.status}`);
+
+    // Parola hijyeni: süreç yüzeyi, ekran, diskteki her dosya, openssl argv/ortamı; FIFO kalıntısı.
+    const argvKayit = existsSync(argvLog) ? readFileSync(argvLog, "utf8") : "";
+    const fifoSonra = readdirSync(os.tmpdir()).filter((n) => n.startsWith("tekserp-ota-") && !fifoOnce.includes(n));
+    const diskte = icerikTara([D, USB, Y, path.join(tmp, "ev"), os.tmpdir()], GIZLILER, [path.join(tmp, "parolalar"), path.join(tmp, "klon")]);
+    const ciktiSizinti = [t, yd, ydYanlis, r1, r2, r3, r4, r5].some((k) => GIZLILER.some((p) => k.cikti.includes(p)));
+    kontrol("§8m ⭐ parola: hiçbir sürecin argv/env'inde YOK · ekranda YOK · diskte (tören, USB, ev, geçici dizin) YOK",
+      !t.parolaGoruldu && t.yoklama >= 5 && !ciktiSizinti && diskte.length === 0, `${t.yoklama} yoklama · ${diskte.join(",")}`);
+    const opensslSatir = argvKayit.split("\n").filter((l) => l.startsWith("ARGV:") && / genpkey | req | x509 /.test(l));
+    kontrol("§8n ⭐ FIFO yolu: openssl her parolayı `file:<fifo>` ile aldı (kayıtçı kör değil: genpkey/req/x509 satırları var), argv ve ortamında parola YOK, FIFO dizini kalmadı",
+      opensslSatir.length >= 6 && opensslSatir.every((l) => !/ -pass(in)? (?!file:)/.test(l)) && opensslSatir.some((l) => / -passin file:\//.test(l)) && !GIZLILER.some((p) => argvKayit.includes(p)) && fifoSonra.length === 0,
+      `${opensslSatir.length} openssl · kalan ${fifoSonra.join(",")}`);
+
+    // Mutasyon sondaları (klonda; her biri ayrı etiket, sonra klon geri sarılır): tören bozuk yaprağı ve Mac'e düşen yedeği yakalar.
+    const mutasyon = async (ad: string, dosya: string, eski: string, yeniMetin: string) => {
+      const f = path.join(KLON, dosya);
+      const m = readFileSync(f, "utf8");
+      if (!m.includes(eski)) return { status: -1, cikti: `mutasyon noktası yok: ${eski}`, parolaGoruldu: false, yoklama: 0 };
+      writeFileSync(f, m.replace(eski, yeniMetin));
+      gitK(["commit", "-qam", ad]);
+      gitK(["tag", ad]);
+      const o = donemDizinleri();
+      const r = await tore(["donem", `--dizin=${D}`, `--yil=${YIL}`, `--etiket=${ad}`, "--istemci", `--yedek-usb=${USB}`, "--yayinda-yok", ...pfArg()], "", {}, ev);
+      gitK(["reset", "-q", "--hard", ETIKET]);
+      return { ...r, yeniDizin: donemDizinleri().filter((n) => !o.includes(n)) };
+    };
+    const ca = await mutasyon("ca-sonda", "mobil/scripts/lib/ota-zinciri.cjs", "[ ota_yaprak ]\nbasicConstraints = critical, CA:FALSE", "[ ota_yaprak ]\nbasicConstraints = critical, CA:TRUE");
+    kontrol("§8o ⭐ CA olan OTA yaprağı (profil mutasyonu) → tören RED, dönem dizini doğmaz, USB yarımı silinir, önceki yedek yerinde",
+      ca.status === 1 && /CA OLAMAZ/.test(ca.cikti) && (ca as { yeniDizin?: string[] }).yeniDizin?.length === 0 && usbYarimYok() && existsSync(usbSon), `${ca.status} ${ca.cikti.trim().split("\n").slice(-2).join(" / ").slice(0, 200)}`);
+    const sizinti = await mutasyon("yedek-sonda", "deploy/satici/uretim-toren.mjs", "  const macte = yedekIziTara(", "  fs.copyFileSync(sonuc.yedek._anahtar, path.join(I, \"sonda-kopya.json\"));\n  const macte = yedekIziTara(");
+    kontrol("§8p ⭐ yedek Mac'te bırakılırsa (tören mutasyonu: yedek Mac'e kopyalanır) → iz taraması RED, dönem dizini doğmaz, USB yarımı silinir",
+      sizinti.status === 1 && /YEDEK ANAHTAR Mac'te bulundu: .*sonda-kopya\.json/.test(sizinti.cikti) && (sizinti as { yeniDizin?: string[] }).yeniDizin?.length === 0 && usbYarimYok() && existsSync(usbSon),
+      `${sizinti.status} ${sizinti.cikti.trim().split("\n").slice(-2).join(" / ").slice(0, 200)}`);
+    kontrol("§8q klon mutasyonlardan sonra TEMİZ ve etiketi HEAD'de (§5 sondaları için)", gitK(["status", "--porcelain", "--untracked-files=all"]).stdout === "" && gitK(["rev-parse", "HEAD"]).stdout.trim() === gitK(["rev-parse", `${ETIKET}^{commit}`]).stdout.trim());
+  } finally {
+    spawnSync("hdiutil", ["detach", ramDev, "-force"], { encoding: "utf8" });
+  }
+}
 
 async function main(): Promise<void> {
   const tmp = mkdtempSync(path.join(os.tmpdir(), "uretim-toren-"));
@@ -657,6 +947,8 @@ async function main(): Promise<void> {
       `${hDonem.status} ${hDonem.cikti.trim().split("\n").pop()?.slice(0, 140)}`);
     const karsi = await tore(["donem", `--dizin=${D}`, `--yil=${YIL}`, ET, `--karsi-dizin=${HZ}`], "", {}, ev);
     kontrol("§7c eski `--karsi-dizin` bayrağı tanınmaz (karşı ortam yok) → çıkış 2", karsi.status === 2 && /Tanınmayan argüman: --karsi-dizin/.test(karsi.cikti), `${karsi.status} ${karsi.cikti.trim().split("\n").pop()?.slice(0, 140)}`);
+
+    await bolum8({ tmp, D, A, ev });
 
     console.log("\n§5 KAYNAK — kirli ağaç, origin/main dışı HEAD, yanlış etiket, npm ls (parola SORULMADAN RED)");
     const H5 = path.join(tmp, "kaynak-hedef");

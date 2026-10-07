@@ -13,6 +13,7 @@
 // ⚠️ CommonJS BİLİNÇLİ: config eklentisi (`plugins/withOtaZinciri.js`) ve jest `require` eder; .mjs'ler createRequire ile.
 // =============================================================================
 
+const { Buffer } = require('node:buffer');
 const { execFileSync } = require('node:child_process');
 const crypto = require('node:crypto');
 const fs = require('node:fs');
@@ -272,23 +273,183 @@ const pemSifreli = (metin) => /-----BEGIN ENCRYPTED PRIVATE KEY-----/.test(Strin
  * ------------------------------------------------------------------ */
 
 /**
- * Tören adımları argv dizileri olarak. `parola` verilirse (yalnız deneme zinciri) openssl'e argümanla geçer;
- * törende verilmez, openssl parolayı kendisi gizli sorar. Yollar çağıranın çalışma dizinine görelidir.
+ * Tören adımlarının TEK tanımı: `parolaBayragi(rol, yon)` parolanın NEREDEN geldiğini söyler (rol `kok`|`yaprak`, yon
+ * `yeni` → `-pass`, `ac` → `-passin`). `kume`: `kok` (OTA kökü üretimi) · `yaprak` (yaprak basımı).
  */
-function torenKomutlari({ kokAnahtar, kokSertifika, yaprakAnahtar, yaprakSertifika, csr, profil, seri = `0x${crypto.randomBytes(16).toString('hex')}`,
-  kokBolum = 'ota_kok', yaprakBolum = 'ota_yaprak', kokGun = OTA_KOK_GUN, yaprakGun = OTA_YAPRAK_GUN, yaprakCn = 'TeksERP OTA Yaprak', parola = null, kokParola = parola }) {
-  const yeni = (p) => (p ? ['-pass', `pass:${p}`] : []);
-  const ac = (p) => (p ? ['-passin', `pass:${p}`] : []);
+function adimlar({ kokAnahtar, kokSertifika, yaprakAnahtar, yaprakSertifika, csr, profil, seri = `0x${crypto.randomBytes(16).toString('hex')}`,
+  kokBolum = 'ota_kok', yaprakBolum = 'ota_yaprak', kokGun = OTA_KOK_GUN, yaprakGun = OTA_YAPRAK_GUN, yaprakCn = 'TeksERP OTA Yaprak' }, parolaBayragi) {
   return [
-    ['openssl', 'genpkey', '-algorithm', 'RSA', '-pkeyopt', 'rsa_keygen_bits:3072', '-aes-256-cbc', ...yeni(kokParola), '-out', kokAnahtar],
-    ['openssl', 'req', '-x509', '-new', '-key', kokAnahtar, ...ac(kokParola), '-sha256', '-days', String(kokGun), '-subj', '/CN=TeksERP OTA Kok',
-      '-config', profil, '-extensions', kokBolum, '-out', kokSertifika],
-    ['openssl', 'genpkey', '-algorithm', 'RSA', '-pkeyopt', 'rsa_keygen_bits:3072', '-aes-256-cbc', ...yeni(parola), '-out', yaprakAnahtar],
-    ['openssl', 'req', '-new', '-key', yaprakAnahtar, ...ac(parola), '-subj', `/CN=${yaprakCn}`, '-config', profil, '-out', csr],
-    ['openssl', 'x509', '-req', '-in', csr, '-CA', kokSertifika, '-CAkey', kokAnahtar, ...ac(kokParola), '-set_serial', seri, '-sha256',
-      '-days', String(yaprakGun), '-extfile', profil, '-extensions', yaprakBolum, '-out', yaprakSertifika],
+    { kume: 'kok', rol: 'kok', argv: ['openssl', 'genpkey', '-algorithm', 'RSA', '-pkeyopt', 'rsa_keygen_bits:3072', '-aes-256-cbc', ...parolaBayragi('kok', 'yeni'), '-out', kokAnahtar] },
+    { kume: 'kok', rol: 'kok', argv: ['openssl', 'req', '-x509', '-new', '-key', kokAnahtar, ...parolaBayragi('kok', 'ac'), '-sha256', '-days', String(kokGun), '-subj', '/CN=TeksERP OTA Kok',
+      '-config', profil, '-extensions', kokBolum, '-out', kokSertifika] },
+    { kume: 'yaprak', rol: 'yaprak', argv: ['openssl', 'genpkey', '-algorithm', 'RSA', '-pkeyopt', 'rsa_keygen_bits:3072', '-aes-256-cbc', ...parolaBayragi('yaprak', 'yeni'), '-out', yaprakAnahtar] },
+    { kume: 'yaprak', rol: 'yaprak', argv: ['openssl', 'req', '-new', '-key', yaprakAnahtar, ...parolaBayragi('yaprak', 'ac'), '-subj', `/CN=${yaprakCn}`, '-config', profil, '-out', csr] },
+    { kume: 'yaprak', rol: 'kok', argv: ['openssl', 'x509', '-req', '-in', csr, '-CA', kokSertifika, '-CAkey', kokAnahtar, ...parolaBayragi('kok', 'ac'), '-set_serial', seri, '-sha256',
+      '-days', String(yaprakGun), '-extfile', profil, '-extensions', yaprakBolum, '-out', yaprakSertifika] },
   ];
 }
+
+/**
+ * Tören adımları argv dizileri olarak (metin + deneme zinciri). `parola` verilirse (YALNIZ deneme zinciri) openssl'e
+ * argümanla geçer; metinde verilmez, openssl parolayı kendisi gizli sorar. Gerçek tören `opensslKos` ile (stdin).
+ */
+function torenKomutlari({ parola = null, kokParola = parola, ...secim }) {
+  return adimlar(secim, (rol, yon) => {
+    const p = rol === 'kok' ? kokParola : parola;
+    return p ? [yon === 'yeni' ? '-pass' : '-passin', `pass:${p}`] : [];
+  }).map((a) => a.argv);
+}
+
+/**
+ * GERÇEK tören: `kume` adımlarını koşar; parola openssl'e YALNIZ özel bir FIFO'dan (`-pass file:<fifo>`, dizin 0700) —
+ * argv'de, ortamda, diskte değil. stdin KULLANILMAZ: Node'un stdio borusu soket çiftidir ve openssl parolayı veri
+ * gelmeden okuyup boş parolayla sessizce devam edebilir (ölçüldü: `pkey -passin stdin` Node'dan RED). `parolalar` =
+ * {kok?: Buffer, yaprak?: Buffer}; girdi tamponu yazılınca sıfırlanır. Yazılacak anahtar dosyası önce boş 0600 yaratılır
+ * (openssl izni korur, var olan dosya EZİLMEZ).
+ */
+async function opensslKos(yollar, kume, parolalar, { env } = {}) {
+  const { spawn } = require('node:child_process');
+  const fd = fs.mkdtempSync(path.join(require('node:os').tmpdir(), 'tekserp-ota-p-'));
+  fs.chmodSync(fd, 0o700);
+  try {
+    // Her adıma AYRI FIFO: önceki adımın kapanış okuyucusu yeni parolayı yutamasın.
+    const liste = adimlar(yollar, (_rol, yon) => [yon === 'yeni' ? '-pass' : '-passin', 'file:@FIFO@']).filter((x) => x.kume === kume);
+    for (const [i, a0] of liste.entries()) {
+      const fifo = path.join(fd, `p${i}`);
+      execFileSync('mkfifo', ['-m', '600', fifo]);
+      const a = { ...a0, argv: a0.argv.map((x) => (x === 'file:@FIFO@' ? `file:${fifo}` : x)) };
+      const p = parolalar[a.rol];
+      if (!Buffer.isBuffer(p) || p.length === 0) throw new Error(`${a.rol} parolası verilmedi (openssl ${a.argv[1]})`);
+      const out = a.argv[a.argv.indexOf('-out') + 1];
+      if (a.argv[1] === 'genpkey') fs.writeFileSync(out, '', { mode: 0o600, flag: 'wx' });
+      const cocuk = spawn(a.argv[0], a.argv.slice(1), { stdio: ['ignore', 'pipe', 'pipe'], ...(env ? { env } : {}) });
+      const sure = setTimeout(() => cocuk.kill('SIGKILL'), 120_000);
+      const hata = [];
+      cocuk.stderr.on('data', (c) => hata.push(c));
+      cocuk.stdout.on('data', () => undefined);
+      const bitti = new Promise((resolve) => {
+        cocuk.on('error', (e) => resolve({ status: null, e }));
+        cocuk.on('close', (status) => resolve({ status }));
+      });
+      const girdi = Buffer.concat([p, Buffer.from('\n')]);
+      // openssl FIFO'yu açmadan düşerse yazar tarafı sonsuza dek beklerdi: süreç kapanınca okur ucu açılıp bekleme çözülür.
+      bitti.then(() => fs.promises.open(fifo, fs.constants.O_RDONLY | fs.constants.O_NONBLOCK).then((h) => setTimeout(() => h.close(), 50), () => undefined));
+      try {
+        const h = await fs.promises.open(fifo, 'w');
+        try {
+          await h.write(girdi);
+        } finally {
+          await h.close();
+        }
+      } catch {
+        // süreç parolayı okumadan kapandı — durum aşağıda raporlanır
+      } finally {
+        girdi.fill(0);
+      }
+      const r = await bitti;
+      clearTimeout(sure);
+      if (r.status !== 0) {
+        const ozet = Buffer.concat(hata).toString('utf8').split('\n').filter(Boolean).slice(0, 2).join(' | ').slice(0, 300);
+        throw new Error(`openssl ${a.argv[1]} başarısız (çıkış ${r.status ?? r.e?.code}): ${ozet}`);
+      }
+    }
+  } finally {
+    fs.rmSync(fd, { recursive: true, force: true });
+  }
+}
+
+/** Geçici openssl profili + CSR dizini (açık bilgi; iş bitince silinir). */
+function geciciProfil() {
+  const d = fs.mkdtempSync(path.join(require('node:os').tmpdir(), 'tekserp-ota-'));
+  const profil = path.join(d, 'ota-profil.cnf');
+  fs.writeFileSync(profil, OPENSSL_PROFILI, { mode: 0o600 });
+  return { d, profil, csr: path.join(d, 'yaprak.csr'), sil: () => fs.rmSync(d, { recursive: true, force: true }) };
+}
+
+const parmakIzi = (pem) => x509(pem).fingerprint256;
+
+/**
+ * OTA KÖKÜ (bir kez; satıcı kökünün yanında, KÖK parolasıyla sarılı): `<dizin>/ota-kok.anahtar.pem` + `ota-kok.pem`.
+ * Var olan dosya ezilmez; üretilen kök `kokHatalari` ile ölçülür, anahtar parolalı ve sertifikanın.
+ */
+async function otaKokUret({ dizin, kokParola, env }) {
+  const kokAnahtar = path.join(dizin, 'ota-kok.anahtar.pem');
+  const kokSertifika = path.join(dizin, 'ota-kok.pem');
+  for (const f of [kokAnahtar, kokSertifika]) if (fs.existsSync(f)) throw new Error(`${f} zaten var — OTA kökü yeniden üretilmez (değişimi yeni Play sürümü ister)`);
+  const g = geciciProfil();
+  try {
+    await opensslKos({ kokAnahtar, kokSertifika, profil: g.profil, csr: g.csr }, 'kok', { kok: kokParola }, { env });
+  } catch (e) {
+    for (const f of [kokAnahtar, kokSertifika]) fs.rmSync(f, { force: true });
+    throw e;
+  } finally {
+    g.sil();
+  }
+  fs.chmodSync(kokSertifika, 0o600);
+  const kokPem = fs.readFileSync(kokSertifika, 'utf8');
+  const h = kokHatalari(kokPem);
+  const anahtarPem = fs.readFileSync(kokAnahtar, 'utf8');
+  if (!pemSifreli(anahtarPem)) h.push('OTA kökü anahtarı parolasız yazıldı');
+  else if (!anahtarYaprakEslesir(crypto.createPrivateKey({ key: anahtarPem, passphrase: kokParola }), kokPem)) h.push('OTA kökü anahtarı sertifikasının değil');
+  if (h.length) {
+    for (const f of [kokAnahtar, kokSertifika]) fs.rmSync(f, { force: true });
+    throw new Error(`üretilen OTA kökü geçersiz: ${h.join('; ')}`);
+  }
+  return { kokAnahtar, kokSertifika, parmakIzi: parmakIzi(kokPem), bitis: x509(kokPem).validTo };
+}
+
+/**
+ * OTA YAPRAĞI basar: `<hedef>/private-key.pem` (yaprak parolasıyla şifreli PKCS#8) + `certificate.pem` (OTA köküyle
+ * imzalı). Ölçüm `node:crypto X509Certificate`: yaprak CA DEĞİL, EKU codeSigning, digitalSignature, köke zincirli,
+ * ≤ 395 gün, anahtar parolalı ve yaprak parolasıyla açılıyor, sertifikanın anahtarı. Geçmezse iki dosya da silinir.
+ */
+async function otaYaprakBas({ kokAnahtar, kokSertifika, hedef, kokParola, yaprakParola, yaprakCn = 'TeksERP OTA Yaprak', yaprakGun = OTA_YAPRAK_GUN, env }) {
+  const yaprakAnahtar = path.join(hedef, 'private-key.pem');
+  const yaprakSertifika = path.join(hedef, 'certificate.pem');
+  const sil = () => {
+    for (const f of [yaprakAnahtar, yaprakSertifika]) fs.rmSync(f, { force: true });
+  };
+  if (fs.existsSync(yaprakAnahtar) || fs.existsSync(yaprakSertifika)) throw new Error(`${hedef} içinde yaprak zaten var — üstüne yazılmaz`);
+  const g = geciciProfil();
+  try {
+    await opensslKos({ kokAnahtar, kokSertifika, yaprakAnahtar, yaprakSertifika, profil: g.profil, csr: g.csr, yaprakCn, yaprakGun }, 'yaprak', { kok: kokParola, yaprak: yaprakParola }, { env });
+  } catch (e) {
+    sil();
+    throw e;
+  } finally {
+    g.sil();
+  }
+  fs.chmodSync(yaprakSertifika, 0o600);
+  try {
+    const o = otaYaprakAc({ anahtarYol: yaprakAnahtar, yaprakYol: yaprakSertifika, kokPem: fs.readFileSync(kokSertifika, 'utf8'), parola: yaprakParola });
+    return { ...o, anahtarYol: yaprakAnahtar, yaprakYol: yaprakSertifika };
+  } catch (e) {
+    sil();
+    throw e;
+  }
+}
+
+/**
+ * Yaprak açılabilirlik + zincir ölçümü (törende basımdan sonra ve USB yedeğinde): anahtar parolalı, parolayla açılıyor,
+ * yaprağın anahtarı; yaprak bu köke bağlı geçerli imzacı (`yaprakHatalari`). Fırlatır; geçerse parmak izi + pencere.
+ */
+function otaYaprakAc({ anahtarYol, yaprakYol, kokPem, parola, simdi = new Date() }) {
+  const anahtarPem = fs.readFileSync(anahtarYol, 'utf8');
+  const yaprakPem = fs.readFileSync(yaprakYol, 'utf8');
+  if (!pemSifreli(anahtarPem)) throw new Error(`OTA yaprak anahtarı parolasız: ${anahtarYol}`);
+  let anahtar;
+  try {
+    anahtar = crypto.createPrivateKey({ key: anahtarPem, passphrase: parola });
+  } catch {
+    throw new Error(`OTA yaprak anahtarı AÇILAMADI (parola yanlış ya da dosya bozuk): ${anahtarYol}`);
+  }
+  const h = yaprakHatalari(yaprakPem, kokPem, { simdi });
+  if (!anahtarYaprakEslesir(anahtar, yaprakPem)) h.push('anahtar bu yaprak sertifikasının değil');
+  if (h.length) throw new Error(`OTA yaprağı geçersiz: ${h.join('; ')}`);
+  const x = x509(yaprakPem);
+  return { parmakIzi: x.fingerprint256, baslangic: tarih(x, 'validFrom').toISOString(), bitis: tarih(x, 'validTo').toISOString() };
+}
+
 const kabukAlinti = (a) => (/^[A-Za-z0-9_./:=@%+-]+$/.test(a) ? a : `"${a.replace(/(["\\$`])/g, '\\$1')}"`);
 const komutMetni = (argv) => argv.map(kabukAlinti).join(' ');
 
@@ -331,6 +492,11 @@ module.exports = {
   anahtarYaprakEslesir,
   pemSifreli,
   torenKomutlari,
+  opensslKos,
+  otaKokUret,
+  otaYaprakBas,
+  otaYaprakAc,
+  parmakIzi,
   komutMetni,
   denemeZinciriUret,
 };

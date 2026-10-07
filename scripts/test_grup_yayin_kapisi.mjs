@@ -11,6 +11,8 @@
 //   §5 terfi: paket baytı bayt-eşit (ortak paket DEĞİŞMEZ), künye hedef grupla yeniden imzalı
 //   §6 betik kaynağı: kapı çağrıları ve sırası (negatif sondalı)
 //   §7 kök çapası + rotasyon kilidi (KÖK düzeyi): fikstür kökü RED · yayındaki v:1 / çapasında olmayan kök RED
+//   §8 yıllık tören (I7): gerçek `yeniden-imzala` çıktısı panelden ve rotasyon kilidinden geçer · ⭐ 30 gün kapısı GERÇEK
+//      imza aracıyla yayın betiğinin yolunda (29 gün → imza yok, yükleme yok; 90 günde kapı iletisi yok — kör değil)
 // ÇIKIŞ: 0 yeşil · 1 KIRMIZI.   node scripts/test_grup_yayin_kapisi.mjs
 // =============================================================================
 import { execFileSync, spawnSync } from 'node:child_process';
@@ -148,6 +150,12 @@ if (arac === 'curl') {
   if (!var_) process.exit(f ? 22 : 0);
   if (!a.includes('/dev/null')) process.stdout.write(fs.readFileSync(dosya));
   process.exit(0);
+}
+if (arac === 'npx' && process.env.GERCEK_PANEL_IMZA) {
+  // §8: GERÇEK imza aracı (parola dosyasından) — yayın yolundaki kapılar (30 gün) taklitle körleşmesin.
+  yaz({ args: a.join(' '), gercek: true });
+  const r = spawnSync(process.execPath, ['--import', 'tsx', path.join(process.env.GERCEK_PANEL_IMZA, a[1]), ...a.slice(2), '--parola-dosyasi=' + process.env.GERCEK_PAROLA_DOSYASI], { cwd: process.env.GERCEK_PANEL_IMZA, stdio: ['ignore', 'inherit', 'inherit'] });
+  process.exit(r.status ?? 1);
 }
 if (arac === 'npx') {
   // panel-imza.ts imzala taklidi: hedef GRUBUN adıyla v:2 künye (gerçek araç parola ister; burada bekçinin ist-* anahtarı + sertifikası).
@@ -565,6 +573,59 @@ function yayindakiYml({ capa, kanal = 'test' }) {
   const bos = ortam({ capa: [] });
   const rb = kos(bos, ['--grup=test', '--kuru']);
   ol('§7 sonda: boş kök çapası → RED, ağ YOK', rb.kod !== 0 && sifirAg(bos) && /CAPA_BOS/.test(rb.cikti), rb.cikti);
+}
+
+/* ------------------------------------------------------------------ *
+ * §8 yıllık tören (I7): yeniden imzalı künye yayın kapısından geçer · 30 gün kapısı GERÇEK araçla yayın yolunda
+ * ------------------------------------------------------------------ */
+{
+  console.log('\n§8 yıllık tören — yeniden imzalı künye (gerçek yeniden-imzala) · 30 gün kapısı (gerçek imzala, yayın betiğinden)');
+  const TEKS = path.join(KOK, 'Teks-Erp');
+  const d8 = path.join(GECICI, 'toren8');
+  fs.mkdirSync(d8, { mode: 0o700 });
+  const tsx = (argv, input = '') => spawnSync(process.execPath, ['--import', 'tsx', 'scripts/panel-imza.ts', ...argv], { cwd: TEKS, encoding: 'utf8', input, timeout: 120_000, env: { ...TEMIZ_ENV, HOME: path.join(d8, 'ev') } });
+  const PAROLA8 = `bekci-toren-${crypto.randomBytes(8).toString('hex')}`;
+  const parolaDosyasi = path.join(d8, 'parola.txt');
+  fs.writeFileSync(parolaDosyasi, `${PAROLA8}\n`, { mode: 0o600 });
+  const anahtarDosyasi = (kid, gun) => {
+    const dizin = path.join(d8, kid);
+    fs.mkdirSync(dizin, { mode: 0o700 });
+    const u = tsx(['anahtar-uret', `--kid=${kid}`, `--dizin=${dizin}`, '--json'], `${PAROLA8}\n${PAROLA8}\n`);
+    if (u.status !== 0) return { hata: u.stderr };
+    const k = JSON.parse(u.stdout.trim().split('\n').pop());
+    const sertifika = hamJws('tekserp-sertifika', KOK_A, {
+      v: 1, sertifikaId: crypto.randomUUID(), kullanim: 'ISTEMCI', kid, x: k.x, siniflar: ['URETIM'],
+      baslangic: new Date(Date.now() - GUN_MS).toISOString(), bitis: new Date(Date.now() + gun * GUN_MS).toISOString(), bayi: null,
+    });
+    fs.writeFileSync(path.join(dizin, `${kid}.sertifika.json`), JSON.stringify({ sertifika }), { mode: 0o600 });
+    return { dosya: k.dosya, x: k.x };
+  };
+  const yeni = anahtarDosyasi('ist-2099-2', 395);
+  const capaDosyasi = path.join(d8, 'capa.json');
+  fs.writeFileSync(capaDosyasi, JSON.stringify({ kokler: TEST_CAPA }));
+  const yayinda = path.join(d8, 'yayindaki.yml');
+  fs.writeFileSync(yayinda, yayindakiYml({ capa: [KOK_A.kid] }));
+  const cikti = path.join(d8, 'yeniden.yml');
+  const r = tsx(['yeniden-imzala', `--latest=${yayinda}`, '--musteri=test', `--anahtar=${yeni.dosya}`, `--capa=${capaDosyasi}`, `--cikti=${cikti}`, `--parola-dosyasi=${parolaDosyasi}`]);
+  const yeniMetin = fs.existsSync(cikti) ? fs.readFileSync(cikti, 'utf8') : '';
+  const p = parseLatestYml(yeniMetin);
+  const v = p.ok ? verifyReleaseBlock(p.value.tekserp, { roots: TEST_CAPA, channel: 'test', nowMs: Date.now() }) : p;
+  ol('§8a gerçek `yeniden-imzala` (parola dosyasıyla): yayındaki künye yeni ist-2099-2 imzasıyla panel doğrulayıcısından geçer, paket kaydı aynen',
+    r.status === 0 && v.ok && v.value.kid === 'ist-2099-2' && yeniMetin.split('\ntekserp:')[0] === fs.readFileSync(yayinda, 'utf8').split('\ntekserp:')[0], `${r.status} ${r.stderr}${yeni.hata ?? ''} ${v.code ?? ''}`);
+  const rot = panelRotasyonDenetimi({ yayindaki: yeniMetin, yeniKok: KOK_A.kid });
+  ol('§8b yeniden imzalı künye yayındayken sonraki yayın (aynı kök) → rotasyon kilidi uyumlu', rot.sonuc === 'uyumlu', rot.satirlar?.join('\n'));
+
+  // 30 gün kapısı: yayın betiği GERÇEK imza aracını çağırır; bitişe 29 gün kalmış sertifikayla künye imzalanmaz, yükleme yok.
+  const yayinKos = (a) => {
+    const o = ortam();
+    return { o, k: kos(o, ['--grup=test', `--anahtar=${a.dosya}`], { anahtar: false, ortamEk: { GERCEK_PANEL_IMZA: TEKS, GERCEK_PAROLA_DOSYASI: parolaDosyasi } }) };
+  };
+  const g29 = yayinKos(anahtarDosyasi('ist-2099-3', 29));
+  ol('§8c ⭐ 30 gün kapısı yayın yolunda: bitişe 29 gün kalan ISTEMCI sertifikası → gerçek imza aracı RED, betik durur, hiçbir şey YÜKLENMEDİ',
+    g29.k.kod !== 0 && /< 30\) — bununla İMZALANMAZ/.test(g29.k.cikti) && /Künye imzalanamadı/.test(g29.k.cikti) && yazanAg(g29.o).length === 0 && !fs.existsSync(g29.o.uzakDosya('test', g29.o.ad)), g29.k.cikti.slice(-600));
+  const g90 = yayinKos(anahtarDosyasi('ist-2099-4', 90));
+  ol('§8c\' ✓K kapı kör değil: 90 günlük sertifikada aynı yol 30 gün iletisini BASMAZ (gerçek araç kapıyı geçer; gerçek üretim çapası test kökünü tanımaz → yine yükleme yok)',
+    g90.k.kod !== 0 && !/< 30\)/.test(g90.k.cikti) && /KOK_BILINMIYOR|SERTIFIKA_GECERSIZ/.test(g90.k.cikti) && /Künye imzalanamadı/.test(g90.k.cikti) && yazanAg(g90.o).length === 0 && g90.o.cagrilar().some((c) => c.arac === 'npx' && c.gercek), g90.k.cikti.slice(-600));
 }
 
 console.log(`\n=== Sonuç: ${gecti} geçti, ${kaldi.length} başarısız ===`);
