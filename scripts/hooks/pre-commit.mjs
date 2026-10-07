@@ -289,8 +289,9 @@ const TABLET_ORTAK_TETIK = [
   "mobil/scripts/lib/ortak-kimlik.cjs", "mobil/scripts/build-apk.mjs", "mobil/app.config.js", "mobil/app.json",
   "deploy/dagitim.json", "scripts/test_tablet_ortak_paket.mjs",
 ];
-// Bekçi build-apk'yı geçici ağaçta koşar: mobil/scripts ve scripts/lib altı okunan kümedir (elle sayılmaz).
-if (staged.some((f) => TABLET_ORTAK_TETIK.includes(f) || f.startsWith("mobil/scripts/") || f.startsWith("scripts/lib/"))) {
+// Bekçi build-apk'yı geçici ağaçta koşar: mobil/scripts ve scripts/lib altı okunan kümedir (elle sayılmaz);
+// mobil/plugins/ imza anahtarı seçimini (K-14) taşır.
+if (staged.some((f) => TABLET_ORTAK_TETIK.includes(f) || f.startsWith("mobil/scripts/") || f.startsWith("scripts/lib/") || f.startsWith("mobil/plugins/"))) {
   adimlar.push({ ad: "tablet ortak paket kimliği", cwd: ".", cmd: ["node", ["scripts/test_tablet_ortak_paket.mjs"]], gitEnvSil: true });
 }
 

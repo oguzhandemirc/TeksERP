@@ -1,6 +1,12 @@
 #!/usr/bin/env node
 /**
- * TeksERP Mobil — sahaya kurulacak release APK derleyicisi (TEK GİRİŞ NOKTASI).
+ * TeksERP Mobil — release derleyicisi (TEK GİRİŞ NOKTASI): Google Play AAB'si ve yerel deneme APK'sı.
+ *
+ * K-14: ortak tablet YALNIZ Google Play gizli yayınıyla dağıtılır. `--aab` Play'e yüklenecek paketi Play
+ * YÜKLEME anahtarıyla (`keystore/play-yukleme/`) üretir; argümansız derleme yalnız yerel deneme APK'sıdır
+ * (emülatör, prova), TEST anahtarıyla (`keystore/deneme/`) imzalanır ve sahaya/fabrikaya DAĞITILMAZ.
+ * Eski kanal mührü (`keystore/` kökü) hiçbir yolda okunmaz; anahtarlar burada üretilmez
+ * (`scripts/lib/imza-anahtari.cjs` yalnız komutu basar).
  *
  * NEDEN BU SCRIPT VAR (2026-08-01 — iki kez ısırdı, ikisi de SESSİZ):
  *
@@ -51,7 +57,9 @@
  * `eski-kanal-son` etiketi, docs/ops/ESKI-KANAL-ACIL.md.
  *
  * Kullanım:
- *   npm run build:apk                                       # ORTAK PAKET
+ *   npm run build:aab                                       # Google Play AAB'si (yükleme anahtarı)
+ *   npm run build:aab -- --verify-only=<aab>                # mevcut AAB'yi ortak kimliğe karşı denetle
+ *   npm run build:apk                                       # yerel deneme APK'sı (test anahtarı; dağıtılmaz)
  *   npm run build:apk:check                                 # ön kontrol, derleme YOK
  *   npm run build:apk:verify                                # mevcut APK'yı ortak kimliğe karşı denetle
  */
@@ -66,6 +74,7 @@ import { ortakBundleAdresleri } from './lib/adres.mjs';
 import { zipGirdisiOku } from './lib/zip.mjs';
 import { ApkOlculemedi, apkKimligi, sertifikaParmakIzi } from './lib/apk-kimlik.mjs';
 import { anahtarToreniKomutu, ortakKaydiOku, ortakKimlik, ortakYapilandirmaFarki } from './lib/ortak-kimlik.cjs';
+import { IMZA_ANAHTARLARI, anahtarUretimKomutu, imzaAnahtariDenetimi } from './lib/imza-anahtari.cjs';
 import { kayitHatalari, KAYIT_REL as DAGITIM_REL, turet } from '../../scripts/lib/dagitim.mjs';
 import { apkKunyeYolu, derlemeKunyesiYaz, temizAgacDenetimi } from '../../scripts/lib/derleme-bagi.mjs';
 
@@ -73,6 +82,9 @@ const HERE = path.dirname(fileURLToPath(import.meta.url));
 const PROJECT_ROOT = path.resolve(HERE, '..');
 const ANDROID_DIR = path.join(PROJECT_ROOT, 'android');
 const APK_PATH = path.join(ANDROID_DIR, 'app/build/outputs/apk/release/app-release.apk');
+const AAB_PATH = path.join(ANDROID_DIR, 'app/build/outputs/bundle/release/app-release.aab');
+/** Play'in yasakladığı izin: uygulama kendi APK'sını kuramaz (K-14); paket bu izni taşırsa DUR. */
+const YASAK_IZIN = 'android.permission.REQUEST_INSTALL_PACKAGES';
 /** Release bundle'ın APK içindeki yolu — doğrulama bunu açar. */
 const BUNDLE_ENTRY = 'assets/index.android.bundle';
 
@@ -117,6 +129,9 @@ const arg = (ad) => {
 };
 const SADECE_KONTROL = argv.includes('--check');
 const SADECE_DOGRULA = arg('verify-only') !== undefined;
+/** Google Play AAB'si (bundleRelease + yükleme anahtarı); yoksa yerel deneme APK'sı (assembleRelease + test anahtarı). */
+const AAB = argv.includes('--aab');
+const IMZA_TURU = AAB ? 'play-yukleme' : 'deneme';
 /** Sürüm kapısını bilinçli olarak geç (ASCII eşanlamlısı da kabul edilir). */
 const SURUM_KAPISI_ATLA =
   argv.includes('--sürüm-farkını-biliyorum') || argv.includes('--surum-farkini-biliyorum');
@@ -278,15 +293,16 @@ function onbellekleriTemizle() {
   // Eski APK: derleme yarıda kalırsa operatör eski dosyayı yeni sanmasın.
   sil(APK_PATH, 'önceki release APK');
   sil(path.join(path.dirname(APK_PATH), 'output-metadata.json'), 'önceki output-metadata.json');
+  sil(AAB_PATH, 'önceki release AAB');
 }
 
 /* ------------------------------------------------------------------ *
  * (d) assembleRelease
  * ------------------------------------------------------------------ */
 
-function gradleKos(adres) {
+function gradleKos(adres, gorev = 'assembleRelease') {
   const ortam = derlemeOrtami();
-  baslik('(2/4) DERLEME — ./gradlew assembleRelease');
+  baslik(`(2/4) DERLEME — ./gradlew ${gorev}`);
   bilgi(`Gömülecek adres: ${adres ?? '(YOK — ortak paket ERP adresi gömmez; .env* dosyaları okunmaz)'}`);
   bilgi('(Bu adım birkaç dakika sürer; önbellek silindiği için bundle sıfırdan üretilir.)\n');
 
@@ -300,7 +316,7 @@ function gradleKos(adres) {
   // ⚠️ shell:true komutu cmd'ye METİN olarak geçirir: yol TIRNAKLANMAK ZORUNDA, yoksa
   // boşluk içeren bir kurulum dizini ("C:\Program Files\...") sessizce bölünür.
   const komut = win ? `"${gradlew}"` : gradlew;
-  const sonuc = spawnSync(komut, ['assembleRelease'], {
+  const sonuc = spawnSync(komut, [gorev], {
     cwd: ANDROID_DIR,
     stdio: 'inherit',
     shell: win,
@@ -313,13 +329,13 @@ function gradleKos(adres) {
   });
 
   if (sonuc.error) {
-    dur('Gradle çalıştırılamadı', String(sonuc.error.message), `Denenen komut: ${gradlew} assembleRelease`);
+    dur('Gradle çalıştırılamadı', String(sonuc.error.message), `Denenen komut: ${gradlew} ${gorev}`);
   }
   if (sonuc.status !== 0) {
     dur(
       `Gradle derlemesi başarısız (exit ${sonuc.status})`,
       'Yukarıdaki Gradle çıktısında ilk "FAILURE"/"error:" satırına bak.',
-      'APK üretilmedi — sahaya kurulacak paket YOK.',
+      'Paket üretilmedi.',
     );
   }
 }
@@ -357,7 +373,7 @@ function derlemeEnv(adres, ortam) {
  */
 function apkyiReddet(apkYolu) {
   if (!fs.existsSync(apkYolu)) return null;
-  const hedef = apkYolu.replace(/\.apk$/i, '') + '.DOGRULANMADI.apk';
+  const hedef = apkYolu.replace(/\.(apk|aab)$/i, '.DOGRULANMADI.$1');
   try {
     fs.rmSync(hedef, { force: true });
     fs.renameSync(apkYolu, hedef);
@@ -513,47 +529,27 @@ function prebuildTemelSorunlari(p) {
 }
 
 /**
- * MÜHÜR KAPISI — üretilen APK bizim imza anahtarımızla mı imzalandı?
+ * İMZA KAPISI — paket türünün KENDİ anahtarıyla mı imzalandı (AAB → Play yükleme, APK → test)?
  *
  * ⚠️ NEDEN: `android/` prebuild çıktısıdır ve imza yapılandırması bir eklentiyle
- * (plugins/withReleaseKeystore.js) her prebuild'de yeniden yazılır. Eklenti
- * bozulur/atlanırsa React Native şablonunun varsayılanı devreye girer ve release
- * APK **Android'in herkese açık DENEME mührüyle** imzalanır. O APK sorunsuz
- * derlenir, kurulur, çalışır — tek farkı sahadaki tabletlere KURULAMAMASIDIR
- * (imza uyuşmazlığı), ve o noktada tek çare uygulamayı silip yeniden kurmaktır.
- *
- * Beklenen parmak izi ayrı bir dosyada TUTULMAZ, mührün kendisinden okunur:
- * ikinci bir kaynak, mühür değiştiğinde bayatlayıp yanlış alarm üretirdi.
+ * (plugins/withReleaseKeystore.js) her prebuild'de yeniden yazılır. Eklenti bozulur/atlanırsa
+ * şablonun varsayılanı devreye girer ve release paketi **Android'in herkese açık DENEME
+ * mührüyle** imzalanır; ya da görev yanlış seçilirse AAB test anahtarını taşır ve Play onu
+ * reddeder. Beklenen parmak izi ayrı bir dosyada TUTULMAZ, anahtarın kendisinden okunur.
  */
-function imzaKapisi(apkYolu) {
-  const propYol = path.join(PROJECT_ROOT, 'keystore/keystore.properties');
-  if (!fs.existsSync(propYol)) {
-    dur(
-      'RELEASE MÜHRÜ BULUNAMADI',
-      `Beklenen: ${propYol}`,
-      'Bu dosya olmadan APK deneme mührüyle imzalanır ve sahadaki tabletlere',
-      'KURULAMAZ. Mührü yedekten geri koy (şifresiyle birlikte).',
-    );
-  }
-  const props = Object.fromEntries(
-    fs
-      .readFileSync(propYol, 'utf8')
-      .split(/\r?\n/)
-      .filter((l) => l.trim() && !l.trim().startsWith('#') && l.includes('='))
-      .map((l) => {
-        const i = l.indexOf('=');
-        return [l.slice(0, i).trim(), l.slice(i + 1).trim()];
-      }),
-  );
-
+function imzaKapisi(paketYolu, tur = IMZA_TURU) {
+  const d = imzaAnahtariHazir(tur);
+  const props = d.props;
   /** `AB:CD:...` ya da `abcd...` → karşılaştırılabilir düz küçük harf hex. */
   const duzHex = (x) => (x ?? '').replace(/:/g, '').toLowerCase();
+  const aab = /\.aab$/i.test(paketYolu);
 
   /**
    * ⚠️ ARAÇ SEÇİMİ ÖLÇÜLDÜ (2026-08-26): `keytool -printcert -jarfile` yalnız
    * **v1 (jar)** imzasını okur. minSdk 26 olduğu için AGP v1'i KAPATIR ve APK
    * yalnız v2/v3 şemasıyla imzalanır → keytool hiçbir çıktı vermez. Doğru araç
-   * `apksigner`dır (Android SDK build-tools). keytool yalnız yedek yoldur.
+   * `apksigner`dır (Android SDK build-tools). AAB ise jarsigner (v1) ile imzalanır:
+   * onda apksigner değil keytool okur.
    */
   const apksignerBul = () => {
     // Kök çözümü TEK KAYNAKTAN (`sdkKokBul`) — iki liste ayrışmasın.
@@ -564,7 +560,7 @@ function imzaKapisi(apkYolu) {
       if (!fs.existsSync(bt)) continue;
       const surumler = fs
         .readdirSync(bt)
-        .filter((d) => fs.existsSync(path.join(bt, d, ad)))
+        .filter((x) => fs.existsSync(path.join(bt, x, ad)))
         .sort();
       if (surumler.length) return path.join(bt, surumler[surumler.length - 1], ad);
     }
@@ -573,7 +569,7 @@ function imzaKapisi(apkYolu) {
 
   // ⚠️ `keytool` JDK'DAN GELİR — Gradle'a JDK vermek YETMEZ, bu adım ayrı bir
   // süreçtir ve PATH'ten arar. Kabuk profilinde JAVA_HOME yoksa derleme geçer
-  // ama doğrulama "Mühür okunamadı" ile düşer ve hata, sebebi (yanlış şifre mi,
+  // ama doğrulama "anahtar okunamadı" ile düşer ve hata, sebebi (yanlış şifre mi,
   // eksik JDK mi) AYIRT ETMEZ — 2026-09-04'te temiz kabukta birebir yaşandı.
   const jdkKok = jdkKokBul();
   const javaOrtam = jdkKok
@@ -582,62 +578,80 @@ function imzaKapisi(apkYolu) {
 
   const magaza = spawnSync(
     'keytool',
-    [
-      '-list', '-v',
-      '-keystore', path.join(PROJECT_ROOT, 'keystore', props.storeFile),
-      '-alias', props.keyAlias,
-      '-storepass', props.storePassword,
-    ],
+    ['-list', '-v', '-keystore', d.storeYolu, '-alias', props.keyAlias, '-storepass', props.storePassword],
     { encoding: 'utf8', env: javaOrtam },
   );
   const beklenen = duzHex(/SHA256:\s*([0-9A-F:]+)/i.exec(magaza.stdout ?? '')?.[1] ?? '');
 
   let bulunan = '';
   let aracHatasi = '';
-  const apksigner = apksignerBul();
+  const apksigner = aab ? null : apksignerBul();
   if (apksigner) {
     // apksigner bir kabuk betiğidir ve içeriden `java` çağırır → JDK ortamı ŞART.
-    const r = spawnSync(apksigner, ['verify', '--print-certs', apkYolu], { encoding: 'utf8', env: javaOrtam });
+    const r = spawnSync(apksigner, ['verify', '--print-certs', paketYolu], { encoding: 'utf8', env: javaOrtam });
     // v1/v2/v3 imzacılarının HEPSİ aynı sertifikayı taşır; ilk eşleşme yeter.
     bulunan = duzHex(/certificate SHA-256 digest:\s*([0-9a-f]+)/i.exec(r.stdout ?? '')?.[1] ?? '');
     if (!bulunan) aracHatasi = (r.stderr || r.stdout || '').trim().split('\n')[0] ?? '';
-  } else {
+  } else if (!aab) {
     aracHatasi = 'apksigner bulunamadı (Android SDK build-tools).';
   }
   if (!bulunan) {
-    // Yedek yol: v1 imzalı APK'lar için keytool.
-    const r = spawnSync('keytool', ['-printcert', '-jarfile', apkYolu], { encoding: 'utf8', env: javaOrtam });
+    // AAB'nin yolu ve APK için yedek yol: v1 (jar) imzası keytool ile.
+    const r = spawnSync('keytool', ['-printcert', '-jarfile', paketYolu], { encoding: 'utf8', env: javaOrtam });
     bulunan = duzHex(/SHA256:\s*([0-9A-F:]+)/i.exec(r.stdout ?? '')?.[1] ?? '');
   }
 
-  baslik('MÜHÜR (İMZA) DOĞRULAMASI');
+  baslik(`İMZA DOĞRULAMASI — ${IMZA_ANAHTARLARI[tur].ad}`);
   if (!beklenen) {
-    dur('Mühür okunamadı', 'keytool `keystore/` altındaki anahtarı açamadı — şifre/alias yanlış olabilir.');
+    dur('İmza anahtarı okunamadı', `keytool ${d.storeYolu} deposunu açamadı — şifre/alias yanlış ya da JDK yok.`);
   }
   if (!bulunan) {
-    // keytool APK imzasını okuyamadıysa SESSİZCE GEÇME: doğrulanamayan imza,
-    // doğrulanmış imza değildir.
+    // Araç imzayı okuyamadıysa SESSİZCE GEÇME: doğrulanamayan imza, doğrulanmış imza değildir.
     dur(
-      'APK imzası okunamadı',
+      'Paket imzası okunamadı',
       aracHatasi || '(araç çıktı vermedi)',
       'Elle doğrula:',
-      `  apksigner verify --print-certs "${apkYolu}"`,
+      aab ? `  keytool -printcert -jarfile "${paketYolu}"` : `  apksigner verify --print-certs "${paketYolu}"`,
     );
   }
-  bilgi(`Mühür  : ${beklenen}`);
-  bilgi(`APK    : ${bulunan}`);
+  bilgi(`Anahtar: ${beklenen}`);
+  bilgi(`Paket  : ${bulunan}`);
   if (beklenen !== bulunan) {
-    apkyiReddet(apkYolu);
+    apkyiReddet(paketYolu);
     dur(
-      'APK YANLIŞ MÜHÜRLE İMZALANMIŞ',
-      'Üretilen paket bizim imza anahtarımızı taşımıyor — büyük olasılıkla',
-      'deneme (debug) mührüyle imzalandı ve sahadaki tabletlere KURULAMAZ.',
+      'PAKET YANLIŞ ANAHTARLA İMZALANMIŞ',
+      `Beklenen: ${IMZA_ANAHTARLARI[tur].ad} (${IMZA_ANAHTARLARI[tur].dizin}/)`,
+      'Büyük olasılıkla deneme (debug) mührü ya da öbür anahtar kullanıldı.',
       '',
-      'Kontrol et: plugins/withReleaseKeystore.js eklentisi app.json `plugins`',
-      'listesinde mi ve prebuild bu eklentiyle koştu mu?',
+      'Kontrol et: plugins/withReleaseKeystore.js app.json `plugins` listesinde mi,',
+      'prebuild bu eklentiyle koştu mu, gradle görevi doğru mu (AAB = bundleRelease)?',
     );
   }
-  bilgi('✔ APK bizim mührümüzle imzalanmış.');
+  bilgi(`✔ Paket ${IMZA_ANAHTARLARI[tur].dizin}/ anahtarıyla imzalanmış.`);
+}
+
+/**
+ * İmza anahtarı hazır mı — yoksa ya da başka bir anahtarın (öbür tür, `keystore/` kökündeki eski mühür) kopyasıysa
+ * GÜRÜLTÜLÜ DUR ve üretim komutunu bas (anahtar burada üretilmez; kullanıcı anahtar töreninde üretir).
+ */
+function imzaAnahtariHazir(tur = IMZA_TURU) {
+  const t = IMZA_ANAHTARLARI[tur];
+  const d = imzaAnahtariDenetimi(PROJECT_ROOT, tur);
+  if (d.sonuc === 'hazir') return d;
+  if (d.sonuc === 'ihlal') {
+    dur(`${t.ad} GEÇERSİZ`, ...d.satirlar, '', 'Her derleme türü KENDİ anahtarını taşır; eski kanal mührü ortak pakete girmez.');
+  }
+  dur(
+    `${t.ad} YOK`,
+    ...d.satirlar,
+    '',
+    tur === 'play-yukleme'
+      ? "Yükleme anahtarını kullanıcı Mac'te BİR KEZ üretir, şifreli yedeğe alır; ilk AAB'de Play Console'a tanıtılır."
+      : 'Test anahtarı yalnız yerel deneme APK\'sını imzalar; kullanıcı anahtar töreninde BİR KEZ üretir.',
+    'Bu komut anahtar ÜRETMEZ. Üretim (anahtar töreninde):',
+    ...anahtarUretimKomutu(tur).map((x) => `  ${x}`),
+  );
+  return d;
 }
 
 /**
@@ -734,8 +748,9 @@ function androidVarMi() {
 
 function ozet(adres, s, stat, apkYolu = APK_PATH) {
   const sha = crypto.createHash('sha256').update(fs.readFileSync(apkYolu)).digest('hex');
+  const aab = /\.aab$/i.test(apkYolu);
   baslik('(4/4) HAZIR');
-  bilgi(`APK      : ${apkYolu}`);
+  bilgi(`${aab ? 'AAB' : 'APK'}      : ${apkYolu}`);
   bilgi('Kimlik   : ORTAK PAKET (dağıtım kaydından)');
   bilgi(`Boyut    : ${(stat.size / 1024 / 1024).toFixed(1)} MB`);
   bilgi(`Sürüm    : ${s.gradleVersionName ?? '?'} (versionCode ${s.gradleVersionCode ?? '?'})`);
@@ -743,8 +758,13 @@ function ozet(adres, s, stat, apkYolu = APK_PATH) {
   bilgi(`SHA-256  : ${sha}`);
   bilgi(`Zaman    : ${stat.mtime.toLocaleString('tr-TR')}`);
   console.log('');
-  bilgi('Kurulum  : adb install -r "<apk yolu>"');
-  bilgi('İmza uyuşmazlığı derse: tabletten kaldır + yeniden kur (operatör yeniden login olur).');
+  if (aab) {
+    bilgi('Yükleme  : Play Console → Test ve yayınla → kapalı test (gizli yayın) → yeni sürüm → bu AAB');
+    bilgi('           versionCode Play\'de bir kez kullanılır; OTA turunda versionCode\'a DOKUNULMAZ.');
+  } else {
+    bilgi('Kurulum  : adb install -r "<apk yolu>"   (yalnız emülatör / prova cihazı)');
+    bilgi('⚠ Bu APK TEST anahtarıyla imzalı ve sahaya DAĞITILMAZ — ortak tablet yalnız Google Play\'den kurulur (npm run build:aab).');
+  }
   console.log('');
 }
 
@@ -854,6 +874,7 @@ function ortakApkKimlikKapisi(apkYolu, k) {
   if (a.guncellemeAcik !== 'true') sorunlar.push(`expo-updates ENABLED "${a.guncellemeAcik ?? 'yok'}" (beklenen true)`);
   if (a.guncellemeAdresi !== k.guncellemeUrl) sorunlar.push(`EXPO_UPDATE_URL "${a.guncellemeAdresi ?? 'yok'}" ≠ "${k.guncellemeUrl}"`);
   if (!a.sertifikaPem || sertifikaParmakIzi(a.sertifikaPem) !== beklenenIz) sorunlar.push(`gömülü OTA sertifikası ortak paketinki değil (${k.otaSertifika})`);
+  if ((a.izinler ?? []).includes(YASAK_IZIN)) sorunlar.push(`${YASAK_IZIN} izni var — ortak tablet kendi APK'sını kuramaz (K-14, app.json blockedPermissions)`);
   if (!a.appConfig) sorunlar.push('assets/app.config yok ya da okunamadı — çalışma anı kimliği ÖLÇÜLEMEDİ');
   else sorunlar.push(...ortakYapilandirmaFarki(a.appConfig, { herkese: true }, k).map((x) => `assets/app.config ${x}`));
   if (sorunlar.length) {
@@ -881,10 +902,67 @@ function ortakApkAdresDogrula(apkYolu, derlemeBaslangici) {
   return stat;
 }
 
+/**
+ * AAB'nin KENDİSİ ortak paketin mi: `base/manifest/AndroidManifest.xml` protobuf'tur (AXML değil) — kimlik
+ * dizeleri bayt aramasıyla, OTA sertifikası PEM olarak okunur; `base/assets/app.config` çalışma anı kimliği;
+ * bundle'da ERP adresi yok; Play'in yasakladığı kurulum izni yok.
+ */
+function ortakAabDogrula(aabYolu, k, derlemeBaslangici) {
+  baslik("(3/4) DOĞRULAMA — AAB'nin kendisinden (kimlik · ERP adresi · yasak izin)");
+  if (!fs.existsSync(aabYolu)) dur('AAB üretilmedi', `Beklenen yol: ${aabYolu}`, 'Gradle "BUILD SUCCESSFUL" dese bile paket yok — çıktıyı incele.');
+  const stat = fs.statSync(aabYolu);
+  if (derlemeBaslangici && stat.mtimeMs < derlemeBaslangici) {
+    apkyiReddet(aabYolu);
+    dur('Üretilen AAB bu derlemeden ESKİ', 'Gradle paketleme adımını atlamış olmalı — paket GÜVENİLMEZ.');
+  }
+  const oku = (ad) => {
+    try {
+      const r = zipGirdisiOku(aabYolu, ad);
+      return r.hata ? null : r.veri;
+    } catch {
+      return null;
+    }
+  };
+  const sorunlar = [];
+  const manifest = oku('base/manifest/AndroidManifest.xml');
+  if (!manifest) sorunlar.push('base/manifest/AndroidManifest.xml okunamadı — kimlik ÖLÇÜLEMEDİ');
+  else {
+    const m = manifest.toString('utf8');
+    if (!m.includes(k.androidPaket)) sorunlar.push(`manifestte ortak paket adı "${k.androidPaket}" yok`);
+    if (!m.includes(k.guncellemeUrl)) sorunlar.push(`manifestte ortak güncelleme adresi "${k.guncellemeUrl}" yok`);
+    if (m.includes(YASAK_IZIN)) sorunlar.push(`${YASAK_IZIN} izni var — ortak tablet kendi APK'sını kuramaz (K-14, app.json blockedPermissions)`);
+    const pem = /-----BEGIN CERTIFICATE-----[\s\S]*?-----END CERTIFICATE-----/.exec(m)?.[0];
+    if (!pem || sertifikaParmakIzi(pem) !== ortakSertifikaIzi(k)) sorunlar.push(`gömülü OTA sertifikası ortak paketinki değil (${k.otaSertifika})`);
+  }
+  const cfgHam = oku('base/assets/app.config');
+  if (!cfgHam) sorunlar.push('base/assets/app.config yok — çalışma anı kimliği ÖLÇÜLEMEDİ');
+  else {
+    try {
+      sorunlar.push(...ortakYapilandirmaFarki(JSON.parse(cfgHam.toString('utf8')), { herkese: true }, k).map((x) => `assets/app.config ${x}`));
+    } catch {
+      sorunlar.push('base/assets/app.config ayrıştırılamadı');
+    }
+  }
+  const bundle = oku(`base/${BUNDLE_ENTRY}`);
+  if (!bundle) sorunlar.push(`base/${BUNDLE_ENTRY} okunamadı — ERP adresi ÖLÇÜLEMEDİ`);
+  else {
+    const { gomulu } = ortakBundleAdresleri(bundle.toString('latin1'));
+    if (gomulu.length) sorunlar.push(`bundle'da ERP adresi var: ${gomulu.join(', ')}`);
+  }
+  if (sorunlar.length) {
+    apkyiReddet(aabYolu);
+    dur('AAB ORTAK PAKETİN KİMLİĞİNİ TAŞIMIYOR', ...sorunlar.map((x) => `• ${x}`), '', "AAB kanonik yolundan taşındı — Play'e YÜKLEME.");
+  }
+  bilgi("✔ AAB ortak paketin kimliğini taşıyor; bundle'da ERP adresi, manifestte kurulum izni yok.");
+  return stat;
+}
+
 async function ortakMain() {
   const k = ortakHedefCoz();
   ortakAdresKapisi();
-  baslik('TeksERP Mobil — RELEASE APK (ORTAK PAKET)');
+  baslik(`TeksERP Mobil — ${AAB ? 'RELEASE AAB' : 'RELEASE APK'} (ORTAK PAKET)`);
+  bilgi(AAB ? 'Paket         : Google Play AAB — Play YÜKLEME anahtarıyla imzalanır'
+    : "Paket         : YEREL DENEME APK'SI — TEST anahtarıyla imzalanır, sahaya DAĞITILMAZ (saha = Google Play)");
   bilgi(`Kimlik        : ${k.androidPaket} · "${k.gorunenAd}" · runtimeVersion ${k.runtimeVersion}`);
   bilgi(`Güncelleme    : ${k.guncellemeUrl}  (Worker belirtecin grubuna yönlendirir)`);
   bilgi(`OTA imzası    : ${k.otaSertifika} · kid "${k.anahtarKimligi}"`);
@@ -903,15 +981,25 @@ async function ortakMain() {
     const ortamCheck = derlemeOrtami();
     bilgi(`Android SDK : ${ortamCheck.sdk}`);
     bilgi(`Java (JDK)  : ${ortamCheck.jdk}`);
-    console.log('\n  ✔ Ön kontrol tamam (--check): ortak kimlik, sürüm, güncelleme yapılandırması ve derleme ortamı tutarlı. Derleme YAPILMADI.\n');
+    bilgi(imzaAnahtariHazir().satirlar[0]);
+    console.log('\n  ✔ Ön kontrol tamam (--check): ortak kimlik, sürüm, güncelleme yapılandırması, imza anahtarı ve derleme ortamı tutarlı. Derleme YAPILMADI.\n');
     return;
   }
 
   if (SADECE_DOGRULA) {
     const ozelYol = arg('verify-only');
-    const hedef = ozelYol ? path.resolve(process.cwd(), ozelYol) : APK_PATH;
-    if (!fs.existsSync(hedef)) dur('Doğrulanacak APK bulunamadı', hedef, 'Önce derle: npm run build:apk');
-    if (hedef !== APK_PATH) uyari(`Kanonik yol dışındaki APK denetleniyor: ${hedef}`);
+    const kanonik = AAB ? AAB_PATH : APK_PATH;
+    const hedef = ozelYol ? path.resolve(process.cwd(), ozelYol) : kanonik;
+    if (!fs.existsSync(hedef)) dur('Doğrulanacak paket bulunamadı', hedef, `Önce derle: npm run ${AAB ? 'build:aab' : 'build:apk'}`);
+    if (hedef !== kanonik) uyari(`Kanonik yol dışındaki paket denetleniyor: ${hedef}`);
+    if (AAB !== /\.aab$/i.test(hedef)) dur('Paket türü komutla uyuşmuyor', `${hedef}`, 'AAB: npm run build:aab -- --verify-only=<aab> · APK: npm run build:apk:verify');
+    if (AAB) {
+      const sAab = surumBas();
+      const statAab = ortakAabDogrula(hedef, k);
+      imzaKapisi(hedef);
+      ozet(null, sAab, statAab, hedef);
+      return;
+    }
     ortakApkKimlikKapisi(hedef, k);
     const sVerify = surumBas();
     const stat = ortakApkAdresDogrula(hedef);
@@ -920,26 +1008,33 @@ async function ortakMain() {
     return;
   }
 
+  // İmza anahtarı android/ denetiminden ÖNCE: anahtarsız derleme dakikalarca sürüp sonda düşmesin.
+  imzaAnahtariHazir();
   androidVarMi();
   const s = surumBas();
   surumNotuKapisi(s);
   ortakGuncellemeKapisi(k);
   const agac = temizAgacDenetimi();
   if (agac.sonuc !== 'temiz') {
-    dur(agac.sonuc === 'kirli' ? 'APK DERLENMEZ — çalışma ağacı temiz değil' : 'ÖLÇÜLEMEDİ — çalışma ağacı okunamadı', ...agac.satirlar);
+    dur(agac.sonuc === 'kirli' ? 'PAKET DERLENMEZ — çalışma ağacı temiz değil' : 'ÖLÇÜLEMEDİ — çalışma ağacı okunamadı', ...agac.satirlar);
   }
   bilgi(agac.satirlar[0]);
-  fs.rmSync(apkKunyeYolu(APK_PATH), { force: true });
+  const hedef = AAB ? AAB_PATH : APK_PATH;
+  fs.rmSync(apkKunyeYolu(hedef), { force: true });
 
   const derlemeBaslangici = Date.now();
   onbellekleriTemizle();
-  gradleKos(null);
-  const stat = ortakApkAdresDogrula(APK_PATH, derlemeBaslangici);
-  ortakApkKimlikKapisi(APK_PATH, k);
-  imzaKapisi(APK_PATH);
-  // Künyenin kanalı null = ortak paket; grup yayında bağlanır (O10b).
-  derlemeKunyesiBirak(agac.commit);
-  ozet(null, s, stat, APK_PATH);
+  gradleKos(null, AAB ? 'bundleRelease' : 'assembleRelease');
+  let stat;
+  if (AAB) {
+    stat = ortakAabDogrula(AAB_PATH, k, derlemeBaslangici);
+  } else {
+    stat = ortakApkAdresDogrula(APK_PATH, derlemeBaslangici);
+    ortakApkKimlikKapisi(APK_PATH, k);
+  }
+  imzaKapisi(hedef);
+  derlemeKunyesiBirak(agac.commit, hedef, s);
+  ozet(null, s, stat, hedef);
 }
 
 async function main() {
@@ -947,7 +1042,7 @@ async function main() {
   if (emekli.length) {
     dur('EMEKLİ ESKİ KANAL ARGÜMANI', ...emekli.map((ad) => `verilen: --${ad}`), '',
       'Müşteri kodlu APK derlemesi emekli (eski-kanal-son etiketi, docs/ops/ESKI-KANAL-ACIL.md).',
-      'Ortak paket: npm run build:apk  (kimlik dağıtım kaydından, ERP adresi gömülmez).');
+      'Ortak paket: npm run build:aab (Google Play) · npm run build:apk (yerel deneme; kimlik dağıtım kaydından, ERP adresi gömülmez).');
   }
   return ortakMain();
 }
@@ -956,28 +1051,32 @@ async function main() {
  * Derleme künyesi (G22): bütün kapılardan geçen APK'nın yanına commit + özet + APK'nın KENDİ sürümü. Derleme
  * sırasında ağaç ya da HEAD değiştiyse künye YAZILMAZ — yayıncı künyesiz APK'yı reddeder.
  */
-function derlemeKunyesiBirak(commit) {
+function derlemeKunyesiBirak(commit, paketYolu, s) {
   const son = temizAgacDenetimi();
   if (son.sonuc !== 'temiz' || son.commit !== commit) {
-    dur('Derleme sırasında çalışma ağacı ya da HEAD değişti — APK güvenilmez, künye YAZILMADI', ...son.satirlar);
+    dur('Derleme sırasında çalışma ağacı ya da HEAD değişti — paket güvenilmez, künye YAZILMADI', ...son.satirlar);
   }
+  const aab = /\.aab$/i.test(paketYolu);
   let k;
   try {
-    const { surumAdi, surumKodu } = apkKimligi(APK_PATH);
-    k = derlemeKunyesiYaz(apkKunyeYolu(APK_PATH), {
-      urun: 'tablet-apk', kanal: null, surum: surumAdi, commit, dosyaYolu: APK_PATH, ek: { versionCode: surumKodu },
+    // AAB'nin manifesti protobuf'tur: sürüm derlemeye giren gradle değerlerinden (surumBas sapmayı zaten durdurur).
+    const { surumAdi, surumKodu } = aab
+      ? { surumAdi: s.gradleVersionName, surumKodu: Number(s.gradleVersionCode) }
+      : apkKimligi(paketYolu);
+    k = derlemeKunyesiYaz(apkKunyeYolu(paketYolu), {
+      urun: aab ? 'tablet-aab' : 'tablet-apk', kanal: null, surum: surumAdi, commit, dosyaYolu: paketYolu, ek: { versionCode: surumKodu },
     });
   } catch (e) {
-    dur('Derleme künyesi yazılamadı — APK yayınlanamaz', String(e?.message ?? e));
+    dur('Derleme künyesi yazılamadı', String(e?.message ?? e));
   }
-  bilgi(`Derleme künyesi: ${path.basename(apkKunyeYolu(APK_PATH))} · commit ${k.commit.slice(0, 12)} · ${k.surum} (vc ${k.versionCode}) — APK'yla BİRLİKTE taşı`);
+  bilgi(`Derleme künyesi: ${path.basename(apkKunyeYolu(paketYolu))} · commit ${k.commit.slice(0, 12)} · ${k.surum} (vc ${k.versionCode})`);
 }
 
 // Beklenmedik istisna da GÜRÜLTÜLÜ bitsin: çıplak yığın izi operatöre
 // "derleme oldu mu, olmadı mı" sorusunu bıraktığı için önce net bir başlık,
 // sonra teşhis için yığın izi basılır. Her hâlükârda exit 1.
 main().catch((e) => {
-  console.error(`\n${BAR}\n  ✖ HATA — Beklenmedik bir sorun oluştu, APK GÜVENİLMEZ\n${BAR}`);
+  console.error(`\n${BAR}\n  ✖ HATA — Beklenmedik bir sorun oluştu, paket GÜVENİLMEZ\n${BAR}`);
   console.error(e?.stack ?? String(e));
   console.error(`${BAR}\n`);
   process.exit(1);

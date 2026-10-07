@@ -8,10 +8,13 @@
 // NE ÖLÇER:
 //   §1 ortak-kimlik.cjs ↔ kayıt: her alan kayıttan bağımsız yeniden türetilmiş değerle eşit; güncelleme adresi
 //      grup-nötr Worker takma adı = dagitim.mjs `turet().otaTakmaAd`; kid + anahtar yolu sertifika dizininden
-//   §2 app.config.js argümansız (TEKSERP_KANAL yok) → değerlendirilmiş yapılandırma ortak kimlikle farksız
+//   §2 app.config.js argümansız (TEKSERP_KANAL yok) → değerlendirilmiş yapılandırma ortak kimlikle farksız;
+//      K-14: REQUEST_INSTALL_PACKAGES izinlerde YOK ve blockedPermissions'ta VAR (Play: uygulama kendi APK'sını kuramaz)
 //   §3 build-apk.mjs ortak yol (geçici ağaç, ağsız): ortak APK geçer ama mühürde durur · bundle'da ERP
 //      adresi · eski kimlikli APK · yabancı sertifika · gorunurEtiket · TEKSERP_KANAL · --api-url · sertifikasız ağaç ·
-//      şema dışı kayıt · emekli eski kanal argümanı → DUR; `--check` android/ ortak paketle tutarlı mı
+//      şema dışı kayıt · emekli eski kanal argümanı · kurulum izinli APK/AAB → DUR; `--check` android/ ortak paketle
+//      tutarlı mı; K-14 imza anahtarları: APK = keystore/deneme (test), AAB = keystore/play-yukleme (yükleme) — yoksa
+//      android/ denetiminden ÖNCE DUR + keytool komutu; öbür anahtarın ya da keystore/ kökündeki eski mührün kopyası DUR
 //   --sonda: §1/§2 yüklemleri enjekte edilmiş bozuk girdilerle KIRMIZIYA düşer (kalıcı negatif sonda)
 //
 // Üç sonuç: 0 yeşil · 1 kırmızı · 2 ÖLÇÜLEMEDİ.   node scripts/test_tablet_ortak_paket.mjs [--sonda]
@@ -95,7 +98,7 @@ function zipYaz(yol, girdiler) {
  * Asgari İKİLİ AndroidManifest (AXML, UTF-16 dize havuzu): `<manifest package>` + `<meta-data>`.
  * Android'in kurulumda okuduğu biçim — paket adı öznitelikten, metin aramasından değil.
  */
-function axmlYaz({ paket, meta = {}, surumAdi = null, surumKodu = null }) {
+function axmlYaz({ paket, meta = {}, surumAdi = null, surumKodu = null, izinler = [] }) {
   const NS = 'http://schemas.android.com/apk/res/android';
   const YOK = 0xffffffff;
   const dizeler = [];
@@ -107,6 +110,7 @@ function axmlYaz({ paket, meta = {}, surumAdi = null, surumKodu = null }) {
   const ogeler = [{ ad: 'manifest', oz: paket == null ? [] : [{ ns: null, ad: 'package', deger: paket }] }];
   if (surumKodu != null) ogeler[0].oz.push({ ns: NS, ad: 'versionCode', deger: String(surumKodu) });
   if (surumAdi != null) ogeler[0].oz.push({ ns: NS, ad: 'versionName', deger: surumAdi });
+  for (const iz of izinler) ogeler.push({ ad: 'uses-permission', oz: [{ ns: NS, ad: 'name', deger: iz }] });
   for (const [n, v] of Object.entries(meta)) ogeler.push({ ad: 'meta-data', oz: [{ ns: NS, ad: 'name', deger: n }, { ns: NS, ad: 'value', deger: v }] });
   for (const e of ogeler) { no(e.ad); for (const a of e.oz) { if (a.ns) no(a.ns); no(a.ad); no(a.deger); } }
   const veriler = dizeler.map((x) => { const u = Buffer.alloc(2); u.writeUInt16LE(x.length); return Buffer.concat([u, Buffer.from(x, 'utf16le'), Buffer.alloc(2)]); });
@@ -155,6 +159,16 @@ function kimlikFarki(kayit, k) {
   e('guncellemeUrl (dagitim.mjs türetimi)', k.guncellemeUrl, turet(kayit).otaTakmaAd);
   // Grup-nötr: adres hiçbir grup kodunu yol öneki olarak taşımaz.
   for (const g of kayit.gruplar) if (k.guncellemeUrl.startsWith(`${kayit.indirmeKoku}${g.kod}/`)) f.push(`güncelleme adresi grup "${g.kod}" taşıyor`);
+  return f;
+}
+
+const YASAK_IZIN = 'android.permission.REQUEST_INSTALL_PACKAGES';
+/** K-14: değerlendirilmiş yapılandırmada kurulum izni İSTENMEZ ve birleşik manifestten açıkça SİLİNİR (kütüphane eklese de). */
+function izinFarki(c) {
+  const f = [];
+  const kisa = (x) => String(x).replace(/^android\.permission\./, '');
+  if ((c.android?.permissions ?? []).some((x) => kisa(x) === kisa(YASAK_IZIN))) f.push(`android.permissions ${YASAK_IZIN} istiyor`);
+  if (!(c.android?.blockedPermissions ?? []).includes(YASAK_IZIN)) f.push(`android.blockedPermissions ${YASAK_IZIN} taşımıyor`);
   return f;
 }
 
@@ -210,6 +224,11 @@ if (SONDA) {
   try { ORTAK.ortakYapilandirmasi({ extra: {} }); } catch { at = true; }
   delete process.env.EXPO_PUBLIC_UPDATE_URL;
   ol('N10 EXPO_PUBLIC_UPDATE_URL ile ezme → atar', at);
+  ol('P3 pozitif: gerçek yapılandırmada kurulum izni yok, blokta var', izinFarki(cfg).length === 0, izinFarki(cfg).join('\n'));
+  const geri = kopya(cfg); geri.android.permissions = [...(geri.android.permissions ?? []), 'REQUEST_INSTALL_PACKAGES'];
+  ol('N11 REQUEST_INSTALL_PACKAGES izinlere geri eklendi → kırmızı', izinFarki(geri).length > 0);
+  const blok = kopya(cfg); blok.android.blockedPermissions = (blok.android.blockedPermissions ?? []).filter((x) => x !== YASAK_IZIN);
+  ol('N12 blockedPermissions\'tan kalktı → kırmızı', izinFarki(blok).length > 0);
   bitir();
 }
 
@@ -226,6 +245,8 @@ console.log('\n§2 — app.config.js argümansız = ortak kimlik');
   const f = ORTAK.ortakYapilandirmaFarki(cfg);
   ol('2a değerlendirilmiş yapılandırma ortak kimlikle farksız', f.length === 0, f.join('\n'));
   ol('2b ERP adresi yapılandırmaya girmez (extra.apiUrl/EXPO_PUBLIC_API_URL yok)', !/\b(apiUrl|api_url|EXPO_PUBLIC_API_URL)\b/i.test(JSON.stringify(cfg.extra ?? {})), JSON.stringify(cfg.extra));
+  const iz = izinFarki(cfg);
+  ol('2c K-14: REQUEST_INSTALL_PACKAGES izinlerde yok, blockedPermissions\'ta var', iz.length === 0, iz.join('\n'));
 }
 
 /* ------------------------------------------------------------------ *
@@ -236,6 +257,17 @@ const GECICI = fs.mkdtempSync(path.join(os.tmpdir(), 'tablet-ortak-'));
 process.on('exit', () => fs.rmSync(GECICI, { recursive: true, force: true }));
 let sayac = 0;
 const git = (cwd, ...a) => spawnSync(GERCEK_GIT, ['-c', 'user.email=bekci@test', '-c', 'user.name=bekci', ...a], { cwd, env: TEMIZ_ENV, encoding: 'utf8' });
+
+/** Sahte anahtar dosyaları (rastgele bayt — gerçek anahtar ÜRETİLMEZ): {dizin: {storeFile, bayt}} + kök dosyaları. */
+function anahtarYaz(agac, anahtarlar = {}, kok = {}) {
+  for (const [dizin, { storeFile, bayt }] of Object.entries(anahtarlar)) {
+    const d = path.join(agac, 'mobil/keystore', dizin);
+    fs.mkdirSync(d, { recursive: true });
+    fs.writeFileSync(path.join(d, 'keystore.properties'), `storeFile=${storeFile}\nstorePassword=x\nkeyAlias=x\nkeyPassword=x\n`);
+    if (bayt && !storeFile.includes('/')) fs.writeFileSync(path.join(d, storeFile), bayt);
+  }
+  for (const [ad, bayt] of Object.entries(kok)) fs.writeFileSync(path.join(agac, 'mobil/keystore', ad), bayt);
+}
 
 function agacKur({ sert = SERT_KANAL, kayitDegistir = null, android = null } = {}) {
   sayac += 1;
@@ -262,13 +294,13 @@ function agacKur({ sert = SERT_KANAL, kayitDegistir = null, android = null } = {
 }
 
 const ORTAK_CFG = { name: kimlik.gorunenAd, android: { package: kimlik.androidPaket }, updates: { url: kimlik.guncellemeUrl } };
-function apk(agac, { paket = kimlik.androidPaket, url = kimlik.guncellemeUrl, bundle = 'hermes\u0000/api/auth/login\u0000son', sertPem = SERT_KANAL, appConfig = ORTAK_CFG } = {}) {
+function apk(agac, { paket = kimlik.androidPaket, url = kimlik.guncellemeUrl, bundle = 'hermes\u0000/api/auth/login\u0000son', sertPem = SERT_KANAL, appConfig = ORTAK_CFG, izinler = [] } = {}) {
   sayac += 1;
   const y = path.join(agac, `sahte-${sayac}.apk`);
   const meta = { 'expo.modules.updates.ENABLED': 'true', 'expo.modules.updates.EXPO_UPDATE_URL': url };
   if (sertPem) meta['expo.modules.updates.CODE_SIGNING_CERTIFICATE'] = sertPem;
   const g = [
-    { ad: 'AndroidManifest.xml', veri: axmlYaz({ paket, meta, surumAdi: '1.0.0', surumKodu: 1 }), yontem: 8 },
+    { ad: 'AndroidManifest.xml', veri: axmlYaz({ paket, meta, surumAdi: '1.0.0', surumKodu: 1, izinler }), yontem: 8 },
     { ad: 'assets/index.android.bundle', veri: Buffer.from(bundle, 'latin1'), yontem: 0 },
   ];
   if (appConfig) g.push({ ad: 'assets/app.config', veri: Buffer.from(JSON.stringify(appConfig)), yontem: 8 });
@@ -285,9 +317,9 @@ const dogrula = (agac, y, ortamEk) => buildApk(agac, [`--verify-only=${y}`], ort
 
 {
   const a = agacKur(); const r = dogrula(a, apk(a));
-  ol('3a ortak kimlikli APK → kimlik + bundle geçer, MÜHÜRDE durur (mühür ağaçta yok)',
+  ol('3a ortak kimlikli APK → kimlik + bundle geçer, İMZADA durur (test anahtarı ağaçta yok; eski mühre düşmez)',
     r.kod !== 0 && /RELEASE APK \(ORTAK PAKET\)/.test(r.cikti) && /✔ APK ortak paketin kimliğini taşıyor/.test(r.cikti) &&
-      /✔ Bundle'da ERP adresi yok/.test(r.cikti) && /RELEASE MÜHRÜ BULUNAMADI/.test(r.cikti), r.cikti.slice(-700));
+      /✔ Bundle'da ERP adresi yok/.test(r.cikti) && /TEST imza anahtarı .*YOK/.test(r.cikti) && /keystore\/deneme\/keystore\.properties/.test(r.cikti), r.cikti.slice(-700));
 }
 {
   const a = agacKur(); const y = apk(a, { bundle: 'hermes\u0000http://192.168.1.250:4000/api\u0000son' }); const r = dogrula(a, y);
@@ -330,6 +362,59 @@ for (const arg of ['--musteri=adnansahin', '--terfi-atla=x', '--yoklama-yok']) {
   ol(`3j ${arg.split('=')[0]} → EMEKLİ ESKİ KANAL ARGÜMANI (hiçbir şey yapılmadan)`,
     r.kod !== 0 && /EMEKLİ ESKİ KANAL ARGÜMANI/.test(r.cikti) && !/RELEASE APK/.test(r.cikti), r.cikti.slice(-400));
 }
+{
+  const a = agacKur(); const y = apk(a, { izinler: [YASAK_IZIN] }); const r = dogrula(a, y);
+  ol('3k K-14: REQUEST_INSTALL_PACKAGES izinli APK → DUR (kimlik kapısı)', r.kod !== 0 && /REQUEST_INSTALL_PACKAGES izni var/.test(r.cikti) && /KİMLİĞİNİ TAŞIMIYOR/.test(r.cikti), r.cikti.slice(-600));
+}
+{
+  const a = agacKur(); const r = buildApk(a, ['--aab']);
+  ol('3l K-14: --aab yükleme anahtarı yok → android/ denetiminden ÖNCE DUR + yer tutucu yol + keytool (anahtar üretmez)',
+    r.kod !== 0 && /RELEASE AAB \(ORTAK PAKET\)/.test(r.cikti) && /Google Play YÜKLEME anahtarı.*YOK/.test(r.cikti) &&
+      /keystore\/play-yukleme\/keystore\.properties/.test(r.cikti) && /keytool -genkeypair/.test(r.cikti) && !/android\/ native projesi yok/.test(r.cikti) &&
+      !fs.existsSync(path.join(a, 'mobil/keystore/play-yukleme')), r.cikti.slice(-700));
+  const b = agacKur(); const r2 = buildApk(b, []);
+  ol('3m K-14: build:apk test anahtarı yok → android/ denetiminden ÖNCE DUR + keystore/deneme keytool komutu',
+    r2.kod !== 0 && /TEST imza anahtarı.*YOK/.test(r2.cikti) && /keytool -genkeypair[^\n]*keystore\/deneme\//.test(r2.cikti) && !/android\/ native projesi yok/.test(r2.cikti), r2.cikti.slice(-700));
+}
+{
+  const eski = crypto.randomBytes(64);
+  const a = agacKur(); anahtarYaz(a, { 'play-yukleme': { storeFile: '../tekserp-release.keystore' } }, { 'tekserp-release.keystore': eski });
+  const r = buildApk(a, ['--aab']);
+  ol('3n K-14: yükleme anahtarı keystore/ köküne (eski mühür) işaret ediyor → GEÇERSİZ', r.kod !== 0 && /YÜKLEME anahtarı.*GEÇERSİZ/.test(r.cikti) && /kendi dizininde değil/.test(r.cikti), r.cikti.slice(-500));
+  const b = agacKur(); anahtarYaz(b, { 'play-yukleme': { storeFile: 'y.keystore', bayt: eski } }, { 'tekserp-release.keystore': eski });
+  const r2 = buildApk(b, ['--aab']);
+  ol('3n2 K-14: yükleme anahtarı eski kanal mührünün bayt-kopyası → GEÇERSİZ', r2.kod !== 0 && /eski kanal mührü/.test(r2.cikti), r2.cikti.slice(-500));
+  const ayni = crypto.randomBytes(64);
+  const c = agacKur(); anahtarYaz(c, { 'play-yukleme': { storeFile: 'y.keystore', bayt: ayni }, deneme: { storeFile: 'd.keystore', bayt: ayni } });
+  const r3 = buildApk(c, ['--aab']);
+  ol('3n3 K-14: AAB test anahtarına düşmez (yükleme = deneme kopyası) → GEÇERSİZ', r3.kod !== 0 && /keystore\/play-yukleme anahtarı keystore\/deneme anahtarının KOPYASI/.test(r3.cikti), r3.cikti.slice(-500));
+  const r4 = buildApk(c, []);
+  ol('3n4 K-14: test APK da yükleme anahtarının kopyasıyla DUR', r4.kod !== 0 && /keystore\/deneme anahtarı keystore\/play-yukleme anahtarının KOPYASI/.test(r4.cikti), r4.cikti.slice(-500));
+}
+/** Sahte AAB: base/manifest protobuf yerine kimlik dizelerini taşıyan bayt dizisi (doğrulayıcı bayt araması yapar). */
+function aab(agac, { izinler = [], paket = kimlik.androidPaket } = {}) {
+  sayac += 1;
+  const y = path.join(agac, `sahte-${sayac}.aab`);
+  const man = Buffer.from(`\u0012${paket}\u0012android.permission.INTERNET\u0012${izinler.join('\u0012')}\u0012${kimlik.guncellemeUrl}\u0012${SERT_KANAL}\u0012`, 'utf8');
+  zipYaz(y, [
+    { ad: 'base/manifest/AndroidManifest.xml', veri: man, yontem: 8 },
+    { ad: 'base/assets/index.android.bundle', veri: Buffer.from('hermes\u0000/api/auth/login\u0000son', 'latin1'), yontem: 0 },
+    { ad: 'base/assets/app.config', veri: Buffer.from(JSON.stringify(ORTAK_CFG)), yontem: 8 },
+  ]);
+  return y;
+}
+{
+  const a = agacKur(); const r = buildApk(a, ['--aab', `--verify-only=${aab(a)}`]);
+  ol('3o K-14: ortak kimlikli AAB → kimlik geçer, İMZADA durur (yükleme anahtarı yok)',
+    r.kod !== 0 && /✔ AAB ortak paketin kimliğini taşıyor/.test(r.cikti) && /Google Play YÜKLEME anahtarı.*YOK/.test(r.cikti), r.cikti.slice(-700));
+  const y = aab(a, { izinler: [YASAK_IZIN] }); const r2 = buildApk(a, ['--aab', `--verify-only=${y}`]);
+  ol('3o2 K-14: REQUEST_INSTALL_PACKAGES izinli AAB → DUR, .DOGRULANMADI.aab', r2.kod !== 0 && /REQUEST_INSTALL_PACKAGES izni var/.test(r2.cikti) &&
+    fs.existsSync(y.replace(/\.aab$/, '.DOGRULANMADI.aab')), r2.cikti.slice(-600));
+  const r3 = buildApk(a, ['--aab', `--verify-only=${aab(a, { paket: 'com.teks.erp.mobil' })}`]);
+  ol('3o3 eski kanal paket adlı AAB → DUR', r3.kod !== 0 && /AAB ORTAK PAKETİN KİMLİĞİNİ TAŞIMIYOR/.test(r3.cikti), r3.cikti.slice(-500));
+  const r4 = buildApk(a, [`--verify-only=${aab(a)}`]);
+  ol('3o4 AAB --aab olmadan doğrulanmaz (tür uyuşmazlığı) → DUR', r4.kod !== 0 && /Paket türü komutla uyuşmuyor/.test(r4.cikti), r4.cikti.slice(-400));
+}
 const AJ = JSON.parse(fs.readFileSync(path.join(KOK, 'mobil/app.json'), 'utf8')).expo;
 const androidYaz = ({ url = kimlik.guncellemeUrl, paket = kimlik.androidPaket, ad = kimlik.gorunenAd } = {}) => (dir) => {
   const yaz = (rel, s) => { fs.mkdirSync(path.dirname(path.join(dir, rel)), { recursive: true }); fs.writeFileSync(path.join(dir, rel), s); };
@@ -355,7 +440,7 @@ console.log('\n§4 — kablolama: commit kancası + CI bu bekçiyi koşturur');
   const kanca = fs.readFileSync(path.join(KOK, 'scripts/hooks/pre-commit.mjs'), 'utf8');
   const ci = fs.readFileSync(path.join(KOK, '.github/workflows/ci.yml'), 'utf8');
   ol('4a commit kancası bekçiyi koşturur; tetik kimliği üreten/okunan dosyaları kapsar',
-    /test_tablet_ortak_paket\.mjs/.test(kanca) && ['ortak-kimlik.cjs', 'build-apk.mjs', 'app.config.js', 'app.json', 'deploy/dagitim.json', 'mobil/scripts/', 'scripts/lib/'].every((x) => kanca.includes(x)));
+    /test_tablet_ortak_paket\.mjs/.test(kanca) && ['ortak-kimlik.cjs', 'build-apk.mjs', 'app.config.js', 'app.json', 'deploy/dagitim.json', 'mobil/scripts/', 'scripts/lib/', 'mobil/plugins/'].every((x) => kanca.includes(x)));
   ol('4b CI bekçiyi iki kipte (--sonda dahil) koşturur', /test_tablet_ortak_paket\.mjs && node scripts\/test_tablet_ortak_paket\.mjs --sonda/.test(ci));
 }
 

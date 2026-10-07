@@ -177,8 +177,8 @@ export function parmakIziHukmu({ onceki, simdiki, runtimeVersion, kabul = false 
   const nativeDegisti = onceki.parmakIzi !== simdiki;
   const rvDegisti = onceki.runtimeVersion !== runtimeVersion;
   if (nativeDegisti && !rvDegisti && !kabul) {
-    return { sonuc: 'ihlal', satirlar: ['NATIVE DEĞİŞTİ ama runtimeVersion AYNI — bu paket sahadaki tabletleri açılışta çökertir', 'runtimeVersion değeri deploy/dagitim.json urun.tablet.runtimeVersion\'dır: artır ve yeni APK derle'] };
+    return { sonuc: 'ihlal', satirlar: ['NATIVE DEĞİŞTİ ama runtimeVersion AYNI — bu paket sahadaki tabletleri açılışta çökertir', 'runtimeVersion artır (deploy/dagitim.json urun.tablet.runtimeVersion) → AAB derle (cd mobil && npm run build:aab) → Play\'e yükle (Play Console, gizli yayın)'] };
   }
-  if (rvDegisti) return { sonuc: 'rv-degisti', satirlar: [`runtimeVersion ${onceki.runtimeVersion} → ${runtimeVersion}: paket yalnız yeni APK kurulu tabletlere gider`] };
+  if (rvDegisti) return { sonuc: 'rv-degisti', satirlar: [`runtimeVersion ${onceki.runtimeVersion} → ${runtimeVersion}: paket yalnız Play'den yeni sürümü kurmuş tabletlere gider`] };
   return { sonuc: 'ayni', satirlar: ['native parmak izi değişmedi'] };
 }

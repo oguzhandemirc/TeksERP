@@ -108,8 +108,10 @@ const UPD = 'expo.modules.updates.';
 /**
  * APK dosyasının kimliği.
  * @returns {{ paket: string, guncellemeAdresi: string|null, sertifikaPem: string|null,
- *             guncellemeAcik: string|null, appConfig: object|null, surumAdi: string|null, surumKodu: number|null }}
+ *             guncellemeAcik: string|null, appConfig: object|null, surumAdi: string|null, surumKodu: number|null,
+ *             izinler: string[] }}
  * `surumAdi`/`surumKodu` `<manifest android:versionName/versionCode>`dan — yayıncı sürümü ARGÜMANDAN değil buradan alır.
+ * `izinler` birleşik manifestteki `<uses-permission android:name>` değerleri (Play'in yasakladığı izin denetimi).
  */
 export function apkKimligi(apkYolu) {
   let r;
@@ -144,5 +146,6 @@ export function apkKimligi(apkYolu) {
     appConfig,
     surumAdi: typeof kok.oznitelik.versionName === 'string' ? kok.oznitelik.versionName : null,
     surumKodu: /^\d+$/.test(String(kok.oznitelik.versionCode ?? '')) ? Number(kok.oznitelik.versionCode) : null,
+    izinler: ogeler.filter((e) => e.ad === 'uses-permission' && e.oznitelik.name).map((e) => e.oznitelik.name),
   };
 }

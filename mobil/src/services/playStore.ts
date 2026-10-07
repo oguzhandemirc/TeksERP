@@ -3,7 +3,7 @@
 // =============================================================================
 // Ortak tablet yalnız Play gizli yayınıyla kurulur ve native/büyük güncellemesi Play'den gelir;
 // uygulama kendi APK'sını indirip kurmaz (Play politikası). Bu modül yalnız Play'deki sayfayı açar.
-// Paket adı koda gömülmez: derlemede ortak kimlikten (`deploy/dagitim.json` → `ortak-kimlik.cjs`)
+// Paket adı koda gömülmez: derlemede ortak kimlikten (dağıtım kaydı → `ortak-kimlik.cjs`)
 // `expoConfig.android.package`a yazılan değer okunur.
 // =============================================================================
 

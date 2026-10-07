@@ -4,7 +4,7 @@
 // =============================================================================
 //   §1 ortak OTA paketi denetimi (negatif sondalı) · §2 grup manifesti (bayt-eşit paket, grup adresleri, imza)
 //   §3 imza anahtarı fail-closed (kuru: sahte) · §4 native parmak izi kararı · §5 tablet artefakt yolu + terfi özeti
-//   §6 CLI negatif yollar (ağ YOK) · §7 betik kaynağı: kapılar ve sıra (negatif sondalı)
+//   §6 CLI negatif yollar (ağ YOK; K-14 `--apk` reddi dahil) · §7 betik kaynağı: kapılar, sıra ve APK yolu YOK (negatif sondalı)
 // ÇIKIŞ: 0 yeşil · 1 KIRMIZI.   node scripts/test_grup_yayin_tablet.mjs
 // =============================================================================
 import { execFileSync, spawnSync } from 'node:child_process';
@@ -151,6 +151,10 @@ c('tanınmayan seçenek RED', ['--grup=test', '--bilinmez', `--paket=${iyi}`], /
 c('--kuru ile --dogrula birlikte RED', ['--grup=test', '--kuru', '--dogrula'], /birlikte verilemez/);
 c('ortak olmayan paket (manifest içeriyor) RED', ['--grup=test', '--kuru', `--paket=${sahtePaket('m2', { manifestVar: true })}`], /ORTAK PAKET DEĞİL/);
 c('ERP adresi gömülü paket RED', ['--grup=test', '--kuru', `--paket=${sahtePaket('e2', { bundleMetni: 'http://10.0.0.5:4000/api' })}`], /ORTAK PAKET DEĞİL/);
+// K-14: ortak tablet APK'sı yalnız Google Play'den — --apk her kipte (kuru dahil) hiçbir şey yapılmadan RED.
+for (const ek of [['--grup=test', '--apk=/yok/app.apk'], ['--grup=test', '--kuru', '--apk=x.apk'], ['--grup=oncu', `--paket=${iyi}`, '--apk=x.apk'], ['--apk']]) {
+  c(`K-14 ${ek.join(' ')} → Play reddi`, ek, /SİTEYE YAYINLANMAZ[\s\S]*build:aab/);
+}
 
 // §7 betik kaynağı
 function betikIhlalleri(metin) {
@@ -158,16 +162,18 @@ function betikIhlalleri(metin) {
   const f = [];
   const yer = (d) => kod.search(d);
   const ilkYazan = yer(/uzakBetik\('mkdir/);
-  for (const [ad, d] of [['profil matrisi kapısı', /profilMatrisiKapisi\(\);/], ['terfi kapısı', /terfiKapisi\(surum, \{ yerel/], ['derleme bağı', /(?<!function )derlemeBagi\(\{/], ['sürüm notu kapısı', /surumNotuKapisi\(surum\)/], ['temiz ağaç', /temizAgacKapisi\(\)/], ['imza (manifest/künye)', /grupManifestiUret\(|grupApkKunyesiImzala\(/]]) {
+  for (const [ad, d] of [['profil matrisi kapısı', /profilMatrisiKapisi\(\);/], ['terfi kapısı', /terfiKapisi\(surum, \{ yerel/], ['derleme bağı', /(?<!function )derlemeBagi\(\{/], ['sürüm notu kapısı', /surumNotuKapisi\(surum\)/], ['temiz ağaç', /temizAgacKapisi\(\)/], ['imza (manifest)', /grupManifestiUret\(/]]) {
     const i = yer(d);
     if (i < 0) f.push(`${ad} çağrısı YOK`);
-    else if (ilkYazan >= 0 && ad !== 'imza (manifest/künye)' && i > ilkYazan && ad !== 'x') f.push(`${ad} ilk yazan ağ işinden SONRA`);
+    else if (ilkYazan >= 0 && ad !== 'imza (manifest)' && i > ilkYazan) f.push(`${ad} ilk yazan ağ işinden SONRA`);
   }
   if (!/profil-matrisi-kapisi\.mjs/.test(kod)) f.push('profil matrisi kapısı CLI çağrısı YOK');
   const paketScp = kod.search(/scp\(icerik/);
   const manifestScp = kod.search(/scp\(\[manifestYol/);
   if (paketScp < 0 || manifestScp < 0 || paketScp > manifestScp) f.push('manifest paketten ÖNCE yükleniyor (EN SON olmalı)');
-  if (!/scp\(\[kunyeYol\][\s\S]*yayını AÇAN/.test(kod) || kod.search(/'-s', apkYolu/) > kod.search(/scp\(\[kunyeYol\]/)) f.push('APK künyesi APK\'dan ÖNCE yükleniyor (EN SON olmalı)');
+  // K-14: APK yolu yok — reddi var, APK yükleyen/künye imzalayan kod yok.
+  if (!/a === '--apk' \|\| a\.startsWith\('--apk='\)\) dur\(/.test(kod)) f.push('--apk reddi YOK (K-14)');
+  if (/apkYayinla|grupApkKunyesi|apk-kunye\.mjs|panel-imza\.ts|apk\/surum\.json|apk-imzala/.test(kod)) f.push('APK yayın yolu GERİ GELDİ (K-14)');
   if (!/yayinEzmeleri\(/.test(kod)) f.push('hedef ezme reddi yok');
   if (/kanalCoz|yayinHedefi\(/.test(kod)) f.push('hedef ESKİ kanal kaydından çözülüyor');
   if (/etikiliyazilim\.com|\/opt\/stack/.test(kod)) f.push('yayın/VDS kökü LİTERAL');
@@ -188,6 +194,8 @@ function betikIhlalleri(metin) {
   mut('eski kanal kaydı geri geldi', (m) => `${m}\nkanalCoz('x');\n`, /ESKİ kanal kaydından/);
   mut('VDS kökü literal gömüldü', (m) => `${m}\nconst V = '/opt/stack/apps/x';\n`, /LİTERAL/);
   mut('çıplak fetch', (m) => `${m}\nawait fetch('https://x');\n`, /belirteçsiz okuma/);
+  mut('--apk reddi kaldırıldı', (m) => m.replace("if (a === '--apk' || a.startsWith('--apk=')) dur(", 'if (false) dur('), /--apk reddi YOK/);
+  mut('APK yükleme yolu geri eklendi', (m) => `${m}\nasync function apkYayinla(y) { scp([y], 'apk/surum.json', 'x'); }\n`, /APK yayın yolu GERİ GELDİ/);
 }
 
 console.log(`\n=== Sonuç: ${gecti} geçti, ${kaldi.length} başarısız ===`);
