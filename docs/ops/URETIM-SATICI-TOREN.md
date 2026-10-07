@@ -160,12 +160,13 @@ Hepsi açık bilgi (künyeden ve çapa betiğinin kuru çıktısından; sır, pa
 ## 8. Dönem töreni — yılda bir (lisans v2, G4 · K4; 2026-10-06'dan beri yıllık)
 
 > **Durum:** araç (`uretim-toren.mjs donem`) + VDS komutları (`anahtar.js kuyruk-disa-aktar · donem-ice-aktar · emekliye-ayir`) + bekçiler (`test_uretim_toren` §6 · `test_ara_imzaci` · `test_iptal_belgesi`) hazır (L2-3). **İlk üretim töreni** yalnız kullanıcının "uygula" cümlesiyle. Hazırlık satıcısı emekli olduğu için prova hazırlıkta DEĞİL, Mac'te sahte anahtarlarla yapıldı (2026-10-05, adım 1–9 + köksüz HAK imzası yeşil; kayıt bu bölümün sonunda). Mac'teki hazırlık dizini düz yapıdadır (`anahtarlar/` yok), `--dizin=~/.tekserp/satici-hazirlik` ile tören koşmaz.
+> **Durum (2026-10-07):** ilk `donem --istemci` töreni YAPILDI (kullanıcı, Mac; paket `donemler/20261007T181311Z`) ve VDS'e kuruldu: satıcı `2831396adb12`e güncellendi (4 göç), adım 3 · 5 · 6 (`VARDI`) · 7 · 8 · 9 uygulandı; adım 4 atlandı (Worker yayında değil — satır `deploy/guncelleme-sunucusu/worker/indir-ayar.json`da). Yürürlükte `alt-2026-3 · ara-2026-2 · ind-2026-3`; `alt-2026-1 · alt-2026-2 · ara-2026-1 · ind-2026 · ind-2026-2` EMEKLİ. Paketin `istemci/` açık sertifikaları VDS'e KONMADI: satıcıda okuyucusu yok (I8 borcu) ve anahtar birimine konan `*.sertifika.json` emekli künyesi sanılıp uyarı üretir.
 
 **Tören öncesi değişkenler (Mac kabuğu):** `v() { ssh -p 2222 oguzhan@80.253.255.188 "$@"; }` · `K=/opt/stack/apps/tekserp-satici-uretim` · `IMAJ=$(v "grep -E '^SATICI_IMAJ=' $K/.env" | cut -d= -f2- | tr -d "\"'")` (satıcı imajı, adım 8) · `Y=$(v "grep -E '^SATICI_YEDEK_IMAJ=' $K/.env" | cut -d= -f2- | tr -d "\"'")` (yedek imajı, adım 5) — ikisi de boş çıkarsa DUR. Tören ortak ağaçta değil, `origin/main`deki AYRI temiz ağaçta koşar (dal commit'i HEAD'i origin/main dışına iter → tören RED): `git fetch && git worktree add --detach ../Teks-Erp-wt/donem-uretim origin/main` → orada `(cd satici/sunucu && npm ci) && (cd Teks-Erp && npm ci)`.
 
 **Ne zaman:** YILDA BİR. Tören günü = en erken biten sertifikanın (ALT · ara imzacı · İNDİRME) bitişinden **30 gün** önce; portal "Kılavuz" sayfası tarihi ve kalan günü anahtar künyesinden canlı gösterir, tören ekranı da sonunda `SONRAKİ dönem töreni <tarih>` basar. Uyarı: portal/Telegram `ANAHTAR_SURESI_BITIYOR` 30 gün kala (tören günü), 15 · 7 · 1 gün kala tekrar. Atlanırsa sertifika bitince yeni kira, HAK ve indirme belirteci basılamaz; fabrikalar ödenmiş tarihe (P) dek etkilenmez.
 
-**Bugünkü anahtarlar (geçiş):** 2026-10-05 töreninin `alt-2026-2 · ara-2026-1 · ind-2026-2`si 120 günlüktür (bitiş 2027-02-02) ve DEĞİŞMEZ — sonraki tören 2027-01-03 civarıdır (bitiş − 30) ve 395 günlükleri çıkarır; yıllık düzen ondan sonra başlar. Erken yapmak zararsızdır (eski anahtarlar örtüşmede kalır, sonra emekliye ayrılır).
+**Bugünkü anahtarlar:** 2026-10-07 töreninin `alt-2026-3 · ara-2026-2 · ind-2026-3`ü 395 günlüktür (bitiş 2027-11-06) — sonraki tören 2027-10-07 civarıdır (bitiş − 30). Erken yapmak zararsızdır (eski anahtarlar örtüşmede kalır, sonra emekliye ayrılır).
 
 **PAKET anahtarı:** yıllık yenilemesi bu törene girecek (iş listesi 3.9 — kök altında sertifikalı paket anahtarı); 3.9 inene dek tören PAKET üretmez, ekranın son adımı bunu hatırlatır ve PAKET §6'daki satırla ayrı yenilenir.
 
@@ -194,16 +195,16 @@ Hepsi açık bilgi (künyeden ve çapa betiğinin kuru çıktısından; sır, pa
 
 ## 9. Dönem töreni — ISTEMCI (panel/tablet güncelleme imzası) kısmı: `donem --istemci`
 
-> **Durum (2026-10-07):** araç hazır (`36d0c9d15`), gerçek tören henüz YAPILMADI — kullanıcıyla, Mac'te, 1.2 sonrası (tasarım: [`ISTEMCI-ANAHTARI-KOK-ALTINDA.md`](../design/ISTEMCI-ANAHTARI-KOK-ALTINDA.md) §6; iş I9). Bu bölüm §8'in yerine geçmez: `--istemci` verilirse §8'in ALT/ara/İNDİRME işi AYNI komutta yapılır, üstüne istemci imza anahtarları eklenir.
+> **Durum (2026-10-07):** ilk gerçek tören YAPILDI (kullanıcı, Mac; `ist-2026-1` birincil · `ist-2026-2` yedek, yayında sürüm yoktu) ve VDS paketi kuruldu (§8 Durum). Araç `36d0c9d15` (tasarım: [`ISTEMCI-ANAHTARI-KOK-ALTINDA.md`](../design/ISTEMCI-ANAHTARI-KOK-ALTINDA.md) §6; iş I9). Bu bölüm §8'in yerine geçmez: `--istemci` verilirse §8'in ALT/ara/İNDİRME işi AYNI komutta yapılır, üstüne istemci imza anahtarları eklenir.
 
-**Ne üretir (sade dille):** panel ve tablet güncellemelerini imzalayan iki anahtar — **birincil** (Mac'te durur, günlük imza) ve **yedek** (yalnız USB'de; birincil kaybolursa onunla devam edilir). Ayrıca tablet güncellemesinin (OTA) iki imza sertifikası. Sonunda sahada yayında olan sürümlerin imzası yeni anahtarla yenilenir (paketin kendisi değişmez, kimse yeniden kurmaz).
+**Ne üretir (sade dille):** panel ve tablet güncellemelerini imzalayan iki anahtar — **birincil** (Mac'te durur, günlük imza) ve **yedek** (yalnız yedek biriminde — Drive'a yüklenen disk görüntüsü; birincil kaybolursa onunla devam edilir). Ayrıca tablet güncellemesinin (OTA) iki imza sertifikası. Sonunda sahada yayında olan sürümlerin imzası yeni anahtarla yenilenir (paketin kendisi değişmez, kimse yeniden kurmaz).
 
-**Dört parola (hepsi birbirinden FARKLI, en az 12 karakter):** kök (kâğıttaki) · ara imzacı · istemci (birincil) · yedek. **Yedek parolası yalnız kâğıda yazılır**; USB'ye, Mac'e, parola yöneticisine konmaz.
+**Dört parola (hepsi birbirinden FARKLI, en az 12 karakter):** kök (kâğıttaki) · ara imzacı · istemci (birincil) · yedek. **Yedek parolası parola yöneticisinde durur**; disk görüntüsüne ve Mac'e dosya olarak konmaz (kullanıcı kararı 2026-10-07: USB yok — yedek disk görüntüsünde, görüntü Drive'da).
 
 ### 9.1 Hazırlık
 
 1. §1.3'teki gibi temiz ağaç (`origin/main`, iki projede `npm ci`) — tören bunu kendisi ölçer.
-2. **Boş/biçimlenmiş bir USB** tak (örnek `/Volumes/TOREN-USB`). Tören USB'nin Mac'in kendi diskinden AYRI bir birim olduğunu ölçer; aynı diskse durur.
+2. **Yedek birimi:** boş bir disk görüntüsü oluştur ve bağla (örnek `/Volumes/TOREN-YEDEK`; USB yok — kullanıcı kararı 2026-10-07). Tören birimin Mac'in kendi diskinden AYRI bir birim olduğunu ölçer; aynı diskse durur.
 3. **Parola dosyalarını yaz** (isteğe bağlı: dosya vermezsen her parola terminalde gizli sorulur — bu daha kolaydır, dosya yalnız uzun/tekrarlı işte işe yarar). Dosyalar Mac'te GEÇİCİ dizinde durur, işin sonunda silinir:
 
    ```bash
@@ -214,7 +215,7 @@ Hepsi açık bilgi (künyeden ve çapa betiğinin kuru çıktısından; sır, pa
    ls -l ~/toren-gecici        # hepsi -rw------- (0600) olmalı; değilse: chmod 600 ~/toren-gecici/*.txt
    ```
 
-   Kural: dosya 0600, sana ait, düzenli dosya, 4 KiB'tan küçük olmalı — değilse araç parolayı OKUMADAN reddeder. **`yedek.txt` USB'nin içinde OLMAMALI** (tören reddeder).
+   Kural: dosya 0600, sana ait, düzenli dosya, 4 KiB'tan küçük olmalı — değilse araç parolayı OKUMADAN reddeder. **`yedek.txt` yedek biriminin içinde OLMAMALI** (tören reddeder).
 4. **Yayındaki kopyalar:** sahada şu an yayında olan panel/tablet sürümlerinin imzasını yenilemek için yayındaki dosyalar indirilir: `<grup>/panel/latest.yml` ve `<grup>/ota/<runtimeVersion>/manifest` düzeninde bir dizin (`<grup>` = test · oncu · genel). Yayında HİÇBİR şey yoksa dizin yerine `--yayinda-yok` verilir.
 
 ### 9.2 İlk kez: OTA kökü (yılda bir DEĞİL, yalnız bir kez)
@@ -230,24 +231,24 @@ node mobil/scripts/ota-zinciri.mjs kok-uret --dizin=$HOME/.tekserp/satici-uretim
 ### 9.3 Töreni koş
 
 ```bash
-node deploy/satici/uretim-toren.mjs donem --istemci --yedek-usb=/Volumes/<USB> --yayindakiler=<indirilen dizin> \
+node deploy/satici/uretim-toren.mjs donem --istemci --yedek-usb=/Volumes/<yedek birimi> --yayindakiler=<indirilen dizin> \
   --kok-parola-dosyasi=$HOME/toren-gecici/kok.txt --ara-parola-dosyasi=$HOME/toren-gecici/ara.txt \
   --istemci-parola-dosyasi=$HOME/toren-gecici/istemci.txt --yedek-parola-dosyasi=$HOME/toren-gecici/yedek.txt
 ```
 
-(`--yayindakiler=<dizin>` yerine `--yayinda-yok`; parola dosyası vermediğin parola terminalde sorulur. Kuyruk HAK'ları varsa §8'deki gibi `--kuyruk=…` da eklenir.) Beklenen: adımlar 8–11 (birincil anahtar Mac'te · yedek anahtar DOĞRUDAN USB'ye · yayındakilerin yeniden imzası · yedeğin açılış ölçümü ve "Mac'te yedek izi yok" taraması) ve 12 (VDS paketi), sonunda `✅`. **Hata olursa hedefe hiçbir şey yazılmaz** (§8'deki gibi yarım dizin silinir); ileti `yedek parola dosyası USB'de` / `USB Mac diskiyle aynı` / `parola dosyası 0600 değil` diyorsa dediğini düzelt ve komutu yeniden koş.
+(`--yayindakiler=<dizin>` yerine `--yayinda-yok`; parola dosyası vermediğin parola terminalde sorulur. Kuyruk HAK'ları varsa §8'deki gibi `--kuyruk=…` da eklenir.) Beklenen: adımlar 8–11 (birincil anahtar Mac'te · yedek anahtar DOĞRUDAN yedek birimine · yayındakilerin yeniden imzası · yedeğin açılış ölçümü ve "Mac'te yedek izi yok" taraması) ve 12 (VDS paketi), sonunda `✅`. **Hata olursa hedefe hiçbir şey yazılmaz** (§8'deki gibi yarım dizin silinir); ileti `yedek parola dosyası USB'de` / `USB Mac diskiyle aynı` (araç yedek birimine USB der) / `parola dosyası 0600 değil` diyorsa dediğini düzelt ve komutu yeniden koş.
 
-Çıktı: Mac'te `~/.tekserp/satici-uretim/donemler/<damga>/` (`vds-paketi/istemci/` yalnız AÇIK sertifikalar + iki yaprak PEM; `DONEM-KUNYE.json` `istemci` bölümü; `istemci/YEDEK-IZI.json` yalnız Mac'te kalır, VDS'e gitmez). USB'de yeni yedek dizini + `YEDEK-KUNYE.json`; önceki yılın yedek dizinleri USB'den silinir. VDS'e aktarma §8 adım 3–9'daki gibidir (paketin `istemci/` klasörü de gider).
+Çıktı: Mac'te `~/.tekserp/satici-uretim/donemler/<damga>/` (`vds-paketi/istemci/` yalnız AÇIK sertifikalar + iki yaprak PEM; `DONEM-KUNYE.json` `istemci` bölümü; `istemci/YEDEK-IZI.json` yalnız Mac'te kalır, VDS'e gitmez). Yedek biriminde yeni yedek dizini + `YEDEK-KUNYE.json`; önceki yılın yedek dizinleri oradan silinir. VDS'e aktarma §8 adım 3–9'daki gibidir (paketin `istemci/` klasörü de gider).
 
-### 9.4 Doğrula ve USB yedeğini sına
+### 9.4 Doğrula ve yedek birimini sına
 
 ```bash
 node deploy/satici/uretim-toren.mjs dogrula
-node deploy/satici/uretim-toren.mjs istemci-yedek-dogrula --yedek-usb=/Volumes/<USB> --yedek-parola-dosyasi=$HOME/toren-gecici/yedek.txt
+node deploy/satici/uretim-toren.mjs istemci-yedek-dogrula --yedek-usb=/Volumes/<yedek birimi> --yedek-parola-dosyasi=$HOME/toren-gecici/yedek.txt
 ```
 
-- `dogrula`: izinler + özetler tutuyor mu; ayrıca **Mac'te yedek anahtarın izi OLMAMALI** (varsa kırmızı — yedek yanlışlıkla Mac'e düşmüş demektir; o kopyayı sil, USB'den yenisini üret).
-- `istemci-yedek-dogrula`: USB'deki yedek anahtar ve yaprak, yedek parolasıyla AÇILIYOR ve açık anahtarları künyedekiyle eşleşiyor mu. **Yılda bir (tören arasında da) tekrarla** — açılamayan yedek, yedek değildir. Parola dosyası vermezsen yedek parolası (kâğıttan) terminalde sorulur.
+- `dogrula`: izinler + özetler tutuyor mu; ayrıca **Mac'te yedek anahtarın izi OLMAMALI** (varsa kırmızı — yedek yanlışlıkla Mac'e düşmüş demektir; o kopyayı sil, yedek biriminden yenisini üret).
+- `istemci-yedek-dogrula`: yedek birimindeki (Drive'daki görüntü bağlanır) yedek anahtar ve yaprak, yedek parolasıyla AÇILIYOR ve açık anahtarları künyedekiyle eşleşiyor mu. **Yılda bir (tören arasında da) tekrarla** — açılamayan yedek, yedek değildir. Parola dosyası vermezsen yedek parolası (parola yöneticisinden) terminalde sorulur.
 
 ### 9.5 Bitiş — parola dosyalarını SİL
 
@@ -256,7 +257,7 @@ rm -P ~/toren-gecici/*.txt && rmdir ~/toren-gecici
 ls ~/toren-gecici 2>&1        # "No such file or directory" görmelisin
 ```
 
-`rm -P` dosyayı silmeden önce üstüne yazar (düz `rm`'den güçlüdür). Sonra USB'yi çıkar ve kâğıttan AYRI bir yere kaldır (§2: biri ele geçerse öteki tek başına işe yaramasın). Yedek parolası yalnız kâğıtta kalır.
+`rm -P` dosyayı silmeden önce üstüne yazar (düz `rm`'den güçlüdür). Sonra disk görüntüsünü çıkar ve Drive'a yükle; yedek parolası parola yöneticisinde kalır, görüntüyle aynı yere konmaz (§2: biri ele geçerse öteki tek başına işe yaramasın).
 
 ### 9.6 Sorun giderme
 
@@ -264,7 +265,7 @@ ls ~/toren-gecici 2>&1        # "No such file or directory" görmelisin
 |---|---|
 | `Tanınmayan argüman` | yazım hatası; parola değeri iletide basılmaz, bayrak adını denetle |
 | `bitişe < 30 gün` (imza reddi) | sertifika dönemi bitmek üzere — yeni tören gerekir (30 gün kapısı; atlatılmaz) |
-| `istemci-yedek-dogrula` RED | USB doğru mu, yedek parolası doğru mu; hâlâ açılmıyorsa yedek GEÇERSİZ sayılır → yeni tören (birincil duruyorsa yayın sürer) |
+| `istemci-yedek-dogrula` RED | doğru disk görüntüsü bağlı mı, yedek parolası doğru mu; hâlâ açılmıyorsa yedek GEÇERSİZ sayılır → yeni tören (birincil duruyorsa yayın sürer) |
 | Birincil kayboldu/bozuldu | yayın yedekle sürer (tasarım §3.6); yeni çift sonraki törende. **Çalınma:** `ist-*` iptali henüz tören adımı değil (kod borcu, tasarım §7 I8) — yöneticiye bildir |
 
 ## Ek A — yönetici için teknik özet
