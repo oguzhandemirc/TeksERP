@@ -21,6 +21,8 @@ const appConfig = require(path.join(KOK, 'app.config.js'));
 const { ortakKimlik } = require(path.join(KOK, 'scripts/lib/ortak-kimlik.cjs'));
 const { IMZA_ANAHTARLARI, gorevAnahtarTuru } = require(path.join(KOK, 'scripts/lib/imza-anahtari.cjs'));
 const { gradleImzala } = require(path.join(KOK, 'plugins/withReleaseKeystore.js'));
+const { YON_OZELLIGI, yonOzelligiYaz } = require(path.join(KOK, 'plugins/withBuyukEkranYonu.js'));
+const buyukEkran = require(path.join(KOK, 'scripts/lib/buyuk-ekran.cjs'));
 /* eslint-enable @typescript-eslint/no-require-imports */
 
 function degerlendir() {
@@ -193,5 +195,39 @@ describe('K-14 — imza anahtarı seçimi (AAB → Play yükleme, APK → test; 
 
   it('eklenti app.json plugins listesinde (yoksa release deneme mührüyle imzalanırdı)', () => {
     expect(appJson.plugins).toContain('./plugins/withReleaseKeystore');
+  });
+});
+
+describe('API 36 — Play hedef SDK ve büyük ekran yön kilidi (Play reddi 2026-10-08)', () => {
+  const buildProps = (appJson.plugins as unknown[]).find(
+    (p): p is [string, { android: Record<string, unknown> }] => Array.isArray(p) && p[0] === 'expo-build-properties',
+  );
+  const android = buildProps?.[1].android ?? {};
+
+  it('hedef SDK ≥ 36 ve derleme SDK hedefin altında değil', () => {
+    expect(Number(android.targetSdkVersion)).toBeGreaterThanOrEqual(36);
+    expect(Number(android.compileSdkVersion)).toBeGreaterThanOrEqual(Number(android.targetSdkVersion));
+  });
+
+  it('yön kilidi eklentisi app.json plugins listesinde (yoksa tablette yatay kilit Android 16+ da yok sayılır)', () => {
+    expect(appJson.plugins).toContain('./plugins/withBuyukEkranYonu');
+    expect(YON_OZELLIGI).toBe('android.window.PROPERTY_COMPAT_ALLOW_RESTRICTED_RESIZABILITY');
+  });
+
+  it('eklenti <application> öğesine özelliği true yazar, ikinci koşumda kopya eklemez', () => {
+    const manifest = { manifest: { application: [{ $: { 'android:name': '.MainApplication' } }] } };
+    yonOzelligiYaz(manifest);
+    yonOzelligiYaz(manifest);
+    const ozellikler = (manifest.manifest.application[0] as { property?: { $: Record<string, string> }[] }).property ?? [];
+    expect(ozellikler.filter((o) => o.$['android:name'] === YON_OZELLIGI)).toEqual([
+      { $: { 'android:name': YON_OZELLIGI, 'android:value': 'true' } },
+    ]);
+  });
+
+  it('AAB doğrulaması hedef SDK ve yön özelliğini paketin kendisinden ölçer', () => {
+    const betik = fs.readFileSync(path.join(KOK, 'scripts/build-apk.mjs'), 'utf8');
+    expect(betik).toMatch(/if \(ogeler\) sorunlar\.push\(\.\.\.buyukEkranSorunlari\(ogeler\)\)/);
+    expect(betik).toMatch(/import \{ PLAY_EN_DUSUK_HEDEF_SDK, YON_OZELLIGI \} from '\.\/lib\/buyuk-ekran\.cjs'/);
+    expect(buyukEkran.PLAY_EN_DUSUK_HEDEF_SDK).toBe(36);
   });
 });

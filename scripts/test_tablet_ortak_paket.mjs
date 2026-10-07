@@ -35,6 +35,7 @@ import { KAYIT_REL, KOK, turet } from './lib/dagitim.mjs';
 const require = createRequire(import.meta.url);
 const ORTAK = require('../mobil/scripts/lib/ortak-kimlik.cjs');
 const Z = require('../mobil/scripts/lib/ota-zinciri.cjs');
+const BUYUK = require('../mobil/scripts/lib/buyuk-ekran.cjs');
 const SONDA = process.argv.includes('--sonda');
 const GERCEK_GIT = 'git';
 const TEMIZ_ENV = Object.fromEntries(Object.entries(process.env).filter(([k]) =>
@@ -412,21 +413,23 @@ const pbBool = (b) => pbAlan(7, Buffer.concat([pbVarint(8 * 8), pbVarint(b ? 1 :
 const ANDROID_NS = 'http://schemas.android.com/apk/res/android';
 const pbOz = (ad, deger, { ns = ANDROID_NS, bool = null } = {}) => pbAlan(4, Buffer.concat([...(ns ? [pbAlan(1, ns)] : []), pbAlan(2, ad), pbAlan(3, deger), ...(bool == null ? [] : [pbAlan(6, pbBool(bool))])]));
 const pbOge = (ad, ozler = [], cocuklar = []) => pbAlan(1, Buffer.concat([pbAlan(3, ad), ...ozler, ...cocuklar.map((c) => pbAlan(5, c))]));
-function protoManifest({ paket, izinler = [], meta = {} }) {
+function protoManifest({ paket, izinler = [], meta = {}, hedefSdk = '36', yonOzelligi = 'true' }) {
   const izin = ['android.permission.INTERNET', ...izinler].map((x) => pbOge('uses-permission', [pbOz('name', x)]));
   const metaOge = Object.entries(meta).map(([n, v]) => pbOge('meta-data', [pbOz('name', n),
     pbOz('value', v, { bool: v === 'true' || v === 'false' ? v === 'true' : null })]));
-  return pbOge('manifest', [pbOz('package', paket, { ns: null })], [...izin, pbOge('application', [], metaOge)]);
+  const sdk = pbOge('uses-sdk', [pbOz('minSdkVersion', '26'), pbOz('targetSdkVersion', hedefSdk)]);
+  const ozellik = yonOzelligi == null ? [] : [pbOge('property', [pbOz('name', BUYUK.YON_OZELLIGI), pbOz('value', yonOzelligi, { bool: yonOzelligi === 'true' })])];
+  return pbOge('manifest', [pbOz('package', paket, { ns: null })], [sdk, ...izin, pbOge('application', [], [...metaOge, ...ozellik])]);
 }
 /** Sahte AAB: base/manifest gerçek protobuf AndroidManifest (doğrulayıcı meta-data'yı öğe düzeyinde çözer). */
-function aab(agac, { izinler = [], paket = kimlik.androidPaket, zincir = 'true', sertPem = SERT_KANAL } = {}) {
+function aab(agac, { izinler = [], paket = kimlik.androidPaket, zincir = 'true', sertPem = SERT_KANAL, hedefSdk = '36', yonOzelligi = 'true' } = {}) {
   sayac += 1;
   const y = path.join(agac, `sahte-${sayac}.aab`);
   const meta = { 'expo.modules.updates.ENABLED': 'true', 'expo.modules.updates.EXPO_UPDATE_URL': kimlik.guncellemeUrl };
   if (sertPem) meta['expo.modules.updates.CODE_SIGNING_CERTIFICATE'] = sertPem;
   if (zincir != null) meta[Z.ZINCIR_META] = zincir;
   zipYaz(y, [
-    { ad: 'base/manifest/AndroidManifest.xml', veri: protoManifest({ paket, izinler, meta }), yontem: 8 },
+    { ad: 'base/manifest/AndroidManifest.xml', veri: protoManifest({ paket, izinler, meta, hedefSdk, yonOzelligi }), yontem: 8 },
     { ad: 'base/assets/index.android.bundle', veri: Buffer.from('hermes\u0000/api/auth/login\u0000son', 'latin1'), yontem: 0 },
     { ad: 'base/assets/app.config', veri: Buffer.from(JSON.stringify(ORTAK_CFG)), yontem: 8 },
   ]);
@@ -449,6 +452,12 @@ function aab(agac, { izinler = [], paket = kimlik.androidPaket, zincir = 'true',
   ol('3o6 K-2: zincir meta-data\'sı derlenmiş false AAB → DUR (bayt araması değil öğe çözümü)', r6.kod !== 0 && /CERTIFICATE_CHAIN "false"/.test(r6.cikti), r6.cikti.slice(-600));
   const r7 = buildApk(a, ['--aab', `--verify-only=${aab(a, { sertPem: SERT_YABANCI })}`]);
   ol('3o7 K-2: yabancı OTA kökü gömülü AAB → DUR', r7.kod !== 0 && /gömülü OTA sertifikası ortak paketinki değil/.test(r7.cikti), r7.cikti.slice(-600));
+  const r8 = buildApk(a, ['--aab', `--verify-only=${aab(a, { hedefSdk: '35' })}`]);
+  ol('3o8 API 36: hedef SDK 35 olan AAB → DUR (Play reddi 2026-10-08)', r8.kod !== 0 && /targetSdkVersion 35 < 36/.test(r8.cikti), r8.cikti.slice(-600));
+  const r9 = buildApk(a, ['--aab', `--verify-only=${aab(a, { yonOzelligi: null })}`]);
+  ol('3o9 API 36: büyük ekran yön özelliği olmayan AAB → DUR', r9.kod !== 0 && /PROPERTY_COMPAT_ALLOW_RESTRICTED_RESIZABILITY yok/.test(r9.cikti), r9.cikti.slice(-600));
+  const r10 = buildApk(a, ['--aab', `--verify-only=${aab(a, { yonOzelligi: 'false' })}`]);
+  ol('3o10 API 36: yön özelliği false olan AAB → DUR', r10.kod !== 0 && /PROPERTY_COMPAT_ALLOW_RESTRICTED_RESIZABILITY yok/.test(r10.cikti), r10.cikti.slice(-600));
 }
 const AJ = JSON.parse(fs.readFileSync(path.join(KOK, 'mobil/app.json'), 'utf8')).expo;
 const androidYaz = ({ url = kimlik.guncellemeUrl, paket = kimlik.androidPaket, ad = kimlik.gorunenAd, zincir = 'true', sert = SERT_KANAL } = {}) => (dir) => {

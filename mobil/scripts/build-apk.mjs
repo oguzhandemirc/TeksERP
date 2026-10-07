@@ -76,6 +76,7 @@ import { ApkOlculemedi, apkKimligi, metaHaritasi, protoManifestOgeleri, sertifik
 import { ZINCIR_META, kokHatalari } from './lib/ota-zinciri.cjs';
 import { anahtarToreniKomutu, ortakKaydiOku, ortakKimlik, ortakYapilandirmaFarki } from './lib/ortak-kimlik.cjs';
 import { IMZA_ANAHTARLARI, anahtarUretimKomutu, imzaAnahtariDenetimi } from './lib/imza-anahtari.cjs';
+import { PLAY_EN_DUSUK_HEDEF_SDK, YON_OZELLIGI } from './lib/buyuk-ekran.cjs';
 import { kayitHatalari, KAYIT_REL as DAGITIM_REL, turet } from '../../scripts/lib/dagitim.mjs';
 import { apkKunyeYolu, derlemeKunyesiYaz, temizAgacDenetimi } from '../../scripts/lib/derleme-bagi.mjs';
 
@@ -926,6 +927,21 @@ function ortakApkAdresDogrula(apkYolu, derlemeBaslangici) {
 }
 
 /**
+ * Play'in kabul ettiği en düşük hedef SDK ve API 36'nın büyük ekran yön kilidi çıkışı (plugins/withBuyukEkranYonu):
+ * hedef düşükse Play reddeder; özellik yoksa tablette yatay kilit Android 16+'da yok sayılır.
+ */
+function buyukEkranSorunlari(ogeler) {
+  const f = [];
+  const hedef = Number(ogeler.find((o) => o.ad === 'uses-sdk')?.oznitelik?.targetSdkVersion);
+  const ozellik = ogeler.find((o) => o.ad === 'property' && o.oznitelik?.name === YON_OZELLIGI);
+  bilgi(`Hedef SDK (targetSdk)    : ${Number.isFinite(hedef) ? hedef : '(okunamadı)'}`);
+  bilgi(`Büyük ekran yön kilidi   : ${ozellik?.oznitelik?.value ?? '(yok)'}`);
+  if (!(hedef >= PLAY_EN_DUSUK_HEDEF_SDK)) f.push(`targetSdkVersion ${Number.isFinite(hedef) ? hedef : 'okunamadı'} < ${PLAY_EN_DUSUK_HEDEF_SDK} — Play yeni sürümü reddeder (app.json expo-build-properties)`);
+  if (ozellik?.oznitelik?.value !== 'true') f.push(`${YON_OZELLIGI} yok — tablette yatay kilit Android 16+'da yok sayılır (plugins/withBuyukEkranYonu)`);
+  return f;
+}
+
+/**
  * AAB'nin KENDİSİ ortak paketin mi: `base/manifest/AndroidManifest.xml` protobuf'tur (AXML değil) — kimlik
  * dizeleri bayt aramasıyla, OTA sertifikası PEM olarak okunur; `base/assets/app.config` çalışma anı kimliği;
  * bundle'da ERP adresi yok; Play'in yasakladığı kurulum izni yok.
@@ -956,11 +972,14 @@ function ortakAabDogrula(aabYolu, k, derlemeBaslangici) {
     if (m.includes(YASAK_IZIN)) sorunlar.push(`${YASAK_IZIN} izni var — ortak tablet kendi APK'sını kuramaz (K-14, app.json blockedPermissions)`);
     // Meta-data öğe düzeyinde: protobuf manifest (aapt2 Resources.proto) çözülür; bayt araması boolean'ı ayırt edemez.
     let meta = null;
+    let ogeler = null;
     try {
-      meta = metaHaritasi(protoManifestOgeleri(manifest));
+      ogeler = protoManifestOgeleri(manifest);
+      meta = metaHaritasi(ogeler);
     } catch (e) {
       sorunlar.push(`base/manifest/AndroidManifest.xml protobuf olarak çözülemedi (${e.message}) — zincir ÖLÇÜLEMEDİ`);
     }
+    if (ogeler) sorunlar.push(...buyukEkranSorunlari(ogeler));
     if (meta) {
       const pem = meta['expo.modules.updates.CODE_SIGNING_CERTIFICATE'];
       bilgi(`OTA sertifika zinciri    : ${meta[ZINCIR_META] ?? '(yok)'}`);
