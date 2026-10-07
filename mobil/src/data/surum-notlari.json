@@ -17,6 +17,36 @@
   ],
   "yayinlar": [
     {
+      "id": "2026-10-08",
+      "durum": "TASLAK — terfide kullanıcı onayı",
+      "baslik": "Yeni TeksERP paneli — ilk sürüm",
+      "surumler": {
+        "panel": "1.5.0"
+      },
+      "maddeler": [
+        {
+          "kapsam": "panel",
+          "tip": "yeni",
+          "metin": "Bu, yeni TeksERP panelinin ilk sürümüdür. Panel güncellemelerini sunucunun lisansındaki güncelleme grubundan alır; Sistem → Güncelleme ekranındaki “Güncelleme grubu” satırı bu bilgisayarın hangi grupta olduğunu gösterir. Panel sunucuya bağlanıp oturum açılmadan ve lisans etkin olmadan güncelleme aramaz."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "yeni",
+          "metin": "Sistem → “Sunucu Güncellemeleri” ekranı eklendi: sunucuda kurulu sürüm, gelen yeni sürüm ve notu, güncelleme politikası, güncelleyicinin durumu ve geçmiş güncellemeler burada görünür. Güncelleme onay istiyorsa lisansı yönetme yetkisi olan kullanıcı “Şimdi kur” ya da “Bu gece kur” düğmesiyle onay verir."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "yeni",
+          "metin": "Sunucu Adresi penceresine “Şifreli bağlantı” bölümü eklendi: “Şifreli bağlantıya geç” düğmesine basınca sunucunun kodu gösterilir. Bu kod sunucu bilgisayarının kendisinde görünen kodla karşılaştırılır; “Kodlar birebir aynı” işaretlenip onaylanınca bu bilgisayar sunucuya şifreli bağlanır. Tek bir harf bile farklıysa onaylamayın."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "yeni",
+          "metin": "Sistem → Lisans ekranına “Lisans dosyası yükle” (internetsiz uzatma dosyası) ve “Donanım değişikliğini bildir” (disk ya da anakart değiştikten sonra) düğmeleri eklendi; ikisi de etkinleştirilmiş kurulumda, lisansı yönetme yetkisi olan kullanıcıya görünür."
+        }
+      ]
+    },
+    {
       "id": "2026-10-07",
       "durum": "TASLAK — terfide kullanıcı onayı",
       "baslik": "Tablet uygulaması Google Play'den kurulur",
