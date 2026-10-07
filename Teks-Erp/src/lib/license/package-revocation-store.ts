@@ -14,14 +14,24 @@ function revocationFile(): string | null {
   return store ? path.join(store.dir, PACKAGE_REVOCATION_FILE) : null;
 }
 
-/** Dosyadaki doğrulanmış PAKET iptal listesi; yoksa/okunamazsa/doğrulanmazsa null (iptal bilinmiyor = işaret yok). */
-export function loadPackageRevocation(roots: readonly RootKey[] = ROOT_PUBLIC_KEYS): VerifiedPackageRevocation | null {
+function loadVerified(roots: readonly RootKey[]): { readonly token: string; readonly value: VerifiedPackageRevocation } | null {
   const file = revocationFile();
   if (!file) return null;
   const read = readFileState(file, MAX_PACKAGE_REVOCATION_BYTES);
   if (read.kind !== "METIN") return null;
-  const r = verifyPackageRevocation(read.text.trim(), roots);
-  return r.ok ? r.value : null;
+  const token = read.text.trim();
+  const r = verifyPackageRevocation(token, roots);
+  return r.ok ? { token, value: r.value } : null;
+}
+
+/** Dosyadaki doğrulanmış PAKET iptal listesi; yoksa/okunamazsa/doğrulanmazsa null (iptal bilinmiyor = işaret yok). */
+export function loadPackageRevocation(roots: readonly RootKey[] = ROOT_PUBLIC_KEYS): VerifiedPackageRevocation | null {
+  return loadVerified(roots)?.value ?? null;
+}
+
+/** Aynı doğrulanmış belgenin imzalı JWS metni (istemciye olduğu gibi gider; istemci kendi çapasıyla yeniden doğrular). */
+export function loadPackageRevocationToken(roots: readonly RootKey[] = ROOT_PUBLIC_KEYS): string | null {
+  return loadVerified(roots)?.token ?? null;
 }
 
 /** Gelen liste doğrulanır ve eldekinden YÜKSEK sıralıysa dosyaya yazılır; aksi her durumda dokunulmaz. */

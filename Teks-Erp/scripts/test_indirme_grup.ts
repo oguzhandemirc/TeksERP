@@ -67,13 +67,13 @@ function baglanti(): void {
   const oku = (rel: string) => readFileSync(path.join(KOK, rel), "utf8");
   const svc = oku("src/services/license-view.service.ts");
   const govde = /export function getDownloadToken\([\s\S]*?\n\}\n/.exec(svc)?.[0] ?? "";
-  const donus = /return \{ \.\.\.d\.token, grup: ([^}]+) \};/.exec(govde)?.[1]?.trim() ?? "";
+  const donus = /return \{ \.\.\.d\.token, grup: ([^}]+?)(?:, iptal: [^}]+)? \};/.exec(govde)?.[1]?.trim() ?? "";
   check("§3a ⭐ yanıtın grubu doğrulanmış kiradan", donus === "updateGroupOf(snap.lease?.document.kanal.kod)", donus || "dönüş satırı bulunamadı");
   check("§3b grup sorgu parametresinden türemez", !donus.includes("g.kanal") && !/\bkanal\)/.test(donus));
   const tip = /export type LicenseDownloadToken = DownloadTokenCore & \{([^}]*)\};/.exec(svc)?.[1] ?? "";
-  check("§3c yanıt tipinde grup: UpdateGroup | null", /readonly grup: UpdateGroup \| null\s*$/.test(tip));
+  check("§3c yanıt tipinde grup: UpdateGroup | null", /readonly grup: UpdateGroup \| null[;\s]/.test(tip));
   const rota = oku("src/routes/license.routes.ts");
-  check("§3d swagger notu grup alanını yazar", /200: \{ description: "\{ yolOneki, belirtec, gecerlilikSonu, grup \}/.test(rota));
+  check("§3d swagger notu grup alanını yazar", /200: \{ description: "\{ yolOneki, belirtec, gecerlilikSonu, grup(?:, iptal)? \}/.test(rota));
   const gnc = oku("src/routes/update.routes.ts");
   check("§3e güncelleme durumu swagger'ı grup alanını yazar", gnc.includes("{ kuruluSurum, kanal, grup,"));
 }

@@ -1,6 +1,7 @@
 // Lisans GÖRÜNÜMÜ: herkese açık durum özeti, yönetici ayrıntısı, proxy okuması ve indirme
 // belirteci. Salt-okunur; belge içeriğinden yalnız ekranın gereksindiği alanlar çıkar.
 // Yanıt tipleri panel (1d) ve tablet (1e) sözleşmesidir: docs/design/LISANS-PROTOKOLU.md §14.
+import { loadPackageRevocationToken } from "../lib/license/package-revocation-store";
 import { APP_VERSION } from "../lib/app-version";
 import { effectiveProxy, maskProxyUrl, nodeSupportsProxyEnv, type ProxySource } from "../lib/http-egress";
 import {
@@ -295,8 +296,8 @@ export function getLicenseDetail(): LicenseDetail {
 // ── İndirme belirteci (onaylı cihaz ya da kimlikli kullanıcı) ───────────────────
 export type DownloadTokenCore = { readonly yolOneki: string; readonly belirtec: string; readonly gecerlilikSonu: string | null };
 
-/** Uç yanıtı: belirteç + kurulumun güncelleme grubu (yalnız doğrulanmış kiradan; grup değilse null). */
-export type LicenseDownloadToken = DownloadTokenCore & { readonly grup: UpdateGroup | null };
+/** Uç yanıtı: belirteç + güncelleme grubu (yalnız doğrulanmış kiradan) + güncel PAKET iptal belgesi (JWS, yoksa null; eski panel yok sayar). */
+export type LicenseDownloadToken = DownloadTokenCore & { readonly grup: UpdateGroup | null; readonly iptal: string | null };
 
 /** Bu kadar süresi kalan belirteç yine verilir ama yoklama dürtülür (bir sonraki kiranın belirteci gelsin). */
 export const DOWNLOAD_TOKEN_REFRESH_MARGIN_MS = 15 * 60 * 1000;
@@ -329,18 +330,14 @@ export function decideDownloadToken(g: {
 export function getDownloadToken(g: { urun: DownloadProduct; kanal?: string | null }): LicenseDownloadToken {
   const snap = getLicenseSnapshot();
   const kanal = g.kanal ?? snap.lease?.document.kanal.kod ?? null;
-  const d = decideDownloadToken({
-    updatesAllowed: snap.state.uygulanan.guncellemeIzni,
-    prefix: kanal ? `/${kanal}/${g.urun}/` : null,
-    tokens: getDownloadTokens(),
-    nowMs: Date.now(),
-  });
+  const prefix = kanal ? `/${kanal}/${g.urun}/` : null;
+  const d = decideDownloadToken({ updatesAllowed: snap.state.uygulanan.guncellemeIzni, prefix, tokens: getDownloadTokens(), nowMs: Date.now() });
   if (d.kind === "frozen") throw licenseError(403, "LICENSE_UPDATES_FROZEN", "Bu kurulum için güncelleme dondurulmuş.");
   if (d.nudge) requestDownloadTokenRefresh();
   if (d.kind === "none") {
     throw licenseError(404, "LICENSE_DOWNLOAD_TOKEN_UNAVAILABLE", "İndirme belirteci yok (kurulum etkin değil ya da yoklama bekleniyor).");
   }
-  return { ...d.token, grup: updateGroupOf(snap.lease?.document.kanal.kod) };
+  return { ...d.token, grup: updateGroupOf(snap.lease?.document.kanal.kod), iptal: loadPackageRevocationToken() };
 }
 
 // ── Proxy okuması ───────────────────────────────────────────────────────────────

@@ -8,19 +8,25 @@
 //      dürt · süresi dolmuş / süresi okunamayan → verilmez + dürt · dolmaya < 15 dk → verilir + dürt ·
 //      taze → verilir, dürtme yok · başka ürünün öneki verilmez
 //   §2 dürtme kısıtı: kayıtlı iş yoksa dürtmez; 5 dk içinde ikinci istek dürtmez, sonra dürter
+//   §4 yanıtın `iptal` alanı: depo boş → null · benimsenmiş belge → AYNEN JWS metni · kök tutmazsa null · uç alanı taşır
 //   §3 bağlantı (statik): uç `decideDownloadToken` + `requestDownloadTokenRefresh`i çağırır, K1'de 403
 //      LICENSE_UPDATES_FROZEN (TR ileti); yoklama işi başlangıçta `onDownloadTokenStale`i kaydeder; uç
 //      onaylı cihaz ya da oturum ister ve kimliksiz uç envanterinde (`PUBLIC_ROUTES`) + swagger'da
 // NEGATİF SONDA (elle, geri alındı; commit mesajında): süresi dolmuş belirteç verilir → §1d ❌ ·
 //   dürtme kısıtı kalkar → §2c ❌ · iş kaydı sökülür → §3c ❌
 // =============================================================================
+import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import { readFileSync } from "node:fs";
+import { randomUUID } from "node:crypto";
+import os from "node:os";
 import path from "node:path";
-import { msToIso, signDownloadToken } from "../src/lib/license/protocol";
+import { PackageRevocationSchema, TYP, msToIso, signDocument, signDownloadToken } from "../src/lib/license/protocol";
+import { loadLicenseStoreSync } from "../src/lib/license/store";
+import { adoptPackageRevocation, loadPackageRevocationToken } from "../src/lib/license/package-revocation-store";
 import { __resetLicenseSignalsForTests, onDownloadTokenStale, requestDownloadTokenRefresh, DOWNLOAD_TOKEN_NUDGE_GAP_MS } from "../src/lib/license/license-signals";
 import { DOWNLOAD_TOKEN_REFRESH_MARGIN_MS, decideDownloadToken } from "../src/services/license-view.service";
 import { PUBLIC_ROUTES } from "../src/constants/license-routes";
-import { anahtarUret } from "./lib/lisans-fikstur";
+import { anahtarUret, fiksturKur } from "./lib/lisans-fikstur";
 
 const KOK = path.resolve(__dirname, "..");
 const DK = 60 * 1000;
@@ -96,11 +102,36 @@ function baglanti(): void {
   check("§3e kimliksiz uç envanterinde (lisans kapısı listesi)", PUBLIC_ROUTES.some((r) => r.method === "GET" && r.path === "/api/license/indirme-belirteci"));
 }
 
+function iptalAlani(): void {
+  console.log("\n§4 yanıtta güncel paket iptal belgesi (I6a)");
+  const f = fiksturKur(SIMDI);
+  const dir = mkdtempSync(path.join(os.tmpdir(), "ind-iptal-"));
+  try {
+    mkdirSync(dir, { recursive: true });
+    loadLicenseStoreSync({ dir });
+    check("§4a kayıtlı iptal yok → iptal null", loadPackageRevocationToken(f.kokler) === null);
+    const tarih = msToIso(SIMDI - DK);
+    const belge = signDocument({
+      typ: TYP.PAKET_IPTAL, schema: PackageRevocationSchema, key: f.kok,
+      payload: { v: 1, iptalId: randomUUID(), sira: 1, verilis: tarih, iptaller: [{ kid: "ist-2026-1", sertifikaId: randomUUID(), tarih, neden: "sızıntı" }] },
+    });
+    check("§4b iptal benimsenir", adoptPackageRevocation(belge, f.kokler));
+    check("§4c kayıtlı iptal → AYNEN o belge (JWS metni)", loadPackageRevocationToken(f.kokler) === belge);
+    check("§4d kökle doğrulanmayan depodaki belge verilmez", loadPackageRevocationToken([f.kokler[1]!]) === null);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+  const svc = readFileSync(path.join(KOK, "src/services/license-view.service.ts"), "utf8");
+  const govde = /export function getDownloadToken\([\s\S]*?\n\}\n/.exec(svc)?.[0] ?? "";
+  check("§4e uç yanıtı iptal alanını depodan taşır", /iptal: loadPackageRevocationToken\(\)/.test(govde));
+}
+
 function main(): void {
   console.log("=== İNDİRME BELİRTECİ UCU ===");
   kararlar();
   durtme();
   baglanti();
+  iptalAlani();
   console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
   process.exit(fail === 0 ? 0 : 1);
 }
