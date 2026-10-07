@@ -8,12 +8,16 @@
 //   §1 adlı vakalar → beklenen kod (geçerli KABUL/YERLEŞİK · kullanım yanlış · sınıf kökü aşıyor · imza anı dışı ·
 //      iptalli KABUL RED / YERLEŞİK işaret · ⭐ tolerans sınırı bitiş+180g geçer, +1 ms düşer · `pkt-` olmayan kid ·
 //      `paket-*`te sertifika · öteki kipin kökü KOK_BILINMIYOR · sınıf süzgeci · kid uyuşmazlığı · sertifika yok)
-//   §2 PAKET iptal belgesi (yalnız kök, kendi typ'i) + `tekserp-iptal`e PAKET satırı şema RED + yüksek sıra kazanır
+//   §2 PAKET iptal belgesi (yalnız kök, kendi typ'i) + `tekserp-iptal`e PAKET/ISTEMCI satırı şema RED + yüksek sıra kazanır
+//   ISTEMCI (I1, `docs/design/ISTEMCI-ANAHTARI-KOK-ALTINDA.md` §3.4): `tekserp-paketiptal` satırı `ist-*` de olabilir;
+//      ⭐ `ist-*` satırı güncelleyicide ZARARSIZ — belge düşmez, PAKET sertifikası iptal olmaz (aynı belgedeki `pkt-*`
+//      satırı yine iptal eder) · `ist-*` imzacı paket belgesi imzalayamaz · ISTEMCI sertifikası PAKET yerine geçmez
 //   §3 vektör dosyası `native/test-vektorleri/paket-zinciri.json` (Rust `tests/paket_zinciri.rs` okur): her kaydın
 //      beklenen sonucu BUGÜNKÜ TS'le aynı (bayat yok) · kapsam (her yeni kod en az bir kayıtta)
 //   §4 ✓K bayatlık karşılaştırıcısı mutasyonda ısırır, eşitte susar
 //
 // NEGATİF SONDA (✓B, bir kezlik): `PACKAGE_ACCEPT_TOLERANCE_DAYS` 181 → §1 "tolerans +1 ms" kırmızı.
+//   I1: satır deseni yeniden `^pkt-` → ist vakaları kırmızı · `ISTEMCI` `REVOCATION_USAGES`a → §1 "tekserp-iptal ISTEMCI" kırmızı.
 // =============================================================================
 import { mkdirSync, readFileSync, writeFileSync, existsSync } from "node:fs";
 import path from "node:path";
@@ -118,12 +122,13 @@ function degerlendir(v: Vektor): unknown {
 const f = fiksturKur(T0);
 const PKT = anahtarUret("pkt-2026-1");
 const PKT2 = anahtarUret("pkt-2026-2");
+const IST = anahtarUret("ist-2026-1");
 const ESKI = anahtarUret("paket-2026");
 const ESKI_KEYS: PackagePublicKey[] = [{ kid: ESKI.kid, x: ESKI.x }];
 const URETIM_KOKU: RootKey[] = [f.kokler[0]];
 const YUK = { v: 1, ornek: "paket-zinciri", sayi: 7 };
 
-function sertifika(konu: TestAnahtari, ek: Parameters<typeof sertifikaYuku>[3] = {}, imzalayan: TestAnahtari = f.kok, kullanim: "PAKET" | "INDIRME" = "PAKET") {
+function sertifika(konu: TestAnahtari, ek: Parameters<typeof sertifikaYuku>[3] = {}, imzalayan: TestAnahtari = f.kok, kullanim: "PAKET" | "INDIRME" | "ISTEMCI" = "PAKET") {
   const yuk = sertifikaYuku(f, konu, kullanim, ek);
   return { yuk, token: sertifikaBas(imzalayan, yuk) };
 }
@@ -132,6 +137,7 @@ const SERT_TEST = sertifika(PKT, { siniflar: ["TEST", "DEMO"] as LicenseClass[] 
 const SERT_HAZIRLIK = sertifika(PKT, { siniflar: ["TEST"] as LicenseClass[] }, f.dar);
 const SERT_HAZIRLIK_ASAN = sertifika(PKT, { siniflar: ["URETIM"] as LicenseClass[] }, f.dar);
 const SERT_IND = sertifika(anahtarUret("ind-2026-9"), {}, f.kok, "INDIRME");
+const SERT_IST = sertifika(IST, {}, f.kok, "ISTEMCI");
 const BITIS = isoToMs(SERT.yuk.bitis);
 
 function zincirli(imzalayan: TestAnahtari, sert: string | undefined, imzaAni: number | undefined, typ: string = TYP.SURUM, yuk: Record<string, unknown> = YUK): string {
@@ -151,6 +157,10 @@ const IPTAL_SATIRI = { kid: PKT.kid, sertifikaId: SERT.yuk.sertifikaId, tarih: m
 const IPTAL = paketIptalBas(f.kok, paketIptalYuku([IPTAL_SATIRI]));
 const IPTAL_KID = paketIptalBas(f.kok, paketIptalYuku([{ ...IPTAL_SATIRI, sertifikaId: randomUUID() }], 2));
 const IPTAL_BASKA = paketIptalBas(f.kok, paketIptalYuku([{ ...IPTAL_SATIRI, kid: PKT2.kid, sertifikaId: randomUUID() }], 3));
+const IST_SATIRI = { kid: IST.kid, sertifikaId: SERT_IST.yuk.sertifikaId, tarih: msToIso(T0 - DAY_MS), neden: "istemci anahtarı çalındı" };
+// Şemayı atlayan imza: `ist-` satırını doğrulayıcının şeması kabul etmeli (imzalayanın şeması değil).
+const IPTAL_IST = hamImzala(TYP.PAKET_IPTAL, f.kok, { ...paketIptalYuku([IST_SATIRI], 4) });
+const IPTAL_KARMA = hamImzala(TYP.PAKET_IPTAL, f.kok, { ...paketIptalYuku([IST_SATIRI, IPTAL_SATIRI], 5) });
 
 const GECERLI = zincirli(PKT, SERT.token, T0);
 const guven = (ek: Partial<GuvenGirdisi> = {}): GuvenGirdisi => ({ keys: ESKI_KEYS, roots: f.kokler, mode: "KABUL", nowMs: T0, iptal: null, ...ek });
@@ -180,6 +190,10 @@ const VAKALAR: { vektor: Vektor; kod: string }[] = [
   { kod: "PAKET_SERTIFIKA_IPTAL", vektor: { tur: "paket-imza", ad: "iptalli KABUL", token: GECERLI, typ: TYP.SURUM, guven: guven({ iptal: IPTAL }) } },
   { kod: "PAKET_SERTIFIKA_IPTAL", vektor: { tur: "paket-imza", ad: "iptalli KABUL (yalnız kid eşleşir)", token: GECERLI, typ: TYP.SURUM, guven: guven({ iptal: IPTAL_KID }) } },
   { kod: "OK", vektor: { tur: "paket-imza", ad: "iptal başka sertifikanın", token: GECERLI, typ: TYP.SURUM, guven: guven({ iptal: IPTAL_BASKA }) } },
+  { kod: "OK", vektor: { tur: "paket-imza", ad: "ist- satırlı iptal PAKET sertifikasını etkilemez (KABUL)", token: GECERLI, typ: TYP.SURUM, guven: guven({ iptal: IPTAL_IST }) } },
+  { kod: "PAKET_SERTIFIKA_IPTAL", vektor: { tur: "paket-imza", ad: "karma iptal: ist- yanında pkt- satırı yine iptal eder", token: GECERLI, typ: TYP.SURUM, guven: guven({ iptal: IPTAL_KARMA }) } },
+  { kod: "JWS_KID", vektor: { tur: "paket-imza", ad: "ist- imzacı paket belgesi imzalayamaz", token: zincirli(IST, SERT_IST.token, T0), typ: TYP.SURUM, guven: guven() } },
+  { kod: "SERTIFIKA_KULLANIM", vektor: { tur: "paket-imza", ad: "ISTEMCI sertifikası PAKET yerine", token: zincirli(PKT, SERT_IST.token, T0), typ: TYP.SURUM, guven: guven() } },
   { kod: "OK", vektor: { tur: "paket-imza", ad: "iptalli YERLEŞİK işaretli geçer", token: GECERLI, typ: TYP.SURUM, guven: guven({ mode: "YERLESIK", iptal: IPTAL }) } },
   { kod: "OK", vektor: { tur: "paket-imza", ad: "tolerans sınırı bitiş+180g", token: GECERLI, typ: TYP.SURUM, guven: guven({ nowMs: BITIS + PACKAGE_ACCEPT_TOLERANCE_MS }) } },
   { kod: "PAKET_SERTIFIKA_ZAMAN", vektor: { tur: "paket-imza", ad: "tolerans +1 ms", token: GECERLI, typ: TYP.SURUM, guven: guven({ nowMs: BITIS + 180 * DAY_MS + 1 }) } },
@@ -193,10 +207,14 @@ const VAKALAR: { vektor: Vektor; kod: string }[] = [
   { kod: "OK", vektor: { tur: "paket-iptal", ad: "hazırlık kökü imzalar", token: paketIptalBas(f.dar, paketIptalYuku([IPTAL_SATIRI])), roots: f.kokler } },
   { kod: "KOK_BILINMIYOR", vektor: { tur: "paket-iptal", ad: "pkt anahtarı imzalayamaz", token: hamImzala(TYP.PAKET_IPTAL, PKT, paketIptalYuku([IPTAL_SATIRI])), roots: f.kokler } },
   { kod: "JWS_TYP", vektor: { tur: "paket-iptal", ad: "tekserp-iptal türü kabul edilmez", token: hamImzala(TYP.IPTAL, f.kok, paketIptalYuku([IPTAL_SATIRI])), roots: f.kokler } },
-  { kod: "BELGE_SEMA", vektor: { tur: "paket-iptal", ad: "satır kid pkt- değil", token: hamImzala(TYP.PAKET_IPTAL, f.kok, paketIptalYuku([{ ...IPTAL_SATIRI, kid: "alt-2026-1" }])), roots: f.kokler } },
+  { kod: "OK", vektor: { tur: "paket-iptal", ad: "ist- satırı kabul (dağıtım iptali)", token: IPTAL_IST, roots: f.kokler } },
+  { kod: "OK", vektor: { tur: "paket-iptal", ad: "karma ist- + pkt- satırları", token: IPTAL_KARMA, roots: f.kokler } },
+  { kod: "BELGE_SEMA", vektor: { tur: "paket-iptal", ad: "satır kid istemci- (önek tam ist-)", token: hamImzala(TYP.PAKET_IPTAL, f.kok, paketIptalYuku([{ ...IST_SATIRI, kid: "istemci-2026-1" }])), roots: f.kokler } },
+  { kod: "BELGE_SEMA", vektor: { tur: "paket-iptal", ad: "satır kid pkt-/ist- değil", token: hamImzala(TYP.PAKET_IPTAL, f.kok, paketIptalYuku([{ ...IPTAL_SATIRI, kid: "alt-2026-1" }])), roots: f.kokler } },
   { kod: "BELGE_SEMA", vektor: { tur: "paket-iptal", ad: "tekrarlı sertifika", token: hamImzala(TYP.PAKET_IPTAL, f.kok, paketIptalYuku([IPTAL_SATIRI, IPTAL_SATIRI])), roots: f.kokler } },
   { kod: "GUVEN_CAPASI_BOS", vektor: { tur: "paket-iptal", ad: "kök yok", token: IPTAL, roots: [] } },
   { kod: "OK", vektor: { tur: "iptal", ad: "tekserp-iptal ALT satırı", token: iptalBas(f.kok, iptalYuku(f, { iptaller: [{ kid: "alt-2026-1", sertifikaId: randomUUID(), kullanim: "ALT", tarih: msToIso(T0 - DAY_MS), neden: "x" }] })), roots: f.kokler } },
+  { kod: "BELGE_SEMA", vektor: { tur: "iptal", ad: "tekserp-iptal ISTEMCI satırı RED", token: hamImzala(TYP.IPTAL, f.kok, { ...iptalYuku(f), iptaller: [{ kid: IST.kid, sertifikaId: randomUUID(), kullanim: "ISTEMCI", tarih: msToIso(T0 - DAY_MS), neden: "x" }] }), roots: f.kokler } },
   { kod: "BELGE_SEMA", vektor: { tur: "iptal", ad: "tekserp-iptal PAKET satırı RED", token: hamImzala(TYP.IPTAL, f.kok, { ...iptalYuku(f), iptaller: [{ kid: PKT.kid, sertifikaId: randomUUID(), kullanim: "PAKET", tarih: msToIso(T0 - DAY_MS), neden: "x" }] }), roots: f.kokler } },
 ];
 

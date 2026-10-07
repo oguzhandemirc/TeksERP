@@ -323,6 +323,7 @@ function sertifikaVektorleri(f: Fikstur): Vektor[] {
   const baslangic = Date.parse(yuk.baslangic);
   const bitis = Date.parse(yuk.bitis);
   const yabanci = anahtarUret("kok-2030-9");
+  const ist = anahtarUret("ist-2026-1");
   const v = (ad: string, token: unknown, g: { usage?: CertUsage; atMs?: number | null; roots?: RootKey[] | null } = {}): Vektor => ({
     tur: "sertifika",
     ad,
@@ -344,6 +345,14 @@ function sertifikaVektorleri(f: Fikstur): Vektor[] {
     v("başlangıç 4 kesir hanesi, tam sınır (kesme)", ham({ baslangic: "2026-09-19T00:00:00.1239Z" }), { atMs: Date.parse("2026-09-19T00:00:00.123Z") - CLOCK_SKEW_MS }),
     v("bitiş 7 kesir hanesi, tam sınır (kesme)", ham({ bitis: "2027-03-18T00:00:00.9999999Z" }), { atMs: Date.parse("2027-03-18T00:00:00.999Z") + CLOCK_SKEW_MS }),
     v("kullanım farklı", alt, { usage: "BAYI" }),
+    // ISTEMCI (panel/tablet imzacısı, `ist-`): Rust doğrulayıcıları kullanmaz, şema ve kullanım kararı yine aynı olmalı.
+    v("geçerli ISTEMCI", sertifikaBas(f.kok, sertifikaYuku(f, ist, "ISTEMCI")), { usage: "ISTEMCI" }),
+    v("ISTEMCI sertifikası ALT yerine", sertifikaBas(f.kok, sertifikaYuku(f, ist, "ISTEMCI"))),
+    v("ALT sertifikası ISTEMCI yerine", alt, { usage: "ISTEMCI" }),
+    v("ISTEMCI kid öneki ist- değil", ham({ kullanim: "ISTEMCI", kid: "panel-2026" }), { usage: "ISTEMCI" }),
+    v("ist- kid'li PAKET sertifikası", ham({ kullanim: "PAKET", kid: ist.kid, x: ist.x }), { usage: "PAKET" }),
+    v("ISTEMCI sertifikasında bayi tavanı", ham({ kullanim: "ISTEMCI", kid: ist.kid, x: ist.x, bayi: { bayiId: randomUUID(), moduller: [] } }), { usage: "ISTEMCI" }),
+    v("dar kök ISTEMCI ÜRETİM sınıfı veremez", sertifikaBas(f.dar, sertifikaYuku(f, ist, "ISTEMCI", { siniflar: ["URETIM"] })), { usage: "ISTEMCI" }),
     v("tanınmayan kök", sertifikaBas(yabanci, sertifikaYuku(f, f.alt, "ALT"))),
     v("dar kök ÜRETİM sınıfı veremez", sertifikaBas(f.dar, sertifikaYuku(f, f.alt, "ALT", { siniflar: ["URETIM"] }))),
     v("dar kök TEST verebilir", sertifikaBas(f.dar, sertifikaYuku(f, f.alt, "ALT", { siniflar: ["TEST"] }))),

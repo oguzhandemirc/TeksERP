@@ -31,8 +31,8 @@ export const TYP = {
   /** Sertifika iptal belgesi (yalnız KÖK imzalar, G4 §2.3) — doğrulayan fabrika (`verifyRevocation`). */
   IPTAL: "tekserp-iptal",
   /**
-   * PAKET sertifikası iptal belgesi (yalnız KÖK imzalar; `paket-zinciri.ts`). `IPTAL`den AYRI tür: o belgenin satır
-   * kullanımı sahadaki doğrulayıcılarda kapalı enumdur, PAKET satırı onları bütün belgeden koparırdı. Adda tire yok: `typ` deseni `^tekserp-[a-z]+$`.
+   * Dağıtım iptali — PAKET (`pkt-`) ve ISTEMCI (`ist-`) sertifikaları (yalnız KÖK imzalar; `paket-zinciri.ts`). `IPTAL`den AYRI
+   * tür: o belgenin satır kullanımı sahadaki doğrulayıcılarda kapalı enumdur, yeni satır onları bütün belgeden koparırdı. Adda tire yok: `typ` deseni `^tekserp-[a-z]+$`.
    */
   PAKET_IPTAL: "tekserp-paketiptal",
 

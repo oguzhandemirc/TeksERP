@@ -12,6 +12,9 @@
 //   §4 `emekliye-ayir`: varsayılan KURU (değişiklik yok); aynı türde daha yeni anahtar yoksa RED; `--uygula` özel yarıyı
 //      siler, açık yarı + sertifika `.sertifika.json` kalır (künyede EMEKLI); tekrar → "zaten emekli"
 //   §5 `donem-ice-aktar` (konteyner CLI'ı): iptal belgesi + kök imzalı HAK tek dosyadan; biçimsiz dosya RED
+//   §7 ⭐ `tekserp-iptal`e ISTEMCI GİREMEZ (ISTEMCI-ANAHTARI-KOK-ALTINDA.md §3.1, I1): satır kullanımı kapalı enum
+//      (ISTEMCI · PAKET yok) · ISTEMCI satırlı kök imzalı belge deftere girmez (400 BELGE_SEMA) · `iptal-uret` ISTEMCI
+//      sertifikalı dosyayı reddeder (tanınmayan tür ya da yanlış etiketli türde kullanım sertifikadan doğrulanır)
 //   §6 tek seçim: dağıtım kapısının engel denetimi "eski derlemeye giden aday"ı (en yeni ara imzasız sürüm) KENDİ seçmez —
 //      teslim seçimiyle (genişlik kapısı) aynı saf yardımcıyı (`newestLegacyVersion`) okur; ara imza yüklemi başka yerde yok
 // ⭐ KALICI SONDA ✓K (her koşumda): §2a geçerli belge GERÇEKTEN eklenir · §3c engeller kalkınca belge GERÇEKTEN dağıtılır
@@ -23,7 +26,7 @@ import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdir
 import os from "node:os";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
-import { DAY_MS, TYP, msToIso, verifyRevocation, type CertificateDoc, type LicenseClass, type RevocationDoc } from "../src/lisans-protokol";
+import { CERT_USAGES, DAY_MS, REVOCATION_USAGES, TYP, msToIso, verifyRevocation, type CertificateDoc, type LicenseClass, type RevocationDoc } from "../src/lisans-protokol";
 import { anahtarUret, hamImzala, iptalBas, iptalYuku, sertifikaBas, sertifikaYuku, type Fikstur, type TestAnahtari } from "../../../Teks-Erp/scripts/lib/lisans-fikstur";
 import { passwordBuffer, wrapPrivateKey, writeKeyFileExclusive } from "../src/keys/key-files";
 import { KeyStore } from "../src/keys/key-store";
@@ -91,7 +94,7 @@ async function main(): Promise<void> {
   const ortam = await anahtarOrtamiKur();
   const { f, ctx } = ortam;
   const { prisma } = await import("../src/lib/prisma");
-  const { importRevocation, distributableRevocation } = await import("../src/services/revocation.service");
+  const { importRevocation, distributableRevocation, verifyRevocationToken } = await import("../src/services/revocation.service");
   const hakSvc = await import("../src/services/entitlement.service");
   const temizlenecek: string[] = [];
   const tmp = mkdtempSync(path.join(os.tmpdir(), "satici-iptal-"));
@@ -229,6 +232,33 @@ async function main(): Promise<void> {
     writeFileSync(path.join(tmp, "bozuk.json"), JSON.stringify({ v: 1, tur: "baska-bir-sey" }));
     const bozuk = cli(["donem-ice-aktar", `--dosya=${path.join(tmp, "bozuk.json")}`], { env: ortamDegiskenleri });
     kontrol("§5c tanınmayan içe aktarma dosyası → çıkış 2", bozuk.status === 2 && /tanınmıyor/.test(bozuk.stderr), `${bozuk.status}`);
+
+    console.log("\n§7 tekserp-iptal'e ISTEMCI GİREMEZ");
+    const kullanimlar = REVOCATION_USAGES as readonly string[];
+    kontrol("§7a satır kullanımı kapalı: ISTEMCI ve PAKET yok (sertifika kullanımında var)", (CERT_USAGES as readonly string[]).includes("ISTEMCI") && !kullanimlar.includes("ISTEMCI") && !kullanimlar.includes("PAKET"), kullanimlar.join(","));
+    const ist = anahtarUret("ist-2026-1");
+    const istSert = sertifikaBas(f.kok, sertifikaYuku(f, ist, "ISTEMCI"));
+    const enYuksek = await prisma.iptalBelgesi.aggregate({ _max: { sira: true } });
+    const istBelge = hamImzala(TYP.IPTAL, f.kok, { ...iptalYuku(f, { sira: (enYuksek._max.sira ?? 0) + 1 }), iptaller: [{ kid: ist.kid, sertifikaId: randomUUID(), kullanim: "ISTEMCI", tarih: msToIso(Date.now()), neden: "bekçi" }] });
+    const onceSayi = await prisma.iptalBelgesi.count();
+    let istKapi = "GECTI";
+    try {
+      verifyRevocationToken(istBelge, ctx.keys.anchor);
+    } catch (e) {
+      istKapi = `${(e as { status?: number }).status} ${(e as { code?: string }).code}`;
+    }
+    const istSonuc = await ekle(istBelge);
+    kontrol("§7b ⭐ ISTEMCI satırlı kök imzalı belge deftere GİRMEZ (doğrulama kapısı 400 BELGE_SEMA, defter sayısı aynı)", istKapi === "400 BELGE_SEMA" && istSonuc === istKapi && (await prisma.iptalBelgesi.count()) === onceSayi, `${istKapi} / ${istSonuc}`);
+    const istDosya = path.join(tmp, `${ist.kid}.istemci.json`);
+    writeFileSync(istDosya, JSON.stringify({ tur: "tekserp-istemci-anahtar", kid: ist.kid, sertifika: istSert }));
+    const istCikti = path.join(tmp, "iptal-ist.json");
+    const istCli = cli(["iptal-uret", `--kok=${f.kok.kid}`, `--kok-dizin=${ortam.dizin}`, `--cikti=${istCikti}`, `--iptal=${istDosya}`], { input: `${TEST_KOK_PAROLASI}\n` });
+    kontrol("§7c iptal-uret ISTEMCI sertifikalı dosyayı reddeder (tür tanınmıyor, çıkış 2, belge yazılmaz)", istCli.status === 2 && /türü tanınmıyor/.test(istCli.stderr) && !existsSync(istCikti), `${istCli.status} ${istCli.stderr.trim().slice(0, 120)}`);
+    const sahte = path.join(tmp, `${ist.kid}.anahtar.json`);
+    writeFileSync(sahte, JSON.stringify({ tur: "tekserp-alt-anahtar", kid: ist.kid, sertifika: istSert }));
+    const sahteCikti = path.join(tmp, "iptal-sahte.json");
+    const sahteCli = cli(["iptal-uret", `--kok=${f.kok.kid}`, `--kok-dizin=${ortam.dizin}`, `--cikti=${sahteCikti}`, `--iptal=${sahte}`], { input: `${TEST_KOK_PAROLASI}\n` });
+    kontrol("§7d ALT etiketli dosyada ISTEMCI sertifikası → RED (kullanım sertifikadan doğrulanır, belge yazılmaz)", sahteCli.status === 2 && /SERTIFIKA_KULLANIM/.test(sahteCli.stderr) && !existsSync(sahteCikti), `${sahteCli.status} ${sahteCli.stderr.trim().slice(0, 120)}`);
   } finally {
     await temizleKurulumlar(temizlenecek, [...ortam.kidler, ...ekKidler]);
     await temizleIptalBelgeleri(YUKLEYEN);

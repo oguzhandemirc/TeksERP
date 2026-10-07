@@ -22,10 +22,11 @@ export type SanctionLevel = (typeof SANCTION_LEVELS)[number];
 /**
  * `HAK`: HAK ara imzacısı (G4) — kök → ara sertifika → HAK; yalnız `hak-ara` yeteneğini bildiren kuruluma gider.
  * `PAKET`: paket belgelerini imzalayan kök sertifikalı anahtar (`pkt-`, `paket-zinciri.ts`).
+ * `ISTEMCI`: panel/tablet güncelleme künyesini imzalayan kök sertifikalı anahtar (`ist-`, ISTEMCI-ANAHTARI-KOK-ALTINDA.md).
  */
-export const CERT_USAGES = ["ALT", "INDIRME", "BAYI", "HAK", "PAKET"] as const;
+export const CERT_USAGES = ["ALT", "INDIRME", "BAYI", "HAK", "PAKET", "ISTEMCI"] as const;
 export type CertUsage = (typeof CERT_USAGES)[number];
-/** `tekserp-iptal` satırının kullanımları — PAKET YOK (iptali ayrı belgededir, `TYP.PAKET_IPTAL`). */
+/** `tekserp-iptal` satırının kullanımları — PAKET ve ISTEMCI YOK (iptalleri ayrı belgededir, `TYP.PAKET_IPTAL`). */
 export const REVOCATION_USAGES = ["ALT", "INDIRME", "BAYI", "HAK"] as const satisfies readonly CertUsage[];
 export const REQUEST_PURPOSES = [
   "etkinlestir",
@@ -309,7 +310,7 @@ export const RequestSchema = z
   });
 export type RequestDoc = z.infer<typeof RequestSchema>;
 
-const SUB_KID_PREFIX: Record<CertUsage, string> = { ALT: "alt-", INDIRME: "ind-", BAYI: "bayi-", HAK: "ara-", PAKET: "pkt-" };
+const SUB_KID_PREFIX: Record<CertUsage, string> = { ALT: "alt-", INDIRME: "ind-", BAYI: "bayi-", HAK: "ara-", PAKET: "pkt-", ISTEMCI: "ist-" };
 const CERT_KID_PATTERN = /^[a-z]+-[a-z0-9-]{1,60}$/;
 
 export const CertificateSchema = z

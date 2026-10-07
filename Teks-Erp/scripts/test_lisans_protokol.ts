@@ -39,6 +39,9 @@
 //   §16 yanıt istek bağı (6.3c): doğru bağ BAGLI · yanlış nonce · başka kira · bağ yok + bayraklı kira RED ·
 //      bağ yok + bayraksız (eski satıcı) BAGSIZ · typ · imza · sınıfa yetkisiz ALT · INDIRME · iptal · kid ≠
 //      gömülü sertifika · sertifikasız · `yanitBagli` yalnız true ve şemada korunur · yanıt alanı · kodlar
+//   §17 ISTEMCI sertifikası (I1, docs/design/ISTEMCI-ANAHTARI-KOK-ALTINDA.md §3.1): kullanım `ISTEMCI` + kid öneki
+//      `ist-` (başka önek · `ist-` kid'li başka kullanım RED) · PAKET ↔ ISTEMCI birbirinin yerine geçmez · bayi tavanı
+//      yok · dar kök ÜRETİM veremez · ⭐ `tekserp-iptal` satırına ISTEMCI GİREMEZ (REVOCATION_USAGES kapalı)
 //
 // NEGATİF SONDA — dosya DIŞI mutasyon zinciri (bir kezlik, ✓B; her biri cp + shasum ile
 // birebir geri alındı; sayılar commit mesajında):
@@ -81,8 +84,10 @@ import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import ts from "typescript";
 import {
+  CERT_USAGES,
   CLOSING_LEASE_REASONS,
   ENDPOINTS,
+  REVOCATION_USAGES,
   FINGERPRINT_LOSS_AFTER_MS,
   HardwareReportRequestSchema,
   HardwareReportResponseSchema,
@@ -999,6 +1004,28 @@ function yanitBagiBolumu(): void {
   check("§16p üç yeni kod tanımlı · bağ türü kayıt defterinde", ["YANIT_BAGI_YOK", "YANIT_BAGI_UYUSMAZ", "YANIT_NONCE_UYUSMAZ"].every((c) => (PROTOCOL_ERROR_CODES as readonly string[]).includes(c)) && TYP.YANIT_BAGI === "tekserp-yanit");
 }
 
+function istemciBolumu(): void {
+  console.log("\n§17 — ISTEMCI sertifikası (panel/tablet güncelleme imzacısı, kökün altında)");
+  const ist = anahtarUret("ist-2026-1");
+  const yuk = sertifikaYuku(f, ist, "ISTEMCI");
+  const sert = sertifikaBas(f.kok, yuk);
+  check("§17a CERT_USAGES ISTEMCI içerir; REVOCATION_USAGES içermez (PAKET de)", (CERT_USAGES as readonly string[]).includes("ISTEMCI") && !(REVOCATION_USAGES as readonly string[]).includes("ISTEMCI") && !(REVOCATION_USAGES as readonly string[]).includes("PAKET"));
+  beklenen("§17b geçerli ISTEMCI sertifikası (ist- kid, bayi null)", verifyCertificate(sert, { roots: f.kokler, usage: "ISTEMCI", atMs: SIMDI }), "OK");
+  const ham = (ek: Record<string, unknown>) => hamImzala(TYP.SERTIFIKA, f.kok, { ...yuk, ...ek });
+  beklenen("§17c ISTEMCI sertifikasında kid ist- değil (eski panel-* ailesi)", verifyCertificate(ham({ kid: "panel-2026" }), { roots: f.kokler, usage: "ISTEMCI", atMs: SIMDI }), "BELGE_SEMA");
+  beklenen("§17c2 ISTEMCI sertifikasında kid istemci- (önek tam ist-)", verifyCertificate(ham({ kid: "istemci-2026-1" }), { roots: f.kokler, usage: "ISTEMCI", atMs: SIMDI }), "BELGE_SEMA");
+  beklenen("§17d ist- kid'li PAKET sertifikası (önek kullanımla uyuşmaz)", verifyCertificate(ham({ kullanim: "PAKET" }), { roots: f.kokler, usage: "PAKET", atMs: SIMDI }), "BELGE_SEMA");
+  beklenen("§17e ⭐ ISTEMCI sertifikası PAKET yerine geçmez", verifyCertificate(sert, { roots: f.kokler, usage: "PAKET", atMs: SIMDI }), "SERTIFIKA_KULLANIM");
+  const pkt = sertifikaBas(f.kok, sertifikaYuku(f, anahtarUret("pkt-2026-1"), "PAKET"));
+  beklenen("§17f ⭐ PAKET sertifikası ISTEMCI yerine geçmez", verifyCertificate(pkt, { roots: f.kokler, usage: "ISTEMCI", atMs: SIMDI }), "SERTIFIKA_KULLANIM");
+  beklenen("§17g ISTEMCI sertifikasında bayi tavanı", verifyCertificate(ham({ bayi: { bayiId: randomUUID(), moduller: [] } }), { roots: f.kokler, usage: "ISTEMCI", atMs: SIMDI }), "BELGE_SEMA");
+  beklenen("§17h dar kök ÜRETİM yetkili ISTEMCI sertifikası basamaz", verifyCertificate(sertifikaBas(f.dar, sertifikaYuku(f, ist, "ISTEMCI", { siniflar: siniflar("URETIM") })), { roots: f.kokler, usage: "ISTEMCI", atMs: SIMDI }), "KOK_SINIF_YETKISIZ");
+  beklenen("§17i imza anı bitişten sonra", verifyCertificate(sert, { roots: f.kokler, usage: "ISTEMCI", atMs: Date.parse(yuk.bitis) + CLOCK_SKEW_MS + 1 }), "SERTIFIKA_ZAMAN");
+  const satir = { kid: ist.kid, sertifikaId: yuk.sertifikaId, kullanim: "ISTEMCI", tarih: msToIso(SIMDI), neden: "çalındı" };
+  beklenen("§17j ⭐ tekserp-iptal satırına ISTEMCI GİREMEZ (bütün belge şema RED)", verifyRevocation(hamImzala(TYP.IPTAL, f.kok, { ...iptalYuku(f), iptaller: [satir] }), f.kokler), "BELGE_SEMA");
+  check("§17k RevocationSchema ISTEMCI satırını reddeder, aynı satır HAK önekiyle kabul (karşı)", !RevocationSchema.safeParse({ ...iptalYuku(f), iptaller: [satir] }).success && RevocationSchema.safeParse({ ...iptalYuku(f), iptaller: [{ ...satir, kid: "ara-2026-1", kullanim: "HAK" }] }).success);
+}
+
 kapalilik();
 capaKipleri();
 derlemeCapasi();
@@ -1019,5 +1046,6 @@ parmakIziV2Bolumu();
 yolDonanimBolumu();
 govdeV2Bolumu();
 yanitBagiBolumu();
+istemciBolumu();
 console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
 process.exit(fail > 0 ? 1 : 0);

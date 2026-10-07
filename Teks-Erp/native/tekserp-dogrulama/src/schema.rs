@@ -15,8 +15,9 @@ pub const PROTOCOL_VERSION: f64 = 1.0;
 pub const LICENSE_CLASSES: [&str; 6] = ["URETIM", "TEST", "DR", "DEMO", "BAYI", "BARINDIRILAN"];
 pub const SANCTION_LEVELS: [&str; 6] = ["K0", "K1", "K2", "K3", "K4", "K5"];
 /// `HAK`: HAK ara imzacısı (G4) — kök → ara sertifika (`ara-`) → HAK. `PAKET`: paket belgesi imzacısı (`pkt-`).
-pub const CERT_USAGES: [&str; 5] = ["ALT", "INDIRME", "BAYI", "HAK", "PAKET"];
-/// `tekserp-iptal` satırının kullanımları — PAKET YOK (iptali ayrı belgede, `paket_zinciri::TYP_PAKET_IPTAL`).
+/// `ISTEMCI`: panel/tablet güncelleme künyesi imzacısı (`ist-`); Rust doğrulayıcıları bu sertifikayı kullanmaz, şema aynası.
+pub const CERT_USAGES: [&str; 6] = ["ALT", "INDIRME", "BAYI", "HAK", "PAKET", "ISTEMCI"];
+/// `tekserp-iptal` satırının kullanımları — PAKET ve ISTEMCI YOK (iptalleri ayrı belgede, `paket_zinciri::TYP_PAKET_IPTAL`).
 pub const REVOCATION_USAGES: [&str; 4] = ["ALT", "INDIRME", "BAYI", "HAK"];
 pub const DAY_MS: f64 = 86_400_000.0;
 pub const LEASE_MAX_DAYS: f64 = 45.0;
@@ -48,7 +49,7 @@ struct Patterns {
     version: Regex,
     license_no: Regex,
     cert_kid: Regex,
-    package_cert_kid: Regex,
+    package_revocation_kid: Regex,
     module_key_id: Regex,
     wrapped_key: Regex,
     release_version: Regex,
@@ -72,7 +73,7 @@ fn patterns() -> &'static Patterns {
         version: Regex::new(r"^[0-9]{1,4}\.[0-9]{1,4}\.[0-9]{1,6}([-+][0-9A-Za-z.-]{1,40})?$").expect("surum"),
         license_no: Regex::new(r"^TKS-[0-9]{4}-[0-9]{4,6}$").expect("lisansNo"),
         cert_kid: Regex::new(r"^[a-z]+-[a-z0-9-]{1,60}$").expect("sertifika kid"),
-        package_cert_kid: Regex::new(r"^pkt-[a-z0-9-]{1,60}$").expect("pkt"),
+        package_revocation_kid: Regex::new(r"^(?:pkt|ist)-[a-z0-9-]{1,60}$").expect("pkt|ist"),
         module_key_id: Regex::new(r"^mk-[A-Za-z0-9_-]{22}$").expect("modul kid"),
         wrapped_key: Regex::new(r"^[A-Za-z0-9_-]{64}$").expect("sarili"),
         release_version: Regex::new(r"^[0-9]{1,4}\.[0-9]{1,4}\.[0-9]{1,6}(-[0-9A-Za-z]{1,20}(\.[0-9A-Za-z]{1,20}){0,3})?$").expect("yayin surumu"),
@@ -506,6 +507,7 @@ pub fn sub_kid_prefix(usage: &str) -> Option<&'static str> {
         "BAYI" => Some("bayi-"),
         "HAK" => Some("ara-"),
         "PAKET" => Some("pkt-"),
+        "ISTEMCI" => Some("ist-"),
         _ => None,
     }
 }
@@ -588,9 +590,9 @@ pub fn revocation(v: &Value) -> Result<Map<String, Value>, String> {
     )
 }
 
-/// PAKET iptal satırı (TS `PackageRevocationSchema` satırı, z.object): kid `pkt-`, kullanım alanı yok.
+/// Dağıtım iptali satırı (TS `PackageRevocationSchema` satırı, z.object): kid `pkt-` ya da `ist-`, kullanım alanı yok.
 fn package_revocation_entry(v: &Value) -> Option<Value> {
-    let is_kid = |x: &Value| is_str_matching(x, &patterns().package_cert_kid);
+    let is_kid = |x: &Value| is_str_matching(x, &patterns().package_revocation_kid);
     let is_reason = |x: &Value| is_string_len(x, 0, 200);
     object(v, &[req("kid", &is_kid), req("sertifikaId", &is_uuid), req("tarih", &is_iso), req("neden", &is_reason)], false)
         .ok()
@@ -607,7 +609,7 @@ fn package_revocation_entries(v: &Value) -> Option<Value> {
     unique_strings(&ids).then_some(Value::Array(shaped))
 }
 
-/// PAKET İPTALİ — TS `PackageRevocationSchema` (`tekserp-paketiptal`; `revocation`ın aynısı, satır yalnız `pkt-`).
+/// PAKET İPTALİ — TS `PackageRevocationSchema` (`tekserp-paketiptal`; `revocation`ın aynısı, satır `pkt-` ya da `ist-`).
 pub fn package_revocation(v: &Value) -> Result<Map<String, Value>, String> {
     let is_v = |x: &Value| js_number(x) == Some(PROTOCOL_VERSION);
     let is_seq = |x: &Value| is_int(x, Some(1.0), Some(MAX_SAFE));

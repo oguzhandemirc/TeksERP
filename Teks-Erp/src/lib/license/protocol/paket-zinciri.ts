@@ -37,14 +37,17 @@ export const PACKAGE_REVOCATION_FILE = "paket-iptal.jws";
 
 const CHAIN_PACKAGE_KID = /^pkt-[a-z0-9-]{1,40}$/;
 
-/** PAKET İPTALİ: `RevocationSchema`nın aynısı, satırı yalnız PAKET sertifikası (kid `pkt-`); kendi `sira`sı. */
+/**
+ * DAĞITIM İPTALİ (`tekserp-paketiptal`): `RevocationSchema`nın aynısı, satırı PAKET (`pkt-`) ya da ISTEMCI (`ist-`)
+ * sertifikası; kendi `sira`sı. Eşleşme kid'le ya da (tekil) sertifika kimliğiyle: `ist-` satırı PAKET sertifikasına dokunmaz.
+ */
 export const PackageRevocationSchema = z.object({
   v: z.literal(PROTOCOL_VERSION),
   iptalId: UuidSchema,
   sira: z.number().int().min(1).max(Number.MAX_SAFE_INTEGER),
   verilis: IsoTimeSchema,
   iptaller: z
-    .array(z.object({ kid: z.string().regex(/^pkt-[a-z0-9-]{1,60}$/), sertifikaId: UuidSchema, tarih: IsoTimeSchema, neden: z.string().max(200) }))
+    .array(z.object({ kid: z.string().regex(/^(?:pkt|ist)-[a-z0-9-]{1,60}$/), sertifikaId: UuidSchema, tarih: IsoTimeSchema, neden: z.string().max(200) }))
     .max(REVOCATION_MAX_ENTRIES)
     .refine((list) => new Set(list.map((e) => e.sertifikaId)).size === list.length, "İptal listesinde tekrarlı sertifika"),
 });

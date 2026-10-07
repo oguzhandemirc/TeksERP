@@ -229,3 +229,43 @@ fn package_revocation_merge_keeps_highest_sequence() {
     let mut bos = trust(&w, PackageMode::Kabul, T0);
     assert!(!policy::adopt_package_revocation(&RealFs, &lic_dir, &w.anchor, &pkg, &mut bos), "doğrulanmayan liste yok sayılır");
 }
+
+// ── ISTEMCI satırı (ISTEMCI-ANAHTARI-KOK-ALTINDA.md §3.4): dağıtım iptalinde `ist-*` satırı güncelleyicide zararsız ──
+
+fn mixed_revocation_token(w: &World, sequence: u32, with_pkt_row: bool) -> String {
+    let mut rows = vec![json!({ "kid": "ist-2026-1", "sertifikaId": OTHER_CERT_ID, "tarih": iso(T0 - DAY), "neden": "istemci anahtarı" })];
+    if with_pkt_row {
+        rows.push(json!({ "kid": PKT_KID, "sertifikaId": CERT_ID, "tarih": iso(T0 - DAY), "neden": "sızıntı" }));
+    }
+    let doc =
+        json!({ "v": 1, "iptalId": "4f4f4f4f-4f4f-4f4f-8f4f-4f4f4f4f4f4f", "sira": sequence, "verilis": iso(T0 - DAY), "iptaller": rows });
+    sign(&w.keys.root, paket_zinciri::TYP_PAKET_IPTAL, "kok-test-1", &doc)
+}
+
+/// `ist-*` satırlı belge düşmez (benimsenir, yüksek sıra), PAKET sertifikasını iptal etmez; aynı belgedeki `pkt-*` satırı eder.
+#[test]
+fn istemci_rows_in_package_revocation_are_harmless() {
+    let w = World::new("pz-istemci", Setup::default());
+    let token = publish_chained(&w);
+    let only_ist = paket_zinciri::verify_package_revocation(&Value::String(mixed_revocation_token(&w, 4, false)), &w.anchor.roots)
+        .expect("ist- satırlı belge doğrulanır (bütün belge düşmez)");
+    let mut kabul = trust(&w, PackageMode::Kabul, T0);
+    kabul.revocation = Some(only_ist);
+    assert_eq!(verdict(&token, &kabul), Ok(()), "ist- satırı PAKET sertifikasına dokunmaz");
+
+    let mixed = paket_zinciri::verify_package_revocation(&Value::String(mixed_revocation_token(&w, 5, true)), &w.anchor.roots)
+        .expect("karma belge doğrulanır");
+    kabul.revocation = Some(mixed);
+    assert_eq!(verdict(&token, &kabul), Err(code::PAKET_SERTIFIKA_IPTAL), "aynı belgedeki pkt- satırı iptal eder");
+
+    let pkg = w.dir.join("paket-ist");
+    let lic_dir = w.dir.join("lisans-ist");
+    std::fs::create_dir_all(&pkg).unwrap();
+    std::fs::create_dir_all(&lic_dir).unwrap();
+    std::fs::write(pkg.join(paket_zinciri::PACKAGE_REVOCATION_FILE), mixed_revocation_token(&w, 4, false)).unwrap();
+    let mut t = trust(&w, PackageMode::Kabul, T0);
+    t.revocation = Some(revocation(&w, 3, OTHER_CERT_ID));
+    assert!(policy::adopt_package_revocation(&RealFs, &lic_dir, &w.anchor, &pkg, &mut t), "ist- satırlı yüksek sıra benimsenir");
+    assert_eq!(t.revocation.as_ref().unwrap().sequence(), 4.0);
+    assert_eq!(verdict(&token, &t), Ok(()));
+}
