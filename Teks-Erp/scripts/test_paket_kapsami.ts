@@ -210,6 +210,15 @@ function olc(d: Dosyalar): Olcum {
     k("§7", "CI bayt kodunun çapa kipini (tek kip uretim) denetleyip güncelleyici künyesinde capaKipi ölçmüyor (G3)");
   }
   if (/hazirlik-capasi/.test(ci)) k("§7", "korumalı paket iş akışında emekli `hazirlik-capasi` özelliği var (çapa tek kip)");
+  // §7L (GUNCELLEYICI-SAGLAMLIK L3): `backend-oci` paketinin linux-x64 güncelleyicisi — eski glibc tabanında, test çapasız sürüm derlemesi.
+  const linux = /\n {2}guncelleyici-linux:\n([\s\S]*?)(?=\n {2}[a-z][a-z0-9-]*:\n|$)/.exec(ci)?.[1];
+  if (!linux) k("§7L", "korumali-paket.yml linux güncelleyici işi (guncelleyici-linux) yok");
+  else {
+    if (!/^ {4}runs-on: ubuntu-22\.04$/m.test(linux)) k("§7L", "linux güncelleyici Ubuntu 22.04 tabanında derlenmiyor (glibc ileri uyumu)");
+    if (!/cargo build --release --locked -p tekserp-guncelleyici\n/.test(linux) || /--features/.test(linux)) k("§7L", "linux güncelleyici özelliksiz sürüm derlemesi değil");
+    if (!/k\.testCapasi !== false/.test(linux) || !/k\.capaKipi !== "uretim"/.test(linux) || !/k\.hedef !== "linux"/.test(linux)) k("§7L", "linux güncelleyici künyesi (hedef · testCapasi · capaKipi) ölçülmüyor");
+    if (!/guncelleyici-cikti\/tekserp-guncelleyici\n/.test(linux) || !/guncelleyici-cikti\/guncelleyici-kunye\.json/.test(linux)) k("§7L", "linux güncelleyici ikilisi + künyesi yapıta girmiyor");
+  }
   return { kirmizi, olculemedi };
 }
 
@@ -272,6 +281,9 @@ function sondalar(taban: Dosyalar): void {
     ["N16 CI güncelleyicinin capaKipi ölçümü kalktı → KIRMIZI (§7, G3)", "kirmizi", metin(KORUMALI_CI, "$k.capaKipi -cne $kip)", "$false)"), "§7"],
     ["N17 CI tek kip kapısı gevşedi (hazırlık kipi de kabul) → KIRMIZI (§7)", "kirmizi", metin(KORUMALI_CI, 'if ($kip -cne "uretim") {', 'if ($kip -cne "uretim" -and $kip -cne "hazirlik") {'), "§7"],
     ["N18 CI emekli hazirlik-capasi özelliğiyle derliyor → KIRMIZI (§7)", "kirmizi", metin(KORUMALI_CI, "cargo build --release --locked -p tekserp-guncelleyici -p tekserp-hizmet", "cargo build --release --locked -p tekserp-guncelleyici -p tekserp-hizmet --features tekserp-guncelleyici/hazirlik-capasi"), "§7"],
+    ["N19 linux güncelleyici ubuntu-latest'e kaydı (glibc ileri uyumu yok) → KIRMIZI (§7L)", "kirmizi", metin(KORUMALI_CI, "    runs-on: ubuntu-22.04\n", "    runs-on: ubuntu-latest\n"), "§7L"],
+    ["N20 linux güncelleyici test çapası ölçümü kalktı → KIRMIZI (§7L)", "kirmizi", metin(KORUMALI_CI, "if (k.testCapasi !== false)", "if (false)"), "§7L"],
+    ["N21 linux güncelleyici test-anchor ile derleniyor → KIRMIZI (§7L)", "kirmizi", metin(KORUMALI_CI, "cargo build --release --locked -p tekserp-guncelleyici\n", "cargo build --release --locked -p tekserp-guncelleyici --features test-anchor\n"), "§7L"],
     ["O1 paketle.ps1 okunamadı → ÖLÇÜLEMEDİ", "olculemedi", (d) => { d[PAKETLE] = undefined; }],
     ["O2 $ALT_BETIKLER listesi kayboldu → ÖLÇÜLEMEDİ (§1)", "olculemedi", metin(PAKETLE, "$ALT_BETIKLER = @(", "$ALT_BETIKLER_ESKI = @("), "§1"],
   ];

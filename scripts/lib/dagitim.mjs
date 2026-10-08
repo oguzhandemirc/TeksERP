@@ -26,6 +26,8 @@ export const AYRILMIS_GRUP_KODLARI = Object.freeze(['ota']);
 export const URUNLER = Object.freeze(['panel', 'tablet', 'backend']);
 /** Ürünün indirme yolundaki dizini — satıcı `DOWNLOAD_PRODUCTS` ve Worker `URUN_DIZINLERI` ile aynı küme (bekçi ölçer). */
 export const URUN_DIZINI = Object.freeze({ panel: 'electron', tablet: 'mobil', backend: 'backend' });
+/** Linux/OCI backend paketinin yayın dizini (sözleşme 5); `URUN_DIZINI`ne indirme belirteci (L2b) inince katılır. */
+export const OCI_URUN_DIZINI = 'backend-oci';
 
 const SEMA = {
   kok: { zorunlu: ['urun', 'indirmeKoku', 'vdsKoku', 'defterKoku', 'lisansSunucusu', 'gruplar'], secimli: ['_aciklama'] },
@@ -193,6 +195,12 @@ export function turet(kayit) {
         defter: defter('tablet'),
       },
       backend: { feed: d('backend'), manifest: `${d('backend')}son.json`, vds: vds('backend'), defter: defter('backend') },
+      // Sözleşme 5 (GUNCELLEYICI.md §16): Linux/OCI paketi AYRI ürün yolunda; dizin adı protokolün
+      // RELEASE_PRODUCT_DIRS["linux-x64-oci"]si (test_backend_yayin §1o ölçer). İndirme öneki/Worker L2b'de.
+      'backend-oci': {
+        feed: `${k}${g}/${OCI_URUN_DIZINI}/`, manifest: `${k}${g}/${OCI_URUN_DIZINI}/son.json`,
+        vds: `${o.vdsKoku}/${g}/${OCI_URUN_DIZINI}`, defter: `${o.defterKoku}/${g}-backend-oci-YAYIN-DEFTERI.tsv`,
+      },
     };
   }
   return { gruplar, otaTakmaAd: `${k}${AYRILMIS_GRUP_KODLARI[0]}/${rv}/manifest` };

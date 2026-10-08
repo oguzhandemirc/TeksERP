@@ -119,3 +119,57 @@ jobs:
           path: ${{ runner.temp }}/koruma-arsiv/**
           if-no-files-found: warn
           retention-days: 7
+
+  # ---------------------------------------------------------------------------
+  # LINUX GÜNCELLEYİCİ (GUNCELLEYICI-SAGLAMLIK L3): `backend-oci` teslim paketine giren linux-x64 ikilisi.
+  # Taban Ubuntu 22.04 (glibc 2.35): eski glibc'de derlenen ikili yenilerde koşar (ileri uyum, R2). Sürüm
+  # derlemesi: test-anchor YOK, çapa kipi `uretim`; künye ikilinin KENDİSİNDEN okunur ve yapıta yazılır.
+  # `teslim-paketle.sh` künyeyi imajın içinde yeniden ölçer (CI dosyasına güvenmez).
+  # ---------------------------------------------------------------------------
+  guncelleyici-linux:
+    name: "Güncelleyici — linux-x64 (Ubuntu 22.04)"
+    runs-on: ubuntu-22.04
+    timeout-minutes: 40
+    defaults:
+      run:
+        working-directory: Teks-Erp/native
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Rust araç zinciri (stable)
+        run: rustup toolchain install stable --profile minimal && rustup default stable
+      - name: Sürüm derlemesi (özelliksiz, kilit dosyasıyla)
+        run: cargo build --release --locked -p tekserp-guncelleyici
+      - name: Künye + ELF + çapa kipi denetimi
+        shell: bash
+        run: |
+          set -eu
+          ikili=target/release/tekserp-guncelleyici
+          cikti=../../guncelleyici-cikti
+          mkdir -p "$cikti"
+          file "$ikili" | grep -q 'ELF 64-bit LSB pie executable, x86-64' || { file "$ikili"; echo "linux-x64 ELF değil"; exit 1; }
+          "$ikili" kunye > "$cikti/guncelleyici-kunye.json"
+          node -e '
+            const k = JSON.parse(require("fs").readFileSync(process.argv[1], "utf8"));
+            const e = [];
+            if (k.ad !== "tekserp-guncelleyici") e.push("ad " + k.ad);
+            if (k.hedef !== "linux") e.push("hedef " + k.hedef);
+            if (k.testCapasi !== false) e.push("test çapalı derleme");
+            if (k.capaKipi !== "uretim") e.push("çapa kipi " + k.capaKipi);
+            if (e.length) { console.error("güncelleyici künyesi sürüm derlemesi değil: " + e.join(", ")); process.exit(1); }
+            console.log("künye", JSON.stringify(k));
+          ' "$cikti/guncelleyici-kunye.json"
+          cp "$ikili" "$cikti/tekserp-guncelleyici"
+          ( cd "$cikti" && sha256sum tekserp-guncelleyici guncelleyici-kunye.json | tee SHA256SUMS )
+          ldd "$ikili" || true
+      - name: Yapıtı yükle (tekserp-guncelleyici + künye)
+        uses: actions/upload-artifact@v4
+        with:
+          name: guncelleyici-linux-x64
+          path: |
+            guncelleyici-cikti/tekserp-guncelleyici
+            guncelleyici-cikti/guncelleyici-kunye.json
+            guncelleyici-cikti/SHA256SUMS
+          if-no-files-found: error
+          retention-days: 7
