@@ -177,16 +177,32 @@ function pgGereksinimi(f: Bayraklar, capa: readonly PackageKey[], zincir: Omit<P
   let hedef: PgRequirement["hedef"] = null;
   const kunyeDosyasi = f.get("pg-kunye");
   if (kunyeDosyasi) {
-    const isaretci = readReleasePointer(fs.readFileSync(kunyeDosyasi, "utf8"));
-    if (!isaretci.ok) throw new CliError(`PG künyesi okunamadı: ${isaretci.code}`);
-    const k = verifyPgPackageManifest(isaretci.value, { keys: capa, zincir });
-    if (!k.ok) throw new CliError(`PG künyesi doğrulanamadı: ${k.code}`);
-    if (k.value.cizgi !== cizgi.data) throw new CliError(`PG künyesi ${k.value.cizgi} ana sürümünün, bildirim çizgisi ${cizgi.data} — ana sürüm geçişi otomatik değildir`);
-    hedef = { surum: k.value.surum, derleme: k.value.derleme, paket: k.value.paket, icerikSha256: k.value.icerikSha256, icuSurum: k.value.icuSurum };
+    const k = pgKunyesiDogrula(kunyeDosyasi, { keys: capa, zincir });
+    if (k.cizgi !== cizgi.data) throw new CliError(`PG künyesi ${k.cizgi} ana sürümünün, bildirim çizgisi ${cizgi.data} — ana sürüm geçişi otomatik değildir`);
+    hedef = { surum: k.surum, derleme: k.derleme, paket: k.paket, icerikSha256: k.icerikSha256, icuSurum: k.icuSurum };
   }
   const p = PgRequirementSchema.safeParse({ cizgi: cizgi.data, enAz, hedef });
   if (!p.success) throw new CliError(`PG gereksinimi geçersiz: ${p.error.issues[0]?.message ?? "şema"}`);
   return p.data;
+}
+
+/**
+ * PG künyesi dosyası: zincirli ailenin ön ekini taşıyan ad (`pg-zincir[-<kid>].json`) TEK adaylı seçimden geçer (ad kid'i =
+ * imzalayan · pkt-* sertifikalı · iptalsiz; aileye uymayan ad RED); diğer adlar (`pg.json`) tek belge doğrulamasıyla.
+ */
+function pgKunyesiDogrula(dosya: string, guven: { readonly keys: readonly PackageKey[]; readonly zincir: Omit<PackageTrust, "keys"> }): PgPackageManifest {
+  const ad = path.basename(dosya);
+  const metin = fs.readFileSync(dosya, "utf8");
+  if (ad.startsWith(CHAINED_PG_POINTER_FILE.replace(/\.json$/, ""))) {
+    const secim = selectChainedDocument<PgPackageManifest>("pg", [chainedPgCandidate(ad, metin, guven)]);
+    if (!secim?.ok) throw new CliError(`PG künyesi doğrulanamadı: ${secim?.code ?? "SURUM_ISARETCI"} — ${secim?.message ?? ad}`);
+    return secim.value.value;
+  }
+  const isaretci = readReleasePointer(metin);
+  if (!isaretci.ok) throw new CliError(`PG künyesi okunamadı: ${isaretci.code}`);
+  const k = verifyPgPackageManifest(isaretci.value, guven);
+  if (!k.ok) throw new CliError(`PG künyesi doğrulanamadı: ${k.code}`);
+  return k.value;
 }
 
 // ── Backend bildirimi ───────────────────────────────────────────────────────
@@ -419,18 +435,15 @@ async function pgImzala(f: Bayraklar): Promise<void> {
 
 function pgDogrula(f: Bayraklar): void {
   const zip = path.resolve(gerek(f, "zip"));
-  const isaretci = readReleasePointer(fs.readFileSync(gerek(f, "kunye"), "utf8"));
-  if (!isaretci.ok) throw new CliError(`PG künyesi okunamadı: ${isaretci.code}`);
-  const k = verifyPgPackageManifest(isaretci.value, { keys: capaOku(f, null), zincir: zincirGuveni(f, null) });
-  if (!k.ok) throw new CliError(`PG künyesi doğrulanamadı: ${k.code}`);
+  const k = pgKunyesiDogrula(gerek(f, "kunye"), { keys: capaOku(f, null), zincir: zincirGuveni(f, null) });
   const olcu = { ad: path.basename(zip), boyut: fs.statSync(zip).size, sha256: sha256Dosya(zip) };
-  if (olcu.ad !== k.value.paket.ad || olcu.boyut !== k.value.paket.boyut || olcu.sha256 !== k.value.paket.sha256) {
+  if (olcu.ad !== k.paket.ad || olcu.boyut !== k.paket.boyut || olcu.sha256 !== k.paket.sha256) {
     throw new CliError(`PG zip'i künyeyle TUTMUYOR (${olcu.ad} ${olcu.boyut} B) — künye başka paketin`);
   }
   const cikti = path.resolve(gerek(f, "cikti"));
   fs.mkdirSync(cikti, { recursive: true });
-  fs.writeFileSync(path.join(cikti, "sonuc.json"), `${JSON.stringify({ v: 1, kip: "pg-dogrula", kunye: k.value }, null, 2)}\n`);
-  console.error(`✓ pg-dogrula: PostgreSQL ${k.value.surum}-${k.value.derleme} · ${olcu.ad} künyeyle birebir`);
+  fs.writeFileSync(path.join(cikti, "sonuc.json"), `${JSON.stringify({ v: 1, kip: "pg-dogrula", kunye: k }, null, 2)}\n`);
+  console.error(`✓ pg-dogrula: PostgreSQL ${k.surum}-${k.derleme} · ${olcu.ad} künyeyle birebir`);
 }
 
 // ── Yeniden imza (3.9 D6, yıllık tören §5 adım 5) ─────────────────────────────

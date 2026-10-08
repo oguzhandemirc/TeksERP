@@ -794,6 +794,14 @@ async function bolum8(): Promise<void> {
   const pgDzSonuc = existsSync(path.join(c16, "sonuc.json")) ? jsonOku(path.join(c16, "sonuc.json")) : {};
   check("§8q ⭐ D8 pg dizin kipi: iptalli kid'siz elenir, girdi pg-zincir-pkt-2099-2.json → pg-zincir-pkt-2099-3.json",
     pgDz.kod === 0 && pgDzSonuc.girdi === pgYeniAdi && existsSync(path.join(c16, `pg-zincir-${PKT3_KID}.json`)), `çıkış ${pgDz.kod} ${pgDz.hata.trim().slice(-140)}`);
+  // D8 kurulum arşivi (pg-dogrula / ortak-dogrula --pg-kunye): kid'li ad seçim kuralından geçer, ad kid'i = imzalayan.
+  const pgDogrulaAd = (kunye: string) => bildirimCli(["pg-dogrula", `--kunye=${kunye}`, `--zip=${pgZip}`, "--guven-capasi=uretim", `--kok-capa=${capa}`, `--cikti=${dizin("pg8-dogrula")}`], "", env);
+  const pgdK = pgDogrulaAd(path.join(c12, pgYeniAdi));
+  const pgYanlisAd = path.join(dizin("pg8-yanlis"), `pg-zincir-${PKT3_KID}.json`);
+  copyFileSync(path.join(c12, pgYeniAdi), pgYanlisAd);
+  const pgdY = pgDogrulaAd(pgYanlisAd);
+  check("§8r ⭐ D8 pg-dogrula: pg-zincir-pkt-2099-2.json KABUL · aynı belge pg-zincir-pkt-2099-3.json adıyla → RED (JWS_KID)",
+    pgdK.kod === 0 && pgdY.kod !== 0 && /JWS_KID/.test(pgdY.hata), `çıkış ${pgdK.kod}/${pgdY.kod} ${pgdK.hata.trim().slice(-100)} | ${pgdY.hata.trim().slice(-120)}`);
 
   const dk = dizin("docker8");
   for (const f of ["t.tar.gz", "docker-compose.yml", ".env.ornek"]) writeFileSync(path.join(dk, f), `${f}\n`);
