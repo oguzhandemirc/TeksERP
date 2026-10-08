@@ -50,9 +50,10 @@ describe("etkin sabit, dönüş adresi, tablet QR'ı", () => {
     expect(activePinFor([PIN], "http://192.168.1.50:4443")).toBeNull();
     expect(activePinFor([PIN], "https://192.168.1.50:9999")).toBeNull();
   });
-  it("dönüş: aynı sunucunun son http adresi, yoksa varsayılan port", () => {
-    expect(httpFallbackUrl("https://10.0.0.5:4443", ["http://10.0.0.9:4000", "http://10.0.0.5:4010"])).toBe("http://10.0.0.5:4010");
-    expect(httpFallbackUrl("https://10.0.0.5:4443", [])).toBe("http://10.0.0.5:4000");
+  it("dönüş yalnız döngü adresinde: son http adresi, yoksa varsayılan port; ağ adresinde dönüş YOK", () => {
+    expect(httpFallbackUrl("https://localhost:4443", ["http://10.0.0.9:4000", "http://localhost:4010"])).toBe("http://localhost:4010");
+    expect(httpFallbackUrl("https://127.0.0.1:4443", [])).toBe("http://127.0.0.1:4000");
+    expect(httpFallbackUrl("https://10.0.0.5:4443", ["http://10.0.0.5:4010"])).toBeNull();
   });
   it("QR yalnız sabitli şifreli panelde ve ayrıştırıcıyla gidiş-dönüş", () => {
     expect(tabletTlsQr([PIN], "http://192.168.1.50:4000")).toBeNull();
@@ -134,27 +135,23 @@ describe("Şifreli bağlantı bölümü", () => {
     delete (window as unknown as { api?: unknown }).api;
   });
 
-  it("LAN adresinde onay kutusu işaretlenmeden sabitlenemez; onayla 'confirmed' gider", async () => {
+  it("LAN adresinde kod gösterilir; 'Kodlar aynı — bağlan' ile 'confirmed' gider", async () => {
     const onChanged = vi.fn();
     render(<LanTlsSection url="http://192.168.1.50:4000" recent={[]} onAddressChanged={onChanged} />);
-    await userEvent.click(screen.getByRole("button", { name: /Şifreli bağlantıya geç/ }));
+    await userEvent.click(screen.getByRole("button", { name: /Doğrulama kodunu göster/ }));
     expect(await screen.findByTestId("lan-tls-observed-fp")).toHaveTextContent(formatFingerprintGroups(FP));
-    const go = screen.getByRole("button", { name: /Onayla ve şifreli/ });
-    expect(go).toBeDisabled();
-    await userEvent.click(go);
     expect(tlsPin).not.toHaveBeenCalled();
-    await userEvent.click(screen.getByLabelText("Kodlar birebir aynı"));
-    await userEvent.click(go);
+    await userEvent.click(screen.getByRole("button", { name: "Kodlar aynı — bağlan" }));
     await waitFor(() => expect(tlsPin).toHaveBeenCalledWith({ baseUrl: "http://192.168.1.50:4000", fingerprint: FP, via: "confirmed" }));
     await waitFor(() => expect(onChanged).toHaveBeenCalledWith("https://192.168.1.50:4443"));
   });
 
-  it("döngü adresinde onay kutusu yok, 'loopback' gider", async () => {
+  it("döngü adresinde kod karşılaştırma yok, 'loopback' gider", async () => {
     observation = obs({ host: "127.0.0.1" });
     render(<LanTlsSection url="http://127.0.0.1:4000" recent={[]} onAddressChanged={vi.fn()} />);
-    await userEvent.click(screen.getByRole("button", { name: /Şifreli bağlantıya geç/ }));
+    await userEvent.click(screen.getByRole("button", { name: /Doğrulama kodunu göster/ }));
     await screen.findByTestId("lan-tls-observed-fp");
-    expect(screen.queryByLabelText("Kodlar birebir aynı")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Kodlar aynı — bağlan" })).toBeNull();
     await userEvent.click(screen.getByRole("button", { name: /Şifreli bağlantıya geç/ }));
     await waitFor(() => expect(tlsPin).toHaveBeenCalledWith(expect.objectContaining({ via: "loopback" })));
   });
@@ -162,13 +159,13 @@ describe("Şifreli bağlantı bölümü", () => {
   it("ilan ile el sıkışma farklıysa sabitleme düğmesi hiç çıkmaz", async () => {
     observation = obs({ observedFingerprint: OTHER });
     render(<LanTlsSection url="http://192.168.1.50:4000" recent={[]} onAddressChanged={vi.fn()} />);
-    await userEvent.click(screen.getByRole("button", { name: /Şifreli bağlantıya geç/ }));
+    await userEvent.click(screen.getByRole("button", { name: /Doğrulama kodunu göster/ }));
     expect(await screen.findByText(/araya giren/)).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /Onayla/ })).toBeNull();
+    expect(screen.queryByRole("button", { name: /Kodlar aynı/ })).toBeNull();
     expect(tlsPin).not.toHaveBeenCalled();
   });
 
-  it("sabitli adreste kod görünür; kaldırma onaylı ve http adresine döner", async () => {
+  it("sabitli ağ adresinde kod görünür; kaldırma onaylı ve şifresiz adrese DÖNMEZ (yeniden eşleşme)", async () => {
     pins = [PIN];
     const onChanged = vi.fn();
     render(<LanTlsSection url="https://192.168.1.50:4443" recent={["http://192.168.1.50:4000"]} onAddressChanged={onChanged} />);
@@ -177,7 +174,8 @@ describe("Şifreli bağlantı bölümü", () => {
     expect(tlsUnpin).not.toHaveBeenCalled();
     await userEvent.click(await screen.findByRole("button", { name: "Kaldır" }));
     await waitFor(() => expect(tlsUnpin).toHaveBeenCalledWith(IID));
-    await waitFor(() => expect(onChanged).toHaveBeenCalledWith("http://192.168.1.50:4000"));
+    await waitFor(() => expect(onChanged).toHaveBeenCalledWith("https://192.168.1.50:4443"));
+    expect(onChanged).not.toHaveBeenCalledWith(expect.stringMatching(/^http:/));
   });
 
   it("köprü yoksa (tarayıcı derlemesi) bölüm hiç görünmez", () => {

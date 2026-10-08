@@ -5,7 +5,7 @@ import { CheckCircle2, History, Loader2, Radar, RotateCcw, X, XCircle } from "lu
 import { useServerDiscovery } from "@/hooks/useServerDiscovery";
 import { ServerDiscoveryPanel } from "./ServerDiscoveryPanel";
 import { LanTlsSection } from "./LanTlsSection";
-import { httpSwitchBlock, type HttpSwitchBlock } from "@/lib/lan-tls-ui";
+import { addressRefusal, httpSwitchBlock, type HttpSwitchBlock } from "@/lib/lan-tls-ui";
 import {
   Dialog,
   DialogContent,
@@ -123,6 +123,12 @@ export function ApiEndpointDialog({ open, onOpenChange }: Props) {
       setTest({ status: "fail", message: "IP / sunucu adresi boş olamaz." });
       return;
     }
+    // Yalnız şifreli: ağ adresinde http:// ya da eşleşmemiş https denenmez bile (ana süreç de keser).
+    const refusal = await addressRefusal(window.api?.discovery, target);
+    if (refusal) {
+      setTest({ status: "fail", message: refusal });
+      return;
+    }
     setTest({ status: "testing" });
     try {
       const res = await axios.get<{ status?: string }>(`${target}/health`, { timeout: 5_000 });
@@ -149,6 +155,12 @@ export function ApiEndpointDialog({ open, onOpenChange }: Props) {
     }
     setSaving(true);
     try {
+      const refusal = await addressRefusal(window.api?.discovery, target);
+      if (refusal) {
+        setTest({ status: "fail", message: refusal });
+        toast.error("Bu adres kaydedilmedi.", { description: refusal });
+        return;
+      }
       const block = await httpSwitchBlock(window.api?.discovery, target, getActiveApiBaseUrl());
       setTlsBlock(block);
       if (block) {

@@ -121,7 +121,12 @@ export function LoginPage() {
             void (async () => {
               // Kimliği sabitlemek YETMEZ — adresi de uygula, yoksa recheck eski
               // (ölü) adresi prob eder ve aynı "ulaşılamadı" ekranı geri gelir.
-              await connectToDiscoveredServer(c, { trustIdentity: true });
+              try {
+                await connectToDiscoveredServer(c, { trustIdentity: true });
+              } catch (e) {
+                toast.error("Bu sunucuya bağlanılmadı.", { description: (e as Error).message });
+                return;
+              }
               setMismatch(null);
               toast.success("Sunucuya bağlanıldı.", { description: c.baseUrl });
               await reach.recheck();

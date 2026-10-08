@@ -218,3 +218,65 @@ export function parseTlsQr(text: string): TlsQr | null {
   if (hosts.length > TLS_QR_MAX_HOSTS || !hosts.every((h) => QR_HOST.test(h))) return null;
   return { installationId: iid === "-" ? null : iid, advert, hosts };
 }
+
+// ---------------------------------------------------------------------------
+// Panel yalnız şifreli (kullanıcı kararı 2026-10-08): ağdaki sunucuya http:// yok. Şifresiz yalnız döngü
+// adresi (paket makineden çıkmaz); https ya sabitli (kendinden imzalı, kod karşılaştırılmış) ya da izinli üst
+// alanda genel CA'lı (sistem güveni + ad eşleşmesi Chromium'da). Panel-yalnız; tablet ikizi değildir.
+// ---------------------------------------------------------------------------
+
+export const LAN_TLS_DEFAULT_PORT = 4443;
+
+export const HTTP_NETWORK_REFUSED_REASON =
+  "Sunucuya yalnız şifreli bağlanılır — ağdaki sunucuya http:// ile bağlanılmaz. 'Doğrulama kodunu göster' ile sunucunun kodunu karşılaştırın; kodlar aynıysa şifreli bağlanılır.";
+
+export const UNPAIRED_HTTPS_REASON =
+  "Bu sunucu bu bilgisayarla henüz eşleşmedi — 'Doğrulama kodunu göster' ile sunucunun kodunu karşılaştırın.";
+
+export type PanelTransport =
+  | { kind: "loopback" }
+  | { kind: "pinned"; pin: TlsPin }
+  | { kind: "internet" }
+  | { kind: "refused"; reason: string };
+
+function urlParts(url: string): { scheme: string; host: string; port: number | null } | null {
+  try {
+    const u = new URL((url ?? "").trim());
+    const scheme = u.protocol.replace(/:$/, "").toLowerCase();
+    return { scheme, host: u.hostname.toLowerCase(), port: u.port ? Number(u.port) : null };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Panelin kaydedip bağlanabileceği adres mi. Döngü adresi her kanalda serbest; ağ adresinde http:// red;
+ * https yalnız bu porttaki sabitle ya da izinli üst alanda (genel CA). Sabitsiz https kendinden imzalıysa
+ * Chromium zaten reddeder — burada da red, kullanıcı eşleştirmeye yönlenir.
+ */
+export function panelTransportFor(
+  pins: readonly TlsPin[],
+  url: string,
+  isInternetHost: (host: string) => boolean,
+): PanelTransport {
+  const p = urlParts(url);
+  if (!p || (p.scheme !== "http" && p.scheme !== "https") || !p.host) return { kind: "refused", reason: "Adres geçersiz." };
+  if (isLoopbackHost(p.host)) return { kind: "loopback" };
+  if (p.scheme === "http") return { kind: "refused", reason: HTTP_NETWORK_REFUSED_REASON };
+  const port = p.port ?? 443;
+  const pin = pins.find((x) => x.port === port);
+  if (pin) return { kind: "pinned", pin };
+  if (isInternetHost(p.host)) return { kind: "internet" };
+  return { kind: "refused", reason: UNPAIRED_HTTPS_REASON };
+}
+
+/**
+ * Ağ katmanı kapısı (oturumun her isteği): şifresiz şema (http/ws) yalnız döngü adresine. Arayüz kapısı
+ * atlansa da ağdaki sunucuya düz metin gitmez. Diğer şemalar (https, file, data, devtools…) bu kapının dışında.
+ */
+export function plainRequestAllowed(url: string): boolean {
+  const p = urlParts(url);
+  if (!p) return !/^\s*(http|ws):/i.test(url ?? "");
+  if (p.scheme !== "http" && p.scheme !== "ws") return true;
+  return isLoopbackHost(p.host);
+}

@@ -13,6 +13,7 @@
  * yanlış-pozitif üretir hale getirir.
  */
 import type { DiscoveredServer } from "@shared/ipc-contract";
+import { addressRefusal } from "@/lib/lan-tls-ui";
 import {
   applyApiBaseUrl,
   getActiveApiBaseUrl,
@@ -53,6 +54,9 @@ export async function connectToDiscoveredServer(
   candidate: DiscoveredServer,
   opts: { trustIdentity?: boolean } = {},
 ): Promise<void> {
+  // Yalnız şifreli: ağdaki sunucuya http:// ya da eşleşmemiş https uygulanmaz (aday listesi de süzülü gelir).
+  const refusal = await addressRefusal(window.api?.discovery, candidate.baseUrl);
+  if (refusal) throw new Error(refusal);
   if (opts.trustIdentity) {
     // Kimlik önce sabitlenir: adres uygulandıktan sonraki ilk prob'un yeniden
     // "uyuşmazlık" demesini önler.

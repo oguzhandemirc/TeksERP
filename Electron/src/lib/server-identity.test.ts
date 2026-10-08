@@ -23,8 +23,8 @@ const store = new Map<string, string>();
 function candidate(over: Partial<DiscoveredServer> = {}): DiscoveredServer {
   return {
     host: "192.168.1.102",
-    port: 4000,
-    baseUrl: "http://192.168.1.102:4000",
+    port: 4443,
+    baseUrl: "https://192.168.1.102:4443",
     via: "scan",
     rttMs: 12,
     matchesPinned: "mismatch",
@@ -43,7 +43,14 @@ beforeEach(() => {
   store.clear();
   applyApiBaseUrl("http://localhost:4000"); // eski, artık cevap vermeyen adres
   (window as unknown as { api?: unknown }).api = {
-    discovery: { pin, probe: vi.fn(), state: vi.fn(), start: vi.fn() },
+    discovery: {
+      pin,
+      probe: vi.fn(),
+      state: vi.fn(),
+      start: vi.fn(),
+      // Yalnız şifreli: aday adresi sabitli https olmalı (ağda http:// uygulanmaz).
+      tlsPins: async () => [{ installationId: "yeni-kurulum-id", fingerprint: "a".repeat(64), port: 4443, via: "confirmed", pinnedAt: "" }],
+    },
     secureStore: {
       get: async (k: string) => store.get(k) ?? null,
       set: async (k: string, v: string) => void store.set(k, v),
@@ -58,20 +65,26 @@ afterEach(() => {
 });
 
 describe("connectToDiscoveredServer", () => {
+  it("⛔ ağdaki http:// aday uygulanmaz — adres değişmez, sebep Türkçe", async () => {
+    await expect(connectToDiscoveredServer(candidate({ baseUrl: "http://192.168.1.102:4000", port: 4000 }))).rejects.toThrow(/yalnız şifreli/);
+    expect(getActiveApiBaseUrl()).toBe("http://localhost:4000");
+    expect(store.size).toBe(0);
+  });
+
   it("⭐ aktif adresi adayın adresine ÇEKER (bu olmazsa modal çıkışsız kalır)", async () => {
     await connectToDiscoveredServer(candidate());
-    expect(getActiveApiBaseUrl()).toBe("http://192.168.1.102:4000");
+    expect(getActiveApiBaseUrl()).toBe("https://192.168.1.102:4443");
   });
 
   it("adresi kalıcı olarak da yazar — sonraki açılış aynı sunucuya gelir", async () => {
     await connectToDiscoveredServer(candidate());
-    expect(store.get("config.apiBaseUrl")).toBe("http://192.168.1.102:4000");
+    expect(store.get("config.apiBaseUrl")).toBe("https://192.168.1.102:4443");
   });
 
   it("son kullanılanlara ekler", async () => {
     await connectToDiscoveredServer(candidate());
     expect(JSON.parse(store.get("config.apiBaseUrl.recent") ?? "[]")).toContain(
-      "http://192.168.1.102:4000",
+      "https://192.168.1.102:4443",
     );
   });
 
@@ -88,7 +101,7 @@ describe("connectToDiscoveredServer", () => {
   it("⭐ sabitleme HATA VERSE BİLE adres uygulanır — bağlanma yolu düşmez", async () => {
     pin.mockRejectedValueOnce(new Error("ipc koptu"));
     await connectToDiscoveredServer(candidate(), { trustIdentity: true });
-    expect(getActiveApiBaseUrl()).toBe("http://192.168.1.102:4000");
+    expect(getActiveApiBaseUrl()).toBe("https://192.168.1.102:4443");
   });
 });
 
