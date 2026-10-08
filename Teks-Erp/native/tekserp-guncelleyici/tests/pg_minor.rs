@@ -5,50 +5,13 @@ mod common;
 
 use common::*;
 use serde_json::{json, Value};
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::sync::atomic::Ordering;
 use tekserp_guncelleyici::env::{Fs, RealFs, SvcState};
 use tekserp_guncelleyici::ipc::State;
 
-const OLD_TAG: &str = "16.9-1";
-const NEW_TAG: &str = "16.15-4";
-
-fn pg_files(version: &str, icu: &str) -> Vec<(String, Vec<u8>)> {
-    vec![
-        ("bin/postgres".into(), b"#!fake postgres".to_vec()),
-        ("bin/pg_ctl".into(), b"#!fake pg_ctl".to_vec()),
-        ("bin/psql".into(), b"#!fake psql".to_vec()),
-        ("bin/SURUM".into(), version.as_bytes().to_vec()),
-        (format!("bin/icuuc{icu}.dll"), b"icu".to_vec()),
-        ("share/timezone/UTC".into(), b"tz".to_vec()),
-    ]
-}
-
-fn image_for(root: &Path, tag: &str) -> String {
-    format!(
-        "\"{}\" runservice -N \"TeksERP-PostgreSQL\" -D \"{}\" -w",
-        root.join("pgsql").join(tag).join("bin").join("pg_ctl").display(),
-        root.join("pgveri").display()
-    )
-}
-
-const PG_ZIP: &str = "postgresql-16.15-4-win-x64.zip";
-
-/// Sözleşme §1.6: PG künyesi yükü (`tekserp-pg`, kanaldan bağımsız).
-fn pg_manifest(zip: &[u8], content_hex: &str, icu: &str) -> Value {
-    json!({
-        "v": 1, "urun": "postgresql", "platform": "win32-x64", "cizgi": 16, "surum": "16.15", "derleme": 4,
-        "paket": { "ad": PG_ZIP, "boyut": zip.len(), "sha256": sha_hex(zip) },
-        "icerikSha256": content_hex, "icuSurum": icu, "yayinZamani": "2026-09-30T21:00:00Z",
-    })
-}
-
-/// Backend bildiriminin `pg` bloğu künyeye bağlanır (§1.6); `hedef` künyenin alanlarıdır.
-fn pg_requirement(k: &Value) -> Value {
-    json!({ "cizgi": 16, "enAz": "16.9", "hedef": {
-        "surum": k["surum"], "derleme": k["derleme"], "paket": k["paket"], "icerikSha256": k["icerikSha256"], "icuSurum": k["icuSurum"],
-    } })
-}
+const OLD_TAG: &str = PG_OLD_TAG;
+const NEW_TAG: &str = PG_NEW_TAG;
 
 /// Backend bildirimini verilen `pg` bloğuyla yeniden imzalayıp yayınlar (paket aynı).
 fn republish_backend(w: &World, pg: Value) {
@@ -60,37 +23,10 @@ fn republish_backend(w: &World, pg: Value) {
 /// Kendi PG örneği (16.9-1) + sunucuda 16.15-4 paketi, imzalı künyesi ve onu isteyen backend bildirimi.
 fn pg_world(tag: &str, kind: &str, new_icu: &str) -> World {
     let w = World::new(tag, Setup::default());
-    let root = w.layout.root.clone();
-    for (p, c) in pg_files("16.9", "67") {
-        let f = root.join("pgsql").join(OLD_TAG).join(&p);
-        std::fs::create_dir_all(f.parent().unwrap()).unwrap();
-        std::fs::write(f, c).unwrap();
-    }
-    RealFs.set_link(&w.layout.pg_bin_link(), &root.join("pgsql").join(OLD_TAG).join("bin")).unwrap();
-    std::fs::create_dir_all(root.join("pgveri")).unwrap();
-    std::fs::write(root.join("pgveri").join("PG_VERSION"), "16\n").unwrap();
-    let instance = json!({
-        "bicim": 1, "kip": kind, "hizmet": PG, "surum": "16.9", "derleme": "1",
-        "ikiliDizin": root.join("pgsql").join(OLD_TAG), "oncekiIkiliDizin": null,
-        "veriDizini": root.join("pgveri"), "port": 5432, "kuruldu": "2026-09-01T00:00:00Z", "guncellendi": null,
-    });
-    std::fs::write(w.layout.pg_instance_file(), serde_json::to_vec_pretty(&instance).unwrap()).unwrap();
-    {
-        let mut svcs = w.svcs.lock().unwrap();
-        let pg = svcs.get_mut(PG).unwrap();
-        pg.image = image_for(&root, OLD_TAG);
-        pg.version = Some("16.9".into());
-    }
+    install_pg_instance(&w, kind);
     // PG paketi: sahne + `shasum -c` biçiminde içerik manifestosu + imzalı künye (pg.json).
-    let files = pg_files("16.15", new_icu);
-    let mut manifest_text = String::new();
-    for (p, c) in &files {
-        manifest_text.push_str(&format!("{}  {p}\n", sha_hex(c)));
-    }
-    let mut all = files.clone();
-    all.push(("TEKSERP-ICERIK.sha256".into(), manifest_text.clone().into_bytes()));
-    let pg_zip = zip_of(&all);
-    let kunye = pg_manifest(&pg_zip, &sha_hex(manifest_text.as_bytes()), new_icu);
+    let (pg_zip, content_hex) = pg_stage_zip(new_icu);
+    let kunye = pg_manifest(&pg_zip, &content_hex, new_icu);
     let dir = format!("/{CHANNEL}/backend/pg/{NEW_TAG}");
     {
         let mut served = w.files.lock().unwrap();

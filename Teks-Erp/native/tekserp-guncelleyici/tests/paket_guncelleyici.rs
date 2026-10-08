@@ -1,5 +1,6 @@
 //! PAKET anahtarı kökün altında — güncelleyici tarafı (sözleşme `docs/design/PAKET-ANAHTARI-KOK-ALTINDA.md` §2.3–§4):
-//! işaretçi sırası + eski dosyaya 404 düşüşü, KABUL/YERLEŞİK, tolerans sınırı, sınıf, iptal birleşmesi.
+//! işaretçi sırası + eski dosyaya 404 düşüşü, KABUL/YERLEŞİK, tolerans sınırı, sınıf, iptal birleşmesi, D8 kid'li adlar
+//! (sabitli sürüm bildirimi · PG künyesi bildirimi imzalayanından).
 //! Belge doğrulayıcının kendisi `tekserp-dogrulama/tests/paket_zinciri.rs`te (TS vektörleriyle) ölçülür.
 #![allow(dead_code)]
 mod common;
@@ -10,7 +11,7 @@ use serde_json::{json, Value};
 use tekserp_dogrulama::b64;
 use tekserp_dogrulama::outcome::code;
 use tekserp_dogrulama::paket_zinciri::{self, PackageMode, PackageTrust, VerifiedPackageRevocation};
-use tekserp_guncelleyici::env::RealFs;
+use tekserp_guncelleyici::env::{Fs, RealFs};
 use tekserp_guncelleyici::ipc::State;
 use tekserp_guncelleyici::policy::{self, LicenseView};
 use tekserp_guncelleyici::release;
@@ -372,4 +373,92 @@ fn pinned_target_unkidded_only_installs_as_before() {
     let st = w.status().unwrap();
     assert_eq!(st.state, State::Succeeded, "{:?} {:?}", st.error_code, st.message);
     assert_eq!(w.current().as_deref(), Some(NEW));
+}
+
+// ── D8 PG künyesi: kid'li ad, bildirimi imzalayan `pkt-*`ten ──────────────────────────────────────
+
+/// Kendi PG (16.9-1) + yeniden imzalı dünya: `son-zincir.json` ikinci PAKET sertifikasıyla (pkt-2027-1) imzalı, zip de
+/// onunla; PG künyesi `pg.json` OLMADAN — `kidsiz` = eski takımın `pg-zincir.json`u (pkt-2026-1), `kidli` =
+/// `pg-zincir-pkt-2027-1.json`. Künye adayı yalnız kid'siz ad + bildirimi imzalayanın kid'li adıdır. İkinci sertifikanın
+/// bitişi `second_end`.
+fn chained_pg_world(tag: &str, unkidded: bool, kidded: bool, second_end: i64) -> World {
+    let w = World::new(tag, Setup::default());
+    install_pg_instance(&w, "kendi");
+    let (pg_zip, content_hex) = pg_stage_zip("67");
+    let kunye = pg_manifest(&pg_zip, &content_hex, "67");
+    let cert1 = certificate(&w, &["URETIM", "TEST"]);
+    let cert2 = certificate_of(&w, &pkt2_key(), PKT2_KID, CERT2_ID, second_end);
+    let zip2 = chained_zip_by(&w, &pkt2_key(), PKT2_KID, &cert2);
+    let name2 = format!("tekserp-backend-{NEW}-{PKT2_KID}.zip");
+    let mut payload = manifest_payload(PKT2_KID, NEW, &zip2, Some(&json!({ "pg": pg_requirement(&kunye) })));
+    payload["paket"]["ad"] = json!(name2);
+    let token = sign_manifest(&pkt2_key(), PKT2_KID, &chained_payload(&payload, &cert2));
+    let dir = format!("/{CHANNEL}/backend/pg/{PG_NEW_TAG}");
+    let mut f = w.files.lock().unwrap();
+    f.clear();
+    f.insert(format!("/{CHANNEL}/backend/{NEW}/{name2}"), zip2);
+    f.insert(format!("/{CHANNEL}/backend/{NEW}/surum-zincir-{PKT2_KID}.json"), pointer(&token));
+    f.insert(format!("/{CHANNEL}/backend/{}", release::CHAINED_RELEASE_POINTER_FILE), pointer(&token));
+    f.insert(format!("{dir}/{PG_ZIP}"), pg_zip);
+    if unkidded {
+        let t = sign(&pkt_key(), "tekserp-pg", PKT_KID, &chained_payload(&kunye, &cert1));
+        f.insert(format!("{dir}/{}", release::CHAINED_PG_POINTER_FILE), pointer(&t));
+    }
+    if kidded {
+        let t = sign(&pkt2_key(), "tekserp-pg", PKT2_KID, &chained_payload(&kunye, &cert2));
+        f.insert(format!("{dir}/pg-zincir-{PKT2_KID}.json"), pointer(&t));
+    }
+    drop(f);
+    w
+}
+
+fn run_pg_and_backend(w: &World) {
+    for _ in 0..8 {
+        if w.run(3).is_ok() && !w.unfinished() && matches!(w.state(), Some(State::Succeeded | State::RolledBack | State::Failed)) {
+            return;
+        }
+        w.crash.disarm();
+    }
+}
+
+fn pg_tag(w: &World) -> String {
+    RealFs.link_target(&w.layout.pg_bin_link()).unwrap().unwrap().to_string_lossy().into_owned()
+}
+
+/// ⭐ Yalnız kid'li künye (`pg-zincir-pkt-2027-1.json`; kid'siz ve `pg.json` yok): ad bildirimi imzalayanından türer,
+/// PG 16.15-4'e geçer, ardından backend kurulur.
+#[test]
+fn chained_pg_kidded_name_from_manifest_signer() {
+    let w = chained_pg_world("pz-d8-pg-kidli", false, true, CERT_END + 365 * DAY);
+    run_pg_and_backend(&w);
+    let st = w.status().unwrap();
+    assert_eq!(st.state, State::Succeeded, "{:?} {:?}", st.error_code, st.message);
+    assert!(pg_tag(&w).contains(PG_NEW_TAG), "PG bağı {}", pg_tag(&w));
+    assert_eq!(w.current().as_deref(), Some(NEW));
+}
+
+/// ⭐ Eski takımın sertifikası iptal: kid'siz `pg-zincir.json` (pkt-2026-1) KABUL'de elenir, kid'li ad seçilir — ikincinin
+/// bitişi DAHA ERKEN, kazanmasının tek nedeni iptal (günlükteki seçim satırı ölçer).
+#[test]
+fn chained_pg_revoked_unkidded_skipped_for_kidded() {
+    let w = chained_pg_world("pz-d8-pg-iptal", true, true, CERT_END - 20 * DAY);
+    std::fs::write(w.layout.root.join("lisans").join(paket_zinciri::PACKAGE_REVOCATION_FILE), revocation_token(&w, 2, CERT_ID)).unwrap();
+    let log = w.run_logged(9);
+    let st = w.status().unwrap();
+    assert_eq!(st.state, State::Succeeded, "{:?} {:?}", st.error_code, st.message);
+    assert!(pg_tag(&w).contains(PG_NEW_TAG), "PG bağı {}", pg_tag(&w));
+    let picked = format!("pg-zincir-{PKT2_KID}.json seçildi; elenen: pg-zincir.json ({})", code::PAKET_SERTIFIKA_IPTAL);
+    assert!(log.contains(&picked), "seçim satırı yok:\n{log}");
+}
+
+/// Yeniden imzalı künye yayına konmadıysa (yalnız iptalli kid'siz ad): PG adımı FAIL-CLOSED düşer, PG ve backend yerinde.
+#[test]
+fn chained_pg_only_revoked_unkidded_fails_closed() {
+    let w = chained_pg_world("pz-d8-pg-takili", true, false, CERT_END + 365 * DAY);
+    std::fs::write(w.layout.root.join("lisans").join(paket_zinciri::PACKAGE_REVOCATION_FILE), revocation_token(&w, 2, CERT_ID)).unwrap();
+    let _ = w.run(3);
+    let st = w.status().unwrap();
+    assert_eq!(st.error_code.as_deref(), Some(code::PAKET_SERTIFIKA_IPTAL), "{:?} {:?}", st.state, st.message);
+    assert!(pg_tag(&w).contains(PG_OLD_TAG), "PG bağı {}", pg_tag(&w));
+    assert_eq!(w.current().as_deref(), Some(OLD));
 }

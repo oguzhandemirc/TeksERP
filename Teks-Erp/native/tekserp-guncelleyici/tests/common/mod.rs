@@ -849,6 +849,11 @@ const KURULUM_ID: &str = "22222222-2222-4222-8222-222222222222";
 
 /// (kira, HAK) — HAK `maintenance_end` yoksa `None`.
 pub fn lease_and_entitlement(k: &Keys, o: &LeaseOpts, now: i64) -> (String, Option<String>) {
+    lease_and_entitlement_in(k, o, now, CHANNEL)
+}
+
+/// `lease_and_entitlement`, kiranın kanal kodu verilerek (prova: ortak paketin grubu).
+pub fn lease_and_entitlement_in(k: &Keys, o: &LeaseOpts, now: i64, channel: &str) -> (String, Option<String>) {
     let cert = sign(
         &k.root,
         "tekserp-sertifika",
@@ -867,7 +872,7 @@ pub fn lease_and_entitlement(k: &Keys, o: &LeaseOpts, now: i64) -> (String, Opti
         "zorlama": false, "gecerlilikBitis": null,
         "yaptirim": { "kademe": null, "mesaj": null, "kisitlamaTarihi": null, "donmusModuller": [], "guncellemeDonuk": o.frozen_by_sanction },
         "yoklamaAraligiDk": 60, "esitlemeAraligiDk": null, "patronBulutBitis": null, "devredildi": false,
-        "kanal": { "kod": CHANNEL, "guncelSurumler": o.channel_backend.map_or_else(|| json!({}), |v| json!({ "backend": v })) },
+        "kanal": { "kod": channel, "guncelSurumler": o.channel_backend.map_or_else(|| json!({}), |v| json!({ "backend": v })) },
         "altSertifika": cert,
     });
     if let Some(u) = &o.update {
@@ -941,6 +946,88 @@ pub fn intent(approval: Option<Value>) -> Value {
         "indirme": { "belirtec": TOKEN, "bitis": iso(T0 + 30 * DAY) },
         "onay": approval,
     })
+}
+
+// ── Kendi PostgreSQL örneği (D4 §5) ──────────────────────────────────────────────────────────────
+
+pub const PG_OLD_TAG: &str = "16.9-1";
+pub const PG_NEW_TAG: &str = "16.15-4";
+pub const PG_ZIP: &str = "postgresql-16.15-4-win-x64.zip";
+
+pub fn pg_files(version: &str, icu: &str) -> Vec<(String, Vec<u8>)> {
+    vec![
+        ("bin/postgres".into(), b"#!fake postgres".to_vec()),
+        ("bin/pg_ctl".into(), b"#!fake pg_ctl".to_vec()),
+        ("bin/psql".into(), b"#!fake psql".to_vec()),
+        ("bin/SURUM".into(), version.as_bytes().to_vec()),
+        (format!("bin/icuuc{icu}.dll"), b"icu".to_vec()),
+        ("share/timezone/UTC".into(), b"tz".to_vec()),
+    ]
+}
+
+pub fn pg_image_for(root: &Path, tag: &str) -> String {
+    format!(
+        "\"{}\" runservice -N \"TeksERP-PostgreSQL\" -D \"{}\" -w",
+        root.join("pgsql").join(tag).join("bin").join("pg_ctl").display(),
+        root.join("pgveri").display()
+    )
+}
+
+/// Sözleşme §1.6: PG künyesi yükü (`tekserp-pg`, kanaldan bağımsız).
+pub fn pg_manifest(zip: &[u8], content_hex: &str, icu: &str) -> Value {
+    json!({
+        "v": 1, "urun": "postgresql", "platform": "win32-x64", "cizgi": 16, "surum": "16.15", "derleme": 4,
+        "paket": { "ad": PG_ZIP, "boyut": zip.len(), "sha256": sha_hex(zip) },
+        "icerikSha256": content_hex, "icuSurum": icu, "yayinZamani": "2026-09-30T21:00:00Z",
+    })
+}
+
+/// Backend bildiriminin `pg` bloğu künyeye bağlanır (§1.6); `hedef` künyenin alanlarıdır.
+pub fn pg_requirement(k: &Value) -> Value {
+    json!({ "cizgi": 16, "enAz": "16.9", "hedef": {
+        "surum": k["surum"], "derleme": k["derleme"], "paket": k["paket"], "icerikSha256": k["icerikSha256"], "icuSurum": k["icuSurum"],
+    } })
+}
+
+/// PG sahnesi (16.15 ikilileri) + `shasum -c` biçiminde içerik manifestosu `TEKSERP-ICERIK.sha256` (son dosya).
+pub fn pg_stage_files(icu: &str) -> Vec<(String, Vec<u8>)> {
+    let mut all = pg_files("16.15", icu);
+    let mut manifest = String::new();
+    for (p, c) in &all {
+        manifest.push_str(&format!("{}  {p}\n", sha_hex(c)));
+    }
+    all.push(("TEKSERP-ICERIK.sha256".into(), manifest.into_bytes()));
+    all
+}
+
+/// PG sahne zip'i ve içerik manifestosunun özeti (hex).
+pub fn pg_stage_zip(icu: &str) -> (Vec<u8>, String) {
+    let all = pg_stage_files(icu);
+    let content = sha_hex(&all.last().unwrap().1);
+    (zip_of(&all), content)
+}
+
+/// Kurulu PG örneği 16.9-1 (`kind` = kendi · harici): ikili + `pgsql\bin` bağı + veri dizini + ornek.json + ImagePath.
+pub fn install_pg_instance(w: &World, kind: &str) {
+    let root = w.layout.root.clone();
+    for (p, c) in pg_files("16.9", "67") {
+        let f = root.join("pgsql").join(PG_OLD_TAG).join(&p);
+        std::fs::create_dir_all(f.parent().unwrap()).unwrap();
+        std::fs::write(f, c).unwrap();
+    }
+    RealFs.set_link(&w.layout.pg_bin_link(), &root.join("pgsql").join(PG_OLD_TAG).join("bin")).unwrap();
+    std::fs::create_dir_all(root.join("pgveri")).unwrap();
+    std::fs::write(root.join("pgveri").join("PG_VERSION"), "16\n").unwrap();
+    let instance = json!({
+        "bicim": 1, "kip": kind, "hizmet": PG, "surum": "16.9", "derleme": "1",
+        "ikiliDizin": root.join("pgsql").join(PG_OLD_TAG), "oncekiIkiliDizin": null,
+        "veriDizini": root.join("pgveri"), "port": 5432, "kuruldu": "2026-09-01T00:00:00Z", "guncellendi": null,
+    });
+    std::fs::write(w.layout.pg_instance_file(), serde_json::to_vec_pretty(&instance).unwrap()).unwrap();
+    let mut svcs = w.svcs.lock().unwrap();
+    let pg = svcs.get_mut(PG).unwrap();
+    pg.image = pg_image_for(&root, PG_OLD_TAG);
+    pg.version = Some("16.9".into());
 }
 
 // ── Dünya ─────────────────────────────────────────────────────────────────────────────────────
