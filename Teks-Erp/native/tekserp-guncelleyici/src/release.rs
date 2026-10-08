@@ -10,9 +10,10 @@ use serde_json::{Map, Value};
 use std::cmp::Ordering;
 use std::sync::OnceLock;
 use tekserp_dogrulama::iso;
+use tekserp_dogrulama::jsonx::deep_equal;
 use tekserp_dogrulama::jsonx::{js_number, utf16_len};
 use tekserp_dogrulama::outcome::{code as proto, Fail, Outcome};
-use tekserp_dogrulama::paket_zinciri::{verify_package_signed, PackageChainSigner, PackageTrust};
+use tekserp_dogrulama::paket_zinciri::{is_chain_package_kid, verify_package_signed, PackageChainSigner, PackageSigned, PackageTrust};
 use tekserp_dogrulama::schema::{self, is_bool, is_int, is_iso, is_nullable, is_str_matching, is_string_len, is_uuid, object, req};
 
 /// Belge türleri (TS `TYP.SURUM` · `TYP.PG`).
@@ -341,11 +342,14 @@ pub struct Checked<T> {
     pub doc: T,
     /// `pkt-*` imzalı belgede imzalayan PAKET sertifikası (iptal işareti dahil); `paket-*`te `None`.
     pub chain: Option<PackageChainSigner>,
+    /// İmzalayan kid ve imzalı ham yük (zincir alanları ayıklanmış) — zincir seçimi "aynı belge mi"yi bununla ölçer.
+    pub signer_kid: String,
+    pub payload: Map<String, Value>,
 }
 
-fn typed<T: serde::de::DeserializeOwned>(shaped: Map<String, Value>, chain: Option<PackageChainSigner>) -> Outcome<Checked<T>> {
+fn typed<T: serde::de::DeserializeOwned>(shaped: Map<String, Value>, signed: PackageSigned) -> Outcome<Checked<T>> {
     match serde_json::from_value::<T>(Value::Object(shaped.clone())) {
-        Ok(doc) => Ok(Checked { shaped, doc, chain }),
+        Ok(doc) => Ok(Checked { shaped, doc, chain: signed.chain, signer_kid: signed.kid, payload: signed.payload }),
         Err(e) => Err(Fail { code: proto::BELGE_SEMA, message: format!("Belge tipe dönüşmedi: {e}") }),
     }
 }
@@ -362,7 +366,7 @@ pub fn verify_release_manifest(token: &Value, trust: &PackageTrust, kanal: &str)
     if channel != kanal {
         return Err(Fail { code: code::SURUM_KANAL, message: format!("Bildirim {channel} kanalının, kurulum {kanal} kanalında") });
     }
-    let mut checked: Checked<ReleaseManifest> = typed(shaped, signed.chain)?;
+    let mut checked: Checked<ReleaseManifest> = typed(shaped, signed)?;
     checked.doc.signer_certificate =
         checked.chain.as_ref().and_then(|c| c.certificate.get("sertifikaId")).and_then(Value::as_str).map(str::to_string);
     Ok(checked)
@@ -472,7 +476,7 @@ pub struct PgPackageManifest {
 pub fn verify_pg_package_manifest(token: &Value, trust: &PackageTrust) -> Outcome<Checked<PgPackageManifest>> {
     let signed = verify_package_signed(token, TYP_PG, trust)?;
     let shaped = schema::decode(pg_package_manifest_schema, &signed.payload)?;
-    typed(shaped, signed.chain)
+    typed(shaped, signed)
 }
 
 /// Bildirimin PG hedefi bu künyenin paketi mi (çizgi · sürüm · derleme · paket · içerik · ICU birebir).
@@ -514,4 +518,167 @@ pub fn pg_version_of(server_version: &str) -> Option<String> {
 
 pub fn pg_major(surum: &str) -> Option<u32> {
     surum.split('.').next()?.parse().ok()
+}
+
+// ── Zincirli işaretçi adı ve seçimi (D8) ─────────────────────────────────────────────────────────
+// TS `paket-zinciri.ts` `chainedFileName` · `parseChainedFileName` · `selectChainedDocument` aynası (aynı sıra, aynı kod);
+// kâhin `test_zincir_secimi` → `test-vektorleri/zincir-secimi.json` (`tests/zincir_secimi.rs`).
+
+/// Zincirli işaretçi aileleri: `son` (değişken, kid'siz) · `surum` (`<sürüm>/`) · `pg` (`pg/<s>-<d>/`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ChainedFamily {
+    Son,
+    Surum,
+    Pg,
+}
+
+impl ChainedFamily {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            ChainedFamily::Son => "son",
+            ChainedFamily::Surum => "surum",
+            ChainedFamily::Pg => "pg",
+        }
+    }
+
+    pub fn parse(s: &str) -> Option<ChainedFamily> {
+        match s {
+            "son" => Some(ChainedFamily::Son),
+            "surum" => Some(ChainedFamily::Surum),
+            "pg" => Some(ChainedFamily::Pg),
+            _ => None,
+        }
+    }
+}
+
+fn chained_file_pattern() -> &'static Regex {
+    static P: OnceLock<Regex> = OnceLock::new();
+    P.get_or_init(|| Regex::new(r"^(son|surum|pg)-zincir(?:-(pkt-[a-z0-9-]{1,40}))?\.json$").expect("zincirli ad"))
+}
+
+/// `<aile>-zincir.json` ya da `<aile>-zincir-<kid>.json`; `son` ailesine ve `pkt-*` dışı kid'e ad verilmez (`None`).
+pub fn chained_file_name(family: ChainedFamily, kid: Option<&str>) -> Option<String> {
+    match kid {
+        None => Some(format!("{}-zincir.json", family.as_str())),
+        Some(k) if family != ChainedFamily::Son && is_chain_package_kid(k) => Some(format!("{}-zincir-{k}.json", family.as_str())),
+        Some(_) => None,
+    }
+}
+
+/// Dosya adı zincirli işaretçi ailesinden mi; kid'li adda kid (yalnız `surum`/`pg`).
+pub fn parse_chained_file_name(name: &str) -> Option<(ChainedFamily, Option<String>)> {
+    let c = chained_file_pattern().captures(name)?;
+    let family = ChainedFamily::parse(c.get(1)?.as_str())?;
+    let kid = c.get(2).map(|m| m.as_str().to_string());
+    if family == ChainedFamily::Son && kid.is_some() {
+        return None;
+    }
+    Some((family, kid))
+}
+
+/// Seçime giren aday: dosya adı + kendi kuralıyla doğrulanmış belge ya da düşme nedeni.
+#[derive(Debug, Clone)]
+pub struct ChainedCandidate<T> {
+    pub name: String,
+    pub result: Outcome<Checked<T>>,
+}
+
+#[derive(Debug, Clone)]
+pub struct ChainedChoice<T> {
+    pub name: String,
+    pub checked: Checked<T>,
+    /// Elenen adaylar (sıralı): ad · kod · ileti.
+    pub rejected: Vec<(String, &'static str, String)>,
+}
+
+/// Aynı belge mi: `paketImzaKid` ve `paket` (yalnız `paketId` kalır — yeniden imzada zip ad/boyut/özet değişir) dışında yük.
+fn document_identity(payload: &Map<String, Value>) -> Value {
+    let mut p = payload.clone();
+    p.remove("paketImzaKid");
+    if let Some(Value::Object(paket)) = p.get("paket") {
+        if let Some(id) = paket.get("paketId") {
+            let only = Value::Object(Map::from_iter([("paketId".to_string(), id.clone())]));
+            p.insert("paket".into(), only);
+        }
+    }
+    Value::Object(p)
+}
+
+/// ZİNCİR SEÇİMİ: aday geçerli ⇔ belge doğrulandı · `pkt-*` sertifikalı · adındaki kid = imzalayan · sertifika iptalli
+/// DEĞİL. Geçerliler aynı belgeyi anlatmalı; kazanan sertifika bitişi EN GEÇ olan. Belirsizlik ve hiç geçerli yokken
+/// FAIL-CLOSED; aday yoksa `None` (eski dosyaya düşüş çağıranın). Sıra: kid'siz önce, sonra ada göre.
+pub fn select_chained<T: Clone>(family: ChainedFamily, candidates: Vec<ChainedCandidate<T>>) -> Option<Outcome<ChainedChoice<T>>> {
+    if candidates.is_empty() {
+        return None;
+    }
+    let mut ordered = candidates;
+    ordered.sort_by(|a, b| {
+        let ka = parse_chained_file_name(&a.name).and_then(|(_, k)| k).is_none();
+        let kb = parse_chained_file_name(&b.name).and_then(|(_, k)| k).is_none();
+        kb.cmp(&ka).then_with(|| a.name.encode_utf16().cmp(b.name.encode_utf16()))
+    });
+    let mut rejected: Vec<(String, &'static str, String)> = Vec::new();
+    let mut valid: Vec<(String, Checked<T>, f64)> = Vec::new();
+    for c in ordered {
+        let parsed = parse_chained_file_name(&c.name).filter(|(f, _)| *f == family);
+        let Some((_, name_kid)) = parsed else {
+            rejected.push((c.name.clone(), code::SURUM_ISARETCI, format!("{} {}-zincir ailesinin adı değil", c.name, family.as_str())));
+            continue;
+        };
+        let checked = match c.result {
+            Ok(v) => v,
+            Err(f) => {
+                rejected.push((c.name, f.code, f.message));
+                continue;
+            }
+        };
+        let Some(chain) = checked.chain.as_ref() else {
+            let m = format!("{} kök sertifikalı pkt-* anahtarla imzalı değil ({})", c.name, checked.signer_kid);
+            rejected.push((c.name, proto::PAKET_SERTIFIKA_YOK, m));
+            continue;
+        };
+        if name_kid.as_deref().is_some_and(|k| k != checked.signer_kid) {
+            let m = format!("{} adındaki kid imzalayan değil ({})", c.name, checked.signer_kid);
+            rejected.push((c.name, proto::JWS_KID, m));
+            continue;
+        }
+        if chain.revoked {
+            let m = format!("{}: PAKET sertifikası {} iptal edilmiş", c.name, checked.signer_kid);
+            rejected.push((c.name, proto::PAKET_SERTIFIKA_IPTAL, m));
+            continue;
+        }
+        let end = iso::date_parse_ms(chain.certificate.get("bitis").and_then(Value::as_str).unwrap_or_default());
+        valid.push((c.name, checked, end));
+    }
+    if valid.is_empty() {
+        let list: Vec<String> = rejected.iter().map(|(n, c, m)| format!("{n} ({c}: {m})")).collect();
+        let first = rejected.first().map_or(code::SURUM_ISARETCI, |r| r.1);
+        return Some(Err(Fail { code: first, message: format!("zincirli dosyaların hiçbiri geçerli değil: {}", list.join(" · ")) }));
+    }
+    let identity = document_identity(&valid[0].1.payload);
+    if let Some(m) = valid.iter().find(|v| !deep_equal(&document_identity(&v.1.payload), &identity)) {
+        let message = format!("belirsiz: {} ile {} aynı belgeyi anlatmıyor — hiçbiri seçilmez", valid[0].0, m.0);
+        return Some(Err(Fail { code: code::SURUM_ISARETCI, message }));
+    }
+    let latest = valid.iter().map(|v| v.2).fold(f64::NEG_INFINITY, f64::max);
+    let mut winners: Vec<(String, Checked<T>, f64)> = valid.into_iter().filter(|v| v.2 == latest).collect();
+    if winners.len() != 1 {
+        let names: Vec<&str> = winners.iter().map(|w| w.0.as_str()).collect();
+        let message = format!("belirsiz: {} aynı sertifika bitişini taşıyor — hiçbiri seçilmez", names.join(", "));
+        return Some(Err(Fail { code: code::SURUM_ISARETCI, message }));
+    }
+    let (name, checked, _) = winners.remove(0);
+    Some(Ok(ChainedChoice { name, checked, rejected }))
+}
+
+/// Zincir seçimi adayı: sürüm bildirimi işaretçisi metni → doğrulanmış bildirim (TS `chainedReleaseCandidate`).
+pub fn chained_release_candidate(name: &str, text: &str, trust: &PackageTrust, kanal: &str) -> ChainedCandidate<ReleaseManifest> {
+    let result = read_release_pointer(text).and_then(|j| verify_release_manifest(&Value::String(j), trust, kanal));
+    ChainedCandidate { name: name.to_string(), result }
+}
+
+/// Zincir seçimi adayı: PG künyesi işaretçisi metni → doğrulanmış künye (TS `chainedPgCandidate`).
+pub fn chained_pg_candidate(name: &str, text: &str, trust: &PackageTrust) -> ChainedCandidate<PgPackageManifest> {
+    let result = read_release_pointer(text).and_then(|j| verify_pg_package_manifest(&Value::String(j), trust));
+    ChainedCandidate { name: name.to_string(), result }
 }
