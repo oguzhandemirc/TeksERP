@@ -1,5 +1,5 @@
 //! Tanı paketinin Linux ölçümleri (W4): Docker sürümü · konteynerlerin SÜZÜLMÜŞ `docker inspect` alanları ·
-//! systemd birim durumu · `df`. Fail-soft: komut yoksa ya da düşerse ölçüm "ölçülemedi" satırıyla girer, paket
+//! systemd birim durumu · `df` (kök · veri · Docker kök dizini). Fail-soft: komut yoksa ya da düşerse ölçüm "ölçülemedi" satırıyla girer, paket
 //! yine yazılır. `docker inspect`in `Env`/`Cmd`/`Args`/sağlık çıktısı sır taşıyabilir — yalnız izinli alanlar
 //! alınır (allowlist; yeni Docker alanı kendiliğinden girmez).
 use crate::tani::{Olcum, TaniHedefi};
@@ -156,7 +156,12 @@ pub fn olcumler(h: &TaniHedefi) -> Vec<Olcum> {
     let units = vec![format!("{}.service", h.updater_service.to_ascii_lowercase()), "docker.service".to_string()];
     let root = h.root.to_string_lossy().into_owned();
     let data = h.data.to_string_lossy().into_owned();
-    let df = match run("df", &["-Pk", &root, &data, "/var/lib/docker"]) {
+    // Docker kök dizini (imajlar + birimler) çoğu zaman diski dolduran yerdir; bilinmiyorsa varsayılanı.
+    let docker_root = match run("docker", &["info", "--format", "{{.DockerRootDir}}"]) {
+        Ok((0, s)) if s.trim().starts_with('/') => s.trim().to_string(),
+        _ => "/var/lib/docker".to_string(),
+    };
+    let df = match run("df", &["-Pk", &root, &data, &docker_root]) {
         Ok((_, s)) => s,
         Err(e) => format!("ölçülemedi: {e}\n"),
     };
@@ -167,7 +172,7 @@ pub fn olcumler(h: &TaniHedefi) -> Vec<Olcum> {
             docker().to_string(),
         ),
         Olcum::new("platform/systemd.txt", "systemd birim durumu (güncelleyici + docker)", systemd(&units)),
-        Olcum::new("platform/df.txt", "disk (df -Pk: kök · veri · /var/lib/docker)", df),
+        Olcum::new("platform/df.txt", "disk (df -Pk: kök · veri · Docker kök dizini)", df),
     ]
 }
 
