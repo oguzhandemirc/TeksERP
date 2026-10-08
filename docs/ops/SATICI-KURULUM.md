@@ -345,7 +345,7 @@ Etkinleşmemiş kurulum hiçbir durumda dışarı istek atmaz (`test_lisans_moto
 ## 10. Anahtar künyesi (sır DEĞİL — açık yarılar)
 
 > **Durum (2026-10-08):** hazırlık satıcısı 2026-10-05'te emekli (verisi silindi) — `hazirlik`/`satici` satırları yalnız tarihtir. Üretimde yürürlükte `alt-2026-3 · ara-2026-2 · ind-2026-3` (tören `donemler/20261007T181311Z`, [`URETIM-SATICI-TOREN.md`](URETIM-SATICI-TOREN.md) §8 Durum); ALT/ARA açık yarıları portalın anahtar künyesindedir (`/portal/api`), İNDİRME satırları `deploy/guncelleme-sunucusu/worker/indir-ayar.json`dadır.
-> **Açık sertifikalar (ISTEMCI · PAKET):** satıcı bu anahtarları TUTMAZ; sertifikalarını anahtar biriminin `istemci/` · `paket/` alt dizinlerinden canlı okur (`e36a91393`, okuyucu `satici/sunucu/src/keys/open-certificates.ts`; OTA yaprağı `istemci/ota-yaprak-*.pem`). Tepe dizine konan çıplak sertifika "alt dizine konur" uyarısı verir. 2026-10-07 töreninin `istemci/` dosyaları (`ist-2026-1` · `ist-2026-2` + iki yaprak PEM) VDS'e **HENÜZ KONMADI**: VDS'teki imaj (`2831396adb12`) okuyucudan öncedir — okuyuculu imaja güncellemeden SONRA tören runbook'u §8 adım 5b.
+> **Açık sertifikalar (ISTEMCI · PAKET):** satıcı bu anahtarları TUTMAZ; sertifikalarını anahtar biriminin `istemci/` · `paket/` alt dizinlerinden canlı okur (`e36a91393`, okuyucu `satici/sunucu/src/keys/open-certificates.ts`; OTA yaprağı `istemci/ota-yaprak-*.pem`). Tepe dizine konan çıplak sertifika "alt dizine konur" uyarısı verir. 2026-10-07 töreninin `istemci/` dosyaları (`ist-2026-1` · `ist-2026-2` + iki yaprak PEM) 2026-10-08'de okuyuculu imaja (`f5f034db3330`) güncellemeden sonra tören runbook'u §8 adım 5b ile kondu (`istemci/`, 0600, 10001; çalışan satıcının anahtar deposu ikisini `ISTEMCI` geçerli + iki yaprağı bağlı okur, uyarı 0).
 
 | kid | Tür | Sınıflar | Açık anahtar (x) | Geçerlilik |
 |---|---|---|---|---|
@@ -360,7 +360,7 @@ Etkinleşmemiş kurulum hiçbir durumda dışarı istek atmaz (`test_lisans_moto
 | `ind-2026-2` | İNDİRME (üretim; tören 2026-10-05) | test · oncu · genel | `Jk5C_hKxebblK4N8us5Vi29UeBDpyV_Q_9qGsMWp6oc` (Worker `indir-ayar.json`, örtüşmede) | 2026-10-05 → 2027-02-02 · EMEKLİ (2026-10-07 töreni) |
 | `alt-2026-3` · `ara-2026-2` | ALT · ARA (üretim; tören 2026-10-07) | künyede | anahtar künyesinde (`/portal/api`) | AKTİF |
 | `ind-2026-3` | İNDİRME (üretim; tören 2026-10-07) | test · oncu · genel | `gsGqiZwbucjzn8z72L38g9lWIA4ZKvqgbjjXLtmfIz4` (Worker `indir-ayar.json`) | 2026-10-07 → 2027-11-06 · AKTİF |
-| `ist-2026-1` · `ist-2026-2` | ISTEMCI birincil · yedek (tören 2026-10-07; satıcı TUTMAZ) + iki OTA yaprağı | kökün sınıfları | `DONEM-KUNYE.json` `istemci` bölümü | 395 gün · sertifikaları VDS'te `istemci/`e HENÜZ konmadı (yukarıdaki not) |
+| `ist-2026-1` · `ist-2026-2` | ISTEMCI birincil · yedek (tören 2026-10-07; satıcı TUTMAZ) + iki OTA yaprağı | kökün sınıfları | `DONEM-KUNYE.json` `istemci` bölümü | 395 gün · sertifikaları VDS'te `istemci/`de (2026-10-08, adım 5b) |
 | `paket-2026` | PAKET — korumalı paketin bütünlük listesi (parolalı; tören 2026-09-30) | — (üretim kid'i; sınıf kısıtı yok) | `j7xjeBy3BGQu38IZrvaaJJFcQ0OJCp22z8fUNiYwaCM` | çapada; yıllık rotasyon (`paket-2027`) |
 | `satici-uretim-mac` · `satici-uretim-kurtarma` | üretim satıcısı yedek alıcıları (.tkenc) | — | parmak izi `ff7b57fd2d1d2361` · `161678a8ce9dec7f` | — |
 
@@ -573,7 +573,7 @@ export PATH="/opt/homebrew/opt/libpq/bin:$PATH"; umask 077
 3. `v "docker network disconnect tekserp-satici-uretim-kenar traefik; cd $K && docker compose down"` — DB hacmi `tekserp-satici-uretim-pg` ve dizinler KALIR (silmek kullanıcı kararı).
 4. DNS kaydı (kullanıcı) · `v "docker rmi tekserp-satici:$SHA tekserp-satici-yedek:$SHA"` (hazırlık başka etiket kullanıyorsa) · sonunda `deploy/vds-dogrula.sh` → ✅.
 
-Sürüm yükseltme hazırlıkla aynı (§8 "Sürüm yükseltme"), `cd $K` ile.
+Sürüm yükseltme hazırlıkla aynı (§8 "Sürüm yükseltme"), `cd $K` ile; `sudo` gerekmez (docker grubu yeter). `$K` kök sahiplidir: `.env` oguzhan'ındır ama yanına yedek/geçici dosya yazılamaz (`cp`/`sed -i` "Permission denied") — etiket değişimi yardımcı konteynerle: `v "docker run --rm --network none --user 0 -v $K:/k --entrypoint sh <eski yedek imajı> -c 'cd /k && cp -p .env .env.yedek-<tarih>-satici-<sha> && sed \"s/<eski sha>/<yeni sha>/\" .env.yedek-<tarih>-satici-<sha> > .env'"` (yönlendirme dosyayı yerinde yazar; sahip ve 0600 korunur).
 
 ### 13.9 Portal — üretimde ZORUNLU örtü (portalın tek yolu)
 
