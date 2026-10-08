@@ -19,7 +19,7 @@
 ## 1. Önkoşul
 
 - Linux **x86_64**, Docker Engine 24+ ve `docker compose` v2 (başka mimaride öykünmeyle koşar — üretimde kullanılmaz).
-- `/etc/machine-id` dolu (systemd'li her dağıtımda var): parmak izinin F1'i buradan gelir (§5).
+- `/etc/machine-id` dolu (systemd'li her dağıtımda var): parmak izinin F1'i buradan gelir (§5). Mac'teki (Docker Desktop) provada konakta bu dosya YOKTUR: `.env`e `TEKSERP_MAKINE_KIMLIGI=<geçici dosyanın mutlak yolu>` yazılır (yalnız prova; gerçek kurulumda boş kalır).
 - Disk: imaj ≈ 1 GB açılmış; veri + yedek için ayrıca pay.
 - **Bu yol fabrika ağı kurulumu DEĞİLDİR:** Docker kurulumunda fabrika ağı TLS'i yok, yalnız şifreli bağlanan panel ve tablet fabrika ağından bağlanamaz (§7). Fabrika içi kurulum Windows yoludur (`deploy/kur.ps1`).
 
@@ -53,11 +53,13 @@ docker inspect --format '{{range .Config.Env}}{{println .}}{{end}}' "$(docker co
 - Audit koruması (bir kez): `docker compose exec postgres psql -U tekserp -d tekserp -c "ALTER DATABASE tekserp SET teks.audit_guard = 'on'"` → `docker compose restart backend` (açılış günlüğündeki "KORUMA KAPALI" uyarısı gider).
 - Satıcı hesabı (TTY şart): `docker compose exec -it backend node /app/dist/tools/superadmin-olustur.cjs` (2f duman provasında koşulmadı; araç imajda karartılmış olarak VAR).
 - Doğrulama: `curl -fsS http://127.0.0.1:4000/health` → `"db":"UP"`; panelde Sistem → Lisans "Gözlem".
+- Yerel sağlık (`/health/yerel`, lisans kademesi + bütünlük + çekirdek) yalnız konteynerin KENDİ döngü adresine cevap verir; konaktan `curl` Docker köprüsünden geldiği için 404 alır (tasarım gereği). Konteyner içinden ölçülür:
+  `docker compose exec backend node -e "fetch('http://127.0.0.1:4000/health/yerel').then(async r=>console.log(r.status, await r.text()))"` → `200 … "db":"UP" … "lisans":{"kip":…,"butunluk":…,"cekirdek":…}`. Bugünkü imajda `"cekirdek":"yok"` ve `"butunluk":"GECERSIZ"` döner (§8 son madde, ölçüldü 2026-10-08).
 
 ## 3. Güncelleme (yeni imaj)
 
 1. Yeni paketi §2'deki gibi doğrula ve `docker load` et.
-2. **Önce yedek:** `docker compose run --rm -e YEDEK_SIMDI=1 yedek` → günlükte `OK ...dump.tkenc`. Geri alma ölçüsü için eski etiketi (`grep ^TEKSERP_IMAJ= .env`) ve göç sayısını not et: `docker compose exec postgres psql -U tekserp -d tekserp -Atc 'select count(*) from _prisma_migrations'`.
+2. **Önce yedek:** `docker compose run --rm -e YEDEK_SIMDI=1 yedek` → günlükte `OK ...dump.tkenc` (şifreleme anahtarı henüz kurulmadıysa `OK ...dump` + `HATA SIFRELENEMEDI` — §4). Geri alma ölçüsü için eski etiketi (`grep ^TEKSERP_IMAJ= .env`) ve göç sayısını not et: `docker compose exec postgres psql -U tekserp -d tekserp -Atc 'select count(*) from _prisma_migrations'`.
 3. `.env`de `TEKSERP_IMAJ`ı yeni etikete çevir → `docker compose up -d` (backend açılışta `migrate deploy` koşar; migration geri alınamaz eşiktir).
 4. `/health` ve panel sürümü (`/api/admin/health` `version`) yeni sürümü gösterir.
 
@@ -80,6 +82,7 @@ docker inspect --format '{{range .Config.Env}}{{println .}}{{end}}' "$(docker co
 - **Etkinleştirme sırası (panel, Sistem → Lisans):** ① ilk girişte parola değişimi (§2) · ② "Lisans sözleşmesi" kartında sözleşme kabulü (Ek-7; kabulsüz etkinleştirme satıcıda RED) · ③ etkinleştirme kodu → Etkinleştir · ④ konteynerde ilk denemenin BEKLENEN cevabı **409 `ZAYIF_TANIMA_ONAY_BEKLIYOR`** ("Bu sunucunun donanımı yeterince tanınamadı; etkinleştirme satıcı onayı bekliyor…"). Kod ve nonce TÜKETİLMEZ: satıcı portalda bu kurulumun zayıf tanımasını onaylar, kurulumcu AYNI kodla yeniden Etkinleştir'e basar. Onaylı kira `parmakIziKurali: zayif` taşır; eşleşen ≥ min(3, okunabilen) = 2, yani iki etkenin İKİSİ de tutmalıdır.
 - Bu yüzden etkinleştirmeden SONRA konağın `/etc/machine-id`'si değiştirilmez ve `pg_data` birimi silinmez ya da yeniden yaratılmaz (F5 = PostgreSQL kümesinin kimliği; yedekten geri yükleme aynı kümeye yapıldığı için F5'i değiştirmez — §6). Bulut sunucusunda sağlayıcı şablonundan gelen `/etc/machine-id` etkinleştirmeden ÖNCE tazelenir (`docs/design/BULUT-KURULUM.md` §1.4).
 - Ölçüm: duman provasında `GET /api/license/detay` → `parmakIzi.olculen = {f1:true, f2:false, f3:false, f4:false, f5:true}`.
+- ⚠️ **Bugünkü imajla etkinleştirme yapılmaz:** native çekirdek ZORUNLU derlenir (`server-kunye.json` `nativeZorunlu: true`) ve zorunlu kipte `.node` yalnız `/app`teki imzalı listeyle yüklenir; imaj içi liste henüz yok (§8 son madde) ⇒ `/health/yerel` `cekirdek: yok`, `butunluk: GECERSIZ` (ölçüldü 2026-10-08, 2.14.0). Çekirdeksiz motor HAK/kira/parmak izi doğrulamalarında `CEKIRDEK_YOK` döner; yukarıdaki etkinleştirme sırası ve parmak izi ölçümü imaj içi liste inene dek denenmez (deneme kurulumu gözlem kipinde kalır).
 
 ## 6. Geri alma
 
@@ -118,7 +121,7 @@ shred -u ozel/<ad>.tkkey
 - İmzalanan yük `PAKET-DOCKER.json`un TAMAMIDIR: `tekserp-butunluk` (`Teks-Erp/src/lib/license/integrity.ts` `IntegrityManifestSchema` — `v`, `paketId`, `urun: "backend-docker"`, `surum`, `derlemeTarihi`, `musteri`, `kapsam {dizinler: [], dosyalar: [<tar.gz>, docker-compose.yml, .env.ornek]}`, `liste {sha256, boyut, dosyaSayisi}`; ek alanlar `imaj`, `sunucu`, `commit` imzanın kapsamında). `teslim-paketle.sh` yalnız kapsamı yazar; imza aracı kapsamdaki dosyaları ölçer, `butunluk-liste.txt`i yazar, `liste` alanını künyeye koyar (2e-S biçimi, I6); kapsamdaki dosya eksikse imza atılmaz.
 - İmza: PAKET anahtarı, JWS EdDSA, `typ` = `tekserp-butunluk` → `PAKET-DOCKER.json.jws`. `teslim-paketle.sh` künyeyi yazdıktan sonra 2e aracını çağırır (`npx tsx Teks-Erp/scripts/build-korumali-imza.ts belge --belge=<çıktı>/PAKET-DOCKER.json --anahtar=<dosya>`); anahtar `TEKSERP_PAKET_ANAHTARI` ile AÇIKÇA verilir, varsayılan yol yoktur (verilmezse betik durur; üretim anahtarı PAKET sertifikalı `pkt-*` zincirinden, 3.9 D5/D8); künye müşteri taşımaz. Anahtar yalnız Mac'te, CI'a girmez; anahtar yoksa ya da öz-denetim düşerse paket ÜRETİLMEZ. `.jws` ve `butunluk-liste.txt` SHA256SUMS'a girer (bekçi `test_docker_hijyeni` §5c · `test_lisans_butunluk` §6).
 - Doğrulama sırası (kurulumda, `docker load`dan ÖNCE): JWS'i gömülü PAKET açık anahtarıyla doğrula → `butunluk-liste.txt`in boyu/özeti imzalı `liste`yle → listedeki her dosyanın sha256'sı → `imaj.arsiv` ≡ yüklenecek tar. Doğrulayıcı bugün native çekirdekte (`verifyIntegrity`); imaj DIŞINDA koşacak bir doğrulama aracı 2e ile birlikte tanımlanır.
-- İmaj İÇİ bütünlük listesi (açılışta + günlük): 2e'nin biçimiyle aynı belge `/app` ağacı için üretilir; imzalı liste imaja ince bir son katman olarak eklenir (derle → listeyi dışa ver → Mac imzalar → `FROM <imaj>` + `COPY` → yeni etiket). Bugün uygulanmadı — borç.
+- İmaj İÇİ bütünlük listesi (açılışta + günlük): 2e'nin biçimiyle aynı belge `/app` ağacı için üretilir; imzalı liste imaja ince bir son katman olarak eklenir (derle → listeyi dışa ver → Mac imzalar → `FROM <imaj>` + `COPY` → yeni etiket). Bugün uygulanmadı — borç. Sonucu: native çekirdek yüklenmez ve lisans etkinleştirilemez (§5 son madde).
 
 ## 9. Birimler, kaldırma ve baştan kurma
 
@@ -188,5 +191,6 @@ Yalnız bizim kurup yönettiğimiz sunucular içindir (deneme, demo, bulut kurul
    ```
 5. **Aç:** `cp docker-compose.bulut-ornek.yml docker-compose.override.yml` → `docker compose config --quiet` → `docker compose up -d` → `docker compose exec kenar nginx -t`. Örnek, backend'e `TRUST_PROXY=1` + `RATE_LIMIT_ENABLED=true` verir ve API portunu `.env`teki `TEKSERP_DINLE` ne olursa olsun yalnız `127.0.0.1`de yayımlar (`ports: !override`, compose v2.24+).
 6. **Sına:** sunucuda `curl -fsS --resolve <ad>.etkiliyazilim.com:443:127.0.0.1 -k https://<ad>.etkiliyazilim.com/health` UP döner, `curl -sk https://127.0.0.1/health` el sıkışmada reddedilir. Bundan SONRA DNS A kaydı (turuncu) açılır. Dışarıdan: ad üzerinden `/health` UP; `--resolve <ad>…:443:<sunucu IP>` ile doğrudan IP zaman aşımına uğrar (ufw Cloudflare dışını düşürür).
+   Mac'teki provada (Docker Desktop) konak ağı Linux sanal makinesinin ağıdır, Mac'in 443'ü DEĞİLDİR: Mac'ten `curl` bağlanamaz. Sınama kenarın içinden yapılır (nginx imajında `curl` var): `docker compose exec kenar curl -fsS --resolve <ad>:443:127.0.0.1 -k https://<ad>/health` UP · `docker compose exec kenar curl -sk https://127.0.0.1/health` çıkış 35 (el sıkışma reddi).
 7. **Güncelleme ve geri alma:** pakette yeni `docker-compose.yml` gelir; `docker-compose.override.yml`, `kenar/` ve `.env` yerinde kalır. Geri almada (§6) `kenar` de durdurulur.
 - Panel ve tablet bu ada internet kipinde bağlanır (genel CA, 443; tablet vc61+ — `docs/kurallar/kesif-cihaz.md`).
