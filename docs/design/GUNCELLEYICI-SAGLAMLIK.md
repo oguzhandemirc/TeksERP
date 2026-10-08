@@ -83,7 +83,7 @@ Hedef dizin düzeni: `src/platform/{mod.rs, windows/, linux/}`; `#[cfg]` yalnız
 
 - `docker compose` HER çağrıda `-p <proje> -f /opt/tekserp/current/docker-compose.yml --env-file /opt/tekserp/yapilandirma/.env --env-file /opt/tekserp/yapilandirma/pg.env` ile koşar; proje adı `ayar.json`dan (Windows'taki `backendHizmeti` karşılığı; aynı konakta iki kanal = iki proje). Elle müdahale de aynı komutu kullanır (runbook tek satır verir).
 - **GECIS = `current` bağının çevrilmesi** (Windows'la aynı `switch_link`). Compose dosyası sürümle birlikte gelir ve imzalıdır; yeni sürüm compose'a yeni ortam değişkeni, birim ya da sağlık ayarı getirebilir. BULUT §4.4'teki "`.env` içinde `TEKSERP_IMAJ` değiştir" yolu bırakılır: imaj etiketi ve compose ayrı ayrı değişseydi iki adımda iki şey değişirdi.
-- Compose şablonu kuralları (L5'te bekçiyle): her serviste `pull_policy: never` (T5 — Docker Hub'a ÇIKILMAZ; eksik imaj "çekilmez", hata verir) · backend imajı `tekserp-korumali:<sürüm>` etiketiyle (güncelleyici her başlatmadan önce etiketin kimliğini bildirimdeki `imaj.kimlik`e karşı ölçer) · backend `restart: unless-stopped` (bkz. çit, §2.3) · `TEKSERP_GOC_ACILISTA=0` (açılışta göç YOK; göç yalnız güncelleyicinin `GOC` adımında) · `/var/lib/tekserp/guncelleme/{durum:ro,niyet:rw}` bağları + `TEKSERP_GUNCELLEME_DIZINI` · `TEKSERP_DOGRULAMA_KIPI: ${TEKSERP_DOGRULAMA_KIPI:-}`.
+- Compose şablonu kuralları (L5'te bekçiyle): her serviste `pull_policy: never` (T5 — Docker Hub'a ÇIKILMAZ; eksik imaj "çekilmez", hata verir) · backend imajı `tekserp-korumali:<sürüm>` etiketiyle (güncelleyici her başlatmadan önce etiketin kimliğini bildirimdeki `imaj.kimlik`e karşı ölçer) · backend `restart: unless-stopped` (bkz. çit, §2.2) · `TEKSERP_GOC_ACILISTA=0` (açılışta göç YOK; göç yalnız güncelleyicinin `GOC` adımında) · `/var/lib/tekserp/guncelleme/{durum:ro,niyet:rw}` bağları + `TEKSERP_GUNCELLEME_DIZINI` · `TEKSERP_DOGRULAMA_KIPI: ${TEKSERP_DOGRULAMA_KIPI:-}`.
 
 **`Services` Linux uygulaması (`DockerServices`):** ad = compose servis adı (`backend`, `postgres`, `kenar`).
 
@@ -199,7 +199,7 @@ Kodlar `codes.rs` + TS `UPDATE_RESULT_CODES` aynası + `guncelleme-rapor.json` v
 
 ### 4.2 Değişiklikler (W1 — iki platform)
 
-1. **"Önce güncelleyici" (A1'in kapanışı):** paket `HAZIR` olduğunda (doğrulandı, açıldı, karar `KUR` · `ONAY_BEKLIYOR` · `PENCERE_BEKLIYOR` farketmez) paketteki güncelleyici ikilisi çalışandan YENİYSE, backend işleminden **önce** kendini güncelleme yapılır (`durum.bilgi = GUNCELLEYICI_ONCE`). Yeni ikili aynı paketi yeniden doğrular ve backend işlemini kendisi yürütür. Böylece güncelleyicinin backend yolundaki bir hatanın düzeltmesi, o hata yüzünden asla bloklanmaz. Koşullar: işlem günlüğünde açık işlem YOK; kurulu sürüm dizini (`current`) değil `surumler/<aday>` kaynak alınır (aday dizini zaten doğrulanmış); politika kendini güncellemeyi engellemez — `DONDUR`/K1 backend sürümünü dondurur, güncelleyicinin kendisi paketi kurmadan yalnız ikiliyi değiştirir. ⚠️ Bu, `DONDUR` kipinde bile ikili değişebilir demektir; ister misiniz → **Açık karar K5** (öneri: DONDUR'da da ikili güncellenir, K1'de güncellenmez).
+1. **"Önce güncelleyici" (A1'in kapanışı):** paket `HAZIR` olduğunda (doğrulandı, açıldı, karar `KUR` · `ONAY_BEKLIYOR` · `PENCERE_BEKLIYOR` farketmez) paketteki güncelleyici ikilisi çalışandan YENİYSE, backend işleminden **önce** kendini güncelleme yapılır (`durum.bilgi = GUNCELLEYICI_ONCE`). Yeni ikili aynı paketi yeniden doğrular ve backend işlemini kendisi yürütür. Böylece güncelleyicinin backend yolundaki bir hatanın düzeltmesi, o hata yüzünden asla bloklanmaz. Koşullar: işlem günlüğünde açık işlem YOK; kurulu sürüm dizini (`current`) değil `surumler/<aday>` kaynak alınır (aday dizini zaten doğrulanmış); politika kendini güncellemeyi engellemez — `DONDUR`/K1 backend sürümünü dondurur, güncelleyicinin kendisi paketi kurmadan yalnız ikiliyi değiştirir. ⚠️ Bu, `DONDUR` kipinde bile ikili değişebilir demektir; ister misiniz → **Açık karar AK-3** (öneri: DONDUR'da da ikili güncellenir, K1'de güncellenmez).
 2. **Son bilinen iyi (A2'nin kapanışı):** `.eski` ilk sağlıklı turda silinmez; `.lkg` ("son bilinen iyi") olarak kalır ve **yeni ikili bir backend işlemini BASARILI ya da GERI_DONDU ile sonuçlandırdığında** (yani uygulama yolunu uçtan uca koştuğunda) değiştirilir. Açılış sayacı kuralı aynen; buna ek olarak yeni ikili `HATA` ile biten ilk işleminde (W3 kurtarma turu da düşerse) `.lkg`ye döner ve işlemi o sürdürür (günlük biçimi ortak — §2.4).
 3. **Doğrulama ölçütü sertleşir:** "ilk sağlıklı tur" = kilit alındı + günlük okundu + kira/HAK okundu + aday kararı verildi + `durum.json` yazıldı. Bugün yalnız turun bitmesi sayılıyor.
 
@@ -283,7 +283,7 @@ Bu, gruplar düzeyinde zaten bir **kanarya → öncü → genel** zinciridir. Ek
 
 - **Dalga ataması belirlenimlidir:** kurulum kimliğinin özeti → 0–99 kova; dalga sınırları sürüm başına (varsayılan öneri: `genel` grubunda %10 → %50 → %100; kurulum sayısı küçükken en az 1 kurulum). Öncü/test gruplarında dalga yok.
 - **İlerleme olay tabanlıdır, takvim tabanlı değil:** bir sonraki dalga, mevcut dalgadaki kurulumların ≥ %80'i bu sürüm için bir SONUÇ bildirdiğinde (`son.hedefSurum = X`, sonuç ne olursa) ve eşik aşılmadıysa açılır. Pencere politikası gereği sonuç genellikle bir gecede gelir; ölçü sonuca bağlıdır, güne değil.
-- **Otomatik durdurma:** bir sürümün dalgasında `GERI_DONDU` + `BASARISIZ` sayısı **≥ 2 kurulum ya da ≥ %10** (hangisi önce) olunca sürüm o grupta **DONAR**: dalga tavanı ilerlemez, satıcıya "yayılım durdu" bildirimi gider (yeni olay `GUNCELLEME_YAYILIM_DURDU`); zaten güncellenmiş kurulumlara dokunulmaz (geri inme yok). Çözme yalnız insan kararıyla (portalda gerekçeli; `kurulum_kaydi` karar satırı). Eşik sayıları açık karar K2.
+- **Otomatik durdurma:** bir sürümün dalgasında `GERI_DONDU` + `BASARISIZ` sayısı **≥ 2 kurulum ya da ≥ %10** (hangisi önce) olunca sürüm o grupta **DONAR**: dalga tavanı ilerlemez, satıcıya "yayılım durdu" bildirimi gider (yeni olay `GUNCELLEME_YAYILIM_DURDU`); zaten güncellenmiş kurulumlara dokunulmaz (geri inme yok). Çözme yalnız insan kararıyla (portalda gerekçeli; `kurulum_kaydi` karar satırı). Eşik sayıları açık karar AK-2.
 - **Filo acil durdurma:** bir sürümü bütün gruplarda donduran tek düğme (dalga tavanı = sürüm öncesi, her kuruluma zil). Kurulum başına K1'den ayrı bir şeydir (K1 yaptırımdır, lisans yüzüne yansır); bu yalnız yayılımı durdurur. Zaten indirilmiş ama uygulanmamış paket, uygulamadan hemen önce yeni kiraya göre karar verilir (bugün var: aday ve karar tazelenir) — **ama** kira saatlik yenilenir, zil ile hızlanır; zil kaçarsa en kötü 1 sa gecikme kabul edilir (pencere içindeki kurulumlar için gerçek bir risk: acil durdurma "bundan sonra başlayacak olanları" durdurur, başlamış işlemi DURDURMAZ — başlamış işlem kendi sağlık ölçüsüyle biter ya da döner).
 
 ### 6.3 CDN yükü (A8, W5)
@@ -292,3 +292,225 @@ Bu, gruplar düzeyinde zaten bir **kanarya → öncü → genel** zinciridir. Ek
 - **Paket:** sürüm dizini DEĞİŞMEZ ve uzun önbellekli (bugün var) ⇒ kaynağa POP başına bir kez gelir. Yüzlerce kurulumun aynı pencere başında birden indirmesi beklenmez: indirme pencereden BAĞIMSIZ, aday göründüğü anda (kaydırmalı) yapılır; pencere yalnız UYGULAMAyı başlatır.
 - **Worker kotası:** belirteç doğrulaması her istekte Worker'dan geçer; ücretsiz katmanın günlük istek sınırı ölçülerek izlenir (F1: yayın defterinin yanında günlük sayım; %50'yi geçince uyarı). Linux paketi (imaj tar ~0,3–0,5 GB, ölçülecek) Windows zip'inden büyüktür; bant genişliği Cloudflare önbelleğinde maliyet doğurmaz, kaynak VDS'e yalnız önbellek ıskasında gelir.
 - **İndirme kesilirse** sürdürülebilir indirme (Range) bugün var; Linux tar'ı için de aynı kod.
+
+## 7. Gözlemlenebilirlik
+
+| Yüzey | Windows (bugün) | Linux | Not |
+|---|---|---|---|
+| Durum dosyası `durum.json` + kalp atışı (`sonCanlilik`, `canlilikEsigiSn`) | `%ProgramData%\TeksERP\guncelleme\durum\` | `/var/lib/tekserp/guncelleme/durum/` → konteynere `ro` | biçim AYNI (§5.2); backend `TEKSERP_GUNCELLEME_DIZINI`den okur — Linux'ta bu değişken compose'da ÜRETİM değeridir (bugün "geliştirme/test" diye belgeli; L5 sözleşme cümlesini günceller) |
+| Geçmiş `gecmis.jsonl` | aynı dizin | aynı dizin | aynı |
+| Panel "Sistem → Sunucu Güncellemeleri" + onay ucu | var (D7) | DEĞİŞMEZ — aynı uçlar, aynı eşleme (`Teks-Erp/src/services/update-status.service.ts`) | yalnız yeni bilgi kodları (`ALTYAPI_BEKLENIYOR` · `KURTARMA_SURUYOR` · `GUNCELLEYICI_ONCE`) panelin "Bilgi" satırına düşer |
+| Sunucu simgesi (`/health/tepsi`) | var | yok (bulutta masaüstü yok) | — |
+| Güncelleyici günlüğü | `<KOK>\guncelleyici\gunluk\guncelleyici.log` (UTC, 10 MB × 10) | `/opt/tekserp/guncelleyici/gunluk/guncelleyici.log` aynı döndürme (`tekserp-hizmet` `RotatingLog`, platform bağımsız) **+** stderr → systemd günlüğü (BULUT §1.4: 500 MB tavan) | sır yok; araç çıktısındaki `şema://kullanıcı:parola@` maskelenir (bugün var) |
+| Olay günlüğü | Uygulama olay günlüğü | systemd günlüğü (`SYSLOG_IDENTIFIER=tekserp-guncelleyici`) | düzeyler aynı |
+| Backend/araç çıktısı | konak `logs\backend-*.log` | Docker `json-file` 20 MB × 5 (`daemon.json`); araç konteynerinin çıktısı güncelleyici günlüğüne süzülerek kopyalanır (son 200 satır) | — |
+| Yoklama raporu → satıcı | var | aynı; platform satıcıda kurulumun kaydından (bulut kurulumu `BARINDIRILAN`, platform kanal kaydının `bulut.platform`unda) — yeni tel alanı gerekmez | filo ekranı platformu kendi kaydından gösterir |
+
+**Satıcı uyarıları (F1):** `HATA` (bugün `GUNCELLEME_BASARISIZ`) · `KURTARMA_SURUYOR` 1 saatten uzun · güncelleyici `OLCULEMEDI`/`DURDU` 2 yoklamadan uzun · sürüm başına yayılım durdu. Hepsi var olan giden kutusundan (e-posta + Telegram); yeni kanal açılmaz.
+
+**Tanı paketi (W4, iki platform):** `tekserp-guncelleyici tani --kok <KOK> [--veri <D>] --cikti <dosya.zip>` (zip yazımı var olan `zip` crate'iyle; yeni bağımlılık yok). İçerik: `durum.json` · `gecmis.jsonl` · `islem.jsonl` (son 5 işlem) · `kendi.json` · `ayar.json` · `ertele.json` · güncelleyici günlüğünün son 5 MB'ı · kurulu sürümlerin ve `current`in listesi · `kurulum-gecmisi.jsonl` son 20 satır · disk ölçümleri · hizmet/konteyner durumu (Windows: SCM durumu + başlangıç türü + kurtarma ayarı; Linux: `docker inspect` süzülmüş alanlar, Docker sürümü, systemd birim durumu) · `kunye`. **Girmez:** `.env` (yalnız ANAHTAR ADLARI), kira/HAK/iptal belgelerinin kendisi (yalnız sha256 + `kid` + bitiş), niyetteki belirteç (yalnız var/yok + bitiş), yedekler, geçici anahtarlar. Paketin içine `ICINDEKILER.txt` (her dosya + özet) yazılır. Paketi dışarı GÖNDERMEZ — fabrikadan dışarı giden her istek kurulum anahtarıyla imzalanır ve güncelleyici kurulum anahtarını kullanmaz; destek paketi Windows'ta yöneticiden, bulutta SSH ile alınır. (Sonraki adım, bu planın dışında: backend'in var olan hata raporu kanalı `durum.json`un süzülmüş özetini taşıyabilir.) Bekçi `tani_paketi_sir_tasimaz` (sahte dünyaya bilinen sırlar konur, paket baytlarında aranır; iki sonda).
+
+## 8. Kurulum
+
+### 8.1 Bulut (BULUT-KURULUM §2'ye bağlanış)
+
+Tek komut kurulumunun (`deploy/bulut/kur.mjs`, B6) adım 6–7'si güncelleyiciyi kurar; L7 bu adımları B6'dan ÖNCE, tek başına çağrılabilir bir alt komut olarak yazar (B6 onu çağırır):
+
+1. **İlk ikiliye güven (yumurta–tavuk):** güncelleyici ikilisi paketin İÇİNDEDİR. Mac'teki kurulum aracı paketi önce TS doğrulayıcıyla doğrular (aynı protokol kodu: zincir dosyası seçimi → bildirim → kanal/grup → tar özeti → künye imzası → listedeki her üye), ancak sonra VDS'e kopyalar. VDS'te ikili, listedeki sha256'sıyla `sha256sum` ölçülmeden çalıştırılmaz. İlk çalıştırma `kurulum-paket --tar <dosya> --hedef /opt/tekserp/surumler/<v>` olur ve ikili paketi KENDİ gömülü çapasıyla baştan doğrular (iki bağımsız doğrulayıcı aynı sonucu vermezse kurulum DURUR).
+2. `tekserp-guncelleyici hizmet-kur --kok /opt/tekserp --veri /var/lib/tekserp --proje <proje>`: dizin iskeleti + sahiplik/izinler (§1.2 tablosu) · `ayar.json` (`guncellemeSunucusu` = `https://guncelleme.etkiliyazilim.com`, proje adı; ZORUNLU) · taban birim + ek dosya · `is/yedek-alan` (64 MB) · `daemon-reload`. Tekrarlanabilir (var olanı ölçer, farklıysa yazar).
+3. `kurulum-paket` → `surumler/<v>` + `current` + `docker load` + kimlik ölçümü + compose doğrulaması (§5 halkaları aynen).
+4. İlk göç: `compose run --rm backend goc` (açılışta göç yok kuralı ilk kurulumda da geçerli) → `compose up -d postgres backend yedek` (+ kenar) → `/health/yerel` konteyner içinden.
+5. `systemctl enable --now tekserp-guncelleyici` → ilk tur: kira henüz yoksa `DONDURULDU/KIRA_YOK` (beklenen; etkinleştirme müşteri yetkilisinin ilk girişindedir, BULUT §2 adım 10).
+6. Kurulum kaydı: güncelleyici sürümü = paketteki ikilinin `kunye.surum`u (kurulum aracı satıcı kurulum kaydına "betik sürümü" ile birlikte yazar).
+
+### 8.2 Bugünkü elle Docker kurulumlarından geçiş (deneme VDS dahil)
+
+`docs/ops/LINUX-DOCKER-KURULUM.md` §2 ile kurulmuş bir sunucuyu güncelleyici düzenine almak Windows'taki D6 geçişinin karşılığıdır (`gecis` alt komutu, L7): var olan `.env`deki `TEKSERP_IMAJ` → aynı sürümün imzalı paketi `surumler/<v>`e açılır (imaj zaten yüklüyse kimlik ölçülür, YENİDEN YÜKLENMEZ), `current` kurulur, `.env` `yapilandirma/`e taşınır. **Proje adı (`TEKSERP_PROJE`) DEĞİŞMEZ** — birim adları `<proje>_pg_data` · `<proje>_lisans` · `<proje>_yedek` · `<proje>_yedek_anahtar` aynı kalmalı (F5 = PG küme kimliği; lisans birimi = kurulum anahtarı; `LINUX-DOCKER-KURULUM` §9). Veritabanına dokunulmaz, göç koşulmaz; geçişin geri alınışı tek komuttur (`gecis --geri-al`: eski compose + `.env` yerine). Geçiş, veriyi taşıyan birimlere hiçbir yoldan yazmaz (bekçi: güncelleyici kaynağında `down -v` · `volume rm` · `system prune` · `image prune` dizgeleri YOK — `test_guncelleyici_yikici_docker_yok`, iki sonda).
+
+### 8.3 Müşteri sunucusu (Linux fabrika sunucusu) — uygun mu?
+
+Güncelleyici tarafında **engel yok:** gelen port açmaz, yalnız CDN'e ve (backend üzerinden) lisans sunucusuna çıkar; Tailscale istemez; root'ta koşan tek hizmettir; politika/pencere/onay fabrikadakiyle aynı. Engeller güncelleyicinin dışındadır: (1) Docker kurulumunda fabrika ağı TLS'i yok — yalnız şifreli bağlanan panel ve tablet bağlanamaz (`LINUX-DOCKER-KURULUM` §7); fabrika içi kenar (LAN sertifikası) ayrı iş · (2) kurulum aracı Mac + SSH'tır; müşteri yerinde kullanıcının kendisi kurar (kullanıcı kararı 2026-10-02) ⇒ yerinde çalışan bir kurulum betiği gerekir · (3) konteynerde parmak izi zayıf tanımadır (iki etken). Karar kullanıcının: **AK-1**.
+
+## 9. Test stratejisi — "bir kere yap, hep çalışsın"ın kanıtı
+
+İlke: H1–H3'ün her cümlesi bir **senaryoya**, her senaryo **iki platform profilinde** bir teste, her test bir **kapıya** bağlanır. Sahte dünya (hızlı, belirlenimli, her makinede) ispatın ana gövdesidir; gerçek platform testleri sahte dünyanın gerçeği doğru taklit ettiğini ölçer.
+
+### 9.1 Katmanlar
+
+| Katman | Ne ölçer | Nerede koşar | Neden orada |
+|---|---|---|---|
+| **K0 Vektörler** | TS ↔ Rust sözleşme aynası (bildirim · kira · karar · rapor · zincir seçimi · env · şema hizası) + yeni: sözleşme 5 · eski biçim klasörleri (`guncelleyici-gunluk/`, `-ayar/`, `-niyet/`, `-durum/`) | Mac (`cargo test`), CI ubuntu-latest + windows-latest | saf hesap; platformdan bağımsız |
+| **K1 Sahte dünya** (`tests/common`, bugün ~30 senaryo) | durum makinesi, telafi, öldür-yeniden başlat, arıza enjeksiyonu | aynı üç yer | belirlenimli; bir PR'ı dakikada ölçer. Windows CI'ı yalnız NTFS junction/yeniden adlandırma gerçeği için ek değer katar |
+| **K2 Gerçek platform dumanı** | sahte dünyanın varsaydığı platform davranışı gerçekte de öyle mi | Windows: windows-latest (`duman-windows.ps1`, gerçek SCM — bugün var) · Linux: ubuntu-latest (gerçek systemd + gerçek Docker; GitHub'ın Ubuntu makinelerinde ikisi de hazır) | hızlı, her PR'da; yeniden açılış ve güç kesintisi YAPAMAZ |
+| **K3 Gerçek uçtan uca** | gerçek korumalı paket/imaj + gerçek PG + gerçek göçler + panel ekranı | Windows: thinkpad-1 (gerçek Windows 11, kendi PG örneği, bugünkü D-prova makinesi) · Linux: ubuntu-latest (elle tetiklenen iş) | windows-latest kalıcı hizmet ve yeniden açılış taşımaz; thinkpad sahaya en yakın Windows'tur |
+| **K4 Yükseltme matrisi** | N→N+k, göçlü/göçsüz, geri dönüş, kendini güncelleme zinciri, eski↔yeni güncelleyici | sentetik sürüm zinciri: sahte dünyada (her PR) + gerçek platformda (Linux ubuntu-latest gecelik; Windows thinkpad, güncelleyici sürümü değişince) | gerçek eski sürümler yeniden derlenemez (bayt kodu V8'e kilitli); sentetik zincir aynı ikiliden, göç ve ikili sürümü farklı paketler üretir |
+| **K5 Kaos / uzun koşu** | rastgele arıza altında yüzlerce döngüde değişmez hiç bozulmuyor mu | Linux: ubuntu-latest gecelik · gerçek güç kesintisi: deneme VDS (sağlayıcı panelinden sert yeniden başlatma) ve thinkpad (`shutdown /r /f /t 0` + fişten çekme) — elle, güncelleyici sürümü değişince | CI makinesi kendini yeniden başlatamaz; gerçek güç kesintisi yalnız gerçek makinede ölçülür |
+| **K6 Deneme VDS provası** | bizim gerçek bulut düzenimizde ilk kurulum + ilk otomatik güncelleme | 213.142.134.226 (`deneme.etkiliyazilim.com`) | ilk BARINDIRILAN müşteriden önce şart (BULUT B11'in güncelleyici kısmı) |
+
+**Mac'te ne koşar:** K0 + K1 (tam paket) ve sentetik sürüm zincirinin üretimi. Mac'teki Docker Desktop'ta konak systemd'si yoktur ve Linux sanal makinesi gizlidir ⇒ Linux arka ucunun gerçek testi Mac'te yapılmaz; Lima/UTM gibi yeni bir araç da eklenmez (GitHub Ubuntu makineleri yeter). Mac'te Docker katmanı için yalnız `duman-linux` betiğinin "güncelleyicisiz" bölümü (imaj yükle → kimlik → compose doğrula) koşabilir.
+
+### 9.2 Sahte dünyanın iki profili (K1'in genişlemesi — W0/L4b)
+
+Bugünkü `tests/common` Windows anlamını taklit eder (SCM kurtarması 5/5/30, junction). Senaryolar `senaryo(profil)` biçimine çevrilir ve **aynı senaryo iki profilde** koşar:
+
+| Profil davranışı | Windows profili | Linux profili |
+|---|---|---|
+| Çöken hizmet | 5 sn sonra kurtarma (bugün var) | Docker `unless-stopped`: hemen, artan aralıkla; `stop` sonrası yok |
+| Açılış (yeni "yeniden açılış" olayı) | backend başlangıç türü otomatikse başlatılır (çitle `demand` ⇒ başlatılmaz) | `stop` edilmiş konteyner başlamaz; edilmemiş başlar |
+| Altyapı | PG hizmeti durabilir | PG konteyneri + Docker servisi durabilir (`daemon_down_for`) |
+| Sağlık sondası | HTTP | `exec` (çıktı satırı) |
+
+**Eklenecek arıza düğmeleri (`Faults`):** `enospc_at(k)` (k'ıncı yazımda ENOSPC — her yazım noktası için döngü) · `eio_at(k)` · `daemon_down_for(sn)` · `pg_down_for(sn)` · `hang_at(adım)` (iç bekçiyi ölçmek için çağrı dönmez) · `reboot_at(k)` (öldür + platformun açılış davranışı) · `clock_jump(±sa)` · `image_tag_tampered` · `restore_fails_times(n)` (HATA kurtarma turu) · `old_journal(sürüm, adım)` (eski güncelleyicinin yarım günlüğü). **Değişmez ölçer** (`assert_invariants`, bugün var) her senaryo sonunda iki profilde aynı kuralları ölçer: tek backend · `current` ↔ şema uyumu · yetim araç yok · düz döküm/anahtar yok · günlük kapalı · `durum.json` son durumla tutarlı · çit kaldırılmış (GERI_DONDU/BASARILI).
+
+### 9.3 Ortak senaryo matrisi
+
+Her satır iki profilde (W = Windows, L = Linux) koşar. "Kapı": **PR** = `native-windows.yml` + yeni `native-linux.yml` (yol süzgeci `Teks-Erp/native/**`, bugünküyle aynı) · **Gece** = gecelik iş · **Sürüm** = yayın kapısının istediği kanıt (§9.5).
+
+| Senaryo | K1 (W+L) | K2 | K4/K5 gerçek | Test / bekçi adı | Kapı |
+|---|---|---|---|---|---|
+| Mutlu yol | var → iki profil | W var · L yeni | ✓ | `happy_path_updates_and_records` | PR |
+| Her değiştiren işlemden önce öldür (başarı ve geri dönüş yolu) | var → iki profil | — | K5 rastgele | `kill_at_every_point_*` | PR |
+| Geri alma sırasında çift öldürme | var → iki profil | — | — | `double_kill_during_recovery` | PR |
+| Her yazım noktasında disk dolu | yeni | L: loop dosya sistemi | K5 | `disk_dolu_her_yazimda` | PR |
+| Yeniden açılış her adımda (açılış yarışı, A3) | yeni | W: `sc config` + hizmet yeniden başlatma · L: `systemctl restart docker` | thinkpad + VDS gerçek yeniden açılış | `acilis_yarisi_her_adimda` | PR + Sürüm |
+| Docker servisi / PG geçici yok | yeni | L: `systemctl stop docker` 60 sn | K5 | `altyapi_bekleme` | PR |
+| Göç hatası → DB geri yükleme | var → iki profil | L yeni | K4 | `migration_failure_restores_database` | PR |
+| Açılışta düşen sürüm | var → iki profil | L yeni | K4 | `startup_crash_rolls_back_early…` | PR |
+| Lisans kötüleşmesi | var → iki profil | — | K3 | `license_regression_rolls_back` | PR |
+| Telafi düşer → HATA → kurtarma turu | yeni | — | — | `hata_kurtarma_turu` | PR |
+| Asılı çağrı → iç bekçi | yeni | L: `WatchdogSec` gerçek | — | `ic_bekci` | PR |
+| Bozuk paket / bozuk imaj / etiket kaydı | paket var · imaj yeni | L: gerçek `docker load` | — | `imaj_bozuk` · `imaj_etiketi_kaydi` | PR |
+| Ağ kesintisi (indirme sürer; işlem ağa çıkmaz) | var + yeni | — | K5 `iptables` | `download_resumes_after_cut` · `ag_yok_islem_tamamlanir` | PR |
+| Kendini güncelleme: A/B, 3 açılış, kopya değişti, öteki çapa, öteki platform | var → + platform | W var · L yeni (gerçek rename + systemd yeniden başlatma) | K4 zinciri | `self_update.rs` + `kendi_platform_gecmez` | PR |
+| Önce güncelleyici (backend geri dönse bile ikili yerleşir) | yeni | — | K4 | `once_guncelleyici` | PR + Sürüm |
+| Son bilinen iyiye dönüş (gizli hata) | yeni | — | K4 | `lkg_donusu` | PR |
+| Eski güncelleyicinin yarım günlüğünü yeni ikili sonuçlandırır | yeni (vektör klasörü) | — | K4 | `eski_gunluk_surdurulur` | PR |
+| Eski güncelleyici + yeni yayın (zincir/yeni ad yanında) | var (D7 prova) → genişler | — | K4 | `prova-paket-zinciri` + `eski_okuyucu_yeni_yayin` | PR |
+| N→N+5 (`minKaynakSurum` → ara sürüme sabitleme) | yeni | — | K4 | `atlamali_yukseltme` | Gece |
+| Pencere sınırında başlayan işlem pencere kapansa da biter | var | — | — | `decision` vektörleri | PR |
+| Dalga tavanı → `HEDEF_ULASILDI` (güncelleyici değişmeden) | vektör | — | — | `guncelleme-karar.json` yeni kayıtlar | PR |
+| 100 döngülük kaos (rastgele öldürme · disk · Docker yeniden başlatma · ağ) | — | — | L gecelik | `kaos_uzun_kosu` | Gece |
+| Gerçek güç kesintisi (adım 2, 4, 5, telafi ortası) | — | — | thinkpad · VDS (elle) | senaryo belgesi "GUC" | Sürüm |
+
+### 9.4 Sentetik sürüm zinciri (K4 aracı — T2)
+
+Gerçek eski backend sürümleri yeniden derlenemez (bayt kodu derleyen V8'e kilitli) ve göç geçmişi gerçek veriye bağlıdır. Bu yüzden matris **tek bir derlemeden** türetilmiş paket ailesiyle koşar: `t1 … t6` sürümleri aynı ikili/imajın üstüne **yalnız göç klasörü** (tablo ekle · kolon ekle · `CONCURRENTLY` dizin · bilerek düşen göç · uzun süren göç) ve **güncelleyici künye sürümü** farklı paketler olarak üretilir; test çapasıyla (`test-anchor` özelliği; üretim ikilisine girmez — bugün var) imzalanır ve `http://127.0.0.1` sunucusundan dağıtılır (test derlemesinde izinli — bugün var). Linux'ta imaj ailesi tek taban imaj + ince göç katmanıyla (G13'ün "ince son katman" yöntemiyle aynı) üretilir. Gerçek veriyle prova ayrıca: Windows'ta hazırlık kanalının gerçek yayınlanmış paketleri thinkpad'de, Linux'ta en eski canlı dökümün kopyası üzerinde (kök kural: şema provası en eski canlı dump'ta).
+
+### 9.5 Yayın kapısı — kanıtsız güncelleyici sahaya çıkmaz
+
+`deploy/backend-yayinla.mjs`, yayınlanacak paketteki güncelleyici ikilisinin sürümü yayındaki sürümünkinden farklıysa bir **kanıt dosyası** ister (`kanit/guncelleyici-<sürüm>.json`: commit · PR koşusu (K0–K2 yeşil) · gecelik koşu (K4/K5 yeşil) · gerçek prova satırları (thinkpad "GUC" ve VDS "GUC" — güncelleyici sürümü değiştiyse)). Kanıt yoksa yayın DURUR; kaçış yalnız kullanıcı cümlesiyle (`--terfi-atla` kalıbı). Güncelleyici değişmediyse (çoğu sürüm) kapı hiçbir şey istemez — "nadiren değişir" hedefinin ölçüsü de budur: yayın defteri güncelleyici sürümünün kaç yayında değiştiğini sayar.
+
+## 10. Dilim planı
+
+Büyüklük ölçüsü bir ajan bağlamıdır (ajanlar ~250 bin jetonda takılıyor): **K** (küçük) ≈ 60–100 bin · **O** (orta) ≈ 100–160 bin · **B** (büyük) ≈ 160–220 bin; B üstü dilim yazılmadı (bölündü). Her dilim kendi worktree'sinde; testler hedefli (dilimin bekçileri + `cargo test -p tekserp-guncelleyici`), tam paket faz inişinde.
+
+| # | Dilim | Net çıktı | Bekçiler | Bağımlı | Boy |
+|---|---|---|---|---|---|
+| **W0** | Sözleşmenin dondurulması | GUNCELLEYICI.md'ye dondurma bölümü (§4.5 kuralları) · eski biçim vektör klasörleri (`guncelleyici-gunluk/` · `-ayar/` · `-niyet/`; bugünkü ve yayınlanmış her güncelleyici sürümünün her adımda yarım bıraktığı günlük — eski etiketlerden sahte dünyada üretilir) · ISLEM satırına `v` + `platform` · senaryoları `senaryo(profil)` biçimine çevirme iskeleti | `eski_gunluk_surdurulur` · vektör sayısı düşmez (cırcır, iki sonda) | — | O |
+| **L1** | Platform sınırı (davranış değişmez) | `src/platform/{windows,linux}` · `Saglik` · `Araclar` · `PgArkaUcu` özellikleri · Linux saplamasıyla derlenir · `native-linux.yml` (ubuntu-latest: fmt + clippy + bütün `cargo test`) | `test_guncelleyici_platform_siniri` (çekirdekte `cfg`/`windows_sys` yok) · bütün mevcut testler aynen yeşil | W0 | O |
+| **W1** | Önce güncelleyici + son bilinen iyi | §4.2 üç madde; `kunye.hedef` platform denetimi; `durum.bilgi = GUNCELLEYICI_ONCE` | `once_guncelleyici` · `lkg_donusu` · `kendi_platform_gecmez` · `self_update.rs` | L1 | O |
+| **W2** | Bakım çiti (A3) | adım 0 `CIT` (Windows başlangıç türü; Linux ölçüm), plan + telafi + son durumlarda kaldırma, `reboot_at` arızası, `duman-windows.ps1` gerçek `sc config` ölçümü | `acilis_yarisi_her_adimda` (iki profil) | W1 | O |
+| **W3a** | Disk | yedek alan dosyası, ENOSPC enjeksiyonu (`enospc_at`), §5 madde 4 disk formülü (Windows) | `disk_dolu_her_yazimda` | L1 | O |
+| **W3b** | Altyapı bekleme + HATA kurtarma + iç bekçi | §2.3'ün üç satırı; `ALTYAPI_*` · `KURTARMA_SURUYOR` kodları (Rust + TS + rapor vektörü aynı commit'te) | `altyapi_bekleme` · `hata_kurtarma_turu` · `ic_bekci` · `test_guncelleme_protokol` | W2 | B |
+| **W4** | Tanı paketi | `tani` alt komutu (iki platform) + runbook satırı | `tani_paketi_sir_tasimaz` | L1 | K |
+| **W5** | CDN yükü | aday sorgusu kira yenilenmesine + 6 sa tavana + kurulum kaydırmasına bağlanır (§6.3) | sahte saatle istek sayımı (`aday_sorgu_sikligi`) | L1 | K |
+| **L2a** | Sözleşme 5 — protokol | `backend-oci` ürünü · `linux-x64-oci` platformu · `imaj` · `guncelleyici` blokları · `SURUM_PLATFORM` · TS + Rust aynası + vektörler aynı commit'te | `test_guncelleme_protokol` · `sozlesme_vektorleri.rs` · `test_lisans_protokol_aynasi` | W0 | O |
+| **L2b** | Sözleşme 5 — uçlar | satıcı belirteci `urun=backend-oci` · Worker yol öneki · backend `indirme-belirteci?urun=backend-oci` · `updater-ipc` Linux kökü · "eski istemci ne yapar" cevabı · **satıcı önce, Worker ilk Linux yayınından önce** | `test_indirme_kapisi` · satıcı testleri · `test_lisans_yoklama_allowlist` | L2a | O |
+| **L3** | Linux paketi + yayıncı | teslim paketinin `backend-oci` biçimi (§1.3) · güncelleyicinin linux-x64 derlemesi CI'da (`korumali-paket.yml` ubuntu işi; Ubuntu 22.04 tabanı — eski glibc ileri uyumu) · `backend-yayinla.mjs --urun=backend-oci` (imzasız taban imajı RED) | `test_backend_yayin` · `test_docker_hijyeni` · `test_korumali_imaj` | L2a + **G13 inişi** | B |
+| **L4a** | Linux arka ucu I | `Fs` eksikleri (`statvfs`, yabancı yazar, `O_NOFOLLOW`) · `Procs` (süreç grubu, `PDEATHSIG`) · `Protect` · `Events` · TLS (`native-tls` Linux hedefi) · Linux `Layout` | `linux_fs_guvenilmez_okuma` · `linux_procs_agac_olur` | L1 | O |
+| **L4b** | Linux arka ucu II | `DockerServices` · `Araclar` (yedek/göç/geri yükleme araç konteynerleriyle) · adım eşlemesi (§2.2) · Linux profilli sahte dünya; matrisin K1 satırları iki profilde | §9.3'ün PR satırları (L profili) | L4a + L5 (araç komutları) | B |
+| **L5** | İmaj / compose tarafı | `TEKSERP_GOC_ACILISTA` · `goc` aracı (`CONCURRENTLY` kuralı `entrypoint.sh`ten araca, tek yer) · compose şablonu kuralları (`pull_policy: never`, bağlar, kip değişkeni) · açılış çıkış kodları tablosu · `TEKSERP_GUNCELLEME_DIZINI` üretim cümlesi | `test_korumali_imaj` · compose denetimi yeni maddeler · `test_dogrulama_kipi` | L2a | O |
+| **L6** | systemd + Linux kendini güncelleme | `hizmet-kur`/`hizmet-kaldir` Linux · taban birim + ek dosya izin listesi · `sd_notify`/`WatchdogSec` · `.exe`siz A/B | `test_systemd_ek_izinli` · `self_update.rs` (L profili) | L4a, W1 | O |
+| **L7** | Kurulum ve geçiş araçları | §8.1 (kur.mjs adım 6–7'nin alt komutu) · §8.2 `gecis` / `gecis --geri-al` · runbook bölümü | `test_guncelleyici_yikici_docker_yok` · kuru koşum sondaları | L3, L4b, L5, L6 | B |
+| **L8** | PG küçük sürümü (KONTEYNER kipi) | `pg.env` yazarı · U3–U11'in Docker karşılığı · ICU yeniden dizinleme aynen | `pg_minor.rs` L profili | L4b | O |
+| **T1** | Linux gerçek dumanı (K2) | `duman-linux.sh` (ubuntu-latest: systemd birimi, gerçek compose, test imajları, yerel CDN, kill/Docker yeniden başlatma/loop disk) | `native-linux.yml` duman adımı | L4b, L5, L6 | O |
+| **T2** | Yükseltme matrisi (K4) + yayın kapısı | sentetik sürüm zinciri aracı (iki platform) · kanıt dosyası · `backend-yayinla.mjs` kanıt kapısı | `test_backend_yayin` yeni sondalar · `atlamali_yukseltme` | W1, L4b | B |
+| **T3** | Windows gerçek prova (thinkpad) | senaryo belgesi "GUC" (adım başına güç kesintisi + yeniden açılış) · betik · ilk kanıt satırları | senaryo (yeşil/kırmızı + kanıt) | W1–W3b | O |
+| **T4** | Kaos / uzun koşu (K5) | gecelik iş · değişmez ölçer aracı (`degismez-olc`: tek backend, `current` ↔ imaj ↔ göç, yetim/sır yok) | `kaos_uzun_kosu` | T1 | O |
+| **F1a** | Filo — satıcı | dalga tavanı (§6.2) · otomatik durdurma · filo acil durdurma · `GUNCELLEME_YAYILIM_DURDU` · Worker istek sayımı · eski biçim emeklilik ölçüsü (§4.5 madde 2) | satıcı servis testleri · bildirim taraması · `guncelleme-karar.json` | L2b | B |
+| **F1b** | Filo — portal | dalga/sürüm görünümü, insan sabitlemesi ↔ dalga tavanı ayrı, gerekçeli çözme | portal testleri | F1a | O |
+| **P1a** | Deneme VDS — ilk kurulum + ilk otomatik güncelleme (hazırlık çapası) | `test` grubunda TEST sınıflı kurulum; t1 → t2 OTOMATİK pencereyle; zorla geri dönüş (düşen göç); kısa kaos (öldür, `systemctl restart docker`, sağlayıcı panelinden sert yeniden başlatma) | senaryo "VDS-GUNCELLEME" | L7, T1, AK-4 | O |
+| **P1b** | Deneme VDS — üretim çapası | üretim ikilisi + `pkt-*` sertifikalı imzalı gerçek Linux paketi; P1a senaryosunun tekrarı | aynı senaryo | **D8 töreni**, P1a | K |
+| **P2** | Windows filosuna ilk yayın | W1–W5'li güncelleyiciyi taşıyan ilk backend sürümü (hazırlık → terfi) | yayın kapısı (§9.5) | T2, T3 | K |
+
+**Paralellik:**
+
+```
+W0 ─┬─ L1 ─┬─ W1 ─ W2 ─ W3b ─┐
+    │      ├─ W3a ───────────┤
+    │      ├─ W4 · W5 ───────┤
+    │      └─ L4a ─┬─ L6 ────┤
+    └─ L2a ─┬─ L2b ─ F1a ─ F1b
+            ├─ L5 ─┐         │
+            │      └─ L4b ─┬─ L8
+            └─ L3 (G13 ile)│
+                           ├─ T1 ─ T4
+                           ├─ T2 (W1 ile) ─┐
+                    L7 (L3·L4b·L5·L6) ─ P1a ─ P1b (D8 töreni)
+                    T3 (W1–W3b) ───────────┴─ P2
+```
+
+- Aynı anda en çok üç hat: **A** Windows/ortak (W-dilimleri `engine.rs`/`operation.rs`e dokunur — kendi aralarında SIRALI, çakışmasınlar diye) · **B** Linux (L4a/L6 yalnız `platform/linux` ve birim dosyaları; A ile çakışmaz) · **C** protokol + satıcı (L2a/L2b/F1 — Rust tarafı yalnız `release.rs`/`decision.rs` ve vektörler).
+- L1 bir **saf yeniden düzenlemedir** ve W1'den önce iner; böylece W-dilimleri yeni düzende yazılır, Linux hattı onlardan sonra birleştirme acısı çekmez.
+
+**Kullanıcı onayı / tören noktaları:**
+
+1. Planın kendisi ve §11'deki açık kararlar (AK-1…AK-5) — W0'dan önce.
+2. **L2b inişi = sözleşme kıran olmayan ama satıcı-önce sıralı yayın:** üretim satıcısı + Worker güncellemesi kullanıcının yayın onayıyla (surum-yayin reçetesi).
+3. **P1a:** deneme VDS'e kurulum — AK-4 cevabıyla; sunucuya bağlanan dilim budur (bu plan sunucuya dokunmadı).
+4. **P1b: PAKET imzası** — D8 töreninden (ilk gerçek `pkt-*` sertifikası, kullanıcı Mac'te, parola TTY) SONRA; Linux paketinin üretim imzası aynı törenin yayın adımıdır (`docs/ops/URETIM-SATICI-TOREN.md`).
+5. **P2:** Windows'a W1'li güncelleyicinin ilk çıkışı terfi etiketiyle (sürüm notu kapısı). ⚠️ Sahadaki ESKİ güncelleyiciler A1 kuralıyla çalışır: yeni ikiliyi ancak bir backend güncellemesini BAŞARILI bitirince alırlar. Bu yüzden P2'nin taşıdığı backend sürümü göçsüz ve küçük tutulur (ilk geçişin başarısı en olası olsun); sonraki her yayın "önce güncelleyici" kuralından yararlanır.
+6. İlk BARINDIRILAN müşteri: P1b + T2 + T3 + T4 yeşil olmadan kurulmaz (BULUT B11 kuralının güncelleyici karşılığı).
+
+**Deneme VDS'e ilk kurulum ve ilk otomatik güncelleme provası: P1a** (hazırlık çapasıyla, D8'den bağımsız); üretim çapalı tekrarı P1b.
+
+## 11. Kararlar
+
+### 11.1 Teknik kararlar (bu planda verildi — gerekçesiyle)
+
+| # | Karar | Gerekçe (kısa) | Yer |
+|---|---|---|---|
+| TK-1 | Docker'ı CLI ile yönet, Engine API'yi kullanma | yeni bağımlılık yok; compose tek beyan; alt küme dar ve tek değer biçimli | §1.2 |
+| TK-2 | Linux TLS = `native-tls` (sistem OpenSSL + sistem CA deposu) | kilit dosyasına yeni crate girmez; CA'lar işletim sistemiyle tazelenir | §1.2 |
+| TK-3 | Linux paketi ayrı ürün yolu `backend-oci` | gruplar platformlar arası ortak; eski Windows güncelleyicisi hiç etkilenmez | §1.3 |
+| TK-4 | Linux'ta da sürüm dizini + `current` bağı; compose sürümle imzalı gelir | GECIS tek atomik değişim; Windows koduyla aynı | §1.2 |
+| TK-5 | Göç yalnız güncelleyicinin adımında; imaj açılışında göç yok | ayrı telafi; eski imajın yeni şemayla karşılaşması önlenir (A11) | §2.2 |
+| TK-6 | Bakım çiti (Windows başlangıç türü; Linux `unless-stopped`) | açılış yarışı (A3) | §2.2 |
+| TK-7 | `HATA` son durak değil; kurtarma turu süresiz, geri çekilmeli | telafiler tekrarlanabilir; insan yalnız yedek bozuksa | §2.3 |
+| TK-8 | Önce güncelleyici + son bilinen iyi | kilitlenme (A1) ve gizli hata (A2) | §4.2 |
+| TK-9 | Sözleşme değişimi yeni ad + yanına yazım; eski ad filo ölçüsüyle emekli | D7/D8'de kanıtlanmış kalıp; eski okuyucu hiç bozulmaz | §4.5 |
+| TK-10 | Dalga = satıcının var olan `hedefSurum` alanı | güncelleyici ve sözleşme değişmez | §6.2 |
+| TK-11 | Mac'te Linux VM kurulmaz; gerçek Linux testi GitHub Ubuntu makinelerinde | yeni araç yok; systemd + Docker hazır | §9.1 |
+| TK-12 | Linux PG küçük sürümü ilk sürümde kapalı, ayrı dilim (L8) | ilk provayı küçültür; ana sürüm zaten runbook | §1.1 |
+
+### 11.2 Kullanıcıya sorulacak kararlar (sade dille)
+
+- **AK-0 — Windows'ta güncelleme programı ayrı bir kurulum mu olsun?** Öneri: **Hayır.** Bugünkü gibi ERP'nin kurulum paketinin içinde gelsin ve kendini yenilesin. Ayrı kurulum, bozulduğunda her fabrikada birinin elle kurmasını gerektirir; ayrıca ikinci bir yayın ve imza işi doğurur. Onun yerine iki iyileştirme yapılır: güncelleme programı kendini ERP'den ÖNCE yeniler (kendi hatası kendi düzeltmesini engelleyemez) ve bir önceki sağlam hâlini her zaman yedekte tutar.
+- **AK-1 — Linux kurulumunu müşterinin kendi fabrikasındaki sunucuya da satacak mıyız, yoksa yalnız bizim kiraladığımız bulut sunucularında mı?** Öneri: **Şimdilik yalnız bulut.** Güncelleme programı ikisine de uygun yazılır; fabrika içi Linux için ayrıca ağ şifrelemesi ve yerinde kurulum aracı gerekir, o ayrı bir iştir.
+- **AK-2 — Yeni sürüm "genel" gruptaki fabrikalara hep birden değil sırayla gitsin mi?** Öneri: **Evet:** önce fabrikaların %10'u, sonuçlar gelince %50'si, sonra hepsi. Aynı sürüm 2 fabrikada (ya da gruptakilerin %10'unda) geri dönerse yayılım kendiliğinden dursun ve size haber gelsin; yeniden başlatmak sizin kararınız olsun. Sayılar uygun mu?
+- **AK-3 — Güncellemesi "dondurulmuş" bir fabrikada güncelleme programının KENDİSİ yenilenebilsin mi?** (ERP'nin sürümü değişmez; yalnız güncelleyen küçük program yenilenir.) Öneri: **Evet;** yalnız lisans yaptırımıyla dondurulmuş fabrikada hayır.
+- **AK-4 — Deneme sunucusundaki prova nasıl yapılsın?** Öneri: **Şu an kurulu ders paketinin yanına, ayrı klasör ve ayrı veritabanıyla** (ders paketine dokunulmaz). Sunucunun belleği iki kurulumu taşımazsa ayrıca sorulur.
+- **AK-5 — Testler GitHub'ın Linux ve Windows makinelerinde koşsun mu?** (Her değişiklikte kısa, her gece uzun test.) Aylık ücretsiz süre aşılırsa küçük bir ücret çıkabilir. Öneri: **Evet;** gece testi yalnız güncelleme programı değiştiğinde koşar.
+
+## 12. Riskler — "bir kere yap" nerede mümkün, nerede değil
+
+**Mümkün olan (dondurulabilir çekirdek):** karar fonksiyonu, doğrulama zinciri, işlem günlüğü + telafi + değişmez, IPC dosya biçimleri, kendini güncelleme yolu. Bunlar dış dünyaya bağlı değildir; vektör + arıza enjeksiyonu + yükseltme matrisiyle bir kez ölçülür ve §4.5 kurallarıyla donar. Bu planın hedefi, güncelleyicinin **değişme nedenlerini** bu çekirdeğin dışına itmektir.
+
+**Mümkün olmayan (dış dünyanın değiştirdiği) ve önlemi:**
+
+| # | Risk | Neden "bir kere" ile çözülemez | Önlem |
+|---|---|---|---|
+| R1 | Docker / compose CLI davranışı değişir (bayrak emekliliği, çıktı) | Docker'ın yol haritası bizde değil | sabit sürüm (`deploy/bulut/surumler.json`), dar alt küme + tek değer biçimi, CI'da iki sürüm; desteklenmeyen sürümde güncelleyici işlem BAŞLATMAZ (bilgi kodu), fabrika eski sürümle çalışmaya devam eder; düzeltme W1 sayesinde insansız ulaşır |
+| R2 | İşletim sistemi büyük sürümü (Ubuntu 24.04 → 26.04; Windows Server sürümleri) | sistem kütüphaneleri, systemd/SCM davranışı | bulutta büyük sürüm geçişi bizim runbook işimizdir (otomatik değil); CI dağıtım matrisi; ikili en eski desteklenen glibc'de derlenir |
+| R3 | OpenSSL ABI'si (Linux) | dinamik bağ | ikili her güncelleyici sürümünde yeniden derlenir; kurulum ön ölçümü `libssl.so.3`ü arar; ABI değişirse yeni ikili eski ABI'li sisteme çıkmaz (`kunye` + platform etiketi) |
+| R4 | Kök/PAKET anahtar dönemi | gömülü çapa ikilinin içindedir | dönem töreni + çift çapa (PAKET-ANAHTARI-KOK-ALTINDA); `pkt-*` sertifikaları çapayı değiştirmeden yeni imzacı ekler — güncelleyici değişimi gerektirmeyen yol budur |
+| R5 | PostgreSQL ana sürüm geçişi | veri dizini biçimi değişir | bilinçli olarak OTOMATİK DEĞİL (runbook, insan); güncelleyici yalnız küçük sürüm |
+| R6 | Hatalı göç (uzun kilit, yanlış veri göçü) | güncelleyicinin dışında, her sürümde yeni | güncelleyici geri döner (veri kaybı yok, kesinti var); göç bekçileri + en eski canlı dökümde prova + sentetik matriste "uzun göç" satırı |
+| R7 | Kendini güncelleme yolunun kendisinde hata | A/B'yi de bozabilir | yol dondurulur (§4.5 madde 4), üç halkalı zincir kanıtı yayın kapısında, `.lkg`; son çare insan: Windows setup "onar", Linux `hizmet-kur` yeniden koşumu (SSH) |
+| R8 | Saat sapması | kira ve pencere zamana bağlı | chrony/w32time; kira +10 dk toleransı; `clock_jump` arıza senaryosu |
+| R9 | Büyük veritabanında geri yükleme süresi | DB büyüdükçe telafi uzar | yedek/geri yükleme zaman aşımları DB boyutundan türetilir (ölçülür, sabit değil); disk ön kontrolü DB boyutunu sayar |
+| R10 | Veri birimi kaybı (Linux `pg_data` = lisans F5) | yanlış komut geri dönüşsüzdür | güncelleyici birimlere hiçbir yoldan dokunmaz; yıkıcı Docker komutu bekçisi (§8.2) |
+| R11 | CDN/Worker kesintisi ya da kota | dış hizmet | güncelleme yalnız gecikir (fail-closed), fabrika etkilenmez; sorgu sıklığı düşürülür (W5); kota sayımı (F1a) |
+| R12 | Windows'ta güvenlik yazılımının dosya kilitlemesi | üçüncü taraf | `DOSYA_KILITLI` bekler, ertelemesiz sürer (bugün var); thinkpad provasında Defender açık koşulur |
+
+**Dürüst sonuç:** "Bir kere yap, hep çalışsın" güncelleyicinin **çekirdeği** için ulaşılabilir ve bu plan onu ölçüyle bağlar. Dış dünyaya bağlı yüzeyler (Docker, işletim sistemi, TLS kütüphanesi, anahtar dönemi, PG ana sürüm) zamanla değişecektir; onlar için hedef "hiç değişmesin" değil, **değiştiğinde güncelleyici güvenli tarafta beklesin, fabrika çalışmaya devam etsin ve düzeltme insan eli değmeden ulaşsın**tır. Bunu mümkün kılan iki parça W1 (önce güncelleyici + son bilinen iyi) ve §4.5'tir; ikisi olmadan her dış değişiklik fabrika başına elle müdahale demektir.
