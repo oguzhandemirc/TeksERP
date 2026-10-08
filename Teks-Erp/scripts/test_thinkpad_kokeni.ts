@@ -4,11 +4,13 @@
 // DB'siz, ağsız; her şey GEÇİCİ dizinde, HOME geçici. NE ÖLÇER:
 //   §1 saf hüküm (`thinkpadKokeniHukmu`): uyan künye → uyumlu; künye yok/biçimsiz · betik okunamadı · üretimde
 //      ana dal ölçülemedi → ÖLÇÜLEMEDİ; zip özeti · iki uç · başka makine · hedef · kirli ağaç · commit · Rust
-//      parçası · hizmet ikilisi · elle değiştirilmiş betik · üretimde ana dal dışı → İHLAL; test anahtarında dal serbest
+//      parçası · hizmet ikilisi · elle değiştirilmiş betik · üretimde ana dal dışı → İHLAL; test anahtarında dal serbest;
+//      §1f derleme kipi İKİ YÖNLÜ: gerçek künye + prova paketi / prova künye + gerçek paket / sürüm tutmaz → İHLAL,
+//      kipsiz (eski) künye prova sayılır, tanınmayan kip · sürümsüz gerçek künye → ÖLÇÜLEMEDİ
 //   §2 uçtan uca (gerçek CLI, `zip` kipi): üretim anahtarı köken bayraksız → RED (mesaj --derleme-kunyesi'ni anar);
 //      künye yok · zip tutmaz · başka makine · kirli ağaç → parola SORULMADAN RED, zip değişmez; --ci-kosu / --ci-atla
 //      ile birlikte RED; `imzala` (dizin) kipinde RED; uyan künye → imza, yükte `ciKokeni.kip = "thinkpad"`,
-//      kaçış cümlesi GEREKMEZ
+//      kaçış cümlesi GEREKMEZ; prova paketi gerçek künyeyle → RED; prova künye + prova paketi → imza, derlemeKipi prova
 // Koşum: node ../scripts/agir-is.mjs -- npx tsx scripts/test_thinkpad_kokeni.ts
 // =============================================================================
 import { execFileSync, spawnSync } from "node:child_process";
@@ -57,6 +59,8 @@ function kunye(zipSha: string, o: Record<string, unknown> = {}): Record<string, 
     v: 1,
     tur: "thinkpad-derleme",
     zaman: "2026-10-08T12:00:00.000Z",
+    kip: "gercek",
+    surum: "2.14.1",
     makine: { ad: "thinkpad-1", tailscaleIp: "100.70.47.46" },
     betik: { yol: THINKPAD_BETIGI, commit: COMMIT, sha256: BETIK_SHA },
     kaynak: { commit: COMMIT, ref: "origin/main" },
@@ -75,6 +79,7 @@ function paketJson(o: Record<string, unknown> = {}): Record<string, unknown> {
     korumaHedef: "win-x64",
     backendKanal: null,
     uygulamaSurumu: "2.14.1",
+    prova: false,
     dosyaSayisi: 7,
     hizmetIkilileri: { "tekserp-hizmet.exe": { sha256: RUST_SHA["tekserp-hizmet.exe"] }, "tekserp-guncelleyici.exe": { sha256: RUST_SHA["tekserp-guncelleyici.exe"] } },
     ...o,
@@ -127,6 +132,23 @@ function bolum1(): void {
   ];
   for (const [ad, o] of ihlal) check(`§1c ⭐ ${ad} → İHLAL`, h(o) === "ihlal", h(o));
   check("§1d üretim dışı (test) anahtarda dal serbest", h({ uretim: false, anaDalda: { kaynak: false, betik: null } }) === "uyumlu");
+  const PROVA_PKT = paketJson({ prova: true, uygulamaSurumu: "2.14.1-prova.eee176f" });
+  const PROVA_K = { kip: "prova", surum: "2.14.1" };
+  const kipsiz = (): Record<string, unknown> => { const x = kunye(Z); delete x.kip; delete x.surum; return x; };
+  check("§1f prova künye + prova paketi → uyumlu", h({ ...k(PROVA_K), paket: PROVA_PKT }) === "uyumlu");
+  check("§1f kipsiz (eski v1) künye prova sayılır: prova paketiyle → uyumlu", h({ kunye: kipsiz(), paket: PROVA_PKT }) === "uyumlu");
+  const kipIhlal: Array<[string, Partial<ThinkpadOlcumu>]> = [
+    ["gerçek künye + PROVA paketi (prova gerçek diye imzalanmaz)", { paket: PROVA_PKT }],
+    ["gerçek künye + prova alanı olmayan paket", { paket: paketJson({ prova: undefined }) }],
+    ["prova künye + gerçek paket", { ...k(PROVA_K) }],
+    ["kipsiz künye + gerçek paket", { kunye: kipsiz() }],
+    ["gerçek künye sürümü ≠ paket sürümü", { paket: paketJson({ uygulamaSurumu: "2.14.2" }) }],
+    ["prova künye tabanı ≠ prova paket sürümü", { ...k(PROVA_K), paket: paketJson({ prova: true, uygulamaSurumu: "2.13.0-prova.eee176f" }) }],
+    ["prova künye + prova=true ama sürüm prova biçiminde değil", { ...k(PROVA_K), paket: paketJson({ prova: true }) }],
+  ];
+  for (const [ad, o] of kipIhlal) check(`§1f ⭐ ${ad} → İHLAL`, h(o) === "ihlal", h(o));
+  check("§1f ⭐ tanınmayan kip → ÖLÇÜLEMEDİ", h(k({ kip: "uretim" })) === "olculemedi");
+  check("§1f ⭐ sürümsüz gerçek künye → ÖLÇÜLEMEDİ", h(k({ surum: null })) === "olculemedi");
   check("§1e Rust parça listesi künye ile zip yolları birebir", Object.keys(RUST_PARCALARI).sort().join() === Object.keys(RUST_SHA).sort().join());
 }
 
@@ -199,6 +221,8 @@ function bolum2(): void {
   red("zip künyedekinden farklı", kunyeArg, /THINKPAD KÖKENİ TUTMUYOR[\s\S]*künyedekinden farklı/, { zip: { sha256: "b".repeat(64), uzakSha256: "b".repeat(64) } });
   red("başka makine", kunyeArg, /THINKPAD KÖKENİ TUTMUYOR[\s\S]*kayıtlı değil/, { makine: { ad: "thinkpad-1", tailscaleIp: "100.64.0.9" } });
   red("kirli ağaç", kunyeArg, /THINKPAD KÖKENİ TUTMUYOR[\s\S]*kirli/, {}, { calismaAgaciTemiz: false });
+  red("PROVA paketi gerçek sürüm künyesiyle", kunyeArg, /THINKPAD KÖKENİ TUTMUYOR[\s\S]*prova paketi gerçek sürüm diye imzalanmaz/, {}, { prova: true, uygulamaSurumu: "2.14.1-prova.eee176f" });
+  red("gerçek paket prova künyesiyle", kunyeArg, /THINKPAD KÖKENİ TUTMUYOR[\s\S]*prova koşusunun yapıtı/, { kip: "prova" });
   red("--derleme-kunyesi + --ci-kosu", (z) => [...kunyeArg(z), "--ci-kosu=4242"], /birlikte verilemez/, {});
   red("--derleme-kunyesi + --ci-atla", (z) => [...kunyeArg(z), "--ci-atla=CI kırık ama kullanıcı imzalamamı istedi"], /CI KAÇIŞI REDDEDİLDİ[\s\S]*birlikte/, {});
 
@@ -214,8 +238,15 @@ function bolum2(): void {
   const rt = cli(["zip", `--zip=${t.zip}`, `--anahtar=${test}`, ...kunyeArg(t.zip)]);
   const yt = rt.kod === 0 ? (yuk(t.zip).ciKokeni as Record<string, unknown> | undefined) : undefined;
   check("§2c test anahtarı + uyan künye → imza, ciKokeni {thinkpad · thinkpad-1 · 100.70.47.46 · commit · zip özeti}",
-    rt.kod === 0 && yt?.kip === "thinkpad" && yt.makine === "thinkpad-1" && yt.tailscaleIp === "100.70.47.46" && yt.commit === COMMIT && yt.zipSha256 === t.sha,
+    rt.kod === 0 && yt?.kip === "thinkpad" && yt.makine === "thinkpad-1" && yt.tailscaleIp === "100.70.47.46" && yt.commit === COMMIT && yt.zipSha256 === t.sha && yt.derlemeKipi === "gercek",
     `${rt.kod} ${rt.hata.trim().slice(0, 160)} ${JSON.stringify(yt)}`);
+
+  // Prova künye + prova paketi (test anahtarı) → imza; yükte derleme kipi prova.
+  const pv = zipKur(null, { prova: true, uygulamaSurumu: "2.14.1-prova.eee176f" });
+  kunyeYaz(pv.zip, kunye(pv.sha, { kip: "prova" }));
+  const rpv = cli(["zip", `--zip=${pv.zip}`, `--anahtar=${test}`, ...kunyeArg(pv.zip)]);
+  const ypv = rpv.kod === 0 ? (yuk(pv.zip).ciKokeni as Record<string, unknown> | undefined) : undefined;
+  check("§2c' prova künye + prova paketi → imza, ciKokeni.derlemeKipi = prova", rpv.kod === 0 && ypv?.derlemeKipi === "prova", `${rpv.kod} ${rpv.hata.trim().slice(0, 160)}`);
 
   // Üretim anahtarı + uyan künye: ana dal ölçülebiliyorsa kaçış cümlesi OLMADAN imzalar; ölçülemiyorsa fail-closed.
   const p = zipKur("uretim");

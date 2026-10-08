@@ -6,7 +6,8 @@
 // Mac'te derlenen Rust parçalarının özetleri · zip'in iki uçta eşleşen SHA256'sı. İmza aracı künyeyi yapıtla
 // ÇAPRAZ ölçer; künye yok/biçimsiz/ölçülemedi ya da bir alan tutmazsa imza YOK (fail-closed).
 // Künye imzalı değildir: Mac'in kendisi güven sınırıdır; kapı yanlış zip'i / başka makineyi / kirli ağacı /
-// elle değiştirilmiş betiği yakalamak içindir.
+// elle değiştirilmiş betiği yakalamak içindir. Derleme kipi (prova | gercek) PAKET.json `prova` ile İKİ YÖNLÜ
+// ölçülür: prova paketi gerçek sürüm künyesiyle, gerçek paket prova künyesiyle imzalanmaz.
 // =============================================================================
 import { createHash } from "node:crypto";
 import { git } from "./git";
@@ -17,6 +18,9 @@ export const THINKPAD_BETIGI = "deploy/korumali-thinkpad.sh";
 export const DERLEME_KUNYESI_TURU = "thinkpad-derleme";
 /** Üretim imzası yalnız bu uzak dalın erişebildiği commit'lere (kaynak + betik) atılır. */
 export const URETIM_REF = "origin/main";
+/** Künyedeki derleme kipi; `kip` alanı olmayan v1 künye yalnız prova üreten betikten çıktı. */
+export const DERLEME_KIPLERI = Object.freeze(["prova", "gercek"] as const);
+export type DerlemeKipi = (typeof DERLEME_KIPLERI)[number];
 
 /** Zip içindeki Rust parçaları (künye anahtarı → zip yolu). */
 export const RUST_PARCALARI = Object.freeze({
@@ -55,12 +59,21 @@ export type ThinkpadKaydi = {
   readonly commit: string;
   readonly zipSha256: string;
   readonly betikCommit: string;
+  readonly derlemeKipi: DerlemeKipi;
 };
 
 const SHA40 = /^[0-9a-f]{40}$/;
 const SHA256 = /^[0-9a-f]{64}$/;
+const SURUM = /^\d+\.\d+\.\d+$/;
 const obj = (v: unknown): Record<string, unknown> | null => (v && typeof v === "object" && !Array.isArray(v) ? (v as Record<string, unknown>) : null);
 const str = (v: unknown): string => (typeof v === "string" ? v : "");
+
+/** Künyenin derleme kipi; alan yoksa prova (kip öncesi betik yalnız prova üretirdi), tanınmayan değer null. */
+export function derlemeKipi(kunye: unknown): DerlemeKipi | null {
+  const kip = obj(kunye)?.kip;
+  if (kip === undefined) return "prova";
+  return (DERLEME_KIPLERI as readonly unknown[]).includes(kip) ? (kip as DerlemeKipi) : null;
+}
 
 /** Saf hüküm: bütün ölçümler çağırandan gelir (bekçi doğrudan sınar). */
 export function thinkpadKokeniHukmu(o: ThinkpadOlcumu): ThinkpadHukmu {
@@ -78,6 +91,10 @@ export function thinkpadKokeniHukmu(o: ThinkpadOlcumu): ThinkpadHukmu {
   if (!SHA40.test(commit) || !SHA40.test(str(betik.commit)) || !SHA256.test(str(betik.sha256)) || !SHA256.test(str(zip.sha256))) {
     return { sonuc: "olculemedi", satirlar: ["derleme künyesinde commit/özet alanları biçimsiz"] };
   }
+  const kip = derlemeKipi(k);
+  const kunyeSurum = k.surum === undefined || k.surum === null ? null : str(k.surum);
+  if (kip === null) return { sonuc: "olculemedi", satirlar: [`derleme künyesinde kip tanınmıyor: "${String(k.kip)}" (${DERLEME_KIPLERI.join(" | ")})`] };
+  if (kip === "gercek" && (kunyeSurum === null || !SURUM.test(kunyeSurum))) return { sonuc: "olculemedi", satirlar: ["gerçek sürüm künyesinde sürüm (x.y.z) yok/biçimsiz"] };
   if (o.betikBlobSha256 === null) return { sonuc: "olculemedi", satirlar: [`betik commit'i ${str(betik.commit).slice(0, 12)} depoda okunamadı — betik sürümü ölçülemedi`] };
   if (o.uretim && (o.anaDalda.kaynak === null || o.anaDalda.betik === null)) {
     return { sonuc: "olculemedi", satirlar: [`${URETIM_REF} erişilebilirliği ölçülemedi (git fetch origin?)`] };
@@ -99,12 +116,20 @@ export function thinkpadKokeniHukmu(o: ThinkpadOlcumu): ThinkpadHukmu {
     if (!SHA256.test(beklenen) || o.zipRust[ad] !== beklenen) ih.push(`Rust parçası ${ad}: zip ${String(o.zipRust[ad]).slice(0, 12)} ≠ künye ${beklenen.slice(0, 12) || "(yok)"}`);
     if (ad.endsWith(".exe") && str(obj(ikili?.[ad])?.sha256).toLowerCase() !== beklenen) ih.push(`PAKET.json hizmetIkilileri ${ad} künyedeki özetle tutmuyor`);
   }
+  const paketSurum = str(o.paket.uygulamaSurumu);
+  if (kip === "gercek") {
+    if (o.paket.prova !== false) ih.push(`künye GERÇEK sürüm (${kunyeSurum}) ama paket prova=${String(o.paket.prova)} — prova paketi gerçek sürüm diye imzalanmaz`);
+    if (paketSurum !== kunyeSurum) ih.push(`paket sürümü "${paketSurum}" — künye gerçek sürüm ${kunyeSurum}`);
+  } else {
+    if (o.paket.prova !== true) ih.push(`künye PROVA derlemesi ama paket prova=${String(o.paket.prova)} — prova koşusunun yapıtı gerçek paket olamaz`);
+    if (!paketSurum.includes("-prova.") || (kunyeSurum !== null && !paketSurum.startsWith(`${kunyeSurum}-prova.`))) ih.push(`prova paketinin sürümü "${paketSurum}" prova biçiminde değil (${kunyeSurum ?? "<sürüm>"}-prova.<commit>)`);
+  }
   if (betik.yol !== THINKPAD_BETIGI) ih.push(`betik "${str(betik.yol)}" — ${THINKPAD_BETIGI} bekleniyor`);
   if (o.betikBlobSha256 !== betik.sha256) ih.push(`koşan betik ${str(betik.commit).slice(0, 12)} commit'indeki ${THINKPAD_BETIGI} değil (elle değiştirilmiş)`);
   if (o.uretim && o.anaDalda.kaynak === false) ih.push(`kaynak ${commit.slice(0, 12)} ${URETIM_REF}'de değil — üretim imzası yalnız ana dalın yapıtına`);
   if (o.uretim && o.anaDalda.betik === false) ih.push(`betik commit'i ${str(betik.commit).slice(0, 12)} ${URETIM_REF}'de değil`);
   if (ih.length) return { sonuc: "ihlal", satirlar: ih };
-  return { sonuc: "uyumlu", satirlar: [`thinkpad kökeni: ${str(makine.ad)} ${str(makine.tailscaleIp)} · ${commit.slice(0, 12)} · zip ${o.zipSha256.slice(0, 12)} · betik ${str(betik.commit).slice(0, 12)}`] };
+  return { sonuc: "uyumlu", satirlar: [`thinkpad kökeni (${kip}${kip === "gercek" ? ` ${kunyeSurum}` : ""}): ${str(makine.ad)} ${str(makine.tailscaleIp)} · ${commit.slice(0, 12)} · zip ${o.zipSha256.slice(0, 12)} · betik ${str(betik.commit).slice(0, 12)}`] };
 }
 
 export function thinkpadKaydi(kunye: unknown, zipSha256: string): ThinkpadKaydi {
@@ -116,6 +141,7 @@ export function thinkpadKaydi(kunye: unknown, zipSha256: string): ThinkpadKaydi 
     commit: str(obj(k.kaynak)?.commit),
     zipSha256: zipSha256.toLowerCase(),
     betikCommit: str(obj(k.betik)?.commit),
+    derlemeKipi: derlemeKipi(k) ?? "prova",
   };
 }
 
