@@ -13,8 +13,9 @@
 // değilse etiket silinir. Ardından imaj bekçisi `--imzali` (K1–K9).
 // İmza bayrakları imza aracına aynen geçer: --ci-atla="<kullanıcının cümlesi>" · --ci-kosu=<id> · --sertifika=<dosya>
 // · --kok-dosyasi=<kök.json> · --kok-capa=<test çapası> · --zincir-anahtar=<pkt> · --zincir-sertifika=<dosya>
-// · --paket-iptal=<dosya>. Kök/sürüm/ürün/müşteri bu betikten gelir (ortak imaj müşteri taşımaz).
-// Parola imza aracının kendi girişinden (TTY ya da stdin satırı); argüman/ortamdan ASLA.
+// · --paket-iptal=<dosya> · --kasa=<ad>|yok · --parola-dosyasi=<yol>. Kök/sürüm/ürün/müşteri bu betikten gelir.
+// Parolayı yalnız imza aracı okur (`cli-girdi.ts` askPassword): --parola-dosyasi > Anahtar Zinciri kasası
+// (`tekserp/paket`, tek kaynak `scripts/lib/parola-kasasi.mjs`) > TTY > stdin; değer argüman/ortamdan ASLA.
 // Çıkış: 0 imzalı etiket hazır · 1 RED/düştü (imzalı etiket yok) · 2 kullanım.
 // Runbook: docs/ops/LINUX-DOCKER-KURULUM.md §8.
 // =============================================================================
@@ -27,7 +28,7 @@ import { fileURLToPath } from 'node:url';
 const BURASI = path.dirname(fileURLToPath(import.meta.url));
 const TEKS = path.resolve(BURASI, '..', '..');
 const REPO = path.resolve(TEKS, '..');
-const IMZA_BAYRAKLARI = ['ci-atla', 'ci-kosu', 'sertifika', 'kok-dosyasi', 'kok-capa', 'zincir-anahtar', 'zincir-sertifika', 'paket-iptal'];
+const IMZA_BAYRAKLARI = ['ci-atla', 'ci-kosu', 'sertifika', 'kok-dosyasi', 'kok-capa', 'zincir-anahtar', 'zincir-sertifika', 'paket-iptal', 'kasa', 'parola-dosyasi'];
 // İmza aracının pakete yazdığı dosyalar (`scripts/lib/butunluk-imza.ts`); taban imajda biri bile varsa imzalı sayılır.
 const LISTE = 'butunluk-liste.txt';
 const YUKLER = ['butunluk-zincir.jws', 'butunluk.jws'];
@@ -125,7 +126,7 @@ function main() {
     if (izler.length) red(`tabanın /app kökünde imza izi var (${izler.join(', ')}) — imzasız tabandan imzala`);
     const surum = JSON.parse(fs.readFileSync(path.join(kok, 'package.json'), 'utf8')).version;
 
-    // 2. İmza: Windows paketinin aynı aracı ve kapsamı (parola aracın kendi girişinden).
+    // 2. İmza: Windows paketinin aynı aracı ve kapsamı (parola aracın kendi girişinden: dosya > kasa > TTY > stdin).
     const imza = spawnSync(
       process.execPath,
       ['--import', 'tsx', 'scripts/build-korumali-imza.ts', 'imzala', `--kok=${kok}`, `--anahtar=${anahtar}`, `--surum=${surum}`, '--urun=backend-docker', ...bayrak],

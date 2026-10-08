@@ -50,6 +50,8 @@ const konteynerler = [];
 
 // Anahtar araçları geçici HOME'la (gerçek ~/.tekserp'e yazılmaz); docker gerçek HOME'la (Desktop bağlamı).
 const TEMIZ = Object.fromEntries(Object.entries(process.env).filter(([k]) => !/^TEKSERP_|^DATABASE_URL$|^ANAHTAR_DIZINI$|^GUVEN_CAPASI_DOSYASI$|^NODE_OPTIONS$/.test(k)));
+// Test parolaları stdin'den; gerçek Anahtar Zinciri'ne (pkt-* → tekserp/paket) gidilmez.
+TEMIZ.TEKSERP_PAROLA_KASASI = 'kapali';
 const ARAC = { ...TEMIZ, HOME: yol('ev') };
 fs.mkdirSync(yol('ev'), { recursive: true });
 

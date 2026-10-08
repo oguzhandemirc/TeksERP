@@ -7,14 +7,14 @@
 
 | Dosya | Ne |
 |---|---|
-| `tekserp-korumali_<sürüm>_linux-amd64.tar.gz` | `docker save | gzip -n` — `docker load` açar (yeniden üretilebilir: aynı imaj aynı sha) |
+| `tekserp-korumali_<sürüm>_linux-amd64.tar.gz` | İMZALI imajın `docker save | gzip -n`'i — `docker load` açar (yeniden üretilebilir: aynı imaj aynı sha); imaj `/app`te kendi imzalı bütünlük listesini taşır (label `tr.tekserp.butunluk=<kid>`, §8); imzasız taban teslim edilmez |
 | `docker-compose.yml` · `.env.ornek` | üç servis (postgres 16 · backend · yedek) ve ortam şablonu |
 | `PAKET-DOCKER.json` | künye — `tekserp-butunluk` yükü (imzalı kapsam = üç teslim dosyası, liste dosyasının özeti, imaj kimliği, runtime Node/V8, `.jsc` sha256) |
 | `butunluk-liste.txt` | imzalı liste (2e-S biçimi `<sha256>\t<boyut>\t<yol>`; imza aracı teslim dosyalarını ölçüp yazar) |
 | `PAKET-DOCKER.json.jws` | PAKET anahtarıyla imza (`teslim-paketle.sh` 2e aracıyla atar; anahtar yoksa paket üretilmez — §8) |
 | `SHA256SUMS` | `sha256sum -c SHA256SUMS` ile doğrulanır |
 
-İmajın içinde KAYNAK YOK: sunucu V8 bayt kodu (`/app/dist/server.jsc` + yükleyici), araçlar karartılmış tek dosya (`/app/dist/tools/*.cjs`), native lisans çekirdeği (`/app/native/`), prod `node_modules`, Prisma şema motoru `debian-openssl-3.0.x`, migration SQL. Süreç `10001:10001` (root değil); `/app` root'a ait ve salt-okunur; compose kök dosya sistemini salt-okunur açar (`/tmp` tmpfs).
+İmajın içinde KAYNAK YOK: sunucu V8 bayt kodu (`/app/dist/server.jsc` + yükleyici), araçlar karartılmış tek dosya (`/app/dist/tools/*.cjs`), native lisans çekirdeği (`/app/native/`) ve onu yükleten imaj içi imzalı liste (`/app/butunluk-liste.txt` + `butunluk-zincir.jws` ya da `butunluk.jws`), prod `node_modules`, Prisma şema motoru `debian-openssl-3.0.x`, migration SQL. Süreç `10001:10001` (root değil); `/app` root'a ait ve salt-okunur; compose kök dosya sistemini salt-okunur açar (`/tmp` tmpfs).
 
 ## 1. Önkoşul
 
@@ -54,7 +54,7 @@ docker inspect --format '{{range .Config.Env}}{{println .}}{{end}}' "$(docker co
 - Satıcı hesabı (TTY şart): `docker compose exec -it backend node /app/dist/tools/superadmin-olustur.cjs` (2f duman provasında koşulmadı; araç imajda karartılmış olarak VAR).
 - Doğrulama: `curl -fsS http://127.0.0.1:4000/health` → `"db":"UP"`; panelde Sistem → Lisans "Gözlem".
 - Yerel sağlık (`/health/yerel`, lisans kademesi + bütünlük + çekirdek) yalnız konteynerin KENDİ döngü adresine cevap verir; konaktan `curl` Docker köprüsünden geldiği için 404 alır (tasarım gereği). Konteyner içinden ölçülür:
-  `docker compose exec backend node -e "fetch('http://127.0.0.1:4000/health/yerel').then(async r=>console.log(r.status, await r.text()))"` → `200 … "db":"UP" … "lisans":{"kip":…,"butunluk":…,"cekirdek":…}`. Bugünkü imajda `"cekirdek":"yok"` ve `"butunluk":"GECERSIZ"` döner (§8 son madde, ölçüldü 2026-10-08).
+  `docker compose exec backend node -e "fetch('http://127.0.0.1:4000/health/yerel').then(async r=>console.log(r.status, await r.text()))"` → `200 … "db":"UP" … "lisans":{"kip":…,"butunluk":…,"cekirdek":…}`. İmzalı imajda beklenen `"cekirdek":"native"` ve `"butunluk":"GECERLI"`dir (§8 son madde); `cekirdek: yok` / `butunluk: GECERSIZ` görülürse imaj imzasız tabandır ya da `/app` değişmiştir — etkinleştirme yapılmaz, paket satıcıya geri bildirilir.
 
 ## 3. Güncelleme (yeni imaj)
 
@@ -82,7 +82,7 @@ docker inspect --format '{{range .Config.Env}}{{println .}}{{end}}' "$(docker co
 - **Etkinleştirme sırası (panel, Sistem → Lisans):** ① ilk girişte parola değişimi (§2) · ② "Lisans sözleşmesi" kartında sözleşme kabulü (Ek-7; kabulsüz etkinleştirme satıcıda RED) · ③ etkinleştirme kodu → Etkinleştir · ④ konteynerde ilk denemenin BEKLENEN cevabı **409 `ZAYIF_TANIMA_ONAY_BEKLIYOR`** ("Bu sunucunun donanımı yeterince tanınamadı; etkinleştirme satıcı onayı bekliyor…"). Kod ve nonce TÜKETİLMEZ: satıcı portalda bu kurulumun zayıf tanımasını onaylar, kurulumcu AYNI kodla yeniden Etkinleştir'e basar. Onaylı kira `parmakIziKurali: zayif` taşır; eşleşen ≥ min(3, okunabilen) = 2, yani iki etkenin İKİSİ de tutmalıdır.
 - Bu yüzden etkinleştirmeden SONRA konağın `/etc/machine-id`'si değiştirilmez ve `pg_data` birimi silinmez ya da yeniden yaratılmaz (F5 = PostgreSQL kümesinin kimliği; yedekten geri yükleme aynı kümeye yapıldığı için F5'i değiştirmez — §6). Bulut sunucusunda sağlayıcı şablonundan gelen `/etc/machine-id` etkinleştirmeden ÖNCE tazelenir (`docs/design/BULUT-KURULUM.md` §1.4).
 - Ölçüm: duman provasında `GET /api/license/detay` → `parmakIzi.olculen = {f1:true, f2:false, f3:false, f4:false, f5:true}`.
-- ⚠️ **Bugünkü imajla etkinleştirme yapılmaz:** native çekirdek ZORUNLU derlenir (`server-kunye.json` `nativeZorunlu: true`) ve zorunlu kipte `.node` yalnız `/app`teki imzalı listeyle yüklenir; imaj içi liste henüz yok (§8 son madde) ⇒ `/health/yerel` `cekirdek: yok`, `butunluk: GECERSIZ` (ölçüldü 2026-10-08, 2.14.0). Çekirdeksiz motor HAK/kira/parmak izi doğrulamalarında `CEKIRDEK_YOK` döner; yukarıdaki etkinleştirme sırası ve parmak izi ölçümü imaj içi liste inene dek denenmez (deneme kurulumu gözlem kipinde kalır).
+- ⚠️ **Etkinleştirme yalnız imzalı imajla:** native çekirdek ZORUNLU derlenir (`server-kunye.json` `nativeZorunlu: true`) ve zorunlu kipte `.node` yalnız `/app`teki imzalı listeyle yüklenir (§8 son madde). İmzalı imajda `/health/yerel` `cekirdek: native`, `butunluk: GECERLI` döner ve yukarıdaki etkinleştirme sırası uygulanır. `cekirdek: yok` görülürse (imzasız taban ya da değişmiş `/app`) motor HAK/kira/parmak izi doğrulamalarında `CEKIRDEK_YOK` döner — etkinleştirme denenmez, kurulum gözlem kipinde kalır.
 
 ## 6. Geri alma
 
@@ -121,7 +121,11 @@ shred -u ozel/<ad>.tkkey
 - İmzalanan yük `PAKET-DOCKER.json`un TAMAMIDIR: `tekserp-butunluk` (`Teks-Erp/src/lib/license/integrity.ts` `IntegrityManifestSchema` — `v`, `paketId`, `urun: "backend-docker"`, `surum`, `derlemeTarihi`, `musteri`, `kapsam {dizinler: [], dosyalar: [<tar.gz>, docker-compose.yml, .env.ornek]}`, `liste {sha256, boyut, dosyaSayisi}`; ek alanlar `imaj`, `sunucu`, `commit` imzanın kapsamında). `teslim-paketle.sh` yalnız kapsamı yazar; imza aracı kapsamdaki dosyaları ölçer, `butunluk-liste.txt`i yazar, `liste` alanını künyeye koyar (2e-S biçimi, I6); kapsamdaki dosya eksikse imza atılmaz.
 - İmza: PAKET anahtarı, JWS EdDSA, `typ` = `tekserp-butunluk` → `PAKET-DOCKER.json.jws`. `teslim-paketle.sh` künyeyi yazdıktan sonra 2e aracını çağırır (`npx tsx Teks-Erp/scripts/build-korumali-imza.ts belge --belge=<çıktı>/PAKET-DOCKER.json --anahtar=<dosya>`); anahtar `TEKSERP_PAKET_ANAHTARI` ile AÇIKÇA verilir, varsayılan yol yoktur (verilmezse betik durur; üretim anahtarı PAKET sertifikalı `pkt-*` zincirinden, 3.9 D5/D8); künye müşteri taşımaz. Anahtar yalnız Mac'te, CI'a girmez; anahtar yoksa ya da öz-denetim düşerse paket ÜRETİLMEZ. `.jws` ve `butunluk-liste.txt` SHA256SUMS'a girer (bekçi `test_docker_hijyeni` §5c · `test_lisans_butunluk` §6).
 - Doğrulama sırası (kurulumda, `docker load`dan ÖNCE): JWS'i gömülü PAKET açık anahtarıyla doğrula → `butunluk-liste.txt`in boyu/özeti imzalı `liste`yle → listedeki her dosyanın sha256'sı → `imaj.arsiv` ≡ yüklenecek tar. Doğrulayıcı bugün native çekirdekte (`verifyIntegrity`); imaj DIŞINDA koşacak bir doğrulama aracı 2e ile birlikte tanımlanır.
-- İmaj İÇİ bütünlük listesi (açılışta + günlük): 2e'nin biçimiyle aynı belge `/app` ağacı için üretilir; imzalı liste imaja ince bir son katman olarak eklenir (derle → listeyi dışa ver → Mac imzalar → `FROM <imaj>` + `COPY` → yeni etiket). Bugün uygulanmadı — borç. Sonucu: native çekirdek yüklenmez ve lisans etkinleştirilemez (§5 son madde).
+- İmaj İÇİ bütünlük listesi (açılışta + günlük native denetimde): akış **imzasız taban → `imaj-imzala.mjs` → ince son katman**.
+  1. Taban: `docker buildx build --platform linux/amd64 -f Teks-Erp/docker/korumali/Dockerfile --build-arg TEKSERP_COMMIT=$(git rev-parse HEAD) -t tekserp-korumali:<sürüm>-imzasiz --load .` (Dockerfile başlığı).
+  2. İmza (Mac, PAKET anahtarı): `TEKSERP_PAKET_ANAHTARI=<anahtar> node Teks-Erp/docker/korumali/imaj-imzala.mjs tekserp-korumali:<sürüm>-imzasiz tekserp-korumali:<sürüm> [imza bayrakları]`. Betik `/app`i tabandan dışa verir, Windows korumalı paketinin AYNI aracını ve kapsamını çağırır (`build-korumali-imza.ts imzala --urun=backend-docker`, kapsam `integrity-scope.ts`), `butunluk-liste.txt` + `butunluk-zincir.jws` (`pkt-*`) ya da `butunluk.jws` (`paket-*`) yazar ve ikisini `FROM <taban>` + `COPY` (root, 0644) ile tek katman olarak ekler; label `tr.tekserp.butunluk=<kid>`. Parolayı yalnız imza aracı okur: `--parola-dosyasi` > Anahtar Zinciri kasası `tekserp/paket` (`scripts/lib/parola-kasasi.mjs`) > TTY > stdin.
+  3. Öz-denetim: imzalı imajda, ağsız, salt-okunur kök ve `10001` kullanıcısıyla imajın KENDİ native çekirdeği her imzalı yükü `/app`e karşı doğrular; `GECERLI` değilse imzalı etiket silinir. Ardından `scripts/test_korumali_imaj.mjs --imaj=<…> --imzali` (K8 etiket + liste/yük, K9 `node_modules/.bin` yok). `teslim-paketle.sh` yalnız bu etiketli imajı paketler, künyeye `imaj.butunlukKid` yazar.
+  4. Üretim kid'inde (`paket-*` / `pkt-*`) imza aracı derleme kökeni ister; Docker imajının kayıtlı derleme kökeni (CI/thinkpad) henüz yok ⇒ `--ci-atla="<kullanıcının cümlesi>"` gerekir (açık borç). Prova: `node scripts/agir-is.mjs -- node Teks-Erp/docker/korumali/prova-imaj-butunluk.mjs` (test kökü, zincir-yalnız; dört negatif).
 
 ## 9. Birimler, kaldırma ve baştan kurma
 

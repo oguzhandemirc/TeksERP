@@ -251,12 +251,14 @@ console.log(JSON.stringify({ adlar: C.KASA_ADLARI, ortam: C.KASA_ORTAM, komut: C
   yaz('deploy/yeni.mjs', "process.stdin.setRawMode(true);\nspawnSync('keytool', ['-list', '-storepass', p]);\n");
   yaz('mobil/scripts/lib/imza-yeni.cjs', "const p = props.storePassword;\n");
   yaz('scripts/test_yeni.mjs', "spawnSync(process.execPath, ['Teks-Erp/scripts/panel-imza.ts']);\n");
+  yaz('Teks-Erp/docker/korumali/prova-yeni.mjs', "spawnSync(process.execPath, ['Teks-Erp/docker/korumali/imaj-imzala.mjs']);\n");
   const neg = new Map(tripwire(sondaKok, { sonda: true }));
   check('§6a SONDA: kasa adı verilmeyen beyansız askPassword → KIRMIZI', (neg.get(T.ASK) ?? []).some((h) => h.includes('yeni-arac.ts')));
   check('§6b SONDA: beyansız gizli TTY istemi olan yeni araç → KIRMIZI', (neg.get(T.ISTEM) ?? []).some((h) => h.includes('deploy/yeni.mjs')));
   check('§6c SONDA: keytool argv\'sinde düz -storepass → KIRMIZI', (neg.get(T.KEYTOOL) ?? []).some((h) => h.includes('deploy/yeni.mjs')));
   check('§6d SONDA: keystore.properties parola alanı yeni dosyada okunur → KIRMIZI', (neg.get(T.PROPS) ?? []).some((h) => h.includes('imza-yeni.cjs')));
   check('§6e SONDA: kasayı kapatmayan araç-koşturan bekçi → KIRMIZI', (neg.get(T.BEKCI) ?? []).some((h) => h.includes('test_yeni.mjs')));
+  check('§6f SONDA: kasayı kapatmayan Docker imaj-imzala provası → KIRMIZI', (neg.get(T.BEKCI) ?? []).some((h) => h.includes('prova-yeni.mjs')));
 } finally {
   fs.rmSync(GECICI, { recursive: true, force: true });
 }
@@ -312,9 +314,9 @@ function tripwire(kok, { sonda = false } = {}) {
   const sonuc = new Map(Object.values(T).map((ad) => [ad, []]));
   const ekle = (ad, h) => sonuc.get(ad).push(h);
   const oku = (rel) => fs.readFileSync(path.join(kok, rel), 'utf8');
-  const DIZINLER = ['deploy', 'scripts', 'Teks-Erp/scripts', 'satici/sunucu/scripts', 'mobil/scripts', 'mobil/plugins', 'patron/sunucu/scripts', 'Electron/scripts'];
+  const DIZINLER = ['deploy', 'scripts', 'Teks-Erp/scripts', 'Teks-Erp/docker', 'satici/sunucu/scripts', 'mobil/scripts', 'mobil/plugins', 'patron/sunucu/scripts', 'Electron/scripts'];
   const dosyalar = tara(kok, DIZINLER, ['.ts', '.mjs', '.cjs', '.js']);
-  const bekciMi = (rel) => /(^|\/)test_[^/]*$/.test(rel) || /\.test\.ts$/.test(rel);
+  const bekciMi = (rel) => /(^|\/)(?:test_|prova-)[^/]*$/.test(rel) || /\.test\.ts$/.test(rel);
 
   // §5a askPassword çağrıları (TS AST)
   const kasasiz = new Map();
@@ -372,7 +374,7 @@ function tripwire(kok, { sonda = false } = {}) {
   }
 
   // §5e araç koşturan bekçiler kasayı kapatır
-  const ARACLAR = /build-korumali-imza|panel-imza\.ts|backend-bildirim|scripts\/anahtar\.ts|["']anahtar\.ts|uretim-toren|ota-zinciri\.mjs|OTA_ARACI|mobil-grup-yayinla|build-apk\.mjs|backend-yayinla|prova-paket-zinciri|parola-kaydet/;
+  const ARACLAR = /build-korumali-imza|panel-imza\.ts|backend-bildirim|scripts\/anahtar\.ts|["']anahtar\.ts|uretim-toren|ota-zinciri\.mjs|OTA_ARACI|mobil-grup-yayinla|build-apk\.mjs|backend-yayinla|prova-paket-zinciri|parola-kaydet|imaj-imzala\.mjs['"]/;
   const bekciler = sonda ? dosyalar.filter(bekciMi) : [...dosyalar.filter(bekciMi), ...tara(kok, ['mobil/src/test'], ['.ts'])];
   for (const rel of bekciler) {
     if (rel === 'scripts/test_parola_kasasi.mjs') continue;
