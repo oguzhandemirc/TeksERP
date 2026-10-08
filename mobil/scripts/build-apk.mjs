@@ -74,7 +74,7 @@ import { ortakBundleAdresleri } from './lib/adres.mjs';
 import { zipGirdisiOku } from './lib/zip.mjs';
 import { ApkOlculemedi, apkKimligi, metaHaritasi, protoManifestOgeleri, sertifikaParmakIzi } from './lib/apk-kimlik.mjs';
 import { ZINCIR_META, kokHatalari } from './lib/ota-zinciri.cjs';
-import { anahtarToreniKomutu, ortakKaydiOku, ortakKimlik, ortakYapilandirmaFarki } from './lib/ortak-kimlik.cjs';
+import { otaTorenYonergesi, ortakKaydiOku, ortakKimlik, ortakYapilandirmaFarki } from './lib/ortak-kimlik.cjs';
 import { IMZA_ANAHTARLARI, anahtarUretimKomutu, imzaAnahtariDenetimi } from './lib/imza-anahtari.cjs';
 import { PLAY_EN_DUSUK_HEDEF_SDK, YON_OZELLIGI } from './lib/buyuk-ekran.cjs';
 import { kayitHatalari, KAYIT_REL as DAGITIM_REL, turet } from '../../scripts/lib/dagitim.mjs';
@@ -818,7 +818,7 @@ function ortakAdresKapisi() {
   }
 }
 
-/** Ortak OTA sertifikasının DER parmak izi; yoksa anahtar töreni komutuyla DUR (fail-closed). */
+/** Ortak OTA sertifikasının DER parmak izi; yoksa tören yönergesiyle DUR (fail-closed). */
 function ortakSertifikaIzi(k) {
   const yol = path.join(PROJECT_ROOT, k.otaSertifika);
   let iz = null;
@@ -830,18 +830,17 @@ function ortakSertifikaIzi(k) {
     iz = null;
   }
   if (!iz) {
-    dur('ORTAK OTA SERTİFİKASI YOK — anahtar töreni yapılmadı ya da keystore/ geri konmadı',
+    dur('ORTAK OTA SERTİFİKASI YOK — OTA kökü üretilmedi ya da APK kopyası keystore/\'a konmadı',
       `Beklenen: ${yol}`, '',
       'Sertifikasız APK güncelleme imzasını doğrulayamaz; derleme bu yüzden DURUR.',
-      'Anahtar çifti Mac\'te BİR KEZ, kullanıcıyla üretilir (şifreli yedeğin parolası kullanıcıda):',
-      ...anahtarToreniKomutu(k).map((x) => `  ${x}`),
-      'Sonra şifreli yedeği yenile (mobil/keystore-yedek.README.md).');
+      'OTA kökü ve yaprağı tören araçlarıyla üretilir (elle openssl yok):',
+      ...otaTorenYonergesi(k).map((x) => `  ${x}`));
   }
   // K-2: gömülen sertifika OTA KÖKÜ olmalı (CA, pathLen 0, EKU yok); eski öz-imzalı yaprak gömülürse zincir işlemez.
   const h = kokHatalari(pem);
   if (h.length) {
     dur('ORTAK OTA SERTİFİKASI OTA KÖKÜ DEĞİL — APK sertifika zincirini doğrulayamaz', `Dosya: ${yol}`, ...h.map((x) => `• ${x}`), '',
-      'Kök ve yaprak törende ayrı üretilir:', ...anahtarToreniKomutu(k).map((x) => `  ${x}`));
+      'Kök ve yaprak törende ayrı üretilir:', ...otaTorenYonergesi(k).map((x) => `  ${x}`));
   }
   return iz;
 }

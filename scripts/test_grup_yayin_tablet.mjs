@@ -115,32 +115,54 @@ ol('§2 sonda: imza zinciri gömülü köke bağlanmıyorsa üretim DURUR', uyus
 
 // §3 — imza malzemesi fail-closed (kuru: atılacak deneme zinciri)
 const bos = path.join(GECICI, 'mobil-bos');
-let yokHata = null;
-try { ortakImzaAnahtari(K, bos); } catch (e) { yokHata = e; }
-const toren = yokHata?.satirlar?.join('\n') ?? '';
-ol('§3 malzeme yok → fail-closed + openssl zincir töreni (kök CA + parolalı yaprak + denetle)', yokHata instanceof OrtakOtaIhlali
-  && /openssl genpkey[^\n]*-aes-256-cbc/.test(toren) && /-extensions ota_kok/.test(toren) && /-extensions ota_yaprak/.test(toren)
-  && /OTA_KOK_ANAHTARI/.test(toren) && /ota-zinciri\.mjs denetle/.test(toren) && !/codesigning:generate|-pass pass:|-passin pass:/.test(toren), toren);
+const imzaHatasi = (kok, secim) => {
+  try { ortakImzaAnahtari(K, kok, secim); } catch (e) { return e; }
+  return null;
+};
+const yonergeTamam = (e) => {
+  const t = e?.satirlar?.join('\n') ?? '';
+  return /ota-zinciri\.mjs kok-uret/.test(t) && /uretim-toren\.mjs donem --istemci/.test(t) && /istemci\/ota-yaprak\/private-key\.pem/.test(t)
+    && !/openssl|ota-keys-|codesigning:generate|pass:/.test(t);
+};
+{
+  const e = imzaHatasi(bos);
+  ol('§3 sonda: yaprak anahtarı verilmedi → gerçek yayın DURUR + tören yönergesi (dönem töreni, elle openssl yok)',
+    e instanceof OrtakOtaIhlali && /YAPRAK ANAHTARI VERİLMEDİ/.test(e.message) && yonergeTamam(e), e ? `${e.message}\n${e.satirlar.join('\n')}` : 'KABUL ETTİ');
+  const e2 = imzaHatasi(bos, { anahtarYolu: path.join(bos, 'yok', 'private-key.pem'), parola: 'x' });
+  ol('§3 sonda: verilen yaprak anahtarı dosyası yok → DURUR + tören yönergesi', e2 instanceof OrtakOtaIhlali && /MALZEMESİ YOK/.test(e2.message) && yonergeTamam(e2), e2?.message ?? 'KABUL ETTİ');
+}
 {
   const k = ortakImzaAnahtari(K, bos, { kuru: true });
   ol('§3 kuru + malzeme yok → deneme zinciri (sahte: true, kök + yaprak hatasız)', k.sahte === true && Z.kokHatalari(k.kokPem).length === 0 && Z.yaprakHatalari(k.yaprakPem, k.kokPem).length === 0);
 }
+/** Kök APK kopyası `mobil/<otaSertifika>`, yaprak dönem töreninin düzeninde (`istemci/ota-yaprak/`) mobil/ DIŞINDA. */
 const dolu = (ad, d, { anahtarPem = d.yaprakAnahtarPem, kokPem = d.kokPem } = {}) => {
   const kok = path.join(GECICI, `mobil-${ad}`);
-  for (const [goreli, icerik] of [[K.otaAnahtar, anahtarPem], [K.otaYaprak, d.yaprakPem], [K.otaSertifika, kokPem]]) {
-    fs.mkdirSync(path.join(kok, path.dirname(goreli)), { recursive: true });
-    fs.writeFileSync(path.join(kok, goreli), icerik);
-  }
-  return kok;
+  const yaprakDizin = path.join(GECICI, `donem-${ad}`, 'istemci', 'ota-yaprak');
+  fs.mkdirSync(path.join(kok, path.dirname(K.otaSertifika)), { recursive: true });
+  fs.writeFileSync(path.join(kok, K.otaSertifika), kokPem);
+  fs.mkdirSync(yaprakDizin, { recursive: true });
+  fs.writeFileSync(path.join(yaprakDizin, 'private-key.pem'), anahtarPem);
+  fs.writeFileSync(path.join(yaprakDizin, 'certificate.pem'), d.yaprakPem);
+  return { kok, anahtarYolu: path.join(yaprakDizin, 'private-key.pem') };
 };
 const iyiKok = dolu('dolu', Zi);
-ol('§3 parolalı yaprak + kök varsa gerçek (sahte: false, kid ortak kimlikten, imzalar)', (() => {
-  const a = ortakImzaAnahtari(K, iyiKok, { parola: Zi.parola });
+ol('§3 parolalı yaprak (--ota-anahtar) + kök varsa gerçek (sahte: false, kid ortak kimlikten, imzalar)', (() => {
+  const a = ortakImzaAnahtari(K, iyiKok.kok, { anahtarYolu: iyiKok.anahtarYolu, parola: Zi.parola });
   return a.sahte === false && a.keyid === K.anahtarKimligi && multipartDogrula(grupManifestiUret({ paketDizin: iyi, kunye, expoConfig, feed: feedT, anahtar: a }).govde, Zi.kokPem, { zincir: true }).zincirli;
 })());
-const malzemeRed = (ad, kok, secim, re) => {
+{
+  // Eski varsayılan yol (mobil/keystore/ota-keys-<ad>/) dolu olsa bile anahtarYolu'suz yaprak OKUNMAZ.
+  const eskiDizin = path.join(iyiKok.kok, path.dirname(K.otaSertifika).replace('ota-certs-', 'ota-keys-'));
+  fs.mkdirSync(eskiDizin, { recursive: true });
+  fs.copyFileSync(iyiKok.anahtarYolu, path.join(eskiDizin, 'private-key.pem'));
+  fs.writeFileSync(path.join(eskiDizin, 'certificate.pem'), Zi.yaprakPem);
+  const e = imzaHatasi(iyiKok.kok, { parola: Zi.parola });
+  ol('§3 sonda: depodaki eski varsayılan yaprak yolu dolu, anahtar verilmedi → yine DURUR (varsayılan okunmaz)', e instanceof OrtakOtaIhlali && /VERİLMEDİ/.test(e.message), e?.message ?? 'KABUL ETTİ');
+}
+const malzemeRed = (ad, d, secim, re) => {
   let e = null;
-  try { ortakImzaAnahtari(K, kok, secim); } catch (x) { e = x; }
+  try { ortakImzaAnahtari(K, d.kok, { anahtarYolu: d.anahtarYolu, ...secim }); } catch (x) { e = x; }
   const metin = e ? `${e.message}\n${(e.satirlar ?? []).join('\n')}` : 'KABUL ETTİ';
   ol(`§3 sonda: ${ad} → imza malzemesi RED`, e instanceof OrtakOtaIhlali && re.test(metin), metin);
 };

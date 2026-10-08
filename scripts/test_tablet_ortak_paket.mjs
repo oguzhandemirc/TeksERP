@@ -140,8 +140,8 @@ function kimlikFarki(kayit, k) {
   e('otaSertifika', k.otaSertifika, t.otaSertifika);
   const ad = /^keystore\/ota-certs-([a-z0-9-]+)\/certificate\.pem$/.exec(t.otaSertifika)?.[1];
   e('anahtarKimligi', k.anahtarKimligi, ad);
-  e('otaAnahtar', k.otaAnahtar, `keystore/ota-keys-${ad}/private-key.pem`);
-  e('otaYaprak', k.otaYaprak, `keystore/ota-keys-${ad}/certificate.pem`);
+  // Yaprak depoda DEĞİL (yıllık dönem töreninin istemci dizini): kimlik yaprak yolu taşımaz.
+  for (const a of ['otaAnahtar', 'otaYaprak']) if (a in k) f.push(`${a} kimlikte var ("${k[a]}") — depoda varsayılan yaprak yolu olmaz`);
   e('guncellemeUrl (kayıt şablonu)', k.guncellemeUrl, `${kayit.indirmeKoku}ota/${t.runtimeVersion}/manifest`);
   e('guncellemeUrl (dagitim.mjs türetimi)', k.guncellemeUrl, turet(kayit).otaTakmaAd);
   // Grup-nötr: adres hiçbir grup kodunu yol öneki olarak taşımaz.
@@ -181,7 +181,8 @@ if (SONDA) {
   ol('N1 güncelleme adresi gruba gömülü → kırmızı', kimlikFarki(kayit, { ...kimlik, guncellemeUrl: `${kayit.indirmeKoku}test/mobil/ota/55.0/manifest` }).length > 0);
   ol('N2 runtimeVersion kayıttan sapmış → kırmızı', kimlikFarki(kayit, { ...kimlik, runtimeVersion: '54.2' }).length > 0);
   ol('N3 kid sertifika dizininden türemiyor → kırmızı', kimlikFarki(kayit, { ...kimlik, anahtarKimligi: 'main' }).length > 0);
-  ol('N3b OTA yaprak yolu anahtar dizininden türemiyor → kırmızı', kimlikFarki(kayit, { ...kimlik, otaYaprak: 'keystore/ota-certs-ortak/certificate.pem' }).length > 0);
+  ol('N3b kimlik depoda varsayılan yaprak anahtarı yolu taşıyor → kırmızı', kimlikFarki(kayit, { ...kimlik, otaAnahtar: 'keystore/ota-keys-ortak/private-key.pem' }).length > 0);
+  ol('N3c kimlik depoda varsayılan yaprak sertifikası yolu taşıyor → kırmızı', kimlikFarki(kayit, { ...kimlik, otaYaprak: 'keystore/ota-keys-ortak/certificate.pem' }).length > 0);
   ol('N4 paket adı eski kanalın → kırmızı', kimlikFarki(kayit, { ...kimlik, androidPaket: 'com.teks.erp.mobil' }).length > 0);
   const gruplu = kopya(kayit); gruplu.gruplar.push({ kod: 'ota', ad: 'x', terfiKaynagi: 'genel' });
   let n5 = false; try { n5 = kimlikFarki(gruplu, kimlik).length > 0; } catch { n5 = true; }
@@ -224,13 +225,15 @@ if (SONDA) {
 console.log('§1 — ortak-kimlik.cjs ↔ deploy/dagitim.json');
 {
   const f = kimlikFarki(kayit, kimlik);
-  ol('1a kimlik kayıttan türer (paket · ad · rv · OTA kökü · kid · yaprak anahtarı + sertifikası · adres)', f.length === 0, f.join('\n'));
+  ol('1a kimlik kayıttan türer (paket · ad · rv · OTA kökü · kid · adres; yaprak yolu YOK)', f.length === 0, f.join('\n'));
   ol('1b güncelleme adresi grup-nötr Worker takma adı', kimlik.guncellemeUrl === `${kayit.indirmeKoku}ota/${kayit.urun.tablet.runtimeVersion}/manifest`, kimlik.guncellemeUrl);
-  const yol = ORTAK.anahtarToreniKomutu(kimlik).join('\n');
-  ol('1c zincir töreni komutu kimlikten (openssl kök CA + parolalı yaprak · kök/yaprak dizini · chmod 600 · denetle)',
-    /openssl genpkey[^\n]*-aes-256-cbc/.test(yol) && /-extensions ota_kok[^\n]*ota-certs-ortak\/certificate\.pem/.test(yol) &&
-      /-extensions ota_yaprak[^\n]*ota-keys-ortak\/certificate\.pem/.test(yol) && /OTA_KOK_ANAHTARI/.test(yol) && /chmod 600[^\n]*ota-keys-ortak/.test(yol) &&
-      /ota-zinciri\.mjs denetle/.test(yol) && !/codesigning:generate|pass:/.test(yol), yol);
+  const yol = ORTAK.otaTorenYonergesi(kimlik).join('\n');
+  ol('1c OTA tören yönergesi tören araçlarından (kök kok-uret · APK kopyası kimlikten · yaprak dönem --istemci · yayın --ota-anahtar · elle openssl/repo-içi yaprak YOK)',
+    /ota-zinciri\.mjs kok-uret --dizin=\$HOME\/\.tekserp\/satici-uretim\/anahtarlar/.test(yol) &&
+      yol.includes(`cp $HOME/.tekserp/satici-uretim/anahtarlar/ota-kok.pem mobil/${kimlik.otaSertifika}`) &&
+      /uretim-toren\.mjs donem --istemci/.test(yol) && /URETIM-SATICI-TOREN\.md §9/.test(yol) &&
+      /--ota-anahtar=\$HOME\/\.tekserp\/satici-uretim\/donemler\/<damga>\/istemci\/ota-yaprak\/private-key\.pem/.test(yol) &&
+      !/openssl|ota-keys-|codesigning:generate|pass:|chmod/.test(yol), yol);
 }
 console.log('\n§2 — app.config.js argümansız = ortak kimlik');
 {
@@ -352,8 +355,9 @@ const dogrula = (agac, y, ortamEk) => buildApk(agac, [`--verify-only=${y}`], ort
 }
 {
   const a = agacKur({ sert: null }); const r = dogrula(a, apk(a));
-  ol('3h sertifikasız ağaç → ORTAK OTA SERTİFİKASI YOK + anahtar töreni komutu',
-    r.kod !== 0 && /ORTAK OTA SERTİFİKASI YOK/.test(r.cikti) && /openssl genpkey/.test(r.cikti) && /ota-zinciri\.mjs denetle/.test(r.cikti), r.cikti.slice(-500));
+  ol('3h sertifikasız ağaç → ORTAK OTA SERTİFİKASI YOK + tören yönergesi (kok-uret · dönem --istemci · elle openssl yok)',
+    r.kod !== 0 && /ORTAK OTA SERTİFİKASI YOK/.test(r.cikti) && /ota-zinciri\.mjs kok-uret/.test(r.cikti) &&
+      /uretim-toren\.mjs donem --istemci/.test(r.cikti) && !/openssl genpkey|ota-keys-/.test(r.cikti), r.cikti.slice(-500));
 }
 {
   const a = agacKur(); const r = dogrula(a, apk(a, { zincir: null }));

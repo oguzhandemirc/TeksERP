@@ -3,7 +3,7 @@
  * TeksERP Tablet — OTA sertifika zinciri aracı (K-2 / I5). Tören bu araçla ölçer; anahtar ÜRETMEZ.
  *
  *   node scripts/ota-zinciri.mjs profil                                  # openssl uzantı profili (stdout)
- *   node scripts/ota-zinciri.mjs denetle [--kok=<pem>] [--yaprak=<pem>]   # kök CA + EKU'suz, yaprak CA değil + codeSigning + köke bağlı
+ *   node scripts/ota-zinciri.mjs denetle [--kok=<pem>] [--yaprak=<pem>]   # kök CA + EKU'suz; --yaprak verilirse yaprak CA değil + codeSigning + köke bağlı
  *
  * Tören (I7; openssl sarmalayıcı, parola openssl'e yalnız özel FIFO'dan — argv/ortam/disk değil):
  *   node scripts/ota-zinciri.mjs kok-uret --dizin=<tören anahtarlar dizini>          # OTA kökü, KÖK parolasıyla (yeni + tekrar)
@@ -14,7 +14,8 @@
  * Parola: TTY'de gizli istem, değilse stdin satırı ya da `--parola-dosyasi=<yol>` (0600; her istenen parola bir satır).
  * Hiçbir komut parolayı ya da özel yarıyı basmaz.
  *
- * Varsayılan yollar ortak kimlikten (`deploy/dagitim.json` → `ortak-kimlik.cjs`). Çıkış: 0 yeşil · 1 kırmızı · 2 ÖLÇÜLEMEDİ.
+ * Kökün varsayılan yolu ortak kimlikten (`deploy/dagitim.json` → `ortak-kimlik.cjs`); yaprağın depoda varsayılanı yok
+ * (dönem töreninin `istemci/ota-yaprak/certificate.pem`i). Çıkış: 0 yeşil · 1 kırmızı · 2 ÖLÇÜLEMEDİ.
  * Kural ve gerekçe: docs/design/ISTEMCI-ANAHTARI-KOK-ALTINDA.md §3.1, §3.5, §6 adım 3.
  */
 import { Buffer } from 'node:buffer';
@@ -196,16 +197,17 @@ if (komut !== 'denetle') {
 }
 const k = ortakKimlik();
 const kokYol = path.resolve(MOBIL, arg('kok') ?? k.otaSertifika);
-const yaprakYol = path.resolve(MOBIL, arg('yaprak') ?? k.otaYaprak);
-const eksik = [kokYol, yaprakYol].filter((y) => !fs.existsSync(y));
+const yaprakYol = arg('yaprak') ? path.resolve(MOBIL, arg('yaprak')) : null;
+const eksik = [kokYol, yaprakYol].filter((y) => y && !fs.existsSync(y));
 if (eksik.length) {
   console.error(`ÖLÇÜLEMEDİ — sertifika yok: ${eksik.join(', ')}`);
   process.exit(2);
 }
 const kokPem = fs.readFileSync(kokYol, 'utf8');
-const yaprakPem = fs.readFileSync(yaprakYol, 'utf8');
-const h = [...Z.kokHatalari(kokPem), ...Z.yaprakHatalari(yaprakPem, kokPem, { esikGun: Z.OTA_YAPRAK_ESIK_GUN })];
+const yaprakPem = yaprakYol ? fs.readFileSync(yaprakYol, 'utf8') : null;
+const h = [...Z.kokHatalari(kokPem), ...(yaprakPem ? Z.yaprakHatalari(yaprakPem, kokPem, { esikGun: Z.OTA_YAPRAK_ESIK_GUN }) : [])];
 for (const [ad, pem] of [['OTA kökü', kokPem], ['OTA yaprağı', yaprakPem]]) {
+  if (!pem) continue;
   let x;
   try {
     x = new X509Certificate(pem);
@@ -217,5 +219,9 @@ for (const [ad, pem] of [['OTA kökü', kokPem], ['OTA yaprağı', yaprakPem]]) 
 if (h.length) {
   for (const s of h) console.error(`  ✖ ${s}`);
   process.exit(1);
+}
+if (!yaprakPem) {
+  console.log('✔ OTA kökü geçerli: CA (pathLen 0, EKU yok). Yaprak denetlenmedi — --yaprak=<dönem>/istemci/ota-yaprak/certificate.pem');
+  process.exit(0);
 }
 console.log('✔ OTA zinciri geçerli: kök CA (pathLen 0, EKU yok), yaprak CA değil + codeSigning + köke bağlı, süre ve 30 gün eşiği tamam.');

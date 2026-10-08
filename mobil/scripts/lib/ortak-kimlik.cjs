@@ -15,7 +15,7 @@
 const fs = require('node:fs');
 const path = require('node:path');
 
-const { OTA_YAPRAK_GUN, OTA_KOK_GUN, komutMetni, torenKomutlari } = require('./ota-zinciri.cjs');
+const { OTA_YAPRAK_GUN, OTA_KOK_GUN } = require('./ota-zinciri.cjs');
 
 const KAYIT_YOLU = path.join(__dirname, '..', '..', '..', 'deploy', 'dagitim.json');
 /** Worker'ın grup-nötr OTA yolu `<indirmeKoku>ota/<rv>/manifest` (dagitim.mjs AYRILMIS_GRUP_KODLARI[0]). */
@@ -23,8 +23,8 @@ const TAKMA_AD = 'ota';
 /** Zincir meta-data'sını yazan eklenti (K-2): ortak yapılandırmada olmazsa APK zinciri okumaz, her OTA RED. */
 const ZINCIR_EKLENTISI = './plugins/withOtaZinciri';
 /**
- * Ortak OTA KÖKÜ sertifikasının biçimi (APK'ya gömülür; K-2/I5). Yaprak anahtarı + yaprak sertifikası
- * `keystore/ota-keys-<ad>/` altındadır ve imza anahtarı kimliği (kid) bu addan türer.
+ * Ortak OTA KÖKÜ sertifikasının biçimi (APK'ya gömülür; K-2/I5); imza anahtarı kimliği (kid) bu addan türer.
+ * Yaprak depoda DEĞİLDİR: yıllık dönem töreninin istemci dizinindedir ve yayına `--ota-anahtar` ile verilir.
  */
 const SERTIFIKA_DESENI = /^keystore\/ota-certs-([a-z0-9][a-z0-9-]{0,31})\/certificate\.pem$/;
 
@@ -65,31 +65,31 @@ function ortakKimlik(kayit = ortakKaydiOku()) {
     gorunenAd: t.gorunenAd,
     runtimeVersion: t.runtimeVersion,
     otaSertifika: t.otaSertifika,
-    otaAnahtar: `keystore/ota-keys-${m[1]}/private-key.pem`,
-    otaYaprak: `keystore/ota-keys-${m[1]}/certificate.pem`,
     anahtarKimligi: m[1],
     indirmeKoku: kok,
     guncellemeUrl: `${kok}${TAKMA_AD}/${t.runtimeVersion}/manifest`,
   };
 }
 
+/** Satıcı üretim dizini (tören aracının varsayılanı); OTA kökü `anahtarlar/`, yıllık yaprak `donemler/<damga>/istemci/`. */
+const URETIM_DIZINI = '$HOME/.tekserp/satici-uretim';
+
 /**
- * OTA zinciri töreninin tek yazımı (belge, build-apk/yayın mesajı ve bekçi aynı metni kullanır). Argv
- * `ota-zinciri.cjs torenKomutlari`ndan — bekçinin deneme zinciri de aynı argv ile üretilir. Kök anahtarı mobil/
- * DIŞINDA, kökle aynı yerde ve kök parolasıyla; yaprak anahtarı istemci parolasıyla (openssl gizli sorar).
- * Yedek yaprak ve kök anahtarının yeri I7 tören aracının işidir (ISTEMCI-ANAHTARI-KOK-ALTINDA.md §6 adım 3).
+ * OTA zinciri yönergesinin tek yazımı (build-apk/yayın mesajı, belge ve bekçi aynı metni kullanır). Kök ve yaprak
+ * tören araçlarıyla üretilir, elle openssl yok; kök anahtarı ve yaprak mobil/ DIŞINDADIR (URETIM-SATICI-TOREN.md §9).
  */
-function anahtarToreniKomutu(k = ortakKimlik()) {
-  const profil = '/tmp/tekserp-ota-profil.cnf';
-  const komutlar = torenKomutlari({
-    kokAnahtar: '$OTA_KOK_ANAHTARI', kokSertifika: k.otaSertifika, yaprakAnahtar: k.otaAnahtar,
-    yaprakSertifika: k.otaYaprak, csr: '/tmp/tekserp-ota-yaprak.csr', profil, yaprakCn: `${k.gorunenAd} OTA Yaprak`,
-  }).map((a) => komutMetni(a).replaceAll('"\\$OTA_KOK_ANAHTARI"', '"$OTA_KOK_ANAHTARI"'));
+function otaTorenYonergesi(k = ortakKimlik()) {
+  const kok = `${URETIM_DIZINI}/anahtarlar/ota-kok.pem`;
+  const yaprak = `${URETIM_DIZINI}/donemler/<damga>/istemci/ota-yaprak`;
   return [
-    `# OTA kökü (CA, ${OTA_KOK_GUN} gün, APK'ya gömülür) + OTA yaprağı (${OTA_YAPRAK_GUN} gün, manifesti imzalar); OTA_KOK_ANAHTARI mobil/ dışında`,
-    `cd mobil && mkdir -p ${path.posix.dirname(k.otaSertifika)} ${path.posix.dirname(k.otaAnahtar)} && node scripts/ota-zinciri.mjs profil > ${profil}`,
-    ...komutlar,
-    `chmod 600 ${k.otaAnahtar} && node scripts/ota-zinciri.mjs denetle`,
+    `# OTA kökü (CA, ${OTA_KOK_GUN} gün, APK'ya gömülür) — yalnız İLK kez, satıcı kök parolasıyla:`,
+    `node mobil/scripts/ota-zinciri.mjs kok-uret --dizin=${URETIM_DIZINI}/anahtarlar`,
+    '# APK\'ya gömülen kopya:',
+    `mkdir -p mobil/${path.posix.dirname(k.otaSertifika)} && cp ${kok} mobil/${k.otaSertifika}`,
+    `# OTA yaprağı (${OTA_YAPRAK_GUN} gün, manifesti imzalar) — yıllık dönem töreninde (docs/ops/URETIM-SATICI-TOREN.md §9):`,
+    'node deploy/satici/uretim-toren.mjs donem --istemci',
+    `# Yayın: node deploy/mobil-grup-yayinla.mjs … --ota-anahtar=${yaprak}/private-key.pem`,
+    `# Ölçüm: cd mobil && node scripts/ota-zinciri.mjs denetle --yaprak=${yaprak}/certificate.pem`,
   ];
 }
 
@@ -162,7 +162,7 @@ module.exports = {
   ZINCIR_EKLENTISI,
   ortakKaydiOku,
   ortakKimlik,
-  anahtarToreniKomutu,
+  otaTorenYonergesi,
   ortakYapilandirmasi,
   ortakYapilandirmaFarki,
 };

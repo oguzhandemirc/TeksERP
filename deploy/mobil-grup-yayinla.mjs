@@ -10,7 +10,7 @@
  * olamaz. Panelin ikizi: `deploy/electron-grup-yayinla.sh` (terfi hükmü `scripts/lib/grup-yayin.mjs`, ortak kitaplık).
  *
  * Kullanım:
- *   node deploy/mobil-grup-yayinla.mjs --grup=test  --paket=mobil/ota-cikti/ortak/<rv>/<damga> [--ota-anahtar=<yaprak anahtarı>]
+ *   node deploy/mobil-grup-yayinla.mjs --grup=test  --paket=mobil/ota-cikti/ortak/<rv>/<damga> --ota-anahtar=<yaprak anahtarı>
  *   node deploy/mobil-grup-yayinla.mjs --grup=oncu  --paket=…     # test'te yayında + onay etiketi (terfi)
  *   node deploy/mobil-grup-yayinla.mjs --grup=genel --paket=…     # K-6: AYRI ikinci onay etiketi
  *   … --kuru                       # AĞ YOK — yerel kapılar + plan (imza anahtarı yoksa SAHTE anahtarla denenir, yazılmaz)
@@ -23,7 +23,9 @@
  * (bundle · varlıklar) gruplar arasında AYNI kalır; terfide kaynak grubun artefakt özeti ile yüklenecek özet eşit olmalıdır.
  * Yaprak anahtarı parolalıdır (TTY'de gizli istem, değilse stdin satırı; argümandan/ortamdan ASLA). Malzeme yoksa, yaprak
  * köke bağlı değilse ya da bitişine 30 günden az kaldıysa imza adımı fail-closed durur (kuru: atılacak deneme zinciri).
- * `--ota-anahtar=<dosya>` yedek yaprağı (USB) seçer; yaprak sertifikası o anahtarın yanındaki `certificate.pem`dir.
+ * `--ota-anahtar=<dosya>` (ya da TEKSERP_OTA_IMZA_ANAHTARI) yaprağı seçer — yıllık dönem töreninin
+ * `~/.tekserp/satici-uretim/donemler/<damga>/istemci/ota-yaprak/private-key.pem`i ya da yedeği (docs/ops/URETIM-SATICI-TOREN.md §9);
+ * verilmezse gerçek yayın DURUR (depoda varsayılan yaprak yok). Yaprak sertifikası o anahtarın yanındaki `certificate.pem`dir.
  * ⚠️ YÜKLEME SIRASI pazarlık dışı: paket/varlıklar ÖNCE, manifest EN SON (yayını açan adım). Cloudflare proxy AÇIK kalır.
  * ⚠️ OTA turunda `versionCode`a dokunulmaz (native sürüm Play'dedir; native değiştiyse runtimeVersion artar → AAB → Play).
  * ⚠️ GERÇEK YAYIN kullanıcı onayıyla yapılır. Hedef YALNIZ dağıtım kaydından türer; ssh/dizin/adres ezmesi RED.

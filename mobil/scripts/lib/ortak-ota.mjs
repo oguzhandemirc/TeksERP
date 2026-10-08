@@ -24,7 +24,7 @@ import { ortakBundleAdresleri } from './adres.mjs';
 import { imzaBasligi, manifestKur, multipartDogrula, multipartKur } from './manifest.mjs';
 
 const require = createRequire(import.meta.url);
-const { anahtarToreniKomutu, ortakYapilandirmaFarki } = require('./ortak-kimlik.cjs');
+const { otaTorenYonergesi, ortakYapilandirmaFarki } = require('./ortak-kimlik.cjs');
 const Z = require('./ota-zinciri.cjs');
 
 /** Ortak paketin yerel künyesi; `ortak: true` ve manifest YOKLUĞU ortak pakettir. */
@@ -88,18 +88,23 @@ export function ortakPaketDenetimi(dizin, kimlik) {
 /** Grubun varlık adresi tabanı (sonu `/` DEĞİL): `<feed>ota/<rv>/<damga>`; `feed` dağıtım kaydından türer (sonu `/`). */
 export const grupVarlikTabani = (feed, rv, damga) => `${String(feed).replace(/\/+$/, '')}/ota/${rv}/${damga}`;
 
+/** Yaprak sertifikasının anahtarın yanındaki adı (tören aracının `<hedef>/certificate.pem` düzeni). */
+const YAPRAK_SERTIFIKASI = 'certificate.pem';
+
 /**
  * Ortak OTA imza malzemesinin yolları: APK'ya gömülü OTA KÖKÜ + manifesti imzalayan OTA YAPRAĞI (anahtar + sertifika).
- * `anahtarYolu` (yedek yaprak, USB) verilirse yaprak sertifikası o anahtarın YANINDAN okunur — aynı dizin düzeni.
+ * Yaprak depoda varsayılan yoldan aranmaz: `anahtarYolu` (dönem töreninin `istemci/ota-yaprak/private-key.pem`i ya da
+ * yedeği) verilmezse yaprak yolları `null`dır; sertifika anahtarın YANINDAN okunur.
  */
 export function ortakImzaYollari(kimlik, mobilKok, { anahtarYolu } = {}) {
-  const anahtarYol = anahtarYolu ? path.resolve(anahtarYolu) : path.join(mobilKok, kimlik.otaAnahtar);
-  const yaprakYol = anahtarYolu ? path.join(path.dirname(anahtarYol), path.basename(kimlik.otaYaprak)) : path.join(mobilKok, kimlik.otaYaprak);
+  const anahtarYol = anahtarYolu ? path.resolve(anahtarYolu) : null;
+  const yaprakYol = anahtarYol ? path.join(path.dirname(anahtarYol), YAPRAK_SERTIFIKASI) : null;
   return { anahtarYol, yaprakYol, kokYol: path.join(mobilKok, kimlik.otaSertifika) };
 }
 
 /** Yaprak anahtarı var ve parolalı mı (yayıncı parolayı yalnız o zaman sorar). */
 export function ortakAnahtarParolali(yollar) {
+  if (!yollar.anahtarYol) return false;
   try {
     return Z.pemSifreli(fs.readFileSync(yollar.anahtarYol, 'utf8'));
   } catch {
@@ -108,14 +113,21 @@ export function ortakAnahtarParolali(yollar) {
 }
 
 /**
- * Ortak OTA imza malzemesi: yaprak anahtarı (açılmış KeyObject) + yaprak + kök PEM. Fail-closed: dosya yoksa tören
- * komutuyla; yaprak anahtarı PAROLASIZSA, parola yoksa/yanlışsa, kök CA değilse, yaprak köke bağlı değilse, süresi
+ * Ortak OTA imza malzemesi: yaprak anahtarı (açılmış KeyObject) + yaprak + kök PEM. Fail-closed: yaprak anahtarı
+ * verilmediyse ya da dosya yoksa tören yönergesiyle; yaprak anahtarı PAROLASIZSA, parola yoksa/yanlışsa, kök CA değilse, yaprak köke bağlı değilse, süresi
  * bitmişse ya da bitişine 30 günden az kalmışsa ya da anahtar yaprağın değilse DURUR. `kuru` + malzeme yoksa ATILACAK
  * bir deneme zinciri üretir (openssl; `sahte: true`, çıktı yayına gitmez).
  * @returns {{anahtar: crypto.KeyObject, kokPem: string, yaprakPem: string, keyid: string, sahte: boolean, yaprakBitis: string}}
  */
 export function ortakImzaAnahtari(kimlik, mobilKok, { kuru = false, anahtarYolu, parola, simdi = new Date() } = {}) {
   const y = ortakImzaYollari(kimlik, mobilKok, { anahtarYolu });
+  if (!y.anahtarYol) {
+    if (kuru) return denemeImzaMalzemesi(kimlik);
+    throw new OrtakOtaIhlali('OTA YAPRAK ANAHTARI VERİLMEDİ (--ota-anahtar / TEKSERP_OTA_IMZA_ANAHTARI) — manifest imzalanamaz, yayın yapılmaz', [
+      'Yaprak yıllık dönem töreninin istemci dizinindedir; depoda varsayılan yaprak yolu YOK:',
+      ...otaTorenYonergesi(kimlik).map((k) => `  ${k}`),
+    ]);
+  }
   const eksik = [y.anahtarYol, y.yaprakYol, y.kokYol].filter((p) => !fs.existsSync(p));
   if (eksik.length) {
     if (kuru) return denemeImzaMalzemesi(kimlik);
@@ -124,15 +136,15 @@ export function ortakImzaAnahtari(kimlik, mobilKok, { kuru = false, anahtarYolu,
       `OTA yaprağı sertifikası  : ${y.yaprakYol}`,
       `OTA yaprağı anahtarı     : ${y.anahtarYol}`,
       `eksik                    : ${eksik.join(', ')}`,
-      'Zincir kullanıcıyla törende üretilir (git dışı, yedekli); üretilmeden OTA yayını çıkmaz:',
-      ...anahtarToreniKomutu(kimlik).map((k) => `  ${k}`),
+      'Zincir tören araçlarıyla üretilir (git dışı, yedekli); üretilmeden OTA yayını çıkmaz:',
+      ...otaTorenYonergesi(kimlik).map((k) => `  ${k}`),
     ]);
   }
   const anahtarPem = fs.readFileSync(y.anahtarYol, 'utf8');
   if (!Z.pemSifreli(anahtarPem)) {
     throw new OrtakOtaIhlali('OTA YAPRAK ANAHTARI PAROLASIZ — imzalanmaz', [
       `anahtar: ${y.anahtarYol}`,
-      'Yaprak anahtarı parolalı PKCS#8 olmalı (BEGIN ENCRYPTED PRIVATE KEY); tören komutu `-aes-256-cbc` ile üretir.',
+      'Yaprak anahtarı parolalı PKCS#8 olmalı (BEGIN ENCRYPTED PRIVATE KEY); tören aracı (`ota-zinciri.mjs yaprak-bas`) böyle üretir.',
     ]);
   }
   if (!parola) throw new OrtakOtaIhlali('OTA YAPRAK ANAHTARI PAROLASI VERİLMEDİ — imzalanmaz', [`anahtar: ${y.anahtarYol}`]);
