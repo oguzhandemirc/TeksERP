@@ -43,6 +43,21 @@ class TeksErpLanTlsModule : Module() {
       }
     }
 
+    /**
+     * İnternet kipi yoklaması: yalnız sistem güven deposu + ad doğrulaması (sabit kümesine bakılmaz). Hiç reddetmez;
+     * `failure` null ise doğrulandı, değilse hata sınıfı (clock_behind · clock_ahead · untrusted · name · network · tls).
+     */
+    AsyncFunction("probeWebPki") { host: String, port: Int, timeoutMs: Int, promise: Promise ->
+      probePool.execute {
+        try {
+          val r = WebPkiProbe.probe(host, port, timeoutMs.coerceIn(200, 15_000))
+          promise.resolve(mapOf("failure" to r.failure?.code, "status" to r.status, "body" to r.body, "detail" to r.detail))
+        } catch (e: Exception) {
+          promise.resolve(mapOf("failure" to WebPkiFailure.TLS.code, "status" to null, "body" to null, "detail" to e.javaClass.simpleName))
+        }
+      }
+    }
+
     OnDestroy { probePool.shutdownNow() }
 
     /** `installed` false ise JS sabit YAZMAZ (D4 kuralı: zorlayamayan sürüm sabit tutmaz). */

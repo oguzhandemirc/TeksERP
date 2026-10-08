@@ -134,8 +134,9 @@ function protoAlanlari(b, bas = 0, son = b.length) {
  * Öznitelik değeri derlenmiş öğeden (boolean → 'true'/'false', dize → metni); yoksa ham metin (`value`).
  * Alan numaraları aapt2 Resources.proto: XmlNode{element=1} · XmlElement{name=3, attribute=4, child=5} ·
  * XmlAttribute{name=2, value=3, compiled_item=6} · Item{str=2, prim=7} · Primitive{boolean_value=8}.
+ * `kok`: beklenen kök öğe (derlenmiş res/xml dosyaları da aynı biçimdedir).
  */
-export function protoManifestOgeleri(b) {
+export function protoManifestOgeleri(b, kok = 'manifest') {
   const metin = (a) => b.toString('utf8', a.bas, a.son);
   const ogeler = [];
   const derlenmis = (item) => {
@@ -177,7 +178,7 @@ export function protoManifestOgeleri(b) {
     if (e instanceof ApkOlculemedi) throw e;
     throw new ApkOlculemedi(`protobuf manifest okunamadı: ${e.message}`);
   }
-  if (!ogeler.length || ogeler[0].ad !== 'manifest') throw new ApkOlculemedi('protobuf manifest kök öğesi <manifest> değil');
+  if (!ogeler.length || ogeler[0].ad !== kok) throw new ApkOlculemedi(`protobuf XML kök öğesi <${kok}> değil`);
   return ogeler;
 }
 

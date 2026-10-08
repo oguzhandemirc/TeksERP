@@ -417,25 +417,34 @@ const pbBool = (b) => pbAlan(7, Buffer.concat([pbVarint(8 * 8), pbVarint(b ? 1 :
 const ANDROID_NS = 'http://schemas.android.com/apk/res/android';
 const pbOz = (ad, deger, { ns = ANDROID_NS, bool = null } = {}) => pbAlan(4, Buffer.concat([...(ns ? [pbAlan(1, ns)] : []), pbAlan(2, ad), pbAlan(3, deger), ...(bool == null ? [] : [pbAlan(6, pbBool(bool))])]));
 const pbOge = (ad, ozler = [], cocuklar = []) => pbAlan(1, Buffer.concat([pbAlan(3, ad), ...ozler, ...cocuklar.map((c) => pbAlan(5, c))]));
-function protoManifest({ paket, izinler = [], meta = {}, hedefSdk = '36', yonOzelligi = 'true', cleartext = 'false', hizmetler = [] }) {
+function protoManifest({ paket, izinler = [], meta = {}, hedefSdk = '36', yonOzelligi = 'true', cleartext = 'false', hizmetler = [], nscOz = true }) {
   const izin = ['android.permission.INTERNET', ...izinler].map((x) => pbOge('uses-permission', [pbOz('name', x)]));
   const metaOge = Object.entries(meta).map(([n, v]) => pbOge('meta-data', [pbOz('name', n),
     pbOz('value', v, { bool: v === 'true' || v === 'false' ? v === 'true' : null })]));
   const sdk = pbOge('uses-sdk', [pbOz('minSdkVersion', '26'), pbOz('targetSdkVersion', hedefSdk)]);
   const ozellik = yonOzelligi == null ? [] : [pbOge('property', [pbOz('name', BUYUK.YON_OZELLIGI), pbOz('value', yonOzelligi, { bool: yonOzelligi === 'true' })])];
-  const uygOz = cleartext == null ? [] : [pbOz('usesCleartextTraffic', cleartext, { bool: cleartext === 'true' })];
+  const uygOz = [...(cleartext == null ? [] : [pbOz('usesCleartextTraffic', cleartext, { bool: cleartext === 'true' })]),
+    ...(nscOz ? [pbOz('networkSecurityConfig', '@xml/network_security_config')] : [])];
   const hizmet = hizmetler.map((h) => pbOge('service', [pbOz('name', h)]));
   return pbOge('manifest', [pbOz('package', paket, { ns: null })], [sdk, ...izin, pbOge('application', uygOz, [...metaOge, ...ozellik, ...hizmet])]);
 }
+/** Ağ güvenlik yapılandırması (proto XML): base-config{cleartextTrafficPermitted} > trust-anchors > certificates{src}. */
+function protoNsc({ cleartext = 'false', capalar = ['system'], alan = false } = {}) {
+  const sertler = capalar.map((c) => pbOge('certificates', [pbOz('src', c, { ns: null })]));
+  const taban = pbOge('base-config', [pbOz('cleartextTrafficPermitted', cleartext, { ns: null, bool: cleartext === 'true' })], [pbOge('trust-anchors', [], sertler)]);
+  const ozel = alan ? [pbOge('domain-config', [pbOz('cleartextTrafficPermitted', 'true', { ns: null, bool: true })])] : [];
+  return pbOge('network-security-config', [], [taban, ...ozel]);
+}
 /** Sahte AAB: base/manifest gerçek protobuf AndroidManifest (doğrulayıcı meta-data'yı öğe düzeyinde çözer). */
-function aab(agac, { izinler = [], paket = kimlik.androidPaket, zincir = 'true', sertPem = SERT_KANAL, hedefSdk = '36', yonOzelligi = 'true', cleartext = 'false', hizmetler = [] } = {}) {
+function aab(agac, { izinler = [], paket = kimlik.androidPaket, zincir = 'true', sertPem = SERT_KANAL, hedefSdk = '36', yonOzelligi = 'true', cleartext = 'false', hizmetler = [], nscOz = true, nsc = {} } = {}) {
   sayac += 1;
   const y = path.join(agac, `sahte-${sayac}.aab`);
   const meta = { 'expo.modules.updates.ENABLED': 'true', 'expo.modules.updates.EXPO_UPDATE_URL': kimlik.guncellemeUrl };
   if (sertPem) meta['expo.modules.updates.CODE_SIGNING_CERTIFICATE'] = sertPem;
   if (zincir != null) meta[Z.ZINCIR_META] = zincir;
   zipYaz(y, [
-    { ad: 'base/manifest/AndroidManifest.xml', veri: protoManifest({ paket, izinler, meta, hedefSdk, yonOzelligi, cleartext, hizmetler }), yontem: 8 },
+    { ad: 'base/manifest/AndroidManifest.xml', veri: protoManifest({ paket, izinler, meta, hedefSdk, yonOzelligi, cleartext, hizmetler, nscOz }), yontem: 8 },
+    ...(nsc ? [{ ad: 'base/res/xml/network_security_config.xml', veri: protoNsc(nsc), yontem: 8 }] : []),
     { ad: 'base/assets/index.android.bundle', veri: Buffer.from('hermes\u0000/api/auth/login\u0000son', 'latin1'), yontem: 0 },
     { ad: 'base/assets/app.config', veri: Buffer.from(JSON.stringify(ORTAK_CFG)), yontem: 8 },
   ]);
@@ -472,6 +481,14 @@ function aab(agac, { izinler = [], paket = kimlik.androidPaket, zincir = 'true',
   ol('3o12 K1: SYSTEM_ALERT_WINDOW izinli AAB → DUR', r12.kod !== 0 && /SYSTEM_ALERT_WINDOW izni var/.test(r12.cikti), r12.cikti.slice(-600));
   const r13 = buildApk(a, ['--aab', `--verify-only=${aab(a, { hizmetler: ['expo.modules.audio.service.AudioControlsService'] })}`]);
   ol('3o13 K1: AudioControlsService hizmetli AAB → DUR', r13.kod !== 0 && /AudioControlsService hizmeti var/.test(r13.cikti), r13.cikti.slice(-600));
+  const r14 = buildApk(a, ['--aab', `--verify-only=${aab(a, { nsc: { capalar: ['system', 'user'] } })}`]);
+  ol('3o14 G2: kullanıcı CA\'sına güvenen AAB → DUR', r14.kod !== 0 && /güven çapası \[system, user\]/.test(r14.cikti), r14.cikti.slice(-600));
+  const r15 = buildApk(a, ['--aab', `--verify-only=${aab(a, { nsc: null, nscOz: false })}`]);
+  ol('3o15 G2: ağ güvenlik yapılandırması olmayan AAB → DUR', r15.kod !== 0 && /networkSecurityConfig yok/.test(r15.cikti) && /network_security_config\.xml yok/.test(r15.cikti), r15.cikti.slice(-600));
+  const r16 = buildApk(a, ['--aab', `--verify-only=${aab(a, { nsc: { cleartext: 'true' } })}`]);
+  ol('3o16 G2: yapılandırmada şifresiz açık AAB → DUR (http yok)', r16.kod !== 0 && /cleartextTrafficPermitted=true/.test(r16.cikti), r16.cikti.slice(-600));
+  const r17 = buildApk(a, ['--aab', `--verify-only=${aab(a, { nsc: { alan: true } })}`]);
+  ol('3o17 G2: alan adına özel istisnalı AAB → DUR', r17.kod !== 0 && /domain-config/.test(r17.cikti), r17.cikti.slice(-600));
 }
 const AJ = JSON.parse(fs.readFileSync(path.join(KOK, 'mobil/app.json'), 'utf8')).expo;
 const androidYaz = ({ url = kimlik.guncellemeUrl, paket = kimlik.androidPaket, ad = kimlik.gorunenAd, zincir = 'true', sert = SERT_KANAL } = {}) => (dir) => {

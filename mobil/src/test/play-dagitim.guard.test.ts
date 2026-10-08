@@ -8,6 +8,7 @@
 // =============================================================================
 
 import fs from 'fs';
+import os from 'os';
 import path from 'path';
 
 import { playStoreAc, playStoreAdresleri } from '../services/playStore';
@@ -25,6 +26,7 @@ const { YON_OZELLIGI, yonOzelligiYaz } = require(path.join(KOK, 'plugins/withBuy
 const buyukEkran = require(path.join(KOK, 'scripts/lib/buyuk-ekran.cjs'));
 const playManifest = require(path.join(KOK, 'scripts/lib/play-manifest.cjs'));
 const { hizmetKaldirmaYaz } = require(path.join(KOK, 'plugins/withPlayManifestTemizligi.js'));
+const agGuvenligi = require(path.join(KOK, 'plugins/withAgGuvenligi.js'));
 /* eslint-enable @typescript-eslint/no-require-imports */
 
 function degerlendir() {
@@ -286,5 +288,56 @@ describe('K1 · K3 — Play manifest temizliği (yalnız şifreli bağlantı; ku
     expect(
       playManifest.playManifestSorunlari([...ogeler({}), { ad: 'service', oznitelik: { name: playManifest.KALDIRILAN_HIZMETLER[1] } }]).join(),
     ).toMatch(/AudioRecordingService hizmeti var/);
+  });
+});
+
+describe('G2 — ağ güvenlik yapılandırması (yalnız sistem CA, şifresiz kapalı; TABLET-GENEL-CA-BAGLANTI §3)', () => {
+  const xmlOge = (xml: string) => {
+    const capalar = [...xml.matchAll(/<certificates src="([^"]+)"/g)].map((m) => m[1]);
+    const cleartext = /<base-config cleartextTrafficPermitted="(\w+)"/.exec(xml)?.[1];
+    return [
+      { ad: 'network-security-config', oznitelik: {} },
+      { ad: 'base-config', oznitelik: { cleartextTrafficPermitted: cleartext } },
+      { ad: 'trust-anchors', oznitelik: {} },
+      ...capalar.map((src) => ({ ad: 'certificates', oznitelik: { src } })),
+      ...(/<domain-config/.test(xml) ? [{ ad: 'domain-config', oznitelik: {} }] : []),
+    ];
+  };
+  const uyg = [{ ad: 'manifest', oznitelik: {} }, { ad: 'application', oznitelik: { networkSecurityConfig: '@xml/network_security_config' } }];
+
+  it('eklenti plugins listesinde; manifest @xml yapılandırmasını gösterir; sürüm ve geliştirme kopyası ayrı yazılır', () => {
+    expect(appJson.plugins).toContain('./plugins/withAgGuvenligi');
+    const manifest = { manifest: { $: {}, application: [{ $: { 'android:name': '.MainApplication' } }] } };
+    agGuvenligi.manifesteYaz(manifest);
+    expect(manifest.manifest.application[0].$).toMatchObject({ 'android:networkSecurityConfig': `@xml/${playManifest.NSC_ADI}` });
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'nsc-'));
+    try {
+      agGuvenligi.dosyalariYaz(tmp);
+      const oku = (k: string) => fs.readFileSync(path.join(tmp, 'app/src', k, 'res/xml', `${playManifest.NSC_ADI}.xml`), 'utf8');
+      expect(oku('main')).toBe(playManifest.NSC_SURUM);
+      expect(oku('debug')).toBe(playManifest.NSC_GELISTIRME);
+    } finally {
+      fs.rmSync(tmp, { recursive: true, force: true });
+    }
+  });
+
+  it('sürüm yapılandırması: yalnız system çapası, şifresiz kapalı, istisna yok; geliştirme yalnız şifresizi açar', () => {
+    expect(playManifest.agGuvenligiSorunlari(uyg, xmlOge(playManifest.NSC_SURUM))).toEqual([]);
+    expect(playManifest.NSC_SURUM).not.toMatch(/src="user"|domain-config|overridePins|debug-overrides/);
+    expect(playManifest.NSC_GELISTIRME).toMatch(/cleartextTrafficPermitted="true"/);
+    expect(playManifest.NSC_GELISTIRME.replace('"true"', '"false"')).toBe(playManifest.NSC_SURUM);
+  });
+
+  it('negatif: kullanıcı CA\'sı, şifresiz açık, alan istisnası, eksik yapılandırma → sorun', () => {
+    const user = playManifest.NSC_SURUM.replace('<certificates src="system" />', '<certificates src="system" /><certificates src="user" />');
+    expect(playManifest.agGuvenligiSorunlari(uyg, xmlOge(user)).join()).toMatch(/system, user/);
+    expect(playManifest.agGuvenligiSorunlari(uyg, xmlOge(playManifest.NSC_GELISTIRME)).join()).toMatch(/cleartextTrafficPermitted=true/);
+    expect(playManifest.agGuvenligiSorunlari(uyg, [...xmlOge(playManifest.NSC_SURUM), { ad: 'domain-config', oznitelik: {} }]).join()).toMatch(/domain-config/);
+    expect(playManifest.agGuvenligiSorunlari([{ ad: 'application', oznitelik: {} }], null).join()).toMatch(/networkSecurityConfig yok.*ÖLÇÜLEMEDİ/);
+  });
+
+  it('AAB doğrulaması yapılandırmayı paketin kendisinden ölçer', () => {
+    const betik = fs.readFileSync(path.join(KOK, 'scripts/build-apk.mjs'), 'utf8');
+    expect(betik).toMatch(/\.\.\.agGuvenligiSorunlari\(ogeler, nsc\)/);
   });
 });
