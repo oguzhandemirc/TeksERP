@@ -1,6 +1,6 @@
 # İndirme kapısı Worker'ı — kurulum, prova, geçiş, geri alma
 
-> **Durum (ölçüldü 2026-10-06):** kod ve bekçi hazır, **YAYIN YAPILMADI** — Cloudflare hesabında Worker ve rota yok, dosyalar belirteçsiz iniyor. **Kapı eski `guncelleme.etkiliyazilim.com`da AÇILMAZ** (kullanıcı kararı 2026-10-03, `docs/plan/DEMOFABRIKA-KURULUM-BULGULARI.md` §D-1): yeni alt adreste (`indir.etkiliyazilim.com`, karar 2026-10-07) tek ortak paketle (plan 3.1) birlikte açılır, klasörler güncelleme grubuna göredir (`/test` · `/oncu` · `/genel`); eski adres adnansahin için kapı DIŞINDA aynen kalır — o ana makineye rota bağlanmaz. testfabrika ve hazırlık satıcısı emekli (2026-10-05): `indirmeListesi.hazirlik` boş.
+> **Durum (ölçüldü 2026-10-08):** kapı **`indir.etkiliyazilim.com`da YAYINDA** (Worker `tekserp-indirme-kapisi`, rota `indir.etkiliyazilim.com/*`, VDS kökeni `tekserp-indir` — §11); eski `guncelleme.etkiliyazilim.com` kapı DIŞINDA, belirteçsiz iner (adnansahin 9/9). **Kapı eski `guncelleme.etkiliyazilim.com`da AÇILMAZ** (kullanıcı kararı 2026-10-03, `docs/plan/DEMOFABRIKA-KURULUM-BULGULARI.md` §D-1): yeni alt adreste (`indir.etkiliyazilim.com`, karar 2026-10-07) tek ortak paketle (plan 3.1) birlikte açılır, klasörler güncelleme grubuna göredir (`/test` · `/oncu` · `/genel`); eski adres adnansahin için kapı DIŞINDA aynen kalır — o ana makineye rota bağlanmaz. testfabrika ve hazırlık satıcısı emekli (2026-10-05): `indirmeListesi.hazirlik` boş.
 > **adnansahin belirteç GÖNDERMEZ:** sahadaki panel 1.3.7 · tablet OTA 1.0.12 · APK 1.0.0 · backend 2.11.2 belirteç kodundan (panel 3b · tablet 3c · fabrika ucu, hepsi 2026-09-29) ÖNCEDİR; adnansahin'e yeni güncelleme gönderilmez, yeni sisteme sonra alınır (kullanıcı kararı 2026-10-06) ⇒ `guncelleme.etkiliyazilim.com`a Worker rotası BAĞLANMAZ.
 > **İstemci zinciri (dilim 3bc):** fabrika ucu `GET /api/license/indirme-belirteci?urun=electron|mobil` süresi dolmuş belirteci vermez, dolmaya < 15 dk kalmışsa yoklamayı dürter; panel (`updater.ipc.ts` + `/download-token`) her denetimde `X-TKL-Indirme`, tablet (`mobil/src/services/downloadToken.service.ts`) her OTA denetiminden önce `tkl` extra param + APK isteğinde başlık, açılışta native denetim bayat paramla 403 alırsa JS 5 sn sonra tazeleyip yeniden dener; belirteç alınamazsa HER İKİSİ BAŞLIKSIZ ister (geçiş listesi). Yayın betikleri önce taze CLI belirteci (`docs/kurallar/surum-yayin.md`). Senaryo L22/L24 bu zinciri gerçek Worker modülüyle koşar.
 > **İNDİRME listesi (L2-8, lisans v2 §2.1/§2.5):** Worker anahtarları tek listeden okur (`uretim`; tek satıcı — başka liste adı 503); her satır kid × izinli kanal kümesi × pencere (sertifikanınki) taşır. Dönem töreni (yılda bir) yapıştırılacak satırı hazır basar — §8. Eski `anahtarlar: [{kid, x}]` biçimi kısıtsız olarak BİR Worker sürümü daha tanınır.
@@ -22,6 +22,8 @@
 2. **İstemciler belirteç gönderiyor:** panel (3b) ve tablet (3c) belirteç kodu sahada; 3c' yayın betikleri Worker'dan ÖNCE iner. Belirteç kodunu taşıyan İLK sürüm eski anonim yoldan iner — geçiş listesi bu yüzden vardır.
 3. **Geçiş listesi hazır:** her kanalın BUGÜNKÜ sürüm dosyaları — `latest.yml`, güncel exe + `.blockmap`, OTA `manifest`(ler), güncel OTA damga dizini (önek), `apk/surum.json`, güncel apk. Adları yayın klasöründen okuyarak yaz, elle tahmin etme.
 4. **Yayıncı belirteci üretildi (dilim 3bc):** yayın betiklerinin kenar doğrulaması (`?onbellek-atla=`/`cb=` sorgulu `HEAD`/`GET`) `~/.tekserp/yayin-belirteci`ndeki belirteci `X-TKL-Indirme` başlığıyla gönderir. 3c' bu değeri yalnız OPAK biçimle denetler (`[A-Za-z0-9._~+/=-]{16,8192}`); Worker ise satıcının İNDİRME anahtarıyla imzalı Ed25519 JWS (`typ: tekserp-indirme`, yayın kanalının öneki) ister. Yayıncı belirteci üretimi inmeden ve belirteç yayın makinesine yazılmadan rota BAĞLANMAZ — aksi hâlde dosyalar SSH ile yüklenir ama kenar doğrulaması 403 `JWS_BICIM` ile durur. Worker belirteç dışı sorguyu origin'e aynen iletir (`t` hariç), önbellek anahtarı belirteçsiz URL'dir; önbellek atlatması bu yüzden kapı arkasında da çalışır (bekçi §4o–§4q).
+
+5. **Rota yalnız adın tamamıdır, joker rota YASAK:** Workers Routes'ta `*.etkiliyazilim.com/*` gibi joker bir rota Worker'ı `guncelleme.etkiliyazilim.com`un da önüne koyar ve belirteç göndermeyen adnansahin 403 `INDIRME_BELIRTEC_YOK` alır (olay 2026-10-08: kurulum sırasında listede joker rota belirdi, adnansahin birkaç dakika 403 aldı; rota silinince düzeldi). Rota eklendikten ya da değiştirildikten HEMEN sonra rota listesi okunur (yalnız `indir.etkiliyazilim.com/*` olmalı) ve adnansahin ölçümü koşulur: `node Teks-Erp-wt/indirme-kapisi-olc.mjs --adnansahin` → 9/9.
 
 ## 2. Ayar — `TKL_INDIRME_AYAR`
 
@@ -53,6 +55,8 @@ Worker değişkeni (panelde Settings → Variables and Secrets; tür JSON ya da 
 2. İçeriği `deploy/guncelleme-sunucusu/worker/indirme-kapisi.js` ile **değiştir** (ES modülü, `export default { fetch }`) → Deploy.
 3. Settings → Variables → `TKL_INDIRME_AYAR` (§2). Uyumluluk tarihi güncel kalsın (WebCrypto `Ed25519` standart adıyla).
 4. Rota henüz BAĞLAMA — §4 provası önce.
+5. **`workers.dev` alt adını KAPAT** (Worker → Settings → Domains & Routes): açık kalırsa Worker rotasız bir ikinci adresten de çağrılabilir; kapı yalnız rota üzerinden çalışır.
+6. Rota bağlanırken §1 adım 5: adın tamamı, joker yok; rotadan hemen sonra adnansahin ölçümü.
 
 ## 4. Prova — yeni adreste, önce `test` grubu
 
@@ -142,6 +146,14 @@ Satıcı yeni İNDİRME anahtarını anahtar birimine kurulduğu DAKİKA kullanm
 
 ## 11. Yeni adres `indir.etkiliyazilim.com` — tek ortak paket (O9; yayın 3.2, kullanıcıyla)
 
+- **Durum: YAYINDA (2026-10-08).** Yapılan adımlar, sırasıyla:
+  1. VDS kökeni: `/opt/stack/apps/tekserp-indir` (repo `a92359530`, compose `deploy/guncelleme-sunucusu/indir/`, yönlendirici `tekserp-indir`, ara katmanlar `tekserp-indir-cf` → `tekserp-indir-hiz`). Kök sahipli dizinler `oguzhan`ın etkileşimsiz sudo'su olmadığından TEK SEFERLİK YARDIMCI KONTEYNERLE yazıldı (`SATICI-KURULUM.md` §12 kalıbı); `html/` + `defter/` → `yayinci`. Envanter: `SUNUCU-ENVANTERI.md`.
+  2. Worker `tekserp-indirme-kapisi`: kod `deploy/guncelleme-sunucusu/worker/indirme-kapisi.js`; değişken `TKL_INDIRME_AYAR` = `worker/indir-ayar.json`, tür **Text**; `workers.dev` alt adı KAPALI.
+  3. Rota `indir.etkiliyazilim.com/*` → `tekserp-indirme-kapisi`. ⚠️ *Request limit failure mode* = Fail closed panelde **TEYİT EDİLMEDİ** — açık iş (Workers Routes → rota → ayarı oku, değilse Fail closed yap).
+  4. DNS: `A indir` → `80.253.255.188`, proxy AÇIK (turuncu bulut).
+  - Ölçüm: `node Teks-Erp-wt/indir-olc.mjs` 15/15 · `--adnansahin` 9/9 · `deploy/vds-dogrula.sh` önce/sonra AYNI. Belirteçsiz `/test/electron/latest.yml` → 403 `INDIRME_BELIRTEC_YOK`; köke doğrudan (`--resolve …:80.253.255.188`) → 403.
+  - **Olay (2026-10-08):** kurulum sırasında rota listesinde `*.etkiliyazilim.com/*` joker rotası belirdi → `guncelleme.etkiliyazilim.com/adnansahin` birkaç dakika 403 `INDIRME_BELIRTEC_YOK` aldı; joker rota silindi, adnansahin yeniden 9/9. Ders §1 adım 5'te.
+
 - **3.2 kararları (kullanıcı 2026-10-07):**
   - Adres `indir.etkiliyazilim.com`.
   - Gruplar (klasörler) `test` · `oncu` · `genel`.
@@ -152,7 +164,7 @@ Satıcı yeni İNDİRME anahtarını anahtar birimine kurulduğu DAKİKA kullanm
 - **Eski adres değişmez:** `guncelleme.etkiliyazilim.com`a rota BAĞLANMAZ (adnansahin eski adresten belirteçsiz alır). Yayından önce ve sonra `node Teks-Erp-wt/indirme-kapisi-olc.mjs --adnansahin` → 9/9.
 - **VDS kökeni:** ayrı compose projesi `deploy/guncelleme-sunucusu/indir/` → `/opt/stack/apps/tekserp-indir` (yönlendirici `tekserp-indir`, kendi CF ipallowlist + hız seddi — §5 bu yönlendiricide uygulanmış doğar; eski `tekserpguncelleme`ye kısıt EKLENMEZ). `html/<grup>/{electron,mobil,backend}` + `defter/` yayıncıya ait. Bekçi `node scripts/test_indir_sunucusu.mjs`.
 - **Cloudflare sırası:** Worker (+ `TKL_INDIRME_AYAR`) → rota → DNS. DNS en son: ad çözülmeye başladığı anda Worker zaten önündedir; arada kapısız pencere olmaz.
-- **Rota:** `indir.etkiliyazilim.com/*` (adın tamamı), *Request limit failure mode* = **Fail closed**. Klasöre bağlı dar rota `//<grup>/…` ve `%..` biçimleriyle atlanır (ölçüldü 2026-10-06); §4'teki kanal başına rota yeni adreste KULLANILMAZ.
+- **Rota:** `indir.etkiliyazilim.com/*` (adın tamamı; joker rota YASAK, §1 adım 5), *Request limit failure mode* = **Fail closed**. Klasöre bağlı dar rota `//<grup>/…` ve `%..` biçimleriyle atlanır (ölçüldü 2026-10-06); §4'teki kanal başına rota yeni adreste KULLANILMAZ.
 - **Ayar:** `TKL_INDIRME_AYAR` = `deploy/guncelleme-sunucusu/worker/indir-ayar.json` (yalnız açık anahtar; dosyaya yorum YAZILMAZ — tanınmayan alan 503). Satırın `kanallar`ı = güncelleme grupları (test · oncu · genel), `anahtarlar`/`gecisListesi` boş, liste adı yalnız `uretim` (yeni adreste eski istemci yok). **K-5:** `ind-2026` satırı YOK — onunla imzalı belirteç `JWS_KID`. Döndürmede yeni satır bu dosyaya eklenir, bekçi (`test_indirme_kapisi` §10) geçince panele yapıştırılır.
 - **OTA takma adı:** tablet `/ota/<rv>/manifest` ister (grup-nötr, `runtimeVersion` biçimi `55.0`). Belirteç ZORUNLU, geçiş listesi uygulanmaz; Worker yolu belirtecin kanalından `/<grup>/mobil/ota/<rv>/manifest`e çevirir, gerçek yol belirtecin `yolOneki`nin altında olmalı. Origin isteği ve önbellek anahtarı gerçek yoldur (manifest değişken: kenarda tutulmaz). Başka her yazım (`//ota/…`, `/%6fta/…`, büyük harf, sonek, `manifest-<damga>`) 403 `INDIRME_YOL`; `ota` grup adı olamaz (`deploy/dagitim.json` ayrılmış ad, `check-dagitim` §3 Worker önekini ölçer).
 - **Prova (yayın günü):** belirteçsiz `/ota/55.0/manifest` → 403 `INDIRME_BELIRTEC_YOK`; test kurulumunun `?urun=mobil` belirteciyle → 200 ve gövde `/test/mobil/ota/55.0/manifest` ile aynı; aynı belirteçle `/oncu/mobil/…` → 403 `INDIRME_YOL`; `//ota/55.0/manifest` → 403.

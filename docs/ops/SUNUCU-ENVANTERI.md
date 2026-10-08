@@ -1,6 +1,6 @@
 # Sunucu envanteri — hangi makine ne yapıyor
 
-> Son güncelleme: **2026-09-29** (fabrika satırları SAHINSRV salt-okuma envanterinden). Yeni bir makine, kullanıcı, port ya da zamanlanmış
+> Son güncelleme: **2026-10-08** (`tekserp-indir` kökeni; fabrika satırları 2026-09-29 SAHINSRV salt-okuma envanterinden). Yeni bir makine, kullanıcı, port ya da zamanlanmış
 > iş eklendiğinde **buraya da yazılır** — aksi hâlde "bu port neden açık" sorusunun
 > cevabı kimsede kalmaz.
 
@@ -96,6 +96,7 @@ Kurulum günü ölçüm: **11 saatte 1193 başarısız giriş denemesi**, ilk sa
 | `traefik` | traefik:v3.5 | 192m | TLS sonlandırma, yönlendirme |
 | `docker-socket-proxy` | nginx:alpine | 64m | `docker.sock`u traefik'e **salt-okunur** verir |
 | `tekserp-guncelleme` | nginx:alpine | 64m | Statik yayın (panel + tablet) |
+| `tekserp-indir` | nginx:alpine (salt-okunur kök) | 64m | Tek ortak paketin indirme kökeni `indir.etkiliyazilim.com` (2026-10-08'den beri yayında; kapı önündeki Cloudflare Worker'da) |
 
 Docker günlükleri: `json-file`, 20 MB × 5 dosya (sınırsız büyümeye karşı).
 
@@ -121,10 +122,26 @@ yazmak kırılgandır, yarın oraya konan ikinci bir iç dosya yine sızar.
 ├── html/adnansahin/mobil/              ota/ · apk/
 ├── defter/<musteri>-YAYIN-DEFTERI.tsv  kim/ne zaman/hangi sağlama
 └── nginx/default.conf                  ⚠️ root'a ait — yayinci DEĞİŞTİREMEZ
+/opt/stack/apps/tekserp-indir/          ayrı compose projesi `tekserp-indir` (kaynak deploy/guncelleme-sunucusu/indir/)
+├── html/<grup>/{electron,mobil,backend}/  grup test · oncu · genel — yayinci (1001)
+├── defter/                             yayın defteri, html/ DIŞINDA — yayinci (1001)
+├── docker-compose.yml                  root — yayinci DEĞİŞTİREMEZ
+└── nginx/default.conf                  root — yayinci DEĞİŞTİREMEZ
 
 /srv/tekserp-yedek/<fabrika>/gelen/     fabrika SFTP ile buraya yazar
 /srv/tekserp-arsiv/<fabrika>/           root'a ait — fabrika ERİŞEMEZ
 ```
+
+**`tekserp-indir` (2026-10-08, repo `a92359530`):** yönlendirici `tekserp-indir` (`Host(indir.etkiliyazilim.com)`),
+kendi kenar zinciri `tekserp-indir-cf` (Cloudflare ipallowlist) → `tekserp-indir-hiz` (`Cf-Connecting-Ip` başına
+hız seddi); satıcının ara katmanlarına ve eski `tekserpguncelleme` yönlendiricisine bağlı DEĞİL. Köken yalnız
+Cloudflare'i kabul eder (doğrudan `--resolve …:80.253.255.188` → 403; ölçüldü 2026-10-08). Kök sahipli dizinler,
+`oguzhan`ın etkileşimsiz sudo'su olmadığından tek seferlik yardımcı konteynerle yazıldı
+([`SATICI-KURULUM.md`](SATICI-KURULUM.md) §12 kalıbı). Kapı ve Cloudflare tarafı:
+[`INDIRME-KAPISI-WORKER.md`](INDIRME-KAPISI-WORKER.md) §11.
+**Geri alma:** önce Cloudflare'de DNS kaydı `indir` ve rota kaldırılır (ad çözülmez, kapısız pencere doğmaz);
+sonra VDS'te `cd /opt/stack/apps/tekserp-indir && docker compose down`. Dizin SİLİNMEZ; eski
+`tekserp-guncelleme` ve adnansahin bu adımlardan etkilenmez — her adımdan sonra adnansahin ölçümü koşulur.
 
 ### Zamanlanmış işler
 
