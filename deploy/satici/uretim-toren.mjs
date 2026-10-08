@@ -34,6 +34,10 @@
 //       HAK'lar (`--kuyruk`, VDS'ten `anahtar.js kuyruk-disa-aktar`) → `<dizin>/donemler/<damga>/vds-paketi/` (KÖK YOK;
 //       DONEM-KUNYE.json + SHA256SUMS). Yarım dizinde kurulur, sonda TEK rename; ortada düşerse hiçbir şey kalmaz.
 //       Tek satıcı, tek kök ailesi: kök `kok-*` olmalı (başka aile parola sorulmadan RED); yeni kid'ler `alt|ara|ind-<yıl>-<n>`.
+//       `--paket --yedek-usb=/Volumes/<görüntü> (--paket-yayindakiler=<dizin> | --paket-yayinda-yok) [--paket-iptal=<pkt|ist kid>,…]`
+//       (3.9 D6): PAKET birincil `pkt-<yıl>-<n>` (Mac, paket parolası) + yedek `pkt-<yıl>-<n+1>` (yedek birimi, yedek parolası;
+//       `--istemci` ile ortak) + kök imzalı sertifikaları (395 gün) + dağıtım iptali (`paket-iptal.json`) + yayındaki backend
+//       sürümleri/PG künyelerinin yeniden imzası. `paket-yedek-dogrula --yedek-usb=…`: yedek açılıyor mu (yıllık ara denetim).
 // Çıkış: 0 tamam · 1 hata (hedefe hiçbir şey yazılmadı) · 2 kullanım/önkoşul.
 // =============================================================================
 import { spawn, spawnSync } from "node:child_process";
@@ -65,12 +69,17 @@ const SUNUCU_SIRLARI = ["portal-totp.key", "etkinlestirme-kodu.pepper", "modul-k
 const PAKET_KOMUTU = "Teks-Erp/scripts/build-korumali-imza.ts anahtar-uret --kid={kid} --dizin={dizin} --json";
 const PAROLA_ARG = /^--[^=]*(parola|password|sifre|secret)/i;
 // Parola DOSYASI bayrağı (değeri yol): rol başına bir dosya, ilk satırı parola; değer hiçbir çıktıya basılmaz.
-const PAROLA_DOSYASI_ARG = /^--(kok|ara|istemci|yedek)-parola-dosyasi=/;
+const PAROLA_DOSYASI_ARG = /^--(kok|ara|istemci|paket|yedek)-parola-dosyasi=/;
 const ISTEMCI_BAYRAKLARI = ["istemci", "yedek-usb", "yayindakiler", "yayinda-yok", "istemci-parola-dosyasi", "yedek-parola-dosyasi"];
+// `--paket` (3.9 D6): PAKET birincil + yedek, dağıtım iptali, yayındakilerin yeniden imzası. Yedek birimi ve yedek parolası
+// `--istemci` ile ORTAK (tek disk görüntüsü, tek yedek parolası).
+const PAKET_BAYRAKLARI = ["paket", "paket-yayindakiler", "paket-yayinda-yok", "paket-iptal", "paket-parola-dosyasi"];
+const YEDEK_BAYRAKLARI = ["yedek-usb", "yedek-parola-dosyasi"];
 const KOMUTLAR = {
   toren: ["dizin", "yil", "alt-gun", "ind-gun", "moduller", "usb", "etiket", "paket-komutu"],
-  donem: ["dizin", "etiket", "kuyruk", "iptal", "neden", "ara-siniflar", "yil", "kok", "kok-parola-dosyasi", "ara-parola-dosyasi", ...ISTEMCI_BAYRAKLARI],
+  donem: ["dizin", "etiket", "kuyruk", "iptal", "neden", "ara-siniflar", "yil", "kok", "kok-parola-dosyasi", "ara-parola-dosyasi", ...ISTEMCI_BAYRAKLARI, ...PAKET_BAYRAKLARI],
   "istemci-yedek-dogrula": ["dizin", "yedek-usb", "yedek-parola-dosyasi"],
+  "paket-yedek-dogrula": ["dizin", "yedek-usb", "yedek-parola-dosyasi"],
   "usb-kopyala": ["dizin", "usb"],
   dogrula: ["dizin"],
 };
@@ -92,7 +101,7 @@ function argumanlar(argv) {
   const bayraklar = new Map();
   for (const a0 of kalan) {
     // Değersiz anahtar bayraklar (`--istemci`, `--yayinda-yok`) `=1` sayılır.
-    const a = /^--(istemci|yayinda-yok)$/.test(a0) ? `${a0}=1` : a0;
+    const a = /^--(istemci|yayinda-yok|paket|paket-yayinda-yok)$/.test(a0) ? `${a0}=1` : a0;
     const m = /^--([a-z-]+)=(.*)$/.exec(a);
     if (!m || !KOMUTLAR[komut].includes(m[1])) throw new TorenHatasi(`Tanınmayan argüman: ${a.split("=")[0]} (${komut}: ${KOMUTLAR[komut].map((b) => `--${b}`).join(" ")})`, 2);
     bayraklar.set(m[1], m[2]);
@@ -260,18 +269,18 @@ function altOrtam() {
 }
 
 /** `node --import tsx <betik>`; parolalar yalnız stdin'e, satır satır. Yazılan birleşik tampon boşalınca sıfırlanır. */
-function kos(cwd, betik, argv, parolalar = []) {
-  return kosNode(cwd, ["--import", "tsx", betik, ...argv], parolalar);
+function kos(cwd, betik, argv, parolalar = [], sureMs = ALT_SURE_MS) {
+  return kosNode(cwd, ["--import", "tsx", betik, ...argv], parolalar, false, sureMs);
 }
 
 /** `terminal`: stdin ve stderr devralınır (alt süreç parolasını KENDİSİ sorar); stdout her durumda yakalanır. */
-function kosNode(cwd, nodeArgv, parolalar = [], terminal = false) {
+function kosNode(cwd, nodeArgv, parolalar = [], terminal = false, sureMs = ALT_SURE_MS) {
   return new Promise((resolve, reject) => {
     const cocuk = spawn(process.execPath, nodeArgv, { cwd, env: altOrtam(), stdio: terminal ? ["inherit", "pipe", "inherit"] : ["pipe", "pipe", "pipe"] });
     const out = [];
     const err = [];
     // Terminali devralan alt süreçte insan yazıyor: süre sınırı yok (Ctrl+C her an keser).
-    const zaman = terminal ? undefined : setTimeout(() => cocuk.kill("SIGKILL"), ALT_SURE_MS);
+    const zaman = terminal ? undefined : setTimeout(() => cocuk.kill("SIGKILL"), sureMs);
     cocuk.stdout.on("data", (c) => out.push(c));
     cocuk.stderr?.on("data", (c) => err.push(c));
     cocuk.on("error", (e) => {
@@ -321,8 +330,8 @@ function hataOzeti(r, parolalar) {
   return secilen.join(" | ").slice(0, 600);
 }
 
-async function kosVeDenetle(ad, cwd, betik, argv, parolalar, gizliler) {
-  const r = await kos(cwd, betik, argv, parolalar);
+async function kosVeDenetle(ad, cwd, betik, argv, parolalar, gizliler, sureMs = ALT_SURE_MS) {
+  const r = await kos(cwd, betik, argv, parolalar, sureMs);
   if (r.status !== 0) throw new TorenHatasi(`${ad} başarısız (çıkış ${r.status}): ${hataOzeti(r, gizliler)}`);
   return r;
 }
@@ -866,6 +875,12 @@ function dogrula(hedef) {
     const bulunan = yedekIziTara([hedef], jsonOku(izYolu));
     yaz(bulunan.length === 0, bulunan.length === 0 ? `ISTEMCI yedeği (${n}) Mac'te YOK` : `ISTEMCI YEDEĞİ Mac'te: ${bulunan.join(", ")} — sil (rm -P); yedek yalnız USB'de durur`);
   }
+  for (const n of lstatYa(donemlerD)?.isDirectory() ? fs.readdirSync(donemlerD).filter((x) => !x.includes(".yarim-")) : []) {
+    const izYolu = path.join(donemlerD, n, "paket", YEDEK_IZI);
+    if (!fs.existsSync(izYolu)) continue;
+    const bulunan = yedekIziTara([hedef], jsonOku(izYolu));
+    yaz(bulunan.length === 0, bulunan.length === 0 ? `PAKET yedeği (${n}) Mac'te YOK` : `PAKET YEDEĞİ Mac'te: ${bulunan.join(", ")} — sil (rm -P); yedek yalnız yedek biriminde durur`);
+  }
   yaz(hata === 0, `${Object.keys(k.ozetler ?? {}).length} dosya: izinler + özetler künyeyle aynı (${k.kok.kid} · ${k.paket.kid})`);
   if (hata > 0) throw new TorenHatasi(`${hata} uyuşmazlık`);
 }
@@ -1047,7 +1062,7 @@ function yedekIziTara(kokler, iz) {
       if (e.isDirectory()) gez(p);
       else if (e.isFile()) {
         try {
-          if (e.name === `${iz.kid}.panel.json` || (fs.statSync(p).size <= 1 << 20 && iz.ozetler.includes(sha256(p)))) bulunan.push(p);
+          if ((iz.adlar ?? [`${iz.kid}.panel.json`]).includes(e.name) || (fs.statSync(p).size <= 1 << 20 && iz.ozetler.includes(sha256(p)))) bulunan.push(p);
         } catch (h) {
           if (!["EACCES", "EPERM", "ENOENT"].includes(h.code)) throw h;
         }
@@ -1154,11 +1169,219 @@ async function istemciAdimlari({ c, hedef, kokKid, K, kokDosya, kokParola, istem
   return { kunye, U, usbKlasor, eskiYedekler: fs.readdirSync(usbKlasor).filter((n) => !n.includes(".yarim-") && n !== damga).sort() };
 }
 
+// ---------------------------------------------------------------- dönem töreni --paket (PAKET-ANAHTARI-KOK-ALTINDA §5)
+// Birincil PAKET anahtarı (`pkt-<yıl>-<n>`) Mac'te (paket parolası), yedek (`pkt-<yıl>-<n+1>`) DOĞRUDAN yedek birimine
+// (yedek parolası; ISTEMCI ile aynı birim ve parola) — ISTEMCI I7 emsali. Sertifikaları kök basar (395 gün); kök parolası
+// PAKET aracına GİTMEZ (yalnız `anahtar.ts`e). VDS paketine yalnız açık sertifikalar + dağıtım iptali girer. Yayındaki
+// backend sürümleri ve PG künyeleri birincil anahtarla yeniden imzalanır (sürüm aynı; kurulu fabrika yeniden kurmaz).
+const PAKET_ARACI = "scripts/build-korumali-imza.ts";
+const BILDIRIM_ARACI = "scripts/backend-bildirim.ts";
+const USB_PAKET_KLASORU = "tekserp-paket-yedek";
+const PAKET_GUN = 395;
+const PAKET_YEDEK_KUNYE = "tekserp-paket-yedek";
+// Yeniden imza büyük zip'i iki kez açar + bir kez yazar: alt süreç sınırı ayrı.
+const YENIDEN_IMZA_SURE_MS = 15 * 60_000;
+
+/**
+ * `--paket-yayindakiler=<dizin>` (yayından indirilmiş kopyalar): `<grup>/backend/<sürüm>/{surum-zincir.json|surum.json, <zip>}`
+ * · `<grup>/backend/pg/<sürüm>-<derleme>/{pg-zincir.json|pg.json[, <zip>]}`. `panel/` · `ota/` (ISTEMCI) yok sayılır:
+ * iki bayrağa AYNI dizin verilebilir. Zincir takımı varsa o, yoksa eski takım yeniden imzalanır.
+ */
+function paketYayindakileriTopla(dizin, gruplar) {
+  const kok = evYolu(dizin);
+  if (!lstatYa(kok)?.isDirectory()) throw new TorenHatasi(`--paket-yayindakiler dizin değil: ${kok}`, 2);
+  const ilk = (d, adlar) => adlar.map((a) => path.join(d, a)).find((f) => fs.existsSync(f));
+  const out = [];
+  for (const g of fs.readdirSync(kok).sort()) {
+    if (!gruplar.includes(g)) throw new TorenHatasi(`--paket-yayindakiler: tanınmayan grup ${g} (deploy/dagitim.json: ${gruplar.join(", ")})`, 2);
+    const b = path.join(kok, g, "backend");
+    if (!lstatYa(b)?.isDirectory()) continue;
+    for (const s of fs.readdirSync(b).sort()) {
+      const d = path.join(b, s);
+      if (s === "pg") {
+        for (const pv of fs.readdirSync(d).sort()) {
+          if (!/^[0-9][0-9.]{0,15}-[0-9]{1,6}$/.test(pv)) throw new TorenHatasi(`--paket-yayindakiler: ${g}/backend/pg/${pv} <sürüm>-<derleme> biçiminde değil`, 2);
+          const pd = path.join(d, pv);
+          const kunye = ilk(pd, ["pg-zincir.json", "pg.json"]);
+          if (!kunye) throw new TorenHatasi(`--paket-yayindakiler: ${g}/backend/pg/${pv}/pg-zincir.json ya da pg.json yok`, 2);
+          const zipler = fs.readdirSync(pd).filter((f) => f.endsWith(".zip"));
+          out.push({ grup: g, tur: "pg", surum: pv, kunye, ...(zipler.length === 1 ? { zip: path.join(pd, zipler[0]) } : {}) });
+        }
+        continue;
+      }
+      if (!/^[0-9][0-9A-Za-z.+-]{0,40}$/.test(s)) throw new TorenHatasi(`--paket-yayindakiler: ${g}/backend/${s} sürüm biçiminde değil`, 2);
+      const kunye = ilk(d, ["surum-zincir.json", "surum.json"]);
+      if (!kunye) throw new TorenHatasi(`--paket-yayindakiler: ${g}/backend/${s}/surum-zincir.json ya da surum.json yok`, 2);
+      let ad;
+      try {
+        ad = jwsYuku(jsonOku(kunye).bildirim).paket?.ad;
+      } catch {
+        ad = undefined;
+      }
+      if (typeof ad !== "string" || !/^[A-Za-z0-9][A-Za-z0-9._-]{0,115}\.zip$/.test(ad) || !fs.existsSync(path.join(d, ad))) {
+        throw new TorenHatasi(`--paket-yayindakiler: ${g}/backend/${s}: bildirimin paketi (${String(ad)}) yanında yok — zip'i de indir`, 2);
+      }
+      out.push({ grup: g, tur: "backend", surum: s, kunye, zip: path.join(d, ad) });
+    }
+  }
+  if (out.length === 0) throw new TorenHatasi("--paket-yayindakiler: hiçbir grupta backend/<sürüm> ya da backend/pg/<sürüm>-<derleme> yok — yayında yoksa --paket-yayinda-yok", 2);
+  return out;
+}
+
+/** Önceki dönem paketlerinde `<alt>/` altındaki dosyalar (yarım dizinler hariç). */
+function donemDosyalari(hedef, alt) {
+  const donemler = path.join(hedef, "donemler");
+  if (!lstatYa(donemler)?.isDirectory()) return [];
+  return fs
+    .readdirSync(donemler)
+    .filter((n) => !n.includes(".yarim-"))
+    .sort()
+    .flatMap((n) => {
+      const d = path.join(donemler, n, "vds-paketi", alt);
+      return lstatYa(d)?.isDirectory() ? fs.readdirSync(d).map((ad) => ({ ad, yol: path.join(d, ad) })) : [];
+    });
+}
+
+/** Bu yılın sıradaki PAKET numarası (önceki dönemlerin `paket/pkt-<yıl>-<n>.sertifika.json`larından; yedek de sayılır). */
+function paketNumarasi(hedef, yil) {
+  let enBuyuk = 0;
+  for (const { ad } of donemDosyalari(hedef, "paket")) {
+    const m = /^pkt-(\d{4})-(\d{1,3})\.sertifika\.json$/.exec(ad);
+    if (m && Number(m[1]) === yil) enBuyuk = Math.max(enBuyuk, Number(m[2]));
+  }
+  return enBuyuk + 1;
+}
+
+/** Önceki dönemlerin en yüksek sıralı dağıtım iptali (`paket/paket-iptal.json`) — doğrulamayı `paket-iptal-uret --onceki` yapar. */
+function oncekiPaketIptal(hedef) {
+  let enIyi = null;
+  for (const { ad, yol } of donemDosyalari(hedef, "paket")) {
+    if (ad !== "paket-iptal.json") continue;
+    const sira = Number(jsonOku(yol).sira);
+    if (Number.isInteger(sira) && (!enIyi || sira > enIyi.sira)) enIyi = { dosya: yol, sira };
+  }
+  return enIyi;
+}
+
+/** `--paket-iptal=<kid>`: PAKET (`pkt-*`) ya da ISTEMCI (`ist-*`) sertifikası önceki dönem paketlerinde aranır; yoksa RED. */
+function iptalSertifikasi(hedef, kid) {
+  if (!/^(pkt|ist)-\d{4}-\d{1,3}$/.test(kid)) throw new TorenHatasi(`--paket-iptal: kid pkt-<yıl>-<n> ya da ist-<yıl>-<n> olmalı: ${kid}`, 2);
+  const bulunan = [...donemDosyalari(hedef, "paket"), ...donemDosyalari(hedef, "istemci")].find((f) => f.ad === `${kid}.sertifika.json`);
+  if (!bulunan) throw new TorenHatasi(`--paket-iptal: ${kid} sertifikası önceki dönem paketlerinde yok`, 2);
+  return bulunan.yol;
+}
+
+/** `--paket` önkoşulları (parola SORULMADAN): araç, yedek birimi, yayındakiler beyanı, iptal edilecek sertifikalar. */
+function paketOnkosullari(bayraklar, hedef, worker, yil) {
+  if (!fs.existsSync(path.join(TEKS, "node_modules", "tsx", "package.json"))) throw new TorenHatasi("Önkoşul: Teks-Erp bağımlılıkları yok — (cd Teks-Erp && npm ci)", 2);
+  if (!bayraklar.get("yedek-usb")) throw new TorenHatasi("--paket: --yedek-usb=/Volumes/<yedek görüntüsü> zorunlu (yedek PAKET anahtarı doğrudan yedek birimine yazılır)", 2);
+  const usb = usbYedekDenetle(bayraklar.get("yedek-usb"), hedef);
+  const yedekDosya = bayraklar.get("yedek-parola-dosyasi");
+  if (yedekDosya !== undefined && fs.existsSync(evYolu(yedekDosya)) && fs.statSync(evYolu(yedekDosya)).dev === fs.statSync(usb).dev) {
+    throw new TorenHatasi("--yedek-parola-dosyasi yedek birimiyle AYNI birimde — parola yedeğin yanında durmaz", 2);
+  }
+  const yd = bayraklar.has("paket-yayindakiler");
+  if (yd === bayraklar.has("paket-yayinda-yok")) throw new TorenHatasi("--paket: --paket-yayindakiler=<dizin> ya da --paket-yayinda-yok — tam olarak biri (yayındaki backend sürümleri ve PG künyeleri yeniden imzalanır, §5 adım 5)", 2);
+  const yayindakiler = yd ? paketYayindakileriTopla(bayraklar.get("paket-yayindakiler"), worker.kanallar) : null;
+  const iptalKidleri = (bayraklar.get("paket-iptal") ?? "").split(",").map((x) => x.trim()).filter(Boolean);
+  const iptalDosyalari = iptalKidleri.map((k) => iptalSertifikasi(hedef, k));
+  const onceki = oncekiPaketIptal(hedef);
+  const n = paketNumarasi(hedef, yil);
+  if (lstatYa(path.join(usb, USB_PAKET_KLASORU)) && !lstatYa(path.join(usb, USB_PAKET_KLASORU)).isDirectory()) throw new TorenHatasi(`${path.join(usb, USB_PAKET_KLASORU)} dizin değil`, 2);
+  return { usb, yayindakiler, iptalKidleri, iptalDosyalari, onceki, iptalYeni: !onceki || iptalDosyalari.length > 0, kid: { birincil: `pkt-${yil}-${n}`, yedek: `pkt-${yil}-${n + 1}` } };
+}
+
+/** Yedek açılış ölçümü: yedek parolasıyla PAKET aracı yedek anahtarı AÇAR, açık yarı künyedekiyle aynı. */
+async function paketYedekOlc({ U, yedek, yedekParola, gizli }) {
+  const r = await kos(TEKS, PAKET_ARACI, ["anahtar-ac", `--anahtar=${path.join(U, `${yedek.kid}.paket.json`)}`, "--json"], [yedekParola]);
+  if (r.status !== 0) throw new TorenHatasi(`YEDEK PAKET anahtarı AÇILAMADI (${yedek.kid}): ${hataOzeti(r, gizli)}`);
+  const ac = sonJson(r);
+  if (ac.kid !== yedek.kid || ac.x !== yedek.x) throw new TorenHatasi(`YEDEK PAKET anahtarı künyedekiyle uyuşmuyor (${ac.kid} x=${ac.x})`);
+}
+
+async function paketAdimlari({ c, hedef, kokKid, K, kokDosya, kokParola, paketParola, yedekParola, yarim, P, adim, n0, damga, usbRef, gizli, neden }) {
+  const M = path.join(yarim, "paket");
+  const VP = path.join(P, "paket");
+  ozelDizin(M);
+  ozelDizin(VP);
+  const usbKlasor = path.join(c.usb, USB_PAKET_KLASORU);
+  if (!lstatYa(usbKlasor)) fs.mkdirSync(usbKlasor, { mode: 0o700 });
+  yolDenetle(usbKlasor);
+  const U = path.join(usbKlasor, `${damga}.yarim-${process.pid}`);
+  ozelDizin(U);
+  usbRef.paketYarim = U;
+  const arac = (ad, argv, p) => kosVeDenetle(ad, TEKS, PAKET_ARACI, argv, p, gizli);
+  const kokArg = `--kok-dosyasi=${kokDosya}`;
+  const sonuc = {};
+  const roller = [
+    { rol: "birincil", kid: c.kid.birincil, dizin: M, parola: paketParola, n: n0, yer: "Mac, paket parolası" },
+    { rol: "yedek", kid: c.kid.yedek, dizin: U, parola: yedekParola, n: n0 + 1, yer: `yedek birimi ${U}, yedek parolası` },
+  ];
+  for (const r of roller) {
+    adim(r.n, `PAKET ${r.rol} ${r.kid} + kök imzalı sertifika (${PAKET_GUN} gün; ${r.yer})`);
+    const k = sonJson(await arac(`PAKET ${r.rol} anahtarı`, ["anahtar-uret", `--kid=${r.kid}`, `--dizin=${r.dizin}`, "--json"], [r.parola, r.parola]));
+    if (k.kid !== r.kid || path.dirname(k.dosya) !== r.dizin || k.parolali !== true) throw new TorenHatasi(`PAKET ${r.rol} anahtarı beklenen yerde/parolalı değil (${k.dosya})`);
+    const sertVds = path.join(VP, `${r.kid}.sertifika.json`);
+    await kosVeDenetle(`PAKET ${r.rol} sertifikası`, SATICI, "scripts/anahtar.ts",
+      ["paket-sertifika-uret", `--x=${k.x}`, `--kid=${r.kid}`, `--kok=${kokKid}`, `--kok-dizin=${K}`, `--gun=${PAKET_GUN}`, `--cikti=${sertVds}`], [kokParola], gizli);
+    await arac(`PAKET ${r.rol} sertifika-ekle`, ["sertifika-ekle", `--anahtar=${k.dosya}`, `--sertifika=${sertVds}`, kokArg], []);
+    const sy = jwsYuku(jsonOku(sertVds).sertifika);
+    sonuc[r.rol] = { kid: r.kid, x: k.x, sertifikaId: sy.sertifikaId, baslangic: sy.baslangic, bitis: sy.bitis, _anahtar: k.dosya };
+  }
+
+  adim(n0 + 2, c.iptalYeni ? `Dağıtım iptali (tekserp-paketiptal, yalnız kök)${c.iptalKidleri.length ? ` — iptal: ${c.iptalKidleri.join(", ")}` : ""}` : `Dağıtım iptali: önceki (sıra ${c.onceki.sira}) aynen`);
+  const iptalYolu = path.join(VP, "paket-iptal.json");
+  if (c.iptalYeni) {
+    const argv = ["paket-iptal-uret", `--kok=${kokKid}`, `--kok-dizin=${K}`, `--cikti=${iptalYolu}`];
+    if (c.onceki) argv.push(`--onceki=${c.onceki.dosya}`);
+    if (c.iptalDosyalari.length) argv.push(`--iptal=${c.iptalDosyalari.join(",")}`, `--neden=${neden}`);
+    await kosVeDenetle("dağıtım iptali", SATICI, "scripts/anahtar.ts", argv, [kokParola], gizli);
+  } else {
+    fs.copyFileSync(c.onceki.dosya, iptalYolu, fs.constants.COPYFILE_EXCL);
+  }
+  const iptal = jsonOku(iptalYolu);
+  const iptalYuku = jwsYuku(iptal.belge);
+
+  adim(n0 + 3, c.yayindakiler ? `Yayındaki ${c.yayindakiler.length} backend sürümü/PG künyesi ${c.kid.birincil} ile yeniden imzalanıyor (sürüm aynı) · yedek ölçümü` : "Yeniden imza: yayında backend/PG YOK (beyan --paket-yayinda-yok) · yedek ölçümü");
+  const yeniden = [];
+  for (const y of c.yayindakiler ?? []) {
+    let d = path.join(M, "yeniden-imza");
+    for (const parca of ["", y.grup, "backend", ...(y.tur === "pg" ? ["pg"] : []), y.surum]) {
+      if (parca) d = path.join(d, parca);
+      if (!lstatYa(d)) ozelDizin(d);
+    }
+    const ortak = [`--anahtar=${sonuc.birincil._anahtar}`, `--cikti=${d}`, `--paket-iptal=${iptalYolu}`, kokArg];
+    const argv = y.tur === "backend"
+      ? ["yeniden-imzala", `--surum-kunye=${y.kunye}`, `--zip=${y.zip}`, `--kanal=${y.grup}`, ...ortak]
+      : ["pg-yeniden-imzala", `--kunye=${y.kunye}`, ...(y.zip ? [`--zip=${y.zip}`] : []), ...ortak];
+    await kosVeDenetle(`yeniden imza (${y.grup} ${y.tur} ${y.surum})`, TEKS, BILDIRIM_ARACI, argv, [paketParola], gizli, YENIDEN_IMZA_SURE_MS);
+    const so = jsonOku(path.join(d, "sonuc.json"));
+    yeniden.push({ grup: y.grup, tur: y.tur, surum: y.surum, ...(y.tur === "backend" ? { eskiKid: so.eskiKid, paket: so.paket?.yeni?.ad } : {}), dizin: path.relative(yarim, d) });
+  }
+
+  await paketYedekOlc({ U, yedek: sonuc.yedek, yedekParola, gizli });
+  const iz = { kid: sonuc.yedek.kid, adlar: [`${sonuc.yedek.kid}.paket.json`], ozetler: [sha256(sonuc.yedek._anahtar)] };
+  const macte = yedekIziTara([hedef, os.tmpdir()], iz);
+  if (macte.length) throw new TorenHatasi(`YEDEK PAKET ANAHTARI Mac'te bulundu: ${macte.join(", ")} — yedek yalnız yedek biriminde durur; tören durduruldu`);
+  const kunye = {
+    birincil: { ...sonuc.birincil, konum: "Mac" },
+    yedek: { ...sonuc.yedek, konum: "yedek birimi" },
+    iptal: { sira: iptalYuku.sira, satir: iptalYuku.iptaller.length, kidler: iptalYuku.iptaller.map((e) => e.kid) },
+    yenidenImza: c.yayindakiler ? yeniden : "yayında yok (beyan)",
+  };
+  for (const r of ["birincil", "yedek"]) delete kunye[r]._anahtar;
+  dosyaYaz(path.join(U, YEDEK_KUNYE), `${JSON.stringify({ v: 1, tur: PAKET_YEDEK_KUNYE, donem: damga, kok: kokKid, yedek: kunye.yedek }, null, 2)}\n`);
+  dosyaYaz(path.join(M, YEDEK_IZI), `${JSON.stringify({ v: 1, tur: "tekserp-paket-yedek-izi", ...iz }, null, 2)}\n`);
+  for (const dd of ["", ...dizinler(U)]) fs.chmodSync(path.join(U, dd), 0o700);
+  for (const f of dosyalar(U)) fs.chmodSync(path.join(U, f), 0o600);
+  return { kunye, iptalBelge: iptal.belge, U, usbKlasor, eskiYedekler: fs.readdirSync(usbKlasor).filter((n) => !n.includes(".yarim-") && n !== damga).sort() };
+}
+
 /** VDS paketinde özel yarı izi: PEM özel anahtar, panel anahtar dosyası türü. */
 function ozelSizdiMi(paket) {
   return dosyalar(paket).filter((f) => {
     const m = fs.readFileSync(path.join(paket, f), "utf8");
-    return /PRIVATE KEY/.test(m) || m.includes("tekserp-panel-anahtar");
+    return /PRIVATE KEY/.test(m) || m.includes("tekserp-panel-anahtar") || m.includes("tekserp-paket-anahtar");
   });
 }
 
@@ -1206,13 +1429,19 @@ async function donem(bayraklar) {
   const yarimlar = fs.readdirSync(donemler).filter((n) => n.includes(".yarim-"));
   if (yarimlar.length > 0) throw new TorenHatasi(`Yarım kalmış dönem dizini var: ${path.join(donemler, yarimlar[0])} — içinde düz ALT/İNDİRME olabilir; sil ve yeniden başla`, 2);
   const istemci = bayraklar.has("istemci");
-  if (!istemci && ISTEMCI_BAYRAKLARI.some((b) => b !== "istemci" && bayraklar.has(b))) throw new TorenHatasi("--yedek-usb/--yayindakiler/--yayinda-yok/istemci·yedek parola dosyası yalnız --istemci ile", 2);
+  const paketVar = bayraklar.has("paket");
+  if (!istemci && ISTEMCI_BAYRAKLARI.some((b) => b !== "istemci" && !YEDEK_BAYRAKLARI.includes(b) && bayraklar.has(b))) throw new TorenHatasi("--yayindakiler/--yayinda-yok/istemci parola dosyası yalnız --istemci ile", 2);
+  if (!paketVar && PAKET_BAYRAKLARI.some((b) => b !== "paket" && bayraklar.has(b))) throw new TorenHatasi("--paket-yayindakiler/--paket-yayinda-yok/--paket-iptal/paket parola dosyası yalnız --paket ile", 2);
+  if (!istemci && !paketVar && YEDEK_BAYRAKLARI.some((b) => bayraklar.has(b))) throw new TorenHatasi("--yedek-usb/yedek parola dosyası yalnız --istemci ya da --paket ile", 2);
   const ic = istemci ? istemciOnkosullari(bayraklar, hedef, K, worker, yil) : null;
+  const pc = paketVar ? paketOnkosullari(bayraklar, hedef, worker, yil) : null;
   const damga = new Date().toISOString().replace(/[-:]/g, "").replace(/\.\d+Z$/, "Z");
   const son = path.join(donemler, damga);
   if (lstatYa(son)) throw new TorenHatasi(`Dönem dizini zaten var: ${son}`, 2);
   if (ic && lstatYa(path.join(ic.usb, USB_YEDEK_KLASORU, damga))) throw new TorenHatasi(`USB'de bu dönemin yedeği zaten var: ${path.join(ic.usb, USB_YEDEK_KLASORU, damga)}`, 2);
-  const toplam = istemci ? 12 : 8;
+  if (pc && lstatYa(path.join(pc.usb, USB_PAKET_KLASORU, damga))) throw new TorenHatasi(`Yedek biriminde bu dönemin PAKET yedeği zaten var: ${path.join(pc.usb, USB_PAKET_KLASORU, damga)}`, 2);
+  const paketIlkAdim = istemci ? 12 : 8;
+  const toplam = paketIlkAdim + (paketVar ? 4 : 0);
   const adim = (n, baslik) => process.stdout.write(`[${n}/${toplam}] ${baslik}\n`);
 
   console.log("TeksERP satıcısı — dönem töreni (G4)");
@@ -1226,17 +1455,21 @@ async function donem(bayraklar) {
     console.log(`  istemci: ${ic.kid.birincil} (Mac) · yedek ${ic.kid.yedek} (USB ${ic.usb}) · OTA yaprakları ${ISTEMCI_GUN} gün · OTA kökü ${OTA.parmakIzi(ic.otaKokPem).slice(0, 23)}…`);
     console.log(`  yeniden: ${ic.yayindakiler ? ic.yayindakiler.map((y) => `${y.grup}/${y.tur}${y.rv ? ` ${y.rv}` : ""}`).join(", ") : "yayında yok (beyan)"}`);
   }
+  if (pc) {
+    console.log(`  paket  : ${pc.kid.birincil} (Mac) · yedek ${pc.kid.yedek} (yedek birimi ${pc.usb}) · ${PAKET_GUN} gün · dağıtım iptali ${pc.iptalYeni ? `YENİ, sıra ${(pc.onceki?.sira ?? 0) + 1}${pc.iptalKidleri.length ? ` — iptal: ${pc.iptalKidleri.join(", ")}` : ""}` : `önceki aynen (sıra ${pc.onceki.sira})`}`);
+    console.log(`  y.imza : ${pc.yayindakiler ? pc.yayindakiler.map((y) => `${y.grup}/${y.tur} ${y.surum}`).join(", ") : "yayında yok (beyan)"}`);
+  }
   console.log(`  paket  : ${son}/vds-paketi (KÖK GİRMEZ)\n`);
   adim(1, "Önkoşullar ✓");
 
   const parolalar = [];
   const yarim = `${son}.yarim-${process.pid}`;
   let yarimBizim = false;
-  const usbRef = { yarim: null, son: null };
+  const usbRef = { yarim: null, son: null, paketYarim: null, paketSon: null };
   const temizlik = () => {
     for (const p of parolalar) p.fill(0);
     if (yarimBizim) fs.rmSync(yarim, { recursive: true, force: true });
-    for (const u of [usbRef.yarim, usbRef.son]) if (u) fs.rmSync(u, { recursive: true, force: true });
+    for (const u of [usbRef.yarim, usbRef.son, usbRef.paketYarim, usbRef.paketSon]) if (u) fs.rmSync(u, { recursive: true, force: true });
   };
   const kesme = () => {
     temizlik();
@@ -1257,6 +1490,7 @@ async function donem(bayraklar) {
     }
     let istemciParola = null;
     let yedekParola = null;
+    let paketParola = null;
     if (ic) {
       process.stdout.write("      YENİ istemci parolası (Mac'teki birincil ISTEMCI + OTA yaprağı; kökten ve aradan FARKLI → parola yöneticisine)\n");
       istemciParola = await yeniParolaAl(bayraklar, "istemci", "İstemci parolası");
@@ -1266,6 +1500,20 @@ async function donem(bayraklar) {
       parolalar.push(yedekParola);
       const cift = [[istemciParola, kokParola], [istemciParola, araParola], [yedekParola, kokParola], [yedekParola, araParola], [yedekParola, istemciParola]];
       if (cift.some(([a, b]) => ayniParola(a, b))) throw new TorenHatasi("İstemci ve yedek parolaları kök, ara ve birbirinden FARKLI olmalı — hiçbir anahtar üretilmedi", 2);
+    }
+    if (pc) {
+      process.stdout.write("      YENİ paket parolası (Mac'teki birincil PAKET anahtarı; her backend imzasında yazılır → parola yöneticisine)\n");
+      paketParola = await yeniParolaAl(bayraklar, "paket", "Paket parolası");
+      parolalar.push(paketParola);
+      if (!yedekParola) {
+        process.stdout.write("      YENİ yedek parolası (yedek birimindeki yedek anahtar; YALNIZ parola yöneticisinde — Mac'te durmaz)\n");
+        yedekParola = await yeniParolaAl(bayraklar, "yedek", "Yedek parolası");
+        parolalar.push(yedekParola);
+      }
+      const digerleri = [kokParola, araParola, yedekParola, ...(istemciParola ? [istemciParola] : [])];
+      if (digerleri.some((d) => ayniParola(paketParola, d)) || ayniParola(yedekParola, kokParola) || ayniParola(yedekParola, araParola)) {
+        throw new TorenHatasi("Paket ve yedek parolaları kök, ara, istemci ve birbirinden FARKLI olmalı — hiçbir anahtar üretilmedi", 2);
+      }
     }
 
     ozelDizin(yarim);
@@ -1298,6 +1546,9 @@ async function donem(bayraklar) {
     const istemciSonucu = ic
       ? await istemciAdimlari({ c: ic, hedef, kokKid, K, kokDosya, kokParola, istemciParola, yedekParola, yarim, P, adim, damga, usbRef, gizli: parolalar })
       : null;
+    const paketSonucu = pc
+      ? await paketAdimlari({ c: pc, hedef, kokKid, K, kokDosya, kokParola, paketParola, yedekParola, yarim, P, adim, n0: paketIlkAdim, damga, usbRef, gizli: parolalar, neden })
+      : null;
     adim(toplam, kuyruk ? `Kök imzası bekleyen ${kuyruk.adet} HAK · paket · künye · yerine koy` : "Paket · künye · yerine koy");
     let haklar = [];
     if (kuyruk) {
@@ -1306,7 +1557,7 @@ async function donem(bayraklar) {
       haklar = jsonOku(imzaliYolu).haklar;
     }
     const iptal = jsonOku(iptalYolu);
-    dosyaYaz(path.join(P, "ice-aktar.json"), `${JSON.stringify({ v: 1, tur: "tekserp-donem-ice-aktar", iptal: iptal.belge, haklar })}\n`);
+    dosyaYaz(path.join(P, "ice-aktar.json"), `${JSON.stringify({ v: 1, tur: "tekserp-donem-ice-aktar", iptal: iptal.belge, ...(paketSonucu ? { paketIptal: paketSonucu.iptalBelge } : {}), haklar })}\n`);
     const yeniKidler = new Set(Object.values(kid));
     const emekliye = [
       ...new Set(
@@ -1321,7 +1572,7 @@ async function donem(bayraklar) {
     if (sizinti.length > 0) throw new TorenHatasi(`Dönem paketinde KÖK izi: ${sizinti.join(", ")} — paket yazılmadı`);
     const ozel = ozelSizdiMi(P);
     if (ozel.length > 0) throw new TorenHatasi(`Dönem paketinde ÖZEL ANAHTAR izi: ${ozel.join(", ")} — VDS'e yalnız açık sertifikalar; paket yazılmadı`);
-    const kunye = donemKunyesi({ P, A, kid, kokDosya, kay, iptal, haklar, emekliye, kuyruk, worker, istemci: istemciSonucu?.kunye ?? null });
+    const kunye = donemKunyesi({ P, A, kid, kokDosya, kay, iptal, haklar, emekliye, kuyruk, worker, istemci: istemciSonucu?.kunye ?? null, paket: paketSonucu?.kunye ?? null });
     dosyaYaz(path.join(P, DONEM_KUNYE), `${JSON.stringify(kunye, null, 2)}\n`);
     const ozetSatirlari = dosyalar(P).map((f) => `${sha256(path.join(P, f))}  ${f}`);
     dosyaYaz(path.join(P, "SHA256SUMS"), `${ozetSatirlari.join("\n")}\n`);
@@ -1336,15 +1587,28 @@ async function donem(bayraklar) {
       usbRef.yarim = null;
       usbRef.son = usbSon;
     }
+    if (paketSonucu) {
+      const pSon = path.join(paketSonucu.usbKlasor, damga);
+      if (lstatYa(pSon) !== null) throw new TorenHatasi(`PAKET yedek dizini tören sürerken doğdu: ${pSon}`);
+      fs.renameSync(paketSonucu.U, pSon);
+      usbRef.paketYarim = null;
+      usbRef.paketSon = pSon;
+    }
     fs.renameSync(yarim, son);
     yarimBizim = false;
     usbRef.son = null;
+    usbRef.paketSon = null;
     const silinen = [];
     for (const n of istemciSonucu?.eskiYedekler ?? []) {
       fs.rmSync(path.join(istemciSonucu.usbKlasor, n), { recursive: true, force: true });
       silinen.push(n);
     }
-    donemOzetiBas(son, kunye, { usb: istemciSonucu ? path.join(istemciSonucu.usbKlasor, damga) : null, silinen, bayraklar });
+    const paketSilinen = [];
+    for (const n of paketSonucu?.eskiYedekler ?? []) {
+      fs.rmSync(path.join(paketSonucu.usbKlasor, n), { recursive: true, force: true });
+      paketSilinen.push(n);
+    }
+    donemOzetiBas(son, kunye, { usb: istemciSonucu ? path.join(istemciSonucu.usbKlasor, damga) : null, silinen, bayraklar, paketUsb: paketSonucu ? path.join(paketSonucu.usbKlasor, damga) : null, paketSilinen });
   } catch (e) {
     const yarimVardi = yarimBizim;
     temizlik();
@@ -1357,7 +1621,7 @@ async function donem(bayraklar) {
   }
 }
 
-function donemKunyesi({ P, A, kid, kokDosya, kay, iptal, haklar, emekliye, kuyruk, worker, istemci = null }) {
+function donemKunyesi({ P, A, kid, kokDosya, kay, iptal, haklar, emekliye, kuyruk, worker, istemci = null, paket = null }) {
   const kok = jsonOku(kokDosya);
   const oku = (dosya) => {
     const d = jsonOku(path.join(A, dosya));
@@ -1378,6 +1642,7 @@ function donemKunyesi({ P, A, kid, kokDosya, kay, iptal, haklar, emekliye, kuyru
     emekliye,
     capaSatirlari: { CF_WORKER_INDIRME: workerSatiri(worker, ind), CF_WORKER_LISTESI: worker.liste },
     ...(istemci ? { istemci } : {}),
+    ...(paket ? { paket } : {}),
     ozetler: Object.fromEntries(dosyalar(P).map((f) => [f, sha256(path.join(P, f))])),
   };
 }
@@ -1403,9 +1668,9 @@ function donemOzetiBas(son, k, ek = {}) {
   console.log("  4. Anahtar birimine kur (anahtarlar/* → 0600, 10001) · içe aktar: … anahtar.js donem-ice-aktar < ice-aktar.json");
   console.log("  5. 1 dk sonra portal Anahtarlar: yeni ALT/ARA/İNDİRME yüklü; İptal belgeleri: dağıtılan sıra = paketinki");
   console.log(`  6. Eski özel yarılar: … anahtar.js emekliye-ayir --kid=${k.emekliye.join(",") || "<yok>"} (önce kuru, sonra --uygula) · VDS'teki paket kopyası silinir (shred).`);
-  // PAKET anahtarı yenilemesi yıllık törene katılacak (iş listesi 3.9); o inene dek ayrı adım.
-  console.log("  7. PAKET anahtarı: iş listesi 3.9 (kök altında sertifikalı paket anahtarı) inince bu törenin adımı olur; o güne dek runbook §6 PAKET satırı.");
+  console.log(k.paket ? "  7. PAKET: aşağıdaki PAKET adımları (dağıtım iptali 4. adımdaki ice-aktar.json'la satıcıya girer)." : "  7. PAKET anahtarı bu törende YENİLENMEDİ — yıllık törende --paket ile (runbook §9).");
   if (k.istemci) istemciOzetiBas(son, k.istemci, ek);
+  if (k.paket) paketOzetiBas(son, k.paket, ek);
 }
 
 function istemciOzetiBas(son, ic, { usb, silinen, bayraklar }) {
@@ -1424,6 +1689,46 @@ function istemciOzetiBas(son, ic, { usb, silinen, bayraklar }) {
   console.log("   d. Yeniden imzalı dosyaları yayına koy (paket baytı değişmez; yalnız latest.yml / manifest — EN SON adım kuralı aynen).");
   console.log("   e. VDS: vds-paketi/istemci/ yalnız AÇIK sertifikalar (süre uyarısı); özel yarı VDS'e gitmez.");
   if (bayraklar?.has("yedek-parola-dosyasi")) console.log("   ⚠ --yedek-parola-dosyasi verildi: o dosya Mac'te KALMAMALI — sil.");
+}
+
+function paketOzetiBas(son, pk, { paketUsb, paketSilinen, bayraklar }) {
+  console.log("\nPAKET (backend paketi imzacısı, PAKET-ANAHTARI-KOK-ALTINDA §5):");
+  for (const r of ["birincil", "yedek"]) {
+    const x = pk[r];
+    console.log(`  ${r.padEnd(8)} ${x.kid.padEnd(12)} x=${x.x}  ${x.baslangic.slice(0, 10)} → ${x.bitis.slice(0, 10)} · ${x.konum}`);
+  }
+  console.log(`  İPTAL    dağıtım iptali sıra ${pk.iptal.sira} · ${pk.iptal.satir} satır${pk.iptal.kidler.length ? ` (${pk.iptal.kidler.join(", ")})` : ""}`);
+  console.log(`  YEDEK    ${paketUsb} (doğrulandı: yedek parolasıyla açıldı, künyeyle aynı) · silinen önceki yedek: ${paketSilinen.join(", ") || "(yok)"}`);
+  console.log(`  YENİDEN  ${Array.isArray(pk.yenidenImza) ? pk.yenidenImza.map((y) => `${y.grup}/${y.tur} ${y.surum} → ${path.join(son, y.dizin)}`).join("\n           ") : pk.yenidenImza}`);
+  console.log("  Sonraki adımlar (PAKET):");
+  console.log("   a. Paket parolası → parola yöneticisi. Yedek parolası YALNIZ parola yöneticisinde; disk görüntüsünü çıkar, Drive'a yükle.");
+  console.log(`   b. Yeni sürüm imzası: build-korumali-imza.ts zip --zincir-anahtar=${path.join(son, "paket", `${pk.birincil.kid}.paket.json`)} (çift) · backend-bildirim imzala/pg-imzala aynı anahtarla.`);
+  console.log("   c. Yeniden imzalı sürümleri yayına koy: yeni zip sürüm dizinine, surum-zincir.json yanına; son sürümse son-zincir.json EN SON (runbook §9).");
+  console.log("   d. Docker teslimi: TEKSERP_PAKET_ANAHTARI=<birincil> teslim-paketle.sh (künye zincirli imzalanır).");
+  console.log("   e. VDS: vds-paketi/paket/ yalnız AÇIK sertifikalar + dağıtım iptali; PAKET özel yarısı VDS'e GİTMEZ.");
+  if (bayraklar?.has("paket-parola-dosyasi") || bayraklar?.has("yedek-parola-dosyasi")) console.log("   ⚠ parola dosyası verildi: o dosyalar Mac'te KALMAMALI — sil (rm -P).");
+}
+
+/** `paket-yedek-dogrula --yedek-usb=<birim>`: yedek birimindeki en yeni PAKET yedeği yedek parolasıyla açılır, künyeyle eşleşir. */
+async function paketYedekDogrula(hedef, bayraklar) {
+  const usb = bayraklar.get("yedek-usb");
+  if (!usb) throw new TorenHatasi("--yedek-usb=<yedek birimi kökü> zorunlu", 2);
+  const klasor = path.join(evYolu(usb), USB_PAKET_KLASORU);
+  const adlar = lstatYa(klasor)?.isDirectory() ? fs.readdirSync(klasor).filter((n) => !n.includes(".yarim-")).sort() : [];
+  if (adlar.length === 0) throw new TorenHatasi(`Yedek biriminde PAKET yedeği yok: ${klasor}`, 2);
+  const U = path.join(klasor, adlar[adlar.length - 1]);
+  const yk = jsonOku(path.join(U, YEDEK_KUNYE));
+  const dk = path.join(hedef, "donemler", yk.donem, "vds-paketi", DONEM_KUNYE);
+  if (!fs.existsSync(dk)) throw new TorenHatasi(`Mac'te bu yedeğin dönem künyesi yok: ${dk}`, 2);
+  const yedek = jsonOku(dk).paket?.yedek;
+  if (yk.tur !== PAKET_YEDEK_KUNYE || !yedek || yedek.kid !== yk.yedek?.kid || yedek.x !== yk.yedek?.x) throw new TorenHatasi("Yedek birimindeki PAKET künyesi Mac'teki dönem künyesiyle uyuşmuyor", 1);
+  const p = await parolaAl(bayraklar, "yedek", `Yedek (${yedek.kid}) parolası: `);
+  try {
+    await paketYedekOlc({ U, yedek, yedekParola: p, gizli: [p] });
+  } finally {
+    p.fill(0);
+  }
+  console.log(`✅ PAKET yedeği ${yedek.kid} açıldı ve künyeyle aynı (${U}) · bitiş ${yedek.bitis.slice(0, 10)} (${Math.round((Date.parse(yedek.bitis) - Date.now()) / 86_400_000)} gün)`);
 }
 
 /**
@@ -1458,6 +1763,7 @@ async function main() {
   if (komut === "toren") return toren(bayraklar);
   if (komut === "donem") return donem(bayraklar);
   if (komut === "istemci-yedek-dogrula") return istemciYedekDogrula(hedef, bayraklar);
+  if (komut === "paket-yedek-dogrula") return paketYedekDogrula(hedef, bayraklar);
   if (komut === "dogrula") return dogrula(hedef);
   if (!bayraklar.get("usb")) throw new TorenHatasi("usb-kopyala: --usb=<USB kökü> zorunlu", 2);
   console.log(`USB kopyası: ${hedef} → ${path.join(evYolu(bayraklar.get("usb")), USB_KLASORU)}`);
