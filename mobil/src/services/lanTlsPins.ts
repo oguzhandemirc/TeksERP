@@ -4,11 +4,9 @@
 // Native kendi kalıcı kopyasını açılışta JS'ten önce yükler (ilk istek de sabitle gider); JS her açılışta,
 // her sabit değişikliğinde ve her adres değişikliğinde güncel kümeyi yeniden iter.
 import { storage } from '../utils/storage';
-import { nativePinState, parseTlsPins, withPin, type TlsPin } from '../lib/lan-tls';
+import { TLS_PINS_KEY, nativePinState, parseTlsPins, withPin, type TlsPin } from '../lib/lan-tls';
 import { parseUrlParts, useBaseUrlStore } from '../store/baseUrlStore';
 import { lanTlsNative } from './lanTlsNative';
-
-const TLS_PINS_KEY = 'api_server_tls_pins';
 
 export function lanTlsNativeAvailable(): boolean {
   return lanTlsNative() !== null;
@@ -49,6 +47,11 @@ export async function addTlsPin(pin: TlsPin): Promise<TlsPin[]> {
   const next = withPin(await getTlsPins(), pin);
   await writePins(next);
   return next;
+}
+
+/** Bir denemenin öncesine dönüş: sabit kümesini verilen anlık görüntüyle değiştirir. */
+export async function restoreTlsPins(pins: TlsPin[]): Promise<void> {
+  await writePins(pins);
 }
 
 export async function removeTlsPins(installationId: string | null): Promise<TlsPin[]> {

@@ -3,7 +3,8 @@
 // (keşiften ya da ilk girişten SABİTLENMEZ). İKİZ: aşağıdaki işlevler `Electron/shared/lan-tls.ts`teki
 // aynı adlı işlevlerle metin olarak aynıdır (bekçi: lan-tls.contract.test.ts) — mobil onu import edemez.
 
-export type TlsPinVia = 'qr';
+/** Sabitin güven kökü: panelin QR'ı ya da kullanıcının doğrulama kodunu göz ile karşılaştırması (§4b). */
+export type TlsPinVia = 'qr' | 'kod';
 
 export interface TlsPin {
   installationId: string | null;
@@ -118,6 +119,100 @@ export function parseTlsQr(text: string): { installationId: string | null; adver
 
 // ---- İKİZ BİTİŞ ----
 
+/** Sabit deposunun anahtarı (expo-secure-store); adres deposu da açılışta okur. */
+export const TLS_PINS_KEY = 'api_server_tls_pins';
+
+/** Sunucunun şifreli dinleyicisinin varsayılan portu (`Teks-Erp/src/lib/lan-tls/config.ts` LAN_TLS_DEFAULT_PORT). */
+export const LAN_TLS_DEFAULT_PORT = 4443;
+
+export const INSECURE_ADDRESS_REASON =
+  'Bu tablet sunucuya yalnız şifreli (HTTPS) bağlanır; "http://" ile başlayan adres kullanılamaz. ' +
+  'Sunucuyu QR ile ya da IP adresi ve doğrulama koduyla ekleyin.';
+
+export type PairAddress = { ok: true; host: string; port: number } | { ok: false; reason: string };
+
+/**
+ * Elle yazılan sunucu adresi: IP/ad, isteğe bağlı port (yoksa şifreli varsayılan port). `https://` öneki ve
+ * `/api` yolu kabul edilir; `http://` açıkça reddedilir — tablet şifresiz bağlanmaz.
+ */
+export function parsePairAddress(input: string, defaultPort = LAN_TLS_DEFAULT_PORT): PairAddress {
+  let v = (input ?? '').trim();
+  if (/^http:\/\//i.test(v)) return { ok: false, reason: INSECURE_ADDRESS_REASON };
+  v = v.replace(/^https:\/\//i, '').replace(/\/+$/, '').replace(/\/api$/i, '').replace(/\/+$/, '');
+  if (!v) return { ok: false, reason: 'Sunucunun IP adresini yazın (ör. 192.168.1.10).' };
+  if (/[/\s]/.test(v) || /^[a-z][a-z0-9+.-]*:\/\//i.test(v)) {
+    return { ok: false, reason: 'Adres anlaşılamadı — yalnız IP adresi ya da sunucu adı yazın (ör. 192.168.1.10).' };
+  }
+  const m = /^([^:]+)(?::(\d{1,5}))?$/.exec(v);
+  if (!m) return { ok: false, reason: 'Adres anlaşılamadı — yalnız IP adresi ya da sunucu adı yazın (ör. 192.168.1.10).' };
+  const host = (m[1] ?? '').toLowerCase();
+  if (!/^[0-9a-z]([0-9a-z.-]{0,251}[0-9a-z])?$/.test(host)) {
+    return { ok: false, reason: 'Adres anlaşılamadı — yalnız IP adresi ya da sunucu adı yazın (ör. 192.168.1.10).' };
+  }
+  const port = m[2] ? Number(m[2]) : defaultPort;
+  if (!Number.isInteger(port) || port < 1 || port > 65535) return { ok: false, reason: 'Port 1–65535 arasında olmalı.' };
+  return { ok: true, host, port };
+}
+
+/** Şifreli yoklamanın sonucu (native: gözlenen iz + doğrulanmamış kimlik). */
+export interface ObservedServer {
+  host: string;
+  port: number;
+  fingerprint: string;
+  installationId: string | null;
+}
+
+export type PairDecision = { ok: true; pin: TlsPin; baseUrl: string } | { ok: false; reason: string };
+
+/**
+ * Kullanıcı doğrulama kodunu sunucunun gösterdiğiyle karşılaştırıp onayladı mı: onay yoksa sabit YOK.
+ * Kod = `formatFingerprintGroups(iz)` (kurulum sonu, durum sayfası ve panel aynı biçimi basar).
+ */
+export function decideCodePin(input: { observed: ObservedServer; confirmed: boolean; now: string }): PairDecision {
+  const fp = normalizeFingerprint(input.observed.fingerprint);
+  if (!fp) return { ok: false, reason: 'Sunucunun sertifika kodu okunamadı.' };
+  if (!input.confirmed) {
+    return { ok: false, reason: 'Kod onaylanmadı — bağlanılmadı. Kod farklıysa ağda araya giren biri olabilir; sistem yöneticisine haber verin.' };
+  }
+  const { host, port, installationId } = input.observed;
+  return {
+    ok: true,
+    pin: { installationId, fingerprint: fp, port, via: 'kod', pinnedAt: input.now },
+    baseUrl: httpsBaseUrlOf(host, port),
+  };
+}
+
+/**
+ * QR'daki iz/port/kurulum kimliği bu adreste gözlenen sunucuyla aynı mı. QR güven köküdür; adres yalnız
+ * QR'ın izini taşıyan sunucuya bağlanır (kurulum kimliği sunucunun bildirdiğiyle de çapraz denetlenir).
+ */
+export function decideQrAddressPin(input: { qrText: string; observed: ObservedServer; now: string }): PairDecision {
+  const qr = parseTlsQr(input.qrText);
+  if (!qr) return { ok: false, reason: "Bu bir şifreli bağlantı QR'ı değil." };
+  const o = input.observed;
+  if (o.port !== qr.advert.port || normalizeFingerprint(o.fingerprint) !== qr.advert.fingerprint) {
+    return { ok: false, reason: "Bu adresteki sunucunun kodu QR'dakiyle aynı değil. Ağda araya giren biri olabilir — sistem yöneticisine haber verin." };
+  }
+  if (o.installationId && qr.installationId && o.installationId !== qr.installationId) {
+    return { ok: false, reason: 'QR bu sunucuya ait değil.' };
+  }
+  return {
+    ok: true,
+    pin: { installationId: qr.installationId ?? o.installationId, fingerprint: qr.advert.fingerprint, port: qr.advert.port, via: 'qr', pinnedAt: input.now },
+    baseUrl: httpsBaseUrlOf(o.host, o.port),
+  };
+}
+
+/**
+ * Yalnız şifreli kipte (sürüm paketi) kayıtlı adres kullanılabilir mi: https olmalı ve portu bir sabitin
+ * portu olmalı (native sabitli uç ölçütüyle aynı). Değilse tablet "Sunucuyu ekle" ekranına döner.
+ */
+export function secureAddressUsable(url: string, pins: readonly TlsPin[]): boolean {
+  const m = /^https:\/\/([^:/\s]+)(?::(\d+))?/i.exec((url ?? '').trim());
+  if (!m || !m[2]) return false;
+  return pins.some((p) => String(p.port) === m[2]);
+}
+
 export function parseTlsPins(raw: string | null | undefined): TlsPin[] {
   if (!raw) return [];
   try {
@@ -133,7 +228,7 @@ export function parseTlsPins(raw: string | null | undefined): TlsPin[] {
         installationId: typeof r.installationId === 'string' && r.installationId ? r.installationId : null,
         fingerprint,
         port: r.port,
-        via: 'qr',
+        via: r.via === 'kod' ? 'kod' : 'qr',
         pinnedAt: typeof r.pinnedAt === 'string' ? r.pinnedAt : '',
       });
     }

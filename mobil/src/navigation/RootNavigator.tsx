@@ -21,6 +21,7 @@ import AwaitingAssignmentScreen from '../screens/Auth/AwaitingAssignmentScreen';
 import NoAccessScreen from '../screens/Common/NoAccessScreen';
 import SettingsScreen from '../screens/Common/SettingsScreen';
 import ServerSettingsScreen from '../screens/Common/settings/ServerSettingsScreen';
+import ServerPairScreen from '../screens/Common/settings/ServerPairScreen';
 import PlaceHardwareScreen from '../screens/Common/settings/PlaceHardwareScreen';
 import ScannerSettingsScreen from '../screens/Common/settings/ScannerSettingsScreen';
 import UpdateSettingsScreen from '../screens/Common/settings/UpdateSettingsScreen';
@@ -242,6 +243,11 @@ export default function RootNavigator() {
         <Stack.Screen
           name="SettingsServer"
           component={ServerSettingsScreen}
+          options={{ animation: 'slide_from_right' }}
+        />
+        <Stack.Screen
+          name="SettingsServerPair"
+          component={ServerPairScreen}
           options={{ animation: 'slide_from_right' }}
         />
         <Stack.Screen

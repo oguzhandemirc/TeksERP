@@ -41,8 +41,10 @@ import {
   type DiscoveryMode,
   type ServerGroup,
 } from '../lib/discovery';
-import { applyTlsRoute, parseTlsAdvert } from '../lib/lan-tls';
+import { LAN_TLS_DEFAULT_PORT, applyTlsRoute, httpsBaseUrlOf, parseTlsAdvert } from '../lib/lan-tls';
+import { secureTransportOnly } from '../lib/secure-transport';
 import { getTlsPins } from './lanTlsPins';
+import { probeTlsServer } from './tlsProbe';
 
 /** Tek adres için bekleme. Wi-Fi'de çok kısası YANLIŞ "sunucu yok" üretir. */
 const PROBE_TIMEOUT_MS = 900;
@@ -91,6 +93,13 @@ export interface DiscoveryOptions {
   extraPorts?: boolean;
   onProgress?: (p: DiscoveryProgress) => void;
   signal?: AbortSignal;
+  /** Yalnız şifreli kipte taranacak port (varsayılan 4443; panel QR'ı başka port bildirebilir). */
+  tlsPort?: number;
+  /**
+   * Sabitlere göre yönlendirme (varsayılan açık). Sunucu ekleme akışı kendi güven kararını verdiği için
+   * kapatır: izi değişmiş sunucu da listelenir, kullanıcı kodu görüp yeniden eşler.
+   */
+  tlsRoute?: boolean;
 }
 
 export interface DiscoveryResult {
@@ -135,6 +144,21 @@ export async function probeServer(
   pinnedId: string | null | undefined,
   timeoutMs = PROBE_TIMEOUT_MS,
 ): Promise<DiscoveredServer | null> {
+  // Yalnız şifreli kipte (K3) aday şifreli yoklamayla bulunur: iz GÖZLENİR, kimlik doğrulanmamış bilgidir;
+  // sabitli kurulumun izi tutmazsa aday aşağıda `applyTlsRoute`ta engellenir.
+  if (secureTransportOnly()) {
+    const s = await probeTlsServer(host, port, timeoutMs);
+    if (!s?.identity) return null;
+    return {
+      baseUrl: httpsBaseUrlOf(host, port),
+      host,
+      port,
+      identity: s.identity,
+      rttMs: s.rttMs,
+      matchesPinned: compareIdentity(pinnedId, s.identity.installationId),
+      tls: { port, fingerprint: s.fingerprint },
+    };
+  }
   const started = Date.now();
   const root = baseUrlOf(host, port);
 
@@ -247,6 +271,9 @@ async function probeMany(
 export async function discoverServers(opts: DiscoveryOptions = {}): Promise<DiscoveryResult> {
   const pinnedId = opts.pinnedInstallationId ?? null;
   const mode: DiscoveryMode = opts.mode ?? 'quick';
+  // Yalnız şifreli kipte tarama şifreli porttadır; şifresiz yedek portlar (5000/3000/8080) aranmaz.
+  const secure = secureTransportOnly();
+  const scanPort = secure ? (opts.tlsPort ?? LAN_TLS_DEFAULT_PORT) : DISCOVERY_DEFAULT_PORT;
   const stopOnMatch = stopsOnPinnedMatch(mode);
   const found: DiscoveredServer[] = [];
   const seen = new Set<string>();
@@ -267,7 +294,7 @@ export async function discoverServers(opts: DiscoveryOptions = {}): Promise<Disc
   for (const url of discoveryPriorityUrls(opts.preferredUrls ?? [], API_URL)) {
     const p = splitUrl(url);
     if (!p) continue;
-    const t = push(p.host, p.port);
+    const t = push(p.host, secure && !/^https:/i.test(url) ? scanPort : p.port);
     if (t) priority.push(t);
   }
   if (address) {
@@ -275,7 +302,7 @@ export async function discoverServers(opts: DiscoveryOptions = {}): Promise<Disc
     for (const o of LIKELY_OCTETS) {
       const host = `${prefix}.${o}`;
       if (host === address) continue;
-      const t = push(host, DISCOVERY_DEFAULT_PORT);
+      const t = push(host, scanPort);
       if (t) priority.push(t);
     }
   }
@@ -333,7 +360,7 @@ export async function discoverServers(opts: DiscoveryOptions = {}): Promise<Disc
     scanRan = true;
     await runStage(
       sweepHosts
-        .map((h) => push(h, DISCOVERY_DEFAULT_PORT))
+        .map((h) => push(h, scanPort))
         .filter((t): t is { host: string; port: number } => t !== null),
     );
   }
@@ -341,8 +368,8 @@ export async function discoverServers(opts: DiscoveryOptions = {}): Promise<Disc
   // --- 3) YEDEK PORTLAR (yalnız hiçbir kullanılabilir aday yokken) ----------
   // Kademe kararı ORTAK helper'da (`runStagedPortScan`, KEŞİF-İKİZ bloğu) —
   // masaüstü de birebir aynı kuralı uygular.
-  let ports: number[] = [DISCOVERY_DEFAULT_PORT];
-  if (opts.extraPorts) {
+  let ports: number[] = [scanPort];
+  if (opts.extraPorts && !secure) {
     const staged = await runStagedPortScan<DiscoveredServer>(
       async (port) => {
         // Varsayılan portun turu YUKARIDA koştu; burada yalnız sonucunu
@@ -373,7 +400,7 @@ export async function discoverServers(opts: DiscoveryOptions = {}): Promise<Disc
   // Sıra: ÖNCE tekilleştir (sunucu başına en iyi adres), SONRA sırala. Tersi,
   // aynı sunucunun iki adresini iki ayrı satır gibi sıralar.
   // Sabitli kurulumun adayı https'e yükselir ya da engellenir (HTTP'ye sessiz düşüş yok).
-  const routed = applyTlsRoute(found, await getTlsPins());
+  const routed = opts.tlsRoute === false ? { list: found, blocked: null } : applyTlsRoute(found, await getTlsPins());
   const groups = groupByInstallation(routed.list);
   return {
     candidates: rankCandidates(dedupeCandidates(routed.list)),

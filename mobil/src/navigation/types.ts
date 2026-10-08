@@ -11,6 +11,7 @@ export type RootStackParamList = {
   // screens/Common/settings/). DevicePairing de bu menünün bir satırıdır.
   Settings: undefined;
   SettingsServer: undefined;
+  SettingsServerPair: undefined;
   SettingsPlaceHardware: undefined;
   SettingsScanner: undefined;
   /** Kişisel çalışma tercihleri (fason varsayılanı) — kullanıcıya bağlı, cihaza değil. */

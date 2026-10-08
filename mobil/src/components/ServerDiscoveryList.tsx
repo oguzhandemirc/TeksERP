@@ -50,6 +50,10 @@ export interface ServerDiscoveryListProps {
   disabled?: boolean;
   /** Bileşen açılınca aramayı bir kez kendisi başlatır (ilk açılış ekranı: operatöre "ara" dedirtilmez). */
   autoStart?: boolean;
+  /** Sunucu ekleme akışı: sabit yönlendirmesi kapalı (bkz. `DiscoveryOptions.tlsRoute`), şifreli port. */
+  pairing?: { tlsPort?: number };
+  /** Aday yokken gösterilen ipucu (varsayılan: elle adres + test). */
+  emptyHint?: string;
 }
 
 export function ServerDiscoveryList({
@@ -59,6 +63,8 @@ export function ServerDiscoveryList({
   onResult,
   disabled,
   autoStart,
+  pairing,
+  emptyHint,
 }: ServerDiscoveryListProps) {
   const [progress, setProgress] = useState<{ tried: number; total: number } | null>(null);
   const [found, setFound] = useState<DiscoveredServer[] | null>(null);
@@ -83,13 +89,14 @@ export function ServerDiscoveryList({
         // TEK açık olduğu yol: arka plan turları bunu AÇMAZ (bkz. DiscoveryOptions).
         extraPorts: true,
         onProgress: setProgress,
+        ...(pairing ? { tlsRoute: false, tlsPort: pairing.tlsPort } : {}),
       });
       setTlsBlocked(res.tlsBlocked);
       return res.candidates;
     } catch {
       return [];
     }
-  }, [currentUrl, recentUrls]);
+  }, [currentUrl, recentUrls, pairing]);
 
   // Tarama zaten saniyeler sürer; asgari süre burada "bir kare parlayıp sönme"
   // ihtimalini kapatır (ağda tek aday varsa cevap çok hızlı gelebiliyor).
@@ -147,8 +154,8 @@ export function ServerDiscoveryList({
         <View style={styles.emptyBox}>
           <Icon source="lan-disconnect" size={18} color={COLORS.subtext} />
           <Text style={styles.hint}>
-            Ağda sunucu bulunamadı. Tablet fabrika Wi-Fi&apos;sinde mi, sunucu açık mı?
-            Adresi biliyorsanız elle yazıp &quot;Bağlantıyı Test Et&quot; deyin.
+            {emptyHint ??
+              'Ağda sunucu bulunamadı. Tablet fabrika Wi-Fi\'sinde mi, sunucu açık mı? Adresi biliyorsanız elle yazıp "Bağlantıyı Test Et" deyin.'}
           </Text>
         </View>
       )}

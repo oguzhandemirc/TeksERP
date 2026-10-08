@@ -27,6 +27,8 @@ import {
 
 import { ServerDiscoveryList } from './ServerDiscoveryList';
 import { httpSwitchBlock } from '../services/lanTlsSwitchGuard';
+import { secureTransportOnly } from '../lib/secure-transport';
+import { SecureServerSheet } from './serverPair/SecureServerSheet';
 
 const COLORS = {
   bgDarker: '#0a1120',
@@ -46,7 +48,12 @@ type TestResult =
   | { status: 'ok'; message: string }
   | { status: 'fail'; message: string };
 
-export default function ServerAddressSheet({
+/** Yalnız şifreli kipte (K3) adres elle yazılmaz: kilit ekranından da tam ekran sunucu ekleme açılır. */
+export default function ServerAddressSheet(props: { visible: boolean; onClose: () => void }) {
+  return secureTransportOnly() ? <SecureServerSheet {...props} /> : <HttpServerAddressSheet {...props} />;
+}
+
+function HttpServerAddressSheet({
   visible,
   onClose,
 }: {

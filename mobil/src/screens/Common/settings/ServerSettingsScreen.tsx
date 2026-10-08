@@ -46,6 +46,8 @@ import { ServerDiscoveryList } from '../../../components/ServerDiscoveryList';
 import { LanTlsCard } from '../../../components/LanTlsCard';
 import { httpSwitchBlock, type HttpSwitchBlock } from '../../../services/lanTlsSwitchGuard';
 import { useBusyAction } from '../../../hooks/useBusyAction';
+import { secureTransportOnly } from '../../../lib/secure-transport';
+import SecureServerSettings from './SecureServerSettings';
 import {
   SETTINGS_COLORS as COLORS,
   SettingsActionButton,
@@ -62,7 +64,12 @@ type TestResult =
 /** Ortak pakette gömülü adres yoktur; varsayılana dönmek ilk açılıştaki "Sunucuyu bul" ekranına götürür. */
 const NO_AUTO_URL = 'yok — "Sunucuyu bul" ekranı açılır';
 
+/** Yalnız şifreli kipte (sürüm paketi, K3) adres elle yazılmaz; şifresiz form yalnız geliştirme derlemesinde. */
 export default function ServerSettingsScreen() {
+  return secureTransportOnly() ? <SecureServerSettings /> : <HttpServerSettingsScreen />;
+}
+
+function HttpServerSettingsScreen() {
   const navigation = useNavigation();
   const { baseUrl, customUrl, recentUrls, setCustomUrl, reset } = useBaseUrlStore();
   const autoUrl = computeAutoUrl();
