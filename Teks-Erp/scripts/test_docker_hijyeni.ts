@@ -22,6 +22,7 @@
 //      §5d vekil ayarları (TRUST_PROXY · LOGIN_LOCKOUT_SCOPE · RATE_LIMIT_*) backend'e boş varsayılanla geçer;
 //      şablon TRUST_PROXY'yi boş doğurur. §5e şablonun LICENSE_SERVER_URL açıklaması vendor-url.ts sabitleriyle aynı.
 //      §5f compose · şablon · runbook API portunu ağa açmayı önermez (Docker'da LAN TLS yok, yayın ufw'yi atlar).
+//      §5g runbook seed parolasını konteynerden temizletir (seed'den sonra bayraksız up -d + uzunluk ölçümü).
 //   §6 satıcı imajı (G2/G3) DURAĞAN: `satici/sunucu/scripts/` altındaki her CLI `dist-cli`'a derlenir ve
 //      `test -f` kapısında; compose'da `/dosyalar` yazılır, `/derlemeler` + `/yayin` salt okunur (⑨'un docker'sız ikizi).
 // =============================================================================
@@ -426,6 +427,30 @@ function dinleStatik(dosyalar: Record<string, string>): string[] {
     ["şablon 0.0.0.0 doğar", { ...d, [eoAd]: d[eoAd].replace(/^TEKSERP_DINLE=.*$/m, "TEKSERP_DINLE=0.0.0.0") }],
   ];
   for (const [ad, dd] of sondalar) check(`§5f sonda: ${ad} → kırmızı`, dinleStatik(dd).length > 0);
+}
+
+// §5g — runbook ilk kurulumu seed parolasını konteynerde BIRAKMAZ: ilk `up`tan sonra bayraksız `up -d`
+// (yeniden yaratma) ve parolayı basmadan uzunluğunu ölçen doğrulama; parola komut satırına yazılmaz.
+function seedTemizlikStatik(runbook: string): string[] {
+  const ih: string[] = [];
+  const bas = runbook.indexOf("## 2.");
+  const son = runbook.indexOf("\n## 3.");
+  const b2 = bas >= 0 && son > bas ? runbook.slice(bas, son) : "";
+  if (!b2) return ["runbook §2 bulunamadı (ÖLÇÜLEMEDİ)"];
+  const ilk = b2.search(/^SEED_ON_EMPTY=1 docker compose up -d/m);
+  if (ilk < 0) ih.push("§2'de ilk (seed'li) up yok");
+  const sonra = ilk >= 0 ? b2.slice(ilk + 1) : "";
+  if (!/^docker compose up -d(\s|$)/m.test(sonra)) ih.push("seed'den sonra bayraksız `docker compose up -d` (yeniden yaratma) yok");
+  if (!/ILK_YONETICI_PAROLASI.*length\(\$2\)/.test(sonra)) ih.push("parolanın konteynerden gittiği (uzunluk 0) ölçülmüyor");
+  if (/ILK_YONETICI_PAROLASI='[^']*'\s+docker compose/.test(b2)) ih.push("parola komut satırında veriliyor (komut geçmişi)");
+  return ih;
+}
+{
+  const rb = oku("docs/ops/LINUX-DOCKER-KURULUM.md");
+  const gercek = seedTemizlikStatik(rb);
+  check("§5g ⭐ runbook seed parolasını konteynerden temizletir (bayraksız up -d + uzunluk ölçümü)", gercek.length === 0, gercek.join(" | "));
+  const sil = rb.replace(/^docker compose up -d {2,}.*\n/m, "");
+  check("§5g sonda: temizlik adımı silindi → kırmızı", sil !== rb && seedTemizlikStatik(sil).length > 0, sil !== rb ? "" : "MUTASYON UYGULANMADI");
 }
 
 // §5c — teslim künyesi İMZALI çıkar (2e aracı, `build-korumali-imza.ts belge`): anahtar yoksa paket

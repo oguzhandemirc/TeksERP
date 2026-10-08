@@ -32,12 +32,24 @@ cp .env.ornek .env && chmod 600 .env
 # .env'i doldur: TEKSERP_IMAJ = load çıktısındaki etiket;
 #   POSTGRES_PASSWORD = $(openssl rand -hex 24) · JWT_SECRET = $(openssl rand -hex 48)
 #   TEKSERP_DINLE: 127.0.0.1 KALIR (§7 — 0.0.0.0 yazılmaz)
+read -rs -p 'İlk yönetici parolası (en az 10 karakter): ' ILK_YONETICI_PAROLASI; echo; export ILK_YONETICI_PAROLASI
 SEED_ON_EMPTY=1 docker compose up -d          # ilk ve YALNIZ ilk up: boş şemaya admin seed'i
+unset ILK_YONETICI_PAROLASI
 docker compose logs -f backend                 # [1/3] migration → [2/3] seed → [3/3] "Backend ayakta"
 ```
 
+**Seed'den hemen sonra parolayı konteynerden temizle (zorunlu):** ilk `up`a verilen `ILK_YONETICI_PAROLASI` konteyner YENİDEN YARATILANA kadar ortamında durur ve `docker inspect` ile okunur; parola verilmediyse seed'in bastığı rastgele parola da o konteynerin günlüğünde (`docker compose logs`) kalır. Bayraksız `up -d` ortam değiştiği için backend'i yeniden yaratır (eski konteyner günlüğüyle birlikte silinir). Rastgele parola yolunda önce parolayı günlükten al ve ilk girişte değiştir, sonra bu adımı uygula.
+
+```sh
+grep -cE '^(SEED_ON_EMPTY|ILK_YONETICI_PAROLASI)=' .env   # 0 olmalı; değilse o satırları .env'den sil
+docker compose up -d                                       # bayraksız: "Recreate … backend" görünür
+docker inspect --format '{{range .Config.Env}}{{println .}}{{end}}' "$(docker compose ps -q backend)" \
+  | awk -F= '$1=="SEED_ON_EMPTY"{print} $1=="ILK_YONETICI_PAROLASI"{print $1, "uzunluk", length($2)}'
+# beklenen: SEED_ON_EMPTY=0 · ILK_YONETICI_PAROLASI uzunluk 0 (parola ekrana basılmaz)
+```
+
 - Seed kapısı fail-closed (`Teks-Erp/docker/entrypoint.sh` §2): yalnız `users` tablosu BOŞ ve `SEED_ON_EMPTY=1` iken koşar; dolu DB'de bayrak kalsa da atlar. `SEED_ON_EMPTY` `.env`e YAZILMAZ.
-- İlk yönetici (`admin`) sabit parolayla DOĞMAZ (G20): ya ilk `up`a `ILK_YONETICI_PAROLASI='<en az 10 karakter>'` verilir (`.env`e YAZILMAZ — `SEED_ON_EMPTY=1 ILK_YONETICI_PAROLASI='…' docker compose up -d`) ya da verilmezse seed 16 karakterlik rastgele parolayı `docker compose logs backend` çıktısında BİR KEZ basar. İki durumda da ilk girişte panel yeni parola ister (bu yapılmadan tablet girişi 403 alır). Seed `.env`teki `JWT_SECRET` bilinen/zayıf ise reddeder.
+- İlk yönetici (`admin`) sabit parolayla DOĞMAZ (G20): ya ilk `up`a `ILK_YONETICI_PAROLASI` (en az 10 karakter) kabuktan `read -rs` ile verilir — `.env`e ve komut satırına YAZILMAZ (komut geçmişine düşer) — ya da verilmezse seed 16 karakterlik rastgele parolayı `docker compose logs backend` çıktısında BİR KEZ basar. İki durumda da ilk girişte panel yeni parola ister (bu yapılmadan tablet girişi 403 alır). Seed `.env`teki `JWT_SECRET` bilinen/zayıf ise reddeder.
 - Audit koruması (bir kez): `docker compose exec postgres psql -U tekserp -d tekserp -c "ALTER DATABASE tekserp SET teks.audit_guard = 'on'"` → `docker compose restart backend` (açılış günlüğündeki "KORUMA KAPALI" uyarısı gider).
 - Satıcı hesabı (TTY şart): `docker compose exec -it backend node /app/dist/tools/superadmin-olustur.cjs` (2f duman provasında koşulmadı; araç imajda karartılmış olarak VAR).
 - Doğrulama: `curl -fsS http://127.0.0.1:4000/health` → `"db":"UP"`; panelde Sistem → Lisans "Gözlem".

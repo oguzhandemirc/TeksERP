@@ -57,7 +57,8 @@ services:
       # Seed yalnız şema BOŞ ve bu değer 1 iken (entrypoint §2); yalnız ilk `up`ta verilir.
       SEED_ON_EMPTY: ${SEED_ON_EMPTY:-0}
       # İlk yöneticinin parolası (yalnız ilk `up`ta). Boşsa seed rastgele üretip loga bir kez
-      # basar; iki durumda da ilk girişte parola değişimi zorunlu.
+      # basar; iki durumda da ilk girişte parola değişimi zorunlu. Seed'den sonra bayraksız `up -d`
+      # konteyneri yeniden yaratır ve parolayı ortamdan/günlükten siler (runbook §2).
       ILK_YONETICI_PAROLASI: ${ILK_YONETICI_PAROLASI:-}
       LICENSE_SERVER_URL: ${LICENSE_SERVER_URL:-}
       # Vekil (nginx/Cloudflare) arkası: boş = vekil yok, bugünkü davranış. Vekil arkasında bu ayar
