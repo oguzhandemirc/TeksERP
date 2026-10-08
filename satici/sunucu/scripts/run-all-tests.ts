@@ -12,8 +12,8 @@ import { hedefDbKapisi } from "./lib/test-ortam";
 
 const DIZIN = __dirname;
 const SURE_SINIRI_MS = 180_000;
-// Uçtan uca tören bekçisi her tören koşumunda bütün süreçlerin argv/env'ini tarar (parola sızıntısı): tek başına ~260 sn.
-const OZEL_SURE_MS: Readonly<Record<string, number>> = { "test_uretim_toren.ts": 900_000 };
+// Uçtan uca tören bekçisi her tören koşumunda bütün süreçlerin argv/env'ini tarar (parola sızıntısı): tek başına ~15 dk (§9 ile, ölçüm 925 sn).
+const OZEL_SURE_MS: Readonly<Record<string, number>> = { "test_uretim_toren.ts": 1_500_000 };
 
 const db = hedefDbKapisi();
 const filtre = process.argv[2];
