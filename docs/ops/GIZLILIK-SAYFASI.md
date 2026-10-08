@@ -1,6 +1,6 @@
 # Gizlilik sayfası — `https://tekserp.etkiliyazilim.com/gizlilik` (Play K2)
 
-> Durum (2026-10-08): repo HAZIR, VDS'e kurulmadı, DNS kaydı yok. Karar: kullanıcı K2, 2026-10-08 (`PLAY-KONSOL-FORMLARI.md` §0).
+> Durum (2026-10-08): VDS'e KURULDU (`736c9f8a1`; konteyner içi 200 bayt-eşit, köke Cloudflare'siz 403, adnansahin/vds-dogrula önce=sonra AYNI); DNS kaydı yok — kullanıcı adımı bekliyor. Karar: kullanıcı K2, 2026-10-08 (`PLAY-KONSOL-FORMLARI.md` §0).
 
 | | |
 |---|---|
