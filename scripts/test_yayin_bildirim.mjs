@@ -28,7 +28,9 @@ export function kancaBulgulari(ad, metin, { cagri, sonrasinda, durdurmaz }) {
   const out = [];
   const i = metin.indexOf(cagri);
   if (i < 0) return [`${ad}: "${cagri}" çağrısı yok`];
-  if (sonrasinda && !(metin.indexOf(sonrasinda) >= 0 && metin.indexOf(sonrasinda) < i)) out.push(`${ad}: çağrı "${sonrasinda}" adımından ÖNCE`);
+  // Çapa kaybı ayrı bulgu: betikte metin değişince "ÖNCE" demek yanlış teşhise götürür; yine de fail-closed.
+  if (sonrasinda && metin.indexOf(sonrasinda) < 0) out.push(`${ad}: çapa "${sonrasinda}" betikte YOK (bekçi bayat ya da adım silindi)`);
+  else if (sonrasinda && metin.indexOf(sonrasinda) > i) out.push(`${ad}: çağrı "${sonrasinda}" adımından ÖNCE`);
   if (durdurmaz && !durdurmaz.test(metin.slice(i, i + 600))) out.push(`${ad}: çağrı yayını durdurabilir (hata yutulmuyor)`);
   return out;
 }
@@ -88,12 +90,14 @@ try {
   const bulgu = [
     ...kancaBulgulari('electron-grup-yayinla.sh', oku('deploy/electron-grup-yayinla.sh'), { cagri: 'yayin-bildirim.mjs" bildir-yayin', sonrasinda: '# --- YAYIN DEFTERİ', durdurmaz: /\|\| echo/ }),
     ...kancaBulgulari('mobil-grup-yayinla.mjs', oku('deploy/mobil-grup-yayinla.mjs'), { cagri: 'await yayinSonrasiBildir(', sonrasinda: 'etiketAt(\'tablet\'' }),
-    ...kancaBulgulari('backend-yayinla.mjs', oku('deploy/backend-yayinla.mjs'), { cagri: 'await yayinSonrasiBildir(', sonrasinda: "bilgi('✓ kenarda son.json yüklenenle bayt bayt aynı');" }),
+    ...kancaBulgulari('backend-yayinla.mjs', oku('deploy/backend-yayinla.mjs'), { cagri: 'await yayinSonrasiBildir(', sonrasinda: 'bilgi(`✓ kenarda ${i.son} yüklenenle bayt bayt aynı`);' }),
   ];
   kontrol('§4a üç kanca yardımcıyı yayından/kayıttan SONRA çağırır, kabuk kancası hatayı yutar', bulgu.length === 0, bulgu.join(' | '));
   const sonda = kancaBulgulari('sonda.sh', '# --- YAYIN DEFTERİ\nnode x/yayin-bildirim.mjs" bildir-yayin --urun=panel\nnext', { cagri: 'yayin-bildirim.mjs" bildir-yayin', sonrasinda: '# --- YAYIN DEFTERİ', durdurmaz: /\|\| echo/ });
   const once = kancaBulgulari('sonda2.sh', 'node x/yayin-bildirim.mjs" bildir-yayin || echo\n# --- YAYIN DEFTERİ', { cagri: 'yayin-bildirim.mjs" bildir-yayin', sonrasinda: '# --- YAYIN DEFTERİ', durdurmaz: /\|\| echo/ });
   kontrol('§4b ✓K sentetik: hatayı yutmayan kanca ve yayından ÖNCE çağrı yakalanır', sonda.length === 1 && /durdurabilir/.test(sonda[0]) && once.length === 1 && /ÖNCE/.test(once[0]), `${sonda.join()} | ${once.join()}`);
+  const capasiz = kancaBulgulari('sonda3.mjs', "await yayinSonrasiBildir({});\nbilgi('başka adım');", { cagri: 'await yayinSonrasiBildir(', sonrasinda: "bilgi('kenar doğrulandı');" });
+  kontrol('§4c ✓K sentetik: çapası betikte olmayan kanca KIRMIZI ve "YOK" der (ÖNCE değil)', capasiz.length === 1 && /YOK/.test(capasiz[0]) && !/ÖNCE/.test(capasiz[0]), capasiz.join());
 } finally {
   fs.rmSync(tmp, { recursive: true, force: true });
 }
