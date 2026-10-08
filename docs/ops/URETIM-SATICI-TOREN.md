@@ -283,8 +283,10 @@ ls ~/toren-gecici 2>&1        # "No such file or directory" görmelisin
 2. **Yedek birimi:** §9.1 adım 2'deki disk görüntüsü (`--istemci` ile birlikteyse AYNI görüntü). Mac'in kendi diskindeyse tören durur.
 3. **Parola dosyaları (isteğe bağlı):** §9.1 adım 3'teki gibi; ek olarak `~/toren-gecici/paket.txt` (tek satır). Dosya vermezsen parola terminalde gizli sorulur.
 4. **Yayındaki kopyalar:** sahada yayında olan backend sürümlerini ve PG künyelerini indir, şu düzende bir dizine koy (`<grup>` = test · oncu · genel; §9'un `--yayindakiler` dizini ile AYNI dizin olabilir, `panel/` ve `ota/` burada yok sayılır):
-   - `<grup>/backend/<sürüm>/` → `surum-zincir.json` (yoksa `surum.json`) **ve** içinde adı geçen zip
-   - `<grup>/backend/pg/<sürüm>-<derleme>/` → `pg-zincir.json` (yoksa `pg.json`)
+   - `<grup>/backend/<sürüm>/` → dizindeki BÜTÜN `surum-zincir.json` / `surum-zincir-<kid>.json` dosyaları (yoksa `surum.json`) **ve** seçilenin adını verdiği zip
+   - `<grup>/backend/pg/<sürüm>-<derleme>/` → BÜTÜN `pg-zincir.json` / `pg-zincir-<kid>.json` (yoksa `pg.json`)
+
+   Tören zincirli adaylardan seçim kuralıyla birini seçer (iptalli/ad-kid uyuşmaz elenir, en geç sertifika bitişi kazanır; belirsizlikte DUR) ve elenenleri ekrana basar.
 
    Yayında hiç backend yoksa dizin yerine `--paket-yayinda-yok`.
 
@@ -299,7 +301,7 @@ node deploy/satici/uretim-toren.mjs donem --paket --yedek-usb=/Volumes/<yedek bi
 Beklenen: tek başına `--paket` ile adımlar 8–11 (birincil anahtar Mac'te · yedek DOĞRUDAN yedek birimine · dağıtım iptali · yeniden imza + yedeğin açılış ölçümü) ve 12 (VDS paketi), sonunda `✅`. `--istemci` ile birlikte: 8–11 istemci, 12–15 paket, 16 VDS paketi. **Hata olursa hedefe hiçbir şey yazılmaz.** Bir anahtar kaybolduysa/çalındıysa aynı komuta `--paket-iptal=<kid> --neden="<kısa neden>"` eklenir (10.5).
 
 Çıktı (Mac, `~/.tekserp/satici-uretim/donemler/<damga>/`):
-- `paket/` — birincil anahtar + sertifikası, `YEDEK-IZI.json` (yalnız Mac'te), `yeniden-imza/<grup>/backend/<sürüm>/` (yeni zip `<ad>-<kid>.zip` + `surum-zincir.json`) ve `…/backend/pg/<sürüm>-<derleme>/pg-zincir.json`.
+- `paket/` — birincil anahtar + sertifikası, `YEDEK-IZI.json` (yalnız Mac'te), `yeniden-imza/<grup>/backend/<sürüm>/` (yeni zip `<ad>-<kid>.zip` + `surum-zincir-<kid>.json`) ve `…/backend/pg/<sürüm>-<derleme>/pg-zincir-<kid>.json` (`<kid>` = yeni birincil `pkt-*`).
 - `vds-paketi/paket/` — yalnız iki AÇIK sertifika + `paket-iptal.json`; `vds-paketi/ice-aktar.json` dağıtım iptalini de taşır. VDS'e aktarma §8 adım 3–9'daki gibi.
 - Yedek biriminde `tekserp-paket-yedek/<damga>/` (yedek anahtar + sertifika + `YEDEK-KUNYE.json`); önceki yılın PAKET yedeği oradan silinir.
 
@@ -316,7 +318,9 @@ node deploy/satici/uretim-toren.mjs paket-yedek-dogrula --yedek-usb=/Volumes/<ye
 ### 10.4 Sonrası
 
 1. Paket parolası → parola yöneticisi. Parola dosyalarını sil (§9.5), disk görüntüsünü çıkar, Drive'a yükle.
-2. **Yeniden imzalı sürümler henüz YAYINA KONMAZ** (tasarım §7 D8'e dek kapalı). Yayındaki sürüm dizini ezilmez: yeni zip ve `surum-zincir.json` ileride yeni adlarla yanına eklenecek; o adım araç olarak gelene dek dosyalar Mac'te bekler.
+2. **Yeniden imzalı sürümleri yayına koyma** (D8; yayına koyma aracı gelene dek elle, yalnız şu sırayla). Yayındaki sürüm dizini EZİLMEZ: `<ad>-<kid>.zip` · `surum-zincir-<kid>.json` · `pg-zincir-<kid>.json` eskilerin YANINA konur.
+   1. **İndirme kapısı Worker'ı yayından ÖNCE yeni desenle dağıtılır** (`deploy/guncelleme-sunucusu/worker/indirme-kapisi.js`, kid'li zincirli adlar DEĞİŞKEN; [`INDIRME-KAPISI-WORKER.md`](INDIRME-KAPISI-WORKER.md) §8). Atlanırsa güncelleyicinin henüz yayında olmayan kid'li adı yoklaması kenarda 404 olarak önbelleklenir.
+   2. **Yeniden imzalı dosyalar yayına konunca `son-zincir.json` da yeniden imzalı EN YENİ bildirimle değişir** (o sürümün `surum-zincir-<kid>.json` içeriği). Eski sertifika iptal edilince/bitince eski imzalı `son-zincir.json` doğrulamada düşer ve kanal güncelleme bulamaz.
 3. Yeni sürüm imzası artık birincil PAKET anahtarıyla (`build-korumali-imza.ts zip --zincir-anahtar=<birincil>`; `backend-bildirim` aynı anahtarla) — tören ekranı tam yolu basar.
 
 ### 10.5 Sorun giderme
