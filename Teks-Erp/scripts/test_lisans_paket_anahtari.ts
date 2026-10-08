@@ -36,7 +36,7 @@ import { generatePackageKey, packageKeyInfo, writePackageKey } from "./lib/butun
 import { CAPA_DOSYALARI, capaDurumuOku } from "./lib/guven-capasi";
 import { main as capaEkle } from "./guven-capasi-ekle";
 import { ciKokeniHukmu } from "./lib/ci-kokeni";
-import { DAY_MS, PackageRevocationSchema, TYP, msToIso, parseJws, signDocument } from "../src/lib/license/protocol";
+import { DAY_MS, PackageRevocationSchema, TYP, msToIso, parseJws, readReleasePointer, signDocument, verifyPgPackageManifest, verifyReleaseManifest } from "../src/lib/license/protocol";
 import { CHAINED_INTEGRITY_FILE, PACKAGE_REVOCATION_FILE } from "../src/lib/license/protocol/paket-zinciri";
 import { anahtarUret, fiksturKur, sertifikaBas, sertifikaYuku } from "./lib/lisans-fikstur";
 import { git } from "./lib/git";
@@ -526,6 +526,108 @@ async function bolum6(): Promise<void> {
     `çıkış ${zr.kod} sayı ${String(pj.dosyaSayisi)} ${zr.hata.trim().slice(0, 100)}`);
 }
 
+
+// ── §7 ───────────────────────────────────────────────────────────────────────
+// D5: `backend-bildirim.ts` iki takım — çift/zincir-yalnız paket, surum.json + surum-zincir.json, pg.json + pg-zincir.json.
+function bildirimCli(argv: readonly string[], input = "", ortam: Record<string, string> = {}): Kosum {
+  const r = spawnSync(process.execPath, ["--import", "tsx", "scripts/backend-bildirim.ts", ...argv], {
+    cwd: TEKS,
+    input,
+    encoding: "utf8",
+    timeout: 120_000,
+    env: { ...process.env, HOME: path.join(TEMP, "ev"), TEKSERP_TEST_KOK_CAPASI: "", ...ortam },
+  });
+  return { kod: r.status, cikti: r.stdout ?? "", hata: r.stderr ?? "" };
+}
+
+/** Ortak (backendKanal null) korumalı paket zip'i — bildirimin okuduğu künye alanlarıyla. */
+function ortakZip(ad: string): string {
+  const k = paket();
+  writeFileSync(path.join(k, "dist", "server-kunye.json"), `${JSON.stringify({ commit: KUNYE_COMMIT, zaman: "2026-10-01T00:00:00.000Z" })}\n`);
+  writeFileSync(path.join(k, "PAKET.json"), `${JSON.stringify({ korumali: true, korumaHedef: "win-x64", uygulamaSurumu: "2.12.1", dosyaSayisi: 4, commit: KUNYE_COMMIT, backendKanal: null, runtimeNodeSurumu: "22.11.0", migrationSayisi: 1 })}\n`);
+  const zip = path.join(dizin("ozip"), `${ad}.zip`);
+  spawnSync("zip", ["-q", "-r", "-X", zip, "."], { cwd: k });
+  return zip;
+}
+
+const isaretciYuku = (f: string): Record<string, unknown> => {
+  const r = readReleasePointer(readFileSync(f, "utf8"));
+  const p = r.ok ? parseJws(r.value) : null;
+  return p?.ok ? (p.value.payload as Record<string, unknown>) : {};
+};
+
+async function bolum7(): Promise<void> {
+  console.log("\n§7 backend-bildirim iki takım");
+  const capa = kokCapaDosyasi();
+  const eski = uretimAnahtari().dosya;
+  const kd = dizin("pkt7");
+  cli(["anahtar-uret", `--kid=${PKT_KID}`, `--dizin=${kd}`, "--json"], `${PAROLA}\n${PAROLA}\n`);
+  const pkt = path.join(kd, `${PKT_KID}.paket.json`);
+  cli(["sertifika-ekle", `--anahtar=${pkt}`, `--sertifika=${sertifikaDosyasi(packageKeyInfo(pkt).x)}`, `--kok-capa=${capa}`]);
+  const paketCapa = path.join(dizin("pcapa"), "c.json");
+  const ek = packageKeyInfo(eski);
+  writeFileSync(paketCapa, JSON.stringify([{ kid: ek.kid, x: ek.x }]));
+  const ozet = path.join(dizin("ozet"), "o.txt");
+  writeFileSync(ozet, "bekçi sürümü\n");
+  const ortak = (komut: string, zip: string, cikti: string, ekArg: readonly string[] = []) =>
+    [komut, "--ortak", `--zip=${zip}`, "--kanal=test", "--guven-capasi=uretim", "--pg-cizgi=16", "--pg-en-az=16.9", `--ozet-dosyasi=${ozet}`, `--cikti=${cikti}`, `--kok-capa=${capa}`, ...ekArg];
+  const env = { TEKSERP_TEST_PAKET_CAPASI: paketCapa };
+
+  const cift = ortakZip("cift");
+  cli(["zip", `--zip=${cift}`, `--anahtar=${eski}`, `--zincir-anahtar=${pkt}`, `--kok-capa=${capa}`, "--ci-kosu=4242"], `${PAROLA}\n${PAROLA}\n`);
+  const c1 = dizin("b-cift");
+  const im = bildirimCli(ortak("imzala", cift, c1, [`--anahtar=${eski}`, `--zincir-anahtar=${pkt}`]), `${PAROLA}\n${PAROLA}\n`, env);
+  const s1 = existsSync(path.join(c1, "sonuc.json")) ? (JSON.parse(readFileSync(path.join(c1, "sonuc.json"), "utf8")) as Record<string, unknown>) : {};
+  const a = existsSync(path.join(c1, "surum.json")) ? isaretciYuku(path.join(c1, "surum.json")) : {};
+  const z = existsSync(path.join(c1, "surum-zincir.json")) ? isaretciYuku(path.join(c1, "surum-zincir.json")) : {};
+  check("§7a ⭐ imzala --zincir-anahtar: surum.json (paket-2099) + surum-zincir.json (pkt-2099-1), aynı yayinZamani, takım cift",
+    im.kod === 0 && s1.takim === "cift" && a.paketImzaKid === KID && z.paketImzaKid === PKT_KID && a.yayinZamani === z.yayinZamani && typeof a.yayinZamani === "string",
+    `çıkış ${im.kod} ${im.hata.trim().slice(-160)}`);
+  if (existsSync(path.join(c1, "surum-zincir.json"))) {
+    const r = readReleasePointer(readFileSync(path.join(c1, "surum-zincir.json"), "utf8"));
+    const v = r.ok ? verifyReleaseManifest(r.value, { keys: [], kanal: "test", zincir: { roots: ZF.kokler, mode: "YERLESIK" } }) : null;
+    check("§7b surum-zincir.json kökle (YERLEŞİK) doğrulanır", v?.ok === true, v && !v.ok ? v.code : "işaretçi okunamadı");
+  }
+
+  const yalniz = ortakZip("yalniz");
+  cli(["zip", `--zip=${yalniz}`, `--anahtar=${pkt}`, `--kok-capa=${capa}`, "--ci-kosu=4242"], `${PAROLA}\n`);
+  const c2 = dizin("b-yalniz");
+  const dg = bildirimCli(ortak("dogrula", yalniz, c2), "", env);
+  const s2 = existsSync(path.join(c2, "sonuc.json")) ? (JSON.parse(readFileSync(path.join(c2, "sonuc.json"), "utf8")) as Record<string, unknown>) : {};
+  check("§7c ⭐ zincir-yalnız paket dogrula → GEÇERLİ, takım zincir", dg.kod === 0 && s2.takim === "zincir", `çıkış ${dg.kod} ${dg.hata.trim().slice(-160)}`);
+  const yanlis = bildirimCli(ortak("imzala", yalniz, dizin("b-yanlis"), [`--anahtar=${eski}`]), "", env);
+  check("§7d zincir-yalnız pakete paket-* anahtarıyla bildirim → RED (imzalayan YOK), parola sorulmadan", yanlis.kod === 2 && /imzalayanı YOK/.test(yanlis.hata), `çıkış ${yanlis.kod} ${yanlis.hata.trim().slice(-120)}`);
+  const kapsiz = bildirimCli(["dogrula", `--zip=${yalniz}`, "--kanal=x", "--kanal-turu=uretim", "--guven-capasi=uretim", "--pg-cizgi=16", "--pg-en-az=16.9", `--ozet-dosyasi=${ozet}`, `--cikti=${dizin("b-uretim")}`, `--kok-capa=${capa}`]);
+  check("§7e ⭐ üretim kanalında test kök çapası → RED", kapsiz.kod !== 0 && /yalnız bekçi içindir/.test(kapsiz.hata), `çıkış ${kapsiz.kod} ${kapsiz.hata.trim().slice(-120)}`);
+
+  // İki imza dosyası FARKLI paketin (farklı paketId) → DUR.
+  const k1 = dizin("karisik");
+  spawnSync("unzip", ["-q", cift, "-d", k1]);
+  const k2 = dizin("karisik2");
+  spawnSync("unzip", ["-q", yalniz, "-d", k2]);
+  copyFileSync(path.join(k2, CHAINED_INTEGRITY_FILE), path.join(k1, CHAINED_INTEGRITY_FILE));
+  const karisik = path.join(dizin("kzip"), "k.zip");
+  spawnSync("zip", ["-q", "-r", "-X", karisik, "."], { cwd: k1 });
+  const kr = bildirimCli(ortak("dogrula", karisik, dizin("b-karisik")), "", env);
+  check("§7f ⭐ iki imza dosyası farklı paketId → DUR", kr.kod === 2 && /aynı paketi anlatmıyor/.test(kr.hata), `çıkış ${kr.kod} ${kr.hata.trim().slice(-120)}`);
+
+  // PG künyesi iki takım.
+  const pgk = dizin("pgk");
+  mkdirSync(path.join(pgk, "bin"));
+  writeFileSync(path.join(pgk, "bin", "icuuc67.dll"), "icu");
+  writeFileSync(path.join(pgk, "TEKSERP-ICERIK.sha256"), "abc  bin/icuuc67.dll\n");
+  const pgZip = path.join(dizin("pgzip"), "pg.zip");
+  spawnSync("zip", ["-q", "-r", "-X", pgZip, "."], { cwd: pgk });
+  const c3 = dizin("pg-cikti");
+  const pg = bildirimCli(["pg-imzala", `--zip=${pgZip}`, `--anahtar=${eski}`, `--zincir-anahtar=${pkt}`, `--kok-capa=${capa}`, `--cikti=${c3}`], `${PAROLA}\n${PAROLA}\n`);
+  const pgz = path.join(c3, "pg-zincir.json");
+  const pr = existsSync(pgz) ? readReleasePointer(readFileSync(pgz, "utf8")) : null;
+  const pv = pr?.ok ? verifyPgPackageManifest(pr.value, { keys: [], zincir: { roots: ZF.kokler, mode: "YERLESIK" } }) : null;
+  check("§7g ⭐ pg-imzala --zincir-anahtar: pg.json + pg-zincir.json (kökle doğrulanır)", pg.kod === 0 && existsSync(path.join(c3, "pg.json")) && pv?.ok === true, `çıkış ${pg.kod} ${pg.hata.trim().slice(-140)}`);
+  const pd = bildirimCli(["pg-dogrula", `--kunye=${pgz}`, `--zip=${pgZip}`, "--guven-capasi=uretim", `--kok-capa=${capa}`, `--cikti=${dizin("pgd")}`], "", env);
+  check("§7h pg-dogrula pg-zincir.json'u kabul eder", pd.kod === 0, `çıkış ${pd.kod} ${pd.hata.trim().slice(-120)}`);
+}
+
 async function main(): Promise<void> {
   try {
     bolum0();
@@ -535,6 +637,7 @@ async function main(): Promise<void> {
     bolum4();
     await bolum5();
     await bolum6();
+    await bolum7();
   } finally {
     rmSync(TEMP, { recursive: true, force: true });
   }
