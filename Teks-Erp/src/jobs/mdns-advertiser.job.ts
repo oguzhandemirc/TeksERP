@@ -228,7 +228,7 @@ function makeTxt(installationId: string | null): AdvertisedTxt {
     return buildAdvertisedTxt({
         discoveryVersion: DISCOVERY_VERSION,
         installationId,
-        serverName: os.hostname(),
+        serverName: live.serverName,
         companyName: live.companyName,
         version: APP_VERSION,
         apiBasePath: "/api",
