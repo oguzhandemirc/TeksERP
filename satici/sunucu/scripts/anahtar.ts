@@ -19,6 +19,14 @@
 //       ISTEMCI sertifikası (panel/tablet güncelleme imzacısı; ISTEMCI-ANAHTARI-KOK-ALTINDA §3.1): özel yarı satıcıya GELMEZ,
 //       yalnız açık anahtar (`panel-imza.ts anahtar-uret` çıktısının x'i) kökle imzalanır → açık {sertifika} dosyası
 //       (`panel-imza.ts sertifika-ekle` x'i yeniden ölçer). Sınıflar kökün bütün sınıfları (istemci sınıf süzgeci uygulamaz).
+//   npx tsx scripts/anahtar.ts paket-sertifika-uret --x=<açık anahtar> --kid=pkt-<yıl>-<n> --kok=kok-2026-1 [--kok-dizin=…] [--gun=395] --cikti=<dosya>
+//       PAKET sertifikası (paket imzacısı; PAKET-ANAHTARI-KOK-ALTINDA §2.5): `istemci-sertifika-uret` ikizi — özel yarı
+//       satıcıya GELMEZ, açık anahtar (`build-korumali-imza.ts anahtar-uret --kid=pkt-…` çıktısının x'i) kökle imzalanır →
+//       açık {sertifika} dosyası (`build-korumali-imza.ts sertifika-ekle` x'i yeniden ölçer). Sınıflar kökün.
+//   npx tsx scripts/anahtar.ts paket-iptal-uret --kok=kok-2026-1 --kok-dizin=<kökün dizini> --cikti=<dosya> [--onceki=<önceki>]
+//                                        [--iptal=<PAKET/ISTEMCI sertifika dosyası>[,…]] [--neden=<metin>]
+//       DAĞITIM İPTALİ (`tekserp-paketiptal`, yalnız kök): önceki belgenin satırları taşınır, sıra +1; satır kullanımı
+//       sertifikanın kendisinden (PAKET · ISTEMCI). Çıktı {v, tur: "tekserp-paketiptal-belgesi", sira, belge}.
 //   npx tsx scripts/anahtar.ts iptal-uret --kok=kok-2026-1 --kok-dizin=<kökün dizini> --cikti=<dosya> [--onceki=<önceki iptal belgesi>]
 //                                        [--iptal=<anahtar/sertifika dosyası>[,…]] [--neden=<metin>]
 //       Sertifika İPTAL belgesi (`tekserp-iptal`, yalnız kök): önceki belgenin bütün satırları taşınır, sıra +1.
@@ -58,8 +66,10 @@ import {
   publicKeyX,
   verifyCertificate,
   verifyEntitlement,
+  verifyPackageRevocation,
   verifyRevocation,
   type CertificateDoc,
+  type PackageRevocationDoc,
   type CertUsage,
   type LicenseClass,
   type RevocationDoc,
@@ -143,7 +153,7 @@ function rootAnchorOf(dir: string, rootKid: string): { path: string; anchor: Roo
 }
 
 /** Parolanın KOPYASIYLA imza (asıl parola birden çok imzada kullanılır; kopya alt süreçte sıfırlanır). */
-async function signWithCopy(keyFile: string, typ: "tekserp-hak" | "tekserp-iptal" | "tekserp-sertifika", payload: Record<string, unknown>, password: Buffer): Promise<string> {
+async function signWithCopy(keyFile: string, typ: "tekserp-hak" | "tekserp-iptal" | "tekserp-sertifika" | "tekserp-paketiptal", payload: Record<string, unknown>, password: Buffer): Promise<string> {
   const copy = Buffer.from(password);
   try {
     return await runAsCli(() => signWithWrappedKey({ keyFile, typ, payload, password: copy }));
@@ -337,6 +347,82 @@ async function generateIntermediate(flags: Map<string, string>): Promise<void> {
     rootPassword.fill(0);
   }
   process.stdout.write(`Ara imzacı yazıldı: ${target} (sınıflar ${classes.join("·")}; sertifika ${cert.baslangic} → ${cert.bitis})\n`);
+}
+
+/** Kök imzalı açık sertifika (`istemci-sertifika-uret` ikizi): ISTEMCI ya da PAKET; özel yarı satıcıya gelmez. */
+async function generatePublicCertificate(flags: Map<string, string>, usage: "PAKET"): Promise<void> {
+  const kid = required(flags, "kid");
+  if (!/^pkt-\d{4}-\d{1,3}$/.test(kid)) throw new CliError("PAKET kid biçimi: pkt-<yıl>-<n>");
+  const x = required(flags, "x");
+  if (!/^[A-Za-z0-9_-]{43}$/.test(x)) throw new CliError("--x Ed25519 açık anahtarı (43 karakter base64url) olmalı");
+  const rootKid = required(flags, "kok");
+  const target = path.resolve(required(flags, "cikti"));
+  if (existsSync(target)) throw new CliError(`${target} zaten var — üstüne yazılmaz`);
+  const dir = path.resolve(flags.get("kok-dizin") || flags.get("dizin") || process.env.ANAHTAR_DIZINI || "anahtarlar");
+  const root = rootAnchorOf(dir, rootKid);
+  const cert = certificateFor({ usage, kid, x, classes: root.classes, validDays: days(flags, 395, 395), dealer: null });
+  const token = await signCertificate(dir, rootKid, cert);
+  const check = verifyCertificate(token, { roots: root.anchor, usage, atMs: Date.now() });
+  if (!check.ok || check.value.document.x !== x || check.value.document.kid !== kid) throw new CliError(`Üretilen ${usage} sertifikası geri doğrulanamadı`);
+  writePublicFile(target, { sertifika: token });
+  process.stdout.write(`${usage} sertifikası yazıldı: ${target} (${kid} · kök ${rootKid} · ${cert.baslangic} → ${cert.bitis})\n`);
+}
+
+/** Dağıtım iptali dosyası: `paket-iptal-uret` çıktısı (`{tur: "tekserp-paketiptal-belgesi", belge}`) ya da düz JWS. */
+function packageRevocationTokenOf(file: string): string {
+  const text = readFileSync(file, "utf8").trim();
+  if (!text.startsWith("{")) return text;
+  const raw = JSON.parse(text) as { tur?: unknown; belge?: unknown };
+  if (raw.tur !== "tekserp-paketiptal-belgesi" || typeof raw.belge !== "string") throw new CliError(`Dağıtım iptali dosyası tanınmıyor: ${file}`);
+  return raw.belge;
+}
+
+/**
+ * DAĞITIM İPTALİ (yalnız kök): `iptal-uret` ikizi — önceki belge kökle doğrulanır ve BÜTÜN satırları taşınır, sıra +1.
+ * Yeni satırlar verilen `{sertifika}` dosyalarından; kullanım sertifikanın kendisinden (yalnız PAKET · ISTEMCI).
+ */
+async function generatePackageRevocation(flags: Map<string, string>): Promise<void> {
+  const rootKid = required(flags, "kok");
+  const target = path.resolve(required(flags, "cikti"));
+  if (existsSync(target)) throw new CliError(`${target} zaten var — üstüne yazılmaz`);
+  const root = rootAnchorOf(path.resolve(required(flags, "kok-dizin")), rootKid);
+  let previous: PackageRevocationDoc | null = null;
+  if (flags.get("onceki")) {
+    const v = verifyPackageRevocation(packageRevocationTokenOf(path.resolve(flags.get("onceki")!)), root.anchor);
+    if (!v.ok) throw new CliError(`Önceki dağıtım iptali bu kökle doğrulanamadı: ${v.code}`);
+    previous = v.value.document;
+  }
+  const neden = (flags.get("neden") ?? "").trim();
+  if (neden.length > 200) throw new CliError("--neden en çok 200 karakter");
+  const now = Date.now();
+  const entries = [...(previous?.iptaller ?? [])];
+  for (const file of (flags.get("iptal") ?? "").split(",").map((x) => x.trim()).filter(Boolean)) {
+    const raw = JSON.parse(readFileSync(path.resolve(file), "utf8")) as { tur?: unknown; sertifika?: unknown };
+    if (raw.tur !== undefined || typeof raw.sertifika !== "string") throw new CliError(`Dağıtım iptaline yalnız PAKET/ISTEMCI {sertifika} dosyası girer: ${file}`);
+    const parsed = parseJws(raw.sertifika);
+    const payload = parsed.ok ? parsed.value.payload : {};
+    const usage = payload.kullanim;
+    if (usage !== "PAKET" && usage !== "ISTEMCI") throw new CliError(`Dağıtım iptaline yalnız PAKET/ISTEMCI sertifikası girer (${String(usage)}): ${file}`);
+    const start = typeof payload.baslangic === "string" ? Date.parse(payload.baslangic) : NaN;
+    const cert = verifyCertificate(raw.sertifika, { roots: root.anchor, usage, atMs: start });
+    if (!cert.ok) throw new CliError(`Sertifika bu kökle doğrulanamadı (${cert.code}): ${file}`);
+    const doc = cert.value.document;
+    if (entries.some((e) => e.sertifikaId === doc.sertifikaId)) continue;
+    entries.push({ kid: doc.kid, sertifikaId: doc.sertifikaId, tarih: new Date(now).toISOString(), neden: neden || "dönem töreni" });
+  }
+  if (entries.length > REVOCATION_MAX_ENTRIES) throw new CliError(`İptal satırı en çok ${REVOCATION_MAX_ENTRIES}`);
+  const payload: PackageRevocationDoc = { v: 1, iptalId: randomUUID(), sira: (previous?.sira ?? 0) + 1, verilis: new Date(now).toISOString(), iptaller: entries };
+  const password = await askPassword(`Kök (${rootKid}) parolası: `);
+  let token: string;
+  try {
+    token = await signWithCopy(root.path, TYP.PAKET_IPTAL, payload, password);
+  } finally {
+    password.fill(0);
+  }
+  const check = verifyPackageRevocation(token, root.anchor);
+  if (!check.ok || check.value.document.sira !== payload.sira) throw new CliError(`Üretilen dağıtım iptali doğrulanamadı: ${check.ok ? "sıra" : check.code}`);
+  writePublicFile(target, { v: 1, tur: "tekserp-paketiptal-belgesi", sira: payload.sira, belge: token });
+  process.stdout.write(`Dağıtım iptali yazıldı: ${target} (sıra ${payload.sira}, ${entries.length} satır)\n`);
 }
 
 /** İptal belgesi dosyası: `iptal-uret` çıktısı (`{tur: "tekserp-iptal-belgesi", belge}`) ya da düz JWS. */
@@ -661,6 +747,10 @@ async function main(): Promise<void> {
       return generateRevocation(flags);
     case "istemci-sertifika-uret":
       return generateClientCertificate(flags);
+    case "paket-sertifika-uret":
+      return generatePublicCertificate(flags, "PAKET");
+    case "paket-iptal-uret":
+      return generatePackageRevocation(flags);
     case "kuyruk-imzala":
       return signRootQueue(flags);
     case "kuyruk-disa-aktar":
@@ -671,7 +761,7 @@ async function main(): Promise<void> {
       return retireKeys(flags);
     default:
       throw new CliError(
-        "Komut: kok-uret | alt-uret | indirme-uret | bayi-uret | ara-uret | istemci-sertifika-uret | iptal-uret | kuyruk-imzala | kuyruk-disa-aktar | donem-ice-aktar | emekliye-ayir | sirlar-uret | indirme-belirteci (ayrıntı dosya başında)",
+        "Komut: kok-uret | alt-uret | indirme-uret | bayi-uret | ara-uret | istemci-sertifika-uret | paket-sertifika-uret | iptal-uret | paket-iptal-uret | kuyruk-imzala | kuyruk-disa-aktar | donem-ice-aktar | emekliye-ayir | sirlar-uret | indirme-belirteci (ayrıntı dosya başında)",
       );
   }
 }

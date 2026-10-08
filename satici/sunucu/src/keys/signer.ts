@@ -80,7 +80,7 @@ export function spawnSignerProcess(): ChildProcess {
 
 export interface SignWithWrappedKeyInput {
   readonly keyFile: string;
-  readonly typ: "tekserp-hak" | "tekserp-sertifika" | "tekserp-iptal";
+  readonly typ: "tekserp-hak" | "tekserp-sertifika" | "tekserp-iptal" | "tekserp-paketiptal";
   readonly payload: Record<string, unknown>;
   /** Çağıran sıfırlar; burada da iş bitince sıfırlanır. */
   readonly password: Buffer;
