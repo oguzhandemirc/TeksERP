@@ -14,6 +14,10 @@
 //       (O11b: ORTAK paket güncelleme grubuna; --kanal = grup kodu, künye kanal/müşteri taşımaz, kip yalnız üretim)
 //   npx tsx scripts/backend-bildirim.ts ortak-dogrula --zip=<paket.zip> --guven-capasi=uretim --pg-cizgi=<16> --pg-en-az=<16.9>
 //       [--pg-kunye=<pg.json>] --cikti=<dizin>   (kurulum arşivi, O11a: ORTAK paket — kanal/grup yok, bildirim KURULMAZ)
+//   npx tsx scripts/backend-bildirim.ts dogrula|imzala --ortak --tar=<tekserp-backend-oci-<sürüm>.tar> --kanal=<GRUP> ...
+//       (sözleşme 5, `linux-x64-oci`: Linux/OCI teslim paketi — `scripts/lib/oci-paket.ts` dış zinciri ve imaj içi
+//       imzayı TAM ölçer, imzasız taban RED; PG hedefi yok, `--pg-kunye` RED; sonuc.json `ciKokeni` imaj içi yükten)
+//   npx tsx scripts/backend-bildirim.ts imaj-kimlik --arsiv=<imaj .tar.gz>   → stdout `sha256:<config özeti>` (Docker'sız)
 //
 // PAKET çapası kanalın çapa KİPİNDEN (G3; yayıncı kanal kaydının `backend.guvenCapasi`sını verir): o kanalın
 // kurulumları yalnız o kipin PAKET anahtarlarına güvenir — öteki kipin imzalı paketi/PG künyesi burada DURUR.
@@ -93,6 +97,8 @@ import { openPackageKey, packageKeyInfo, resignChainedIntegrity, type OpenedPack
 import { assertPackageCertificateFresh, packageRoots, readPackageCertificate, readPackageRevocationFile } from "./lib/paket-sertifika";
 import { PACKAGE_CERT_FIELD, PACKAGE_REVOCATION_FILE, type VerifiedPackageRevocation } from "../src/lib/license/protocol/paket-zinciri";
 import { CliError, args, askPassword, kasaAdiKid } from "./lib/cli-girdi";
+import { OCI_PLATFORM, ociPaketAdi, ociPaketiAc } from "./lib/oci-paket";
+import { imajArsiviOlc } from "./lib/oci-arsiv";
 
 type Bayraklar = ReadonlyMap<string, string>;
 
@@ -218,7 +224,9 @@ interface PaketKunyesi {
 }
 
 interface BackendGirdisi {
-  readonly zip: string;
+  /** Windows zip'i (`win32-x64`) ya da Linux/OCI dış tar'ı (`linux-x64-oci`) — tam biri. */
+  readonly zip: string | null;
+  readonly tar: string | null;
   readonly kanal: string;
   readonly kanalTuru: string;
   readonly minKaynak: string | null;
@@ -245,7 +253,15 @@ function backendGirdisi(f: Bayraklar): BackendGirdisi {
   // Ortakta test çapası bekçi içindir (ortak-dogrula ile aynı: kip yine üretim); yayıncı gerçek yüklemede onu reddeder.
   const capa = capaOku(f, ortak ? null : kanalTuru);
   const zincir = zincirGuveni(f, ortak ? null : kanalTuru);
-  return { zip: path.resolve(gerek(f, "zip")), kanal: gerek(f, "kanal"), kanalTuru, minKaynak, zorunlu: f.has("zorunlu"), ozet, pg: pgGereksinimi(f, capa, zincir), capa, zincir, ortak };
+  const tar = f.get("tar");
+  if (tar !== undefined) {
+    if (!ortak) throw new CliError("Linux/OCI paketi (--tar) yalnız ortak paket olarak güncelleme grubuna çıkar (--ortak)");
+    if (f.has("zip")) throw new CliError("--zip ve --tar birlikte verilmez (tek paket: Windows zip'i YA DA Linux/OCI tar'ı)");
+    // Konteyner PG'si bu bildirimle gelmez (sözleşme 5 şeması `pg.hedef` null ister); hedef künyesi RED.
+    if (f.has("pg-kunye")) throw new CliError("--pg-kunye Linux/OCI bildiriminde verilmez (linux-x64-oci PG hedefi taşımaz)");
+  }
+  const pg = pgGereksinimi(f, capa, zincir);
+  return { zip: tar === undefined ? path.resolve(gerek(f, "zip")) : null, tar: tar === undefined ? null : path.resolve(gerek(f, "tar")), kanal: gerek(f, "kanal"), kanalTuru, minKaynak, zorunlu: f.has("zorunlu"), ozet, pg, capa, zincir, ortak };
 }
 
 interface AcilanPaket {
@@ -294,11 +310,54 @@ async function kanalPaketiAc(tmp: string, g: BackendGirdisi): Promise<AcilanPake
   return { kunye, p, kid: eskiKid ?? zincirKid!, eskiKid, zincirKid };
 }
 
+/** Ortak paket yalnız üretim anahtar ailesiyle imzalı olur (iki platformda aynı kural). */
+function uretimAilesi(kidler: readonly (string | null)[]): void {
+  for (const k of kidler) {
+    if (k !== null && !isProductionPackageKid(k) && !isProductionChainPackageKid(k)) throw new CliError(`paket ${k} anahtarıyla imzalı — ortak paket yalnız üretim anahtar ailesiyle (paket-<yıl> · pkt-<yıl>-<n>)`);
+  }
+}
+
+type KurulanBildirim = { yuk: ReleaseManifest; eskiKid: string | null; zincirKid: string | null; ciKokeni: unknown };
+
+/** Linux/OCI (sözleşme 5): dış zincir + imaj içi imza `ociPaketiAc`ta TAM ölçülür; bildirim `linux-x64-oci`. */
+async function ociBildirimKur(g: BackendGirdisi, tar: string): Promise<KurulanBildirim> {
+  const ac = await ociPaketiAc(tar, { capa: g.capa, zincir: g.zincir });
+  uretimAilesi([ac.eskiKid, ac.zincirKid]);
+  if (path.basename(tar) !== ociPaketAdi(ac.p.surum)) throw new CliError(`paket dosyasının adı ${path.basename(tar)} — ${ociPaketAdi(ac.p.surum)} bekleniyor`);
+  if (g.pg.hedef !== null) throw new CliError("linux-x64-oci bildirimi PG hedefi taşımaz");
+  if (g.minKaynak !== null && (compareVersions(g.minKaynak, ac.p.surum) ?? 0) >= 0) throw new CliError(`--min-kaynak (${g.minKaynak}) sürümden (${ac.p.surum}) eski olmalı`);
+  const yuk: ReleaseManifest = {
+    v: 1,
+    urun: "backend",
+    platform: OCI_PLATFORM,
+    kanal: g.kanal,
+    surum: ac.p.surum,
+    commit: ac.commit,
+    derlemeTarihi: ac.p.derlemeTarihi,
+    yayinZamani: new Date().toISOString(),
+    paket: { ad: path.basename(tar), boyut: fs.statSync(tar).size, sha256: sha256Dosya(tar), paketId: ac.p.paketId },
+    paketImzaKid: ac.kid,
+    minKaynakSurum: g.minKaynak,
+    gocSayisi: ac.gocSayisi,
+    pg: g.pg,
+    runtime: { node: ac.nodeSurum },
+    notlar: { ozet: g.ozet },
+    zorunlu: g.zorunlu,
+    imaj: ac.imaj,
+    guncelleyici: ac.guncelleyici,
+  };
+  const sema = ReleaseManifestSchema.safeParse(yuk);
+  if (!sema.success) throw new CliError(`bildirim şemadan geçmedi: ${sema.error.issues[0]?.path.join(".")} ${sema.error.issues[0]?.message ?? ""}`);
+  return { yuk, eskiKid: ac.eskiKid, zincirKid: ac.zincirKid, ciKokeni: ac.ciKokeni };
+}
+
 /** Paketi açar, bütünlüğünü ve künyesini denetler; bildirim yükünü kurar (imzasız). */
-async function bildirimKur(g: BackendGirdisi): Promise<{ yuk: ReleaseManifest; eskiKid: string | null; zincirKid: string | null }> {
+async function bildirimKur(g: BackendGirdisi): Promise<KurulanBildirim> {
+  if (g.tar !== null) return ociBildirimKur(g, g.tar);
+  const zip = g.zip!;
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "tekserp-bildirim-"));
   try {
-    execFileSync("unzip", ["-q", g.zip, "-d", tmp]);
+    execFileSync("unzip", ["-q", zip, "-d", tmp]);
     const ac = g.ortak ? await ortakPaketiAc(tmp, g.capa, g.zincir, "ortak gruba") : await kanalPaketiAc(tmp, g);
     const { kunye, p, kid } = ac;
     if (typeof kunye.commit !== "string" || typeof kunye.runtimeNodeSurumu !== "string" || typeof kunye.migrationSayisi !== "number") {
@@ -314,7 +373,7 @@ async function bildirimKur(g: BackendGirdisi): Promise<{ yuk: ReleaseManifest; e
       commit: kunye.commit,
       derlemeTarihi: p.derlemeTarihi,
       yayinZamani: new Date().toISOString(),
-      paket: { ad: path.basename(g.zip), boyut: fs.statSync(g.zip).size, sha256: sha256Dosya(g.zip), paketId: p.paketId },
+      paket: { ad: path.basename(zip), boyut: fs.statSync(zip).size, sha256: sha256Dosya(zip), paketId: p.paketId },
       paketImzaKid: kid,
       minKaynakSurum: g.minKaynak,
       gocSayisi: kunye.migrationSayisi,
@@ -323,7 +382,7 @@ async function bildirimKur(g: BackendGirdisi): Promise<{ yuk: ReleaseManifest; e
       notlar: { ozet: g.ozet },
       zorunlu: g.zorunlu,
     };
-    return { yuk, eskiKid: ac.eskiKid, zincirKid: ac.zincirKid };
+    return { yuk, eskiKid: ac.eskiKid, zincirKid: ac.zincirKid, ciKokeni: null };
   } finally {
     fs.rmSync(tmp, { recursive: true, force: true });
   }
@@ -349,8 +408,8 @@ async function backend(komut: "dogrula" | "imzala", f: Bayraklar): Promise<void>
       const kendi: ReleaseManifest = { ...yuk, paketImzaKid: key.kid };
       const token = belgeImzala(TYP.SURUM, ReleaseManifestSchema, kendi, key, i.sertifika, () => signReleaseManifest({ payload: kendi, key: { kid: key.kid, privateKey: key.privateKey } }));
       const geri = i.sertifika === null
-        ? verifyReleaseManifest(token, { keys: [{ kid: key.kid, x: key.x }], kanal: g.kanal })
-        : verifyReleaseManifest(token, { keys: [], kanal: g.kanal, zincir: g.zincir });
+        ? verifyReleaseManifest(token, { keys: [{ kid: key.kid, x: key.x }], kanal: g.kanal, platform: yuk.platform })
+        : verifyReleaseManifest(token, { keys: [], kanal: g.kanal, platform: yuk.platform, zincir: g.zincir });
       if (!geri.ok) throw new Error(`öz-denetim düştü (${key.kid}): ${geri.code}`);
       if (i.sertifika === null) bildirim = token;
       else bildirimZincir = token;
@@ -359,10 +418,10 @@ async function backend(komut: "dogrula" | "imzala", f: Bayraklar): Promise<void>
     if (bildirimZincir) fs.writeFileSync(path.join(cikti, CHAINED_RELEASE_MANIFEST_FILE), releasePointerText(bildirimZincir), { mode: 0o644 });
   }
   const takim = komut === "imzala" ? takimOf(bildirim !== null, bildirimZincir !== null) : takimOf(kur.eskiKid !== null, kur.zincirKid !== null);
-  fs.writeFileSync(path.join(cikti, "sonuc.json"), `${JSON.stringify({ v: 1, kip: komut, surum: yuk.surum, takim, bildirim: yuk, jws: bildirim, jwsZincir: bildirimZincir, zincirKid: kur.zincirKid, uyarilar }, null, 2)}\n`);
+  fs.writeFileSync(path.join(cikti, "sonuc.json"), `${JSON.stringify({ v: 1, kip: komut, surum: yuk.surum, takim, bildirim: yuk, jws: bildirim, jwsZincir: bildirimZincir, zincirKid: kur.zincirKid, ciKokeni: kur.ciKokeni, uyarilar }, null, 2)}\n`);
   for (const u of uyarilar) console.error(`⚠ ${u}`);
   const pg = yuk.pg.hedef ? ` · PG hedefi ${yuk.pg.hedef.surum}-${yuk.pg.hedef.derleme}` : " · PG hedefi yok";
-  console.error(`✓ ${komut}: backend ${yuk.surum} → ${g.kanal} · paket ${yuk.paket.ad} (${yuk.paket.boyut} B) · takım ${takim} · kid ${[kur.eskiKid, kur.zincirKid].filter(Boolean).join(" + ")}${pg}`);
+  console.error(`✓ ${komut}: backend ${yuk.surum} (${yuk.platform}) → ${g.kanal} · paket ${yuk.paket.ad} (${yuk.paket.boyut} B) · takım ${takim} · kid ${[kur.eskiKid, kur.zincirKid].filter(Boolean).join(" + ")}${pg}`);
 }
 
 // ── PG paketi künyesi ───────────────────────────────────────────────────────
@@ -646,9 +705,7 @@ async function ortakPaketiAc(tmp: string, capa: readonly PackageKey[], zincir: O
   if (kunye.backendKanal !== null) throw new CliError(`paket "${String(kunye.backendKanal)}" kanalı için üretilmiş — ${hedef} yalnız ortak paket girer (paketle.ps1 argümansız)`);
   if (kunye.prova === true) throw new CliError(`PROVA paketi ${hedef} girmez`);
   const { p, eskiKid, zincirKid } = await imzalariDenetle(tmp, capa, zincir, `${hedef} girmez`);
-  for (const k of [eskiKid, zincirKid]) {
-    if (k !== null && !isProductionPackageKid(k) && !isProductionChainPackageKid(k)) throw new CliError(`paket ${k} anahtarıyla imzalı — ortak paket yalnız üretim anahtar ailesiyle (paket-<yıl> · pkt-<yıl>-<n>)`);
-  }
+  uretimAilesi([eskiKid, zincirKid]);
   const kid = eskiKid ?? zincirKid!;
   if (p.urun !== "backend") throw new CliError(`künye ürünü backend değil: ${p.urun}`);
   if (p.surum !== kunye.uygulamaSurumu) throw new CliError(`künye sürümü (${p.surum}) PAKET.json uygulamaSurumu (${String(kunye.uygulamaSurumu)}) ile aynı değil`);
@@ -677,15 +734,27 @@ async function ortakDogrula(f: Bayraklar): Promise<void> {
   }
 }
 
+/** `imaj-kimlik --arsiv=<imaj .tar.gz>`: imaj kimliği = config özeti, arşivden (Docker deposunun `.Id`'si değil). */
+async function imajKimlik(f: Bayraklar): Promise<void> {
+  let o;
+  try {
+    o = await imajArsiviOlc(path.resolve(gerek(f, "arsiv")));
+  } catch (e) {
+    throw new CliError(`imaj arşivi ölçülemedi: ${e instanceof Error ? e.message : String(e)}`);
+  }
+  process.stdout.write(`${o.kimlik}\n`);
+}
+
 async function main(): Promise<void> {
   const { command, flags } = args(process.argv.slice(2));
   if (command === "dogrula" || command === "imzala") return backend(command, flags);
+  if (command === "imaj-kimlik") return imajKimlik(flags);
   if (command === "ortak-dogrula") return ortakDogrula(flags);
   if (command === "pg-imzala") return pgImzala(flags);
   if (command === "pg-dogrula") return pgDogrula(flags);
   if (command === "yeniden-imzala") return yenidenImzala(flags);
   if (command === "pg-yeniden-imzala") return pgYenidenImzala(flags);
-  throw new CliError("komut: dogrula | imzala | ortak-dogrula | pg-imzala | pg-dogrula | yeniden-imzala | pg-yeniden-imzala");
+  throw new CliError("komut: dogrula | imzala | imaj-kimlik | ortak-dogrula | pg-imzala | pg-dogrula | yeniden-imzala | pg-yeniden-imzala");
 }
 
 main().catch((e: unknown) => {

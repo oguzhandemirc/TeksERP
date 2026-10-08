@@ -11,6 +11,10 @@
 export const SURUM_DESENI = /^[0-9]{1,4}\.[0-9]{1,4}\.[0-9]{1,6}(-[0-9A-Za-z]{1,20}(\.[0-9A-Za-z]{1,20}){0,3})?$/;
 /** Sürüm dizinindeki paket adı — protokol `ArtifactNameSchema` ile birebir. */
 export const PAKET_ADI_DESENI = /^[A-Za-z0-9][A-Za-z0-9._-]{0,115}\.zip$/;
+/** Linux/OCI teslim paketi (sözleşme 5, `backend-oci`): `tekserp-backend-oci-<sürüm>.tar` — `oci-paket.ts` `ociPaketAdi` aynası. */
+export const OCI_PAKET_ADI_DESENI = /^tekserp-backend-oci-[0-9]{1,4}\.[0-9]{1,4}\.[0-9]{1,6}(-[0-9A-Za-z]{1,20}(\.[0-9A-Za-z]{1,20}){0,3})?\.tar$/;
+/** Yayıncının iki ürün yolu: Windows `backend` (zip) · Linux/OCI `backend-oci` (tar). */
+export const YAYIN_URUNLERI = Object.freeze(['backend', 'backend-oci']);
 /** VDS mutlak yolu (kanal kaydından gelir; yine de uzak komuta girmeden ölçülür). */
 export const UZAK_YOL_DESENI = /^\/[A-Za-z0-9._/-]+$/;
 /** Sürüm dizininin tam kopyası yüklenene dek taşıdığı ad (yayın dışı, nokta önekli). */
@@ -83,11 +87,12 @@ export function zincirAdresi(sonJsonUrl) {
   return String(sonJsonUrl).replace(/son\.json$/, ZINCIR_ISARETCI);
 }
 
-/** Köprü kaydının yolu: yayın defterinin dizininde `<grup>-backend-KOPRU.json` (eski takım donduruldu). */
-export function kopruYolu(backendDefter, grup) {
+/** Köprü kaydının yolu: yayın defterinin dizininde `<grup>-<ürün>-KOPRU.json` (eski takım donduruldu; ürün yolu başına). */
+export function kopruYolu(backendDefter, grup, urun = 'backend') {
   if (!UZAK_YOL_DESENI.test(backendDefter) || backendDefter.split('/').includes('..')) throw new Error(`güvensiz defter yolu: ${backendDefter}`);
   if (!/^[a-z0-9-]{1,40}$/.test(grup)) throw new Error(`güvensiz grup: ${grup}`);
-  return `${backendDefter.slice(0, backendDefter.lastIndexOf('/'))}/${grup}-backend-KOPRU.json`;
+  if (!YAYIN_URUNLERI.includes(urun)) throw new Error(`güvensiz ürün: ${urun}`);
+  return `${backendDefter.slice(0, backendDefter.lastIndexOf('/'))}/${grup}-${urun}-KOPRU.json`;
 }
 
 /** Köprü kaydını uzakta geçici adla yazıp yerine taşıyan komut (var olanı ezmez). */
@@ -142,11 +147,16 @@ const tirnak = (s) => `'${String(s).replace(/'/g, "'\\''")}'`;
  * Uzak yayın planı — yollar kanal kaydından, adlar bildirimden. Her değer desenden geçer; geçmeyen FIRLATIR.
  * Sıra (pazarlık dışı): geçici dizine yükle → uzakta ölç → dizini yeniden adla → `son.json` EN SON.
  */
-export function yayinPlani({ vdsBackend, backendDefter, surum, paketAd, pgAd = null, damga }) {
+export function yayinPlani({ vdsBackend, backendDefter, surum, paketAd, pgAd = null, damga, urun = 'backend' }) {
+  if (!YAYIN_URUNLERI.includes(urun)) throw new Error(`yayın planı: tanınmayan ürün: ${urun}`);
+  // Paket adı ürünün biçiminde: Windows zip'i OCI yoluna, OCI tar'ı Windows yoluna giremez.
+  const paketDeseni = urun === 'backend-oci' ? OCI_PAKET_ADI_DESENI : PAKET_ADI_DESENI;
   for (const [ne, v, d] of [['vdsBackend', vdsBackend, UZAK_YOL_DESENI], ['backendDefter', backendDefter, UZAK_YOL_DESENI],
-    ['sürüm', surum, SURUM_DESENI], ['paket adı', paketAd, PAKET_ADI_DESENI], ['damga', damga, /^[0-9A-Za-z]{6,40}$/]]) {
+    ['sürüm', surum, SURUM_DESENI], ['paket adı', paketAd, paketDeseni], ['damga', damga, /^[0-9A-Za-z]{6,40}$/]]) {
     if (typeof v !== 'string' || !d.test(v) || v.split('/').includes('..')) throw new Error(`yayın planı: güvensiz ${ne}: ${v}`);
   }
+  if (urun === 'backend-oci' && pgAd !== null) throw new Error('yayın planı: backend-oci PG paketi taşımaz');
+  if (urun === 'backend-oci' && paketAd !== `tekserp-backend-oci-${surum}.tar`) throw new Error(`yayın planı: OCI paket adı sürümün değil: ${paketAd}`);
   if (pgAd !== null && !PAKET_ADI_DESENI.test(pgAd)) throw new Error(`yayın planı: güvensiz PG paket adı: ${pgAd}`);
   const kok = vdsBackend.replace(/\/+$/, '');
   const surumDizini = `${kok}/${surum}`;
@@ -239,11 +249,15 @@ export function defterSatiri({ zaman, surum, kim, sha16, boyut, terfiAtla, ciAtl
 export function ciKokeniOku(jws) {
   try {
     const yuk = JSON.parse(Buffer.from(String(jws ?? '').trim().split('.')[1] ?? '', 'base64url').toString('utf8'));
-    const k = yuk?.ciKokeni;
-    return k && typeof k === 'object' && (k.kip === 'kosu' || k.kip === 'atlandi' || k.kip === 'thinkpad') ? k : null;
+    return ciKokeniSuz(yuk?.ciKokeni);
   } catch {
     return null;
   }
+}
+
+/** Köken kaydı nesnesi tanınan kiplerden biriyse kendisi, değilse null (OCI: bildirim aracının `sonuc.json`undan gelir). */
+export function ciKokeniSuz(k) {
+  return k && typeof k === 'object' && (k.kip === 'kosu' || k.kip === 'atlandi' || k.kip === 'thinkpad') ? k : null;
 }
 
 /** CI kaçışı kaydının defter/uyarı metni: cümle · saat · makine · HEAD; kaçış değilse null. */

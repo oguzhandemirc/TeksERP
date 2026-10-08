@@ -7,11 +7,11 @@
 //   2. build-araclar --korumali → dist/tools/*.cjs, ardından HER araç esbuild ile karartılır
 //      (2b'nin --korumali bayrağı yoksa da `// src/...` yol yorumu pakete girmesin)
 //   3. seed aracı (entrypoint §2'nin ilk kurulum seed'i) → dist/tools/seed.cjs, karartılmış
-//   4. prisma (YORUMSUZ şema + migration SQL + üretim config'i) · public · assets · native
+//   4. prisma (YORUMSUZ şema + migration SQL + üretim config'i) · public · assets · native (+ çapa kipi denetimi)
 // Paketin RUNTIME Node'uyla koşar (V8 kilidi: .jsc onunla üretilir, onunla açılır).
 //   node docker/korumali/sahne.mjs /sahne/app
 // =============================================================================
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -88,6 +88,10 @@ async function main() {
   kopyala(path.join(PROJ, 'package-lock.json'), path.join(SAHNE, 'package-lock.json'));
   fs.mkdirSync(path.join(SAHNE, 'native'), { recursive: true });
   kopyala(path.join(PROJ, 'native', 'lisans-cekirdek', 'dist-uretim', NATIVE), path.join(SAHNE, 'native', NATIVE));
+  // Bayt kodunun çapa kipi = native'in gömülü kipi, native test çapasız (Windows paketle.ps1 ile aynı kapı, G3);
+  // uyuşmazsa imaj açılışta çekirdeksiz kalırdı — derlemede durulur.
+  const capa = spawnSync(process.execPath, ['scripts/native-capa-kipi.mjs', path.join(SAHNE, 'native', NATIVE), path.join(dist, 'server-kunye.json')], { cwd: PROJ, stdio: 'inherit' });
+  if (capa.status !== 0) dur(`native çapa kipi bayt koduyla tutarsız ya da ölçülemedi (native-capa-kipi.mjs çıkış ${capa.status})`);
 
   // --- Kapı: sahnede kaynak/harita yok ------------------------------------------
   const yasak = [];

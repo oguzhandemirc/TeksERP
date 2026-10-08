@@ -43,6 +43,11 @@
  *   node deploy/backend-yayinla.mjs --grup=<grup> --pg-yayinla --pg-paket=<PG sahne zip> --pg-kunye=<pg.json> [--kuru]
  *        # PG paketi (sözleşme sürümü 2): `<grup>/backend/pg/<sürüm>-<derleme>/` DEĞİŞMEZ dizinine; son.json'a dokunmaz
  *   node deploy/backend-yayinla.mjs --grup=<grup> --dogrula        # yükleme YOK: kenardaki son.json'u oku
+ *   node deploy/backend-yayinla.mjs --grup=<grup> --urun=backend-oci --paket=<tekserp-backend-oci-<sürüm>.tar> [--anahtar] [--kuru]
+ *        # Linux/OCI (sözleşme 5): `/<grup>/backend-oci/` yolu, kendi defteri; Windows `backend/` yoluna DOKUNULMAZ. Paket
+ *        # `teslim-paketle.sh` çıktısıdır; imzasız TABAN imaj, label'sız imaj, etiket/kimlik uyuşmazlığı bildirim aracında
+ *        # DURUR. PG argümanları (--pg-yayinla · --pg-kunye · --pg-paket) OCI'de DURUR. Terfi etiketi sürümündür
+ *        # (`terfi/<grup>/backend-vX`, iki platform aynı sürüm). CI kökeni imaj içi imzalı yükten.
  * `--kuru`: künye + sürüm notu + terfi (ağsız) + paket bütünlüğü ölçülür, bildirim İMZASIZ kurulur; ağa ÇIKILMAZ.
  */
 
@@ -70,6 +75,8 @@ import {
   zincirAdresi,
   ciAtlaMetni,
   ciKokeniOku,
+  ciKokeniSuz,
+  YAYIN_URUNLERI,
   defterKomutu,
   defterSatiri,
   isaretciSurumu,
@@ -109,6 +116,13 @@ if (argv.some((a) => /^--(parola|password|sifre)/.test(a))) dur('Parola argüman
 if (arg('musteri') !== undefined) dur('EMEKLİ ESKİ KANAL ARGÜMANI: --musteri — hiçbir şey yüklenmedi', 'Bu ağaç yalnız grup yayını yapar: --grup=<test|oncu|genel>.', 'Eski kanal: docs/ops/ESKI-KANAL-ACIL.md (eski-kanal-son etiketi).');
 const GRUP = arg('grup');
 if (!GRUP) dur('HANGİ GRUBA YAYINLANIYOR?', '`--grup=<test|oncu|genel>` zorunludur — hedef dizin, feed ve defter dağıtım kaydından çözülür.');
+const URUN = arg('urun') ?? 'backend';
+if (!YAYIN_URUNLERI.includes(URUN)) dur(`TANINMAYAN ÜRÜN: --urun=${URUN}`, `Ürün yolu: ${YAYIN_URUNLERI.join(' | ')} (varsayılan backend = Windows).`);
+const OCI = URUN === 'backend-oci';
+if (OCI) {
+  const pgArg = ['pg-yayinla', 'pg-kunye', 'pg-paket'].filter((a) => arg(a) !== undefined);
+  if (pgArg.length) dur(`--${pgArg.join(' --')} Linux/OCI yayınında verilmez — hiçbir şey yüklenmedi`, 'linux-x64-oci bildirimi PG hedefi taşımaz (konteyner PG\'si ayrı yoldan; GUNCELLEYICI-SAGLAMLIK L8).');
+}
 // Yeni adres: gerçek yükleme D5 + D8 olmadan KAPALI (fail-closed); --kuru/--dogrula ağa yazmaz.
 if (!KURU && !argv.includes('--dogrula')) {
   const kapali = yeniAdresKapisiSatirlari();
@@ -120,8 +134,9 @@ let KANAL;
 let KAYIT;
 try {
   const { kayit, kaynak } = grupCoz(GRUP);
-  const h = grupHedefi(GRUP, 'backend', { kayit });
-  KANAL = { tur: 'uretim', backend: { guvenCapasi: 'uretim' }, yayin: { ...grupYayinBlogu(GRUP, { kayit }).yayin, vdsBackend: h.vds, backendDefter: h.defter }, terfiKaynagi: kaynak };
+  const h = grupHedefi(GRUP, URUN, { kayit });
+  // OCI: feed/işaretçi/VDS/defter `backend-oci` yolundan; Windows bloğunun backend alanları EZİLİR (karışmaz).
+  KANAL = { tur: 'uretim', backend: { guvenCapasi: 'uretim' }, yayin: { ...grupYayinBlogu(GRUP, { kayit }).yayin, vdsBackend: h.vds, backendDefter: h.defter, backendFeed: `${h.feed}/`, backendManifest: `${h.feed}/son.json` }, terfiKaynagi: kaynak };
   KAYIT = { kanallar: { [GRUP]: KANAL } };
 } catch (e) {
   if (e instanceof Olculemedi) dur('DAĞITIM KAYDI ÖLÇÜLEMEDİ', e.message);
@@ -268,7 +283,8 @@ if (argv.includes('--pg-yayinla')) {
  * ------------------------------------------------------------------ */
 
 const PAKET = arg('paket') ? path.resolve(arg('paket')) : null;
-if (!PAKET || !fs.existsSync(PAKET)) dur('PAKET YOK', '`--paket=<imzalı zip>` (paketle.ps1 -Korumali + build-korumali-imza.ts zip çıktısı)');
+if (!PAKET || !fs.existsSync(PAKET)) dur('PAKET YOK', OCI ? '`--paket=<tekserp-backend-oci-<sürüm>.tar>` (docker/korumali/teslim-paketle.sh çıktısı)' : '`--paket=<imzalı zip>` (paketle.ps1 -Korumali + build-korumali-imza.ts zip çıktısı)');
+if (OCI !== PAKET.endsWith('.tar')) dur(`PAKET ÜRÜN YOLUNA UYMUYOR: ${path.basename(PAKET)} → ${URUN}`, OCI ? 'backend-oci yalnız Linux/OCI dış tar\'ını yayınlar (Windows zip\'i --urun verilmeden).' : 'Linux/OCI tar\'ı --urun=backend-oci ile yayınlanır.');
 const ANAHTAR = arg('anahtar');
 const ZINCIR_ANAHTAR = arg('zincir-anahtar');
 const KOK_DOSYASI = arg('kok-dosyasi');
@@ -292,9 +308,13 @@ const PG_HEDEF = PG_KUNYE ? pgKunyeYukuOku() : null;
 
 let kunye;
 try {
-  kunye = JSON.parse(execFileSync('unzip', ['-p', PAKET, 'PAKET.json'], { encoding: 'utf8', maxBuffer: 1024 * 1024 }).replace(/^﻿/, ''));
+  // OCI: dış tar'daki teslim künyesi (imzası bildirim aracında TAM ölçülür); alan adları Windows künyesine eşlenir.
+  if (OCI) {
+    const d = JSON.parse(execFileSync('tar', ['-xOf', PAKET, 'PAKET-DOCKER.json'], { encoding: 'utf8', maxBuffer: 1024 * 1024 }));
+    kunye = { uygulamaSurumu: d.surum, commit: d.commit, prova: false, backendKanal: d.musteri ?? null };
+  } else kunye = JSON.parse(execFileSync('unzip', ['-p', PAKET, 'PAKET.json'], { encoding: 'utf8', maxBuffer: 1024 * 1024 }).replace(/^﻿/, ''));
 } catch (e) {
-  dur('PAKET.json okunamadı', `${PAKET}: ${String(e.message ?? e).slice(0, 200)}`);
+  dur(`${OCI ? 'PAKET-DOCKER.json' : 'PAKET.json'} okunamadı`, `${PAKET}: ${String(e.message ?? e).slice(0, 200)}`);
 }
 const SURUM = String(kunye.uygulamaSurumu ?? '');
 if (!SURUM_DESENI.test(SURUM)) dur(`Paket sürümü yayınlanabilir biçimde değil: "${SURUM}"`, 'x.y.z ya da x.y.z-ön.sürüm (+yapı eki yok).');
@@ -302,7 +322,7 @@ const PROVA = kunye.prova === true;
 if (PROVA) dur(`PROVA paketi "${GRUP}" grubuna yayınlanmaz`, 'Prova paketi yayına çıkmaz; yalnız yerelde/kurulum provasında denenir.');
 if (kunye.backendKanal !== null) dur(`Paket "${kunye.backendKanal}" kanalı için üretilmiş — gruba yalnız ORTAK paket çıkar`, 'paketle.ps1 argümansız (ortak paket) ile üret.');
 
-console.log(`\n${BAR}\n  BACKEND ${SURUM} → ${GRUP} (${KANAL.tur})${KURU ? ' — KURU' : ''}\n${BAR}`);
+console.log(`\n${BAR}\n  BACKEND ${SURUM} → ${GRUP} (${KANAL.tur})${OCI ? ' · Linux/OCI (backend-oci)' : ''}${KURU ? ' — KURU' : ''}\n${BAR}`);
 const belge = path.join(KOK, 'docs', 'surumler', `backend-${PROVA ? cekirdekSurum(SURUM) : SURUM}.md`);
 let ozet = fs.existsSync(belge) ? ozetCikar(fs.readFileSync(belge, 'utf8')) : null;
 if (!ozet) {
@@ -368,7 +388,7 @@ fs.writeFileSync(ozetDosyasi, ozet);
 const aracArg = [
   '--import', 'tsx', 'scripts/backend-bildirim.ts', KURU ? 'dogrula' : 'imzala',
   '--ortak',
-  `--zip=${PAKET}`, `--kanal=${GRUP}`, `--kanal-turu=${KANAL.tur}`, `--guven-capasi=${KANAL.backend.guvenCapasi}`, `--pg-cizgi=${PG_CIZGI}`, `--pg-en-az=${PG_EN_AZ}`,
+  OCI ? `--tar=${PAKET}` : `--zip=${PAKET}`, `--kanal=${GRUP}`, `--kanal-turu=${KANAL.tur}`, `--guven-capasi=${KANAL.backend.guvenCapasi}`, `--pg-cizgi=${PG_CIZGI}`, `--pg-en-az=${PG_EN_AZ}`,
   `--ozet-dosyasi=${ozetDosyasi}`, `--cikti=${CIKTI}`,
   ...(PG_KUNYE ? [`--pg-kunye=${PG_KUNYE}`] : []),
   ...(arg('min-kaynak') ? [`--min-kaynak=${arg('min-kaynak')}`] : []),
@@ -388,7 +408,8 @@ const sha16 = B.paket.sha256.slice(0, 16);
 bilgi(`✓ paket ${B.paket.ad} · ${B.paket.boyut} B · sha256 ${sha16}… · kid ${B.paketImzaKid} · PG ${B.pg.cizgi} ≥ ${B.pg.enAz}${B.pg.hedef ? ` · hedef ${B.pg.hedef.surum}-${B.pg.hedef.derleme}` : ''}`);
 // CI kökeni imzalı künyeden (bütünlük yukarıda TAM denetlendi); kaçış DURDURMAZ, uyarır ve deftere girer.
 let ciKokeni = null;
-try {
+if (OCI) ciKokeni = ciKokeniSuz(sonuc.ciKokeni);
+else try {
   const icerik = execFileSync('unzip', ['-Z1', PAKET], { encoding: 'utf8', maxBuffer: 16 * 1024 * 1024 }).split('\n');
   const imzaDosyasi = icerik.includes('butunluk.jws') ? 'butunluk.jws' : 'butunluk-zincir.jws';
   ciKokeni = ciKokeniOku(execFileSync('unzip', ['-p', PAKET, imzaDosyasi], { encoding: 'utf8', maxBuffer: 1024 * 1024 }));
@@ -407,14 +428,17 @@ const plan = yayinPlani({
   surum: SURUM,
   paketAd: B.paket.ad,
   damga: crypto.randomBytes(6).toString('hex'),
+  urun: URUN,
 });
+if (OCI && (B.platform !== 'linux-x64-oci' || !B.imaj)) dur('Bildirim Linux/OCI bildirimi değil', `platform ${B.platform}`);
+if (OCI) bilgi(`✓ imaj ${B.imaj.etiket} · kimlik ${B.imaj.kimlik.slice(0, 19)}… · güncelleyici ${B.guncelleyici?.surum ?? '?'} · göç ${B.gocSayisi}`);
 
 /* ------------------------------------------------------------------ *
  * 4) Uzak kapılar — belirteç · monotonluk · değişmezlik (yüklemeden ÖNCE)
  * ------------------------------------------------------------------ */
 
 const ZINCIR_URL = zincirAdresi(KANAL.yayin.backendManifest);
-const KOPRU_YOLU = kopruYolu(KANAL.yayin.backendDefter, GRUP);
+const KOPRU_YOLU = kopruYolu(KANAL.yayin.backendDefter, GRUP, URUN);
 let KOPRU_YAZ = false;
 if (KURU) {
   bilgi('[kuru] kenar belirteci, yayındaki sürüm, köprü kaydı ve sürüm dizininin varlığı ÖLÇÜLMEDİ (ağ yok)');
@@ -497,6 +521,7 @@ const satir = defterSatiri({
   boyut: B.paket.boyut,
   terfiAtla: TERFI_ATLA !== undefined ? cumleDenetle(TERFI_ATLA).cumle : null,
   ciAtla: CI_ATLA,
+  urun: URUN,
 });
 const defter = uzak(defterKomutu(plan.defter, satir), 'yayın defteri');
 if (!KURU && defter.status !== 0) bilgi('⚠ yayın defteri yazılamadı (yayın etkilenmedi)');
@@ -517,7 +542,7 @@ for (const i of ISARETCILER) {
   }
   bilgi(`✓ kenarda ${i.son} yüklenenle bayt bayt aynı`);
 }
-await yayinSonrasiBildir({ urun: 'backend', kanal: GRUP, surum: SURUM, ayrinti: { sha16, boyut: String(B.paket.boyut) }, terfiAtla: TERFI_ATLA });
+await yayinSonrasiBildir({ urun: 'backend', kanal: GRUP, surum: SURUM, ayrinti: { sha16, boyut: String(B.paket.boyut), platform: B.platform }, terfiAtla: TERFI_ATLA });
 if (terfi.atlandi) {
   const k = terfiAtlaKaydi({ kod: GRUP, urun: 'backend', surum: SURUM, cumle: terfi.atlandi.cumle });
   bilgi(k.durum === 'basarisiz' ? `⚠ terfi atlama etiketi atılamadı: ${k.not}` : `✓ terfi atlama etiketi: ${k.ad}`);
