@@ -14,12 +14,15 @@ use tekserp_dogrulama::jsonx::deep_equal;
 use tekserp_dogrulama::jsonx::{js_number, utf16_len};
 use tekserp_dogrulama::outcome::{code as proto, Fail, Outcome};
 use tekserp_dogrulama::paket_zinciri::{is_chain_package_kid, verify_package_signed, PackageChainSigner, PackageSigned, PackageTrust};
-use tekserp_dogrulama::schema::{self, is_bool, is_int, is_iso, is_nullable, is_str_matching, is_string_len, is_uuid, object, req};
+use tekserp_dogrulama::schema::{self, is_bool, is_int, is_iso, is_nullable, is_str_matching, is_string_len, is_uuid, object, opt, req};
 
 /// Belge türleri (TS `TYP.SURUM` · `TYP.PG`).
 pub const TYP_SURUM: &str = "tekserp-surum";
 pub const TYP_PG: &str = "tekserp-pg";
-pub const UPDATE_PLATFORMS: [&str; 1] = ["win32-x64"];
+/// TS `UPDATE_PLATFORMS` — sözleşme 5 `linux-x64-oci`yi ekledi (ayrı ürün yolu `backend-oci`).
+pub const UPDATE_PLATFORMS: [&str; 2] = ["win32-x64", "linux-x64-oci"];
+/// TS `PG_PLATFORMS` — PG sahne paketi yalnız Windows'ta.
+pub const PG_PLATFORMS: [&str; 1] = ["win32-x64"];
 pub const UPDATE_PRODUCT: &str = "backend";
 pub const PG_PRODUCT: &str = "postgresql";
 pub const PACKAGE_MAX_BYTES: u64 = 4 * 1024 * 1024 * 1024;
@@ -38,8 +41,59 @@ pub mod code {
     pub const SURUM_ISARETCI: &str = "SURUM_ISARETCI";
     pub const SURUM_KANAL: &str = "SURUM_KANAL";
     pub const SURUM_ANAHTAR: &str = "SURUM_ANAHTAR";
+    /// Sözleşme 5: bildirimin platformu okuyanın hedefi değil.
+    pub const SURUM_PLATFORM: &str = "SURUM_PLATFORM";
     pub const PAKET_BAGI: &str = "PAKET_BAGI";
     pub const PG_BAGI: &str = "PG_BAGI";
+}
+
+/// Bildirimin platformu (TS `UpdatePlatform`). Okuyan güncelleyici kendi hedefini PARAMETRE olarak verir.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum UpdatePlatform {
+    Win32X64,
+    LinuxX64Oci,
+}
+
+/// Sözleşme 1–4'ün tek platformu; platform almayan çağrılar bunu kastetmiştir.
+pub const WINDOWS_PLATFORM: UpdatePlatform = UpdatePlatform::Win32X64;
+
+impl UpdatePlatform {
+    pub const ALL: [UpdatePlatform; 2] = [UpdatePlatform::Win32X64, UpdatePlatform::LinuxX64Oci];
+
+    pub fn as_str(self) -> &'static str {
+        match self {
+            UpdatePlatform::Win32X64 => "win32-x64",
+            UpdatePlatform::LinuxX64Oci => "linux-x64-oci",
+        }
+    }
+
+    pub fn parse(s: &str) -> Option<UpdatePlatform> {
+        UpdatePlatform::ALL.into_iter().find(|p| p.as_str() == s)
+    }
+
+    /// TS `RELEASE_PRODUCT_DIRS`: Linux bildirimi ayrı yolda, eski Windows güncelleyicisi onu hiç görmez.
+    pub fn product_dir(self) -> &'static str {
+        match self {
+            UpdatePlatform::Win32X64 => UPDATE_PRODUCT,
+            UpdatePlatform::LinuxX64Oci => "backend-oci",
+        }
+    }
+
+    /// TS `PACKAGE_IDENTITY_PRODUCTS`: paketin imzalı künyesindeki `urun`.
+    pub fn package_product(self) -> &'static str {
+        match self {
+            UpdatePlatform::Win32X64 => UPDATE_PRODUCT,
+            UpdatePlatform::LinuxX64Oci => "backend-docker",
+        }
+    }
+
+    /// TS `RELEASE_PACKAGE_EXTENSIONS`.
+    pub fn package_extension(self) -> &'static str {
+        match self {
+            UpdatePlatform::Win32X64 => ".zip",
+            UpdatePlatform::LinuxX64Oci => ".tar",
+        }
+    }
 }
 
 struct Patterns {
@@ -47,6 +101,9 @@ struct Patterns {
     signer_kid: Regex,
     sha256_hex: Regex,
     artifact_name: Regex,
+    release_package_name: Regex,
+    image_id: Regex,
+    image_tag: Regex,
     commit: Regex,
     node_version: Regex,
     pg_version: Regex,
@@ -60,6 +117,9 @@ fn patterns() -> &'static Patterns {
         signer_kid: Regex::new(r"^(paket|pkt)-[a-z0-9-]{1,40}$").expect("imzaci kid"),
         sha256_hex: Regex::new(r"^[0-9a-f]{64}$").expect("sha256"),
         artifact_name: Regex::new(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,115}\.zip$").expect("paket adi"),
+        release_package_name: Regex::new(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,115}\.(zip|tar)$").expect("surum paketi adi"),
+        image_id: Regex::new(r"^sha256:[0-9a-f]{64}$").expect("imaj kimligi"),
+        image_tag: Regex::new(r"^[a-z0-9][a-z0-9._/-]{0,127}:[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$").expect("imaj etiketi"),
         commit: Regex::new(r"^[0-9a-f]{7,40}$").expect("commit"),
         node_version: Regex::new(r"^[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}$").expect("node"),
         pg_version: Regex::new(r"^[0-9]{2}\.[0-9]{1,3}$").expect("pg surumu"),
@@ -69,19 +129,32 @@ fn patterns() -> &'static Patterns {
 
 // ── Yayın düzeni ─────────────────────────────────────────────────────────────────────────────────
 
-/// `/<kanal>/backend/son.json` — kanalın EN YENİ sürümü.
+/// `/<kanal>/backend/son.json` — kanalın EN YENİ sürümü (Windows yolu; Linux `release_pointer_path_on`).
 pub fn release_pointer_path(kanal: &str) -> String {
-    format!("/{kanal}/{UPDATE_PRODUCT}/{RELEASE_POINTER_FILE}")
+    release_pointer_path_on(WINDOWS_PLATFORM, kanal)
+}
+
+/// `/<kanal>/<ürün dizini>/son.json` — ürün dizini platformun (sözleşme 5).
+pub fn release_pointer_path_on(platform: UpdatePlatform, kanal: &str) -> String {
+    format!("/{kanal}/{}/{RELEASE_POINTER_FILE}", platform.product_dir())
 }
 
 /// `/<kanal>/backend/son-zincir.json` — `son.json`ın zincirli ikizi (önce o okunur).
 pub fn chained_release_pointer_path(kanal: &str) -> String {
-    format!("/{kanal}/{UPDATE_PRODUCT}/{CHAINED_RELEASE_POINTER_FILE}")
+    chained_release_pointer_path_on(WINDOWS_PLATFORM, kanal)
+}
+
+pub fn chained_release_pointer_path_on(platform: UpdatePlatform, kanal: &str) -> String {
+    format!("/{kanal}/{}/{CHAINED_RELEASE_POINTER_FILE}", platform.product_dir())
 }
 
 /// `/<kanal>/backend/<sürüm>/<dosya>` — sürüm dizini DEĞİŞMEZ.
 pub fn release_file_path(kanal: &str, surum: &str, dosya: &str) -> String {
-    format!("/{kanal}/{UPDATE_PRODUCT}/{surum}/{dosya}")
+    release_file_path_on(WINDOWS_PLATFORM, kanal, surum, dosya)
+}
+
+pub fn release_file_path_on(platform: UpdatePlatform, kanal: &str, surum: &str, dosya: &str) -> String {
+    format!("/{kanal}/{}/{surum}/{dosya}", platform.product_dir())
 }
 
 /// `/<kanal>/backend/pg/<sürüm>-<derleme>/<dosya>`.
@@ -126,12 +199,29 @@ fn is_package_size(v: &Value) -> bool {
     is_int(v, Some(1.0), Some(PACKAGE_MAX_BYTES as f64))
 }
 
-fn artifact_fields(extra_uuid: bool) -> impl Fn(&Value) -> Option<Value> {
+/// Bildirimin `paket`i: uzantıyı platform kuralı seçer (`release_manifest_schema`).
+fn release_package(x: &Value) -> Option<Value> {
+    let is_name = |y: &Value| is_string_len(y, 0, 120) && is_str_matching(y, &patterns().release_package_name);
+    let fields = [req("ad", &is_name), req("boyut", &is_package_size), req("sha256", &is_sha256_hex), req("paketId", &is_uuid)];
+    object(x, &fields, false).ok().map(Value::Object)
+}
+
+/// Sözleşme 5 `ReleaseImageSchema` (z.object).
+fn release_image(x: &Value) -> Option<Value> {
+    let is_id = |y: &Value| is_str_matching(y, &patterns().image_id);
+    let is_tag = |y: &Value| is_string_len(y, 0, 200) && is_str_matching(y, &patterns().image_tag);
+    object(x, &[req("kimlik", &is_id), req("etiket", &is_tag)], false).ok().map(Value::Object)
+}
+
+/// Sözleşme 5 `ReleaseUpdaterSchema` (z.object).
+fn release_updater(x: &Value) -> Option<Value> {
+    object(x, &[req("surum", &schema::is_release_version), req("sha256", &is_sha256_hex)], false).ok().map(Value::Object)
+}
+
+/// PG paketi künyesi (`ArtifactSchema`, yalnız zip).
+fn artifact_fields() -> impl Fn(&Value) -> Option<Value> {
     move |x: &Value| {
-        let mut fields = vec![req("ad", &is_artifact_name), req("boyut", &is_package_size), req("sha256", &is_sha256_hex)];
-        if extra_uuid {
-            fields.push(req("paketId", &is_uuid));
-        }
+        let fields = [req("ad", &is_artifact_name), req("boyut", &is_package_size), req("sha256", &is_sha256_hex)];
         object(x, &fields, false).ok().map(Value::Object)
     }
 }
@@ -149,7 +239,7 @@ fn pg_target(v: &Value) -> Option<Value> {
     let is_build = |x: &Value| is_int(x, Some(1.0), Some(999.0));
     let is_icu = |x: &Value| is_str_matching(x, &patterns().icu_version);
     let any_object = |x: &Value| x.is_object();
-    let artifact = artifact_fields(false);
+    let artifact = artifact_fields();
     schema::object_with_nested(
         v,
         &[
@@ -217,7 +307,6 @@ pub fn release_manifest_schema(v: &Value) -> Result<Map<String, Value>, String> 
     let is_min_source = |x: &Value| is_nullable(x, &schema::is_release_version);
     let is_migrations = |x: &Value| is_int(x, Some(0.0), Some(100_000.0));
     let any_object = |x: &Value| x.is_object();
-    let package = artifact_fields(true);
     let runtime = |x: &Value| object(x, &[req("node", &|y| is_str_matching(y, &patterns().node_version))], false).ok().map(Value::Object);
     let notes = |x: &Value| object(x, &[req("ozet", &|y| is_string_len(y, 1, 2000))], false).ok().map(Value::Object);
     let out = schema::object_with_nested(
@@ -239,10 +328,31 @@ pub fn release_manifest_schema(v: &Value) -> Result<Map<String, Value>, String> 
             req("runtime", &any_object),
             req("notlar", &any_object),
             req("zorunlu", &is_bool),
+            opt("imaj", &any_object),
+            opt("guncelleyici", &any_object),
         ],
-        &[("paket", &package), ("pg", &pg_requirement), ("runtime", &runtime), ("notlar", &notes)],
+        &[
+            ("paket", &release_package),
+            ("pg", &pg_requirement),
+            ("runtime", &runtime),
+            ("notlar", &notes),
+            ("imaj", &release_image),
+            ("guncelleyici", &release_updater),
+        ],
     )?;
     let s = |k: &str| out.get(k).and_then(Value::as_str).unwrap_or_default();
+    // Sözleşme 5 platform kuralları — TS'teki refine sırasıyla.
+    let platform = UpdatePlatform::parse(s("platform")).ok_or("platform")?;
+    let package_name = out.get("paket").and_then(|p| p.get("ad")).and_then(Value::as_str).unwrap_or_default();
+    if !package_name.ends_with(platform.package_extension()) {
+        return Err("Paket uzantısı platformun değil".into());
+    }
+    if (platform == UpdatePlatform::LinuxX64Oci) != out.contains_key("imaj") {
+        return Err("imaj yalnız linux-x64-oci bildiriminde ve orada zorunlu".into());
+    }
+    if platform == UpdatePlatform::LinuxX64Oci && !out.get("pg").and_then(|p| p.get("hedef")).is_some_and(Value::is_null) {
+        return Err("linux-x64-oci bildirimi PG hedefi taşımaz".into());
+    }
     if let Some(min) = out.get("minKaynakSurum").and_then(Value::as_str) {
         if crate::version::compare(min, s("surum")).unwrap_or(Ordering::Equal) != Ordering::Less {
             return Err("minKaynakSurum sürümün kendisinden eski olmalı".into());
@@ -306,6 +416,20 @@ pub struct Notes {
     pub ozet: String,
 }
 
+/// Sözleşme 5 — OCI imajı: `kimlik` imzalı son katmanlı etiketin config özeti.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ReleaseImage {
+    pub kimlik: String,
+    pub etiket: String,
+}
+
+/// Sözleşme 5 — paketin taşıdığı güncelleyici ikilisi.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ReleaseUpdater {
+    pub surum: String,
+    pub sha256: String,
+}
+
 /// Doğrulanmış sürüm bildirimi (yük; alan adları tel sözleşmesi).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ReleaseManifest {
@@ -330,6 +454,12 @@ pub struct ReleaseManifest {
     pub runtime: RuntimeInfo,
     pub notlar: Notes,
     pub zorunlu: bool,
+    /// Sözleşme 5: yalnız `linux-x64-oci`de (orada zorunlu).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub imaj: Option<ReleaseImage>,
+    /// Sözleşme 5: paketin taşıdığı güncelleyici (isteğe bağlı, iki platformda).
+    #[serde(default, rename = "guncelleyici", skip_serializing_if = "Option::is_none")]
+    pub updater: Option<ReleaseUpdater>,
     /// `pkt-*` imzalı bildirimde imzalayan PAKET sertifikasının kimliği (yükte değil, doğrulamadan; bellekte kalır).
     #[serde(skip)]
     pub signer_certificate: Option<String>,
@@ -354,9 +484,20 @@ fn typed<T: serde::de::DeserializeOwned>(shaped: Map<String, Value>, signed: Pac
     }
 }
 
-/// Sıra (TS `verifyReleaseManifest` ile aynı kod): JWS (typ · kid · imza; `pkt-*` ise PAKET sertifikası zinciri) →
-/// şema → imzalayan = `paketImzaKid` → kanal. `trust.keys` ÇAĞIRANIN süzdüğü kümedir (hazırlık anahtarı yalnız TEST/DEMO'da).
+/// Windows okuyucusu (sözleşme 1–4 çağrıları): `verify_release_manifest_on(.., WINDOWS_PLATFORM)`.
 pub fn verify_release_manifest(token: &Value, trust: &PackageTrust, kanal: &str) -> Outcome<Checked<ReleaseManifest>> {
+    verify_release_manifest_on(token, trust, kanal, WINDOWS_PLATFORM)
+}
+
+/// Sıra (TS `verifyReleaseManifest` ile aynı kod): JWS (typ · kid · imza; `pkt-*` ise PAKET sertifikası zinciri) →
+/// şema → imzalayan = `paketImzaKid` → kanal → platform. `trust.keys` ÇAĞIRANIN süzdüğü kümedir (hazırlık anahtarı
+/// yalnız TEST/DEMO'da); `platform` okuyan ikilinin hedefidir.
+pub fn verify_release_manifest_on(
+    token: &Value,
+    trust: &PackageTrust,
+    kanal: &str,
+    platform: UpdatePlatform,
+) -> Outcome<Checked<ReleaseManifest>> {
     let signed = verify_package_signed(token, TYP_SURUM, trust)?;
     let shaped = schema::decode(release_manifest_schema, &signed.payload)?;
     if shaped.get("paketImzaKid").and_then(Value::as_str) != Some(signed.kid.as_str()) {
@@ -365,6 +506,11 @@ pub fn verify_release_manifest(token: &Value, trust: &PackageTrust, kanal: &str)
     let channel = shaped.get("kanal").and_then(Value::as_str).unwrap_or_default().to_string();
     if channel != kanal {
         return Err(Fail { code: code::SURUM_KANAL, message: format!("Bildirim {channel} kanalının, kurulum {kanal} kanalında") });
+    }
+    let declared = shaped.get("platform").and_then(Value::as_str).unwrap_or_default().to_string();
+    if declared != platform.as_str() {
+        let message = format!("Bildirim {declared} platformunun, okuyan {}", platform.as_str());
+        return Err(Fail { code: code::SURUM_PLATFORM, message });
     }
     let mut checked: Checked<ReleaseManifest> = typed(shaped, signed)?;
     checked.doc.signer_certificate =
@@ -388,7 +534,7 @@ pub struct PackageIdentity {
     pub musteri: Option<String>,
 }
 
-/// Paket bildirimin paketi mi? Künyenin müşterisi yoksa kanal-dışı paket kabul, varsa bildirimin kanalı.
+/// Paket bildirimin paketi mi? Künyenin ürünü platformunki; müşterisi yoksa kanal-dışı paket kabul, varsa bildirimin kanalı.
 pub fn check_package_binding(m: &ReleaseManifest, p: &PackageIdentity) -> Outcome<()> {
     let mut off = vec![];
     if p.kid != m.signer_kid {
@@ -401,7 +547,7 @@ pub fn check_package_binding(m: &ReleaseManifest, p: &PackageIdentity) -> Outcom
     if p.package_id != m.paket.package_id {
         off.push("paketId");
     }
-    if p.urun != m.urun {
+    if UpdatePlatform::parse(&m.platform).map(UpdatePlatform::package_product) != Some(p.urun.as_str()) {
         off.push("urun");
     }
     if p.surum != m.surum {
@@ -427,12 +573,12 @@ pub fn check_package_binding(m: &ReleaseManifest, p: &PackageIdentity) -> Outcom
 pub fn pg_package_manifest_schema(v: &Value) -> Result<Map<String, Value>, String> {
     let is_v = |x: &Value| js_number(x) == Some(1.0);
     let is_product = |x: &Value| x.as_str() == Some(PG_PRODUCT);
-    let is_platform = |x: &Value| matches!(x, Value::String(s) if UPDATE_PLATFORMS.contains(&s.as_str()));
+    let is_platform = |x: &Value| matches!(x, Value::String(s) if PG_PLATFORMS.contains(&s.as_str()));
     let is_line = |x: &Value| is_int(x, Some(10.0), Some(99.0));
     let is_build = |x: &Value| is_int(x, Some(1.0), Some(999.0));
     let is_icu = |x: &Value| is_str_matching(x, &patterns().icu_version);
     let any_object = |x: &Value| x.is_object();
-    let artifact = artifact_fields(false);
+    let artifact = artifact_fields();
     let out = schema::object_with_nested(
         v,
         &[
@@ -673,7 +819,17 @@ pub fn select_chained<T: Clone>(family: ChainedFamily, candidates: Vec<ChainedCa
 
 /// Zincir seçimi adayı: sürüm bildirimi işaretçisi metni → doğrulanmış bildirim (TS `chainedReleaseCandidate`).
 pub fn chained_release_candidate(name: &str, text: &str, trust: &PackageTrust, kanal: &str) -> ChainedCandidate<ReleaseManifest> {
-    let result = read_release_pointer(text).and_then(|j| verify_release_manifest(&Value::String(j), trust, kanal));
+    chained_release_candidate_on(name, text, trust, kanal, WINDOWS_PLATFORM)
+}
+
+pub fn chained_release_candidate_on(
+    name: &str,
+    text: &str,
+    trust: &PackageTrust,
+    kanal: &str,
+    platform: UpdatePlatform,
+) -> ChainedCandidate<ReleaseManifest> {
+    let result = read_release_pointer(text).and_then(|j| verify_release_manifest_on(&Value::String(j), trust, kanal, platform));
     ChainedCandidate { name: name.to_string(), result }
 }
 

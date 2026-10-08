@@ -175,7 +175,7 @@ Bulut güncelleyicisi, Dağıtım v2'nin **aynı sözleşmesine** bağlanır: `t
 
 | Alan | Bugün | Ek |
 |---|---|---|
-| `platform` | `UPDATE_PLATFORMS = ["win32-x64"]` | `linux-x64-oci`. Bildirimin platformu kanal kaydındakine eşit olmalıdır. Eski doğrulayıcı bu değeri tanımaz; bu yalnız Linux kanalında yayımlandığı için zararsızdır |
+| `platform` | `UPDATE_PLATFORMS = ["win32-x64"]` | `linux-x64-oci`. Gruplar platformlar arası ortak olduğu için Linux bildirimi ayrı ürün yolundan (`/<grup>/backend-oci/`) yayınlanır; platform okuyan güncelleyicinin hedefidir (`SURUM_PLATFORM`). Uygulandı: `GUNCELLEYICI.md` §16 |
 | `paket` | zip + paket içi `butunluk.jws` | Teslim paketi tar'ı: imaj (`docker save`) + `docker-compose.yml` + `.env.ornek` + `PAKET-DOCKER.json.jws` (bugünkü Docker teslimi, `docs/ops/LINUX-DOCKER-KURULUM.md` §8) |
 | `imaj` (yeni, isteğe bağlı) | — | `{kimlik: <config özeti>, etiket}`. Yalnız `linux-x64-oci`de zorunludur |
 | `pg.hedef` | KENDI kipte PG zip'i | Kip `KONTEYNER`: hedef = PostgreSQL imajının tar'ı + özeti. Küçük sürüm otomatik, ana sürüm yalnız runbook'la (aynı ilke) |

@@ -11,7 +11,7 @@ use tekserp_dogrulama::paket_zinciri::PackageTrust;
 use tekserp_dogrulama::schema;
 use tekserp_guncelleyici::decision::{self, InstalledPg, UpdatePolicy};
 use tekserp_guncelleyici::ipc::UpdateResult;
-use tekserp_guncelleyici::release::{self, PackageIdentity, PgPackageManifest, PgRequirement, ReleaseManifest};
+use tekserp_guncelleyici::release::{self, PackageIdentity, PgPackageManifest, PgRequirement, ReleaseManifest, UpdatePlatform};
 use tekserp_guncelleyici::version;
 
 fn records(file: &str) -> Vec<Value> {
@@ -44,14 +44,31 @@ fn typed<T: serde::de::DeserializeOwned>(v: &Value, what: &str) -> T {
 /// Bir kaydın BUGÜNKÜ Rust sonucu (TS `guncellemeDegerlendir` karşılığı); tanınmayan tür `None`.
 fn evaluate(v: &Value) -> Option<Value> {
     Some(match v["tur"].as_str()? {
-        "bildirim" => outcome(
-            release::verify_release_manifest(
-                &v["token"],
-                &PackageTrust::embedded(keys_of(&v["keys"])),
-                v["kanal"].as_str().unwrap_or_default(),
-            ),
-            |c| Value::Object(c.shaped),
-        ),
+        "bildirim" => {
+            // `platform` okuyanın hedefi (sözleşme 5); kayıtta yoksa Windows okuyucusu (eski çağrı yolu aynen).
+            let trust = PackageTrust::embedded(keys_of(&v["keys"]));
+            let kanal = v["kanal"].as_str().unwrap_or_default();
+            let r = match v["platform"].as_str() {
+                None => release::verify_release_manifest(&v["token"], &trust, kanal),
+                Some(p) => {
+                    let p = UpdatePlatform::parse(p).unwrap_or_else(|| panic!("vektörde bilinmeyen platform {p}"));
+                    release::verify_release_manifest_on(&v["token"], &trust, kanal, p)
+                }
+            };
+            outcome(r, |c| Value::Object(c.shaped))
+        }
+        "yol" => {
+            let (kanal, surum, dosya) = (v["kanal"].as_str()?, v["surum"].as_str()?, v["dosya"].as_str()?);
+            match v["platform"].as_str() {
+                None => {
+                    json!({ "isaretci": release::release_pointer_path(kanal), "dosya": release::release_file_path(kanal, surum, dosya) })
+                }
+                Some(p) => {
+                    let p = UpdatePlatform::parse(p)?;
+                    json!({ "isaretci": release::release_pointer_path_on(p, kanal), "dosya": release::release_file_path_on(p, kanal, surum, dosya) })
+                }
+            }
+        }
         "isaretci" => outcome(release::read_release_pointer(v["metin"].as_str().unwrap_or_default()), Value::String),
         "pg-kunye" => outcome(release::verify_pg_package_manifest(&v["token"], &PackageTrust::embedded(keys_of(&v["keys"]))), |c| {
             Value::Object(c.shaped)
@@ -153,6 +170,7 @@ fn contract_vectors_match_ts() {
         ("surum-karsilastir", 8),
         ("etkin-politika", 4),
         ("rapor", 1),
+        ("yol", 3),
     ] {
         assert!(
             seen.get(tur).copied().unwrap_or(0) >= min,

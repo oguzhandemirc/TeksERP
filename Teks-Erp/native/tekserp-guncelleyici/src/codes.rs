@@ -140,6 +140,7 @@ mod tests {
             GERI_YUKLEME_HATASI,
             "JWS_IMZA",
             "SURUM_KANAL",
+            crate::release::code::SURUM_PLATFORM,
             "PG_BAGI",
             IC_HATA,
             KESINTI,
@@ -148,6 +149,8 @@ mod tests {
         ] {
             assert!(DOCUMENTED.contains(&report_code(c)), "{c} → {}", report_code(c));
         }
+        // Sözleşme 5: platform uyuşmazlığı imza/sözleşme reddidir (aday kurulmaz, geri dönüş yok).
+        assert_eq!(report_code(crate::release::code::SURUM_PLATFORM), "IMZA_GECERSIZ");
         assert_eq!(report_code(PG_SURUM_UYUSMAZ), "PG_GUNCELLEME_HATASI");
         assert_eq!(report_code(SAGLIK_ZAMAN_ASIMI), "SAGLIK_HATASI");
         assert_eq!(report_code(SAGLIK_HIZMET_DUSTU), "SAGLIK_HATASI");

@@ -68,6 +68,8 @@ KATI `{ "v": 1, "bildirim": "<JWS>" }` (`ReleasePointerSchema`, ≤ 64 KB). Bozu
 
 `z.object`: v:1 içinde yeni bilgi alanı `.optional()` eklenir, eski doğrulayıcı ATAR; anlam daraltan değişiklik `v`yi artırır (LİSANS-PROTOKOLU §9 aynen).
 
+Sözleşme 5 (Linux/OCI) ekleri — `platform: linux-x64-oci`, `imaj`, `guncelleyici`, ayrı ürün yolu: §16.
+
 ### 1.4 Doğrulama sırası (`verifyReleaseManifest(token, {keys, kanal})`)
 
 1. JWS: `typ = tekserp-surum` (`JWS_TYP`), `kid` çağıranın anahtar kümesinde (`JWS_KID`), imza (`JWS_IMZA`).
@@ -447,3 +449,15 @@ Güncelleyicinin okuduğu ve yazdığı yerel biçimler (işlem günlüğü §7 
 5. **Eski biçim vektörleri silinmez, değiştirilmez:** `Teks-Erp/native/test-vektorleri/guncelleyici-{gunluk,ayar,niyet,durum}/`deki her dosyanın özeti `guncelleyici-eski-bicim.sha256`dadır; bekçi `eski_bicim_vektorleri_donmus` baytı ve sayıyı ölçer (cırcır `TABAN=85`; yeni vektör yalnız EKLENİR: `TEKSERP_ESKI_BICIM_LISTE_EKLE=1` + `TABAN` artırılır).
 6. **Vektör üretimi:** günlük vektörü yayınlanmış ETİKETİN worktree'sinde, o etiketin koduyla sahte dünyada üretilir (`tests/gunluk_vektoru_uret.rs`, `TEKSERP_GUNLUK_VEKTOR_YAZ=<etiket>`; klasör varsa durur); `guncelleyici-ayar/` ve `guncelleyici-niyet/` yazıcısı Rust dışında olduğu için (PS 5.1 `AyarYaz` · backend `composeIntent`) o yazıcıların bayt biçimi elle aktarılmıştır.
 7. **Adım listesi değişirse `v` artar:** v1 adım listeleri bugünkü `BACKEND_STEPS` (`operation.rs`) ve `PG_STEPS`dir (`pgminor.rs`). Adım eklenen/çıkan sürüm (W1/W2 — `CIT`) `v`yi artırır ya da ISLEM'e adım listesini yazar ve v1 günlüğünü v1 listesiyle sürdürür; bu sürüm kendi biçimiyle yeni vektör seti ekler.
+
+## §16 Sözleşme 5 — Linux/OCI bildirimi — 2026-10-08 (L2a)
+
+Yalnız EKLER (§15 madde 1). Plan: `GUNCELLEYICI-SAGLAMLIK.md` §1.3 (A10). Kaynak `protocol/guncelleme.ts` · `guncelleme-ortak.ts` · `guncelleme-pg.ts`; Rust aynası `tekserp-guncelleyici/src/release.rs`; vektörler `guncelleme-{surum,karar}.json` (`s5 …` kayıtları ve `yol` türü).
+
+1. **Ayrı ürün yolu.** `RELEASE_PRODUCT_DIRS`: `win32-x64` → `/<grup>/backend/` (DEĞİŞMEDİ), `linux-x64-oci` → `/<grup>/backend-oci/` (`son.json` · `<sürüm>/` · zincirli ikizleri aynı ad kuralıyla). Gruplar platformlar arası ortak olduğu için tek `son.json`a iki platform yazamaz; ayrı yol sayesinde eski Windows güncelleyicisi Linux bildirimini HİÇ görmez. Yol yardımcıları platform alır (TS isteğe bağlı parametre, Rust `*_on`); platformsuz çağrı Windows yoludur. İndirme öneki (`DOWNLOAD_PRODUCTS`), satıcı belirteci ve Worker L2b'dedir — bu sürümde `backend-oci` için belirteç basılmaz.
+2. **Platform okuyanın PARAMETRESİDİR.** `verifyReleaseManifest(token, {keys, kanal, platform?})` / `verify_release_manifest_on(.., platform)`; sıra JWS → şema → `SURUM_ANAHTAR` → `SURUM_KANAL` → **`SURUM_PLATFORM`** (yeni protokol kodu, `PROTOCOL_ERROR_CODES`; rapor kodu `IMZA_GECERSIZ`). Platform verilmezse Windows (sözleşme 1–4 çağrıları aynen). Platformu derleme hedefinden okuyan katman platform arka ucudur (L1/L4), sözleşme değil.
+3. **Şema ekleri (z.object, eski okuyucu atar):** `platform` ∈ {`win32-x64`, `linux-x64-oci`} · `imaj: {kimlik: "sha256:<64 hex>", etiket: "<ad>:<etiket>"}` — `linux-x64-oci`de ZORUNLU, `win32-x64`te YASAK · `guncelleyici: {surum, sha256}` — isteğe bağlı, iki platformda · `paket.ad` uzantısı platformun (`.zip` / `.tar`) · `linux-x64-oci`de `pg.hedef` `null` olmalı (konteyner PG'si ileride YENİ adla gelir, L8; PG künyesi `tekserp-pg` yalnız `win32-x64` — `PG_PLATFORMS`). Kural ihlali `BELGE_SEMA`.
+4. **Paket bağı:** künyenin `urun`u platformun (`PACKAGE_IDENTITY_PRODUCTS`: Windows `backend`, Linux `backend-docker` — Docker teslim künyesi); bildirimin `urun`u her platformda `backend` kalır (karar, rapor, panel aynı ürünü görür).
+5. **Karar** platformdan bağımsızdır (`decideUpdate` aynen; Linux adayı Windows adayıyla aynı kararı alır — vektörle ölçüldü).
+6. **Eski istemci ne yapar (ölçüldü 2026-10-08, yeni vektörler eski koda okutuldu):** güncelleyici 0.1.3 (`backend-v2.14.0`) ve W0 (`8693455cc`) Rust'u ile 2.14.0 TS kâhini — 118 kaydın 105'i aynı, ayrışan 13'ün hepsi `s5` kaydı: Windows bildirimindeki `guncelleyici` bloğu ATILIR ve bildirim kabul edilir (bugünkü davranış) · Linux bildirimi her durumda `BELGE_SEMA` (kibar ret; zaten ayrı yolda olduğu için görülmez) · eski okuyucu Windows bildirimindeki biçimsiz `guncelleyici`/`imaj`ı atıp kabul eder (yayıncı yazmaz; yeni okuyucu reddeder) · eski paket bağı Linux künyesini `PAKET_BAGI` ile reddeder. Eski backend bildirimi okumaz (yalnız `durum.json`); niyet/durum/günlük biçimi değişmedi.
+

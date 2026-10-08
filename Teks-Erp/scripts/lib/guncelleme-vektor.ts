@@ -16,6 +16,8 @@ import {
   decodeDocument,
   effectiveUpdatePolicy,
   readReleasePointer,
+  releaseFilePath,
+  releasePointerPath,
   releasePointerText,
   signJws,
   signPgPackageManifest,
@@ -29,6 +31,7 @@ import {
   type PgRequirement,
   type ReleaseManifest,
   type UpdateDecisionInput,
+  type UpdatePlatform,
 } from "../../src/lib/license/protocol";
 import { anahtarUret, type TestAnahtari } from "./lisans-fikstur";
 import { DEFAULT_FACTORY_TIMEZONE } from "../../src/constants/time";
@@ -42,7 +45,8 @@ export function guncellemeVektorDizini(teksKok: string): string {
 }
 
 export type GuncellemeVektoru =
-  | { readonly tur: "bildirim"; readonly ad: string; readonly token: unknown; readonly keys: PackagePublicKey[]; readonly kanal: string }
+  // `platform` okuyanın hedefi (sözleşme 5); yoksa Windows — eski kayıtlar ve eski okuyucu aynen.
+  | { readonly tur: "bildirim"; readonly ad: string; readonly token: unknown; readonly keys: PackagePublicKey[]; readonly kanal: string; readonly platform?: UpdatePlatform }
   | { readonly tur: "isaretci"; readonly ad: string; readonly metin: string }
   | { readonly tur: "pg-kunye"; readonly ad: string; readonly token: unknown; readonly keys: PackagePublicKey[] }
   | { readonly tur: "pg-bagi"; readonly ad: string; readonly gereksinim: PgRequirement; readonly kunye: PgPackageManifest }
@@ -52,7 +56,9 @@ export type GuncellemeVektoru =
   | { readonly tur: "karar"; readonly ad: string; readonly girdi: UpdateDecisionInput }
   | { readonly tur: "surum-karsilastir"; readonly ad: string; readonly a: string; readonly b: string }
   | { readonly tur: "paket-bagi"; readonly ad: string; readonly bildirim: ReleaseManifest; readonly paket: PackageIdentity }
-  | { readonly tur: "rapor"; readonly ad: string; readonly girdi: unknown };
+  | { readonly tur: "rapor"; readonly ad: string; readonly girdi: unknown }
+  // Sözleşme 5: yayın yolu platformun ürün dizininden (`platform` yoksa Windows yolu).
+  | { readonly tur: "yol"; readonly ad: string; readonly kanal: string; readonly surum: string; readonly dosya: string; readonly platform?: UpdatePlatform };
 
 export interface GuncellemeVektorKaydi {
   readonly vektor: GuncellemeVektoru;
@@ -72,7 +78,7 @@ function jsonKopya(x: unknown): unknown {
 export function guncellemeDegerlendir(v: GuncellemeVektoru): unknown {
   switch (v.tur) {
     case "bildirim":
-      return sonuc(verifyReleaseManifest(v.token, { keys: v.keys, kanal: v.kanal }));
+      return sonuc(verifyReleaseManifest(v.token, { keys: v.keys, kanal: v.kanal, ...(v.platform ? { platform: v.platform } : {}) }));
     case "isaretci":
       return sonuc(readReleasePointer(v.metin));
     case "pg-kunye":
@@ -96,6 +102,8 @@ export function guncellemeDegerlendir(v: GuncellemeVektoru): unknown {
       return compareVersions(v.a, v.b);
     case "paket-bagi":
       return sonuc(checkPackageBinding(v.bildirim, v.paket));
+    case "yol":
+      return { isaretci: releasePointerPath(v.kanal, v.platform), dosya: releaseFilePath(v.kanal, v.surum, v.dosya, v.platform) };
     case "rapor": {
       const r = UpdateReportSchema.safeParse(v.girdi);
       return r.success ? { ok: true, value: jsonKopya(r.data) } : { ok: false };
@@ -142,6 +150,21 @@ function bildirimYuku(ek: Partial<ReleaseManifest> = {}): ReleaseManifest {
     zorunlu: false,
     ...ek,
   };
+}
+
+// Sözleşme 5: Linux/OCI bildirimi — ayrı ürün yolu, tar paket, imaj zorunlu, PG hedefi yok.
+const IMAJ = { kimlik: `sha256:${"5".repeat(64)}`, etiket: "tekserp-korumali:2.11.0" };
+const GUNCELLEYICI = { surum: "0.2.0", sha256: "6".repeat(64) };
+
+function linuxYuku(ek: Partial<ReleaseManifest> = {}): ReleaseManifest {
+  return bildirimYuku({
+    platform: "linux-x64-oci",
+    paket: { ad: "tekserp-backend-oci-2.11.0.tar", boyut: 412_345_678, sha256: "7".repeat(64), paketId: "8b1c2d3e-4f5a-4b6c-8d7e-9f0a1b2c3d4e" },
+    pg: { cizgi: 16, enAz: "16.9", hedef: null },
+    imaj: IMAJ,
+    guncelleyici: GUNCELLEYICI,
+    ...ek,
+  });
 }
 
 const KURAL = { baslangic: "02:00", bitis: "05:00", gunler: [1, 2, 3, 4, 5, 6, 7], saatDilimi: DEFAULT_FACTORY_TIMEZONE };
@@ -228,11 +251,34 @@ function vektorler(anahtar: TestAnahtari, yabanci: TestAnahtari, uretim: TestAna
     { tur: "bildirim", ad: "derleme yayından sonra", token: hamYuk({ ...bildirimYuku(), derlemeTarihi: "2026-10-05T00:00:00.000Z" }), keys, kanal: "testfabrika" },
     { tur: "bildirim", ad: "tanınmayan alan atılır (v:1 ekleme)", token: hamYuk({ ...bildirimYuku(), yeniBilgi: 1 }), keys, kanal: "testfabrika" },
     { tur: "bildirim", ad: "platform linux", token: hamYuk({ ...bildirimYuku(), platform: "linux-x64" }), keys, kanal: "testfabrika" },
+    // ── sözleşme 5: Linux/OCI ──
+    { tur: "bildirim", ad: "s5 Windows bildirimi güncelleyici bloğuyla", token: imzala(bildirimYuku({ guncelleyici: GUNCELLEYICI })), keys, kanal: "testfabrika" },
+    { tur: "bildirim", ad: "s5 Linux bildirimi Linux okuyucuda", token: imzala(linuxYuku()), keys, kanal: "testfabrika", platform: "linux-x64-oci" },
+    { tur: "bildirim", ad: "s5 Linux bildirimi güncelleyici bloğu yok", token: imzala(linuxYuku({ guncelleyici: undefined })), keys, kanal: "testfabrika", platform: "linux-x64-oci" },
+    { tur: "bildirim", ad: "s5 Linux bildirimi platformsuz okuyucuda (Windows)", token: imzala(linuxYuku()), keys, kanal: "testfabrika" },
+    { tur: "bildirim", ad: "s5 Linux bildirimi açıkça Windows okuyucuda", token: imzala(linuxYuku()), keys, kanal: "testfabrika", platform: "win32-x64" },
+    { tur: "bildirim", ad: "s5 Windows bildirimi Linux okuyucuda", token: gecerli, keys, kanal: "testfabrika", platform: "linux-x64-oci" },
+    { tur: "bildirim", ad: "s5 kanal platformdan önce denetlenir", token: imzala(linuxYuku()), keys, kanal: "adnansahin" },
+    { tur: "bildirim", ad: "s5 Linux bildirimi imajsız", token: hamYuk({ ...linuxYuku(), imaj: undefined }), keys, kanal: "testfabrika", platform: "linux-x64-oci" },
+    { tur: "bildirim", ad: "s5 Windows bildirimi imajlı", token: hamYuk({ ...bildirimYuku(), imaj: IMAJ }), keys, kanal: "testfabrika" },
+    { tur: "bildirim", ad: "s5 Linux paketi zip", token: hamYuk({ ...linuxYuku(), paket: { ...linuxYuku().paket, ad: "tekserp-backend-oci-2.11.0.zip" } }), keys, kanal: "testfabrika", platform: "linux-x64-oci" },
+    { tur: "bildirim", ad: "s5 Windows paketi tar", token: hamYuk({ ...bildirimYuku(), paket: { ...bildirimYuku().paket, ad: "tekserp-backend-2.11.0.tar" } }), keys, kanal: "testfabrika" },
+    { tur: "bildirim", ad: "s5 Linux bildiriminde PG hedefi", token: hamYuk({ ...linuxYuku(), pg: PG_GEREKSINIM }), keys, kanal: "testfabrika", platform: "linux-x64-oci" },
+    { tur: "bildirim", ad: "s5 imaj kimliği öneksiz", token: hamYuk({ ...linuxYuku(), imaj: { ...IMAJ, kimlik: "5".repeat(64) } }), keys, kanal: "testfabrika", platform: "linux-x64-oci" },
+    { tur: "bildirim", ad: "s5 imaj etiketi etiketsiz ad", token: hamYuk({ ...linuxYuku(), imaj: { ...IMAJ, etiket: "tekserp-korumali" } }), keys, kanal: "testfabrika", platform: "linux-x64-oci" },
+    { tur: "bildirim", ad: "s5 güncelleyici özeti büyük harf", token: hamYuk({ ...bildirimYuku(), guncelleyici: { ...GUNCELLEYICI, sha256: "A".repeat(64) } }), keys, kanal: "testfabrika" },
+    { tur: "bildirim", ad: "s5 güncelleyici sürümünde +yapı eki", token: hamYuk({ ...bildirimYuku(), guncelleyici: { ...GUNCELLEYICI, surum: "0.2.0+abc" } }), keys, kanal: "testfabrika" },
+    { tur: "bildirim", ad: "s5 imaj null", token: hamYuk({ ...linuxYuku(), imaj: null }), keys, kanal: "testfabrika", platform: "linux-x64-oci" },
+    { tur: "bildirim", ad: "s5 imajda tanınmayan alan atılır", token: hamYuk({ ...linuxYuku(), imaj: { ...IMAJ, platform: "linux/amd64" } }), keys, kanal: "testfabrika", platform: "linux-x64-oci" },
     { tur: "bildirim", ad: "pg hedefsiz (küçük sürüm güncellemesi yok)", token: imzala(hedefsiz), keys, kanal: "testfabrika" },
     { tur: "bildirim", ad: "pg enAz başka ana sürümde", token: hamYuk({ ...bildirimYuku(), pg: { ...PG_GEREKSINIM, enAz: "15.8" } }), keys, kanal: "testfabrika" },
     { tur: "bildirim", ad: "pg hedef başka ana sürümde (17)", token: hamYuk({ ...bildirimYuku(), pg: { ...PG_GEREKSINIM, hedef: { ...PG_HEDEF, surum: "17.6" } } }), keys, kanal: "testfabrika" },
     { tur: "bildirim", ad: "pg hedef enAz'dan eski", token: hamYuk({ ...bildirimYuku(), pg: { ...PG_GEREKSINIM, enAz: "16.16" } }), keys, kanal: "testfabrika" },
     { tur: "bildirim", ad: "pg eski biçim (gerekenSurum) — sözleşme sürümü 1", token: hamYuk({ ...bildirimYuku(), pg: { gerekenSurum: "16.4", paket: null } }), keys, kanal: "testfabrika" },
+    // ── yayın yolları (sözleşme 5) ──
+    { tur: "yol", ad: "s5 platformsuz yol = Windows (değişmedi)", kanal: "test", surum: "2.11.0", dosya: "tekserp-backend-2.11.0.zip" },
+    { tur: "yol", ad: "s5 Windows yolu", kanal: "genel", surum: "2.11.0", dosya: "surum.json", platform: "win32-x64" },
+    { tur: "yol", ad: "s5 Linux yolu backend-oci", kanal: "test", surum: "2.11.0", dosya: "tekserp-backend-oci-2.11.0.tar", platform: "linux-x64-oci" },
     // ── PG künyesi (sözleşme sürümü 2) ──
     { tur: "pg-kunye", ad: "geçerli PG künyesi", token: pgGecerli, keys },
     { tur: "pg-kunye", ad: "PG künyesi kurcalandı", token: `${pbas}.${Buffer.from(JSON.stringify({ ...pgKunyeYuku(), derleme: 5 })).toString("base64url")}.${pimza}`, keys },
@@ -242,6 +288,7 @@ function vektorler(anahtar: TestAnahtari, yabanci: TestAnahtari, uretim: TestAna
     { tur: "pg-kunye", ad: "PG derlemesi 0", token: pgImzala({ ...pgKunyeYuku(), derleme: 0 }), keys },
     { tur: "pg-kunye", ad: "PG künyesi v:2", token: pgImzala({ ...pgKunyeYuku(), v: 2 }), keys },
     { tur: "pg-kunye", ad: "PG künyesi başka ürün", token: pgImzala({ ...pgKunyeYuku(), urun: "backend" }), keys },
+    { tur: "pg-kunye", ad: "s5 PG künyesi Linux platformunda", token: pgImzala({ ...pgKunyeYuku(), platform: "linux-x64-oci" }), keys },
     // ── işaretçi ──
     { tur: "isaretci", ad: "geçerli işaretçi", metin: releasePointerText(gecerli) },
     { tur: "isaretci", ad: "JSON değil", metin: "<html>404</html>" },
@@ -316,6 +363,8 @@ function vektorler(anahtar: TestAnahtari, yabanci: TestAnahtari, uretim: TestAna
     { tur: "karar", ad: "onaylı pencere yok, PENCERE onayı bekler", girdi: kararGirdisi({ politika: LeaseUpdatePolicySchema.parse({ kip: "ONAYLI", pencere: null, araliklar: [], hedefSurum: null }), onay: { surum: "2.11.0", zamanlama: "PENCERE" } }) },
     { tur: "karar", ad: "pencere bitiş anı dışarıda (yarı açık aralık)", girdi: kararGirdisi({ nowMs: Date.parse("2026-10-03T02:00:00.000Z") }) },
     { tur: "karar", ad: "pencere başlangıç anı içeride", girdi: kararGirdisi({ nowMs: Date.parse("2026-10-02T23:00:00.000Z") }) },
+    { tur: "karar", ad: "s5 Linux adayı aynı tablodan (pencere içi → kur)", girdi: kararGirdisi({ aday: linuxYuku(), nowMs: ICINDE }) },
+    { tur: "karar", ad: "s5 Linux adayı, kendi PG hedefsiz bildirimde dokunulmaz", girdi: kararGirdisi({ aday: linuxYuku(), pg: { kip: "KENDI", surum: "16.9", derleme: 1 }, nowMs: ICINDE }) },
     // ── sürüm karşılaştırma ──
     { tur: "surum-karsilastir", ad: "yama büyük", a: "2.10.10", b: "2.10.9" },
     { tur: "surum-karsilastir", ad: "sayısal (sözlük değil)", a: "2.9.0", b: "2.10.0" },
@@ -335,6 +384,9 @@ function vektorler(anahtar: TestAnahtari, yabanci: TestAnahtari, uretim: TestAna
     { tur: "paket-bagi", ad: "sürüm farklı", bildirim: bildirimYuku(), paket: { ...paket, surum: "2.10.9" } },
     { tur: "paket-bagi", ad: "imzalayan farklı", bildirim: bildirimYuku(), paket: { ...paket, kid: "paket-2026" } },
     { tur: "paket-bagi", ad: "derleme tarihi aynı an, farklı yazım", bildirim: bildirimYuku(), paket: { ...paket, derlemeTarihi: "2026-09-30T18:00:00Z" } },
+    { tur: "paket-bagi", ad: "s5 Linux paketi Docker künyesiyle bağlı", bildirim: linuxYuku(), paket: { ...paket, paketId: linuxYuku().paket.paketId, urun: "backend-docker" } },
+    { tur: "paket-bagi", ad: "s5 Linux bildirimi Windows künyesiyle", bildirim: linuxYuku(), paket: { ...paket, paketId: linuxYuku().paket.paketId } },
+    { tur: "paket-bagi", ad: "s5 Windows bildirimi Docker künyesiyle", bildirim: bildirimYuku(), paket: { ...paket, urun: "backend-docker" } },
     // ── PG bağı (sözleşme sürümü 2) ──
     { tur: "pg-bagi", ad: "PG künyesi hedefle bağlı", gereksinim: PG_GEREKSINIM, kunye: pgKunyeYuku() },
     { tur: "pg-bagi", ad: "bildirim PG hedefi taşımıyor", gereksinim: { ...PG_GEREKSINIM, hedef: null }, kunye: pgKunyeYuku() },
@@ -375,7 +427,7 @@ function raporYuku(son: Record<string, unknown> = {}): Record<string, unknown> {
 
 /** Dosya adı → o dosyanın vektör türleri (Rust tarafı dosya başına okur). */
 const DOSYA_TURLERI: Record<GuncellemeVektorDosyasi, readonly GuncellemeVektoru["tur"][]> = {
-  "guncelleme-surum.json": ["bildirim", "isaretci", "pg-kunye"],
+  "guncelleme-surum.json": ["bildirim", "isaretci", "pg-kunye", "yol"],
   "guncelleme-kira.json": ["politika", "kira-yuku", "etkin-politika"],
   "guncelleme-karar.json": ["karar", "surum-karsilastir", "paket-bagi", "pg-bagi"],
   "guncelleme-rapor.json": ["rapor"],
