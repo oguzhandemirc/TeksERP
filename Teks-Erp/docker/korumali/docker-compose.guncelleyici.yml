@@ -1,0 +1,136 @@
+# =============================================================================
+# TeksERP — KORUMALI LINUX KURULUMU, GÜNCELLEYİCİLİ (Linux güncelleyicisinin yönettiği düzen)
+# =============================================================================
+# ŞABLON: `@@SURUM@@` paketleyicide sürümle doldurulur ve dosya imzalı pakette `docker-compose.yml` adıyla
+# `/opt/tekserp/surumler/<sürüm>/` altına girer (imaj etiketi compose ile AYNI adımda değişir; `.env`de
+# TEKSERP_IMAJ yok). Doldurulmamış şablon açılmaz (geçersiz imaj adı). Güncelleyici her çağrıda:
+#   docker compose -p <proje> -f /opt/tekserp/current/docker-compose.yml \
+#     --env-file /opt/tekserp/yapilandirma/.env --env-file /opt/tekserp/yapilandirma/pg.env …
+# Elle (güncelleyicisiz) kurulumun dosyası yanındaki `docker-compose.yml`dir; bu dosya ONUN AYNISIDIR,
+# farkı yalnız `# GUNCELLEYICI` işaretli satırlar + imaj satırlarıdır (test_docker_hijyeni §7 ölçer —
+# ortak bir satırı yalnız birinde değiştirmek kırmızıdır). Tasarım: docs/design/GUNCELLEYICI-SAGLAMLIK.md §1.2.
+#
+# ⚠ `pull_policy: never`: hiçbir imaj dışarıdan ÇEKİLMEZ; eksik imaj hata verir (güncelleyici yükler + ölçer).
+# ⚠ Birimler, parmak izi ve `down -v` yasağı elle kurulumla aynı (docker-compose.yml başlığı).
+# =============================================================================
+name: ${TEKSERP_PROJE:-tekserp}
+
+x-guvenlik: &guvenlik
+  read_only: true
+  tmpfs: ["/tmp:size=256m,mode=1777"]
+  cap_drop: ["ALL"]
+  security_opt: ["no-new-privileges:true"]
+  user: "10001:10001"
+
+services:
+  postgres:
+    image: ${TEKSERP_PG_IMAJ:-postgres:16-bookworm}
+    pull_policy: never  # GUNCELLEYICI
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-tekserp}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD .env'de tanımlı olmalı}
+      POSTGRES_DB: ${POSTGRES_DB:-tekserp}
+      TZ: Europe/Istanbul
+      PGTZ: Europe/Istanbul
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+    # Port DIŞARI açılmaz: yalnız compose ağından.
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+    command: ["postgres", "-c", "statement_timeout=50s", "-c", "idle_in_transaction_session_timeout=300000"]
+
+  backend:
+    image: tekserp-korumali:@@SURUM@@  # GUNCELLEYICI
+    pull_policy: never  # GUNCELLEYICI
+    # Bayt kodu (.jsc) ve native çekirdek linux/amd64'e kilitli; başka mimaride öykünmeyle koşar.
+    platform: linux/amd64
+    <<: *guvenlik
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      PORT: "4000"
+      DATABASE_URL: postgresql://${POSTGRES_USER:-tekserp}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-tekserp}?schema=public
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET .env'de tanımlı olmalı}
+      # Seed yalnız şema BOŞ ve bu değer 1 iken (entrypoint §2); yalnız ilk `up`ta verilir.
+      SEED_ON_EMPTY: ${SEED_ON_EMPTY:-0}
+      # İlk yöneticinin parolası (yalnız ilk `up`ta). Boşsa seed rastgele üretip loga bir kez
+      # basar; iki durumda da ilk girişte parola değişimi zorunlu. Seed'den sonra bayraksız `up -d`
+      # konteyneri yeniden yaratır ve parolayı ortamdan/günlükten siler (runbook §2).
+      ILK_YONETICI_PAROLASI: ${ILK_YONETICI_PAROLASI:-}
+      LICENSE_SERVER_URL: ${LICENSE_SERVER_URL:-}
+      # Vekil (nginx/Cloudflare) arkası: boş = vekil yok, bugünkü davranış. Vekil arkasında bu ayar
+      # verilmezse bütün istemciler tek adres görünür ve bir kişinin hatalı girişi herkesi kilitler.
+      # Tek vekilde "1" (yalnız port 127.0.0.1'deyken güvenli); "true" sahte X-Forwarded-For'a güvenir.
+      TRUST_PROXY: ${TRUST_PROXY:-}
+      LOGIN_LOCKOUT_SCOPE: ${LOGIN_LOCKOUT_SCOPE:-}
+      RATE_LIMIT_ENABLED: ${RATE_LIMIT_ENABLED:-}
+      RATE_LIMIT_WINDOW_SEC: ${RATE_LIMIT_WINDOW_SEC:-}
+      RATE_LIMIT_WRITE_MAX: ${RATE_LIMIT_WRITE_MAX:-}
+      RATE_LIMIT_LOGIN_MAX: ${RATE_LIMIT_LOGIN_MAX:-}
+      # Göç açılışta DEĞİL, yalnız güncelleyicinin GOC adımında (`compose run --rm --no-deps backend goc`);
+      # açılış yalnız şemayı denetler, imaj ≠ veritabanı ise sunucu açılmaz (acilis-kodlari.json).
+      TEKSERP_GOC_ACILISTA: "0"  # GUNCELLEYICI
+      # Güncelleyici IPC kökü — bu kurulumda ÜRETİM değeridir: durum/ salt okunur, niyet/ yazılır.
+      TEKSERP_GUNCELLEME_DIZINI: /var/lib/tekserp/guncelleme  # GUNCELLEYICI
+      # Güncelleyici DOGRULAMA adımında 1 verir (sunucu yalnız konteynerin döngü adresinde dinler); başka her an boş.
+      TEKSERP_DOGRULAMA_KIPI: ${TEKSERP_DOGRULAMA_KIPI:-}  # GUNCELLEYICI
+    ports:
+      # YALNIZ bu makine: 4000 şifresizdir ve Docker'ın yayımladığı port ufw'nin önünden geçer.
+      # Docker kurulumunda fabrika ağı TLS'i yok; ağdan erişim yalnız TLS'i sonlandıran vekille
+      # (runbook §7, §10). TEKSERP_DINLE=0.0.0.0 yazılmaz.
+      - "${TEKSERP_DINLE:-127.0.0.1}:${TEKSERP_PORT:-4000}:4000"
+    volumes:
+      - lisans:/var/lib/tekserp/lisans
+      - yedek:/var/lib/tekserp/yedek
+      - yedek_anahtar:/var/lib/tekserp/yedek-anahtar:ro
+      # Konak makine kimliği (Linux: /etc/machine-id). Başka yol yalnız prova içindir.
+      - ${TEKSERP_MAKINE_KIMLIGI:-/etc/machine-id}:/etc/machine-id:ro
+      # IPC dizinlerini kurulum yaratır (durum/ root 0755 · niyet/ 10001 0700); yoksa konteyner AÇILMAZ (dizin uydurulmaz).
+      - type: bind  # GUNCELLEYICI
+        source: /var/lib/tekserp/guncelleme/durum  # GUNCELLEYICI
+        target: /var/lib/tekserp/guncelleme/durum  # GUNCELLEYICI
+        read_only: true  # GUNCELLEYICI
+        bind: { create_host_path: false }  # GUNCELLEYICI
+      - type: bind  # GUNCELLEYICI
+        source: /var/lib/tekserp/guncelleme/niyet  # GUNCELLEYICI
+        target: /var/lib/tekserp/guncelleme/niyet  # GUNCELLEYICI
+        read_only: false  # GUNCELLEYICI
+        bind: { create_host_path: false }  # GUNCELLEYICI
+
+  yedek:
+    image: tekserp-korumali:@@SURUM@@  # GUNCELLEYICI
+    pull_policy: never  # GUNCELLEYICI
+    platform: linux/amd64
+    <<: *guvenlik
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command: ["/usr/local/bin/yedek-zamanlayici.sh"]
+    healthcheck:
+      disable: true
+    environment:
+      PGHOST: postgres
+      PGPORT: "5432"
+      PGUSER: ${POSTGRES_USER:-tekserp}
+      PGPASSWORD: ${POSTGRES_PASSWORD}
+      PGDATABASE: ${POSTGRES_DB:-tekserp}
+      YEDEK_SAAT: ${YEDEK_SAAT:-03:00}
+      YEDEK_SAKLAMA_GUN: ${YEDEK_SAKLAMA_GUN:-30}
+      YEDEK_EN_AZ: ${YEDEK_EN_AZ:-3}
+      YEDEK_ILK_BEKLEME: ${YEDEK_ILK_BEKLEME:-120}
+    volumes:
+      - yedek:/var/lib/tekserp/yedek
+      - yedek_anahtar:/var/lib/tekserp/yedek-anahtar:ro
+
+volumes:
+  pg_data:
+  lisans:
+  yedek:
+  yedek_anahtar:

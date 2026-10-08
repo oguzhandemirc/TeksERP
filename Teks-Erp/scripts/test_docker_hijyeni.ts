@@ -29,8 +29,12 @@
 //      §5k bulut kenarı örneği (runbook §10): TRUST_PROXY=1 + hız sınırı, port yalnız 127.0.0.1, konak ağı yalnız sertleştirilmiş kenarda, teslim dışı.
 //   §6 satıcı imajı (G2/G3) DURAĞAN: `satici/sunucu/scripts/` altındaki her CLI `dist-cli`'a derlenir ve
 //      `test -f` kapısında; compose'da `/dosyalar` yazılır, `/derlemeler` + `/yayin` salt okunur (⑨'un docker'sız ikizi).
+//   §7 güncelleyicinin yöneteceği düzen (GUNCELLEYICI-SAGLAMLIK L5): §7a–§7e `TEKSERP_GOC_ACILISTA` (yok/boş/1 =
+//      bugünkü açılışta göç · 0 = göç yok, şema denetimi · başka = çık) ve `goc` aracı DAVRANIŞI (sh + sahteler) ·
+//      §7f çıkış kodları betik ↔ `docker/korumali/acilis-kodlari.json` iki yönlü · §7g imajda `goc` bağı ·
+//      §7h güncelleyicili compose kuralları · §7i elle compose ile ayrışma yok · §7j anahtar yalnız güncelleyicili compose'da.
 // =============================================================================
-import { readFileSync, readdirSync, existsSync, mkdtempSync, mkdirSync, writeFileSync, chmodSync, rmSync } from "node:fs";
+import { readFileSync, readdirSync, existsSync, mkdtempSync, mkdirSync, writeFileSync, chmodSync, rmSync, symlinkSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { spawnSync } from "node:child_process";
@@ -699,6 +703,329 @@ function saticiImajStatik(dockerfile: string, compose: string): string[] {
     const uygulandi = d !== df || c !== dc;
     check(`§6b sonda: ${ad} → kırmızı`, uygulandi && saticiImajStatik(d, c).length > 0, uygulandi ? "" : "MUTASYON UYGULANMADI");
   }
+}
+
+// -----------------------------------------------------------------------------
+// §7 — güncelleyicinin yöneteceği düzen (GUNCELLEYICI-SAGLAMLIK L5): açılışta göç anahtarı · `goc` aracı ·
+// açılış çıkış kodları tablosu · güncelleyicili compose şablonu
+// -----------------------------------------------------------------------------
+console.log("\n=== §7 açılışta göç anahtarı · goc aracı · çıkış kodları · güncelleyicili compose ===\n");
+
+interface AcilisKodu { kod: number; ad: string; anlam: string }
+const KODLAR_YOLU = "Teks-Erp/docker/korumali/acilis-kodlari.json";
+const acilisKodlari = (JSON.parse(oku(KODLAR_YOLU)) as { kodlar: AcilisKodu[] }).kodlar;
+const kod = (ad: string): number => {
+  const k = acilisKodlari.find((x) => x.ad === ad);
+  if (!k) throw new Error(`${KODLAR_YOLU}: ${ad} yok`);
+  return k.kod;
+};
+
+const SAHTELER7: Record<string, string> = {
+  npx: `echo "npx $*" >> "$STUB_LOG"
+case "$*" in
+  "prisma migrate deploy")
+    n=$(cat "$STUB_SAYAC" 2>/dev/null || echo 0); n=$((n+1)); echo "$n" > "$STUB_SAYAC"
+    if [ "$n" -le "\${STUB_DEPLOY_FAIL:-0}" ]; then echo "Error: migration failed \${STUB_DEPLOY_CIKTI:-}"; exit 1; fi
+    exit 0 ;;
+  "prisma migrate resolve"*) exit "\${STUB_RESOLVE_EXIT:-0}" ;;
+esac
+exit 0`,
+  psql: `echo "psql $*" >> "$STUB_LOG"
+case "$*" in
+  *"-f "*) exit "\${STUB_PSQL_F_EXIT:-0}" ;;
+  *to_regclass*) [ "$STUB_TABLO" = fail ] && exit 2; printf '%s\\n' "$STUB_TABLO" ;;
+  *"finished_at IS NULL AND rolled_back_at"*) printf '%s\\n' "\${STUB_YARIM:-0}" ;;
+  *"finished_at IS NOT NULL"*) [ "$STUB_DB" = fail ] && exit 2; cat "$STUB_DB" ;;
+  *"ORDER BY started_at"*) printf '%s\\n' "\${STUB_FAILED:-}" ;;
+  *"FROM users"*) printf '%s\\n' "\${STUB_USERS:-3}" ;;
+esac
+exit 0`,
+  node: `echo "node $*" >> "$STUB_LOG"; exit 0`,
+};
+const GOCLER = ["20260101000000_init", "20260201000000_dizin_eszamanli", "20260301000000_kolon"];
+const ESZAMANLI = "20260201000000_dizin_eszamanli";
+
+interface Kosum7 extends Kosum { cagri: { deploy: number; denetim: boolean; sunucu: boolean; seed: boolean; elle: boolean; resolve: boolean } }
+function kos7(env: Record<string, string>, o: { db?: string[]; gocBagi?: boolean; arg?: string[] } = {}): Kosum7 {
+  const dir = mkdtempSync(join(tmpdir(), "docker-goc-"));
+  try {
+    const bin = join(dir, "bin");
+    mkdirSync(bin);
+    for (const [ad, govde] of Object.entries(SAHTELER7)) {
+      writeFileSync(join(bin, ad), `#!/bin/sh\n${govde}\n`);
+      chmodSync(join(bin, ad), 0o755);
+    }
+    for (const g of GOCLER) {
+      mkdirSync(join(dir, "prisma", "migrations", g), { recursive: true });
+      writeFileSync(join(dir, "prisma", "migrations", g, "migration.sql"), g === ESZAMANLI ? "CREATE INDEX CONCURRENTLY x ON y (z);\n" : "SELECT 1;\n");
+    }
+    const dbYolu = join(dir, "db.txt");
+    writeFileSync(dbYolu, (o.db ?? GOCLER).map((x) => `${x}\n`).join(""));
+    const logYolu = join(dir, "stub.log");
+    writeFileSync(logYolu, "");
+    let betik = ENTRYPOINT;
+    if (o.gocBagi) {
+      betik = join(dir, "goc");
+      symlinkSync(ENTRYPOINT, betik);
+    }
+    const r = spawnSync("sh", [betik, ...(o.arg ?? [])], {
+      cwd: dir,
+      encoding: "utf8",
+      timeout: 20_000,
+      env: {
+        PATH: `${bin}:/usr/bin:/bin`, STUB_LOG: logYolu, STUB_SAYAC: join(dir, "sayac"), STUB_DB: dbYolu, STUB_TABLO: "t", HOME: dir,
+        DATABASE_URL: URL_SEMALI, ...env,
+      },
+    });
+    const log = readFileSync(logYolu, "utf8").split("\n").filter(Boolean);
+    return {
+      cikis: r.status, log, stdout: `${r.stdout ?? ""}${r.stderr ?? ""}`, hata: r.error?.message,
+      cagri: {
+        deploy: log.filter((l) => l === "npx prisma migrate deploy").length,
+        denetim: log.some((l) => l.includes("to_regclass")),
+        sunucu: log.includes("node dist/server.js"),
+        seed: log.some((l) => l.includes("FROM users")),
+        elle: log.some((l) => /^psql .* -f prisma\/migrations\//.test(l)),
+        resolve: log.some((l) => l.startsWith("npx prisma migrate resolve --applied")),
+      },
+    };
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+}
+
+// §7a–§7f davranış: her senaryo çıkış kodunu TABLODAN okur (betikteki sayı tabloya bağlı mı da ölçülür).
+type Beklenti = { cikis: number; deploy: number; denetim: boolean; sunucu: boolean; ek?: (k: Kosum7) => boolean };
+const ACILIS_BUGUN: Beklenti = { cikis: 0, deploy: 1, denetim: false, sunucu: true };
+const senaryolar7: Array<{ ad: string; env: Record<string, string>; o?: Parameters<typeof kos7>[1]; b: Beklenti }> = [
+  { ad: "§7a ⭐ anahtar YOK → bugünkü açılış (göç + sunucu, şema denetimi yok)", env: {}, b: ACILIS_BUGUN },
+  { ad: "§7a anahtar boş → bugünkü açılış", env: { TEKSERP_GOC_ACILISTA: "" }, b: ACILIS_BUGUN },
+  { ad: "§7a anahtar \"1\" → bugünkü açılış", env: { TEKSERP_GOC_ACILISTA: "1" }, b: ACILIS_BUGUN },
+  { ad: "§7a bugünkü açılış: göç düşerse sunucu açılmaz (GOC_BASARISIZ)", env: { STUB_DEPLOY_FAIL: "1", STUB_FAILED: GOCLER[2]! }, b: { cikis: kod("GOC_BASARISIZ"), deploy: 1, denetim: false, sunucu: false } },
+  { ad: "§7b ⭐ \"0\" + şema = imaj → göç YOK, denetim var, sunucu açılır", env: { TEKSERP_GOC_ACILISTA: "0" }, b: { cikis: 0, deploy: 0, denetim: true, sunucu: true } },
+  { ad: "§7b ⭐ \"0\" + bekleyen göç → GOC_BEKLIYOR, sunucu açılmaz", env: { TEKSERP_GOC_ACILISTA: "0" }, o: { db: GOCLER.slice(0, 2) }, b: { cikis: kod("GOC_BEKLIYOR"), deploy: 0, denetim: true, sunucu: false } },
+  { ad: "§7b \"0\" + göç tablosu yok → GOC_BEKLIYOR", env: { TEKSERP_GOC_ACILISTA: "0", STUB_TABLO: "f" }, b: { cikis: kod("GOC_BEKLIYOR"), deploy: 0, denetim: true, sunucu: false } },
+  { ad: "§7b ⭐ \"0\" + yarım göç → GOC_YARIM", env: { TEKSERP_GOC_ACILISTA: "0", STUB_YARIM: "1" }, b: { cikis: kod("GOC_YARIM"), deploy: 0, denetim: true, sunucu: false } },
+  { ad: "§7b ⭐ \"0\" + imajın tanımadığı göç (eski imaj yeni şemada) → SEMA_ILERIDE", env: { TEKSERP_GOC_ACILISTA: "0" }, o: { db: [...GOCLER, "29990101000000_gelecek"] }, b: { cikis: kod("SEMA_ILERIDE"), deploy: 0, denetim: true, sunucu: false } },
+  { ad: "§7b \"0\" + DB'ye ulaşılamıyor → SEMA_OLCULEMEDI", env: { TEKSERP_GOC_ACILISTA: "0", STUB_TABLO: "fail" }, b: { cikis: kod("SEMA_OLCULEMEDI"), deploy: 0, denetim: true, sunucu: false } },
+  { ad: "§7b \"0\" + bitmiş göçler okunamıyor → SEMA_OLCULEMEDI", env: { TEKSERP_GOC_ACILISTA: "0", STUB_DB: "fail" }, b: { cikis: kod("SEMA_OLCULEMEDI"), deploy: 0, denetim: true, sunucu: false } },
+  { ad: "§7b \"0\" + yarım sayısı anlamsız → SEMA_OLCULEMEDI", env: { TEKSERP_GOC_ACILISTA: "0", STUB_YARIM: "ERROR" }, b: { cikis: kod("SEMA_OLCULEMEDI"), deploy: 0, denetim: true, sunucu: false } },
+  { ad: "§7c ⭐ tanınmayan değer (\"evet\") → KIP_GECERSIZ, göç de sunucu da yok", env: { TEKSERP_GOC_ACILISTA: "evet" }, b: { cikis: kod("KIP_GECERSIZ"), deploy: 0, denetim: false, sunucu: false } },
+  { ad: "§7d ⭐ goc aracı (argüman) → göç + denetim, sunucu ve seed YOK, GOC_TAMAM", env: {}, o: { arg: ["goc"] }, b: { cikis: 0, deploy: 1, denetim: true, sunucu: false, ek: (k) => !k.cagri.seed && /^GOC_TAMAM$/m.test(k.stdout) } },
+  { ad: "§7d ⭐ goc aracı (imajdaki `goc` bağı) → aynı", env: {}, o: { gocBagi: true }, b: { cikis: 0, deploy: 1, denetim: true, sunucu: false, ek: (k) => !k.cagri.seed && /^GOC_TAMAM$/m.test(k.stdout) } },
+  { ad: "§7d goc aracı anahtarı yok sayar (\"0\" olsa da göç koşar)", env: { TEKSERP_GOC_ACILISTA: "0" }, o: { gocBagi: true }, b: { cikis: 0, deploy: 1, denetim: true, sunucu: false } },
+  { ad: "§7d goc sonrası şema imajdan ileride → SEMA_ILERIDE (ad kümesi eşitliği)", env: {}, o: { gocBagi: true, db: [...GOCLER, "29990101000000_gelecek"] }, b: { cikis: kod("SEMA_ILERIDE"), deploy: 1, denetim: true, sunucu: false } },
+  { ad: "§7d goc \"başarılı\" ama göç DB'ye yazılmamış → GOC_BEKLIYOR", env: {}, o: { gocBagi: true, db: GOCLER.slice(1) }, b: { cikis: kod("GOC_BEKLIYOR"), deploy: 1, denetim: true, sunucu: false } },
+  { ad: "§7e ⭐ CONCURRENTLY göçü (tek yer: goc) → psql ile uygulanır + resolve + yeniden deploy", env: { STUB_DEPLOY_FAIL: "1", STUB_FAILED: ESZAMANLI }, o: { gocBagi: true }, b: { cikis: 0, deploy: 2, denetim: true, sunucu: false, ek: (k) => k.cagri.elle && k.cagri.resolve } },
+  { ad: "§7e CONCURRENTLY psql düştü → GOC_ELLE_BASARISIZ", env: { STUB_DEPLOY_FAIL: "1", STUB_FAILED: ESZAMANLI, STUB_PSQL_F_EXIT: "3" }, o: { gocBagi: true }, b: { cikis: kod("GOC_ELLE_BASARISIZ"), deploy: 1, denetim: false, sunucu: false } },
+  { ad: "§7e CONCURRENTLY resolve düştü → GOC_ELLE_BASARISIZ", env: { STUB_DEPLOY_FAIL: "1", STUB_FAILED: ESZAMANLI, STUB_RESOLVE_EXIT: "1" }, o: { gocBagi: true }, b: { cikis: kod("GOC_ELLE_BASARISIZ"), deploy: 1, denetim: false, sunucu: false } },
+  { ad: "§7e düşen göç tespit edilemedi → GOC_TANISIZ", env: { STUB_DEPLOY_FAIL: "1" }, o: { gocBagi: true }, b: { cikis: kod("GOC_TANISIZ"), deploy: 1, denetim: false, sunucu: false } },
+  { ad: "§7e düşen göç çıktıdan okunur, SQL imajda yok → GOC_SQL_YOK", env: { STUB_DEPLOY_FAIL: "1", STUB_DEPLOY_CIKTI: "29990101000000_yok" }, o: { gocBagi: true }, b: { cikis: kod("GOC_SQL_YOK"), deploy: 1, denetim: false, sunucu: false } },
+  { ad: "§7e deploy deneme tavanında bitmedi → GOC_DENEME_TUKENDI (eskiden sessizce sunucu açılırdı)", env: { STUB_DEPLOY_FAIL: "99", STUB_FAILED: ESZAMANLI }, b: { cikis: kod("GOC_DENEME_TUKENDI"), deploy: 20, denetim: false, sunucu: false } },
+];
+for (const s of senaryolar7) {
+  const k = kos7(s.env, s.o);
+  if (k.hata || k.cikis === null) {
+    check(`${s.ad}: betik koşturulabildi`, false, `ÖLÇÜLEMEDİ — ${k.hata ?? "sinyal"}`);
+    continue;
+  }
+  const c = k.cagri;
+  const ok = k.cikis === s.b.cikis && c.deploy === s.b.deploy && c.denetim === s.b.denetim && c.sunucu === s.b.sunucu && (s.b.ek ? s.b.ek(k) : true);
+  check(s.ad, ok, ok ? "" : `çıkış ${k.cikis} (beklenen ${s.b.cikis}) · deploy ${c.deploy}/${s.b.deploy} · denetim ${c.denetim} · sunucu ${c.sunucu} · ${k.stdout.trim().split("\n").slice(-1)[0]}`);
+}
+
+// §7f çıkış kodları: betik ↔ tablo İKİ YÖNLÜ; betikte beyansız `exit N` yok; kodlar node/sinyal/kabuk aralığına çarpmaz.
+function kodTablosuStatik(betik: string, tablo: AcilisKodu[]): string[] {
+  const ih: string[] = [];
+  const kodSatirlari = betik.split("\n").filter((l) => !/^\s*#/.test(l));
+  const atama = new Map<string, number>();
+  for (const l of kodSatirlari) {
+    const m = /^KOD_([A-Z_]+)=(\d+)$/.exec(l.trim());
+    if (m) atama.set(m[1]!, Number(m[2]));
+  }
+  if (atama.size === 0) ih.push("betikte KOD_ ataması yok");
+  const adlar = new Set<string>();
+  const sayilar = new Set<number>();
+  for (const t of tablo) {
+    if (adlar.has(t.ad) || sayilar.has(t.kod)) ih.push(`tabloda mükerrer: ${t.ad}/${t.kod}`);
+    adlar.add(t.ad);
+    sayilar.add(t.kod);
+    if (!Number.isInteger(t.kod) || t.kod < 15 || t.kod > 125) ih.push(`kod ${t.kod} izinli aralıkta değil (15–125: node 1–14, kabuk 126–127, sinyal 128+)`);
+    if (!t.anlam?.trim()) ih.push(`${t.ad} anlamsız`);
+    if (atama.get(t.ad) !== t.kod) ih.push(`tablo ${t.ad}=${t.kod}, betik ${atama.get(t.ad) ?? "yok"}`);
+  }
+  for (const [ad, n] of atama) if (!adlar.has(ad)) ih.push(`betikte beyansız kod KOD_${ad}=${n}`);
+  for (const l of kodSatirlari) {
+    for (const m of l.matchAll(/\bexit\s+(\S+)/g)) {
+      const a = m[1]!.replace(/[;}]+$/, "");
+      if (a === "0") continue;
+      const v = /^\$KOD_([A-Z_]+)$/.exec(a);
+      if (!v || !atama.has(v[1]!)) ih.push(`beyansız çıkış: exit ${a}`);
+    }
+  }
+  const kullanilan = new Set([...betik.matchAll(/\bexit \$KOD_([A-Z_]+)/g)].map((m) => m[1]!));
+  for (const ad of atama.keys()) if (!kullanilan.has(ad)) ih.push(`KOD_${ad} hiçbir çıkışta kullanılmıyor (ölü kod)`);
+  return ih;
+}
+{
+  const betik = oku("Teks-Erp/docker/entrypoint.sh");
+  const gercek = kodTablosuStatik(betik, acilisKodlari);
+  check(`§7f ⭐ çıkış kodları betik ↔ ${KODLAR_YOLU} iki yönlü eşit, beyansız exit yok`, gercek.length === 0, gercek.join(" | ") || `${acilisKodlari.length} kod`);
+  const sondalar: Array<[string, string, AcilisKodu[]]> = [
+    ["betiğe çıplak exit 1", betik.replace('exit $KOD_GOC_BASARISIZ', "exit 1"), acilisKodlari],
+    ["tablodan kod silindi", betik, acilisKodlari.filter((k) => k.ad !== "GOC_YARIM")],
+    ["betikte sayı değişti", betik.replace("KOD_SEMA_ILERIDE=49", "KOD_SEMA_ILERIDE=50"), acilisKodlari],
+    ["node koduna çarpan kod", betik.replace("KOD_KIP_GECERSIZ=40", "KOD_KIP_GECERSIZ=1"), acilisKodlari.map((k) => (k.ad === "KIP_GECERSIZ" ? { ...k, kod: 1 } : k))],
+    ["ölü kod", betik.replace("KOD_SEMA_ILERIDE=49", "KOD_SEMA_ILERIDE=49\nKOD_OLU=59"), [...acilisKodlari, { kod: 59, ad: "OLU", anlam: "x" }]],
+  ];
+  for (const [ad, b, t] of sondalar) {
+    const uygulandi = b !== betik || t !== acilisKodlari;
+    check(`§7f sonda: ${ad} → kırmızı`, uygulandi && kodTablosuStatik(b, t).length > 0, uygulandi ? "" : "MUTASYON UYGULANMADI");
+  }
+}
+
+// §7g imaj: `goc` bağı açılış betiğine gider (güncelleyicinin `compose run … backend goc`u) ve CMD açılış betiği kalır.
+function gocBagiStatik(dockerfile: string): string[] {
+  const son = dockerfile.slice(dockerfile.lastIndexOf("\nFROM "));
+  const ih: string[] = [];
+  if (!/^RUN ln -s \/usr\/local\/bin\/entrypoint\.sh \/usr\/local\/bin\/goc$/m.test(son)) ih.push("çalışma aşamasında `goc` bağı yok");
+  if (!/^CMD \["\/usr\/local\/bin\/entrypoint\.sh"\]$/m.test(son)) ih.push("CMD açılış betiği değil (compose run komutu onu ezer)");
+  if (!/^ENTRYPOINT \["\/usr\/bin\/tini", "--"\]$/m.test(son)) ih.push("ENTRYPOINT yalnız tini değil (`goc` komut olarak koşmaz)");
+  return ih;
+}
+{
+  const df = oku("Teks-Erp/docker/korumali/Dockerfile");
+  const g = gocBagiStatik(df);
+  check("§7g ⭐ korumalı imajda `goc` → entrypoint.sh bağı, ENTRYPOINT tini, CMD açılış betiği", g.length === 0, g.join(" | "));
+  const sonda = df.replace(/^RUN ln -s \/usr\/local\/bin\/entrypoint\.sh \/usr\/local\/bin\/goc\n/m, "");
+  check("§7g sonda: bağ silindi → kırmızı", sonda !== df && gocBagiStatik(sonda).length > 0, sonda !== df ? "" : "MUTASYON UYGULANMADI");
+}
+
+// §7h güncelleyicili compose şablonu kuralları (GUNCELLEYICI-SAGLAMLIK §1.2).
+const ISARET = /\s+# GUNCELLEYICI$/;
+const IPC_KOK = "/var/lib/tekserp/guncelleme";
+function servisBloklari(compose: string): Map<string, string> {
+  const bas = compose.indexOf("\nservices:\n");
+  const out = new Map<string, string>();
+  if (bas < 0) return out;
+  const govde = compose.slice(bas + "\nservices:\n".length);
+  const son = govde.search(/^\S/m);
+  const servisler = son < 0 ? govde : govde.slice(0, son);
+  const parcalar = servisler.split(/^(?= {2}[A-Za-z0-9_-]+:\s*$)/m);
+  for (const p of parcalar) {
+    const m = /^ {2}([A-Za-z0-9_-]+):\s*$/m.exec(p);
+    if (m) out.set(m[1]!, p);
+  }
+  return out;
+}
+function guncelleyiciComposeStatik(ham: string): string[] {
+  const ih: string[] = [];
+  const c = ham.split("\n").filter((l) => !/^\s*#/.test(l)).map((l) => l.replace(ISARET, "")).join("\n");
+  const s = servisBloklari(c);
+  if (!s.has("backend") || !s.has("postgres") || !s.has("yedek")) return [`servisler çözülemedi (${[...s.keys()].join(",")})`];
+  for (const [ad, b] of s) if (!/^ {4}pull_policy: never$/m.test(b)) ih.push(`${ad}: pull_policy never değil (imaj dışarıdan çekilebilir)`);
+  if (/\$\{TEKSERP_IMAJ\b/.test(c)) ih.push("imaj etiketi .env'den (TEKSERP_IMAJ) — compose ile aynı adımda değişmez");
+  for (const ad of ["backend", "yedek"]) if (!/^ {4}image: tekserp-korumali:@@SURUM@@$/m.test(s.get(ad)!)) ih.push(`${ad}: imaj tekserp-korumali:@@SURUM@@ değil`);
+  const be = s.get("backend")!;
+  if (!/^ {4}restart: unless-stopped$/m.test(be)) ih.push("backend restart unless-stopped değil");
+  if (!/^ {6}TEKSERP_GOC_ACILISTA: "0"$/m.test(be)) ih.push("backend TEKSERP_GOC_ACILISTA \"0\" değil (açılışta göç sürer)");
+  if (!/^ {6}TEKSERP_DOGRULAMA_KIPI: \$\{TEKSERP_DOGRULAMA_KIPI:-\}$/m.test(be)) ih.push("backend doğrulama kipi değişkenini geçirmiyor");
+  if (!new RegExp(`^ {6}TEKSERP_GUNCELLEME_DIZINI: ${IPC_KOK.replace(/\//g, "\\/")}$`, "m").test(be)) ih.push(`backend TEKSERP_GUNCELLEME_DIZINI ${IPC_KOK} değil`);
+  const baglar = [...be.matchAll(/^ {6}- type: bind\n {8}source: (\S+)\n {8}target: (\S+)\n {8}read_only: (true|false)\n {8}bind: \{ create_host_path: false \}$/gm)]
+    .map((m) => ({ kaynak: m[1]!, hedef: m[2]!, ro: m[3] === "true" }));
+  const durum = baglar.find((b) => b.hedef === `${IPC_KOK}/durum`);
+  const niyet = baglar.find((b) => b.hedef === `${IPC_KOK}/niyet`);
+  if (!durum || durum.kaynak !== `${IPC_KOK}/durum` || !durum.ro) ih.push("durum/ bağı yok ya da salt okunur değil (create_host_path false)");
+  if (!niyet || niyet.kaynak !== `${IPC_KOK}/niyet` || niyet.ro) ih.push("niyet/ bağı yok ya da yazılamaz (create_host_path false)");
+  if (/^ {6}- \S*guncelleme/m.test(be)) ih.push("IPC dizini kısa sözdizimiyle bağlı (eksik dizini root sahipli UYDURUR)");
+  return ih;
+}
+const GUNCELLEYICI_COMPOSE = "Teks-Erp/docker/korumali/docker-compose.guncelleyici.yml";
+{
+  const gc = oku(GUNCELLEYICI_COMPOSE);
+  const g = guncelleyiciComposeStatik(gc);
+  check("§7h ⭐ güncelleyicili compose: her serviste pull_policy never · imaj compose'da sürümlü · göç açılışta kapalı · IPC bağları (durum ro, niyet rw) · doğrulama kipi", g.length === 0, g.join(" | "));
+  const sondalar: Array<[string, string]> = [
+    ["postgres pull_policy kalktı", gc.replace(/(image: \$\{TEKSERP_PG_IMAJ[^\n]*\n) {4}pull_policy: never[^\n]*\n/, "$1")],
+    ["imaj .env'den", gc.replace("    image: tekserp-korumali:@@SURUM@@  # GUNCELLEYICI\n", "    image: ${TEKSERP_IMAJ}\n")],
+    ["göç açılışta", gc.replace('TEKSERP_GOC_ACILISTA: "0"', 'TEKSERP_GOC_ACILISTA: "1"')],
+    ["durum yazılabilir", gc.replace(/(source: \/var\/lib\/tekserp\/guncelleme\/durum[^\n]*\n[^\n]*\n {8}read_only: )true/, "$1false")],
+    ["niyet salt okunur", gc.replace(/(source: \/var\/lib\/tekserp\/guncelleme\/niyet[^\n]*\n[^\n]*\n {8}read_only: )false/, "$1true")],
+    ["dizin uydurulur", gc.replace("bind: { create_host_path: false }", "bind: { create_host_path: true }")],
+    ["doğrulama kipi sabit", gc.replace("TEKSERP_DOGRULAMA_KIPI: ${TEKSERP_DOGRULAMA_KIPI:-}", 'TEKSERP_DOGRULAMA_KIPI: "1"')],
+    ["restart always", gc.replace(/(\n {2}backend:[\s\S]*?\n {4}restart: )unless-stopped/, "$1always")],
+  ];
+  for (const [ad, s] of sondalar) check(`§7h sonda: ${ad} → kırmızı`, s !== gc && guncelleyiciComposeStatik(s).length > 0, s !== gc ? "" : "MUTASYON UYGULANMADI");
+}
+
+// §7i ayrışma: güncelleyicili compose, elle kurulumun compose'unun AYNISIDIR — fark yalnız `# GUNCELLEYICI`
+// işaretli, beyanlı biçimdeki satırlar + tabanın .env'den gelen imaj satırları. Ortak satırı yalnız birinde değiştirmek kırmızı.
+const ISARETLI_IZINLI: RegExp[] = [
+  /^ {4}pull_policy: never$/,
+  /^ {4}image: tekserp-korumali:@@SURUM@@$/,
+  /^ {6}TEKSERP_GOC_ACILISTA: "0"$/,
+  /^ {6}TEKSERP_GUNCELLEME_DIZINI: \/var\/lib\/tekserp\/guncelleme$/,
+  /^ {6}TEKSERP_DOGRULAMA_KIPI: \$\{TEKSERP_DOGRULAMA_KIPI:-\}$/,
+  /^ {6}- type: bind$/,
+  /^ {8}(source|target): \/var\/lib\/tekserp\/guncelleme\/(durum|niyet)$/,
+  /^ {8}read_only: (true|false)$/,
+  /^ {8}bind: \{ create_host_path: false \}$/,
+];
+const TABAN_YALNIZ: RegExp[] = [/^ {4}image: \$\{TEKSERP_IMAJ(:\?[^}]*)?\}$/];
+function ayrismaStatik(taban: string, guncelleyici: string): string[] {
+  const ih: string[] = [];
+  const govde = (t: string) => t.split("\n").map((l) => l.trimEnd()).filter((l) => l.trim() && !/^\s*#/.test(l));
+  const t = govde(taban).filter((l) => !TABAN_YALNIZ.some((r) => r.test(l)));
+  const gTum = govde(guncelleyici);
+  const isaretli = gTum.filter((l) => ISARET.test(l)).map((l) => l.replace(ISARET, ""));
+  for (const l of isaretli) if (!ISARETLI_IZINLI.some((r) => r.test(l))) ih.push(`beyansız güncelleyici satırı: ${l.trim()}`);
+  const g = gTum.filter((l) => !ISARET.test(l));
+  const n = Math.max(t.length, g.length);
+  for (let i = 0; i < n; i++) {
+    if (t[i] !== g[i]) {
+      ih.push(`ayrışma (satır ${i + 1}): elle «${(t[i] ?? "—").trim()}» ≠ güncelleyicili «${(g[i] ?? "—").trim()}»`);
+      break;
+    }
+  }
+  return ih;
+}
+{
+  const dc = oku("Teks-Erp/docker/korumali/docker-compose.yml");
+  const gc = oku(GUNCELLEYICI_COMPOSE);
+  const g = ayrismaStatik(dc, gc);
+  check("§7i ⭐ güncelleyicili compose = elle kurulum compose'u + yalnız beyanlı işaretli satırlar (ayrışma yok)", g.length === 0, g.join(" | "));
+  const sondalar: Array<[string, string, string]> = [
+    ["yalnız tabana yeni ortam değişkeni", dc.replace("      LICENSE_SERVER_URL: ${LICENSE_SERVER_URL:-}\n", "      LICENSE_SERVER_URL: ${LICENSE_SERVER_URL:-}\n      YENI_AYAR: ${YENI_AYAR:-}\n"), gc],
+    ["yalnız güncelleyicilide ortak satır değişti", dc, gc.replace("statement_timeout=50s", "statement_timeout=0")],
+    ["işaretsiz ek satır", dc, gc.replace("    restart: unless-stopped\n", "    restart: unless-stopped\n    privileged: true\n")],
+    ["işaretle gizlenmiş yetki", dc, gc.replace("    restart: unless-stopped\n", "    restart: unless-stopped\n    privileged: true  # GUNCELLEYICI\n")],
+  ];
+  for (const [ad, d, c] of sondalar) {
+    const uygulandi = d !== dc || c !== gc;
+    check(`§7i sonda: ${ad} → kırmızı`, uygulandi && ayrismaStatik(d, c).length > 0, uygulandi ? "" : "MUTASYON UYGULANMADI");
+  }
+}
+
+// §7j varsayılan = bugünkü davranış: anahtarı yalnız güncelleyicili compose yazar; elle kurulum, bulut örneği ve
+// demo compose'u onu taşımaz (taşırsa bugünkü kurulum açılışta göçü bırakır). Teslim paketi şablonu taşımaz (yeri L3'te).
+function anahtarYeriStatik(dosyalar: Record<string, string>, teslim: string): string[] {
+  const ih: string[] = [];
+  for (const [ad, m] of Object.entries(dosyalar)) if (/TEKSERP_GOC_ACILISTA/.test(m)) ih.push(`${ad} TEKSERP_GOC_ACILISTA taşıyor`);
+  if (/docker-compose\.guncelleyici/.test(teslim.split("\n").filter((l) => !/^\s*#/.test(l)).join("\n"))) ih.push("teslim paketi güncelleyici şablonunu taşıyor (yeri L3'te)");
+  return ih;
+}
+{
+  const dosyalar: Record<string, string> = {
+    "docker/korumali/docker-compose.yml": oku("Teks-Erp/docker/korumali/docker-compose.yml"),
+    "docker/korumali/docker-compose.bulut-ornek.yml": oku("Teks-Erp/docker/korumali/docker-compose.bulut-ornek.yml"),
+    "docker/korumali/.env.ornek": oku("Teks-Erp/docker/korumali/.env.ornek"),
+    "docker-compose.yml (demo)": oku("Teks-Erp/docker-compose.yml"),
+  };
+  const tp = oku("Teks-Erp/docker/korumali/teslim-paketle.sh");
+  const g = anahtarYeriStatik(dosyalar, tp);
+  check("§7j ⭐ anahtar yalnız güncelleyicili compose'da (elle/bulut/demo compose bugünkü gibi açılışta göçer)", g.length === 0, g.join(" | "));
+  const sonda = { ...dosyalar, "docker/korumali/docker-compose.yml": dosyalar["docker/korumali/docker-compose.yml"]!.replace("      PORT: \"4000\"\n", "      PORT: \"4000\"\n      TEKSERP_GOC_ACILISTA: \"0\"\n") };
+  check("§7j sonda: elle compose'a anahtar → kırmızı", anahtarYeriStatik(sonda, tp).length > 0);
 }
 
 console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);

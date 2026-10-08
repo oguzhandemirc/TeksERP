@@ -1,0 +1,16 @@
+{
+  "v": 1,
+  "aciklama": "Korumalı imajın açılış betiğinin (docker/entrypoint.sh) ve goc aracının beyanlı çıkış kodları. Güncelleyicinin Linux crash_exit_code eşlemesi bu tabloyu okur; betikle iki yönlü eşitliği test_docker_hijyeni §7 ölçer. Tablo dışı kodlar: 0 temiz kapanış · 1 sunucu (node) hatası · 128+N sinyal.",
+  "kodlar": [
+    { "kod": 40, "ad": "KIP_GECERSIZ", "anlam": "TEKSERP_GOC_ACILISTA tanınmıyor (yalnız boş, 0, 1)" },
+    { "kod": 41, "ad": "GOC_TANISIZ", "anlam": "migrate deploy düştü, hangi göç olduğu tespit edilemedi" },
+    { "kod": 42, "ad": "GOC_SQL_YOK", "anlam": "düşen göçün migration.sql dosyası imajda yok" },
+    { "kod": 43, "ad": "GOC_BASARISIZ", "anlam": "CONCURRENTLY içermeyen göç düştü" },
+    { "kod": 44, "ad": "GOC_ELLE_BASARISIZ", "anlam": "CONCURRENTLY göçünün psql ile uygulanması ya da migrate resolve düştü" },
+    { "kod": 45, "ad": "GOC_DENEME_TUKENDI", "anlam": "migrate deploy deneme tavanında bitmedi" },
+    { "kod": 46, "ad": "SEMA_OLCULEMEDI", "anlam": "şema denetimi ölçülemedi (DB'ye ulaşılamadı ya da imajda göç yok)" },
+    { "kod": 47, "ad": "GOC_BEKLIYOR", "anlam": "imajdaki göçlerden en az biri veritabanında uygulanmamış" },
+    { "kod": 48, "ad": "GOC_YARIM", "anlam": "veritabanında yarım kalmış göç var (finished_at boş, geri alınmamış)" },
+    { "kod": 49, "ad": "SEMA_ILERIDE", "anlam": "veritabanında bu imajın tanımadığı bitmiş göç var (eski imaj yeni şemada)" }
+  ]
+}
