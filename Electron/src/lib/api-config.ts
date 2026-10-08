@@ -123,9 +123,25 @@ export async function clearStoredApiBaseUrl(): Promise<void> {
   await secureStore.delete(STORE_KEY);
 }
 
+type ApiBaseUrlListener = (url: string) => void;
+const listeners = new Set<ApiBaseUrlListener>();
+
+/**
+ * Aktif adres her uygulandığında (kayıt, sıfırlama, şifreli geçiş, keşif) haber alır. Giriş ekranının
+ * erişilebilirlik durumu buna bağlıdır: eski adresin "ulaşılamadı" sonucu yeni adreste kalmamalı.
+ */
+export function onApiBaseUrlApplied(listener: ApiBaseUrlListener): () => void {
+  listeners.add(listener);
+  return () => {
+    listeners.delete(listener);
+  };
+}
+
 /** axios singleton'ın baseURL'ini güncelle — bir sonraki istek anında kullanır. */
 export function applyApiBaseUrl(url: string): void {
-  apiClient.defaults.baseURL = normalizeApiBaseUrl(url);
+  const next = normalizeApiBaseUrl(url);
+  apiClient.defaults.baseURL = next;
+  for (const l of [...listeners]) l(next);
 }
 
 /** O an axios'a uygulanmış aktif adres. */

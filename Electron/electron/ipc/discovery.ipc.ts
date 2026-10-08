@@ -48,10 +48,10 @@ import { readSecureValue, writeSecureValue } from "./secure-store.ipc.js";
 import { browseMdns } from "../discovery/mdns-browser.js";
 import { scanSubnet } from "../discovery/subnet-scan.js";
 import { probeIdentity } from "../discovery/probe.js";
-import { httpsBaseUrlOf, isLoopbackHost, panelTransportFor, routeFor } from "../../shared/lan-tls.js";
+import { httpsBaseUrlOf, isLoopbackHost, panelTransportFor, routeFor, serverUrlParts } from "../../shared/lan-tls.js";
 import { isInternetHost } from "../../shared/internet-tls.js";
 import { readTlsPins } from "../security/lan-tls-pin.js";
-import { verifyHttpsCandidate } from "../discovery/tls-candidate.js";
+import { verifyHttpsCandidate, verifyInternetCandidate } from "../discovery/tls-candidate.js";
 import { autoPinLoopback, registerLanTlsIpc } from "./lan-tls.ipc.js";
 
 /** Electron'daki API adresi anahtarı — `src/lib/api-config.ts` ile AYNI olmalı. */
@@ -110,13 +110,7 @@ function readRecentUrls(): string[] {
 
 /** `http(s)://host:port[/api]` → `{scheme, host, port}`. Çözülemezse null. */
 function splitUrl(url: string): { scheme: "http" | "https"; host: string; port: number } | null {
-  const m = /^(https?):\/\/([^:/\s]+)(?::(\d+))?/i.exec((url ?? "").trim());
-  if (!m || !m[1] || !m[2]) return null;
-  return {
-    scheme: m[1].toLowerCase() === "https" ? "https" : "http",
-    host: m[2],
-    port: m[3] ? Number(m[3]) : DISCOVERY_DEFAULT_PORT,
-  };
+  return serverUrlParts(url, DISCOVERY_DEFAULT_PORT);
 }
 
 /** Sabit varken HTTP'ye düşülmediğinin tanısı — kullanıcıya "neden bulunamadı" cevabı. */
@@ -473,6 +467,10 @@ export function registerDiscoveryIpc(): void {
     if (typeof baseUrl !== "string") return null;
     const parts = splitUrl(baseUrl);
     if (!parts) return null;
+    // İnternet kipi (genel CA) sabit aramaz; kimlik yanıtının protocol/apiPort beyanı adresi değiştirmez.
+    if (panelTransportFor(readTlsPins(), baseUrl, isInternetHost).kind === "internet") {
+      return verifyInternetCandidate({ host: parts.host, via: "stored", pinnedId: readPinnedId(), timeoutMs: 5000, onBlocked: noteTlsBlocked }, parts.port);
+    }
     return verify(parts.host, parts.port, "stored", readPinnedId(), 5000, parts.scheme);
   });
 

@@ -5,9 +5,19 @@
  */
 import { DISCOVERY_DEFAULT_PORT } from "@shared/discovery";
 import type { DiscoveryApi, TlsObservation } from "@shared/ipc-contract";
-import { HTTP_TO_PINNED_REASON, buildTlsQr, isLoopbackHost, panelTransportFor, pinBlockingHttp, type TlsPin } from "@shared/lan-tls";
+import {
+  HTTP_TO_PINNED_REASON,
+  INTERNET_HOST_NOT_PINNABLE_REASON,
+  UNADVERTISED_CERT_REASON,
+  buildTlsQr,
+  isLoopbackHost,
+  panelTransportFor,
+  pinBlockingHttp,
+  type TlsPin,
+} from "@shared/lan-tls";
 import { isInternetHost } from "@shared/internet-tls";
 import { splitApiBaseUrl } from "@/lib/api-config";
+import { modeRefusal, type ServerMode } from "@/lib/server-mode";
 
 export type TlsSwitchPlan =
   | { kind: "unavailable"; reason: string }
@@ -22,6 +32,7 @@ export type TlsSwitchPlan =
  */
 export function planTlsSwitch(obs: TlsObservation | null): TlsSwitchPlan {
   if (!obs) return { kind: "unavailable", reason: "Adres geçersiz." };
+  if (isInternetHost(obs.host)) return { kind: "unavailable", reason: INTERNET_HOST_NOT_PINNABLE_REASON };
   if (!obs.observedFingerprint) {
     return {
       kind: "unavailable",
@@ -30,7 +41,9 @@ export function planTlsSwitch(obs: TlsObservation | null): TlsSwitchPlan {
         : "Sunucu şifreli bağlantı sunmuyor (sunucuda LAN_TLS_MODE kapalı).",
     };
   }
-  if (obs.advert && obs.advert.fingerprint !== obs.observedFingerprint) {
+  // İlansız sertifika (vekil, bulut kenarı) karşılaştırılacak bir kod değildir — onay sunulmaz.
+  if (!obs.advert) return { kind: "unavailable", reason: UNADVERTISED_CERT_REASON };
+  if (obs.advert.fingerprint !== obs.observedFingerprint) {
     return {
       kind: "mismatch",
       reason: "Sunucunun ilan ettiği kod ile şifreli kanalda sunulan sertifika farklı. Ağda araya giren biri olabilir — sabitlemeyin, sistem yöneticisine haber verin.",
@@ -114,8 +127,12 @@ export async function httpSwitchBlock(
  * Panel yalnız şifreli: kaydedilecek/denenecek adres kabul edilmiyorsa Türkçe sebep (ağ adresinde http:// ya da
  * eşleşmemiş https). Karar `panelTransportFor`da; ana süreçteki ağ kapısı aynı kuralı ayrıca uygular.
  */
-export async function addressRefusal(api: Pick<DiscoveryApi, "tlsPins"> | undefined, url: string): Promise<string | null> {
+export async function addressRefusal(
+  api: Pick<DiscoveryApi, "tlsPins"> | undefined,
+  url: string,
+  mode?: ServerMode,
+): Promise<string | null> {
   const pins = api?.tlsPins ? await api.tlsPins().catch(() => [] as TlsPin[]) : [];
   const t = panelTransportFor(pins, url, isInternetHost);
-  return t.kind === "refused" ? t.reason : null;
+  return (mode ? modeRefusal(mode, t) : null) ?? (t.kind === "refused" ? t.reason : null);
 }

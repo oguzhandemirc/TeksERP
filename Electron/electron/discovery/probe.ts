@@ -42,9 +42,10 @@ interface RawResponse {
  * https probu sertifikayı KABUL EDER ve parmak izini gözlem olarak döner: kendinden imzalı sertifika
  * zincirle doğrulanamaz, güven kararı sabitle karşılaştırmadadır (docs/design/LAN-TLS.md §6).
  */
-function requestFor(url: string, timeoutMs: number, onRes: (res: http.IncomingMessage) => void): http.ClientRequest {
+function requestFor(url: string, timeoutMs: number, strictTls: boolean, onRes: (res: http.IncomingMessage) => void): http.ClientRequest {
   if (!url.startsWith("https:")) return http.get(url, { timeout: timeoutMs }, onRes);
-  return https.get(url, { timeout: timeoutMs, rejectUnauthorized: false }, onRes);
+  // strictTls: internet kipi — zincir + ad doğrulaması (genel CA); sabitli kipte gözlem için kabul edilir.
+  return https.get(url, { timeout: timeoutMs, rejectUnauthorized: strictTls }, onRes);
 }
 
 function peerFingerprint(res: http.IncomingMessage): string | null {
@@ -55,7 +56,7 @@ function peerFingerprint(res: http.IncomingMessage): string | null {
 }
 
 /** Tek GET. Asla throw etmez; ulaşılamazsa null. */
-function get(url: string, timeoutMs: number): Promise<RawResponse | null> {
+function get(url: string, timeoutMs: number, strictTls = false): Promise<RawResponse | null> {
   return new Promise((resolve) => {
     let settled = false;
     const done = (r: RawResponse | null): void => {
@@ -64,7 +65,7 @@ function get(url: string, timeoutMs: number): Promise<RawResponse | null> {
       resolve(r);
     };
     try {
-      const req = requestFor(url, timeoutMs, (res) => {
+      const req = requestFor(url, timeoutMs, strictTls, (res) => {
         const observedFingerprint = peerFingerprint(res);
         const chunks: Buffer[] = [];
         // Kötü niyetli/yanlış bir servis sonsuz gövde akıtabilir — 64 KB'de kes.
@@ -110,12 +111,12 @@ function get(url: string, timeoutMs: number): Promise<RawResponse | null> {
 export async function probeIdentity(
   baseUrl: string,
   timeoutMs = 2000,
-  opts: { requireIdentity?: boolean } = {},
+  opts: { requireIdentity?: boolean; strictTls?: boolean } = {},
 ): Promise<ProbeResult | null> {
   const started = Date.now();
   const root = baseUrl.replace(/\/+$/, "");
 
-  const res = await get(`${root}${DISCOVERY_IDENTITY_PATH}`, timeoutMs);
+  const res = await get(`${root}${DISCOVERY_IDENTITY_PATH}`, timeoutMs, opts.strictTls === true);
   if (res && res.status === 200) {
     try {
       const body = JSON.parse(res.body) as { tls?: unknown } | null;
@@ -135,7 +136,7 @@ export async function probeIdentity(
 
   // Eski backend (uç yok) ya da yanıt bozuk: canlılık ucuyla teyit et.
   if (opts.requireIdentity) return null;
-  const health = await get(`${root}/health`, timeoutMs);
+  const health = await get(`${root}/health`, timeoutMs, opts.strictTls === true);
   if (!health || health.status !== 200) return null;
   try {
     const parsed = JSON.parse(health.body) as { status?: unknown };
