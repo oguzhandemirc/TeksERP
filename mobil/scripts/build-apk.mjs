@@ -77,6 +77,7 @@ import { ZINCIR_META, kokHatalari } from './lib/ota-zinciri.cjs';
 import { otaTorenYonergesi, ortakKaydiOku, ortakKimlik, ortakYapilandirmaFarki } from './lib/ortak-kimlik.cjs';
 import { IMZA_ANAHTARLARI, anahtarUretimKomutu, imzaAnahtariDenetimi } from './lib/imza-anahtari.cjs';
 import { PLAY_EN_DUSUK_HEDEF_SDK, YON_OZELLIGI } from './lib/buyuk-ekran.cjs';
+import { playManifestSorunlari } from './lib/play-manifest.cjs';
 import { kayitHatalari, KAYIT_REL as DAGITIM_REL, turet } from '../../scripts/lib/dagitim.mjs';
 import { apkKunyeYolu, derlemeKunyesiYaz, temizAgacDenetimi } from '../../scripts/lib/derleme-bagi.mjs';
 
@@ -946,7 +947,7 @@ function buyukEkranSorunlari(ogeler) {
  * bundle'da ERP adresi yok; Play'in yasakladığı kurulum izni yok.
  */
 function ortakAabDogrula(aabYolu, k, derlemeBaslangici) {
-  baslik("(3/4) DOĞRULAMA — AAB'nin kendisinden (kimlik · ERP adresi · yasak izin)");
+  baslik("(3/4) DOĞRULAMA — AAB'nin kendisinden (kimlik · ERP adresi · yasak izin · düz HTTP · hizmet)");
   if (!fs.existsSync(aabYolu)) dur('AAB üretilmedi', `Beklenen yol: ${aabYolu}`, 'Gradle "BUILD SUCCESSFUL" dese bile paket yok — çıktıyı incele.');
   const stat = fs.statSync(aabYolu);
   if (derlemeBaslangici && stat.mtimeMs < derlemeBaslangici) {
@@ -978,7 +979,7 @@ function ortakAabDogrula(aabYolu, k, derlemeBaslangici) {
     } catch (e) {
       sorunlar.push(`base/manifest/AndroidManifest.xml protobuf olarak çözülemedi (${e.message}) — zincir ÖLÇÜLEMEDİ`);
     }
-    if (ogeler) sorunlar.push(...buyukEkranSorunlari(ogeler));
+    if (ogeler) sorunlar.push(...buyukEkranSorunlari(ogeler), ...playManifestSorunlari(ogeler));
     if (meta) {
       const pem = meta['expo.modules.updates.CODE_SIGNING_CERTIFICATE'];
       bilgi(`OTA sertifika zinciri    : ${meta[ZINCIR_META] ?? '(yok)'}`);

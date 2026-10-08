@@ -17,6 +17,36 @@
   ],
   "yayinlar": [
     {
+      "id": "2026-10-08b",
+      "durum": "TASLAK — terfide kullanıcı onayı",
+      "baslik": "Tablet sunucuya yalnız şifreli bağlanır",
+      "surumler": {
+        "tablet": "1.2.0"
+      },
+      "maddeler": [
+        {
+          "kapsam": "tablet",
+          "tip": "yeni",
+          "metin": "Tablet sunucuya artık yalnız şifreli bağlantıyla bağlanır. İlk açılışta tam ekran “Sunucuyu ekle” sayfası açılır ve iki yol sunar: “QR okut” ile yönetim panelindeki şifreli bağlantı QR'ı okutulur ya da “Adresi yaz” ile sunucunun IP adresi yazılır."
+        },
+        {
+          "kapsam": "tablet",
+          "tip": "yeni",
+          "metin": "IP adresi yazıldığında tablet sunucunun doğrulama kodunu gösterir. Bu kodu sunucu kurulumunun son sayfasındaki ya da paneldeki kodla karşılaştırın; birebir aynıysa “Kodlar aynı — bağlan”a dokunun. Kod farklıysa “Kodlar farklı — vazgeç” deyin ve sistem yöneticinize haber verin."
+        },
+        {
+          "kapsam": "tablet",
+          "tip": "iyilestirme",
+          "metin": "Daha önce şifresiz adresle bağlanan tablet bu sürümle sunucuyu bir kez yeniden ekler; eski adres sayfanın üstünde gösterilir."
+        },
+        {
+          "kapsam": "tablet",
+          "tip": "iyilestirme",
+          "metin": "Tablet artık kullanmadığı izinleri istemiyor (diğer uygulamaların üstünde gösterme, parmak izi, arka planda ses)."
+        }
+      ]
+    },
+    {
       "id": "2026-10-08",
       "durum": "TASLAK — terfide kullanıcı onayı",
       "baslik": "Yeni TeksERP paneli — ilk sürüm",
