@@ -9,7 +9,7 @@
 
 | Konu | Bugün (ölçüldü, §1) | Hedef (§3) |
 |---|---|---|
-| Panel künyesi (`tekserp-panel`) | `panel-2026` (+ yedek `panel-2026-2`) panele GÖMÜLÜ, süresiz | gömülü olan yalnız KÖK; imzalayan `ist-<yıl>-<n>` kök imzalı ISTEMCI sertifikasıyla (395 gün) künyenin YÜKÜNDE gelir; YEDEK ISTEMCI anahtarı çevrimdışı USB'de, sertifikası yine kök imzalı (§3.6) |
+| Panel künyesi (`tekserp-panel`) | `panel-2026` (+ yedek `panel-2026-2`) panele GÖMÜLÜ, süresiz | gömülü olan yalnız KÖK; imzalayan `ist-<yıl>-<n>` kök imzalı ISTEMCI sertifikasıyla (395 gün) künyenin YÜKÜNDE gelir; YEDEK ISTEMCI anahtarı çevrimdışı ayrı birimde (disk görüntüsü), sertifikası yine kök imzalı (§3.6) |
 | Tablet APK künyesi (`tekserp-apk`) | aynı iki anahtar, JS paketine gömülü | ortak tablette YOK: dağıtım Google Play gizli yayını, native güncelleme Play'den (§1.2, §4); künye yalnız adnansahin'in eski yolunda yaşar |
 | Tablet OTA kod imzası (expo-updates) | kanal başına öz-imzalı RSA sertifika, 30 yıl, APK'ya gömülü; özel anahtar Mac'te PAROLASIZ | APK'ya gömülü olan **OTA kökü** (X.509 RSA CA, çevrimdışı); manifesti yıllık **OTA yaprak sertifikası** (395 gün) imzalar, zincir manifest yanıtında gelir — expo-updates bunu destekliyor (§1.4, ölçüldü) |
 | APK mührü (Android) | `tekserp-release.keystore` | kökün altına GİREMEZ (§4); ortak tablette mührü Google tutar (Play App Signing), bizde yükleme anahtarı kalır |
@@ -80,13 +80,13 @@ Kapsam dışı: şirket kod imza sertifikası (Authenticode) — gelince `publis
 KÖK (kok-<yıl>-<n>, Ed25519, Mac, çevrimdışı)
   ├─ ISTEMCI sertifikası (birincil)  tekserp-sertifika { kullanim: "ISTEMCI", kid: "ist-<yıl>-<n>", x, siniflar, baslangic, bitis }  (395 gün; Mac, istemci parolası)
   │    └─ panel künyesi  tekserp-panel  (latest.yml bloğu v:2; yükte imzaciSertifikasi + imzaZamani)
-  └─ ISTEMCI sertifikası (yedek)     aynı biçim, kid "ist-<yıl>-<n+1>"  (395 gün; çevrimdışı USB, kendi parolası kâğıtta — §3.6)
+  └─ ISTEMCI sertifikası (yedek)     aynı biçim, kid "ist-<yıl>-<n+1>"  (395 gün; çevrimdışı ayrı birim, kendi parolası parola yöneticisinde — §3.6)
 KÖK ── iptal: tekserp-paketiptal satırı { kid: "ist-…", sertifikaId, tarih, neden }   (§3.4)
 
 OTA KÖKÜ (X.509 RSA-3072, öz-imzalı CA, pathLen 0, keyCertSign, EKU YOK; 30 yıl; APK'ya gömülü; kök parolasıyla sarılı, kökle aynı yerde)
   ├─ OTA YAPRAK  (X.509 RSA, digitalSignature + EKU codeSigning, 395 gün; Mac'te parolalı)
   │    └─ OTA manifesti  (expo-signature; yanıtta certificate_chain = yaprak PEM)
-  └─ YEDEK OTA YAPRAK  (aynı biçim, 395 gün; yedek ISTEMCI anahtarıyla aynı USB'de, aynı yedek parolayla — §3.6)
+  └─ YEDEK OTA YAPRAK  (aynı biçim, 395 gün; yedek ISTEMCI anahtarıyla aynı birimde, aynı yedek parolayla — §3.6)
 ```
 
 - ISTEMCI sertifikası mevcut `tekserp-sertifika` biçimidir; `CERT_USAGES`a `ISTEMCI`, `SUB_KID_PREFIX`e `ISTEMCI: "ist-"` (TS + satıcı/patron aynası + Rust `schema.rs` aynası — Rust doğrulayıcıları bu sertifikayı hiç görmez ama kâhin şema eşitliğini ölçer). `bayi: null`; `siniflar` kökün bütün sınıfları — istemci sınıf süzgeci UYGULAMAZ (kurulumun sınıfını güvenilir bilmez; PAKET'in setup CLI'si V5 gibi süzgeçsiz).
@@ -133,11 +133,12 @@ OTA KÖKÜ (X.509 RSA-3072, öz-imzalı CA, pathLen 0, keyCertSign, EKU YOK; 30 
 
 ### 3.6 Yedek ISTEMCI anahtarı (karar 6)
 
-- Her yıllık tören İKİ ISTEMCI anahtarı basar: birincil `ist-<yıl>-<n>` (Mac, istemci parolası) ve yedek `ist-<yıl>-<n+1>` (çevrimdışı USB, KENDİ parolası yalnız kâğıtta, Mac'te kalmaz) — bugünkü `panel-2026-2` düzeni. İkisinin sertifikası kök imzalı ve 395 günlüktür; aynı törende yedek OTA yaprağı da basılır ve aynı USB'ye, aynı yedek parolayla yazılır.
+- Her yıllık tören İKİ ISTEMCI anahtarı basar: birincil `ist-<yıl>-<n>` (Mac, istemci parolası) ve yedek `ist-<yıl>-<n+1>` (çevrimdışı AYRI BİRİM, KENDİ parolası Mac'te kalmaz). Ayrı birim USB değil, tören sırasında bağlanan bir **disk görüntüsüdür** (Mac diskinden ayrı birim olarak ölçülür, `--yedek-usb=/Volumes/<görüntü>`); görüntü Drive'a yüklenir, yedek parolası **parola yöneticisindedir** (kâğıt değil) — kullanıcı kararı 2026-10-07. İkisinin sertifikası kök imzalı ve 395 günlüktür; aynı törende yedek OTA yaprağı da basılır ve aynı birime, aynı yedek parolayla yazılır. İlk tören 2026-10-07: `ist-2026-1` birincil · `ist-2026-2` yedek.
 - Birincil kaybolur ya da bozulursa yayın yedekle sürer: yedeğin sertifikası zaten kök imzalıdır ⇒ çapa değişmez, kök açılmaz, tören beklenmez. Yeni çift bir sonraki törende (gerekirse kökle o gün) basılır.
 - Birincil ÇALINIRSA yayın yedekle sürer ve kök birincil için iptal satırı basar (§3.4). Yedek çalınırsa aynı iptal yolu.
-- Yedek de 30 gün kapısına tabidir (§3.3); bitişi birincille aynı gündür, ikisi aynı törende yenilenir ve önceki yılın yedeği USB'den silinir.
-- Tören, USB'deki yedeğin açıldığını ve açık anahtarının künyedekiyle eşleştiğini ölçer; açılamayan yedek tören hatasıdır.
+- Yedek de 30 gün kapısına tabidir (§3.3); bitişi birincille aynı gündür, ikisi aynı törende yenilenir ve önceki yılın yedeği ayrı birimden silinir.
+- Tören, ayrı birimdeki yedeğin açıldığını ve açık anahtarının künyedekiyle eşleştiğini ölçer; açılamayan yedek tören hatasıdır.
+- **Satıcı tarafı:** satıcı ISTEMCI anahtarı (birincil ya da yedek) TUTMAZ; yalnız AÇIK sertifikaları ve OTA yaprak PEM'lerini anahtar biriminin `istemci/` alt dizininden canlı okur (künye ve bitiş uyarısı için, imzada kullanılmaz — `e36a91393`, `satici/sunucu/src/keys/open-certificates.ts`). Kurulum tören runbook'u adım 5b'dir (`docs/ops/URETIM-SATICI-TOREN.md` §8); 2026-10-07 töreninin dosyaları VDS'e henüz konmadı — VDS'teki satıcı imajı okuyucudan öncedir.
 
 ## 4. APK mührünün bu düzene GİREMEYECEĞİ sınırlar
 
@@ -220,4 +221,4 @@ Sıra şartı (karar 1): I1–I3 ve I5 `TEK-ORTAK-PAKET.md` O10a/O10b'den (ilk y
 3. **Eski anahtarlar:** adnansahin'in panel/tablet/OTA anahtarları (`panel-2026`, `panel-2026-2`, adnansahin OTA anahtarı) silinmez, şifreli saklanır. Mac'te parolasız duran OTA anahtarlarına (`mobil/keystore/ota-keys*/`) parola konur; bu iş kullanıcı klavye başındayken yapılır ve 2026-10-07 itibarıyla YAPILMADI (§1.5, I9).
 4. **Tablet OTA belgesinde iptal yok:** risk KABUL edildi; Expo'ya iptal yaması yapılmaz. Acil çıkış yeni kurulumdur (§3.5).
 5. **Tablet dağıtımı:** Google Play gizli yayını (Managed Google Play, yalnız bizim fabrikalarımıza görünür). Sonuçları: uygulama mührünü Google tutar (Play App Signing) · uygulamanın kendi APK indirme/kurma yolu Play'de kullanılamaz, native/büyük güncelleme Play'den, JS OTA ile uygulama içinden · Play incelemesi demo sunucu + deneme hesabı ister · siteden kurulan tablet Play'den güncellenemez ⇒ tek kurulum yolu Play (§1.2, §4, §5; `TEK-ORTAK-PAKET.md` K-14).
-6. **Yedek anahtar:** öneriye TERS karar — yedek ISTEMCI anahtarı TUTULUR (bugünkü `panel-2026-2` gibi: çevrimdışı USB, kendi parolası kâğıtta). Aynı düzen OTA yaprağına da uygulanır: yedek yaprak aynı USB'de, aynı yedek parolayla (tasarım uzantısı; kullanıcı aksini derse yalnız ISTEMCI yedeği kalır) (§3.6, §6, §7).
+6. **Yedek anahtar:** öneriye TERS karar — yedek ISTEMCI anahtarı TUTULUR (bugünkü `panel-2026-2` gibi: çevrimdışı USB, kendi parolası kâğıtta). (Uygulama 2026-10-07, kullanıcı: USB yerine disk görüntüsü, kâğıt yerine parola yöneticisi — §3.6.) Aynı düzen OTA yaprağına da uygulanır: yedek yaprak aynı USB'de, aynı yedek parolayla (tasarım uzantısı; kullanıcı aksini derse yalnız ISTEMCI yedeği kalır) (§3.6, §6, §7).

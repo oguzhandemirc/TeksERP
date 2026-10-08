@@ -344,15 +344,23 @@ Etkinleşmemiş kurulum hiçbir durumda dışarı istek atmaz (`test_lisans_moto
 
 ## 10. Anahtar künyesi (sır DEĞİL — açık yarılar)
 
+> **Durum (2026-10-08):** hazırlık satıcısı 2026-10-05'te emekli (verisi silindi) — `hazirlik`/`satici` satırları yalnız tarihtir. Üretimde yürürlükte `alt-2026-3 · ara-2026-2 · ind-2026-3` (tören `donemler/20261007T181311Z`, [`URETIM-SATICI-TOREN.md`](URETIM-SATICI-TOREN.md) §8 Durum); ALT/ARA açık yarıları portalın anahtar künyesindedir (`/portal/api`), İNDİRME satırları `deploy/guncelleme-sunucusu/worker/indir-ayar.json`dadır.
+> **Açık sertifikalar (ISTEMCI · PAKET):** satıcı bu anahtarları TUTMAZ; sertifikalarını anahtar biriminin `istemci/` · `paket/` alt dizinlerinden canlı okur (`e36a91393`, okuyucu `satici/sunucu/src/keys/open-certificates.ts`; OTA yaprağı `istemci/ota-yaprak-*.pem`). Tepe dizine konan çıplak sertifika "alt dizine konur" uyarısı verir. 2026-10-07 töreninin `istemci/` dosyaları (`ist-2026-1` · `ist-2026-2` + iki yaprak PEM) VDS'e **HENÜZ KONMADI**: VDS'teki imaj (`2831396adb12`) okuyucudan öncedir — okuyuculu imaja güncellemeden SONRA tören runbook'u §8 adım 5b.
+
 | kid | Tür | Sınıflar | Açık anahtar (x) | Geçerlilik |
 |---|---|---|---|---|
-| `hazirlik-2026-1` | hazırlık kökü (parolalı) | TEST · DEMO | `705hChzAL045Gp-XoG6SaUKAW8muK1SFcW0Vpwhf-mo` | süresiz (çapada) |
-| `alt-hazirlik-2026-1` | ALT (kira) | TEST · DEMO | anahtar künyesinde (`/portal/api`) | 2026-09-29 → 2027-03-28 |
-| `ind-hazirlik-2026` | İNDİRME | TEST · DEMO | `olL5-kJO9x2ll70S07upNYejiB1-pim7IfU7wFPnGlw` (CF Worker, Faz 3a) | 2026-09-29 → 2027-09-29 |
+| `hazirlik-2026-1` | hazırlık kökü (parolalı) | TEST · DEMO | `705hChzAL045Gp-XoG6SaUKAW8muK1SFcW0Vpwhf-mo` | süresiz (çapada) · hazırlık satıcısı EMEKLİ 2026-10-05 |
+| `alt-hazirlik-2026-1` | ALT (kira) | TEST · DEMO | (hazırlık portalı kapandı) | 2026-09-29 → 2027-03-28 · EMEKLİ 2026-10-05 |
+| `ind-hazirlik-2026` | İNDİRME | TEST · DEMO | `olL5-kJO9x2ll70S07upNYejiB1-pim7IfU7wFPnGlw` (Worker'a hiç girmedi; `indirmeListesi.hazirlik` yok) | 2026-09-29 → 2027-09-29 · EMEKLİ 2026-10-05 |
 | `satici` | yedek alıcısı (.tkenc) | — | parmak izi `9795275bc12a5faa` | — |
 | `kok-2026-1` | ÜRETİM kökü (parolalı; tören 2026-09-30) | URETIM · TEST · DR · DEMO · BAYI · BARINDIRILAN | `sPveT3g3QhV8F_-xN2ZF0MVXFX1HHSiYzZ1GHYbPhEY` | süresiz (çapada) |
-| `alt-2026-1` | ALT (kira, üretim) | kökün altı sınıfı | anahtar künyesinde (`/portal/api`) · ilk 8 `6goSeQri` | 2026-09-30 → 2027-03-29 |
-| `ind-2026` | İNDİRME (üretim) | kökün sınıfları (`anahtar.ts` varsayılanı; künye sınıf yazmaz) | `ckusT12f_3VBSKC2b0nnB-UWbalN9BtlR5AOWaZbSwE` (CF Worker — `URETIM-SATICI-TOREN.md` §5.3) | 2026-09-30 → 2027-09-30 |
+| `alt-2026-1` | ALT (kira, üretim) | kökün altı sınıfı | anahtar künyesinde (`/portal/api`) · ilk 8 `6goSeQri` | 2026-09-30 → 2027-03-29 · EMEKLİ (2026-10-05 töreni) |
+| `ind-2026` | İNDİRME (üretim) | kökün sınıfları (`anahtar.ts` varsayılanı; künye sınıf yazmaz) | `ckusT12f_3VBSKC2b0nnB-UWbalN9BtlR5AOWaZbSwE` (yeni adreste kabul EDİLMEZ, K-5) | 2026-09-30 → 2027-09-30 · EMEKLİ (2026-10-05 töreni) |
+| `alt-2026-2` · `ara-2026-1` | ALT · ARA (üretim; tören 2026-10-05) | künyede | anahtar künyesinde (`/portal/api`) | bitiş 2027-02-02 · EMEKLİ (2026-10-07 töreni) |
+| `ind-2026-2` | İNDİRME (üretim; tören 2026-10-05) | test · oncu · genel | `Jk5C_hKxebblK4N8us5Vi29UeBDpyV_Q_9qGsMWp6oc` (Worker `indir-ayar.json`, örtüşmede) | 2026-10-05 → 2027-02-02 · EMEKLİ (2026-10-07 töreni) |
+| `alt-2026-3` · `ara-2026-2` | ALT · ARA (üretim; tören 2026-10-07) | künyede | anahtar künyesinde (`/portal/api`) | AKTİF |
+| `ind-2026-3` | İNDİRME (üretim; tören 2026-10-07) | test · oncu · genel | `gsGqiZwbucjzn8z72L38g9lWIA4ZKvqgbjjXLtmfIz4` (Worker `indir-ayar.json`) | 2026-10-07 → 2027-11-06 · AKTİF |
+| `ist-2026-1` · `ist-2026-2` | ISTEMCI birincil · yedek (tören 2026-10-07; satıcı TUTMAZ) + iki OTA yaprağı | kökün sınıfları | `DONEM-KUNYE.json` `istemci` bölümü | 395 gün · sertifikaları VDS'te `istemci/`e HENÜZ konmadı (yukarıdaki not) |
 | `paket-2026` | PAKET — korumalı paketin bütünlük listesi (parolalı; tören 2026-09-30) | — (üretim kid'i; sınıf kısıtı yok) | `j7xjeBy3BGQu38IZrvaaJJFcQ0OJCp22z8fUNiYwaCM` | çapada; yıllık rotasyon (`paket-2027`) |
 | `satici-uretim-mac` · `satici-uretim-kurtarma` | üretim satıcısı yedek alıcıları (.tkenc) | — | parmak izi `ff7b57fd2d1d2361` · `161678a8ce9dec7f` | — |
 
