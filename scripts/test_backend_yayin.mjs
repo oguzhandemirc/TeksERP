@@ -127,7 +127,8 @@ function bolum1() {
   const KACIS = { kip: 'atlandi', cumle: 'CI kırık, kullanıcı\tonayladı: imzala', saat: '2026-10-01T20:00:00+03:00', makine: 'mac', head: 'a'.repeat(40) };
   const jws = (yuk) => `e30.${Buffer.from(JSON.stringify(yuk)).toString('base64url')}.imza`;
   ol('§1m ciKokeniOku: imzalı yükten kayıt; yoksa/biçimsizse null', ciKokeniOku(jws({ v: 1, ciKokeni: KACIS }))?.kip === 'atlandi' &&
-    ciKokeniOku(jws({ v: 1, ciKokeni: { kip: 'kosu', kosu: 1 } }))?.kip === 'kosu' && ciKokeniOku(jws({ v: 1 })) === null &&
+    ciKokeniOku(jws({ v: 1, ciKokeni: { kip: 'kosu', kosu: 1 } }))?.kip === 'kosu' && ciKokeniOku(jws({ v: 1, ciKokeni: { kip: 'thinkpad', makine: 'thinkpad-1' } }))?.kip === 'thinkpad' &&
+    ciAtlaMetni({ kip: 'thinkpad' }) === null && ciKokeniOku(jws({ v: 1 })) === null &&
     ciKokeniOku(jws({ v: 1, ciKokeni: { kip: 'baska' } })) === null && ciKokeniOku('bozuk') === null && ciKokeniOku(undefined) === null);
   const iki = defterSatiri({ zaman: 'z', surum: '2.11.0', kim: 'a@b', sha16: 's', boyut: 1, terfiAtla: 'kullanıcı dedi ki yayınla', ciAtla: ciAtlaMetni(KACIS) });
   const yalnizCi = defterSatiri({ zaman: 'z', surum: '2.11.0', kim: 'a@b', sha16: 's', boyut: 1, ciAtla: ciAtlaMetni(KACIS) });

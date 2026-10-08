@@ -233,14 +233,14 @@ export function defterSatiri({ zaman, surum, kim, sha16, boyut, terfiAtla, ciAtl
 }
 
 /**
- * İmzalı bütünlük yükündeki CI kökeni kaydı (`butunluk.jws` → `ciKokeni`; G22). İmza burada DOĞRULANMAZ —
+ * İmzalı bütünlük yükündeki köken kaydı (`butunluk.jws` → `ciKokeni`; G22 — `kosu` · `atlandi` · `thinkpad`). İmza burada DOĞRULANMAZ —
  * çağıran paketi önce `backend-bildirim.ts` ile tam denetler. Kayıt yoksa ya da biçimsizse null.
  */
 export function ciKokeniOku(jws) {
   try {
     const yuk = JSON.parse(Buffer.from(String(jws ?? '').trim().split('.')[1] ?? '', 'base64url').toString('utf8'));
     const k = yuk?.ciKokeni;
-    return k && typeof k === 'object' && (k.kip === 'kosu' || k.kip === 'atlandi') ? k : null;
+    return k && typeof k === 'object' && (k.kip === 'kosu' || k.kip === 'atlandi' || k.kip === 'thinkpad') ? k : null;
   } catch {
     return null;
   }

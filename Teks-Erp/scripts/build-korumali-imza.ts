@@ -12,7 +12,8 @@
 //   npx tsx scripts/build-korumali-imza.ts imzala --kok=<paket dizini> --anahtar=<dosya> --surum=<x.y.z>
 //       [--urun=backend] [--musteri=<kod>] [--kurulum=<uuid>] [--derleme-tarihi=<ISO>]
 //   npx tsx scripts/build-korumali-imza.ts zip --zip=<paket.zip> --anahtar=<dosya> [--kurulum=<uuid>] [--surum-belgesi=<md>]
-//       [--ci-kosu=<korumali-paket.yml koşu numarası> | --ci-atla="<kullanıcının onay cümlesi>"]   (ÜRETİM anahtarında biri ZORUNLU)
+//       [--ci-kosu=<korumali-paket.yml koşu numarası> | --derleme-kunyesi=<zip>.derleme.json | --ci-atla="<kullanıcının onay cümlesi>"]
+//       (ÜRETİM anahtarında biri ZORUNLU, ikisi birlikte RED)
 //   (`imzala`/`zip` ortak) [--zincir-anahtar=<pkt dosyası>] çift imza: `butunluk.jws` (paket-*) + `butunluk-zincir.jws`
 //       (pkt-*, aynı yük); `--anahtar=<pkt dosyası>` tek başına zincir-yalnız; [--paket-iptal=<kök imzalı iptal>] yalnız
 //       zincirli pakette `paket-iptal.jws`; [--kok-dosyasi=<kök.json>] çapa; iki parola sırayla. Sertifikanın bitişine
@@ -33,6 +34,9 @@
 // KAÇIŞ (kullanıcı kararı 2026-10-01): koşu YOKKEN üretim imzası yalnız `--ci-atla="<kullanıcının cümlesi>"` ile;
 // cümle + saat + makine + HEAD imzalı yüke (`ciKokeni`) girer, yayıncı (`deploy/backend-yayinla.mjs`) uyarır ve
 // defterine yazar. Üretim dışı (test) anahtarda `--ci-atla` RED (kaçış gerekmez).
+// THINKPAD KÖKENİ (kullanıcı kararı 2026-10-08): kayıtlı ikinci derleme kökeni thinkpad-1 — `zip` kipinde
+// `--derleme-kunyesi=<zip>.derleme.json` (`deploy/korumali-thinkpad.sh` yazar) parola sorulmadan ÖNCE yapıtla çapraz
+// ölçülür (`scripts/lib/thinkpad-kokeni.ts`); tutarsa kaçış cümlesi GEREKMEZ, kayıt (`ciKokeni.kip = "thinkpad"`) imzalı yüke girer.
 // Parolalı anahtarla imzada (`imzala` · `zip` · `belge`) parola TTY'den ya da stdin'in satırından sorulur;
 // parola argümandan/ortamdan ASLA alınmaz (`--parola…` biçimli argüman çıkış 2 ile reddedilir).
 // =============================================================================
@@ -64,6 +68,7 @@ import { CHAINED_INTEGRITY_FILE, PACKAGE_REVOCATION_FILE, isChainPackageKid } fr
 import { CliError, args, askPassword } from "./lib/cli-girdi";
 import { git } from "./lib/git";
 import { type CiKokeniKaydi, ciAtlaHukmu, ciKokeniHukmu, ciKosusuOku } from "./lib/ci-kokeni";
+import { RUST_PARCALARI, type ThinkpadKaydi, anaDaldaMi, betikBlobSha256, thinkpadKaydi, thinkpadKokeniHukmu } from "./lib/thinkpad-kokeni";
 import { INTEGRITY_FILE, isProductionChainPackageKid } from "../src/lib/license/integrity-scope";
 import { INTEGRITY_LIST_FILE } from "../src/lib/license/integrity-list";
 import { istanbulSaati } from "../../scripts/lib/kullanici-cumlesi.mjs";
@@ -152,6 +157,8 @@ interface DirOptions {
   readonly musteri: string | null;
   /** PAKET.json `commit` (zip kipinde); dizin imzasında null. */
   readonly paketCommit?: string | null;
+  /** Zip kipinde imzadan ÖNCE ölçülen zip özeti + PAKET.json (thinkpad kökeni); dizin imzasında yok. */
+  readonly zipOlcumu?: { readonly zipSha256: string; readonly paket: Record<string, unknown> } | null;
 }
 
 interface DirResult {
@@ -175,24 +182,34 @@ function depoHead(): string {
  * ALT-9 — yapıtın CI kökeni; üretim anahtarında `--ci-kosu` ya da kullanıcının cümlesiyle `--ci-atla` zorunlu,
  * parola sorulmadan ÖNCE ölçülür. Dönen kayıt imzalı yüke girer (üretim dışı test anahtarında koşusuz: null).
  */
-function ciKokeniDenetle(kunye: Record<string, unknown>, keyFile: string, paketCommit: string | null): CiKokeniKaydi | null {
+function ciKokeniDenetle(
+  kunye: Record<string, unknown>,
+  keyFile: string,
+  paketCommit: string | null,
+  root: string,
+  zipOlcumu: DirOptions["zipOlcumu"],
+): CiKokeniKaydi | ThinkpadKaydi | null {
   const kid = packageKeyInfo(keyFile).kid;
   const uretim = isProductionSigningKid(kid);
   const id = arg("ci-kosu");
   const atla = argVar("ci-atla");
+  const derlemeKunyesi = argVar("derleme-kunyesi");
+  if (derlemeKunyesi !== undefined && argVar("ci-kosu") !== undefined) throw new Error("--ci-kosu ile --derleme-kunyesi birlikte verilemez — yapıtın TEK kökeni ölçülür; imza atılmadı");
   if (atla !== undefined) {
-    const h = ciAtlaHukmu({ ham: atla, uretim, kosuVar: argVar("ci-kosu") !== undefined });
+    const h = ciAtlaHukmu({ ham: atla, uretim, kosuVar: argVar("ci-kosu") !== undefined || derlemeKunyesi !== undefined });
     if (h.sonuc !== "uyumlu") throw new Error(`CI KAÇIŞI REDDEDİLDİ (${kid}) — imza atılmadı:\n  ${h.satirlar.join("\n  ")}`);
     const kayit: CiKokeniKaydi = { kip: "atlandi", cumle: h.cumle, saat: istanbulSaati(), makine: os.hostname().split(".")[0] || "?", head: depoHead() };
     console.warn(`⚠ ${h.satirlar[0]}`);
     console.warn(`  saat ${kayit.saat} · makine ${kayit.makine} · HEAD ${kayit.head.slice(0, 12)} — imzalı künyeye yazılıyor; yayıncı uyaracak`);
     return kayit;
   }
+  if (derlemeKunyesi !== undefined) return thinkpadKokeniDenetle(derlemeKunyesi, root, zipOlcumu, uretim);
   if (!id) {
     if (uretim) {
       throw new Error(
         `üretim PAKET imzası (${kid}) CI kökeni ister: --ci-kosu=<korumali-paket.yml koşu numarası> (gh run list --workflow=korumali-paket.yml)` +
-          ` — koşu yoksa yalnız kullanıcının cümlesiyle: --ci-atla="<cümle>" — imza atılmadı`,
+          ` ya da thinkpad derleme künyesi: --derleme-kunyesi=<zip>.derleme.json` +
+          ` — ikisi de yoksa yalnız kullanıcının cümlesiyle: --ci-atla="<cümle>" — imza atılmadı`,
       );
     }
     console.warn(`⚠ CI kökeni ÖLÇÜLMEDİ (üretim dışı test anahtarı ${kid}, --ci-kosu verilmedi)`);
@@ -205,6 +222,39 @@ function ciKokeniDenetle(kunye: Record<string, unknown>, keyFile: string, paketC
   }
   console.log(`✓ ${h.satirlar[0]}`);
   return { kip: "kosu", kosu: Number(id), dal: String(kosu.head_branch), commit: String(kosu.head_sha) };
+}
+
+const sha256Dosya = (f: string): string | null => (fs.existsSync(f) ? createHash("sha256").update(fs.readFileSync(f)).digest("hex") : null);
+
+/** Kayıtlı derleme makinesinin (thinkpad-1) künyesi yapıtla çapraz ölçülür; tutmazsa/ölçülemezse imza YOK. */
+function thinkpadKokeniDenetle(dosya: string, root: string, zipOlcumu: DirOptions["zipOlcumu"], uretim: boolean): ThinkpadKaydi {
+  if (!zipOlcumu) throw new Error("--derleme-kunyesi yalnız `zip` kipinde (zip özeti künyeyle ölçülür) — imza atılmadı");
+  let kunye: unknown = null;
+  try {
+    kunye = dosya ? readJson(home(dosya)) : null;
+  } catch {
+    kunye = null;
+  }
+  const k = (kunye ?? {}) as { kaynak?: { commit?: unknown }; betik?: { commit?: unknown } };
+  const kaynakCommit = String(k.kaynak?.commit ?? "");
+  const betikCommit = String(k.betik?.commit ?? "");
+  const zipRust = Object.fromEntries(Object.entries(RUST_PARCALARI).map(([ad, yol]) => [ad, sha256Dosya(path.join(root, yol))])) as Record<keyof typeof RUST_PARCALARI, string | null>;
+  const serverKunyeYolu = path.join(root, "dist", "server-kunye.json");
+  const h = thinkpadKokeniHukmu({
+    kunye,
+    zipSha256: zipOlcumu.zipSha256,
+    paket: zipOlcumu.paket,
+    serverKunye: fs.existsSync(serverKunyeYolu) ? readJson(serverKunyeYolu) : {},
+    zipRust,
+    betikBlobSha256: betikBlobSha256(DEPO_KOKU, betikCommit),
+    anaDalda: { kaynak: anaDaldaMi(DEPO_KOKU, kaynakCommit), betik: anaDaldaMi(DEPO_KOKU, betikCommit) },
+    uretim,
+  });
+  if (h.sonuc !== "uyumlu") {
+    throw new Error(`THINKPAD KÖKENİ ${h.sonuc === "olculemedi" ? "ÖLÇÜLEMEDİ" : "TUTMUYOR"} (${dosya || "(boş yol)"}) — imza atılmadı:\n  ${h.satirlar.join("\n  ")}`);
+  }
+  console.log(`✓ ${h.satirlar[0]}`);
+  return thinkpadKaydi(kunye, zipOlcumu.zipSha256);
 }
 
 /** Derlemenin çapa kipi `uretim` olmalı ve anahtar üretim ailesinden; künyede kip yoksa (G3 öncesi derleme) uyarı. */
@@ -237,7 +287,7 @@ async function signDir(o: DirOptions): Promise<DirResult> {
   anahtarAilesiDenetle(kunye, o.keyFile);
   if (o.zincirKeyFile) anahtarAilesiDenetle(kunye, o.zincirKeyFile);
   // Parola sorulmadan önce: CI kökeni, sertifika + tazelik, kök çapası, iptal belgesi.
-  const ciKokeni = ciKokeniDenetle(kunye, o.keyFile, o.paketCommit ?? null);
+  const ciKokeni = ciKokeniDenetle(kunye, o.keyFile, o.paketCommit ?? null, o.root, o.zipOlcumu ?? null);
   const birincilCert = zincirli ? zincirSertifikasi(o.keyFile, arg("sertifika")) : null;
   const zincirCert = o.zincirKeyFile ? zincirSertifikasi(o.zincirKeyFile, arg("zincir-sertifika")) : null;
   const zincirVar = birincilCert !== null || zincirCert !== null;
@@ -282,6 +332,7 @@ async function signZip(): Promise<void> {
   const zincirArg = arg("zincir-anahtar");
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "tekserp-imza-"));
   try {
+    const zipSha256 = createHash("sha256").update(fs.readFileSync(zip)).digest("hex");
     execFileSync("unzip", ["-q", zip, "-d", tmp]);
     const paket = readJson(path.join(tmp, "PAKET.json"));
     const imzaIzi = [INTEGRITY_FILE, CHAINED_INTEGRITY_FILE, INTEGRITY_LIST_FILE, PACKAGE_REVOCATION_FILE].filter((f) => fs.existsSync(path.join(tmp, f)));
@@ -299,6 +350,7 @@ async function signZip(): Promise<void> {
       surum,
       musteri: arg("musteri") ?? kanal,
       paketCommit: typeof paket.commit === "string" ? paket.commit : null,
+      zipOlcumu: { zipSha256, paket },
     });
     // kur.ps1 sayım kapısı: PAKET.json dosya sayısı yazılan her dosya kadar artar.
     const updated = { ...paket, dosyaSayisi: Number(paket.dosyaSayisi) + r.yazilan.length, butunlukKid: r.kid, ...(r.zincirKid ? { butunlukZincirKid: r.zincirKid } : {}) };
