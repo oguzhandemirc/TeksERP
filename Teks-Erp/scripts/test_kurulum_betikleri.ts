@@ -53,7 +53,7 @@
 //      Geçiş aracı (deploy/gecis/gecis.ps1) eski adreste kalır ve adresi güncelleyici betiğine açıkça geçirir.
 //   §17 O12 Tailscale (100.64.0.0/10) müşteri kurulumunda yok: sihirbaz kutusu, cevap seçeneği, onarım ön doldurması
 //      (K3 kod yolu) kapalı; kayıttaki eski izin onarımda korunur, özet + karar uyarır.
-//   §18 LAN TLS (kullanıcı kararı 2026-10-07, docs/design/LAN-TLS.md D6): YENİ .env `LAN_TLS_MODE=dual` alır (yalnız .env'i
+//   §18 LAN TLS (kullanıcı kararı 2026-10-07, docs/design/LAN-TLS.md D6): YENİ .env `LAN_TLS_MODE` satırını alır (yalnız .env'i
 //      ilk kez yazan dal, karar tek işlevde `LanTlsYeniKurulum`; harness `lantls.*`); onarım/devam .env'e satır EKLEMEZ,
 //      var olanı DEĞİŞTİRMEZ (`EnvDatabaseUrlYenile` yalnız DATABASE_URL); .env'e dokunan öteki yollar (geçiş, donmuş pm2,
 //      hizmet, bakım rolü) LAN_TLS yazmaz; HTTPS kuralı ÖLÇÜMDEN (kimlik ucu) ve API ile aynı profil/adreslerle, kaldırıcının
@@ -102,6 +102,9 @@ const YOL = {
   ilkKurulum: "deploy/ilk-kurulum.ps1",
   backendHizmeti: "deploy/hizmet/backend-hizmeti.ps1",
   bakimRolu: "deploy/bakim-rolu.ps1",
+  // §19: API'ye sunucunun içinden bağlanan öteki hizmetler (yalnız OKUNUR)
+  yedekle: "deploy/yedekle.ps1",
+  saglikRs: "Teks-Erp/native/tekserp-guncelleyici/src/health.rs",
 } as const;
 /** Kanal düzeninin güncelleme adresi: ortak kurulumda varsayılan OLAMAZ, yalnız kayıttaki eski izi tanımak için anılır. */
 const ESKI_GUNCELLEME = "https://guncelleme.etkiliyazilim.com";
@@ -634,7 +637,7 @@ function olc(k: Kaynaklar): Bulgular {
     const onarimDal = onarimBas >= 0 && onarimSon > onarimBas ? pg18.slice(onarimBas, onarimSon) : "";
     if (!yeniDal || !onarimDal) ekle("§18", "AsamaPostgreSQL'de yeni .env / onarım dalları bulunamadı (ÖLÇÜLEMEDİ)");
     if (!artan(sira(yeniDal, ["$lt = LanTlsYeniKurulum ([int]$d.portlar.api)", "if ($lt.hata) { Dur $lt.hata }", "$satirlar += @($lt.satirlar)", 'EnvYaz $envYolu (($satirlar -join'])))
-      ekle("§18", "yeni .env LAN_TLS_MODE=dual almıyor (LanTlsYeniKurulum satırları EnvYaz'dan önce eklenmiyor)");
+      ekle("§18", "yeni .env LAN_TLS_MODE almıyor (LanTlsYeniKurulum satırları EnvYaz'dan önce eklenmiyor)");
     if (!/\$yeni = EnvDatabaseUrlYenile \(\[IO\.File\]::ReadAllLines\(\$envYolu\)\) \$dbUrl\s*\n\s*EnvYaz \$envYolu \(\(\$yeni -join/.test(onarimDal) || /LAN_TLS|LanTls/.test(onarimDal))
       ekle("§18", "onarım dalı .env'e EnvDatabaseUrlYenile dışında dokunuyor (LAN_TLS satırı ekleyebilir/değiştirebilir)");
     const kurYaz = kur.satirlar.filter((x) => /LAN_TLS_MODE=|LAN_TLS_PORT=/.test(x.kod));
@@ -642,7 +645,6 @@ function olc(k: Kaynaklar): Bulgular {
     const ortYaz = ort.satirlar.filter((x) => /LAN_TLS_MODE=|LAN_TLS_PORT=/.test(x.kod));
     const ltF = ort.fonksiyonlar.find((f) => f.ad === "LanTlsYeniKurulum");
     if (!ltF || ortYaz.some((x) => x.no < ltF.bas || x.no > ltF.son)) ekle("§18", "kurulum-ortak.ps1 LAN_TLS satırını LanTlsYeniKurulum dışında kuruyor");
-    if (!/satirlar = @\("LAN_TLS_MODE=dual"\)/.test(psGovde(ort, "LanTlsYeniKurulum") ?? "")) ekle("§18", "LanTlsYeniKurulum yeni kurulumun kipini dual yazmıyor");
     for (const ad of ["gecis", "kur", "ilkKurulum", "backendHizmeti", "bakimRolu", "guncelleyici"] as const) {
       if (/LAN_TLS/.test(k[ad])) ekle("§18", `${YOL[ad]} LAN_TLS'e dokunuyor (var olan kurulumun kipi yalnız kullanıcının .env düzenlemesiyle değişir)`);
     }
@@ -655,13 +657,51 @@ function olc(k: Kaynaklar): Bulgular {
     const dg18 = psGovde(kur, "AsamaDogrulama") ?? "";
     if (!/\$lo = LanTlsOlc \(\[int\]\$d\.portlar\.api\) \$envYolu/.test(dg18) || !/guvenlikDuvari = \$kurallar/.test(dg18) || !/if \(\$tls\) \{ \$kurallar \+= "TeksERP HTTPS \$\(\$tls\.port\)" \}/.test(dg18))
       ekle("§18", "Dogrulama şifreli dinleyiciyi ölçmüyor ya da HTTPS kuralını kurulum.json listesine yazmıyor");
-    if (!/durumSayfasi = \$durumSayfasi/.test(dg18) || !/\["tlsParmakIzi"\] = \$tls\.gosterim/.test(dg18) || !/\$durumSayfasi = "http:\/\/localhost:\$\(\$d\.portlar\.api\)\/"/.test(dg18))
+    if (!/durumSayfasi = \$durumSayfasi/.test(dg18) || !/\["tlsParmakIzi"\] = \$tls\.gosterim/.test(dg18) || !/\$durumSayfasi = "http:\/\/127\.0\.0\.1:\$\(\$d\.portlar\.api\)\/"/.test(dg18))
       ekle("§18", "Dogrulama kod (SHA-256) ve durum sayfası adresini sonuca yazmıyor");
     if (!/Write-Host "  Sifreli baglanti kodu \(SHA-256, HTTPS \$\(\$tls\.port\)\): \$\(\$tls\.gosterim\)"/.test(dg18) || !/Write-Host "  Durum sayfasi \(yalniz bu bilgisayarda acin\): \$durumSayfasi"/.test(dg18))
       ekle("§18", "Dogrulama kodu ve durum sayfasını ekrana basmıyor (sessiz kip / bayi)");
     const sm18 = pasGovde(k.iss, "SonucMetniKur") ?? "";
     if (!/\(KurulumHatasi = ''\) and \(SonucOku\(SonIni, 'kurulum\.tlsParmakIzi'\) <> ''\) then/.test(sm18) || !/'  ' \+ SonucOku\(SonIni, 'kurulum\.tlsParmakIzi'\) \+ #13#10/.test(sm18) ||
       !/\(KurulumHatasi = ''\) and \(SonucOku\(SonIni, 'kurulum\.durumSayfasi'\) <> ''\) then\s*\n\s*S := S \+ 'Durum sayfası : ' \+ SonucOku\(SonIni, 'kurulum\.durumSayfasi'\)/.test(sm18)) ekle("§18", "sihirbazın son sayfası şifreli bağlantı kodunu ve durum sayfası adresini göstermiyor");
+  }
+
+  // §19 — yalnız şifreli (kullanıcı kararı 2026-10-08): yeni .env required; API portu yalnız 127.0.0.1, ona gelen kural YOK;
+  // HTTPS portu meşgulse DUR; required'da HTTPS ölçülemezse DUR; iç hizmetler API'ye yalnız http://127.0.0.1 ile bağlanır.
+  {
+    if (!/satirlar = @\("LAN_TLS_MODE=required"\)/.test(psGovde(ort, "LanTlsYeniKurulum") ?? "")) ekle("§19", "LanTlsYeniKurulum yeni kurulumun kipini required yazmıyor (ağa şifresiz kapı açılır)");
+    const onk19 = psGovde(kur, "AsamaOnKosul") ?? "";
+    if (!/if \(PortDinleniyorMu \$lt\.port\) \{ Dur "/.test(onk19)) ekle("§19", "yeni kurulumda HTTPS portu meşgulken DURMUYOR (ağa hiçbir kapı açılmadan kurulum biter)");
+    const hz19 = psGovde(kur, "AsamaHizmetler") ?? "";
+    if (!artan(sira(hz19, [
+      `$apiYerel = LanTlsZorunlu "$(EnvDeger ([IO.File]::ReadAllLines((Join-Path $kok 'yapilandirma\\.env'))) 'LAN_TLS_MODE')"`,
+      "if ($apiYerel) {", "Remove-NetFirewallRule -DisplayName $apiKural",
+      "} elseif (-not (Get-NetFirewallRule -DisplayName $apiKural -ErrorAction SilentlyContinue)) {",
+      "New-NetFirewallRule -DisplayName $apiKural -Direction Inbound -Protocol TCP -LocalPort $apiPort",
+      "if (-not $apiYerel) { $kurallar = @($apiKural) + $kurallar }",
+      "} elseif ($apiYerel) { Dur $script:LAN_TLS_EKSIK_ZORUNLU",
+    ]))) ekle("§19", "required'da API portuna güvenlik duvarı kuralı açılabiliyor / kaldırıcı listesine giriyor / HTTPS ölçülemeyince DURMUYOR");
+    // Güvenlik duvarına açılan her TCP portu: API yalnız required-dışı dalda bir kez, HTTPS ölçümden; başka port yok.
+    for (const [ad, t] of [["kurulum.ps1", k.kurulum], ["kurulum-ortak.ps1", k.ortak]] as const) {
+      for (const m of t.matchAll(/New-NetFirewallRule[^\n]*-LocalPort (\S+)/g)) {
+        if (!["$apiPort", "$lo.tls.port", "5353"].includes(m[1]!)) ekle("§19", `${ad} güvenlik duvarına tanınmayan port açıyor (-LocalPort ${m[1]})`);
+      }
+    }
+    if ((k.kurulum.match(/New-NetFirewallRule[^\n]*-LocalPort \$apiPort\b/g) ?? []).length !== 1) ekle("§19", "API portuna birden çok yerde güvenlik duvarı kuralı açılıyor");
+    const dg19 = psGovde(kur, "AsamaDogrulama") ?? "";
+    if (!/\$apiYerel = LanTlsZorunlu /.test(dg19) || !/if \(-not \$apiYerel\) \{ \$kurallar = @\("TeksERP API/.test(dg19) || !/elseif \(\$apiYerel\) \{ Uyar \$script:LAN_TLS_EKSIK_ZORUNLU \}/.test(dg19))
+      ekle("§19", "Dogrulama required'da API kuralını kurulum.json listesine yazıyor ya da ölçülemeyen HTTPS'i söylemiyor");
+    const sm19 = pasGovde(k.iss, "SonucMetniKur") ?? "";
+    if (!/Adres := 'https:\/\/' \+ GetComputerNameString \+ ':' \+ SonucOku\(SonIni, 'kurulum\.tlsPort'\)/.test(sm19) || !/'Sunucu adresi : ' \+ Adres/.test(sm19))
+      ekle("§19", "sihirbazın son sayfası ağ adresi olarak şifreli adresi (https + HTTPS portu) göstermiyor");
+    // İç hizmetler: API adresi yalnız http://127.0.0.1:<port> (4443/https ya da ağ adı yok); <sunucu> yalnız ekran metnidir.
+    for (const ad of ["kurulum", "ortak", "tepsi", "onOlcum", "kaldir", "yedekle", "guncelleyici", "backendHizmeti", "saglikRs"] as const) {
+      for (const m of k[ad].matchAll(/(https?):\/\/([^/\s"'`]+?):[$({0-9]/g)) {
+        if (m[2] === "<sunucu>") continue;
+        if (m[1] !== "http" || m[2] !== "127.0.0.1") ekle("§19", `${YOL[ad]} API'ye 127.0.0.1 dışından/şifreli kapıdan bağlanıyor (${m[0]})`);
+      }
+    }
+    if (!/format!\("http:\/\/127\.0\.0\.1:\{port\}\{path\}"\)/.test(k.saglikRs)) ekle("§19", "güncelleyici sağlık yoklaması http://127.0.0.1 değil (ÖLÇÜLEMEDİ)");
   }
   return b;
 }
@@ -691,7 +731,7 @@ const SAAT_KONTROLLERI = ["etki-alani-dokunmaz", "zaten-ntp-dokunmaz", "ntp-hizm
 /** Sunucu simgesi (tepsi.ps1 saf işlevleri). */
 const TEPSI_KONTROLLERI = ["renk-backendden-aynen", "taninmayan-yanit-kirmizi", "kisa-kesinti-onceki-korunur", "guncelleme-yeniden-basliyor-sari", "ipucu-63-sinir", "yuzde"].map((c) => `tepsi.${c}`);
 /** LAN TLS (2026-10-07): yeni .env dual · API/HTTPS port çakışması DUR · onarım .env'i aynen · beyan · kod gösterimi · biçimsiz kimlik. */
-const LANTLS_KONTROLLERI = ["yeni-kurulum-dual", "api-portu-cakisirsa-dur", "onarim-env-dokunulmaz", "beyan", "kimlik-kod-gosterimi", "kimlik-bicimsiz-yok"].map((c) => `lantls.${c}`);
+const LANTLS_KONTROLLERI = ["yeni-kurulum-required", "zorunlu", "api-portu-cakisirsa-dur", "onarim-env-dokunulmaz", "beyan", "kimlik-kod-gosterimi", "kimlik-bicimsiz-yok"].map((c) => `lantls.${c}`);
 const CEVAP_KONTROLLERI = ["ornek-gecerli", "varsayilanlar", "surum-zorunlu", "surum-yanlis", "bilinmeyen-alan", "sir-alan-red", "sir-adi-dar", "tur-sayi", "sayi-aralik", "tur-mantik", "tur-yol", "desen", "secenek-liste", "bos", "sema-sirsiz"];
 function durum(satirlar: string[], ad: string): "OK" | "HATA" | "YOK" {
   if (satirlar.includes(`OK ${ad}`)) return "OK";
@@ -765,7 +805,8 @@ if (eksik.length === 0) {
     ["§13", "onarım/kurulum güvenliği (D8e-3b): F1 ağ ayarı kayıttan (ön doldurma · özet etkili · OnKosul korur · kural karardan · önceki cevap saklanır) · F2 başka köke bağlı / ölçülemeyen kanal hizmeti engel+DUR · F3 eski paket tek giriş + sayfada engel · F4-B geçişli düzen GECISLI, DUR"],
     ["§14", "saat eşitlemesi: karar PartOfDomain ölçerek · DOKUNMA yazmaz · w32tm yalnız NTP_AC · sonuç yeniden ölçülür · UYARI (DUR değil) · onarım önceki kaydı ezmez · /resync/Set-Date yok · kaldırma dokunmaz · özet söyler"],
     ["§15", "sunucu simgesi: setup içeriğinde · kurulum (Users salt okuma + HKLM Run) · kaldırıcı siler · yalnız 127.0.0.1 /health/tepsi OKUR (dinlemez/yazmaz/başlatmaz) · ASCII"],
-    ["§18", "LAN TLS: yeni .env dual (tek karar) · onarım .env'e satır eklemez/değiştirmez · öteki yollar LAN_TLS yazmaz · HTTPS kuralı ölçümden, kaldırıcı listesinde · kod + durum sayfası sonuçta, ekranda ve son sayfada"],
+    ["§19", "yalnız şifreli: yeni .env required · API portuna kural yok (kaldırıcı listesinde de yok) · HTTPS meşgulse/ölçülemezse DUR · iç hizmetler yalnız http://127.0.0.1 · son sayfa https adresi"],
+    ["§18", "LAN TLS: yeni .env LAN_TLS satırı (tek karar) · onarım .env'e satır eklemez/değiştirmez · öteki yollar LAN_TLS yazmaz · HTTPS kuralı ölçümden, kaldırıcı listesinde · kod + durum sayfası sonuçta, ekranda ve son sayfada"],
     ["§17", "O12 Tailscale müşteri kurulumunda yok: sihirbazda kutu yok · onarım ön doldurması kayıttan kutu kurmaz (K3) · cevap/örnek yalnız LocalSubnet · şema eski izni yalnız kayıtta tanır · özet + karar uyarır"],
   ];
   console.log("");
@@ -870,11 +911,22 @@ if (eksik.length === 0) {
     { ad: "S90 sihirbaz onarımda kayıttaki eski adresi koruyor", dosya: "iss", eski: "    if Lowercase(Olc('oncekiGuncellemeSunucusu')) = ESKI_GUNCELLEME then GelismisSayfasi.Values[0] := VARSAYILAN_GUNCELLEME\n    else if", yeni: "    if", bolum: "§16", parca: "eski güncelleme adresini koruyor" },
     { ad: "S21 CI boru sonucunu ölçmüyor", dosya: "is", eski: `if ($r -notmatch "(?m)^BORU=TAMAM\\r?$")`, yeni: `if ($false)`, bolum: "§9", parca: "boru öz-sınaması" },
     { ad: "S22 CI test çapalı doğrulayıcıyı kabul ediyor", dosya: "is", eski: `$k.testCapasi -ne $false`, yeni: `$false`, bolum: "§9", parca: "doğrulayıcı üretim derlemesi" },
-    { ad: "S96 LAN TLS: yeni .env dual satırını almıyor", dosya: "kurulum", eski: "    $satirlar += @($lt.satirlar)\n", yeni: "", bolum: "§18", parca: "yeni .env LAN_TLS_MODE=dual almıyor" },
+    { ad: "S96 LAN TLS: yeni .env LAN_TLS satırını almıyor", dosya: "kurulum", eski: "    $satirlar += @($lt.satirlar)\n", yeni: "", bolum: "§18", parca: "yeni .env LAN_TLS_MODE almıyor" },
     { ad: "S97 LAN TLS: onarım var olan .env'e dual ekliyor", dosya: "kurulum", eski: "$yeni = EnvDatabaseUrlYenile ([IO.File]::ReadAllLines($envYolu)) $dbUrl", yeni: '$yeni = @(EnvDatabaseUrlYenile ([IO.File]::ReadAllLines($envYolu)) $dbUrl) + @("LAN_TLS_MODE=dual")', bolum: "§18", parca: "onarım dalı .env'e" },
     { ad: "S98 LAN TLS: geçiş aracı var olan kurulumun kipini değiştiriyor", dosya: "gecis", eski: "\n", yeni: '\n$null = "LAN_TLS_MODE=dual"\n', bolum: "§18", parca: "deploy/gecis/gecis.ps1 LAN_TLS'e dokunuyor" },
     { ad: "S99 LAN TLS: HTTPS kuralı her adrese açık", dosya: "kurulum", eski: "-LocalPort $lo.tls.port -Action Allow -Profile @($ag.agProfilleri) -RemoteAddress @($ag.izinliAdresler)", yeni: "-LocalPort $lo.tls.port -Action Allow -Profile Any", bolum: "§18", parca: "HTTPS kuralı ölçümden" },
     { ad: "S100 LAN TLS: son sayfa kodu göstermiyor", dosya: "iss", eski: "SonucOku(SonIni, 'kurulum.tlsParmakIzi') <> ''", yeni: "False", bolum: "§18", parca: "son sayfası şifreli bağlantı kodunu" },
+    { ad: "S102 yalnız şifreli: yeni kurulum dual yazıyor", dosya: "ortak", eski: 'satirlar = @("LAN_TLS_MODE=required")', yeni: 'satirlar = @("LAN_TLS_MODE=dual")', bolum: "§19", parca: "kipini required yazmıyor" },
+    { ad: "S103 yalnız şifreli: HTTPS portu meşgulken uyarıp sürüyor", dosya: "kurulum", eski: "if (PortDinleniyorMu $lt.port) { Dur ", yeni: "if (PortDinleniyorMu $lt.port) { Uyar ", bolum: "§19", parca: "HTTPS portu meşgulken" },
+    { ad: "S104 yalnız şifreli: required'da da API portuna kural açılıyor", dosya: "kurulum", eski: "  } elseif (-not (Get-NetFirewallRule -DisplayName $apiKural -ErrorAction SilentlyContinue)) {", yeni: "  }\n  if (-not (Get-NetFirewallRule -DisplayName $apiKural -ErrorAction SilentlyContinue)) {", bolum: "§19", parca: "required'da API portuna" },
+    { ad: "S105 yalnız şifreli: 4000'e ikinci kural (Dogrulama)", dosya: "kurulum", eski: "  $kayit = [ordered]@{", yeni: "  New-NetFirewallRule -DisplayName x -Direction Inbound -Protocol TCP -LocalPort $apiPort -Action Allow\n  $kayit = [ordered]@{", bolum: "§19", parca: "birden çok yerde" },
+    { ad: "S106 yalnız şifreli: tanınmayan porta kural", dosya: "kurulum", eski: "-LocalPort $lo.tls.port -Action Allow", yeni: "-LocalPort 4000 -Action Allow", bolum: "§19", parca: "tanınmayan port" },
+    { ad: "S107 yalnız şifreli: required'da HTTPS ölçülemeyince sürüyor", dosya: "kurulum", eski: "} elseif ($apiYerel) { Dur $script:LAN_TLS_EKSIK_ZORUNLU", yeni: "} elseif ($apiYerel) { Uyar $script:LAN_TLS_EKSIK_ZORUNLU", bolum: "§19", parca: "HTTPS ölçülemeyince" },
+    { ad: "S108 yalnız şifreli: tepsi 4443/https'ten okuyor", dosya: "tepsi", eski: '"http://127.0.0.1:$Port/health/tepsi"', yeni: '"https://127.0.0.1:$Port/health/tepsi"', bolum: "§19", parca: "tepsi.ps1 API'ye" },
+    { ad: "S109 yalnız şifreli: güncelleyici sağlığı ağ adından", dosya: "saglikRs", eski: 'format!("http://127.0.0.1:{port}{path}")', yeni: 'format!("http://sunucu-adi:{port}{path}")', bolum: "§19", parca: "health.rs API'ye" },
+    { ad: "S110 yalnız şifreli: kurulum sağlık yoklaması ağ adresinden", dosya: "ortak", eski: '"http://127.0.0.1:$port$yol"', yeni: '"http://$env:COMPUTERNAME:$port$yol"', bolum: "§19", parca: "kurulum-ortak.ps1 API'ye" },
+    { ad: "S111 yalnız şifreli: son sayfa şifresiz adres", dosya: "iss", eski: "Adres := 'https://' + GetComputerNameString", yeni: "Adres := 'http://' + GetComputerNameString", bolum: "§19", parca: "şifreli adresi" },
+    { ad: "S112 yalnız şifreli: Dogrulama required'da API kuralını listeye yazıyor", dosya: "kurulum", eski: '  if (-not $apiYerel) { $kurallar = @("TeksERP API', yeni: '  if ($true) { $kurallar = @("TeksERP API', bolum: "§19", parca: "Dogrulama required'da" },
     { ad: "S101 LAN TLS: Dogrulama kodu sonuca yazmıyor", dosya: "kurulum", eski: '$script:SonucKaydi["kurulum"]["tlsParmakIzi"] = $tls.gosterim', yeni: "$null = $tls.gosterim", bolum: "§18", parca: "kod (SHA-256) ve durum sayfası adresini sonuca" },
   ];
   for (const s of SONDALAR) {
@@ -920,7 +972,8 @@ if (eksik.length === 0) {
       { ad: "H24 saat: kayıtlı NTP sunucusu ezilip varsayılana dönülüyor", eski: "$sunucu = $(if ($onceki.ntpSunucu) { $onceki.ntpSunucu } else", yeni: "$sunucu = $(if ($false) { $onceki.ntpSunucu } else", kontrol: "saat.kapali-ntp-acar" },
       { ad: "H25 saat: zaten NTP olan makine yeniden yapılandırılıyor", eski: "  if ($esitler -and $otomatik) { return", yeni: "  if ($false) { return", kontrol: "saat.zaten-ntp-dokunmaz" },
       { ad: "H26 saat: yalnız hizmeti elle başlayan NTP makinesi açılmıyor", eski: "  if ($esitler) { return [ordered]@{ eylem = \"HIZMET_OTOMATIK\"", yeni: "  if ($esitler) { return [ordered]@{ eylem = \"DOKUNMA\"", kontrol: "saat.ntp-hizmet-otomatik" },
-      { ad: "H29 LAN TLS: yeni kurulum dual yerine off yazıyor", eski: 'satirlar = @("LAN_TLS_MODE=dual")', yeni: 'satirlar = @("LAN_TLS_MODE=off")', kontrol: "lantls.yeni-kurulum-dual" },
+      { ad: "H29 LAN TLS: yeni kurulum required yerine dual yazıyor", eski: 'satirlar = @("LAN_TLS_MODE=required")', yeni: 'satirlar = @("LAN_TLS_MODE=dual")', kontrol: "lantls.yeni-kurulum-required" },
+      { ad: "H34 yalnız şifreli: dual da 'API yerel' sayılıyor", eski: '($v -ceq "required" -or $v -ceq "zorunlu")', yeni: '($v -ceq "required" -or $v -ceq "zorunlu" -or $v -ceq "dual")', kontrol: "lantls.zorunlu" },
       { ad: "H30 LAN TLS: onarım var olan .env'e satır ekliyor", eski: "return @(@($satirlar) | ForEach-Object {", yeni: 'return @(@($satirlar) + @("LAN_TLS_MODE=dual") | ForEach-Object {', kontrol: "lantls.onarim-env-dokunulmaz" },
       { ad: "H31 LAN TLS: onarım var olan LAN_TLS_MODE satırını değiştiriyor", eski: '{ "DATABASE_URL=$dbUrl" } else { $_ } })', yeni: '{ "DATABASE_URL=$dbUrl" } elseif ($_ -cmatch \'^LAN_TLS_MODE=\') { "LAN_TLS_MODE=dual" } else { $_ } })', kontrol: "lantls.onarim-env-dokunulmaz" },
       { ad: "H32 LAN TLS: API portu HTTPS portuyla çakışınca sessizce sürüyor", eski: "  if ($apiPort -eq $p) { return", yeni: "  if ($false) { return", kontrol: "lantls.api-portu-cakisirsa-dur" },
@@ -973,7 +1026,7 @@ if (eksik.length === 0) {
     } finally {
       rmSync(dizin, { recursive: true, force: true });
     }
-  } else defter.atla("✓K harness sondaları", "pwsh 7 yok", 23 + 2 + 4 + 5 + 5);
+  } else defter.atla("✓K harness sondaları", "pwsh 7 yok", 23 + 2 + 4 + 5 + 6);
 }
 
 console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız${defter.ozetEki()} ===`);
