@@ -7,6 +7,7 @@ import { ServerDiscoveryList } from '../ServerDiscoveryList';
 import { LAN_TLS_DEFAULT_PORT, formatFingerprintGroups } from '../../lib/lan-tls';
 import type { DiscoveredServer } from '../../lib/discovery';
 import type { TlsProbed } from '../../services/tlsProbe';
+import { INTERNET_PARENT_DOMAINS, INTERNET_TLS_PORT, type WebPkiObserved } from '../../lib/internet-tls';
 import { SettingsActionButton } from '../../screens/Common/settings/settingsUi';
 import { C, styles } from './styles';
 
@@ -82,9 +83,11 @@ interface AddressStepProps extends AddressFieldProps {
 export function AddressStep({ value, onChange, onSubmit, busy, recentUrls, onPick, onBack }: AddressStepProps) {
   return (
     <View style={styles.panel}>
-      <Text style={styles.stepTitle}>Sunucunun IP adresi</Text>
+      <Text style={styles.stepTitle}>Sunucunun adresi</Text>
       <Text style={styles.body}>
-        Port yazmazsanız şifreli bağlantı portu {LAN_TLS_DEFAULT_PORT} kullanılır. Tablet sunucuya yalnız şifreli bağlanır.
+        Fabrika ağındaki sunucu için IP adresi (port yazılmazsa {LAN_TLS_DEFAULT_PORT}; doğrulama kodu gösterilir). Size
+        verilen internet adresi (…{INTERNET_PARENT_DOMAINS[0]}) için adı yazın (port {INTERNET_TLS_PORT}; internet sertifikasıyla
+        doğrulanır). Tablet sunucuya yalnız şifreli bağlanır.
       </Text>
       <AddressField value={value} onChange={onChange} onSubmit={onSubmit} />
       <SettingsActionButton testID="sunucu-adres-devam" tone="primary" icon="arrow-right" label="Devam" disabled={busy} onPress={onSubmit} />
@@ -158,6 +161,39 @@ export function ConfirmStep({ server, wide, busy, onSame, onDifferent }: Confirm
         </View>
         <View style={wide ? styles.flex1 : undefined}>
           <SettingsActionButton testID="kod-farkli" tone="neutral" icon="close-octagon" label="Kodlar farklı — vazgeç" disabled={busy} onPress={onDifferent} />
+        </View>
+      </View>
+    </View>
+  );
+}
+
+interface InternetConfirmProps {
+  server: WebPkiObserved;
+  wide: boolean;
+  busy: boolean;
+  onYes: () => void;
+  onNo: () => void;
+}
+
+/** İnternet kipi onayı: kod yok — ad, sistem güven deposu ve ad eşleşmesiyle doğrulandı. */
+export function InternetConfirmStep({ server, wide, busy, onYes, onNo }: InternetConfirmProps) {
+  return (
+    <View style={styles.panel} testID="internet-onay">
+      <Text style={styles.stepTitle}>İnternette doğrulandı</Text>
+      <Text style={styles.code} testID="internet-onay-ad" selectable>
+        {server.host}
+      </Text>
+      <Text style={styles.body}>
+        {server.companyName ? `Sunucunun bildirdiği firma: ${server.companyName}. ` : ''}Bağlantı şifreli; sunucunun
+        sertifikası tabletin güvendiği bir sertifika yetkilisince bu ad için verilmiş. Eklensin mi?
+      </Text>
+      <Text style={styles.hint}>port {server.port}</Text>
+      <View style={[styles.confirmRow, wide && styles.confirmRowWide]}>
+        <View style={wide ? styles.flex1 : undefined}>
+          <SettingsActionButton testID="internet-ekle" tone="success" icon="check-decagram" label="Ekle" disabled={busy} onPress={onYes} />
+        </View>
+        <View style={wide ? styles.flex1 : undefined}>
+          <SettingsActionButton testID="internet-vazgec" tone="neutral" icon="close-octagon" label="Vazgeç" disabled={busy} onPress={onNo} />
         </View>
       </View>
     </View>

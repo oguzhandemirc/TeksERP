@@ -4,7 +4,8 @@
 // (a) Paneldeki şifreli bağlantı QR'ı: iz ve port QR'dan gelir; önce QR'daki adresler denenir (v2), sonra sunucu
 //     ağda o izle aranır (bulunamazsa adres yazılır). (b) IP adresi: tablet sunucunun sertifika izinden doğrulama kodunu gösterir; kullanıcı kurulum
 //     sonundaki / durum sayfasındaki / paneldeki kodla karşılaştırıp onaylar. İki yolun sonucu da sabitlenmiş
-//     şifreli bağlantıdır (`serverPairing.completePairing`). Tam ekran sayfanın GÖVDESİDİR; kabuk çağıranda.
+//     şifreli bağlantıdır (`serverPairing.completePairing`). (b') İzinli üst alandaki ad (internet kipi): kod yok, sistem
+//     güven deposu + ad eşleşmesi, onay (`internetServers.completeInternetPairing`). Tam ekran sayfanın GÖVDESİDİR.
 // =============================================================================
 
 import React, { useState } from 'react';
@@ -12,7 +13,7 @@ import { View, useWindowDimensions } from 'react-native';
 
 import { BarcodeScannerModal } from '../BarcodeScannerModal';
 import { decideCodePin } from '../../lib/lan-tls';
-import { AddressStep, ChooseStep, ConfirmStep, NoticeBox, QrAddressStep, QrSearchStep, StatusLines } from './steps';
+import { AddressStep, ChooseStep, ConfirmStep, InternetConfirmStep, NoticeBox, QrAddressStep, QrSearchStep, StatusLines } from './steps';
 import { styles } from './styles';
 import { useServerPair } from './useServerPair';
 
@@ -60,6 +61,18 @@ export function ServerPairFlow({ onDone, notice }: ServerPairFlowProps) {
             toChoose();
             const d = decideCodePin({ observed: step.server, confirmed: false, now: '' });
             if (!d.ok) p.setError(d.reason);
+          }}
+        />
+      )}
+      {step.kind === 'internetConfirm' && (
+        <InternetConfirmStep
+          server={step.server}
+          wide={wide}
+          busy={busy}
+          onYes={() => void p.finishInternet(step.server, true)}
+          onNo={() => {
+            toChoose();
+            p.setError('Onaylanmadı — bağlanılmadı.');
           }}
         />
       )}
