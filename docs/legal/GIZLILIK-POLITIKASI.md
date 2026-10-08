@@ -1,98 +1,101 @@
-# TeksERP Mobil — Gizlilik Politikası
+# TeksERP — Gizlilik Politikası
 
-> **TASLAK — AVUKAT İNCELEMESİ BEKLİYOR.** Google Play'in zorunlu tuttuğu gizlilik politikası
-> için hazırlanmış bir taslaktır; hukuki görüş değildir. Veri akışları uygulamanın
-> kaynak kodundan çıkarılmıştır ve doğrudur; köşeli parantezli alanlar şirket
-> kuruluşu tamamlanınca ve yayın anında doldurulmalı; metin yayına çıkmadan bir
-> hukukçu tarafından KVKK / GDPR uyumu açısından gözden geçirilmelidir.
+> **TASLAK — AVUKAT İNCELEMESİ BEKLİYOR.** Google Play'in zorunlu tuttuğu gizlilik politikası için
+> hazırlanmış bir taslaktır; hukuki görüş değildir. Metin `docs/ops/PLAY-KONSOL-FORMLARI.md` §1.2 ile
+> hizalıdır (2026-10-08; veri akışları koddan ölçüldü, kaynaklar orada §1.1 ve §8). Yayından önce bir hukukçu
+> KVKK / GDPR açısından gözden geçirmeli; köşeli parantezli alanları kullanıcı doldurur.
+>
+> **Açık kararlar:** yayın yeri **K2** (öneri `https://etkiliyazilim.com/tekserp/gizlilik`; herkese açık,
+> giriş istemeyen, PDF olmayan bir adres) · iletişim e-postası **K6** — ikisi de `PLAY-KONSOL-FORMLARI.md` §0.
+> ML Kit veri açıklaması bağlantısı (§5) web'den doğrulanınca eklenir.
 
-**Son güncelleme:** [Yayın tarihi]
-**Uygulama:** TeksERP Mobil (`com.teks.erp.mobil`)
-**Veri sorumlusu:** Etkili Yazılım — [Lisans Veren ticaret unvanı — kuruluş tamamlanınca], [Lisans Veren adresi — kuruluş tamamlanınca]
-**İletişim:** info@etkiliyazilim.com
+**Son güncelleme:** [YAYIN TARİHİ]
+**Uygulama:** TeksERP (Google Play paket adı: `com.etkiliyazilim.tekserp`)
+**Geliştirici:** Etkili Yazılım — [TİCARET UNVANI], [ADRES]
+**İletişim:** [E-POSTA]
 
 ## 1. Uygulamanın niteliği
 
-TeksERP Mobil bir **tekstil fabrikası üretim takip istemcisidir**. Uygulama tek
-başına çalışmaz; kullanan kuruluşun **kendi sunucusunda** (self-hosted) kurulu
-TeksERP backend'ine bağlanır. Sunucu adresi kullanıcı tarafından uygulama içinden
-girilir.
+TeksERP, tekstil fabrikalarında üretim, kalite, depo ve sevkiyat işlemlerinin kaydı için kullanılan bir iş
+uygulamasıdır. Uygulama tek başına çalışmaz: kullanan fabrikanın KENDİ sunucusunda kurulu TeksERP sistemine
+bağlanır. Sunucu adresi uygulamada ağ taraması veya elle giriş ile belirlenir; uygulamada hiçbir fabrika
+sunucusunun adresi gömülü değildir.
 
-Bunun sonucu: üretim verileri üzerinde **veri sorumlusu, uygulamayı kullanan
-kuruluştur** (fabrika). Uygulama geliştiricisi bu verilere erişmez, kopyalamaz ve
-saklamaz. İstisna: aşağıdaki §5'te açıklanan demo sunucusu.
+Bu nedenle uygulamaya girilen iş verilerinin ve personel bilgilerinin veri sorumlusu, uygulamayı kullanan
+fabrikadır (işveren). Etkili Yazılım bu verileri toplamaz, kendi sunucularında saklamaz ve bunlara erişmez;
+aşağıda 5. maddede sayılan sınırlı teknik veriler istisnadır.
 
-## 2. Toplanan veriler
+## 2. Uygulamanın fabrika sunucusuna gönderdiği veriler
 
-| Veri | Amaç | Nerede |
-|---|---|---|
-| Kullanıcı adı ve şifre | Kuruluşun sunucusunda kimlik doğrulama | Şifre yalnız girişte iletilir, cihazda saklanmaz. Oturum anahtarı (JWT) cihazın güvenli deposunda (Android Keystore) tutulur. |
-| Cihaz kimliği (rastgele UUID) | Tabletin hangi makine/istasyona atandığının tanınması | Cihazda üretilir, güvenli depoda saklanır, kuruluşun sunucusuna bildirilir. |
-| Operatörün girdiği üretim verileri (barkod, metraj, ağırlık, kalite kararı, hata kaydı) | Uygulamanın asıl işlevi | Kuruluşun sunucusu. Çevrimdışı çalışmada geçici olarak cihazda kuyruklanır. |
-| Teknik hata/işlem kayıtları | Arıza teşhisi | Kuruluşun sunucusu. |
+- **Kimlik doğrulama:** kullanıcı adı ve parola, hızlı giriş PIN'i veya personel kartı kodu. Bunlar yalnız
+  giriş anında fabrika sunucusuna gönderilir, cihazda saklanmaz. Fabrika sunucusu PIN'i ve kart kodunu geri
+  çevrilemez özet olarak tutar. Girişten sonra oturum anahtarı cihazın güvenli deposunda (Android Keystore)
+  tutulur.
+- **Kullanıcı listesi:** giriş ekranında, fabrika sunucusundaki kullanıcıların adları seçim için gösterilir.
+- **Cihaz kimliği:** uygulamanın ilk açılışta ürettiği rastgele bir tanımlayıcı. Fabrika yöneticisinin
+  tableti tanıması ve istasyona ataması için kullanılır; reklam kimliği veya donanım kimliği değildir.
+- **İş kayıtları:** okutulan barkodlar, metraj, ağırlık, kalite kararları, açıklama notları, sevkiyatta şoför
+  adı ve araç plakası gibi operatörün girdiği bilgiler ve bu işlemleri hangi kullanıcının ne zaman yaptığı.
+- **Teknik hata bilgisi:** uygulama beklenmedik bir hatayla karşılaştığında hatanın türü, teknik yığın
+  bilgisi, ekran adı ve uygulama sürümü. Hata mesajının metni ve iş verisi gönderilmez.
 
-## 3. Toplanmayan veriler
+Ağ bağlantısı yokken yapılan işlemler cihazda geçici olarak sıraya alınır ve bağlantı gelince fabrika
+sunucusuna gönderilir.
 
-Aşağıdakiler **hiçbir şekilde toplanmaz, iletilmez veya saklanmaz**:
+## 3. Kamera, Bluetooth ve konum
 
-- **Konum.** Uygulama konum izni ister ama konumu okumaz. İzin, Android 11 ve
-  öncesinde **Bluetooth cihaz taraması** için işletim sistemi tarafından zorunlu
-  kılındığı için istenir (metre, kantar, etiket yazıcısı bağlantısı).
-- **Kamera görüntüsü.** Kamera yalnız barkod/QR çözmek için kullanılır; çözme
-  işlemi cihazda yapılır, fotoğraf veya video kaydedilmez ve gönderilmez.
-- Rehber, çağrı kaydı, SMS, mikrofon, sağlık verisi.
-- Reklam kimliği. Uygulamada **reklam yok, üçüncü taraf analitik/izleme SDK'sı
-  yok, çökme raporlama SDK'sı yok**.
+- Kamera yalnız barkod ve QR kod okumak için kullanılır. Görüntü cihazda işlenir; fotoğraf veya video
+  kaydedilmez ve gönderilmez.
+- Bluetooth; metre, kantar ve etiket yazıcısı gibi fabrika cihazlarına bağlanmak için kullanılır.
+- Konum izni yalnız Android 11 ve önceki sürümlerde, işletim sistemi Bluetooth cihaz taraması için bu izni
+  zorunlu tuttuğu için istenir. Uygulama konumunuzu okumaz, kaydetmez ve göndermez.
+- Uygulama mikrofon, rehber, arama kaydı, SMS, fotoğraf arşivi veya sağlık verisi kullanmaz. Uygulamada reklam
+  yoktur ve reklam kimliği kullanılmaz.
 
-## 4. İzinler ve gerekçeleri
+## 4. Uygulama güncellemeleri
 
-| İzin | Gerekçe |
-|---|---|
-| Kamera | Barkod ve refakat kartı QR kodu okuma |
-| Bluetooth (bağlan / tara) | Metre, kantar ve etiket yazıcısına bağlanma |
-| Konum (yaklaşık / hassas) | Yalnızca Bluetooth taraması için — bkz. §3 |
-| İnternet | Kuruluşun sunucusuna bağlanma |
+Uygulama, küçük güncellemeleri Etkili Yazılım'ın güncelleme sunucusundan (indir.etkiliyazilim.com) indirir. Bu
+istekte uygulama sürümü ve fabrikanın güncelleme grubunu belirten bir indirme belirteci gönderilir; kişisel
+veri ve iş verisi gönderilmez. Sunucu, internet altyapısı gereği bağlantının IP adresini görür. Büyük
+güncellemeler Google Play üzerinden gelir.
 
-## 5. Demo sunucusu
+## 5. Etkili Yazılım'a ulaşan veriler
 
-Uygulamayı denemek isteyenler için herkese açık bir demo sunucusu sunulmaktadır.
-Demo sunucusuna girilen veriler **test verisidir**, gerçek üretim verisi
-niteliğinde değildir, üçüncü taraflarla paylaşılmaz ve düzenli olarak silinir.
-Demo sunucusuna hassas veya kişisel veri girilmemelidir.
+- Güncelleme istekleri (4. madde).
+- Fabrika yöneticisi açıkça onay verirse, fabrika sunucusu teknik hata bilgilerini (2. maddedeki "teknik hata
+  bilgisi"; kullanıcı adı ve iş verisi olmadan) arıza teşhisi için Etkili Yazılım'a iletir. Bu ayar
+  varsayılan olarak kapalıdır.
+- Barkod okuma, Google'ın ML Kit kütüphanesiyle cihaz üzerinde yapılır. Google'ın bu kütüphane için topladığı
+  teknik veriler Google'ın kendi politikasına tabidir: [ML KIT VERİ AÇIKLAMASI BAĞLANTISI — doğrulandıktan
+  sonra].
 
-Demo adresi: https://demo.etkiliyazilim.com
+## 6. Paylaşım
 
-## 6. Veri paylaşımı
-
-Toplanan veriler üçüncü taraflarla paylaşılmaz, satılmaz, reklam amacıyla
-kullanılmaz. Veri, kullanıcının girdiği sunucu adresinden başka bir yere
-gönderilmez.
+Veriler satılmaz, reklam amacıyla kullanılmaz ve üçüncü taraflarla paylaşılmaz. Fabrika sunucusundaki
+verilerin kimlerle paylaşılacağına fabrika karar verir.
 
 ## 7. Saklama ve güvenlik
 
-- Oturum anahtarı cihazın güvenli deposunda (Android Keystore) tutulur.
-- Çevrimdışı kuyruk ve önbellek, oturum kapatıldığında cihazdan temizlenir.
-- Sunucu tarafı saklama süresi ve yedekleme politikası, sunucuyu işleten
-  kuruluşun sorumluluğundadır.
+- Oturum anahtarı ve cihaz kimliği Android Keystore korumalı güvenli depoda tutulur.
+- Fabrika sunucusundaki verilerin saklama süresi, yedeklenmesi ve silinmesi fabrikanın sorumluluğundadır.
+- Fabrika sunucusuyla bağlantı, fabrikanın ayarına göre şifreli (HTTPS) ya da fabrikanın kendi iç ağında
+  şifresiz olabilir. Güncelleme sunucusuyla bağlantı her zaman şifrelidir.
 
-## 8. Hesaplar
+## 8. Hesaplar ve silme
 
-Kullanıcı hesapları **uygulama içinden açılamaz**; kuruluşun yöneticisi
-tarafından oluşturulur ve atanır. Hesabının silinmesini isteyen kullanıcı
-kuruluşunun yöneticisine ya da aşağıdaki adrese başvurur.
+Kullanıcı hesapları uygulama içinden açılamaz; fabrika yöneticisi tarafından açılır ve kapatılır. Hesabınızın
+ve verilerinizin silinmesi için önce fabrikanızın yöneticisine başvurun. Etkili Yazılım'a ulaşan teknik
+verilerin silinmesi için: [E-POSTA].
 
-## 9. Kullanıcı hakları
+## 9. Haklarınız
 
-KVKK md. 11 ve (uygulanabildiği yerde) GDPR kapsamında; kişisel verilerinize
-erişme, düzeltilmesini, silinmesini veya işlenmesinin kısıtlanmasını isteme
-haklarına sahipsiniz. Talepler: info@etkiliyazilim.com.
+6698 sayılı KVKK md. 11 ve uygulanabildiği ölçüde GDPR kapsamındaki haklarınızı, verilerinizin sorumlusu olan
+fabrikaya (işvereninize) karşı kullanabilirsiniz. Etkili Yazılım'a ilişkin talepler: [E-POSTA].
 
-## 10. Çocukların gizliliği
+## 10. Çocuklar
 
-Uygulama işyeri kullanımı içindir, 18 yaş altına yönelik değildir ve çocuklardan
-bilerek veri toplanmaz.
+Uygulama işyeri kullanımı içindir; 18 yaş altına yönelik değildir.
 
 ## 11. Değişiklikler
 
-Bu politika güncellendiğinde bu sayfada yayımlanır ve "son güncelleme" tarihi
-değiştirilir. Önemli değişiklikler uygulama içinden bildirilir.
+Politika değiştiğinde bu sayfa güncellenir ve "son güncelleme" tarihi değişir.

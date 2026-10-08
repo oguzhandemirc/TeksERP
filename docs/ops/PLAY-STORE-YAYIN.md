@@ -1,145 +1,142 @@
-# Google Play — Public Yayın Kontrol Listesi (mobil)
+# Google Play — Yayın Kontrol Listesi (ortak tablet)
 
-> **Karar (2026-07-30):** Mobil uygulama Google Play'de **herkese açık** (aramada
-> bulunabilir) yayınlanacak. Managed Google Play private app / APK sideload yolu
-> tercih edilmedi. iOS **kapsam dışı** — `ios/` projesi yok ve BT-Classic SPP
-> (HC-06 metre/kantar) iOS'ta MFi gerektirdiği için saha işlevi taşınamıyor.
+> **Durum (ölçüldü 2026-10-08):** uygulama **TeksERP** · `com.etkiliyazilim.tekserp` Play Console'da açık.
+> 1.1.0 / vc 58 (API 35) **reddedildi**; 1.1.0 / vc 59 (targetSdk 36, commit `58e61f608`) **Dahili teste
+> yayınlandı**. Geliştirici hesabı **KİŞİSEL** (kurumsal değil) — sonuçları §4.
 >
-> Bu dosya yayın öncesi mekanik gereklilikleri tutar. Kurulum/saha adımları için
-> `docs/ops/KURULUM.md` (bölüm E — Android Tablet), sunucu tarafı için
-> `docs/ops/DEPLOY-RUNBOOK.md`.
+> **Dağıtım kararı (K-14, 2026-10-07):** ortak fabrika tableti yalnız Google Play'den kurulur; native
+> güncelleme Play'den, JS güncellemesi OTA ile gelir (`docs/kurallar/surum-yayin.md` Tablet → Kararlar).
+> Kararın "Managed Google Play **gizli yayın**" kısmı kurumsal hesap varsayımıyla verildi; hesap kişisel
+> çıktığı için **yeniden açık — kullanıcıya sorulacak** (§4, `PLAY-KONSOL-FORMLARI.md` K5). 2026-07-30'daki
+> "herkese açık yayın" kararı K-14 ile geçersizdir. iOS kapsam dışı (BT-Classic SPP iOS'ta MFi ister).
+>
+> Form cevapları (kopyala-yapıştır): [`PLAY-KONSOL-FORMLARI.md`](PLAY-KONSOL-FORMLARI.md). Tablet derleme ve
+> OTA: [`MOBIL-UZAKTAN-GUNCELLEME.md`](MOBIL-UZAKTAN-GUNCELLEME.md), `mobil/CLAUDE.md`.
 
 ## 0. Mimari not — native proje geçici
 
-`mobil/android/` **git'te DEĞİL** (`mobil/.gitignore` → `/android`); Expo CNG ile
-`prebuild` sırasında üretilir. Sonuç: `android/app/build.gradle` veya
-`AndroidManifest.xml` **elle düzenlenmez** — her düzenleme bir sonraki prebuild'de
-kaybolur. Tüm native ayar `app.json` (+ config plugin) üzerinden yapılır, imza
-EAS credentials'ta durur.
+`mobil/android/` **git'te DEĞİL** (`mobil/.gitignore` → `/android`); Expo CNG ile `prebuild` sırasında
+üretilir. `android/app/build.gradle` ve `AndroidManifest.xml` **elle düzenlenmez** — her düzenleme bir
+sonraki prebuild'de kaybolur. Native ayar `app.json` + repo içi config eklentileri (`mobil/plugins/`)
+üzerinden yapılır: imza `withReleaseKeystore`, büyük ekran yön özelliği `withBuyukEkranYonu`, OTA zinciri
+`withOtaZinciri`.
 
-## 1. Yayını fiilen bloklayan üç şey
+## 1. Yayının ön koşulları
 
-### 1.1 Release imzası
-
-Üretilen proje varsayılan olarak **debug keystore** ile imzalar; Play debug-imzalı
-paketi kabul etmez. CNG'de doğru yol EAS'in yönettiği upload key'i:
+### 1.1 Derleme ve imza — yerel `build:aab`, yükleme anahtarı, Play App Signing
 
 ```bash
 cd mobil
-npx eas-cli@latest login
-npx eas-cli credentials          # Android → production → upload keystore üret
-npx eas-cli build -p android --profile production   # → AAB
+npm run build:aab        # argümansız ORTAK PAKET; kimlik deploy/dagitim.json urun.tablet'ten
 ```
 
-`eas.json` hazır: `production` profili **app-bundle** (Play yeni uygulamalarda AAB
-ister, APK kabul etmez) + `autoIncrement: versionCode`. Yerel derleme şart olursa
-`eas build --local` aynı profili kullanır.
-
-> Keystore'u repoya **koyma**. `.gitignore` `*.jks`/`*.p12`/`*.key` zaten
-> yakalıyor; EAS'te tutulan anahtar yedeği için `eas credentials` → download.
+- AAB **yerelde** derlenir (`scripts/build-apk.mjs --aab`); EAS akışı kullanılmaz.
+- AAB **yükleme anahtarıyla** imzalanır: `mobil/keystore/play-yukleme/` (git DIŞI, VPS'e gitmez). Anahtar
+  yoksa ya da başka bir anahtarın kopyasıysa derleme DURUR — deneme mührüne sessizce düşmez.
+- Uygulama mührü Google'dadır (**Play App Signing**); yükleme anahtarı kaybı Google'a başvuruyla sıfırlanır.
+- `npm run build:apk` (argümansız) yalnız yerel deneme APK'sıdır, ayrı test anahtarıyla (`keystore/deneme/`)
+  imzalanır ve fabrikaya DAĞITILMAZ. `--apk` yolu yoktur.
+- `versionCode` yalnız Play'e yüklenecek AAB için artar; Play'e yüklenmiş bir kod (vc 58 dahil) bir daha
+  kullanılamaz. OTA turunda `versionCode`a dokunulmaz.
 
 ### 1.2 Politika formları (Play Console)
 
-| Form | Durum | Not |
-|---|---|---|
-| **Gizlilik Politikası URL'i** | 🟡 taslak var | `docs/legal/GIZLILIK-POLITIKASI.md` — `[DOLDURULACAK]` alanları (şirket ünvanı, e-posta, demo adresi) tamamlanıp herkese açık bir URL'de barındırılacak. |
-| **Data safety** (Veri Güvenliği) | ❌ | Toplanan veri: hesap (kullanıcı adı), cihaz kimliği (UUID, `devices/announce`), kamera (barkod — cihazda işlenir, gönderilmez). Konum **toplanmıyor** (yalnız BT taraması izni). |
-| **App access** | ❌ | Uygulama login-gated ve **kendi sunucunuza** bağlanıyor → "All or some functionality is restricted" seç, incelemeciye erişilebilir bir sunucu adresi + test hesabı ver. Bu adım atlanırsa ret gelir. |
-| İçerik derecelendirme (IARC) | ❌ | Anket; iş/üretkenlik uygulaması. |
-| Hedef kitle / reklam beyanı | ❌ | Reklam yok, çocuklara yönelik değil. |
+Bütün form cevapları, durumları ve açık kararlar (K1–K6): [`PLAY-KONSOL-FORMLARI.md`](PLAY-KONSOL-FORMLARI.md).
+Gizlilik politikası metni: [`../legal/GIZLILIK-POLITIKASI.md`](../legal/GIZLILIK-POLITIKASI.md) — yayın yeri
+(K2) açık.
 
-### 1.3 İncelemecinin uygulamayı kullanabilmesi — **KARAR: demo sunucu**
+### 1.3 İncelemecinin uygulamayı kullanabilmesi — demo sunucu
 
-Üretim derlemesinde varsayılan API adresi `http://localhost:4000/api`
-(`src/store/baseUrlStore.ts` → `computeAutoUrl`, `__DEV__` dışı). İncelemeci
-uygulamayı açtığında hiçbir sunucuya bağlanamaz → "broken functionality" reddi.
-
-**Seçilen çözüm:** internete açık **demo sunucu + demo hesabı**.
-
-Gerekenler:
-
-1. **Demo backend HTTPS olmalı.** Public internette cleartext HTTP kabul edilemez
-   (ayrıca Android'de `usesCleartextTraffic` yalnız LAN kullanımı için duruyor).
-2. **Store derlemesine demo adresi gömülür:** `EXPO_PUBLIC_API_URL` build-time
-   env'i. `eas.json` → `production.env.EXPO_PUBLIC_API_URL = https://<demo>/api`.
-   **Bu ayarlanmazsa mağazadan indiren herkes `localhost`'a bakan ölü bir
-   uygulama alır** — yayın öncesi son kontrol maddesi.
-   > Saha tabletleri bundan etkilenmez: operatör Ayarlar → API Sunucusu'ndan
-   > fabrika LAN adresini girer, tercih cihazda kalıcıdır ve derlemedeki
-   > varsayılanı ezer.
-3. **Play Console → App access:** "All or some functionality is restricted" →
-   demo hesabı kullanıcı adı + şifre + adım adım giriş talimatı.
+Ortak pakette **ERP adresi GÖMÜLMEZ**; adres yokken hiçbir istek atılmaz ve ilk ekran **"Sunucuyu bul"**dur
+(`mobil/src/navigation/RootNavigator.tsx`). Derlemeye demo adresi de gömülmez: incelemeci "Adresi elle gir"
+ile demo sunucunun adresini yazar (talimat metni `PLAY-KONSOL-FORMLARI.md` §2). Dahili test incelemeye
+girmez; kapalı test, açık test ve üretim girer ⇒ demo sunucu ve "Uygulama erişimi" formu ondan ÖNCE hazır
+olmalı (K4).
 
 **Demo sunucusu güvenlik şartları (ihmal edilmemeli):**
 
-- Fabrikanın **gerçek sunucusu internete AÇILMAZ**. Demo ayrı, izole bir instance.
-- Seed kullanıcıları (`admin/123123` vb., bkz. `Teks-Erp/ARCHITECTURE.md §13`)
-  demo instance'ında **kullanılmaz** — demo için ayrı, sınırlı yetkili hesap.
+- Fabrikanın **gerçek sunucusu internete AÇILMAZ**. Demo ayrı, izole bir instance; HTTPS ve alan adı.
+- Seed kullanıcıları (`admin/123123` vb., bkz. `Teks-Erp/ARCHITECTURE.md §13`) demo instance'ında
+  **kullanılmaz** — demo için ayrı, sınırlı yetkili hesap.
 - Demo'da gerçek müşteri/sipariş/fiyat verisi olmaz; periyodik reset.
 - Demo hesabına yıkıcı yetki (kullanıcı yönetimi, kalıcı silme) verilmez.
 
-## 2. İzinler
+## 2. İzinler ve hedef SDK
 
-`app.json` → `android.blockedPermissions` ile kaldırıldı (kütüphane autolink'inden
-geliyorlardı, uygulama kullanmıyor):
-`RECORD_AUDIO`, `READ_EXTERNAL_STORAGE`, `WRITE_EXTERNAL_STORAGE`.
+### 2.1 İzinler
 
-Kalan hassas izinler ve gerekçeleri (Play listelemesinde görünür):
+`app.json` → `android.blockedPermissions`: `REQUEST_INSTALL_PACKAGES`, `RECORD_AUDIO`,
+`READ_EXTERNAL_STORAGE`, `WRITE_EXTERNAL_STORAGE` (AAB'de yok — ölçüldü). Kalan izinlerin AAB vc 59
+manifestinden ölçülmüş tam tablosu: `PLAY-KONSOL-FORMLARI.md` §4. Özet:
 
 | İzin | Gerekçe |
 |---|---|
 | `CAMERA` | Barkod / refakat kartı QR okuma |
-| `BLUETOOTH*` | Metre / kantar / etiket yazıcı (BT-Classic SPP + BLE) |
+| `BLUETOOTH*` (`BLUETOOTH_SCAN` `neverForLocation` ile) | Metre / kantar / etiket yazıcı (BT-Classic SPP + BLE) |
 | `ACCESS_FINE/COARSE_LOCATION` | **Yalnızca** BT taraması için (Android ≤11 zorunluluğu) |
 
-**Açık iş:** konum iznini `android:maxSdkVersion="30"` ile sınırla +
-`BLUETOOTH_SCAN`'e `android:usesPermissionFlags="neverForLocation"` ekle (küçük bir
-`withAndroidManifest` config plugin'i gerekir). Play'de konum sorgulamasını azaltır
-ama **sahada Android 12+ tablette BT tarama testi yapılmadan uygulanmamalı** —
-BT-Classic cihaz keşfi etkilenebilir.
+- **Kullanılmayan izinler — karar K1 (açık):** `SYSTEM_ALERT_WINDOW`, `USE_BIOMETRIC`/`USE_FINGERPRINT` ve
+  `expo-audio`nun iki ön plan hizmeti (`mediaPlayback`, `microphone`) uygulamada kullanılmıyor ama AAB'de
+  var; kalırlarsa "Ön plan hizmetleri" beyanı + video istenir. Öneri: kapalı teste çıkmadan kaldır, yeni AAB
+  (vc 60). Adımlar `PLAY-KONSOL-FORMLARI.md` §4.1; kod değişikliği K1 onayını bekler.
+- **Açık iş:** konum iznini `android:maxSdkVersion="30"` ile sınırla — sahada Android 12+ tablette BT tarama
+  testi yapılmadan uygulanmaz.
+- `usesCleartextTraffic: true` (LAN'da HTTP) yayını bloklamaz; Veri güvenliği formunda "aktarımda şifreli"
+  cevabını belirler (K3).
 
-`usesCleartextTraffic: true` (LAN'da HTTP) yayını bloklamaz ama güvenlik
-incelemesinde bayrak; orta vadede backend'e TLS.
+### 2.2 Hedef SDK 36 ve büyük ekran yön kilidi
+
+- Play en düşük hedef API 36 istiyor: `expo-build-properties` compileSdk/targetSdk **36**, buildTools 36.0.0.
+- API 36'da Android 16+ büyük ekranda (sw ≥ 600dp) yön kilidini yok sayar; tablet yatay kilidi uygulama
+  düzeyindeki `android.window.PROPERTY_COMPAT_ALLOW_RESTRICTED_RESIZABILITY = true` özelliğiyle korunur
+  (`plugins/withBuyukEkranYonu`). `build:aab` hedef SDK'yı ve özelliği AAB'nin kendisinden ölçer, eksikse DURUR.
+- **Borç (API 37):** özellik API 37 hedefinde yok sayılır ⇒ hedef 37'ye çıkmadan yatay/dikey kilitli
+  ekranlar kilitsiz düzene geçmeli. Kilidin gerçek tablette çalıştığı henüz ölçülmedi (arşiv 2026-10-08).
 
 ## 3. Mağaza listelemesi varlıkları
 
-- Uygulama ikonu 512×512 (`assets/icon.png` var — Play'in istediği boyutta export edilecek)
-- Feature graphic 1024×500 — **yok, üretilecek**
-- Ekran görüntüleri: telefon (min 2) + 7"/10" tablet (tablet listelemesi için önerilir) — **yok**
-- Kısa açıklama (80 karakter) + tam açıklama (4000) TR/EN — **yazılacak**
+- Uygulama ikonu 512×512 — repoda `assets/icon.png` 1024×1024; 512'ye dışa aktarılacak.
+- Öne çıkan grafik 1024×500 — **yok, üretilecek**.
+- Ekran görüntüleri: telefon + 7"/10" tablet — **yok**; demo verisiyle çekilir, gerçek müşteri verisi görünmez.
+- Kısa ve tam açıklama taslağı: `PLAY-KONSOL-FORMLARI.md` §5.
 
-## 4. Hesap türü — **KARAR: kişisel hesap** → closed testing zorunlu
+## 4. Hesap türü — KİŞİSEL (ölçüm 2026-10-08)
 
-13 Kasım 2023 sonrası açılan **kişisel** geliştirici hesaplarında production
-erişimi için Google şunu şart koşuyor:
+Play Console geliştirici hesabı **kişisel** çıktı; hafızadaki ve plan §E'deki "kurumsal hesap" varsayımı
+konsolda yanlışlandı. Sonuçları (Play kuralları **⚠ web'den doğrulanmalı** — eşikler değişebilir):
 
-> **12 test kullanıcısı, kesintisiz 14 gün** closed testing track'inde opt-in
-> kalmalı; ardından production erişimi başvurusu yapılır.
+- **Üretime çıkış için 12×14 kapalı test:** 13 Kasım 2023 sonrası açılan kişisel hesapta üretim erişimi için
+  en az **12 test kullanıcısının kesintisiz 14 gün** kapalı teste katılmış olması, ardından üretim erişimi
+  başvurusu gerekir. Sayaç 12. kullanıcı katıldığı anda başlar; kullanıcı düşerse bozulur.
+- **"Gizli yayın" kararı yeniden açık:** Managed Google Play gizli uygulamasının kişisel hesaptan yayınlanıp
+  yayınlanamayacağı ve 12×14 şartına tabi olup olmadığı bilinmiyor; gizli yayın ayrıca tabletlerin bir
+  kuruluşa (Managed Google Play) bağlanmasını gerektirir. **Kullanıcıya sorulacak** (K5).
+- **Kuruluş hesabına geçiş:** 12×14 şartını kaldırır ama D-U-N-S doğrulaması ister; kişisel hesabın
+  çevrilip çevrilemeyeceği doğrulanmalı.
 
-Sonuçlar:
+## 5. Dahili test akışı (bugün yayında olan yol)
 
-- "Direkt public" **en iyi durumda ~2–3 hafta** sürer; 14 gün sayacı 12. tester
-  opt-in olduğu anda başlar, tester düşerse sayaç bozulur.
-- 12 tester gerçek Google hesabı olmalı — fabrika personeli + ofis bu sayıyı
-  karşılar. Tester listesi e-posta ya da Google Grubu ile yönetilir.
-- Kuruluş (organization) hesabına geçmek bu şartı kaldırır ama D-U-N-S numarası
-  doğrulaması gerektirir. Takvim sıkışırsa **gerçek alternatif budur**.
+Dahili test incelemeye girmeden yayınlanır (vc 59'da gözlendi); 12×14 sayacına sayılmaz — sayaç kapalı testte işler (⚠ web'den doğrulanmalı).
 
-Play Console kayıt ücreti tek seferlik 25 USD.
+1. Play Console → Test → **Dahili test** → **Test kullanıcıları**: e-posta listesi oluştur, tabletlerde
+   oturum açılacak Google hesaplarını ekle.
+2. Aynı sayfadaki **katılma bağlantısını** (opt-in URL) tabletin Google hesabıyla aç → "Test kullanıcısı ol"
+   → Play'de uygulama sayfası açılır, oradan kurulur.
+3. Yeni AAB: `npm run build:aab` → Dahili test → Yeni sürüm → AAB'yi yükle → sürüm notu → yayınla.
+4. **Öneri — fabrika başına ayrı Gmail:** her fabrikanın tabletleri o fabrikaya açılmış tek bir Google
+   hesabıyla oturum açar (kişisel hesap tablete girmez); hesabın **senkronizasyonu kapalı** tutulur (kişi,
+   takvim, fotoğraf eşitlenmez). Test listesi böylece fabrika başına bir satır olur. Gizli yayın seçilirse bu
+   öneri yeniden değerlendirilir (§4).
 
-## 5. Sıra
+## 6. Sıra
 
-1. **Play Console hesabı** aç (kişisel, 25 USD) + uygulamayı oluştur
-2. **Gizlilik politikası:** `docs/legal/GIZLILIK-POLITIKASI.md` `[DOLDURULACAK]`'larını
-   tamamla → herkese açık URL'de yayınla
-3. **Demo sunucu** (§1.3): HTTPS, izole instance, demo hesabı
-4. `eas credentials` → upload keystore; `production.env.EXPO_PUBLIC_API_URL` =
-   demo adresi; `eas build -p android --profile production` → AAB
-5. AAB'yi **internal testing**'e yükle (hızlı, kendi cihazlarında doğrula)
-6. Formlar: Data safety, App access (demo hesabı), içerik derecelendirme, hedef kitle
-7. Listeleme varlıkları (§3) — feature graphic + ekran görüntüleri
-8. **Closed testing: 12 tester × 14 gün** (§4) → production erişim başvurusu
-9. Production rollout (kademeli başlat: %20 → %100)
+1. ~~Play Console hesabı + uygulama~~ — yapıldı (kişisel hesap).
+2. ~~İlk AAB → Dahili test~~ — vc 58 reddedildi (API 35), vc 59 yayında.
+3. K1 → kullanılmayan izinler → vc 60 AAB → manifest ölçümü.
+4. K2 → gizlilik politikası yayını → URL konsola.
+5. K4 → demo sunucu + deneme hesabı → "Uygulama erişimi" formu.
+6. Formlar: Veri güvenliği, içerik derecelendirme, hedef kitle (`PLAY-KONSOL-FORMLARI.md` §3).
+7. Listeleme varlıkları (§3).
+8. K5 → dağıtım yolu: kapalı test (12×14) → üretim erişimi başvurusu, ya da gizli yayın.
 
-> Play Console menü adları ve politika eşikleri değişebiliyor; yayına çıkarken
-> konsoldaki güncel yazımı teyit et.
+> Play Console menü adları ve politika eşikleri değişebiliyor; her adımda konsoldaki güncel yazımı teyit et.

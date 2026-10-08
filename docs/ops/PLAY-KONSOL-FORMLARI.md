@@ -5,7 +5,7 @@
 > (kaynak sütunu / "Ölçüm" notları). Ölçülemeyen Play kuralları **⚠ WEB'DEN DOĞRULANMALI** diye işaretli —
 > bu belge Play politikası hakkında kesin hüküm vermez.
 > **Konsol dili:** başlıklar Türkçe konsol yazımına yakın yazıldı; konsoldaki birebir yazım küçük farklılık gösterebilir.
-> **Sabah karar verilecekler:** §0. Mevcut eski belgeler: `PLAY-STORE-YAYIN.md` (§9'da eskiyen yerleri), `../legal/GIZLILIK-POLITIKASI.md` (§1.1'de eskiyen yerleri).
+> **Sabah karar verilecekler:** §0. İlgili belgeler: `PLAY-STORE-YAYIN.md` (§9'daki eskiyen yerlere göre 2026-10-08'de yeniden yazıldı), `../legal/GIZLILIK-POLITIKASI.md` (§1.1'deki hatalar 2026-10-08'de §1.2 metniyle hizalandı).
 
 ---
 
@@ -26,7 +26,7 @@
 
 **Alan:** Gizlilik politikası URL'si → K2'de seçilen adres.
 
-### 1.1 Eski taslağın (`docs/legal/GIZLILIK-POLITIKASI.md`) eskiyen yerleri — o dosya DEĞİŞTİRİLMEDİ
+### 1.1 Eski taslağın (`docs/legal/GIZLILIK-POLITIKASI.md`) eskiyen yerleri — 2026-10-08'de düzeltildi (o dosya artık §1.2 metnini taşır)
 
 - Paket adı `com.teks.erp.mobil` → bugün `com.etkiliyazilim.tekserp`; ad "TeksERP Mobil" → "TeksERP".
 - "Çökme raporlama yok" → tablet yakalanmamış JS hatasının sınıfını, yığınını, ekran adını ve sürümünü fabrika sunucusuna gönderir (`mobil/src/lib/errorReport.ts`, mesaj metni gönderilmez); fabrika sunucusu bunu yalnız müşteri onayıyla bize iletir (varsayılan KAPALI, `docs/kurallar/lisans.md`).
@@ -382,7 +382,7 @@ Sonuç: K-14'teki "gizli yayın" kararı (2026-10-07) kurumsal hesap varsayımı
 - Kütüphane manifestleri: `expo-audio` 1.1.1 (`android/src/main/AndroidManifest.xml`), `expo-secure-store` 15.0.8 (`androidx.biometric`), `expo-camera` 17.0.10 (`com.google.mlkit:barcode-scanning:17.3.0`, `play-services-code-scanner:16.1.0`).
 - Kod: `mobil/src/services/scanFeedback.ts`, `mobil/src/services/hal/btClassic.transport.ts`, `mobil/src/lib/errorReport.ts`, `mobil/src/utils/deviceId.ts`, `mobil/src/services/auth.service.ts`, `mobil/src/offline/flushThenLogout.ts`.
 
-## 9. `PLAY-STORE-YAYIN.md` eskiyen yerleri (o belge DEĞİŞTİRİLMEDİ)
+## 9. `PLAY-STORE-YAYIN.md` eskiyen yerleri (2026-10-08'de belge bu listeye göre yeniden yazıldı)
 
 - Başlık kararı "herkese açık yayın, Managed Google Play tercih edilmedi" → K-14 (2026-10-07) "gizli yayın" ile çelişiyor; o da kişisel hesap bulgusuyla açık (§6).
 - §1.1 EAS imza akışı → bugün yerel `npm run build:aab` + `mobil/keystore/play-yukleme` yükleme anahtarı + Play App Signing.
