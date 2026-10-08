@@ -55,7 +55,6 @@ export const TABLET_ARTEFAKT_GORELI = Object.freeze({
 export const YENI_ADRES_KAPISI = Object.freeze({
   acik: false,
   sart: Object.freeze([
-    '3.9 D5: PAKET zincirli (pkt-*) imzalı listenin kökle doğrulanması + üretim imzası araçları',
     '3.9 D8: ilk PAKET sertifikası (kullanıcıyla yıllık tören)',
   ]),
 });

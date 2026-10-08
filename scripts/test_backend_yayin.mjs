@@ -57,6 +57,7 @@ import {
   ozetCikar,
   pgYayinPlani,
   surumKiyasla,
+  takimKarari,
   yayinPlani,
 } from './lib/backend-yayin.mjs';
 import { kaynakSurumleri, terfiHukmu } from './lib/terfi.mjs';
@@ -243,6 +244,30 @@ generateWrappedPackageKey('paket-2099-1', Buffer.from(${JSON.stringify(parola)})
   return { dosya: path.join(dizin, 'paket-2099-1.paket.json'), parola, capa: path.join(GECICI, 'capa-uretim.json') };
 }
 
+/**
+ * Zincir takımı fikstürü (3.9 D5): sahte kök (bekçi kök çapası) + parolalı üretim biçimli `pkt-2099-1` (URETIM ile aynı parola), kök imzalı
+ * PAKET sertifikası anahtarın yanında (`<kid>.sertifika.json`, build-korumali-imza `sertifika-ekle` düzeni).
+ */
+function zincirKur(parola) {
+  const dizin = path.join(GECICI, 'anahtar-zincir');
+  const capa = path.join(GECICI, 'kok-capa.json');
+  const betik = path.join(GECICI, 'zincir-anahtari.ts');
+  fs.writeFileSync(betik, `import fs from 'node:fs';
+import { generateWrappedPackageKey, writePackageKey } from ${JSON.stringify(path.join(TEKS, 'scripts/lib/butunluk-imza.ts'))};
+import { fiksturKur, sertifikaBas, sertifikaYuku } from ${JSON.stringify(path.join(TEKS, 'scripts/lib/lisans-fikstur.ts'))};
+const f = fiksturKur(Date.now());
+generateWrappedPackageKey('pkt-2099-1', Buffer.from(${JSON.stringify(parola)})).then((k) => {
+  writePackageKey(${JSON.stringify(dizin)}, k);
+  const sert = sertifikaBas(f.kok, sertifikaYuku(f, { ...f.alt, kid: k.kid, x: k.x }, 'PAKET'));
+  fs.writeFileSync(${JSON.stringify(path.join(dizin, 'pkt-2099-1.sertifika.json'))}, JSON.stringify({ sertifika: sert }), { mode: 0o600 });
+  fs.writeFileSync(${JSON.stringify(capa)}, JSON.stringify(f.kokler));
+}).catch((e) => { console.error(e); process.exit(1); });
+`);
+  tsx([betik]);
+  return { dosya: path.join(dizin, 'pkt-2099-1.paket.json'), sertifika: path.join(dizin, 'pkt-2099-1.sertifika.json'), capa };
+}
+const ZINCIR = {};
+
 /** İmzalı test paketi: künye + birkaç kapsam dosyası, gerçek imza aracıyla; zip kökünde PAKET.json. */
 function paketKoku(ad, { surum, kanal, prova, commit = '91c79ebd' }) {
   const kok = path.join(GECICI, `paket-${ad}`);
@@ -284,7 +309,7 @@ signPackageDirectory({ root: ${JSON.stringify(kok)}, key: readPackageKey(${JSON.
  * yalnız o anahtar. `uretim` verilirse parolalı üretim anahtar dosyasıyla imzalar (gerçek yayın bildirimi paketi
  * imzalayan anahtarla atılır). `kurcala` imzadan sonra kapsam dosyasını değiştirir.
  */
-function ortakPaketKur(ad, { surum, kanal = null, musteri = null, prova = false, kid = 'paket-2099-1', kurcala = false, commit, ciKokeni = null, uretim = null }) {
+function ortakPaketKur(ad, { surum, kanal = null, musteri = null, prova = false, kid = 'paket-2099-1', kurcala = false, commit, ciKokeni = null, uretim = null, takim = uretim ? 'cift' : 'eski' }) {
   const kok = paketKoku(ad, { surum, kanal, prova, commit });
   const capa = uretim ? uretim.capa : path.join(GECICI, `capa-${ad}.json`);
   const betik = path.join(GECICI, `imza-${ad}.ts`);
@@ -298,8 +323,16 @@ import { generatePackageKey, signPackageDirectory } from ${JSON.stringify(imzaci
 const k = generatePackageKey(${JSON.stringify(kid)}, []);
 const anahtar = Promise.resolve({ kid: k.kid, x: k.x, privateKey: createPrivateKey({ key: { kty: 'OKP', crv: 'Ed25519', x: k.x, d: k.d }, format: 'jwk' }) });
 fs.writeFileSync(${JSON.stringify(capa)}, JSON.stringify([{ kid: k.kid, x: k.x }]));`;
-  fs.writeFileSync(betik, `${anahtarKodu}
-anahtar.then((key) => signPackageDirectory({ root: ${JSON.stringify(kok)}, key, urun: 'backend', surum: ${JSON.stringify(surum)},
+  // Zincir takımı: `cift` → paket-* + pkt-* (aynı yük), `zincir` → yalnız pkt-*; kök çapası bekçinin sahte kökü.
+  const zincirKodu = takim === 'eski' ? '' : `
+import { openPackageKey as zincirAc } from ${JSON.stringify(imzaci)};
+const zinciri = zincirAc(${JSON.stringify(ZINCIR.dosya)}, async () => Buffer.from(${JSON.stringify(URETIM.parola)}));
+const zs = JSON.parse(fs2.readFileSync(${JSON.stringify(ZINCIR.sertifika)}, 'utf8')).sertifika;
+const kokler = JSON.parse(fs2.readFileSync(${JSON.stringify(ZINCIR.capa)}, 'utf8'));`;
+  const imzaGirdisi = takim === 'eski' ? 'key' : takim === 'cift' ? 'key, zincir: { key: zk, certificate: zs }, roots: kokler' : 'key: zk, certificate: zs, roots: kokler';
+  fs.writeFileSync(betik, `import fs2 from 'node:fs';
+${anahtarKodu}${zincirKodu}
+Promise.all([anahtar, ${takim === 'eski' ? 'null' : 'zinciri'}]).then(([key, zk]) => signPackageDirectory({ root: ${JSON.stringify(kok)}, ${imzaGirdisi}, urun: 'backend', surum: ${JSON.stringify(surum)},
   derlemeTarihi: '2026-09-30T10:00:00.000Z', musteri: ${JSON.stringify(musteri)}${ciKokeni ? `, ciKokeni: ${JSON.stringify(ciKokeni)}` : ''} }))
   .catch((e) => { console.error(e); process.exit(1); });
 `);
@@ -325,6 +358,7 @@ function yayinla(argumanlar, ortam = {}, kok = KOK, girdi = '') {
       TEKSERP_YAYIN_BELIRTECI: path.join(HOME, '.tekserp', 'yayin-belirteci'),
       TEKSERP_YAYIN_BELIRTEC_KAYNAGI: path.join(HOME, '.tekserp', 'yok.json'),
       TEKSERP_TEST_PAKET_CAPASI: ORTAK.capa,
+      ...(ZINCIR.capa ? { TEKSERP_TEST_KOK_CAPASI: ZINCIR.capa } : {}),
       ...ortam,
     },
   });
@@ -349,9 +383,10 @@ const GRUP = 'test';
 const YAMALAR = [
   ['scripts/lib/grup-yayin.mjs', 'export const YENI_ADRES_KAPISI = Object.freeze({\n  acik: false,', 'export const YENI_ADRES_KAPISI = Object.freeze({\n  acik: true,'],
   ['deploy/backend-yayinla.mjs', '  if (process.env.TEKSERP_TEST_PAKET_CAPASI) dur(', '  if (false) dur('],
+  ['deploy/backend-yayinla.mjs', '  if (process.env.TEKSERP_TEST_KOK_CAPASI) dur(', '  if (false) dur('],
 ];
 /** Notu yazılan (prova olmayan) test sürümleri; §3o notsuz sürümü bilerek dışarıda bırakır. */
-const NOTLU = ['9.9.0', '9.9.1', '9.9.2', '9.9.3', '9.9.4', '9.9.5', '9.9.6', '9.9.7', '9.9.8', '9.9.10'];
+const NOTLU = ['9.9.0', '9.9.1', '9.9.2', '9.9.3', '9.9.4', '9.9.5', '9.9.6', '9.9.7', '9.9.8', '9.9.10', '9.9.11', '9.9.12', '9.9.13'];
 let AGAC_HEAD = null;
 function agacKur() {
   fs.cpSync(path.join(KOK, 'scripts'), path.join(AGAC, 'scripts'), { recursive: true });
@@ -372,7 +407,7 @@ function agacKur() {
   AGAC_HEAD = g('rev-parse', 'HEAD');
 }
 const URETIM = {};
-const yayinlaAgac = (argumanlar, ortam = {}) => yayinla(argumanlar, ortam, AGAC, `${URETIM.parola}\n`);
+const yayinlaAgac = (argumanlar, ortam = {}) => yayinla(argumanlar, ortam, AGAC, `${URETIM.parola}\n${URETIM.parola}\n`);
 /** Grubun uzak (sahte) dosyaları — VDS yolu dağıtım kaydından, sahte ssh/scp'nin eşlemesiyle. */
 const GY = grupYayinBlogu(GRUP).yayin;
 const uzakYol = (vds) => vds.replace(`${YENI_VDS}/html`, path.join(UZAK, 'indir-html')).replace(`${YENI_VDS}/defter`, path.join(UZAK, 'indir-defter'));
@@ -381,7 +416,7 @@ const DEFTER = () => uzakYol(GY.backendDefter);
 const KENAR_YOLU = new URL(GY.backendManifest).pathname;
 /** Ortak test paketi (geçici ağacın HEAD'ine bağlı künye) + yayın argümanları. */
 const op = (ad, surum, ek = {}) => ortakPaketKur(ad, { surum, commit: AGAC_HEAD.slice(0, 8), uretim: URETIM, ...ek });
-const arg3 = (pk, ek = []) => [`--grup=${GRUP}`, `--paket=${pk.zip}`, `--anahtar=${URETIM.dosya}`, '--pg-cizgi=16', '--pg-en-az=16.9', ...ek];
+const arg3 = (pk, ek = []) => [`--grup=${GRUP}`, `--paket=${pk.zip}`, `--anahtar=${URETIM.dosya}`, `--zincir-anahtar=${ZINCIR.dosya}`, '--pg-cizgi=16', '--pg-en-az=16.9', ...ek];
 const capaOrtami = (pk, ek = {}) => ({ TEKSERP_TEST_PAKET_CAPASI: pk.capa, ...ek });
 
 function bolum3() {
@@ -389,6 +424,7 @@ function bolum3() {
   sahteAraclarKur();
   Object.assign(ORTAK, anahtarKur());
   Object.assign(URETIM, uretimAnahtariKur());
+  Object.assign(ZINCIR, zincirKur(URETIM.parola));
   agacKur();
   const p1 = op('p1', '9.9.1');
 
@@ -421,7 +457,9 @@ function bolum3() {
   ol('§3f yayın defteri html/ DIŞINDA, bir satır, backend-<sürüm>', fs.existsSync(DEFTER()) && !DEFTER().includes(`${path.sep}indir-html${path.sep}`) &&
     /\tbackend-9\.9\.1\t/.test(fs.readFileSync(DEFTER(), 'utf8')), DEFTER());
   const kenar = ilk.log.filter(([t]) => t === 'fetch');
-  ol(`§3g kenar okuması BELİRTEÇLİ ve yalnız ${KENAR_YOLU}`, kenar.length >= 1 && kenar.every(([, y, b]) => y === KENAR_YOLU && b === 'belirtecli'), JSON.stringify(kenar));
+  const kenarZincir = KENAR_YOLU.replace(/son\.json$/, 'son-zincir.json');
+  ol(`§3g kenar okuması BELİRTEÇLİ ve yalnız ${KENAR_YOLU} + son-zincir.json`, kenar.length >= 2 && kenar.every(([, y, b]) => (y === KENAR_YOLU || y === kenarZincir) && b === 'belirtecli') &&
+    kenar.some(([, y]) => y === kenarZincir), JSON.stringify(kenar));
   const isaretci = ilk.kod === 0 ? JSON.parse(fs.readFileSync(sonJson, 'utf8')) : { bildirim: 'e30.e30.x' };
   const bildirim = JSON.parse(Buffer.from(isaretci.bildirim.split('.')[1], 'base64url').toString('utf8'));
   ol('§3h bildirim: kanal = grup · sürüm · paket özeti · imzalayan = paketin anahtarı · PG alt sınırı', bildirim.kanal === GRUP && bildirim.surum === '9.9.1' &&
@@ -470,6 +508,62 @@ function bolum3() {
   bolum3ci();
   bolum3ortak();
   bolum3grup();
+  bolum3zincir();
+}
+
+/** Takım kararının sözleşmesi (karar 6); `kararDenetle(bozuk)` false dönmeli (negatif sonda). */
+function kararDenetle(f) {
+  const d = (g) => f(g).durum;
+  return d({ takim: 'eski', eskiVar: true, kopruVar: false }) === 'dur' &&
+    d({ takim: 'cift', eskiVar: true, kopruVar: false }) === 'tamam' &&
+    d({ takim: 'cift', eskiVar: true, kopruVar: true }) === 'dur' &&
+    d({ takim: 'zincir', eskiVar: true, kopruVar: false }) === 'dur' &&
+    f({ takim: 'zincir', eskiVar: true, kopruVar: false, kopruIlan: 'x' }).kopruYaz === true &&
+    d({ takim: 'zincir', eskiVar: true, kopruVar: true, kopruIlan: 'x' }) === 'dur' &&
+    d({ takim: 'zincir', eskiVar: true, kopruVar: true }) === 'tamam' &&
+    d({ takim: 'zincir', eskiVar: false, kopruVar: false }) === 'tamam' &&
+    d({ takim: undefined, eskiVar: false, kopruVar: false }) === 'dur';
+}
+
+/** §3Z — iki imza takımı (3.9 D5): çift birlikte-ya-da-hiç, köprü ilanı, köprü sonrası eski takım donar. */
+function bolum3zincir() {
+  console.log('\n§3Z — iki imza takımı (son.json + son-zincir.json, köprü ilanı)');
+  ol('§3Z0 takimKarari sözleşmesi (karar 6)', kararDenetle(takimKarari));
+  ol('§3Z0b sonda: her şeye "tamam" diyen karar sözleşmeyi GEÇEMEZ', !kararDenetle(() => ({ durum: 'tamam', kopruYaz: true })));
+  const oku = (f) => (fs.existsSync(uzakDosya(f)) ? fs.readFileSync(uzakDosya(f), 'utf8') : null);
+  const kopru = path.join(path.dirname(DEFTER()), `${GRUP}-backend-KOPRU.json`);
+  const zArg = (pk, ek = []) => arg3(pk, ek).map((a) => (a.startsWith('--anahtar=') ? `--anahtar=${ZINCIR.dosya}` : a)).filter((a) => !a.startsWith('--zincir-anahtar='));
+
+  const pe = op('z0', '9.9.11', { takim: 'eski' });
+  const re = yayinlaAgac(arg3(pe).filter((a) => !a.startsWith('--zincir-anahtar=')), capaOrtami(pe));
+  ol('§3Z1 ⭐ yalnız eski (paket-*) imzalı paket GERÇEK grup yayınında → DUR, yazma SIFIR', re.kod !== 0 && /İMZA TAKIMI BU GRUBA ÇIKAMAZ/.test(re.cikti) && re.yazma.length === 0, re.cikti.slice(-400));
+
+  const pc = op('z1', '9.9.11');
+  const rc = yayinlaAgac(arg3(pc), capaOrtami(pc));
+  const tekKomut = rc.log.filter(([t, c]) => t === 'ssh' && /mv .*son-zincir\.json.*&&.*mv .*son\.json/.test(String(c)));
+  ol('§3Z2 ⭐ çift takım: iki işaretçi aynı sürümde, kendi bildirimiyle bayt bayt, TEK uzak komutla taşındı', rc.kod === 0 &&
+    oku('son.json') === oku('9.9.11/surum.json') && oku('son-zincir.json') === oku('9.9.11/surum-zincir.json') && oku('son.json') !== oku('son-zincir.json') &&
+    tekKomut.length === 1, rc.cikti.slice(-600));
+
+  const pz = op('z2', '9.9.12', { takim: 'zincir' });
+  const rz0 = yayinlaAgac(zArg(pz), capaOrtami(pz));
+  ol('§3Z3 ⭐ zincir-yalnız + grupta son.json + köprüsüz → DUR (köprü ilanı ister), yazma SIFIR', rz0.kod !== 0 && /KÖPRÜ İLANI ister/.test(rz0.cikti) && rz0.yazma.length === 0 && !fs.existsSync(kopru), rz0.cikti.slice(-400));
+  const sonOnce = oku('son.json');
+  const rz1 = yayinlaAgac(zArg(pz, ['--kopru-ilan=test grubunda eski takımı donduruyorum köprü ilanını onaylıyorum 2026-10-08']), capaOrtami(pz));
+  ol('§3Z4 ⭐ --kopru-ilan: KOPRU.json yazılır, yalnız son-zincir.json ilerler (son.json DONAR)', rz1.kod === 0 && fs.existsSync(kopru) &&
+    /köprü ilanını onaylıyorum/.test(fs.readFileSync(kopru, 'utf8')) && oku('son.json') === sonOnce && oku('son-zincir.json') === oku('9.9.12/surum-zincir.json') &&
+    !fs.existsSync(uzakDosya('9.9.12/surum.json')), rz1.cikti.slice(-600));
+
+  const pc2 = op('z3', '9.9.13');
+  const rc2 = yayinlaAgac(arg3(pc2), capaOrtami(pc2));
+  ol('§3Z5 ⭐ köprü sonrası çift takım → DUR (eski takım donduruldu), yazma SIFIR', rc2.kod !== 0 && /KÖPRÜ İLAN EDİLDİ/.test(rc2.cikti) && rc2.yazma.length === 0 && oku('son.json') === sonOnce, rc2.cikti.slice(-400));
+  const rm = yayinlaAgac(zArg(pz), capaOrtami(pz));
+  ol('§3Z6 monotonluk son-zincir.json\'dan: 9.9.12 (son.json 9.9.11\'den büyük) yeniden → DUR', rm.kod !== 0 && /YENİ değil/.test(rm.cikti) && rm.yazma.length === 0, rm.cikti.slice(-400));
+  const ri = yayinlaAgac(zArg(op('z4', '9.9.13', { takim: 'zincir' }), ['--kopru-ilan=test grubunda eski takımı yeniden donduruyorum onaylıyorum 2026-10-08']), capaOrtami(pc2));
+  ol('§3Z7 köprü varken --kopru-ilan → DUR', ri.kod !== 0 && /Köprü zaten ilan edildi/.test(ri.cikti) && ri.yazma.length === 0, ri.cikti.slice(-400));
+  const pz3 = op('z5', '9.9.13', { takim: 'zincir' });
+  const rz3 = yayinlaAgac(zArg(pz3), capaOrtami(pz3));
+  ol('§3Z8 köprü sonrası zincir-yalnız ilansız → yayınlanır, son.json yine DONUK', rz3.kod === 0 && oku('son-zincir.json') === oku('9.9.13/surum-zincir.json') && oku('son.json') === sonOnce, rz3.cikti.slice(-600));
 }
 
 /** O11a — kurulum arşivinin doğrulayıcısı `ortak-dogrula`: başarılı yol test imzasıyla, her ret ayrı ölçülür. */
@@ -556,7 +650,7 @@ function bolum3grup() {
   for (const g of ['test', 'oncu', 'genel']) {
     const gercek = yayinla(grup(g1, g), { TEKSERP_TEST_PAKET_CAPASI: '' });
     ol(`§3G8 ⭐ ${g}: GERÇEK yayın (kuru değil) → DUR "YENİ ADRESE GERÇEK YAYIN KAPALI", ssh/scp/fetch SIFIR`,
-      gercek.kod !== 0 && /YENİ ADRESE GERÇEK YAYIN KAPALI/.test(gercek.cikti) && /D5/.test(gercek.cikti) && /D8/.test(gercek.cikti) && gercek.log.length === 0, gercek.cikti.slice(-500));
+      gercek.kod !== 0 && /YENİ ADRESE GERÇEK YAYIN KAPALI/.test(gercek.cikti) && !/D5/.test(gercek.cikti) && /D8/.test(gercek.cikti) && gercek.log.length === 0, gercek.cikti.slice(-500));
   }
   const terfiliGercek = yayinla(grup(g1, 'oncu', ['--terfi-atla=test grubunda yeşil öncü grubuna çıkışı onaylıyorum 2026-10-06']), ortamCapa(g1));
   ol('§3G8b terfi kaçışı kapıyı AÇMAZ (gerçek oncu yayını yine DUR, yazma SIFIR)', terfiliGercek.kod !== 0 && /GERÇEK YAYIN KAPALI/.test(terfiliGercek.cikti) && terfiliGercek.log.length === 0);
@@ -567,8 +661,8 @@ function bolum3grup() {
   const dogrula = yayinla(['--grup=test', '--dogrula'], ortamCapa(g1));
   const okuma = dogrula.log.filter(([t]) => t === 'fetch');
   ol('§3G9 --dogrula kapıya takılmaz: yeni adresten BELİRTEÇLİ okur, §3\'ün geçici ağaçtan yayınladığı sürümü (9.9.10) görür, yazma SIFIR',
-    !/GERÇEK YAYIN KAPALI/.test(dogrula.cikti) && okuma.length >= 1 && okuma.every(([, y, b]) => y === '/test/backend/son.json' && b === 'belirtecli') && dogrula.yazma.length === 0 &&
-    dogrula.kod === 0 && /yayındaki backend sürümü: 9\.9\.10/.test(dogrula.cikti),
+    !/GERÇEK YAYIN KAPALI/.test(dogrula.cikti) && okuma.length === 2 && okuma.every(([, y, b]) => /^\/test\/backend\/son(-zincir)?\.json$/.test(y) && b === 'belirtecli') && dogrula.yazma.length === 0 &&
+    dogrula.kod === 0 && /yayındaki backend sürümü \(son\.json\): 9\.9\.10/.test(dogrula.cikti) && /yayındaki backend sürümü \(son-zincir\.json\): 9\.9\.10/.test(dogrula.cikti),
     dogrula.cikti.slice(-300) + JSON.stringify(okuma));
 
   // Terfi (yayıncı uçtan uca): oncu için etiket yok → DUR; kaçışla profil matrisi raporu yok → DUR; yeşil rapor → geçer.
