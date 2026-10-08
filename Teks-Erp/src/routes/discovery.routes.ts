@@ -13,6 +13,7 @@
 
 import { Router, Request, Response } from "express";
 import { buildDiscoveryIdentity } from "../services/discovery.service";
+import { readForwardedView } from "../lib/forwarded-view";
 
 const router = Router();
 
@@ -31,8 +32,9 @@ const router = Router();
  *       200:
  *         description: Kimlik yükü
  */
-router.get("/identity", (_req: Request, res: Response) => {
-    res.status(200).json(buildDiscoveryIdentity());
+// Güvenilen vekil (TRUST_PROXY) arkasında şema/port istemcinin gördüğüdür; vekil yoksa bugünkü değerler.
+router.get("/identity", (req: Request, res: Response) => {
+    res.status(200).json(buildDiscoveryIdentity(readForwardedView(req)));
 });
 
 export default router;
