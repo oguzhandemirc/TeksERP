@@ -1668,7 +1668,7 @@ function donemOzetiBas(son, k, ek = {}) {
   console.log("  4. Anahtar birimine kur (anahtarlar/* → 0600, 10001) · içe aktar: … anahtar.js donem-ice-aktar < ice-aktar.json");
   console.log("  5. 1 dk sonra portal Anahtarlar: yeni ALT/ARA/İNDİRME yüklü; İptal belgeleri: dağıtılan sıra = paketinki");
   console.log(`  6. Eski özel yarılar: … anahtar.js emekliye-ayir --kid=${k.emekliye.join(",") || "<yok>"} (önce kuru, sonra --uygula) · VDS'teki paket kopyası silinir (shred).`);
-  console.log(k.paket ? "  7. PAKET: aşağıdaki PAKET adımları (dağıtım iptali 4. adımdaki ice-aktar.json'la satıcıya girer)." : "  7. PAKET anahtarı bu törende YENİLENMEDİ — yıllık törende --paket ile (runbook §9).");
+  console.log(k.paket ? "  7. PAKET: aşağıdaki PAKET adımları (dağıtım iptali 4. adımdaki ice-aktar.json'la satıcıya girer)." : "  7. PAKET anahtarı bu törende YENİLENMEDİ — yıllık törende --paket ile (runbook §10).");
   if (k.istemci) istemciOzetiBas(son, k.istemci, ek);
   if (k.paket) paketOzetiBas(son, k.paket, ek);
 }
@@ -1703,7 +1703,7 @@ function paketOzetiBas(son, pk, { paketUsb, paketSilinen, bayraklar }) {
   console.log("  Sonraki adımlar (PAKET):");
   console.log("   a. Paket parolası → parola yöneticisi. Yedek parolası YALNIZ parola yöneticisinde; disk görüntüsünü çıkar, Drive'a yükle.");
   console.log(`   b. Yeni sürüm imzası: build-korumali-imza.ts zip --zincir-anahtar=${path.join(son, "paket", `${pk.birincil.kid}.paket.json`)} (çift) · backend-bildirim imzala/pg-imzala aynı anahtarla.`);
-  console.log("   c. Yeniden imzalı sürümleri yayına koy: yeni zip sürüm dizinine, surum-zincir.json yanına; son sürümse son-zincir.json EN SON (runbook §9).");
+  console.log("   c. Yeniden imzalı sürümler (yukarıdaki dizinler) yayına HENÜZ konmaz — yayındaki sürüm dizini ezilmez, yeni adlarla yanına ekleme adımı D8 (runbook §10).");
   console.log("   d. Docker teslimi: TEKSERP_PAKET_ANAHTARI=<birincil> teslim-paketle.sh (künye zincirli imzalanır).");
   console.log("   e. VDS: vds-paketi/paket/ yalnız AÇIK sertifikalar + dağıtım iptali; PAKET özel yarısı VDS'e GİTMEZ.");
   if (bayraklar?.has("paket-parola-dosyasi") || bayraklar?.has("yedek-parola-dosyasi")) console.log("   ⚠ parola dosyası verildi: o dosyalar Mac'te KALMAMALI — sil (rm -P).");
