@@ -284,8 +284,9 @@ const TAKMA_AD = new RegExp(`^${OTA_TAKMA_AD_ONEKI}([0-9]{1,6}\\.[0-9]{1,6})\\/m
 const OTA_MANIFEST = /^\/[^/]+\/mobil\/ota\/[^/]+\/manifest(-[0-9]+)?$/;
 const OTA_VARLIK = /^\/[^/]+\/mobil\/ota\/[^/]+\/[0-9]+\/[^?#]+$/;
 // `son.json` backend kanalının en yeni sürüm işaretçisi: her yayında değişir, kenarda tutulmaz; zincirli
-// ikizleri (`son-zincir.json` · `surum-zincir.json` · `pg-zincir.json`, protocol/paket-zinciri.ts) de öyle.
-const DEGISKEN_DOSYA = /(\.ya?ml|\/manifest(-[0-9]+)?|\/surum\.json|\/son\.json|\/(son|surum|pg)-zincir\.json)$/i;
+// ikizleri (`son-zincir.json` · `surum-zincir[-<kid>].json` · `pg-zincir[-<kid>].json`, protocol/paket-zinciri.ts) de
+// öyle: güncelleyici henüz yayında olmayan kid'li adı yoklar, kenarda 404 önbelleklenmemeli.
+const DEGISKEN_DOSYA = /(\.ya?ml|\/manifest(-[0-9]+)?|\/surum\.json|\/son\.json|\/(son-zincir|(surum|pg)-zincir(-pkt-[a-z0-9-]{1,40})?)\.json)$/i;
 
 /**
  * Kapsam kararı, origin'in (nginx) GÖRECEĞİ yolda verilir: yüzde kodu çözülür, ters bölü

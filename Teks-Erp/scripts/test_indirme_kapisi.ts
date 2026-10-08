@@ -52,7 +52,7 @@ import {
   type DownloadPublicKey,
 } from "../src/lib/license/protocol";
 import { anahtarUret, hamImzala, type TestAnahtari } from "./lib/lisans-fikstur";
-import { CHAINED_PG_POINTER_FILE, CHAINED_RELEASE_MANIFEST_FILE, CHAINED_RELEASE_POINTER_FILE } from "../src/lib/license/protocol/paket-zinciri";
+import { CHAINED_PG_POINTER_FILE, CHAINED_RELEASE_MANIFEST_FILE, CHAINED_RELEASE_POINTER_FILE, chainedFileName } from "../src/lib/license/protocol/paket-zinciri";
 import { UPDATE_GROUPS } from "../src/lib/license/update-group";
 
 const REPO = path.resolve(__dirname, "..", "..");
@@ -731,12 +731,15 @@ async function bolum10(w: WorkerModulu): Promise<void> {
     check(`§10m benzer ad ${yol} kapsam dışı, aynen geçer`, y.status === 200 && o.cagrilar.length === 1 && o.cagrilar[0]!.istek === r);
   }
   const beB = signDownloadToken({ payload: yuk("backend", {}, "test"), key: { kid: IND_YENI.kid, privateKey: IND_YENI.privateKey }, nowMs: SIMDI });
-  for (const ad of [CHAINED_RELEASE_POINTER_FILE, `2.20.0/${CHAINED_RELEASE_MANIFEST_FILE}`, CHAINED_PG_POINTER_FILE]) {
+  for (const ad of [CHAINED_RELEASE_POINTER_FILE, `2.20.0/${CHAINED_RELEASE_MANIFEST_FILE}`, CHAINED_PG_POINTER_FILE,
+    `2.20.0/${chainedFileName("surum", "pkt-2099-2")}`, `pg/16.9-1/${chainedFileName("pg", "pkt-2099-2")}`]) {
     const o = await kabul(w, `§10n zincirli işaretçi ${ad}`, a, istek(`/test/backend/${ad}`, bsl(beB)));
     check(`§10n' ⭐ ${ad} DEĞİŞKEN: cf seçeneği YOK`, o.cagrilar[0]?.init === undefined);
   }
   const zo = await kabul(w, "§10n'' zincir paketi zip (kıyas)", a, istek("/test/backend/2.20.0/tekserp-backend-2.20.0.zip", bsl(beB)));
   check("§10n''' zip DEĞİŞMEZ: kenar önbelleği", zo.cagrilar[0]?.init?.cf?.cacheEverything === true);
+  const zk = await kabul(w, "§10n4 yeniden imzalı zip (kid ekli ad, kıyas)", a, istek("/test/backend/2.20.0/tekserp-backend-2.20.0-pkt-2099-2.zip", bsl(beB)));
+  check("§10n5 kid ekli zip de DEĞİŞMEZ: kenar önbelleği", zk.cagrilar[0]?.init?.cf?.cacheEverything === true);
 
   // Yeni adresin ayarı — panele yapıştırılacak metin bu dosyadır.
   let ham: Record<string, unknown> | null = null;
