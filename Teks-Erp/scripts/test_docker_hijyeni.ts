@@ -21,6 +21,7 @@
 //      künye müşterisiz, .jws SHA256SUMS'ta.
 //      §5d vekil ayarları (TRUST_PROXY · LOGIN_LOCKOUT_SCOPE · RATE_LIMIT_*) backend'e boş varsayılanla geçer;
 //      şablon TRUST_PROXY'yi boş doğurur. §5e şablonun LICENSE_SERVER_URL açıklaması vendor-url.ts sabitleriyle aynı.
+//      §5f compose · şablon · runbook API portunu ağa açmayı önermez (Docker'da LAN TLS yok, yayın ufw'yi atlar).
 //   §6 satıcı imajı (G2/G3) DURAĞAN: `satici/sunucu/scripts/` altındaki her CLI `dist-cli`'a derlenir ve
 //      `test -f` kapısında; compose'da `/dosyalar` yazılır, `/derlemeler` + `/yayin` salt okunur (⑨'un docker'sız ikizi).
 // =============================================================================
@@ -399,6 +400,32 @@ function lisansAdresiStatik(envOrnek: string, vendorUrl: string): string[] {
   check("§5e ⭐ şablonun LICENSE_SERVER_URL açıklaması vendor-url.ts ile aynı (boş = üretim satıcısı, `kapali` = çıkış yok)", gercek.length === 0, gercek.join(" | "));
   const eski = eo.replace(/^# Satıcı lisans sunucusu kökü[\s\S]*?(?=^LICENSE_SERVER_URL=)/m, "# Satıcı lisans sunucusu kökü (boşsa dışarı çıkılmaz; motor gözlemde kalır).\n");
   check("§5e sonda: eski açıklama → kırmızı", eski !== eo && lisansAdresiStatik(eski, vu).length > 0, eski !== eo ? "" : "MUTASYON UYGULANMADI");
+}
+
+// §5f — teslim dosyaları ve runbook API portunu ağa açmayı ÖNERMEZ: Docker'da LAN TLS yok (4000 şifresiz) ve
+// Docker yayını ufw'yi atlar. 0.0.0.0'ı anan her satır yasak kipindedir; şablon değeri 127.0.0.1.
+const DINLE_DOSYALARI = ["Teks-Erp/docker/korumali/docker-compose.yml", "Teks-Erp/docker/korumali/.env.ornek", "docs/ops/LINUX-DOCKER-KURULUM.md"];
+function dinleStatik(dosyalar: Record<string, string>): string[] {
+  const ih: string[] = [];
+  for (const [ad, metin] of Object.entries(dosyalar)) {
+    metin.split("\n").forEach((l, n) => {
+      if (/0\.0\.0\.0/.test(l) && !/yazılmaz|yazılırsa|yazmayın|değiştirilmez/i.test(l)) ih.push(`${ad}:${n + 1} 0.0.0.0'ı yasak kipinde anmıyor`);
+    });
+  }
+  const eo = dosyalar["Teks-Erp/docker/korumali/.env.ornek"] ?? "";
+  if (!/^TEKSERP_DINLE=127\.0\.0\.1$/m.test(eo)) ih.push(".env.ornek TEKSERP_DINLE=127.0.0.1 doğmuyor");
+  return ih;
+}
+{
+  const d = Object.fromEntries(DINLE_DOSYALARI.map((y) => [y, oku(y)]));
+  const gercek = dinleStatik(d);
+  check("§5f ⭐ compose · şablon · runbook API portunu ağa açmayı önermez (0.0.0.0 yalnız yasak kipinde)", gercek.length === 0, gercek.join(" | "));
+  const eoAd = "Teks-Erp/docker/korumali/.env.ornek";
+  const sondalar: Array<[string, Record<string, string>]> = [
+    ["eski öneri satırı", { ...d, [eoAd]: d[eoAd] + "# fabrika ağına açmak için 0.0.0.0 ya da LAN IP'si\n" }],
+    ["şablon 0.0.0.0 doğar", { ...d, [eoAd]: d[eoAd].replace(/^TEKSERP_DINLE=.*$/m, "TEKSERP_DINLE=0.0.0.0") }],
+  ];
+  for (const [ad, dd] of sondalar) check(`§5f sonda: ${ad} → kırmızı`, dinleStatik(dd).length > 0);
 }
 
 // §5c — teslim künyesi İMZALI çıkar (2e aracı, `build-korumali-imza.ts belge`): anahtar yoksa paket

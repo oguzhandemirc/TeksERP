@@ -70,8 +70,9 @@ services:
       RATE_LIMIT_WRITE_MAX: ${RATE_LIMIT_WRITE_MAX:-}
       RATE_LIMIT_LOGIN_MAX: ${RATE_LIMIT_LOGIN_MAX:-}
     ports:
-      # Varsayılan YALNIZ bu makine (kapalı doğar); fabrika ağına açmak bilinçli karar:
-      # .env'de TEKSERP_DINLE=0.0.0.0 (ya da LAN IP'si).
+      # YALNIZ bu makine: 4000 şifresizdir ve Docker'ın yayımladığı port ufw'nin önünden geçer.
+      # Docker kurulumunda fabrika ağı TLS'i yok; ağdan erişim yalnız TLS'i sonlandıran vekille
+      # (runbook §7, §10). TEKSERP_DINLE=0.0.0.0 yazılmaz.
       - "${TEKSERP_DINLE:-127.0.0.1}:${TEKSERP_PORT:-4000}:4000"
     volumes:
       - lisans:/var/lib/tekserp/lisans

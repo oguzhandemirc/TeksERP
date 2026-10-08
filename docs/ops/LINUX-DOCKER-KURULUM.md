@@ -21,6 +21,7 @@
 - Linux **x86_64**, Docker Engine 24+ ve `docker compose` v2 (başka mimaride öykünmeyle koşar — üretimde kullanılmaz).
 - `/etc/machine-id` dolu (systemd'li her dağıtımda var): parmak izinin F1'i buradan gelir (§5).
 - Disk: imaj ≈ 1 GB açılmış; veri + yedek için ayrıca pay.
+- **Bu yol fabrika ağı kurulumu DEĞİLDİR:** Docker kurulumunda fabrika ağı TLS'i yok, yalnız şifreli bağlanan panel ve tablet fabrika ağından bağlanamaz (§7). Fabrika içi kurulum Windows yoludur (`deploy/kur.ps1`).
 
 ## 2. İlk kurulum
 
@@ -30,7 +31,7 @@ docker load -i tekserp-korumali_<sürüm>_linux-amd64.tar.gz   # "Loaded image: 
 cp .env.ornek .env && chmod 600 .env
 # .env'i doldur: TEKSERP_IMAJ = load çıktısındaki etiket;
 #   POSTGRES_PASSWORD = $(openssl rand -hex 24) · JWT_SECRET = $(openssl rand -hex 48)
-#   TEKSERP_DINLE: varsayılan 127.0.0.1 (kapalı doğar) — fabrika ağına açmak için 0.0.0.0 ya da LAN IP'si
+#   TEKSERP_DINLE: 127.0.0.1 KALIR (§7 — 0.0.0.0 yazılmaz)
 SEED_ON_EMPTY=1 docker compose up -d          # ilk ve YALNIZ ilk up: boş şemaya admin seed'i
 docker compose logs -f backend                 # [1/3] migration → [2/3] seed → [3/3] "Backend ayakta"
 ```
@@ -73,8 +74,10 @@ docker compose logs -f backend                 # [1/3] migration → [2/3] seed 
 
 ## 7. Ağ ve güvenlik notları
 
-- Postgres portu dışarı açılmaz (yalnız compose ağı). Backend portu varsayılan `127.0.0.1`e bağlanır.
-- Docker köprüsü istemci adresini NAT'lar (giriş kilidi köprü adresini görür). Uzak erişim tüneli 2026-09-30'da emekli (B6); patron erişimi patron bulutundandır.
+- **API portu (4000) yalnız `127.0.0.1`de yayımlanır; `TEKSERP_DINLE` değiştirilmez.** Port şifresizdir ve Docker'ın yayımladığı port konağın güvenlik duvarının (ufw) ÖNÜNDEN geçer: `0.0.0.0` yazılırsa 4000 ufw "kapalı" dese bile bütün ağa — bulutta bütün internete — şifresiz açılır. Yeni kurulumun yalnız şifreli olması kuralı (`docs/kurallar/deploy-kurulum.md`, 2026-10-08) Docker'da da geçerlidir.
+- **Docker kurulumunda fabrika ağı TLS'i (LAN TLS) YOK:** compose `LAN_TLS_MODE` geçirmez; 4443 yayını ve sertifika birimi yoktur. Bu yüzden yalnız şifreli bağlanan panel (1.6.0+) ve tablet (vc60+) fabrika ağındaki bir Docker kurulumuna **bağlanamaz**. Fabrika içi kurulum Windows yoludur (`deploy/kur.ps1`, `LAN_TLS_MODE=required`). Docker kurulumuna ağdan yalnız TLS'i sonlandıran bir vekil üzerinden bağlanılır; bizim yönettiğimiz bulut sunucusu için kalıp §10'dadır.
+- **Vekil arkasında** `.env`e `TRUST_PROXY=1` ve `RATE_LIMIT_ENABLED=true` yazılır (compose ikisini de backend'e geçirir; §10 örneği kendisi koyar). Yazılmazsa Docker köprüsü ve vekil bütün istemcileri TEK adres gösterir: bir kişinin hatalı girişi herkesi kilitler, hız sınırı da kapalı kalır. `TRUST_PROXY=1` yalnız port `127.0.0.1`deyken ve vekil `X-Forwarded-For`u gerçek adresle EZERKEN güvenlidir. `true` istemcinin yazdığı başlığa güvenir; backend bu durumda uyarı basar. Vekilsiz kurulumda ikisi de boş kalır (bugünkü davranış).
+- Postgres portu dışarı açılmaz (yalnız compose ağı). Uzak erişim tüneli 2026-09-30'da emekli (B6); patron erişimi patron bulutundandır.
 - Servisler `cap_drop: ALL`, `no-new-privileges`, salt-okunur kök ile koşar; yazılabilir yerler yalnız birimler + `/tmp`.
 - Web paneli (`WEB_DIST_DIR`) bu imajda YOK: panel Electron'dan ve tabletten bağlanır; `/` durum sayfasıdır.
 
