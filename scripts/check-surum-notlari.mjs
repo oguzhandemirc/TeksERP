@@ -363,6 +363,7 @@ console.log("\n§9 — Tırnaklı ETİKET ADI koddan mı (§9a kısa ad · §9b 
     { etiket: "bu rakam neden böyle", sinif: "ALINTI", gerekce: "Sonradan bakan kişinin sorusu." },
     // --- EMEKLI: yayınlanmış notun andığı ad koddan kalktı (not donuk)
     { etiket: "Patron (Uzaktan Takip)", sinif: "EMEKLI", gerekce: "WEB_BOSS şablonunun adı; tünelle birlikte 2026-09-30'da (B6) katalogdan çıktı." },
+    { etiket: "Kodlar birebir aynı", sinif: "EMEKLI", gerekce: "Panel 1.5.0 onay kutusu; 1.6.0'da (A2, panel yalnız şifreli) tek düğme \"Kodlar aynı — bağlan\" oldu." },
   ];
 
   let dosyaSayisi = 0;
