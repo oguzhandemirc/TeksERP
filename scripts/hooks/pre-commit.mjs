@@ -314,6 +314,12 @@ if (staged.some((f) => TABLET_ORTAK_TETIK.includes(f) || f.startsWith("mobil/scr
   adimlar.push({ ad: "tablet ortak paket kimliği", cwd: ".", cmd: ["node", ["scripts/test_tablet_ortak_paket.mjs"]], gitEnvSil: true });
 }
 
+// PLAY YAYINCISI: AAB → Play test kanalı (ağsız, sahte fetch); okuduğu kitaplıklar scripts/lib ve mobil/scripts/lib altında.
+const PLAY_TETIK = ["deploy/play-yayinla.mjs", "scripts/test_play_yayinla.mjs", "deploy/dagitim.json"];
+if (staged.some((f) => PLAY_TETIK.includes(f) || f.startsWith("scripts/lib/") || f.startsWith("mobil/scripts/lib/"))) {
+  adimlar.push({ ad: "Play yayıncısı", cwd: ".", cmd: ["node", ["scripts/test_play_yayinla.mjs"]], gitEnvSil: true });
+}
+
 // GRUP YAYINI (O10a · O10b · O11b): ortak grup kitaplığı üç ürünün kapısıdır — kitaplık/terfi değişince üç bekçi birden.
 // Ortak yayın kitaplıkları (eski kanal kapıları emekli olunca — O15 — tetikleri buraya geçti): üç grup bekçisi onları koşturur.
 const GRUP_KITAPLIGI = new Set([

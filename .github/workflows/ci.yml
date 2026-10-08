@@ -112,6 +112,9 @@ jobs:
       # O10b: tablet grup yayını (ortak OTA paketi + APK; sahte ssh/scp/curl/npx, ağsız).
       - name: Tablet ortak paket kimliği (O7) + tablet grup yayını (O10b)
         run: node scripts/test_tablet_ortak_paket.mjs && node scripts/test_tablet_ortak_paket.mjs --sonda && node scripts/test_grup_yayin_tablet.mjs
+      # Play yayıncısı: AAB → dahili/kapalı test (sahte fetch, ağsız; üretim reddi, versionCode, not sınırı, anahtar sızıntısı).
+      - name: Play yayıncısı (deploy/play-yayinla.mjs)
+        run: node scripts/test_play_yayinla.mjs
 
   # ===========================================================================
   # BACKEND — Express + Prisma; Postgres service + migrate deploy + seed + test
