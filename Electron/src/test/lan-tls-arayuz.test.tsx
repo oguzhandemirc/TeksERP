@@ -5,7 +5,7 @@ import type { TlsObservation } from "@shared/ipc-contract";
 import type { DiscoveredServer } from "@shared/discovery";
 import { HTTP_TO_PINNED_REASON, formatFingerprintGroups, parseTlsQr, type TlsPin } from "@shared/lan-tls";
 import { LanTlsSection } from "@/components/settings/LanTlsSection";
-import { activePinFor, httpFallbackUrl, httpSwitchBlock, planTlsSwitch, tabletTlsQr } from "@/lib/lan-tls-ui";
+import { activePinFor, httpFallbackUrl, httpSwitchBlock, planTlsSwitch, tabletQrHosts, tabletTlsQr } from "@/lib/lan-tls-ui";
 
 /**
  * FABRİKA AĞINDA TLS — PANEL ARAYÜZÜ (docs/design/LAN-TLS.md §4, §6).
@@ -58,7 +58,16 @@ describe("etkin sabit, dönüş adresi, tablet QR'ı", () => {
     expect(tabletTlsQr([PIN], "http://192.168.1.50:4000")).toBeNull();
     expect(tabletTlsQr([], "https://192.168.1.50:4443")).toBeNull();
     const qr = tabletTlsQr([PIN], "https://192.168.1.50:4443");
-    expect(parseTlsQr(qr!)).toEqual({ installationId: IID, advert: { port: 4443, fingerprint: FP } });
+    expect(parseTlsQr(qr!)).toEqual({ installationId: IID, advert: { port: 4443, fingerprint: FP }, hosts: [] });
+  });
+  it("adresli QR (v2): panelin bağlı olduğu adres; döngüde bu makinenin LAN adresleri", () => {
+    expect(tabletQrHosts("https://192.168.1.50:4443", ["10.0.0.9"])).toEqual(["192.168.1.50"]);
+    expect(tabletQrHosts("https://sahinsrv:4443", [])).toEqual(["sahinsrv"]);
+    expect(tabletQrHosts("https://127.0.0.1:4443", ["192.168.1.50", "169.254.3.4", "100.101.1.2", "fe80::1", "10.0.0.5"])).toEqual(["192.168.1.50", "10.0.0.5"]);
+    expect(tabletQrHosts("https://localhost:4443", [])).toEqual([]);
+    const qr = tabletTlsQr([PIN], "https://192.168.1.50:4443", ["192.168.1.50"]);
+    expect(qr!.startsWith("teks-erp-tls:2:")).toBe(true);
+    expect(parseTlsQr(qr!)?.hosts).toEqual(["192.168.1.50"]);
   });
 });
 

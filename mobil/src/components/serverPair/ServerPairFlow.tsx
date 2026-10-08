@@ -1,8 +1,8 @@
 // =============================================================================
 // Sunucuyu ekle — iki EŞİT yol (kullanıcı kararı 2026-10-08)
 // =============================================================================
-// (a) Paneldeki şifreli bağlantı QR'ı: iz ve port QR'dan gelir, sunucu ağda o izle aranır (bulunamazsa adres
-//     yazılır). (b) IP adresi: tablet sunucunun sertifika izinden doğrulama kodunu gösterir; kullanıcı kurulum
+// (a) Paneldeki şifreli bağlantı QR'ı: iz ve port QR'dan gelir; önce QR'daki adresler denenir (v2), sonra sunucu
+//     ağda o izle aranır (bulunamazsa adres yazılır). (b) IP adresi: tablet sunucunun sertifika izinden doğrulama kodunu gösterir; kullanıcı kurulum
 //     sonundaki / durum sayfasındaki / paneldeki kodla karşılaştırıp onaylar. İki yolun sonucu da sabitlenmiş
 //     şifreli bağlantıdır (`serverPairing.completePairing`). Tam ekran sayfanın GÖVDESİDİR; kabuk çağıranda.
 // =============================================================================

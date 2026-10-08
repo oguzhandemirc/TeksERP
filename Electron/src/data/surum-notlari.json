@@ -43,6 +43,11 @@
           "kapsam": "tablet",
           "tip": "iyilestirme",
           "metin": "Tablet artık kullanmadığı izinleri istemiyor (diğer uygulamaların üstünde gösterme, parmak izi, arka planda ses)."
+        },
+        {
+          "kapsam": "tablet",
+          "tip": "iyilestirme",
+          "metin": "Paneldeki QR sunucunun adresini taşıyorsa tablet önce o adrese bağlanır; ağda arama yalnız adres cevap vermezse yapılır. Tablet yine yalnız QR'daki kodu taşıyan sunucuya bağlanır."
         }
       ]
     },
@@ -73,6 +78,11 @@
           "kapsam": "panel",
           "tip": "yeni",
           "metin": "Sistem → Lisans ekranına “Lisans dosyası yükle” (internetsiz uzatma dosyası) ve “Donanım değişikliğini bildir” (disk ya da anakart değiştikten sonra) düğmeleri eklendi; ikisi de etkinleştirilmiş kurulumda, lisansı yönetme yetkisi olan kullanıcıya görünür."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "iyilestirme",
+          "metin": "Cihazlar → “Tablet için şifreli bağlantı” QR'ı artık sunucunun adresini de taşır; tablet bu kodu okutunca ağı aramadan doğrudan bağlanır. Eski sürüm bir tablet kodu tanımazsa aynı pencerede adressiz kodu açabilirsiniz."
         }
       ]
     },

@@ -48,6 +48,7 @@
 - **[ÇEKİRDEK]** helmet İKİ AYRI ÖRNEK kurulur (HSTS/CSP-upgrade LAN'a sızarsa panel kullanıcının HSTS önbelleğinde kilitlenir) ve dispatcher'ın adı `helmetMiddleware` olmak ZORUNDADIR (bekçi ada bakar). · bekçi: `Teks-Erp/scripts/test_middleware_order.ts:37` <sub>(CLAUDE.md:95)</sub>
 - **[ÇEKİRDEK]** Fabrika ağında TLS `LAN_TLS_MODE` ile açılır — varsayılan `off` = yalnız HTTP (bugünkü davranış), `dual` HTTP + HTTPS yan yana, `required` HTTPS ve HTTP yalnız 127.0.0.1; sertifika kurulumda üretilen kendinden imzalı ECDSA P-256'dır ve istemci sunucuyu adresle değil sertifikanın SHA-256 parmak iziyle tanır; parmak izini keşiften ya da ilk girişten SABİTLEME (TOFU) — yalnız loopback, göz ile karşılaştırma ya da sabitli panelin QR'ı; sabitli istemci HTTPS düşünce HTTP'ye dönmez; LAN TLS HSTS açmaz; `required`ı bütün istemciler sabitli sürüme geçmeden açma (eski istemci bağlanamaz). Tasarım `docs/design/LAN-TLS.md`. · bekçi: `Teks-Erp/scripts/test_lan_tls.ts`, `Teks-Erp/scripts/test_lan_tls_http.ts` (dual sunucuyla) <sub>(arşiv 2026-10-06 LAN TLS)</sub>
 - **[ÇEKİRDEK]** Tablet sürüm paketi sunucuya YALNIZ şifreli ve sabitli bağlanır (`secureTransportOnly() = !__DEV__`, manifestte düz HTTP kapalı); sunucu panel QR'ı ya da IP + kullanıcının kurulum/paneldeki kodla karşılaştırdığı doğrulama koduyla eklenir — native TLS yoklaması yalnız GÖZLEMDİR (zinciri kaydeder, her bağlantıyı reddeder, veri göndermez), güven kararını QR ya da insan verir.
+- **[ÇEKİRDEK]** Tablet QR'ı sürümlüdür (`teks-erp-tls:1` adressiz · `:2` + https adresleri); biçim yalnız `buildTlsQr`/`parseTlsQr` ikizinde yaşar, adres yalnız ipucudur — tablet izi QR'dakiyle tutmayan adrese bağlanmaz, hiçbiri tutmazsa ağda izle arar; v1 okuyucusu fazla alanı reddettiği için panel adressiz v1 kodunu da açar.
 - **[ÇEKİRDEK]** Katalog ATAMA İÇERMEZ — 'katalog koda, atama script'e/panele'. Unutulan atamayı görünür kılan tek yüzey 'N yetki hiçbir kullanıcıda yok' bandıdır. Yeni ekran görünmüyorsa sırayla bak: (1) satır DB'de mi, (2) kullanıcıya atanmış mı, (3) kullanıcı yeniden giriş yaptı mı (JWT bayat). <sub>(CLAUDE.md:240)</sub>
 
 ### Yasaklar
@@ -172,6 +173,7 @@ Backend: `test_kisa_kimlik_ozet`, `test_audit_followups`, `test_canvas_preview_p
 
 ## Arşiv notları (tam metin, gerekçe ve ölçüm)
 
+- 2026-10-08 · 2026-10-08 — Tablet QR'ına sunucu adresi (v2), eski tablet için v1 [ÇEKİRDEK] — `arsiv/2026-10.md` §2026-10-08 QR adres
 - 2026-10-08 · 2026-10-08 — Ortak tablet vc 60 (1.2.0): yalnız şifreli bağlantı, "Sunucuyu ekle" iki yol, Play izin temizliği [ÇEKİRDEK] + [PROFİL] — `arsiv/2026-10.md` §2026-10-08 Ortak tablet vc 60
 - 2026-10-06 · 2026-10-06 — Fabrika ağında TLS: LAN_TLS_MODE (off/dual/required), kendinden imzalı sertifika + parmak izi sabitleme, TOFU değil (plan 6.1) [ÇEKİRDEK] — `arsiv/2026-10.md` §2026-10-06 LAN TLS
 - 2026-10-05 · 2026-10-05 — Sunucu yalnız kullanılabilir adreslerini duyurur (K1) [ÇEKİRDEK] — `arsiv/2026-10.md` §2026-10-05 K1

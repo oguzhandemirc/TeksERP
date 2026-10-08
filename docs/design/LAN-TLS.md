@@ -34,7 +34,7 @@ Kapsam dışı: sunucu makinesinin ya da istemci cihazın kendisinin ele geçmes
 | c) **QR** | Tablet | Sabitli panelin Cihazlar ekranında (ya da durum sayfasında) gösterilen `teks-erp-tls` QR'ı okutulur — kanal görsel |
 | d) Lisans zinciri (ileride, isteğe bağlı) | Hepsi | Kurulum anahtarıyla imzalı TLS beyanı + satıcı imzalı kira; istemciye satıcı çapası gömülürse firma adı imzalı görünür. Bu turda YOK |
 
-QR yükü: `teks-erp-tls:1:<installationId>:<parmak-izi-hex>:<tlsPort>`. Parmak izi = sertifika DER'inin SHA-256'sı (Electron `certificate.fingerprint` ve Android `MessageDigest(cert.encoded)` ile aynı değer).
+QR yükü: v1 `teks-erp-tls:1:<installationId>:<parmak-izi-hex>:<tlsPort>`; v2 (2026-10-08) `teks-erp-tls:2:<installationId>:<parmak-izi-hex>:<tlsPort>:<adres,adres…>` — adresler https ve QR'daki porttur (en çok 6; panelin bağlı olduğu adres, panel sunucu makinesindeyse o makinenin LAN IPv4'leri), sonraki alanlar yok sayılır. Tablet adresleri sırayla dener ve yalnız izi QR'dakiyle tutan sunucuya bağlanır; hiçbiri tutmazsa ağda izle arar. v1 okuyucusu fazla alanı reddettiği için panel aynı pencerede adressiz v1 kodunu da açar (eski tablet). Parmak izi = sertifika DER'inin SHA-256'sı (Electron `certificate.fingerprint` ve Android `MessageDigest(cert.encoded)` ile aynı değer).
 
 Reddedilenler: keşiften/ilk girişten otomatik sabitleme (TOFU) · IP'ye bağlı sertifika (DHCP) · genel CA (yerel IP için yok) · istemciye ortak CA gömmek (tek ortak paket ⇒ her fabrikada aynı CA özel anahtarı = herkesin anahtarı).
 

@@ -451,6 +451,9 @@ export function registerDiscoveryIpc(): void {
     );
     state.pinnedInstallationId = installationId.trim();
   });
+
+  // Bu makinenin LAN IPv4'leri — panel sunucunun kendisindeyken tablet QR'ına sunucu adresi olarak girer.
+  handleTrusted("discovery:lanHosts", () => localInterfaces().map((n) => n.address));
 }
 
 export type { ServerIdentity };

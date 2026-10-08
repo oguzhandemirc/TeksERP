@@ -10,7 +10,9 @@ import {
   decideCodePin,
   decideQrAddressPin,
   formatFingerprintGroups,
+  pairViaQrHosts,
   parsePairAddress,
+  parseTlsQr,
   parseTlsPins,
   secureAddressUsable,
   type TlsPin,
@@ -68,6 +70,59 @@ describe('decideQrAddressPin (QR + elle adres)', () => {
   it('tutarsa via qr, https adres', () => {
     const d = decideQrAddressPin({ qrText, observed: OBS, now: NOW });
     expect(d).toEqual({ ok: true, pin: { installationId: IID, fingerprint: FP, port: 4443, via: 'qr', pinnedAt: NOW }, baseUrl: 'https://192.168.1.50:4443' });
+  });
+});
+
+describe('QR v2: sunucu adresleri', () => {
+  const ADV = { port: 4443, fingerprint: FP };
+  it('adressiz QR bugünkü v1 dizesinin aynısı (eski tablet okur)', () => {
+    expect(buildTlsQr(IID, ADV)).toBe(`teks-erp-tls:1:${IID}:${FP}:4443`);
+    expect(buildTlsQr(IID, ADV, [])).toBe(`teks-erp-tls:1:${IID}:${FP}:4443`);
+    expect(parseTlsQr(buildTlsQr(IID, ADV))?.hosts).toEqual([]);
+  });
+  it('adresli QR v2: tekilleşir, küçük harfe iner, geçersiz adres girmez, en çok 6', () => {
+    const qr = buildTlsQr(IID, ADV, ['192.168.1.50', 'SahinSrv', '192.168.1.50', 'http://x', 'a b', '::1', '10.0.0.1', '10.0.0.2', '10.0.0.3', '10.0.0.4', '10.0.0.5']);
+    expect(qr.startsWith('teks-erp-tls:2:')).toBe(true);
+    expect(parseTlsQr(qr)).toEqual({ installationId: IID, advert: ADV, hosts: ['192.168.1.50', 'sahinsrv', '10.0.0.1', '10.0.0.2', '10.0.0.3', '10.0.0.4'] });
+  });
+  it('v2 sonraki alanları yok sayar; bozuk adres listesi bütün QR\'ı düşürür', () => {
+    const base = `teks-erp-tls:2:${IID}:${FP}:4443`;
+    expect(parseTlsQr(`${base}:192.168.1.50:yeni-alan`)?.hosts).toEqual(['192.168.1.50']);
+    for (const bad of [base, `${base}:`, `${base}:192.168.1.50,`, `${base}:HOST`, `${base}:http//x`, `${base}:${'1.1.1.1,'.repeat(6)}1.1.1.1`]) {
+      expect(parseTlsQr(bad)).toBeNull();
+    }
+  });
+  it('eski (vc60) okuyucu v2\'yi tanımaz — panel bu yüzden v1\'i de gösterir', () => {
+    const eskiOkuyucu = (t: string) => t.startsWith('teks-erp-tls:1:') && t.slice(15).split(':').length === 3;
+    expect(eskiOkuyucu(buildTlsQr(IID, ADV))).toBe(true);
+    expect(eskiOkuyucu(buildTlsQr(IID, ADV, ['192.168.1.50']))).toBe(false);
+  });
+});
+
+describe('pairViaQrHosts: adresler sırayla, güven izde', () => {
+  const qrText = buildTlsQr(IID, { port: 4443, fingerprint: FP }, ['10.0.0.1', '10.0.0.2', '10.0.0.3']);
+  const now = () => NOW;
+  it('cevapsız ve izi tutmayan adres atlanır; ilk tutan sabitlenir', async () => {
+    const seen: string[] = [];
+    const probe = async (host: string, port: number) => {
+      seen.push(`${host}:${port}`);
+      if (host === '10.0.0.1') return null;
+      if (host === '10.0.0.2') return { ...OBS, host, fingerprint: OTHER };
+      return { ...OBS, host };
+    };
+    const d = await pairViaQrHosts({ qrText, probe, now });
+    expect(seen).toEqual(['10.0.0.1:4443', '10.0.0.2:4443', '10.0.0.3:4443']);
+    expect(d).toEqual({ ok: true, pin: { installationId: IID, fingerprint: FP, port: 4443, via: 'qr', pinnedAt: NOW }, baseUrl: 'https://10.0.0.3:4443' });
+  });
+  it('hiçbiri tutmazsa null (ağ aramasına düşülür); başka kurulumun sunucusu da tutmaz', async () => {
+    const d = await pairViaQrHosts({ qrText, probe: async (host) => ({ ...OBS, host, installationId: '99999999-2222-3333-4444-555555555555' }), now });
+    expect(d).toBeNull();
+  });
+  it('adressiz (v1) QR yoklama yapmaz; vazgeçilince durur', async () => {
+    const probe = jest.fn(async (host: string) => ({ ...OBS, host }));
+    expect(await pairViaQrHosts({ qrText: buildTlsQr(IID, { port: 4443, fingerprint: FP }), probe, now })).toBeNull();
+    expect(await pairViaQrHosts({ qrText, probe, now, stillWanted: () => false })).toBeNull();
+    expect(probe).not.toHaveBeenCalled();
   });
 });
 

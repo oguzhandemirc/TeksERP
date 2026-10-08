@@ -173,12 +173,20 @@ describe('ikiz: Electron/shared/lan-tls.ts', () => {
   });
   it('QR öneki ve parmak izi kalıbı aynı', () => {
     expect(ele).toContain('export const TLS_QR_PREFIX = "teks-erp-tls:1:";');
+    expect(ele).toContain('export const TLS_QR_V2_PREFIX = "teks-erp-tls:2:";');
+    expect(mob).toContain("export const TLS_QR_V2_PREFIX = 'teks-erp-tls:2:';");
+    const max = (src: string) => /export const TLS_QR_MAX_HOSTS = (\d+);/.exec(src)?.[1] ?? null;
+    expect(max(mob)).not.toBeNull();
+    expect(max(ele)).toBe(max(mob));
+    const host = (src: string) => /const QR_HOST = (\/.*\/);/.exec(src)?.[1] ?? null;
+    expect(host(mob)).not.toBeNull();
+    expect(host(ele)).toBe(host(mob));
     expect(ele).toContain('const HEX64 = /^[0-9a-f]{64}$/;');
     const reason = (src: string) => /export const HTTP_TO_PINNED_REASON = (".*");/.exec(src)?.[1] ?? null;
     expect(reason(mob)).not.toBeNull();
     expect(reason(ele)).toBe(reason(mob));
   });
   it('panelin ürettiği QR biçimi tablette ayrışır', () => {
-    expect(parseTlsQr(`teks-erp-tls:1:${IID}:${FP}:4443`)).toEqual({ installationId: IID, advert: { port: 4443, fingerprint: FP } });
+    expect(parseTlsQr(`teks-erp-tls:1:${IID}:${FP}:4443`)).toEqual({ installationId: IID, advert: { port: 4443, fingerprint: FP }, hosts: [] });
   });
 });

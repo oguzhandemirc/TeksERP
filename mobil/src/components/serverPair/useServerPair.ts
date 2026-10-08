@@ -2,7 +2,7 @@
 import { useCallback, useRef, useState } from 'react';
 import Toast from 'react-native-toast-message';
 
-import { decideQrAddressPin, parsePairAddress, parseTlsQr, type PairDecision } from '../../lib/lan-tls';
+import { decideQrAddressPin, pairViaQrHosts, parsePairAddress, parseTlsQr, type PairDecision } from '../../lib/lan-tls';
 import type { DiscoveredServer } from '../../lib/discovery';
 import { discoverServers } from '../../services/discovery.service';
 import { completePairing } from '../../services/serverPairing';
@@ -10,6 +10,8 @@ import { probeTlsDetailed, type TlsProbed } from '../../services/tlsProbe';
 import { useBaseUrlStore } from '../../store/baseUrlStore';
 
 const PROBE_TIMEOUT_MS = 5000;
+/** QR'daki her adres için (v2): cevap vermeyen adres ağ aramasını uzun bekletmesin. */
+const QR_HOST_TIMEOUT_MS = 3000;
 
 export type Step =
   | { kind: 'choose' }
@@ -117,7 +119,7 @@ export function useServerPair(onDone: () => void) {
     else void probeAddress(a.host, a.port);
   };
 
-  // (a) QR → ağda bu izi taşıyan sunucu → yoksa adres
+  // (a) QR → QR'daki adresler (v2) → ağda bu izi taşıyan sunucu → yoksa adres
   const onQr = async (text: string) => {
     const qr = parseTlsQr(text);
     if (!qr) {
@@ -127,6 +129,20 @@ export function useServerPair(onDone: () => void) {
     }
     go({ kind: 'qrSearch', qrText: text, port: qr.advert.port });
     const seq = searchSeq.current;
+    const direct = await pairViaQrHosts({
+      qrText: text,
+      probe: async (host, port) => {
+        const r = await probeTlsDetailed(host, port, QR_HOST_TIMEOUT_MS);
+        return r.ok ? r.server : null;
+      },
+      now: () => new Date().toISOString(),
+      stillWanted: () => seq === searchSeq.current,
+    });
+    if (seq !== searchSeq.current) return;
+    if (direct) {
+      await finish(direct);
+      return;
+    }
     const match = await findQrServer(qr.advert.fingerprint, qr.advert.port, recentUrls);
     if (seq !== searchSeq.current) return;
     if (!match) go({ kind: 'qrAddress', qrText: text, port: qr.advert.port });

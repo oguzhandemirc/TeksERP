@@ -1,15 +1,23 @@
 // Sunucu ekleme akışı (K3): iki eşit yol; http adresi Türkçe hatayla reddedilir; IP yolunda gösterilen kod
 // sunucunun izinden formatFingerprintGroups ile birebir; "Kodlar aynı" kod kararını tamamlamaya gönderir.
 import React from 'react';
-import { act, fireEvent, screen } from '@testing-library/react-native';
+import { act, fireEvent, screen, waitFor } from '@testing-library/react-native';
 
 import { renderWithPaper } from '../../test/render';
-import { INSECURE_ADDRESS_REASON, formatFingerprintGroups } from '../../lib/lan-tls';
+import { INSECURE_ADDRESS_REASON, buildTlsQr, formatFingerprintGroups } from '../../lib/lan-tls';
+import { discoverServers } from '../../services/discovery.service';
 import { probeTlsDetailed } from '../../services/tlsProbe';
 import { completePairing } from '../../services/serverPairing';
 import { ServerPairFlow } from './ServerPairFlow';
 
-jest.mock('../BarcodeScannerModal', () => ({ BarcodeScannerModal: () => null }));
+jest.mock('../BarcodeScannerModal', () => {
+  const { Pressable } = jest.requireActual('react-native');
+  // Okutma taklidi: görünürken `__qr`daki metni okutan düğme.
+  return {
+    BarcodeScannerModal: ({ visible, onScan }: { visible: boolean; onScan: (t: string) => void }) =>
+      visible ? <Pressable testID="taklit-okut" onPress={() => onScan((globalThis as { __qr?: string }).__qr ?? '')} /> : null,
+  };
+});
 jest.mock('../../services/discovery.service', () => ({ discoverServers: jest.fn(async () => ({ candidates: [] })) }));
 jest.mock('../../services/tlsProbe', () => ({ probeTlsDetailed: jest.fn() }));
 jest.mock('../../services/serverPairing', () => ({ completePairing: jest.fn(async () => ({ ok: true })) }));
@@ -70,4 +78,34 @@ it('"Kodlar farklı" bağlanmaz, başa döner ve uyarır', async () => {
   expect(completePairing).not.toHaveBeenCalled();
   expect(screen.getByTestId('sunucu-ekle-qr')).toBeTruthy();
   expect(screen.getByTestId('sunucu-ekle-hata')).toBeTruthy();
+});
+
+describe('QR v2: adresli kod', () => {
+  const IID = '11111111-2222-3333-4444-555555555555';
+  const QR_SERVER = { ...SERVER, installationId: IID };
+  async function scan(text: string) {
+    (globalThis as { __qr?: string }).__qr = text;
+    renderWithPaper(<ServerPairFlow onDone={jest.fn()} />);
+    await press('sunucu-ekle-qr');
+    await press('taklit-okut');
+  }
+  it('QR adresindeki sunucu izi tutarsa ağ aranmadan bağlanır', async () => {
+    (probeTlsDetailed as jest.Mock).mockResolvedValue({ ok: true, server: QR_SERVER });
+    await scan(buildTlsQr(IID, { port: 4443, fingerprint: FP }, ['192.168.1.50']));
+    await waitFor(() => expect(completePairing).toHaveBeenCalled());
+    expect(probeTlsDetailed).toHaveBeenCalledWith('192.168.1.50', 4443, expect.any(Number));
+    expect(discoverServers).not.toHaveBeenCalled();
+    expect((completePairing as jest.Mock).mock.calls[0][0]).toMatchObject({ ok: true, baseUrl: 'https://192.168.1.50:4443', pin: { via: 'qr', fingerprint: FP } });
+  });
+  it('adresteki sunucunun izi farklıysa bağlanmaz, ağ aramasına düşer', async () => {
+    (probeTlsDetailed as jest.Mock).mockResolvedValue({ ok: true, server: { ...QR_SERVER, fingerprint: 'ff'.repeat(32) } });
+    await scan(buildTlsQr(IID, { port: 4443, fingerprint: FP }, ['192.168.1.50']));
+    await waitFor(() => expect(discoverServers).toHaveBeenCalled());
+    expect(completePairing).not.toHaveBeenCalled();
+  });
+  it('adressiz (v1) QR doğrudan ağ aramasına gider', async () => {
+    await scan(buildTlsQr(IID, { port: 4443, fingerprint: FP }));
+    await waitFor(() => expect(discoverServers).toHaveBeenCalled());
+    expect(probeTlsDetailed).not.toHaveBeenCalled();
+  });
 });
