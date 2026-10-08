@@ -1,20 +1,35 @@
-//! Kendini güncelleme (§10): paketteki daha yeni ikili imzalı listeyle bağlanır (kurulu sürüm dizini
-//! doğrulanır, KOPYANIN özeti listedekiyle tutmadan hiçbir ikili çalışmaz — DAGK-3), künyesi kopyadan
-//! sınanır, çalışan ikiliyle yer değiştirir; yeni ikili doğrulanmadan 3 açılışı aşarsa eskisi geri konur.
+//! Kendini güncelleme (§10, plan `GUNCELLEYICI-SAGLAMLIK.md` §4.2 — W1): paketteki daha yeni ikili imzalı listeyle
+//! bağlanır (KOPYANIN özeti listedekiyle tutmadan hiçbir ikili çalışmaz — DAGK-3), künyesi kopyadan sınanır (ad ·
+//! platform · sürüm · çapa kipi), çalışan ikiliyle yer değiştirir; yeni ikili doğrulanmadan 3 açılışı aşarsa geri döner.
+//! W1: önce güncelleyici (aday HAZIR iken backend işleminden ÖNCE; `DONDUR`da da, K1'de hiç) · son bilinen iyi
+//! (`.lkg`; kanıtsız yeni ikili ilk HATA'da ona döner) · ilk SAĞLIKLI tur ölçütü.
 mod common;
 
 use common::*;
-use std::path::PathBuf;
+use serde_json::json;
+use std::path::{Path, PathBuf};
+use std::sync::atomic::Ordering;
+use std::sync::Arc;
 use tekserp_dogrulama::paket_zinciri::PackageTrust;
-use tekserp_guncelleyici::selfupdate::{self, Startup};
+use tekserp_guncelleyici::engine::{Engine, TickResult};
+use tekserp_guncelleyici::ipc::State;
+use tekserp_guncelleyici::selfupdate::{self, AfterAttempt, SelfState, Startup, OWN_TARGET};
 use tekserp_guncelleyici::trust::ANCHOR_MODE;
+use tekserp_hizmet::logfile::RotatingLog;
 
 fn exe_json(name: &str, version: &str) -> String {
     exe_json_mode(name, version, Some(ANCHOR_MODE))
 }
 
 fn exe_json_mode(name: &str, version: &str, mode: Option<&str>) -> String {
-    let mut k = serde_json::json!({ "ad": name, "surum": version, "hedef": "windows", "testCapasi": false });
+    exe_json_full(name, version, mode, Some(OWN_TARGET))
+}
+
+fn exe_json_full(name: &str, version: &str, mode: Option<&str>, target: Option<&str>) -> String {
+    let mut k = serde_json::json!({ "ad": name, "surum": version, "testCapasi": false });
+    if let Some(t) = target {
+        k["hedef"] = t.into();
+    }
     if let Some(m) = mode {
         k["capaKipi"] = m.into();
     }
@@ -59,10 +74,13 @@ fn stages_newer_binary_and_verifies_on_boot() {
     assert!(read(&own).contains("9.9.9"), "yeni ikili asıl adda");
     let old = own.with_file_name("tekserp-guncelleyici.eski.exe");
     assert!(read(&old).contains("0.1.0"), "eski ikili yanda");
-    // Yeni ikilinin ilk açılışı: sayaç 1, doğrulama eskisini siler.
+    // Yeni ikilinin ilk açılışı: sayaç 1; doğrulama eskisini SİLMEZ — son bilinen iyi yoksa o olur (W1 §4.2 madde 2).
     assert_eq!(selfupdate::on_startup(&env, &w.layout, &own, "9.9.9"), Startup::Continue);
     selfupdate::mark_healthy(&env, &w.layout, &own, "9.9.9");
-    assert!(!old.exists(), "doğrulanınca .eski.exe silinir");
+    assert!(!old.exists(), "doğrulanınca .eski.exe kalmaz");
+    assert!(read(&lkg_of(&own)).contains("0.1.0"), "eski ikili son bilinen iyi (.lkg) oldu");
+    let s = state(&w);
+    assert_eq!((s.durum.as_str(), s.lkg_version.as_deref(), s.proven), ("DOGRULANDI", Some("0.1.0"), false));
     assert_eq!(selfupdate::on_startup(&env, &w.layout, &own, "9.9.9"), Startup::Continue);
     assert!(read(&own).contains("9.9.9"));
 }
@@ -170,4 +188,217 @@ fn other_anchor_mode_binary_is_refused() {
         assert!(!own.with_file_name("tekserp-guncelleyici.yeni.exe").exists(), "{tag}: yan dosya açılmadı");
         assert!(!w.layout.self_update_file().exists(), "{tag}: kendini güncelleme durumu yazılmadı");
     }
+}
+
+// ── W1 ────────────────────────────────────────────────────────────────────────────────────────
+
+const OWN_OLD: &str = "0.1.0";
+const OWN_NEW: &str = "9.9.9";
+
+fn lkg_of(own: &Path) -> PathBuf {
+    own.with_file_name("tekserp-guncelleyici.lkg.exe")
+}
+
+fn state(w: &World) -> SelfState {
+    selfupdate::read(&w.env(), &w.layout).expect("kendi.json")
+}
+
+/// Kurulu ikili `OWN_OLD`; yeni paket (sunucuda) `OWN_NEW` güncelleyici taşır.
+fn w1_world(tag: &str, s: Setup) -> (World, PathBuf) {
+    let w = World::new(tag, Setup { packaged_updater: Some(exe_json("tekserp-guncelleyici", OWN_NEW)), ..s });
+    let own = w.layout.updater_dir().join("tekserp-guncelleyici.exe");
+    std::fs::write(&own, exe_json("tekserp-guncelleyici", OWN_OLD)).unwrap();
+    (w, own)
+}
+
+/// "Süreç başlangıcı": `version` sürümlü ikili olarak çalışan motor (kendini güncellemesi açık).
+fn engine_as(w: &World, own: &Path, version: &str) -> Engine {
+    let mut e = Engine::new(w.env(), w.layout.clone(), w.anchor.clone(), Arc::new(RotatingLog::disabled()), Some(own.to_path_buf()));
+    e.own_version = version.to_string();
+    e
+}
+
+fn announced_block() -> serde_json::Value {
+    json!({ "guncelleyici": { "surum": OWN_NEW, "sha256": sha_hex(exe_json("tekserp-guncelleyici", OWN_NEW).as_bytes()) } })
+}
+
+fn journal_ops(w: &World) -> usize {
+    std::fs::read_to_string(w.layout.journal_file()).map(|t| t.lines().filter(|l| l.contains("\"ISLEM\"")).count()).unwrap_or(0)
+}
+
+/// §4.2 madde 1: aday HAZIR ve paketteki güncelleyici YENİ → backend işleminden ÖNCE kendini yeniler (`durum.bilgi =
+/// GUNCELLEYICI_ONCE`, işlem günlüğünde işlem YOK, `current` ESKİ); yeni ikili aynı paketi yeniden doğrulayıp işlemi
+/// yürütür, BASARILI ile kendini son bilinen iyi yapar.
+#[test]
+fn once_guncelleyici() {
+    let (w, own) = w1_world("once", Setup::default());
+    let r = engine_as(&w, &own, OWN_OLD).tick(&|| false);
+    assert_eq!(r, TickResult::RestartForSelfUpdate, "{:?}", w.status().map(|s| s.message));
+    assert!(read(&own).contains(OWN_NEW), "yeni ikili asıl adda");
+    assert_eq!(w.current().as_deref(), Some(OLD), "backend'e dokunulmadı");
+    assert_eq!(journal_ops(&w), 0, "işlem başlamadı — güncelleyici ÖNCE");
+    let st = w.status().unwrap();
+    assert_eq!(st.notice.as_ref().map(|n| n.code.as_str()), Some("GUNCELLEYICI_ONCE"), "{st:?}");
+    assert_eq!(st.error_code, None);
+    let ran = w.faults.executed.lock().unwrap().clone();
+    assert!(!ran.is_empty() && ran.iter().all(|p| name(p) == "tekserp-guncelleyici.yeni.exe"), "yalnız doğrulanmış kopya: {ran:?}");
+    // Yeni ikili: aynı paket, işlemi o yürütür.
+    assert_eq!(selfupdate::on_startup(&w.env(), &w.layout, &own, OWN_NEW), Startup::Continue);
+    let e = engine_as(&w, &own, OWN_NEW);
+    assert!(matches!(e.tick(&|| false), TickResult::Idle(_)));
+    assert_eq!((w.state(), w.current().as_deref()), (Some(State::Succeeded), Some(NEW)), "{:?}", w.status().map(|s| s.message));
+    assert!(e.verified(), "işlemi bitiren tur sağlıklı");
+    let s = state(&w);
+    assert_eq!((s.durum.as_str(), s.proven, s.lkg_version.as_deref()), ("DOGRULANDI", true, Some(OWN_NEW)), "{s:?}");
+    assert!(read(&lkg_of(&own)).contains(OWN_NEW), "BASARILI: son bilinen iyi = işlemi bitiren ikili");
+    assert!(!own.with_file_name("tekserp-guncelleyici.eski.exe").exists());
+}
+
+/// §4.2 madde 2: son bilinen iyi. Kanıtsız yeni ikili HATA ile biten İLK denemesinde `.lkg`ye döner (özeti tutan KOPYA;
+/// `.lkg` yerinde kalır), geri alınan sürüm yeniden yerleşmez; kanıtlanmış ikili HATA'da dönmez.
+#[test]
+fn lkg_donusu() {
+    let lease = LeaseOpts { update: Some(policy("ONAYLI", &open_window(), None)), ..LeaseOpts::default() };
+    let (w, own) = w1_world("lkg", Setup { lease, ..Setup::default() });
+    // ONAY_BEKLIYOR iken de önce güncelleyici.
+    assert_eq!(engine_as(&w, &own, OWN_OLD).tick(&|| false), TickResult::RestartForSelfUpdate);
+    assert_eq!(selfupdate::on_startup(&w.env(), &w.layout, &own, OWN_NEW), Startup::Continue);
+    let e = engine_as(&w, &own, OWN_NEW);
+    assert!(matches!(e.tick(&|| false), TickResult::Idle(_)));
+    assert_eq!(w.state(), Some(State::Ready));
+    assert!(read(&lkg_of(&own)).contains(OWN_OLD), "ilk sağlıklı tur: eski ikili son bilinen iyi");
+    // Onay gelir, işlem geri alınamaz (HATA).
+    w.write_intent(&intent(Some(approval("onay-1", NEW, "HEMEN"))));
+    w.faults.unhealthy_all.store(true, Ordering::SeqCst);
+    assert_eq!(e.tick(&|| false), TickResult::RestartForSelfUpdate, "{:?}", w.status().map(|s| s.message));
+    assert_eq!(w.state(), Some(State::Failed));
+    assert!(read(&own).contains(OWN_OLD), "son bilinen iyi asıl adda");
+    assert!(read(&lkg_of(&own)).contains(OWN_OLD), ".lkg yerinde kalır");
+    assert!(read(&own.with_file_name("tekserp-guncelleyici.bozuk.exe")).contains(OWN_NEW));
+    let s = state(&w);
+    assert_eq!((s.durum.as_str(), s.refused.as_deref()), ("GERI_ALINDI", Some(OWN_NEW)), "{s:?}");
+    // Dönülen ikili HATA'yı sürdürür (insan); aynı sürüm ondan yeniden yerleşmez.
+    assert_eq!(selfupdate::on_startup(&w.env(), &w.layout, &own, OWN_OLD), Startup::Continue);
+    assert!(matches!(engine_as(&w, &own, OWN_OLD).tick(&|| false), TickResult::Idle(_)));
+    assert_eq!(w.status().unwrap().error_code.as_deref(), Some("INSAN_GEREKIYOR"));
+    let again = selfupdate::stage_from(&w.env(), &w.layout, &own, OWN_OLD, &w.layout.version_dir(NEW), &keys(&w), None);
+    assert_eq!(again, Ok(None), "geri alınan sürüm yeniden yerleşmez");
+    assert!(read(&own).contains(OWN_OLD));
+    // Kanıtlanmış ikili HATA'da dönmez.
+    let (w, own) = setup("lkg-kanitli", Some(exe_json("tekserp-guncelleyici", OWN_NEW)));
+    let env = w.env();
+    assert_eq!(stage(&w, &own, OWN_OLD), Ok(true));
+    assert_eq!(selfupdate::after_attempt(&env, &w.layout, &own, OWN_NEW, true), AfterAttempt::Nothing);
+    assert_eq!(selfupdate::after_attempt(&env, &w.layout, &own, OWN_NEW, false), AfterAttempt::Nothing, "kanıtlanmış: dönmez");
+    assert!(read(&own).contains(OWN_NEW));
+    // Özeti tutmayan `.lkg`ye dönülmez (doğrulanmamış bayt çalışmaz).
+    let (w, own) = setup("lkg-kurcali", Some(exe_json("tekserp-guncelleyici", OWN_NEW)));
+    let env = w.env();
+    assert_eq!(stage(&w, &own, OWN_OLD), Ok(true));
+    selfupdate::mark_healthy(&env, &w.layout, &own, OWN_NEW);
+    std::fs::write(lkg_of(&own), exe_json("tekserp-guncelleyici", "0.0.9")).unwrap();
+    assert_eq!(selfupdate::after_attempt(&env, &w.layout, &own, OWN_NEW, false), AfterAttempt::Nothing);
+    assert!(read(&own).contains(OWN_NEW), "kurcalı .lkg asıl ada konmadı");
+}
+
+/// §4.6: platform geçmez — `kunye.hedef` çalışanın hedefi değilse (ya da yoksa) yerleşmez.
+#[test]
+fn kendi_platform_gecmez() {
+    let other = if OWN_TARGET == "windows" { "linux" } else { "windows" };
+    for (tag, target) in [("oteki-platform", Some(other)), ("hedefsiz", None)] {
+        let (w, own) = setup(tag, Some(exe_json_full("tekserp-guncelleyici", OWN_NEW, Some(ANCHOR_MODE), target)));
+        let r = stage(&w, &own, OWN_OLD);
+        assert!(r.as_ref().is_err_and(|e| e.contains("platform")), "{tag}: {r:?}");
+        assert!(read(&own).contains(OWN_OLD), "{tag}: kurulu ikili yerinde");
+        assert!(!own.with_file_name("tekserp-guncelleyici.yeni.exe").exists(), "{tag}: yan dosya kalmadı");
+        assert!(!w.layout.self_update_file().exists(), "{tag}: kendini güncelleme durumu yazılmadı");
+    }
+    // Bildirimin ilan ettiği sürümden sapan künye de yerleşmez.
+    let (w, own) = setup("ilan", Some(exe_json("tekserp-guncelleyici", OWN_NEW)));
+    let r = selfupdate::stage_from(&w.env(), &w.layout, &own, OWN_OLD, &w.layout.version_dir(OLD), &keys(&w), Some("9.9.8"));
+    assert!(r.as_ref().is_err_and(|e| e.contains("ilan")), "{r:?}");
+    assert!(read(&own).contains(OWN_OLD));
+}
+
+/// AK-3: `DONDUR` backend sürümünü dondurur, güncelleyiciyi DEĞİL — imzalı bildirim yeni ikili ilan ediyorsa paket
+/// hazırlanır, ikili yenilenir, backend aynen kalır; blok yoksa paket indirilmez bile.
+#[test]
+fn dondur_kendini_yeniler() {
+    let lease = || LeaseOpts { update: Some(policy("DONDUR", &[], None)), ..LeaseOpts::default() };
+    let (w, own) = w1_world("dondur", Setup { lease: lease(), manifest_extra: Some(announced_block()), ..Setup::default() });
+    assert_eq!(engine_as(&w, &own, OWN_OLD).tick(&|| false), TickResult::RestartForSelfUpdate, "{:?}", w.status().map(|s| s.message));
+    assert!(read(&own).contains(OWN_NEW), "ikili yenilendi");
+    assert_eq!((w.current().as_deref(), w.backend().version.as_deref()), (Some(OLD), Some(OLD)), "backend dondurulmuş kalır");
+    assert_eq!(journal_ops(&w), 0);
+    let st = w.status().unwrap();
+    assert_eq!(st.decision.as_ref().map(|d| (d.karar.label(), d.neden.clone())), Some(("DONDURULDU", Some("POLITIKA".into()))));
+    assert_eq!(st.notice.as_ref().map(|n| n.code.as_str()), Some("GUNCELLEYICI_ONCE"));
+    // Yeni ikili de dondurmaya uyar: backend'e dokunmaz.
+    assert_eq!(selfupdate::on_startup(&w.env(), &w.layout, &own, OWN_NEW), Startup::Continue);
+    assert!(matches!(engine_as(&w, &own, OWN_NEW).tick(&|| false), TickResult::Idle(_)));
+    assert_eq!((w.current().as_deref(), journal_ops(&w)), (Some(OLD), 0));
+    // İmzalı blok yok: DONDUR'da paket indirilmez, ikili değişmez.
+    let (w, own) = w1_world("dondur-bloksuz", Setup { lease: lease(), ..Setup::default() });
+    assert!(matches!(engine_as(&w, &own, OWN_OLD).tick(&|| false), TickResult::Idle(_)));
+    assert!(read(&own).contains(OWN_OLD));
+    assert!(!w.layout.version_dir(NEW).exists(), "paket indirilmedi");
+}
+
+/// AK-3: lisans yaptırımı (K1, `yaptirim.guncellemeDonuk`) varken HİÇBİR ŞEY yenilenmez — ne backend ne güncelleyici;
+/// paket indirilmez, künye koşturulmaz (politika OTOMATİK de DONDUR da olsa).
+#[test]
+fn k1_hicbir_sey_yenilenmez() {
+    for (tag, kip) in [("k1-otomatik", "OTOMATIK"), ("k1-dondur", "DONDUR")] {
+        let lease = LeaseOpts { update: Some(policy(kip, &open_window(), None)), frozen_by_sanction: true, ..LeaseOpts::default() };
+        let (w, own) = w1_world(tag, Setup { lease, manifest_extra: Some(announced_block()), ..Setup::default() });
+        let e = engine_as(&w, &own, OWN_OLD);
+        for _ in 0..3 {
+            assert!(matches!(e.tick(&|| false), TickResult::Idle(_)), "{tag}");
+        }
+        assert!(read(&own).contains(OWN_OLD), "{tag}: güncelleyici yenilenmedi");
+        assert_eq!((w.current().as_deref(), journal_ops(&w)), (Some(OLD), 0), "{tag}: backend yenilenmedi");
+        assert!(!w.layout.version_dir(NEW).exists(), "{tag}: paket indirilmedi");
+        assert!(w.faults.executed.lock().unwrap().is_empty(), "{tag}: hiçbir ikili koşturulmadı");
+        assert!(!w.layout.self_update_file().exists(), "{tag}");
+        let st = w.status().unwrap();
+        assert_eq!(st.decision.map(|d| d.neden), Some(Some("YAPTIRIM".into())), "{tag}");
+    }
+}
+
+/// §4.2 madde 3: "ilk sağlıklı tur" = kilit · günlük · kira/HAK okundu · karar verildi · `durum.json` yazıldı. Ayarı
+/// okunamayan tur turu bitirse de yeni ikiliyi DOĞRULAMAZ (`.eski` yerinde, sayaç işler).
+#[test]
+fn ilk_saglikli_tur_olcutu() {
+    let (w, own) = setup("saglikli", Some(exe_json("tekserp-guncelleyici", OWN_NEW)));
+    assert_eq!(stage(&w, &own, OWN_OLD), Ok(true));
+    assert_eq!(selfupdate::on_startup(&w.env(), &w.layout, &own, OWN_NEW), Startup::Continue);
+    let settings = std::fs::read(w.layout.settings_file()).unwrap();
+    std::fs::write(w.layout.settings_file(), b"{bozuk").unwrap();
+    let e = engine_as(&w, &own, OWN_NEW);
+    assert!(matches!(e.tick(&|| false), TickResult::Idle(_)));
+    assert_eq!(w.status().unwrap().error_code.as_deref(), Some("AYAR_BICIMSIZ"));
+    assert!(!e.verified());
+    assert_eq!(state(&w).durum, "YER_DEGISTIRILDI", "kararsız tur doğrulamaz");
+    assert!(own.with_file_name("tekserp-guncelleyici.eski.exe").exists());
+    std::fs::write(w.layout.settings_file(), settings).unwrap();
+    assert!(matches!(e.tick(&|| false), TickResult::Idle(_)));
+    assert!(e.verified());
+    assert_eq!(state(&w).durum, "DOGRULANDI");
+    assert!(read(&lkg_of(&own)).contains(OWN_OLD));
+}
+
+/// Eski `kendi.json` (W1 öncesi alanlar) aynen okunur; yeni alanlar eski okuyucuya ek alandır.
+#[test]
+fn eski_kendi_json_okunur() {
+    let (w, own) = setup("eski-kendi", Some(exe_json("tekserp-guncelleyici", OWN_NEW)));
+    std::fs::create_dir_all(w.layout.work()).unwrap();
+    std::fs::write(
+        w.layout.self_update_file(),
+        json!({ "durum": "DOGRULANDI", "eskiSurum": "0.0.9", "yeniSurum": OWN_OLD, "acilis": 1, "zaman": "2026-10-01T00:00:00Z" })
+            .to_string(),
+    )
+    .unwrap();
+    let s = state(&w);
+    assert_eq!((s.proven, s.lkg_version, s.refused), (false, None, None));
+    assert_eq!(stage(&w, &own, OWN_OLD), Ok(true));
 }

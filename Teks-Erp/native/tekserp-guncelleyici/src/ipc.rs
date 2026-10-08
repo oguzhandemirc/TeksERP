@@ -225,7 +225,7 @@ pub struct LastDetail {
     pub message: Option<String>,
 }
 
-/// Bilgi (sorun DEĞİL): bu turda ölçülemeyen ama işi durdurmayan şey — bugün yalnız `SEMA_OLCULEMEDI`.
+/// Bilgi (sorun DEĞİL): işi durdurmayan şey — `SEMA_OLCULEMEDI` (ölçülemedi) · `GUNCELLEYICI_ONCE` (önce kendini yeniledi).
 /// `hataKodu` "şu anki sorun"dur ve onay kuralı onu bekleyiş nedeni sayar; bilgi oraya yazılmaz.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct Notice {

@@ -50,6 +50,9 @@ pub const SEMA_ILERIDE: &str = "SEMA_ILERIDE";
 /// okunamadı). Güncelleme DURMAZ — göç adımı veritabanını zaten ister, düşerse telafiyle döner; engel acil sürümü de
 /// bloklardı. Sessiz de geçilmez: günlüğe ve durum dosyasına kod + nedenle yazılır.
 pub const SEMA_OLCULEMEDI: &str = "SEMA_OLCULEMEDI";
+/// BİLGİ, sorun DEĞİL (`durum.bilgi`): paket HAZIR ve taşıdığı güncelleyici çalışandan yeni — backend işleminden ÖNCE
+/// güncelleyici kendini yeniledi (plan §4.2 madde 1; `DONDUR`da da, AK-3); işlemi yeni ikili yeniden doğrulayıp yürütür.
+pub const GUNCELLEYICI_ONCE: &str = "GUNCELLEYICI_ONCE";
 pub const GOC_HATASI: &str = "GOC_HATASI";
 pub const GOC_ZAMAN_ASIMI: &str = "GOC_ZAMAN_ASIMI";
 pub const SAGLIK_ZAMAN_ASIMI: &str = "SAGLIK_ZAMAN_ASIMI";

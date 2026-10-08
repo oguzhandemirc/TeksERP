@@ -141,18 +141,11 @@ fn body(layout: &Layout, log: &Arc<RotatingLog>, stop: &AtomicBool, running: &dy
     running();
     log.info(&format!("güncelleyici başladı (sürüm {}; test çapası {})", env!("CARGO_PKG_VERSION"), crate::trust::TEST_ANCHOR));
     ensure_own_recovery(log);
-    let engine = Engine::new(env.clone(), layout.clone(), anchor, Arc::clone(log), own.clone());
+    let engine = Engine::new(env.clone(), layout.clone(), anchor, Arc::clone(log), own);
     let should_stop = || stop.load(Ordering::SeqCst);
-    let mut healthy_marked = false;
+    // Yeni ikilinin doğrulanması (ilk SAĞLIKLI tur) motorun içindedir: ölçüt iki platformda tek yerde.
     while !should_stop() {
-        let r = engine.tick(&should_stop);
-        if !healthy_marked {
-            if let Some(own) = &own {
-                selfupdate::mark_healthy(&env, layout, own, env!("CARGO_PKG_VERSION"));
-            }
-            healthy_marked = true;
-        }
-        match r {
+        match engine.tick(&should_stop) {
             TickResult::RestartForSelfUpdate => return codes::EXIT_SELF_UPDATE,
             TickResult::Idle(d) => crate::wait::until_change_or(&env, layout, d, &should_stop),
         }

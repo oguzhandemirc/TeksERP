@@ -30,7 +30,7 @@ fn identity() -> String {
     serde_json::json!({
         "ad": "tekserp-guncelleyici",
         "surum": env!("CARGO_PKG_VERSION"),
-        "hedef": std::env::consts::OS,
+        "hedef": tekserp_guncelleyici::selfupdate::OWN_TARGET,
         "testCapasi": TEST_ANCHOR,
         "capaKipi": ANCHOR_MODE,
         "paketZinciri": true,
