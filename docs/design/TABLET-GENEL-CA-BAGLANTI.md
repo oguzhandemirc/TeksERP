@@ -1,6 +1,6 @@
 # Tablet: internet sertifikalı (genel CA) sunucuya bağlantı
 
-**Durum:** TASARIM — kod yok. Kullanıcı kararı K2 (2026-10-08): tablet, Cloudflare gibi herkesin güvendiği bir sertifika yetkilisiyle doğrulanan ALAN ADLI sunuculara da bağlanabilsin. Çözdüğü iki iş: Play inceleme kurulumu (`PLAY-DEMO-SUNUCU.md`) ve bulut kurulumu (`BULUT-KURULUM.md`, tablet Cloudflare üzerinden). Yeni Play paketi gerektirir.
+**Durum:** G1–G5 İNDİ (ortak tablet vc61 1.3.0, runtimeVersion 57.0); G6 (gerçek tablet) bekliyor. Kullanıcı kararları 2026-10-08: KA = a (yalnız `*.etkiliyazilim.com`), KB = a (Play'e ilk gönderim vc61, inceleme sunucusu Cloudflare arkasında). Önceki durum: TASARIM — Kullanıcı kararı K2 (2026-10-08): tablet, Cloudflare gibi herkesin güvendiği bir sertifika yetkilisiyle doğrulanan ALAN ADLI sunuculara da bağlanabilsin. Çözdüğü iki iş: Play inceleme kurulumu (`PLAY-DEMO-SUNUCU.md`) ve bulut kurulumu (`BULUT-KURULUM.md`, tablet Cloudflare üzerinden). Yeni Play paketi gerektirir.
 **Bağlam:** `LAN-TLS.md` (sabitli kip) · `docs/kurallar/kesif-cihaz.md` ("tablet sürüm paketi yalnız şifreli ve sabitli bağlanır" — bu tasarım inince o satır değişir) · arşiv `2026-10.md` §2026-10-08 gelen bağlantı istisnası.
 
 ## 1. Ölçüm — vc60 bugün ne yapıyor (salt okuma, kod)
@@ -62,7 +62,8 @@
 
 - **QR kipi TAŞIMAZ.** QR yalnız adresi (+ `installationId`) taşır; kip tablette adresten türer — kötü bir QR kip seçtiremez. İnternet kipindeki sunucunun QR'ında parmak izi alanı anlamsızdır (kenar sertifikası döner); panel QR'ına adres ekleme işi (`gece/qr-adres`) ile biçim birlikte kararlaştırılır: ayrı önek ya da iz alanı `-`. vc60 tanımadığı öneki reddeder ("şifreli bağlantı QR'ı değil") — güvenli.
 - **Bulut kurulumunun alan adı:** tek kaynak kanal kaydı (`deploy/kanallar.json` bulut bloğu, T1: alt alan = kanal kodu) → `kur.mjs` DNS kaydını ve backend ortamını yazar. Tablete adı operatör yazar ya da panelin QR'ı verir. ⚠️ `BULUT-KURULUM.md` R11 ("tablette adres kanal kaydından gömülü") TEK ORTAK Play paketiyle çelişir (paket herkese aynı) → R11 "elle ya da panel QR'ı, değişiklik onaylı" diye düzeltilir (G5).
-- **İzinli üst alan** tek kaynaktan gelir (`deploy/kanallar.json`te genel alan alanı → derlemede `app.config` `extra`), koda literal gömülmez; bekçi eşitliği ölçer.
+- **İzinli üst alan** tek kaynaktan gelir — kullanıcı kararı KA (2026-10-08): "koda sabit ama tek yerde" ⇒ `INTERNET_PARENT_DOMAINS` (`mobil/src/lib/internet-tls.ts`); bekçi (`internet-tls.test.ts`) `mobil/src` altında başka tırnaklı literal arar. Önceki öneri (`kanallar.json` → `app.config extra`) uygulanmadı: tek ortak pakette kanal kaydı tablete girmez.
+- **G4 kararı (uygulandı):** QR v2 internet kipindeki adı TAŞIMAZ — tablet v2 adres listesindeki internet adını yoklamaz ve sabitlemez (`pairViaQrHosts`), QR + adres adımı da internet adını reddeder. Gerekli değil: internet kipindeki sunucu kod istemediği için adı yazmak yeterlidir; panel genel CA'lı adrese bağlıyken sabiti olmadığından QR zaten göstermez. Panel kodu değişmedi.
 - **Eski vc60:** internet kipini bilmez; böyle bir adresi kullanmaz, "Sunucuyu ekle"ye döner (M6). Bulut/inceleme talimatı vc61+ yazar. vc61'e geçen tabletin vc60 sabitleri olduğu gibi geçerlidir (kayıtta kip yoksa = sabitli). Backend değişmez → "backend önce" sırası etkilenmez, `minVersion` değişmez.
 
 ## 6. Dilimler

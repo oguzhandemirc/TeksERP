@@ -17,6 +17,36 @@
   ],
   "yayinlar": [
     {
+      "id": "2026-10-08d",
+      "durum": "TASLAK — terfide kullanıcı onayı",
+      "baslik": "Tablet internet adresli sunucuya da bağlanır",
+      "surumler": {
+        "tablet": "1.3.0"
+      },
+      "maddeler": [
+        {
+          "kapsam": "tablet",
+          "tip": "yeni",
+          "metin": "“Sunucuyu ekle” → “Adresi yaz”a size verilen internet adresi (…etkiliyazilim.com ile biten ad) yazılabilir. Bu adreste doğrulama kodu sorulmaz: tablet sunucunun internet sertifikasını kendisi doğrular “İnternette doğrulandı” sayfasında sunucunun adını gösterip eklensin mi diye sorar; “Ekle”ye dokunun."
+        },
+        {
+          "kapsam": "tablet",
+          "tip": "iyilestirme",
+          "metin": "Fabrika ağındaki sunucu (IP adresi ya da bilgisayar adı) bugünkü gibi QR ya da doğrulama koduyla eklenir; değişen bir şey yok."
+        },
+        {
+          "kapsam": "tablet",
+          "tip": "iyilestirme",
+          "metin": "Bağlanılamadığında tablet sebebini ayrı söyler: tablet saati yanlış, ağ bağlantıyı denetliyor (BT bölümünden istisna isteyin), adres sertifikayla eşleşmiyor ya da sunucuya ulaşılamıyor."
+        },
+        {
+          "kapsam": "tablet",
+          "tip": "iyilestirme",
+          "metin": "Ayarlar'daki sunucu sayfası sunucunun nasıl doğrulandığını gösterir (fabrika ağı kodu ya da internet sertifikası). Sunucu değişirse tablet bağlanmaz ve sunucuyu yeniden eklemenizi ister."
+        }
+      ]
+    },
+    {
       "id": "2026-10-08c",
       "durum": "TASLAK — terfide kullanıcı onayı",
       "baslik": "Panel sunucuya yalnız şifreli bağlanır",
