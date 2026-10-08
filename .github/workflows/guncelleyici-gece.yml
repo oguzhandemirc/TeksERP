@@ -98,6 +98,8 @@ jobs:
             cargo-gece-${{ runner.os }}-${{ steps.rustc.outputs.surum }}-
       # paket_prova'nın iki testi `deploy/satici/prova-paket-zinciri.mjs` tarafından ortamla sürülür
       # (TEKSERP_PAKET_PROVA); tek başına koşulamaz → atlanır (gerçek paket provası T2'nin işi).
+      - name: NEGATIF SONDA (geri alınacak) — bilerek kırılan #[ignore] test
+        run: printf '#[test]\n#[ignore]\nfn t0_sonda_kirmizi() { panic!("T0 negatif sonda"); }\n' > tekserp-dogrulama/tests/t0_sonda.rs
       - name: cargo test --include-ignored (napi'siz üyeler)
         run: cargo test --locked --workspace --exclude lisans-cekirdek -- --include-ignored --skip prova_hazirla --skip prova_motor
       - name: cargo test --include-ignored (lisans çekirdeği, test çapası)

@@ -67,6 +67,8 @@ jobs:
             cargo-native-linux-${{ steps.rustc.outputs.surum }}-
       - name: Biçim + clippy (bütün çalışma alanı, Linux yerel hedef)
         run: node scripts/kapi.mjs denetle
+      - name: NEGATIF SONDA (geri alınacak) — bilerek kırılan test
+        run: printf '#[test]\nfn t0_sonda_kirmizi() { panic!("T0 negatif sonda"); }\n' > tekserp-dogrulama/tests/t0_sonda.rs
       - name: cargo test (vektörler + durum makinesi + öldür-yeniden başlat, Linux dosya sistemi)
         run: node scripts/kapi.mjs test
       # T1 (GUNCELLEYICI-SAGLAMLIK §10): gerçek Linux dumanı bu adımın yerine iner (L4b · L5 · L6 sonrası).
