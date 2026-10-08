@@ -1,6 +1,6 @@
 //! Gerçek ortam (`env::Env`in üretim uygulamaları): dosya sistemi, çocuk süreç, ağ, saat — derleme hedefinin
-//! işletim sistemi bağlarıyla (`#[cfg]` yalnız burada ve `platform/` altında). Unix dalları geliştirme/test
-//! içindir (sembolik bağ, `rename(2)`); Windows dalları `windows::sys`e (Win32) iner.
+//! işletim sistemi bağlarıyla (`#[cfg]` yalnız burada ve `platform/` altında). Unix dalları `linux::sys`e
+//! (sembolik bağ, `rename(2)`, `O_NOFOLLOW`, `statvfs`, süreç grubu), Windows dalları `windows::sys`e (Win32) iner.
 use crate::env::{Clock, Env, EnvError, EnvResult, Events, Fs, HttpResponse, Net, Procs, Protect, ReadSeek, Services, SyncWrite};
 use crate::env::{Cmd, CmdOut};
 use std::io::{self, Read, Write};
@@ -28,6 +28,12 @@ impl Fs for RealFs {
         std::fs::read(p)
     }
 
+    #[cfg(unix)]
+    fn read_untrusted(&self, p: &Path, max: u64) -> io::Result<Vec<u8>> {
+        super::linux::sys::read_untrusted(p, max)
+    }
+
+    #[cfg(windows)]
     fn read_untrusted(&self, p: &Path, max: u64) -> io::Result<Vec<u8>> {
         let deny = |why: &str| io::Error::new(io::ErrorKind::PermissionDenied, format!("{}: {why}", p.display()));
         if let Some(parent) = p.parent() {
@@ -265,13 +271,6 @@ fn durable_rename(from: &Path, to: &Path) -> io::Result<()> {
     super::windows::sys::move_file_durable(from, to)
 }
 
-#[cfg(unix)]
-fn open_no_follow(p: &Path) -> io::Result<std::fs::File> {
-    use std::os::unix::fs::OpenOptionsExt;
-    const O_NOFOLLOW: i32 = if cfg!(target_os = "macos") { 0x0100 } else { 0o400000 };
-    std::fs::OpenOptions::new().read(true).custom_flags(O_NOFOLLOW).open(p)
-}
-
 /// Windows: `FILE_FLAG_OPEN_REPARSE_POINT` — son bileşen bağlantıysa HEDEF değil bağlantının kendisi açılır.
 #[cfg(windows)]
 fn open_no_follow(p: &Path) -> io::Result<std::fs::File> {
@@ -281,9 +280,8 @@ fn open_no_follow(p: &Path) -> io::Result<std::fs::File> {
 }
 
 #[cfg(unix)]
-fn free_space_of(_p: &Path) -> io::Result<u64> {
-    // Geliştirme/test platformu: ölçmeyiz (üretim yalnız Windows).
-    Ok(u64::MAX)
+fn free_space_of(p: &Path) -> io::Result<u64> {
+    super::linux::sys::free_space(p)
 }
 
 #[cfg(windows)]
@@ -291,19 +289,10 @@ fn free_space_of(p: &Path) -> io::Result<u64> {
     super::windows::sys::free_space(p)
 }
 
-/// Geliştirme/test platformu: grup ya da herkes yazabiliyorsa yabancı (üretim ölçümü Windows DACL'i).
+/// Sahibi root/güncelleyici değilse ya da grup/herkes yazabiliyorsa yabancı (Windows DACL ölçümünün karşılığı).
 #[cfg(unix)]
 fn foreign_writers_of(p: &Path) -> io::Result<Vec<String>> {
-    use std::os::unix::fs::PermissionsExt;
-    let mode = std::fs::metadata(p)?.permissions().mode();
-    let mut out = Vec::new();
-    if mode & 0o020 != 0 {
-        out.push("grup yazabilir".to_string());
-    }
-    if mode & 0o002 != 0 {
-        out.push("herkes yazabilir".to_string());
-    }
-    Ok(out)
+    super::linux::sys::foreign_writers(p)
 }
 
 #[cfg(windows)]
@@ -311,8 +300,8 @@ fn foreign_writers_of(p: &Path) -> io::Result<Vec<String>> {
     super::windows::sys::foreign_writers(p)
 }
 
-/// Çocuk süreç: stdout/stderr ayrı iş parçacıklarında (1 MB tavanlı) toplanır; süre dolunca süreç
-/// (Windows'ta kendi iş nesnesiyle bütün ağacı) sonlandırılır.
+/// Çocuk süreç: stdout/stderr ayrı iş parçacıklarında (1 MB tavanlı) toplanır; süre dolunca bütün ağaç
+/// sonlandırılır (Windows'ta iş nesnesi, Unix'te süreç grubu + Linux'ta `PDEATHSIG`).
 pub struct RealProcs;
 
 const OUTPUT_CAP: u64 = 1024 * 1024;
@@ -345,9 +334,13 @@ impl Procs for RealProcs {
             const CREATE_NO_WINDOW: u32 = 0x0800_0000;
             cmd.creation_flags(CREATE_NO_WINDOW);
         }
+        #[cfg(unix)]
+        super::linux::sys::own_process_tree(&mut cmd);
         let mut child = cmd.spawn().map_err(|e| EnvError(format!("{} başlatılamadı: {e}", c.program.display())))?;
         #[cfg(windows)]
         let tree = super::windows::sys::ChildTree::attach(&child);
+        #[cfg(unix)]
+        let tree = super::linux::sys::ChildGroup::attach(&child);
         let out = collect(child.stdout.take());
         let err = collect(child.stderr.take());
         let started = std::time::Instant::now();
@@ -355,21 +348,28 @@ impl Procs for RealProcs {
             match child.try_wait() {
                 Ok(Some(s)) => break (s.code(), false),
                 Ok(None) if started.elapsed() >= c.timeout => {
-                    #[cfg(windows)]
                     tree.kill();
                     let _ = child.kill();
                     let _ = child.wait();
                     break (None, true);
                 }
                 Ok(None) => std::thread::sleep(Duration::from_millis(50)),
-                Err(e) => return Err(EnvError(format!("{} beklenemedi: {e}", c.program.display()))),
+                Err(e) => {
+                    #[cfg(unix)]
+                    tree.kill();
+                    return Err(EnvError(format!("{} beklenemedi: {e}", c.program.display())));
+                }
             }
         };
+        // Unix: çıktı borusunu açık tutan torun, aşağıdaki toplayıcıyı sonsuza dek bekletmesin.
+        #[cfg(unix)]
+        tree.kill();
         Ok(CmdOut { code, stdout: out.join().unwrap_or_default(), stderr: err.join().unwrap_or_default(), timed_out })
     }
 }
 
-/// HTTP(S): Windows'ta TLS işletim sisteminden (SChannel + sertifika deposu); vekil `ayar.json`dan.
+/// HTTP(S): Windows'ta TLS `native-tls` (SChannel); Linux'ta `native-tls` (sistem OpenSSL'i) + SİSTEM CA deposu
+/// (`unattended-upgrades` ile güncel kalır — gömülü kök listesi bayatlardı, §1.2); vekil `ayar.json`dan.
 pub struct RealNet {
     agent: ureq::Agent,
 }
@@ -389,6 +389,13 @@ impl RealNet {
             .user_agent(format!("tekserp-guncelleyici/{}", env!("CARGO_PKG_VERSION")));
         #[cfg(windows)]
         let builder = builder.tls_config(ureq::tls::TlsConfig::builder().provider(ureq::tls::TlsProvider::NativeTls).build());
+        #[cfg(target_os = "linux")]
+        let builder = builder.tls_config(
+            ureq::tls::TlsConfig::builder()
+                .provider(ureq::tls::TlsProvider::NativeTls)
+                .root_certs(ureq::tls::RootCerts::PlatformVerifier)
+                .build(),
+        );
         Ok(RealNet { agent: builder.build().into() })
     }
 }
@@ -430,7 +437,11 @@ pub fn real(proxy: Option<&str>, event_source: &str) -> Result<Env, String> {
     #[cfg(not(windows))]
     let (svc, events, protect): (Arc<dyn Services>, Arc<dyn Events>, Arc<dyn Protect>) = {
         let _ = event_source;
-        (Arc::new(super::linux::NoServices), Arc::new(super::linux::NoEvents), Arc::new(super::linux::NoProtect))
+        (
+            Arc::new(super::linux::NoServices),
+            Arc::new(super::linux::olay::StderrEvents::from_env()),
+            Arc::new(super::linux::koruma::DirectoryProtect),
+        )
     };
     Ok(Env {
         fs: Arc::new(RealFs),

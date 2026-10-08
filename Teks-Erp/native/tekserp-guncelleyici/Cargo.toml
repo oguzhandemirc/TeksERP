@@ -33,12 +33,21 @@ zip = { version = "8.6", default-features = false, features = ["deflate-flate2-z
 ureq = { version = "3.4", default-features = false }
 
 [target.'cfg(windows)'.dependencies]
-# Windows'ta TLS işletim sisteminin (SChannel + sertifika deposu): C derlemesi yok, kurum vekillerinin
-# kök sertifikaları tanınır. Windows dışında yalnız düz http (geliştirme/test sunucusu).
+# Windows'ta TLS işletim sisteminin (SChannel): C derlemesi yok. Linux'ta aşağıda; macOS (geliştirme) düz http.
 ureq = { version = "3.4", default-features = false, features = ["native-tls"] }
 windows-service.workspace = true
 windows-sys.workspace = true
 junction = "2.1"
+
+[target.'cfg(target_os = "linux")'.dependencies]
+# Linux (§1.2): sistem OpenSSL'i + SİSTEM CA deposu (`RootCerts::PlatformVerifier`); gömülü kök listesi
+# (`native-tls-webpki-roots`) bilerek dışarıda. `native-tls`/`openssl-sys` kilit dosyasında zaten vardı.
+ureq = { version = "3.4", default-features = false, features = ["native-tls-no-default"] }
+
+[target.'cfg(unix)'.dependencies]
+# `statvfs` · `openat(O_NOFOLLOW)` · `flock` · süreç grubu `kill` · `prctl(PR_SET_PDEATHSIG)` — kilit dosyasında
+# zaten olan crate (yeni crate değil).
+libc = "0.2"
 
 [dev-dependencies]
 ed25519-dalek.workspace = true

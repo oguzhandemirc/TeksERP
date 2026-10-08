@@ -122,7 +122,8 @@ pub fn is_sharing_violation(e: &std::io::Error) -> bool {
     cfg!(windows) && matches!(e.raw_os_error(), Some(32 | 33))
 }
 
-/// Güncelleyicinin özel alanını kurar: Windows'ta korumalı DACL (SYSTEM + Administrators), başka yerde dizin.
+/// Güncelleyicinin özel alanını kurar: Windows'ta korumalı DACL (SYSTEM + Administrators), Unix'te sahibi
+/// güncelleyici + 0700 (`linux::sys`).
 pub fn harden_private_dir(fs: &dyn Fs, p: &Path) -> Result<(), String> {
     #[cfg(windows)]
     {
@@ -131,20 +132,24 @@ pub fn harden_private_dir(fs: &dyn Fs, p: &Path) -> Result<(), String> {
     }
     #[cfg(not(windows))]
     {
-        fs.create_dir_all(p).map_err(|e| e.to_string())
+        fs.create_dir_all(p).map_err(|e| e.to_string())?;
+        linux::sys::harden_private_dir(p).map_err(|e| format!("özel alan kurulamadı: {e}"))
     }
 }
 
-/// `--veri` verilmezse veri kökü: Windows'ta `%ProgramData%\TeksERP`, başka yerde `<kök>/programdata`.
+/// `--veri` verilmezse veri kökü: Windows'ta `%ProgramData%\TeksERP`, Linux'ta `/var/lib/tekserp` (§1.2), başka
+/// yerde (geliştirme) `<kök>/programdata`.
 pub fn default_data_dir(root: &Path) -> PathBuf {
+    if cfg!(target_os = "linux") {
+        return PathBuf::from(linux::duzen::VARSAYILAN_VERI);
+    }
     match std::env::var_os("ProgramData") {
         Some(pd) if cfg!(windows) => PathBuf::from(pd).join("TeksERP"),
         _ => root.join("programdata"),
     }
 }
 
-/// Tek güncelleyici süreci kilidi (`lock::acquire`): Windows'ta paylaşım kipi 0; başka yerde yalnız açık dosya
-/// (geliştirme — Linux kilidi L4a'nın işi).
+/// Tek güncelleyici süreci kilidi (`lock::acquire`): Windows'ta paylaşım kipi 0, Unix'te `flock` (`linux::sys`).
 #[cfg(windows)]
 pub fn open_lock_file(p: &Path) -> Result<std::fs::File, String> {
     use std::os::windows::fs::OpenOptionsExt;
@@ -162,10 +167,7 @@ pub fn open_lock_file(p: &Path) -> Result<std::fs::File, String> {
 
 #[cfg(not(windows))]
 pub fn open_lock_file(p: &Path) -> Result<std::fs::File, String> {
-    if let Some(d) = p.parent() {
-        std::fs::create_dir_all(d).map_err(|e| e.to_string())?;
-    }
-    std::fs::OpenOptions::new().create(true).truncate(false).write(true).open(p).map_err(|e| e.to_string())
+    linux::sys::open_lock_file(p)
 }
 
 /// Hizmet kaydı komutları (`hizmet` · `hizmet-kur` · `hizmet-kaldir`) — platformun hizmet yöneticisine.
