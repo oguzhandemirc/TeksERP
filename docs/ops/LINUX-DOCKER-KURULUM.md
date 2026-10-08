@@ -61,7 +61,7 @@ docker inspect --format '{{range .Config.Env}}{{println .}}{{end}}' "$(docker co
 3. `.env`de `TEKSERP_IMAJ`ı yeni etikete çevir → `docker compose up -d` (backend açılışta `migrate deploy` koşar; migration geri alınamaz eşiktir).
 4. `/health` ve panel sürümü (`/api/admin/health` `version`) yeni sürümü gösterir.
 
-**ASLA** `docker compose down -v` (birimleri — veri, lisans, yedek — SİLER), `migrate reset`, elle seed.
+**ASLA** `docker compose down -v` (birimleri — veri, lisans, yedek — SİLER; lisans gider → §9), `migrate reset`, elle seed.
 
 ## 4. Yedek
 
@@ -119,3 +119,23 @@ shred -u ozel/<ad>.tkkey
 - İmza: PAKET anahtarı, JWS EdDSA, `typ` = `tekserp-butunluk` → `PAKET-DOCKER.json.jws`. `teslim-paketle.sh` künyeyi yazdıktan sonra 2e aracını çağırır (`npx tsx Teks-Erp/scripts/build-korumali-imza.ts belge --belge=<çıktı>/PAKET-DOCKER.json --anahtar=<dosya>`); anahtar `TEKSERP_PAKET_ANAHTARI` ile AÇIKÇA verilir, varsayılan yol yoktur (verilmezse betik durur; üretim anahtarı PAKET sertifikalı `pkt-*` zincirinden, 3.9 D5/D8); künye müşteri taşımaz. Anahtar yalnız Mac'te, CI'a girmez; anahtar yoksa ya da öz-denetim düşerse paket ÜRETİLMEZ. `.jws` ve `butunluk-liste.txt` SHA256SUMS'a girer (bekçi `test_docker_hijyeni` §5c · `test_lisans_butunluk` §6).
 - Doğrulama sırası (kurulumda, `docker load`dan ÖNCE): JWS'i gömülü PAKET açık anahtarıyla doğrula → `butunluk-liste.txt`in boyu/özeti imzalı `liste`yle → listedeki her dosyanın sha256'sı → `imaj.arsiv` ≡ yüklenecek tar. Doğrulayıcı bugün native çekirdekte (`verifyIntegrity`); imaj DIŞINDA koşacak bir doğrulama aracı 2e ile birlikte tanımlanır.
 - İmaj İÇİ bütünlük listesi (açılışta + günlük): 2e'nin biçimiyle aynı belge `/app` ağacı için üretilir; imzalı liste imaja ince bir son katman olarak eklenir (derle → listeyi dışa ver → Mac imzalar → `FROM <imaj>` + `COPY` → yeni etiket). Bugün uygulanmadı — borç.
+
+## 9. Birimler, kaldırma ve baştan kurma
+
+> ⚠️ **`docker compose down -v` KURULUMU SİLER — LİSANS DAHİL.** `-v` dört kalıcı birimin dördünü de siler: `<proje>_pg_data` (bütün veri) · `<proje>_lisans` (kurulum anahtarı, kira) · `<proje>_yedek` (yedekler) · `<proje>_yedek_anahtar` (yedek şifreleme alıcısı). `<proje>` = `.env`deki `TEKSERP_PROJE` (yoksa `tekserp`). Lisans birimi silinince yeniden açılan kurulum YENİ bir kurulum anahtarıyla doğar; eski kod başka anahtarla etkin bir kuruluma bağlı olduğu için **409 `TASIMA_KODU_GEREKLI`** alır ve kurulum, satıcının onayladığı taşıma kodu (ya da yeni kod) olmadan yeniden etkinleşmez. Güncellemede, geri almada ve arızada `-v` VERİLMEZ.
+
+```sh
+docker volume ls --filter label=com.docker.compose.project=<proje>   # yalnız listeler
+docker compose down                                                   # GÜVENLİ: konteyner + ağ gider, dört birim KALIR
+docker compose up -d                                                  # aynı birimlerle aynı kurulum geri gelir
+```
+
+- **Kurulum başka sunucuya gidecekse** birim kopyalanmaz (lisans kopyası parmak izini tutturmaz, §5): son yedek alınır ve makine dışına çıkarılır (§4), panelden taşıma talebi açılır, yeni sunucuda satıcının onayladığı taşıma koduyla etkinleştirilir (`docs/kurallar/lisans.md` taşıma).
+- **Tamamen kaldırma ya da deneme kurulumunu baştan kurma** (gerçek kurulumda yalnız son yedek makine dışına çıkarıldıktan sonra): birimler `-v` ile toptan değil, ADIYLA silinir — ne silindiği komutta görünür.
+
+```sh
+docker compose down
+docker volume rm <proje>_pg_data <proje>_yedek <proje>_yedek_anahtar <proje>_lisans   # GERİ DÖNÜŞÜ YOK
+```
+
+- Yeniden kurulumda satıcıdan yeni etkinleştirme kodu ya da taşıma kodu istenir. Yalnız `<proje>_pg_data`yı silip lisans birimini tutmak lisansı KURTARMAZ: yeni küme yeni F5 demektir ve iki etkenli zayıf tanımada iki etkenin ikisi de tutmalıdır (§5); sözleşme kabulü de veritabanındadır. Bu yol ölçülmedi, kullanılmaz.

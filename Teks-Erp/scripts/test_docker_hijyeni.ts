@@ -25,6 +25,7 @@
 //      §5g runbook seed parolasını konteynerden temizletir (seed'den sonra bayraksız up -d + uzunluk ölçümü).
 //      §5h runbook konteynerin lisans cevaplarını anar (zayıf tanıma onayı); adlar protokol kataloğunda (uclar.ts).
 //      §5i göçlü geri alma şemayı ÖNCE sıfırlar (pg_restore --clean yeni göçün tablolarını bırakır), göç sayısını ölçer.
+//      §5j runbook §9 compose'un bütün birimlerini `<proje>_` adıyla anar; kaldırma `-v` değil adıyla.
 //   §6 satıcı imajı (G2/G3) DURAĞAN: `satici/sunucu/scripts/` altındaki her CLI `dist-cli`'a derlenir ve
 //      `test -f` kapısında; compose'da `/dosyalar` yazılır, `/derlemeler` + `/yayin` salt okunur (⑨'un docker'sız ikizi).
 // =============================================================================
@@ -456,8 +457,8 @@ function seedTemizlikStatik(runbook: string): string[] {
 }
 
 // §5h — runbook konteynerin bilinen lisans cevaplarını anar ve adları protokol kataloğunda yaşar (ad kayarsa kırmızı):
-// iki etkenli konteyner ilk etkinleştirmede zayıf tanıma onayı bekler.
-const RUNBOOK_LISANS_KODLARI = ["ZAYIF_TANIMA_ONAY_BEKLIYOR"];
+// iki etkenli konteyner ilk etkinleştirmede zayıf tanıma onayı bekler; lisans birimi silinen kurulum taşıma kodu ister.
+const RUNBOOK_LISANS_KODLARI = ["ZAYIF_TANIMA_ONAY_BEKLIYOR", "TASIMA_KODU_GEREKLI"];
 function lisansKoduStatik(runbook: string, uclar: string, kodlar: string[]): string[] {
   const ih: string[] = [];
   for (const k of kodlar) {
@@ -504,6 +505,37 @@ function geriAlmaStatik(runbook: string): string[] {
     ["sıfırlama silindi", rb.replace(/^.*DROP SCHEMA public CASCADE.*\n/m, "")],
   ];
   for (const [ad, r] of sondalar) check(`§5i sonda: ${ad} → kırmızı`, r !== rb && geriAlmaStatik(r).length > 0, r !== rb ? "" : "MUTASYON UYGULANMADI");
+}
+
+// §5j — `down -v` kurulumu lisansla birlikte siler: runbook §9 compose'un BÜTÜN birimlerini `<proje>_` adıyla anar
+// (birim eklenip runbook'a yazılmazsa kırmızı) ve kaldırmayı `-v` yerine adıyla yaptırır.
+function birimStatik(compose: string, runbook: string): string[] {
+  const ih: string[] = [];
+  const vbas = compose.indexOf("\nvolumes:");
+  const birimler = vbas >= 0 ? [...compose.slice(vbas).matchAll(/^ {2}([a-z_]+):\s*$/gm)].map((m) => m[1]) : [];
+  if (birimler.length < 4) return [`compose birimleri okunamadı (${birimler.join(",") || "yok"}) — ÖLÇÜLEMEDİ`];
+  const bas = runbook.indexOf("\n## 9.");
+  const b9 = bas >= 0 ? runbook.slice(bas, (runbook.indexOf("\n## 10.", bas) + 1 || runbook.length + 1) - 1) : "";
+  if (!b9) return ["runbook §9 (birimler) bulunamadı"];
+  for (const b of birimler) if (!b9.includes(`<proje>_${b}`)) ih.push(`§9 <proje>_${b} birimini anmıyor`);
+  const rm = /^docker volume rm (.+?)(\s+#.*)?$/m.exec(b9);
+  if (!rm) ih.push("§9 kaldırmayı birim adıyla (docker volume rm) yaptırmıyor");
+  else for (const b of birimler) if (!rm[1].includes(`<proje>_${b}`)) ih.push(`§9 volume rm satırında <proje>_${b} yok`);
+  if (/^docker compose down -v/m.test(b9)) ih.push("§9 komut olarak `down -v` veriyor");
+  if (!/TASIMA_KODU_GEREKLI/.test(b9)) ih.push("§9 lisans biriminin silinmesinin sonucunu (TASIMA_KODU_GEREKLI) söylemiyor");
+  return ih;
+}
+{
+  const dc = oku("Teks-Erp/docker/korumali/docker-compose.yml");
+  const rb = oku("docs/ops/LINUX-DOCKER-KURULUM.md");
+  const gercek = birimStatik(dc, rb);
+  check("§5j ⭐ runbook §9 compose'un bütün birimlerini adıyla anar, kaldırma `-v` değil adıyla, lisans sonucu yazılı", gercek.length === 0, gercek.join(" | "));
+  const sondalar: Array<[string, string, string]> = [
+    ["compose'a yeni birim", dc.replace(/\nvolumes:\n/, "\nvolumes:\n  ota:\n"), rb],
+    ["rm satırından lisans düştü", dc, rb.replace(/ <proje>_lisans(?=\s+# GERİ)/, "")],
+    ["kaldırma -v'ye döndü", dc, rb.replace(/^docker compose down\ndocker volume rm .*$/m, "docker compose down -v")],
+  ];
+  for (const [ad, c, r] of sondalar) check(`§5j sonda: ${ad} → kırmızı`, (c !== dc || r !== rb) && birimStatik(c, r).length > 0, c !== dc || r !== rb ? "" : "MUTASYON UYGULANMADI");
 }
 
 // §5c — teslim künyesi İMZALI çıkar (2e aracı, `build-korumali-imza.ts belge`): anahtar yoksa paket

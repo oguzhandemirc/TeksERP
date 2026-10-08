@@ -8,7 +8,8 @@
 #
 # ⚠ Kalıcı birimler: pg_data (veri) · lisans (kurulum anahtarı/HAK/kira — KOPYALANMAZ,
 #   kopyası başka makinede parmak izini tutturmaz) · yedek · yedek-anahtar. `down -v`
-#   BUNLARI SİLER — güncellemede ve geri almada ASLA `-v` verilmez.
+#   BUNLARI SİLER (lisans gider → TASIMA_KODU_GEREKLI) — güncellemede ve geri almada ASLA `-v` verilmez;
+#   kaldırma birim ADIYLA yapılır (runbook §9).
 # ⚠ Parmak izi: F1 = konağın /etc/machine-id'si (salt-okunur bağlanır). F2/F4 (DMI) konteynerde
 #   root-only, F3 (disk seri) overlay birimde görünmez → motor "ölçülemedi" beyan eder.
 # =============================================================================
