@@ -1,0 +1,108 @@
+name: Güncelleyici gecelik (Linux + Windows)
+
+# =============================================================================
+# GÜNCELLEYİCİ GECELİK — GUNCELLEYICI-SAGLAMLIK T0 iskeleti (kullanıcı kararı AK-5)
+# =============================================================================
+# ubuntu-latest × windows-latest: bütün `cargo test` `--include-ignored` ile. Yer tutucular: T2 (K4 sentetik
+# sürüm zinciri / yükseltme matrisi) ve T4 (K5 kaos / uzun koşu) kendi adımlarını buraya indirir.
+# Zamanlı koşu son 25 saatte `Teks-Erp/native/**` (ya da bu dosya) değişmediyse testleri ATLAR — gürültüsüz
+# yeşil için; ölçüm başarısızsa testler yine koşar (atlamanın yönü güvenli taraf). Elle tetik ve bu dosyanın
+# kendi değişikliği her zaman koşar. Sır gerekmez; `pull_request_target` yok.
+# =============================================================================
+
+on:
+  schedule:
+    # 01:17 UTC — gece, saat başı kuyruğundan uzak.
+    - cron: "17 1 * * *"
+  workflow_dispatch:
+  push:
+    branches: [main, "gece/**"]
+    paths:
+      - ".github/workflows/guncelleyici-gece.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: guncelleyici-gece-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  degisim:
+    name: Son 25 saatte native değişti mi
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      kos: ${{ steps.olc.outputs.kos }}
+    steps:
+      - id: olc
+        env:
+          GH_TOKEN: ${{ github.token }}
+          OLAY: ${{ github.event_name }}
+        run: |
+          if [ "$OLAY" != "schedule" ]; then
+            echo "kos=1" >> "$GITHUB_OUTPUT"; echo "olay=$OLAY → koşulur"; exit 0
+          fi
+          since=$(date -u -d '25 hours ago' +%Y-%m-%dT%H:%M:%SZ)
+          toplam=0
+          for yol in Teks-Erp/native .github/workflows/guncelleyici-gece.yml; do
+            if ! n=$(gh api -X GET "repos/$GITHUB_REPOSITORY/commits" -f sha="$GITHUB_SHA" -f path="$yol" -f since="$since" -f per_page=1 --jq 'length'); then
+              echo "::warning title=Gecelik::değişiklik ölçülemedi ($yol) — testler koşulur"
+              echo "kos=1" >> "$GITHUB_OUTPUT"; exit 0
+            fi
+            echo "$yol: $since sonrası $n commit"
+            toplam=$((toplam + n))
+          done
+          if [ "$toplam" -gt 0 ]; then
+            echo "kos=1" >> "$GITHUB_OUTPUT"
+          else
+            echo "kos=0" >> "$GITHUB_OUTPUT"
+            echo "::notice title=Gecelik::son 25 saatte native değişmedi — testler atlandı"
+          fi
+
+  test:
+    name: "Gecelik — ${{ matrix.os }}"
+    needs: degisim
+    if: needs.degisim.outputs.kos == '1'
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    env:
+      CARGO_TERM_COLOR: always
+      CARGO_INCREMENTAL: "0"
+    defaults:
+      run:
+        shell: bash
+        working-directory: Teks-Erp/native
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Rust araç zinciri (stable)
+        run: rustup toolchain install stable --profile minimal && rustup default stable
+      - name: rustc sürümü (önbellek anahtarı)
+        id: rustc
+        run: echo "surum=$(rustc --version | tr ' ' '-')" >> "$GITHUB_OUTPUT"
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git/db
+            Teks-Erp/native/target
+          key: cargo-gece-${{ runner.os }}-${{ steps.rustc.outputs.surum }}-${{ hashFiles('Teks-Erp/native/Cargo.lock') }}
+          restore-keys: |
+            cargo-gece-${{ runner.os }}-${{ steps.rustc.outputs.surum }}-
+      # paket_prova'nın iki testi `deploy/satici/prova-paket-zinciri.mjs` tarafından ortamla sürülür
+      # (TEKSERP_PAKET_PROVA); tek başına koşulamaz → atlanır (gerçek paket provası T2'nin işi).
+      - name: cargo test --include-ignored (napi'siz üyeler)
+        run: cargo test --locked --workspace --exclude lisans-cekirdek -- --include-ignored --skip prova_hazirla --skip prova_motor
+      - name: cargo test --include-ignored (lisans çekirdeği, test çapası)
+        run: cargo test --locked -p lisans-cekirdek --no-default-features --features test-anchor -- --include-ignored
+      - name: "T2 yer tutucu — K4 yükseltme matrisi (sentetik sürüm zinciri) henüz yok"
+        run: echo "::notice title=T2::K4 yükseltme matrisi henüz yok — T2 dilimi ekler"
+      - name: "T4 yer tutucu — K5 kaos / uzun koşu henüz yok"
+        run: echo "::notice title=T4::K5 kaos henüz yok — T4 dilimi ekler"
