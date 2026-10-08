@@ -5,7 +5,8 @@
  */
 import { DISCOVERY_DEFAULT_PORT } from "@shared/discovery";
 import type { DiscoveryApi, TlsObservation } from "@shared/ipc-contract";
-import { HTTP_TO_PINNED_REASON, buildTlsQr, isLoopbackHost, pinBlockingHttp, type TlsPin } from "@shared/lan-tls";
+import { HTTP_TO_PINNED_REASON, buildTlsQr, isLoopbackHost, panelTransportFor, pinBlockingHttp, type TlsPin } from "@shared/lan-tls";
+import { isInternetHost } from "@shared/internet-tls";
 import { splitApiBaseUrl } from "@/lib/api-config";
 
 export type TlsSwitchPlan =
@@ -49,11 +50,12 @@ export function activePinFor(pins: readonly TlsPin[], url: string): TlsPin | nul
 }
 
 /**
- * Sabit kaldırılınca dönülecek HTTP adresi: aynı sunucunun son kullanılan http adresi,
- * yoksa varsayılan port.
+ * Sabit kaldırılınca dönülecek HTTP adresi — yalnız döngü adresinde (paket makineden çıkmaz): aynı sunucunun son
+ * kullanılan http adresi, yoksa varsayılan port. Ağ adresinde şifresize dönüş YOK (null): yeniden eşleşme gerekir.
  */
-export function httpFallbackUrl(httpsUrl: string, recent: readonly string[]): string {
+export function httpFallbackUrl(httpsUrl: string, recent: readonly string[]): string | null {
   const host = splitApiBaseUrl(httpsUrl).host;
+  if (!isLoopbackHost(host)) return null;
   const prior = recent.find((u) => {
     const p = splitApiBaseUrl(u);
     return p.protocol === "http" && p.host === host;
@@ -106,4 +108,14 @@ export async function httpSwitchBlock(
   const server = await api.probe(targetUrl).catch(() => null);
   const installationId = server?.identity?.installationId ?? null;
   return block(pinBlockingHttp(pins, current, { scheme: target.protocol, host: target.host, installationId }));
+}
+
+/**
+ * Panel yalnız şifreli: kaydedilecek/denenecek adres kabul edilmiyorsa Türkçe sebep (ağ adresinde http:// ya da
+ * eşleşmemiş https). Karar `panelTransportFor`da; ana süreçteki ağ kapısı aynı kuralı ayrıca uygular.
+ */
+export async function addressRefusal(api: Pick<DiscoveryApi, "tlsPins"> | undefined, url: string): Promise<string | null> {
+  const pins = api?.tlsPins ? await api.tlsPins().catch(() => [] as TlsPin[]) : [];
+  const t = panelTransportFor(pins, url, isInternetHost);
+  return t.kind === "refused" ? t.reason : null;
 }

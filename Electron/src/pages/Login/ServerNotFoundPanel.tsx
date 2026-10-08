@@ -44,7 +44,12 @@ export function ServerNotFoundPanel({
       onMismatch(c);
       return;
     }
-    await connectToDiscoveredServer(c);
+    try {
+      await connectToDiscoveredServer(c);
+    } catch (e) {
+      toast.error("Bu sunucuya bağlanılmadı.", { description: (e as Error).message });
+      return;
+    }
     toast.success("Sunucuya bağlanıldı.", { description: c.baseUrl });
     onResolved();
   };
@@ -68,6 +73,14 @@ export function ServerNotFoundPanel({
         <Callout tone="danger" title="Şifreli bağlantı doğrulanamadı" className="text-left">
           <span data-testid="tls-blocked">{state.tlsBlocked}</span>. Güvenlik için şifresiz bağlantıya geçilmedi.
           Sunucu şifreli bağlantıyı kapattıysa Sunucu Adresi ekranından şifreli bağlantıyı kaldırın.
+        </Callout>
+      )}
+
+      {/* Yalnız şifreli: bulunan ama eşleşmemiş sunucu — adres yazılır, doğrulama kodu karşılaştırılır. */}
+      {(state?.needsPairing?.length ?? 0) > 0 && (
+        <Callout tone="info" title="Sunucu bulundu — eşleştirme gerekiyor" className="text-left">
+          <span data-testid="needs-pairing">{state?.needsPairing.join(", ")}</span>. Bu bilgisayar sunucuya yalnız şifreli
+          bağlanır: &quot;Adresi Elle Gir&quot; ile adresi yazıp &quot;Doğrulama kodunu göster&quot;e basın ve kodu sunucudaki kodla karşılaştırın.
         </Callout>
       )}
 

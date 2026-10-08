@@ -348,6 +348,8 @@ export interface DiscoveryState {
   pinnedInstallationId: string | null;
   /** Şifreli bağlantı sabitli ama sunucu doğrulanamadı → HTTP'ye DÜŞÜLMEDİ; kullanıcıya gösterilen sebep. */
   tlsBlocked: string | null;
+  /** Yalnız şifreli: bulunan ama bu bilgisayarla eşleşmemiş sunucuların https adresleri (kod karşılaştırılınca bağlanılır). */
+  needsPairing: string[];
   error: string | null;
 }
 

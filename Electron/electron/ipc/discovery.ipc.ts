@@ -48,10 +48,11 @@ import { readSecureValue, writeSecureValue } from "./secure-store.ipc.js";
 import { browseMdns } from "../discovery/mdns-browser.js";
 import { scanSubnet } from "../discovery/subnet-scan.js";
 import { probeIdentity } from "../discovery/probe.js";
-import { routeFor } from "../../shared/lan-tls.js";
+import { httpsBaseUrlOf, isLoopbackHost, panelTransportFor, routeFor } from "../../shared/lan-tls.js";
+import { isInternetHost } from "../../shared/internet-tls.js";
 import { readTlsPins } from "../security/lan-tls-pin.js";
 import { verifyHttpsCandidate } from "../discovery/tls-candidate.js";
-import { registerLanTlsIpc } from "./lan-tls.ipc.js";
+import { autoPinLoopback, registerLanTlsIpc } from "./lan-tls.ipc.js";
 
 /** Electron'daki API adresi anahtarı — `src/lib/api-config.ts` ile AYNI olmalı. */
 const API_BASE_URL_KEY = "config.apiBaseUrl";
@@ -76,6 +77,7 @@ function emptyState(): DiscoveryState {
     scan: { ran: false, targets: 0, open: 0, ports: [], skippedReason: null },
     pinnedInstallationId: null,
     tlsBlocked: null,
+    needsPairing: [],
     error: null,
   };
 }
@@ -124,6 +126,19 @@ function noteTlsBlocked(host: string, reason: string): void {
 }
 
 
+/**
+ * Yalnız şifreli: ağdaki sabitsiz sunucu aday OLAMAZ (http'ye bağlanılmaz). Şifreli kanalı varsa adresi
+ * eşleştirme ipucu olarak kaydedilir — kullanıcı kodu karşılaştırınca bağlanır; yoksa sebep gösterilir.
+ */
+function notePairingNeeded(host: string, tlsPort: number | null): void {
+  if (!tlsPort) {
+    noteTlsBlocked(host, "sunucu şifreli bağlantı sunmuyor (sunucuda LAN_TLS_MODE kapalı) — panel ağdaki sunucuya şifresiz bağlanmaz");
+    return;
+  }
+  const url = httpsBaseUrlOf(host, tlsPort);
+  if (!state.needsPairing.includes(url)) state.needsPairing = [...state.needsPairing, url];
+}
+
 /** Bir adresi doğrular ve aday nesnesine çevirir. Aday değilse null. Sabitli kurulum HTTP adayı OLAMAZ. */
 async function verify(
   host: string,
@@ -147,6 +162,10 @@ async function verify(
     return null;
   }
   if (route.kind === "https") return verifyHttpsCandidate(ctx, route.port);
+  if (!isLoopbackHost(host)) {
+    notePairingNeeded(host, res.tls?.port ?? null);
+    return null;
+  }
   return {
     baseUrl,
     host,
@@ -230,11 +249,14 @@ async function runDiscovery(timeoutMs: number, mode: DiscoveryMode): Promise<Dis
       const key = `${h}:${hit.port}`;
       if (seenAddr.has(key)) continue;
       seenAddr.add(key);
-      mdnsProbes.push(
-        verify(h, hit.port || DISCOVERY_DEFAULT_PORT, "mdns", pinnedId, 2000).then(collect),
-      );
-      // `required` kipte HTTP LAN'a kapalıdır; ilanın TLS portu yalnız sabit varsa denenir.
+      // `required` kipte HTTP LAN'a kapalıdır; ilanın TLS portu sabit varsa denenir, yoksa eşleştirme ipucudur.
       const tp = Number(typeof hit.txt.tp === "string" ? hit.txt.tp : NaN);
+      mdnsProbes.push(
+        verify(h, hit.port || DISCOVERY_DEFAULT_PORT, "mdns", pinnedId, 2000).then((c) => {
+          collect(c);
+          if (!c && Number.isInteger(tp) && tp > 0 && !isLoopbackHost(h)) notePairingNeeded(h, tp);
+        }),
+      );
       if (Number.isInteger(tp) && tp > 0 && readTlsPins().length > 0 && !seenAddr.has(`${h}:${tp}`)) {
         seenAddr.add(`${h}:${tp}`);
         mdnsProbes.push(verify(h, tp, "mdns", pinnedId, 2000, "https").then(collect));
@@ -329,6 +351,8 @@ async function runDiscovery(timeoutMs: number, mode: DiscoveryMode): Promise<Dis
     finishedAt: Date.now(),
     candidates,
     groups,
+    // Şifreli adayı bulunan makine eşleştirme ipucu değildir (ağda http kapalıyken ilan ipucu bırakır).
+    needsPairing: state.needsPairing.filter((u) => !candidates.some((c) => u.startsWith(`https://${c.host}:`))),
   };
   log.info("[discovery] tur bitti", {
     adaylar: candidates.length,
@@ -349,6 +373,22 @@ function applyAddress(baseUrl: string, reason: "single" | "pin-moved" | "tls"): 
   } catch (e) {
     log.warn("[discovery] adres yazılamadı:", (e as Error).message);
   }
+}
+
+/**
+ * Sunucu makinesinin kendisi (kullanıcı kararı 2026-10-08): döngü adresindeki sunucu şifreli kanal sunuyorsa
+ * kimseye sormadan sabitlenir ve https döngü adresine geçilir (tablet QR'ı sabitten doğar). Kanal yoksa döngü http kalır.
+ */
+async function upgradeLoopback(c: DiscoveredServer): Promise<boolean> {
+  if (!isLoopbackHost(c.host) || !c.baseUrl.startsWith("http:") || c.matchesPinned === "mismatch") return false;
+  const res = await autoPinLoopback(c.baseUrl, {
+    onPinned: (id) => {
+      state.pinnedInstallationId = id;
+    },
+  }).catch(() => null);
+  if (!res?.ok) return false;
+  applyAddress(res.baseUrl, "tls");
+  return true;
 }
 
 /**
@@ -380,6 +420,7 @@ export async function startDiscoveryIfNeeded(): Promise<void> {
           };
           // Sabitli kurulum kayıtlı HTTP adresinde bulunduysa adres HTTPS'e yükselir (sabitsizde dokunulmaz).
           if (ok.baseUrl.startsWith("https:") && !/^https:/i.test(stored.trim())) applyAddress(ok.baseUrl, "tls");
+          else await upgradeLoopback(ok);
           log.info(`[discovery] kayıtlı adres cevap verdi, keşif gerekmedi: ${stored}`);
           return;
         }
@@ -387,9 +428,14 @@ export async function startDiscoveryIfNeeded(): Promise<void> {
     }
 
     const result = await runDiscovery(SPLASH_TIMEOUT_MS, "quick");
-    const usable = result.candidates.filter((c) => c.matchesPinned !== "mismatch");
+    const usable = result.candidates.filter(
+      (c) => c.matchesPinned !== "mismatch" && panelTransportFor(readTlsPins(), c.baseUrl, isInternetHost).kind !== "refused",
+    );
+    const loopback = usable.find((c) => isLoopbackHost(c.host));
 
-    if (!stored && usable.length === 1 && usable[0]) {
+    if (loopback && (await upgradeLoopback(loopback))) {
+      // sunucu makinesinin kendisi — şifreli döngü adresine geçildi
+    } else if (!stored && usable.length === 1 && usable[0]) {
       applyAddress(usable[0].baseUrl, "single");
     } else if (stored && pinnedId) {
       const moved = usable.filter((c) => c.matchesPinned === "match");

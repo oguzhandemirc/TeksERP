@@ -2,13 +2,11 @@ import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { Loader2, Lock, LockOpen, ShieldCheck } from "lucide-react";
 import type { DiscoveryApi } from "@shared/ipc-contract";
-import { formatFingerprintGroups, type TlsPin, type TlsPinVia } from "@shared/lan-tls";
+import { formatFingerprintGroups, isLoopbackHost, type TlsPin, type TlsPinVia } from "@shared/lan-tls";
 import { Button } from "@/components/ui/button";
 import { Callout } from "@/components/ui/callout";
-import { Checkbox } from "@/components/ui/checkbox";
-import { Label } from "@/components/ui/label";
 import { ConfirmDialog } from "@/components/forms/ConfirmDialog";
-import { applyApiBaseUrl, pushRecentApiBaseUrl, setStoredApiBaseUrl } from "@/lib/api-config";
+import { applyApiBaseUrl, pushRecentApiBaseUrl, setStoredApiBaseUrl, splitApiBaseUrl } from "@/lib/api-config";
 import { activePinFor, httpFallbackUrl, planTlsSwitch, type TlsSwitchPlan } from "@/lib/lan-tls-ui";
 
 interface Props {
@@ -43,7 +41,8 @@ function useLanTls(api: DiscoveryApi | undefined, { url, recent, onAddressChange
 
   const blockedPin = blocked ? (pins.find((p) => p.installationId === blocked.pin.installationId) ?? null) : null;
   const active = blockedPin ?? (url ? activePinFor(pins, url) : null);
-  const fallback = blockedPin && blocked ? blocked.url : httpFallbackUrl(url, recent);
+  // Şifresize dönüş yalnız döngü adresinde; ağ adresinde sabit kalkınca adres eşleşmemiş kalır (yeniden kod).
+  const fallback = blockedPin && blocked ? (isLoopbackHost(splitApiBaseUrl(blocked.url).host) ? blocked.url : null) : httpFallbackUrl(url, recent);
 
   const observe = async () => {
     if (!api || !url) return;
@@ -83,10 +82,14 @@ function useLanTls(api: DiscoveryApi | undefined, { url, recent, onAddressChange
     if (!api || !active) return false;
     try {
       await api.tlsUnpin(active.installationId);
-      await saveAddress(fallback);
+      if (fallback) await saveAddress(fallback);
       setPins(await api.tlsPins());
-      toast.success("Şifreli bağlantı kaldırıldı.", { description: `Şifresiz adrese dönüldü: ${fallback} — bağlantıyı test edin.` });
-      onAddressChanged(fallback);
+      toast.success("Şifreli bağlantı kaldırıldı.", {
+        description: fallback
+          ? `Bu bilgisayardaki sunucuya şifresiz döngü adresinden bağlanılıyor: ${fallback}`
+          : "Bu sunucuya yeniden bağlanmak için doğrulama kodunu karşılaştırın.",
+      });
+      onAddressChanged(fallback ?? url);
       return true;
     } catch {
       toast.error("Şifreli bağlantı kaldırılamadı.");
@@ -107,7 +110,6 @@ function FingerprintLine({ hex, testId }: { hex: string; testId: string }) {
 
 /** Döngü adresinde kod doğrudan alınır; başka her adreste kullanıcı gözle karşılaştırıp onaylar. */
 function SwitchPlanView({ plan, busy, onPin }: { plan: TlsSwitchPlan; busy: boolean; onPin: (fp: string, via: TlsPinVia) => void }) {
-  const [same, setSame] = useState(false);
   if (plan.kind === "unavailable") return <Callout tone="muted">{plan.reason}</Callout>;
   if (plan.kind === "mismatch") return <Callout tone="danger">{plan.reason}</Callout>;
   if (plan.kind === "loopback") {
@@ -124,18 +126,12 @@ function SwitchPlanView({ plan, busy, onPin }: { plan: TlsSwitchPlan; busy: bool
   return (
     <div className="space-y-2">
       <p className="text-xs text-muted-foreground">
-        Aşağıdaki kodu sunucu bilgisayarının kendisinde görünen kodla karşılaştırın (oradaki panel: Sunucu Adresi → Şifreli bağlantı; ya da tarayıcıda http://localhost:4000/ durum sayfası).
-        Tek bir harf bile farklıysa onaylamayın.
+        Sunucunun doğrulama kodu aşağıda. Kurulumun son sayfasındaki, sunucu bilgisayarındaki panelin (Sunucu Adresi) ya da
+        oradaki durum sayfasının (http://localhost:4000/) koduyla karşılaştırın. Tek bir harf bile farklıysa bağlanmayın.
       </p>
       <FingerprintLine hex={plan.fingerprint} testId="lan-tls-observed-fp" />
-      <div className="flex items-center gap-2">
-        <Checkbox id="lan-tls-same" checked={same} onCheckedChange={(v) => setSame(v === true)} />
-        <Label htmlFor="lan-tls-same" className="text-xs">
-          Kodlar birebir aynı
-        </Label>
-      </div>
-      <Button type="button" size="sm" onClick={() => onPin(plan.fingerprint, "confirmed")} disabled={busy || !same}>
-        Onayla ve şifreli bağlantıya geç
+      <Button type="button" size="sm" onClick={() => onPin(plan.fingerprint, "confirmed")} disabled={busy} data-testid="lan-tls-same">
+        Kodlar aynı — bağlan
       </Button>
     </div>
   );
@@ -174,14 +170,18 @@ export function LanTlsSection(props: Props) {
       ) : (
         <Button type="button" variant="outline" size="sm" onClick={() => void observe()} disabled={busy || !props.url}>
           {busy ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <ShieldCheck className="mr-2 h-4 w-4" />}
-          Şifreli bağlantıya geç
+          Doğrulama kodunu göster
         </Button>
       )}
       <ConfirmDialog
         open={unpinOpen}
         onOpenChange={setUnpinOpen}
         title="Şifreli bağlantı kaldırılsın mı?"
-        description={`Bu bilgisayar sunucuya yeniden şifresiz (HTTP) bağlanacak: ${fallback}. Yeniden şifreli bağlantıya geçmek için kodu tekrar karşılaştırmanız gerekir.`}
+        description={
+          fallback
+            ? `Bu bilgisayar kendi üzerindeki sunucuya şifresiz döngü adresinden bağlanacak: ${fallback}.`
+            : "Bu bilgisayar sunucuya bağlanmayı bırakır. Yeniden bağlanmak için doğrulama kodunu tekrar karşılaştırmanız gerekir."
+        }
         confirmLabel="Kaldır"
         destructive
         onConfirm={async () => {
