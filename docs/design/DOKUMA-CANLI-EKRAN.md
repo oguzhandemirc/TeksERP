@@ -1,0 +1,144 @@
+# Tezgah Salonu — dokuma tezgahlarının canlı ekranı (ÖRNEK VERİ)
+
+> **Tarih:** 2026-10-09 · **Durum:** panelde çalışan bir MOCK; yalnız `gece/dokuma-ekran` dalında, **main'e inmez** (sahaya örnek veri çıkmasın). Veri çekmez, bildirim göndermez, backend'e dokunmaz.
+> **Kod:** `Electron/src/pages/Operations/WeavingFloor/` · veri sözleşmesi `Electron/src/pages/Operations/WeavingFloor/types.ts` · tek veri kapısı `Electron/src/pages/Operations/WeavingFloor/useLoomFloorLive.ts`.
+> **Bağlam:** tezgah izlemenin asıl tasarımı `docs/design/DOKUMA-TEZGAH-IZLEME-TASARIMI.md` (telemetri, duruş defteri, vardiya karnesi); dokuma kuralları `docs/kurallar/dokuma.md`.
+
+## 1 · Amaç
+
+Salona bakan biri (vardiya amiri, patron, salondaki TV) **tek bakışta** üç soruyu cevaplasın:
+
+1. Hangi tezgah duruyor, **neden**?
+2. **Kaç dakikadır** müdahale bekliyor — hedef süreyi aştı mı?
+3. Salon bu vardiya ne üretti, hedefin neresinde?
+
+İlke: az yazı, çok şekil. Her tezgah küçük, canlı bir makine; duran makine donar ve ortasında sebebin simgesi belirir. Yazı yalnız sayılarda, anahtar satırında ve detay panelinde.
+
+## 2 · Ekran anatomisi
+
+```
+┌ Başlık: Tezgah Salonu [Örnek veri]            [Göster: Tümü] [Tam ekran] ┐
+├ Özet: ● 26/36 çalışıyor │ ⯃ 10 (●5 ◆3 ■1 ◌1) │ ◔ %79 │ 891 m ▬▬▬ hedef │ 02:07 ┤
+├ Hedefi aşan 3:  [35 ⟂ 14 dk /10 dk ♛] [22 👤✕ 9 dk /5 dk ♛] …           ┤
+├ Hol A 11/14 ▬▬ %84 🏆 ─────────────────────────────────────────────────── ┤
+│ [01][02][03][04][05⯃][06]…   her kart: no · zincir/şekil · figür · alt şerit │
+├ Hol B … / Hol C …                                                         ┤
+└ Anahtar: ● Çalışıyor ⯃ Arıza/kopuş ◆ Ayar ■ Planlı ◌ Plan dışı           ┘
+```
+
+- **Özet şeridi** — çalışan/toplam; duran sayısı + sınıf kırılımı (şekillerle); salonun çalışma oranı (kullanılabilirlik); vardiya metresi ve hedef çubuğu; fabrika saati + vardiyanın kalanı.
+- **Hedefi aşanlar şeridi** — yalnız varsa görünür; en uzun bekleyen başta; her öğe detayı açar.
+- **Hol bölümü** — hol adı, çalışan/toplam, holün çalışma oranı; tezgahlar salondaki sırayla.
+- **Tezgah kartı** — numara; sağ üstte çalışırken durum şekli, dururken **kompakt uyarı zinciri**; ortada canlı figür (dururken solar ve üstüne sebep simgesi biner); altta çalışırken vardiya hedef çubuğu, dururken **hedef halkası + sayaç**.
+- **Detay paneli** (karta tıklayınca sağdan) — büyük figür; açık duruş kartı (sebep, kademe, sayaç, hedef) ve uyarı zinciri zaman çizgisi; vardiya rakamları (üretim · atkı · çalışma · hız — randıman tek sayıya çökertilmez); sebebe göre duruş çubukları; dokuma işi ve levent (kalan iplik); son olaylar. Saatler fabrika diliminden (`formatFactory`).
+- **Göster seçici** — modal (combobox değil): Tümü · Duranlar · Hedefi aşanlar.
+- **Tam ekran (salon TV'si)** — sayfa pencereyi kaplar; anahtar başlığa taşınır; bütün holler aynı kolon ızgarasına (en kalabalık holün adedi = 14) dizilir ⇒ 36 tezgah 1920×1080'e **kaydırmasız** sığar. Esc ya da düğme çıkarır.
+- **Dar pencere** — panelin en dar penceresi 1100 px; kartlar `minmax(7.5em, 1fr)` ile akar, sayaç kart daraldıkça küçülür, **kesilmez**.
+
+## 3 · Renk · şekil · simge sözlüğü
+
+Renk tek başına anlam taşımaz: her durumun **renkten bağımsız bir şekli** var (renk körlüğünde de ayrışır).
+
+| Durum | Kayıp sınıfı | Şekil | Renk |
+|---|---|---|---|
+| Çalışıyor | — | dolu daire | yeşil |
+| Arıza / kopuş | `UNPLANNED` | sekizgen (dur levhası) | kırmızı |
+| Ayar / hazırlık | `SETUP` | eşkenar dörtgen | mor |
+| Planlı duruş | `PLANNED` | yuvarlak kare | mavi |
+| Plan dışı | `NON_SCHEDULED` | kesik çizgili daire (içi boş) | gri |
+
+**Sebep simgeleri** sunucunun 23 sebeplik kataloğunun (`MACHINE_STOP_REASONS`, `Teks-Erp/src/constants/reason-presets.ts`) aynasıdır. Lucide'de "yatay iplik / dikey iplik koptu" ayrımı olmadığından üç özel simge çizildi: **atkı kopuşu YATAY**, **çözgü kopuşu DİKEY** kırık iplik, **kenar kopuşu** kenarda kırık iplik.
+
+**Sayaç kademeleri** (renk + halka):
+
+| Kademe | Anlam | Sayaç rengi |
+|---|---|---|
+| `WITHIN` | hedef süre içinde | mürekkep (nötr) |
+| `OVERDUE` | hedef aşıldı, iletim payı işliyor | kehribar |
+| `ESCALATED` | patrona iletildi | koyu kırmızı + kart çerçevesi + yavaş nefes |
+| `UNTRACKED` | plan dışı, süre izlenmez | gri, halka yok |
+
+Halka hedefin tüketilen kısmını gösterir ve hedefte dolar. Sayaç bir saatin altında `DD:SS` akar; üstünde `1 sa 35 dk` (kartta birimler küçük, rakamlar büyük).
+
+**Figür:** levent kalınlığı = kalan iplik; dokunan bezin rengi = kumaşın rengi; mekik hızı = devir (göz yormayan aralıkta sınırlı). Durunca bütün hareket aynı karede donar.
+
+## 4 · Oyunsu öğeler (ölçülü)
+
+- **Canlı makineler:** mekik gider gelir, çerçeveler ağızlık açar, tarak vurur, bez akar.
+- **Vardiya hedef çubukları:** kartta ve özette dolan çubuk.
+- **⭐ Vardiyanın yıldızı:** çalışma oranı en yüksek tek tezgah (eşitlikte metre).
+- **🏆 En iyi hol:** çalışma oranı en yüksek hol.
+- **Yeni duran tezgah** tek seferlik kısa bir sıçrama yapar; **patrona iletilen** kart 4,5 sn'de bir yavaşça "nefes alır" — yanıp sönme yok.
+- **Puan, sıralama tablosu, kişi karşılaştırması YOK** — ekran makineyi gösterir, insanı yarıştırmaz.
+- `prefers-reduced-motion` bütün animasyonları kapatır.
+
+## 5 · Uyarı zinciri (eskalasyon)
+
+### 5.1 Kademeler
+
+```
+duruş başladı ──► görevliye bildirildi ──► görevli tezgahta ──► (hedef + pay dolduysa) patrona iletildi
+     │                  🔔                       ✋                          ♛
+     └── sayaç işler; halka hedefe doğru dolar; hedef dolunca sayaç rengi değişir
+```
+
+- **Kartta** üç küçük halka (🔔 ✋ ♛) yazısız gösterir: gerçekleşen yanar, bekleyen soluk.
+- **Detayda** aynı zincir zaman çizgisidir: kişi, gerçekleştiği saat; bekleyen patron adımı için **beklenen saat** (`~HH:mm`).
+- **İletim kuralı:** duruşun yaşı ≥ sebebin hedef süresi + iletim payı ⇒ patrona iletilir. Görevlinin tezgaha gelmesi zinciri durdurmaz — ölçülen müdahale değil **çözüm** süresidir (tezgah çalışınca zincir kapanır).
+- **Kullanıcının senaryosu:** atkı kopuşu, hedef 5 dk, aşılınca patrona ⇒ mock'ta **pay = 0**.
+
+### 5.2 Hedef süre ve pay = profil/ayar verisi
+
+- **Sebep başına hedef süre** (`targetMin`) ve **iletim payı** (`graceMin`) KODDA DEĞİL fabrika ayarında yaşar ([PROFİL]: her fabrika kendi sürelerini seçer). Mock'ta `Electron/src/pages/Operations/WeavingFloor/stopReasons.ts` içinde örnek değerler: atkı 5 · çözgü 10 · kenar 8 · levent bağlama 30 · tahar 120 · planlı bakım 60 dk …; plan dışı sebeplerde süre **izlenmez** (`null`).
+- Gerçek veride yeri: sebep kataloğu `ReasonPreset(kind = MACHINE_STOP)` satırına bir **hedef süre** alanı (ya da sebep × fabrika ayar tablosu) + fabrika ayarında tek bir **iletim payı**. Değişiklik geçmişi etkilemez: açık duruş, başladığı andaki hedefle değerlendirilir (ayar değişikliği defterine yazılır).
+- Varsayılan = bugünkü davranış kuralı: ayar satırı yoksa **süre izlenmez, kimseye iletilmez** (bayrak kuralı — çıkışsız kapı üretmez).
+
+### 5.3 Kanallar
+
+| Kademe | Kime | Kanal |
+|---|---|---|
+| Bildirim | holün/vardiyanın görevlisi | **görevli telefonu — mobil uygulama** bildirimi; **kol saati** ayrı bir kanal değil, telefon bildiriminin saate yansımasıdır |
+| Müdahale | (görevliden geri) | mobil uygulamada "tezgahtayım" dokunuşu ya da tezgah telemetrisinin kendisi |
+| İletim | patron | **patron uygulaması** + panel |
+
+**Çekirdek kısıt:** fabrika sunucusuna dışarıdan **GELEN port açılmaz**. Patron bildirimi fabrikanın **çıkan, kurulum anahtarıyla imzalı kanalı** üzerinden **patron bulutuna** gider; patron uygulaması bildirimi buluttan alır (`docs/kurallar/patron-bulutu.md`, `docs/design/PATRON-BULUTU.md`). Saha telefonu fabrika ağındadır, bildirimini fabrika sunucusundan alır.
+
+### 5.4 Gerçek veriye geçişte gerekenler
+
+1. **Tezgah telemetrisi** — duruşun başladığı an ve tezgahın tekrar çalıştığı an makineden gelmeli; elle girişle "kaç dakikadır" güvenilmez.
+2. **Sorumlu ataması** — hol/vardiya → görevli eşlemesi (bugün yok).
+3. **Bildirim altyapısı** — mobil push (saha) + patron bulutu iletimi (patron); ikisi de bu dilimde YAZILMADI.
+4. **Zincir defteri** — bildirim/müdahale/iletim damgaları "ne oldu" bilgisidir ⇒ duruş olayının kendi hareket satırlarında durur (audit'ten türetilmez).
+
+## 6 · Mock → gerçek veri eşlemesi
+
+Bileşenler yalnız `types.ts` şekline bağlıdır; geçişte yalnız `useLoomFloorLive` gövdesi değişir (sorgu + canlı akış), dönüş şekli sabit kalır.
+
+| Ekrandaki alan | Mock (bugün) | Gerçek kaynak |
+|---|---|---|
+| durum / açık duruş (`openStop`) | `mock/stepFloor.ts` rastgele | `MachineStopEvent` + tezgah telemetrisi (Faz 2, `MachineSpec.monitoringState = LIVE`) |
+| devir, atkı, metre | devir × süre / atkı sıklığı | `MachineRun` + telemetri kovaları |
+| vardiya, kalan süre | fabrika gününü 00/08/16 diye böler | `ShiftInstance` / `ShiftDefinition` |
+| çalışma oranı, hız | `availabilityPct` · `performancePct` (ayrı) | `MachineShiftStat` terimleri (`computeShiftTermsPure`, `Teks-Erp/src/services/helpers/loom-shift-terms.helper.ts`) — kullanılabilirlik ve performans AYRI kalır |
+| dokuma işi, plan/üretilen | uydurma `DK…` | `WeavingOrder` (`plannedM`; ÜRETİLEN ≠ TEZGAHTA — `docs/kurallar/dokuma.md`) |
+| levent, kalan iplik | uydurma `LV-…` | `WarpBeam` + levent defteri |
+| sebep, sınıf, simge | `stopReasons.ts` aynası | `ReasonPreset(MACHINE_STOP)` |
+| hedef süre, iletim payı | `targetMin`, `ESCALATION_SETTINGS` | sebep kataloğu/fabrika ayarı (§5.2) |
+| görevli, patron | uydurma adlar | sorumlu ataması + patron hesabı (yok) |
+| `source` | `"SIMULATED"` | `"MACHINE"` — uydurulmuş değer beyanla gider |
+
+Mock deterministiktir (`mulberry32`, tohum dışarıda): aynı tohum + an ⇒ aynı salon; simülasyon adımı saftır (test: `mock/floorMock.test.ts`).
+
+## 7 · Yer ve izin
+
+- Yol `operations/weaving-orders/salon` — Dokuma İşleri ekranının alt yolu; aynı okuma izni (`weavingorder:read`) ve aynı modül kapısı (`ROUTE_MODULE` ön eki, `dokumaEnabled`); yeni ekran kataloğu girdisi gerekmez. Karo `weaving-floor` aynı görünürlük yüklemini kullanır.
+- `reports/dokuma/*` yolu elendi: backend rapor kataloğu girdisi ister, katalog dışı anahtar kapalı sayılır.
+- Geliştirme önizlemesi `Electron/preview-weaving-floor.html` yalnız Vite geliştirme sunucusunda açılır; derleme girdisi değildir (electron-vite girdisi yalnız `index.html`), giriş modülü üretimde hata fırlatır.
+
+## 8 · Açık sorular
+
+1. **Hedef süreleri kim ayarlar?** Fabrika ayarlarında yönetici mi, yoksa vardiya amiri sebep başına mı? Tek iletim payı mı, sebep başına pay mı?
+2. **TV'de tam ekran kendiliğinden mi açılsın?** (ör. "salon ekranı" kipiyle açılan bir cihaz/kullanıcı ⇒ doğrudan tam ekran, girişsiz değil.)
+3. **Dizilim gerçek salon planından mı gelsin?** Bugün hol başına sıra numarasıyla ızgara; gerçek yerleşim (sıra/koridor) tanımlanabilir mi?
+4. **Hangi roller görür?** Bugün `weavingorder:read` olan herkes; patron/vardiya amiri/usta için ayrı bir izin gerekir mi?
+5. **Modül anahtarı:** ekran dokuma modülüne (`dokumaEnabled`) bağlı; telemetri geldiğinde tezgah modülüne (`tezgahEnabled`) mi taşınmalı?

@@ -1,0 +1,52 @@
+// Sayfa çatısı parçaları: "Örnek veri" rozeti, renk/şekil anahtarı ve tam ekran başlığı.
+import { FlaskConical, Minimize2 } from "lucide-react";
+import { formatFactory } from "@/lib/factory-time";
+import { Button } from "@/components/ui/button";
+import { StatusShape } from "./Markers";
+import { STATUS_LABEL, hsl, type StatusKey } from "./palette";
+
+export function SampleDataBadge() {
+  return (
+    <span
+      className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-full px-2.5 py-0.5 text-xs font-bold"
+      style={{ background: hsl("var(--ds-over)", 0.16), color: hsl("var(--ds-over)") }}
+      title="Bu ekran tezgahlardan veri almıyor; gördüğünüz her şey örnek veridir."
+    >
+      <FlaskConical className="h-3.5 w-3.5" />
+      Örnek veri
+    </span>
+  );
+}
+
+const LEGEND: StatusKey[] = ["RUN", "UNPLANNED", "SETUP", "PLANNED", "NON_SCHEDULED"];
+
+/** Renk + şekil anahtarı — tek satır, yazı yalnız burada. */
+export function StatusLegend() {
+  return (
+    <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[0.8em] text-muted-foreground">
+      {LEGEND.map((s) => (
+        <span key={s} className="inline-flex items-center gap-1.5">
+          <StatusShape status={s} className="h-3.5 w-3.5" />
+          {STATUS_LABEL[s]}
+        </span>
+      ))}
+    </div>
+  );
+}
+
+export function FullscreenHeader({ now, onExit, legend }: { now: number; onExit: () => void; legend?: React.ReactNode }) {
+  return (
+    <div className="flex items-center gap-4 px-6 pt-4">
+      <h1 className="whitespace-nowrap text-[1.6em] font-extrabold" style={{ color: hsl("var(--ds-ink)") }}>
+        Tezgah Salonu
+      </h1>
+      <SampleDataBadge />
+      <div className="min-w-0 flex-1">{legend}</div>
+      <span className="whitespace-nowrap text-[1.1em] font-bold tabular-nums text-muted-foreground">{formatFactory(now, "dd.MM.yyyy")}</span>
+      <Button variant="outline" size="sm" onClick={onExit}>
+        <Minimize2 className="mr-1.5 h-4 w-4" />
+        Tam ekrandan çık
+      </Button>
+    </div>
+  );
+}

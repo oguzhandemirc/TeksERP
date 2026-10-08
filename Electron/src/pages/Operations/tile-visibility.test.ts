@@ -189,6 +189,7 @@ describe("karo bağlantıları", () => {
       "stock-counts",
       "warehouse-transfers",
       "warp-beams",
+      "weaving-floor",
       "weaving-orders",
       "work-order-events",
       "work-orders",

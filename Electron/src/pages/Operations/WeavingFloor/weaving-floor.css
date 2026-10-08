@@ -1,0 +1,111 @@
+/* Tezgah Salonu — sayfaya özel renk sözlüğü ve tezgah animasyonları.
+   Renkler :root'ta (detay paneli portal'da çizilir); ön ek --ds- çakışmayı önler. */
+
+:root {
+  --ds-floor: 210 22% 93%;
+  --ds-tile: 0 0% 100%;
+  --ds-ink: 215 28% 24%;
+  --ds-warp: 214 14% 68%;
+  --ds-run: 160 80% 32%;
+  --ds-unplanned: 4 72% 51%;
+  --ds-setup: 262 60% 56%;
+  --ds-planned: 218 70% 52%;
+  --ds-idle: 214 10% 56%;
+  --ds-over: 36 96% 44%;
+  --ds-escalated: 350 78% 42%;
+}
+
+.dark {
+  --ds-floor: 216 30% 8%;
+  --ds-tile: 215 26% 12.5%;
+  --ds-ink: 212 18% 74%;
+  --ds-warp: 214 12% 40%;
+  --ds-run: 158 62% 45%;
+  --ds-unplanned: 4 82% 62%;
+  --ds-setup: 262 78% 72%;
+  --ds-planned: 216 88% 66%;
+  --ds-idle: 214 10% 56%;
+  --ds-over: 38 96% 56%;
+  --ds-escalated: 352 88% 64%;
+}
+
+/* ── Tezgah figürü ─────────────────────────────────────────────────────── */
+.ds-loom {
+  --ds-beat: 1.2s;
+}
+.ds-loom .ds-shuttle {
+  animation: ds-shuttle var(--ds-beat) cubic-bezier(0.45, 0, 0.55, 1) infinite alternate;
+}
+.ds-loom .ds-heddle-a {
+  animation: ds-heddle var(--ds-beat) ease-in-out infinite alternate;
+}
+.ds-loom .ds-heddle-b {
+  animation: ds-heddle var(--ds-beat) ease-in-out infinite alternate-reverse;
+}
+.ds-loom .ds-reed {
+  animation: ds-reed var(--ds-beat) ease-in infinite;
+}
+.ds-loom .ds-weft {
+  animation: ds-weft calc(var(--ds-beat) * 2) linear infinite;
+}
+.ds-loom[data-state="stop"] .ds-shuttle,
+.ds-loom[data-state="stop"] .ds-heddle-a,
+.ds-loom[data-state="stop"] .ds-heddle-b,
+.ds-loom[data-state="stop"] .ds-reed,
+.ds-loom[data-state="stop"] .ds-weft {
+  animation-play-state: paused;
+}
+
+@keyframes ds-shuttle {
+  from { transform: translateX(0); }
+  to { transform: translateX(74px); }
+}
+@keyframes ds-heddle {
+  from { transform: translateY(-2px); }
+  to { transform: translateY(2px); }
+}
+@keyframes ds-reed {
+  0%, 70%, 100% { transform: translateY(0); }
+  85% { transform: translateY(3px); }
+}
+@keyframes ds-weft {
+  from { transform: translateY(0); }
+  to { transform: translateY(4px); }
+}
+
+/* ── Patrona iletilmiş duruş: yavaş, tek nefes (yanıp sönme değil) ────── */
+/* Halka ::after'da — kartın kendi box-shadow çerçevesini ezmesin. */
+.ds-breathe::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  animation: ds-breathe 4.5s ease-in-out infinite;
+}
+@keyframes ds-breathe {
+  0%, 100% { box-shadow: 0 0 0 0 hsl(var(--ds-escalated) / 0); }
+  50% { box-shadow: 0 0 0 5px hsl(var(--ds-escalated) / 0.22); }
+}
+
+/* ── Yeni duran tezgah: tek seferlik kısa vurgu ─────────────────────────── */
+.ds-just-stopped {
+  animation: ds-pop 0.6s ease-out 1;
+}
+@keyframes ds-pop {
+  0% { transform: scale(1); }
+  40% { transform: scale(1.04); }
+  100% { transform: scale(1); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ds-loom .ds-shuttle,
+  .ds-loom .ds-heddle-a,
+  .ds-loom .ds-heddle-b,
+  .ds-loom .ds-reed,
+  .ds-loom .ds-weft,
+  .ds-breathe::after,
+  .ds-just-stopped {
+    animation: none;
+  }
+}

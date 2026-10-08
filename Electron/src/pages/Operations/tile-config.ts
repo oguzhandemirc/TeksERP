@@ -22,6 +22,7 @@ import {
   type LucideIcon,
   AlertOctagon,
   Layers,
+  MonitorPlay,
 } from "lucide-react";
 import type { OperationGroupKey } from "./groups-config";
 // Paket D — görünürlük kuralları SAF katmanda (bileşen içindeki bir `&&`
@@ -259,6 +260,18 @@ export const operationsTiles: OperationsTile[] = [
     description: "Ne dokunacak, ne kadar, kimde — dokuma işi planlama; koşum ve top indirme tabletten",
     icon: Spool,
     to: "/operations/weaving-orders",
+    group: "production",
+    permission: "weavingorder:read",
+    visibleWhen: isWeavingOrdersVisible,
+  },
+  {
+    // TEZGAH SALONU (ÖRNEK VERİ): Dokuma İşleri'nin alt ekranı — aynı izin, aynı
+    // dokuma kapısı (yüklem kimliği aynı). Tezgah telemetrisi gelene dek veri çekmez.
+    key: "weaving-floor",
+    title: "Tezgah Salonu",
+    description: "Tezgahlar şu an ne yapıyor: duranlar, sebebi ve kaç dakikadır beklediği (örnek veri)",
+    icon: MonitorPlay,
+    to: "/operations/weaving-orders/salon",
     group: "production",
     permission: "weavingorder:read",
     visibleWhen: isWeavingOrdersVisible,

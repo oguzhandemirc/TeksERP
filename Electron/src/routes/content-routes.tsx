@@ -68,6 +68,7 @@ import { FxDiffPage } from "@/pages/Reports/Finance/FxDiffPage";
 // Paket D (2026-08-14) — hepsi NAMED export.
 import { YarnStockPage } from "@/pages/Operations/Yarn/YarnStockPage";
 import { WeavingOrdersPage } from "@/pages/Operations/WeavingOrders/WeavingOrdersPage";
+import { WeavingFloorPage } from "@/pages/Operations/WeavingFloor/WeavingFloorPage";
 import { MachineStopsPage } from "@/pages/Operations/MachineStops/MachineStopsPage";
 import { WarpBeamsPage } from "@/pages/Operations/WarpBeams/WarpBeamsPage";
 import { PurchaseOrdersPage } from "@/pages/Operations/PurchaseOrders/PurchaseOrdersPage";
@@ -446,6 +447,16 @@ export const contentRoutes: RouteObject[] = [
     element: (
       <ProtectedRoute requirePermission="weavingorder:read">
         <WeavingOrdersPage />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    // Tezgah Salonu (ÖRNEK VERİ — veri çekmez): Dokuma İşleri ekranının alt yolu, aynı
+    // okuma izni ve aynı modül kapısı (`ROUTE_MODULE` ön eki `operations/weaving-orders`).
+    path: "operations/weaving-orders/salon",
+    element: (
+      <ProtectedRoute requirePermission="weavingorder:read">
+        <WeavingFloorPage />
       </ProtectedRoute>
     ),
   },
