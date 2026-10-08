@@ -271,7 +271,7 @@ ls ~/toren-gecici 2>&1        # "No such file or directory" görmelisin
 
 ## 10. Dönem töreni — PAKET (backend paketi imzası) kısmı: `donem --paket`
 
-> **Durum (2026-10-08):** araç hazır ve bekçide uçtan uca koşuldu (`test_uretim_toren` §9; tasarım [`PAKET-ANAHTARI-KOK-ALTINDA.md`](../design/PAKET-ANAHTARI-KOK-ALTINDA.md) §7 D6). Gerçek tören YAPILMADI. §8'in yerine geçmez: `--paket` verilirse §8'in ALT/ara/İNDİRME işi AYNI komutta yapılır; `--istemci` ile birlikte de verilebilir (§9).
+> **Durum (2026-10-08):** araç hazır ve bekçide uçtan uca koşuldu (`test_uretim_toren` §9; tasarım [`PAKET-ANAHTARI-KOK-ALTINDA.md`](../design/PAKET-ANAHTARI-KOK-ALTINDA.md) §7 D6). Zincir uçtan uca provası (test kökü → sertifika → imza → yeniden imza → iptal → güncelleyici motoru, geçici dizinde, 21 adım): `node scripts/agir-is.mjs -- node deploy/satici/prova-paket-zinciri.mjs`. Gerçek tören YAPILMADI. §8'in yerine geçmez: `--paket` verilirse §8'in ALT/ara/İNDİRME işi AYNI komutta yapılır; `--istemci` ile birlikte de verilebilir (§9).
 
 **Ne üretir (sade dille):** fabrikaya giden backend paketlerini imzalayan iki anahtar — **birincil** (Mac'te, her sürüm imzasında kullanılır) ve **yedek** (yalnız yedek biriminde — Drive'a yüklenen disk görüntüsü). İkisine kökün imzaladığı birer sertifika (395 gün). Kayıp/çalınan anahtarların listesi (dağıtım iptali). Sahada yayında olan backend sürümlerinin imzası yeni anahtarla yenilenir — paketin içi değişmez, yeni imzalı kopyalar Mac'te ayrı bir dizine yazılır.
 
@@ -320,7 +320,7 @@ node deploy/satici/uretim-toren.mjs paket-yedek-dogrula --yedek-usb=/Volumes/<ye
 1. Paket parolası → parola yöneticisi. Parola dosyalarını sil (§9.5), disk görüntüsünü çıkar, Drive'a yükle.
 2. **Yeniden imzalı sürümleri yayına koyma** (D8; yayına koyma aracı gelene dek elle, yalnız şu sırayla). Yayındaki sürüm dizini EZİLMEZ: `<ad>-<kid>.zip` · `surum-zincir-<kid>.json` · `pg-zincir-<kid>.json` eskilerin YANINA konur.
    1. **İndirme kapısı Worker'ı yayından ÖNCE yeni desenle dağıtılır** (`deploy/guncelleme-sunucusu/worker/indirme-kapisi.js`, kid'li zincirli adlar DEĞİŞKEN; [`INDIRME-KAPISI-WORKER.md`](INDIRME-KAPISI-WORKER.md) §8). Atlanırsa güncelleyicinin henüz yayında olmayan kid'li adı yoklaması kenarda 404 olarak önbelleklenir.
-   2. **Yeniden imzalı dosyalar yayına konunca `son-zincir.json` da yeniden imzalı EN YENİ bildirimle değişir** (o sürümün `surum-zincir-<kid>.json` içeriği). Eski sertifika iptal edilince/bitince eski imzalı `son-zincir.json` doğrulamada düşer ve kanal güncelleme bulamaz.
+   2. **Yeniden imzalı dosyalar yayına konunca `son-zincir.json` da yeniden imzalı EN YENİ bildirimle değişir** (o sürümün `surum-zincir-<kid>.json` içeriği) — **eski sertifikanın iptali yayına girmeden ÖNCE.** Değişmezse kurulumlar takılır: güncelleme durumu `Waiting`, hata `PAKET_SERTIFIKA_IPTAL`; kanalı izleyen kurulum da sabit sürüm hedefli kurulum da (sabit hedefte güncelleyici kid'li adı `son-zincir.json`un imzalayanından öğrenir; o iptalliyse kid'li ad hiç yoklanmaz). Kurulu sürüm ve PG yerinde kalır (prova adım 20–21).
 3. Yeni sürüm imzası artık birincil PAKET anahtarıyla (`build-korumali-imza.ts zip --zincir-anahtar=<birincil>`; `backend-bildirim` aynı anahtarla) — tören ekranı tam yolu basar.
 
 ### 10.5 Sorun giderme
@@ -330,7 +330,7 @@ node deploy/satici/uretim-toren.mjs paket-yedek-dogrula --yedek-usb=/Volumes/<ye
 | `--paket-yayindakiler … zip'i de indir` | sürüm dizinine bildirimin gösterdiği zip'i de koy |
 | `Paket ve yedek parolaları … FARKLI olmalı` | dört parola birbirinden farklı olmalı; yeniden koş |
 | `paket-yedek-dogrula` RED | doğru görüntü bağlı mı, yedek parolası doğru mu; hâlâ açılmıyorsa yedek GEÇERSİZ → sonraki törende yeni çift (birincil durdukça imza sürer) |
-| Birincil kayboldu, parolası unutuldu ya da çalındı | yedekle imzaya devam (görüntüyü bağla, `--zincir-anahtar=<yedek dosyası>`, yedek parolası); en kısa sürede yeni tören `--paket-iptal=<kayıp kid>` ile — eski anahtarın imzaladıkları dağıtım iptaliyle reddedilir, yayındakiler yeni anahtarla yeniden imzalanır |
+| Birincil kayboldu, parolası unutuldu ya da çalındı | yedekle imzaya devam (görüntüyü bağla, `--zincir-anahtar=<yedek dosyası>`, yedek parolası); en kısa sürede yeni tören `--paket-iptal=<kayıp kid>` ile — eski anahtarın imzaladıkları dağıtım iptaliyle reddedilir. **Tek imzası iptal edilen anahtardan gelen yayındaki sürüm yeniden İMZALANAMAZ** (köken kanıtlanamaz; tören/`yeniden-imzala` RED — prova adım 13), **YENİDEN DERLENİR**; o yüzden emekliye ayrılan (çalınmamış) anahtarda önce yeniden imzala ve yayına koy (10.4 adım 2), iptali SONRA yap |
 
 ## Ek A — yönetici için teknik özet
 
