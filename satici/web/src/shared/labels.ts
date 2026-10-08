@@ -181,6 +181,7 @@ export const NOTIFICATION_EVENT_LABEL: Record<string, string> = {
   KOK_IMZASI_ACIL: "ACİL kök imzası gerekiyor",
   DONANIM_ONAYI_BEKLIYOR: "Donanım / zayıf tanıma onayı bekliyor",
   BAKIM_BITISI_YAKLASIYOR: "Bakım bitişi yaklaşıyor",
+  GUNCELLEME_DALGA_UYARI: "Güncelleme dalgasında sorun eşiği aşıldı",
 };
 export const NOTIFICATION_CHANNEL_LABEL: Record<string, string> = { EPOSTA: "E-posta", TELEGRAM: "Telegram" };
 export const NOTIFICATION_STATUS_LABEL: Record<string, string> = {

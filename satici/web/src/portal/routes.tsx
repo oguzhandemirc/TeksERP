@@ -26,6 +26,8 @@ import { ReleasesPage } from "./pages/Releases";
 import { RevocationsPage } from "./pages/Revocations";
 import { RootQueuePage } from "./pages/RootQueue";
 import { UsersPage } from "./pages/Users";
+import { WaveDetailPage } from "./update/WaveDetailPage";
+import { WavesPage } from "./update/WavesPage";
 
 export const PORTAL_PRODUCT = "TeksERP Satıcı Portalı";
 
@@ -45,6 +47,7 @@ export const PORTAL_NAV: readonly NavItem[] = [
   { to: "/bayiler", label: "Bayiler", permission: "portal:oku" },
   { to: "/kanallar", label: "Güncelleme grupları", permission: "portal:oku" },
   { to: "/surumler", label: "Sürümler", permission: "portal:oku" },
+  { to: "/guncelleme-dalgalari", label: "Güncelleme dalgaları", permission: "portal:oku" },
   { to: "/filo", label: "Filo", permission: "portal:oku" },
   { to: "/bakim-bitecek", label: "Bakım bitişleri", permission: "portal:oku" },
   { to: "/dosyalar", label: "Dosyalar", permission: "portal:oku" },
@@ -80,6 +83,8 @@ export const PORTAL_ROUTES: RouteObject[] = [
       { path: "bayiler/:id", element: <DealerDetailPage /> },
       { path: "kanallar", element: <ChannelsPage /> },
       { path: "surumler", element: <ReleasesPage /> },
+      { path: "guncelleme-dalgalari", element: <WavesPage /> },
+      { path: "guncelleme-dalgalari/:id", element: <WaveDetailPage /> },
       { path: "filo", element: <FleetPage /> },
       { path: "bakim-bitecek", element: <MaintenanceDuePage /> },
       { path: "dosyalar", element: <FilesPage /> },
