@@ -86,7 +86,7 @@ yaz(path.join(G, 'Teks-Erp/scripts/backend-bildirim.ts'), `import fs from 'node:
 const argv = process.argv.slice(2);
 const komut = argv[0];
 const f = Object.fromEntries(argv.slice(1).map((a) => { const i = a.indexOf('='); return i > 0 ? [a.slice(2, i), a.slice(i + 1)] : [a.slice(2), '']; }));
-fs.appendFileSync(process.env.BEKCI_TS_IZ, JSON.stringify({ komut, f, testCapasi: process.env.TEKSERP_TEST_PAKET_CAPASI ?? null }) + '\\n');
+fs.appendFileSync(process.env.BEKCI_TS_IZ, JSON.stringify({ komut, f, testCapasi: process.env.TEKSERP_TEST_PAKET_CAPASI ?? null, kokCapasi: process.env.TEKSERP_TEST_KOK_CAPASI ?? null }) + '\\n');
 const senaryo = process.env.BEKCI_TS_SENARYO || 'gecerli';
 if (senaryo === 'gecersiz') { console.error('✖ paket bütünlüğü GECERSIZ (IMZA) — imzasız/kurcalı paket yayınlanmaz'); process.exit(2); }
 const pg = JSON.parse(Buffer.from(JSON.parse(fs.readFileSync(f['pg-kunye'] ?? f.kunye, 'utf8')).bildirim.split('.')[1], 'base64url').toString());
@@ -123,9 +123,9 @@ const DAGITIM = JSON.parse(fs.readFileSync(path.join(KOK, 'deploy/dagitim.json')
 const HIZMET_ADI = DAGITIM.urun.backend.hizmetAdi;
 const SURUM = '9.9.9';
 const b64 = (o) => Buffer.from(JSON.stringify(o)).toString('base64url');
-function pgKunye(paket, ek = {}) {
+function pgKunye(paket, ek = {}, kid = 'paket-sahte') {
   const y = { v: 1, urun: 'postgresql', platform: 'win32-x64', cizgi: Number(GERCEK.cizgi), surum: GERCEK.surum, derleme: Number(GERCEK.derleme), paket, icerikSha256: sha(MANIFESTO), icuSurum: ICU, yayinZamani: '2026-10-02T00:00:00.000Z', ...ek };
-  return `${JSON.stringify({ v: 1, bildirim: `${b64({ alg: 'EdDSA', kid: 'paket-sahte' })}.${b64(y)}.c2FodGU` })}\n`;
+  return `${JSON.stringify({ v: 1, bildirim: `${b64({ alg: 'EdDSA', kid })}.${b64(y)}.c2FodGU` })}\n`;
 }
 function tkpub() {
   const raw = crypto.randomBytes(32);
@@ -170,7 +170,7 @@ function kos(ozel = {}, { senaryo = 'gecerli', cikti = yol('cikti', String(Math.
   const tsx = path.join(G, 'Teks-Erp/node_modules/tsx');
   if (tsxYok) fs.renameSync(tsx, `${tsx}.yok`);
   try {
-    const r = spawnSync(process.execPath, [BETIK, ...argv], { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024, env: { ...process.env, BEKCI_TS_IZ: IZ, BEKCI_TS_SENARYO: senaryo, BEKCI_TS_SURUM: SURUM, TEKSERP_TEST_PAKET_CAPASI: yol('sahte-capa.json') } });
+    const r = spawnSync(process.execPath, [BETIK, ...argv], { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024, env: { ...process.env, BEKCI_TS_IZ: IZ, BEKCI_TS_SENARYO: senaryo, BEKCI_TS_SURUM: SURUM, TEKSERP_TEST_PAKET_CAPASI: yol('sahte-capa.json'), TEKSERP_TEST_KOK_CAPASI: yol('sahte-kok.json') } });
     const iz = fs.existsSync(IZ) ? fs.readFileSync(IZ, 'utf8').split('\n').filter(Boolean).map((l) => JSON.parse(l)) : [];
     const dosyalar = fs.existsSync(cikti) ? fs.readdirSync(cikti) : [];
     return { kod: r.status, cikti: `${r.stdout ?? ''}${r.stderr ?? ''}`, iz, dizin: cikti, dosyalar };
@@ -216,7 +216,7 @@ let ILK_SHA = null;
   check('§1g doğrulayıcı TEK kez `ortak-dogrula`: --guven-capasi=uretim · --pg-kunye · --zip · kanal/grup argümanı YOK',
     r.iz.length === 1 && d.length === 1 && f['guven-capasi'] === 'uretim' && !('kanal' in f) && !('kanal-turu' in f) && !('grup' in f) && f['pg-kunye'] === PGJSON && f.zip === BACKEND && f['pg-cizgi'] === String(GERCEK.cizgi) && f['pg-en-az'] === GERCEK.backendEnAz,
     JSON.stringify(r.iz).slice(0, 300));
-  check('§1h ortamdaki TEKSERP_TEST_PAKET_CAPASI doğrulayıcıya GEÇMEZ ve --capa verilmez (yalnız gerçek üretim çapası)', r.iz.length === 1 && r.iz[0].testCapasi === null && !('capa' in f), JSON.stringify(r.iz[0]?.testCapasi));
+  check('§1h ortamdaki TEKSERP_TEST_PAKET_CAPASI ve TEKSERP_TEST_KOK_CAPASI doğrulayıcıya GEÇMEZ ve --capa verilmez (yalnız gerçek üretim çapası)', r.iz.length === 1 && r.iz[0].testCapasi === null && r.iz[0].kokCapasi === null && !('capa' in f), JSON.stringify(r.iz[0]?.testCapasi));
 }
 
 // §2 belirlenimlilik · §3 ezmez
@@ -314,6 +314,33 @@ function dur(ad, r, desen, { tsBos = true, kod = 1 } = {}) {
   const uyeler = ['BENIOKU.txt', 'SHA256SUMS', 'TeksERP-Kurulum-9.9.9.exe', 'etkili.tkpub', 'pg.json', PG_AD, path.basename(BACKEND)];
   const say = (x) => uyeler.filter((u) => x.desen.test(u)).length;
   check('§6c üretilen arşivin üyelerinde her setup deseni TAM bir dosya (SHA256SUMS/BENIOKU.txt çakışmaz)', say(d.backend) === 1 && say(d.pg) === 1 && say(d.pgKunye) === 1 && say(d.tkpub) === 1, `${say(d.backend)}/${say(d.pg)}/${say(d.pgKunye)}/${say(d.tkpub)}`);
+}
+
+// §6Z zincir (3.9 D5): zincir-yalnız paket ve zincirli PG künyesi
+{
+  const zGunc = pe('tekserp-guncelleyici {"paketZinciri":true}');
+  const zIkili = { 'tekserp-hizmet.exe': { boyut: HIZMET.length }, 'tekserp-guncelleyici.exe': { boyut: zGunc.length } };
+  const zZip = (ad, { gunc = zGunc, eski = false, paket = {} } = {}) => backendZip(path.join(yol('z', ad), path.basename(BACKEND)), {
+    imzali: false, paket: { butunlukKid: 'pkt-test-1', hizmetIkilileri: { ...zIkili, 'tekserp-guncelleyici.exe': { boyut: gunc.length } }, ...paket },
+    ek: { 'runtime/tekserp-guncelleyici.exe': gunc, 'butunluk-zincir.jws': 'a.b.c', 'butunluk-liste.txt': 'liste\n', ...(eski ? { 'butunluk.jws': 'a.b.c' } : {}) } });
+  const icerik = (r) => {
+    const a = r.dosyalar.find((x) => x.endsWith('.zip'));
+    return a ? arac('unzip', ['-Z1', path.join(r.dizin, a)]).stdout.split('\n').filter(Boolean) : [];
+  };
+  dur('§6Z1 zincir-yalnız paket + "paketZinciri" bilmeyen güncelleyici', kos({ '--backend': zZip('eskigu', { gunc: GUNC }) }), /ZİNCİR-YALNIZ paket, ama runtime\/tekserp-guncelleyici\.exe "paketZinciri" bilmeyen/);
+  dur('§6Z2 zincir-yalnız paket + setup sürümü farklı', kos({ '--backend': zZip('surum', { paket: { uygulamaSurumu: '9.9.8' } }) }), /setup sürümü 9\.9\.9 — paket 9\.9\.8/);
+  const r3 = kos({ '--backend': zZip('tamam') });
+  check('§6Z3 zincir-yalnız paket + zinciri bilen güncelleyici + aynı sürüm setup → arşiv üretilir', r3.kod === 0 && icerik(r3).includes(path.basename(BACKEND)), r3.cikti.slice(-400));
+  const pgz = yol('pgz', 'pg-zincir.json');
+  yaz(pgz, pgKunye({ ad: PG_AD, boyut: PG_VERI.length, sha256: sha(PG_VERI) }, {}, 'pkt-test-1'));
+  dur('§6Z4 zincirli PG künyesi + eski güncelleyicili paket', kos({ '--pg-kunye': pgz }), /zincir imzalı PG künyesi \(pg-zincir\.json\), ama/);
+  const r5 = kos({ '--pg-kunye': pgz, '--backend': zZip('cift', { eski: true, paket: { butunlukKid: 'paket-sahte' } }) });
+  const i5 = icerik(r5);
+  check('§6Z5 pg-zincir.json arşive setup\'ın aradığı adla (pg.json) girer, kendi adıyla GİRMEZ', r5.kod === 0 && i5.includes('pg.json') && !i5.includes('pg-zincir.json') &&
+    r5.iz.some((x) => x.f['pg-kunye'] === pgz), `${r5.cikti.slice(-300)} ${i5.join(',')}`);
+  const pgk = yol('pgk', 'pg-kunye.json');
+  yaz(pgk, fs.readFileSync(pgz, 'utf8'));
+  dur('§6Z6 başka adlı künye (pg-zincir.json / pg.json dışı) yine DUR', kos({ '--pg-kunye': pgk }), /setup yalnız "pg\.json" arar/);
 }
 
 // §7 doğrulayıcı koşamaz
