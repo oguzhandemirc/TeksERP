@@ -11,9 +11,14 @@ import {
   ReleaseVersionSchema,
   UPDATE_DECISIONS,
   UuidSchema,
+  downloadPlatformOf,
+  type UpdatePlatform,
 } from "./protocol";
 
-/** Geliştirme/test için açık veri kökü (mutlak); yoksa Windows'ta `%ProgramData%\TeksERP\guncelleme`. */
+/**
+ * Açık veri kökü (mutlak). Linux/OCI'de TEK kaynaktır: güncelleyicili compose `/var/lib/tekserp/guncelleme` yazar
+ * (üretim değeri); Windows'ta ikinci kanal ve geliştirme/test için, yoksa `%ProgramData%\TeksERP\guncelleme`.
+ */
 export const UPDATER_DIR_ENV = "TEKSERP_GUNCELLEME_DIZINI";
 export const UPDATER_STATUS_FILE = path.join("durum", "durum.json");
 export const UPDATER_HISTORY_FILE = path.join("durum", "gecmis.jsonl");
@@ -121,7 +126,17 @@ export interface UpdaterRead {
   readonly history: readonly UpdaterHistoryLine[];
 }
 
-/** Veri kökü: açık değişken (göreliyse `invalid`) > Windows'ta ProgramData > yok (güncelleyici yok). */
+/** Konteyner içinde mi (Docker `/.dockerenv` · Podman `/run/.containerenv`) — ortam bildirimi de bunu okur. */
+export function runningInContainer(): boolean {
+  return fs.existsSync("/.dockerenv") || fs.existsSync("/run/.containerenv");
+}
+
+/** Bu backend'in güncelleme paketi platformu — satıcının belirteç kümesini seçtiği kural (`downloadPlatformOf`). */
+export function ownUpdatePlatform(platform: NodeJS.Platform = process.platform, container: boolean = runningInContainer()): UpdatePlatform {
+  return downloadPlatformOf({ platform, konteyner: container });
+}
+
+/** Veri kökü: açık değişken (göreliyse `invalid`) > Windows'ta ProgramData > yok (güncelleyici yok; Linux'ta kök yalnız değişkenden). */
 export function resolveUpdaterDir(
   env: NodeJS.ProcessEnv = process.env,
   platform: NodeJS.Platform = process.platform,

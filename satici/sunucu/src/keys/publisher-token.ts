@@ -6,7 +6,7 @@ import type { KeyStore } from "./key-store";
 
 /** Kurulum değil yayıncı: belirteç kimin için basıldı (Worker kurulumu sorgulamaz). */
 export const PUBLISHER_INSTALLATION_ID = "00000000-0000-4000-8000-000000000000";
-/** Kurulumun belirteç kümesiyle aynı ürünler (protokol `DOWNLOAD_PRODUCTS`: electron · mobil · backend). */
+/** Bütün ürün dizinleri (protokol `DOWNLOAD_PRODUCTS`): yayıncı her platformun paketini yayınlar, kurulum yalnız kendininkini alır. */
 export const PUBLISHER_PRODUCTS = DOWNLOAD_PRODUCTS;
 export const PUBLISHER_DEFAULT_MINUTES = 60;
 export const PUBLISHER_MAX_MINUTES = DOWNLOAD_MAX_TTL_MS / 60_000;

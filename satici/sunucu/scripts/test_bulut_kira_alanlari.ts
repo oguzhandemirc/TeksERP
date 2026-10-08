@@ -13,7 +13,7 @@ import { cpSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync }
 import os from "node:os";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
-import { ENDPOINTS, parseJws, verifyDownloadToken, type LeaseDoc } from "../src/lisans-protokol";
+import { DOWNLOAD_PRODUCTS, ENDPOINTS, parseJws, verifyDownloadToken, type LeaseDoc } from "../src/lisans-protokol";
 import { kurulumAnahtariUret } from "../../../Teks-Erp/scripts/lib/lisans-fikstur";
 import { cloudEntitlementUntil, leaseSyncMinutes } from "../src/services/cloud-entitlement";
 import { PUBLISHER_INSTALLATION_ID, publisherTokens } from "../src/keys/publisher-token";
@@ -169,7 +169,7 @@ async function yayinci(ortam: AnahtarOrtami, cliDizin: string): Promise<void> {
   const anahtarlar = [{ kid: ortam.f.ind.kid, x: ortam.f.ind.x }];
   const t = publisherTokens(ortam.ctx.keys, { channels: ["testfabrika", "adnansahin", "testfabrika"], minutes: 60, nowMs: now });
   const onekler = t.map((x) => x.yolOneki).sort().join(",");
-  kontrol("§4a ✓K kanal × {electron, mobil, backend}, tekrarlı kanal tekilleşir", onekler === "/adnansahin/backend/,/adnansahin/electron/,/adnansahin/mobil/,/testfabrika/backend/,/testfabrika/electron/,/testfabrika/mobil/", onekler);
+  kontrol("§4a ✓K kanal × {electron, mobil, backend, backend-oci} (yayıncı her platformu yayınlar), tekrarlı kanal tekilleşir", onekler === "/adnansahin/backend-oci/,/adnansahin/backend/,/adnansahin/electron/,/adnansahin/mobil/,/testfabrika/backend-oci/,/testfabrika/backend/,/testfabrika/electron/,/testfabrika/mobil/", onekler);
   const dog = t.map((x) => verifyDownloadToken(x.belirtec, { keys: anahtarlar, nowMs: now }));
   kontrol("§4b ✓K hepsi kâhinden geçer, yayıncı kimliği, yol öneki belgeyle aynı", dog.every((d, i) => d.ok && d.value.kurulumId === PUBLISHER_INSTALLATION_ID && d.value.yolOneki === t[i]!.yolOneki));
   const at = (fn: () => unknown): boolean => { try { fn(); return false; } catch { return true; } };
@@ -182,8 +182,8 @@ async function yayinci(ortam: AnahtarOrtami, cliDizin: string): Promise<void> {
   const r = cli(["--kanal=testfabrika", "--dk=5"]);
   let json: { v?: number; belirtecler?: { yolOneki: string; belirtec: string }[] } = {};
   try { json = JSON.parse(r.stdout) as typeof json; } catch { json = {}; }
-  const cliOk = r.status === 0 && json.v === 1 && json.belirtecler?.length === 3 && json.belirtecler.every((b) => verifyDownloadToken(b.belirtec, { keys: anahtarlar, nowMs: Date.now() }).ok);
-  kontrol("§4d ✓K CLI indirme-belirteci → tek satır JSON, üç belirteç (electron · mobil · backend) kâhinden geçer", cliOk, `${r.status} ${r.stderr.slice(0, 160)}`);
+  const cliOk = r.status === 0 && json.v === 1 && json.belirtecler?.length === DOWNLOAD_PRODUCTS.length && json.belirtecler.every((b) => verifyDownloadToken(b.belirtec, { keys: anahtarlar, nowMs: Date.now() }).ok);
+  kontrol("§4d ✓K CLI indirme-belirteci → tek satır JSON, her ürün dizinine bir belirteç (DOWNLOAD_PRODUCTS) kâhinden geçer", cliOk, `${r.status} ${r.stderr.slice(0, 160)}`);
   const r71 = cli(["--kanal=testfabrika", "--dk=71"]);
   const rYok = cli([]);
   kontrol("§4e CLI ömür 71 dk / kanalsız → çıkış 2, stdout'ta belirteç yok", r71.status === 2 && rYok.status === 2 && !r71.stdout.includes("ey") && !rYok.stdout.includes("ey"), `${r71.status} ${rYok.status}`);
@@ -221,6 +221,13 @@ async function yayinKaynagi(ortam: AnahtarOrtami, cliDizin: string): Promise<voi
     kontrol("§5b ✓K yerel CLI: adresin önekine taze belirteç (electron · mobil), dosya belirteci kullanılmaz",
       e !== DOSYA && de.ok && de.value.yolOneki === "/testfabrika/electron/" && dm.ok && dm.value.yolOneki === "/testfabrika/mobil/");
     kontrol("§5c aynı önek ikinci okumada aynı belirteç (önbellek) · başlık X-TKL-Indirme", yo.belirtecOku("/testfabrika/electron/TeksERP.exe") === e && yo.indirmeBasliklari("/testfabrika/electron/latest.yml")["X-TKL-Indirme"] === e);
+    // L2b: CLI backend-oci/ belirteci de basar; yayın okuyucusu onu tanımazsa bütün çıktıyı reddeder (yayın durur).
+    const lo = yo.belirtecOku("/testfabrika/backend-oci/son.json");
+    const lw = yo.belirtecOku("/testfabrika/backend/son.json");
+    const dlo = dogrula(lo);
+    const dlw = dogrula(lw);
+    kontrol("§5b' ✓K backend-oci/ adresine kendi öneki, backend/ adresine kendi öneki (ayrı belirteçler)",
+      dlo.ok && dlo.value.yolOneki === "/testfabrika/backend-oci/" && dlw.ok && dlw.value.yolOneki === "/testfabrika/backend/" && lo !== lw);
     kontrol("§5d kanal/ürün öneki dışı adres ya da adressiz → DUR", yok(() => yo.belirtecOku("/testfabrika/baska/x")) && yok(() => yo.belirtecOku()));
     writeFileSync(kaynak, JSON.stringify({ tur: "yerel", dizin: path.join(tmp, "olmayan") }), { mode: 0o600 });
     kontrol("§5e yapılandırılmış CLI üretemiyor → DUR (dosyaya DÜŞMEZ)", yok(() => yo.belirtecOku("/adnansahin/electron/latest.yml")));

@@ -102,7 +102,7 @@ Hedef dizin düzeni: `src/platform/{mod.rs, windows/, linux/}`; `#[cfg]` yalnız
 
 ### 1.3 Ürün yolu ve platform (sözleşme 5 — A10'un çözümü)
 
-> → `GUNCELLEYICI.md` §16 (L2a, 2026-10-08): ürün yolu · platform · `imaj` · `guncelleyici` · `SURUM_PLATFORM` uygulandı; indirme öneki/belirteç/Worker L2b'de.
+> → `GUNCELLEYICI.md` §16 (L2a, 2026-10-08): ürün yolu · platform · `imaj` · `guncelleyici` · `SURUM_PLATFORM` uygulandı; indirme öneki/belirteç/Worker L2b'de uygulandı (§16 madde 7: kurulum yalnız kendi platformunun backend dizinine belirteç alır).
 
 - **Yeni ürün segmenti `backend-oci`:** `/<grup>/backend-oci/son.json` · `/<grup>/backend-oci/<sürüm>/…` · `/<grup>/backend-oci/pg/…`. `DOWNLOAD_PRODUCTS`a `backend-oci`; indirme belirteci `?urun=backend-oci` (yol öneki `/<grup>/backend-oci/`). Windows yolu (`/backend/`) **hiç değişmez** ⇒ eski Windows güncelleyicisi hiçbir zaman Linux bildirimi görmez; Linux güncelleyicisi Windows bildirimi görmez. BULUT §4.2'deki "yalnız Linux kanalında yayımlanır" varsayımının yerine geçer.
 - Bildirim `platform: "linux-x64-oci"` (`UPDATE_PLATFORMS`a eklenir), `urun: "backend"` kalır (karar, rapor ve panel ürünü aynı görür); güncelleyici `platform`u kendi derleme hedefine eşit ister (`SURUM_PLATFORM` — yeni kod, sözleşme 5).
@@ -300,7 +300,7 @@ Bu, gruplar düzeyinde zaten bir **kanarya → öncü → genel** zinciridir. Ek
 
 | Yüzey | Windows (bugün) | Linux | Not |
 |---|---|---|---|
-| Durum dosyası `durum.json` + kalp atışı (`sonCanlilik`, `canlilikEsigiSn`) | `%ProgramData%\TeksERP\guncelleme\durum\` | `/var/lib/tekserp/guncelleme/durum/` → konteynere `ro` | biçim AYNI (§5.2); backend `TEKSERP_GUNCELLEME_DIZINI`den okur — Linux'ta bu değişken compose'da ÜRETİM değeridir (bugün "geliştirme/test" diye belgeli; L5 sözleşme cümlesini günceller) |
+| Durum dosyası `durum.json` + kalp atışı (`sonCanlilik`, `canlilikEsigiSn`) | `%ProgramData%\TeksERP\guncelleme\durum\` | `/var/lib/tekserp/guncelleme/durum/` → konteynere `ro` | biçim AYNI (§5.2); backend `TEKSERP_GUNCELLEME_DIZINI`den okur — Linux'ta bu değişken compose'da ÜRETİM değeridir ve tek kaynaktır (L5 compose · L2b `updater-ipc.ts` + `GUNCELLEYICI.md` eşleme cümlesi) |
 | Geçmiş `gecmis.jsonl` | aynı dizin | aynı dizin | aynı |
 | Panel "Sistem → Sunucu Güncellemeleri" + onay ucu | var (D7) | DEĞİŞMEZ — aynı uçlar, aynı eşleme (`Teks-Erp/src/services/update-status.service.ts`) | yalnız yeni bilgi kodları (`ALTYAPI_BEKLENIYOR` · `KURTARMA_SURUYOR` · `GUNCELLEYICI_ONCE`) panelin "Bilgi" satırına düşer |
 | Sunucu simgesi (`/health/tepsi`) | var | yok (bulutta masaüstü yok) | — |

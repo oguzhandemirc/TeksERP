@@ -1,7 +1,8 @@
 // =============================================================================
 // NİYET YAZICISI (Dağıtım v2 — docs/design/GUNCELLEYICI.md §5.1) — `niyet\niyet.json`un TEK yazarı
 // =============================================================================
-// Niyet iki girdiden doğar: kiranın yoklamasıyla gelen `/<kanal>/backend/` İNDİRME belirteci (≤ 70 dk ömür,
+// Niyet iki girdiden doğar: kiranın yoklamasıyla gelen backend İNDİRME belirteci (önek platformun dizini: Windows
+// `/<kanal>/backend/`, Linux/OCI `/<kanal>/backend-oci/` — `backendDownloadPrefix`; ≤ 70 dk ömür,
 // yoklama saatlik — her kabul edilen yoklamada tazelenir) + yürürlükteki panel ONAYI. İkisi aynı dosyadadır:
 // yazım tek yerden, süreç içinde SIRALI ve her seferinde iki girdinin BUGÜNKÜ hâlinden kurulur (iki yazım birbirini
 // ezemez). Niyet yetki DEĞİLDİR: yalnız sürüm + kimlik seçer; yol, komut, adres, dosya adı taşımaz
@@ -9,8 +10,9 @@
 // =============================================================================
 import { isVerificationMode } from "../lib/dogrulama-kipi";
 import { getDownloadTokens, getLicenseSnapshot } from "../lib/license/runtime";
-import { msToIso } from "../lib/license/protocol";
+import { WINDOWS_PLATFORM, backendDownloadPrefix, msToIso, type UpdatePlatform } from "../lib/license/protocol";
 import {
+  ownUpdatePlatform,
   readUpdaterIntent,
   resolveUpdaterDir,
   writeUpdaterIntent,
@@ -41,8 +43,8 @@ export function composeIntent(g: {
 }
 
 /**
- * Yazılacak belirteç: bellekteki `/<kanal>/backend/` belirteci; yoksa (yeniden başlatma sonrası ilk yoklamadan
- * önce) niyette duran ve süresi geçmemiş olan korunur. Güncelleme donuksa (K1) hiçbiri.
+ * Yazılacak belirteç: bellekteki, bu backend'in platformunun önekindeki belirteç; yoksa (yeniden başlatma sonrası ilk
+ * yoklamadan önce) niyette duran ve süresi geçmemiş olan korunur. Güncelleme donuksa (K1) hiçbiri.
  */
 export function intentToken(g: {
   readonly updatesAllowed: boolean;
@@ -50,8 +52,10 @@ export function intentToken(g: {
   readonly tokens: ReadonlyArray<{ yolOneki: string; belirtec: string }>;
   readonly kept: UpdaterIntent | null;
   readonly nowMs: number;
+  readonly platform?: UpdatePlatform;
 }): IntentToken | null {
-  const d = decideDownloadToken({ updatesAllowed: g.updatesAllowed, prefix: g.kanal ? `/${g.kanal}/backend/` : null, tokens: g.tokens, nowMs: g.nowMs });
+  const prefix = g.kanal ? backendDownloadPrefix(g.kanal, g.platform ?? WINDOWS_PLATFORM) : null;
+  const d = decideDownloadToken({ updatesAllowed: g.updatesAllowed, prefix, tokens: g.tokens, nowMs: g.nowMs });
   if (d.kind === "frozen") return null;
   if (d.kind === "ok" && d.token.gecerlilikSonu) return { belirtec: d.token.belirtec, bitis: d.token.gecerlilikSonu };
   const kept = g.kept?.indirme ?? null;
@@ -69,6 +73,7 @@ async function refreshOnce(nowMs: number): Promise<IntentRefreshResult> {
     tokens: getDownloadTokens(),
     kept: readUpdaterIntent(dir),
     nowMs,
+    platform: ownUpdatePlatform(),
   });
   const approval = await activeUpdateApproval();
   return writeUpdaterIntent(dir, composeIntent({ token, approval, nowMs }));

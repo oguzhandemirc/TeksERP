@@ -1,7 +1,7 @@
 // =============================================================================
 // Cloudflare Worker — İNDİRME KAPISI (güncelleme sunucusu)
 // =============================================================================
-// `/<kanal>/electron/*` · `/<kanal>/mobil/*` · `/<kanal>/backend/*` dosyalarını yalnız fabrikanın
+// `/<kanal>/electron/*` · `/<kanal>/mobil/*` · `/<kanal>/backend/*` · `/<kanal>/backend-oci/*` dosyalarını yalnız fabrikanın
 // KENDİ backend'inden alınmış kısa ömürlü İNDİRME belirteciyle verir; adresi bulan
 // dışarıdaki biri indiremez. Belirteç JWS + Ed25519 (`typ: tekserp-indirme`) —
 // Worker'da YALNIZ açık anahtar durur, imzalayamaz. Anahtarlar İNDİRME LİSTESİNDEN gelir (L2-8): çapa kipi başına
@@ -42,8 +42,11 @@ export const VARSAYILAN_AYAR = Object.freeze({
   onbellekSn: 604800,
 });
 
-/** Kanal başına ürün dizinleri — kâhin `DOWNLOAD_PRODUCTS` (protocol/belgeler.ts) ile birebir (bekçi §8). */
-export const URUN_DIZINLERI = Object.freeze(["electron", "mobil", "backend"]);
+/**
+ * Kanal başına ürün dizinleri — kâhin `DOWNLOAD_PRODUCTS` (protocol/indirme.ts) ile birebir (bekçi §9a). Listede
+ * olmayan dizin KAPSAM DIŞIDIR ve belirteçsiz geçer: yeni ürün dizinine ilk yayından ÖNCE buraya girer.
+ */
+export const URUN_DIZINLERI = Object.freeze(["electron", "mobil", "backend", "backend-oci"]);
 
 /** OTA takma adının öneki — dağıtım kaydının `otaTakmaAd` türetimiyle aynı (check-dagitim §3); `ota` grup adı olamaz. */
 export const OTA_TAKMA_AD_ONEKI = "/ota/";

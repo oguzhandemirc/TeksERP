@@ -8,7 +8,8 @@ import type { Hak, Kira, Kurulum, YaptirimEylemi, ZincirKarari } from "@prisma/c
 import { z } from "zod";
 import {
   DAY_MS,
-  DOWNLOAD_PRODUCTS,
+  DOWNLOAD_PRODUCTS_BY_PLATFORM,
+  downloadPlatformOf,
   IsoTimeSchema,
   LeaseSchema,
   LicenseResponseSchema,
@@ -292,9 +293,11 @@ export async function issueLease(tx: Tx, ctx: VendorContext, g: IssueLeaseInput)
 }
 
 /**
- * İndirme belirteçleri (grubun electron/ · mobil/ · backend/ önekleri — `DOWNLOAD_PRODUCTS`). Verilmez: K1
- * (güncelleme donuk), bakım bitmiş (son hak edilen sürümde kalır), kurulum ETKİN değil, kurulumun kanalı aktif bir
- * güncelleme grubu değil (emekli kanalın yayın kökü yok — kira yine basılır), indirme anahtarı yok.
+ * İndirme belirteçleri: grubun electron/ · mobil/ önekleri + kurulumun KENDİ platformunun backend dizini
+ * (`DOWNLOAD_PRODUCTS_BY_PLATFORM`; Linux + konteyner → backend-oci/, diğer her ortam → backend/). Platform `ortam`dan
+ * — yoklamada bu isteğin bildirdiği ortam, yoksa kurulumun son bildirdiği. Verilmez: K1 (güncelleme donuk), bakım
+ * bitmiş (son hak edilen sürümde kalır), kurulum ETKİN değil, kurulumun kanalı aktif bir güncelleme grubu değil (emekli
+ * kanalın yayın kökü yok — kira yine basılır), indirme anahtarı yok.
  */
 export async function downloadTokens(
   db: Db,
@@ -303,6 +306,7 @@ export async function downloadTokens(
   entitlement: Hak,
   sanction: SanctionState,
   nowMs: number,
+  ortam: unknown = installation.sonOrtam,
 ): Promise<{ yolOneki: string; belirtec: string }[]> {
   if (sanction.guncellemeDonuk || installation.durum !== "ETKIN" || entitlement.bakimBitis.getTime() < nowMs) return [];
   const channel = await db.kanal.findUnique({ where: { kod: installation.kanalKodu }, select: { kod: true, aktif: true } });
@@ -310,7 +314,7 @@ export async function downloadTokens(
   const key = ctx.keys.downloadKey(nowMs);
   if (!key) return [];
   const exp = msToIso(nowMs + ctx.config.INDIRME_OMUR_DK * 60_000);
-  return DOWNLOAD_PRODUCTS.map((dir) => {
+  return DOWNLOAD_PRODUCTS_BY_PLATFORM[downloadPlatformOf(ortam)].map((dir) => {
     const yolOneki = `/${installation.kanalKodu}/${dir}/`;
     return {
       yolOneki,

@@ -58,7 +58,8 @@ const CLI_OMUR_DK = 60;
 /** Bu kadar süresi kalmış belirteç yeniden kullanılmaz — uzun yükleme ortasında dolmasın. */
 const TAZELIK_PAYI_MS = 10 * 60_000;
 const CLI_ZAMAN_ASIMI_MS = 60_000;
-const KAPSAM_DESENI = /^\/([a-z0-9][a-z0-9-]{0,39})\/(electron|mobil|backend)\//;
+// Ürün kümesi protokol `DOWNLOAD_PRODUCTS`; CLI çıktısı her satırda bunu ister, eksik ürün bütün yayını durdurur.
+const KAPSAM_DESENI = /^\/([a-z0-9][a-z0-9-]{0,39})\/(electron|mobil|backend|backend-oci)\//;
 const SSH_HEDEF_DESENI = /^[A-Za-z0-9@._-]{1,120}$/;
 const UZAK_KOMUT_DESENI = /^[A-Za-z0-9 ._/=-]{1,300}$/;
 const onbellek = new Map();
@@ -95,7 +96,7 @@ function kaynakOku() {
   throw new BelirtecYok(`YAYIN BELİRTECİ KAYNAĞI tanınmıyor: ${yol} — {"tur":"yerel","dizin":…} ya da {"tur":"ssh","hedef":…,"komut":…}`);
 }
 
-/** Adresin kanal + ürün öneki (`/<kanal>/electron/` · `/<kanal>/mobil/` · `/<kanal>/backend/`); değilse null. */
+/** Adresin kanal + ürün öneki (`/<kanal>/electron/` · `mobil/` · `backend/` · `backend-oci/`); değilse null. */
 export function kapsamCoz(url) {
   let yol;
   try {
@@ -133,7 +134,7 @@ function cliCalistir(kaynak, kanal) {
 
 function cliBelirteci(kaynak, url) {
   const kapsam = kapsamCoz(url);
-  if (!kapsam) throw new BelirtecYok(`YAYIN BELİRTECİ: adres kanal/ürün önekinde değil (/<kanal>/electron|mobil|backend/): ${String(url ?? '(yok)').split(/[?#]/)[0]}`);
+  if (!kapsam) throw new BelirtecYok(`YAYIN BELİRTECİ: adres kanal/ürün önekinde değil (/<kanal>/electron|mobil|backend|backend-oci/): ${String(url ?? '(yok)').split(/[?#]/)[0]}`);
   const taze = (b) => b.yolOneki === kapsam.yolOneki && b.expMs - Date.now() >= TAZELIK_PAYI_MS;
   let b = (onbellek.get(kapsam.kanal) ?? []).find(taze);
   if (!b) {

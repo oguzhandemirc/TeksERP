@@ -5,10 +5,36 @@ import { z } from "zod";
 import { publicKeyFromX, verifyJws } from "./jws";
 import { ChannelCodeSchema, IsoTimeSchema, PROTOCOL_VERSION, TYP, UuidSchema, decodeDocument, signDocument } from "./belgeler";
 import { CLOCK_SKEW_MS, success, failure, forwardFailure, isoToMs, type Result } from "./ortak";
+import { WINDOWS_PLATFORM, type UpdatePlatform } from "./guncelleme-ortak";
+import { RELEASE_PRODUCT_DIRS } from "./guncelleme";
 
 /** Güncelleme sunucusunda kanal başına ürün dizinleri (`/<kanal>/<ürün>/`) — indirme belirtecinin önek kümesi. */
-export const DOWNLOAD_PRODUCTS = ["electron", "mobil", "backend"] as const;
+export const DOWNLOAD_PRODUCTS = ["electron", "mobil", "backend", "backend-oci"] as const;
 export type DownloadProduct = (typeof DOWNLOAD_PRODUCTS)[number];
+
+/**
+ * Kuruluma basılan önekler, backend paketinin platformuna göre (sözleşme 5): bir kurulum yalnız KENDİ platformunun
+ * backend dizinini alır. Windows kümesi sözleşme 5 öncesiyle aynıdır.
+ */
+export const DOWNLOAD_PRODUCTS_BY_PLATFORM = {
+  "win32-x64": ["electron", "mobil", RELEASE_PRODUCT_DIRS["win32-x64"]],
+  "linux-x64-oci": ["electron", "mobil", RELEASE_PRODUCT_DIRS["linux-x64-oci"]],
+} as const satisfies Record<UpdatePlatform, readonly DownloadProduct[]>;
+
+/** Backend güncelleme belirtecinin öneki — niyet yazıcısı ve panel görünümü bunu arar. */
+export function backendDownloadPrefix(kanal: string, platform: UpdatePlatform): string {
+  return `/${kanal}/${RELEASE_PRODUCT_DIRS[platform]}/`;
+}
+
+/**
+ * Kurulumun bildirdiği ortamdan (`EnvironmentSchema`: `platform` + `konteyner`) backend paketinin platformu. Yalnız
+ * Linux + konteyner `linux-x64-oci`dir; ortamsız, biçimsiz ya da başka her ortam `win32-x64` (bugünkü küme).
+ */
+export function downloadPlatformOf(ortam: unknown): UpdatePlatform {
+  if (typeof ortam !== "object" || ortam === null) return WINDOWS_PLATFORM;
+  const o = ortam as { readonly platform?: unknown; readonly konteyner?: unknown };
+  return o.platform === "linux" && o.konteyner === true ? "linux-x64-oci" : WINDOWS_PLATFORM;
+}
 
 export const DownloadSchema = z
   .object({
@@ -19,7 +45,7 @@ export const DownloadSchema = z
     exp: IsoTimeSchema,
   })
   .refine((i) => DOWNLOAD_PRODUCTS.some((urun) => i.yolOneki === `/${i.kanal}/${urun}/`), {
-    message: "Yol öneki kanalın electron/, mobil/ ya da backend/ dizini olmalı",
+    message: "Yol öneki kanalın electron/, mobil/, backend/ ya da backend-oci/ dizini olmalı",
   });
 export type DownloadDoc = z.infer<typeof DownloadSchema>;
 

@@ -33,6 +33,9 @@
 //      zincirli işaretçiler (`son-zincir.json` · `surum-zincir.json` · `pg-zincir.json`) değişken · yeni adres
 //      ayarı (`worker/indir-ayar.json`): geçerli, kanallar = backend `UPDATE_GROUPS`, eski biçim/hazırlık/geçiş
 //      boş, K-5 — `ind-2026` listede YOK ve onunla imzalı belirteç RED
+//   §11 backend-oci/ öneki (sözleşme 5, L2b): kâhin ile parite · belirteçsiz backend-oci/ KAPILI (Worker'da yoksa
+//      kapsam dışı kalıp anonim geçerdi) · Windows ↔ Linux belirteçleri birbirinin dizininde RED · kodlanmış/büyük harf
+//      atlatma kapılı · paket değişmez, işaretçiler değişken
 // ÖLÇMEDİĞİ: Cloudflare çalışma zamanı (workerd). WebCrypto Ed25519 burada Node'unkidir;
 // kenar ölçümü runbook'un prova adımında (docs/ops/INDIRME-KAPISI-WORKER.md).
 // =============================================================================
@@ -92,7 +95,7 @@ const IND2 = anahtarUret("ind-2026-yedek");
 const YABANCI = anahtarUret("ind-yabanci");
 const KURULUM = "3f0c8a52-6d1e-4b7a-9c2f-1a2b3c4d5e6f";
 
-type Urun = "electron" | "mobil" | "backend";
+type Urun = (typeof DOWNLOAD_PRODUCTS)[number];
 function yuk(urun: Urun, ek: Partial<DownloadDoc> = {}, kanal = KANAL): DownloadDoc {
   return { v: 1, kanal, yolOneki: `/${kanal}/${urun}/`, kurulumId: KURULUM, exp: msToIso(SIMDI + 60 * DAKIKA), ...ek };
 }
@@ -688,6 +691,36 @@ async function bolum9(w: WorkerModulu): Promise<void> {
   check("§9j benzer ad (backendx) kapsam dışı, aynen geçer", y.status === 200 && o3.cagrilar.length === 1);
 }
 
+// §11 — backend-oci/ öneki (sözleşme 5): Linux/OCI paketi kendi dizininde, kendi belirteciyle.
+async function bolum11(w: WorkerModulu): Promise<void> {
+  console.log("\n§11 — backend-oci/ öneki (sözleşme 5)");
+  const oci = bas("backend-oci");
+  const kahin = verifyDownloadToken(oci, { keys: [acik(IND)], nowMs: SIMDI });
+  const isci = await w.belirteciDogrula(oci, { anahtarlar: [acik(IND)], simdiMs: SIMDI });
+  check("§11a backend-oci belirteci: kâhin ve Worker ikisi de kabul eder, önek aynı",
+    kahin.ok && isci.ok && kahin.value.yolOneki === `/${KANAL}/backend-oci/` && isci.belge?.yolOneki === kahin.value.yolOneki, isci.kod ?? "");
+  const a = ayarKur(w);
+  const tar = `/${KANAL}/backend-oci/2.20.0/tekserp-backend-oci-2.20.0.tar`;
+  const son = `/${KANAL}/backend-oci/son.json`;
+  const o = await kabul(w, "§11b backend-oci belirteci → paket tar", a, istek(tar, bsl(oci)));
+  check("§11b' tar DEĞİŞMEZ: kenar önbelleği", o.cagrilar[0]?.init?.cf?.cacheEverything === true);
+  const o2 = await kabul(w, "§11c backend-oci belirteci → son.json", a, istek(son, bsl(oci)));
+  check("§11c' son.json DEĞİŞKEN: cf seçeneği YOK", o2.cagrilar[0]?.init === undefined);
+  const o3 = await kabul(w, "§11d backend-oci belirteci → zincirli işaretçi", a, istek(`/${KANAL}/backend-oci/son-zincir.json`, bsl(oci)));
+  check("§11d' zincirli işaretçi DEĞİŞKEN", o3.cagrilar[0]?.init === undefined);
+  await ret(w, "§11e belirteçsiz son.json (kapsam içi)", a, istek(son), "INDIRME_BELIRTEC_YOK");
+  await ret(w, "§11e' belirteçsiz paket tar", a, istek(tar), "INDIRME_BELIRTEC_YOK");
+  await ret(w, "§11f Windows backend belirteci backend-oci/de", a, istek(son, bsl(bas("backend"))), "INDIRME_YOL");
+  await ret(w, "§11g backend-oci belirteci Windows backend/de", a, istek(`/${KANAL}/backend/son.json`, bsl(oci)), "INDIRME_YOL");
+  await ret(w, "§11h electron belirteci backend-oci/de", a, istek(son, bsl(bas("electron"))), "INDIRME_YOL");
+  await ret(w, "§11i başka kanalın backend-oci'si", a, istek("/baska-kanal/backend-oci/son.json", bsl(oci)), "INDIRME_YOL");
+  await ret(w, "§11j kodlanmış atlatma (backend%2Doci)", a, istek(`/${KANAL}/backend%2Doci/son.json`), "INDIRME_BELIRTEC_YOK");
+  await ret(w, "§11k büyük harf atlatma (BACKEND-OCI)", a, istek(`/${KANAL}/BACKEND-OCI/son.json`), "INDIRME_BELIRTEC_YOK");
+  await ret(w, "§11l çift bölü atlatma (//backend-oci)", a, istek(`/${KANAL}//backend-oci/son.json`), "INDIRME_BELIRTEC_YOK");
+  const { y, o: o4 } = await kapidan(w, a, istek(`/${KANAL}/backend-ocix/a`, {}, "POST"));
+  check("§11m benzer ad (backend-ocix) kapsam dışı, aynen geçer", y.status === 200 && o4.cagrilar.length === 1);
+}
+
 // §10 — tek ortak paket (O9): grup-nötr OTA takma adı + yeni adresin ayarı (K-5).
 const YENI_AYAR = path.join(REPO, "deploy/guncelleme-sunucusu/worker/indir-ayar.json");
 const IND_YENI = anahtarUret("ind-2026-2");
@@ -782,6 +815,7 @@ async function main(): Promise<void> {
   await bolum8(w);
   await bolum9(w);
   await bolum10(w);
+  await bolum11(w);
   console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
   process.exit(fail === 0 ? 0 : 1);
 }
