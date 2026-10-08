@@ -50,6 +50,8 @@ export const PROTOCOL_ERROR_CODES = [
   "SURUM_KANAL",
   /** Bildirimi imzalayan PAKET anahtarı bildirimin beyan ettiği `paketImzaKid` değil. */
   "SURUM_ANAHTAR",
+  /** Sözleşme 5: bildirimin platformu okuyan güncelleyicinin hedefi değil (Linux bildirimi Windows'ta ya da tersi). */
+  "SURUM_PLATFORM",
   /** Açılan paketin imzalı künyesi (`butunluk.jws`) bildirimle bağlanmıyor. */
   "PAKET_BAGI",
   /** PG paketi künyesi backend bildiriminin PG hedefiyle bağlanmıyor (farklı ana sürüm dahil). */

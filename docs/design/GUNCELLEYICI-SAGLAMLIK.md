@@ -102,6 +102,8 @@ Hedef dizin düzeni: `src/platform/{mod.rs, windows/, linux/}`; `#[cfg]` yalnız
 
 ### 1.3 Ürün yolu ve platform (sözleşme 5 — A10'un çözümü)
 
+> → `GUNCELLEYICI.md` §16 (L2a, 2026-10-08): ürün yolu · platform · `imaj` · `guncelleyici` · `SURUM_PLATFORM` uygulandı; indirme öneki/belirteç/Worker L2b'de.
+
 - **Yeni ürün segmenti `backend-oci`:** `/<grup>/backend-oci/son.json` · `/<grup>/backend-oci/<sürüm>/…` · `/<grup>/backend-oci/pg/…`. `DOWNLOAD_PRODUCTS`a `backend-oci`; indirme belirteci `?urun=backend-oci` (yol öneki `/<grup>/backend-oci/`). Windows yolu (`/backend/`) **hiç değişmez** ⇒ eski Windows güncelleyicisi hiçbir zaman Linux bildirimi görmez; Linux güncelleyicisi Windows bildirimi görmez. BULUT §4.2'deki "yalnız Linux kanalında yayımlanır" varsayımının yerine geçer.
 - Bildirim `platform: "linux-x64-oci"` (`UPDATE_PLATFORMS`a eklenir), `urun: "backend"` kalır (karar, rapor ve panel ürünü aynı görür); güncelleyici `platform`u kendi derleme hedefine eşit ister (`SURUM_PLATFORM` — yeni kod, sözleşme 5).
 - Bildirime isteğe bağlı `imaj: {kimlik, etiket}` (`linux-x64-oci`de zorunlu, `win32-x64`te yasak — şema düzeyinde `superRefine`) ve `guncelleyici: {surum, sha256}` (isteğe bağlı, her iki platformda; §4.2'deki "önce güncelleyici" kuralının ön bilgisi — eski doğrulayıcı alanı atar).

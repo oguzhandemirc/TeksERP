@@ -7,7 +7,11 @@ import { publicKeyFromX } from "./jws";
 import { JwsTextSchema, PROTOCOL_VERSION } from "./belgeler";
 import { failure, isPlainObject, success, type Result } from "./ortak";
 
-export const UPDATE_PLATFORMS = ["win32-x64"] as const;
+/** Sözleşme 5 `linux-x64-oci`yi ekledi: ayrı ürün yolundan (`backend-oci`) yayınlanır, eski Windows güncelleyicisi onu hiç görmez. */
+export const UPDATE_PLATFORMS = ["win32-x64", "linux-x64-oci"] as const;
+export type UpdatePlatform = (typeof UPDATE_PLATFORMS)[number];
+/** Sözleşme 1–4'ün tek platformu; platform verilmeyen çağrı bunu kastetmiştir. */
+export const WINDOWS_PLATFORM: UpdatePlatform = "win32-x64";
 export const PACKAGE_MAX_BYTES = 4 * 1024 * 1024 * 1024;
 const POINTER_MAX_BYTES = 64 * 1024;
 const PACKAGE_KID = /^paket-[a-z0-9-]{1,40}$/;

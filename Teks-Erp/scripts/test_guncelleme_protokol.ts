@@ -21,6 +21,9 @@
 //   §6 sürüm karşılaştırma (semver önceliği)  §7 paket bağı  §8 rapor şeması KATI
 //   §9 vektör dosyaları (`native/test-vektorleri/guncelleme-*.json`, Rust güncelleyici de okur): her
 //      kaydın beklenen sonucu BUGÜNKÜ TS'le aynı (bayat yok) · kapsam (her neden/kod en az bir kayıtta)
+//   §1s5 sözleşme 5 (Linux/OCI): ayrı ürün yolu `backend-oci` · platform okuyanın hedefi (`SURUM_PLATFORM`, kanaldan
+//      sonra) · imaj yalnız ve zorunlu Linux'ta · uzantı platformun · Linux'ta PG hedefi yok · güncelleyici bloğu
+//      eski okuyucuda atılır · künye ürünü platformun (`backend-docker`) · karar tablosu platformdan bağımsız
 //   §10 ⭐ KALICI SONDA ✓K (her koşumda): bayatlık karşılaştırıcısı mutasyonlu beklenende ısırır,
 //      eşitte susar · kapsam denetimi eksik nedeni yakalar
 //
@@ -34,7 +37,12 @@ import {
   DownloadSchema,
   LeaseSchema,
   LeaseUpdatePolicySchema,
+  PACKAGE_IDENTITY_PRODUCTS,
+  PG_PLATFORMS,
   PROTOCOL_ERROR_CODES,
+  RELEASE_PACKAGE_EXTENSIONS,
+  RELEASE_PRODUCT_DIRS,
+  UPDATE_PLATFORMS,
   UPDATE_DECISION_REASONS,
   UPDATE_DECISIONS,
   UPDATE_INTERVAL_MAX,
@@ -121,6 +129,47 @@ function bolum1(): void {
   check("§1 tanınmayan alan doğrulamada ATILIR (v:1 içinde ekleme kırmaz)", ek.ok === true && !!ek.value && !("yeniBilgi" in ek.value));
   check("§1 yol yardımcıları", releasePointerPath("testfabrika") === "/testfabrika/backend/son.json" && releaseFilePath("k1", "2.11.0", "a.zip") === "/k1/backend/2.11.0/a.zip");
   check("§1 protokol kodları kayıtlı (SURUM_* · PAKET_BAGI · PG_BAGI)", ["SURUM_ISARETCI", "SURUM_KANAL", "SURUM_ANAHTAR", "PAKET_BAGI", "PG_BAGI"].every((c) => (PROTOCOL_ERROR_CODES as readonly string[]).includes(c)));
+}
+
+function bolum1s5(): void {
+  console.log("\n§1s5 — sözleşme 5: Linux/OCI bildirimi (ayrı ürün yolu, platform okuyanın hedefi)");
+  check("§1s5a platformlar win32-x64 · linux-x64-oci; PG künyesi yalnız Windows", jsonEsit([...UPDATE_PLATFORMS], ["win32-x64", "linux-x64-oci"]) && jsonEsit([...PG_PLATFORMS], ["win32-x64"]));
+  const dizinler = UPDATE_PLATFORMS.map((p) => RELEASE_PRODUCT_DIRS[p]);
+  check("§1s5b ürün yolları platform başına AYRI (Windows yolu backend/ — değişmedi)", new Set(dizinler).size === UPDATE_PLATFORMS.length && RELEASE_PRODUCT_DIRS["win32-x64"] === "backend" && RELEASE_PRODUCT_DIRS["linux-x64-oci"] === "backend-oci", dizinler.join(","));
+  check(
+    "§1s5c yol yardımcıları: platformsuz çağrı bugünkü yol, Linux backend-oci/",
+    releasePointerPath("test") === "/test/backend/son.json" &&
+      releasePointerPath("test", "linux-x64-oci") === "/test/backend-oci/son.json" &&
+      releaseFilePath("test", "2.11.0", "a.tar", "linux-x64-oci") === "/test/backend-oci/2.11.0/a.tar",
+  );
+  check("§1s5d künye ürünü ve uzantı platform başına", PACKAGE_IDENTITY_PRODUCTS["win32-x64"] === "backend" && PACKAGE_IDENTITY_PRODUCTS["linux-x64-oci"] === "backend-docker" && RELEASE_PACKAGE_EXTENSIONS["win32-x64"] === ".zip" && RELEASE_PACKAGE_EXTENSIONS["linux-x64-oci"] === ".tar");
+  check("§1s5e SURUM_PLATFORM ortak katalogda", (PROTOCOL_ERROR_CODES as readonly string[]).includes("SURUM_PLATFORM"));
+  for (const ad of ["s5 Linux bildirimi Linux okuyucuda", "s5 Linux bildirimi güncelleyici bloğu yok", "s5 imajda tanınmayan alan atılır"]) beklenenKod("bildirim", ad, "OK");
+  for (const ad of ["s5 Linux bildirimi platformsuz okuyucuda (Windows)", "s5 Linux bildirimi açıkça Windows okuyucuda", "s5 Windows bildirimi Linux okuyucuda"]) beklenenKod("bildirim", ad, "SURUM_PLATFORM");
+  beklenenKod("bildirim", "s5 kanal platformdan önce denetlenir", "SURUM_KANAL");
+  for (const ad of [
+    "s5 Linux bildirimi imajsız",
+    "s5 Windows bildirimi imajlı",
+    "s5 Linux paketi zip",
+    "s5 Windows paketi tar",
+    "s5 Linux bildiriminde PG hedefi",
+    "s5 imaj kimliği öneksiz",
+    "s5 imaj etiketi etiketsiz ad",
+    "s5 güncelleyici özeti büyük harf",
+    "s5 güncelleyici sürümünde +yapı eki",
+    "s5 imaj null",
+  ])
+    beklenenKod("bildirim", ad, "BELGE_SEMA");
+  beklenenKod("pg-kunye", "s5 PG künyesi Linux platformunda", "BELGE_SEMA");
+  const blok = kayit("bildirim", "s5 Windows bildirimi güncelleyici bloğuyla").beklenen as { ok: boolean; value?: Record<string, unknown> };
+  check("§1s5f Windows bildirimi güncelleyici bloğunu TAŞIR (yeni okuyucu korur)", blok.ok === true && jsonEsit(blok.value?.guncelleyici, { surum: "0.2.0", sha256: "6".repeat(64) }));
+  const imaj = kayit("bildirim", "s5 imajda tanınmayan alan atılır").beklenen as { ok: boolean; value?: { imaj?: Record<string, unknown> } };
+  check("§1s5g imaj bloğunda tanınmayan alan ATILIR", imaj.ok === true && !!imaj.value?.imaj && !("platform" in imaj.value.imaj));
+  beklenenKod("paket-bagi", "s5 Linux paketi Docker künyesiyle bağlı", "OK");
+  for (const ad of ["s5 Linux bildirimi Windows künyesiyle", "s5 Windows bildirimi Docker künyesiyle"]) beklenenKod("paket-bagi", ad, "PAKET_BAGI");
+  const k = kayit("karar", "s5 Linux adayı aynı tablodan (pencere içi → kur)").beklenen as { karar?: string };
+  const w = kayit("karar", "otomatik, pencere içi → kur").beklenen as { karar?: string };
+  check("§1s5h karar tablosu platformdan bağımsız (Linux adayı = Windows adayı kararı)", k.karar === "KUR" && k.karar === w.karar);
 }
 
 function bolum2(): void {
@@ -309,7 +358,7 @@ function bolum9(): void {
   const eksik = kapsamEksigi(hepsi);
   check("§9c kapsam: her karar ve neden en az bir karar vektöründe", eksik.length === 0, eksik.join(", ") || `${UPDATE_DECISIONS.length + UPDATE_DECISION_REASONS.length} değer`);
   const kodlar = new Set(hepsi.filter((k) => ["bildirim", "isaretci", "paket-bagi", "pg-kunye", "pg-bagi"].includes(k.vektor.tur)).map((k) => kodu(k.beklenen)));
-  const gereken = ["OK", "JWS_IMZA", "JWS_KID", "JWS_TYP", "BELGE_SEMA", "BELGE_SURUM", "SURUM_ISARETCI", "SURUM_KANAL", "SURUM_ANAHTAR", "PAKET_BAGI", "PG_BAGI"];
+  const gereken = ["OK", "JWS_IMZA", "JWS_KID", "JWS_TYP", "BELGE_SEMA", "BELGE_SURUM", "SURUM_ISARETCI", "SURUM_KANAL", "SURUM_ANAHTAR", "SURUM_PLATFORM", "PAKET_BAGI", "PG_BAGI"];
   check("§9d kapsam: bildirim/işaretçi/bağ kodlarının her biri en az bir vektörde", gereken.every((c) => kodlar.has(c)), gereken.filter((c) => !kodlar.has(c)).join(",") || `${gereken.length} kod`);
   check("§9e kayıt adları dosyalar arası tekil (Rust testi adla raporlar)", new Set(hepsi.map((k) => `${k.vektor.tur}:${k.vektor.ad}`)).size === hepsi.length);
 }
@@ -341,6 +390,7 @@ function main(): void {
   // Politika şemasıyla kira şemasının aynı `v`yi taşıdığı: decodeDocument BELGE_SURUM ayrımını yapar.
   check("§0 decodeDocument politika alt belgesinde v'siz çalışır", decodeDocument(LeaseUpdatePolicySchema, defaultUpdatePolicy()).ok);
   bolum1();
+  bolum1s5();
   bolum2();
   bolum3();
   bolum4();

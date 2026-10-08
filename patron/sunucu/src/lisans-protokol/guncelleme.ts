@@ -17,7 +17,17 @@ import {
   signDocument,
 } from "./belgeler";
 import type { DownloadProduct } from "./indirme";
-import { ArtifactSchema, PackageSignerKidSchema, UPDATE_PLATFORMS, isPackageKid, readReleasePointer, type PackagePublicKey } from "./guncelleme-ortak";
+import {
+  ArtifactSchema,
+  PackageSignerKidSchema,
+  Sha256HexSchema,
+  UPDATE_PLATFORMS,
+  WINDOWS_PLATFORM,
+  isPackageKid,
+  readReleasePointer,
+  type PackagePublicKey,
+  type UpdatePlatform,
+} from "./guncelleme-ortak";
 import { verifyPackageSigned, type ChainedCandidate, type PackageSigned, type PackageTrust } from "./paket-zinciri";
 import { PgRequirementSchema } from "./guncelleme-pg";
 import { CLOCK_SKEW_MS, failure, forwardFailure, isoToMs, success, type Result } from "./ortak";
@@ -30,16 +40,39 @@ export const RELEASE_POINTER_FILE = "son.json";
 /** Sürüm dizinindeki DEĞİŞMEZ işaretçi: `/<kanal>/backend/<sürüm>/surum.json` (sabitlemede okunur). */
 export const RELEASE_MANIFEST_FILE = "surum.json";
 
-export function releasePointerPath(kanal: string): string {
-  return `/${kanal}/${RELEASE_PRODUCT_DIR}/${RELEASE_POINTER_FILE}`;
+/**
+ * Platform → güncelleme sunucusundaki ürün dizini (sözleşme 5). Gruplar platformlar arası ortak olduğu için Linux
+ * bildirimi ayrı yoldadır; Windows yolu değişmez ve eski Windows güncelleyicisi Linux bildirimini hiç görmez.
+ */
+export const RELEASE_PRODUCT_DIRS = { "win32-x64": "backend", "linux-x64-oci": "backend-oci" } as const satisfies Record<UpdatePlatform, string>;
+/** Paketin imzalı künyesindeki `urun` (bildirimin `urun`u her platformda "backend"; Docker teslim künyesi "backend-docker"). */
+export const PACKAGE_IDENTITY_PRODUCTS = { "win32-x64": "backend", "linux-x64-oci": "backend-docker" } as const satisfies Record<UpdatePlatform, string>;
+/** Paket dosyasının uzantısı: Windows zip, Linux sıkıştırılmamış dış tar. */
+export const RELEASE_PACKAGE_EXTENSIONS = { "win32-x64": ".zip", "linux-x64-oci": ".tar" } as const satisfies Record<UpdatePlatform, string>;
+
+export function releasePointerPath(kanal: string, platform: UpdatePlatform = WINDOWS_PLATFORM): string {
+  return `/${kanal}/${RELEASE_PRODUCT_DIRS[platform]}/${RELEASE_POINTER_FILE}`;
 }
 
-export function releaseFilePath(kanal: string, surum: string, dosya: string): string {
-  return `/${kanal}/${RELEASE_PRODUCT_DIR}/${surum}/${dosya}`;
+export function releaseFilePath(kanal: string, surum: string, dosya: string, platform: UpdatePlatform = WINDOWS_PLATFORM): string {
+  return `/${kanal}/${RELEASE_PRODUCT_DIRS[platform]}/${surum}/${dosya}`;
 }
 
 // ── Sürüm bildirimi (`tekserp-surum`) ────────────────────────────────────────
 const NodeVersionSchema = z.string().regex(/^[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}$/);
+/** Uzantıyı platform kuralı seçer (`RELEASE_PACKAGE_EXTENSIONS`); yol yok. */
+const ReleasePackageNameSchema = z.string().max(120).regex(/^[A-Za-z0-9][A-Za-z0-9._-]{0,115}\.(zip|tar)$/);
+
+/** Sözleşme 5 — OCI imajı: `kimlik` imzalı son katmanlı etiketin config özeti (`docker load` sonrası ölçülür). */
+export const ReleaseImageSchema = z.object({
+  kimlik: z.string().regex(/^sha256:[0-9a-f]{64}$/),
+  etiket: z.string().max(200).regex(/^[a-z0-9][a-z0-9._/-]{0,127}:[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$/),
+});
+export type ReleaseImage = z.infer<typeof ReleaseImageSchema>;
+
+/** Sözleşme 5 — paketin taşıdığı güncelleyici ikilisi (önce-güncelleyici kuralının ön bilgisi; eski okuyucu atar). */
+export const ReleaseUpdaterSchema = z.object({ surum: ReleaseVersionSchema, sha256: Sha256HexSchema });
+export type ReleaseUpdater = z.infer<typeof ReleaseUpdaterSchema>;
 
 export const ReleaseManifestSchema = z
   .object({
@@ -52,8 +85,8 @@ export const ReleaseManifestSchema = z
     /** Paketin imzalı künyesiyle (`butunluk.jws`) aynı; bakım sonu denetimi bunu HAK `bakimBitis`iyle kıyaslar. */
     derlemeTarihi: IsoTimeSchema,
     yayinZamani: IsoTimeSchema,
-    /** Paket zip'i: sürüm dizininde `ad`; `paketId` açılan paketin künyesindekiyle aynı olmalı. */
-    paket: ArtifactSchema.extend({ paketId: UuidSchema }),
+    /** Paket dosyası: sürüm dizininde `ad`; `paketId` açılan paketin künyesindekiyle aynı olmalı. */
+    paket: ArtifactSchema.extend({ ad: ReleasePackageNameSchema, paketId: UuidSchema }),
     /** Paketin dosya listesini imzalayan PAKET anahtarı = bu bildirimi imzalayan anahtar. */
     paketImzaKid: PackageSignerKidSchema,
     /** Doğrudan geçişin en eski kaynak sürümü; daha eski kurulum önce ara sürüme sabitlenir. null = sınır yok. */
@@ -66,7 +99,15 @@ export const ReleaseManifestSchema = z
     notlar: z.object({ ozet: z.string().min(1).max(2000) }),
     /** Gösterim içindir (panel/filo "kritik"); zamanlamayı politikadan başka hiçbir şey belirlemez. */
     zorunlu: z.boolean(),
+    /** Sözleşme 5: yalnız `linux-x64-oci`de ve orada zorunlu. */
+    imaj: ReleaseImageSchema.optional(),
+    /** Sözleşme 5: isteğe bağlı, iki platformda. */
+    guncelleyici: ReleaseUpdaterSchema.optional(),
   })
+  .refine((m) => m.paket.ad.endsWith(RELEASE_PACKAGE_EXTENSIONS[m.platform]), { message: "Paket uzantısı platformun değil" })
+  .refine((m) => (m.platform === "linux-x64-oci") === (m.imaj !== undefined), { message: "imaj yalnız linux-x64-oci bildiriminde ve orada zorunlu" })
+  // Konteyner PG'si bu alanla gelmez (PG sahne zip'i yalnız Windows'ta); ileride yeni adla eklenir.
+  .refine((m) => m.platform !== "linux-x64-oci" || m.pg.hedef === null, { message: "linux-x64-oci bildirimi PG hedefi taşımaz" })
   .refine((m) => m.minKaynakSurum === null || (compareVersions(m.minKaynakSurum, m.surum) ?? 0) < 0, {
     message: "minKaynakSurum sürümün kendisinden eski olmalı",
   })
@@ -86,12 +127,13 @@ export function signReleaseManifest(g: {
 
 /**
  * Sıra (Rust aynası aynı sırayla aynı kodu verir): JWS (typ · kid · imza; `pkt-*` ise PAKET sertifikası zinciri) → şema
- * → imzalayan = `paketImzaKid` → kanal. `keys` ÇAĞIRANIN verdiği kümedir (bu derlemenin
+ * → imzalayan = `paketImzaKid` → kanal → platform. `keys` ÇAĞIRANIN verdiği kümedir (bu derlemenin
  * PAKET çapası). `zincir` verilmezse `pkt-*` imzalı bildirim kök olmadığı için düşer (GUVEN_CAPASI_BOS).
+ * `platform` okuyanın hedefidir; verilmezse sözleşme 1–4'ün tek platformu (Windows).
  */
 export function verifyReleaseManifest(
   token: unknown,
-  g: { readonly keys: readonly PackagePublicKey[]; readonly kanal: string; readonly zincir?: Omit<PackageTrust, "keys"> },
+  g: { readonly keys: readonly PackagePublicKey[]; readonly kanal: string; readonly platform?: UpdatePlatform; readonly zincir?: Omit<PackageTrust, "keys"> },
 ): Result<ReleaseManifest> {
   const r = verifyReleaseManifestSigned(token, g);
   return r.ok ? success(r.value.value) : forwardFailure(r);
@@ -100,7 +142,7 @@ export function verifyReleaseManifest(
 /** `verifyReleaseManifest` + imzalayan (zincir seçimi sertifikaya bakar). */
 export function verifyReleaseManifestSigned(
   token: unknown,
-  g: { readonly keys: readonly PackagePublicKey[]; readonly kanal: string; readonly zincir?: Omit<PackageTrust, "keys"> },
+  g: { readonly keys: readonly PackagePublicKey[]; readonly kanal: string; readonly platform?: UpdatePlatform; readonly zincir?: Omit<PackageTrust, "keys"> },
 ): Result<{ readonly value: ReleaseManifest; readonly signed: PackageSigned }> {
   const j = verifyPackageSigned(token, TYP.SURUM, { roots: [], mode: "YERLESIK", ...g.zincir, keys: g.keys });
   if (!j.ok) return forwardFailure(j);
@@ -108,6 +150,8 @@ export function verifyReleaseManifestSigned(
   if (!b.ok) return forwardFailure(b);
   if (j.value.kid !== b.value.paketImzaKid) return failure("SURUM_ANAHTAR", "Bildirimi imzalayan anahtar paketImzaKid değil");
   if (b.value.kanal !== g.kanal) return failure("SURUM_KANAL", `Bildirim ${b.value.kanal} kanalının, kurulum ${g.kanal} kanalında`);
+  const platform = g.platform ?? WINDOWS_PLATFORM;
+  if (b.value.platform !== platform) return failure("SURUM_PLATFORM", `Bildirim ${b.value.platform} platformunun, okuyan ${platform}`);
   return success({ value: b.value, signed: j.value });
 }
 
@@ -115,7 +159,7 @@ export function verifyReleaseManifestSigned(
 export function chainedReleaseCandidate(
   ad: string,
   metin: string,
-  g: { readonly keys: readonly PackagePublicKey[]; readonly kanal: string; readonly zincir?: Omit<PackageTrust, "keys"> },
+  g: { readonly keys: readonly PackagePublicKey[]; readonly kanal: string; readonly platform?: UpdatePlatform; readonly zincir?: Omit<PackageTrust, "keys"> },
 ): ChainedCandidate<ReleaseManifest> {
   const p = readReleasePointer(metin);
   return { ad, sonuc: p.ok ? verifyReleaseManifestSigned(p.value, g) : forwardFailure(p) };
@@ -131,12 +175,12 @@ export interface PackageIdentity {
   readonly musteri: string | null;
 }
 
-/** Paket bildirimin paketi mi? Künyenin müşterisi yoksa kanal-dışı paket kabul, varsa bildirimin kanalı olmalı. */
+/** Paket bildirimin paketi mi? Künyenin ürünü platformunki; müşterisi yoksa kanal-dışı paket kabul, varsa bildirimin kanalı. */
 export function checkPackageBinding(m: ReleaseManifest, p: PackageIdentity): Result<true> {
   const off: string[] = [];
   if (p.kid !== m.paketImzaKid) off.push("kid");
   if (p.paketId !== m.paket.paketId) off.push("paketId");
-  if (p.urun !== m.urun) off.push("urun");
+  if (p.urun !== PACKAGE_IDENTITY_PRODUCTS[m.platform]) off.push("urun");
   if (p.surum !== m.surum) off.push("surum");
   if (isoToMs(p.derlemeTarihi) !== isoToMs(m.derlemeTarihi)) off.push("derlemeTarihi");
   if (p.musteri !== null && p.musteri !== m.kanal) off.push("musteri");

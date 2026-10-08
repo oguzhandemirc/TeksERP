@@ -5,12 +5,14 @@
 import type { KeyObject } from "node:crypto";
 import { z } from "zod";
 import { IsoTimeSchema, PROTOCOL_VERSION, TYP, decodeDocument, signDocument } from "./belgeler";
-import { ArtifactSchema, Sha256HexSchema, UPDATE_PLATFORMS, isPackageKid, readReleasePointer, type PackagePublicKey } from "./guncelleme-ortak";
+import { ArtifactSchema, Sha256HexSchema, isPackageKid, readReleasePointer, type PackagePublicKey } from "./guncelleme-ortak";
 import { verifyPackageSigned, type ChainedCandidate, type PackageSigned, type PackageTrust } from "./paket-zinciri";
 import { failure, forwardFailure, success, type Result } from "./ortak";
 
 /** `/<kanal>/backend/pg/<sürüm>-<derleme>/` — dizin değişmez; künye `pg.json`, paket künyedeki `paket.ad`. */
 export const PG_RELEASE_DIR = "pg";
+/** PG sahne paketi yalnız Windows'ta; konteyner PG'si (Linux) bu künyeyi kullanmaz, kendi alanıyla gelir. */
+export const PG_PLATFORMS = ["win32-x64"] as const;
 export const PG_POINTER_FILE = "pg.json";
 
 /** PostgreSQL `ana.küçük` (`16.15`). */
@@ -72,7 +74,7 @@ export const PgPackageManifestSchema = z
   .object({
     v: z.literal(PROTOCOL_VERSION),
     urun: z.literal(PG_PRODUCT),
-    platform: z.enum(UPDATE_PLATFORMS),
+    platform: z.enum(PG_PLATFORMS),
     cizgi: PgMajorSchema,
     surum: PgVersionSchema,
     derleme: PgBuildSchema,
