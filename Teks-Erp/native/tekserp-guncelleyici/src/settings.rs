@@ -231,8 +231,7 @@ impl BackendEnv {
     }
 
     pub fn pg_tool(&self, name: &str) -> PathBuf {
-        let exe = if cfg!(windows) { format!("{name}.exe") } else { name.to_string() };
-        self.pg_bin_dir.join(exe)
+        self.pg_bin_dir.join(crate::platform::executable(name))
     }
 }
 

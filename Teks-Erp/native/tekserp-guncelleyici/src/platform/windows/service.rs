@@ -160,3 +160,56 @@ fn body(layout: &Layout, log: &Arc<RotatingLog>, stop: &AtomicBool, running: &dy
     log.info("güncelleyici duruyor (istenen durdurma)");
     0
 }
+
+/// `hizmet` (SCM'in başlattığı kip) · `hizmet-kur` · `hizmet-kaldir` (yönetici).
+pub fn command(command: &str, args: &[String]) -> Result<u32, String> {
+    use crate::cli::{data_arg, flag_value, root_arg};
+    use contract::path;
+    match command {
+        "hizmet" => {
+            let root = root_arg(args)?;
+            let data = data_arg(args, &root);
+            let name = contract::service_name_arg(args, contract::UPDATER_SERVICE)?;
+            run(root, data, name).map(|()| 0)
+        }
+        "hizmet-kur" => {
+            let root = root_arg(args)?;
+            let name = contract::service_name_arg(args, contract::UPDATER_SERVICE)?;
+            let mut arguments: Vec<std::ffi::OsString> = vec!["hizmet".into(), "--kok".into(), root.clone().into_os_string()];
+            if let Some(d) = flag_value(args, "--veri") {
+                if !std::path::Path::new(&d).is_absolute() {
+                    return Err(format!("--veri mutlak yol olmalı: {d}"));
+                }
+                arguments.extend(["--veri".into(), d.into()]);
+            }
+            arguments.extend([contract::ARG_SERVICE_NAME.into(), name.clone().into()]);
+            let display_name = if name == contract::UPDATER_SERVICE {
+                contract::UPDATER_DISPLAY_NAME.to_string()
+            } else {
+                format!("{} ({name})", contract::UPDATER_DISPLAY_NAME)
+            };
+            scm::install(&scm::ServiceSpec {
+                name: name.clone(),
+                display_name,
+                description: contract::UPDATER_DESCRIPTION.into(),
+                executable: root.join(path::UPDATER).join(path::UPDATER_EXE),
+                arguments,
+                account: None,
+                dependencies: vec![],
+                // Açılıştaki uyum denetimiyle AYNI dizi (kendini güncelleyen ikili eski kaydı da düzeltir).
+                restart_delays: selfupdate::RESTART_DELAYS_S.map(Duration::from_secs).to_vec(),
+                required_privileges: vec![],
+            })?;
+            println!("{name} kaydedildi (kök {})", root.display());
+            Ok(0)
+        }
+        "hizmet-kaldir" => {
+            let name = contract::service_name_arg(args, contract::UPDATER_SERVICE)?;
+            scm::uninstall(&name).map(|()| {
+                println!("{name} kaldırıldı");
+                0
+            })
+        }
+        _ => Err(format!("bilinmeyen komut: {command}")),
+    }
+}

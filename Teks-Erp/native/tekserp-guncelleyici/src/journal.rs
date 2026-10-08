@@ -29,9 +29,9 @@ pub enum Kind {
 
 /// ISLEM satırının `v`si: günlük biçimi. Yoksa 1 sayılır (0.1.3 ve öncesi yazmazdı).
 pub const FORMAT: u32 = 1;
-/// ISLEM satırının `platform`u: işlemi yürüten arka uç (bildirimin platform sözlüğüyle aynı ad). Bugün tek arka uç
-/// Windows hizmetidir; yoksa da bu sayılır (alansız günlüğü yalnız Windows ikilisi yazdı).
-pub const PLATFORM: &str = "win32-x64";
+/// Alansız ISLEM satırının `platform`u (§15 madde 2): 0.1.3 ve öncesinin günlüğünü yalnız Windows ikilisi yazdı.
+/// Bu ikilinin yazdığı ad işlemi yürüten arka ucun adıdır (`Env::arka.platform`, `begin`).
+pub const LEGACY_PLATFORM: &str = "win32-x64";
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Record {
@@ -48,7 +48,7 @@ pub struct Record {
     /// Yalnız ISLEM satırında (`FORMAT`).
     #[serde(rename = "v", default, skip_serializing_if = "Option::is_none")]
     pub format: Option<u32>,
-    /// Yalnız ISLEM satırında (`PLATFORM`).
+    /// Yalnız ISLEM satırında (işlemi yürüten arka uç; yoksa `LEGACY_PLATFORM`).
     #[serde(rename = "platform", default, skip_serializing_if = "Option::is_none")]
     pub platform: Option<String>,
     #[serde(rename = "veri", default)]
@@ -78,7 +78,7 @@ impl OpView {
     }
     /// İşlemi başlatan arka uç (`platform` yoksa `win32-x64`).
     pub fn platform(&self) -> &str {
-        self.begin().and_then(|r| r.platform.as_deref()).unwrap_or(PLATFORM)
+        self.begin().and_then(|r| r.platform.as_deref()).unwrap_or(LEGACY_PLATFORM)
     }
     /// Bu ikilinin adım listesinde olmayan ilk adım adı — daha yeni bir ikilinin günlüğü (§15: güvenli yön geri almadır).
     pub fn unknown_step<'a>(&'a self, known: &[&str]) -> Option<&'a str> {
@@ -169,21 +169,33 @@ impl Journal {
         self.last_op().filter(|v| v.result().is_none())
     }
 
-    pub fn append(&mut self, fs: &dyn Fs, op: &str, kind: Kind, step: Option<&str>, data: Value, at: String) -> std::io::Result<()> {
-        if kind == Kind::Begin {
-            self.compact(fs)?;
-        }
-        let begin = kind == Kind::Begin;
+    /// İşlemin ISLEM satırı (biçim + işlemi yürüten arka ucun adı + plan).
+    pub fn begin(&mut self, fs: &dyn Fs, op: &str, platform: &str, data: Value, at: String) -> std::io::Result<()> {
+        self.compact(fs)?;
         let rec = Record {
             seq: self.seq + 1,
             op: op.to_string(),
-            kind,
-            step: step.map(str::to_string),
+            kind: Kind::Begin,
+            step: None,
             at,
-            format: begin.then_some(FORMAT),
-            platform: begin.then(|| PLATFORM.to_string()),
+            format: Some(FORMAT),
+            platform: Some(platform.to_string()),
             data,
         };
+        self.write(fs, rec)
+    }
+
+    /// ISLEM dışındaki satırlar (ISLEM `begin` ile — platformsuz yeni günlük yazılmaz).
+    pub fn append(&mut self, fs: &dyn Fs, op: &str, kind: Kind, step: Option<&str>, data: Value, at: String) -> std::io::Result<()> {
+        if kind == Kind::Begin {
+            return Err(std::io::Error::new(std::io::ErrorKind::InvalidInput, "ISLEM satırı `begin` ile (platformuyla) yazılır"));
+        }
+        let rec =
+            Record { seq: self.seq + 1, op: op.to_string(), kind, step: step.map(str::to_string), at, format: None, platform: None, data };
+        self.write(fs, rec)
+    }
+
+    fn write(&mut self, fs: &dyn Fs, rec: Record) -> std::io::Result<()> {
         let mut line = serde_json::to_vec(&rec).map_err(std::io::Error::other)?;
         line.push(b'\n');
         fs.append_sync(&self.path, &line)?;
@@ -227,7 +239,7 @@ mod tests {
         let p = tmp("yirtik");
         let fs = RealFs;
         let mut j = Journal::open(&fs, &p).unwrap();
-        j.append(&fs, "op1", Kind::Begin, None, json!({"surum":"2.0.0"}), "t".into()).unwrap();
+        j.begin(&fs, "op1", LEGACY_PLATFORM, json!({"surum":"2.0.0"}), "t".into()).unwrap();
         j.append(&fs, "op1", Kind::StepBegin, Some("YEDEK"), json!(null), "t".into()).unwrap();
         j.append(&fs, "op1", Kind::StepEnd, Some("YEDEK"), json!({"x":1}), "t".into()).unwrap();
         let mut bytes = std::fs::read(&p).unwrap();
@@ -265,17 +277,18 @@ mod tests {
         let p = tmp("bicim");
         let fs = RealFs;
         let mut j = Journal::open(&fs, &p).unwrap();
-        j.append(&fs, "op1", Kind::Begin, None, json!({"tur":"BACKEND"}), "t".into()).unwrap();
+        assert!(j.append(&fs, "op1", Kind::Begin, None, json!({}), "t".into()).is_err(), "platformsuz ISLEM yazılmaz");
+        j.begin(&fs, "op1", "linux-x64-oci", json!({"tur":"BACKEND"}), "t".into()).unwrap();
         j.append(&fs, "op1", Kind::StepBegin, Some("YEDEK"), json!(null), "t".into()).unwrap();
         let text = std::fs::read_to_string(&p).unwrap();
         let lines: Vec<Value> = text.lines().map(|l| serde_json::from_str(l).unwrap()).collect();
-        assert_eq!((lines[0]["v"].as_u64(), lines[0]["platform"].as_str()), (Some(u64::from(FORMAT)), Some(PLATFORM)));
+        assert_eq!((lines[0]["v"].as_u64(), lines[0]["platform"].as_str()), (Some(u64::from(FORMAT)), Some("linux-x64-oci")));
         assert!(lines[1].get("v").is_none() && lines[1].get("platform").is_none(), "yalnız ISLEM satırında");
         for l in text.lines() {
             serde_json::from_str::<Record013>(l).expect("0.1.3 okuyucusu yeni satırı okur");
         }
         let v = Journal::open(&fs, &p).unwrap().unfinished().unwrap();
-        assert_eq!((v.format(), v.platform()), (FORMAT, PLATFORM));
+        assert_eq!((v.format(), v.platform()), (FORMAT, "linux-x64-oci"));
         assert_eq!(v.unknown_step(&["YEDEK"]), None);
         assert_eq!(v.unknown_step(&["GECIS"]), Some("YEDEK"));
         // 0.1.3 satırı (alansız): v 1, platform win32-x64.

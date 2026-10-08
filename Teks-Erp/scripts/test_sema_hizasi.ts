@@ -126,7 +126,7 @@ if (process.argv.includes("--vektor-yaz")) {
 const YOL = {
   sema: "Teks-Erp/native/tekserp-guncelleyici/src/sema.rs",
   engine: "Teks-Erp/native/tekserp-guncelleyici/src/engine.rs",
-  tools: "Teks-Erp/native/tekserp-guncelleyici/src/tools.rs",
+  tools: "Teks-Erp/native/tekserp-guncelleyici/src/platform/windows/araclar.rs",
   codes: "Teks-Erp/native/tekserp-guncelleyici/src/codes.rs",
   rustTest: "Teks-Erp/native/tekserp-guncelleyici/tests/sema_hizasi.rs",
   ps: "deploy/hizmet/sema-hizasi.ps1",
