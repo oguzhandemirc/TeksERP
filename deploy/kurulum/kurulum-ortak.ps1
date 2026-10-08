@@ -104,18 +104,25 @@ function EnvDatabaseUrlYenile($satirlar, [string]$dbUrl) {
 }
 
 # --- Fabrika aginda TLS (docs/design/LAN-TLS.md b.5, b.7) --------------------------------------------------
-# Kod varsayilani off (bugunku davranis); YENI kurulumun .env'i dual yazar (kullanici karari 2026-10-07). Yalniz .env'i
-# ILK KEZ yazan dal cagirir; port satiri yazilmaz (backend varsayilani 4443 = burasi). Ayni port: sessiz baska port yok.
+# Kod varsayilani off (bugunku davranis); YENI kurulumun .env'i required yazar: ag yalniz HTTPS 4443, API portu yalniz
+# 127.0.0.1 (kullanici karari 2026-10-08; secenek yok). Yalniz .env'i ILK KEZ yazan dal cagirir; port satiri yazilmaz
+# (backend varsayilani 4443 = burasi). Ayni port: sessiz baska port yok.
 $script:LAN_TLS_VARSAYILAN_PORT = 4443
 function LanTlsYeniKurulum([int]$apiPort) {
   $p = $script:LAN_TLS_VARSAYILAN_PORT
   if ($apiPort -eq $p) { return [ordered]@{ hata = "API portu $apiPort sifreli baglanti portuyla (HTTPS $p) ayni - cevap dosyasinda api.port ile baska port verin"; port = $p; satirlar = @() } }
-  return [ordered]@{ hata = $null; port = $p; satirlar = @("LAN_TLS_MODE=dual") }
+  return [ordered]@{ hata = $null; port = $p; satirlar = @("LAN_TLS_MODE=required") }
 }
 # .env'deki LAN_TLS_MODE degeri sifreli dinleyici BEKLETIR mi (yalniz olcum suresi icin; karar backend'indir).
 function LanTlsBeyanli([string]$deger) {
   $v = "$deger".Trim()
   return [bool]($v -and $v -cnotmatch '^(?i:off|kapali|kapal.)$')
+}
+# .env'deki LAN_TLS_MODE API portunu (HTTP) yalniz 127.0.0.1'e baglar mi: o zaman API portuna guvenlik duvari kurali YOK.
+# Backend'in MODES tablosuyla ayni adlar (src/lib/lan-tls/config.ts); kucuk harf DEGISMEZ kulturle (tr-TR'de I -> i degil).
+function LanTlsZorunlu([string]$deger) {
+  $v = "$deger".Trim().ToLowerInvariant()
+  return [bool]($v -ceq "required" -or $v -ceq "zorunlu")
 }
 # Kimlik ucunun (GET /api/discovery/identity, DONGU adresinden - guven koku a) tls alani: { port, fingerprint }.
 # Bicimsiz/eksik -> $null. Gosterim 4'lu buyuk harf gruplar (durum sayfasi ve tablet ile ayni).

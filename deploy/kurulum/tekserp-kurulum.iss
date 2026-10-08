@@ -868,7 +868,7 @@ begin
   VeriSayfasi := CreateInputDirPage(OlcumSayfasi.ID, 'Veritabanı verisi', 'PostgreSQL veri dizini', VERI_ACIKLAMASI, False, '');
   VeriSayfasi.Add('Veri dizini (boşluksuz):');
   PortSayfasi := CreateInputQueryPage(VeriSayfasi.ID, 'Portlar', 'Uygulama ve veritabanı portları',
-    'API portu panel ve tabletlerin bağlandığı porttur (varsayılan 4000; meşgulse kurulum durur). PostgreSQL yalnız bu bilgisayardan (127.0.0.1) dinler.');
+    'API portu yalnız bu bilgisayardaki hizmetlerin kullandığı iç porttur (varsayılan 4000; meşgulse kurulum durur). Panel ve tabletler ağdan yalnız şifreli bağlantıyla (HTTPS 4443) bağlanır. PostgreSQL yalnız bu bilgisayardan (127.0.0.1) dinler.');
   PortSayfasi.Add('API portu:', False);
   PortSayfasi.Add('PostgreSQL portu:', False);
   AgSayfasi := CreateInputOptionPage(PortSayfasi.ID, 'Ağ ve güvenlik duvarı', 'API portuna kimler erişebilir?',
@@ -1392,11 +1392,16 @@ begin
 end;
 
 procedure SonucMetniKur(const SonIni: String);
-var I, N: Integer; S: String;
+var I, N: Integer; S, Adres: String;
 begin
+  // Şifreli dinleyici ölçüldüyse ağ adresi odur (yeni kurulumda API portu yalnız 127.0.0.1).
+  if (SonIni <> '') and (SonucOku(SonIni, 'kurulum.tlsPort') <> '') then
+    Adres := 'https://' + GetComputerNameString + ':' + SonucOku(SonIni, 'kurulum.tlsPort')
+  else
+    Adres := 'http://' + GetComputerNameString + ':' + PortSayfasi.Values[0];
   if KurulumHatasi = '' then
     S := 'KURULUM TAMAM' + #13#10#13#10 +
-      'Sunucu adresi : http://' + GetComputerNameString + ':' + PortSayfasi.Values[0] + #13#10 +
+      'Sunucu adresi : ' + Adres + #13#10 +
       'Sürüm         : ' + Olc('paketSurum') + #13#10 +
       'Hizmetler     : ' + Olc('backendHizmeti') + ' · ' + Olc('guncelleyiciHizmeti') + ' · ' + Olc('pgHizmeti') + #13#10
   else

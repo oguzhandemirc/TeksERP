@@ -333,9 +333,9 @@ $y2 = TepsiYuzde ('{"indirilen":5,"toplam":0}' | ConvertFrom-Json)
 $y3 = TepsiYuzde ('{"indirilen":900,"toplam":200}' | ConvertFrom-Json)
 Olc "tepsi.yuzde" ($y1 -eq 25 -and $null -eq $y2 -and $y3 -eq 100 -and $null -eq (TepsiYuzde $null)) ("25: $y1 / toplam0: $y2 / tavan: $y3")
 
-# --- Fabrika aginda TLS (kullanici karari 2026-10-07): YENI .env dual; var olan .env'e (onarim/devam) dokunulmaz ------
+# --- Fabrika aginda TLS (kullanici karari 2026-10-08): YENI .env required (ag yalniz HTTPS); var olan .env'e dokunulmaz ---
 $lt = LanTlsYeniKurulum 4000
-Olc "lantls.yeni-kurulum-dual" ($null -eq $lt.hata -and $lt.port -eq 4443 -and (@($lt.satirlar) -join "|") -ceq "LAN_TLS_MODE=dual" -and @(@($lt.satirlar) | Where-Object { -not (EnvSatiriGecerli $_) }).Count -eq 0) ("hata=$($lt.hata) port=$($lt.port) satirlar=$(@($lt.satirlar) -join '|')")
+Olc "lantls.yeni-kurulum-required" ($null -eq $lt.hata -and $lt.port -eq 4443 -and (@($lt.satirlar) -join "|") -ceq "LAN_TLS_MODE=required" -and @(@($lt.satirlar) | Where-Object { -not (EnvSatiriGecerli $_) }).Count -eq 0) ("hata=$($lt.hata) port=$($lt.port) satirlar=$(@($lt.satirlar) -join '|')")
 $lt2 = LanTlsYeniKurulum 4443
 Olc "lantls.api-portu-cakisirsa-dur" ($lt2.hata -and "$($lt2.hata)".Contains("4443") -and @($lt2.satirlar).Count -eq 0) ("hata=$($lt2.hata)")
 $eskiEnv = @("DATABASE_URL=postgresql://u:eski@127.0.0.1:5432/t?schema=public", "JWT_SECRET=x", "PORT=4000", "LAN_TLS_MODE=off", "BACKUP_KEY_DIR=C:/K/yedek-anahtar")
@@ -345,6 +345,8 @@ $y2 = EnvDatabaseUrlYenile $satirsiz "postgresql://u:yeni@127.0.0.1:5432/t?schem
 $ayni = { param($a, $b) (@($a) -join "`n") -ceq (@($b) -join "`n") }
 Olc "lantls.onarim-env-dokunulmaz" ((& $ayni $y1 (@("DATABASE_URL=postgresql://u:yeni@127.0.0.1:5432/t?schema=public") + $eskiEnv[1..4])) -and (& $ayni $y2 (@("DATABASE_URL=postgresql://u:yeni@127.0.0.1:5432/t?schema=public") + $satirsiz[1..2])) -and -not ((@($y2) -join "`n").Contains("LAN_TLS"))) ("kayitli: $(@($y1) -join ' | ') / satirsiz: $(@($y2) -join ' | ')")
 Olc "lantls.beyan" ((LanTlsBeyanli "dual") -and (LanTlsBeyanli "required") -and (LanTlsBeyanli "zorunlu") -and -not (LanTlsBeyanli "") -and -not (LanTlsBeyanli $null) -and -not (LanTlsBeyanli "off") -and -not (LanTlsBeyanli "OFF") -and -not (LanTlsBeyanli "kapali")) "-"
+# required/zorunlu (backend MODES adlari) API portunu 127.0.0.1'e baglar -> API kurali YOK; baska her deger (yazim hatasi dahil) degil.
+Olc "lantls.zorunlu" ((LanTlsZorunlu "required") -and (LanTlsZorunlu "zorunlu") -and (LanTlsZorunlu " REQUIRED ") -and -not (LanTlsZorunlu "dual") -and -not (LanTlsZorunlu "off") -and -not (LanTlsZorunlu "") -and -not (LanTlsZorunlu $null) -and -not (LanTlsZorunlu "requred")) "-"
 $fp = "0123456789abcdef" * 4
 $k1 = LanTlsKimliktenOku ('{"tls":{"port":4443,"fingerprint":"' + $fp + '"}}' | ConvertFrom-Json)
 Olc "lantls.kimlik-kod-gosterimi" ($k1 -and $k1.port -eq 4443 -and $k1.parmakIzi -ceq $fp -and $k1.gosterim -ceq ((@(1..4) | ForEach-Object { "0123 4567 89AB CDEF" }) -join " ")) ("gosterim: $($k1.gosterim)")
