@@ -2,7 +2,7 @@
 // OCI / `docker save` ARŞİVİ OKUYUCUSU — Docker'sız, bağımlılıksız (sözleşme 5, GUNCELLEYICI-SAGLAMLIK L3)
 // =============================================================================
 // Yayıncı (`backend-bildirim.ts`, `linux-x64-oci`) teslim paketindeki imaj arşivini Docker çalıştırmadan ölçer:
-// imaj kimliği = config blob'unun sha256'sı (`docker image inspect .Id`), etiket = `manifest.json` RepoTags, son
+// imaj kimliği = config blob'unun sha256'sı (containerd deposunda `.Id` index özetidir, kimlik değil), etiket = RepoTags, son
 // katman = imzalı ince katman (`imaj-imzala.mjs`: yalnız `app/butunluk-liste.txt` + imzalı yük). Akış tek geçiştir;
 // yalnız küçük girdiler belleğe alınır, büyük katmanlar okunup atılır (950 MB imaj diske açılmaz).
 // =============================================================================
@@ -180,7 +180,7 @@ export async function tarDosyasiOku(dosya: string, sakla: (ad: string, boyut: nu
 
 /** `docker save` arşivinin ölçümü. */
 export interface ImajOlcumu {
-  /** `sha256:<64 hex>` — config blob'unun özeti (`docker image inspect .Id`). */
+  /** `sha256:<64 hex>` — config blob'unun özeti (= `docker image inspect` `.Config` özeti; containerd `.Id`'si DEĞİL). */
   readonly kimlik: string;
   readonly etiketler: readonly string[];
   readonly etiketDegerleri: Readonly<Record<string, string>>;

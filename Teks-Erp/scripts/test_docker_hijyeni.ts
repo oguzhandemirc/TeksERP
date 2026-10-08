@@ -27,12 +27,17 @@
 //      §5i göçlü geri alma şemayı ÖNCE sıfırlar (pg_restore --clean yeni göçün tablolarını bırakır), göç sayısını ölçer.
 //      §5j runbook §9 compose'un bütün birimlerini `<proje>_` adıyla anar; kaldırma `-v` değil adıyla.
 //      §5k bulut kenarı örneği (runbook §10): TRUST_PROXY=1 + hız sınırı, port yalnız 127.0.0.1, konak ağı yalnız sertleştirilmiş kenarda, teslim dışı.
+//      §5l teslim paketi `backend-oci` biçimi (L3): dış tar üyeleri + künye kapsamı = `scripts/lib/oci-paket.ts`, etiket
+//      `tekserp-korumali:<sürüm>`, compose şablonu doldurulur (yer tutucu kalmaz), imaj kimliği ARŞİVDEN (`.Id` yok),
+//      güncelleyici künyesi imajın içinde ikiliden yeniden ölçülür, dış tar ustar + sahip 0:0 + Mac meta verisiz.
+//      §5m imaj derlemesi (`sahne.mjs`) native'in gömülü çapa kipini bayt koduyla kıyaslar (`native-capa-kipi.mjs`).
 //   §6 satıcı imajı (G2/G3) DURAĞAN: `satici/sunucu/scripts/` altındaki her CLI `dist-cli`'a derlenir ve
 //      `test -f` kapısında; compose'da `/dosyalar` yazılır, `/derlemeler` + `/yayin` salt okunur (⑨'un docker'sız ikizi).
 //   §7 güncelleyicinin yöneteceği düzen (GUNCELLEYICI-SAGLAMLIK L5): §7a–§7e `TEKSERP_GOC_ACILISTA` (yok/boş/1 =
 //      bugünkü açılışta göç · 0 = göç yok, şema denetimi · başka = çık) ve `goc` aracı DAVRANIŞI (sh + sahteler) ·
 //      §7f çıkış kodları betik ↔ `docker/korumali/acilis-kodlari.json` iki yönlü · §7g imajda `goc` bağı ·
-//      §7h güncelleyicili compose kuralları · §7i elle compose ile ayrışma yok · §7j anahtar yalnız güncelleyicili compose'da ·
+//      §7h güncelleyicili compose kuralları · §7i elle compose ile ayrışma yok · §7j anahtar yalnız güncelleyicili compose'da,
+//      teslim paketi elle compose'u DEĞİL güncelleyicili şablonu taşır ·
 //      §7k kurulum sınıfı (`TEKSERP_KURULUM_SINIFI`) compose'dan backend'e geçer, şablon boş, bulut örneği BARINDIRILAN.
 // =============================================================================
 import { readFileSync, readdirSync, existsSync, mkdtempSync, mkdirSync, writeFileSync, chmodSync, rmSync, symlinkSync } from "node:fs";
@@ -40,6 +45,7 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { spawnSync } from "node:child_process";
 import { git } from "./lib/git";
+import { ociImajArsivi, ociKapsam, ociUyeler } from "./lib/oci-paket";
 // Bekçi/koşucu gerçek Anahtar Zinciri'ne GİTMEZ: parola okuyan araçlar kasa yerine stdin/dosya kullanır (scripts/lib/parola-kasasi.mjs).
 process.env.TEKSERP_PAROLA_KASASI = "kapali";
 
@@ -584,7 +590,7 @@ function bulutOrnekStatik(ornek: string, teslim: string): string[] {
     ["kenar port yayını", bo.replace("    network_mode: host\n", '    ports: ["443:443"]\n'), tp],
     ["kenar cap_drop kalktı", bo.replace('    cap_drop: ["ALL"]\n', ""), tp],
     ["kenara SYS_ADMIN", bo.replace('"CHOWN"]', '"CHOWN", "SYS_ADMIN"]'), tp],
-    ["teslim pakete girdi", bo, tp.replace('cp "$BURASI/.env.ornek"', 'cp "$BURASI/docker-compose.bulut-ornek.yml" "$CIKTI/"\ncp "$BURASI/.env.ornek"')],
+    ["teslim pakete girdi", bo, tp.replace('cp "$BURASI/.env.ornek"', 'cp "$BURASI/docker-compose.bulut-ornek.yml" "$SAHNE/"\ncp "$BURASI/.env.ornek"')],
   ];
   for (const [ad, o, t] of sondalar) check(`§5k sonda: ${ad} → kırmızı`, (o !== bo || t !== tp) && bulutOrnekStatik(o, t).length > 0, o !== bo || t !== tp ? "" : "MUTASYON UYGULANMADI");
 }
@@ -594,7 +600,7 @@ function bulutOrnekStatik(ornek: string, teslim: string): string[] {
 function teslimImzaStatik(betik: string): string[] {
   const kod = betik.split("\n").filter((l) => !/^\s*#/.test(l)).join("\n");
   const ih: string[] = [];
-  const imza = kod.search(/build-korumali-imza\.ts belge --belge="\$CIKTI\/PAKET-DOCKER\.json" --anahtar="\$ANAHTAR"/);
+  const imza = kod.search(/build-korumali-imza\.ts belge --belge="\$SAHNE\/PAKET-DOCKER\.json" --anahtar="\$ANAHTAR"/);
   if (imza < 0) ih.push("künye imza aracına verilmiyor");
   if (!/\[ -f "\$ANAHTAR" \] \|\| \{[^}]*exit 1; \}/.test(kod)) ih.push("anahtar yokken paket üretimi durmuyor");
   // Anahtar AÇIKÇA verilir: varsayılan yol yok, boş değer durur (fail-closed); künye müşteri taşımaz.
@@ -617,7 +623,7 @@ function teslimImzaStatik(betik: string): string[] {
     ["imza çağrısı silindi", t.replace(/^\( cd "\$REPO\/Teks-Erp" && npx tsx scripts\/build-korumali-imza\.ts belge.*$/m, "( true ) \\")],
     ["anahtarsız devam", t.replace(/imzasız teslim paketi üretilmez" >&2; exit 1; \}/, 'imzasız teslim paketi üretilmez" >&2; }')],
     ["jws özetsiz", t.replace("PAKET-DOCKER.json PAKET-DOCKER.json.jws; do", "PAKET-DOCKER.json; do")],
-    ["liste özetsiz", t.replace(".env.ornek butunluk-liste.txt PAKET-DOCKER.json", ".env.ornek PAKET-DOCKER.json")],
+    ["liste özetsiz", t.replace("guncelleyici-kunye.json butunluk-liste.txt PAKET-DOCKER.json", "guncelleyici-kunye.json PAKET-DOCKER.json")],
     ["varsayılan anahtar yolu geri", t.replace('ANAHTAR="${TEKSERP_PAKET_ANAHTARI:-}"', 'ANAHTAR="${TEKSERP_PAKET_ANAHTARI:-$HOME/.tekserp/satici-hazirlik/paket-hazirlik.paket.json}"')],
     ["boş anahtar kapısı silindi", t.replace(/^\[ -n "\$ANAHTAR" \].*\n/m, "")],
     ["TEKSERP_MUSTERI geri", t.replace("  musteri: null,", "  musteri: process.env.TEKSERP_MUSTERI || null,")],
@@ -626,6 +632,72 @@ function teslimImzaStatik(betik: string): string[] {
   for (const [ad, m] of sondalar) {
     check(`§5c sonda: ${ad} → kırmızı`, m !== t && teslimImzaStatik(m).length > 0, m !== t ? "" : "MUTASYON UYGULANMADI");
   }
+}
+
+// §5l — teslim paketi `backend-oci` biçimi (sözleşme 5, L3): üye kümesi ve künye kapsamı TEK kaynaktan
+// (`scripts/lib/oci-paket.ts`, yayıncı aynısını ölçer); etiket compose'un istediği; şablon doldurulur; imaj kimliği
+// config özeti ARŞİVDEN (containerd `.Id`'si index özetidir); güncelleyici künyesi imajda ikiliden; dış tar belirlenimli.
+function teslimOciStatik(betik: string): string[] {
+  const kod = betik.split("\n").filter((l) => !/^\s*#/.test(l)).join("\n");
+  const ih: string[] = [];
+  const sentetik = (x: string): string => x.replace(ociImajArsivi("S"), "$AD");
+  const uyeler = /^UYELER="([^"]*)"$/m.exec(kod)?.[1].split(/\s+/) ?? [];
+  if (JSON.stringify([...uyeler].sort()) !== JSON.stringify(ociUyeler("S").map(sentetik).sort())) ih.push(`dış tar üyeleri oci-paket.ts ociUyeler ile aynı değil (${uyeler.join(" ")})`);
+  if (!/tar [^\n]*-cf "\$CIKTI\/\$PAKET\.part" \$UYELER/.test(kod)) ih.push("dış tar UYELER listesinden kurulmuyor");
+  const kapsam = /"\$GKUNYE" \\\n\s+(.+)$/m.exec(kod)?.[1].trim().split(/\s+/).map((x) => x.replace(/"/g, "")) ?? [];
+  if (JSON.stringify(kapsam) !== JSON.stringify(ociKapsam("S").map(sentetik))) ih.push(`künye kapsamı oci-paket.ts ociKapsam ile aynı değil (${kapsam.join(" ")})`);
+  if (!/^AD="tekserp-korumali_\$\{SURUM\}_linux-amd64\.tar\.gz"$/m.test(kod) || !/^PAKET="tekserp-backend-oci-\$\{SURUM\}\.tar"$/m.test(kod)) ih.push("imaj arşivi / paket adı oci-paket.ts biçiminde değil");
+  if (!/\[ "\$ETIKET" = "tekserp-korumali:\$SURUM" \] \|\| \{[^}]*exit 1; \}/.test(kod)) ih.push("imaj etiketi tekserp-korumali:<sürüm> zorunlu değil");
+  if (!/^sed "s\/@@SURUM@@\/\$SURUM\/g" "\$BURASI\/docker-compose\.guncelleyici\.yml" > "\$SAHNE\/docker-compose\.yml"$/m.test(kod)) ih.push("compose güncelleyicili şablondan sürümle doldurulmuyor");
+  if (!/if grep -q '@@' "\$SAHNE\/docker-compose\.yml"; then [^\n]*exit 1; fi/.test(kod)) ih.push("doldurulmamış yer tutucu denetimi yok");
+  if (/\{\{\.Id\}\}/.test(kod)) ih.push("imaj kimliği docker image inspect .Id'den (containerd'de index özeti)");
+  if (!/backend-bildirim\.ts imaj-kimlik --arsiv="\$SAHNE\/\$AD"/.test(kod) || !/kimlik: imajKimlik/.test(kod)) ih.push("imaj kimliği arşivden ölçülmüyor");
+  if (!/docker run --rm --network none --platform linux\/amd64 -v "\$GDIZIN:\/g:ro" --entrypoint \/g\/tekserp-guncelleyici "\$ETIKET" kunye/.test(kod)) ih.push("güncelleyici künyesi imajın içinde ikiliden ölçülmüyor");
+  if (!/if \(!ayni\(gDosya, gOlcu\)\)/.test(kod)) ih.push("ölçülen künye CI dosyasıyla kıyaslanmıyor");
+  if (!/tar --format=ustar --owner=0 --group=0 --numeric-owner -cf/.test(kod)) ih.push("GNU tar dalı ustar + sahip 0:0 değil");
+  if (!/COPYFILE_DISABLE=1 tar --format=ustar --uid 0 --gid 0 --no-xattrs --no-mac-metadata -cf/.test(kod)) ih.push("bsdtar dalı ustar + 0:0 + Mac meta verisiz değil");
+  if (!/platform: "linux-x64-oci", gocSayisi: Number\(goc\)/.test(kod) || !/guncelleyici: \{ surum: gOlcu\.surum, sha256: gSha \}/.test(kod)) ih.push("künye platform/gocSayisi/guncelleyici alanlarını taşımıyor");
+  return ih;
+}
+{
+  const t = oku("Teks-Erp/docker/korumali/teslim-paketle.sh");
+  const g = teslimOciStatik(t);
+  check("§5l ⭐ teslim paketi backend-oci biçiminde (üyeler/kapsam = oci-paket.ts, etiket, doldurulmuş şablon, kimlik arşivden, künye imajda ölçülür, belirlenimli tar)", g.length === 0, g.join(" | ") || "temiz");
+  const sondalar: Array<[string, string]> = [
+    ["dış tar'dan güncelleyici düştü", t.replace("docker-compose.yml .env.ornek tekserp-guncelleyici guncelleyici-kunye.json PAKET-DOCKER.json PAKET-DOCKER.json.jws", "docker-compose.yml .env.ornek guncelleyici-kunye.json PAKET-DOCKER.json PAKET-DOCKER.json.jws")],
+    ["kapsamdan künye düştü", t.replace(/("\$GKUNYE" \\\n\s+"\$AD" docker-compose\.yml \.env\.ornek tekserp-guncelleyici) guncelleyici-kunye\.json/, "$1")],
+    ["etiket kapısı kalktı", t.replace(/^\[ "\$ETIKET" = "tekserp-korumali:\$SURUM" \].*\n/m, "")],
+    ["elle compose girdi (doldurma kalktı)", t.replace(/^sed "s\/@@SURUM@@\/\$SURUM\/g" "\$BURASI\/docker-compose\.guncelleyici\.yml"/m, 'cp "$BURASI/docker-compose.yml"')],
+    ["yer tutucu denetimi kalktı", t.replace(/^if grep -q '@@'.*\n/m, "")],
+    [".Id geri", t.replace("IMAJ_KIMLIK=$( cd", "IMAJ_KIMLIK=$(docker image inspect \"$ETIKET\" --format '{{.Id}}') # $( cd")],
+    ["künye imajda ölçülmüyor", t.replace("--entrypoint /g/tekserp-guncelleyici \"$ETIKET\" kunye", "--entrypoint cat \"$ETIKET\" /g/guncelleyici-kunye.json")],
+    ["sahip 0:0 kalktı (GNU)", t.replace("--owner=0 --group=0 --numeric-owner ", "")],
+    ["Mac meta verisi girdi", t.replace("--no-xattrs --no-mac-metadata ", "")],
+  ];
+  for (const [ad, m] of sondalar) check(`§5l sonda: ${ad} → kırmızı`, m !== t && teslimOciStatik(m).length > 0, m !== t ? "" : "MUTASYON UYGULANMADI");
+}
+
+// §5m — imaj derlemesi native'in gömülü çapa kipini bayt koduyla kıyaslar (Windows `paketle.ps1` ile aynı kapı, G3):
+// sahne native'i kopyaladıktan SONRA `native-capa-kipi.mjs` koşar ve sıfır olmayan çıkışta derleme durur.
+function sahneCapaStatik(sahne: string): string[] {
+  const kod = sahne.split("\n").filter((l) => !/^\s*\/\//.test(l)).join("\n");
+  const kopya = kod.search(/kopyala\(path\.join\(PROJ, 'native', 'lisans-cekirdek', 'dist-uretim', NATIVE\), path\.join\(SAHNE, 'native', NATIVE\)\)/);
+  const cagri = kod.search(/\['scripts\/native-capa-kipi\.mjs', path\.join\(SAHNE, 'native', NATIVE\), path\.join\(dist, 'server-kunye\.json'\)\]/);
+  const ih: string[] = [];
+  if (cagri < 0) ih.push("sahne native-capa-kipi.mjs çağırmıyor");
+  else if (kopya < 0 || cagri < kopya) ih.push("çapa kipi native kopyalanmadan önce ölçülüyor");
+  if (!/if \(capa\.status !== 0\) dur\(/.test(kod)) ih.push("çapa kipi uyuşmazlığında derleme durmuyor");
+  return ih;
+}
+{
+  const t = oku("Teks-Erp/docker/korumali/sahne.mjs");
+  const g = sahneCapaStatik(t);
+  check("§5m ⭐ imaj derlemesi native çapa kipini bayt koduyla kıyaslar (native-capa-kipi.mjs, uyuşmazlıkta DUR)", g.length === 0, g.join(" | ") || "temiz");
+  const sondalar: Array<[string, string]> = [
+    ["çağrı silindi", t.replace(/^  const capa = spawnSync\(.*\n/m, "  const capa = { status: 0 };\n")],
+    ["çıkış yok sayıldı", t.replace("if (capa.status !== 0) dur(", "if (false) dur(")],
+  ];
+  for (const [ad, m] of sondalar) check(`§5m sonda: ${ad} → kırmızı`, m !== t && sahneCapaStatik(m).length > 0, m !== t ? "" : "MUTASYON UYGULANMADI");
 }
 
 // §5l — G13 imaj içi bütünlük listesi (`imaj-imzala.mjs`): Windows paketinin AYNI aracı (`build-korumali-imza.ts
@@ -1008,11 +1080,14 @@ function ayrismaStatik(taban: string, guncelleyici: string): string[] {
 }
 
 // §7j varsayılan = bugünkü davranış: anahtarı yalnız güncelleyicili compose yazar; elle kurulum, bulut örneği ve
-// demo compose'u onu taşımaz (taşırsa bugünkü kurulum açılışta göçü bırakır). Teslim paketi şablonu taşımaz (yeri L3'te).
+// demo compose'u onu taşımaz (taşırsa bugünkü kurulum açılışta göçü bırakır). Teslim paketi (`backend-oci`, L3)
+// güncelleyicili şablonu TAŞIR, elle compose'u taşımaz (paketi güncelleyici açar; göç yalnız GOC adımında).
 function anahtarYeriStatik(dosyalar: Record<string, string>, teslim: string): string[] {
   const ih: string[] = [];
   for (const [ad, m] of Object.entries(dosyalar)) if (/TEKSERP_GOC_ACILISTA/.test(m)) ih.push(`${ad} TEKSERP_GOC_ACILISTA taşıyor`);
-  if (/docker-compose\.guncelleyici/.test(teslim.split("\n").filter((l) => !/^\s*#/.test(l)).join("\n"))) ih.push("teslim paketi güncelleyici şablonunu taşıyor (yeri L3'te)");
+  const kod = teslim.split("\n").filter((l) => !/^\s*#/.test(l)).join("\n");
+  if (!/"\$BURASI\/docker-compose\.guncelleyici\.yml" > "\$SAHNE\/docker-compose\.yml"/.test(kod)) ih.push("teslim paketi güncelleyicili şablonu taşımıyor");
+  if (/"\$BURASI\/docker-compose\.yml"/.test(kod)) ih.push("teslim paketi elle compose'u taşıyor (açılışta göçerdi)");
   return ih;
 }
 {
@@ -1024,9 +1099,11 @@ function anahtarYeriStatik(dosyalar: Record<string, string>, teslim: string): st
   };
   const tp = oku("Teks-Erp/docker/korumali/teslim-paketle.sh");
   const g = anahtarYeriStatik(dosyalar, tp);
-  check("§7j ⭐ anahtar yalnız güncelleyicili compose'da (elle/bulut/demo compose bugünkü gibi açılışta göçer)", g.length === 0, g.join(" | "));
+  check("§7j ⭐ anahtar yalnız güncelleyicili compose'da (elle/bulut/demo compose bugünkü gibi açılışta göçer); teslim paketi güncelleyicili şablonu taşır", g.length === 0, g.join(" | "));
   const sonda = { ...dosyalar, "docker/korumali/docker-compose.yml": dosyalar["docker/korumali/docker-compose.yml"]!.replace("      PORT: \"4000\"\n", "      PORT: \"4000\"\n      TEKSERP_GOC_ACILISTA: \"0\"\n") };
   check("§7j sonda: elle compose'a anahtar → kırmızı", anahtarYeriStatik(sonda, tp).length > 0);
+  const elle = tp.replace('"$BURASI/docker-compose.guncelleyici.yml" > "$SAHNE/docker-compose.yml"', '"$BURASI/docker-compose.yml" > "$SAHNE/docker-compose.yml"');
+  check("§7j sonda: teslim elle compose'u taşır → kırmızı", elle !== tp && anahtarYeriStatik(dosyalar, elle).length > 0, elle !== tp ? "" : "MUTASYON UYGULANMADI");
 }
 
 // §7k kurulum sınıfı: compose backend'e `TEKSERP_KURULUM_SINIFI`ni boş varsayılanla geçirir (yoksa .env'deki değer

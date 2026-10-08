@@ -36,6 +36,11 @@
 //      sayılmaz; kaynak grup geride → DUR; kök grup etiket istemez) · `dogrula --ortak` bildirim aracı kuralları
 //   §3T (3.9 D7) TEST ÇAPASI DUR satırları uçtan uca: yalnız adres kapısı açık ikinci geçici ağaçta; kök çapası
 //      (paket çapası boş) ve paket çapası (kök çapası boş) ayrı ayrı DUR, ssh/scp/fetch SIFIR; --kuru kontrolü durmaz
+//   §1o/§3L (sözleşme 5, L3) LINUX/OCI `--urun=backend-oci`: ürün dizini = protokol RELEASE_PRODUCT_DIRS · paket adı
+//      deseni = oci-paket.ts ociPaketAdi · yayın planı ürünün paket biçimini ister · sentetik docker-save fikstürüyle
+//      (`Teks-Erp/scripts/lib/oci-fikstur.ts`) kuru kip ağsız + bildirim linux-x64-oci · sahte hedefte `/<grup>/backend-oci/`
+//      düzeni, kendi defteri, Windows işaretçilerine DOKUNULMAZ, kenarda belirteçli · imzasız taban / label yok / kimlik
+//      uyuşmaz / etiket uyuşmaz / zip'le --urun=backend-oci / tar'la Windows yolu / PG argümanı → DUR, yazma SIFIR
 //   §1m/§3ci (G22) CI KAÇIŞI: imzalı künyede `ciKokeni.kip = "atlandi"` → yayın DURMAZ, uyarı basılır, defterde
 //      `ci-atlandi:` kolonu (cümle · saat · makine · HEAD); kaçışsız pakette kolon YOK
 //
@@ -49,6 +54,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import {
+  OCI_PAKET_ADI_DESENI,
   PAKET_ADI_DESENI,
   SURUM_DESENI,
   defterKomutu,
@@ -63,9 +69,10 @@ import {
   yayinPlani,
 } from './lib/backend-yayin.mjs';
 import { kaynakSurumleri, terfiHukmu } from './lib/terfi.mjs';
-import { YENI_ADRES_KAPISI, grupTerfiKapisi, grupYayinBlogu, yeniAdresKapisiSatirlari } from './lib/grup-yayin.mjs';
+import { YENI_ADRES_KAPISI, grupHedefi, grupTerfiKapisi, grupYayinBlogu, yeniAdresKapisiSatirlari } from './lib/grup-yayin.mjs';
 import { PROFIL_DIZINI_REL, profilOzetleri, raporYolu } from './lib/profil-raporu.mjs';
 import { YAYIN_EZME_ORTAMLARI } from './lib/yayin-hedefi.mjs';
+import { OCI_URUN_DIZINI } from './lib/dagitim.mjs';
 // Bekçi/koşucu gerçek Anahtar Zinciri'ne GİTMEZ: parola okuyan araçlar kasa yerine stdin/dosya kullanır (scripts/lib/parola-kasasi.mjs).
 process.env.TEKSERP_PAROLA_KASASI = 'kapali';
 
@@ -140,6 +147,19 @@ function bolum1() {
     iki.split('\t').length === 7 && iki.split('\t')[5].startsWith('terfi-atlandi: ') && /^ci-atlandi: "CI kırık, kullanıcı onayladı: imzala" · 2026-10-01T20:00:00\+03:00 · mac · HEAD a{12}$/.test(iki.split('\t')[6]) &&
     yalnizCi.split('\t').length === 6 && yalnizCi.split('\t')[5].startsWith('ci-atlandi: ') && ciAtlaMetni({ kip: 'kosu' }) === null && ciAtlaMetni(null) === null, iki);
   ol("§1k defter komutu tek tırnağı kaçırır (içerik biçim dizesine girmez)", defterKomutu('/opt/v/defter/k.tsv', "a'b").includes("'a'\\''b'") && defterKomutu('/opt/v/defter/k.tsv', 'x').includes("printf '%s\\n'"));
+
+  // §1o sözleşme 5: Linux/OCI ürün yolu ve paket adı tek kaynaktan (protokol + oci-paket.ts), yayın planı ürüne bağlı.
+  const tek = JSON.parse(execFileSync(process.execPath, ['--import', 'tsx', '-e',
+    'import("./src/lib/license/protocol/guncelleme.ts").then(async (g) => { const o = await import("./scripts/lib/oci-paket.ts"); console.log(JSON.stringify({ dir: g.RELEASE_PRODUCT_DIRS["linux-x64-oci"], ad: [o.ociPaketAdi("2.15.0"), o.ociPaketAdi("2.15.0-prova.1")] })); })'],
+  { cwd: TEKS, encoding: 'utf8' }).trim().split('\n').pop());
+  ol('§1o ⭐ OCI_URUN_DIZINI = protokol RELEASE_PRODUCT_DIRS["linux-x64-oci"]; OCI_PAKET_ADI_DESENI oci-paket.ts ociPaketAdi\'nı tanır, zip\'i tanımaz',
+    OCI_URUN_DIZINI === tek.dir && tek.ad.every((a) => OCI_PAKET_ADI_DESENI.test(a)) && !OCI_PAKET_ADI_DESENI.test('tekserp-backend-oci-2.15.0.zip') && !OCI_PAKET_ADI_DESENI.test('baska-2.15.0.tar'), JSON.stringify(tek));
+  const planOci = (ek) => () => yayinPlani({ vdsBackend: '/v/test/backend-oci', backendDefter: '/v/defter/test-backend-oci.tsv', surum: '2.15.0', damga: 'abcdef12', urun: 'backend-oci', ...ek });
+  const firlatir = (f) => { try { f(); return false; } catch { return true; } };
+  ol('§1o2 yayın planı ürünün paket biçimini ister: OCI tar geçer · OCI\'ye zip · Windows\'a tar · sürümü tutmayan OCI adı · OCI + PG → fırlatır',
+    !firlatir(planOci({ paketAd: 'tekserp-backend-oci-2.15.0.tar' })) && firlatir(planOci({ paketAd: 'tekserp-backend-2.15.0.zip' })) &&
+    firlatir(() => yayinPlani({ vdsBackend: '/v/test/backend', backendDefter: '/v/defter/t.tsv', surum: '2.15.0', paketAd: 'tekserp-backend-oci-2.15.0.tar', damga: 'abcdef12' })) &&
+    firlatir(planOci({ paketAd: 'tekserp-backend-oci-2.14.0.tar' })) && firlatir(planOci({ paketAd: 'tekserp-backend-oci-2.15.0.tar', pgAd: 'pg.zip' })));
 }
 
 /* ------------------------------------------------------------------ *
@@ -391,7 +411,7 @@ const YAMALAR = [
   ['deploy/backend-yayinla.mjs', '  if (process.env.TEKSERP_TEST_KOK_CAPASI) dur(', '  if (false) dur('],
 ];
 /** Notu yazılan (prova olmayan) test sürümleri; §3o notsuz sürümü bilerek dışarıda bırakır. */
-const NOTLU = ['9.9.0', '9.9.1', '9.9.2', '9.9.3', '9.9.4', '9.9.5', '9.9.6', '9.9.7', '9.9.8', '9.9.10', '9.9.11', '9.9.12', '9.9.13'];
+const NOTLU = ['9.9.0', '9.9.1', '9.9.2', '9.9.3', '9.9.4', '9.9.5', '9.9.6', '9.9.7', '9.9.8', '9.9.10', '9.9.11', '9.9.12', '9.9.13', '9.9.20'];
 let AGAC_HEAD = null;
 /** Yama listesi parametrelidir: §3T yalnız adres kapısı açılmış ikinci bir ağaçta test çapası DUR satırlarını ölçer. */
 function agacKur(hedef = AGAC, yamalar = YAMALAR) {
@@ -516,7 +536,90 @@ function bolum3() {
   bolum3grup();
   bolum3zincir();
   bolum3testCapa();
+  bolum3oci();
 }
+
+/* §3L (sözleşme 5, L3) — Linux/OCI teslim paketi `--urun=backend-oci`: sentetik `docker save` fikstürü, gerçek imza aracı. */
+function ociPaketKur(ad, { surum, commit, bozulma = null, ciKokeni = null }) {
+  const betik = path.join(GECICI, `oci-${ad}.ts`);
+  fs.writeFileSync(betik, `import fs from 'node:fs';
+import { openPackageKey } from ${JSON.stringify(path.join(TEKS, 'scripts/lib/butunluk-imza.ts'))};
+import { ociFiksturKur } from ${JSON.stringify(path.join(TEKS, 'scripts/lib/oci-fikstur.ts'))};
+openPackageKey(${JSON.stringify(ZINCIR.dosya)}, async () => Buffer.from(${JSON.stringify(URETIM.parola)})).then((anahtar) => ociFiksturKur({
+  dizin: ${JSON.stringify(path.join(GECICI, 'oci'))}, surum: ${JSON.stringify(surum)}, commit: ${JSON.stringify(commit)}, anahtar,
+  sertifika: JSON.parse(fs.readFileSync(${JSON.stringify(ZINCIR.sertifika)}, 'utf8')).sertifika, kokler: JSON.parse(fs.readFileSync(${JSON.stringify(ZINCIR.capa)}, 'utf8')),
+  composeSablonu: fs.readFileSync(${JSON.stringify(path.join(TEKS, 'docker/korumali/docker-compose.guncelleyici.yml'))}, 'utf8'),
+  envOrnek: fs.readFileSync(${JSON.stringify(path.join(TEKS, 'docker/korumali/.env.ornek'))}, 'utf8'),
+  bozulma: ${JSON.stringify(bozulma)}, ciKokeni: ${JSON.stringify(ciKokeni)},
+})).then((r) => console.log(JSON.stringify(r))).catch((e) => { console.error(e); process.exit(1); });
+`);
+  return JSON.parse(tsx([betik]).trim().split('\n').pop());
+}
+
+function bolum3oci() {
+  console.log('\n§3L — Linux/OCI teslim paketi (--urun=backend-oci, sözleşme 5)');
+  const head = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: KOK, encoding: 'utf8' }).trim();
+  const SURUM = '2.14.0';
+  const hicYazmadi = (r) => r.yazma.length === 0 && !r.log.some(([t]) => t === 'ssh' || t === 'scp');
+  const oci = (pk, g = 'test', ek = []) => [`--grup=${g}`, '--urun=backend-oci', `--paket=${pk.tar}`, `--anahtar=${ZINCIR.dosya}`, ...ek];
+  const ortam = { TEKSERP_TEST_PAKET_CAPASI: ORTAK.capa };
+
+  const t1 = ociPaketKur('t1', { surum: SURUM, commit: head.slice(0, 8), ciKokeni: { kip: 'atlandi', cumle: 'Docker imajı Mac üzerinde derlendi, kullanıcı onayladı', saat: '2026-10-08T20:00:00+03:00', makine: 'mac', head: 'a'.repeat(40) } });
+  const k = yayinla(oci(t1, 'test', ['--kuru']), ortam);
+  const kayitYolu = /imzasız bildirim: (\S+sonuc\.json)/.exec(k.cikti)?.[1];
+  const kb = kayitYolu && fs.existsSync(kayitYolu) ? JSON.parse(fs.readFileSync(kayitYolu, 'utf8')).bildirim : null;
+  ol('§3L1 ⭐ OCI paketi test grubuna KURU: çıkış 0, uzağa yazma SIFIR, kenar YOK; bildirim linux-x64-oci · imaj kimliği = config özeti · PG hedefi yok · güncelleyici bloğu',
+    k.kod === 0 && hicYazmadi(k) && !k.log.some(([t]) => t === 'fetch') && /Linux\/OCI \(backend-oci\) — KURU/.test(k.cikti) &&
+    kb?.platform === 'linux-x64-oci' && kb?.urun === 'backend' && kb?.imaj?.kimlik === t1.kimlik && kb?.imaj?.etiket === `tekserp-korumali:${SURUM}` &&
+    kb?.pg?.hedef === null && kb?.guncelleyici?.surum === '0.9.0' && kb?.paket?.ad === `tekserp-backend-oci-${SURUM}.tar`, k.cikti.slice(-900));
+  ol('§3L1b kuru çıktıda adresler backend-oci yolunda, Windows backend yolu YOK; CI kökeni imaj içi yükten (kaçış uyarısı)',
+    /tekserp-indir\/html\/test\/backend-oci\//.test(k.cikti) && !/tekserp-indir\/html\/test\/backend\//.test(k.cikti) && /CI KAÇIŞI/.test(k.cikti) && /backend-oci-YAYIN-DEFTERI/.test(k.cikti), k.cikti.slice(-600));
+
+  for (const [bozulma, desen, ad] of [
+    ['imzasiz-taban', /son katman ince imza katmanı değil/, 'İMZASIZ TABAN (son katman imza katmanı değil)'],
+    ['label-yok', /label tr\.tekserp\.butunluk yok/, 'label tr.tekserp.butunluk yok'],
+    ['kimlik-uyusmaz', /config özeti\) sha256:[0-9a-f]{64} ≠ künye/, 'imaj kimliği künyeyle uyuşmaz'],
+    ['etiket-uyusmaz', /imaj etiketi \["tekserp-korumali:baska"\]/, 'imaj etiketi künyeyle uyuşmaz'],
+  ]) {
+    const pk = ociPaketKur(bozulma, { surum: SURUM, commit: head.slice(0, 8), bozulma });
+    const rr = yayinla(oci(pk, 'test', ['--kuru']), ortam);
+    ol(`§3L2 ⭐ ${ad} → DUR, uzağa yazma SIFIR`, rr.kod !== 0 && desen.test(rr.cikti) && hicYazmadi(rr), rr.cikti.slice(-400));
+  }
+  const g1 = ortakPaketKur('oz', { surum: SURUM, commit: head.slice(0, 8) });
+  const rz = yayinla([`--grup=test`, '--urun=backend-oci', `--paket=${g1.zip}`, '--kuru'], { TEKSERP_TEST_PAKET_CAPASI: g1.capa });
+  ol('§3L3 Windows zip\'i --urun=backend-oci ile → DUR (ürün yoluna uymuyor), ağa çıkılmaz', rz.kod !== 0 && /PAKET ÜRÜN YOLUNA UYMUYOR/.test(rz.cikti) && rz.log.length === 0, rz.cikti.slice(-300));
+  const rt = yayinla([`--grup=test`, `--paket=${t1.tar}`, '--kuru'], ortam);
+  ol('§3L3b OCI tar\'ı --urun verilmeden (Windows yolu) → DUR, ağa çıkılmaz', rt.kod !== 0 && /PAKET ÜRÜN YOLUNA UYMUYOR/.test(rt.cikti) && rt.log.length === 0, rt.cikti.slice(-300));
+  for (const pgArg of ['--pg-kunye=/tmp/yok.json', '--pg-yayinla']) {
+    const rp = yayinla(oci(t1, 'test', ['--kuru', pgArg]), ortam);
+    ol(`§3L4 ${pgArg.split('=')[0]} Linux/OCI yayınında → DUR, ağa çıkılmaz`, rp.kod !== 0 && /Linux\/OCI yayınında verilmez/.test(rp.cikti) && rp.log.length === 0, rp.cikti.slice(-300));
+  }
+  const ru = yayinla([`--grup=test`, '--urun=backend-arm', `--paket=${t1.tar}`, '--kuru'], ortam);
+  ol('§3L4b tanınmayan --urun → DUR, ağa çıkılmaz', ru.kod !== 0 && /TANINMAYAN ÜRÜN/.test(ru.cikti) && ru.log.length === 0, ru.cikti.slice(-300));
+
+  // Sahte hedefte gerçek yükleme (geçici ağaç, adres kapısı yamalı): backend-oci düzeni, Windows işaretçileri bayt bayt aynı.
+  const winOnce = ['son.json', 'son-zincir.json'].map((f) => (fs.existsSync(uzakDosya(f)) ? fs.readFileSync(uzakDosya(f), 'utf8') : null));
+  const ociKok = uzakYol(grupHedefiOci().vds);
+  const S2 = '9.9.20';
+  const t2 = ociPaketKur('t2', { surum: S2, commit: AGAC_HEAD.slice(0, 8) });
+  const g = yayinlaAgac(oci(t2, GRUP), ortam);
+  const ociDefter = uzakYol(grupHedefiOci().defter);
+  const winSonra = ['son.json', 'son-zincir.json'].map((f) => (fs.existsSync(uzakDosya(f)) ? fs.readFileSync(uzakDosya(f), 'utf8') : null));
+  const okuma = g.log.filter(([t]) => t === 'fetch');
+  ol('§3L5 ⭐ sahte hedefe OCI yayını: <grup>/backend-oci/<sürüm>/ (tar + surum-zincir.json) + son-zincir.json EN SON, geçici yok, kenar belirteçli backend-oci yolundan',
+    g.kod === 0 && fs.existsSync(path.join(ociKok, S2, `tekserp-backend-oci-${S2}.tar`)) && fs.existsSync(path.join(ociKok, S2, 'surum-zincir.json')) &&
+    fs.existsSync(path.join(ociKok, 'son-zincir.json')) && !fs.existsSync(path.join(ociKok, 'son.json')) &&
+    !fs.readdirSync(ociKok).some((f) => f.startsWith('.')) && okuma.length >= 1 && okuma.every(([, y, b]) => y === `/${GRUP}/backend-oci/son-zincir.json` && b === 'belirtecli'),
+    g.cikti.slice(-900) + JSON.stringify(okuma));
+  const yuk = (() => { try { return JSON.parse(Buffer.from(JSON.parse(fs.readFileSync(path.join(ociKok, 'son-zincir.json'), 'utf8')).bildirim.split('.')[1], 'base64url').toString('utf8')); } catch { return null; } })();
+  ol('§3L5b yayınlanan bildirim linux-x64-oci, imaj kimliği fikstürün config özeti, kanal = grup', yuk?.platform === 'linux-x64-oci' && yuk?.imaj?.kimlik === t2.kimlik && yuk?.kanal === GRUP, JSON.stringify(yuk)?.slice(0, 300));
+  ol('§3L5c ⭐ Windows işaretçileri (backend/son.json · son-zincir.json) bayt bayt AYNI; OCI defteri ayrı (backend-oci-9.9.20)',
+    JSON.stringify(winOnce) === JSON.stringify(winSonra) && winOnce.some((x) => x !== null) && fs.existsSync(ociDefter) && /\tbackend-oci-9\.9\.20\t/.test(fs.readFileSync(ociDefter, 'utf8')) &&
+    !fs.readFileSync(DEFTER(), 'utf8').includes('9.9.20'));
+  const ikinci = yayinlaAgac(oci(t2, GRUP), ortam);
+  ol('§3L6 aynı OCI sürümü ikinci kez → DUR (monotonluk backend-oci işaretçisinden), yazma SIFIR', ikinci.kod !== 0 && /YENİ değil/.test(ikinci.cikti) && ikinci.yazma.length === 0, ikinci.cikti.slice(-300));
+}
+const grupHedefiOci = () => grupHedefi(GRUP, 'backend-oci');
 
 /* §3T (3.9 D7) — test çapası DUR satırları uçtan uca: yalnız adres kapısı açık ikinci ağaç; iki DUR satırı YAMASIZ.
  * Paket çapası satırı önce koştuğu için kök satırı paket çapası BOŞKEN ölçülür (ve tersi). Kontrol: aynı ortam --kuru'da durmaz. */

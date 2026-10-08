@@ -32,38 +32,46 @@ Plan: `docs/design/GUNCELLEYICI-SAGLAMLIK.md` §1.3 + §10 L3; sözleşme `docs/
 - Yayıncı "kuru" kipi varsayılana ÇEVRİLMEDİ (mevcut `--kuru` bayrağı aynen); "yerel sahte hedef" = test_backend_yayin'in
   sahte ssh/scp + geçici ağaç düzeni.
 
+## Oturum 2 (2026-10-09) — yapılanlar (commit: `git log gece/gl3`, "L3 ikinci ara")
+1. `backend-bildirim.ts`: `dogrula|imzala --ortak --tar=<paket.tar>` → `ociPaketiAc` + üretim anahtar ailesi + ad = `ociPaketAdi`;
+   bildirim `platform:"linux-x64-oci"`, `imaj`, `guncelleyici`, `pg.hedef:null` (`--pg-kunye` RED), `runtime.node`=künye
+   `sunucu.nodeSurum`, şema öz-denetimi; imza öz-denetimi `verifyReleaseManifest(..., {platform})`; `sonuc.json`a `ciKokeni`.
+   Yeni komut `imaj-kimlik --arsiv=<tar.gz>`. `oci-arsiv.ts` yorumlarındaki `.Id` ifadesi düzeltildi.
+2. `deploy/backend-yayinla.mjs --urun=backend-oci` (+ `scripts/lib/backend-yayin.mjs`: `OCI_PAKET_ADI_DESENI`, `YAYIN_URUNLERI`,
+   `yayinPlani({urun})`, ürün başına `kopruYolu`, `ciKokeniSuz`). Terfi etiketi sürümün (`urun:'backend'`); portal olayı
+   `urun:'backend'` + `ayrinti.platform`. PG argümanları OCI'de DUR; zip↔tar ürün yolu uyuşmazlığı DUR.
+3. `teslim-paketle.sh` yeni imza `<etiket> <güncelleyici-dizini> <çıktı>` (oci-paket.ts biçimi, şablon doldurma, kimlik
+   arşivden, güncelleyici künyesi imajda ölçülür, ustar dış tar).
+4. Bekçiler: `test_docker_hijyeni` §5c (sahne değişkeni) · YENİ §5l (teslim OCI biçimi, 9 sonda) · YENİ §5m (sahne çapa kipi,
+   2 sonda) · §7j TERSİNE (teslim güncelleyicili şablonu taşır) → 182/0. `test_backend_yayin` YENİ §1o/§1o2 + §3L1–§3L6
+   (sentetik fikstür `Teks-Erp/scripts/lib/oci-fikstur.ts`) → 140/0. Negatif sondalar elle: öz-denetimden platform
+   kalktı → §3L5–6 4 ❌; ürün yolu kapısı + ince katman denetimi kalktı → §3L2/§3L3/§3L3b 3 ❌; geri alınınca yeşil.
+5. `sahne.mjs` native kopyasından sonra `native-capa-kipi.mjs` (G13 borcunun ucuz kısmı).
+6. Gerçek prova: `prova-imaj-butunluk.mjs --birak` 16/0 (yeni sahne.mjs ile) → `teslim-paketle.sh` (test kökü kok-2099-3 /
+   pkt-2099-3 dış imza, çapraz derlenmiş güncelleyici 0.1.3) → 213 MB tar, imaj config özeti sha256:c25df486… →
+   `backend-yayinla.mjs --grup=test --urun=backend-oci --kuru` ÇIKIŞ 0 (bildirim linux-x64-oci, göç 373, CI kaçışı uyarısı).
+   Geçici etiket `tekserp-korumali:2.14.0` silindi. Prova imajları (`tekserp-korumali:prova-g13-071a03*`, 6 adet) ve
+   geçici dizin `/var/folders/7j/.../tekserp-imaj-prova-j04JP8` DURUYOR — işi bitiren siler (ders imajı SİLİNMEZ).
+7. `satici/sunucu/node_modules` worktree'de `npm ci` ile kuruldu (prova için; gitignore'lu).
+
 ## Kalan adımlar (sırayla)
-1. `Teks-Erp/scripts/backend-bildirim.ts`: `dogrula|imzala --ortak --tar=<paket.tar>` → `ociPaketiAc` (+ `pgGereksinimi`
-   hedefsiz; `--pg-kunye` OCI'de RED), bildirim `platform:"linux-x64-oci"`, `paket.ad`=tar adı, `imaj`, `guncelleyici`,
-   `pg.hedef:null`, `gocSayisi`, `runtime.node`=künye `sunucu.nodeSurum`; öz-denetimde `verifyReleaseManifest(.., {platform})`
-   (bugün platformsuz → Windows → SURUM_PLATFORM düşer!); `sonuc.json`a `ciKokeni`. Ayrıca `imaj-kimlik --arsiv=<tar.gz>`
-   komutu (teslim betiği config özetini buradan alır).
-2. `deploy/backend-yayinla.mjs --urun=backend-oci`: hedef `grupHedefi(GRUP,'backend-oci')`; paket `.tar` (`scripts/lib/
-   backend-yayin.mjs` yeni `OCI_PAKET_ADI_DESENI` ve `yayinPlani` tar kabulü); PAKET.json/unzip okumaları OCI dalında
-   tar'dan (`tar -xOf <paket> PAKET-DOCKER.json`), sürüm notu/terfi (`grupTerfiKapisi` urun backend-oci?)/profil kapıları
-   aynen; `--pg-yayinla`/`--pg-kunye` OCI'de DUR; CI kökeni `sonuc.json`dan; defter `urun:'backend-oci'`.
-3. `Teks-Erp/docker/korumali/teslim-paketle.sh`: yeni imza `<imaj-etiketi> <güncelleyici-dizini> <çıktı-dizini>`; etiket
-   `tekserp-korumali:$SURUM` zorunlu; güncelleyici ELF + `kunye`yi imajda `docker run --network none --entrypoint
-   /g/tekserp-guncelleyici -v dir:/g:ro` ile yeniden ölç (CI dosyasıyla eşit); gocSayisi imajdan; compose
-   `sed s/@@SURUM@@/` + `@@` kalmadı denetimi; künyeye platform/gocSayisi/guncelleyici/imaj.kimlik(config özeti); sahne
-   dizininde imza (`belge`), SHA256SUMS, dış tar (`--format=ustar`, uid/gid 0, `COPYFILE_DISABLE=1`, bsdtar/GNU ayrımı).
-4. Bekçiler: `test_docker_hijyeni` §5c regex'leri (`$CIKTI/PAKET-DOCKER.json` → sahne değişkeni) + §7j TERSİNE (şablon
-   pakete GİRMELİ, doldurulmuş; sondalar: elle compose girdi / doldurma kalktı → kırmızı) + §5k teslim satırı;
-   `test_backend_yayin` yeni §3L (sentetik docker-save fikstürü TS'te: imzalı app + ince katman + config/manifest +
-   dış künye `signManifestDocument` + dış tar): kuru kip · sahte hedefte `/<grup>/backend-oci/` düzeni + Windows son.json'a
-   DOKUNULMAZ · imzasız taban DUR · label yok DUR · kimlik/etiket uyuşmaz DUR · zip'le --urun=backend-oci DUR · PG argümanı
-   DUR; §1o `OCI_URUN_DIZINI` = protokol `RELEASE_PRODUCT_DIRS["linux-x64-oci"]`. Her yeni madde negatif sondalı.
-5. G13 borcu (ucuz kısım): `Teks-Erp/docker/korumali/sahne.mjs` native kopyasından sonra `node scripts/native-capa-kipi.mjs
-   <sahne native> <dist/server-kunye.json>` çağrısı + test_docker_hijyeni durağan madde + sonda. Köken borcu (Docker
-   derlemesinin kayıtlı CI kökeni yok → üretim imzası `--ci-atla` ister) AÇIK kalır: önerilen kapanış imajın CI'da
-   (ubuntu, buildx) derlenip yapıt olması — ayrı dilim.
-6. Gerçek prova (Docker, test kökü): `prova-imaj-butunluk.mjs --birak` ile test köklü imzalı imaj → teslim-paketle.sh
-   (test pkt anahtarı, çapraz derlenmiş güncelleyici) → `backend-yayinla.mjs --grup=test --urun=backend-oci --kuru` +
-   ders imajı tar'ıyla imzasız taban RED. Ders imajı `tekserp-korumali:2.14.0-ders.5fb46d862` SİLİNMEZ.
-7. Belgeler: GUNCELLEYICI.md §16'ya "kimlik = config özeti" + paket biçimi; runbook `docs/ops/LINUX-DOCKER-KURULUM.md` §8;
-   `docs/kurallar/deploy-kurulum.md` tek satır; arşiv `docs/history/arsiv/2026-10.md` SONUNA; BEKCI-HARITASI satırları.
-8. Testler: test_docker_hijyeni · test_korumali_imaj (--sonda) · prova-imaj-butunluk.mjs · test_backend_yayin ·
-   test_paket_kapsami (yeşil) · test_guncelleme_protokol · prova-paket-zinciri.mjs · test_parola_kasasi · check-dagitim.
+1. Ders imajıyla imzasız taban RED uçtan uca (isteğe bağlı): teslim-paketle.sh'in `--imzali` satırı çıkarılmış KOPYASIyla
+   (scratch'te) ders imajı → tar → yayıncı kuru → "son katman ince imza katmanı değil" / "İMZASIZ TABAN" beklenir.
+2. Belgeler: plan `docs/design/GUNCELLEYICI-SAGLAMLIK.md` §1.2'deki `docker image inspect --format '{{.Id}}'` satırı YANLIŞ →
+   "imaj kimliği = config özeti, arşivden (`RootFS.Layers` + config); containerd'de `.Id` index özetidir" olarak düzelt;
+   §1.3 paket biçimine `.env.ornek` + SHA256SUMS + `tekserp-backend-oci-<sürüm>.tar` adı; GUNCELLEYICI.md §16 kural + paket
+   biçimi; runbook `docs/ops/LINUX-DOCKER-KURULUM.md` §8 (yeni teslim-paketle imzası, dış tar); `docs/kurallar/deploy-kurulum.md`
+   tek satır; arşiv `docs/history/arsiv/2026-10.md` SONUNA L3 notu ([ÇEKİRDEK] kimlik=config özeti; [PROFİL] yok);
+   `Teks-Erp/docs/BEKCI-HARITASI.md`: test_docker_hijyeni §5l/§5m/§7j, test_backend_yayin §1o/§3L satırları.
+3. Koşulmamış bekçiler: test_korumali_imaj (--sonda) · test_paket_kapsami · test_guncelleme_protokol · prova-paket-zinciri.mjs ·
+   test_parola_kasasi · check-dagitim · tsc (scripts + backend) — sonra commit.
+4. İNİŞ (görev metni): fetch → `gece/gl3`ü origin/main üzerine rebase (arşiv/kural çakışmalarında ikisini de koru) → kapı
+   (rebase tetiklemezse `git reset --soft origin/main` → `node scripts/hooks/pre-commit.mjs` → commit'leri geri kur;
+   TEKSERP_HOOK_SKIP YASAK) → alan bekçileri + ilgili npm test → `git push origin HEAD:main` (force YASAK).
+5. Açık (kullanıcı/sonraki dilim): OCI terfisinde kaynak grup ölçümü bugün Windows `backend/son.json`dan (ARTEFAKT backend
+   `olculmez`; gerçek yükleme YENI_ADRES_KAPISI ile kapalı) — D5+D8 dilimi backend-oci kaynağını ölçmeli · Worker
+   `backend-oci` yolu L2b'de (ilk gerçek OCI yayınından önce) · Docker derlemesinin CI kökeni yok (`--ci-atla`) · L4b: hedefte
+   etiketi `.Id` ile değil config özetiyle ölç.
 
 ## Dokunma
 L2b (Worker/satıcı belirteci), F1b satici/web, L1 Teks-Erp/native — paralel ajanlarda. Ana .env/VDS/CF/indir sunucusu ASLA.
