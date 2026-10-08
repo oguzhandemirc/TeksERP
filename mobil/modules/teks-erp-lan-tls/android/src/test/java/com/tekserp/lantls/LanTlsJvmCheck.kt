@@ -169,6 +169,15 @@ fun main(args: Array<String>) {
   current = LanTlsState.EMPTY
   ok("sabit yokken şifresiz istek serbest (bugünkü davranış)", get("$h/api/auth/me") == 200)
 
+  // 7) Yoklama: iz yalnız GÖZLENİR (güven kararı yok), kimlik ucu yalnız gözlenen ize kilitli okunur.
+  ok("yoklama: gözlenen iz sunucunun izi", runCatching { LanTlsProbe.observeFingerprint("127.0.0.1", portA, 3000) }.getOrNull() == fpA)
+  val probed = runCatching { LanTlsProbe.probe("127.0.0.1", portB, 3000) }.getOrNull()
+  ok("yoklama: iz + kimlik yanıtı (sabit yokken de)", probed?.fingerprint == fpB && probed.status == 200 && probed.body == "ok")
+  ok("yoklama: beklenen iz tutmazsa kimlik okunmaz", runCatching { LanTlsProbe.fetchIdentity("127.0.0.1", portA, fpB, 3000) }.isFailure)
+  ok("yoklama: şifresiz porta iz yok → hata", runCatching { LanTlsProbe.observeFingerprint("127.0.0.1", portH, 3000) }.exceptionOrNull() is TlsProbeException)
+  val closed = ServerSocket(0, 1, InetAddress.getByName("127.0.0.1")).use { it.localPort }
+  ok("yoklama: kapalı port → hata", runCatching { LanTlsProbe.probe("127.0.0.1", closed, 1000) }.exceptionOrNull() is TlsProbeException)
+
   println("\n$passes geçti, $failures kaldı")
   if (failures > 0) kotlin.system.exitProcess(1)
 }

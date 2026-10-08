@@ -1,9 +1,9 @@
 // =============================================================================
 // Bekçi: tek ortak paket O8 — ilk açılış. Ortak paket ERP adresi taşımaz; adres yokken uygulama
-// `localhost`a değil "Sunucuyu bul" ekranına gider, keşif kendiliğinden başlar, seçilen sunucu kaydedilir.
+// `localhost`a değil "Sunucuyu ekle" sayfasına gider (QR ya da adres + doğrulama kodu; K3).
 //
 // NEGATİF SONDA (ölçüldü): autoUrlFrom localhost'a geri düşünce §1 KIRMIZI; RootNavigator'da ServerSetup
-// dalı pairing'in arkasına alınınca / sorgu kapısı kalkınca §2 KIRMIZI; autoStart kalkınca §3a KIRMIZI.
+// dalı pairing'in arkasına alınınca / sorgu kapısı kalkınca §2 KIRMIZI; adres yolunda `pairing` kalkınca §3a KIRMIZI.
 // =============================================================================
 import React from 'react';
 import { readFileSync } from 'fs';
@@ -63,17 +63,23 @@ describe('§3 ServerSetupScreen', () => {
     useBaseUrlStore.setState({ baseUrl: '', customUrl: null, recentUrls: [], isLoaded: true });
   });
 
-  it('§3a keşif kendiliğinden başlar; bulunan firmaya dokununca adres kaydedilir', async () => {
+  it('§3a "Sunucuyu ekle": iki EŞİT yol (QR · adres); adres yolunda ağ araması ekleme kipinde', async () => {
     discoverMock.mockResolvedValue({ candidates: [SUNUCU] } as never);
     renderWithPaper(<ServerSetupScreen />);
-    expect(screen.getByText('Sunucuyu bul')).toBeTruthy();
-    await waitFor(() => expect(discoverMock).toHaveBeenCalledTimes(1));
-    const satir = await screen.findByText('Örnek Tekstil', {}, { timeout: 5000 });
+    expect(screen.getByText('Sunucuyu ekle')).toBeTruthy();
+    expect(screen.getByTestId('sunucu-ekle-qr')).toBeTruthy();
+    expect(screen.getByTestId('sunucu-ekle-adres')).toBeTruthy();
+    expect(discoverMock).not.toHaveBeenCalled();
     await act(async () => {
-      fireEvent.press(satir);
+      fireEvent.press(screen.getByTestId('sunucu-ekle-adres'));
     });
-    await waitFor(() => expect(useBaseUrlStore.getState().baseUrl).toBe('http://192.168.1.20:4000/api'));
-    expect(hasServerAddress(useBaseUrlStore.getState().baseUrl)).toBe(true);
+    expect(screen.getByTestId('sunucu-adres-input')).toBeTruthy();
+    await act(async () => {
+      fireEvent.press(screen.getByTestId('sunucu-ara'));
+    });
+    await waitFor(() => expect(discoverMock).toHaveBeenCalledTimes(1));
+    expect(discoverMock.mock.calls[0][0]).toMatchObject({ tlsRoute: false });
+    expect(await screen.findByText('Örnek Tekstil', {}, { timeout: 5000 })).toBeTruthy();
   });
 
   it('§3b "Adresi elle gir" elle adres modalını açar', async () => {

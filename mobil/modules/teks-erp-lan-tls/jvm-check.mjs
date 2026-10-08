@@ -13,7 +13,7 @@ import { fileURLToPath } from 'node:url';
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const SRC = path.join(HERE, 'android/src/main/java/com/tekserp/lantls');
 const TEST = path.join(HERE, 'android/src/test/java/com/tekserp/lantls/LanTlsJvmCheck.kt');
-const PURE = ['LanTlsPolicy.kt', 'PinningTrustManager.kt', 'PinningHostnameVerifier.kt', 'CleartextGuardInterceptor.kt'];
+const PURE = ['LanTlsPolicy.kt', 'PinningTrustManager.kt', 'PinningHostnameVerifier.kt', 'CleartextGuardInterceptor.kt', 'LanTlsProbe.kt'];
 const CACHE = path.join(os.homedir(), '.gradle/caches/modules-2/files-2.1');
 
 function dur(msg) {

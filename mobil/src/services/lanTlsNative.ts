@@ -8,6 +8,22 @@ export interface LanTlsNative {
   getPinState: () => { installed: boolean; fingerprints: string[]; endpoints: string[] };
 }
 
+/** Native şifreli yoklamanın ham sonucu: gözlenen iz + kimlik ucunun doğrulanmamış yanıtı. */
+export interface RawTlsProbe {
+  fingerprint: string;
+  status: number | null;
+  body: string | null;
+}
+
+type ProbeFn = (host: string, port: number, timeoutMs: number) => Promise<RawTlsProbe>;
+
+/** Şifreli yoklama işlevi; zorlama katmanı kurulu değilse ya da işlev yoksa `null`. */
+export function lanTlsProbe(): ProbeFn | null {
+  if (!lanTlsNative()) return null;
+  const m = requireOptionalNativeModule<{ probeTls?: ProbeFn }>('TeksErpLanTls');
+  return m && typeof m.probeTls === 'function' ? m.probeTls.bind(m) : null;
+}
+
 export function lanTlsNative(): LanTlsNative | null {
   let m: Partial<LanTlsNative> | null;
   try {

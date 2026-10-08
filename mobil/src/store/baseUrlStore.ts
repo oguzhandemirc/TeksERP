@@ -1,6 +1,8 @@
 import { create } from 'zustand';
 import Constants from 'expo-constants';
 import { storage } from '../utils/storage';
+import { INSECURE_ADDRESS_REASON, TLS_PINS_KEY, parseTlsPins, secureAddressUsable } from '../lib/lan-tls';
+import { secureTransportOnly } from '../lib/secure-transport';
 
 const BACKEND_PORT = 4000;
 const CUSTOM_URL_KEY = 'api_base_url_custom';
@@ -121,6 +123,11 @@ interface BaseUrlState {
   /** Daha önce kaydedilmiş adresler (en yeni önce, MAX_RECENT ile sınırlı). */
   recentUrls: string[];
   isLoaded: boolean;
+  /**
+   * Yalnız şifreli kipte kullanılamayan kayıtlı adres (şifresiz ya da sabitsiz): tablet "Sunucuyu ekle"
+   * ekranına döner ve kullanıcıya bu adresi gösterir. Silinmez; yeni sunucu eklenince boşalır.
+   */
+  unusableUrl: string | null;
 
   init: () => Promise<void>;
   setCustomUrl: (url: string) => Promise<void>;
@@ -132,23 +139,34 @@ export const useBaseUrlStore = create<BaseUrlState>((set, get) => ({
   customUrl: null,
   recentUrls: [],
   isLoaded: false,
+  unusableUrl: null,
 
   init: async () => {
-    const [stored, recentRaw] = await Promise.all([
+    const [stored, recentRaw, pinsRaw] = await Promise.all([
       storage.getItem(CUSTOM_URL_KEY),
       storage.getItem(RECENT_URLS_KEY),
+      storage.getItem(TLS_PINS_KEY).catch(() => null),
     ]);
     const auto = computeAutoUrl();
+    let baseUrl = stored ?? auto;
+    let unusableUrl: string | null = null;
+    if (secureTransportOnly() && hasServerAddress(baseUrl) && !secureAddressUsable(baseUrl, parseTlsPins(pinsRaw))) {
+      unusableUrl = baseUrl;
+      baseUrl = '';
+    }
     set({
       customUrl: stored,
-      baseUrl: stored ?? auto,
+      baseUrl,
       recentUrls: readRecent(recentRaw),
       isLoaded: true,
+      unusableUrl,
     });
   },
 
   setCustomUrl: async (url) => {
     const normalized = normalizeUrl(url);
+    // Yalnız şifreli kip: şifresiz adres hiçbir yoldan kaydedilmez (sabit ise sunucu ekleme akışında yazılır).
+    if (secureTransportOnly() && !/^https:\/\//i.test(normalized)) throw new Error(INSECURE_ADDRESS_REASON);
     // Geçmiş: en yeni önde, tekrarları at, MAX_RECENT ile sınırla.
     const recent = [normalized, ...get().recentUrls.filter((u) => u !== normalized)].slice(
       0,
@@ -158,12 +176,13 @@ export const useBaseUrlStore = create<BaseUrlState>((set, get) => ({
       storage.setItem(CUSTOM_URL_KEY, normalized),
       storage.setItem(RECENT_URLS_KEY, JSON.stringify(recent)),
     ]);
-    set({ customUrl: normalized, baseUrl: normalized, recentUrls: recent });
+    set({ customUrl: normalized, baseUrl: normalized, recentUrls: recent, unusableUrl: null });
   },
 
   reset: async () => {
     await storage.deleteItem(CUSTOM_URL_KEY);
-    set({ customUrl: null, baseUrl: computeAutoUrl() });
+    const auto = computeAutoUrl();
+    set({ customUrl: null, baseUrl: secureTransportOnly() && !/^https:\/\//i.test(auto) ? '' : auto });
   },
 }));
 
