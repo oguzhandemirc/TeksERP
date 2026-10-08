@@ -26,6 +26,7 @@
 //      §5h runbook konteynerin lisans cevaplarını anar (zayıf tanıma onayı); adlar protokol kataloğunda (uclar.ts).
 //      §5i göçlü geri alma şemayı ÖNCE sıfırlar (pg_restore --clean yeni göçün tablolarını bırakır), göç sayısını ölçer.
 //      §5j runbook §9 compose'un bütün birimlerini `<proje>_` adıyla anar; kaldırma `-v` değil adıyla.
+//      §5k bulut kenarı örneği (runbook §10): TRUST_PROXY=1 + hız sınırı, port yalnız 127.0.0.1, konak ağı yalnız sertleştirilmiş kenarda, teslim dışı.
 //   §6 satıcı imajı (G2/G3) DURAĞAN: `satici/sunucu/scripts/` altındaki her CLI `dist-cli`'a derlenir ve
 //      `test -f` kapısında; compose'da `/dosyalar` yazılır, `/derlemeler` + `/yayin` salt okunur (⑨'un docker'sız ikizi).
 // =============================================================================
@@ -407,13 +408,13 @@ function lisansAdresiStatik(envOrnek: string, vendorUrl: string): string[] {
 }
 
 // §5f — teslim dosyaları ve runbook API portunu ağa açmayı ÖNERMEZ: Docker'da LAN TLS yok (4000 şifresiz) ve
-// Docker yayını ufw'yi atlar. 0.0.0.0'ı anan her satır yasak kipindedir; şablon değeri 127.0.0.1.
+// Docker yayını ufw'yi atlar. 0.0.0.0'ı anan her satır yasak kipindedir (tasarımın 443 kenarı hariç); şablon 127.0.0.1.
 const DINLE_DOSYALARI = ["Teks-Erp/docker/korumali/docker-compose.yml", "Teks-Erp/docker/korumali/.env.ornek", "docs/ops/LINUX-DOCKER-KURULUM.md"];
 function dinleStatik(dosyalar: Record<string, string>): string[] {
   const ih: string[] = [];
   for (const [ad, metin] of Object.entries(dosyalar)) {
     metin.split("\n").forEach((l, n) => {
-      if (/0\.0\.0\.0/.test(l) && !/yazılmaz|yazılırsa|yazmayın|değiştirilmez/i.test(l)) ih.push(`${ad}:${n + 1} 0.0.0.0'ı yasak kipinde anmıyor`);
+      if (/0\.0\.0\.0(?!:443)/.test(l) && !/yazılmaz|yazılırsa|yazmayın|değiştirilmez/i.test(l)) ih.push(`${ad}:${n + 1} 0.0.0.0'ı yasak kipinde anmıyor`);
     });
   }
   const eo = dosyalar["Teks-Erp/docker/korumali/.env.ornek"] ?? "";
@@ -536,6 +537,49 @@ function birimStatik(compose: string, runbook: string): string[] {
     ["kaldırma -v'ye döndü", dc, rb.replace(/^docker compose down\ndocker volume rm .*$/m, "docker compose down -v")],
   ];
   for (const [ad, c, r] of sondalar) check(`§5j sonda: ${ad} → kırmızı`, (c !== dc || r !== rb) && birimStatik(c, r).length > 0, c !== dc || r !== rb ? "" : "MUTASYON UYGULANMADI");
+}
+
+// §5k — bulut kenarı örneği (bizim yönettiğimiz sunucu, runbook §10): backend tek vekile güvenir ("1", true değil) ve
+// hız sınırı açık; API portu .env ne derse desin yalnız 127.0.0.1 (`!override`) — TRUST_PROXY=1'in güvenli olma şartı;
+// konak ağı yalnız kenarda, kenar yetkisi düşürülmüş + salt okunur; örnek müşteri teslim paketine girmez.
+function bulutOrnekStatik(ornek: string, teslim: string): string[] {
+  const ih: string[] = [];
+  const kb = ornek.indexOf("\n  kenar:");
+  const backend = kb > 0 ? ornek.slice(ornek.indexOf("\n  backend:"), kb) : "";
+  const kenar = kb > 0 ? ornek.slice(kb) : "";
+  if (!backend || !kenar) return ["bulut örneğinde backend/kenar servisi bulunamadı"];
+  if (!/^\s+TRUST_PROXY: "1"$/m.test(backend)) ih.push("backend TRUST_PROXY \"1\" değil");
+  if (!/^\s+RATE_LIMIT_ENABLED: "true"$/m.test(backend)) ih.push("backend hız sınırı açık değil");
+  const pm = /^ {4}ports: !override\n((?: {6}- .*\n)+)/m.exec(backend);
+  if (!pm) ih.push("backend portu `ports: !override` ile ezilmiyor (.env'deki TEKSERP_DINLE sızar)");
+  else if (!pm[1].trim().split("\n").every((l) => /- "127\.0\.0\.1:/.test(l))) ih.push("backend portu yalnız 127.0.0.1 değil");
+  if ((ornek.match(/network_mode:/g) ?? []).length !== 1 || !/^ {4}network_mode: host$/m.test(kenar)) ih.push("konak ağı yalnız kenarda değil");
+  if (/^ {4}ports:/m.test(kenar)) ih.push("kenar port yayımlıyor (Docker yayını ufw'yi atlar)");
+  if (!/^ {4}read_only: true$/m.test(kenar)) ih.push("kenar kök FS salt okunur değil");
+  if (!/cap_drop: \["ALL"\]/.test(kenar)) ih.push("kenar yetkileri düşürmüyor");
+  const ek = /cap_add: \[([^\]]*)\]/.exec(kenar)?.[1].split(",").map((x) => x.trim().replace(/"/g, "")) ?? [];
+  const izinli = new Set(["NET_BIND_SERVICE", "SETUID", "SETGID", "CHOWN"]);
+  if (ek.some((c) => !izinli.has(c))) ih.push(`kenar beyansız yetki ekliyor (${ek.join(",")})`);
+  if (!/no-new-privileges:true/.test(kenar)) ih.push("kenar no-new-privileges taşımıyor");
+  for (const m of kenar.matchAll(/^ {6}- (\.\/kenar\/\S+)$/gm)) if (!m[1].endsWith(":ro")) ih.push(`kenar bağı salt okunur değil: ${m[1]}`);
+  if (/bulut-ornek/.test(teslim.split("\n").filter((l) => !/^\s*#/.test(l)).join("\n"))) ih.push("bulut örneği müşteri teslim paketine giriyor");
+  return ih;
+}
+{
+  const bo = oku("Teks-Erp/docker/korumali/docker-compose.bulut-ornek.yml");
+  const tp = oku("Teks-Erp/docker/korumali/teslim-paketle.sh");
+  const gercek = bulutOrnekStatik(bo, tp);
+  check("§5k ⭐ bulut kenarı örneği: TRUST_PROXY=1 + hız sınırı, port yalnız 127.0.0.1 (!override), konak ağı yalnız sertleştirilmiş kenarda, teslim dışı", gercek.length === 0, gercek.join(" | "));
+  const sondalar: Array<[string, string, string]> = [
+    ["TRUST_PROXY true", bo.replace('TRUST_PROXY: "1"', 'TRUST_PROXY: "true"'), tp],
+    ["!override kalktı", bo.replace("ports: !override", "ports:"), tp],
+    ["port 0.0.0.0", bo.replace('- "127.0.0.1:${TEKSERP_PORT', '- "0.0.0.0:${TEKSERP_PORT'), tp],
+    ["kenar port yayını", bo.replace("    network_mode: host\n", '    ports: ["443:443"]\n'), tp],
+    ["kenar cap_drop kalktı", bo.replace('    cap_drop: ["ALL"]\n', ""), tp],
+    ["kenara SYS_ADMIN", bo.replace('"CHOWN"]', '"CHOWN", "SYS_ADMIN"]'), tp],
+    ["teslim pakete girdi", bo, tp.replace('cp "$BURASI/.env.ornek"', 'cp "$BURASI/docker-compose.bulut-ornek.yml" "$CIKTI/"\ncp "$BURASI/.env.ornek"')],
+  ];
+  for (const [ad, o, t] of sondalar) check(`§5k sonda: ${ad} → kırmızı`, (o !== bo || t !== tp) && bulutOrnekStatik(o, t).length > 0, o !== bo || t !== tp ? "" : "MUTASYON UYGULANMADI");
 }
 
 // §5c — teslim künyesi İMZALI çıkar (2e aracı, `build-korumali-imza.ts belge`): anahtar yoksa paket

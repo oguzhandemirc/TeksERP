@@ -87,6 +87,8 @@ Bulut kurulum, fabrika kurulumunun aynısıdır. Tek fark, backend ile PostgreSQ
 | Çıkan, postgres / yedek / kenar | YOK (internal ağlar) | compose |
 | Çıkan, konak | apt, CDN (güncelleyici), depo (SFTP) | — |
 
+> **Elle kurulumda sapma (2026-10-08):** tasarımdaki kenar (T3: yayımlı port + `DOCKER-USER`/`ipset`) ve araçları yazılana dek, bizim yönettiğimiz sunuculardaki elle Docker kurulumu nginx'i konak ağında koşturur; böylece 443'e ufw'nin "yalnız Cloudflare" kuralları gerçekten uygulanır (Docker'ın yayımladığı port ufw'nin önünden geçer). Örnek `Teks-Erp/docker/korumali/docker-compose.bulut-ornek.yml`, adımlar ve bedeli `docs/ops/LINUX-DOCKER-KURULUM.md` §10. Kenar yazılınca örnek emekli olur.
+
 Backend'in dışarıya çıkan bütün istekleri kurulum anahtarıyla imzalıdır ve bugünkü kanallardan gider: lisans yoklaması ve zil (`lisans.`), patron eşitlemesi (`patron.`, `Teks-Erp/src/cloud-sync/cloud-url.ts`), indirme belirteci, döviz kuru işi.
 
 ### 1.4 Konak sertleştirmesi

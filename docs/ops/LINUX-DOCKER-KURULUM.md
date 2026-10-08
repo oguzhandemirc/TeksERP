@@ -139,3 +139,54 @@ docker volume rm <proje>_pg_data <proje>_yedek <proje>_yedek_anahtar <proje>_lis
 ```
 
 - Yeniden kurulumda satıcıdan yeni etkinleştirme kodu ya da taşıma kodu istenir. Yalnız `<proje>_pg_data`yı silip lisans birimini tutmak lisansı KURTARMAZ: yeni küme yeni F5 demektir ve iki etkenli zayıf tanımada iki etkenin ikisi de tutmalıdır (§5); sözleşme kabulü de veritabanındadır. Bu yol ölçülmedi, kullanılmaz.
+
+## 10. Bulut sunucusu (bizim yönettiğimiz): 443 kenarı
+
+Yalnız bizim kurup yönettiğimiz sunucular içindir (deneme, demo, bulut kurulumu); müşteri yerindeki sunucuya gelen port AÇILMAZ (`docs/kurallar/deploy-kurulum.md`, 2026-10-08 gelen bağlantı istisnası). Örnek dosya `Teks-Erp/docker/korumali/docker-compose.bulut-ornek.yml` müşteri teslim paketine GİRMEZ (`teslim-paketle.sh` yalnız `docker-compose.yml` + `.env.ornek` taşır).
+
+**Tasarımdan sapma (`docs/design/BULUT-KURULUM.md` T3 · §1.2 · §1.3):** tasarımdaki kenar `nginx-unprivileged` konteyneridir; Docker port yayınıyla (`0.0.0.0:443→8443`) dinler ve Cloudflare süzgeci `DOCKER-USER` + `ipset` ile kurulur. O kenar ve onu kuran araçlar yazılmadı. Bu örnek nginx'i **konak ağında** (`network_mode: host`) koşturur. Gerekçe: Docker'ın yayımladığı port ufw'nin ÖNÜNDEN geçer, konak ağındaki 443'e ise ufw'nin "yalnız Cloudflare" kuralları gerçekten uygulanır; `DOCKER-USER` betiği yazmadan aynı kapı elde edilir. Bedeli: kenar konağın ağını görür (yalnız 443'ü dinler; yetkileri `NET_BIND_SERVICE`/`SETUID`/`SETGID`/`CHOWN`a düşürülmüş, kök dosya sistemi salt okunur), imaj Docker Hub'dan etiketle gelir (T5'in özet sabitlemesi yok) ve Cloudflare istemci sertifikası (AOP) isteğe bağlıdır. Tasarımdaki kenar yazılınca bu örnek emekli olur.
+
+1. **Ön koşul:** §2 tamam ve `curl -fsS http://127.0.0.1:4000/health` UP. ufw'de gelen varsayılanı RED, SSH portu açık. Cloudflare bölgesi **Full (strict)**. Ad tek düzeydir (`<ad>.etkiliyazilim.com`, Universal SSL) ve ayrılmış adlardan değildir (T1).
+2. **Origin sertifikası** (özel anahtar sunucuda üretilir, sunucudan çıkmaz; kenar yetkisiz root olarak okuduğu için dosyalar root'a aittir):
+   ```sh
+   install -d -m 700 -o root -g root kenar/tls
+   openssl req -new -newkey rsa:2048 -nodes -keyout kenar/tls/origin.key -out kenar/tls/origin.csr -subj "/CN=<ad>.etkiliyazilim.com"
+   chmod 600 kenar/tls/origin.key
+   ```
+   CSR → Cloudflare: SSL/TLS → Origin Server → "Use my private key and CSR" → 15 yıl. Çıkan PEM `kenar/tls/origin.pem` olur. Origin sertifikasına yalnız Cloudflare güvenir: DNS kaydı **turuncu** (vekil açık) olmak ZORUNDADIR.
+3. **Cloudflare aralıkları → ufw + nginx** (`kenar/cf-guncelle.sh`, root; boş liste gelirse hiçbir şeyi değiştirmez):
+   ```sh
+   #!/bin/sh
+   set -eu
+   cd "$(dirname "$0")"
+   V4=$(curl -fsS https://www.cloudflare.com/ips-v4); V6=$(curl -fsS https://www.cloudflare.com/ips-v6)
+   [ -n "$V4" ] && [ -n "$V6" ] || { echo "Cloudflare listesi boş geldi — değişiklik yok" >&2; exit 1; }
+   { for ip in $V4 $V6; do echo "set_real_ip_from $ip;"; done; echo "real_ip_header CF-Connecting-IP;"; } > cloudflare-ips.conf
+   for ip in $V4 $V6; do ufw allow proto tcp from "$ip" to any port 443 comment cloudflare >/dev/null; done
+   ```
+   Liste değişince eski ufw kuralları kendiliğinden silinmez (günlük tazeleme tasarımın işidir, §1.3). Betikten sonra `docker compose exec kenar nginx -s reload`.
+4. **nginx** (`kenar/site.conf`). Tanınmayan ad (doğrudan IP, başka alan) el sıkışmada reddedilir. `X-Forwarded-For` Cloudflare'in verdiği gerçek adresle EZİLİR; istemcinin yazdığı başlık API'ye ulaşmaz (`TRUST_PROXY=1`in güvenli olma şartı, §7):
+   ```nginx
+   server { listen 443 ssl default_server; ssl_reject_handshake on; }
+   server {
+       listen 443 ssl;
+       http2 on;
+       server_name <ad>.etkiliyazilim.com;
+       ssl_certificate     /etc/nginx/tls/origin.pem;
+       ssl_certificate_key /etc/nginx/tls/origin.key;
+       ssl_protocols TLSv1.2 TLSv1.3;
+       include /etc/nginx/cloudflare-ips.conf;
+       client_max_body_size 20m;
+       location / {
+           proxy_pass http://127.0.0.1:4000;
+           proxy_set_header Host $host;
+           proxy_set_header X-Forwarded-For $remote_addr;
+           proxy_set_header X-Forwarded-Proto https;
+           proxy_read_timeout 120s;
+       }
+   }
+   ```
+5. **Aç:** `cp docker-compose.bulut-ornek.yml docker-compose.override.yml` → `docker compose config --quiet` → `docker compose up -d` → `docker compose exec kenar nginx -t`. Örnek, backend'e `TRUST_PROXY=1` + `RATE_LIMIT_ENABLED=true` verir ve API portunu `.env`teki `TEKSERP_DINLE` ne olursa olsun yalnız `127.0.0.1`de yayımlar (`ports: !override`, compose v2.24+).
+6. **Sına:** sunucuda `curl -fsS --resolve <ad>.etkiliyazilim.com:443:127.0.0.1 -k https://<ad>.etkiliyazilim.com/health` UP döner, `curl -sk https://127.0.0.1/health` el sıkışmada reddedilir. Bundan SONRA DNS A kaydı (turuncu) açılır. Dışarıdan: ad üzerinden `/health` UP; `--resolve <ad>…:443:<sunucu IP>` ile doğrudan IP zaman aşımına uğrar (ufw Cloudflare dışını düşürür).
+7. **Güncelleme ve geri alma:** pakette yeni `docker-compose.yml` gelir; `docker-compose.override.yml`, `kenar/` ve `.env` yerinde kalır. Geri almada (§6) `kenar` de durdurulur.
+- Panel ve tablet bu ada internet kipinde bağlanır (genel CA, 443; tablet vc61+ — `docs/kurallar/kesif-cihaz.md`).
