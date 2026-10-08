@@ -10,6 +10,7 @@
 # Kullanım:  deploy/korumali-thinkpad.sh [--ref <rev>] [--cikti <mac-dizini>] [--surum <x.y.z>]
 #   --ref    derlenecek commit (varsayılan origin/main; önce fetch edilir)
 #   --cikti  zip'in Mac'teki yeri (varsayılan ~/.tekserp/korumali-derleme)
+#   --pilde-kabul  makine pildeyse de başlat (yalnız kullanıcı cümlesiyle; şarj kesilirse derleme yarıda kalır)
 #   --surum  paketin taban sürümü (paket yine <surum>-prova.<commit> olur; repo değişmez)
 # Ortam:     TP_SSH (varsayılan oguzhan@100.70.47.46) · TP_TS_IP (kimlik kapısı, varsayılan 100.70.47.46)
 #
@@ -17,6 +18,7 @@
 # runbook LISANS-DEVREYE-ALMA-TESTFABRIKA §1.3) · paketle.ps1'in kendi kapıları (MZ, künye, çapa, zip sayımı).
 # =============================================================================
 set -euo pipefail
+PIL_KABUL=0
 
 REF=origin/main
 CIKTI="$HOME/.tekserp/korumali-derleme"
@@ -26,6 +28,7 @@ while [ $# -gt 0 ]; do
     --ref) REF="$2"; shift 2 ;;
     --cikti) CIKTI="$2"; shift 2 ;;
     --surum) SURUM="$2"; shift 2 ;;
+    --pilde-kabul) PIL_KABUL=1; shift ;;
     *) echo "tanınmayan argüman: $1" >&2; exit 2 ;;
   esac
 done
@@ -60,7 +63,7 @@ mkdir -p "$CIKTI"
 adim "kapı: thinkpad kimlik + priz + araçlar"
 uzak '
 $b = Get-CimInstance -Namespace root/wmi -ClassName BatteryStatus -ErrorAction SilentlyContinue | Select-Object -First 1
-if ($b -and -not $b.PowerOnline) { Write-Output "PIL: thinkpad prizde degil - uzun is baslatilmaz"; exit 98 }
+if ($b -and -not $b.PowerOnline) { if ('"$PIL_KABUL"' -eq 1) { Write-Output "UYARI: thinkpad pilde - kullanici kabul etti" } else { Write-Output "PIL: thinkpad prizde degil - uzun is baslatilmaz (--pilde-kabul)"; exit 98 } }
 $pw = (Get-Command pwsh -ErrorAction SilentlyContinue); if (-not $pw) { Write-Output "pwsh 7 yok"; exit 97 }
 foreach ($a in "node","npm.cmd","git","tar") { if (-not (Get-Command $a -ErrorAction SilentlyContinue)) { Write-Output "arac yok: $a"; exit 97 } }
 $bos = (Get-PSDrive C).Free / 1GB; if ($bos -lt 10) { Write-Output ("C: bos alan {0:N1} GB < 10" -f $bos); exit 97 }
@@ -84,8 +87,8 @@ rm -rf "$YEREL/kaynak/Teks-Erp/native/lisans-cekirdek/node_modules" "$YEREL/kayn
 git -C "$YEREL/kaynak" status --porcelain | grep -q . && { echo "sığ klon kirlendi (Rust derlemesi)"; git -C "$YEREL/kaynak" status --short | head; exit 1; }
 
 adim "aktarım"
-tar -czf "$YEREL/kaynak.tgz" -C "$YEREL/kaynak" .
-tar -czf "$YEREL/rust.tgz" -C "$YEREL/rust" .
+COPYFILE_DISABLE=1 tar --no-mac-metadata --no-xattrs -czf "$YEREL/kaynak.tgz" -C "$YEREL/kaynak" .
+COPYFILE_DISABLE=1 tar --no-mac-metadata --no-xattrs -czf "$YEREL/rust.tgz" -C "$YEREL/rust" .
 UZ="tkd\\$K"
 uzak "\$d = Join-Path \$env:USERPROFILE '$UZ'; if (Test-Path \$d) { Write-Output \"uzak dizin zaten var: \$d (silinmez; elle bak)\"; exit 96 }; New-Item -ItemType Directory -Force -Path \$d | Out-Null"
 scp -q "${SSH_OPT[@]}" "$YEREL/kaynak.tgz" "$YEREL/rust.tgz" "$TP_SSH:tkd/$K/"
@@ -99,6 +102,7 @@ New-Item -ItemType Directory -Path \"\$d\\src\",\"\$d\\rust\",\"\$d\\cikti\" -Fo
 tar -xzf \"\$d\\kaynak.tgz\" -C \"\$d\\src\"; if (\$LASTEXITCODE) { exit 95 }
 tar -xzf \"\$d\\rust.tgz\" -C \"\$d\\rust\"; if (\$LASTEXITCODE) { exit 95 }
 Set-Location \"\$d\\src\"
+git config core.fileMode false; if (git status --porcelain) { Write-Output \"aktarilan agac temiz degil\"; git status --short | Select-Object -First 5; exit 94 }
 \$ErrorActionPreference = 'Continue'
 pwsh -NoProfile -ExecutionPolicy Bypass -File deploy\\paketle.ps1 -Korumali -Prova $SURUM_ARG -NativeYol \"\$d\\rust\\lisans-cekirdek.win32-x64-msvc.node\" -HizmetIkiliDizini \"\$d\\rust\" -Cikti \"\$d\\cikti\" *>&1 | Tee-Object -FilePath \"\$d\\paketle.log\" | Select-String -Pattern '^\s*(\[|\+|X|!|==|surum=|dal=)|PAKET|SHA256|MB  \|' | ForEach-Object { \$_.Line }
 exit \$LASTEXITCODE" | tee "$CIKTI/paketle-$K.log"
