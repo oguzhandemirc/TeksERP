@@ -5,19 +5,33 @@
 import { createHash, generateKeyPairSync, createPrivateKey, randomUUID, type KeyObject } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
-import { JWS_MAX_LENGTH, LICENSE_CLASSES, b64uEncode, publicKeyX, signJws } from "../../src/lib/license/protocol";
+import { JWS_MAX_LENGTH, LICENSE_CLASSES, b64uEncode, parseJws, publicKeyX, signJws, type RootKey } from "../../src/lib/license/protocol";
+import {
+  CHAINED_INTEGRITY_FILE,
+  PACKAGE_CERT_FIELD,
+  PACKAGE_REVOCATION_FILE,
+  PACKAGE_SIGNED_AT_FIELD,
+  isChainPackageKid,
+  verifyPackageRevocation,
+} from "../../src/lib/license/protocol/paket-zinciri";
 import { openSealedKey, privateKeyFromRaw, sealPrivateKey, type SealedKey } from "../../src/lib/license/protocol/anahtar-sarma";
 import { INTEGRITY_TYP, IntegrityManifestSchema, verifyIntegrity, type IntegrityManifest } from "../../src/lib/license/integrity";
 import { INTEGRITY_LIST_FILE, formatIntegrityList, type IntegrityListEntry } from "../../src/lib/license/integrity-list";
 import {
   INTEGRITY_FILE,
   fileEntries,
+  isProductionChainPackageKid,
   isProductionPackageKid,
   listScopedFiles,
   packageScope,
 } from "../../src/lib/license/integrity-scope";
 
 export const PACKAGE_KEY_KIND = "tekserp-paket-anahtar";
+
+/** Parolalı doğan üretim imza anahtarı: gömülü çapalı `paket-<yıl>[-<n>]` ya da kök sertifikalı `pkt-<yıl>-<n>`. */
+export function isProductionSigningKid(kid: string): boolean {
+  return isProductionPackageKid(kid) || isProductionChainPackageKid(kid);
+}
 
 export interface PackageKeyFile {
   readonly tur: typeof PACKAGE_KEY_KIND;
@@ -56,9 +70,9 @@ export function generatePackageKey(kid: string, siniflar: readonly string[]): Pa
   return { tur: PACKAGE_KEY_KIND, surum: 1, kid, x: jwk.x, d: jwk.d, siniflar: [...siniflar], olusturma: new Date().toISOString() };
 }
 
-/** Üretim PAKET anahtarı üretir ve parolayla sarar (parolayı çağıran sıfırlar); kid `paket-<yıl>[-<n>]` olmalı. */
+/** Üretim PAKET anahtarı üretir ve parolayla sarar (parolayı çağıran sıfırlar); kid `paket-<yıl>[-<n>]` ya da `pkt-<yıl>-<n>`. */
 export async function generateWrappedPackageKey(kid: string, password: Buffer): Promise<WrappedPackageKeyFile> {
-  if (!isProductionPackageKid(kid)) throw new Error(`üretim PAKET kid'i paket-<yıl>[-<n>] biçiminde olmalı: ${kid}`);
+  if (!isProductionSigningKid(kid)) throw new Error(`üretim PAKET kid'i paket-<yıl>[-<n>] ya da pkt-<yıl>-<n> biçiminde olmalı: ${kid}`);
   const { privateKey } = generateKeyPairSync("ed25519");
   const siniflar = [...LICENSE_CLASSES];
   const s = await sealPrivateKey({ tur: PACKAGE_KEY_KIND, kid, siniflar }, privateKey, password);
@@ -84,7 +98,7 @@ function plainKey(k: Record<string, unknown>): OpenedPackageKey {
     throw new Error("PAKET anahtar dosyası biçimsiz");
   }
   // Üretim kid'i parolasız dosyada bulunamaz: test biçimiyle üretim anahtarı karıştırılmasın.
-  if (isProductionPackageKid(k.kid)) throw new Error(`üretim PAKET kid'i (${k.kid}) parolasız dosyada olamaz — anahtar-uret ile parolalı üretilir`);
+  if (isProductionSigningKid(k.kid)) throw new Error(`üretim PAKET kid'i (${k.kid}) parolasız dosyada olamaz — anahtar-uret ile parolalı üretilir`);
   const privateKey = createPrivateKey({ key: { kty: "OKP", crv: "Ed25519", x: k.x, d: k.d }, format: "jwk" });
   if (publicKeyX(privateKey) !== k.x) throw new Error("anahtar dosyasında x ile d uyuşmuyor");
   return { kid: k.kid, x: k.x, privateKey };
@@ -112,8 +126,8 @@ function wrappedKeyOf(k: Record<string, unknown>): WrappedPackageKeyFile {
     (kdf.N as number) >= 1 << 14 && (kdf.N as number) <= 1 << 17 && (kdf.r as number) >= 1 && (kdf.r as number) <= 32 && (kdf.p as number) >= 1 && (kdf.p as number) <= 16;
   if (!ok) throw new Error("parolalı PAKET anahtar dosyası biçimsiz");
   // Üretim dışı kid parolalı biçimde bulunamaz: iki biçim kid sınıfına bağlı, karıştırılmaz.
-  if (!isProductionPackageKid(k.kid as string)) {
-    throw new Error(`parolalı biçim yalnız üretim PAKET kid'i (paket-<yıl>) taşır: ${String(k.kid)}`);
+  if (!isProductionSigningKid(k.kid as string)) {
+    throw new Error(`parolalı biçim yalnız üretim PAKET kid'i (paket-<yıl> · pkt-<yıl>-<n>) taşır: ${String(k.kid)}`);
   }
   return k as unknown as WrappedPackageKeyFile;
 }
@@ -155,9 +169,24 @@ export async function openPackageKey(file: string, askPassword: (kid: string) =>
   }
 }
 
+export interface SigningKey {
+  readonly kid: string;
+  readonly x: string;
+  readonly privateKey: KeyObject;
+}
+
 export interface SignInput {
   readonly root: string;
-  readonly key: { readonly kid: string; readonly x: string; readonly privateKey: KeyObject };
+  /** Birincil imzacı: `paket-*` (gömülü çapa → `butunluk.jws`) ya da `pkt-*` (sertifikalı → `butunluk-zincir.jws`). */
+  readonly key: SigningKey;
+  /** `key` `pkt-*` ise ZORUNLU: kök imzalı PAKET sertifikası (compact JWS). */
+  readonly certificate?: string;
+  /** Çift imza (G1): birincil `paket-*`, bu `pkt-*` — aynı yük iki dosyada. */
+  readonly zincir?: { readonly key: SigningKey; readonly certificate: string } | null;
+  /** Zincirli imzanın öz-denetimi ve iptal belgesinin doğrulaması için kök çapası. */
+  readonly roots?: readonly RootKey[];
+  /** Paketin kökünde taşınacak en güncel dağıtım iptali (`paket-iptal.jws`, kök imzalı; yalnız zincirli pakette). */
+  readonly paketIptal?: string | null;
   readonly urun: string;
   readonly surum: string;
   readonly derlemeTarihi: string;
@@ -167,21 +196,71 @@ export interface SignInput {
   readonly kurulumId?: string | null;
   /** CI kökeni kaydı (`ci-kokeni.ts`): ek anahtar olarak imzalı yükte durur, v1 şeması doğrulamada atar. */
   readonly ciKokeni?: Readonly<Record<string, unknown>> | null;
+  /** Zincirli imzanın `imzaZamani`; verilmezse şimdi. */
+  readonly now?: Date;
+}
+
+export interface SignedFile {
+  readonly kid: string;
+  readonly token: string;
+  readonly file: string;
 }
 
 export interface SignResult {
+  /** Birincil imza (`key`) — geriye uyum: `token`/`file`. */
   readonly token: string;
+  readonly file: string;
   readonly manifest: IntegrityManifest;
   readonly entries: readonly IntegrityListEntry[];
-  readonly file: string;
   readonly listFile: string;
+  /** Yazılan imza dosyaları (`butunluk.jws` ve/veya `butunluk-zincir.jws`). */
+  readonly imzalar: readonly SignedFile[];
+  /** Paketin kökünde `paket-iptal.jws` yazıldıysa yolu. */
+  readonly iptalFile: string | null;
+}
+
+/** Zincirli imza: yük + iki zincir alanı, imzalayan `pkt-*`; sertifika bu anahtarın olmalı (protokolün doğrulayıcısı denetler). */
+function signChained(payload: Record<string, unknown>, key: SigningKey, certificate: string, signedAt: string): string {
+  if (!isChainPackageKid(key.kid)) throw new Error(`zincirli imza yalnız pkt-* anahtarıyla: ${key.kid}`);
+  const c = parseJws(certificate);
+  if (!c.ok || c.value.payload.kid !== key.kid || c.value.payload.x !== key.x) throw new Error(`PAKET sertifikası bu anahtarın (${key.kid}) değil`);
+  return signJws({ typ: INTEGRITY_TYP, kid: key.kid, payload: { ...payload, [PACKAGE_CERT_FIELD]: certificate, [PACKAGE_SIGNED_AT_FIELD]: signedAt }, privateKey: key.privateKey });
+}
+
+/** İmzacı listesi: birincil + (çift imzada) zincir; aileler karışmaz, aynı aile iki kez olmaz. */
+function signersOf(g: SignInput): { readonly key: SigningKey; readonly certificate: string | null }[] {
+  const out: { key: SigningKey; certificate: string | null }[] = [];
+  if (isChainPackageKid(g.key.kid)) {
+    if (!g.certificate) throw new Error(`${g.key.kid} zincirli anahtar — PAKET sertifikası gerekli`);
+    if (g.zincir) throw new Error("çift imzada birincil anahtar gömülü çapalı (paket-*) olmalı, ikinci pkt-*");
+    out.push({ key: g.key, certificate: g.certificate });
+  } else {
+    if (g.certificate) throw new Error(`${g.key.kid} gömülü çapalı anahtar — sertifika taşıyamaz`);
+    out.push({ key: g.key, certificate: null });
+    if (g.zincir) {
+      if (!isChainPackageKid(g.zincir.key.kid)) throw new Error(`çift imzanın ikinci anahtarı pkt-* olmalı: ${g.zincir.key.kid}`);
+      out.push({ key: g.zincir.key, certificate: g.zincir.certificate });
+    }
+  }
+  if (out.some((s) => s.certificate !== null) && !g.roots) throw new Error("zincirli imzanın öz-denetimi kök çapası ister");
+  return out;
 }
 
 /**
- * Kapsamı ölçer, liste dosyasını (`butunluk-liste.txt`) ve imzalı yükü (`butunluk.jws`) yazar,
- * sonra çalışan tarafın denetimiyle doğrular; öz-denetim düşerse iki dosya da silinir.
+ * Kapsamı ölçer, liste dosyasını (`butunluk-liste.txt`) ve imzalı yükü yazar — gömülü çapalı imza `butunluk.jws`,
+ * zincirli (`pkt-*`) imza `butunluk-zincir.jws`; çift imzada AYNI yük (aynı paketId) iki dosyada. Her imza çalışan
+ * tarafın denetimiyle doğrulanır (zincirli KABUL kipinde); öz-denetim düşerse yazılan HER dosya silinir.
  */
 export async function signPackageDirectory(g: SignInput): Promise<SignResult> {
+  const signers = signersOf(g);
+  const now = g.now ?? new Date();
+  let revocation: string | null = null;
+  if (g.paketIptal) {
+    if (!signers.some((s) => s.certificate !== null)) throw new Error("dağıtım iptali yalnız zincirli imzalı pakete girer");
+    const v = verifyPackageRevocation(g.paketIptal, g.roots ?? []);
+    if (!v.ok) throw new Error(`dağıtım iptali kökle doğrulanamadı (${v.code})`);
+    revocation = g.paketIptal;
+  }
   const kapsam = await packageScope(g.root);
   const files = await listScopedFiles(g.root, kapsam);
   if (files.length === 0) throw new Error("kapsamda dosya yok — paket kökü mü?");
@@ -198,19 +277,36 @@ export async function signPackageDirectory(g: SignInput): Promise<SignResult> {
     kapsam,
   });
   const payload: Record<string, unknown> = { ...manifest, ...(g.kurulumId ? { kurulumId: g.kurulumId } : {}), ...(g.ciKokeni ? { ciKokeni: g.ciKokeni } : {}) };
-  const token = signJws({ typ: INTEGRITY_TYP, kid: g.key.kid, payload, privateKey: g.key.privateKey });
-  if (token.length > JWS_MAX_LENGTH) throw new Error(`imzalı yük ${token.length} bayt > ${JWS_MAX_LENGTH}`);
-  const file = path.join(g.root, INTEGRITY_FILE);
   const listFile = path.join(g.root, INTEGRITY_LIST_FILE);
-  fs.writeFileSync(listFile, listBytes);
-  fs.writeFileSync(file, `${token}\n`);
-  const check = await verifyIntegrity(token, g.root, [{ kid: g.key.kid, x: g.key.x }]);
-  if (check.durum !== "GECERLI") {
-    fs.rmSync(file, { force: true });
-    fs.rmSync(listFile, { force: true });
-    throw new Error(`öz-denetim düştü: ${check.durum} ${check.kod ?? ""}`);
+  const yazilan: string[] = [listFile];
+  const imzalar: SignedFile[] = [];
+  const iptalFile = revocation ? path.join(g.root, PACKAGE_REVOCATION_FILE) : null;
+  try {
+    fs.writeFileSync(listFile, listBytes);
+    for (const s of signers) {
+      const token = s.certificate === null
+        ? signJws({ typ: INTEGRITY_TYP, kid: s.key.kid, payload, privateKey: s.key.privateKey })
+        : signChained(payload, s.key, s.certificate, now.toISOString());
+      if (token.length > JWS_MAX_LENGTH) throw new Error(`imzalı yük ${token.length} bayt > ${JWS_MAX_LENGTH}`);
+      const file = path.join(g.root, s.certificate === null ? INTEGRITY_FILE : CHAINED_INTEGRITY_FILE);
+      fs.writeFileSync(file, `${token}\n`);
+      yazilan.push(file);
+      const check = s.certificate === null
+        ? await verifyIntegrity(token, g.root, [{ kid: s.key.kid, x: s.key.x }])
+        : await verifyIntegrity(token, g.root, [], { roots: g.roots ?? [], mode: "KABUL", nowMs: Date.now() });
+      if (check.durum !== "GECERLI") throw new Error(`öz-denetim düştü (${s.key.kid}): ${check.durum} ${check.kod ?? ""}`);
+      imzalar.push({ kid: s.key.kid, token, file });
+    }
+    if (iptalFile && revocation) {
+      fs.writeFileSync(iptalFile, `${revocation}\n`, { flag: "wx" });
+      yazilan.push(iptalFile);
+    }
+  } catch (e) {
+    for (const f of yazilan) fs.rmSync(f, { force: true });
+    throw e;
   }
-  return { token, manifest, entries, file, listFile };
+  const first = imzalar[0]!;
+  return { token: first.token, file: first.file, manifest, entries, listFile, imzalar, iptalFile };
 }
 
 /**
@@ -218,7 +314,7 @@ export async function signPackageDirectory(g: SignInput): Promise<SignResult> {
  * dizininde ölçülür, liste `butunluk-liste.txt`e yazılır, `liste` alanı künyeye girer; yük künyenin TAMAMIDIR
  * (şemanın atladığı ek alanlar da imzada). Kapsamdaki dosya eksikse imza atılmaz; öz-denetim düşerse iz kalmaz.
  */
-export async function signManifestDocument(file: string, key: SignInput["key"]): Promise<{ token: string; file: string; listFile: string }> {
+export async function signManifestDocument(file: string, key: SigningKey): Promise<{ token: string; file: string; listFile: string }> {
   const root = path.dirname(file);
   const doc = JSON.parse(fs.readFileSync(file, "utf8")) as Record<string, unknown>;
   const kapsam = IntegrityManifestSchema.shape.kapsam.safeParse(doc.kapsam);
