@@ -57,7 +57,7 @@ docker inspect --format '{{range .Config.Env}}{{println .}}{{end}}' "$(docker co
 ## 3. Güncelleme (yeni imaj)
 
 1. Yeni paketi §2'deki gibi doğrula ve `docker load` et.
-2. **Önce yedek:** `docker compose run --rm -e YEDEK_SIMDI=1 yedek` → günlükte `OK ...dump.tkenc`.
+2. **Önce yedek:** `docker compose run --rm -e YEDEK_SIMDI=1 yedek` → günlükte `OK ...dump.tkenc`. Geri alma ölçüsü için eski etiketi (`grep ^TEKSERP_IMAJ= .env`) ve göç sayısını not et: `docker compose exec postgres psql -U tekserp -d tekserp -Atc 'select count(*) from _prisma_migrations'`.
 3. `.env`de `TEKSERP_IMAJ`ı yeni etikete çevir → `docker compose up -d` (backend açılışta `migrate deploy` koşar; migration geri alınamaz eşiktir).
 4. `/health` ve panel sürümü (`/api/admin/health` `version`) yeni sürümü gösterir.
 
@@ -83,8 +83,26 @@ docker inspect --format '{{range .Config.Env}}{{println .}}{{end}}' "$(docker co
 
 ## 6. Geri alma
 
-- Uygulama: `.env` `TEKSERP_IMAJ`ı önceki etikete çevir → `docker compose up -d`. Yalnız yeni imaj migration İÇERMİYORSA güvenlidir.
-- Migration uygulandıysa geri alma = **yedekten restore** (kök kural): backend'i durdur (`docker compose stop backend yedek`), §3.2'de alınan dökümü çöz (`yedek-sifrele.cjs coz`), `pg_restore --clean --if-exists` ile geri yükle, önceki imajla `up -d`. Tatbikat: `docs/ops/YEDEK-GERI-YUKLEME-TATBIKATI.md`.
+- **Yeni imaj göç İÇERMİYORSA** (göç sayısı §3.2'deki notla aynı): `.env` `TEKSERP_IMAJ`ı önceki etikete çevir → `docker compose up -d`.
+- **Göç uygulandıysa geri alma = yedekten geri yükleme (kök kural) ve şema ÖNCE sıfırlanır.** `pg_restore --clean --if-exists` YETMEZ: yalnız dökümde OLAN nesneleri düşürür; yeni göçün eklediği tablo, tür ve dizinler yerinde kalır. Eski tablolara bağlı yeni bir yabancı anahtar varsa o tablonun düşürülmesi de durur ve geri yükleme yarım kalır. Kalan nesneler bir sonraki güncellemede aynı göçü "zaten var" hatasıyla düşürür. Doğru yol `docs/design/BULUT-KURULUM.md` §4.4'teki `GOC` telafisidir: çöz → `public` şemasını sıfırla → `pg_restore` → göç sayısı = önceki. Şema yalnız döküm çözülüp okunabildiği ölçüldükten SONRA sıfırlanır; sıfırlama + geri yükleme, doğrulanmış güncelleme öncesi yedekle yapılan geri yüklemenin kendisidir (`migrate reset` ya da elle seed DEĞİL).
+
+```sh
+docker compose stop backend yedek                       # bulutta kenar da (§10)
+# özel anahtar geçici olarak ozel/ altına (sahibi 10001, 0600 — §4)
+docker compose run --rm --no-deps -v "$PWD/ozel":/ozel:ro backend node /app/dist/tools/yedek-sifrele.cjs \
+  coz --girdi /var/lib/tekserp/yedek/<güncelleme-öncesi>.dump.tkenc --cikti /var/lib/tekserp/yedek/geri.dump --anahtar /ozel/<ad>.tkkey
+docker compose run --rm --no-deps yedek pg_restore --list /var/lib/tekserp/yedek/geri.dump | grep -c TABLE   # > 0 değilse DUR
+docker compose exec postgres psql -U tekserp -d tekserp -v ON_ERROR_STOP=1 -c 'DROP SCHEMA public CASCADE' -c 'CREATE SCHEMA public'
+docker compose run --rm --no-deps yedek pg_restore --no-owner -d tekserp /var/lib/tekserp/yedek/geri.dump   # uyarıları sakla
+docker compose run --rm --no-deps yedek rm -f /var/lib/tekserp/yedek/geri.dump
+docker compose exec postgres psql -U tekserp -d tekserp -Atc 'select count(*) from _prisma_migrations' -c 'show teks.audit_guard'
+# göç sayısı §3.2'deki notla AYNI, audit_guard 'on' (veritabanı ayarı şema sıfırlamasından etkilenmez)
+sed -i "s|^TEKSERP_IMAJ=.*|TEKSERP_IMAJ=<önceki etiket>|" .env && docker compose up -d
+shred -u ozel/<ad>.tkkey
+```
+
+- Veritabanı silinip yeniden yaratılmaz (`dropdb`/`createdb`): veritabanı düzeyi ayarlar (`teks.audit_guard`) onunla gider. Küme (`pg_data` birimi) hiçbir durumda yeniden yaratılmaz (lisansın F5'i — §5).
+- Bu telafiyi otomatik yapacak Docker güncelleyicisi (`docs/design/BULUT-KURULUM.md` §4) yazılmadı — borç; o gelene dek geri alma bu elle adımlardır. Tatbikat: `docs/ops/YEDEK-GERI-YUKLEME-TATBIKATI.md`.
 
 ## 7. Ağ ve güvenlik notları
 

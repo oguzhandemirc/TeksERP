@@ -24,6 +24,7 @@
 //      §5f compose · şablon · runbook API portunu ağa açmayı önermez (Docker'da LAN TLS yok, yayın ufw'yi atlar).
 //      §5g runbook seed parolasını konteynerden temizletir (seed'den sonra bayraksız up -d + uzunluk ölçümü).
 //      §5h runbook konteynerin lisans cevaplarını anar (zayıf tanıma onayı); adlar protokol kataloğunda (uclar.ts).
+//      §5i göçlü geri alma şemayı ÖNCE sıfırlar (pg_restore --clean yeni göçün tablolarını bırakır), göç sayısını ölçer.
 //   §6 satıcı imajı (G2/G3) DURAĞAN: `satici/sunucu/scripts/` altındaki her CLI `dist-cli`'a derlenir ve
 //      `test -f` kapısında; compose'da `/dosyalar` yazılır, `/derlemeler` + `/yayin` salt okunur (⑨'un docker'sız ikizi).
 // =============================================================================
@@ -472,6 +473,37 @@ function lisansKoduStatik(runbook: string, uclar: string, kodlar: string[]): str
   check("§5h ⭐ runbook konteynerin lisans cevaplarını (zayıf tanıma onayı…) anar, adlar protokol kataloğunda", gercek.length === 0, gercek.join(" | "));
   check("§5h sonda: runbook'tan silindi → kırmızı", lisansKoduStatik(rb.split("ZAYIF_TANIMA_ONAY_BEKLIYOR").join("ZAYIF"), uc, RUNBOOK_LISANS_KODLARI).length > 0);
   check("§5h sonda: katalogda yeniden adlandı → kırmızı", lisansKoduStatik(rb, uc.split('"ZAYIF_TANIMA_ONAY_BEKLIYOR"').join('"ZAYIF_TANIMA"'), RUNBOOK_LISANS_KODLARI).length > 0);
+}
+
+// §5i — göçlü geri alma şemayı ÖNCE sıfırlar: `pg_restore --clean` yalnız dökümdeki nesneleri düşürür, yeni göçün
+// tabloları kalır ve sonraki güncellemede aynı göç "zaten var" ile düşer (BULUT-KURULUM §4.4 GOC telafisi).
+function geriAlmaStatik(runbook: string): string[] {
+  const ih: string[] = [];
+  const bas = runbook.indexOf("\n## 6.");
+  const son = runbook.indexOf("\n## 7.");
+  const b6 = bas >= 0 && son > bas ? runbook.slice(bas, son) : "";
+  if (!b6) return ["runbook §6 bulunamadı (ÖLÇÜLEMEDİ)"];
+  for (const l of b6.split("\n")) {
+    if (/pg_restore[^\n]*--clean/.test(l) && !/YETMEZ/.test(l)) ih.push("§6 geri yüklemeyi `pg_restore --clean` ile öneriyor");
+  }
+  const sifirla = b6.search(/DROP SCHEMA public CASCADE/);
+  const yukle = b6.search(/yedek pg_restore --no-owner -d /);
+  if (sifirla < 0) ih.push("§6 public şemasını sıfırlamıyor");
+  if (yukle < 0) ih.push("§6 pg_restore adımı yok");
+  if (sifirla >= 0 && yukle >= 0 && sifirla > yukle) ih.push("§6 şemayı geri yüklemeden SONRA sıfırlıyor");
+  if (/^[^#\n]*\b(dropdb|createdb)\b/m.test(b6.replace(/^- .*$/gm, ""))) ih.push("§6 veritabanını silip yaratıyor (audit_guard gider)");
+  if (!/_prisma_migrations/.test(b6)) ih.push("§6 göç sayısını ölçmüyor");
+  return ih;
+}
+{
+  const rb = oku("docs/ops/LINUX-DOCKER-KURULUM.md");
+  const gercek = geriAlmaStatik(rb);
+  check("§5i ⭐ göçlü geri alma: şema sıfırla → pg_restore → göç sayısı (pg_restore --clean önerilmez)", gercek.length === 0, gercek.join(" | "));
+  const sondalar: Array<[string, string]> = [
+    ["--clean'e dönüş", rb.replace("yedek pg_restore --no-owner -d ", "yedek pg_restore --clean --if-exists --no-owner -d ")],
+    ["sıfırlama silindi", rb.replace(/^.*DROP SCHEMA public CASCADE.*\n/m, "")],
+  ];
+  for (const [ad, r] of sondalar) check(`§5i sonda: ${ad} → kırmızı`, r !== rb && geriAlmaStatik(r).length > 0, r !== rb ? "" : "MUTASYON UYGULANMADI");
 }
 
 // §5c — teslim künyesi İMZALI çıkar (2e aracı, `build-korumali-imza.ts belge`): anahtar yoksa paket
