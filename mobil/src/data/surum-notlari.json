@@ -27,22 +27,22 @@
         {
           "kapsam": "tablet",
           "tip": "yeni",
-          "metin": "“Sunucuyu ekle” → “Adresi yaz”a size verilen internet adresi (…etkiliyazilim.com ile biten ad) yazılabilir. Bu adreste doğrulama kodu sorulmaz: tablet sunucunun internet sertifikasını kendisi doğrular ve “İnternette doğrulandı” sayfasında sunucunun adını gösterip eklensin mi diye sorar; “Ekle”ye dokunun."
+          "metin": "“Adresi yaz”a size verilen …etkiliyazilim.com adresi yazılabilir; tablet sertifikayı kendisi doğrular, kod sorulmaz, “Ekle”ye dokunun."
         },
         {
           "kapsam": "tablet",
           "tip": "iyilestirme",
-          "metin": "Fabrika ağındaki sunucu (IP adresi ya da bilgisayar adı) bugünkü gibi QR ya da doğrulama koduyla eklenir; değişen bir şey yok."
+          "metin": "Fabrika ağındaki sunucu eskisi gibi QR ya da doğrulama koduyla eklenir."
         },
         {
           "kapsam": "tablet",
           "tip": "iyilestirme",
-          "metin": "Bağlanılamadığında tablet sebebini ayrı söyler: tablet saati yanlış, ağ bağlantıyı denetliyor (BT bölümünden istisna isteyin), adres sertifikayla eşleşmiyor ya da sunucuya ulaşılamıyor."
+          "metin": "Bağlanamayınca tablet sebebini söyler: saat yanlış, ağ bağlantıyı denetliyor, adres sertifikayla eşleşmiyor ya da sunucuya ulaşılamıyor."
         },
         {
           "kapsam": "tablet",
           "tip": "iyilestirme",
-          "metin": "Ayarlar'daki sunucu sayfası sunucunun nasıl doğrulandığını gösterir (fabrika ağı kodu ya da internet sertifikası). Sunucu değişirse tablet bağlanmaz ve sunucuyu yeniden eklemenizi ister."
+          "metin": "Ayarlar'da sunucunun nasıl doğrulandığı görünür; sunucu değişirse tablet yeniden eklemenizi ister."
         }
       ]
     },
