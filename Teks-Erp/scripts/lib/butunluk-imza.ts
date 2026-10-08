@@ -309,12 +309,89 @@ export async function signPackageDirectory(g: SignInput): Promise<SignResult> {
   return { token: first.token, file: first.file, manifest, entries, listFile, imzalar, iptalFile };
 }
 
+export interface ResignInput {
+  readonly root: string;
+  /** Yeni zincir imzacısı (`pkt-*`) ve onun kök imzalı PAKET sertifikası. */
+  readonly key: SigningKey;
+  readonly certificate: string;
+  readonly roots: readonly RootKey[];
+  /** Daha yüksek sıralıysa paketteki `paket-iptal.jws`in yerine geçer (en yüksek sıra kazanır). */
+  readonly paketIptal?: string | null;
+  readonly now?: Date;
+}
+
+export interface ResignResult {
+  readonly kid: string;
+  readonly file: string;
+  /** Pakette ÖNCEDEN olmayan, bu imzayla eklenen dosyalar (PAKET.json sayım kapısı). */
+  readonly eklenen: readonly string[];
+  /** Pakette kalan dağıtım iptalinin sırası (yoksa null). */
+  readonly iptalSira: number | null;
+  /** `paket-iptal.jws` bu imzayla yazıldı mı (yeni ya da daha yüksek sıralı). */
+  readonly iptalYazildi: boolean;
+}
+
+/**
+ * Yayındaki paketi YENİ PAKET sertifikasıyla yeniden imzalar: imzalı yük (paketId · liste · kapsam · ek alanlar) AYNEN
+ * kalır, yalnız `butunluk-zincir.jws` yeniden yazılır (gömülü çapalı `butunluk.jws` ve liste dosyasına dokunulmaz).
+ * Eski imzanın geçerliliğini ÇAĞIRAN ölçer (yeniden imza köken kanıtı değildir). Öz-denetim KABUL kipinde; düşerse
+ * paket ilk hâline döner.
+ */
+export async function resignChainedIntegrity(g: ResignInput): Promise<ResignResult> {
+  if (!isChainPackageKid(g.key.kid)) throw new Error(`yeniden imza yalnız pkt-* anahtarıyla: ${g.key.kid}`);
+  const zincirYolu = path.join(g.root, CHAINED_INTEGRITY_FILE);
+  const eskiYolu = path.join(g.root, INTEGRITY_FILE);
+  const kaynak = fs.existsSync(zincirYolu) ? zincirYolu : fs.existsSync(eskiYolu) ? eskiYolu : null;
+  if (!kaynak) throw new Error(`pakette ${INTEGRITY_FILE} da ${CHAINED_INTEGRITY_FILE} de yok — imzasız paket yeniden imzalanmaz`);
+  const p = parseJws(fs.readFileSync(kaynak, "utf8").trim());
+  if (!p.ok) throw new Error(`${path.basename(kaynak)} ayrıştırılamadı: ${p.code}`);
+  const { [PACKAGE_CERT_FIELD]: _c, [PACKAGE_SIGNED_AT_FIELD]: _t, ...payload } = p.value.payload as Record<string, unknown>;
+  void _c;
+  void _t;
+  let revocation: string | null = null;
+  let iptalSira: number | null = null;
+  const iptalYolu = path.join(g.root, PACKAGE_REVOCATION_FILE);
+  const mevcut = fs.existsSync(iptalYolu) ? verifyPackageRevocation(fs.readFileSync(iptalYolu, "utf8").trim(), g.roots) : null;
+  if (mevcut && !mevcut.ok) throw new Error(`paketteki ${PACKAGE_REVOCATION_FILE} kökle doğrulanamadı (${mevcut.code})`);
+  if (mevcut?.ok) iptalSira = mevcut.value.document.sira;
+  if (g.paketIptal) {
+    const v = verifyPackageRevocation(g.paketIptal, g.roots);
+    if (!v.ok) throw new Error(`dağıtım iptali kökle doğrulanamadı (${v.code})`);
+    if (iptalSira === null || v.value.document.sira > iptalSira) {
+      revocation = g.paketIptal;
+      iptalSira = v.value.document.sira;
+    }
+  }
+  const yedekler = new Map<string, Buffer | null>([zincirYolu, iptalYolu].map((f) => [f, fs.existsSync(f) ? fs.readFileSync(f) : null]));
+  const eklenen = [zincirYolu, ...(revocation ? [iptalYolu] : [])].filter((f) => yedekler.get(f) === null).map((f) => path.basename(f));
+  try {
+    const token = signChained(payload, g.key, g.certificate, (g.now ?? new Date()).toISOString());
+    if (token.length > JWS_MAX_LENGTH) throw new Error(`imzalı yük ${token.length} bayt > ${JWS_MAX_LENGTH}`);
+    fs.writeFileSync(zincirYolu, `${token}\n`);
+    if (revocation) fs.writeFileSync(iptalYolu, `${revocation}\n`);
+    const check = await verifyIntegrity(token, g.root, [], { roots: g.roots, mode: "KABUL", nowMs: Date.now() });
+    if (check.durum !== "GECERLI") throw new Error(`öz-denetim düştü (${g.key.kid}): ${check.durum} ${check.kod ?? ""}`);
+  } catch (e) {
+    for (const [f, b] of yedekler) {
+      if (b === null) fs.rmSync(f, { force: true });
+      else fs.writeFileSync(f, b);
+    }
+    throw e;
+  }
+  return { kid: g.key.kid, file: zincirYolu, eklenen, iptalSira, iptalYazildi: revocation !== null };
+}
+
 /**
  * Docker teslim künyesini (`PAKET-DOCKER.json`) imzalar: künyenin `kapsam`ındaki teslim dosyaları belgenin
  * dizininde ölçülür, liste `butunluk-liste.txt`e yazılır, `liste` alanı künyeye girer; yük künyenin TAMAMIDIR
  * (şemanın atladığı ek alanlar da imzada). Kapsamdaki dosya eksikse imza atılmaz; öz-denetim düşerse iz kalmaz.
  */
-export async function signManifestDocument(file: string, key: SigningKey): Promise<{ token: string; file: string; listFile: string }> {
+export async function signManifestDocument(
+  file: string,
+  key: SigningKey,
+  zincir?: { readonly certificate: string; readonly roots: readonly RootKey[]; readonly now?: Date } | null,
+): Promise<{ token: string; file: string; listFile: string }> {
+  if (isChainPackageKid(key.kid) !== Boolean(zincir)) throw new Error(`${key.kid}: zincirli (pkt-*) anahtar PAKET sertifikası + kök çapası ister, gömülü çapalı (paket-*) anahtar taşıyamaz`);
   const root = path.dirname(file);
   const doc = JSON.parse(fs.readFileSync(file, "utf8")) as Record<string, unknown>;
   const kapsam = IntegrityManifestSchema.shape.kapsam.safeParse(doc.kapsam);
@@ -330,11 +407,15 @@ export async function signManifestDocument(file: string, key: SigningKey): Promi
   };
   const parsed = IntegrityManifestSchema.safeParse(payload);
   if (!parsed.success) throw new Error(`künye tekserp-butunluk yükü değil: ${parsed.error.issues[0]?.message ?? "şema"}`);
-  const token = signJws({ typ: INTEGRITY_TYP, kid: key.kid, payload, privateKey: key.privateKey });
+  const token = zincir
+    ? signChained(payload, key, zincir.certificate, (zincir.now ?? new Date()).toISOString())
+    : signJws({ typ: INTEGRITY_TYP, kid: key.kid, payload, privateKey: key.privateKey });
   if (token.length > JWS_MAX_LENGTH) throw new Error(`imzalı belge ${token.length} bayt > ${JWS_MAX_LENGTH}`);
   const listFile = path.join(root, INTEGRITY_LIST_FILE);
   fs.writeFileSync(listFile, listBytes);
-  const check = await verifyIntegrity(token, root, [{ kid: key.kid, x: key.x }]);
+  const check = zincir
+    ? await verifyIntegrity(token, root, [], { roots: zincir.roots, mode: "KABUL", nowMs: Date.now() })
+    : await verifyIntegrity(token, root, [{ kid: key.kid, x: key.x }]);
   if (check.durum !== "GECERLI") {
     fs.rmSync(listFile, { force: true });
     throw new Error(`öz-denetim düştü: ${check.durum} ${check.kod ?? ""}`);

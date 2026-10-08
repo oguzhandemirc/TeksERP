@@ -31,6 +31,10 @@
 //   bulunur; ikisi varsa AYNI paket. `imzala`/`pg-imzala` `--anahtar` + `--zincir-anahtar` → eski takım (`surum.json`/
 //   `pg.json`) + zincir takımı (`surum-zincir.json`/`pg-zincir.json`), her biri kendi kid'iyle, aynı yayinZamani. Kök
 //   çapası `--kok-dosyasi` > test kök çapası (`--kok-capa` / `TEKSERP_TEST_KOK_CAPASI`, test çapasıyla AYNI kural) > üretim.
+// yeniden-imzala --surum-kunye=<surum(-zincir).json> --zip=<yayındaki zip> --anahtar=<pkt> --cikti=<dizin> [--kanal=<grup>]
+//   [--paket-iptal=<kök imzalı dağıtım iptali>] [--kok-dosyasi=<kök.json>]: yayındaki sürümü YENİ PAKET sertifikasıyla
+//   yeniden imzalar (yıllık tören): sürüm/paketId/liste aynı, `<ad>-<kid>.zip` + `surum-zincir.json`. Eski takım dokunulmaz.
+// pg-yeniden-imzala --kunye=<pg(-zincir).json> --anahtar=<pkt> --cikti=<dizin> [--zip] [--paket-iptal] → `pg-zincir.json`.
 // pg-dogrula: künyenin imzası (PAKET çapası) + zip'in boyu/özeti künyeyle birebir → `<cikti>/sonuc.json` (yayıncı okur).
 // Test çapası (`--capa=<json>` ya da ortam `TEKSERP_TEST_PAKET_CAPASI`) YALNIZ bekçiler içindir ve backend
 // bildiriminde YALNIZ hazırlık kanalında kabul edilir; gerçek çapa `packagePublicKeysFor(<kanalın kipi>)`.
@@ -73,8 +77,9 @@ import {
 import { packagePublicKeysFor, verifyIntegrity, type PackageKey } from "../src/lib/license/integrity";
 import type { ZodType } from "zod";
 import { INTEGRITY_FILE, isProductionChainPackageKid, isProductionPackageKid } from "../src/lib/license/integrity-scope";
-import { openPackageKey, packageKeyInfo, type OpenedPackageKey } from "./lib/butunluk-imza";
-import { assertPackageCertificateFresh, packageRoots, readPackageCertificate } from "./lib/paket-sertifika";
+import { openPackageKey, packageKeyInfo, resignChainedIntegrity, type OpenedPackageKey } from "./lib/butunluk-imza";
+import { assertPackageCertificateFresh, packageRoots, readPackageCertificate, readPackageRevocationFile } from "./lib/paket-sertifika";
+import { PACKAGE_CERT_FIELD, PACKAGE_REVOCATION_FILE, type VerifiedPackageRevocation } from "../src/lib/license/protocol/paket-zinciri";
 import { CliError, args, askPassword } from "./lib/cli-girdi";
 
 type Bayraklar = ReadonlyMap<string, string>;
@@ -416,6 +421,143 @@ function pgDogrula(f: Bayraklar): void {
   console.error(`✓ pg-dogrula: PostgreSQL ${k.value.surum}-${k.value.derleme} · ${olcu.ad} künyeyle birebir`);
 }
 
+// ── Yeniden imza (3.9 D6, yıllık tören §5 adım 5) ─────────────────────────────
+/** Yayındaki belgenin imzacısı için güven: gömülü çapa (paket-*) + kök çapası (pkt-*, sertifikası bitmiş olabilir). */
+function yayindakiGuven(f: Bayraklar): { capa: readonly PackageKey[]; roots: PackageTrust["roots"] } {
+  const dosya = f.get("capa") ?? process.env.TEKSERP_TEST_PAKET_CAPASI;
+  const capa = dosya ? (JSON.parse(fs.readFileSync(dosya, "utf8")) as PackageKey[]) : packagePublicKeysFor("uretim");
+  if (dosya) console.error("⚠ TEST ÇAPASI kullanılıyor — yalnız bekçi içindir");
+  return { capa, roots: packageRoots({ kokDosyasi: f.get("kok-dosyasi") ?? null, testCapa: f.get("kok-capa") ?? null, testIzinli: true }).roots };
+}
+
+/** Yeni imzacı: yalnız `pkt-*`, yanında kök imzalı sertifika, bitişine ≥ 30 gün (parola SORULMADAN). */
+function yeniImzaci(f: Bayraklar): { dosya: string; kid: string; sertifika: string } {
+  const dosya = gerek(f, "anahtar");
+  const kid = packageKeyInfo(dosya).kid;
+  if (!isChainPackageKid(kid)) throw new CliError(`yeniden imza yalnız kök sertifikalı pkt-* anahtarıyla (gelen ${kid})`);
+  const sertifika = readPackageCertificate({ keyFile: dosya, kid });
+  assertPackageCertificateFresh(sertifika);
+  return { dosya, kid, sertifika };
+}
+
+/** Zincirli belgenin (yükünde PAKET sertifikası olan) sertifikası verilen dağıtım iptalinde mi. */
+function sertifikasiIptalli(jws: string, iptal: VerifiedPackageRevocation | null): string | null {
+  if (!iptal) return null;
+  const p = parseJws(jws);
+  const cert = p.ok ? (p.value.payload as Record<string, unknown>)[PACKAGE_CERT_FIELD] : undefined;
+  const c = typeof cert === "string" ? parseJws(cert) : null;
+  if (!c?.ok) return null;
+  const { sertifikaId, kid } = c.value.payload as { sertifikaId?: unknown; kid?: unknown };
+  return typeof sertifikaId === "string" && iptal.document.iptaller.some((e) => e.sertifikaId === sertifikaId) ? String(kid) : null;
+}
+
+function iptalOku(f: Bayraklar, roots: PackageTrust["roots"]): { token: string; verified: VerifiedPackageRevocation } | null {
+  const d = f.get("paket-iptal");
+  return d ? readPackageRevocationFile(path.resolve(d), roots) : null;
+}
+
+/** `<ad>.zip` → `<ad>-<kid>.zip` (önceki yeniden imzanın `-pkt-<yıl>-<n>` eki düşer: ad büyümez). */
+function yenidenAd(ad: string, kid: string): string {
+  return `${ad.replace(/\.zip$/, "").replace(/-pkt-\d{4}-\d{1,3}$/, "")}-${kid}.zip`;
+}
+
+/**
+ * `yeniden-imzala`: yayındaki backend sürümünü (bildirim + zip) YENİ PAKET sertifikasıyla yeniden imzalar — sürüm,
+ * paketId, liste ve gömülü çapalı `butunluk.jws` AYNEN; yalnız `butunluk-zincir.jws` (+ daha yeni `paket-iptal.jws`)
+ * değişir → yeni ad `<ad>-<kid>.zip` + `surum-zincir.json`. Eski takım (`surum.json`) eski zip'i göstermeye devam eder.
+ * Yayındaki belgeler YERLEŞİK kipte ölçülür (eski sertifika bitmiş olabilir); imzacı sertifikası iptalliyse ve paketi
+ * gömülü çapalı imza da desteklemiyorsa DUR (köken kanıtlanamaz → yeniden derle).
+ */
+async function yenidenImzala(f: Bayraklar): Promise<void> {
+  const zip = path.resolve(gerek(f, "zip"));
+  const cikti = path.resolve(gerek(f, "cikti"));
+  const yeni = yeniImzaci(f);
+  const { capa, roots } = yayindakiGuven(f);
+  const iptal = iptalOku(f, roots);
+  const isaretci = readReleasePointer(fs.readFileSync(gerek(f, "surum-kunye"), "utf8"));
+  if (!isaretci.ok) throw new CliError(`sürüm bildirimi okunamadı: ${isaretci.code}`);
+  const ham = parseJws(isaretci.value);
+  const kanal = ham.ok ? (ham.value.payload as { kanal?: unknown }).kanal : undefined;
+  if (typeof kanal !== "string") throw new CliError("sürüm bildiriminde kanal yok");
+  if (f.has("kanal") && f.get("kanal") !== kanal) throw new CliError(`bildirim ${kanal} grubunun, beklenen ${f.get("kanal")}`);
+  const eski = verifyReleaseManifest(isaretci.value, { keys: capa, kanal, zincir: { roots, mode: "YERLESIK" } });
+  if (!eski.ok) throw new CliError(`yayındaki bildirim doğrulanamadı: ${eski.code}`);
+  const iptalliBildirim = sertifikasiIptalli(isaretci.value, iptal?.verified ?? null);
+  if (iptalliBildirim) throw new CliError(`bildirimi imzalayan ${iptalliBildirim} sertifikası İPTALLİ — yeniden imza kökeni kanıtlamaz; eski takımın surum.json'unu ver ya da sürümü yeniden derle`);
+  if (eski.value.paketImzaKid === yeni.kid) throw new CliError(`bildirim zaten ${yeni.kid} ile imzalı`);
+  const olcu = { ad: path.basename(zip), boyut: fs.statSync(zip).size, sha256: sha256Dosya(zip) };
+  const p0 = eski.value.paket;
+  if (olcu.ad !== p0.ad || olcu.boyut !== p0.boyut || olcu.sha256 !== p0.sha256) throw new CliError(`zip bildirimle TUTMUYOR (${olcu.ad} ${olcu.boyut} B) — yayındaki paketin kendisi verilmeli`);
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "tekserp-yeniden-"));
+  const tmp2 = fs.mkdtempSync(path.join(os.tmpdir(), "tekserp-yeniden-ol-"));
+  const yeniAd = yenidenAd(p0.ad, yeni.kid);
+  const yeniZip = path.join(cikti, yeniAd);
+  let zipBizim = false;
+  try {
+    execFileSync("unzip", ["-q", zip, "-d", tmp]);
+    const once = await imzalariDenetle(tmp, capa, { roots, mode: "YERLESIK" }, "yeniden imzalanmaz");
+    if (once.p.paketId !== p0.paketId || once.p.surum !== eski.value.surum) throw new CliError(`paket bildirimin paketi değil (paketId ${once.p.paketId})`);
+    const zincirYolu = path.join(tmp, CHAINED_INTEGRITY_FILE);
+    const iptalliPaket = fs.existsSync(zincirYolu) ? sertifikasiIptalli(fs.readFileSync(zincirYolu, "utf8").trim(), iptal?.verified ?? null) : null;
+    if (iptalliPaket && once.eskiKid === null) throw new CliError(`paketin tek imzası İPTALLİ ${iptalliPaket} sertifikasıyla — köken kanıtlanamaz; sürümü yeniden derle`);
+    const key = await paketAnahtari(yeni.dosya);
+    const r = await resignChainedIntegrity({ root: tmp, key, certificate: yeni.sertifika, roots, paketIptal: iptal?.token ?? null });
+    const kunye = JSON.parse(fs.readFileSync(path.join(tmp, "PAKET.json"), "utf8").replace(/^\uFEFF/, "")) as Record<string, unknown>;
+    const guncel = { ...kunye, dosyaSayisi: Number(kunye.dosyaSayisi) + r.eklenen.length, butunlukZincirKid: key.kid };
+    fs.writeFileSync(path.join(tmp, "PAKET.json"), `${JSON.stringify(guncel, null, 2)}\n`);
+    fs.mkdirSync(cikti, { recursive: true });
+    fs.copyFileSync(zip, yeniZip, fs.constants.COPYFILE_EXCL);
+    zipBizim = true;
+    execFileSync("zip", ["-q", "-X", yeniZip, CHAINED_INTEGRITY_FILE, "PAKET.json", ...(r.iptalYazildi ? [PACKAGE_REVOCATION_FILE] : [])], { cwd: tmp });
+    // Yeni zip baştan açılıp iki imza da ölçülür: eski takım gömülü çapayla, zincir KABUL kipinde (yeni sertifika).
+    execFileSync("unzip", ["-q", yeniZip, "-d", tmp2]);
+    const kabul: Omit<PackageTrust, "keys"> = { roots, mode: "KABUL", nowMs: Date.now() };
+    const sonra = await imzalariDenetle(tmp2, capa, kabul, "yeniden imzası düştü");
+    if (sonra.p.paketId !== p0.paketId || sonra.zincirKid !== key.kid || sonra.eskiKid !== once.eskiKid) throw new Error("öz-denetim: yeniden imzalı paket aynı paket değil");
+    const paket = { ad: yeniAd, boyut: fs.statSync(yeniZip).size, sha256: sha256Dosya(yeniZip), paketId: p0.paketId };
+    const yuk: ReleaseManifest = { ...eski.value, paket, paketImzaKid: key.kid };
+    const token = signChainedPackageDocument({ typ: TYP.SURUM, schema: ReleaseManifestSchema, payload: yuk, key: { kid: key.kid, privateKey: key.privateKey }, certificate: yeni.sertifika, signedAt: new Date().toISOString() });
+    const geri = verifyReleaseManifest(token, { keys: [], kanal, zincir: kabul });
+    if (!geri.ok) throw new Error(`öz-denetim düştü (${key.kid}): ${geri.code}`);
+    fs.writeFileSync(path.join(cikti, CHAINED_RELEASE_MANIFEST_FILE), releasePointerText(token), { mode: 0o644 });
+    const sonuc = { v: 1, kip: "yeniden-imzala", kanal, surum: yuk.surum, eskiKid: eski.value.paketImzaKid, yeniKid: key.kid, takim: once.eskiKid ? "cift" : "zincir", paket: { eski: p0, yeni: paket }, iptalSira: r.iptalSira };
+    fs.writeFileSync(path.join(cikti, "sonuc.json"), `${JSON.stringify(sonuc, null, 2)}\n`);
+    zipBizim = false;
+    console.error(`✓ yeniden-imzala: backend ${yuk.surum} (${kanal}) · ${eski.value.paketImzaKid} → ${key.kid} · ${yeniAd} (${paket.boyut} B) + ${CHAINED_RELEASE_MANIFEST_FILE}${r.iptalSira !== null ? ` · dağıtım iptali sıra ${r.iptalSira}` : ""}`);
+  } finally {
+    if (zipBizim) fs.rmSync(yeniZip, { force: true });
+    fs.rmSync(tmp, { recursive: true, force: true });
+    fs.rmSync(tmp2, { recursive: true, force: true });
+  }
+}
+
+/** `pg-yeniden-imzala`: yayındaki PG künyesinin yükü AYNEN, yeni PAKET sertifikasıyla → `pg-zincir.json` (zip değişmez). */
+async function pgYenidenImzala(f: Bayraklar): Promise<void> {
+  const cikti = path.resolve(gerek(f, "cikti"));
+  const yeni = yeniImzaci(f);
+  const { capa, roots } = yayindakiGuven(f);
+  const iptal = iptalOku(f, roots);
+  const isaretci = readReleasePointer(fs.readFileSync(gerek(f, "kunye"), "utf8"));
+  if (!isaretci.ok) throw new CliError(`PG künyesi okunamadı: ${isaretci.code}`);
+  const eski = verifyPgPackageManifest(isaretci.value, { keys: capa, zincir: { roots, mode: "YERLESIK" } });
+  if (!eski.ok) throw new CliError(`yayındaki PG künyesi doğrulanamadı: ${eski.code}`);
+  const iptalli = sertifikasiIptalli(isaretci.value, iptal?.verified ?? null);
+  if (iptalli) throw new CliError(`PG künyesini imzalayan ${iptalli} sertifikası İPTALLİ — eski takımın pg.json'unu ver ya da pg-imzala ile baştan imzala`);
+  if (f.has("zip")) {
+    const zip = path.resolve(gerek(f, "zip"));
+    const olcu = { ad: path.basename(zip), boyut: fs.statSync(zip).size, sha256: sha256Dosya(zip) };
+    if (olcu.ad !== eski.value.paket.ad || olcu.boyut !== eski.value.paket.boyut || olcu.sha256 !== eski.value.paket.sha256) throw new CliError(`PG zip'i künyeyle TUTMUYOR (${olcu.ad})`);
+  }
+  const key = await paketAnahtari(yeni.dosya);
+  const token = signChainedPackageDocument({ typ: TYP.PG, schema: PgPackageManifestSchema, payload: eski.value, key: { kid: key.kid, privateKey: key.privateKey }, certificate: yeni.sertifika, signedAt: new Date().toISOString() });
+  const geri = verifyPgPackageManifest(token, { keys: [], zincir: { roots, mode: "KABUL", nowMs: Date.now() } });
+  if (!geri.ok) throw new Error(`öz-denetim düştü (${key.kid}): ${geri.code}`);
+  fs.mkdirSync(cikti, { recursive: true });
+  fs.writeFileSync(path.join(cikti, CHAINED_PG_POINTER_FILE), releasePointerText(token), { mode: 0o644 });
+  fs.writeFileSync(path.join(cikti, "sonuc.json"), `${JSON.stringify({ v: 1, kip: "pg-yeniden-imzala", yeniKid: key.kid, kunye: eski.value }, null, 2)}\n`);
+  console.error(`✓ pg-yeniden-imzala: PostgreSQL ${eski.value.surum}-${eski.value.derleme} · ${key.kid} → ${CHAINED_PG_POINTER_FILE} (zip aynı)`);
+}
+
 // ── Ortak paket (kurulum arşivi, O11a) ──────────────────────────────────────
 /**
  * Ortak paketin künye + bütünlük denetimi — TEK gövde: kurulum arşivi (`ortak-dogrula`) ve grup yayını
@@ -465,7 +607,9 @@ async function main(): Promise<void> {
   if (command === "ortak-dogrula") return ortakDogrula(flags);
   if (command === "pg-imzala") return pgImzala(flags);
   if (command === "pg-dogrula") return pgDogrula(flags);
-  throw new CliError("komut: dogrula | imzala | ortak-dogrula | pg-imzala | pg-dogrula");
+  if (command === "yeniden-imzala") return yenidenImzala(flags);
+  if (command === "pg-yeniden-imzala") return pgYenidenImzala(flags);
+  throw new CliError("komut: dogrula | imzala | ortak-dogrula | pg-imzala | pg-dogrula | yeniden-imzala | pg-yeniden-imzala");
 }
 
 main().catch((e: unknown) => {
