@@ -23,13 +23,14 @@
 | `TOREN-KUNYE.json` · `BENIOKU.md` | açık künye (kid · açık anahtar · parmak izi · dosya özetleri) + ne-nedir/nasıl geri yüklenir | sır YOK | Mac → USB; künye yöneticiye |
 
 - **Kâğıt:** YALNIZ kök parolası. Kurtarma anahtarı da kök parolasıyla sarılıdır → USB + kâğıt, Mac olmadan her şeyi geri getirir (§6).
-- **Kök ve paket parolaları AYRI parolalardır:** tören kök parolasını sorar, paket parolasını 7. adımda PAKET aracı kendi istemiyle sorar; tören kök parolasını PAKET aracına GEÇİRMEZ. Paket parolası kökten FARKLI seçilir (araçlar aynı olmasını engellemez; önerilmez): kök parolası portalda (VDS'te) yazılır, paket anahtarı da VDS'te ara kopya olarak durur — biri sızarsa öteki korunsun. Paket parolası parola yöneticisinde durur; kaybı telafi edilir (§6).
+- **Kök ve paket parolaları AYRI parolalardır:** tören kök parolasını Anahtar Zinciri'nden okur (kayıtlı değilse sorar), paket parolasını 7. adımda PAKET aracı kendisi alır (Anahtar Zinciri, değilse kendi istemi); tören kök parolasını PAKET aracına GEÇİRMEZ. Paket parolası kökten FARKLI seçilir (araçlar aynı olmasını engellemez; önerilmez): kök parolası portalda (VDS'te) yazılır, paket anahtarı da VDS'te ara kopya olarak durur — biri sızarsa öteki korunsun. Paket parolası parola yöneticisinde durur; kaybı telafi edilir (§6).
+- **Parolalar macOS Anahtar Zinciri'nde (kullanıcı kararı 2026-10-08, risk kabulü kullanıcıda):** tören ve imza araçları parolayı `tekserp/<ad>` kaydından SORUSUZ okur (`kok` · `ara` · `paket` · `istemci` · `yedek` · `play-yukleme`). Kaydı yalnız sen, kendi Terminal'inde, repo kökünde yaparsın: `node scripts/parola-kaydet.mjs <ad>` (iki kez yazılır, ekranda görünmez; aynı ad yeniden kaydedilirse eskisinin üstüne yazar); kontrol `node scripts/parola-kaydet.mjs --liste` (değer basmaz). Kayıt yoksa araç terminalde sorar; `--*-parola-dosyasi` verilirse dosya önce gelir; `--kasa=yok` kasaya hiç bakmaz. Kâğıttaki kök parolası ve parola yöneticisindeki kopyalar YERİNDE KALIR — Mac kaybında tek kurtarma yolu onlardır.
 - **Üçüncü yedek alıcısı:** Etkili Yazılım çevrimdışı anahtarı ([`YEDEK-SIFRELEME.md`](YEDEK-SIFRELEME.md) §2, töreni henüz yok) — eklenince açık yarısı VDS `yedek-alici/`ye konur; o güne dek satıcı yedekleri iki alıcılıdır.
 - VDS'e ASLA gitmeyen: `yedek-ozel/`, `kurtarma/`, modül anahtarı dosyaları (yalnız kasaya içe aktarılır).
 
 ## 1. Hazırlık (tören öncesi, ~10 dk)
 
-1. **İki parola belirle** (ekranda görünmezler, her biri iki kez yazılır): **kök parolası** — en az 12 karakter, öneri 5–6 rastgele kelime; kâğıda yazılacak (tören sorar). **Paket parolası** — en az 12 karakter, kökten farklı; parola yöneticisine ("TeksERP paket-2026") (7. adımda PAKET aracı sorar).
+1. **İki parola belirle** (ekranda görünmezler, her biri iki kez yazılır): **kök parolası** — en az 12 karakter, öneri 5–6 rastgele kelime; kâğıda yazılacak; `node scripts/parola-kaydet.mjs kok` ile Anahtar Zinciri'ne kaydet (kayıtlı değilse tören sorar). **Paket parolası** — en az 12 karakter, kökten farklı; parola yöneticisine ("TeksERP paket-2026") ve `node scripts/parola-kaydet.mjs paket` ile Anahtar Zinciri'ne (kayıtlı değilse 7. adımda PAKET aracı sorar).
 2. **Kâğıt + kalem** hazır; kâğıdın duracağı yer (kasa) belli. USB gelince USB, kâğıtla AYNI yerde durmaz (biri ele geçerse öteki tek başına işe yaramasın).
 3. **Temiz ağaç + bağımlılıklar** (repo kökünde) — ZORUNLU, tören kendisi ölçer ve parola sormadan REDDEDER:
 
@@ -53,15 +54,15 @@ node deploy/satici/uretim-toren.mjs
 |---|---|
 | `kaynak : <tam sha> (temiz · origin/main · npm ls hatasız)` · iki `kilit : …package-lock.json sha256 …` · hedef · `USB : verilmedi …` · kid'ler (`kok-2026-1 · alt-2026-1 (180 gün) · ind-2026 (365 gün) · paket-2026 · modül: depo.multiEnabled`) · `PAKET : <komut>` | `PAKET` satırında `varsayılan DEĞİL` görürsen Ctrl+C, yöneticiye sor (kirli ağaç / origin/main dışı HEAD tören tarafından zaten REDDEDİLİR) |
 | `[1/10] Önkoşullar ✓` · `[2/10] Kök parolası …` | — |
-| `Kök parolası (en az 12 karakter):` → `Kök parolası (tekrar):` | kök parolasını iki kez yaz (görünmez), Enter |
+| `Kök parolası (en az 12 karakter):` → `Kök parolası (tekrar):` — yalnız `tekserp/kok` Anahtar Zinciri'nde kayıtlı DEĞİLSE | kök parolasını iki kez yaz (görünmez), Enter |
 | `[3/10] KÖK` … `[6/10] Sunucu sırları` | bekle; hiçbir şey sorulmaz |
-| `[7/10] PAKET paket-2026 … — PAKET aracı kendi parolasını sorar` + aracın kendi istemi | **paket parolasını** aracın istediği kadar (yeni + tekrar) yaz |
+| `[7/10] PAKET paket-2026 … — PAKET aracı kendi parolasını sorar` + aracın kendi istemi (yalnız `tekserp/paket` kayıtlı DEĞİLSE) | **paket parolasını** aracın istediği kadar (yeni + tekrar) yaz |
 | `[8/10]` … `[10/10] Kurtarma arşivi · künye · BENIOKU · izinler · yerine koy` | bekle (≈ 10–30 sn) |
 | `✅ Tören tamam.` + KÖK · ALT · İNDİRME · PAKET · MODÜL · YEDEK satırları (kid + açık anahtar + tarih + parmak izi) + "Sonraki adımlar" | §3'e geç |
 
 **Kâğıda yaz:** başlık `TeksERP üretim kökü kok-2026-1`, altına **kök parolası**, altına ekrandaki `KÖK … x=` değerinin ilk 8 karakteri (hangi köke ait olduğunu tanımak için; sır değil) ve tarih. Paket parolası kâğıda YAZILMAZ → parola yöneticisine.
 
-**Sır hijyeni:** ekran yalnız açık bilgi basar (kid · açık anahtar · parmak izi · yol). Kök parolası alt süreçlere yalnız stdin borusuyla gider (PAKET aracına HİÇ gitmez); paket parolasını PAKET aracı terminalden kendisi okur. Tören `--*parola*` argümanını reddeder, ortam değişkeninden parola okumaz.
+**Sır hijyeni:** ekran yalnız açık bilgi basar (kid · açık anahtar · parmak izi · yol). Kök parolası (Anahtar Zinciri ya da terminal) alt süreçlere yalnız stdin borusuyla gider (PAKET aracına HİÇ gitmez); paket parolasını PAKET aracı kendisi alır (Anahtar Zinciri ya da terminal). Tören `--*parola*` argümanını reddeder, ortam değişkeninden parola okumaz.
 
 **Hata olursa (hepsinde hedefe HİÇBİR ŞEY yazılmaz):**
 
@@ -174,7 +175,7 @@ Hepsi açık bilgi (künyeden ve çapa betiğinin kuru çıktısından; sır, pa
 
 **Ortam ve kid'ler:** ortam kök dosyasının KENDİ kimliğinden çözülür (`kok-*` üretim · `hazirlik-*` hazırlık, sınıfları yalnız TEST/DEMO), bayrakla seçilmez. Hazırlık kökünün dönemi `alt-hazirlik-<yıl>-<n>` · `ara-hazirlik-<yıl>-<n>` · `ind-hazirlik-<yıl>-<n>` basar (numara, önekli ilk anahtarlar `alt-hazirlik-2026-1` · `ind-hazirlik-2026` dahil iki biçimden de ilerler); üretiminki öneksizdir — iki satıcı aynı kid'i asla basmaz (aynı kid CF Worker'ın iki listesinde olursa bütün indirmeler 503 olur). Tören, yeni kid'ler karşı ortamın kalıbındaysa ya da anahtar kümesindeyse (`--karsi-dizin`, varsayılan öteki ortamın Mac dizini: `~/.tekserp/satici-hazirlik` ↔ `~/.tekserp/satici-uretim`; dizin yoksa yalnız kalıp ölçülür) parola sormadan durur.
 
-**Parolalar:** kök parolası (kâğıttan, tören başında BİR kez) · **yeni ara imzacı parolası** (iki kez; kökünkinden FARKLI olmak ZORUNDA — araç aynısını reddeder; portalda HAK imzalarken VDS'te yazılır → parola yöneticisine "TeksERP ara-<yıl>-<n>"). İkisi de argv/env/log/dosyaya girmez.
+**Parolalar:** kök parolası (Anahtar Zinciri `tekserp/kok`; kayıtlı değilse kâğıttan, tören başında BİR kez) · **yeni ara imzacı parolası** (Anahtar Zinciri `tekserp/ara` — yeni dönemin parolasını törenden ÖNCE `node scripts/parola-kaydet.mjs ara` ile kaydet, yoksa geçen yılınki kullanılır; kayıtlı değilse iki kez sorulur; kökünkinden FARKLI olmak ZORUNDA — araç aynısını reddeder; portalda HAK imzalarken VDS'te yazılır → parola yöneticisine "TeksERP ara-<yıl>-<n>"). İkisi de argv/env/log/dosyaya girmez.
 
 | # | Nerede | Komut / iş | Beklenen |
 |---|---|---|---|
@@ -200,13 +201,13 @@ Hepsi açık bilgi (künyeden ve çapa betiğinin kuru çıktısından; sır, pa
 
 **Ne üretir (sade dille):** panel ve tablet güncellemelerini imzalayan iki anahtar — **birincil** (Mac'te durur, günlük imza) ve **yedek** (yalnız yedek biriminde — Drive'a yüklenen disk görüntüsü; birincil kaybolursa onunla devam edilir). Ayrıca tablet güncellemesinin (OTA) iki imza sertifikası. Sonunda sahada yayında olan sürümlerin imzası yeni anahtarla yenilenir (paketin kendisi değişmez, kimse yeniden kurmaz).
 
-**Dört parola (hepsi birbirinden FARKLI, en az 12 karakter):** kök (kâğıttaki) · ara imzacı · istemci (birincil) · yedek. **Yedek parolası parola yöneticisinde durur**; disk görüntüsüne ve Mac'e dosya olarak konmaz (kullanıcı kararı 2026-10-07: USB yok — yedek disk görüntüsünde, görüntü Drive'da).
+**Dört parola (hepsi birbirinden FARKLI, en az 12 karakter):** kök (kâğıttaki) · ara imzacı · istemci (birincil) · yedek. Dördü de Anahtar Zinciri'nden sorusuz okunur (`kok` · `ara` · `istemci` · `yedek`; kayıtlı olmayan sorulur — §0). **Yedek parolası parola yöneticisinde de durur**; disk görüntüsüne ve Mac'e DOSYA olarak konmaz (kullanıcı kararı 2026-10-07: USB yok — yedek disk görüntüsünde, görüntü Drive'da).
 
 ### 9.1 Hazırlık
 
 1. §1.3'teki gibi temiz ağaç (`origin/main`, iki projede `npm ci`) — tören bunu kendisi ölçer.
 2. **Yedek birimi:** boş bir disk görüntüsü oluştur ve bağla (örnek `/Volumes/TOREN-YEDEK`; USB yok — kullanıcı kararı 2026-10-07). Tören birimin Mac'in kendi diskinden AYRI bir birim olduğunu ölçer; aynı diskse durur.
-3. **Parola dosyalarını yaz** (isteğe bağlı: dosya vermezsen her parola terminalde gizli sorulur — bu daha kolaydır, dosya yalnız uzun/tekrarlı işte işe yarar). Dosyalar Mac'te GEÇİCİ dizinde durur, işin sonunda silinir:
+3. **Parolalar Anahtar Zinciri'nden okunur;** kayıtlı değilse `node scripts/parola-kaydet.mjs <kok|ara|istemci|yedek>` (§0). Kaydetmediğin parola terminalde gizli sorulur. **Parola dosyası** yalnız kasasız iş için (isteğe bağlı; dosya kasadan önce gelir). Dosyalar Mac'te GEÇİCİ dizinde durur, işin sonunda silinir:
 
    ```bash
    umask 077; mkdir -p ~/toren-gecici
@@ -227,7 +228,7 @@ OTA kökü tablet uygulamasının içine gömülür ve kolay değişmez. Yalnız
 node mobil/scripts/ota-zinciri.mjs kok-uret --dizin=$HOME/.tekserp/satici-uretim/anahtarlar --parola-dosyasi=$HOME/toren-gecici/ota-kok.txt
 ```
 
-(Dosya vermezsen parola iki kez sorulur.) Dosya zaten varsa komut durur — sonraki yıllarda bu adım ATLANIR.
+(Dosya vermezsen parola Anahtar Zinciri'nden `tekserp/kok` okunur, kayıtlı değilse iki kez sorulur; o zaman `--parola-dosyasi` kısmını sil.) Dosya zaten varsa komut durur — sonraki yıllarda bu adım ATLANIR.
 
 ### 9.3 Töreni koş
 
@@ -237,7 +238,7 @@ node deploy/satici/uretim-toren.mjs donem --istemci --yedek-usb=/Volumes/<yedek 
   --istemci-parola-dosyasi=$HOME/toren-gecici/istemci.txt --yedek-parola-dosyasi=$HOME/toren-gecici/yedek.txt
 ```
 
-(`--yayindakiler=<dizin>` yerine `--yayinda-yok`; parola dosyası vermediğin parola terminalde sorulur. Kuyruk HAK'ları varsa §8'deki gibi `--kuyruk=…` da eklenir.) Beklenen: adımlar 8–11 (birincil anahtar Mac'te · yedek anahtar DOĞRUDAN yedek birimine · yayındakilerin yeniden imzası · yedeğin açılış ölçümü ve "Mac'te yedek izi yok" taraması) ve 12 (VDS paketi), sonunda `✅`. **Hata olursa hedefe hiçbir şey yazılmaz** (§8'deki gibi yarım dizin silinir); ileti `yedek parola dosyası USB'de` / `USB Mac diskiyle aynı` (araç yedek birimine USB der) / `parola dosyası 0600 değil` diyorsa dediğini düzelt ve komutu yeniden koş.
+(`--yayindakiler=<dizin>` yerine `--yayinda-yok`; parolalar Anahtar Zinciri'ndeyse `--*-parola-dosyasi` satırları yazılmaz — vermediğin parola kasadan okunur, kayıtlı değilse terminalde sorulur. Kuyruk HAK'ları varsa §8'deki gibi `--kuyruk=…` da eklenir.) Beklenen: adımlar 8–11 (birincil anahtar Mac'te · yedek anahtar DOĞRUDAN yedek birimine · yayındakilerin yeniden imzası · yedeğin açılış ölçümü ve "Mac'te yedek izi yok" taraması) ve 12 (VDS paketi), sonunda `✅`. **Hata olursa hedefe hiçbir şey yazılmaz** (§8'deki gibi yarım dizin silinir); ileti `yedek parola dosyası USB'de` / `USB Mac diskiyle aynı` (araç yedek birimine USB der) / `parola dosyası 0600 değil` diyorsa dediğini düzelt ve komutu yeniden koş.
 
 Çıktı: Mac'te `~/.tekserp/satici-uretim/donemler/<damga>/` (`vds-paketi/istemci/` yalnız AÇIK sertifikalar + iki yaprak PEM; `DONEM-KUNYE.json` `istemci` bölümü; `istemci/YEDEK-IZI.json` yalnız Mac'te kalır, VDS'e gitmez). Yedek biriminde yeni yedek dizini + `YEDEK-KUNYE.json`; önceki yılın yedek dizinleri oradan silinir. VDS'e aktarma §8 adım 3–9'daki gibidir (paketin `istemci/` klasörü de gider).
 
@@ -258,7 +259,7 @@ rm -P ~/toren-gecici/*.txt && rmdir ~/toren-gecici
 ls ~/toren-gecici 2>&1        # "No such file or directory" görmelisin
 ```
 
-`rm -P` dosyayı silmeden önce üstüne yazar (düz `rm`'den güçlüdür). Sonra disk görüntüsünü çıkar ve Drive'a yükle; yedek parolası parola yöneticisinde kalır, görüntüyle aynı yere konmaz (§2: biri ele geçerse öteki tek başına işe yaramasın).
+(Parola dosyası yazmadıysan bu adım yoktur.) `rm -P` dosyayı silmeden önce üstüne yazar (düz `rm`'den güçlüdür). Sonra disk görüntüsünü çıkar ve Drive'a yükle; yedek parolası parola yöneticisinde kalır, görüntüyle aynı yere konmaz (§2: biri ele geçerse öteki tek başına işe yaramasın).
 
 ### 9.6 Sorun giderme
 
@@ -275,13 +276,13 @@ ls ~/toren-gecici 2>&1        # "No such file or directory" görmelisin
 
 **Ne üretir (sade dille):** fabrikaya giden backend paketlerini imzalayan iki anahtar — **birincil** (Mac'te, her sürüm imzasında kullanılır) ve **yedek** (yalnız yedek biriminde — Drive'a yüklenen disk görüntüsü). İkisine kökün imzaladığı birer sertifika (395 gün). Kayıp/çalınan anahtarların listesi (dağıtım iptali). Sahada yayında olan backend sürümlerinin imzası yeni anahtarla yenilenir — paketin içi değişmez, yeni imzalı kopyalar Mac'te ayrı bir dizine yazılır.
 
-**Parolalar (hepsi birbirinden FARKLI, en az 12 karakter):** kök (kâğıttaki) · ara imzacı · paket (birincil) · yedek. `--istemci` ile birlikte koşulursa istemci parolası da sorulur ve **yedek parolası İKİSİNE ORTAKTIR** (tek disk görüntüsü, tek yedek parolası). Paket parolası bir kez sorulur, tören onu imza araçlarına kendisi verir; kök parolası paket aracına hiç gitmez.
+**Parolalar (hepsi birbirinden FARKLI, en az 12 karakter):** kök (kâğıttaki) · ara imzacı · paket (birincil) · yedek. Dördü de Anahtar Zinciri'nden sorusuz okunur (`kok` · `ara` · `paket` · `yedek`; kayıtlı olmayan sorulur — §0). `--istemci` ile birlikte koşulursa istemci parolası da alınır ve **yedek parolası İKİSİNE ORTAKTIR** (tek disk görüntüsü, tek yedek parolası). Paket parolası bir kez alınır, tören onu imza araçlarına kendisi verir; kök parolası paket aracına hiç gitmez.
 
 ### 10.1 Hazırlık
 
 1. §1.3'teki gibi temiz ağaç (`origin/main`; `Teks-Erp` ve `satici/sunucu`'da `npm ci`) — tören bunu ölçer.
 2. **Yedek birimi:** §9.1 adım 2'deki disk görüntüsü (`--istemci` ile birlikteyse AYNI görüntü). Mac'in kendi diskindeyse tören durur.
-3. **Parola dosyaları (isteğe bağlı):** §9.1 adım 3'teki gibi; ek olarak `~/toren-gecici/paket.txt` (tek satır). Dosya vermezsen parola terminalde gizli sorulur.
+3. **Parolalar:** §9.1 adım 3'teki gibi Anahtar Zinciri'nden; ek olarak `node scripts/parola-kaydet.mjs paket` (yeni dönemin paket parolası). Kayıtlı değilse terminalde gizli sorulur; parola dosyası (`~/toren-gecici/paket.txt`) yalnız kasasız iş için.
 4. **Yayındaki kopyalar:** sahada yayında olan backend sürümlerini ve PG künyelerini indir, şu düzende bir dizine koy (`<grup>` = test · oncu · genel; §9'un `--yayindakiler` dizini ile AYNI dizin olabilir, `panel/` ve `ota/` burada yok sayılır):
    - `<grup>/backend/<sürüm>/` → dizindeki BÜTÜN `surum-zincir.json` / `surum-zincir-<kid>.json` dosyaları (yoksa `surum.json`) **ve** seçilenin adını verdiği zip
    - `<grup>/backend/pg/<sürüm>-<derleme>/` → BÜTÜN `pg-zincir.json` / `pg-zincir-<kid>.json` (yoksa `pg.json`)
@@ -317,7 +318,7 @@ node deploy/satici/uretim-toren.mjs paket-yedek-dogrula --yedek-usb=/Volumes/<ye
 
 ### 10.4 Sonrası
 
-1. Paket parolası → parola yöneticisi. Parola dosyalarını sil (§9.5), disk görüntüsünü çıkar, Drive'a yükle.
+1. Paket parolası → parola yöneticisi (Anahtar Zinciri'ndeki kayıt kalır). Parola dosyası yazdıysan sil (§9.5), disk görüntüsünü çıkar, Drive'a yükle.
 2. **Yeniden imzalı sürümleri yayına koyma** (D8; yayına koyma aracı gelene dek elle, yalnız şu sırayla). Yayındaki sürüm dizini EZİLMEZ: `<ad>-<kid>.zip` · `surum-zincir-<kid>.json` · `pg-zincir-<kid>.json` eskilerin YANINA konur.
    1. **İndirme kapısı Worker'ı yayından ÖNCE yeni desenle dağıtılır** (`deploy/guncelleme-sunucusu/worker/indirme-kapisi.js`, kid'li zincirli adlar DEĞİŞKEN; [`INDIRME-KAPISI-WORKER.md`](INDIRME-KAPISI-WORKER.md) §8). Atlanırsa güncelleyicinin henüz yayında olmayan kid'li adı yoklaması kenarda 404 olarak önbelleklenir.
    2. **Yeniden imzalı dosyalar yayına konunca `son-zincir.json` da yeniden imzalı EN YENİ bildirimle değişir** (o sürümün `surum-zincir-<kid>.json` içeriği) — **eski sertifikanın iptali yayına girmeden ÖNCE.** Değişmezse kurulumlar takılır: güncelleme durumu `Waiting`, hata `PAKET_SERTIFIKA_IPTAL`; kanalı izleyen kurulum da sabit sürüm hedefli kurulum da (sabit hedefte güncelleyici kid'li adı `son-zincir.json`un imzalayanından öğrenir; o iptalliyse kid'li ad hiç yoklanmaz). Kurulu sürüm ve PG yerinde kalır (prova adım 20–21).
@@ -336,7 +337,7 @@ node deploy/satici/uretim-toren.mjs paket-yedek-dogrula --yedek-usb=/Volumes/<ye
 
 - **Alt süreçler:** kök/ALT/İNDİRME/sırlar `satici/sunucu/scripts/anahtar.ts` (`kok-uret` · `alt-uret` · `indirme-uret` · `sirlar-uret`), PAKET = `PAKET_KOMUTU` (tek satır, törenin başında: `Teks-Erp/scripts/build-korumali-imza.ts anahtar-uret --kid={kid} --dizin={dizin} --json` — arayüz değişirse yalnız bu satır; `--paket-komutu="…"` koşum başına ezer ve ekranda `varsayılan DEĞİL` diye görünür), modül `satici/sunucu/scripts/modul-anahtari.ts uret` (DB'siz), yedek alıcıları + sınama + kurtarma arşivi `Teks-Erp/scripts/yedek-sifrele.ts`. Kurtarma alıcısı `--parolali --parola-stdin` ile KÖK parolasına sarılır.
 - **PAKET sözleşmesi:** araç `{dizin}/{kid}.paket.json` üretir (parolalı v2, 0600, `kid` + `x`; ham `d` alanı OLMAZ — parolasız dosya RED) ve `--json` ile stdout'a tek satır `{"v":1,"kid","x","dosya","parolali":true}` basar; tören bu özeti dosyayla karşılaştırır (kid · x · dosya · `parolali`), uyuşmazsa RED. TTY'de terminali devralıp parolayı kendisi sorar (iki kez), TTY yoksa törenin stdin'inde kalan satırlar ona geçer; kök parolası ona hiç verilmez. Ölçüm (2026-09-30): `lisans/uretim-gecis` dalının aracıyla bekçi §4a yeşil (34/0); `expect` ile gerçek terminalde iki parola da ekrana hiç yansımadı; `guven-capasi-ekle.ts` kuru kipte törenin kök ve paket dosyalarını okudu.
-- **Parola yolu:** kök parolası TTY'den gizli (TTY yoksa stdin satırları: kök, kök tekrar, sonra PAKET aracının satırları — yalnız bekçi); alt süreçlere yalnız stdin; alt süreç ortamı yalın (`PATH` · `HOME` · `TMPDIR` · `COPYFILE_DISABLE`) — `ANAHTAR_DIZINI`, `GUVEN_CAPASI_DOSYASI`, `DATABASE_URL`, `NODE_OPTIONS` geçmez. Alt süreç hata çıktısı parola baytı içeriyorsa hiç basılmaz.
+- **Parola yolu:** kök parolası `--kok-parola-dosyasi` > Anahtar Zinciri `tekserp/kok` (`scripts/lib/parola-kasasi.mjs`) > TTY'den gizli (TTY yoksa stdin satırları: kök, kök tekrar, sonra PAKET aracının satırları — yalnız bekçi); alt süreçlere yalnız stdin; alt süreç ortamı yalın (`PATH` · `HOME` · `TMPDIR` · `COPYFILE_DISABLE`) — `ANAHTAR_DIZINI`, `GUVEN_CAPASI_DOSYASI`, `DATABASE_URL`, `NODE_OPTIONS` geçmez. Alt süreç hata çıktısı parola baytı içeriyorsa hiç basılmaz.
 - **Hepsi ya da hiçbiri:** `<hedef>.yarim-<pid>`de kurulur, en sonda tek `rename`; her hata ve Ctrl+C yarım dizini siler (yalnız törenin YARATTIĞI yolu — araya giren yol/bağ dokunulmadan kalır). Hedef ya da yarım kalıntı VARSA parola sorulmadan RED.
 - **Yol güvenliği (TOCTOU):** yol boyunca her bileşen `lstat`la ölçülür — sembolik bağ RED (root'a ait sistem bağı, macOS `/var` · `/tmp`, hariç); üst dizin kullanıcının ve grup/başkalarına kapalı olmalı (yoksa bileşen bileşen 0700 yaratılır); yarım dizin ve alt dizinleri recursive OLMADAN yaratılır (varsa RED); tören dosyaları `wx` (varsa ezmez); hedef rename'den HEMEN önce yeniden ölçülür ve özel `mkdir` ile sahiplenilir — araya giren boş dizinin üstüne geçilmez.
 - **Kaynak kapısı:** ağaç temiz + HEAD origin/main'de ya da `--etiket=<ad>`in commit'i + `npm ls --all` hatasız (iki proje); künyede `kaynak{commit (tam sha), dayanak, kirli:false, kilitler{yol: sha256}, npmLs}`.

@@ -59,6 +59,8 @@
 | APK mührü | `mobil/keystore/tekserp-release.keystore` + `keystore.properties` | keystore parolası |
 | KÖK `kok-2026-1` (Ed25519) | iş listesi 1.2 ile Mac'e iner | kök parolası |
 
+Parolaların okunduğu yer (kullanıcı kararı 2026-10-08): imza/tören araçları parolayı macOS Anahtar Zinciri `tekserp/<kok|ara|paket|istemci|yedek|play-yukleme>` kaydından sorusuz okur, kayıt yoksa sorar (`scripts/lib/parola-kasasi.mjs`; kayıt `node scripts/parola-kaydet.mjs <ad>`); kâğıt ve parola yöneticisi kopyaları kurtarma için durur.
+
 ## 2. Tehdit
 
 | # | Olay | Bugün | Hedef |
