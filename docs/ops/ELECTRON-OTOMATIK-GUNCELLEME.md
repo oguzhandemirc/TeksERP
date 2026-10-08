@@ -70,7 +70,7 @@ Yayın servisi kuruldu ve uçtan uca doğrulandı. Burada anlatılan şey **tekr
 yapılacak bir iş değil**, ne olduğunun kaydıdır.
 
 > ⚠️ **Sunucu değişti (2026-09-01):** yayın ESKİ paylaşımlı sunucudan (`91.217.119.138`,
-> takma ad `yenisunucu`) **tekserp-vds**'e (`80.253.255.188`) taşındı ve DNS oraya
+> takma ad `fzt`, eski adı `yenisunucu`; TeksERP için kullanılmaz) **tekserp-vds**'e (`80.253.255.188`) taşındı ve DNS oraya
 > döndü (`deploy/electron-yayinla.sh` `SSH_HEDEF=tekserp-yayin`). Aşağıdaki tablo
 > BUGÜNKÜ durumu gösterir; ayrıntı `SUNUCU-ENVANTERI.md` · `VDS-TASIMA.md`.
 
