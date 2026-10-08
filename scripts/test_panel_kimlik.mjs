@@ -7,6 +7,7 @@
 //   P  dinlenme: ağaç ortak kimlikte (package.json tabanı · işaretçi yok · ana süreç literalsiz · çözücü kayıttan okur)
 //   N  negatif sondalar: her ihlal KIRMIZI verir (appId eski · işaretçi geri · publish/output eski kanal · ana süreçte literal · çözücü izi yok)
 //   O  ölçülemedi: kayıt bozuk / dosya yok → Olculemedi (sessiz yeşil değil)
+//   KY kurulum yolu: yeni kurulumun varsayılan klasörü ASCII + boşluksuz, yalnız ilk kurulumda; kayıt anahtarı sahadakiyle aynı
 //   A  paket geri okuma farkı: sağlam sentetik paket temiz; url · appId · exe · başlık · yabancı kimlik → kırmızı
 //   K  kablo: commit kapısı + CI + paketleme betiği bu ölçümü çağırır; tetik okunan her dosyayı kapsar
 // Cırcır değil (taban yok). Sonuç: 0 yeşil · 1 kırmızı · 2 ÖLÇÜLEMEDİ.
@@ -15,8 +16,8 @@
 
 import { ESKI_KAYIT_REL, KAYIT_REL, Olculemedi, dosyalariOku } from './lib/dagitim.mjs';
 import {
-  PANEL_DINLENME_DOSYALARI, PANEL_ISARETCI_REL, PANEL_KIMLIK_BEKCI_DOSYALARI, PANEL_KIMLIK_COZUCU_REL, PANEL_MAIN_REL, PANEL_PAKET_REL,
-  ortakKimlik, panelDinlenmeFarki, panelKimlikTetigi, panelOrtakArtefaktFarki,
+  PANEL_DINLENME_DOSYALARI, PANEL_ISARETCI_REL, PANEL_KIMLIK_BEKCI_DOSYALARI, PANEL_KIMLIK_COZUCU_REL, PANEL_KURULU_GUID, PANEL_KURULUM_NSH_REL,
+  PANEL_MAIN_REL, PANEL_PAKET_REL, nsisGuid, ortakKimlik, panelDinlenmeFarki, panelKimlikTetigi, panelKurulumYoluFarki, panelOrtakArtefaktFarki,
 } from './lib/panel-kimlik.mjs';
 
 let kotu = 0;
@@ -73,6 +74,47 @@ for (const [ad, mut, desen] of negatifler) {
   mut(d);
   const r = ozel(() => panelDinlenmeFarki(d));
   ol(`${ad} → KIRMIZI`, Boolean(r.f?.length) && r.f.some((s) => desen.test(s)), r.hata?.message ?? JSON.stringify(r.f));
+}
+
+// ---- KY: kurulum yolu (panelDinlenmeFarki'nin parçası — paketleme kapısı da ölçer) ----
+{
+  const r = ozel(() => panelKurulumYoluFarki(taban));
+  ol('KY0 kurulum yolu düzeni: fark yok', r.f?.length === 0, r.hata?.message ?? r.f?.join(' | '));
+  // Bağımsız vektör: builder-util-runtime UUID.v5(appId, UUID.parse(ELECTRON_BUILDER_NS_UUID)) ile hesaplandı.
+  ol('KY-G nsisGuid electron-builder hesabıyla aynı (bağımsız vektör)', nsisGuid('com.etkiliyazilim.adnan-sahin-erp') === 'a20b667e-ad97-51dd-832d-a27c83b9dbd2' && nsisGuid(k.appId) === PANEL_KURULU_GUID);
+}
+const nshDegistir = (d, eski, yeni) => {
+  if (!d[PANEL_KURULUM_NSH_REL].includes(eski)) throw new Error(`sonda kurulamadı: ${eski}`);
+  d[PANEL_KURULUM_NSH_REL] = d[PANEL_KURULUM_NSH_REL].replace(eski, yeni);
+};
+const VARSAYILAN = 'StrCpy $INSTDIR "$R1\\EtkiliYazilim\\${APP_FILENAME}"';
+const kurulumNegatifler = [
+  ['KY1 nsis.include söküldü', (d) => paketDegistir(d, (p) => { delete p.build.nsis.include; }), /build\.nsis\.include/],
+  ['KY2 kurulum betiği yok', (d) => { d[PANEL_KURULUM_NSH_REL] = undefined; }, /installer\.nsh YOK/],
+  ['KY3 varsayılan yol boşluklu', (d) => nshDegistir(d, VARSAYILAN, VARSAYILAN.replace('EtkiliYazilim', 'Etkili Yazilim')), /ASCII ve boşluksuz değil/],
+  ['KY4 varsayılan yolda Türkçe harf', (d) => nshDegistir(d, VARSAYILAN, VARSAYILAN.replace('EtkiliYazilim', 'EtkiliYazılım')), /ASCII ve boşluksuz değil/],
+  ['KY5 varsayılan yol Program Files\\<menü kategorisi>ne döndü', (d) => nshDegistir(d, VARSAYILAN, 'StrCpy $INSTDIR "$PROGRAMFILES64\\${MENU_FILENAME}\\${APP_FILENAME}"'), /Program Files\/menü/],
+  ['KY6 ilk kurulum koşulu (InstallLocation) söküldü', (d) => nshDegistir(d, 'ReadRegStr $R1 HKLM "${INSTALL_REGISTRY_KEY}" InstallLocation', 'StrCpy $R1 ""'), /InstallLocation/],
+  ['KY7 /D bakısı söküldü', (d) => nshDegistir(d, '!insertmacro GetDParameter $R1', 'StrCpy $R1 ""'), /\/D parametresine/],
+  ['KY8 klasör kilidi (miras kesme) söküldü', (d) => nshDegistir(d, '/inheritance:r ', ''), /miras kesme/],
+  ['KY9 Program Files kapsam koşulu söküldü', (d) => { d[PANEL_KURULUM_NSH_REL] = d[PANEL_KURULUM_NSH_REL].replaceAll('$PROGRAMFILES64', '$WINDIR'); }, /kapsam koşulu/],
+  ['KY10 customInit makrosu yok', (d) => nshDegistir(d, '!macro customInit', '!macro baskaInit'), /customInit makrosu yok/],
+  ['KY11 elle nsis.guid', (d) => paketDegistir(d, (p) => { p.build.nsis.guid = 'aaaaaaaa-aaaa-5aaa-8aaa-aaaaaaaaaaaa'; }), /guid VAR/],
+  ['KY12 appId kayıtta ve tabanda birlikte değişti (kayıt anahtarı)', (d) => {
+    const kayit = JSON.parse(d[KAYIT_REL]);
+    kayit.urun.panel.appId = 'com.etkiliyazilim.tekserp2';
+    d[KAYIT_REL] = JSON.stringify(kayit);
+    paketDegistir(d, (p) => { p.build.appId = 'com.etkiliyazilim.tekserp2'; });
+  }, /sahadaki kurulumlarınki/],
+  ['KY13 perMachine kapandı', (d) => paketDegistir(d, (p) => { p.build.nsis.perMachine = false; }), /nsis\.perMachine/],
+  ['KY14 klasör seçimi kapandı', (d) => paketDegistir(d, (p) => { p.build.nsis.allowToChangeInstallationDirectory = false; }), /allowToChangeInstallationDirectory/],
+  ['KY15 ürün adı (klasör adı) boşluklu', (d) => paketDegistir(d, (p) => { p.build.productName = 'Teks ERP'; }), /kurulum klasörü adı/],
+];
+for (const [ad, mut, desen] of kurulumNegatifler) {
+  const d = kopya();
+  const s = ozel(() => mut(d));
+  const r = s.hata ? s : ozel(() => panelDinlenmeFarki(d));
+  ol(`${ad} → KIRMIZI`, Boolean(r.f?.length) && r.f.some((x) => desen.test(x)), r.hata?.message ?? JSON.stringify(r.f));
 }
 
 // ---- O: ölçülemedi ----

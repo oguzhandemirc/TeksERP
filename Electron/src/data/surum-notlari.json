@@ -73,6 +73,11 @@
           "kapsam": "panel",
           "tip": "iyilestirme",
           "metin": "Güncellemeden sonra ağdaki sunucuya bağlı paneller bir kez kod karşılaştırması ister. Giriş ekranında “Sunucu bulundu — eşleştirme gerekiyor” görürseniz “Adresi Elle Gir” ile adresi yazıp kodu karşılaştırın."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "iyilestirme",
+          "metin": "Yeni kurulumlarda program boşluksuz klasöre kurulur: C:\\EtkiliYazilim\\TeksERP; mevcut kurulumlar yerinde kalır."
         }
       ]
     },

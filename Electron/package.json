@@ -191,7 +191,8 @@
       "uninstallerIcon": "resources/TeksERP-LOGO.ico",
       "installerHeaderIcon": "resources/TeksERP-LOGO.ico",
       "uninstallDisplayName": "TeksERP",
-      "menuCategory": "Etkili Yazılım"
+      "menuCategory": "Etkili Yazılım",
+      "include": "resources/installer.nsh"
     },
     "linux": {
       "icon": "resources/TeksERP-LOGO.png",
