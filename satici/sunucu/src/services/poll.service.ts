@@ -14,6 +14,7 @@ import { pollV2Report } from "./local-intervention";
 import { renewLease } from "./renewal.service";
 import { supportUpdatesFor } from "./support.service";
 import { recordUpdateReport } from "./update-policy.service";
+import { evaluateWaveAlert } from "./update-wave-view.service";
 
 export async function processPoll(
   ctx: VendorContext,
@@ -41,7 +42,10 @@ export async function processPoll(
     console.error(`[yoklama] kurulum kaydı yazılamadı: ${err instanceof Error ? err.message : String(err)}`);
   }
   try {
-    await recordUpdateReport(prisma, { installationDbId: auth.installation.id, kid: auth.kid, report: body.guncelleme, nowMs });
+    // Yeni sorunlu sonuç → grubun dalga eşiği hemen değerlendirilir (uyarı; tavan değişmez). Kaçarsa tarama yakalar.
+    if (await recordUpdateReport(prisma, { installationDbId: auth.installation.id, kid: auth.kid, report: body.guncelleme, nowMs })) {
+      await evaluateWaveAlert(auth.installation.kanalKodu);
+    }
   } catch (err) {
     console.error(`[yoklama] güncelleme raporu yazılamadı: ${err instanceof Error ? err.message : String(err)}`);
   }

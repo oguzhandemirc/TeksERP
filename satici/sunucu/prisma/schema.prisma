@@ -209,8 +209,57 @@ model Kanal {
   updatedAt      DateTime  @updatedAt @db.Timestamptz
 
   kurulumlar Kurulum[]
+  dalgalar   GuncellemeDalgasi[]
 
   @@map("kanal")
+}
+
+// -----------------------------------------------------------------------------
+// GÜNCELLEME DALGASI (F1a — docs/design/GUNCELLEYICI-SAGLAMLIK.md §6.2): grup İÇİNDE kademeli backend yayılımı.
+// Kira basılırken `guncelleme.hedefSurum` = min(insanın sabitlemesi, dalga tavanı); dalgaya girmemiş kurulumun
+// tavanı `oncekiSurum`, girmişin `surum`. Aşamayı yalnız İNSAN değiştirir (AK-2); otomatik ilerletme/durdurma YOK.
+// -----------------------------------------------------------------------------
+
+/// Sürüm × grup başına bir satır. `asama` DURUMDUR (0 durdu · 1 %10 · 2 %50 · 3 hepsi; CHECK); her değişimi
+/// `guncelleme_dalgasi_kaydi` DEFTERİNE yazılır. Grubun yürürlükteki dalgası en yüksek `surum`lu satırdır.
+/// Satır silinmez (FK Restrict, defter-öncelikli); durdurmak = aşama 0.
+model GuncellemeDalgasi {
+  id          String   @id @default(uuid()) @db.Uuid
+  kanalKodu   String   @db.VarChar(40)
+  /// Dalganın yaydığı backend sürümü.
+  surum       String   @db.VarChar(40)
+  /// Dalgaya girmemiş kurulumun tavanı — grubun yerleşik sürümü (doğuşta materyalize edilir, değişmez).
+  oncekiSurum String   @db.VarChar(40)
+  asama       Int      @default(0)
+  createdAt   DateTime @default(now()) @db.Timestamptz
+  updatedAt   DateTime @updatedAt @db.Timestamptz
+
+  kanal    Kanal                    @relation(fields: [kanalKodu], references: [kod], onDelete: Restrict, onUpdate: Restrict)
+  kayitlar GuncellemeDalgasiKaydi[]
+
+  @@unique([kanalKodu, surum])
+  @@map("guncelleme_dalgasi")
+}
+
+/// Dalga KARAR DEFTERİ (tetikleyiciyle değişmez): DALGA_ACILDI · ASAMA_ILERLETILDI ↔ ASAMA_GERI_CEKILDI (net karşı
+/// olay). Her satır gerekçelidir; ek onayla (uyarı açık / sonuç < %80) verilen ilerletme `ekOnay` taşır.
+model GuncellemeDalgasiKaydi {
+  id          String   @id @default(uuid()) @db.Uuid
+  dalgaId     String   @db.Uuid
+  olay        String   @db.VarChar(30)
+  oncekiAsama Int?
+  yeniAsama   Int
+  sebep       String   @db.VarChar(500)
+  ekOnay      Boolean  @default(false)
+  /// Kararın anındaki ölçü (sonuç sayaçları özeti) — yalnız gösterim; karar bundan türetilmez.
+  ayrinti     Json?
+  yapan       String   @db.VarChar(120)
+  createdAt   DateTime @default(now()) @db.Timestamptz
+
+  dalga GuncellemeDalgasi @relation(fields: [dalgaId], references: [id], onDelete: Restrict)
+
+  @@index([dalgaId, createdAt])
+  @@map("guncelleme_dalgasi_kaydi")
 }
 
 // -----------------------------------------------------------------------------
@@ -1373,6 +1422,9 @@ enum BildirimOlayi {
   DONANIM_ONAYI_BEKLIYOR
   /// K9: HAK bakım bitişine ≤ 30 gün (yenileme satışı); bitiş değişirse yeni dönem.
   BAKIM_BITISI_YAKLASIYOR
+  /// F1a: bir backend sürümünün dalgasında GERI_DONDU + BASARISIZ eşiği aştı (≥ 2 kurulum ya da ≥ %10) — UYARI,
+  /// yayılımı DURDURMAZ (AK-2); dalga × aşama başına bir kez.
+  GUNCELLEME_DALGA_UYARI
 }
 
 enum BildirimKanali {

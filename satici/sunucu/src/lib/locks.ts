@@ -1,7 +1,7 @@
 // Advisory kilit ENVANTERİ — satıcı DB'sinin kendi uzayı (backend'in 80xx uzayından bağımsız).
 // Kural: kilit tx'in İLK ifadesidir; birden çok kilit deterministik sırada alınır:
 //   PORTAL_TOKEN → DEALER (kimlik sırasıyla) → CUSTOMER → TRANSFER_KEY → INSTALLATION (kimlik sırasıyla) → LICENSE_NUMBER
-//   → UPLOAD_REQUEST → UPLOAD_SESSION → SHARED_FILE → DOWNLOAD_LINK → KEY_SET.
+//   → UPLOAD_REQUEST → UPLOAD_SESSION → SHARED_FILE → DOWNLOAD_LINK → KEY_SET → UPDATE_WAVE.
 // Envanter CLAUDE.md tablosuyla birebir; bekçi: scripts/test_satici_kapilari.ts.
 import type { Tx } from "./prisma";
 
@@ -28,6 +28,8 @@ export const LOCK_NAMESPACES = {
   DOWNLOAD_LINK: 9110,
   /** Satıcının imza anahtarı kümesi (tek anahtar): iptal belgesi içe aktarma (`sira` tekdüze) ↔ anahtar süresi bildirimi. */
   KEY_SET: 9111,
+  /** Güncelleme grubu başına (kanal kodu): dalga açma ↔ aşama ilerletme/geri çekme ↔ eşik uyarısı değerlendirmesi. */
+  UPDATE_WAVE: 9112,
 } as const;
 
 export async function lockInstallation(tx: Tx, installationDbId: string): Promise<void> {
@@ -93,4 +95,9 @@ export async function lockKeySet(tx: Tx): Promise<void> {
 export async function lockUploadScope(tx: Tx, requestId: string | null, sessionIds: readonly string[]): Promise<void> {
   if (requestId) await lockUploadRequest(tx, requestId);
   for (const id of [...new Set(sessionIds)].sort()) await lockUploadSession(tx, id);
+}
+
+/** Güncelleme grubunun dalgaları (kanal kodu başına): açılış · aşama değişimi · uyarı değerlendirmesi sıraya girer. */
+export async function lockUpdateWave(tx: Tx, channelCode: string): Promise<void> {
+  await tx.$executeRaw`SELECT pg_advisory_xact_lock(${LOCK_NAMESPACES.UPDATE_WAVE}::int4, hashtext(${channelCode}))`;
 }
