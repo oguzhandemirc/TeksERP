@@ -6,7 +6,8 @@
 // (`tekserp-guncelleyici`, sahte dünya: dosya sistemi gerçek, hizmet/ağ/saat sahte) provanın ürettiği dosyalara karşı koşar:
 //   test kökü (`anahtar.ts kok-uret`, TEKSERP_TEST_KOK_CAPASI) → iki PAKET sertifikası (pkt-2099-1 · pkt-2099-2) →
 //   zincir-yalnız paket + PG künyesi + sürüm bildirimi (kid'siz zincirli ad) → yeniden imza (yanına
-//   `surum-zincir-<kid>.json` · `pg-zincir-<kid>.json`) → birincinin dağıtım iptali → tören girdisinde iptalli elenir →
+//   `surum-zincir-<kid>.json` · `pg-zincir-<kid>.json`) → birincinin dağıtım iptali → tören girdisinde iptalli elenir ·
+//   tek imzası iptalli sürüm yeniden imzalanamaz (iptalden ÖNCE yeniden imzala, yoksa yeniden derle) →
 //   motor: kid'siz ad okunur · çift kid'de en geç bitiş · iptalde seçim ikinciye geçer (sürüm + PG) · `son-zincir.json`
 //   yeniden imzalıyla DEĞİŞMEZSE kanal TAKILIR (runbook URETIM-SATICI-TOREN.md §10.4 adım 2'nin gerekçesi).
 // Gerçek köke, satıcıya, VDS'e, Cloudflare'e, ~/.tekserp'e DOKUNMAZ: HOME geçici dizin, parolalar bellekte rastgele
@@ -202,6 +203,19 @@ function prova() {
   const ti = tsx(TEKS, ['scripts/backend-bildirim.ts', 'yeniden-imzala', `--surum-dizini=${SURUM_D}`, `--anahtar=${anahtar[PKT2].dosya}`, `--kanal=${GRUP}`, `--paket-iptal=${iptalDosya}`, `--cikti=${yol('r3')}`], `${P[PKT2]}\n`);
   adim(`tören girdisi iptalle: surum-zincir.json (${PKT1}) ELENİR, seçilen ${PKT2}'nin bildirimi ("zaten ${PKT2} ile imzalı" → yazma yok)`,
     ti.kod !== 0 && /elendi surum-zincir\.json: PAKET_SERTIFIKA_IPTAL/.test(ti.hata) && new RegExp(`zaten ${PKT2} ile imzalı`).test(ti.hata) && !fs.existsSync(yol('r3', 'sonuc.json')), kuyruk(ti));
+
+  // ── 9b. Tek imzası iptalli anahtardan gelen sürüm YENİDEN İMZALANAMAZ (yeniden derlenir) — dizin ve dosya kipi ──
+  const tekD = yol('tek-imza', 'surum');
+  kopyala(path.join(SURUM_D, 'surum-zincir.json'), path.join(tekD, 'surum-zincir.json'));
+  kopyala(zip1, path.join(tekD, path.basename(zip1)));
+  const ortakArg = [`--anahtar=${anahtar[PKT2].dosya}`, `--kanal=${GRUP}`, `--paket-iptal=${iptalDosya}`];
+  const td = tsx(TEKS, ['scripts/backend-bildirim.ts', 'yeniden-imzala', `--surum-dizini=${tekD}`, ...ortakArg, `--cikti=${yol('r4')}`], `${P[PKT2]}\n`);
+  const tf = tsx(TEKS, ['scripts/backend-bildirim.ts', 'yeniden-imzala', `--surum-kunye=${path.join(tekD, 'surum-zincir.json')}`, `--zip=${path.join(tekD, path.basename(zip1))}`, ...ortakArg, `--cikti=${yol('r5')}`], `${P[PKT2]}\n`);
+  const yazilmadi = (d) => !fs.existsSync(d) || fs.readdirSync(d).length === 0;
+  adim(`tek imzası iptalli (${PKT1}) sürüm yeniden imzalanamaz: dizin kipi PAKET_SERTIFIKA_IPTAL ile RED, dosya kipi "İPTALLİ — yeniden derle" RED, çıktı yok`,
+    td.kod !== 0 && /PAKET_SERTIFIKA_IPTAL/.test(td.hata) && /eski surum\.json de yok/.test(td.hata)
+      && tf.kod !== 0 && new RegExp(`${PKT1} sertifikası İPTALLİ`).test(tf.hata) && /yeniden derle/.test(tf.hata)
+      && yazilmadi(yol('r4')) && yazilmadi(yol('r5')), `dizin ${kuyruk(td)} · dosya ${kuyruk(tf)}`);
 
   // ── 10. Güncelleyici motoru (Rust) — provanın dosyalarıyla ──
   const ilkYayin = {
