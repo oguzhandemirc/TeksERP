@@ -6,6 +6,8 @@
 //   · play-yukleme — Google Play yükleme anahtarı (`npm run build:aab`); uygulama mührünü Google tutar.
 // Görev → anahtar eşlemesi gradle'da da buradan türer (plugins/withReleaseKeystore.js); AAB hiçbir koşulda
 // deneme anahtarına ya da `keystore/` kökündeki eski mühre düşmez. Anahtarlar git DIŞI, burada ÜRETİLMEZ.
+// Play yükleme parolası `keystore.properties`te DURMAZ: macOS Anahtar Zinciri `tekserp/play-yukleme`den okunur
+// (scripts/lib/parola-kasasi.mjs) ve yalnız Gradle/keytool alt sürecine ortamla verilir (`IMZA_PAROLA_ORTAMI`).
 // =============================================================================
 
 const fs = require('node:fs');
@@ -19,6 +21,7 @@ const IMZA_ANAHTARLARI = Object.freeze({
     storeFile: 'tekserp-deneme.keystore',
     alias: 'tekserp-deneme',
     cn: 'TeksERP Deneme',
+    kasa: null,
   }),
   'play-yukleme': Object.freeze({
     dizin: 'keystore/play-yukleme',
@@ -26,8 +29,13 @@ const IMZA_ANAHTARLARI = Object.freeze({
     storeFile: 'tekserp-play-yukleme.keystore',
     alias: 'tekserp-yukleme',
     cn: 'TeksERP Play Yukleme',
+    kasa: 'play-yukleme',
   }),
 });
+
+/** Kasadan okunan parolanın YALNIZ Gradle/keytool alt sürecine verildiği ortam anahtarı (diske ve argv'ye yazılmaz). */
+const IMZA_PAROLA_ORTAMI = 'TEKSERP_IMZA_PAROLASI';
+const PAROLA_ALANLARI = ['storePassword', 'keyPassword'];
 
 /** Gradle görevinden anahtar türü: bundle*Release → play-yukleme, diğer release görevleri → deneme. */
 function gorevAnahtarTuru(gorevAdi) {
@@ -43,10 +51,22 @@ function tanim(tur) {
 /** Anahtarı üreten komut — yalnız METİN; kullanıcı anahtar töreninde Mac'te koşar (burada koşulmaz). */
 function anahtarUretimKomutu(tur) {
   const t = tanim(tur);
-  return [
+  const uret = [
     `cd mobil && mkdir -p ${t.dizin} && chmod 700 ${t.dizin}`,
     `keytool -genkeypair -v -storetype PKCS12 -keystore ${t.dizin}/${t.storeFile} -alias ${t.alias} ` +
       `-keyalg RSA -keysize 4096 -validity 10000 -dname "CN=${t.cn}, O=Etkili Yazilim, C=TR"`,
+  ];
+  if (t.kasa) {
+    return [
+      ...uret,
+      `Parolayı Anahtar Zinciri'ne kaydet (repo kökünde, kendi Terminal'inde): node scripts/parola-kaydet.mjs ${t.kasa}`,
+      `${t.dizin}/keystore.properties dosyasını yaz (chmod 600; PAROLA YAZILMAZ):`,
+      `  storeFile=${t.storeFile}`,
+      `  keyAlias=${t.alias}`,
+    ];
+  }
+  return [
+    ...uret,
     `${t.dizin}/keystore.properties dosyasını yaz (chmod 600; PKCS12'de iki parola aynıdır):`,
     `  storeFile=${t.storeFile}`,
     '  storePassword=<parola>',
@@ -87,7 +107,18 @@ function imzaAnahtariDenetimi(mobilKok, tur) {
     return { sonuc: 'ihlal', propsYolu, satirlar: [`${propsYolu} okunamadı: ${e.message}`] };
   }
   const sf = String(props.storeFile ?? '');
-  const eksik = ['storeFile', 'storePassword', 'keyAlias', 'keyPassword'].filter((a) => !props[a]);
+  const duzParola = t.kasa ? PAROLA_ALANLARI.filter((a) => a in props) : [];
+  if (duzParola.length) {
+    return {
+      sonuc: 'ihlal',
+      propsYolu,
+      satirlar: [
+        `${propsYolu} DÜZ PAROLA taşıyor (${duzParola.join(', ')}) — parola dosyada durmaz, Anahtar Zinciri'nden okunur`,
+        `Önce kaydet: node scripts/parola-kaydet.mjs ${t.kasa}  ·  sonra bu satırları dosyadan sil (değer basılmadı)`,
+      ],
+    };
+  }
+  const eksik = ['storeFile', ...(t.kasa ? [] : ['storePassword']), 'keyAlias', ...(t.kasa ? [] : ['keyPassword'])].filter((a) => !props[a]);
   if (eksik.length) return { sonuc: 'ihlal', propsYolu, satirlar: [`${propsYolu} eksik alan: ${eksik.join(', ')}`] };
   if (/[\\/]/.test(sf) || sf.includes('..')) {
     return { sonuc: 'ihlal', propsYolu, satirlar: [`storeFile "${sf}" kendi dizininde değil — anahtar ${t.dizin}/ içinde durur, başka yere işaret edemez`] };
@@ -121,4 +152,4 @@ function imzaAnahtariDenetimi(mobilKok, tur) {
   return { sonuc: 'hazir', propsYolu, props, storeYolu, satirlar: [`${t.ad}: ${storeYolu}`] };
 }
 
-module.exports = { IMZA_ANAHTARLARI, gorevAnahtarTuru, anahtarUretimKomutu, imzaAnahtariDenetimi };
+module.exports = { IMZA_ANAHTARLARI, IMZA_PAROLA_ORTAMI, gorevAnahtarTuru, anahtarUretimKomutu, imzaAnahtariDenetimi };

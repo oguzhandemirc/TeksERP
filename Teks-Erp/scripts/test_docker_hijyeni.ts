@@ -35,6 +35,8 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { spawnSync } from "node:child_process";
 import { git } from "./lib/git";
+// Bekçi/koşucu gerçek Anahtar Zinciri'ne GİTMEZ: parola okuyan araçlar kasa yerine stdin/dosya kullanır (scripts/lib/parola-kasasi.mjs).
+process.env.TEKSERP_PAROLA_KASASI = "kapali";
 
 const KOK = join(__dirname, "..", "..");
 let pass = 0;

@@ -12,6 +12,8 @@ import os from "node:os";
 import path from "node:path";
 import { generateKeyPairSync } from "node:crypto";
 import { publicKeyX, verifyCertificate, verifyPackageRevocation, type RootKey } from "../src/lisans-protokol";
+// Bekçi/koşucu gerçek Anahtar Zinciri'ne GİTMEZ: parola okuyan araçlar kasa yerine stdin/dosya kullanır (scripts/lib/parola-kasasi.mjs).
+process.env.TEKSERP_PAROLA_KASASI = "kapali";
 
 let pass = 0;
 let fail = 0;

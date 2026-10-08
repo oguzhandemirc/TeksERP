@@ -92,7 +92,7 @@ import { INTEGRITY_FILE, isProductionChainPackageKid, isProductionPackageKid } f
 import { openPackageKey, packageKeyInfo, resignChainedIntegrity, type OpenedPackageKey } from "./lib/butunluk-imza";
 import { assertPackageCertificateFresh, packageRoots, readPackageCertificate, readPackageRevocationFile } from "./lib/paket-sertifika";
 import { PACKAGE_CERT_FIELD, PACKAGE_REVOCATION_FILE, type VerifiedPackageRevocation } from "../src/lib/license/protocol/paket-zinciri";
-import { CliError, args, askPassword } from "./lib/cli-girdi";
+import { CliError, args, askPassword, kasaAdiKid } from "./lib/cli-girdi";
 
 type Bayraklar = ReadonlyMap<string, string>;
 
@@ -165,7 +165,7 @@ function takimOf(eski: boolean, zincir: boolean): "eski" | "zincir" | "cift" {
 }
 
 function paketAnahtari(dosya: string) {
-  return openPackageKey(dosya, (kid) => askPassword(`PAKET anahtarı (${kid}) parolası: `));
+  return openPackageKey(dosya, (kid) => askPassword(`PAKET anahtarı (${kid}) parolası: `, kasaAdiKid(kid)));
 }
 
 // ── PG gereksinimi (backend bildiriminin `pg` bloğu) ─────────────────────────

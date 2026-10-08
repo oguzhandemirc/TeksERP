@@ -75,7 +75,8 @@ import { zipGirdisiOku } from './lib/zip.mjs';
 import { ApkOlculemedi, apkKimligi, metaHaritasi, protoManifestOgeleri, sertifikaParmakIzi } from './lib/apk-kimlik.mjs';
 import { ZINCIR_META, kokHatalari } from './lib/ota-zinciri.cjs';
 import { otaTorenYonergesi, ortakKaydiOku, ortakKimlik, ortakYapilandirmaFarki } from './lib/ortak-kimlik.cjs';
-import { IMZA_ANAHTARLARI, anahtarUretimKomutu, imzaAnahtariDenetimi } from './lib/imza-anahtari.cjs';
+import { IMZA_ANAHTARLARI, IMZA_PAROLA_ORTAMI, anahtarUretimKomutu, imzaAnahtariDenetimi } from './lib/imza-anahtari.cjs';
+import { KasaHatasi, kasaIpucu, kasadanAl } from '../../scripts/lib/parola-kasasi.mjs';
 import { PLAY_EN_DUSUK_HEDEF_SDK, YON_OZELLIGI } from './lib/buyuk-ekran.cjs';
 import { NSC_ADI, agGuvenligiSorunlari, playManifestSorunlari } from './lib/play-manifest.cjs';
 import { kayitHatalari, KAYIT_REL as DAGITIM_REL, turet } from '../../scripts/lib/dagitim.mjs';
@@ -319,7 +320,12 @@ function gradleKos(adres, gorev = 'assembleRelease') {
   // ⚠️ shell:true komutu cmd'ye METİN olarak geçirir: yol TIRNAKLANMAK ZORUNDA, yoksa
   // boşluk içeren bir kurulum dizini ("C:\Program Files\...") sessizce bölünür.
   const komut = win ? `"${gradlew}"` : gradlew;
-  const sonuc = spawnSync(komut, [gorev], {
+  // Play yükleme parolası yalnız BU alt sürecin ortamına gider (Anahtar Zinciri'nden); daemon'da kalmasın diye --no-daemon.
+  const parola = imzaParolasi(IMZA_TURU);
+  const env = derlemeEnv(adres, ortam);
+  if (parola) env[IMZA_PAROLA_ORTAMI] = parola.toString('utf8');
+  parola?.fill(0);
+  const sonuc = spawnSync(komut, parola ? ['--no-daemon', gorev] : [gorev], {
     cwd: ANDROID_DIR,
     stdio: 'inherit',
     shell: win,
@@ -328,8 +334,9 @@ function gradleKos(adres, gorev = 'assembleRelease') {
     // ⚠️ SDK ve JDK AÇIKÇA geçiyor: kabuk profilinde `export` olmasa da derleme
     // koşar. Kullanıcının `.zshrc`ine bağımlı bir derleme, yeni makinede ve
     // otomasyonda sessizce düşer.
-    env: derlemeEnv(adres, ortam),
+    env,
   });
+  delete env[IMZA_PAROLA_ORTAMI];
 
   if (sonuc.error) {
     dur('Gradle çalıştırılamadı', String(sonuc.error.message), `Denenen komut: ${gradlew} ${gorev}`);
@@ -582,11 +589,16 @@ function imzaKapisi(paketYolu, tur = IMZA_TURU) {
     ? { ...process.env, JAVA_HOME: jdkKok, PATH: `${path.join(jdkKok, 'bin')}${path.delimiter}${process.env.PATH ?? ''}` }
     : process.env;
 
+  // Parola argv'ye GİRMEZ (süreç listesi): keytool `-storepass:env` ile yalnız bu alt sürecin ortamından okur.
+  const parola = imzaParolasi(tur);
+  const keytoolOrtami = { ...javaOrtam, [IMZA_PAROLA_ORTAMI]: parola ? parola.toString('utf8') : String(props.storePassword ?? '') };
+  parola?.fill(0);
   const magaza = spawnSync(
     'keytool',
-    ['-list', '-v', '-keystore', d.storeYolu, '-alias', props.keyAlias, '-storepass', props.storePassword],
-    { encoding: 'utf8', env: javaOrtam },
+    ['-list', '-v', '-keystore', d.storeYolu, '-alias', props.keyAlias, '-storepass:env', IMZA_PAROLA_ORTAMI],
+    { encoding: 'utf8', env: keytoolOrtami },
   );
+  delete keytoolOrtami[IMZA_PAROLA_ORTAMI];
   const beklenen = duzHex(/SHA256:\s*([0-9A-F:]+)/i.exec(magaza.stdout ?? '')?.[1] ?? '');
 
   let bulunan = '';
@@ -634,6 +646,24 @@ function imzaKapisi(paketYolu, tur = IMZA_TURU) {
     );
   }
   bilgi(`✔ Paket ${IMZA_ANAHTARLARI[tur].dizin}/ anahtarıyla imzalanmış.`);
+}
+
+/**
+ * Kasalı anahtar türünün (Play yükleme) parolası: Anahtar Zinciri'nden, sorusuz. Kayıt yoksa GÜRÜLTÜLÜ DUR (deneme
+ * mührüne ya da dosyadaki parolaya düşülmez). Kasasız tür (deneme) → null: parola keystore.properties'ten.
+ */
+function imzaParolasi(tur) {
+  const ad = IMZA_ANAHTARLARI[tur].kasa;
+  if (!ad) return null;
+  let p;
+  try {
+    p = kasadanAl(ad);
+  } catch (e) {
+    if (e instanceof KasaHatasi) dur(`${IMZA_ANAHTARLARI[tur].ad}: parola okunamadı`, e.message);
+    throw e;
+  }
+  if (!p) dur(`${IMZA_ANAHTARLARI[tur].ad}: parola Anahtar Zinciri'nde YOK`, kasaIpucu(ad), 'Paket üretilmedi.');
+  return p;
 }
 
 /**

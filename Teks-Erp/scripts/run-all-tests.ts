@@ -30,6 +30,8 @@ import {
 // STRICT anahtarı TEK KAYNAKTIR ([TD-10c]): ikinci bir bayrak ya da ikinci bir
 // `process.env` okuması açılmaz — iki koşum iki farklı şey iddia ederdi.
 import { BILINMEYEN_BEYAN, strictMi } from "./lib/atlama";
+// Bekçi/koşucu gerçek Anahtar Zinciri'ne GİTMEZ: parola okuyan araçlar kasa yerine stdin/dosya kullanır (scripts/lib/parola-kasasi.mjs).
+process.env.TEKSERP_PAROLA_KASASI = "kapali";
 
 const SCRIPTS_DIR = join(__dirname);
 const PER_TEST_TIMEOUT_MS = 180_000;

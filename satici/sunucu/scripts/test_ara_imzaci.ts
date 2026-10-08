@@ -72,6 +72,8 @@ import {
   temizlePortal,
   yoklamaGovdesi,
 } from "./lib/test-ortam";
+// Bekçi/koşucu gerçek Anahtar Zinciri'ne GİTMEZ: parola okuyan araçlar kasa yerine stdin/dosya kullanır (scripts/lib/parola-kasasi.mjs).
+process.env.TEKSERP_PAROLA_KASASI = "kapali";
 
 const ARA_PAROLASI = "bekci-ara-parolasi-2026";
 const YANLIS = "yanlis-parola-bekci-2026";

@@ -24,6 +24,8 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+// Bekçi/koşucu gerçek Anahtar Zinciri'ne GİTMEZ: parola okuyan araçlar kasa yerine stdin/dosya kullanır (scripts/lib/parola-kasasi.mjs).
+process.env.TEKSERP_PAROLA_KASASI = 'kapali';
 
 const KOK = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 const TEKS = path.join(KOK, 'Teks-Erp');

@@ -9,6 +9,8 @@ import { spawnSync } from "node:child_process";
 import { readdirSync } from "node:fs";
 import path from "node:path";
 import { hedefDbKapisi } from "./lib/test-ortam";
+// Bekçi/koşucu gerçek Anahtar Zinciri'ne GİTMEZ: parola okuyan araçlar kasa yerine stdin/dosya kullanır (scripts/lib/parola-kasasi.mjs).
+process.env.TEKSERP_PAROLA_KASASI = "kapali";
 
 const DIZIN = __dirname;
 const SURE_SINIRI_MS = 180_000;

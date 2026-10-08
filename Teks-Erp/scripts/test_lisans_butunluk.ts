@@ -58,6 +58,8 @@ import {
 } from "../src/lib/license/integrity-state";
 import type { IntegrityOutcome } from "../src/lib/license/integrity-check";
 import { bolum8 } from "./lib/butunluk-zincir-bolum";
+// Bekçi/koşucu gerçek Anahtar Zinciri'ne GİTMEZ: parola okuyan araçlar kasa yerine stdin/dosya kullanır (scripts/lib/parola-kasasi.mjs).
+process.env.TEKSERP_PAROLA_KASASI = "kapali";
 
 let pass = 0;
 let fail = 0;

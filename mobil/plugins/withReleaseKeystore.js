@@ -23,11 +23,12 @@
 // mantığı o durumda prebuild'i düşürür. Ayrım nettir: ZATEN UYGULANMIŞ olmak
 // başarıdır, BEKLENMEYEN bir şablon bulmak hatadır.
 //
-// Anahtar dosyaları ve şifreleri repoda DEĞİL (`keystore/` gitignore'da); burada üretilmez.
+// Anahtar dosyaları ve şifreleri repoda DEĞİL (`keystore/` gitignore'da); burada üretilmez. Play yükleme parolası
+// `keystore.properties`te DURMAZ (varsa RED): build-apk onu Anahtar Zinciri'nden okuyup yalnız Gradle sürecine ortamla verir.
 // =============================================================================
 
 const { withAppBuildGradle } = require('@expo/config-plugins');
-const { IMZA_ANAHTARLARI } = require('../scripts/lib/imza-anahtari.cjs');
+const { IMZA_ANAHTARLARI, IMZA_PAROLA_ORTAMI } = require('../scripts/lib/imza-anahtari.cjs');
 
 /** Yapılandırmanın bizim tarafımızdan yazıldığını gösteren imza. */
 const MARKER = 'tekserpProps';
@@ -60,9 +61,21 @@ const IMZA_BLOGU = `    signingConfigs {
                     throw new GradleException("TeksERP: storeFile kendi dizininde olmali (keystore/" + tekserpDizin + "/): " + tekserpStore)
                 }
                 storeFile file('../../keystore/' + tekserpDizin + '/' + tekserpStore)
-                storePassword ${MARKER}['storePassword']
                 keyAlias ${MARKER}['keyAlias']
-                keyPassword ${MARKER}['keyPassword']
+                if (tekserpPlay) {
+                    if (${MARKER}.containsKey('storePassword') || ${MARKER}.containsKey('keyPassword')) {
+                        throw new GradleException("TeksERP: Play yukleme parolasi keystore.properties'te DURMAZ - Anahtar Zinciri'ne kaydet (node scripts/parola-kaydet.mjs play-yukleme) ve satirlari sil")
+                    }
+                    def tekserpParola = System.getenv('${IMZA_PAROLA_ORTAMI}')
+                    if (!tekserpParola && !tekserpRelease.isEmpty()) {
+                        throw new GradleException("TeksERP: Play yukleme parolasi yok - AAB 'npm run build:aab' ile derlenir (parola Anahtar Zinciri'nden okunur)")
+                    }
+                    storePassword tekserpParola
+                    keyPassword tekserpParola
+                } else {
+                    storePassword ${MARKER}['storePassword']
+                    keyPassword ${MARKER}['keyPassword']
+                }
             } else if (!tekserpRelease.isEmpty()) {
                 throw new GradleException(
                     "TeksERP imza anahtari bulunamadi: " + tekserpFile.absolutePath + "\\n" +

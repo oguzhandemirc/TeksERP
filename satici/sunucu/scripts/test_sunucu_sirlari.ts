@@ -19,6 +19,8 @@ import { MODULE_VAULT_KEY_FILE } from "../src/keys/module-vault";
 import { MissingServerSecretsError, SERVER_SECRET_FILES, loadServerSecrets } from "../src/keys/server-secrets";
 import { PORTAL_SECRET_KEY_FILE } from "../src/portal/secret-box";
 import { BEKCI_ORTAMI, SATICI_KOKU, anahtarOrtamiKur, hedefDbKapisi, kapat, kontrol, sonuc, sunucuBaslat, temizleKurulumlar } from "./lib/test-ortam";
+// Bekçi/koşucu gerçek Anahtar Zinciri'ne GİTMEZ: parola okuyan araçlar kasa yerine stdin/dosya kullanır (scripts/lib/parola-kasasi.mjs).
+process.env.TEKSERP_PAROLA_KASASI = "kapali";
 
 const KAYNAKLAR = ["src", "scripts/anahtar.ts", "scripts/portal-kullanici.ts", "scripts/modul-anahtari.ts"];
 const YUKLEYICILER = ["src/server.ts", "scripts/portal-kullanici.ts", "scripts/modul-anahtari.ts"];

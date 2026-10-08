@@ -32,6 +32,8 @@ import { etkilenenProjeler, stagedFiles } from "./lib/staged.mjs";
 import { agirSurecSayisi, slotAl } from "./lib/semafor.mjs";
 import { dagitimBekcisiTetigi } from "../lib/dagitim.mjs";
 import { panelKimlikTetigi } from "../lib/panel-kimlik.mjs";
+// Bekçi/koşucu gerçek Anahtar Zinciri'ne GİTMEZ: parola okuyan araçlar kasa yerine stdin/dosya kullanır (scripts/lib/parola-kasasi.mjs).
+process.env.TEKSERP_PAROLA_KASASI = "kapali";
 
 const REPO = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
 // Kapı defteri: wt BASENAME'i (wt-0c · Teks-Erp), tam yol ve kimlik yok — lib/kapi-defteri.mjs.

@@ -1,10 +1,13 @@
 // Satıcı CLI'larının ve PAKET imza aracının ortak girdisi: argüman ayrıştırma (parola argümandan ASLA) ve parola
-// istemi (TTY'de gizli; değilse stdin'in sıradaki satırı; `--parola-dosyasi=<yol>` verilmişse o dosyanın sıradaki satırı —
-// her istenen parola bir satır, stdin ile aynı sıra). Parola Buffer olarak döner; çağıran sıfırlar.
+// kaynağı, öncelik sırasıyla: `--parola-dosyasi=<yol>` (her istenen parola bir satır) > macOS Anahtar Zinciri
+// (`tekserp/<ad>`, sorusuz) > TTY'de gizli istem > stdin'in sıradaki satırı. Parola Buffer olarak döner; çağıran sıfırlar.
 // Kaynak bu dosya; `Teks-Erp/scripts/lib/cli-girdi.ts` BAYT-EŞİT aynasıdır (test_lisans_paket_anahtari §0).
 // `test_` öneki yok → koşucu bunu bekçi saymaz.
 
-import { lstatSync, readFileSync } from "node:fs";
+import { spawnSync } from "node:child_process";
+import { lstatSync, readFileSync, realpathSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { isAbsolute, sep } from "node:path";
 
 export class CliError extends Error {}
 
@@ -23,6 +26,10 @@ export function args(argv: readonly string[]): { command: string; flags: Map<str
     }
     if (m[1] === "parola-dosyasi") {
       fileLines = readPasswordFile(m[2] ?? "", "--parola-dosyasi");
+      continue;
+    }
+    if (m[1] === "kasa") {
+      kasaOverride = kasaSecimi(m[2] ?? "");
       continue;
     }
     flags.set(m[1]!, m[2] ?? "");
@@ -113,22 +120,124 @@ function readHiddenFromTty(question: string): Promise<Buffer> {
   });
 }
 
-/** Parola: `--parola-dosyasi` verilmişse onun sıradaki satırı; yoksa TTY'de gizli istem, değilse stdin'in sıradaki satırı. NFC Buffer. */
-export async function askPassword(question: string): Promise<Buffer> {
+/**
+ * Parola: `--parola-dosyasi` verilmişse onun sıradaki satırı; yoksa `kasa` adı (ya da `--kasa=<ad>|yok`) Anahtar
+ * Zinciri'nde kayıtlıysa o (istem YOK); yoksa TTY'de gizli istem, değilse stdin'in sıradaki satırı. NFC Buffer.
+ */
+export async function askPassword(question: string, kasa: KasaAdi | null = null): Promise<Buffer> {
   let raw: Buffer;
+  const ad = kasaOverride === undefined ? kasa : kasaOverride;
   if (fileLines) {
     const next = fileLines.shift();
     if (!next) throw new CliError(`Parola dosyasında beklenen satır yok: ${question.trim()}`);
     raw = next;
-  } else if (process.stdin.isTTY) raw = await readHiddenFromTty(question);
-  else {
-    stdinLines ??= await readAllStdin();
-    const next = stdinLines.shift();
-    if (!next) throw new CliError(`Parola bekleniyordu (stdin bitti): ${question.trim()}`);
-    raw = next;
+  } else {
+    const fromKasa = ad === null ? null : kasadanOku(ad);
+    if (fromKasa) return fromKasa;
+    if (ad !== null && kasaKomutu() !== null && !kasaUyarilan.has(ad)) {
+      kasaUyarilan.add(ad);
+      process.stderr.write(`ℹ ${kasaIpucu(ad)}\n`);
+    }
+    if (process.stdin.isTTY) raw = await readHiddenFromTty(question);
+    else {
+      stdinLines ??= await readAllStdin();
+      const next = stdinLines.shift();
+      if (!next) throw new CliError(`Parola bekleniyordu (stdin bitti): ${question.trim()}${ad !== null && kasaKomutu() !== null ? ` — ${kasaIpucu(ad)}` : ""}`);
+      raw = next;
+    }
   }
   const normalized = Buffer.from(raw.toString("utf8").normalize("NFC"), "utf8");
   raw.fill(0);
   return normalized;
 }
 
+
+// ---------------------------------------------------------------- parola kasası (macOS Anahtar Zinciri)
+// Kaynak `scripts/lib/parola-kasasi.mjs` (katalog, biçim, `security` çağrısı); bu blok onun TEK TS kopyasıdır —
+// satıcı imajı repo kökünü görmez. Eşitlik bekçisi `scripts/test_parola_kasasi.mjs`. Değer hiçbir çıktıya basılmaz.
+export const KASA_ADLARI = ["kok", "ara", "paket", "istemci", "yedek", "play-yukleme"] as const;
+export type KasaAdi = (typeof KASA_ADLARI)[number];
+export const KASA_ORTAM = "TEKSERP_PAROLA_KASASI";
+export const KASA_KOMUTU = "/usr/bin/security";
+export const KASA_HESAP = "tekserp";
+export const KASA_ONEK = "tekserp/";
+export const KASA_BICIM = "tkp1:";
+export const KASA_BULUNAMADI = 44;
+export const KAYIT_KOMUTU = "node scripts/parola-kaydet.mjs";
+
+let kasaOverride: KasaAdi | null | undefined;
+const kasaUyarilan = new Set<KasaAdi>();
+
+const isKasaAdi = (ad: string): ad is KasaAdi => (KASA_ADLARI as readonly string[]).includes(ad);
+
+/** `--kasa=<ad>|yok`: yok → kasa sorulmaz; ad → bu süreçteki her parola o addan (ör. yedek anahtarı açarken `yedek`). */
+export function kasaSecimi(bayrak: string): KasaAdi | null {
+  if (bayrak === "yok") return null;
+  if (!isKasaAdi(bayrak)) throw new CliError(`--kasa: tanınmayan ad (bilinen: ${KASA_ADLARI.join(", ")}, yok)`);
+  return bayrak;
+}
+
+/** Üretim kid'inden kasa adı; hazırlık/test kid'i ve tanınmayan aile → null (kasa sorulmaz). */
+export function kasaAdiKid(kid: string): KasaAdi | null {
+  if (/^kok-\d{4}-\d+$/.test(kid)) return "kok";
+  if (/^ara-\d{4}-\d+$/.test(kid)) return "ara";
+  if (/^(?:paket-\d{4}(?:-\d+)?|pkt-\d{4}-\d+)$/.test(kid)) return "paket";
+  if (/^ist-\d{4}-\d+$/.test(kid)) return "istemci";
+  return null;
+}
+
+export const kasaIpucu = (ad: KasaAdi): string =>
+  `Anahtar Zinciri'nde ${KASA_ONEK}${ad} kayıtlı değil — kendi Terminal'inde kaydet: ${KAYIT_KOMUTU} ${ad}`;
+
+/** Kasaya giden komutun yolu; null = kapalı (macOS dışı ya da `kapali`). `sahte:` yalnız geçici dizindeki bekçi betiği. */
+export function kasaKomutu(env: NodeJS.ProcessEnv = process.env, platform: string = process.platform): string | null {
+  const s = env[KASA_ORTAM] ?? "";
+  if (s === "kapali") return null;
+  if (s.startsWith("sahte:")) {
+    const yol = s.slice("sahte:".length);
+    let gercek: string;
+    try {
+      gercek = realpathSync(yol);
+    } catch {
+      throw new CliError(`${KASA_ORTAM}=sahte:… betiği bulunamadı`);
+    }
+    if (!isAbsolute(yol) || !gercek.startsWith(`${realpathSync(tmpdir())}${sep}`)) {
+      throw new CliError(`${KASA_ORTAM}=sahte:… yalnız geçici dizindeki bir betik olabilir (bekçi)`);
+    }
+    return gercek;
+  }
+  if (s !== "") throw new CliError(`${KASA_ORTAM}: yalnız 'kapali' ya da 'sahte:<geçici dizindeki betik>' olabilir`);
+  return platform === "darwin" ? KASA_KOMUTU : null;
+}
+
+/** `tkp1:<hex>` → NFC Buffer; biçim tanınmazsa değer basılmadan RED. */
+export function kasaCoz(out: Buffer, hizmet: string): Buffer {
+  let end = out.length;
+  while (end > 0 && (out[end - 1] === 0x0a || out[end - 1] === 0x0d)) end--;
+  const text = out.subarray(0, end).toString("latin1");
+  const hex = text.startsWith(KASA_BICIM) ? text.slice(KASA_BICIM.length) : "";
+  if (hex.length === 0 || hex.length % 2 !== 0 || !/^[0-9a-f]+$/.test(hex)) {
+    throw new CliError(`${hizmet}: kayıt biçimi tanınmadı (değer basılmadı) — ${KAYIT_KOMUTU} ${hizmet.slice(KASA_ONEK.length)} ile yeniden kaydet`);
+  }
+  const raw = Buffer.from(hex, "hex");
+  const nfc = Buffer.from(raw.toString("utf8").normalize("NFC"), "utf8");
+  raw.fill(0);
+  return nfc;
+}
+
+/** Kasadan oku: Buffer (çağıran sıfırlar) · null (kapalı ya da kayıt yok); komut başarısızsa değer basılmadan RED. */
+export function kasadanOku(ad: KasaAdi, env: NodeJS.ProcessEnv = process.env): Buffer | null {
+  const hizmet = `${KASA_ONEK}${ad}`;
+  const komut = kasaKomutu(env);
+  if (!komut) return null;
+  const r = spawnSync(komut, ["find-generic-password", "-s", hizmet, "-a", KASA_HESAP, "-w"], { stdio: ["ignore", "pipe", "pipe"], env, maxBuffer: 64 * 1024, timeout: 30_000 });
+  try {
+    if (r.error) throw new CliError(`Anahtar Zinciri komutu çalışmadı (${hizmet})`);
+    if (r.status === KASA_BULUNAMADI) return null;
+    if (r.status !== 0) throw new CliError(`Anahtar Zinciri okunamadı (${hizmet}; security çıkış ${r.status ?? r.signal}) — Anahtar Zinciri kilitliyse Mac oturumunu açıp yeniden dene`);
+    return kasaCoz(r.stdout, hizmet);
+  } finally {
+    r.stdout?.fill(0);
+    r.stderr?.fill(0);
+  }
+}

@@ -54,6 +54,8 @@ import { KeyFileError, passwordBuffer, readWrappedKeyFile, unwrapPrivateKey } fr
 import { KeyStore } from "../src/keys/key-store";
 import { loadServerSecrets } from "../src/keys/server-secrets";
 import { SATICI_KOKU, kontrol, sonuc } from "./lib/test-ortam";
+// Bekçi/koşucu gerçek Anahtar Zinciri'ne GİTMEZ: parola okuyan araçlar kasa yerine stdin/dosya kullanır (scripts/lib/parola-kasasi.mjs).
+process.env.TEKSERP_PAROLA_KASASI = "kapali";
 
 const REPO = path.resolve(SATICI_KOKU, "..", "..");
 const TEKS = path.join(REPO, "Teks-Erp");

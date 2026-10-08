@@ -46,6 +46,8 @@ import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { psTara, kapsayanFonksiyon } from "./lib/ps-tarama";
 import { INSTALL_HISTORY_FILE_NAME, INSTALL_RECORD_KINDS, InstallRecordSchema } from "../src/lib/license/protocol";
+// Bekçi/koşucu gerçek Anahtar Zinciri'ne GİTMEZ: parola okuyan araçlar kasa yerine stdin/dosya kullanır (scripts/lib/parola-kasasi.mjs).
+process.env.TEKSERP_PAROLA_KASASI = "kapali";
 
 const KOK = join(__dirname, "..", "..");
 let pass = 0;

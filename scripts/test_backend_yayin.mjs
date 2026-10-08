@@ -66,6 +66,8 @@ import { kaynakSurumleri, terfiHukmu } from './lib/terfi.mjs';
 import { YENI_ADRES_KAPISI, grupTerfiKapisi, grupYayinBlogu, yeniAdresKapisiSatirlari } from './lib/grup-yayin.mjs';
 import { PROFIL_DIZINI_REL, profilOzetleri, raporYolu } from './lib/profil-raporu.mjs';
 import { YAYIN_EZME_ORTAMLARI } from './lib/yayin-hedefi.mjs';
+// Bekçi/koşucu gerçek Anahtar Zinciri'ne GİTMEZ: parola okuyan araçlar kasa yerine stdin/dosya kullanır (scripts/lib/parola-kasasi.mjs).
+process.env.TEKSERP_PAROLA_KASASI = 'kapali';
 
 const KOK = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const TEKS = path.join(KOK, 'Teks-Erp');

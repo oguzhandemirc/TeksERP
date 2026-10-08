@@ -11,7 +11,8 @@
  *        # parolalar: OTA kökününki, sonra YENİ yaprak parolası (yeni + tekrar) → <hedef>/private-key.pem + certificate.pem
  *   node scripts/ota-zinciri.mjs yaprak-ac --anahtar=<private-key.pem> --kok=<pem> [--yaprak=<certificate.pem>] [--json]
  *   node scripts/ota-zinciri.mjs yeniden-imzala --manifest=<yayındaki manifest> --cikti=<yeni> --anahtar=<private-key.pem> --kok=<pem>
- * Parola: TTY'de gizli istem, değilse stdin satırı ya da `--parola-dosyasi=<yol>` (0600; her istenen parola bir satır).
+ * Parola: `--parola-dosyasi=<yol>` (0600; her istenen parola bir satır) > macOS Anahtar Zinciri (OTA kökü `tekserp/kok`,
+ * yaprak `tekserp/istemci`; yedek yaprak için `--kasa=yedek`, kapatmak için `--kasa=yok`) > TTY'de gizli istem > stdin satırı.
  * Hiçbir komut parolayı ya da özel yarıyı basmaz.
  *
  * Kökün varsayılan yolu ortak kimlikten (`deploy/dagitim.json` → `ortak-kimlik.cjs`); yaprağın depoda varsayılanı yok
@@ -25,6 +26,7 @@ import path from 'node:path';
 import process from 'node:process';
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
+import { KasaHatasi, kasaSecimi, kasadanAl } from '../../scripts/lib/parola-kasasi.mjs';
 
 const require = createRequire(import.meta.url);
 const Z = require('./lib/ota-zinciri.cjs');
@@ -100,7 +102,19 @@ function ttyGizli(soru) {
     process.stdin.on('data', veri);
   });
 }
-async function parola(soru) {
+/* Anahtar Zinciri: dosya verilmemişse ve kasa adı (ya da --kasa) belirliyse kayıtlı parola, istem yok. */
+function kasadan(varsayilan) {
+  if (dosyaYolu !== undefined) return null;
+  try {
+    return kasadanAl(kasaSecimi(arg('kasa'), varsayilan));
+  } catch (e) {
+    if (e instanceof KasaHatasi) dur(e.message, 2);
+    throw e;
+  }
+}
+async function parola(soru, kasa = null) {
+  const k = kasadan(kasa);
+  if (k) return k;
   let ham;
   if (satirlar) ham = satirlar.shift();
   else if (process.stdin.isTTY) ham = await ttyGizli(soru);
@@ -115,9 +129,9 @@ async function parola(soru) {
   ham.fill(0);
   return nfc;
 }
-async function yeniParola(ad) {
-  const a = await parola(`${ad} (en az 12 karakter): `);
-  const b = await parola(`${ad} (tekrar): `);
+async function yeniParola(ad, kasa = null) {
+  const a = await parola(`${ad} (en az 12 karakter): `, kasa);
+  const b = await parola(`${ad} (tekrar): `, kasa);
   const ayni = a.length === b.length && crypto.timingSafeEqual(a, b);
   b.fill(0);
   if (!ayni) dur(`${ad}: iki giriş eşleşmedi`, 2);
@@ -130,7 +144,7 @@ if (['kok-uret', 'yaprak-bas', 'yaprak-ac', 'yeniden-imzala'].includes(komut)) {
   try {
     if (komut === 'kok-uret') {
       const dizin = path.resolve(gerek('dizin'));
-      const p = await yeniParola('OTA kökü parolası (satıcı KÖK parolasıyla aynı)');
+      const p = await yeniParola('OTA kökü parolası (satıcı KÖK parolasıyla aynı)', 'kok');
       try {
         const k = await Z.otaKokUret({ dizin, kokParola: p });
         console.log(JSON.stringify({ v: 1, tur: 'ota-kok', sertifika: k.kokSertifika, parmakIzi: k.parmakIzi, bitis: k.bitis }));
@@ -141,8 +155,8 @@ if (['kok-uret', 'yaprak-bas', 'yaprak-ac', 'yeniden-imzala'].includes(komut)) {
       const gun = Number(arg('gun') ?? Z.OTA_YAPRAK_GUN);
       if (!Number.isInteger(gun) || gun < 1 || gun > Z.OTA_YAPRAK_GUN) dur(`--gun 1–${Z.OTA_YAPRAK_GUN} olmalı`, 2);
       const hedef = path.resolve(gerek('hedef'));
-      const kp = await parola('OTA kökü parolası: ');
-      const yp = await yeniParola('OTA yaprak parolası');
+      const kp = await parola('OTA kökü parolası: ', 'kok');
+      const yp = await yeniParola('OTA yaprak parolası', 'istemci');
       try {
         if (kp.length === yp.length && crypto.timingSafeEqual(kp, yp)) dur('OTA yaprak parolası kök parolasıyla AYNI olamaz', 2);
         const y = await Z.otaYaprakBas({ kokAnahtar: path.resolve(gerek('kok-anahtar')), kokSertifika: path.resolve(gerek('kok')), hedef, kokParola: kp, yaprakParola: yp, yaprakCn: arg('cn') || 'TeksERP OTA Yaprak', yaprakGun: gun });
@@ -154,7 +168,7 @@ if (['kok-uret', 'yaprak-bas', 'yaprak-ac', 'yeniden-imzala'].includes(komut)) {
     } else if (komut === 'yaprak-ac') {
       const anahtarYol = path.resolve(gerek('anahtar'));
       const yaprakYol = path.resolve(arg('yaprak') ?? path.join(path.dirname(anahtarYol), 'certificate.pem'));
-      const p = await parola(`OTA yaprak parolası (${path.basename(path.dirname(anahtarYol))}): `);
+      const p = await parola(`OTA yaprak parolası (${path.basename(path.dirname(anahtarYol))}): `, 'istemci');
       try {
         const o = Z.otaYaprakAc({ anahtarYol, yaprakYol, kokPem: fs.readFileSync(path.resolve(gerek('kok')), 'utf8'), parola: p });
         if (argv.includes('--json')) console.log(JSON.stringify({ v: 1, acildi: true, ...o }));
@@ -168,7 +182,7 @@ if (['kok-uret', 'yaprak-bas', 'yaprak-ac', 'yeniden-imzala'].includes(komut)) {
       if (fs.existsSync(cikti)) dur(`${cikti} zaten var — üstüne yazılmaz`, 2);
       const anahtarYol = path.resolve(gerek('anahtar'));
       const yaprakPem = fs.readFileSync(path.resolve(arg('yaprak') ?? path.join(path.dirname(anahtarYol), 'certificate.pem')), 'utf8');
-      const p = await parola('OTA yaprak parolası: ');
+      const p = await parola('OTA yaprak parolası: ', 'istemci');
       let anahtar;
       try {
         anahtar = crypto.createPrivateKey({ key: fs.readFileSync(anahtarYol, 'utf8'), passphrase: p });

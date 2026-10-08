@@ -43,6 +43,8 @@ import {
   temizleIptalBelgeleri,
   temizleKurulumlar,
 } from "./lib/test-ortam";
+// Bekçi/koşucu gerçek Anahtar Zinciri'ne GİTMEZ: parola okuyan araçlar kasa yerine stdin/dosya kullanır (scripts/lib/parola-kasasi.mjs).
+process.env.TEKSERP_PAROLA_KASASI = "kapali";
 
 const ARA_PAROLASI = "bekci-ara-parolasi-iptal";
 const YUKLEYEN = "bekci-iptal";

@@ -92,6 +92,8 @@ import { main as capaEkle } from "./guven-capasi-ekle";
 import { publicKeyFromX, verifyJwsWithAnchor } from "../../Electron/electron/guncelleme/kunye-jws.mjs";
 import { PANEL_RELEASE_TYP, buildReleaseDoc, checkPanelRootAnchor, signReleaseDoc, verifyUpdateInfo } from "../../Electron/electron/guncelleme/panel-kunye.mjs";
 import { parseLatestYml, withReleaseBlock } from "../../Electron/electron/guncelleme/latest-yml.mjs";
+// Bekçi/koşucu gerçek Anahtar Zinciri'ne GİTMEZ: parola okuyan araçlar kasa yerine stdin/dosya kullanır (scripts/lib/parola-kasasi.mjs).
+process.env.TEKSERP_PAROLA_KASASI = "kapali";
 
 let pass = 0;
 let fail = 0;

@@ -21,7 +21,8 @@
  * `<kök><grup>/mobil/ota/<rv>/<damga>/…`) ve OTA YAPRAĞIYLA imzalanır; yaprak `certificate_chain` parçasında gider,
  * tablet onu APK'ya gömülü OTA KÖKÜNE zincirler (K-2, docs/design/ISTEMCI-ANAHTARI-KOK-ALTINDA.md §3.1). Paket baytı
  * (bundle · varlıklar) gruplar arasında AYNI kalır; terfide kaynak grubun artefakt özeti ile yüklenecek özet eşit olmalıdır.
- * Yaprak anahtarı parolalıdır (TTY'de gizli istem, değilse stdin satırı; argümandan/ortamdan ASLA). Malzeme yoksa, yaprak
+ * Yaprak anahtarı parolalıdır: macOS Anahtar Zinciri `tekserp/istemci` (sorusuz; yedek yaprakta `--kasa=yedek`, kapatmak
+ * için `--kasa=yok`) > TTY'de gizli istem > stdin satırı; argümandan/ortamdan ASLA. Malzeme yoksa, yaprak
  * köke bağlı değilse ya da bitişine 30 günden az kaldıysa imza adımı fail-closed durur (kuru: atılacak deneme zinciri).
  * `--ota-anahtar=<dosya>` (ya da TEKSERP_OTA_IMZA_ANAHTARI) yaprağı seçer — yıllık dönem töreninin
  * `~/.tekserp/satici-uretim/donemler/<damga>/istemci/ota-yaprak/private-key.pem`i ya da yedeği (docs/ops/URETIM-SATICI-TOREN.md §9);
@@ -46,6 +47,7 @@ import { Olculemedi, terfiKaynagi } from '../scripts/lib/dagitim.mjs';
 import { etiketAt } from '../scripts/lib/surum.mjs';
 import { cumleDenetle, istanbulSaati, terfiAtlaKaydi, terfiAtlaMesaji, terfiRaporu } from '../scripts/lib/terfi.mjs';
 import { yayinSonrasiBildir } from '../scripts/lib/yayin-bildirim.mjs';
+import { KasaHatasi, kasaSecimi, kasadanAl } from '../scripts/lib/parola-kasasi.mjs';
 import { BelirtecYok, belirtecOku, belirtecliFetch } from '../scripts/lib/yayin-okuma.mjs';
 import { SURUM_BICIMI, ezmeSatirlari, uzakDegerDenetle, yayinEzmeleri } from '../scripts/lib/yayin-hedefi.mjs';
 
@@ -82,7 +84,7 @@ const arg = (ad) => {
   if (e === undefined) return undefined;
   return e.includes('=') ? e.slice(e.indexOf('=') + 1) : '';
 };
-const BILINEN = ['grup', 'paket', 'kuru', 'dogrula', 'ota-anahtar', 'terfi-atla', 'profil-matrisi-atla'];
+const BILINEN = ['grup', 'paket', 'kuru', 'dogrula', 'ota-anahtar', 'terfi-atla', 'profil-matrisi-atla', 'kasa'];
 for (const a of argv) {
   const ad = a.replace(/^--/, '').split('=')[0];
   if (a === '--musteri' || a.startsWith('--musteri=')) dur('--musteri emekli eski kanal yayıncısının argümanıdır (eski-kanal-son etiketi, docs/ops/ESKI-KANAL-ACIL.md)', 'Grup yayını --grup=<test|oncu|genel> alır.');
@@ -272,6 +274,16 @@ function grupTerfiKaynagiVar() {
  * Yaprak anahtarı parolası — TTY'de gizli istem, değilse stdin'in ilk satırı (argüman/ortam YOK)
  * ------------------------------------------------------------------ */
 
+/** OTA yaprağının parolası Anahtar Zinciri'nde kayıtlıysa o (istem yok); `--kasa=yedek|yok` seçimi değiştirir. */
+function kasadanYaprak() {
+  try {
+    return kasadanAl(kasaSecimi(arg('kasa'), 'istemci'));
+  } catch (e) {
+    if (e instanceof KasaHatasi) dur(e.message);
+    throw e;
+  }
+}
+
 function parolaSor(soru) {
   const stdin = process.stdin;
   if (!stdin.isTTY) {
@@ -336,7 +348,7 @@ async function otaYayinla(paketDizin) {
   let parola;
   try {
     const yollar = ortakImzaYollari(KIMLIK, MOBIL, { anahtarYolu: OTA_ANAHTAR || undefined });
-    if (ortakAnahtarParolali(yollar)) parola = await parolaSor(`OTA yaprak anahtarı parolası (${yollar.anahtarYol}): `);
+    if (ortakAnahtarParolali(yollar)) parola = kasadanYaprak() ?? (await parolaSor(`OTA yaprak anahtarı parolası (${yollar.anahtarYol}): `));
     const anahtar = ortakImzaAnahtari(KIMLIK, MOBIL, { kuru: KURU, anahtarYolu: OTA_ANAHTAR || undefined, parola });
     uretim = grupManifestiUret({ paketDizin, kunye, expoConfig, feed: FEED, anahtar });
   } catch (e) {

@@ -20,6 +20,8 @@ import { KeyFileError, passwordBuffer, readWrappedKeyFile, wrapPrivateKey, write
 import { signWithWrappedKey, spawnSignerProcess } from "../src/keys/signer";
 import { runAsCli } from "../src/lib/request-scope";
 import { SATICI_KOKU, kontrol, sonuc } from "./lib/test-ortam";
+// Bekçi/koşucu gerçek Anahtar Zinciri'ne GİTMEZ: parola okuyan araçlar kasa yerine stdin/dosya kullanır (scripts/lib/parola-kasasi.mjs).
+process.env.TEKSERP_PAROLA_KASASI = "kapali";
 
 /** Sürecin argv'si (herkese açık yüzey) ve env'i (aynı kullanıcıya açık yüzey), düz metin. */
 function surecYuzeyleri(pid: number): { argv: string; env: string } {

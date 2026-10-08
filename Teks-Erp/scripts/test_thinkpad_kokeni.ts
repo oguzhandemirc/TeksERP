@@ -21,6 +21,8 @@ import path from "node:path";
 import { generatePackageKey, writePackageKey } from "./lib/butunluk-imza";
 import { git } from "./lib/git";
 import { RUST_PARCALARI, THINKPAD_BETIGI, type ThinkpadOlcumu, thinkpadKokeniHukmu } from "./lib/thinkpad-kokeni";
+// Bekçi/koşucu gerçek Anahtar Zinciri'ne GİTMEZ: parola okuyan araçlar kasa yerine stdin/dosya kullanır (scripts/lib/parola-kasasi.mjs).
+process.env.TEKSERP_PAROLA_KASASI = "kapali";
 
 let pass = 0;
 let fail = 0;

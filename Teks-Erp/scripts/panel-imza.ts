@@ -28,7 +28,7 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { CliError, args, askPassword } from "./lib/cli-girdi";
+import { CliError, args, askPassword, kasaAdiKid } from "./lib/cli-girdi";
 import {
   DEPO_KOKU,
   attachClientCertificate,
@@ -75,7 +75,7 @@ async function imzala(f: ReadonlyMap<string, string>): Promise<void> {
   const { dizin, kanal } = paketDizini(f);
   const anchor = capa(f);
   const keyFile = evYolu(gerek(f, "anahtar"));
-  const key = await openPanelSigningKey(keyFile, (kid) => askPassword(`Panel künye imza anahtarı (${kid}) parolası: `));
+  const key = await openPanelSigningKey(keyFile, (kid) => askPassword(`Panel künye imza anahtarı (${kid}) parolası: `, kasaAdiKid(kid)));
   if (!key.kid.startsWith("ist-")) {
     throw new Error(`panel künyesini (v:2) yalnız ist-* anahtarı imzalar (kök imzalı ISTEMCI sertifikalı); verilen: ${key.kid}`);
   }
@@ -103,8 +103,8 @@ async function anahtarUret(f: ReadonlyMap<string, string>): Promise<void> {
   const dizin = path.resolve(evYolu(f.get("dizin") ?? "~/.tekserp/panel-uretim"));
   const hedef = path.join(dizin, `${kid}.panel.json`);
   if (fs.existsSync(hedef)) throw new Error(`${hedef} zaten var — rotasyon yeni kid ile yapılır`);
-  const first = await askPassword(`Yeni panel yayın anahtarı (${kid}) parolası: `);
-  const second = await askPassword("Parola (tekrar): ");
+  const first = await askPassword(`Yeni panel yayın anahtarı (${kid}) parolası: `, kasaAdiKid(kid));
+  const second = await askPassword("Parola (tekrar): ", kasaAdiKid(kid));
   const same = first.length === second.length && first.equals(second);
   second.fill(0);
   let file: string;
@@ -143,7 +143,7 @@ async function yenidenImzala(f: ReadonlyMap<string, string>): Promise<void> {
   const kid = readPanelKeyPublic(keyFile).kid;
   const sertifikaDosyasi = f.get("sertifika");
   const certificate = readClientCertificate({ keyFile, kid, ...(sertifikaDosyasi ? { file: evYolu(sertifikaDosyasi) } : {}) });
-  const key = await openPanelSigningKey(keyFile, (k) => askPassword(`Panel künye imza anahtarı (${k}) parolası: `));
+  const key = await openPanelSigningKey(keyFile, (k) => askPassword(`Panel künye imza anahtarı (${k}) parolası: `, kasaAdiKid(k)));
   const r = resignPanelRelease({ latestText: fs.readFileSync(latest, "utf8"), kanal, key, certificate, anchor });
   fs.writeFileSync(cikti, r.text, { flag: "wx", mode: 0o644 });
   console.log(`✓ künye yeniden imzalandı · ${kanal} ${r.doc.surum} · ${r.oncekiKid} → ${r.yeniKid} · paket ${r.doc.paket.ad} (sha512 ${r.doc.paket.sha512.slice(0, 16)}…, değişmedi)`);
@@ -153,7 +153,7 @@ async function yenidenImzala(f: ReadonlyMap<string, string>): Promise<void> {
 async function anahtarAc(f: ReadonlyMap<string, string>): Promise<void> {
   const keyFile = evYolu(gerek(f, "anahtar"));
   const pub = readPanelKeyPublic(keyFile);
-  const key = await openPanelSigningKey(keyFile, (k) => askPassword(`Anahtar (${k}) parolası: `));
+  const key = await openPanelSigningKey(keyFile, (k) => askPassword(`Anahtar (${k}) parolası: `, kasaAdiKid(k)));
   const x = publicXOf(key.privateKey);
   if (x !== pub.x || key.kid !== pub.kid) throw new Error(`açılan özel anahtar dosyadaki açık yarıyla uyuşmuyor (${pub.kid})`);
   if (f.has("json")) console.log(JSON.stringify({ v: 1, kid: key.kid, x, acildi: true }));

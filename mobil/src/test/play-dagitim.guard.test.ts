@@ -12,6 +12,8 @@ import os from 'os';
 import path from 'path';
 
 import { playStoreAc, playStoreAdresleri } from '../services/playStore';
+// Bekçi/koşucu gerçek Anahtar Zinciri'ne GİTMEZ: parola okuyan araçlar kasa yerine stdin/dosya kullanır (scripts/lib/parola-kasasi.mjs).
+process.env.TEKSERP_PAROLA_KASASI = "kapali";
 
 const KOK = path.join(__dirname, '..', '..');
 const YASAK_IZIN = 'android.permission.REQUEST_INSTALL_PACKAGES';

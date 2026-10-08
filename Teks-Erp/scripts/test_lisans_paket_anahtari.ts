@@ -46,6 +46,8 @@ import { DAY_MS, PackageRevocationSchema, TYP, msToIso, parseJws, readReleasePoi
 import { CHAINED_INTEGRITY_FILE, PACKAGE_REVOCATION_FILE } from "../src/lib/license/protocol/paket-zinciri";
 import { anahtarUret, fiksturKur, sertifikaBas, sertifikaYuku } from "./lib/lisans-fikstur";
 import { git } from "./lib/git";
+// Bekçi/koşucu gerçek Anahtar Zinciri'ne GİTMEZ: parola okuyan araçlar kasa yerine stdin/dosya kullanır (scripts/lib/parola-kasasi.mjs).
+process.env.TEKSERP_PAROLA_KASASI = "kapali";
 
 let pass = 0;
 let fail = 0;

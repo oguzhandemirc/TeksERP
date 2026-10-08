@@ -28,6 +28,8 @@ import {
   raporYolu,
   YAYIN_BETIGI_DESENI,
 } from './lib/profil-raporu.mjs';
+// Bekçi/koşucu gerçek Anahtar Zinciri'ne GİTMEZ: parola okuyan araçlar kasa yerine stdin/dosya kullanır (scripts/lib/parola-kasasi.mjs).
+process.env.TEKSERP_PAROLA_KASASI = 'kapali';
 
 let gecti = 0;
 let basarisiz = 0;

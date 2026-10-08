@@ -2,6 +2,8 @@
 // RNTL matcher'ları (toBeOnTheScreen vb.) setupFilesAfterEnv ile yüklenir.
 // transformIgnorePatterns preset'ten gelir; kullanılan native modülleri (paper,
 // reanimated, flash-list, gesture-handler) transform kapsamına alır.
+// Bekçiler gerçek Anahtar Zinciri'ne GİTMEZ (scripts/lib/parola-kasasi.mjs).
+process.env.TEKSERP_PAROLA_KASASI = "kapali";
 module.exports = {
   preset: "jest-expo",
   // RNTL v13: matcher'lar built-in (extend-expect kaldırıldı) — yalnız kendi setup'ımız.

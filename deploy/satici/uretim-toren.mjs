@@ -7,9 +7,10 @@
 //   PAKET (bütünlük listesi, parolalı)     → PAKET aracı (ayrı dilim; komut PAKET_KOMUTU, `--paket-komutu` ile ezilir)
 //   şifreli modül anahtarları              → satici/sunucu/scripts/modul-anahtari.ts uret
 //   yedek alıcıları + kurtarma arşivi      → Teks-Erp/scripts/yedek-sifrele.ts
-// Kök parolası TTY'den gizli sorulur (TTY yoksa stdin satırları — yalnız bekçi) ve alt süreçlere YALNIZ stdin borusuyla
-// gider: argv'ye, ortama, loga, dosyaya girmez. PAKET parolasını tören GÖRMEZ: PAKET aracı terminali devralıp kendisi
-// sorar (TTY yoksa törenin stdin'inde kalan satırlar ona geçer). Alt süreçler yalın ortamla koşar (ANAHTAR_DIZINI,
+// Parola kaynağı: `--<rol>-parola-dosyasi` > macOS Anahtar Zinciri `tekserp/<rol>` (sorusuz; scripts/lib/parola-kasasi.mjs)
+// > TTY'de gizli istem (TTY yoksa stdin satırları — yalnız bekçi); alt süreçlere YALNIZ stdin borusuyla gider: argv'ye,
+// ortama, loga, dosyaya girmez. PAKET parolasını tören GÖRMEZ: PAKET aracı terminali devralıp kendisi alır (kasa ya da
+// istem; TTY yoksa törenin stdin'inde kalan satırlar ona geçer). Alt süreçler yalın ortamla koşar (ANAHTAR_DIZINI,
 // GUVEN_CAPASI_DOSYASI, DATABASE_URL, NODE_OPTIONS geçmez). Ekrana yalnız kid + açık anahtar + parmak izi + sonraki adım.
 // Hedef dizin VARSA dokunulmaz; anahtarlar `<hedef>.yarim-<pid>`de kurulur ve en sonda TEK rename ile hedefe geçer
 // (hepsi ya da hiçbiri — yarım kalan dizin, düz ALT/İNDİRME taşıdığı için silinir). TOCTOU: yol boyunca sembolik bağ
@@ -48,6 +49,7 @@ import path from "node:path";
 import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
 import { KAYIT_REL, Olculemedi, grupZinciri, kayitAyristir, kayitHatalari } from "../../scripts/lib/dagitim.mjs";
+import { KASA_ORTAM, KasaHatasi, kasadanAl } from "../../scripts/lib/parola-kasasi.mjs";
 
 const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
 const SATICI = path.join(REPO, "satici", "sunucu");
@@ -240,17 +242,28 @@ function parolaDosyasi(yol, etiket) {
   return nfc;
 }
 
-/** Var olan parola: dosya verilmişse o, yoksa istem. */
-async function parolaAl(bayraklar, ad, soru) {
-  const yol = bayraklar.get(`${ad}-parola-dosyasi`);
-  return yol !== undefined ? parolaDosyasi(evYolu(yol), `--${ad}-parola-dosyasi`) : parolaSor(soru);
+/** Rol parolası Anahtar Zinciri'nde (`tekserp/<ad>`) kayıtlıysa o — istem yok; kasa kapalı ya da kayıt yoksa null. */
+function kasadan(ad) {
+  try {
+    return kasadanAl(ad);
+  } catch (e) {
+    if (e instanceof KasaHatasi) throw new TorenHatasi(e.message, 2);
+    throw e;
+  }
 }
 
-/** Yeni parola: dosya verilmişse tek okuma + güç denetimi; yoksa iki kez istem. */
+/** Var olan parola: dosya verilmişse o, yoksa Anahtar Zinciri, yoksa istem. */
+async function parolaAl(bayraklar, ad, soru) {
+  const yol = bayraklar.get(`${ad}-parola-dosyasi`);
+  if (yol !== undefined) return parolaDosyasi(evYolu(yol), `--${ad}-parola-dosyasi`);
+  return kasadan(ad) ?? parolaSor(soru);
+}
+
+/** Yeni parola: dosya ya da Anahtar Zinciri → tek okuma + güç denetimi; ikisi de yoksa iki kez istem. */
 async function yeniParolaAl(bayraklar, ad, etiket) {
   const yol = bayraklar.get(`${ad}-parola-dosyasi`);
-  if (yol === undefined) return yeniParola(etiket);
-  const p = parolaDosyasi(evYolu(yol), `--${ad}-parola-dosyasi`);
+  const p = yol !== undefined ? parolaDosyasi(evYolu(yol), `--${ad}-parola-dosyasi`) : kasadan(ad);
+  if (p === null) return yeniParola(etiket);
   if ([...p.toString("utf8")].length < MIN_PAROLA) {
     p.fill(0);
     throw new TorenHatasi(`${etiket} en az ${MIN_PAROLA} karakter olmalı — hiçbir anahtar üretilmedi`, 2);
@@ -261,7 +274,7 @@ async function yeniParolaAl(bayraklar, ad, etiket) {
 const ayniParola = (a, b) => a.length === b.length && crypto.timingSafeEqual(a, b);
 
 // ---------------------------------------------------------------- alt süreçler
-/** Yalın ortam: sır taşıyan ya da davranış değiştiren hiçbir değişken alt sürece geçmez. */
+/** Yalın ortam: sır taşıyan ya da davranış değiştiren hiçbir değişken alt sürece geçmez (kasa anahtarı: `kosNode`). */
 function altOrtam() {
   const e = { PATH: process.env.PATH ?? "/usr/bin:/bin", HOME: process.env.HOME ?? os.homedir(), COPYFILE_DISABLE: "1" };
   if (process.env.TMPDIR) e.TMPDIR = process.env.TMPDIR;
@@ -276,7 +289,9 @@ function kos(cwd, betik, argv, parolalar = [], sureMs = ALT_SURE_MS) {
 /** `terminal`: stdin ve stderr devralınır (alt süreç parolasını KENDİSİ sorar); stdout her durumda yakalanır. */
 function kosNode(cwd, nodeArgv, parolalar = [], terminal = false, sureMs = ALT_SURE_MS) {
   return new Promise((resolve, reject) => {
-    const cocuk = spawn(process.execPath, nodeArgv, { cwd, env: altOrtam(), stdio: terminal ? ["inherit", "pipe", "inherit"] : ["pipe", "pipe", "pipe"] });
+    // Parolayı stdin borusundan alan alt süreç Anahtar Zinciri'ne BAKMAZ; terminali devralan, törenin kasa kipini taşır.
+    const kasa = terminal ? (process.env[KASA_ORTAM] ? { [KASA_ORTAM]: process.env[KASA_ORTAM] } : {}) : { [KASA_ORTAM]: "kapali" };
+    const cocuk = spawn(process.execPath, nodeArgv, { cwd, env: { ...altOrtam(), ...kasa }, stdio: terminal ? ["inherit", "pipe", "inherit"] : ["pipe", "pipe", "pipe"] });
     const out = [];
     const err = [];
     // Terminali devralan alt süreçte insan yazıyor: süre sınırı yok (Ctrl+C her an keser).
@@ -589,7 +604,7 @@ async function toren(bayraklar) {
   process.on("SIGINT", kesme);
   process.on("SIGTERM", kesme);
   try {
-    const kokParola = await yeniParola("Kök parolası");
+    const kokParola = await yeniParolaAl(bayraklar, "kok", "Kök parolası");
     parolalar.push(kokParola);
 
     ustHazirla(path.dirname(hedef));

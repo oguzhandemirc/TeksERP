@@ -28,6 +28,8 @@ import { derlemeKunyesiYaz, PANEL_KUNYE_ADI } from './lib/derleme-bagi.mjs';
 import { buildReleaseDoc, signReleaseDoc, verifyReleaseBlock } from '../Electron/electron/guncelleme/panel-kunye.mjs';
 import { parseLatestYml, withReleaseBlock } from '../Electron/electron/guncelleme/latest-yml.mjs';
 import { panelRotasyonDenetimi } from './lib/panel-imza-kapisi.mjs';
+// Bekçi/koşucu gerçek Anahtar Zinciri'ne GİTMEZ: parola okuyan araçlar kasa yerine stdin/dosya kullanır (scripts/lib/parola-kasasi.mjs).
+process.env.TEKSERP_PAROLA_KASASI = 'kapali';
 
 let gecti = 0;
 const kaldi = [];

@@ -91,7 +91,7 @@ import { runAsCli } from "../src/lib/request-scope";
 import { KeyStore, anchorModeOfKeyDir } from "../src/keys/key-store";
 import { PUBLISHER_DEFAULT_MINUTES, PublisherTokenError, publisherTokens } from "../src/keys/publisher-token";
 import { generateServerSecrets } from "../src/keys/server-secrets";
-import { CliError, args, askPassword } from "./lib/cli-girdi";
+import { CliError, args, askPassword, kasaAdiKid } from "./lib/cli-girdi";
 
 // ---------------------------------------------------------------- yardımcılar
 function keyDir(flags: Map<string, string>): string {
@@ -132,7 +132,7 @@ async function signCertificate(
 ): Promise<string> {
   const rootPath = path.join(dir, `${rootKid}.kok.json`);
   const root = readWrappedKeyFile(rootPath);
-  const password = await askPassword(`Kök (${rootKid}) parolası: `);
+  const password = await askPassword(`Kök (${rootKid}) parolası: `, kasaAdiKid(rootKid));
   const token = await runAsCli(() => signWithWrappedKey({ keyFile: rootPath, typ: TYP.SERTIFIKA, payload: cert, password }));
   const check = verifyCertificate(token, {
     roots: [{ kid: root.kid, x: root.x, classes: root.siniflar }],
@@ -197,8 +197,8 @@ async function generateRoot(flags: Map<string, string>): Promise<void> {
   const dir = keyDir(flags);
   const target = path.join(dir, `${kid}.kok.json`);
   if (existsSync(target)) throw new CliError(`${target} zaten var — rotasyon yeni kid ile yapılır`);
-  const first = await askPassword("Yeni kök parolası: ");
-  const second = await askPassword("Parola (tekrar): ");
+  const first = await askPassword("Yeni kök parolası: ", kasaAdiKid(kid));
+  const second = await askPassword("Parola (tekrar): ", kasaAdiKid(kid));
   const same = first.length === second.length && first.equals(second);
   second.fill(0);
   if (!same) {
@@ -323,14 +323,14 @@ async function generateIntermediate(flags: Map<string, string>): Promise<void> {
   const validDays = days(flags, PERIOD_DAYS, PERIOD_DAYS);
   const { privateKey } = generateKeyPairSync("ed25519");
   const cert = certificateFor({ usage: "HAK", kid, x: publicKeyX(privateKey), classes, validDays, dealer: null });
-  const rootPassword = await askPassword(`Kök (${rootKid}) parolası: `);
+  const rootPassword = await askPassword(`Kök (${rootKid}) parolası: `, kasaAdiKid(rootKid));
   let token: string;
   try {
     token = await signWithCopy(root.path, TYP.SERTIFIKA, cert, rootPassword);
     const check = verifyCertificate(token, { roots: root.anchor, usage: "HAK", atMs: Date.now() });
     if (!check.ok) throw new CliError(`Üretilen ara imzacı sertifikası doğrulanamadı: ${check.code}`);
-    const first = await askPassword("Yeni ara imzacı parolası: ");
-    const second = await askPassword("Ara imzacı parolası (tekrar): ");
+    const first = await askPassword("Yeni ara imzacı parolası: ", kasaAdiKid(kid));
+    const second = await askPassword("Ara imzacı parolası (tekrar): ", kasaAdiKid(kid));
     try {
       const same = first.length === second.length && timingSafeEqual(first, second);
       if (!same) throw new CliError("Ara imzacı parolaları eşleşmedi");
@@ -412,7 +412,7 @@ async function generatePackageRevocation(flags: Map<string, string>): Promise<vo
   }
   if (entries.length > REVOCATION_MAX_ENTRIES) throw new CliError(`İptal satırı en çok ${REVOCATION_MAX_ENTRIES}`);
   const payload: PackageRevocationDoc = { v: 1, iptalId: randomUUID(), sira: (previous?.sira ?? 0) + 1, verilis: new Date(now).toISOString(), iptaller: entries };
-  const password = await askPassword(`Kök (${rootKid}) parolası: `);
+  const password = await askPassword(`Kök (${rootKid}) parolası: `, kasaAdiKid(rootKid));
   let token: string;
   try {
     token = await signWithCopy(root.path, TYP.PAKET_IPTAL, payload, password);
@@ -486,7 +486,7 @@ async function generateRevocation(flags: Map<string, string>): Promise<void> {
   }
   if (entries.length > REVOCATION_MAX_ENTRIES) throw new CliError(`İptal satırı en çok ${REVOCATION_MAX_ENTRIES}`);
   const payload: RevocationDoc = { v: 1, iptalId: randomUUID(), sira: (previous?.sira ?? 0) + 1, verilis: new Date(now).toISOString(), iptaller: entries };
-  const password = await askPassword(`Kök (${rootKid}) parolası: `);
+  const password = await askPassword(`Kök (${rootKid}) parolası: `, kasaAdiKid(rootKid));
   let token: string;
   try {
     token = await signWithCopy(root.path, TYP.IPTAL, payload, password);
@@ -520,7 +520,7 @@ async function signRootQueue(flags: Map<string, string>): Promise<void> {
     if (!root.classes.includes(decoded.value.sinif)) throw new CliError(`Talep ${r.talepId}: kök ${rootKid} ${decoded.value.sinif} sınıfına yetkili değil`);
     if (decoded.value.hakId !== r.hakId || decoded.value.surum !== r.surum) throw new CliError(`Talep ${r.talepId}: yükün hakId/sürümü talep satırıyla uyuşmuyor`);
   }
-  const password = await askPassword(`Kök (${rootKid}) parolası: `);
+  const password = await askPassword(`Kök (${rootKid}) parolası: `, kasaAdiKid(rootKid));
   const signed: { talepId: string; hakId: string; surum: number; belge: string }[] = [];
   try {
     for (const r of requests) {

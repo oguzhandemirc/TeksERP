@@ -18,6 +18,8 @@ import { KOK } from './lib/dagitim.mjs';
 import { TABLET_ARTEFAKT_GORELI, grupTerfiKapisi } from './lib/grup-yayin.mjs';
 import { ORTAK_PARMAK_IZI_ALG, OrtakOtaIhlali, grupManifestiUret, ortakImzaAnahtari, ortakNativeParmakIzi, ortakPaketDenetimi, parmakIziHukmu, yerelNativeKaynakIzi } from '../mobil/scripts/lib/ortak-ota.mjs';
 import { imzaBasligi, multipartDogrula, multipartKur } from '../mobil/scripts/lib/manifest.mjs';
+// Bekçi/koşucu gerçek Anahtar Zinciri'ne GİTMEZ: parola okuyan araçlar kasa yerine stdin/dosya kullanır (scripts/lib/parola-kasasi.mjs).
+process.env.TEKSERP_PAROLA_KASASI = 'kapali';
 
 const require = createRequire(import.meta.url);
 const { ortakKimlik } = require('../mobil/scripts/lib/ortak-kimlik.cjs');
@@ -268,8 +270,9 @@ function betikIhlalleri(metin) {
   if (/etikiliyazilim\.com|\/opt\/stack/.test(kod)) f.push('yayın/VDS kökü LİTERAL');
   if (/\bfetch\(|\bcurl\b/.test(kod.replace(/belirtecliFetch\(/g, ''))) f.push('belirteçsiz okuma');
   if (!/musteri'?\)? ?(\|\||&&)|--musteri/.test(kod)) f.push('--musteri reddi yok');
-  // K-2: yaprak anahtarı parolası yalnız istemden (TTY gizli / stdin) — argüman ya da ortam değişkeni DEĞİL.
-  if (!/ortakAnahtarParolali\(yollar\)\) parola = await parolaSor\(/.test(kod)) f.push('yaprak parolası istemi YOK');
+  // K-2: yaprak parolası Anahtar Zinciri'nden, kayıt yoksa istemden (TTY gizli / stdin) — argüman ya da ortam değişkeni DEĞİL.
+  if (!/ortakAnahtarParolali\(yollar\)\) parola = kasadanYaprak\(\) \?\? \(await parolaSor\(/.test(kod)) f.push('yaprak parolası istemi YOK');
+  if (!/return kasadanAl\(kasaSecimi\(arg\('kasa'\), 'istemci'\)\)/.test(kod)) f.push('yaprak parolası kasa kaydı (istemci) YOK');
   if (/process\.env\.\w*(PAROLA|PASS)|'--parola|--passin|pass:/i.test(kod)) f.push('yaprak parolası argüman/ortamdan okunuyor');
   if (!/parola\?\.fill\(0\)/.test(kod)) f.push('parola tamponu sıfırlanmıyor');
   return f;
@@ -288,7 +291,8 @@ function betikIhlalleri(metin) {
   mut('VDS kökü literal gömüldü', (m) => `${m}\nconst V = '/opt/stack/apps/x';\n`, /LİTERAL/);
   mut('çıplak fetch', (m) => `${m}\nawait fetch('https://x');\n`, /belirteçsiz okuma/);
   mut('--apk reddi kaldırıldı', (m) => m.replace("if (a === '--apk' || a.startsWith('--apk=')) dur(", 'if (false) dur('), /--apk reddi YOK/);
-  mut('yaprak parolası istemi söküldü', (m) => m.replace('if (ortakAnahtarParolali(yollar)) parola = await parolaSor(', 'if (false) parola = await parolaSor('), /parolası istemi YOK/);
+  mut('yaprak parolası istemi söküldü', (m) => m.replace('if (ortakAnahtarParolali(yollar)) parola = kasadanYaprak() ?? (await parolaSor(', 'if (false) parola = kasadanYaprak() ?? (await parolaSor('), /parolası istemi YOK/);
+  mut('yaprak kasa adı değişti', (m) => m.replace("kasadanAl(kasaSecimi(arg('kasa'), 'istemci'))", "kasadanAl(kasaSecimi(arg('kasa'), 'kok'))"), /kasa kaydı \(istemci\) YOK/);
   mut('parola ortamdan okundu', (m) => `${m}\nconst P = process.env.TEKSERP_OTA_PAROLA;\n`, /argüman\/ortamdan/);
   mut('parola tamponu sıfırlanmıyor', (m) => m.replace('parola?.fill(0);', ''), /sıfırlanmıyor/);
   mut('APK yükleme yolu geri eklendi', (m) => `${m}\nasync function apkYayinla(y) { scp([y], 'apk/surum.json', 'x'); }\n`, /APK yayın yolu GERİ GELDİ/);

@@ -31,6 +31,8 @@ import zlib from 'node:zlib';
 import { fileURLToPath } from 'node:url';
 
 import { KAYIT_REL, KOK, turet } from './lib/dagitim.mjs';
+// Bekçi/koşucu gerçek Anahtar Zinciri'ne GİTMEZ: parola okuyan araçlar kasa yerine stdin/dosya kullanır (scripts/lib/parola-kasasi.mjs).
+process.env.TEKSERP_PAROLA_KASASI = 'kapali';
 
 const require = createRequire(import.meta.url);
 const ORTAK = require('../mobil/scripts/lib/ortak-kimlik.cjs');
@@ -267,7 +269,9 @@ function anahtarYaz(agac, anahtarlar = {}, kok = {}) {
   for (const [dizin, { storeFile, bayt }] of Object.entries(anahtarlar)) {
     const d = path.join(agac, 'mobil/keystore', dizin);
     fs.mkdirSync(d, { recursive: true });
-    fs.writeFileSync(path.join(d, 'keystore.properties'), `storeFile=${storeFile}\nstorePassword=x\nkeyAlias=x\nkeyPassword=x\n`);
+    // Play yükleme parolası dosyada DURMAZ (Anahtar Zinciri); deneme anahtarınınki dosyada.
+    const parola = dizin === 'play-yukleme' ? '' : 'storePassword=x\nkeyPassword=x\n';
+    fs.writeFileSync(path.join(d, 'keystore.properties'), `storeFile=${storeFile}\nkeyAlias=x\n${parola}`);
     if (bayt && !storeFile.includes('/')) fs.writeFileSync(path.join(d, storeFile), bayt);
   }
   for (const [ad, bayt] of Object.entries(kok)) fs.writeFileSync(path.join(agac, 'mobil/keystore', ad), bayt);

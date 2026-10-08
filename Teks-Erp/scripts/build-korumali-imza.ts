@@ -67,7 +67,7 @@ import {
   type PackageRoots,
 } from "./lib/paket-sertifika";
 import { CHAINED_INTEGRITY_FILE, PACKAGE_REVOCATION_FILE, isChainPackageKid } from "../src/lib/license/protocol/paket-zinciri";
-import { CliError, args, askPassword } from "./lib/cli-girdi";
+import { CliError, args, askPassword, kasaAdiKid } from "./lib/cli-girdi";
 import { git } from "./lib/git";
 import { type CiKokeniKaydi, ciAtlaHukmu, ciKokeniHukmu, ciKosusuOku } from "./lib/ci-kokeni";
 import { RUST_PARCALARI, type ThinkpadKaydi, anaDaldaMi, betikBlobSha256, thinkpadKaydi, thinkpadKokeniHukmu } from "./lib/thinkpad-kokeni";
@@ -112,8 +112,8 @@ async function keygen(): Promise<void> {
   if (icinde(dir, DEPO_KOKU)) throw new Error(`üretim PAKET anahtarı depo içine yazılmaz: ${dir}`);
   const hedef = path.join(dir, `${kid}.paket.json`);
   if (fs.existsSync(hedef)) throw new Error(`${hedef} zaten var — rotasyon yeni kid ile yapılır`);
-  const first = await askPassword(`Yeni PAKET anahtarı (${kid}) parolası: `);
-  const second = await askPassword("Parola (tekrar): ");
+  const first = await askPassword(`Yeni PAKET anahtarı (${kid}) parolası: `, kasaAdiKid(kid));
+  const second = await askPassword("Parola (tekrar): ", kasaAdiKid(kid));
   const same = first.length === second.length && first.equals(second);
   second.fill(0);
   let file: string;
@@ -140,7 +140,7 @@ async function keygen(): Promise<void> {
   console.log("  ⚠ Parolalı dosyanın kopyası Mac DIŞINDA saklanır (USB + kâğıt; parola ayrı kâğıtta).");
 }
 
-const paketParolasi = (kid: string): Promise<Buffer> => askPassword(`PAKET anahtarı (${kid}) parolası: `);
+const paketParolasi = (kid: string): Promise<Buffer> => askPassword(`PAKET anahtarı (${kid}) parolası: `, kasaAdiKid(kid));
 
 /** Kök çapası: tören kök dosyası (`--kok-dosyasi`) > bekçi test çapası (`--kok-capa` / ortam) > üretim kökleri. */
 function kokCapasi(): PackageRoots {
