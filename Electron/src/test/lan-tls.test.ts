@@ -119,7 +119,7 @@ describe("sabit deposu", () => {
 describe("tablet QR'ı", () => {
   it("gidiş-dönüş aynı ilan ve kurulum", () => {
     const qr = buildTlsQr(IID, { port: 4443, fingerprint: FP });
-    expect(parseTlsQr(qr)).toEqual({ installationId: IID, advert: { port: 4443, fingerprint: FP } });
+    expect(parseTlsQr(qr)).toEqual({ installationId: IID, advert: { port: 4443, fingerprint: FP }, hosts: [] });
     expect(parseTlsQr(buildTlsQr(null, { port: 4443, fingerprint: FP }))?.installationId).toBeNull();
   });
   it("biçimsiz QR reddedilir", () => {

@@ -377,6 +377,8 @@ export interface DiscoveryApi {
   /** Kurulumun şifreli bağlantı sabitini kaldırır (kullanıcının açık kararı). */
   tlsUnpin: (installationId: string | null) => Promise<void>;
   tlsPins: () => Promise<TlsPin[]>;
+  /** Bu makinenin LAN IPv4 adresleri (tablet QR'ı; panel sunucu makinesindeyken sunucunun adresleri). */
+  lanHosts: () => Promise<string[]>;
 }
 
 /** Lisans panel aktarması — backend dışarı çıkamıyorsa imzalı isteği satıcıya taşır. */

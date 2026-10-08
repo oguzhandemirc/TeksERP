@@ -61,11 +61,26 @@ export function httpFallbackUrl(httpsUrl: string, recent: readonly string[]): st
   return prior ?? `http://${host}:${DISCOVERY_DEFAULT_PORT}`;
 }
 
-/** Tablet QR'ı yalnız panelin kendisi şifreli ve sabitliyken gösterilir (QR'ın güveni panelin sabitinden gelir). */
-export function tabletTlsQr(pins: readonly TlsPin[], activeUrl: string): string | null {
+/**
+ * Tablet QR'ına girecek sunucu adresleri: panelin bağlı olduğu adres; panel sunucunun kendisindeyse (döngü)
+ * bu makinenin LAN adresleri (kendi kendine atanmış ve CGNAT/Tailscale hariç). Güven adreste değil izdedir —
+ * tablet izi tutmayan adrese bağlanmaz, yanlış adres yalnız bir zaman aşımına mal olur.
+ */
+export function tabletQrHosts(activeUrl: string, localHosts: readonly string[]): string[] {
+  const host = splitApiBaseUrl(activeUrl).host;
+  if (!host) return [];
+  if (!isLoopbackHost(host)) return host.includes(":") ? [] : [host];
+  return localHosts.filter((h) => /^\d{1,3}(\.\d{1,3}){3}$/.test(h) && !h.startsWith("169.254.") && !/^100\.(6[4-9]|[7-9]\d|1[01]\d|12[0-7])\./.test(h));
+}
+
+/**
+ * Tablet QR'ı yalnız panelin kendisi şifreli ve sabitliyken gösterilir (QR'ın güveni panelin sabitinden gelir).
+ * Adres verilirse v2 (adresli), verilmezse v1 — v1'i adres alanını bilmeyen eski tablet de okur.
+ */
+export function tabletTlsQr(pins: readonly TlsPin[], activeUrl: string, hosts: readonly string[] = []): string | null {
   const pin = activePinFor(pins, activeUrl);
   if (!pin) return null;
-  return buildTlsQr(pin.installationId, { port: pin.port, fingerprint: pin.fingerprint });
+  return buildTlsQr(pin.installationId, { port: pin.port, fingerprint: pin.fingerprint }, hosts);
 }
 
 export type HttpSwitchBlock = { pin: TlsPin; url: string; reason: string };

@@ -32,6 +32,7 @@ const api: ApiBridge = {
     tlsPin: (req) => ipcRenderer.invoke("discovery:tlsPin", req),
     tlsUnpin: (installationId: string | null) => ipcRenderer.invoke("discovery:tlsUnpin", installationId),
     tlsPins: () => ipcRenderer.invoke("discovery:tlsPins"),
+    lanHosts: () => ipcRenderer.invoke("discovery:lanHosts"),
   },
   appInfo: {
     version: () => ipcRenderer.invoke("app:version"),

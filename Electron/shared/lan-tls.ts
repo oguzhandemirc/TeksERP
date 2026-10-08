@@ -181,22 +181,40 @@ export function withPin(pins: readonly TlsPin[], pin: TlsPin): TlsPin[] {
 }
 
 // ---------------------------------------------------------------------------
-// Tablet QR'ı — `teks-erp-tls:1:<installationId|->:<parmak-izi>:<port>`
+// Tablet QR'ı — v1 `teks-erp-tls:1:<installationId|->:<parmak-izi>:<port>`;
+// v2 = v1 + `:<adres,adres…>` (https, QR'daki port; sonraki alanlar yok sayılır).
+// v1 okuyucusu (vc60) fazla alanı reddeder — panel eski tablete v1'i ayrıca gösterir.
 // ---------------------------------------------------------------------------
 
 export const TLS_QR_PREFIX = "teks-erp-tls:1:";
+export const TLS_QR_V2_PREFIX = "teks-erp-tls:2:";
+export const TLS_QR_MAX_HOSTS = 6;
+const QR_HOST = /^[0-9a-z]([0-9a-z.-]{0,251}[0-9a-z])?$/;
 
-export function buildTlsQr(installationId: string | null, advert: TlsAdvert): string {
-  return `${TLS_QR_PREFIX}${installationId ?? "-"}:${advert.fingerprint}:${advert.port}`;
+export interface TlsQr {
+  installationId: string | null;
+  advert: TlsAdvert;
+  /** Sunucunun https adresleri (v2); boş = ağda izle aranır. Güven adreste değil izdedir. */
+  hosts: string[];
 }
 
-export function parseTlsQr(text: string): { installationId: string | null; advert: TlsAdvert } | null {
-  if (typeof text !== "string" || !text.startsWith(TLS_QR_PREFIX)) return null;
-  const parts = text.slice(TLS_QR_PREFIX.length).split(":");
-  if (parts.length !== 3) return null;
+export function buildTlsQr(installationId: string | null, advert: TlsAdvert, hosts: readonly string[] = []): string {
+  const head = `${installationId ?? "-"}:${advert.fingerprint}:${advert.port}`;
+  const list = [...new Set(hosts.map((h) => h.trim().toLowerCase()))].filter((h) => QR_HOST.test(h)).slice(0, TLS_QR_MAX_HOSTS);
+  return list.length > 0 ? `${TLS_QR_V2_PREFIX}${head}:${list.join(",")}` : `${TLS_QR_PREFIX}${head}`;
+}
+
+export function parseTlsQr(text: string): TlsQr | null {
+  if (typeof text !== "string") return null;
+  const v2 = text.startsWith(TLS_QR_V2_PREFIX);
+  if (!v2 && !text.startsWith(TLS_QR_PREFIX)) return null;
+  const parts = text.slice((v2 ? TLS_QR_V2_PREFIX : TLS_QR_PREFIX).length).split(":");
+  if (v2 ? parts.length < 4 : parts.length !== 3) return null;
   const [iid, fp, port] = parts as [string, string, string];
   const advert = parseTlsAdvert({ fingerprint: fp, port: /^\d{1,5}$/.test(port) ? Number(port) : NaN });
   if (!advert || fp !== advert.fingerprint) return null;
   if (iid !== "-" && !/^[0-9a-f-]{36}$/i.test(iid)) return null;
-  return { installationId: iid === "-" ? null : iid, advert };
+  const hosts = v2 ? (parts[3] ?? "").split(",") : [];
+  if (hosts.length > TLS_QR_MAX_HOSTS || !hosts.every((h) => QR_HOST.test(h))) return null;
+  return { installationId: iid === "-" ? null : iid, advert, hosts };
 }

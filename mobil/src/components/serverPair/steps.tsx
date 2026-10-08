@@ -108,7 +108,7 @@ export function QrSearchStep({ onBack }: { onBack: () => void }) {
       <Text style={styles.stepTitle}>QR okundu</Text>
       <View style={styles.row}>
         <ActivityIndicator size={18} color={C.accentLight} />
-        <Text style={styles.body}>Bu QR&apos;ın sunucusu ağda aranıyor…</Text>
+        <Text style={styles.body}>Bu QR&apos;ın sunucusu aranıyor…</Text>
       </View>
       <BackButton onPress={onBack} />
     </View>
