@@ -12,6 +12,8 @@ import { hedefDbKapisi } from "./lib/test-ortam";
 
 const DIZIN = __dirname;
 const SURE_SINIRI_MS = 180_000;
+// Uçtan uca tören bekçisi her tören koşumunda bütün süreçlerin argv/env'ini tarar (parola sızıntısı): tek başına ~260 sn.
+const OZEL_SURE_MS: Readonly<Record<string, number>> = { "test_uretim_toren.ts": 900_000 };
 
 const db = hedefDbKapisi();
 const filtre = process.argv[2];
@@ -31,7 +33,7 @@ for (const d of dosyalar) {
     cwd: path.resolve(DIZIN, ".."),
     env: process.env,
     encoding: "utf8",
-    timeout: SURE_SINIRI_MS,
+    timeout: OZEL_SURE_MS[d] ?? SURE_SINIRI_MS,
     maxBuffer: 32 * 1024 * 1024,
   });
   const sn = ((Date.now() - t0) / 1000).toFixed(1);
