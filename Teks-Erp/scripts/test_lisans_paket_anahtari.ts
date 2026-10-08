@@ -21,9 +21,11 @@
 //      üretim dışı (test) anahtarda → RED; geçerli cümle + saat + makine + HEAD imzalı yüke (`ciKokeni`) girer, imza GEÇERLİ;
 //      koşulu imzada koşu kaydı (`ciKokeni.kip = "kosu"`) yüke girer
 //   §6–§7 (D5) kök sertifikalı pkt-* anahtar: sertifika-ekle, çift/zincir-yalnız imza, dağıtım iptali, bildirimin iki takımı
-//   §8 (D6) yıllık tören araçları: `yeniden-imzala` (yeni zip + surum-zincir.json; eski imza/liste bayt-aynı, yayındaki
+//   §8 (D6/D8) yıllık tören araçları: `yeniden-imzala` (yeni zip + surum-zincir-<kid>.json; eski imza/liste bayt-aynı, yayındaki
 //      zip dokunulmaz; tutmayan zip · paket-* imzacı · aynı imzacı · iptalli tek imza → RED; eski takım bildirimiyle iptal
-//      pakete girer) · `pg-yeniden-imzala` (yük aynen) · Docker künyesi pkt-* ile zincirli · `anahtar-ac` (yanlış parola RED)
+//      pakete girer) · `pg-yeniden-imzala` (yük aynen, `pg-zincir-<kid>.json`) · D8 dizin kipi (`--surum-dizini`/`--pg-dizini`:
+//      kid'siz + kid'li yan yana, iptalli elenir; hepsi geçersizse eski takım; o da yoksa RED) · Docker künyesi pkt-* ile
+//      zincirli · `anahtar-ac` (yanlış parola RED)
 // ⭐ KALICI SONDA ✓K: §0c tek-uygulama tarayıcısı sentetik kripto satırını yakalar; §2 ret dalları her koşumda.
 // Koşum: node ../scripts/agir-is.mjs -- npx tsx scripts/test_lisans_paket_anahtari.ts
 // =============================================================================
@@ -642,6 +644,7 @@ async function bolum7(): Promise<void> {
 // D6: yıllık törenin yeniden imzası (`backend-bildirim.ts yeniden-imzala` · `pg-yeniden-imzala`), Docker künyesi
 // zincirde (`belge --anahtar=pkt-*`), yedek ölçümü (`anahtar-ac`).
 const PKT2_KID = "pkt-2099-2";
+const PKT3_KID = "pkt-2099-3";
 const jsonOku = (f: string): Record<string, unknown> => (existsSync(f) ? (JSON.parse(readFileSync(f, "utf8")) as Record<string, unknown>) : {});
 const sertifikaIdOf = (f: string): string => {
   const p = parseJws(String(jsonOku(f).sertifika));
@@ -682,17 +685,18 @@ async function bolum8(): Promise<void> {
   const y = yeniden(path.join(c1, "surum-zincir.json"), cift, c8);
   const yeniZip = path.join(c8, `cift8-${PKT2_KID}.zip`);
   const eskiYuk = isaretciYuku(path.join(c1, "surum-zincir.json"));
-  const yeniYuk = existsSync(path.join(c8, "surum-zincir.json")) ? isaretciYuku(path.join(c8, "surum-zincir.json")) : {};
+  const yeniAdi = `surum-zincir-${PKT2_KID}.json`;
+  const yeniYuk = existsSync(path.join(c8, yeniAdi)) ? isaretciYuku(path.join(c8, yeniAdi)) : {};
   const yp = yeniYuk.paket as Record<string, unknown> | undefined;
   const ep = eskiYuk.paket as Record<string, unknown> | undefined;
-  check("§8a ⭐ yeniden-imzala: <ad>-pkt-2099-2.zip + surum-zincir.json; imzacı pkt-2099-2, sürüm · paketId · yayinZamani · özet AYNI",
-    y.kod === 0 && existsSync(yeniZip) && yeniYuk.paketImzaKid === PKT2_KID && yeniYuk.surum === eskiYuk.surum && yp?.paketId === ep?.paketId && yeniYuk.yayinZamani === eskiYuk.yayinZamani
+  check("§8a ⭐ yeniden-imzala: <ad>-pkt-2099-2.zip + surum-zincir-pkt-2099-2.json (kid'siz ad YAZILMAZ); imzacı pkt-2099-2, sürüm · paketId · yayinZamani · özet AYNI",
+    y.kod === 0 && existsSync(yeniZip) && !existsSync(path.join(c8, "surum-zincir.json")) && yeniYuk.paketImzaKid === PKT2_KID && yeniYuk.surum === eskiYuk.surum && yp?.paketId === ep?.paketId && yeniYuk.yayinZamani === eskiYuk.yayinZamani
       && JSON.stringify(yeniYuk.notlar) === JSON.stringify(eskiYuk.notlar) && yp?.ad === path.basename(yeniZip) && yp?.sha256 === (existsSync(yeniZip) ? shaOf(yeniZip) : ""),
     `çıkış ${y.kod} ${y.hata.trim().slice(-200)}`);
-  if (existsSync(path.join(c8, "surum-zincir.json"))) {
-    const r = readReleasePointer(readFileSync(path.join(c8, "surum-zincir.json"), "utf8"));
+  if (existsSync(path.join(c8, yeniAdi))) {
+    const r = readReleasePointer(readFileSync(path.join(c8, yeniAdi), "utf8"));
     const v = r.ok ? verifyReleaseManifest(r.value, { keys: [], kanal: "test", zincir: { roots: ZF.kokler, mode: "KABUL", nowMs: Date.now() } }) : null;
-    check("§8b yeni surum-zincir.json kökle KABUL kipinde doğrulanır", v?.ok === true, v ? (v.ok ? "" : v.code) : "işaretçi okunamadı");
+    check("§8b yeni surum-zincir-<kid>.json kökle KABUL kipinde doğrulanır", v?.ok === true, v ? (v.ok ? "" : v.code) : "işaretçi okunamadı");
   }
   const a0 = dizin("y-a0");
   spawnSync("unzip", ["-q", cift, "-d", a0]);
@@ -746,13 +750,50 @@ async function bolum8(): Promise<void> {
   bildirimCli(["pg-imzala", `--zip=${pgZip}`, `--anahtar=${eski}`, `--zincir-anahtar=${pkt1}`, `--kok-capa=${capa}`, `--cikti=${c3}`], `${PAROLA}\n${PAROLA}\n`);
   const c12 = dizin("pg8-y");
   const pgy = bildirimCli(["pg-yeniden-imzala", `--kunye=${path.join(c3, "pg-zincir.json")}`, `--zip=${pgZip}`, `--anahtar=${pkt2}`, `--kok-capa=${capa}`, `--cikti=${c12}`], `${PAROLA}\n`, env);
-  const pr = existsSync(path.join(c12, "pg-zincir.json")) ? readReleasePointer(readFileSync(path.join(c12, "pg-zincir.json"), "utf8")) : null;
+  const pgYeniAdi = `pg-zincir-${PKT2_KID}.json`;
+  const pr = existsSync(path.join(c12, pgYeniAdi)) ? readReleasePointer(readFileSync(path.join(c12, pgYeniAdi), "utf8")) : null;
   const pv = pr?.ok ? verifyPgPackageManifest(pr.value, { keys: [], zincir: { roots: ZF.kokler, mode: "KABUL", nowMs: Date.now() } }) : null;
   const pgEski = readReleasePointer(readFileSync(path.join(c3, "pg-zincir.json"), "utf8"));
   const pe = pgEski.ok ? verifyPgPackageManifest(pgEski.value, { keys: [], zincir: { roots: ZF.kokler, mode: "YERLESIK" } }) : null;
   const pgYeniKid = pr?.ok ? (parseJws(pr.value).ok ? (parseJws(pr.value) as { value: { header: { kid: string } } }).value.header.kid : "") : "";
-  check("§8j ⭐ pg-yeniden-imzala: pg-zincir.json pkt-2099-2 ile KABUL, künye yükü AYNEN", pgy.kod === 0 && pv?.ok === true && pe?.ok === true && JSON.stringify(pv.value) === JSON.stringify(pe.value) && pgYeniKid === PKT2_KID,
+  check("§8j ⭐ pg-yeniden-imzala: pg-zincir-pkt-2099-2.json pkt-2099-2 ile KABUL, künye yükü AYNEN", pgy.kod === 0 && !existsSync(path.join(c12, "pg-zincir.json")) && pv?.ok === true && pe?.ok === true && JSON.stringify(pv.value) === JSON.stringify(pe.value) && pgYeniKid === PKT2_KID,
     `çıkış ${pgy.kod} ${pgy.hata.trim().slice(-140)}`);
+
+  // D8 dizin kipi: ikinci yıl — yayın dizininde eski takım + kid'siz (pkt-2099-1) + kid'li (pkt-2099-2) yan yana.
+  const pkt3 = pktAnahtar(PKT3_KID);
+  const yd = dizin("y-yayin8");
+  for (const [k, a] of [[c1, "surum.json"], [c1, "surum-zincir.json"], [c8, yeniAdi]] as const) copyFileSync(path.join(k, a), path.join(yd, a));
+  copyFileSync(cift, path.join(yd, path.basename(cift)));
+  copyFileSync(yeniZip, path.join(yd, path.basename(yeniZip)));
+  const yenidenDizin = (cikti: string, ekArg: readonly string[], d = yd) =>
+    bildirimCli(["yeniden-imzala", `--surum-dizini=${d}`, `--anahtar=${pkt3}`, `--kok-capa=${capa}`, `--cikti=${cikti}`, "--kanal=test", ...ekArg], `${PAROLA}\n`, env);
+  const c13 = dizin("y-dizin");
+  const dz = yenidenDizin(c13, [`--paket-iptal=${iptal}`]);
+  const dzSonuc = existsSync(path.join(c13, "sonuc.json")) ? jsonOku(path.join(c13, "sonuc.json")) : {};
+  check("§8n ⭐ D8 dizin kipi: iptalli kid'siz elenir, kid'li pkt-2099-2 girdi olur → surum-zincir-pkt-2099-3.json + cift8-pkt-2099-3.zip",
+    dz.kod === 0 && dzSonuc.girdi === yeniAdi && existsSync(path.join(c13, `surum-zincir-${PKT3_KID}.json`)) && existsSync(path.join(c13, `cift8-${PKT3_KID}.zip`)) && /elendi surum-zincir\.json: PAKET_SERTIFIKA_IPTAL/.test(dz.hata),
+    `çıkış ${dz.kod} girdi ${String(dzSonuc.girdi)} ${dz.hata.trim().slice(-160)}`);
+  const ikisi = iptalDosyasi(ZF.kok, [PKT_KID, PKT2_KID].map((kid) => ({ kid, sertifikaId: sertifikaIdOf(path.join(path.dirname(kid === PKT_KID ? pkt1 : pkt2), `${kid}.sertifika.json`)) })), 5);
+  const c14 = dizin("y-dizin-eski");
+  const dzEski = yenidenDizin(c14, [`--paket-iptal=${ikisi}`]);
+  const dzEskiSonuc = existsSync(path.join(c14, "sonuc.json")) ? jsonOku(path.join(c14, "sonuc.json")) : {};
+  check("§8o ⭐ D8 dizin kipi: zincirli adayların hepsi iptalli → eski takım (surum.json) girdi olur, elenenler ekrana",
+    dzEski.kod === 0 && dzEskiSonuc.girdi === "surum.json" && /zincirli adaylar geçersiz/.test(dzEski.hata) && /eski takım: surum\.json/.test(dzEski.hata),
+    `çıkış ${dzEski.kod} girdi ${String(dzEskiSonuc.girdi)} ${dzEski.hata.trim().slice(-160)}`);
+  const yd2 = dizin("y-yayin8-yalniz");
+  copyFileSync(path.join(c2, "surum-zincir.json"), path.join(yd2, "surum-zincir.json"));
+  copyFileSync(yalniz, path.join(yd2, path.basename(yalniz)));
+  const c15 = dizin("y-dizin-yok");
+  const dzYok = yenidenDizin(c15, [`--paket-iptal=${iptal}`], yd2);
+  check("§8p ⭐ D8 dizin kipi: tek zincirli aday iptalli ve eski takım yok → RED, çıktı YOK", dzYok.kod === 2 && /eski surum\.json de yok/.test(dzYok.hata) && readdirSync(c15).length === 0,
+    `çıkış ${dzYok.kod} ${dzYok.hata.trim().slice(-140)}`);
+  const pd8 = dizin("pg8-yayin");
+  for (const [k, a] of [[c3, "pg.json"], [c3, "pg-zincir.json"], [c12, pgYeniAdi]] as const) copyFileSync(path.join(k, a), path.join(pd8, a));
+  const c16 = dizin("pg8-dizin");
+  const pgDz = bildirimCli(["pg-yeniden-imzala", `--pg-dizini=${pd8}`, `--anahtar=${pkt3}`, `--kok-capa=${capa}`, `--cikti=${c16}`, `--paket-iptal=${iptal}`], `${PAROLA}\n`, env);
+  const pgDzSonuc = existsSync(path.join(c16, "sonuc.json")) ? jsonOku(path.join(c16, "sonuc.json")) : {};
+  check("§8q ⭐ D8 pg dizin kipi: iptalli kid'siz elenir, girdi pg-zincir-pkt-2099-2.json → pg-zincir-pkt-2099-3.json",
+    pgDz.kod === 0 && pgDzSonuc.girdi === pgYeniAdi && existsSync(path.join(c16, `pg-zincir-${PKT3_KID}.json`)), `çıkış ${pgDz.kod} ${pgDz.hata.trim().slice(-140)}`);
 
   const dk = dizin("docker8");
   for (const f of ["t.tar.gz", "docker-compose.yml", ".env.ornek"]) writeFileSync(path.join(dk, f), `${f}\n`);
