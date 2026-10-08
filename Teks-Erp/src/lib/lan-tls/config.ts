@@ -14,7 +14,7 @@ export interface LanTlsConfig {
   port: number;
   /** HTTP dinleyicinin bağlanacağı adres: `required`da yalnız döngü adresi. */
   httpHost: string;
-  /** Sertifika deposu; çözülemediyse null + `dirProblem`. */
+  /** Sertifika deposu; çözülemediyse (ya da `required`da port çakışmasında) null + `dirProblem` — TLS açılmaz. */
   dir: string | null;
   dirProblem: string | null;
 }
@@ -45,9 +45,16 @@ export function readLanTlsConfig(
     if (Number.isInteger(n) && n > 0 && n < 65536) port = n;
     else onWarn(`[lan-tls] LAN_TLS_PORT="${rawPort}" geçersiz — ${LAN_TLS_DEFAULT_PORT} kullanıldı.`);
   }
+  let portProblem: string | null = null;
   if (mode !== "off" && String(port) === String(env.PORT ?? "4000").trim()) {
-    onWarn(`[lan-tls] LAN_TLS_PORT HTTP portuyla aynı (${port}) — off sayıldı.`);
-    mode = "off";
+    if (mode === "required") {
+      // `required` yanlış ayarla `off`a düşmez: HTTP ağa açılırdı. HTTP döngüde kalır, HTTPS açılmaz.
+      portProblem = `LAN_TLS_PORT HTTP portuyla aynı (${port})`;
+      onWarn(`[lan-tls] ${portProblem} — ZORUNLU kip korunur, ağa hiçbir bağlantı açılmaz.`);
+    } else {
+      onWarn(`[lan-tls] LAN_TLS_PORT HTTP portuyla aynı (${port}) — off sayıldı.`);
+      mode = "off";
+    }
   }
 
   let dir: string | null = null;
@@ -60,6 +67,11 @@ export function readLanTlsConfig(
     const lic = resolveLicenseDir(env);
     if (lic.problem) dirProblem = `lisans dizini kullanılamaz (${lic.problem})`;
     else dir = path.join(lic.dir, "lan-tls");
+  }
+
+  if (portProblem) {
+    dir = null;
+    dirProblem = portProblem;
   }
 
   return { mode, port, httpHost: mode === "required" ? LOOPBACK : baseHttpHost, dir, dirProblem };

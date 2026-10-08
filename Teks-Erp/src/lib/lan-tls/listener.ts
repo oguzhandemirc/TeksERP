@@ -35,7 +35,7 @@ export function startLanTlsListener(
   if (cfg.mode === "off") return null;
   const failNote = cfg.mode === "required" ? " — ZORUNLU kipte LAN'a hiçbir bağlantı açık değil" : " — HTTP ile sürüyor";
   if (!cfg.dir) {
-    log.error(`TLS deposu çözülemedi (${cfg.dirProblem ?? "bilinmiyor"})${failNote}`);
+    log.error(`TLS dinleyicisi açılamaz (${cfg.dirProblem ?? "depo çözülemedi"})${failNote}`);
     return null;
   }
   const store = loadOrCreateLanTlsStore(cfg.dir);

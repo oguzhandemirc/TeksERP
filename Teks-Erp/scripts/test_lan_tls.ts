@@ -18,7 +18,7 @@ import net from "node:net";
 import { generateKeyPairSync, X509Certificate, createHash } from "node:crypto";
 import { readLanTlsConfig, LAN_TLS_DEFAULT_PORT } from "../src/lib/lan-tls/config";
 import { buildSelfSignedCertificate, certificateFingerprint, derToPem } from "../src/lib/lan-tls/x509";
-import { loadOrCreateLanTlsStore, LAN_TLS_FILES, formatFingerprintGroups } from "../src/lib/lan-tls/store";
+import { loadOrCreateLanTlsStore, LAN_TLS_FILES, LAN_TLS_VALIDITY_YEARS, formatFingerprintGroups } from "../src/lib/lan-tls/store";
 import { startLanTlsListener, stopLanTlsListener, getLanTlsAdvert } from "../src/lib/lan-tls/listener";
 import { readWebHardeningConfig } from "../src/middlewares/web-hardening";
 import { buildAdvertisedTxt } from "../src/lib/discovery-txt";
@@ -29,6 +29,14 @@ function check(label: string, ok: boolean, detail = ""): void {
   if (ok) pass++;
   else fail++;
   console.log(`${ok ? "✅" : "❌"} ${label}${detail ? ` — ${detail}` : ""}`);
+}
+
+/** TBSCertificate.validity içinde GeneralizedTime (0x18, 15 bayt "YYYYMMDDHHMMSSZ") var mı. */
+function derHasGeneralizedTime(der: Buffer): boolean {
+  for (let i = 0; i + 17 <= der.length; i++) {
+    if (der[i] === 0x18 && der[i + 1] === 15 && /^\d{14}Z$/.test(der.subarray(i + 2, i + 17).toString("ascii"))) return true;
+  }
+  return false;
 }
 
 const TMP = fs.mkdtempSync(path.join(os.tmpdir(), "lan-tls-bekci-"));
@@ -58,8 +66,14 @@ function section1(): void {
   check("§1 tanınmayan kip → off + uyarı", typo.c.mode === "off" && typo.c.httpHost === "0.0.0.0" && typo.warns.length === 1, typo.warns.join(" | "));
   const badPort = cfg({ LAN_TLS_MODE: "dual", LAN_TLS_PORT: "99999" });
   check("§1 geçersiz port → varsayılan + uyarı", badPort.c.port === 4443 && badPort.warns.length === 1);
-  const clash = cfg({ LAN_TLS_MODE: "required", LAN_TLS_PORT: "4000" });
-  check("§1 HTTP portuyla çakışan TLS portu → off (HTTP LAN'dan kopmaz)", clash.c.mode === "off" && clash.c.httpHost === "0.0.0.0");
+  const clash = cfg({ LAN_TLS_MODE: "dual", LAN_TLS_PORT: "4000" });
+  check("§1 dual'da HTTP portuyla çakışan TLS portu → off (HTTP LAN'dan kopmaz)", clash.c.mode === "off" && clash.c.httpHost === "0.0.0.0");
+  const reqClash = cfg({ LAN_TLS_MODE: "required", LAN_TLS_PORT: "4000" });
+  check("§1 required'da çakışma off'a DÜŞMEZ: HTTP döngüde, TLS deposu yok (ağ kapalı)",
+    reqClash.c.mode === "required" && reqClash.c.httpHost === "127.0.0.1" && reqClash.c.dir === null && !!reqClash.c.dirProblem,
+    `${reqClash.c.mode} ${reqClash.c.httpHost} ${reqClash.c.dirProblem}`);
+  const reqHost = readLanTlsConfig(baseEnv({ LAN_TLS_MODE: "required" }), "192.168.1.5", () => {});
+  check("§1 required'da HOST verilse de HTTP yalnız 127.0.0.1", reqHost.httpHost === "127.0.0.1", reqHost.httpHost);
   const custom = cfg({ LAN_TLS_DIR: path.join(TMP, "ozel") });
   check("§1 LAN_TLS_DIR açıkça verilirse o kullanılır", custom.c.dir === path.join(TMP, "ozel"));
   const inApp = readLanTlsConfig({ PORT: "4000", LICENSE_DIR: process.cwd() } as NodeJS.ProcessEnv, "0.0.0.0", () => {});
@@ -106,6 +120,14 @@ function section3(): void {
   if (process.platform !== "win32") {
     check("§3 özel anahtar 0600", (fs.statSync(keyFile).mode & 0o777) === 0o600, (fs.statSync(keyFile).mode & 0o777).toString(8));
   }
+  const made = new X509Certificate(first.certPem);
+  const from = new Date(made.validFrom);
+  const to = new Date(made.validTo);
+  const thirty = new Date(from.getTime());
+  thirty.setUTCFullYear(thirty.getUTCFullYear() + LAN_TLS_VALIDITY_YEARS);
+  check("§3 üretilen sertifika en az 30 yıl geçerli", LAN_TLS_VALIDITY_YEARS >= 30 && to.getTime() >= thirty.getTime() - 2 * 864e5,
+    `${made.validFrom} → ${made.validTo}`);
+  check("§3 2050 sonrası bitiş GeneralizedTime (DER etiketi 0x18)", to.getUTCFullYear() < 2050 || derHasGeneralizedTime(made.raw), made.validTo);
   const second = loadOrCreateLanTlsStore(dir);
   check("§3 ikinci açılış AYNI parmak izi, üretim yok", second.ok && !second.generated && second.fingerprint === first.fingerprint);
 
@@ -196,7 +218,7 @@ async function section4(): Promise<void> {
 
   const broken = { ...dualCfg, dir: null, dirProblem: "deneme" };
   const none = startLanTlsListener(app as never, broken, "127.0.0.1", log);
-  check("§4 depo yoksa dinleyici açılmaz + hata log'u", none === null && logs.some((l) => l.startsWith("e:TLS deposu")));
+  check("§4 depo yoksa dinleyici açılmaz + hata log'u", none === null && logs.some((l) => l.startsWith("e:TLS dinleyicisi açılamaz")));
 }
 
 function section5(): void {
