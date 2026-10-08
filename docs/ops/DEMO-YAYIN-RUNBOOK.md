@@ -1,5 +1,13 @@
 # Demo Yayın Runbook — `demo.etkiliyazilim.com`
 
+> ⛔ **GEÇERSİZ (kullanıcı kararı 2026-10-08):** bu runbook'un sunucusu `fzt`
+> (`91.217.119.138`, eski takma ad `yenisunucu`) kullanıcının fizik tedavi sitelerini
+> barındırır ve TeksERP için artık KULLANILMAZ. Oradaki demo kaldırılacak; yeni satış
+> demosu bulut deneme sunucusuna (`213.142.134.226`, `ssh tekserp-bulut-deneme`) temiz
+> kurulur ve `demo` DNS kaydı oraya çevrilir. Aşağısı yalnız tarihsel kayıttır;
+> kalıntı envanteri `SUNUCU-ENVANTERI.md` §fzt. `deploy-demo.sh`/`demo-reset.sh` hâlâ
+> varsayılan `DEMO_HOST=yenisunucu` taşır — yeni sunucuya göre ayrıca uyarlanır.
+
 **Bu belge teorik değildir: 2026-08-14'te baştan sona uygulandı ve doğrulandı.**
 Aşağıdaki her komut gerçekten koştu; çıkan iki tuzak da (§7) burada yazılı.
 
@@ -40,11 +48,11 @@ fail2ban çalışıyor.
 ## 2. Erişim
 
 ```bash
-ssh yenisunucu        # ~/.ssh/config: oguzhan@91.217.119.138:2222, yenisunucu_ed25519
+ssh -p 2222 oguzhan@91.217.119.138   # fzt (eski takma ad yenisunucu; ~/.ssh/config'te girdi yok)
 ```
 
 ⚠️ **Hangi sunucu:** demo, repodaki son kayda göre hâlâ ESKİ paylaşımlı sunucuda
-(`91.217.119.138`, takma ad `yenisunucu` — adı yanıltıcı, bu ESKİ makinedir).
+(`91.217.119.138`, takma ad `fzt` — eski adı `yenisunucu`; fizik tedavi sunucusu).
 2026-09-01'de yalnız güncelleme yayını `tekserp-vds`e (`80.253.255.188`) taşındı;
 demo bilerek taşınmadı (`VDS-TASIMA.md` "Taşınmıyor", `SUNUCU-ENVANTERI.md`).
 Bu bilgi 2026-09-29'da sunucuda **doğrulanamadı** (repo kaydı; sunucu ölçümü ayrı iş).
@@ -68,7 +76,7 @@ sorunu da yok; yine de SPA fallback bloğu ileriye dönük duruyor.
 ### 4.1 Veritabanı
 
 ```bash
-ssh yenisunucu
+ssh -p 2222 oguzhan@91.217.119.138   # fzt
 # rol + veritabanı (İDEMPOTENT — mevcut fizyodb/postgres'e DOKUNMAZ)
 sudo docker exec postgres psql -U postgres -c \
   "CREATE ROLE tekserp LOGIN PASSWORD '<parola>';"

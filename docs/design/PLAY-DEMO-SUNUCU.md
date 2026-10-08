@@ -7,7 +7,7 @@
 
 | # | Karar | Sonucu |
 |---|---|---|
-| K1 | a — eski demo sunucusunda, satış demosundan AYRI kurulum | Ayrı konteyner + kendi PostgreSQL'i; satış demosuna dokunulmaz |
+| K1 | ~~a — eski demo sunucusunda~~ **GEÇERSİZ → 2026-10-08:** inceleme kurulumu YENİ bulut deneme sunucusunda (`213.142.134.226`, `ssh tekserp-bulut-deneme`), satış demosundan AYRI kurulum | Ayrı konteyner + kendi PostgreSQL'i. Eski sunucu `fzt` (fizik tedavi siteleri) TeksERP için kullanılmaz (kullanıcı kararı 2026-10-08); yeni satış demosu da aynı bulut deneme sunucusuna kurulur |
 | K2 | **b** — tablete "internet sertifikalı sunucu" desteği; Cloudflare kalır | Gri bulut + 4443 + kod karşılaştırması (eski A düzeni) DÜŞTÜ. Tablet tasarımı `TABLET-GENEL-CA-BAGLANTI.md`; yeni Play paketi (vc61) gerekir. Aynı iş bulut kurulumunun tablet bağlantısını da çözer |
 | K3 | a — beyanlı istisna | Kök `CLAUDE.md` cümlesi: müşterinin kendi yerindeki fabrika sunucusuna gelen port açılmaz; bizim kurup yönettiğimiz sunucular (bulut VDS'i, demo/inceleme) istisnadır, API orada internete açık yayın yapar. Arşiv `2026-10.md` §2026-10-08 gelen bağlantı istisnası |
 | K4 | a — lisans sunucusunda "test" grubunda inceleme lisansı | Plan 3.8 ile aynı grup |
@@ -56,7 +56,9 @@ Turuncu bulutta tableti karşılayan sertifika Cloudflare'in KENAR sertifikasıd
 
 ~~Önerilen: A şimdi.~~ **Karar (K2, kullanıcı 2026-10-08): C.** Tablet işi bulut kurulumunun önünde zaten duruyordu; tek seferde ikisini çözer. A'nın açık 4443'ü ve kod karşılaştırması gerekmez.
 
-## 4. Kararlaştırılan düzen (K1-a + K2-b)
+## 4. Kararlaştırılan düzen (K1 + K2-b)
+
+> ⚠️ **2026-10-08 K1 değişti:** aşağıdaki "eski sunucu", "mevcut Traefik", Ö2/Ö5 atıfları `fzt` içindir ve GEÇERSİZDİR. Port, vekil ve TLS satırları bulut deneme sunucusunda yeniden belirlenir (orada ufw bugün yalnız 2222'yi açar; 443'ün yalnız Cloudflare aralıklarına açılması ve köken sertifikası D1'in konusudur). Kapsam (ayrı konteyner, kendi PG, deneme hesabı, veri, tablet) değişmez.
 
 **Ayrı inceleme kurulumu, satış demosundan bağımsız, Cloudflare arkasında.** Satış demosu (`demo.etkiliyazilim.com`) DOKUNULMADAN kalır. Ayrı olmasının nedeni artık yalnız veri yalıtımıdır (incelemecinin verisi satış demosunu kirletmez, ayrı sıfırlanır); A düzenindeki `TRUST_PROXY` gerekçesi düştü — yeni kapı açılmaz, bütün istekler aynı vekil zincirinden gelir.
 
@@ -87,7 +89,7 @@ K3-a ile çözüldü: kök `CLAUDE.md` cümlesi müşterinin kendi yerindeki fab
 | Dilim | İçerik | Yazma? |
 |---|---|---|
 | D0 | Bu belge + kararlar | — |
-| D1 | Eski sunucuda salt ölçüm: Traefik sürümü ve yönlendirici kalıbı, demo'nun `TRUST_PROXY`/`CLIENT_IP_HEADER` zinciri, derleme önbelleği/disk, etkiliyazilim.com CAA kaydı; satış demosuna dokunulmaz | Hayır |
+| D1 | Bulut deneme sunucusunda salt ölçüm (2026-10-08'e kadar "eski sunucuda"): Traefik sürümü ve yönlendirici kalıbı, demo'nun `TRUST_PROXY`/`CLIENT_IP_HEADER` zinciri, derleme önbelleği/disk, etkiliyazilim.com CAA kaydı; satış demosuna dokunulmaz | Hayır |
 | D2 | Tablet vc61 — `TABLET-GENEL-CA-BAGLANTI.md` G1–G3 (inceleme kurulumunun ön koşulu) | Repo |
 | D3 | İnceleme yığını: compose (backend + kendi PG + iç ağ + adlı birimler + Traefik etiketi), `.env` (sırlar sunucuda üretilir), seed + deneme hesabı, lisans (test grubu). Önce yalnız sunucunun kendi içinden ölçülür | Sunucuya (onaylı) |
 | D4 | Dışarı açma: Cloudflare'de turuncu bulutlu `inceleme` A kaydı | Cloudflare (onaylı) |
