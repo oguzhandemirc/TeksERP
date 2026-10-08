@@ -273,7 +273,7 @@ if (staged.some(dagitimBekcisiTetigi)) {
 const INDIR_KOKENI_TETIK = new Set([
   "deploy/guncelleme-sunucusu/indir/docker-compose.yml", "deploy/guncelleme-sunucusu/indir/nginx/default.conf",
   "deploy/guncelleme-sunucusu/docker-compose.yml", "satici/sunucu/src/http/client-address.ts", "mobil/scripts/lib/feed.cjs",
-  "deploy/dagitim.json", "scripts/test_indir_sunucusu.mjs", "deploy/traefik/kenar-zinciri.mjs",
+  "deploy/dagitim.json", "scripts/test_indir_sunucusu.mjs", "deploy/traefik/kenar-zinciri.mjs", "scripts/lib/backend-yayin.mjs",
 ]);
 if (staged.some((f) => INDIR_KOKENI_TETIK.has(f))) {
   adimlar.push({ ad: "indirme kökeni", cwd: ".", cmd: ["node", ["scripts/test_indir_sunucusu.mjs"]] });

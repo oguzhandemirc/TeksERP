@@ -9,7 +9,8 @@
 //      Host ile kesişmez; eski compose yeni host'u anmaz
 //   §3 kenar zinciri (deploy/traefik/kenar-zinciri.mjs): Cloudflare ipallowlist = satıcı `CLOUDFLARE_NETWORKS`
 //      birebir → Cf-Connecting-Ip hız seddi; yalnız kendi ara katmanları (başka sağlayıcının/servisin adı yok)
-//   §4 nginx: uzun önbellekli konumda `always` YOK · OTA manifest sınırlayıcısı = feed.cjs `MULTIPART_BOUNDARY`
+//   §4 nginx: yayıncının paket uzantıları (backend zip · Linux/OCI tar, `scripts/lib/backend-yayin.mjs` desenleri) + panel
+//      exe/blockmap İLK eşleşen konumda uzun önbellekli · uzun önbellekli konumda `always` YOK · OTA manifest sınırlayıcısı = feed.cjs `MULTIPART_BOUNDARY`
 //      + expo başlıkları · nokta-dosya (yarım yükleme) 404 · dizin listesi kapalı · 404 no-store
 //   §5 kablolama: commit kancası + CI bu bekçiyi koşar
 //
@@ -23,6 +24,7 @@ import path from 'node:path';
 
 import { KAYIT_REL, KOK, kayitAyristir, kayitHatalari } from './lib/dagitim.mjs';
 import { kenarZinciriSorunlari } from '../deploy/traefik/kenar-zinciri.mjs';
+import { OCI_PAKET_ADI_DESENI, PAKET_ADI_DESENI } from './lib/backend-yayin.mjs';
 
 const COMPOSE_REL = 'deploy/guncelleme-sunucusu/indir/docker-compose.yml';
 const NGINX_REL = 'deploy/guncelleme-sunucusu/indir/nginx/default.conf';
@@ -39,7 +41,7 @@ const ESKI_YONLENDIRICI = 'tekserpguncelleme';
 const ESKI_HOST = 'guncelleme.etkiliyazilim.com';
 
 /** Commit tetiği: bekçinin okuduğu her dosya (kanca bunu içe aktarmaz; §5 listenin kancada aynen geçtiğini ölçer). */
-export const TETIK = Object.freeze([COMPOSE_REL, NGINX_REL, ESKI_COMPOSE_REL, CF_REL, FEED_REL, KAYIT_REL, BEN_REL, 'deploy/traefik/kenar-zinciri.mjs']);
+export const TETIK = Object.freeze([COMPOSE_REL, NGINX_REL, ESKI_COMPOSE_REL, CF_REL, FEED_REL, KAYIT_REL, BEN_REL, 'deploy/traefik/kenar-zinciri.mjs', 'scripts/lib/backend-yayin.mjs']);
 const OKUNAN = [COMPOSE_REL, NGINX_REL, ESKI_COMPOSE_REL, CF_REL, FEED_REL, KAYIT_REL, KANCA_REL, CI_REL];
 
 function dosyalariOku() {
@@ -143,6 +145,16 @@ export function olc(d) {
       if (yas && Number(yas[1]) > 0 && /\balways\b/.test(m[2])) s.kirmizi.push(`§4 "${desen}" uzun önbellek başlığında always (404 bir hafta kenarda kalır)`);
     }
   }
+  // Değişmez paket uzantıları: yayıncının paket adı desenlerinden (tek kaynak) + panel kurulumu. nginx ilk eşleşen
+  // regex konumunu seçer ⇒ uzun önbellek o konumda olmalı (yoksa her indirme kökene düşer).
+  const uzanti = (re) => /\\\.([a-z0-9]+)\$$/.exec(re.source)?.[1];
+  const degismez = ['exe', 'blockmap', uzanti(PAKET_ADI_DESENI), uzanti(OCI_PAKET_ADI_DESENI)];
+  if (degismez.some((u) => !u)) s.olculemedi.push('§4 yayıncı paket adı desenlerinden uzantı okunamadı');
+  else for (const u of degismez) {
+    const ilk = k.find((x) => x.desen.startsWith('~ ') && (() => { try { return new RegExp(x.desen.slice(2)).test(`/test/urun/1.0.0/paket.${u}`); } catch { return false; } })());
+    const yas = ilk && /add_header\s+Cache-Control\s+"[^"]*max-age=([0-9]+)/.exec(ilk.govde);
+    if (!yas || Number(yas[1]) <= 0) s.kirmizi.push(`§4 değişmez paket .${u} uzun önbellekli konuma düşmüyor (${ilk ? `ilk konum "${ilk.desen}"` : 'konum yok'})`);
+  }
   const manifest = k.find((x) => x.desen.includes('/mobil/ota/') && x.desen.includes('manifest'));
   if (!manifest) s.kirmizi.push('§4 OTA manifest konumu yok');
   else {
@@ -188,7 +200,9 @@ function sondalar(taban) {
     ['N9 html bağı yazılabilir', 'kirmizi', C((t) => t.replace('./html:/usr/share/nginx/html:ro', './html:/usr/share/nginx/html'))],
     ['N10 tls yok', 'kirmizi', C((t) => t.replace(/^.*routers\.tekserp-indir\.tls=true\n/m, ''))],
     ['N11 eski compose yeni adresi anıyor', 'kirmizi', deg(ESKI_COMPOSE_REL, (t) => `${t}\n# indir.etkiliyazilim.com\n`)],
-    ['N12 exe konumunda always', 'kirmizi', N((t) => t.replace(/(location ~ \\\.\(exe\|blockmap\|zip\)\$ \{[^}]*max-age=604800")/, '$1 always'))],
+    ['N12 exe konumunda always', 'kirmizi', N((t) => t.replace(/(location ~ \\\.\(exe\|blockmap\|zip\|tar\)\$ \{[^}]*max-age=604800")/, '$1 always'))],
+    ['N12b Linux/OCI tar uzun önbellek konumundan çıktı', 'kirmizi', N((t) => t.replace('location ~ \\.(exe|blockmap|zip|tar)$ {', 'location ~ \\.(exe|blockmap|zip)$ {'))],
+    ['N12c backend zip uzun önbellek konumundan çıktı', 'kirmizi', N((t) => t.replace('location ~ \\.(exe|blockmap|zip|tar)$ {', 'location ~ \\.(exe|blockmap|tar)$ {'))],
     ['N13 OTA varlık konumunda always', 'kirmizi', N((t) => t.replace(/(\/\[0-9\]\+\/ \{\s*add_header Cache-Control "public, max-age=604800")/, '$1 always'))],
     ['N14 sınırlayıcı farklı', 'kirmizi', N((t) => t.replace('boundary=tekserpota', 'boundary=baska'))],
     ['N15 nokta-dosya konumu yok', 'kirmizi', N((t) => t.replace(/location ~ \(\^\|\/\)\\\. \{\s*return 404;\s*\}/, ''))],

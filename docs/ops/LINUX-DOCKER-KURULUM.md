@@ -5,11 +5,14 @@
 
 ## 0. Ne teslim edilir
 
+Teslim TEK dosyadır: `tekserp-backend-oci-<sürüm>.tar` (sıkıştırılmamış dış tar, üyeler düz ad; biçimin tek kaynağı `Teks-Erp/scripts/lib/oci-paket.ts`, `GUNCELLEYICI.md` §16 madde 9). Önce `tar -xf tekserp-backend-oci-<sürüm>.tar` ile boş bir dizine açılır; üyeleri:
+
 | Dosya | Ne |
 |---|---|
 | `tekserp-korumali_<sürüm>_linux-amd64.tar.gz` | İMZALI imajın `docker save | gzip -n`'i — `docker load` açar (yeniden üretilebilir: aynı imaj aynı sha); imaj `/app`te kendi imzalı bütünlük listesini taşır (label `tr.tekserp.butunluk=<kid>`, §8); imzasız taban teslim edilmez |
-| `docker-compose.yml` · `.env.ornek` | üç servis (postgres 16 · backend · yedek) ve ortam şablonu |
-| `PAKET-DOCKER.json` | künye — `tekserp-butunluk` yükü (imzalı kapsam = üç teslim dosyası, liste dosyasının özeti, imaj kimliği, runtime Node/V8, `.jsc` sha256) |
+| `docker-compose.yml` · `.env.ornek` | üç servis (postgres 16 · backend · yedek) ve ortam şablonu — `docker-compose.yml` GÜNCELLEYİCİLİ düzenin şablonudur (`docker-compose.guncelleyici.yml`, sürüm dolu: imaj `tekserp-korumali:<sürüm>`, açılışta göç YOK, güncelleme dizini bağları); ⚠ güncelleyicisiz elle kurulum (§2–§3) bu dosyayla açılmaz — L7 kurulum aracı gelene dek elle kurulum depodaki `Teks-Erp/docker/korumali/docker-compose.yml`i kullanır |
+| `tekserp-guncelleyici` · `guncelleyici-kunye.json` | Linux güncelleyicisi (linux-x64 ELF, CI işi `guncelleyici-linux`) ve künyesi — künye paketlemede imajın içinde ikiliden yeniden ölçülür |
+| `PAKET-DOCKER.json` | künye — `tekserp-butunluk` yükü (imzalı kapsam = beş teslim dosyası, `platform: linux-x64-oci`, göç sayısı, güncelleyici sürüm/sha256, liste dosyasının özeti, imaj kimliği, runtime Node/V8, `.jsc` sha256) |
 | `butunluk-liste.txt` | imzalı liste (2e-S biçimi `<sha256>\t<boyut>\t<yol>`; imza aracı teslim dosyalarını ölçüp yazar) |
 | `PAKET-DOCKER.json.jws` | PAKET anahtarıyla imza (`teslim-paketle.sh` 2e aracıyla atar; anahtar yoksa paket üretilmez — §8) |
 | `SHA256SUMS` | `sha256sum -c SHA256SUMS` ile doğrulanır |
@@ -26,7 +29,8 @@
 ## 2. İlk kurulum
 
 ```sh
-sha256sum -c SHA256SUMS                         # dört satır da OK olmalı
+tar -xf tekserp-backend-oci-<sürüm>.tar        # boş bir dizinde
+sha256sum -c SHA256SUMS                         # sekiz satır da OK olmalı
 docker load -i tekserp-korumali_<sürüm>_linux-amd64.tar.gz   # "Loaded image: tekserp-korumali:<etiket>"
 cp .env.ornek .env && chmod 600 .env
 # .env'i doldur: TEKSERP_IMAJ = load çıktısındaki etiket;
@@ -120,7 +124,7 @@ shred -u ozel/<ad>.tkkey
 
 ## 8. İmza
 
-- İmzalanan yük `PAKET-DOCKER.json`un TAMAMIDIR: `tekserp-butunluk` (`Teks-Erp/src/lib/license/integrity.ts` `IntegrityManifestSchema` — `v`, `paketId`, `urun: "backend-docker"`, `surum`, `derlemeTarihi`, `musteri`, `kapsam {dizinler: [], dosyalar: [<tar.gz>, docker-compose.yml, .env.ornek]}`, `liste {sha256, boyut, dosyaSayisi}`; ek alanlar `imaj`, `sunucu`, `commit` imzanın kapsamında). `teslim-paketle.sh` yalnız kapsamı yazar; imza aracı kapsamdaki dosyaları ölçer, `butunluk-liste.txt`i yazar, `liste` alanını künyeye koyar (2e-S biçimi, I6); kapsamdaki dosya eksikse imza atılmaz.
+- İmzalanan yük `PAKET-DOCKER.json`un TAMAMIDIR: `tekserp-butunluk` (`Teks-Erp/src/lib/license/integrity.ts` `IntegrityManifestSchema` — `v`, `paketId`, `urun: "backend-docker"`, `surum`, `derlemeTarihi`, `musteri`, `kapsam {dizinler: [], dosyalar: [<tar.gz>, docker-compose.yml, .env.ornek, tekserp-guncelleyici, guncelleyici-kunye.json]}`, `liste {sha256, boyut, dosyaSayisi}`; ek alanlar `platform`, `gocSayisi`, `imaj`, `sunucu`, `guncelleyici`, `commit` imzanın kapsamında). `teslim-paketle.sh` yalnız kapsamı yazar; imza aracı kapsamdaki dosyaları ölçer, `butunluk-liste.txt`i yazar, `liste` alanını künyeye koyar (2e-S biçimi, I6); kapsamdaki dosya eksikse imza atılmaz.
 - İmza: PAKET anahtarı, JWS EdDSA, `typ` = `tekserp-butunluk` → `PAKET-DOCKER.json.jws`. `teslim-paketle.sh` künyeyi yazdıktan sonra 2e aracını çağırır (`npx tsx Teks-Erp/scripts/build-korumali-imza.ts belge --belge=<çıktı>/PAKET-DOCKER.json --anahtar=<dosya>`); anahtar `TEKSERP_PAKET_ANAHTARI` ile AÇIKÇA verilir, varsayılan yol yoktur (verilmezse betik durur; üretim anahtarı PAKET sertifikalı `pkt-*` zincirinden, 3.9 D5/D8); künye müşteri taşımaz. Anahtar yalnız Mac'te, CI'a girmez; anahtar yoksa ya da öz-denetim düşerse paket ÜRETİLMEZ. `.jws` ve `butunluk-liste.txt` SHA256SUMS'a girer (bekçi `test_docker_hijyeni` §5c · `test_lisans_butunluk` §6).
 - Doğrulama sırası (kurulumda, `docker load`dan ÖNCE): JWS'i gömülü PAKET açık anahtarıyla doğrula → `butunluk-liste.txt`in boyu/özeti imzalı `liste`yle → listedeki her dosyanın sha256'sı → `imaj.arsiv` ≡ yüklenecek tar. Doğrulayıcı bugün native çekirdekte (`verifyIntegrity`); imaj DIŞINDA koşacak bir doğrulama aracı 2e ile birlikte tanımlanır.
 - İmaj İÇİ bütünlük listesi (açılışta + günlük native denetimde): akış **imzasız taban → `imaj-imzala.mjs` → ince son katman**.
@@ -128,6 +132,9 @@ shred -u ozel/<ad>.tkkey
   2. İmza (Mac, PAKET anahtarı): `TEKSERP_PAKET_ANAHTARI=<anahtar> node Teks-Erp/docker/korumali/imaj-imzala.mjs tekserp-korumali:<sürüm>-imzasiz tekserp-korumali:<sürüm> [imza bayrakları]`. Betik `/app`i tabandan dışa verir, Windows korumalı paketinin AYNI aracını ve kapsamını çağırır (`build-korumali-imza.ts imzala --urun=backend-docker`, kapsam `integrity-scope.ts`), `butunluk-liste.txt` + `butunluk-zincir.jws` (`pkt-*`) ya da `butunluk.jws` (`paket-*`) yazar ve ikisini `FROM <taban>` + `COPY` (root, 0644) ile tek katman olarak ekler; label `tr.tekserp.butunluk=<kid>`. Parolayı yalnız imza aracı okur: `--parola-dosyasi` > Anahtar Zinciri kasası `tekserp/paket` (`scripts/lib/parola-kasasi.mjs`) > TTY > stdin.
   3. Öz-denetim: imzalı imajda, ağsız, salt-okunur kök ve `10001` kullanıcısıyla imajın KENDİ native çekirdeği her imzalı yükü `/app`e karşı doğrular; `GECERLI` değilse imzalı etiket silinir. Ardından `scripts/test_korumali_imaj.mjs --imaj=<…> --imzali` (K8 etiket + liste/yük, K9 `node_modules/.bin` yok). `teslim-paketle.sh` yalnız bu etiketli imajı paketler, künyeye `imaj.butunlukKid` yazar.
   4. Üretim kid'inde (`paket-*` / `pkt-*`) imza aracı derleme kökeni ister; Docker imajının kayıtlı derleme kökeni (CI/thinkpad) henüz yok ⇒ `--ci-atla="<kullanıcının cümlesi>"` gerekir (açık borç). Prova: `node scripts/agir-is.mjs -- node Teks-Erp/docker/korumali/prova-imaj-butunluk.mjs` (test kökü, zincir-yalnız; dört negatif).
+  5. Teslim paketi: `TEKSERP_PAKET_ANAHTARI=<anahtar> sh Teks-Erp/docker/korumali/teslim-paketle.sh tekserp-korumali:<sürüm> <güncelleyici-dizini> <çıktı-dizini>` — `<güncelleyici-dizini>` CI yapıtı `guncelleyici-linux-x64` (`tekserp-guncelleyici` + `guncelleyici-kunye.json`); etiket TAM `tekserp-korumali:<sürüm>` olmalı (compose onu ister), imzasız taban reddedilir (`test_korumali_imaj.mjs --imzali`). Çıktı repo DIŞI `tekserp-backend-oci-<sürüm>.tar` (ustar, sahip 0:0, Mac meta verisi yok); var olan paket EZİLMEZ.
+  6. İmaj kimliği = CONFIG ÖZETİ, arşivden ölçülür (`npx tsx Teks-Erp/scripts/backend-bildirim.ts imaj-kimlik --arsiv=<imaj .tar.gz>`). `docker image inspect` `.Id`si KULLANILMAZ: containerd deposunda (Docker 29 varsayılanı) index özetidir.
+  7. Yayın (kanal başına, yalnız Mac): `node deploy/backend-yayinla.mjs --grup=<grup> --urun=backend-oci --paket=<tar> --kuru` — bildirim aracı dış künyeyi, güncelleyici künyesini ve imajı ölçer; imzasız taban (label yok · son katman ince imza katmanı değil · imzalı liste/yük yok) DURUR. Gerçek yükleme bugün kapalıdır (`YENI_ADRES_KAPISI`).
 
 ## 9. Birimler, kaldırma ve baştan kurma
 

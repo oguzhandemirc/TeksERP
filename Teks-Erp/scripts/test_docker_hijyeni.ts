@@ -27,7 +27,7 @@
 //      §5i göçlü geri alma şemayı ÖNCE sıfırlar (pg_restore --clean yeni göçün tablolarını bırakır), göç sayısını ölçer.
 //      §5j runbook §9 compose'un bütün birimlerini `<proje>_` adıyla anar; kaldırma `-v` değil adıyla.
 //      §5k bulut kenarı örneği (runbook §10): TRUST_PROXY=1 + hız sınırı, port yalnız 127.0.0.1, konak ağı yalnız sertleştirilmiş kenarda, teslim dışı.
-//      §5l teslim paketi `backend-oci` biçimi (L3): dış tar üyeleri + künye kapsamı = `scripts/lib/oci-paket.ts`, etiket
+//      §5n teslim paketi `backend-oci` biçimi (L3): dış tar üyeleri + künye kapsamı = `scripts/lib/oci-paket.ts`, etiket
 //      `tekserp-korumali:<sürüm>`, compose şablonu doldurulur (yer tutucu kalmaz), imaj kimliği ARŞİVDEN (`.Id` yok),
 //      güncelleyici künyesi imajın içinde ikiliden yeniden ölçülür, dış tar ustar + sahip 0:0 + Mac meta verisiz.
 //      §5m imaj derlemesi (`sahne.mjs`) native'in gömülü çapa kipini bayt koduyla kıyaslar (`native-capa-kipi.mjs`).
@@ -634,7 +634,7 @@ function teslimImzaStatik(betik: string): string[] {
   }
 }
 
-// §5l — teslim paketi `backend-oci` biçimi (sözleşme 5, L3): üye kümesi ve künye kapsamı TEK kaynaktan
+// §5n — teslim paketi `backend-oci` biçimi (sözleşme 5, L3): üye kümesi ve künye kapsamı TEK kaynaktan
 // (`scripts/lib/oci-paket.ts`, yayıncı aynısını ölçer); etiket compose'un istediği; şablon doldurulur; imaj kimliği
 // config özeti ARŞİVDEN (containerd `.Id`'si index özetidir); güncelleyici künyesi imajda ikiliden; dış tar belirlenimli.
 function teslimOciStatik(betik: string): string[] {
@@ -662,7 +662,7 @@ function teslimOciStatik(betik: string): string[] {
 {
   const t = oku("Teks-Erp/docker/korumali/teslim-paketle.sh");
   const g = teslimOciStatik(t);
-  check("§5l ⭐ teslim paketi backend-oci biçiminde (üyeler/kapsam = oci-paket.ts, etiket, doldurulmuş şablon, kimlik arşivden, künye imajda ölçülür, belirlenimli tar)", g.length === 0, g.join(" | ") || "temiz");
+  check("§5n ⭐ teslim paketi backend-oci biçiminde (üyeler/kapsam = oci-paket.ts, etiket, doldurulmuş şablon, kimlik arşivden, künye imajda ölçülür, belirlenimli tar)", g.length === 0, g.join(" | ") || "temiz");
   const sondalar: Array<[string, string]> = [
     ["dış tar'dan güncelleyici düştü", t.replace("docker-compose.yml .env.ornek tekserp-guncelleyici guncelleyici-kunye.json PAKET-DOCKER.json PAKET-DOCKER.json.jws", "docker-compose.yml .env.ornek guncelleyici-kunye.json PAKET-DOCKER.json PAKET-DOCKER.json.jws")],
     ["kapsamdan künye düştü", t.replace(/("\$GKUNYE" \\\n\s+"\$AD" docker-compose\.yml \.env\.ornek tekserp-guncelleyici) guncelleyici-kunye\.json/, "$1")],
@@ -674,7 +674,7 @@ function teslimOciStatik(betik: string): string[] {
     ["sahip 0:0 kalktı (GNU)", t.replace("--owner=0 --group=0 --numeric-owner ", "")],
     ["Mac meta verisi girdi", t.replace("--no-xattrs --no-mac-metadata ", "")],
   ];
-  for (const [ad, m] of sondalar) check(`§5l sonda: ${ad} → kırmızı`, m !== t && teslimOciStatik(m).length > 0, m !== t ? "" : "MUTASYON UYGULANMADI");
+  for (const [ad, m] of sondalar) check(`§5n sonda: ${ad} → kırmızı`, m !== t && teslimOciStatik(m).length > 0, m !== t ? "" : "MUTASYON UYGULANMADI");
 }
 
 // §5m — imaj derlemesi native'in gömülü çapa kipini bayt koduyla kıyaslar (Windows `paketle.ps1` ile aynı kapı, G3):
