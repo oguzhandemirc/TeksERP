@@ -18,7 +18,9 @@
 //       (pkt-*, aynı yük); `--anahtar=<pkt dosyası>` tek başına zincir-yalnız; [--paket-iptal=<kök imzalı iptal>] yalnız
 //       zincirli pakette `paket-iptal.jws`; [--kok-dosyasi=<kök.json>] çapa; iki parola sırayla. Sertifikanın bitişine
 //       30 günden az kaldıysa imza YOK (parola sorulmadan).
-//   npx tsx scripts/build-korumali-imza.ts belge --belge=<PAKET-DOCKER.json> --anahtar=<dosya>   (Docker teslim künyesi → <belge>.jws)
+//   npx tsx scripts/build-korumali-imza.ts belge --belge=<PAKET-DOCKER.json> --anahtar=<dosya> [--kok-dosyasi=<kök.json>]
+//       Docker teslim künyesi → <belge>.jws; `pkt-*` anahtarda zincirli (yanındaki kök imzalı sertifika yüke girer).
+//   npx tsx scripts/build-korumali-imza.ts anahtar-ac --anahtar=<dosya> [--json]   (parolayla açar, yazmaz: yedek ölçümü)
 //
 // `zip` kipi: zip'i açar, sürüm/müşteri/derleme künyesini PAKET.json + dist/server-kunye.json'dan okur,
 // imzalar, imza dosyalarını + `butunluk-liste.txt`i ekler ve PAKET.json'daki dosya sayısını yazılan dosya kadar
@@ -380,6 +382,26 @@ function sertifikaEkle(): void {
   console.log(`${r.yazildi ? "✓ eklendi" : "✓ zaten ekli (aynı içerik)"}: ${r.file} · kid ${r.kid} · kök ${r.rootKid} (${roots.kaynak}) · bitiş ${r.bitis}`);
 }
 
+/**
+ * `belge`: Docker teslim künyesi. `pkt-*` anahtarda zincirli (kök imzalı PAKET sertifikası yükte, öz-denetim kök
+ * çapasıyla KABUL kipinde); sertifika + tazelik parola SORULMADAN denetlenir. `paket-*` gömülü çapalı (eski).
+ */
+async function belge(): Promise<void> {
+  const keyFile = home(need("anahtar"));
+  const kid = packageKeyInfo(keyFile).kid;
+  const zincir = isChainPackageKid(kid) ? { certificate: zincirSertifikasi(keyFile, arg("sertifika")), roots: kokCapasi().roots } : null;
+  const key = await openPackageKey(keyFile, paketParolasi);
+  const r = await signManifestDocument(path.resolve(need("belge")), key, zincir);
+  console.log(`✓ ${r.file} · kid ${key.kid}${zincir ? " (zincirli, kök imzalı PAKET sertifikası)" : ""} · ${r.token.length} bayt`);
+}
+
+/** `anahtar-ac --anahtar=<dosya> [--json]`: parolayla AÇAR (yedek ölçümü), hiçbir şey yazmaz; yalnız kid + x basar. */
+async function anahtarAc(): Promise<void> {
+  const key = await openPackageKey(home(need("anahtar")), paketParolasi);
+  if (process.argv.includes("--json")) console.log(JSON.stringify({ v: 1, kid: key.kid, x: key.x }));
+  else console.log(`✓ açıldı: ${key.kid} · x=${key.x}`);
+}
+
 async function main(): Promise<void> {
   // Parola taşıyan argüman (`--parola=…` · `--password` …) değerine bakılmadan reddedilir.
   args(process.argv.slice(2));
@@ -392,13 +414,9 @@ async function main(): Promise<void> {
   }
   if (cmd === "sertifika-ekle") return sertifikaEkle();
   if (cmd === "zip") return signZip();
-  if (cmd === "belge") {
-    const key = await openPackageKey(home(need("anahtar")), paketParolasi);
-    const r = await signManifestDocument(path.resolve(need("belge")), key);
-    console.log(`✓ ${r.file} · kid ${key.kid} · ${r.token.length} bayt`);
-    return;
-  }
-  throw new Error("komut: anahtar-uret | sertifika-ekle | imzala | zip | belge");
+  if (cmd === "belge") return belge();
+  if (cmd === "anahtar-ac") return anahtarAc();
+  throw new Error("komut: anahtar-uret | sertifika-ekle | anahtar-ac | imzala | zip | belge");
 }
 
 main().catch((e: unknown) => {
