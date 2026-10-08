@@ -52,7 +52,9 @@ export function packageRoots(g: { readonly kokDosyasi?: string | null; readonly 
   if (test) {
     if (g.testIzinli === false) throw new Error(`test kök çapası (${TEST_ROOTS_ENV}) burada kabul edilmez — yalnız bekçi içindir`);
     console.error("⚠ TEST KÖK ÇAPASI kullanılıyor — yalnız bekçi içindir");
-    return { roots: rootsChecked(JSON.parse(fs.readFileSync(test, "utf8")) as RootKey[], test), kaynak: "test" };
+    const list: unknown = JSON.parse(fs.readFileSync(test, "utf8"));
+    if (!Array.isArray(list)) throw new Error(`test kök çapası bir dizi ({kid,x,classes}[]) olmalı: ${test} — kök anahtar dosyası --kok-dosyasi ile verilir`);
+    return { roots: rootsChecked(list as RootKey[], test), kaynak: "test" };
   }
   return { roots: rootPublicKeysFor("uretim"), kaynak: "uretim" };
 }

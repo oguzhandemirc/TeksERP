@@ -466,6 +466,11 @@ async function bolum6(): Promise<void> {
 
   const baska = cli(["sertifika-ekle", `--anahtar=${pkt}`, `--sertifika=${sertifikaDosyasi(anahtarUret("z").x)}`, `--kok-capa=${capa}`]);
   check("§6b ⭐ sertifika-ekle: x uyuşmuyor → RED, sertifika dosyası YOK", baska.kod === 1 && /x\)/.test(baska.hata) && !existsSync(sertYolu), `çıkış ${baska.kod} ${baska.hata.trim().slice(0, 100)}`);
+  const nesneCapa = path.join(dizin("kok-capa-nesne"), "kok.json");
+  writeFileSync(nesneCapa, `${JSON.stringify(ZF.kokler[0])}\n`);
+  const nesne = cli(["sertifika-ekle", `--anahtar=${pkt}`, `--sertifika=${sertifikaDosyasi(info.x)}`, `--kok-capa=${nesneCapa}`]);
+  check("§6b2 test kök çapası dizi değil (tek kök nesnesi) → anlaşılır RED (çökme değil), sertifika dosyası YOK",
+    nesne.kod === 1 && /bir dizi/.test(nesne.hata) && !/is not iterable/.test(nesne.hata) && !existsSync(sertYolu), `çıkış ${nesne.kod} ${nesne.hata.trim().slice(0, 120)}`);
   const yabanci = cli(["sertifika-ekle", `--anahtar=${pkt}`, `--sertifika=${sertifikaDosyasi(info.x, { imzalayan: YABANCI.kok })}`, `--kok-capa=${capa}`]);
   check("§6c ⭐ sertifika-ekle: çapada olmayan kökün sertifikası → RED", yabanci.kod === 1 && /doğrulanamadı/.test(yabanci.hata) && !existsSync(sertYolu), `çıkış ${yabanci.kod} ${yabanci.hata.trim().slice(0, 100)}`);
   const sert = sertifikaDosyasi(info.x);
