@@ -18,7 +18,9 @@
 // Arşiv: kök düz (alt dizin yok), zip/exe "store", içinde SHA256SUMS (sha256sum biçimi) + BENIOKU.txt; yeniden
 // açılıp her girdi SHA256SUMS'a ve kaynağa karşı ölçülür + `unzip -t`; yanında `<arşiv>.sha256`.
 // `--prova`: imza kapıları UYARIYA düşer, ad `-PROVA-IMZASIZ` taşır (yapı denemesi; müşteriye verilmez).
-// Test çapası (TEKSERP_TEST_PAKET_CAPASI) doğrulayıcıya GEÇİRİLMEZ: arşiv yalnız gerçek üretim çapasına güvenir.
+// Test çapaları (TEKSERP_TEST_PAKET_CAPASI · TEKSERP_TEST_KOK_CAPASI) doğrulayıcıya GEÇİRİLMEZ: arşiv yalnız üretim çapasına güvenir.
+// Zincir (3.9 D5): `pg-zincir.json` arşive setup'ın aradığı adla (pg.json) girer; zincir-yalnız pakette güncelleyici
+//   `paketZinciri` bilen derleme olmalı ve setup sürümü paketinkiyle aynı olmalı (setup içi Mac'ten okunamaz).
 // Arşiv sürüm başına TEKTİR (müşteri/kanal/grup argümanı YOK): firma adı lisanstan, grup kiradan gelir.
 //
 //   node deploy/kurulum/kurulum-arsivi.mjs --setup <TeksERP-Kurulum-<sürüm>.exe> --backend <tekserp-backend-*.zip> \
@@ -56,6 +58,10 @@ const DEGERLI = ['--setup', '--backend', '--pg', '--pg-kunye', '--tkpub', '--cik
 const KULLANIM = 'Kullanım: --setup <exe> --backend <zip> --pg <zip> --pg-kunye <pg.json> [--tkpub <etkili.tkpub>] --cikti <dizin> [--prova]';
 /** Ortak paket ÜRETİM çapasıyla doğar (build-korumali: müşterisiz → üretim); başka kip arşive girmez. */
 const ORTAK_CAPA = 'uretim';
+const ZINCIR_IMZA = 'butunluk-zincir.jws';
+const ZINCIR_PG_KUNYE = 'pg-zincir.json';
+/** Güncelleyicinin künyesindeki anahtar (native/tekserp-guncelleyici `identity()`): zincirli paketi bilen derleme. */
+const ZINCIR_ISARETI = 'paketZinciri';
 
 class Dur extends Error {
   constructor(kod, mesaj, satirlar = []) {
@@ -107,6 +113,16 @@ export function girdiDesenleri({ kurulum, onOlcum, iss }) {
     tkpub: { joker: tk[0], desen: jokerDeseni(tk[0]) },
     setup: { onek, sonek, desen: new RegExp(`^${onek.replace(/[.+^${}()|[\]\\-]/g, '\\$&')}[0-9A-Za-z][0-9A-Za-z.+-]*\\.exe$`) },
   };
+}
+
+/** İmzalı işaretçi metninin (`{bildirim}` JSON) JWS başlığındaki kid; çözülemezse null. */
+export function jwsBaslikKid(metin) {
+  try {
+    const b = JSON.parse(String(metin).replace(/^\uFEFF/, '')).bildirim;
+    return JSON.parse(Buffer.from(String(b).split('.')[0], 'base64url').toString('utf8')).kid ?? null;
+  } catch {
+    return null;
+  }
 }
 
 // ---------------------------------------------------------------- argümanlar
@@ -170,6 +186,7 @@ function tsDogrulayici(komut, argumanlar) {
   try {
     const env = { ...process.env };
     delete env.TEKSERP_TEST_PAKET_CAPASI;
+    delete env.TEKSERP_TEST_KOK_CAPASI;
     const r = spawnSync(process.execPath, ['--import', 'tsx', 'scripts/backend-bildirim.ts', komut, ...argumanlar, `--cikti=${cikti}`], { cwd: TEKS, encoding: 'utf8', env, maxBuffer: 64 * 1024 * 1024 });
     const metin = `${r.stdout ?? ''}${r.stderr ?? ''}`.trim();
     if (r.error) throw olculemedi(`backend-bildirim.ts ${komut} çalıştırılamadı: ${r.error.message}`);
@@ -273,6 +290,7 @@ async function denetle(arg) {
   }
   if (girdi.backend && !desen.backend.desen.test(girdi.backend.ad)) hatalar.push(`backend adı "${girdi.backend.ad}" setup deseni ${desen.backend.joker} ile eşleşmez (kurulum.ps1 GirdiCoz)`);
   if (girdi.pg && !desen.pg.desen.test(girdi.pg.ad)) hatalar.push(`PG adı "${girdi.pg.ad}" setup deseni ${desen.pg.joker} ile eşleşmez`);
+  if (girdi.pgKunye?.ad === ZINCIR_PG_KUNYE) girdi.pgKunye = { ...girdi.pgKunye, kaynakAd: ZINCIR_PG_KUNYE, ad: desen.pgKunye.joker };
   if (girdi.pgKunye && !desen.pgKunye.desen.test(girdi.pgKunye.ad)) hatalar.push(`PG künyesinin adı "${girdi.pgKunye.ad}" — setup yalnız "${desen.pgKunye.joker}" arar`);
   if (girdi.tkpub && !desen.tkpub.desen.test(girdi.tkpub.ad)) hatalar.push(`tkpub adı "${girdi.tkpub.ad}" — setup yalnız "${desen.tkpub.joker}" arar (on-olcum.ps1)`);
   if (girdi.setup) {
@@ -289,6 +307,8 @@ async function denetle(arg) {
   // 3) Backend zip: PAKET.json + server-kunye.json + imzalı liste + hizmet ikilileri.
   let paket = null;
   let sKunye = null;
+  let zincirYalniz = false;
+  let guncelleyiciZincir = false;
   let zb;
   try {
     zb = zipAc(girdi.backend.yol);
@@ -319,9 +339,13 @@ async function denetle(arg) {
       }
       if (typeof paket.uygulamaSurumu !== 'string' || !SURUM_DESENI.test(paket.uygulamaSurumu)) hatalar.push(`paket sürümü biçimsiz: "${paket.uygulamaSurumu}" (setup'ın sürüm dizini kuralı)`);
       if (paket.prova === true) imzaKapisi('PROVA paketi (PAKET.json prova=true) — fabrikaya kurulmaz (kurulum.ps1 provaKabul ister)');
-      const imzaliListe = girdiler.has('butunluk.jws') && girdiler.has('butunluk-liste.txt');
+      const eskiImza = girdiler.has('butunluk.jws');
+      const zincirImza = girdiler.has(ZINCIR_IMZA);
+      zincirYalniz = zincirImza && !eskiImza;
+      guncelleyiciZincir = oku('runtime/tekserp-guncelleyici.exe')?.toString('latin1').includes(ZINCIR_ISARETI) === true;
+      const imzaliListe = (eskiImza || zincirImza) && girdiler.has('butunluk-liste.txt');
       if (!imzaliListe || typeof paket.butunlukKid !== 'string' || !paket.butunlukKid) {
-        imzaKapisi(`backend paketi İMZASIZ (butunluk.jws ${girdiler.has('butunluk.jws') ? 'var' : 'YOK'} · butunluk-liste.txt ${girdiler.has('butunluk-liste.txt') ? 'var' : 'YOK'} · butunlukKid ${paket.butunlukKid ?? 'null'}) — imza: Teks-Erp/scripts/build-korumali-imza.ts zip`);
+        imzaKapisi(`backend paketi İMZASIZ (butunluk.jws ${eskiImza ? 'var' : 'YOK'} · ${ZINCIR_IMZA} ${zincirImza ? 'var' : 'YOK'} · butunluk-liste.txt ${girdiler.has('butunluk-liste.txt') ? 'var' : 'YOK'} · butunlukKid ${paket.butunlukKid ?? 'null'}) — imza: Teks-Erp/scripts/build-korumali-imza.ts zip`);
         paket.imzasiz = true;
       }
     }
@@ -339,6 +363,14 @@ async function denetle(arg) {
   if (pr.error || pr.status === 2) throw olculemedi(`pg-paketle --dogrula: ${(pr.error?.message ?? `${pr.stdout}${pr.stderr}`).trim().split('\n').slice(-2).join(' · ')}`);
   if (pr.status !== 0) hatalar.push(`PG zip kayıtla eşit değil (pg-paketle --dogrula çıkış ${pr.status}): ${`${pr.stdout}${pr.stderr}`.trim().split('\n').filter((s) => /✖/.test(s)).slice(0, 3).join(' · ')}`);
   const pgYuk = isaretciYuku(fs.readFileSync(girdi.pgKunye.yol, 'utf8'));
+  // Zincir gereği: zincir-yalnız paket ya da zincir imzalı (pkt-*) PG künyesi → güncelleyici zinciri bilmeli, setup aynı sürüm.
+  const pgZincir = /^pkt-/.test(String(jwsBaslikKid(fs.readFileSync(girdi.pgKunye.yol, 'utf8')) ?? ''));
+  if (zincirYalniz || pgZincir) {
+    const neden = zincirYalniz ? 'ZİNCİR-YALNIZ paket' : `zincir imzalı PG künyesi (${girdi.pgKunye.kaynakAd ?? girdi.pgKunye.ad})`;
+    if (!guncelleyiciZincir) hatalar.push(`${neden}, ama runtime/tekserp-guncelleyici.exe "${ZINCIR_ISARETI}" bilmeyen eski derleme — kurulan sistem zinciri doğrulayamaz`);
+    const setupSurum = girdi.setup.ad.slice(desen.setup.onek.length, -'.exe'.length);
+    if (paket && setupSurum !== paket.uygulamaSurumu) hatalar.push(`${neden}: setup sürümü ${setupSurum} — paket ${paket.uygulamaSurumu} (setup kendi güncelleyicisini taşır; aynı derlemeden olmalı)`);
+  }
   if (!pgYuk || typeof pgYuk.paket !== 'object') hatalar.push(`pg.json çözülemedi (imzalı işaretçi biçiminde değil): ${girdi.pgKunye.yol}`);
   else {
     const p = pgYuk.paket;
