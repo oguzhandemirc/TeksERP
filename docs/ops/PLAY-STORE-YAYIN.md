@@ -122,7 +122,7 @@ Dahili test incelemeye girmeden yayınlanır (vc 59'da gözlendi); 12×14 sayac�
    oturum açılacak Google hesaplarını ekle.
 2. Aynı sayfadaki **katılma bağlantısını** (opt-in URL) tabletin Google hesabıyla aç → "Test kullanıcısı ol"
    → Play'de uygulama sayfası açılır, oradan kurulur.
-3. Yeni AAB: `npm run build:aab` → Dahili test → Yeni sürüm → AAB'yi yükle → sürüm notu → yayınla.
+3. Yeni AAB: `npm run build:aab` → `node deploy/play-yayinla.mjs --kanal=internal` (kuru) → aynı komut `--uygula` (§7). Konsoldan elle yükleme yalnız araç kullanılamıyorsa.
 4. **Öneri — fabrika başına ayrı Gmail:** her fabrikanın tabletleri o fabrikaya açılmış tek bir Google
    hesabıyla oturum açar (kişisel hesap tablete girmez); hesabın **senkronizasyonu kapalı** tutulur (kişi,
    takvim, fotoğraf eşitlenmez). Test listesi böylece fabrika başına bir satır olur. Gizli yayın seçilirse bu
@@ -140,3 +140,20 @@ Dahili test incelemeye girmeden yayınlanır (vc 59'da gözlendi); 12×14 sayac�
 8. K5 → dağıtım yolu: kapalı test (12×14) → üretim erişimi başvurusu, ya da gizli yayın.
 
 > Play Console menü adları ve politika eşikleri değişebiliyor; her adımda konsoldaki güncel yazımı teyit et.
+
+## 7. Araçla yayın — `deploy/play-yayinla.mjs`
+
+Servis hesabı anahtarı `~/.tekserp/sirlar/play-yayinci.json` (izin 600; hesap yalnız test kanallarına yayın + uygulama bilgisi görüntüleme, üretim YOK). Araç anahtarın içeriğini basmaz, yalnız `client_email`.
+
+```
+node deploy/play-yayinla.mjs --kanal=internal [--aab=<yol>]          # KURU: kapılar + Play'in kanalları + plan
+node deploy/play-yayinla.mjs --kanal=internal --uygula               # yükle → dahili teste ata → onayla → geri oku
+node deploy/play-yayinla.mjs --kanal=alpha --uygula                  # kapalı test: dahilideki AYNI paketi ata
+```
+
+- Varsayılan AAB `mobil/android/app/build/outputs/bundle/release/app-release.aab`; komut AAB'nin derlendiği commit'te (künye commit'i = HEAD) koşar — `build:aab`'ı koşturan ağaçta.
+- Kapılar: paket adı = `deploy/dagitim.json` · künye ↔ AAB sha256 ↔ HEAD · `build:aab --verify-only` (kimlik, izin, cleartext, imza; AAB'nin KOPYASI üzerinde) · versionCode > Play'deki en büyük (yüklü vc yalnız aynı baytsa kanala atanır) · tr-TR not = `surum-notlari.json` tablet maddeleri, en çok 500 karakter (aşarsa DUR — notu kısalt) · kanal yalnız `internal`/`alpha`.
+- Kapalı test (`alpha`) terfi ister: `tablet-vX` + `terfi/oncu/tablet-vX` açıklamalı etiketi HEAD'de (kullanıcının onay cümlesi) ve dahili testte aynı vc + aynı sha256. Acil kaçış yalnız kullanıcının cümlesiyle `--terfi-atla="<cümle>"`.
+- Hedef kanalda aynı vc zaten yayındaysa araç "ZATEN YAYINDA" der ve çıkar (0).
+- Her `--uygula` yayını `~/.tekserp/yayin-defteri/play-YAYIN-DEFTERI.tsv`e satır yazar (saat · `tablet-X-play-<kanal>` · kim · sha256 ilk 16 · boyut · vc · yükle/ata · doğrulandı); dahili test yayınından sonra `tablet-vX` etiketi atılır.
+- Kapalı test kullanıcıları (Google Grubu) konsoldan yönetilir; araç yalnız sürümü kanala atar.

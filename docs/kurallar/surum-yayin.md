@@ -102,6 +102,8 @@
 
 - **[ÇEKİRDEK]** Tablet kanalı TAHMİN EDİLMEZ: `npm run yayinla:check -- --musteri=<kod>` → 'parmak izi tutarlı' = OTA, 'NATIVE DEĞİŞTİ' = `runtimeVersion` artır → `npm run build:aab` → Play (ortak tablette `yayinla:ortak:check`). Parmak izi değişip runtimeVersion aynıysa yayın DURUR (`--parmak-izini-kabul-et` bilinçli); şüphede runtimeVersion ARTIR. Kayıt `alg` taşır. · bekçi: `yayinla-ota.mjs parmakIziKapisi (--check yan etkisiz)` <sub>(CLAUDE.md:19, CLAUDE.md:128, CLAUDE.md:93)</sub>
 
+- **[ÇEKİRDEK]** Ortak tablet AAB'si Play'e yalnız `node deploy/play-yayinla.mjs --kanal=internal|alpha` ile çıkar (varsayılan KURU, yazma `--uygula`; production/beta RED): paket adı dağıtım kaydından, versionCode Play'deki en büyükten büyük (yüklü vc yalnız aynı baytsa kanala atanır), künye = AAB = HEAD, `build:aab --verify-only` geçer, tr-TR not `surum-notlari.json` tablet maddelerinden ≤500 karakter; `internal` kök gruptur (etiketsiz, sonra `tablet-vX` atılır), `alpha` (kapalı test) kökten sonraki grubun `terfi/<grup>/tablet-vX` etiketini + dahili testte AYNI baytı ister, kaçış yalnız kullanıcı cümlesiyle; yayın Play'den geri okunur, satır `~/.tekserp/yayin-defteri/play-YAYIN-DEFTERI.tsv`e yazılır. · bekçi: `scripts/test_play_yayinla.mjs` <sub>(arşiv:2026-10-08 Play yayıncısı)</sub>
+
 ### Kararlar
 
 - **[PROFİL]** Eski kanal (adnansahin) APK künye yolu `eski-kanal-son` etiketinde DONUKTUR (imzalı `apk/surum.json` künyesi, etiketteki `panel-imza.ts apk-imzala`); ana dalda bu yolun kodu YOK (K-14), yeni iş buraya eklenmez. · bekçi: `Teks-Erp/scripts/test_panel_imza.ts (§3b–d)` <sub>(arşiv:2026-10-01 tablet APK künyesi · arşiv:2026-10-07)</sub>
