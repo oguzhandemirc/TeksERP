@@ -1183,14 +1183,15 @@ const PAKET_YEDEK_KUNYE = "tekserp-paket-yedek";
 const YENIDEN_IMZA_SURE_MS = 15 * 60_000;
 
 /**
- * `--paket-yayindakiler=<dizin>` (yayından indirilmiş kopyalar): `<grup>/backend/<sürüm>/{surum-zincir.json|surum.json, <zip>}`
- * · `<grup>/backend/pg/<sürüm>-<derleme>/{pg-zincir.json|pg.json[, <zip>]}`. `panel/` · `ota/` (ISTEMCI) yok sayılır:
- * iki bayrağa AYNI dizin verilebilir. Zincir takımı varsa o, yoksa eski takım yeniden imzalanır.
+ * `--paket-yayindakiler=<dizin>` (yayından indirilmiş kopyalar): `<grup>/backend/<sürüm>/{surum-zincir[-<kid>].json…|surum.json, <zip'ler>}`
+ * · `<grup>/backend/pg/<sürüm>-<derleme>/{pg-zincir[-<kid>].json…|pg.json[, <zip>]}`. `panel/` · `ota/` (ISTEMCI) yok sayılır:
+ * iki bayrağa AYNI dizin verilebilir. Hangi belgenin yeniden imzalanacağını araç SEÇER (D8: dizin kipi — zincirli
+ * adaylar seçim kuralıyla, yoksa/hepsi geçersizse eski takım).
  */
 function paketYayindakileriTopla(dizin, gruplar) {
   const kok = evYolu(dizin);
   if (!lstatYa(kok)?.isDirectory()) throw new TorenHatasi(`--paket-yayindakiler dizin değil: ${kok}`, 2);
-  const ilk = (d, adlar) => adlar.map((a) => path.join(d, a)).find((f) => fs.existsSync(f));
+  const adaylar = (d, aile) => fs.readdirSync(d).filter((a) => a === `${aile}.json` || new RegExp(`^${aile}-zincir(-pkt-[a-z0-9-]{1,40})?\\.json$`).test(a)).sort();
   const out = [];
   for (const g of fs.readdirSync(kok).sort()) {
     if (!gruplar.includes(g)) throw new TorenHatasi(`--paket-yayindakiler: tanınmayan grup ${g} (deploy/dagitim.json: ${gruplar.join(", ")})`, 2);
@@ -1202,26 +1203,28 @@ function paketYayindakileriTopla(dizin, gruplar) {
         for (const pv of fs.readdirSync(d).sort()) {
           if (!/^[0-9][0-9.]{0,15}-[0-9]{1,6}$/.test(pv)) throw new TorenHatasi(`--paket-yayindakiler: ${g}/backend/pg/${pv} <sürüm>-<derleme> biçiminde değil`, 2);
           const pd = path.join(d, pv);
-          const kunye = ilk(pd, ["pg-zincir.json", "pg.json"]);
-          if (!kunye) throw new TorenHatasi(`--paket-yayindakiler: ${g}/backend/pg/${pv}/pg-zincir.json ya da pg.json yok`, 2);
+          if (adaylar(pd, "pg").length === 0) throw new TorenHatasi(`--paket-yayindakiler: ${g}/backend/pg/${pv}/ içinde pg-zincir*.json ya da pg.json yok`, 2);
           const zipler = fs.readdirSync(pd).filter((f) => f.endsWith(".zip"));
-          out.push({ grup: g, tur: "pg", surum: pv, kunye, ...(zipler.length === 1 ? { zip: path.join(pd, zipler[0]) } : {}) });
+          out.push({ grup: g, tur: "pg", surum: pv, dizin: pd, ...(zipler.length === 1 ? { zip: path.join(pd, zipler[0]) } : {}) });
         }
         continue;
       }
       if (!/^[0-9][0-9A-Za-z.+-]{0,40}$/.test(s)) throw new TorenHatasi(`--paket-yayindakiler: ${g}/backend/${s} sürüm biçiminde değil`, 2);
-      const kunye = ilk(d, ["surum-zincir.json", "surum.json"]);
-      if (!kunye) throw new TorenHatasi(`--paket-yayindakiler: ${g}/backend/${s}/surum-zincir.json ya da surum.json yok`, 2);
-      let ad;
-      try {
-        ad = jwsYuku(jsonOku(kunye).bildirim).paket?.ad;
-      } catch {
-        ad = undefined;
+      const bildirimler = adaylar(d, "surum");
+      if (bildirimler.length === 0) throw new TorenHatasi(`--paket-yayindakiler: ${g}/backend/${s}/ içinde surum-zincir*.json ya da surum.json yok`, 2);
+      // Okunabilen her bildirimin paketi yanında olmalı (seçimi araç yapar; hangisi seçilirse onun zip'i gerekir).
+      for (const b of bildirimler) {
+        let ad;
+        try {
+          ad = jwsYuku(jsonOku(path.join(d, b)).bildirim).paket?.ad;
+        } catch {
+          continue;
+        }
+        if (typeof ad !== "string" || !/^[A-Za-z0-9][A-Za-z0-9._-]{0,115}\.zip$/.test(ad) || !fs.existsSync(path.join(d, ad))) {
+          throw new TorenHatasi(`--paket-yayindakiler: ${g}/backend/${s}/${b}: bildirimin paketi (${String(ad)}) yanında yok — zip'i de indir`, 2);
+        }
       }
-      if (typeof ad !== "string" || !/^[A-Za-z0-9][A-Za-z0-9._-]{0,115}\.zip$/.test(ad) || !fs.existsSync(path.join(d, ad))) {
-        throw new TorenHatasi(`--paket-yayindakiler: ${g}/backend/${s}: bildirimin paketi (${String(ad)}) yanında yok — zip'i de indir`, 2);
-      }
-      out.push({ grup: g, tur: "backend", surum: s, kunye, zip: path.join(d, ad) });
+      out.push({ grup: g, tur: "backend", surum: s, dizin: d });
     }
   }
   if (out.length === 0) throw new TorenHatasi("--paket-yayindakiler: hiçbir grupta backend/<sürüm> ya da backend/pg/<sürüm>-<derleme> yok — yayında yoksa --paket-yayinda-yok", 2);
@@ -1352,11 +1355,11 @@ async function paketAdimlari({ c, hedef, kokKid, K, kokDosya, kokParola, paketPa
     }
     const ortak = [`--anahtar=${sonuc.birincil._anahtar}`, `--cikti=${d}`, `--paket-iptal=${iptalYolu}`, kokArg];
     const argv = y.tur === "backend"
-      ? ["yeniden-imzala", `--surum-kunye=${y.kunye}`, `--zip=${y.zip}`, `--kanal=${y.grup}`, ...ortak]
-      : ["pg-yeniden-imzala", `--kunye=${y.kunye}`, ...(y.zip ? [`--zip=${y.zip}`] : []), ...ortak];
+      ? ["yeniden-imzala", `--surum-dizini=${y.dizin}`, `--kanal=${y.grup}`, ...ortak]
+      : ["pg-yeniden-imzala", `--pg-dizini=${y.dizin}`, ...(y.zip ? [`--zip=${y.zip}`] : []), ...ortak];
     await kosVeDenetle(`yeniden imza (${y.grup} ${y.tur} ${y.surum})`, TEKS, BILDIRIM_ARACI, argv, [paketParola], gizli, YENIDEN_IMZA_SURE_MS);
     const so = jsonOku(path.join(d, "sonuc.json"));
-    yeniden.push({ grup: y.grup, tur: y.tur, surum: y.surum, ...(y.tur === "backend" ? { eskiKid: so.eskiKid, paket: so.paket?.yeni?.ad } : {}), dizin: path.relative(yarim, d) });
+    yeniden.push({ grup: y.grup, tur: y.tur, surum: y.surum, girdi: so.girdi, ...(y.tur === "backend" ? { eskiKid: so.eskiKid, paket: so.paket?.yeni?.ad, bildirim: so.bildirim } : { kunye: so.kunyeAdi }), dizin: path.relative(yarim, d) });
   }
 
   await paketYedekOlc({ U, yedek: sonuc.yedek, yedekParola, gizli });

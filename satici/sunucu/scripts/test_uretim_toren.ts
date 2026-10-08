@@ -600,6 +600,10 @@ async function bolum9(g: { tmp: string; D: string; A: string; ev: string }): Pro
     const pgD = path.join(Y, "test", "backend", "pg", "16.15-4");
     mkdirSync(pgD, { recursive: true });
     if (existsSync(path.join(pc, "pg-zincir.json"))) cpSync(path.join(pc, "pg-zincir.json"), path.join(pgD, "pg-zincir.json"));
+    // D8: kid'li ad yan yanadır; adındaki kid imzalayan değilse (JWS_KID) seçimde elenir, kid'siz belge girdi olur.
+    for (const [d, aile] of [[surumD, "surum"], [pgD, "pg"]] as const) {
+      if (existsSync(path.join(d, `${aile}-zincir.json`))) cpSync(path.join(d, `${aile}-zincir.json`), path.join(d, `${aile}-zincir-pkt-2098-9.json`));
+    }
     const yayinOzeti = () => dosyaListesi(Y).sort().map((f) => `${f}:${sha(path.join(Y, f))}`).join("\n");
     const yayinOnce = yayinOzeti();
     kontrol("§9a yayındakiler kuruldu: eski pkt-2098-1 (kök sertifikalı) ile zincir-yalnız ortak paket + surum-zincir.json + pg-zincir.json",
@@ -642,7 +646,7 @@ async function bolum9(g: { tmp: string; D: string; A: string; ev: string }): Pro
       `${t.status} ${t.status === 0 ? "" : t.cikti.slice(-700)}`);
     if (t.status !== 0 || !son) return;
     const P = path.join(son, "vds-paketi");
-    type PaketKunye = { birincil: { kid: string; x: string }; yedek: { kid: string; x: string }; iptal: { sira: number; satir: number; kidler: string[] }; yenidenImza: Array<{ grup: string; tur: string; surum: string; paket?: string; dizin: string }> };
+    type PaketKunye = { birincil: { kid: string; x: string }; yedek: { kid: string; x: string }; iptal: { sira: number; satir: number; kidler: string[] }; yenidenImza: Array<{ grup: string; tur: string; surum: string; girdi?: string; paket?: string; bildirim?: string; kunye?: string; dizin: string }> };
     const pkK = (JSON.parse(readFileSync(path.join(P, "DONEM-KUNYE.json"), "utf8")) as { paket: PaketKunye }).paket;
     const usbSon = path.join(usbPaket, path.basename(son));
     const usbDosyalari = existsSync(usbSon) ? dosyaListesi(usbSon).sort() : [];
@@ -669,7 +673,8 @@ async function bolum9(g: { tmp: string; D: string; A: string; ev: string }): Pro
         typeof ice.paketIptal === "string" && ice.paketIptal.split(".").length === 3 && pkK.iptal.sira === 1 && pkK.iptal.satir === 0,
       `${vdsPaket.join(" ")} · özel: ${ozelVds.join(",")} · iptal ${JSON.stringify(pkK.iptal)}`);
 
-    // Yeniden imza: yeni zip `<ad>-<kid>.zip` + surum-zincir.json ve pg-zincir.json, kökle KABUL; yayındakiler dokunulmadı.
+    // Yeniden imza (D8): yeni zip `<ad>-<kid>.zip` + surum-zincir-<kid>.json ve pg-zincir-<kid>.json, kökle KABUL; kid'siz ad
+    // yazılmaz; girdi seçimle kid'siz belge (yandaki kid'li ad elendi); yayındakiler dokunulmadı.
     const P9 = (await import("../src/lisans-protokol")) as unknown as {
       readReleasePointer: (t: string) => { ok: boolean; value: string };
       parseJws: (t: string) => { ok: boolean; value: { header: { kid: string }; payload: Record<string, unknown> } };
@@ -679,22 +684,24 @@ async function bolum9(g: { tmp: string; D: string; A: string; ev: string }): Pro
     const zincir = { roots: kokler, mode: "KABUL", nowMs: Date.now() };
     const yd = path.join(son, "paket", "yeniden-imza", "test", "backend", "2.12.1");
     const yeniZip = path.join(yd, `TeksERP-Backend-2.12.1-pkt-${YIL}-1.zip`);
-    const ptr = existsSync(path.join(yd, "surum-zincir.json")) ? P9.readReleasePointer(readFileSync(path.join(yd, "surum-zincir.json"), "utf8")) : { ok: false, value: "" };
+    const yeniAd = `surum-zincir-pkt-${YIL}-1.json`;
+    const ptr = existsSync(path.join(yd, yeniAd)) ? P9.readReleasePointer(readFileSync(path.join(yd, yeniAd), "utf8")) : { ok: false, value: "" };
+    const girdiler = pkK.yenidenImza.map((y) => `${y.tur}:${y.girdi}`).sort().join(",");
     const v = ptr.ok ? P9.verifyReleaseManifest(ptr.value, { keys: [], kanal: "test", zincir }) : null;
     const yuk = ptr.ok ? P9.parseJws(ptr.value) : null;
     const eskiYuk = P9.parseJws(P9.readReleasePointer(readFileSync(path.join(surumD, "surum-zincir.json"), "utf8")).value);
     const yp = yuk?.value.payload.paket as { ad?: string; sha256?: string; paketId?: string } | undefined;
     const ep = eskiYuk.value.payload.paket as { paketId?: string } | undefined;
     const zipIc = existsSync(yeniZip) ? spawnSync("unzip", ["-Z1", yeniZip], { encoding: "utf8" }).stdout : "";
-    kontrol("§9g ⭐ backend yeniden imzası: <ad>-pkt-<yıl>-1.zip + surum-zincir.json kökle KABUL, imzacı yeni birincil, sürüm/paketId AYNI, zip özeti bildirimde, zipte butunluk-zincir.jws",
-      v?.ok === true && yuk?.value.header.kid === `pkt-${YIL}-1` && yp?.ad === path.basename(yeniZip) && yp?.sha256 === sha(yeniZip) && yp?.paketId === ep?.paketId &&
+    kontrol("§9g ⭐ backend yeniden imzası: <ad>-pkt-<yıl>-1.zip + surum-zincir-pkt-<yıl>-1.json (kid'siz ad YOK) kökle KABUL, imzacı yeni birincil, sürüm/paketId AYNI, zip özeti bildirimde, zipte butunluk-zincir.jws · girdi seçimle kid'siz",
+      v?.ok === true && !existsSync(path.join(yd, "surum-zincir.json")) && girdiler === "backend:surum-zincir.json,pg:pg-zincir.json" && yuk?.value.header.kid === `pkt-${YIL}-1` && yp?.ad === path.basename(yeniZip) && yp?.sha256 === sha(yeniZip) && yp?.paketId === ep?.paketId &&
         yuk?.value.payload.surum === eskiYuk.value.payload.surum && /butunluk-zincir\.jws/.test(zipIc) && pkK.yenidenImza.length === 2,
-      `${v ? (v.ok ? "KABUL" : v.code) : "işaretçi yok"} · ${yuk?.value.header.kid} · ${JSON.stringify(pkK.yenidenImza.map((y) => y.dizin))}`);
-    const pgY = path.join(son, "paket", "yeniden-imza", "test", "backend", "pg", "16.15-4", "pg-zincir.json");
+      `${v ? (v.ok ? "KABUL" : v.code) : "işaretçi yok"} · ${yuk?.value.header.kid} · ${girdiler} · ${JSON.stringify(pkK.yenidenImza.map((y) => y.dizin))}`);
+    const pgY = path.join(son, "paket", "yeniden-imza", "test", "backend", "pg", "16.15-4", `pg-zincir-pkt-${YIL}-1.json`);
     const pgp = existsSync(pgY) ? P9.readReleasePointer(readFileSync(pgY, "utf8")) : { ok: false, value: "" };
     const pgv = pgp.ok ? P9.verifyPgPackageManifest(pgp.value, { keys: [], zincir }) : null;
     const pge = P9.verifyPgPackageManifest(P9.readReleasePointer(readFileSync(path.join(pgD, "pg-zincir.json"), "utf8")).value, { keys: [], zincir: { roots: kokler, mode: "YERLESIK" } });
-    kontrol("§9h ⭐ PG yeniden imzası: pg-zincir.json kökle KABUL, imzacı yeni birincil, künye yükü AYNEN · yayındakiler dizinine DOKUNULMADI (özetler aynı)",
+    kontrol("§9h ⭐ PG yeniden imzası: pg-zincir-pkt-<yıl>-1.json kökle KABUL, imzacı yeni birincil, künye yükü AYNEN · yayındakiler dizinine DOKUNULMADI (özetler aynı)",
       pgv?.ok === true && pge.ok && JSON.stringify(pgv.value) === JSON.stringify(pge.value) && pgp.ok && P9.parseJws(pgp.value).value.header.kid === `pkt-${YIL}-1` && yayinOzeti() === yayinOnce,
       `${pgv ? (pgv.ok ? "KABUL" : pgv.code) : "yok"} · yayın ${yayinOzeti() === yayinOnce ? "aynı" : "DEĞİŞTİ"}`);
 
