@@ -2,6 +2,7 @@
 // Tablet sunucuyu sertifika parmak iziyle tanır; sabit yalnız sabitli panelin gösterdiği QR'dan gelir
 // (keşiften ya da ilk girişten SABİTLENMEZ). İKİZ: aşağıdaki işlevler `Electron/shared/lan-tls.ts`teki
 // aynı adlı işlevlerle metin olarak aynıdır (bekçi: lan-tls.contract.test.ts) — mobil onu import edemez.
+import { INTERNET_TLS_PORT, internetServerFor, kipFor, type InternetServer } from './internet-tls';
 
 /** Sabitin güven kökü: panelin QR'ı ya da kullanıcının doğrulama kodunu göz ile karşılaştırması (§4b). */
 export type TlsPinVia = 'qr' | 'kod';
@@ -148,11 +149,15 @@ export const INSECURE_ADDRESS_REASON =
 
 export type PairAddress = { ok: true; host: string; port: number } | { ok: false; reason: string };
 
+/** Sabitli kip internet kipindeki adı sabitlemez (kip adresten türer; düşüş yok). */
+export const INTERNET_HOST_NOT_PINNABLE =
+  'Bu ad internet sertifikasıyla doğrulanır, doğrulama koduyla ya da QR ile sabitlenmez. “Adres yaz” ile ekleyin.';
+
 /**
- * Elle yazılan sunucu adresi: IP/ad, isteğe bağlı port (yoksa şifreli varsayılan port). `https://` öneki ve
- * `/api` yolu kabul edilir; `http://` açıkça reddedilir — tablet şifresiz bağlanmaz.
+ * Elle yazılan sunucu adresi: IP/ad, isteğe bağlı port (yoksa kipin varsayılanı: sabitli 4443, internet 443).
+ * `https://` öneki ve `/api` yolu kabul edilir; `http://` açıkça reddedilir — tablet şifresiz bağlanmaz.
  */
-export function parsePairAddress(input: string, defaultPort = LAN_TLS_DEFAULT_PORT): PairAddress {
+export function parsePairAddress(input: string, defaultPort?: number): PairAddress {
   let v = (input ?? '').trim();
   if (/^http:\/\//i.test(v)) return { ok: false, reason: INSECURE_ADDRESS_REASON };
   v = v.replace(/^https:\/\//i, '').replace(/\/+$/, '').replace(/\/api$/i, '').replace(/\/+$/, '');
@@ -166,7 +171,7 @@ export function parsePairAddress(input: string, defaultPort = LAN_TLS_DEFAULT_PO
   if (!/^[0-9a-z]([0-9a-z.-]{0,251}[0-9a-z])?$/.test(host)) {
     return { ok: false, reason: 'Adres anlaşılamadı — yalnız IP adresi ya da sunucu adı yazın (ör. 192.168.1.10).' };
   }
-  const port = m[2] ? Number(m[2]) : defaultPort;
+  const port = m[2] ? Number(m[2]) : (defaultPort ?? (kipFor(host) === 'internet' ? INTERNET_TLS_PORT : LAN_TLS_DEFAULT_PORT));
   if (!Number.isInteger(port) || port < 1 || port > 65535) return { ok: false, reason: 'Port 1–65535 arasında olmalı.' };
   return { ok: true, host, port };
 }
@@ -186,6 +191,7 @@ export type PairDecision = { ok: true; pin: TlsPin; baseUrl: string } | { ok: fa
  * Kod = `formatFingerprintGroups(iz)` (kurulum sonu, durum sayfası ve panel aynı biçimi basar).
  */
 export function decideCodePin(input: { observed: ObservedServer; confirmed: boolean; now: string }): PairDecision {
+  if (kipFor(input.observed.host) === 'internet') return { ok: false, reason: INTERNET_HOST_NOT_PINNABLE };
   const fp = normalizeFingerprint(input.observed.fingerprint);
   if (!fp) return { ok: false, reason: 'Sunucunun sertifika kodu okunamadı.' };
   if (!input.confirmed) {
@@ -207,6 +213,7 @@ export function decideQrAddressPin(input: { qrText: string; observed: ObservedSe
   const qr = parseTlsQr(input.qrText);
   if (!qr) return { ok: false, reason: "Bu bir şifreli bağlantı QR'ı değil." };
   const o = input.observed;
+  if (kipFor(o.host) === 'internet') return { ok: false, reason: INTERNET_HOST_NOT_PINNABLE };
   if (o.port !== qr.advert.port || normalizeFingerprint(o.fingerprint) !== qr.advert.fingerprint) {
     return { ok: false, reason: "Bu adresteki sunucunun kodu QR'dakiyle aynı değil. Ağda araya giren biri olabilir — sistem yöneticisine haber verin." };
   }
@@ -234,6 +241,7 @@ export async function pairViaQrHosts(input: {
   if (!qr) return null;
   for (const host of qr.hosts) {
     if (input.stillWanted && !input.stillWanted()) return null;
+    if (kipFor(host) === 'internet') continue; // QR kip taşımaz: internet kipindeki ad sabitlenmez
     const observed = await input.probe(host, qr.advert.port);
     if (!observed) continue;
     const decision = decideQrAddressPin({ qrText: input.qrText, observed, now: input.now() });
@@ -243,12 +251,15 @@ export async function pairViaQrHosts(input: {
 }
 
 /**
- * Yalnız şifreli kipte (sürüm paketi) kayıtlı adres kullanılabilir mi: https olmalı ve portu bir sabitin
- * portu olmalı (native sabitli uç ölçütüyle aynı). Değilse tablet "Sunucuyu ekle" ekranına döner.
+ * Yalnız şifreli kipte (sürüm paketi) kayıtlı adres kullanılabilir mi: https olmalı; sabitli kipte portu bir sabitin
+ * portu (native sabitli uç ölçütü), internet kipinde ad + port bir internet kaydı. Kip adresten türer: internet
+ * kipindeki ad sabitle, sabitli adres internet kaydıyla kullanılamaz. Değilse tablet "Sunucuyu ekle"ye döner.
  */
-export function secureAddressUsable(url: string, pins: readonly TlsPin[]): boolean {
+export function secureAddressUsable(url: string, pins: readonly TlsPin[], internet: readonly InternetServer[] = []): boolean {
   const m = /^https:\/\/([^:/\s]+)(?::(\d+))?/i.exec((url ?? '').trim());
-  if (!m || !m[2]) return false;
+  if (!m) return false;
+  if (kipFor(m[1] ?? '') === 'internet') return internetServerFor(url, internet) !== null;
+  if (!m[2]) return false;
   return pins.some((p) => String(p.port) === m[2]);
 }
 
@@ -293,7 +304,8 @@ export function nativePinState(
 ): NativePinState {
   const fingerprints = [...new Set(pins.map((p) => p.fingerprint))].sort();
   const host = current.host.trim().toLowerCase();
-  const pinnedHere = current.scheme === 'https' && host !== '' && pins.some((p) => String(p.port) === current.port);
+  const pinnedHere =
+    current.scheme === 'https' && host !== '' && kipFor(host) === 'sabitli' && pins.some((p) => String(p.port) === current.port);
   return { fingerprints, endpoints: pinnedHere ? [`${host}:${current.port}`] : [] };
 }
 

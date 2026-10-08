@@ -27,8 +27,9 @@ const COLORS = {
 };
 
 /** Kayıtlı ama yalnız şifreli kipte kullanılamayan adresin açıklaması. */
-export function unusableUrlNotice(url: string | null): string | null {
+export function unusableUrlNotice(url: string | null, reason: string | null = null): string | null {
   if (!url) return null;
+  if (reason) return `${displayUrl(url)}: ${reason}`;
   return /^http:\/\//i.test(url)
     ? `Önceki sunucu adresi (${displayUrl(url)}) şifresizdi. Bu sürüm sunucuya yalnız şifreli bağlanır — sunucuyu aşağıdan yeniden ekleyin.`
     : `Önceki sunucu (${displayUrl(url)}) bu tablette doğrulanmamış. Sunucuyu aşağıdan yeniden ekleyin.`;
@@ -37,6 +38,7 @@ export function unusableUrlNotice(url: string | null): string | null {
 export default function ServerSetupScreen() {
   const insets = useSafeAreaInsets();
   const unusableUrl = useBaseUrlStore((s) => s.unusableUrl);
+  const unusableReason = useBaseUrlStore((s) => s.unusableReason);
   const [devSheetOpen, setDevSheetOpen] = useState(false);
 
   return (
@@ -52,7 +54,7 @@ export default function ServerSetupScreen() {
             iki yoldan birini seçin.
           </Text>
           {/* Başarıda adres deposu dolar; kök gezgin kendiliğinden giriş ekranına geçer. */}
-          <ServerPairFlow onDone={() => undefined} notice={unusableUrlNotice(unusableUrl)} />
+          <ServerPairFlow onDone={() => undefined} notice={unusableUrlNotice(unusableUrl, unusableReason)} />
           {!secureTransportOnly() && (
             <SettingsActionButton
               testID="sunucu-elle-gir"

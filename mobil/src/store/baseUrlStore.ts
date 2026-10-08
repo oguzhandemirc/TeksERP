@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import Constants from 'expo-constants';
 import { storage } from '../utils/storage';
 import { INSECURE_ADDRESS_REASON, TLS_PINS_KEY, parseTlsPins, secureAddressUsable } from '../lib/lan-tls';
+import { INTERNET_SERVERS_KEY, parseInternetServers } from '../lib/internet-tls';
 import { secureTransportOnly } from '../lib/secure-transport';
 
 const BACKEND_PORT = 4000;
@@ -128,10 +129,14 @@ interface BaseUrlState {
    * ekranına döner ve kullanıcıya bu adresi gösterir. Silinmez; yeni sunucu eklenince boşalır.
    */
   unusableUrl: string | null;
+  /** Kayıtlı adres neden kullanılamıyor (ör. internet sunucusunun kimliği değişti); yoksa genel metin. */
+  unusableReason: string | null;
 
   init: () => Promise<void>;
   setCustomUrl: (url: string) => Promise<void>;
   reset: () => Promise<void>;
+  /** Geçerli adresi kullanılamaz işaretler (kayıt silinmez; kullanıcı kaldırıp yeniden ekler). */
+  markUnusable: (reason: string) => void;
 }
 
 export const useBaseUrlStore = create<BaseUrlState>((set, get) => ({
@@ -140,17 +145,20 @@ export const useBaseUrlStore = create<BaseUrlState>((set, get) => ({
   recentUrls: [],
   isLoaded: false,
   unusableUrl: null,
+  unusableReason: null,
 
   init: async () => {
-    const [stored, recentRaw, pinsRaw] = await Promise.all([
+    const [stored, recentRaw, pinsRaw, internetRaw] = await Promise.all([
       storage.getItem(CUSTOM_URL_KEY),
       storage.getItem(RECENT_URLS_KEY),
       storage.getItem(TLS_PINS_KEY).catch(() => null),
+      storage.getItem(INTERNET_SERVERS_KEY).catch(() => null),
     ]);
     const auto = computeAutoUrl();
     let baseUrl = stored ?? auto;
     let unusableUrl: string | null = null;
-    if (secureTransportOnly() && hasServerAddress(baseUrl) && !secureAddressUsable(baseUrl, parseTlsPins(pinsRaw))) {
+    const usable = secureAddressUsable(baseUrl, parseTlsPins(pinsRaw), parseInternetServers(internetRaw));
+    if (secureTransportOnly() && hasServerAddress(baseUrl) && !usable) {
       unusableUrl = baseUrl;
       baseUrl = '';
     }
@@ -176,13 +184,19 @@ export const useBaseUrlStore = create<BaseUrlState>((set, get) => ({
       storage.setItem(CUSTOM_URL_KEY, normalized),
       storage.setItem(RECENT_URLS_KEY, JSON.stringify(recent)),
     ]);
-    set({ customUrl: normalized, baseUrl: normalized, recentUrls: recent, unusableUrl: null });
+    set({ customUrl: normalized, baseUrl: normalized, recentUrls: recent, unusableUrl: null, unusableReason: null });
   },
 
   reset: async () => {
     await storage.deleteItem(CUSTOM_URL_KEY);
     const auto = computeAutoUrl();
     set({ customUrl: null, baseUrl: secureTransportOnly() && !/^https:\/\//i.test(auto) ? '' : auto });
+  },
+
+  markUnusable: (reason) => {
+    const { baseUrl } = get();
+    if (!hasServerAddress(baseUrl)) return;
+    set({ unusableUrl: baseUrl, unusableReason: reason, baseUrl: '' });
   },
 }));
 

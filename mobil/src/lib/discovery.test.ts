@@ -191,6 +191,10 @@ describe('pickSelfHealTarget — sessiz geçiş sınırı', () => {
   it('körlük zemini: boş liste null döner (mutlu yol yukarıda kanıtlandı)', () => {
     expect(pickSelfHealTarget([], 'http://192.168.1.50:4000', 'iid-1')).toBeNull();
   });
+
+  it('internet kipindeki sunucudan ağdaki adrese sessiz geçiş YOK (kip değişimi yeniden ekleme ister)', () => {
+    expect(pickSelfHealTarget([matched], 'https://tekserp.etkiliyazilim.com:443/api', 'iid-1')).toBeNull();
+  });
 });
 
 
