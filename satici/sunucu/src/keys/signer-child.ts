@@ -6,6 +6,7 @@ import { z } from "zod";
 import {
   CertificateSchema,
   EntitlementSchema,
+  PackageRevocationSchema,
   RevocationSchema,
   TYP,
   decodeDocument,
@@ -19,7 +20,7 @@ import { KeyFileError, privateKeyFromRaw, readWrappedKeyFile, unwrapPrivateKey, 
 
 const SignRequestSchema = z.strictObject({
   anahtarDosyasi: z.string().min(1),
-  typ: z.enum([TYP.HAK, TYP.SERTIFIKA, TYP.IPTAL]),
+  typ: z.enum([TYP.HAK, TYP.SERTIFIKA, TYP.IPTAL, TYP.PAKET_IPTAL]),
   yuk: z.record(z.string(), z.unknown()),
 });
 
@@ -57,8 +58,8 @@ async function sign(requestLine: Buffer, password: Buffer): Promise<SignerOutput
   if (!parsed.success) return { ok: false, kod: "BICIM", mesaj: "İmza isteği tanınmıyor" };
   const request = parsed.data;
   const file = readWrappedKeyFile(request.anahtarDosyasi);
-  if (request.typ === TYP.SERTIFIKA || request.typ === TYP.IPTAL) {
-    // Sertifika ve iptal belgesi YALNIZ kökün işidir: ara/bayi anahtarı kendi kuşağını basamaz, iptal edemez.
+  if (request.typ === TYP.SERTIFIKA || request.typ === TYP.IPTAL || request.typ === TYP.PAKET_IPTAL) {
+    // Sertifika, iptal ve dağıtım iptali YALNIZ kökün işidir: ara/bayi anahtarı kendi kuşağını basamaz, iptal edemez.
     if (file.tur !== "tekserp-kok-anahtar") return { ok: false, kod: "YETKISIZ", mesaj: "Sertifikayı ve iptal belgesini yalnız kök imzalar" };
     if (request.typ === TYP.SERTIFIKA) {
       const cert = decodeDocument(CertificateSchema, request.yuk);
@@ -67,7 +68,7 @@ async function sign(requestLine: Buffer, password: Buffer): Promise<SignerOutput
         return { ok: false, kod: "YETKISIZ", mesaj: `Kök ${file.kid} bu sınıflara sertifika veremez` };
       }
     } else {
-      const doc = decodeDocument(RevocationSchema, request.yuk);
+      const doc = request.typ === TYP.IPTAL ? decodeDocument(RevocationSchema, request.yuk) : decodeDocument(PackageRevocationSchema, request.yuk);
       if (!doc.ok) return { ok: false, kod: "BICIM", mesaj: doc.message };
     }
   } else {
@@ -87,7 +88,9 @@ async function sign(requestLine: Buffer, password: Buffer): Promise<SignerOutput
         ? signDocument({ typ: TYP.SERTIFIKA, schema: CertificateSchema, payload: request.yuk as never, key })
         : request.typ === TYP.IPTAL
           ? signDocument({ typ: TYP.IPTAL, schema: RevocationSchema, payload: request.yuk as never, key })
-          : signDocument({ typ: TYP.HAK, schema: EntitlementSchema, payload: request.yuk as never, key });
+          : request.typ === TYP.PAKET_IPTAL
+            ? signDocument({ typ: TYP.PAKET_IPTAL, schema: PackageRevocationSchema, payload: request.yuk as never, key })
+            : signDocument({ typ: TYP.HAK, schema: EntitlementSchema, payload: request.yuk as never, key });
   } finally {
     raw.fill(0);
   }
