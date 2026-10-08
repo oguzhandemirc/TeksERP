@@ -42,6 +42,11 @@ export function isProductionPackageKid(kid: string): boolean {
   return /^paket-\d{4}(?:-\d{1,3})?$/.test(kid);
 }
 
+/** Üretim zincirli PAKET anahtarının kid'i: `pkt-<yıl>-<n>` (kök imzalı PAKET sertifikalı, parolalı). */
+export function isProductionChainPackageKid(kid: string): boolean {
+  return /^pkt-\d{4}-\d{1,3}$/.test(kid);
+}
+
 
 /** İmzalanacak kapsam: pakette DİZİN olarak duran kapsam dizinleri + bütün kapsam dosyaları. */
 export async function packageScope(root: string): Promise<IntegrityScope> {
