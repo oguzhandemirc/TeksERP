@@ -17,8 +17,8 @@ import {
   signDocument,
 } from "./belgeler";
 import type { DownloadProduct } from "./indirme";
-import { ArtifactSchema, PackageSignerKidSchema, UPDATE_PLATFORMS, isPackageKid, type PackagePublicKey } from "./guncelleme-ortak";
-import { verifyPackageSigned, type PackageTrust } from "./paket-zinciri";
+import { ArtifactSchema, PackageSignerKidSchema, UPDATE_PLATFORMS, isPackageKid, readReleasePointer, type PackagePublicKey } from "./guncelleme-ortak";
+import { verifyPackageSigned, type ChainedCandidate, type PackageSigned, type PackageTrust } from "./paket-zinciri";
 import { PgRequirementSchema } from "./guncelleme-pg";
 import { CLOCK_SKEW_MS, failure, forwardFailure, isoToMs, success, type Result } from "./ortak";
 
@@ -93,13 +93,32 @@ export function verifyReleaseManifest(
   token: unknown,
   g: { readonly keys: readonly PackagePublicKey[]; readonly kanal: string; readonly zincir?: Omit<PackageTrust, "keys"> },
 ): Result<ReleaseManifest> {
+  const r = verifyReleaseManifestSigned(token, g);
+  return r.ok ? success(r.value.value) : forwardFailure(r);
+}
+
+/** `verifyReleaseManifest` + imzalayan (zincir seçimi sertifikaya bakar). */
+export function verifyReleaseManifestSigned(
+  token: unknown,
+  g: { readonly keys: readonly PackagePublicKey[]; readonly kanal: string; readonly zincir?: Omit<PackageTrust, "keys"> },
+): Result<{ readonly value: ReleaseManifest; readonly signed: PackageSigned }> {
   const j = verifyPackageSigned(token, TYP.SURUM, { roots: [], mode: "YERLESIK", ...g.zincir, keys: g.keys });
   if (!j.ok) return forwardFailure(j);
   const b = decodeDocument(ReleaseManifestSchema, j.value.payload);
   if (!b.ok) return forwardFailure(b);
   if (j.value.kid !== b.value.paketImzaKid) return failure("SURUM_ANAHTAR", "Bildirimi imzalayan anahtar paketImzaKid değil");
   if (b.value.kanal !== g.kanal) return failure("SURUM_KANAL", `Bildirim ${b.value.kanal} kanalının, kurulum ${g.kanal} kanalında`);
-  return success(b.value);
+  return success({ value: b.value, signed: j.value });
+}
+
+/** Zincir seçimi adayı: işaretçi metni (`{v, bildirim}`) → doğrulanmış bildirim + imzalayan (Rust `release::chained_release_candidate`). */
+export function chainedReleaseCandidate(
+  ad: string,
+  metin: string,
+  g: { readonly keys: readonly PackagePublicKey[]; readonly kanal: string; readonly zincir?: Omit<PackageTrust, "keys"> },
+): ChainedCandidate<ReleaseManifest> {
+  const p = readReleasePointer(metin);
+  return { ad, sonuc: p.ok ? verifyReleaseManifestSigned(p.value, g) : forwardFailure(p) };
 }
 
 /** Açılan paketin imzalı künyesinden (`butunluk.jws` + imzalayan kid) bildirime bağ için gereken alanlar. */
