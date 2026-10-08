@@ -207,6 +207,8 @@ Tek kaynak yine `protocol/guncelleme*.ts` dosyalarıdır (w2). Rust aynası ve v
 
 ### 4.5 Konum ve kendini güncelleme
 
+Konak gereksinimi: güncelleyici TLS'te sistem OpenSSL'ini kullanır ve `libssl.so.3`e dinamik bağlıdır (L4a) ⇒ konakta `libssl3` kurulu olmalı (Ubuntu 22.04+ / Debian 12+ varsayılanı; CI ikilinin bağını ölçer, `korumali-paket.yml` `guncelleyici-linux`).
+
 Güncelleyici konakta systemd hizmeti olarak çalışır (`Restart=always`), aynı Rust crate'in Linux arka ucudur (T2, yönetici onaylı). Dosya düzeni ve IPC Windows'takinin aynısıdır: `/var/lib/tekserp/guncelleme/{durum,niyet,is}`. Backend `durum/`u salt okunur bağlar, `niyet/`e yazar. Dosya adları ve biçimleri w2 §5 ile aynıdır. Güncelleyici ikilisi paketin içinde gelir; kendini güncelleme w2 §10'daki A/B şemasını izler (`.eski` ikili, 3 açılış sayacı). İşletim sistemi yamaları güncelleyicinin işi değildir (§1.4).
 
 ## 5. Yedek, başka sağlayıcıda kopya ve geri yükleme tatbikatı

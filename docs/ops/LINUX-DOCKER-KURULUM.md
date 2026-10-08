@@ -11,7 +11,7 @@ Teslim TEK dosyadır: `tekserp-backend-oci-<sürüm>.tar` (sıkıştırılmamı�
 |---|---|
 | `tekserp-korumali_<sürüm>_linux-amd64.tar.gz` | İMZALI imajın `docker save | gzip -n`'i — `docker load` açar (yeniden üretilebilir: aynı imaj aynı sha); imaj `/app`te kendi imzalı bütünlük listesini taşır (label `tr.tekserp.butunluk=<kid>`, §8); imzasız taban teslim edilmez |
 | `docker-compose.yml` · `.env.ornek` | üç servis (postgres 16 · backend · yedek) ve ortam şablonu — `docker-compose.yml` GÜNCELLEYİCİLİ düzenin şablonudur (`docker-compose.guncelleyici.yml`, sürüm dolu: imaj `tekserp-korumali:<sürüm>`, açılışta göç YOK, güncelleme dizini bağları); ⚠ güncelleyicisiz elle kurulum (§2–§3) bu dosyayla açılmaz — L7 kurulum aracı gelene dek elle kurulum depodaki `Teks-Erp/docker/korumali/docker-compose.yml`i kullanır |
-| `tekserp-guncelleyici` · `guncelleyici-kunye.json` | Linux güncelleyicisi (linux-x64 ELF, CI işi `guncelleyici-linux`) ve künyesi — künye paketlemede imajın içinde ikiliden yeniden ölçülür |
+| `tekserp-guncelleyici` · `guncelleyici-kunye.json` | Linux güncelleyicisi (linux-x64 ELF, CI işi `guncelleyici-linux`; konakta `libssl3` ister — §1) ve künyesi — künye paketlemede imajın içinde ikiliden yeniden ölçülür |
 | `PAKET-DOCKER.json` | künye — `tekserp-butunluk` yükü (imzalı kapsam = beş teslim dosyası, `platform: linux-x64-oci`, göç sayısı, güncelleyici sürüm/sha256, liste dosyasının özeti, imaj kimliği, runtime Node/V8, `.jsc` sha256) |
 | `butunluk-liste.txt` | imzalı liste (2e-S biçimi `<sha256>\t<boyut>\t<yol>`; imza aracı teslim dosyalarını ölçüp yazar) |
 | `PAKET-DOCKER.json.jws` | PAKET anahtarıyla imza (`teslim-paketle.sh` 2e aracıyla atar; anahtar yoksa paket üretilmez — §8) |
@@ -22,6 +22,7 @@ Teslim TEK dosyadır: `tekserp-backend-oci-<sürüm>.tar` (sıkıştırılmamı�
 ## 1. Önkoşul
 
 - Linux **x86_64**, Docker Engine 24+ ve `docker compose` v2 (başka mimaride öykünmeyle koşar — üretimde kullanılmaz).
+- Güncelleyicili düzende konakta `libssl3` (OpenSSL 3; Ubuntu 22.04+ / Debian 12+ varsayılanı): paketteki `tekserp-guncelleyici` konakta koşar ve `libssl.so.3`e dinamik bağlıdır (glibc tabanı Ubuntu 22.04). Denetim: `ldd ./tekserp-guncelleyici | grep libssl.so.3`.
 - `/etc/machine-id` dolu (systemd'li her dağıtımda var): parmak izinin F1'i buradan gelir (§5). Mac'teki (Docker Desktop) provada konakta bu dosya YOKTUR: `.env`e `TEKSERP_MAKINE_KIMLIGI=<geçici dosyanın mutlak yolu>` yazılır (yalnız prova; gerçek kurulumda boş kalır).
 - Disk: imaj ≈ 1 GB açılmış; veri + yedek için ayrıca pay.
 - **Bu yol fabrika ağı kurulumu DEĞİLDİR:** Docker kurulumunda fabrika ağı TLS'i yok, yalnız şifreli bağlanan panel ve tablet fabrika ağından bağlanamaz (§7). Fabrika içi kurulum Windows yoludur (`deploy/kur.ps1`).

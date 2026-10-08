@@ -125,6 +125,8 @@ jobs:
   # Taban Ubuntu 22.04 (glibc 2.35): eski glibc'de derlenen ikili yenilerde koşar (ileri uyum, R2). Sürüm
   # derlemesi: test-anchor YOK, çapa kipi `uretim`; künye ikilinin KENDİSİNDEN okunur ve yapıta yazılır.
   # `teslim-paketle.sh` künyeyi imajın içinde yeniden ölçer (CI dosyasına güvenmez).
+  # TLS sistem OpenSSL'iyle (L4a, native-tls): derleme libssl-dev + pkg-config ister, ikili libssl.so.3'e
+  # dinamik bağlanır ⇒ hedef konakta libssl3 gerekir (runbook §1).
   # ---------------------------------------------------------------------------
   guncelleyici-linux:
     name: "Güncelleyici — linux-x64 (Ubuntu 22.04)"
@@ -139,6 +141,8 @@ jobs:
           persist-credentials: false
       - name: Rust araç zinciri (stable)
         run: rustup toolchain install stable --profile minimal && rustup default stable
+      - name: Sistem OpenSSL geliştirme paketleri (native-tls)
+        run: sudo apt-get update -q && sudo apt-get install -y --no-install-recommends libssl-dev pkg-config
       - name: Sürüm derlemesi (özelliksiz, kilit dosyasıyla)
         run: cargo build --release --locked -p tekserp-guncelleyici
       - name: Künye + ELF + çapa kipi denetimi
@@ -162,7 +166,8 @@ jobs:
           ' "$cikti/guncelleyici-kunye.json"
           cp "$ikili" "$cikti/tekserp-guncelleyici"
           ( cd "$cikti" && sha256sum tekserp-guncelleyici guncelleyici-kunye.json | tee SHA256SUMS )
-          ldd "$ikili" || true
+          ldd "$ikili"
+          ldd "$ikili" | grep -q 'libssl\.so\.3 => /' || { echo "ikili sistem OpenSSL 3'e (libssl.so.3) bağlı değil — hedef konak beyanı (libssl3) tutmaz"; exit 1; }
       - name: Yapıtı yükle (tekserp-guncelleyici + künye)
         uses: actions/upload-artifact@v4
         with:

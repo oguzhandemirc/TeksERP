@@ -218,6 +218,9 @@ function olc(d: Dosyalar): Olcum {
     if (!/cargo build --release --locked -p tekserp-guncelleyici\n/.test(linux) || /--features/.test(linux)) k("§7L", "linux güncelleyici özelliksiz sürüm derlemesi değil");
     if (!/k\.testCapasi !== false/.test(linux) || !/k\.capaKipi !== "uretim"/.test(linux) || !/k\.hedef !== "linux"/.test(linux)) k("§7L", "linux güncelleyici künyesi (hedef · testCapasi · capaKipi) ölçülmüyor");
     if (!/guncelleyici-cikti\/tekserp-guncelleyici\n/.test(linux) || !/guncelleyici-cikti\/guncelleyici-kunye\.json/.test(linux)) k("§7L", "linux güncelleyici ikilisi + künyesi yapıta girmiyor");
+    // L4a: TLS sistem OpenSSL'iyle — derleme paketleri açıkça kurulur, ikilinin libssl.so.3 bağı ölçülür (hedef beyanı libssl3).
+    if (!/apt-get install[^\n]*\blibssl-dev\b/.test(linux) || !/apt-get install[^\n]*\bpkg-config\b/.test(linux)) k("§7L", "linux güncelleyici derlemesi libssl-dev + pkg-config kurmuyor (native-tls)");
+    if (!/ldd "\$ikili" \| grep -q 'libssl\\\.so\\\.3 => \/' \|\| \{/.test(linux)) k("§7L", "linux güncelleyicinin libssl.so.3 bağı ölçülmüyor");
   }
   return { kirmizi, olculemedi };
 }
@@ -284,6 +287,8 @@ function sondalar(taban: Dosyalar): void {
     ["N19 linux güncelleyici ubuntu-latest'e kaydı (glibc ileri uyumu yok) → KIRMIZI (§7L)", "kirmizi", metin(KORUMALI_CI, "    runs-on: ubuntu-22.04\n", "    runs-on: ubuntu-latest\n"), "§7L"],
     ["N20 linux güncelleyici test çapası ölçümü kalktı → KIRMIZI (§7L)", "kirmizi", metin(KORUMALI_CI, "if (k.testCapasi !== false)", "if (false)"), "§7L"],
     ["N21 linux güncelleyici test-anchor ile derleniyor → KIRMIZI (§7L)", "kirmizi", metin(KORUMALI_CI, "cargo build --release --locked -p tekserp-guncelleyici\n", "cargo build --release --locked -p tekserp-guncelleyici --features test-anchor\n"), "§7L"],
+    ["N22 linux güncelleyici libssl-dev kurmadan derleniyor → KIRMIZI (§7L)", "kirmizi", metin(KORUMALI_CI, "install -y --no-install-recommends libssl-dev pkg-config", "install -y --no-install-recommends pkg-config"), "§7L"],
+    ["N23 linux güncelleyicinin libssl.so.3 bağı ölçülmüyor → KIRMIZI (§7L)", "kirmizi", metin(KORUMALI_CI, "ldd \"$ikili\" | grep -q 'libssl\\.so\\.3 => /' || {", "ldd \"$ikili\" | grep -q 'libssl' || true || {"), "§7L"],
     ["O1 paketle.ps1 okunamadı → ÖLÇÜLEMEDİ", "olculemedi", (d) => { d[PAKETLE] = undefined; }],
     ["O2 $ALT_BETIKLER listesi kayboldu → ÖLÇÜLEMEDİ (§1)", "olculemedi", metin(PAKETLE, "$ALT_BETIKLER = @(", "$ALT_BETIKLER_ESKI = @("), "§1"],
   ];
