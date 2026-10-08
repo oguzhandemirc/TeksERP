@@ -341,6 +341,17 @@ function dur(ad, r, desen, { tsBos = true, kod = 1 } = {}) {
   const pgk = yol('pgk', 'pg-kunye.json');
   yaz(pgk, fs.readFileSync(pgz, 'utf8'));
   dur('§6Z6 başka adlı künye (pg-zincir.json / pg.json dışı) yine DUR', kos({ '--pg-kunye': pgk }), /setup yalnız "pg\.json" arar/);
+  // D8: yeniden imzalı kid'li ad — arşive pg.json adıyla girer, doğrulayıcıya KENDİ adıyla gider (ad kid'i = imzalayan orada).
+  const pgzk = yol('pgzk', 'pg-zincir-pkt-test-2.json');
+  yaz(pgzk, pgKunye({ ad: PG_AD, boyut: PG_VERI.length, sha256: sha(PG_VERI) }, {}, 'pkt-test-2'));
+  const r7 = kos({ '--pg-kunye': pgzk, '--backend': zZip('kidli') });
+  const i7 = icerik(r7);
+  check('§6Z7 ⭐ pg-zincir-<kid>.json arşive pg.json adıyla girer, doğrulayıcı künyeyi kendi (kid\'li) adıyla görür',
+    r7.kod === 0 && i7.includes('pg.json') && !i7.some((x) => x.startsWith('pg-zincir')) && r7.iz.some((x) => x.f['pg-kunye'] === pgzk),
+    `${r7.cikti.slice(-300)} ${i7.join(',')}`);
+  const pgzx = yol('pgzx', 'pg-zincirx.json');
+  yaz(pgzx, fs.readFileSync(pgzk, 'utf8'));
+  dur('§6Z8 zincirli ön eke benzeyen ama aileden olmayan ad (pg-zincirx.json) DUR', kos({ '--pg-kunye': pgzx }), /setup yalnız "pg\.json" arar/);
 }
 
 // §7 doğrulayıcı koşamaz

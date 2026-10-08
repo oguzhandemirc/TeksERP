@@ -19,7 +19,8 @@
 // açılıp her girdi SHA256SUMS'a ve kaynağa karşı ölçülür + `unzip -t`; yanında `<arşiv>.sha256`.
 // `--prova`: imza kapıları UYARIYA düşer, ad `-PROVA-IMZASIZ` taşır (yapı denemesi; müşteriye verilmez).
 // Test çapaları (TEKSERP_TEST_PAKET_CAPASI · TEKSERP_TEST_KOK_CAPASI) doğrulayıcıya GEÇİRİLMEZ: arşiv yalnız üretim çapasına güvenir.
-// Zincir (3.9 D5): `pg-zincir.json` arşive setup'ın aradığı adla (pg.json) girer; zincir-yalnız pakette güncelleyici
+// Zincir (3.9 D5): `pg-zincir.json` ya da yeniden imzalı `pg-zincir-<kid>.json` (D8) arşive setup'ın aradığı adla (pg.json)
+//   girer; ad kid'i = imzalayan denetimi TS doğrulayıcısının seçim kuralındadır (tek kaynak); zincir-yalnız pakette güncelleyici
 //   `paketZinciri` bilen derleme olmalı ve setup sürümü paketinkiyle aynı olmalı (setup içi Mac'ten okunamaz).
 // Arşiv sürüm başına TEKTİR (müşteri/kanal/grup argümanı YOK): firma adı lisanstan, grup kiradan gelir.
 //
@@ -60,6 +61,8 @@ const KULLANIM = 'Kullanım: --setup <exe> --backend <zip> --pg <zip> --pg-kunye
 const ORTAK_CAPA = 'uretim';
 const ZINCIR_IMZA = 'butunluk-zincir.jws';
 const ZINCIR_PG_KUNYE = 'pg-zincir.json';
+/** Zincirli PG künyesi adı: kid'siz ya da kid'li; tam dilbilgisi + ad kid'i = imzalayan TS seçim kuralında (`pgKunyesiDogrula`). */
+const zincirPgKunyesi = (ad) => ad === ZINCIR_PG_KUNYE || (ad.startsWith(ZINCIR_PG_KUNYE.replace(/\.json$/, '-')) && ad.endsWith('.json'));
 /** Güncelleyicinin künyesindeki anahtar (native/tekserp-guncelleyici `identity()`): zincirli paketi bilen derleme. */
 const ZINCIR_ISARETI = 'paketZinciri';
 
@@ -290,7 +293,7 @@ async function denetle(arg) {
   }
   if (girdi.backend && !desen.backend.desen.test(girdi.backend.ad)) hatalar.push(`backend adı "${girdi.backend.ad}" setup deseni ${desen.backend.joker} ile eşleşmez (kurulum.ps1 GirdiCoz)`);
   if (girdi.pg && !desen.pg.desen.test(girdi.pg.ad)) hatalar.push(`PG adı "${girdi.pg.ad}" setup deseni ${desen.pg.joker} ile eşleşmez`);
-  if (girdi.pgKunye?.ad === ZINCIR_PG_KUNYE) girdi.pgKunye = { ...girdi.pgKunye, kaynakAd: ZINCIR_PG_KUNYE, ad: desen.pgKunye.joker };
+  if (girdi.pgKunye && zincirPgKunyesi(girdi.pgKunye.ad)) girdi.pgKunye = { ...girdi.pgKunye, kaynakAd: girdi.pgKunye.ad, ad: desen.pgKunye.joker };
   if (girdi.pgKunye && !desen.pgKunye.desen.test(girdi.pgKunye.ad)) hatalar.push(`PG künyesinin adı "${girdi.pgKunye.ad}" — setup yalnız "${desen.pgKunye.joker}" arar`);
   if (girdi.tkpub && !desen.tkpub.desen.test(girdi.tkpub.ad)) hatalar.push(`tkpub adı "${girdi.tkpub.ad}" — setup yalnız "${desen.tkpub.joker}" arar (on-olcum.ps1)`);
   if (girdi.setup) {
