@@ -155,7 +155,7 @@ const kotu = satir.korumali !== true || satir.prova !== true || satir.hedef !== 
 if (kotu) { console.error('  ÖZET KAPISI: beklenen parça eksik / fazla'); process.exit(1); }
 // Derleme künyesi — imza aracı (`--derleme-kunyesi`) her alanı yapıtla çapraz ölçer; bu dosya imzalı DEĞİLDİR.
 const e = process.env;
-const kunye = {
+const derleme = {
   v: 1, tur: 'thinkpad-derleme', zaman: new Date().toISOString(),
   makine: { ad: e.TP_MAKINE, tailscaleIp: e.TS_IP_OLCULEN },
   betik: { yol: 'deploy/korumali-thinkpad.sh', commit: e.BETIK_COMMIT, sha256: e.BETIK_SHA },
@@ -164,7 +164,7 @@ const kunye = {
   rust: Object.fromEntries(e.RUST_SHA.split(',').map((s) => s.split('='))),
   zip: { ad: require('node:path').basename(zip), sha256: e.MSHA, uzakSha256: e.ZSHA },
 };
-require('node:fs').writeFileSync(`${zip}.derleme.json`, `${JSON.stringify(kunye, null, 2)}\n`);
+require('node:fs').writeFileSync(`${zip}.derleme.json`, `${JSON.stringify(derleme, null, 2)}\n`);
 console.log(`  künye          ${zip}.derleme.json`);
 JS
 echo "  zip     $CIKTI/$ZAD"
