@@ -64,6 +64,8 @@ services:
       # konteyneri yeniden yaratır ve parolayı ortamdan/günlükten siler (runbook §2).
       ILK_YONETICI_PAROLASI: ${ILK_YONETICI_PAROLASI:-}
       LICENSE_SERVER_URL: ${LICENSE_SERVER_URL:-}
+      # Keşifte görünen sunucu adı; boş = makine adı (Docker'da konteyner kimliği, her yeniden yaratılışta değişir).
+      TEKSERP_SUNUCU_ADI: ${TEKSERP_SUNUCU_ADI:-}
       # Vekil (nginx/Cloudflare) arkası: boş = vekil yok, bugünkü davranış. Vekil arkasında bu ayar
       # verilmezse bütün istemciler tek adres görünür ve bir kişinin hatalı girişi herkesi kilitler.
       # Tek vekilde "1" (yalnız port 127.0.0.1'deyken güvenli); "true" sahte X-Forwarded-For'a güvenir.
