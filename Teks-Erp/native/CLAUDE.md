@@ -34,6 +34,6 @@
 | `npm test` | `cargo test` bütün alan (lisans çekirdeği napi'siz + test çapasıyla; güncelleyicinin öldür-yeniden başlat paketi ~1 dk) · güncelleyicinin `capa_kipi` + `self_update` testleri · lisans çekirdeği |
 | `npm run derle:hizmetler:win` | Mac'ten iki Windows ikilisi (cargo-xwin, CRT statik, ÜRETİM çapası) → `target/x86_64-pc-windows-msvc/release/` — thinkpad-1 provası için; CI yapıtı `native-windows.yml` |
 
-Tanı (Windows'ta, yönetici): `tekserp-guncelleyici.exe durum --kok <KOK> [--veri <VERİ>]` · `tur --kok <KOK>` (tek tur ön planda; yarım işlemi de sonuçlandırır) · `tekserp-hizmet.exe on-planda --kok <KOK> [--ad <ad>] [--dogrulama]` (stdin'e satır = durdur). Hizmet adları parametredir (`--ad`; aynı makinede ikinci kanal — `docs/design/GUNCELLEYICI.md` §4.2).
+Tanı (Windows'ta, yönetici): `tekserp-guncelleyici.exe durum --kok <KOK> [--veri <VERİ>]` · `tur --kok <KOK>` (tek tur ön planda; yarım işlemi de sonuçlandırır) · `tani --kok <KOK> --cikti <z.zip>` (sırsız destek paketi; gönderilmez) · `tekserp-hizmet.exe on-planda --kok <KOK> [--ad <ad>] [--dogrulama]` (stdin'e satır = durdur). Hizmet adları parametredir (`--ad`; aynı makinede ikinci kanal — `docs/design/GUNCELLEYICI.md` §4.2).
 
 Commit kapısı bu dizini `Teks-Erp/`den ayrı TEK proje sayar (`scripts/hooks/lib/staged.mjs`); cargo yoksa ⏭ beyanla geçer, ölçüm CI'da (`ci.yml` "Native" · `native-windows.yml` — gerçek SCM dumanı `scripts/duman-windows.ps1`).
