@@ -17,6 +17,8 @@
 //   K8 imzalı imaj (label `tr.tekserp.butunluk` ya da `--imzali`): app kökünde imzalı liste
 //      (`butunluk-liste.txt` + `butunluk-zincir.jws`|`butunluk.jws`) VAR; `--imzali` etiketsiz imajı reddeder
 //   K9 app altında sembolik bağ yok (imza aracı bağı imzalamaz; `node_modules/.bin` imaja girmez)
+//   K10 göç aracı: `usr/local/bin/goc` açılış betiğine (`entrypoint.sh`) bağ — güncelleyicinin GOC adımı
+//      `compose run --rm --no-deps backend goc` onu çağırır (GUNCELLEYICI-SAGLAMLIK L5)
 //
 // ÜÇ SONUÇ: 0 yeşil · 1 kırmızı · 2 ÖLÇÜLEMEDİ (docker yok / imaj yok / akış okunamadı).
 // İmaj yoksa YEŞİL DEĞİL ÖLÇÜLEMEDİ döner — sessiz yeşil yok. Cırcır DEĞİL (taban yok).
@@ -37,7 +39,12 @@ export const ZORUNLU = [
   'app/dist/tools/yedek-sifrele.cjs',
   'app/runtime/bin/node',
   'usr/local/bin/node',
+  'usr/local/bin/entrypoint.sh',
 ];
+
+/** Güncelleyicinin GOC adımının imajdaki aracı: açılış betiğinin göç kipine bağ. */
+export const GOC_ARACI = 'usr/local/bin/goc';
+const GOC_HEDEFI = /^(\/usr\/local\/bin\/)?entrypoint\.sh$/;
 
 /** İmaj içi bütünlük listesi (`Teks-Erp/docker/korumali/imaj-imzala.mjs`): liste + en az bir imzalı yük. */
 export const IMZA_LISTESI = 'app/butunluk-liste.txt';
@@ -74,6 +81,8 @@ export function denetle({ user, dosyalar, imza = { etiket: null, iste: false } }
     if (!IMZA_YUKLERI.some((y) => adlar.has(y))) ihlal.push(`K8 imzalı yük yok: ${IMZA_YUKLERI.join(' | ')}`);
   }
   for (const z of ZORUNLU) if (!adlar.has(z)) ihlal.push(`K5 zorunlu parça yok: ${z}`);
+  const goc = dosyalar.find((d) => d.ad === GOC_ARACI);
+  if (!goc || goc.tip !== 'bag' || !GOC_HEDEFI.test(goc.hedef ?? '')) ihlal.push(`K10 göç aracı yok: ${GOC_ARACI} → entrypoint.sh bağı değil (${goc ? `${goc.tip} ${goc.hedef ?? ''}` : 'yok'})`);
   if (migration === 0) ihlal.push('K5 migration SQL yok (app/prisma/migrations/*/migration.sql)');
   return ihlal;
 }
@@ -108,6 +117,7 @@ export function tarAkisi(icerikIste = () => false) {
     ad = ad.replace(/^\.?\//, '').replace(/\/$/, '');
     const tip = tipBayt === '0' || tipBayt === '\0' ? 'dosya' : tipBayt === '5' ? 'dizin' : tipBayt === '2' ? 'bag' : 'diger';
     const d = { ad, boyut, uid: sekizli(h, 108, 8), mod: sekizli(h, 100, 8), tip };
+    if (tip === 'bag') d.hedef = cstr(h, 157, 100);
     dosyalar.push(d);
     return { kalan: boyut, dolgu, d, parcalar: tip === 'dosya' && icerikIste(ad) ? [] : null };
   }
@@ -203,6 +213,7 @@ function temizOrnek() {
       f('app/node_modules/zod/index.d.ts'),
       f('app/node_modules/pkg/src/kendi.ts', { uid: 0 }),
       f('etc/machine-id', { boyut: 0 }),
+      f(GOC_ARACI, { boyut: 0, mod: 0o777, tip: 'bag', hedef: '/usr/local/bin/entrypoint.sh' }),
     ].filter((d, i, a) => a.findIndex((x) => x.ad === d.ad) === i),
   };
 }
@@ -222,6 +233,10 @@ const MUTASYONLAR = [
   ['K6', 'kullanıcıya ait app', (o) => { o.dosyalar.find((d) => d.ad === 'app/dist/server.js').uid = 10001; }],
   ['K7 imajda dolu', 'dolu machine-id', (o) => { o.dosyalar.find((d) => d.ad === 'etc/machine-id').boyut = 33; }],
   ['K7 ortam', '.env', (o) => o.dosyalar.push({ ad: 'app/.env', boyut: 5, uid: 0, mod: 0o600, tip: 'dosya' })],
+  ['K10', 'goc bağı yok', (o) => { o.dosyalar = o.dosyalar.filter((d) => d.ad !== GOC_ARACI); }],
+  ['K10', 'goc düz dosya', (o) => { Object.assign(o.dosyalar.find((d) => d.ad === GOC_ARACI), { tip: 'dosya', hedef: undefined }); }],
+  ['K10', 'goc başka yere bağ', (o) => { o.dosyalar.find((d) => d.ad === GOC_ARACI).hedef = '/bin/sh'; }],
+  ['K5 zorunlu parça yok: usr/local/bin/entrypoint.sh', 'açılış betiği yok', (o) => { o.dosyalar = o.dosyalar.filter((d) => d.ad !== 'usr/local/bin/entrypoint.sh'); }],
   ['K9', 'node_modules/.bin bağı', (o) => o.dosyalar.push({ ad: 'app/node_modules/.bin/prisma', boyut: 0, uid: 0, mod: 0o777, tip: 'bag' })],
   ['K8 imzalı imaj bekleniyordu', '--imzali ama etiket yok', (o) => { o.imza = { etiket: null, iste: true }; imzaDosyalari(o); }],
   ['K8 imzalı liste yok', 'etiketli imajda liste yok', (o) => { o.imza = { etiket: 'pkt-2099-1', iste: true }; imzaDosyalari(o, [IMZA_YUKLERI[0]]); }],
@@ -231,12 +246,13 @@ function imzaDosyalari(o, adlar = [IMZA_LISTESI, IMZA_YUKLERI[0]]) {
   for (const ad of adlar) o.dosyalar.push({ ad, boyut: 10, uid: 0, mod: 0o644, tip: 'dosya' });
 }
 
-function tarBaslik(ad, boyut, tip = '0') {
+function tarBaslik(ad, boyut, tip = '0', hedef = '') {
   const h = Buffer.alloc(512);
   h.write(ad, 0, 100, 'utf8');
   h.write('0000644\0', 100); h.write('0000000\0', 108); h.write('0000000\0', 116);
   h.write(boyut.toString(8).padStart(11, '0') + '\0', 124);
   h.write(tip, 156);
+  if (hedef) h.write(hedef, 157, 100, 'utf8');
   return h;
 }
 
@@ -273,6 +289,8 @@ function sondalar() {
   bak(a.bitti && a.dosyalar[0]?.ad === uzun, 'T1 GNU uzun ad (97 baytlık parçalarla)');
   bak(a.dosyalar[1]?.ad === 'app/dist/tools/pax.cjs' && a.dosyalar[1]?.icerik === icerik.toString(), 'T2 PAX path + içerik');
   bak(denetle({ user: '10001', dosyalar: a.dosyalar }).some((x) => x.startsWith('K4 araç')), 'T3 ayrıştırılan içerik K4\'e ulaşır');
+  const bagli = tarListele(Buffer.concat([tarBaslik('usr/local/bin/goc', 0, '2', '/usr/local/bin/entrypoint.sh'), Buffer.alloc(1024)]));
+  bak(bagli[0]?.tip === 'bag' && bagli[0]?.hedef === '/usr/local/bin/entrypoint.sh', 'T4 sembolik bağın hedefi okunur (K10)');
   return kirmizi;
 }
 
@@ -295,7 +313,7 @@ async function main() {
       console.log(`\n  ✖ KIRMIZI: ${ih.length} ihlal`);
       process.exit(1);
     }
-    console.log(`  ✓ K1–K9 temiz: kaynak/harita/tsx/bağ yok, root değil, zorunlu parçalar var · imaj içi liste: ${olcum.etiket ? `imzalı (${olcum.etiket})` : 'YOK (imzasız taban)'}`);
+    console.log(`  ✓ K1–K10 temiz: kaynak/harita/tsx/bağ yok, root değil, zorunlu parçalar var · imaj içi liste: ${olcum.etiket ? `imzalı (${olcum.etiket})` : 'YOK (imzasız taban)'}`);
     process.exit(0);
   } catch (e) {
     if (e instanceof Olculemedi) {

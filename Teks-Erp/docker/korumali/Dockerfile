@@ -103,6 +103,8 @@ COPY --from=derle --chown=root:root /sahne/app /app
 COPY --from=runtime-node --chown=root:root /w/sahne/runtime/bin/node /app/runtime/bin/node
 RUN ln -s /app/runtime/bin/node /usr/local/bin/node
 COPY --chmod=0755 Teks-Erp/docker/entrypoint.sh /usr/local/bin/entrypoint.sh
+# Güncelleyicinin GOC adımı: `compose run --rm --no-deps backend goc` (açılış betiğinin göç kipi; sunucu açılmaz).
+RUN ln -s /usr/local/bin/entrypoint.sh /usr/local/bin/goc
 COPY --chmod=0755 Teks-Erp/docker/korumali/yedek-zamanlayici.sh /usr/local/bin/yedek-zamanlayici.sh
 WORKDIR /app
 ENV NODE_ENV=production TZ=Europe/Istanbul HOME=/tmp \

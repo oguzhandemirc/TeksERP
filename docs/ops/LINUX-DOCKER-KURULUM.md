@@ -63,6 +63,8 @@ docker inspect --format '{{range .Config.Env}}{{println .}}{{end}}' "$(docker co
 3. `.env`de `TEKSERP_IMAJ`ı yeni etikete çevir → `docker compose up -d` (backend açılışta `migrate deploy` koşar; migration geri alınamaz eşiktir).
 4. `/health` ve panel sürümü (`/api/admin/health` `version`) yeni sürümü gösterir.
 
+**Göç aracı ve güncelleyicili düzen.** Göç tek başına da koşar: `docker compose run --rm --no-deps backend goc` (göç + şema denetimi, sunucu AÇMAZ; sonunda `GOC_TAMAM`, düşerse `Teks-Erp/docker/korumali/acilis-kodlari.json`daki kodla çıkar; `goc` bağı L5 sonrası imajlarda). Güncelleyicinin yönettiği kurulum ayrı şablonla açılır (`docker-compose.guncelleyici.yml`; tasarım `docs/design/GUNCELLEYICI-SAGLAMLIK.md` §1.2): orada backend açılışta göç ETMEZ (`TEKSERP_GOC_ACILISTA=0`), imajın göç kümesi veritabanınınkine eşit değilse açılmaz, ve `TEKSERP_GUNCELLEME_DIZINI=/var/lib/tekserp/guncelleme` ÜRETİM değeridir (geliştirme/test değil). Bu dosyadaki elle kurulum bugünkü gibi açılışta göçer.
+
 **ASLA** `docker compose down -v` (birimleri — veri, lisans, yedek — SİLER; lisans gider → §9), `migrate reset`, elle seed.
 
 ## 4. Yedek
