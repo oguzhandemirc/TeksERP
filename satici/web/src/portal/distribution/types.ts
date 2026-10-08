@@ -129,6 +129,8 @@ export interface ChannelRelease {
     readonly panel: Published | null;
     readonly tabletOta: readonly (Published & { readonly runtime: string })[];
     readonly tabletApk: (Published & { readonly vc: number | null }) | null;
+    /** Backend işaretçisi: ZINCIR = son-zincir.json önce; eskiSurum = köprüden sonra donan son.json. Eski sunucu göndermez. */
+    readonly backend?: (Published & { readonly imza: "ZINCIR" | "ESKI"; readonly eskiSurum: string | null }) | null;
   } | null;
   /** Panel defteri (grupta `<grup>-panel-…`, emekli kanalda eski ad); null = ölçülemedi. */
   readonly defter: readonly LedgerRow[] | null;

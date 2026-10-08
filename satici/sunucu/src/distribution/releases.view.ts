@@ -34,12 +34,16 @@ export async function panelPublished(root: string, code: string): Promise<Publis
   return { surum: /^version:\s*(\S+)\s*$/m.exec(f.text)?.[1] ?? null, degisti: f.mtime };
 }
 
-/**
- * Backend (Dağıtım v2): `backend/son.json` işaretçisindeki imzalı bildirimin sürümü — İMZASIZ okuma, yalnız
- * görünüm içindir (kurulumun güncelleyicisi imzayı doğrular).
- */
-export async function backendPublished(root: string, code: string): Promise<Published | null> {
-  const f = await readSmall(path.join(root, "html", code, "backend", "son.json"), 64 * 1024);
+/** Backend işaretçisinin görünümü: hangi imza takımı yayında, köprüden sonra eski takımın donmuş sürümü. */
+export interface BackendPublished extends Published {
+  /** `ZINCIR` = `son-zincir.json` (pkt-* zinciri) · `ESKI` = yalnız `son.json` (paket-*). */
+  readonly imza: "ZINCIR" | "ESKI";
+  /** Zincir takımı yayındayken `son.json`un sürümü (eski kurulumların gördüğü; köprüden sonra DONAR); yoksa null. */
+  readonly eskiSurum: string | null;
+}
+
+async function pointerVersion(file: string): Promise<Published | null> {
+  const f = await readSmall(file, 64 * 1024);
   if (!f) return null;
   try {
     const token = (JSON.parse(f.text) as { bildirim?: unknown }).bildirim;
@@ -48,6 +52,18 @@ export async function backendPublished(root: string, code: string): Promise<Publ
   } catch {
     return { surum: null, degisti: f.mtime };
   }
+}
+
+/**
+ * Backend (Dağıtım v2): `backend/son-zincir.json` önce, yoksa `backend/son.json` işaretçisindeki imzalı bildirimin
+ * sürümü — İMZASIZ okuma, yalnız görünüm içindir (kurulumun güncelleyicisi imzayı doğrular).
+ */
+export async function backendPublished(root: string, code: string): Promise<BackendPublished | null> {
+  const dir = path.join(root, "html", code, "backend");
+  const eski = await pointerVersion(path.join(dir, "son.json"));
+  const zincir = await pointerVersion(path.join(dir, "son-zincir.json"));
+  if (zincir) return { ...zincir, imza: "ZINCIR", eskiSurum: eski?.surum ?? null };
+  return eski ? { ...eski, imza: "ESKI", eskiSurum: null } : null;
 }
 
 /** OTA manifesti: çok parçalı gövdede `manifest` parçası (ya da düz JSON) → extra.expoClient.version. */

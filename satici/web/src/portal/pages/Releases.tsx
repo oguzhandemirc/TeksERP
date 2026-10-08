@@ -25,6 +25,9 @@ function published(c: ChannelRelease): string {
   const parts = [
     c.yayinda.panel?.surum ? `Panel ${c.yayinda.panel.surum}` : null,
     ...c.yayinda.tabletOta.map((o) => `OTA ${o.runtime}: ${o.surum ?? "?"}`),
+    c.yayinda.backend?.surum
+      ? `Backend ${c.yayinda.backend.surum}${c.yayinda.backend.imza === "ZINCIR" ? ` (zincir imzalı${c.yayinda.backend.eskiSurum ? `; eski takım ${c.yayinda.backend.eskiSurum}` : ""})` : ""}`
+      : null,
     c.yayinda.tabletApk?.surum ? `APK ${c.yayinda.tabletApk.surum}${c.yayinda.tabletApk.vc ? ` (vc ${c.yayinda.tabletApk.vc})` : ""}` : null,
   ].filter(Boolean);
   return parts.length ? parts.join(" · ") : "yayın yok";
