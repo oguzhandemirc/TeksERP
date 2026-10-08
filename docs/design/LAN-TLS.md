@@ -1,6 +1,6 @@
 # Fabrika ağında TLS (plan 6.1 · §C-2)
 
-> Durum: D1–D2 uygulandı (backend); dilimler §8. Karar notu: `docs/history/arsiv/2026-10.md` §2026-10-06 LAN TLS. Kural satırı: `docs/kurallar/kesif-cihaz.md`.
+> Durum: dilimler §8 (D8 yalnız şifreli yeni kurulum 2026-10-08); panel sözleşmesi §9. Karar notu: `docs/history/arsiv/2026-10.md` §2026-10-06 LAN TLS. Kural satırı: `docs/kurallar/kesif-cihaz.md`.
 
 ## 1. Tehdit
 
@@ -19,7 +19,7 @@ Kapsam dışı: sunucu makinesinin ya da istemci cihazın kendisinin ele geçmes
 
 - **Biçim:** ECDSA P-256, SHA-256 imzalı, kendinden imzalı X.509 v3. Node `crypto` sertifika ÜRETEMEZ (yalnız okur); paket eklemeden küçük bir DER kurucu yazılır (`src/lib/lan-tls/x509.ts`), çıktısı `X509Certificate` ile okunup imzası doğrulanarak ölçülür.
 - **Kimlik adreste değil parmak izinde:** SAN yalnız makine adı + `localhost` + `127.0.0.1`. LAN IP'leri DHCP ile değişir; istemci ana makine adını değil sertifikanın SHA-256'sını denetler.
-- **Geçerlilik 10 yıl.** Sabitleme tarihe bakmaz; süre, sertifikayı tarihle düşürmeyen bir sınır olarak durur.
+- **Geçerlilik 30 yıl** (kullanıcı 2026-10-08; 2050 sonrası bitiş GeneralizedTime). Sabitleme tarihe bakmaz; sertifika değişimi yalnız bilinçli bir eylemdir (çalınma/sunucu değişimi) ve bütün cihazların yeniden eşleşmesi demektir. Ölçüldü: `openssl` okur/doğrular, Electron 42 sabitleme kancasıyla kabul eder (yalnız `ERR_CERT_AUTHORITY_INVALID`); Android A7 provasında. Daha önce üretilmiş sertifika (10 yıl) yerinde kalır — süre yalnız yeni üretimi etkiler.
 - **Saklama:** `LAN_TLS_DIR` (yoksa `<LICENSE_DIR>/lan-tls`); `anahtar.pem` 0600, `sertifika.pem`. Lisans deposu program dizininde/yedek dizininde ise (güncelleyici siler) TLS deposu da kurulmaz.
 - **Yükleme kuralı** (lisans deposuyla aynı desen): dosya yok → üret · bozuk/çift uyuşmuyor → kenara al (`.bozuk-<zaman>`) + üret, yüksek sesle uyar (parmak izi değişti, istemciler yeniden eşleşir) · okunamıyor → ÜRETME, TLS dinleyicisi açılmaz (sessiz anahtar değişimi yok).
 - **Yenileme (D7):** sunucu "sonraki" sertifikayı üretir; sabitli istemci, ZATEN DOĞRULANMIŞ kanaldan sonraki parmak izini öğrenip pin kümesine ekler (TOFU değil); geçiş süresi sonunda sunucu takas eder. Elle zorunlu yenileme = yeniden eşleştirme.
@@ -46,6 +46,7 @@ Reddedilenler: keşiften/ilk girişten otomatik sabitleme (TOFU) · IP'ye bağl�
 | `dual` | `HOST`ta | `HOST`ta, aynı uygulama | `{ port, fingerprint }` |
 | `required` | yalnız `127.0.0.1` (yerel araçlar: `kur.ps1` sağlık, durum sayfası, güncelleyici) | `HOST`ta | `{ port, fingerprint }` |
 
+- `required`da HTTP `HOST` ne olursa olsun yalnız `127.0.0.1`dir; `LAN_TLS_PORT = PORT` çakışması `off`a DÜŞMEZ (HTTP ağa açılırdı) — kip korunur, HTTPS açılmaz, ağ kapalı kalır.
 - Tanınmayan değer → uyarı + `off` (web sertleştirmesiyle aynı asimetri: yazım hatası fabrikayı kilitlemesin; banner kipi basar).
 - Sertifika yüklenemezse `dual` HTTP ile sürer; `required` LAN'a hiç açılmaz (fail-closed, banner + log hatası). Kaçış: kipi `dual`/`off` yapıp yeniden başlatmak.
 - **HSTS AÇILMAZ.** LAN TLS `HTTPS_ENABLED`den bağımsızdır; HSTS sabitli istemcinin `dual`daki HTTP'ye dönüşünü kalıcı kilitlerdi.
@@ -72,9 +73,9 @@ Reddedilenler: keşiften/ilk girişten otomatik sabitleme (TOFU) · IP'ye bağl�
 
 ## 7. Kurulum adımı
 
-**Karar (kullanıcı 2026-10-07):** YENİ kurulumun kipi `dual`dır. Kod varsayılanı `off` KALIR ("bayrak varsayılanı = bugünkü davranış"); `dual`ı kurulum aracı yeni kurulumun `.env`ine yazar. Var olan kurulumun kipine kurulum dokunmaz.
+**Karar (kullanıcı 2026-10-08, 2026-10-07 `dual` kararının yerine):** YENİ kurulum yalnız şifrelidir — kip `required`, seçenek yok: ağ yalnız HTTPS 4443'ü görür, API portu (4000) yalnız `127.0.0.1`i dinler ve ona güvenlik duvarı kuralı açılmaz. Kod varsayılanı `off` KALIR ("bayrak varsayılanı = bugünkü davranış": LAN_TLS satırı olmayan `.env` güncellenince istemci kopmasın); `required`ı kurulum aracı yeni kurulumun `.env`ine yazar. Var olan kurulumun kipine kurulum dokunmaz.
 
-**Uygulama (D6):** yeni kurulum (`deploy/kurulum/kurulum.ps1`, `.env` yokken) `.env`e `LAN_TLS_MODE=dual` yazar (port satırı yazılmaz, 4443; API portu 4443 ise kurulum durur). Onarım/devam ve güncelleme var olan `.env`e LAN_TLS satırı eklemez, olanı değiştirmez. HTTPS güvenlik duvarı kuralı ölçümden (kimlik ucu `tls` doluysa), API ile aynı profil/adreslerle. Dogrulama kodu (SHA-256, 4'lü gruplar) döngü adresindeki kimlik ucundan okur; kod ve durum sayfası adresi (`http://localhost:<PORT>/`) ekrana, sonuç INI'sine ve sihirbazın son sayfasına gider. pm2 yolu (`kur.ps1`, `ilk-kurulum.ps1`) donmuştur, bu özelliği almaz.
+**Uygulama (D6 + D8):** yeni kurulum (`deploy/kurulum/kurulum.ps1`, `.env` yokken) `.env`e `LAN_TLS_MODE=required` yazar (port satırı yazılmaz, 4443; API portu 4443 ise ya da 4443 meşgulse kurulum durur). `.env` required ise Hizmetler aşaması API portuna kural açmaz, aynı adlı eski kuralımızı kaldırır, kaldırıcı listesine yazmaz; şifreli dinleyici ölçülemezse DURUR. Sunucunun içindeki hizmetler (güncelleyici `/health/yerel`, kurulum yoklamaları, simge `/health/tepsi`) API'ye yalnız `http://127.0.0.1:<PORT>` ile bağlanır; yedek betiği API'ye bağlanmaz. Durum sayfası `http://127.0.0.1:<PORT>/`; son sayfa ağ adresini `https://<ad>:4443` basar. Onarım/devam ve güncelleme var olan `.env`e LAN_TLS satırı eklemez, olanı değiştirmez. HTTPS güvenlik duvarı kuralı ölçümden (kimlik ucu `tls` doluysa), API ile aynı profil/adreslerle. Dogrulama kodu (SHA-256, 4'lü gruplar) döngü adresindeki kimlik ucundan okur; kod ve durum sayfası adresi (`http://localhost:<PORT>/`) ekrana, sonuç INI'sine ve sihirbazın son sayfasına gider. pm2 yolu (`kur.ps1`, `ilk-kurulum.ps1`) donmuştur, bu özelliği almaz.
 
 ## 8. Dilimler
 
@@ -87,3 +88,23 @@ Reddedilenler: keşiften/ilk girişten otomatik sabitleme (TOFU) · IP'ye bağl�
 | D5 | Tablet: native zorlama (OkHttp) — yerel Expo modülü `mobil/modules/teks-erp-lan-tls` (config eklentisi yerine otomatik bağlama + `ApplicationLifecycleListener`, `MainApplication`a dokunulmaz): RN istemci fabrikası + WebSocket'e parmak izi `TrustManager`/`HostnameVerifier` + sabitli makineye şifresiz istek kesicisi (yalnız kimlik yoklaması geçer); küme JS'ten itilir, native kendi kopyasını açılışta yükler; `expo-file-system`/`expo-audio`/`expo-updates` kendi istemcileri sistem CA'sıyla kalır (sabitli kendinden imzalı sunucuya ulaşamaz, atlatamaz). JVM denetimi `jvm-check.mjs`; OTA parmak izine depo içi native kaynak girdi (alg 4) | ✅ derlendi · gerçek tablette deneme bekler |
 | D6 | Durum sayfası (yalnız döngü adresinde) + yeni kurulum `dual` + kurulum sonu (sihirbaz son sayfası, `kurulum.ps1`) parmak izi ve durum sayfası; bekçi `test_kurulum_betikleri` §18 + harness `lantls.*` (Windows denemesi bekler) | ✅ |
 | D7 | Sertifika yenileme (sonraki parmak izi) | sırada |
+| D8 | Yeni kurulum yalnız şifreli (`required`, API kuralı yok, 4443 meşgul/ölçülemez → DUR), sertifika 30 yıl, `required` çakışması fail-closed; bekçi `test_kurulum_betikleri` §19 + `test_lan_tls` §1 §3 | ✅ Mac · Windows güvenlik duvarı A7 |
+
+## 9. Panel sunucu makinesinde — sunucu ↔ panel sözleşmesi (A2, 2026-10-08)
+
+Seçilen yol: **panel parmak izini döngü adresinden okur, onaysız sabitler ve API'ye şifreli döngüden bağlanır.** `http://127.0.0.1:4000`e kalıcı bağlanmak da güvenlidir ama §6'daki "sabitli sunucuya `http://` kaydedilmez" kuralını ve tablet QR'ının yalnız sabitli panelden çıkmasını ikiye bölerdi; tek kod yolu kalsın diye şifreli döngü.
+
+Sunucunun garantileri (her kipte; bekçi `test_lan_tls`, `test_discovery_identity`):
+1. `GET http://127.0.0.1:<PORT>/api/discovery/identity` (PORT varsayılan 4000) döngüden her zaman açıktır; `required`da HTTP YALNIZ buradadır.
+2. Yanıttaki `tls` = `{ port, fingerprint }` yalnız HTTPS dinleyici GERÇEKTEN dinlerken doludur (`fingerprint` = sertifika DER'inin SHA-256'sı, küçük harf hex); `null` → şifreli kapı yok.
+3. HTTPS dinleyici `HOST`a (varsayılan `0.0.0.0`) bağlıdır, dolayısıyla `https://127.0.0.1:<tls.port>` döngüden erişilir; sertifika SAN'ı makine adı + `localhost` + `127.0.0.1`.
+4. Durum sayfası `http://127.0.0.1:<PORT>/` kodu yalnız döngüden açılınca gösterir.
+
+Panelin yapacağı (A2):
+- "Sunucu bu makinede mi?" = kimlik ucu `127.0.0.1:<PORT>`ten okunabiliyor mu. Okunuyorsa `tls.fingerprint` onaysız sabitlenir (güven kökü a) ve adres `https://127.0.0.1:<tls.port>` olur; el sıkışmadaki sertifikanın izi ilandakiyle aynı değilse sabitleme yok (§6 kuralı).
+- `tls` `null`sa (eski `off` kurulum) bugünkü HTTP davranışı.
+- Başka makinede: `required` sunucunun HTTP portu ağdan YOKTUR. mDNS SRV portu geri uyum için hâlâ HTTP portunu ilan eder, `tp` TXT HTTPS portunu; panel adayı `https://<ip>:<tp>`ye yükseltmeli, SRV portuna `http` denemesi başarısız olur. İlk eşleştirme göz ile karşılaştırma (kök b).
+
+**Eski istemci ne yapar:** şifresiz bağlanan panel/tablet `required` kuruluma bağlanamaz ("sunucu bulunamadı"); yalnız adnansahin'de (donmuş panel 1.3.7 / tablet 1.0.12) yaşarlar ve adnansahin bu kurulum yolunu almaz. Ortak tablet vc60 zaten yalnız şifreli. `minVersion` değişmez.
+
+**Mevcut kurulum güncellenince ne olur:** güncelleyici ve onarım `.env`e dokunmaz — kip neyse (`off`/`dual`/`required`) o kalır; onarım yalnız `.env` required ise API portu kuralını kaldırır. adnansahin (pm2, `kur.ps1` donuk) hiç etkilenmez. Bugün bu yoldan kurulmuş çalışan başka kurulum yok.
