@@ -23,6 +23,7 @@
 //      şablon TRUST_PROXY'yi boş doğurur. §5e şablonun LICENSE_SERVER_URL açıklaması vendor-url.ts sabitleriyle aynı.
 //      §5f compose · şablon · runbook API portunu ağa açmayı önermez (Docker'da LAN TLS yok, yayın ufw'yi atlar).
 //      §5g runbook seed parolasını konteynerden temizletir (seed'den sonra bayraksız up -d + uzunluk ölçümü).
+//      §5h runbook konteynerin lisans cevaplarını anar (zayıf tanıma onayı); adlar protokol kataloğunda (uclar.ts).
 //   §6 satıcı imajı (G2/G3) DURAĞAN: `satici/sunucu/scripts/` altındaki her CLI `dist-cli`'a derlenir ve
 //      `test -f` kapısında; compose'da `/dosyalar` yazılır, `/derlemeler` + `/yayin` salt okunur (⑨'un docker'sız ikizi).
 // =============================================================================
@@ -451,6 +452,26 @@ function seedTemizlikStatik(runbook: string): string[] {
   check("§5g ⭐ runbook seed parolasını konteynerden temizletir (bayraksız up -d + uzunluk ölçümü)", gercek.length === 0, gercek.join(" | "));
   const sil = rb.replace(/^docker compose up -d {2,}.*\n/m, "");
   check("§5g sonda: temizlik adımı silindi → kırmızı", sil !== rb && seedTemizlikStatik(sil).length > 0, sil !== rb ? "" : "MUTASYON UYGULANMADI");
+}
+
+// §5h — runbook konteynerin bilinen lisans cevaplarını anar ve adları protokol kataloğunda yaşar (ad kayarsa kırmızı):
+// iki etkenli konteyner ilk etkinleştirmede zayıf tanıma onayı bekler.
+const RUNBOOK_LISANS_KODLARI = ["ZAYIF_TANIMA_ONAY_BEKLIYOR"];
+function lisansKoduStatik(runbook: string, uclar: string, kodlar: string[]): string[] {
+  const ih: string[] = [];
+  for (const k of kodlar) {
+    if (!runbook.includes(k)) ih.push(`runbook ${k}'yi anmıyor`);
+    if (!uclar.includes(`"${k}"`)) ih.push(`${k} protokol kataloğunda (uclar.ts) yok`);
+  }
+  return ih;
+}
+{
+  const rb = oku("docs/ops/LINUX-DOCKER-KURULUM.md");
+  const uc = oku("Teks-Erp/src/lib/license/protocol/uclar.ts");
+  const gercek = lisansKoduStatik(rb, uc, RUNBOOK_LISANS_KODLARI);
+  check("§5h ⭐ runbook konteynerin lisans cevaplarını (zayıf tanıma onayı…) anar, adlar protokol kataloğunda", gercek.length === 0, gercek.join(" | "));
+  check("§5h sonda: runbook'tan silindi → kırmızı", lisansKoduStatik(rb.split("ZAYIF_TANIMA_ONAY_BEKLIYOR").join("ZAYIF"), uc, RUNBOOK_LISANS_KODLARI).length > 0);
+  check("§5h sonda: katalogda yeniden adlandı → kırmızı", lisansKoduStatik(rb, uc.split('"ZAYIF_TANIMA_ONAY_BEKLIYOR"').join('"ZAYIF_TANIMA"'), RUNBOOK_LISANS_KODLARI).length > 0);
 }
 
 // §5c — teslim künyesi İMZALI çıkar (2e aracı, `build-korumali-imza.ts belge`): anahtar yoksa paket
