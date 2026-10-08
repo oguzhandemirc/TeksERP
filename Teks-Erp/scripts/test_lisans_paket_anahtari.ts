@@ -36,6 +36,9 @@ import { generatePackageKey, packageKeyInfo, writePackageKey } from "./lib/butun
 import { CAPA_DOSYALARI, capaDurumuOku } from "./lib/guven-capasi";
 import { main as capaEkle } from "./guven-capasi-ekle";
 import { ciKokeniHukmu } from "./lib/ci-kokeni";
+import { DAY_MS, PackageRevocationSchema, TYP, msToIso, parseJws, signDocument } from "../src/lib/license/protocol";
+import { CHAINED_INTEGRITY_FILE, PACKAGE_REVOCATION_FILE } from "../src/lib/license/protocol/paket-zinciri";
+import { anahtarUret, fiksturKur, sertifikaBas, sertifikaYuku } from "./lib/lisans-fikstur";
 import { git } from "./lib/git";
 
 let pass = 0;
@@ -409,6 +412,120 @@ async function bolum5Kacis(dosya: string): Promise<void> {
   check("§5k koşulu imza: yük ciKokeni = {kosu · 4242 · main · künye commit'i}", r2.kod === 0 && k2?.kip === "kosu" && k2.kosu === 4242 && k2.dal === "main" && k2.commit === KUNYE_COMMIT, JSON.stringify(k2));
 }
 
+
+// ── §6 ───────────────────────────────────────────────────────────────────────
+// D5: kök sertifikalı `pkt-<yıl>-<n>` anahtarı — sertifika-ekle, çift imza, zincir-yalnız, dağıtım iptali, tazelik.
+const ZF = fiksturKur(Date.now());
+const YABANCI = fiksturKur(Date.now());
+const PKT_KID = "pkt-2099-1";
+
+function kokCapaDosyasi(): string {
+  const d = dizin("kok-capa");
+  const f = path.join(d, "kokler.json");
+  writeFileSync(f, `${JSON.stringify(ZF.kokler)}\n`);
+  return f;
+}
+
+/** `x`i verilen PAKET sertifikası (dosya), `imzalayan` kökün. */
+function sertifikaDosyasi(x: string, ek: { bitis?: string; imzalayan?: typeof ZF.kok } = {}): string {
+  const konu = { ...anahtarUret(PKT_KID), kid: PKT_KID, x };
+  const yuk = sertifikaYuku(ZF, konu, "PAKET", ek.bitis ? { bitis: ek.bitis } : {});
+  const f = path.join(dizin("sertifika"), "s.json");
+  writeFileSync(f, `${JSON.stringify({ sertifika: sertifikaBas(ek.imzalayan ?? ZF.kok, yuk) })}\n`);
+  return f;
+}
+
+function iptalDosyasi(imzalayan: typeof ZF.kok): string {
+  const belge = signDocument({
+    typ: TYP.PAKET_IPTAL,
+    schema: PackageRevocationSchema,
+    payload: { v: 1, iptalId: "00000000-0000-4000-8000-000000000001", sira: 3, verilis: msToIso(ZF.simdi - DAY_MS), iptaller: [] },
+    key: imzalayan,
+  });
+  const f = path.join(dizin("iptal"), "iptal.json");
+  writeFileSync(f, `${JSON.stringify({ v: 1, tur: "tekserp-paketiptal-belgesi", sira: 3, belge })}\n`);
+  return f;
+}
+
+const paketIdOf = (f: string): unknown => {
+  const p = parseJws(readFileSync(f, "utf8").trim());
+  return p.ok ? (p.value.payload as Record<string, unknown>).paketId : null;
+};
+
+async function bolum6(): Promise<void> {
+  console.log("\n§6 kök sertifikalı PAKET anahtarı (pkt-<yıl>-<n>)");
+  const paketDosya = uretimAnahtari().dosya;
+  const capa = kokCapaDosyasi();
+  const kd = dizin("pkt-anahtar");
+  const u = cli(["anahtar-uret", `--kid=${PKT_KID}`, `--dizin=${kd}`], `${PAROLA}\n${PAROLA}\n`);
+  const pkt = path.join(kd, `${PKT_KID}.paket.json`);
+  const info = existsSync(pkt) ? packageKeyInfo(pkt) : null;
+  check("§6a ⭐ anahtar-uret pkt-2099-1 → parolalı dosya; çapaya EKLENMEZ, sertifika-ekle yönlendirmesi", u.kod === 0 && info?.parolali === true && /çapaya EKLENMEZ/.test(u.cikti) && /sertifika-ekle/.test(u.cikti), `çıkış ${u.kod} ${u.hata.trim().slice(0, 80)}`);
+  if (!info) return;
+  const sertYolu = path.join(kd, `${PKT_KID}.sertifika.json`);
+
+  const baska = cli(["sertifika-ekle", `--anahtar=${pkt}`, `--sertifika=${sertifikaDosyasi(anahtarUret("z").x)}`, `--kok-capa=${capa}`]);
+  check("§6b ⭐ sertifika-ekle: x uyuşmuyor → RED, sertifika dosyası YOK", baska.kod === 1 && /x\)/.test(baska.hata) && !existsSync(sertYolu), `çıkış ${baska.kod} ${baska.hata.trim().slice(0, 100)}`);
+  const yabanci = cli(["sertifika-ekle", `--anahtar=${pkt}`, `--sertifika=${sertifikaDosyasi(info.x, { imzalayan: YABANCI.kok })}`, `--kok-capa=${capa}`]);
+  check("§6c ⭐ sertifika-ekle: çapada olmayan kökün sertifikası → RED", yabanci.kod === 1 && /doğrulanamadı/.test(yabanci.hata) && !existsSync(sertYolu), `çıkış ${yabanci.kod} ${yabanci.hata.trim().slice(0, 100)}`);
+  const sert = sertifikaDosyasi(info.x);
+  const ekle = cli(["sertifika-ekle", `--anahtar=${pkt}`, `--sertifika=${sert}`, `--kok-capa=${capa}`]);
+  const mod = existsSync(sertYolu) ? statSync(sertYolu).mode & 0o777 : -1;
+  check("§6d ⭐ sertifika-ekle: parola SORULMADAN (stdin boş) yanına 0600 <kid>.sertifika.json", ekle.kod === 0 && mod === 0o600, `çıkış ${ekle.kod} mod ${mod.toString(8)} ${ekle.hata.trim().slice(0, 80)}`);
+  const tekrar = cli(["sertifika-ekle", `--anahtar=${pkt}`, `--sertifika=${sert}`, `--kok-capa=${capa}`]);
+  check("§6e sertifika-ekle tekrar → idempotent (zaten ekli)", tekrar.kod === 0 && /zaten ekli/.test(tekrar.cikti), `çıkış ${tekrar.kod}`);
+
+  const iki = `${PAROLA}\n${PAROLA}\n`;
+  const kok = paket();
+  const cift = imzala(kok, paketDosya, iki, ["--ci-kosu=4242", `--zincir-anahtar=${pkt}`, `--kok-capa=${capa}`]);
+  const a = path.join(kok, INTEGRITY_FILE);
+  const z = path.join(kok, CHAINED_INTEGRITY_FILE);
+  const ciftOk = cift.kod === 0 && existsSync(a) && existsSync(z) && paketIdOf(a) !== null && paketIdOf(a) === paketIdOf(z);
+  check("§6f ⭐ çift imza (--zincir-anahtar): butunluk.jws + butunluk-zincir.jws, AYNI paketId", ciftOk, `çıkış ${cift.kod} ${cift.hata.trim().slice(0, 120)}`);
+  if (ciftOk) {
+    const v = await verifyIntegrity(readFileSync(z, "utf8").trim(), kok, [], { roots: ZF.kokler, mode: "KABUL", nowMs: Date.now() });
+    check("§6g zincirli imza fikstür köküyle GECERLI", v.durum === "GECERLI", `${v.durum} ${v.kod ?? ""}`);
+  }
+
+  const kok2 = paket();
+  const yalniz = imzala(kok2, pkt, `${PAROLA}\n`, ["--ci-kosu=4242", `--kok-capa=${capa}`, `--paket-iptal=${iptalDosyasi(ZF.kok)}`]);
+  check("§6h ⭐ zincir-yalnız (--anahtar=pkt-*) + --paket-iptal: yalnız butunluk-zincir.jws + paket-iptal.jws",
+    yalniz.kod === 0 && !existsSync(path.join(kok2, INTEGRITY_FILE)) && existsSync(path.join(kok2, CHAINED_INTEGRITY_FILE)) && existsSync(path.join(kok2, PACKAGE_REVOCATION_FILE)),
+    `çıkış ${yalniz.kod} ${yalniz.hata.trim().slice(0, 120)}`);
+
+  const kok3 = paket();
+  const kotuIptal = imzala(kok3, pkt, `${PAROLA}\n`, ["--ci-kosu=4242", `--kok-capa=${capa}`, `--paket-iptal=${iptalDosyasi(YABANCI.kok)}`]);
+  check("§6i ⭐ yabancı kökün iptal belgesi → RED, parola sorulmadan, iz yok", kotuIptal.kod === 1 && /iptali kökle doğrulanamadı/.test(kotuIptal.hata) && !/parola/i.test(kotuIptal.hata) && !existsSync(path.join(kok3, INTEGRITY_LIST_FILE)), `çıkış ${kotuIptal.kod} ${kotuIptal.hata.trim().slice(0, 100)}`);
+  const iptalZincirsiz = imzala(paket(), paketDosya, "", ["--ci-kosu=4242", `--paket-iptal=${iptalDosyasi(ZF.kok)}`]);
+  check("§6j --paket-iptal zincirsiz pakette → RED", iptalZincirsiz.kod === 1 && /yalnız zincirli/.test(iptalZincirsiz.hata), `çıkış ${iptalZincirsiz.kod}`);
+  const kok4 = paket();
+  const capasiz = imzala(kok4, pkt, `${PAROLA}\n`, ["--ci-kosu=4242"], { TEKSERP_TEST_KOK_CAPASI: "" });
+  check("§6k ⭐ fikstür sertifikası üretim kökleriyle → öz-denetim RED, yazılan dosya silindi", capasiz.kod === 1 && !existsSync(path.join(kok4, CHAINED_INTEGRITY_FILE)) && !existsSync(path.join(kok4, INTEGRITY_LIST_FILE)), `çıkış ${capasiz.kod} ${capasiz.hata.trim().slice(0, 100)}`);
+
+  // Tazelik: bitişe < 30 gün kalmış sertifika — ayrı anahtar dizini.
+  const kd2 = dizin("pkt-bayat");
+  cli(["anahtar-uret", `--kid=${PKT_KID}`, `--dizin=${kd2}`, "--json"], `${PAROLA}\n${PAROLA}\n`);
+  const pkt2 = path.join(kd2, `${PKT_KID}.paket.json`);
+  const bayat = cli(["sertifika-ekle", `--anahtar=${pkt2}`, `--sertifika=${sertifikaDosyasi(packageKeyInfo(pkt2).x, { bitis: msToIso(Date.now() + 10 * DAY_MS) })}`, `--kok-capa=${capa}`]);
+  const kok5 = paket();
+  const tazelik = imzala(kok5, pkt2, "", ["--ci-kosu=4242", `--kok-capa=${capa}`]);
+  check("§6l ⭐ sertifikanın bitişine < 30 gün → parola SORULMADAN RED, imza yok", bayat.kod === 0 && tazelik.kod === 1 && /bitişine/.test(tazelik.hata) && !existsSync(path.join(kok5, INTEGRITY_LIST_FILE)), `çıkış ${tazelik.kod} ${tazelik.hata.trim().slice(0, 100)}`);
+
+  // zip: dosya sayısı yazılan dosya kadar artar, iki kid PAKET.json'da.
+  const zk = paket();
+  writeFileSync(path.join(zk, "PAKET.json"), `${JSON.stringify({ korumali: true, uygulamaSurumu: "2.12.1", dosyaSayisi: 4, commit: KUNYE_COMMIT, backendKanal: null })}\n`);
+  writeFileSync(path.join(zk, "dist", "server-kunye.json"), `${JSON.stringify({ commit: KUNYE_COMMIT, zaman: "2026-10-01T00:00:00.000Z" })}\n`);
+  const zip = path.join(dizin("zip"), "p.zip");
+  spawnSync("zip", ["-q", "-r", "-X", zip, "."], { cwd: zk });
+  const zr = cli(["zip", `--zip=${zip}`, `--anahtar=${paketDosya}`, `--zincir-anahtar=${pkt}`, `--kok-capa=${capa}`, "--ci-kosu=4242"], iki);
+  const acik = dizin("zip-acik");
+  spawnSync("unzip", ["-q", zip, "-d", acik]);
+  const pj = existsSync(path.join(acik, "PAKET.json")) ? (JSON.parse(readFileSync(path.join(acik, "PAKET.json"), "utf8")) as Record<string, unknown>) : {};
+  check("§6m ⭐ zip çift imza: iki imza dosyası + liste, dosyaSayisi +3, butunlukKid paket-2099 · butunlukZincirKid pkt-2099-1",
+    zr.kod === 0 && existsSync(path.join(acik, INTEGRITY_FILE)) && existsSync(path.join(acik, CHAINED_INTEGRITY_FILE)) && pj.dosyaSayisi === 7 && pj.butunlukKid === KID && pj.butunlukZincirKid === PKT_KID,
+    `çıkış ${zr.kod} sayı ${String(pj.dosyaSayisi)} ${zr.hata.trim().slice(0, 100)}`);
+}
+
 async function main(): Promise<void> {
   try {
     bolum0();
@@ -417,6 +534,7 @@ async function main(): Promise<void> {
     bolum3();
     bolum4();
     await bolum5();
+    await bolum6();
   } finally {
     rmSync(TEMP, { recursive: true, force: true });
   }

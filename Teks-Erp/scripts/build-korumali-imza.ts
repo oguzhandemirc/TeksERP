@@ -3,18 +3,25 @@
 // =============================================================================
 // Satıcı Mac'inde koşar; imza anahtarı CI'a ve pakete GİRMEZ. Kapsam: src/lib/license/integrity-scope.ts.
 //
-//   npx tsx scripts/build-korumali-imza.ts anahtar-uret --kid=paket-<yıl>[-<n>] [--dizin=~/.tekserp/satici-uretim] [--json]
+//   npx tsx scripts/build-korumali-imza.ts anahtar-uret --kid=paket-<yıl>[-<n>]|pkt-<yıl>-<n> [--dizin=~/.tekserp/satici-uretim] [--json]
 //       ÜRETİM (tören): parolalı (kök dosyasıyla aynı sarma, `protocol/anahtar-sarma.ts`); parola iki kez — TTY'de
 //       gizli istem, TTY yoksa stdin'in ilk iki satırı. Çıktı `<dizin>/<kid>.paket.json` (0600, var olanı ezmez).
+//   npx tsx scripts/build-korumali-imza.ts sertifika-ekle --anahtar=<pkt dosyası> --sertifika=<dosya> [--kok-dosyasi=<kök.json>]
+//       Kök imzalı PAKET sertifikasını (satıcı `anahtar.ts paket-sertifika-uret`) anahtarın yanına `<kid>.sertifika.json`
+//       olarak koyar; kök + PAKET kullanımı + kid + x eşleşmesi denetlenir, parola sorulmaz.
 //   npx tsx scripts/build-korumali-imza.ts imzala --kok=<paket dizini> --anahtar=<dosya> --surum=<x.y.z>
 //       [--urun=backend] [--musteri=<kod>] [--kurulum=<uuid>] [--derleme-tarihi=<ISO>]
 //   npx tsx scripts/build-korumali-imza.ts zip --zip=<paket.zip> --anahtar=<dosya> [--kurulum=<uuid>] [--surum-belgesi=<md>]
 //       [--ci-kosu=<korumali-paket.yml koşu numarası> | --ci-atla="<kullanıcının onay cümlesi>"]   (ÜRETİM anahtarında biri ZORUNLU)
+//   (`imzala`/`zip` ortak) [--zincir-anahtar=<pkt dosyası>] çift imza: `butunluk.jws` (paket-*) + `butunluk-zincir.jws`
+//       (pkt-*, aynı yük); `--anahtar=<pkt dosyası>` tek başına zincir-yalnız; [--paket-iptal=<kök imzalı iptal>] yalnız
+//       zincirli pakette `paket-iptal.jws`; [--kok-dosyasi=<kök.json>] çapa; iki parola sırayla. Sertifikanın bitişine
+//       30 günden az kaldıysa imza YOK (parola sorulmadan).
 //   npx tsx scripts/build-korumali-imza.ts belge --belge=<PAKET-DOCKER.json> --anahtar=<dosya>   (Docker teslim künyesi → <belge>.jws)
 //
 // `zip` kipi: zip'i açar, sürüm/müşteri/derleme künyesini PAKET.json + dist/server-kunye.json'dan okur,
-// imzalar, `butunluk.jws` + `butunluk-liste.txt`i ekler ve PAKET.json'daki dosya sayısını iki artırır
-// (kur.ps1 sayım kapısı).
+// imzalar, imza dosyalarını + `butunluk-liste.txt`i ekler ve PAKET.json'daki dosya sayısını yazılan dosya kadar
+// artırır (kur.ps1 sayım kapısı); `butunlukKid` birincil, `butunlukZincirKid` zincirli imzanın kid'i.
 // Anahtar üretimi yalnız üretim ailesidir (`paket-<yıl>`, parolalı); parolasız anahtar yalnız bekçilerin test anahtarıdır.
 // Anahtar AİLESİ derlemenin çapa kipine uymalı (G3, `dist/server-kunye.json` `guvenCapasi`): tek kip `uretim`, pakete
 // yalnız `paket-<yıl>`; başka kip (eski `hazirlik`) ya da başka aile parola sorulmadan RED (paket açılışta imzalı
@@ -39,13 +46,25 @@ import {
   openPackageKey,
   packageKeyInfo,
   signManifestDocument,
+  isProductionSigningKid,
   signPackageDirectory,
   writePackageKey,
+  type OpenedPackageKey,
 } from "./lib/butunluk-imza";
+import {
+  assertPackageCertificateFresh,
+  attachPackageCertificate,
+  certificateTokenFromFile,
+  packageRoots,
+  readPackageCertificate,
+  readPackageRevocationFile,
+  type PackageRoots,
+} from "./lib/paket-sertifika";
+import { CHAINED_INTEGRITY_FILE, PACKAGE_REVOCATION_FILE, isChainPackageKid } from "../src/lib/license/protocol/paket-zinciri";
 import { CliError, args, askPassword } from "./lib/cli-girdi";
 import { git } from "./lib/git";
 import { type CiKokeniKaydi, ciAtlaHukmu, ciKokeniHukmu, ciKosusuOku } from "./lib/ci-kokeni";
-import { isProductionPackageKid } from "../src/lib/license/integrity-scope";
+import { INTEGRITY_FILE, isProductionChainPackageKid } from "../src/lib/license/integrity-scope";
 import { INTEGRITY_LIST_FILE } from "../src/lib/license/integrity-list";
 import { istanbulSaati } from "../../scripts/lib/kullanici-cumlesi.mjs";
 
@@ -80,8 +99,8 @@ function icinde(dizin: string, kok: string): boolean {
 
 async function keygen(): Promise<void> {
   const kid = arg("kid");
-  if (typeof kid !== "string") throw new Error("--kid=paket-<yıl>[-<n>] zorunlu (parolasız hazırlık anahtarı kalktı)");
-  if (!isProductionPackageKid(kid)) throw new Error(`kid biçimi: paket-<yıl>[-<n>] (üretim, parolalı): ${kid}`);
+  if (typeof kid !== "string") throw new Error("--kid=paket-<yıl>[-<n>] | pkt-<yıl>-<n> zorunlu (parolasız hazırlık anahtarı kalktı)");
+  if (!isProductionSigningKid(kid)) throw new Error(`kid biçimi: paket-<yıl>[-<n>] (gömülü çapa) ya da pkt-<yıl>-<n> (kök sertifikalı), parolalı: ${kid}`);
   const dir = path.resolve(home(arg("dizin") ?? "~/.tekserp/satici-uretim"));
   if (icinde(dir, DEPO_KOKU)) throw new Error(`üretim PAKET anahtarı depo içine yazılmaz: ${dir}`);
   const hedef = path.join(dir, `${kid}.paket.json`);
@@ -103,6 +122,12 @@ async function keygen(): Promise<void> {
     return;
   }
   console.log(`✓ ${file} (0600, parolalı — kök dosyasıyla aynı sarma)`);
+  if (isProductionChainPackageKid(k.kid)) {
+    console.log(`  Açık yarı: { kid: "${k.kid}", x: "${k.x}" } — çapaya EKLENMEZ; kök PAKET sertifikası basar (satıcı \`anahtar.ts paket-sertifika-uret\`),`);
+    console.log(`  sonra: npx tsx scripts/build-korumali-imza.ts sertifika-ekle --anahtar=${file} --sertifika=<dosya>`);
+    console.log("  ⚠ Parolalı dosyanın kopyası Mac DIŞINDA saklanır (USB + kâğıt; parola ayrı kâğıtta).");
+    return;
+  }
   console.log(`  PACKAGE_PUBLIC_KEYS girdisi: { kid: "${k.kid}", x: "${k.x}" }`);
   console.log(`  Çapaya ekle: cd Teks-Erp && npx tsx scripts/guven-capasi-ekle.ts paket --dosya=${file}   (KURU; sonra --yaz)`);
   console.log("  ⚠ Parolalı dosyanın kopyası Mac DIŞINDA saklanır (USB + kâğıt; parola ayrı kâğıtta).");
@@ -110,15 +135,31 @@ async function keygen(): Promise<void> {
 
 const paketParolasi = (kid: string): Promise<Buffer> => askPassword(`PAKET anahtarı (${kid}) parolası: `);
 
+/** Kök çapası: tören kök dosyası (`--kok-dosyasi`) > bekçi test çapası (`--kok-capa` / ortam) > üretim kökleri. */
+function kokCapasi(): PackageRoots {
+  const kokDosyasi = arg("kok-dosyasi");
+  const testCapa = arg("kok-capa");
+  return packageRoots({ kokDosyasi: kokDosyasi ? home(kokDosyasi) : null, testCapa: testCapa ? home(testCapa) : null });
+}
+
 interface DirOptions {
   readonly root: string;
+  /** Birincil anahtar: `paket-*` (→ `butunluk.jws`) ya da `pkt-*` (zincir-yalnız → `butunluk-zincir.jws`). */
   readonly keyFile: string;
+  /** Çift imzanın zincir anahtarı (`pkt-*`); birincil `paket-*` olmalı. */
+  readonly zincirKeyFile: string | null;
   readonly surum: string;
   readonly musteri: string | null;
   /** PAKET.json `commit` (zip kipinde); dizin imzasında null. */
   readonly paketCommit?: string | null;
 }
 
+interface DirResult {
+  readonly kid: string;
+  readonly zincirKid: string | null;
+  /** Paket köküne yazılan dosyalar (liste + imza dosyaları + varsa iptal). */
+  readonly yazilan: readonly string[];
+}
 /** Kaçışın kaydı HEAD'i taşır; ölçülemezse kaçış yok (fail-closed). */
 function depoHead(): string {
   try {
@@ -136,7 +177,7 @@ function depoHead(): string {
  */
 function ciKokeniDenetle(kunye: Record<string, unknown>, keyFile: string, paketCommit: string | null): CiKokeniKaydi | null {
   const kid = packageKeyInfo(keyFile).kid;
-  const uretim = isProductionPackageKid(kid);
+  const uretim = isProductionSigningKid(kid);
   const id = arg("ci-kosu");
   const atla = argVar("ci-atla");
   if (atla !== undefined) {
@@ -175,20 +216,47 @@ function anahtarAilesiDenetle(kunye: Record<string, unknown>, keyFile: string): 
     return;
   }
   if (kip !== "uretim") throw new Error(`anahtar ailesi denetlenemez: paket ${String(kip)} çapalı — yalnız uretim çapası imzalanır (hazırlık kipi kalktı)`);
-  if (!isProductionPackageKid(kid)) throw new Error(`anahtar ailesi derlemenin çapa kipine uymuyor: paket uretim çapalı, anahtar ${kid} — paket-<yıl> anahtarıyla imzala`);
+  if (!isProductionSigningKid(kid)) throw new Error(`anahtar ailesi derlemenin çapa kipine uymuyor: paket uretim çapalı, anahtar ${kid} — paket-<yıl> ya da pkt-<yıl>-<n> anahtarıyla imzala`);
 }
 
-async function signDir(o: DirOptions): Promise<string> {
+/** Zincirli anahtarın sertifikası: anahtarın yanındaki `<kid>.sertifika.json` (ya da verilen dosya); tazelik imzadan ÖNCE. */
+function zincirSertifikasi(keyFile: string, file: string | null): string {
+  const kid = packageKeyInfo(keyFile).kid;
+  if (!isChainPackageKid(kid)) throw new Error(`zincir anahtarı pkt-* olmalı: ${kid}`);
+  const cert = readPackageCertificate({ keyFile, kid, file: file ? home(file) : null });
+  assertPackageCertificateFresh(cert);
+  return cert;
+}
+
+async function signDir(o: DirOptions): Promise<DirResult> {
   const kunyeFile = path.join(o.root, "dist", "server-kunye.json");
   const kunye = fs.existsSync(kunyeFile) ? readJson(kunyeFile) : {};
+  const birincilKid = packageKeyInfo(o.keyFile).kid;
+  const zincirli = isChainPackageKid(birincilKid);
+  if (o.zincirKeyFile && zincirli) throw new Error("--zincir-anahtar çift imza içindir: birincil --anahtar paket-* olmalı (zincir-yalnız imzada yalnız --anahtar=pkt-*)");
   anahtarAilesiDenetle(kunye, o.keyFile);
+  if (o.zincirKeyFile) anahtarAilesiDenetle(kunye, o.zincirKeyFile);
+  // Parola sorulmadan önce: CI kökeni, sertifika + tazelik, kök çapası, iptal belgesi.
   const ciKokeni = ciKokeniDenetle(kunye, o.keyFile, o.paketCommit ?? null);
-  const key = await openPackageKey(o.keyFile, paketParolasi);
+  const birincilCert = zincirli ? zincirSertifikasi(o.keyFile, arg("sertifika")) : null;
+  const zincirCert = o.zincirKeyFile ? zincirSertifikasi(o.zincirKeyFile, arg("zincir-sertifika")) : null;
+  const zincirVar = birincilCert !== null || zincirCert !== null;
+  const roots = zincirVar ? kokCapasi() : null;
+  const iptalDosyasi = arg("paket-iptal");
+  if (iptalDosyasi && !zincirVar) throw new Error("--paket-iptal yalnız zincirli imzalı pakete girer (--zincir-anahtar ya da --anahtar=pkt-*)");
+  const paketIptal = iptalDosyasi && roots ? readPackageRevocationFile(home(iptalDosyasi), roots.roots) : null;
   const derlemeTarihi = arg("derleme-tarihi") ?? (typeof kunye.zaman === "string" ? kunye.zaman : null);
   if (!derlemeTarihi) throw new Error("derleme tarihi yok: dist/server-kunye.json `zaman` ya da --derleme-tarihi");
+  // İki parola sırayla; ikincisi düşerse birincinin açılmış anahtarı yalnız bellekte kalır, dosya yazılmaz.
+  const key: OpenedPackageKey = await openPackageKey(o.keyFile, paketParolasi);
+  const zincirKey = o.zincirKeyFile ? await openPackageKey(o.zincirKeyFile, paketParolasi) : null;
   const r = await signPackageDirectory({
     root: o.root,
     key,
+    ...(birincilCert ? { certificate: birincilCert } : {}),
+    zincir: zincirKey && zincirCert ? { key: zincirKey, certificate: zincirCert } : null,
+    ...(roots ? { roots: roots.roots } : {}),
+    paketIptal: paketIptal?.token ?? null,
     urun: arg("urun") ?? "backend",
     surum: o.surum,
     derlemeTarihi,
@@ -197,32 +265,47 @@ async function signDir(o: DirOptions): Promise<string> {
     kurulumId: arg("kurulum") ?? (typeof kunye.kurulumId === "string" ? kunye.kurulumId : null),
     ciKokeni,
   });
-  console.log(`✓ ${r.file} + ${INTEGRITY_LIST_FILE} — ${r.entries.length} dosya · kapsam ${r.manifest.kapsam.dizinler.join(", ")} · kid ${key.kid}`);
-  return key.kid;
+  const imzaDosyalari = r.imzalar.map((i) => `${path.basename(i.file)} (${i.kid})`).join(" + ");
+  console.log(`✓ ${imzaDosyalari} + ${INTEGRITY_LIST_FILE} — ${r.entries.length} dosya · paketId ${r.manifest.paketId} · kapsam ${r.manifest.kapsam.dizinler.join(", ")}`);
+  if (roots) console.log(`  kök çapası: ${roots.kaynak}`);
+  if (paketIptal) console.log(`✓ ${PACKAGE_REVOCATION_FILE} (sıra ${paketIptal.verified.document.sira})`);
+  return {
+    kid: key.kid,
+    zincirKid: r.imzalar.find((i) => path.basename(i.file) === CHAINED_INTEGRITY_FILE)?.kid ?? null,
+    yazilan: [r.listFile, ...r.imzalar.map((i) => i.file), ...(r.iptalFile ? [r.iptalFile] : [])].map((f) => path.relative(o.root, f)),
+  };
 }
 
 async function signZip(): Promise<void> {
   const zip = path.resolve(need("zip"));
   const keyFile = home(need("anahtar"));
+  const zincirArg = arg("zincir-anahtar");
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "tekserp-imza-"));
   try {
     execFileSync("unzip", ["-q", zip, "-d", tmp]);
     const paket = readJson(path.join(tmp, "PAKET.json"));
-    if (fs.existsSync(path.join(tmp, "butunluk.jws")) || fs.existsSync(path.join(tmp, INTEGRITY_LIST_FILE))) {
-      throw new Error(`paket zaten imzalı (butunluk.jws ya da ${INTEGRITY_LIST_FILE} var)`);
-    }
+    const imzaIzi = [INTEGRITY_FILE, CHAINED_INTEGRITY_FILE, INTEGRITY_LIST_FILE, PACKAGE_REVOCATION_FILE].filter((f) => fs.existsSync(path.join(tmp, f)));
+    if (imzaIzi.length > 0) throw new Error(`paket zaten imzalı (${imzaIzi.join(", ")} var)`);
     if (paket.korumali !== true) throw new Error("yalnız KORUMALI paket imzalanır (PAKET.json korumali=true)");
     const surum = paket.uygulamaSurumu;
     if (typeof surum !== "string") throw new Error("PAKET.json uygulamaSurumu yok");
     const kanal = typeof paket.backendKanal === "string" ? paket.backendKanal : null;
     // Ortak paket (backendKanal null) müşteri/kurulum taşımaz: filigran kurulumda, imzalı yüke de girmez.
     if (kanal === null && (arg("musteri") !== null || arg("kurulum") !== null)) throw new Error("ortak paket (PAKET.json backendKanal null) --musteri/--kurulum almaz — filigran kurulumda");
-    const kid = await signDir({ root: tmp, keyFile, surum, musteri: arg("musteri") ?? kanal, paketCommit: typeof paket.commit === "string" ? paket.commit : null });
-    const updated = { ...paket, dosyaSayisi: Number(paket.dosyaSayisi) + 2, butunlukKid: kid };
+    const r = await signDir({
+      root: tmp,
+      keyFile,
+      zincirKeyFile: zincirArg ? home(zincirArg) : null,
+      surum,
+      musteri: arg("musteri") ?? kanal,
+      paketCommit: typeof paket.commit === "string" ? paket.commit : null,
+    });
+    // kur.ps1 sayım kapısı: PAKET.json dosya sayısı yazılan her dosya kadar artar.
+    const updated = { ...paket, dosyaSayisi: Number(paket.dosyaSayisi) + r.yazilan.length, butunlukKid: r.kid, ...(r.zincirKid ? { butunlukZincirKid: r.zincirKid } : {}) };
     fs.writeFileSync(path.join(tmp, "PAKET.json"), `${JSON.stringify(updated, null, 2)}\n`);
-    execFileSync("zip", ["-q", "-X", zip, "butunluk.jws", INTEGRITY_LIST_FILE, "PAKET.json"], { cwd: tmp });
+    execFileSync("zip", ["-q", "-X", zip, ...r.yazilan, "PAKET.json"], { cwd: tmp });
     const sha = createHash("sha256").update(fs.readFileSync(zip)).digest("hex").toUpperCase();
-    console.log(`✓ ${path.basename(zip)} imzalandı · yeni SHA256 ${sha}`);
+    console.log(`✓ ${path.basename(zip)} imzalandı (${r.yazilan.join(", ")}) · yeni SHA256 ${sha}`);
     const belge = arg("surum-belgesi");
     if (belge) {
       const text = fs.readFileSync(belge, "utf8").replace(/^\*\*SHA256:\*\*.*$/m, `**SHA256:** \`${sha}\``);
@@ -236,15 +319,26 @@ async function signZip(): Promise<void> {
   }
 }
 
+/** `sertifika-ekle`: kök imzalı PAKET sertifikasını anahtarın yanına koyar; parola sormaz. */
+function sertifikaEkle(): void {
+  const keyFile = home(need("anahtar"));
+  const certificate = certificateTokenFromFile(home(need("sertifika")));
+  const roots = kokCapasi();
+  const r = attachPackageCertificate({ keyFile, certificate, roots: roots.roots });
+  console.log(`${r.yazildi ? "✓ eklendi" : "✓ zaten ekli (aynı içerik)"}: ${r.file} · kid ${r.kid} · kök ${r.rootKid} (${roots.kaynak}) · bitiş ${r.bitis}`);
+}
+
 async function main(): Promise<void> {
   // Parola taşıyan argüman (`--parola=…` · `--password` …) değerine bakılmadan reddedilir.
   args(process.argv.slice(2));
   const cmd = process.argv[2];
   if (cmd === "anahtar-uret") return keygen();
   if (cmd === "imzala") {
-    await signDir({ root: path.resolve(need("kok")), keyFile: home(need("anahtar")), surum: need("surum"), musteri: arg("musteri") });
+    const zincirArg = arg("zincir-anahtar");
+    await signDir({ root: path.resolve(need("kok")), keyFile: home(need("anahtar")), zincirKeyFile: zincirArg ? home(zincirArg) : null, surum: need("surum"), musteri: arg("musteri") });
     return;
   }
+  if (cmd === "sertifika-ekle") return sertifikaEkle();
   if (cmd === "zip") return signZip();
   if (cmd === "belge") {
     const key = await openPackageKey(home(need("anahtar")), paketParolasi);
@@ -252,7 +346,7 @@ async function main(): Promise<void> {
     console.log(`✓ ${r.file} · kid ${key.kid} · ${r.token.length} bayt`);
     return;
   }
-  throw new Error("komut: anahtar-uret | imzala | zip | belge");
+  throw new Error("komut: anahtar-uret | sertifika-ekle | imzala | zip | belge");
 }
 
 main().catch((e: unknown) => {
