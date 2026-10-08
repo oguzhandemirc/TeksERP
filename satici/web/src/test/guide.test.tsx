@@ -106,3 +106,33 @@ describe("nextCeremony (saf)", () => {
     expect(new Date(p.ceremonyMs).toISOString().slice(0, 10)).toBe("2027-01-03");
   });
 });
+
+describe("nextCeremony — açık sertifikalar (ISTEMCI · PAKET)", () => {
+  const now = Date.parse("2026-10-08T00:00:00.000Z");
+  type Open = NonNullable<KeyStatus["acikSertifikalar"]>[number];
+  const cert = (kid: string, endMs: number, over: Partial<Open> = {}): Open => ({
+    kid,
+    kullanim: kid.startsWith("pkt-") ? "PAKET" : "ISTEMCI",
+    acikAnahtar: "x".repeat(43),
+    sertifikaId: `00000000-0000-4000-8000-${kid.replace(/\D/g, "").padStart(12, "0").slice(-12)}`,
+    sertifikaVeren: "kok-2026-1",
+    baslangic: new Date(endMs - 395 * DAY).toISOString(),
+    bitis: new Date(endMs).toISOString(),
+    suresiDoldu: false,
+    iptalSira: null,
+    otaYapraklari: [],
+    ...over,
+  });
+  const base = [row("alt-2026-3", "ALT", now + 400 * DAY), row("ara-2026-2", "ARA", now + 400 * DAY), row("ind-2026-3", "INDIRME", now + 400 * DAY)];
+
+  it("ISTEMCI erken biterse tören onun bitişinden; OTA yaprağı daha erken biterse yaprak sayılır", () => {
+    const leaf = { dosya: "istemci/ota-yaprak-birincil.pem", parmakIzi: "AA", baslangic: new Date(now).toISOString(), bitis: new Date(now + 100 * DAY).toISOString() };
+    expect(nextCeremony(base, [cert("ist-2026-1", now + 200 * DAY)])).toMatchObject({ tur: "ISTEMCI", kid: "ist-2026-1", endMs: now + 200 * DAY });
+    expect(nextCeremony(base, [cert("ist-2026-1", now + 200 * DAY, { otaYapraklari: [leaf] })])).toMatchObject({ tur: "ISTEMCI", endMs: now + 100 * DAY });
+  });
+
+  it("iptal edilmiş açık sertifika sayılmaz; ISTEMCI/PAKET yoksa 'eksik tür' uyarısı çıkmaz", () => {
+    expect(nextCeremony(base, [cert("ist-2026-1", now + 50 * DAY, { iptalSira: 1 })])).toMatchObject({ tur: "ALT", missing: [] });
+    expect(nextCeremony(base)!.missing).toEqual([]);
+  });
+});

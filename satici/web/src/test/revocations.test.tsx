@@ -131,3 +131,110 @@ describe("anahtarlar ekranı (ara imzacı · sertifika · emekli)", () => {
     expect(within(retired).queryByText(/gün kaldı/)).toBeNull();
   });
 });
+
+// DAĞITIM İPTALİ + AÇIK SERTİFİKALAR (ISTEMCI · PAKET; 2026-10-08): iptal ekranı dağıtım iptali defterini salt okunur
+// gösterir (kirada giden sıra rozeti, iptal edilen ve bu sunucuda duran sertifikalar; yazma düğmesi yok); anahtarlar
+// ekranı açık sertifikaları kullanımı, OTA yaprağı ve iptal/süre durumuyla gösterir; kök Mac'teyse "beklenen" der.
+const PKG_STATUS: RevocationStatus = {
+  ...STATUS,
+  bekleyen: null,
+  dagitimIptali: {
+    belgeler: [
+      { id: "p2", iptalId: "pi-2", sira: 2, imzalayanKid: "kok-2026-1", verilis: "2026-10-08T08:00:00.000Z", kidler: ["ist-2026-1", "pkt-2027-1"], yukleyen: "cli:donem-ice-aktar", createdAt: "2026-10-08T09:00:00.000Z" },
+      { id: "p1", iptalId: "pi-1", sira: 1, imzalayanKid: "kok-2026-1", verilis: "2026-10-07T08:00:00.000Z", kidler: ["pkt-2027-1"], yukleyen: "cli:donem-ice-aktar", createdAt: "2026-10-07T09:00:00.000Z" },
+    ],
+    kiradakiSira: 2,
+    iptalEdilenYukluler: ["ist-2026-1"],
+  },
+};
+
+describe("dağıtım iptali (salt okuma)", () => {
+  it("defter satırları, kirada giden sıra ve bu sunucudaki iptal edilmiş sertifika; yazma düğmesi yok", async () => {
+    const { calls } = open("/iptal-belgeleri", "ERISIM", { "GET /iptal-belgeleri": () => ({ data: PKG_STATUS }) });
+    const section = (await screen.findByText("Dağıtım iptalleri (panel/tablet ve paket imzası)")).closest("section")!;
+    expect(within(within(section).getByText("ist-2026-1, pkt-2027-1").closest("tr")!).getByText("Kirada")).toBeInTheDocument();
+    expect(within(within(section).getByText("pkt-2027-1").closest("tr")!).queryByText("Kirada")).toBeNull();
+    expect(within(section).getByText("ist-2026-1")).toBeInTheDocument();
+    expect(within(section).queryAllByRole("button")).toHaveLength(0);
+    expect(writes(calls)).toEqual([]);
+  });
+
+  it("eski sunucu (alan yok) → bölüm çizilmez, sayfa kırılmaz", async () => {
+    open("/iptal-belgeleri");
+    expect(await screen.findByText("Defter")).toBeInTheDocument();
+    expect(screen.queryByText("Dağıtım iptalleri (panel/tablet ve paket imzası)")).toBeNull();
+  });
+});
+
+const DAY = 86_400_000;
+const OPEN_KEYS: KeyStatus = {
+  ...KEYS,
+  anahtarlar: [
+    ...KEYS.anahtarlar,
+    { kid: "kok-2026-1", tur: "KOK", acikAnahtar: "k".repeat(43), siniflar: ["URETIM"], baslangic: null, bitis: null, durum: "AKTIF", yuklu: false, suresiDoldu: false, capada: true, sertifikaVeren: null, updatedAt: "2026-09-30T00:00:00.000Z" },
+  ],
+  acikSertifikalar: [
+    {
+      kid: "ist-2026-1",
+      kullanim: "ISTEMCI",
+      acikAnahtar: "i".repeat(43),
+      sertifikaId: "59a12742-dae0-4ef3-bf30-d94621206279",
+      sertifikaVeren: "kok-2026-1",
+      baslangic: "2026-10-07T18:13:13.105Z",
+      bitis: new Date(Date.now() + 300 * DAY).toISOString(),
+      suresiDoldu: false,
+      iptalSira: 2,
+      otaYapraklari: [],
+    },
+    {
+      kid: "ist-2026-2",
+      kullanim: "ISTEMCI",
+      acikAnahtar: "j".repeat(43),
+      sertifikaId: "445390c4-15a3-47bb-89e6-b7f5fae9acc4",
+      sertifikaVeren: "kok-2026-1",
+      baslangic: "2026-10-07T18:13:14.141Z",
+      bitis: new Date(Date.now() + 300 * DAY).toISOString(),
+      suresiDoldu: false,
+      iptalSira: null,
+      otaYapraklari: [{ dosya: "istemci/ota-yaprak-yedek.pem", parmakIzi: "68:67:C6:FB:ED:74:64:0F:52:D5:E6:2A:65:E9:50:8D", baslangic: "2026-10-07T18:13:14.000Z", bitis: new Date(Date.now() + 20 * DAY).toISOString() }],
+    },
+  ],
+};
+
+describe("anahtarlar ekranı — açık sertifikalar ve çevrimdışı kök", () => {
+  it("ISTEMCI satırları kullanım, OTA yaprağı ve durumla (iptal sırası · erken biten OTA yaprağı uyarısı)", async () => {
+    open("/anahtarlar", "ERISIM", { "GET /anahtarlar": () => ({ data: OPEN_KEYS }) });
+    const section = (await screen.findByText("İstemci ve paket sertifikaları (açık)")).closest("section")!;
+    const revoked = within(section).getByText("ist-2026-1").closest("tr")!;
+    expect(within(revoked).getByText("İptal (dağıtım iptali sıra 2)")).toBeInTheDocument();
+    expect(within(revoked).getByText("İstemci (panel/tablet güncelleme imzası)")).toBeInTheDocument();
+    const spare = within(section).getByText("ist-2026-2").closest("tr")!;
+    expect(within(spare).getByText(/68:67:C6:FB:ED:74:64:0F/)).toBeInTheDocument();
+    expect(within(spare).getByText("20 gün kaldı — dönem töreni")).toBeInTheDocument();
+  });
+
+  it("kök bu sunucuda değil ama çapada → 'beklenen' rozeti (yüklü değil uyarısı yerine)", async () => {
+    open("/anahtarlar", "ERISIM", { "GET /anahtarlar": () => ({ data: OPEN_KEYS }) });
+    const active = (await screen.findByText("Anahtar künyesi")).closest("section")!;
+    const root = within(active).getByText("kok-2026-1").closest("tr")!;
+    expect(within(root).getByText("Bu sunucuda değil — kök Mac'te (beklenen)")).toBeInTheDocument();
+    expect(within(root).getByText("Aktif")).toBeInTheDocument();
+  });
+
+  it("sertifika geçerli ama OTA yaprağı bitmiş → eksi gün değil 'OTA yaprağının süresi doldu'", async () => {
+    const [, spare] = OPEN_KEYS.acikSertifikalar!;
+    const leaf = { ...spare!.otaYapraklari[0]!, bitis: new Date(Date.now() - 3 * DAY).toISOString() };
+    const data: KeyStatus = { ...OPEN_KEYS, acikSertifikalar: [{ ...spare!, otaYapraklari: [leaf] }] };
+    open("/anahtarlar", "ERISIM", { "GET /anahtarlar": () => ({ data }) });
+    const section = (await screen.findByText("İstemci ve paket sertifikaları (açık)")).closest("section")!;
+    const row = within(section).getByText("ist-2026-2").closest("tr")!;
+    expect(within(row).getByText("OTA yaprağının süresi doldu")).toBeInTheDocument();
+    expect(within(row).queryByText(/gün kaldı/)).toBeNull();
+  });
+
+  it("eski sunucu (alan yok) → boş tablo, sayfa kırılmaz", async () => {
+    open("/anahtarlar", "ERISIM", { "GET /anahtarlar": () => ({ data: KEYS }) });
+    const section = (await screen.findByText("İstemci ve paket sertifikaları (açık)")).closest("section")!;
+    expect(within(section).getByText("Anahtar biriminde açık sertifika yok")).toBeInTheDocument();
+  });
+});

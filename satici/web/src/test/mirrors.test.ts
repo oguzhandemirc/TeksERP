@@ -30,6 +30,7 @@ import {
   HARDWARE_REQUEST_STATUS_LABEL,
   KEY_KIND_LABEL,
   KEY_STATUS_LABEL,
+  OPEN_CERT_USAGE_LABEL,
   REISSUE_STATUS_LABEL,
   REVOCATION_BLOCKER_LABEL,
   SIGNER_PLAN_LABEL,
@@ -345,6 +346,17 @@ describe("lisans v2 — enum ve küme ekran adları (sunucu kaynağı, iki yönl
     expect(retiredEnumValues("AnahtarTuru")).toHaveLength(1);
     twoWay(kinds, KEY_KIND_LABEL);
     twoWay(prismaEnum("AnahtarDurumu"), KEY_STATUS_LABEL);
+  });
+
+  it("açık sertifika kullanımı = OpenCertUsage ve dizin eşlemesi (keys/open-certificates.ts)", () => {
+    const src = read("keys/open-certificates.ts");
+    const usage = /export type OpenCertUsage = ([^;]+);/.exec(src);
+    expect(usage, "OpenCertUsage bulunamadı").not.toBeNull();
+    const values = [...usage![1]!.matchAll(/"([A-Z_]+)"/g)].map((x) => x[1]!);
+    twoWay(values, OPEN_CERT_USAGE_LABEL);
+    const dirs = /export const OPEN_CERT_DIRS[^=]*= \{([^}]*)\}/.exec(src);
+    expect(dirs, "OPEN_CERT_DIRS bulunamadı").not.toBeNull();
+    expect([...dirs![1]!.matchAll(/"([A-Z_]+)"/g)].map((x) => x[1]!).sort()).toEqual([...values].sort());
   });
 
   it("iptal engeli türleri = RevocationBlocker (revocation.service.ts) · toplu basım sonucu = ReissueResult (entitlement-issue.service.ts)", () => {

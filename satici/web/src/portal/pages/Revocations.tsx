@@ -1,7 +1,8 @@
 // İPTAL BELGELERİ (lisans v2 · G4 §2.3): satıcı iptal belgesini BASMAZ — dönem töreninin paketinden içe aktarır; defter
 // ekleme-yalnızdır. Dağıtım kapısı: bir HAK'ı ya da hâlâ yüklü bir anahtarı geçersiz kılacak belge, HAK ara imzacıyla
 // yeniden basılıp anahtar emekliye ayrılmadan fabrikalara gitmez; o güne dek bir önceki belge dağıtılır. Engelli HAK'ları
-// TOPLU yeniden basma ara imzacı parolası ister; düğme her dinleyicide görünür.
+// TOPLU yeniden basma ara imzacı parolası ister; düğme her dinleyicide görünür. Dağıtım iptali (ISTEMCI · PAKET) ayrı defterdir,
+// aynı sayfada salt okunur görünür.
 import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { ApiError } from "../../shared/api";
@@ -94,6 +95,41 @@ function ReissueModal({ blockers, onClose, onDone }: { blockers: readonly HakBlo
   );
 }
 
+/**
+ * DAĞITIM İPTALİ (ISTEMCI `ist-*` · PAKET `pkt-*`; `paket_iptal_belgesi`): salt okuma. Kapısı yoktur — en yüksek sıralı
+ * geçerli belge kira yanıtıyla HER kuruluma gider; satıcı bu anahtarları tutmadığı için engel hesabı da yoktur.
+ */
+function PackageRevocationSection({ status }: { status: RevocationStatus["dagitimIptali"] }) {
+  if (!status) return null;
+  return (
+    <Section title="Dağıtım iptalleri (panel/tablet ve paket imzası)">
+      <p className="muted small">
+        Kök imzalı; panel/tablet güncelleme imzası (<code>ist-*</code>) ya da paket imzası (<code>pkt-*</code>) çalınınca dönem töreninde basılır. Engel beklemez: en
+        yüksek sıra kira yanıtıyla her kuruluma gider.
+      </p>
+      <KeyValues
+        items={[
+          ["Kirada giden sıra", status.kiradakiSira === null ? "Henüz yok" : String(status.kiradakiSira)],
+          ["Bu sunucudaki iptal edilmiş sertifikalar", status.iptalEdilenYukluler.length > 0 ? <Badge tone="warn">{status.iptalEdilenYukluler.join(", ")}</Badge> : "Yok"],
+        ]}
+      />
+      <Table
+        rows={status.belgeler}
+        rowKey={(r) => r.id}
+        empty="İçe aktarılmış dağıtım iptali yok"
+        columns={[
+          { header: "Sıra", render: (r) => r.sira, className: "num-col" },
+          { header: "Durum", render: (r) => (r.sira === status.kiradakiSira ? <Badge tone="ok">Kirada</Badge> : "—") },
+          { header: "İptal edilen sertifikalar", render: (r) => r.kidler.join(", ") || "—" },
+          { header: "İmzalayan kök", render: (r) => <code>{r.imzalayanKid}</code> },
+          { header: "Veriliş", render: (r) => fmtDateTime(r.verilis) },
+          { header: "İçe aktaran", render: (r) => `${r.yukleyen} · ${fmtDateTime(r.createdAt)}` },
+        ]}
+      />
+    </Section>
+  );
+}
+
 export function RevocationsPage() {
   const queryClient = useQueryClient();
   const q = useGet<RevocationStatus>(["iptal-belgeleri"], "/iptal-belgeleri");
@@ -160,6 +196,7 @@ export function RevocationsPage() {
               ]}
             />
           </Section>
+          <PackageRevocationSection status={s.dagitimIptali} />
         </>
       ) : null}
       {reissue && s ? (

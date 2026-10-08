@@ -4,7 +4,7 @@
 import { Link } from "react-router-dom";
 import { fmtDate } from "../../shared/format";
 import { useGet } from "../../shared/hooks";
-import { KEY_KIND_LABEL, label } from "../../shared/labels";
+import { KEY_KIND_LABEL, OPEN_CERT_USAGE_LABEL, label } from "../../shared/labels";
 import { useCan } from "../../shared/session";
 import type { KeyStatus } from "../../shared/types";
 import { Badge, PageTitle, QueryState, Section, Table } from "../../shared/ui";
@@ -14,10 +14,13 @@ export const CEREMONY_LEAD_DAYS = 30;
 /** Satıcının `ANAHTAR_SURESI_BITIYOR` eşikleri — sunucu `KEY_EXPIRY_WARNING_DAYS` aynası. */
 export const KEY_EXPIRY_WARNING_DAYS = [30, 15, 7, 1] as const;
 /** Törenle yenilenen kullanımlar — sunucu `ExpiringKeyUsage` aynası. */
-export const CEREMONY_USAGES = ["ALT", "ARA", "INDIRME"] as const;
+export const CEREMONY_USAGES = ["ALT", "ARA", "INDIRME", "ISTEMCI", "PAKET"] as const;
+/** Satıcının KENDİ anahtarları: yoksa uyarı. ISTEMCI · PAKET açık sertifikadır, anahtar biriminde olmayabilir. */
+const REQUIRED_USAGES = ["ALT", "ARA", "INDIRME"] as const;
 const DAY_MS = 86_400_000;
 
 type KeyRow = KeyStatus["anahtarlar"][number];
+type OpenRow = NonNullable<KeyStatus["acikSertifikalar"]>[number];
 
 export interface CeremonyPlan {
   /** Önce bitecek kullanımın en yeni sertifikası. */
@@ -30,16 +33,23 @@ export interface CeremonyPlan {
 }
 
 /**
- * Kullanım başına (ALT · ara imzacı · İNDİRME) yüklü, aktif en geç biten sertifika; bunların EN ERKENİ sıradaki
- * törenin bitişidir, tören günü ondan {@link CEREMONY_LEAD_DAYS} gün öncedir. Hiç anahtar yoksa null.
+ * Kullanım başına (ALT · ara imzacı · İNDİRME · ISTEMCI · PAKET) yüklü, aktif en geç biten sertifika; bunların EN ERKENİ
+ * sıradaki törenin bitişidir, tören günü ondan {@link CEREMONY_LEAD_DAYS} gün öncedir. Açık sertifikada iptal edilen
+ * sayılmaz ve ISTEMCI'nin bitişi bağlı OTA yaprağıyla erken biteni (sunucunun seçimi). Hiç anahtar yoksa null.
  */
-export function nextCeremony(rows: readonly KeyRow[]): CeremonyPlan | null {
+export function nextCeremony(rows: readonly KeyRow[], open: readonly OpenRow[] = []): CeremonyPlan | null {
   const latest = new Map<string, { kid: string; endMs: number }>();
+  const consider = (tur: string, kid: string, endMs: number) => {
+    const cur = latest.get(tur);
+    if (Number.isFinite(endMs) && (!cur || endMs > cur.endMs)) latest.set(tur, { kid, endMs });
+  };
   for (const r of rows) {
     if (!(CEREMONY_USAGES as readonly string[]).includes(r.tur) || !r.yuklu || r.durum !== "AKTIF" || !r.bitis) continue;
-    const endMs = Date.parse(r.bitis);
-    const cur = latest.get(r.tur);
-    if (Number.isFinite(endMs) && (!cur || endMs > cur.endMs)) latest.set(r.tur, { kid: r.kid, endMs });
+    consider(r.tur, r.kid, Date.parse(r.bitis));
+  }
+  for (const c of open) {
+    if (c.iptalSira !== null) continue;
+    consider(c.kullanim, c.kid, Math.min(Date.parse(c.bitis), ...c.otaYapraklari.map((l) => Date.parse(l.bitis))));
   }
   let first: { tur: string; kid: string; endMs: number } | null = null;
   for (const [tur, v] of latest) if (!first || v.endMs < first.endMs) first = { tur, ...v };
@@ -47,7 +57,7 @@ export function nextCeremony(rows: readonly KeyRow[]): CeremonyPlan | null {
   return {
     ...first,
     ceremonyMs: first.endMs - CEREMONY_LEAD_DAYS * DAY_MS,
-    missing: CEREMONY_USAGES.filter((u) => !latest.has(u)),
+    missing: REQUIRED_USAGES.filter((u) => !latest.has(u)),
   };
 }
 
@@ -56,12 +66,12 @@ function NextCeremony() {
   const q = useGet<KeyStatus>(["anahtarlar"], "/anahtarlar", undefined, canRead);
   if (!canRead) return <p className="muted">Anahtar bilgisini görme izniniz yok; tarihi yöneticiye sorun.</p>;
   if (!q.data) return <QueryState isLoading={q.isLoading} error={q.error} />;
-  const plan = nextCeremony(q.data.anahtarlar);
+  const plan = nextCeremony(q.data.anahtarlar, q.data.acikSertifikalar ?? []);
   if (!plan) return <p className="warn-box">Yüklü anahtar bulunamadı — Anahtarlar sayfasına bakın ve Claude'a haber verin.</p>;
   const nowMs = Date.now();
   const toCeremony = Math.ceil((plan.ceremonyMs - nowMs) / DAY_MS);
   const toEnd = Math.ceil((plan.endMs - nowMs) / DAY_MS);
-  const who = `${label(KEY_KIND_LABEL, plan.tur)} · ${plan.kid}`;
+  const who = `${label({ ...KEY_KIND_LABEL, ...OPEN_CERT_USAGE_LABEL }, plan.tur)} · ${plan.kid}`;
   return (
     <>
       <p data-testid="sonraki-toren">
@@ -121,6 +131,11 @@ const ITEMS: readonly Item[] = [
     ad: "İndirme anahtarı",
     ne: "Güncelleme indirme izni imzalar; açık yarısı Cloudflare'deki indirme kapısında durur. Yılda bir yenilenir.",
     nerede: "Satıcı sunucusunda; Mac'teki tören klasöründe kopyası.",
+  },
+  {
+    ad: "Panel/tablet güncelleme imzası (istemci)",
+    ne: "Panel ve tablet güncellemelerini imzalar (tabletin OTA yaprağı dahil). Birincil ve yedek olarak iki tane; yılda bir yenilenir.",
+    nerede: "Birincil Mac'te, yedeği Drive'daki disk görüntüsünde (parolası parola yöneticisinde). Satıcı sunucusunda yalnız açık sertifikası durur — süre uyarısı için.",
   },
   {
     ad: "Kurtarma klasörü",

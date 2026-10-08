@@ -5,7 +5,7 @@ import { useState } from "react";
 import { Link } from "react-router-dom";
 import { fmtDateTime } from "../../shared/format";
 import { useGet, usePaged } from "../../shared/hooks";
-import { CLASS_LABEL, KEY_KIND_LABEL, KEY_STATUS_LABEL, label } from "../../shared/labels";
+import { CLASS_LABEL, KEY_KIND_LABEL, KEY_STATUS_LABEL, OPEN_CERT_USAGE_LABEL, label } from "../../shared/labels";
 import type { AuditRow, KeyStatus } from "../../shared/types";
 import { Badge, KeyValues, LoadMore, PageTitle, QueryState, Section, Table, type Column } from "../../shared/ui";
 
@@ -84,7 +84,14 @@ function keyColumns(nowMs: number, retired: boolean): Column<KeyRow>[] {
             header: "Yükleme",
             render: (r: KeyRow) => (
               <>
-                {r.yuklu ? <Badge tone="ok">Yüklü</Badge> : <Badge>Yüklü değil</Badge>} {r.suresiDoldu ? <Badge tone="danger">Süresi doldu</Badge> : null}{" "}
+                {r.yuklu ? (
+                  <Badge tone="ok">Yüklü</Badge>
+                ) : r.tur === "KOK" && r.capada ? (
+                  <Badge tone="ok">Bu sunucuda değil — kök Mac'te (beklenen)</Badge>
+                ) : (
+                  <Badge>Yüklü değil</Badge>
+                )}{" "}
+                {r.suresiDoldu ? <Badge tone="danger">Süresi doldu</Badge> : null}{" "}
                 {r.capada === false ? <Badge tone="danger">Çapada yok</Badge> : null}
               </>
             ),
@@ -93,6 +100,38 @@ function keyColumns(nowMs: number, retired: boolean): Column<KeyRow>[] {
     { header: "Son değişim", render: (r) => fmtDateTime(r.updatedAt) },
   ];
 }
+
+type OpenRow = NonNullable<KeyStatus["acikSertifikalar"]>[number];
+
+function openStatus(r: OpenRow, nowMs: number) {
+  if (r.iptalSira !== null) return <Badge tone="danger">{`İptal (dağıtım iptali sıra ${r.iptalSira})`}</Badge>;
+  if (r.suresiDoldu) return <Badge tone="danger">Süresi doldu</Badge>;
+  const ends = [Date.parse(r.bitis), ...r.otaYapraklari.map((l) => Date.parse(l.bitis))];
+  const left = Math.ceil((Math.min(...ends) - nowMs) / 86_400_000);
+  // Sertifika geçerli ama bağlı OTA yaprağı bitmiş: tablet güncellemesi imzalanamaz.
+  if (left <= 0) return <Badge tone="danger">OTA yaprağının süresi doldu</Badge>;
+  return left <= 30 ? <Badge tone="warn">{`${left} gün kaldı — dönem töreni`}</Badge> : <Badge tone="ok">Geçerli</Badge>;
+}
+
+const OPEN_COLUMNS = (nowMs: number): Column<OpenRow>[] => [
+  { header: "Kid", render: (r) => <code>{r.kid}</code> },
+  { header: "Kullanım", render: (r) => label(OPEN_CERT_USAGE_LABEL, r.kullanim) },
+  { header: "Açık anahtar", render: (r) => <code>{r.acikAnahtar.slice(0, 16)}…</code> },
+  { header: "Sertifika", render: (r) => (r.sertifikaVeren ? `kök imzalı (${r.sertifikaVeren})` : "—") },
+  { header: "Geçerlilik", render: (r) => `${fmtDateTime(r.baslangic)} → ${fmtDateTime(r.bitis)}` },
+  {
+    header: "Tablet OTA yaprağı",
+    render: (r) =>
+      r.otaYapraklari.length === 0
+        ? "—"
+        : r.otaYapraklari.map((l) => (
+            <div key={l.dosya} className="small">
+              <code>{l.parmakIzi.slice(0, 23)}…</code> {`${fmtDateTime(l.baslangic)} → ${fmtDateTime(l.bitis)}`}
+            </div>
+          )),
+  },
+  { header: "Durum", render: (r) => openStatus(r, nowMs) },
+];
 
 export function KeysPage() {
   const q = useGet<KeyStatus>(["anahtarlar"], "/anahtarlar");
@@ -139,6 +178,13 @@ export function KeysPage() {
           </Section>
           <Section title="Anahtar künyesi">
             <Table rows={active} rowKey={(r) => r.kid} columns={keyColumns(nowMs, false)} />
+          </Section>
+          <Section title="İstemci ve paket sertifikaları (açık)">
+            <p className="muted small">
+              Satıcı bu anahtarları TUTMAZ: panel/tablet güncelleme imzası (birincil + yedek) ve paket imzası Mac'te ya da yedek biriminde durur; burada yalnız kök
+              imzalı açık sertifikaları görünür (anahtar biriminin <code>istemci/</code> · <code>paket/</code> alt dizinleri) — süre uyarısı ve iptal durumu için.
+            </p>
+            <Table rows={k.acikSertifikalar ?? []} rowKey={(r) => r.kid} empty="Anahtar biriminde açık sertifika yok" columns={OPEN_COLUMNS(nowMs)} />
           </Section>
           <Section title="Emekli anahtarlar">
             <p className="muted small">Özel yarısı dönem töreninde silindi; açık yarı + sertifika yalnız eski imzaları doğrulamak için künyede kalır.</p>

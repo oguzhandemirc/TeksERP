@@ -176,6 +176,7 @@ describe("Filo sayfası", () => {
     kuruluSurum: "2.13.1",
     kanalSurumu: { surum: "2.14.0", kaynak: "YAYIN" },
     geride: true,
+    paketZinciri: true,
     politika: { kip: "ONAYLI", pencere: null, hedefSurum: null },
     rapor: null,
     raporZamani: null,
@@ -208,5 +209,28 @@ describe("Filo sayfası", () => {
     expect(screen.getByText("Güncelleme başarılı")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Örnek Tekstil › Ana tesis › Merkez sunucu" })).toHaveAttribute("href", `/kurulumlar/${INSTALLATION_DB_ID}`);
     expect(screen.getByRole("link", { name: "Filo" })).toBeInTheDocument();
+  });
+
+  it("paket zinciri sütunu (Evet · Hayır · Bilinmiyor) ve kesim ölçüsü özeti aynı satırlardan", async () => {
+    renderApp({
+      base: "/portal/api",
+      routes: PORTAL_ROUTES,
+      path: "/filo",
+      handlers: {
+        "GET /oturum": () => ({ data: sessionFor("SATICI_OPERATOR") }),
+        "GET /filo": () => ({
+          data: [
+            row({ ad: "Zincirli", geride: false }),
+            row({ id: "b", ad: "Eski güncelleyici", paketZinciri: false, geride: false }),
+            row({ id: "c", ad: "Etkinleşmedi", durum: "ETKINLESMEDI", paketZinciri: null, geride: false }),
+          ],
+        }),
+      },
+    });
+    expect(await screen.findByTestId("paket-zinciri-ozeti")).toHaveTextContent("Paket zinciri: 1/3 kurulum");
+    const cell = (name: RegExp, text: string) => within(screen.getByRole("link", { name }).closest("tr")!).getByText(text);
+    expect(cell(/Zincirli/, "Evet")).toBeInTheDocument();
+    expect(cell(/Eski güncelleyici/, "Hayır")).toBeInTheDocument();
+    expect(cell(/Etkinleşmedi/, "Bilinmiyor")).toBeInTheDocument();
   });
 });

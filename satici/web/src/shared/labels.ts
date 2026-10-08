@@ -146,6 +146,11 @@ export const KEY_KIND_LABEL: Record<string, string> = {
   ARA: "Ara imzacı (HAK)",
 };
 export const KEY_STATUS_LABEL: Record<string, string> = { AKTIF: "Aktif", EMEKLI: "Emekli", IPTAL: "İptal" };
+/** Açık sertifika kullanımları — sunucu `OpenCertUsage` aynası (keys/open-certificates.ts; satıcı bu anahtarları TUTMAZ). */
+export const OPEN_CERT_USAGE_LABEL: Record<string, string> = {
+  ISTEMCI: "İstemci (panel/tablet güncelleme imzası)",
+  PAKET: "Paket (sunucu paketi imzası)",
+};
 /** İptal belgesinin dağıtım engeli — sunucu `RevocationBlocker["tur"]` aynası (revocation.service.ts). */
 export const REVOCATION_BLOCKER_LABEL: Record<string, string> = {
   HAK: "HAK sürümü iptal edilen anahtarla imzalı — ara imzacıyla yeniden basılmalı",

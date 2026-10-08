@@ -283,6 +283,14 @@ export interface RevocationStatus {
   }[];
   readonly dagitilanSira: number | null;
   readonly bekleyen: { readonly sira: number; readonly engeller: RevocationBlocker[] } | null;
+  /** Dağıtım iptali defteri (ISTEMCI · PAKET; `paket_iptal_belgesi`) — salt okuma, dağıtım kapısı yok. */
+  readonly dagitimIptali?: {
+    readonly belgeler: RevocationStatus["belgeler"];
+    /** Kira yanıtıyla her kuruluma giden (çapayla doğrulanan en yüksek) sıra; defter boşsa null. */
+    readonly kiradakiSira: number | null;
+    /** Anahtar biriminde açık sertifikası duran ve bu belgeyle iptal edilmiş kid'ler. */
+    readonly iptalEdilenYukluler: string[];
+  };
 }
 
 /** Ara imzacıyla toplu yeniden basım (`POST /haklar/toplu-yeniden-bas`). */
@@ -503,9 +511,25 @@ export interface KeyStatus {
     readonly sertifikaVeren?: string | null;
     readonly updatedAt: string;
   }[];
+  /** Satıcının TUTMADIĞI anahtarların açık sertifikaları (anahtar biriminin `istemci/` · `paket/` alt dizinleri). */
+  readonly acikSertifikalar?: OpenCertificateRow[];
   readonly kiraImzalayabilir: boolean;
   readonly indirmeAnahtari: string | null;
   readonly uyarilar: string[];
+}
+
+export interface OpenCertificateRow {
+  readonly kid: string;
+  readonly kullanim: "ISTEMCI" | "PAKET";
+  readonly acikAnahtar: string;
+  readonly sertifikaId: string;
+  readonly sertifikaVeren: string | null;
+  readonly baslangic: string;
+  readonly bitis: string;
+  readonly suresiDoldu: boolean;
+  /** Kiradaki dağıtım iptali bu sertifikayı kapsıyorsa onun sırası. */
+  readonly iptalSira: number | null;
+  readonly otaYapraklari: { readonly dosya: string; readonly parmakIzi: string; readonly baslangic: string; readonly bitis: string }[];
 }
 
 export interface Dashboard {
@@ -696,6 +720,8 @@ export interface FleetRow {
   readonly kanalSurumu: { readonly surum: string | null; readonly kaynak: "YAYIN" | "KANAL_KAYDI" | "YOK" };
   /** İki sürüm de okunabildiyse; okunamayan null ("bilinmiyor"). */
   readonly geride: boolean | null;
+  /** Güncelleyici PAKET zincirini bildirdi mi (yetenek `paket-zinciri`); hiç etkinleşmemişse null. */
+  readonly paketZinciri?: boolean | null;
   readonly politika: UpdatePolicy;
   readonly rapor: UpdateReportSummary | null;
   readonly raporZamani: string | null;
