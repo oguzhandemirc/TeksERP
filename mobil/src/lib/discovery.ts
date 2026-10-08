@@ -13,6 +13,7 @@
  */
 
 /** Kimlik ucunun yolu — taban adresin KÖKÜNE eklenir (`/api` ZATEN içinde). */
+import { kipFor } from './internet-tls';
 import type { TlsAdvert } from './lan-tls';
 
 export const DISCOVERY_IDENTITY_PATH = "/api/discovery/identity";
@@ -485,6 +486,9 @@ export function pickSelfHealTarget(
   pinnedId: string | null | undefined,
 ): DiscoveredServer | null {
   if (!pinnedId || !pinnedId.trim()) return null;
+  // İnternet kipindeki sunucudan ağdaki bir adrese sessiz geçiş = kip değişimi; yalnız yeniden eklemeyle olur.
+  const currentHost = /^https?:\/\/([^:/\s]+)/i.exec(currentBaseUrl ?? '')?.[1] ?? '';
+  if (kipFor(currentHost) === 'internet') return null;
   const current = (currentBaseUrl ?? '').replace(/\/api\/?$/i, '').replace(/\/+$/, '');
   for (const c of candidates) {
     if (c.matchesPinned !== 'match') continue;
