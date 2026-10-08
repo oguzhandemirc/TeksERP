@@ -54,7 +54,7 @@ release/<sürüm>/           latest.yml              latest.yml'e bakar
   yüzden kurulmadı, 2026-09-28). Sürüm politikası kilidi (`minVersion`) yalnız
   oturum açıkken uygulanır. Bekçi: `src/test/update-gate-her-ekranda.test.tsx`.
 - **Kapanışta sessiz kurulum bilerek KAPALI** (`autoInstallOnAppQuit = false`):
-  uygulama "Program Files"a kurulu olduğu için Windows izin sorar; kapanışta
+  uygulama tüm kullanıcılar için korumalı klasöre kurulu olduğu için Windows izin sorar; kapanışta
   tetiklenseydi operatör gittikten sonra ekranda cevapsız bir izin penceresi
   asılı kalırdı. Kurulum hep operatör başındayken yapılır.
 - **Güncelleme İMZALI KÜNYEYLE kurulur** (2026-10-01, güvenlik dilimi G5): panel
@@ -521,9 +521,10 @@ ekranı) sabitleridir.
 
 ## Bilinen sınırlar (bilinçli kararlar)
 
-**① Windows izin penceresi (UAC) çıkar.** Uygulama "Program Files"a kurulu
-(`nsis.perMachine: true`), orası korumalı bir klasör olduğu için her kurulumda bir
-kez izin sorulur.
+**① Windows izin penceresi (UAC) çıkar.** Uygulama tüm kullanıcılar için korumalı bir
+klasöre kurulu (`nsis.perMachine: true`; eski kurulumlar `C:\Program Files\Etkili Yazılım\TeksERP`,
+1.6.0'dan itibaren yeni kurulumlar `C:\EtkiliYazilim\TeksERP` — kurulum klasörü kilitler), bu yüzden
+her kurulumda bir kez izin sorulur.
 
 ⚠️ **O makinedeki Windows hesabı yönetici DEĞİLSE operatör "Evet" diyemez ve
 güncelleme o makinede kurulmaz** (panel eski sürümle çalışmaya devam eder, bozulmaz).

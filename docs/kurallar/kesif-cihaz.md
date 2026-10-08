@@ -97,7 +97,7 @@
 - **[ÇEKİRDEK]** `bonjour-service` sürümü SABİT ('^' yok — sonraki ana sürüm ESM-only olup `createRequire` yolunu kırar) ve `dependencies`te DURMAK ZORUNDA: `externalizeDepsPlugin()` yalnız orayı okur, devDependencies'te kurulu uygulamada MODULE_NOT_FOUND ('dev'de çalışır, kurulumda ölü'). · bekçi: `Electron/src/test/discovery-ipc-contract.test.ts` <sub>(CLAUDE.md:335)</sub>
 - **[ÇEKİRDEK]** `build.<mac|win>.artifactName` ASCII kalmalı, `${productName}` KULLANILMAZ — ad `latest.yml` içinde URL'dir; 'Ş' + boşluk aktarımda bozulup 404 üretir. · bekçi: `Electron/src/test/update-feed-url.test.ts:67-73` <sub>(CLAUDE.md:78)</sub>
 - **[ÇEKİRDEK]** `autoUpdater`a MODÜL GÖVDESİNDE dokunulmaz — o bir getter, ilk erişimde Electron `app`ine dokunur; erişim `updater()` ile ertelenir. `autoInstallOnAppQuit` KAPALI kalır (kapanışta cevapsız UAC); şerit YALNIZ `ready`de çizilir (error şeridi internetsizde körleştirir). <sub>(CLAUDE.md:78)</sub>
-- **[PROFİL]** `nsis.perMachine: true` (uygulama Program Files'ta) → her güncellemede bir kez Windows izin penceresi; o makinedeki hesap YÖNETİCİ DEĞİLSE güncelleme o makinede kurulmaz ve panel sessizce eski sürümde kalır. <sub>(CLAUDE.md:78)</sub>
+- **[PROFİL]** `nsis.perMachine: true` (tüm kullanıcılara, yönetici korumalı klasöre kurulum) → her güncellemede bir kez Windows izin penceresi; o makinedeki hesap YÖNETİCİ DEĞİLSE güncelleme o makinede kurulmaz ve panel sessizce eski sürümde kalır. <sub>(CLAUDE.md:78)</sub>
 
 ### Reçeteler
 

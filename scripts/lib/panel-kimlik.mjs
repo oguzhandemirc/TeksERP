@@ -9,6 +9,7 @@
 // Bekçi: scripts/test_panel_kimlik.mjs · CLI: scripts/panel-kimlik-kapisi.mjs
 // =============================================================================
 
+import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 
@@ -18,10 +19,11 @@ export const PANEL_PAKET_REL = 'Electron/package.json';
 export const PANEL_ISARETCI_REL = 'Electron/shared/musteri.json';
 export const PANEL_MAIN_REL = 'Electron/electron/main.ts';
 export const PANEL_KIMLIK_COZUCU_REL = 'Electron/build-identity.ts';
+export const PANEL_KURULUM_NSH_REL = 'Electron/resources/installer.nsh';
 
 /** Dinlenme ölçümünün okuduğu dosyalar (olmayan dosya `undefined` kalır — işaretçi için beklenen budur). */
 export const PANEL_DINLENME_DOSYALARI = Object.freeze([
-  KAYIT_REL, ESKI_KAYIT_REL, PANEL_PAKET_REL, PANEL_ISARETCI_REL, PANEL_MAIN_REL, PANEL_KIMLIK_COZUCU_REL,
+  KAYIT_REL, ESKI_KAYIT_REL, PANEL_PAKET_REL, PANEL_ISARETCI_REL, PANEL_MAIN_REL, PANEL_KIMLIK_COZUCU_REL, PANEL_KURULUM_NSH_REL,
 ]);
 
 /** Bekçinin ve CLI'nin dosyaları — commit tetiği bunları + okunan dosyaları kapsar. */
@@ -86,6 +88,80 @@ export function panelDinlenmeFarki(dosyalar) {
   // Eski kanal yolu emekli: çözücü donuk kaydı ya da kanal ortamını yeniden okursa paket bir fabrikanın kimliğini taşıyabilir.
   for (const iz of ESKI_YOL_IZLERI) {
     if (cozucu.includes(iz)) f.push(`${PANEL_KIMLIK_COZUCU_REL} emekli eski kanal yolunun izini (${iz}) taşıyor — kimlik yalnız dağıtım kaydından`);
+  }
+  f.push(...panelKurulumYoluFarki(dosyalar, k));
+  return f;
+}
+
+/**
+ * Sahadaki kurulumların Windows kayıt anahtarı (electron-builder APP_GUID = UUIDv5(appId)); 1.5.0 test grubu bu anahtarla
+ * kurulu. Değişirse güncelleme eski kurulumu bulamaz, yanına İKİNCİ kurulum açar — değişimi bir göçtür.
+ */
+export const PANEL_KURULU_GUID = 'e16d63ae-6f76-5cbf-b749-01aed69eed94';
+const EB_NS_UUID = '50e065bc-3134-11e6-9bab-38c9862bdaf3';
+
+/** electron-builder NsisTarget'ın `UUID.v5(appId, ELECTRON_BUILDER_NS_UUID)` hesabı (RFC 4122 v5). */
+export function nsisGuid(appId) {
+  const h = crypto.createHash('sha1').update(Buffer.from(EB_NS_UUID.replaceAll('-', ''), 'hex')).update(appId, 'utf8').digest();
+  h[6] = (h[6] & 0x0f) | 0x50;
+  h[8] = (h[8] & 0x3f) | 0x80;
+  const x = h.subarray(0, 16).toString('hex');
+  return `${x.slice(0, 8)}-${x.slice(8, 12)}-${x.slice(12, 16)}-${x.slice(16, 20)}-${x.slice(20)}`;
+}
+
+/** Varsayılan kurulum yolu ASCII ve boşluksuz olmalı (betiklerde tırnak/kod sayfası tuzağı). */
+const yolTemiz = (s) => /^[\x21-\x7e]+$/.test(s);
+
+/**
+ * Panel kurulum yolu (nsis): yeni kurulumun varsayılan klasörü ASCII + boşluksuz, yalnız İLK kurulumda uygulanır
+ * (kayıtta InstallLocation yoksa ve /D verilmemişse), Program Files dışı klasör kilitlenir; kayıt anahtarı sahadakiyle aynı.
+ */
+export function panelKurulumYoluFarki(dosyalar, k = ortakKimlik(dosyalar)) {
+  const p = jsonOku(dosyalar, PANEL_PAKET_REL);
+  const n = p.build?.nsis ?? {};
+  const f = [];
+  const nshRel = path.posix.relative('Electron', PANEL_KURULUM_NSH_REL);
+  if (n.include !== nshRel) f.push(`${PANEL_PAKET_REL} build.nsis.include = ${JSON.stringify(n.include)} — kurulum yolu betiği ${JSON.stringify(nshRel)} bekleniyor`);
+  for (const [a, v] of [['perMachine', true], ['oneClick', false], ['allowToChangeInstallationDirectory', true]]) {
+    if (n[a] !== v) f.push(`${PANEL_PAKET_REL} build.nsis.${a} = ${JSON.stringify(n[a])} — ${JSON.stringify(v)} bekleniyor (kurulum yolu düzeni buna dayanır)`);
+  }
+  if (n.guid !== undefined) f.push(`${PANEL_PAKET_REL} build.nsis.guid VAR — kayıt anahtarı appId'den türer; elle guid sahadaki kurulumu yetim bırakır`);
+  const guid = nsisGuid(p.build?.appId ?? '');
+  if (guid !== PANEL_KURULU_GUID || nsisGuid(k.appId) !== PANEL_KURULU_GUID) {
+    f.push(`kurulum kayıt anahtarı ${guid} — sahadaki kurulumlarınki ${PANEL_KURULU_GUID} (appId değişti: güncelleme ikinci kurulum açar, bu bir göçtür)`);
+  }
+  const urun = p.build?.productName ?? '';
+  if (!/^[0-9A-Za-z_+.-]+$/.test(urun)) f.push(`${PANEL_PAKET_REL} build.productName ${JSON.stringify(urun)} — kurulum klasörü adı olur, ASCII ve boşluksuz olmalı`);
+
+  const nsh = dosyalar[PANEL_KURULUM_NSH_REL];
+  if (typeof nsh !== 'string') return [...f, `${PANEL_KURULUM_NSH_REL} YOK — yeni kurulum electron-builder varsayılanına (Program Files\\<menü kategorisi>) düşer`];
+  const kod = nsh.replace(/^\s*;.*$/gm, '');
+  const makro = (ad) => kod.match(new RegExp(`!macro\\s+${ad}\\b([\\s\\S]*?)!macroend`))?.[1];
+  const init = makro('customInit');
+  if (!init) {
+    f.push(`${PANEL_KURULUM_NSH_REL} customInit makrosu yok — varsayılan kurulum klasörü değişmez`);
+  } else {
+    const atamalar = [...init.matchAll(/StrCpy\s+\$INSTDIR\s+"([^"]*)"/g)].map((m) => m[1]);
+    if (atamalar.length !== 1) f.push(`${PANEL_KURULUM_NSH_REL} customInit $INSTDIR'i ${atamalar.length} kez atıyor — tek varsayılan atama bekleniyor`);
+    for (const yol of atamalar) {
+      const cozulu = yol.replace('${APP_FILENAME}', urun);
+      if (!yolTemiz(cozulu)) f.push(`${PANEL_KURULUM_NSH_REL} varsayılan kurulum yolu ${JSON.stringify(cozulu)} ASCII ve boşluksuz değil`);
+      if (!yol.endsWith('\\${APP_FILENAME}')) f.push(`${PANEL_KURULUM_NSH_REL} varsayılan kurulum yolu ${JSON.stringify(yol)} \\\${APP_FILENAME} ile bitmiyor`);
+      if (/PROGRAMFILES|MENU_FILENAME/.test(yol)) f.push(`${PANEL_KURULUM_NSH_REL} varsayılan kurulum yolu ${JSON.stringify(yol)} Program Files/menü kategorisinden türüyor (boşluk/Türkçe harf)`);
+    }
+    const ilk = /ReadRegStr\s+\$(\w+)\s+HKLM\s+"\$\{INSTALL_REGISTRY_KEY\}"\s+InstallLocation/.exec(init);
+    const atamaYeri = init.search(/StrCpy\s+\$INSTDIR/);
+    if (!ilk || ilk.index > atamaYeri || !new RegExp(`\\$\\{if\\}\\s+\\$${ilk[1]}\\s+==\\s+""`).test(init)) {
+      f.push(`${PANEL_KURULUM_NSH_REL} customInit varsayılanı kayıttaki InstallLocation boşken uygulamıyor — güncelleme mevcut kurulumu taşır`);
+    }
+    if (!/!insertmacro\s+GetDParameter/.test(init)) f.push(`${PANEL_KURULUM_NSH_REL} customInit /D parametresine bakmıyor — sessiz kurulumun klasörü ezilir`);
+  }
+  const kur = makro('customInstall') ?? '';
+  for (const [iz, ne] of [
+    ['/setowner *S-1-5-32-544', 'sahip Administrators'], ['/inheritance:r', 'miras kesme'], ['*S-1-5-32-545:(OI)(CI)RX', 'Users yalnız okuma/çalıştırma'],
+    ['$PROGRAMFILES64', 'Program Files kapsam koşulu'],
+  ]) {
+    if (!kur.includes(iz)) f.push(`${PANEL_KURULUM_NSH_REL} customInstall klasör kilidi eksik: ${ne} (${iz}) — Program Files dışı klasör kullanıcılara yazılabilir kalır`);
   }
   return f;
 }
