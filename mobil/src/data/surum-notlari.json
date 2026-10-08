@@ -17,6 +17,36 @@
   ],
   "yayinlar": [
     {
+      "id": "2026-10-08c",
+      "durum": "TASLAK — terfide kullanıcı onayı",
+      "baslik": "Panel sunucuya yalnız şifreli bağlanır",
+      "surumler": {
+        "panel": "1.6.0"
+      },
+      "maddeler": [
+        {
+          "kapsam": "panel",
+          "tip": "yeni",
+          "metin": "Panel fabrika sunucusuna artık yalnız şifreli bağlantıyla bağlanır. Sunucu bilgisayarının kendisinde çalışan panel sunucuyu kendiliğinden tanır, hiçbir şey sormaz."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "yeni",
+          "metin": "Başka bir bilgisayardaki panelde “Sunucu Adresi” penceresine sunucunun IP adresini yazın ve “Doğrulama kodunu göster”e basın. Çıkan kodu sunucu kurulumunun son sayfasındaki ya da sunucu bilgisayarındaki paneldeki kodla karşılaştırın; birebir aynıysa “Kodlar aynı — bağlan”a basın. Kod farklıysa bağlanmayın ve sistem yöneticinize haber verin."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "iyilestirme",
+          "metin": "Ağdaki sunucuya “http://” ile başlayan şifresiz adres artık kaydedilmez; panel nedenini Türkçe yazar. Sunucunun kodu değişirse panel bağlanmaz; “Şifreli bağlantıyı kaldır” deyip kodu yeniden karşılaştırmanız gerekir."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "iyilestirme",
+          "metin": "Güncellemeden sonra ağdaki sunucuya bağlı paneller bir kez kod karşılaştırması ister. Giriş ekranında “Sunucu bulundu — eşleştirme gerekiyor” görürseniz “Adresi Elle Gir” ile adresi yazıp kodu karşılaştırın."
+        }
+      ]
+    },
+    {
       "id": "2026-10-08b",
       "durum": "TASLAK — terfide kullanıcı onayı",
       "baslik": "Tablet sunucuya yalnız şifreli bağlanır",
