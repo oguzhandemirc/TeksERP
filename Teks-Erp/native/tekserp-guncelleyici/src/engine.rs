@@ -22,7 +22,7 @@ use crate::release::{self, Checked, PgTarget, ReleaseManifest};
 use crate::selfupdate;
 use crate::sema;
 use crate::settings::{self, BackendEnv, UpdaterSettings};
-use crate::tools::{self, Runtime};
+use crate::tools;
 use crate::trust::TrustAnchor;
 use crate::version;
 use serde_json::{json, Map, Value};
@@ -123,7 +123,7 @@ type Fail = (&'static str, String);
 /// Hazırlık dizini işlemi düştü: kilit (erişim engellendi · Windows paylaşım/kilit ihlali 32/33) `DOSYA_KILITLI`,
 /// diğerleri verilen kod. Kilit bir indirme hatası değildir ve paketi ertelemeye sokmaz.
 fn staging_fail(otherwise: &'static str, path: &std::path::Path, e: &std::io::Error) -> Fail {
-    let locked = e.kind() == std::io::ErrorKind::PermissionDenied || (cfg!(windows) && matches!(e.raw_os_error(), Some(32 | 33)));
+    let locked = e.kind() == std::io::ErrorKind::PermissionDenied || crate::platform::is_sharing_violation(e);
     if locked {
         fail(
             codes::DOSYA_KILITLI,
@@ -235,11 +235,7 @@ impl Engine {
                 return Err(format!("{} bir bağlantı (junction/sembolik bağ) — güncelleyici özel alanı olarak kullanılmaz", p.display()));
             }
         }
-        #[cfg(windows)]
-        crate::windows::harden_private_dir(&self.layout.work()).map_err(|e| format!("özel alan kurulamadı: {e}"))?;
-        #[cfg(not(windows))]
-        fs.create_dir_all(&self.layout.work()).map_err(|e| e.to_string())?;
-        Ok(())
+        crate::platform::harden_private_dir(fs, &self.layout.work())
     }
 
     /// SYSTEM'in ÇALIŞTIRDIĞI ya da güvendiği her yol (DAGK-3/4): kök · `surumler\` · kurulu sürüm dizini ·
@@ -259,7 +255,7 @@ impl Engine {
         };
         if let Some(bin) = bin {
             for tool in ["pg_dump", "pg_restore", "psql", "postgres"] {
-                paths.push(bin.join(if cfg!(windows) { format!("{tool}.exe") } else { tool.to_string() }));
+                paths.push(bin.join(crate::platform::executable(tool)));
             }
             paths.push(bin);
         }
@@ -1175,7 +1171,7 @@ impl Engine {
                 }
             })
             .and_then(|()| {
-                let c = crate::env::Cmd::new(&staging.join("bin").join(if cfg!(windows) { "postgres.exe" } else { "postgres" }))
+                let c = crate::env::Cmd::new(&staging.join("bin").join(crate::platform::executable("postgres")))
                     .arg("--version")
                     .timeout(Duration::from_secs(30));
                 let out = self.env.procs.run(&c).map_err(|e| e.0)?;
@@ -1257,7 +1253,7 @@ impl Engine {
     }
 
     fn tools_dir(&self, old: &Path, new: &Path) -> PathBuf {
-        if Runtime::of(old).usable_for_backup(&self.env) {
+        if tools::usable_for_backup(&self.env, old) {
             old.to_path_buf()
         } else {
             new.to_path_buf()
@@ -1278,11 +1274,11 @@ impl Engine {
     ) -> OpOutcome {
         let tag = target.tag();
         let new_dir = self.layout.pg_version_dir(&tag);
-        let old_image = match self.env.svc.image_path(&inst.hizmet) {
+        let old_image = match self.env.arka.pg.image_path(&self.env, &inst.hizmet) {
             Ok(p) => p,
             Err(e) => return OpOutcome::RolledBack(operation::step_err(codes::PG_YOL_HATASI, e.0)),
         };
-        let Some(new_image) = pgminor::replace_dir(&old_image, &inst.bin_dir, &new_dir) else {
+        let Some(new_image) = self.env.arka.pg.replace_dir(&old_image, &inst.bin_dir, &new_dir) else {
             return OpOutcome::RolledBack(operation::step_err(
                 codes::PG_YOL_HATASI,
                 "PG hizmetinin ImagePath'i ornek.json'daki ikili dizinini göstermiyor",

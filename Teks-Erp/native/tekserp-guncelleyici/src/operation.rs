@@ -14,7 +14,7 @@ use crate::ipc::Approval;
 use crate::journal::{Journal, Kind, OpView};
 use crate::layout::Layout;
 use crate::settings::{BackendEnv, UpdaterSettings};
-use crate::tools::{self, MigrationCount, Runtime};
+use crate::tools::{self, MigrationCount};
 use crate::trust::TrustAnchor;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
@@ -112,7 +112,10 @@ fn progress(ctx: &Ctx, op: &dyn Operation, step: &str, rolling_back: bool) {
 pub fn start(ctx: &Ctx, journal: &mut Journal, op: &dyn Operation, plan: Value) -> OpOutcome {
     ctx.log.info(&format!("işlem {} başlıyor: {} {} → {}", op.op_id(), op.product(), op.source(), op.target()));
     ctx.env.events.event(Level::Info, &format!("Güncelleme başladı: {} {} → {}", op.product(), op.source(), op.target()));
-    if let Err(e) = record(ctx, journal, op.op_id(), Kind::Begin, None, plan) {
+    let begun = journal
+        .begin(ctx.env.fs.as_ref(), op.op_id(), ctx.env.arka.platform, plan, ctx.now_iso())
+        .map_err(|e| step_err(codes::IC_HATA, format!("işlem günlüğü yazılamadı: {e}")));
+    if let Err(e) = begun {
         return OpOutcome::Failed(e);
     }
     drive(ctx, journal, op)
@@ -125,6 +128,17 @@ pub fn drive(ctx: &Ctx, journal: &mut Journal, op: &dyn Operation) -> OpOutcome 
         let v = view(journal, &id);
         if v.result().is_some() {
             return outcome_of(&v);
+        }
+        // Başka arka ucun günlüğü: adımları da telafileri de o platformun eylemleridir — ne sürdürülür ne geri
+        // alınır, günlüğe yazılmaz; insan inceler (fail-safe).
+        if v.platform() != ctx.env.arka.platform {
+            let m = format!(
+                "işlem {id} {} arka ucunun günlüğü, bu güncelleyici {} — sürdürülmez, geri alınmaz; günlük incelenmeli",
+                v.platform(),
+                ctx.env.arka.platform
+            );
+            ctx.log.error(&m);
+            return OpOutcome::Failed(step_err(codes::IC_HATA, m));
         }
         if v.rolling_back() {
             return rollback(ctx, journal, op);
@@ -403,17 +417,9 @@ pub struct BackendOp {
 
 const KEY_NAME: &str = "guncelleme";
 
-fn same_path(a: &Path, b: &Path) -> bool {
-    if cfg!(windows) {
-        a.to_string_lossy().trim_end_matches('\\').eq_ignore_ascii_case(b.to_string_lossy().trim_end_matches('\\'))
-    } else {
-        a == b
-    }
-}
-
 pub fn switch_link(ctx: &Ctx, link: &Path, target: &Path, code: &'static str) -> Result<(), StepError> {
     let fs = ctx.env.fs.as_ref();
-    if fs.link_target(link).ok().flatten().is_some_and(|t| same_path(&t, target)) {
+    if fs.link_target(link).ok().flatten().is_some_and(|t| crate::platform::same_path(&t, target)) {
         return Ok(());
     }
     if !fs.is_dir(target) {
@@ -421,7 +427,7 @@ pub fn switch_link(ctx: &Ctx, link: &Path, target: &Path, code: &'static str) ->
     }
     fs.set_link(link, target).map_err(|e| step_err(code, format!("bağlantı değiştirilemedi: {e}")))?;
     match fs.link_target(link) {
-        Ok(Some(t)) if same_path(&t, target) => Ok(()),
+        Ok(Some(t)) if crate::platform::same_path(&t, target) => Ok(()),
         other => Err(step_err(code, format!("bağlantı doğrulanamadı: {other:?}"))),
     }
 }
@@ -464,7 +470,6 @@ pub fn take_backup(ctx: &Ctx, op_id: &str, tools_dir: &Path) -> Result<Value, St
     let dump = dir.join("db.dump");
     tools::pg_dump(ctx.env, ctx.backend, &dump, ctx.settings.backup_timeout()).map_err(e)?;
     tools::pg_restore_list(ctx.env, ctx.backend, &dump).map_err(e)?;
-    let rt = Runtime::of(tools_dir);
     let keys = ctx.layout.op_keys(op_id);
     let protected = keys.join(format!("{KEY_NAME}.tksec.dpapi"));
     let public = keys.join(format!("{KEY_NAME}.tkpub"));
@@ -472,7 +477,7 @@ pub fn take_backup(ctx: &Ctx, op_id: &str, tools_dir: &Path) -> Result<Value, St
     if !(fs.exists(&protected) && fs.exists(&public)) {
         fs.remove_dir_all(&keys).map_err(|x| e(x.to_string()))?;
         fs.create_dir_all(&keys).map_err(|x| e(x.to_string()))?;
-        tools::backup_keygen(ctx.env, &rt, &keys, &plain).map_err(e)?;
+        tools::backup_keygen(ctx.env, tools_dir, &keys, &plain).map_err(e)?;
         let secret = fs.read(&plain).map_err(|x| e(format!("geçici anahtar okunamadı: {x}")))?;
         let wrapped = ctx.env.protect.protect(&secret).map_err(|x| e(format!("geçici anahtar sarılamadı: {x}")))?;
         fs.write_atomic(&protected, &wrapped).map_err(|x| e(x.to_string()))?;
@@ -489,7 +494,7 @@ pub fn take_backup(ctx: &Ctx, op_id: &str, tools_dir: &Path) -> Result<Value, St
     let own_recipients = recipients.len();
     recipients.push(public);
     let enc = dir.join("db.dump.tkenc");
-    tools::backup_encrypt(ctx.env, &rt, &dump, &enc, &recipients, ctx.settings.backup_timeout()).map_err(e)?;
+    tools::backup_encrypt(ctx.env, tools_dir, &dump, &enc, &recipients, ctx.settings.backup_timeout()).map_err(e)?;
     fs.remove_file(&dump).map_err(|x| e(x.to_string()))?;
     let size = fs.file_len(&enc).map_err(|x| e(x.to_string()))?;
     let info = json!({ "dosya": "db.dump.tkenc", "boyut": size, "kurulumAlicisi": own_recipients, "zaman": ctx.now_iso() });
@@ -515,8 +520,7 @@ pub fn restore_backup(ctx: &Ctx, op_id: &str, tools_dir: &Path, expect: Option<M
     let wrapped = fs.read(&keys.join(format!("{KEY_NAME}.tksec.dpapi"))).map_err(|x| e(format!("geçici anahtar okunamadı: {x}")))?;
     let secret = ctx.env.protect.unprotect(&wrapped).map_err(|x| e(format!("geçici anahtar açılamadı: {x}")))?;
     fs.write_atomic(&temp_key, &secret).map_err(|x| e(x.to_string()))?;
-    let rt = Runtime::of(tools_dir);
-    let decrypted = tools::backup_decrypt(ctx.env, &rt, &enc, &plain, &temp_key, ctx.settings.backup_timeout());
+    let decrypted = tools::backup_decrypt(ctx.env, tools_dir, &enc, &plain, &temp_key, ctx.settings.backup_timeout());
     let _ = fs.remove_file(&temp_key);
     decrypted.map_err(e)?;
     tools::pg_restore_list(ctx.env, ctx.backend, &plain).map_err(e)?;
@@ -544,8 +548,7 @@ impl BackendOp {
     }
 
     fn migrate(&self, ctx: &Ctx) -> Result<Value, StepError> {
-        let rt = Runtime::of(&self.plan.new_target);
-        let out = tools::migrate_deploy(ctx.env, &rt, &self.plan.new_target, ctx.backend, ctx.settings.migrate_timeout())
+        let out = tools::migrate_deploy(ctx.env, &self.plan.new_target, ctx.backend, ctx.settings.migrate_timeout())
             .map_err(|m| step_err(codes::GOC_HATASI, m))?;
         if out.timed_out {
             return Err(step_err(

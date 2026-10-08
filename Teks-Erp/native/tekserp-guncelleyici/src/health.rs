@@ -1,5 +1,5 @@
-//! Sağlık (§8.7, sözleşme 4): `GET http://127.0.0.1:<PORT>/health/yerel` — yalnız döngü adresine cevap
-//! veren yerel uç: HTTP 200 · `status=UP` · `db=UP` · `version` = beklenen · `lisans{kip,butunluk,cekirdek}`
+//! Sağlık (§8.7, sözleşme 4): `GET /health/yerel` — yalnız döngü adresine cevap veren yerel uç (sondanın
+//! kendisi platform arka ucunun işi: `platform::Saglik`; Windows'ta `http://127.0.0.1:<PORT>`): HTTP 200 · `status=UP` · `db=UP` · `version` = beklenen · `lisans{kip,butunluk,cekirdek}`
 //! (motor yerel ölçümünü bitirince; o zamana dek alan yok → beklenir). Lisans işlem öncesi görüntüden KÖTÜ
 //! olamaz. Public `/health`in alan kümesi DONMUŞTUR ve lisans taşımaz.
 //! ESKİ backend (`/health/yerel` → 404, sözleşme 4 öncesi): canlılık public `/health`ten okunur ama lisans
@@ -35,12 +35,9 @@ pub struct Health {
     pub local: bool,
 }
 
-fn endpoint(port: u16, path: &str) -> String {
-    format!("http://127.0.0.1:{port}{path}")
-}
-
-pub fn url(port: u16) -> String {
-    endpoint(port, LOCAL_PATH)
+/// Sondanın adresi (ileti için) — arka ucun söylediği.
+pub fn url(env: &Env, port: u16) -> String {
+    env.arka.saglik.address(port, LOCAL_PATH)
 }
 
 enum Fetch {
@@ -50,8 +47,8 @@ enum Fetch {
     Failed,
 }
 
-fn get_json(env: &Env, url: &str) -> Fetch {
-    let Ok(r) = env.net.get(url, &[], Duration::from_secs(5)) else {
+fn get_json(env: &Env, port: u16, path: &str) -> Fetch {
+    let Ok(r) = env.arka.saglik.probe(env, port, path) else {
         return Fetch::Failed;
     };
     match r.status {
@@ -73,9 +70,9 @@ fn read(v: &Value, local: bool) -> Health {
 }
 
 pub fn probe(env: &Env, port: u16) -> Option<Health> {
-    match get_json(env, &url(port)) {
+    match get_json(env, port, LOCAL_PATH) {
         Fetch::Body(v) => Some(read(&v, true)),
-        Fetch::Missing => match get_json(env, &endpoint(port, PUBLIC_PATH)) {
+        Fetch::Missing => match get_json(env, port, PUBLIC_PATH) {
             Fetch::Body(v) => Some(read(&v, false)),
             Fetch::Missing | Fetch::Failed => None,
         },
@@ -142,19 +139,6 @@ fn judge(h: &Health, c: &Criteria) -> Result<(), Option<(&'static str, String)>>
     Ok(())
 }
 
-/// Konağın hizmete özgü çıkış kodunun anlamı (`tekserp_hizmet::contract::exit`).
-fn exit_meaning(code: u32) -> &'static str {
-    use tekserp_hizmet::contract::exit;
-    match code {
-        exit::NODE_UNEXPECTED => "node beklenmedik çıktı",
-        exit::NODE_NOT_STARTED => "node başlatılamadı",
-        exit::ENV_FILE => ".env yok/okunamadı",
-        exit::JOB_OBJECT => "iş nesnesi kurulamadı",
-        exit::CURRENT_LINK => "current çözülemedi",
-        _ => "konak hatası",
-    }
-}
-
 /// Zaman aşımına dek dener; son gözlemden hata kodu türetir. `service` verilirse: hizmet konağın sıfır-dışı
 /// koduyla DURMUŞ görülürse (açılışta düşen sürüm) zaman aşımı beklenmeden `SAGLIK_HIZMET_DUSTU`.
 pub fn wait_healthy(
@@ -182,7 +166,7 @@ pub fn wait_healthy(
                     codes::SAGLIK_HIZMET_DUSTU,
                     format!(
                         "{name} açılışta düştü: konak çıkış {code} ({}) — {waited} sn'de görüldü, {} sn beklenmedi",
-                        exit_meaning(code),
+                        env.arka.saglik.exit_meaning(code),
                         timeout.as_secs()
                     ),
                 ));
@@ -190,7 +174,7 @@ pub fn wait_healthy(
         }
         if env.clock.now_ms() >= deadline {
             return Err(match last {
-                None => (codes::SAGLIK_ZAMAN_ASIMI, format!("{} {} sn içinde cevap vermedi", url(port), timeout.as_secs())),
+                None => (codes::SAGLIK_ZAMAN_ASIMI, format!("{} {} sn içinde cevap vermedi", url(env, port), timeout.as_secs())),
                 Some(h) if !h.up => (codes::SAGLIK_ZAMAN_ASIMI, "status UP olmadı".into()),
                 Some(h) if !h.db_up => (codes::SAGLIK_DB, "db UP olmadı".into()),
                 Some(_) => (codes::SAGLIK_LISANS_OLCULEMEDI, format!("{LOCAL_PATH} lisans alanını taşımıyor (motor yerel ölçümü bitmedi)")),

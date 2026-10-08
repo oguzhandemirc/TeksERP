@@ -1,6 +1,7 @@
 //! PostgreSQL küçük sürüm güncellemesi — D4 `KENDI-POSTGRESQL.md` §5 U0–U11 (§9). Yalnız
 //! `pgsql\ornek.json` `kip: "kendi"`de; harici kipte PG'ye DOKUNULMAZ (yalnız `pg.enAz` denetimi,
-//! motor yapar). Veri dizinine dokunulmaz; geri dönüş = eski ImagePath + eski `pgsql\bin` bağlantısı.
+//! motor yapar). Veri dizinine dokunulmaz; geri dönüş = eski ImagePath + eski `pgsql\bin` bağlantısı. Hizmet
+//! komut satırı, ICU sürümü ve psql çağrısı platform arka ucunun işidir (`platform::PgArkaUcu`).
 use crate::codes;
 use crate::download;
 use crate::env::Env;
@@ -49,14 +50,15 @@ pub fn read_instance(env: &Env, layout: &Layout) -> Option<Instance> {
     env.fs.read(&layout.pg_instance_file()).ok().and_then(|b| serde_json::from_slice(&b).ok())
 }
 
-/// `bin\icuuc<N>.dll` → N (ICU sürümü değişirse ICU'ya bağlı index'ler yeniden kurulur, D4 U9).
+/// PG sürüm dizininin ICU sürümü (değişirse ICU'ya bağlı index'ler yeniden kurulur, D4 U9).
 pub fn icu_version(env: &Env, dir: &Path) -> Option<String> {
-    env.fs.list(&dir.join("bin")).ok()?.into_iter().find_map(|n| {
-        let l = n.to_ascii_lowercase();
-        let rest = l.strip_prefix("icuuc")?.strip_suffix(".dll")?;
-        (!rest.is_empty() && rest.bytes().all(|b| b.is_ascii_digit())).then(|| rest.to_string())
-    })
+    env.arka.pg.icu_version(env, dir)
 }
+
+/// ICU collation'a bağlı index'leri katalogdan bulup yeniden kuran, collation sürümlerini tazeleyen SQL (D4 U9).
+pub const ICU_REINDEX_SQL: &str = "SET statement_timeout = 0; DO $$ DECLARE r record; BEGIN \
+            FOR r IN SELECT DISTINCT i.indexrelid::regclass AS ix FROM pg_index i JOIN pg_depend d ON d.classid = 'pg_class'::regclass AND d.objid = i.indexrelid AND d.refclassid = 'pg_collation'::regclass JOIN pg_collation c ON c.oid = d.refobjid WHERE c.collprovider = 'i' LOOP EXECUTE 'REINDEX INDEX ' || r.ix; END LOOP; \
+            FOR r IN SELECT c.oid::regcollation AS co FROM pg_collation c JOIN pg_namespace n ON n.oid = c.collnamespace WHERE c.collprovider = 'i' AND n.nspname NOT IN ('pg_catalog', 'information_schema') LOOP EXECUTE 'ALTER COLLATION ' || r.co || ' REFRESH VERSION'; END LOOP; END $$;";
 
 /// İçerik manifestosuna karşı ölçüm: manifestonun özeti imzalı değere (`icerikSha256`, hex) eşit, her
 /// satırdaki dosya var ve özeti tutuyor, listede olmayan dosya YOK.
@@ -147,16 +149,6 @@ pub struct PgPlan {
     pub started_ms: i64,
 }
 
-/// ImagePath'teki eski sürüm dizinini yenisiyle değiştirir (Windows'ta büyük/küçük harf duyarsız).
-pub fn replace_dir(command_line: &str, old_dir: &Path, new_dir: &Path) -> Option<String> {
-    let old = old_dir.to_string_lossy().to_string();
-    let new = new_dir.to_string_lossy().to_string();
-    let hay = if cfg!(windows) { command_line.to_ascii_lowercase() } else { command_line.to_string() };
-    let needle = if cfg!(windows) { old.to_ascii_lowercase() } else { old.clone() };
-    let i = hay.find(&needle)?;
-    Some(format!("{}{}{}", &command_line[..i], new, &command_line[i + old.len()..]))
-}
-
 pub struct PgOp {
     pub plan: PgPlan,
 }
@@ -179,44 +171,16 @@ impl PgOp {
 
     /// ICU collation'a bağlı index'ler katalogdan bulunup yeniden kurulur, collation sürümleri tazelenir.
     fn reindex_icu(&self, ctx: &Ctx, bin_dir: &Path) -> Result<(), StepError> {
-        let db = &ctx.backend.db;
-        let sql = "SET statement_timeout = 0; DO $$ DECLARE r record; BEGIN \
-            FOR r IN SELECT DISTINCT i.indexrelid::regclass AS ix FROM pg_index i JOIN pg_depend d ON d.classid = 'pg_class'::regclass AND d.objid = i.indexrelid AND d.refclassid = 'pg_collation'::regclass JOIN pg_collation c ON c.oid = d.refobjid WHERE c.collprovider = 'i' LOOP EXECUTE 'REINDEX INDEX ' || r.ix; END LOOP; \
-            FOR r IN SELECT c.oid::regcollation AS co FROM pg_collation c JOIN pg_namespace n ON n.oid = c.collnamespace WHERE c.collprovider = 'i' AND n.nspname NOT IN ('pg_catalog', 'information_schema') LOOP EXECUTE 'ALTER COLLATION ' || r.co || ' REFRESH VERSION'; END LOOP; END $$;";
-        let psql = bin_dir.join("bin").join(if cfg!(windows) { "psql.exe" } else { "psql" });
-        let c = crate::env::Cmd::new(&psql)
-            .env("PGPASSWORD", &db.password)
-            .args([
-                "-X",
-                "-w",
-                "-h",
-                &db.host,
-                "-p",
-                &db.port.to_string(),
-                "-U",
-                &db.user,
-                "-d",
-                &db.database,
-                "-v",
-                "ON_ERROR_STOP=1",
-                "-c",
-                sql,
-            ])
-            .timeout(Duration::from_secs(3600));
-        let out = ctx.env.procs.run(&c).map_err(|e| step_err(codes::PG_ICU_HATASI, e.0))?;
-        if !out.ok() {
-            return Err(step_err(codes::PG_ICU_HATASI, tools::describe_failure("ICU yeniden dizinleme", &out)));
-        }
-        Ok(())
+        ctx.env.arka.pg.reindex_icu(ctx.env, ctx.backend, bin_dir, ICU_REINDEX_SQL).map_err(|m| step_err(codes::PG_ICU_HATASI, m))
     }
 
     fn set_image_path(&self, ctx: &Ctx, want: &str) -> Result<(), StepError> {
-        let svc = ctx.env.svc.as_ref();
-        if svc.image_path(&self.plan.service).map_err(|e| step_err(codes::PG_YOL_HATASI, e.0))? == want {
+        let (env, pg) = (ctx.env, ctx.env.arka.pg.as_ref());
+        if pg.image_path(env, &self.plan.service).map_err(|e| step_err(codes::PG_YOL_HATASI, e.0))? == want {
             return Ok(());
         }
-        svc.set_image_path(&self.plan.service, want).map_err(|e| step_err(codes::PG_YOL_HATASI, e.0))?;
-        let back = svc.image_path(&self.plan.service).map_err(|e| step_err(codes::PG_YOL_HATASI, e.0))?;
+        pg.set_image_path(env, &self.plan.service, want).map_err(|e| step_err(codes::PG_YOL_HATASI, e.0))?;
+        let back = pg.image_path(env, &self.plan.service).map_err(|e| step_err(codes::PG_YOL_HATASI, e.0))?;
         if back != want {
             return Err(step_err(codes::PG_YOL_HATASI, "ImagePath geri okunduğunda farklı"));
         }
@@ -375,22 +339,5 @@ impl Operation for PgOp {
             approval: None,
         };
         let _ = crate::ipc::append_history(ctx.env.fs.as_ref(), ctx.layout, &line);
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn image_path_dir_replacement() {
-        let old = PathBuf::from("/k/pgsql/16.9-1");
-        let new = PathBuf::from("/k/pgsql/16.15-4");
-        let cl = "\"/k/pgsql/16.9-1/bin/pg_ctl\" runservice -N \"TeksERP-PostgreSQL\" -D \"/k/pgveri\" -w";
-        assert_eq!(
-            replace_dir(cl, &old, &new).as_deref(),
-            Some("\"/k/pgsql/16.15-4/bin/pg_ctl\" runservice -N \"TeksERP-PostgreSQL\" -D \"/k/pgveri\" -w")
-        );
-        assert_eq!(replace_dir("\"/baska/bin/pg_ctl\"", &old, &new), None);
     }
 }

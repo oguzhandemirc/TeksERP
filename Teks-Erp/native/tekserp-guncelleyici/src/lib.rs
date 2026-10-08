@@ -6,7 +6,8 @@
 //! AYNI kod; sözleşme (§1–§3, D1) TS protokolünün aynası `release` + `decision`. Niyet dosyası (backend
 //! yazar) yetki değildir; yalnız panel onayını ve indirme belirtecini taşır. Uygulama çökme güvenlidir: her adım önce işlem günlüğüne iner, açılışta yarım
 //! işlem sürdürülür ya da geri alınır (§7). Çekirdek platformdan bağımsızdır (`env::Env` üzerinden
-//! dosya/hizmet/süreç/ağ/saat); Windows bağları `windows` modülünde.
+//! dosya/hizmet/süreç/ağ/saat + arka uç); platform bağları ve `#[cfg]` yalnız `platform` altında.
+pub mod cli;
 pub mod codes;
 pub mod decision;
 pub mod download;
@@ -23,6 +24,7 @@ pub mod lock;
 pub mod operation;
 pub mod package;
 pub mod pgminor;
+pub mod platform;
 pub mod policy;
 pub mod release;
 pub mod selfupdate;
@@ -32,6 +34,3 @@ pub mod tools;
 pub mod trust;
 pub mod version;
 pub mod wait;
-
-#[cfg(windows)]
-pub mod windows;

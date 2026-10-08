@@ -1044,7 +1044,7 @@ pub enum Profil {
 pub const PROFILLER: &[Profil] = &[Profil::Windows];
 
 impl Profil {
-    /// Bu profilin işlem günlüğüne yazdığı `platform` (`journal::PLATFORM`).
+    /// Bu profilin işlem günlüğüne yazdığı `platform` (arka ucun adı, `platform::Arka::platform`).
     pub fn platform(self) -> &'static str {
         match self {
             Profil::Windows => "win32-x64",
@@ -1250,6 +1250,7 @@ impl World {
             clock: Arc::new(FakeClock(Arc::clone(&self.clock))),
             events: Arc::new(FakeEvents(Arc::clone(&self.events))),
             protect: Arc::new(FakeProtect),
+            arka: tekserp_guncelleyici::platform::windows::arka_ucu(),
         }
     }
 

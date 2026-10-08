@@ -1,0 +1,215 @@
+//! Linux/Docker arka ucu — İSKELET (`GUNCELLEYICI-SAGLAMLIK.md` §1.2; asıl iş L4a/L4b/L6/L8). Derlenir ve
+//! seçilebilir, ama hiçbir yöntem iş yapmaz: her çağrı `PLATFORM_DESTEKSIZ` önekli açık bir hatadır (fail-closed;
+//! `unimplemented!` değil — süreç düşmez, adım kendi koduyla düşer ve telafi yolu çalışır).
+use crate::env::{CmdOut, Env, EnvError, EnvResult, Events, HttpResponse, Protect, Services, SvcState};
+use crate::settings::BackendEnv;
+use crate::tools::MigrationCount;
+use std::path::{Path, PathBuf};
+use std::sync::Arc;
+use std::time::Duration;
+use tekserp_hizmet::logfile::Level;
+
+/// İşlem günlüğünün `platform`u (bildirimin platform sözlüğüyle aynı ad, sözleşme 5).
+pub const PLATFORM: &str = "linux-x64-oci";
+/// İskeletin her hatasının öneki.
+pub const DESTEKSIZ: &str = "PLATFORM_DESTEKSIZ";
+
+fn unsupported(what: &str) -> String {
+    format!("{DESTEKSIZ}: {what} Linux arka ucunda henüz yok")
+}
+
+pub fn arka_ucu() -> crate::platform::Arka {
+    crate::platform::Arka {
+        platform: PLATFORM,
+        saglik: Arc::new(IskeletSaglik),
+        araclar: Arc::new(IskeletAraclar),
+        pg: Arc::new(IskeletPg),
+    }
+}
+
+pub struct IskeletSaglik;
+
+impl crate::platform::Saglik for IskeletSaglik {
+    fn probe(&self, _env: &Env, _port: u16, path: &str) -> EnvResult<HttpResponse> {
+        Err(EnvError(unsupported(&format!("sağlık sondası ({path})"))))
+    }
+    fn address(&self, _port: u16, path: &str) -> String {
+        format!("backend konteyneri {path}")
+    }
+    fn exit_meaning(&self, _code: u32) -> &'static str {
+        "konteyner çıkışı"
+    }
+}
+
+pub struct IskeletAraclar;
+
+impl crate::platform::Araclar for IskeletAraclar {
+    fn migration_count(&self, _env: &Env, _be: &BackendEnv) -> Result<MigrationCount, String> {
+        Err(unsupported("göç sayısı"))
+    }
+    fn finished_migrations(&self, _env: &Env, _be: &BackendEnv) -> Result<Vec<String>, String> {
+        Err(unsupported("bitmiş göç adları"))
+    }
+    fn pg_dump(&self, _env: &Env, _be: &BackendEnv, _out_file: &Path, _timeout: Duration) -> Result<(), String> {
+        Err(unsupported("pg_dump"))
+    }
+    fn pg_restore_list(&self, _env: &Env, _be: &BackendEnv, _dump: &Path) -> Result<(), String> {
+        Err(unsupported("pg_restore --list"))
+    }
+    fn restore_db(&self, _env: &Env, _be: &BackendEnv, _dump: &Path, _timeout: Duration) -> Result<(), String> {
+        Err(unsupported("geri yükleme"))
+    }
+    fn server_version(&self, _env: &Env, _be: &BackendEnv, _bin: &Path) -> Result<String, String> {
+        Err(unsupported("SHOW server_version"))
+    }
+    fn usable_for_backup(&self, _env: &Env, _tools_dir: &Path) -> bool {
+        false
+    }
+    fn backup_keygen(&self, _env: &Env, _tools_dir: &Path, _dir: &Path, _private_out: &Path) -> Result<(), String> {
+        Err(unsupported("yedek anahtarı"))
+    }
+    fn backup_encrypt(
+        &self,
+        _env: &Env,
+        _tools_dir: &Path,
+        _input: &Path,
+        _output: &Path,
+        _recipients: &[PathBuf],
+        _timeout: Duration,
+    ) -> Result<(), String> {
+        Err(unsupported("yedek şifreleme"))
+    }
+    fn backup_decrypt(
+        &self,
+        _env: &Env,
+        _tools_dir: &Path,
+        _input: &Path,
+        _output: &Path,
+        _key: &Path,
+        _timeout: Duration,
+    ) -> Result<(), String> {
+        Err(unsupported("yedek çözme"))
+    }
+    fn migrate_deploy(&self, _env: &Env, _version_dir: &Path, _be: &BackendEnv, _timeout: Duration) -> Result<CmdOut, String> {
+        Err(unsupported("göç"))
+    }
+}
+
+/// Linux'ta PG küçük sürümü ilk sürümde KAPALI (§1.1 madde 3; KONTEYNER kipi L8).
+pub struct IskeletPg;
+
+impl crate::platform::PgArkaUcu for IskeletPg {
+    fn image_path(&self, _env: &Env, service: &str) -> EnvResult<String> {
+        Err(EnvError(unsupported(&format!("{service} komut satırı"))))
+    }
+    fn set_image_path(&self, _env: &Env, service: &str, _command_line: &str) -> EnvResult<()> {
+        Err(EnvError(unsupported(&format!("{service} komut satırı"))))
+    }
+    fn replace_dir(&self, _command_line: &str, _old_dir: &Path, _new_dir: &Path) -> Option<String> {
+        None
+    }
+    fn icu_version(&self, _env: &Env, _dir: &Path) -> Option<String> {
+        None
+    }
+    fn reindex_icu(&self, _env: &Env, _be: &BackendEnv, _pg_dir: &Path, _sql: &str) -> Result<(), String> {
+        Err(unsupported("ICU yeniden dizinleme"))
+    }
+}
+
+/// Olay günlüğü yok (L4a: stderr/journald).
+pub struct NoEvents;
+impl Events for NoEvents {
+    fn event(&self, _level: Level, _message: &str) {}
+}
+
+/// Hizmet denetimi yok (L4b: `DockerServices`) — her çağrı hata.
+pub struct NoServices;
+impl Services for NoServices {
+    fn state(&self, _name: &str) -> EnvResult<SvcState> {
+        Err(EnvError(unsupported("hizmet denetimi")))
+    }
+    fn start(&self, name: &str, _args: &[&str]) -> EnvResult<()> {
+        Err(EnvError(unsupported(&format!("{name}: hizmet denetimi"))))
+    }
+    fn stop(&self, name: &str) -> EnvResult<()> {
+        Err(EnvError(unsupported(&format!("{name}: hizmet denetimi"))))
+    }
+    fn crash_exit_code(&self, name: &str) -> EnvResult<Option<u32>> {
+        Err(EnvError(unsupported(&format!("{name}: hizmet denetimi"))))
+    }
+    fn image_path(&self, name: &str) -> EnvResult<String> {
+        Err(EnvError(unsupported(&format!("{name}: hizmet denetimi"))))
+    }
+    fn set_image_path(&self, name: &str, _command_line: &str) -> EnvResult<()> {
+        Err(EnvError(unsupported(&format!("{name}: hizmet denetimi"))))
+    }
+}
+
+/// Yerel koruma yok (L4a: root 0600 dizin izni).
+pub struct NoProtect;
+impl Protect for NoProtect {
+    fn protect(&self, _data: &[u8]) -> EnvResult<Vec<u8>> {
+        Err(EnvError(unsupported("yerel koruma")))
+    }
+    fn unprotect(&self, _data: &[u8]) -> EnvResult<Vec<u8>> {
+        Err(EnvError(unsupported("yerel koruma")))
+    }
+}
+
+/// `hizmet` · `hizmet-kur` · `hizmet-kaldir` (L6: systemd birimi).
+pub fn service_command(command: &str, _args: &[String]) -> Result<u32, String> {
+    Err(format!("{}: `{command}` — tanı için `tur`", unsupported("hizmet kaydı")))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::platform::{Araclar, PgArkaUcu, Saglik};
+
+    /// İskelet fail-closed: hiçbir yöntem başarı dönmez ve her hata açık önekle başlar.
+    #[test]
+    fn iskelet_her_cagrida_acik_hata() {
+        let p = Path::new("/yok");
+        let layout = crate::layout::Layout::new(p, p);
+        let be = crate::settings::backend_env_from_bytes(b"DATABASE_URL=postgresql://u:p@h:5432/d\n", &layout).unwrap();
+        let env = Env {
+            fs: Arc::new(crate::env::RealFs),
+            svc: Arc::new(NoServices),
+            procs: Arc::new(crate::env::RealProcs),
+            net: Arc::new(crate::env::RealNet::new(None).unwrap()),
+            clock: Arc::new(crate::env::SystemClock),
+            events: Arc::new(NoEvents),
+            protect: Arc::new(NoProtect),
+            arka: arka_ucu(),
+        };
+        let a = IskeletAraclar;
+        let t = Duration::from_secs(1);
+        let errors = [
+            a.migration_count(&env, &be).err(),
+            a.finished_migrations(&env, &be).err(),
+            a.pg_dump(&env, &be, p, t).err(),
+            a.pg_restore_list(&env, &be, p).err(),
+            a.restore_db(&env, &be, p, t).err(),
+            a.server_version(&env, &be, p).err(),
+            a.backup_keygen(&env, p, p, p).err(),
+            a.backup_encrypt(&env, p, p, p, &[], t).err(),
+            a.backup_decrypt(&env, p, p, p, p, t).err(),
+            a.migrate_deploy(&env, p, &be, t).err(),
+            IskeletSaglik.probe(&env, 4000, "/health/yerel").err().map(|e| e.0),
+            IskeletPg.image_path(&env, "pg").err().map(|e| e.0),
+            IskeletPg.set_image_path(&env, "pg", "x").err().map(|e| e.0),
+            IskeletPg.reindex_icu(&env, &be, p, "SELECT 1").err(),
+            NoServices.state("b").err().map(|e| e.0),
+            NoServices.start("b", &[]).err().map(|e| e.0),
+            NoServices.stop("b").err().map(|e| e.0),
+            NoProtect.protect(b"x").err().map(|e| e.0),
+            service_command("hizmet-kur", &[]).err(),
+        ];
+        for (i, e) in errors.iter().enumerate() {
+            assert!(e.as_deref().is_some_and(|m| m.starts_with(DESTEKSIZ)), "{i}: {e:?}");
+        }
+        assert!(!a.usable_for_backup(&env, p));
+        assert_eq!(IskeletPg.replace_dir("x", p, p), None);
+        assert_eq!(IskeletPg.icu_version(&env, p), None);
+    }
+}

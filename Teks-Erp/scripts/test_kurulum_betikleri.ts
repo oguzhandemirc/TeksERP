@@ -104,7 +104,7 @@ const YOL = {
   bakimRolu: "deploy/bakim-rolu.ps1",
   // §19: API'ye sunucunun içinden bağlanan öteki hizmetler (yalnız OKUNUR)
   yedekle: "deploy/yedekle.ps1",
-  saglikRs: "Teks-Erp/native/tekserp-guncelleyici/src/health.rs",
+  saglikRs: "Teks-Erp/native/tekserp-guncelleyici/src/platform/windows/mod.rs",
 } as const;
 /** Kanal düzeninin güncelleme adresi: ortak kurulumda varsayılan OLAMAZ, yalnız kayıttaki eski izi tanımak için anılır. */
 const ESKI_GUNCELLEME = "https://guncelleme.etkiliyazilim.com";

@@ -1,7 +1,5 @@
-//! Güncelleyicinin Windows bağları: dayanıklı yeniden adlandırma, boş alan, çocuk süreç ağacı (iş
-//! nesnesi), SCM (`tekserp_hizmet::windows::scm`), olay günlüğü, DPAPI ve hizmet yapıştırıcısı.
-pub mod service;
-
+//! Güncelleyicinin Win32 bağları: dayanıklı yeniden adlandırma, boş alan, çocuk süreç ağacı (iş
+//! nesnesi), SCM (`tekserp_hizmet::windows::scm`), olay günlüğü, DPAPI. Yalnız Windows'ta derlenir.
 use crate::env::{EnvError, EnvResult, Events, Protect, Services, SvcState};
 use std::io;
 use std::path::Path;
