@@ -398,6 +398,7 @@ try {
 const CI_ATLA = ciAtlaMetni(ciKokeni);
 if (CI_ATLA) bilgi(`⚠ CI KAÇIŞI: bu paketin üretim imzası CI koşusu OLMADAN atıldı — kullanıcının cümlesi ${CI_ATLA}`);
 else if (ciKokeni?.kip === 'kosu') bilgi(`✓ CI kökeni: koşu ${ciKokeni.kosu} · ${ciKokeni.dal} · ${String(ciKokeni.commit).slice(0, 12)}`);
+else if (ciKokeni?.kip === 'thinkpad') bilgi(`✓ derleme kökeni: ${ciKokeni.makine} ${ciKokeni.tailscaleIp} · ${String(ciKokeni.commit).slice(0, 12)} · zip ${String(ciKokeni.zipSha256).slice(0, 12)}`);
 else bilgi('ℹ CI kökeni künyede yok (hazırlık imzası ya da G22 öncesi paket)');
 
 const plan = yayinPlani({

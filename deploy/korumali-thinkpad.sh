@@ -6,6 +6,9 @@
 # Rust parçaları (lisans çekirdeği .node + iki hizmet ikilisi) Mac'te cargo-xwin ile derlenir:
 # thinkpad'e Rust kurulmaz. Zip Mac'e çekilir, SHA256 iki uçta eşlenir. İMZA YOK — satıcı Mac'inde
 # ayrı adım (build-korumali-imza.ts zip). Yalnız PROVA paketi: etiket/push/sürüm belgesi yazılmaz.
+# DERLEME KÜNYESİ: zip'in yanına `<zip>.derleme.json` (makine + ölçülen Tailscale IP · bu betiğin commit'i ve
+# SHA256'sı · kaynak commit · ağaç temizliği · Rust parça özetleri · iki uçta eşleşen zip SHA256). İmza aracı
+# `--derleme-kunyesi=` ile yapıtla çapraz ölçer (scripts/lib/thinkpad-kokeni.ts); künyesiz zip thinkpad kökenli imzalanmaz.
 #
 # Kullanım:  deploy/korumali-thinkpad.sh [--ref <rev>] [--cikti <mac-dizini>] [--surum <x.y.z>]
 #   --ref    derlenecek commit (varsayılan origin/main; önce fetch edilir)
@@ -56,18 +59,27 @@ adim "kaynak: $REF"
 git -C "$REPO" fetch -q origin
 SHA=$(git -C "$REPO" rev-parse --verify "$REF^{commit}")
 K=${SHA:0:9}
+BETIK_SHA=$(shasum -a 256 "$0" | cut -d' ' -f1)
+BETIK_COMMIT=$(git -C "$REPO" rev-parse HEAD)
+git -C "$REPO" diff --quiet HEAD -- deploy/korumali-thinkpad.sh \
+  || echo "UYARI: betik HEAD'deki sürümünden farklı — derleme künyesi imza aracında TUTMAYACAK" >&2
 YEREL=$(mktemp -d "${TMPDIR:-/tmp}/korumali-thinkpad.XXXXXX")
 trap 'rm -rf "$YEREL"' EXIT
 mkdir -p "$CIKTI"
 
 adim "kapı: thinkpad kimlik + priz + araçlar"
-uzak '
+KAPI=$(uzak '
 $b = Get-CimInstance -Namespace root/wmi -ClassName BatteryStatus -ErrorAction SilentlyContinue | Select-Object -First 1
 if ($b -and -not $b.PowerOnline) { if ('"$PIL_KABUL"' -eq 1) { Write-Output "UYARI: thinkpad pilde - kullanici kabul etti" } else { Write-Output "PIL: thinkpad prizde degil - uzun is baslatilmaz (--pilde-kabul)"; exit 98 } }
 $pw = (Get-Command pwsh -ErrorAction SilentlyContinue); if (-not $pw) { Write-Output "pwsh 7 yok"; exit 97 }
 foreach ($a in "node","npm.cmd","git","tar") { if (-not (Get-Command $a -ErrorAction SilentlyContinue)) { Write-Output "arac yok: $a"; exit 97 } }
 $bos = (Get-PSDrive C).Free / 1GB; if ($bos -lt 10) { Write-Output ("C: bos alan {0:N1} GB < 10" -f $bos); exit 97 }
-Write-Output ("tamam: node {0} · C: {1:N0} GB bos" -f (node -v), $bos)'
+Write-Output ("tamam: node {0} · C: {1:N0} GB bos" -f (node -v), $bos)
+Write-Output ("TSIP=" + $ip)') || { kod=$?; echo "$KAPI"; exit "$kod"; }
+KAPI=$(printf '%s\n' "$KAPI" | tr -d '\r')
+printf '%s\n' "$KAPI" | grep -v '^TSIP=' || true
+TS_IP_OLCULEN=$(printf '%s\n' "$KAPI" | sed -n 's/^TSIP=//p' | head -1)
+[ "$TS_IP_OLCULEN" = "$TP_TS_IP" ] || { echo "Tailscale IP ölçülemedi/tutmadı: '$TS_IP_OLCULEN'"; exit 99; }
 
 adim "Mac: sığ klon ($K)"
 git init -q "$YEREL/kaynak"
@@ -83,6 +95,7 @@ export CARGO_TARGET_DIR="$CIKTI/cargo-target"
 mkdir -p "$YEREL/rust"
 cp "$YEREL/kaynak/Teks-Erp/native/lisans-cekirdek/dist-uretim/lisans-cekirdek.win32-x64-msvc.node" "$YEREL/rust/"
 cp "$CARGO_TARGET_DIR/x86_64-pc-windows-msvc/release/tekserp-hizmet.exe" "$CARGO_TARGET_DIR/x86_64-pc-windows-msvc/release/tekserp-guncelleyici.exe" "$YEREL/rust/"
+RUST_SHA=$(cd "$YEREL/rust" && shasum -a 256 lisans-cekirdek.win32-x64-msvc.node tekserp-hizmet.exe tekserp-guncelleyici.exe | awk '{print $2"="$1}' | paste -sd, -)
 rm -rf "$YEREL/kaynak/Teks-Erp/native/lisans-cekirdek/node_modules" "$YEREL/kaynak/Teks-Erp/native/lisans-cekirdek/dist-uretim"
 git -C "$YEREL/kaynak" status --porcelain | grep -q . && { echo "sığ klon kirlendi (Rust derlemesi)"; git -C "$YEREL/kaynak" status --short | head; exit 1; }
 
@@ -118,8 +131,9 @@ scp -q "${SSH_OPT[@]}" "$TP_SSH:tkd/$K/cikti/$ZAD" "$CIKTI/$ZAD"
 MSHA=$(shasum -a 256 "$CIKTI/$ZAD" | cut -d' ' -f1)
 [ "$MSHA" = "$ZSHA" ] || { echo "SHA256 TUTMADI: uzak $ZSHA · Mac $MSHA"; exit 1; }
 
-adim "özet"
-node - "$CIKTI/$ZAD" <<'JS'
+adim "özet + derleme künyesi"
+TP_MAKINE=thinkpad-1 TS_IP_OLCULEN="$TS_IP_OLCULEN" BETIK_SHA="$BETIK_SHA" BETIK_COMMIT="$BETIK_COMMIT" KAYNAK="$SHA" REF="$REF" \
+  RUST_SHA="$RUST_SHA" ZSHA="$ZSHA" MSHA="$MSHA" node - "$CIKTI/$ZAD" <<'JS'
 const { execFileSync } = require('node:child_process');
 const zip = process.argv[2];
 const liste = execFileSync('unzip', ['-Z1', zip], { maxBuffer: 1 << 28 }).toString().split('\n').filter(Boolean);
@@ -139,8 +153,22 @@ const satir = {
 for (const [k, v] of Object.entries(satir)) console.log(`  ${k.padEnd(14)} ${v}`);
 const kotu = satir.korumali !== true || satir.prova !== true || satir.hedef !== 'win-x64' || !satir.jsc || satir.jscUretildi === false || !satir.nodeExe || !satir.hizmet || !satir.guncelleyici || !satir.native || satir.seed > 0 || satir['dist/*.ts|map'] > 0;
 if (kotu) { console.error('  ÖZET KAPISI: beklenen parça eksik / fazla'); process.exit(1); }
+// Derleme künyesi — imza aracı (`--derleme-kunyesi`) her alanı yapıtla çapraz ölçer; bu dosya imzalı DEĞİLDİR.
+const e = process.env;
+const kunye = {
+  v: 1, tur: 'thinkpad-derleme', zaman: new Date().toISOString(),
+  makine: { ad: e.TP_MAKINE, tailscaleIp: e.TS_IP_OLCULEN },
+  betik: { yol: 'deploy/korumali-thinkpad.sh', commit: e.BETIK_COMMIT, sha256: e.BETIK_SHA },
+  kaynak: { commit: e.KAYNAK, ref: e.REF },
+  agac: { macKlonTemiz: true, uzakAgacTemiz: pkt.calismaAgaciTemiz === true },
+  rust: Object.fromEntries(e.RUST_SHA.split(',').map((s) => s.split('='))),
+  zip: { ad: require('node:path').basename(zip), sha256: e.MSHA, uzakSha256: e.ZSHA },
+};
+require('node:fs').writeFileSync(`${zip}.derleme.json`, `${JSON.stringify(kunye, null, 2)}\n`);
+console.log(`  künye          ${zip}.derleme.json`);
 JS
 echo "  zip     $CIKTI/$ZAD"
 echo "  sha256  $MSHA (iki uçta eşit)"
-echo "  İMZASIZ — kur.ps1/kurulum imzasız korumalı paketi reddeder; imza satıcı Mac'inde ayrı adım."
+echo "  İMZASIZ — kur.ps1/kurulum imzasız korumalı paketi reddeder; imza satıcı Mac'inde ayrı adım:"
+echo "    npx tsx Teks-Erp/scripts/build-korumali-imza.ts zip --zip=$CIKTI/$ZAD --anahtar=<PAKET anahtarı> --derleme-kunyesi=$CIKTI/$ZAD.derleme.json"
 adim "bitti (uzak dizin %USERPROFILE%\\$UZ yerinde bırakıldı)"
