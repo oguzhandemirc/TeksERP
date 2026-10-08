@@ -18,7 +18,7 @@ import {
 import { prepareTrustAnchor, verifyCertificate } from "./anahtar-zinciri";
 import { packageKeyLookup, type PackagePublicKey } from "./guncelleme-ortak";
 import type { RootKey } from "./kok-anahtarlar";
-import { DAY_MS, failure, forwardFailure, isoToMs, success, type Result } from "./ortak";
+import { DAY_MS, failure, forwardFailure, isoToMs, success, type ProtocolErrorCode, type Result } from "./ortak";
 
 /** Zincirli belgenin yükünde kök imzalı PAKET sertifikası (compact JWS). */
 export const PACKAGE_CERT_FIELD = "paketSertifikasi";
@@ -36,6 +36,117 @@ export const CHAINED_PG_POINTER_FILE = "pg-zincir.json";
 export const PACKAGE_REVOCATION_FILE = "paket-iptal.jws";
 
 const CHAIN_PACKAGE_KID = /^pkt-[a-z0-9-]{1,40}$/;
+
+/**
+ * Zincirli işaretçi aileleri: `son` (kanalın en yenisi, değişken, kid'siz) · `surum` (`<sürüm>/`) · `pg` (`pg/<s>-<d>/`).
+ * Yeniden imza değişmez dizine YANINA yazılır: `<aile>-zincir-<kid>.json` (kid = imzalayan PAKET sertifikası).
+ */
+export type ChainedFamily = "son" | "surum" | "pg";
+const CHAINED_FILE = /^(son|surum|pg)-zincir(?:-(pkt-[a-z0-9-]{1,40}))?\.json$/;
+
+/** `<aile>-zincir.json` ya da `<aile>-zincir-<kid>.json`; `son` ailesi ve `pkt-*` dışı kid'e ad verilmez. */
+export function chainedFileName(aile: ChainedFamily, kid: string | null = null): string {
+  if (kid === null) return `${aile}-zincir.json`;
+  if (aile === "son" || !isChainPackageKid(kid)) throw new Error(`chainedFileName: ${aile} ailesine ${kid} kid'li ad verilmez`);
+  return `${aile}-zincir-${kid}.json`;
+}
+
+/** Dosya adı zincirli işaretçi ailesinden mi; kid'li adda kid (yalnız `surum`/`pg`). Değilse null. */
+export function parseChainedFileName(ad: string): { readonly aile: ChainedFamily; readonly kid: string | null } | null {
+  const m = CHAINED_FILE.exec(ad);
+  if (!m) return null;
+  const aile = m[1] as ChainedFamily;
+  const kid = m[2] ?? null;
+  return aile === "son" && kid !== null ? null : { aile, kid };
+}
+
+/** Seçime giren aday: dosya adı + kendi kuralıyla (şema, kanal) doğrulanmış belge ya da düşme nedeni. */
+export interface ChainedCandidate<T> {
+  readonly ad: string;
+  readonly sonuc: Result<{ readonly value: T; readonly signed: PackageSigned }>;
+}
+
+export interface ChainedChoice<T> {
+  readonly ad: string;
+  readonly value: T;
+  readonly signed: PackageSigned;
+  /** Elenen adaylar (sıralı) — çağıran ekrana/duruma yazar. */
+  readonly elenen: readonly { readonly ad: string; readonly code: ProtocolErrorCode; readonly message: string }[];
+}
+
+/** Aynı belge mi: imzaya bağlı alanlar (`paketImzaKid`, yeniden imzada değişen zip'in ad/boyut/özeti) dışında yük. */
+function documentIdentity(payload: Record<string, unknown>): string {
+  const p: Record<string, unknown> = { ...payload };
+  delete p.paketImzaKid;
+  const paket = p.paket;
+  if (paket !== null && typeof paket === "object" && !Array.isArray(paket) && "paketId" in paket) p.paket = { paketId: (paket as Record<string, unknown>).paketId };
+  return canonicalJson(p);
+}
+
+function canonicalJson(v: unknown): string {
+  if (Array.isArray(v)) return `[${v.map(canonicalJson).join(",")}]`;
+  if (v !== null && typeof v === "object") {
+    const o = v as Record<string, unknown>;
+    return `{${Object.keys(o).sort().map((k) => `${JSON.stringify(k)}:${canonicalJson(o[k])}`).join(",")}}`;
+  }
+  return JSON.stringify(v);
+}
+
+/**
+ * ZİNCİR SEÇİMİ (Rust aynası `paket_zinciri::select_chained`; kâhin `test_zincir_secimi`): aynı dizinde kid'siz ve
+ * kid'li zincirli dosyalar yan yanadır. Aday geçerliyse: belgesi doğrulandı · `pkt-*` sertifikalı · adındaki kid =
+ * imzalayan · sertifikası iptalli DEĞİL (her kipte). Geçerliler aynı belgeyi anlatmalı; kazanan sertifika bitişi EN GEÇ
+ * olandır. Belirsizlikte (farklı belge · en geç bitişte eşitlik) ve hiç geçerli yokken FAIL-CLOSED. Aday yoksa null
+ * (eski takıma düşüş kararı çağıranın). Sıra: kid'siz önce, sonra ada göre.
+ */
+export function selectChainedDocument<T>(aile: ChainedFamily, adaylar: readonly ChainedCandidate<T>[]): Result<ChainedChoice<T>> | null {
+  if (adaylar.length === 0) return null;
+  const ordered = [...adaylar].sort((a, b) => {
+    const ka = parseChainedFileName(a.ad)?.kid ?? null;
+    const kb = parseChainedFileName(b.ad)?.kid ?? null;
+    if ((ka === null) !== (kb === null)) return ka === null ? -1 : 1;
+    return a.ad < b.ad ? -1 : a.ad > b.ad ? 1 : 0;
+  });
+  const rejected: { ad: string; code: ProtocolErrorCode; message: string }[] = [];
+  const valid: { ad: string; value: T; signed: PackageSigned; bitis: number }[] = [];
+  for (const a of ordered) {
+    const n = parseChainedFileName(a.ad);
+    if (!n || n.aile !== aile) {
+      rejected.push({ ad: a.ad, code: "SURUM_ISARETCI", message: `${a.ad} ${aile}-zincir ailesinin adı değil` });
+      continue;
+    }
+    if (!a.sonuc.ok) {
+      rejected.push({ ad: a.ad, code: a.sonuc.code, message: a.sonuc.message });
+      continue;
+    }
+    const { value, signed } = a.sonuc.value;
+    if (signed.chain === null) {
+      rejected.push({ ad: a.ad, code: "PAKET_SERTIFIKA_YOK", message: `${a.ad} kök sertifikalı pkt-* anahtarla imzalı değil (${signed.kid})` });
+      continue;
+    }
+    if (n.kid !== null && n.kid !== signed.kid) {
+      rejected.push({ ad: a.ad, code: "JWS_KID", message: `${a.ad} adındaki kid imzalayan değil (${signed.kid})` });
+      continue;
+    }
+    if (signed.chain.revoked) {
+      rejected.push({ ad: a.ad, code: "PAKET_SERTIFIKA_IPTAL", message: `${a.ad}: PAKET sertifikası ${signed.kid} iptal edilmiş` });
+      continue;
+    }
+    valid.push({ ad: a.ad, value, signed, bitis: isoToMs(signed.chain.certificate.bitis) });
+  }
+  if (valid.length === 0) {
+    const first = rejected[0]!;
+    return failure(first.code, `zincirli dosyaların hiçbiri geçerli değil: ${rejected.map((e) => `${e.ad} (${e.code}: ${e.message})`).join(" · ")}`);
+  }
+  const identity = documentIdentity(valid[0]!.signed.payload);
+  const mismatch = valid.find((g) => documentIdentity(g.signed.payload) !== identity);
+  if (mismatch) return failure("SURUM_ISARETCI", `belirsiz: ${valid[0]!.ad} ile ${mismatch.ad} aynı belgeyi anlatmıyor — hiçbiri seçilmez`);
+  const latest = Math.max(...valid.map((g) => g.bitis));
+  const winners = valid.filter((g) => g.bitis === latest);
+  if (winners.length !== 1) return failure("SURUM_ISARETCI", `belirsiz: ${winners.map((g) => g.ad).join(", ")} aynı sertifika bitişini taşıyor — hiçbiri seçilmez`);
+  const k = winners[0]!;
+  return success({ ad: k.ad, value: k.value, signed: k.signed, elenen: rejected });
+}
 
 /**
  * DAĞITIM İPTALİ (`tekserp-paketiptal`): `RevocationSchema`nın aynısı, satırı PAKET (`pkt-`) ya da ISTEMCI (`ist-`)

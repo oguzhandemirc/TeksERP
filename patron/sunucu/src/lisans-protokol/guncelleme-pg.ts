@@ -5,8 +5,8 @@
 import type { KeyObject } from "node:crypto";
 import { z } from "zod";
 import { IsoTimeSchema, PROTOCOL_VERSION, TYP, decodeDocument, signDocument } from "./belgeler";
-import { ArtifactSchema, Sha256HexSchema, UPDATE_PLATFORMS, isPackageKid, type PackagePublicKey } from "./guncelleme-ortak";
-import { verifyPackageSigned, type PackageTrust } from "./paket-zinciri";
+import { ArtifactSchema, Sha256HexSchema, UPDATE_PLATFORMS, isPackageKid, readReleasePointer, type PackagePublicKey } from "./guncelleme-ortak";
+import { verifyPackageSigned, type ChainedCandidate, type PackageSigned, type PackageTrust } from "./paket-zinciri";
 import { failure, forwardFailure, success, type Result } from "./ortak";
 
 /** `/<kanal>/backend/pg/<sürüm>-<derleme>/` — dizin değişmez; künye `pg.json`, paket künyedeki `paket.ad`. */
@@ -101,10 +101,29 @@ export function verifyPgPackageManifest(
   token: unknown,
   g: { readonly keys: readonly PackagePublicKey[]; readonly zincir?: Omit<PackageTrust, "keys"> },
 ): Result<PgPackageManifest> {
+  const r = verifyPgPackageManifestSigned(token, g);
+  return r.ok ? success(r.value.value) : forwardFailure(r);
+}
+
+/** `verifyPgPackageManifest` + imzalayan (zincir seçimi sertifikaya bakar). */
+export function verifyPgPackageManifestSigned(
+  token: unknown,
+  g: { readonly keys: readonly PackagePublicKey[]; readonly zincir?: Omit<PackageTrust, "keys"> },
+): Result<{ readonly value: PgPackageManifest; readonly signed: PackageSigned }> {
   const j = verifyPackageSigned(token, TYP.PG, { roots: [], mode: "YERLESIK", ...g.zincir, keys: g.keys });
   if (!j.ok) return forwardFailure(j);
   const b = decodeDocument(PgPackageManifestSchema, j.value.payload);
-  return b.ok ? success(b.value) : forwardFailure(b);
+  return b.ok ? success({ value: b.value, signed: j.value }) : forwardFailure(b);
+}
+
+/** Zincir seçimi adayı: PG künyesi işaretçisi → doğrulanmış künye + imzalayan (Rust `release::chained_pg_candidate`). */
+export function chainedPgCandidate(
+  ad: string,
+  metin: string,
+  g: { readonly keys: readonly PackagePublicKey[]; readonly zincir?: Omit<PackageTrust, "keys"> },
+): ChainedCandidate<PgPackageManifest> {
+  const p = readReleasePointer(metin);
+  return { ad, sonuc: p.ok ? verifyPgPackageManifestSigned(p.value, g) : forwardFailure(p) };
 }
 
 /**
