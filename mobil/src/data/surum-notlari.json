@@ -27,7 +27,7 @@
         {
           "kapsam": "tablet",
           "tip": "yeni",
-          "metin": "“Sunucuyu ekle” → “Adresi yaz”a size verilen internet adresi (…etkiliyazilim.com ile biten ad) yazılabilir. Bu adreste doğrulama kodu sorulmaz: tablet sunucunun internet sertifikasını kendisi doğrular “İnternette doğrulandı” sayfasında sunucunun adını gösterip eklensin mi diye sorar; “Ekle”ye dokunun."
+          "metin": "“Sunucuyu ekle” → “Adresi yaz”a size verilen internet adresi (…etkiliyazilim.com ile biten ad) yazılabilir. Bu adreste doğrulama kodu sorulmaz: tablet sunucunun internet sertifikasını kendisi doğrular ve “İnternette doğrulandı” sayfasında sunucunun adını gösterip eklensin mi diye sorar; “Ekle”ye dokunun."
         },
         {
           "kapsam": "tablet",
