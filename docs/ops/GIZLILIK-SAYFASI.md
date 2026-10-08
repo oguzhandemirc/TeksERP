@@ -1,6 +1,6 @@
 # Gizlilik sayfası — `https://tekserp.etkiliyazilim.com/gizlilik` (Play K2)
 
-> Durum (2026-10-08): VDS'e KURULDU (`736c9f8a1`; konteyner içi 200 bayt-eşit, köke Cloudflare'siz 403, adnansahin/vds-dogrula önce=sonra AYNI); DNS kaydı yok — kullanıcı adımı bekliyor. Karar: kullanıcı K2, 2026-10-08 (`PLAY-KONSOL-FORMLARI.md` §0).
+> Durum (2026-10-08): YAYINDA — DNS proxy açık, `olc.mjs` tamamen yeşil (e-posta karartması email_off ile kapatıldı). Karar: kullanıcı K2, 2026-10-08 (`PLAY-KONSOL-FORMLARI.md` §0).
 
 | | |
 |---|---|
@@ -28,6 +28,7 @@
 
 ## Güncelleme ve geri alma
 
-- Metin değişikliği: kaynak → `uret.mjs` → commit → `vds-kur.sh --uygula` (aynı yol; kenar 5 dk içinde tazelenir).
+- Metin değişikliği: kaynak → `uret.mjs` → commit → `vds-kur.sh --html` (kuru) → `vds-kur.sh --html --uygula` (yalnız `html/gizlilik.html` değişir; önceki `onceki/html_gizlilik.html`; konteyner yeniden başlamaz). compose/conf değişirse `--uygula`.
+- E-posta: Cloudflare "Email Address Obfuscation" zone genelinde açık ve adresi çözücü betiğe bağlar; CSP (`default-src 'none'`) betiği engellediği için adres görünmez. Zone ayarına dokunulmaz — `uret.mjs` her adresi `<!--email_off-->…<!--/email_off-->` ile sarar (bekçi §1 ölçer). Kenar bu iki yorum işaretini siler, başka bayta dokunmaz (ölçüldü 2026-10-08); `olc.mjs` bayt-eşitliği işaretler çıkarılmış repo html'ine karşı ölçer ve `[email protected]`/`cdn-cgi/l/email-protection` yokluğunu ayrıca denetler.
 - vc60 (yalnız şifreli bağlantı) yayına çıkınca: politika §7 + Play veri güvenliği Soru 2 birlikte güncellenir (K3).
 - Geri alma: önce Cloudflare'de `tekserp` DNS kaydı silinir, sonra `vds-kur.sh --geri-al` (konteyner durur, dizin SİLİNMEZ). adnansahin ve indir etkilenmez; her adımda komşu ölçümü koşulur.

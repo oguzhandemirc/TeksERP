@@ -15,6 +15,9 @@ const KOK = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const ADRES = 'https://tekserp.etkiliyazilim.com/gizlilik';
 const KOKEN_IP = '80.253.255.188';
 const HTML = fs.readFileSync(path.join(KOK, 'deploy/gizlilik-sayfasi/html/gizlilik.html'));
+// Kenarın tek dönüşümü: Cloudflare email_off yorum işaretlerini siler (canlıda ölçüldü 2026-10-08), başka bayta dokunmaz.
+const KENAR_BEKLENEN = Buffer.from(HTML.toString('utf8').replaceAll('<!--email_off-->', '').replaceAll('<!--/email_off-->', ''), 'utf8');
+const KARARTMA = ['[email protected]', '[email&#160;protected]', 'cdn-cgi/l/email-protection', '__cf_email__', 'email-decode'];
 
 /** curl ile tek istek: { kod, baslik: {ad→değer}, govde: Buffer } (yönlendirme izlenmez). */
 function iste(url, ek = []) {
@@ -64,7 +67,9 @@ async function sayfa() {
   bak('Cache-Control kısa (max-age=300)', /max-age=300\b/.test(r.baslik['cache-control'] ?? ''), r.baslik['cache-control']);
   bak('CSP default-src none', /default-src 'none'/.test(r.baslik['content-security-policy'] ?? ''));
   const ozet = (x) => crypto.createHash('sha256').update(x).digest('hex').slice(0, 12);
-  bak('yayındaki sayfa repodakiyle bayt-eşit', r.govde.equals(HTML), `yayın ${ozet(r.govde)} ↔ repo ${ozet(HTML)}`);
+  bak('yayındaki sayfa repodakiyle bayt-eşit (email_off işaretleri hariç)', r.govde.equals(KENAR_BEKLENEN), `yayın ${ozet(r.govde)} ↔ repo ${ozet(KENAR_BEKLENEN)}`);
+  const karartma = KARARTMA.filter((x) => r.govde.includes(x));
+  bak('sayfada e-posta karartması yok ([email protected] · cdn-cgi/l/email-protection · çözücü betik)', r.kod === 200 && karartma.length === 0, karartma.join(', '));
   bak('sayfada yer tutucu yok', r.kod === 200 && !/\[[A-ZÇĞİÖŞÜ][^\]\n]{1,80}\]/.test(r.govde.toString()));
 
   const s = iste(`${ADRES}/`);
