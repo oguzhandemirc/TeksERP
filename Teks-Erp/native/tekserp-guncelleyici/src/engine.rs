@@ -55,10 +55,22 @@ struct Candidate {
     manifest: Checked<ReleaseManifest>,
 }
 
-/// İşaretçi çifti: zincirli (PAKET sertifikalı) dosya önce, eski (`paket-*` imzalı) dosya 404 düşüşü.
+/// İşaretçi: zincirli (PAKET sertifikalı) dosya önce, eski (`paket-*` imzalı) dosya 404 düşüşü. `family` doluysa
+/// (değişmez dizin: `surum`/`pg`) yeniden imza YANINA yazılır ⇒ kid'siz + bilinen imzacıların `<aile>-zincir-<kid>.json`
+/// adları aday, seçim `release::select_chained`.
 struct Pointer {
     chained: String,
     legacy: String,
+    family: Option<release::ChainedFamily>,
+    kids: Vec<String>,
+    /// Sabitlenmiş sürüm: bilinen imzacı kanalın `son-zincir.json`ının imzalayanı (en iyi çaba).
+    kids_from_latest: bool,
+}
+
+impl Pointer {
+    fn single(chained: String, legacy: String) -> Pointer {
+        Pointer { chained, legacy, family: None, kids: Vec::new(), kids_from_latest: false }
+    }
 }
 
 pub struct Engine {
@@ -588,8 +600,11 @@ impl Engine {
             Some(t) => Pointer {
                 chained: release::release_file_path(&channel, &t, release::CHAINED_RELEASE_MANIFEST_FILE),
                 legacy: release::release_file_path(&channel, &t, release::RELEASE_MANIFEST_FILE),
+                family: Some(release::ChainedFamily::Surum),
+                kids: Vec::new(),
+                kids_from_latest: true,
             },
-            None => Pointer { chained: release::chained_release_pointer_path(&channel), legacy: release::release_pointer_path(&channel) },
+            None => Pointer::single(release::chained_release_pointer_path(&channel), release::release_pointer_path(&channel)),
         };
         let m = match self.candidate(&server, &pointer, token.as_deref(), &trust, &channel, CANDIDATE_TTL_MS, &token_problem) {
             Ok(m) => m,
@@ -761,11 +776,29 @@ impl Engine {
             return Ok(c.manifest.clone());
         }
         let Some(token) = token else { return Err(token_problem()) };
-        let (path, bytes) = self.fetch_pointer(server, pointer, token, trust)?;
-        let text = String::from_utf8(bytes).map_err(|_| fail(release::code::SURUM_ISARETCI, "işaretçi UTF-8 değil"))?;
-        let jws_text = release::read_release_pointer(&text).map_err(|e| (e.code, format!("{path}: {}", e.message)))?;
-        let checked = release::verify_release_manifest(&Value::String(jws_text), trust, channel)
-            .map_err(|e| (e.code, format!("sürüm bildirimi reddedildi ({}): {}", e.code, e.message)))?;
+        let checked = if let Some(family) = pointer.family {
+            let mut kids = pointer.kids.clone();
+            if pointer.kids_from_latest {
+                kids.extend(self.latest_signer_kid(server, channel, token, trust));
+            }
+            self.fetch_selected(
+                server,
+                pointer,
+                family,
+                &kids,
+                token,
+                trust,
+                "sürüm bildirimi",
+                &|name, text| release::chained_release_candidate(name, text, trust, channel),
+                &|jws| release::verify_release_manifest(jws, trust, channel),
+            )?
+        } else {
+            let (path, bytes) = self.fetch_pointer(server, pointer, token, trust)?;
+            let text = String::from_utf8(bytes).map_err(|_| fail(release::code::SURUM_ISARETCI, "işaretçi UTF-8 değil"))?;
+            let jws_text = release::read_release_pointer(&text).map_err(|e| (e.code, format!("{path}: {}", e.message)))?;
+            release::verify_release_manifest(&Value::String(jws_text), trust, channel)
+                .map_err(|e| (e.code, format!("sürüm bildirimi reddedildi ({}): {}", e.code, e.message)))?
+        };
         *self.candidate.borrow_mut() = Some(Candidate { fetched_ms: now, pointer: pointer.chained.clone(), manifest: checked.clone() });
         Ok(checked)
     }
@@ -784,6 +817,76 @@ impl Engine {
                 Ok((pointer.legacy.as_str(), bytes))
             }
         }
+    }
+
+    /// D8 seçimli okuma: zincirli adaylar (kid'siz + `kids`) getirilir ve `release::select_chained` uygulanır; HİÇBİRİ
+    /// yoksa (404) ve gömülü `paket-*` anahtarı varken eski dosya (okunuşu bugünküyle aynı). Adaylardan birinde ağ
+    /// hatası turu düşürür — eksik aday kümesiyle seçim yapılmaz (belirsizlikte FAIL-CLOSED).
+    #[allow(clippy::too_many_arguments)]
+    fn fetch_selected<T: Clone>(
+        &self,
+        server: &str,
+        pointer: &Pointer,
+        family: release::ChainedFamily,
+        kids: &[String],
+        token: &str,
+        trust: &PackageTrust,
+        label: &str,
+        make: &dyn Fn(&str, &str) -> release::ChainedCandidate<T>,
+        verify_legacy: &dyn Fn(&Value) -> tekserp_dogrulama::outcome::Outcome<Checked<T>>,
+    ) -> Result<Checked<T>, Fail> {
+        let (dir, first) = pointer.chained.rsplit_once('/').unwrap_or(("", pointer.chained.as_str()));
+        let mut names = vec![first.to_string()];
+        for kid in kids {
+            if let Some(n) = release::chained_file_name(family, Some(kid)).filter(|n| !names.contains(n)) {
+                names.push(n);
+            }
+        }
+        let mut candidates = Vec::new();
+        for name in &names {
+            let url = format!("{server}{dir}/{name}");
+            if let Some(bytes) = download::fetch_small_opt(&self.env, &url, Some(token)).map_err(|e| (e.code, e.message))? {
+                candidates.push(match String::from_utf8(bytes) {
+                    Ok(text) => make(name, &text),
+                    Err(_) => release::ChainedCandidate {
+                        name: name.clone(),
+                        result: Err(tekserp_dogrulama::outcome::Fail {
+                            code: release::code::SURUM_ISARETCI,
+                            message: "işaretçi UTF-8 değil".into(),
+                        }),
+                    },
+                });
+            }
+        }
+        match release::select_chained(family, candidates) {
+            Some(Ok(c)) => {
+                if !c.rejected.is_empty() {
+                    let list: Vec<String> = c.rejected.iter().map(|(n, code, _)| format!("{n} ({code})")).collect();
+                    self.log.info(&format!("{label}: {dir}/{} seçildi; elenen: {}", c.name, list.join(", ")));
+                }
+                Ok(c.checked)
+            }
+            Some(Err(e)) => Err((e.code, format!("{label} reddedildi ({}): {}", e.code, e.message))),
+            None if trust.keys.is_empty() => Err(fail(codes::MANIFEST_INDIRILEMEDI, format!("{}: HTTP 404", pointer.chained))),
+            None => {
+                let path = pointer.legacy.as_str();
+                let bytes = download::fetch_small(&self.env, &format!("{server}{path}"), Some(token)).map_err(|e| (e.code, e.message))?;
+                let text = String::from_utf8(bytes).map_err(|_| fail(release::code::SURUM_ISARETCI, "işaretçi UTF-8 değil"))?;
+                let jws_text = release::read_release_pointer(&text).map_err(|e| (e.code, format!("{path}: {}", e.message)))?;
+                verify_legacy(&Value::String(jws_text)).map_err(|e| (e.code, format!("{label} reddedildi ({}): {}", e.code, e.message)))
+            }
+        }
+    }
+
+    /// Kanalın `son-zincir.json`ını (KABUL güveniyle) imzalayan `pkt-*` kid — sabitlenmiş sürüm dizininde yeniden imzalı
+    /// adın adayı. En iyi çaba: yokluk ya da her hata `None` (aday kümesi küçülür, kid'siz ad yine okunur).
+    fn latest_signer_kid(&self, server: &str, channel: &str, token: &str, trust: &PackageTrust) -> Option<String> {
+        let url = format!("{server}{}", release::chained_release_pointer_path(channel));
+        let bytes = download::fetch_small_opt(&self.env, &url, Some(token)).ok()??;
+        let text = String::from_utf8(bytes).ok()?;
+        let jws = release::read_release_pointer(&text).ok()?;
+        let m = release::verify_release_manifest(&Value::String(jws), trust, channel).ok()?;
+        m.chain.is_some().then_some(m.signer_kid)
     }
 
     /// Kurulu PG (sözleşme §1.6): kip `pgsql\ornek.json`dan (yoksa HARİCİ: bugünkü kurulumlar), sürüm
@@ -1021,15 +1124,27 @@ impl Engine {
             ));
         }
         // Künye: ayrı PAKET imzalı belge, bildirimin hedefiyle BAĞLANIR (ana sürüm dahil).
+        // Bilinen imzacı: doğrulanmış bildirimi imzalayan `pkt-*` (yeniden imzada künye de onunla yanına yazılır).
+        let kids: Vec<String> =
+            Some(m.signer_kid.clone()).filter(|k| tekserp_dogrulama::paket_zinciri::is_chain_package_kid(k)).into_iter().collect();
         let pointer = Pointer {
             chained: release::pg_release_file_path(channel, &target.surum, target.derleme, release::CHAINED_PG_POINTER_FILE),
             legacy: release::pg_release_file_path(channel, &target.surum, target.derleme, release::PG_POINTER_FILE),
+            family: Some(release::ChainedFamily::Pg),
+            kids: kids.clone(),
+            kids_from_latest: false,
         };
-        let (path, bytes) = self.fetch_pointer(server, &pointer, token, trust)?;
-        let text = String::from_utf8(bytes).map_err(|_| fail(release::code::SURUM_ISARETCI, "PG künyesi UTF-8 değil"))?;
-        let jws_text = release::read_release_pointer(&text).map_err(|e| (e.code, format!("{path}: {}", e.message)))?;
-        let kunye = release::verify_pg_package_manifest(&Value::String(jws_text), trust)
-            .map_err(|e| (e.code, format!("PG künyesi reddedildi ({}): {}", e.code, e.message)))?;
+        let kunye = self.fetch_selected(
+            server,
+            &pointer,
+            release::ChainedFamily::Pg,
+            &kids,
+            token,
+            trust,
+            "PG künyesi",
+            &|name, text| release::chained_pg_candidate(name, text, trust),
+            &|jws| release::verify_pg_package_manifest(jws, trust),
+        )?;
         release::check_pg_binding(&m.pg, &kunye.doc).map_err(|e| (e.code, e.message))?;
         let zip = self.layout.downloads().join(format!("pg-{tag}.zip"));
         let spec = Spec {

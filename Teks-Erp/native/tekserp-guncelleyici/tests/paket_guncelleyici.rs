@@ -55,13 +55,17 @@ fn revocation(w: &World, sequence: u32, cert_id: &str) -> VerifiedPackageRevocat
 
 /// Zincirli paket: `butunluk-zincir.jws` (eski `butunluk.jws` YOK) + kökte `paket-iptal.jws` (başka sertifikayı iptal eder).
 fn chained_zip(w: &World, cert: &str) -> Vec<u8> {
+    chained_zip_by(w, &pkt_key(), PKT_KID, cert)
+}
+
+fn chained_zip_by(w: &World, key: &SigningKey, kid: &str, cert: &str) -> Vec<u8> {
     let files = version_files(NEW);
     let mut all = files.clone();
-    for (name, body) in integrity_files(&files, NEW, &pkt_key(), PKT_KID, Some(CHANNEL)) {
+    for (name, body) in integrity_files(&files, NEW, key, kid, Some(CHANNEL)) {
         if name == "butunluk.jws" {
             let text = String::from_utf8(body).unwrap();
             let payload: Value = serde_json::from_slice(&b64::decode_strict(text.split('.').nth(1).unwrap()).unwrap()).unwrap();
-            let token = sign(&pkt_key(), "tekserp-butunluk", PKT_KID, &chained_payload(&payload, cert));
+            let token = sign(key, "tekserp-butunluk", kid, &chained_payload(&payload, cert));
             all.push((paket_zinciri::CHAINED_INTEGRITY_FILE.into(), token.into_bytes()));
         } else {
             all.push((name, body));
@@ -268,4 +272,104 @@ fn istemci_rows_in_package_revocation_are_harmless() {
     assert!(policy::adopt_package_revocation(&RealFs, &lic_dir, &w.anchor, &pkg, &mut t), "ist- satırlı yüksek sıra benimsenir");
     assert_eq!(t.revocation.as_ref().unwrap().sequence(), 4.0);
     assert_eq!(verdict(&token, &t), Ok(()));
+}
+
+// ── D8: değişmez sürüm dizininde yeniden imzalı ad (`surum-zincir-<kid>.json`) ─────────────────────
+
+const PKT2_KID: &str = "pkt-2027-1";
+const CERT2_ID: &str = "4f4f4f4f-4f4f-4f4f-8f4f-4f4f4f4f4f4f";
+
+fn pkt2_key() -> SigningKey {
+    SigningKey::from_bytes(&[10; 32])
+}
+
+fn certificate_of(w: &World, key: &SigningKey, kid: &str, id: &str, end: i64) -> String {
+    let doc = json!({
+        "v": 1, "sertifikaId": id, "kullanim": "PAKET", "kid": kid, "x": x_of(key),
+        "siniflar": ["URETIM", "TEST"], "baslangic": iso(T0 - 10 * DAY), "bitis": iso(end), "bayi": null,
+    });
+    sign(&w.keys.root, "tekserp-sertifika", "kok-test-1", &doc)
+}
+
+/// Sabitlenmiş hedef (`hedefSurum` = NEW): eski takım `surum-zincir.json` (pkt-2026-1) + yeniden imzalı
+/// `surum-zincir-pkt-2027-1.json` (zip `<ad>-<kid>.zip`); `son-zincir.json` yeniden imzalı bildirim. `extra` ikincinin
+/// yükünü ezer. Yalnız yeniden imzalı zip sunulur: yanlış aday seçilirse indirme düşer.
+fn pinned_world(tag: &str, second_end: i64, extra: Option<&Value>) -> World {
+    let w = World::new(
+        tag,
+        Setup {
+            lease: LeaseOpts { update: Some(policy("OTOMATIK", &open_window(), Some(NEW))), ..LeaseOpts::default() },
+            ..Setup::default()
+        },
+    );
+    let cert1 = certificate(&w, &["URETIM", "TEST"]);
+    let zip1 = chained_zip(&w, &cert1);
+    let first = manifest_payload(PKT_KID, NEW, &zip1, None);
+    let token1 = sign_manifest(&pkt_key(), PKT_KID, &chained_payload(&first, &cert1));
+    let cert2 = certificate_of(&w, &pkt2_key(), PKT2_KID, CERT2_ID, second_end);
+    let zip2 = chained_zip_by(&w, &pkt2_key(), PKT2_KID, &cert2);
+    let name2 = format!("tekserp-backend-{NEW}-{PKT2_KID}.zip");
+    let mut second = manifest_payload(PKT2_KID, NEW, &zip2, extra);
+    second["paket"]["ad"] = json!(name2);
+    let token2 = sign_manifest(&pkt2_key(), PKT2_KID, &chained_payload(&second, &cert2));
+    let mut f = w.files.lock().unwrap();
+    f.insert(format!("/{CHANNEL}/backend/{NEW}/{name2}"), zip2);
+    f.insert(format!("/{CHANNEL}/backend/{NEW}/{}", release::CHAINED_RELEASE_MANIFEST_FILE), pointer(&token1));
+    f.insert(format!("/{CHANNEL}/backend/{NEW}/surum-zincir-{PKT2_KID}.json"), pointer(&token2));
+    f.insert(format!("/{CHANNEL}/backend/{}", release::CHAINED_RELEASE_POINTER_FILE), pointer(&token2));
+    drop(f);
+    w
+}
+
+/// ⭐ Eski takımın sertifikası iptal: kid'siz `surum-zincir.json` KABUL'de elenir, `son-zincir.json` imzalayanından
+/// bilinen kid'li ad seçilir (ikincinin bitişi DAHA ERKEN — kazanmasının tek nedeni iptal) ve kurulur.
+#[test]
+fn pinned_target_skips_revoked_unkidded_and_installs_kidded() {
+    let w = pinned_world("pz-d8-iptal", CERT_END - 20 * DAY, None);
+    std::fs::write(w.layout.root.join("lisans").join(paket_zinciri::PACKAGE_REVOCATION_FILE), revocation_token(&w, 2, CERT_ID)).unwrap();
+    w.run_to_rest(0);
+    let st = w.status().unwrap();
+    assert_eq!(st.state, State::Succeeded, "{:?} {:?}", st.error_code, st.message);
+    assert_eq!(w.current().as_deref(), Some(NEW));
+}
+
+/// İptal yokken iki geçerli aday: bitişi EN GEÇ olan (yeniden imzalı) kazanır — eski zip sunulmasa da kurulur.
+#[test]
+fn pinned_target_prefers_latest_certificate_end() {
+    let w = pinned_world("pz-d8-gec", CERT_END + 365 * DAY, None);
+    w.run_to_rest(0);
+    let st = w.status().unwrap();
+    assert_eq!(st.state, State::Succeeded, "{:?} {:?}", st.error_code, st.message);
+    assert_eq!(w.current().as_deref(), Some(NEW));
+}
+
+/// Belirsizlikte FAIL-CLOSED: iki geçerli aday farklı paketi anlatıyor → SURUM_ISARETCI, kurulu sürüm yerinde.
+#[test]
+fn pinned_target_ambiguous_documents_fail_closed() {
+    let other =
+        json!({ "paket": { "ad": "x.zip", "boyut": 1, "sha256": "c".repeat(64), "paketId": "5a5a5a5a-5a5a-4a5a-8a5a-5a5a5a5a5a5a" } });
+    let w = pinned_world("pz-d8-belirsiz", CERT_END + 365 * DAY, Some(&other));
+    let _ = w.run(1);
+    let st = w.status().unwrap();
+    assert_eq!(st.error_code.as_deref(), Some(release::code::SURUM_ISARETCI), "{:?}", st.message);
+    assert!(st.message.as_deref().unwrap_or_default().contains("belirsiz"), "{:?}", st.message);
+    assert_eq!(w.current().as_deref(), Some(OLD));
+}
+
+/// Eski davranış: sabitlenmiş hedefte yalnız kid'siz `surum-zincir.json` (kid'li ad yok) aynen kurulur.
+#[test]
+fn pinned_target_unkidded_only_installs_as_before() {
+    let w = World::new(
+        "pz-d8-eski",
+        Setup {
+            lease: LeaseOpts { update: Some(policy("OTOMATIK", &open_window(), Some(NEW))), ..LeaseOpts::default() },
+            ..Setup::default()
+        },
+    );
+    publish_chained(&w);
+    w.files.lock().unwrap().insert(format!("/{CHANNEL}/backend/{NEW}/surum.json"), b"{bozuk".to_vec());
+    w.run_to_rest(0);
+    let st = w.status().unwrap();
+    assert_eq!(st.state, State::Succeeded, "{:?} {:?}", st.error_code, st.message);
+    assert_eq!(w.current().as_deref(), Some(NEW));
 }
