@@ -6,11 +6,14 @@ import { createHash } from "node:crypto";
 import { createReadStream } from "node:fs";
 import { lstat, stat } from "node:fs/promises";
 import path from "node:path";
-import { b64uEncode } from "./protocol";
+import { CHAINED_INTEGRITY_FILE, b64uEncode } from "./protocol";
 import { walkIntegrityScope, type IntegrityListEntry, type IntegrityScope } from "./integrity-list";
 
 /** Paket kökündeki imzalı yük dosyası (JWS compact, `typ: tekserp-butunluk`). */
 export const INTEGRITY_FILE = "butunluk.jws";
+
+/** İmzalı yük dosyalarının OKUMA sırası (zincirli varsa o, yoksa bugünkü): yükleyici ve denetim aynı dosyayı okusun. */
+export const INTEGRITY_TOKEN_FILES: readonly string[] = Object.freeze([CHAINED_INTEGRITY_FILE, INTEGRITY_FILE]);
 
 /**
  * Altındaki HER dosya listede olmalı; listede olmayan dosya FAZLA sayılır. Pakette olmayan dizin

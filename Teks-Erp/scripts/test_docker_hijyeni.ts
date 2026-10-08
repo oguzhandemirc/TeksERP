@@ -599,6 +599,7 @@ function teslimImzaStatik(betik: string): string[] {
   if (ozet < 0) ih.push("imza dosyası SHA256SUMS'a girmiyor");
   if (!/for f in [^;\n]*butunluk-liste\.txt[^;\n]*; do/.test(kod)) ih.push("imzalı liste dosyası SHA256SUMS'a girmiyor");
   else if (imza > ozet) ih.push("imza özetlerden SONRA atılıyor");
+  if (!/test_korumali_imaj\.mjs" --imaj="\$ETIKET" --imzali \|\| \{[^}]*exit 1; \}/.test(kod)) ih.push("imzasız imaj teslim ediliyor (bekçi --imzali yok)");
   return ih;
 }
 {
@@ -613,9 +614,51 @@ function teslimImzaStatik(betik: string): string[] {
     ["varsayılan anahtar yolu geri", t.replace('ANAHTAR="${TEKSERP_PAKET_ANAHTARI:-}"', 'ANAHTAR="${TEKSERP_PAKET_ANAHTARI:-$HOME/.tekserp/satici-hazirlik/paket-hazirlik.paket.json}"')],
     ["boş anahtar kapısı silindi", t.replace(/^\[ -n "\$ANAHTAR" \].*\n/m, "")],
     ["TEKSERP_MUSTERI geri", t.replace("  musteri: null,", "  musteri: process.env.TEKSERP_MUSTERI || null,")],
+    ["imzasız imaj teslimi", t.replace('--imaj="$ETIKET" --imzali ||', '--imaj="$ETIKET" ||')],
   ];
   for (const [ad, m] of sondalar) {
     check(`§5c sonda: ${ad} → kırmızı`, m !== t && teslimImzaStatik(m).length > 0, m !== t ? "" : "MUTASYON UYGULANMADI");
+  }
+}
+
+// §5l — G13 imaj içi bütünlük listesi (`imaj-imzala.mjs`): Windows paketinin AYNI aracı (`build-korumali-imza.ts
+// imzala`, kapsam `integrity-scope.ts`) — betik kendi özetini/imzasını yazmaz; anahtar açıkça verilir; etiket
+// yalnız imajın kendi native çekirdeğinin öz-denetimi GECERLI ise kalır. Dockerfile kapsamı imzalanabilir kurar
+// (`node_modules/.bin` bağları yok, runtime Node imzalı `runtime/` altında).
+function imajImzaStatik(betik: string, dockerfile: string): string[] {
+  const kod = betik.split("\n").filter((l) => !/^\s*\/\//.test(l)).join("\n");
+  const ih: string[] = [];
+  if (!/'scripts\/build-korumali-imza\.ts', 'imzala'/.test(kod)) ih.push("imza Windows aracından (build-korumali-imza.ts imzala) geçmiyor");
+  if (/createHash|createSign|\bsign\(|privateKey/.test(kod)) ih.push("betik kendi özetini/imzasını üretiyor (tek kaynak dışı)");
+  if (!/process\.env\.TEKSERP_PAKET_ANAHTARI \|\| ''/.test(kod) || !/if \(!anahtar\) red\(/.test(kod)) ih.push("anahtar açıkça verilmeden imza atılabiliyor");
+  const oz = kod.search(/const o = ozDenetim\(hedef, y\);/), birak = kod.search(/^\s+hedefYazildi = false;/m);
+  if (oz < 0 || birak < 0 || birak < oz) ih.push("öz-denetimden ÖNCE imzalı etiket bırakılıyor");
+  if (!/rapor\?\.durum === 'GECERLI'/.test(kod)) ih.push("öz-denetim GECERLI dışını kabul ediyor");
+  if (!/if \(hedefYazildi\) \{\s*docker\(\['image', 'rm', hedef\]\)/.test(kod)) ih.push("düşen imzada etiket silinmiyor");
+  if (!/'--network', 'none'/.test(kod)) ih.push("öz-denetim ağlı koşuyor");
+  if (!/rm -rf node_modules\/\.bin/.test(dockerfile)) ih.push("Dockerfile node_modules/.bin bağlarını bırakıyor (imzalanamaz)");
+  if (!/COPY --from=runtime-node --chown=root:root \/w\/sahne\/runtime\/bin\/node \/app\/runtime\/bin\/node/.test(dockerfile)) ih.push("runtime Node imzalı kapsamda (app/runtime) değil");
+  return ih;
+}
+{
+  const b = oku("Teks-Erp/docker/korumali/imaj-imzala.mjs");
+  const d = oku("Teks-Erp/docker/korumali/Dockerfile");
+  const g = imajImzaStatik(b, d);
+  check("§5l ⭐ imaj içi liste: Windows imza aracı + kapsamı, anahtar açıkça, etiket yalnız öz-denetim GECERLI ise, imzalanabilir kapsam", g.length === 0, g.join(" | ") || "temiz");
+  const sondalar: Array<[string, string, string]> = [
+    ["kendi özeti", b.replace("import fs from 'node:fs';", "import fs from 'node:fs';\nimport { createHash } from 'node:crypto';"), d],
+    ["imza aracı atlandı", b.replace("'scripts/build-korumali-imza.ts', 'imzala'", "'scripts/baska.ts', 'imzala'"), d],
+    ["varsayılan anahtar", b.replace("process.env.TEKSERP_PAKET_ANAHTARI || ''", "process.env.TEKSERP_PAKET_ANAHTARI || '~/.tekserp/pkt.json'"), d],
+    ["öz-denetim GECERLI şartı gevşedi", b.replace("rapor?.durum === 'GECERLI'", "rapor?.durum !== 'GECERSIZ'"), d],
+    ["düşünce etiket kalır", b.replace("docker(['image', 'rm', hedef]);", "void 0;"), d],
+    ["öz-denetim ağlı", b.replace("'--network', 'none',", ""), d],
+    ["etiket öz-denetimden önce bırakıldı", b.replace("    hedefYazildi = true;\n", "    hedefYazildi = false;\n"), d],
+    [".bin geri", b, d.replace("  && rm -rf node_modules/.bin \\\n", "")],
+    ["runtime kapsam dışı", b, d.replace("/app/runtime/bin/node\nRUN", "/usr/local/bin/node2\nRUN")],
+  ];
+  for (const [ad, mb, md] of sondalar) {
+    const uyg = mb !== b || md !== d;
+    check(`§5l sonda: ${ad} → kırmızı`, uyg && imajImzaStatik(mb, md).length > 0, uyg ? "" : "MUTASYON UYGULANMADI");
   }
 }
 

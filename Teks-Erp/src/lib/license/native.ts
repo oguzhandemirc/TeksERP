@@ -8,10 +8,10 @@ import path from "node:path";
 import { createHash } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
 import { z } from "zod";
-import { TRUST_ANCHOR_MODES, b64uEncode, type TrustAnchorMode } from "./protocol";
+import { TRUST_ANCHOR_MODES, b64uEncode, type RootKey, type TrustAnchorMode } from "./protocol";
 import { PACKAGE_PUBLIC_KEYS, verifySignedManifest, type PackageKey } from "./integrity";
-import { BUILD_ANCHOR_MODE } from "./trust-anchor";
-import { INTEGRITY_FILE } from "./integrity-scope";
+import { BUILD_ANCHOR_MODE, ROOT_PUBLIC_KEYS } from "./trust-anchor";
+import { INTEGRITY_TOKEN_FILES } from "./integrity-scope";
 import { INTEGRITY_LIST_FILE, parseIntegrityList } from "./integrity-list";
 import { tsLicenseCore, type LicenseCore } from "./license-core";
 import { isNativeBinding, nativeCore, unavailableCore, type NativeBinding } from "./native-adapter";
@@ -79,6 +79,8 @@ export interface LoaderOptions {
   readonly arch: string;
   /** Zorunlu kipte `.node`u imzalı listeye karşı denetleyen PAKET anahtarları (yalnız testler değiştirir). */
   readonly packageKeys?: readonly PackageKey[];
+  /** Zincirli (`pkt-*`) listenin PAKET sertifikasını doğrulayan kökler; verilmezse bu derlemenin kök çapası (yalnız testler değiştirir). */
+  readonly packageRoots?: readonly RootKey[];
   /** Beklenen gömülü çapa kipi; verilmezse bu derlemeninki (yalnız testler değiştirir). */
   readonly anchorMode?: TrustAnchorMode;
 }
@@ -172,21 +174,27 @@ export function identityRejection(
 /**
  * İKİNCİ DENETİM NOKTASI: native kendi bütünlüğünü doğrulayamaz (yamalı `.node` her şeyi "geçerli"
  * diyebilir). Zorunlu kipte `.node` AÇILMADAN ÖNCE (dlopen yamalı kodu çalıştırır) paket kökündeki
- * imzalı listeye karşı bu derlemenin PAKET çapasıyla TS
+ * imzalı listeye karşı bu derlemenin PAKET + kök çapasıyla TS
  * protokolüyle denetlenir; liste yok/geçersiz/uyuşmaz → çekirdek YOK.
  */
 export function packagedNativeRejection(
   file: string,
   root: string,
   keys: readonly PackageKey[] = PACKAGE_PUBLIC_KEYS,
+  roots: readonly RootKey[] = ROOT_PUBLIC_KEYS,
 ): { readonly neden: FallbackReason; readonly ayrinti: string } | null {
-  let token: string;
-  try {
-    token = readFileSync(path.join(root, INTEGRITY_FILE), "utf8").trim();
-  } catch {
-    return { neden: "LISTE_YOK", ayrinti: `${INTEGRITY_FILE} okunamadı` };
+  let token: string | null = null;
+  for (const name of INTEGRITY_TOKEN_FILES) {
+    try {
+      token = readFileSync(path.join(root, name), "utf8").trim();
+      break;
+    } catch {
+      // sıradaki dosya (denetimdeki `readList` ile aynı sıra)
+    }
   }
-  const signed = verifySignedManifest(token, keys);
+  if (token === null) return { neden: "LISTE_YOK", ayrinti: `${INTEGRITY_TOKEN_FILES.join(" / ")} okunamadı` };
+  // Zincirli liste YERLEŞİK kipte kökten doğrulanır (iptal yalnız uyarı — ikinci katmanla aynı kural).
+  const signed = verifySignedManifest(token, keys, { roots, mode: "YERLESIK" });
   if (!signed.ok) return { neden: "LISTE_GECERSIZ", ayrinti: signed.code };
   const { liste } = signed.manifest;
   let listBytes: Buffer;
@@ -223,7 +231,7 @@ export function loadLicenseCoreFrom(o: LoaderOptions): LoadedCore {
   const file = tried.find((f) => existsSync(f));
   if (!file) return fallback("DOSYA_YOK", "native .node bulunamadı");
   if (o.required) {
-    const rejected = packagedNativeRejection(file, o.cwd, o.packageKeys);
+    const rejected = packagedNativeRejection(file, o.cwd, o.packageKeys, o.packageRoots);
     if (rejected) return fallback(rejected.neden, rejected.ayrinti);
   }
   let binding: NativeBinding;
