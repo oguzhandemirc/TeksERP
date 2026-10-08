@@ -10,7 +10,9 @@ import { buildSelfSignedCertificate, certificateFingerprint, derToPem } from "./
 
 export const LAN_TLS_FILES = { KEY: "anahtar.pem", CERT: "sertifika.pem" } as const;
 const MAX_PEM_BYTES = 64 * 1024;
-const VALIDITY_DAYS = 3650;
+// Takvim yılı; 2050 sonrası bitiş GeneralizedTime ile yazılır (x509.ts). Sertifika değişimi yalnız bilinçli
+// (çalınma/sunucu değişimi) ve bütün cihazların yeniden eşleşmesi demektir — süre bunu zorlamasın.
+export const LAN_TLS_VALIDITY_YEARS = 30;
 
 export type LanTlsStoreResult =
   | {
@@ -38,6 +40,12 @@ function parsePair(keyPem: string, certPem: string): { fingerprint: string } | n
   }
 }
 
+function addUtcYears(d: Date, years: number): Date {
+  const out = new Date(d.getTime());
+  out.setUTCFullYear(out.getUTCFullYear() + years);
+  return out;
+}
+
 function generate(dir: string, now: Date): { keyPem: string; certPem: string; fingerprint: string } {
   const { privateKey } = generateKeyPairSync("ec", { namedCurve: "prime256v1" });
   const host = os.hostname();
@@ -46,7 +54,7 @@ function generate(dir: string, now: Date): { keyPem: string; certPem: string; fi
     commonName: `TeksERP ${host}`.slice(0, 64),
     altNames: [host, "localhost", "127.0.0.1"],
     notBefore: new Date(now.getTime() - 24 * 3600 * 1000), // istemci saati biraz geride olabilir
-    notAfter: new Date(now.getTime() + VALIDITY_DAYS * 24 * 3600 * 1000),
+    notAfter: addUtcYears(now, LAN_TLS_VALIDITY_YEARS),
   });
   const keyPem = privateKey.export({ format: "pem", type: "pkcs8" }).toString();
   const certPem = derToPem(der);
