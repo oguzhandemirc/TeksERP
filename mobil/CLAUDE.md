@@ -9,13 +9,14 @@ npx expo start · npx expo start --android · npx expo run:android   # native bu
 npx tsc --noEmit · npm test (jest --runInBand, 85 dosya / 854 vaka / ~17 sn — commit kapısında)
 npm run yayinla:ortak:check                     # OTA mı Play mi? (native parmak izi)
 npm run yayinla:ortak                           # ortak OTA paketi (JS-only, ~%90; argümansız)
-npm run build:aab                               # ORTAK PAKET → Google Play gizli yayın (argümansız; kimlik deploy/dagitim.json'dan, ERP adresi GÖMÜLMEZ; yükleme anahtarı keystore/play-yukleme yoksa DURUR)
+npm run build:aab                               # ORTAK PAKET → Google Play kapalı test + Google Grubu (argümansız; kimlik deploy/dagitim.json'dan, ERP adresi GÖMÜLMEZ; yükleme anahtarı keystore/play-yukleme yoksa DURUR)
 npm run build:apk                               # YALNIZ yerel deneme (emülatör/prova; deneme mührü keystore/deneme, fabrikaya gitmez)
 node ../deploy/mobil-grup-yayinla.mjs --grup=<test|oncu|genel> --paket=ota-cikti/ortak/<rv>/<damga>   # OTA yükleme (manifest EN SON; oncu/genel terfi etiketli)
 ```
 
 - **Sahaya çıkış:** değişikliğin cinsi belirler; hedef `--grup=<test|oncu|genel>` (`deploy/dagitim.json`), `--musteri` yok; kimlik (paket adı · görünen ad · güncelleme adresi · OTA sertifikası) `deploy/dagitim.json` urun.tablet'ten `ortak-kimlik.cjs` ile `app.config.js`e gelir, ERP adresi GÖMÜLMEZ; OTA kökü (sertifikası APK'ya gömülü, özel anahtarı `mobil/` dışında ve kök parolasıyla) + yıllık parolalı OTA yaprağı (dönem töreninden: `~/.tekserp/satici-uretim/donemler/<damga>/istemci/ota-yaprak/`); `runtimeVersion` native kimliğidir (artmazsa yeni JS eski native'i çağırır, tüm tabletler çöker); OTA turunda `versionCode`a dokunulmaz; `keystore/` git dışı; uygulama mührü Google'da (Play App Signing), yükleme anahtarı kaybı Google'a başvuruyla sıfırlanır; uygulama içinde APK indirip kurma YOK (yeni native sürüm Play'den); `usesCleartextTraffic` `expo-build-properties` altında. Reçete ve tuzaklar: `docs/kurallar/surum-yayin.md`, `docs/ops/MOBIL-UZAKTAN-GUNCELLEME.md`.
 - **API adresi:** `EXPO_PUBLIC_API_URL` → `store/baseUrlStore.autoUrlFrom` (dev-host'tan türetir; tek kural, `constants/api.ts` onu okur) → axios `baseURL`; eski kanalda derleme anında gömülür, ortak pakette YOK → adres boş, ilk ekran "Sunucuyu bul" (`screens/Auth/ServerSetupScreen.tsx`; `localhost`a düşülmez). JWT `expo-secure-store`; her istek `Authorization: Bearer`; cache `@tanstack/react-query` (+ persist: offline mutasyon kuyruğu). Sunucu politikası `GET /api/client-policy/mobil` fail-open, iki eksen (`minVersion` + `minPaketTarihi`).
+- **Sunucu bağlantısı yalnız şifreli:** sürüm paketi sunucuya yalnız sabitlenmiş TLS ile bağlanır (cleartext kapalı, `http://` reddedilir; eşleşme QR ya da adres + doğrulama kodu, `components/serverPair/`; sunucu `LAN_TLS_MODE` ≥ `dual`); düz HTTP yalnız debug/Metro derlemesinde. Bekçi `play-dagitim.guard.test.ts` · `test_tablet_ortak_paket` 3o11–3o13; kural `docs/kurallar/kesif-cihaz.md`.
 
 ## Klasör yapısı
 
