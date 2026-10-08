@@ -59,6 +59,7 @@
 ### Değişmezler
 
 - **[ÇEKİRDEK]** Backend paketi SÜRÜM BELGESİZ üretilmez: `docs/surumler/backend-<sürüm>.md` yoksa `paketle.ps1` DURUR (kapı sürüm çözüldükten hemen sonra, ağır işten ÖNCE). Yedi başlık zorunlu (özet · ne değişti · sözleşme · migration · kurulum notu · geri alma · doğrulama); paket adı/SHA256/commit'i MAKİNE yazar, elle kopyalanmaz. Belge KURANA yazılır (teknik dil serbest) — operatör notu `surum-notlari.json`dur ve backend oraya GİRMEZ. · bekçi: `scripts/test_surum_belgesi.ts` <sub>(arşiv:2026-09-10 sürüm belgesi)</sub>
+- **[ÇEKİRDEK]** Korumalı backend paketini thinkpad-1'de yalnız `deploy/korumali-thinkpad.sh` ile derle; varsayılan kip PROVA'dır ve gerçek sürüm yalnız `--kip gercek --surum x.y.z` ile, temiz ağaçta, kaynak = HEAD = `origin/main`deki commit iken, sürüm belgesi o commit'te ve `backend-vX` başka commit'te değilken derlenir; etiketi derleme sonrası betik Mac'te YEREL atar (push yalnız `test` yayınıyla), derleme künyesinin kipi PAKET.json `prova` ile İKİ YÖNLÜ ölçülür (prova paketi gerçek sürüm künyesiyle imzalanmaz, gerçek koşu prova paketini kabul etmez). · bekçi: `scripts/test_korumali_thinkpad.mjs` · `Teks-Erp/scripts/test_thinkpad_kokeni.ts §1f` <sub>(arşiv:2026-10-08 thinkpad gerçek kip)</sub>
 - **[ÇEKİRDEK]** Mobilde sürüm İKİ EKSENLİ: `minVersion` (APK) + `minPaketTarihi` (OTA paketi, `Updates.createdAt`; JS düzeltmesi versionName'i değiştirmez); `paketTarihi=null` ESKİ SAYILMAZ; tanımsızsa yalnız minVersion. Tablet kilidi KOŞULLU (kurulabilir düzeltme + gönderilmemiş kayıt yok). Önce paket çıkar. · bekçi: `Teks-Erp/scripts/test_client_policy.ts; mobil clientPolicy.service.test.ts` <sub>(CLAUDE.md:328, CLAUDE.md:128)</sub>
 
 ## Panel (Electron)
@@ -149,7 +150,7 @@
 
 Backend: `test_backend_surum`, `test_client_policy`, `test_client_registry`, `test_db_copy`, `test_migration_hygiene`, `test_mobile_update`, `test_offsite_sweep`
 
-Kök (zero-dep, DB'siz, ağsız — `node scripts/<ad>`): `test_tablet_ortak_paket.mjs` (+ `--sonda`; tablet ortak kimliği), `check-dagitim.mjs` (+ `--sonda`; tek ortak paketin `deploy/dagitim.json` kaydı), `test_eski_kanal_donuk.mjs` (+ `--sonda`; `deploy/kanallar.json` bayt-donuk), `check-kanallar.mjs` (+ `--sonda`), `check-yayin-okuma.mjs` (+ `--sonda`), `test_grup_yayin_kapisi.mjs`, `test_surum.mjs`, `check-surum-notlari.mjs`
+Kök (zero-dep, DB'siz, ağsız — `node scripts/<ad>`): `test_tablet_ortak_paket.mjs` (+ `--sonda`; tablet ortak kimliği), `check-dagitim.mjs` (+ `--sonda`; tek ortak paketin `deploy/dagitim.json` kaydı), `test_eski_kanal_donuk.mjs` (+ `--sonda`; `deploy/kanallar.json` bayt-donuk), `check-kanallar.mjs` (+ `--sonda`), `check-yayin-okuma.mjs` (+ `--sonda`), `test_grup_yayin_kapisi.mjs`, `test_surum.mjs`, `check-surum-notlari.mjs`, `test_korumali_thinkpad.mjs` (thinkpad derleme betiği: kuru kip + sahte ssh/scp/npm ile uçtan uca)
 
 Panel imzalı künye: `test_panel_imza` (Teks-Erp) · `panel-kunye.test.ts` · `updater-imza-akisi.test.ts` · `update-imza-arayuz.test.tsx` (Electron) · `test_grup_yayin_kapisi.mjs` §8 (kök)
 

@@ -76,6 +76,9 @@ param(
   [string]$Surum,
   # Yayin provasi paketi - baslik "PROVA KIPI".
   [switch]$Prova,
+  # Surum etiketini CAGIRAN atar (deploy/korumali-thinkpad.sh gercek kip: thinkpad'deki gecici
+  # klonun uzagi yok; etiket derleme sonrasi Mac'te, kaynak commit'e atilir).
+  [switch]$EtiketAtma,
   # EMEKLI (eski kanal yolu, eski-kanal-son etiketi): verilirse DUR. Paket TEK ORTAK pakettir:
   # kimlik deploy/dagitim.json'dan (dagitim-kapisi.mjs), musteri/kanal TASIMAZ; firma adi lisanstan,
   # guncelleme grubu kiradan, filigran kurulumda (TEK-ORTAK-PAKET.md O11a).
@@ -763,6 +766,8 @@ if ($Prova) {
 } elseif ($kirli) {
   Write-Host "  ! Etiket ATILMADI: paket KIRLI agactan uretildi. backend-v$yeniSurum HEAD'i ($commit)" -ForegroundColor Yellow
   Write-Host "    gosterirdi ama paket HEAD'de olmayan degisiklik tasiyor. Commit'le, TEMIZ agactan yeniden uret." -ForegroundColor Yellow
+} elseif ($EtiketAtma) {
+  Write-Host "  ! Etiket burada atilmadi (-EtiketAtma): backend-v$yeniSurum etiketini cagiran atar." -ForegroundColor Yellow
 } else {
   & node (Join-Path $repo "scripts/backend-surum.mjs") --etiketle $yeniSurum
 }
