@@ -26,6 +26,8 @@ use tekserp_guncelleyici::package::{ExtractLimits, ExtractStats};
 use tekserp_guncelleyici::trust::TrustAnchor;
 use tekserp_hizmet::logfile::{Level, RotatingLog};
 
+pub mod eski_bicim;
+
 pub const CHANNEL: &str = "testkanal";
 pub const OLD: &str = "2.12.0";
 pub const NEW: &str = "2.13.0";
@@ -1030,6 +1032,33 @@ pub fn install_pg_instance(w: &World, kind: &str) {
     pg.version = Some("16.9".into());
 }
 
+// ── Platform profilleri (GUNCELLEYICI-SAGLAMLIK §9.2) ───────────────────────────────────────────
+
+/// Sahte dünyanın taklit ettiği arka uç. Bugün yalnız Windows (SCM kurtarması, junction); Linux profili (Docker
+/// `unless-stopped`, `exec` sağlık sondası) eklenince `PROFILLER`e girer ve `senaryo` ile yazılmış her test iki profilde koşar.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Profil {
+    Windows,
+}
+
+pub const PROFILLER: &[Profil] = &[Profil::Windows];
+
+impl Profil {
+    /// Bu profilin işlem günlüğüne yazdığı `platform` (`journal::PLATFORM`).
+    pub fn platform(self) -> &'static str {
+        match self {
+            Profil::Windows => "win32-x64",
+        }
+    }
+}
+
+/// Senaryoyu her etkin profilde koşar; ikinci argüman başarısızlık iletisinin öneki (`ad [profil]`).
+pub fn senaryo(ad: &str, f: impl Fn(Profil, &str)) {
+    for p in PROFILLER {
+        f(*p, &format!("{ad} [{p:?}]"));
+    }
+}
+
 // ── Dünya ─────────────────────────────────────────────────────────────────────────────────────
 
 pub struct Setup {
@@ -1070,6 +1099,13 @@ fn quiet_injected_panics() {
 }
 
 impl World {
+    /// Profilin dünyası (bugün tek profil: `World::new`).
+    pub fn new_in(profil: Profil, tag: &str, s: Setup) -> World {
+        match profil {
+            Profil::Windows => World::new(tag, s),
+        }
+    }
+
     pub fn new(tag: &str, s: Setup) -> World {
         quiet_injected_panics();
         let n = SEQ.fetch_add(1, Ordering::SeqCst);

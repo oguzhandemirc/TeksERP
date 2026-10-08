@@ -129,6 +129,16 @@ pub fn drive(ctx: &Ctx, journal: &mut Journal, op: &dyn Operation) -> OpOutcome 
         if v.rolling_back() {
             return rollback(ctx, journal, op);
         }
+        // Daha yeni bir ikilinin yarım günlüğü (ör. kendini güncellemenin A/B dönüşü): tanınmayan adım sürdürülmez.
+        if let Some(step) = v.unknown_step(op.steps()).map(str::to_string) {
+            ctx.log.warn(&format!("işlem {id}: tanınmayan adım {step} — geri alınıyor"));
+            let data =
+                json!({ "hataKodu": codes::KESINTI, "mesaj": format!("{step} adımı bu güncelleyicide yok (daha yeni sürümün işlemi)") });
+            if let Err(e) = record(ctx, journal, &id, Kind::Error, Some(&step), data) {
+                return OpOutcome::Failed(e);
+            }
+            continue;
+        }
         let Some(step) = op.steps().iter().copied().find(|s| !v.ended(s)) else {
             return finish(ctx, journal, op, OpOutcome::Succeeded, json!({ "sonuc": "BASARILI" }));
         };

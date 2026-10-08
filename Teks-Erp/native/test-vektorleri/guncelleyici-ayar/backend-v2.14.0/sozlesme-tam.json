@@ -1,0 +1,20 @@
+{
+  "v": 1,
+  "kaynak": {
+    "yazar": "docs/design/GUNCELLEYICI.md §6.1 tam biçim (elle yazılan ayar)",
+    "etiket": "backend-v2.14.0",
+    "commit": "bf4e96833869f43e70ca807fc9fbc3d2de6b91e8"
+  },
+  "dosyaAdi": "ayar.json",
+  "dosya": "{\n  \"v\": 1,\n  \"guncellemeSunucusu\": \"https://guncelleme.etkiliyazilim.com\",\n  \"vekil\": null,\n  \"backendHizmeti\": \"TeksERP-Backend\",\n  \"saglikZamanAsimiSn\": 180,\n  \"durdurmaZamanAsimiSn\": 60,\n  \"gocZamanAsimiSn\": 1800,\n  \"yedekZamanAsimiSn\": 3600,\n  \"turAraligiSn\": 60\n}\n",
+  "beklenen": {
+    "guncellemeSunucusu": "https://guncelleme.etkiliyazilim.com",
+    "vekil": null,
+    "backendHizmeti": "TeksERP-Backend",
+    "saglikZamanAsimiSn": 180,
+    "durdurmaZamanAsimiSn": 60,
+    "gocZamanAsimiSn": 1800,
+    "yedekZamanAsimiSn": 3600,
+    "turAraligiSn": 60
+  }
+}

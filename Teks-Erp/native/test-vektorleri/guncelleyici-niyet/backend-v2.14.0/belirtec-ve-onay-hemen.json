@@ -1,0 +1,20 @@
+{
+  "v": 1,
+  "kaynak": {
+    "yazar": "Teks-Erp/src/services/update-intent.service.ts composeIntent + lib/license/updater-ipc.ts writeUpdaterIntent (JSON.stringify 2 + LF, alan sırası UpdaterIntentSchema)",
+    "etiket": "backend-v2.14.0",
+    "commit": "bf4e96833869f43e70ca807fc9fbc3d2de6b91e8"
+  },
+  "dosyaAdi": "niyet.json",
+  "dosya": "{\n  \"v\": 1,\n  \"yazildi\": \"2026-10-02T20:00:00.000Z\",\n  \"indirme\": {\n    \"belirtec\": \"eyJhbGciOiJFZERTQSIsInR5cCI6InRla3NlcnAtaW5kaXJtZSJ9.eyJ5b2xPbmVraSI6Ii9rYW5hbC9iYWNrZW5kLyJ9.c2FodGUtaW16YQ\",\n    \"bitis\": \"2026-10-02T21:05:00.000Z\"\n  },\n  \"onay\": {\n    \"onayId\": \"6f0c2b1e-8a4d-4c3b-9e2f-1a2b3c4d5e6f\",\n    \"surum\": \"2.15.0\",\n    \"zamanlama\": \"HEMEN\",\n    \"kullaniciId\": \"0d9e8f7a-6b5c-4d3e-8f2a-9b8c7d6e5f4a\",\n    \"ad\": \"Ayse Y.\",\n    \"zaman\": \"2026-10-02T19:58:00.000Z\"\n  }\n}\n",
+  "beklenen": {
+    "gecerli": true,
+    "belirtec": "eyJhbGciOiJFZERTQSIsInR5cCI6InRla3NlcnAtaW5kaXJtZSJ9.eyJ5b2xPbmVraSI6Ii9rYW5hbC9iYWNrZW5kLyJ9.c2FodGUtaW16YQ",
+    "bitis": "2026-10-02T21:05:00.000Z",
+    "onay": {
+      "onayId": "6f0c2b1e-8a4d-4c3b-9e2f-1a2b3c4d5e6f",
+      "surum": "2.15.0",
+      "zamanlama": "HEMEN"
+    }
+  }
+}
