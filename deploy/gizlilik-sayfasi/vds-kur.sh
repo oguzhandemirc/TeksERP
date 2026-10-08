@@ -64,7 +64,8 @@ id -nG | tr ' ' '\n' | grep -qx docker && echo "docker=evet" || echo "docker=HAY
 docker network inspect web >/dev/null 2>&1 && echo "ag=evet" || echo "ag=HAYIR"
 docker image inspect nginx:alpine >/dev/null 2>&1 && echo "imaj=evet" || echo "imaj=HAYIR"
 [ -d "$K" ] && echo "dizin=var" || echo "dizin=yok"
-echo "konteyner=$(docker inspect -f '{{.State.Status}}' tekserp-gizlilik 2>/dev/null || echo yok)"
+KD=$(docker inspect -f '{{.State.Status}}' tekserp-gizlilik 2>/dev/null) || KD=yok
+echo "konteyner=$KD"
 UZAK
 ) || dur "ssh $SSH_HEDEF bağlanamadı"
 echo "$DURUM" | sed 's/^/   VDS /'
