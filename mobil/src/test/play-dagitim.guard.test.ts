@@ -66,6 +66,12 @@ describe('K-14 — kurulum izni yok', () => {
   it('APK kurma aracı (expo-intent-launcher) bağımlılıklarda yok', () => {
     expect(Object.keys(pkg.dependencies ?? {})).not.toContain('expo-intent-launcher');
   });
+
+  it('APK künyesi kriptosu (src/lib/kripto, @noble/*) ve gömülü künye çapası yok', () => {
+    expect(Object.keys(pkg.dependencies ?? {}).filter((d) => d.startsWith('@noble/'))).toEqual([]);
+    expect(fs.existsSync(path.join(KOK, 'src', 'lib', 'kripto'))).toBe(false);
+    expect(fs.existsSync(path.join(KOK, 'src', 'lib', 'apk-imza-capasi.json'))).toBe(false);
+  });
 });
 
 describe('K-14 — uygulama kodunda APK indir/kur yolu yok', () => {
@@ -76,6 +82,7 @@ describe('K-14 — uygulama kodunda APK indir/kur yolu yok', () => {
     ['kurulum izni', /REQUEST_INSTALL_PACKAGES/],
     ['APK künyesi adresi', /apk\/surum\.json/],
     ['APK künyesi modülü', /apkKunye/],
+    ['APK künyesi çapası / kriptosu', /apk-imza-capasi|ed25519Verify|@noble\//],
     ['intent başlatıcı', /expo-intent-launcher|startActivityAsync/],
   ];
 

@@ -72,7 +72,7 @@ Paket `deploy/` ve `scripts/`yi TAŞIMAZ (`docs/KOD-KURALLARI.md` § deploy) —
 | Yazdırma / dosya | `expo-print` | `expo-sharing` KULLANILMAZ (ölü); `expo-intent-launcher` ve doğrudan `expo-file-system` bağımı çıktı (2026-10-07, K-14: uygulama içi APK kurulumu kalktı; `expo`nun geçişli bağımlılığı olarak kalır) |
 | Animasyon · klavye · sıralama | `react-native-reanimated` 4 + `react-native-worklets` · `react-native-keyboard-controller` · `react-native-sortables` | worklets reanimated 4 peer'ı |
 | Ağ · güncelleme · test | `@react-native-community/netinfo` · `expo-updates` · `jest-expo` + `@testing-library/react-native` | — |
-| İmza doğrulama · özet (saf JS kripto) | `@noble/curves` 2.4.0 + `@noble/hashes` 2.4.0 (TAM SABİT — ESM-only, [KU-12]) | yalnız `src/lib/kripto/` sarmalayıcısı (APK künyesi); `expo-crypto` native (APK ister), `tweetnacl` S < L denetlemez, `node-forge` yalnız expo CLI'ın geçişli bağımlılığı; elle yazılan doğrulayıcı GEÇİCİYDİ (§9) |
+| İmza doğrulama · özet (saf JS kripto) | **YOK** | `@noble/curves` + `@noble/hashes` ve `src/lib/kripto/` çıktı (2026-10-08: tek kullanıcısı tablet APK künyesiydi, K-14'te kalktı); yeniden gerekirse §9 kaydı emsaldir |
 | Şema doğrulama | **YOK** (`zod` bağımlılığı yok, 386 dosyada 0 `z.object`) | §8 açık karar |
 | Web hedefi | **YOK** | `react-native-web` + `react-dom` ölü (§7) |
 

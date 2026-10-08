@@ -51,12 +51,8 @@ const EN_AZ_TABLO_TOKEN = 15;
 // hatasını `throw`la atıyor (Teks-Erp/src/jobs/mdns-advertiser.job.ts:12-17,
 // Electron/electron/discovery/mdns-browser.ts:8). İki uç aynı protokolü
 // konuşuyor → sürüm de birlikte yürür.
-// `@noble/curves` + `@noble/hashes` (mobil): YALNIZ ESM yayınlanır ve tablet APK künyesinin imza doğrulamasıdır
-// (`mobil/src/lib/kripto/`) — kripto sürümü bilinçli yükseltilir, `^` ile kendiliğinden kaymaz.
 const PIN_KAYDI = [
   { paket: "bonjour-service", projeler: ["Teks-Erp", "Electron"] as const },
-  { paket: "@noble/curves", projeler: ["mobil"] as const },
-  { paket: "@noble/hashes", projeler: ["mobil"] as const },
 ];
 const TAM_SABIT = /^\d+\.\d+\.\d+$/;
 

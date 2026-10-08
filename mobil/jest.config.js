@@ -8,9 +8,8 @@ module.exports = {
   setupFilesAfterEnv: ["<rootDir>/src/test/setup.ts"],
   // Sadece test dosyalarını topla.
   testMatch: ["**/*.test.ts", "**/*.test.tsx"],
-  // `@noble/*` YALNIZ ESM yayınlanır (tablet APK künyesi kriptosu) — babel dönüştürmezse jest `export`te düşer.
   transformIgnorePatterns: [
-    "node_modules/(?!((jest-)?react-native|@react-native(-community)?|expo(nent)?|@expo(nent)?/.*|@expo-google-fonts/.*|react-navigation|@react-navigation/.*|@unimodules/.*|unimodules|sentry-expo|native-base|react-native-paper|react-native-reanimated|react-native-gesture-handler|@shopify/flash-list|react-native-sortables|react-native-toast-message|@noble/.*))",
+    "node_modules/(?!((jest-)?react-native|@react-native(-community)?|expo(nent)?|@expo(nent)?/.*|@expo-google-fonts/.*|react-navigation|@react-navigation/.*|@unimodules/.*|unimodules|sentry-expo|native-base|react-native-paper|react-native-reanimated|react-native-gesture-handler|@shopify/flash-list|react-native-sortables|react-native-toast-message))",
   ],
   // RN/react-query/jest-expo altyapısı node ortamında pin'lenemeyen açık handle
   // (timer) bırakıyor → "worker did not exit gracefully" uyarısı (testler 53/53

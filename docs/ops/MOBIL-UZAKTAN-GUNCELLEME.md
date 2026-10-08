@@ -269,7 +269,7 @@ ya da sahte) · `JWS_IMZA`/`JWS_*` bozuk/sahte imza · `KUNYE_KANAL` başka kana
 `surum.json` alanları künyeyle uyuşmuyor · `BELGE_*` biçim · `DOSYA_OZETI` inen dosya künyede yazan değil (silindi) ·
 `DOSYA_OKUNAMADI` · `CAPA_BOS`/`CAPA_GECERSIZ` çapasız JS. Hepsinde tablet eski sürümde çalışır.
 
-**Kripto (kullanıcı onayı 2026-10-01):** `@noble/curves` 2.4.0 (Ed25519) + `@noble/hashes` 2.4.0 (SHA-256/512) —
+**Kripto (kullanıcı onayı 2026-10-01; eski kanal — ana daldan 2026-10-08'de `src/lib/kripto/` ve iki paket kalktı, `eski-kanal-son` etiketinde):** `@noble/curves` 2.4.0 (Ed25519) + `@noble/hashes` 2.4.0 (SHA-256/512) —
 denetlenmiş saf JS, TAM SABİT (ESM-only; `test_dependency_contract §(a)`), yalnız `src/lib/kripto/` sarmalar.
 Kip bizim seçimimiz: RFC 8032 katı kip (`zip215: false` — kanonik A/R, S < L, küçük mertebeli A RED) + küçük
 mertebeli R reddi; kâhinler RFC 8032 + Wycheproof EdDSA 151 vektör + node:crypto rastgele/bozulma (gevşek ZIP-215
@@ -387,7 +387,6 @@ Güncelleme: internet). İkisinin farklı olması normaldir; ekran bunu uyarı o
 | `Teks-Erp/scripts/test_mobile_update.ts` | Donmuş manifest baytları BOZULMADAN servis ediliyor mu · imza sertifikayla doğrulanıyor mu · protokol başlıkları · yol kaçışı · geri alma · **backend ↔ mobil ↔ nginx sınırlayıcı tutarlılığı** (37 kontrol) |
 | `mobil/src/test/update-feed-url.test.ts` | Feed adresi tek kaynak · `enabled` açık · sertifika dosyası gerçekten var · ERP adresinden bağımsızlık (7 kontrol) |
 | `mobil/src/services/appUpdate.service.test.ts` | Yenileme kapısı (bekleyen kayıt) + sürüm karşılaştırması (8 kontrol) |
-| `mobil/src/lib/kripto/kripto.test.ts` | `@noble/*` sarmalayıcısının kâhini: SHA-256/512 + Ed25519 (RFC 8032 · Wycheproof 151 vektör · node:crypto) + katı kip |
 | `Teks-Erp/scripts/test_panel_imza.ts` §3b–d | APK künyesi kodu ana dalda YOK: `guven-capasi-ekle.ts tablet` → 64 · `panel-imza.ts apk-imzala/apk-dogrula` → 2 |
 | `scripts/test_grup_yayin_kapisi.mjs` §3G6 | Yayın kapıları: imzasız OTA · OTA sertifikası · tablet çapası · imzasız künye · rotasyon · yükleme sırası |
 | `mobil/scripts/build-apk.mjs` | Manifest'te feed adresi + runtimeVersion + **kod imzalama sertifikası** · APK'nın mührü |

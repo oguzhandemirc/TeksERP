@@ -106,6 +106,7 @@ Ayrıca kayıtta duran iki küçük borç: OFL-1.1 font lisans metninin dağıt�
 4. Bakım        : 2.4.0 (2026-08-27); TAM SABİT (ESM-only + kripto: bilinçli yükseltme) — `test_dependency_contract §(a)` korur
 5. Lisans       : MIT (ikisi de)
 6. Dağıtım      : mobilde OTA (native yok); ancak depo parmak izi `dependencies`i saydığı için ilk OTA `--parmak-izini-kabul-et` ister (gerekçe: saf JS) — `docs/ops/MOBIL-UZAKTAN-GUNCELLEME.md` §4d
+7. KALDIRILDI  : 2026-10-08 — tek kullanıcısı (tablet APK künyesi doğrulaması) K-14'te kalktı; `src/lib/kripto/` ve iki paket çıktı. Saf JS: Play paketinin native'i değişmez, ama parmak izi `dependencies`i saydığından önceki tabanla kıyaslayan ilk OTA yine `--parmak-izini-kabul-et` ister
 
 Önceki tek karar sonucu "paket YOK"tur:
 **backend log kanalı** (2026-09-07) — `pino`/`winston` yerine **elle yazmak**
