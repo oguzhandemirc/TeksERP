@@ -19,6 +19,8 @@
 //      root değil + bağlamdan yalnız docker/ betikleri, machine-id silinir; compose ro/127/seed 0.
 //      §5c teslim künyesi 2e aracıyla imzalanır: anahtar açıkça verilir (varsayılan yol yok, boşsa DUR), yoksa paket yok,
 //      künye müşterisiz, .jws SHA256SUMS'ta.
+//      §5d vekil ayarları (TRUST_PROXY · LOGIN_LOCKOUT_SCOPE · RATE_LIMIT_*) backend'e boş varsayılanla geçer;
+//      şablon TRUST_PROXY'yi boş doğurur.
 //   §6 satıcı imajı (G2/G3) DURAĞAN: `satici/sunucu/scripts/` altındaki her CLI `dist-cli`'a derlenir ve
 //      `test -f` kapısında; compose'da `/dosyalar` yazılır, `/derlemeler` + `/yayin` salt okunur (⑨'un docker'sız ikizi).
 // =============================================================================
@@ -333,6 +335,42 @@ function korumaliStatik(dockerfile: string, ignore: string, compose: string): st
   for (const [ad, d, i, c] of sondalar) {
     const uygulandi = d !== df || i !== ig || c !== dc;
     check(`§5b sonda: ${ad} → kırmızı`, uygulandi && korumaliStatik(d, i, c).length > 0, uygulandi ? "" : "MUTASYON UYGULANMADI");
+  }
+}
+
+// §5d — vekil ayarları: compose backend'e geçer (yoksa vekil arkasında herkes tek IP), varsayılan BOŞ
+// (vekilsiz kurulumda bugünkü davranış), şablon TRUST_PROXY'yi boş doğurur ("true" sahte XFF'e güvenir).
+const VEKIL_ANAHTARLARI = ["TRUST_PROXY", "LOGIN_LOCKOUT_SCOPE", "RATE_LIMIT_ENABLED", "RATE_LIMIT_WINDOW_SEC", "RATE_LIMIT_WRITE_MAX", "RATE_LIMIT_LOGIN_MAX"];
+function vekilStatik(compose: string, envOrnek: string): string[] {
+  const ih: string[] = [];
+  const bas = compose.indexOf("\n  backend:");
+  const son = compose.indexOf("\n  yedek:");
+  const backend = bas >= 0 && son > bas ? compose.slice(bas, son) : "";
+  if (!backend) ih.push("compose backend servisi bulunamadı");
+  for (const a of VEKIL_ANAHTARLARI) {
+    if (!new RegExp(`^\\s+${a}: \\$\\{${a}:-\\}$`, "m").test(backend)) ih.push(`compose backend ${a}'yi boş varsayılanla geçirmiyor`);
+  }
+  const tp = /^TRUST_PROXY=(.*)$/m.exec(envOrnek);
+  if (!tp) ih.push(".env.ornek TRUST_PROXY satırı yok");
+  else if (tp[1].trim() !== "") ih.push(`.env.ornek TRUST_PROXY boş doğmuyor (${tp[1].trim()})`);
+  if (!/^RATE_LIMIT_ENABLED=/m.test(envOrnek)) ih.push(".env.ornek RATE_LIMIT_ENABLED satırı yok");
+  return ih;
+}
+{
+  const dc = oku("Teks-Erp/docker/korumali/docker-compose.yml");
+  const eo = oku("Teks-Erp/docker/korumali/.env.ornek");
+  const gercek = vekilStatik(dc, eo);
+  check("§5d ⭐ compose vekil ayarlarını (TRUST_PROXY · giriş kilidi · hız sınırı) boş varsayılanla geçirir, şablon güvenmez", gercek.length === 0, gercek.join(" | "));
+  const sondalar: Array<[string, string, string]> = [
+    ["TRUST_PROXY geçmiyor", dc.replace(/^\s+TRUST_PROXY: .*\n/m, ""), eo],
+    ["TRUST_PROXY varsayılanı true", dc.replace("${TRUST_PROXY:-}", "${TRUST_PROXY:-true}"), eo],
+    ["RATE_LIMIT_ENABLED geçmiyor", dc.replace(/^\s+RATE_LIMIT_ENABLED: .*\n/m, ""), eo],
+    ["anahtar yedek servisinde", dc.replace(/^\s+LOGIN_LOCKOUT_SCOPE: .*\n/m, "").replace("      YEDEK_SAAT:", "      LOGIN_LOCKOUT_SCOPE: ${LOGIN_LOCKOUT_SCOPE:-}\n      YEDEK_SAAT:"), eo],
+    ["şablon TRUST_PROXY=true", dc, eo.replace(/^TRUST_PROXY=.*$/m, "TRUST_PROXY=true")],
+  ];
+  for (const [ad, c, e] of sondalar) {
+    const uygulandi = c !== dc || e !== eo;
+    check(`§5d sonda: ${ad} → kırmızı`, uygulandi && vekilStatik(c, e).length > 0, uygulandi ? "" : "MUTASYON UYGULANMADI");
   }
 }
 

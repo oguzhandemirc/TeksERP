@@ -60,6 +60,15 @@ services:
       # basar; iki durumda da ilk girişte parola değişimi zorunlu.
       ILK_YONETICI_PAROLASI: ${ILK_YONETICI_PAROLASI:-}
       LICENSE_SERVER_URL: ${LICENSE_SERVER_URL:-}
+      # Vekil (nginx/Cloudflare) arkası: boş = vekil yok, bugünkü davranış. Vekil arkasında bu ayar
+      # verilmezse bütün istemciler tek adres görünür ve bir kişinin hatalı girişi herkesi kilitler.
+      # Tek vekilde "1" (yalnız port 127.0.0.1'deyken güvenli); "true" sahte X-Forwarded-For'a güvenir.
+      TRUST_PROXY: ${TRUST_PROXY:-}
+      LOGIN_LOCKOUT_SCOPE: ${LOGIN_LOCKOUT_SCOPE:-}
+      RATE_LIMIT_ENABLED: ${RATE_LIMIT_ENABLED:-}
+      RATE_LIMIT_WINDOW_SEC: ${RATE_LIMIT_WINDOW_SEC:-}
+      RATE_LIMIT_WRITE_MAX: ${RATE_LIMIT_WRITE_MAX:-}
+      RATE_LIMIT_LOGIN_MAX: ${RATE_LIMIT_LOGIN_MAX:-}
     ports:
       # Varsayılan YALNIZ bu makine (kapalı doğar); fabrika ağına açmak bilinçli karar:
       # .env'de TEKSERP_DINLE=0.0.0.0 (ya da LAN IP'si).
