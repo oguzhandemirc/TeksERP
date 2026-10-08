@@ -32,7 +32,8 @@
 //   §7 güncelleyicinin yöneteceği düzen (GUNCELLEYICI-SAGLAMLIK L5): §7a–§7e `TEKSERP_GOC_ACILISTA` (yok/boş/1 =
 //      bugünkü açılışta göç · 0 = göç yok, şema denetimi · başka = çık) ve `goc` aracı DAVRANIŞI (sh + sahteler) ·
 //      §7f çıkış kodları betik ↔ `docker/korumali/acilis-kodlari.json` iki yönlü · §7g imajda `goc` bağı ·
-//      §7h güncelleyicili compose kuralları · §7i elle compose ile ayrışma yok · §7j anahtar yalnız güncelleyicili compose'da.
+//      §7h güncelleyicili compose kuralları · §7i elle compose ile ayrışma yok · §7j anahtar yalnız güncelleyicili compose'da ·
+//      §7k kurulum sınıfı (`TEKSERP_KURULUM_SINIFI`) compose'dan backend'e geçer, şablon boş, bulut örneği BARINDIRILAN.
 // =============================================================================
 import { readFileSync, readdirSync, existsSync, mkdtempSync, mkdirSync, writeFileSync, chmodSync, rmSync, symlinkSync } from "node:fs";
 import { join } from "node:path";
@@ -1026,6 +1027,51 @@ function anahtarYeriStatik(dosyalar: Record<string, string>, teslim: string): st
   check("§7j ⭐ anahtar yalnız güncelleyicili compose'da (elle/bulut/demo compose bugünkü gibi açılışta göçer)", g.length === 0, g.join(" | "));
   const sonda = { ...dosyalar, "docker/korumali/docker-compose.yml": dosyalar["docker/korumali/docker-compose.yml"]!.replace("      PORT: \"4000\"\n", "      PORT: \"4000\"\n      TEKSERP_GOC_ACILISTA: \"0\"\n") };
   check("§7j sonda: elle compose'a anahtar → kırmızı", anahtarYeriStatik(sonda, tp).length > 0);
+}
+
+// §7k kurulum sınıfı: compose backend'e `TEKSERP_KURULUM_SINIFI`ni boş varsayılanla geçirir (yoksa .env'deki değer
+// konteynere ulaşmaz — saha bulgusu); şablon boş doğar (fabrika = bugünkü davranış); bulut örneği BARINDIRILAN'ı sabitler.
+function kurulumSinifiStatik(d: { helper: string; compose: string; guncelleyici: string; envOrnek: string; bulut: string; runbook: string }): string[] {
+  const ih: string[] = [];
+  const ad = /export const INSTALL_CLASS_ENV = "([A-Z_]+)";/.exec(d.helper)?.[1];
+  const sinif = /export const HOSTED_CLASS = "([A-Z_]+)";/.exec(d.helper)?.[1];
+  if (!ad || !sinif) return ["install-class.helper.ts sabitleri okunamadı (ÖLÇÜLEMEDİ)"];
+  const gecis = new RegExp(`^ {6}${ad}: \\$\\{${ad}:-\\}$`, "m");
+  for (const [n, c] of [["elle compose", d.compose], ["güncelleyicili compose", d.guncelleyici]] as const) {
+    const be = servisBloklari(c).get("backend") ?? "";
+    if (!gecis.test(be)) ih.push(`${n} backend'e ${ad}'ı boş varsayılanla geçirmiyor`);
+  }
+  if (!new RegExp(`^${ad}=$`, "m").test(d.envOrnek)) ih.push(`.env.ornek ${ad}'ı boş doğurmuyor (fabrika kurulumu = bugünkü davranış)`);
+  const bb = servisBloklari(`\n${d.bulut}`).get("backend") ?? "";
+  if (!new RegExp(`^ {6}${ad}: ${sinif}$`, "m").test(bb)) ih.push(`bulut örneği backend'e ${ad}=${sinif} vermiyor`);
+  const b10 = d.runbook.slice(d.runbook.indexOf("## 10."));
+  if (!b10.includes(`${ad}=${sinif}`)) ih.push(`runbook §10 bulutta ${ad}=${sinif} zorunluluğunu anmıyor`);
+  return ih;
+}
+{
+  const d = {
+    helper: oku("Teks-Erp/src/services/helpers/install-class.helper.ts"),
+    compose: oku("Teks-Erp/docker/korumali/docker-compose.yml"),
+    guncelleyici: oku(GUNCELLEYICI_COMPOSE),
+    envOrnek: oku("Teks-Erp/docker/korumali/.env.ornek"),
+    bulut: oku("Teks-Erp/docker/korumali/docker-compose.bulut-ornek.yml"),
+    runbook: oku("docs/ops/LINUX-DOCKER-KURULUM.md"),
+  };
+  const g = kurulumSinifiStatik(d);
+  check("§7k ⭐ kurulum sınıfı: iki compose backend'e boş varsayılanla geçirir, şablon boş, bulut örneği + runbook §10 BARINDIRILAN", g.length === 0, g.join(" | "));
+  const SATIR = "      TEKSERP_KURULUM_SINIFI: ${TEKSERP_KURULUM_SINIFI:-}\n";
+  const sondalar: Array<[string, typeof d]> = [
+    ["elle compose geçirmiyor", { ...d, compose: d.compose.replace(SATIR, "") }],
+    ["güncelleyicili compose geçirmiyor", { ...d, guncelleyici: d.guncelleyici.replace(SATIR, "") }],
+    ["varsayılan BARINDIRILAN", { ...d, compose: d.compose.replace("${TEKSERP_KURULUM_SINIFI:-}", "${TEKSERP_KURULUM_SINIFI:-BARINDIRILAN}") }],
+    ["şablon dolu doğuyor", { ...d, envOrnek: d.envOrnek.replace(/^TEKSERP_KURULUM_SINIFI=$/m, "TEKSERP_KURULUM_SINIFI=BARINDIRILAN") }],
+    ["bulut örneği sınıfsız", { ...d, bulut: d.bulut.replace(/^ {6}TEKSERP_KURULUM_SINIFI: BARINDIRILAN\n/m, "") }],
+    ["runbook anmıyor", { ...d, runbook: d.runbook.replace("`TEKSERP_KURULUM_SINIFI=BARINDIRILAN`", "") }],
+  ];
+  for (const [ad, s] of sondalar) {
+    const uygulandi = JSON.stringify(s) !== JSON.stringify(d);
+    check(`§7k sonda: ${ad} → kırmızı`, uygulandi && kurulumSinifiStatik(s).length > 0, uygulandi ? "" : "MUTASYON UYGULANMADI");
+  }
 }
 
 console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);

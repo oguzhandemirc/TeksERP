@@ -73,6 +73,9 @@ services:
       RATE_LIMIT_WINDOW_SEC: ${RATE_LIMIT_WINDOW_SEC:-}
       RATE_LIMIT_WRITE_MAX: ${RATE_LIMIT_WRITE_MAX:-}
       RATE_LIMIT_LOGIN_MAX: ${RATE_LIMIT_LOGIN_MAX:-}
+      # Kurulum sınıfı: boş = fabrika kurulumu (bugünkü davranış); bizim yönettiğimiz bulut sunucusunda
+      # BARINDIRILAN (yalnız sertleştirir, hiçbir kuralı gevşetmez — install-class.helper.ts).
+      TEKSERP_KURULUM_SINIFI: ${TEKSERP_KURULUM_SINIFI:-}
       # Göç açılışta DEĞİL, yalnız güncelleyicinin GOC adımında (`compose run --rm --no-deps backend goc`);
       # açılış yalnız şemayı denetler, imaj ≠ veritabanı ise sunucu açılmaz (acilis-kodlari.json).
       TEKSERP_GOC_ACILISTA: "0"  # GUNCELLEYICI

@@ -18,6 +18,8 @@ services:
       # Cloudflare'in verdiği gerçek adresle EZER, istemcinin yazdığı başlık API'ye ulaşmaz.
       TRUST_PROXY: "1"
       RATE_LIMIT_ENABLED: "true"
+      # Bulut sunucusu BARINDIRILAN sınıftadır (ZORUNLU): .env ne derse desin burada sabit.
+      TEKSERP_KURULUM_SINIFI: BARINDIRILAN
     # TRUST_PROXY=1 yalnız API portu dışarıya kapalıyken güvenlidir: .env'deki TEKSERP_DINLE ne olursa
     # olsun port yalnız döngü adresinde yayımlanır.
     ports: !override
