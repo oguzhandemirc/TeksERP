@@ -1,0 +1,74 @@
+name: Native Linux (güncelleyici çalışma alanı)
+
+# =============================================================================
+# NATIVE ÇALIŞMA ALANI — Linux kolu (GUNCELLEYICI-SAGLAMLIK T0, kullanıcı kararı AK-5)
+# =============================================================================
+# ubuntu-latest üzerinde: biçim + clippy (uyarı = hata) + bütün `cargo test` (`scripts/kapi.mjs`, Mac
+# kapısıyla aynı adımlar). Windows kolu `native-windows.yml`de (NTFS junction + gerçek SCM). `ci.yml`
+# "native" işi aynı alanı kâhin ve `.node` derlemesiyle ölçer; bu dosya güncelleyicinin Linux arka ucunun
+# yeridir — T1 gerçek dumanı (`duman-linux.sh`: systemd + compose + yerel CDN) buraya adım olarak iner.
+# Sır gerekmez; `pull_request_target` KULLANILMAZ (açık repoda PR koduna sır verilmez).
+# Yalnız native alan (ya da bu dosya) değişince koşar; `gece/**` push'u da ölçülür (dalga dalları PR'sız).
+# =============================================================================
+
+on:
+  push:
+    branches: [main, "gece/**"]
+    paths:
+      - "Teks-Erp/native/**"
+      - ".github/workflows/native-linux.yml"
+  pull_request:
+    branches: [main]
+    paths:
+      - "Teks-Erp/native/**"
+      - ".github/workflows/native-linux.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: native-linux-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  linux:
+    name: Native Linux (fmt + clippy + test)
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    env:
+      CARGO_TERM_COLOR: always
+      CARGO_INCREMENTAL: "0"
+    defaults:
+      run:
+        working-directory: Teks-Erp/native
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Rust araç zinciri (stable + rustfmt + clippy)
+        run: rustup toolchain install stable --profile minimal --component rustfmt,clippy && rustup default stable
+      # Anahtar kilit dosyası + araç zinciri sürümü; ara anahtar bayat target'ı geri getirir (cargo yeniden derler).
+      - name: rustc sürümü (önbellek anahtarı)
+        id: rustc
+        run: echo "surum=$(rustc --version | tr ' ' '-')" >> "$GITHUB_OUTPUT"
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git/db
+            Teks-Erp/native/target
+          key: cargo-native-linux-${{ steps.rustc.outputs.surum }}-${{ hashFiles('Teks-Erp/native/Cargo.lock') }}
+          restore-keys: |
+            cargo-native-linux-${{ steps.rustc.outputs.surum }}-
+      - name: Biçim + clippy (bütün çalışma alanı, Linux yerel hedef)
+        run: node scripts/kapi.mjs denetle
+      - name: cargo test (vektörler + durum makinesi + öldür-yeniden başlat, Linux dosya sistemi)
+        run: node scripts/kapi.mjs test
+      # T1 (GUNCELLEYICI-SAGLAMLIK §10): gerçek Linux dumanı bu adımın yerine iner (L4b · L5 · L6 sonrası).
+      - name: "T1 yer tutucu — Linux gerçek dumanı (duman-linux.sh) henüz yok"
+        run: echo "::notice title=T1::Linux dumanı henüz yok — T1 dilimi bu adımı duman-linux.sh ile değiştirir"
