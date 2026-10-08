@@ -495,8 +495,43 @@ jobs:
       - name: Kapı kapsamı (tip kapısı SIFIR dosya derlemiyor)
         run: node scripts/kapi-kapsami.mjs satici/sunucu
         working-directory: .
+      # Tören bekçisi (test_uretim_toren.ts) ayrı birim olarak macOS RAM diski ister → aşağıdaki
+      # satici-toren-mac işinde koşar; koşucu çıkarmayı yalnız o iş ci.yml'de duruyorsa yapar (yoksa KIRMIZI).
       - name: Satıcı bekçileri
+        env:
+          SATICI_TOREN_MAC_ISINDE: "1"
         run: npx tsx scripts/run-all-tests.ts
+
+  # ===========================================================================
+  # SATICI ÜRETİM TÖRENİ — macOS. Tören Mac'te yapılır; yedek anahtar ayrı birime (/Volumes/<USB>)
+  # yazılır ve bekçi o birimi hdiutil RAM diskiyle kurar ("kurulamazsa KIRMIZI, atlama yok"). Tören
+  # aracının /Volumes kuralı darwin'e özgüdür — Linux'ta ölçülse aynı güvence ölçülmezdi. DB'siz.
+  # ===========================================================================
+  satici-toren-mac:
+    name: Satıcı üretim töreni (macOS RAM diski)
+    runs-on: macos-latest
+    defaults:
+      run:
+        working-directory: satici/sunucu
+    env:
+      TEKSERP_PAROLA_KASASI: kapali
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            satici/sunucu/package-lock.json
+            Teks-Erp/package-lock.json
+      - name: Teks-Erp bağımlılıkları (tören klonuna kopyalanır)
+        run: npm ci
+        working-directory: Teks-Erp
+      - run: npm ci
+      - name: Prisma generate
+        run: npx prisma generate
+      - name: Üretim töreni bekçisi
+        run: npx tsx scripts/test_uretim_toren.ts
 
   # ===========================================================================
   # SATICI WEB — portal web arayüzü (satici/web; React + Vite). DB'siz: tip + lint + vitest (ayna

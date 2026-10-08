@@ -27,6 +27,8 @@
 
 - **[ÇEKİRDEK]** Müşteri adı koda gömülmez: ağda (keşif, mDNS) ve giriş ekranında görünen ad kabul edilmiş HAK'ın `musteri.ad`ından (`lib/license/licensee-name.ts`), belge/etiket/panel unvanı `company.name` ayarından okunur; unvanın ilk değeri lisans adıdır (satır yok ya da nötrse bir kez, audit'li), sonra yalnız fabrika değiştirir; okunamazsa nötr yedek "TeksERP" (`constants/company.ts` + iki istemci aynası) gösterilir; bir müşteriye özgü görünüm kanal kaydında ya da veride yaşar. · bekçi: `scripts/test_musteri_adi_kodda_yok.ts`, `scripts/test_firma_adi_dondur.ts`, `scripts/test_lisans_adi.ts` <sub>(arşiv 2026-09-28 firma adı · 2026-10-06 O4)</sub>
 
+- **[ÇEKİRDEK]** Yalnız bir işletim sisteminde ölçülebilen bekçiyi CI'da o sistemin işinde koş; başka platformun koşucusundan çıkarmak beyanlı olur ve koşucu o işin ci.yml'de durduğunu ölçer (iş yoksa KIRMIZI) — platforma göre sessizce atlamak ya da beklentiyi platforma göre gevşetmek yasak. · bekçi: `satici/sunucu/scripts/run-all-tests.ts` (`scripts/lib/ci-mac-isi.ts`) <sub>(arşiv 2026-10-09 CI kırmızıları)</sub>
+
 ### Yasaklar
 
 - **[ÇEKİRDEK]** `CLIENT_IP_HEADER` yalnız operatörün beyan ettiği ters vekil arkasında verilir (demo) ve verildiğinde HER isteğe uygulanır; LAN kurulumunda VERİLMEZ (LAN'daki biri `CF-Connecting-IP` uydurup giriş kilidini VE hız sınırını etkisizleştirir). Emekli tünelden kalan `REMOTE_PORT` .env'de duruyorsa başlık YOK SAYILIR ve uyarılır; `TRUST_PROXY` de app-wide AYARLANMAZ. · bekçi: `scripts/test_web_hardening.ts §CI-11..13` <sub>(arşiv 2026-09-30 B6)</sub>
@@ -87,6 +89,7 @@ Backend: `test_kisa_kimlik_ozet`, `test_lisans_kapisi`, `test_audit_depth`, `tes
 
 ## Arşiv notları (tam metin, gerekçe ve ölçüm)
 
+- 2026-10-09 · CI kırmızıları: tören bekçisi macOS işinde, bayat kanca çapası, sunucusuz giriş ekranı smoke'u [ÇEKİRDEK] — `arsiv/2026-10.md` §2026-10-09 CI kırmızıları
 - 2026-10-05 · PIN bayat özet: geri alıp yeniden yükseltmede düz değer esas, iki kişide eşleşen PIN fail-closed [ÇEKİRDEK] — `arsiv/2026-10.md` §2026-10-05 PIN bayat özet
 - 2026-10-01 · 2026-10-01 — Kısa kimlikler (hızlı PIN + QR kart) özetli saklanır: anahtar halkası LICENSE_DIR'de, yedeğe mühürlü emanet, tembel + betikli dönüşüm, kalıcı giriş kilidi, yalnız onaylı cihaz bayrağı (G21-K) [ÇEKİRDEK] + [PROFİL] — `arsiv/2026-10.md` §2026-10-01 G21-K
 - 2026-09-01 · 2026-09-01 — Patron modülü: fabrikaya GELEN PORT AÇMADAN uzaktan takip (GEÇERSİZ → 2026-09-29/30) — `arsiv/2026-09.md`

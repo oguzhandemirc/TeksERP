@@ -6,8 +6,9 @@
 // Ağır koşum makine semaforundan geçer: node ../../scripts/agir-is.mjs -- npx tsx scripts/run-all-tests.ts
 // =============================================================================
 import { spawnSync } from "node:child_process";
-import { readdirSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
+import { macIsiBul } from "./lib/ci-mac-isi";
 import { hedefDbKapisi } from "./lib/test-ortam";
 // Bekçi/koşucu gerçek Anahtar Zinciri'ne GİTMEZ: parola okuyan araçlar kasa yerine stdin/dosya kullanır (scripts/lib/parola-kasasi.mjs).
 process.env.TEKSERP_PAROLA_KASASI = "kapali";
@@ -17,18 +18,35 @@ const SURE_SINIRI_MS = 180_000;
 // Uçtan uca tören bekçisi her tören koşumunda bütün süreçlerin argv/env'ini tarar (parola sızıntısı): tek başına ~15 dk (§9 ile, ölçüm 925 sn).
 const OZEL_SURE_MS: Readonly<Record<string, number>> = { "test_uretim_toren.ts": 1_500_000 };
 
+// Yalnız macOS'ta ölçülebilen bekçi: ayrı birim hdiutil RAM diskidir (/Volumes) ve tören aracının /Volumes kuralı
+// darwin'e özgüdür. Linux CI bunu ci.yml'deki macOS işine bırakır — ama yalnız o iş beyanlıysa; değilse koşar (KIRMIZI).
+const MAC_BEKCISI = "test_uretim_toren.ts";
+const MAC_ISI_ORTAMI = "SATICI_TOREN_MAC_ISINDE";
+
 const db = hedefDbKapisi();
 const filtre = process.argv[2];
+const kirmizi: string[] = [];
+let macaBirakilan: string | null = null;
+if (process.platform !== "darwin" && process.env[MAC_ISI_ORTAMI] === "1") {
+  const ciYol = path.resolve(DIZIN, "..", "..", "..", ".github", "workflows", "ci.yml");
+  const is = existsSync(ciYol) ? macIsiBul(readFileSync(ciYol, "utf8"), MAC_BEKCISI) : null;
+  if (is) macaBirakilan = is;
+  else {
+    console.log(`❌ ${MAC_ISI_ORTAMI}=1 ama ci.yml'de ${MAC_BEKCISI}'i koşturan macOS işi yok — bekçi hiçbir yerde koşmazdı`);
+    kirmizi.push(`${MAC_ISI_ORTAMI} beyanı`);
+  }
+}
 const dosyalar = readdirSync(DIZIN)
   .filter((f) => /^test_[a-z0-9_]+\.ts$/.test(f))
   .filter((f) => !filtre || f.includes(filtre))
+  .filter((f) => !(macaBirakilan && f === MAC_BEKCISI))
   .sort();
+if (macaBirakilan) console.log(`⏭ ${MAC_BEKCISI} bu koşumda değil — ci.yml macOS işi "${macaBirakilan}" koşturur (RAM diski)`);
 if (dosyalar.length === 0) {
   console.error(`⛔ Koşulacak bekçi yok${filtre ? ` ("${filtre}" eşleşmedi)` : ""}`);
   process.exit(2);
 }
 console.log(`Satıcı bekçileri — hedef DB ${db} — ${dosyalar.length} dosya\n`);
-const kirmizi: string[] = [];
 for (const d of dosyalar) {
   const t0 = Date.now();
   const r = spawnSync(process.execPath, ["--import", "tsx", path.join(DIZIN, d)], {
