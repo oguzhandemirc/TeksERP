@@ -1,9 +1,9 @@
 # TeksERP — Gizlilik Politikası
 
-> **TASLAK — AVUKAT İNCELEMESİ BEKLİYOR.** Google Play'in zorunlu tuttuğu gizlilik politikası için
-> hazırlanmış bir taslaktır; hukuki görüş değildir. Metin `docs/ops/PLAY-KONSOL-FORMLARI.md` §1.2 ile
-> hizalıdır (2026-10-08; veri akışları koddan ölçüldü, kaynaklar orada §1.1 ve §8). Yayından önce bir hukukçu
-> KVKK / GDPR açısından gözden geçirmeli; köşeli parantezli alanları kullanıcı doldurur.
+> **YAYINDA — hukukçu incelemesi YAPILMADI** (kullanıcı kararı 2026-10-08: "hukukçu yok, şimdi yayınla").
+> Google Play'in zorunlu tuttuğu gizlilik politikasıdır; hukuki görüş değildir. Metin
+> `docs/ops/PLAY-KONSOL-FORMLARI.md` §1.2 ile hizalıdır (2026-10-08; veri akışları koddan ölçüldü, kaynaklar
+> orada §1.1 ve §8). Unvan "Etkili Yazılım Ltd. Şti.", adres satırı yok (kullanıcı kararı 2026-10-08).
 >
 > **Yayın:** `https://tekserp.etkiliyazilim.com/gizlilik` (K2, kullanıcı kararı 2026-10-08; kendi VDS'imiz).
 > Bu dosya sayfanın TEK KAYNAĞIDIR: bu satırın altındaki kısım `deploy/gizlilik-sayfasi/uret.mjs` ile
@@ -14,7 +14,7 @@
 
 **Son güncelleme:** 8 Ekim 2026
 **Uygulama:** TeksERP (Google Play paket adı: `com.etkiliyazilim.tekserp`)
-**Geliştirici:** Etkili Yazılım — [TİCARET UNVANI], [ADRES]
+**Geliştirici:** Etkili Yazılım Ltd. Şti.
 **İletişim:** info@etkiliyazilim.com
 
 ## 1. Uygulamanın niteliği

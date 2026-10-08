@@ -46,13 +46,13 @@
 
 ### 1.2 Yeni gizlilik politikası METNİ taslağı (yayınlanacak sayfanın içeriği)
 
-> Hukuki görüş değildir; yayından önce KVKK/GDPR açısından hukukçu gözden geçirmeli. `[…]` alanları kullanıcı doldurur.
+> Hukuki görüş değildir; hukukçu incelemesi yapılmadan yayınlandı (kullanıcı kararı 2026-10-08). Yayınlanan metnin tek kaynağı `docs/legal/GIZLILIK-POLITIKASI.md`.
 
 ```text
 TeksERP — Gizlilik Politikası
 Son güncelleme: [YAYIN TARİHİ]
 Uygulama: TeksERP (Google Play paket adı: com.etkiliyazilim.tekserp)
-Geliştirici: Etkili Yazılım — [TİCARET UNVANI], [ADRES]
+Geliştirici: Etkili Yazılım Ltd. Şti.
 İletişim: info@etkiliyazilim.com
 
 1. Uygulamanın niteliği

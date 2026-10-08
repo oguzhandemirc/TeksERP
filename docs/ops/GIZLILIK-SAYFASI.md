@@ -12,7 +12,7 @@
 
 ## Kurulum sırası
 
-1. Metindeki köşeli parantezli alanlar (bugün: `[TİCARET UNVANI]`, `[ADRES]`) doldurulur → `node deploy/gizlilik-sayfasi/uret.mjs` → commit (+ isteğe bağlı hukukçu incelemesi). Yer tutucu kaldıkça `--uygula` durur.
+1. Metindeki köşeli parantezli alanlar doldurulur (2026-10-08: unvan "Etkili Yazılım Ltd. Şti.", adres satırı kaldırıldı; hukukçu incelemesi yapılmadı — kullanıcı kararı) → `node deploy/gizlilik-sayfasi/uret.mjs` → commit (+ isteğe bağlı hukukçu incelemesi). Yer tutucu kaldıkça `--uygula` durur.
 2. Kuru: `deploy/gizlilik-sayfasi/vds-kur.sh` — bekçi, VDS önkoşulları, köken durumu, komşu ölçümü (adnansahin + indir); VDS'e yazmaz.
 3. Uygula: `deploy/gizlilik-sayfasi/vds-kur.sh --uygula` — `nginx -t` → yardımcı konteynerle dosyalar (root 0644, öncekiler `onceki/`) → `docker compose up -d --force-recreate` → konteyner içinden sayfa = repo → köke Cloudflare'siz istek 403 → komşu ölçümü sonra.
 4. Cloudflare DNS (kullanıcı, aşağıda). DNS EN SON: köken kapılı olmadan ad çözülmez.
