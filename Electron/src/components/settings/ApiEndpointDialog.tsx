@@ -1,11 +1,15 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import axios from "axios";
 import { toast } from "sonner";
-import { CheckCircle2, History, Loader2, Radar, RotateCcw, X, XCircle } from "lucide-react";
+import { CheckCircle2, Loader2, Radar, RotateCcw, XCircle } from "lucide-react";
 import { useServerDiscovery } from "@/hooks/useServerDiscovery";
 import { ServerDiscoveryPanel } from "./ServerDiscoveryPanel";
 import { LanTlsSection } from "./LanTlsSection";
+import { RecentAddressList } from "./RecentAddressList";
+import { ServerAddressFields, ServerModeSwitch } from "./ServerAddressFields";
+import { useServerAddressForm } from "./useServerAddressForm";
 import { addressRefusal, httpSwitchBlock, type HttpSwitchBlock } from "@/lib/lan-tls-ui";
+import { serverModeFor } from "@/lib/server-mode";
 import {
   Dialog,
   DialogContent,
@@ -15,28 +19,16 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import {
   DEFAULT_API_BASE_URL,
   applyApiBaseUrl,
   clearStoredApiBaseUrl,
   getActiveApiBaseUrl,
   getRecentApiBaseUrls,
-  joinApiBaseUrl,
   normalizeApiBaseUrl,
   pushRecentApiBaseUrl,
   removeRecentApiBaseUrl,
   setStoredApiBaseUrl,
-  splitApiBaseUrl,
-  type ApiBaseUrlParts,
 } from "@/lib/api-config";
 
 interface Props {
@@ -44,99 +36,46 @@ interface Props {
   onOpenChange: (open: boolean) => void;
 }
 
-type TestState =
-  | { status: "idle" }
-  | { status: "testing" }
-  | { status: "ok"; message: string }
-  | { status: "fail"; message: string };
-
 /**
  * Backend (API) adresini düzenleme dialog'u. Login ekranında ve uygulama içi
  * ayarlarda paylaşılır. Adres yerel saklanır (`@/lib/api-config`), kaydedince
- * anında geçerli olur — uygulamayı yeniden başlatmak gerekmez.
+ * anında geçerli olur — uygulamayı yeniden başlatmak gerekmez; giriş ekranı yeni
+ * adresi kendiliğinden yeniden yoklar (`onApiBaseUrlApplied`).
  *
- * Protokol / IP / port ayrı input'larda girilir (elle URL yazmaktan kolay);
- * son kullanılan adresler hızlı-seçim için listelenir.
+ * Üstte "Fabrika içi / Bulut" seçimi: Fabrika içi şifreli LAN (4443 + doğrulama
+ * kodu), Bulut https + kilitli boş port (443), şifreli bağlantı bölümü yok.
  */
 export function ApiEndpointDialog({ open, onOpenChange }: Props) {
   const discovery = useServerDiscovery();
-  const [parts, setParts] = useState<ApiBaseUrlParts>({ protocol: "http", host: "", port: "" });
-  const [recent, setRecent] = useState<string[]>([]);
-  const [test, setTest] = useState<TestState>({ status: "idle" });
+  const f = useServerAddressForm(open);
+  const { composed, mode, setTest } = f;
   const [saving, setSaving] = useState(false);
   // Sabitli sunucuya şifresiz adresle geçiş engellenir; bölüm o sabiti "kaldır"a açar.
   const [tlsBlock, setTlsBlock] = useState<HttpSwitchBlock | null>(null);
-
-  // Açılışta o an aktif adresi parçala + son kullanılanları yükle.
-  useEffect(() => {
-    if (open) {
-      setParts(splitApiBaseUrl(getActiveApiBaseUrl()));
-      setTest({ status: "idle" });
-      void getRecentApiBaseUrls().then(setRecent);
-    }
-  }, [open]);
-
-  const composed = joinApiBaseUrl(parts);
   const isDefault =
     !!composed && normalizeApiBaseUrl(composed) === normalizeApiBaseUrl(DEFAULT_API_BASE_URL);
+  const fabrika = mode === "fabrika";
 
-  const setPart = (patch: Partial<ApiBaseUrlParts>) => {
-    setParts((p) => ({ ...p, ...patch }));
-    setTest({ status: "idle" });
-  };
-
-  /**
-   * IP/host alanına yazım. Hostname/IP'de ':' veya '/' olmaz — varsa kullanıcı
-   * tam ya da parçalı bir adres yapıştırmış demektir ("http://192.168.1.50:4000"
-   * kopyala-yapıştır en yaygın giriş yolu). Bu durumda parçalara dağıt ki eski
-   * tek-alanlı diyalogun "URL yapıştır" jesti korunsun (aksi halde çift protokol/
-   * çift port oluşurdu). Protokolü yalnız yapıştırmada varsa değiştir; port
-   * yapıştırmadan aynen alınır (yoksa boşalır — kullanıcı açıkça portsuz girdi).
-   */
-  const onHostChange = (raw: string) => {
-    if (/[:/]/.test(raw)) {
-      const p = splitApiBaseUrl(raw);
-      const hasProtocol = /:\/\//.test(raw);
-      setParts((prev) => ({
-        protocol: hasProtocol ? p.protocol : prev.protocol,
-        host: p.host,
-        port: p.port,
-      }));
-      setTest({ status: "idle" });
-      return;
-    }
-    setPart({ host: raw });
-  };
-
-  const pickRecent = (url: string) => {
-    setParts(splitApiBaseUrl(url));
-    setTest({ status: "idle" });
-  };
-
-  const dropRecent = async (url: string) => {
-    setRecent(await removeRecentApiBaseUrl(url));
+  /** Kayıt ya da deneme öncesi: mod + yalnız-şifreli kuralı (`panelTransportFor`). */
+  const refuse = async (): Promise<string | null> => {
+    if (!composed) return "IP / sunucu adresi boş olamaz.";
+    return addressRefusal(window.api?.discovery, composed, mode);
   };
 
   const handleTest = async () => {
-    const target = composed;
-    if (!target) {
-      setTest({ status: "fail", message: "IP / sunucu adresi boş olamaz." });
-      return;
-    }
-    // Yalnız şifreli: ağ adresinde http:// ya da eşleşmemiş https denenmez bile (ana süreç de keser).
-    const refusal = await addressRefusal(window.api?.discovery, target);
+    const refusal = await refuse();
     if (refusal) {
       setTest({ status: "fail", message: refusal });
       return;
     }
     setTest({ status: "testing" });
     try {
-      const res = await axios.get<{ status?: string }>(`${target}/health`, { timeout: 5_000 });
-      if (res.data?.status === "UP") {
-        setTest({ status: "ok", message: "Bağlantı başarılı — sunucu çalışıyor." });
-      } else {
-        setTest({ status: "fail", message: "Yanıt alındı ama sunucu beklenen formatta değil." });
-      }
+      const res = await axios.get<{ status?: string }>(`${composed}/health`, { timeout: 5_000 });
+      setTest(
+        res.data?.status === "UP"
+          ? { status: "ok", message: "Bağlantı başarılı — sunucu çalışıyor." }
+          : { status: "fail", message: "Yanıt alındı ama sunucu beklenen formatta değil." },
+      );
     } catch (err) {
       const reason = axios.isAxiosError(err)
         ? err.code === "ECONNABORTED"
@@ -148,29 +87,24 @@ export function ApiEndpointDialog({ open, onOpenChange }: Props) {
   };
 
   const handleSave = async () => {
-    const target = composed;
-    if (!target) {
-      setTest({ status: "fail", message: "IP / sunucu adresi boş olamaz." });
-      return;
-    }
     setSaving(true);
     try {
-      const refusal = await addressRefusal(window.api?.discovery, target);
+      const refusal = await refuse();
       if (refusal) {
         setTest({ status: "fail", message: refusal });
-        toast.error("Bu adres kaydedilmedi.", { description: refusal });
+        if (composed) toast.error("Bu adres kaydedilmedi.", { description: refusal });
         return;
       }
-      const block = await httpSwitchBlock(window.api?.discovery, target, getActiveApiBaseUrl());
+      const block = await httpSwitchBlock(window.api?.discovery, composed, getActiveApiBaseUrl());
       setTlsBlock(block);
       if (block) {
         setTest({ status: "fail", message: block.reason });
         toast.error("Şifresiz adrese geçilemez.", { description: block.reason });
         return;
       }
-      await setStoredApiBaseUrl(target);
-      applyApiBaseUrl(target);
-      await pushRecentApiBaseUrl(target);
+      await setStoredApiBaseUrl(composed);
+      applyApiBaseUrl(composed);
+      await pushRecentApiBaseUrl(composed);
       toast.success("Sunucu adresi kaydedildi.");
       onOpenChange(false);
     } catch {
@@ -185,8 +119,7 @@ export function ApiEndpointDialog({ open, onOpenChange }: Props) {
     try {
       await clearStoredApiBaseUrl();
       applyApiBaseUrl(DEFAULT_API_BASE_URL);
-      setParts(splitApiBaseUrl(DEFAULT_API_BASE_URL));
-      setTest({ status: "idle" });
+      f.load(DEFAULT_API_BASE_URL);
       toast.success("Varsayılan adrese dönüldü.");
     } catch {
       toast.error("Sıfırlanamadı.");
@@ -211,81 +144,40 @@ export function ApiEndpointDialog({ open, onOpenChange }: Props) {
         </DialogHeader>
 
         <div className="space-y-3 py-2">
-          {/* Protokol / IP / Port — ayrı input'lar */}
-          <div className="grid grid-cols-[7rem_1fr_5.5rem] gap-2">
-            <div className="space-y-1.5">
-              <Label htmlFor="api-protocol">Protokol</Label>
-              <Select
-                value={parts.protocol}
-                onValueChange={(v) => setPart({ protocol: v as "http" | "https" })}
-              >
-                <SelectTrigger id="api-protocol">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="http">http</SelectItem>
-                  <SelectItem value="https">https</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="api-host">IP / Sunucu adresi</Label>
-              <Input
-                id="api-host"
-                value={parts.host}
-                onChange={(e) => onHostChange(e.target.value)}
-                placeholder="192.168.1.50"
-                autoComplete="off"
-                spellCheck={false}
-                className="font-mono"
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="api-port">Port</Label>
-              <Input
-                id="api-port"
-                value={parts.port}
-                onChange={(e) => setPart({ port: e.target.value.replace(/[^0-9]/g, "") })}
-                placeholder="4000"
-                inputMode="numeric"
-                autoComplete="off"
-                className="font-mono"
-              />
-            </div>
-          </div>
-
-          <p className="text-xs text-muted-foreground">
-            {composed ? (
-              <>
-                Adres: <span className="font-mono text-foreground">{composed}</span>
-                {isDefault && " (varsayılan)"}
-              </>
-            ) : (
-              <>
-                Varsayılan:{" "}
-                <span className="font-mono">{normalizeApiBaseUrl(DEFAULT_API_BASE_URL)}</span>
-              </>
-            )}
-          </p>
-
-          <LanTlsSection
-            url={composed}
-            recent={recent}
-            blocked={tlsBlock && tlsBlock.url === composed ? tlsBlock : null}
-            onAddressChanged={(url) => {
-              setParts(splitApiBaseUrl(url));
-              setTest({ status: "idle" });
-              void getRecentApiBaseUrls().then(setRecent);
-            }}
+          <ServerModeSwitch mode={mode} onChange={f.changeMode} />
+          <ServerAddressFields
+            mode={mode}
+            parts={f.parts}
+            composed={composed}
+            isDefault={isDefault}
+            httpOk={f.httpOk}
+            portLocked={f.portLocked}
+            onUnlockPort={f.unlockPort}
+            onProtocolChange={f.setProtocol}
+            onHostChange={f.changeHost}
+            onPortChange={f.setPort}
           />
+
+          {/* Bulut'ta şifreli LAN bölümü ve ağ keşfi yok: internet adresi kodsuz doğrulanır. */}
+          {fabrika && (
+            <LanTlsSection
+              url={composed}
+              recent={f.recent}
+              blocked={tlsBlock && tlsBlock.url === composed ? tlsBlock : null}
+              onAddressChanged={(url) => {
+                f.load(url);
+                void getRecentApiBaseUrls().then(f.setRecent);
+              }}
+            />
+          )}
 
           {/* Ağda bulunanlar — "Son kullanılanlar"ın ÜSTÜNDE: keşfedilen canlı
               sunucu, geçmişte yazılmış bir adresten daha güncel bir bilgidir. */}
-          {(discovery.state?.candidates.length ?? 0) > 0 && (
+          {fabrika && (discovery.state?.candidates.length ?? 0) > 0 && (
             <ServerDiscoveryPanel
               state={discovery.state}
               onPick={(c) => {
-                setParts(splitApiBaseUrl(c.baseUrl));
+                f.load(c.baseUrl);
                 // Aday zaten doğrulanmıştı — tekrar test ettirmeye gerek yok.
                 setTest({
                   status: "ok",
@@ -297,57 +189,23 @@ export function ApiEndpointDialog({ open, onOpenChange }: Props) {
             />
           )}
 
-          {/* Son kullanılan adresler — hızlı seçim */}
-          {recent.length > 0 && (
-            <div className="space-y-1.5">
-              <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                <History className="h-3.5 w-3.5" />
-                Son kullanılanlar
-              </div>
-              <div className="flex flex-col gap-1">
-                {recent.map((url) => {
-                  const active = normalizeApiBaseUrl(composed) === normalizeApiBaseUrl(url);
-                  return (
-                    <div
-                      key={url}
-                      className={`flex items-center gap-1 rounded-md border pl-2 pr-1 text-xs ${
-                        active ? "border-primary/50 bg-primary/5" : "border-border"
-                      }`}
-                    >
-                      <button
-                        type="button"
-                        onClick={() => pickRecent(url)}
-                        className="flex-1 truncate py-1.5 text-left font-mono hover:text-foreground"
-                        title={`Seç: ${url}`}
-                      >
-                        {url}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => void dropRecent(url)}
-                        className="shrink-0 rounded p-1 text-muted-foreground hover:text-destructive"
-                        aria-label="Listeden çıkar"
-                        title="Listeden çıkar"
-                      >
-                        <X className="h-3.5 w-3.5" />
-                      </button>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          )}
+          <RecentAddressList
+            urls={f.recent.filter((u) => serverModeFor(f.pins, u) === mode)}
+            current={composed}
+            onPick={(url) => f.load(url)}
+            onDrop={(url) => void removeRecentApiBaseUrl(url).then(f.setRecent)}
+          />
 
-          {test.status === "ok" && (
+          {f.test.status === "ok" && (
             <p className="flex items-center gap-2 text-sm text-emerald-600 dark:text-emerald-400">
               <CheckCircle2 className="h-4 w-4 shrink-0" />
-              {test.message}
+              {f.test.message}
             </p>
           )}
-          {test.status === "fail" && (
-            <p className="flex items-center gap-2 text-sm text-destructive">
+          {f.test.status === "fail" && (
+            <p role="alert" className="flex items-center gap-2 text-sm text-destructive">
               <XCircle className="h-4 w-4 shrink-0" />
-              {test.message}
+              {f.test.message}
             </p>
           )}
         </div>
@@ -366,6 +224,7 @@ export function ApiEndpointDialog({ open, onOpenChange }: Props) {
             Varsayılana dön
           </Button>
           <div className="flex gap-2">
+            {fabrika && (
             <Button
               type="button"
               variant="outline"
@@ -385,13 +244,14 @@ export function ApiEndpointDialog({ open, onOpenChange }: Props) {
                 </>
               )}
             </Button>
+            )}
             <Button
               type="button"
               variant="outline"
               onClick={() => void handleTest()}
-              disabled={test.status === "testing" || saving}
+              disabled={f.test.status === "testing" || saving}
             >
-              {test.status === "testing" ? (
+              {f.test.status === "testing" ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                   Test ediliyor...

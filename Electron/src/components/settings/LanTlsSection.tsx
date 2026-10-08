@@ -8,6 +8,7 @@ import { Callout } from "@/components/ui/callout";
 import { ConfirmDialog } from "@/components/forms/ConfirmDialog";
 import { applyApiBaseUrl, pushRecentApiBaseUrl, setStoredApiBaseUrl, splitApiBaseUrl } from "@/lib/api-config";
 import { activePinFor, httpFallbackUrl, planTlsSwitch, type TlsSwitchPlan } from "@/lib/lan-tls-ui";
+import { serverModeFor } from "@/lib/server-mode";
 
 interface Props {
   /** Diyalogda görünen adres (kaydedilmemiş olabilir). */
@@ -97,7 +98,7 @@ function useLanTls(api: DiscoveryApi | undefined, { url, recent, onAddressChange
     }
   };
 
-  return { active, fallback, plan, busy, observe, pin, unpin };
+  return { pins, active, fallback, plan, busy, observe, pin, unpin };
 }
 
 function FingerprintLine({ hex, testId }: { hex: string; testId: string }) {
@@ -144,9 +145,10 @@ function SwitchPlanView({ plan, busy, onPin }: { plan: TlsSwitchPlan; busy: bool
  */
 export function LanTlsSection(props: Props) {
   const api = typeof window !== "undefined" ? window.api?.discovery : undefined;
-  const { active, fallback, plan, busy, observe, pin, unpin } = useLanTls(api, props);
+  const { pins, active, fallback, plan, busy, observe, pin, unpin } = useLanTls(api, props);
   const [unpinOpen, setUnpinOpen] = useState(false);
-  if (!api?.tlsObserve) return null;
+  // İnternet kipindeki adres (genel CA) kodla sabitlenmez — bölüm hiç çizilmez.
+  if (!api?.tlsObserve || (props.url && serverModeFor(pins, props.url) === "bulut")) return null;
 
   return (
     <div className="space-y-2 rounded-md border p-3" data-testid="lan-tls-section">

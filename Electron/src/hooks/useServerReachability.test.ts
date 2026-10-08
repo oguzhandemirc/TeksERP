@@ -13,6 +13,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { useServerReachability } from "./useServerReachability";
+import { applyApiBaseUrl, getActiveApiBaseUrl } from "@/lib/api-config";
 
 type Probe = () => Promise<unknown>;
 
@@ -66,5 +67,37 @@ describe("useServerReachability", () => {
       await result.current.recheck();
     });
     await waitFor(() => expect(result.current.status).toBe("reachable"));
+  });
+
+  // ⭐ 2026-10-08 saha (panel 1.5.0): "Adresi Elle Gir" → test başarılı → Kaydet, ama giriş ekranı
+  // eski adresin "Sunucuya ulaşılamadı" sonucunda kaldı — kayıt yeniden yoklamayı tetiklemiyordu.
+  describe("adres değişince kendiliğinden yeniden yoklar", () => {
+    const original = getActiveApiBaseUrl();
+    afterEach(() => applyApiBaseUrl(original));
+
+    it("⭐ yeni adres uygulanınca (kayıt) durum sıfırlanır ve yeni adres yoklanır", async () => {
+      const probe = vi.fn(async (url: string) => (url === "https://deneme.etkiliyazilim.com" ? { baseUrl: url } : null));
+      installBridge(probe as unknown as Probe);
+      applyApiBaseUrl("http://10.0.0.99:4000");
+      const { result } = renderHook(() => useServerReachability());
+      await waitFor(() => expect(result.current.status).toBe("unreachable"));
+      act(() => applyApiBaseUrl("https://deneme.etkiliyazilim.com"));
+      await waitFor(() => expect(result.current.status).toBe("reachable"));
+      expect(probe).toHaveBeenLastCalledWith("https://deneme.etkiliyazilim.com");
+    });
+
+    it("eski adresin geç gelen 'ulaşılamadı'sı yeni adresin sonucunu ezmez", async () => {
+      let releaseOld: (v: null) => void = () => undefined;
+      const probe = vi.fn((url: string) =>
+        url === "http://10.0.0.99:4000" ? new Promise<null>((r) => (releaseOld = r)) : Promise.resolve({ baseUrl: url }),
+      );
+      installBridge(probe as unknown as Probe);
+      applyApiBaseUrl("http://10.0.0.99:4000");
+      const { result } = renderHook(() => useServerReachability());
+      act(() => applyApiBaseUrl("https://deneme.etkiliyazilim.com"));
+      await waitFor(() => expect(result.current.status).toBe("reachable"));
+      await act(async () => releaseOld(null));
+      expect(result.current.status).toBe("reachable");
+    });
   });
 });

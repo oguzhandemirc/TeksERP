@@ -140,18 +140,30 @@ export function checkPinRequest(req: {
   host: string;
   requested: unknown;
   observed: string | null;
+  /** Sunucunun keşif yükünde İLAN ettiği parmak izi; ilansız sertifika (vekil/bulut kenarı) sabitlenmez. */
+  advertised: unknown;
+  /** Adres internet kipinde mi (`isInternetHost`) — o ad genel CA ile doğrulanır, sabitlenmez. */
+  internet: boolean;
   via: unknown;
 }): PinRequestCheck {
+  if (req.internet) return { ok: false, reason: INTERNET_HOST_NOT_PINNABLE_REASON };
   const requested = normalizeFingerprint(req.requested);
   if (!requested) return { ok: false, reason: "Parmak izi biçimi geçersiz" };
   if (!req.observed) return { ok: false, reason: "Sunucuya şifreli bağlanılamadı" };
   if (requested !== req.observed) return { ok: false, reason: "Sunucunun sunduğu sertifika onaylanan kodla aynı değil" };
+  if (normalizeFingerprint(req.advertised) !== req.observed) return { ok: false, reason: UNADVERTISED_CERT_REASON };
   if (req.via === "loopback") {
     return isLoopbackHost(req.host) ? { ok: true } : { ok: false, reason: "Otomatik sabitleme yalnız sunucu bilgisayarının kendisinde" };
   }
   if (req.via === "confirmed") return { ok: true };
   return { ok: false, reason: "Sabitleme yolu tanınmıyor" };
 }
+
+export const INTERNET_HOST_NOT_PINNABLE_REASON =
+  "Bu ad internet sertifikasıyla doğrulanır, doğrulama koduyla sabitlenmez — Sunucu Adresi penceresinde “Bulut”u seçin.";
+
+export const UNADVERTISED_CERT_REASON =
+  "Sunucu bu sertifikayı doğrulama kodu olarak ilan etmiyor (araya bir vekil ya da bulut kenarı girmiş olabilir) — sabitlenmedi.";
 
 export const HTTP_TO_PINNED_REASON = "Bu sunucuya şifreli bağlanılıyor; şifresiz adrese geçmek için önce 'Şifreli bağlantıyı kaldır'";
 
@@ -239,6 +251,21 @@ export type PanelTransport =
   | { kind: "internet" }
   | { kind: "refused"; reason: string };
 
+/** https'in standart portu — internet kipinde port yazılmaz. */
+export const INTERNET_TLS_PORT = 443;
+
+/**
+ * Ana sürecin yoklama/sabitleme hedefi. Port yazılmamışsa https → 443 (`panelTransportFor` ile aynı), http →
+ * API'nin varsayılan portu (`httpDefaultPort`, döngüdeki şifresiz kimlik ucu). Adres kimlik yanıtının
+ * `protocol`/`apiPort` beyanıyla YENİDEN KURULMAZ: kullanıcının yazdığı şema ve port esastır.
+ */
+export function serverUrlParts(url: string, httpDefaultPort: number): { scheme: "http" | "https"; host: string; port: number } | null {
+  const m = /^(https?):\/\/([^:/\s]+)(?::(\d+))?/i.exec((url ?? "").trim());
+  if (!m || !m[1] || !m[2]) return null;
+  const scheme = m[1].toLowerCase() === "https" ? "https" : "http";
+  return { scheme, host: m[2], port: m[3] ? Number(m[3]) : scheme === "https" ? INTERNET_TLS_PORT : httpDefaultPort };
+}
+
 function urlParts(url: string): { scheme: string; host: string; port: number | null } | null {
   try {
     const u = new URL((url ?? "").trim());
@@ -263,7 +290,7 @@ export function panelTransportFor(
   if (!p || (p.scheme !== "http" && p.scheme !== "https") || !p.host) return { kind: "refused", reason: "Adres geçersiz." };
   if (isLoopbackHost(p.host)) return { kind: "loopback" };
   if (p.scheme === "http") return { kind: "refused", reason: HTTP_NETWORK_REFUSED_REASON };
-  const port = p.port ?? 443;
+  const port = p.port ?? INTERNET_TLS_PORT;
   const pin = pins.find((x) => x.port === port);
   if (pin) return { kind: "pinned", pin };
   if (isInternetHost(p.host)) return { kind: "internet" };

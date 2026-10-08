@@ -79,19 +79,19 @@ describe("kanal seçimi — sabit varken HTTP'ye düşülmez", () => {
 
 describe("sabitleme isteği — TOFU yok", () => {
   it("gözlenen sertifika onaylanan koddan farklıysa RED", () => {
-    expect(checkPinRequest({ host: "10.0.0.5", requested: FP, observed: OTHER, via: "confirmed" }).ok).toBe(false);
+    expect(checkPinRequest({ host: "10.0.0.5", requested: FP, observed: OTHER, advertised: FP, internet: false, via: "confirmed" }).ok).toBe(false);
   });
   it("el sıkışma olmadıysa RED", () => {
-    expect(checkPinRequest({ host: "10.0.0.5", requested: FP, observed: null, via: "confirmed" }).ok).toBe(false);
+    expect(checkPinRequest({ host: "10.0.0.5", requested: FP, observed: null, advertised: FP, internet: false, via: "confirmed" }).ok).toBe(false);
   });
   it("otomatik (loopback) yol yalnız döngü adresinde", () => {
-    expect(checkPinRequest({ host: "10.0.0.5", requested: FP, observed: FP, via: "loopback" }).ok).toBe(false);
-    expect(checkPinRequest({ host: "127.0.0.1", requested: FP, observed: FP, via: "loopback" }).ok).toBe(true);
-    expect(checkPinRequest({ host: "localhost", requested: FP, observed: FP, via: "loopback" }).ok).toBe(true);
+    expect(checkPinRequest({ host: "10.0.0.5", requested: FP, observed: FP, advertised: FP, internet: false, via: "loopback" }).ok).toBe(false);
+    expect(checkPinRequest({ host: "127.0.0.1", requested: FP, observed: FP, advertised: FP, internet: false, via: "loopback" }).ok).toBe(true);
+    expect(checkPinRequest({ host: "localhost", requested: FP, observed: FP, advertised: FP, internet: false, via: "loopback" }).ok).toBe(true);
   });
   it("LAN adresinde yalnız kullanıcının açık onayıyla", () => {
-    expect(checkPinRequest({ host: "10.0.0.5", requested: FP, observed: FP, via: "confirmed" }).ok).toBe(true);
-    expect(checkPinRequest({ host: "10.0.0.5", requested: FP, observed: FP, via: "auto" }).ok).toBe(false);
+    expect(checkPinRequest({ host: "10.0.0.5", requested: FP, observed: FP, advertised: FP, internet: false, via: "confirmed" }).ok).toBe(true);
+    expect(checkPinRequest({ host: "10.0.0.5", requested: FP, observed: FP, advertised: FP, internet: false, via: "auto" }).ok).toBe(false);
   });
   it("döngü adresi tanıma", () => {
     expect(isLoopbackHost("127.0.0.1")).toBe(true);

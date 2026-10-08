@@ -78,6 +78,26 @@
           "kapsam": "panel",
           "tip": "iyilestirme",
           "metin": "Yeni kurulumlarda program boşluksuz klasöre kurulur: C:\\EtkiliYazilim\\TeksERP; mevcut kurulumlar yerinde kalır."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "yeni",
+          "metin": "“Sunucu Adresi” penceresinin başında artık iki seçenek var: “Fabrika içi” ve “Bulut”. Sunucunuz fabrikanın ağındaysa “Fabrika içi” hazır seçili gelir; bağlantı şifrelidir ve ilk bağlanışta doğrulama kodu karşılaştırılır. Sunucunuz internetteyse (…etkiliyazilim.com) “Bulut”u seçip adresi yazın; kod sorulmaz, port kutusu boş kalır. Farklı bir port gerekirse port kutusuna tıklayıp yazabilirsiniz."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "iyilestirme",
+          "metin": "“Bulut” seçiliyken şifreli bağlantı bölümü ve doğrulama kodu hiç gösterilmez; bulut adresinin sertifikası otomatik doğrulanır. “Bulut”ta etkiliyazilim.com dışında bir adres, “Fabrika içi”nde de bulut adresi yazılırsa panel kaydetmez ve hangi seçeneği seçmeniz gerektiğini yazar."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "duzeltme",
+          "metin": "“Adresi Elle Gir” ile yeni adresi kaydettikten sonra giriş ekranı “Sunucuya ulaşılamadı”da kalıyordu; artık kayıttan hemen sonra yeni adres denenir ve sunucu yanıt veriyorsa giriş alanları gelir."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "duzeltme",
+          "metin": "Bulut adresine bağlanan panel, giriş alanları göründükten birkaç saniye sonra yeniden “Sunucuya ulaşılamadı” ekranına dönüyordu; düzeltildi."
         }
       ]
     },

@@ -79,7 +79,7 @@ describe("⛔ iz tutmazsa bağlanılmaz", () => {
     expect(panelTransportFor([PIN], "https://192.168.1.50:4443", isInternetHost)).toEqual({ kind: "pinned", pin: PIN });
   });
   it("sabitleme gözlenen izle aynı olmalı", () => {
-    expect(checkPinRequest({ host: "192.168.1.50", requested: FP, observed: OTHER, via: "confirmed" }).ok).toBe(false);
+    expect(checkPinRequest({ host: "192.168.1.50", requested: FP, observed: OTHER, advertised: FP, internet: false, via: "confirmed" }).ok).toBe(false);
   });
   it("internet kipi: yalnız izinli üst alanın altındaki ad, sabitsiz (sistem güveni)", () => {
     expect(panelTransportFor([], "https://fabrika.etkiliyazilim.com", isInternetHost).kind).toBe("internet");
@@ -93,8 +93,8 @@ describe("⛔ döngü dışı adres kodsuz güvenilmez", () => {
     addTlsPin.mockReset();
   });
   it("loopback yolu ağ adresinde reddedilir", () => {
-    expect(checkPinRequest({ host: "192.168.1.50", requested: FP, observed: FP, via: "loopback" }).ok).toBe(false);
-    expect(checkPinRequest({ host: "127.0.0.1", requested: FP, observed: FP, via: "loopback" }).ok).toBe(true);
+    expect(checkPinRequest({ host: "192.168.1.50", requested: FP, observed: FP, advertised: FP, internet: false, via: "loopback" }).ok).toBe(false);
+    expect(checkPinRequest({ host: "127.0.0.1", requested: FP, observed: FP, advertised: FP, internet: false, via: "loopback" }).ok).toBe(true);
   });
   it("otomatik sabitleme ağ adresinde hiç yoklamaz, hiç sabitlemez", async () => {
     const { autoPinLoopback } = await import("../../electron/ipc/lan-tls.ipc");
