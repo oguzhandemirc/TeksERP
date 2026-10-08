@@ -1,0 +1,209 @@
+{
+  "arizalar": {
+    "sagliksizSurum": "2.13.0"
+  },
+  "dunya": {
+    "backendHizmeti": "TeksERP-Backend",
+    "baglantilar": {
+      "kok/current": "kok/surumler/2.12.0"
+    },
+    "db": {
+      "data": 42,
+      "finished": 2,
+      "total": 2
+    },
+    "dizinler": [
+      "kok",
+      "kok/guncelleyici",
+      "kok/lisans",
+      "kok/surumler",
+      "kok/surumler/2.12.0",
+      "kok/surumler/2.12.0/dist",
+      "kok/surumler/2.12.0/dist/tools",
+      "kok/surumler/2.12.0/node_modules",
+      "kok/surumler/2.12.0/node_modules/prisma",
+      "kok/surumler/2.12.0/node_modules/prisma/build",
+      "kok/surumler/2.12.0/prisma",
+      "kok/surumler/2.12.0/prisma/migrations",
+      "kok/surumler/2.12.0/prisma/migrations/0001_goc",
+      "kok/surumler/2.12.0/prisma/migrations/0002_goc",
+      "kok/surumler/2.12.0/runtime",
+      "kok/surumler/2.13.0",
+      "kok/surumler/2.13.0/dist",
+      "kok/surumler/2.13.0/dist/tools",
+      "kok/surumler/2.13.0/node_modules",
+      "kok/surumler/2.13.0/node_modules/prisma",
+      "kok/surumler/2.13.0/node_modules/prisma/build",
+      "kok/surumler/2.13.0/prisma",
+      "kok/surumler/2.13.0/prisma/migrations",
+      "kok/surumler/2.13.0/prisma/migrations/0001_goc",
+      "kok/surumler/2.13.0/prisma/migrations/0002_goc",
+      "kok/surumler/2.13.0/prisma/migrations/0003_goc",
+      "kok/surumler/2.13.0/prisma/migrations/0004_goc",
+      "kok/surumler/2.13.0/runtime",
+      "kok/yapilandirma",
+      "kok/yedek-anahtar",
+      "programdata",
+      "programdata/guncelleme",
+      "programdata/guncelleme/durum",
+      "programdata/guncelleme/is",
+      "programdata/guncelleme/is/anahtar",
+      "programdata/guncelleme/is/anahtar/e9a7e452-ac73-47c2-a1ab-6ba12f56c8a0",
+      "programdata/guncelleme/is/hazir",
+      "programdata/guncelleme/is/indirme",
+      "programdata/guncelleme/is/yedek",
+      "programdata/guncelleme/is/yedek/e9a7e452-ac73-47c2-a1ab-6ba12f56c8a0",
+      "programdata/guncelleme/niyet"
+    ],
+    "dosyalar": {
+      "kok/guncelleyici/ayar.json": {
+        "metin": "{\"guncellemeSunucusu\":\"https://guncelleme.test\",\"v\":1}"
+      },
+      "kok/lisans/hak.jws": {
+        "metin": "eyJhbGciOiJFZERTQSIsImtpZCI6Imtvay10ZXN0LTEiLCJ0eXAiOiJ0ZWtzZXJwLWhhayJ9.eyJiYWtpbUJpdGlzIjoiMjAyNy0wOS0zMFQyMzozMDowMFoiLCJoYWtJZCI6IjExMTExMTExLTExMTEtNDExMS04MTExLTExMTExMTExMTExMSIsImthbGljaSI6dHJ1ZSwia3VydWx1bUlkIjoiMjIyMjIyMjItMjIyMi00MjIyLTgyMjItMjIyMjIyMjIyMjIyIiwibGlzYW5zTm8iOiJUS1MtMjAyNi0wMDAxIiwibW9kdWxsZXIiOltdLCJtdXN0ZXJpIjp7ImFkIjoiVGVzdCIsImlkIjoiNTU1NTU1NTUtNTU1NS00NTU1LTg1NTUtNTU1NTU1NTU1NTU1In0sInNpbmlmIjoiVVJFVElNIiwic3VydW0iOjEsInRlc2lzIjp7ImFkIjoiVGVzdCB0ZXNpcyIsImlkIjoiNjY2NjY2NjYtNjY2Ni00NjY2LTg2NjYtNjY2NjY2NjY2NjY2In0sInYiOjEsInZlcmlsaXMiOiIyMDI2LTA5LTIwVDIzOjMwOjAwWiJ9.dAfJfvZTQQphrMPm-Ofe3QddjdOoLDEGUzUsoAr303PMrampjAkzbl70zkA7Vq_dPvFaHIouoCieqfp9N_Z5Dg"
+      },
+      "kok/lisans/kira.jws": {
+        "metin": "eyJhbGciOiJFZERTQSIsImtpZCI6ImFsdC10ZXN0LTEiLCJ0eXAiOiJ0ZWtzZXJwLWtpcmEifQ.eyJhbHRTZXJ0aWZpa2EiOiJleUpoYkdjaU9pSkZaRVJUUVNJc0ltdHBaQ0k2SW10dmF5MTBaWE4wTFRFaUxDSjBlWEFpT2lKMFpXdHpaWEp3TFhObGNuUnBabWxyWVNKOS5leUppWVhOc1lXNW5hV01pT2lJeU1ESTFMVEE0TFRJMlZESXpPak13T2pBd1dpSXNJbUpoZVdraU9tNTFiR3dzSW1KcGRHbHpJam9pTWpBeU55MHhNUzB3TkZReU16b3pNRG93TUZvaUxDSnJhV1FpT2lKaGJIUXRkR1Z6ZEMweElpd2lhM1ZzYkdGdWFXMGlPaUpCVEZRaUxDSnpaWEowYVdacGEyRkpaQ0k2SWpNek16TXpNek16TFRNek16TXRORE16TXkwNE16TXpMVE16TXpNek16TXpNek16TXlJc0luTnBibWxtYkdGeUlqcGJJbFZTUlZSSlRTSXNJbFJGVTFRaVhTd2lkaUk2TVN3aWVDSTZJbWRVYkRORWNXZzVSakU1VjI4eFVtMTNNSGd0ZWsxMVRtbHdSekEzYW1WcFdHWlpVRmMwWDBwek5WRWlmUS5JTlhVbzZwXzFMdXBhZUZXT0RWaE5talpLSml2aGxSUS1yajM1NWlGdkE1VTNMTTE2aHB6Z0d2dzg0bFRSc2s1UUNaWV95aE9LSUE5dEZ1WjJqRUNEUSIsImJpdGlzIjoiMjAyNi0xMC0yOVQyMzozMDowMFoiLCJkZXZyZWRpbGRpIjpmYWxzZSwiZWtTdXJlR3VuIjozMCwiZXNpdGxlbWVBcmFsaWdpRGsiOm51bGwsImdlY2VybGlsaWtCaXRpcyI6bnVsbCwiZ3VuY2VsbGVtZSI6eyJhcmFsaWtsYXIiOlt7ImJhc2xhbmdpYyI6IjIwMjYtMDktMzBUMjM6MDA6MDBaIiwiYml0aXMiOiIyMDI2LTEwLTAxVDAyOjAwOjAwWiJ9LHsiYmFzbGFuZ2ljIjoiMjAyNi0xMC0wMVQyMzowMDowMFoiLCJiaXRpcyI6IjIwMjYtMTAtMDJUMDI6MDA6MDBaIn0seyJiYXNsYW5naWMiOiIyMDI2LTEwLTAyVDIzOjAwOjAwWiIsImJpdGlzIjoiMjAyNi0xMC0wM1QwMjowMDowMFoifSx7ImJhc2xhbmdpYyI6IjIwMjYtMTAtMDNUMjM6MDA6MDBaIiwiYml0aXMiOiIyMDI2LTEwLTA0VDAyOjAwOjAwWiJ9LHsiYmFzbGFuZ2ljIjoiMjAyNi0xMC0wNFQyMzowMDowMFoiLCJiaXRpcyI6IjIwMjYtMTAtMDVUMDI6MDA6MDBaIn1dLCJoZWRlZlN1cnVtIjpudWxsLCJraXAiOiJPVE9NQVRJSyIsInBlbmNlcmUiOnsiYmFzbGFuZ2ljIjoiMDI6MDAiLCJiaXRpcyI6IjA1OjAwIiwiZ3VubGVyIjpbMSwyLDMsNCw1LDYsN10sInNhYXREaWxpbWkiOiJFdXJvcGUvSXN0YW5idWwifX0sImhha0lkIjoiMTExMTExMTEtMTExMS00MTExLTgxMTEtMTExMTExMTExMTExIiwiaGFrU3VydW0iOjEsImthbmFsIjp7Imd1bmNlbFN1cnVtbGVyIjp7ImJhY2tlbmQiOiIyLjEzLjAifSwia29kIjoidGVzdGthbmFsIn0sImtpcmFJZCI6IjQ0NDQ0NDQ0LTQ0NDQtNDQ0NC04NDQ0LTQ0NDQ0NDQ0NDQ0NCIsImt1cnVsdW1BbmFodGFyS2ltbGlnaSI6Imt1ci1BQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBIiwia3VydWx1bUlkIjoiMjIyMjIyMjItMjIyMi00MjIyLTgyMjItMjIyMjIyMjIyMjIyIiwicGFybWFrSXppIjp7ImYxIjpudWxsLCJmMiI6bnVsbCwiZjMiOm51bGwsImY0IjpudWxsLCJmNSI6bnVsbH0sInBhdHJvbkJ1bHV0Qml0aXMiOm51bGwsInN1bnVjdVNhYXRpIjoiMjAyNi0wOS0yOVQyMzozMDowMFoiLCJ2IjoxLCJ2ZXJpbGlzIjoiMjAyNi0wOS0yOVQyMzozMDowMFoiLCJ5YXB0aXJpbSI6eyJkb25tdXNNb2R1bGxlciI6W10sImd1bmNlbGxlbWVEb251ayI6ZmFsc2UsImthZGVtZSI6bnVsbCwia2lzaXRsYW1hVGFyaWhpIjpudWxsLCJtZXNhaiI6bnVsbH0sInlva2xhbWFBcmFsaWdpRGsiOjYwLCJ6b3JsYW1hIjpmYWxzZX0.VboWAPmwReXfzbqGnjvO_1QcXh_zdUKR_6Wz3DpYgweo0aGkkgnntvstXpSA5-3lsymUqQIPukutfVLytdHmCQ"
+      },
+      "kok/surumler/2.12.0/PAKET.json": {
+        "metin": "{\"commit\":\"abcdef1234\"}"
+      },
+      "kok/surumler/2.12.0/dist/buyuk.bin": {
+        "boy": 98304,
+        "dolgu": "carpim",
+        "sha256": "702e9f2c1239fbff38d75ab0ae130d2600b1d35a5519bf80f764d6d4375c68dd"
+      },
+      "kok/surumler/2.12.0/dist/server.js": {
+        "metin": "// sunucu 2.12.0"
+      },
+      "kok/surumler/2.12.0/dist/tools/yedek-sifrele.cjs": {
+        "metin": "// yedek araci"
+      },
+      "kok/surumler/2.12.0/node_modules/prisma/build/index.js": {
+        "metin": "// prisma"
+      },
+      "kok/surumler/2.12.0/package.json": {
+        "metin": "{\"name\":\"tekserp\",\"version\":\"2.12.0\"}"
+      },
+      "kok/surumler/2.12.0/prisma/migrations/0001_goc/migration.sql": {
+        "metin": "-- 1"
+      },
+      "kok/surumler/2.12.0/prisma/migrations/0002_goc/migration.sql": {
+        "metin": "-- 2"
+      },
+      "kok/surumler/2.12.0/runtime/node": {
+        "metin": "#!fake node"
+      },
+      "kok/surumler/2.13.0/PAKET.json": {
+        "metin": "{\"commit\":\"abcdef1234\"}"
+      },
+      "kok/surumler/2.13.0/butunluk-liste.txt": {
+        "metin": "cC6fLBI5-_8411qwrhMNJgCx01pVGb-A92TW1DdcaN0\t98304\tdist/buyuk.bin\njEXTFcuqH1wt2RkCWth2RHrYKA_PKcwJAqcbNIuncnk\t16\tdist/server.js\nsEeJW62R3d6tZpZsv_-zmrwpcHiGzbTYCVPuc8ljvCQ\t14\tdist/tools/yedek-sifrele.cjs\nBYF6MjbRBHhx06ha8IEy74xJpOypbHn7SlqZK7ZTgpo\t9\tnode_modules/prisma/build/index.js\n-Vtfay2g4Db6xtT0wA2_Lw2S3Hkg043oOq9-Ped94Ik\t37\tpackage.json\nLXbWH-u9eRhyWVaxRUG5TBWsVcgSXH5OhbDA7uejjq8\t4\tprisma/migrations/0001_goc/migration.sql\n1-Mus8_xzF_RqPW_O1TuVKTaEW3BhYzZUV_sZJbThZs\t4\tprisma/migrations/0002_goc/migration.sql\n4ILkjkF_u5ot7TVm9C_yq0Wbj3g4vuH2ZrGHpye9_qY\t4\tprisma/migrations/0003_goc/migration.sql\nJbC8bAGjAj270hIgWhyXN485z1UJdfQzyK2sIhusPtI\t4\tprisma/migrations/0004_goc/migration.sql\nq1B9vsB1Mk08iFCAHZEpqdp7G2eZDtoXi0UEEPnwLJU\t11\truntime/node\n"
+      },
+      "kok/surumler/2.13.0/butunluk.jws": {
+        "metin": "eyJhbGciOiJFZERTQSIsImtpZCI6InBha2V0LTIwMjYiLCJ0eXAiOiJ0ZWtzZXJwLWJ1dHVubHVrIn0.eyJkZXJsZW1lVGFyaWhpIjoiMjAyNi0wOS0zMFQwMDowMDowMFoiLCJrYXBzYW0iOnsiZGl6aW5sZXIiOlsiZGlzdCIsIm5vZGVfbW9kdWxlcyIsInByaXNtYS9taWdyYXRpb25zIiwicnVudGltZSJdLCJkb3N5YWxhciI6WyJwYWNrYWdlLmpzb24iXX0sImxpc3RlIjp7ImJveXV0Ijo3NTIsImRvc3lhU2F5aXNpIjoxMCwic2hhMjU2IjoiSUhIRjJOT09xWm54TFNVUUlWUkZkQzBCVXJuVWJtbHZicVpqSXVPdW5wbyJ9LCJtdXN0ZXJpIjoidGVzdGthbmFsIiwicGFrZXRJZCI6IjBiMGIwYjBiLTBiMGItNGIwYi04YjBiLTBiMGIwYjBiMGIwYiIsInN1cnVtIjoiMi4xMy4wIiwidXJ1biI6ImJhY2tlbmQiLCJ2IjoxfQ.mErSmAOX_lkVocI8zmGHKsR4L-Q91_CxCAWQTRdJfhqAnAtk1ZBGFzmuc5SZXx1a3Zi7qIqcvdcdgEXgU-8aBw"
+      },
+      "kok/surumler/2.13.0/dist/buyuk.bin": {
+        "boy": 98304,
+        "dolgu": "carpim",
+        "sha256": "702e9f2c1239fbff38d75ab0ae130d2600b1d35a5519bf80f764d6d4375c68dd"
+      },
+      "kok/surumler/2.13.0/dist/server.js": {
+        "metin": "// sunucu 2.13.0"
+      },
+      "kok/surumler/2.13.0/dist/tools/yedek-sifrele.cjs": {
+        "metin": "// yedek araci"
+      },
+      "kok/surumler/2.13.0/node_modules/prisma/build/index.js": {
+        "metin": "// prisma"
+      },
+      "kok/surumler/2.13.0/package.json": {
+        "metin": "{\"name\":\"tekserp\",\"version\":\"2.13.0\"}"
+      },
+      "kok/surumler/2.13.0/prisma/migrations/0001_goc/migration.sql": {
+        "metin": "-- 1"
+      },
+      "kok/surumler/2.13.0/prisma/migrations/0002_goc/migration.sql": {
+        "metin": "-- 2"
+      },
+      "kok/surumler/2.13.0/prisma/migrations/0003_goc/migration.sql": {
+        "metin": "-- 3"
+      },
+      "kok/surumler/2.13.0/prisma/migrations/0004_goc/migration.sql": {
+        "metin": "-- 4"
+      },
+      "kok/surumler/2.13.0/runtime/node": {
+        "metin": "#!fake node"
+      },
+      "kok/yapilandirma/.env": {
+        "metin": "PORT=4999\nDATABASE_URL=\"postgresql://tekserp:gizli-parola@127.0.0.1:5432/tekserp?schema=public\"\nPG_BIN_DIR=/fake/pgbin\n"
+      },
+      "kok/yedek-anahtar/musteri.tkpub": {
+        "metin": "tkpub1:MUSTERI\n"
+      },
+      "programdata/guncelleme/durum/durum.json": {
+        "metin": "{\n  \"v\": 1,\n  \"zaman\": \"2026-09-30T23:33:00.000Z\",\n  \"sonCanlilik\": \"2026-09-30T23:33:00.000Z\",\n  \"canlilikEsigiSn\": 3900,\n  \"turSn\": 60,\n  \"guncelleyiciSurum\": \"0.1.3\",\n  \"kuruluSurum\": \"2.12.0\",\n  \"durum\": \"UYGULANIYOR\",\n  \"surum\": \"2.13.0\",\n  \"kaynakSurum\": \"2.12.0\",\n  \"urun\": \"backend\",\n  \"islemId\": \"e9a7e452-ac73-47c2-a1ab-6ba12f56c8a0\",\n  \"adim\": \"GERI_DON:BACKEND_DURDUR\",\n  \"hataKodu\": null,\n  \"mesaj\": \"geri alınıyor: GERI_DON:BACKEND_DURDUR\",\n  \"ilerleme\": null,\n  \"planlanan\": null,\n  \"politika\": {\n    \"kip\": \"OTOMATIK\",\n    \"izin\": true,\n    \"neden\": null,\n    \"kaynak\": \"KIRA\",\n    \"hedefSurum\": null,\n    \"donuk\": false\n  },\n  \"karar\": {\n    \"karar\": \"KUR\",\n    \"neden\": \"PENCERE\",\n    \"aralik\": {\n      \"baslangic\": \"2026-09-30T23:00:00Z\",\n      \"bitis\": \"2026-10-01T02:00:00Z\"\n    },\n    \"pgGuncellemesi\": false\n  },\n  \"bekleyen\": {\n    \"surum\": \"2.13.0\",\n    \"karar\": \"KUR\",\n    \"neden\": \"PENCERE\",\n    \"aralik\": {\n      \"baslangic\": \"2026-09-30T23:00:00Z\",\n      \"bitis\": \"2026-10-01T02:00:00Z\"\n    },\n    \"pgGuncellemesi\": false,\n    \"zorunlu\": false,\n    \"ozet\": \"Test sürümü\"\n  },\n  \"son\": null,\n  \"sonAyrinti\": null\n}"
+      },
+      "programdata/guncelleme/is/anahtar/e9a7e452-ac73-47c2-a1ab-6ba12f56c8a0/guncelleme.tkpub": {
+        "metin": "tkpub1:PUB\n"
+      },
+      "programdata/guncelleme/is/anahtar/e9a7e452-ac73-47c2-a1ab-6ba12f56c8a0/guncelleme.tksec.dpapi": {
+        "metin": "DPAPI:tksec1:SECRET\n"
+      },
+      "programdata/guncelleme/is/hazir/2.13.0.json": {
+        "metin": "{\"paketId\":\"0b0b0b0b-0b0b-4b0b-8b0b-0b0b0b0b0b0b\",\"surum\":\"2.13.0\",\"zaman\":\"2026-09-30T23:30:00.000Z\"}"
+      },
+      "programdata/guncelleme/is/islem.jsonl": {
+        "metin": "{\"sira\":1,\"islemId\":\"e9a7e452-ac73-47c2-a1ab-6ba12f56c8a0\",\"olay\":\"ISLEM\",\"zaman\":\"2026-09-30T23:30:00.000Z\",\"veri\":{\"araclar\":\"{{DUNYA}}/kok/surumler/2.12.0\",\"basladi\":1790811000000,\"commit\":\"abcdef1234\",\"gocOnce\":{\"bitmis\":2,\"toplam\":2},\"islemId\":\"e9a7e452-ac73-47c2-a1ab-6ba12f56c8a0\",\"kaynakSurum\":\"2.12.0\",\"lisansOnce\":{\"butunluk\":\"GECERLI\",\"cekirdek\":\"native\",\"kip\":\"NORMAL\"},\"onay\":null,\"onayId\":null,\"oncekiHedef\":\"{{DUNYA}}/kok/surumler/2.12.0\",\"paketOzeti\":\"979559335f83cf45f9b32d0a733588563770e20f90dc41226f78110a7a6642a3\",\"surum\":\"2.13.0\",\"tur\":\"BACKEND\",\"yeniHedef\":\"{{DUNYA}}/kok/surumler/2.13.0\"}}\n{\"sira\":2,\"islemId\":\"e9a7e452-ac73-47c2-a1ab-6ba12f56c8a0\",\"olay\":\"BASLADI\",\"adim\":\"BACKEND_DURDUR\",\"zaman\":\"2026-09-30T23:30:00.000Z\",\"veri\":null}\n{\"sira\":3,\"islemId\":\"e9a7e452-ac73-47c2-a1ab-6ba12f56c8a0\",\"olay\":\"BITTI\",\"adim\":\"BACKEND_DURDUR\",\"zaman\":\"2026-09-30T23:30:00.000Z\",\"veri\":null}\n{\"sira\":4,\"islemId\":\"e9a7e452-ac73-47c2-a1ab-6ba12f56c8a0\",\"olay\":\"BASLADI\",\"adim\":\"YEDEK\",\"zaman\":\"2026-09-30T23:30:00.000Z\",\"veri\":null}\n{\"sira\":5,\"islemId\":\"e9a7e452-ac73-47c2-a1ab-6ba12f56c8a0\",\"olay\":\"BITTI\",\"adim\":\"YEDEK\",\"zaman\":\"2026-09-30T23:30:00.000Z\",\"veri\":{\"boyut\":39,\"dosya\":\"db.dump.tkenc\",\"kurulumAlicisi\":1,\"zaman\":\"2026-09-30T23:30:00.000Z\"}}\n{\"sira\":6,\"islemId\":\"e9a7e452-ac73-47c2-a1ab-6ba12f56c8a0\",\"olay\":\"BASLADI\",\"adim\":\"GECIS\",\"zaman\":\"2026-09-30T23:30:00.000Z\",\"veri\":null}\n{\"sira\":7,\"islemId\":\"e9a7e452-ac73-47c2-a1ab-6ba12f56c8a0\",\"olay\":\"BITTI\",\"adim\":\"GECIS\",\"zaman\":\"2026-09-30T23:30:00.000Z\",\"veri\":null}\n{\"sira\":8,\"islemId\":\"e9a7e452-ac73-47c2-a1ab-6ba12f56c8a0\",\"olay\":\"BASLADI\",\"adim\":\"GOC\",\"zaman\":\"2026-09-30T23:30:00.000Z\",\"veri\":null}\n{\"sira\":9,\"islemId\":\"e9a7e452-ac73-47c2-a1ab-6ba12f56c8a0\",\"olay\":\"BITTI\",\"adim\":\"GOC\",\"zaman\":\"2026-09-30T23:30:00.000Z\",\"veri\":{\"gocSonra\":{\"bitmis\":4,\"toplam\":4}}}\n{\"sira\":10,\"islemId\":\"e9a7e452-ac73-47c2-a1ab-6ba12f56c8a0\",\"olay\":\"BASLADI\",\"adim\":\"DOGRULAMA\",\"zaman\":\"2026-09-30T23:30:00.000Z\",\"veri\":null}\n{\"sira\":11,\"islemId\":\"e9a7e452-ac73-47c2-a1ab-6ba12f56c8a0\",\"olay\":\"HATA\",\"adim\":\"DOGRULAMA\",\"zaman\":\"2026-09-30T23:33:00.000Z\",\"veri\":{\"hataKodu\":\"SAGLIK_ZAMAN_ASIMI\",\"mesaj\":\"status UP olmadı\"}}\n{\"sira\":12,\"islemId\":\"e9a7e452-ac73-47c2-a1ab-6ba12f56c8a0\",\"olay\":\"TELAFI_BASLADI\",\"adim\":\"DOGRULAMA\",\"zaman\":\"2026-09-30T23:33:00.000Z\",\"veri\":null}\n{\"sira\":13,\"islemId\":\"e9a7e452-ac73-47c2-a1ab-6ba12f56c8a0\",\"olay\":\"TELAFI_BITTI\",\"adim\":\"DOGRULAMA\",\"zaman\":\"2026-09-30T23:33:00.000Z\",\"veri\":null}\n{\"sira\":14,\"islemId\":\"e9a7e452-ac73-47c2-a1ab-6ba12f56c8a0\",\"olay\":\"TELAFI_BASLADI\",\"adim\":\"GOC\",\"zaman\":\"2026-09-30T23:33:00.000Z\",\"veri\":null}\n{\"sira\":15,\"islemId\":\"e9a7e452-ac73-47c2-a1ab-6ba12f56c8a0\",\"olay\":\"TELAFI_BITTI\",\"adim\":\"GOC\",\"zaman\":\"2026-09-30T23:33:00.000Z\",\"veri\":{\"geriYuklendi\":true}}\n{\"sira\":16,\"islemId\":\"e9a7e452-ac73-47c2-a1ab-6ba12f56c8a0\",\"olay\":\"TELAFI_BASLADI\",\"adim\":\"GECIS\",\"zaman\":\"2026-09-30T23:33:00.000Z\",\"veri\":null}\n{\"sira\":17,\"islemId\":\"e9a7e452-ac73-47c2-a1ab-6ba12f56c8a0\",\"olay\":\"TELAFI_BITTI\",\"adim\":\"GECIS\",\"zaman\":\"2026-09-30T23:33:00.000Z\",\"veri\":null}\n{\"sira\":18,\"islemId\":\"e9a7e452-ac73-47c2-a1ab-6ba12f56c8a0\",\"olay\":\"TELAFI_BASLADI\",\"adim\":\"BACKEND_DURDUR\",\"zaman\":\"2026-09-30T23:33:00.000Z\",\"veri\":null}\n{\"sira\":19,\"islemId\":\"e9a7e452-ac73-47c2-a1ab-6ba12f56c8a0\",\"olay\":\"TELAFI_BITTI\",\"adim\":\"BACKEND_DURDUR\",\"zaman\":\"2026-09-30T23:33:00.000Z\",\"veri\":null}\n"
+      },
+      "programdata/guncelleme/is/yedek/e9a7e452-ac73-47c2-a1ab-6ba12f56c8a0/db.dump.tkenc": {
+        "metin": "ENC2:{\"finished\":2,\"total\":2,\"data\":42}"
+      },
+      "programdata/guncelleme/is/yedek/e9a7e452-ac73-47c2-a1ab-6ba12f56c8a0/yedek.json": {
+        "metin": "{\"boyut\":39,\"dosya\":\"db.dump.tkenc\",\"kurulumAlicisi\":1,\"zaman\":\"2026-09-30T23:30:00.000Z\"}"
+      },
+      "programdata/guncelleme/niyet/niyet.json": {
+        "metin": "{\"indirme\":{\"belirtec\":\"belirtec.test.imza\",\"bitis\":\"2026-10-30T23:30:00Z\"},\"onay\":null,\"v\":1,\"yazildi\":\"2026-09-30T23:30:00Z\"}"
+      }
+    },
+    "hizmetler": {
+      "TeksERP-Backend": {
+        "argumanlar": [],
+        "baslatma": 2,
+        "cokme": null,
+        "durum": "Running",
+        "imaj": "konak",
+        "surum": "2.12.0",
+        "yenidenBaslatma": null
+      },
+      "TeksERP-PostgreSQL": {
+        "argumanlar": [],
+        "baslatma": 0,
+        "cokme": null,
+        "durum": "Running",
+        "imaj": "",
+        "surum": "16.9",
+        "yenidenBaslatma": null
+      }
+    },
+    "saat": 1790811180000
+  },
+  "eskiSonuc": {
+    "durum": "RolledBack",
+    "hataKodu": "SAGLIK_ZAMAN_ASIMI"
+  },
+  "kaynak": {
+    "commit": "bf4e96833869f43e70ca807fc9fbc3d2de6b91e8",
+    "etiket": "0.1.3-backend-v2.14.0",
+    "guncelleyici": "0.1.3"
+  },
+  "oldurme": {
+    "adim": "BACKEND_DURDUR",
+    "nokta": 74,
+    "olay": "TELAFI_BITTI",
+    "sonCagri": "74:ekle islem.jsonl",
+    "yirtik": false
+  },
+  "senaryo": "saglik-geri-donus",
+  "v": 1
+}

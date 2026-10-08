@@ -1,0 +1,20 @@
+{
+  "v": 1,
+  "kaynak": {
+    "yazar": "deploy/hizmet/guncelleyici-hizmeti.ps1 AyarYaz (Windows PowerShell 5.1 ConvertTo-Json + LF)",
+    "etiket": "backend-v2.14.0",
+    "commit": "bf4e96833869f43e70ca807fc9fbc3d2de6b91e8"
+  },
+  "dosyaAdi": "ayar.json",
+  "dosya": "{\r\n    \"v\":  1,\r\n    \"guncellemeSunucusu\":  \"https://guncelleme.etkiliyazilim.com\",\r\n    \"backendHizmeti\":  \"TeksERP-Backend-hazirlik\",\r\n    \"vekil\":  \"http://vekil.fabrika.local:3128\"\r\n}\n",
+  "beklenen": {
+    "guncellemeSunucusu": "https://guncelleme.etkiliyazilim.com",
+    "vekil": "http://vekil.fabrika.local:3128",
+    "backendHizmeti": "TeksERP-Backend-hazirlik",
+    "saglikZamanAsimiSn": 180,
+    "durdurmaZamanAsimiSn": 60,
+    "gocZamanAsimiSn": 1800,
+    "yedekZamanAsimiSn": 3600,
+    "turAraligiSn": 60
+  }
+}
