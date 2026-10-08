@@ -5,6 +5,7 @@ import { VersionTextSchema, compareVersions } from "../lisans-protokol";
 import type { Db } from "../lib/prisma";
 import type { Kurulum } from "@prisma/client";
 import { notFoundError } from "../lib/errors";
+import { installationCapabilities } from "../services/entitlement-policy";
 import { UPDATE_POLICY_EVENT, UPDATE_RESULT_EVENTS, policyOf, policyTimeZone } from "../services/update-policy.service";
 
 const RESULT_EVENTS: readonly string[] = Object.values(UPDATE_RESULT_EVENTS);
@@ -17,6 +18,8 @@ function versionText(v: unknown): string | null {
  * FİLO (Dağıtım v2): etkin kurulumlar × kurulu backend sürümü (son yoklamanın `ortam.uygulamaSurum`u) × kanalın
  * yayındaki sürümü (`son.json`; yayın kökü bağlı değilse kanal kaydındaki güncel sürüm) × politika × güncelleyici ×
  * son tamamlanan deneme (defterden). "Geride" yalnız iki sürüm de okunabildiğinde hesaplanır — okunamayan "bilinmiyor"dur.
+ * `paketZinciri`: güncelleyicisi kök sertifikalı PAKET zincirini okuyabildiğini bildirmiş mi (yetenek `paket-zinciri`;
+ * eski imzayla yayını bırakmanın ölçüsü — PAKET-ANAHTARI-KOK-ALTINDA §3.4); hiç etkinleşmemiş kurulumda bilinmiyor (null).
  */
 export async function fleetView(db: Db, root: string | undefined) {
   const rows = await db.kurulum.findMany({
@@ -54,6 +57,7 @@ export async function fleetView(db: Db, root: string | undefined) {
       kuruluSurum: installed,
       kanalSurumu: channel,
       geride: cmp === null ? null : cmp < 0,
+      paketZinciri: r.durum === "ETKINLESMEDI" ? null : installationCapabilities(r).includes("paket-zinciri"),
       politika: policyOf(r),
       rapor: r.sonGuncellemeRaporu,
       raporZamani: r.sonGuncellemeRaporuZamani,

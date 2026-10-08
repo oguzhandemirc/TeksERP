@@ -2,7 +2,7 @@
 // belgeyi BASMAZ (yalnız kök imzalar): tören paketinden İÇE AKTARIR, saklar ve her kira yanıtına (`paketIptal`) koyar.
 // Defter ekleme-yalnızdır (`paket_iptal_belgesi`, tetikleyici); `sira` tekdüze artar, yeni belge öncekinin bütün
 // satırlarını taşır. Dağıtım kapısı YOK: satıcı PAKET/ISTEMCI anahtarı tutmaz, imzaladığı hiçbir şey bu belgeyle düşmez.
-import { parseJws, verifyPackageRevocation, type RootKey, type VerifiedPackageRevocation } from "../lisans-protokol";
+import { isPackageCertificateRevoked, parseJws, verifyPackageRevocation, type RootKey, type VerifiedPackageRevocation } from "../lisans-protokol";
 import type { KeyStore } from "../keys/key-store";
 import { recordAudit } from "../lib/audit";
 import { VendorError, stateConflict } from "../lib/errors";
@@ -78,7 +78,33 @@ export async function importPackageRevocation(g: { token: string; anchor: readon
  * sıralı belge, HER kuruluma (yetenek kapısı yok: yanıt şeması gevşek, eski fabrika alanı atar). Kiraya sıra pini konmaz; defter boşsa null.
  */
 export async function leasePackageRevocation(db: Db, keys: KeyStore): Promise<string | null> {
-  const rows = await db.paketIptalBelgesi.findMany({ orderBy: { sira: "desc" }, take: 16, select: { belge: true } });
-  for (const row of rows) if (verifyPackageRevocation(row.belge, keys.anchor).ok) return row.belge;
+  return (await newestPackageRevocation(db, keys))?.belge ?? null;
+}
+
+/** Çapaya karşı doğrulanan en yüksek sıralı dağıtım iptali (kiradaki belge budur); portal görünümü de bundan okur. */
+export async function newestPackageRevocation(db: Db, keys: KeyStore): Promise<{ sira: number; belge: string; verified: VerifiedPackageRevocation } | null> {
+  const rows = await db.paketIptalBelgesi.findMany({ orderBy: { sira: "desc" }, take: 16, select: { sira: true, belge: true } });
+  for (const row of rows) {
+    const v = verifyPackageRevocation(row.belge, keys.anchor);
+    if (v.ok) return { sira: row.sira, belge: row.belge, verified: v.value };
+  }
   return null;
+}
+
+/**
+ * Portal (salt okuma): dağıtım iptali defteri (en yüksek sıra önce; belge metni listede yok) + kirada giden sıra +
+ * anahtar biriminde açık sertifikası duran ISTEMCI/PAKET'ten iptal edilenler. Yazma yolu yok — belge törenden gelir.
+ */
+export async function packageRevocationStatus(db: Db, keys: KeyStore) {
+  const rows = await db.paketIptalBelgesi.findMany({
+    orderBy: { sira: "desc" },
+    take: 50,
+    select: { id: true, iptalId: true, sira: true, imzalayanKid: true, verilis: true, kidler: true, yukleyen: true, createdAt: true },
+  });
+  const newest = await newestPackageRevocation(db, keys);
+  return {
+    belgeler: rows,
+    kiradakiSira: newest?.sira ?? null,
+    iptalEdilenYukluler: keys.openCertificates.filter((c) => isPackageCertificateRevoked(c.document, newest?.verified)).map((c) => c.kid),
+  };
 }

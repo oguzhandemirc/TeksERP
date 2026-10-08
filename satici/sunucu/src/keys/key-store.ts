@@ -4,18 +4,18 @@
 //   *.anahtar.json — ALT (kira) / İNDİRME (parolasız 0600 + kök imzalı sertifika)
 //   *.ara.json     — HAK ARA İMZACISI (G4; parolalı + kök imzalı `HAK` sertifikası; 395 gün, yıllık dönem töreninde yenilenir)
 //   *.sertifika.json — EMEKLİ anahtar: özel yarısı silinmiş ALT · İNDİRME · ARA'nın açık yarısı + sertifikası (yalnız künye)
+//   istemci/ · paket/ — satıcının TUTMADIĞI anahtarların AÇIK sertifikaları (`{sertifika}`; ISTEMCI · PAKET) + istemci/
+//     altında tablet OTA yaprakları (`ota-yaprak-*.pem`): yalnız künye ve süre uyarısı, imzada kullanılmaz
 // Çapa: gömülü üretim kökleri (GUVEN_CAPASI=uretim; fabrika derlemesinin güvendiği küme — ayna); yalnız bekçiler için
 // GUVEN_CAPASI_DOSYASI.
 // Çapada olmayan kökle imza yapılmaz (fabrika reddederdi); kip yok ya da çapa geçersizse yükleme DURUR (fail-closed).
-import { readdirSync, readFileSync, statSync } from "node:fs";
+import { readFileSync, statSync } from "node:fs";
 import path from "node:path";
 import type { KeyObject } from "node:crypto";
 import { z } from "zod";
 import {
-  CLOCK_SKEW_MS,
   LICENSE_CLASSES,
   isoToMs,
-  parseJws,
   prepareTrustAnchor,
   rootPublicKeysFor,
   verifyCertificate,
@@ -26,7 +26,9 @@ import {
   type TrustAnchorMode,
 } from "../lisans-protokol";
 import type { VendorConfig } from "../config";
+import { certValidAt, listFiles, parseCertificatePayload } from "./key-dir";
 import { readRetiredKeyFile, readSubKeyFile, readWrappedKeyFile, subKeyPrivate, type RetiredKeyFile } from "./key-files";
+import { loadOpenCertificates, loadOtaLeaves, openCertUsageOf, type OpenCertificate, type OtaLeaf } from "./open-certificates";
 
 // Prisma `AnahtarTuru`nun CANLI değerleri; şemada `/// EMEKLİ DEĞER` işaretli değer yazılmaz (TEK-ORTAK-PAKET §7).
 export type VendorKeyKind = "KOK" | "ALT" | "INDIRME" | "BAYI" | "ARA";
@@ -105,19 +107,6 @@ const ROOT_FILE_KID = /^kok-[a-z0-9-]{1,40}$/;
 
 const sameClasses = (a: readonly string[], b: readonly string[]): boolean => a.length === b.length && [...a].sort().join() === [...b].sort().join();
 
-function listFiles(dir: string, suffix: string): string[] {
-  let names: string[];
-  try {
-    names = readdirSync(dir);
-  } catch {
-    return [];
-  }
-  return names
-    .filter((n) => n.endsWith(suffix))
-    .sort()
-    .map((n) => path.join(dir, n));
-}
-
 /**
  * Anahtar dizinindeki kökler yalnız `kok-*` ailesindense uretim; başka aile (eski `hazirlik-*`) ya da kök yoksa null.
  * Yalnız ortamı olmayan CLI kolaylığıdır (yerel anahtar dizini); sunucu kipi yapılandırmadan alır.
@@ -137,10 +126,6 @@ function resolveAnchor(config: Pick<VendorConfig, "GUVEN_CAPASI" | "GUVEN_CAPASI
   return { anchor: rootPublicKeysFor(config.GUVEN_CAPASI), anchorSource: "gomulu" };
 }
 
-function certValidAt(doc: CertificateDoc, atMs: number): boolean {
-  return atMs >= isoToMs(doc.baslangic) - CLOCK_SKEW_MS && atMs <= isoToMs(doc.bitis) + CLOCK_SKEW_MS;
-}
-
 export class KeyStore {
   private constructor(
     readonly anchor: readonly RootKey[],
@@ -150,6 +135,8 @@ export class KeyStore {
     readonly warnings: readonly string[],
     readonly intermediates: readonly LoadedIntermediate[] = [],
     readonly retired: readonly RetiredKey[] = [],
+    readonly openCertificates: readonly OpenCertificate[] = [],
+    readonly otaLeaves: readonly OtaLeaf[] = [],
   ) {}
 
   static load(config: Pick<VendorConfig, "ANAHTAR_DIZINI" | "GUVEN_CAPASI" | "GUVEN_CAPASI_DOSYASI">, nowMs: number = Date.now()): KeyStore {
@@ -212,7 +199,9 @@ export class KeyStore {
     }
     const intermediates = loadIntermediates(dir, anchor, nowMs, warnings);
     const retired = loadRetired(dir, anchor, warnings);
-    return new KeyStore(anchor, anchorSource, wrapped, subKeys, warnings, intermediates, retired);
+    const openCertificates = loadOpenCertificates(dir, anchor, nowMs, warnings);
+    const otaLeaves = loadOtaLeaves(path.join(dir, "istemci"), openCertificates, warnings);
+    return new KeyStore(anchor, anchorSource, wrapped, subKeys, warnings, intermediates, retired, openCertificates, otaLeaves);
   }
 
   /** HAK'ı imzalayacak ARA imzacı: sertifikası ŞİMDİ geçerli ve sınıfa yetkili olanların en yenisi (G4). */
@@ -325,6 +314,11 @@ function loadRetired(dir: string, anchor: readonly RootKey[], warnings: string[]
   const out: RetiredKey[] = [];
   for (const file of listFiles(dir, ".sertifika.json")) {
     try {
+      const open = openCertUsageOf(file);
+      if (open) {
+        warnings.push(`${path.basename(file)} açık ${open} sertifikası, emekli künyesi değil — anahtar biriminin ${open === "PAKET" ? "paket" : "istemci"}/ alt dizinine konur`);
+        continue;
+      }
       const k = readRetiredKeyFile(file);
       const meta = RETIRED_USAGE_OF[k.kaynakTur];
       const parsed = parseCertificatePayload(k.sertifika);
@@ -339,11 +333,4 @@ function loadRetired(dir: string, anchor: readonly RootKey[], warnings: string[]
     }
   }
   return out;
-}
-
-/** Doğrulanmamış sertifika yükünden yalnız başlangıç anı okunur (doğrulama o anda yapılır). */
-function parseCertificatePayload(token: string): { baslangic: string } | null {
-  const parsed = parseJws(token);
-  const start = parsed.ok ? parsed.value.payload.baslangic : undefined;
-  return typeof start === "string" && Number.isFinite(isoToMs(start)) ? { baslangic: start } : null;
 }

@@ -1,4 +1,4 @@
-// ANAHTAR KATMANI PORTAL ROTALARI (G4) — kök imzası bekleyen HAK kuyruğu · iptal belgesi defteri · ara imzacıyla toplu
+// ANAHTAR KATMANI PORTAL ROTALARI (G4) — kök imzası bekleyen HAK kuyruğu · iptal belgesi + dağıtım iptali defteri · ara imzacıyla toplu
 // yeniden basım. Toplu basım ara imzacı parolası taşır: imza parolası kapısı + imza boğazı (hangi yoldan imzalanacağı
 // keys/signing-scope.ts). Kuyruk talebinin kendisi HAK sürüm rotasından doğar (`/haklar/:id/surum`, plan KUYRUK).
 import { z } from "zod";
@@ -6,6 +6,7 @@ import { passwordBuffer } from "../keys/key-files";
 import { prisma } from "../lib/prisma";
 import { withSigningPasswordGuard } from "../portal/signing-guard";
 import { entitlementVersionAudit, prepareIntermediateReissue, recordIntermediateReissueTx } from "../services/entitlement.service";
+import { packageRevocationStatus } from "../services/package-revocation.service";
 import { revocationStatus } from "../services/revocation.service";
 import { cancelRootRequestTx, findRootRequest, listRootRequests } from "../services/root-queue.service";
 import { ClientTokenSchema, ReasonSchema, bodyOf, idParam, pageQuery, portalAction, queryBool, queryEnum, type PortalRouteDef } from "./portal-http";
@@ -53,7 +54,8 @@ export const KEY_PORTAL_ROUTES: readonly PortalRouteDef[] = [
     path: "/iptal-belgeleri",
     permission: "anahtar:oku",
     kimlik: "OKUMA",
-    handler: async (c) => ({ data: await revocationStatus(prisma, c.ctx.keys) }),
+    // Dağıtım iptali (ISTEMCI · PAKET) ayrı defterdir ve dağıtım kapısı taşımaz; aynı sayfada salt okunur görünür.
+    handler: async (c) => ({ data: { ...(await revocationStatus(prisma, c.ctx.keys)), dagitimIptali: await packageRevocationStatus(prisma, c.ctx.keys) } }),
   },
   {
     method: "post",
