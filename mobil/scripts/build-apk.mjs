@@ -77,7 +77,7 @@ import { ZINCIR_META, kokHatalari } from './lib/ota-zinciri.cjs';
 import { otaTorenYonergesi, ortakKaydiOku, ortakKimlik, ortakYapilandirmaFarki } from './lib/ortak-kimlik.cjs';
 import { IMZA_ANAHTARLARI, anahtarUretimKomutu, imzaAnahtariDenetimi } from './lib/imza-anahtari.cjs';
 import { PLAY_EN_DUSUK_HEDEF_SDK, YON_OZELLIGI } from './lib/buyuk-ekran.cjs';
-import { playManifestSorunlari } from './lib/play-manifest.cjs';
+import { NSC_ADI, agGuvenligiSorunlari, playManifestSorunlari } from './lib/play-manifest.cjs';
 import { kayitHatalari, KAYIT_REL as DAGITIM_REL, turet } from '../../scripts/lib/dagitim.mjs';
 import { apkKunyeYolu, derlemeKunyesiYaz, temizAgacDenetimi } from '../../scripts/lib/derleme-bagi.mjs';
 
@@ -980,6 +980,16 @@ function ortakAabDogrula(aabYolu, k, derlemeBaslangici) {
       sorunlar.push(`base/manifest/AndroidManifest.xml protobuf olarak çözülemedi (${e.message}) — zincir ÖLÇÜLEMEDİ`);
     }
     if (ogeler) sorunlar.push(...buyukEkranSorunlari(ogeler), ...playManifestSorunlari(ogeler));
+    if (ogeler) {
+      const nscHam = oku(`base/res/xml/${NSC_ADI}.xml`);
+      let nsc = null;
+      try {
+        nsc = nscHam ? protoManifestOgeleri(nscHam, 'network-security-config') : null;
+      } catch (e) {
+        sorunlar.push(`base/res/xml/${NSC_ADI}.xml çözülemedi (${e.message})`);
+      }
+      sorunlar.push(...agGuvenligiSorunlari(ogeler, nsc));
+    }
     if (meta) {
       const pem = meta['expo.modules.updates.CODE_SIGNING_CERTIFICATE'];
       bilgi(`OTA sertifika zinciri    : ${meta[ZINCIR_META] ?? '(yok)'}`);

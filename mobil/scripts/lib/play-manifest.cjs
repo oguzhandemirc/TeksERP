@@ -34,4 +34,49 @@ function playManifestSorunlari(ogeler) {
   return f;
 }
 
-module.exports = { ENGELLI_IZINLER, KALDIRILAN_HIZMETLER, playManifestSorunlari };
+/** Ağ güvenlik yapılandırmasının kaynak adı (res/xml/<ad>.xml; manifest `@xml/<ad>`). */
+const NSC_ADI = 'network_security_config';
+
+/**
+ * Sürüm derlemesinin ağ güvenlik yapılandırması (TABLET-GENEL-CA-BAGLANTI §3): şifresiz kapalı, güven çapası YALNIZ
+ * sistem deposu — kullanıcının/MDM'in eklediği CA'lar beyanlı olarak hariç. Sabitli kip native katmanda ayrıca çalışır.
+ */
+const NSC_SURUM = `<?xml version="1.0" encoding="utf-8"?>
+<network-security-config>
+  <base-config cleartextTrafficPermitted="false">
+    <trust-anchors>
+      <certificates src="system" />
+    </trust-anchors>
+  </base-config>
+</network-security-config>
+`;
+
+/** Geliştirme (debug) derlemesi: Metro'ya şifresiz bağlanır; güven yine yalnız sistem. src/debug kaynağı sürümü ezmez. */
+const NSC_GELISTIRME = NSC_SURUM.replace('cleartextTrafficPermitted="false"', 'cleartextTrafficPermitted="true"');
+
+/**
+ * AAB'nin ağ güvenlik yapılandırması sorunları: manifest yapılandırmayı göstermeli; yapılandırma şifresizi kapatmalı,
+ * yalnız sistem çapasına güvenmeli, alan adına özel istisna (domain-config) taşımamalı. `nsc` proto XML öğeleri.
+ */
+function agGuvenligiSorunlari(ogeler, nsc) {
+  const f = [];
+  const uygulama = ogeler.find((o) => o.ad === 'application');
+  if (!uygulama || !('networkSecurityConfig' in (uygulama.oznitelik ?? {}))) {
+    f.push('application networkSecurityConfig yok — kullanıcı CA dışlaması beyanlı değil (plugins/withAgGuvenligi)');
+  }
+  if (!nsc) return [...f, `res/xml/${NSC_ADI}.xml yok — ağ güvenlik yapılandırması ÖLÇÜLEMEDİ`];
+  const taban = nsc.find((o) => o.ad === 'base-config');
+  if (taban?.oznitelik?.cleartextTrafficPermitted !== 'false') {
+    f.push(`ağ güvenlik yapılandırması base-config cleartextTrafficPermitted=${taban?.oznitelik?.cleartextTrafficPermitted ?? '(yok)'} — şifresiz kapalı olmalı`);
+  }
+  const capalar = nsc.filter((o) => o.ad === 'certificates').map((o) => o.oznitelik?.src ?? '(yok)');
+  if (capalar.length === 0 || capalar.some((c) => c !== 'system')) {
+    f.push(`ağ güvenlik yapılandırması güven çapası [${capalar.join(', ')}] — yalnız "system" olmalı (kullanıcı CA'sı hariç)`);
+  }
+  if (nsc.some((o) => o.ad === 'domain-config' || o.ad === 'debug-overrides' || o.ad === 'pin-set')) {
+    f.push('ağ güvenlik yapılandırması domain-config/debug-overrides/pin-set taşıyor — sürüm paketinde istisna yok');
+  }
+  return f;
+}
+
+module.exports = { ENGELLI_IZINLER, KALDIRILAN_HIZMETLER, NSC_ADI, NSC_SURUM, NSC_GELISTIRME, agGuvenligiSorunlari, playManifestSorunlari };

@@ -13,7 +13,7 @@ import { fileURLToPath } from 'node:url';
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const SRC = path.join(HERE, 'android/src/main/java/com/tekserp/lantls');
 const TEST = path.join(HERE, 'android/src/test/java/com/tekserp/lantls/LanTlsJvmCheck.kt');
-const PURE = ['LanTlsPolicy.kt', 'PinningTrustManager.kt', 'PinningHostnameVerifier.kt', 'CleartextGuardInterceptor.kt', 'LanTlsProbe.kt'];
+const PURE = ['LanTlsPolicy.kt', 'PinningTrustManager.kt', 'PinningHostnameVerifier.kt', 'CleartextGuardInterceptor.kt', 'LanTlsProbe.kt', 'WebPkiProbe.kt'];
 const CACHE = path.join(os.homedir(), '.gradle/caches/modules-2/files-2.1');
 
 function dur(msg) {
@@ -66,20 +66,22 @@ const calisma = [stdlib, jar('com.squareup.okhttp3', 'okhttp', ['4.9.2', '4.12.0
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'lantls-jvm-'));
 try {
   const parola = `p${process.pid}${Date.now()}`;
-  const ks = (ad, san) => {
+  const ks = (ad, san, ek = []) => {
     const f = path.join(tmp, `${ad}.p12`);
     execFileSync(keytool, ['-genkeypair', '-alias', ad, '-keyalg', 'EC', '-groupname', 'secp256r1', '-sigalg', 'SHA256withECDSA',
-      '-dname', `CN=${ad}`, '-ext', `SAN=${san}`, '-validity', '2', '-storetype', 'PKCS12',
+      '-dname', `CN=${ad}`, '-ext', `SAN=${san}`, '-validity', '2', '-storetype', 'PKCS12', ...ek,
       '-keystore', f, '-storepass', parola, '-keypass', parola], { stdio: 'ignore' });
     return f;
   };
   const a = ks('sunucu-a', 'dns:sunucu-a');
   const b = ks('sunucu-b', 'ip:127.0.0.1');
+  // C: sistemce güvenilir ama başlangıcı yarın — tablet saati geride kalmış gibi (internet kipi saat sınıfı).
+  const c = ks('sunucu-c', 'ip:127.0.0.1', ['-startdate', '+1d']);
   const out = path.join(tmp, 'out');
   execFileSync(java, ['-cp', derleyici.join(path.delimiter), 'org.jetbrains.kotlin.cli.jvm.K2JVMCompiler',
     '-no-stdlib', '-no-reflect', '-nowarn', '-jvm-target', '17', '-cp', calisma.join(path.delimiter), '-d', out,
     ...PURE.map((f) => path.join(SRC, f)), TEST], { stdio: 'inherit' });
-  execFileSync(java, ['-cp', [out, ...calisma].join(path.delimiter), 'com.tekserp.lantls.LanTlsJvmCheckKt', a, b, parola],
+  execFileSync(java, ['-cp', [out, ...calisma].join(path.delimiter), 'com.tekserp.lantls.LanTlsJvmCheckKt', a, b, parola, c],
     { stdio: 'inherit' });
 } catch (e) {
   process.exitCode = typeof e.status === 'number' ? e.status : 1;

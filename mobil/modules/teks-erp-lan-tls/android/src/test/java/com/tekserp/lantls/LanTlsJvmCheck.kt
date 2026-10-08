@@ -80,7 +80,7 @@ private fun httpServer(): Int {
 }
 
 fun main(args: Array<String>) {
-  require(args.size == 3) { "kullanım: <A.p12> <B.p12> <parola>" }
+  require(args.size == 4) { "kullanım: <A.p12> <B.p12> <parola> <C.p12>" }
   val pass = args[2]
   val ksA = keyStore(args[0], pass)
   val ksB = keyStore(args[1], pass)
@@ -101,7 +101,12 @@ fun main(args: Array<String>) {
   val provider = { current }
 
   // Sahte sistem güveni: yalnız B'ye güvenir (gerçek tablette Android'in CA deposu).
-  val sysStore = KeyStore.getInstance("PKCS12").apply { load(null, null); setCertificateEntry("b", leaf(ksB)) }
+  val ksC = keyStore(args[3], pass)
+  val sysStore = KeyStore.getInstance("PKCS12").apply {
+    load(null, null)
+    setCertificateEntry("b", leaf(ksB))
+    setCertificateEntry("c", leaf(ksC))
+  }
   val system = TrustManagerFactory.getInstance(TrustManagerFactory.getDefaultAlgorithm())
     .apply { init(sysStore) }.trustManagers.filterIsInstance<X509TrustManager>().first()
   val tm = PinningTrustManager(system, provider)
@@ -177,6 +182,24 @@ fun main(args: Array<String>) {
   ok("yoklama: şifresiz porta iz yok → hata", runCatching { LanTlsProbe.observeFingerprint("127.0.0.1", portH, 3000) }.exceptionOrNull() is TlsProbeException)
   val closed = ServerSocket(0, 1, InetAddress.getByName("127.0.0.1")).use { it.localPort }
   ok("yoklama: kapalı port → hata", runCatching { LanTlsProbe.probe("127.0.0.1", closed, 1000) }.exceptionOrNull() is TlsProbeException)
+
+  // 8) İnternet kipi yoklaması: yalnız sistem güveni + ad; sabit kümesi yok sayılır; hata sınıfı ayrılır.
+  val portC = tlsServer(ksC, pass) { httpPortRef }
+  fun web(host: String, port: Int) = WebPkiProbe.probe(host, port, 3000, system)
+  web("127.0.0.1", portB).let { ok("internet: sistemce geçerli + ad tutuyor → kimlik okunur", it.failure == null && it.status == 200 && it.body == "ok") }
+  ok("internet: kendinden imzalı (denetleyen vekil gibi) → untrusted", web("127.0.0.1", portA).failure == WebPkiFailure.UNTRUSTED)
+  current = LanTlsState.of(listOf(fpA), listOf("127.0.0.1:$portA"))
+  ok("internet: sabitli iz internet yoklamasını AÇMAZ", web("127.0.0.1", portA).failure == WebPkiFailure.UNTRUSTED)
+  current = LanTlsState.EMPTY
+  ok("internet: ad sertifikayla tutmuyor → name", web("localhost", portB).failure == WebPkiFailure.NAME)
+  // Güven çapası olarak C'nin tarihi PKIX'te denetlenmez; sınıflama zincir tarihinden (gerçek el sıkışma: emülatör G6).
+  ok("internet: sertifika henüz geçerli değil → clock_behind",
+    WebPkiProbe.classify(java.security.cert.CertificateException("x"), listOf(leaf(ksC)), System.currentTimeMillis()) == WebPkiFailure.CLOCK_BEHIND)
+  ok("internet: güvenilir çapa (C) bağlanabilir", portC > 0 && web("127.0.0.1", portC).status == 200)
+  ok("internet: tablet saati ileri → clock_ahead",
+    WebPkiProbe.classify(java.security.cert.CertificateException("x"), listOf(leaf(ksB)), System.currentTimeMillis() + 10L * 86_400_000) == WebPkiFailure.CLOCK_AHEAD)
+  ok("internet: kapalı port → network", web("127.0.0.1", closed).failure == WebPkiFailure.NETWORK)
+  web("127.0.0.1", portH).let { ok("internet: şifresiz port → hata, http'ye düşmez", it.failure != null && it.status == null) }
 
   println("\n$passes geçti, $failures kaldı")
   if (failures > 0) kotlin.system.exitProcess(1)

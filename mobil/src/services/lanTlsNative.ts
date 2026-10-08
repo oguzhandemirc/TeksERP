@@ -38,3 +38,20 @@ export function lanTlsNative(): LanTlsNative | null {
     return null;
   }
 }
+
+/** İnternet kipi yoklamasının ham sonucu: `failure` null ise sistem doğrulaması geçti (vc61+ native). */
+export interface RawWebPkiProbe {
+  failure: string | null;
+  status: number | null;
+  body: string | null;
+  detail: string | null;
+}
+
+type WebPkiFn = (host: string, port: number, timeoutMs: number) => Promise<RawWebPkiProbe>;
+
+/** Sistem güven deposuyla yoklama; modül ya da işlev yoksa (vc60) `null` — internet kipi bu sürümde yok. */
+export function webPkiProbe(): WebPkiFn | null {
+  if (!lanTlsNative()) return null;
+  const m = requireOptionalNativeModule<{ probeWebPki?: WebPkiFn }>('TeksErpLanTls');
+  return m && typeof m.probeWebPki === 'function' ? m.probeWebPki.bind(m) : null;
+}
