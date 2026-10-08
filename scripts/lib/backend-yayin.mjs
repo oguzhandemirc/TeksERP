@@ -74,6 +74,56 @@ export function ozetCikar(md) {
   return `${kesik.slice(0, son > OZET_TAVANI / 2 ? son : kesik.length)}…`;
 }
 
+/** Zincir takımının işaretçisi (`pkt-*` imzalı bildirim); eski takım `son.json`. */
+export const ZINCIR_ISARETCI = 'son-zincir.json';
+
+/** Grubun `son.json` adresinden zincir işaretçisinin adresi (aynı dizin). */
+export function zincirAdresi(sonJsonUrl) {
+  if (!/\/son\.json$/.test(String(sonJsonUrl))) throw new Error(`son.json adresi değil: ${sonJsonUrl}`);
+  return String(sonJsonUrl).replace(/son\.json$/, ZINCIR_ISARETCI);
+}
+
+/** Köprü kaydının yolu: yayın defterinin dizininde `<grup>-backend-KOPRU.json` (eski takım donduruldu). */
+export function kopruYolu(backendDefter, grup) {
+  if (!UZAK_YOL_DESENI.test(backendDefter) || backendDefter.split('/').includes('..')) throw new Error(`güvensiz defter yolu: ${backendDefter}`);
+  if (!/^[a-z0-9-]{1,40}$/.test(grup)) throw new Error(`güvensiz grup: ${grup}`);
+  return `${backendDefter.slice(0, backendDefter.lastIndexOf('/'))}/${grup}-backend-KOPRU.json`;
+}
+
+/** Köprü kaydını uzakta geçici adla yazıp yerine taşıyan komut (var olanı ezmez). */
+export function kopruKomutu(yol, kayit) {
+  if (!UZAK_YOL_DESENI.test(yol) || yol.split('/').includes('..')) throw new Error(`güvensiz köprü yolu: ${yol}`);
+  const g = `${yol}.yaziliyor`;
+  return `test ! -e ${tirnak(yol)} && mkdir -p ${tirnak(yol.slice(0, yol.lastIndexOf('/')))} && printf '%s\\n' ${tirnak(JSON.stringify(kayit))} > ${tirnak(g)} && chmod 0644 ${tirnak(g)} && mv ${tirnak(g)} ${tirnak(yol)}`;
+}
+
+/**
+ * Takım kararı (3.9 D5, karar 6): grup yayınında `eski`-yalnız takım DUR · `cift` köprü ilan edilmeden serbest, köprüden
+ * sonra DUR (eski takım donduruldu) · `zincir`-yalnız: grupta `son.json` varsa ve köprü yoksa kullanıcının köprü cümlesi
+ * ister → köprü kaydı yazılır. `eskiVar`/`kopruVar` ölçülemediyse çağıran bu fonksiyonu çağırmaz (fail-closed).
+ */
+export function takimKarari({ takim, eskiVar, kopruVar, kopruIlan }) {
+  if (takim === 'eski') {
+    return { durum: 'dur', kopruYaz: false, satirlar: ['Paket yalnız eski (paket-*) imzalı — gruba yalnız zincir imzalı paket çıkar', 'Çift imzala: build-korumali-imza.ts zip --zincir-anahtar=<pkt anahtarı>'] };
+  }
+  if (takim === 'cift') {
+    if (kopruVar) return { durum: 'dur', kopruYaz: false, satirlar: ['Bu grupta KÖPRÜ İLAN EDİLDİ — eski takım (son.json) donduruldu, çift imzalı yayın yapılmaz', 'Zincir-yalnız paket yayınla (--anahtar=<pkt anahtarı>)'] };
+    if (kopruIlan !== undefined) return { durum: 'dur', kopruYaz: false, satirlar: ['--kopru-ilan yalnız zincir-yalnız pakette anlamlıdır'] };
+    return { durum: 'tamam', kopruYaz: false, satirlar: [] };
+  }
+  if (takim === 'zincir') {
+    if (eskiVar && !kopruVar) {
+      if (kopruIlan === undefined) {
+        return { durum: 'dur', kopruYaz: false, satirlar: ['Grupta eski takım (son.json) yayında — zincir-yalnız yayın KÖPRÜ İLANI ister', 'Kullanıcının cümlesiyle: --kopru-ilan="<cümle>" (eski takım bundan sonra DONAR)'] };
+      }
+      return { durum: 'tamam', kopruYaz: true, satirlar: [] };
+    }
+    if (kopruIlan !== undefined) return { durum: 'dur', kopruYaz: false, satirlar: [kopruVar ? 'Köprü zaten ilan edildi — --kopru-ilan verilmez' : 'Grupta eski takım yok — köprü ilanı gerekmez'] };
+    return { durum: 'tamam', kopruYaz: false, satirlar: [] };
+  }
+  return { durum: 'dur', kopruYaz: false, satirlar: [`Bildirim aracının takımı tanınmıyor: ${String(takim)}`] };
+}
+
 /** `son.json` gövdesinden bildirimin sürümü (imzasız okuma — yalnız monotonluk ve terfi için). */
 export function isaretciSurumu(govde) {
   try {
@@ -103,12 +153,17 @@ export function yayinPlani({ vdsBackend, backendDefter, surum, paketAd, pgAd = n
   const gecici = `${kok}/${GECICI_ONEKI}${surum}-${damga}`;
   const sonJson = `${kok}/son.json`;
   const sonJsonGecici = `${kok}/.son.json.${damga}`;
+  const sonZincir = `${kok}/${ZINCIR_ISARETCI}`;
+  const sonZincirGecici = `${kok}/.${ZINCIR_ISARETCI}.${damga}`;
+  const tasi = (g, h) => `chmod 0644 ${tirnak(g)} && mv ${tirnak(g)} ${tirnak(h)}`;
   return {
     kok,
     surumDizini,
     gecici,
     sonJson,
     sonJsonGecici,
+    sonZincir,
+    sonZincirGecici,
     defter: backendDefter,
     komut: {
       varMi: `test -e ${tirnak(surumDizini)}`,
@@ -117,8 +172,11 @@ export function yayinPlani({ vdsBackend, backendDefter, surum, paketAd, pgAd = n
         (pgAd ? ` && sha256sum ${tirnak(`${gecici}/${pgAd}`)} | cut -d' ' -f1 && stat -c %s ${tirnak(`${gecici}/${pgAd}`)}` : ''),
       // Kip AÇIKÇA yazılır: scp yerel kipi taşır — 0600 bir paket nginx'e 403 olurdu (thinkpad-1 D8b, 2.14.7).
       yayinla: `chmod -R u=rwX,go=rX ${tirnak(gecici)} && test ! -e ${tirnak(surumDizini)} && mv ${tirnak(gecici)} ${tirnak(surumDizini)}`,
-      sonJsonYaz: `chmod 0644 ${tirnak(sonJsonGecici)} && mv ${tirnak(sonJsonGecici)} ${tirnak(sonJson)}`,
-      geciciSil: `rm -rf ${tirnak(gecici)} ${tirnak(sonJsonGecici)}`,
+      sonJsonYaz: tasi(sonJsonGecici, sonJson),
+      // Takımın işaretçileri TEK uzak komutla yerine taşınır (birlikte-ya-da-hiç: ikisi de önce geçici adla yüklenir).
+      isaretciYaz: (takim) =>
+        takim === 'cift' ? `${tasi(sonZincirGecici, sonZincir)} && ${tasi(sonJsonGecici, sonJson)}` : takim === 'zincir' ? tasi(sonZincirGecici, sonZincir) : tasi(sonJsonGecici, sonJson),
+      geciciSil: `rm -rf ${tirnak(gecici)} ${tirnak(sonJsonGecici)} ${tirnak(sonZincirGecici)}`,
     },
   };
 }

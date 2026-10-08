@@ -30,6 +30,11 @@
  *    sürüm ≥ X (K-6: genel kendi etiketini ister). Ağaç temiz · künye commit'i == HEAD · profil matrisi raporu
  *    (`scripts/profil-matrisi-kapisi.mjs`, kök grup muaf). YENİ ADRESE GERÇEK YÜKLEME 3.9 D5 + D8 olmadan KAPALI
  *    (`YENI_ADRES_KAPISI`, fail-closed): yalnız --kuru ve --dogrula açıktır.
+ * ⚠️ İKİ TAKIM (3.9 D5): eski takım `son.json` (paket-* imzalı bildirim), zincir takımı `son-zincir.json` (pkt-*, kök
+ *    imzalı PAKET sertifikalı). `--zincir-anahtar=<pkt>` ile çift imzalı paket iki işaretçiyi BİRLİKTE-YA-DA-HİÇ yazar
+ *    (ikisi geçici adla, tek uzak komutla yerine). Gerçek yayında eski-yalnız paket DURUR; grupta `son.json` varken
+ *    zincir-yalnız yayın `--kopru-ilan="<kullanıcının cümlesi>"` ister ve `<defter dizini>/<grup>-backend-KOPRU.json`
+ *    yazılır — köprüden sonra eski takım DONAR (çift imzalı yayın DURUR). Monotonluk iki işaretçinin büyüğünden.
  *
  * Kullanım:
  *   node deploy/backend-yayinla.mjs --grup=<grup> --paket=<ortak imzalı zip> --anahtar=<PAKET anahtarı>
@@ -57,7 +62,12 @@ import { grupCoz, grupHedefi, grupTerfiKapisi, grupYayinBlogu, yeniAdresKapisiSa
 import { Olculemedi as PgOlculemedi, SURUM_REL as PG_KAYIT_REL, jsonOku as pgJsonOku, surumKaydiHatalari } from './pg/lib/pg-ornegi.mjs';
 import {
   SURUM_DESENI,
+  ZINCIR_ISARETCI,
   cekirdekSurum,
+  kopruKomutu,
+  kopruYolu,
+  takimKarari,
+  zincirAdresi,
   ciAtlaMetni,
   ciKokeniOku,
   defterKomutu,
@@ -104,6 +114,7 @@ if (!KURU && !argv.includes('--dogrula')) {
   const kapali = yeniAdresKapisiSatirlari();
   if (kapali.length) dur('YENİ ADRESE GERÇEK YAYIN KAPALI — hiçbir şey yüklenmedi', ...kapali);
   if (process.env.TEKSERP_TEST_PAKET_CAPASI) dur('TEST ÇAPASI ortamda — gerçek yayın yapılmaz', 'TEKSERP_TEST_PAKET_CAPASI yalnız bekçi içindir; ortamdan kaldır.');
+  if (process.env.TEKSERP_TEST_KOK_CAPASI) dur('TEST KÖK ÇAPASI ortamda — gerçek yayın yapılmaz', 'TEKSERP_TEST_KOK_CAPASI yalnız bekçi içindir; ortamdan kaldır.');
 }
 let KANAL;
 let KAYIT;
@@ -160,11 +171,20 @@ async function kenardanOku(url) {
 if (argv.includes('--dogrula')) {
   console.log(`\n${BAR}\n  BACKEND YAYIN DENETİMİ — ${GRUP} (yükleme yok)\n${BAR}`);
   try {
-    const k = await kenardanOku(KANAL.yayin.backendManifest);
-    if (k.durum !== 200) dur(`son.json kenarda ${k.durum}`, KANAL.yayin.backendManifest);
-    const s = isaretciSurumu(k.govde);
-    if (!s) dur('son.json okunamadı (işaretçi biçimsiz)', KANAL.yayin.backendManifest);
-    bilgi(`✔ kanalın yayındaki backend sürümü: ${s}`);
+    let bulundu = 0;
+    for (const [ad, url] of [['son.json', KANAL.yayin.backendManifest], [ZINCIR_ISARETCI, zincirAdresi(KANAL.yayin.backendManifest)]]) {
+      const k = await kenardanOku(url);
+      if (k.durum === 404) {
+        bilgi(`ℹ ${ad} kenarda yok (404)`);
+        continue;
+      }
+      if (k.durum !== 200) dur(`${ad} kenarda ${k.durum}`, url);
+      const s = isaretciSurumu(k.govde);
+      if (!s) dur(`${ad} okunamadı (işaretçi biçimsiz)`, url);
+      bulundu += 1;
+      bilgi(`✔ kanalın yayındaki backend sürümü (${ad}): ${s}`);
+    }
+    if (bulundu === 0) dur('Kenarda hiçbir backend işaretçisi yok (son.json · son-zincir.json)', KANAL.yayin.backendManifest);
     process.exit(0);
   } catch (e) {
     if (e instanceof BelirtecYok) dur('YAYIN BELİRTECİ YOK — kenar okunamaz', e.message);
@@ -250,6 +270,13 @@ if (argv.includes('--pg-yayinla')) {
 const PAKET = arg('paket') ? path.resolve(arg('paket')) : null;
 if (!PAKET || !fs.existsSync(PAKET)) dur('PAKET YOK', '`--paket=<imzalı zip>` (paketle.ps1 -Korumali + build-korumali-imza.ts zip çıktısı)');
 const ANAHTAR = arg('anahtar');
+const ZINCIR_ANAHTAR = arg('zincir-anahtar');
+const KOK_DOSYASI = arg('kok-dosyasi');
+const KOPRU_ILAN = arg('kopru-ilan');
+if (KOPRU_ILAN !== undefined) {
+  const k = cumleDenetle(KOPRU_ILAN);
+  if (!k.gecerli) dur('KÖPRÜ İLANI CÜMLESİ GEÇERSİZ — hiçbir şey yüklenmedi', `${k.sebep} — kullanıcının kendi cümlesi verilir`);
+}
 if (!KURU && !ANAHTAR) dur('PAKET ANAHTARI YOK', '`--anahtar=<PAKET anahtar dosyası>` — bildirim paketi imzalayan anahtarla imzalanır (kuru kip anahtarsız çalışır).');
 // Bildirimin `pg` bloğu kayıttan: argüman yalnız geriye uyum içindir ve kayıttan farklıysa DUR.
 const PG_CIZGI = pgKaydi().cizgi;
@@ -347,18 +374,24 @@ const aracArg = [
   ...(arg('min-kaynak') ? [`--min-kaynak=${arg('min-kaynak')}`] : []),
   ...(argv.includes('--zorunlu') ? ['--zorunlu'] : []),
   ...(KURU ? [] : [`--anahtar=${ANAHTAR}`]),
+  ...(!KURU && ZINCIR_ANAHTAR ? [`--zincir-anahtar=${ZINCIR_ANAHTAR}`] : []),
+  ...(KOK_DOSYASI ? [`--kok-dosyasi=${path.resolve(KOK_DOSYASI)}`] : []),
 ];
 const arac = spawnSync(process.execPath, aracArg, { cwd: TEKS, stdio: 'inherit' });
 if (arac.status !== 0) dur(`Bildirim üretilemedi (backend-bildirim.ts çıkış ${arac.status})`, 'Yukarıdaki satır nedeni söyler; hiçbir şey yüklenmedi.');
 const sonuc = JSON.parse(fs.readFileSync(path.join(CIKTI, 'sonuc.json'), 'utf8'));
 const B = sonuc.bildirim;
+const TAKIM = sonuc.takim ?? 'eski';
+bilgi(`✓ imza takımı: ${TAKIM}${sonuc.zincirKid ? ` (zincir ${sonuc.zincirKid})` : ''}`);
 if (B.surum !== SURUM || B.kanal !== GRUP) dur('Bildirim künyeyle bağlanmıyor', `${B.surum}/${B.kanal} ≠ ${SURUM}/${GRUP}`);
 const sha16 = B.paket.sha256.slice(0, 16);
 bilgi(`✓ paket ${B.paket.ad} · ${B.paket.boyut} B · sha256 ${sha16}… · kid ${B.paketImzaKid} · PG ${B.pg.cizgi} ≥ ${B.pg.enAz}${B.pg.hedef ? ` · hedef ${B.pg.hedef.surum}-${B.pg.hedef.derleme}` : ''}`);
 // CI kökeni imzalı künyeden (bütünlük yukarıda TAM denetlendi); kaçış DURDURMAZ, uyarır ve deftere girer.
 let ciKokeni = null;
 try {
-  ciKokeni = ciKokeniOku(execFileSync('unzip', ['-p', PAKET, 'butunluk.jws'], { encoding: 'utf8', maxBuffer: 1024 * 1024 }));
+  const icerik = execFileSync('unzip', ['-Z1', PAKET], { encoding: 'utf8', maxBuffer: 16 * 1024 * 1024 }).split('\n');
+  const imzaDosyasi = icerik.includes('butunluk.jws') ? 'butunluk.jws' : 'butunluk-zincir.jws';
+  ciKokeni = ciKokeniOku(execFileSync('unzip', ['-p', PAKET, imzaDosyasi], { encoding: 'utf8', maxBuffer: 1024 * 1024 }));
 } catch {
   ciKokeni = null;
 }
@@ -379,8 +412,12 @@ const plan = yayinPlani({
  * 4) Uzak kapılar — belirteç · monotonluk · değişmezlik (yüklemeden ÖNCE)
  * ------------------------------------------------------------------ */
 
+const ZINCIR_URL = zincirAdresi(KANAL.yayin.backendManifest);
+const KOPRU_YOLU = kopruYolu(KANAL.yayin.backendDefter, GRUP);
+let KOPRU_YAZ = false;
 if (KURU) {
-  bilgi('[kuru] kenar belirteci, yayındaki sürüm ve sürüm dizininin varlığı ÖLÇÜLMEDİ (ağ yok)');
+  bilgi('[kuru] kenar belirteci, yayındaki sürüm, köprü kaydı ve sürüm dizininin varlığı ÖLÇÜLMEDİ (ağ yok)');
+  if (TAKIM === 'eski') bilgi('⚠ paket yalnız eski (paket-*) imzalı — GERÇEK grup yayınında DURUR (--zincir-anahtar ile çift imzala)');
 } else {
   try {
     belirtecOku(KANAL.yayin.backendManifest);
@@ -388,16 +425,28 @@ if (KURU) {
     if (e instanceof BelirtecYok) dur('YAYIN BELİRTECİ YOK — yayından sonra kenar doğrulanamaz; hiçbir şey yüklenmedi', e.message);
     throw e;
   }
-  const mevcut = yayinOku(KANAL.yayin.backendManifest, { kayit: KAYIT, hedef: SSH_HEDEF });
-  if (mevcut.durum === 'olculemedi') dur('Kanalın yayındaki son.json ÖLÇÜLEMEDİ', mevcut.neden);
-  if (mevcut.durum === 'var') {
-    const once = isaretciSurumu(mevcut.govde);
-    if (!once) dur('Yayındaki son.json çözülemedi (işaretçi biçimsiz) — elle incele', KANAL.yayin.backendManifest);
+  const yayinda = {};
+  for (const [ad, url] of [['son.json', KANAL.yayin.backendManifest], [ZINCIR_ISARETCI, ZINCIR_URL]]) {
+    const m = yayinOku(url, { kayit: KAYIT, hedef: SSH_HEDEF });
+    if (m.durum === 'olculemedi') dur(`Kanalın yayındaki ${ad} ÖLÇÜLEMEDİ`, m.neden);
+    if (m.durum === 'var') {
+      const s = isaretciSurumu(m.govde);
+      if (!s) dur(`Yayındaki ${ad} çözülemedi (işaretçi biçimsiz) — elle incele`, url);
+      yayinda[ad] = s;
+    }
+  }
+  const once = [yayinda[ZINCIR_ISARETCI], yayinda['son.json']].filter(Boolean).sort((a, b) => surumKiyasla(b, a) ?? 0)[0];
+  if (once) {
     if ((surumKiyasla(SURUM, once) ?? 0) <= 0) {
       dur(`${SURUM} kanalda yayındaki ${once}'dan YENİ değil`, 'Yayında geri inme yok; yeni paket yeni sürüm numarası alır (prova sürümlerinde sha sırası tanımsızdır).');
     }
-    bilgi(`✓ monotonluk: ${once} → ${SURUM}`);
-  } else bilgi('✓ kanalın İLK backend yayını (son.json yok)');
+    bilgi(`✓ monotonluk: ${once} → ${SURUM} (son.json ${yayinda['son.json'] ?? 'yok'} · ${ZINCIR_ISARETCI} ${yayinda[ZINCIR_ISARETCI] ?? 'yok'})`);
+  } else bilgi('✓ kanalın İLK backend yayını (işaretçi yok)');
+  const kopru = uzak(`test -e '${KOPRU_YOLU}'`, 'köprü kaydı var mı?', { sessiz: true });
+  if (kopru.error || (kopru.status !== 0 && kopru.status !== 1)) dur('Köprü kaydı ÖLÇÜLEMEDİ — hiçbir şey yüklenmedi', String(kopru.stderr ?? kopru.error?.message ?? '').trim().slice(0, 200));
+  const karar = takimKarari({ takim: TAKIM, eskiVar: yayinda['son.json'] !== undefined, kopruVar: kopru.status === 0, kopruIlan: KOPRU_ILAN });
+  if (karar.durum !== 'tamam') dur('İMZA TAKIMI BU GRUBA ÇIKAMAZ — hiçbir şey yüklenmedi', ...karar.satirlar);
+  KOPRU_YAZ = karar.kopruYaz;
   const var_ = uzak(plan.komut.varMi, 'sürüm dizini var mı?', { sessiz: true });
   if (var_.status === 0) dur(`${plan.surumDizini} ZATEN VAR — yayınlanmış sürüm EZİLMEZ`);
   if (PG_HEDEF) {
@@ -415,8 +464,12 @@ if (KURU) {
 
 uzakZorunlu(plan.komut.geciciAc, `geçici dizin: ${plan.gecici}`);
 gonder(PAKET, `${plan.gecici}/${B.paket.ad}`, `paket → ${plan.gecici}/`);
-const isaretci = path.join(CIKTI, 'surum.json');
-gonder(isaretci, `${plan.gecici}/surum.json`, 'sürüm işaretçisi (surum.json)');
+// Takımın işaretçileri: eski `surum.json` → `son.json`, zincir `surum-zincir.json` → `son-zincir.json`.
+const ISARETCILER = [
+  ...(TAKIM !== 'zincir' ? [{ yerel: path.join(CIKTI, 'surum.json'), ad: 'surum.json', son: 'son.json', gecici: plan.sonJsonGecici, url: KANAL.yayin.backendManifest }] : []),
+  ...(TAKIM !== 'eski' ? [{ yerel: path.join(CIKTI, 'surum-zincir.json'), ad: 'surum-zincir.json', son: ZINCIR_ISARETCI, gecici: plan.sonZincirGecici, url: ZINCIR_URL }] : []),
+];
+for (const i of ISARETCILER) gonder(i.yerel, `${plan.gecici}/${i.ad}`, `sürüm işaretçisi (${i.ad})`);
 if (!KURU) {
   const olcum = uzakZorunlu(plan.komut.olc, 'uzakta boy + sha256 ölçülüyor');
   const [ozetU, boyU] = String(olcum.stdout).trim().split(/\s+/);
@@ -428,8 +481,12 @@ if (!KURU) {
   bilgi('✓ uzak ölçüm bildirimle birebir');
 }
 uzakZorunlu(plan.komut.yayinla, `sürüm dizini yayında: ${plan.surumDizini}`);
-gonder(isaretci, plan.sonJsonGecici, 'son.json (geçici ad)');
-uzakZorunlu(plan.komut.sonJsonYaz, 'son.json EN SON yerine taşındı');
+if (KOPRU_YAZ) {
+  const kayit = { v: 1, grup: GRUP, surum: SURUM, zaman: istanbulSaati(), cumle: cumleDenetle(KOPRU_ILAN).cumle, kim: `${os.userInfo().username}@${os.hostname().split('.')[0]}` };
+  uzakZorunlu(kopruKomutu(KOPRU_YOLU, kayit), `KÖPRÜ İLANI yazıldı (eski takım donar): ${KOPRU_YOLU}`);
+}
+for (const i of ISARETCILER) gonder(i.yerel, i.gecici, `${i.son} (geçici ad)`);
+uzakZorunlu(plan.komut.isaretciYaz(TAKIM), `${ISARETCILER.map((i) => i.son).join(' + ')} EN SON yerine taşındı (tek komut)`);
 
 const satir = defterSatiri({
   zaman: istanbulSaati(),
@@ -452,12 +509,13 @@ if (KURU) {
  * 6) Kenar doğrulaması + bildirim + terfi kaçış kaydı
  * ------------------------------------------------------------------ */
 
-const yerel = fs.readFileSync(isaretci, 'utf8');
-const kenar = await kenardanOku(KANAL.yayin.backendManifest);
-if (kenar.durum !== 200 || kenar.govde !== yerel) {
-  dur(`KENAR son.json yüklenenle AYNI DEĞİL (HTTP ${kenar.durum})`, 'Önbellek ya da Worker yapılandırmasını incele; kurulumlar bu sürümü GÖRMEYEBİLİR.');
+for (const i of ISARETCILER) {
+  const kenar = await kenardanOku(i.url);
+  if (kenar.durum !== 200 || kenar.govde !== fs.readFileSync(i.yerel, 'utf8')) {
+    dur(`KENAR ${i.son} yüklenenle AYNI DEĞİL (HTTP ${kenar.durum})`, 'Önbellek ya da Worker yapılandırmasını incele; kurulumlar bu sürümü GÖRMEYEBİLİR.');
+  }
+  bilgi(`✓ kenarda ${i.son} yüklenenle bayt bayt aynı`);
 }
-bilgi('✓ kenarda son.json yüklenenle bayt bayt aynı');
 await yayinSonrasiBildir({ urun: 'backend', kanal: GRUP, surum: SURUM, ayrinti: { sha16, boyut: String(B.paket.boyut) }, terfiAtla: TERFI_ATLA });
 if (terfi.atlandi) {
   const k = terfiAtlaKaydi({ kod: GRUP, urun: 'backend', surum: SURUM, cumle: terfi.atlandi.cumle });
