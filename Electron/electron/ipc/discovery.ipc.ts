@@ -381,7 +381,8 @@ function applyAddress(baseUrl: string, reason: "single" | "pin-moved" | "tls"): 
  */
 async function upgradeLoopback(c: DiscoveredServer): Promise<boolean> {
   if (!isLoopbackHost(c.host) || !c.baseUrl.startsWith("http:") || c.matchesPinned === "mismatch") return false;
-  const res = await autoPinLoopback(c.baseUrl, {
+  // Sözleşme (LAN-TLS §9): kimlik ve https döngüde 127.0.0.1'den — `localhost` IPv6'ya çözülebilir, HTTPS 0.0.0.0'da.
+  const res = await autoPinLoopback(baseUrlOf("127.0.0.1", c.port), {
     onPinned: (id) => {
       state.pinnedInstallationId = id;
     },
