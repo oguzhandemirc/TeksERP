@@ -47,6 +47,7 @@
 
 - **[ÇEKİRDEK]** helmet İKİ AYRI ÖRNEK kurulur (HSTS/CSP-upgrade LAN'a sızarsa panel kullanıcının HSTS önbelleğinde kilitlenir) ve dispatcher'ın adı `helmetMiddleware` olmak ZORUNDADIR (bekçi ada bakar). · bekçi: `Teks-Erp/scripts/test_middleware_order.ts:37` <sub>(CLAUDE.md:95)</sub>
 - **[ÇEKİRDEK]** Fabrika ağında TLS `LAN_TLS_MODE` ile açılır — varsayılan `off` = yalnız HTTP (bugünkü davranış), `dual` HTTP + HTTPS yan yana, `required` HTTPS ve HTTP yalnız 127.0.0.1; sertifika kurulumda üretilen kendinden imzalı ECDSA P-256'dır ve istemci sunucuyu adresle değil sertifikanın SHA-256 parmak iziyle tanır; parmak izini keşiften ya da ilk girişten SABİTLEME (TOFU) — yalnız loopback, göz ile karşılaştırma ya da sabitli panelin QR'ı; sabitli istemci HTTPS düşünce HTTP'ye dönmez; LAN TLS HSTS açmaz; `required`ı bütün istemciler sabitli sürüme geçmeden açma (eski istemci bağlanamaz). Tasarım `docs/design/LAN-TLS.md`. · bekçi: `Teks-Erp/scripts/test_lan_tls.ts`, `Teks-Erp/scripts/test_lan_tls_http.ts` (dual sunucuyla) <sub>(arşiv 2026-10-06 LAN TLS)</sub>
+- **[ÇEKİRDEK]** Tablet sürüm paketi sunucuya YALNIZ şifreli ve sabitli bağlanır (`secureTransportOnly() = !__DEV__`, manifestte düz HTTP kapalı); sunucu panel QR'ı ya da IP + kullanıcının kurulum/paneldeki kodla karşılaştırdığı doğrulama koduyla eklenir — native TLS yoklaması yalnız GÖZLEMDİR (zinciri kaydeder, her bağlantıyı reddeder, veri göndermez), güven kararını QR ya da insan verir.
 - **[ÇEKİRDEK]** Katalog ATAMA İÇERMEZ — 'katalog koda, atama script'e/panele'. Unutulan atamayı görünür kılan tek yüzey 'N yetki hiçbir kullanıcıda yok' bandıdır. Yeni ekran görünmüyorsa sırayla bak: (1) satır DB'de mi, (2) kullanıcıya atanmış mı, (3) kullanıcı yeniden giriş yaptı mı (JWT bayat). <sub>(CLAUDE.md:240)</sub>
 
 ### Yasaklar
@@ -118,7 +119,7 @@
 ### Tuzaklar
 
 - **[ÇEKİRDEK]** Metro/Gradle önbelleği env değerini anahtarına ALMAZ — hızlı biten build iyi haber değil, BAYAT ADRESTİR (ölçüm: sıcak önbellek 17,9 sn ESKİ adres ↔ temiz 69,9 sn YENİ adres). Release bundle Hermes bytecode'dur: Türkçe dizeler UTF-16'ya gider ve grep BULMAZ — bundle'da hep ASCII dize ara. <sub>(CLAUDE.md:66)</sub>
-- **[ÇEKİRDEK]** `usesCleartextTraffic` app.json'da `android` ALTINDA GEÇERSİZDİR (Expo SDK 54 sessizce atar) — `expo-build-properties` eklentisinin `android` bloğuna yazılmak ZORUNDA. Doğrulama tek satır: `grep -o 'usesCleartextTraffic="[^"]*"' android/app/src/main/AndroidManifest.xml`. BU TUZAĞIN BEKÇİSİ YOK. <sub>(CLAUDE.md:66)</sub>
+- **[ÇEKİRDEK]** `usesCleartextTraffic` app.json'da `android` ALTINDA GEÇERSİZDİR (Expo SDK 54 sessizce atar) — `expo-build-properties` eklentisinin `android` bloğuna yazılmak ZORUNDA. Doğrulama tek satır: `grep -o 'usesCleartextTraffic="[^"]*"' android/app/src/main/AndroidManifest.xml`. Sürüm paketinde değer `false`tır; bekçi `mobil/src/test/play-dagitim.guard.test.ts` (iki yerde false) + `build-apk.mjs` AAB doğrulaması (`playManifestSorunlari`, `test_tablet_ortak_paket` 3o11). <sub>(CLAUDE.md:66)</sub>
 
 ### Reçeteler
 
@@ -153,7 +154,7 @@
 - Üç envanter ölçülebilir biçimde BAYAT ve kanıt olarak kullanılamaz: (a) Electron/CLAUDE.md Komutlar — package.json'daki preview, dev:web, build:web, preview:web, release:win, build:win:cross, build:all, typecheck:plain, format, test:watch, e2e:run listede yok; (b) Electron Allowed Packages — react-day-picker, buffer, @fontsource/* yok, `electron-rebuild` bugün `@electron/rebuild` (package.json:92, komut adı :25'te aynı kaldı); (c) mobil Allowed Packages — expo-audio, expo-asset, expo-file-system, expo-intent-launcher, expo-updates yok.
 - B:undated__verifytoken-requirepermission-apperror-prisma-zod — middlewares/ envanteri 7 dosya sayıyor, dizinde 18 var (ölçüldü 2026-09-30): backup-password, client-info, demo, devere-station-fields, finance, license, module, report, settings-password, system-account, web-hardening listede YOK. Envanter mi tamamlanacak, yoksa 'liste örnektir' mi denecek — karar yok.
 - R:2026-09-03__2026-09-03-panel-modul-kapilari — bu notun dizin satırı asıl olarak 'modül/bayrak' kümesine ait; buradaki öneri yalnız 2026-09-04 ezilmesini işaretlemek için. İki kümenin dizin satırı çakışmasın diye tek yerde tutulmalı.
-- M:undated__apk-derleme (usesCleartextTraffic tuzağı) ve M:undated__apk-derleme (Metro önbellek bayatlığı) için MEKANİK BEKÇİ YOK — notun kendisi bunu söylüyor; bekçi yazılacak mı, karar yok.
+- M:undated__apk-derleme (Metro önbellek bayatlığı) için MEKANİK BEKÇİ YOK; usesCleartextTraffic tuzağının bekçisi 2026-10-08'de indi (AAB'den ölçülür).
 
 ## Doğrulama turu ekleri (eski CLAUDE.md ↔ yeni yapı karşılaştırması, 2026-09-05)
 
@@ -171,6 +172,7 @@ Backend: `test_kisa_kimlik_ozet`, `test_audit_followups`, `test_canvas_preview_p
 
 ## Arşiv notları (tam metin, gerekçe ve ölçüm)
 
+- 2026-10-08 · 2026-10-08 — Ortak tablet vc 60 (1.2.0): yalnız şifreli bağlantı, "Sunucuyu ekle" iki yol, Play izin temizliği [ÇEKİRDEK] + [PROFİL] — `arsiv/2026-10.md` §2026-10-08 Ortak tablet vc 60
 - 2026-10-06 · 2026-10-06 — Fabrika ağında TLS: LAN_TLS_MODE (off/dual/required), kendinden imzalı sertifika + parmak izi sabitleme, TOFU değil (plan 6.1) [ÇEKİRDEK] — `arsiv/2026-10.md` §2026-10-06 LAN TLS
 - 2026-10-05 · 2026-10-05 — Sunucu yalnız kullanılabilir adreslerini duyurur (K1) [ÇEKİRDEK] — `arsiv/2026-10.md` §2026-10-05 K1
 - 2026-10-01 · 2026-10-01 — Kısa kimlikler (hızlı PIN + QR kart) özetli saklanır: anahtar halkası LICENSE_DIR'de, yedeğe mühürlü emanet, tembel + betikli dönüşüm, kalıcı giriş kilidi, yalnız onaylı cihaz bayrağı (G21-K) [ÇEKİRDEK] + [PROFİL] — `arsiv/2026-10.md` §2026-10-01 G21-K

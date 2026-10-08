@@ -15,7 +15,7 @@
 |---|---|---|---|
 | K1 | Gereksiz izinler/hizmetler kaldırılsın mı? (ön plan hizmeti `mediaPlayback` + `microphone`, `SYSTEM_ALERT_WINDOW`, `USE_BIOMETRIC`/`USE_FINGERPRINT`) | **Evet, kapalı teste çıkmadan önce yeni AAB (vc 60)** | Uygulama bunların hiçbirini kullanmıyor (§4). Kalırsa "Ön plan hizmetleri" beyanı + video istenir ve gerçek olmayan bir kullanım beyan edilmiş olur. |
 | K2 | Gizlilik politikası nerede yayınlansın? | `https://etkiliyazilim.com/tekserp/gizlilik` (şirket sitesi, düz HTML sayfa) | Play herkese açık, giriş istemeyen, coğrafi kısıtsız, PDF olmayan etkin bir adres ister (⚠ web'den doğrulanmalı). `indir.` alt alanı Worker/VDS koduna dokunmayı gerektirir; şirket sitesi en az hareketli parça. |
-| K3 | "Veriler aktarım sırasında şifreleniyor mu?" | **Hayır** (bugün dürüst cevap) | Fabrika sunucusuna bağlantı düz HTTP olabilir (`usesCleartextTraffic=true`; LAN TLS yeni kurulumda "dual", sabitleme isteğe bağlı). Bütün kurulumlar TLS'e zorlanınca "Evet"e çevrilir. |
+| K3 | "Veriler aktarım sırasında şifreleniyor mu?" | **Evet — vc 60 (1.2.0) ile** (kullanıcı kararı 2026-10-08) | vc 60'ta tablet sunucuya yalnız şifreli ve sabitli bağlanır (`usesCleartextTraffic=false`, AAB doğrulaması ölçer); sunucu QR ya da IP + doğrulama koduyla eklenir. vc 59 için cevap "Hayır"dı. Sunucu en az `LAN_TLS_MODE=dual` olmalı. |
 | K4 | İnceleme için demo sunucu + deneme hesabı | `demo.etkiliyazilim.com` (2026-08-14 runbook'u) bugün ayakta mı, 1.1.0 tabletle uyumlu mu — **ölçülmedi**; kapalı teste çıkmadan hazırlanmalı | Uygulama giriş istiyor ve sunucu adresi gömülü değil; incelemeci bağlanamazsa "işlevsiz uygulama" reddi gelir. |
 | K5 | Dağıtım yolu: kişisel hesapta Managed Google Play gizli yayın mı, kapalı test → üretim mi? | §6'daki üç soru web'den doğrulanınca karar | Hesap KİŞİSEL çıktı (2026-10-08); "gizli yayın" kararı (K-14, 2026-10-07) kurumsal hesap varsayımıyla verilmişti. |
 | K6 | İletişim e-postası | Kullanıcı yazar | Eski taslakta `info@etkiliyazilim.com` geçiyor; o adresin gerçekten okunduğunu kullanıcı doğrulamalı. Mağazada herkese açık görünür. |
@@ -112,9 +112,9 @@ Fabrika sunucusundaki verilerin kimlerle paylaşılacağına fabrika karar verir
 - Oturum anahtarı ve cihaz kimliği Android Keystore korumalı güvenli depoda tutulur.
 - Fabrika sunucusundaki verilerin saklama süresi, yedeklenmesi ve silinmesi
   fabrikanın sorumluluğundadır.
-- Fabrika sunucusuyla bağlantı, fabrikanın ayarına göre şifreli (HTTPS) ya da
-  fabrikanın kendi iç ağında şifresiz olabilir. Güncelleme sunucusuyla bağlantı her
-  zaman şifrelidir.
+- Fabrika sunucusuyla bağlantı her zaman şifrelidir (HTTPS, sunucunun sertifikası
+  kurulumda tablete QR ya da doğrulama koduyla tanıtılır). Güncelleme sunucusuyla
+  bağlantı da her zaman şifrelidir.
 
 8. Hesaplar ve silme
 Kullanıcı hesapları uygulama içinden açılamaz; fabrika yöneticisi tarafından açılır
@@ -204,7 +204,7 @@ Konsoldaki alanlar: Ad ("Demo hesabı") · Kullanıcı adı · Parola · "Diğer
 
 **Soru 1 — "Uygulamanız, gerekli kullanıcı veri türlerinden herhangi birini toplıyor veya paylaşıyor mu?"** → **Evet.**
 
-**Soru 2 — "Toplanan tüm kullanıcı verileri aktarım sırasında şifreleniyor mu?"** → **Hayır** (K3).
+**Soru 2 — "Toplanan tüm kullanıcı verileri aktarım sırasında şifreleniyor mu?"** → **Evet** (K3, vc 60'tan itibaren).
 
 **Soru 3 — Hesap oluşturma:** "Uygulamanız kullanıcıların hesap oluşturmasına izin veriyor mu?" → **Hayır** — hesaplar fabrika yöneticisince panelde açılır, uygulamada kayıt ekranı yok. Kullanıcılar uygulama dışında oluşturulan hesapla giriş yapar. ⚠ Konsol bu durumda yine de "hesap silme URL'si" isterse: gizlilik sayfasının §8 bağlantısı (`…/gizlilik#hesaplar`) verilir. Play'in hesap silme şartının yalnız uygulama içinden hesap açılabilen uygulamalara uygulandığı anlaşılıyor — **web'den doğrulanmalı**.
 
@@ -270,7 +270,7 @@ Toplanmayan (işaretleme): Konum (yaklaşık/kesin), Finansal bilgiler, Sağlık
 | **`USE_BIOMETRIC`, `USE_FINGERPRINT`** | `expo-secure-store` → `androidx.biometric:biometric:1.1.0` kütüphane manifesti | **Hayır** — `requireAuthentication` hiçbir yerde kullanılmıyor | Yok (normal izin) ama listede "biyometrik donanım" görünür | **KALDIR** (`blockedPermissions`) |
 | `REQUEST_INSTALL_PACKAGES`, `RECORD_AUDIO`, `READ/WRITE_EXTERNAL_STORAGE` | — | — | — | Zaten engelli (ölçüldü: AAB'de yok) |
 
-### 4.1 Kaldırma önerisi (DEĞİŞİKLİK YAPILMADI — K1 onayı bekler)
+### 4.1 Kaldırma (UYGULANDI — vc 60, 1.2.0; eklenti `plugins/withPlayManifestTemizligi`, liste `scripts/lib/play-manifest.cjs`)
 
 1. `mobil/app.json` → `android.blockedPermissions`e ekle: `android.permission.SYSTEM_ALERT_WINDOW`, `android.permission.USE_BIOMETRIC`, `android.permission.USE_FINGERPRINT`, `android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK`, `android.permission.FOREGROUND_SERVICE`.
 2. Küçük config eklentisi (`mobil/plugins/`, `withAndroidManifest`): iki expo-audio hizmetini `tools:node="remove"` ile manifestten çıkar (`.service.AudioControlsService`, `.service.AudioRecordingService`). Yalnız izni engellemek hizmet beyanını bırakır; `foregroundServiceType` beyanı konsolda yine soru doğurabilir.
@@ -329,9 +329,10 @@ SAHAYA UYGUN
 • Kullanıcı adı ve parola, hızlı PIN veya personel kartıyla giriş.
 • Tablette yatay, telefonda dikey kullanım.
 
-SUNUCUNUZU BULUR
-Uygulama ilk açılışta yerel ağdaki TeksERP sunucusunu arar; bulamazsa adresi
-elle girebilirsiniz. Fabrika ağında şifreli bağlantı desteklenir.
+SUNUCUYA ŞİFRELİ BAĞLANIR
+İlk açılışta sunucu, yönetim panelindeki QR okutularak ya da IP adresi yazılıp
+ekranda çıkan doğrulama kodu kurulumdaki kodla karşılaştırılarak eklenir.
+Tablet sunucuya yalnız şifreli bağlantıyla bağlanır.
 
 VERİLERİNİZ SİZDE
 Üretim verileriniz fabrikanızın kendi sunucusunda tutulur. Uygulamada reklam

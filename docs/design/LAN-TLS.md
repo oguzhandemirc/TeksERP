@@ -67,7 +67,7 @@ Reddedilenler: keşiften/ilk girişten otomatik sabitleme (TOFU) · IP'ye bağl�
 - axios/fetch Android'de OkHttp'tan geçer; kendinden imzalı sertifika ancak OkHttp'a parmak izi denetleyen bir `X509TrustManager` + `HostnameVerifier` takılarak kabul edilir (`OkHttpClientProvider.setOkHttpClientFactory`). JS'ten yapılamaz, OTA ile gitmez, yeni APK ister.
 - Yol (i): depo içinde Expo config eklentisi + küçük Kotlin modülü (yeni npm paketi yok, native kod var). **Karar (kullanıcı 2026-10-07): ONAYLANDI** — native modül (D5) ortak tabletin İLK Play sürümüne girer (tablet dağıtımı Play gizli yayını, `ISTEMCI-ANAHTARI-KOK-ALTINDA.md` §8 karar 5). Yol (ii): hazır pinleme paketleri (`react-native-ssl-public-key-pinning` vb.) OkHttp `CertificatePinner` kullanır; o zincir doğrulamasından SONRA çalıştığı için kendinden imzalıda işe yaramaz.
 - Ayrı OkHttp istemcisi kuran yollar da kapsamda: `expo-file-system` indirmesi (APK güncelleme — ortak tablette Play kararıyla kalkar), görsel yükleyici.
-- `usesCleartextTraffic` `dual` boyunca açık kalır; `required`a geçen kurulumda kapatılması ayrı karar.
+- `usesCleartextTraffic` tablet sürüm paketinde KAPALI (K3, 2026-10-08, vc60): tablet sunucunun `dual`/`required` HTTPS dinleyicisine bağlanır, `off` kurulumda bağlanamaz; düz HTTP yalnız geliştirme derlemesinde (Expo debug manifesti).
 - JS katmanı (D4) native katmandan önce iner ve ona bağlıdır: native modül (`TeksErpLanTls`) yoksa QR'dan sabit YAZILMAZ ve kart görünmez — yazılsaydı ya bağlantı kesilirdi ya da sahte güvenlik hissi doğardı. QR, bağlı sunucunun kimliği ve ilanıyla çapraz denetlenir (kurulum kimliği ya da kod/port farklıysa red).
 
 ## 7. Kurulum adımı

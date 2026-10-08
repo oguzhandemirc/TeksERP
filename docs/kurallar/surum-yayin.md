@@ -95,7 +95,7 @@
 
 ### Tuzaklar
 
-- **[ÇEKİRDEK]** `usesCleartextTraffic` app.json → `android` altında GEÇERSİZ (SDK 54 sessizce atar); yalnız `expo-build-properties` android bloğu geçerli. `android/` git dışı prebuild ÇIKTISI: eski klasör doğru görünür, prebuild'de bayrak düşer → APK hiç istek yollayamaz. BEKÇİ YOK: prebuild sonrası grep'le bak. · bekçi: `yok (bilinçli; mobil/scripts/build-apk.mjs yalnız grep komutunu BASAR, koşmaz)` · Kapanır: `build-apk.mjs (ya da yayinla) android/app/src/main/AndroidManifest.xml içinde android:usesCleartextTraffic="true" yokken çıkış kodu sıfır-dışı ile DURDUĞUNDA — bugün o script'te bayrağı okuyan satır 0, hatırlatan satır 1; kapı, hatırlatmayı komuta çevirdiğinde ve negatif sondası (bayrak silinmiş manifest → kırmızı) kaydedildiğinde` · Öncül: ölçüldü <sub>(CLAUDE.md:66)</sub>
+- **[ÇEKİRDEK]** `usesCleartextTraffic` app.json → `android` altında GEÇERSİZ (SDK 54 sessizce atar); yalnız `expo-build-properties` android bloğu geçerli. `android/` git dışı prebuild ÇIKTISI: eski klasör doğru görünür, prebuild'de bayrak düşer → APK hiç istek yollayamaz. Sürüm paketinde değer `false` (K3). · bekçi: `mobil/src/test/play-dagitim.guard.test.ts` + `build-apk.mjs` AAB doğrulaması (`playManifestSorunlari`; APK yolunda ölçüm yok) · Öncül: ölçüldü <sub>(CLAUDE.md:66)</sub>
 - **[ÇEKİRDEK]** Bundle doğrulama: release bundle Hermes bytecode — ASCII dizeler düz metin, Türkçe karakterli dizeler UTF-16 tablosuna gider ve grep BULMAZ; dizeler uç uca ('sonrasında harf gelmesin' sondajı eşleşmeyi eler). Hep ASCII dize ara. Sıcak Metro/Gradle önbelleği env'i görmez: HIZLI build bayat adrestir. · bekçi: `build-apk.mjs önbellek silme + bundle geri okuma` <sub>(CLAUDE.md:66)</sub>
 
 ### Reçeteler
@@ -132,7 +132,6 @@
 - N5 (mobil okutma bekçileri), N6 (2026-08-19 Tambur paketi), N10 (sipariş görünürlüğü), N11 (süperadmin P8) bu kümeye ait değil — yalnız 'Backend ÖNCE / APK YOK' ibaresiyle düşmüş; dizin/arşiv kararı kendi kümelerinde verilmeli (burada archiveOnly'ye BİLEREK yazılmadı).
 - client-version-policy.ts yorumları eski numaralandırmayı anlatıyor (:84-86 'minVersion 2.8.1', :139-141 '2.9.8 = ilk sürüm') ama değerler 1.0.0; ELECTRON currentVersion 1.2.6 ↔ Electron/package.json 1.2.7 (test_client_policy yalnız ℹ️ basar). Kod yorumu/değer bayat — kural değil, temizlik.
 - Bekçi sayıları notlarda oynak: update-feed-url.test Electron'da 5 `it`, mobil'de 10 `it` (notlar 3 / 7 / 10 diyor); test_mobile_update 37 check tutuyor. Kural etkilenmez.
-- mobil/app.json:25 `usesCleartextTraffic` `android` altında da duruyor (N3'e göre sessizce yok sayılır) — zararsız kopya ama 'bayrak burada yeter' yanılgısı üretebilir; bekçi hâlâ YOK.
 - docs/ops/MOBIL-UZAKTAN-GUNCELLEME.md:146 ve kök CLAUDE.md:210 `npm run build:apk` argümansız — kod `--musteri` ister; iki reçete satırı düzeltilmeli.
 
 ## Doğrulama turu ekleri (eski CLAUDE.md ↔ yeni yapı karşılaştırması, 2026-09-05)
