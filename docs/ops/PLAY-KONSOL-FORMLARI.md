@@ -5,14 +5,22 @@
 > (kaynak sütunu / "Ölçüm" notları). Ölçülemeyen Play kuralları **⚠ WEB'DEN DOĞRULANMALI** diye işaretli —
 > bu belge Play politikası hakkında kesin hüküm vermez.
 > **Konsol dili:** başlıklar Türkçe konsol yazımına yakın yazıldı; konsoldaki birebir yazım küçük farklılık gösterebilir.
-> **Sabah karar verilecekler:** §0. İlgili belgeler: `PLAY-STORE-YAYIN.md` (§9'daki eskiyen yerlere göre 2026-10-08'de yeniden yazıldı), `../legal/GIZLILIK-POLITIKASI.md` (§1.1'deki hatalar 2026-10-08'de §1.2 metniyle hizalandı).
+> **Kararlar (2026-10-08) ve açık kalanlar (K4, K5):** §0. İlgili belgeler: `PLAY-STORE-YAYIN.md` (§9'daki eskiyen yerlere göre 2026-10-08'de yeniden yazıldı), `../legal/GIZLILIK-POLITIKASI.md` (§1.1'deki hatalar 2026-10-08'de §1.2 metniyle hizalandı).
 
 ---
 
-## 0. Sabah karar verilecekler (kısa)
+## 0. Kararlar (kullanıcı 2026-10-08) ve açık kalanlar
 
-| # | Soru | Öneri | Neden |
+| # | Soru | Karar / durum | Not |
 |---|---|---|---|
+| K1 | Gereksiz izinler/hizmetler kaldırılsın mı? (ön plan hizmeti `mediaPlayback` + `microphone`, `SYSTEM_ALERT_WINDOW`, `USE_BIOMETRIC`/`USE_FINGERPRINT`) | **KARAR: kaldır — vc60'ta** | Uygulama bunların hiçbirini kullanmıyor (§4); yöntem §4.1. Kapalı teste vc60 ile çıkılır. |
+| K2 | Gizlilik politikası nerede yayınlansın? | **KARAR: bizim sunucu — `https://tekserp.etkiliyazilim.com/gizlilik`** | VDS'te ayrı küçük köken (`deploy/gizlilik-sayfasi/`, runbook `GIZLILIK-SAYFASI.md`); indir kapısının (Worker) DIŞINDA, girişsiz. Konsola URL ancak sayfa yayına çıkınca girilir. |
+| K3 | "Veriler aktarım sırasında şifreleniyor mu?" | **KARAR: "Evet" — YALNIZ vc60 yayına çıkınca forma yazılır** | vc60'tan itibaren tablet fabrika sunucusuna yalnız şifreli bağlanır. vc59 bugün düz HTTP'ye izin veriyor (`usesCleartextTraffic=true`) — vc60 öncesi formda "Evet" yazılmaz; gizlilik politikası §7 de vc60 ile birlikte güncellenir. |
+| K4 | İnceleme için demo sunucu + deneme hesabı | **AÇIK** | `demo.etkiliyazilim.com` (2026-08-14 runbook'u) bugün ayakta mı, 1.1.0 tabletle uyumlu mu — ölçülmedi. Uygulama giriş istiyor; incelemeci bağlanamazsa "işlevsiz uygulama" reddi gelir. |
+| K5 | Dağıtım yolu: kişisel hesapta Managed Google Play gizli yayın mı, kapalı test → üretim mi? | **AÇIK** — §6'daki üç soru web'den doğrulanınca | Hesap KİŞİSEL çıktı (2026-10-08); "gizli yayın" kararı (K-14, 2026-10-07) kurumsal hesap varsayımıyla verilmişti. |
+| K6 | İletişim e-postası | **KARAR: `info@etkiliyazilim.com`** | Mağazada ve gizlilik sayfasında herkese açık görünür. |
+
+---|---|---|---|
 | K1 | Gereksiz izinler/hizmetler kaldırılsın mı? (ön plan hizmeti `mediaPlayback` + `microphone`, `SYSTEM_ALERT_WINDOW`, `USE_BIOMETRIC`/`USE_FINGERPRINT`) | **Evet, kapalı teste çıkmadan önce yeni AAB (vc 60)** | Uygulama bunların hiçbirini kullanmıyor (§4). Kalırsa "Ön plan hizmetleri" beyanı + video istenir ve gerçek olmayan bir kullanım beyan edilmiş olur. |
 | K2 | Gizlilik politikası nerede yayınlansın? | `https://etkiliyazilim.com/tekserp/gizlilik` (şirket sitesi, düz HTML sayfa) | Play herkese açık, giriş istemeyen, coğrafi kısıtsız, PDF olmayan etkin bir adres ister (⚠ web'den doğrulanmalı). `indir.` alt alanı Worker/VDS koduna dokunmayı gerektirir; şirket sitesi en az hareketli parça. |
 | K3 | "Veriler aktarım sırasında şifreleniyor mu?" | **Hayır** (bugün dürüst cevap) | Fabrika sunucusuna bağlantı düz HTTP olabilir (`usesCleartextTraffic=true`; LAN TLS yeni kurulumda "dual", sabitleme isteğe bağlı). Bütün kurulumlar TLS'e zorlanınca "Evet"e çevrilir. |
@@ -24,7 +32,7 @@
 
 ## 1. Uygulama içeriği → Gizlilik politikası
 
-**Alan:** Gizlilik politikası URL'si → K2'de seçilen adres.
+**Alan:** Gizlilik politikası URL'si → `https://tekserp.etkiliyazilim.com/gizlilik` (K2; sayfa yayına çıkınca). Sayfanın metni tek kaynaktan üretilir: `docs/legal/GIZLILIK-POLITIKASI.md` → `deploy/gizlilik-sayfasi/html/gizlilik.html`; aşağıdaki §1.2 kopyası tarihtir, fark varsa legal dosya geçerlidir.
 
 ### 1.1 Eski taslağın (`docs/legal/GIZLILIK-POLITIKASI.md`) eskiyen yerleri — 2026-10-08'de düzeltildi (o dosya artık §1.2 metnini taşır)
 
@@ -45,7 +53,7 @@ TeksERP — Gizlilik Politikası
 Son güncelleme: [YAYIN TARİHİ]
 Uygulama: TeksERP (Google Play paket adı: com.etkiliyazilim.tekserp)
 Geliştirici: Etkili Yazılım — [TİCARET UNVANI], [ADRES]
-İletişim: [E-POSTA]
+İletişim: info@etkiliyazilim.com
 
 1. Uygulamanın niteliği
 TeksERP, tekstil fabrikalarında üretim, kalite, depo ve sevkiyat işlemlerinin kaydı
@@ -102,7 +110,7 @@ Büyük güncellemeler Google Play üzerinden gelir.
   teşhisi için Etkili Yazılım'a iletir. Bu ayar varsayılan olarak kapalıdır.
 - Barkod okuma, Google'ın ML Kit kütüphanesiyle cihaz üzerinde yapılır. Google'ın
   bu kütüphane için topladığı teknik veriler Google'ın kendi politikasına tabidir:
-  [ML KIT VERİ AÇIKLAMASI BAĞLANTISI — doğrulandıktan sonra].
+  https://developers.google.com/ml-kit/android-data-disclosure
 
 6. Paylaşım
 Veriler satılmaz, reklam amacıyla kullanılmaz ve üçüncü taraflarla paylaşılmaz.
@@ -120,12 +128,12 @@ Fabrika sunucusundaki verilerin kimlerle paylaşılacağına fabrika karar verir
 Kullanıcı hesapları uygulama içinden açılamaz; fabrika yöneticisi tarafından açılır
 ve kapatılır. Hesabınızın ve verilerinizin silinmesi için önce fabrikanızın
 yöneticisine başvurun. Etkili Yazılım'a ulaşan teknik verilerin silinmesi için:
-[E-POSTA].
+info@etkiliyazilim.com.
 
 9. Haklarınız
 6698 sayılı KVKK md. 11 ve uygulanabildiği ölçüde GDPR kapsamındaki haklarınızı,
 verilerinizin sorumlusu olan fabrikaya (işvereninize) karşı kullanabilirsiniz.
-Etkili Yazılım'a ilişkin talepler: [E-POSTA].
+Etkili Yazılım'a ilişkin talepler: info@etkiliyazilim.com.
 
 10. Çocuklar
 Uygulama işyeri kullanımı içindir; 18 yaş altına yönelik değildir.
@@ -204,9 +212,9 @@ Konsoldaki alanlar: Ad ("Demo hesabı") · Kullanıcı adı · Parola · "Diğer
 
 **Soru 1 — "Uygulamanız, gerekli kullanıcı veri türlerinden herhangi birini toplıyor veya paylaşıyor mu?"** → **Evet.**
 
-**Soru 2 — "Toplanan tüm kullanıcı verileri aktarım sırasında şifreleniyor mu?"** → **Hayır** (K3).
+**Soru 2 — "Toplanan tüm kullanıcı verileri aktarım sırasında şifreleniyor mu?"** → **Evet** (K3) — ⚠ YALNIZ vc60 yayına çıktıktan sonra; vc59 dönemi forma girilirse cevap **Hayır**dır.
 
-**Soru 3 — Hesap oluşturma:** "Uygulamanız kullanıcıların hesap oluşturmasına izin veriyor mu?" → **Hayır** — hesaplar fabrika yöneticisince panelde açılır, uygulamada kayıt ekranı yok. Kullanıcılar uygulama dışında oluşturulan hesapla giriş yapar. ⚠ Konsol bu durumda yine de "hesap silme URL'si" isterse: gizlilik sayfasının §8 bağlantısı (`…/gizlilik#hesaplar`) verilir. Play'in hesap silme şartının yalnız uygulama içinden hesap açılabilen uygulamalara uygulandığı anlaşılıyor — **web'den doğrulanmalı**.
+**Soru 3 — Hesap oluşturma:** "Uygulamanız kullanıcıların hesap oluşturmasına izin veriyor mu?" → **Hayır** — hesaplar fabrika yöneticisince panelde açılır, uygulamada kayıt ekranı yok. Kullanıcılar uygulama dışında oluşturulan hesapla giriş yapar. ⚠ Konsol bu durumda yine de "hesap silme URL'si" isterse: gizlilik sayfasının §8 bağlantısı (`https://tekserp.etkiliyazilim.com/gizlilik#hesaplar-ve-silme`) verilir. Play'in hesap silme şartının yalnız uygulama içinden hesap açılabilen uygulamalara uygulandığı anlaşılıyor — **web'den doğrulanmalı**.
 
 **Soru 4 — "Kullanıcıların verilerinin silinmesini isteyebilecekleri bir yol sağlıyor musunuz?"** (isteğe bağlı) → **Evet** — fabrika yöneticisine başvuru + gizlilik sayfasındaki e-posta.
 
@@ -270,7 +278,7 @@ Toplanmayan (işaretleme): Konum (yaklaşık/kesin), Finansal bilgiler, Sağlık
 | **`USE_BIOMETRIC`, `USE_FINGERPRINT`** | `expo-secure-store` → `androidx.biometric:biometric:1.1.0` kütüphane manifesti | **Hayır** — `requireAuthentication` hiçbir yerde kullanılmıyor | Yok (normal izin) ama listede "biyometrik donanım" görünür | **KALDIR** (`blockedPermissions`) |
 | `REQUEST_INSTALL_PACKAGES`, `RECORD_AUDIO`, `READ/WRITE_EXTERNAL_STORAGE` | — | — | — | Zaten engelli (ölçüldü: AAB'de yok) |
 
-### 4.1 Kaldırma önerisi (DEĞİŞİKLİK YAPILMADI — K1 onayı bekler)
+### 4.1 Kaldırma yöntemi (K1 kararı 2026-10-08: vc60'ta uygulanır)
 
 1. `mobil/app.json` → `android.blockedPermissions`e ekle: `android.permission.SYSTEM_ALERT_WINDOW`, `android.permission.USE_BIOMETRIC`, `android.permission.USE_FINGERPRINT`, `android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK`, `android.permission.FOREGROUND_SERVICE`.
 2. Küçük config eklentisi (`mobil/plugins/`, `withAndroidManifest`): iki expo-audio hizmetini `tools:node="remove"` ile manifestten çıkar (`.service.AudioControlsService`, `.service.AudioRecordingService`). Yalnız izni engellemek hizmet beyanını bırakır; `foregroundServiceType` beyanı konsolda yine soru doğurabilir.
@@ -291,7 +299,7 @@ Tam ekran bildirim, kesin alarm, erişilebilirlik, tüm dosyalara erişim, `QUER
 - **Uygulama adı:** TeksERP
 - **Kategori:** Uygulama → **İş** (alternatif: Verimlilik)
 - **Etiketler (öneri):** İş yönetimi, Envanter, Üretim — ⚠ konsolun etiket listesinden seçilir.
-- **İletişim e-postası:** `[KULLANICI DOLDURUR]` (K6) · Web sitesi: `https://etkiliyazilim.com` (isteğe bağlı) · Telefon: boş bırakılabilir.
+- **İletişim e-postası:** `info@etkiliyazilim.com` (K6) · Web sitesi: `https://etkiliyazilim.com` (isteğe bağlı) · Telefon: boş bırakılabilir.
 
 **Kısa açıklama** (75 karakter, sınır 80):
 
@@ -366,8 +374,8 @@ Sonuç: K-14'teki "gizli yayın" kararı (2026-10-07) kurumsal hesap varsayımı
 
 ## 7. Sıra (önerilen)
 
-1. K1 onayı → 4.1 değişikliği → vc 60 AAB → manifest ölçümü.
-2. K2 → gizlilik sayfası yayını → URL'yi konsola gir.
+1. K1 (karar verildi) → 4.1 değişikliği + K3 şifreli bağlantı → vc 60 AAB → manifest ölçümü.
+2. K2 → gizlilik sayfası yayını (`GIZLILIK-SAYFASI.md`) → URL'yi konsola gir.
 3. K4 → demo sunucu + deneme hesabı → §2 formu.
 4. §3 formları (veri güvenliği: ML Kit satırını web'den doğrulayarak).
 5. §5 mağaza girişi + grafikler.

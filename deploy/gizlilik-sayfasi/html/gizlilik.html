@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TeksERP — Gizlilik Politikası</title>
+<style>
+body { margin: 0; background: #f6f7f9; color: #1d2330; font: 16px/1.6 -apple-system, "Segoe UI", Roboto, Arial, sans-serif; }
+main { max-width: 760px; margin: 0 auto; padding: 24px 18px 48px; background: #fff; }
+h1 { font-size: 1.6em; line-height: 1.3; margin: 0.4em 0 0.8em; }
+h2 { font-size: 1.15em; margin: 1.8em 0 0.5em; padding-top: 0.6em; border-top: 1px solid #e3e6eb; }
+ul { padding-left: 1.3em; }
+li { margin: 0.35em 0; }
+code { font-size: 0.92em; background: #eef0f3; padding: 0 4px; border-radius: 3px; word-break: break-all; }
+a { color: #1a56b0; word-break: break-word; }
+</style>
+</head>
+<body>
+<main>
+<h1>TeksERP — Gizlilik Politikası</h1>
+<p><strong>Son güncelleme:</strong> 8 Ekim 2026<br>
+<strong>Uygulama:</strong> TeksERP (Google Play paket adı: <code>com.etkiliyazilim.tekserp</code>)<br>
+<strong>Geliştirici:</strong> Etkili Yazılım — [TİCARET UNVANI], [ADRES]<br>
+<strong>İletişim:</strong> <a href="mailto:info@etkiliyazilim.com">info@etkiliyazilim.com</a></p>
+<h2 id="uygulamanin-niteligi">1. Uygulamanın niteliği</h2>
+<p>TeksERP, tekstil fabrikalarında üretim, kalite, depo ve sevkiyat işlemlerinin kaydı için kullanılan bir iş uygulamasıdır. Uygulama tek başına çalışmaz: kullanan fabrikanın KENDİ sunucusunda kurulu TeksERP sistemine bağlanır. Sunucu adresi uygulamada ağ taraması veya elle giriş ile belirlenir; uygulamada hiçbir fabrika sunucusunun adresi gömülü değildir.</p>
+<p>Bu nedenle uygulamaya girilen iş verilerinin ve personel bilgilerinin veri sorumlusu, uygulamayı kullanan fabrikadır (işveren). Etkili Yazılım bu verileri toplamaz, kendi sunucularında saklamaz ve bunlara erişmez; aşağıda 5. maddede sayılan sınırlı teknik veriler istisnadır.</p>
+<h2 id="uygulamanin-fabrika-sunucusuna-gonderdigi-veriler">2. Uygulamanın fabrika sunucusuna gönderdiği veriler</h2>
+<ul>
+  <li><strong>Kimlik doğrulama:</strong> kullanıcı adı ve parola, hızlı giriş PIN'i veya personel kartı kodu. Bunlar yalnız giriş anında fabrika sunucusuna gönderilir, cihazda saklanmaz. Fabrika sunucusu PIN'i ve kart kodunu geri çevrilemez özet olarak tutar. Girişten sonra oturum anahtarı cihazın güvenli deposunda (Android Keystore) tutulur.</li>
+  <li><strong>Kullanıcı listesi:</strong> giriş ekranında, fabrika sunucusundaki kullanıcıların adları seçim için gösterilir.</li>
+  <li><strong>Cihaz kimliği:</strong> uygulamanın ilk açılışta ürettiği rastgele bir tanımlayıcı. Fabrika yöneticisinin tableti tanıması ve istasyona ataması için kullanılır; reklam kimliği veya donanım kimliği değildir.</li>
+  <li><strong>İş kayıtları:</strong> okutulan barkodlar, metraj, ağırlık, kalite kararları, açıklama notları, sevkiyatta şoför adı ve araç plakası gibi operatörün girdiği bilgiler ve bu işlemleri hangi kullanıcının ne zaman yaptığı.</li>
+  <li><strong>Teknik hata bilgisi:</strong> uygulama beklenmedik bir hatayla karşılaştığında hatanın türü, teknik yığın bilgisi, ekran adı ve uygulama sürümü. Hata mesajının metni ve iş verisi gönderilmez.</li>
+</ul>
+<p>Ağ bağlantısı yokken yapılan işlemler cihazda geçici olarak sıraya alınır ve bağlantı gelince fabrika sunucusuna gönderilir.</p>
+<h2 id="kamera-bluetooth-ve-konum">3. Kamera, Bluetooth ve konum</h2>
+<ul>
+  <li>Kamera yalnız barkod ve QR kod okumak için kullanılır. Görüntü cihazda işlenir; fotoğraf veya video kaydedilmez ve gönderilmez.</li>
+  <li>Bluetooth; metre, kantar ve etiket yazıcısı gibi fabrika cihazlarına bağlanmak için kullanılır.</li>
+  <li>Konum izni yalnız Android 11 ve önceki sürümlerde, işletim sistemi Bluetooth cihaz taraması için bu izni zorunlu tuttuğu için istenir. Uygulama konumunuzu okumaz, kaydetmez ve göndermez.</li>
+  <li>Uygulama mikrofon, rehber, arama kaydı, SMS, fotoğraf arşivi veya sağlık verisi kullanmaz. Uygulamada reklam yoktur ve reklam kimliği kullanılmaz.</li>
+</ul>
+<h2 id="uygulama-guncellemeleri">4. Uygulama güncellemeleri</h2>
+<p>Uygulama, küçük güncellemeleri Etkili Yazılım'ın güncelleme sunucusundan (indir.etkiliyazilim.com) indirir. Bu istekte uygulama sürümü ve fabrikanın güncelleme grubunu belirten bir indirme belirteci gönderilir; kişisel veri ve iş verisi gönderilmez. Sunucu, internet altyapısı gereği bağlantının IP adresini görür. Büyük güncellemeler Google Play üzerinden gelir.</p>
+<h2 id="etkili-yazilim-a-ulasan-veriler">5. Etkili Yazılım'a ulaşan veriler</h2>
+<ul>
+  <li>Güncelleme istekleri (4. madde).</li>
+  <li>Fabrika yöneticisi açıkça onay verirse, fabrika sunucusu teknik hata bilgilerini (2. maddedeki &quot;teknik hata bilgisi&quot;; kullanıcı adı ve iş verisi olmadan) arıza teşhisi için Etkili Yazılım'a iletir. Bu ayar varsayılan olarak kapalıdır.</li>
+  <li>Barkod okuma, Google'ın ML Kit kütüphanesiyle cihaz üzerinde yapılır. Google'ın bu kütüphane için topladığı teknik veriler Google'ın kendi politikasına tabidir: <a href="https://developers.google.com/ml-kit/android-data-disclosure">https://developers.google.com/ml-kit/android-data-disclosure</a></li>
+</ul>
+<h2 id="paylasim">6. Paylaşım</h2>
+<p>Veriler satılmaz, reklam amacıyla kullanılmaz ve üçüncü taraflarla paylaşılmaz. Fabrika sunucusundaki verilerin kimlerle paylaşılacağına fabrika karar verir.</p>
+<h2 id="saklama-ve-guvenlik">7. Saklama ve güvenlik</h2>
+<ul>
+  <li>Oturum anahtarı ve cihaz kimliği Android Keystore korumalı güvenli depoda tutulur.</li>
+  <li>Fabrika sunucusundaki verilerin saklama süresi, yedeklenmesi ve silinmesi fabrikanın sorumluluğundadır.</li>
+  <li>Fabrika sunucusuyla bağlantı, fabrikanın ayarına göre şifreli (HTTPS) ya da fabrikanın kendi iç ağında şifresiz olabilir. Güncelleme sunucusuyla bağlantı her zaman şifrelidir.</li>
+</ul>
+<h2 id="hesaplar-ve-silme">8. Hesaplar ve silme</h2>
+<p>Kullanıcı hesapları uygulama içinden açılamaz; fabrika yöneticisi tarafından açılır ve kapatılır. Hesabınızın ve verilerinizin silinmesi için önce fabrikanızın yöneticisine başvurun. Etkili Yazılım'a ulaşan teknik verilerin silinmesi için: <a href="mailto:info@etkiliyazilim.com">info@etkiliyazilim.com</a>.</p>
+<h2 id="haklariniz">9. Haklarınız</h2>
+<p>6698 sayılı KVKK md. 11 ve uygulanabildiği ölçüde GDPR kapsamındaki haklarınızı, verilerinizin sorumlusu olan fabrikaya (işvereninize) karşı kullanabilirsiniz. Etkili Yazılım'a ilişkin talepler: <a href="mailto:info@etkiliyazilim.com">info@etkiliyazilim.com</a>.</p>
+<h2 id="cocuklar">10. Çocuklar</h2>
+<p>Uygulama işyeri kullanımı içindir; 18 yaş altına yönelik değildir.</p>
+<h2 id="degisiklikler">11. Değişiklikler</h2>
+<p>Politika değiştiğinde bu sayfa güncellenir ve &quot;son güncelleme&quot; tarihi değişir.</p>
+</main>
+</body>
+</html>

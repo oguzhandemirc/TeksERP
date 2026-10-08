@@ -276,6 +276,16 @@ const INDIR_KOKENI_TETIK = new Set([
 if (staged.some((f) => INDIR_KOKENI_TETIK.has(f))) {
   adimlar.push({ ad: "indirme kökeni", cwd: ".", cmd: ["node", ["scripts/test_indir_sunucusu.mjs"]] });
 }
+// GİZLİLİK SAYFASI (Play K2): tetik = bekçinin okuduğu dosyalar (bekçi bu listenin burada aynen geçtiğini ölçer).
+const GIZLILIK_SAYFASI_TETIK = new Set([
+  "docs/legal/GIZLILIK-POLITIKASI.md", "deploy/gizlilik-sayfasi/html/gizlilik.html", "deploy/gizlilik-sayfasi/docker-compose.yml",
+  "deploy/gizlilik-sayfasi/nginx/default.conf", "deploy/gizlilik-sayfasi/uret.mjs", "deploy/gizlilik-sayfasi/vds-kur.sh",
+  "deploy/gizlilik-sayfasi/olc.mjs", "docs/ops/PLAY-KONSOL-FORMLARI.md", "docs/ops/SUNUCU-ENVANTERI.md",
+  "satici/sunucu/src/http/client-address.ts", "deploy/traefik/kenar-zinciri.mjs", "scripts/test_gizlilik_sayfasi.mjs",
+]);
+if (staged.some((f) => GIZLILIK_SAYFASI_TETIK.has(f))) {
+  adimlar.push({ ad: "gizlilik sayfası", cwd: ".", cmd: ["node", ["scripts/test_gizlilik_sayfasi.mjs"]] });
+}
 // PROFİL MATRİSİ YAYIN KAPISI (O13b): tetik = bekçinin okuduğu dosyalar (kapı kitaplığı, CLI, rapor
 // yazarı, cümle yüklemi) + dağıtım kaydı tetiği (tüketici listesi ve grup zinciri oradan okunur).
 const PROFIL_KAPISI_DOSYALARI = new Set([

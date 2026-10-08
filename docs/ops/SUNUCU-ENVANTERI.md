@@ -1,6 +1,6 @@
 # Sunucu envanteri — hangi makine ne yapıyor
 
-> Son güncelleme: **2026-10-08** (`tekserp-indir` kökeni; fabrika satırları 2026-09-29 SAHINSRV salt-okuma envanterinden). Yeni bir makine, kullanıcı, port ya da zamanlanmış
+> Son güncelleme: **2026-10-08** (`tekserp-indir` kökeni; `tekserp-gizlilik` planı; fabrika satırları 2026-09-29 SAHINSRV salt-okuma envanterinden). Yeni bir makine, kullanıcı, port ya da zamanlanmış
 > iş eklendiğinde **buraya da yazılır** — aksi hâlde "bu port neden açık" sorusunun
 > cevabı kimsede kalmaz.
 
@@ -97,6 +97,7 @@ Kurulum günü ölçüm: **11 saatte 1193 başarısız giriş denemesi**, ilk sa
 | `docker-socket-proxy` | nginx:alpine | 64m | `docker.sock`u traefik'e **salt-okunur** verir |
 | `tekserp-guncelleme` | nginx:alpine | 64m | Statik yayın (panel + tablet) |
 | `tekserp-indir` | nginx:alpine (salt-okunur kök) | 64m | Tek ortak paketin indirme kökeni `indir.etkiliyazilim.com` (2026-10-08'den beri yayında; kapı önündeki Cloudflare Worker'da) |
+| `tekserp-gizlilik` | nginx:alpine (salt-okunur kök) | 32m | **PLANLI (kurulmadı)** — herkese açık gizlilik sayfası `https://tekserp.etkiliyazilim.com/gizlilik` (Play K2; [`GIZLILIK-SAYFASI.md`](GIZLILIK-SAYFASI.md)) |
 
 Docker günlükleri: `json-file`, 20 MB × 5 dosya (sınırsız büyümeye karşı).
 
@@ -127,6 +128,9 @@ yazmak kırılgandır, yarın oraya konan ikinci bir iç dosya yine sızar.
 ├── defter/                             yayın defteri, html/ DIŞINDA — yayinci (1001)
 ├── docker-compose.yml                  root — yayinci DEĞİŞTİREMEZ
 └── nginx/default.conf                  root — yayinci DEĞİŞTİREMEZ
+/opt/stack/apps/tekserp-gizlilik/       PLANLI — ayrı compose projesi `tekserp-gizlilik` (kaynak deploy/gizlilik-sayfasi/), hepsi root 0644
+├── html/gizlilik.html · nginx/default.conf · docker-compose.yml
+└── onceki/                             güncellemede değişen dosyanın bir önceki hâli
 
 /srv/tekserp-yedek/<fabrika>/gelen/     fabrika SFTP ile buraya yazar
 /srv/tekserp-arsiv/<fabrika>/           root'a ait — fabrika ERİŞEMEZ
@@ -142,6 +146,11 @@ Cloudflare'i kabul eder (doğrudan `--resolve …:80.253.255.188` → 403; ölç
 **Geri alma:** önce Cloudflare'de DNS kaydı `indir` ve rota kaldırılır (ad çözülmez, kapısız pencere doğmaz);
 sonra VDS'te `cd /opt/stack/apps/tekserp-indir && docker compose down`. Dizin SİLİNMEZ; eski
 `tekserp-guncelleme` ve adnansahin bu adımlardan etkilenmez — her adımdan sonra adnansahin ölçümü koşulur.
+
+**`tekserp-gizlilik` (PLANLI, repo hazır 2026-10-08):** `https://tekserp.etkiliyazilim.com/gizlilik` — yönlendirici
+`tekserp-gizlilik`, kendi kenar zinciri `tekserp-gizlilik-cf` → `tekserp-gizlilik-hiz`; indir Worker'ının ve eski sitenin
+dışında. Kurulum `deploy/gizlilik-sayfasi/vds-kur.sh` (kuru varsayılan · `--uygula` · `--geri-al`; sudo'suz yardımcı
+konteyner; komşu ölçümü önce/sonra), DNS `A tekserp` proxy açık EN SON. Runbook: [`GIZLILIK-SAYFASI.md`](GIZLILIK-SAYFASI.md).
 
 ### Zamanlanmış işler
 
@@ -189,6 +198,7 @@ Yedek şifreleme parolası **sunucuda YOK** — fabrikada ve parola yöneticisin
 - [`YEDEK-GERI-YUKLEME-TATBIKATI.md`](YEDEK-GERI-YUKLEME-TATBIKATI.md) — geri yükleme provası
 - [`SATICI-KURULUM.md`](SATICI-KURULUM.md) — satıcı (lisans) sunucusu: ayrı compose projesi, port yayını yok, şifreli yedek; VDS'te yalnız üretim satıcısı (§13; portal örtüsü zorunlu) — hazırlık satıcısı 2026-10-05 emekli, verisi silindi (§0–§12 tarih)
 - [`PORTAL-GENEL-ERISIM.md`](PORTAL-GENEL-ERISIM.md) — satıcı portalının internetten yolu (`portal.etkiliyazilim.com`): Cloudflare Access + parola + TOTP, kök parolası dahil bütün satıcı işlemleri (2026-10-04; 2026-10-05'ten beri portalın TEK yolu, yalnız üretim satıcısında — tünel D5'te kalktı); Cloudflare API sırası, DNS, doğrulama
+- [`GIZLILIK-SAYFASI.md`](GIZLILIK-SAYFASI.md) — Play gizlilik sayfası kökeni (`tekserp.etkiliyazilim.com/gizlilik`): kurulum betiği, Cloudflare DNS adımı, ölçüm, geri alma
 - [`LISANS-DEVREYE-ALMA-TESTFABRIKA.md`](LISANS-DEVREYE-ALMA-TESTFABRIKA.md) — lisansı testfabrika'da devreye alma sırası; testfabrika emekli (kullanıcı kararı 2026-10-05, kaldırma ayrı adım), belge üretim satıcısında "test" grubunda kurulacak yeni test kurulumu için şablon (satıcı A2 imajı → yayıncı → korumalı backend → yayın → portal → gözlem kipinde etkinleştirme → Senaryo T); salt-okuma aşama doğrulayıcısı
 
 ## Açık iş
