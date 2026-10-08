@@ -1,13 +1,20 @@
-//! Linux/Docker arka ucu — İSKELET (`GUNCELLEYICI-SAGLAMLIK.md` §1.2; asıl iş L4a/L4b/L6/L8). Derlenir ve
-//! seçilebilir, ama hiçbir yöntem iş yapmaz: her çağrı `PLATFORM_DESTEKSIZ` önekli açık bir hatadır (fail-closed;
-//! `unimplemented!` değil — süreç düşmez, adım kendi koduyla düşer ve telafi yolu çalışır).
-use crate::env::{CmdOut, Env, EnvError, EnvResult, Events, HttpResponse, Protect, Services, SvcState};
+//! Linux/Docker arka ucu (`GUNCELLEYICI-SAGLAMLIK.md` §1.2). L4a: konak bağları (`sys` — güvenilmez okuma,
+//! `statvfs`, yabancı yazar, özel alan, `flock`, süreç grubu + `PDEATHSIG`) · olay günlüğü (`olay`, stderr →
+//! journald) · yerel koruma (`koruma`, dizin izni) · dizin düzeni (`duzen`). Sağlık · araçlar · PG · hizmet denetimi
+//! hâlâ İSKELET (L4b/L6/L8): her çağrı `PLATFORM_DESTEKSIZ` önekli açık bir hatadır (fail-closed; `unimplemented!`
+//! değil — süreç düşmez, adım kendi koduyla düşer ve telafi yolu çalışır).
+pub mod duzen;
+pub mod koruma;
+pub mod olay;
+#[cfg(unix)]
+pub mod sys;
+
+use crate::env::{CmdOut, Env, EnvError, EnvResult, HttpResponse, Services, SvcState};
 use crate::settings::BackendEnv;
 use crate::tools::MigrationCount;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Duration;
-use tekserp_hizmet::logfile::Level;
 
 /// İşlem günlüğünün `platform`u (bildirimin platform sözlüğüyle aynı ad, sözleşme 5).
 pub const PLATFORM: &str = "linux-x64-oci";
@@ -116,12 +123,6 @@ impl crate::platform::PgArkaUcu for IskeletPg {
     }
 }
 
-/// Olay günlüğü yok (L4a: stderr/journald).
-pub struct NoEvents;
-impl Events for NoEvents {
-    fn event(&self, _level: Level, _message: &str) {}
-}
-
 /// Hizmet denetimi yok (L4b: `DockerServices`) — her çağrı hata.
 pub struct NoServices;
 impl Services for NoServices {
@@ -142,17 +143,6 @@ impl Services for NoServices {
     }
     fn set_image_path(&self, name: &str, _command_line: &str) -> EnvResult<()> {
         Err(EnvError(unsupported(&format!("{name}: hizmet denetimi"))))
-    }
-}
-
-/// Yerel koruma yok (L4a: root 0600 dizin izni).
-pub struct NoProtect;
-impl Protect for NoProtect {
-    fn protect(&self, _data: &[u8]) -> EnvResult<Vec<u8>> {
-        Err(EnvError(unsupported("yerel koruma")))
-    }
-    fn unprotect(&self, _data: &[u8]) -> EnvResult<Vec<u8>> {
-        Err(EnvError(unsupported("yerel koruma")))
     }
 }
 
@@ -178,8 +168,8 @@ mod tests {
             procs: Arc::new(crate::env::RealProcs),
             net: Arc::new(crate::env::RealNet::new(None).unwrap()),
             clock: Arc::new(crate::env::SystemClock),
-            events: Arc::new(NoEvents),
-            protect: Arc::new(NoProtect),
+            events: Arc::new(olay::StderrEvents { journald: false }),
+            protect: Arc::new(koruma::DirectoryProtect),
             arka: arka_ucu(),
         };
         let a = IskeletAraclar;
@@ -202,7 +192,6 @@ mod tests {
             NoServices.state("b").err().map(|e| e.0),
             NoServices.start("b", &[]).err().map(|e| e.0),
             NoServices.stop("b").err().map(|e| e.0),
-            NoProtect.protect(b"x").err().map(|e| e.0),
             service_command("hizmet-kur", &[]).err(),
         ];
         for (i, e) in errors.iter().enumerate() {
