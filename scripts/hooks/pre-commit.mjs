@@ -350,6 +350,12 @@ if (grupTetigi(TABLET_GRUP_DOSYALARI)) {
   adimlar.push({ ad: "tablet grup yayını", cwd: ".", cmd: ["node", ["scripts/test_grup_yayin_tablet.mjs"]], gitEnvSil: true });
 }
 
+// PAROLA KASASI: bekçi tripwire'ı bu dizinlerdeki her aracı/bekçiyi tarar — yeni parola okuyan araç ya da kasayı kapatmayan bekçi buradan doğar.
+const PAROLA_KASASI_TETIK = /^(deploy|scripts|Teks-Erp\/scripts|satici\/sunucu\/scripts|mobil\/scripts|mobil\/plugins|patron\/sunucu\/scripts|Electron\/scripts|mobil\/src\/test)\/.*\.(ts|mjs|cjs|js)$|^mobil\/jest\.config\.js$/;
+if (staged.some((f) => PAROLA_KASASI_TETIK.test(f))) {
+  adimlar.push({ ad: "parola kasası", cwd: ".", cmd: ["node", ["scripts/test_parola_kasasi.mjs"]], gitEnvSil: true });
+}
+
 if (adimlar.length === 0) process.exit(0);
 
 // UCUZ KAYIT ADIMLARI ÖNCE (doküman · mandallar · hijyen · kapının kendisi), ağırlar
