@@ -34,6 +34,8 @@
 //      --dogrula kapıdan etkilenmez, belirteçli ve yeni adresten okur · oncu terfisi: etiket yok → DUR; terfi kaçışıyla
 //      profil matrisi raporu yok → DUR, yeşil rapor → geçer · saf terfi (K-6: genel kendi etiketini ister, oncu etiketi
 //      sayılmaz; kaynak grup geride → DUR; kök grup etiket istemez) · `dogrula --ortak` bildirim aracı kuralları
+//   §3T (3.9 D7) TEST ÇAPASI DUR satırları uçtan uca: yalnız adres kapısı açık ikinci geçici ağaçta; kök çapası
+//      (paket çapası boş) ve paket çapası (kök çapası boş) ayrı ayrı DUR, ssh/scp/fetch SIFIR; --kuru kontrolü durmaz
 //   §1m/§3ci (G22) CI KAÇIŞI: imzalı künyede `ciKokeni.kip = "atlandi"` → yayın DURMAZ, uyarı basılır, defterde
 //      `ci-atlandi:` kolonu (cümle · saat · makine · HEAD); kaçışsız pakette kolon YOK
 //
@@ -389,23 +391,24 @@ const YAMALAR = [
 /** Notu yazılan (prova olmayan) test sürümleri; §3o notsuz sürümü bilerek dışarıda bırakır. */
 const NOTLU = ['9.9.0', '9.9.1', '9.9.2', '9.9.3', '9.9.4', '9.9.5', '9.9.6', '9.9.7', '9.9.8', '9.9.10', '9.9.11', '9.9.12', '9.9.13'];
 let AGAC_HEAD = null;
-function agacKur() {
-  fs.cpSync(path.join(KOK, 'scripts'), path.join(AGAC, 'scripts'), { recursive: true });
-  fs.cpSync(path.join(KOK, 'deploy/pg'), path.join(AGAC, 'deploy/pg'), { recursive: true });
-  for (const rel of ['deploy/backend-yayinla.mjs', 'deploy/dagitim.json', 'deploy/kanallar.json']) fs.copyFileSync(path.join(KOK, rel), path.join(AGAC, rel));
-  fs.symlinkSync(TEKS, path.join(AGAC, 'Teks-Erp'));
-  fs.mkdirSync(path.join(AGAC, 'docs/surumler'), { recursive: true });
-  for (const v of NOTLU) fs.writeFileSync(path.join(AGAC, `docs/surumler/backend-${v}.md`), `# backend ${v}\n\n## Özet\n\nBekçi sürümü ${v}.\n`);
-  for (const [rel, eski, yeni] of YAMALAR) {
-    const yol = path.join(AGAC, rel);
+/** Yama listesi parametrelidir: §3T yalnız adres kapısı açılmış ikinci bir ağaçta test çapası DUR satırlarını ölçer. */
+function agacKur(hedef = AGAC, yamalar = YAMALAR) {
+  fs.cpSync(path.join(KOK, 'scripts'), path.join(hedef, 'scripts'), { recursive: true });
+  fs.cpSync(path.join(KOK, 'deploy/pg'), path.join(hedef, 'deploy/pg'), { recursive: true });
+  for (const rel of ['deploy/backend-yayinla.mjs', 'deploy/dagitim.json', 'deploy/kanallar.json']) fs.copyFileSync(path.join(KOK, rel), path.join(hedef, rel));
+  fs.symlinkSync(TEKS, path.join(hedef, 'Teks-Erp'));
+  fs.mkdirSync(path.join(hedef, 'docs/surumler'), { recursive: true });
+  for (const v of NOTLU) fs.writeFileSync(path.join(hedef, `docs/surumler/backend-${v}.md`), `# backend ${v}\n\n## Özet\n\nBekçi sürümü ${v}.\n`);
+  for (const [rel, eski, yeni] of yamalar) {
+    const yol = path.join(hedef, rel);
     const metin = fs.readFileSync(yol, 'utf8');
     const adet = metin.split(eski).length - 1;
     if (adet !== 1) throw new Error(`geçici ağaç yaması TUTMADI (${rel}: ${adet} eşleşme) — bekçi kapalı kapıya karşı ölçemez`);
     fs.writeFileSync(yol, metin.replace(eski, yeni));
   }
-  const g = (...a) => execFileSync('git', ['-c', 'user.email=bekci@test', '-c', 'user.name=bekci', ...a], { cwd: AGAC, encoding: 'utf8' }).trim();
+  const g = (...a) => execFileSync('git', ['-c', 'user.email=bekci@test', '-c', 'user.name=bekci', ...a], { cwd: hedef, encoding: 'utf8' }).trim();
   g('init', '-q'); g('add', '-A'); g('commit', '-q', '-m', 'bekci agaci');
-  AGAC_HEAD = g('rev-parse', 'HEAD');
+  return g('rev-parse', 'HEAD');
 }
 const URETIM = {};
 const yayinlaAgac = (argumanlar, ortam = {}) => yayinla(argumanlar, ortam, AGAC, `${URETIM.parola}\n${URETIM.parola}\n`);
@@ -426,7 +429,7 @@ function bolum3() {
   Object.assign(ORTAK, anahtarKur());
   Object.assign(URETIM, uretimAnahtariKur());
   Object.assign(ZINCIR, zincirKur(URETIM.parola));
-  agacKur();
+  AGAC_HEAD = agacKur();
   const p1 = op('p1', '9.9.1');
 
   const kuru = yayinlaAgac(arg3(p1, ['--kuru']), capaOrtami(p1));
@@ -510,6 +513,28 @@ function bolum3() {
   bolum3ortak();
   bolum3grup();
   bolum3zincir();
+  bolum3testCapa();
+}
+
+/* §3T (3.9 D7) — test çapası DUR satırları uçtan uca: yalnız adres kapısı açık ikinci ağaç; iki DUR satırı YAMASIZ.
+ * Paket çapası satırı önce koştuğu için kök satırı paket çapası BOŞKEN ölçülür (ve tersi). Kontrol: aynı ortam --kuru'da durmaz. */
+function bolum3testCapa() {
+  console.log('\n§3T — test çapası ortamdayken gerçek yayın DUR (adres kapısı açık, DUR satırları yamasız)');
+  const dAgac = path.join(GECICI, 'agac-capa');
+  const dHead = agacKur(dAgac, YAMALAR.filter(([rel]) => rel === 'scripts/lib/grup-yayin.mjs'));
+  const pk = ortakPaketKur('t1', { surum: '9.9.11', commit: dHead.slice(0, 8), uretim: URETIM });
+  const kos = (ek, ortam) => yayinla(arg3(pk, ek), ortam, dAgac, `${URETIM.parola}\n${URETIM.parola}\n`);
+  const kokOrtam = { TEKSERP_TEST_PAKET_CAPASI: '', TEKSERP_TEST_KOK_CAPASI: ZINCIR.capa };
+  const pktOrtam = { TEKSERP_TEST_PAKET_CAPASI: pk.capa, TEKSERP_TEST_KOK_CAPASI: '' };
+  const kok = kos([], kokOrtam);
+  ol('§3T1 ⭐ TEKSERP_TEST_KOK_CAPASI dolu (paket çapası boş) → DUR "TEST KÖK ÇAPASI ortamda", ssh/scp/fetch SIFIR, adres kapısı açık',
+    kok.kod !== 0 && /TEST KÖK ÇAPASI ortamda/.test(kok.cikti) && !/GERÇEK YAYIN KAPALI/.test(kok.cikti) && kok.log.length === 0, kok.cikti.slice(-400));
+  const pkt = kos([], pktOrtam);
+  ol('§3T2 ⭐ TEKSERP_TEST_PAKET_CAPASI dolu (kök çapası boş) → DUR "TEST ÇAPASI ortamda", ssh/scp/fetch SIFIR',
+    pkt.kod !== 0 && /TEST ÇAPASI ortamda/.test(pkt.cikti) && !/TEST KÖK ÇAPASI/.test(pkt.cikti) && pkt.log.length === 0, pkt.cikti.slice(-400));
+  const kuru = kos(['--kuru'], { TEKSERP_TEST_PAKET_CAPASI: pk.capa, TEKSERP_TEST_KOK_CAPASI: ZINCIR.capa });
+  ol('§3T3 kontrol: aynı ağaç + iki çapa --kuru kipte DUR\'mez (çıkış 0, yazma SIFIR) — DUR yalnız gerçek yayının',
+    kuru.kod === 0 && !/ÇAPASI ortamda/.test(kuru.cikti) && kuru.yazma.length === 0, kuru.cikti.slice(-400));
 }
 
 /** Takım kararının sözleşmesi (karar 6); `kararDenetle(bozuk)` false dönmeli (negatif sonda). */
