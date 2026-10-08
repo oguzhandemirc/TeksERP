@@ -20,7 +20,7 @@
 //      §5c teslim künyesi 2e aracıyla imzalanır: anahtar açıkça verilir (varsayılan yol yok, boşsa DUR), yoksa paket yok,
 //      künye müşterisiz, .jws SHA256SUMS'ta.
 //      §5d vekil ayarları (TRUST_PROXY · LOGIN_LOCKOUT_SCOPE · RATE_LIMIT_*) backend'e boş varsayılanla geçer;
-//      şablon TRUST_PROXY'yi boş doğurur.
+//      şablon TRUST_PROXY'yi boş doğurur. §5e şablonun LICENSE_SERVER_URL açıklaması vendor-url.ts sabitleriyle aynı.
 //   §6 satıcı imajı (G2/G3) DURAĞAN: `satici/sunucu/scripts/` altındaki her CLI `dist-cli`'a derlenir ve
 //      `test -f` kapısında; compose'da `/dosyalar` yazılır, `/derlemeler` + `/yayin` salt okunur (⑨'un docker'sız ikizi).
 // =============================================================================
@@ -372,6 +372,33 @@ function vekilStatik(compose: string, envOrnek: string): string[] {
     const uygulandi = c !== dc || e !== eo;
     check(`§5d sonda: ${ad} → kırmızı`, uygulandi && vekilStatik(c, e).length > 0, uygulandi ? "" : "MUTASYON UYGULANMADI");
   }
+}
+
+// §5e — şablonun lisans adresi açıklaması tek çözüm yeriyle (vendor-url.ts) aynı şeyi söyler:
+// boş = üretim satıcısı, yalnız `kapali` dışarı çıkışı kapatır.
+function lisansAdresiStatik(envOrnek: string, vendorUrl: string): string[] {
+  const ih: string[] = [];
+  const varsayilan = /DEFAULT_LICENSE_SERVER_URL = "([^"]+)"/.exec(vendorUrl)?.[1];
+  const kapali = /LICENSE_SERVER_DISABLED = "([^"]+)"/.exec(vendorUrl)?.[1];
+  if (!varsayilan || !kapali) return ["vendor-url.ts sabitleri okunamadı (ÖLÇÜLEMEDİ)"];
+  const satirlar = envOrnek.split("\n");
+  const i = satirlar.findIndex((l) => l.startsWith("LICENSE_SERVER_URL="));
+  let j = i;
+  while (j > 0 && satirlar[j - 1].startsWith("#")) j--;
+  const yorum = i >= 0 ? satirlar.slice(j, i).join("\n") : "";
+  if (!yorum) ih.push(".env.ornek LICENSE_SERVER_URL açıklamasız");
+  if (!yorum.includes(varsayilan)) ih.push(`açıklama boş değerin ${varsayilan} olduğunu söylemiyor`);
+  if (!yorum.includes(`\`${kapali}\``)) ih.push(`açıklama çıkışı kapatan \`${kapali}\` değerini anmıyor`);
+  if (/boşsa dışarı çıkılmaz/i.test(yorum)) ih.push("açıklama 'boşsa dışarı çıkılmaz' diyor (boş = üretim satıcısı)");
+  return ih;
+}
+{
+  const eo = oku("Teks-Erp/docker/korumali/.env.ornek");
+  const vu = oku("Teks-Erp/src/lib/license/vendor-url.ts");
+  const gercek = lisansAdresiStatik(eo, vu);
+  check("§5e ⭐ şablonun LICENSE_SERVER_URL açıklaması vendor-url.ts ile aynı (boş = üretim satıcısı, `kapali` = çıkış yok)", gercek.length === 0, gercek.join(" | "));
+  const eski = eo.replace(/^# Satıcı lisans sunucusu kökü[\s\S]*?(?=^LICENSE_SERVER_URL=)/m, "# Satıcı lisans sunucusu kökü (boşsa dışarı çıkılmaz; motor gözlemde kalır).\n");
+  check("§5e sonda: eski açıklama → kırmızı", eski !== eo && lisansAdresiStatik(eski, vu).length > 0, eski !== eo ? "" : "MUTASYON UYGULANMADI");
 }
 
 // §5c — teslim künyesi İMZALI çıkar (2e aracı, `build-korumali-imza.ts belge`): anahtar yoksa paket

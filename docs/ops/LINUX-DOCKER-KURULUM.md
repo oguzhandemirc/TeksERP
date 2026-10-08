@@ -61,7 +61,7 @@ docker compose logs -f backend                 # [1/3] migration → [2/3] seed 
 
 ## 5. Lisans ve parmak izi
 
-- Motor derleme varsayılanıyla **gözlem** kipinde açılır (hiçbir istek engellenmez). Etkinleştirme panelden (Sistem → Lisans); satıcı adresi `.env` `LICENSE_SERVER_URL` (boşsa dışarı çıkılmaz).
+- Motor derleme varsayılanıyla **gözlem** kipinde açılır (hiçbir istek engellenmez). Etkinleştirme panelden (Sistem → Lisans); satıcı adresi `.env` `LICENSE_SERVER_URL`: boş = üretim lisans sunucusu (`https://lisans.etkiliyazilim.com`), `kapali` = dışarı hiç çıkılmaz, biçimsiz değer = adres yok (`Teks-Erp/src/lib/license/vendor-url.ts`); etkinleştirilmemiş kurulum her durumda dışarı istek atmaz.
 - Lisans deposu `lisans` biriminde (`LICENSE_DIR=/var/lib/tekserp/lisans`, 0700). **Kopyalanmaz** — başka makineye taşınan kopya parmak izini tutturmaz; taşıma satıcı akışıyla (taşıma kodu).
 - Konteynerde ölçülebilen etkenler: **F1** konağın `/etc/machine-id`'si (salt-okunur bağlanır; imaj kendi makine kimliğini TAŞIMAZ) · **F5** PostgreSQL `system_identifier` (`pg_data` birimi). **F2/F4** (DMI: `product_uuid`, `product_serial`/`board_serial`) servis kullanıcısına kapalı (root-only) ve **F3** (disk seri) overlay kök dosya sisteminde görünmez → üçü "ölçülemedi" beyan edilir, uyuşmazlık SAYILMAZ (`docs/design/LISANS-PROTOKOLU.md` karar kuralı). Konteyner sınıfında koruma = çevrimiçi tek etkin kurulum + konak makine kimliği.
 - Ölçüm: duman provasında `GET /api/license/detay` → `parmakIzi.olculen = {f1:true, f2:false, f3:false, f4:false, f5:true}`.
