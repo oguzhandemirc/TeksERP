@@ -13,6 +13,7 @@
 //!   kurulum-paket --zip <z> --hedef <d>                 setup.exe: backend paketini aç + doğrula (§1.5)
 //!   kurulum-pg --kunye <pg.json> --zip <z> --hedef <d>  setup.exe: PG paketini aç + doğrula (§1.6)
 //!   kurulum-dizin --dizin <d>                         setup.exe onarımı: açılmış sürüm dizinini yeniden ölç
+//!   tani --kok <KOK> [--veri <D>] [--ad <ad>] --cikti <z>  tanı paketi (sırsız zip; gönderilmez — `tani.rs`)
 //!
 //! Sözleşme: docs/design/GUNCELLEYICI.md §4–§13.
 use std::process::ExitCode;
@@ -79,8 +80,9 @@ fn main() -> ExitCode {
         "durum" => show_status(&args),
         "hizmet" | "hizmet-kur" | "hizmet-kaldir" => tekserp_guncelleyici::platform::service_command(&command, &args),
         "kurulum-paket" | "kurulum-pg" | "kurulum-dizin" => tekserp_guncelleyici::kurulum::komut(&command, &args),
+        "tani" => tekserp_guncelleyici::tani::komut(&args, &identity()),
         _ => Err(
-            "kullanım: tekserp-guncelleyici <hizmet|tur|onar|durum|hizmet-kur|hizmet-kaldir|kunye|kurulum-paket|kurulum-pg|kurulum-dizin> [--kok <dizin>] [--veri <dizin>] [--ad <hizmet adı>]"
+            "kullanım: tekserp-guncelleyici <hizmet|tur|onar|durum|hizmet-kur|hizmet-kaldir|kunye|kurulum-paket|kurulum-pg|kurulum-dizin|tani> [--kok <dizin>] [--veri <dizin>] [--ad <hizmet adı>]"
                 .into(),
         ),
     };

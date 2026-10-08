@@ -8,6 +8,7 @@ pub mod koruma;
 pub mod olay;
 #[cfg(unix)]
 pub mod sys;
+pub mod tani;
 
 use crate::env::{CmdOut, Env, EnvError, EnvResult, HttpResponse, Services, SvcState};
 use crate::settings::BackendEnv;

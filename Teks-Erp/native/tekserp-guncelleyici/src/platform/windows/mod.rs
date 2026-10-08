@@ -8,6 +8,8 @@ pub mod pg;
 pub mod service;
 #[cfg(windows)]
 pub mod sys;
+#[cfg(windows)]
+pub mod tani;
 
 use crate::env::{Env, EnvResult, HttpResponse};
 use std::sync::Arc;

@@ -181,6 +181,17 @@ pub fn service_command(command: &str, args: &[String]) -> Result<u32, String> {
     linux::service_command(command, args)
 }
 
+/// Tanı paketinin platform ölçümleri (W4; fail-soft): Windows'ta SCM hizmetleri, başka yerde Docker + systemd + `df`.
+#[cfg(windows)]
+pub fn tani_olcumleri(h: &crate::tani::TaniHedefi) -> Vec<crate::tani::Olcum> {
+    windows::tani::olcumler(h)
+}
+
+#[cfg(not(windows))]
+pub fn tani_olcumleri(h: &crate::tani::TaniHedefi) -> Vec<crate::tani::Olcum> {
+    linux::tani::olcumler(h)
+}
+
 #[cfg(test)]
 mod tests {
     #[test]

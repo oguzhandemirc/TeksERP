@@ -30,6 +30,7 @@ pub mod release;
 pub mod selfupdate;
 pub mod sema;
 pub mod settings;
+pub mod tani;
 pub mod tools;
 pub mod trust;
 pub mod version;
