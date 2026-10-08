@@ -1068,6 +1068,8 @@ pub struct Setup {
     pub extra_file_in_scope: bool,
     pub manifest_extra: Option<Value>,
     pub intent: Option<Value>,
+    /// Yeni paketin `runtime/tekserp-guncelleyici.exe`i (sahte ikili = künye JSON'u); `None` = paket taşımaz.
+    pub packaged_updater: Option<String>,
 }
 
 impl Default for Setup {
@@ -1079,6 +1081,7 @@ impl Default for Setup {
             extra_file_in_scope: false,
             manifest_extra: None,
             intent: Some(intent(None)),
+            packaged_updater: None,
         }
     }
 }
@@ -1145,7 +1148,10 @@ impl World {
             std::fs::write(root.join("lisans").join("hak.jws"), h).unwrap();
         }
         // Yeni paket + imzalı bildirim + işaretçiler (sunucuda)
-        let files = version_files(NEW);
+        let mut files = version_files(NEW);
+        if let Some(u) = &s.packaged_updater {
+            files.push(("runtime/tekserp-guncelleyici.exe".into(), u.clone().into_bytes()));
+        }
         let (signer, kid) = if s.package_signer_legacy { (&keys.legacy, "paket-hazirlik") } else { (&keys.package, "paket-2026") };
         let mut all = files.clone();
         all.extend(integrity_files(&files, NEW, signer, kid, s.customer));

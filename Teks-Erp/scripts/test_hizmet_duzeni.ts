@@ -345,7 +345,7 @@ function rustKayitIhlalleri(mainRs: string, contractRs: string): string[] {
 function guncelleyiciKurtarmaIhlalleri(mainRs: string, ps1: string, selfRs = "", serviceRs = ""): string[] {
   const ih: string[] = [];
   if (!/pub const RESTART_DELAYS_S: \[u64; 3\] = \[10, 10, 30\];/.test(selfRs)) ih.push("selfupdate::RESTART_DELAYS_S 10/10/30 değil");
-  if (!/restart_delays: tekserp_guncelleyici::selfupdate::RESTART_DELAYS_S\.map\(/.test(mainRs)) ih.push("hizmet-kur kurtarma gecikmelerini RESTART_DELAYS_S'ten okumuyor (ikinci kaynak)");
+  if (!/restart_delays: (?:tekserp_guncelleyici::|crate::)?selfupdate::RESTART_DELAYS_S\.map\(/.test(mainRs)) ih.push("hizmet-kur kurtarma gecikmelerini RESTART_DELAYS_S'ten okumuyor (ikinci kaynak)");
   const body = /fn body\([\s\S]*?\n\}\n/.exec(serviceRs)?.[0] ?? "";
   const ensure = /fn ensure_own_recovery\([\s\S]*?\n\}\n/.exec(serviceRs)?.[0] ?? "";
   if (!/\n\s*ensure_own_recovery\(log\);/.test(body)) ih.push("güncelleyici açılışta kendi SCM kurtarmasını ölçüp yazmıyor — kendini güncelleme 10/10/30'u sahaya taşımaz");
@@ -428,14 +428,15 @@ function hizmetBetigi(): void {
   const rMut = mainRs.replace(/restart_delays:\s*\[5,\s*5,\s*30\]/, "restart_delays: [5, 5, 60]");
   check("§9h sonda: Rust kurtarma gecikmesi değişti → kırmızı", rMut !== mainRs && rustKayitIhlalleri(rMut, contractRs).length > 0, rMut !== mainRs ? "" : "MUTASYON UYGULANMADI");
   const gSrc = join(TEKS, "native", "tekserp-guncelleyici", "src");
-  const gMain = readFileSync(join(gSrc, "main.rs"), "utf8");
+  // `hizmet-kur` L1'den beri platform arka ucunda (`platform/windows/service.rs`), `main.rs` yalnız yönlendirir.
+  const gMain = readFileSync(join(gSrc, "platform", "windows", "service.rs"), "utf8");
   const gSelf = readFileSync(join(gSrc, "selfupdate.rs"), "utf8");
-  const gSvc = readFileSync(join(gSrc, "windows", "service.rs"), "utf8");
+  const gSvc = readFileSync(join(gSrc, "platform", "windows", "service.rs"), "utf8");
   const gPs1 = readFileSync(join(KOK, "deploy", "hizmet", "guncelleyici-hizmeti.ps1"), "utf8").replace(/\r\n/g, "\n");
   const gih = guncelleyiciKurtarmaIhlalleri(gMain, gPs1, gSelf, gSvc);
   check("§9i ⭐ güncelleyici kurtarması TEK sabitte (10/10/30): hizmet-kur onu okur, hizmet açılışta kendi kaydını ona getirir, ps1 ölçümü aynısını bekler", gih.length === 0, gih.join(" | ") || "aynı");
   const gSMut = gSelf.replace("pub const RESTART_DELAYS_S: [u64; 3] = [10, 10, 30];", "pub const RESTART_DELAYS_S: [u64; 3] = [10, 30, 60];");
-  const gRMut = gMain.replace("restart_delays: tekserp_guncelleyici::selfupdate::RESTART_DELAYS_S.map(", "restart_delays: [10, 10, 30].map(");
+  const gRMut = gMain.replace("restart_delays: selfupdate::RESTART_DELAYS_S.map(", "restart_delays: [10, 10, 30].map(");
   const gVMut = gSvc.replace("\n    ensure_own_recovery(log);", "");
   const gPMut = gPs1.replace('"1/10000,1/10000,1/30000"', '"1/10000,1/30000,1/60000"');
   check("§9i sonda: Rust gecikmesi eskiye döndü → kırmızı", gSMut !== gSelf && guncelleyiciKurtarmaIhlalleri(gMain, gPs1, gSMut, gSvc).length > 0, gSMut !== gSelf ? "" : "MUTASYON UYGULANMADI");

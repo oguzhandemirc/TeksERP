@@ -26,7 +26,7 @@ use crate::tools;
 use crate::trust::TrustAnchor;
 use crate::version;
 use serde_json::{json, Map, Value};
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Duration;
@@ -80,11 +80,21 @@ pub struct Engine {
     pub log: Arc<RotatingLog>,
     /// Çalışan ikilinin yolu (kendini güncelleme); test `None` verir.
     pub own_exe: Option<PathBuf>,
+    /// Çalışan ikilinin sürümü (`kunye.surum`; test yerleşmiş yeni ikiliyi taklit etmek için değiştirir).
+    pub own_version: String,
     last_status: RefCell<Option<StatusDoc>>,
     last_progress_ms: RefCell<i64>,
     candidate: RefCell<Option<Candidate>>,
     /// Bu turun bilgisi (`durum.bilgi`): turun başında silinir, ölçüm koyar; sonraki her durum yazımı taşır.
     notice: RefCell<Option<Notice>>,
+    /// Sağlıklı tur ölçütü (§4.2 madde 3): bu turda kira/HAK okunup karar verildi · ardından `durum.json` yazıldı.
+    decided: Cell<bool>,
+    status_after_decision: Cell<bool>,
+    healthy_marked: Cell<bool>,
+    /// Önce-güncelleyici sınaması sonuçsuz kalan paket (sürüm:paketId) — aynı süreçte her turda yeniden ölçülmez.
+    self_checked: RefCell<Option<String>>,
+    /// DONDUR'da yenilemenin olmama nedeni: yalnız değişince günlüğe yazılır (her tur aynı satır olmasın).
+    frozen_note: RefCell<Option<String>>,
 }
 
 struct Inputs {
@@ -151,10 +161,16 @@ impl Engine {
             anchor,
             log,
             own_exe,
+            own_version: env!("CARGO_PKG_VERSION").to_string(),
             last_status: RefCell::new(None),
             last_progress_ms: RefCell::new(0),
             candidate: RefCell::new(None),
             notice: RefCell::new(None),
+            decided: Cell::new(false),
+            status_after_decision: Cell::new(false),
+            healthy_marked: Cell::new(false),
+            self_checked: RefCell::new(None),
+            frozen_note: RefCell::new(None),
         }
     }
 
@@ -166,8 +182,9 @@ impl Engine {
         doc.at = timefmt::iso_millis(self.now());
         doc.heartbeat = doc.at.clone();
         doc.liveness_threshold_s = self.liveness_threshold(&doc);
-        if let Err(e) = ipc::write_status(self.env.fs.as_ref(), &self.layout, &doc) {
-            self.log.warn(&format!("durum.json yazılamadı: {e}"));
+        match ipc::write_status(self.env.fs.as_ref(), &self.layout, &doc) {
+            Ok(()) => self.status_after_decision.set(self.decided.get()),
+            Err(e) => self.log.warn(&format!("durum.json yazılamadı: {e}")),
         }
         *self.last_status.borrow_mut() = Some(doc);
     }
@@ -286,10 +303,31 @@ impl Engine {
         }
     }
 
-    /// Bir tur. `stop()` doğru olursa uzun işler (indirme) güvenli noktada bırakılır.
+    /// Bir tur. `stop()` doğru olursa uzun işler (indirme) güvenli noktada bırakılır. Kendini güncellemeyle gelen
+    /// ikili, İLK SAĞLIKLI turunda doğrulanır (§4.2 madde 3: kilit alındı · günlük okundu · kira/HAK okundu · karar
+    /// verildi · `durum.json` yazıldı) — turun yalnız bitmesi yetmez.
     pub fn tick(&self, stop: &dyn Fn() -> bool) -> TickResult {
-        let idle = |s: u64| TickResult::Idle(Duration::from_secs(s));
         *self.notice.borrow_mut() = None;
+        self.decided.set(false);
+        self.status_after_decision.set(false);
+        let r = self.tick_inner(stop);
+        let healthy = self.decided.get() && self.status_after_decision.get();
+        if healthy && r != TickResult::RestartForSelfUpdate && !self.healthy_marked.get() {
+            if let Some(own) = &self.own_exe {
+                selfupdate::mark_healthy(&self.env, &self.layout, own, &self.own_version);
+            }
+            self.healthy_marked.set(true);
+        }
+        r
+    }
+
+    /// Bu süreçte sağlıklı tur ölçütünü karşılayan bir tur oldu mu (§4.2 madde 3).
+    pub fn verified(&self) -> bool {
+        self.healthy_marked.get()
+    }
+
+    fn tick_inner(&self, stop: &dyn Fn() -> bool) -> TickResult {
+        let idle = |s: u64| TickResult::Idle(Duration::from_secs(s));
         if let Err(m) = self.private_area_ok() {
             self.log.error(&m);
             self.env.events.event(tekserp_hizmet::logfile::Level::Error, &m);
@@ -445,6 +483,21 @@ impl Engine {
         // Başarılı PG adımının ardından backend adımı bu turda koşmadıysa (süreç o arada öldü) iş sürer.
         let state = if outcome == OpOutcome::Succeeded && product == "pg" { State::Waiting } else { state };
         self.write_status(self.doc(&f, state, code, &message));
+        // Son bilinen iyi (§4.2 madde 2): denemeyi bitiren ikili kanıtlanır; kanıtsız yeni ikili HATA'da geri döner.
+        if let (Some(own), true) = (self.own_exe.as_ref(), last.as_ref().is_some_and(|l| l.attempt_end)) {
+            let proven = !matches!(outcome, OpOutcome::Failed(_));
+            if let selfupdate::AfterAttempt::Reverted(v) =
+                selfupdate::after_attempt(&self.env, &self.layout, own, &self.own_version, proven)
+            {
+                let m = format!(
+                    "yeni güncelleyici {} ilk denemesini HATA ile bitirdi — son bilinen iyi {v} geri kondu, işlemi o sürdürür",
+                    self.own_version
+                );
+                self.log.error(&m);
+                self.env.events.event(tekserp_hizmet::logfile::Level::Error, &m);
+                return TickResult::RestartForSelfUpdate;
+            }
+        }
         if outcome == OpOutcome::Succeeded && product == "backend" {
             if let Some(t) = self.maybe_self_update(inputs) {
                 return t;
@@ -457,15 +510,60 @@ impl Engine {
         let own = self.own_exe.as_ref()?;
         let (_, current_dir) = self.installed_version()?;
         let lic = policy::load(self.env.fs.as_ref(), &inputs.backend.license_dir, &self.anchor);
+        // AK-3: lisans yaptırımı (K1) varken hiçbir şey yenilenmez — güncelleyici de.
+        if lic.frozen {
+            return None;
+        }
         let trust = policy::package_trust(&self.anchor, &lic, PackageMode::Yerlesik, self.now() as f64);
-        match selfupdate::stage(&self.env, &self.layout, own, &current_dir, &trust) {
-            Ok(true) => {
+        match selfupdate::stage_from(&self.env, &self.layout, own, &self.own_version, &current_dir, &trust, None) {
+            Ok(Some(_)) => {
                 self.log.info("güncelleyicinin yeni ikilisi yerleştirildi — yeniden başlatılıyor");
                 Some(TickResult::RestartForSelfUpdate)
             }
-            Ok(false) => None,
+            Ok(None) => None,
             Err(e) => {
                 self.log.warn(&format!("kendini güncelleme yapılamadı (sonraki başarılı işlemde yeniden denenir): {e}"));
+                None
+            }
+        }
+    }
+
+    /// Önce güncelleyici (§4.2 madde 1): aday paket HAZIR (doğrulandı, açıldı) ve paketteki ikili çalışandan YENİYSE
+    /// backend işleminden ÖNCE kendini yeniler; yeni ikili aynı paketi yeniden doğrular ve işlemi kendisi yürütür.
+    /// Açık işlem yokken çağrılır (yarım işlem turun başında sürdürülür); kaynak `surumler/<aday>`. Kendini güncelleme
+    /// düşerse backend yolu BLOKLANMAZ (günlüğe yazılır, iş eski ikiliyle sürer). K1'de hiçbir şey yenilenmez (AK-3).
+    fn updater_first(&self, f: &Frame, lic: &LicenseView, trust: &PackageTrust, m: &ReleaseManifest, state: State) -> Option<TickResult> {
+        let own = self.own_exe.as_ref()?;
+        if lic.frozen {
+            return None;
+        }
+        if m.updater.as_ref().is_some_and(|u| version::compare(&u.surum, &self.own_version) != Some(std::cmp::Ordering::Greater)) {
+            return None;
+        }
+        let key = format!("{}:{}", m.surum, m.paket.package_id);
+        if self.self_checked.borrow().as_deref() == Some(key.as_str()) {
+            return None;
+        }
+        let dir = self.layout.version_dir(&m.surum);
+        let announced = m.updater.as_ref().map(|u| u.surum.as_str());
+        match selfupdate::stage_from(&self.env, &self.layout, own, &self.own_version, &dir, trust, announced) {
+            Ok(Some(new)) => {
+                let message = format!(
+                    "güncelleyici {} → {new}: {} işleminden ÖNCE kendini yeniledi — paketi yeni ikili yeniden doğrulayıp yürütecek",
+                    self.own_version, m.surum
+                );
+                self.log.info(&format!("{}: {message}", codes::GUNCELLEYICI_ONCE));
+                *self.notice.borrow_mut() = Some(Notice { code: codes::GUNCELLEYICI_ONCE.into(), message: message.clone() });
+                self.write_status(self.doc(f, state, None, &message));
+                Some(TickResult::RestartForSelfUpdate)
+            }
+            Ok(None) => {
+                *self.self_checked.borrow_mut() = Some(key);
+                None
+            }
+            Err(e) => {
+                self.log.warn(&format!("önce-güncelleyici yapılamadı ({}): {e} — backend yolu eski ikiliyle sürer", m.surum));
+                *self.self_checked.borrow_mut() = Some(key);
                 None
             }
         }
@@ -531,6 +629,7 @@ impl Engine {
             now_ms: now as f64,
         };
         let pre = decision::decide(&base_input);
+        self.decided.set(true);
         let last = self.last_op(journal);
         if let Some(l) = last.as_ref().filter(|l| l.attempt_end) {
             f.last = Some(l.result.clone());
@@ -563,8 +662,15 @@ impl Engine {
                 (Kind::Frozen, Some((c, m))) if pre.neden.as_deref() == Some("KIRA_YOK") => (Some(*c), m.clone()),
                 _ => (None, format!("{}{}", pre.karar.label(), pre.neden.as_deref().map(|n| format!(" / {n}")).unwrap_or_default())),
             };
+            let frozen_by_policy = pre.karar == Kind::Frozen && pre.neden.as_deref() == Some("POLITIKA");
             f.decision = Some(pre);
             let state = self.resting_state(last.as_ref(), &installed, None);
+            if let (true, Some(p)) = (frozen_by_policy, pol.as_ref()) {
+                let token = intent.as_ref().and_then(|i| i.token_at(now));
+                if let Some(t) = self.frozen_self_update(inputs, &lic, &p.0, &base_input, token, &f, state, stop) {
+                    return t;
+                }
+            }
             self.write_status(self.doc(&f, state, code, &message));
             return idle;
         }
@@ -592,16 +698,7 @@ impl Engine {
                 return idle;
             }
         };
-        let pointer = match pol.as_ref().and_then(|p| p.0.target.clone()) {
-            Some(t) => Pointer {
-                chained: release::release_file_path(&channel, &t, release::CHAINED_RELEASE_MANIFEST_FILE),
-                legacy: release::release_file_path(&channel, &t, release::RELEASE_MANIFEST_FILE),
-                family: Some(release::ChainedFamily::Surum),
-                kids: Vec::new(),
-                kids_from_latest: true,
-            },
-            None => Pointer::single(release::chained_release_pointer_path(&channel), release::release_pointer_path(&channel)),
-        };
+        let pointer = Self::pointer_for(&channel, pol.as_ref().and_then(|p| p.0.target.clone()));
         let m = match self.candidate(&server, &pointer, token.as_deref(), &trust, &channel, CANDIDATE_TTL_MS, &token_problem) {
             Ok(m) => m,
             Err((code, msg)) => {
@@ -701,6 +798,10 @@ impl Engine {
             self.write_status(self.doc(&f, State::Waiting, Some(code), &msg));
             return idle;
         }
+        // Paket HAZIR: karar KUR · ONAY_BEKLIYOR · PENCERE_BEKLIYOR farketmez, önce güncelleyici.
+        if let Some(t) = self.updater_first(&f, &lic, &trust, &m.doc, State::Ready) {
+            return t;
+        }
         if d.karar != Kind::Install {
             let mut doc = self.doc(&f, State::Ready, None, &format!("{} hazır; {}", m.doc.surum, d.karar.label()));
             doc.planned = d.aralik.as_ref().filter(|_| d.karar == Kind::AwaitingWindow).map(|a| a.baslangic.clone());
@@ -743,6 +844,88 @@ impl Engine {
         }
         let outcome = self.run_backend(inputs, journal, &m.doc, &installed, &current_dir, approval_id, used_approval.cloned());
         self.after_op(inputs, journal, outcome, tick_s)
+    }
+
+    /// Aday işaretçisi: sabitlenmiş sürüm (`hedefSurum`) kendi dizininden, yoksa kanalın son sürümü.
+    fn pointer_for(channel: &str, target: Option<String>) -> Pointer {
+        match target {
+            Some(t) => Pointer {
+                chained: release::release_file_path(channel, &t, release::CHAINED_RELEASE_MANIFEST_FILE),
+                legacy: release::release_file_path(channel, &t, release::RELEASE_MANIFEST_FILE),
+                family: Some(release::ChainedFamily::Surum),
+                kids: Vec::new(),
+                kids_from_latest: true,
+            },
+            None => Pointer::single(release::chained_release_pointer_path(channel), release::release_pointer_path(channel)),
+        }
+    }
+
+    /// AK-3: `DONDUR` backend sürümünü dondurur, güncelleyiciyi DEĞİL. İmzalı bildirimin `guncelleyici` bloğu çalışandan
+    /// YENİ bir ikili ilan ediyorsa ve aday dondurma dışında kurulabilir olurdu (HAK · bakım · kaynak sınırı · PG aynen;
+    /// kip ONAYLI sayılır) paket hazırlanır ve ikili ondan yenilenir; backend'e dokunulmaz. Blok yoksa paket indirilmez.
+    /// Her aksama günlüğe yazılır, durum DONDURULDU kalır. K1 (`YAPTIRIM`) buraya hiç gelmez.
+    #[allow(clippy::too_many_arguments)]
+    fn frozen_self_update(
+        &self,
+        inputs: &Inputs,
+        lic: &LicenseView,
+        pol: &UpdatePolicy,
+        base: &decision::Input,
+        token: Option<&str>,
+        f: &Frame,
+        state: State,
+        stop: &dyn Fn() -> bool,
+    ) -> Option<TickResult> {
+        self.own_exe.as_ref()?;
+        if lic.frozen {
+            return None;
+        }
+        let skip = |why: String| -> Option<TickResult> {
+            if self.frozen_note.borrow().as_deref() != Some(why.as_str()) {
+                self.log.info(&format!("DONDUR: güncelleyici yenilemesi yok — {why}"));
+                *self.frozen_note.borrow_mut() = Some(why);
+            }
+            None
+        };
+        let channel = lic.channel.clone()?;
+        let server = inputs.settings.server_base().ok()?;
+        let Some(token) = token else { return skip("indirme belirteci yok".into()) };
+        let mut trust = policy::package_trust(&self.anchor, lic, PackageMode::Kabul, base.now_ms);
+        let pointer = Self::pointer_for(&channel, pol.target.clone());
+        let no_token = || fail(codes::BELIRTEC_YOK, "belirteç yok");
+        let m = match self.candidate(&server, &pointer, Some(token), &trust, &channel, CANDIDATE_TTL_MS, &no_token) {
+            Ok(m) => m,
+            Err((code, msg)) => return skip(format!("aday okunamadı ({code}): {msg}")),
+        };
+        let newer =
+            m.doc.updater.as_ref().is_some_and(|u| version::compare(&u.surum, &self.own_version) == Some(std::cmp::Ordering::Greater));
+        if !newer {
+            return None;
+        }
+        let thawed = UpdatePolicy { kip: decision::Mode::Approval, ..pol.clone() };
+        let mut input = decision::Input { politika: Some(&thawed), aday: Some(&m.doc), onay: None, ..base.clone() };
+        let mut d = decision::decide(&input);
+        let measured;
+        if d.karar == Kind::NotEligible && d.neden.as_deref() == Some("PG_OLCULEMEDI") {
+            measured = self.installed_pg(inputs).0;
+            input.pg = measured.as_ref();
+            d = decision::decide(&input);
+        }
+        if !matches!(d.karar, Kind::Install | Kind::AwaitingApproval | Kind::AwaitingWindow) {
+            return skip(format!(
+                "{} dondurma dışında da kurulamazdı ({}{})",
+                m.doc.surum,
+                d.karar.label(),
+                d.neden.map(|n| format!(" / {n}")).unwrap_or_default()
+            ));
+        }
+        if let Err((code, msg)) = self.disk_check(&m.doc) {
+            return skip(format!("{code}: {msg}"));
+        }
+        if let Err((code, msg)) = self.prepare_backend(f, &server, &channel, &inputs.backend.license_dir, &mut trust, &m.doc, token, stop) {
+            return skip(format!("paket hazırlanamadı ({code}): {msg}"));
+        }
+        self.updater_first(f, lic, &trust, &m.doc, state)
     }
 
     /// Yapılacak iş yokken gösterilen durum: son deneme bu kurulumun sürümüne BAŞARILI geçtiyse ya da

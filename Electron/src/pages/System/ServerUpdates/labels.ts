@@ -55,6 +55,7 @@ const RESULT_CODES: Record<string, string> = {
 /** `yerel.bilgi` — sorun DEĞİL ("Sorun" satırına girmez, `hataKodu` sözlüğünden ayrı). */
 const NOTICES: Record<string, string> = {
   SEMA_OLCULEMEDI: "Şema hizası ölçülemedi — güncelleme bu yüzden durdurulmadı (göç adımı veritabanını ayrıca denetler)",
+  GUNCELLEYICI_ONCE: "Güncelleme programı önce kendini yeniledi — güncellemeyi yeni sürümü yürütecek",
 };
 
 const RESULTS: Record<UpdateResultKind, string> = {
