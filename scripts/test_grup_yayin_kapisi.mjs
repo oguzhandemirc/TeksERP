@@ -249,6 +249,10 @@ function ortam({ betik = null, capa = TEST_CAPA } = {}) {
   dosyaKopya(agac, 'Electron/package.json', `${JSON.stringify({ name: 'tekserp-panel', version: SURUM })}\n`);
   dosyaKopya(agac, '.gitignore', 'Electron/release/\n');
   git(agac, 'init', '-q');
+  // Yayın betiği sürüm etiketini deponun kimliğiyle atar (yayın makinesinde var); HOME geçici olduğundan
+  // kimlik depoya yazılır — yoksa alan adsız konakta (CI koşucusu) `git tag -a` düşer ve §3 kırmızı olur.
+  git(agac, 'config', 'user.email', 'bekci@test');
+  git(agac, 'config', 'user.name', 'bekci');
   git(agac, 'add', '-A');
   git(agac, 'commit', '-q', '-m', 'taban');
   const bas = git(agac, 'rev-parse', 'HEAD');

@@ -38,6 +38,12 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
+          cache: npm
+          cache-dependency-path: Teks-Erp/package-lock.json
+      # test_grup_yayin_kapisi §8 gerçek imza aracını (Teks-Erp/scripts/panel-imza.ts) tsx ile koşturur.
+      - name: Teks-Erp bağımlılıkları (yayın kapısı §8 gerçek imza aracı)
+        run: npm ci
+        working-directory: Teks-Erp
       - name: Doküman tutarlılık kontrolü
         run: node scripts/check-docs.mjs
       # Migration hijyeni — asıl değeri YERELDE (untracked migration/test yakalar).
