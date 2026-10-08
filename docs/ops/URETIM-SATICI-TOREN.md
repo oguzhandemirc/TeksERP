@@ -269,6 +269,65 @@ ls ~/toren-gecici 2>&1        # "No such file or directory" görmelisin
 | `istemci-yedek-dogrula` RED | doğru disk görüntüsü bağlı mı, yedek parolası doğru mu; hâlâ açılmıyorsa yedek GEÇERSİZ sayılır → yeni tören (birincil duruyorsa yayın sürer) |
 | Birincil kayboldu/bozuldu | yayın yedekle sürer (tasarım §3.6); yeni çift sonraki törende. **Çalınma:** `ist-*` iptali henüz tören adımı değil (kod borcu, tasarım §7 I8) — yöneticiye bildir |
 
+## 10. Dönem töreni — PAKET (backend paketi imzası) kısmı: `donem --paket`
+
+> **Durum (2026-10-08):** araç hazır ve bekçide uçtan uca koşuldu (`test_uretim_toren` §9; tasarım [`PAKET-ANAHTARI-KOK-ALTINDA.md`](../design/PAKET-ANAHTARI-KOK-ALTINDA.md) §7 D6). Gerçek tören YAPILMADI. §8'in yerine geçmez: `--paket` verilirse §8'in ALT/ara/İNDİRME işi AYNI komutta yapılır; `--istemci` ile birlikte de verilebilir (§9).
+
+**Ne üretir (sade dille):** fabrikaya giden backend paketlerini imzalayan iki anahtar — **birincil** (Mac'te, her sürüm imzasında kullanılır) ve **yedek** (yalnız yedek biriminde — Drive'a yüklenen disk görüntüsü). İkisine kökün imzaladığı birer sertifika (395 gün). Kayıp/çalınan anahtarların listesi (dağıtım iptali). Sahada yayında olan backend sürümlerinin imzası yeni anahtarla yenilenir — paketin içi değişmez, yeni imzalı kopyalar Mac'te ayrı bir dizine yazılır.
+
+**Parolalar (hepsi birbirinden FARKLI, en az 12 karakter):** kök (kâğıttaki) · ara imzacı · paket (birincil) · yedek. `--istemci` ile birlikte koşulursa istemci parolası da sorulur ve **yedek parolası İKİSİNE ORTAKTIR** (tek disk görüntüsü, tek yedek parolası). Paket parolası bir kez sorulur, tören onu imza araçlarına kendisi verir; kök parolası paket aracına hiç gitmez.
+
+### 10.1 Hazırlık
+
+1. §1.3'teki gibi temiz ağaç (`origin/main`; `Teks-Erp` ve `satici/sunucu`'da `npm ci`) — tören bunu ölçer.
+2. **Yedek birimi:** §9.1 adım 2'deki disk görüntüsü (`--istemci` ile birlikteyse AYNI görüntü). Mac'in kendi diskindeyse tören durur.
+3. **Parola dosyaları (isteğe bağlı):** §9.1 adım 3'teki gibi; ek olarak `~/toren-gecici/paket.txt` (tek satır). Dosya vermezsen parola terminalde gizli sorulur.
+4. **Yayındaki kopyalar:** sahada yayında olan backend sürümlerini ve PG künyelerini indir, şu düzende bir dizine koy (`<grup>` = test · oncu · genel; §9'un `--yayindakiler` dizini ile AYNI dizin olabilir, `panel/` ve `ota/` burada yok sayılır):
+   - `<grup>/backend/<sürüm>/` → `surum-zincir.json` (yoksa `surum.json`) **ve** içinde adı geçen zip
+   - `<grup>/backend/pg/<sürüm>-<derleme>/` → `pg-zincir.json` (yoksa `pg.json`)
+
+   Yayında hiç backend yoksa dizin yerine `--paket-yayinda-yok`.
+
+### 10.2 Töreni koş
+
+```bash
+node deploy/satici/uretim-toren.mjs donem --paket --yedek-usb=/Volumes/<yedek birimi> --paket-yayindakiler=<indirilen dizin> \
+  --kok-parola-dosyasi=$HOME/toren-gecici/kok.txt --ara-parola-dosyasi=$HOME/toren-gecici/ara.txt \
+  --paket-parola-dosyasi=$HOME/toren-gecici/paket.txt --yedek-parola-dosyasi=$HOME/toren-gecici/yedek.txt
+```
+
+Beklenen: tek başına `--paket` ile adımlar 8–11 (birincil anahtar Mac'te · yedek DOĞRUDAN yedek birimine · dağıtım iptali · yeniden imza + yedeğin açılış ölçümü) ve 12 (VDS paketi), sonunda `✅`. `--istemci` ile birlikte: 8–11 istemci, 12–15 paket, 16 VDS paketi. **Hata olursa hedefe hiçbir şey yazılmaz.** Bir anahtar kaybolduysa/çalındıysa aynı komuta `--paket-iptal=<kid> --neden="<kısa neden>"` eklenir (10.5).
+
+Çıktı (Mac, `~/.tekserp/satici-uretim/donemler/<damga>/`):
+- `paket/` — birincil anahtar + sertifikası, `YEDEK-IZI.json` (yalnız Mac'te), `yeniden-imza/<grup>/backend/<sürüm>/` (yeni zip `<ad>-<kid>.zip` + `surum-zincir.json`) ve `…/backend/pg/<sürüm>-<derleme>/pg-zincir.json`.
+- `vds-paketi/paket/` — yalnız iki AÇIK sertifika + `paket-iptal.json`; `vds-paketi/ice-aktar.json` dağıtım iptalini de taşır. VDS'e aktarma §8 adım 3–9'daki gibi.
+- Yedek biriminde `tekserp-paket-yedek/<damga>/` (yedek anahtar + sertifika + `YEDEK-KUNYE.json`); önceki yılın PAKET yedeği oradan silinir.
+
+### 10.3 Doğrula ve yedek birimini sına
+
+```bash
+node deploy/satici/uretim-toren.mjs dogrula
+node deploy/satici/uretim-toren.mjs paket-yedek-dogrula --yedek-usb=/Volumes/<yedek birimi> --yedek-parola-dosyasi=$HOME/toren-gecici/yedek.txt
+```
+
+- `dogrula`: Mac'te yedek PAKET anahtarının izi OLMAMALI (varsa kırmızı — o kopyayı `rm -P` ile sil).
+- `paket-yedek-dogrula`: yedek anahtar yedek parolasıyla AÇILIYOR ve künyedekiyle aynı mı. **Yılda bir (tören arasında da) tekrarla.**
+
+### 10.4 Sonrası
+
+1. Paket parolası → parola yöneticisi. Parola dosyalarını sil (§9.5), disk görüntüsünü çıkar, Drive'a yükle.
+2. **Yeniden imzalı sürümler henüz YAYINA KONMAZ** (tasarım §7 D8'e dek kapalı). Yayındaki sürüm dizini ezilmez: yeni zip ve `surum-zincir.json` ileride yeni adlarla yanına eklenecek; o adım araç olarak gelene dek dosyalar Mac'te bekler.
+3. Yeni sürüm imzası artık birincil PAKET anahtarıyla (`build-korumali-imza.ts zip --zincir-anahtar=<birincil>`; `backend-bildirim` aynı anahtarla) — tören ekranı tam yolu basar.
+
+### 10.5 Sorun giderme
+
+| Belirti | Ne yap |
+|---|---|
+| `--paket-yayindakiler … zip'i de indir` | sürüm dizinine bildirimin gösterdiği zip'i de koy |
+| `Paket ve yedek parolaları … FARKLI olmalı` | dört parola birbirinden farklı olmalı; yeniden koş |
+| `paket-yedek-dogrula` RED | doğru görüntü bağlı mı, yedek parolası doğru mu; hâlâ açılmıyorsa yedek GEÇERSİZ → sonraki törende yeni çift (birincil durdukça imza sürer) |
+| Birincil kayboldu, parolası unutuldu ya da çalındı | yedekle imzaya devam (görüntüyü bağla, `--zincir-anahtar=<yedek dosyası>`, yedek parolası); en kısa sürede yeni tören `--paket-iptal=<kayıp kid>` ile — eski anahtarın imzaladıkları dağıtım iptaliyle reddedilir, yayındakiler yeni anahtarla yeniden imzalanır |
+
 ## Ek A — yönetici için teknik özet
 
 - **Alt süreçler:** kök/ALT/İNDİRME/sırlar `satici/sunucu/scripts/anahtar.ts` (`kok-uret` · `alt-uret` · `indirme-uret` · `sirlar-uret`), PAKET = `PAKET_KOMUTU` (tek satır, törenin başında: `Teks-Erp/scripts/build-korumali-imza.ts anahtar-uret --kid={kid} --dizin={dizin} --json` — arayüz değişirse yalnız bu satır; `--paket-komutu="…"` koşum başına ezer ve ekranda `varsayılan DEĞİL` diye görünür), modül `satici/sunucu/scripts/modul-anahtari.ts uret` (DB'siz), yedek alıcıları + sınama + kurtarma arşivi `Teks-Erp/scripts/yedek-sifrele.ts`. Kurtarma alıcısı `--parolali --parola-stdin` ile KÖK parolasına sarılır.
