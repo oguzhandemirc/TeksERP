@@ -727,3 +727,81 @@ export interface FleetRow {
   readonly raporZamani: string | null;
   readonly sonSonuc: { readonly olay: string; readonly ayrinti: Record<string, unknown> | null; readonly createdAt: string } | null;
 }
+
+// ---------------------------------------------------------------- güncelleme dalgası (F1a/F1b)
+
+/** Sonuç sayaçları (sunucu `ResultCounts`, update-wave.service.ts). */
+export interface WaveResultCounts {
+  readonly kurulum: number;
+  readonly TAMAMLANDI: number;
+  readonly GERI_DONDU: number;
+  readonly BASARISIZ: number;
+  readonly BEKLIYOR: number;
+}
+
+/** Sayaçlar + uyarı + ek onay gereği (sunucu `WaveTally`); hesap sunucuda, arayüz yalnız gösterir. */
+export interface WaveTally {
+  readonly asamalar: readonly (WaveResultCounts & { readonly asama: number })[];
+  readonly dalgada: WaveResultCounts;
+  readonly hata: number;
+  readonly uyariAcik: boolean;
+  readonly bildirimYuzdesi: number | null;
+  readonly ilerletmeEkOnayIster: boolean;
+}
+
+/** `guncelleme_dalgasi` satırı (ilerlet/geri çek yanıtındaki `dalga`). */
+export interface UpdateWaveRow {
+  readonly id: string;
+  readonly kanalKodu: string;
+  readonly surum: string;
+  readonly oncekiSurum: string;
+  readonly asama: number;
+  readonly createdAt: string;
+  readonly updatedAt: string;
+}
+
+/** `GET /guncelleme-dalgalari` satırı (sunucu `listWaves`). */
+export interface UpdateWave extends UpdateWaveRow {
+  readonly yururlukte: boolean;
+  readonly sayac: WaveTally;
+}
+
+/** Dalga üyesi (sunucu `WaveMemberRow`). */
+export interface WaveMember {
+  readonly id: string;
+  readonly kurulumId: string;
+  readonly kova: number;
+  readonly girisAsamasi: number;
+  readonly dalgada: boolean;
+  readonly kuruluSurum: string | null;
+  readonly sonuc: string;
+  readonly kaynak: "DEFTER" | "YOKLAMA" | null;
+}
+
+/** Dalga karar defteri satırı (`guncelleme_dalgasi_kaydi`). */
+export interface WaveLedgerRow {
+  readonly id: string;
+  readonly dalgaId: string;
+  readonly olay: string;
+  readonly oncekiAsama: number | null;
+  readonly yeniAsama: number;
+  readonly sebep: string;
+  readonly ekOnay: boolean;
+  readonly ayrinti: Record<string, unknown> | null;
+  readonly yapan: string;
+  readonly createdAt: string;
+}
+
+/** `GET /guncelleme-dalgalari/:id` (sunucu `waveDetail`). */
+export interface UpdateWaveDetail extends UpdateWave {
+  readonly uyeler: readonly WaveMember[];
+  readonly gecmis: readonly WaveLedgerRow[];
+}
+
+/** İlerlet / geri çek yanıtı. */
+export interface WaveStageChange {
+  readonly dalga: UpdateWaveRow;
+  readonly kayit: WaveLedgerRow;
+  /** Tavanı değişip hemen haber verilen kurulum sayısı. */
+  readonly zil: number;
+}

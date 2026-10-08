@@ -66,6 +66,16 @@ import {
   WINDOW_END_PATTERN,
   WINDOW_START_PATTERN,
 } from "../portal/update/labels";
+import {
+  SECOND_CONFIRMATION_CODE,
+  WAVE_EVENT_LABEL,
+  WAVE_GROUPS,
+  WAVE_REPORTED_MIN_PERCENT,
+  WAVE_RESULT_LABEL,
+  WAVE_RESULT_TONE,
+  WAVE_SOURCE_LABEL,
+  WAVE_STAGE_THRESHOLDS,
+} from "../portal/update/wave";
 
 const WEB_SRC = path.resolve(__dirname, "..");
 const SERVER_SRC = path.resolve(__dirname, "../../../sunucu/src");
@@ -199,7 +209,7 @@ describe("katalog ekran adları", () => {
 
   it("arayüzün dallandığı hata kodları sunucuda tanımlı", () => {
     const codes = listStrings(read("lib/errors.ts"), "export const PORTAL_ERROR_CODES");
-    for (const c of ["OTURUM_YOK", "GIRIS_BASARISIZ", "IMZA_PAROLASI_HATALI", "IMZA_PAROLASI_KILITLI"]) expect(codes).toContain(c);
+    for (const c of ["OTURUM_YOK", "GIRIS_BASARISIZ", "IMZA_PAROLASI_HATALI", "IMZA_PAROLASI_KILITLI", SECOND_CONFIRMATION_CODE]) expect(codes).toContain(c);
     // "Tekrar deneyin" (işlem kimliği yapışır) ve giriş hız sınırı protokolün ortak kod listesinde yaşar.
     const vendorCodes = listStrings(read("lisans-protokol/uclar.ts"), "export const VENDOR_ERROR_CODES");
     expect(vendorCodes).toContain(RETRY_CONFLICT_CODE);
@@ -497,9 +507,42 @@ describe("güncelleme (Dağıtım v2) sözlüğü ve desenleri aynası", () => {
   });
 });
 
+describe("güncelleme dalgası (F1b) aynası — services/update-wave.service.ts", () => {
+  const service = read("services/update-wave.service.ts");
+  const numbers = (name: string) => {
+    const m = new RegExp(`export const ${name} = \\[([^\\]]*)\\]`).exec(service);
+    if (!m) throw new Error(`${name} bulunamadı`);
+    return m[1]!.split(",").map((x) => Number(x.trim()));
+  };
+  const twoWay = (values: readonly string[], map: Record<string, string>) => {
+    expect(values.length).toBeGreaterThan(1);
+    expect(values.filter((v) => !map[v])).toEqual([]);
+    expect(Object.keys(map).filter((k) => !values.includes(k))).toEqual([]);
+  };
+
+  it("dalgalı gruplar · aşama eşikleri · sonuç bildirme eşiği aynı", () => {
+    expect([...WAVE_GROUPS]).toEqual(listStrings(service, "export const WAVE_GROUPS"));
+    expect([...WAVE_STAGE_THRESHOLDS]).toEqual(numbers("WAVE_STAGE_THRESHOLDS"));
+    const m = /export const WAVE_REPORTED_MIN_PERCENT = (\d+);/.exec(service);
+    expect(m, "WAVE_REPORTED_MIN_PERCENT bulunamadı").not.toBeNull();
+    expect(WAVE_REPORTED_MIN_PERCENT).toBe(Number(m![1]));
+  });
+
+  it("sonuç · karar defteri olayı · sonuç kaynağı ekran adları iki yönlü", () => {
+    twoWay(listStrings(service, "export const WAVE_RESULTS"), WAVE_RESULT_LABEL);
+    twoWay(listStrings(service, "export const WAVE_RESULTS"), WAVE_RESULT_TONE);
+    const events = /export const WAVE_EVENTS = \{([^}]*)\}/.exec(service);
+    expect(events, "WAVE_EVENTS bulunamadı").not.toBeNull();
+    twoWay([...events![1]!.matchAll(/"([A-Z_]+)"/g)].map((x) => x[1]!), WAVE_EVENT_LABEL);
+    const source = /readonly kaynak: ([^;]+);/.exec(service);
+    expect(source, "WaveMemberRow.kaynak bulunamadı").not.toBeNull();
+    twoWay([...source![1]!.matchAll(/"([A-Z_]+)"/g)].map((x) => x[1]!), WAVE_SOURCE_LABEL);
+  });
+});
+
 describe("arayüzün çağırdığı her uç sunucuda var", () => {
   // Satıcı tablosu başka dosyadan yayılan parçaları da taşır (`...SUPPORT_PORTAL_ROUTES`): her yayılan tablo bu listede.
-  const VENDOR_ROUTE_FILES = ["http/portal-routes.ts", "http/key-routes.ts", "http/hardware-routes.ts", "http/distribution-routes.ts", "http/support-routes.ts", "http/error-report-routes.ts", "http/notification-routes.ts"];
+  const VENDOR_ROUTE_FILES = ["http/portal-routes.ts", "http/key-routes.ts", "http/hardware-routes.ts", "http/distribution-routes.ts", "http/support-routes.ts", "http/error-report-routes.ts", "http/notification-routes.ts", "http/update-wave-routes.ts"];
   const vendor = [...VENDOR_ROUTE_FILES.flatMap(serverRoutes), ...sessionRoutes()];
   const dealer = [...serverRoutes("http/dealer-routes.ts"), ...sessionRoutes()];
   const calls = clientCalls();
@@ -517,6 +560,7 @@ describe("arayüzün çağırdığı her uç sunucuda var", () => {
     expect(calls.length).toBeGreaterThan(40);
     expect(calls.some((c) => c.key === "POST /kurulumlar/:p/agir-yaptirim")).toBe(true);
     expect(calls.some((c) => c.key === "PATCH /kanallar/:p")).toBe(true);
+    expect(calls.some((c) => c.key === "POST /guncelleme-dalgalari/:p/ilerlet")).toBe(true);
   });
 
   it("her çağrının yolu kaynakta LİTERAL (değişkenden gelen yol ya da eylem parçası ölçülemez)", () => {
