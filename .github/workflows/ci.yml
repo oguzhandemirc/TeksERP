@@ -105,6 +105,9 @@ jobs:
       # 3.2: yeni indirme kökeni (indir.etkiliyazilim.com) compose + nginx — eski siteden ayrı, kenar zinciri CF birebir.
       - name: İndirme kökeni (3.2)
         run: node scripts/test_indir_sunucusu.mjs && node scripts/test_indir_sunucusu.mjs --sonda
+      # Play K2: herkese açık gizlilik sayfası (tekserp.etkiliyazilim.com/gizlilik) — kaynak ↔ html, compose, nginx, kablolama.
+      - name: Gizlilik sayfası (Play K2)
+        run: node scripts/test_gizlilik_sayfasi.mjs && node scripts/test_gizlilik_sayfasi.mjs --sonda
       # Tek ortak paket O7: tablet ortak kimliği (kayıt ↔ ortak-kimlik.cjs ↔ app.config.js ↔ build-apk ortak yolu).
       # O10b: tablet grup yayını (ortak OTA paketi + APK; sahte ssh/scp/curl/npx, ağsız).
       - name: Tablet ortak paket kimliği (O7) + tablet grup yayını (O10b)

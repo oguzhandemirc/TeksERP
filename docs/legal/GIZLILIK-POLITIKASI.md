@@ -5,14 +5,17 @@
 > hizalıdır (2026-10-08; veri akışları koddan ölçüldü, kaynaklar orada §1.1 ve §8). Yayından önce bir hukukçu
 > KVKK / GDPR açısından gözden geçirmeli; köşeli parantezli alanları kullanıcı doldurur.
 >
-> **Açık kararlar:** yayın yeri **K2** (öneri `https://etkiliyazilim.com/tekserp/gizlilik`; herkese açık,
-> giriş istemeyen, PDF olmayan bir adres) · iletişim e-postası **K6** — ikisi de `PLAY-KONSOL-FORMLARI.md` §0.
-> ML Kit veri açıklaması bağlantısı (§5) web'den doğrulanınca eklenir.
+> **Yayın:** `https://tekserp.etkiliyazilim.com/gizlilik` (K2, kullanıcı kararı 2026-10-08; kendi VDS'imiz).
+> Bu dosya sayfanın TEK KAYNAĞIDIR: bu satırın altındaki kısım `deploy/gizlilik-sayfasi/uret.mjs` ile
+> `deploy/gizlilik-sayfasi/html/gizlilik.html`e çevrilir (bekçi `scripts/test_gizlilik_sayfasi.mjs` bayt-eşitliği
+> ölçer); köşeli parantezli alan kaldıkça kurulum betiği yayını durdurur.
+> **K3:** 7. maddedeki "şifresiz olabilir" cümlesi bugünkü tablete (vc59) göre doğrudur; vc60 (yalnız şifreli
+> bağlantı) yayına çıktığı gün bu madde ve Play veri güvenliği formu birlikte güncellenir.
 
-**Son güncelleme:** [YAYIN TARİHİ]
+**Son güncelleme:** 8 Ekim 2026
 **Uygulama:** TeksERP (Google Play paket adı: `com.etkiliyazilim.tekserp`)
 **Geliştirici:** Etkili Yazılım — [TİCARET UNVANI], [ADRES]
-**İletişim:** [E-POSTA]
+**İletişim:** info@etkiliyazilim.com
 
 ## 1. Uygulamanın niteliği
 
@@ -66,8 +69,7 @@ güncellemeler Google Play üzerinden gelir.
   bilgisi"; kullanıcı adı ve iş verisi olmadan) arıza teşhisi için Etkili Yazılım'a iletir. Bu ayar
   varsayılan olarak kapalıdır.
 - Barkod okuma, Google'ın ML Kit kütüphanesiyle cihaz üzerinde yapılır. Google'ın bu kütüphane için topladığı
-  teknik veriler Google'ın kendi politikasına tabidir: [ML KIT VERİ AÇIKLAMASI BAĞLANTISI — doğrulandıktan
-  sonra].
+  teknik veriler Google'ın kendi politikasına tabidir: https://developers.google.com/ml-kit/android-data-disclosure
 
 ## 6. Paylaşım
 
@@ -85,12 +87,12 @@ verilerin kimlerle paylaşılacağına fabrika karar verir.
 
 Kullanıcı hesapları uygulama içinden açılamaz; fabrika yöneticisi tarafından açılır ve kapatılır. Hesabınızın
 ve verilerinizin silinmesi için önce fabrikanızın yöneticisine başvurun. Etkili Yazılım'a ulaşan teknik
-verilerin silinmesi için: [E-POSTA].
+verilerin silinmesi için: info@etkiliyazilim.com.
 
 ## 9. Haklarınız
 
 6698 sayılı KVKK md. 11 ve uygulanabildiği ölçüde GDPR kapsamındaki haklarınızı, verilerinizin sorumlusu olan
-fabrikaya (işvereninize) karşı kullanabilirsiniz. Etkili Yazılım'a ilişkin talepler: [E-POSTA].
+fabrikaya (işvereninize) karşı kullanabilirsiniz. Etkili Yazılım'a ilişkin talepler: info@etkiliyazilim.com.
 
 ## 10. Çocuklar
 
