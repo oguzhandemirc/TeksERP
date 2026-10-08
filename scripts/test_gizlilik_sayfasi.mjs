@@ -3,7 +3,8 @@
 // BEKÇİ — HERKESE AÇIK GİZLİLİK SAYFASI (tekserp.etkiliyazilim.com/gizlilik, Play K2) · zero-dep, DB'siz, ağsız
 // =============================================================================
 // Kaynak: deploy/gizlilik-sayfasi/ (VDS /opt/stack/apps/tekserp-gizlilik) + docs/legal/GIZLILIK-POLITIKASI.md.
-//   §1 tek kaynak: html/gizlilik.html = uret(GIZLILIK-POLITIKASI.md) bayt-eşit; sayfada betik/dış kaynak yok
+//   §1 tek kaynak: html/gizlilik.html = uret(GIZLILIK-POLITIKASI.md) bayt-eşit; sayfada betik/dış kaynak yok;
+//      her e-posta/mailto <!--email_off--> içinde (Cloudflare karartması çözücü betik ister, CSP onu engeller)
 //   §2 compose: proje/konteyner adı, salt-okunur kök + salt-okunur bağlar, Host = ADRES, websecure+tls,
 //      yalnız kendi önekli etiketler (indir/eski güncelleme sitesinin adı ve adresi yok)
 //   §3 kenar zinciri (deploy/traefik/kenar-zinciri.mjs): CF ipallowlist = satıcı CLOUDFLARE_NETWORKS birebir → hız seddi
@@ -81,6 +82,12 @@ export function yerTutucular(html) {
   return [...html.matchAll(/\[[A-ZÇĞİÖŞÜ][^\]\n]{1,80}\]/g)].map((m) => m[0]);
 }
 
+/** email_off bölgelerinin DIŞINDA kalan e-posta adresleri ve mailto bağları (boş = temiz). */
+export function emailOffDisi(html) {
+  const dis = html.replace(/<!--email_off-->[\s\S]*?<!--\/email_off-->/g, '');
+  return [...dis.matchAll(/mailto:[^"'\s>]*|[a-z0-9._-]+@[a-z0-9-]+(?:\.[a-z0-9-]+)+/gi)].map((m) => m[0]);
+}
+
 /** Saf ölçüm: girdiler enjekte edilebilir (sondalar). */
 export function olc(d) {
   const s = { kirmizi: [], olculemedi: [] };
@@ -96,6 +103,8 @@ export function olc(d) {
     s.kirmizi.push(`§1 kaynak çevrilemedi: ${e.message}`);
   }
   if (/<script|<link|<iframe|<img|\ssrc=/i.test(h)) s.kirmizi.push('§1 sayfada betik/dış kaynak var (CSP default-src none)');
+  const acik = emailOffDisi(h);
+  if (acik.length) s.kirmizi.push(`§1 email_off dışında e-posta/mailto (Cloudflare karartır, CSP çözücüyü engeller): ${[...new Set(acik)].join(', ')}`);
   if (!/<html lang="tr">/.test(h) || !/name="viewport"/.test(h)) s.kirmizi.push('§1 lang="tr" ya da mobil viewport yok');
 
   // §2
@@ -194,11 +203,14 @@ function sondalar(taban) {
     ['N22 kancada adım yok', 'kirmizi', deg(KANCA_REL, (t) => t.replaceAll(`"${BEN_REL}"`, '"x"'))],
     ['N23 kanca tetiği html kapsamıyor', 'kirmizi', deg(KANCA_REL, (t) => t.replace(`"${HTML_REL}"`, '"y"'))],
     ['N24 CI koşmuyor', 'kirmizi', deg(CI_REL, (t) => t.replaceAll(BEN_REL, 'scripts/x.mjs'))],
+    ['N25 mailto email_off dışında', 'kirmizi', deg(HTML_REL, (t) => t.replaceAll('<!--email_off-->', '').replaceAll('<!--/email_off-->', '')), '§1 email_off dışında'],
+    ['N26 düz e-posta email_off dışında', 'kirmizi', deg(HTML_REL, (t) => t.replace('</main>', '<p>destek@etkiliyazilim.com</p>\n</main>')), '§1 email_off dışında'],
+    ['P1 kaynağa yeni e-posta + üretildi', 'yesil', (d) => { d[KAYNAK_REL] = d[KAYNAK_REL].replace('## 10. Çocuklar', 'Ek: destek@etkiliyazilim.com\n\n## 10. Çocuklar'); d[HTML_REL] = uret(d[KAYNAK_REL]); }],
     ['O1 CF kaynağı okunamadı', 'olculemedi', deg(CF_REL, () => undefined)],
     ['O2 CLOUDFLARE_NETWORKS adı değişti', 'olculemedi', deg(CF_REL, (t) => t.replaceAll('CLOUDFLARE_NETWORKS', 'CF_AGLARI'))],
   ];
   let kotu = 0;
-  for (const [ad, beklenen, boz] of liste) {
+  for (const [ad, beklenen, boz, ileti] of liste) {
     const d = { ...taban };
     try {
       boz(d);
@@ -207,10 +219,10 @@ function sondalar(taban) {
       kotu++;
       continue;
     }
-    if (beklenen !== 'yesil' && Object.keys(d).every((k) => d[k] === taban[k])) { console.log(`❌ ${ad} — bozma metni değiştirmedi (sonda geçersiz)`); kotu++; continue; }
+    if ((beklenen !== 'yesil' || ad.startsWith('P1')) && Object.keys(d).every((k) => d[k] === taban[k])) { console.log(`❌ ${ad} — bozma metni değiştirmedi (sonda geçersiz)`); kotu++; continue; }
     const s = olc(d);
     const h = s.olculemedi.length ? 'olculemedi' : s.kirmizi.length ? 'kirmizi' : 'yesil';
-    const ok = h === beklenen;
+    const ok = h === beklenen && (!ileti || s.kirmizi.some((x) => x.startsWith(ileti)));
     if (!ok) kotu++;
     console.log(`${ok ? '✅' : '❌'} ${ad} → ${h}${ok ? '' : ` (beklenen ${beklenen}): ${[...s.olculemedi, ...s.kirmizi].join(' · ')}`}`);
   }
@@ -232,7 +244,7 @@ const s = olc(girdi);
 for (const x of s.olculemedi) console.log(`⛔ ÖLÇÜLEMEDİ ${x}`);
 for (const x of s.kirmizi) console.log(`❌ ${x}`);
 if (!s.olculemedi.length && !s.kirmizi.length) {
-  console.log('✅ gizlilik sayfası: kaynak ↔ html bayt-eşit · compose ayrı ve salt-okunur · kenar zinciri CF birebir · nginx önbellek/always/404 · adres tutarlı · kablolu');
+  console.log('✅ gizlilik sayfası: kaynak ↔ html bayt-eşit · e-posta email_off içinde · compose ayrı ve salt-okunur · kenar zinciri CF birebir · nginx önbellek/always/404 · adres tutarlı · kablolu');
   const yt = typeof girdi[HTML_REL] === 'string' ? yerTutucular(girdi[HTML_REL]) : [];
   if (yt.length) console.log(`⏳ yayın öncesi doldurulacak yer tutucu (vds-kur.sh --uygula durdurur): ${yt.join(' ')}`);
 }

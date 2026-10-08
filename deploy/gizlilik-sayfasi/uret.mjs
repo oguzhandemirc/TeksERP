@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Gizlilik sayfası üreticisi — docs/legal/GIZLILIK-POLITIKASI.md (tek kaynak) → html/gizlilik.html. Paket yok.
 // Kaynağın baştaki `>` iç notu sayfaya GİRMEZ. Desteklenen alt küme: #, ##, "- " madde (2 boşluk devam),
-// paragraf, **kalın**, `kod`, https bağlantısı, e-posta. Başka biçim → hata (sessiz bozulma yerine).
+// paragraf, **kalın**, `kod`, https bağlantısı, e-posta (email_off içinde). Başka biçim → hata (sessiz bozulma yerine).
 //   node deploy/gizlilik-sayfasi/uret.mjs            # html'i yaz
 //   node deploy/gizlilik-sayfasi/uret.mjs --denetle  # yazma; fark varsa 1
 
@@ -20,7 +20,8 @@ function satirIci(ham) {
   s = s.replace(/`([^`]+)`/g, '<code>$1</code>');
   s = s.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
   s = s.replace(/https:\/\/[^\s<]*[^\s<.,;:)]/g, (u) => `<a href="${u}">${u}</a>`);
-  s = s.replace(/(^|[\s(])([a-z0-9._-]+@[a-z0-9-]+(?:\.[a-z0-9-]+)+)/gi, '$1<a href="mailto:$2">$2</a>');
+  // Cloudflare e-posta karartması adresi çözücü betiğe bağlar; CSP betiği engeller → adres görünmez. email_off onu kapatır.
+  s = s.replace(/(^|[\s(])([a-z0-9._-]+@[a-z0-9-]+(?:\.[a-z0-9-]+)+)/gi, '$1<!--email_off--><a href="mailto:$2">$2</a><!--/email_off-->');
   return s;
 }
 
