@@ -8,18 +8,21 @@
 //   §2 uçtan uca (gerçek sunucu + süreç içi portal): etkinleştirmede kira varsayılanı + backend/ belirteci · politika
 //      ucu (200, defter satırı, işlem kimliği tekrarı aynı yanıt/tek satır, geçersiz gövde 400, izin) · sonraki kira
 //      OTOMATİK + pencere + aralıklar · rapor → dilim/durum, sonuç defteri idempotent · sonraki kira fabrikanın dilimiyle
-//      · filo ve kurulum ayrıntısı · DB CHECK ham yazımı reddeder
+//      · filo ve kurulum ayrıntısı · DB CHECK ham yazımı reddeder · ⭐ belirteç kümesi kurulumun platformundan (L2b):
+//      Windows kümesi AYNEN electron/ · mobil/ · backend/; Linux + konteyner electron/ · mobil/ · backend-oci/ (backend/ YOK),
+//      platform bu yoklamanın ortamından (bayat kolondan değil), konteynersiz Linux Windows kümesinde kalır
 //   §3 BİLDİRİM (D7): tamamlanan deneme defter satırıyla AYNI tx'te bildirilir — geri dönüş (sebep + veri) ·
 //      başarı · başarısızlık (müdahale) olayları kanal başına BİR satır; tekrar yoklama yeni satır doğurmaz; gövde
 //      allowlist'te, raporun kodlu alanlarından (serbest metin yok); bildirim yazılamazsa defter satırı da yok,
 //      sonraki yoklama ikisini birlikte yazar
 // Koşum: npx tsx scripts/test_guncelleme_politikasi.ts   (yalnız *_test DB)
 // =============================================================================
-import { DOWNLOAD_PRODUCTS, ENDPOINTS, LeaseSchema, isoToMs, parseJws, type LeaseDoc } from "../src/lisans-protokol";
+import { ENDPOINTS, LeaseSchema, isoToMs, parseJws, type LeaseDoc } from "../src/lisans-protokol";
 import { kurulumAnahtariUret } from "../../../Teks-Erp/scripts/lib/lisans-fikstur";
 import { FACTORY_DEFAULT_TIME_ZONE, leaseUpdatePolicy, policyOf, validatePolicy } from "../src/services/update-policy.service";
 import { NOTIFICATION_BODY_KEYS } from "../src/notifications/catalog";
 import {
+  ORTAM,
   anahtarOrtamiKur,
   etkinlestirmeGovdesi,
   hedefDbKapisi,
@@ -182,7 +185,7 @@ async function uctanUca(temizlenecek: { kurulumlar: string[]; kidler: string[]; 
     let uc = kira?.kiraId ?? null;
     kontrol("§2a etkinleştirme kirası varsayılan politikayı taşır (ONAYLI, pencere yok)", kira?.guncelleme?.kip === "ONAYLI" && kira.guncelleme.pencere === null, JSON.stringify(kira?.guncelleme));
     const onekler = ((et.json.indirmeBelirtecleri ?? []) as { yolOneki: string }[]).map((t) => t.yolOneki).sort();
-    kontrol("§2b indirme belirteçleri backend/ önekini de kapsar", onekler.length === DOWNLOAD_PRODUCTS.length && onekler.includes(`/oncu/backend/`), onekler.join(","));
+    kontrol("§2b Windows kurulumunun indirme belirteçleri AYNEN electron/ · mobil/ · backend/ (backend-oci/ YOK)", onekler.join(",") === "/oncu/backend/,/oncu/electron/,/oncu/mobil/", onekler.join(","));
     const yokla = async (ek: Record<string, unknown> = {}): Promise<LeaseDoc | null> => {
       const y = await imzaliPost(sunucu.genel, ENDPOINTS.POLL, {
         kurulumId: k.kurulumId, amac: "yokla", anahtar,
@@ -192,6 +195,26 @@ async function uctanUca(temizlenecek: { kurulumlar: string[]; kidler: string[]; 
       if (l) uc = l.kiraId;
       return l;
     };
+
+    const ortamla = async (o: Record<string, unknown>): Promise<string> => {
+      const y = await imzaliPost(sunucu.genel, ENDPOINTS.POLL, {
+        kurulumId: k.kurulumId, amac: "yokla", anahtar,
+        govde: { ...yoklamaGovdesi({ sonKiraId: uc, hak: { hakId: k.hakId, surum: 1 }, parmakIzi: ortam.f.parmakIzi }), ortam: o },
+      });
+      const l = kiraOf(y);
+      if (l) uc = l.kiraId;
+      return ((y.json.indirmeBelirtecleri ?? []) as { yolOneki: string }[]).map((t) => t.yolOneki).sort().join(",");
+    };
+    const WIN_KUMESI = "/oncu/backend/,/oncu/electron/,/oncu/mobil/";
+    const linux = await ortamla({ ...ORTAM, platform: "linux", isletimSistemi: "Ubuntu 24.04", konteyner: true });
+    const linuxKolon = await prisma.kurulum.findUniqueOrThrow({ where: { id: k.kurulumDbId }, select: { platform: true } });
+    kontrol("§2b1 Linux + konteyner yoklaması → electron/ · mobil/ · backend-oci/ (Windows backend/ YOK); platform kolonu linux",
+      linux === "/oncu/backend-oci/,/oncu/electron/,/oncu/mobil/" && linuxKolon.platform === "linux", linux);
+    const geriWin = await ortamla(ORTAM);
+    kontrol("§2b2 platform bu yoklamanın ortamından: Windows ortamıyla gelen ilk yanıt yine Windows kümesi", geriWin === WIN_KUMESI, geriWin);
+    const konteynersiz = await ortamla({ ...ORTAM, platform: "linux", konteyner: false });
+    kontrol("§2b3 konteynersiz Linux → Windows kümesi (bugünkü davranış)", konteynersiz === WIN_KUMESI, konteynersiz);
+    await ortamla(ORTAM);
 
     const kul = await portalKullaniciAc(ortam.ctx, "SATICI_OPERATOR");
     temizlenecek.kullanicilar.push(kul.id);

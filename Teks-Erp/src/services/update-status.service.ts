@@ -17,12 +17,15 @@ import {
   UpdateResultSchema,
   UuidSchema,
   VersionTextSchema,
+  WINDOWS_PLATFORM,
+  backendDownloadPrefix,
   effectiveUpdatePolicy,
   isoToMs,
   type LeaseDoc,
   type LeaseUpdatePolicy,
   type UpdateDecisionKind,
   type UpdateReport,
+  type UpdatePlatform,
   type UpdateResult,
   type UpdateWindowRule,
   type UPDATER_STATES,
@@ -35,6 +38,7 @@ import {
   UpdaterLastDetailSchema,
   UpdaterNoticeSchema,
   UpdaterPendingBlockSchema,
+  ownUpdatePlatform,
   readUpdater,
   type UpdaterHistoryLine,
   type UpdaterLastDetail,
@@ -252,12 +256,15 @@ export function updateStatusFrom(g: {
   readonly kuruluSurum: string;
   readonly nowMs: number;
   readonly approval?: Omit<UpdateApprovalView, "kullanildi"> | null;
+  /** Bu backend'in paket platformu (belirteç öneki); verilmezse Windows. */
+  readonly platform?: UpdatePlatform;
 }): UpdateStatus {
   const { lease, read, nowMs } = g;
   const kanal = lease?.kanal.kod ?? null;
   const eff = effectiveUpdatePolicy(lease, nowMs);
   const next = eff?.politika.araliklar.find((a) => isoToMs(a.bitis) > nowMs) ?? null;
-  const token = decideDownloadToken({ updatesAllowed: true, prefix: kanal ? `/${kanal}/backend/` : null, tokens: g.tokens, nowMs });
+  const prefix = kanal ? backendDownloadPrefix(kanal, g.platform ?? WINDOWS_PLATFORM) : null;
+  const token = decideDownloadToken({ updatesAllowed: true, prefix, tokens: g.tokens, nowMs });
   const d = read.status.kind === "ok" ? read.status.doc : null;
   const attempts = read.history.map(historyItem).filter((a): a is UpdateHistoryItem => a !== null).reverse().slice(0, UPDATER_HISTORY_LIMIT);
   const approval = g.approval ? { ...g.approval, kullanildi: read.history.some((h) => h.onayId === g.approval!.onayId) } : null;
@@ -331,5 +338,5 @@ export async function activeUpdateApproval(): Promise<Omit<UpdateApprovalView, "
 export async function getUpdateStatus(nowMs: number = Date.now()): Promise<UpdateStatus> {
   const lease = getLicenseSnapshot(nowMs).lease?.document ?? null;
   const approval = await activeUpdateApproval();
-  return updateStatusFrom({ lease, tokens: getDownloadTokens(), read: readUpdater(), kuruluSurum: APP_VERSION, nowMs, approval });
+  return updateStatusFrom({ lease, tokens: getDownloadTokens(), read: readUpdater(), kuruluSurum: APP_VERSION, nowMs, approval, platform: ownUpdatePlatform() });
 }

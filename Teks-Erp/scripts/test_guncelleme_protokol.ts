@@ -42,6 +42,9 @@ import {
   PROTOCOL_ERROR_CODES,
   RELEASE_PACKAGE_EXTENSIONS,
   RELEASE_PRODUCT_DIRS,
+  DOWNLOAD_PRODUCTS_BY_PLATFORM,
+  backendDownloadPrefix,
+  downloadPlatformOf,
   UPDATE_PLATFORMS,
   UPDATE_DECISION_REASONS,
   UPDATE_DECISIONS,
@@ -206,9 +209,21 @@ function bolum3(): void {
   check("§3h' etkin politika: tolerans içinde → kiradan", (kayit("etkin-politika", "kiranın süresi tolerans içinde").beklenen as { kaynak?: string } | null)?.kaynak === "KIRA");
   console.log("\n§3' — indirme belirteci öneki");
   const d = (yolOneki: string) => DownloadSchema.safeParse({ v: 1, kanal: "k1", yolOneki, kurulumId: "2f5d8b4c-1e3a-4b9c-8d2e-7f8a9b0c1d2e", exp: "2026-10-01T00:00:00Z" }).success;
-  check("§3i önek kümesi electron · mobil · backend", jsonEsit([...DOWNLOAD_PRODUCTS], ["electron", "mobil", "backend"]));
-  check("§3j /k1/backend/ geçer", d("/k1/backend/"));
-  check("§3k /k1/diger/ · başka kanalın backend'i · öneksiz RED", !d("/k1/diger/") && !d("/k2/backend/") && !d("/k1/backend"));
+  check("§3i önek kümesi electron · mobil · backend · backend-oci", jsonEsit([...DOWNLOAD_PRODUCTS], ["electron", "mobil", "backend", "backend-oci"]));
+  check("§3j /k1/backend/ · /k1/backend-oci/ geçer", d("/k1/backend/") && d("/k1/backend-oci/"));
+  check("§3k /k1/diger/ · başka kanalın backend'i · öneksiz · /k1/backend-ocix/ RED", !d("/k1/diger/") && !d("/k2/backend/") && !d("/k1/backend") && !d("/k1/backend-ocix/"));
+  // L2b: kurulum yalnız KENDİ platformunun backend dizinini alır; Windows kümesi sözleşme 5 öncesiyle aynı.
+  check("§3l Windows kurulumunun kümesi DEĞİŞMEDİ (electron · mobil · backend)", jsonEsit([...DOWNLOAD_PRODUCTS_BY_PLATFORM["win32-x64"]], ["electron", "mobil", "backend"]));
+  check("§3m Linux/OCI kurulumunun kümesi electron · mobil · backend-oci", jsonEsit([...DOWNLOAD_PRODUCTS_BY_PLATFORM["linux-x64-oci"]], ["electron", "mobil", "backend-oci"]));
+  check("§3n platform kümelerinin backend dizini = RELEASE_PRODUCT_DIRS; birleşimleri = DOWNLOAD_PRODUCTS",
+    UPDATE_PLATFORMS.every((p) => (DOWNLOAD_PRODUCTS_BY_PLATFORM[p] as readonly string[]).includes(RELEASE_PRODUCT_DIRS[p]) && backendDownloadPrefix("k1", p) === `/k1/${RELEASE_PRODUCT_DIRS[p]}/`) &&
+      jsonEsit([...new Set(UPDATE_PLATFORMS.flatMap((p) => [...DOWNLOAD_PRODUCTS_BY_PLATFORM[p]]))].sort(), [...DOWNLOAD_PRODUCTS].sort()));
+  const ortam = (o: unknown) => downloadPlatformOf(o);
+  check("§3o ortam → platform: yalnız linux + konteyner:true OCI; win32 · linux konteynersiz · darwin · ortamsız · biçimsiz → Windows",
+    ortam({ platform: "linux", konteyner: true }) === "linux-x64-oci" &&
+      ortam({ platform: "win32", konteyner: false }) === "win32-x64" && ortam({ platform: "win32", konteyner: true }) === "win32-x64" &&
+      ortam({ platform: "linux", konteyner: false }) === "win32-x64" && ortam({ platform: "linux", konteyner: "true" }) === "win32-x64" &&
+      ortam({ platform: "darwin", konteyner: true }) === "win32-x64" && ortam(null) === "win32-x64" && ortam(undefined) === "win32-x64" && ortam("linux") === "win32-x64");
 }
 
 function bolum4(): void {

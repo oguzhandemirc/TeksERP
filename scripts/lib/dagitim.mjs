@@ -24,8 +24,12 @@ export const GRUP_KODU_DESENI = /^[a-z0-9][a-z0-9-]{0,39}$/;
 /** `ota`: Worker'ın grup-nötr OTA takma adı (`/ota/<rv>/manifest`, §3.3) — grup olursa yol çakışır. */
 export const AYRILMIS_GRUP_KODLARI = Object.freeze(['ota']);
 export const URUNLER = Object.freeze(['panel', 'tablet', 'backend']);
-/** Ürünün indirme yolundaki dizini — satıcı `DOWNLOAD_PRODUCTS` ve Worker `URUN_DIZINLERI` ile aynı küme (bekçi ölçer). */
+/** Ürünün indirme yolundaki (Windows/varsayılan) dizini. */
 export const URUN_DIZINI = Object.freeze({ panel: 'electron', tablet: 'mobil', backend: 'backend' });
+/** Ürünün başka platform dizinleri — backend'in Linux/OCI paketi (sözleşme 5, protokol `RELEASE_PRODUCT_DIRS`). */
+export const PLATFORM_DIZINLERI = Object.freeze({ backend: Object.freeze(['backend-oci']) });
+/** İndirme yolundaki bütün dizinler — satıcı `DOWNLOAD_PRODUCTS` ve Worker `URUN_DIZINLERI` ile aynı küme (bekçi ölçer). */
+export const INDIRME_DIZINLERI = Object.freeze([...Object.values(URUN_DIZINI), ...Object.values(PLATFORM_DIZINLERI).flat()]);
 
 const SEMA = {
   kok: { zorunlu: ['urun', 'indirmeKoku', 'vdsKoku', 'defterKoku', 'lisansSunucusu', 'gruplar'], secimli: ['_aciklama'] },

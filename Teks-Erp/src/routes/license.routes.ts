@@ -111,7 +111,7 @@ router.get("/durum", verifyTokenIfPresent, (req: Request, res: Response) => {
  *     tags: [Lisans]
  *     summary: Güncelleme indirme belirteci (onaylı cihaz ya da oturum)
  *     parameters:
- *       - { in: query, name: urun, required: true, schema: { type: string, enum: [electron, mobil, backend] } }
+ *       - { in: query, name: urun, required: true, schema: { type: string, enum: [electron, mobil, backend, backend-oci] } }
  *       - { in: query, name: kanal, required: false, schema: { type: string } }
  *     responses:
  *       200: { description: "{ yolOneki, belirtec, gecerlilikSonu, grup, iptal } — grup yalnız doğrulanmış kiradan (test · oncu · genel), değilse null; iptal güncel PAKET iptal belgesi (JWS), yoksa null" }

@@ -22,6 +22,9 @@
 //   §7 ⭐ eylemler (`approvalActions` — panel düğmeleri ve POST kapısı AYNI yüklem); §7k onaylı ama bekleyen sürümün nedeni
 //      (§7l şema ileride: daha yeni sürüm gerekir, "kendiliğinden" denmez)
 //   §8 bağlantı (statik): uçlar izinli ve bağlı · yoklama gövdesi raporu yayar · yoklama niyeti tazeler
+//   §9 platform öneki (sözleşme 5, L2b): backend kendi platformunu satıcının kuralıyla çözer (yalnız Linux +
+//      konteyner OCI) · niyet ve panel YALNIZ kendi platformunun belirtecini görür (Windows backend/ · Linux backend-oci/)
+//      · niyet yazıcısı ve panel gerçek platformu geçirir (statik)
 // NEGATİF SONDA (elle, geri alındı; commit mesajında).
 // =============================================================================
 import fs from "node:fs";
@@ -31,6 +34,7 @@ import { randomUUID } from "node:crypto";
 import { UpdateReportSchema, msToIso, signDownloadToken, type LeaseDoc } from "../src/lib/license/protocol";
 import {
   UPDATER_DIR_ENV,
+  ownUpdatePlatform,
   readUpdater,
   readUpdaterHistory,
   readUpdaterStatus,
@@ -48,6 +52,7 @@ import {
   updaterLiveness,
   updaterProcess,
 } from "../src/services/update-status.service";
+import { intentToken } from "../src/services/update-intent.service";
 import { approvalActions, type ApprovalActionInput, type UpdateApprovalView } from "../src/services/helpers/update-approval-rules.helper";
 import { DEFAULT_FACTORY_TIMEZONE } from "../src/constants/time";
 import { anahtarUret } from "./lib/lisans-fikstur";
@@ -359,6 +364,37 @@ function baglanti(): void {
   check("§8f indirme belirteci ucu ürün listesini protokolden alır (backend dahil)", /urun: z\.enum\(DOWNLOAD_PRODUCTS\)/.test(oku("src/routes/license.routes.ts")));
 }
 
+function platformOneki(): void {
+  console.log("\n§9 platform öneki (sözleşme 5)");
+  check("§9a kendi platformu: linux + konteyner → linux-x64-oci; win32 · konteynersiz linux · darwin → win32-x64",
+    ownUpdatePlatform("linux", true) === "linux-x64-oci" && ownUpdatePlatform("win32", false) === "win32-x64" && ownUpdatePlatform("win32", true) === "win32-x64" &&
+      ownUpdatePlatform("linux", false) === "win32-x64" && ownUpdatePlatform("darwin", true) === "win32-x64");
+  const anahtar = anahtarUret("ind-gnc-bekci-9");
+  const bas = (yolOneki: string) => signDownloadToken({
+    payload: { v: 1, kanal: "deneme-kanal", yolOneki, kurulumId: "3f0c2b1e-5a5d-4c1e-9d36-6f0c2b1e5a5d", exp: msToIso(SIMDI + SAAT) },
+    key: { kid: anahtar.kid, privateKey: anahtar.privateKey },
+    nowMs: SIMDI,
+  });
+  const win = { yolOneki: "/deneme-kanal/backend/", belirtec: bas("/deneme-kanal/backend/") };
+  const oci = { yolOneki: "/deneme-kanal/backend-oci/", belirtec: bas("/deneme-kanal/backend-oci/") };
+  const niyet = (tokens: { yolOneki: string; belirtec: string }[], platform?: "win32-x64" | "linux-x64-oci") =>
+    intentToken({ updatesAllowed: true, kanal: "deneme-kanal", tokens, kept: null, nowMs: SIMDI, ...(platform ? { platform } : {}) })?.belirtec ?? null;
+  check("§9b niyet: platform verilmezse Windows backend/ belirteci (bugünkü davranış)", niyet([oci, win]) === win.belirtec && niyet([oci]) === null);
+  check("§9c niyet: Linux/OCI backend-oci/ belirtecini yazar, Windows belirtecini ASLA", niyet([win, oci], "linux-x64-oci") === oci.belirtec && niyet([win], "linux-x64-oci") === null);
+  const read: UpdaterRead = { status: { kind: "missing" }, history: [] };
+  const lease = { kanal: { kod: "deneme-kanal" }, bitis: msToIso(SIMDI + 30 * 24 * SAAT), yaptirim: { kademe: null, mesaj: null, kisitlamaTarihi: null, donmusModuller: [], guncellemeDonuk: false } } as unknown as LeaseDoc;
+  const panelde = (tokens: { yolOneki: string; belirtec: string }[], platform?: "win32-x64" | "linux-x64-oci") =>
+    updateStatusFrom({ lease, tokens, read, kuruluSurum: "2.14.0", nowMs: SIMDI, ...(platform ? { platform } : {}) }).indirmeBelirteci;
+  check("§9d panel: Windows yalnız backend/ belirtecini sayar · Linux/OCI yalnız backend-oci/",
+    panelde([win]) && !panelde([oci]) && panelde([oci], "linux-x64-oci") && !panelde([win], "linux-x64-oci"));
+  const oku = (rel: string) => fs.readFileSync(path.join(KOK, rel), "utf8");
+  const niyetKaynak = oku("src/services/update-intent.service.ts");
+  const durumKaynak = oku("src/services/update-status.service.ts");
+  check("§9e niyet yazıcısı ve panel gerçek platformu geçirir; elle kurulan `${kanal}/backend/` öneki kalmadı",
+    /platform: ownUpdatePlatform\(\)/.test(niyetKaynak) && /platform: ownUpdatePlatform\(\)/.test(durumKaynak) &&
+      !/\}\/backend\/`/.test(niyetKaynak) && !/\}\/backend\/`/.test(durumKaynak));
+}
+
 function main(): void {
   console.log("=== BACKEND GÜNCELLEME DURUMU ===");
   kok();
@@ -369,6 +405,7 @@ function main(): void {
   panel();
   eylemler();
   baglanti();
+  platformOneki();
   console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
   process.exit(fail === 0 ? 0 : 1);
 }

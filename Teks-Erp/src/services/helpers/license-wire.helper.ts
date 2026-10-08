@@ -1,6 +1,5 @@
 // Lisans motorunun TEL katmanı: satıcıya imzalı istek, taşıma soyutlaması (test enjeksiyonu),
 // hata sözlüğü (TR mesaj + `details.code`), önkoşullar ve ortam künyesi. Servisler bunu paylaşır.
-import fs from "node:fs";
 import os from "node:os";
 import { AppError } from "../../utils/app-error";
 import { APP_VERSION } from "../../lib/app-version";
@@ -22,6 +21,7 @@ import { getLicenseCore } from "../../lib/license/native";
 import { installHistoryPath, readInstallHistory } from "../../lib/license/install-history";
 import { ensureInstallationX25519, getLicenseStore, type InstallationKey, type LicenseStoreSnapshot } from "../../lib/license/store";
 import { requestClockSkewMs } from "../../lib/license/request-clock";
+import { runningInContainer } from "../../lib/license/updater-ipc";
 import {
   getLicenseConfig,
   getLicenseDbFacts,
@@ -283,7 +283,7 @@ export function buildEnvironment(): {
     uygulamaSurum: appVersionForWire(),
     // İmzalı derleme künyesi Faz 2'de; imzasız tarih bakım kararına girmez.
     derlemeTarihi: null,
-    konteyner: fs.existsSync("/.dockerenv") || fs.existsSync("/run/.containerenv"),
+    konteyner: runningInContainer(),
     ...(dbId ? { installationId: dbId } : {}),
   };
 }

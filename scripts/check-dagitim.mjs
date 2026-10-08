@@ -45,6 +45,7 @@ import {
   SATICI_INDIRME_REL,
   TUKETICILER,
   URUN_DIZINI,
+  INDIRME_DIZINLERI,
   URUNLER,
   VENDOR_URL_REL,
   WORKER_REL,
@@ -167,7 +168,7 @@ function olc(d, okuyanlar, ek = {}) {
   try {
     const satici = diziOku(d[SATICI_INDIRME_REL], /export const DOWNLOAD_PRODUCTS = \[([^\]]*)\] as const;/, `${SATICI_INDIRME_REL} DOWNLOAD_PRODUCTS`);
     const worker = diziOku(d[WORKER_REL], /export const URUN_DIZINLERI = Object\.freeze\(\[([^\]]*)\]\);/, `${WORKER_REL} URUN_DIZINLERI`);
-    const bizim = Object.values(URUN_DIZINI).sort().join(',');
+    const bizim = [...INDIRME_DIZINLERI].sort().join(',');
     if (satici.slice().sort().join(',') !== bizim) s.kirmizi.push(`§3 ürün dizinleri satıcıyla ayrıştı: satıcı ${satici.join(',')} · kayıt ${bizim}`);
     if (worker.slice().sort().join(',') !== bizim) s.kirmizi.push(`§3 ürün dizinleri Worker'la ayrıştı: Worker ${worker.join(',')} · kayıt ${bizim}`);
     const takmaOnek = /^export const OTA_TAKMA_AD_ONEKI = "([^"]*)";$/m.exec(d[WORKER_REL] ?? '')?.[1];
@@ -307,7 +308,7 @@ function sondalar(taban, tabanOkuyanlar) {
       c.ek.turet = (k) => ({ ...turet(k), otaTakmaAd: 'https://indir.etkiliyazilim.com/test/mobil/ota/55.0/manifest' });
     }, 'otaTakmaAd'],
     ['N19 satıcı DOWNLOAD_PRODUCTS\'a yeni ürün (patron) → KIRMIZI', 'kirmizi', (d) => {
-      d[SATICI_INDIRME_REL] = d[SATICI_INDIRME_REL].replace('["electron", "mobil", "backend"]', '["electron", "mobil", "backend", "patron"]');
+      d[SATICI_INDIRME_REL] = d[SATICI_INDIRME_REL].replace('["electron", "mobil", "backend", "backend-oci"]', '["electron", "mobil", "backend", "backend-oci", "patron"]');
     }, 'satıcıyla ayrıştı'],
     ['N20 indirme kökü eski adres (guncelleme.etkiliyazilim.com) → KIRMIZI', 'kirmizi', kayitta((o) => { o.indirmeKoku = 'https://guncelleme.etkiliyazilim.com/'; }), '§4 indirmeKoku ana makinesi'],
     ['N21 VDS kökü eski yayın ağacının altında → KIRMIZI', 'kirmizi', kayitta((o) => { o.vdsKoku = '/opt/stack/apps/tekserp-guncelleme/html/ortak'; }), '§4 vdsKoku'],

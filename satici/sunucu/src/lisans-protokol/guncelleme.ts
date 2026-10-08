@@ -44,7 +44,7 @@ export const RELEASE_MANIFEST_FILE = "surum.json";
  * Platform → güncelleme sunucusundaki ürün dizini (sözleşme 5). Gruplar platformlar arası ortak olduğu için Linux
  * bildirimi ayrı yoldadır; Windows yolu değişmez ve eski Windows güncelleyicisi Linux bildirimini hiç görmez.
  */
-export const RELEASE_PRODUCT_DIRS = { "win32-x64": "backend", "linux-x64-oci": "backend-oci" } as const satisfies Record<UpdatePlatform, string>;
+export const RELEASE_PRODUCT_DIRS = { "win32-x64": "backend", "linux-x64-oci": "backend-oci" } as const satisfies Record<UpdatePlatform, DownloadProduct>;
 /** Paketin imzalı künyesindeki `urun` (bildirimin `urun`u her platformda "backend"; Docker teslim künyesi "backend-docker"). */
 export const PACKAGE_IDENTITY_PRODUCTS = { "win32-x64": "backend", "linux-x64-oci": "backend-docker" } as const satisfies Record<UpdatePlatform, string>;
 /** Paket dosyasının uzantısı: Windows zip, Linux sıkıştırılmamış dış tar. */
