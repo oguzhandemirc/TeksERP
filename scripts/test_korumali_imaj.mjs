@@ -14,11 +14,14 @@
 //      Linux şema motoru + runtime node (yoksa ölçülen imaj korumalı imaj DEĞİLDİR)
 //   K6 uygulama ağacı root'a ait, grup/diğerine yazılamaz (yamalı .jsc yazılamasın)
 //   K7 imajda DOLU /etc/machine-id yok (parmak izi F1 konaktan gelir) · app altında .env yok
+//   K8 imzalı imaj (label `tr.tekserp.butunluk` ya da `--imzali`): app kökünde imzalı liste
+//      (`butunluk-liste.txt` + `butunluk-zincir.jws`|`butunluk.jws`) VAR; `--imzali` etiketsiz imajı reddeder
+//   K9 app altında sembolik bağ yok (imza aracı bağı imzalamaz; `node_modules/.bin` imaja girmez)
 //
 // ÜÇ SONUÇ: 0 yeşil · 1 kırmızı · 2 ÖLÇÜLEMEDİ (docker yok / imaj yok / akış okunamadı).
 // İmaj yoksa YEŞİL DEĞİL ÖLÇÜLEMEDİ döner — sessiz yeşil yok. Cırcır DEĞİL (taban yok).
 //
-//   node scripts/test_korumali_imaj.mjs [--imaj=<etiket>]   # varsayılan: etiketli en yeni imaj
+//   node scripts/test_korumali_imaj.mjs [--imaj=<etiket>] [--imzali]   # varsayılan: etiketli en yeni imaj
 //   node scripts/test_korumali_imaj.mjs --sonda              # negatif + pozitif sondalar (docker'sız)
 // =============================================================================
 import { spawn, spawnSync } from 'node:child_process';
@@ -32,11 +35,19 @@ export const ZORUNLU = [
   'app/node_modules/@prisma/engines/schema-engine-debian-openssl-3.0.x',
   'app/dist/tools/seed.cjs',
   'app/dist/tools/yedek-sifrele.cjs',
+  'app/runtime/bin/node',
   'usr/local/bin/node',
 ];
 
-/** Saf denetim — `{ user, dosyalar: [{ ad, boyut, uid, mod, tip, icerik? }] }` → ihlal listesi. */
-export function denetle({ user, dosyalar }) {
+/** İmaj içi bütünlük listesi (`Teks-Erp/docker/korumali/imaj-imzala.mjs`): liste + en az bir imzalı yük. */
+export const IMZA_LISTESI = 'app/butunluk-liste.txt';
+export const IMZA_YUKLERI = ['app/butunluk-zincir.jws', 'app/butunluk.jws'];
+
+/**
+ * Saf denetim — `{ user, dosyalar: [{ ad, boyut, uid, mod, tip, icerik? }], imza? }` → ihlal listesi.
+ * `imza = { etiket, iste }`: imajın `tr.tekserp.butunluk` etiketi (yoksa null) ve imzalı imaj şartı (`--imzali`).
+ */
+export function denetle({ user, dosyalar, imza = { etiket: null, iste: false } }) {
   const ihlal = [];
   const u = String(user ?? '').trim();
   if (u === '' || u === 'root' || u === '0' || /^(0|root)(:|$)/.test(u)) ihlal.push(`K1 süreç kullanıcısı root (User="${u}")`);
@@ -55,6 +66,12 @@ export function denetle({ user, dosyalar }) {
     if (a.startsWith('app/') && !nm && d.tip === 'dosya' && (d.uid !== 0 || (d.mod & 0o022) !== 0)) ihlal.push(`K6 uygulama dosyası yazılabilir/root dışı (uid ${d.uid}, mod ${d.mod.toString(8)}): ${a}`);
     if ((a === 'etc/machine-id' || a === 'var/lib/dbus/machine-id') && d.tip === 'dosya' && d.boyut > 0) ihlal.push(`K7 imajda dolu makine kimliği: ${a}`);
     if (a.startsWith('app/') && !nm && /(^|\/)\.env(\.|$)/.test(a)) ihlal.push(`K7 ortam dosyası: ${a}`);
+    if (a.startsWith('app/') && d.tip === 'bag') ihlal.push(`K9 app altında sembolik bağ (imzalanamaz): ${a}`);
+  }
+  if (imza.iste && !imza.etiket) ihlal.push('K8 imzalı imaj bekleniyordu: tr.tekserp.butunluk etiketi yok (imaj-imzala.mjs koşulmadı)');
+  if (imza.iste || imza.etiket) {
+    if (!adlar.has(IMZA_LISTESI)) ihlal.push(`K8 imzalı liste yok: ${IMZA_LISTESI}`);
+    if (!IMZA_YUKLERI.some((y) => adlar.has(y))) ihlal.push(`K8 imzalı yük yok: ${IMZA_YUKLERI.join(' | ')}`);
   }
   for (const z of ZORUNLU) if (!adlar.has(z)) ihlal.push(`K5 zorunlu parça yok: ${z}`);
   if (migration === 0) ihlal.push('K5 migration SQL yok (app/prisma/migrations/*/migration.sql)');
@@ -168,7 +185,7 @@ async function olc(imaj) {
       p.on('close', (kod) => (kod === 0 ? coz() : red(new Olculemedi(`docker export çıkış ${kod}: ${hataMetni.slice(0, 200)}`))));
     });
     if (!akis.bitti || akis.dosyalar.length === 0) throw new Olculemedi('tar akışı eksik/boş okundu');
-    return { user: config.User, dosyalar: akis.dosyalar };
+    return { user: config.User, dosyalar: akis.dosyalar, etiket: (config.Labels ?? {})['tr.tekserp.butunluk'] || null };
   } finally {
     docker(['rm', id]);
   }
@@ -205,7 +222,14 @@ const MUTASYONLAR = [
   ['K6', 'kullanıcıya ait app', (o) => { o.dosyalar.find((d) => d.ad === 'app/dist/server.js').uid = 10001; }],
   ['K7 imajda dolu', 'dolu machine-id', (o) => { o.dosyalar.find((d) => d.ad === 'etc/machine-id').boyut = 33; }],
   ['K7 ortam', '.env', (o) => o.dosyalar.push({ ad: 'app/.env', boyut: 5, uid: 0, mod: 0o600, tip: 'dosya' })],
+  ['K9', 'node_modules/.bin bağı', (o) => o.dosyalar.push({ ad: 'app/node_modules/.bin/prisma', boyut: 0, uid: 0, mod: 0o777, tip: 'bag' })],
+  ['K8 imzalı imaj bekleniyordu', '--imzali ama etiket yok', (o) => { o.imza = { etiket: null, iste: true }; imzaDosyalari(o); }],
+  ['K8 imzalı liste yok', 'etiketli imajda liste yok', (o) => { o.imza = { etiket: 'pkt-2099-1', iste: true }; imzaDosyalari(o, [IMZA_YUKLERI[0]]); }],
+  ['K8 imzalı yük yok', 'etiketli imajda imzalı yük yok', (o) => { o.imza = { etiket: 'pkt-2099-1', iste: false }; imzaDosyalari(o, [IMZA_LISTESI]); }],
 ];
+function imzaDosyalari(o, adlar = [IMZA_LISTESI, IMZA_YUKLERI[0]]) {
+  for (const ad of adlar) o.dosyalar.push({ ad, boyut: 10, uid: 0, mod: 0o644, tip: 'dosya' });
+}
 
 function tarBaslik(ad, boyut, tip = '0') {
   const h = Buffer.alloc(512);
@@ -221,6 +245,11 @@ function sondalar() {
   const bak = (kosul, ad) => { console.log(`  ${kosul ? '✓' : '✖'} ${ad}`); if (!kosul) kirmizi++; };
   const p0 = denetle(temizOrnek());
   bak(p0.length === 0, `P0 temiz örnek YEŞİL (${p0.length} ihlal${p0.length ? ': ' + p0.join(' | ') : ''})`);
+  const imzali = temizOrnek();
+  imzali.imza = { etiket: 'pkt-2099-1', iste: true };
+  imzaDosyalari(imzali);
+  const p1 = denetle(imzali);
+  bak(p1.length === 0, `P1 imzalı temiz örnek (--imzali) YEŞİL (${p1.length} ihlal${p1.length ? ': ' + p1.join(' | ') : ''})`);
   for (const [kod, ad, mut] of MUTASYONLAR) {
     const o = temizOrnek();
     const once = JSON.stringify(o);
@@ -259,14 +288,14 @@ async function main() {
   try {
     imaj = imajSec(istenen);
     const olcum = await olc(imaj);
-    const ih = denetle(olcum);
+    const ih = denetle({ ...olcum, imza: { etiket: olcum.etiket, iste: process.argv.includes('--imzali') } });
     console.log(`== test_korumali_imaj — ${imaj} (${olcum.dosyalar.length} girdi, User=${olcum.user || '∅'}) ==`);
     if (ih.length) {
       for (const x of ih.slice(0, 40)) console.log(`  ✖ ${x}`);
       console.log(`\n  ✖ KIRMIZI: ${ih.length} ihlal`);
       process.exit(1);
     }
-    console.log('  ✓ K1–K7 temiz: kaynak/harita/tsx yok, root değil, zorunlu parçalar var');
+    console.log(`  ✓ K1–K9 temiz: kaynak/harita/tsx/bağ yok, root değil, zorunlu parçalar var · imaj içi liste: ${olcum.etiket ? `imzalı (${olcum.etiket})` : 'YOK (imzasız taban)'}`);
     process.exit(0);
   } catch (e) {
     if (e instanceof Olculemedi) {

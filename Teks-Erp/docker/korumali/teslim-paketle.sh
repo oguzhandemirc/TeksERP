@@ -3,6 +3,7 @@
 # KORUMALI LINUX İMAJI — TESLİM PAKETİ (Faz 2f): docker save + sha256 + künye
 # =============================================================================
 #   TEKSERP_PAKET_ANAHTARI=<anahtar dosyası> sh Teks-Erp/docker/korumali/teslim-paketle.sh <imaj-etiketi> <çıktı-dizini>
+# <imaj-etiketi> İMZALI imajdır (`imaj-imzala.mjs` çıktısı, label tr.tekserp.butunluk); imzasız taban reddedilir.
 # Üretir (çıktı dizini REPO DIŞI olmalı):
 #   tekserp-korumali_<sürüm>_linux-amd64.tar.gz   docker save | gzip -n (docker load bunu açar)
 #   docker-compose.yml · .env.ornek               kurulumun iki dosyası (imajla aynı commit'ten)
@@ -28,7 +29,9 @@ ANAHTAR="${TEKSERP_PAKET_ANAHTARI:-}"
 
 ETIKET_TUR=$(docker image inspect "$ETIKET" --format '{{index .Config.Labels "tr.tekserp.imaj"}}') || { echo "✖ imaj yok: $ETIKET" >&2; exit 1; }
 [ "$ETIKET_TUR" = "korumali" ] || { echo "✖ $ETIKET korumalı imaj değil (label tr.tekserp.imaj=$ETIKET_TUR)" >&2; exit 1; }
-node "$REPO/scripts/test_korumali_imaj.mjs" --imaj="$ETIKET" || { echo "✖ imaj bekçisi yeşil değil — paket üretilmedi" >&2; exit 1; }
+# Teslim edilen imaj İMZALI olmalı (imaj içi liste; imzasız imajda native çekirdek yüklenmez, lisans etkinleşmez).
+node "$REPO/scripts/test_korumali_imaj.mjs" --imaj="$ETIKET" --imzali || { echo "✖ imaj bekçisi (--imzali) yeşil değil — önce imaj-imzala.mjs; paket üretilmedi" >&2; exit 1; }
+BUTUNLUK_KID=$(docker image inspect "$ETIKET" --format '{{index .Config.Labels "tr.tekserp.butunluk"}}')
 
 IMAJ_ID=$(docker image inspect "$ETIKET" --format '{{.Id}}')
 PLATFORM=$(docker image inspect "$ETIKET" --format '{{.Os}}/{{.Architecture}}')
@@ -44,18 +47,18 @@ cp "$BURASI/docker-compose.yml" "$CIKTI/docker-compose.yml"
 cp "$BURASI/.env.ornek" "$CIKTI/.env.ornek"
 
 node -e '
-const [ad, cikti, etiket, imajId, platform, commit, surum, kunye, ...dosyalar] = process.argv.slice(1);
+const [ad, cikti, etiket, imajId, platform, commit, surum, kunye, butunlukKid, ...dosyalar] = process.argv.slice(1);
 const fs = require("fs"), crypto = require("crypto"), path = require("path");
 const k = JSON.parse(kunye);
 // `tekserp-butunluk` yükü (Teks-Erp/src/lib/license/integrity.ts): dosya listesini ve özetini imza aracı
 // ölçüp yazar (butunluk-liste.txt); künye yalnız kapsamı söyler. Ek alanlar şemada serbest, imzanın kapsamında.
 const paket = { v: 1, paketId: crypto.randomUUID(), urun: "backend-docker", surum, derlemeTarihi: k.zaman,
   musteri: null, commit: commit || k.commit,
-  imaj: { etiket, kimlik: imajId, platform, arsiv: ad },
+  imaj: { etiket, kimlik: imajId, platform, arsiv: ad, butunlukKid },
   sunucu: { nodeSurum: k.nodeSurum, v8Taban: k.v8Taban, jscSha256: k.jscSha256, nativeZorunlu: k.nativeZorunlu === true },
   kapsam: { dizinler: [], dosyalar } };
 fs.writeFileSync(path.join(cikti, "PAKET-DOCKER.json"), JSON.stringify(paket, null, 2) + "\n");
-' "$AD" "$CIKTI" "$ETIKET" "$IMAJ_ID" "$PLATFORM" "$COMMIT" "$SURUM" "$KUNYE" "$AD" docker-compose.yml .env.ornek
+' "$AD" "$CIKTI" "$ETIKET" "$IMAJ_ID" "$PLATFORM" "$COMMIT" "$SURUM" "$KUNYE" "$BUTUNLUK_KID" "$AD" docker-compose.yml .env.ornek
 
 ( cd "$REPO/Teks-Erp" && npx tsx scripts/build-korumali-imza.ts belge --belge="$CIKTI/PAKET-DOCKER.json" --anahtar="$ANAHTAR" ) \
   || { echo "✖ künye imzalanamadı — teslim paketi eksik" >&2; exit 1; }

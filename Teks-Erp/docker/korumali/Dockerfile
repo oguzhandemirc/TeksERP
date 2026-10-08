@@ -14,7 +14,9 @@
 #   doğrulamalı) — `runtime-node` aşaması onu bir kez indirir, iki aşama da onu kullanır.
 # Derleme (Mac'te dahil):  docker buildx build --platform linux/amd64 \
 #   -f Teks-Erp/docker/korumali/Dockerfile --build-arg TEKSERP_COMMIT=$(git rev-parse HEAD) \
-#   -t tekserp-korumali:<sürüm> --load .
+#   -t tekserp-korumali:<sürüm>-imzasiz --load .
+# İmzala (Mac, PAKET anahtarı): imaj içi bütünlük listesi ince son katman olarak eklenir —
+#   TEKSERP_PAKET_ANAHTARI=<anahtar> node Teks-Erp/docker/korumali/imaj-imzala.mjs <…-imzasiz> tekserp-korumali:<sürüm>
 # Kaynak haritası (REPO DIŞI arşiv):  aynı komut + --target kaynak-haritasi \
 #   --output type=local,dest=$HOME/.tekserp/kaynak-haritalari/<ad>
 # Runbook: docs/ops/LINUX-DOCKER-KURULUM.md
@@ -59,6 +61,7 @@ COPY Teks-Erp/docker/korumali/sahne.mjs ./docker/korumali/sahne.mjs
 RUN KORUMA_COMMIT="$TEKSERP_COMMIT" KORUMA_ARSIV_DIZINI=/arsiv \
     /opt/tekserp/bin/node docker/korumali/sahne.mjs /sahne/app
 # Prod bağımlılıkları + Prisma istemcisi YORUMSUZ şemadan; şema motoru Linux ikilisi (ELF kapısı).
+# `node_modules/.bin` sembolik bağdır: imzalı kapsamda bağ imzalanmaz (Windows paketi de taşımaz); prisma doğrudan çağrılır.
 WORKDIR /sahne/app
 RUN npm ci --omit=dev --no-audit --no-fund \
   && PRISMA_CLI_BINARY_TARGETS=debian-openssl-3.0.x npx prisma generate \
@@ -66,6 +69,7 @@ RUN npm ci --omit=dev --no-audit --no-fund \
   && head -c 4 node_modules/@prisma/engines/schema-engine-debian-openssl-3.0.x | grep -q 'ELF' \
   && find node_modules/@prisma/engines -maxdepth 1 -name 'schema-engine-*' ! -name 'schema-engine-debian-openssl-3.0.x' -delete \
   && find node_modules -name '*.map' -type f -delete \
+  && rm -rf node_modules/.bin \
   && rm -f package-lock.json && npm cache clean --force
 
 # ---------------------------------------------------------------------------
@@ -93,9 +97,11 @@ RUN apt-get update \
   && groupadd --system --gid 10001 tekserp \
   && useradd --system --uid 10001 --gid tekserp --home-dir /nonexistent --shell /usr/sbin/nologin tekserp \
   && install -d -o tekserp -g tekserp -m 0700 /var/lib/tekserp/lisans /var/lib/tekserp/yedek /var/lib/tekserp/yedek-anahtar
-COPY --from=runtime-node /w/sahne/runtime/bin/node /usr/local/bin/node
-# Uygulama ağacı root'a ait ve süreç kullanıcısına SALT-OKUNUR (yamalı .jsc yazılamasın).
+# Uygulama ağacı root'a ait ve süreç kullanıcısına SALT-OKUNUR (yamalı .jsc yazılamasın). Runtime Node
+# imzalı kapsamdaki `runtime/` altında durur (Windows paketiyle aynı kapsam); PATH'teki ad ona bağdır.
 COPY --from=derle --chown=root:root /sahne/app /app
+COPY --from=runtime-node --chown=root:root /w/sahne/runtime/bin/node /app/runtime/bin/node
+RUN ln -s /app/runtime/bin/node /usr/local/bin/node
 COPY --chmod=0755 Teks-Erp/docker/entrypoint.sh /usr/local/bin/entrypoint.sh
 COPY --chmod=0755 Teks-Erp/docker/korumali/yedek-zamanlayici.sh /usr/local/bin/yedek-zamanlayici.sh
 WORKDIR /app

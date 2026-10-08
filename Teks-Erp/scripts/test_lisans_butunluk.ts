@@ -656,7 +656,22 @@ async function main(): Promise<void> {
     const zincirCores: { core: LicenseCore; ek: string }[] = [{ core: tsLicenseCore, ek: "ts" }];
     if (n.status.kaynak === "native" && n.status.kunye.testCapasi) zincirCores.push({ core: n.core, ek: "native" });
     else ATLAMA.atla("§8 native kolu", "test çapalı native derlemesi yok — `cd native/lisans-cekirdek && npm run derle`", 8);
-    await bolum8({ check, temp: TEMP, paketKur: async (ad) => { const k = paket(ad); await imzala(k, A); return k; }, girdi }, zincirCores);
+    const natDosya = nativeFileName(process.platform, process.arch);
+    const natUretim = natDosya ? path.join(TEKS, "native", "lisans-cekirdek", "dist-uretim", natDosya) : null;
+    const yukleyici =
+      natDosya && natUretim && existsSync(natUretim)
+        ? {
+            keys: keysOf(A),
+            paketKur: async (ad: string) => {
+              const k = paket(ad);
+              copyFileSync(natUretim, path.join(k, "native", natDosya));
+              await imzala(k, A);
+              return { kok: k, node: natUretim, dosya: natDosya };
+            },
+          }
+        : null;
+    if (!yukleyici) ATLAMA.atla("§8r–§8u yükleyici zinciri (gerçek .node)", "native üretim derlemesi yok — `cd native/lisans-cekirdek && npm run derle:uretim`", 4);
+    await bolum8({ check, temp: TEMP, paketKur: async (ad) => { const k = paket(ad); await imzala(k, A); return k; }, girdi, yukleyici }, zincirCores);
   } finally {
     rmSync(TEMP, { recursive: true, force: true });
   }

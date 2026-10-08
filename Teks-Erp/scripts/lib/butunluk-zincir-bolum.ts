@@ -1,7 +1,8 @@
 // `test_lisans_butunluk` §8 — zincirli (`pkt-*`) bütünlük listesi backend'de (PAKET-ANAHTARI-KOK-ALTINDA.md D3):
 // liste sırası, YERLEŞİK kip (iptal yalnız uyarı), sertifika sınıfından dar yetki kuralı, PAKET iptal deposu ve
-// güncelleyiciye bağlı `paket-zinciri` yeteneği. TS ve (varsa) test çapalı native çekirdekle koşulur.
-import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+// güncelleyiciye bağlı `paket-zinciri` yeteneği. TS ve (varsa) test çapalı native çekirdekle koşulur. §8r–§8u: zorunlu
+// kipte `.node` yükleyicisi zincir-yalnız listeyi (Docker imajı) kökten doğrular (gerçek üretim `.node`u varsa).
+import { appendFileSync, copyFileSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
 import {
@@ -17,7 +18,8 @@ import {
   type LicenseClass,
   type PackageRevocationDoc,
 } from "../../src/lib/license/protocol";
-import { IntegrityManifestSchema, INTEGRITY_TYP } from "../../src/lib/license/integrity";
+import { IntegrityManifestSchema, INTEGRITY_TYP, type PackageKey } from "../../src/lib/license/integrity";
+import { loadLicenseCoreFrom } from "../../src/lib/license/native";
 import { INTEGRITY_FILE } from "../../src/lib/license/integrity-scope";
 import { INTEGRITY_CERT_REVOKED_WARNING, decideForClass, runIntegrityCheck, type IntegrityCheckInput } from "../../src/lib/license/integrity-check";
 import type { LicenseCore } from "../../src/lib/license/license-core";
@@ -35,6 +37,8 @@ export interface ZincirOrtami {
   /** Bugünkü (`paket-*`) imzalı paket kökü üretir: `butunluk.jws` + liste. */
   readonly paketKur: (ad: string) => Promise<string>;
   readonly girdi: (kok: string, o?: Partial<IntegrityCheckInput>) => IntegrityCheckInput;
+  /** Gerçek üretim `.node`u ile imzalı (`paket-*`) paket kökü + o anahtar; `.node` yoksa null (§8r–§8u atlanır). */
+  readonly yukleyici: { readonly paketKur: (ad: string) => Promise<{ kok: string; node: string; dosya: string }>; readonly keys: PackageKey[] } | null;
 }
 
 const f = fiksturKur(Date.now());
@@ -159,6 +163,35 @@ function yetenek(o: ZincirOrtami): void {
   }
 }
 
+/** Zorunlu kipte `.node` açılmadan önceki liste denetimi zincirli listeyi de okur — denetimle aynı sıra ve kök kuralı. */
+async function yukleyiciZinciri(o: ZincirOrtami): Promise<void> {
+  const y = o.yukleyici;
+  if (y === null) return;
+  const cert = sertifika();
+  const yukle = (kok: string, roots = f.kokler) =>
+    loadLicenseCoreFrom({ required: true, cwd: kok, env: {}, platform: process.platform, arch: process.arch, packageKeys: y.keys, packageRoots: roots });
+  const neden = (r: ReturnType<typeof yukle>) => ("neden" in r.status ? r.status.neden : "native");
+
+  const yalniz = await y.paketKur("yukleyici-zincir");
+  zincirle(yalniz.kok, cert.token, true);
+  const r0 = yukle(yalniz.kok);
+  o.check("§8r zincir-yalnız liste + kök çapada → native yüklenir (zorunlu kip)", r0.status.kaynak === "native", neden(r0));
+  const r1 = yukle(yalniz.kok, [f.kokler[1]!]);
+  o.check("§8s zincir-yalnız liste, sertifikayı imzalayan kök çapada yok → LISTE_GECERSIZ, çekirdek YOK", r1.status.kaynak === "yok" && neden(r1) === "LISTE_GECERSIZ", neden(r1));
+
+  const ikili = await y.paketKur("yukleyici-ikili");
+  writeFileSync(path.join(ikili.kok, CHAINED_INTEGRITY_FILE), "bozuk.zincir.dosyasi\n");
+  const r2 = yukle(ikili.kok);
+  o.check("§8t bozuk zincirli dosya geçerli eski listenin yanında → LISTE_GECERSIZ (eskiye sessizce düşmez)", r2.status.kaynak === "yok" && neden(r2) === "LISTE_GECERSIZ", neden(r2));
+
+  const kurcali = await y.paketKur("yukleyici-kurcali");
+  zincirle(kurcali.kok, cert.token, true);
+  appendFileSync(path.join(kurcali.kok, "native", kurcali.dosya), Buffer.from([0]));
+  const r3 = yukle(kurcali.kok);
+  o.check("§8u zincir-yalnız liste + kurcalanmış .node → LISTE_UYUSMAZ", r3.status.kaynak === "yok" && neden(r3) === "LISTE_UYUSMAZ", neden(r3));
+  copyFileSync(kurcali.node, path.join(kurcali.kok, "native", kurcali.dosya));
+}
+
 export async function bolum8(o: ZincirOrtami, cores: readonly { readonly core: LicenseCore; readonly ek: string }[]): Promise<void> {
   for (const c of cores) {
     await listeSirasi(o, c.core, c.ek);
@@ -166,4 +199,5 @@ export async function bolum8(o: ZincirOrtami, cores: readonly { readonly core: L
   }
   iptalDeposu(o);
   yetenek(o);
+  await yukleyiciZinciri(o);
 }

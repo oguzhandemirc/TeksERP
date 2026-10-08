@@ -4,7 +4,7 @@
 // sertifikasının HAK sınıfı yetkisini uygular.
 import { readFile } from "node:fs/promises";
 import path from "node:path";
-import { CHAINED_INTEGRITY_FILE, LICENSE_CLASSES, isoToMs, type RootKey, type VerifiedPackageRevocation } from "./protocol";
+import { LICENSE_CLASSES, isoToMs, type RootKey, type VerifiedPackageRevocation } from "./protocol";
 import {
   PACKAGE_PUBLIC_KEYS,
   readIntegrityList,
@@ -16,7 +16,7 @@ import {
 import { walkIntegrityScope } from "./integrity-list";
 import type { LicenseCore } from "./license-core";
 import type { IntegrityStatus } from "./state-rules";
-import { INTEGRITY_FILE } from "./integrity-scope";
+import { INTEGRITY_TOKEN_FILES } from "./integrity-scope";
 import { ROOT_PUBLIC_KEYS } from "./trust-anchor";
 import { BUILD_WATERMARK, watermarkMatches, type BuildWatermark } from "./watermark";
 
@@ -186,7 +186,7 @@ function outcome(o: Partial<IntegrityOutcome> & Pick<IntegrityOutcome, "durum" |
 
 /** Önce zincirli liste (`butunluk-zincir.jws`), yoksa bugünkü `butunluk.jws`. */
 async function readList(root: string): Promise<string | null> {
-  for (const file of [CHAINED_INTEGRITY_FILE, INTEGRITY_FILE]) {
+  for (const file of INTEGRITY_TOKEN_FILES) {
     try {
       return (await readFile(path.join(root, file), "utf8")).trim();
     } catch {
