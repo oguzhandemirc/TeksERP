@@ -165,6 +165,8 @@ Bulut sınıfının **değiştirmediği** çekirdek kurallar: lisans kapısı an
 
 ## 4. Docker güncelleyicisi
 
+> **Yerini alan plan (2026-10-08):** bu bölüm ve dilim B4, `docs/design/GUNCELLEYICI-SAGLAMLIK.md`in L-dilimleriyle uygulanır. Oradaki farklar bağlayıcıdır: Linux paketi ayrı ürün yolundan (`/<grup>/backend-oci/`, gruplar platformlar arası ortak olduğu için) · GECIS `.env` değil `current` sembolik bağı (compose sürümle imzalı gelir) · göç imaj açılışında değil yalnız güncelleyicinin `GOC` adımında.
+
 ### 4.1 Ortak sözleşme (Dağıtım v2)
 
 Bulut güncelleyicisi, Dağıtım v2'nin **aynı sözleşmesine** bağlanır: `tekserp-surum` bildirimi (PAKET imzalı) · kanal bağı · kiranın `guncelleme` politikası (OTOMATIK · ONAYLI · DONDUR, pencere, sabitleme; K1 her şeyi ezer) · tek karar fonksiyonu `decideUpdate` · yoklamadaki güncelleme raporu · panelin "Sistem → Sunucu Güncellemeleri" ekranı · onay ucu ve niyet dosyası (yetki DEĞİL) · ortak test vektörleri. Satıcı ve portal tarafında yeni bir şey gerekmez, kurulum geçmişi ve filo görünümü aynen çalışır. Politika müşteri başına portalda ayarlanır, varsayılanı bugünkü `defaultUpdatePolicy()` (ONAYLI) kalır (K-B14).
