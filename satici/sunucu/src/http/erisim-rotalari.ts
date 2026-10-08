@@ -54,6 +54,12 @@ export const ERISIM_PORTAL_ROTALARI: ReadonlySet<string> = new Set([
   "POST /kurulumlar/:id/etkinlestirme-kodu",
   // Dağıtım v2: güncelleme politikası (kök parolası taşımaz, güven kökü eklemez — operasyon ayarı)
   "POST /kurulumlar/:id/guncelleme-politikasi",
+  // güncelleme dalgası (F1a): liste/ayrıntı salt okuma · aç · aşama ilerlet/geri çek (gerekçeli, elle — AK-2)
+  "GET /guncelleme-dalgalari",
+  "GET /guncelleme-dalgalari/:id",
+  "POST /guncelleme-dalgalari",
+  "POST /guncelleme-dalgalari/:id/ilerlet",
+  "POST /guncelleme-dalgalari/:id/geri-cek",
   // kök kuyruğu talebinden vazgeçmek · ara imzacıyla toplu yeniden basım (ara imzacı parolası gövdede)
   "POST /kok-kuyrugu/:id/iptal",
   "POST /haklar/toplu-yeniden-bas",

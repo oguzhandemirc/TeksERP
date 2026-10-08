@@ -1,7 +1,7 @@
 // ZAMANA BAĞLI BİLDİRİMLER — dakikalık bakım işinin içinde `BILDIRIM_TARAMA_DK`da bir koşar: kurulum ses vermiyor ·
 // kira bitişi yaklaşıyor (yalnız eski çapalı kurulum; P modelinde kira bitişi tazeliktir) · lisans geçerlilik bitişi
 // yaklaşıyor · taksit vadesi yaklaşıyor (bu ikisi ödenmiş tarih P'nin iki kaynağıdır — `paid-through.ts`) · bakım bitişi
-// yaklaşıyor (30 gün; yenileme satışı). Aday kilitsiz okunur, her
+// yaklaşıyor (30 gün; yenileme satışı) · güncelleme dalgası eşik uyarısı (F1a; grup kilidiyle, durdurmaz). Aday kilitsiz okunur, her
 // aday kendi tx'inde kurulum kilidi ALTINDA TAZE okunup yeniden doğrulanır (TOCTOU: arada yoklayan kurulum "sessiz"
 // bildirimi almaz). Tekillik anahtarı dönemi taşır (son yoklama anı · kira kimliği · bitiş/vade anı): aynı dönem
 // ikinci satır doğurmaz, iki zamanlayıcı yarışsa da UNIQUE tek satır bırakır — spam yok.
@@ -11,6 +11,7 @@ import { prisma, type Tx } from "../lib/prisma";
 import { installationCapabilities } from "../services/entitlement-policy";
 import { findEntitlementForDelivery } from "../services/lease.service";
 import { paidThroughModelActive } from "../services/paid-through";
+import { scanWaveAlerts } from "../services/update-wave-view.service";
 import { enqueueNotificationTx } from "./outbox";
 
 const HOUR_MS = 3_600_000;
@@ -30,6 +31,7 @@ export interface ScanTotals {
   validityEnd: number;
   installmentDue: number;
   maintenanceEnd: number;
+  waveAlert: number;
 }
 
 /** Tek adayın tx'i: ilk ifade kurulum kilidi; aday düşerse (hata) diğerleri sürer. */
@@ -180,7 +182,7 @@ async function scanInstallmentDue(cfg: ScanConfig, nowMs: number): Promise<numbe
   return n;
 }
 
-/** Beş tarama sırayla; dönüş yeni yazılan satır sayısı (kanal başına). */
+/** Altı tarama sırayla; dönüş yeni yazılan satır sayısı (kanal başına). */
 export async function scanTimedNotifications(cfg: ScanConfig, nowMs: number): Promise<ScanTotals> {
   return {
     silent: await scanSilent(cfg, nowMs),
@@ -188,5 +190,6 @@ export async function scanTimedNotifications(cfg: ScanConfig, nowMs: number): Pr
     validityEnd: await scanValidityEnd(cfg, nowMs),
     installmentDue: await scanInstallmentDue(cfg, nowMs),
     maintenanceEnd: await scanMaintenanceEnd(nowMs),
+    waveAlert: await scanWaveAlerts(),
   };
 }

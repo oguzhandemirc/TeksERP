@@ -72,6 +72,7 @@ async function main(): Promise<void> {
   const bildirimJetonlari: string[] = [];
   const dealerHit = new Set<string>();
   const sapmalar: string[] = [];
+  const dalgalar: string[] = [];
   try {
     const yonetici = await portalKullaniciAc(ctx, "SATICI_YONETICI");
     kullanicilar.push(yonetici.id);
@@ -344,6 +345,14 @@ async function main(): Promise<void> {
     });
     const filo = await s("get", "/filo", "/filo", 200);
     await s("get", "/kurulumlar/:id/guncelleme", `/kurulumlar/${kId}/guncelleme`, 200);
+    // Güncelleme dalgası (davranış test_guncelleme_dalgasi'nda): aç → ilerlet → geri çek → liste/ayrıntı koşulur.
+    const dalga = await s("post", "/guncelleme-dalgalari", "/guncelleme-dalgalari", 200, { kanalKodu: "genel", surum: "2.13.0", oncekiSurum: "0.0.1", sebep: "uçlar kapsamı" });
+    const dalgaId = (dalga.veri as { id?: string } | undefined)?.id ?? "yok";
+    if (dalgaId !== "yok") dalgalar.push(dalgaId);
+    await s("post", "/guncelleme-dalgalari/:id/ilerlet", `/guncelleme-dalgalari/${dalgaId}/ilerlet`, 200, { beklenenAsama: 0, sebep: "uçlar kapsamı", onay: true });
+    await s("post", "/guncelleme-dalgalari/:id/geri-cek", `/guncelleme-dalgalari/${dalgaId}/geri-cek`, 200, { beklenenAsama: 1, hedefAsama: 0, sebep: "uçlar kapsamı" });
+    await s("get", "/guncelleme-dalgalari", "/guncelleme-dalgalari?kanal=genel", 200);
+    await s("get", "/guncelleme-dalgalari/:id", `/guncelleme-dalgalari/${dalgaId}`, 200);
     const bakimSatiri = async (gun: number) => {
       await prisma.hak.update({ where: { id: hakId }, data: { bakimBitis: new Date(Date.now() + gun * 86_400_000) } });
       const r = await s("get", "/bakim-bitecek", "/bakim-bitecek", 200);
@@ -426,6 +435,15 @@ async function main(): Promise<void> {
     const sonda = coverageGaps([{ method: "get", path: "/a" }, { method: "post", path: "/b" }], new Set(["GET /a", "PATCH /c"]));
     kontrol("§5d ✓K karşılaştırıcı sentetik kümede ısırır (eksik POST /b · hayalet PATCH /c)", sonda.missing.join() === "POST /b" && sonda.ghost.join() === "PATCH /c");
   } finally {
+    if (dalgalar.length > 0) {
+      await prisma.$transaction(async (tx) => {
+        await tx.$executeRawUnsafe(`SET LOCAL satici.defter_temizlik = 'test'`);
+        await tx.bildirim.deleteMany({ where: { ilgiliKayit: { in: dalgalar } } });
+        await tx.guncellemeDalgasiKaydi.deleteMany({ where: { dalgaId: { in: dalgalar } } });
+        await tx.guncellemeDalgasi.deleteMany({ where: { id: { in: dalgalar } } });
+        await tx.denetim.deleteMany({ where: { varlikId: { in: dalgalar } } });
+      });
+    }
     await sunucu.kapat();
     await prisma.bildirim.deleteMany({ where: { tekillikAnahtari: { in: bildirimJetonlari.map((j) => `DENEME:${j}`) } } });
     await temizleDagitim({ musteriler, yayinciKidler: [`uclar-${ek}`] });

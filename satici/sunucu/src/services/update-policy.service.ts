@@ -10,6 +10,7 @@ import {
   ReleaseVersionSchema,
   UPDATE_MODES,
   UpdateWindowRuleSchema,
+  compareVersions,
   isKnownTimeZone,
   windowIntervals,
   type LeaseUpdatePolicy,
@@ -116,12 +117,24 @@ export function validatePolicy(input: UpdatePolicyInput, timeZone: string): Upda
   return { kip: input.kip, pencere: window, hedefSurum: input.hedefSurum };
 }
 
-/** Kiranın `guncelleme` alanı — kuralın `[fromMs, toMs)` (kiranın ömrü) ile kesişen mutlak aralıklarıyla. */
-export function leaseUpdatePolicy(inst: PolicyColumns, fromMs: number, toMs: number): LeaseUpdatePolicy {
+/** Etkin hedef = min(insanın sabitlemesi, dalga tavanı); null = sınırsız. Karşılaştırılamayan çift → tavan (fail-closed). */
+export function effectiveTarget(pin: string | null, ceiling: string | null): string | null {
+  if (pin === null) return ceiling;
+  if (ceiling === null) return pin;
+  const c = compareVersions(pin, ceiling);
+  return c !== null && c <= 0 ? pin : ceiling;
+}
+
+/**
+ * Kiranın `guncelleme` alanı — kuralın `[fromMs, toMs)` (kiranın ömrü) ile kesişen mutlak aralıklarıyla. `hedefSurum`
+ * = min(insanın sabitlemesi, dalga tavanı) (F1a — tavan `update-wave.service.ts` `waveCeilingFor`); tavan yoksa sabitleme aynen.
+ */
+export function leaseUpdatePolicy(inst: PolicyColumns, fromMs: number, toMs: number, waveCeiling: string | null = null): LeaseUpdatePolicy {
   const p = policyOf(inst);
-  if (!p.pencere) return { kip: p.kip, pencere: null, araliklar: [], hedefSurum: p.hedefSurum };
+  const hedefSurum = effectiveTarget(p.hedefSurum, waveCeiling);
+  if (!p.pencere) return { kip: p.kip, pencere: null, araliklar: [], hedefSurum };
   const rule = { ...p.pencere, saatDilimi: policyTimeZone(inst) };
-  return LeaseUpdatePolicySchema.parse({ kip: p.kip, pencere: rule, araliklar: windowIntervals(rule, fromMs, toMs), hedefSurum: p.hedefSurum });
+  return LeaseUpdatePolicySchema.parse({ kip: p.kip, pencere: rule, araliklar: windowIntervals(rule, fromMs, toMs), hedefSurum });
 }
 
 const samePolicy = (a: UpdatePolicyInput, b: UpdatePolicyInput): boolean => JSON.stringify(a) === JSON.stringify(b);
@@ -157,12 +170,13 @@ export async function setUpdatePolicyTx(
 /**
  * Yoklamanın güncelleme raporu (kira verildikten SONRA, ayrı ve idempotent): dilim + güncelleyici durumu + bekleyen
  * karar kurulumun DURUM kolonlarına; tamamlanan deneme `kurulum_kaydi` DEFTERİNE `(kurulum, kayitId)` ile bir kez.
+ * Dönüş: bu çağrı YENİ bir başarısız/geri dönen sonuç yazdı mı (çağıran dalga uyarısını değerlendirir — F1a).
  */
 export async function recordUpdateReport(
   db: PrismaClient,
   g: { installationDbId: string; kid: string; report: UpdateReport | undefined; nowMs: number },
-): Promise<void> {
-  if (!g.report) return;
+): Promise<boolean> {
+  if (!g.report) return false;
   const r = g.report;
   const summary: Prisma.InputJsonObject = { guncelleyici: r.guncelleyici, bekleyen: r.bekleyen, son: r.son };
   await db.kurulum.update({
@@ -170,8 +184,8 @@ export async function recordUpdateReport(
     data: { saatDilimi: r.saatDilimi, sonGuncellemeRaporu: summary, sonGuncellemeRaporuZamani: new Date(g.nowMs) },
   });
   const son = r.son;
-  if (!son) return;
-  await db.$transaction(async (tx) => {
+  if (!son) return false;
+  return db.$transaction(async (tx) => {
     // Kilit tx'in İLK ifadesi (kural): aynı kurulumun eşzamanlı iki yoklaması defter + bildirimi sırayla yazar.
     await lockInstallation(tx, g.installationDbId);
     const written = await tx.kurulumKaydi.createMany({
@@ -186,7 +200,7 @@ export async function recordUpdateReport(
       skipDuplicates: true,
     });
     // Aynı rapor her yoklamada gelir: bildirim yalnız defter satırı İLK kez yazıldığında (tekillik anahtarı ikinci sigorta).
-    if (written.count === 0) return;
+    if (written.count === 0) return false;
     const text = updateNotificationText(son);
     await enqueueNotificationTx(tx, {
       event: UPDATE_NOTIFICATION_EVENTS[son.sonuc],
@@ -198,5 +212,6 @@ export async function recordUpdateReport(
       referans: text.referans,
       tarih: new Date(son.bitis),
     });
+    return son.sonuc !== "BASARILI";
   });
 }

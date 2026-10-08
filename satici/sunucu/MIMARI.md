@@ -103,6 +103,16 @@ node ../../scripts/agir-is.mjs -- npx tsx scripts/run-all-tests.ts [ad-parçası
 - **Sürüm/kanal görünümü (`GET /portal/api/surumler`):** `YAYIN_DIZINI` (güncelleme sunucusunun `html/` + `defter/` kökü, SALT-OKUNUR bağ) okunur: `latest.yml` · OTA manifesti · APK künyesi · yayın defteri TSV'si; kök yoksa "ölçülemedi" (boş liste "yayın yok" değildir).
 - Ham gövdeli portal uçları `/portal/api/ham` (parça PUT, dosya indirme) JSON tablosunun dışındadır ama aynı oturum + izin kapısından geçer (`requirePortalSession`).
 
+### Güncelleme dalgası (F1a)
+
+> Kural: kimlikli satır: `bekçi: test_guncelleme_dalgasi.ts`.
+
+- **Model:** `guncelleme_dalgasi` DURUM tablosudur (kanal · sürüm · önceki sürüm · aşama 0–3, `UNIQUE(kanal, sürüm)`, CHECK aralık + önceki ≠ sürüm); her aşama değişimi `guncelleme_dalgasi_kaydi` DEFTERİNE satırdır (DALGA_ACILDI · ASAMA_ILERLETILDI tek adım ↔ ASAMA_GERI_CEKILDI aşağı, sebep zorunlu, karar anı sayacı `ayrinti`de; `defter_degismez` tetikleyicisi). Açılışın tersi aşama 0'dır, dalga silinmez. Dalga yalnız `genel` grubunda (`WAVE_GROUPS`).
+- **Üyelik:** kova = lisans kimliğinin sha256'sı mod 100; eşik aşama 0/1/2/3 → %0/10/50/100, küçük grupta aşama ≥ 1 en az bir kurulum seçer. Tek yüklem `isWaveMember`; tavan `waveCeilingFor` (üye → dalga sürümü, değil → önceki sürüm). Kirada etkin hedef = min(insan sabitlemesi, tavan) (`effectiveTarget`); güncelleyici ve tel sözleşmesi değişmez (var olan `hedefSurum`).
+- **Yürürlükteki dalga** grubun en yüksek sürümlü satırıdır; dalga açıldıktan sonra o grupta dalgasız yeni sürüm yayılmaz (fail-closed).
+- **Aşama ELLE** (AK-2): `POST /guncelleme-dalgalari` · `/:id/ilerlet {beklenenAsama}` · `/:id/geri-cek` — kilit `UPDATE_WAVE 9112` → taze okuma → atomik claim (`count 0 → 409 DURUM_CAKISMASI`). Uyarı açıkken ya da sonuç < %80 iken ilerletme `onay:true` ister (400 `IKINCI_ONAY_GEREKLI`). Zil yalnız tavanı değişen kuruluma; izin `guncelleme:dalga`, okuma `portal:oku`.
+- **Uyarı:** sorunlu sonuç (yoklama raporu) ve tarayıcı `GUNCELLEME_DALGA_UYARI` yazar — aşama ≥ 1, ≥ 2 kurulum ya da ≥ %10; dalga × aşama başına bir kez. Uyarı aşamaya DOKUNMAZ; otomatik ilerletme/durdurma yoktur.
+
 ### ERİŞİM
 
 > Kural: kimlikli satırlar: Access JWT · OPT-IN izin listesi · imza boğazı · denetim · JWKS yaşı · gövde özeti (`bekçi: test_erisim_kapisi · test_imza_parolasi`). 2026-10-04'te `docs/kurallar/lisans.md`'den taşındı; kapsam cümleleri o günün kararına göre (portal tamamen internetten).

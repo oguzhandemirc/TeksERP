@@ -29,6 +29,8 @@ export const PORTAL_PERMISSIONS = {
   "kurulum:yonet": VENDOR,
   /** Backend güncelleme politikası (kip · pencere · sabitleme — Dağıtım v2); kiraya imzalı gider. */
   "guncelleme:yaz": VENDOR,
+  /** Güncelleme dalgası (F1a): dalga açma · aşama ilerletme/geri çekme — gerekçeli, elle (AK-2); acil durdurma = aşama 0. */
+  "guncelleme:dalga": VENDOR,
   /** Kurulum iptali ve iptalin geri alınması. */
   "kurulum:iptal": ADMIN,
   /** Kanal ana verisi (kod · ad · tür · güncel sürümler). */
