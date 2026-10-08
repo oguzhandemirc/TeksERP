@@ -23,6 +23,8 @@ const { IMZA_ANAHTARLARI, gorevAnahtarTuru } = require(path.join(KOK, 'scripts/l
 const { gradleImzala } = require(path.join(KOK, 'plugins/withReleaseKeystore.js'));
 const { YON_OZELLIGI, yonOzelligiYaz } = require(path.join(KOK, 'plugins/withBuyukEkranYonu.js'));
 const buyukEkran = require(path.join(KOK, 'scripts/lib/buyuk-ekran.cjs'));
+const playManifest = require(path.join(KOK, 'scripts/lib/play-manifest.cjs'));
+const { hizmetKaldirmaYaz } = require(path.join(KOK, 'plugins/withPlayManifestTemizligi.js'));
 /* eslint-enable @typescript-eslint/no-require-imports */
 
 function degerlendir() {
@@ -76,7 +78,7 @@ describe('K-14 — kurulum izni yok', () => {
 
 describe('K-14 — uygulama kodunda APK indir/kur yolu yok', () => {
   const dosyalar = uygulamaDosyalari(path.join(KOK, 'src'));
-  const YASAK: Array<[string, RegExp]> = [
+  const YASAK: [string, RegExp][] = [
     ['kurulum niyeti', /INSTALL_PACKAGE/],
     ['APK MIME tipi', /vnd\.android\.package-archive/],
     ['kurulum izni', /REQUEST_INSTALL_PACKAGES/],
@@ -233,8 +235,56 @@ describe('API 36 — Play hedef SDK ve büyük ekran yön kilidi (Play reddi 202
 
   it('AAB doğrulaması hedef SDK ve yön özelliğini paketin kendisinden ölçer', () => {
     const betik = fs.readFileSync(path.join(KOK, 'scripts/build-apk.mjs'), 'utf8');
-    expect(betik).toMatch(/if \(ogeler\) sorunlar\.push\(\.\.\.buyukEkranSorunlari\(ogeler\)\)/);
+    expect(betik).toMatch(/if \(ogeler\) sorunlar\.push\(\.\.\.buyukEkranSorunlari\(ogeler\)/);
     expect(betik).toMatch(/import \{ PLAY_EN_DUSUK_HEDEF_SDK, YON_OZELLIGI \} from '\.\/lib\/buyuk-ekran\.cjs'/);
     expect(buyukEkran.PLAY_EN_DUSUK_HEDEF_SDK).toBe(36);
+  });
+});
+
+describe('K1 · K3 — Play manifest temizliği (yalnız şifreli bağlantı; kullanılmayan izin ve hizmet yok)', () => {
+  const buildProps = (appJson.plugins as unknown[]).find(
+    (p): p is [string, { android: Record<string, unknown> }] => Array.isArray(p) && p[0] === 'expo-build-properties',
+  );
+  const cfg = degerlendir();
+
+  it('usesCleartextTraffic iki yerde de false (app.json android + expo-build-properties) ve değerlendirilmiş config\'de false', () => {
+    expect(appJson.android.usesCleartextTraffic).toBe(false);
+    expect(buildProps?.[1].android.usesCleartextTraffic).toBe(false);
+    expect(cfg.android?.usesCleartextTraffic).toBe(false);
+  });
+
+  it('engellenen izinler tek kaynaktan: app.json blockedPermissions ⊇ ENGELLI_IZINLER, permissions ile kesişmez', () => {
+    const engelli: string[] = appJson.android.blockedPermissions;
+    for (const iz of playManifest.ENGELLI_IZINLER) expect(engelli).toContain(iz);
+    for (const iz of playManifest.ENGELLI_IZINLER) expect(appJson.android.permissions).not.toContain(iz);
+  });
+
+  it('hizmet temizleme eklentisi plugins listesinde; iki expo-audio hizmetini tools:node=remove yazar (idempotent)', () => {
+    expect(appJson.plugins).toContain('./plugins/withPlayManifestTemizligi');
+    const manifest = { manifest: { $: {}, application: [{ $: { 'android:name': '.MainApplication' } }] } };
+    hizmetKaldirmaYaz(manifest);
+    hizmetKaldirmaYaz(manifest);
+    const hizmetler = (manifest.manifest.application[0] as { service?: { $: Record<string, string> }[] }).service ?? [];
+    expect(hizmetler.map((h) => h.$)).toEqual(
+      playManifest.KALDIRILAN_HIZMETLER.map((ad: string) => ({ 'android:name': ad, 'tools:node': 'remove' })),
+    );
+    expect((manifest.manifest.$ as Record<string, string>)['xmlns:tools']).toBe('http://schemas.android.com/tools');
+  });
+
+  it('AAB doğrulaması düz HTTP, engelli izin ve hizmeti paketin kendisinden ölçer', () => {
+    const betik = fs.readFileSync(path.join(KOK, 'scripts/build-apk.mjs'), 'utf8');
+    expect(betik).toMatch(/\.\.\.playManifestSorunlari\(ogeler\)/);
+    const ogeler = (ozel: Record<string, unknown>) => [
+      { ad: 'manifest', oznitelik: {} },
+      { ad: 'application', oznitelik: { usesCleartextTraffic: 'false', ...ozel } },
+    ];
+    expect(playManifest.playManifestSorunlari(ogeler({}))).toEqual([]);
+    expect(playManifest.playManifestSorunlari(ogeler({ usesCleartextTraffic: 'true' })).join()).toMatch(/usesCleartextTraffic=true/);
+    expect(
+      playManifest.playManifestSorunlari([...ogeler({}), { ad: 'uses-permission', oznitelik: { name: 'android.permission.USE_BIOMETRIC' } }]).join(),
+    ).toMatch(/USE_BIOMETRIC izni var/);
+    expect(
+      playManifest.playManifestSorunlari([...ogeler({}), { ad: 'service', oznitelik: { name: playManifest.KALDIRILAN_HIZMETLER[1] } }]).join(),
+    ).toMatch(/AudioRecordingService hizmeti var/);
   });
 });

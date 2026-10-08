@@ -9,7 +9,7 @@
   ],
   "urun": {
     "panel": { "appId": "com.etkiliyazilim.tekserp", "urunAdi": "TeksERP", "paketAdi": "tekserp-panel" },
-    "tablet": { "androidPaket": "com.etkiliyazilim.tekserp", "gorunenAd": "TeksERP", "runtimeVersion": "55.0", "otaSertifika": "keystore/ota-certs-ortak/certificate.pem" },
+    "tablet": { "androidPaket": "com.etkiliyazilim.tekserp", "gorunenAd": "TeksERP", "runtimeVersion": "56.0", "otaSertifika": "keystore/ota-certs-ortak/certificate.pem" },
     "backend": { "urunAdi": "TeksERP Sunucu", "hizmetAdi": "TeksERP-Backend" }
   },
   "indirmeKoku": "https://indir.etkiliyazilim.com/",

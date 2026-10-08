@@ -2,7 +2,7 @@
   "expo": {
     "name": "TeksERP",
     "slug": "teks-erp-mobil",
-    "version": "1.1.0",
+    "version": "1.2.0",
     "orientation": "default",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
@@ -21,8 +21,8 @@
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false,
       "package": "com.etkiliyazilim.tekserp",
-      "versionCode": 59,
-      "usesCleartextTraffic": true,
+      "versionCode": 60,
+      "usesCleartextTraffic": false,
       "permissions": [
         "android.permission.CAMERA",
         "android.permission.BLUETOOTH",
@@ -36,7 +36,13 @@
         "android.permission.REQUEST_INSTALL_PACKAGES",
         "android.permission.RECORD_AUDIO",
         "android.permission.READ_EXTERNAL_STORAGE",
-        "android.permission.WRITE_EXTERNAL_STORAGE"
+        "android.permission.WRITE_EXTERNAL_STORAGE",
+        "android.permission.SYSTEM_ALERT_WINDOW",
+        "android.permission.USE_BIOMETRIC",
+        "android.permission.USE_FINGERPRINT",
+        "android.permission.FOREGROUND_SERVICE",
+        "android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK",
+        "android.permission.FOREGROUND_SERVICE_MICROPHONE"
       ]
     },
     "ios": {
@@ -64,7 +70,7 @@
             "targetSdkVersion": 36,
             "minSdkVersion": 26,
             "buildToolsVersion": "36.0.0",
-            "usesCleartextTraffic": true,
+            "usesCleartextTraffic": false,
             "buildArchs": [
               "arm64-v8a"
             ]
@@ -80,9 +86,10 @@
       "expo-asset",
       "./plugins/withReleaseKeystore",
       "./plugins/withOtaZinciri",
-      "./plugins/withBuyukEkranYonu"
+      "./plugins/withBuyukEkranYonu",
+      "./plugins/withPlayManifestTemizligi"
     ],
-    "runtimeVersion": "55.0",
+    "runtimeVersion": "56.0",
     "updates": {
       "enabled": true,
       "checkAutomatically": "ON_LOAD",
@@ -92,7 +99,7 @@
         "keyid": "ortak",
         "alg": "rsa-v1_5-sha256"
       },
-      "url": "https://indir.etkiliyazilim.com/ota/55.0/manifest"
+      "url": "https://indir.etkiliyazilim.com/ota/56.0/manifest"
     }
   }
 }
