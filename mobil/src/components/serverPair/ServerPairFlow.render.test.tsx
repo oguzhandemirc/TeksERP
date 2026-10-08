@@ -8,6 +8,8 @@ import { INSECURE_ADDRESS_REASON, buildTlsQr, formatFingerprintGroups } from '..
 import { discoverServers } from '../../services/discovery.service';
 import { probeTlsDetailed } from '../../services/tlsProbe';
 import { completePairing } from '../../services/serverPairing';
+import { completeInternetPairing, probeInternetServer } from '../../services/internetServers';
+import { webPkiFailureText } from '../../lib/internet-tls';
 import { ServerPairFlow } from './ServerPairFlow';
 
 jest.mock('../BarcodeScannerModal', () => {
@@ -21,6 +23,10 @@ jest.mock('../BarcodeScannerModal', () => {
 jest.mock('../../services/discovery.service', () => ({ discoverServers: jest.fn(async () => ({ candidates: [] })) }));
 jest.mock('../../services/tlsProbe', () => ({ probeTlsDetailed: jest.fn() }));
 jest.mock('../../services/serverPairing', () => ({ completePairing: jest.fn(async () => ({ ok: true })) }));
+jest.mock('../../services/internetServers', () => ({
+  probeInternetServer: jest.fn(),
+  completeInternetPairing: jest.fn(async () => ({ ok: true })),
+}));
 jest.mock('react-native-toast-message', () => ({ __esModule: true, default: { show: jest.fn() } }));
 
 const FP = '0123456789abcdef'.repeat(4);
@@ -107,5 +113,63 @@ describe('QR v2: adresli kod', () => {
     await scan(buildTlsQr(IID, { port: 4443, fingerprint: FP }));
     await waitFor(() => expect(discoverServers).toHaveBeenCalled());
     expect(probeTlsDetailed).not.toHaveBeenCalled();
+  });
+});
+
+describe('internet kipi (G3): izinli üst alandaki ad kodsuz, onayla', () => {
+  const CLOUD = 'tekserp.etkiliyazilim.com';
+  const WEB = { host: CLOUD, port: 443, installationId: 'iid-9', companyName: 'Örnek Tekstil' };
+
+  it('ad yazılınca 443 sistem doğrulamasıyla yoklanır, kod gösterilmez; "Ekle" internet kaydını tamamlar', async () => {
+    (probeInternetServer as jest.Mock).mockResolvedValue({ ok: true, server: WEB });
+    const onDone = jest.fn();
+    renderWithPaper(<ServerPairFlow onDone={onDone} />);
+    await press('sunucu-ekle-adres');
+    fireEvent.changeText(screen.getByTestId('sunucu-adres-input'), CLOUD);
+    await press('sunucu-adres-devam');
+    expect(probeInternetServer).toHaveBeenCalledWith(CLOUD, 443, expect.any(Number));
+    expect(probeTlsDetailed).not.toHaveBeenCalled();
+    expect(screen.queryByTestId('dogrulama-kodu')).toBeNull();
+    expect(screen.getByTestId('internet-onay-ad').props.children).toBe(CLOUD);
+    expect(screen.getByText(/Örnek Tekstil/)).toBeTruthy();
+    await press('internet-ekle');
+    expect(completeInternetPairing).toHaveBeenCalledWith(
+      expect.objectContaining({ baseUrl: `https://${CLOUD}:443`, record: expect.objectContaining({ host: CLOUD, installationId: 'iid-9' }) }),
+    );
+    expect(completePairing).not.toHaveBeenCalled();
+    expect(onDone).toHaveBeenCalled();
+  });
+
+  it('doğrulama hatası sınıfıyla yazılır; sabitli yola (koda) DÜŞÜLMEZ', async () => {
+    (probeInternetServer as jest.Mock).mockResolvedValue({ ok: false, reason: webPkiFailureText('clock_ahead', CLOUD) });
+    renderWithPaper(<ServerPairFlow onDone={jest.fn()} />);
+    await press('sunucu-ekle-adres');
+    fireEvent.changeText(screen.getByTestId('sunucu-adres-input'), CLOUD);
+    await press('sunucu-adres-devam');
+    expect(screen.getByText(/Tablet saati ileride/)).toBeTruthy();
+    expect(probeTlsDetailed).not.toHaveBeenCalled();
+    expect(screen.queryByTestId('internet-onay')).toBeNull();
+  });
+
+  it('"Vazgeç" bağlanmaz', async () => {
+    (probeInternetServer as jest.Mock).mockResolvedValue({ ok: true, server: WEB });
+    renderWithPaper(<ServerPairFlow onDone={jest.fn()} />);
+    await press('sunucu-ekle-adres');
+    fireEvent.changeText(screen.getByTestId('sunucu-adres-input'), CLOUD);
+    await press('sunucu-adres-devam');
+    await press('internet-vazgec');
+    expect(completeInternetPairing).not.toHaveBeenCalled();
+    expect(screen.getByText('Onaylanmadı — bağlanılmadı.')).toBeTruthy();
+  });
+
+  it('izinli üst alan dışındaki ad sabitli yoldan (4443, kod) gider', async () => {
+    (probeTlsDetailed as jest.Mock).mockResolvedValue({ ok: true, server: { ...SERVER, host: 'erp.ornek.com' } });
+    renderWithPaper(<ServerPairFlow onDone={jest.fn()} />);
+    await press('sunucu-ekle-adres');
+    fireEvent.changeText(screen.getByTestId('sunucu-adres-input'), 'erp.ornek.com');
+    await press('sunucu-adres-devam');
+    expect(probeInternetServer).not.toHaveBeenCalled();
+    expect(probeTlsDetailed).toHaveBeenCalledWith('erp.ornek.com', 4443, expect.any(Number));
+    expect(screen.getByTestId('dogrulama-kodu')).toBeTruthy();
   });
 });

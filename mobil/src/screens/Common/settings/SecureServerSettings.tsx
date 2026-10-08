@@ -10,6 +10,8 @@ import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import ConfirmDialog from '../../../components/ConfirmDialog';
 import { formatFingerprintGroups, type TlsPin } from '../../../lib/lan-tls';
 import { getTlsPins, removeTlsPins } from '../../../services/lanTlsPins';
+import { kipFor } from '../../../lib/internet-tls';
+import { removeInternetServer } from '../../../services/internetServers';
 import { displayUrl, parseUrlParts, useBaseUrlStore } from '../../../store/baseUrlStore';
 import type { RootStackParamList } from '../../../navigation/types';
 import { SETTINGS_COLORS as C, SettingsActionButton, SettingsPage, settingsStyles } from './settingsUi';
@@ -66,12 +68,16 @@ export default function SecureServerSettings() {
   const [pin, setPin] = useState<TlsPin | null>(null);
   const [confirmOpen, setConfirmOpen] = useState(false);
 
+  const { host, port } = parseUrlParts(baseUrl);
+  const internet = kipFor(host) === 'internet';
+
   useEffect(() => {
-    const port = parseUrlParts(baseUrl).port;
-    void getTlsPins().then((pins) => setPin(pins.find((p) => String(p.port) === port) ?? null));
-  }, [baseUrl]);
+    if (internet) setPin(null);
+    else void getTlsPins().then((pins) => setPin(pins.find((p) => String(p.port) === port) ?? null));
+  }, [internet, port]);
 
   const disconnect = async () => {
+    if (internet) await removeInternetServer(host);
     if (pin) await removeTlsPins(pin.installationId);
     await reset();
     Toast.show({ type: 'info', text1: 'Sunucu bağlantısı kaldırıldı', text2: 'Sunucuyu yeniden ekleyin.' });
@@ -85,6 +91,11 @@ export default function SecureServerSettings() {
           <Text style={settingsStyles.title}>Şifreli bağlantı</Text>
         </View>
         <Text style={settingsStyles.subtitle}>Sunucu: {displayUrl(baseUrl) || '—'}</Text>
+        <Text style={settingsStyles.subtitle} testID="sunucu-kip">
+          {internet
+            ? 'Doğrulama: internet sertifikası (tabletin güven deposu + sunucu adı).'
+            : 'Doğrulama: fabrika ağı — sertifika kodu sabitli.'}
+        </Text>
         {pin ? (
           <>
             <Text style={settingsStyles.subtitle}>Tablet sunucuyu bu doğrulama koduyla tanıyor:</Text>
@@ -114,7 +125,7 @@ export default function SecureServerSettings() {
         visible={confirmOpen}
         onDismiss={() => setConfirmOpen(false)}
         title="Sunucu bağlantısı kaldırılsın mı?"
-        description="Tablet bu sunucuya bağlanmayı bırakır ve “Sunucuyu ekle” ekranına döner. Yeniden bağlanmak için QR ya da doğrulama kodu gerekir."
+        description="Tablet bu sunucuya bağlanmayı bırakır ve “Sunucuyu ekle” ekranına döner. Yeniden bağlanmak için sunucuyu yeniden eklemek gerekir."
         confirmLabel="Kaldır"
         onConfirm={() => {
           setConfirmOpen(false);

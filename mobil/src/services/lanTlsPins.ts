@@ -79,6 +79,8 @@ export function startLanTlsNativeSync(): void {
     if (!s.isLoaded || s.baseUrl === last) return;
     last = s.baseUrl;
     push();
+    // İnternet kipinde kurulum kimliği kayıtla aynı mı (değiştiyse adres kullanılamaz; döngüsüz tembel yük).
+    void import('./internetServers').then((m) => m.verifyInternetIdentity()).catch(() => undefined);
   };
   useBaseUrlStore.subscribe(onState);
   onState(useBaseUrlStore.getState());

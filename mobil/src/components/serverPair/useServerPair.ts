@@ -2,7 +2,9 @@
 import { useCallback, useRef, useState } from 'react';
 import Toast from 'react-native-toast-message';
 
-import { decideQrAddressPin, pairViaQrHosts, parsePairAddress, parseTlsQr, type PairDecision } from '../../lib/lan-tls';
+import { INTERNET_HOST_NOT_PINNABLE, decideQrAddressPin, pairViaQrHosts, parsePairAddress, parseTlsQr, type PairDecision } from '../../lib/lan-tls';
+import { decideInternetPair, kipFor, type WebPkiObserved } from '../../lib/internet-tls';
+import { completeInternetPairing, probeInternetServer } from '../../services/internetServers';
 import type { DiscoveredServer } from '../../lib/discovery';
 import { discoverServers } from '../../services/discovery.service';
 import { completePairing } from '../../services/serverPairing';
@@ -18,7 +20,8 @@ export type Step =
   | { kind: 'address' }
   | { kind: 'qrSearch'; qrText: string; port: number }
   | { kind: 'qrAddress'; qrText: string; port: number }
-  | { kind: 'confirm'; server: TlsProbed };
+  | { kind: 'confirm'; server: TlsProbed }
+  | { kind: 'internetConfirm'; server: WebPkiObserved };
 
 /** Ağda QR'daki izi taşıyan sunucu (ekleme kipi: sabit yönlendirmesi kapalı, QR'daki port). */
 async function findQrServer(fingerprint: string, port: number, recentUrls: string[]): Promise<DiscoveredServer | undefined> {
@@ -90,7 +93,31 @@ function usePairCore(onDone: () => void) {
     }
   }, []);
 
-  return { step, busy, error, setError, go, finish, probe, searchSeq };
+  /** İnternet kipi: onaylı kayıt (kod yok; güven sistem deposundan). */
+  const finishInternet = useCallback(
+    async (server: WebPkiObserved, confirmed: boolean) => {
+      const decision = decideInternetPair({ observed: server, confirmed, now: new Date().toISOString() });
+      if (!decision.ok) {
+        setError(decision.reason);
+        return;
+      }
+      setBusy('Bağlantı kuruluyor…');
+      try {
+        const r = await completeInternetPairing(decision);
+        if (!r.ok) {
+          setError(r.reason);
+          return;
+        }
+        Toast.show({ type: 'success', text1: 'Sunucu eklendi', text2: 'Bağlantı şifreli; internet sertifikasıyla doğrulandı.' });
+        onDone();
+      } finally {
+        setBusy(null);
+      }
+    },
+    [onDone],
+  );
+
+  return { step, busy, setBusy, error, setError, go, finish, finishInternet, probe, searchSeq };
 }
 
 export function useServerPair(onDone: () => void) {
@@ -113,9 +140,26 @@ export function useServerPair(onDone: () => void) {
     [probe, go],
   );
 
+  // (b') izinli üst alandaki ad → sistem doğrulaması → onay (kod yok)
+  const probeInternet = useCallback(
+    async (host: string, port: number) => {
+      setError(null);
+      core.setBusy('Sunucu internet sertifikasıyla doğrulanıyor…');
+      try {
+        const r = await probeInternetServer(host, port, PROBE_TIMEOUT_MS);
+        if (r.ok) go({ kind: 'internetConfirm', server: r.server });
+        else setError(r.reason);
+      } finally {
+        core.setBusy(null);
+      }
+    },
+    [core, go, setError],
+  );
+
   const submitAddress = () => {
     const a = parsePairAddress(address);
     if (!a.ok) setError(a.reason);
+    else if (kipFor(a.host) === 'internet') void probeInternet(a.host, a.port);
     else void probeAddress(a.host, a.port);
   };
 
@@ -153,6 +197,10 @@ export function useServerPair(onDone: () => void) {
     const a = parsePairAddress(address, port);
     if (!a.ok) {
       setError(a.reason);
+      return;
+    }
+    if (kipFor(a.host) === 'internet') {
+      setError(INTERNET_HOST_NOT_PINNABLE);
       return;
     }
     const server = await probe(a.host, port, 'Sunucu doğrulanıyor…');
