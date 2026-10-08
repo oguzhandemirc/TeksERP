@@ -168,7 +168,10 @@ export function olc(d) {
   // §6
   const kanca = d[KANCA_REL];
   if (!kanca.includes(`"${BEN_REL}"`)) s.kirmizi.push('§6 commit kancasında bu bekçinin adımı yok');
-  for (const t of TETIK) if (!kanca.includes(`"${t}"`)) s.kirmizi.push(`§6 commit kancası tetiği "${t}"i kapsamıyor`);
+  // Tetik bu bekçinin KENDİ kümesinde aranır: aynı yol başka bekçinin kümesinde geçince bu bekçi tetiklenmez.
+  const kume = new RegExp('const GIZLILIK_SAYFASI_TETIK = new Set\\(\\[([\\s\\S]*?)\\]\\);').exec(kanca)?.[1];
+  if (kume === undefined) s.kirmizi.push('§6 commit kancasında GIZLILIK_SAYFASI_TETIK kümesi yok');
+  for (const t of TETIK) if (!(kume ?? '').includes(`"${t}"`)) s.kirmizi.push(`§6 commit kancası tetiği "${t}"i kapsamıyor`);
   if (!d[CI_REL].includes(`node ${BEN_REL} && node ${BEN_REL} --sonda`)) s.kirmizi.push('§6 CI bu bekçiyi (+ --sonda) koşmuyor');
   return s;
 }
@@ -202,6 +205,7 @@ function sondalar(taban) {
     ['N21 form belgesi adresi anmıyor', 'kirmizi', deg(FORM_REL, (t) => t.replaceAll(ADRES, 'https://etkiliyazilim.com/tekserp/gizlilik'))],
     ['N22 kancada adım yok', 'kirmizi', deg(KANCA_REL, (t) => t.replaceAll(`"${BEN_REL}"`, '"x"'))],
     ['N23 kanca tetiği html kapsamıyor', 'kirmizi', deg(KANCA_REL, (t) => t.replace(`"${HTML_REL}"`, '"y"'))],
+    ['N23b kanca tetiği client-address.ts yalnız başka bekçinin kümesinde', 'kirmizi', deg(KANCA_REL, (t) => t.replace(/(const GIZLILIK_SAYFASI_TETIK = new Set\(\[[\s\S]*?)"satici\/sunucu\/src\/http\/client-address\.ts", /, '$1'))],
     ['N24 CI koşmuyor', 'kirmizi', deg(CI_REL, (t) => t.replaceAll(BEN_REL, 'scripts/x.mjs'))],
     ['N25 mailto email_off dışında', 'kirmizi', deg(HTML_REL, (t) => t.replaceAll('<!--email_off-->', '').replaceAll('<!--/email_off-->', '')), '§1 email_off dışında'],
     ['N26 düz e-posta email_off dışında', 'kirmizi', deg(HTML_REL, (t) => t.replace('</main>', '<p>destek@etkiliyazilim.com</p>\n</main>')), '§1 email_off dışında'],

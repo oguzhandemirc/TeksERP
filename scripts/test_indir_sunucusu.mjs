@@ -162,7 +162,10 @@ export function olc(d) {
   // §5
   const kanca = d[KANCA_REL];
   if (!kanca.includes(`"${BEN_REL}"`)) s.kirmizi.push('§5 commit kancasında bu bekçinin adımı yok');
-  for (const t of TETIK) if (!kanca.includes(`"${t}"`)) s.kirmizi.push(`§5 commit kancası tetiği "${t}"i kapsamıyor`);
+  // Tetik bu bekçinin KENDİ kümesinde aranır: aynı yol başka bekçinin kümesinde geçince bu bekçi tetiklenmez.
+  const kume = new RegExp('const INDIR_KOKENI_TETIK = new Set\\(\\[([\\s\\S]*?)\\]\\);').exec(kanca)?.[1];
+  if (kume === undefined) s.kirmizi.push('§5 commit kancasında INDIR_KOKENI_TETIK kümesi yok');
+  for (const t of TETIK) if (!(kume ?? '').includes(`"${t}"`)) s.kirmizi.push(`§5 commit kancası tetiği "${t}"i kapsamıyor`);
   if (!d[CI_REL].includes(`node ${BEN_REL} && node ${BEN_REL} --sonda`)) s.kirmizi.push('§5 CI bu bekçiyi (+ --sonda) koşmuyor');
   return s;
 }
@@ -198,6 +201,7 @@ function sondalar(taban) {
     ['N19 kancada adım yok', 'kirmizi', deg(KANCA_REL, (t) => t.replaceAll(`"${BEN_REL}"`, '"x"'))],
     ['N20 CI koşmuyor', 'kirmizi', deg(CI_REL, (t) => t.replaceAll(BEN_REL, 'scripts/x.mjs'))],
     ['N21 kanca tetiği client-address.ts kapsamıyor', 'kirmizi', deg(KANCA_REL, (t) => t.replace(`"${CF_REL}"`, '"y"'))],
+    ['N21b kancada tetik kümesi adı değişti', 'kirmizi', deg(KANCA_REL, (t) => t.replaceAll('INDIR_KOKENI_TETIK', 'INDIR_TETIK'))],
     ['O1 CF kaynağı okunamadı', 'olculemedi', deg(CF_REL, () => undefined)],
     ['O2 CLOUDFLARE_NETWORKS adı değişti', 'olculemedi', deg(CF_REL, (t) => t.replaceAll('CLOUDFLARE_NETWORKS', 'CF_AGLARI'))],
     ['O3 feed.cjs sınırlayıcı adı değişti', 'olculemedi', deg(FEED_REL, (t) => t.replace('MULTIPART_BOUNDARY', 'SINIR'))],

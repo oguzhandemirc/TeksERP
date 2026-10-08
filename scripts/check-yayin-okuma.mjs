@@ -49,6 +49,10 @@ const IZINLI = {
   'deploy/pg/pg-ikili-dogrula.mjs': [{ desen: /const yanit = await fetch\(url, \{ redirect: 'follow' \}\);/, gerekce: 'PostgreSQL ikilisi resmî EDB kaynağından; deploy/pg/pg-surumu.json boyut + SHA256\'sıyla doğrulanır' }],
   'mobil/scripts/surucu/api.mjs': [{ desen: /await fetch\(`\$\{this\.taban\}\$\{yol\}`/, gerekce: 'e2e tablet sürücüsü — ERP backend API\'si' }],
   'mobil/scripts/surucu/guzergah.mjs': [{ desen: /await fetch\(`\$\{ortam\.apiUrl\}\/health`\)/, gerekce: 'e2e tablet sürücüsü — ERP backend /health' }],
+  'deploy/play-yayinla.mjs': [
+    { desen: /y = await fetch\(url, \{ method: yontem, headers: basliklar, body: govde \}\);/, gerekce: 'Google Play Developer API (androidpublisher.googleapis.com) — güncelleme sunucusu değil' },
+    { desen: /y = await fetch\(TOKEN_URL, \{ method: 'POST'/, gerekce: 'Google OAuth belirteç ucu (oauth2.googleapis.com) — Play API erişimi için' },
+  ],
 };
 
 /** Yorum satırı mı (yalnız TAM yorum satırı; satır sonu yorumu kod sayılır — fail-closed). */
