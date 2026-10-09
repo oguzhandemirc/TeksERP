@@ -531,6 +531,24 @@ mod tests {
         let _ = std::fs::remove_dir_all(&d);
     }
 
+    /// Linux'ta TLS bağlayıcısı ikilide: https isteği el sıkışmada HATA döner, "özellik açık değil" paniği vermez
+    /// (sonda: Cargo.toml'da Linux ureq özelliği `native-tls-no-default`e dönünce bu test panikle kırmızı).
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn https_reaches_native_tls_connector() {
+        use super::RealNet;
+        use crate::env::Net;
+        let l = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = l.local_addr().unwrap().port();
+        let kapat = std::thread::spawn(move || drop(l.accept()));
+        let net = RealNet::new(None).unwrap();
+        let r = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            net.get(&format!("https://127.0.0.1:{port}/"), &[], std::time::Duration::from_secs(5)).is_err()
+        }));
+        let _ = kapat.join();
+        assert_eq!(r.ok(), Some(true), "https isteği TLS bağlayıcısına ulaşmadı (panik ya da başarı)");
+    }
+
     #[cfg(unix)]
     #[test]
     fn foreign_writers_reads_group_and_world_write_bits() {
