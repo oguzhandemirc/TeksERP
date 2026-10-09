@@ -17,11 +17,14 @@ use std::time::Duration;
 
 /// İşlem günlüğünün `platform`u (bildirimin platform sözlüğüyle aynı ad).
 pub const PLATFORM: &str = "win32-x64";
+/// Paketteki güncelleyici ikilisi (`runtime\\tekserp-guncelleyici.exe`; imzalı listede `/` ayraçlı).
+pub const GUNCELLEYICI_PAKET_YOLU: &str = "runtime/tekserp-guncelleyici.exe";
 
 pub fn arka_ucu() -> crate::platform::Arka {
     crate::platform::Arka {
         ortam: crate::settings::OrtamKipi::Hizmet,
         platform: PLATFORM,
+        guncelleyici_paket_yolu: GUNCELLEYICI_PAKET_YOLU,
         saglik: Arc::new(HttpSaglik),
         araclar: Arc::new(araclar::NodeAraclar),
         pg: Arc::new(pg::ImagePathPg),

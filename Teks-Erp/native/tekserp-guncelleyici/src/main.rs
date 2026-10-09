@@ -5,6 +5,7 @@
 //!   durum --kok <KOK> [--veri <D>]  durum.json + son işlemin özeti
 //!   hizmet-kur --kok <KOK> [--veri <D>] [--ad <ad>]   kaydet/güncelle (yönetici)
 //!   hizmet-kaldir [--ad <ad>]       durdur + sil (yönetici)
+//!   onar --yalniz-asil-ad --kok <KOK> ...   Linux taban biriminin onarım satırı (tur koşmaz; W1b §4.7)
 //!
 //! Aynı makinede ikinci kanal: güncelleyici kendi adını (`--ad`, varsayılan `TeksERP-Guncelleyici`) ve
 //! kendi veri kökünü (`--veri`; backend'in `TEKSERP_GUNCELLEME_DIZINI` = `<veri>\guncelleme`) alır; yönettiği
@@ -77,6 +78,8 @@ fn main() -> ExitCode {
             println!("{}", identity());
             Ok(0)
         }
+        // Taban birimin (systemd) onarım satırı: tur KOŞMAZ — platformun hizmet komutudur (§4.7 L-B).
+        "onar" if args.iter().any(|a| a == "--yalniz-asil-ad") => tekserp_guncelleyici::platform::service_command(&command, &args),
         "tur" | "onar" => one_tick(&args),
         "durum" => show_status(&args),
         "hizmet" | "hizmet-kur" | "hizmet-kaldir" => tekserp_guncelleyici::platform::service_command(&command, &args),

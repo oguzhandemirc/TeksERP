@@ -69,6 +69,12 @@ jobs:
         run: node scripts/kapi.mjs denetle
       - name: cargo test (vektörler + durum makinesi + öldür-yeniden başlat, Linux dosya sistemi)
         run: node scripts/kapi.mjs test
+      # L6 (§4.3): gerçek systemd'de taban birim + ek dosya + Type=notify + gözcü + Restart=always + kaldırma; ek olarak
+      # OnFailure= + Restart=always ölçümü (notice, karar girdisi — W1b L-C). Compose/imaj YOK (o T1'in).
+      - name: L6 systemd dumanı (sudo, gerçek systemd)
+        run: |
+          cargo build -p tekserp-guncelleyici --bin tekserp-guncelleyici
+          bash scripts/duman-systemd.sh "$PWD/target/debug/tekserp-guncelleyici"
       # T1 (GUNCELLEYICI-SAGLAMLIK §10): gerçek Linux dumanı bu adımın yerine iner (L4b · L5 · L6 sonrası).
       # L4b — Linux arka ucunun GERÇEK Docker ayağı (K1'in gerçeği; T1 dumanı DEĞİL): DockerServices durum/başlat/
       # durdur/çökme eşlemesi, doğrulama kipi değişkeni, `unless-stopped` + `compose stop` yatışması, araç yetimi yok.

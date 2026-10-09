@@ -80,6 +80,9 @@ pub struct Arka {
     pub platform: &'static str,
     /// Backend `.env`inin okunuşu (hizmet kipi `DATABASE_URL` · compose kipi `POSTGRES_*`).
     pub ortam: crate::settings::OrtamKipi,
+    /// Paketteki güncelleyici ikilisinin sürüm dizinine göre yolu (`/` ayraçlı, imzalı listedeki ad) — kendini
+    /// güncellemenin kaynağı: Windows `runtime/tekserp-guncelleyici.exe`, Linux paket kökünde `tekserp-guncelleyici`.
+    pub guncelleyici_paket_yolu: &'static str,
     pub saglik: Arc<dyn Saglik>,
     pub araclar: Arc<dyn Araclar>,
     pub pg: Arc<dyn PgArkaUcu>,
@@ -218,6 +221,17 @@ pub fn tani_olcumleri(h: &crate::tani::TaniHedefi) -> Vec<crate::tani::Olcum> {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn guncelleyici_paket_yollari() {
+        use tekserp_hizmet::contract::path;
+        assert_eq!(super::windows::GUNCELLEYICI_PAKET_YOLU, format!("{}/{}", path::RUNTIME, path::UPDATER_EXE), "Windows yolu değişmez");
+        assert_eq!(
+            super::linux::arka_ucu().guncelleyici_paket_yolu,
+            "tekserp-guncelleyici",
+            "Linux: paket kökünde, .exe'siz (oci-paket.ts)"
+        );
+    }
+
     #[test]
     fn windows_platform_is_legacy_journal_default() {
         assert_eq!(super::windows::PLATFORM, crate::journal::LEGACY_PLATFORM, "alansız günlüğü yalnız Windows ikilisi yazdı (§15 madde 2)");

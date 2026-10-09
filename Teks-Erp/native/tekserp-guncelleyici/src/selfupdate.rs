@@ -1,4 +1,5 @@
-//! Kendini güncelleme (§10, plan `GUNCELLEYICI-SAGLAMLIK.md` §4.2): paket `runtime\tekserp-guncelleyici.exe` taşır;
+//! Kendini güncelleme (§10, plan `GUNCELLEYICI-SAGLAMLIK.md` §4.2): paket güncelleyici ikilisini taşır (yeri arka ucun
+//! `guncelleyici_paket_yolu`; Linux'ta `.exe`siz, yan adlar `.yeni`/`.eski`/`.lkg`);
 //! kaynak sürüm dizini (önce-güncelleyicide hazırlanmış ADAY dizini, backend BASARILI sonrası kurulu dizin) imzalı
 //! listeyle doğrulanır, ikili yan dosyaya (`.yeni.exe`) kopyalanır ve KOPYANIN özeti imzalı listedekiyle tutmadan
 //! HİÇBİR ikili çalıştırılmaz (DAGK-3); künye kopyadan alınır (ad · platform · sürüm · çapa kipi). Çalışan ikili
@@ -276,7 +277,9 @@ pub fn stage_from(
     trust: &PackageTrust,
     announced: Option<&str>,
 ) -> Result<Option<String>, String> {
-    let candidate = source_dir.join(contract::path::RUNTIME).join(contract::path::UPDATER_EXE);
+    // Paketteki yer arka ucun beyanıdır (Windows `runtime/…exe`, Linux paket kökünde `.exe`siz).
+    let rel = env.arka.guncelleyici_paket_yolu;
+    let candidate = rel.split('/').fold(source_dir.to_path_buf(), |p, c| p.join(c));
     if !env.fs.exists(&candidate) {
         return Ok(None);
     }
@@ -284,8 +287,7 @@ pub fn stage_from(
     if digest(env, &candidate).is_some_and(|c| digest(env, own_exe).as_deref() == Some(c.as_str())) {
         return Ok(None);
     }
-    let rel = format!("{}/{}", contract::path::RUNTIME, contract::path::UPDATER_EXE);
-    let want = package::signed_file_digest(source_dir, env.fs.as_ref(), trust, &rel)
+    let want = package::signed_file_digest(source_dir, env.fs.as_ref(), trust, rel)
         .map_err(|e| format!("paketteki ikili imzalı listeyle doğrulanamadı ({}): {}", e.code, e.message))?;
     if package::file_digest(env.fs.as_ref(), own_exe).is_ok_and(|own| own == want) {
         return Ok(None);

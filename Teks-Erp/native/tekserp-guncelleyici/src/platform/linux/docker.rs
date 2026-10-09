@@ -457,6 +457,7 @@ pub fn arka_ucu(komut: Arc<DockerKomut>) -> crate::platform::Arka {
     crate::platform::Arka {
         platform: super::PLATFORM,
         ortam: crate::settings::OrtamKipi::Compose,
+        guncelleyici_paket_yolu: super::birim::IKILI,
         saglik: Arc::new(DockerSaglik { komut: Arc::clone(&komut) }),
         araclar: Arc::new(DockerAraclar { komut }),
         pg: Arc::new(super::IskeletPg),

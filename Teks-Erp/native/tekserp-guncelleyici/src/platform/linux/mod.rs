@@ -1,10 +1,15 @@
 //! Linux/Docker arka ucu (`GUNCELLEYICI-SAGLAMLIK.md` §1.2). L4a: konak bağları (`sys` — güvenilmez okuma,
 //! `statvfs`, yabancı yazar, özel alan, `flock`, süreç grubu + `PDEATHSIG`) · olay günlüğü (`olay`, stderr →
 //! journald) · yerel koruma (`koruma`, dizin izni) · dizin düzeni (`duzen`). L4b: Docker hizmet denetimi · sağlık ·
-//! araçlar (`docker`, kuruluma `platform::baglam` ile bağlanır). Bağlanmamış ortam ve PG (L8) İSKELETTİR: her çağrı
-//! `PLATFORM_DESTEKSIZ` önekli açık bir hatadır (fail-closed; süreç düşmez, adım kendi koduyla düşer).
+//! araçlar (`docker`, kuruluma `platform::baglam` ile bağlanır). L6: systemd birimi (`birim` — taban birim + ek dosya
+//! izin listesi, saf) ve hizmet yapıştırıcısı (`hizmet` — `sd_notify`, gözcü, `hizmet-kur`/`hizmet-kaldir`).
+//! Bağlanmamış ortam ve PG (L8) İSKELETTİR: her çağrı `PLATFORM_DESTEKSIZ` önekli açık bir hatadır (fail-closed;
+//! süreç düşmez, adım kendi koduyla düşer).
+pub mod birim;
 pub mod docker;
 pub mod duzen;
+#[cfg(unix)]
+pub mod hizmet;
 pub mod koruma;
 pub mod olay;
 #[cfg(unix)]
@@ -31,6 +36,7 @@ pub fn arka_ucu() -> crate::platform::Arka {
     crate::platform::Arka {
         platform: PLATFORM,
         ortam: crate::settings::OrtamKipi::Compose,
+        guncelleyici_paket_yolu: birim::IKILI,
         saglik: Arc::new(IskeletSaglik),
         araclar: Arc::new(IskeletAraclar),
         pg: Arc::new(IskeletPg),
@@ -149,7 +155,13 @@ impl Services for NoServices {
     }
 }
 
-/// `hizmet` · `hizmet-kur` · `hizmet-kaldir` (L6: systemd birimi).
+/// `hizmet` · `hizmet-kur` · `hizmet-kaldir` · `onar --yalniz-asil-ad` (L6: systemd birimi).
+#[cfg(unix)]
+pub fn service_command(command: &str, args: &[String]) -> Result<u32, String> {
+    hizmet::komut(command, args)
+}
+
+#[cfg(not(unix))]
 pub fn service_command(command: &str, _args: &[String]) -> Result<u32, String> {
     Err(format!("{}: `{command}` — tanı için `tur`", unsupported("hizmet kaydı")))
 }
@@ -195,7 +207,6 @@ mod tests {
             NoServices.state("b").err().map(|e| e.0),
             NoServices.start("b", &[]).err().map(|e| e.0),
             NoServices.stop("b").err().map(|e| e.0),
-            service_command("hizmet-kur", &[]).err(),
         ];
         for (i, e) in errors.iter().enumerate() {
             assert!(e.as_deref().is_some_and(|m| m.starts_with(DESTEKSIZ)), "{i}: {e:?}");
