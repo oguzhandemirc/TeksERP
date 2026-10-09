@@ -98,6 +98,21 @@
           "kapsam": "panel",
           "tip": "duzeltme",
           "metin": "Bulut adresine bağlanan panel, giriş alanları göründükten birkaç saniye sonra yeniden “Sunucuya ulaşılamadı” ekranına dönüyordu; düzeltildi."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "yeni",
+          "metin": "Sistem → “Sunucu Güncellemeleri” ekranındaki “Güncelleyici” kartı, sunucudaki güncelleme programı bozulan ya da silinen dosyasını kendiliğinden onardığında veya güncellemeden önce kendini yenilediğinde bunu “Bilgi” satırında yazar."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "iyilestirme",
+          "metin": "Güncelleme programı kendini onaramazsa (24 saatte üç kez bozulduysa, onaracak sağlam kopya yoksa ya da hizmeti kapatılmışsa) aynı kartın “Sorun” satırı ne gerektiğini söyler; bu durumda “Şimdi kur” ve “Bu gece kur” düğmeleri çıkmaz."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "iyilestirme",
+          "metin": "Sunucunun diskinde yer kalmadığı için güncelleme yapılamazsa panel artık çareyi yazar: sunucuda yer açın, sonra güncellemeyi yeniden onaylayın. Güncelleme henüz başlamadan bekliyorsa yer açılınca kendiliğinden sürer."
         }
       ]
     },
