@@ -27,6 +27,10 @@
 //   anahtarla imzalar (parola TTY'de gizli ya da stdin satırı — argümandan ASLA) ve geri doğrular.
 //   `--pg-kunye` verilirse PG hedefi O KÜNYEDEN (imzası doğrulanarak) alınır; verilmezse hedef yok (küçük sürüm
 //   güncellemesi olmaz). Çıktı `<cikti>/sonuc.json` + imzada `<cikti>/surum.json` (işaretçi).
+//   `guncelleyici` bloğu (sözleşme 5, R15) iki platformda ZORUNLU ve ÖLÇÜLÜR (`lib/guncelleyici-blok.ts`): Windows'ta
+//   `runtime/tekserp-guncelleyici.exe` (PE32+ x64, imzalı kapsamda) + `PAKET.json` `hizmetIkilileri` künyesi (sürüm ·
+//   boyut · özet); ikili yoksa, künyesiz ya da tutmuyorsa DUR. İmza öncesi blok ikiliyle yeniden ölçülür, imzadan
+//   sonra geri okunan blok imzalananla aynı olmalı. DONDUR'daki kurulum ikilisini yalnız bu blokla yeniler (AK-3).
 // pg-imzala: PG sahne zip'inin boyu/özeti ölçülür; içerik özeti zip'teki `TEKSERP-ICERIK.sha256`dan ÖLÇÜLÜR (elle
 //   yazılmaz), `bin/icuuc<icu>.dll` aranır; künye imzalanır → `<cikti>/pg.json` + `<cikti>/sonuc.json`.
 // ortak-dogrula: ortak paketi (PAKET.json backendKanal null, künye müşterisiz) ÜRETİM çapasıyla TAM denetler; hazırlık
@@ -40,7 +44,9 @@
 //   yayındaki sürümü YENİ PAKET sertifikasıyla yeniden imzalar (yıllık tören): sürüm/paketId/liste aynı,
 //   `<ad>-<kid>.zip` + `surum-zincir-<kid>.json` (D8: değişmez dizinde YANINA). Eski takım dokunulmaz. Dizin kipinde
 //   bütün zincirli adlar aday (seçim kuralı `selectChainedDocument`, YERLEŞİK + verilen iptal); zincirli aday yoksa ya
-//   da hepsi geçersizse eski `surum.json` (elenenler ekrana).
+//   da hepsi geçersizse eski `surum.json` (elenenler ekrana). `guncelleyici` bloğu paketten YENİDEN ölçülür: eski
+//   bildirimde varsa ölçümle aynı olmalı (değilse DUR), yoksa EKLENİR; paket ölçülebilir güncelleyici taşımıyorsa
+//   (R15 öncesi eski paket) blok yazılmaz, uyarı basılır — eski bildirim blok taşıyorsa DUR. sonuc.json `guncelleyici`.
 // pg-yeniden-imzala (--kunye=<pg(-zincir…).json> | --pg-dizini=<d>) --anahtar=<pkt> --cikti=<dizin> [--zip] [--paket-iptal]
 //   → `pg-zincir-<kid>.json` (zip değişmez).
 // pg-dogrula: künyenin imzası (PAKET çapası) + zip'in boyu/özeti künyeyle birebir → `<cikti>/sonuc.json` (yayıncı okur).
@@ -99,6 +105,7 @@ import { PACKAGE_CERT_FIELD, PACKAGE_REVOCATION_FILE, type VerifiedPackageRevoca
 import { CliError, args, askPassword, kasaAdiKid } from "./lib/cli-girdi";
 import { OCI_PLATFORM, ociPaketAdi, ociPaketiAc } from "./lib/oci-paket";
 import { imajArsiviOlc } from "./lib/oci-arsiv";
+import { WIN_GUNCELLEYICI_YOLU, ayniBlok, guncelleyiciOzDenetim, windowsGuncelleyiciOlc } from "./lib/guncelleyici-blok";
 
 type Bayraklar = ReadonlyMap<string, string>;
 
@@ -221,6 +228,8 @@ interface PaketKunyesi {
   readonly uygulamaSurumu?: unknown;
   readonly migrationSayisi?: unknown;
   readonly runtimeNodeSurumu?: unknown;
+  /** `deploy/paketle.ps1`: runtime\ altındaki Rust ikilileri `{surum, boyut, sha256}` (paketleyici koşturup ölçer). */
+  readonly hizmetIkilileri?: unknown;
 }
 
 interface BackendGirdisi {
@@ -364,6 +373,9 @@ async function bildirimKur(g: BackendGirdisi): Promise<KurulanBildirim> {
       throw new CliError("PAKET.json commit / runtimeNodeSurumu / migrationSayisi eksik");
     }
     if (g.minKaynak !== null && (compareVersions(g.minKaynak, p.surum) ?? 0) >= 0) throw new CliError(`--min-kaynak (${g.minKaynak}) sürümden (${p.surum}) eski olmalı`);
+    // R15: blok paketteki ikiliden ölçülür; ikilisiz paket yayınlanmaz (DONDUR'da güncelleyici hiç yenilenemezdi).
+    const guncelleyici = windowsGuncelleyiciOlc(tmp, kunye);
+    if (guncelleyici === null) throw new CliError(`pakette ${WIN_GUNCELLEYICI_YOLU} yok — bildirimin guncelleyici bloğu ölçülemez (paketle.ps1 -Korumali win-x64 ikiliyi koyar)`);
     const yuk: ReleaseManifest = {
       v: 1,
       urun: "backend",
@@ -381,7 +393,9 @@ async function bildirimKur(g: BackendGirdisi): Promise<KurulanBildirim> {
       runtime: { node: kunye.runtimeNodeSurumu },
       notlar: { ozet: g.ozet },
       zorunlu: g.zorunlu,
+      guncelleyici,
     };
+    guncelleyiciOzDenetim(yuk, path.join(tmp, ...WIN_GUNCELLEYICI_YOLU.split("/")));
     return { yuk, eskiKid: ac.eskiKid, zincirKid: ac.zincirKid, ciKokeni: null };
   } finally {
     fs.rmSync(tmp, { recursive: true, force: true });
@@ -394,6 +408,7 @@ async function backend(komut: "dogrula" | "imzala", f: Bayraklar): Promise<void>
   const uyarilar: string[] = [];
   const kur = await bildirimKur(g);
   const yuk = kur.yuk;
+  if (!yuk.guncelleyici) throw new Error(`öz-denetim: ${yuk.platform} bildiriminde guncelleyici bloğu yok`);
   fs.mkdirSync(cikti, { recursive: true });
   let bildirim: string | null = null;
   let bildirimZincir: string | null = null;
@@ -411,6 +426,7 @@ async function backend(komut: "dogrula" | "imzala", f: Bayraklar): Promise<void>
         ? verifyReleaseManifest(token, { keys: [{ kid: key.kid, x: key.x }], kanal: g.kanal, platform: yuk.platform })
         : verifyReleaseManifest(token, { keys: [], kanal: g.kanal, platform: yuk.platform, zincir: g.zincir });
       if (!geri.ok) throw new Error(`öz-denetim düştü (${key.kid}): ${geri.code}`);
+      if (!ayniBlok(geri.value.guncelleyici, yuk.guncelleyici)) throw new Error(`öz-denetim: imzalı bildirimin guncelleyici bloğu imzalanandan farklı (${key.kid})`);
       if (i.sertifika === null) bildirim = token;
       else bildirimZincir = token;
     }
@@ -421,7 +437,7 @@ async function backend(komut: "dogrula" | "imzala", f: Bayraklar): Promise<void>
   fs.writeFileSync(path.join(cikti, "sonuc.json"), `${JSON.stringify({ v: 1, kip: komut, surum: yuk.surum, takim, bildirim: yuk, jws: bildirim, jwsZincir: bildirimZincir, zincirKid: kur.zincirKid, ciKokeni: kur.ciKokeni, uyarilar }, null, 2)}\n`);
   for (const u of uyarilar) console.error(`⚠ ${u}`);
   const pg = yuk.pg.hedef ? ` · PG hedefi ${yuk.pg.hedef.surum}-${yuk.pg.hedef.derleme}` : " · PG hedefi yok";
-  console.error(`✓ ${komut}: backend ${yuk.surum} (${yuk.platform}) → ${g.kanal} · paket ${yuk.paket.ad} (${yuk.paket.boyut} B) · takım ${takim} · kid ${[kur.eskiKid, kur.zincirKid].filter(Boolean).join(" + ")}${pg}`);
+  console.error(`✓ ${komut}: backend ${yuk.surum} (${yuk.platform}) → ${g.kanal} · paket ${yuk.paket.ad} (${yuk.paket.boyut} B) · takım ${takim} · kid ${[kur.eskiKid, kur.zincirKid].filter(Boolean).join(" + ")}${pg} · güncelleyici ${yuk.guncelleyici.surum} (${yuk.guncelleyici.sha256.slice(0, 12)}…)`);
 }
 
 // ── PG paketi künyesi ───────────────────────────────────────────────────────
@@ -592,6 +608,31 @@ function yenidenAd(ad: string, kid: string): string {
 }
 
 /**
+ * Yeniden imzada `guncelleyici` bloğu paketten YENİDEN ölçülür (R15): eski bildirimdeki blok ölçümle aynı olmalı,
+ * yoksa eklenir. Ölçülemeyen eski paket (ikilisiz/künyesiz) bloksuz kalır ve uyarılır; eski bildirim blok taşıyorsa DUR.
+ */
+function guncelleyiciYenidenOlc(tmp: string, eskiBlok: ReleaseManifest["guncelleyici"]): { blok: ReleaseManifest["guncelleyici"]; durum: "ayni" | "eklendi" | "yok" } {
+  const kunye = JSON.parse(fs.readFileSync(path.join(tmp, "PAKET.json"), "utf8").replace(/^\uFEFF/, "")) as PaketKunyesi;
+  let olcu: ReleaseManifest["guncelleyici"] | null;
+  let neden = "";
+  try {
+    olcu = windowsGuncelleyiciOlc(tmp, kunye);
+    if (olcu === null) neden = `pakette ${WIN_GUNCELLEYICI_YOLU} yok`;
+  } catch (e) {
+    if (!(e instanceof CliError)) throw e;
+    olcu = null;
+    neden = e.message;
+  }
+  if (olcu === null) {
+    if (eskiBlok) throw new CliError(`yayındaki bildirim güncelleyici ${eskiBlok.surum} ilan ediyor ama paketten ölçülemiyor: ${neden}`);
+    console.error(`⚠ güncelleyici bloğu EKLENMEDİ (${neden}) — bu sürümle DONDUR'daki kurulum güncelleyicisini yenilemez`);
+    return { blok: undefined, durum: "yok" };
+  }
+  if (eskiBlok && !ayniBlok(eskiBlok, olcu)) throw new CliError(`yayındaki bildirimin guncelleyici bloğu (${eskiBlok.surum} · ${eskiBlok.sha256.slice(0, 12)}…) paketteki ikiliyle tutmuyor (${olcu.surum} · ${olcu.sha256.slice(0, 12)}…)`);
+  return { blok: olcu, durum: eskiBlok ? "ayni" : "eklendi" };
+}
+
+/**
  * `yeniden-imzala`: yayındaki backend sürümünü (bildirim + zip) YENİ PAKET sertifikasıyla yeniden imzalar — sürüm,
  * paketId, liste ve gömülü çapalı `butunluk.jws` AYNEN; yalnız `butunluk-zincir.jws` (+ daha yeni `paket-iptal.jws`)
  * değişir → yeni ad `<ad>-<kid>.zip` + `surum-zincir.json`. Eski takım (`surum.json`) eski zip'i göstermeye devam eder.
@@ -632,6 +673,7 @@ async function yenidenImzala(f: Bayraklar): Promise<void> {
     const zincirYolu = path.join(tmp, CHAINED_INTEGRITY_FILE);
     const iptalliPaket = fs.existsSync(zincirYolu) ? sertifikasiIptalli(fs.readFileSync(zincirYolu, "utf8").trim(), iptal?.verified ?? null) : null;
     if (iptalliPaket && once.eskiKid === null) throw new CliError(`paketin tek imzası İPTALLİ ${iptalliPaket} sertifikasıyla — köken kanıtlanamaz; sürümü yeniden derle`);
+    const blok = guncelleyiciYenidenOlc(tmp, eski.value.guncelleyici);
     const key = await paketAnahtari(yeni.dosya);
     const r = await resignChainedIntegrity({ root: tmp, key, certificate: yeni.sertifika, roots, paketIptal: iptal?.token ?? null });
     const kunye = JSON.parse(fs.readFileSync(path.join(tmp, "PAKET.json"), "utf8").replace(/^\uFEFF/, "")) as Record<string, unknown>;
@@ -647,16 +689,18 @@ async function yenidenImzala(f: Bayraklar): Promise<void> {
     const sonra = await imzalariDenetle(tmp2, capa, kabul, "yeniden imzası düştü");
     if (sonra.p.paketId !== p0.paketId || sonra.zincirKid !== key.kid || sonra.eskiKid !== once.eskiKid) throw new Error("öz-denetim: yeniden imzalı paket aynı paket değil");
     const paket = { ad: yeniAd, boyut: fs.statSync(yeniZip).size, sha256: sha256Dosya(yeniZip), paketId: p0.paketId };
-    const yuk: ReleaseManifest = { ...eski.value, paket, paketImzaKid: key.kid };
+    const yuk: ReleaseManifest = { ...eski.value, paket, paketImzaKid: key.kid, ...(blok.blok ? { guncelleyici: blok.blok } : {}) };
+    if (blok.blok) guncelleyiciOzDenetim(yuk, path.join(tmp2, ...WIN_GUNCELLEYICI_YOLU.split("/")));
     const token = signChainedPackageDocument({ typ: TYP.SURUM, schema: ReleaseManifestSchema, payload: yuk, key: { kid: key.kid, privateKey: key.privateKey }, certificate: yeni.sertifika, signedAt: new Date().toISOString() });
     const geri = verifyReleaseManifest(token, { keys: [], kanal, zincir: kabul });
     if (!geri.ok) throw new Error(`öz-denetim düştü (${key.kid}): ${geri.code}`);
+    if (!ayniBlok(geri.value.guncelleyici, yuk.guncelleyici)) throw new Error(`öz-denetim: imzalı bildirimin guncelleyici bloğu imzalanandan farklı (${key.kid})`);
     const bildirimAdi = chainedFileName("surum", key.kid);
     fs.writeFileSync(path.join(cikti, bildirimAdi), releasePointerText(token), { mode: 0o644 });
-    const sonuc = { v: 1, kip: "yeniden-imzala", kanal, surum: yuk.surum, eskiKid: eski.value.paketImzaKid, yeniKid: key.kid, takim: once.eskiKid ? "cift" : "zincir", girdi: girdi.ad, bildirim: bildirimAdi, paket: { eski: p0, yeni: paket }, iptalSira: r.iptalSira };
+    const sonuc = { v: 1, kip: "yeniden-imzala", kanal, surum: yuk.surum, eskiKid: eski.value.paketImzaKid, yeniKid: key.kid, takim: once.eskiKid ? "cift" : "zincir", girdi: girdi.ad, bildirim: bildirimAdi, paket: { eski: p0, yeni: paket }, iptalSira: r.iptalSira, guncelleyici: { durum: blok.durum, blok: yuk.guncelleyici ?? null } };
     fs.writeFileSync(path.join(cikti, "sonuc.json"), `${JSON.stringify(sonuc, null, 2)}\n`);
     zipBizim = false;
-    console.error(`✓ yeniden-imzala: backend ${yuk.surum} (${kanal}) · ${eski.value.paketImzaKid} → ${key.kid} · ${yeniAd} (${paket.boyut} B) + ${bildirimAdi}${r.iptalSira !== null ? ` · dağıtım iptali sıra ${r.iptalSira}` : ""}`);
+    console.error(`✓ yeniden-imzala: backend ${yuk.surum} (${kanal}) · ${eski.value.paketImzaKid} → ${key.kid} · ${yeniAd} (${paket.boyut} B) + ${bildirimAdi}${r.iptalSira !== null ? ` · dağıtım iptali sıra ${r.iptalSira}` : ""} · güncelleyici bloğu ${blok.durum}`);
   } finally {
     if (zipBizim) fs.rmSync(yeniZip, { force: true });
     fs.rmSync(tmp, { recursive: true, force: true });

@@ -431,7 +431,10 @@ const plan = yayinPlani({
   urun: URUN,
 });
 if (OCI && (B.platform !== 'linux-x64-oci' || !B.imaj)) dur('Bildirim Linux/OCI bildirimi değil', `platform ${B.platform}`);
-if (OCI) bilgi(`✓ imaj ${B.imaj.etiket} · kimlik ${B.imaj.kimlik.slice(0, 19)}… · güncelleyici ${B.guncelleyici?.surum ?? '?'} · göç ${B.gocSayisi}`);
+// R15: DONDUR'daki kurulum güncelleyicisini YALNIZ bu blokla yeniler; bildirim aracı ölçer, yayıncı yokluğunu yüklemez.
+if (!B.guncelleyici) dur('Bildirimde guncelleyici bloğu yok', 'backend-bildirim.ts bloğu paketteki ikiliden ölçer; blok yoksa DONDUR\'daki kurulum güncelleyicisini yenileyemez.');
+bilgi(`✓ güncelleyici ${B.guncelleyici.surum} · sha256 ${B.guncelleyici.sha256.slice(0, 16)}… (paketteki ikiliden ölçüldü)`);
+if (OCI) bilgi(`✓ imaj ${B.imaj.etiket} · kimlik ${B.imaj.kimlik.slice(0, 19)}… · göç ${B.gocSayisi}`);
 
 /* ------------------------------------------------------------------ *
  * 4) Uzak kapılar — belirteç · monotonluk · değişmezlik (yüklemeden ÖNCE)

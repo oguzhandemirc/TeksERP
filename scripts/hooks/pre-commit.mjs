@@ -334,6 +334,7 @@ const GRUP_KITAPLIGI = new Set([
 const GRUP_YAYIN_DOSYALARI = new Set([
   "deploy/backend-yayinla.mjs", "scripts/lib/backend-yayin.mjs",
   "Teks-Erp/scripts/backend-bildirim.ts", "scripts/test_backend_yayin.mjs",
+  "Teks-Erp/scripts/lib/guncelleyici-blok.ts", "scripts/lib/guncelleyici-fikstur.mjs", "Teks-Erp/native/test-vektorleri/guncelleme-yayinci.json",
 ]);
 const PANEL_GRUP_DOSYALARI = new Set(["deploy/electron-grup-yayinla.sh", "scripts/grup-yayin-kapisi.mjs", "scripts/test_grup_yayin_kapisi.mjs"]);
 const TABLET_GRUP_DOSYALARI = new Set([

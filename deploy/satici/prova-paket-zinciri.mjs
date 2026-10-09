@@ -24,6 +24,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { fiksturGuncelleyiciYaz } from '../../scripts/lib/guncelleyici-fikstur.mjs';
 // Bekçi/koşucu gerçek Anahtar Zinciri'ne GİTMEZ: parola okuyan araçlar kasa yerine stdin/dosya kullanır (scripts/lib/parola-kasasi.mjs).
 process.env.TEKSERP_PAROLA_KASASI = 'kapali';
 
@@ -145,8 +146,10 @@ function prova() {
   fs.cpSync(yol('motor', 'paket-agaci'), pk, { recursive: true });
   const commit = '0123456789abcdef0123456789abcdef01234567';
   fs.writeFileSync(path.join(pk, 'dist', 'server-kunye.json'), `${JSON.stringify({ commit, zaman: '2026-10-01T00:00:00.000Z' })}\n`);
+  // R15: bildirim aracı guncelleyici bloğunu paketteki ikiliden ölçer (prova motoru kendini güncellemez: own_exe yok).
+  const hizmetIkilileri = fiksturGuncelleyiciYaz(pk);
   const dosyaSayisi = fs.readdirSync(pk, { recursive: true }).filter((f) => fs.statSync(path.join(pk, f)).isFile()).length + 1;
-  fs.writeFileSync(path.join(pk, 'PAKET.json'), `${JSON.stringify({ korumali: true, korumaHedef: 'win-x64', uygulamaSurumu: hz.surum, dosyaSayisi, commit, backendKanal: null, runtimeNodeSurumu: '24.18.0', migrationSayisi: hz.gocSayisi })}\n`);
+  fs.writeFileSync(path.join(pk, 'PAKET.json'), `${JSON.stringify({ korumali: true, korumaHedef: 'win-x64', uygulamaSurumu: hz.surum, dosyaSayisi, commit, backendKanal: null, runtimeNodeSurumu: '24.18.0', migrationSayisi: hz.gocSayisi, hizmetIkilileri })}\n`);
   fs.mkdirSync(SURUM_D, { recursive: true });
   const zip1 = path.join(SURUM_D, `TeksERP-Backend-${hz.surum}.zip`);
   spawnSync('zip', ['-q', '-r', '-X', zip1, '.'], { cwd: pk });

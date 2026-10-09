@@ -250,6 +250,9 @@ pub struct Faults {
     pub docker: AtomicBool,
     /// Docker `RestartCount` (konteyner başına; `--force-recreate` sıfırlar).
     pub restarts: Mutex<HashMap<String, u64>>,
+    /// Gerçek biçimli (PE başlıklı) fikstür ikilisinin `kunye` çıktısı, ikilinin sha256'sına göre; yoksa sahte ikili
+    /// künyenin kendisidir (dosya içeriği).
+    pub identities: Mutex<HashMap<String, String>>,
 }
 
 #[derive(Debug, Clone)]
@@ -716,8 +719,9 @@ impl Procs for FakeProcs {
             "docker" => Ok(self.docker(c, &args)),
             "tekserp-guncelleyici" | "tekserp-guncelleyici.yeni" => {
                 self.w.faults.executed.lock().unwrap().push(c.program.clone());
-                let text = std::fs::read_to_string(&c.program).unwrap_or_default();
-                Ok(ok_out(&text))
+                let bytes = std::fs::read(&c.program).unwrap_or_default();
+                let known = self.w.faults.identities.lock().unwrap().get(&sha_hex(&bytes)).cloned();
+                Ok(ok_out(&known.unwrap_or_else(|| String::from_utf8_lossy(&bytes).into_owned())))
             }
             other => Ok(fail_out(127, &format!("bilinmeyen program {other}"))),
         }
@@ -1205,8 +1209,9 @@ pub struct Setup {
     pub extra_file_in_scope: bool,
     pub manifest_extra: Option<Value>,
     pub intent: Option<Value>,
-    /// Yeni paketin `runtime/tekserp-guncelleyici.exe`i (sahte ikili = künye JSON'u); `None` = paket taşımaz.
-    pub packaged_updater: Option<String>,
+    /// Yeni paketin `runtime/tekserp-guncelleyici.exe`i (sahte ikili = künye JSON'u, ya da `Faults::identities`li
+    /// gerçek biçimli bayt); `None` = paket taşımaz.
+    pub packaged_updater: Option<Vec<u8>>,
 }
 
 impl Default for Setup {
@@ -1300,7 +1305,7 @@ impl World {
         // Yeni paket + imzalı bildirim + işaretçiler (sunucuda)
         let mut files = version_files(NEW);
         if let Some(u) = &s.packaged_updater {
-            files.push(("runtime/tekserp-guncelleyici.exe".into(), u.clone().into_bytes()));
+            files.push(("runtime/tekserp-guncelleyici.exe".into(), u.clone()));
         }
         let (signer, kid) = if s.package_signer_legacy { (&keys.legacy, "paket-hazirlik") } else { (&keys.package, "paket-2026") };
         let mut all = files.clone();

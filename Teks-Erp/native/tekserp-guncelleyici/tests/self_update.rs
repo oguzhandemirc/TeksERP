@@ -205,7 +205,7 @@ fn state(w: &World) -> SelfState {
 
 /// Kurulu ikili `OWN_OLD`; yeni paket (sunucuda) `OWN_NEW` güncelleyici taşır.
 fn w1_world(tag: &str, s: Setup) -> (World, PathBuf) {
-    let w = World::new(tag, Setup { packaged_updater: Some(exe_json("tekserp-guncelleyici", OWN_NEW)), ..s });
+    let w = World::new(tag, Setup { packaged_updater: Some(exe_json("tekserp-guncelleyici", OWN_NEW).into_bytes()), ..s });
     let own = w.layout.updater_dir().join("tekserp-guncelleyici.exe");
     std::fs::write(&own, exe_json("tekserp-guncelleyici", OWN_OLD)).unwrap();
     (w, own)
@@ -342,6 +342,50 @@ fn dondur_kendini_yeniler() {
     assert!(matches!(engine_as(&w, &own, OWN_OLD).tick(&|| false), TickResult::Idle(_)));
     assert!(read(&own).contains(OWN_OLD));
     assert!(!w.layout.version_dir(NEW).exists(), "paket indirilmedi");
+}
+
+/// R15: `DONDUR` dünyası YAYINCININ GERÇEK çıktısıyla beslenir — `test-vektorleri/guncelleme-yayinci.json`
+/// (`scripts/test_backend_yayin.mjs --vektor-yaz`): `backend-bildirim.ts`in sentetik Windows paketinden ölçtüğü
+/// `guncelleyici` bloğu + paketteki ikili (PE başlıklı bayt). Blok ikilinin özetini ve künyenin sürümünü taşır; motor bu
+/// blokla paketi hazırlar ve ikiliyi yeniler. Künye ikilinin özetine bağlıdır (sahte koşucu `Faults::identities`).
+#[test]
+fn dondur_yayinci_blogu() {
+    let path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("..").join("test-vektorleri").join("guncelleme-yayinci.json");
+    let v: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(&path).expect("guncelleme-yayinci.json")).unwrap();
+    use base64::Engine as _;
+    let bin = base64::engine::general_purpose::STANDARD.decode(v["ikili"].as_str().unwrap()).unwrap();
+    let block = v["guncelleyici"].clone();
+    let announced = block["surum"].as_str().unwrap().to_string();
+    assert_eq!(
+        (v["platform"].as_str(), block["sha256"].as_str()),
+        (Some("win32-x64"), Some(sha_hex(&bin).as_str())),
+        "blok paketteki ikilinin özeti"
+    );
+    assert_eq!(&bin[..2], b"MZ", "yayıncının ölçtüğü ikili PE biçiminde");
+    assert_eq!(Some(announced.as_str()), v["kunye"]["surum"].as_str(), "blok sürümü paketleyici künyesinden");
+    let lease = LeaseOpts { update: Some(policy("DONDUR", &[], None)), ..LeaseOpts::default() };
+    let s =
+        Setup { lease, manifest_extra: Some(json!({ "guncelleyici": block })), packaged_updater: Some(bin.clone()), ..Setup::default() };
+    let w = World::new("dondur-yayinci", s);
+    w.faults.identities.lock().unwrap().insert(sha_hex(&bin), exe_json("tekserp-guncelleyici", &announced));
+    let own = w.layout.updater_dir().join("tekserp-guncelleyici.exe");
+    std::fs::write(&own, exe_json("tekserp-guncelleyici", OWN_OLD)).unwrap();
+    assert_eq!(engine_as(&w, &own, OWN_OLD).tick(&|| false), TickResult::RestartForSelfUpdate, "{:?}", w.status().map(|s| s.message));
+    assert_eq!(std::fs::read(&own).unwrap(), bin, "asıl adda yayıncının ölçtüğü ikili");
+    assert_eq!((w.current().as_deref(), journal_ops(&w)), (Some(OLD), 0), "backend dondurulmuş kalır");
+    assert_eq!(state(&w).new_version, announced);
+    // Kontrol: aynı dünya, blok ikiliyle tutmayan sürüm ilan ediyor → künye ilandan sapar, ikili YERLEŞMEZ.
+    let lease = LeaseOpts { update: Some(policy("DONDUR", &[], None)), ..LeaseOpts::default() };
+    let wrong = json!({ "guncelleyici": { "surum": "99.0.0", "sha256": sha_hex(&bin) } });
+    let w = World::new(
+        "dondur-yayinci-ilan",
+        Setup { lease, manifest_extra: Some(wrong), packaged_updater: Some(bin.clone()), ..Setup::default() },
+    );
+    w.faults.identities.lock().unwrap().insert(sha_hex(&bin), exe_json("tekserp-guncelleyici", &announced));
+    let own = w.layout.updater_dir().join("tekserp-guncelleyici.exe");
+    std::fs::write(&own, exe_json("tekserp-guncelleyici", OWN_OLD)).unwrap();
+    assert_ne!(engine_as(&w, &own, OWN_OLD).tick(&|| false), TickResult::RestartForSelfUpdate);
+    assert!(read(&own).contains(OWN_OLD), "ilanla tutmayan künye yerleşmedi");
 }
 
 /// AK-3: lisans yaptırımı (K1, `yaptirim.guncellemeDonuk`) varken HİÇBİR ŞEY yenilenmez — ne backend ne güncelleyici;

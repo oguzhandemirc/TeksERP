@@ -41,10 +41,14 @@
 //      (`Teks-Erp/scripts/lib/oci-fikstur.ts`) kuru kip ağsız + bildirim linux-x64-oci · sahte hedefte `/<grup>/backend-oci/`
 //      düzeni, kendi defteri, Windows işaretçilerine DOKUNULMAZ, kenarda belirteçli · imzasız taban / label yok / kimlik
 //      uyuşmaz / etiket uyuşmaz / zip'le --urun=backend-oci / tar'la Windows yolu / PG argümanı → DUR, yazma SIFIR
+//   §3U (R15) GÜNCELLEYİCİ BLOĞU: Windows bildirimi `guncelleyici`yi paketteki ikiliden ÖLÇEREK taşır (sürüm paketleyici
+//      künyesinden, özet ikiliden; §3y2 imzalı yayında da) · ikilisiz paket / künye özeti-boyutu tutmuyor / künyesiz /
+//      sürümsüz / biçimsiz sürüm / Windows paketinde ELF → DUR · `native/test-vektorleri/guncelleme-yayinci.json`
+//      yayıncının çıktısıyla bayt-aynı (`--vektor-yaz`; Rust `self_update.rs` `dondur_yayinci_blogu` okur)
 //   §1m/§3ci (G22) CI KAÇIŞI: imzalı künyede `ciKokeni.kip = "atlandi"` → yayın DURMAZ, uyarı basılır, defterde
 //      `ci-atlandi:` kolonu (cümle · saat · makine · HEAD); kaçışsız pakette kolon YOK
 //
-//   node scripts/test_backend_yayin.mjs
+//   node scripts/test_backend_yayin.mjs [--vektor-yaz]
 // =============================================================================
 
 import { execFileSync, spawnSync } from 'node:child_process';
@@ -73,6 +77,7 @@ import { YENI_ADRES_KAPISI, grupHedefi, grupTerfiKapisi, grupYayinBlogu, yeniAdr
 import { PROFIL_DIZINI_REL, profilOzetleri, raporYolu } from './lib/profil-raporu.mjs';
 import { YAYIN_EZME_ORTAMLARI } from './lib/yayin-hedefi.mjs';
 import { OCI_URUN_DIZINI } from './lib/dagitim.mjs';
+import { FIKSTUR_GUNCELLEYICI_SURUMU, fiksturGuncelleyiciYaz, sahteLinuxGuncelleyici, sahteWindowsGuncelleyici, sha256Hex } from './lib/guncelleyici-fikstur.mjs';
 // Bekçi/koşucu gerçek Anahtar Zinciri'ne GİTMEZ: parola okuyan araçlar kasa yerine stdin/dosya kullanır (scripts/lib/parola-kasasi.mjs).
 process.env.TEKSERP_PAROLA_KASASI = 'kapali';
 
@@ -293,17 +298,21 @@ generateWrappedPackageKey('pkt-2099-1', Buffer.from(${JSON.stringify(parola)})).
 }
 const ZINCIR = {};
 
-/** İmzalı test paketi: künye + birkaç kapsam dosyası, gerçek imza aracıyla; zip kökünde PAKET.json. */
-function paketKoku(ad, { surum, kanal, prova, commit = '91c79ebd' }) {
+/**
+ * İmzalı test paketi: künye + birkaç kapsam dosyası, gerçek imza aracıyla; zip kökünde PAKET.json. `guncelleyici`:
+ * `runtime/tekserp-guncelleyici.exe` fikstürü (`{ surum, ikili }`), `null` = ikilisiz paket; `hizmetIkilileri` künyeyi ezer.
+ */
+function paketKoku(ad, { surum, kanal, prova, commit = '91c79ebd', guncelleyici = {}, hizmetIkilileri }) {
   const kok = path.join(GECICI, `paket-${ad}`);
   fs.mkdirSync(path.join(kok, 'dist'), { recursive: true });
   fs.mkdirSync(path.join(kok, 'prisma/migrations/20260101000000_ilk'), { recursive: true });
   fs.writeFileSync(path.join(kok, 'dist/server.js'), `console.log(${JSON.stringify(surum)});\n`);
   fs.writeFileSync(path.join(kok, 'package.json'), `${JSON.stringify({ name: 'teks-erp', version: surum })}\n`);
   fs.writeFileSync(path.join(kok, 'prisma/migrations/20260101000000_ilk/migration.sql'), 'SELECT 1;\n');
+  const olcu = guncelleyici === null ? null : fiksturGuncelleyiciYaz(kok, guncelleyici);
   fs.writeFileSync(path.join(kok, 'PAKET.json'), `${JSON.stringify({
     ad, commit, backendKanal: kanal, korumali: true, korumaHedef: 'win-x64', runtimeNodeSurumu: '24.18.0',
-    uygulamaSurumu: surum, prova, migrationSayisi: 1, dosyaSayisi: 4,
+    uygulamaSurumu: surum, prova, migrationSayisi: 1, dosyaSayisi: 4, hizmetIkilileri: hizmetIkilileri === undefined ? olcu : hizmetIkilileri,
   }, null, 2)}\n`);
   return kok;
 }
@@ -334,8 +343,8 @@ signPackageDirectory({ root: ${JSON.stringify(kok)}, key: readPackageKey(${JSON.
  * yalnız o anahtar. `uretim` verilirse parolalı üretim anahtar dosyasıyla imzalar (gerçek yayın bildirimi paketi
  * imzalayan anahtarla atılır). `kurcala` imzadan sonra kapsam dosyasını değiştirir.
  */
-function ortakPaketKur(ad, { surum, kanal = null, musteri = null, prova = false, kid = 'paket-2099-1', kurcala = false, commit, ciKokeni = null, uretim = null, takim = uretim ? 'cift' : 'eski' }) {
-  const kok = paketKoku(ad, { surum, kanal, prova, commit });
+function ortakPaketKur(ad, { surum, kanal = null, musteri = null, prova = false, kid = 'paket-2099-1', kurcala = false, commit, ciKokeni = null, uretim = null, takim = uretim ? 'cift' : 'eski', guncelleyici, hizmetIkilileri }) {
+  const kok = paketKoku(ad, { surum, kanal, prova, commit, guncelleyici, hizmetIkilileri });
   const capa = uretim ? uretim.capa : path.join(GECICI, `capa-${ad}.json`);
   const betik = path.join(GECICI, `imza-${ad}.ts`);
   const imzaci = path.join(TEKS, 'scripts/lib/butunluk-imza.ts');
@@ -537,6 +546,7 @@ function bolum3() {
   bolum3zincir();
   bolum3testCapa();
   bolum3oci();
+  bolum3guncelleyici();
 }
 
 /* §3L (sözleşme 5, L3) — Linux/OCI teslim paketi `--urun=backend-oci`: sentetik `docker save` fikstürü, gerçek imza aracı. */
@@ -982,6 +992,8 @@ function bolum3pg() {
   const zipOzet = execFileSync('shasum', ['-a', '256', pgZip], { encoding: 'utf8' }).split(' ')[0];
   ol('§3y backend bildirimi PG hedefini KÜNYEDEN alır (sürüm · derleme · zip özeti · içerik özeti ölçülmüş · ICU)', r1.kod === 0 && b.pg.hedef?.surum === '16.15' &&
     b.pg.hedef?.derleme === 4 && b.pg.hedef?.paket?.sha256 === zipOzet && b.pg.hedef?.icerikSha256 === icerik && b.pg.hedef?.icuSurum === '67', r1.cikti.slice(-400));
+  ol('§3y2 ⭐ (R15) yayındaki İMZALI Windows bildirimi guncelleyici bloğunu taşır: sürüm paketleyici künyesinden, özet paketteki ikiliden',
+    b.guncelleyici?.surum === FIKSTUR_GUNCELLEYICI_SURUMU && b.guncelleyici?.sha256 === sha256Hex(sahteWindowsGuncelleyici()) && /güncelleyici 1\.4\.0/.test(r1.cikti), JSON.stringify(b.guncelleyici ?? null));
   const sahteKunye = path.join(GECICI, 'pg-baska-surum.json');
   const yuk = { v: 1, urun: 'postgresql', platform: 'win32-x64', cizgi: 16, surum: '16.14', derleme: 4, paket: { ad: 'postgresql-16.14-4-win-x64.zip', boyut: 1, sha256: 'a'.repeat(64) }, icerikSha256: 'b'.repeat(64), icuSurum: '67', yayinZamani: '2026-10-01T00:00:00.000Z' };
   fs.writeFileSync(sahteKunye, JSON.stringify({ v: 1, bildirim: `e30.${Buffer.from(JSON.stringify(yuk)).toString('base64url')}.imza` }));
@@ -990,6 +1002,62 @@ function bolum3pg() {
   ol('§3z hedef PG künyesi kaydın sürümü değil (16.14 ≠ kayıt) → DUR, uzak SIFIR', rs.kod !== 0 && rs.log.length === 0 && /KAYITLA UYUŞMUYOR/.test(rs.cikti), rs.cikti.slice(-300));
   const rsy = pgYayinla([`--pg-paket=${pgZip}`, `--pg-kunye=${sahteKunye}`]);
   ol("§3z' --pg-yayinla kaydın sürümü olmayan künyeyle → DUR, uzak SIFIR", rsy.kod !== 0 && rsy.log.length === 0 && /KAYITLA UYUŞMUYOR/.test(rsy.cikti), rsy.cikti.slice(-300));
+}
+
+/* ------------------------------------------------------------------ *
+ * §3U (R15) imzalı bildirimin `guncelleyici` bloğu — paketteki ikiliden ÖLÇÜLÜR
+ * ------------------------------------------------------------------ */
+
+const VEKTOR_YAYINCI = path.join(TEKS, 'native/test-vektorleri/guncelleme-yayinci.json');
+const VEKTOR_YAZ = process.argv.includes('--vektor-yaz');
+
+/** Rust `tests/self_update.rs` `dondur_yayinci_blogu` bu dosyayı okur: yayıncının GERÇEK çıktısı + ölçtüğü ikili. */
+function yayinciVektoru(blok) {
+  const ikili = sahteWindowsGuncelleyici();
+  return {
+    aciklama: 'R15: backend-bildirim.ts (dogrula --ortak) sentetik Windows paketinden ölçtüğü guncelleyici bloğu + paketteki ikili. Rust DONDUR dünyası bu blokla kendini yeniler.',
+    uretici: 'node scripts/test_backend_yayin.mjs --vektor-yaz',
+    platform: 'win32-x64',
+    ikili: ikili.toString('base64'),
+    kunye: { surum: FIKSTUR_GUNCELLEYICI_SURUMU, boyut: ikili.length, sha256: sha256Hex(ikili) },
+    guncelleyici: blok,
+  };
+}
+
+function bolum3guncelleyici() {
+  console.log('\n§3U — imzalı bildirimin guncelleyici bloğu (R15: paketteki ikiliden ölçülür, elle verilmez)');
+  const ozet = path.join(GECICI, 'u-ozet.txt');
+  fs.writeFileSync(ozet, 'bekçi sürümü\n');
+  const dogrula = (pk) => {
+    const cikti = path.join(GECICI, `u-${Math.random().toString(36).slice(2)}`);
+    const r = spawnSync(process.execPath, ['--import', 'tsx', 'scripts/backend-bildirim.ts', 'dogrula', '--ortak', `--zip=${pk.zip}`, '--kanal=test', '--guven-capasi=uretim',
+      '--pg-cizgi=16', '--pg-en-az=16.9', `--ozet-dosyasi=${ozet}`, `--cikti=${cikti}`], { cwd: TEKS, encoding: 'utf8', env: { ...process.env, TEKSERP_TEST_PAKET_CAPASI: pk.capa } });
+    const sonuc = path.join(cikti, 'sonuc.json');
+    return { kod: r.status, err: r.stderr ?? '', sonuc: fs.existsSync(sonuc) ? JSON.parse(fs.readFileSync(sonuc, 'utf8')) : null };
+  };
+  const beklenen = { surum: FIKSTUR_GUNCELLEYICI_SURUMU, sha256: sha256Hex(sahteWindowsGuncelleyici()) };
+  const r1 = dogrula(ortakPaketKur('u1', { surum: '9.9.30' }));
+  const blok = r1.sonuc?.bildirim?.guncelleyici ?? null;
+  ol('§3U1 ⭐ Windows bildirimi guncelleyici bloğunu taşır = { paketleyici künyesinin sürümü, paketteki ikilinin özeti }',
+    r1.kod === 0 && r1.sonuc?.bildirim?.platform === 'win32-x64' && JSON.stringify(blok) === JSON.stringify(beklenen), `${r1.err.slice(-300)} blok ${JSON.stringify(blok)}`);
+  const dur = (no, ad, pk, desen) => {
+    const r = dogrula(pk);
+    ol(`§3U${no} ${ad} → DUR, sonuç YOK`, r.kod !== 0 && desen.test(r.err) && r.sonuc === null, r.err.slice(-300));
+  };
+  dur(2, '⭐ ikilisiz Windows paketi (runtime/tekserp-guncelleyici.exe yok)', ortakPaketKur('u2', { surum: '9.9.31', guncelleyici: null }), /runtime\/tekserp-guncelleyici\.exe yok/);
+  dur(3, '⭐ künyenin özeti paketteki ikiliyle tutmuyor', ortakPaketKur('u3', { surum: '9.9.32', hizmetIkilileri: { 'tekserp-guncelleyici.exe': { surum: FIKSTUR_GUNCELLEYICI_SURUMU, boyut: 1024, sha256: 'a'.repeat(64) } } }), /özeti künyeyle tutmuyor/);
+  dur(4, 'PAKET.json hizmetIkilileri yok (paketleyici ölçmemiş)', ortakPaketKur('u4', { surum: '9.9.33', hizmetIkilileri: null }), /hizmetIkilileri\["tekserp-guncelleyici\.exe"\] yok/);
+  dur(5, '⭐ künyede sürüm yok (ikili koşturulmadan paketlenmiş)', ortakPaketKur('u5', { surum: '9.9.34', guncelleyici: { surum: null } }), /sözleşme biçiminde değil/);
+  dur(6, 'künye sürümü sözleşme biçiminde değil (+yapı eki)', ortakPaketKur('u6', { surum: '9.9.35', guncelleyici: { surum: '1.4.0+abc' } }), /sözleşme biçiminde değil/);
+  dur(7, '⭐ Windows paketinde Linux (ELF) güncelleyici — platform geçmez', ortakPaketKur('u7', { surum: '9.9.36', guncelleyici: { ikili: sahteLinuxGuncelleyici() } }), /linux ikilisi — win32-x64 paketi windows/);
+  const kirpik = sahteWindowsGuncelleyici();
+  dur(8, 'künyenin boyutu ikiliyle tutmuyor', ortakPaketKur('u8', { surum: '9.9.37', hizmetIkilileri: { 'tekserp-guncelleyici.exe': { surum: FIKSTUR_GUNCELLEYICI_SURUMU, boyut: 7, sha256: sha256Hex(kirpik) } } }), /boyutu künyeyle tutmuyor/);
+  // Vektör: Rust DONDUR dünyası yayıncının GERÇEK çıktısıyla beslenir (elle yazılmış blokla değil).
+  const taze = `${JSON.stringify(yayinciVektoru(blok), null, 2)}\n`;
+  if (VEKTOR_YAZ && r1.kod === 0) fs.writeFileSync(VEKTOR_YAYINCI, taze);
+  const dosya = fs.existsSync(VEKTOR_YAYINCI) ? fs.readFileSync(VEKTOR_YAYINCI, 'utf8') : '';
+  ol('§3U9 ⭐ native/test-vektorleri/guncelleme-yayinci.json yayıncının bugünkü çıktısıyla BAYT-AYNI (Rust dondur_yayinci_blogu onu okur)', dosya === taze,
+    dosya ? 'fark var — node scripts/test_backend_yayin.mjs --vektor-yaz' : 'dosya yok — --vektor-yaz');
 }
 
 function main() {

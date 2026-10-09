@@ -54,6 +54,7 @@ import { KeyFileError, passwordBuffer, readWrappedKeyFile, unwrapPrivateKey } fr
 import { KeyStore } from "../src/keys/key-store";
 import { loadServerSecrets } from "../src/keys/server-secrets";
 import { SATICI_KOKU, kontrol, sonuc } from "./lib/test-ortam";
+import { fiksturGuncelleyiciYaz } from "../../../scripts/lib/guncelleyici-fikstur.mjs";
 // Bekçi/koşucu gerçek Anahtar Zinciri'ne GİTMEZ: parola okuyan araçlar kasa yerine stdin/dosya kullanır (scripts/lib/parola-kasasi.mjs).
 process.env.TEKSERP_PAROLA_KASASI = "kapali";
 
@@ -579,7 +580,8 @@ async function bolum9(g: { tmp: string; D: string; A: string; ev: string }): Pro
     const commit = "0123456789abcdef0123456789abcdef01234567";
     writeFileSync(path.join(pk, "dist", "a.js"), "console.log('a');\n");
     writeFileSync(path.join(pk, "dist", "server-kunye.json"), `${JSON.stringify({ commit, zaman: "2026-10-01T00:00:00.000Z" })}\n`);
-    writeFileSync(path.join(pk, "PAKET.json"), `${JSON.stringify({ korumali: true, korumaHedef: "win-x64", uygulamaSurumu: "2.12.1", dosyaSayisi: 3, commit, backendKanal: null, runtimeNodeSurumu: "22.11.0", migrationSayisi: 1 })}\n`);
+    const hizmetIkilileri = fiksturGuncelleyiciYaz(pk); // R15: bildirim aracı guncelleyici bloğunu ikiliden ölçer
+    writeFileSync(path.join(pk, "PAKET.json"), `${JSON.stringify({ korumali: true, korumaHedef: "win-x64", uygulamaSurumu: "2.12.1", dosyaSayisi: 3, commit, backendKanal: null, runtimeNodeSurumu: "22.11.0", migrationSayisi: 1, hizmetIkilileri })}\n`);
     const surumD = path.join(Y, "test", "backend", "2.12.1");
     mkdirSync(surumD, { recursive: true });
     const zipAd = "TeksERP-Backend-2.12.1.zip";

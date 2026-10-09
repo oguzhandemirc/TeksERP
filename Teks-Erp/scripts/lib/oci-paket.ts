@@ -14,7 +14,6 @@
 // verir ve depodan depoya değişir — kimlik her yerde arşivden ölçülür.
 // =============================================================================
 import { execFileSync } from "node:child_process";
-import { createHash } from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -24,6 +23,7 @@ import { INTEGRITY_FILE } from "../../src/lib/license/integrity-scope";
 import { INTEGRITY_LIST_FILE } from "../../src/lib/license/integrity-list";
 import { imajArsiviOlc, tarDosyasiOku } from "./oci-arsiv";
 import { CliError } from "./cli-girdi";
+import { guncelleyiciBlogu } from "./guncelleyici-blok";
 
 export const OCI_PLATFORM = "linux-x64-oci";
 export const OCI_KUNYE = "PAKET-DOCKER.json";
@@ -41,8 +41,6 @@ export const ociUyeler = (surum: string): string[] => [...ociKapsam(surum), OCI_
 /** İnce imza katmanının taşıyabileceği dosyalar (`imaj-imzala.mjs`). */
 const IMZA_KATMANI = new Set([`app/${INTEGRITY_LIST_FILE}`, `app/${INTEGRITY_FILE}`, `app/${CHAINED_INTEGRITY_FILE}`, "app/paket-iptal.jws"]);
 
-const sha256 = (b: Buffer): string => createHash("sha256").update(b).digest("hex");
-
 function jwsYuku(jws: string): Record<string, unknown> {
   return JSON.parse(Buffer.from(jws.split(".")[1] ?? "", "base64url").toString("utf8")) as Record<string, unknown>;
 }
@@ -59,18 +57,6 @@ export interface OciAcilan {
   readonly guncelleyici: { readonly surum: string; readonly sha256: string };
   /** İmaj içi imzalı yükün CI kökeni (`ciKokeni`; Docker derlemesinde bugün kaçış cümlesi). */
   readonly ciKokeni: unknown;
-}
-
-/** ELF64 · little-endian · x86-64 (e_machine 0x3E). */
-export function elfX64Mi(dosya: string): boolean {
-  const b = Buffer.alloc(20);
-  const fd = fs.openSync(dosya, "r");
-  try {
-    fs.readSync(fd, b, 0, 20, 0);
-  } finally {
-    fs.closeSync(fd);
-  }
-  return b.subarray(0, 4).equals(Buffer.from([0x7f, 0x45, 0x4c, 0x46])) && b[4] === 2 && b[5] === 1 && b.readUInt16LE(18) === 0x3e;
 }
 
 /** İmaj arşivinin imzalı son katmanını ölçer; imzasız taban, kurcalı/yabancı imza, etiket uyuşmazlığı RED. */
@@ -157,9 +143,7 @@ export async function ociPaketiAc(tarDosyasi: string, guven: { readonly capa: re
     if (typeof k.guncelleyici?.surum !== "string" || typeof k.guncelleyici?.sha256 !== "string") hata.push("guncelleyici");
     if (hata.length) throw new CliError(`teslim künyesi eksik/biçimsiz: ${hata.join(" · ")}`);
     // Güncelleyici: imzalı listedeki ikili linux-x64 ELF, künyesi sürüm derlemesinin (test çapasız, üretim kipi).
-    const ikili = path.join(tmp, OCI_GUNCELLEYICI);
-    if (!elfX64Mi(ikili)) throw new CliError(`${OCI_GUNCELLEYICI} linux-x64 ELF değil`);
-    if (sha256(fs.readFileSync(ikili)) !== k.guncelleyici!.sha256) throw new CliError("güncelleyici özeti künyeyle tutmuyor");
+    const guncelleyici = guncelleyiciBlogu({ ikili: path.join(tmp, OCI_GUNCELLEYICI), platform: OCI_PLATFORM, kunye: k.guncelleyici!, yer: OCI_GUNCELLEYICI });
     const gk = JSON.parse(fs.readFileSync(path.join(tmp, OCI_GUNCELLEYICI_KUNYE), "utf8")) as Record<string, unknown>;
     if (gk.ad !== "tekserp-guncelleyici" || gk.hedef !== "linux" || gk.testCapasi !== false || gk.capaKipi !== "uretim" || gk.surum !== k.guncelleyici!.surum) {
       throw new CliError(`güncelleyici künyesi sürüm derlemesinin değil: ${JSON.stringify(gk)}`);
@@ -180,7 +164,7 @@ export async function ociPaketiAc(tarDosyasi: string, guven: { readonly capa: re
       gocSayisi: k.gocSayisi as number,
       nodeSurum: k.sunucu!.nodeSurum as string,
       imaj: { kimlik: k.imaj!.kimlik as string, etiket },
-      guncelleyici: { surum: k.guncelleyici!.surum as string, sha256: k.guncelleyici!.sha256 as string },
+      guncelleyici,
       ciKokeni: imaj.ciKokeni,
     };
   } finally {

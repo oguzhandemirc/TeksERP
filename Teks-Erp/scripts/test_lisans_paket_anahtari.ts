@@ -38,11 +38,12 @@ import { LICENSE_CLASSES } from "../src/lib/license/protocol";
 import { PACKAGE_PUBLIC_KEYS, verifyIntegrity } from "../src/lib/license/integrity";
 import { INTEGRITY_FILE } from "../src/lib/license/integrity-scope";
 import { INTEGRITY_LIST_FILE } from "../src/lib/license/integrity-list";
-import { generatePackageKey, packageKeyInfo, writePackageKey } from "./lib/butunluk-imza";
+import { generatePackageKey, openPackageKey, packageKeyInfo, writePackageKey } from "./lib/butunluk-imza";
+import { FIKSTUR_GUNCELLEYICI_SURUMU, fiksturGuncelleyiciYaz, sahteWindowsGuncelleyici, sha256Hex } from "../../scripts/lib/guncelleyici-fikstur.mjs";
 import { CAPA_DOSYALARI, capaDurumuOku } from "./lib/guven-capasi";
 import { main as capaEkle } from "./guven-capasi-ekle";
 import { ciKokeniHukmu } from "./lib/ci-kokeni";
-import { DAY_MS, PackageRevocationSchema, TYP, msToIso, parseJws, readReleasePointer, signDocument, verifyPgPackageManifest, verifyReleaseManifest } from "../src/lib/license/protocol";
+import { DAY_MS, PackageRevocationSchema, TYP, msToIso, parseJws, readReleasePointer, releasePointerText, signDocument, signReleaseManifest, verifyPgPackageManifest, verifyReleaseManifest, type ReleaseManifest } from "../src/lib/license/protocol";
 import { CHAINED_INTEGRITY_FILE, PACKAGE_REVOCATION_FILE } from "../src/lib/license/protocol/paket-zinciri";
 import { anahtarUret, fiksturKur, sertifikaBas, sertifikaYuku } from "./lib/lisans-fikstur";
 import { git } from "./lib/git";
@@ -554,11 +555,12 @@ function bildirimCli(argv: readonly string[], input = "", ortam: Record<string, 
   return { kod: r.status, cikti: r.stdout ?? "", hata: r.stderr ?? "" };
 }
 
-/** Ortak (backendKanal null) korumalı paket zip'i — bildirimin okuduğu künye alanlarıyla. */
-function ortakZip(ad: string): string {
+/** Ortak (backendKanal null) korumalı paket zip'i — bildirimin okuduğu künye alanlarıyla; `guncelleyici:false` = R15 öncesi ikilisiz paket. */
+function ortakZip(ad: string, { guncelleyici = true }: { guncelleyici?: boolean } = {}): string {
   const k = paket();
   writeFileSync(path.join(k, "dist", "server-kunye.json"), `${JSON.stringify({ commit: KUNYE_COMMIT, zaman: "2026-10-01T00:00:00.000Z" })}\n`);
-  writeFileSync(path.join(k, "PAKET.json"), `${JSON.stringify({ korumali: true, korumaHedef: "win-x64", uygulamaSurumu: "2.12.1", dosyaSayisi: 4, commit: KUNYE_COMMIT, backendKanal: null, runtimeNodeSurumu: "22.11.0", migrationSayisi: 1 })}\n`);
+  const hizmetIkilileri = guncelleyici ? fiksturGuncelleyiciYaz(k) : null;
+  writeFileSync(path.join(k, "PAKET.json"), `${JSON.stringify({ korumali: true, korumaHedef: "win-x64", uygulamaSurumu: "2.12.1", dosyaSayisi: 4, commit: KUNYE_COMMIT, backendKanal: null, runtimeNodeSurumu: "22.11.0", migrationSayisi: 1, hizmetIkilileri })}\n`);
   const zip = path.join(dizin("ozip"), `${ad}.zip`);
   spawnSync("zip", ["-q", "-r", "-X", zip, "."], { cwd: k });
   return zip;
@@ -640,6 +642,66 @@ async function bolum7(): Promise<void> {
   check("§7g ⭐ pg-imzala --zincir-anahtar: pg.json + pg-zincir.json (kökle doğrulanır)", pg.kod === 0 && existsSync(path.join(c3, "pg.json")) && pv?.ok === true, `çıkış ${pg.kod} ${pg.hata.trim().slice(-140)}`);
   const pd = bildirimCli(["pg-dogrula", `--kunye=${pgz}`, `--zip=${pgZip}`, "--guven-capasi=uretim", `--kok-capa=${capa}`, `--cikti=${dizin("pgd")}`], "", env);
   check("§7h pg-dogrula pg-zincir.json'u kabul eder", pd.kod === 0, `çıkış ${pd.kod} ${pd.hata.trim().slice(-120)}`);
+}
+
+// ── §8w ──────────────────────────────────────────────────────────────────────
+// R15: yeniden imzada `guncelleyici` bloğu paketten YENİDEN ölçülür — aynıysa korunur, yoksa eklenir, tutmuyorsa DUR;
+// ölçülemeyen eski (ikilisiz) paket bloksuz kalır, ama blok ilan eden bildirimi DUR. Eski bildirim (bloklu/bloksuz)
+// eski takım anahtarıyla (paket-2099) elle imzalanır: bugünkü `imzala` bloksuz bildirim üretmez.
+async function bolum8guncelleyici(g: {
+  eski: string; cift: string; c1: string; c8: string; yeniAdi: string;
+  yeniden: (kunye: string, zip: string, cikti: string, ekArg?: readonly string[], anahtar?: string, input?: string) => Kosum;
+}): Promise<void> {
+  const beklenen = { surum: FIKSTUR_GUNCELLEYICI_SURUMU, sha256: sha256Hex(sahteWindowsGuncelleyici()) };
+  const sonuc8 = jsonOku(path.join(g.c8, "sonuc.json"));
+  const yeni8 = existsSync(path.join(g.c8, g.yeniAdi)) ? isaretciYuku(path.join(g.c8, g.yeniAdi)) : {};
+  check("§8w1 ⭐ (R15) bloklu bildirimin yeniden imzası: blok paketten yeniden ölçülür, AYNI → korunur (sonuc.guncelleyici.durum ayni)",
+    (sonuc8.guncelleyici as Record<string, unknown> | undefined)?.durum === "ayni" && JSON.stringify(yeni8.guncelleyici) === JSON.stringify(beklenen), JSON.stringify(sonuc8.guncelleyici ?? null));
+  const sablon = isaretciYuku(path.join(g.c1, "surum.json")) as unknown as ReleaseManifest;
+  const key = await openPackageKey(g.eski, async () => Buffer.from(PAROLA));
+  const elleBildirim = (degis: (y: Record<string, unknown>) => void): string => {
+    const yuk = structuredClone(sablon) as unknown as Record<string, unknown>;
+    degis(yuk);
+    const d = dizin("w-eski-bildirim");
+    const token = signReleaseManifest({ payload: yuk as unknown as ReleaseManifest, key: { kid: key.kid, privateKey: key.privateKey } });
+    writeFileSync(path.join(d, "surum.json"), releasePointerText(token));
+    return path.join(d, "surum.json");
+  };
+  const bloksuz = elleBildirim((y) => delete y.guncelleyici);
+  const c1w = dizin("w-eklendi");
+  const r1 = g.yeniden(bloksuz, g.cift, c1w);
+  const s1 = jsonOku(path.join(c1w, "sonuc.json"));
+  const y1 = existsSync(path.join(c1w, g.yeniAdi)) ? isaretciYuku(path.join(c1w, g.yeniAdi)) : {};
+  check("§8w2 ⭐ (R15) bloksuz (R15 öncesi) bildirimin yeniden imzası → blok paketteki ikiliden EKLENİR (durum eklendi)",
+    r1.kod === 0 && (s1.guncelleyici as Record<string, unknown> | undefined)?.durum === "eklendi" && JSON.stringify(y1.guncelleyici) === JSON.stringify(beklenen), `çıkış ${r1.kod} ${r1.hata.trim().slice(-200)}`);
+  const yanlis = elleBildirim((y) => (y.guncelleyici = { surum: FIKSTUR_GUNCELLEYICI_SURUMU, sha256: "b".repeat(64) }));
+  const c2w = dizin("w-tutmuyor");
+  const r2 = g.yeniden(yanlis, g.cift, c2w, [], undefined, "");
+  check("§8w3 ⭐ (R15) bildirimin bloğu paketteki ikiliyle tutmuyor → DUR, parola sorulmadan, çıktı YOK",
+    r2.kod === 2 && /paketteki ikiliyle tutmuyor/.test(r2.hata) && readdirSync(c2w).length === 0, `çıkış ${r2.kod} ${r2.hata.trim().slice(-160)}`);
+  // R15 öncesi ikilisiz paket: bildirimi o pakete bağlanır (ad · boyut · özet · paketId).
+  const eskiZip = ortakZip("eski8w", { guncelleyici: false });
+  cli(["zip", `--zip=${eskiZip}`, `--anahtar=${g.eski}`, "--ci-kosu=4242"], `${PAROLA}\n`);
+  const ac = dizin("w-eski-ac");
+  spawnSync("unzip", ["-q", eskiZip, "-d", ac]);
+  const paket = { ad: path.basename(eskiZip), boyut: statSync(eskiZip).size, sha256: shaOf(eskiZip), paketId: paketIdOf(path.join(ac, INTEGRITY_FILE)) };
+  const eskiBloksuz = elleBildirim((y) => {
+    delete y.guncelleyici;
+    y.paket = paket;
+  });
+  const c3w = dizin("w-yok");
+  const r3 = g.yeniden(eskiBloksuz, eskiZip, c3w);
+  const s3 = jsonOku(path.join(c3w, "sonuc.json"));
+  const y3 = existsSync(path.join(c3w, g.yeniAdi)) ? isaretciYuku(path.join(c3w, g.yeniAdi)) : { guncelleyici: "dosya yok" };
+  check("§8w4 (R15) ikilisiz eski paket + bloksuz bildirim → yeniden imza GEÇER, blok YAZILMAZ (durum yok) ve uyarılır",
+    r3.kod === 0 && (s3.guncelleyici as Record<string, unknown> | undefined)?.durum === "yok" && y3.guncelleyici === undefined && /EKLENMEDİ/.test(r3.hata), `çıkış ${r3.kod} ${r3.hata.trim().slice(-200)}`);
+  const eskiBloklu = elleBildirim((y) => {
+    y.paket = paket;
+  });
+  const c4w = dizin("w-ilan");
+  const r4 = g.yeniden(eskiBloklu, eskiZip, c4w, [], undefined, "");
+  check("§8w5 ⭐ (R15) ikilisiz paketin bildirimi güncelleyici İLAN ediyor → DUR, çıktı YOK", r4.kod === 2 && /paketten ölçülemiyor/.test(r4.hata) && readdirSync(c4w).length === 0,
+    `çıkış ${r4.kod} ${r4.hata.trim().slice(-160)}`);
 }
 
 // ── §8 ───────────────────────────────────────────────────────────────────────
@@ -741,6 +803,7 @@ async function bolum8(): Promise<void> {
   check("§8i ⭐ çift sürüm, eski takım bildirimiyle + iptal → GEÇER: pakete paket-iptal.jws (sıra 4) girer, dosyaSayisi +1",
     eskiTakim.kod === 0 && ip?.ok === true && (ip.value.payload as Record<string, unknown>).sira === 4 && pj2.dosyaSayisi === Number(pj0.dosyaSayisi) + 1,
     `çıkış ${eskiTakim.kod} ${eskiTakim.hata.trim().slice(-160)}`);
+  await bolum8guncelleyici({ eski, cift, c1, c8, yeniAdi, yeniden });
 
   const pgk = dizin("pgk8");
   mkdirSync(path.join(pgk, "bin"));
