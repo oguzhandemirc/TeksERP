@@ -335,7 +335,7 @@ Güncelleyici SYSTEM'dir; backend düşük yetkilidir. Yetki yalnız satıcı im
 
 ### §6.4 Paket (sözleşme §1.5)
 
-Önce boş disk (≥ paket × 3 + 2 GB, `DISK_DOLU`), sonra `/<kanal>/backend/<surum>/<paket.ad>` sürdürülebilir iner; boy + sha256 (küçük harf hex) bildirimle EŞİT olmadan zip AÇILMAZ (`PAKET_OZETI`, parça silinir). Açma yalnız `surumler\.hazirlik-<surum>`e ve yalnız göreli yollarla (`PAKET_YOL`; sembolik bağ girdisi RED). `butunluk.jws` aynı anahtar kümesiyle ve dosya listesi GEÇERLİ olmalı (`BUTUNLUK_GECERSIZ`); künye bildirimle BAĞLANMALI (`checkPackageBinding`: imzalayan · `paketId` · `urun` · `surum` · `derlemeTarihi` · müşteri null ya da kanal — `PAKET_BAGI`). Kesin paket hatasında (özet · yol · bütünlük · bağ) aynı paket 15 dk × 4ⁿ (≤ 24 sa) yeniden indirilmez (`is\ertele.json`, `INDIRME_ERTELENDI`).
+Önce boş disk (kök ≥ paket × 3 + DB × 1,2 + 2 GB; veri kökü ayrıysa o da ≥ paket + DB × 1,2 + 2 GB; DB ölçülemezse 2 GB sayılır — `DISK_DOLU`, plan `GUNCELLEYICI-SAGLAMLIK.md` §5 madde 4), sonra `/<kanal>/backend/<surum>/<paket.ad>` sürdürülebilir iner; boy + sha256 (küçük harf hex) bildirimle EŞİT olmadan zip AÇILMAZ (`PAKET_OZETI`, parça silinir). Açma yalnız `surumler\.hazirlik-<surum>`e ve yalnız göreli yollarla (`PAKET_YOL`; sembolik bağ girdisi RED). `butunluk.jws` aynı anahtar kümesiyle ve dosya listesi GEÇERLİ olmalı (`BUTUNLUK_GECERSIZ`); künye bildirimle BAĞLANMALI (`checkPackageBinding`: imzalayan · `paketId` · `urun` · `surum` · `derlemeTarihi` · müşteri null ya da kanal — `PAKET_BAGI`). Kesin paket hatasında (özet · yol · bütünlük · bağ) aynı paket 15 dk × 4ⁿ (≤ 24 sa) yeniden indirilmez (`is\ertele.json`, `INDIRME_ERTELENDI`).
 
 ### §6.5 Güvenilmez girdi (D3 güvenlik kuralı)
 
@@ -435,6 +435,8 @@ Paket `runtime\tekserp-guncelleyici.exe` taşır. Paketteki ikilinin sürümü �
 | `IC_HATA` ve tanınmayan | `BILINMEYEN` |
 
 **Bakım çiti (W2, plan `GUNCELLEYICI-SAGLAMLIK.md` §2.2):** backend işlemi sürerken Windows'ta backend hizmetinin başlangıç türü `ELLE`dir (eski tür `<veri>\guncelleme\is\cit.json` işaretinde); işlem `BASARILI`/`GERI_DONDU` bitince tür geri yazılır. `HATA`da çit KALIR (açılışta backend eski kod + yeni şemayla başlamasın). İnsan çaresi — yalnız durum incelenip backend'in başlaması güvenli bulunduktan sonra: `tekserp-guncelleyici cit --kok <KOK> [--veri <D>] --kaldir` (güncelleyici hizmeti durdurulmuşken; kilit doluysa `KILIT_DOLU`, açık işlem varken `ACIK_ISLEM` ile reddeder; işaretteki eski türü geri yazar, işareti siler; işaret yoksa sessiz çıkar; okunamayan işareti silmez). `cit` bayraksız ölçer, `--kur` elle çit kurar (duman).
+
+**Disk dolu (W3a, plan `GUNCELLEYICI-SAGLAMLIK.md` §2.3):** `<veri>\guncelleme\is\yedek-alan` (64 MB) boşta turda kurulur; kurulamıyorsa işlem başlamaz (`BEKLIYOR / DISK_DOLU`, onay tüketilmez — yer açılınca kendiliğinden sürer). İşlem sürerken disk dolarsa güncelleyici alanı bırakır ve geri alır: sonuç `GERI_DONDU (DISK_DOLU)`; aynı sürüm yeni panel onayı olmadan, pencere kipinde de yeniden denenmez. **İnsan çaresi:** sunucuda yer aç (ilgisiz dosyalar, eski günlükler; güncelleme öncesi yedekleri güncelleyici kendisi budar) → panelden güncellemeyi yeniden onayla. Büyük DB'de geri yükleme 64 MB'a sığmazsa sonuç `HATA` olur (plan R18): yer açıldıktan sonra kurtarma insanla yapılır.
 
 ## §13 Diğer dilimlerin bu sözleşmeden işi
 
