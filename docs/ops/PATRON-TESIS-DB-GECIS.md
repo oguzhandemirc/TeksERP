@@ -1,6 +1,6 @@
 # Patron bulutu — tesis başına ayrı veritabanına geçiş (VDS uygulama adımları)
 
-> **Durum:** HAZIR, UYGULANMADI. Kod `gece/patron-tesis-db` dalında (dilim 1–7); VDS'e hiçbir adım kullanıcının "uygula" cümlesi olmadan uygulanmaz. Tasarım: `docs/design/PATRON-TESIS-DB.md`. Kurulum runbook'u (kalıp, yollar, imaj taşıma): `docs/ops/PATRON-BULUTU-KURULUM.md` §2–§8.
+> **Durum:** UYGULANDI 2026-10-10 00:10–00:12 TR (imaj `a30833e666b6`, §6). Tasarım: `docs/design/PATRON-TESIS-DB.md`. Kurulum runbook'u (kalıp, yollar, imaj taşıma): `docs/ops/PATRON-BULUTU-KURULUM.md` §2–§8.
 
 ## 0. Ne değişir, ne değişmez
 
@@ -84,4 +84,14 @@ deploy/vds-dogrula.sh                                                           
 
 ## 6. Kayıt
 
-(Uygulamada doldurulur: önce ölçüm sayıları · imaj kimlikleri · göç çıktısı · sonra ölçüm · süreler.)
+**2026-10-10 00:10–00:12 TR (21:10–21:12Z), mesai dışı.** Kesinti (patron durdu → yeni sunucu sağlıklı) ~35 sn; tesis 0, kimse etkilenmedi.
+- **sudo yerine:** `oguzhan` docker grubunda, sudo parolası yok ⇒ `docker compose` doğrudan; kök yazımlar (compose dosyası, `sirlar/tesis-rol-anahtari` `root:61062 0440`) ağsız yardımcı konteynerle (`postgres:16-alpine` sabitli imaj, `--user 0`); `.env` `oguzhan`ındır, yerinde `cat >` ile yazıldı (dizin yazılamaz, `sed -i` düşer). Yedek dosyaları `exec -T patron-yedek cat/sha256sum` ile çekildi.
+- **Önce:** `vds-dogrula` ✅ 420 dosya · §1 beş sayı 0 · yarım göç 0 · 7 göç · max_connections 40 · kullanılabilir ~1903 MB.
+- **Yedek:** `patron_20261009_210927.dump.tkenc` + `anahtarlar_…210927.tar.tkenc`; iki uç sha eşit (cc54161f… · bc5fdb36…), Mac'te özel yarıyla açıldı: `pg_restore --list` 22 tablo verisi, anahtar arşivi 3 öge.
+- **İmaj:** `tekserp-patron:a30833e666b6` `sha256:32fde639…` · `-yedek` `sha256:1880e7d7…` (iki uçta aynı); arşiv sha 616a89e0…; eski `2d5aeccd6261` VDS'te duruyor. Yerel duman bu imajla YEŞİL (HTTP · uygulama 13 adım · Chromium · yedek merkez + tesis dökümü, ikisi açıldı · hazırlayıcı 48/96 MiB, RestartCount 0); compose-denetle 50 ✅ 0 ihlal.
+- **Sır:** tesis rol anahtarı Mac `~/.tekserp/patron-uretim/tesis-rol-anahtari` (0600) + VDS `sirlar/` — USB kopyası kullanıcıda AÇIK.
+- **Göç:** `Applying migration 20261006120000_tesis_veritabanlari` · `All migrations have been successfully applied` · `✅ roller hizalandı` · `PATRON_TESIS_GOC tesis=0 hata=0` (10 sn).
+- **Sonra:** dört servis ayakta (sunucu healthy; hazırlayıcı `0 running`, log `PATRON_HAZIRLA izliyor aralik=10s`) · ilk yedek `+ 0 tesis dökümü` · `tesis-db durum` 0 kayıt · `app.veritabani_tesisi` = merkez · `patron_uygulama` accounts f / login_routes t · 8 göç · bellek: sunucu 97 · DB 23 · hazırlayıcı 19 (< 96) · yedek 1 MiB.
+- **Kenar:** yönlendirici `[-cf, -hiz] enabled`; `-hiz` 30/sn · 900 · anahtar `Cf-Connecting-Ip`; `websecure`te forwardedHeaders/proxyProtocol yok (kova = gerçek istemci, §2.7 ✅); Traefik ERR/WRN yok. CF üzerinden `/saglik` 200 · web 200 · imzasız `POST /v1/esitle` 401 · köken doğrudan 403 (sahte `Cf-Connecting-Ip` ile de) · lisans/portal köken 403, lisans CF 200, guncelleme köken 200.
+- **Sonra doğrulama:** `vds-dogrula` ✅ adnansahin AYNI (420) · patron dışı 10 konteyner ad+imaj AYNI, satıcı yeniden başlamadı.
+- Geri dönüş dosyaları: `~/ptd-env-yedek-2d5aeccd6261` · `docker-compose.yml.yedek-20261010_0010-2d5aeccd6261`.
