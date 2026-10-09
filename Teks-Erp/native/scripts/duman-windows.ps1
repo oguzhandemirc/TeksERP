@@ -299,3 +299,5 @@ finally {
     Unregister-ScheduledTask -TaskPath "\TeksERP\" -TaskName "$ad-Onarim" -Confirm:$false -ErrorAction SilentlyContinue
   }
 }
+# 7d'nin beklenen cikis 14'u $LASTEXITCODE'da kalir; Actions pwsh sarmalayicisi onu cikis kodu yapar.
+exit 0
