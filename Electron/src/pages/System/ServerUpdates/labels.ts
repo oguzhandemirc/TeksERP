@@ -38,7 +38,8 @@ const RESULT_CODES: Record<string, string> = {
   PAKET_OZETI: "Paket özeti uyuşmadı",
   PAKET_BAGI: "Paket, sürüm bildirimiyle eşleşmedi",
   BUTUNLUK_GECERSIZ: "Paket bütünlüğü geçersiz",
-  DISK_DOLU: "Disk dolu",
+  // Geri dönen deneme aynı sürümü kendiliğinden yeniden denemez (yeni onay ister); bekleyen deneme yer açılınca sürer.
+  DISK_DOLU: "Sunucunun diskinde yer kalmadı — sunucuda yer açın, sonra güncellemeyi yeniden onaylayın (yalnız bekliyorsa yer açılınca kendiliğinden sürer)",
   DOSYA_KILITLI: "Dosya kilitli — başka bir program kullanıyor (kilit kalkınca kendiliğinden sürer)",
   SEMA_ILERIDE: "Şema ileride — veritabanında bu paketin tanımadığı göçler var; geri indirme yapılmaz (daha yeni sürüm gerekir)",
   // Linux (Docker) iç kodları: rapora PAKET_BAGI · INDIRME_HATASI · BASLATMA_HATASI olarak gider.

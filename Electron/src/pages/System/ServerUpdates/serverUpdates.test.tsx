@@ -53,6 +53,8 @@ describe("sunucu güncellemesi — sözlük (saf)", () => {
     expect(decisionText("GUNCEL", null)).toBe("Güncel");
     expect(resultCodeLabel("SAGLIK_HATASI")).toBe("Yeni sürüm sağlık denetiminden geçemedi");
     expect(resultCodeLabel("YENI_KOD")).toBe("YENI_KOD");
+    // Disk dolu: kullanıcıya çareyi söyler (yer aç + yeniden onayla), salt "Disk dolu" yetmez.
+    expect(resultCodeLabel("DISK_DOLU")).toMatch(/yer açın.*yeniden onaylayın/);
   });
   it("onarım kodları: üç arıza Sorun sözlüğünde, ONARILDI yalnız Bilgi sözlüğünde", () => {
     for (const k of ["ONARIM_TAVANI", "ONARIM_KAYNAK_YOK", "GUNCELLEYICI_KAPALI"]) expect(resultCodeLabel(k)).not.toBe(k);
