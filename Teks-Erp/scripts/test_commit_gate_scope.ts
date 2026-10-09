@@ -29,7 +29,7 @@
 // =============================================================================
 import { execFileSync, spawnSync } from "node:child_process";
 import { git } from "./lib/git";
-import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -465,6 +465,71 @@ tripwire(
   (k) => /process\.argv\[1\]\s*===\s*fileURLToPath\(import\.meta\.url\)/.test(k),
   (k) => k.replace(/if \(process\.argv\[1\] === fileURLToPath\(import\.meta\.url\)\) main\(\);/, "main();"),
 );
+
+// =============================================================================
+// §4 — native ağır testler kapıda atlanır, CI'da SAYILARAK koşar (kullanıcı kararı 2026-10-09)
+// =============================================================================
+// `kapi.mjs test --kapi` crash_restart + pg_minor'u atlar; bayraksız kip (CI · `npm test`)
+// onları koşar ve geçen sayısını `#[test]` sayısıyla eşler. Bayrağın CI'ya sızması ya da
+// CI adımının düşmesi bu testleri HİÇBİR yerde koşmaz bırakır — sessiz kör nokta.
+console.log("\n§4 — native ağır testler: kapıda ⏭, CI'da sayılı koşum");
+
+tripwire(
+  "kapı native testi `--kapi` kipinde çağırıyor",
+  "scripts/hooks/lib/staged.mjs",
+  (k) => /ad: "Teks-Erp\/native"[\s\S]{0,1200}?test: \["node", \["scripts\/kapi\.mjs", "test", "--kapi"\]\]/.test(k),
+  (k) => k.replace(/"test", "--kapi"/, '"test"'),
+);
+
+const agirListesi = (k: string) => /const AGIR_TESTLER = \["crash_restart", "pg_minor"\]/.test(k);
+tripwire(
+  "kapi.mjs ağır listesi crash_restart + pg_minor",
+  "Teks-Erp/native/scripts/kapi.mjs",
+  agirListesi,
+  (k) => k.replace(/"crash_restart", "pg_minor"/, '"crash_restart"'),
+);
+tripwire(
+  "kapi.mjs bayraksız kipte ağır testleri koşup geçen sayısını `#[test]` sayısıyla eşliyor",
+  "Teks-Erp/native/scripts/kapi.mjs",
+  (k) =>
+    /if \(KAPI_KIPI\) \{[\s\S]{0,400}?⏭[\s\S]{0,200}?continue;\s*\}[\s\S]{0,200}?agirKos\(ad\)/.test(k) &&
+    /gecen !== beklenen \|\| atlanan !== 0/.test(k) &&
+    /const KAPI_KIPI = process\.argv\.slice\(3\)\.includes\("--kapi"\)/.test(k),
+  (k) => k.replace(/gecen !== beklenen \|\| atlanan !== 0/, "false"),
+);
+tripwire(
+  "   ↳ kapı kipi ağır adımı atlarken yalnız `--kapi`ya bakıyor (CI ortam değişkeni değil)",
+  "Teks-Erp/native/scripts/kapi.mjs",
+  (k) => /const KAPI_KIPI = process\.argv\.slice\(3\)\.includes\("--kapi"\)/.test(k),
+  (k) => k.replace(/process\.argv\.slice\(3\)\.includes\("--kapi"\)/, 'process.env.CI !== "true"'),
+);
+
+for (const ad of ["crash_restart", "pg_minor"]) {
+  const yol = join(KOK, "Teks-Erp/native/tekserp-guncelleyici/tests", `${ad}.rs`);
+  let sayi = 0;
+  try {
+    sayi = (readFileSync(yol, "utf8").match(/^\s*#\[test\]/gm) ?? []).length;
+  } catch {
+    /* yok → 0 */
+  }
+  check(`ağır test dosyası var ve test taşıyor: ${ad}.rs`, sayi > 0, `${sayi} #[test]`);
+}
+
+// CI: üç native işi bayraksız `kapi.mjs test` koşar; hiçbir iş akışı `--kapi` taşımaz.
+const isAkislari = readdirSync(join(KOK, ".github/workflows")).filter((f) => /\.ya?ml$/.test(f));
+const kapiSizinti = (metin: string) => metin.split("\n").some((l) => /kapi\.mjs/.test(l) && /--kapi\b/.test(l));
+const sizan = isAkislari.filter((f) => kapiSizinti(readFileSync(join(KOK, ".github/workflows", f), "utf8")));
+check("⭐ `--kapi` hiçbir CI iş akışına SIZMAMIŞ", sizan.length === 0, sizan.join(", "));
+check("   ↳ sonda: sızsaydı yakalanırdı", kapiSizinti("        run: node scripts/kapi.mjs test --kapi"));
+const ciTestAdimi = (metin: string) => /^\s*run: node (?:\.\.\/)?scripts\/kapi\.mjs test\s*$/m.test(metin);
+for (const f of ["native-linux.yml", "native-windows.yml", "ci.yml"]) {
+  const metin = readFileSync(join(KOK, ".github/workflows", f), "utf8");
+  check(`⭐ ${f} bayraksız \`kapi.mjs test\` koşuyor (ağır testler + sayım)`, ciTestAdimi(metin));
+  check("   ↳ sonda: adım silinse ısırır", !ciTestAdimi(metin.replace(/^\s*run: node (?:\.\.\/)?scripts\/kapi\.mjs test\s*$/gm, "")));
+}
+for (const f of ["Teks-Erp/native/package.json", "Teks-Erp/native/lisans-cekirdek/package.json"]) {
+  check(`${f} \`npm test\` tam kip (\`--kapi\` yok)`, !readFileSync(join(KOK, f), "utf8").includes("--kapi"));
+}
 
 console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
 process.exit(fail > 0 ? 1 : 0);

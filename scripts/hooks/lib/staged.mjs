@@ -180,7 +180,8 @@ export const PROJELER = [
     ad: "Teks-Erp/native",
     typecheck: ["node", ["scripts/kapi.mjs", "denetle"]],
     lint: null,
-    test: ["node", ["scripts/kapi.mjs", "test"]],
+    // `--kapi`: ağır sahte dünya testleri (crash_restart · pg_minor) kapıda koşmaz, yalnız CI (kullanıcı kararı 2026-10-09).
+    test: ["node", ["scripts/kapi.mjs", "test", "--kapi"]],
     // Rust kaynağı, Cargo.toml/lock, vektör dosyaları ve betikler bu projenin girdisidir.
     kodDosyasi: (f) => /\.(rs|toml|lock|json|mjs)$/.test(f),
   },

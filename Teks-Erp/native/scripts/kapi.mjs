@@ -6,10 +6,12 @@
 //             bağlama yok — Mac'ten de ölçülür; hedef std'si kurulu değilse ⏭ beyanla, CI Windows job'ı ölçer)
 //   test    — `cargo test`: alanın napi'siz üyeleri + lisans çekirdeği (TS kâhininin vektör dosyası, test çapası).
 //             Gömülü çapa tek kiptir (üretim); `test-anchor` yalnız test derlemesinde dışarıdan çapa verir
+//   test --kapi — commit kapısı kipi: AGIR_TESTLER (sahte dünya, ~7 dk) KOŞMAZ, ⏭ satırıyla söylenir.
+//             Bayraksız kip (CI · `npm test`) onları ayrı koşar ve geçen sayıyı `#[test]` sayısıyla eşler.
 // ÜÇ SONUÇ: 0 temiz · 1 ihlal · cargo YOKSA ⏭ beyanla 0 — Rust araç zinciri olmayan oturum kapıyı
 // ölçemez; ölçüm CI'daki "Native" job'larındadır (sessiz yeşil değil, beyanlı atlama).
 import { spawnSync } from "node:child_process";
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { homedir } from "node:os";
 import { delimiter, dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -17,6 +19,7 @@ import { fileURLToPath } from "node:url";
 const DIZIN = join(dirname(fileURLToPath(import.meta.url)), "..");
 const WINDOWS_HEDEFI = "x86_64-pc-windows-msvc";
 const komut = process.argv[2];
+const KAPI_KIPI = process.argv.slice(3).includes("--kapi");
 
 function cargoBul() {
   const ev = join(homedir(), ".cargo", "bin");
@@ -46,6 +49,33 @@ function windowsHedefiKurulu(bulunan, env) {
 }
 
 const HIZMETLER = ["-p", "tekserp-dogrulama", "-p", "tekserp-guncelleyici", "-p", "tekserp-hizmet"];
+// Commit kapısından çıkarılan ağır test hedefleri (kullanıcı kararı 2026-10-09): yalnız CI koşar.
+// Bekçi: `Teks-Erp/scripts/test_commit_gate_scope.ts` §4 (CI'da bayraksız koşum + sayım).
+const AGIR_TESTLER = ["crash_restart", "pg_minor"];
+const ALAN = ["--workspace", "--exclude", "lisans-cekirdek"];
+
+/** Alanın napi'siz üyelerinin entegrasyon test hedefleri (`tests/*.rs` · `tests/<ad>/main.rs`). */
+function testHedefleri() {
+  const uyeler = (readFileSync(join(DIZIN, "Cargo.toml"), "utf8").match(/members\s*=\s*\[([^\]]*)\]/)?.[1] ?? "")
+    .match(/"[^"]+"/g)
+    .map((u) => u.slice(1, -1))
+    .filter((u) => u !== "lisans-cekirdek");
+  const hedefler = [];
+  for (const u of uyeler) {
+    const d = join(DIZIN, u, "tests");
+    if (!existsSync(d)) continue;
+    for (const g of readdirSync(d, { withFileTypes: true })) {
+      if (g.isFile() && g.name.endsWith(".rs")) hedefler.push(g.name.slice(0, -3));
+      else if (g.isDirectory() && existsSync(join(d, g.name, "main.rs"))) hedefler.push(g.name);
+    }
+  }
+  return hedefler;
+}
+
+/** Ağır hedefin dosyasındaki `#[test]` sayısı — CI'da geçen sayı buna eşit olmalı (sessiz düşüş yok). */
+function testSayisi(ad) {
+  return (readFileSync(join(DIZIN, "tekserp-guncelleyici", "tests", `${ad}.rs`), "utf8").match(/^\s*#\[test\]/gm) ?? []).length;
+}
 const ADIMLAR = {
   denetle: [
     ["fmt", "--all", "--check"],
@@ -54,8 +84,10 @@ const ADIMLAR = {
     { windows: ["clippy", "--release", "--target", WINDOWS_HEDEFI, ...HIZMETLER, "--all-targets", "--", "-D", "warnings"] },
   ],
   test: [
-    ["test", "--workspace", "--exclude", "lisans-cekirdek"],
+    // Doctest yok (ölçüldü); hedef seçimi `--doc`u dışlar, bayraksız kip onu ayrıca koşar.
+    { hafif: true },
     ["test", "-p", "lisans-cekirdek", "--no-default-features", "--features", "test-anchor"],
+    { agir: true },
   ],
 };
 
@@ -71,7 +103,55 @@ if (!bulunan) {
 }
 const env = { ...process.env, PATH: bulunan.path };
 let atlanan = 0;
+const hedefler = komut === "test" ? testHedefleri() : [];
+const eksik = komut !== "test" ? [] : AGIR_TESTLER.filter((t) => !hedefler.includes(t));
+if (eksik.length) {
+  console.error(`❌ AGIR_TESTLER'de olup test hedefi olmayan: ${eksik.join(", ")} — listeyi güncelle`);
+  process.exit(1);
+}
+
+/** Ağır hedefi koşar; çıktıdaki geçen sayısını `#[test]` sayısıyla eşler (0 yok sayılan, 0 süzülen). */
+function agirKos(ad) {
+  const args = ["test", ...ALAN, "--test", ad];
+  console.log(`$ cargo ${args.join(" ")}`);
+  const r = spawnSync(bulunan.cargo, args, { cwd: DIZIN, stdio: ["inherit", "pipe", "inherit"], env, timeout: 1_800_000, maxBuffer: 64 * 1024 * 1024, encoding: "utf8" });
+  process.stdout.write(r.stdout ?? "");
+  if (r.error || r.status !== 0) return { ok: false, mesaj: r.error?.message ?? `çıkış ${r.status}` };
+  const sonuc = [...(r.stdout ?? "").matchAll(/test result: ok\. (\d+) passed; (\d+) failed; (\d+) ignored; \d+ measured; (\d+) filtered out/g)];
+  const gecen = sonuc.reduce((t, m) => t + Number(m[1]), 0);
+  const atlanan = sonuc.reduce((t, m) => t + Number(m[3]) + Number(m[4]), 0);
+  const beklenen = testSayisi(ad);
+  if (sonuc.length !== 1 || gecen !== beklenen || atlanan !== 0) {
+    return { ok: false, mesaj: `${ad}: ${gecen} geçti, ${atlanan} atlandı/süzüldü — beklenen ${beklenen} (#[test] sayısı)` };
+  }
+  return { ok: true, gecen };
+}
+
 for (const a of adimlar) {
+  if (a.hafif) {
+    const hafif = hedefler.filter((t) => !AGIR_TESTLER.includes(t)).flatMap((t) => ["--test", t]);
+    if (kos(bulunan.cargo, env, ["test", ...ALAN, "--lib", "--bins", ...hafif]) !== 0) process.exit(1);
+    if (!KAPI_KIPI && kos(bulunan.cargo, env, ["test", ...ALAN, "--doc"]) !== 0) process.exit(1);
+    continue;
+  }
+  if (a.agir) {
+    if (KAPI_KIPI) {
+      console.log(`⏭  ağır testler (${AGIR_TESTLER.join(" · ")}) commit kapısında KOŞMADI — yalnız CI koşar (Native Linux · Native Windows · ci.yml native), geçen sayısını doğrular`);
+      atlanan++;
+      continue;
+    }
+    const sayim = [];
+    for (const ad of AGIR_TESTLER) {
+      const s = agirKos(ad);
+      if (!s.ok) {
+        console.error(`❌ ağır test: ${s.mesaj}`);
+        process.exit(1);
+      }
+      sayim.push(`${ad} ${s.gecen}`);
+    }
+    console.log(`✅ ağır testler koştu: ${sayim.join(" · ")} geçti (#[test] sayısına eşit)`);
+    continue;
+  }
   if (!Array.isArray(a)) {
     // Windows'ta bu adım yerel hedefin clippy'sidir (yukarıdaki alan adımı zaten kapsar) → tekrar koşulmaz.
     if (process.platform === "win32") continue;
