@@ -1,4 +1,4 @@
-//! Tanı paketinin Linux ölçümleri (W4): Docker sürümü · konteynerlerin SÜZÜLMÜŞ `docker inspect` alanları ·
+//! Tanı paketinin Linux ölçümleri (W4): Docker sürümü · compose projesinin konteynerlerinin SÜZÜLMÜŞ `docker inspect` alanları ·
 //! systemd birim durumu · `df` (kök · veri · Docker kök dizini). Fail-soft: komut yoksa ya da düşerse ölçüm "ölçülemedi" satırıyla girer, paket
 //! yine yazılır. `docker inspect`in `Env`/`Cmd`/`Args`/sağlık çıktısı sır taşıyabilir — yalnız izinli alanlar
 //! alınır (allowlist; yeni Docker alanı kendiliğinden girmez).
@@ -100,8 +100,16 @@ pub fn filter_version(v: &Value) -> Value {
     })
 }
 
-fn docker() -> Value {
+/// `ayar.json`daki compose projesi (W4 açık noktası, L4b): yalnız o projenin konteynerleri ölçülür — aynı
+/// konaktaki başka proje (ikinci kanal, başka yazılım) pakete girmez.
+fn proje(h: &TaniHedefi) -> String {
+    let layout = crate::layout::Layout::new(&h.root, &h.data);
+    crate::settings::read_settings(&crate::env::RealFs, &layout).unwrap_or_default().compose_project().to_string()
+}
+
+fn docker(proje: &str) -> Value {
     let mut m = Map::new();
+    m.insert("proje".into(), json!(proje));
     m.insert(
         "surum".into(),
         match run("docker", &["version", "--format", "{{json .}}"]) {
@@ -111,7 +119,8 @@ fn docker() -> Value {
             Err(e) => json!(format!("ölçülemedi: {e}")),
         },
     );
-    let ids = match run("docker", &["ps", "-a", "-q", "--no-trunc"]) {
+    let filter = format!("label=com.docker.compose.project={proje}");
+    let ids = match run("docker", &["ps", "-a", "-q", "--no-trunc", "--filter", &filter]) {
         Ok((0, out)) => out.split_whitespace().map(str::to_string).collect::<Vec<_>>(),
         Ok((c, _)) => {
             m.insert("konteynerler".into(), json!(format!("ölçülemedi: docker ps çıkış {c}")));
@@ -169,7 +178,7 @@ pub fn olcumler(h: &TaniHedefi) -> Vec<Olcum> {
         Olcum::new(
             "platform/docker.json",
             "Docker sürümü + konteynerler (süzülmüş inspect: durum · sağlık · imaj · bağlar; ortam/komut YOK)",
-            docker().to_string(),
+            docker(&proje(h)).to_string(),
         ),
         Olcum::new("platform/systemd.txt", "systemd birim durumu (güncelleyici + docker)", systemd(&units)),
         Olcum::new("platform/df.txt", "disk (df -Pk: kök · veri · Docker kök dizini)", df),

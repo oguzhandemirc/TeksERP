@@ -609,6 +609,7 @@ impl BackendOp {
             .iter()
             .filter_map(|p| p.file_name().map(|n| n.to_string_lossy().into_owned()))
             .collect();
+        ctx.env.arka.araclar.imaj_buda(ctx.env, &keep);
         for name in fs.list(&ctx.layout.versions()).unwrap_or_default() {
             let stale_staging = name.starts_with(".hazirlik-");
             if stale_staging || (crate::version::parse(&name).is_some() && !keep.contains(&name)) {

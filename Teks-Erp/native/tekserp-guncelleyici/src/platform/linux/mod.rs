@@ -1,8 +1,9 @@
 //! Linux/Docker arka ucu (`GUNCELLEYICI-SAGLAMLIK.md` §1.2). L4a: konak bağları (`sys` — güvenilmez okuma,
 //! `statvfs`, yabancı yazar, özel alan, `flock`, süreç grubu + `PDEATHSIG`) · olay günlüğü (`olay`, stderr →
-//! journald) · yerel koruma (`koruma`, dizin izni) · dizin düzeni (`duzen`). Sağlık · araçlar · PG · hizmet denetimi
-//! hâlâ İSKELET (L4b/L6/L8): her çağrı `PLATFORM_DESTEKSIZ` önekli açık bir hatadır (fail-closed; `unimplemented!`
-//! değil — süreç düşmez, adım kendi koduyla düşer ve telafi yolu çalışır).
+//! journald) · yerel koruma (`koruma`, dizin izni) · dizin düzeni (`duzen`). L4b: Docker hizmet denetimi · sağlık ·
+//! araçlar (`docker`, kuruluma `platform::baglam` ile bağlanır). Bağlanmamış ortam ve PG (L8) İSKELETTİR: her çağrı
+//! `PLATFORM_DESTEKSIZ` önekli açık bir hatadır (fail-closed; süreç düşmez, adım kendi koduyla düşer).
+pub mod docker;
 pub mod duzen;
 pub mod koruma;
 pub mod olay;
@@ -22,13 +23,14 @@ pub const PLATFORM: &str = "linux-x64-oci";
 /// İskeletin her hatasının öneki.
 pub const DESTEKSIZ: &str = "PLATFORM_DESTEKSIZ";
 
-fn unsupported(what: &str) -> String {
+pub(crate) fn unsupported(what: &str) -> String {
     format!("{DESTEKSIZ}: {what} Linux arka ucunda henüz yok")
 }
 
 pub fn arka_ucu() -> crate::platform::Arka {
     crate::platform::Arka {
         platform: PLATFORM,
+        ortam: crate::settings::OrtamKipi::Compose,
         saglik: Arc::new(IskeletSaglik),
         araclar: Arc::new(IskeletAraclar),
         pg: Arc::new(IskeletPg),
@@ -124,7 +126,7 @@ impl crate::platform::PgArkaUcu for IskeletPg {
     }
 }
 
-/// Hizmet denetimi yok (L4b: `DockerServices`) — her çağrı hata.
+/// Kuruluma bağlanmamış ortamın hizmet denetimi (`platform::baglam` öncesi) — her çağrı hata.
 pub struct NoServices;
 impl Services for NoServices {
     fn state(&self, _name: &str) -> EnvResult<SvcState> {

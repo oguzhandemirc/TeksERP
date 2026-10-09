@@ -44,6 +44,7 @@ fn one_tick(args: &[String]) -> Result<u32, String> {
     let _lock = lock::acquire(&layout.lock_file()).map_err(|e| format!("KILIT_DOLU: {e}"))?;
     let s = settings::read_settings(&env::RealFs, &layout).unwrap_or_default();
     let e = env::real(s.proxy.as_deref(), &tekserp_hizmet::contract::service_name_arg(args, tekserp_hizmet::contract::UPDATER_SERVICE)?)?;
+    let e = tekserp_guncelleyici::platform::baglam(e, &layout, &s)?;
     let log = Arc::new(RotatingLog::open(&layout.log_dir(), "guncelleyici", LogSpec::SERVICE));
     let engine = Engine::new(e, layout.clone(), TrustAnchor::for_process()?, log, None);
     let r = engine.tick(&|| false);

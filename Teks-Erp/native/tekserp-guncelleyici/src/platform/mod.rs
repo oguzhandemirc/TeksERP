@@ -53,6 +53,12 @@ pub trait Araclar: Send + Sync {
         -> Result<(), String>;
     /// Göç aracının ham çıktısı (zaman aşımı/çıkış kodu kararı çağıranın).
     fn migrate_deploy(&self, env: &Env, version_dir: &Path, be: &BackendEnv, timeout: Duration) -> Result<CmdOut, String>;
+    /// İmajların ayrı dosya sisteminde durduğu dizin (Docker kökü) — disk ön kontrolü onu da ölçer. Windows: yok.
+    fn imaj_deposu(&self, _env: &Env) -> Option<PathBuf> {
+        None
+    }
+    /// ONAY budaması: `keep` dışındaki sürüm imajları (en iyi çaba). Windows: imaj yok.
+    fn imaj_buda(&self, _env: &Env, _keep: &[String]) {}
 }
 
 /// Kendi PostgreSQL'in küçük sürümü (D4 U5–U9): hizmet komut satırı, ICU sürümü, SQL koşumu.
@@ -72,6 +78,8 @@ pub struct Arka {
     /// İşlem günlüğünün ISLEM satırına yazılan ad (bildirimin platform sözlüğüyle aynı). Başka adlı günlük
     /// sürdürülmez de geri alınmaz da (`operation::drive`).
     pub platform: &'static str,
+    /// Backend `.env`inin okunuşu (hizmet kipi `DATABASE_URL` · compose kipi `POSTGRES_*`).
+    pub ortam: crate::settings::OrtamKipi,
     pub saglik: Arc<dyn Saglik>,
     pub araclar: Arc<dyn Araclar>,
     pub pg: Arc<dyn PgArkaUcu>,
@@ -91,6 +99,22 @@ pub fn yerel() -> Arka {
 
 #[cfg(not(any(target_os = "windows", target_os = "linux", target_os = "macos")))]
 compile_error!("tekserp-guncelleyici: tanınmayan hedef işletim sistemi (arka uç yok)");
+
+/// Ortamı kuruluma bağlar: Linux'ta hizmet denetimi ve arka uç `ayar.json`daki compose projesine (`composeProje`)
+/// bağlı Docker uygulamalarıdır; Windows'ta ortam değişmez. Proje adı geçersizse iskelet kalır (fail-closed).
+pub fn baglam(env: Env, layout: &crate::layout::Layout, s: &crate::settings::UpdaterSettings) -> Result<Env, String> {
+    #[cfg(windows)]
+    {
+        let _ = (layout, s);
+        Ok(env)
+    }
+    #[cfg(not(windows))]
+    {
+        let komut = Arc::new(linux::docker::DockerKomut::new(layout, s.compose_project())?);
+        let svc = Arc::new(linux::docker::DockerServices::new(Arc::clone(&komut), Arc::clone(&env.procs), s.stop_timeout_s));
+        Ok(Env { svc, arka: linux::docker::arka_ucu(komut), ..env })
+    }
+}
 
 // ── Konak olguları (derleme hedefinin işletim sistemi) ─────────────────────────────────────────
 

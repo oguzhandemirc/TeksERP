@@ -246,6 +246,10 @@ pub struct Faults {
     pub serve_tampered: AtomicBool,
     /// GÖZLEM: künyesi alınmak için koşturulan güncelleyici ikilileri (hangi kopya çalıştı).
     pub executed: Mutex<Vec<PathBuf>>,
+    /// Linux profili (Docker): çöken konteyneri `unless-stopped` HEMEN yeniden başlatır (elle durdurulanı asla).
+    pub docker: AtomicBool,
+    /// Docker `RestartCount` (konteyner başına; `--force-recreate` sıfırlar).
+    pub restarts: Mutex<HashMap<String, u64>>,
 }
 
 #[derive(Debug, Clone)]
@@ -355,6 +359,9 @@ impl WorldRefs {
                 if *name == backend {
                     s.version = current_version(&self.root);
                 }
+                if self.faults.docker.load(Ordering::SeqCst) {
+                    *self.faults.restarts.lock().unwrap().entry(name.clone()).or_insert(0) += 1;
+                }
                 self.events.lock().unwrap().push(format!("scm-kurtarma {name} {:?}", s.version));
             }
         }
@@ -450,6 +457,130 @@ impl FakeProcs {
         if self.w.svcs.lock().unwrap().get(&backend).is_some_and(|s| s.state != SvcState::Stopped) {
             self.w.events.lock().unwrap().push("IHLAL: geri yükleme sırasında backend çalışıyor".into());
         }
+    }
+}
+
+/// Sahte `docker` CLI (Linux profili): compose servisleri dünyanın hizmet tablosudur (`backend` → backend hizmeti,
+/// `postgres` → PG); araç konteynerleri bağlı dizinleri konak yoluna çevirip aynı sahte araçları koşar (parola
+/// compose ortamından gelir — `PGPASSWORD` argümanda değil).
+impl FakeProcs {
+    fn svc_name(&self, svc: &str) -> String {
+        match svc {
+            "backend" => self.w.backend_name.lock().unwrap().clone(),
+            "postgres" => PG.to_string(),
+            other => other.to_string(),
+        }
+    }
+
+    fn docker(&self, c: &Cmd, args: &[String]) -> CmdOut {
+        let fake = FakeServices { w: self.w.clone() };
+        let sub: Vec<String> = if args.first().map(String::as_str) == Some("compose") {
+            assert_eq!(args.get(3).map(String::as_str), Some("-f"), "compose başı: {args:?}");
+            let f = PathBuf::from(&args[4]);
+            assert!(f.ends_with("current/docker-compose.yml"), "compose dosyası current'ten: {f:?}");
+            args[9..].to_vec()
+        } else {
+            args.to_vec()
+        };
+        let s: Vec<&str> = sub.iter().map(String::as_str).collect();
+        match s.as_slice() {
+            ["rm", "-f", _] => ok_out(""),
+            ["info", ..] => ok_out(&format!("{}\n", self.w.root.display())),
+            ["image", ..] => ok_out(""),
+            ["ps", "-a", "-q", svc] => {
+                let name = self.svc_name(svc);
+                let known = self.w.svcs.lock().unwrap().contains_key(&name);
+                ok_out(&if known { format!("id-{svc}\n") } else { String::new() })
+            }
+            ["inspect", "--format", _, id] => {
+                self.w.scm_tick();
+                let name = self.svc_name(id.trim_start_matches("id-"));
+                let svcs = self.w.svcs.lock().unwrap();
+                let Some(x) = svcs.get(&name) else { return fail_out(1, "No such object") };
+                let n = self.w.faults.restarts.lock().unwrap().get(&name).copied().unwrap_or(0);
+                let line = match (x.state, x.restart_at, x.crash) {
+                    (SvcState::Running, _, _) => format!("running|0|{n}|"),
+                    (SvcState::Stopped, Some(_), code) => format!("restarting|{}|{n}|", code.unwrap_or(1)),
+                    (SvcState::Stopped, None, code) => format!("exited|{}|{n}|", code.unwrap_or(0)),
+                    (other, _, _) => format!("{other:?}|0|{n}|").to_lowercase(),
+                };
+                ok_out(&format!("{line}\n"))
+            }
+            ["up", "-d", "--no-deps", "--force-recreate", svc] => {
+                let name = self.svc_name(svc);
+                let verify = c.env.iter().any(|(k, v)| k == "TEKSERP_DOGRULAMA_KIPI" && v == "1");
+                let a: &[&str] = if verify { &[tekserp_hizmet::contract::VERIFY_ARG] } else { &[] };
+                // `--force-recreate`: çalışan konteyner de yeniden yaratılır.
+                let _ = fake.stop(&name);
+                self.w.faults.restarts.lock().unwrap().insert(name.clone(), 0);
+                match fake.start(&name, a) {
+                    Ok(()) => ok_out(""),
+                    Err(e) => fail_out(1, &e.0),
+                }
+            }
+            ["stop", "-t", _, svc] => {
+                // Docker: elle durdurma `restarting` konteynerin bekleyen yeniden başlatmasını da İPTAL EDER (SCM'den farkı).
+                let name = self.svc_name(svc);
+                if let Some(x) = self.w.svcs.lock().unwrap().get_mut(&name) {
+                    x.restart_at = None;
+                }
+                match fake.stop(&name) {
+                    Ok(()) => ok_out(""),
+                    Err(e) => fail_out(1, &e.0),
+                }
+            }
+            ["exec", "-T", "backend", "node", "-e", script] => {
+                let path = script
+                    .split("127.0.0.1:")
+                    .nth(1)
+                    .and_then(|r| r.split_once('/'))
+                    .map(|(_, p)| p.split('\'').next().unwrap_or_default());
+                let net = FakeNet { w: self.w.clone() };
+                match net.get(&format!("http://127.0.0.1:4999/{}", path.unwrap_or_default()), &[], Duration::from_secs(5)) {
+                    Ok(mut r) => {
+                        let mut body = String::new();
+                        let _ = std::io::Read::read_to_string(&mut r.body, &mut body);
+                        ok_out(&format!("{}\n{body}", r.status))
+                    }
+                    Err(_) => fail_out(3, ""),
+                }
+            }
+            ["run", "--rm", "--no-deps", "-T", "--name", _, rest @ ..] => self.tool_container(rest),
+            _ => fail_out(125, &format!("sahte docker: bilinmeyen {sub:?}")),
+        }
+    }
+
+    fn tool_container(&self, rest: &[&str]) -> CmdOut {
+        let mut i = 0;
+        let mut mounts: Vec<(String, String)> = Vec::new();
+        while i < rest.len() {
+            match rest[i] {
+                "--user" => i += 2,
+                "-v" => {
+                    let mut it = rest[i + 1].rsplitn(3, ':');
+                    let _mode = it.next();
+                    let cont = it.next().unwrap().to_string();
+                    mounts.push((cont, it.next().unwrap().to_string()));
+                    i += 2;
+                }
+                _ => break,
+            }
+        }
+        let (svc, cmd) = (rest[i], &rest[i + 1..]);
+        let host = |a: &str| {
+            mounts.iter().find_map(|(c, h)| a.strip_prefix(c.as_str()).map(|r| format!("{h}{r}"))).unwrap_or_else(|| a.to_string())
+        };
+        if svc == "backend" && cmd == ["goc"] {
+            let cur = RealFs.link_target(&self.w.root.join("current")).unwrap().unwrap();
+            let c = Cmd::new(Path::new("node")).args(["index.js", "migrate", "deploy"]).cwd(&cur);
+            return self.run(&c).unwrap();
+        }
+        assert_eq!(svc, "yedek", "araç servisi");
+        if cmd.first() == Some(&"ls") {
+            return ok_out("");
+        }
+        let c = Cmd::new(Path::new(cmd[0])).args(cmd[1..].iter().map(|a| host(a))).env("PGPASSWORD", "gizli-parola");
+        self.run(&c).unwrap()
     }
 }
 
@@ -582,6 +713,7 @@ impl Procs for FakeProcs {
                 }
                 Ok(fail_out(1, "bilinmeyen betik"))
             }
+            "docker" => Ok(self.docker(c, &args)),
             "tekserp-guncelleyici" | "tekserp-guncelleyici.yeni" => {
                 self.w.faults.executed.lock().unwrap().push(c.program.clone());
                 let text = std::fs::read_to_string(&c.program).unwrap_or_default();
@@ -637,7 +769,10 @@ impl Net for FakeNet {
                     b.state = SvcState::Stopped;
                     b.crash = Some(10);
                     b.args.clear();
-                    if self.w.faults.scm_recovery.load(Ordering::SeqCst) {
+                    if self.w.faults.docker.load(Ordering::SeqCst) {
+                        // `unless-stopped`: 100 ms'den başlayan aralıkla hemen yeniden başlatır.
+                        b.restart_at = Some(self.w.clock.load(Ordering::SeqCst) + 100);
+                    } else if self.w.faults.scm_recovery.load(Ordering::SeqCst) {
                         b.restart_at = Some(self.w.clock.load(Ordering::SeqCst) + 5_000);
                     }
                     return Err(EnvError("bağlantı reddedildi (açılışta düştü)".into()));
@@ -1039,15 +1174,17 @@ pub fn install_pg_instance(w: &World, kind: &str) {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Profil {
     Windows,
+    Linux,
 }
 
-pub const PROFILLER: &[Profil] = &[Profil::Windows];
+pub const PROFILLER: &[Profil] = &[Profil::Windows, Profil::Linux];
 
 impl Profil {
     /// Bu profilin işlem günlüğüne yazdığı `platform` (arka ucun adı, `platform::Arka::platform`).
     pub fn platform(self) -> &'static str {
         match self {
             Profil::Windows => "win32-x64",
+            Profil::Linux => "linux-x64-oci",
         }
     }
 }
@@ -1102,10 +1239,23 @@ fn quiet_injected_panics() {
 }
 
 impl World {
-    /// Profilin dünyası (bugün tek profil: `World::new`).
+    /// Profilin dünyası. Linux: compose `.env`i (`POSTGRES_*`, adres şablondan), gerçek `DockerServices` + Docker arka
+    /// ucu sahte `docker` CLI'ya karşı, `unless-stopped` yeniden başlatma. Paket HAZIRLIĞI iki profilde aynı sahte zip
+    /// yoludur (Linux tar/`docker load` hazırlığı ayrı dilim) — profil ADIMLARI (§2.2) ölçer.
     pub fn new_in(profil: Profil, tag: &str, s: Setup) -> World {
-        match profil {
-            Profil::Windows => World::new(tag, s),
+        let w = World::new(tag, s);
+        if profil == Profil::Linux {
+            w.faults.docker.store(true, Ordering::SeqCst);
+            std::fs::write(w.layout.backend_env(), "POSTGRES_USER=tekserp\nPOSTGRES_PASSWORD=gizli-parola\nPOSTGRES_DB=tekserp\n").unwrap();
+        }
+        w
+    }
+
+    pub fn profil(&self) -> Profil {
+        if self.faults.docker.load(Ordering::SeqCst) {
+            Profil::Linux
+        } else {
+            Profil::Windows
         }
     }
 
@@ -1248,7 +1398,7 @@ impl World {
 
     pub fn env(&self) -> Env {
         let r = self.refs();
-        Env {
+        let env = Env {
             fs: Arc::clone(&self.fs) as Arc<dyn Fs>,
             svc: Arc::new(FakeServices { w: r.clone() }),
             procs: Arc::new(FakeProcs { w: r.clone() }),
@@ -1257,6 +1407,16 @@ impl World {
             events: Arc::new(FakeEvents(Arc::clone(&self.events))),
             protect: Arc::new(FakeProtect),
             arka: tekserp_guncelleyici::platform::windows::arka_ucu(),
+        };
+        if self.profil() == Profil::Windows {
+            return env;
+        }
+        use tekserp_guncelleyici::platform::linux::docker;
+        let komut = Arc::new(docker::DockerKomut::new(&self.layout, "tekserp").unwrap());
+        Env {
+            svc: Arc::new(docker::DockerServices::new(Arc::clone(&komut), Arc::clone(&env.procs), 60)),
+            arka: docker::arka_ucu(komut),
+            ..env
         }
     }
 

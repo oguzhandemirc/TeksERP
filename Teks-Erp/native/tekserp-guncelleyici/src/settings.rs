@@ -30,6 +30,9 @@ pub struct UpdaterSettings {
     /// Yoksa `TeksERP-Backend`.
     #[serde(rename = "backendHizmeti", default)]
     pub backend_service: Option<String>,
+    /// Linux: yönetilen compose projesi (aynı konakta iki kanal = iki proje). Yoksa `tekserp` (şablonun `name`i).
+    #[serde(rename = "composeProje", default)]
+    pub compose_project: Option<String>,
 }
 
 fn default_health() -> u64 {
@@ -59,6 +62,7 @@ impl Default for UpdaterSettings {
             backup_timeout_s: default_backup(),
             tick_s: default_tick(),
             backend_service: None,
+            compose_project: None,
         }
     }
 }
@@ -78,6 +82,9 @@ impl UpdaterSettings {
     }
 
     /// Backend hizmetinin adı (okunurken doğrulanmıştır).
+    pub fn compose_project(&self) -> &str {
+        self.compose_project.as_deref().unwrap_or(DEFAULT_COMPOSE_PROJECT)
+    }
     pub fn backend_service(&self) -> &str {
         self.backend_service.as_deref().unwrap_or(tekserp_hizmet::contract::BACKEND_SERVICE)
     }
@@ -185,14 +192,52 @@ pub struct BackendEnv {
 /// sessizce atlar; bu liste o sessizliğin bir zorunlu ayarı yutmasını engeller (yok/boş → `AYAR_EKSIK`).
 pub const REQUIRED_BACKEND_KEYS: [&str; 1] = ["DATABASE_URL"];
 
+/// Compose projesinin varsayılan adı (`docker-compose.guncelleyici.yml`: `name: ${TEKSERP_PROJE:-tekserp}`).
+pub const DEFAULT_COMPOSE_PROJECT: &str = "tekserp";
+/// Compose kipinde `.env`in güncelleyici için zorunlu anahtarları (veritabanı adresi şablondan türetilir).
+pub const REQUIRED_COMPOSE_KEYS: [&str; 1] = ["POSTGRES_PASSWORD"];
+
+/// Backend `.env`inin biçimi arka uca bağlıdır: Windows hizmeti `DATABASE_URL`i okur; Linux compose `.env`i yalnız
+/// `POSTGRES_*` taşır ve backend'in adresi şablonda kurulur (`postgres:5432`, konteyner portu 4000).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum OrtamKipi {
+    Hizmet,
+    Compose,
+}
+
 /// Okuma hatası: `durum.json` `hataKodu` + sırsız ileti.
 pub type EnvFail = (&'static str, String);
 
 pub fn read_backend_env(fs: &dyn Fs, layout: &Layout) -> Result<BackendEnv, EnvFail> {
+    read_backend_env_in(fs, layout, OrtamKipi::Hizmet)
+}
+
+pub fn read_backend_env_in(fs: &dyn Fs, layout: &Layout, kip: OrtamKipi) -> Result<BackendEnv, EnvFail> {
     let bytes = fs
         .read_untrusted(&layout.backend_env(), 256 * 1024)
         .map_err(|e| (codes::AYAR_BICIMSIZ, format!("yapilandirma\\.env okunamadı: {e}")))?;
-    backend_env_from_bytes(&bytes, layout)
+    backend_env_from_bytes_in(&bytes, layout, kip)
+}
+
+pub fn backend_env_from_bytes_in(bytes: &[u8], layout: &Layout, kip: OrtamKipi) -> Result<BackendEnv, EnvFail> {
+    if kip == OrtamKipi::Hizmet {
+        return backend_env_from_bytes(bytes, layout);
+    }
+    let file = envfile::parse_bytes(bytes);
+    let missing: Vec<&str> = REQUIRED_COMPOSE_KEYS.into_iter().filter(|k| file.get(k).is_none()).collect();
+    if !missing.is_empty() {
+        return Err((codes::AYAR_EKSIK, format!("yapilandirma/.env zorunlu anahtar yok ya da boş: {}", missing.join(", "))));
+    }
+    let db = DbUrl {
+        user: file.get("POSTGRES_USER").unwrap_or(DEFAULT_COMPOSE_PROJECT).to_string(),
+        password: file.get("POSTGRES_PASSWORD").unwrap_or_default().to_string(),
+        host: "postgres".into(),
+        port: 5432,
+        database: file.get("POSTGRES_DB").unwrap_or(DEFAULT_COMPOSE_PROJECT).to_string(),
+    };
+    let license_dir = layout.default_license_dir();
+    let backup_key_dir = layout.default_backup_keys();
+    Ok(BackendEnv { file, port: 4000, license_dir, backup_key_dir, pg_bin_dir: layout.pg_bin_link(), db, env_file: layout.backend_env() })
 }
 
 /// `.env` baytlarından güncelleyicinin değerleri: önce zorunlu anahtarlar (`AYAR_EKSIK`), sonra biçim

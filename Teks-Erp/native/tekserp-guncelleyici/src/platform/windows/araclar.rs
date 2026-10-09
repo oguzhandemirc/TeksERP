@@ -31,6 +31,12 @@ impl Runtime {
     }
 }
 
+/// Bitmiş + toplam göç satırı (iki arka uç aynı sorguyu koşar).
+pub const MIGRATION_COUNT_SQL: &str = "SELECT (SELECT count(*) FROM _prisma_migrations WHERE finished_at IS NOT NULL AND rolled_back_at IS NULL) || ' ' || (SELECT count(*) FROM _prisma_migrations)";
+/// Geri yüklemeden önce `public` sıfırlanır (veritabanı ve onun düzeyindeki ayarlar korunur).
+pub const RESET_SQL: &str =
+    "SET lock_timeout = '30s'; DROP SCHEMA IF EXISTS public CASCADE; CREATE SCHEMA public AUTHORIZATION pg_database_owner;";
+
 fn pg_cmd(be: &BackendEnv, tool: &str, db: &DbUrl) -> Cmd {
     Cmd::new(&be.pg_tool(tool)).env("PGPASSWORD", &db.password).env("PGCONNECT_TIMEOUT", "15")
 }
@@ -54,7 +60,7 @@ impl crate::platform::Araclar for NodeAraclar {
     /// `_prisma_migrations`: bitmiş (kur.ps1'in sorgusu) + toplam satır — başlamış-bitmemiş göç de ölçülsün.
     fn migration_count(&self, env: &Env, be: &BackendEnv) -> Result<MigrationCount, String> {
         let db = &be.db;
-        let sql = "SELECT (SELECT count(*) FROM _prisma_migrations WHERE finished_at IS NOT NULL AND rolled_back_at IS NULL) || ' ' || (SELECT count(*) FROM _prisma_migrations)";
+        let sql = MIGRATION_COUNT_SQL;
         let c = pg_cmd(be, "psql", db)
             .args(["-X", "-w"])
             .args(conn_args(db))
@@ -98,7 +104,7 @@ impl crate::platform::Araclar for NodeAraclar {
     /// beklemesi 30 sn. Başarının asıl ölçüsü çağıranın göç sayısı denetimidir.
     fn restore_db(&self, env: &Env, be: &BackendEnv, dump: &Path, timeout: Duration) -> Result<(), String> {
         let db = &be.db;
-        let reset = "SET lock_timeout = '30s'; DROP SCHEMA IF EXISTS public CASCADE; CREATE SCHEMA public AUTHORIZATION pg_database_owner;";
+        let reset = RESET_SQL;
         let c = pg_cmd(be, "psql", db)
             .args(["-X", "-w"])
             .args(conn_args(db))

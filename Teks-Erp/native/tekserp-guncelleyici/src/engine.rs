@@ -239,7 +239,7 @@ impl Engine {
 
     fn inputs(&self) -> Result<Inputs, Fail> {
         let settings = settings::read_settings(self.env.fs.as_ref(), &self.layout).map_err(|e| fail(codes::AYAR_BICIMSIZ, e))?;
-        let backend = settings::read_backend_env(self.env.fs.as_ref(), &self.layout)?;
+        let backend = settings::read_backend_env_in(self.env.fs.as_ref(), &self.layout, self.env.arka.ortam)?;
         Ok(Inputs { settings, backend })
     }
 
@@ -1431,6 +1431,16 @@ impl Engine {
             Ok(free) if free < need => {
                 Err(fail(codes::DISK_DOLU, format!("boş alan {} MB, en az {} MB gerekir", free / 1_048_576, need / 1_048_576)))
             }
+            _ => Ok(()),
+        }?;
+        // Linux: imajlar Docker kökünde (çoğu zaman ayrı dosya sistemi) — açılmış imaj ≈ paket × 3 + 1 GB.
+        let Some(depo) = self.env.arka.araclar.imaj_deposu(&self.env) else { return Ok(()) };
+        let need = m.paket.boyut.saturating_mul(3).saturating_add(1024 * 1024 * 1024);
+        match self.env.fs.free_space(&depo) {
+            Ok(free) if free < need => Err(fail(
+                codes::DISK_DOLU,
+                format!("{} boş alanı {} MB, en az {} MB gerekir", depo.display(), free / 1_048_576, need / 1_048_576),
+            )),
             _ => Ok(()),
         }
     }

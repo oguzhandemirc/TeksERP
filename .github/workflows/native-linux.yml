@@ -70,5 +70,17 @@ jobs:
       - name: cargo test (vektörler + durum makinesi + öldür-yeniden başlat, Linux dosya sistemi)
         run: node scripts/kapi.mjs test
       # T1 (GUNCELLEYICI-SAGLAMLIK §10): gerçek Linux dumanı bu adımın yerine iner (L4b · L5 · L6 sonrası).
+      # L4b — Linux arka ucunun GERÇEK Docker ayağı (K1'in gerçeği; T1 dumanı DEĞİL): DockerServices durum/başlat/
+      # durdur/çökme eşlemesi, doğrulama kipi değişkeni, `unless-stopped` + `compose stop` yatışması, araç yetimi yok.
+      # Test imajı önceden yerelleşir; testin compose'u `pull_policy: never` (hiçbir şey çekmez).
+      - name: Docker arka ucu (gerçek Docker, L4b)
+        env:
+          TEKSERP_DOCKER_TEST: "1"
+          TEKSERP_DOCKER_TEST_IMAJ: busybox:1.36
+        run: |
+          docker version --format 'docker {{.Server.Version}} · compose {{.Client.Version}}'
+          docker compose version
+          docker pull -q busybox:1.36
+          cargo test -p tekserp-guncelleyici --test docker_gercek -- --nocapture
       - name: "T1 yer tutucu — Linux gerçek dumanı (duman-linux.sh) henüz yok"
         run: echo "::notice title=T1::Linux dumanı henüz yok — T1 dilimi bu adımı duman-linux.sh ile değiştirir"

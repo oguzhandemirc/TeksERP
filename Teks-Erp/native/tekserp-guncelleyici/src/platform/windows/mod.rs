@@ -20,6 +20,7 @@ pub const PLATFORM: &str = "win32-x64";
 
 pub fn arka_ucu() -> crate::platform::Arka {
     crate::platform::Arka {
+        ortam: crate::settings::OrtamKipi::Hizmet,
         platform: PLATFORM,
         saglik: Arc::new(HttpSaglik),
         araclar: Arc::new(araclar::NodeAraclar),
