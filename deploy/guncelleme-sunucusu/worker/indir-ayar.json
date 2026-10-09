@@ -3,7 +3,8 @@
   "indirmeListesi": {
     "uretim": [
       { "kid": "ind-2026-2", "x": "Jk5C_hKxebblK4N8us5Vi29UeBDpyV_Q_9qGsMWp6oc", "kanallar": ["test", "oncu", "genel"], "baslangic": "2026-10-05T13:10:06.530Z", "bitis": "2027-02-02T13:10:06.530Z" },
-      { "kid": "ind-2026-3", "x": "gsGqiZwbucjzn8z72L38g9lWIA4ZKvqgbjjXLtmfIz4", "kanallar": ["test", "oncu", "genel"], "baslangic": "2026-10-07T18:13:12.343Z", "bitis": "2027-11-06T18:13:12.343Z" }
+      { "kid": "ind-2026-3", "x": "gsGqiZwbucjzn8z72L38g9lWIA4ZKvqgbjjXLtmfIz4", "kanallar": ["test", "oncu", "genel"], "baslangic": "2026-10-07T18:13:12.343Z", "bitis": "2027-11-06T18:13:12.343Z" },
+      { "kid": "ind-2026-4", "x": "qjMm5s4rzQAnIXRSsGgXsn2tZRfQlAmbk26PDhrDTYY", "kanallar": ["test", "oncu", "genel"], "baslangic": "2026-10-09T19:40:30.799Z", "bitis": "2027-11-08T19:40:30.799Z" }
     ]
   },
   "gecisListesi": [],

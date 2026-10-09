@@ -149,7 +149,7 @@ Satıcı yeni İNDİRME anahtarını anahtar birimine kurulduğu DAKİKA kullanm
 - **Durum: YAYINDA (2026-10-08).** Yapılan adımlar, sırasıyla:
   1. VDS kökeni: `/opt/stack/apps/tekserp-indir` (repo `a92359530`, compose `deploy/guncelleme-sunucusu/indir/`, yönlendirici `tekserp-indir`, ara katmanlar `tekserp-indir-cf` → `tekserp-indir-hiz`). Kök sahipli dizinler `oguzhan`ın etkileşimsiz sudo'su olmadığından TEK SEFERLİK YARDIMCI KONTEYNERLE yazıldı (`SATICI-KURULUM.md` §12 kalıbı); `html/` + `defter/` → `yayinci`. Envanter: `SUNUCU-ENVANTERI.md`.
   2. Worker `tekserp-indirme-kapisi`: kod `deploy/guncelleme-sunucusu/worker/indirme-kapisi.js`; değişken `TKL_INDIRME_AYAR` = `worker/indir-ayar.json`, tür **Text**; `workers.dev` alt adı KAPALI.
-  3. Rota `indir.etkiliyazilim.com/*` → `tekserp-indirme-kapisi`. ⚠️ *Request limit failure mode* = Fail closed panelde **TEYİT EDİLMEDİ** — açık iş (Workers Routes → rota → ayarı oku, değilse Fail closed yap).
+  3. Rota `indir.etkiliyazilim.com/*` → `tekserp-indirme-kapisi`. *Request limit failure mode* = Fail closed — API ile ölçüldü 2026-10-09 (`zones/<zone>/workers/routes` → `request_limit_fail_open: false`).
   4. DNS: `A indir` → `80.253.255.188`, proxy AÇIK (turuncu bulut).
   - Ölçüm: `node Teks-Erp-wt/indir-olc.mjs` 15/15 · `--adnansahin` 9/9 · `deploy/vds-dogrula.sh` önce/sonra AYNI. Belirteçsiz `/test/electron/latest.yml` → 403 `INDIRME_BELIRTEC_YOK`; köke doğrudan (`--resolve …:80.253.255.188`) → 403.
   - **Olay (2026-10-08):** kurulum sırasında rota listesinde `*.etkiliyazilim.com/*` joker rotası belirdi → `guncelleme.etkiliyazilim.com/adnansahin` birkaç dakika 403 `INDIRME_BELIRTEC_YOK` aldı; joker rota silindi, adnansahin yeniden 9/9. Ders §1 adım 5'te.
