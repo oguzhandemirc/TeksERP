@@ -885,7 +885,7 @@ impl Net for FakeNet {
         let Some(mut body) = self.w.files.lock().unwrap().get(path).cloned() else {
             return Ok(resp(404, vec![], vec![]));
         };
-        if self.w.faults.serve_tampered.load(Ordering::SeqCst) && path.ends_with(".zip") {
+        if self.w.faults.serve_tampered.load(Ordering::SeqCst) && (path.ends_with(".zip") || path.ends_with(".tar")) {
             let n = body.len();
             body[n / 2] ^= 0xff;
         }
