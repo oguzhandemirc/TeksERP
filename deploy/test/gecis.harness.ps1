@@ -145,6 +145,7 @@ function OsHizmetBaslat($ad, [string[]]$ek) {
 }
 function OsHizmetDurdur($ad) { $h = Hizmet $ad; if ($h) { $h.Durum = "Stopped"; $h.Kip = ""; Kaydet; Cagri "hizmet durdur $ad" } }
 function OsHizmetKaldir($exe, $ad) { $global:S.hizmetler = @($global:S.hizmetler | Where-Object { $_.Ad -cne $ad }); Kaydet; Cagri "hizmet kaldir $ad"; return [pscustomobject]@{ Kod = 0; Metin = "" } }
+function OsOnarimGoreviSil($ad) { $var = @($global:S.gorevler | Where-Object { $_.Ad -ceq "$ad-Onarim" }); if (-not $var.Count) { return $false }; $global:S.gorevler = @($global:S.gorevler | Where-Object { $_.Ad -cne "$ad-Onarim" }); Kaydet; Cagri "onarim gorevi sil $ad"; return $true }
 function OsNodeSurecleri { return @() }
 function OsPm2Daemon { if ($global:S.pm2.daemon) { return @([pscustomobject]@{ Pid = 900; Ust = 1; Komut = "node pm2\lib\Daemon.js" }) } else { return @() } }
 function OsDinleyenler([int]$port) { if (BackendCalisiyor) { return @(5555) } elseif (Pm2Online) { return @([int](Pm2Online).pid) } else { return @() } }

@@ -22,6 +22,9 @@
 #      ScheduledTask) surumlu ImagePath'e dogrulanmis kopyayi koyar ve baslatir -> son 4 KB kesilir -> .lkg onar
 #      onarir -> "Devre disi" + ikili yok: onarilmaz, cikis 14 + durum.json GUNCELLEYICI_KAPALI -> hizmet-kaldir
 #      gorevi de siler -> kayit yokken de onarilmaz (cikis 14)
+#   8. bakim citi (W2, A3): hizmet-kur backend'i AUTO_START (DELAYED) yapar ve `cit` onu OTOMATIK_GECIKMELI olcer ->
+#      `cit --kur` gercek SCM'de DEMAND_START + is\cit.json -> `cit --kaldir` AUTO_START (DELAYED) geri + isaret silinir
+#      -> ikinci `--kaldir` sessiz -> yonetici `start= demand` yapmissa `--kur` isaret yazmaz, `--kaldir` dokunmaz
 # ASCII: bilerek yalniz ASCII (PS 5.1 BOM'suz UTF-8'i ANSI okur).
 # =============================================================================
 param([Parameter(Mandatory = $true)][string]$Bin)
@@ -291,6 +294,33 @@ try {
   if (Gorev) { Dur "hizmet-kaldir onarim gorevini silmedi" }
   & $lkg onar --kok $kok --veri $veri | Out-Null
   if ($LASTEXITCODE -ne 14) { Dur "kayitsiz hizmet icin cikis 14 beklenirdi ($LASTEXITCODE)" }
+  Adim "8. bakim citi: gercek SCM baslangic turu (cit / --kur / --kaldir)"
+  & "$ver\runtime\tekserp-hizmet.exe" hizmet-kur --kok $kok --pg-yok
+  if ($LASTEXITCODE -ne 0) { Dur "hizmet-kur $LASTEXITCODE" }
+  $citYolu = "$is\cit.json"
+  function Tur { sc.exe qc TeksERP-Backend | Out-String }
+  function Cit([string[]]$ek) {
+    $c = & $lkg cit --kok $kok --veri $veri @ek | Out-String
+    if ($LASTEXITCODE -ne 0) { Dur "cit $($ek -join ' ') cikis $LASTEXITCODE`: $c" }
+    return ($c | ConvertFrom-Json)
+  }
+  if ((Tur) -notmatch "AUTO_START\s+\(DELAYED\)") { Dur "hizmet-kur gecikmeli otomatik degil: $(Tur)" }
+  $o = Cit @()
+  if ($o.olcum -ne "OTOMATIK_GECIKMELI") { Dur "cit olcumu OTOMATIK_GECIKMELI degil: $($o | ConvertTo-Json -Compress)" }
+  $o = Cit @("--kur")
+  if ((Tur) -notmatch "DEMAND_START" -or -not (Test-Path $citYolu)) { Dur "cit --kur DEMAND_START + isaret yazmadi: $(Tur)" }
+  if ((Get-Content $citYolu -Raw | ConvertFrom-Json).eskiTur -ne "OTOMATIK_GECIKMELI") { Dur "isaret eski turu tasimiyor: $(Get-Content $citYolu -Raw)" }
+  $o = Cit @("--kaldir")
+  if ((Tur) -notmatch "AUTO_START\s+\(DELAYED\)" -or (Test-Path $citYolu) -or -not $o.citKaldirildi) { Dur "cit --kaldir eski turu geri yazmadi: $(Tur) $($o | ConvertTo-Json -Compress)" }
+  $o = Cit @("--kaldir")
+  if ($o.citKaldirildi -or (Tur) -notmatch "AUTO_START\s+\(DELAYED\)") { Dur "isaretsiz --kaldir sessiz degil: $($o | ConvertTo-Json -Compress)" }
+  # Yoneticinin kendi "Elle" secimi: cit sayilir, isaret yazilmaz, kaldirma ona dokunmaz.
+  sc.exe config TeksERP-Backend start= demand | Out-Null
+  $o = Cit @("--kur")
+  if ((Test-Path $citYolu) -or $o.citKuruldu) { Dur "yoneticinin Elle turunde isaret yazildi" }
+  $o = Cit @("--kaldir")
+  if ((Tur) -notmatch "DEMAND_START") { Dur "yoneticinin Elle turu ezildi: $(Tur)" }
+  & "$ver\runtime\tekserp-hizmet.exe" hizmet-kaldir
   Write-Host "OK duman: iki hizmet de beklenen gibi (varsayilan ve parametreli adlarla)" -ForegroundColor Green
 }
 finally {

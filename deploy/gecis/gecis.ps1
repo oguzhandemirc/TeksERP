@@ -301,6 +301,12 @@ function OsHizmetKaldir($exe, $ad) {
   if ($exe -and (Test-Path -LiteralPath $exe)) { return NativeKos $exe @("hizmet-kaldir", "--ad", $ad) }
   return NativeKos "sc.exe" @("delete", $ad)
 }
+# Guncelleyicinin karsilikli onarim gorevi (\TeksERP\<ad>-Onarim); yoksa sessiz. Donus: silindi mi.
+function OsOnarimGoreviSil($ad) {
+  if (-not (Get-ScheduledTask -TaskPath "\TeksERP\" -TaskName "$ad-Onarim" -ErrorAction SilentlyContinue)) { return $false }
+  Unregister-ScheduledTask -TaskPath "\TeksERP\" -TaskName "$ad-Onarim" -Confirm:$false
+  return $true
+}
 
 # =============================================================================
 # YARDIMCILAR
@@ -1115,11 +1121,14 @@ function Is_GUNCELLEYICI($E) {
 }
 function Telafi_GUNCELLEYICI($bas, $bit) {
   $ad = [string]$bas.hizmet
-  if (-not (OsHizmet $ad)) { return }
-  try { OsHizmetDurdur $ad; HizmetDurmasiniBekle $ad } catch { }
-  $r = OsHizmetKaldir (Join-Path $script:kok "guncelleyici\tekserp-guncelleyici.exe") $ad
-  if ($r.Kod -ne 0) { throw "guncelleyici kaldirilamadi ($($r.Kod)): $($r.Metin)" }
-  Bilgi "guncelleyici kaldirildi: $ad"
+  if (OsHizmet $ad) {
+    try { OsHizmetDurdur $ad; HizmetDurmasiniBekle $ad } catch { }
+    $r = OsHizmetKaldir (Join-Path $script:kok "guncelleyici\tekserp-guncelleyici.exe") $ad
+    if ($r.Kod -ne 0) { throw "guncelleyici kaldirilamadi ($($r.Kod)): $($r.Metin)" }
+    Bilgi "guncelleyici kaldirildi: $ad"
+  }
+  # sc.exe delete yolu (ikili yok) onarim gorevini birakir; gorev hizmetsiz kalirsa da silinir.
+  if (OsOnarimGoreviSil $ad) { Bilgi "onarim gorevi kaldirildi: \TeksERP\$ad-Onarim" }
 }
 
 function Is_PG_KAYDI($E) {

@@ -367,6 +367,10 @@ function olc(k: Kaynaklar): Bulgular {
   if (!/\^\[0-9\]\{2\}\\\.\[0-9\]\{1,3\}-\[0-9\]\{1,3\}\$/.test(k.kaldir)) ekle("§6", "pgsql\\<sürüm>-<derleme> deseni daraltılmamış");
   const silme = /AdimDene "program dizini[\s\S]*?\n {2}\}\n/.exec(k.kaldir)?.[0] ?? "";
   if (!/ReparseMi \$p/.test(silme) || !/ReparsePoint/.test(silme)) ekle("§6", "program dizini silinmeden önce kendisi ve içi bağlantı için ölçülmüyor");
+  // W1b onarım görevi: hizmet-kaldir'i bilmeyen ikili ve sc.exe delete yolu onu bırakır — kaldırıcı ayrıca siler, yoksa sessiz.
+  const gorev = /AdimDene "guncelleyici onarim gorevi" \{[\s\S]*?\n {2}\}\n/.exec(k.kaldir)?.[0] ?? "";
+  if (!/\$gorevAd = "\$\(\$ad\.guncelleyici\)-Onarim"/.test(gorev) || !/if \(Get-ScheduledTask -TaskPath "\\TeksERP\\" -TaskName \$gorevAd -ErrorAction SilentlyContinue\) \{\n\s+Unregister-ScheduledTask -TaskPath "\\TeksERP\\" -TaskName \$gorevAd -Confirm:\$false/.test(gorev))
+    ekle("§6", "kaldırıcı güncelleyicinin onarım görevini (\\TeksERP\\<ad>-Onarim) varsa silmiyor");
 
   // §7 — .env yalnız EnvYaz'dan
   for (const s of kodSatirlari(kur)) {
@@ -831,6 +835,8 @@ if (eksik.length === 0) {
     { ad: "S76 simge ağ dinliyor (HttpListener)", dosya: "tepsi", eski: `$bildirim.Visible = $true\n`, yeni: `$bildirim.Visible = $true\n$dinle = New-Object System.Net.HttpListener\n`, bolum: "§15", parca: "salt okunur/dinlemez değil" },
     { ad: "S77 simge yerel adres yerine ağdan okuyor", dosya: "tepsi", eski: `"http://127.0.0.1:$Port/health/tepsi"`, yeni: `"http://sunucu:$Port/health/tepsi"`, bolum: "§15", parca: "yalnız http://127.0.0.1" },
     { ad: "S78 tepsi dizininde Users'a yazma izni", dosya: "kurulum", eski: `*S-1-5-32-545:(OI)(CI)RX`, yeni: `*S-1-5-32-545:(OI)(CI)M`, bolum: "§15", parca: "Users YALNIZ okuma" },
+    { ad: "S113 kaldırıcı onarım görevini silmiyor", dosya: "kaldir", eski: `      Unregister-ScheduledTask -TaskPath "\\TeksERP\\" -TaskName $gorevAd -Confirm:$false\n`, yeni: ``, bolum: "§6", parca: "onarım görevini" },
+    { ad: "S114 kaldırıcı onarım görevini adsız arıyor", dosya: "kaldir", eski: `$gorevAd = "$($ad.guncelleyici)-Onarim"`, yeni: `$gorevAd = "TeksERP-Guncelleyici-Onarim"`, bolum: "§6", parca: "onarım görevini" },
     { ad: "S79 kaldırıcı Run kaydını silmiyor", dosya: "kaldir", eski: `Remove-ItemProperty -LiteralPath $run -Name $isim;`, yeni: ``, bolum: "§15", parca: "Run kaydını" },
     { ad: "S80 kurulum TepsiKur'u çağırmıyor", dosya: "kurulum", eski: `  TepsiKur $kok $d $apiPort\n`, yeni: ``, bolum: "§15", parca: "TepsiKur'u çağırmıyor" },
     { ad: "S81 simge dosya yazıyor", dosya: "tepsi", eski: `$ErrorActionPreference = "Stop"\n`, yeni: `$ErrorActionPreference = "Stop"\nSet-Content -Path x -Value y\n`, bolum: "§15", parca: "salt okunur/dinlemez değil" },

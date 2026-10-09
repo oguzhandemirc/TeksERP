@@ -422,6 +422,10 @@ function gecisIhlalleri(metin: string): string[] {
   if (!metin.includes("$_ -cmatch '(^|/)\\.\\.(/|$)'")) ih.push("zip kök dışı girdi denetimi yok");
   if (!/\$ayni = \(\[string\]\$E\.Paket\.derlemeKimligi -ceq \[string\]\$E\.AppPaket\.derlemeKimligi\) -and \(\[string\]\$E\.Paket\.commit -ceq \[string\]\$E\.AppPaket\.commit\) -and \(\$E\.Surum -ceq \$E\.AppSurum\)\s*$/m.test(metin)) ih.push("paket = app\\ derlemesi denetimi yok");
   if (!/if \(\$bekleyen\.Count\) \{ Engel /.test(metin) || !/if \(\$fazla\.Count\) \{ Engel /.test(metin) || !/if \(\$yarim\.Count\) \{ Engel /.test(metin)) ih.push("bekleyen/fazla/yarım göç engeli yok");
+  // Güncelleyici telafisi onarım görevini hizmetten bağımsız siler (sc.exe delete yolu görevi bırakır).
+  const tg = /function Telafi_GUNCELLEYICI\(\$bas, \$bit\) \{[\s\S]*?\n\}\n/.exec(metin)?.[0] ?? "";
+  if (!/\n {2}if \(OsOnarimGoreviSil \$ad\)/.test(tg) || /\breturn\b/.test(tg.split("OsOnarimGoreviSil")[0])) ih.push("güncelleyici telafisi onarım görevini (hizmetsiz de) silmiyor");
+  if (!/function OsOnarimGoreviSil\(\$ad\) \{\n\s+if \(-not \(Get-ScheduledTask -TaskPath "\\TeksERP\\" -TaskName "\$ad-Onarim" -ErrorAction SilentlyContinue\)\) \{ return \$false \}/.test(metin)) ih.push("onarım görevi silme varlığı ölçmüyor (yoksa sessiz değil)");
   return ih;
 }
 function gecisStatik(): void {
@@ -446,6 +450,8 @@ function gecisStatik(): void {
     ["kayıt iskeletten önce", '  & $ekle "ISKELET"', '  & $ekle "HIZMET_KAYIT" "x"\n  & $ekle "ISKELET"'],
     ["sağlık sonrası kalem kritik değil", '"DOGRULAMA", "BASLAT")', '"DOGRULAMA")'],
     ["telafi eksik", "function Telafi_DUVAR($bas, $bit)", "function Telafi_DUVAR_YOK($bas, $bit)"],
+    ["onarım görevi telafide kalıyor", "  if (OsOnarimGoreviSil $ad) {", "  if ($false) {"],
+    ["onarım görevi yalnız hizmet varken siliniyor", "  $ad = [string]$bas.hizmet\n  if (OsHizmet $ad) {", "  $ad = [string]$bas.hizmet\n  if (-not (OsHizmet $ad)) { return }\n  if ($true) {"],
     ["parola ekrana", "  $E.Db = [pscustomobject]@{", '  Bilgi "parola $par"\n  $E.Db = [pscustomobject]@{'],
     ["derleme denetimi yok", "$ayni = ([string]$E.Paket.derlemeKimligi", "$ayni = $true -or ([string]$E.Paket.derlemeKimligi"],
   ];

@@ -63,6 +63,14 @@ try {
       Ok "hizmet kaldirildi: $($ad.guncelleyici)"
     }
   }
+  # Karsilikli onarim gorevi (\TeksERP\<guncelleyici>-Onarim): sc.exe delete yolu ve gorevi bilmeyen eski ikili onu birakir.
+  AdimDene "guncelleyici onarim gorevi" {
+    $gorevAd = "$($ad.guncelleyici)-Onarim"
+    if (Get-ScheduledTask -TaskPath "\TeksERP\" -TaskName $gorevAd -ErrorAction SilentlyContinue) {
+      Unregister-ScheduledTask -TaskPath "\TeksERP\" -TaskName $gorevAd -Confirm:$false
+      Ok "onarim gorevi kaldirildi: \TeksERP\$gorevAd"
+    }
+  }
   AdimDene "backend hizmeti" {
     $exe = Join-Path $kok "current\runtime\tekserp-hizmet.exe"
     if (Get-Service -Name "$($ad.backend)" -ErrorAction SilentlyContinue) {
