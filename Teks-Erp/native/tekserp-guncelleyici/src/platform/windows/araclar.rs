@@ -87,6 +87,18 @@ impl crate::platform::Araclar for NodeAraclar {
         Ok(String::from_utf8_lossy(&out.stdout).lines().map(str::trim).filter(|l| !l.is_empty()).map(str::to_string).collect())
     }
 
+    /// Disk formülünün yedek payı (`package::disk_needs`) — backend çalışırken salt okuma; ölçülemezse `None`.
+    fn db_boyutu(&self, env: &Env, be: &BackendEnv) -> Option<u64> {
+        let db = &be.db;
+        let c = pg_cmd(be, "psql", db)
+            .args(["-X", "-w"])
+            .args(conn_args(db))
+            .args(["-v", "ON_ERROR_STOP=1", "-tAc", crate::package::DB_BOYU_SQL])
+            .timeout(Duration::from_secs(60));
+        let out = run(env, &c, "veritabanı boyu (psql)").ok()?;
+        String::from_utf8_lossy(&out.stdout).trim().parse().ok()
+    }
+
     /// Özel biçimli döküm (`-Fc`), backend DURMUŞKEN.
     fn pg_dump(&self, env: &Env, be: &BackendEnv, out_file: &Path, timeout: Duration) -> Result<(), String> {
         let db = &be.db;

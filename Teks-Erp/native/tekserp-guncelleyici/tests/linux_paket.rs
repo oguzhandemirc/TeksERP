@@ -216,7 +216,7 @@ fn linux_paket_hazirligi_uctan_uca() {
     untouched(&w, "platform");
 }
 
-/// Linux disk formülü veri kökünde DB boyunu sayar (Windows formülü saymaz): aynı boş alan, DB boyu karar verir.
+/// Linux disk formülü veri kökünde DB boyunu sayar (Windows'unki `disk_dolu.rs`): aynı boş alan, DB boyu karar verir.
 #[test]
 fn linux_disk_dolu_db_boyunu_sayar() {
     const GB: u64 = 1024 * 1024 * 1024;

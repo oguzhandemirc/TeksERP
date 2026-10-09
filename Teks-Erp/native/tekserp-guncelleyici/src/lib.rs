@@ -31,6 +31,7 @@ pub mod pgminor;
 pub mod platform;
 pub mod policy;
 pub mod release;
+pub mod reserve;
 pub mod selfupdate;
 pub mod sema;
 pub mod settings;

@@ -86,10 +86,51 @@ pub trait Operation {
     fn after_result(&self, ctx: &Ctx, view: &OpView, outcome: &OpOutcome);
 }
 
+fn journal_err(e: &std::io::Error) -> StepError {
+    let code = if crate::platform::is_disk_full(e) { codes::DISK_DOLU } else { codes::IC_HATA };
+    step_err(code, format!("işlem günlüğü yazılamadı: {e}"))
+}
+
+/// Disk dolu: yedek alanı bırakır (§2.3). Yer açıldıysa `true` — tek seferlik; dosya boşta turda yeniden kurulur.
+fn release_reserve(ctx: &Ctx) -> bool {
+    let freed = crate::reserve::release(ctx.env.fs.as_ref(), ctx.layout);
+    let m = if freed {
+        "disk dolu — yedek alan bırakıldı (işlem günlüğü ve telafi için)"
+    } else {
+        "disk dolu — bırakılacak yedek alan yok"
+    };
+    ctx.log.warn(m);
+    freed
+}
+
+/// Disk doluysa yedek alan bırakılır ve AYNI yazım bir kez daha denenir (geri yönlü günlük satırı, kapanış kaydı).
+pub fn retry_if_full<T>(ctx: &Ctx, mut f: impl FnMut() -> std::io::Result<T>) -> std::io::Result<T> {
+    match f() {
+        Err(e) if crate::platform::is_disk_full(&e) && release_reserve(ctx) => f(),
+        r => r,
+    }
+}
+
+/// Geri yönlü ya da kapanış satırı (hata, telafi, sonuç): disk doluysa yedek alanla bir kez daha — geri alma ilerler.
 fn record(ctx: &Ctx, journal: &mut Journal, op: &str, kind: Kind, step: Option<&str>, data: Value) -> Result<(), StepError> {
-    journal
-        .append(ctx.env.fs.as_ref(), op, kind, step, data, ctx.now_iso())
-        .map_err(|e| step_err(codes::IC_HATA, format!("işlem günlüğü yazılamadı: {e}")))
+    let fs = ctx.env.fs.as_ref();
+    retry_if_full(ctx, || journal.append(fs, op, kind, step, data.clone(), ctx.now_iso())).map_err(|e| journal_err(&e))
+}
+
+/// İleri yönlü satır (BAŞLADI/BİTTİ): disk doluysa YAZILMAZ — yedek alan bırakılır, yerine `DISK_DOLU` hatası yazılır;
+/// adım ilerletilmez, döngü geri almaya döner. `Ok(false)` = yerine hata yazıldı.
+fn forward(ctx: &Ctx, journal: &mut Journal, op: &str, kind: Kind, step: &str, data: Value) -> Result<bool, StepError> {
+    match journal.append(ctx.env.fs.as_ref(), op, kind, Some(step), data, ctx.now_iso()) {
+        Ok(()) => Ok(true),
+        Err(e) if crate::platform::is_disk_full(&e) => {
+            release_reserve(ctx);
+            let m = format!("{step} adımında disk doldu ({e}) — işlem geri alınıyor");
+            ctx.log.error(&format!("işlem {op}: {m}"));
+            record(ctx, journal, op, Kind::Error, Some(step), json!({ "hataKodu": codes::DISK_DOLU, "mesaj": m }))?;
+            Ok(false)
+        }
+        Err(e) => Err(journal_err(&e)),
+    }
 }
 
 fn view(journal: &Journal, op: &str) -> OpView {
@@ -112,11 +153,22 @@ fn progress(ctx: &Ctx, op: &dyn Operation, step: &str, rolling_back: bool) {
 pub fn start(ctx: &Ctx, journal: &mut Journal, op: &dyn Operation, plan: Value) -> OpOutcome {
     ctx.log.info(&format!("işlem {} başlıyor: {} {} → {}", op.op_id(), op.product(), op.source(), op.target()));
     ctx.env.events.event(Level::Info, &format!("Güncelleme başladı: {} {} → {}", op.product(), op.source(), op.target()));
-    let begun = journal
-        .begin(ctx.env.fs.as_ref(), op.op_id(), ctx.env.arka.platform.as_str(), plan, ctx.now_iso())
-        .map_err(|e| step_err(codes::IC_HATA, format!("işlem günlüğü yazılamadı: {e}")));
+    let fs = ctx.env.fs.as_ref();
+    let platform = ctx.env.arka.platform.as_str();
+    let mut begun = journal.begin(fs, op.op_id(), platform, plan.clone(), ctx.now_iso());
+    // Disk dolu: açılan yerle işlem açılır ve hemen geri alınır — sonuç günlükte, durum `GERI_DONDU (DISK_DOLU)`.
+    let full = matches!(&begun, Err(e) if crate::platform::is_disk_full(e)) && release_reserve(ctx);
+    if full {
+        begun = journal.begin(fs, op.op_id(), platform, plan, ctx.now_iso());
+    }
     if let Err(e) = begun {
-        return OpOutcome::Failed(e);
+        return OpOutcome::Failed(journal_err(&e));
+    }
+    if full {
+        let data = json!({ "hataKodu": codes::DISK_DOLU, "mesaj": "işlem açılırken disk doldu — hiçbir adım başlamadı" });
+        if let Err(e) = record(ctx, journal, op.op_id(), Kind::Error, None, data) {
+            return OpOutcome::Failed(e);
+        }
     }
     drive(ctx, journal, op)
 }
@@ -166,14 +218,16 @@ pub fn drive(ctx: &Ctx, journal: &mut Journal, op: &dyn Operation) -> OpOutcome 
         }
         progress(ctx, op, step, false);
         ctx.log.info(&format!("işlem {id}: {step} başlıyor"));
-        if let Err(e) = record(ctx, journal, &id, Kind::StepBegin, Some(step), Value::Null) {
-            return OpOutcome::Failed(e);
+        match forward(ctx, journal, &id, Kind::StepBegin, step, Value::Null) {
+            Ok(true) => {}
+            Ok(false) => continue,
+            Err(e) => return OpOutcome::Failed(e),
         }
         let v = view(journal, &id);
         match op.run_step(ctx, &v, step) {
             Ok(data) => {
                 ctx.log.info(&format!("işlem {id}: {step} bitti"));
-                if let Err(e) = record(ctx, journal, &id, Kind::StepEnd, Some(step), data) {
+                if let Err(e) = forward(ctx, journal, &id, Kind::StepEnd, step, data) {
                     return OpOutcome::Failed(e);
                 }
             }
@@ -245,7 +299,15 @@ fn rollback(ctx: &Ctx, journal: &mut Journal, op: &dyn Operation) -> OpOutcome {
             return OpOutcome::Failed(e);
         }
         let v = view(journal, &id);
-        match op.compensate(ctx, &v, step) {
+        // Telafinin de diske ihtiyacı var (A4): düşerse yedek alan bırakılıp bir kez daha (telafi tekrarlanabilir).
+        let done = match op.compensate(ctx, &v, step) {
+            Err(e) if release_reserve(ctx) => {
+                ctx.log.warn(&format!("işlem {id}: {step} telafisi düştü ({}) — yedek alanla yeniden deneniyor", e.code));
+                op.compensate(ctx, &v, step)
+            }
+            r => r,
+        };
+        match done {
             Ok(data) => {
                 if let Err(e) = record(ctx, journal, &id, Kind::CompEnd, Some(step), data) {
                     return OpOutcome::Failed(e);
@@ -614,7 +676,10 @@ impl BackendOp {
             migrations_after: after.map(|m| m.finished),
             data_encrypted: true,
         };
-        history::append(fs, ctx.layout, &rec).map_err(|x| step_err(codes::IC_HATA, format!("kurulum kaydı yazılamadı: {x}")))?;
+        history::append(fs, ctx.layout, &rec).map_err(|x| {
+            let code = if crate::platform::is_disk_full(&x) { codes::DISK_DOLU } else { codes::IC_HATA };
+            step_err(code, format!("kurulum kaydı yazılamadı: {x}"))
+        })?;
         self.prune(ctx);
         Ok(json!({ "kurulumKaydi": true }))
     }
@@ -778,7 +843,7 @@ impl Operation for BackendOp {
                 migrations_after: self.plan.migrations_before.map(|m| m.finished),
                 data_encrypted: true,
             };
-            if let Err(e) = history::append(fs, ctx.layout, &rec) {
+            if let Err(e) = retry_if_full(ctx, || history::append(fs, ctx.layout, &rec)) {
                 ctx.log.warn(&format!("geri alma kaydı yazılamadı: {e}"));
             }
         }
@@ -807,7 +872,7 @@ impl Operation for BackendOp {
             backup: view.ended("YEDEK").then(|| self.plan.op_id.clone()),
             approval: self.plan.approval.clone(),
         };
-        if let Err(e) = crate::ipc::append_history(fs, ctx.layout, &line) {
+        if let Err(e) = retry_if_full(ctx, || crate::ipc::append_history(fs, ctx.layout, &line)) {
             ctx.log.warn(&format!("geçmiş satırı yazılamadı: {e}"));
         }
     }

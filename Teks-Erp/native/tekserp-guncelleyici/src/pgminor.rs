@@ -338,6 +338,6 @@ impl Operation for PgOp {
             backup: view.ended("PG_YEDEK").then(|| self.plan.op_id.clone()),
             approval: None,
         };
-        let _ = crate::ipc::append_history(ctx.env.fs.as_ref(), ctx.layout, &line);
+        let _ = crate::operation::retry_if_full(ctx, || crate::ipc::append_history(ctx.env.fs.as_ref(), ctx.layout, &line));
     }
 }

@@ -15,8 +15,6 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use tekserp_hizmet::contract;
 
-/// Disk ön kontrolünün DB payı (§5 madde 4).
-pub const DB_BOYU_SQL: &str = "SELECT pg_database_size(current_database())";
 /// Compose servis adları (şablon `docker-compose.guncelleyici.yml`).
 pub const BACKEND: &str = "backend";
 /// Araç konteynerlerinin servisi: aynı imaj, PG istemcisi + yedek aracı, PG ortamı compose'tan.
@@ -467,7 +465,7 @@ impl crate::platform::Araclar for DockerAraclar {
         s.starts_with('/').then(|| PathBuf::from(s))
     }
     fn db_boyutu(&self, env: &Env, _be: &BackendEnv) -> Option<u64> {
-        self.psql(env, DB_BOYU_SQL, "veritabanı boyu (psql)").ok()?.trim().parse().ok()
+        self.psql(env, crate::package::DB_BOYU_SQL, "veritabanı boyu (psql)").ok()?.trim().parse().ok()
     }
     fn imaj_hazir(&self, env: &Env, surum: &str, kimlik: &str) -> bool {
         let Some(k) = imaj::kayit_oku(env.fs.as_ref(), &self.komut.layout, surum) else { return false };

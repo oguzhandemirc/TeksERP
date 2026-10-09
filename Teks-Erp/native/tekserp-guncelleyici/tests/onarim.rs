@@ -647,7 +647,7 @@ fn onarim_disk_dolu() {
         let ctx = la_name(la);
         std::fs::remove_file(s.svc_exe()).unwrap();
         s.stop_updater();
-        s.w.fs.enospc_copy.store(true, Ordering::SeqCst);
+        s.w.crash.fill_disk(true);
         let before = tree(&s.w.layout.root);
         let o = s.onar();
         assert!(matches!(&o, Outcome::DiskDolu(m) if m.contains("hiçbir şey silinmedi")), "{ctx}: {o:?}");
@@ -656,7 +656,7 @@ fn onarim_disk_dolu() {
         assert_eq!(tree(&s.w.layout.root), before, "{ctx}: hiçbir dosya silinmedi, yarım kopya kalmadı");
         assert!(!s.w.layout.repair_file().exists(), "{ctx}: sayaç işlemedi");
         assert_eq!(s.updater().starts, 0);
-        s.w.fs.enospc_copy.store(false, Ordering::SeqCst);
+        s.w.crash.free_disk();
         assert_repaired(&s.onar(), "EKSIK", "son bilinen iyi", ctx);
         assert!(s.runs_installed());
     }

@@ -239,10 +239,19 @@ pub struct DiskNeed {
 const GB: u64 = 1024 * 1024 * 1024;
 /// DB boyu ölçülemezse varsayılan (§5 madde 4).
 pub const DB_SIZE_UNKNOWN: u64 = 2 * GB;
+/// Disk ön kontrolünün DB payı (§5 madde 4) — iki platformun araçları aynı sorguyu koşar.
+pub const DB_BOYU_SQL: &str = "SELECT pg_database_size(current_database())";
 
-/// Disk formülü (§5 madde 4, indirmeden ÖNCE). Windows: kök ≥ paket × 3 + 2 GB. Linux iki dosya sistemi: veri kökü
-/// (`/var/lib/tekserp`: dış tar + açılmış kopya + güncelleme öncesi yedek) ≥ paket × 2 + DB × 1,2 + 2 GB ve Docker
-/// kökü ≥ açılmış imaj (bildirimde boy yok: paket × 3) + 1 GB. Docker kökü ölçülemezse o satır yok.
+/// Güncelleme öncesi yedeğin payı: DB × 1,2 (ölçülemezse 2 GB) — iki platformda aynı.
+fn backup_share(db_bytes: Option<u64>) -> u64 {
+    db_bytes.unwrap_or(DB_SIZE_UNKNOWN).saturating_mul(6) / 5
+}
+
+/// Disk formülü (§5 madde 4, indirmeden ÖNCE); iki platform aynı biçimde: paket payı + yedek payı + 2 GB.
+/// Windows: kök ≥ paket × 3 (zip + açılmış kopya) + DB × 1,2 + 2 GB — kök ile veri kökü aynı birimdeyse (varsayılan)
+/// toplam orada; veri kökü (`%ProgramData%`: zip + yedek) ayrı yoldaysa o da ≥ paket + DB × 1,2 + 2 GB. Linux iki
+/// dosya sistemi: veri kökü (`/var/lib/tekserp`: dış tar + açılmış kopya + yedek) ≥ paket × 2 + DB × 1,2 + 2 GB ve
+/// Docker kökü ≥ açılmış imaj (bildirimde boy yok: paket × 3) + 1 GB. Docker kökü ölçülemezse o satır yok.
 pub fn disk_needs(
     platform: UpdatePlatform,
     layout: &crate::layout::Layout,
@@ -252,11 +261,16 @@ pub fn disk_needs(
 ) -> Vec<DiskNeed> {
     match platform {
         UpdatePlatform::Win32X64 => {
-            vec![DiskNeed { path: layout.root.clone(), bytes: package_bytes.saturating_mul(3).saturating_add(2 * GB) }]
+            let root = package_bytes.saturating_mul(3).saturating_add(backup_share(db_bytes)).saturating_add(2 * GB);
+            let mut out = vec![DiskNeed { path: layout.root.clone(), bytes: root }];
+            if layout.data != layout.root {
+                let data = package_bytes.saturating_add(backup_share(db_bytes)).saturating_add(2 * GB);
+                out.push(DiskNeed { path: layout.data.clone(), bytes: data });
+            }
+            out
         }
         UpdatePlatform::LinuxX64Oci => {
-            let db = db_bytes.unwrap_or(DB_SIZE_UNKNOWN);
-            let data = package_bytes.saturating_mul(2).saturating_add(db.saturating_mul(6) / 5).saturating_add(2 * GB);
+            let data = package_bytes.saturating_mul(2).saturating_add(backup_share(db_bytes)).saturating_add(2 * GB);
             let mut out = vec![DiskNeed { path: layout.data.clone(), bytes: data }];
             out.extend(image_store.map(|p| DiskNeed { path: p, bytes: package_bytes.saturating_mul(3).saturating_add(GB) }));
             out
@@ -273,9 +287,20 @@ mod tests {
     fn disk_formula_per_platform() {
         let l = Layout::new(Path::new("/opt/tekserp"), Path::new("/var/lib/tekserp"));
         let p = 100 * 1024 * 1024;
+        let w = Layout::new(Path::new("C:/TeksERP"), Path::new("C:/ProgramData/TeksERP"));
         assert_eq!(
-            disk_needs(UpdatePlatform::Win32X64, &l, p, Some(5 * GB), Some("/d".into())),
-            vec![DiskNeed { path: l.root.clone(), bytes: 3 * p + 2 * GB }]
+            disk_needs(UpdatePlatform::Win32X64, &w, p, Some(5 * GB), Some("/d".into())),
+            vec![
+                DiskNeed { path: w.root.clone(), bytes: 3 * p + 6 * GB + 2 * GB },
+                DiskNeed { path: w.data.clone(), bytes: p + 6 * GB + 2 * GB },
+            ],
+            "Windows: Linux'la aynı yedek payı; imaj deposu yok sayılır"
+        );
+        let same = Layout::new(Path::new("C:/TeksERP"), Path::new("C:/TeksERP"));
+        assert_eq!(
+            disk_needs(UpdatePlatform::Win32X64, &same, p, None, None),
+            vec![DiskNeed { path: same.root.clone(), bytes: 3 * p + DB_SIZE_UNKNOWN * 6 / 5 + 2 * GB }],
+            "tek kök + DB ölçülemedi: 2 GB"
         );
         let linux = disk_needs(UpdatePlatform::LinuxX64Oci, &l, p, Some(10 * GB), Some("/var/lib/docker".into()));
         assert_eq!(

@@ -125,6 +125,10 @@ impl Layout {
     pub fn self_update_file(&self) -> PathBuf {
         self.work().join("kendi.json")
     }
+    /// Yedek alan dosyası (`reserve`): işlem günlüğüyle AYNI dosya sisteminde ki bırakılınca açılan yer günlüğe yetsin.
+    pub fn reserve_file(&self) -> PathBuf {
+        self.work().join(crate::reserve::FILE_NAME)
+    }
     /// Karşılıklı onarımın sayacı ve son onarımları (§4.7 madde 4–5).
     pub fn repair_file(&self) -> PathBuf {
         self.work().join("onarim.json")

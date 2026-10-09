@@ -89,8 +89,14 @@ impl Fs for RealFs {
             std::fs::create_dir_all(dir)?;
         }
         let mut f = std::fs::OpenOptions::new().create(true).append(true).open(p)?;
-        f.write_all(line)?;
-        f.sync_all()
+        let before = f.metadata()?.len();
+        // Disk dolu: yarım satır geri kesilir (kesmek yer istemez) — sonraki satır çöpün ARKASINA eklenmesin; günlük
+        // okuyucusu ilk bozuk satırdan sonrasını atar.
+        if let Err(e) = f.write_all(line).and_then(|()| f.sync_all()) {
+            let _ = f.set_len(before).and_then(|()| f.sync_all());
+            return Err(e);
+        }
+        Ok(())
     }
 
     fn exists(&self, p: &Path) -> bool {

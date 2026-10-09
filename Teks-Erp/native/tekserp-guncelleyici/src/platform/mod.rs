@@ -57,8 +57,7 @@ pub trait Araclar: Send + Sync {
     fn imaj_deposu(&self, _env: &Env) -> Option<PathBuf> {
         None
     }
-    /// Veritabanının boyu (`pg_database_size`, bayt) — Linux disk formülünün yedek payı; ölçülemezse `None`. Windows
-    /// formülü DB boyu kullanmaz.
+    /// Veritabanının boyu (`package::DB_BOYU_SQL`, bayt) — disk formülünün yedek payı; ölçülemezse `None` (2 GB sayılır).
     fn db_boyutu(&self, _env: &Env, _be: &BackendEnv) -> Option<u64> {
         None
     }

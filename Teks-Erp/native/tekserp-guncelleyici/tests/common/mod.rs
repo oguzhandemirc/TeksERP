@@ -58,11 +58,29 @@ pub struct Crash {
     pub log: Mutex<Vec<String>>,
     /// Her noktada (ölümden önce) çağrılan gözlem; açılış kararını dünyayı değiştirmeden her noktada ölçmek için.
     pub probe: Mutex<Option<Box<dyn Fn() + Send + Sync>>>,
+    /// `enospc_at` (W3a): bu noktadan sonraki İLK yer isteyen yazımda disk dolar ve DOLU KALIR — yedek alan dosyası
+    /// silinene (ya da test `free_disk` diyene) dek yer isteyen her yazım ENOSPC. 0 = kapalı.
+    pub enospc_at: AtomicU64,
+    enospc_fired: AtomicBool,
+    pub disk_full: AtomicBool,
+    /// Dolu diskte küçük yazımlar (≤ `SMALL_WRITE`) sığar — W1b onarımı: kopya megabaytlar, durum dosyası yüzlerce bayt.
+    pub small_fits: AtomicBool,
+    /// Yer isteyen noktaların numaraları: sayım koşusundan bekçinin dolaşacağı noktalar.
+    pub space_points: Mutex<Vec<u64>>,
+    /// Yedek alan dosyası sığmıyor (kalan yer ondan az), başka her yazım sığar — işlem başlatma kapısının sondası.
+    pub reserve_blocked: AtomicBool,
+    /// GÖZLEM: diske inen her `durum.json`un `durum`u (sırayla) — ara durumlar da ölçülsün (ör. geçici `HATA`).
+    pub status_trail: Mutex<Vec<String>>,
 }
 
+/// `Crash::small_fits` sınırı.
+pub const SMALL_WRITE: u64 = 4096;
+/// Sahte dünyanın yedek alan boyu (gerçeği 64 MB; yüzlerce dünyada yazılmasın).
+pub const TEST_RESERVE: u64 = 4096;
+
 impl Crash {
-    /// Değiştiren her çağrıdan ÖNCE: sayaç enjeksiyon noktasına gelince süreç "ölür".
-    pub fn point(&self, what: &str) {
+    /// Değiştiren her çağrıdan ÖNCE: sayaç enjeksiyon noktasına gelince süreç "ölür". Noktanın numarasını döner.
+    pub fn point(&self, what: &str) -> u64 {
         let n = self.count.fetch_add(1, Ordering::SeqCst) + 1;
         if let Ok(mut l) = self.log.lock() {
             l.push(format!("{n}:{what}"));
@@ -73,6 +91,38 @@ impl Crash {
         if self.at.load(Ordering::SeqCst) == n {
             std::panic::panic_any(Killed);
         }
+        n
+    }
+    /// `n`inci nokta `bytes` bayt yer ister: disk doluysa (ya da `enospc_at` burada tetiklenirse) ENOSPC.
+    pub fn space(&self, n: u64, bytes: u64) -> std::io::Result<()> {
+        self.space_points.lock().unwrap().push(n);
+        let at = self.enospc_at.load(Ordering::SeqCst);
+        if at != 0 && n >= at && !self.enospc_fired.swap(true, Ordering::SeqCst) {
+            self.disk_full.store(true, Ordering::SeqCst);
+        }
+        if self.disk_full.load(Ordering::SeqCst) && !(self.small_fits.load(Ordering::SeqCst) && bytes <= SMALL_WRITE) {
+            return Err(std::io::Error::from(std::io::ErrorKind::StorageFull));
+        }
+        Ok(())
+    }
+    pub fn arm_enospc(&self, at: u64) {
+        self.count.store(0, Ordering::SeqCst);
+        self.enospc_at.store(at, Ordering::SeqCst);
+        self.enospc_fired.store(false, Ordering::SeqCst);
+        self.disk_full.store(false, Ordering::SeqCst);
+    }
+    pub fn enospc_fired(&self) -> bool {
+        self.enospc_fired.load(Ordering::SeqCst)
+    }
+    /// Disk şimdi dolar (`small_fits`: küçük yazımlar sığar).
+    pub fn fill_disk(&self, small_fits: bool) {
+        self.small_fits.store(small_fits, Ordering::SeqCst);
+        self.disk_full.store(true, Ordering::SeqCst);
+    }
+    /// İnsan yer açtı.
+    pub fn free_disk(&self) {
+        self.disk_full.store(false, Ordering::SeqCst);
+        self.small_fits.store(false, Ordering::SeqCst);
     }
     pub fn arm(&self, at: u64, torn: bool) {
         self.count.store(0, Ordering::SeqCst);
@@ -103,9 +153,6 @@ pub struct CrashFs {
     pub corrupt_copy: AtomicBool,
     /// Başka süreçte açık sayılan adlar: silme/yeniden adlandırma "erişim engellendi" ile düşer (thinkpad-1 D8b 3I).
     pub locked: Mutex<Vec<String>>,
-    /// Disk dolu (W1b §4.7 madde 6): `copy` ENOSPC ile düşer ve HİÇ dosya bırakmaz (gerçek `RealFs::copy` gibi); küçük
-    /// atomik yazımlar (durum dosyası) sığar — onarımın kopyası megabaytlar, durum dosyası birkaç yüz bayt.
-    pub enospc_copy: AtomicBool,
 }
 
 /// Güç kesintisi modeli (`Crash::torn`): gerçek `RealFs` her yazımı ve yeniden adlandırmayı (Unix'te üst dizin dahil)
@@ -143,7 +190,15 @@ impl Fs for CrashFs {
     }
     fn write_atomic(&self, p: &Path, data: &[u8]) -> std::io::Result<()> {
         torn_tmp(&self.crash, p, data);
-        self.crash.point(&format!("yaz {}", name(p)));
+        let n = self.crash.point(&format!("yaz {}", name(p)));
+        self.crash.space(n, data.len() as u64)?;
+        if self.crash.reserve_blocked.load(Ordering::SeqCst) && name(p) == tekserp_guncelleyici::reserve::FILE_NAME {
+            return Err(std::io::Error::from(std::io::ErrorKind::StorageFull));
+        }
+        if name(p) == "durum.json" {
+            let state = serde_json::from_slice::<Value>(data).ok().and_then(|v| v["durum"].as_str().map(str::to_string));
+            self.crash.status_trail.lock().unwrap().push(state.unwrap_or_default());
+        }
         self.inner.write_atomic(p, data)
     }
     fn append_sync(&self, p: &Path, line: &[u8]) -> std::io::Result<()> {
@@ -153,7 +208,8 @@ impl Fs for CrashFs {
             let mut f = std::fs::OpenOptions::new().create(true).append(true).open(p)?;
             f.write_all(&line[..line.len() / 2])?;
         }
-        self.crash.point(&format!("ekle {}", name(p)));
+        let n = self.crash.point(&format!("ekle {}", name(p)));
+        self.crash.space(n, line.len() as u64)?;
         self.inner.append_sync(p, line)
     }
     fn exists(&self, p: &Path) -> bool {
@@ -163,12 +219,20 @@ impl Fs for CrashFs {
         self.inner.is_dir(p)
     }
     fn create_dir_all(&self, p: &Path) -> std::io::Result<()> {
-        self.crash.point(&format!("dizin {}", name(p)));
+        let n = self.crash.point(&format!("dizin {}", name(p)));
+        if !self.inner.is_dir(p) {
+            self.crash.space(n, 0)?;
+        }
         self.inner.create_dir_all(p)
     }
     fn remove_file(&self, p: &Path) -> std::io::Result<()> {
         self.crash.point(&format!("sil {}", name(p)));
-        self.inner.remove_file(p)
+        self.inner.remove_file(p)?;
+        // Yedek alan bırakıldı: açılan yer (gerçekte 64 MB) günlüğe ve telafiye yeter.
+        if name(p) == tekserp_guncelleyici::reserve::FILE_NAME {
+            self.crash.disk_full.store(false, Ordering::SeqCst);
+        }
+        Ok(())
     }
     fn remove_dir_all(&self, p: &Path) -> std::io::Result<()> {
         self.crash.point(&format!("dizinsil {}", name(p)));
@@ -187,7 +251,8 @@ impl Fs for CrashFs {
         self.inner.link_target(link)
     }
     fn set_link(&self, link: &Path, target: &Path) -> std::io::Result<()> {
-        self.crash.point(&format!("baglanti {}→{}", name(link), name(target)));
+        let n = self.crash.point(&format!("baglanti {}→{}", name(link), name(target)));
+        self.crash.space(n, 0)?;
         self.inner.set_link(link, target)
     }
     fn free_space(&self, _p: &Path) -> std::io::Result<u64> {
@@ -206,15 +271,14 @@ impl Fs for CrashFs {
         self.inner.open_read(p)
     }
     fn open_append(&self, p: &Path) -> std::io::Result<Box<dyn SyncWrite>> {
-        self.crash.point(&format!("acekle {}", name(p)));
+        let n = self.crash.point(&format!("acekle {}", name(p)));
+        self.crash.space(n, u64::MAX)?;
         self.inner.open_append(p)
     }
     fn copy(&self, from: &Path, to: &Path) -> std::io::Result<()> {
         torn_tmp(&self.crash, to, &std::fs::read(from).unwrap_or_default());
-        self.crash.point(&format!("kopyala {}", name(from)));
-        if self.enospc_copy.load(Ordering::SeqCst) {
-            return Err(std::io::Error::from(std::io::ErrorKind::StorageFull));
-        }
+        let n = self.crash.point(&format!("kopyala {}", name(from)));
+        self.crash.space(n, std::fs::metadata(from).map_or(u64::MAX, |m| m.len().max(SMALL_WRITE + 1)))?;
         self.inner.copy(from, to)?;
         if self.corrupt_copy.load(Ordering::SeqCst) {
             let mut b = std::fs::read(to)?;
@@ -224,11 +288,13 @@ impl Fs for CrashFs {
         Ok(())
     }
     fn extract_zip(&self, archive: &Path, dest: &Path, limits: &ExtractLimits) -> Result<ExtractStats, String> {
-        self.crash.point(&format!("ac {}", name(archive)));
+        let n = self.crash.point(&format!("ac {}", name(archive)));
+        self.crash.space(n, u64::MAX).map_err(|e| e.to_string())?;
         self.inner.extract_zip(archive, dest, limits)
     }
     fn extract_tar(&self, archive: &Path, dest: &Path, members: &[String], limits: &ExtractLimits) -> Result<ExtractStats, String> {
-        self.crash.point(&format!("ac {}", name(archive)));
+        let n = self.crash.point(&format!("ac {}", name(archive)));
+        self.crash.space(n, u64::MAX).map_err(|e| e.to_string())?;
         self.inner.extract_tar(archive, dest, members, limits)
     }
 }
@@ -885,6 +951,16 @@ impl FakeProcs {
     }
 }
 
+/// Yer isteyen araç: döküm, geri yükleme, şifreleme, göç ve DB'yi yeniden yazan SQL.
+fn writes_disk(prog: &str, args: &[String]) -> bool {
+    match prog {
+        "pg_dump" | "node" => true,
+        "pg_restore" => !args.iter().any(|a| a == "--list"),
+        "psql" => args.last().is_some_and(|sql| sql.contains("DROP SCHEMA") || sql.contains("REINDEX")),
+        _ => false,
+    }
+}
+
 /// `docker [compose <baş>] <alt komut>` salt-okur mu (durum/kök/etiket sorgusu).
 fn docker_salt_okur(args: &[String]) -> bool {
     let sub = if args.first().map(String::as_str) == Some("compose") { args.get(9..) } else { args.get(..) };
@@ -901,7 +977,11 @@ impl Procs for FakeProcs {
         // Docker'ın salt-okur sorguları (`ps`/`inspect`/`info`/`image ls`) Windows profilindeki `state()` gibi
         // öldürme noktası DEĞİLDİR: K1 her DEĞİŞTİREN işlemden önce öldürür; yoklama noktaları yalnız süre katlar.
         if !(prog == "docker" && docker_salt_okur(&args)) {
-            self.w.crash.point(&format!("surec {prog} {}", args.first().cloned().unwrap_or_default()));
+            let n = self.w.crash.point(&format!("surec {prog} {}", args.first().cloned().unwrap_or_default()));
+            // Diske (DB dahil — aynı dosya sistemi) yazan araçlar disk doluyken düşer.
+            if writes_disk(&prog, &args) && self.w.crash.space(n, u64::MAX).is_err() {
+                return Ok(fail_out(1, &format!("{prog}: could not write: No space left on device")));
+            }
         }
         let pw_ok = c.env.iter().any(|(k, v)| k == "PGPASSWORD" && v == "gizli-parola");
         match prog.as_str() {
@@ -932,7 +1012,7 @@ impl Procs for FakeProcs {
                     let d = self.w.db.lock().unwrap();
                     return Ok(ok_out(&format!("{} {}\n", d.finished, d.total)));
                 }
-                if sql == tekserp_guncelleyici::platform::linux::docker::DB_BOYU_SQL {
+                if sql == tekserp_guncelleyici::package::DB_BOYU_SQL {
                     return Ok(ok_out(&format!("{}\n", self.w.faults.db_bytes.load(Ordering::SeqCst))));
                 }
                 if sql.contains("SHOW server_version") {
@@ -1918,7 +1998,6 @@ impl World {
                 unmeasurable: Mutex::new(vec![]),
                 corrupt_copy: AtomicBool::new(false),
                 locked: Mutex::new(vec![]),
-                enospc_copy: AtomicBool::new(false),
             }),
             dir,
             layout,
@@ -1996,7 +2075,9 @@ impl World {
 
     /// "Süreç başlangıcı": yeni motor (bellekteki hiçbir durum taşınmaz).
     pub fn engine(&self) -> Engine {
-        Engine::new(self.env(), self.layout.clone(), self.anchor.clone(), Arc::new(RotatingLog::disabled()), None)
+        let mut e = Engine::new(self.env(), self.layout.clone(), self.anchor.clone(), Arc::new(RotatingLog::disabled()), None);
+        e.reserve_bytes = TEST_RESERVE;
+        e
     }
 
     pub fn status(&self) -> Option<StatusDoc> {
@@ -2051,7 +2132,8 @@ impl World {
     /// `run` gibi bir süreç ömrü, ama günlük DOSYAYA yazılır (`<dünya>\gunluk\guncelleyici.log`); dönüş: içeriği.
     pub fn run_logged(&self, ticks: usize) -> String {
         let log = Arc::new(RotatingLog::open(&self.dir.join("gunluk"), "guncelleyici", tekserp_hizmet::logfile::LogSpec::SERVICE));
-        let engine = Engine::new(self.env(), self.layout.clone(), self.anchor.clone(), Arc::clone(&log), None);
+        let mut engine = Engine::new(self.env(), self.layout.clone(), self.anchor.clone(), Arc::clone(&log), None);
+        engine.reserve_bytes = TEST_RESERVE;
         for _ in 0..ticks {
             engine.tick(&|| false);
         }
@@ -2084,6 +2166,11 @@ impl World {
 
     /// `reboot_at(k)` arızası (§9.3): k'ıncı noktada süreç ölür VE konak yeniden açılır — platformun açılış davranışı
     /// (`boot`) uygulanır, sonra güncelleyici yeniden başlar (`run_to_rest`).
+    /// `k`ıncı noktadan sonraki ilk yer isteyen yazımda disk dolar ve dolu kalır (yedek alan bırakılana dek).
+    pub fn enospc_at(&self, k: u64) {
+        self.crash.arm_enospc(k);
+    }
+
     pub fn reboot_at(&self, k: u64) {
         self.crash.arm(k, false);
         self.faults.reboot.store(true, Ordering::SeqCst);

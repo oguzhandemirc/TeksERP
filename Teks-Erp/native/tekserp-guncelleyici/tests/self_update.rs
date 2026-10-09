@@ -316,6 +316,7 @@ fn w1_world(tag: &str, s: Setup, la: bool) -> (World, PathBuf) {
 fn engine_as(w: &World, own: &Path, version: &str) -> Engine {
     let mut e = Engine::new(w.env(), w.layout.clone(), w.anchor.clone(), Arc::new(RotatingLog::disabled()), Some(own.to_path_buf()));
     e.own_version = version.to_string();
+    e.reserve_bytes = TEST_RESERVE;
     e
 }
 

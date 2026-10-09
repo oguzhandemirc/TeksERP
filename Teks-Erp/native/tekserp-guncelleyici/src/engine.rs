@@ -40,7 +40,7 @@ const CANDIDATE_FRESH_FOR_APPLY_MS: i64 = 60 * 1000;
 /// Kesin paket hatalarında (özet · bütünlük · bağ) yeniden indirme aralığı: 15 dk × 4ⁿ, en çok 24 sa.
 const BACKOFF_BASE_MS: i64 = 15 * 60 * 1000;
 const BACKOFF_MAX_MS: i64 = 24 * 60 * 60 * 1000;
-/// Linux disk formülünün DB boyu bu süre önbellekte kalır.
+/// Disk formülünün DB boyu bu süre önbellekte kalır.
 const DB_SIZE_TTL_MS: i64 = 60 * 60 * 1000;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -84,6 +84,8 @@ pub struct Engine {
     pub own_exe: Option<PathBuf>,
     /// Çalışan ikilinin sürümü (`kunye.surum`; test yerleşmiş yeni ikiliyi taklit etmek için değiştirir).
     pub own_version: String,
+    /// Yedek alan dosyasının boyu (`reserve::RESERVE_BYTES`; sahte dünya yüzlerce dünyada 64 MB yazmasın diye küçültür).
+    pub reserve_bytes: u64,
     last_status: RefCell<Option<StatusDoc>>,
     last_progress_ms: RefCell<i64>,
     candidate: RefCell<Option<Candidate>>,
@@ -97,7 +99,7 @@ pub struct Engine {
     self_checked: RefCell<Option<String>>,
     /// DONDUR'da yenilemenin olmama nedeni: yalnız değişince günlüğe yazılır (her tur aynı satır olmasın).
     frozen_note: RefCell<Option<String>>,
-    /// Linux disk formülünün DB boyu (ölçüm anı, değer) — `DB_SIZE_TTL_MS` boyunca yeniden ölçülmez.
+    /// Disk formülünün DB boyu (ölçüm anı, değer) — `DB_SIZE_TTL_MS` boyunca yeniden ölçülmez.
     db_size: RefCell<Option<(i64, Option<u64>)>>,
 }
 
@@ -166,6 +168,7 @@ impl Engine {
             log,
             own_exe,
             own_version: env!("CARGO_PKG_VERSION").to_string(),
+            reserve_bytes: crate::reserve::RESERVE_BYTES,
             last_status: RefCell::new(None),
             last_progress_ms: RefCell::new(0),
             candidate: RefCell::new(None),
@@ -183,11 +186,25 @@ impl Engine {
         self.env.clock.now_ms()
     }
 
-    fn write_status(&self, mut doc: StatusDoc) {
+    fn write_status(&self, doc: StatusDoc) {
+        self.write_status_as(doc, false);
+    }
+
+    /// `closing`: işlemin SONUCU — disk doluysa yedek alan bırakılıp bir kez daha denenir; bitmiş işlem panelde
+    /// "uygulanıyor" kalmasın (ara ve boşta durumlar yedek alana dokunmaz, o işlem günlüğüne ayrılmıştır).
+    fn write_status_as(&self, mut doc: StatusDoc, closing: bool) {
         doc.at = timefmt::iso_millis(self.now());
         doc.heartbeat = doc.at.clone();
         doc.liveness_threshold_s = self.liveness_threshold(&doc);
-        match ipc::write_status(self.env.fs.as_ref(), &self.layout, &doc) {
+        let fs = self.env.fs.as_ref();
+        let r = match ipc::write_status(fs, &self.layout, &doc) {
+            Err(e) if closing && crate::platform::is_disk_full(&e) && crate::reserve::release(fs, &self.layout) => {
+                self.log.warn("disk dolu — sonuç durumu için yedek alan bırakıldı");
+                ipc::write_status(fs, &self.layout, &doc)
+            }
+            r => r,
+        };
+        match r {
             Ok(()) => self.status_after_decision.set(self.decided.get()),
             Err(e) => self.log.warn(&format!("durum.json yazılamadı: {e}")),
         }
@@ -371,6 +388,10 @@ impl Engine {
             let outcome = self.resume(&inputs, &mut journal, v.plan().cloned().unwrap_or(Value::Null));
             return self.after_op(&inputs, &journal, outcome, tick_s);
         }
+        // Boşta: yedek alan (yeniden) kurulur — açık işlem varken DEĞİL (bırakılan yer telafiye ayrılmıştır).
+        if let Err((_, m)) = self.ensure_reserve() {
+            self.log.warn(&m);
+        }
         match crate::cit::settle(&self.env, &self.layout, journal.last_op().as_ref()) {
             Some(Ok(_)) => self.log.info("bitmiş işlemin bakım çiti kaldırıldı (backend başlangıç türü geri yazıldı)"),
             Some(Err(m)) => self.log.warn(&format!("bitmiş işlemin bakım çiti kaldırılamadı: {m}")),
@@ -493,7 +514,7 @@ impl Engine {
         };
         // Başarılı PG adımının ardından backend adımı bu turda koşmadıysa (süreç o arada öldü) iş sürer.
         let state = if outcome == OpOutcome::Succeeded && product == "pg" { State::Waiting } else { state };
-        self.write_status(self.doc(&f, state, code, &message));
+        self.write_status_as(self.doc(&f, state, code, &message), true);
         // Son bilinen iyi (§4.2 madde 2): denemeyi bitiren ikili kanıtlanır; kanıtsız yeni ikili HATA'da geri döner.
         if let (Some(own), true) = (self.own_exe.as_ref(), last.as_ref().is_some_and(|l| l.attempt_end)) {
             let proven = !matches!(outcome, OpOutcome::Failed(_));
@@ -842,6 +863,10 @@ impl Engine {
         }
         if let Err((code, msg)) = self.reverify_prepared(&trust, &m.doc, pg_target.as_ref()) {
             self.log.warn(&msg);
+            self.write_status(self.doc(&f, State::Waiting, Some(code), &msg));
+            return idle;
+        }
+        if let Err((code, msg)) = self.ensure_reserve() {
             self.write_status(self.doc(&f, State::Waiting, Some(code), &msg));
             return idle;
         }
@@ -1480,10 +1505,11 @@ impl Engine {
     }
 
     /// Disk ön kontrolü (§5 madde 4, `package::disk_needs`): her satırın dosya sistemi ölçülür; ölçülemeyen satır
-    /// engellemez (bugünkü davranış). Linux'ta DB boyu formüle girer ve saatte bir ölçülür (araç konteyneri pahalı).
+    /// engellemez (bugünkü davranış). DB boyu iki platformda formüle girer ve saatte bir ölçülür (Linux'ta araç
+    /// konteyneri pahalı).
     fn disk_check(&self, inputs: &Inputs, m: &ReleaseManifest) -> Result<(), Fail> {
         let platform = self.platform();
-        let db = if platform == release::UpdatePlatform::LinuxX64Oci { self.db_size(inputs) } else { None };
+        let db = self.db_size(inputs);
         let store = self.env.arka.araclar.imaj_deposu(&self.env);
         for need in package::disk_needs(platform, &self.layout, m.paket.boyut, db, store) {
             if let Ok(free) = self.env.fs.free_space(&need.path) {
@@ -1496,6 +1522,15 @@ impl Engine {
             }
         }
         Ok(())
+    }
+
+    /// Yedek alan dosyası (`reserve`) yerinde mi; değilse kurulur. Kurulamazsa yeni işlem BAŞLAMAZ: disk dolunca işlem
+    /// günlüğü ve telafi için yer açılamaz.
+    fn ensure_reserve(&self) -> Result<(), Fail> {
+        crate::reserve::ensure(self.env.fs.as_ref(), &self.layout, self.reserve_bytes).map(|_| ()).map_err(|e| {
+            let code = if crate::platform::is_disk_full(&e) { codes::DISK_DOLU } else { codes::IC_HATA };
+            (code, format!("yedek alan dosyası kurulamadı ({e}) — disk dolarsa işlem güvenle kapatılamaz, güncelleme başlamaz"))
+        })
     }
 
     fn db_size(&self, inputs: &Inputs) -> Option<u64> {
