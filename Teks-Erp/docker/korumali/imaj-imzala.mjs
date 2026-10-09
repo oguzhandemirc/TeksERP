@@ -16,6 +16,9 @@
 // · --paket-iptal=<dosya> · --kasa=<ad>|yok · --parola-dosyasi=<yol>. Kök/sürüm/ürün/müşteri bu betikten gelir.
 // Parolayı yalnız imza aracı okur (`cli-girdi.ts` askPassword): --parola-dosyasi > Anahtar Zinciri kasası
 // (`tekserp/paket`, tek kaynak `scripts/lib/parola-kasasi.mjs`) > TTY > stdin; değer argüman/ortamdan ASLA.
+// CI KÖKENİ (`--ci-kosu=<id>`, resmî yol): parola sorulmadan ÖNCE o koşunun `imaj-kunye.json` yapıtı indirilir, yerel
+// taban `docker save` ARŞİVİNDEN ölçülür (`.Id` değil) ve `imaj-kokeni.mjs` hükmü uyumlu değilse RED; ardından imza
+// aracı koşuyu (iş akışı, main dalı, başarı, commit = /app/dist/server-kunye.json) ölçer ve `ciKokeni`ni yüke yazar.
 // Çıkış: 0 imzalı etiket hazır · 1 RED/düştü (imzalı etiket yok) · 2 kullanım.
 // Runbook: docs/ops/LINUX-DOCKER-KURULUM.md §8.
 // =============================================================================
@@ -24,6 +27,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { KUNYE_DOSYASI, KUNYE_YAPITI, imajKokeniHukmu } from './imaj-kokeni.mjs';
 
 const BURASI = path.dirname(fileURLToPath(import.meta.url));
 const TEKS = path.resolve(BURASI, '..', '..');
@@ -96,6 +100,44 @@ function kidOf(token) {
   }
 }
 
+/** `gh` (depo kökünde): koşu numarası `--ci-kosu`dan; okunamazsa null (hüküm ÖLÇÜLEMEDİ der). */
+function gh(args) {
+  const r = spawnSync('gh', args, { cwd: REPO, encoding: 'utf8', timeout: 120_000 });
+  return r.status === 0 ? r.stdout : null;
+}
+
+/** Resmî CI kökeni: künye ↔ koşu ↔ yerel taban (arşivden). Parola/kasa okunmadan önce; tutmazsa RED. */
+function imajKokeniDenetle(taban, kosuId, tmp) {
+  const kdizin = path.join(tmp, 'kunye');
+  let kunye = null;
+  if (/^\d{1,20}$/.test(kosuId) && gh(['run', 'download', kosuId, '-n', KUNYE_YAPITI, '-D', kdizin]) !== null) {
+    try {
+      kunye = JSON.parse(fs.readFileSync(path.join(kdizin, KUNYE_DOSYASI), 'utf8'));
+    } catch {
+      kunye = null;
+    }
+  }
+  const kosuCommit = /^\d{1,20}$/.test(kosuId) ? (gh(['api', `repos/{owner}/{repo}/actions/runs/${kosuId}`, '--jq', '.head_sha']) ?? '').trim() : '';
+  let olcum = null;
+  if (kunye !== null) {
+    const arsiv = path.join(tmp, 'taban.tar');
+    const s = docker(['save', '-o', arsiv, taban]);
+    if (s.status === 0) {
+      const o = spawnSync(process.execPath, ['--import', 'tsx', 'scripts/imaj-kunye.ts', 'olc', `--arsiv=${arsiv}`], { cwd: TEKS, encoding: 'utf8', timeout: 600_000 });
+      try {
+        olcum = o.status === 0 ? JSON.parse(o.stdout) : null;
+      } catch {
+        olcum = null;
+      }
+      if (olcum === null) console.error(`  ölçüm: ${(o.stderr || '').trim().slice(0, 300)}`);
+    }
+    fs.rmSync(arsiv, { force: true });
+  }
+  const h = imajKokeniHukmu({ kosuId, kosuCommit, kunye, taban: olcum });
+  if (h.sonuc !== 'uyumlu') red(`İMAJ KÖKENİ ${h.sonuc === 'olculemedi' ? 'ÖLÇÜLEMEDİ' : 'TUTMUYOR'} — imza atılmadı:\n  ${h.satirlar.join('\n  ')}`);
+  console.log(`✓ ${h.satirlar[0]}`);
+}
+
 function main() {
   const { taban, hedef, bayrak } = argumanlar();
   const anahtar = process.env.TEKSERP_PAKET_ANAHTARI || '';
@@ -108,6 +150,16 @@ function main() {
   if (t.labels['tr.tekserp.imaj'] !== 'korumali') red(`${taban} korumalı imaj değil (label tr.tekserp.imaj=${t.labels['tr.tekserp.imaj'] ?? '∅'})`);
   if (t.labels['tr.tekserp.butunluk']) red(`${taban} zaten imzalı (${t.labels['tr.tekserp.butunluk']}) — imzasız tabandan imzala`);
   if (t.platform !== 'linux/amd64') red(`taban platformu ${t.platform} (linux/amd64 bekleniyor)`);
+  const kosuBayragi = bayrak.find((b) => b === '--ci-kosu' || b.startsWith('--ci-kosu='));
+  if (kosuBayragi !== undefined) {
+    const kosuId = kosuBayragi.slice('--ci-kosu='.length);
+    const ktmp = fs.mkdtempSync(path.join(os.tmpdir(), 'tekserp-imaj-koken-'));
+    try {
+      imajKokeniDenetle(taban, kosuId, ktmp);
+    } finally {
+      fs.rmSync(ktmp, { recursive: true, force: true });
+    }
+  }
   const bekci = spawnSync(process.execPath, [path.join(REPO, 'scripts', 'test_korumali_imaj.mjs'), `--imaj=${taban}`], { stdio: 'inherit' });
   if (bekci.status !== 0) red('taban imaj bekçisi yeşil değil — imzalanmadı');
 

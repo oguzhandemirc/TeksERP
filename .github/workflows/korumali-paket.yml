@@ -178,3 +178,85 @@ jobs:
             guncelleyici-cikti/SHA256SUMS
           if-no-files-found: error
           retention-days: 7
+
+  # ---------------------------------------------------------------------------
+  # KORUMALI LINUX İMAJI — RESMÎ DERLEME KÖKENİ (Linux müşterisinin imzalı paketi yalnız buradan doğar)
+  # Native çekirdek üretim çapalı (glibc 2.28 kapısı) → buildx linux/amd64 (revision = koşunun commit'i) →
+  # taban imaj bekçisi → `docker save | gzip -n` → künye ARŞİVDEN ölçülür (`scripts/imaj-kunye.ts`, biçim tek kaynak
+  # `Teks-Erp/docker/korumali/imaj-kokeni.mjs`). Mac `imaj-imzala.mjs --ci-kosu=<bu koşu>` künyeyi indirir ve
+  # parola sorulmadan önce yerel tabanla kıyaslar. Sır YOK; imza Mac'te.
+  # ---------------------------------------------------------------------------
+  docker-linux-x64:
+    name: "Korumalı imaj — docker linux/amd64"
+    runs-on: ubuntu-latest
+    timeout-minutes: 75
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Node sürümünü node-surumu.json'dan oku
+        id: nodesurum
+        shell: bash
+        run: echo "surum=$(node -e "process.stdout.write(require('./deploy/node-surumu.json').surum)")" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ steps.nodesurum.outputs.surum }}
+
+      - name: Bağımlılıklar (Teks-Erp — künye ölçümü)
+        working-directory: Teks-Erp
+        run: npm ci --no-audit --no-fund
+
+      # cargo-zigbuild + zig Mac'teki derlemeyle aynı sürümde, ayrık bir venv'de (sistem Python'una dokunulmaz).
+      - name: Rust araç zinciri + cargo-zigbuild/zig (sabit sürüm)
+        run: |
+          rustup toolchain install stable --profile minimal && rustup default stable
+          python3 -m venv "$RUNNER_TEMP/zig"
+          "$RUNNER_TEMP/zig/bin/pip" install --quiet cargo-zigbuild==0.23.4 ziglang==0.17.0
+          echo "$RUNNER_TEMP/zig/bin" >> "$GITHUB_PATH"
+
+      - name: Native lisans çekirdeği (üretim çapalı, glibc 2.28 kapısı)
+        working-directory: Teks-Erp/native/lisans-cekirdek
+        run: npm run derle:linux:uretim
+
+      - name: Taban imaj (buildx linux/amd64, revision = koşunun commit'i)
+        id: imaj
+        shell: bash
+        run: |
+          set -euo pipefail
+          surum=$(node -p "require('./Teks-Erp/package.json').version")
+          etiket="tekserp-korumali:${surum}-imzasiz"
+          docker buildx build --platform linux/amd64 -f Teks-Erp/docker/korumali/Dockerfile \
+            --build-arg TEKSERP_COMMIT=${{ github.sha }} -t "$etiket" --load .
+          echo "etiket=$etiket" >> "$GITHUB_OUTPUT"
+
+      - name: Taban imaj bekçisi (test_korumali_imaj)
+        run: node scripts/test_korumali_imaj.mjs --imaj=${{ steps.imaj.outputs.etiket }}
+
+      - name: İmaj arşivi + künye (kimlik arşivden)
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p imaj-cikti imaj-kunye
+          docker save "${{ steps.imaj.outputs.etiket }}" | gzip -n > imaj-cikti/tekserp-korumali-imzasiz-linux-x64.tar.gz
+          cd Teks-Erp
+          npx tsx scripts/imaj-kunye.ts yaz --arsiv=../imaj-cikti/tekserp-korumali-imzasiz-linux-x64.tar.gz \
+            --native=native/lisans-cekirdek/dist-uretim/lisans-cekirdek.linux-x64-gnu.node --cikti=../imaj-kunye/imaj-kunye.json
+
+      - name: Künye yapıtı (küçük; Mac köken denetimi bunu indirir)
+        uses: actions/upload-artifact@v4
+        with:
+          name: korumali-imaj-kunye-linux-x64
+          path: imaj-kunye/imaj-kunye.json
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: İmzasız taban imaj arşivi
+        uses: actions/upload-artifact@v4
+        with:
+          name: korumali-imaj-linux-x64
+          path: imaj-cikti/tekserp-korumali-imzasiz-linux-x64.tar.gz
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 7

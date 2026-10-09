@@ -31,6 +31,9 @@
 //      `tekserp-korumali:<sürüm>`, compose şablonu doldurulur (yer tutucu kalmaz), imaj kimliği ARŞİVDEN (`.Id` yok),
 //      güncelleyici künyesi imajın içinde ikiliden yeniden ölçülür, dış tar ustar + sahip 0:0 + Mac meta verisiz.
 //      §5m imaj derlemesi (`sahne.mjs`) native'in gömülü çapa kipini bayt koduyla kıyaslar (`native-capa-kipi.mjs`).
+//      §5o RESMÎ DERLEME KÖKENİ (K1): `korumali-paket.yml` işi `docker-linux-x64` sırsız, salt-okunur izinle, üretim
+//      çapalı native + revision = github.sha + taban bekçisi + arşivden künye; `imaj-imzala --ci-kosu` künyeyi parola
+//      sorulmadan önce yerel tabanla (arşivden) kıyaslar — hüküm `imaj-kokeni.mjs` (imaja girmez) sondalarla ölçülür.
 //   §6 satıcı imajı (G2/G3) DURAĞAN: `satici/sunucu/scripts/` altındaki her CLI `dist-cli`'a derlenir ve
 //      `test -f` kapısında; compose'da `/dosyalar` yazılır, `/derlemeler` + `/yayin` salt okunur (⑨'un docker'sız ikizi).
 //   §7 güncelleyicinin yöneteceği düzen (GUNCELLEYICI-SAGLAMLIK L5): §7a–§7e `TEKSERP_GOC_ACILISTA` (yok/boş/1 =
@@ -46,6 +49,8 @@ import { tmpdir } from "node:os";
 import { spawnSync } from "node:child_process";
 import { git } from "./lib/git";
 import { ociImajArsivi, ociKapsam, ociUyeler } from "./lib/oci-paket";
+import { KORUMALI_IS_AKISI } from "./lib/ci-kokeni";
+import { IMAJ_ARSIVI, IMAJ_YAPITI, KUNYE_DOSYASI, KUNYE_YAPITI, PLATFORM, imajKokeniHukmu } from "../docker/korumali/imaj-kokeni.mjs";
 // Bekçi/koşucu gerçek Anahtar Zinciri'ne GİTMEZ: parola okuyan araçlar kasa yerine stdin/dosya kullanır (scripts/lib/parola-kasasi.mjs).
 process.env.TEKSERP_PAROLA_KASASI = "kapali";
 
@@ -738,6 +743,134 @@ function imajImzaStatik(betik: string, dockerfile: string): string[] {
   for (const [ad, mb, md] of sondalar) {
     const uyg = mb !== b || md !== d;
     check(`§5l sonda: ${ad} → kırmızı`, uyg && imajImzaStatik(mb, md).length > 0, uyg ? "" : "MUTASYON UYGULANMADI");
+  }
+}
+
+// -----------------------------------------------------------------------------
+// §5o — RESMÎ DERLEME KÖKENİ (K1): Linux müşterisinin imzalı imajı yalnız CI koşusunun tabanından doğar.
+// (a) saf hüküm: künye ↔ koşu ↔ yerel taban; (b) iş akışı işi; (c) `imaj-imzala.mjs` sırası; (d) hüküm imaja girmez.
+// -----------------------------------------------------------------------------
+const SHA_A = "a".repeat(40);
+const OZ = (c: string): string => `sha256:${c.repeat(64)}`;
+const ornekKunye = () => ({
+  v: 1, commit: SHA_A, runId: 4242, runAttempt: 1, surum: "2.15.0", platform: PLATFORM, configOzeti: OZ("c"),
+  diffIds: [OZ("1"), OZ("2"), OZ("3")], native: { dosya: "lisans-cekirdek.linux-x64-gnu.node", sha256: "d".repeat(64) },
+  arsiv: { dosya: IMAJ_ARSIVI, sha256: "e".repeat(64) },
+});
+const ornekTaban = () => ({ kimlik: OZ("c"), platform: PLATFORM, diffIds: [OZ("1"), OZ("2"), OZ("3")], revision: SHA_A });
+{
+  const temel: { kosuId: unknown; kosuCommit: unknown; kunye: unknown; taban: unknown } = { kosuId: "4242", kosuCommit: SHA_A, kunye: ornekKunye(), taban: ornekTaban() };
+  const p = imajKokeniHukmu(temel);
+  check("§5o ⭐ köken hükmü pozitif: künye koşusu = --ci-kosu, commit = koşu = revision, diffIds + config özeti eşit, linux/amd64 → uyumlu", p.sonuc === "uyumlu", p.satirlar.join(" | "));
+  const sondalar: Array<[string, "ihlal" | "olculemedi", Partial<typeof temel>]> = [
+    ["künye commit ≠ revision", "ihlal", { taban: { ...ornekTaban(), revision: "b".repeat(40) } }],
+    ["künye commit ≠ koşunun commit'i", "ihlal", { kosuCommit: "b".repeat(40) }],
+    ["diffIds farklı", "ihlal", { taban: { ...ornekTaban(), diffIds: [OZ("1"), OZ("9"), OZ("3")] } }],
+    ["fazladan katman", "ihlal", { taban: { ...ornekTaban(), diffIds: [OZ("1"), OZ("2"), OZ("3"), OZ("4")] } }],
+    ["config özeti farklı", "ihlal", { taban: { ...ornekTaban(), kimlik: OZ("f") } }],
+    ["runId ≠ --ci-kosu", "ihlal", { kosuId: "4243" }],
+    ["künye platformu arm64", "ihlal", { kunye: { ...ornekKunye(), platform: "linux/arm64" } }],
+    ["taban platformu arm64", "ihlal", { taban: { ...ornekTaban(), platform: "linux/arm64" } }],
+    ["künye yok", "olculemedi", { kunye: null }],
+    ["künye biçimsiz (diffIds yok)", "olculemedi", { kunye: { ...ornekKunye(), diffIds: [] } }],
+    ["künye biçimsiz (commit kısa)", "olculemedi", { kunye: { ...ornekKunye(), commit: "abc" } }],
+    ["künye nesne değil", "olculemedi", { kunye: "{}" }],
+    ["taban ölçülemedi", "olculemedi", { taban: null }],
+    ["koşu commit'i okunamadı", "olculemedi", { kosuCommit: "" }],
+    ["--ci-kosu boş", "olculemedi", { kosuId: "" }],
+  ];
+  for (const [ad, beklenen, deg] of sondalar) {
+    const h = imajKokeniHukmu({ ...temel, ...deg });
+    check(`§5o sonda: ${ad} → ${beklenen === "ihlal" ? "TUTMUYOR" : "ÖLÇÜLEMEDİ"} (RED)`, h.sonuc === beklenen, `${h.sonuc}: ${h.satirlar.join(" | ")}`);
+  }
+}
+
+/** `korumali-paket.yml` metninden `docker-linux-x64` işi (bir sonraki iş başlığına ya da dosya sonuna kadar). */
+const dockerIsi = (wf: string): string | null => /\n {2}docker-linux-x64:\n([\s\S]*?)(?=\n {2}[a-z][a-z0-9-]*:\n|$)/.exec(wf)?.[1] ?? null;
+function kokenIsAkisiStatik(yol: string, wf: string): string[] {
+  const ih: string[] = [];
+  if (yol !== KORUMALI_IS_AKISI.yol) ih.push(`iş akışı yolu ${yol} — köken denetimi ${KORUMALI_IS_AKISI.yol} bekliyor`);
+  const ad = /^name: (.+)$/m.exec(wf)?.[1]?.trim().replace(/^"(.*)"$/, "$1");
+  if (ad !== KORUMALI_IS_AKISI.ad) ih.push(`iş akışı adı "${ad}" — köken denetimi "${KORUMALI_IS_AKISI.ad}" bekliyor`);
+  if (/\bsecrets\./.test(wf)) ih.push("iş akışı sır okuyor (secrets.) — CI'a anahtar girmez");
+  if (!/^permissions:\n {2}contents: read\n(?! )/m.test(wf)) ih.push("üst düzey izin yalnız `contents: read` değil");
+  if (/:\s*write\b|write-all/.test(wf)) ih.push("iş akışında yazma izni var");
+  const is = dockerIsi(wf);
+  if (!is) return [...ih, "docker-linux-x64 işi yok"];
+  if (!/^ {4}runs-on: ubuntu-latest$/m.test(is)) ih.push("docker işi ubuntu-latest (amd64) koşucusunda değil");
+  if (/^ {4}permissions:/m.test(is)) ih.push("docker işi kendi izinlerini tanımlıyor (üst düzey salt-okunur yeter)");
+  if (!/run: npm run derle:linux:uretim\n/.test(is)) ih.push("native çekirdek üretim çapalı derlenmiyor (derle:linux:uretim)");
+  if (/test-anchor|--features/.test(is)) ih.push("docker işi test çapası/özellikle derliyor");
+  if (!/docker buildx build --platform linux\/amd64 -f Teks-Erp\/docker\/korumali\/Dockerfile/.test(is) || !/--load \.\n/.test(is)) ih.push("taban imaj buildx linux/amd64 --load ile korumalı Dockerfile'dan derlenmiyor");
+  if (!/--build-arg TEKSERP_COMMIT=\$\{\{ github\.sha \}\}/.test(is)) ih.push("TEKSERP_COMMIT koşunun commit'i (github.sha) değil");
+  if (!/run: node scripts\/test_korumali_imaj\.mjs --imaj=\$\{\{ steps\.imaj\.outputs\.etiket \}\}\n/.test(is)) ih.push("taban imaj bekçisi (test_korumali_imaj) koşmuyor");
+  const bek = is.indexOf("scripts/test_korumali_imaj.mjs"), kay = is.indexOf("docker save");
+  if (bek < 0 || kay < 0 || kay < bek) ih.push("arşiv bekçiden ÖNCE çıkıyor");
+  if (!new RegExp(`docker save "\\$\\{\\{ steps\\.imaj\\.outputs\\.etiket \\}\\}" \\| gzip -n > imaj-cikti/${IMAJ_ARSIVI.replace(/\./g, "\\.")}`).test(is)) ih.push("imaj arşivi `docker save | gzip -n` ile beyanlı adla yazılmıyor");
+  if (!/set -euo pipefail\n {10}mkdir -p imaj-cikti imaj-kunye/.test(is)) ih.push("arşiv adımı pipefail'siz (docker save düşerse sessiz)");
+  if (!/npx tsx scripts\/imaj-kunye\.ts yaz --arsiv=/.test(is) || !/--native=native\/lisans-cekirdek\/dist-uretim\/lisans-cekirdek\.linux-x64-gnu\.node/.test(is)) ih.push("künye arşivden + üretim native'den yazılmıyor (imaj-kunye.ts yaz)");
+  if (!is.includes(`name: ${KUNYE_YAPITI}\n`) || !is.includes(`imaj-kunye/${KUNYE_DOSYASI}`)) ih.push(`künye yapıtı (${KUNYE_YAPITI}/${KUNYE_DOSYASI}) yüklenmiyor`);
+  if (!is.includes(`name: ${IMAJ_YAPITI}\n`)) ih.push(`imaj arşivi yapıtı (${IMAJ_YAPITI}) yüklenmiyor`);
+  if ((is.match(/retention-days: 7\n/g) ?? []).length !== 2) ih.push("iki yapıtın saklaması 7 gün değil");
+  return ih;
+}
+{
+  const wf = oku(KORUMALI_IS_AKISI.yol);
+  const g = kokenIsAkisiStatik(KORUMALI_IS_AKISI.yol, wf);
+  check("§5o ⭐ iş akışı: docker-linux-x64 sırsız + salt-okunur, üretim native, revision = github.sha, taban bekçisi, arşivden künye, iki yapıt 7 gün", g.length === 0, g.join(" | ") || "temiz");
+  const is = dockerIsi(wf) ?? "";
+  const sondalar: Array<[string, string, string]> = [
+    ["secrets. eklendi", KORUMALI_IS_AKISI.yol, wf.replace("          node-version: ${{ steps.nodesurum.outputs.surum }}\n\n      - name: Bağımlılıklar (Teks-Erp — künye", "          node-version: ${{ steps.nodesurum.outputs.surum }}\n          token: ${{ secrets.PAKET }}\n\n      - name: Bağımlılıklar (Teks-Erp — künye")],
+    ["TEKSERP_COMMIT github.sha değil", KORUMALI_IS_AKISI.yol, wf.replace("--build-arg TEKSERP_COMMIT=${{ github.sha }}", "--build-arg TEKSERP_COMMIT=$(git rev-parse HEAD)")],
+    ["taban bekçisi adımı silindi", KORUMALI_IS_AKISI.yol, wf.replace(/\n {6}- name: Taban imaj bekçisi \(test_korumali_imaj\)\n[^\n]*\n/, "\n")],
+    ["native --uretim'siz", KORUMALI_IS_AKISI.yol, wf.replace("run: npm run derle:linux:uretim\n", "run: npm run derle:linux\n")],
+    ["permissions yazmaya açık (üst)", KORUMALI_IS_AKISI.yol, wf.replace("permissions:\n  contents: read\n", "permissions:\n  contents: write\n")],
+    ["permissions yazmaya açık (iş)", KORUMALI_IS_AKISI.yol, wf.replace("  docker-linux-x64:\n", "  docker-linux-x64:\n    permissions:\n      packages: write\n")],
+    ["iş akışı adı değişti", KORUMALI_IS_AKISI.yol, wf.replace(/^name: .*$/m, "name: Korumalı imaj")],
+    ["iş akışı yolu değişti", ".github/workflows/korumali-imaj.yml", wf],
+    ["pipefail söküldü", KORUMALI_IS_AKISI.yol, wf.replace("set -euo pipefail\n          mkdir -p imaj-cikti imaj-kunye", "mkdir -p imaj-cikti imaj-kunye")],
+    ["künye yapıtı yüklenmiyor", KORUMALI_IS_AKISI.yol, wf.replace(`name: ${KUNYE_YAPITI}\n`, "name: kunye\n")],
+  ];
+  for (const [ad, y, m] of sondalar) {
+    const uyg = y !== KORUMALI_IS_AKISI.yol || m !== wf;
+    check(`§5o sonda: ${ad} → kırmızı`, uyg && kokenIsAkisiStatik(y, m).length > 0, uyg ? "" : "MUTASYON UYGULANMADI");
+  }
+  check("§5o iş gövdesi okundu", is.length > 0);
+}
+
+/** `imaj-imzala.mjs`: `--ci-kosu` köken hükmü bekçiden ve imza aracından (parola) ÖNCE, kimlik `docker save` arşivinden. */
+function imzalaKokenStatik(betik: string, ignore: string): string[] {
+  const kod = betik.split("\n").filter((l) => !/^\s*\/\//.test(l)).join("\n");
+  const ih: string[] = [];
+  const kok = kod.search(/^\s+imajKokeniDenetle\(taban, kosuId, ktmp\);/m);
+  const bek = kod.search(/const bekci = spawnSync/), imza = kod.search(/'scripts\/build-korumali-imza\.ts', 'imzala'/);
+  if (kok < 0 || bek < 0 || imza < 0 || kok > bek || kok > imza) ih.push("imaj köken hükmü imza aracından (parola) ÖNCE koşmuyor");
+  if (!/if \(h\.sonuc !== 'uyumlu'\) red\(/.test(kod)) ih.push("uyumlu dışı köken hükmü RED değil");
+  if (!/docker\(\['save', '-o', arsiv, taban\]\)/.test(kod) || !/'scripts\/imaj-kunye\.ts', 'olc'/.test(kod)) ih.push("yerel taban arşivden ölçülmüyor (docker save + imaj-kunye.ts olc)");
+  if (/imajKokeniHukmu\([^)]*\bid\b/.test(kod) || /taban: \{ ?kimlik: t\.id/.test(kod)) ih.push("imaj kimliği docker image inspect .Id'den");
+  if (!/\['run', 'download', kosuId, '-n', KUNYE_YAPITI/.test(kod)) ih.push("künye o koşunun yapıtından indirilmiyor");
+  // Hüküm modülü imaja GİRMEZ: izin listesindeki hiçbir `!` deseni onu kapsamaz.
+  const izinler = ignore.split("\n").filter((l) => l.startsWith("!")).map((l) => l.slice(1).trim());
+  const globRe = (g: string): RegExp => new RegExp(`^${g.replace(/[.+^${}()|[\]\\]/g, "\\$&").replace(/\*\*/g, "\u0000").replace(/\*/g, "[^/]*").replace(/\?/g, "[^/]").replace(/\u0000/g, ".*")}$`);
+  for (const f of ["Teks-Erp/docker/korumali/imaj-kokeni.mjs", "Teks-Erp/docker/korumali/imaj-imzala.mjs"]) {
+    if (izinler.some((g) => globRe(g).test(f))) ih.push(`${f} imaj bağlamına izinli (Dockerfile.dockerignore)`);
+  }
+  return ih;
+}
+{
+  const b = oku("Teks-Erp/docker/korumali/imaj-imzala.mjs");
+  const ig = oku("Teks-Erp/docker/korumali/Dockerfile.dockerignore");
+  const g = imzalaKokenStatik(b, ig);
+  check("§5o ⭐ imaj-imzala --ci-kosu: künye o koşudan, taban arşivden (.Id değil), hüküm parola/imza aracından ÖNCE, uyumsuz RED; hüküm imaja girmez", g.length === 0, g.join(" | ") || "temiz");
+  const sondalar: Array<[string, string, string]> = [
+    ["hüküm RED'i söküldü", b.replace("if (h.sonuc !== 'uyumlu') red(", "if (false) red("), ig],
+    ["köken imzadan sonra", b.replace("      imajKokeniDenetle(taban, kosuId, ktmp);\n", "      void 0;\n").replace("    if (imza.status !== 0)", "    imajKokeniDenetle(taban, kosuId, ktmp);\n    if (imza.status !== 0)"), ig],
+    ["kimlik .Id'den", b.replace("docker(['save', '-o', arsiv, taban])", "docker(['image', 'inspect', taban])"), ig],
+    ["hüküm modülü imaja izinli", b, `${ig}\n!Teks-Erp/docker/korumali/*.mjs\n`],
+  ];
+  for (const [ad, mb, mi] of sondalar) {
+    const uyg = mb !== b || mi !== ig;
+    check(`§5o sonda: ${ad} → kırmızı`, uyg && imzalaKokenStatik(mb, mi).length > 0, uyg ? "" : "MUTASYON UYGULANMADI");
   }
 }
 

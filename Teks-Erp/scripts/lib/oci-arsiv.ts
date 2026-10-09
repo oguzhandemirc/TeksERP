@@ -193,13 +193,10 @@ export interface ImajOlcumu {
 /** Son katman bu boyu aşarsa ince imza katmanı değildir (liste ~ dosya başına bir satır). */
 const KUCUK_GIRDI = 32 * 1024 * 1024;
 
-/**
- * İmaj arşivini (gzip'li `docker save`) ölçer: tek imaj, config özeti, etiket, son katmanın diff_id'si.
- * Biçim hatası `Error` fırlatır (çağıran DURUR).
- */
-export async function imajArsiviOlc(dosya: string): Promise<ImajOlcumu> {
-  const girdiler = await tarDosyasiOku(dosya, (_ad, boyut) => boyut <= KUCUK_GIRDI, (ad) => /^blobs\/sha256\/[0-9a-f]{64}$|\/layer\.tar$|^[0-9a-f]{64}\.json$/.test(ad));
-  const ad = new Map(girdiler.map((g) => [g.ad, g]));
+type ArsivGirdileri = Map<string, TarGirdisi & { readonly sha256: string | null }>;
+
+/** manifest.json (tek imaj) + config blob'u: kimlik = config özeti, diff_ids katman sayısına eşit. */
+function manifestVeConfig(ad: ArsivGirdileri) {
   const mj = ad.get("manifest.json")?.veri;
   if (!mj) throw new Error("imaj arşivinde manifest.json yok (docker save çıktısı değil)");
   const manifest = JSON.parse(mj.toString("utf8")) as { Config?: string; RepoTags?: string[]; Layers?: string[] }[];
@@ -211,7 +208,19 @@ export async function imajArsiviOlc(dosya: string): Promise<ImajOlcumu> {
   const c = JSON.parse(config.toString("utf8")) as { os?: string; architecture?: string; config?: { Labels?: Record<string, string> }; rootfs?: { diff_ids?: string[] } };
   const diff = c.rootfs?.diff_ids ?? [];
   if (diff.length !== m.Layers.length) throw new Error(`config diff_ids (${diff.length}) ≠ katman sayısı (${m.Layers.length})`);
-  const sonAd = m.Layers[m.Layers.length - 1]!;
+  return { kimlik, katmanlar: m.Layers, etiketler: m.RepoTags ?? [], etiketDegerleri: c.config?.Labels ?? {}, platform: `${c.os}/${c.architecture}`, diffIds: diff };
+}
+
+/**
+ * İmaj arşivini (gzip'li `docker save`) ölçer: tek imaj, config özeti, etiket, son katmanın diff_id'si.
+ * Biçim hatası `Error` fırlatır (çağıran DURUR).
+ */
+export async function imajArsiviOlc(dosya: string): Promise<ImajOlcumu> {
+  const girdiler = await tarDosyasiOku(dosya, (_ad, boyut) => boyut <= KUCUK_GIRDI, (ad) => /^blobs\/sha256\/[0-9a-f]{64}$|\/layer\.tar$|^[0-9a-f]{64}\.json$/.test(ad));
+  const ad: ArsivGirdileri = new Map(girdiler.map((g) => [g.ad, g]));
+  const m = manifestVeConfig(ad);
+  const diff = m.diffIds;
+  const sonAd = m.katmanlar[m.katmanlar.length - 1]!;
   const son = ad.get(sonAd);
   if (!son) throw new Error(`son katman arşivde yok: ${sonAd}`);
   if (!son.veri) throw new Error(`son katman ${son.boyut} bayt — ince imza katmanı değil (imzasız taban mı?)`);
@@ -219,11 +228,30 @@ export async function imajArsiviOlc(dosya: string): Promise<ImajOlcumu> {
   const sonDiff = `sha256:${createHash("sha256").update(ham).digest("hex")}`;
   if (sonDiff !== diff[diff.length - 1]) throw new Error(`son katmanın özeti config diff_id'siyle tutmuyor (${sonDiff.slice(0, 19)}… ≠ ${String(diff[diff.length - 1]).slice(0, 19)}…)`);
   return {
-    kimlik,
-    etiketler: m.RepoTags ?? [],
-    etiketDegerleri: c.config?.Labels ?? {},
-    platform: `${c.os}/${c.architecture}`,
-    katmanSayisi: m.Layers.length,
+    kimlik: m.kimlik,
+    etiketler: m.etiketler,
+    etiketDegerleri: m.etiketDegerleri,
+    platform: m.platform,
+    katmanSayisi: m.katmanlar.length,
     sonKatman: tarOku(ham),
   };
+}
+
+/** İmzasız TABAN imaj arşivinin kimliği (CI künyesi `imaj-kunye.json` ↔ Mac'te yerel tabanın `docker save`i). */
+export interface TabanArsivOlcumu {
+  /** `sha256:<64 hex>` — config özeti (containerd `.Id`'si DEĞİL). */
+  readonly kimlik: string;
+  readonly platform: string;
+  readonly diffIds: readonly string[];
+  /** `org.opencontainers.image.revision` etiketi (derlemenin commit'i); yoksa null. */
+  readonly revision: string | null;
+  readonly etiketDegerleri: Readonly<Record<string, string>>;
+}
+
+/** Yalnız manifest + config okunur (katmanlar akıştan geçer, belleğe alınmaz); son katman büyük olabilir. */
+export async function tabanArsiviOlc(dosya: string): Promise<TabanArsivOlcumu> {
+  const girdiler = await tarDosyasiOku(dosya, (ad, boyut) => boyut <= 1024 * 1024 && (ad === "manifest.json" || /^blobs\/sha256\/[0-9a-f]{64}$|^[0-9a-f]{64}\.json$/.test(ad)));
+  const m = manifestVeConfig(new Map(girdiler.map((g) => [g.ad, g])));
+  const rev = m.etiketDegerleri["org.opencontainers.image.revision"];
+  return { kimlik: m.kimlik, platform: m.platform, diffIds: m.diffIds, revision: typeof rev === "string" && rev ? rev : null, etiketDegerleri: m.etiketDegerleri };
 }
