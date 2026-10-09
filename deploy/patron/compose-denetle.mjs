@@ -23,8 +23,11 @@
 //   ⑨ SATICIYLA UYUM (--satici-env): ic-api ağ adı, satıcı iç adresi ve PATRON_IC_IP satıcınınkiyle AYNI;
 //      SIR_GID satıcınınkinden FARKLI; patronun kenar ve çıkış ağları satıcının hiçbir ağıyla (kenar · ic-api · JWKS ve
 //      bildirim çıkışı — satıcı .env'inde tanımlıysa) çakışmaz
+//   ⑩ her servisin `secrets:` listesi = giriş betiğinin o rolde okuduğu sırlar (patron-baslat.sh rol tablosu ·
+//      yedek-dongusu.sh · DB'nin *_FILE ortamı): eksik sır servisi döngüde çökertir, fazla sır en az yetkiyi bozar — ikisi de ❌
 //
 // Kullanım: node deploy/patron/compose-denetle.mjs --env-file <.env> --satici-env <satıcının .env'i> [-f <compose> ...]
+//           [--baslat-betigi <yol>] [--yedek-betigi <yol>]   (bekçinin sondaları için; varsayılan bu dizindekiler)
 // Çıkış: 0 temiz · 1 ihlal · 2 ölçülemedi (docker yok / config çözülemedi / satıcı .env'i yok).
 // =============================================================================
 import { spawnSync } from "node:child_process";
@@ -232,6 +235,52 @@ if (!saticiEnv) {
   kontrol("⑨ patronun çıkış ağı satıcının hiçbir ağıyla ve kenarla çakışmaz", !!cc && cikisCakisan.length === 0 && !(kc.subnet && cakisir(cc, kc.subnet)), cikisCakisan.join(", ") || cc || "YOK");
 }
 
+// ⑩ sır ↔ giriş betiği eşleşmesi (sınıf: compose sırrı vermez, betik ister → servis yeniden başlama döngüsü)
+{
+  const baslatYolu = al("--baslat-betigi") ?? path.join(burasi, "patron-baslat.sh");
+  const yedekYolu = al("--yedek-betigi") ?? path.join(burasi, "yedek-dongusu.sh");
+  let tablo = null;
+  let yedekSirlari = null;
+  try {
+    tablo = baslatRolTablosu(readFileSync(baslatYolu, "utf8"));
+    yedekSirlari = [...new Set([...readFileSync(yedekYolu, "utf8").matchAll(/\/run\/secrets\/([a-z0-9_]+)/g)].map((m) => m[1]))].sort();
+  } catch (err) {
+    console.log(`❌ ⑩ giriş betikleri okunamadı — ${err.message}`);
+    ihlal++;
+  }
+  if (tablo && yedekSirlari) {
+    kontrol("⑩ patron-baslat.sh rol tablosu çözüldü ve betiğin andığı her sır tabloda", tablo.roller.size > 0 && tablo.tabloDisi.length === 0, tablo.roller.size === 0 ? "rol tablosu YOK" : tablo.tabloDisi.length ? `tablo dışı okuma: ${tablo.tabloDisi.join(", ")}` : [...tablo.roller.keys()].join(" · "));
+    for (const [ad, s] of servisler) {
+      let beklenen;
+      let kaynak;
+      if (s.image && s.image === patron.image) {
+        const rol = String(s.environment?.PATRON_ROL ?? "sunucu");
+        if (s.entrypoint) {
+          kontrol(`⑩ ${ad}: giriş betiği patron-baslat (entrypoint ezilmez)`, false, JSON.stringify(s.entrypoint));
+          continue;
+        }
+        if (!tablo.roller.has(rol)) {
+          kontrol(`⑩ ${ad}: PATRON_ROL tanınır`, false, `${rol} (tablo: ${[...tablo.roller.keys()].join("|")})`);
+          continue;
+        }
+        beklenen = tablo.roller.get(rol);
+        kaynak = `patron-baslat rol ${rol}`;
+      } else if (ad === "patron-yedek") {
+        beklenen = yedekSirlari;
+        kaynak = "yedek-dongusu.sh";
+      } else {
+        beklenen = Object.entries(s.environment ?? {}).filter(([k]) => /_FILE$/.test(k)).map(([, v]) => /^\/run\/secrets\/([a-z0-9_]+)$/.exec(String(v))?.[1]).filter(Boolean).sort();
+        kaynak = "*_FILE ortamı";
+      }
+      const verilen = [...new Set(sirlari(s))].sort();
+      const eksik = beklenen.filter((x) => !verilen.includes(x));
+      const fazla = verilen.filter((x) => !beklenen.includes(x));
+      const ayr = [eksik.length ? `EKSİK (servis çöker): ${eksik.join(", ")}` : "", fazla.length ? `FAZLA (okunmayan sır, en az yetki): ${fazla.join(", ")}` : ""].filter(Boolean).join(" · ");
+      kontrol(`⑩ ${ad}: secrets = giriş betiğinin okuduğu sırlar (${kaynak})`, eksik.length === 0 && fazla.length === 0, ayr || verilen.join(", ") || "sırsız");
+    }
+  }
+}
+
 console.log(`\n=== ${gecti} geçti, ${ihlal} ihlal${olculemedi ? `, ${olculemedi} ölçülemedi` : ""} ===`);
 process.exit(ihlal > 0 ? 1 : olculemedi > 0 ? 2 : 0);
 
@@ -245,4 +294,19 @@ function cloudflareAglari() {
   } catch {
     return null;
   }
+}
+
+/**
+ * patron-baslat.sh'teki `rol_sirlari()` tablosu (rol → okunan sırlar) ve tablonun DIŞINDA anılan sırlar
+ * (`$S/<ad>` · `/run/secrets/<ad>` · `parola <ad>` · `sir_var <ad>`) — betik tablo dışından sır okursa ⑩ onu da yakalar.
+ */
+function baslatRolTablosu(metin) {
+  const govde = /rol_sirlari\(\)\s*\{([\s\S]*?)\n\}/.exec(metin)?.[1] ?? "";
+  const roller = new Map();
+  for (const m of govde.matchAll(/^\s*([a-z]+)\)\s*echo\s+"([^"]*)"\s*;;/gm)) roller.set(m[1], m[2].split(/\s+/).filter(Boolean).sort());
+  const birlesim = new Set([...roller.values()].flat());
+  const anilan = new Set([...metin.matchAll(/(?:\$S\/|\/run\/secrets\/|\bparola |\bsir_var )([a-z0-9_]+)/g)].map((m) => m[1]));
+  // Tablodaki her sırrın okuma döngüsünde kendi kolu olmalı (kolsuz sır çalışırken `*)` koluna düşer, servis çöker).
+  const kolsuz = [...birlesim].filter((x) => !new RegExp(`^\\s+${x}\\)\\s*$`, "m").test(metin)).map((x) => `${x} (döngüde kolu yok)`);
+  return { roller, tabloDisi: [...[...anilan].filter((x) => !birlesim.has(x)), ...kolsuz].sort() };
 }

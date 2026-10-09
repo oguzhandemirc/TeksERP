@@ -77,13 +77,15 @@ BITIS=$(node -e 'console.log(new Date(Date.now()+365*864e5).toISOString())')
 dc --profile goc run --rm patron-goc node dist-cli/scripts/tesis.js kurulum-kaydet --tesis="$TESIS" --kurulum="$(node -e 'console.log(require("crypto").randomUUID())')" \
   --acik-anahtar="$ANAHTAR_X" --sinif=URETIM --moduller=patron-bulut --bitis="$BITIS" | tail -1
 dc --profile goc run --rm patron-goc node dist-cli/scripts/tesis.js yonetici-davet --tesis="$TESIS" --eposta=yonetici@duman.invalid --ad="Duman Yönetici" \
-  | sed -n 's/.*: \([A-Za-z0-9_-]\{20,\}\)$/\1/p' > "$D/davet"
+  | sed -n 's/.*: \([A-Za-z0-9_.-]\{20,\}\)$/\1/p' > "$D/davet"
 [ -s "$D/davet" ] || { echo "⛔ davet belirteci alınamadı" >&2; exit 1; }
 
 echo "→ sunucu + yedek"
-dc up -d --wait patron patron-hazirla patron-yedek
+dc up -d --wait patron patron-hazirla patron-yedek duman-kopru
 
-echo "→ HTTP (yalnız 127.0.0.1)"
+echo "→ HTTP (yalnız 127.0.0.1, kenar köprüsü üzerinden)"
+# Köprü "running" olduğunda henüz dinlemiyor olabilir (amd64 öykünmesinde node açılışı birkaç saniye).
+for _ in $(seq 60); do curl -sf -o /dev/null "$URL/saglik" && break; sleep 1; done
 h() { curl -s -o /dev/null -D - "$URL$1" | tr -d '\r'; }
 kod() { curl -s -o /dev/null -w '%{http_code}' "$URL$1"; }
 olc "/saglik" "$(curl -s "$URL/saglik")"
@@ -119,5 +121,8 @@ TDOKUM=$(ls "$D/yedek" | grep "^tesis_${TESIS}_.*\.dump\.tkenc\$" | head -1)
 docker run --rm --network none -v "$D:/d" --entrypoint sh "$YIMAJ" -c \
   "node /arac/yedek-sifrele.cjs coz --girdi /d/yedek/$TDOKUM --cikti /tmp/t.dump --anahtar /d/yedek-ozel.txt >/dev/null && pg_restore --list /tmp/t.dump | grep -c 'TABLE DATA'" \
   | sed 's/^/  açılan TESİS dökümünde tablo verisi: /'
+YB=$(docker inspect -f '{{.RestartCount}} {{.State.Status}}' tekserp-patron-duman-hazirla)
+olc "hazırlayıcı yeniden başlama · durum" "$YB"
+[ "$YB" = "0 running" ] || { echo "⛔ patron-hazirla yeniden başlıyor ya da ayakta değil ($YB)" >&2; exit 1; }
 docker stats --no-stream --format '{{.Name}} {{.MemUsage}} {{.CPUPerc}} {{.PIDs}}' tekserp-patron-duman tekserp-patron-duman-db tekserp-patron-duman-hazirla tekserp-patron-duman-yedek
 echo "✅ duman tamam — kaldırmak için: deploy/patron/duman.sh kaldir $SHA"

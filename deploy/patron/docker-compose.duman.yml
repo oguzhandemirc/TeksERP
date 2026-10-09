@@ -1,17 +1,35 @@
 # =============================================================================
 # YEREL DUMAN örtüsü — yalnız geliştirme makinesinde, `duman.sh` ile (VDS'te KULLANILMAZ).
 # =============================================================================
-# Ana dosyanın üstüne biner: Traefik yok → patron YALNIZ 127.0.0.1'e yayımlanır (kenar ağı bu yüzden
+# Ana dosyanın üstüne biner: Traefik yok → kenar ağındaki köprü YALNIZ 127.0.0.1'e yayımlar (kenar ağı bu yüzden
 # internal değil; internal ağda port yayını çalışmaz); satıcı yok → ic-api ağı projenin kendi internal
 # ağıdır ve KURULUM_KAYNAGI=kayit (kurulum kaydı CLI'yle). compose-denetle bu örtüyü REDDEDER (① port) —
 # bilerek: örtü yalnız duman içindir.
 # =============================================================================
 services:
   patron:
-    ports:
-      - "127.0.0.1:${DUMAN_PORT:-18620}:4620"
     environment:
       KURULUM_KAYNAGI: kayit
+
+  # Yayın KÖPRÜSÜ: patron yalnız kenar adresini dinler (BIND) ve çok ağlıdır; Docker Desktop'ta doğrudan yayın kenara
+  # düşmüyor (127.0.0.1 boş yanıt, 2026-10-09 ölçüldü). Kenara tek ağla katılan bu köprü Traefik'in yerini tutar.
+  duman-kopru:
+    image: ${PATRON_IMAJ}
+    entrypoint: ["node", "-e", "const n=require('net');n.createServer(c=>{const u=n.connect(4620,process.env.HEDEF);c.pipe(u).pipe(c);c.on('error',()=>u.destroy());u.on('error',()=>c.destroy())}).listen(4620,'0.0.0.0')"]
+    environment:
+      HEDEF: ${KENAR_IP}
+    user: "10001:10001"
+    read_only: true
+    cap_drop: ["ALL"]
+    security_opt: ["no-new-privileges:true"]
+    depends_on:
+      patron: { condition: service_healthy }
+    ports:
+      - "127.0.0.1:${DUMAN_PORT:-18620}:4620"
+    networks: [kenar]
+    mem_limit: 64m
+    cpus: 0.25
+    pids_limit: 20
 
 networks:
   kenar:

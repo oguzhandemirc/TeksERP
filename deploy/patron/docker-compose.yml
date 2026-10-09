@@ -71,6 +71,8 @@ services:
     depends_on:
       patron-db: { condition: service_healthy }
     environment:
+      # Giriş betiğinin rolü (patron-baslat.sh): hangi sırları okuyacağı buradan; compose-denetle ⑩ eşleşmeyi ölçer.
+      PATRON_ROL: sunucu
       NODE_ENV: production
       # Yığın cgroup tavanının altında: çöp toplayıcı OOM öldürmesinden ÖNCE devreye girer.
       NODE_OPTIONS: --max-old-space-size=320
@@ -140,6 +142,8 @@ services:
     group_add: ["${SIR_GID}"]
     depends_on:
       patron-db: { condition: service_healthy }
+    environment:
+      PATRON_ROL: goc
     command: ["sh", "-c", "node node_modules/prisma/build/index.js migrate deploy && node dist-cli/scripts/db-rolleri.js && node dist-cli/scripts/tesis-db.js goc"]
     secrets: [goc_parolasi, uygulama_parolasi, esitleme_parolasi, tesis_rol_anahtari]
     tmpfs:
@@ -161,6 +165,7 @@ services:
     depends_on:
       patron-db: { condition: service_healthy }
     environment:
+      PATRON_ROL: hazirla
       NODE_OPTIONS: --max-old-space-size=64
     command: ["node", "dist-cli/scripts/tesis-db.js", "izle", "--aralik=10"]
     secrets: [goc_parolasi, tesis_rol_anahtari]
