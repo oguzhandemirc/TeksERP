@@ -420,7 +420,7 @@ Paket `runtime\tekserp-guncelleyici.exe` taşır. Paketteki ikilinin sürümü �
 
 | İç kod | Rapor kodu |
 |---|---|
-| `HIZMET_YOK` · `HIZMET_DURMADI` | `DURDURMA_HATASI` |
+| `HIZMET_YOK` · `HIZMET_DURMADI` · `CIT_HATASI` (W2 bakım çiti kurulamadı: Windows başlangıç türü yazılamadı/doğrulanamadı, Linux politika `always` — backend'e dokunulmadan geri dönülür) | `DURDURMA_HATASI` |
 | `YEDEK_HATASI` | `YEDEK_HATASI` |
 | `GECIS_HATASI` · `DOSYA_KILITLI` (hazırlık/sürüm dizini başka süreçte açık; kilit kalkınca kendiliğinden sürer, erteleme yok) | `DOSYA_KILITLI` |
 | `GOC_HATASI` · `GOC_ZAMAN_ASIMI` | `GOC_HATASI` |
@@ -431,6 +431,8 @@ Paket `runtime\tekserp-guncelleyici.exe` taşır. Paketteki ikilinin sürümü �
 | `KESINTI` (yarım göç açılışta geri alındı) | `KESINTI` |
 | `DISK_DOLU` · `PAKET_OZETI` · `BUTUNLUK_GECERSIZ`/`PAKET_YOL` · `PAKET_BAGI`/`PG_BAGI` · imza/şema kodları · indirme kodları | aynı adlı ya da `BUTUNLUK_GECERSIZ` · `PAKET_BAGI` · `IMZA_GECERSIZ` · `INDIRME_HATASI` |
 | `IC_HATA` ve tanınmayan | `BILINMEYEN` |
+
+**Bakım çiti (W2, plan `GUNCELLEYICI-SAGLAMLIK.md` §2.2):** backend işlemi sürerken Windows'ta backend hizmetinin başlangıç türü `ELLE`dir (eski tür `<veri>\guncelleme\is\cit.json` işaretinde); işlem `BASARILI`/`GERI_DONDU` bitince tür geri yazılır. `HATA`da çit KALIR (açılışta backend eski kod + yeni şemayla başlamasın). İnsan çaresi — yalnız durum incelenip backend'in başlaması güvenli bulunduktan sonra: `tekserp-guncelleyici cit --kok <KOK> [--veri <D>] --kaldir` (güncelleyici hizmeti durdurulmuşken; kilit doluysa `KILIT_DOLU`, açık işlem varken `ACIK_ISLEM` ile reddeder; işaretteki eski türü geri yazar, işareti siler; işaret yoksa sessiz çıkar; okunamayan işareti silmez). `cit` bayraksız ölçer, `--kur` elle çit kurar (duman).
 
 ## §13 Diğer dilimlerin bu sözleşmeden işi
 
