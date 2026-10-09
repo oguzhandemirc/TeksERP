@@ -3,6 +3,8 @@
 //! ImagePath + `pgsql\bin` bağlantısıdır. Arka uç her hedefte derlenir (sahte dünyanın Windows profili);
 //! Win32 bağları (`sys`) ve SCM hizmet yapıştırıcısı (`service`) yalnız Windows'ta.
 pub mod araclar;
+pub mod gorev;
+pub mod kendi;
 pub mod pg;
 #[cfg(windows)]
 pub mod service;
@@ -28,6 +30,7 @@ pub fn arka_ucu() -> crate::platform::Arka {
         saglik: Arc::new(HttpSaglik),
         araclar: Arc::new(araclar::NodeAraclar),
         pg: Arc::new(pg::ImagePathPg),
+        kendi: Arc::new(kendi::SurumluImagePath),
     }
 }
 

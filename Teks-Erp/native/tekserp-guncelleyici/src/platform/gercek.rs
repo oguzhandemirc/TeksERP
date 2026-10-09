@@ -71,12 +71,17 @@ impl Fs for RealFs {
             std::fs::create_dir_all(dir)?;
         }
         let tmp = tmp_sibling(p, "tmp");
-        {
+        let written = (|| {
             let mut f = std::fs::File::create(&tmp)?;
             f.write_all(data)?;
-            f.sync_all()?;
+            f.sync_all()
+        })();
+        // Yarım geçici dosya kalmaz (disk dolu dahil): yer açılmasını bekleyen bir sonraki deneme temiz başlar.
+        if let Err(e) = written.and_then(|()| durable_rename(&tmp, p)) {
+            let _ = std::fs::remove_file(&tmp);
+            return Err(e);
         }
-        durable_rename(&tmp, p)
+        Ok(())
     }
 
     fn append_sync(&self, p: &Path, line: &[u8]) -> io::Result<()> {
@@ -188,10 +193,17 @@ impl Fs for RealFs {
 
     fn copy(&self, from: &Path, to: &Path) -> io::Result<()> {
         let tmp = tmp_sibling(to, "tmp");
-        std::fs::copy(from, &tmp)?;
-        // Windows: FlushFileBuffers yazma hakkı ister — salt-okunur tutamaçta "Access is denied" (os error 5).
-        std::fs::OpenOptions::new().write(true).open(&tmp)?.sync_all()?;
-        durable_rename(&tmp, to)
+        let copied = (|| {
+            std::fs::copy(from, &tmp)?;
+            // Windows: FlushFileBuffers yazma hakkı ister — salt-okunur tutamaçta "Access is denied" (os error 5).
+            std::fs::OpenOptions::new().write(true).open(&tmp)?.sync_all()?;
+            durable_rename(&tmp, to)
+        })();
+        // Disk dolunca yarım `.tmp` kalmaz (W1b §4.7 madde 6).
+        if copied.is_err() {
+            let _ = std::fs::remove_file(&tmp);
+        }
+        copied
     }
 
     fn extract_zip(
@@ -263,7 +275,12 @@ fn is_reparse_point(m: &std::fs::Metadata) -> bool {
 
 #[cfg(unix)]
 fn durable_rename(from: &Path, to: &Path) -> io::Result<()> {
-    std::fs::rename(from, to)
+    std::fs::rename(from, to)?;
+    // Yeniden adlandırma dizin girdisidir: güç kesintisinde kaybolmasın diye üst dizin de diske boşaltılır.
+    match to.parent() {
+        Some(d) if !d.as_os_str().is_empty() => super::linux::sys::sync_dir(d),
+        _ => Ok(()),
+    }
 }
 
 #[cfg(windows)]
@@ -457,6 +474,35 @@ pub fn real(proxy: Option<&str>, event_source: &str) -> Result<Env, String> {
 
 #[cfg(test)]
 mod tests {
+    /// Kopya ya da atomik yazım yarıda düşerse (disk dolu, hedef yerine konamadı) geçici `.tmp` kalmaz (W1b §4.7 madde 6;
+    /// sonda: temizlik satırı kaldırılınca bu test kırmızı).
+    #[test]
+    fn failed_copy_and_write_leave_no_tmp() {
+        use super::RealFs;
+        use crate::env::Fs;
+        let d = std::env::temp_dir().join(format!("yarim-tmp-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&d);
+        std::fs::create_dir_all(&d).unwrap();
+        let src = d.join("kaynak");
+        std::fs::write(&src, b"ikili").unwrap();
+        // Hedef boş olmayan bir dizin: kopya yazılır, yeniden adlandırma düşer.
+        let to = d.join("hedef");
+        std::fs::create_dir_all(to.join("dolu")).unwrap();
+        let tmps = || -> Vec<String> {
+            std::fs::read_dir(&d)
+                .unwrap()
+                .flatten()
+                .map(|e| e.file_name().to_string_lossy().into_owned())
+                .filter(|n| n.ends_with(".tmp"))
+                .collect()
+        };
+        assert!(RealFs.copy(&src, &to).is_err());
+        assert!(tmps().is_empty(), "kopya yarım geçici dosya bıraktı: {:?}", tmps());
+        assert!(RealFs.write_atomic(&to, b"x").is_err());
+        assert!(tmps().is_empty(), "atomik yazım yarım geçici dosya bıraktı: {:?}", tmps());
+        let _ = std::fs::remove_dir_all(&d);
+    }
+
     #[cfg(unix)]
     #[test]
     fn foreign_writers_reads_group_and_world_write_bits() {

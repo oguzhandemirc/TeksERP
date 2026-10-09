@@ -33,6 +33,8 @@ pub const OLD: &str = "2.12.0";
 pub const NEW: &str = "2.13.0";
 pub const BACKEND: &str = "TeksERP-Backend";
 pub const PG: &str = "TeksERP-PostgreSQL";
+/// Güncelleyicinin kendi hizmeti (W1b: W-A ImagePath'i ve `onar` onu işaret eder).
+pub const UPDATER: &str = "TeksERP-Guncelleyici";
 /// Sabit test saati: 2026-09-30T23:30:00Z (İstanbul 02:30).
 pub const T0: i64 = 1_790_811_000_000;
 pub const HOUR: i64 = 3_600_000;
@@ -95,6 +97,23 @@ pub struct CrashFs {
     pub corrupt_copy: AtomicBool,
     /// Başka süreçte açık sayılan adlar: silme/yeniden adlandırma "erişim engellendi" ile düşer (thinkpad-1 D8b 3I).
     pub locked: Mutex<Vec<String>>,
+    /// Disk dolu (W1b §4.7 madde 6): `copy` ENOSPC ile düşer ve HİÇ dosya bırakmaz (gerçek `RealFs::copy` gibi); küçük
+    /// atomik yazımlar (durum dosyası) sığar — onarımın kopyası megabaytlar, durum dosyası birkaç yüz bayt.
+    pub enospc_copy: AtomicBool,
+}
+
+/// Güç kesintisi modeli (`Crash::torn`): gerçek `RealFs` her yazımı ve yeniden adlandırmayı (Unix'te üst dizin dahil)
+/// diske boşaltır; kayıp penceresi ölüm anındaki TEK çağrının içidir. O çağrı bir kopya ya da atomik yazımsa geçici
+/// dosyasında yarım/çöp bayt kalır (diske boşaltılmamış sayfa) ve hedef hiç değişmez.
+fn torn_tmp(crash: &Crash, to: &Path, data: &[u8]) {
+    let n = crash.count.load(Ordering::SeqCst) + 1;
+    if crash.torn.load(Ordering::SeqCst) && crash.at.load(Ordering::SeqCst) == n {
+        let mut tmp = to.file_name().map(|n| n.to_os_string()).unwrap_or_default();
+        tmp.push(".tmp");
+        let mut half = data[..data.len() / 2].to_vec();
+        half.extend_from_slice(&[0u8; 16]);
+        let _ = std::fs::write(to.with_file_name(tmp), half);
+    }
 }
 
 impl CrashFs {
@@ -117,6 +136,7 @@ impl Fs for CrashFs {
         self.inner.is_link(p)
     }
     fn write_atomic(&self, p: &Path, data: &[u8]) -> std::io::Result<()> {
+        torn_tmp(&self.crash, p, data);
         self.crash.point(&format!("yaz {}", name(p)));
         self.inner.write_atomic(p, data)
     }
@@ -184,7 +204,11 @@ impl Fs for CrashFs {
         self.inner.open_append(p)
     }
     fn copy(&self, from: &Path, to: &Path) -> std::io::Result<()> {
+        torn_tmp(&self.crash, to, &std::fs::read(from).unwrap_or_default());
         self.crash.point(&format!("kopyala {}", name(from)));
+        if self.enospc_copy.load(Ordering::SeqCst) {
+            return Err(std::io::Error::from(std::io::ErrorKind::StorageFull));
+        }
         self.inner.copy(from, to)?;
         if self.corrupt_copy.load(Ordering::SeqCst) {
             let mut b = std::fs::read(to)?;
@@ -253,6 +277,8 @@ pub struct Faults {
     /// Gerçek biçimli (PE başlıklı) fikstür ikilisinin `kunye` çıktısı, ikilinin sha256'sına göre; yoksa sahte ikili
     /// künyenin kendisidir (dosya içeriği).
     pub identities: Mutex<HashMap<String, String>>,
+    /// Yöneticinin "Devre dışı" yaptığı hizmetler (W1b §4.7 madde 7).
+    pub disabled_services: Mutex<Vec<String>>,
 }
 
 #[derive(Debug, Clone)]
@@ -282,6 +308,14 @@ pub struct World {
     pub backend_name: Arc<Mutex<String>>,
     pub keys: Keys,
     pub anchor: TrustAnchor,
+    /// Kendi yerleşimi: `false` = Windows W-A (sürümlü ImagePath; varsayılan profil), `true` = Linux L-A (tek atomik
+    /// yeniden adlandırma). Aynı kendini güncelleme/onarım testleri iki yerleşimde koşar.
+    pub atomic_layout: AtomicBool,
+}
+
+/// `hizmet-kur`un kurduğu komut satırı biçimi (tırnaklı ikili + argümanlar).
+pub fn updater_image(exe: &Path, root: &Path) -> String {
+    format!("\"{}\" hizmet --kok \"{}\" --ad {UPDATER}", exe.display(), root.display())
 }
 
 pub struct Keys {
@@ -423,6 +457,9 @@ impl Services for FakeServices {
     }
     fn image_path(&self, name: &str) -> EnvResult<String> {
         self.w.svcs.lock().unwrap().get(name).map(|s| s.image.clone()).ok_or_else(|| EnvError(format!("{name} yok")))
+    }
+    fn disabled(&self, name: &str) -> EnvResult<bool> {
+        Ok(self.w.faults.disabled_services.lock().unwrap().iter().any(|n| n == name))
     }
     fn set_image_path(&self, name: &str, cl: &str) -> EnvResult<()> {
         self.w.crash.point(&format!("yol {name}"));
@@ -730,7 +767,7 @@ impl Procs for FakeProcs {
                 Ok(fail_out(1, "bilinmeyen betik"))
             }
             "docker" => Ok(self.docker(c, &args)),
-            "tekserp-guncelleyici" | "tekserp-guncelleyici.yeni" => {
+            p if p.starts_with("tekserp-guncelleyici") => {
                 self.w.faults.executed.lock().unwrap().push(c.program.clone());
                 let bytes = std::fs::read(&c.program).unwrap_or_default();
                 let known = self.w.faults.identities.lock().unwrap().get(&sha_hex(&bytes)).cloned();
@@ -1360,6 +1397,18 @@ impl World {
                 restart_at: None,
             },
         );
+        svcs.insert(
+            UPDATER.to_string(),
+            Svc {
+                state: SvcState::Running,
+                args: vec![],
+                version: None,
+                image: updater_image(&layout.updater_dir().join("tekserp-guncelleyici.exe"), &root),
+                starts: 0,
+                crash: None,
+                restart_at: None,
+            },
+        );
         let crash = Arc::new(Crash::default());
         World {
             fs: Arc::new(CrashFs {
@@ -1370,6 +1419,7 @@ impl World {
                 unmeasurable: Mutex::new(vec![]),
                 corrupt_copy: AtomicBool::new(false),
                 locked: Mutex::new(vec![]),
+                enospc_copy: AtomicBool::new(false),
             }),
             dir,
             layout,
@@ -1383,6 +1433,7 @@ impl World {
             backend_name: Arc::new(Mutex::new(BACKEND.to_string())),
             keys,
             anchor,
+            atomic_layout: AtomicBool::new(false),
         }
     }
 
@@ -1424,7 +1475,13 @@ impl World {
             clock: Arc::new(FakeClock(Arc::clone(&self.clock))),
             events: Arc::new(FakeEvents(Arc::clone(&self.events))),
             protect: Arc::new(FakeProtect),
-            arka: tekserp_guncelleyici::platform::windows::arka_ucu(),
+            arka: {
+                let mut a = tekserp_guncelleyici::platform::windows::arka_ucu();
+                if self.atomic_layout.load(Ordering::SeqCst) {
+                    a.kendi = Arc::new(tekserp_guncelleyici::platform::linux::kendi::AtomikAdlandirma);
+                }
+                a
+            },
         };
         if self.profil() == Profil::Windows {
             return env;

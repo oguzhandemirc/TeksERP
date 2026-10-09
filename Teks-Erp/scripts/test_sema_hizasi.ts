@@ -287,7 +287,8 @@ function olculemedi(k: Kaynaklar): string[] {
     if (!/\*self\.notice\.borrow_mut\(\) = Some\(Notice \{ code: codes::SEMA_OLCULEMEDI/.test(olc)) ih.push("ölçülemedi kolu SEMA_OLCULEMEDI'yi durum dosyasına (durum.bilgi) yazmıyor — sessiz geçiş");
     if (/Err\(|State::Waiting|hataKodu|error_code/.test(olc) || !/\bOk\(\(\)\)/.test(olc)) ih.push("ölçülemedi kolu engel/sorun yazıyor — karar: güncelleme DURMAZ, BİLGİ düzeyi");
   }
-  if (!/d\.notice = self\.notice\.borrow\(\)\.clone\(\);/.test(rustGovde(k.engine, "doc") ?? "")) ih.push("engine doc() durum.bilgi'yi taşımıyor");
+  // Turun bilgisi önce gelir; yoksa (W1b) son 24 saatin onarım bilgisi (`onarim::recent_notice`) — tur bilgisi ezilmez.
+  if (!/d\.notice = self\.notice\.borrow\(\)\.clone\(\)(?:\.or_else\(\|\| crate::onarim::recent_notice\([^;]*\))?;/.test(rustGovde(k.engine, "doc") ?? "")) ih.push("engine doc() durum.bilgi'yi taşımıyor");
   const tick = rustGovde(k.engine, "tick") ?? "";
   const sil = tick.indexOf("*self.notice.borrow_mut() = None;");
   if (sil < 0 || (tick.indexOf("self.write_status(") >= 0 && sil > tick.indexOf("self.write_status("))) ih.push("tick bilgiyi tur başında silmiyor — bayat bilgi sonraki tura taşınır");

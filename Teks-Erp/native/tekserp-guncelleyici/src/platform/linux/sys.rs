@@ -199,6 +199,13 @@ impl ChildGroup {
     }
 }
 
+/// Dizin girdisini (yeniden adlandırma) diske boşaltır. Unix'te dizinin fsync'i salt-okunur tutamaçla yapılır
+/// (Windows'taki "salt-okunur tutamaçta FlushFileBuffers" sınıfı burada yok — bu modül yalnız Unix'te derlenir).
+pub fn sync_dir(d: &Path) -> io::Result<()> {
+    let dir = std::fs::File::open(d)?;
+    dir.sync_all()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

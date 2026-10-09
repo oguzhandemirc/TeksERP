@@ -461,6 +461,7 @@ pub fn arka_ucu(komut: Arc<DockerKomut>) -> crate::platform::Arka {
         saglik: Arc::new(DockerSaglik { komut: Arc::clone(&komut) }),
         araclar: Arc::new(DockerAraclar { komut }),
         pg: Arc::new(super::IskeletPg),
+        kendi: Arc::new(super::kendi::AtomikAdlandirma),
     }
 }
 

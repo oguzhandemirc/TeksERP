@@ -45,6 +45,21 @@ export interface ApprovalActionInput {
 }
 
 /**
+ * Güncelleyicinin KENDİSİ çalışmıyor (`onar`ın görünür arızaları, plan GUNCELLEYICI-SAGLAMLIK §4.7): onay verilse de
+ * okuyacak süreç yok — "son denemenin sürümüne yeni onay" (insan gerektiren HATA) bu durumda sunulmaz.
+ */
+const UPDATER_DOWN_REASONS: Readonly<Record<string, string>> = {
+  ONARIM_TAVANI: "Güncelleme programı 24 saat içinde tekrar tekrar bozuldu; otomatik onarım durdu — müdahale gerekiyor.",
+  ONARIM_KAYNAK_YOK: "Güncelleme programının dosyası eksik ya da bozuk ve onarmak için doğrulanmış kopya yok — yeniden kurulum gerekiyor.",
+  GUNCELLEYICI_KAPALI: "Güncelleme programı hizmeti kapatılmış ya da kaldırılmış — yeniden açılmadıkça güncelleme yapılmaz.",
+};
+
+/** `durum.hataKodu` güncelleyicinin kendisinin çalışmadığını mı söylüyor (tek kaynak: `UPDATER_DOWN_REASONS`). */
+export function updaterDownReason(hataKodu: string | null | undefined): string | null {
+  return hataKodu ? (UPDATER_DOWN_REASONS[hataKodu] ?? null) : null;
+}
+
+/**
  * Karar KUR ama uygulama başlamadı: güncelleyici yerel bir engeli bekliyor (D8b: disk doluyken HEMEN onayından
  * sonra "şu an kuruluyor" denirdi). Uygulanıyorsa bu yola gelinmez (approvalActions önce keser).
  */
@@ -83,6 +98,8 @@ export function approvalActions(s: ApprovalActionInput): UpdateActions {
   const withdraw = active !== null && s.yerelDurum !== "UYGULANIYOR";
   const none = (neden: string, geriAl = false): UpdateActions => ({ hemen: false, pencere: false, geriAl, hedefSurum: null, neden });
   if (s.guncelleyici.durum === "YOK") return none("Bu sunucuda güncelleyici kurulu değil.");
+  const down = updaterDownReason(s.yerelHataKodu);
+  if (down !== null) return none(down, withdraw);
   if (s.yerelDurum === "UYGULANIYOR") return none("Güncelleme şu an uygulanıyor.");
   if (s.politika === null) return none("Geçerli kira yok; güncelleme kapalı.", withdraw);
   if (s.donuk) return none("Güncellemeler lisans yaptırımıyla durduruldu.", withdraw);

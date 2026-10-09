@@ -222,7 +222,8 @@ impl Engine {
         d.last_detail = f.last_detail.clone();
         d.error_code = code.map(str::to_string);
         d.message = (!message.is_empty()).then(|| message.to_string());
-        d.notice = self.notice.borrow().clone();
+        // Son 24 saatteki onarım (W1b, `onar`) başka bilgi yoksa görünür kalır.
+        d.notice = self.notice.borrow().clone().or_else(|| crate::onarim::recent_notice(&self.env, &self.layout));
         d
     }
 
@@ -314,7 +315,7 @@ impl Engine {
         let healthy = self.decided.get() && self.status_after_decision.get();
         if healthy && r != TickResult::RestartForSelfUpdate && !self.healthy_marked.get() {
             if let Some(own) = &self.own_exe {
-                selfupdate::mark_healthy(&self.env, &self.layout, own, &self.own_version);
+                selfupdate::on_healthy(&self.env, &self.layout, own, &self.own_version);
             }
             self.healthy_marked.set(true);
         }
@@ -545,7 +546,7 @@ impl Engine {
             return None;
         }
         let dir = self.layout.version_dir(&m.surum);
-        let announced = m.updater.as_ref().map(|u| u.surum.as_str());
+        let announced = m.updater.as_ref();
         match selfupdate::stage_from(&self.env, &self.layout, own, &self.own_version, &dir, trust, announced) {
             Ok(Some(new)) => {
                 let message = format!(

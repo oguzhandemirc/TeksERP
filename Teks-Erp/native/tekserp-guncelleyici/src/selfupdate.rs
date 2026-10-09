@@ -1,18 +1,19 @@
-//! Kendini güncelleme (§10, plan `GUNCELLEYICI-SAGLAMLIK.md` §4.2): paket güncelleyici ikilisini taşır (yeri arka ucun
-//! `guncelleyici_paket_yolu`; Linux'ta `.exe`siz, yan adlar `.yeni`/`.eski`/`.lkg`);
-//! kaynak sürüm dizini (önce-güncelleyicide hazırlanmış ADAY dizini, backend BASARILI sonrası kurulu dizin) imzalı
-//! listeyle doğrulanır, ikili yan dosyaya (`.yeni.exe`) kopyalanır ve KOPYANIN özeti imzalı listedekiyle tutmadan
-//! HİÇBİR ikili çalıştırılmaz (DAGK-3); künye kopyadan alınır (ad · platform · sürüm · çapa kipi). Çalışan ikili
-//! `.eski.exe`ye ve yeni ikili asıl ada yeniden adlandırılır, hizmet `EXIT_SELF_UPDATE` ile çıkar, hizmet yöneticisi
-//! yeni ikiliyle başlatır. Yeni ikili İLK iş olarak açılış sayacını artırır: doğrulanmadan 3. açılışı aşarsa geri döner.
-//! Son bilinen iyi (`.lkg.exe`): ilk sağlıklı turda `.eski.exe` silinmez, son bilinen iyi yoksa o olur; bir backend
-//! denemesini BASARILI/GERI_DONDU bitiren ikili kendini `.lkg.exe`ye kopyalar; HATA ile biten İLK denemede
-//! (henüz kanıtlanmamış yeni ikili) son bilinen iyiye dönülür. Geri alınan sürüm (ve eskisi) yeniden yerleşmez.
-//! Hizmet her açılışta kendi SCM kurtarmasını `RESTART_DELAYS_S`e getirir (yalnız farklıysa yazar): kurtarma
-//! ayarı kendini güncellemeyle sahaya gider, onarım beklemez.
+//! Kendini güncelleme (§10, plan `GUNCELLEYICI-SAGLAMLIK.md` §4.2 + §4.7): paket güncelleyici ikilisini taşır (yeri
+//! arka ucun `guncelleyici_paket_yolu`; Linux'ta `.exe`siz); kaynak sürüm dizini imzalı listeyle doğrulanır, ikili yan
+//! dosyaya (`.yeni`) kopyalanır ve KOPYANIN özeti imzalı listedekiyle (ve imzalı bildirim ilan ediyorsa onun
+//! `guncelleyici.sha256`ıyla) tutmadan HİÇBİR ikili çalıştırılmaz (DAGK-3); künye kopyadan alınır (ad · platform ·
+//! sürüm · çapa kipi). Yerleşim platformun (W1b): Windows'ta yeni ikili `guncelleyici\s\<sürüm>\`e konur ve hizmet
+//! komut satırı TEK kayıt yazımıyla ona çevrilir (W-A); Linux'ta `.eski` önce KOPYA alınır, yeni ikili asıl adın
+//! üzerine tek `rename(2)` ile iner (L-A) — hizmetin çalıştıracağı yol HİÇBİR an boş kalmaz. Yeni ikili İLK iş olarak
+//! açılış sayacını artırır: doğrulanmadan 3. açılışı aşarsa geri döner. Son bilinen iyi (`.lkg`) asıl adın yanındadır;
+//! backend denemesini BASARILI/GERI_DONDU bitiren ikili kendini ona kopyalar, kanıtsız yeni ikili ilk HATA'da ona
+//! döner. `calisanOzet` + `.lkg` `onar`ın ölçüsüdür. Hizmet her açılışta kendi SCM kurtarmasını `RESTART_DELAYS_S`e
+//! getirir (yalnız farklıysa yazar).
 use crate::env::Env;
 use crate::layout::Layout;
 use crate::package;
+use crate::platform::KendiYerlesim;
+use crate::release::ReleaseUpdater;
 use crate::tools;
 use crate::trust;
 use crate::version;
@@ -25,9 +26,10 @@ use tekserp_hizmet::timefmt;
 /// Bu ikilinin platformu (`kunye.hedef`): kendini güncelleme platform GEÇMEZ (§4.6) — başka hedefin ikilisi yerleşmez.
 pub const OWN_TARGET: &str = std::env::consts::OS;
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
 pub struct SelfState {
-    /// `HAZIRLANDI` · `YER_DEGISTIRILDI` · `DOGRULANDI` · `GERI_ALINDI`
+    /// `HAZIRLANDI` · `YER_DEGISTIRILDI` · `DOGRULANDI` · `GERI_ALINDI` · `KURULUM` (W1b: yalnız ölçü; eski okuyucu
+    /// hiçbir dalında iş yapmaz)
     pub durum: String,
     #[serde(rename = "eskiSurum")]
     pub old_version: String,
@@ -47,6 +49,21 @@ pub struct SelfState {
     /// Geri alınmış sürüm: bu sürüm ve eskisi yeniden yerleşmez (geri dön → yeniden yerleş döngüsü olmaz).
     #[serde(default, rename = "reddedilenSurum", skip_serializing_if = "Option::is_none")]
     pub refused: Option<String>,
+    /// W1b: yer değiştirmenin iki ucu (yol + özet) — geri dönüş ve `onar` yalnız özeti tutan ikiliyi kullanır.
+    #[serde(default, rename = "eskiYol", skip_serializing_if = "Option::is_none")]
+    pub old_path: Option<String>,
+    #[serde(default, rename = "eskiOzet", skip_serializing_if = "Option::is_none")]
+    pub old_digest: Option<String>,
+    #[serde(default, rename = "yeniYol", skip_serializing_if = "Option::is_none")]
+    pub new_path: Option<String>,
+    #[serde(default, rename = "yeniOzet", skip_serializing_if = "Option::is_none")]
+    pub new_digest: Option<String>,
+    /// Hizmetin son sağlıklı turu koşturan ikilisinin özeti (`onar`: bu özetteki dosya geçerlidir).
+    #[serde(default, rename = "calisanOzet", skip_serializing_if = "Option::is_none")]
+    pub running_digest: Option<String>,
+    /// Windows onarım görevinin gösterdiği ikilinin (imzalı listeyle doğrulanmış) özeti — `onar`ın ucuz kendi ölçümü.
+    #[serde(default, rename = "onariciOzet", skip_serializing_if = "Option::is_none")]
+    pub repairer_digest: Option<String>,
 }
 
 pub const MAX_UNVERIFIED_BOOTS: u32 = 3;
@@ -90,44 +107,108 @@ fn write(env: &Env, layout: &Layout, s: &SelfState) -> std::io::Result<()> {
     env.fs.write_atomic(&layout.self_update_file(), &serde_json::to_vec_pretty(s).map_err(std::io::Error::other)?)
 }
 
-fn digest(env: &Env, p: &Path) -> Option<String> {
+pub(crate) fn digest(env: &Env, p: &Path) -> Option<String> {
     package::file_digest(env.fs.as_ref(), p).ok()
 }
 
-/// Çalışanı `.bozuk`a, yerineyi asıl ada koyar; ikincisi düşerse çalışan geri konur (asıl ad boş kalmaz).
-fn swap_in(env: &Env, own_exe: &Path, replacement: &Path) -> bool {
-    let broken = sibling(own_exe, "bozuk");
-    let _ = env.fs.remove_file(&broken);
-    if env.fs.rename(own_exe, &broken).is_err() {
-        return false;
-    }
-    if env.fs.rename(replacement, own_exe).is_err() {
-        let _ = env.fs.rename(&broken, own_exe);
-        return false;
-    }
-    true
+fn surumlu(env: &Env) -> bool {
+    env.arka.kendi.yerlesim() == KendiYerlesim::SurumluYol
 }
 
-/// Geri dönüş: yer değiştirmeden beri duran `.eski`, yoksa özeti tutan `.lkg`ın KOPYASI (son bilinen iyi yerinde kalır).
-/// Dönülen sürüm, `None` = dönülecek doğrulanmış ikili yok (çalışan yerinde kalır).
+fn path_text(p: &Path) -> String {
+    p.to_string_lossy().into_owned()
+}
+
+/// Asıl ad: `<Kök>/guncelleyici/<platformun ikili adı>` (L-A'da hizmetin çalıştırdığı yol, W-A'da kurulumun yolu).
+pub fn asil_ad_path(env: &Env, layout: &Layout) -> PathBuf {
+    layout.updater_dir().join(env.arka.kendi.asil_ad())
+}
+
+/// Hizmetin ÇALIŞTIRACAĞI ikili: W-A'da ImagePath'in ikilisi, L-A'da asıl ad.
+pub fn service_exe(env: &Env, layout: &Layout) -> Result<PathBuf, String> {
+    if !surumlu(env) {
+        return Ok(asil_ad_path(env, layout));
+    }
+    let command = env.svc.image_path(&layout.updater_service).map_err(|e| format!("hizmet komut satırı okunamadı: {e}"))?;
+    env.arka.kendi.komut_ikilisi(&command).ok_or_else(|| format!("hizmet komut satırı çözülemedi: {command}"))
+}
+
+/// Son bilinen iyinin yeri: asıl adın yanı. W-A'da çalışan ikili `s\<sürüm>\` altındadır, `.lkg` yine asıl adın yanında.
+pub fn lkg_path(env: &Env, layout: &Layout, own_exe: &Path) -> PathBuf {
+    let anchor = if surumlu(env) { layout.updater_dir().join(own_exe.file_name().unwrap_or_default()) } else { own_exe.to_path_buf() };
+    sibling(&anchor, "lkg")
+}
+
+/// W-A: sürümün ikili yolu `guncelleyici\s\<sürüm>\<ad>`.
+fn versioned_exe(layout: &Layout, version: &str, own_exe: &Path) -> PathBuf {
+    layout.updater_versions().join(version).join(own_exe.file_name().unwrap_or_default())
+}
+
+/// W-A: hizmetin ImagePath'ini `exe`ye çevirir (TEK kayıt yazımı; argümanlar aynen). `expect_current` verilmişse kayıt
+/// önce onu göstermeli — başka bir ikiliyi gösteren kayda (başka kurulum, elle değiştirilmiş) dokunulmaz.
+pub(crate) fn point_service(env: &Env, layout: &Layout, exe: &Path, expect_current: Option<&Path>) -> Result<(), String> {
+    let name = &layout.updater_service;
+    let command = env.svc.image_path(name).map_err(|e| format!("{name} komut satırı okunamadı: {e}"))?;
+    if let Some(cur) = expect_current {
+        let shown = env.arka.kendi.komut_ikilisi(&command);
+        if !shown.as_deref().is_some_and(|s| crate::platform::same_path(s, cur)) {
+            return Err(format!("{name} kaydı çalışan ikiliyi göstermiyor ({command}) — kayda dokunulmadı"));
+        }
+    }
+    let new = env.arka.kendi.ikiliyi_degistir(&command, exe).ok_or_else(|| format!("{name} komut satırı kurulamadı ({command})"))?;
+    env.svc.set_image_path(name, &new).map_err(|e| format!("{name} komut satırı yazılamadı: {e}"))
+}
+
+/// Hizmeti doğrulanmış `replacement`a çevirir. L-A: çalışan önce `.bozuk`a KOPYALANIR (tanı), `replacement` asıl adın
+/// üzerine tek yeniden adlandırmayla iner — asıl ad hiçbir an boş kalmaz. W-A: ImagePath `replacement`ı gösterir.
+fn swap_in(env: &Env, layout: &Layout, own_exe: &Path, replacement: &Path) -> bool {
+    if surumlu(env) {
+        return point_service(env, layout, replacement, None).is_ok();
+    }
+    let broken = sibling(own_exe, "bozuk");
+    let _ = env.fs.remove_file(&broken);
+    let _ = env.fs.copy(own_exe, &broken);
+    env.fs.rename(replacement, own_exe).is_ok()
+}
+
+/// Yer değiştirmeden beri duran eski ikili (W-A: kayıtlı eski yol; L-A: `.eski`).
+fn old_binary(env: &Env, own_exe: &Path, s: &SelfState) -> PathBuf {
+    match (&s.old_path, surumlu(env)) {
+        (Some(p), true) => PathBuf::from(p),
+        _ => sibling(own_exe, "eski"),
+    }
+}
+
+/// `want` biliniyorsa (W1b sonrası durum) dosyanın özeti tutmalı; W1 öncesi durumda özet yoktu (eski davranış).
+fn digest_ok(env: &Env, p: &Path, want: Option<&str>) -> bool {
+    env.fs.exists(p) && want.is_none_or(|w| digest(env, p).as_deref() == Some(w))
+}
+
+/// Geri dönüş: yer değiştirmeden beri duran eski ikili (özeti tutarsa), yoksa özeti tutan `.lkg`ın KOPYASI (son bilinen
+/// iyi yerinde kalır). Dönülen sürüm, `None` = dönülecek doğrulanmış ikili yok (çalışan yerinde kalır).
 fn revert(env: &Env, layout: &Layout, own_exe: &Path, s: &mut SelfState) -> Option<String> {
-    let old = sibling(own_exe, "eski");
-    let (replacement, version) = if env.fs.exists(&old) {
+    let old = old_binary(env, own_exe, s);
+    let (replacement, version) = if digest_ok(env, &old, s.old_digest.as_deref()) && old != own_exe {
         (old, s.old_version.clone())
     } else {
-        let lkg = sibling(own_exe, "lkg");
+        let lkg = lkg_path(env, layout, own_exe);
         let (want, version) = (s.lkg_digest.clone()?, s.lkg_version.clone()?);
         if version == s.new_version || digest(env, &lkg).as_deref() != Some(want.as_str()) {
             return None;
         }
-        let copy = sibling(own_exe, "geri");
-        if env.fs.copy(&lkg, &copy).is_err() || digest(env, &copy).as_deref() != Some(want.as_str()) {
-            let _ = env.fs.remove_file(&copy);
-            return None;
+        let copy = if surumlu(env) { versioned_exe(layout, &version, own_exe) } else { sibling(own_exe, "geri") };
+        if digest(env, &copy).as_deref() != Some(want.as_str()) {
+            if let Some(d) = copy.parent() {
+                let _ = env.fs.create_dir_all(d);
+            }
+            if env.fs.copy(&lkg, &copy).is_err() || digest(env, &copy).as_deref() != Some(want.as_str()) {
+                let _ = env.fs.remove_file(&copy);
+                return None;
+            }
         }
         (copy, version)
     };
-    if !swap_in(env, own_exe, &replacement) {
+    if !swap_in(env, layout, own_exe, &replacement) {
         return None;
     }
     s.refused = Some(s.new_version.clone());
@@ -145,16 +226,31 @@ pub enum Startup {
     RevertedRestart,
 }
 
+/// W-A: `s\` altında `keep` dışındaki sürüm dizinlerini budar (çalışan ve eski ikili dışında hiçbir şey kalmaz).
+fn prune_versions(env: &Env, layout: &Layout, keep: &[&Path]) {
+    let root = layout.updater_versions();
+    let Ok(names) = env.fs.list(&root) else { return };
+    for n in names {
+        let d = root.join(&n);
+        if keep.iter().any(|k| k.parent().is_some_and(|p| crate::platform::same_path(p, &d))) {
+            continue;
+        }
+        let _ = env.fs.remove_dir_all(&d);
+    }
+}
+
 /// Açılışta İLK iş (başka hiçbir şeyden önce): yeni ikili mi çalışıyor, açılış sayacı aşıldı mı.
 pub fn on_startup(env: &Env, layout: &Layout, own_exe: &Path, own_version: &str) -> Startup {
     let Some(mut s) = read(env, layout) else { return Startup::Continue };
     if !matches!(s.durum.as_str(), "HAZIRLANDI" | "YER_DEGISTIRILDI") {
         return Startup::Continue;
     }
-    let fresh = sibling(own_exe, "yeni");
     if own_version != s.new_version {
-        // Eski ikili çalışıyor: değişim hiç olmadı (yeniden adlandırmadan önce kesildi) — artık temizlenir.
-        let _ = env.fs.remove_file(&fresh);
+        // Eski ikili çalışıyor: değişim hiç olmadı (yer değiştirmeden önce kesildi) — artık temizlenir.
+        let _ = env.fs.remove_file(&sibling(own_exe, "yeni"));
+        if surumlu(env) {
+            prune_versions(env, layout, &[own_exe]);
+        }
         s.durum = "GERI_ALINDI".into();
         s.zaman = timefmt::iso_millis(env.clock.now_ms());
         let _ = write(env, layout, &s);
@@ -171,30 +267,83 @@ pub fn on_startup(env: &Env, layout: &Layout, own_exe: &Path, own_version: &str)
 }
 
 /// İlk SAĞLIKLI turdan sonra (ölçüt motorda: kilit · günlük · kira/HAK · karar · `durum.json`): yeni ikili doğrulandı.
-/// `.eski` silinmez — son bilinen iyi yoksa o olur; varsa (kanıtlanmış daha eski ikili) `.eski` silinir.
+/// Eski ikili silinmez — son bilinen iyi yoksa o olur; varsa (kanıtlanmış daha eski ikili) eski silinir/budanır.
 pub fn mark_healthy(env: &Env, layout: &Layout, own_exe: &Path, own_version: &str) {
     let Some(mut s) = read(env, layout) else { return };
     if s.durum != "YER_DEGISTIRILDI" || s.new_version != own_version {
         return;
     }
-    let old = sibling(own_exe, "eski");
-    let lkg = sibling(own_exe, "lkg");
+    let old = old_binary(env, own_exe, &s);
+    let lkg = lkg_path(env, layout, own_exe);
     let has_lkg = s.lkg_version.is_some() && env.fs.exists(&lkg);
-    if !has_lkg && env.fs.exists(&old) && env.fs.rename(&old, &lkg).is_ok() {
-        s.lkg_version = Some(s.old_version.clone());
-        s.lkg_digest = digest(env, &lkg);
-    } else {
+    let old_ok = digest_ok(env, &old, s.old_digest.as_deref()) && old != own_exe;
+    if !has_lkg && old_ok {
+        // W-A'da eski ikili kurulumun dosyası olabilir (asıl ad): taşınmaz, kopyalanır.
+        let placed = if surumlu(env) { env.fs.copy(&old, &lkg) } else { env.fs.rename(&old, &lkg) };
+        if placed.is_ok() {
+            s.lkg_version = Some(s.old_version.clone());
+            s.lkg_digest = digest(env, &lkg);
+        }
+    } else if !surumlu(env) {
         let _ = env.fs.remove_file(&old);
+    }
+    if surumlu(env) {
+        prune_versions(env, layout, &[own_exe]);
     }
     s.durum = "DOGRULANDI".into();
     s.zaman = timefmt::iso_millis(env.clock.now_ms());
     let _ = write(env, layout, &s);
 }
 
+/// Her süreçte İLK sağlıklı turda (motor): yeni ikilinin doğrulanması (`mark_healthy`) + `onar`ın ölçüsü — hizmetin
+/// çalıştırdığı ikilinin özeti `calisanOzet`e iner; hiç son bilinen iyi yoksa (kurulum ikilisi, ya da `.lkg` silinmiş/
+/// bozulmuş) çalışan ikili onun KOPYASI olur. Onarım tavanı kanıtlı turla kalkar (`onarim::kanitli_tur`).
+pub fn on_healthy(env: &Env, layout: &Layout, own_exe: &Path, own_version: &str) {
+    mark_healthy(env, layout, own_exe, own_version);
+    crate::onarim::kanitli_tur(env, layout);
+    let Some(own) = digest(env, own_exe) else { return };
+    let now = timefmt::iso_millis(env.clock.now_ms());
+    let mut s = read(env, layout).unwrap_or_else(|| SelfState {
+        durum: "KURULUM".into(),
+        old_version: own_version.into(),
+        new_version: own_version.into(),
+        zaman: now.clone(),
+        ..SelfState::default()
+    });
+    let lkg = lkg_path(env, layout, own_exe);
+    let lkg_ok = s.lkg_digest.is_some() && digest(env, &lkg) == s.lkg_digest;
+    let mut changed = s.running_digest.as_deref() != Some(own.as_str());
+    s.running_digest = Some(own.clone());
+    if !lkg_ok {
+        if env.fs.copy(own_exe, &lkg).is_ok() && digest(env, &lkg).as_deref() == Some(own.as_str()) {
+            s.lkg_version = Some(own_version.into());
+            s.lkg_digest = Some(own);
+        } else {
+            let _ = env.fs.remove_file(&lkg);
+            s.lkg_version = None;
+            s.lkg_digest = None;
+        }
+        changed = true;
+    }
+    if changed {
+        s.zaman = now;
+        let _ = write(env, layout, &s);
+    }
+}
+
+/// Onarım görevinin onarıcısının özeti (`onariciOzet`; yalnız farklıysa yazar).
+pub fn remember_repairer(env: &Env, layout: &Layout, digest: &str) {
+    let Some(mut s) = read(env, layout) else { return };
+    if s.repairer_digest.as_deref() != Some(digest) {
+        s.repairer_digest = Some(digest.to_string());
+        let _ = write(env, layout, &s);
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum AfterAttempt {
     Nothing,
-    /// Kanıtlanmamış yeni ikili HATA ile bitirdi, son bilinen iyi (sürümü) asıl ada kondu — hizmet çıkmalı.
+    /// Kanıtlanmamış yeni ikili HATA ile bitirdi, son bilinen iyi (sürümü) hizmete kondu — hizmet çıkmalı.
     Reverted(String),
 }
 
@@ -209,12 +358,8 @@ pub fn after_attempt(env: &Env, layout: &Layout, own_exe: &Path, own_version: &s
         durum: "DOGRULANDI".into(),
         old_version: own_version.into(),
         new_version: own_version.into(),
-        boots: 0,
         zaman: now.clone(),
-        proven: false,
-        lkg_version: None,
-        lkg_digest: None,
-        refused: None,
+        ..SelfState::default()
     });
     if !proven {
         let unproven_new =
@@ -224,7 +369,7 @@ pub fn after_attempt(env: &Env, layout: &Layout, own_exe: &Path, own_version: &s
             None => AfterAttempt::Nothing,
         };
     }
-    let lkg = sibling(own_exe, "lkg");
+    let lkg = lkg_path(env, layout, own_exe);
     let Some(own) = digest(env, own_exe) else { return AfterAttempt::Nothing };
     let current = s.lkg_version.as_deref() == Some(own_version) && digest(env, &lkg).as_deref() == Some(own.as_str());
     if !current {
@@ -267,7 +412,8 @@ pub fn stage_with_version(
 }
 
 /// `source_dir`in (imzalı listesi doğrulanan sürüm dizini) güncelleyicisi daha yeniyse yerleştirir; `Some(yeni sürüm)` =
-/// hizmet yeniden başlamalı. `announced` = imzalı bildirimin `guncelleyici.surum`u: verilmişse künye ondan sapamaz.
+/// hizmet yeniden başlamalı. `announced` = imzalı bildirimin `guncelleyici` bloğu: verilmişse künye sürümü ve ikilinin
+/// özeti ondan sapamaz (yayıncı bloğu ikiliden ölçer — iki imzalı kaynak aynı baytı göstermeli).
 pub fn stage_from(
     env: &Env,
     layout: &Layout,
@@ -275,7 +421,7 @@ pub fn stage_from(
     own_version: &str,
     source_dir: &Path,
     trust: &PackageTrust,
-    announced: Option<&str>,
+    announced: Option<&ReleaseUpdater>,
 ) -> Result<Option<String>, String> {
     // Paketteki yer arka ucun beyanıdır (Windows `runtime/…exe`, Linux paket kökünde `.exe`siz).
     let rel = env.arka.guncelleyici_paket_yolu;
@@ -284,13 +430,19 @@ pub fn stage_from(
         return Ok(None);
     }
     // Çalışanla bayt bayt aynı: yapılacak iş yok (hiçbir şey çalıştırılmaz, listeyi doğrulamak gerekmez).
-    if digest(env, &candidate).is_some_and(|c| digest(env, own_exe).as_deref() == Some(c.as_str())) {
+    let own_digest = digest(env, own_exe);
+    if digest(env, &candidate).is_some_and(|c| own_digest.as_deref() == Some(c.as_str())) {
         return Ok(None);
     }
     let want = package::signed_file_digest(source_dir, env.fs.as_ref(), trust, rel)
         .map_err(|e| format!("paketteki ikili imzalı listeyle doğrulanamadı ({}): {}", e.code, e.message))?;
-    if package::file_digest(env.fs.as_ref(), own_exe).is_ok_and(|own| own == want) {
+    if own_digest.as_deref() == Some(want.as_str()) {
         return Ok(None);
+    }
+    if let Some(a) = announced {
+        if !same_sha256(&want, &a.sha256) {
+            return Err(format!("paketteki ikilinin özeti imzalı bildirimin guncelleyici.sha256'sıyla uyuşmuyor ({})", a.sha256));
+        }
     }
     let fresh = sibling(own_exe, "yeni");
     env.fs.copy(&candidate, &fresh).map_err(|e| format!("yeni ikili kopyalanamadı: {e}"))?;
@@ -305,19 +457,12 @@ pub fn stage_from(
         let _ = env.fs.remove_file(&fresh);
         Err(why)
     };
-    if id.get("ad").and_then(|v| v.as_str()) != Some("tekserp-guncelleyici") {
-        return discard("paketteki ikili güncelleyici değil".into());
-    }
-    let target = id.get("hedef").and_then(|v| v.as_str());
-    if target != Some(OWN_TARGET) {
-        return discard(format!(
-            "paketteki güncelleyici {} hedefli, çalışan {OWN_TARGET} — kendini güncelleme platform DEĞİŞTİRMEZ",
-            target.unwrap_or("hedefsiz")
-        ));
+    if let Err(why) = check_identity(&id) {
+        return discard(why);
     }
     let Some(new_version) = new_version else { return discard("künyede sürüm yok".into()) };
-    if announced.is_some_and(|a| a != new_version) {
-        return discard(format!("künye sürümü {new_version}, imzalı bildirim {} ilan ediyor", announced.unwrap_or_default()));
+    if let Some(a) = announced.filter(|a| a.surum != new_version) {
+        return discard(format!("künye sürümü {new_version}, imzalı bildirim {} ilan ediyor", a.surum));
     }
     let prev = read(env, layout);
     let refused = prev.as_ref().and_then(|p| p.refused.clone());
@@ -327,38 +472,117 @@ pub fn stage_from(
         let _ = env.fs.remove_file(&fresh);
         return Ok(None);
     }
+    let mut s = SelfState {
+        durum: "HAZIRLANDI".into(),
+        old_version: own_version.into(),
+        new_version: new_version.clone(),
+        zaman: timefmt::iso_millis(env.clock.now_ms()),
+        lkg_version: prev.as_ref().and_then(|p| p.lkg_version.clone()),
+        lkg_digest: prev.as_ref().and_then(|p| p.lkg_digest.clone()),
+        refused,
+        old_digest: own_digest.clone(),
+        new_digest: Some(want.clone()),
+        running_digest: prev.as_ref().and_then(|p| p.running_digest.clone()),
+        ..SelfState::default()
+    };
+    if surumlu(env) {
+        place_versioned(env, layout, own_exe, &fresh, &want, &mut s)?;
+    } else {
+        place_atomic(env, layout, own_exe, &fresh, own_digest.as_deref(), &mut s)?;
+    }
+    s.durum = "YER_DEGISTIRILDI".into();
+    write(env, layout, &s).map_err(|e| e.to_string())?;
+    Ok(Some(new_version))
+}
+
+/// Bütünlük listesinin özeti (base64url) ile bildirimin onaltılık `sha256`ı aynı baytları mı gösteriyor.
+fn same_sha256(b64u: &str, hex: &str) -> bool {
+    tekserp_dogrulama::b64::decode_strict(b64u)
+        .is_some_and(|d| d.iter().map(|x| format!("{x:02x}")).collect::<String>().eq_ignore_ascii_case(hex))
+}
+
+/// Künyenin kimlik denetimi (ad · platform · çapa kipi) — kendini güncelleme ve `onar` adayları aynı kuralla.
+pub(crate) fn check_identity(id: &serde_json::Value) -> Result<(), String> {
+    if id.get("ad").and_then(|v| v.as_str()) != Some("tekserp-guncelleyici") {
+        return Err("paketteki ikili güncelleyici değil".into());
+    }
+    let target = id.get("hedef").and_then(|v| v.as_str());
+    if target != Some(OWN_TARGET) {
+        return Err(format!(
+            "paketteki güncelleyici {} hedefli, çalışan {OWN_TARGET} — kendini güncelleme platform DEĞİŞTİRMEZ",
+            target.unwrap_or("hedefsiz")
+        ));
+    }
     // Güven çapası kurulumun kimliğidir: paket yanlış kipte güncelleyici taşısa da SYSTEM ikilisi kipi değiştirmez.
     let mode = id.get("capaKipi").and_then(|v| v.as_str());
     if mode != Some(trust::ANCHOR_MODE) {
-        return discard(format!(
+        return Err(format!(
             "paketteki güncelleyici {} çapalı, kurulu olan {} — kendini güncelleme çapa kipini DEĞİŞTİRMEZ",
             mode.unwrap_or("kipsiz"),
             trust::ANCHOR_MODE
         ));
     }
-    let mut s = SelfState {
-        durum: "HAZIRLANDI".into(),
-        old_version: own_version.into(),
-        new_version: new_version.clone(),
-        boots: 0,
-        zaman: timefmt::iso_millis(env.clock.now_ms()),
-        proven: false,
-        lkg_version: prev.as_ref().and_then(|p| p.lkg_version.clone()),
-        lkg_digest: prev.as_ref().and_then(|p| p.lkg_digest.clone()),
-        refused,
-    };
-    write(env, layout, &s).map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+/// L-A: çalışan önce `.eski`ye KOPYALANIR (özeti tutmalı), sonra doğrulanmış kopya asıl adın ÜZERİNE tek
+/// yeniden adlandırmayla iner. Hangi adımda ölünürse ölünsün asıl ad ya eski ya yeni doğrulanmış ikilidir.
+fn place_atomic(
+    env: &Env,
+    layout: &Layout,
+    own_exe: &Path,
+    fresh: &Path,
+    own_digest: Option<&str>,
+    s: &mut SelfState,
+) -> Result<(), String> {
     let old = sibling(own_exe, "eski");
+    let fail = |why: String| -> Result<(), String> {
+        let _ = env.fs.remove_file(fresh);
+        Err(why)
+    };
     let _ = env.fs.remove_file(&old);
-    env.fs.rename(own_exe, &old).map_err(|e| format!("çalışan ikili yeniden adlandırılamadı: {e}"))?;
-    if let Err(e) = env.fs.rename(&fresh, own_exe) {
-        // Asıl ad boş kalmasın: eskisi hemen geri konur.
-        let _ = env.fs.rename(&old, own_exe);
-        return Err(format!("yeni ikili yerine konamadı: {e}"));
+    if let Err(e) = env.fs.copy(own_exe, &old) {
+        let _ = env.fs.remove_file(&old);
+        return fail(format!("çalışan ikili .eski'ye kopyalanamadı: {e}"));
     }
-    s.durum = "YER_DEGISTIRILDI".into();
-    write(env, layout, &s).map_err(|e| e.to_string())?;
-    Ok(Some(new_version))
+    if own_digest.is_none() || digest(env, &old).as_deref() != own_digest {
+        let _ = env.fs.remove_file(&old);
+        return fail("çalışan ikilinin .eski kopyası doğrulanamadı".into());
+    }
+    s.old_path = Some(path_text(&old));
+    s.new_path = Some(path_text(own_exe));
+    write(env, layout, s).map_err(|e| e.to_string())?;
+    if let Err(e) = env.fs.rename(fresh, own_exe) {
+        return fail(format!("yeni ikili yerine konamadı: {e}"));
+    }
+    Ok(())
+}
+
+/// W-A: doğrulanmış kopya `s\<sürüm>\`e taşınır, ImagePath TEK kayıt yazımıyla ona çevrilir; hiçbir ikili yer
+/// değiştirmez. Önce `yeniYol` yazılır: kayıt yazımından hemen sonra ölünse de açılış yeni ikiliyi tanır.
+fn place_versioned(env: &Env, layout: &Layout, own_exe: &Path, fresh: &Path, want: &str, s: &mut SelfState) -> Result<(), String> {
+    let target = versioned_exe(layout, &s.new_version, own_exe);
+    let fail = |why: String| -> Result<(), String> {
+        let _ = env.fs.remove_file(fresh);
+        Err(why)
+    };
+    if let Some(d) = target.parent() {
+        if let Err(e) = env.fs.create_dir_all(d) {
+            return fail(format!("{} açılamadı: {e}", d.display()));
+        }
+    }
+    let _ = env.fs.remove_file(&target);
+    if let Err(e) = env.fs.rename(fresh, &target) {
+        return fail(format!("yeni ikili {} yerine konamadı: {e}", target.display()));
+    }
+    if digest(env, &target).as_deref() != Some(want) {
+        let _ = env.fs.remove_file(&target);
+        return Err("yerleşen ikili imzalı listeyle uyuşmuyor".into());
+    }
+    s.old_path = Some(path_text(own_exe));
+    s.new_path = Some(path_text(&target));
+    write(env, layout, s).map_err(|e| e.to_string())?;
+    point_service(env, layout, &target, Some(own_exe))
 }
 
 #[cfg(test)]

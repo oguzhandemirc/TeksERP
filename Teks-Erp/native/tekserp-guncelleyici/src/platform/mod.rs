@@ -72,6 +72,29 @@ pub trait PgArkaUcu: Send + Sync {
     fn reindex_icu(&self, env: &Env, be: &BackendEnv, pg_dir: &Path, sql: &str) -> Result<(), String>;
 }
 
+/// Güncelleyicinin kendi ikilisini yerleştirme biçimi (plan §4.7): asıl ad / hizmetin gösterdiği yol HER AN
+/// doğrulanmış bir ikiliyi gösterir.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum KendiYerlesim {
+    /// Windows W-A: çalışan imajın üzerine yeniden adlandırılamaz — yeni ikili `guncelleyici\s\<sürüm>\`e konur,
+    /// hizmet komut satırı (ImagePath) TEK kayıt yazımıyla ona çevrilir; hiçbir ikili yer değiştirmez.
+    SurumluYol,
+    /// Linux L-A: `.eski` önce KOPYA alınır, yeni ikili çalışanın ÜZERİNE tek `rename(2)` ile iner (çalışan süreç eski
+    /// inode'da sürer); asıl ad hiçbir an boş kalmaz.
+    AtomikAdlandirma,
+}
+
+/// Güncelleyicinin kendi hizmetini doğrulanmış ikiliye işaret etme yolu (§4.7 `onar`'ın platforma özgü tek adımı).
+pub trait KendiArkaUcu: Send + Sync {
+    fn yerlesim(&self) -> KendiYerlesim;
+    /// Asıl adın dosya adı (`<Kök>/guncelleyici/` altında).
+    fn asil_ad(&self) -> &'static str;
+    /// Hizmet komut satırının ikili yolu (W-A); çözülemezse ya da yerleşim komut satırı kullanmıyorsa `None`.
+    fn komut_ikilisi(&self, komut: &str) -> Option<PathBuf>;
+    /// Komut satırında YALNIZ ikili yolunu değiştirir (argümanlar aynen).
+    fn ikiliyi_degistir(&self, komut: &str, yeni: &Path) -> Option<String>;
+}
+
 /// İşlemi yürüten arka uç.
 #[derive(Clone)]
 pub struct Arka {
@@ -86,6 +109,8 @@ pub struct Arka {
     pub saglik: Arc<dyn Saglik>,
     pub araclar: Arc<dyn Araclar>,
     pub pg: Arc<dyn PgArkaUcu>,
+    /// Kendi ikilisinin yerleşimi (kendini güncelleme + `onar`).
+    pub kendi: Arc<dyn KendiArkaUcu>,
 }
 
 /// Derleme hedefinin arka ucu (üretim ortamı, `gercek::real`).
@@ -142,6 +167,12 @@ pub fn same_path(a: &Path, b: &Path) -> bool {
     } else {
         a == b
     }
+}
+
+/// Disk dolu (ENOSPC · Windows ERROR_DISK_FULL 112 / ERROR_HANDLE_DISK_FULL 39).
+pub fn is_disk_full(e: &std::io::Error) -> bool {
+    e.kind() == std::io::ErrorKind::StorageFull
+        || if cfg!(windows) { matches!(e.raw_os_error(), Some(39 | 112)) } else { e.raw_os_error() == Some(28) }
 }
 
 /// Windows paylaşım/kilit ihlali (32/33) — dosya başka süreçte açık.

@@ -5,7 +5,7 @@ import { renderWithProviders } from "@/test/render";
 import { LICENSE_ACCESS } from "@/lib/permissions";
 import type { UpdateStatus } from "@/types/server-update";
 import { systemTiles } from "../tile-config";
-import { decisionText, progressPercent, resultCodeLabel, windowRuleText } from "./labels";
+import { decisionText, noticeLabel, progressPercent, resultCodeLabel, windowRuleText } from "./labels";
 import { actionText } from "./UpdateApprovalCard";
 import { refetchIntervalFor } from "./hooks";
 
@@ -53,6 +53,11 @@ describe("sunucu güncellemesi — sözlük (saf)", () => {
     expect(decisionText("GUNCEL", null)).toBe("Güncel");
     expect(resultCodeLabel("SAGLIK_HATASI")).toBe("Yeni sürüm sağlık denetiminden geçemedi");
     expect(resultCodeLabel("YENI_KOD")).toBe("YENI_KOD");
+  });
+  it("onarım kodları: üç arıza Sorun sözlüğünde, ONARILDI yalnız Bilgi sözlüğünde", () => {
+    for (const k of ["ONARIM_TAVANI", "ONARIM_KAYNAK_YOK", "GUNCELLEYICI_KAPALI"]) expect(resultCodeLabel(k)).not.toBe(k);
+    expect(noticeLabel("ONARILDI")).not.toBe("ONARILDI");
+    expect(resultCodeLabel("ONARILDI")).toBe("ONARILDI");
   });
   it("pencere kuralı ve ilerleme", () => {
     expect(windowRuleText({ baslangic: "02:00", bitis: "05:00", gunler: [1, 2, 3, 4, 5, 6, 7], saatDilimi: "Europe/Istanbul" })).toBe("Her gün 02:00–05:00");
@@ -217,6 +222,27 @@ describe("sunucu güncellemesi — sonuç ve uyarılar", () => {
   });
 });
 
+describe("sunucu güncellemesi — güncelleyicinin kendisi çalışmıyor (onar)", () => {
+  beforeEach(sifirla);
+
+  it("güncelleyici hizmeti kapatılmış (onar: GUNCELLEYICI_KAPALI) → Durdu + sorun cümlesi, onay düğmesi yok", async () => {
+    perms.push("license:manage");
+    status.mockResolvedValue(
+      durum({
+        guncelleyici: { durum: "DURDU", surum: "0.1.0" },
+        bekleyen: null,
+        karar: null,
+        yerel: { ...durum().yerel!, durum: "HATA", hataKodu: "GUNCELLEYICI_KAPALI", mesaj: "TeksERP-Guncelleyici devre dışı" },
+        eylemler: { hemen: false, pencere: false, geriAl: false, hedefSurum: null, neden: "Güncelleme programı hizmeti kapatılmış ya da kaldırılmış — yeniden açılmadıkça güncelleme yapılmaz." },
+      }),
+    );
+    renderWithProviders(<ServerUpdatesPage />);
+    expect(await screen.findByText("Güncelleme programı hizmeti kapatılmış ya da kaldırılmış — yeniden açılmadıkça güncelleme yapılmaz")).toBeTruthy();
+    expect(screen.getByText("Durdu — müdahale gerekiyor")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Şimdi kur" })).toBeNull();
+  });
+});
+
 describe("sunucu güncellemesi — bilgi (sorun değil)", () => {
   beforeEach(sifirla);
 
@@ -233,5 +259,14 @@ describe("sunucu güncellemesi — bilgi (sorun değil)", () => {
     expect(bilgi.getAttribute("title")).toContain("psql");
     expect(screen.queryByText("Sorun")).toBeNull();
     expect(screen.getByText("Hazır")).toBeTruthy();
+  });
+
+  it("güncelleyici kendini onardı → 'Bilgi' satırı (ONARILDI), Sorun yok", async () => {
+    perms.push("license:view");
+    status.mockResolvedValue(durum({ yerel: { ...durum().yerel!, bilgi: { kod: "ONARILDI", mesaj: "ikili silinmişti — .lkg'den geri kondu" } } }));
+    renderWithProviders(<ServerUpdatesPage />);
+    const bilgi = await screen.findByTestId("guncelleyici-bilgi");
+    expect(bilgi.textContent).toBe("Güncelleme programı kendini onardı — bozulan ya da silinen dosyası doğrulanmış kopyadan geri kondu");
+    expect(screen.queryByText("Sorun")).toBeNull();
   });
 });

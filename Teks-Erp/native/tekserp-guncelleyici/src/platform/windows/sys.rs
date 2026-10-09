@@ -327,6 +327,9 @@ impl Services for WinServices {
     fn set_image_path(&self, name: &str, command_line: &str) -> EnvResult<()> {
         scm::set_image_path(name, command_line).map_err(EnvError)
     }
+    fn disabled(&self, name: &str) -> EnvResult<bool> {
+        scm::disabled(name).map_err(EnvError)
+    }
 }
 
 /// Olay günlüğü kaynağı = güncelleyici hizmetinin adı (`hizmet-kur` o adla kaydeder).

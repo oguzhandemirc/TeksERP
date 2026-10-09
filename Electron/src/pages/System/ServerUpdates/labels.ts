@@ -49,6 +49,10 @@ const RESULT_CODES: Record<string, string> = {
   SAGLIK_HATASI: "Yeni sürüm sağlık denetiminden geçemedi",
   KESINTI: "İşlem yarıda kesildi",
   GERI_DONUS_HATASI: "Geri dönüş tamamlanamadı",
+  // Güncelleme programının KENDİSİ çalışmıyor (`onar`, durum.json HATA) — deneme sonucu değil, rapora girmez.
+  ONARIM_TAVANI: "Güncelleme programı tekrar tekrar bozuldu — otomatik onarım durdu (24 saatte 3 onarım), müdahale gerekiyor",
+  ONARIM_KAYNAK_YOK: "Güncelleme programının dosyası eksik ya da bozuk ve onarmak için doğrulanmış kopya yok — yeniden kurulum gerekiyor",
+  GUNCELLEYICI_KAPALI: "Güncelleme programı hizmeti kapatılmış ya da kaldırılmış — yeniden açılmadıkça güncelleme yapılmaz",
   BILINMEYEN: "Bilinmeyen hata",
 };
 
@@ -56,6 +60,7 @@ const RESULT_CODES: Record<string, string> = {
 const NOTICES: Record<string, string> = {
   SEMA_OLCULEMEDI: "Şema hizası ölçülemedi — güncelleme bu yüzden durdurulmadı (göç adımı veritabanını ayrıca denetler)",
   GUNCELLEYICI_ONCE: "Güncelleme programı önce kendini yeniledi — güncellemeyi yeni sürümü yürütecek",
+  ONARILDI: "Güncelleme programı kendini onardı — bozulan ya da silinen dosyası doğrulanmış kopyadan geri kondu",
 };
 
 const RESULTS: Record<UpdateResultKind, string> = {

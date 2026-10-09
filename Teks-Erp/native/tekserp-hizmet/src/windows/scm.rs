@@ -220,6 +220,16 @@ pub fn stop(name: &str) -> Result<(), String> {
     h.stop().map(|_| ()).map_err(|e| format!("{name}: durdurulamadı: {e}"))
 }
 
+/// Başlangıç türü `Disabled` mı (yöneticinin "Devre dışı"sı); hizmet yoksa `false`.
+pub fn disabled(name: &str) -> Result<bool, String> {
+    let m = manager(ServiceManagerAccess::CONNECT)?;
+    let Ok(h) = m.open_service(name, ServiceAccess::QUERY_CONFIG) else {
+        return Ok(false);
+    };
+    let c = h.query_config().map_err(|e| format!("{name}: yapılandırma okunamadı: {e}"))?;
+    Ok(c.start_type == ServiceStartType::Disabled)
+}
+
 /// Hizmetin tam komut satırı (ImagePath; ikili + argümanlar).
 pub fn image_path(name: &str) -> Result<String, String> {
     let m = manager(ServiceManagerAccess::CONNECT)?;

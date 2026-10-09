@@ -20,7 +20,8 @@
 //   §6 panel görünümü: kira yok/kiradaki politika/K1/varsayılan · geçmiş (backend + PG satırı) en yeni önce ·
 //      yerel ayrıntı · karar · onayın kullanıldığı
 //   §7 ⭐ eylemler (`approvalActions` — panel düğmeleri ve POST kapısı AYNI yüklem); §7k onaylı ama bekleyen sürümün nedeni
-//      (§7l şema ileride: daha yeni sürüm gerekir, "kendiliğinden" denmez)
+//      (§7l şema ileride: daha yeni sürüm gerekir, "kendiliğinden" denmez) · §7m güncelleyicinin kendisi çalışmıyorken
+//      (`onar`: ONARIM_TAVANI · ONARIM_KAYNAK_YOK · GUNCELLEYICI_KAPALI) onay sunulmaz; ONARILDI bilgidir
 //   §8 bağlantı (statik): uçlar izinli ve bağlı · yoklama gövdesi raporu yayar · yoklama niyeti tazeler
 //   §9 platform öneki (sözleşme 5, L2b): backend kendi platformunu satıcının kuralıyla çözer (yalnız Linux +
 //      konteyner OCI) · niyet ve panel YALNIZ kendi platformunun belirtecini görür (Windows backend/ · Linux backend-oci/)
@@ -53,7 +54,7 @@ import {
   updaterProcess,
 } from "../src/services/update-status.service";
 import { intentToken } from "../src/services/update-intent.service";
-import { approvalActions, type ApprovalActionInput, type UpdateApprovalView } from "../src/services/helpers/update-approval-rules.helper";
+import { approvalActions, updaterDownReason, type ApprovalActionInput, type UpdateApprovalView } from "../src/services/helpers/update-approval-rules.helper";
 import { DEFAULT_FACTORY_TIMEZONE } from "../src/constants/time";
 import { anahtarUret } from "./lib/lisans-fikstur";
 
@@ -348,6 +349,23 @@ function eylemler(): void {
     semaBekleyis(kurBekliyor("SEMA_ILERIDE")), kurBekliyor("SEMA_ILERIDE") ?? "-");
   const pencereKur = e({ politika: { kip: "OTOMATIK" }, yerelDurum: "BEKLIYOR", yerelHataKodu: "DISK_DOLU", bekleyen: { surum: "2.15.0", karar: "KUR", neden: null } }).neden;
   check("§7k onaysız (OTOMATİK pencere) KUR beklerken 'onaylandı' denmez", dogruBekleyis(pencereKur, /disk/i, /kurulacak/) && !/onaylandı/.test(pencereKur ?? ""), pencereKur ?? "-");
+  // §7m (W1b, GUNCELLEYICI-SAGLAMLIK §4.7): `onar`ın görünür arızası durum.json'a HATA + kod yazar — güncelleyicinin
+  // KENDİSİ çalışmıyor. §7j'nin "son denemenin sürümüne yeni onay" yolu burada sunulmaz (onayı okuyacak süreç yok).
+  const onarimKodlari = ["ONARIM_TAVANI", "ONARIM_KAYNAK_YOK", "GUNCELLEYICI_KAPALI"] as const;
+  const durmus = (kod: string) => e({ guncelleyici: { durum: "DURDU", surum: "0.1.0" }, yerelDurum: "HATA", yerelHataKodu: kod, bekleyen: null, son: { ...sonuc({ hedefSurum: "2.15.0" }), sonuc: "BASARILI" } as never, onay: verildi });
+  check("§7m ⭐ güncelleyici kendisi çalışmıyorken (onarım tavanı · kaynak yok · kapalı) onay sunulmaz, nedeni kodun cümlesi, geri alma açık",
+    onarimKodlari.every((k) => { const x = durmus(k); return !x.hemen && !x.pencere && x.hedefSurum === null && x.geriAl && x.neden === updaterDownReason(k) && x.neden !== null; }),
+    onarimKodlari.map((k) => durmus(k).neden).join(" | "));
+  check("§7m kodlar birbirinden ayrı cümle (insan neyi yapacağını bilir); başka HATA kodu §7j'de kalır",
+    new Set(onarimKodlari.map((k) => updaterDownReason(k))).size === 3 && durmus("GOC_HATASI").hemen && updaterDownReason("GOC_HATASI") === null && updaterDownReason(null) === null);
+  const onarimRead = ok(doc({ durum: "HATA", hataKodu: "ONARIM_TAVANI", mesaj: "24 saatte 3 onarım", son: sonuc({ hedefSurum: "2.15.0", sonuc: "BASARILI", kod: null, veriGeriYuklendi: false }) }));
+  const onarimV = updateStatusFrom({ lease: kira(undefined), tokens: [], read: onarimRead, kuruluSurum: "2.15.0", nowMs: SIMDI });
+  check("§7m ⭐ uçtan uca: durum.json HATA/ONARIM_TAVANI → güncelleyici DURDU, yerel hataKodu aynen, panel onay sunmaz",
+    onarimV.guncelleyici.durum === "DURDU" && onarimV.yerel?.hataKodu === "ONARIM_TAVANI" && !onarimV.eylemler.hemen && onarimV.eylemler.neden === updaterDownReason("ONARIM_TAVANI"),
+    JSON.stringify({ g: onarimV.guncelleyici, e: onarimV.eylemler }));
+  const onarildi = updateStatusFrom({ lease: kira(undefined), tokens: [], read: ok(doc({ bilgi: { kod: "ONARILDI", mesaj: "ikili .lkg'den geri kondu" } })), kuruluSurum: "2.15.0", nowMs: SIMDI });
+  check("§7m ONARILDI bilgidir: yerel.bilgi'ye geçer, hataKodu boş, güncelleyici CALISIYOR",
+    onarildi.yerel?.bilgi?.kod === "ONARILDI" && onarildi.yerel.hataKodu === null && onarildi.guncelleyici.durum === "CALISIYOR", JSON.stringify(onarildi.yerel));
 }
 
 function baglanti(): void {

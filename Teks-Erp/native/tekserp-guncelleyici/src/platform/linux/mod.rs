@@ -10,6 +10,7 @@ pub mod docker;
 pub mod duzen;
 #[cfg(unix)]
 pub mod hizmet;
+pub mod kendi;
 pub mod koruma;
 pub mod olay;
 #[cfg(unix)]
@@ -40,6 +41,7 @@ pub fn arka_ucu() -> crate::platform::Arka {
         saglik: Arc::new(IskeletSaglik),
         araclar: Arc::new(IskeletAraclar),
         pg: Arc::new(IskeletPg),
+        kendi: Arc::new(kendi::AtomikAdlandirma),
     }
 }
 

@@ -7,11 +7,18 @@ pub struct Layout {
     pub root: PathBuf,
     /// `%ProgramData%\TeksERP` (IPC + güncelleyicinin özel alanı).
     pub data: PathBuf,
+    /// Güncelleyicinin KENDİ hizmet adı (`--ad`; ikinci kanalda farklı): W-A ImagePath'i ve `onar` onu işaret eder.
+    pub updater_service: String,
 }
 
 impl Layout {
     pub fn new(root: &Path, data: &Path) -> Layout {
-        Layout { root: root.to_path_buf(), data: data.to_path_buf() }
+        Layout { root: root.to_path_buf(), data: data.to_path_buf(), updater_service: tekserp_hizmet::contract::UPDATER_SERVICE.into() }
+    }
+
+    pub fn with_service(mut self, name: &str) -> Layout {
+        self.updater_service = name.to_string();
+        self
     }
 
     pub fn versions(&self) -> PathBuf {
@@ -117,5 +124,17 @@ impl Layout {
     }
     pub fn self_update_file(&self) -> PathBuf {
         self.work().join("kendi.json")
+    }
+    /// Karşılıklı onarımın sayacı ve son onarımları (§4.7 madde 4–5).
+    pub fn repair_file(&self) -> PathBuf {
+        self.work().join("onarim.json")
+    }
+    /// W2 çitinin işareti: çitin KENDİ koyduğu "Devre dışı" — `onar` bunu yönetici kararı saymaz (§4.7 madde 7).
+    pub fn fence_marker(&self) -> PathBuf {
+        self.work().join("cit.json")
+    }
+    /// W-A: sürümlü ikili dizinleri (`guncelleyici\s\<sürüm>\`).
+    pub fn updater_versions(&self) -> PathBuf {
+        self.updater_dir().join("s")
     }
 }

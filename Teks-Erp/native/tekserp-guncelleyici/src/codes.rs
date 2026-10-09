@@ -53,6 +53,16 @@ pub const SEMA_OLCULEMEDI: &str = "SEMA_OLCULEMEDI";
 /// BİLGİ, sorun DEĞİL (`durum.bilgi`): paket HAZIR ve taşıdığı güncelleyici çalışandan yeni — backend işleminden ÖNCE
 /// güncelleyici kendini yeniledi (plan §4.2 madde 1; `DONDUR`da da, AK-3); işlemi yeni ikili yeniden doğrulayıp yürütür.
 pub const GUNCELLEYICI_ONCE: &str = "GUNCELLEYICI_ONCE";
+/// BİLGİ (`durum.bilgi`): `onar` güncelleyici ikilisini doğrulanmış kaynaktan geri koydu ya da durmuş hizmeti başlattı
+/// (W1b, plan §4.7); son 24 saat boyunca görünür kalır. Rapora (`son.kod`) GİRMEZ — deneme sonucu değildir.
+pub const ONARILDI: &str = "ONARILDI";
+/// `onar` 24 saatte `onarim::MAX_REPAIRS` onarımı aştı: döngü kesildi, ONARILMADI (insan). `durum.json` HATA kodu —
+/// güncelleyici çalışmıyor; satıcı `guncelleyici.durum = DURDU` görür.
+pub const ONARIM_TAVANI: &str = "ONARIM_TAVANI";
+/// Hizmetin ikilisi eksik/bozuk ve doğrulanmış onarım kaynağı yok (`.lkg` · eski · kurulu sürüm · `surumler`).
+pub const ONARIM_KAYNAK_YOK: &str = "ONARIM_KAYNAK_YOK";
+/// Güncelleyici hizmeti silinmiş ya da yönetici "Devre dışı" yapmış — bilinçli karar, onarılmaz (§4.7 madde 7).
+pub const GUNCELLEYICI_KAPALI: &str = "GUNCELLEYICI_KAPALI";
 pub const GOC_HATASI: &str = "GOC_HATASI";
 pub const GOC_ZAMAN_ASIMI: &str = "GOC_ZAMAN_ASIMI";
 pub const SAGLIK_ZAMAN_ASIMI: &str = "SAGLIK_ZAMAN_ASIMI";
@@ -167,6 +177,16 @@ mod tests {
             "SERTIFIKA_KULLANIM",
         ] {
             assert_eq!(report_code(c), "IMZA_GECERSIZ", "{c}");
+        }
+        // W1b: onarım kodları deneme sonucu DEĞİLDİR — `report_code`ta eşlenmez (belgeli kümeye özel kod açılmaz),
+        // `onarim.rs` geçmişe (`gecmis.jsonl`) ve işlem günlüğüne yazmaz; satıcı `guncelleyici.durum = DURDU` görür.
+        for c in [ONARILDI, ONARIM_TAVANI, ONARIM_KAYNAK_YOK, GUNCELLEYICI_KAPALI] {
+            assert!(!DOCUMENTED.contains(&c), "{c} belgeli rapor kodu olmamalı");
+            assert_eq!(report_code(c), "BILINMEYEN", "{c} rapora eşlenmemeli");
+        }
+        let onarim = include_str!("onarim.rs");
+        for yasak in ["history_file", "journal_file", "gecmis.jsonl"] {
+            assert!(!onarim.contains(yasak), "onarim.rs {yasak}'a dokunuyor — onarım deneme sonucu değil");
         }
         for (ours, proto) in [
             (PAKET_SERTIFIKA_YOK, tekserp_dogrulama::outcome::code::PAKET_SERTIFIKA_YOK),

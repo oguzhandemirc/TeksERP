@@ -36,7 +36,7 @@ pub fn run(root: PathBuf, data: PathBuf, service_name: String) -> Result<(), Str
 
 fn service_main(_arguments: Vec<OsString>) {
     let (root, data) = PATHS.get().cloned().unwrap_or_default();
-    let layout = Layout::new(&root, &data);
+    let layout = Layout::new(&root, &data).with_service(name());
     let log = Arc::new(RotatingLog::open(&layout.log_dir(), "guncelleyici", LogSpec::SERVICE));
     let stop = Arc::new(AtomicBool::new(false));
     let s2 = Arc::clone(&stop);
@@ -103,6 +103,21 @@ fn ensure_own_recovery(log: &RotatingLog) {
     }
 }
 
+/// W-C onarım görevini doğrulanmış onarıcıya hizalar (yalnız farklıysa yazar); onarıcının özeti `kendi.json`a.
+fn align_repair_task(env: &crate::env::Env, layout: &Layout, own: &std::path::Path, anchor: &TrustAnchor, log: &RotatingLog) {
+    let trust = crate::onarim::installed_trust(env, layout, anchor);
+    let Some((exe, digest)) = super::gorev::pick_target(env, layout, own, Some(&trust)) else {
+        log.warn("onarım görevi: doğrulanmış onarıcı bulunamadı (görev değiştirilmedi)");
+        return;
+    };
+    super::gorev::remember(env, layout, &digest);
+    match super::gorev::ensure(layout, &exe) {
+        Ok(true) => log.info(&format!("onarım görevi {} → {}", super::gorev::task_name(&layout.updater_service), exe.display())),
+        Ok(false) => {}
+        Err(e) => log.warn(&format!("onarım görevi hizalanamadı: {e}")),
+    }
+}
+
 fn body(layout: &Layout, log: &Arc<RotatingLog>, stop: &AtomicBool, running: &dyn Fn(), job_slot: &mut Option<job::KillOnCloseJob>) -> u32 {
     let own = std::env::current_exe().ok();
     let settings = crate::settings::read_settings(&crate::env::RealFs, layout).unwrap_or_default();
@@ -141,11 +156,25 @@ fn body(layout: &Layout, log: &Arc<RotatingLog>, stop: &AtomicBool, running: &dy
     running();
     log.info(&format!("güncelleyici başladı (sürüm {}; test çapası {})", env!("CARGO_PKG_VERSION"), crate::trust::TEST_ANCHOR));
     ensure_own_recovery(log);
+    if let Some(own) = &own {
+        align_repair_task(&env, layout, own, &anchor, log);
+    }
+    let own_for_task = own.clone();
+    let task_anchor = anchor.clone();
+    let mut task_after_healthy = false;
     let engine = Engine::new(env.clone(), layout.clone(), anchor, Arc::clone(log), own);
     let should_stop = || stop.load(Ordering::SeqCst);
     // Yeni ikilinin doğrulanması (ilk SAĞLIKLI tur) motorun içindedir: ölçüt iki platformda tek yerde.
     while !should_stop() {
-        match engine.tick(&should_stop) {
+        let r = engine.tick(&should_stop);
+        // İlk sağlıklı tur `.lkg`yi kurmuş olabilir: görev bir kez daha hizalanır (onarıcı çalışan ikiliden bağımsız olsun).
+        if engine.verified() && !task_after_healthy {
+            task_after_healthy = true;
+            if let Some(own) = &own_for_task {
+                align_repair_task(&env, layout, own, &task_anchor, log);
+            }
+        }
+        match r {
             TickResult::RestartForSelfUpdate => return codes::EXIT_SELF_UPDATE,
             TickResult::Idle(d) => crate::wait::until_change_or(&env, layout, d, &should_stop),
         }
@@ -194,14 +223,23 @@ pub fn command(command: &str, args: &[String]) -> Result<u32, String> {
                 required_privileges: vec![],
             })?;
             println!("{name} kaydedildi (kök {})", root.display());
+            // W-C: onarım görevi (kurulumun ikilisi `onar`ı tanır; `.lkg` oluşunca hizmet görevi ona hizalar).
+            let layout = Layout::new(&root, &data_arg(args, &root)).with_service(&name);
+            let own = std::env::current_exe().map_err(|e| format!("kendi yolu okunamadı: {e}"))?;
+            let env = crate::env::real(None, &name)?;
+            let anchor = TrustAnchor::for_process()?;
+            let trust = crate::onarim::installed_trust(&env, &layout, &anchor);
+            let (exe, _) = super::gorev::pick_target(&env, &layout, &own, Some(&trust)).unwrap_or((own.clone(), String::new()));
+            super::gorev::ensure(&layout, &exe).map_err(|e| format!("{name} kaydedildi ama onarım görevi kurulamadı: {e}"))?;
+            println!("onarım görevi {} → {}", super::gorev::task_name(&name), exe.display());
             Ok(0)
         }
         "hizmet-kaldir" => {
             let name = contract::service_name_arg(args, contract::UPDATER_SERVICE)?;
-            scm::uninstall(&name).map(|()| {
-                println!("{name} kaldırıldı");
-                0
-            })
+            scm::uninstall(&name)?;
+            super::gorev::remove(&name)?;
+            println!("{name} ve onarım görevi kaldırıldı");
+            Ok(0)
         }
         _ => Err(format!("bilinmeyen komut: {command}")),
     }

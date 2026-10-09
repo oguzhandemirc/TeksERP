@@ -107,6 +107,10 @@ pub trait Services: Send + Sync {
     /// Hizmetin tam komut satırı (ImagePath) — PG küçük sürümünde sürüm dizini değişir (D4 U6).
     fn image_path(&self, name: &str) -> EnvResult<String>;
     fn set_image_path(&self, name: &str, command_line: &str) -> EnvResult<()>;
+    /// Hizmet yönetici kararıyla devre dışı mı (Windows başlangıç türü `Disabled`); ölçemeyen arka uç `false` der.
+    fn disabled(&self, _name: &str) -> EnvResult<bool> {
+        Ok(false)
+    }
 }
 
 #[derive(Debug, Clone, Default)]

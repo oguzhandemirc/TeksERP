@@ -21,6 +21,7 @@ pub mod journal;
 pub mod kurulum;
 pub mod layout;
 pub mod lock;
+pub mod onarim;
 pub mod operation;
 pub mod package;
 pub mod pgminor;

@@ -1,7 +1,10 @@
 //! `tekserp-guncelleyici` — TeksERP güncelleyici hizmeti (`TeksERP-Guncelleyici`, LocalSystem).
 //!
 //!   hizmet --kok <KOK> [--veri <D>] [--ad <ad>]   SCM'in başlattığı kip (ImagePath argümanları)
-//!   tur --kok <KOK> [--veri <D>]    tek tur ön planda (tanı; yarım işlemi de sonuçlandırır — "onar")
+//!   tur --kok <KOK> [--veri <D>]    tek tur ön planda (tanı; yarım işlemi de sonuçlandırır)
+//!   onar --kok <KOK> [--veri <D>] [--ad <ad>] [--yalniz-asil-ad]   karşılıklı onarım (W1b, `onarim.rs`): hizmetin
+//!                                   ikilisi eksik/bozuksa doğrulanmış kaynaktan geri koyar. W1 ikilisinde `onar` =
+//!                                   `tur` takma adıydı: onu çağıran görev/birim yalnız künyesinde `"onarim":1` olanı gösterir
 //!   durum --kok <KOK> [--veri <D>]  durum.json + son işlemin özeti
 //!   hizmet-kur --kok <KOK> [--veri <D>] [--ad <ad>]   kaydet/güncelle (yönetici)
 //!   hizmet-kaldir [--ad <ad>]       durdur + sil (yönetici)
@@ -35,6 +38,8 @@ fn identity() -> String {
         "testCapasi": TEST_ANCHOR,
         "capaKipi": ANCHOR_MODE,
         "paketZinciri": true,
+        // `onar` alt komutunu (W1b) tanır — onarım görevi yalnız bunu taşıyan ikiliyi çağırır.
+        "onarim": 1,
     })
     .to_string()
 }
@@ -51,6 +56,20 @@ fn one_tick(args: &[String]) -> Result<u32, String> {
     let r = engine.tick(&|| false);
     println!("{}", String::from_utf8_lossy(&std::fs::read(layout.status_file()).unwrap_or_default()));
     Ok(u32::from(r == TickResult::RestartForSelfUpdate))
+}
+
+fn repair(args: &[String]) -> Result<u32, String> {
+    use tekserp_guncelleyici::onarim;
+    let root = root_arg(args)?;
+    let name = tekserp_hizmet::contract::service_name_arg(args, tekserp_hizmet::contract::UPDATER_SERVICE)?;
+    let layout = Layout::new(&root, &data_arg(args, &root)).with_service(&name);
+    let own = std::env::current_exe().map_err(|e| format!("kendi yolu okunamadı: {e}"))?;
+    let e = env::real(None, &name)?;
+    let trust = TrustAnchor::for_process().ok().map(|a| onarim::installed_trust(&e, &layout, &a));
+    let opts = onarim::Options { yalniz_asil_ad: args.iter().any(|a| a == "--yalniz-asil-ad") };
+    let out = onarim::onar(&e, &layout, &own, trust.as_ref(), &opts);
+    println!("{out:?}");
+    Ok(out.exit_code())
 }
 
 fn show_status(args: &[String]) -> Result<u32, String> {
@@ -78,9 +97,8 @@ fn main() -> ExitCode {
             println!("{}", identity());
             Ok(0)
         }
-        // Taban birimin (systemd) onarım satırı: tur KOŞMAZ — platformun hizmet komutudur (§4.7 L-B).
-        "onar" if args.iter().any(|a| a == "--yalniz-asil-ad") => tekserp_guncelleyici::platform::service_command(&command, &args),
-        "tur" | "onar" => one_tick(&args),
+        "tur" => one_tick(&args),
+        "onar" => repair(&args),
         "durum" => show_status(&args),
         "hizmet" | "hizmet-kur" | "hizmet-kaldir" => tekserp_guncelleyici::platform::service_command(&command, &args),
         "kurulum-paket" | "kurulum-pg" | "kurulum-dizin" => tekserp_guncelleyici::kurulum::komut(&command, &args),

@@ -289,24 +289,11 @@ fn kaldir(args: &[String]) -> Result<u32, String> {
     Ok(0)
 }
 
-/// Taban birimin onarım satırı (`onar --yalniz-asil-ad`). L6: yalnız ÖLÇER — asıl ad sağlamsa sessiz; değilse görünür
-/// uyarı. Asıl adı doğrulanmış kaynaktan geri koyan onarım W1b'nindir (§4.7 madde 1–6). Hep 0 (satır `-` önekli).
-fn asil_ad_onar(args: &[String]) -> Result<u32, String> {
-    let kok = crate::cli::root_arg(args)?;
-    let asil = birim::asil_ikili(&kok);
-    let saglam = std::fs::metadata(&asil).is_ok_and(|m| m.is_file() && m.permissions().mode() & 0o111 != 0);
-    if !saglam {
-        eprintln!("<4>UYARI: güncelleyicinin asıl ikilisi yok ya da çalıştırılamaz: {} (onarım W1b)", asil.display());
-    }
-    Ok(0)
-}
-
 pub fn komut(command: &str, args: &[String]) -> Result<u32, String> {
     match command {
         "hizmet" => calis(args),
         "hizmet-kur" => kur(args),
         "hizmet-kaldir" => kaldir(args),
-        "onar" => asil_ad_onar(args),
         _ => Err(format!("bilinmeyen komut: {command}")),
     }
 }
@@ -360,15 +347,6 @@ mod tests {
         assert_eq!(std::fs::read_to_string(&f).unwrap(), birim::EK_DOSYA_SABLONU);
         let artik: Vec<_> = std::fs::read_dir(f.parent().unwrap()).unwrap().map(|e| e.unwrap().file_name()).collect();
         assert_eq!(artik.len(), 1, "geçici dosya kalmaz: {artik:?}");
-        std::fs::remove_dir_all(&d).unwrap();
-    }
-
-    #[test]
-    fn asil_ad_onar_tur_kosmaz_hep_sifir() {
-        let d = gecici("onar");
-        let args: Vec<String> = ["onar", "--yalniz-asil-ad", "--kok", &d.to_string_lossy()].iter().map(|s| s.to_string()).collect();
-        assert_eq!(komut("onar", &args), Ok(0));
-        assert!(!d.join("programdata").exists() && std::fs::read_dir(&d).unwrap().next().is_none(), "onarım satırı hiçbir şey yazmaz");
         std::fs::remove_dir_all(&d).unwrap();
     }
 }

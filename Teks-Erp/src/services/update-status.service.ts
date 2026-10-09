@@ -104,7 +104,8 @@ export function updaterLiveness(d: UpdaterStatusDoc, nowMs: number): UpdaterLive
   };
 }
 
-/** Güncelleyici süreci: dosya yok → YOK · okunamıyor ya da kalp atışı eşiği aştı → OLCULEMEDI · HATA (insan gerekir) → DURDU. */
+/** Güncelleyici süreci: dosya yok → YOK · okunamıyor ya da kalp atışı eşiği aştı → OLCULEMEDI · HATA (insan gerekir; `onar`ın
+ * ONARIM_TAVANI · ONARIM_KAYNAK_YOK · GUNCELLEYICI_KAPALI arızaları da) → DURDU. */
 export function updaterProcess(read: UpdaterRead, nowMs: number): UpdaterProcessView {
   if (read.status.kind === "missing") return { durum: "YOK", surum: null };
   if (read.status.kind === "invalid") return { durum: "OLCULEMEDI", surum: null };
@@ -234,7 +235,7 @@ export interface UpdateStatus {
     readonly planlanan: string | null;
     readonly zaman: string | null;
     readonly sonAyrinti: UpdaterLastDetail | null;
-    /** Bu turun bilgisi (sorun DEĞİL; ör. `SEMA_OLCULEMEDI` — güncelleme durmadı). */
+    /** Bu turun bilgisi (sorun DEĞİL; ör. `SEMA_OLCULEMEDI` — güncelleme durmadı · `ONARILDI` — güncelleyici kendini onardı). */
     readonly bilgi: UpdaterNotice | null;
   } | null;
   /** Son denemeler (backend + PG adımları), en yeni önce. */
