@@ -49,6 +49,14 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
+      # Kaynağı değişen hizmet ikilisinin Cargo sürümü son backend-v* etiketinden büyük mü (sahadaki
+      # güncelleyici eşit sürümü almaz). Sığ klonda etiket yok: yalnız backend-v* etiketleri derinlik 1 çekilir.
+      - name: Güncelleyici sürüm bekçisi (test_guncelleyici_surum)
+        working-directory: .
+        run: |
+          git fetch --no-tags --depth=1 origin '+refs/tags/backend-v*:refs/tags/backend-v*'
+          node scripts/test_guncelleyici_surum.mjs --sonda
+          node scripts/test_guncelleyici_surum.mjs
       - name: Rust araç zinciri (stable + rustfmt + clippy)
         run: rustup toolchain install stable --profile minimal --component rustfmt,clippy && rustup default stable
       # Anahtar kilit dosyası + araç zinciri sürümü; ara anahtar bayat target'ı geri getirir (cargo yeniden derler).
