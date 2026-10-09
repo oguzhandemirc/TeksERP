@@ -99,6 +99,11 @@ function createLoom(r: Random, seed: LoomSeed, open: OpenStop | null): LiveLoom 
   const plannedM = r.int(8, 30) * 100;
   const totalM = r.int(30, 50) * 100;
   const code = String(seed.seq).padStart(2, "0");
+  // Günün önceki vardiyaları (mock): her hol kendi ortalamasında (%91/%83/%75 ± 6) çalışmış sayılır.
+  const earlierSec = Math.max(0, (shift.startsAt - factoryDayStart(now).getTime()) / 1000);
+  const hallMean = 0.91 - HALLS.indexOf(hall) * 0.08;
+  const earlierRunSec = earlierSec * Math.min(1, r.range(hallMean - 0.06, hallMean + 0.06));
+  const plannedSec = Math.max(0, elapsedSec - unscheduledSec);
   return {
     id: `tz-${code}`,
     code,
@@ -113,8 +118,9 @@ function createLoom(r: Random, seed: LoomSeed, open: OpenStop | null): LiveLoom 
       meters,
       targetMeters: metersOf(SHIFT_HOURS * 60 * targetRpm * TARGET_EFFICIENCY, picksPerCm),
       runSec,
-      plannedSec: Math.max(0, elapsedSec - unscheduledSec),
+      plannedSec,
     },
+    today: { runSec: earlierRunSec + runSec, plannedSec: earlierSec + plannedSec },
     stops,
     events: eventsOf(stops, open, hall.name),
     job: {

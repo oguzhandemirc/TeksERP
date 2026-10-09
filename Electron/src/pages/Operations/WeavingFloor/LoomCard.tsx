@@ -1,12 +1,13 @@
-// Tek tezgah kartı — numara, canlı figür, alt şerit: çalışırken vardiya hedefi,
-// dururken halka + büyük sayaç; uyarı zinciri sağ üst köşede. Tıklanınca detay açılır.
+// Tek tezgah kartı — numara, canlı figür, alt şerit: çalışırken "bugün %" çubuğu,
+// dururken halka + büyük sayaç ("bugün %" figürün köşesinde — sayaç ezilmesin); uyarı
+// zinciri sağ üstte. Tıklanınca detay.
 import { memo } from "react";
 import { Star } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { AlertChainMini, StatusShape, TimerRing } from "./Markers";
 import { LoomFigure } from "./LoomFigure";
 import { STATUS_COLOR, STATUS_LABEL, TIER_COLOR, TIER_LABEL, hsl, statusOf } from "./palette";
-import { escalationTierOf, formatTimer, targetProgress } from "./metrics";
+import { escalationTierOf, formatTimer, targetProgress, todayAvailabilityPct } from "./metrics";
 import { reasonOf } from "./stopReasons";
 import type { LiveLoom, OpenStop } from "./types";
 
@@ -40,6 +41,16 @@ function CardTimer({ ms, color, ring }: { ms: number; color: string; ring: boole
   );
 }
 
+/** "bugün %84" — tezgahın bugünkü çalışma oranı; etiket her kartta açık yazılır. */
+function TodayPct({ pct }: { pct: number | null }) {
+  return (
+    <span className="shrink-0 whitespace-nowrap text-xs font-semibold tabular-nums text-muted-foreground" title="Bugünkü çalışma oranı">
+      <span className="text-[0.85em] font-medium">bugün </span>
+      {pct === null ? "—" : `%${pct}`}
+    </span>
+  );
+}
+
 function StoppedFooter({ stop, now }: { stop: OpenStop; now: number }) {
   const tier = escalationTierOf(stop, now);
   const color = TIER_COLOR[tier];
@@ -53,21 +64,23 @@ function StoppedFooter({ stop, now }: { stop: OpenStop; now: number }) {
 }
 
 function RunningFooter({ loom }: { loom: LiveLoom }) {
-  const ratio = loom.shift.targetMeters > 0 ? Math.min(1, loom.shift.meters / loom.shift.targetMeters) : 0;
+  const pct = todayAvailabilityPct(loom);
   return (
-    <div className="flex h-6 items-center gap-2" title="Vardiya hedefi">
-      <div className="h-1.5 flex-1 overflow-hidden rounded-full" style={{ background: hsl("var(--ds-ink)", 0.1) }}>
-        <div className="h-full rounded-full transition-[width] duration-1000" style={{ width: `${ratio * 100}%`, background: hsl("var(--ds-run)") }} />
+    <div className="flex h-6 items-center gap-2">
+      <div className="h-1.5 min-w-0 flex-1 overflow-hidden rounded-full" style={{ background: hsl("var(--ds-ink)", 0.1) }}>
+        <div className="h-full rounded-full transition-[width] duration-1000" style={{ width: `${pct ?? 0}%`, background: hsl("var(--ds-run)") }} />
       </div>
-      <span className="text-xs font-semibold tabular-nums text-muted-foreground">%{Math.round(ratio * 100)}</span>
+      <TodayPct pct={pct} />
     </div>
   );
 }
 
 function ariaLabelOf(t: LiveLoom, now: number): string {
-  if (!t.openStop) return `Tezgah ${t.code}, çalışıyor`;
+  const today = todayAvailabilityPct(t);
+  const todayText = today === null ? "" : `, bugün %${today}`;
+  if (!t.openStop) return `Tezgah ${t.code}, çalışıyor${todayText}`;
   const r = reasonOf(t.openStop.reasonCode);
-  return `Tezgah ${t.code}, duruyor: ${r.label}, ${formatTimer(now - t.openStop.startedAt)}, ${TIER_LABEL[escalationTierOf(t.openStop, now)]}`;
+  return `Tezgah ${t.code}, duruyor: ${r.label}, ${formatTimer(now - t.openStop.startedAt)}, ${TIER_LABEL[escalationTierOf(t.openStop, now)]}${todayText}`;
 }
 
 function LoomCardImpl({ loom: t, now, star, onSelect }: Props) {
@@ -120,6 +133,11 @@ function LoomCardImpl({ loom: t, now, star, onSelect }: Props) {
             icon={reason.icon}
             className="absolute left-1/2 top-1/2 h-[3.2em] w-[3.2em] -translate-x-1/2 -translate-y-1/2 drop-shadow"
           />
+        )}
+        {stop && (
+          <span className="absolute bottom-0 right-0 rounded-md px-1 leading-tight" style={{ background: hsl("var(--ds-tile)", 0.85) }}>
+            <TodayPct pct={todayAvailabilityPct(t)} />
+          </span>
         )}
       </div>
       {stop ? <StoppedFooter stop={stop} now={now} /> : <RunningFooter loom={t} />}

@@ -1,5 +1,5 @@
 // Üst özet şeridi — dört büyük cevap: kaç tezgah çalışıyor, kaçı duruyor (sınıf
-// şekilleriyle), salonun çalışma oranı, vardiya hedefi; sağda vardiya saati.
+// şekilleriyle), "şu an %" (şu an çalışan tezgah oranı), vardiya hedefi; sağda saat.
 import { formatFactory } from "@/lib/factory-time";
 import { StatusShape, TimerRing } from "./Markers";
 import { STATUS_LABEL, hsl, statusOf, type StatusKey } from "./palette";
@@ -68,10 +68,13 @@ export function FloorSummary({ floor, now }: Props) {
         </div>
       </Block>
       <Block>
-        <TimerRing progress={(s.availabilityPct ?? 0) / 100} color="var(--ds-run)" className="h-10 w-10" />
-        <div>
-          <div className="text-[2em] font-extrabold leading-none tabular-nums" style={ink}>{s.availabilityPct === null ? "—" : `%${s.availabilityPct}`}</div>
-          <Caption>Çalışma oranı</Caption>
+        <TimerRing progress={(s.runningNowPct ?? 0) / 100} color="var(--ds-run)" className="h-10 w-10" />
+        <div title="Şu an çalışan tezgahların oranı">
+          <div className="text-[2em] font-extrabold leading-none tabular-nums" style={ink}>
+            <span className="mr-1 text-[0.45em] font-bold uppercase tracking-wide text-muted-foreground">şu an</span>
+            {s.runningNowPct === null ? "—" : `%${s.runningNowPct}`}
+          </div>
+          <Caption>Şu an çalışan tezgah</Caption>
         </div>
       </Block>
       <Block className="col-span-2 md:col-span-1">

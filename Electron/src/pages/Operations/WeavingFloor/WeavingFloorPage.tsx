@@ -3,6 +3,7 @@
 // =============================================================================
 // Veri tek kapıdan: `useLoomFloorLive` (bugün mock; ağ/IPC yok). Tasarım kararları
 // ve gerçek veriye geçiş: docs/design/DOKUMA-CANLI-EKRAN.md.
+// `tv` = salon TV'si kipi: açılışta tam ekran, menü/düğme/çıkış yok, dokunuş detay açmaz.
 // =============================================================================
 import { useCallback, useMemo, useState } from "react";
 import { Maximize2 } from "lucide-react";
@@ -28,18 +29,21 @@ function bestHallOf(halls: readonly { hall: string; pct: number | null }[]): str
   return ranked[0]?.hall ?? null;
 }
 
-export function WeavingFloorPage() {
+const noSelect = () => undefined;
+
+export function WeavingFloorPage({ tv = false }: { tv?: boolean }) {
   const { floor, now } = useLoomFloorLive();
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [filter, setFilter] = useState<ShowFilter>("ALL");
   const [root, setRoot] = useState<HTMLDivElement | null>(null);
-  const fullscreen = useFullscreen(root);
-  const onSelect = useCallback((id: string) => setSelectedId(id), []);
+  const fullscreen = useFullscreen(root, { locked: tv });
+  const select = useCallback((id: string) => setSelectedId(id), []);
+  const onSelect = tv ? noSelect : select;
 
   const predicate = showFilterPredicate(filter, now);
   const halls = floor.halls.map((hall) => {
     const all = floor.looms.filter((t) => t.hall === hall);
-    return { hall, all, visible: all.filter(predicate), pct: summarizeFloor(all, now).availabilityPct };
+    return { hall, all, visible: all.filter(predicate), pct: summarizeFloor(all, now).todayPct };
   });
   const bestHall = bestHallOf(halls);
   const starId = useMemo(() => shiftStarLoom(floor.looms), [floor.looms]);
@@ -57,7 +61,12 @@ export function WeavingFloorPage() {
       >
         <TabPortalProvider value={root}>
           {fullscreen.active ? (
-            <FullscreenHeader now={now} onExit={fullscreen.exit} legend={<StatusLegend />} />
+            <FullscreenHeader
+              now={now}
+              updatedAt={floor.updatedAt}
+              onExit={tv ? undefined : fullscreen.exit}
+              legend={<StatusLegend />}
+            />
           ) : (
             <PageHeader
               title="Tezgah Salonu"

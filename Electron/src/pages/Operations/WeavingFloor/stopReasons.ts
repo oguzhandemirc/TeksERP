@@ -2,8 +2,8 @@
 // DURUŞ SEBEPLERİ — görsel sözlük + hedef müdahale süreleri
 // =============================================================================
 // Kod, etiket ve kayıp sınıfı sunucu kataloğunun (`MACHINE_STOP_REASONS`) aynası.
-// `targetMin` ve `ESCALATION_SETTINGS` MOCK ayar verisidir: gerçekte fabrika
-// ayarından gelir, kodda sabit kalmaz (docs/design/DOKUMA-CANLI-EKRAN.md § Uyarı zinciri).
+// `targetMin` ve `ESCALATION_SETTINGS` MOCK ayar verisidir: gerçekte hedef süreyi
+// yönetici panelde sebep satırına yazar, kodda sabit kalmaz (DOKUMA-CANLI-EKRAN.md §5.2, §8).
 // =============================================================================
 import {
   CalendarClock,

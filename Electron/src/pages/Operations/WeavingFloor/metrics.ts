@@ -70,6 +70,12 @@ export function availabilityPct(t: LiveLoom): number | null {
   return Math.round((t.shift.runSec / t.shift.plannedSec) * 100);
 }
 
+/** Bugünkü çalışma oranı 0..100 (fabrika günü başından beri) — kartın "bugün %"i. */
+export function todayAvailabilityPct(t: LiveLoom): number | null {
+  if (t.today.plannedSec <= 0) return null;
+  return Math.round((t.today.runSec / t.today.plannedSec) * 100);
+}
+
 /** Hız oranı (performans) 0..100 — çalışırken hedef devire göre. */
 export function performancePct(t: LiveLoom): number | null {
   if (t.shift.runSec <= 0 || t.targetRpm <= 0) return null;
@@ -82,7 +88,10 @@ export interface FloorSummaryData {
   running: number;
   stopped: number;
   overdue: number;
-  availabilityPct: number | null;
+  /** Şu an çalışan tezgah oranı 0..100 (üst şeridin "şu an %"i); tezgah yoksa null. */
+  runningNowPct: number | null;
+  /** Bugünkü çalışma oranı 0..100 (günün toplam çalışılan / planlı süresi). */
+  todayPct: number | null;
   meters: number;
   targetMeters: number;
 }
@@ -95,8 +104,8 @@ export function summarizeFloor(looms: readonly LiveLoom[], now: number): FloorSu
   let overdue = 0;
   let stopped = 0;
   for (const t of looms) {
-    runSec += t.shift.runSec;
-    plannedSec += t.shift.plannedSec;
+    runSec += t.today.runSec;
+    plannedSec += t.today.plannedSec;
     meters += t.shift.meters;
     targetMeters += t.shift.targetMeters;
     if (t.openStop) {
@@ -109,7 +118,8 @@ export function summarizeFloor(looms: readonly LiveLoom[], now: number): FloorSu
     running: looms.length - stopped,
     stopped,
     overdue,
-    availabilityPct: plannedSec > 0 ? Math.round((runSec / plannedSec) * 100) : null,
+    runningNowPct: looms.length > 0 ? Math.round(((looms.length - stopped) / looms.length) * 100) : null,
+    todayPct: plannedSec > 0 ? Math.round((runSec / plannedSec) * 100) : null,
     meters: Math.round(meters),
     targetMeters: Math.round(targetMeters),
   };

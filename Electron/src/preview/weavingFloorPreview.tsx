@@ -1,5 +1,5 @@
 // YALNIZ GELİŞTİRME önizlemesi: Tezgah Salonu'nu girişsiz açar (ekran görüntüsü ve
-// tasarım incelemesi). `preview-weaving-floor.html` derleme girdisi değildir; üretimde atar.
+// tasarım incelemesi; `?kip=tv` TV kipi). `preview-weaving-floor.html` derleme girdisi değildir; üretimde atar.
 import React from "react";
 import ReactDOM from "react-dom/client";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -16,7 +16,10 @@ import "../index.css";
 
 if (!import.meta.env.DEV) throw new Error("Önizleme yalnız geliştirme kipinde açılır.");
 
-const theme = new URLSearchParams(window.location.search).get("tema") === "koyu" ? "dark" : "light";
+const params = new URLSearchParams(window.location.search);
+const theme = params.get("tema") === "koyu" ? "dark" : "light";
+// `?kip=tv` salon TV'si kipini açar (gerçekte ayrı bağlantı + TV hesabı — sonraki dilim).
+const tv = params.get("kip") === "tv";
 const routePath = "/operations/weaving-orders/salon";
 
 ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
@@ -27,7 +30,7 @@ ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
           <MemoryRouter initialEntries={[routePath]}>
             <div className="h-screen">
               <Routes>
-                <Route path={routePath} element={<WeavingFloorPage />} />
+                <Route path={routePath} element={<WeavingFloorPage tv={tv} />} />
               </Routes>
             </div>
           </MemoryRouter>

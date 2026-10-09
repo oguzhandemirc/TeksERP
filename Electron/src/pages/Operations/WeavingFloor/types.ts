@@ -71,6 +71,12 @@ export interface ShiftCounters {
   plannedSec: number;
 }
 
+/** Fabrika günü başından beri (içinde bulunulan vardiya dahil) — kartın "bugün %"i. */
+export interface DayCounters {
+  runSec: number;
+  plannedSec: number;
+}
+
 export type LoomType = "AIR_JET" | "RAPIER";
 
 export interface LiveLoom {
@@ -86,6 +92,7 @@ export interface LiveLoom {
   picksPerCm: number;
   openStop: OpenStop | null;
   shift: ShiftCounters;
+  today: DayCounters;
   stops: StopRecord[];
   events: LoomEvent[];
   job: WeavingJob | null;

@@ -36,6 +36,7 @@ function advanceRunning(r: Random, t: LiveLoom, now: number, dtMs: number): Live
       runSec: t.shift.runSec + dtMs / 1000,
       plannedSec: t.shift.plannedSec + dtMs / 1000,
     },
+    today: { runSec: t.today.runSec + dtMs / 1000, plannedSec: t.today.plannedSec + dtMs / 1000 },
     job: t.job ? { ...t.job, producedM: t.job.producedM + meters } : null,
     beam: t.beam ? { ...t.beam, remainingM } : null,
   };
@@ -77,8 +78,14 @@ function advanceStopped(r: Random, t: LiveLoom, now: number, dtMs: number): Live
     open = stamped;
     added.push({ at: open.escalatedAt!, kind: "ESCALATE", person: OWNER });
   }
-  const plannedSec = t.shift.plannedSec + (unscheduled ? 0 : dtMs / 1000);
-  const mid: LiveLoom = { ...t, openStop: open, shift: { ...t.shift, plannedSec }, events: added.length ? withEvents(t, ...added) : t.events };
+  const plannedDelta = unscheduled ? 0 : dtMs / 1000;
+  const mid: LiveLoom = {
+    ...t,
+    openStop: open,
+    shift: { ...t.shift, plannedSec: t.shift.plannedSec + plannedDelta },
+    today: { ...t.today, plannedSec: t.today.plannedSec + plannedDelta },
+    events: added.length ? withEvents(t, ...added) : t.events,
+  };
   const meanFixSec = (reason.targetMin ?? 240) * 60 * 0.7;
   const fixed = open.respondedAt !== null && now - open.respondedAt > 20_000 && r.next() < dtMs / 1000 / meanFixSec;
   const unscheduledEnds = unscheduled && r.next() < dtMs / 1000 / 3600;

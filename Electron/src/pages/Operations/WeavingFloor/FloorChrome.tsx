@@ -34,7 +34,16 @@ export function StatusLegend() {
   );
 }
 
-export function FullscreenHeader({ now, onExit, legend }: { now: number; onExit: () => void; legend?: React.ReactNode }) {
+interface FullscreenHeaderProps {
+  now: number;
+  /** Son veri tazelemesinin anı — TV'ye bakan ekranın canlı olduğunu görsün. */
+  updatedAt: number;
+  /** Yoksa (TV kipi) çıkış düğmesi çizilmez. */
+  onExit?: () => void;
+  legend?: React.ReactNode;
+}
+
+export function FullscreenHeader({ now, updatedAt, onExit, legend }: FullscreenHeaderProps) {
   return (
     <div className="flex items-center gap-4 px-6 pt-4">
       <h1 className="whitespace-nowrap text-[1.6em] font-extrabold" style={{ color: hsl("var(--ds-ink)") }}>
@@ -42,11 +51,20 @@ export function FullscreenHeader({ now, onExit, legend }: { now: number; onExit:
       </h1>
       <SampleDataBadge />
       <div className="min-w-0 flex-1">{legend}</div>
+      <span
+        className="inline-flex items-center gap-1.5 whitespace-nowrap text-[0.8em] font-semibold tabular-nums text-muted-foreground"
+        title="Ekran kendini tazeler"
+      >
+        <span className="h-2 w-2 rounded-full" style={{ background: hsl("var(--ds-run)") }} aria-hidden />
+        Canlı · {formatFactory(updatedAt, "HH:mm:ss")}
+      </span>
       <span className="whitespace-nowrap text-[1.1em] font-bold tabular-nums text-muted-foreground">{formatFactory(now, "dd.MM.yyyy")}</span>
-      <Button variant="outline" size="sm" onClick={onExit}>
-        <Minimize2 className="mr-1.5 h-4 w-4" />
-        Tam ekrandan çık
-      </Button>
+      {onExit && (
+        <Button variant="outline" size="sm" onClick={onExit}>
+          <Minimize2 className="mr-1.5 h-4 w-4" />
+          Tam ekrandan çık
+        </Button>
+      )}
     </div>
   );
 }

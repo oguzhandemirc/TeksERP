@@ -1,6 +1,6 @@
 // Mock üreticinin deterministikliği: aynı tohum + an → aynı salon; adım saf.
 import { describe, expect, it } from "vitest";
-import { escalationTierOf } from "../metrics";
+import { escalationTierOf, summarizeFloor, todayAvailabilityPct } from "../metrics";
 import { reasonOf } from "../stopReasons";
 import type { FloorState } from "../types";
 import { OPENING_SCENARIOS } from "./catalog";
@@ -51,6 +51,30 @@ describe("createFloor — tohumlu başlangıç", () => {
     }
   });
 
+  it("bugün sayaçları vardiyayı kapsar: günün önceki vardiyaları da sayılır", () => {
+    const f = createFloor(SEED, NOW);
+    for (const t of f.looms) {
+      expect(t.today.plannedSec).toBeGreaterThan(t.shift.plannedSec);
+      expect(t.today.runSec).toBeGreaterThanOrEqual(t.shift.runSec);
+      expect(t.today.runSec).toBeLessThanOrEqual(t.today.plannedSec);
+      const pct = todayAvailabilityPct(t)!;
+      expect(pct).toBeGreaterThanOrEqual(0);
+      expect(pct).toBeLessThanOrEqual(100);
+    }
+  });
+
+  it("şu an % = çalışan tezgah / toplam (vardiya ya da gün süresinden bağımsız)", () => {
+    const f = createFloor(SEED, NOW);
+    const s = summarizeFloor(f.looms, NOW);
+    expect(s.runningNowPct).toBe(Math.round(((36 - OPENING_SCENARIOS.length) / 36) * 100));
+    expect(summarizeFloor([], NOW).runningNowPct).toBeNull();
+  });
+
+  it("günün ilk vardiyasında bugün = vardiya", () => {
+    const night = Date.UTC(2026, 9, 8, 23, 0); // 02:00 İstanbul, 3. vardiya (günün ilki)
+    for (const t of createFloor(SEED, night).looms) expect(t.today).toEqual({ runSec: t.shift.runSec, plannedSec: t.shift.plannedSec });
+  });
+
   it("vardiya fabrika gününden üçe bölünür", () => {
     const s = shiftOf(NOW);
     expect(s.name).toBe("1. vardiya");
@@ -81,6 +105,7 @@ describe("stepFloor — saf simülasyon adımı", () => {
     const after = g.looms.reduce((a, t) => a + t.shift.meters, 0);
     expect(after).toBeGreaterThan(before);
     expect(g.updatedAt).toBe(NOW + 20_000);
+    for (const [i, t] of g.looms.entries()) expect(t.today.plannedSec).toBeGreaterThanOrEqual(f.looms[i]!.today.plannedSec);
   });
 
   it("hedefi dolan duruş adımda patrona iletilir ve olay defterine düşer", () => {

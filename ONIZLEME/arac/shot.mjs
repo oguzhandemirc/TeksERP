@@ -8,11 +8,11 @@ const [out, suffix = ""] = process.argv.slice(2);
 const URL_BASE = "http://localhost:5391/preview-weaving-floor.html";
 const browser = await chromium.launch();
 const errors = [];
-async function open(theme, w, h) {
+async function open(theme, w, h, extra = "") {
   const p = await browser.newPage({ viewport: { width: w, height: h }, deviceScaleFactor: 1 });
   p.on("pageerror", (e) => errors.push(String(e)));
   p.on("console", (m) => m.type() === "error" && errors.push(m.text()));
-  await p.goto(`${URL_BASE}?tema=${theme}`);
+  await p.goto(`${URL_BASE}?tema=${theme}${extra}`);
   await p.waitForSelector("button[aria-label^='Tezgah']");
   await p.waitForTimeout(1500);
   return p;
@@ -45,6 +45,17 @@ const fs = await p.evaluate(() => {
 });
 console.log("tam ekran kök", JSON.stringify(fs));
 await p.screenshot({ path: `${out}/05-tam-ekran-koyu${suffix}.png` });
+await p.close();
+
+// TV kipi: ayrı bağlantı (?kip=tv) — açılışta tam ekran, düğme/çıkış yok.
+p = await open("koyu", 1920, 1080, "&kip=tv");
+const tv = await p.evaluate(() => {
+  const root = document.querySelector(".fixed.inset-0");
+  const buttons = [...document.querySelectorAll("button")].map((b) => b.textContent?.trim()).filter((t) => t && !t.startsWith("Tezgah"));
+  return root ? { sh: root.scrollHeight, ch: root.clientHeight, buttons: buttons.filter((t) => !/^\d/.test(t)) } : null;
+});
+console.log("tv kipi kök", JSON.stringify(tv));
+await p.screenshot({ path: `${out}/06-tv-kipi-koyu${suffix}.png` });
 await p.close();
 
 await browser.close();

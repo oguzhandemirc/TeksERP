@@ -1,6 +1,6 @@
 # Tezgah Salonu — dokuma tezgahlarının canlı ekranı (ÖRNEK VERİ)
 
-> **Tarih:** 2026-10-09 · **Durum:** panelde çalışan bir MOCK; yalnız `gece/dokuma-ekran` dalında, **main'e inmez** (sahaya örnek veri çıkmasın). Veri çekmez, bildirim göndermez, backend'e dokunmaz.
+> **Tarih:** 2026-10-09 · **Kararlar:** kullanıcı 2026-10-09 sabah (§8) · **Durum:** panelde çalışan bir MOCK; yalnız `gece/dokuma-ekran` dalında, **main'e inmez** (sahaya örnek veri çıkmasın). Veri çekmez, bildirim göndermez, backend'e dokunmaz.
 > **Kod:** `Electron/src/pages/Operations/WeavingFloor/` · veri sözleşmesi `Electron/src/pages/Operations/WeavingFloor/types.ts` · tek veri kapısı `Electron/src/pages/Operations/WeavingFloor/useLoomFloorLive.ts`.
 > **Bağlam:** tezgah izlemenin asıl tasarımı `docs/design/DOKUMA-TEZGAH-IZLEME-TASARIMI.md` (telemetri, duruş defteri, vardiya karnesi); dokuma kuralları `docs/kurallar/dokuma.md`.
 
@@ -18,21 +18,22 @@ Salona bakan biri (vardiya amiri, patron, salondaki TV) **tek bakışta** üç s
 
 ```
 ┌ Başlık: Tezgah Salonu [Örnek veri]            [Göster: Tümü] [Tam ekran] ┐
-├ Özet: ● 26/36 çalışıyor │ ⯃ 10 (●5 ◆3 ■1 ◌1) │ ◔ %79 │ 891 m ▬▬▬ hedef │ 02:07 ┤
+├ Özet: ● 26/36 çalışıyor │ ⯃ 10 (●5 ◆3 ■1 ◌1) │ ◔ ŞU AN %72 │ 891 m ▬▬▬ hedef │ 02:07 ┤
 ├ Hedefi aşan 3:  [35 ⟂ 14 dk /10 dk ♛] [22 👤✕ 9 dk /5 dk ♛] …           ┤
-├ Hol A 11/14 ▬▬ %84 🏆 ─────────────────────────────────────────────────── ┤
-│ [01][02][03][04][05⯃][06]…   her kart: no · zincir/şekil · figür · alt şerit │
+├ Hol A 11/14 ▬▬ bugün %90 🏆 ───────────────────────────────────────────── ┤
+│ [01][02][03][04][05⯃][06]…   her kart: no · zincir/şekil · figür · alt şerit (bugün %) │
 ├ Hol B … / Hol C …                                                         ┤
 └ Anahtar: ● Çalışıyor ⯃ Arıza/kopuş ◆ Ayar ■ Planlı ◌ Plan dışı           ┘
 ```
 
-- **Özet şeridi** — çalışan/toplam; duran sayısı + sınıf kırılımı (şekillerle); salonun çalışma oranı (kullanılabilirlik); vardiya metresi ve hedef çubuğu; fabrika saati + vardiyanın kalanı.
+- **Özet şeridi** — çalışan/toplam; duran sayısı + sınıf kırılımı (şekillerle); **"şu an %"** = şu an çalışan tezgah / toplam (etiket: "ŞU AN %72 · Şu an çalışan tezgah"); vardiya metresi ve hedef çubuğu; fabrika saati + vardiyanın kalanı.
 - **Hedefi aşanlar şeridi** — yalnız varsa görünür; en uzun bekleyen başta; her öğe detayı açar.
-- **Hol bölümü** — hol adı, çalışan/toplam, holün çalışma oranı; tezgahlar salondaki sırayla.
-- **Tezgah kartı** — numara; sağ üstte çalışırken durum şekli, dururken **kompakt uyarı zinciri**; ortada canlı figür (dururken solar ve üstüne sebep simgesi biner); altta çalışırken vardiya hedef çubuğu, dururken **hedef halkası + sayaç**.
+- **Hol bölümü** — hol (salon) adı, çalışan/toplam, holün **"bugün %"**i (holdeki tezgahların bugünkü çalışılan / planlı süresi); tezgahlar **tezgah numarası sırasıyla ızgarada** — gerçek kat planı yok (§8 karar 3).
+- **Tezgah kartı** — numara; sağ üstte çalışırken durum şekli, dururken **kompakt uyarı zinciri**; ortada canlı figür (dururken solar ve üstüne sebep simgesi biner); altta çalışırken **"bugün %"** çubuğu + etiketi, dururken **hedef halkası + sayaç** ve "bugün %" figürün sağ alt köşesinde (sayaç ezilmesin). "bugün %" = o tezgahın fabrika günü başından beri çalışılan / planlı süresi (plan dışı duruş paydadan düşer); vardiya metresi karttan çıktı, özet şeridinde ve detayda kalır.
 - **Detay paneli** (karta tıklayınca sağdan) — büyük figür; açık duruş kartı (sebep, kademe, sayaç, hedef) ve uyarı zinciri zaman çizgisi; vardiya rakamları (üretim · atkı · çalışma · hız — randıman tek sayıya çökertilmez); sebebe göre duruş çubukları; dokuma işi ve levent (kalan iplik); son olaylar. Saatler fabrika diliminden (`formatFactory`).
 - **Göster seçici** — modal (combobox değil): Tümü · Duranlar · Hedefi aşanlar.
-- **Tam ekran (salon TV'si)** — sayfa pencereyi kaplar; anahtar başlığa taşınır; bütün holler aynı kolon ızgarasına (en kalabalık holün adedi = 14) dizilir ⇒ 36 tezgah 1920×1080'e **kaydırmasız** sığar. Esc ya da düğme çıkarır.
+- **Tam ekran** — sayfa pencereyi kaplar; anahtar başlığa taşınır; bütün holler aynı kolon ızgarasına (en kalabalık holün adedi = 14) dizilir ⇒ 36 tezgah 1920×1080'e **kaydırmasız** sığar. Esc ya da düğme çıkarır.
+- **TV kipi** (§8 karar 2) — ayrı bağlantı; açılışta tam ekran, **menü yok, düğme yok, çıkış yok**, Esc kapatmaz, karta dokunmak detay açmaz; başlıkta "● Canlı · HH:mm:ss" son tazeleme damgası (ekranın donmadığı görülsün). Tarayıcı gerçek tam ekranı kullanıcı dokunuşu olmadan vermediği için sayfa pencereyi CSS ile kaplar ve gerçek tam ekranı ilk dokunuşta/tuşta yeniden dener (TV cihazında tarayıcının kiosk kipi beklenir). Mock'ta yalnız önizlemede: `preview-weaving-floor.html?kip=tv` (`WeavingFloorPage tv`); uygulamadaki menüsüz bağlantı sonraki dilim (§9).
 - **Dar pencere** — panelin en dar penceresi 1100 px; kartlar `minmax(7.5em, 1fr)` ile akar, sayaç kart daraldıkça küçülür, **kesilmez**.
 
 ## 3 · Renk · şekil · simge sözlüğü
@@ -89,8 +90,8 @@ duruş başladı ──► görevliye bildirildi ──► görevli tezgahta ─
 
 ### 5.2 Hedef süre ve pay = profil/ayar verisi
 
-- **Sebep başına hedef süre** (`targetMin`) ve **iletim payı** (`graceMin`) KODDA DEĞİL fabrika ayarında yaşar ([PROFİL]: her fabrika kendi sürelerini seçer). Mock'ta `Electron/src/pages/Operations/WeavingFloor/stopReasons.ts` içinde örnek değerler: atkı 5 · çözgü 10 · kenar 8 · levent bağlama 30 · tahar 120 · planlı bakım 60 dk …; plan dışı sebeplerde süre **izlenmez** (`null`).
-- Gerçek veride yeri: sebep kataloğu `ReasonPreset(kind = MACHINE_STOP)` satırına bir **hedef süre** alanı (ya da sebep × fabrika ayar tablosu) + fabrika ayarında tek bir **iletim payı**. Değişiklik geçmişi etkilemez: açık duruş, başladığı andaki hedefle değerlendirilir (ayar değişikliği defterine yazılır).
+- **Sebep başına hedef süre** (`targetMin`) ve **iletim payı** (`graceMin`) KODDA DEĞİL fabrika ayarında yaşar ([PROFİL]: her fabrika kendi sürelerini seçer). **Karar (kullanıcı 2026-10-09):** hedef süreyi **fabrika yöneticisi panelden, sebep kataloğu satırında** ayarlar; [PROFİL] verisidir, kodda sabit değildir. Mock'ta `Electron/src/pages/Operations/WeavingFloor/stopReasons.ts` içinde örnek değerler: atkı 5 · çözgü 10 · kenar 8 · levent bağlama 30 · tahar 120 · planlı bakım 60 dk …; plan dışı sebeplerde süre **izlenmez** (`null`).
+- Gerçek veride yeri: sebep kataloğu `ReasonPreset(kind = MACHINE_STOP)` satırına bir **hedef süre** kolonu (karar gereği satırda; ayrı ayar tablosu seçeneği düştü) + fabrika ayarında tek bir **iletim payı** (pay biçimi açık — §8). Değişiklik geçmişi etkilemez: açık duruş, başladığı andaki hedefle değerlendirilir (ayar değişikliği defterine yazılır).
 - Varsayılan = bugünkü davranış kuralı: ayar satırı yoksa **süre izlenmez, kimseye iletilmez** (bayrak kuralı — çıkışsız kapı üretmez).
 
 ### 5.3 Kanallar
@@ -116,6 +117,8 @@ Bileşenler yalnız `types.ts` şekline bağlıdır; geçişte yalnız `useLoomF
 
 | Ekrandaki alan | Mock (bugün) | Gerçek kaynak |
 |---|---|---|
+| "bugün %" (kart, hol) | `today.runSec / today.plannedSec` — günün önceki vardiyaları hol başına uydurma oran | günün `MachineShiftStat` satırları + açık vardiya telemetrisi (kullanılabilirlik; fabrika günü `factoryDayStart`) |
+| "şu an %" (üst şerit) | çalışan / toplam | açık duruşu olmayan tezgah / izlenen tezgah |
 | durum / açık duruş (`openStop`) | `mock/stepFloor.ts` rastgele | `MachineStopEvent` + tezgah telemetrisi (Faz 2, `MachineSpec.monitoringState = LIVE`) |
 | devir, atkı, metre | devir × süre / atkı sıklığı | `MachineRun` + telemetri kovaları |
 | vardiya, kalan süre | fabrika gününü 00/08/16 diye böler | `ShiftInstance` / `ShiftDefinition` |
@@ -131,14 +134,35 @@ Mock deterministiktir (`mulberry32`, tohum dışarıda): aynı tohum + an ⇒ ay
 
 ## 7 · Yer ve izin
 
-- Yol `operations/weaving-orders/salon` — Dokuma İşleri ekranının alt yolu; aynı okuma izni (`weavingorder:read`) ve aynı modül kapısı (`ROUTE_MODULE` ön eki, `dokumaEnabled`); yeni ekran kataloğu girdisi gerekmez. Karo `weaving-floor` aynı görünürlük yüklemini kullanır.
+- **Bugün (mock):** yol `operations/weaving-orders/salon` — Dokuma İşleri ekranının alt yolu; aynı okuma izni (`weavingorder:read`) ve aynı modül kapısı (`ROUTE_MODULE` ön eki, `dokumaEnabled`). Karo `weaving-floor` aynı görünürlük yüklemini kullanır.
+- **Karar (kullanıcı 2026-10-09):** ekran ayrı bir **"dokuma canlı izleme"** izniyle açılır; hangi rolün göreceğini fabrika panelden atar (izin kataloğu kodda, atama panelde — kök `CLAUDE.md`). TV için **salt-okur ayrı hesap** açılır. Geçiş sonraki dilimdir (§9); o zamana dek mock `weavingorder:read` ile kalır.
 - `reports/dokuma/*` yolu elendi: backend rapor kataloğu girdisi ister, katalog dışı anahtar kapalı sayılır.
 - Geliştirme önizlemesi `Electron/preview-weaving-floor.html` yalnız Vite geliştirme sunucusunda açılır; derleme girdisi değildir (electron-vite girdisi yalnız `index.html`), giriş modülü üretimde hata fırlatır.
 
-## 8 · Açık sorular
+## 8 · Kararlar ve açık kalanlar
 
-1. **Hedef süreleri kim ayarlar?** Fabrika ayarlarında yönetici mi, yoksa vardiya amiri sebep başına mı? Tek iletim payı mı, sebep başına pay mı?
-2. **TV'de tam ekran kendiliğinden mi açılsın?** (ör. "salon ekranı" kipiyle açılan bir cihaz/kullanıcı ⇒ doğrudan tam ekran, girişsiz değil.)
-3. **Dizilim gerçek salon planından mı gelsin?** Bugün hol başına sıra numarasıyla ızgara; gerçek yerleşim (sıra/koridor) tanımlanabilir mi?
-4. **Hangi roller görür?** Bugün `weavingorder:read` olan herkes; patron/vardiya amiri/usta için ayrı bir izin gerekir mi?
-5. **Modül anahtarı:** ekran dokuma modülüne (`dokumaEnabled`) bağlı; telemetri geldiğinde tezgah modülüne (`tezgahEnabled`) mi taşınmalı?
+Kullanıcı 2026-10-09 sabah beş soruyu kapattı; kaynak her satırda "kullanıcı 2026-10-09".
+
+| # | Soru | Karar (kullanıcı 2026-10-09) | Bu dalda |
+|---|---|---|---|
+| 1 | Hedef süreleri kim ayarlar? | **Fabrika yöneticisi, panelden, sebep kataloğu satırında** ([PROFİL] verisi; kodda sabit değil). | Belge (§5.2); mock örnek değerleri `stopReasons.ts`te kalır. Kolon sonraki dilim. |
+| 2 | TV'de tam ekran kendiliğinden mi? | **Ayrı bağlantı; menü yok, açılınca tam ekran, kendini tazeler.** | Mock: `tv` kipi (önizleme `?kip=tv`, `ONIZLEME/06-tv-kipi-koyu.png`). Menüsüz bağlantı sonraki dilim. |
+| 3 | Dizilim gerçek salon planından mı? | **Hayır — salon (hol) + tezgah numarası ızgarası; gerçek kat planı YOK.** | Bugünkü ızgara zaten böyle; değişiklik yok. |
+| 4 | Yüzdeler ne anlatır? | **Kartta "bugün %"** (o tezgahın bugünkü çalışma oranı), **üst şeritte "şu an %"** (şu an çalışan tezgah oranı); ikisi de açık etiketli. | Mock uyarlandı (§2); hol başlığı da "bugün %". |
+| 5 | Hangi roller görür? | **Ayrı "dokuma canlı izleme" izni**; rol ataması fabrikanın panelinde; TV için salt-okur ayrı hesap. | Sonraki dilim (§9). |
+
+**Açık kalanlar (karar verilmedi):**
+
+1. **Modül anahtarı:** ekran bugün dokuma modülüne (`dokumaEnabled`) bağlı; telemetri geldiğinde tezgah modülüne (`tezgahEnabled`) mi taşınmalı? (`tezgahEnabled` = "Tezgah izleme" modül anahtarı, `productionEnabled`a bağlı; bugün arkasında hiçbir ekran yok, yalnız panelde duruş sebebi sekmesini açar.)
+2. **İletim payı biçimi:** fabrika ayarında tek pay mı, sebep satırında ayrı pay mı? (Karar 1 yalnız hedef süreyi bağladı.)
+
+## 9 · Sonraki dilim — gerçek uygulama için gerekenler (bu dalda KOD YOK)
+
+Backend'e bu dalda dokunulmadı; aşağıdakiler ayrı dilim(ler)dir ve `main`e kendi dalından iner.
+
+1. **Sebep kataloğuna hedef süre kolonu** — `ReasonPreset` + `targetMinutes Int?` (yalnız `MACHINE_STOP`ta anlamlı; başka kind'de dolu → 400, `stopLossClass` deseniyle simetrik servis kapısı + DB CHECK). `null` = süre izlenmez, kimseye iletilmez (bugünkü davranış = varsayılan). Reçeteler: `docs/RECETELER.md` § Yeni migration · § Yeni Prisma modeli (kolon); alan kuralları `docs/kurallar/sebep-katalogu.md`. Yazma yolu yalnız sebep kataloğu ucu; değişiklik audit'e yazılır, açık duruş başladığı andaki hedefle değerlendirilir (duruş satırına donar — geçmiş etkilenmez). Panel: Sebep Kataloğu → Tezgah duruşu sekmesinde satır başına "hedef süre (dk)" alanı.
+2. **İletim payı ayarı** — §8 açık 2 kapanınca: fabrika ayarı (`docs/RECETELER.md` § Yeni feature flag / sistem ayarı) ya da sebep satırında ikinci kolon.
+3. **"Dokuma canlı izleme" izni** — `docs/RECETELER.md` § Yeni backend route + izin kodu, 17 adım: kod `PERMISSION_CATALOG`a (tek iki nokta, `mobile:` ön eki DEĞİL — masaüstü/TV ekranı), en az bir dar rol şablonu ya da gerekçeli muaf, `SCREEN_CATALOG` girdisi + `modul` beyanı (§8 açık 1'e bağlı), Electron `content-routes.tsx` `ProtectedRoute` ile karo `tile-config.ts` AYNI izinle, canlı veri ucu `verifyToken` + izin + adlandırılmış modül kapısı. Atama panelden; migration YAZILMAZ (boot uzlaştırması).
+4. **TV bağlantısı (menüsüz)** — App kökünde kabuk-dışı bir yol (2FA kurulum sayfasının deseni: `App.tsx` `Root` kapısı), sekme/menü kabuğu çizilmeden `WeavingFloorPage tv`; açılışta tam ekran, oturum düşerse kendiliğinden yeniden bağlanır, veri akışı kesilirse "Canlı" damgası bayatlar ve ekranda görünür uyarı verir.
+5. **TV hesabı** — salt-okur ayrı kullanıcı: yalnız "dokuma canlı izleme" izni (yazma izni yok); iki adımlı giriş kararı (kullanıcı 2026-09-30: herkese TOTP) TV cihazında nasıl karşılanır ayrıca ölçülür; parola/PIN sır hijyeni kurallarıyla.
+6. **Canlı veri** — `useLoomFloorLive` gövdesi sorgu + akışa döner (§6 tablosu); "bugün %" ve "şu an %" sunucuda tek helper'dan türer (ayrışan yüzey kuralı), istemci yalnız gösterir.
