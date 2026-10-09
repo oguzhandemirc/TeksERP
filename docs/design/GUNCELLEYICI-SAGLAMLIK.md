@@ -518,7 +518,7 @@ Büyüklük ölçüsü bir ajan bağlamıdır (ajanlar ~250 bin jetonda takılı
 | **F1c** | Filo — ölçüler | Worker günlük istek sayımı (%50 uyarı) · eski biçim emeklilik ölçüsü yayın betiğinde (§4.5 madde 2) · `KURTARMA_SURUYOR` 1 sa uyarısı | satıcı testleri · `test_backend_yayin` emeklilik sondası | F1a, L2b, W3b | K |
 | **P1a** | Deneme VDS — ilk kurulum + ilk otomatik güncelleme (hazırlık çapası) | `test` grubunda TEST sınıflı kurulum; t1 → t2 OTOMATİK pencereyle; zorla geri dönüş (düşen göç); kısa kaos (öldür, `systemctl restart docker`, sağlayıcı panelinden sert yeniden başlatma) | senaryo "VDS-GUNCELLEME" | L7, T1 (ikisi de L4c'ye bağlı — L4c olmadan Linux paketi hazırlanamaz) (AK-4 kapandı: ders kurulumunun yanına, §9.1 K6) | O |
 | **P1b** | Deneme VDS — üretim çapası | üretim ikilisi + `pkt-*` sertifikalı imzalı gerçek Linux paketi; P1a senaryosunun tekrarı | aynı senaryo | **D8 töreni**, P1a | K |
-| **P2** | Windows filosuna ilk yayın | W1–W5'li güncelleyiciyi taşıyan ilk backend sürümü (hazırlık → terfi) | yayın kapısı (§9.5) | T2, T3 | K |
+| **P2** | Windows filosuna ilk yayın | W1–W5'li güncelleyiciyi (0.2.0) taşıyan ilk backend sürümü: **2.15.0**, `main`den tek büyük sürüm, migration'lı (kullanıcı kararı 2026-10-09; tören maddesi 5) (hazırlık → terfi) | yayın kapısı (§9.5) | T2, T3 | K |
 
 **Paralellik — dalgalar (2026-10-08 kararlarından sonra):** bir dalgadaki dilimler birbirinin dosyalarına dokunmaz; dalga, bağımlılıkları inmiş dilimlerden oluşur.
 
@@ -549,7 +549,7 @@ Sonrası sıralı hatlar: **W hattı** (`engine.rs`/`operation.rs` ortak — ken
 2. **L2b inişi = sözleşme kıran olmayan ama satıcı-önce sıralı yayın:** üretim satıcısı + Worker güncellemesi kullanıcının yayın onayıyla (surum-yayin reçetesi).
 3. **P1a:** deneme VDS'e kurulum — AK-4 gereği ders kurulumunun yanına; sunucuya bağlanan dilim budur (bu plan sunucuya dokunmadı).
 4. **P1b: PAKET imzası** — D8 töreninden (ilk gerçek `pkt-*` sertifikası, kullanıcı Mac'te, parola TTY) SONRA; Linux paketinin üretim imzası aynı törenin yayın adımıdır (`docs/ops/URETIM-SATICI-TOREN.md`).
-5. **P2:** Windows'a W1'li güncelleyicinin ilk çıkışı terfi etiketiyle (sürüm notu kapısı). ⚠️ Sahadaki ESKİ güncelleyiciler A1 kuralıyla çalışır: yeni ikiliyi ancak bir backend güncellemesini BAŞARILI bitirince alırlar. Bu yüzden P2'nin taşıdığı backend sürümü göçsüz ve küçük tutulur (ilk geçişin başarısı en olası olsun); sonraki her yayın "önce güncelleyici" kuralından yararlanır.
+5. **P2:** Windows'a W1'li güncelleyicinin ilk çıkışı terfi etiketiyle (sürüm notu kapısı). ⚠️ Sahadaki ESKİ güncelleyiciler A1 kuralıyla çalışır: yeni ikiliyi ancak bir backend güncellemesini BAŞARILI bitirince alırlar. **Kullanıcı kararı 2026-10-09:** "küçük, göçsüz ilk sürüm" bırakıldı; P2 = backend **2.15.0** tek büyük sürüm (migration `20261006120000_hata_raporu_kuyrugu`, panel 1.6.0 ve LAN TLS onunla), güncelleyici 0.2.0. Gerekçe: 0.1.3 güncelleyicili tek kayıtlı kurulum demofabrikaydı, sunucusu 2026-10-06'da kaldırıldı (satıcı salt-okuma ölçümü 2026-10-09) — eski kurallarla yürüyecek ilk geçiş sahada yok, yeni kurulum 0.2.0'la doğar. Sonraki her yayın "önce güncelleyici" kuralından yararlanır; güncelleyici kaynağı değişen her sürümde güncelleyici sürümü artar (`scripts/test_guncelleyici_surum.mjs`).
 6. İlk BARINDIRILAN müşteri: P1b + T2 + T3 + T4 yeşil olmadan kurulmaz (BULUT B11 kuralının güncelleyici karşılığı).
 
 **Deneme VDS'e ilk kurulum ve ilk otomatik güncelleme provası: P1a** (hazırlık çapasıyla, D8'den bağımsız); üretim çapalı tekrarı P1b.

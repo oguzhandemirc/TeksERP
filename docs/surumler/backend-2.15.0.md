@@ -1,7 +1,7 @@
-# Backend `2.14.1`
+# Backend `2.15.0`
 
 **Durum:** TASLAK — terfide kullanıcı onayı. **YAYIN KAPISI AÇIK DEĞİL:** bu sürüm yenilenmiş güncelleme programını
-(sağlamlık planı W1–W5) taşır; `docs/design/GUNCELLEYICI-SAGLAMLIK.md` §9.5 kanıtları (CI koşuları, thinkpad ve VDS
+(sağlamlık planı W1–W5, güncelleme programı 0.2.0) taşır; `docs/design/GUNCELLEYICI-SAGLAMLIK.md` §9.5 kanıtları (CI koşuları, thinkpad ve VDS
 gerçek provaları, onarım provası) tamamlanmadan hiçbir gruba yayınlanmaz.
 **Paket:** _(paketleme doldurur)_
 **SHA256:** _(paketleme doldurur)_
@@ -9,8 +9,12 @@ gerçek provaları, onarım provası) tamamlanmadan hiçbir gruba yayınlanmaz.
 **Önceki saha sürümü:** 2.14.0 (son paketlenen sürüm). Güncellenecek her kurulumda sahadaki sürüm kurulumdan önce
 sunucunun sağlık bilgisinden okunur; tahmin edilmez.
 
-Sürüm numarası yönetici kararıdır (2026-10-09): 2.14.1. Panel aynı turda 1.6.0'a çıkar (sürüm notu
-`surum-notlari.json` 2026-10-08c); tablet bu belgenin kapsamı dışındadır.
+Sürüm numarası kullanıcı kararıdır (2026-10-09): 2.15.0 — yeni güncelleme programı TEK büyük sürümle, `main`den
+çıkar; panel 1.6.0 (sürüm notu `surum-notlari.json` 2026-10-08c) ve fabrika ağında şifreli bağlantı onunla birlikte.
+Tablet bu belgenin kapsamı dışındadır. Önce planlanan "küçük, migration'sız ilk sürüm" (2.14.1) bırakıldı: o plan,
+sahadaki eski güncelleme programının (0.1.3) ilk geçişi kendi kurallarıyla yürüteceği kurulumları korumak içindi;
+0.1.3'lü tek kayıtlı kurulum demofabrikaydı ve sunucusu 2026-10-06'da kaldırıldı (satıcı kayıtlarından salt-okuma
+ölçümü, 2026-10-09). Güncelleme programının sürümü 0.1.3 → 0.2.0, sunucu hizmet konağınınki 0.1.0 → 0.2.0.
 
 ## 1. Özet
 
@@ -26,7 +30,7 @@ firma adının lisanstan gelmesi bu sürüme girer.
 Önceki sürüm 2.14.0'a göre; yalnız sunucu ve kurulum tarafı. Ölçüm: `git log backend-v2.14.0..` (sunucu, veritabanı,
 yerel ikililer ve kurulum yolları).
 
-**Güncelleme programı (Windows hizmeti)**
+**Güncelleme programı (Windows hizmeti) — sürüm 0.2.0 (önceki 0.1.3)**
 
 - Önce kendini yeniler: indirilen pakette daha yeni bir güncelleme programı varsa, sunucuyu güncellemeden önce kendini
   yeniler ve güncellemeyi yeni sürümü yürütür. Önceden yeni program ancak bir güncelleme başarıyla bittikten sonra
@@ -132,11 +136,13 @@ yerel ikililer ve kurulum yolları).
   Sıfırdan kurulumda yok.
 - **Sıra:** sunucu önce, panel 1.6.0 sonra.
 - **Bu sürüme özel:**
-  - YAYIN KAPISI (§9.5): yenilenmiş güncelleme programını taşıyan ilk sürümdür. Kanıt dosyası (CI koşuları, thinkpad
-    ve VDS gerçek provaları, onarım provası) olmadan hiçbir gruba çıkmaz.
-  - Yeni korumalar (önce kendini yenileme, onarım, bakım koruması, disk dolu) 2.14.1'e GEÇİŞ sırasında değil, geçiş
+  - YAYIN KAPISI (§9.5): yenilenmiş güncelleme programını taşıyan ilk sürümdür. Kanıt dosyası (`kanit/guncelleyici-0.2.0.json`: CI
+    koşuları, thinkpad ve VDS gerçek provaları, onarım provası) olmadan hiçbir gruba çıkmaz.
+  - Yeni korumalar (önce kendini yenileme, onarım, bakım koruması, disk dolu) 2.15.0'a GEÇİŞ sırasında değil, geçiş
     başarıyla bittikten sonra devreye girer: sahadaki eski güncelleme programı yeni programı ancak bu güncellemeyi
-    başarıyla bitirince alır. Geçiş eski programın kurallarıyla yürür.
+    başarıyla bitirince alır. Geçiş eski programın kurallarıyla yürür
+    ve bu sürüm migration taşır; 2026-10-09 ölçümünde sahada böyle bir kurulum yok, yine de bulunursa geçiş elle
+    izlenir.
   - Panel 1.6.0 başka bilgisayardan yalnız şifreli bağlanır. Şifreli bağlantısı kapalı (ayarsız) eski kurulumda
     panelleri 1.6.0'a geçirmeden önce sunucuda şifreli bağlantı (en az "HTTP + HTTPS" kipi) açılmalıdır; yoksa
     sunucu bilgisayarı dışındaki paneller bağlanamaz ve güncellemeyi de alamaz. Bu bir karar adımıdır, güncelleme
@@ -166,10 +172,10 @@ koruma kaldırma komutunu çalıştırır; eski başlatma türü geri yazılır.
 
 ## 7. Doğrulama — kurulumdan sonra rapor edilecekler
 
-- Sağlık bilgisi: sürüm 2.14.1, sunucu ve veritabanı ayakta.
+- Sağlık bilgisi: sürüm 2.15.0, sunucu ve veritabanı ayakta.
 - Sunucu hizmeti ve güncelleyici hizmeti çalışıyor; sunucu hizmetinin başlatma türü kurulumdaki gibi (bakım koruması
   kalkmış); bilgisayar yeniden başlayınca ikisi de kendiliğinden açılıyor.
-- Güncelleme durumu: güncelleyici canlı, kurulu sürüm 2.14.1; güncelleyici sürümü paketteki sürüm.
+- Güncelleme durumu: güncelleyici canlı, kurulu sürüm 2.15.0; güncelleyici sürümü 0.2.0 (paketteki sürüm).
 - Windows zamanlanmış görevlerde TeksERP onarım görevi var ve doğrulanmış güncelleme programını gösteriyor.
 - Veritabanı: 373 migration bitmiş, sorunlu migration yok.
 - Şifreli bağlantı kipi kurulumdan önceki değeriyle aynı (yeni kurulumda zorunlu kip; durum sayfası açılıyor).
