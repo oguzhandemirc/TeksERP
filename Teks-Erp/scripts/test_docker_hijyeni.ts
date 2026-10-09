@@ -34,6 +34,8 @@
 //      §5o RESMÎ DERLEME KÖKENİ (K1): `korumali-paket.yml` işi `docker-linux-x64` sırsız, salt-okunur izinle, üretim
 //      çapalı native + revision = github.sha + taban bekçisi + arşivden künye; `imaj-imzala --ci-kosu` künyeyi parola
 //      sorulmadan önce yerel tabanla (arşivden) kıyaslar — hüküm `imaj-kokeni.mjs` (imaja girmez) sondalarla ölçülür.
+//      §5p CI'da docker.io çekimi yalnız `mirror.gcr.io/library/` aynasından (Docker Hub anonim 429 sınırı): servis/konteyner
+//      imajı, `docker pull|run`, test imajı değişkeni, `uses: docker://`; imaj derleyen iş daemon'a aynayı kurar.
 //   §6 satıcı imajı (G2/G3) DURAĞAN: `satici/sunucu/scripts/` altındaki her CLI `dist-cli`'a derlenir ve
 //      `test -f` kapısında; compose'da `/dosyalar` yazılır, `/derlemeler` + `/yayin` salt okunur (⑨'un docker'sız ikizi).
 //   §7 güncelleyicinin yöneteceği düzen (GUNCELLEYICI-SAGLAMLIK L5): §7a–§7e `TEKSERP_GOC_ACILISTA` (yok/boş/1 =
@@ -840,6 +842,83 @@ function kokenIsAkisiStatik(yol: string, wf: string): string[] {
     check(`§5o sonda: ${ad} → kırmızı`, uyg && kokenIsAkisiStatik(y, m).length > 0, uyg ? "" : "MUTASYON UYGULANMADI");
   }
   check("§5o iş gövdesi okundu", is.length > 0);
+}
+
+// §5p — CI'da Docker Hub çekimi yalnız beyanlı aynadan: paylaşılan koşucu IP'sinde anonim çekim 429 ile düşüyor
+// (ölçüldü 2026-10-09: korumali-paket + ci.yml dört iş). Ayna içeriği resmî imajla aynı digest'tir.
+const AYNA = "mirror.gcr.io/library/";
+/** Kayıt adresi olmayan (ya da docker.io/index.docker.io) imaj başvurusu Docker Hub'dan çekilir. */
+const dockerHubMu = (ref: string): boolean => {
+  const r = ref.replace(/^["']|["']$/g, "");
+  if (!r || r.startsWith("${{") || r.startsWith("$")) return false;
+  if (!r.includes("/")) return true;
+  const ilk = r.split("/")[0]!;
+  return !(ilk.includes(".") || ilk.includes(":") || ilk === "localhost") || /^(docker\.io|index\.docker\.io|registry-1\.docker\.io)$/.test(ilk);
+};
+/** Değer alan `docker run/pull/create` bayrakları (ayrık yazımda sonraki belirteç değerdir). */
+const DEGERLI_BAYRAK = new Set(["-e", "--env", "-v", "--volume", "-p", "--publish", "-w", "--workdir", "-u", "--user", "--name", "--network", "--platform", "--entrypoint", "--mount", "-l", "--label", "--env-file", "--add-host", "--cap-add", "--cap-drop", "--tmpfs", "--memory", "--cpus", "--restart", "--pull", "-h", "--hostname"]);
+/** Komutun bayraklardan sonraki ilk belirteci (imaj); kabuk işleci gelirse yok. */
+function komutImaji(kuyruk: string): string | null {
+  const b = kuyruk.trim().split(/\s+/);
+  for (let i = 0; i < b.length; i += 1) {
+    const t = b[i]!;
+    if (!t || /^(&&|\|\||\||;|\)|>|<)/.test(t)) return null;
+    if (t.startsWith("-")) {
+      if (!t.includes("=") && DEGERLI_BAYRAK.has(t)) i += 1;
+      continue;
+    }
+    return t.replace(/;$/, "");
+  }
+  return null;
+}
+function aynaIhlalleri(dosyalar: Record<string, string>): string[] {
+  const ih: string[] = [];
+  for (const [ad, metin] of Object.entries(dosyalar)) {
+    const satirlar = metin.split("\n");
+    satirlar.forEach((l, i) => {
+      if (/^\s*#/.test(l)) return;
+      const refs: string[] = [];
+      for (const m of l.matchAll(/^\s*(?:-\s*)?(?:image|container):\s*(\S+)\s*$/g)) refs.push(m[1]!);
+      for (const m of l.matchAll(/uses:\s*docker:\/\/(\S+)/g)) refs.push(m[1]!);
+      for (const m of l.matchAll(/\bdocker\s+(?:pull|run|create)\b(.*)/g)) {
+        const ilk = komutImaji(m[1]!);
+        if (ilk) refs.push(ilk);
+      }
+      for (const m of l.matchAll(/_IMAJ:\s*(\S+)/g)) refs.push(m[1]!);
+      for (const r of refs) {
+        const t = r.replace(/^["']|["']$/g, "");
+        if (dockerHubMu(t) && !t.startsWith(AYNA)) ih.push(`${ad}:${i + 1} docker.io çekimi aynasız: ${t} (${AYNA}${t.replace(/^(docker\.io\/)?(library\/)?/, "")} kullan)`);
+      }
+    });
+    // Dockerfile derleyen iş FROM'ları Docker Hub'dan çeker: aynı dosyada daemon aynası kurulmalı.
+    if (/docker (?:buildx )?build\b/.test(metin.split("\n").filter((l) => !/^\s*#/.test(l)).join("\n")) && !/"registry-mirrors": \["https:\/\/mirror\.gcr\.io"\]/.test(metin)) ih.push(`${ad}: imaj derliyor ama daemon aynası (registry-mirrors mirror.gcr.io) yok`);
+  }
+  return ih;
+}
+{
+  const dizin = ".github/workflows";
+  const dosyalar: Record<string, string> = {};
+  for (const f of readdirSync(join(KOK, dizin)).filter((x) => /\.ya?ml$/.test(x))) dosyalar[`${dizin}/${f}`] = oku(`${dizin}/${f}`);
+  const g = aynaIhlalleri(dosyalar);
+  check(`§5p ⭐ CI docker.io çekimi yalnız ${AYNA} aynasından (${Object.keys(dosyalar).length} iş akışı)`, g.length === 0, g.join(" | ") || "temiz");
+  const CI = `${dizin}/ci.yml`, NL = `${dizin}/native-linux.yml`, KP = KORUMALI_IS_AKISI.yol;
+  check("§5p gerçek kapsam: ci.yml servis imajı + native-linux test imajı aynada", /image: mirror\.gcr\.io\/library\/postgres:/.test(dosyalar[CI] ?? "") && /mirror\.gcr\.io\/library\/busybox/.test(dosyalar[NL] ?? ""));
+  const mut = (f: string, a: string | RegExp, b: string): Record<string, string> => ({ ...dosyalar, [f]: dosyalar[f]!.replace(a, b) });
+  const sondalar: Array<[string, Record<string, string>]> = [
+    ["servis imajı postgres:16", mut(CI, "image: mirror.gcr.io/library/postgres:16", "image: postgres:16")],
+    ["docker.io/ önekli servis", mut(CI, "image: mirror.gcr.io/library/postgres:16", "image: docker.io/library/postgres:16")],
+    ["yeni docker pull alpine", mut(NL, "docker compose version\n", "docker compose version\n          docker pull -q alpine:3.20\n")],
+    ["docker run --rm node", mut(NL, "docker compose version\n", "docker compose version\n          docker run --rm -e A=1 node:24 true\n")],
+    ["test imajı busybox", mut(NL, "TEKSERP_DOCKER_TEST_IMAJ: mirror.gcr.io/library/busybox:1.36", "TEKSERP_DOCKER_TEST_IMAJ: busybox:1.36")],
+    ["uses: docker://", mut(NL, "docker compose version\n", "docker compose version\n      - uses: docker://alpine:3.20\n")],
+    ["derleyen işte ayna yok", mut(KP, /"registry-mirrors": \["https:\/\/mirror\.gcr\.io"\]/, '"debug": true')],
+    ["iş konteyneri", mut(CI, "    services:\n", "    container: node:24\n    services:\n")],
+  ];
+  for (const [ad, d] of sondalar) {
+    const uyg = JSON.stringify(d) !== JSON.stringify(dosyalar);
+    check(`§5p sonda: ${ad} → kırmızı`, uyg && g.length === 0 && aynaIhlalleri(d).length > 0, uyg ? aynaIhlalleri(d)[0] ?? "" : "MUTASYON UYGULANMADI");
+  }
+  check("§5p sonda: yerel etiket (adımın çıktısı) aynasız sayılmaz", aynaIhlalleri({ x: '          docker save "${{ steps.imaj.outputs.etiket }}"\n          docker run --rm "$etiket" true\n' }).length === 0);
 }
 
 /** `imaj-imzala.mjs`: `--ci-kosu` köken hükmü bekçiden ve imza aracından (parola) ÖNCE, kimlik `docker save` arşivinden. */
