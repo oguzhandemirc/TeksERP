@@ -331,7 +331,7 @@ Güncelleyici SYSTEM'dir; backend düşük yetkilidir. Yetki yalnız satıcı im
 - Yol: sabitleme yoksa `/<kanal>/backend/son.json`, varsa `/<kanal>/backend/<hedefSurum>/surum.json`; kanal kiranın `kanal.kod`u. İşaretçinin kendisine güvenilmez: KATI `{v, bildirim}`, ≤ 64 KB.
 - Doğrulama sırası TS ile aynı: JWS (typ `tekserp-surum` · kid · imza) → şema (`BELGE_SURUM` · `BELGE_SEMA`) → imzalayan = `paketImzaKid` (`SURUM_ANAHTAR`) → kanal (`SURUM_KANAL`). Hata kodu `durum.hataKodu`na olduğu gibi yazılır.
 - **Anahtar kümesi:** gömülü PAKET anahtarları, hazırlık anahtarı (`paket-hazirlik*`) yalnız HAK sınıfı TEST/DEMO iken; sınıf bilinmiyorsa dışarıda (`JWS_KID`). Aynı küme bütünlük listesi ve PG künyesi için de kullanılır.
-- Doğrulanmış aday 5 dk bellekte tutulur; uygulamadan hemen önce (1 dk'dan eskiyse) yeniden indirilip doğrulanır ve karar yeniden verilir — aday değiştiyse uygulama o turda başlamaz.
+- Aday (işaretçi + bildirim) yalnız kira yenilenince (`verilis` değişti — saatlik yoklama + zil), niyete yeni panel onayı yazılınca ve en geç 6 saatte bir sorgulanır; 6 saatlik tavanın anı kurulum kimliğinden türeyen sabit kaydırmaya (0–60 dk) oturur (`src/schedule.rs`, W5). Arada bellekteki doğrulanmış aday kullanılır; başarısız sorgu 1 · 2 · 4 … dk aralıkla yinelenir ve o arada hata durumda görünür kalır. Uygulamadan hemen önce (1 dk'dan eskiyse) aday yeniden indirilip doğrulanır ve karar yeniden verilir — aday değiştiyse uygulama o turda başlamaz.
 
 ### §6.4 Paket (sözleşme §1.5)
 
@@ -426,7 +426,7 @@ Paket `runtime\tekserp-guncelleyici.exe` taşır. Paketteki ikilinin sürümü �
 | `GOC_HATASI` · `GOC_ZAMAN_ASIMI` | `GOC_HATASI` |
 | `HIZMET_BASLAMADI` · `COMPOSE_HATASI` (Linux: paketin compose dosyası doğrulanamadı ya da kurallara uymuyor — kesin) | `BASLATMA_HATASI` |
 | `IMAJ_KIMLIGI` (Linux: imaj arşivinin ya da yüklenen/başlatılacak etiketin kimliği bildirimle ya da etiket kaydıyla tutmuyor — kesin; başlatma öncesi ölçümde de bu kod, `GECIS_HATASI` değil) | `PAKET_BAGI` |
-| `IMAJ_YUKLENEMEDI` (Linux: `docker load` düştü — geçici, sürüm dizini kalır, yükleme yeniden denenir) | `INDIRME_HATASI` |
+| `IMAJ_YUKLENEMEDI` (Linux: `docker load` düştü — geçici, sürüm dizini kalır, yükleme yeniden denenir; daemon disk dolu derse kod `DISK_DOLU`) | `INDIRME_HATASI` |
 | `SAGLIK_ZAMAN_ASIMI` · `SAGLIK_HIZMET_DUSTU` · `SAGLIK_SURUM` · `SAGLIK_DB` · `SAGLIK_LISANS` · `SAGLIK_LISANS_OLCULEMEDI` | `SAGLIK_HATASI` |
 | `PG_DURMADI` · `PG_BASLAMADI` · `PG_SURUM_UYUSMAZ` · `PG_ICU_HATASI` · `PG_YOL_HATASI` · `PG_PAKET` · `PG_BUYUK_SURUM` | `PG_GUNCELLEME_HATASI` |
 | `GERI_YUKLEME_HATASI` · `GERI_DONUS_SAGLIKSIZ` | `GERI_DONUS_HATASI` |
