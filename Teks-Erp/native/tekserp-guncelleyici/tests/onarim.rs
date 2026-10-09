@@ -843,3 +843,24 @@ fn kilit_doluysa_dokunmaz() {
         assert_eq!(s.onar(), Outcome::Baslatildi, "kalp atışı bayat: başlatılır");
     }
 }
+
+/// Linux (L4c-2, plan §4.7 madde 2): onarım kaynağı OCI sürüm dizinidir — `current/tekserp-guncelleyici` imzalı teslim
+/// künyesiyle (`PAKET-DOCKER.json` + bütünlük listesi) doğrulanır; künye bozulunca o dizin kaynak olmaz.
+#[test]
+fn linux_oci_kunyesi_onarim_kaynagi() {
+    let w = World::new_in(Profil::Linux, "onarim-linux-oci", Setup::default());
+    w.run_to_rest(0);
+    assert_eq!(w.current().as_deref(), Some(NEW), "{:?}", w.status().and_then(|s| s.message));
+    let cur = w.layout.version_dir(NEW);
+    let from_current = |w: &World| -> Vec<(PathBuf, String)> {
+        onarim::signed_sources(&w.env(), &w.layout, &keys(w)).into_iter().filter(|(p, _)| p.starts_with(&cur)).collect()
+    };
+    let src = from_current(&w);
+    assert_eq!(src.len(), 1, "{src:?}");
+    assert_eq!(src[0].0.file_name().unwrap(), "tekserp-guncelleyici");
+    assert_eq!(src[0].1, sha_b64u(&oci_default_updater()), "beklenen özet imzalı listeden");
+    let kunye = cur.join("PAKET-DOCKER.json");
+    let bozuk = std::fs::read_to_string(&kunye).unwrap().replace("24.18.0", "24.18.1");
+    std::fs::write(&kunye, bozuk).unwrap();
+    assert!(from_current(&w).is_empty(), "künyesi bozuk dizin onarım kaynağı oldu");
+}

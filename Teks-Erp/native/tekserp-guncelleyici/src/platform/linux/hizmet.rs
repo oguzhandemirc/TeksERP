@@ -146,6 +146,12 @@ fn systemctl(args: &[&str]) -> Result<(), String> {
 }
 
 /// Birimin `ExecStart`ı. Dönen kod sürecin çıkış kodudur (`Restart=always` her çıkışta yeniden başlatır).
+/// Hizmetin ortamı `tur` ile aynı bağlamayla: hizmet + arka uç Docker'a (L4b) — yoksa systemd altında iskelet arka uç
+/// koşar (sağlık ve başlatma ölçümü sessizce düşer).
+fn ortam_kur(settings: &crate::settings::UpdaterSettings, layout: &Layout, ad: &str) -> Result<crate::env::Env, String> {
+    crate::env::real(settings.proxy.as_deref(), ad).and_then(|e| crate::platform::baglam(e, layout, settings))
+}
+
 fn calis(args: &[String]) -> Result<u32, String> {
     let root = crate::cli::root_arg(args)?;
     let data = crate::cli::data_arg(args, &root);
@@ -155,8 +161,7 @@ fn calis(args: &[String]) -> Result<u32, String> {
     sinyalleri_kur();
     let own = std::env::current_exe().ok();
     let settings = crate::settings::read_settings(&crate::env::RealFs, &layout).unwrap_or_default();
-    // `tur` ile aynı bağlama: hizmet + arka uç Docker'a (L4b) — yoksa systemd altında iskelet arka uç koşar.
-    let env = match crate::env::real(settings.proxy.as_deref(), &ad).and_then(|e| crate::platform::baglam(e, &layout, &settings)) {
+    let env = match ortam_kur(&settings, &layout, &ad) {
         Ok(e) => e,
         Err(e) => {
             log.error(&format!("ortam kurulamadı: {e}"));
@@ -307,6 +312,20 @@ mod tests {
         let _ = std::fs::remove_dir_all(&d);
         std::fs::create_dir_all(&d).unwrap();
         d
+    }
+
+    /// `calis`ın ortamı Docker'a bağlı (iskelet değil): sağlık sondası konteyner içinden, ortam kipi compose.
+    #[test]
+    fn hizmet_ortami_docker_baglamli() {
+        let d = gecici("baglam");
+        let layout = Layout::new(&d, &d.join("veri"));
+        let env = ortam_kur(&crate::settings::UpdaterSettings::default(), &layout, "tekserp-guncelleyici").unwrap();
+        assert!(env.arka.saglik.address(4000, "/health/yerel").contains("içinden"));
+        assert_eq!(env.arka.ortam, crate::settings::OrtamKipi::Compose);
+        let src = include_str!("hizmet.rs");
+        let body = &src[src.find("fn calis(").unwrap()..];
+        let body = &body[..body.find("\n}\n").unwrap()];
+        assert!(body.contains("ortam_kur(&settings"), "calis ortamını ortam_kur'dan kurmalı");
     }
 
     #[test]

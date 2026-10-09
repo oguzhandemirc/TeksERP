@@ -29,8 +29,10 @@ const COMPOSE: &str = r#"services:
     command: ["sh", "-c", "sleep 1; exit 10"]
 "#;
 
-/// Test imajının sürüm etiketi (backend başlatması yalnız güncelleyicinin yüklediği etiketi başlatır).
-const ETIKET: &str = "tekserp-korumali:1.0.0";
+/// Test sürümü ve etiketi (backend yalnız güncelleyicinin yüklediği etiketi başlatır); geliştirici makinesindeki gerçek
+/// `tekserp-korumali` sürümleriyle çakışmasın diye ön sürümlü.
+const SURUM: &str = "0.0.1-l4b";
+const ETIKET: &str = "tekserp-korumali:0.0.1-l4b";
 
 struct Proje {
     root: PathBuf,
@@ -76,7 +78,7 @@ fn docker_gercek_hizmet_ve_arac() {
     assert!(!sh(&["image", "inspect", "--format", "{{.Id}}", &imaj]).is_empty(), "{imaj} YEREL olmalı (çekilmez)");
     let proje = format!("tekserp_l4b_{}", std::process::id());
     let root = std::env::temp_dir().join(&proje);
-    let surum = root.join("surumler").join("1.0.0");
+    let surum = root.join("surumler").join(SURUM);
     std::fs::create_dir_all(&surum).unwrap();
     std::fs::create_dir_all(root.join("yapilandirma")).unwrap();
     std::fs::write(surum.join("docker-compose.yml"), COMPOSE).unwrap();
@@ -103,7 +105,7 @@ fn docker_gercek_hizmet_ve_arac() {
     let arsiv = root.join("imaj.tar");
     sh(&["save", "-o", &arsiv.to_string_lossy(), ETIKET]);
     let kimlik = tekserp_guncelleyici::imaj::olc(fs.as_ref(), &arsiv).unwrap().kimlik;
-    a.imaj_yukle(&env, &arsiv, "1.0.0", &kimlik).unwrap();
+    a.imaj_yukle(&env, &arsiv, SURUM, &kimlik).unwrap();
     let s = DockerServices::new(Arc::clone(&p.komut), Arc::clone(&procs), Arc::clone(&fs), 5);
 
     // Yok ⇒ durmuş; doğrulama kipi konteynere "1", normal başlatmada BOŞ.
@@ -147,4 +149,96 @@ fn docker_gercek_hizmet_ve_arac() {
     assert!(!out.ok(), "test imajında `goc` yok — konteyner koştu ve düştü");
     assert!(sh(&["ps", "-a", "-q", "--filter", &format!("name=^{ad}$")]).is_empty(), "araç konteyneri yetim kaldı");
     assert_eq!(a.imaj_deposu(&env).map(|d| d.is_absolute()), Some(true), "Docker kökü ölçüldü");
+}
+
+/// Yerel, çekilmeden üretilen küçük imaj: tek dosyalı kök `docker import` ile (içerik imajı ayırır).
+fn kucuk_imaj(dir: &Path, tag: &str, icerik: &str) {
+    let kok = dir.join(format!("kok-{icerik}"));
+    std::fs::create_dir_all(&kok).unwrap();
+    std::fs::write(kok.join("icerik"), icerik).unwrap();
+    let tar = dir.join(format!("kok-{icerik}.tar"));
+    let ok = Command::new("tar").arg("-C").arg(&kok).arg("-cf").arg(&tar).arg(".").status().unwrap().success();
+    assert!(ok, "tar");
+    assert!(Command::new("docker").arg("import").arg(&tar).arg(tag).output().unwrap().status.success(), "docker import {tag}");
+}
+
+struct Etiketler(Vec<String>, PathBuf);
+impl Drop for Etiketler {
+    fn drop(&mut self) {
+        for t in &self.0 {
+            let _ = Command::new("docker").args(["image", "rm", "-f", t]).output();
+        }
+        let _ = std::fs::remove_dir_all(&self.1);
+    }
+}
+
+/// `imaj_bozuk` (L4c-2, GERÇEK Docker): `docker save | gzip` arşivinin kimliği config özetidir (Docker'ın `.Id`si
+/// değil); kimliği tutmayan ya da kesik arşiv yüklenmez; iyi arşiv yüklenir, etiket kaydı yazılır; etiket başka imaja
+/// kaydırılınca başlatma ölçümü reddeder. Yalnız `TEKSERP_DOCKER_TEST=1`; imaj ÇEKMEZ (`docker import`).
+#[test]
+fn imaj_bozuk() {
+    if std::env::var("TEKSERP_DOCKER_TEST").as_deref() != Ok("1") {
+        eprintln!("⏭ imaj_bozuk: TEKSERP_DOCKER_TEST=1 verilmedi (CI native-linux koşar)");
+        return;
+    }
+    use tekserp_guncelleyici::{imaj, oci};
+    let pid = std::process::id();
+    let surum = format!("0.0.{pid}-l4c2");
+    let tag = oci::image_tag(&surum);
+    let yabanci = format!("tekserp-l4c2-yabanci:{pid}");
+    let root = std::env::temp_dir().join(format!("tekserp_l4c2_{pid}"));
+    let _ = std::fs::remove_dir_all(&root);
+    std::fs::create_dir_all(root.join("surumler").join(&surum)).unwrap();
+    let _temiz = Etiketler(vec![tag.clone(), yabanci.clone()], root.clone());
+    kucuk_imaj(&root, &tag, "iyi");
+    kucuk_imaj(&root, &yabanci, "yabanci");
+    let duz = root.join("imaj.tar");
+    sh(&["save", "-o", &duz.to_string_lossy(), &tag]);
+    let mut gz = flate2::write::GzEncoder::new(Vec::new(), flate2::Compression::fast());
+    std::io::Write::write_all(&mut gz, &std::fs::read(&duz).unwrap()).unwrap();
+    let gz = gz.finish().unwrap();
+    let arsiv = root.join("imaj.tar.gz");
+    std::fs::write(&arsiv, &gz).unwrap();
+    sh(&["image", "rm", &tag]);
+
+    let fs: Arc<dyn Fs> = Arc::new(tekserp_guncelleyici::env::RealFs);
+    let olcum = imaj::olc(fs.as_ref(), &arsiv).unwrap();
+    assert_eq!(olcum.etiketler, vec![tag.clone()]);
+    let layout = Layout::new(&root, &root.join("veri"));
+    let komut = Arc::new(DockerKomut::new(&layout, &format!("tekserp_l4c2_{pid}")).unwrap());
+    let procs: Arc<dyn Procs> = Arc::new(RealProcs);
+    let env = Env {
+        fs: Arc::clone(&fs),
+        svc: Arc::new(DockerServices::new(Arc::clone(&komut), Arc::clone(&procs), Arc::clone(&fs), 5)),
+        procs: Arc::clone(&procs),
+        net: Arc::new(tekserp_guncelleyici::env::RealNet::new(None).unwrap()),
+        clock: Arc::new(tekserp_guncelleyici::env::SystemClock),
+        events: Arc::new(tekserp_guncelleyici::platform::linux::olay::StderrEvents { journald: false }),
+        protect: Arc::new(tekserp_guncelleyici::platform::linux::koruma::DirectoryProtect),
+        arka: docker::arka_ucu(Arc::clone(&komut)),
+    };
+    let a = docker::DockerAraclar { komut: Arc::clone(&komut) };
+    let yok = || sh(&["image", "ls", "-q", &tag]).is_empty();
+
+    // Kimlik bildirimle tutmuyor: yüklemeden ÖNCE red.
+    let e = a.imaj_yukle(&env, &arsiv, &surum, &format!("sha256:{}", "0".repeat(64))).unwrap_err();
+    assert_eq!(e.0, "IMAJ_KIMLIGI", "{e:?}");
+    assert!(yok(), "kimliği tutmayan arşiv yüklendi");
+    // Kesik arşiv (bayt bozuk).
+    let kesik = root.join("kesik.tar.gz");
+    std::fs::write(&kesik, &gz[..gz.len() / 2]).unwrap();
+    assert_eq!(a.imaj_yukle(&env, &kesik, &surum, &olcum.kimlik).unwrap_err().0, "IMAJ_KIMLIGI");
+    assert!(yok(), "kesik arşiv yüklendi");
+    // İyi arşiv: yüklenir, kayıt Docker'ın ölçtüğü katmanlarla.
+    a.imaj_yukle(&env, &arsiv, &surum, &olcum.kimlik).unwrap();
+    let k = imaj::kayit_oku(fs.as_ref(), &layout, &surum).expect("kayıt");
+    assert_eq!((k.kimlik.as_str(), &k.katmanlar), (olcum.kimlik.as_str(), &olcum.katmanlar));
+    assert!(a.imaj_hazir(&env, &surum, &olcum.kimlik));
+    Fs::set_link(fs.as_ref(), &layout.current(), &layout.version_dir(&surum)).unwrap();
+    docker::etiket_dogrula(fs.as_ref(), procs.as_ref(), &komut).unwrap();
+    // Etiket başka imaja kaydırıldı (`docker tag`): hazır değil, başlatılmaz.
+    sh(&["tag", &yabanci, &tag]);
+    assert!(!a.imaj_hazir(&env, &surum, &olcum.kimlik));
+    let e = docker::etiket_dogrula(fs.as_ref(), procs.as_ref(), &komut).unwrap_err();
+    assert!(e.starts_with(imaj::KIMLIK_ONEKI), "{e}");
 }
