@@ -15,7 +15,9 @@
 #   [1/4] <Kok>\guncelleyici\ korumali (SYSTEM + Administrators, miras kesik, genis gruplar yok):
 #         backend'in yazabildigi dizinde olsaydi SYSTEM'in ikilisi/gunlugu ele gecirilebilirdi.
 #   [2/4] Ikili: <Kok>\current\runtime\tekserp-guncelleyici.exe -> <Kok>\guncelleyici\ (ozet ayniysa
-#         atlanir; farkli ve hizmet CALISIYORSA durur - kendini guncelleme alani, cakismaz).
+#         atlanir; farkli ve hizmet bu ikiliden CALISIYORSA durur - kendini guncelleme alani, cakismaz).
+#         Kendini guncelleme (W-A) ImagePath'i <Kok>\guncelleyici\s\<surum>\ altina cevirir; o yol da uyumlu
+#         sayilir ve sabit ikili o zaman calisan imaj olmadigindan kopyalanabilir.
 #   [3/4] ayar.json (GUNCELLEYICI.md 6.1): yoksa yazilir; varsa YALNIZ guncellemeSunucusu,
 #         backendHizmeti (yalniz varsayilan degilse) ve vekil (verildiyse) duzeltilir, digerleri korunur.
 #         BOM'suz UTF-8 (serde BOM kabul etmez), gecici dosya + yeniden adlandirma.
@@ -150,6 +152,27 @@ function KorumaliYaz($yol, $backendSid) {
   }
 }
 
+# W-A: kendini guncelleme ImagePath'i <ikilinin dizini>\s\<surum>\<ikili adi>'na cevirir; bu yol da guncelleyicinin.
+function SurumluIkiliMi($yol, $ikili) {
+  # '.'/'..' parcasi kabul edilmez: Split-Path onu cozmez, s\..\ kontrolu atlatirdi.
+  if (-not $yol -or $yol -cmatch '(^|[\\/])\.{1,2}([\\/]|$)') { return $false }
+  $ust = Split-Path -Parent $yol
+  if (-not $ust) { return $false }
+  $surum = Split-Path -Leaf $ust
+  if (-not $surum) { return $false }
+  $sDizini = Join-Path (Split-Path -Parent $ikili) "s"
+  return (YolEsit (Split-Path -Parent $ust) $sDizini) -and ((Split-Path -Leaf $yol) -ieq (Split-Path -Leaf $ikili))
+}
+
+# Hizmetin calistirdigi ikili (ImagePath'in ilk parcasi); kayit yoksa $null.
+function HizmetIkilisi($ad) {
+  $k = "HKLM:\SYSTEM\CurrentControlSet\Services\$ad"
+  if (-not (Test-Path $k)) { return $null }
+  $p = KomutParcala ([string](Get-ItemProperty -Path $k).ImagePath)
+  if ($p.Count -eq 0) { return $null }
+  return $p[0]
+}
+
 # Kayit defterinden kayit farki (bos = uyumlu; $null = kayitli degil).
 function HizmetFarki($ad, $ikili, $kok, $veri) {
   $k = "HKLM:\SYSTEM\CurrentControlSet\Services\$ad"
@@ -161,7 +184,7 @@ function HizmetFarki($ad, $ikili, $kok, $veri) {
   $bek = @("hizmet", "--kok", $kok)
   if ($veri) { $bek += @("--veri", $veri) }
   $bek += @("--ad", $ad)
-  $argOk = ($p.Count -eq ($bek.Count + 1)) -and (YolEsit $p[0] $ikili)
+  $argOk = ($p.Count -eq ($bek.Count + 1)) -and ((YolEsit $p[0] $ikili) -or (SurumluIkiliMi $p[0] $ikili))
   if ($argOk) {
     for ($i = 0; $i -lt $bek.Count; $i++) {
       $x = $p[$i + 1]; $y = $bek[$i]
@@ -283,7 +306,9 @@ if ($Uygula) {
   if ($hedefOzet -ceq $kaynakOzet) { Ok "ikili zaten ayni - kopyalanmadi" }
   else {
     $svc = Get-Service -Name $HizmetAdi -ErrorAction SilentlyContinue
-    if ($hedefOzet -and $svc -and "$($svc.Status)" -cne "Stopped") { Dur "guncelleyici CALISIYOR ve ikilisi surumunkinden farkli - kendini guncelleme alanina dokunulmaz (durdurup tekrar kosun)." }
+    $calisan = HizmetIkilisi $HizmetAdi
+    $sabittenCalisiyor = -not ($calisan -and (SurumluIkiliMi $calisan $hedefIkili))
+    if ($hedefOzet -and $svc -and "$($svc.Status)" -cne "Stopped" -and $sabittenCalisiyor) { Dur "guncelleyici CALISIYOR ve ikilisi surumunkinden farkli - kendini guncelleme alanina dokunulmaz (durdurup tekrar kosun)." }
     Copy-Item -LiteralPath $kaynakIkili -Destination $hedefIkili -Force
     if ((Ozet $hedefIkili) -cne $kaynakOzet) { Dur "ikili kopyasi dogrulanamadi: $hedefIkili" }
     Ok "kopyalandi: $hedefIkili"
@@ -330,6 +355,8 @@ if (-not (Test-Path -LiteralPath $hedefIkili)) { Uyar "ikili yok: $hedefIkili" }
 elseif (-not (MzMi $hedefIkili)) { Uyar "ikili Windows ikilisi degil (MZ yok): $hedefIkili" }
 elseif ((Ozet $hedefIkili) -ceq (Ozet $kaynakIkili)) { Ok "ikili = surumunki ($hedefIkili)" }
 else { Bilgi "ikili surumunkinden farkli - guncelleyici kendini guncellemis olabilir (GUNCELLEYICI.md 10)" }
+$calisan = HizmetIkilisi $HizmetAdi
+if ($calisan -and (SurumluIkiliMi $calisan $hedefIkili)) { Bilgi "hizmet surumlu ikiliden calisiyor (kendini guncelleme): $calisan" }
 $a = AyarOlc $ayarYolu
 if ($a.Durum -ceq "UYUMLU") { Ok "ayar.json uyumlu" } else { Uyar "ayar.json $($a.Durum)$(if ($a.Fark.Count) { ': ' + ($a.Fark -join ', ') })" }
 $fark = HizmetFarki $HizmetAdi $hedefIkili $kokTam $VeriDizini

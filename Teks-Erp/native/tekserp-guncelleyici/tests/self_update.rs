@@ -532,7 +532,8 @@ fn dondur_yayinci_blogu() {
     let own = w.layout.updater_dir().join("tekserp-guncelleyici.exe");
     std::fs::write(&own, exe_json("tekserp-guncelleyici", OWN_OLD)).unwrap();
     assert_eq!(engine_as(&w, &own, OWN_OLD).tick(&|| false), TickResult::RestartForSelfUpdate, "{:?}", w.status().map(|s| s.message));
-    assert_eq!(std::fs::read(&own).unwrap(), bin, "asıl adda yayıncının ölçtüğü ikili");
+    assert_eq!(std::fs::read(svc_exe(&w)).unwrap(), bin, "hizmetin ikilisi (W-A: s\\<sürüm>\\) yayıncının ölçtüğü ikili");
+    assert!(read(&own).contains(OWN_OLD), "W-A: asıl ad değişmez");
     assert_eq!((w.current().as_deref(), journal_ops(&w)), (Some(OLD), 0), "backend dondurulmuş kalır");
     assert_eq!(state(&w).new_version, announced);
     // Kontrol: aynı dünya, blok ikiliyle tutmayan sürüm ilan ediyor → künye ilandan sapar, ikili YERLEŞMEZ.

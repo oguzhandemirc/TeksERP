@@ -226,8 +226,9 @@ try {
   function Gorev { Get-ScheduledTask -TaskPath "\TeksERP\" -TaskName $gorevAdi -ErrorAction SilentlyContinue }
   function HizmetIkilisi {
     $yol = (Get-CimInstance Win32_Service -Filter "Name='TeksERP-Guncelleyici'").PathName
-    if ($yol -notmatch '^"([^"]+)"') { Dur "ImagePath tirnakli ikili tasimiyor: $yol" }
-    return $Matches[1]
+    # hizmet-kur bosluksuz yolu tirnaksiz yazar; bosluklu yol tirnakli gelir.
+    if ($yol -notmatch '^(?:"([^"]+)"|(\S+))') { Dur "ImagePath ikili tasimiyor: $yol" }
+    if ($Matches[1]) { return $Matches[1] } else { return $Matches[2] }
   }
   function OnarimSayisi { if (Test-Path "$is\onarim.json") { @((Get-Content "$is\onarim.json" -Raw | ConvertFrom-Json).onarimlar).Count } else { 0 } }
   & $asil hizmet-kur --kok $kok
