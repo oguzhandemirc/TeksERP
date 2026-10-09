@@ -6,7 +6,8 @@
 // sahte argv'yi deftere yazar. Bölümler:
 //   §1 tek kaynak — mjs kataloğu/sabitleri/kid eşlemesi = cli-girdi.ts'in TS kopyası (iki ayna bayt-eşit)
 //   §2 mjs yardımcısı — okur, kayıt yoksa null + ipucu (değer yok), biçimsiz kayıt değer basmadan RED, `kapali`/geçici dizin dışı sahte
-//   §3 kayıt aracı — iki giriş, eşleşmeme/kısa RED, değer yalnız `security -i` stdin'inde, `--liste` değer basmaz
+//   §3 kayıt aracı — iki giriş, eşleşmeme/kısa RED, değer yalnız `security -i` stdin'inde, `--liste` değer basmaz,
+//      kenar boşluğu atılır (içteki korunur), var olan kayıt `-U`suz sil+yaz, silme sonrası yazım hatası açıkça söylenir
 //   §4 TS aracı (panel-imza) — kasadan sorusuz üretir/açar, `--kasa=yok`/`kapali` kasaya bakmaz, kayıt yoksa ipucu
 //   §5 tripwire — parola girdisi olan her araç kasa yolunda; `askPassword` kasasız çağrı beyanlı; keytool argv'de parola yok;
 //      Play parolası keystore.properties'ten okunmaz; araç koşturan her bekçi kasayı kapatır
@@ -66,6 +67,7 @@ fs.writeFileSync(
 const fs = require('fs');
 const DB = ${JSON.stringify(KASA)};
 const LOG = ${JSON.stringify(DEFTER)};
+const BOZ = ${JSON.stringify(path.join(GECICI, 'boz-'))};
 const db = fs.existsSync(DB) ? JSON.parse(fs.readFileSync(DB, 'utf8')) : {};
 fs.appendFileSync(LOG, JSON.stringify(process.argv.slice(2)) + '\\n');
 function kos(a) {
@@ -78,15 +80,27 @@ function kos(a) {
     return 0;
   }
   if (a[0] === 'add-generic-password') {
-    if (k in db && !a.includes('-U')) return 45;
+    if (fs.existsSync(BOZ + 'ekle')) return 1;
+    // var olan kayıtta -U: gerçek macOS izin penceresi açar — sahte kasa reddeder
+    if (k in db) return a.includes('-U') ? 51 : 45;
     if (al('-T') !== '/usr/bin/security') return 3;
     db[k] = al('-w'); fs.writeFileSync(DB, JSON.stringify(db)); return 0;
+  }
+  if (a[0] === 'delete-generic-password') {
+    if (fs.existsSync(BOZ + 'sil')) return 51;
+    if (!(k in db)) return 44;
+    delete db[k]; fs.writeFileSync(DB, JSON.stringify(db)); return 0;
   }
   return 1;
 }
 if (process.argv[2] === '-i') {
   let st = 0;
-  for (const l of fs.readFileSync(0, 'utf8').split('\\n').filter(Boolean)) st = kos(l.trim().split(/\\s+/));
+  for (const l of fs.readFileSync(0, 'utf8').split('\\n').filter(Boolean)) {
+    const a = l.trim().split(/\\s+/);
+    const w = a.indexOf('-w');
+    fs.appendFileSync(LOG, JSON.stringify(['-i:', ...a.map((x, i) => (w >= 0 && i === w + 1 ? '***' : x))]) + '\\n');
+    st = kos(a);
+  }
   process.exit(st);
 }
 process.exit(kos(process.argv.slice(2)));
@@ -208,6 +222,30 @@ console.log(JSON.stringify({ adlar: C.KASA_ADLARI, ortam: C.KASA_ORTAM, komut: C
   check('§3g parola argümanı ve tanınmayan ad RED (çıkış 2)', k5.status === 2 && k6.status === 2);
   const k7 = spawnSync(process.execPath, [KAYDET, 'kok'], { input: `${PAROLA}\n${PAROLA}\n`, encoding: 'utf8', env: { ...process.env, [K.KASA_ORTAM]: 'kapali' } });
   check('§3h kasa kapalıyken kayıt yapılmaz (çıkış 2)', k7.status === 2);
+  const degerYok = (r, ...degerler) => ![r.stdout, r.stderr].some((c) => degerler.some((d) => c.includes(d) || c.includes(hex(d))));
+  kasaKoy({});
+  const kb = kaydet(['yedek'], `  \u00a0${PAROLA}\t \n${PAROLA}\u00a0\n`);
+  check('§3i kenar boşluğu (boşluk · sekme · NBSP) atılır, açıkça söylenir, değer basılmaz', kb.status === 0 && kasaHam()['tekserp/yedek|tekserp'] === kodla(PAROLA.normalize('NFC')) && /Kenar boşluğu atıldı/.test(kb.stderr) && degerYok(kb, PAROLA), `${kb.status} ${kb.stderr.slice(0, 200)}`);
+  const OBEK = 'uzun kelime öbeği parola';
+  const ko = kaydet(['ara'], `${OBEK}\n${OBEK}\n`);
+  check('§3j içteki boşluk korunur; kenarı temiz değerde kırpma iletisi YOK', ko.status === 0 && kasaHam()['tekserp/ara|tekserp'] === kodla(OBEK) && !/Kenar boşluğu/.test(ko.stderr), `${ko.status} ${ko.stderr.slice(0, 200)}`);
+  kasaKoy({ paket: kodla(PAROLA_IKI) });
+  defterSifirla();
+  const ku = kaydet(['paket'], `${PAROLA}\n${PAROLA}\n`);
+  const altKomut = defter().trim().split('\n').map((l) => JSON.parse(l)).filter((a) => a[0] === '-i:' || a[0].endsWith('-generic-password'));
+  const ekle = altKomut.filter((a) => a.includes('add-generic-password'));
+  const silSira = altKomut.findIndex((a) => a[0] === 'delete-generic-password');
+  check('§3k var olan kayıt -U\'suz: önce sil, sonra yaz (izin penceresi yok), yeni değer geri okunur', ku.status === 0 && kasaHam()['tekserp/paket|tekserp'] === kodla(PAROLA.normalize('NFC')) && silSira >= 0 && silSira < altKomut.indexOf(ekle[0]) && ekle.length === 1 && !ekle[0].includes('-U') && /eski kayıt silinip/.test(ku.stdout) && degerYok(ku, PAROLA, PAROLA_IKI), `${ku.status} ${ku.stderr.slice(0, 200)} ${JSON.stringify(altKomut).slice(0, 300)}`);
+  kasaKoy({ paket: kodla(PAROLA_IKI) });
+  fs.writeFileSync(path.join(GECICI, 'boz-ekle'), '');
+  const ke = kaydet(['paket'], `${PAROLA}\n${PAROLA}\n`);
+  fs.rmSync(path.join(GECICI, 'boz-ekle'));
+  check('§3l silindi ama yazılamadı → çıkış 1, "ESKİ KAYIT SİLİNDİ … KAYITSIZ" + kayıt komutu söylenir, değer basılmaz', ke.status === 1 && !('tekserp/paket|tekserp' in kasaHam()) && /ESKİ KAYIT SİLİNDİ/.test(ke.stderr) && /KAYITSIZ/.test(ke.stderr) && ke.stderr.includes('parola-kaydet.mjs paket') && degerYok(ke, PAROLA, PAROLA_IKI), `${ke.status} ${ke.stderr.slice(0, 300)}`);
+  kasaKoy({ paket: kodla(PAROLA_IKI) });
+  fs.writeFileSync(path.join(GECICI, 'boz-sil'), '');
+  const ks = kaydet(['paket'], `${PAROLA}\n${PAROLA}\n`);
+  fs.rmSync(path.join(GECICI, 'boz-sil'));
+  check('§3m eski kayıt silinemezse yazıma geçilmez: çıkış 1, kayıt DEĞİŞMEDİ', ks.status === 1 && kasaHam()['tekserp/paket|tekserp'] === kodla(PAROLA_IKI) && /DEĞİŞMEDİ/.test(ks.stderr) && degerYok(ks, PAROLA, PAROLA_IKI), `${ks.status} ${ks.stderr.slice(0, 300)}`);
 
   // ============================================================== §4 TS aracı uçtan uca (panel-imza)
   const DIZIN = path.join(GECICI, 'panel');

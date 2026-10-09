@@ -146,15 +146,27 @@ export function kasaKayitliMi(ad, env = process.env) {
 
 /**
  * Kasaya yaz — YALNIZ `parola-kaydet.mjs`. Değer `security -i`nin STDIN'inden gider (komut satırı süreç listesine
- * düşmez); yazıldıktan sonra geri okunup sabit zamanlı kıyaslanır.
+ * düşmez); yazıldıktan sonra geri okunup sabit zamanlı kıyaslanır. Var olan kayıt `-U` ile GÜNCELLENMEZ (macOS izin
+ * penceresi açtırıyor): önce silinir, sonra yeniden yazılır. Dönüş: `{ eskiSilindi }`.
  */
 export function kasayaYaz(ad, parola, env = process.env) {
   const hizmet = kasaHizmeti(ad);
   const komut = kasaKomutu(env);
   if (!komut) throw new KasaHatasi(`Parola kasası kapalı (${KASA_ORTAM} ya da macOS dışı) — kayıt yapılmadı`);
+  let eskiSilindi = false;
+  if (kasaKayitliMi(ad, env)) {
+    const s = kasaKos(komut, ['delete-generic-password', '-s', hizmet, '-a', KASA_HESAP], undefined, env);
+    s.stdout?.fill(0);
+    s.stderr?.fill(0);
+    if (s.error || (s.status !== 0 && s.status !== KASA_BULUNAMADI)) {
+      throw new KasaHatasi(`${hizmet}: eski kayıt silinemedi (security çıkış ${s.status ?? s.signal}) — kayıt DEĞİŞMEDİ, eski parola duruyor`);
+    }
+    eskiSilindi = s.status === 0;
+  }
+  const kayipNotu = eskiSilindi ? ` — ESKİ KAYIT SİLİNDİ, ${hizmet} şu an KAYITSIZ; hemen yeniden kaydet: ${KAYIT_KOMUTU} ${ad}` : '';
   const kod = kasaKodla(parola);
   const girdi = Buffer.concat([
-    Buffer.from(`add-generic-password -U -s ${hizmet} -a ${KASA_HESAP} -l ${hizmet} -T ${KASA_KOMUTU} -w `, 'latin1'),
+    Buffer.from(`add-generic-password -s ${hizmet} -a ${KASA_HESAP} -l ${hizmet} -T ${KASA_KOMUTU} -w `, 'latin1'),
     kod,
     Buffer.from('\n', 'latin1'),
   ]);
@@ -163,11 +175,17 @@ export function kasayaYaz(ad, parola, env = process.env) {
   girdi.fill(0);
   r.stdout?.fill(0);
   r.stderr?.fill(0);
-  if (r.error || r.status !== 0) throw new KasaHatasi(`Anahtar Zinciri'ne yazılamadı (${hizmet}; security çıkış ${r.status ?? r.signal})`);
-  const geri = kasadanOku(ad, env);
+  if (r.error || r.status !== 0) throw new KasaHatasi(`Anahtar Zinciri'ne yazılamadı (${hizmet}; security çıkış ${r.status ?? r.signal})${kayipNotu}`);
+  let geri = null;
+  try {
+    geri = kasadanOku(ad, env);
+  } catch {
+    // aşağıda "geri okunamadı" olarak raporlanır
+  }
   const ayni = geri !== null && geri.length === parola.length && crypto.timingSafeEqual(geri, parola);
   geri?.fill(0);
-  if (!ayni) throw new KasaHatasi(`${hizmet}: yazılan kayıt geri okunamadı ya da uyuşmadı — kayıt GÜVENİLMEZ, yeniden dene`);
+  if (!ayni) throw new KasaHatasi(`${hizmet}: yazılan kayıt geri okunamadı ya da uyuşmadı — kayıt GÜVENİLMEZ, yeniden dene${eskiSilindi ? ' (eski kayıt silindi)' : ''}`);
+  return { eskiSilindi };
 }
 
 const uyarilan = new Set();

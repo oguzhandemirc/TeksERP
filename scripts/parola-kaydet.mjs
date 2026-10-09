@@ -3,10 +3,12 @@
 // PAROLA KAYDET — tören/imza parolasını macOS Anahtar Zinciri'ne yazar (kullanıcı kendi Terminal'inde koşar)
 // =============================================================================
 //   node scripts/parola-kaydet.mjs <ad>       parolayı gizli girdiyle İKİ kez sorar, `tekserp/<ad>` olarak kaydeder
-//                                             (varsa günceller); yazdıktan sonra geri okuyup doğrular
+//                                             (varsa eskisini siler, yeniden yazar); yazdıktan sonra geri okuyup doğrular
 //   node scripts/parola-kaydet.mjs --liste    hangi adların kayıtlı olduğunu gösterir (DEĞER GÖSTERMEZ)
 // Adlar ve hangi aracın kullandığı: scripts/lib/parola-kasasi.mjs (KASA_KATALOGU). Parola argümandan ve ortamdan
 // ALINMAZ; terminal yoksa kayıt yapılmaz (yalnız bekçinin sahte kasasında stdin satırları). Değer hiçbir çıktıya basılmaz.
+// Başta/sonda boşluk (NBSP dahil) atılır ve bildirilir — kopyala-yapıştırla gelen sondaki boşluk anahtarı açtırmaz; içteki
+// boşluk korunur.
 // Çıkış: 0 tamam · 1 hata · 2 kullanım.
 // =============================================================================
 
@@ -51,6 +53,7 @@ const tanim = KASA_KATALOGU[ad];
 
 // ---------------------------------------------------------------- gizli girdi
 let stdinSatirlari = null;
+let kenarAtildi = false;
 async function stdinOku() {
   const parcalar = [];
   for await (const p of process.stdin) parcalar.push(p);
@@ -113,9 +116,11 @@ async function sor(soru) {
     ham = stdinSatirlari.shift();
     if (!ham) dur('Parola bekleniyordu (stdin bitti)', 2);
   } else dur("Terminal yok — parola kaydı yalnız kendi Terminal'inde, gizli girdiyle yapılır", 2);
-  const nfc = Buffer.from(ham.toString('utf8').normalize('NFC'), 'utf8');
+  const metin = ham.toString('utf8').normalize('NFC');
   ham.fill(0);
-  return nfc;
+  const kirpik = metin.replace(/^\s+|\s+$/gu, '');
+  if (kirpik.length !== metin.length) kenarAtildi = true;
+  return Buffer.from(kirpik, 'utf8');
 }
 
 process.stdout.write(`${kasaHizmeti(ad)} — ${tanim.ad}\nKullanan: ${tanim.kullanan}\n`);
@@ -123,6 +128,7 @@ const ilk = await sor(`Parola (en az ${tanim.min} karakter; görünmez): `);
 const ikinci = await sor('Parola (tekrar): ');
 const ayni = ilk.length === ikinci.length && crypto.timingSafeEqual(ilk, ikinci);
 ikinci.fill(0);
+if (kenarAtildi) process.stderr.write('⚠ Kenar boşluğu atıldı: girilen değerin başındaki/sonundaki boşluk kaydedilmeyecek (içteki boşluklar korunur; değer gösterilmez).\n');
 if (!ayni) {
   ilk.fill(0);
   dur('İki giriş eşleşmedi — kayıt yapılmadı', 2);
@@ -131,11 +137,13 @@ if ([...ilk.toString('utf8')].length < tanim.min) {
   ilk.fill(0);
   dur(`En az ${tanim.min} karakter olmalı — kayıt yapılmadı`, 2);
 }
+let sonuc;
 try {
-  kasayaYaz(ad, ilk);
+  sonuc = kasayaYaz(ad, ilk);
 } catch (e) {
   dur(e instanceof KasaHatasi ? e.message : 'Anahtar Zinciri yazımı başarısız');
 } finally {
   ilk.fill(0);
 }
-process.stdout.write(`✓ ${kasaHizmeti(ad)} Anahtar Zinciri'ne kaydedildi ve geri okunarak doğrulandı (değer gösterilmez).\n`);
+const eski = sonuc.eskiSilindi ? ' (eski kayıt silinip yeniden yazıldı)' : '';
+process.stdout.write(`✓ ${kasaHizmeti(ad)} Anahtar Zinciri'ne kaydedildi${eski} ve geri okunarak doğrulandı (değer gösterilmez).\n`);
