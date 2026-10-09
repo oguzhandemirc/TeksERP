@@ -315,6 +315,8 @@ pub struct Faults {
     pub load_partial: AtomicBool,
     /// Yüklenen imajın katmanları arşivdekinden sapar.
     pub load_wrong_layers: AtomicBool,
+    /// `docker load` sürerken `current` bu dizine çevrilir (yükleme sırasında elle müdahale).
+    pub load_repoints_current: Mutex<Option<PathBuf>>,
 }
 
 /// Açılışın bir hizmet için kararı (`WorldRefs::boot_plan`): gerçek açılış da her noktadaki önizleme de bunu uygular.
@@ -863,6 +865,9 @@ impl FakeProcs {
             return fail_out(1, "Error: archive/tar: invalid tar header");
         };
         let mut layers = m.katmanlar.clone();
+        if let Some(to) = f.load_repoints_current.lock().unwrap().as_ref() {
+            RealFs.set_link(&self.w.root.join("current"), to).unwrap();
+        }
         if f.load_wrong_layers.load(Ordering::SeqCst) {
             layers.push(format!("sha256:{}", "f".repeat(64)));
         }

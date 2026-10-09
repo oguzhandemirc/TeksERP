@@ -65,13 +65,20 @@ kes_4kb() {
 }
 
 if systemctl cat "$AD" >/dev/null 2>&1; then dur "$AD zaten kayıtlı — duman gerçek birime dokunmaz"; fi
+# Temizlik hatası dumanın sonucunu değiştirmez (çıkış kodu korunur) ama sessiz de kalmaz: ekrana yazılır.
 temizle() {
-  systemctl unmask "$AD" >/dev/null 2>&1 || true
-  systemctl disable --now "$AD" >/dev/null 2>&1 || true
-  rm -f "$BIRIM"
-  systemctl daemon-reload || true
-  mountpoint -q "$KOK2" && umount "$KOK2" || true
-  rm -rf "$KOK" "$VERI" "$KOK2" "$VERI2"
+  local rc=$?
+  set +e
+  systemctl unmask "$AD" >/dev/null 2>&1
+  systemctl disable --now "$AD" >/dev/null 2>&1
+  rm -f "$BIRIM" || echo "TEMİZLİK: $BIRIM silinemedi" >&2
+  systemctl daemon-reload || echo "TEMİZLİK: daemon-reload başarısız" >&2
+  if mountpoint -q "$KOK2"; then
+    # Önce düz ayırma; meşgulse tembel ayırma (bağ hemen kalkar, açık tutamaçlar kapanınca serbest kalır).
+    umount "$KOK2" 2>/dev/null || umount -l "$KOK2" || echo "TEMİZLİK: $KOK2 ayrılamadı" >&2
+  fi
+  rm -rf "$KOK" "$VERI" "$KOK2" "$VERI2" || echo "TEMİZLİK: test dizinleri silinemedi" >&2
+  exit "$rc"
 }
 trap temizle EXIT
 

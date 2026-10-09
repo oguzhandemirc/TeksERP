@@ -242,3 +242,57 @@ fn imaj_bozuk() {
     let e = docker::etiket_dogrula(fs.as_ref(), procs.as_ref(), &komut).unwrap_err();
     assert!(e.starts_with(imaj::KIMLIK_ONEKI), "{e}");
 }
+
+/// `gercek_compose_sablonu` (L4c-2, GERÇEK `docker compose config`): teslim paketine giren güncelleyicili şablon,
+/// paketleyicinin doldurduğu biçimde (`@@SURUM@@` → sürüm) compose kurallarından GEÇER; iki bozulma (backend
+/// `privileged` · yedek ana makine ağı) ve dışa açılan port reddedilir. Yalnız `TEKSERP_DOCKER_TEST=1`; imaj gerekmez.
+#[test]
+fn gercek_compose_sablonu() {
+    if std::env::var("TEKSERP_DOCKER_TEST").as_deref() != Ok("1") {
+        eprintln!("⏭ gercek_compose_sablonu: TEKSERP_DOCKER_TEST=1 verilmedi (CI native-linux koşar)");
+        return;
+    }
+    let sablon_yolu = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../docker/korumali/docker-compose.guncelleyici.yml");
+    let sablon = std::fs::read_to_string(&sablon_yolu).expect("güncelleyicili compose şablonu");
+    let pid = std::process::id();
+    let surum = format!("0.0.{pid}-l4c2c");
+    let root = std::env::temp_dir().join(format!("tekserp_l4c2c_{pid}"));
+    let _ = std::fs::remove_dir_all(&root);
+    let _temiz = Etiketler(Vec::new(), root.clone());
+    let dir = root.join("surumler").join(&surum);
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::create_dir_all(root.join("yapilandirma")).unwrap();
+    std::fs::write(root.join("yapilandirma/pg.env"), "").unwrap();
+    let layout = Layout::new(&root, &root.join("veri"));
+    let komut = Arc::new(DockerKomut::new(&layout, &format!("tekserp_l4c2c_{pid}")).unwrap());
+    let fs: Arc<dyn Fs> = Arc::new(tekserp_guncelleyici::env::RealFs);
+    let procs: Arc<dyn Procs> = Arc::new(RealProcs);
+    let env = Env {
+        fs: Arc::clone(&fs),
+        svc: Arc::new(DockerServices::new(Arc::clone(&komut), Arc::clone(&procs), Arc::clone(&fs), 5)),
+        procs: Arc::clone(&procs),
+        net: Arc::new(tekserp_guncelleyici::env::RealNet::new(None).unwrap()),
+        clock: Arc::new(tekserp_guncelleyici::env::SystemClock),
+        events: Arc::new(tekserp_guncelleyici::platform::linux::olay::StderrEvents { journald: false }),
+        protect: Arc::new(tekserp_guncelleyici::platform::linux::koruma::DirectoryProtect),
+        arka: docker::arka_ucu(Arc::clone(&komut)),
+    };
+    let a = docker::DockerAraclar { komut: Arc::clone(&komut) };
+    let denetle = |compose: &str, ortam: &str| {
+        std::fs::write(dir.join("docker-compose.yml"), compose.replace("@@SURUM@@", &surum)).unwrap();
+        std::fs::write(root.join("yapilandirma/.env"), format!("POSTGRES_PASSWORD=p\nJWT_SECRET=j\n{ortam}")).unwrap();
+        a.compose_denetle(&env, &dir, &surum)
+    };
+    let ekle = |sonra: &str, satir: &str| {
+        assert!(sablon.contains(sonra), "şablonda {sonra:?} yok");
+        sablon.replacen(sonra, &format!("{sonra}{satir}"), 1)
+    };
+
+    denetle(&sablon, "").unwrap_or_else(|e| panic!("gerçek şablon kurallardan geçmedi: {e}"));
+    let e = denetle(&ekle("\n  backend:\n", "    privileged: true\n"), "").unwrap_err();
+    assert!(e.contains("backend: privileged"), "{e}");
+    let e = denetle(&ekle("\n  yedek:\n", "    network_mode: host\n"), "").unwrap_err();
+    assert!(e.contains("yedek: network_mode: host"), "{e}");
+    let e = denetle(&sablon, "TEKSERP_DINLE=0.0.0.0\n").unwrap_err();
+    assert!(e.contains("backend: port yalnız bu makineye değil"), "{e}");
+}

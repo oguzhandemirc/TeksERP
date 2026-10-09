@@ -1206,10 +1206,10 @@ impl Engine {
             // İşaretsiz sürüm dizini (yarım yerleştirme ya da elle konmuş): doğrulanır ve bağlanırsa kabul, değilse silinir.
             match package::verify_bound(self.platform(), &dir, fs, trust, m) {
                 Ok(()) => {
-                    self.prepare_platform(&dir, m, f.installed.as_deref() == Some(m.surum.as_str()))?;
+                    self.prepare_platform(&dir, m)?;
                     return place_marker();
                 }
-                Err(e) if f.installed.as_deref() == Some(m.surum.as_str()) => return Err(e),
+                Err(e) if self.is_installed(&m.surum) => return Err(e),
                 Err((_, why)) => {
                     self.log.warn(&format!("{} doğrulanamadı ({why}), yeniden açılacak", dir.display()));
                     fs.remove_dir_all(&dir).map_err(|x| staging_fail(codes::INDIRME_HATASI, &dir, &x))?;
@@ -1253,7 +1253,7 @@ impl Engine {
             return Err(e);
         }
         fs.rename(&staging, &dir).map_err(|x| staging_fail(codes::INDIRME_HATASI, &staging, &x))?;
-        if let Err(e) = self.prepare_platform(&dir, m, false) {
+        if let Err(e) = self.prepare_platform(&dir, m) {
             let _ = fs.remove_file(&pkg);
             return Err(e);
         }
@@ -1261,6 +1261,12 @@ impl Engine {
         let _ = fs.remove_file(&pkg);
         self.log.info(&format!("{} hazır: indirildi, sha256 + PAKET imzası + bütünlük listesi + bildirim bağı doğrulandı", m.surum));
         Ok(())
+    }
+
+    /// `current` şu an bu sürümü mü gösteriyor: silme ANINDA taze okunur — uzun yükleme sürerken bağ elle
+    /// çevrilmiş olabilir, tur başındaki çerçeve bayattır.
+    fn is_installed(&self, surum: &str) -> bool {
+        self.installed_version().is_some_and(|(v, _)| v == surum)
     }
 
     /// Bildirim imaj taşıyorsa (Linux) imajı kayıtla tutuyor mu; taşımıyorsa hazır.
@@ -1271,11 +1277,11 @@ impl Engine {
     /// Doğrulanmış sürüm dizininin platform hazırlığı (Linux: compose + imaj). Kesin hatada dizin silinir — sonraki tur
     /// geri çekilmeye takılır, ağır yükleme her turda tekrarlanmaz; geçici hatada dizin kalır, yükleme yeniden denenir.
     /// Kurulu sürümün dizini (`current`in hedefi) hiçbir hatada silinmez.
-    fn prepare_platform(&self, dir: &Path, m: &ReleaseManifest, installed: bool) -> Result<(), Fail> {
+    fn prepare_platform(&self, dir: &Path, m: &ReleaseManifest) -> Result<(), Fail> {
         let Some(img) = &m.imaj else { return Ok(()) };
         let r = self.env.arka.araclar.surum_hazirla(&self.env, dir, &m.surum, &img.kimlik);
         if let Err((code, _)) = &r {
-            if Self::definitive(code) && !installed {
+            if Self::definitive(code) && !self.is_installed(&m.surum) {
                 let _ = self.env.fs.remove_dir_all(dir);
             }
         }

@@ -28,6 +28,7 @@ fn untouched(w: &World, ctx: &str) {
     assert_eq!(w.current().as_deref(), Some(OLD), "{ctx}: current değişti");
     assert!(!w.layout.version_dir(NEW).exists(), "{ctx}: sürüm dizini kaldı");
     assert!(imaj::kayit_oku(&RealFs, &w.layout, NEW).is_none(), "{ctx}: NEW kaydı yazılmış");
+    assert!(w.layout.version_dir(OLD).is_dir(), "{ctx}: kurulu sürümün dizini silindi");
 }
 
 /// Testin seçtiği imaj arşivi/compose ile imzalı paket sunulur.
@@ -188,4 +189,18 @@ fn baslatma_etiketi_motor_yolundan() {
     let err = journal.lines().find(|l| l.contains("\"hataKodu\":\"IMAJ_KIMLIGI\"")).unwrap_or_default();
     assert!(err.contains(imaj::KIMLIK_ONEKI) && err.contains(OLD), "günlükte IMAJ_KIMLIGI adımı yok:\n{journal}");
     assert!(s.message.unwrap_or_default().contains("PAKET_BAGI"), "rapora belgeli kodla (PAKET_BAGI)");
+}
+
+#[test]
+fn kurulu_surum_dizini_silinmez() {
+    // Kesin hata (katman tutmaz) anında `current` hazırlanan sürümü gösteriyor (yükleme sürerken elle çevrildi):
+    // dizin SİLİNMEZ — kurulu sürümün dizini hiçbir hatada silinmez, karar tur başındaki bilgiyle verilmez.
+    let w = linux("li-kurulu");
+    w.faults.load_wrong_layers.store(true, Ordering::SeqCst);
+    *w.faults.load_repoints_current.lock().unwrap() = Some(w.layout.version_dir(NEW));
+    w.run(1).unwrap();
+    assert_eq!(code(&w).as_deref(), Some("IMAJ_KIMLIGI"));
+    assert_eq!(w.current().as_deref(), Some(NEW));
+    assert!(w.layout.version_dir(NEW).is_dir(), "current'in gösterdiği sürüm dizini silindi");
+    assert!(w.layout.version_dir(OLD).is_dir());
 }
