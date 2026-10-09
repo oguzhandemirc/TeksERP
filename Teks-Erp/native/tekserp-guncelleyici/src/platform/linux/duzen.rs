@@ -37,6 +37,11 @@ pub fn valid_project(name: &str) -> bool {
 /// HER `docker compose` çağrısının ortak başı (§1.2): `compose -p <proje> -f current/docker-compose.yml
 /// --env-file yapilandirma/.env --env-file yapilandirma/pg.env` — elle müdahale de aynı satırı kullanır.
 pub fn compose_args(l: &Layout, project: &str) -> Result<Vec<String>, String> {
+    compose_args_for(l, project, &compose_file(l))
+}
+
+/// Aynı baş, başka compose dosyasıyla: hazırlıkta paketin (henüz `current` olmayan) dosyası denetlenir.
+pub fn compose_args_for(l: &Layout, project: &str, file: &Path) -> Result<Vec<String>, String> {
     if !valid_project(project) {
         return Err(format!("compose proje adı geçersiz: {project:?}"));
     }
@@ -46,7 +51,7 @@ pub fn compose_args(l: &Layout, project: &str) -> Result<Vec<String>, String> {
         "-p".into(),
         project.into(),
         "-f".into(),
-        s(compose_file(l)),
+        s(file.to_path_buf()),
         "--env-file".into(),
         s(l.backend_env()),
         "--env-file".into(),

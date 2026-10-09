@@ -1188,7 +1188,12 @@ impl Engine {
             .and_then(|b| serde_json::from_slice::<Value>(&b).ok())
             .is_some_and(|v| v.get("paketId").and_then(Value::as_str) == Some(m.paket.package_id.as_str()));
         if marked && fs.is_dir(&dir) {
-            return Ok(());
+            if self.image_ready(m) {
+                return Ok(());
+            }
+            // İşaretli ama imajı kaybolmuş ya da yeniden etiketlenmiş: dizin yeniden doğrulanıp imaj yeniden yüklenir.
+            self.log.warn(&format!("{} imajı hazır değil, yeniden yüklenecek", m.surum));
+            let _ = fs.remove_file(&marker);
         }
         let place_marker = || {
             fs.write_atomic(
@@ -1200,7 +1205,10 @@ impl Engine {
         if fs.is_dir(&dir) {
             // İşaretsiz sürüm dizini (yarım yerleştirme ya da elle konmuş): doğrulanır ve bağlanırsa kabul, değilse silinir.
             match package::verify_bound(self.platform(), &dir, fs, trust, m) {
-                Ok(()) => return place_marker(),
+                Ok(()) => {
+                    self.prepare_platform(&dir, m, f.installed.as_deref() == Some(m.surum.as_str()))?;
+                    return place_marker();
+                }
                 Err(e) if f.installed.as_deref() == Some(m.surum.as_str()) => return Err(e),
                 Err((_, why)) => {
                     self.log.warn(&format!("{} doğrulanamadı ({why}), yeniden açılacak", dir.display()));
@@ -1245,10 +1253,33 @@ impl Engine {
             return Err(e);
         }
         fs.rename(&staging, &dir).map_err(|x| staging_fail(codes::INDIRME_HATASI, &staging, &x))?;
+        if let Err(e) = self.prepare_platform(&dir, m, false) {
+            let _ = fs.remove_file(&pkg);
+            return Err(e);
+        }
         place_marker()?;
         let _ = fs.remove_file(&pkg);
         self.log.info(&format!("{} hazır: indirildi, sha256 + PAKET imzası + bütünlük listesi + bildirim bağı doğrulandı", m.surum));
         Ok(())
+    }
+
+    /// Bildirim imaj taşıyorsa (Linux) imajı kayıtla tutuyor mu; taşımıyorsa hazır.
+    fn image_ready(&self, m: &ReleaseManifest) -> bool {
+        m.imaj.as_ref().is_none_or(|i| self.env.arka.araclar.imaj_hazir(&self.env, &m.surum, &i.kimlik))
+    }
+
+    /// Doğrulanmış sürüm dizininin platform hazırlığı (Linux: compose + imaj). Kesin hatada dizin silinir — sonraki tur
+    /// geri çekilmeye takılır, ağır yükleme her turda tekrarlanmaz; geçici hatada dizin kalır, yükleme yeniden denenir.
+    /// Kurulu sürümün dizini (`current`in hedefi) hiçbir hatada silinmez.
+    fn prepare_platform(&self, dir: &Path, m: &ReleaseManifest, installed: bool) -> Result<(), Fail> {
+        let Some(img) = &m.imaj else { return Ok(()) };
+        let r = self.env.arka.araclar.surum_hazirla(&self.env, dir, &m.surum, &img.kimlik);
+        if let Err((code, _)) = &r {
+            if Self::definitive(code) && !installed {
+                let _ = self.env.fs.remove_dir_all(dir);
+            }
+        }
+        r
     }
 
     fn download_progress(&self, f: &Frame, done: u64, total: u64) {

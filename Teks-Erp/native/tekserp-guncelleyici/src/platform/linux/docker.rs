@@ -3,9 +3,11 @@
 //! Docker'a YALNIZ `docker` CLI ile, `Procs` üzerinden konuşulur; her compose çağrısı `duzen::compose_args`
 //! başıyla koşar. CLI çıktısından yalnız Go şablonuyla istenen tek değerler okunur, başarı ölçüsü çıkış kodudur.
 use super::duzen;
-use crate::env::{Cmd, CmdOut, Env, EnvError, EnvResult, HttpResponse, Procs, Services, SvcState};
+use crate::codes;
+use crate::env::{Cmd, CmdOut, Env, EnvError, EnvResult, Fs, HttpResponse, Procs, Services, SvcState};
+use crate::imaj;
 use crate::layout::Layout;
-use crate::settings::BackendEnv;
+use crate::settings::{redact, BackendEnv};
 use crate::tools::{describe_failure, restore_errors, MigrationCount};
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
@@ -50,6 +52,10 @@ impl DockerKomut {
     /// `docker compose -p … -f current/docker-compose.yml --env-file … --env-file …`.
     pub fn compose(&self) -> Cmd {
         self.docker().args(duzen::compose_args(&self.layout, &self.proje).unwrap_or_default())
+    }
+    /// Hazırlıkta paketin compose dosyasıyla aynı baş (`config` denetimi).
+    pub fn compose_dosyali(&self, file: &Path) -> Cmd {
+        self.docker().args(duzen::compose_args_for(&self.layout, &self.proje, file).unwrap_or_default())
     }
     /// Araç konteynerinin sabit adı: devam/telafi önce aynı adlıyı siler (yetim araç kalmaz).
     pub fn arac_adi(&self, arac: &str) -> String {
@@ -103,6 +109,8 @@ fn run(procs: &dyn Procs, c: &Cmd, what: &str) -> Result<CmdOut, String> {
 pub struct DockerServices {
     pub komut: Arc<DockerKomut>,
     pub procs: Arc<dyn Procs>,
+    /// Etiket kaydı ve `current` okunur: backend başlatılmadan önce etiket ölçülür.
+    pub fs: Arc<dyn Fs>,
     pub stop_timeout_s: u64,
     /// Bu süreçte `stop` ile durdurulanlar: Docker elle durdurulan konteyneri yeniden başlatmaz — çıkış kodu
     /// çökme sayılmaz (yatıştırma kendiliğinden).
@@ -110,8 +118,8 @@ pub struct DockerServices {
 }
 
 impl DockerServices {
-    pub fn new(komut: Arc<DockerKomut>, procs: Arc<dyn Procs>, stop_timeout_s: u64) -> DockerServices {
-        DockerServices { komut, procs, stop_timeout_s, durduruldu: Mutex::new(HashSet::new()) }
+    pub fn new(komut: Arc<DockerKomut>, procs: Arc<dyn Procs>, fs: Arc<dyn Fs>, stop_timeout_s: u64) -> DockerServices {
+        DockerServices { komut, procs, fs, stop_timeout_s, durduruldu: Mutex::new(HashSet::new()) }
     }
 
     pub fn konteyner(&self, svc: &str) -> EnvResult<Option<String>> {
@@ -150,6 +158,9 @@ impl Services for DockerServices {
             [a] if *a == contract::VERIFY_ARG => true,
             other => return Err(EnvError(format!("{name}: tanınmayan başlatma argümanı {other:?}"))),
         };
+        if svc == BACKEND {
+            etiket_dogrula(self.fs.as_ref(), self.procs.as_ref(), &self.komut).map_err(EnvError)?;
+        }
         let c = self
             .komut
             .compose()
@@ -458,6 +469,18 @@ impl crate::platform::Araclar for DockerAraclar {
     fn db_boyutu(&self, env: &Env, _be: &BackendEnv) -> Option<u64> {
         self.psql(env, DB_BOYU_SQL, "veritabanı boyu (psql)").ok()?.trim().parse().ok()
     }
+    fn imaj_hazir(&self, env: &Env, surum: &str, kimlik: &str) -> bool {
+        let Some(k) = imaj::kayit_oku(env.fs.as_ref(), &self.komut.layout, surum) else { return false };
+        let now = etiket_olc(env.procs.as_ref(), &self.komut, &crate::oci::image_tag(surum)).ok().flatten();
+        k.kimlik == kimlik && now.is_some_and(|(id, layers)| k.tutar(&id, &layers))
+    }
+    fn surum_hazirla(&self, env: &Env, dir: &Path, surum: &str, kimlik: &str) -> Result<(), (&'static str, String)> {
+        self.compose_denetle(env, dir, surum).map_err(|e| (codes::COMPOSE_HATASI, e))?;
+        if self.imaj_hazir(env, surum, kimlik) {
+            return Ok(());
+        }
+        self.imaj_yukle(env, &dir.join(crate::oci::image_archive(surum)), surum, kimlik)
+    }
     /// Yalnız `tekserp-korumali:<sürüm>` etiketleri, tutulanlar dışındakiler; `image prune` ÇAĞRILMAZ.
     fn imaj_buda(&self, env: &Env, keep: &[String]) {
         let c = self.komut.docker().args(["image", "ls", "--format", "{{.Tag}}", IMAJ_DEPOSU]).timeout(Duration::from_secs(60));
@@ -468,6 +491,137 @@ impl crate::platform::Araclar for DockerAraclar {
                 let _ = env.procs.run(&rm);
             }
         }
+        let dir = imaj::kayit_dizini(&self.komut.layout);
+        for name in env.fs.list(&dir).unwrap_or_default() {
+            if name.strip_suffix(".json").is_some_and(|v| !keep.iter().any(|k| k == v)) {
+                let _ = env.fs.remove_file(&dir.join(&name));
+            }
+        }
+    }
+}
+
+// ── İmaj yükleme · etiket kaydı · compose denetimi (L4c-2) ──────────────────────────────────────
+
+/// `docker image inspect`: `None` = böyle imaj yok; Docker'a ulaşılamaması hata.
+fn imaj_incele(procs: &dyn Procs, komut: &DockerKomut, r: &str, format: &str) -> Result<Option<String>, String> {
+    let c = komut.docker().args(["image", "inspect", "--format", format, r]).timeout(Duration::from_secs(60));
+    let out = procs.run(&c).map_err(|e| format!("docker image inspect: {e}"))?;
+    if out.ok() {
+        return Ok(Some(String::from_utf8_lossy(&out.stdout).trim().to_string()));
+    }
+    if String::from_utf8_lossy(&out.stderr).contains("No such image") {
+        return Ok(None);
+    }
+    Err(describe_failure("docker image inspect", &out))
+}
+
+/// Etiketin bugünkü (yerel tutamaç, katmanlar) ölçümü.
+fn etiket_olc(procs: &dyn Procs, komut: &DockerKomut, tag: &str) -> Result<Option<(String, Vec<String>)>, String> {
+    match imaj_incele(procs, komut, tag, imaj::INSPECT_FORMAT)? {
+        None => Ok(None),
+        Some(line) => imaj::inspect_coz(&line).map(Some).ok_or_else(|| format!("docker image inspect çözülemedi: {line:?}")),
+    }
+}
+
+/// Başlatılacak sürümün etiketi güncelleyicinin kaydıyla aynı nesne mi (`current`in hedefi). Kayıt yok, etiket yok ya
+/// da başka nesne ⇒ `IMAJ_KIMLIGI:` önekli hata; Docker'a ulaşılamazsa öneksiz (başlatma hatası).
+pub fn etiket_dogrula(fs: &dyn Fs, procs: &dyn Procs, komut: &DockerKomut) -> Result<(), String> {
+    let target = fs.link_target(&komut.layout.current()).ok().flatten().ok_or("current bağlantısı okunamadı")?;
+    let surum = target.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
+    let tag = crate::oci::image_tag(&surum);
+    let Some(k) = imaj::kayit_oku(fs, &komut.layout, &surum) else {
+        return Err(format!("{} {tag}: güncelleyicinin yükleme kaydı yok — başlatılmaz", imaj::KIMLIK_ONEKI));
+    };
+    match etiket_olc(procs, komut, &tag)? {
+        Some((id, layers)) if k.tutar(&id, &layers) => Ok(()),
+        Some(_) => Err(format!("{} {tag} güncelleyicinin yüklediği imaj değil (yeniden etiketlenmiş) — başlatılmaz", imaj::KIMLIK_ONEKI)),
+        None => Err(format!("{} {tag} Docker'da yok — başlatılmaz", imaj::KIMLIK_ONEKI)),
+    }
+}
+
+impl DockerAraclar {
+    fn imaj_kumesi(&self, env: &Env) -> Result<HashSet<String>, String> {
+        let c = self.komut.docker().args(["image", "ls", "-a", "-q", "--no-trunc"]).timeout(Duration::from_secs(60));
+        let out = run(env.procs.as_ref(), &c, "docker image ls").map_err(|e| e.to_string())?;
+        Ok(String::from_utf8_lossy(&out.stdout).split_whitespace().map(str::to_string).collect())
+    }
+
+    /// Yarım/uyuşmaz yüklemenin artığı: yüklemeden sonra doğan ve YALNIZ bizim etiketimizi taşıyan imajlar silinir
+    /// (başka projenin imajına ve etiketsiz yeniye dokunulmaz). En iyi çaba.
+    fn artik_temizle(&self, env: &Env, before: &HashSet<String>, tag: &str) {
+        let Ok(after) = self.imaj_kumesi(env) else { return };
+        for id in after.difference(before) {
+            let tags = imaj_incele(env.procs.as_ref(), &self.komut, id, "{{json .RepoTags}}").ok().flatten();
+            let tags: Vec<String> = tags.and_then(|t| serde_json::from_str(&t).ok()).unwrap_or_default();
+            if !tags.is_empty() && tags.iter().all(|t| t == tag) {
+                let rm = self.komut.docker().args(["image", "rm", id.as_str()]).timeout(Duration::from_secs(120));
+                let _ = env.procs.run(&rm);
+            }
+        }
+    }
+
+    /// Paketin compose dosyası: `config --format json` + kurallar. Hata iletisi YALNIZ stderr'den (stdout ortamı
+    /// açılmış hâliyle sır taşır).
+    pub fn compose_denetle(&self, env: &Env, dir: &Path, surum: &str) -> Result<(), String> {
+        let c = self
+            .komut
+            .compose_dosyali(&dir.join(duzen::COMPOSE_DOSYASI))
+            .args(["config", "--format", "json"])
+            .timeout(Duration::from_secs(60));
+        let out = env.procs.run(&c).map_err(|e| format!("compose config: {e}"))?;
+        if !out.ok() {
+            let err = String::from_utf8_lossy(&out.stderr);
+            let last: Vec<&str> = err.lines().filter(|l| !l.trim().is_empty()).collect();
+            return Err(format!("compose config: çıkış {:?} — {}", out.code, redact(&last[last.len().saturating_sub(4)..].join(" | "))));
+        }
+        let cfg: serde_json::Value = serde_json::from_slice(&out.stdout).map_err(|_| "compose config çıktısı JSON değil".to_string())?;
+        let bad = super::compose::ihlaller(&cfg, surum);
+        if bad.is_empty() {
+            Ok(())
+        } else {
+            Err(format!("compose kuralı: {}", bad.join(" · ")))
+        }
+    }
+
+    /// Arşivi ölçer (kimlik = bildirim), yükler, etiketin katmanlarını arşivle karşılaştırır, kaydı yazar.
+    pub fn imaj_yukle(&self, env: &Env, archive: &Path, surum: &str, kimlik: &str) -> Result<(), (&'static str, String)> {
+        let fs = env.fs.as_ref();
+        let tag = crate::oci::image_tag(surum);
+        let k = |m: String| (codes::IMAJ_KIMLIGI, m);
+        let olcum = imaj::olc(fs, archive).map_err(k)?;
+        if olcum.kimlik != kimlik {
+            return Err(k(format!("imaj arşivinin kimliği {} — bildirim {kimlik}", olcum.kimlik)));
+        }
+        if olcum.etiketler != [tag.clone()] {
+            return Err(k(format!("imaj arşivinin etiketleri {:?} — yalnız {tag} bekleniyor", olcum.etiketler)));
+        }
+        let before = self.imaj_kumesi(env).map_err(|e| (codes::IMAJ_YUKLENEMEDI, e))?;
+        let c = self.komut.docker().arg("load").arg("-i").arg(archive).timeout(Duration::from_secs(1800));
+        if let Err(e) = run(env.procs.as_ref(), &c, "docker load") {
+            self.artik_temizle(env, &before, &tag);
+            return Err((codes::IMAJ_YUKLENEMEDI, e));
+        }
+        let olcum_d = etiket_olc(env.procs.as_ref(), &self.komut, &tag).map_err(|e| (codes::IMAJ_YUKLENEMEDI, e))?;
+        let Some((docker_id, layers)) = olcum_d else {
+            self.artik_temizle(env, &before, &tag);
+            return Err((codes::IMAJ_YUKLENEMEDI, format!("docker load sonrası {tag} yok")));
+        };
+        if layers != olcum.katmanlar {
+            self.artik_temizle(env, &before, &tag);
+            let rm = self.komut.docker().args(["image", "rm", &tag]).timeout(Duration::from_secs(120));
+            let _ = env.procs.run(&rm);
+            return Err(k(format!("yüklenen {tag} katmanları arşivle tutmuyor — imaj silindi")));
+        }
+        let kayit = imaj::Kayit {
+            v: 1,
+            surum: surum.to_string(),
+            etiket: tag,
+            kimlik: olcum.kimlik,
+            katmanlar: layers,
+            docker_id,
+            zaman: tekserp_hizmet::timefmt::iso_millis(env.clock.now_ms()),
+        };
+        imaj::kayit_yaz(fs, &self.komut.layout, &kayit).map_err(|e| (codes::IMAJ_YUKLENEMEDI, format!("imaj kaydı yazılamadı: {e}")))
     }
 }
 
@@ -509,7 +663,9 @@ mod tests {
         CmdOut { code: Some(code), stdout: stdout.as_bytes().to_vec(), stderr: vec![], timed_out: false }
     }
     fn kur(yanit: impl Fn(&[String]) -> CmdOut + Send + Sync + 'static) -> (Arc<Betik>, Arc<DockerKomut>, Env) {
-        let layout = Layout::new(Path::new("/opt/tekserp"), Path::new("/var/lib/tekserp"));
+        kur_l(Layout::new(Path::new("/opt/tekserp"), Path::new("/var/lib/tekserp")), yanit)
+    }
+    fn kur_l(layout: Layout, yanit: impl Fn(&[String]) -> CmdOut + Send + Sync + 'static) -> (Arc<Betik>, Arc<DockerKomut>, Env) {
         let komut = Arc::new(DockerKomut::new(&layout, "tekserp_l4b").unwrap());
         let procs = Arc::new(Betik { calls: Mutex::new(vec![]), yanit: Box::new(yanit) });
         let env = Env {
@@ -550,25 +706,42 @@ mod tests {
                 Some("inspect") => out(0, &format!("{l}\n")),
                 _ => out(1, ""),
             });
-            let s = DockerServices::new(komut, Arc::clone(&env.procs), 60);
+            let s = DockerServices::new(komut, Arc::clone(&env.procs), Arc::clone(&env.fs), 60);
             assert_eq!(s.state(contract::BACKEND_SERVICE).unwrap(), state, "{line}");
             assert_eq!(s.crash_exit_code("backend").unwrap(), crash, "{line}");
         }
         // Konteyner yok ⇒ durmuş (Missing değil: compose `up` yaratır).
         let (_, komut, env) = kur(|_| out(0, ""));
-        let s = DockerServices::new(komut, Arc::clone(&env.procs), 60);
+        let s = DockerServices::new(komut, Arc::clone(&env.procs), Arc::clone(&env.fs), 60);
         assert_eq!(s.state("backend").unwrap(), SvcState::Stopped);
         assert!(s.state("TeksERP-Backend-ikinci").is_err(), "büyük harfli ad compose servisi değil");
     }
 
     #[test]
     fn baslat_kip_degiskeni_ve_durdurulani_cokme_saymaz() {
-        let (p, komut, env) = kur(|a| match alt_komut(a).first().map(String::as_str) {
+        // Backend başlatması etiketi kayda karşı ölçer: `current` → 1.0.0 ve güncelleyicinin kaydı.
+        let root = std::env::temp_dir().join(format!("tekserp-dk-baslat-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        let layout = Layout::new(&root, &root.join("veri"));
+        std::fs::create_dir_all(layout.version_dir("1.0.0")).unwrap();
+        Fs::set_link(&crate::env::RealFs, &layout.current(), &layout.version_dir("1.0.0")).unwrap();
+        let kayit = imaj::Kayit {
+            v: 1,
+            surum: "1.0.0".into(),
+            etiket: "tekserp-korumali:1.0.0".into(),
+            kimlik: "sha256:c".into(),
+            katmanlar: vec!["sha256:l".into()],
+            docker_id: "sha256:h".into(),
+            zaman: String::new(),
+        };
+        imaj::kayit_yaz(&crate::env::RealFs, &layout, &kayit).unwrap();
+        let (p, komut, env) = kur_l(layout, |a| match alt_komut(a).first().map(String::as_str) {
             Some("ps") => out(0, "abc\n"),
             Some("inspect") => out(0, "exited|10|0|\n"),
+            Some("image") => out(0, "sha256:h|[\"sha256:l\"]\n"),
             _ => out(0, ""),
         });
-        let s = DockerServices::new(komut, Arc::clone(&env.procs), 45);
+        let s = DockerServices::new(komut, Arc::clone(&env.procs), Arc::clone(&env.fs), 45);
         s.start("TeksERP-Backend", &[contract::VERIFY_ARG]).unwrap();
         s.start("backend", &[]).unwrap();
         assert!(s.start("backend", &["--baska"]).is_err());
@@ -583,7 +756,8 @@ mod tests {
         let stop = calls.iter().find(|(a, _)| alt_komut(a).first().map(String::as_str) == Some("stop")).unwrap();
         assert_eq!(alt_komut(&stop.0), ["stop", "-t", "45", "backend"]);
         // Birim her hedefte koşar; Windows'ta `Path::join` `\` ekler — ölçülen compose başının biçimi, ayraç değil.
-        let head: Vec<String> = ups[0].0[..9].iter().map(|a| a.replace('\\', "/")).collect();
+        let root_s = root.to_string_lossy().replace('\\', "/");
+        let head: Vec<String> = ups[0].0[..9].iter().map(|a| a.replace('\\', "/").replace(&root_s, "/opt/tekserp")).collect();
         assert_eq!(
             head,
             [

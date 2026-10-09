@@ -19,6 +19,7 @@ use tekserp_guncelleyici::env::{
     start_mode, Clock, Cmd, CmdOut, Env, EnvError, EnvResult, Events, Fs, HttpResponse, Net, Procs, Protect, ReadSeek, RealFs, Services,
     SvcState, SyncWrite,
 };
+use tekserp_guncelleyici::imaj;
 use tekserp_guncelleyici::ipc::{self, State, StatusDoc};
 use tekserp_guncelleyici::journal::Journal;
 use tekserp_guncelleyici::layout::Layout;
@@ -304,6 +305,16 @@ pub struct Faults {
     pub boots: Mutex<Vec<BootReport>>,
     /// Testin kurduğu işlem öncesi başlangıç türü (değişmez ölçer son durumda bunu bekler; yoksa `OTOMATIK_GECIKMELI`).
     pub backend_mode_before: Mutex<Option<String>>,
+    /// Linux: sahte Docker imaj deposu (L4c-2).
+    pub images: Mutex<Vec<FakeImage>>,
+    /// `docker load` çağrı sayısı.
+    pub image_loads: AtomicU64,
+    /// `docker load` daemon hatasıyla düşer (hiçbir şey yüklenmez).
+    pub load_fails: AtomicBool,
+    /// `docker load` etiketli imajı bırakıp düşer (yarım yükleme artığı).
+    pub load_partial: AtomicBool,
+    /// Yüklenen imajın katmanları arşivdekinden sapar.
+    pub load_wrong_layers: AtomicBool,
 }
 
 /// Açılışın bir hizmet için kararı (`WorldRefs::boot_plan`): gerçek açılış da her noktadaki önizleme de bunu uygular.
@@ -344,6 +355,14 @@ pub struct BootReport {
     pub started: bool,
     /// Açılış anındaki başlangıç türü / politika.
     pub mode: String,
+}
+
+/// Sahte Docker deposunun bir imajı: yerel tutamaç (`.Id`), etiketler, `RootFS.Layers`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct FakeImage {
+    pub id: String,
+    pub tags: Vec<String>,
+    pub layers: Vec<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -654,6 +673,10 @@ impl FakeProcs {
         let sub: Vec<String> = if args.first().map(String::as_str) == Some("compose") {
             assert_eq!(args.get(3).map(String::as_str), Some("-f"), "compose başı: {args:?}");
             let f = PathBuf::from(&args[4]);
+            // `config` hazırlıkta paketin kendi dosyasını denetler; geri kalan her çağrı `current`ten.
+            if args.get(9).map(String::as_str) == Some("config") {
+                return compose_config(&f);
+            }
             assert!(f.ends_with("current/docker-compose.yml"), "compose dosyası current'ten: {f:?}");
             args[9..].to_vec()
         } else {
@@ -663,7 +686,38 @@ impl FakeProcs {
         match s.as_slice() {
             ["rm", "-f", _] => ok_out(""),
             ["info", ..] => ok_out(&format!("{}\n", self.w.root.display())),
-            ["image", ..] => ok_out(""),
+            ["load", "-i", path] => self.docker_load(Path::new(path)),
+            ["image", "inspect", "--format", fmt, r] => {
+                let images = self.w.faults.images.lock().unwrap();
+                let Some(i) = images.iter().find(|i| i.id == *r || i.tags.iter().any(|t| t == r)) else {
+                    return fail_out(1, &format!("Error response from daemon: No such image: {r}"));
+                };
+                match *fmt {
+                    imaj::INSPECT_FORMAT => ok_out(&format!("{}|{}\n", i.id, serde_json::to_string(&i.layers).unwrap())),
+                    "{{json .RepoTags}}" => ok_out(&format!("{}\n", serde_json::to_string(&i.tags).unwrap())),
+                    other => fail_out(125, &format!("sahte docker: bilinmeyen biçim {other:?}")),
+                }
+            }
+            ["image", "rm", r] => {
+                let mut images = self.w.faults.images.lock().unwrap();
+                let Some(n) = images.iter().position(|i| i.id == *r || i.tags.iter().any(|t| t == r)) else {
+                    return fail_out(1, &format!("Error response from daemon: No such image: {r}"));
+                };
+                images[n].tags.retain(|t| t != r);
+                if images[n].id == *r || images[n].tags.is_empty() {
+                    images.remove(n);
+                }
+                ok_out("")
+            }
+            ["image", "ls", "-a", "-q", "--no-trunc"] => {
+                ok_out(&self.w.faults.images.lock().unwrap().iter().map(|i| format!("{}\n", i.id)).collect::<String>())
+            }
+            ["image", "ls", "--format", "{{.Tag}}", repo] => {
+                let pre = format!("{repo}:");
+                let images = self.w.faults.images.lock().unwrap();
+                let tags = images.iter().flat_map(|i| i.tags.iter()).filter_map(|t| t.strip_prefix(&pre));
+                ok_out(&tags.map(|t| format!("{t}\n")).collect::<String>())
+            }
             ["ps", "-a", "-q", svc] => {
                 let name = self.svc_name(svc);
                 let known = self.w.svcs.lock().unwrap().contains_key(&name);
@@ -788,12 +842,50 @@ impl FakeProcs {
     }
 }
 
+/// Sahte `compose config --format json`: fikstürün compose dosyası JSON'dur (YAML'ın alt kümesi), normalleştirilmiş
+/// çıktı olduğu gibi döner; çözülemeyen dosya compose'un kendi hatasıyla düşer.
+fn compose_config(f: &Path) -> CmdOut {
+    match std::fs::read(f).ok().and_then(|b| serde_json::from_slice::<Value>(&b).ok()) {
+        Some(v) => ok_out(&v.to_string()),
+        None => fail_out(15, "yaml: line 1: did not find expected key"),
+    }
+}
+
+impl FakeProcs {
+    /// Sahte `docker load`: arşivi ölçer (gerçek Docker gibi config + RepoTags), etiketi yeni imaja taşır.
+    fn docker_load(&self, path: &Path) -> CmdOut {
+        let f = &self.w.faults;
+        f.image_loads.fetch_add(1, Ordering::SeqCst);
+        if f.load_fails.load(Ordering::SeqCst) {
+            return fail_out(1, "Error response from daemon: write /var/lib/docker/tmp: no space left on device");
+        }
+        let Ok(m) = std::fs::read(path).map_err(|e| e.to_string()).and_then(|b| imaj::olc_okuyucu(Cursor::new(b))) else {
+            return fail_out(1, "Error: archive/tar: invalid tar header");
+        };
+        let mut layers = m.katmanlar.clone();
+        if f.load_wrong_layers.load(Ordering::SeqCst) {
+            layers.push(format!("sha256:{}", "f".repeat(64)));
+        }
+        let id = docker_handle(&m.kimlik);
+        let mut images = f.images.lock().unwrap();
+        for i in images.iter_mut() {
+            i.tags.retain(|t| !m.etiketler.contains(t));
+        }
+        images.retain(|i| i.id != id);
+        images.push(FakeImage { id, tags: m.etiketler.clone(), layers });
+        if f.load_partial.load(Ordering::SeqCst) {
+            return fail_out(1, "Error: unexpected EOF");
+        }
+        ok_out(&m.etiketler.iter().map(|t| format!("Loaded image: {t}\n")).collect::<String>())
+    }
+}
+
 /// `docker [compose <baş>] <alt komut>` salt-okur mu (durum/kök/etiket sorgusu).
 fn docker_salt_okur(args: &[String]) -> bool {
     let sub = if args.first().map(String::as_str) == Some("compose") { args.get(9..) } else { args.get(..) };
     matches!(
         sub.unwrap_or_default().iter().map(String::as_str).collect::<Vec<_>>().as_slice(),
-        ["ps" | "inspect" | "info", ..] | ["image", "ls", ..]
+        ["ps" | "inspect" | "info" | "config", ..] | ["image", "ls" | "inspect", ..]
     )
 }
 
@@ -1206,9 +1298,54 @@ pub fn oci_package_name(v: &str) -> String {
     format!("tekserp-backend-oci-{v}.tar")
 }
 
-/// Sahte imaj kimliği (config özeti biçiminde) — L4c-1 arşivi ölçmez, yalnız künye ↔ bildirim bağını.
+/// Sürümün tek katmanının `diff_id`si.
+pub fn oci_layer_id(v: &str) -> String {
+    format!("sha256:{}", sha_hex(format!("katman {v}").as_bytes()))
+}
+
+/// Sürüm imajının config blob'u; imaj kimliği onun özetidir (`imaj.rs`).
+pub fn oci_config(v: &str) -> Vec<u8> {
+    json!({ "architecture": "amd64", "os": "linux", "rootfs": { "type": "layers", "diff_ids": [oci_layer_id(v)] } })
+        .to_string()
+        .into_bytes()
+}
+
+/// İmaj kimliği = config özeti (gerçek arşivle aynı ölçü).
 pub fn oci_image_id(v: &str) -> String {
-    format!("sha256:{}", sha_hex(format!("config {v}").as_bytes()))
+    format!("sha256:{}", sha_hex(&oci_config(v)))
+}
+
+/// Docker'ın yerel tutamacı (containerd'de index özeti) — kimlikten başka bir değer.
+pub fn docker_handle(kimlik: &str) -> String {
+    format!("sha256:{}", sha_hex(format!("index {kimlik}").as_bytes()))
+}
+
+/// `docker save | gzip` biçiminde arşiv: config + tek katman + `manifest.json` (`RepoTags` = `tags`).
+pub fn oci_image_archive_of(config: &[u8], tags: &[String]) -> Vec<u8> {
+    let c = sha_hex(config);
+    let layer = format!("katman-govdesi {c}").into_bytes();
+    let l = sha_hex(&layer);
+    let manifest = json!([{ "Config": format!("blobs/sha256/{c}"), "RepoTags": tags, "Layers": [format!("blobs/sha256/{l}")] }]);
+    let tar = ustar_of(&[
+        (format!("blobs/sha256/{c}"), config.to_vec()),
+        (format!("blobs/sha256/{l}"), layer),
+        ("manifest.json".into(), manifest.to_string().into_bytes()),
+    ]);
+    let mut gz = flate2::write::GzEncoder::new(Vec::new(), flate2::Compression::fast());
+    gz.write_all(&tar).unwrap();
+    gz.finish().unwrap()
+}
+
+pub fn oci_image_archive(v: &str) -> Vec<u8> {
+    oci_image_archive_of(&oci_config(v), &[format!("tekserp-korumali:{v}")])
+}
+
+/// Sertleştirilmiş compose (`config --format json` biçimi): kurallardan geçer (`platform::linux::compose`).
+pub fn oci_compose(v: &str) -> Value {
+    json!({ "name": "tekserp", "services": { "backend": {
+        "image": format!("tekserp-korumali:{v}"), "pull_policy": "never", "read_only": true, "cap_drop": ["ALL"],
+        "security_opt": ["no-new-privileges:true"], "user": "10001:10001",
+        "ports": [{ "host_ip": "127.0.0.1", "target": 4000, "published": "4000" }] } } })
 }
 
 /// Sürümün güncelleyici ikilisi (paketin kökünde; bayt içeriği testin seçimi).
@@ -1227,10 +1364,25 @@ pub fn oci_files(
     customer: Option<&str>,
     edit: &dyn Fn(&mut Value),
 ) -> Vec<(String, Vec<u8>)> {
+    oci_files_with(v, updater, signer, kid, customer, edit, oci_image_archive(v), &oci_compose(v))
+}
+
+/// `oci_files`, imaj arşivi ve compose testin seçimi (imzalı kapsamda — bütünlük tutar, imaj/compose kuralı sınanır).
+#[allow(clippy::too_many_arguments)]
+pub fn oci_files_with(
+    v: &str,
+    updater: &[u8],
+    signer: &SigningKey,
+    kid: &str,
+    customer: Option<&str>,
+    edit: &dyn Fn(&mut Value),
+    image: Vec<u8>,
+    compose: &Value,
+) -> Vec<(String, Vec<u8>)> {
     let archive = format!("tekserp-korumali_{v}_linux-amd64.tar.gz");
     let scope: Vec<(String, Vec<u8>)> = vec![
-        (archive.clone(), format!("sahte imaj {v}").into_bytes()),
-        ("docker-compose.yml".into(), format!("services:\n  backend:\n    image: tekserp-korumali:{v}\n").into_bytes()),
+        (archive.clone(), image),
+        ("docker-compose.yml".into(), serde_json::to_vec_pretty(compose).unwrap()),
         (".env.ornek".into(), b"POSTGRES_USER=tekserp\n".to_vec()),
         ("tekserp-guncelleyici".into(), updater.to_vec()),
         (
@@ -1587,6 +1739,7 @@ impl World {
         let w = World::new(tag, s);
         if linux {
             w.faults.docker.store(true, Ordering::SeqCst);
+            w.docker_seed(OLD);
             std::fs::write(w.layout.backend_env(), "POSTGRES_USER=tekserp\nPOSTGRES_PASSWORD=gizli-parola\nPOSTGRES_DB=tekserp\n").unwrap();
             let (legacy, customer, extra, updater) = oci;
             let (signer, kid) = if legacy { (&w.keys.legacy, "paket-hazirlik") } else { (&w.keys.package, "paket-2026") };
@@ -1606,6 +1759,45 @@ impl World {
         let payload = manifest_payload_oci(kid, v, &tar, extra);
         self.files.lock().unwrap().clear();
         publish(&self.files, &payload, &sign_manifest(signer, kid, &payload), Some(tar), true);
+    }
+
+    /// Kurulumun yüklediği imaj: depoda etiketli + güncelleyicinin kaydı (`is/imaj/<v>.json`).
+    pub fn docker_seed(&self, v: &str) {
+        let kimlik = oci_image_id(v);
+        let tag = format!("tekserp-korumali:{v}");
+        let img = FakeImage { id: docker_handle(&kimlik), tags: vec![tag.clone()], layers: vec![oci_layer_id(v)] };
+        let k = imaj::Kayit {
+            v: 1,
+            surum: v.into(),
+            etiket: tag,
+            kimlik,
+            katmanlar: img.layers.clone(),
+            docker_id: img.id.clone(),
+            zaman: String::new(),
+        };
+        imaj::kayit_yaz(&RealFs, &self.layout, &k).unwrap();
+        self.faults.images.lock().unwrap().push(img);
+    }
+
+    /// Etiket başka (yabancı) bir imaja taşınır — `docker tag` ile yeniden etiketleme.
+    pub fn docker_retag(&self, tag: &str) {
+        let mut images = self.faults.images.lock().unwrap();
+        for i in images.iter_mut() {
+            i.tags.retain(|t| t != tag);
+        }
+        let id = format!("sha256:{}", sha_hex(format!("yabanci {tag}").as_bytes()));
+        images.push(FakeImage { id, tags: vec![tag.into()], layers: vec![format!("sha256:{}", "a".repeat(64))] });
+    }
+
+    /// Etiketli imaj elle silinir (`docker image rm`).
+    pub fn docker_forget(&self, tag: &str) {
+        self.faults.images.lock().unwrap().retain(|i| !i.tags.iter().any(|t| t == tag));
+    }
+
+    pub fn docker_tags(&self) -> Vec<String> {
+        let mut t: Vec<String> = self.faults.images.lock().unwrap().iter().flat_map(|i| i.tags.clone()).collect();
+        t.sort();
+        t
     }
 
     pub fn profil(&self) -> Profil {
@@ -1791,7 +1983,7 @@ impl World {
         use tekserp_guncelleyici::platform::linux::docker;
         let komut = Arc::new(docker::DockerKomut::new(&self.layout, "tekserp").unwrap());
         Env {
-            svc: Arc::new(docker::DockerServices::new(Arc::clone(&komut), Arc::clone(&env.procs), 60)),
+            svc: Arc::new(docker::DockerServices::new(Arc::clone(&komut), Arc::clone(&env.procs), Arc::clone(&env.fs), 60)),
             arka: docker::arka_ucu(komut),
             ..env
         }

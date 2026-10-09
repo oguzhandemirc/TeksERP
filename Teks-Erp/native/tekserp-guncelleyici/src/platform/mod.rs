@@ -62,6 +62,14 @@ pub trait Araclar: Send + Sync {
     fn db_boyutu(&self, _env: &Env, _be: &BackendEnv) -> Option<u64> {
         None
     }
+    /// Hazırlanmış sürümün imajı yerinde ve güncelleyicinin kaydıyla aynı nesne mi. Windows: imaj yok, hep hazır.
+    fn imaj_hazir(&self, _env: &Env, _surum: &str, _kimlik: &str) -> bool {
+        true
+    }
+    /// Doğrulanmış sürüm dizininin platform hazırlığı (Linux: compose denetimi + imaj yükleme + etiket kaydı).
+    fn surum_hazirla(&self, _env: &Env, _dir: &Path, _surum: &str, _kimlik: &str) -> Result<(), (&'static str, String)> {
+        Ok(())
+    }
     /// ONAY budaması: `keep` dışındaki sürüm imajları (en iyi çaba). Windows: imaj yok.
     fn imaj_buda(&self, _env: &Env, _keep: &[String]) {}
 }
@@ -154,7 +162,8 @@ pub fn baglam(env: Env, layout: &crate::layout::Layout, s: &crate::settings::Upd
     #[cfg(not(windows))]
     {
         let komut = Arc::new(linux::docker::DockerKomut::new(layout, s.compose_project())?);
-        let svc = Arc::new(linux::docker::DockerServices::new(Arc::clone(&komut), Arc::clone(&env.procs), s.stop_timeout_s));
+        let svc =
+            Arc::new(linux::docker::DockerServices::new(Arc::clone(&komut), Arc::clone(&env.procs), Arc::clone(&env.fs), s.stop_timeout_s));
         Ok(Env { svc, arka: linux::docker::arka_ucu(komut), ..env })
     }
 }
