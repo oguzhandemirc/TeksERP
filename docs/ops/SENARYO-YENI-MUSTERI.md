@@ -13,7 +13,7 @@
 | # | İş | Komut / yer | Bugünkü durum |
 |---|---|---|---|
 | 0.1 | Kanal kaydı + OTA imza anahtarı | `deploy/kanallar.json` `demofabrika`; anahtar `mobil/keystore/ota-keys-demofabrika/` (git dışı) | kayıt dalda, anahtar üretildi — **şifreli yedek yenilenmedi** (parola sahibi, `mobil/keystore-yedek.README.md`) |
-| 0.2 | Satıcı ve sınıf | Satıcı: ÜRETİM lisans sunucusu, demo müşteri "test" güncelleme grubunda — gruplar tek ortak paket modeliyle (liste Faz 1) gelir, o güne dek grubun karşılığı 0.8'deki `hazirlik` türlü kanaldır (kullanıcı kararı 2026-10-05; tek satıcı üretimdir — hazırlık satıcısı 2026-10-05 emekli). Sınıf (**KARAR**): (A) **Demo / deneme** · (B) **Üretim** | üretim kökü `kok-2026-1` güven çapasında (`Teks-Erp/src/lib/license/protocol/kok-anahtarlar.ts`; bütün sınıflar). **Patron bulutu (§12) yalnız (B)'de çalışır.** |
+| 0.2 | Satıcı ve sınıf | Satıcı: ÜRETİM lisans sunucusu, demo müşteri "test" güncelleme grubunda — gruplar tek ortak paket modeliyle (liste Faz 1) gelir, o güne dek grubun karşılığı 0.8'deki `hazirlik` türlü kanaldır (kullanıcı kararı 2026-10-05; tek satıcı üretimdir — hazırlık satıcısı 2026-10-05 emekli). Sınıf (**KARAR**): (A) **Demo / deneme** · (B) **Üretim** | üretim kökü `kok-2026-1` güven çapasında (`Teks-Erp/src/lib/license/protocol/kok-anahtarlar.ts`; bütün sınıflar). Patron bulutu (§12) iki sınıfta da çalışır (gönderici sınıflar URETIM · BARINDIRILAN · DEMO — `docs/kurallar/patron-bulutu.md`); `patron-bulut` modülü HAK'ta olmalı. |
 | 0.3 | Sürüm notları | yeni panel/tablet/backend numarası için `surum-notlari.json` + `node scripts/surum-notlari-kopyala.mjs` | ilk paket kanal kaydını taşıyan commit'ten çıkmak ZORUNDA (eski etiketten derlenemez) ⇒ yeni numara + not |
 | 0.4 | Backend paketi | `pwsh deploy/paketle.ps1 -Musteri demofabrika -Korumali …` (PAKET anahtarı 0.2'deki satıcının) | — |
 | 0.5 | Panel paketi + yayını | `./deploy/electron-paketle.sh demofabrika` → `ssh tekserp-yayin "mkdir -p /opt/stack/apps/tekserp-guncelleme/html/demofabrika/electron"` (bir kez) → `./deploy/electron-yayinla.sh --musteri=demofabrika` | ilk yayında uzak dizin elle açılır |
@@ -37,10 +37,11 @@
 ## 2. Portal — HAK, ZORUNLU kip, etkinleştirme kodu
 
 - **Nerede:** kurulum sayfası → "Lisans" sekmesi → "Lisans hakkı oluştur".
-- **Yap:** "Modüller (lisans tavanı)" — üretim + (B'de) patron bulutu dahil; "Kalıcı lisans" (varsayılan işaretli) · "Bakım bitişi" → "Oluştur" → "Lisansı imzala": "Sebep (deftere yazılır)" = "İlk imza" · "Kök anahtar parolası" → "İmzala". (İmza düğmesi internet portalında açıktır — 2026-10-04'ten beri tek yol.)
+- **Yap:** "Modüller (lisans tavanı)" — üretim + patron bulutu dahil; "Kalıcı lisans" (varsayılan işaretli) · "Bakım bitişi" → "Oluştur" → "Lisansı imzala": "Sebep (deftere yazılır)" = "İlk imza" → **"Kök kuyruğuna gönder"** → "Kök imzası kuyruğuna girdi" → "Kapat". İlk HAK'ta parola SORULMAZ: kök VDS'te durmaz ve hiç etkinleşmemiş kurulum `hak-ara` yeteneğini bildirmemiştir ⇒ imza planı "Kök imzası kuyruğu" (neden "kurulumun derlemesi ara imzalı HAK'ı tanımıyor"). "Kök anahtar parolası" → "İmzala" yalnız kök satıcıda dururken çıkar; ara imzacı parolası kurulum etkinleşip yeteneğini bildirdikten sonraki HAK sürümlerinde sorulur.
+- **Yap (kök töreni, Mac — 1e):** kuyruktaki ilk HAK kökle imzalanır ([`URETIM-SATICI-TOREN.md`](URETIM-SATICI-TOREN.md) §8a: `kuyruk-disa-aktar` → `kuyruk-imzala` → `donem-ice-aktar`; dönem töreni GEREKMEZ). Beklenen: `HAK talebi <id>: IMZALANDI (sürüm 1)`; portal "Kök imzası kuyruğu"nda talep "İmzalandı". Bu adım bitmeden kod üretilemez (409 "Önce kurulumun HAK'ı imzalanmalı").
 - **Yap (kip):** "Yaptırım" sekmesi → "Zorla kipine geçir" (izin `yaptirim:agir`, yalnız yönetici). Ekrandaki ad "Zorla"; "ZORUNLU" diye bir etiket yok.
 - **Yap (kod):** "Lisans" sekmesi → "Etkinleştirme kodları" → "Etkinleştirme kodu üret" → "Geçerlilik (gün)" 30 → "Üret" → kod "Etkinleştirme kodu" penceresinde BİR KEZ görünür → kâğıda/parola yöneticisine → "Kaydettim, kapat".
-- **Beklenen:** HAK imzalı; kip Zorla; tek aktif kod (yeni kod eskisini iptal eder).
+- **Beklenen:** HAK imzalı (sürüm 1, imzalayan `kok-<yıl>-<n>`); kip Zorla; tek aktif kod (yeni kod eskisini iptal eder).
 - **Kanıt:** "Lisans" ve "Yaptırım" sekmelerinin görüntüsü (kod metni görüntüye GİRMEZ).
 
 ## 3. Portal — taksit planı ve planlı eylem

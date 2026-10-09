@@ -197,6 +197,19 @@ Hepsi açık bilgi (künyeden ve çapa betiğinin kuru çıktısından; sır, pa
 - **Mac'te kalan:** `donemler/<damga>/` (700/600; ALT/İND düz, ara parolalı). USB kopyası (`usb-kopyala`) bugün yalnız ilk törenin kümesini kopyalar; dönem paketleri kapsamaz (borç — sonraki dilim).
 - **Prova kaydı (2026-10-05, Mac, sahte anahtarlar, `sat_dp_test`):** sahte ilk tören (`--dizin=<scratch>/satici-uretim`) → üretimdeki altı dosyalı birimin kopyası + dosya çapasıyla (`GUVEN_CAPASI_DOSYASI`; üretimde gömülü çapa) yerel satıcı → adım 1 `talepler: []` · adım 2 rc 0 (`alt-2026-2 · ara-2026-1 · ind-2026-2`, iptal sıra 1, EMEKLİYE `alt-2026-1, ind-2026`) · adım 3 6/6 `OK` · adım 4 yalnız yerel `ayarCoz` (`ok: true`; eski `{kid,x}` satırla RED) · adım 6 `EKLENDI` → tekrar `VARDI` · adım 7 ≤ 1 dk'da ARA `yuklu: true`, plan ARA, `dagitilanSira: 1`, kira `alt-2026-2`, indirme belirteci `ind-2026-2` · adım 8 kuru → `--uygula`, tek başına `ara-…` RED · kök dosyası birimden alınınca: plan ARA, ara parolası yerine kök parolası 400 `IMZA_PAROLASI_HATALI`, KOK isteği 409, ara parolasıyla 201 `imzalayanKid: ara-2026-1`, yoklama HAK'ı ARA sertifikalı teslim eder, satıcı köksüz yeniden açılır.
 
+## 8a. Dönem dışı kuyruk imzası — yeni anahtar ÜRETMEDEN
+
+Kuyrukta bekleyen HAK (ör. yeni kurulumun İLK HAK'ı) dönem beklemeden imzalanır: §8'in adım 1 ve 6'sı ile aralarında tek `kuyruk-imzala` çağrısı; yeni ALT · ARA · İNDİRME, iptal belgesi ve CF Worker adımı YOKTUR. Kök yalnız Mac'te kullanılır; dosyalar Mac'te 0600, VDS'e dosya bırakılmaz (girdi stdin'den).
+
+| # | Nerede | Komut | Beklenen |
+|---|---|---|---|
+| 1 | VDS (salt okuma) | `v "cd $K && docker compose exec -T satici satici-baslat node dist-cli/scripts/anahtar.js kuyruk-disa-aktar" > <Mac dizini>/kuyruk.json` | `talepler` dolu (ACİL'ler önce) |
+| 2 | Mac (`satici/sunucu`, `npm ci`li ağaç) | `npx tsx scripts/anahtar.ts kuyruk-imzala --kok=kok-2026-1 --kok-dizin=$HOME/.tekserp/satici-uretim/anahtarlar --kuyruk=<…>/kuyruk.json --cikti=<…>/kok-imzali-haklar.json </dev/null` | kök parolası Anahtar Zinciri'nden (`tekserp/kok`); `Kök imzalı HAK: N talep → …` |
+| 3 | Mac | `kok-imzali-haklar.json`dan `{"v":1,"tur":"tekserp-donem-ice-aktar","haklar":[{talepId,belge}…]}` (iptal alanı YOK) | — |
+| 4 | VDS (YAZIM) | `v "cd $K && docker compose exec -T satici satici-baslat node dist-cli/scripts/anahtar.js donem-ice-aktar" < <…>/ice-aktar.json` | her talep `IMZALANDI (sürüm N)`; tekrarında `VARDI` |
+
+Arşiv: `kuyruk.json` + `kok-imzali-haklar.json` → `~/.tekserp/satici-uretim/kok-kuyrugu/<damga>-<konu>/` (açık belgeler). İlk uygulama 2026-10-10 (Deneme kurulumu, `TKS-2026-0002` sürüm 1).
+
 ## 9. Dönem töreni — ISTEMCI (panel/tablet güncelleme imzası) kısmı: `donem --istemci`
 
 > **Durum (2026-10-07):** ilk gerçek tören YAPILDI (kullanıcı, Mac; `ist-2026-1` birincil · `ist-2026-2` yedek, yayında sürüm yoktu) ve VDS paketi kuruldu (§8 Durum). Araç `36d0c9d15` (tasarım: [`ISTEMCI-ANAHTARI-KOK-ALTINDA.md`](../design/ISTEMCI-ANAHTARI-KOK-ALTINDA.md) §6; iş I9). Bu bölüm §8'in yerine geçmez: `--istemci` verilirse §8'in ALT/ara/İNDİRME işi AYNI komutta yapılır, üstüne istemci imza anahtarları eklenir.
