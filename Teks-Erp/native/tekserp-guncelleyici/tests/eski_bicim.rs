@@ -55,8 +55,15 @@ fn eski_gunluk_surdurulur() {
         *by_source.entry(doc["kaynak"]["etiket"].as_str().unwrap().to_string()).or_default() += 1;
         let w = World::from_vector("eski-gunluk", &doc);
         assert!(w.unfinished(), "{ctx}: vektörde yarım işlem yok");
+        let journal = std::fs::read_to_string(w.layout.journal_file()).unwrap();
+        let onay_bitti =
+            journal.lines().filter_map(|l| serde_json::from_str::<Value>(l).ok()).any(|r| r["adim"] == "ONAY" && r["olay"] == "BITTI");
         w.run_to_rest(0);
         assert_invariants(&w, &ctx);
+        if onay_bitti {
+            // Kaldıracak adım kalmamış eski işlemde çit hiç kurulmaz (başlangıç türüne dokunulmaz).
+            assert!(!w.crash.log.lock().unwrap().iter().any(|l| l.contains(":tur ")), "{ctx}: ONAY bitmiş eski günlükte tür yazıldı");
+        }
         let st = w.status().unwrap();
         let old = &doc["eskiSonuc"];
         assert_eq!(format!("{:?}", st.state), old["durum"].as_str().unwrap(), "{ctx}: eski ikiliden farklı son durum ({:?})", st.message);

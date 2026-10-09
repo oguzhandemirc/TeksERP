@@ -146,3 +146,32 @@ pub fn settle(env: &Env, layout: &Layout, last: Option<&crate::journal::OpView>)
     let done = last.result().and_then(|r| r.get("sonuc")).and_then(Value::as_str).is_some_and(|r| matches!(r, "BASARILI" | "GERI_DONDU"));
     (m.op_id.as_deref() == Some(last.op.as_str()) && done).then(|| lift(env, layout))
 }
+
+/// `cit` komutunun işi (insan aracı; duman ölçümü).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Action {
+    /// Ölç ve yazdır: açılış davranışı + işaret.
+    Show,
+    /// Çiti elle kur (işaret `islemId: null`).
+    Raise,
+    /// HATA sonrası elle kaldır: işaretteki eski tür geri yazılır, işaret silinir; işaret yoksa iş yok.
+    Lift,
+}
+
+/// `cit` komutu. Kilit alınır (çalışan güncelleyiciyle yarışmaz); açık işlem varken kurma/kaldırma reddedilir — çit o
+/// işlemindir ve güncelleyici sürdürünce kendisi kaldırır.
+pub fn command(env: &Env, layout: &Layout, service: &str, action: Action) -> Result<Value, String> {
+    let _lock = crate::lock::acquire(&layout.lock_file()).map_err(|e| format!("KILIT_DOLU: {e}"))?;
+    if action != Action::Show {
+        let journal =
+            crate::journal::Journal::open(env.fs.as_ref(), &layout.journal_file()).map_err(|e| format!("işlem günlüğü okunamadı: {e}"))?;
+        if let Some(op) = journal.unfinished() {
+            return Err(format!("ACIK_ISLEM: {} sürüyor — çit o işlemin; güncelleyici sürdürünce kaldırır", op.op));
+        }
+    }
+    match action {
+        Action::Show => Ok(json!({ "olcum": measure(env, service)?, "isaret": read(env, layout) })),
+        Action::Raise => raise(env, layout, service, None, None),
+        Action::Lift => lift(env, layout),
+    }
+}

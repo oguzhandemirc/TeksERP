@@ -322,6 +322,54 @@ fn cit_hatada_kalir_sonraki_islem_devralir() {
     assert_eq!(w.refs().start_mode_of(BACKEND), "OTOMATIK_GECIKMELI");
 }
 
+/// İnsan çaresi `cit --kaldir` (HATA'da kalan çit; W2 ikilisi W1b'ye dönerse W1b çiti tanımaz): işaretteki eski tür
+/// geri yazılır, işaret silinir; ikinci çağrı sessiz ve türe dokunmaz. Kilit tutulurken ve açık işlem varken reddeder
+/// (çit o işlemin); okunamayan işaret silinmez (eski tür bilinmiyor). `--kur` işaretsiz sahipli (`islemId: null`) çit kurar.
+#[test]
+fn cit_kaldir_elle_idempotent() {
+    use tekserp_guncelleyici::cit::{command, read, Action};
+    let w = failed_world("cit-kaldir");
+    assert_eq!(w.refs().start_mode_of(BACKEND), "ELLE");
+    {
+        let _held = tekserp_guncelleyici::lock::acquire(&w.layout.lock_file()).expect("kilit");
+        let e = command(&w.env(), &w.layout, BACKEND, Action::Lift).unwrap_err();
+        assert!(e.starts_with("KILIT_DOLU"), "{e}");
+        assert!(w.layout.fence_marker().exists());
+    }
+    let out = command(&w.env(), &w.layout, BACKEND, Action::Lift).unwrap();
+    assert_eq!((out["citKaldirildi"].as_bool(), out["tur"].as_str()), (Some(true), Some("OTOMATIK_GECIKMELI")), "{out}");
+    assert_eq!(w.refs().start_mode_of(BACKEND), "OTOMATIK_GECIKMELI");
+    assert!(!w.layout.fence_marker().exists(), "işaret silinmeli");
+    w.crash.log.lock().unwrap().clear();
+    let out = command(&w.env(), &w.layout, BACKEND, Action::Lift).unwrap();
+    assert_eq!(out["citKaldirildi"], false, "ikinci çağrı sessiz: {out}");
+    assert!(w.crash.log.lock().unwrap().is_empty(), "işaretsiz kaldırma hiçbir şey yazmaz");
+
+    let out = command(&w.env(), &w.layout, BACKEND, Action::Raise).unwrap();
+    assert_eq!(out["eskiTur"], "OTOMATIK_GECIKMELI", "{out}");
+    assert_eq!(read(&w.env(), &w.layout).map(|m| m.op_id), Some(None), "elle çitin sahibi işlem değil");
+    assert_eq!(w.refs().start_mode_of(BACKEND), "ELLE");
+    std::fs::write(w.layout.fence_marker(), b"{bozuk").unwrap();
+    assert!(command(&w.env(), &w.layout, BACKEND, Action::Lift).is_err(), "okunamayan işaret: eski tür bilinmiyor");
+    assert!(w.layout.fence_marker().exists() && w.refs().start_mode_of(BACKEND) == "ELLE", "bozuk işaret ve tür olduğu gibi");
+
+    // Açık işlemin çiti: insan aracı reddeder, güncelleyici sürdürünce kendisi kaldırır.
+    let sayac = world("cit-kaldir-sayac");
+    sayac.count_points();
+    let stop =
+        sayac.crash.log.lock().unwrap().iter().find(|l| l.contains(":durdur ")).and_then(|l| l.split(':').next()?.parse().ok()).unwrap();
+    let w = world("cit-kaldir-acik");
+    w.crash.arm(stop, false);
+    assert!(w.run(3).is_err());
+    w.crash.disarm();
+    let e = command(&w.env(), &w.layout, BACKEND, Action::Lift).unwrap_err();
+    assert!(e.starts_with("ACIK_ISLEM"), "{e}");
+    assert_eq!(w.refs().start_mode_of(BACKEND), "ELLE", "açık işlemin çitine dokunulmaz");
+    w.run_to_rest(0);
+    assert_eq!(w.state(), Some(State::Succeeded));
+    assert_invariants(&w, "açık işlemin çiti sürdürmede kalktı");
+}
+
 /// Yöneticinin seçtiği "Elle" türü çit sayılır ve OLDUĞU GİBİ kalır: işaret yazılmaz, sonda tür değişmez.
 #[test]
 fn cit_yoneticinin_turune_dokunmaz() {

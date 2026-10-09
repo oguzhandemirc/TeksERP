@@ -6,6 +6,8 @@
 //!                                   ikilisi eksik/bozuksa doğrulanmış kaynaktan geri koyar. W1 ikilisinde `onar` =
 //!                                   `tur` takma adıydı: onu çağıran görev/birim yalnız künyesinde `"onarim":1` olanı gösterir
 //!   durum --kok <KOK> [--veri <D>]  durum.json + son işlemin özeti
+//!   cit --kok <KOK> [--veri <D>] [--kur|--kaldir]   bakım çiti (W2, `cit.rs`): ölç; `--kaldir` = HATA'da kalan çitin
+//!                                   insan çaresi (eski tür geri yazılır, işaret silinir; işaret yoksa sessiz)
 //!   hizmet-kur --kok <KOK> [--veri <D>] [--ad <ad>]   kaydet/güncelle (yönetici)
 //!   hizmet-kaldir [--ad <ad>]       durdur + sil (yönetici)
 //!   onar --yalniz-asil-ad --kok <KOK> ...   Linux taban biriminin onarım satırı (tur koşmaz; W1b §4.7)
@@ -72,6 +74,23 @@ fn repair(args: &[String]) -> Result<u32, String> {
     Ok(out.exit_code())
 }
 
+fn fence(args: &[String]) -> Result<u32, String> {
+    use tekserp_guncelleyici::cit::{command, Action};
+    let root = root_arg(args)?;
+    let layout = Layout::new(&root, &data_arg(args, &root));
+    let s = settings::read_settings(&env::RealFs, &layout).unwrap_or_default();
+    let e = env::real(s.proxy.as_deref(), &tekserp_hizmet::contract::service_name_arg(args, tekserp_hizmet::contract::UPDATER_SERVICE)?)?;
+    let e = tekserp_guncelleyici::platform::baglam(e, &layout, &s)?;
+    let action = match (args.iter().any(|a| a == "--kur"), args.iter().any(|a| a == "--kaldir")) {
+        (false, false) => Action::Show,
+        (true, false) => Action::Raise,
+        (false, true) => Action::Lift,
+        (true, true) => return Err("--kur ile --kaldir birlikte verilemez".into()),
+    };
+    println!("{}", command(&e, &layout, s.backend_service(), action)?);
+    Ok(0)
+}
+
 fn show_status(args: &[String]) -> Result<u32, String> {
     let root = root_arg(args)?;
     let layout = Layout::new(&root, &data_arg(args, &root));
@@ -100,11 +119,12 @@ fn main() -> ExitCode {
         "tur" => one_tick(&args),
         "onar" => repair(&args),
         "durum" => show_status(&args),
+        "cit" => fence(&args),
         "hizmet" | "hizmet-kur" | "hizmet-kaldir" => tekserp_guncelleyici::platform::service_command(&command, &args),
         "kurulum-paket" | "kurulum-pg" | "kurulum-dizin" => tekserp_guncelleyici::kurulum::komut(&command, &args),
         "tani" => tekserp_guncelleyici::tani::komut(&args, &identity()),
         _ => Err(
-            "kullanım: tekserp-guncelleyici <hizmet|tur|onar|durum|hizmet-kur|hizmet-kaldir|kunye|kurulum-paket|kurulum-pg|kurulum-dizin|tani> [--kok <dizin>] [--veri <dizin>] [--ad <hizmet adı>]"
+            "kullanım: tekserp-guncelleyici <hizmet|tur|onar|durum|cit|hizmet-kur|hizmet-kaldir|kunye|kurulum-paket|kurulum-pg|kurulum-dizin|tani> [--kok <dizin>] [--veri <dizin>] [--ad <hizmet adı>]"
                 .into(),
         ),
     };
