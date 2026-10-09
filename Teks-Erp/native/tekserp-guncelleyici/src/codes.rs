@@ -66,6 +66,13 @@ pub const ONARIM_TAVANI: &str = "ONARIM_TAVANI";
 pub const ONARIM_KAYNAK_YOK: &str = "ONARIM_KAYNAK_YOK";
 /// Güncelleyici hizmeti silinmiş ya da yönetici "Devre dışı" yapmış — bilinçli karar, onarılmaz (§4.7 madde 7).
 pub const GUNCELLEYICI_KAPALI: &str = "GUNCELLEYICI_KAPALI";
+/// Linux: imaj arşivinin kimliği bildirimin `imaj.kimlik`iyle tutmuyor, yüklenen imajın katmanları arşivle tutmuyor ya da
+/// başlatılacak etiket güncelleyicinin yüklediği nesne değil (yeniden etiketlenmiş) — kesin, geri çekilir.
+pub const IMAJ_KIMLIGI: &str = "IMAJ_KIMLIGI";
+/// Linux: `docker load` düştü (daemon geçici olabilir — kesin sayılmaz, sonraki turda yeniden denenir).
+pub const IMAJ_YUKLENEMEDI: &str = "IMAJ_YUKLENEMEDI";
+/// Linux: paketin compose dosyası çözülemedi ya da güvenlik kuralına uymuyor (`platform::linux::compose`) — kesin.
+pub const COMPOSE_HATASI: &str = "COMPOSE_HATASI";
 pub const GOC_HATASI: &str = "GOC_HATASI";
 pub const GOC_ZAMAN_ASIMI: &str = "GOC_ZAMAN_ASIMI";
 pub const SAGLIK_ZAMAN_ASIMI: &str = "SAGLIK_ZAMAN_ASIMI";
@@ -95,9 +102,13 @@ pub const EXIT_SELF_UPDATE: u32 = 20;
 /// İç kod → yoklama raporunun BELGELİ sonuç kodu (TS `UPDATE_RESULT_CODES`, sözleşme §3.1 madde 10).
 pub fn report_code(internal: &str) -> &'static str {
     match internal {
-        INDIRME_HATASI | MANIFEST_INDIRILEMEDI | INDIRME_REDDEDILDI | BELIRTEC_SURESI_DOLDU | BELIRTEC_YOK | INDIRME_ERTELENDI => {
-            "INDIRME_HATASI"
-        }
+        INDIRME_HATASI
+        | IMAJ_YUKLENEMEDI
+        | MANIFEST_INDIRILEMEDI
+        | INDIRME_REDDEDILDI
+        | BELIRTEC_SURESI_DOLDU
+        | BELIRTEC_YOK
+        | INDIRME_ERTELENDI => "INDIRME_HATASI",
         c if c.starts_with("JWS_") || c.starts_with("BELGE_") || c.starts_with("SURUM_") || c == MANIFEST_GECERSIZ => "IMZA_GECERSIZ",
         // Zincir: PAKET sertifikası ve onu imzalayan kök (sözleşmenin kendi kodları).
         c if c.starts_with("PAKET_SERTIFIKA_")
@@ -108,7 +119,7 @@ pub fn report_code(internal: &str) -> &'static str {
             "IMZA_GECERSIZ"
         }
         PAKET_OZETI => "PAKET_OZETI",
-        "PAKET_BAGI" | "PG_BAGI" => "PAKET_BAGI",
+        "PAKET_BAGI" | "PG_BAGI" | IMAJ_KIMLIGI => "PAKET_BAGI",
         BUTUNLUK_GECERSIZ | PAKET_YOL => "BUTUNLUK_GECERSIZ",
         DISK_DOLU => "DISK_DOLU",
         GECIS_HATASI | DOSYA_KILITLI => "DOSYA_KILITLI",
@@ -116,7 +127,7 @@ pub fn report_code(internal: &str) -> &'static str {
         HIZMET_YOK | HIZMET_DURMADI | CIT_HATASI => "DURDURMA_HATASI",
         c if c.starts_with("PG_") => "PG_GUNCELLEME_HATASI",
         GOC_HATASI | GOC_ZAMAN_ASIMI => "GOC_HATASI",
-        HIZMET_BASLAMADI => "BASLATMA_HATASI",
+        HIZMET_BASLAMADI | COMPOSE_HATASI => "BASLATMA_HATASI",
         c if c.starts_with("SAGLIK_") => "SAGLIK_HATASI",
         KESINTI => "KESINTI",
         GERI_YUKLEME_HATASI | GERI_DONUS_SAGLIKSIZ => "GERI_DONUS_HATASI",
@@ -188,6 +199,11 @@ mod tests {
         for c in [ONARILDI, ONARIM_TAVANI, ONARIM_KAYNAK_YOK, GUNCELLEYICI_KAPALI] {
             assert!(!DOCUMENTED.contains(&c), "{c} belgeli rapor kodu olmamalı");
             assert_eq!(report_code(c), "BILINMEYEN", "{c} rapora eşlenmemeli");
+        }
+        // L4c-2: Linux imaj/compose iç kodları belgeli kümeye eşlenir (plan §3 tablosu; yeni rapor kodu açılmaz).
+        for (c, want) in [(IMAJ_KIMLIGI, "PAKET_BAGI"), (IMAJ_YUKLENEMEDI, "INDIRME_HATASI"), (COMPOSE_HATASI, "BASLATMA_HATASI")] {
+            assert_eq!(report_code(c), want, "{c}");
+            assert!(DOCUMENTED.contains(&want));
         }
         let onarim = include_str!("onarim.rs");
         for yasak in ["history_file", "journal_file", "gecmis.jsonl"] {

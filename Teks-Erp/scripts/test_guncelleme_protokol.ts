@@ -328,6 +328,7 @@ function bolum6ila8(): void {
   beklenenKod("rapor", "tam rapor", "OK");
   beklenenKod("rapor", "güncelleyici yok, sonuç yok", "OK");
   beklenenKod("rapor", "belgesiz ama desene uyan kod geçer (ileri uyum)", "OK");
+  for (const ad of ["imaj kimliği tutmadı (PAKET_BAGI)", "imaj yüklenemedi (INDIRME_HATASI)", "compose geçersiz (BASLATMA_HATASI)"]) beklenenKod("rapor", ad, "OK");
   for (const ad of ["tanınmayan alan (KATI)", "başarılı sonuç kod taşıyamaz", "başarısız sonuç kod taşımalı", "kod deseni (serbest metin yok)", "bitiş başlangıçtan önce"]) beklenenKod("rapor", ad, "RED");
 }
 

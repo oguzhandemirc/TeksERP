@@ -402,6 +402,10 @@ function vektorler(anahtar: TestAnahtari, yabanci: TestAnahtari, uretim: TestAna
     { tur: "rapor", ad: "başarısız sonuç kod taşımalı", girdi: raporYuku({ sonuc: "BASARISIZ", kod: null }) },
     { tur: "rapor", ad: "kod deseni (serbest metin yok)", girdi: raporYuku({ kod: "göç düştü: tablo yok" }) },
     { tur: "rapor", ad: "belgesiz ama desene uyan kod geçer (ileri uyum)", girdi: raporYuku({ kod: "YENI_BIR_KOD" }) },
+    // L4c-2: Linux imaj/compose iç kodları rapora belgeli koda eşlenmiş gider (codes.rs `report_code`).
+    { tur: "rapor", ad: "imaj kimliği tutmadı (PAKET_BAGI)", girdi: raporYuku({ sonuc: "BASARISIZ", kod: "PAKET_BAGI", veriGeriYuklendi: false }) },
+    { tur: "rapor", ad: "imaj yüklenemedi (INDIRME_HATASI)", girdi: raporYuku({ sonuc: "BASARISIZ", kod: "INDIRME_HATASI", veriGeriYuklendi: false }) },
+    { tur: "rapor", ad: "compose geçersiz (BASLATMA_HATASI)", girdi: raporYuku({ sonuc: "BASARISIZ", kod: "BASLATMA_HATASI", veriGeriYuklendi: false }) },
     { tur: "rapor", ad: "bitiş başlangıçtan önce", girdi: raporYuku({ bitis: "2026-10-02T23:00:00.000Z" }) },
   ];
 }

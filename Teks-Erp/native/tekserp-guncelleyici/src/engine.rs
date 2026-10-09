@@ -1131,8 +1131,15 @@ impl Engine {
     }
 
     fn definitive(code: &str) -> bool {
-        matches!(code, codes::PAKET_OZETI | codes::PAKET_YOL | codes::BUTUNLUK_GECERSIZ | codes::PG_PAKET)
-            || code == release::code::PAKET_BAGI
+        matches!(
+            code,
+            codes::PAKET_OZETI
+                | codes::PAKET_YOL
+                | codes::BUTUNLUK_GECERSIZ
+                | codes::PG_PAKET
+                | codes::IMAJ_KIMLIGI
+                | codes::COMPOSE_HATASI
+        ) || code == release::code::PAKET_BAGI
             || code == release::code::PG_BAGI
     }
 

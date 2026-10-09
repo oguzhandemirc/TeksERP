@@ -59,6 +59,9 @@ describe("sunucu güncellemesi — sözlük (saf)", () => {
     expect(noticeLabel("ONARILDI")).not.toBe("ONARILDI");
     expect(resultCodeLabel("ONARILDI")).toBe("ONARILDI");
   });
+  it("Linux imaj/compose iç kodları Sorun sözlüğünde", () => {
+    for (const k of ["IMAJ_KIMLIGI", "IMAJ_YUKLENEMEDI", "COMPOSE_HATASI"]) expect(resultCodeLabel(k)).not.toBe(k);
+  });
   it("pencere kuralı ve ilerleme", () => {
     expect(windowRuleText({ baslangic: "02:00", bitis: "05:00", gunler: [1, 2, 3, 4, 5, 6, 7], saatDilimi: "Europe/Istanbul" })).toBe("Her gün 02:00–05:00");
     expect(windowRuleText({ baslangic: "23:00", bitis: "02:00", gunler: [1, 3], saatDilimi: "Europe/Istanbul" })).toBe("Pzt, Çar 23:00–02:00");

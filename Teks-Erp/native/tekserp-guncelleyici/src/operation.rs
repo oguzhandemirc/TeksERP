@@ -273,6 +273,7 @@ const ALL_CODES: &[&str] = &[
     codes::HIZMET_DURMADI,
     codes::CIT_HATASI,
     codes::HIZMET_BASLAMADI,
+    codes::IMAJ_KIMLIGI,
     codes::YEDEK_HATASI,
     codes::GECIS_HATASI,
     codes::GOC_HATASI,
@@ -366,7 +367,11 @@ pub fn stop_service(ctx: &Ctx, name: &str, code_missing: &'static str, code_stuc
 }
 
 pub fn start_service(ctx: &Ctx, name: &str, args: &[&str], code: &'static str) -> Result<(), StepError> {
-    ctx.env.svc.start(name, args).map_err(|e| step_err(code, e.0))?;
+    // Linux başlatmadan önce etiketi ölçer; ölçüm hatası başlatma değil imaj kimliği sorunudur (kesin).
+    ctx.env
+        .svc
+        .start(name, args)
+        .map_err(|e| step_err(if e.0.starts_with(crate::imaj::KIMLIK_ONEKI) { codes::IMAJ_KIMLIGI } else { code }, e.0))?;
     if !wait_state(ctx, name, SvcState::Running, Duration::from_secs(120)) {
         return Err(step_err(code, format!("{name} 120 sn içinde çalışır duruma gelmedi")));
     }

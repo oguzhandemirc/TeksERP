@@ -41,6 +41,10 @@ const RESULT_CODES: Record<string, string> = {
   DISK_DOLU: "Disk dolu",
   DOSYA_KILITLI: "Dosya kilitli — başka bir program kullanıyor (kilit kalkınca kendiliğinden sürer)",
   SEMA_ILERIDE: "Şema ileride — veritabanında bu paketin tanımadığı göçler var; geri indirme yapılmaz (daha yeni sürüm gerekir)",
+  // Linux (Docker) iç kodları: rapora PAKET_BAGI · INDIRME_HATASI · BASLATMA_HATASI olarak gider.
+  IMAJ_KIMLIGI: "Sunucu imajı doğrulanamadı — imaj sürüm bildirimiyle ya da güncelleme programının yüklediğiyle eşleşmiyor",
+  IMAJ_YUKLENEMEDI: "Sunucu imajı Docker'a yüklenemedi (sonraki denemede yeniden denenir)",
+  COMPOSE_HATASI: "Paketin Docker yapılandırması (compose) geçersiz ya da güvenlik kuralına uymuyor",
   YEDEK_HATASI: "Güncelleme öncesi yedek alınamadı",
   DURDURMA_HATASI: "Sunucu hizmeti durdurulamadı",
   PG_GUNCELLEME_HATASI: "PostgreSQL güncellemesi başarısız",
