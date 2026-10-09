@@ -54,6 +54,36 @@ d('OTA zinciri — tören profili (openssl, atılacak zincir)', () => {
     expect(eklenti.kokSorunu(gecici, 'yok/certificate.pem')).toMatch(/OTA kökü sertifikası yok/);
     expect(eklenti.kokSorunu(gecici, undefined)).toMatch(/tanımlı değil/);
   });
+
+  // `openssl ca -startdate/-enddate` LibreSSL ve OpenSSL 3.0'da da var: saniye kaymalı yaprak her platformda basılır.
+  const caIleYaprak = (ad: string, omurSn: number): string => {
+    const d0 = path.join(gecici, `ca-${ad}`);
+    fs.mkdirSync(d0);
+    fs.writeFileSync(path.join(d0, 'index.txt'), '');
+    fs.writeFileSync(path.join(d0, 'serial'), '01\n');
+    const cfg = path.join(d0, 'ca.cnf');
+    fs.writeFileSync(cfg, `[ ca ]\ndefault_ca = d\n[ d ]\ndatabase = ${d0}/index.txt\nnew_certs_dir = ${d0}\nserial = ${d0}/serial\n` +
+      'default_md = sha256\npolicy = p\nunique_subject = no\n[ p ]\ncommonName = supplied\n');
+    const bas = new Date(Math.floor(Date.now() / 1000) * 1000 - 86_400_000);
+    const zaman = (t: Date) => `${t.toISOString().replace(/[-:T]/g, '').slice(0, 14)}Z`;
+    const cikti = path.join(d0, 'yaprak.pem');
+    const y = (z as unknown as { yollar: Record<string, string> }).yollar;
+    execFileSync('openssl', ['ca', '-batch', '-notext', '-config', cfg, '-cert', y.kokSertifika, '-keyfile', y.kokAnahtar, '-passin', 'pass:deneme',
+      '-in', y.csr, '-out', cikti, '-startdate', zaman(bas), '-enddate', zaman(new Date(bas.getTime() + omurSn * 1000)),
+      '-extfile', y.profil, '-extensions', 'ota_yaprak'], { stdio: ['ignore', 'pipe', 'pipe'] });
+    return fs.readFileSync(cikti, 'utf8');
+  };
+
+  it('yaprak ömrü tavanı saniye kaymasına toleranslı: 395 gün + 1 sn KABUL, 396 gün RED', () => {
+    expect(Z.yaprakHatalari(caIleYaprak('kayma', Z.OTA_YAPRAK_GUN * 86_400 + 1), z.kokPem)).toEqual([]);
+    expect(Z.yaprakHatalari(caIleYaprak('uzun', (Z.OTA_YAPRAK_GUN + 1) * 86_400), z.kokPem).join('\n')).toMatch(/OTA yaprağı ömrü 396\.0 gün/);
+  });
+
+  it('basım bayrakları başlangıç ve bitişi TEK andan türetir (açık tarih) ya da -days\'e düşer', () => {
+    const bas = new Date('2026-10-09T05:35:38.999Z');
+    expect(Z.gecerlilikBayraklari(395, bas, true)).toEqual(['-not_before', '20261009053538Z', '-not_after', '20271108053538Z']);
+    expect(Z.gecerlilikBayraklari(395, bas, false)).toEqual(['-days', '395']);
+  });
 });
 
 describe('withOtaZinciri.zincirMetaYaz', () => {

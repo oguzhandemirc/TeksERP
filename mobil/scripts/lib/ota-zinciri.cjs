@@ -14,7 +14,7 @@
 // =============================================================================
 
 const { Buffer } = require('node:buffer');
-const { execFileSync } = require('node:child_process');
+const { execFileSync, spawnSync } = require('node:child_process');
 const crypto = require('node:crypto');
 const fs = require('node:fs');
 const path = require('node:path');
@@ -28,6 +28,8 @@ const CODE_SIGNING_OID = '1.3.6.1.5.5.7.3.3';
 const EXPO_PROJE_OID = '1.2.840.113556.1.8000.2554.43437.254.128.102.157.7894389.20439.2.1';
 const OTA_KOK_GUN = 10_950; // 30 yıl
 const OTA_YAPRAK_GUN = 395;
+/** Yaprak ömrü tavanının toleransı (gün): `-days` basımı başlangıç/bitişi ayrı saniyelerden okuyabilir, dışarıdan gelen yaprakta da kayma olur. */
+const OMUR_TOLERANS_GUN = 120 / 86_400;
 /** Yayın aracı bitişine bundan az gün kalan yaprakla İMZALAMAZ (§3.5; yıllık tören yeniden imzalar). */
 const OTA_YAPRAK_ESIK_GUN = 30;
 const KOK_RSA_ASGARI = 3072;
@@ -206,7 +208,7 @@ function yaprakHatalari(yaprakPem, kokPem, { simdi = new Date(), esikGun = 0 } =
   const g = gecerlilikHatasi(y, simdi);
   if (g) h.push(`OTA yaprağı ${g}`);
   const omur = (tarih(y, 'validTo') - tarih(y, 'validFrom')) / GUN;
-  if (omur > OTA_YAPRAK_GUN + 1e-6) h.push(`OTA yaprağı ömrü ${omur.toFixed(1)} gün — en çok ${OTA_YAPRAK_GUN} gün`);
+  if (omur > OTA_YAPRAK_GUN + OMUR_TOLERANS_GUN) h.push(`OTA yaprağı ömrü ${omur.toFixed(1)} gün — en çok ${OTA_YAPRAK_GUN} gün`);
   if (!g && esikGun > 0) {
     const kalan = (tarih(y, 'validTo') - simdi) / GUN;
     if (kalan < esikGun) h.push(`OTA yaprağının bitişine ${kalan.toFixed(1)} gün kaldı (< ${esikGun}) — yıllık törende yeni yaprak basılır, bununla İMZALANMAZ`);
@@ -277,16 +279,45 @@ const pemSifreli = (metin) => /-----BEGIN ENCRYPTED PRIVATE KEY-----/.test(Strin
  * `yeni` → `-pass`, `ac` → `-passin`). `kume`: `kok` (OTA kökü üretimi) · `yaprak` (yaprak basımı).
  */
 function adimlar({ kokAnahtar, kokSertifika, yaprakAnahtar, yaprakSertifika, csr, profil, seri = `0x${crypto.randomBytes(16).toString('hex')}`,
-  kokBolum = 'ota_kok', yaprakBolum = 'ota_yaprak', kokGun = OTA_KOK_GUN, yaprakGun = OTA_YAPRAK_GUN, yaprakCn = 'TeksERP OTA Yaprak' }, parolaBayragi) {
+  kokBolum = 'ota_kok', yaprakBolum = 'ota_yaprak', kokGun = OTA_KOK_GUN, yaprakGun = OTA_YAPRAK_GUN, yaprakCn = 'TeksERP OTA Yaprak',
+  bas = new Date(), acikTarih = opensslAcikTarih() }, parolaBayragi) {
+  const sure = (gun) => gecerlilikBayraklari(gun, bas, acikTarih);
   return [
     { kume: 'kok', rol: 'kok', argv: ['openssl', 'genpkey', '-algorithm', 'RSA', '-pkeyopt', 'rsa_keygen_bits:3072', '-aes-256-cbc', ...parolaBayragi('kok', 'yeni'), '-out', kokAnahtar] },
-    { kume: 'kok', rol: 'kok', argv: ['openssl', 'req', '-x509', '-new', '-key', kokAnahtar, ...parolaBayragi('kok', 'ac'), '-sha256', '-days', String(kokGun), '-subj', '/CN=TeksERP OTA Kok',
+    { kume: 'kok', rol: 'kok', argv: ['openssl', 'req', '-x509', '-new', '-key', kokAnahtar, ...parolaBayragi('kok', 'ac'), '-sha256', ...sure(kokGun), '-subj', '/CN=TeksERP OTA Kok',
       '-config', profil, '-extensions', kokBolum, '-out', kokSertifika] },
     { kume: 'yaprak', rol: 'yaprak', argv: ['openssl', 'genpkey', '-algorithm', 'RSA', '-pkeyopt', 'rsa_keygen_bits:3072', '-aes-256-cbc', ...parolaBayragi('yaprak', 'yeni'), '-out', yaprakAnahtar] },
     { kume: 'yaprak', rol: 'yaprak', argv: ['openssl', 'req', '-new', '-key', yaprakAnahtar, ...parolaBayragi('yaprak', 'ac'), '-subj', `/CN=${yaprakCn}`, '-config', profil, '-out', csr] },
     { kume: 'yaprak', rol: 'kok', argv: ['openssl', 'x509', '-req', '-in', csr, '-CA', kokSertifika, '-CAkey', kokAnahtar, ...parolaBayragi('kok', 'ac'), '-set_serial', seri, '-sha256',
-      '-days', String(yaprakGun), '-extfile', profil, '-extensions', yaprakBolum, '-out', yaprakSertifika] },
+      ...sure(yaprakGun), '-extfile', profil, '-extensions', yaprakBolum, '-out', yaprakSertifika] },
   ];
+}
+
+const asn1Zaman = (d) => `${d.toISOString().replace(/[-:T]/g, '').slice(0, 14)}Z`;
+
+/**
+ * Geçerlilik bayrakları: openssl `-days` notBefore ile notAfter'ı AYRI `time()` çağrılarından okur (arada saniye
+ * dönerse ömür gün+1 sn olur); destekleyen sürümde (3.4+) ikisi tek andan açıkça verilir, desteklemeyende `-days`.
+ */
+function gecerlilikBayraklari(gun, bas, acikTarih) {
+  if (!acikTarih) return ['-days', String(gun)];
+  const b = new Date(Math.floor(bas.getTime() / 1000) * 1000);
+  return ['-not_before', asn1Zaman(b), '-not_after', asn1Zaman(new Date(b.getTime() + gun * GUN))];
+}
+
+const acikTarihOnbellek = new Map();
+/** PATH'teki openssl'in `req` ve `x509` uygulamaları `-not_before/-not_after` biliyor mu (LibreSSL / OpenSSL < 3.4 bilmez)? */
+function opensslAcikTarih(env = process.env) {
+  const anahtar = env.PATH ?? '';
+  if (!acikTarihOnbellek.has(anahtar)) {
+    const bilir = (app) => {
+      const r = spawnSync('openssl', [app, '-help'], { env, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
+      const yardim = `${r.stdout ?? ''}${r.stderr ?? ''}`;
+      return /-not_before\b/.test(yardim) && /-not_after\b/.test(yardim);
+    };
+    acikTarihOnbellek.set(anahtar, bilir('req') && bilir('x509'));
+  }
+  return acikTarihOnbellek.get(anahtar);
 }
 
 /**
@@ -313,7 +344,7 @@ async function opensslKos(yollar, kume, parolalar, { env } = {}) {
   fs.chmodSync(fd, 0o700);
   try {
     // Her adıma AYRI FIFO: önceki adımın kapanış okuyucusu yeni parolayı yutamasın.
-    const liste = adimlar(yollar, (_rol, yon) => [yon === 'yeni' ? '-pass' : '-passin', 'file:@FIFO@']).filter((x) => x.kume === kume);
+    const liste = adimlar({ acikTarih: opensslAcikTarih(env ?? process.env), ...yollar }, (_rol, yon) => [yon === 'yeni' ? '-pass' : '-passin', 'file:@FIFO@']).filter((x) => x.kume === kume);
     for (const [i, a0] of liste.entries()) {
       const fifo = path.join(fd, `p${i}`);
       execFileSync('mkfifo', ['-m', '600', fifo]);
@@ -483,6 +514,7 @@ module.exports = {
   OTA_KOK_GUN,
   OTA_YAPRAK_GUN,
   OTA_YAPRAK_ESIK_GUN,
+  OMUR_TOLERANS_GUN,
   OPENSSL_PROFILI,
   uzantilar,
   pemAyir,
@@ -492,6 +524,8 @@ module.exports = {
   anahtarYaprakEslesir,
   pemSifreli,
   torenKomutlari,
+  gecerlilikBayraklari,
+  opensslAcikTarih,
   opensslKos,
   otaKokUret,
   otaYaprakBas,
