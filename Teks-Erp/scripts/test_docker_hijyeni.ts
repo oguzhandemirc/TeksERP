@@ -812,6 +812,9 @@ function kokenIsAkisiStatik(yol: string, wf: string): string[] {
   if (!is.includes(`name: ${KUNYE_YAPITI}\n`) || !is.includes(`imaj-kunye/${KUNYE_DOSYASI}`)) ih.push(`künye yapıtı (${KUNYE_YAPITI}/${KUNYE_DOSYASI}) yüklenmiyor`);
   if (!is.includes(`name: ${IMAJ_YAPITI}\n`)) ih.push(`imaj arşivi yapıtı (${IMAJ_YAPITI}) yüklenmiyor`);
   if ((is.match(/retention-days: 7\n/g) ?? []).length !== 2) ih.push("iki yapıtın saklaması 7 gün değil");
+  // Taban imajlar yalnız Docker Hub'dan ya da beyanlı aynasından (mirror.gcr.io) gelir; başka ayna içerik kaynağını değiştirir.
+  const aynalar = [...is.matchAll(/"registry-mirrors": \[([^\]]*)\]/g)].flatMap((m) => m[1]!.split(",").map((x) => x.trim()));
+  if (aynalar.some((a) => a !== '"https://mirror.gcr.io"')) ih.push(`beyansız kayıt aynası: ${aynalar.join(", ")}`);
   return ih;
 }
 {
@@ -830,6 +833,7 @@ function kokenIsAkisiStatik(yol: string, wf: string): string[] {
     ["iş akışı yolu değişti", ".github/workflows/korumali-imaj.yml", wf],
     ["pipefail söküldü", KORUMALI_IS_AKISI.yol, wf.replace("set -euo pipefail\n          mkdir -p imaj-cikti imaj-kunye", "mkdir -p imaj-cikti imaj-kunye")],
     ["künye yapıtı yüklenmiyor", KORUMALI_IS_AKISI.yol, wf.replace(`name: ${KUNYE_YAPITI}\n`, "name: kunye\n")],
+    ["beyansız kayıt aynası", KORUMALI_IS_AKISI.yol, wf.replace('"https://mirror.gcr.io"', '"https://ayna.example.com"')],
   ];
   for (const [ad, y, m] of sondalar) {
     const uyg = y !== KORUMALI_IS_AKISI.yol || m !== wf;

@@ -220,6 +220,18 @@ jobs:
         working-directory: Teks-Erp/native/lisans-cekirdek
         run: npm run derle:linux:uretim
 
+      # Docker Hub anonim çekim sınırı (429) paylaşılan koşucu IP'sinde sık düşürüyor: docker.io çekimleri
+      # mirror.gcr.io aynasından (içerik özetle adreslenir, aynı bayt); var olan daemon ayarı korunur.
+      - name: Docker Hub aynası (429 çekim sınırı)
+        shell: bash
+        run: |
+          set -euo pipefail
+          ayar=/etc/docker/daemon.json
+          ( [ -s "$ayar" ] && sudo cat "$ayar" || echo '{}' ) | jq '. + {"registry-mirrors": ["https://mirror.gcr.io"]}' > "$RUNNER_TEMP/daemon.json"
+          sudo cp "$RUNNER_TEMP/daemon.json" "$ayar"
+          sudo systemctl restart docker
+          docker info --format '{{json .RegistryConfig.Mirrors}}'
+
       - name: Taban imaj (buildx linux/amd64, revision = koşunun commit'i)
         id: imaj
         shell: bash
@@ -227,8 +239,13 @@ jobs:
           set -euo pipefail
           surum=$(node -p "require('./Teks-Erp/package.json').version")
           etiket="tekserp-korumali:${surum}-imzasiz"
-          docker buildx build --platform linux/amd64 -f Teks-Erp/docker/korumali/Dockerfile \
-            --build-arg TEKSERP_COMMIT=${{ github.sha }} -t "$etiket" --load .
+          for deneme in 1 2 3; do
+            if docker buildx build --platform linux/amd64 -f Teks-Erp/docker/korumali/Dockerfile \
+              --build-arg TEKSERP_COMMIT=${{ github.sha }} -t "$etiket" --load .
+            then break; fi
+            if [ "$deneme" = 3 ]; then echo "taban imaj 3 denemede derlenemedi"; exit 1; fi
+            sleep 60
+          done
           echo "etiket=$etiket" >> "$GITHUB_OUTPUT"
 
       - name: Taban imaj bekçisi (test_korumali_imaj)
