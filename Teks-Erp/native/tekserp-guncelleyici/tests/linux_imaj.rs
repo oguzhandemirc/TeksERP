@@ -127,6 +127,30 @@ fn imaj_yuklenemedi_yarim_artik() {
     assert_eq!(w.docker_tags(), vec![format!("tekserp-korumali:{OLD}")]);
 }
 
+/// `docker load` disk doluyken düşer (daemon ENOSPC'yi metinle bildirir): kod `DISK_DOLU` (insan yer açmalı; W3a'nın
+/// hazırlık kolu — işlem açılmadan), yarım imaj kalmaz, sürüm dizini KALIR; yer açılınca yükleme yeniden denenir ve güncelleme tamamlanır.
+#[test]
+fn imaj_yukleme_disk_dolu() {
+    let sayac = linux("li-disk-sayac");
+    sayac.count_points();
+    let log = sayac.crash.log.lock().unwrap().clone();
+    let k = log.iter().find_map(|l| l.split_once(':').filter(|(_, x)| *x == "surec docker load").map(|(n, _)| n.parse::<u64>().unwrap()));
+    let k = k.expect("sayım koşusunda docker load noktası yok");
+    let w = linux("li-disk");
+    // İmaj yüzlerce MB ister, durum dosyası yüzlerce bayt: kod panelde görünür.
+    w.crash.small_fits.store(true, Ordering::SeqCst);
+    w.enospc_at(k);
+    w.run(2).unwrap();
+    assert!(w.crash.enospc_fired(), "disk docker load'da dolmadı");
+    assert_eq!(code(&w).as_deref(), Some("DISK_DOLU"), "{:?}", w.status().and_then(|s| s.message));
+    assert_eq!(w.docker_tags(), vec![format!("tekserp-korumali:{OLD}")], "yarım imaj kaldı");
+    assert!(w.layout.version_dir(NEW).exists(), "disk dolu geçicidir — sürüm dizini silinmez");
+    assert_eq!((w.backend().starts, w.current().as_deref()), (0, Some(OLD)));
+    w.crash.free_disk();
+    w.run_to_rest(0);
+    assert_eq!(w.state(), Some(State::Succeeded), "{:?}", w.status().and_then(|s| s.message));
+}
+
 #[test]
 fn compose_motor_yolundan() {
     for (ad, edit) in [

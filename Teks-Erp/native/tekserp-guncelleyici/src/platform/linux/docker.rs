@@ -597,7 +597,9 @@ impl DockerAraclar {
         let c = self.komut.docker().arg("load").arg("-i").arg(archive).timeout(Duration::from_secs(1800));
         if let Err(e) = run(env.procs.as_ref(), &c, "docker load") {
             self.artik_temizle(env, &before, &tag);
-            return Err((codes::IMAJ_YUKLENEMEDI, e));
+            // Daemon ENOSPC'yi yalnız metinle bildirir; insan yer açmalı, kod bunu söylemeli.
+            let code = if crate::platform::is_disk_full_text(&e) { codes::DISK_DOLU } else { codes::IMAJ_YUKLENEMEDI };
+            return Err((code, e));
         }
         let olcum_d = etiket_olc(env.procs.as_ref(), &self.komut, &tag).map_err(|e| (codes::IMAJ_YUKLENEMEDI, e))?;
         let Some((docker_id, layers)) = olcum_d else {

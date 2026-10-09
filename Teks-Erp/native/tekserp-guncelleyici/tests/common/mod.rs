@@ -929,7 +929,7 @@ impl FakeProcs {
         let f = &self.w.faults;
         f.image_loads.fetch_add(1, Ordering::SeqCst);
         if f.load_fails.load(Ordering::SeqCst) {
-            return fail_out(1, "Error response from daemon: write /var/lib/docker/tmp: no space left on device");
+            return fail_out(1, "Error response from daemon: error processing tar file: unexpected EOF");
         }
         let Ok(m) = std::fs::read(path).map_err(|e| e.to_string()).and_then(|b| imaj::olc_okuyucu(Cursor::new(b))) else {
             return fail_out(1, "Error: archive/tar: invalid tar header");
@@ -955,10 +955,11 @@ impl FakeProcs {
     }
 }
 
-/// Yer isteyen araç: döküm, geri yükleme, şifreleme, göç ve DB'yi yeniden yazan SQL.
+/// Yer isteyen araç: döküm, geri yükleme, şifreleme, göç, DB'yi yeniden yazan SQL ve imaj yükleme (Docker deposu).
 fn writes_disk(prog: &str, args: &[String]) -> bool {
     match prog {
         "pg_dump" | "node" => true,
+        "docker" => args.first().is_some_and(|a| a == "load"),
         "pg_restore" => !args.iter().any(|a| a == "--list"),
         "psql" => args.last().is_some_and(|sql| sql.contains("DROP SCHEMA") || sql.contains("REINDEX")),
         _ => false,
@@ -984,6 +985,12 @@ impl Procs for FakeProcs {
             let n = self.w.crash.point(&format!("surec {prog} {}", args.first().cloned().unwrap_or_default()));
             // Diske (DB dahil — aynı dosya sistemi) yazan araçlar disk doluyken düşer.
             if writes_disk(&prog, &args) && self.w.crash.space(n, u64::MAX).is_err() {
+                if prog == "docker" {
+                    return Ok(fail_out(
+                        1,
+                        "Error response from daemon: write /var/lib/docker/tmp/docker-import-1: no space left on device",
+                    ));
+                }
                 return Ok(fail_out(1, &format!("{prog}: could not write: No space left on device")));
             }
         }

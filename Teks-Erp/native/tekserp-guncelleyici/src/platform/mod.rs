@@ -198,6 +198,11 @@ pub fn is_disk_full(e: &std::io::Error) -> bool {
         || if cfg!(windows) { matches!(e.raw_os_error(), Some(39 | 112)) } else { e.raw_os_error() == Some(28) }
 }
 
+/// Dış aracın (Docker daemon) hata metni disk dolu diyor mu: ENOSPC'nin `strerror`ı, daemon dilden bağımsız İngilizce yazar.
+pub fn is_disk_full_text(message: &str) -> bool {
+    message.to_ascii_lowercase().contains("no space left on device")
+}
+
 /// Windows paylaşım/kilit ihlali (32/33) — dosya başka süreçte açık.
 pub fn is_sharing_violation(e: &std::io::Error) -> bool {
     cfg!(windows) && matches!(e.raw_os_error(), Some(32 | 33))

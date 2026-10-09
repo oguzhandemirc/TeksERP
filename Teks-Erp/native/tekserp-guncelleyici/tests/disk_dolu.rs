@@ -127,6 +127,12 @@ fn disk_dolu_her_yazimda() {
             let log: Vec<String> = log.iter().map(|l| same_world(l)).collect();
             let prefix = if rollback { success_log.iter().zip(&log).take_while(|(a, b)| a == b).count() } else { 0 };
             let (points, all) = representatives(&sayac, prefix);
+            // Linux: imaj yükleme (`docker load`) yer isteyen noktadır ve dolaşılır (L4c-2 hazırlık kolu).
+            let load_point = (1..=log.len() as u64).find(|k| log[*k as usize - 1].ends_with(":surec docker load"));
+            if p == Profil::Linux && !rollback {
+                let k = load_point.unwrap_or_else(|| panic!("{ctx}: sayımda docker load yok"));
+                assert!(points.contains(&k), "{ctx}: docker load yer isteyen nokta sayılmadı");
+            }
             // İşlemin günlük satırları: ISLEM (ilk) ve SONUÇ (son). Aradaki her noktada disk dolarsa işlem GERİ ALINIR
             // (adım ilerletilmez); SONUÇ'tan sonra dolarsa sonuç değişmez.
             let journal: Vec<u64> = (1..=log.len() as u64).filter(|k| log[*k as usize - 1].ends_with(":ekle islem.jsonl")).collect();
@@ -139,6 +145,9 @@ fn disk_dolu_her_yazimda() {
             // Her nokta kendi dünyasında: süre fsync beklemesi, işlemci boş — dört iş parçacığına bölünür.
             let check = |k: u64| -> String {
                 let w = setup("disk");
+                // İmaj yüzlerce MB ister, durum dosyası yüzlerce bayt: hazırlıktaki disk dolu panelde görünür.
+                let at_load = Some(k) == load_point && !rollback;
+                w.crash.small_fits.store(at_load, Ordering::SeqCst);
                 w.enospc_at(k);
                 let _ = w.run(3);
                 let last = w.crash.log.lock().unwrap().iter().find(|l| l.starts_with(&format!("{k}:"))).cloned().unwrap_or_default();
@@ -148,6 +157,9 @@ fn disk_dolu_her_yazimda() {
                 assert_safe_while_full(&w, &ctx);
                 assert_eq!(snapshot(&w.layout.version_dir(OLD)), old_files, "{ctx}: kurulu sürüm değişti/silindi");
                 let st = w.status().map(|st| format!("{:?}/{}", st.state, st.error_code.as_deref().unwrap_or("-")));
+                if at_load {
+                    assert_eq!(st.as_deref(), Some("Waiting/DISK_DOLU"), "{ctx}: imaj yüklemede disk dolu görünmüyor");
+                }
                 let trail = w.crash.status_trail.lock().unwrap().clone();
                 assert!(!trail.iter().any(|s| s == "HATA"), "{ctx}: disk dolu HATA'ya düşürdü (insan gerekir): {trail:?}");
                 // İnsan yer açar: işlem sonuna varır, yedek alan yeniden kurulur.

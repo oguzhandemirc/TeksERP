@@ -66,7 +66,7 @@ fn onayli() -> LeaseOpts {
     LeaseOpts { update: Some(policy("ONAYLI", &[], None)), ..LeaseOpts::default() }
 }
 
-/// Kira saatlik yenilenir (dakika 15'te; gerçek yoklama süreç başlangıcına göre kayar): kurulum başına günde 24 sorgu
+/// Kira saatlik yenilenir (dakika 20'de; gerçek yoklama süreç başlangıcına göre kayar): kurulum başına günde 24 sorgu
 /// (bugün 5 dk'lık önbellekle 288) — 300 kurulumda 7.200/gün, Worker'ın 100 bin/gün sınırının %7'si. Sahte sunucuda
 /// zincirli işaretçi yok (404 → eski `son.json`), sorgu başına 2 istek: üst sınır yine %15.
 #[test]
@@ -77,7 +77,7 @@ fn hourly_lease_gives_24_per_day() {
     let start = s.requests().len();
     let mut per_day = vec![];
     for _ in 0..2 {
-        per_day.push(s.run(24 * 60, 5, &|m| m % 60 == 15).len());
+        per_day.push(s.run(24 * 60, 10, &|m| m % 60 == 20).len());
     }
     let reqs = &s.requests()[start..];
     assert!(reqs.iter().all(|p| p.ends_with("son-zincir.json") || p.ends_with("son.json")), "yalnız işaretçi: {reqs:?}");
@@ -95,14 +95,14 @@ fn ceiling_six_hours_on_installation_phase() {
     let s = Sim::new("w5-tavan", onayli());
     s.e.tick(&|| false);
     let first = s.now();
-    let at = s.run(2 * 24 * 60, 5, &|_| false);
+    let at = s.run(2 * 24 * 60, 10, &|_| false);
     let phase = schedule::phase_ms(KURULUM_ID);
     let mut prev = first;
     for t in &at {
         let gap = t - prev;
         assert!(gap <= CEILING_MS && gap > CEILING_MS - SPREAD_MS, "aralık {} dk (5–6 sa beklenir)", gap / MINUTE);
         assert!(
-            (t - phase).rem_euclid(SPREAD_MS) < 5 * MINUTE,
+            (t - phase).rem_euclid(SPREAD_MS) < 10 * MINUTE,
             "sorgu kaydırmaya oturmuyor: {} dk",
             (t - phase).rem_euclid(SPREAD_MS) / MINUTE
         );
@@ -152,13 +152,13 @@ fn server_down_is_bounded_and_visible() {
     s.e.tick(&|| false);
     s.w.faults.update_server_down.store(true, Ordering::SeqCst);
     let before = s.requests().len();
-    let n = s.run(24 * 60, 5, &|m| m % 60 == 15).len();
+    let n = s.run(24 * 60, 10, &|m| m % 60 == 20).len();
     assert!((24..=34).contains(&n), "kesintide günlük sorgu {n}");
     assert!(s.requests().len() - before <= 2 * n);
     let st = s.w.status().unwrap();
     assert!(st.error_code.is_some() && st.state != State::Ready, "kesinti görünmüyor: {:?} {:?}", st.state, st.error_code);
     s.w.faults.update_server_down.store(false, Ordering::SeqCst);
-    s.run(60, 5, &|m| m == 15);
+    s.run(60, 10, &|m| m == 20);
     assert_eq!(s.w.state(), Some(State::Ready), "{:?}", s.w.status().map(|d| (d.error_code, d.message)));
 }
 
