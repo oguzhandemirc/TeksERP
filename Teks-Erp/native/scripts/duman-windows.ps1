@@ -17,6 +17,11 @@
 #      izin kaldirilinca durum.json (kira yok: DONDURULDU/KIRA_YOK + kalp atisi) -> is\ korumali DACL -> durdur
 #   6. hizmet adi parametresi (ayni makinede ikinci kanal): konak --ad ile kendi sanal hesabi ve
 #      TEKSERP_HIZMET_ADI; ACL KAYITTAN SONRA (sanal hesap kayitla dogar); guncelleyici --ad + --veri
+#   7. karsilikli onarim (W1b, plan GUNCELLEYICI-SAGLAMLIK 4.7): hizmet-kur onarim gorevini kurar (SYSTEM) ->
+#      ilk saglikli tur .lkg'yi kurar, gorev ona hizalanir -> ikili silinir + hizmet durur -> gorev (Start-
+#      ScheduledTask) surumlu ImagePath'e dogrulanmis kopyayi koyar ve baslatir -> son 4 KB kesilir -> .lkg onar
+#      onarir -> "Devre disi" + ikili yok: onarilmaz, cikis 14 + durum.json GUNCELLEYICI_KAPALI -> hizmet-kaldir
+#      gorevi de siler -> kayit yokken de onarilmaz (cikis 14)
 # ASCII: bilerek yalniz ASCII (PS 5.1 BOM'suz UTF-8'i ANSI okur).
 # =============================================================================
 param([Parameter(Mandatory = $true)][string]$Bin)
@@ -210,10 +215,86 @@ try {
   Stop-Service TeksERP-Guncelleyici-duman
   Bekle "TeksERP-Guncelleyici-duman" "Stopped"
   & "$kok\guncelleyici\tekserp-guncelleyici.exe" hizmet-kaldir --ad TeksERP-Guncelleyici-duman
+  if (Get-ScheduledTask -TaskPath "\TeksERP\" -TaskName "TeksERP-Guncelleyici-duman-Onarim" -ErrorAction SilentlyContinue) { Dur "hizmet-kaldir --ad onarim gorevini silmedi" }
+
+  Adim "7. karsilikli onarim: gorev + silinen/kesilen ikili + devre disi"
+  $gorevAdi = "TeksERP-Guncelleyici-Onarim"
+  $asil = "$kok\guncelleyici\tekserp-guncelleyici.exe"
+  $lkg = "$kok\guncelleyici\tekserp-guncelleyici.lkg.exe"
+  $is = "$veri\guncelleme\is"
+  Remove-Item -Recurse -Force "$veri\guncelleme" -ErrorAction SilentlyContinue
+  function Gorev { Get-ScheduledTask -TaskPath "\TeksERP\" -TaskName $gorevAdi -ErrorAction SilentlyContinue }
+  function HizmetIkilisi {
+    $yol = (Get-CimInstance Win32_Service -Filter "Name='TeksERP-Guncelleyici'").PathName
+    if ($yol -notmatch '^"([^"]+)"') { Dur "ImagePath tirnakli ikili tasimiyor: $yol" }
+    return $Matches[1]
+  }
+  function OnarimSayisi { if (Test-Path "$is\onarim.json") { @((Get-Content "$is\onarim.json" -Raw | ConvertFrom-Json).onarimlar).Count } else { 0 } }
+  & $asil hizmet-kur --kok $kok
+  if ($LASTEXITCODE -ne 0) { Dur "guncelleyici hizmet-kur $LASTEXITCODE" }
+  $g = Gorev
+  if (-not $g) { Dur "hizmet-kur onarim gorevini kurmadi" }
+  if ($g.Principal.UserId -notmatch "SYSTEM" -or $g.Actions[0].Arguments -notmatch "^onar --kok") { Dur "gorev SYSTEM + onar degil: $($g.Principal.UserId) $($g.Actions[0].Arguments)" }
+  Start-Service TeksERP-Guncelleyici
+  Bekle "TeksERP-Guncelleyici" "Running"
+  # Ilk saglikli tur .lkg'yi kurar; hizmet gorevi ona hizalar (onarici onarilan ikiliden bagimsiz).
+  for ($i = 0; $i -lt 120 -and -not ((Test-Path $lkg) -and ((Gorev).Actions[0].Execute -match "lkg")); $i++) { Start-Sleep -Milliseconds 500 }
+  if (-not (Test-Path $lkg)) { Get-Content "$kok\guncelleyici\gunluk\*.log" -ErrorAction SilentlyContinue; Dur "ilk saglikli tur .lkg kurmadi" }
+  if ((Gorev).Actions[0].Execute -notmatch "lkg") { Dur "gorev .lkg'ye hizalanmadi: $((Gorev).Actions[0].Execute)" }
+  $boy = (Get-Item $asil).Length
+
+  # 7a. Defender/elle silinme: ikili yok, hizmet durmus -> gorev onarir (surumlu ImagePath) ve baslatir.
+  Stop-Service TeksERP-Guncelleyici
+  Bekle "TeksERP-Guncelleyici" "Stopped"
+  $exe = HizmetIkilisi
+  Remove-Item -Force $exe
+  Start-ScheduledTask -TaskPath "\TeksERP\" -TaskName $gorevAdi
+  Bekle "TeksERP-Guncelleyici" "Running"
+  $exe = HizmetIkilisi
+  if ($exe -notmatch "\\guncelleyici\\s\\[^\\]+\\tekserp-guncelleyici\.exe$" -or -not (Test-Path $exe)) { Dur "onarim surumlu yola konmadi: $exe" }
+  if ((Get-Item $exe).Length -ne $boy) { Dur "onarilan ikilinin boyu farkli" }
+  for ($i = 0; $i -lt 60 -and (Get-ScheduledTask -TaskPath "\TeksERP\" -TaskName $gorevAdi).State -eq "Running"; $i++) { Start-Sleep -Milliseconds 500 }
+  $sonuc = (Get-ScheduledTaskInfo -TaskPath "\TeksERP\" -TaskName $gorevAdi).LastTaskResult
+  if ($sonuc -ne 0) { Dur "onarim gorevi cikis kodu $sonuc" }
+  if ((OnarimSayisi) -ne 1) { Dur "onarim.json bir onarim tasimiyor: $(Get-Content "$is\onarim.json" -Raw)" }
+  Write-Host "   gorev onardi: $exe"
+
+  # 7b. Son 4 KB kesildi (yarim yazim): .lkg onar dogru kaynaktan geri koyar.
+  Stop-Service TeksERP-Guncelleyici
+  Bekle "TeksERP-Guncelleyici" "Stopped"
+  $f = [IO.File]::Open($exe, "Open", "ReadWrite")
+  $f.SetLength($f.Length - 4096)
+  $f.Close()
+  $cikti = & $lkg onar --kok $kok --veri $veri | Out-String
+  if ($LASTEXITCODE -ne 0 -or $cikti -notmatch "BOZUK") { Dur "kesik ikili onarilmadi ($LASTEXITCODE): $cikti" }
+  Bekle "TeksERP-Guncelleyici" "Running"
+  if ((Get-Item (HizmetIkilisi)).Length -ne $boy) { Dur "kesik ikili geri konmadi" }
+  if ((OnarimSayisi) -ne 2) { Dur "onarim sayaci 2 degil" }
+
+  # 7c. Yonetici "Devre disi" yapti + ikili yok: ONARILMAZ, gorunur (cikis 14, GUNCELLEYICI_KAPALI).
+  Stop-Service TeksERP-Guncelleyici
+  Bekle "TeksERP-Guncelleyici" "Stopped"
+  sc.exe config TeksERP-Guncelleyici start= disabled | Out-Null
+  $exe = HizmetIkilisi
+  Remove-Item -Force $exe
+  $cikti = & $lkg onar --kok $kok --veri $veri | Out-String
+  if ($LASTEXITCODE -ne 14) { Dur "devre disi hizmet icin cikis 14 beklenirdi ($LASTEXITCODE): $cikti" }
+  $d = Get-Content $durumYolu -Raw | ConvertFrom-Json
+  if ($d.hataKodu -ne "GUNCELLEYICI_KAPALI") { Dur "durum.json GUNCELLEYICI_KAPALI degil: $($d | ConvertTo-Json -Compress)" }
+  if ((Test-Path $exe) -or (Get-Service TeksERP-Guncelleyici).Status -ne "Stopped" -or (Get-Service TeksERP-Guncelleyici).StartType -ne "Disabled") { Dur "yonetici karari geri alindi" }
+  if ((OnarimSayisi) -ne 2) { Dur "devre disi hizmet onarim sayildi" }
+
+  # 7d. hizmet-kaldir gorevi de siler; kayit yokken onar yine dokunmaz (cikis 14).
+  & $lkg hizmet-kaldir
+  if ($LASTEXITCODE -ne 0) { Dur "hizmet-kaldir $LASTEXITCODE" }
+  if (Gorev) { Dur "hizmet-kaldir onarim gorevini silmedi" }
+  & $lkg onar --kok $kok --veri $veri | Out-Null
+  if ($LASTEXITCODE -ne 14) { Dur "kayitsiz hizmet icin cikis 14 beklenirdi ($LASTEXITCODE)" }
   Write-Host "OK duman: iki hizmet de beklenen gibi (varsayilan ve parametreli adlarla)" -ForegroundColor Green
 }
 finally {
   foreach ($ad in $adlar) {
     if (Get-Service -Name $ad -ErrorAction SilentlyContinue) { Stop-Service $ad -Force -ErrorAction SilentlyContinue; sc.exe delete $ad | Out-Null }
+    Unregister-ScheduledTask -TaskPath "\TeksERP\" -TaskName "$ad-Onarim" -Confirm:$false -ErrorAction SilentlyContinue
   }
 }

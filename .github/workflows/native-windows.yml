@@ -7,7 +7,7 @@ name: Native Windows (hizmetler)
 # `cargo test` bütün Cargo çalışma alanı (durum makinesinin öldür-yeniden başlat testleri GERÇEK
 # NTFS junction'larıyla) · sürüm derlemesi · gerçek SCM ile duman (`scripts/duman-windows.ps1`:
 # kayıt → başlat → ortam sözleşmesi → stdin kapanışı → doğrulama kipi → SCM kurtarması → iş nesnesi
-# → güncelleyicinin durum.json'u ve özel alan DACL'i → kaldırma). Yapıtlar (iki .exe) 7 gün tutulur;
+# → güncelleyicinin durum.json'u ve özel alan DACL'i → karşılıklı onarım görevi W1b → kaldırma). Yapıtlar (iki .exe) 7 gün tutulur;
 # İMZA KANCASI: kod imzalama sertifikası gelince imzalama bu işe eklenir (anahtar CI'a girmez — imza
 # Mac'te, `korumali-paket.yml` kalıbı). Mac/Linux'ta aynı Windows kodu `kapi.mjs denetle`
 # (clippy --target x86_64-pc-windows-msvc) ile derleme düzeyinde ölçülür; SCM/iş nesnesi/DPAPI
