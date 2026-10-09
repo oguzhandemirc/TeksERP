@@ -57,7 +57,7 @@ son="\${@: -1}"; b64="\${son##* }"
 cmd=$(printf '%s' "$b64" | base64 -d 2>/dev/null | iconv -f UTF-16LE -t UTF-8)
 printf 'SSH %s\\n=====\\n' "$cmd" >> "$SSH_LOG"
 case "$cmd" in
-  *BatteryStatus*) echo "tamam: node v26 · C: 100 GB bos"; echo "TSIP=100.70.47.46" ;;
+  *BatteryStatus*) if [ -n "$TP_SAHTE_KIRLI" ]; then printf 'tamam: node v26 \\xb7 C: 100 GB bos\\r\\n'; else echo "tamam: node v26 · C: 100 GB bos"; fi; printf 'TSIP=100.70.47.46\\r\\n' ;;
   *paketle.ps1*) echo "  PAKET HAZIR (sahte)" ;;
   *Get-ChildItem*) echo "$(basename "$TP_SAHTE_ZIP")|$(shasum -a 256 "$TP_SAHTE_ZIP" | cut -d' ' -f1)" ;;
 esac
@@ -225,6 +225,11 @@ if (process.platform !== 'darwin') {
   check('§2f ⭐ etiket origin\'e İTİLMEDİ (push komutu yalnız söylendi)',
     git(['ls-remote', '--tags', 'origin', 'refs/tags/backend-v2.14.1']) === '' && /git push origin backend-v2\.14\.1/.test(g.cikti), g.cikti.slice(-200));
   check('§2g Mac ağacı temiz kaldı (sürüm belgesi repoda yazılmadı)', git(['status', '--porcelain']) === '');
+
+  // UTF-8 dışı bayt (Windows kod sayfası "·") + CRLF içeren uzak çıktı: UTF-8 yerelinde tr/grep/sed düşmemeli.
+  const k = kos(['--kip', 'prova', '--surum', '2.14.1', '--cikti', cikti('k')], { TP_SAHTE_ZIP: z.prova, TP_SAHTE_KIRLI: '1', LC_ALL: 'en_US.UTF-8' });
+  check('§2i ⭐ uzak çıktıda UTF-8 dışı bayt + CRLF → kapı düşmez (LC_ALL=C), Tailscale IP ölçülür',
+    k.kod === 0 && !/Illegal byte sequence/.test(k.hata) && !/Tailscale IP ölçülemedi/.test(k.cikti + k.hata), ozet(k));
 
   const t = kos(['--kip', 'gercek', '--surum', '2.14.1', '--kuru']);
   check('§2h yeniden koşu: etiket zaten HEAD\'de → kapı geçer, "yeniden atılmaz" der', t.kod === 0 && /zaten .*yeniden atılmaz/.test(t.cikti), ozet(t));

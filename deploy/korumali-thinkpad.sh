@@ -132,9 +132,10 @@ foreach ($a in "node","npm.cmd","git","tar") { if (-not (Get-Command $a -ErrorAc
 $bos = (Get-PSDrive C).Free / 1GB; if ($bos -lt 10) { Write-Output ("C: bos alan {0:N1} GB < 10" -f $bos); exit 97 }
 Write-Output ("tamam: node {0} · C: {1:N0} GB bos" -f (node -v), $bos)
 Write-Output ("TSIP=" + $ip)') || { kod=$?; echo "$KAPI"; exit "$kod"; }
-KAPI=$(printf '%s\n' "$KAPI" | tr -d '\r')
-printf '%s\n' "$KAPI" | grep -v '^TSIP=' || true
-TS_IP_OLCULEN=$(printf '%s\n' "$KAPI" | sed -n 's/^TSIP=//p' | head -1)
+# Uzak çıktı UTF-8 olmayabilir (PowerShell "·" gibi baytları kod sayfasıyla yollar): bayt işleyen araçlar LC_ALL=C ile koşar.
+KAPI=$(printf '%s\n' "$KAPI" | LC_ALL=C tr -d '\r')
+printf '%s\n' "$KAPI" | LC_ALL=C grep -v '^TSIP=' || true
+TS_IP_OLCULEN=$(printf '%s\n' "$KAPI" | LC_ALL=C sed -n 's/^TSIP=//p' | head -1)
 [ "$TS_IP_OLCULEN" = "$TP_TS_IP" ] || { echo "Tailscale IP ölçülemedi/tutmadı: '$TS_IP_OLCULEN'"; exit 99; }
 
 adim "Mac: sığ klon ($K)"
@@ -179,8 +180,8 @@ set -e
 [ "$kod" -eq 0 ] || { echo "paketleme DÜŞTÜ (çıkış $kod) — uzak günlük: %USERPROFILE%\\$UZ\\paketle.log"; exit "$kod"; }
 
 adim "zip'i Mac'e çek + SHA256 eşle"
-UZAKZIP=$(uzak "Get-ChildItem (Join-Path \$env:USERPROFILE '$UZ\\cikti') -Filter *.zip | ForEach-Object { \$_.Name + '|' + (Get-FileHash \$_.FullName -Algorithm SHA256).Hash.ToLower() }" | tr -d '\r')
-[ "$(printf '%s\n' "$UZAKZIP" | grep -c '|')" -eq 1 ] || { echo "uzak çıktıda tek zip beklenirdi: $UZAKZIP"; exit 1; }
+UZAKZIP=$(uzak "Get-ChildItem (Join-Path \$env:USERPROFILE '$UZ\\cikti') -Filter *.zip | ForEach-Object { \$_.Name + '|' + (Get-FileHash \$_.FullName -Algorithm SHA256).Hash.ToLower() }" | LC_ALL=C tr -d '\r')
+[ "$(printf '%s\n' "$UZAKZIP" | LC_ALL=C grep -c '|')" -eq 1 ] || { echo "uzak çıktıda tek zip beklenirdi: $UZAKZIP"; exit 1; }
 ZAD=${UZAKZIP%%|*}; ZSHA=${UZAKZIP##*|}
 scp -q "${SSH_OPT[@]}" "$TP_SSH:tkd/$K/cikti/$ZAD" "$CIKTI/$ZAD"
 MSHA=$(shasum -a 256 "$CIKTI/$ZAD" | cut -d' ' -f1)
