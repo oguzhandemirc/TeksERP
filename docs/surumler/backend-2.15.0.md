@@ -3,9 +3,9 @@
 **Durum:** TASLAK — terfide kullanıcı onayı. **YAYIN KAPISI AÇIK DEĞİL:** bu sürüm yenilenmiş güncelleme programını
 (sağlamlık planı W1–W5, güncelleme programı 0.2.0) taşır; `docs/design/GUNCELLEYICI-SAGLAMLIK.md` §9.5 kanıtları (CI koşuları, thinkpad ve VDS
 gerçek provaları, onarım provası) tamamlanmadan hiçbir gruba yayınlanmaz.
-**Paket:** _(paketleme doldurur)_
-**SHA256:** _(paketleme doldurur)_
-**Commit:** _(paketleme doldurur)_
+**Paket:** `tekserp-backend-20261009_234648-eb4eea5.zip`
+**SHA256:** `8595B45CBD7F781F4EEAB27CB3F4563AA5EFA0EAA4087DE271D47BE4025E1D06` (imzalı zip: paket-2026 + zincir pkt-2026-1; imzasız derleme 41D4884BFAD96A9E6ECC35C693C604F7932907B03AC805413135EB3A0D2C7165, thinkpad-1)
+**Commit:** `eb4eea5`
 **Önceki saha sürümü:** 2.14.0 (son paketlenen sürüm). Güncellenecek her kurulumda sahadaki sürüm kurulumdan önce
 sunucunun sağlık bilgisinden okunur; tahmin edilmez.
 
