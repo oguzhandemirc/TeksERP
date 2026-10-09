@@ -214,6 +214,28 @@ impl Fs for RealFs {
     ) -> Result<crate::package::ExtractStats, String> {
         crate::package::extract_real(archive, dest, limits)
     }
+
+    fn extract_tar(
+        &self,
+        archive: &Path,
+        dest: &Path,
+        members: &[String],
+        limits: &crate::package::ExtractLimits,
+    ) -> Result<crate::package::ExtractStats, String> {
+        crate::tar::extract_real(archive, dest, members, limits, &set_extracted_mode)
+    }
+}
+
+/// Açılan dosyanın kipi başlıktan YALNIZ çalıştırılabilirliği alır: 0755 ya da 0644 (setuid/grup-yazma taşınmaz).
+#[cfg(unix)]
+fn set_extracted_mode(p: &Path, m: &crate::tar::Member) -> io::Result<()> {
+    use std::os::unix::fs::PermissionsExt;
+    std::fs::set_permissions(p, std::fs::Permissions::from_mode(if m.executable { 0o755 } else { 0o644 }))
+}
+
+#[cfg(windows)]
+fn set_extracted_mode(_p: &Path, _m: &crate::tar::Member) -> io::Result<()> {
+    Ok(())
 }
 
 /// Unix: bağlantı değişimi `rename(2)` ile atomiktir — eskisini ayrıca taşımaya gerek yok.

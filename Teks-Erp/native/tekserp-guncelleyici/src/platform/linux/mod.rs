@@ -24,8 +24,10 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Duration;
 
-/// İşlem günlüğünün `platform`u (bildirimin platform sözlüğüyle aynı ad, sözleşme 5).
-pub const PLATFORM: &str = "linux-x64-oci";
+/// Bildirim/işaretçi/paket biçiminin platformu (sözleşme 5: `backend-oci` yolu, ustar dış tar) ve işlem günlüğünün
+/// `platform`u.
+pub const SURUM_PLATFORMU: crate::release::UpdatePlatform = crate::release::UpdatePlatform::LinuxX64Oci;
+pub const PLATFORM: &str = SURUM_PLATFORMU.as_str();
 /// İskeletin her hatasının öneki.
 pub const DESTEKSIZ: &str = "PLATFORM_DESTEKSIZ";
 
@@ -35,7 +37,7 @@ pub(crate) fn unsupported(what: &str) -> String {
 
 pub fn arka_ucu() -> crate::platform::Arka {
     crate::platform::Arka {
-        platform: PLATFORM,
+        platform: SURUM_PLATFORMU,
         ortam: crate::settings::OrtamKipi::Compose,
         guncelleyici_paket_yolu: birim::IKILI,
         saglik: Arc::new(IskeletSaglik),

@@ -40,6 +40,8 @@ const CANDIDATE_FRESH_FOR_APPLY_MS: i64 = 60 * 1000;
 /// Kesin paket hatalarında (özet · bütünlük · bağ) yeniden indirme aralığı: 15 dk × 4ⁿ, en çok 24 sa.
 const BACKOFF_BASE_MS: i64 = 15 * 60 * 1000;
 const BACKOFF_MAX_MS: i64 = 24 * 60 * 60 * 1000;
+/// Linux disk formülünün DB boyu bu süre önbellekte kalır.
+const DB_SIZE_TTL_MS: i64 = 60 * 60 * 1000;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum TickResult {
@@ -95,6 +97,8 @@ pub struct Engine {
     self_checked: RefCell<Option<String>>,
     /// DONDUR'da yenilemenin olmama nedeni: yalnız değişince günlüğe yazılır (her tur aynı satır olmasın).
     frozen_note: RefCell<Option<String>>,
+    /// Linux disk formülünün DB boyu (ölçüm anı, değer) — `DB_SIZE_TTL_MS` boyunca yeniden ölçülmez.
+    db_size: RefCell<Option<(i64, Option<u64>)>>,
 }
 
 struct Inputs {
@@ -171,6 +175,7 @@ impl Engine {
             healthy_marked: Cell::new(false),
             self_checked: RefCell::new(None),
             frozen_note: RefCell::new(None),
+            db_size: RefCell::new(None),
         }
     }
 
@@ -699,7 +704,7 @@ impl Engine {
                 return idle;
             }
         };
-        let pointer = Self::pointer_for(&channel, pol.as_ref().and_then(|p| p.0.target.clone()));
+        let pointer = self.pointer_for(&channel, pol.as_ref().and_then(|p| p.0.target.clone()));
         let m = match self.candidate(&server, &pointer, token.as_deref(), &trust, &channel, CANDIDATE_TTL_MS, &token_problem) {
             Ok(m) => m,
             Err((code, msg)) => {
@@ -773,7 +778,7 @@ impl Engine {
             self.write_status(self.doc(&f, State::Waiting, Some(code), &msg));
             return idle;
         };
-        if let Err((code, msg)) = self.disk_check(&m.doc) {
+        if let Err((code, msg)) = self.disk_check(inputs, &m.doc) {
             self.write_status(self.doc(&f, State::Waiting, Some(code), &msg));
             return idle;
         }
@@ -826,7 +831,7 @@ impl Engine {
                 return idle;
             }
         };
-        if let Err((code, msg)) = self.disk_check(&m.doc) {
+        if let Err((code, msg)) = self.disk_check(inputs, &m.doc) {
             self.write_status(self.doc(&f, State::Waiting, Some(code), &msg));
             return idle;
         }
@@ -847,17 +852,24 @@ impl Engine {
         self.after_op(inputs, journal, outcome, tick_s)
     }
 
+    /// Bildirimin, işaretçinin ve paket biçiminin platformu: arka ucunki (sözleşme 5 — Linux `backend-oci` yolunu ve
+    /// ustar paketini okur, Windows bugünkü `backend` yolunu ve zip'i).
+    fn platform(&self) -> release::UpdatePlatform {
+        self.env.arka.platform
+    }
+
     /// Aday işaretçisi: sabitlenmiş sürüm (`hedefSurum`) kendi dizininden, yoksa kanalın son sürümü.
-    fn pointer_for(channel: &str, target: Option<String>) -> Pointer {
+    fn pointer_for(&self, channel: &str, target: Option<String>) -> Pointer {
+        let p = self.platform();
         match target {
             Some(t) => Pointer {
-                chained: release::release_file_path(channel, &t, release::CHAINED_RELEASE_MANIFEST_FILE),
-                legacy: release::release_file_path(channel, &t, release::RELEASE_MANIFEST_FILE),
+                chained: release::release_file_path_on(p, channel, &t, release::CHAINED_RELEASE_MANIFEST_FILE),
+                legacy: release::release_file_path_on(p, channel, &t, release::RELEASE_MANIFEST_FILE),
                 family: Some(release::ChainedFamily::Surum),
                 kids: Vec::new(),
                 kids_from_latest: true,
             },
-            None => Pointer::single(release::chained_release_pointer_path(channel), release::release_pointer_path(channel)),
+            None => Pointer::single(release::chained_release_pointer_path_on(p, channel), release::release_pointer_path_on(p, channel)),
         }
     }
 
@@ -892,7 +904,7 @@ impl Engine {
         let server = inputs.settings.server_base().ok()?;
         let Some(token) = token else { return skip("indirme belirteci yok".into()) };
         let mut trust = policy::package_trust(&self.anchor, lic, PackageMode::Kabul, base.now_ms);
-        let pointer = Self::pointer_for(&channel, pol.target.clone());
+        let pointer = self.pointer_for(&channel, pol.target.clone());
         let no_token = || fail(codes::BELIRTEC_YOK, "belirteç yok");
         let m = match self.candidate(&server, &pointer, Some(token), &trust, &channel, CANDIDATE_TTL_MS, &no_token) {
             Ok(m) => m,
@@ -920,7 +932,7 @@ impl Engine {
                 d.neden.map(|n| format!(" / {n}")).unwrap_or_default()
             ));
         }
-        if let Err((code, msg)) = self.disk_check(&m.doc) {
+        if let Err((code, msg)) = self.disk_check(inputs, &m.doc) {
             return skip(format!("{code}: {msg}"));
         }
         if let Err((code, msg)) = self.prepare_backend(f, &server, &channel, &inputs.backend.license_dir, &mut trust, &m.doc, token, stop) {
@@ -969,14 +981,14 @@ impl Engine {
                 token,
                 trust,
                 "sürüm bildirimi",
-                &|name, text| release::chained_release_candidate(name, text, trust, channel),
-                &|jws| release::verify_release_manifest(jws, trust, channel),
+                &|name, text| release::chained_release_candidate_on(name, text, trust, channel, self.platform()),
+                &|jws| release::verify_release_manifest_on(jws, trust, channel, self.platform()),
             )?
         } else {
             let (path, bytes) = self.fetch_pointer(server, pointer, token, trust)?;
             let text = String::from_utf8(bytes).map_err(|_| fail(release::code::SURUM_ISARETCI, "işaretçi UTF-8 değil"))?;
             let jws_text = release::read_release_pointer(&text).map_err(|e| (e.code, format!("{path}: {}", e.message)))?;
-            release::verify_release_manifest(&Value::String(jws_text), trust, channel)
+            release::verify_release_manifest_on(&Value::String(jws_text), trust, channel, self.platform())
                 .map_err(|e| (e.code, format!("sürüm bildirimi reddedildi ({}): {}", e.code, e.message)))?
         };
         *self.candidate.borrow_mut() = Some(Candidate { fetched_ms: now, pointer: pointer.chained.clone(), manifest: checked.clone() });
@@ -1061,11 +1073,11 @@ impl Engine {
     /// Kanalın `son-zincir.json`ını (KABUL güveniyle) imzalayan `pkt-*` kid — sabitlenmiş sürüm dizininde yeniden imzalı
     /// adın adayı. En iyi çaba: yokluk ya da her hata `None` (aday kümesi küçülür, kid'siz ad yine okunur).
     fn latest_signer_kid(&self, server: &str, channel: &str, token: &str, trust: &PackageTrust) -> Option<String> {
-        let url = format!("{server}{}", release::chained_release_pointer_path(channel));
+        let url = format!("{server}{}", release::chained_release_pointer_path_on(self.platform(), channel));
         let bytes = download::fetch_small_opt(&self.env, &url, Some(token)).ok()??;
         let text = String::from_utf8(bytes).ok()?;
         let jws = release::read_release_pointer(&text).ok()?;
-        let m = release::verify_release_manifest(&Value::String(jws), trust, channel).ok()?;
+        let m = release::verify_release_manifest_on(&Value::String(jws), trust, channel, self.platform()).ok()?;
         m.chain.is_some().then_some(m.signer_kid)
     }
 
@@ -1175,10 +1187,7 @@ impl Engine {
         };
         if fs.is_dir(&dir) {
             // İşaretsiz sürüm dizini (yarım yerleştirme ya da elle konmuş): doğrulanır ve bağlanırsa kabul, değilse silinir.
-            let verified = package::verify_dir(&dir, fs, trust, Some(&m.signer_kid))
-                .map_err(|e| (e.code, e.message))
-                .and_then(|id| release::check_package_binding(m, &id).map_err(|e| (e.code, e.message)));
-            match verified {
+            match package::verify_bound(self.platform(), &dir, fs, trust, m) {
                 Ok(()) => return place_marker(),
                 Err(e) if f.installed.as_deref() == Some(m.surum.as_str()) => return Err(e),
                 Err((_, why)) => {
@@ -1193,12 +1202,13 @@ impl Engine {
                 format!("{} paketi önceki denemede doğrulanamadı — yeniden indirme {} sonra", m.surum, timefmt::iso_millis(until)),
             ));
         }
-        let zip = self.layout.downloads().join(format!("{}.zip", m.surum));
+        let ext = self.platform().package_extension();
+        let pkg = self.layout.downloads().join(format!("{}{ext}", m.surum));
         let spec = Spec {
-            url: format!("{server}{}", release::release_file_path(channel, &m.surum, &m.paket.ad)),
+            url: format!("{server}{}", release::release_file_path_on(self.platform(), channel, &m.surum, &m.paket.ad)),
             token: Some(token.to_string()),
-            part: self.layout.downloads().join(format!("{}.zip.part", m.surum)),
-            dest: zip.clone(),
+            part: self.layout.downloads().join(format!("{}{ext}.part", m.surum)),
+            dest: pkg.clone(),
             size: m.paket.boyut,
             sha256_hex: m.paket.sha256.clone(),
         };
@@ -1207,9 +1217,9 @@ impl Engine {
         let staging = self.layout.staging_dir(&m.surum);
         fs.remove_dir_all(&staging).map_err(|x| staging_fail(codes::INDIRME_HATASI, &staging, &x))?;
         fs.create_dir_all(&self.layout.versions()).map_err(|x| staging_fail(codes::INDIRME_HATASI, &self.layout.versions(), &x))?;
-        if let Err(e) = fs.extract_zip(&zip, &staging, &ExtractLimits::default()) {
+        if let Err(e) = package::extract_on(self.platform(), fs, &pkg, &staging, &m.surum, &ExtractLimits::default()) {
             let _ = fs.remove_dir_all(&staging);
-            let _ = fs.remove_file(&zip);
+            let _ = fs.remove_file(&pkg);
             let code = if e.starts_with("PAKET_YOL") { codes::PAKET_YOL } else { codes::BUTUNLUK_GECERSIZ };
             return Err(fail(code, e));
         }
@@ -1217,17 +1227,14 @@ impl Engine {
         if policy::adopt_package_revocation(fs, license_dir, &self.anchor, &staging, trust) {
             self.log.info("paketteki daha yeni PAKET iptal listesi benimsendi");
         }
-        let verified = package::verify_dir(&staging, fs, trust, Some(&m.signer_kid))
-            .map_err(|e| (e.code, e.message))
-            .and_then(|id| release::check_package_binding(m, &id).map_err(|e| (e.code, e.message)));
-        if let Err(e) = verified {
+        if let Err(e) = package::verify_bound(self.platform(), &staging, fs, trust, m) {
             let _ = fs.remove_dir_all(&staging);
-            let _ = fs.remove_file(&zip);
+            let _ = fs.remove_file(&pkg);
             return Err(e);
         }
         fs.rename(&staging, &dir).map_err(|x| staging_fail(codes::INDIRME_HATASI, &staging, &x))?;
         place_marker()?;
-        let _ = fs.remove_file(&zip);
+        let _ = fs.remove_file(&pkg);
         self.log.info(&format!("{} hazır: indirildi, sha256 + PAKET imzası + bütünlük listesi + bildirim bağı doğrulandı", m.surum));
         Ok(())
     }
@@ -1383,10 +1390,7 @@ impl Engine {
     /// hazırlar. Doğrulama ile kullanım arasındaki pencere izin ölçümüyle (`trusted_paths_ok`) kapanır.
     fn reverify_prepared(&self, trust: &PackageTrust, m: &ReleaseManifest, pg: Option<&PgTarget>) -> Result<(), Fail> {
         let fs = self.env.fs.as_ref();
-        let backend = package::verify_dir(&self.layout.version_dir(&m.surum), fs, trust, Some(&m.signer_kid))
-            .map_err(|e| (e.code, e.message))
-            .and_then(|id| release::check_package_binding(m, &id).map_err(|e| (e.code, e.message)));
-        if let Err((code, why)) = backend {
+        if let Err((code, why)) = package::verify_bound(self.platform(), &self.layout.version_dir(&m.surum), fs, trust, m) {
             let _ = fs.remove_file(&self.ready_marker(&m.surum));
             return Err((code, format!("{} uygulama anında yeniden doğrulanamadı — yeniden hazırlanacak: {why}", m.surum)));
         }
@@ -1426,24 +1430,35 @@ impl Engine {
         }
     }
 
-    fn disk_check(&self, m: &ReleaseManifest) -> Result<(), Fail> {
-        let need = m.paket.boyut.saturating_mul(3).saturating_add(2 * 1024 * 1024 * 1024);
-        match self.env.fs.free_space(&self.layout.root) {
-            Ok(free) if free < need => {
-                Err(fail(codes::DISK_DOLU, format!("boş alan {} MB, en az {} MB gerekir", free / 1_048_576, need / 1_048_576)))
+    /// Disk ön kontrolü (§5 madde 4, `package::disk_needs`): her satırın dosya sistemi ölçülür; ölçülemeyen satır
+    /// engellemez (bugünkü davranış). Linux'ta DB boyu formüle girer ve saatte bir ölçülür (araç konteyneri pahalı).
+    fn disk_check(&self, inputs: &Inputs, m: &ReleaseManifest) -> Result<(), Fail> {
+        let platform = self.platform();
+        let db = if platform == release::UpdatePlatform::LinuxX64Oci { self.db_size(inputs) } else { None };
+        let store = self.env.arka.araclar.imaj_deposu(&self.env);
+        for need in package::disk_needs(platform, &self.layout, m.paket.boyut, db, store) {
+            if let Ok(free) = self.env.fs.free_space(&need.path) {
+                if free < need.bytes {
+                    return Err(fail(
+                        codes::DISK_DOLU,
+                        format!("{} boş alanı {} MB, en az {} MB gerekir", need.path.display(), free / 1_048_576, need.bytes / 1_048_576),
+                    ));
+                }
             }
-            _ => Ok(()),
-        }?;
-        // Linux: imajlar Docker kökünde (çoğu zaman ayrı dosya sistemi) — açılmış imaj ≈ paket × 3 + 1 GB.
-        let Some(depo) = self.env.arka.araclar.imaj_deposu(&self.env) else { return Ok(()) };
-        let need = m.paket.boyut.saturating_mul(3).saturating_add(1024 * 1024 * 1024);
-        match self.env.fs.free_space(&depo) {
-            Ok(free) if free < need => Err(fail(
-                codes::DISK_DOLU,
-                format!("{} boş alanı {} MB, en az {} MB gerekir", depo.display(), free / 1_048_576, need / 1_048_576),
-            )),
-            _ => Ok(()),
         }
+        Ok(())
+    }
+
+    fn db_size(&self, inputs: &Inputs) -> Option<u64> {
+        let now = self.now();
+        if let Some((at, v)) = *self.db_size.borrow() {
+            if now - at < DB_SIZE_TTL_MS {
+                return v;
+            }
+        }
+        let v = self.env.arka.araclar.db_boyutu(&self.env, &inputs.backend);
+        *self.db_size.borrow_mut() = Some((now, v));
+        v
     }
 
     fn tools_dir(&self, old: &Path, new: &Path) -> PathBuf {

@@ -633,14 +633,14 @@ fn env_l(w: &World) -> tekserp_guncelleyici::env::Env {
     e
 }
 
-/// Kurulu ikili 0.1.0 (`guncelleyici/tekserp-guncelleyici`); paket `files` taşır (imzalı listeyle).
-fn setup_l(tag: &str, files_extra: Vec<(String, Vec<u8>)>) -> (World, PathBuf) {
+/// Kurulu ikili 0.1.0 (`guncelleyici/tekserp-guncelleyici`); sürüm dizini imzalı OCI teslim paketi (`oci_files`),
+/// kökteki güncelleyici `updater`; `extra` imzadan SONRA yazılır (listede yok).
+fn setup_l(tag: &str, updater: &[u8], extra: Vec<(String, Vec<u8>)>) -> (World, PathBuf) {
     let w = World::new(tag, Setup { intent: None, ..Setup::default() });
     let own = w.layout.updater_dir().join("tekserp-guncelleyici");
     std::fs::write(&own, exe_json("tekserp-guncelleyici", "0.1.0")).unwrap();
-    let mut files = version_files(OLD);
-    files.extend(files_extra);
-    for (rel, content) in files.iter().chain(integrity_l(&files, &w).iter()) {
+    let files = oci_files(OLD, updater, &w.keys.package, "paket-2026", Some(CHANNEL), &|_| {});
+    for (rel, content) in files.iter().chain(extra.iter()) {
         let f = w.layout.version_dir(OLD).join(rel);
         std::fs::create_dir_all(f.parent().unwrap()).unwrap();
         std::fs::write(f, content).unwrap();
@@ -648,26 +648,8 @@ fn setup_l(tag: &str, files_extra: Vec<(String, Vec<u8>)>) -> (World, PathBuf) {
     (w, own)
 }
 
-/// Ortak `integrity_files` ile aynı imzalı liste; kapsam paket kökündeki `.exe`siz ikiliyi de kapsar (Linux paketinin
-/// gerçek bütünlük biçimi — `PAKET-DOCKER.json` — L4b/L7'nin; burada ölçülen yalnız yol ve yan adlar).
-fn integrity_l(files: &[(String, Vec<u8>)], w: &World) -> Vec<(String, Vec<u8>)> {
-    let in_scope = |p: &str| {
-        ["dist/", "runtime/", "node_modules/", "prisma/migrations/"].iter().any(|d| p.starts_with(d))
-            || p == "package.json"
-            || p == "tekserp-guncelleyici"
-    };
-    let mut scoped: Vec<&(String, Vec<u8>)> = files.iter().filter(|(p, _)| in_scope(p)).collect();
-    scoped.sort_by(|a, b| a.0.as_bytes().cmp(b.0.as_bytes()));
-    let list: String = scoped.iter().map(|(p, c)| format!("{}\t{}\t{}\n", sha_b64u(c), c.len(), p)).collect();
-    let payload = json!({
-        "v": 1, "paketId": PACKAGE_ID, "urun": "backend", "surum": OLD, "derlemeTarihi": BUILT_AT, "musteri": CHANNEL,
-        "liste": { "sha256": sha_b64u(list.as_bytes()), "boyut": list.len(), "dosyaSayisi": scoped.len() },
-        "kapsam": { "dizinler": ["dist", "node_modules", "prisma/migrations", "runtime"], "dosyalar": ["package.json", "tekserp-guncelleyici"] },
-    });
-    vec![
-        ("butunluk-liste.txt".into(), list.into_bytes()),
-        ("butunluk.jws".into(), sign(&w.keys.package, "tekserp-butunluk", "paket-2026", &payload).into_bytes()),
-    ]
+fn new_updater() -> Vec<u8> {
+    exe_json("tekserp-guncelleyici", "9.9.9").into_bytes()
 }
 
 fn stage_l(w: &World, own: &Path) -> Result<bool, String> {
@@ -676,7 +658,7 @@ fn stage_l(w: &World, own: &Path) -> Result<bool, String> {
 
 #[test]
 fn l_profili_exesiz_ab() {
-    let (w, own) = setup_l("l-ab", vec![("tekserp-guncelleyici".into(), exe_json("tekserp-guncelleyici", "9.9.9").into_bytes())]);
+    let (w, own) = setup_l("l-ab", &new_updater(), vec![]);
     let env = env_l(&w);
     assert_eq!(stage_l(&w, &own), Ok(true));
     assert!(read(&own).contains("9.9.9"), "yeni ikili asıl adda (.exe'siz)");
@@ -692,7 +674,7 @@ fn l_profili_exesiz_ab() {
 
 #[test]
 fn l_profili_dogrulanmayan_ikili_geri_doner() {
-    let (w, own) = setup_l("l-geri", vec![("tekserp-guncelleyici".into(), exe_json("tekserp-guncelleyici", "9.9.9").into_bytes())]);
+    let (w, own) = setup_l("l-geri", &new_updater(), vec![]);
     let env = env_l(&w);
     assert_eq!(stage_l(&w, &own), Ok(true));
     for boot in 1..=3 {
@@ -704,20 +686,21 @@ fn l_profili_dogrulanmayan_ikili_geri_doner() {
 }
 
 /// Linux arka ucu Windows yolundaki ikiliyi (`runtime/…exe`) kaynak saymaz; Windows arka ucu da kökteki `.exe`siz
-/// ikiliyi. İmzalı listede olmayan kök ikili hiç çalıştırılmaz.
+/// ikiliyi. İmzadan sonra değişen kök ikili hiç çalıştırılmaz.
 #[test]
 fn l_profili_yalniz_kendi_paket_yolu() {
-    let win = ("runtime/tekserp-guncelleyici.exe".to_string(), exe_json("tekserp-guncelleyici", "9.9.9").into_bytes());
-    let (w, own) = setup_l("l-winyolu", vec![win]);
+    // OCI paketinde kök ikili hep vardır: çalışanla aynı bayt → Windows yolundaki daha yeni ikili kaynak değil.
+    let win = ("runtime/tekserp-guncelleyici.exe".to_string(), new_updater());
+    let (w, own) = setup_l("l-winyolu", exe_json("tekserp-guncelleyici", "0.1.0").as_bytes(), vec![win]);
     assert_eq!(stage_l(&w, &own), Ok(false), "Windows yolundaki ikili Linux'ta kaynak değil");
     assert!(read(&own).contains("0.1.0"));
-    let (w, _) = setup_l("l-kok", vec![("tekserp-guncelleyici".into(), exe_json("tekserp-guncelleyici", "9.9.9").into_bytes())]);
+    let (w, _) = setup_l("l-kok", &new_updater(), vec![]);
     let own_w = w.layout.updater_dir().join("tekserp-guncelleyici.exe");
     std::fs::write(&own_w, exe_json("tekserp-guncelleyici", "0.1.0")).unwrap();
     assert_eq!(stage(&w, &own_w, "0.1.0"), Ok(false), "kökteki .exe'siz ikili Windows'ta kaynak değil");
-    // İmzadan sonra eklenen kök ikili: listede yok → hata, hiç çalıştırılmaz.
-    let (w, own) = setup_l("l-imzasiz", vec![]);
-    std::fs::write(w.layout.version_dir(OLD).join("tekserp-guncelleyici"), exe_json("tekserp-guncelleyici", "9.9.9")).unwrap();
+    // İmzadan sonra değiştirilen kök ikili: listeyle uyuşmaz → hata, hiç çalıştırılmaz.
+    let (w, own) = setup_l("l-imzasiz", &new_updater(), vec![]);
+    std::fs::write(w.layout.version_dir(OLD).join("tekserp-guncelleyici"), exe_json("tekserp-guncelleyici", "9.9.8")).unwrap();
     assert!(stage_l(&w, &own).is_err());
     assert!(read(&own).contains("0.1.0") && !own.with_file_name("tekserp-guncelleyici.yeni").exists());
 }

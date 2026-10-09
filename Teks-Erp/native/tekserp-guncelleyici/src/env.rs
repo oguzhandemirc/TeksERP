@@ -83,6 +83,15 @@ pub trait Fs: Send + Sync {
         dest: &Path,
         limits: &crate::package::ExtractLimits,
     ) -> Result<crate::package::ExtractStats, String>;
+    /// Ustar dış paketi `dest`e açar: önce BÜTÜN başlıklar ölçülür ve düz dosya üyeleri `members`e TAM eşit olmalıdır,
+    /// ancak sonra yazılır (`tar::extract_real`). Yarım açılış hazırlık dizininde kalır, sonraki tur siler.
+    fn extract_tar(
+        &self,
+        archive: &Path,
+        dest: &Path,
+        members: &[String],
+        limits: &crate::package::ExtractLimits,
+    ) -> Result<crate::package::ExtractStats, String>;
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

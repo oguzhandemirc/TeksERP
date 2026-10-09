@@ -60,7 +60,7 @@ pub const WINDOWS_PLATFORM: UpdatePlatform = UpdatePlatform::Win32X64;
 impl UpdatePlatform {
     pub const ALL: [UpdatePlatform; 2] = [UpdatePlatform::Win32X64, UpdatePlatform::LinuxX64Oci];
 
-    pub fn as_str(self) -> &'static str {
+    pub const fn as_str(self) -> &'static str {
         match self {
             UpdatePlatform::Win32X64 => "win32-x64",
             UpdatePlatform::LinuxX64Oci => "linux-x64-oci",

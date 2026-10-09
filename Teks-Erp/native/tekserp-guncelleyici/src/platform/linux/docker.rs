@@ -13,6 +13,8 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use tekserp_hizmet::contract;
 
+/// Disk ön kontrolünün DB payı (§5 madde 4).
+pub const DB_BOYU_SQL: &str = "SELECT pg_database_size(current_database())";
 /// Compose servis adları (şablon `docker-compose.guncelleyici.yml`).
 pub const BACKEND: &str = "backend";
 /// Araç konteynerlerinin servisi: aynı imaj, PG istemcisi + yedek aracı, PG ortamı compose'tan.
@@ -439,6 +441,9 @@ impl crate::platform::Araclar for DockerAraclar {
         let s = String::from_utf8_lossy(&out.stdout).trim().to_string();
         s.starts_with('/').then(|| PathBuf::from(s))
     }
+    fn db_boyutu(&self, env: &Env, _be: &BackendEnv) -> Option<u64> {
+        self.psql(env, DB_BOYU_SQL, "veritabanı boyu (psql)").ok()?.trim().parse().ok()
+    }
     /// Yalnız `tekserp-korumali:<sürüm>` etiketleri, tutulanlar dışındakiler; `image prune` ÇAĞRILMAZ.
     fn imaj_buda(&self, env: &Env, keep: &[String]) {
         let c = self.komut.docker().args(["image", "ls", "--format", "{{.Tag}}", IMAJ_DEPOSU]).timeout(Duration::from_secs(60));
@@ -455,7 +460,7 @@ impl crate::platform::Araclar for DockerAraclar {
 /// Kuruluma bağlı Linux arka ucu (`platform::baglam`).
 pub fn arka_ucu(komut: Arc<DockerKomut>) -> crate::platform::Arka {
     crate::platform::Arka {
-        platform: super::PLATFORM,
+        platform: super::SURUM_PLATFORMU,
         ortam: crate::settings::OrtamKipi::Compose,
         guncelleyici_paket_yolu: super::birim::IKILI,
         saglik: Arc::new(DockerSaglik { komut: Arc::clone(&komut) }),

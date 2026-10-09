@@ -113,7 +113,7 @@ pub fn start(ctx: &Ctx, journal: &mut Journal, op: &dyn Operation, plan: Value) 
     ctx.log.info(&format!("işlem {} başlıyor: {} {} → {}", op.op_id(), op.product(), op.source(), op.target()));
     ctx.env.events.event(Level::Info, &format!("Güncelleme başladı: {} {} → {}", op.product(), op.source(), op.target()));
     let begun = journal
-        .begin(ctx.env.fs.as_ref(), op.op_id(), ctx.env.arka.platform, plan, ctx.now_iso())
+        .begin(ctx.env.fs.as_ref(), op.op_id(), ctx.env.arka.platform.as_str(), plan, ctx.now_iso())
         .map_err(|e| step_err(codes::IC_HATA, format!("işlem günlüğü yazılamadı: {e}")));
     if let Err(e) = begun {
         return OpOutcome::Failed(e);
@@ -131,11 +131,11 @@ pub fn drive(ctx: &Ctx, journal: &mut Journal, op: &dyn Operation) -> OpOutcome 
         }
         // Başka arka ucun günlüğü: adımları da telafileri de o platformun eylemleridir — ne sürdürülür ne geri
         // alınır, günlüğe yazılmaz; insan inceler (fail-safe).
-        if v.platform() != ctx.env.arka.platform {
+        if v.platform() != ctx.env.arka.platform.as_str() {
             let m = format!(
                 "işlem {id} {} arka ucunun günlüğü, bu güncelleyici {} — sürdürülmez, geri alınmaz; günlük incelenmeli",
                 v.platform(),
-                ctx.env.arka.platform
+                ctx.env.arka.platform.as_str()
             );
             ctx.log.error(&m);
             return OpOutcome::Failed(step_err(codes::IC_HATA, m));

@@ -57,6 +57,11 @@ pub trait Araclar: Send + Sync {
     fn imaj_deposu(&self, _env: &Env) -> Option<PathBuf> {
         None
     }
+    /// Veritabanının boyu (`pg_database_size`, bayt) — Linux disk formülünün yedek payı; ölçülemezse `None`. Windows
+    /// formülü DB boyu kullanmaz.
+    fn db_boyutu(&self, _env: &Env, _be: &BackendEnv) -> Option<u64> {
+        None
+    }
     /// ONAY budaması: `keep` dışındaki sürüm imajları (en iyi çaba). Windows: imaj yok.
     fn imaj_buda(&self, _env: &Env, _keep: &[String]) {}
 }
@@ -98,9 +103,9 @@ pub trait KendiArkaUcu: Send + Sync {
 /// İşlemi yürüten arka uç.
 #[derive(Clone)]
 pub struct Arka {
-    /// İşlem günlüğünün ISLEM satırına yazılan ad (bildirimin platform sözlüğüyle aynı). Başka adlı günlük
-    /// sürdürülmez de geri alınmaz da (`operation::drive`).
-    pub platform: &'static str,
+    /// Bildirim, işaretçi ve paket biçimi bu platformdan okunur (sözleşme 5); adı işlem günlüğünün ISLEM satırına
+    /// yazılır. Başka adlı günlük sürdürülmez de geri alınmaz da (`operation::drive`).
+    pub platform: crate::release::UpdatePlatform,
     /// Backend `.env`inin okunuşu (hizmet kipi `DATABASE_URL` · compose kipi `POSTGRES_*`).
     pub ortam: crate::settings::OrtamKipi,
     /// Paketteki güncelleyici ikilisinin sürüm dizinine göre yolu (`/` ayraçlı, imzalı listedeki ad) — kendini

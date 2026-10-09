@@ -434,7 +434,7 @@ pub fn stage_from(
     if digest(env, &candidate).is_some_and(|c| own_digest.as_deref() == Some(c.as_str())) {
         return Ok(None);
     }
-    let want = package::signed_file_digest(source_dir, env.fs.as_ref(), trust, rel)
+    let want = package::signed_file_digest(env.arka.platform, source_dir, env.fs.as_ref(), trust, rel)
         .map_err(|e| format!("paketteki ikili imzalı listeyle doğrulanamadı ({}): {}", e.code, e.message))?;
     if own_digest.as_deref() == Some(want.as_str()) {
         return Ok(None);

@@ -221,6 +221,10 @@ impl Fs for CrashFs {
         self.crash.point(&format!("ac {}", name(archive)));
         self.inner.extract_zip(archive, dest, limits)
     }
+    fn extract_tar(&self, archive: &Path, dest: &Path, members: &[String], limits: &ExtractLimits) -> Result<ExtractStats, String> {
+        self.crash.point(&format!("ac {}", name(archive)));
+        self.inner.extract_tar(archive, dest, members, limits)
+    }
 }
 
 pub fn name(p: &Path) -> String {
@@ -237,6 +241,8 @@ pub struct Db {
 
 #[derive(Default)]
 pub struct Faults {
+    /// Linux disk formülünün `pg_database_size` cevabı (bayt).
+    pub db_bytes: AtomicU64,
     /// Bu sürüm çalışırken sağlık `status: DOWN`.
     pub unhealthy_version: Mutex<Option<String>>,
     /// Bu sürüm AÇILIŞTA düşer: ilk sağlık sondasında konak çıkış 10 ile durur (SCM kurtarması açıksa 5 sn sonra
@@ -590,6 +596,19 @@ impl FakeProcs {
         }
     }
 
+    /// `migrate deploy`: DB `n` göçe çıkar (ya da enjekte göç hatası).
+    fn migrate(&self, n: u64) -> CmdOut {
+        let mut d = self.w.db.lock().unwrap();
+        if self.w.faults.migrate_fails.load(Ordering::SeqCst) {
+            d.finished += 1;
+            d.total = d.finished + 1;
+            return fail_out(1, "Error: P3018 migration failed postgresql://tekserp:gizli-parola@127.0.0.1:5432/db");
+        }
+        d.finished = n;
+        d.total = n;
+        ok_out("All migrations have been successfully applied.")
+    }
+
     fn tool_container(&self, rest: &[&str]) -> CmdOut {
         let mut i = 0;
         let mut mounts: Vec<(String, String)> = Vec::new();
@@ -611,9 +630,10 @@ impl FakeProcs {
             mounts.iter().find_map(|(c, h)| a.strip_prefix(c.as_str()).map(|r| format!("{h}{r}"))).unwrap_or_else(|| a.to_string())
         };
         if svc == "backend" && cmd == ["goc"] {
+            // Göçler imajın içinde: sürümün göç sayısı (paket dizininde `prisma/` yok — OCI teslim paketi).
             let cur = RealFs.link_target(&self.w.root.join("current")).unwrap().unwrap();
-            let c = Cmd::new(Path::new("node")).args(["index.js", "migrate", "deploy"]).cwd(&cur);
-            return self.run(&c).unwrap();
+            let v = cur.file_name().unwrap().to_string_lossy().into_owned();
+            return self.migrate(migrations_of(&v));
         }
         assert_eq!(svc, "yedek", "araç servisi");
         if cmd.first() == Some(&"ls") {
@@ -670,6 +690,9 @@ impl Procs for FakeProcs {
                 if sql.contains("_prisma_migrations") {
                     let d = self.w.db.lock().unwrap();
                     return Ok(ok_out(&format!("{} {}\n", d.finished, d.total)));
+                }
+                if sql == tekserp_guncelleyici::platform::linux::docker::DB_BOYU_SQL {
+                    return Ok(ok_out(&format!("{}\n", self.w.faults.db_bytes.load(Ordering::SeqCst))));
                 }
                 if sql.contains("SHOW server_version") {
                     let svcs = self.w.svcs.lock().unwrap();
@@ -754,15 +777,7 @@ impl Procs for FakeProcs {
                 if script.ends_with("index.js") && args.get(1).map(String::as_str) == Some("migrate") {
                     let cwd = c.cwd.clone().expect("cwd");
                     let n = std::fs::read_dir(cwd.join("prisma").join("migrations")).map(|r| r.count() as u64).unwrap_or(0);
-                    let mut d = self.w.db.lock().unwrap();
-                    if self.w.faults.migrate_fails.load(Ordering::SeqCst) {
-                        d.finished += 1;
-                        d.total = d.finished + 1;
-                        return Ok(fail_out(1, "Error: P3018 migration failed postgresql://tekserp:gizli-parola@127.0.0.1:5432/db"));
-                    }
-                    d.finished = n;
-                    d.total = n;
-                    return Ok(ok_out("All migrations have been successfully applied."));
+                    return Ok(self.migrate(n));
                 }
                 Ok(fail_out(1, "bilinmeyen betik"))
             }
@@ -993,6 +1008,128 @@ pub fn zip_of(files: &[(String, Vec<u8>)]) -> Vec<u8> {
     buf.into_inner()
 }
 
+// ── Linux/OCI teslim paketi (L4c-1; biçim `Teks-Erp/scripts/lib/oci-paket.ts`) ─────────────────────
+
+/// Test ustar başlığı — okuyucudan BAĞIMSIZ yazıcı (GNU tar `--format=ustar` alanları). Alanlar istenirse sonra
+/// bozulur; `ustar_seal` sağlama toplamını koyar (bozuk sağlama sondası onu çağırmaz).
+pub fn ustar_header(name: &str, typeflag: u8, size: u64, mode: u32) -> [u8; 512] {
+    let mut h = [0u8; 512];
+    assert!(name.len() <= 100, "ustar adı uzun: {name}");
+    h[..name.len()].copy_from_slice(name.as_bytes());
+    h[100..108].copy_from_slice(format!("{mode:07o}\0").as_bytes());
+    h[108..116].copy_from_slice(b"0000000\0");
+    h[116..124].copy_from_slice(b"0000000\0");
+    h[124..136].copy_from_slice(format!("{size:011o}\0").as_bytes());
+    h[136..148].copy_from_slice(b"15123456700\0");
+    h[156] = typeflag;
+    h[257..263].copy_from_slice(b"ustar\0");
+    h[263..265].copy_from_slice(b"00");
+    h
+}
+
+pub fn ustar_seal(mut h: [u8; 512]) -> [u8; 512] {
+    h[148..156].copy_from_slice(b"        ");
+    let sum: u32 = h.iter().map(|b| u32::from(*b)).sum();
+    h[148..156].copy_from_slice(format!("{sum:06o}\0 ").as_bytes());
+    h
+}
+
+/// Başlık + veri dizisi → arşiv: veri 512'ye dolgulanır, iki sıfır blok, GNU gibi 10240'lık kayda dolgu.
+pub fn ustar_raw(entries: &[([u8; 512], Vec<u8>)]) -> Vec<u8> {
+    let mut v = Vec::new();
+    for (h, data) in entries {
+        v.extend_from_slice(h);
+        v.extend_from_slice(data);
+        v.resize(v.len().div_ceil(512) * 512, 0);
+    }
+    v.extend_from_slice(&[0u8; 1024]);
+    v.resize(v.len().div_ceil(10240) * 10240, 0);
+    v
+}
+
+/// Düz dosyalardan ustar (güncelleyici ikilisi 0755, diğerleri 0644 — `teslim-paketle.sh` gibi).
+pub fn ustar_of(files: &[(String, Vec<u8>)]) -> Vec<u8> {
+    let entries: Vec<([u8; 512], Vec<u8>)> = files
+        .iter()
+        .map(|(n, c)| {
+            (ustar_seal(ustar_header(n, b'0', c.len() as u64, if n == "tekserp-guncelleyici" { 0o755 } else { 0o644 })), c.clone())
+        })
+        .collect();
+    ustar_raw(&entries)
+}
+
+pub fn oci_package_name(v: &str) -> String {
+    format!("tekserp-backend-oci-{v}.tar")
+}
+
+/// Sahte imaj kimliği (config özeti biçiminde) — L4c-1 arşivi ölçmez, yalnız künye ↔ bildirim bağını.
+pub fn oci_image_id(v: &str) -> String {
+    format!("sha256:{}", sha_hex(format!("config {v}").as_bytes()))
+}
+
+/// Sürümün güncelleyici ikilisi (paketin kökünde; bayt içeriği testin seçimi).
+pub fn oci_default_updater() -> Vec<u8> {
+    br#"{"ad":"tekserp-guncelleyici","surum":"0.9.0","hedef":"linux"}"#.to_vec()
+}
+
+/// OCI teslim paketinin üyeleri (`ociUyeler` sırası): imaj arşivi (sahte bayt), compose, `.env.ornek`, güncelleyici +
+/// künyesi, imzalı teslim künyesi (`PAKET-DOCKER.json` + `.jws`, `tekserp-butunluk`), bütünlük listesi, `SHA256SUMS`.
+/// `edit` imzadan ÖNCE künyeyi değiştirir (bağ sondaları).
+pub fn oci_files(
+    v: &str,
+    updater: &[u8],
+    signer: &SigningKey,
+    kid: &str,
+    customer: Option<&str>,
+    edit: &dyn Fn(&mut Value),
+) -> Vec<(String, Vec<u8>)> {
+    let archive = format!("tekserp-korumali_{v}_linux-amd64.tar.gz");
+    let scope: Vec<(String, Vec<u8>)> = vec![
+        (archive.clone(), format!("sahte imaj {v}").into_bytes()),
+        ("docker-compose.yml".into(), format!("services:\n  backend:\n    image: tekserp-korumali:{v}\n").into_bytes()),
+        (".env.ornek".into(), b"POSTGRES_USER=tekserp\n".to_vec()),
+        ("tekserp-guncelleyici".into(), updater.to_vec()),
+        (
+            "guncelleyici-kunye.json".into(),
+            br#"{"ad":"tekserp-guncelleyici","surum":"0.9.0","hedef":"linux","testCapasi":false,"capaKipi":"uretim"}"#.to_vec(),
+        ),
+    ];
+    let mut sorted: Vec<&(String, Vec<u8>)> = scope.iter().collect();
+    sorted.sort_by(|a, b| a.0.as_bytes().cmp(b.0.as_bytes()));
+    let list: String = sorted.iter().map(|(p, c)| format!("{}\t{}\t{}\n", sha_b64u(c), c.len(), p)).collect();
+    let mut kunye = json!({
+        "v": 1, "paketId": PACKAGE_ID, "urun": "backend-docker", "surum": v, "derlemeTarihi": BUILT_AT, "musteri": customer,
+        "commit": COMMIT, "platform": "linux-x64-oci", "gocSayisi": migrations_of(v),
+        "imaj": { "etiket": format!("tekserp-korumali:{v}"), "kimlik": oci_image_id(v), "platform": "linux/amd64", "arsiv": archive, "butunlukKid": kid },
+        "sunucu": { "nodeSurum": "24.18.0", "v8Taban": "13.6.233.17", "jscSha256": "0".repeat(64), "nativeZorunlu": true },
+        "guncelleyici": { "surum": "0.9.0", "sha256": sha_hex(updater) },
+        "kapsam": { "dizinler": [], "dosyalar": scope.iter().map(|(n, _)| n.clone()).collect::<Vec<_>>() },
+        "liste": { "sha256": sha_b64u(list.as_bytes()), "boyut": list.len(), "dosyaSayisi": scope.len() },
+    });
+    edit(&mut kunye);
+    let mut out = scope;
+    out.push(("PAKET-DOCKER.json".into(), format!("{}\n", serde_json::to_string_pretty(&kunye).unwrap()).into_bytes()));
+    out.push(("PAKET-DOCKER.json.jws".into(), format!("{}\n", sign(signer, "tekserp-butunluk", kid, &kunye)).into_bytes()));
+    out.push(("butunluk-liste.txt".into(), list.into_bytes()));
+    let sums: String = out.iter().map(|(n, c)| format!("{}  {n}\n", sha_hex(c))).collect();
+    out.push(("SHA256SUMS".into(), sums.into_bytes()));
+    out
+}
+
+/// Linux bildirimi (sözleşme 5): `platform` · `.tar` paket · `imaj` bloğu; `extra` üst düzey alanları ezer.
+pub fn manifest_payload_oci(kid: &str, v: &str, tar: &[u8], extra: Option<&Value>) -> Value {
+    let mut p = manifest_payload(kid, v, tar, None);
+    p["platform"] = json!("linux-x64-oci");
+    p["paket"]["ad"] = json!(oci_package_name(v));
+    p["imaj"] = json!({ "kimlik": oci_image_id(v), "etiket": format!("tekserp-korumali:{v}") });
+    if let Some(Value::Object(e)) = extra {
+        for (a, b) in e {
+            p[a] = b.clone();
+        }
+    }
+    p
+}
+
 /// Kiranın `guncelleme` politikası (sözleşme §2): mutlak aralıklar ms çiftleri olarak verilir.
 pub fn policy(kip: &str, intervals: &[(i64, i64)], target: Option<&str>) -> Value {
     let rule = (!intervals.is_empty() || kip == "OTOMATIK")
@@ -1114,15 +1251,17 @@ pub fn sign_manifest(k: &SigningKey, kid: &str, payload: &Value) -> String {
 }
 
 /// Bildirimi yayınlar: `<sürüm>/surum.json` + `son.json` (+ paket, verilirse) — yayın sırası gibi.
+/// Ürün dizini bildirimin platformundan (sözleşme 5: Linux `backend-oci`).
 pub fn publish(files: &Mutex<HashMap<String, Vec<u8>>>, payload: &Value, token: &str, zip: Option<Vec<u8>>, latest: bool) {
     let v = payload["surum"].as_str().unwrap().to_string();
+    let dir = if payload["platform"] == "linux-x64-oci" { "backend-oci" } else { "backend" };
     let mut f = files.lock().unwrap();
     if let Some(z) = zip {
-        f.insert(format!("/{CHANNEL}/backend/{v}/{}", payload["paket"]["ad"].as_str().unwrap()), z);
+        f.insert(format!("/{CHANNEL}/{dir}/{v}/{}", payload["paket"]["ad"].as_str().unwrap()), z);
     }
-    f.insert(format!("/{CHANNEL}/backend/{v}/surum.json"), pointer(token));
+    f.insert(format!("/{CHANNEL}/{dir}/{v}/surum.json"), pointer(token));
     if latest {
-        f.insert(format!("/{CHANNEL}/backend/son.json"), pointer(token));
+        f.insert(format!("/{CHANNEL}/{dir}/son.json"), pointer(token));
     }
 }
 
@@ -1295,15 +1434,34 @@ fn quiet_injected_panics() {
 
 impl World {
     /// Profilin dünyası. Linux: compose `.env`i (`POSTGRES_*`, adres şablondan), gerçek `DockerServices` + Docker arka
-    /// ucu sahte `docker` CLI'ya karşı, `unless-stopped` yeniden başlatma. Paket HAZIRLIĞI iki profilde aynı sahte zip
-    /// yoludur (Linux tar/`docker load` hazırlığı ayrı dilim) — profil ADIMLARI (§2.2) ölçer.
+    /// ucu sahte `docker` CLI'ya karşı, `unless-stopped` yeniden başlatma; sunucuda `backend-oci` yolunda Linux bildirimi
+    /// ve GERÇEK ustar teslim paketi (L4c-1 hazırlığı). İmaj yükleme (`docker load`) L4c-2'nin.
     pub fn new_in(profil: Profil, tag: &str, s: Setup) -> World {
+        let linux = profil == Profil::Linux;
+        assert!(!(linux && s.extra_file_in_scope), "Linux'ta fazla dosya bir tar üyesidir — `tests/linux_paket.rs`");
+        let oci = (s.package_signer_legacy, s.customer, s.manifest_extra.clone(), s.packaged_updater.clone());
         let w = World::new(tag, s);
-        if profil == Profil::Linux {
+        if linux {
             w.faults.docker.store(true, Ordering::SeqCst);
             std::fs::write(w.layout.backend_env(), "POSTGRES_USER=tekserp\nPOSTGRES_PASSWORD=gizli-parola\nPOSTGRES_DB=tekserp\n").unwrap();
+            let (legacy, customer, extra, updater) = oci;
+            let (signer, kid) = if legacy { (&w.keys.legacy, "paket-hazirlik") } else { (&w.keys.package, "paket-2026") };
+            let files = oci_files(NEW, &updater.unwrap_or_else(oci_default_updater), signer, kid, customer, &|_| {});
+            w.serve_oci_signed(NEW, ustar_of(&files), extra.as_ref(), signer, kid);
         }
         w
+    }
+
+    /// Linux profilinin sunucusu: `backend-oci` altında `tar` ve onu ilan eden imzalı bildirim (PAKET `paket-2026`);
+    /// Windows yolu boşaltılır — Linux güncelleyicisi onu zaten okumaz.
+    pub fn serve_oci(&self, v: &str, tar: Vec<u8>, extra: Option<&Value>) {
+        self.serve_oci_signed(v, tar, extra, &self.keys.package, "paket-2026");
+    }
+
+    fn serve_oci_signed(&self, v: &str, tar: Vec<u8>, extra: Option<&Value>, signer: &SigningKey, kid: &str) {
+        let payload = manifest_payload_oci(kid, v, &tar, extra);
+        self.files.lock().unwrap().clear();
+        publish(&self.files, &payload, &sign_manifest(signer, kid, &payload), Some(tar), true);
     }
 
     pub fn profil(&self) -> Profil {

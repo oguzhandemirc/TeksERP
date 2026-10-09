@@ -180,7 +180,7 @@ pub fn signed_sources(env: &Env, layout: &Layout, trust: &PackageTrust) -> Vec<(
             if !fs.exists(&exe) {
                 return None;
             }
-            package::signed_file_digest(&d, fs, trust, rel).ok().map(|w| (exe, w))
+            package::signed_file_digest(env.arka.platform, &d, fs, trust, rel).ok().map(|w| (exe, w))
         })
         .collect()
 }
