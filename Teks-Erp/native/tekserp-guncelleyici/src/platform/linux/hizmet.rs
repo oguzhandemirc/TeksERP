@@ -155,7 +155,8 @@ fn calis(args: &[String]) -> Result<u32, String> {
     sinyalleri_kur();
     let own = std::env::current_exe().ok();
     let settings = crate::settings::read_settings(&crate::env::RealFs, &layout).unwrap_or_default();
-    let env = match crate::env::real(settings.proxy.as_deref(), &ad) {
+    // `tur` ile aynı bağlama: hizmet + arka uç Docker'a (L4b) — yoksa systemd altında iskelet arka uç koşar.
+    let env = match crate::env::real(settings.proxy.as_deref(), &ad).and_then(|e| crate::platform::baglam(e, &layout, &settings)) {
         Ok(e) => e,
         Err(e) => {
             log.error(&format!("ortam kurulamadı: {e}"));
