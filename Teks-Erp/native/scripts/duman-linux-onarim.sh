@@ -26,7 +26,8 @@ if [ "$(id -u)" != 0 ]; then exec sudo -E bash "$0" "$BIN"; fi
 AD=tekserp-onarim-duman
 KOK=/opt/$AD
 VERI=/var/lib/$AD
-BIRIM=/etc/systemd/system/$AD.service
+# /etc dışında: `systemctl mask` /etc/systemd/system/<ad> bağını yazar, aynı adlı birim dosyası orada olamaz.
+BIRIM=/usr/local/lib/systemd/system/$AD.service
 KOK2=/mnt/$AD-dolu
 VERI2=/var/lib/$AD-dolu
 ASIL=$KOK/guncelleyici/tekserp-guncelleyici
@@ -98,6 +99,7 @@ mv "$2.tmp" "$2"
 exec sleep infinity
 EOF
 chmod 0755 "$KOK/calistir.sh"
+mkdir -p "$(dirname "$BIRIM")"
 cat > "$BIRIM" <<EOF
 [Unit]
 Description=TeksERP onarim dumani (TEST birimi; L6 taban birimine dokunmaz)
