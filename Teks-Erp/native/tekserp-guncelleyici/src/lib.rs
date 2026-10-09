@@ -17,6 +17,7 @@ pub mod env;
 pub mod health;
 pub mod history;
 pub mod ids;
+pub mod imaj;
 pub mod ipc;
 pub mod journal;
 pub mod kurulum;

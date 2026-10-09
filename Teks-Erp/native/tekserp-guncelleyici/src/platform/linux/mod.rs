@@ -6,6 +6,7 @@
 //! Bağlanmamış ortam ve PG (L8) İSKELETTİR: her çağrı `PLATFORM_DESTEKSIZ` önekli açık bir hatadır (fail-closed;
 //! süreç düşmez, adım kendi koduyla düşer).
 pub mod birim;
+pub mod compose;
 pub mod docker;
 pub mod duzen;
 #[cfg(unix)]
