@@ -43,7 +43,8 @@ echo "$analiz"
 echo "$analiz" | grep -Ei "unknown (key|section|lvalue)|failed to parse|invalid" && hata "systemd-analyze birimi tanımadı"
 [ "$(systemctl is-enabled "$AD.service")" = enabled ] || hata "birim etkin değil"
 [ "$(ozellik Type)" = notify ] || hata "Type=$(ozellik Type)"
-[ "$(ozellik WatchdogUSec)" = 3min ] || hata "ek dosyanın WatchdogSec'i etkin değil: $(ozellik WatchdogUSec)"
+# WatchdogUSec etkin değeri yalnız koşarken görünür (255: durmuşken infinity) — aşağıda başlatınca ölçülür.
+ozellik DropInPaths | grep -q "$EKDIZIN/50-tekserp.conf" || hata "ek dosya yüklenmedi: $(ozellik DropInPaths)"
 [ "$(ozellik OOMScoreAdjust)" = -500 ] || hata "OOMScoreAdjust=$(ozellik OOMScoreAdjust)"
 
 echo "── 2. başlat (READY) + gözcü 6 sn ──"
@@ -52,6 +53,8 @@ sudo systemctl daemon-reload
 # .lkg ve current/ ikilisi YOK: `-` önekli onarım satırları başlatmayı durdurmamalı.
 timeout 60 sudo systemctl start "$AD.service" || hata "start düştü (READY gelmedi ya da onarım satırı başlatmayı durdurdu)"
 [ "$(ozellik ActiveState)" = active ] || hata "aktif değil: $(ozellik ActiveState)/$(ozellik SubState)"
+[ "$(ozellik WatchdogUSec)" = 6s ] || hata "gözcü etkin değil: WatchdogUSec=$(ozellik WatchdogUSec)"
+[ "$(sudo cat /proc/"$(ozellik MainPID)"/oom_score_adj)" = -500 ] || hata "süreçte oom_score_adj -500 değil"
 sleep 20
 [ "$(ozellik ActiveState)" = active ] && [ "$(ozellik NRestarts)" = 0 ] || hata "gözcü öldürdü (WATCHDOG=1 gelmiyor): $(ozellik Result) NRestarts=$(ozellik NRestarts)"
 
