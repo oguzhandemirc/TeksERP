@@ -32,6 +32,7 @@ pub mod platform;
 pub mod policy;
 pub mod release;
 pub mod reserve;
+pub mod schedule;
 pub mod selfupdate;
 pub mod sema;
 pub mod settings;

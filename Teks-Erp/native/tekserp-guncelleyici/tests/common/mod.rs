@@ -383,6 +383,10 @@ pub struct Faults {
     pub load_wrong_layers: AtomicBool,
     /// `docker load` sürerken `current` bu dizine çevrilir (yükleme sırasında elle müdahale).
     pub load_repoints_current: Mutex<Option<PathBuf>>,
+    /// GÖZLEM: güncelleme sunucusuna (CDN Worker) giden her isteğin yolu (W5 sorgu sayımı).
+    pub update_requests: Mutex<Vec<String>>,
+    /// Güncelleme sunucusu erişilemez (bağlantı hatası; istek yine sayılır).
+    pub update_server_down: AtomicBool,
 }
 
 /// Açılışın bir hizmet için kararı (`WorldRefs::boot_plan`): gerçek açılış da her noktadaki önizleme de bunu uygular.
@@ -1199,6 +1203,10 @@ impl Net for FakeNet {
         }
         self.w.crash.point(&format!("ag {url}"));
         let path = url.strip_prefix("https://guncelleme.test").ok_or_else(|| EnvError(format!("bilinmeyen sunucu {url}")))?;
+        self.w.faults.update_requests.lock().unwrap().push(path.to_string());
+        if self.w.faults.update_server_down.load(Ordering::SeqCst) {
+            return Err(EnvError("bağlantı kurulamadı (sunucu erişilemez)".into()));
+        }
         let token = headers.iter().find(|(k, _)| k == "X-TKL-Indirme").map(|(_, v)| v.clone());
         if token.as_deref() != Some("belirtec.test.imza") {
             return Ok(resp(403, vec![("X-TKL-Kod".into(), "INDIRME_BELIRTEC_YOK".into())], vec![]));
@@ -1528,6 +1536,7 @@ pub fn open_window() -> Vec<(i64, i64)> {
     (0..5).map(|d| (T0 - 30 * 60_000 + d * DAY, T0 + 150 * 60_000 + d * DAY)).collect()
 }
 
+#[derive(Clone)]
 pub struct LeaseOpts {
     /// `guncelleme` alanı (yoksa eski satıcı: varsayılan ONAYLI).
     pub update: Option<Value>,
@@ -1554,7 +1563,7 @@ impl Default for LeaseOpts {
 }
 
 const HAK_ID: &str = "11111111-1111-4111-8111-111111111111";
-const KURULUM_ID: &str = "22222222-2222-4222-8222-222222222222";
+pub const KURULUM_ID: &str = "22222222-2222-4222-8222-222222222222";
 
 /// (kira, HAK) — HAK `maintenance_end` yoksa `None`.
 pub fn lease_and_entitlement(k: &Keys, o: &LeaseOpts, now: i64) -> (String, Option<String>) {

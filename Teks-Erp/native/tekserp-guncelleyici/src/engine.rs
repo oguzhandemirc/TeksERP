@@ -19,6 +19,7 @@ use crate::package::{self, ExtractLimits};
 use crate::pgminor::{self, PgOp, PgPlan};
 use crate::policy::{self, LicenseView};
 use crate::release::{self, Checked, PgTarget, ReleaseManifest};
+use crate::schedule::{self, QueryNow};
 use crate::selfupdate;
 use crate::sema;
 use crate::settings::{self, BackendEnv, UpdaterSettings};
@@ -34,8 +35,7 @@ use tekserp_dogrulama::paket_zinciri::{PackageMode, PackageTrust};
 use tekserp_hizmet::logfile::RotatingLog;
 use tekserp_hizmet::timefmt;
 
-/// Doğrulanmış aday bu kadar süre yeniden indirilmeden kullanılır; uygulamadan hemen önce tazelenir.
-const CANDIDATE_TTL_MS: i64 = 5 * 60 * 1000;
+/// Uygulamadan hemen önce aday bu süreden eskiyse yeniden indirilir; turlar arası sorgu `schedule`a uyar.
 const CANDIDATE_FRESH_FOR_APPLY_MS: i64 = 60 * 1000;
 /// Kesin paket hatalarında (özet · bütünlük · bağ) yeniden indirme aralığı: 15 dk × 4ⁿ, en çok 24 sa.
 const BACKOFF_BASE_MS: i64 = 15 * 60 * 1000;
@@ -49,6 +49,12 @@ pub enum TickResult {
     Idle(Duration),
     /// Yeni ikiliyle yeniden başlatılmak için çık (§10).
     RestartForSelfUpdate,
+}
+
+/// Adayın ne zaman yeniden sorgulanacağı: tur zamanlaması (§6.3) ya da uygulama öncesi tazelik.
+enum Freshness<'a> {
+    Scheduled(&'a QueryNow),
+    Within(i64),
 }
 
 struct Candidate {
@@ -89,6 +95,9 @@ pub struct Engine {
     last_status: RefCell<Option<StatusDoc>>,
     last_progress_ms: RefCell<i64>,
     candidate: RefCell<Option<Candidate>>,
+    /// Son aday sorgusunun izi ve (başarısızsa) hatası: sorgu anı gelene dek hata yeniden sorgulanmadan döner.
+    query_mark: RefCell<Option<schedule::Mark>>,
+    query_error: RefCell<Option<Fail>>,
     /// Bu turun bilgisi (`durum.bilgi`): turun başında silinir, ölçüm koyar; sonraki her durum yazımı taşır.
     notice: RefCell<Option<Notice>>,
     /// Sağlıklı tur ölçütü (§4.2 madde 3): bu turda kira/HAK okunup karar verildi · ardından `durum.json` yazıldı.
@@ -172,6 +181,8 @@ impl Engine {
             last_status: RefCell::new(None),
             last_progress_ms: RefCell::new(0),
             candidate: RefCell::new(None),
+            query_mark: RefCell::new(None),
+            query_error: RefCell::new(None),
             notice: RefCell::new(None),
             decided: Cell::new(false),
             status_after_decision: Cell::new(false),
@@ -731,7 +742,8 @@ impl Engine {
             }
         };
         let pointer = self.pointer_for(&channel, pol.as_ref().and_then(|p| p.0.target.clone()));
-        let m = match self.candidate(&server, &pointer, token.as_deref(), &trust, &channel, CANDIDATE_TTL_MS, &token_problem) {
+        let q = Self::query_now(&lic, approval.as_ref());
+        let m = match self.candidate(&server, &pointer, token.as_deref(), &trust, &channel, Freshness::Scheduled(&q), &token_problem) {
             Ok(m) => m,
             Err((code, msg)) => {
                 f.decision = Some(pre);
@@ -841,7 +853,15 @@ impl Engine {
             return idle;
         }
         // ── Uygulama: bildirim bayatsa önce tazelenir ve karar yeniden verilir ─────────────
-        let m = match self.candidate(&server, &pointer, Some(&token), &trust, &channel, CANDIDATE_FRESH_FOR_APPLY_MS, &token_problem) {
+        let m = match self.candidate(
+            &server,
+            &pointer,
+            Some(&token),
+            &trust,
+            &channel,
+            Freshness::Within(CANDIDATE_FRESH_FOR_APPLY_MS),
+            &token_problem,
+        ) {
             Ok(fresh) if fresh.doc == m.doc => fresh,
             Ok(_) => {
                 self.write_status(self.doc(
@@ -936,7 +956,8 @@ impl Engine {
         let mut trust = policy::package_trust(&self.anchor, lic, PackageMode::Kabul, base.now_ms);
         let pointer = self.pointer_for(&channel, pol.target.clone());
         let no_token = || fail(codes::BELIRTEC_YOK, "belirteç yok");
-        let m = match self.candidate(&server, &pointer, Some(token), &trust, &channel, CANDIDATE_TTL_MS, &no_token) {
+        let q = Self::query_now(lic, None);
+        let m = match self.candidate(&server, &pointer, Some(token), &trust, &channel, Freshness::Scheduled(&q), &no_token) {
             Ok(m) => m,
             Err((code, msg)) => return skip(format!("aday okunamadı ({code}): {msg}")),
         };
@@ -981,6 +1002,16 @@ impl Engine {
         }
     }
 
+    /// Sorgu zamanlamasının bu turdaki girdileri (kira verilişi · onay · kurulum kaydırması).
+    fn query_now(lic: &LicenseView, approval: Option<&Approval>) -> QueryNow {
+        let id = lic.lease.as_ref().and_then(|l| l.get("kurulumId")).and_then(Value::as_str).unwrap_or_default();
+        QueryNow {
+            lease_issued_ms: lic.lease_issued_ms.map(|v| v as i64),
+            approval_id: approval.map(|a| a.id.clone()),
+            phase_ms: schedule::phase_ms(id),
+        }
+    }
+
     /// Doğrulanmış aday: önbellekteki (aynı işaretçi, `max_age`dan taze) ya da indirilip doğrulanan.
     #[allow(clippy::too_many_arguments)]
     fn candidate(
@@ -990,14 +1021,56 @@ impl Engine {
         token: Option<&str>,
         trust: &PackageTrust,
         channel: &str,
-        max_age: i64,
+        freshness: Freshness,
         token_problem: &dyn Fn() -> Fail,
     ) -> Result<Checked<ReleaseManifest>, Fail> {
         let now = self.now();
-        if let Some(c) = self.candidate.borrow().as_ref().filter(|c| c.pointer == pointer.chained && now - c.fetched_ms < max_age) {
-            return Ok(c.manifest.clone());
-        }
+        let cached = self.candidate.borrow().as_ref().filter(|c| c.pointer == pointer.chained).map(|c| (c.fetched_ms, c.manifest.clone()));
+        let query = match freshness {
+            Freshness::Within(max_age) => {
+                if let Some((_, m)) = cached.filter(|(at, _)| now - at < max_age) {
+                    return Ok(m);
+                }
+                None
+            }
+            Freshness::Scheduled(q) => {
+                if !schedule::due(self.query_mark.borrow().as_ref(), &pointer.chained, q, now) {
+                    if let Some(e) = self.query_error.borrow().clone() {
+                        return Err(e);
+                    }
+                    if let Some((_, m)) = cached {
+                        return Ok(m);
+                    }
+                }
+                Some(q)
+            }
+        };
         let Some(token) = token else { return Err(token_problem()) };
+        let got = self.fetch_candidate(server, pointer, token, trust, channel);
+        let prev = self.query_mark.borrow().clone();
+        let failures = if got.is_ok() { 0 } else { prev.as_ref().map_or(0, |m| m.failures) + 1 };
+        *self.query_mark.borrow_mut() = Some(schedule::Mark {
+            at_ms: now,
+            pointer: pointer.chained.clone(),
+            lease_issued_ms: query.map_or_else(|| prev.as_ref().and_then(|m| m.lease_issued_ms), |q| q.lease_issued_ms),
+            approval_id: query.map_or_else(|| prev.as_ref().and_then(|m| m.approval_id.clone()), |q| q.approval_id.clone()),
+            failures,
+        });
+        *self.query_error.borrow_mut() = got.as_ref().err().cloned();
+        let checked = got?;
+        *self.candidate.borrow_mut() = Some(Candidate { fetched_ms: now, pointer: pointer.chained.clone(), manifest: checked.clone() });
+        Ok(checked)
+    }
+
+    /// Adayı sunucudan indirir ve doğrular (önbelleğe bakmaz).
+    fn fetch_candidate(
+        &self,
+        server: &str,
+        pointer: &Pointer,
+        token: &str,
+        trust: &PackageTrust,
+        channel: &str,
+    ) -> Result<Checked<ReleaseManifest>, Fail> {
         let checked = if let Some(family) = pointer.family {
             let mut kids = pointer.kids.clone();
             if pointer.kids_from_latest {
@@ -1021,7 +1094,6 @@ impl Engine {
             release::verify_release_manifest_on(&Value::String(jws_text), trust, channel, self.platform())
                 .map_err(|e| (e.code, format!("sürüm bildirimi reddedildi ({}): {}", e.code, e.message)))?
         };
-        *self.candidate.borrow_mut() = Some(Candidate { fetched_ms: now, pointer: pointer.chained.clone(), manifest: checked.clone() });
         Ok(checked)
     }
 
