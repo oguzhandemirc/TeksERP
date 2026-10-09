@@ -11,8 +11,8 @@ use windows_service::service::{
 };
 use windows_service::service_manager::{ServiceManager, ServiceManagerAccess};
 use windows_sys::Win32::System::Services::{
-    ChangeServiceConfig2W, ChangeServiceConfigW, SERVICE_CONFIG_REQUIRED_PRIVILEGES_INFO, SERVICE_NO_CHANGE,
-    SERVICE_REQUIRED_PRIVILEGES_INFOW,
+    ChangeServiceConfig2W, ChangeServiceConfigW, QueryServiceConfig2W, SERVICE_CONFIG_DELAYED_AUTO_START_INFO,
+    SERVICE_CONFIG_REQUIRED_PRIVILEGES_INFO, SERVICE_DELAYED_AUTO_START_INFO, SERVICE_NO_CHANGE, SERVICE_REQUIRED_PRIVILEGES_INFOW,
 };
 
 #[derive(Debug, Clone)]
@@ -228,6 +228,90 @@ pub fn disabled(name: &str) -> Result<bool, String> {
     };
     let c = h.query_config().map_err(|e| format!("{name}: yapılandırma okunamadı: {e}"))?;
     Ok(c.start_type == ServiceStartType::Disabled)
+}
+
+/// Başlangıç türü (bakım çiti, W2): `sc qc`nin `START_TYPE`ı + gecikmeli bayrağı.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum StartMode {
+    AutoDelayed,
+    Auto,
+    Demand,
+    Disabled,
+    /// Önyükleme/sistem sürücüsü türleri — hizmetimizde beklenmez; olduğu gibi raporlanır, geri yazılmaz.
+    Other(u32),
+}
+
+/// Hizmetin başlangıç türü; hizmet yoksa `None`.
+pub fn start_mode(name: &str) -> Result<Option<StartMode>, String> {
+    let m = manager(ServiceManagerAccess::CONNECT)?;
+    let Ok(h) = m.open_service(name, ServiceAccess::QUERY_CONFIG) else {
+        return Ok(None);
+    };
+    let c = h.query_config().map_err(|e| format!("{name}: yapılandırma okunamadı: {e}"))?;
+    Ok(Some(match c.start_type {
+        ServiceStartType::AutoStart => {
+            let mut info = SERVICE_DELAYED_AUTO_START_INFO { fDelayedAutostart: 0 };
+            let mut needed = 0u32;
+            // SAFETY: tutamaç açık; tampon tek BOOL alanlı yapıdır ve boyu tam verilir.
+            let ok = unsafe {
+                QueryServiceConfig2W(
+                    h.raw_handle(),
+                    SERVICE_CONFIG_DELAYED_AUTO_START_INFO,
+                    std::ptr::from_mut(&mut info).cast(),
+                    std::mem::size_of::<SERVICE_DELAYED_AUTO_START_INFO>() as u32,
+                    &mut needed,
+                )
+            };
+            if ok == 0 {
+                return Err(format!("{name}: gecikmeli başlatma okunamadı: {}", std::io::Error::last_os_error()));
+            }
+            if info.fDelayedAutostart != 0 {
+                StartMode::AutoDelayed
+            } else {
+                StartMode::Auto
+            }
+        }
+        ServiceStartType::OnDemand => StartMode::Demand,
+        ServiceStartType::Disabled => StartMode::Disabled,
+        other => StartMode::Other(other.to_raw()),
+    }))
+}
+
+/// YALNIZ başlangıç türünü yazar (yol, hesap, bağımlılık `SERVICE_NO_CHANGE`). Otomatikte gecikme bayrağı ÖNCE yazılır:
+/// bayrak otomatik olmayan türde yok sayılır, böylece ara hâl "gecikmesiz otomatik" olmaz.
+pub fn set_start_mode(name: &str, mode: StartMode) -> Result<(), String> {
+    let raw = match mode {
+        StartMode::AutoDelayed | StartMode::Auto => ServiceStartType::AutoStart.to_raw(),
+        StartMode::Demand => ServiceStartType::OnDemand.to_raw(),
+        StartMode::Disabled => ServiceStartType::Disabled.to_raw(),
+        StartMode::Other(t) => return Err(format!("{name}: başlangıç türü {t} yazılmaz")),
+    };
+    let m = manager(ServiceManagerAccess::CONNECT)?;
+    let h =
+        m.open_service(name, ServiceAccess::QUERY_CONFIG | ServiceAccess::CHANGE_CONFIG).map_err(|e| format!("{name}: açılamadı: {e}"))?;
+    if matches!(mode, StartMode::AutoDelayed | StartMode::Auto) {
+        h.set_delayed_auto_start(mode == StartMode::AutoDelayed).map_err(|e| format!("{name}: gecikmeli başlatma: {e}"))?;
+    }
+    // SAFETY: tutamaç açık hizmetindir; yalnız başlangıç türü verilir, diğer bütün alanlar değişmez (null/NO_CHANGE).
+    let ok = unsafe {
+        ChangeServiceConfigW(
+            h.raw_handle(),
+            SERVICE_NO_CHANGE,
+            raw,
+            SERVICE_NO_CHANGE,
+            std::ptr::null(),
+            std::ptr::null(),
+            std::ptr::null_mut(),
+            std::ptr::null(),
+            std::ptr::null(),
+            std::ptr::null(),
+            std::ptr::null(),
+        )
+    };
+    if ok == 0 {
+        return Err(format!("{name}: başlangıç türü yazılamadı: {}", std::io::Error::last_os_error()));
+    }
+    Ok(())
 }
 
 /// Hizmetin tam komut satırı (ImagePath; ikili + argümanlar).

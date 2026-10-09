@@ -180,6 +180,159 @@ fn startup_crash_rolls_back_early_and_settles_scm_recovery() {
     });
 }
 
+/// A3 (W2 bakım çiti): konak HER enjeksiyon noktasında yeniden açılabilir (başarılı güncellemede ve geri dönüşte).
+/// Açılış kararı (`boot_plan`) her noktada ölçülür: işlem açıkken durdurulan ya da doğrulama kipindeki backend
+/// başlatılamaz. Gerçek açılış + kurtarma, kararı ve adımı aynı noktaların (eşdeğerlik sınıfı) ilkinde koşar; sınıf
+/// içindeki noktalar yalnız dosya ilerlemesinde ayrışır, onu `kill_at_every_point_*` her noktada ölçer.
+#[test]
+fn acilis_yarisi_her_adimda() {
+    senaryo("acilis_yarisi_her_adimda", |p, ctx| {
+        eprintln!("{ctx}");
+        for rollback in [false, true] {
+            let setup = |tag: &str| {
+                let w = world_in(p, tag);
+                if rollback {
+                    *w.faults.unhealthy_version.lock().unwrap() = Some(NEW.into());
+                }
+                w
+            };
+            let path = if rollback { "geri dönüşte" } else { "güncellemede" };
+            let sayac = setup("acilis-sayac");
+            let plans = sayac.boot_plans();
+            let backend = sayac.backend_name.lock().unwrap().clone();
+            let mut guarded = 0;
+            for (i, plan) in plans.iter().enumerate() {
+                let ctx = format!("{ctx} {path} nokta {}", i + 1);
+                assert_eq!(plan.violation, None, "{ctx}: açılış yarışı");
+                let b = plan.backend(&backend);
+                if plan.open && b.before.0 == tekserp_guncelleyici::env::SvcState::Stopped {
+                    guarded += 1;
+                    if p == Profil::Windows {
+                        assert_eq!(b.mode, "ELLE", "{ctx}: çit yok: {b:?}");
+                    }
+                }
+            }
+            assert!(guarded > 0, "{ctx}: sonda kurgusu — backend işlem açıkken hiç durdurulmuş değil (çit ölçülmedi)");
+            let reps: Vec<u64> = (0..plans.len()).filter(|&i| i == 0 || plans[i] != plans[i - 1]).map(|i| i as u64 + 1).collect();
+            assert!(reps.len() > 4 && reps.len() < plans.len(), "{ctx}: sınıf kurgusu: {} / {}", reps.len(), plans.len());
+            let mut rebooted_guarded = 0;
+            for k in reps {
+                let w = setup("acilis");
+                w.reboot_at(k);
+                assert!(w.run(3).is_err(), "nokta {k}: ölüm yok");
+                let last = w.crash.log.lock().unwrap().last().cloned().unwrap_or_default();
+                w.run_to_rest(4);
+                let ctx = format!("{ctx} {path} açılış {k} ({last})");
+                assert_invariants(&w, &ctx);
+                if rollback {
+                    assert_eq!(w.state(), Some(State::RolledBack), "{ctx}");
+                }
+                let boots = w.faults.boots.lock().unwrap().clone();
+                assert_eq!(boots.len(), 1, "{ctx}: açılış tetiklenmedi");
+                let (b, want) = (&boots[0], plans[k as usize - 1].backend(&backend));
+                assert_eq!(
+                    (b.open, &b.before, b.started, &b.mode),
+                    (plans[k as usize - 1].open, &want.before, want.starts, &want.mode),
+                    "{ctx}: önizleme ≠ açılış"
+                );
+                if b.open && b.before.0 == tekserp_guncelleyici::env::SvcState::Stopped {
+                    rebooted_guarded += 1;
+                }
+            }
+            assert!(rebooted_guarded > 0, "{ctx}: durdurulmuş backend'le hiç gerçek açılış koşulmadı");
+        }
+    });
+}
+
+/// Adım 0 `CIT` iki profilde: Windows'ta tür `ELLE`ye çekilir, eski tür işarette ve plan satırında; ONAY'da geri yazılır.
+/// Linux'ta yalnız politika ölçülür (işaret yok, tür yazımı yok).
+#[test]
+fn cit_adimi_iki_profilde() {
+    senaryo("cit_adimi_iki_profilde", |p, ctx| {
+        let w = world_in(p, "cit");
+        w.run_to_rest(0);
+        assert_invariants(&w, ctx);
+        let j = tekserp_guncelleyici::journal::Journal::open(&tekserp_guncelleyici::env::RealFs, &w.layout.journal_file()).unwrap();
+        let v = j.last_op().unwrap();
+        let data = v.step_data("CIT").cloned().unwrap_or_default();
+        let plan = v.plan().cloned().unwrap_or_default();
+        let log: Vec<String> = w.crash.log.lock().unwrap().iter().filter_map(|l| l.split_once(':').map(|(_, x)| x.to_string())).collect();
+        if p == Profil::Windows {
+            assert_eq!(plan["baslangicTuru"], "OTOMATIK_GECIKMELI", "{ctx}: plan eski türü saklar");
+            assert_eq!((data["olcum"].as_str(), data["eskiTur"].as_str()), (Some("ELLE"), Some("OTOMATIK_GECIKMELI")), "{ctx}: {data}");
+            assert_eq!(v.step_data("ONAY").unwrap()["cit"]["tur"], "OTOMATIK_GECIKMELI", "{ctx}: ONAY çiti kaldırır");
+            let order: Vec<&String> =
+                log.iter().filter(|l| l.starts_with("tur ") || l.starts_with("durdur ") || l.contains("cit.json")).collect();
+            let first_stop = order.iter().position(|l| l.starts_with("durdur ")).unwrap();
+            let fence = order.iter().position(|l| l.starts_with("tur ")).unwrap();
+            let marker = order.iter().position(|l| l.contains("cit.json")).unwrap();
+            assert!(marker < fence && fence < first_stop, "{ctx}: sıra işaret → tür → durdur: {order:?}");
+        } else {
+            assert_eq!(plan["baslangicTuru"], "unless-stopped", "{ctx}");
+            assert_eq!(data["olcum"], "unless-stopped", "{ctx}: Linux ölçümü günlükte");
+            assert!(!log.iter().any(|l| l.contains("cit.json") || l.starts_with("tur ")), "{ctx}: Linux'ta çit yazılmaz: {log:?}");
+        }
+    });
+}
+
+/// Çit kurulamıyorsa backend'e dokunulmadan geri dönülür (`CIT_HATASI` → rapor `DURDURMA_HATASI`): Windows'ta tür
+/// yazımı düşer; Linux'ta politika `always` (durdurulan konteyner daemon açılışında başlar — çit sağlanamaz).
+#[test]
+fn cit_kurulamazsa_geri_doner() {
+    senaryo("cit_kurulamazsa_geri_doner", |p, ctx| {
+        let w = world_in(p, "cit-hata");
+        if p == Profil::Windows {
+            w.faults.start_mode_write_fails.store(true, Ordering::SeqCst);
+        } else {
+            *w.faults.restart_policy.lock().unwrap() = Some("always".into());
+        }
+        w.run_to_rest(0);
+        let st = w.status().unwrap();
+        assert_eq!((st.state, st.error_code.as_deref()), (State::RolledBack, Some("CIT_HATASI")), "{ctx}: {:?}", st.message);
+        assert_eq!(st.last.clone().expect("son").kod.as_deref(), Some("DURDURMA_HATASI"), "{ctx}");
+        assert_invariants(&w, ctx);
+        assert_eq!(w.backend().starts, 0, "{ctx}: backend hiç durdurulmadı/başlatılmadı");
+    });
+}
+
+/// `HATA`da çit KALIR (geri dönüş sağlıksız: eski kod + yeni şema riski — açılışta backend başlamamalı); sonraki
+/// işlem işaretteki ESKİ türü devralır (ölçülen `ELLE`yi değil) ve başarıda onu geri yazar. Bitmiş işlemin işaretini
+/// (W2 öncesi ikili sonuçlandırmış) işlem dışı tur kaldırır; `HATA`nınkini kaldırmaz.
+#[test]
+fn cit_hatada_kalir_sonraki_islem_devralir() {
+    let w = failed_world("cit-hata-sonra");
+    let marker = tekserp_guncelleyici::cit::read(&w.env(), &w.layout).expect("HATA'da çit işareti kalır");
+    assert_eq!(marker.previous, "OTOMATIK_GECIKMELI");
+    assert_eq!(w.refs().start_mode_of(BACKEND), "ELLE", "HATA'da tür ELLE kalır");
+    w.run(2).unwrap();
+    assert!(w.layout.fence_marker().exists(), "işlem dışı tur HATA'nın çitini kaldırmaz");
+    w.write_intent(&intent(Some(approval("onay-yeniden", NEW, "HEMEN"))));
+    w.run_to_rest(0);
+    assert_eq!(w.state(), Some(State::Succeeded), "{:?}", w.status().map(|s| s.message));
+    assert_invariants(&w, "HATA sonrası başarılı işlem");
+
+    // W2 öncesi ikilinin bitirdiği işlem (tanımadığı CIT'i telafi etmeden GERI_DONDU): sonraki tur kaldırır.
+    let j = tekserp_guncelleyici::journal::Journal::open(&tekserp_guncelleyici::env::RealFs, &w.layout.journal_file()).unwrap();
+    let op = j.last_op().unwrap().op;
+    let m = tekserp_guncelleyici::cit::Marker { op_id: Some(op), ..marker };
+    std::fs::write(w.layout.fence_marker(), serde_json::to_vec(&m).unwrap()).unwrap();
+    w.refs().faults.start_modes.lock().unwrap().insert(BACKEND.into(), "ELLE".into());
+    w.run(1).unwrap();
+    assert!(!w.layout.fence_marker().exists(), "bitmiş işlemin çiti kalktı");
+    assert_eq!(w.refs().start_mode_of(BACKEND), "OTOMATIK_GECIKMELI");
+}
+
+/// Yöneticinin seçtiği "Elle" türü çit sayılır ve OLDUĞU GİBİ kalır: işaret yazılmaz, sonda tür değişmez.
+#[test]
+fn cit_yoneticinin_turune_dokunmaz() {
+    let w = world("cit-elle");
+    w.set_backend_start_mode("ELLE");
+    w.run_to_rest(0);
+    assert_eq!(w.state(), Some(State::Succeeded));
+    assert_invariants(&w, "yönetici ELLE");
+    assert!(!w.crash.log.lock().unwrap().iter().any(|l| l.contains(":tur ") || l.contains("cit.json")), "türe dokunuldu");
+}
+
 /// İki ölüm: ilk koşumda k1'de, kurtarma koşumunda k2'de (seyreltilmiş ızgara).
 #[test]
 fn double_kill_during_recovery() {

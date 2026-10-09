@@ -271,6 +271,7 @@ const ALL_CODES: &[&str] = &[
     codes::IC_HATA,
     codes::HIZMET_YOK,
     codes::HIZMET_DURMADI,
+    codes::CIT_HATASI,
     codes::HIZMET_BASLAMADI,
     codes::YEDEK_HATASI,
     codes::GECIS_HATASI,
@@ -374,7 +375,7 @@ pub fn start_service(ctx: &Ctx, name: &str, args: &[&str], code: &'static str) -
 
 // ── Backend güncellemesi (§8) ────────────────────────────────────────────────────────────────────
 
-pub const BACKEND_STEPS: &[&str] = &["BACKEND_DURDUR", "YEDEK", "GECIS", "GOC", "DOGRULAMA", "BASLAT", "ONAY"];
+pub const BACKEND_STEPS: &[&str] = &["CIT", "BACKEND_DURDUR", "YEDEK", "GECIS", "GOC", "DOGRULAMA", "BASLAT", "ONAY"];
 
 /// İşlemin kararları — ISLEM satırına yazılır, yeniden başlayan süreç yeniden HESAPLAMAZ.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -409,6 +410,9 @@ pub struct BackendPlan {
     /// Yedek/geri yükleme aracının alındığı sürüm dizini (eski sürüm araç taşıyorsa o, yoksa yeni).
     #[serde(rename = "araclar")]
     pub tools_dir: PathBuf,
+    /// Backend'in çitten önceki açılış davranışı (`cit::original`; W2 öncesi günlükte yok — adım o an ölçer).
+    #[serde(rename = "baslangicTuru", default, skip_serializing_if = "Option::is_none")]
+    pub start_mode_before: Option<String>,
 }
 
 pub struct BackendOp {
@@ -564,6 +568,14 @@ impl BackendOp {
         Ok(json!({ "gocSonra": after }))
     }
 
+    /// Geri dönüşün backend'i: önceki sürümle başlat + sağlık (lisans şartı yok; işlem öncesi görüntüyle kıyaslanır).
+    fn start_previous(&self, ctx: &Ctx) -> Result<(), StepError> {
+        start_service(ctx, ctx.settings.backend_service(), &[], codes::GERI_DONUS_SAGLIKSIZ)?;
+        self.health(ctx, &self.plan.source_version, false)
+            .map(|_| ())
+            .map_err(|e| step_err(codes::GERI_DONUS_SAGLIKSIZ, format!("önceki sürüm sağlıklı başlamadı: {} {}", e.code, e.message)))
+    }
+
     fn restart_backend(&self, ctx: &Ctx, args: &[&str]) -> Result<(), StepError> {
         stop_service(ctx, ctx.settings.backend_service(), codes::HIZMET_YOK, codes::HIZMET_DURMADI)?;
         start_service(ctx, ctx.settings.backend_service(), args, codes::HIZMET_BASLAMADI)
@@ -671,6 +683,16 @@ impl Operation for BackendOp {
 
     fn run_step(&self, ctx: &Ctx, view: &OpView, step: &str) -> Result<Value, StepError> {
         match step {
+            // W2 öncesi ikilinin ONAY'ı bitmiş günlüğü: kaldıracak adım kalmadı — çit kurulmaz.
+            "CIT" if view.ended("ONAY") => Ok(json!({ "atlandi": "ONAY bitmiş (eski günlük)" })),
+            "CIT" => crate::cit::raise(
+                ctx.env,
+                ctx.layout,
+                ctx.settings.backend_service(),
+                self.plan.start_mode_before.as_deref(),
+                Some(&self.plan.op_id),
+            )
+            .map_err(|m| step_err(codes::CIT_HATASI, m)),
             "BACKEND_DURDUR" => {
                 stop_service(ctx, ctx.settings.backend_service(), codes::HIZMET_YOK, codes::HIZMET_DURMADI).map(|()| Value::Null)
             }
@@ -685,13 +707,22 @@ impl Operation for BackendOp {
                 self.restart_backend(ctx, &[])?;
                 self.health(ctx, &self.plan.version, true)
             }
-            "ONAY" => self.commit(ctx, view),
+            "ONAY" => {
+                let mut data = self.commit(ctx, view)?;
+                // Son adımda çit kalkar; backend açılışta çit yüzünden başlamadıysa önce yeni sürümle başlatılır.
+                let fence = crate::cit::finish(ctx, &|| {
+                    start_service(ctx, ctx.settings.backend_service(), &[], codes::HIZMET_BASLAMADI)?;
+                    self.health(ctx, &self.plan.version, true).map(|_| ())
+                })?;
+                data["cit"] = fence;
+                Ok(data)
+            }
             other => Err(step_err(codes::IC_HATA, format!("bilinmeyen adım {other}"))),
         }
     }
 
     fn has_compensation(&self, step: &str) -> bool {
-        matches!(step, "BACKEND_DURDUR" | "GECIS" | "GOC" | "DOGRULAMA" | "BASLAT")
+        matches!(step, "CIT" | "BACKEND_DURDUR" | "GECIS" | "GOC" | "DOGRULAMA" | "BASLAT")
     }
 
     fn compensate(&self, ctx: &Ctx, view: &OpView, step: &str) -> Result<Value, StepError> {
@@ -712,12 +743,9 @@ impl Operation for BackendOp {
                 }
             }
             "GECIS" => switch_link(ctx, &ctx.layout.current(), &self.plan.previous_target, codes::GECIS_HATASI).map(|()| Value::Null),
-            "BACKEND_DURDUR" => {
-                start_service(ctx, ctx.settings.backend_service(), &[], codes::GERI_DONUS_SAGLIKSIZ)?;
-                self.health(ctx, &self.plan.source_version, false).map(|_| Value::Null).map_err(|e| {
-                    step_err(codes::GERI_DONUS_SAGLIKSIZ, format!("önceki sürüm sağlıklı başlamadı: {} {}", e.code, e.message))
-                })
-            }
+            "BACKEND_DURDUR" => self.start_previous(ctx).map(|()| Value::Null),
+            // Telafinin sonuncusu: eski backend ayakta (açılışta çit yüzünden başlamadıysa burada başlar), tür geri yazılır.
+            "CIT" => crate::cit::finish(ctx, &|| self.start_previous(ctx)),
             _ => Ok(Value::Null),
         }
     }

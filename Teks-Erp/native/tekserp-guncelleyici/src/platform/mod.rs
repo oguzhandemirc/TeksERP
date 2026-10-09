@@ -100,6 +100,15 @@ pub trait KendiArkaUcu: Send + Sync {
     fn ikiliyi_degistir(&self, komut: &str, yeni: &Path) -> Option<String>;
 }
 
+/// Bakım çitinin (W2) biçimi: açılışta backend'i kim başlatır ve çit nasıl kurulur (`cit.rs`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CitKipi {
+    /// Windows: SCM başlangıç türüne göre başlatır — tür `ELLE`ye çekilir, eski tür işarette.
+    BaslangicTuru,
+    /// Linux: Docker yeniden başlatma politikası — `unless-stopped` + `compose stop` zaten çitli; yalnız ölçülür.
+    YenidenBaslatmaPolitikasi,
+}
+
 /// İşlemi yürüten arka uç.
 #[derive(Clone)]
 pub struct Arka {
@@ -116,6 +125,7 @@ pub struct Arka {
     pub pg: Arc<dyn PgArkaUcu>,
     /// Kendi ikilisinin yerleşimi (kendini güncelleme + `onar`).
     pub kendi: Arc<dyn KendiArkaUcu>,
+    pub cit: CitKipi,
 }
 
 /// Derleme hedefinin arka ucu (üretim ortamı, `gercek::real`).

@@ -120,6 +120,24 @@ pub trait Services: Send + Sync {
     fn disabled(&self, _name: &str) -> EnvResult<bool> {
         Ok(false)
     }
+    /// Açılış davranışı (bakım çiti, W2): Windows başlangıç türü (`start_mode::*`), Linux konteynerin yeniden başlatma
+    /// politikası (`unless-stopped` …); hizmet/konteyner yoksa `start_mode::MISSING`.
+    fn start_mode(&self, name: &str) -> EnvResult<String> {
+        Err(EnvError(format!("{name}: açılış davranışı bu arka uçta ölçülmez")))
+    }
+    /// Yalnız Windows başlangıç türünü yazar (`start_mode::*`); Linux'ta çit yazılmaz (politika ölçülür).
+    fn set_start_mode(&self, name: &str, _mode: &str) -> EnvResult<()> {
+        Err(EnvError(format!("{name}: açılış davranışı bu arka uçta yazılmaz")))
+    }
+}
+
+/// Açılış davranışının günlük/işaret değerleri (Windows başlangıç türleri; Linux'ta politika adı olduğu gibi).
+pub mod start_mode {
+    pub const AUTO_DELAYED: &str = "OTOMATIK_GECIKMELI";
+    pub const AUTO: &str = "OTOMATIK";
+    pub const DEMAND: &str = "ELLE";
+    pub const DISABLED: &str = "DEVRE_DISI";
+    pub const MISSING: &str = "YOK";
 }
 
 #[derive(Debug, Clone, Default)]

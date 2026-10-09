@@ -37,6 +37,9 @@ pub const BUTUNLUK_GECERSIZ: &str = "BUTUNLUK_GECERSIZ";
 pub const DISK_DOLU: &str = "DISK_DOLU";
 pub const HIZMET_YOK: &str = "HIZMET_YOK";
 pub const HIZMET_DURMADI: &str = "HIZMET_DURMADI";
+/// Bakım çiti (W2) kurulamadı/kaldırılamadı: Windows başlangıç türü yazılamadı ya da Linux yeniden başlatma politikası
+/// durdurulan konteyneri açılışta başlatıyor (`always`).
+pub const CIT_HATASI: &str = "CIT_HATASI";
 pub const HIZMET_BASLAMADI: &str = "HIZMET_BASLAMADI";
 pub const YEDEK_HATASI: &str = "YEDEK_HATASI";
 pub const GECIS_HATASI: &str = "GECIS_HATASI";
@@ -110,7 +113,7 @@ pub fn report_code(internal: &str) -> &'static str {
         DISK_DOLU => "DISK_DOLU",
         GECIS_HATASI | DOSYA_KILITLI => "DOSYA_KILITLI",
         YEDEK_HATASI => "YEDEK_HATASI",
-        HIZMET_YOK | HIZMET_DURMADI => "DURDURMA_HATASI",
+        HIZMET_YOK | HIZMET_DURMADI | CIT_HATASI => "DURDURMA_HATASI",
         c if c.starts_with("PG_") => "PG_GUNCELLEME_HATASI",
         GOC_HATASI | GOC_ZAMAN_ASIMI => "GOC_HATASI",
         HIZMET_BASLAMADI => "BASLATMA_HATASI",
@@ -158,6 +161,7 @@ mod tests {
             IC_HATA,
             KESINTI,
             HIZMET_DURMADI,
+            CIT_HATASI,
             GOC_ZAMAN_ASIMI,
         ] {
             assert!(DOCUMENTED.contains(&report_code(c)), "{c} → {}", report_code(c));
@@ -168,6 +172,7 @@ mod tests {
         assert_eq!(report_code(SAGLIK_ZAMAN_ASIMI), "SAGLIK_HATASI");
         assert_eq!(report_code(SAGLIK_HIZMET_DUSTU), "SAGLIK_HATASI");
         assert_eq!(report_code(DOSYA_KILITLI), "DOSYA_KILITLI");
+        assert_eq!(report_code(CIT_HATASI), "DURDURMA_HATASI", "plan §3: çit backend'i durdurmanın ön adımı");
         for c in [
             PAKET_SERTIFIKA_YOK,
             PAKET_SERTIFIKA_ZAMAN,

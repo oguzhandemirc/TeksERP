@@ -371,6 +371,11 @@ impl Engine {
             let outcome = self.resume(&inputs, &mut journal, v.plan().cloned().unwrap_or(Value::Null));
             return self.after_op(&inputs, &journal, outcome, tick_s);
         }
+        match crate::cit::settle(&self.env, &self.layout, journal.last_op().as_ref()) {
+            Some(Ok(_)) => self.log.info("bitmiş işlemin bakım çiti kaldırıldı (backend başlangıç türü geri yazıldı)"),
+            Some(Err(m)) => self.log.warn(&format!("bitmiş işlemin bakım çiti kaldırılamadı: {m}")),
+            None => {}
+        }
         self.cycle(&inputs, &mut journal, stop, tick_s)
     }
 
@@ -1555,6 +1560,7 @@ impl Engine {
             started_ms: self.now(),
             approval,
             tools_dir: self.tools_dir(current_dir, &new_dir),
+            start_mode_before: crate::cit::original(&self.env, &self.layout, inputs.settings.backend_service()),
         };
         let report = self.report_fn(inputs.settings.tick_s.clamp(10, 3600));
         let ctx = self.ctx(inputs, &report);

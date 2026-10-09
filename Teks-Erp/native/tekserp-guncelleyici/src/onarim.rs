@@ -123,7 +123,7 @@ pub enum Outcome {
     Baslatildi,
     /// Hizmet silinmiş ya da yönetici "Devre dışı" yapmış — onarılmaz, görünür (`GUNCELLEYICI_KAPALI`).
     Kapali(String),
-    /// "Devre dışı"yı W2 çiti koymuş (`is/cit.json`) — sahibi kaldırır; uyarı da yok.
+    /// "Devre dışı"yı W2 çiti koymuş (geçerli `is/cit.json`, biçimi `cit::Marker`) — sahibi kaldırır; uyarı da yok.
     Cit,
     Tavan,
     KaynakYok,
@@ -249,7 +249,7 @@ pub fn onar(env: &Env, layout: &Layout, own_exe: &Path, trust: Option<&PackageTr
             _ => None,
         };
         if let Some(why) = off {
-            if disabled.as_ref().is_ok_and(|d| *d) && env.fs.exists(&layout.fence_marker()) {
+            if disabled.as_ref().is_ok_and(|d| *d) && crate::cit::read(env, layout).is_some() {
                 return Outcome::Cit;
             }
             let message = format!("{why} — yönetici kararı onarılmaz; çare: panelden \"Onar\" ya da kurulumun onarımı");

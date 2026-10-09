@@ -28,6 +28,9 @@ pub const IMAJ_DEPOSU: &str = "tekserp-korumali";
 pub const INSPECT_FORMAT: &str =
     "{{.State.Status}}|{{.State.ExitCode}}|{{.RestartCount}}|{{if .State.Health}}{{.State.Health.Status}}{{end}}";
 
+/// Konteynerin yeniden başlatma politikası (bakım çiti W2: `stop` edilen konteyneri açılışta başlatmayan politika şart).
+pub const RESTART_POLICY_FORMAT: &str = "{{.HostConfig.RestartPolicy.Name}}";
+
 /// Bir kuruluma (compose projesine) bağlı komut kurucusu.
 #[derive(Debug, Clone)]
 pub struct DockerKomut {
@@ -187,6 +190,17 @@ impl Services for DockerServices {
         })
     }
 
+    fn start_mode(&self, name: &str) -> EnvResult<String> {
+        let svc = compose_hizmeti(name).map_err(EnvError)?;
+        let Some(id) = self.konteyner(svc)? else { return Ok(crate::env::start_mode::MISSING.into()) };
+        let c = self.komut.docker().args(["inspect", "--format", RESTART_POLICY_FORMAT]).arg(&id).timeout(Duration::from_secs(60));
+        let out = run(self.procs.as_ref(), &c, "docker inspect").map_err(EnvError)?;
+        let policy = String::from_utf8_lossy(&out.stdout).trim().to_string();
+        if policy.is_empty() || !policy.chars().all(|c| c.is_ascii_lowercase() || c == '-') {
+            return Err(EnvError(format!("docker inspect yeniden başlatma politikası çözülemedi: {policy:?}")));
+        }
+        Ok(policy)
+    }
     fn image_path(&self, name: &str) -> EnvResult<String> {
         Err(EnvError(super::unsupported(&format!("{name}: komut satırı (PG imajı L8'de `pg.env`)"))))
     }
@@ -467,6 +481,7 @@ pub fn arka_ucu(komut: Arc<DockerKomut>) -> crate::platform::Arka {
         araclar: Arc::new(DockerAraclar { komut }),
         pg: Arc::new(super::IskeletPg),
         kendi: Arc::new(super::kendi::AtomikAdlandirma),
+        cit: crate::platform::CitKipi::YenidenBaslatmaPolitikasi,
     }
 }
 

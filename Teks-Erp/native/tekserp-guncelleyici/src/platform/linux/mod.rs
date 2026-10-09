@@ -44,6 +44,7 @@ pub fn arka_ucu() -> crate::platform::Arka {
         araclar: Arc::new(IskeletAraclar),
         pg: Arc::new(IskeletPg),
         kendi: Arc::new(kendi::AtomikAdlandirma),
+        cit: crate::platform::CitKipi::YenidenBaslatmaPolitikasi,
     }
 }
 

@@ -6,7 +6,7 @@
 use ed25519_dalek::{Signer, SigningKey};
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::io::{Cursor, Read, Write};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, AtomicI64, AtomicU64, Ordering};
@@ -16,8 +16,8 @@ use tekserp_dogrulama::b64;
 use tekserp_dogrulama::chain::RootKey;
 use tekserp_guncelleyici::engine::{Engine, TickResult};
 use tekserp_guncelleyici::env::{
-    Clock, Cmd, CmdOut, Env, EnvError, EnvResult, Events, Fs, HttpResponse, Net, Procs, Protect, ReadSeek, RealFs, Services, SvcState,
-    SyncWrite,
+    start_mode, Clock, Cmd, CmdOut, Env, EnvError, EnvResult, Events, Fs, HttpResponse, Net, Procs, Protect, ReadSeek, RealFs, Services,
+    SvcState, SyncWrite,
 };
 use tekserp_guncelleyici::ipc::{self, State, StatusDoc};
 use tekserp_guncelleyici::journal::Journal;
@@ -55,6 +55,8 @@ pub struct Crash {
     pub at: AtomicU64,
     pub torn: AtomicBool,
     pub log: Mutex<Vec<String>>,
+    /// Her noktada (ölümden önce) çağrılan gözlem; açılış kararını dünyayı değiştirmeden her noktada ölçmek için.
+    pub probe: Mutex<Option<Box<dyn Fn() + Send + Sync>>>,
 }
 
 impl Crash {
@@ -63,6 +65,9 @@ impl Crash {
         let n = self.count.fetch_add(1, Ordering::SeqCst) + 1;
         if let Ok(mut l) = self.log.lock() {
             l.push(format!("{n}:{what}"));
+        }
+        if let Some(probe) = self.probe.lock().unwrap().as_ref() {
+            probe();
         }
         if self.at.load(Ordering::SeqCst) == n {
             std::panic::panic_any(Killed);
@@ -285,6 +290,60 @@ pub struct Faults {
     pub identities: Mutex<HashMap<String, String>>,
     /// Yöneticinin "Devre dışı" yaptığı hizmetler (W1b §4.7 madde 7).
     pub disabled_services: Mutex<Vec<String>>,
+    /// Windows başlangıç türleri (W2 çiti); yoksa `OTOMATIK_GECIKMELI` (`hizmet-kur` gibi).
+    pub start_modes: Mutex<HashMap<String, String>>,
+    /// Başlangıç türü yazımı düşer (izin/SCM arızası) → `CIT_HATASI`.
+    pub start_mode_write_fails: AtomicBool,
+    /// Linux konteynerlerinin yeniden başlatma politikası (yoksa şablonun `unless-stopped`'ı).
+    pub restart_policy: Mutex<Option<String>>,
+    /// Docker'ın "elle durduruldu" bildiği konteynerler (`compose stop`; `up` siler) — açılışta başlatılmazlar.
+    pub docker_stopped: Mutex<HashSet<String>>,
+    /// `reboot_at`: sıradaki enjekte ölüm konak yeniden açılışıdır (`World::boot`).
+    pub reboot: AtomicBool,
+    /// Yeniden açılışların gözlemi (backend için).
+    pub boots: Mutex<Vec<BootReport>>,
+    /// Testin kurduğu işlem öncesi başlangıç türü (değişmez ölçer son durumda bunu bekler; yoksa `OTOMATIK_GECIKMELI`).
+    pub backend_mode_before: Mutex<Option<String>>,
+}
+
+/// Açılışın bir hizmet için kararı (`WorldRefs::boot_plan`): gerçek açılış da her noktadaki önizleme de bunu uygular.
+#[derive(Debug, Clone, PartialEq)]
+pub struct BootStep {
+    pub name: String,
+    pub before: (SvcState, Vec<String>),
+    pub version: Option<String>,
+    pub starts: bool,
+    pub mode: String,
+    pub manual: bool,
+}
+
+/// Bir noktadaki açılış önizlemesi: kararlar + işlem günlüğünün satır sayısı (adım kimliği) + değişmez ihlali.
+#[derive(Debug, Clone, PartialEq)]
+pub struct BootPlan {
+    pub open: bool,
+    pub journal_lines: usize,
+    pub current: Option<String>,
+    pub steps: Vec<BootStep>,
+    pub violation: Option<String>,
+}
+
+impl BootPlan {
+    pub fn backend(&self, name: &str) -> &BootStep {
+        self.steps.iter().find(|s| s.name == name).expect("backend hizmeti yok")
+    }
+}
+
+/// Bir konak açılışının backend gözlemi (`World::boot`).
+#[derive(Debug, Clone)]
+pub struct BootReport {
+    /// Açılış anında işlem günlüğünde yarım işlem vardı.
+    pub open: bool,
+    /// Açılıştan hemen önce backend: durum + başlatma argümanları.
+    pub before: (SvcState, Vec<String>),
+    /// Açılış backend'i başlattı (Windows: başlangıç türü; Linux: yeniden başlatma politikası).
+    pub started: bool,
+    /// Açılış anındaki başlangıç türü / politika.
+    pub mode: String,
 }
 
 #[derive(Debug, Clone)]
@@ -411,6 +470,59 @@ impl WorldRefs {
     }
 }
 
+impl WorldRefs {
+    /// Konak açılışının kararı, dünyayı DEĞİŞTİRMEDEN: her hizmet durur; Windows'ta başlangıç türü otomatik olanı SCM,
+    /// Linux'ta yeniden başlatma politikası izin vereni Docker başlatır (`unless-stopped`: elle durdurulan HARİÇ). Değişmez
+    /// (A3): işlem açıkken açılış yalnız güncelleyicinin o an ÇALIŞTIRDIĞI backend'i AYNI kipte geri getirebilir.
+    pub fn boot_plan(&self, journal: &Path) -> BootPlan {
+        let open = Journal::open(&RealFs, journal).map(|j| j.unfinished().is_some()).unwrap_or(false);
+        let journal_lines = std::fs::read_to_string(journal).map(|t| t.lines().count()).unwrap_or(0);
+        let backend = self.backend_name.lock().unwrap().clone();
+        let linux = self.faults.docker.load(Ordering::SeqCst);
+        let policy = self.faults.restart_policy.lock().unwrap().clone().unwrap_or_else(|| "unless-stopped".into());
+        let mut names: Vec<String> = self.svcs.lock().unwrap().keys().filter(|n| n.as_str() != UPDATER).cloned().collect();
+        names.sort();
+        let mut steps = vec![];
+        let mut violation = None;
+        for name in names {
+            let mode = if linux { policy.clone() } else { self.start_mode_of(&name) };
+            let manual = self.faults.docker_stopped.lock().unwrap().contains(&name);
+            let svcs = self.svcs.lock().unwrap();
+            let s = &svcs[&name];
+            let before = (s.state, s.args.clone());
+            let starts = if linux {
+                match policy.as_str() {
+                    "always" => true,
+                    "unless-stopped" => !manual,
+                    "on-failure" => s.restart_at.is_some(),
+                    _ => false,
+                }
+            } else {
+                matches!(mode.as_str(), start_mode::AUTO | start_mode::AUTO_DELAYED)
+            };
+            // Linux'ta Docker konteyneri argümanlarıyla geri getirir; Windows'ta SCM argümansız başlatır.
+            let after_args = if starts && linux { before.1.clone() } else { vec![] };
+            let restored = before.0 == SvcState::Running && before.1 == after_args;
+            if name == backend && open && starts && !restored {
+                violation = Some(format!("işlem açıkken açılış backend'i başlattı ({mode}; önce {before:?})"));
+            }
+            steps.push(BootStep { name, before, version: s.version.clone(), starts, mode, manual });
+        }
+        BootPlan { open, journal_lines, current: current_version(&self.root), steps, violation }
+    }
+
+    /// Sahte SCM'in başlangıç türü (Windows profili).
+    pub fn start_mode_of(&self, name: &str) -> String {
+        if !self.svcs.lock().unwrap().contains_key(name) {
+            return start_mode::MISSING.into();
+        }
+        if self.faults.disabled_services.lock().unwrap().iter().any(|n| n == name) {
+            return start_mode::DISABLED.into();
+        }
+        self.faults.start_modes.lock().unwrap().get(name).cloned().unwrap_or_else(|| start_mode::AUTO_DELAYED.into())
+    }
+}
+
 fn current_version(root: &Path) -> Option<String> {
     RealFs.link_target(&root.join("current")).ok().flatten().and_then(|t| t.file_name().map(|n| n.to_string_lossy().into_owned()))
 }
@@ -466,6 +578,25 @@ impl Services for FakeServices {
     }
     fn disabled(&self, name: &str) -> EnvResult<bool> {
         Ok(self.w.faults.disabled_services.lock().unwrap().iter().any(|n| n == name))
+    }
+    fn start_mode(&self, name: &str) -> EnvResult<String> {
+        Ok(self.w.start_mode_of(name))
+    }
+    fn set_start_mode(&self, name: &str, mode: &str) -> EnvResult<()> {
+        self.w.crash.point(&format!("tur {name}"));
+        if self.w.faults.start_mode_write_fails.load(Ordering::SeqCst) {
+            return Err(EnvError(format!("{name}: başlangıç türü yazılamadı: Erişim engellendi")));
+        }
+        if !self.w.svcs.lock().unwrap().contains_key(name) {
+            return Err(EnvError(format!("{name} yok")));
+        }
+        let mut disabled = self.w.faults.disabled_services.lock().unwrap();
+        disabled.retain(|n| n != name);
+        if mode == start_mode::DISABLED {
+            disabled.push(name.to_string());
+        }
+        self.w.faults.start_modes.lock().unwrap().insert(name.to_string(), mode.to_string());
+        Ok(())
     }
     fn set_image_path(&self, name: &str, cl: &str) -> EnvResult<()> {
         self.w.crash.point(&format!("yol {name}"));
@@ -538,6 +669,13 @@ impl FakeProcs {
                 let known = self.w.svcs.lock().unwrap().contains_key(&name);
                 ok_out(&if known { format!("id-{svc}\n") } else { String::new() })
             }
+            ["inspect", "--format", f, id] if *f == tekserp_guncelleyici::platform::linux::docker::RESTART_POLICY_FORMAT => {
+                if !self.w.svcs.lock().unwrap().contains_key(&self.svc_name(id.trim_start_matches("id-"))) {
+                    return fail_out(1, "No such object");
+                }
+                let policy = self.w.faults.restart_policy.lock().unwrap().clone();
+                ok_out(&format!("{}\n", policy.as_deref().unwrap_or("unless-stopped")))
+            }
             ["inspect", "--format", _, id] => {
                 self.w.scm_tick();
                 let name = self.svc_name(id.trim_start_matches("id-"));
@@ -560,7 +698,10 @@ impl FakeProcs {
                 let _ = fake.stop(&name);
                 self.w.faults.restarts.lock().unwrap().insert(name.clone(), 0);
                 match fake.start(&name, a) {
-                    Ok(()) => ok_out(""),
+                    Ok(()) => {
+                        self.w.faults.docker_stopped.lock().unwrap().remove(&name);
+                        ok_out("")
+                    }
                     Err(e) => fail_out(1, &e.0),
                 }
             }
@@ -571,7 +712,10 @@ impl FakeProcs {
                     x.restart_at = None;
                 }
                 match fake.stop(&name) {
-                    Ok(()) => ok_out(""),
+                    Ok(()) => {
+                        self.w.faults.docker_stopped.lock().unwrap().insert(name);
+                        ok_out("")
+                    }
                     Err(e) => fail_out(1, &e.0),
                 }
             }
@@ -1695,7 +1839,12 @@ impl World {
         for _ in 0..ticks {
             match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| engine.tick(&|| false))) {
                 Ok(r) => out.push(r),
-                Err(p) if p.is::<Killed>() => return Err(Killed),
+                Err(p) if p.is::<Killed>() => {
+                    if self.faults.reboot.swap(false, Ordering::SeqCst) {
+                        self.boot();
+                    }
+                    return Err(Killed);
+                }
                 Err(p) => std::panic::resume_unwind(p),
             }
         }
@@ -1734,6 +1883,70 @@ impl World {
             st.as_ref().and_then(|s| s.message.clone()),
             self.unfinished()
         );
+    }
+
+    /// `reboot_at(k)` arızası (§9.3): k'ıncı noktada süreç ölür VE konak yeniden açılır — platformun açılış davranışı
+    /// (`boot`) uygulanır, sonra güncelleyici yeniden başlar (`run_to_rest`).
+    pub fn reboot_at(&self, k: u64) {
+        self.crash.arm(k, false);
+        self.faults.reboot.store(true, Ordering::SeqCst);
+    }
+
+    /// Testin işlem öncesi başlangıç türü (Windows).
+    pub fn set_backend_start_mode(&self, mode: &str) {
+        let name = self.backend_name.lock().unwrap().clone();
+        self.faults.start_modes.lock().unwrap().insert(name, mode.to_string());
+        *self.faults.backend_mode_before.lock().unwrap() = Some(mode.to_string());
+    }
+
+    /// Konak açılışı: `WorldRefs::boot_plan`ın kararını uygular; A3 ihlali `IHLAL: açılış yarışı` olayıdır.
+    pub fn boot(&self) -> BootReport {
+        let refs = self.refs();
+        let plan = refs.boot_plan(&self.layout.journal_file());
+        let backend = self.backend_name.lock().unwrap().clone();
+        let linux = self.profil() == Profil::Linux;
+        for step in &plan.steps {
+            let mut svcs = self.svcs.lock().unwrap();
+            let s = svcs.get_mut(&step.name).unwrap();
+            s.state = SvcState::Stopped;
+            s.crash = None;
+            s.restart_at = None;
+            if step.starts {
+                s.state = SvcState::Running;
+                s.starts += 1;
+                if !linux {
+                    s.args.clear();
+                    if step.name == backend {
+                        s.version = plan.current.clone();
+                    }
+                }
+            } else {
+                s.args.clear();
+            }
+        }
+        if let Some(v) = &plan.violation {
+            self.events.lock().unwrap().push(format!("IHLAL: açılış yarışı — {v}"));
+        }
+        let b = plan.backend(&backend);
+        let report = BootReport { open: plan.open, before: b.before.clone(), started: b.starts, mode: b.mode.clone() };
+        self.faults.boots.lock().unwrap().push(report.clone());
+        self.events.lock().unwrap().push(format!("açılış {report:?}"));
+        report
+    }
+
+    /// Ölümsüz sayaç koşumu; her noktada açılış önizlemesi (`boot_plan`) — dizinin `k-1`'inci elemanı k'ıncı noktanın.
+    pub fn boot_plans(&self) -> Vec<BootPlan> {
+        let plans = Arc::new(Mutex::new(vec![]));
+        let (refs, journal, sink) = (self.refs(), self.layout.journal_file(), Arc::clone(&plans));
+        *self.crash.probe.lock().unwrap() = Some(Box::new(move || {
+            let plan = refs.boot_plan(&journal);
+            sink.lock().unwrap().push(plan);
+        }));
+        let points = self.count_points();
+        *self.crash.probe.lock().unwrap() = None;
+        let plans = std::mem::take(&mut *plans.lock().unwrap());
+        assert_eq!(plans.len() as u64, points, "her noktada bir önizleme");
+        plans
     }
 
     /// Sayaçlı "ölümsüz" koşum: kaç enjeksiyon noktası var.
@@ -1775,6 +1988,15 @@ pub fn assert_invariants(w: &World, ctx: &str) {
         }
         other => panic!("{ctx}: beklenmeyen son durum {other:?} ({:?}: {:?})", st.error_code, st.message),
     }
+    // W2 çiti son durumda kalkmış: işaret yok, işlem öncesi başlangıç türü geri yazılmış, açılış yarışı yok.
+    assert!(!w.layout.fence_marker().exists(), "{ctx}: çit işareti kalmış");
+    if w.profil() == Profil::Windows {
+        let want = w.faults.backend_mode_before.lock().unwrap().clone().unwrap_or_else(|| start_mode::AUTO_DELAYED.into());
+        let name = w.backend_name.lock().unwrap().clone();
+        assert_eq!(w.refs().start_mode_of(&name), want, "{ctx}: backend başlangıç türü geri yazılmamış");
+    }
+    let races: Vec<String> = w.events.lock().unwrap().iter().filter(|e| e.starts_with("IHLAL: açılış")).cloned().collect();
+    assert!(races.is_empty(), "{ctx}: {races:?}");
     for stray in ["current.yeni", "current.eski"] {
         assert!(std::fs::symlink_metadata(w.layout.root.join(stray)).is_err(), "{ctx}: artık bağlantı {stray}");
     }

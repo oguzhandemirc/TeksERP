@@ -535,7 +535,14 @@ fn cit_isareti_istisna() {
         let s = installed("cit", la, None);
         let ctx = la_name(la);
         std::fs::create_dir_all(s.w.layout.work()).unwrap();
-        std::fs::write(s.w.layout.fence_marker(), br#"{"v":1}"#).unwrap();
+        let marker = tekserp_guncelleyici::cit::Marker {
+            v: tekserp_guncelleyici::cit::MARKER_FORMAT,
+            service: BACKEND.into(),
+            previous: "OTOMATIK_GECIKMELI".into(),
+            op_id: Some("islem-cit".into()),
+            zaman: iso(T0),
+        };
+        std::fs::write(s.w.layout.fence_marker(), serde_json::to_vec(&marker).unwrap()).unwrap();
         s.stop_updater();
         std::fs::remove_file(s.svc_exe()).unwrap();
         s.w.faults.disabled_services.lock().unwrap().push(UPDATER.into());

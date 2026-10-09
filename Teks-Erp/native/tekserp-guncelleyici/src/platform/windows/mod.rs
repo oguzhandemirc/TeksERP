@@ -32,6 +32,7 @@ pub fn arka_ucu() -> crate::platform::Arka {
         araclar: Arc::new(araclar::NodeAraclar),
         pg: Arc::new(pg::ImagePathPg),
         kendi: Arc::new(kendi::SurumluImagePath),
+        cit: crate::platform::CitKipi::BaslangicTuru,
     }
 }
 

@@ -7,6 +7,7 @@
 //! yazar) yetki değildir; yalnız panel onayını ve indirme belirtecini taşır. Uygulama çökme güvenlidir: her adım önce işlem günlüğüne iner, açılışta yarım
 //! işlem sürdürülür ya da geri alınır (§7). Çekirdek platformdan bağımsızdır (`env::Env` üzerinden
 //! dosya/hizmet/süreç/ağ/saat + arka uç); platform bağları ve `#[cfg]` yalnız `platform` altında.
+pub mod cit;
 pub mod cli;
 pub mod codes;
 pub mod decision;

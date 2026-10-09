@@ -129,7 +129,8 @@ impl Layout {
     pub fn repair_file(&self) -> PathBuf {
         self.work().join("onarim.json")
     }
-    /// W2 çitinin işareti: çitin KENDİ koyduğu "Devre dışı" — `onar` bunu yönetici kararı saymaz (§4.7 madde 7).
+    /// W2 bakım çitinin işareti (biçimi `cit::Marker`): türü güncelleyici değiştirdi, eski tür burada — `onar` çitli
+    /// hizmeti yönetici kararı saymaz (§4.7 madde 7).
     pub fn fence_marker(&self) -> PathBuf {
         self.work().join("cit.json")
     }

@@ -330,6 +330,28 @@ impl Services for WinServices {
     fn disabled(&self, name: &str) -> EnvResult<bool> {
         scm::disabled(name).map_err(EnvError)
     }
+    fn start_mode(&self, name: &str) -> EnvResult<String> {
+        use crate::env::start_mode as m;
+        Ok(match scm::start_mode(name).map_err(EnvError)? {
+            None => m::MISSING.into(),
+            Some(scm::StartMode::AutoDelayed) => m::AUTO_DELAYED.into(),
+            Some(scm::StartMode::Auto) => m::AUTO.into(),
+            Some(scm::StartMode::Demand) => m::DEMAND.into(),
+            Some(scm::StartMode::Disabled) => m::DISABLED.into(),
+            Some(scm::StartMode::Other(t)) => format!("TUR_{t}"),
+        })
+    }
+    fn set_start_mode(&self, name: &str, mode: &str) -> EnvResult<()> {
+        use crate::env::start_mode as m;
+        let mode = match mode {
+            m::AUTO_DELAYED => scm::StartMode::AutoDelayed,
+            m::AUTO => scm::StartMode::Auto,
+            m::DEMAND => scm::StartMode::Demand,
+            m::DISABLED => scm::StartMode::Disabled,
+            other => return Err(EnvError(format!("{name}: tanınmayan başlangıç türü {other:?}"))),
+        };
+        scm::set_start_mode(name, mode).map_err(EnvError)
+    }
 }
 
 /// Olay günlüğü kaynağı = güncelleyici hizmetinin adı (`hizmet-kur` o adla kaydeder).
