@@ -63,11 +63,23 @@ fn happy_path_updates_and_records() {
 fn kill_at_every_point_of_a_successful_update() {
     senaryo("kill_at_every_point_of_a_successful_update", |p, ctx| {
         eprintln!("{ctx}");
-        let points = world_in(p, "sayac").count_points();
+        let sayac = world_in(p, "sayac");
+        let points = sayac.count_points();
         assert!(points >= 40, "enjeksiyon noktası beklenenden az: {points}");
+        // Yırtık yazım yalnız `ekle` (append_sync) noktasında farklıdır; başka noktada yırtık koşu yırtıksızın aynısı.
+        let yirtilabilir: Vec<u64> = sayac
+            .crash
+            .log
+            .lock()
+            .unwrap()
+            .iter()
+            .filter_map(|l| l.split_once(':').filter(|(_, what)| what.starts_with("ekle ")).and_then(|(n, _)| n.parse().ok()))
+            .collect();
+        assert!(!yirtilabilir.is_empty(), "sonda kurgusu: ekleme noktası yok (yırtık yazım ölçülmedi)");
         let mut outcomes = std::collections::BTreeMap::new();
         for torn in [false, true] {
-            for k in 1..=points {
+            let noktalar: Vec<u64> = if torn { yirtilabilir.clone() } else { (1..=points).collect() };
+            for k in noktalar {
                 let w = world_in(p, "oldur");
                 w.crash.arm(k, torn);
                 let killed = w.run(3).is_err();

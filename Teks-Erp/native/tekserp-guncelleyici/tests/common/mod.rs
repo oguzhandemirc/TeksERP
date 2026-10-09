@@ -587,11 +587,24 @@ impl FakeProcs {
     }
 }
 
+/// `docker [compose <baş>] <alt komut>` salt-okur mu (durum/kök/etiket sorgusu).
+fn docker_salt_okur(args: &[String]) -> bool {
+    let sub = if args.first().map(String::as_str) == Some("compose") { args.get(9..) } else { args.get(..) };
+    matches!(
+        sub.unwrap_or_default().iter().map(String::as_str).collect::<Vec<_>>().as_slice(),
+        ["ps" | "inspect" | "info", ..] | ["image", "ls", ..]
+    )
+}
+
 impl Procs for FakeProcs {
     fn run(&self, c: &Cmd) -> EnvResult<CmdOut> {
         let prog = c.program_name();
         let args: Vec<String> = c.args.iter().map(|a| a.to_string_lossy().into_owned()).collect();
-        self.w.crash.point(&format!("surec {prog} {}", args.first().cloned().unwrap_or_default()));
+        // Docker'ın salt-okur sorguları (`ps`/`inspect`/`info`/`image ls`) Windows profilindeki `state()` gibi
+        // öldürme noktası DEĞİLDİR: K1 her DEĞİŞTİREN işlemden önce öldürür; yoklama noktaları yalnız süre katlar.
+        if !(prog == "docker" && docker_salt_okur(&args)) {
+            self.w.crash.point(&format!("surec {prog} {}", args.first().cloned().unwrap_or_default()));
+        }
         let pw_ok = c.env.iter().any(|(k, v)| k == "PGPASSWORD" && v == "gizli-parola");
         match prog.as_str() {
             "psql" => {

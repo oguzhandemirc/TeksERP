@@ -561,7 +561,8 @@ mod tests {
         assert_eq!(ups[1].1, [("TEKSERP_DOGRULAMA_KIPI".to_string(), String::new())], "normal başlatmada kip BOŞ");
         let stop = calls.iter().find(|(a, _)| alt_komut(a).first().map(String::as_str) == Some("stop")).unwrap();
         assert_eq!(alt_komut(&stop.0), ["stop", "-t", "45", "backend"]);
-        let head = &ups[0].0[..9];
+        // Birim her hedefte koşar; Windows'ta `Path::join` `\` ekler — ölçülen compose başının biçimi, ayraç değil.
+        let head: Vec<String> = ups[0].0[..9].iter().map(|a| a.replace('\\', "/")).collect();
         assert_eq!(
             head,
             [
