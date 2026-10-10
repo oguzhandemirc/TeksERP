@@ -1,10 +1,10 @@
 // Görsel sözlük — durum → renk değişkeni; kademe → sayaç rengi. Renk tek başına
 // anlam taşımaz: her durumun bir ŞEKLİ (StatusShape) ve simgesi de vardır.
 import type { EscalationTier } from "./metrics";
-import { reasonOf } from "./stopReasons";
 import type { LiveLoom, LossClass, LoomType } from "./types";
 
-export type StatusKey = "RUN" | LossClass;
+/** `UNMONITORED` = izleme kapalı tezgah (durumu bilinmez; sayılara girmez). */
+export type StatusKey = "RUN" | LossClass | "UNMONITORED";
 
 export const STATUS_COLOR: Record<StatusKey, string> = {
   RUN: "var(--ds-run)",
@@ -12,6 +12,7 @@ export const STATUS_COLOR: Record<StatusKey, string> = {
   SETUP: "var(--ds-setup)",
   PLANNED: "var(--ds-planned)",
   NON_SCHEDULED: "var(--ds-idle)",
+  UNMONITORED: "var(--ds-idle)",
 };
 
 export const STATUS_LABEL: Record<StatusKey, string> = {
@@ -20,10 +21,13 @@ export const STATUS_LABEL: Record<StatusKey, string> = {
   SETUP: "Ayar / hazırlık",
   PLANNED: "Planlı duruş",
   NON_SCHEDULED: "Plan dışı",
+  UNMONITORED: "İzlenmiyor",
 };
 
+/** Sebep bekleyen duruş (sınıfı yok) plansız kayıp gibi çizilir — açıklanmamış duruş kayıptır. */
 export function statusOf(t: LiveLoom): StatusKey {
-  return t.openStop ? reasonOf(t.openStop.reasonCode).lossClass : "RUN";
+  if (!t.monitored) return "UNMONITORED";
+  return t.openStop ? (t.openStop.lossClass ?? "UNPLANNED") : "RUN";
 }
 
 /** Sayaç rengi: hedef içinde mürekkep, aşınca kehribar, iletilince koyu kırmızı. */

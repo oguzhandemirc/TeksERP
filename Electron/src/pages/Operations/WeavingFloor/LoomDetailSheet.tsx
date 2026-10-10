@@ -4,9 +4,9 @@ import { Sheet, SheetContent, SheetDescription, SheetTitle } from "@/components/
 import { JobAndBeam, ShiftFigures, StopBreakdown } from "./DetailBlocks";
 import { StatusShape, TimerRing } from "./Markers";
 import { LoomFigure } from "./LoomFigure";
-import { AlertChainTimeline, RecentEvents } from "./Timelines";
+import { AlertChainTimeline, EscalationDueLine, RecentEvents } from "./Timelines";
 import { LOOM_TYPE_LABEL, STATUS_COLOR, STATUS_LABEL, TIER_COLOR, TIER_LABEL, hsl, statusOf } from "./palette";
-import { reasonOf } from "./stopReasons";
+import { reasonIconOf } from "./stopReasons";
 import { escalationTierOf, formatNumber, formatTimer, targetProgress } from "./metrics";
 import type { LiveLoom, OpenStop } from "./types";
 
@@ -26,19 +26,19 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 }
 
 function OpenStopPanel({ stop, now }: { stop: OpenStop; now: number }) {
-  const r = reasonOf(stop.reasonCode);
+  const status = stop.lossClass ?? "UNPLANNED";
   const tier = escalationTierOf(stop, now);
   const color = TIER_COLOR[tier];
-  const edge = tier === "ESCALATED" ? "var(--ds-escalated)" : STATUS_COLOR[r.lossClass];
+  const edge = tier === "ESCALATED" ? "var(--ds-escalated)" : STATUS_COLOR[status];
   return (
     <div
       className="space-y-4 rounded-2xl p-4"
-      style={{ background: hsl(STATUS_COLOR[r.lossClass], 0.08), boxShadow: `inset 0 0 0 1.5px ${hsl(edge, 0.5)}` }}
+      style={{ background: hsl(STATUS_COLOR[status], 0.08), boxShadow: `inset 0 0 0 1.5px ${hsl(edge, 0.5)}` }}
     >
       <div className="flex items-center gap-3">
-        <StatusShape status={r.lossClass} icon={r.icon} className="h-14 w-14 shrink-0" />
+        <StatusShape status={status} icon={reasonIconOf(stop.reasonCode, stop.lossClass)} className="h-14 w-14 shrink-0" />
         <div className="min-w-0 flex-1">
-          <div className="text-lg font-extrabold">{r.label}</div>
+          <div className="text-lg font-extrabold">{stop.label}</div>
           <div className="text-sm font-semibold" style={{ color: hsl(color) }}>{TIER_LABEL[tier]}</div>
         </div>
         <div className="flex items-center gap-2">
@@ -47,11 +47,11 @@ function OpenStopPanel({ stop, now }: { stop: OpenStop; now: number }) {
             <div className="whitespace-nowrap text-3xl font-extrabold leading-none tabular-nums" style={{ color: hsl(color) }}>
               {formatTimer(now - stop.startedAt)}
             </div>
-            {r.targetMin !== null && <div className="mt-1 text-xs font-medium text-muted-foreground">hedef {r.targetMin} dk</div>}
+            {stop.targetMin !== null && <div className="mt-1 text-xs font-medium text-muted-foreground">hedef {stop.targetMin} dk</div>}
           </div>
         </div>
       </div>
-      {tier !== "UNTRACKED" && <AlertChainTimeline stop={stop} now={now} />}
+      {tier !== "UNTRACKED" && (stop.attendant ? <AlertChainTimeline stop={stop} now={now} /> : <EscalationDueLine stop={stop} />)}
     </div>
   );
 }
@@ -65,15 +65,15 @@ function DetailBody({ loom: t, now }: { loom: LiveLoom; now: number }) {
         <div className="min-w-0">
           <SheetTitle className="text-2xl font-extrabold">Tezgah {t.code}</SheetTitle>
           <SheetDescription className="text-sm">
-            Hol {t.hall} · {LOOM_TYPE_LABEL[t.loomType]} · {STATUS_LABEL[status]}
-            {t.openStop ? "" : ` · ${formatNumber(t.rpm)} atkı/dk`}
+            {[t.hall, t.loomType ? LOOM_TYPE_LABEL[t.loomType] : null, STATUS_LABEL[status]].filter(Boolean).join(" · ")}
+            {status === "RUN" && t.rpm !== null ? ` · ${formatNumber(t.rpm)} atkı/dk` : ""}
           </SheetDescription>
         </div>
       </div>
       <div className="rounded-2xl p-4" style={{ background: hsl("var(--ds-floor)") }}>
         <LoomFigure
-          running={!t.openStop}
-          rpm={t.rpm}
+          running={status === "RUN"}
+          rpm={t.rpm ?? 0}
           beamRatio={t.beam ? t.beam.remainingM / t.beam.totalM : 0}
           fabricColor={t.job?.color ?? "#999"}
           statusColor={STATUS_COLOR[status]}
@@ -81,17 +81,21 @@ function DetailBody({ loom: t, now }: { loom: LiveLoom; now: number }) {
         />
       </div>
       {t.openStop && <OpenStopPanel stop={t.openStop} now={now} />}
-      <Section title="Bu vardiya">
-        <ShiftFigures loom={t} />
-      </Section>
-      <Section title="Duruşlar">
+      {t.shift && (
+        <Section title="Bu vardiya">
+          <ShiftFigures loom={t} />
+        </Section>
+      )}
+      <Section title={t.dayBreakdown ? "Bugünkü duruşlar" : "Duruşlar"}>
         <StopBreakdown loom={t} now={now} />
       </Section>
-      <Section title="Dokuma işi ve levent">
-        <JobAndBeam loom={t} />
-      </Section>
+      {(t.job || t.beam) && (
+        <Section title={t.beam ? "Dokuma işi ve levent" : "Dokuma işi"}>
+          <JobAndBeam loom={t} />
+        </Section>
+      )}
       <Section title="Son olaylar">
-        <RecentEvents events={t.events} now={now} />
+        {t.events.length > 0 ? <RecentEvents events={t.events} now={now} /> : <p className="text-sm text-muted-foreground">Kayıtlı olay yok.</p>}
       </Section>
     </div>
   );

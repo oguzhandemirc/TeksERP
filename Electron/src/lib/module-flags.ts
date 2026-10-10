@@ -100,5 +100,4 @@ export const MODULE_FIELD_BY_SETTING_KEY: Readonly<Record<string, ModuleFlagKey>
  */
 export const MODULE_PLACEHOLDERS: readonly ModuleFlagKey[] = [
   "kumasTeknikEnabled",
-  "tezgahEnabled",
 ];

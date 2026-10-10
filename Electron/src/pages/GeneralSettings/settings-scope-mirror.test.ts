@@ -81,12 +81,21 @@ describe("ayar kategorisi ↔ backend kapsam tablosu", () => {
   it("⭐ tablodaki anahtar, kategorinin satırı değilse özel bölümün anahtarıdır (ters yön)", () => {
     // Satır listesi olan (flags) kategorilerde tablo FAZLA anahtar taşımamalı —
     // taşırsa dar izin ekranda görünmeyen bir ayarı yazabilir.
-    const extra: string[] = [];
+    // Bir dar izin birden çok kategoriyi açabilir (`settings:dokuma` → Dokuma + Tezgah
+    // izleme): anahtar, o izni taşıyan kategorilerden BİRİNİN satırı olmalı.
+    const byPerm = new Map<string, { flags: string[]; settings: string[] }>();
     for (const { cat, perm } of narrow) {
-      if (cat.kind !== "flags") continue;
-      const scope = SCOPES.get(perm ?? "");
-      if (!scope) continue;
+      if (cat.kind !== "flags" || !perm) continue;
+      const acc = byPerm.get(perm) ?? { flags: [], settings: [] };
       const { flags, settings } = categoryKeys(cat);
+      acc.flags.push(...flags);
+      acc.settings.push(...settings);
+      byPerm.set(perm, acc);
+    }
+    const extra: string[] = [];
+    for (const [perm, { flags, settings }] of byPerm) {
+      const scope = SCOPES.get(perm);
+      if (!scope) continue;
       for (const k of scope.flagKeys) if (!flags.includes(k)) extra.push(`${perm}: ${k}`);
       for (const k of scope.settingKeys) if (!settings.includes(k)) extra.push(`${perm}: ${k} (ham)`);
     }

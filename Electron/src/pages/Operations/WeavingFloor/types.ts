@@ -1,15 +1,15 @@
 // =============================================================================
 // TEZGAH SALONU — CANLI VERİ SÖZLEŞMESİ
 // =============================================================================
-// Ekranın okuduğu TEK şekil. Bugün `mock/` üretir; gerçek veriye geçişte yalnız
-// `useLoomFloorLive` kancasının kaynağı değişir, bileşenler bu tiplere bağlı kalır.
-// Alanların gerçek kaynağı: docs/design/DOKUMA-CANLI-EKRAN.md § Mock → gerçek veri.
+// Ekranın okuduğu TEK şekil. Uygulamada `GET /api/loom-floor` (`fromApi`), geliştirme
+// önizlemesinde `mock/` üretir; bileşenler yalnız bu tiplere bağlıdır. `null` alan =
+// bugün ölçülmüyor (sayaç/levent/devir telemetrisi sonraki fazda) — ekran "—" basar, uydurmaz.
 // =============================================================================
 
 /** `MachineStopLossClass` aynası (MINOR süre sınıfıdır, sebep değil — burada yok). */
 export type LossClass = "UNPLANNED" | "SETUP" | "PLANNED" | "NON_SCHEDULED";
 
-/** Uyarı zincirindeki kişi — mock'ta uydurma adlar. */
+/** Uyarı zincirindeki kişi — bildirim kanalı gelene dek yalnız önizlemede dolu. */
 export interface Person {
   id: string;
   name: string;
@@ -18,11 +18,21 @@ export interface Person {
 
 /** Şu an açık duruş + uyarı zinciri damgaları (epoch ms). */
 export interface OpenStop {
-  reasonCode: string;
+  /** null = sebep bekleniyor (operatör henüz seçmedi). */
+  reasonCode: string | null;
+  /** Görünen sebep adı — sunucu kataloğundan; kod ekranda sözlüğe çevrilmez. */
+  label: string;
+  /** null = sebep bekleniyor (ekran plansız duruş gibi çizer). */
+  lossClass: LossClass | null;
   startedAt: number;
-  attendant: Person;
-  /** Görevlinin telefonuna/saatine bildirim düştüğü an. */
-  notifiedAt: number;
+  /** Duruşa DONMUŞ hedef süre (dk); null = süre izlenmez. */
+  targetMin: number | null;
+  /** Duruşa DONMUŞ iletim payı (dk) — hedef aşıldıktan sonra patrona iletime kadar. */
+  graceMin: number;
+  /** Bildirim kanalı yokken null. */
+  attendant: Person | null;
+  /** Görevlinin telefonuna/saatine bildirim düştüğü an; bildirim yoksa null. */
+  notifiedAt: number | null;
   /** Görevli bildirimi gördü ve tezgaha geldi; null = müdahale yok. */
   respondedAt: number | null;
   /** Hedef süre (+ pay) dolunca patrona iletildiği an. */
@@ -31,7 +41,9 @@ export interface OpenStop {
 
 /** Vardiya içinde kapanmış duruş. */
 export interface StopRecord {
-  reasonCode: string;
+  reasonCode: string | null;
+  label: string;
+  lossClass: LossClass | null;
   startedAt: number;
   endedAt: number;
 }
@@ -41,7 +53,10 @@ export type LoomEventKind = "RUN" | "STOP" | "NOTIFY" | "RESPOND" | "ESCALATE" |
 export interface LoomEvent {
   at: number;
   kind: LoomEventKind;
-  reasonCode?: string;
+  reasonCode?: string | null;
+  /** Sebep adı (STOP olayında) — yoksa olay türünün metni basılır. */
+  label?: string;
+  lossClass?: LossClass | null;
   person?: Person;
 }
 
@@ -51,8 +66,10 @@ export interface WeavingJob {
   fabric: string;
   /** Kumaşın görünen rengi — figürdeki dokunan bez bu renkte çizilir. */
   color: string;
-  plannedM: number;
-  producedM: number;
+  /** null = plan metresi girilmemiş. */
+  plannedM: number | null;
+  /** null = üretilen metre ölçülmüyor. */
+  producedM: number | null;
 }
 
 export interface BeamState {
@@ -79,26 +96,41 @@ export interface DayCounters {
 
 export type LoomType = "AIR_JET" | "RAPIER";
 
+/** Sebebe göre duruş toplamı (detay panelinin çubukları). */
+export interface StopTotal {
+  reasonCode: string | null;
+  label: string;
+  lossClass: LossClass | null;
+  count: number;
+  ms: number;
+}
+
 export interface LiveLoom {
   id: string;
   code: string;
+  /** Görünen hol adı (istasyon adı). */
   hall: string;
-  loomType: LoomType;
-  /** Hedef devir (atkı/dk) — performansın paydası. */
-  targetRpm: number;
-  /** Anlık devir; duran tezgahta 0. */
-  rpm: number;
+  /** İzleme kapalı tezgah (künyede OFF) — durumu bilinmez, sayılara girmez. */
+  monitored: boolean;
+  loomType: LoomType | null;
+  /** Hedef devir (atkı/dk) — performansın paydası; ölçülmemişse null. */
+  targetRpm: number | null;
+  /** Anlık devir; duran tezgahta 0, ölçülmüyorsa null. */
+  rpm: number | null;
   /** Ham atkı sıklığı (atkı/cm) — atkıdan metreye. */
-  picksPerCm: number;
+  picksPerCm: number | null;
   openStop: OpenStop | null;
-  shift: ShiftCounters;
+  /** Vardiya sayaçları (atkı · metre); sayaç telemetrisi yokken null. */
+  shift: ShiftCounters | null;
   today: DayCounters;
   stops: StopRecord[];
+  /** Günün sebep kırılımı sunucudan geldiyse o (bugün tümü); yoksa `stops`tan hesaplanır. */
+  dayBreakdown: StopTotal[] | null;
   events: LoomEvent[];
   job: WeavingJob | null;
   beam: BeamState | null;
-  /** Uydurulmuş değer beyanı — gerçek ölçüm gelince `MACHINE`. */
-  source: "SIMULATED";
+  /** Veri kaynağı beyanı (`MACHINE` · `OPERATOR` · `SIMULATED` …). */
+  source: string;
 }
 
 export interface Shift {
@@ -108,7 +140,8 @@ export interface Shift {
 }
 
 export interface FloorState {
-  shift: Shift;
+  /** Vardiya takvimi yoksa null. */
+  shift: Shift | null;
   halls: string[];
   looms: LiveLoom[];
   /** Son simülasyon adımının anı. */

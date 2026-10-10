@@ -69,6 +69,7 @@ import { FxDiffPage } from "@/pages/Reports/Finance/FxDiffPage";
 import { YarnStockPage } from "@/pages/Operations/Yarn/YarnStockPage";
 import { WeavingOrdersPage } from "@/pages/Operations/WeavingOrders/WeavingOrdersPage";
 import { MachineStopsPage } from "@/pages/Operations/MachineStops/MachineStopsPage";
+import { WeavingFloorPage } from "@/pages/Operations/WeavingFloor/WeavingFloorPage";
 import { WarpBeamsPage } from "@/pages/Operations/WarpBeams/WarpBeamsPage";
 import { PurchaseOrdersPage } from "@/pages/Operations/PurchaseOrders/PurchaseOrdersPage";
 import { ItemPricesPage } from "@/pages/Definitions/ItemPrices/ItemPricesPage";
@@ -456,6 +457,16 @@ export const contentRoutes: RouteObject[] = [
     element: (
       <ProtectedRoute requireAnyPermission={["loom:manual-entry", "loom:classify"]}>
         <MachineStopsPage />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    // Tezgah Salonu — karo izniyle BİREBİR (`loom:live-view`); modül kapısı backend
+    // `requireTezgahEnabled` + `ROUTE_MODULE` (`tezgahEnabled`).
+    path: "operations/weaving-floor",
+    element: (
+      <ProtectedRoute requirePermission="loom:live-view">
+        <WeavingFloorPage />
       </ProtectedRoute>
     ),
   },

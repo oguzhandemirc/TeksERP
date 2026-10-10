@@ -93,6 +93,7 @@ describe("§1 üç yüzeyin dağılımı", () => {
       "orders",
       "production",
       "shipping",
+      "tezgah",
       "warehouse",
       "work-orders",
       "yarn",

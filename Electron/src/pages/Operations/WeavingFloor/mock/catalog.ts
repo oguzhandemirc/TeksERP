@@ -15,18 +15,18 @@ export const FABRICS: readonly { name: string; color: string }[] = [
 
 /** Hol başına görevli (mock; gerçekte vardiya/hol sorumlu ataması). */
 export const ATTENDANTS: Readonly<Record<string, Person>> = {
-  A: { id: "g-a", name: "Kerem U.", role: "ATTENDANT" },
-  B: { id: "g-b", name: "Selin T.", role: "ATTENDANT" },
-  C: { id: "g-c", name: "Murat D.", role: "ATTENDANT" },
+  "Hol A": { id: "g-a", name: "Kerem U.", role: "ATTENDANT" },
+  "Hol B": { id: "g-b", name: "Selin T.", role: "ATTENDANT" },
+  "Hol C": { id: "g-c", name: "Murat D.", role: "ATTENDANT" },
 };
 
 export const OWNER: Person = { id: "p-1", name: "Patron", role: "OWNER" };
 
 /** Holler ve tezgah sayıları — üç hol, 36 tezgah. */
 export const HALLS: readonly { name: string; count: number; loomType: LoomType }[] = [
-  { name: "A", count: 14, loomType: "AIR_JET" },
-  { name: "B", count: 12, loomType: "AIR_JET" },
-  { name: "C", count: 10, loomType: "RAPIER" },
+  { name: "Hol A", count: 14, loomType: "AIR_JET" },
+  { name: "Hol B", count: 12, loomType: "AIR_JET" },
+  { name: "Hol C", count: 10, loomType: "RAPIER" },
 ];
 
 /** Çalışan tezgahın kendiliğinden durma sebepleri (sahadaki sıklık sırasıyla). */

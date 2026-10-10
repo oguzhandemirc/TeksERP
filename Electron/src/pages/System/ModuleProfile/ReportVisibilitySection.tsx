@@ -37,7 +37,7 @@ export function reportModuleFlag(modul: string): ModuleFlagKey | null {
 export function isReportModuleClosed(entry: ReportCatalogEntry, ctx: OperationsVisibilityContext): boolean {
   const flag = reportModuleFlag(entry.modul);
   if (flag === null) return false;
-  // ctx yalnız yüzeyi olan modülleri taşır; taşımadığı anahtar (kumaş teknik, tezgah) kapatmaz.
+  // ctx yalnız yüzeyi olan modülleri taşır; taşımadığı anahtar (kumaş teknik) kapatmaz.
   const value = (ctx as Partial<Record<ModuleFlagKey, boolean>>)[flag];
   return value === false;
 }

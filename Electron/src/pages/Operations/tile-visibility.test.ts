@@ -18,6 +18,7 @@ import {
 } from "@/pages/Definitions/production-regime";
 import { isWeavingOrdersVisible } from "./WeavingOrders/weaving-regime";
 import { isMachineStopsVisible } from "./MachineStops/stop-regime";
+import { isWeavingFloorVisible } from "./WeavingFloor/floor-regime";
 import { isWarpBeamsVisible } from "./WarpBeams/warp-beam-regime";
 
 /**
@@ -53,7 +54,7 @@ function ctx(
     // Çözgü Kartları karosu çizilmemeli.
     devereEnabled: false,
     // Dokuma işi de ETKİN değer (production && dokuma); fabrikada KAPALI.
-    dokumaEnabled: false,
+    dokumaEnabled: false, tezgahEnabled: false,
     reportsClosedKeys: [],
     isReportOpen: () => true,
     flagsReady: true,
@@ -189,6 +190,7 @@ describe("karo bağlantıları", () => {
       "stock-counts",
       "warehouse-transfers",
       "warp-beams",
+      "weaving-floor",
       "weaving-orders",
       "work-order-events",
       "work-orders",
@@ -344,6 +346,18 @@ describe("Tezgah Duruşları karosu", () => {
     expect(t?.permissionAny).toEqual(["loom:manual-entry", "loom:classify"]);
     expect(t?.visibleWhen?.(ctx())).toBe(false);
     expect(t?.visibleWhen?.(ctx({ dokumaEnabled: true }))).toBe(true);
+  });
+});
+
+describe("Tezgah Salonu karosu", () => {
+  it("⭐ yalnız TEZGAH İZLEME açıkken; izin `loom:live-view` (route ile birebir)", () => {
+    const t = operationsTiles.find((x) => x.key === "weaving-floor");
+    expect(t?.visibleWhen).toBe(isWeavingFloorVisible);
+    expect(t?.permission).toBe("loom:live-view");
+    expect(t?.to).toBe("/operations/weaving-floor");
+    expect(t?.visibleWhen?.(ctx())).toBe(false);
+    expect(t?.visibleWhen?.(ctx({ dokumaEnabled: true }))).toBe(false);
+    expect(t?.visibleWhen?.(ctx({ tezgahEnabled: true }))).toBe(true);
   });
 });
 

@@ -15,7 +15,7 @@ import type { OperationsVisibilityContext } from "@/pages/Operations/tile-config
 const get = vi.fn();
 vi.mock("@/services/apiClient", () => ({ default: { get: (...a: unknown[]) => get(...a), post: vi.fn(), patch: vi.fn() } }));
 vi.mock("@/pages/Operations/useOperationsVisibility", () => ({
-  useOperationsVisibilityContext: (): OperationsVisibilityContext => ({ shipmentConfirmationEnabled: false, depoMultiEnabled: false, devereEnabled: true, dokumaEnabled: true, financeEnabled: true, productionEnabled: true, ticaretEnabled: true, iplikEnabled: true, reportsClosedKeys: [], isReportOpen: () => true, flagsReady: true, flagsFailed: false }),
+  useOperationsVisibilityContext: (): OperationsVisibilityContext => ({ shipmentConfirmationEnabled: false, depoMultiEnabled: false, devereEnabled: true, dokumaEnabled: true, tezgahEnabled: true, financeEnabled: true, productionEnabled: true, ticaretEnabled: true, iplikEnabled: true, reportsClosedKeys: [], isReportOpen: () => true, flagsReady: true, flagsFailed: false }),
 }));
 vi.mock("@/hooks/useRoleAccess", () => ({ useRoleAccess: () => ({ isAdmin: true, hasPermission: () => true, hasAnyPermission: () => true, hasAllPermissions: () => true }) }));
 vi.mock("@/hooks/useFavorites", () => ({ useFavorites: () => ({ favorites: [], isFavorite: () => false, toggleFavorite: vi.fn(), reorderFavorites: vi.fn() }) }));

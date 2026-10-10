@@ -311,8 +311,12 @@ export interface FeatureFlags {
   /** Kumaş teknik kartı modülü. YER TUTUCU — arkasında henüz yüzey yok, bu yüzden
    *  Genel Ayarlar'da satırı da YOK (bkz. `settings-config.ts` "Modüller"). */
   kumasTeknikEnabled: boolean;
-  /** Dokuma tezgah izleme modülü. YER TUTUCU — üretime bağımlı; panelde satırı yok. */
+  /** Tezgah izleme modülü (Tezgah Salonu canlı ekranı). Varsayılan KAPALI; üretime bağımlı —
+   *  bu alan HAM değerdir, etkin değer `production && tezgah` (`useOperationsVisibilityContext`). */
   tezgahEnabled: boolean;
+  /** Hedef süre aşıldıktan sonra patrona iletmeden önceki pay (dk, 0..1440, varsayılan 0).
+   *  Duruş AÇILIRKEN satıra donar; değişiklik yalnız yeni duruşları etkiler. */
+  tezgahEscalationGraceMinutes: number;
   /** Devere / levent modülü (çözgü kartı · levent stoğu · levent defteri).
    *  Varsayılan KAPALI. ⚠️ İPLİĞE BAĞIMLI, iplik de TİCARETE: bu alan HAM değerdir;
    *  etkin değer `ticaret && iplik && devere`. Faz 1a'da panel satırı YOK (yüzey

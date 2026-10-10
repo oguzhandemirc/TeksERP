@@ -1,6 +1,6 @@
 import { Badge } from "@/components/ui/badge";
 import type { ReasonPreset } from "./service";
-import { StopLossClassBadge } from "./StopLossClassField";
+import { StopLossClassBadge, StopTargetBadge } from "./StopLossClassField";
 
 /** Liste satırının sol bloğu: ad + durum rozetleri + kod/tam metin. */
 export function PresetRowSummary({ row }: { row: ReasonPreset }) {
@@ -14,6 +14,7 @@ export function PresetRowSummary({ row }: { row: ReasonPreset }) {
         {row.requiresText && <Badge variant="secondary">Açıklama ister</Badge>}
         {row.isSystem && <Badge variant="outline">Sistem</Badge>}
         <StopLossClassBadge value={row.stopLossClass} />
+        <StopTargetBadge value={row.targetMinutes} />
       </div>
       <div className="truncate text-xs text-muted-foreground">
         <span className="font-mono">{row.code}</span>

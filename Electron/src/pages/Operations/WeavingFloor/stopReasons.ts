@@ -1,9 +1,9 @@
 // =============================================================================
-// DURUŞ SEBEPLERİ — görsel sözlük + hedef müdahale süreleri
+// DURUŞ SEBEPLERİ — görsel sözlük (simge) + önizleme verisi
 // =============================================================================
-// Kod, etiket ve kayıp sınıfı sunucu kataloğunun (`MACHINE_STOP_REASONS`) aynası.
-// `targetMin` ve `ESCALATION_SETTINGS` MOCK ayar verisidir: gerçekte hedef süreyi
-// yönetici panelde sebep satırına yazar, kodda sabit kalmaz (DOKUMA-CANLI-EKRAN.md §5.2, §8).
+// Gerçek ekranda ad, sınıf, hedef süre ve pay SUNUCUDAN gelir (duruşa donmuş);
+// buradan yalnız SİMGE okunur (`reasonIconOf`). `label`/`targetMin` ve
+// `ESCALATION_SETTINGS` yalnız önizleme (mock) verisidir (DOKUMA-CANLI-EKRAN.md §5.2, §8).
 // =============================================================================
 import {
   CalendarClock,
@@ -73,7 +73,21 @@ export const STOP_REASONS: readonly StopReason[] = [
 
 const BY_CODE = new Map(STOP_REASONS.map((s) => [s.code, s]));
 
-/** Bilinmeyen kod "tespit edilemedi"ye düşer — ekran boş simge çizmez. */
+/** Katalogda olmayan kodun simgesi sınıfından; sebep bekleyen duruş soru işareti. */
+const CLASS_ICON: Record<LossClass, ReasonIcon> = {
+  UNPLANNED: Wrench,
+  SETUP: Shuffle,
+  PLANNED: CalendarClock,
+  NON_SCHEDULED: Power,
+};
+
+export function reasonIconOf(code: string | null | undefined, lossClass: LossClass | null | undefined): ReasonIcon {
+  const known = code ? BY_CODE.get(code) : undefined;
+  if (known) return known.icon;
+  return lossClass ? CLASS_ICON[lossClass] : CircleHelp;
+}
+
+/** Bilinmeyen kod "tespit edilemedi"ye düşer — ekran boş simge çizmez. (Önizleme verisi.) */
 export function reasonOf(code: string): StopReason {
   return BY_CODE.get(code) ?? BY_CODE.get("TESPIT_EDILEMEDI")!;
 }

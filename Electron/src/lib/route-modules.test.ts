@@ -17,7 +17,7 @@ function ctx(over: Partial<OperationsVisibilityContext> = {}): OperationsVisibil
     shipmentConfirmationEnabled: false,
     depoMultiEnabled: true,
     devereEnabled: true,
-    dokumaEnabled: true,
+    dokumaEnabled: true, tezgahEnabled: true,
     reportsClosedKeys: [],
     isReportOpen: () => true,
     flagsReady: true,

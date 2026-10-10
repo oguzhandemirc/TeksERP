@@ -29,7 +29,7 @@ const RAPOR: DestinationMix = {
 const get = vi.fn(async () => ({ data: { success: true, data: RAPOR, range: { from: "2026-09-01T00:00:00.000Z", to: "2026-09-23T00:00:00.000Z" } } }));
 vi.mock("@/services/apiClient", () => ({ default: { get: (...a: unknown[]) => get(...(a as [])), post: vi.fn(), patch: vi.fn() } }));
 vi.mock("@/pages/Operations/useOperationsVisibility", () => ({
-  useOperationsVisibilityContext: (): OperationsVisibilityContext => ({ shipmentConfirmationEnabled: false, depoMultiEnabled: false, devereEnabled: true, dokumaEnabled: true, financeEnabled: true, productionEnabled: true, ticaretEnabled: true, iplikEnabled: true, reportsClosedKeys: [], isReportOpen: () => true, flagsReady: true, flagsFailed: false }),
+  useOperationsVisibilityContext: (): OperationsVisibilityContext => ({ shipmentConfirmationEnabled: false, depoMultiEnabled: false, devereEnabled: true, dokumaEnabled: true, tezgahEnabled: true, financeEnabled: true, productionEnabled: true, ticaretEnabled: true, iplikEnabled: true, reportsClosedKeys: [], isReportOpen: () => true, flagsReady: true, flagsFailed: false }),
 }));
 vi.mock("@/hooks/useRoleAccess", () => ({ useRoleAccess: () => ({ isAdmin: true, hasPermission: () => true, hasAnyPermission: () => true, hasAllPermissions: () => true }) }));
 vi.mock("@/hooks/useFavorites", () => ({ useFavorites: () => ({ favorites: [], isFavorite: () => false, toggleFavorite: vi.fn(), reorderFavorites: vi.fn() }) }));

@@ -15,6 +15,7 @@ import {
   Clock,
   Tags,
   Layers,
+  MonitorPlay,
   UsersRound,
   Warehouse,
   type LucideIcon,
@@ -432,8 +433,8 @@ export type SettingsRegimeKey = "productionEnabled" | "financeEnabled";
  * Bir ayar kategorisini KİLİTLEYEBİLEN modül anahtarları (gizleme DEĞİL — bkz.
  * `SettingsCategory.moduleKey`).
  *
- * ⚠️ Yer tutucu modüller (`kumasTeknikEnabled` / `tezgahEnabled`) bilerek YOK:
- * arkalarında ayar satırı da yüzey de bulunmuyor, union'a girselerdi hiçbir
+ * ⚠️ Yer tutucu modül (`kumasTeknikEnabled`) bilerek YOK:
+ * arkasında ayar satırı da yüzey de bulunmuyor, union'a girseydi hiçbir
  * kategoriye konamayan ölü değerler olurlardı. Bekçi (`§14b`) değerlerin
  * backend rejim kapılarıyla (`REGIME_GATES`) birebirliğini ölçer.
  */
@@ -444,7 +445,8 @@ export type SettingsModuleKey =
   | "iplikEnabled"
   | "depoMultiEnabled"
   | "devereEnabled"
-  | "dokumaEnabled";
+  | "dokumaEnabled"
+  | "tezgahEnabled";
 
 /** Bölüm = SALT YERLEŞİM (başlık + sıra). Rejim kapısı taşımaz — bkz. yukarıdaki gerekçe. */
 export interface SettingsSection {
@@ -663,6 +665,15 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
         desc: "Açıkken Dokuma İşleri ekranı, tezgah koşumu ve top indirme uçları açılır. Kapalıyken (varsayılan) 403 verir, karo çizilmez. ⚠️ Üretim modülü kapalıyken açılamaz.",
       },
       {
+        // ⚠️ SIRA: Dokuma işinin ALTINDA — ön koşulu o değil Üretim'dir (kardeş modül).
+        key: "tezgahEnabled",
+        title: "Tezgah izleme modülünü aç",
+        summary: "Tezgah Salonu canlı ekranı açılır: çalışan, duran ve hedef süreyi aşan tezgahlar.",
+        defaultOn: false,
+        audience: ["Operatör", "Yönetim"],
+        desc: "Açıkken Tezgah Salonu ekranı (karo ve tam ekran / TV kipi) ve canlı salon ucu açılır; Hazır Sebepler'de duruş sebeplerine hedef süre girilir. Kapalıyken (varsayılan) uç 403 verir, karo çizilmez. ⚠️ Üretim modülü kapalıyken açılamaz.",
+      },
+      {
         key: "depoMultiEnabled",
         title: "Çoklu depo modülünü aç",
         summary: "Depo seçicileri, listelerdeki depo kolonu ve depolar arası transfer ekranı açılır.",
@@ -679,10 +690,10 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
         audience: ["Depocu", "Planlamacı", "Yönetim"],
         desc: "Açıkken top, levent ve iplik lotunda “sahibi olan müşteri” alanı açılır; emanet mal ayrı sayılır. Kapalıyken (varsayılan) alan çizilmez, yazılamaz ve her mal fabrikanın sayılır.",
       },
-      // ⚠️ `kumasTeknikEnabled` ve `tezgahEnabled` BİLEREK BURADA YOK: arkalarında
-      // henüz hiçbir yüzey/kapı yok, satırları yalnız "açtım ama hiçbir şey
-      // olmadı" üretirdi. Backend sözleşme bekçisinde gerekçeli muaf listesinde
-      // (`PANEL_EXEMPT`) duruyorlar; yüzey doğduğu gün buraya eklenirler.
+      // ⚠️ `kumasTeknikEnabled` BİLEREK BURADA YOK: arkasında henüz hiçbir
+      // yüzey/kapı yok, satırı yalnız "açtım ama hiçbir şey olmadı" üretirdi.
+      // Backend sözleşme bekçisinde gerekçeli muaf listesinde (`PANEL_EXEMPT`)
+      // duruyor; yüzey doğduğu gün buraya eklenir.
     ],
   },
   {
@@ -1470,6 +1481,31 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
         defaultOn: false,
         audience: ["Planlamacı", "Yönetim"],
         desc: "Açıkken dokuma işi en az bir sipariş satırına bağlanmadan kaydedilemez. Kapalıyken (varsayılan) stoka dokuma işi açılır ve hub'da ayrı sekmede durur.",
+      },
+    ],
+  },
+  {
+    // TEZGAH İZLEME — KİLİT `tezgahEnabled` (ETKİN: production && tezgah); yazma
+    // kapsamı `settings:dokuma` (backend `settings-scopes.ts`).
+    id: "tezgah",
+    label: "Tezgah izleme",
+    icon: MonitorPlay,
+    description: "Tezgah Salonu canlı ekranının uyarı ayarları.",
+    keywords: "tezgah salonu canlı izleme duruş hedef süre aşım patron iletim payı uyarı tv",
+    kind: "flags",
+    section: "production",
+    permissionAny: [SETTINGS_ADMIN_PERMISSION, "settings:dokuma"],
+    moduleKey: "tezgahEnabled",
+    numberFlags: [
+      {
+        key: "tezgahEscalationGraceMinutes",
+        title: "Patrona iletim payı",
+        desc: "Duruş sebebinin hedef süresi aşıldıktan sonra patrona iletmeden önce beklenen ek süre. 0 = hedef dolar dolmaz. Değer duruş açılırken o duruşa donar; değişiklik yalnız yeni duruşları etkiler. Hedef sürenin kendisi Hazır Sebepler'de, sebep satırındadır.",
+        min: 0,
+        max: 1440,
+        fallback: 0,
+        unit: "dk",
+        audience: ["Yönetim"],
       },
     ],
   },

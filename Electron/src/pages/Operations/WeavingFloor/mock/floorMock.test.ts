@@ -29,7 +29,7 @@ describe("createFloor — tohumlu başlangıç", () => {
   it("36 tezgah, üç hol, hepsi SIMULATED beyanlı", () => {
     const f = createFloor(SEED, NOW);
     expect(f.looms).toHaveLength(36);
-    expect(f.halls).toEqual(["A", "B", "C"]);
+    expect(f.halls).toEqual(["Hol A", "Hol B", "Hol C"]);
     expect(f.looms.every((t) => t.source === "SIMULATED")).toBe(true);
   });
 
@@ -47,15 +47,15 @@ describe("createFloor — tohumlu başlangıç", () => {
     for (const t of f.looms) {
       const s = t.openStop;
       if (!s || s.escalatedAt === null) continue;
-      expect(s.escalatedAt).toBe(s.startedAt + reasonOf(s.reasonCode).targetMin! * 60_000);
+      expect(s.escalatedAt).toBe(s.startedAt + reasonOf(s.reasonCode!).targetMin! * 60_000);
     }
   });
 
   it("bugün sayaçları vardiyayı kapsar: günün önceki vardiyaları da sayılır", () => {
     const f = createFloor(SEED, NOW);
     for (const t of f.looms) {
-      expect(t.today.plannedSec).toBeGreaterThan(t.shift.plannedSec);
-      expect(t.today.runSec).toBeGreaterThanOrEqual(t.shift.runSec);
+      expect(t.today.plannedSec).toBeGreaterThan(t.shift!.plannedSec);
+      expect(t.today.runSec).toBeGreaterThanOrEqual(t.shift!.runSec);
       expect(t.today.runSec).toBeLessThanOrEqual(t.today.plannedSec);
       const pct = todayAvailabilityPct(t)!;
       expect(pct).toBeGreaterThanOrEqual(0);
@@ -72,7 +72,7 @@ describe("createFloor — tohumlu başlangıç", () => {
 
   it("günün ilk vardiyasında bugün = vardiya", () => {
     const night = Date.UTC(2026, 9, 8, 23, 0); // 02:00 İstanbul, 3. vardiya (günün ilki)
-    for (const t of createFloor(SEED, night).looms) expect(t.today).toEqual({ runSec: t.shift.runSec, plannedSec: t.shift.plannedSec });
+    for (const t of createFloor(SEED, night).looms) expect(t.today).toEqual({ runSec: t.shift!.runSec, plannedSec: t.shift!.plannedSec });
   });
 
   it("vardiya fabrika gününden üçe bölünür", () => {
@@ -101,8 +101,8 @@ describe("stepFloor — saf simülasyon adımı", () => {
   it("çalışan tezgahlar üretir; vardiya metresi geri gitmez", () => {
     const f = createFloor(SEED, NOW);
     const g = runSteps(f, NOW, 10);
-    const before = f.looms.reduce((a, t) => a + t.shift.meters, 0);
-    const after = g.looms.reduce((a, t) => a + t.shift.meters, 0);
+    const before = f.looms.reduce((a, t) => a + t.shift!.meters, 0);
+    const after = g.looms.reduce((a, t) => a + t.shift!.meters, 0);
     expect(after).toBeGreaterThan(before);
     expect(g.updatedAt).toBe(NOW + 20_000);
     for (const [i, t] of g.looms.entries()) expect(t.today.plannedSec).toBeGreaterThanOrEqual(f.looms[i]!.today.plannedSec);

@@ -3,7 +3,7 @@
 // =============================================================================
 import { factoryDayStart, formatFactory } from "@/lib/factory-time";
 import { escalationDueAt, shouldEscalate } from "../metrics";
-import { reasonOf } from "../stopReasons";
+import { ESCALATION_SETTINGS, reasonOf } from "../stopReasons";
 import type { FloorState, LiveLoom, LoomEvent, OpenStop, Shift, StopRecord } from "../types";
 import { ATTENDANTS, FABRICS, HALLS, OPENING_SCENARIOS, OWNER, SUDDEN_STOP_WEIGHTS } from "./catalog";
 import { createRandom, type Random } from "./random";
@@ -27,6 +27,12 @@ export function shiftOf(now: number): Shift {
 
 export const metersOf = (picks: number, picksPerCm: number): number => picks / (picksPerCm * 100);
 
+/** Önizleme sözlüğünden ad + sınıf (gerçekte sunucu verir). */
+export function reasonFields(reasonCode: string): { reasonCode: string; label: string; lossClass: StopRecord["lossClass"] } {
+  const r = reasonOf(reasonCode);
+  return { reasonCode, label: r.label, lossClass: r.lossClass };
+}
+
 /** Kapanmış geçmiş duruşlar — vardiya başı ile `limit` arasında, sırayla. */
 function pastStops(r: Random, from: number, limit: number): StopRecord[] {
   const out: StopRecord[] = [];
@@ -36,7 +42,7 @@ function pastStops(r: Random, from: number, limit: number): StopRecord[] {
     const reasonCode = r.weighted(SUDDEN_STOP_WEIGHTS);
     const target = reasonOf(reasonCode).targetMin ?? 10;
     const duration = Math.min(r.range(0.4, 1.6) * target * MINUTE, limit - t);
-    out.push({ reasonCode, startedAt: t, endedAt: t + duration });
+    out.push({ ...reasonFields(reasonCode), startedAt: t, endedAt: t + duration });
     t += duration + r.range(8, 40) * MINUTE;
   }
   return out;
@@ -46,7 +52,7 @@ function eventsOf(stops: StopRecord[], open: OpenStop | null, hall: string): Loo
   const attendant = ATTENDANTS[hall]!;
   const events: LoomEvent[] = [];
   for (const d of stops) {
-    events.push({ at: d.startedAt, kind: "STOP", reasonCode: d.reasonCode });
+    events.push({ at: d.startedAt, kind: "STOP", reasonCode: d.reasonCode, label: d.label, lossClass: d.lossClass });
     events.push({ at: d.startedAt + NOTIFY_DELAY_MS, kind: "NOTIFY", person: attendant });
     events.push({ at: d.startedAt + (d.endedAt - d.startedAt) * 0.3, kind: "RESPOND", person: attendant });
     events.push({ at: d.endedAt, kind: "RUN" });
@@ -57,16 +63,25 @@ function eventsOf(stops: StopRecord[], open: OpenStop | null, hall: string): Loo
 
 export function openStopEvents(a: OpenStop): LoomEvent[] {
   const list: LoomEvent[] = [
-    { at: a.startedAt, kind: "STOP", reasonCode: a.reasonCode },
-    { at: a.notifiedAt, kind: "NOTIFY", person: a.attendant },
+    { at: a.startedAt, kind: "STOP", reasonCode: a.reasonCode, label: a.label, lossClass: a.lossClass },
+    { at: a.notifiedAt!, kind: "NOTIFY", person: a.attendant! },
   ];
-  if (a.respondedAt !== null) list.push({ at: a.respondedAt, kind: "RESPOND", person: a.attendant });
+  if (a.respondedAt !== null) list.push({ at: a.respondedAt, kind: "RESPOND", person: a.attendant! });
   if (a.escalatedAt !== null) list.push({ at: a.escalatedAt, kind: "ESCALATE", person: OWNER });
   return list;
 }
 
 export function openStopOf(reasonCode: string, startedAt: number, hall: string, respondedAt: number | null): OpenStop {
-  return { reasonCode, startedAt, attendant: ATTENDANTS[hall]!, notifiedAt: startedAt + NOTIFY_DELAY_MS, respondedAt, escalatedAt: null };
+  return {
+    ...reasonFields(reasonCode),
+    startedAt,
+    targetMin: reasonOf(reasonCode).targetMin,
+    graceMin: ESCALATION_SETTINGS.graceMin,
+    attendant: ATTENDANTS[hall]!,
+    notifiedAt: startedAt + NOTIFY_DELAY_MS,
+    respondedAt,
+    escalatedAt: null,
+  };
 }
 
 /** Hedef + pay dolduysa patrona iletim damgası, iletimin olması gereken ana yazılır. */
@@ -91,7 +106,7 @@ function createLoom(r: Random, seed: LoomSeed, open: OpenStop | null): LiveLoom 
   const elapsedSec = Math.max(0, (now - shift.startsAt) / 1000);
   const openSec = open ? (now - limit) / 1000 : 0;
   const stopSec = stops.reduce((a, d) => a + (d.endedAt - d.startedAt) / 1000, 0) + openSec;
-  const unscheduledSec = open && reasonOf(open.reasonCode).lossClass === "NON_SCHEDULED" ? openSec : 0;
+  const unscheduledSec = open && open.lossClass === "NON_SCHEDULED" ? openSec : 0;
   const runSec = Math.max(0, elapsedSec - stopSec);
   const picks = (runSec / 60) * targetRpm * r.range(0.86, 0.99);
   const meters = metersOf(picks, picksPerCm);
@@ -108,6 +123,7 @@ function createLoom(r: Random, seed: LoomSeed, open: OpenStop | null): LiveLoom 
     id: `tz-${code}`,
     code,
     hall: hall.name,
+    monitored: true,
     loomType: hall.loomType,
     targetRpm,
     rpm: open ? 0 : Math.round(targetRpm * r.range(0.9, 1)),
@@ -122,6 +138,7 @@ function createLoom(r: Random, seed: LoomSeed, open: OpenStop | null): LiveLoom 
     },
     today: { runSec: earlierRunSec + runSec, plannedSec: earlierSec + plannedSec },
     stops,
+    dayBreakdown: null,
     events: eventsOf(stops, open, hall.name),
     job: {
       no: `DK${formatFactory(now, "ddMMyy")}${String(1000 + seed.seq * 7).slice(-4)}`,

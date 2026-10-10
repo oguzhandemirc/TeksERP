@@ -16,7 +16,7 @@ import type { OperationsVisibilityContext } from "@/pages/Operations/tile-config
 let ready = true;
 vi.mock("@/pages/Operations/useOperationsVisibility", () => ({
   useOperationsVisibilityContext: (): OperationsVisibilityContext => ({
-    shipmentConfirmationEnabled: false, depoMultiEnabled: false, devereEnabled: false, dokumaEnabled: false,
+    shipmentConfirmationEnabled: false, depoMultiEnabled: false, devereEnabled: false, dokumaEnabled: false, tezgahEnabled: false,
     financeEnabled: true, productionEnabled: true, ticaretEnabled: true, iplikEnabled: false,
     reportsClosedKeys: ready ? [] : null,
     isReportOpen: () => ready,

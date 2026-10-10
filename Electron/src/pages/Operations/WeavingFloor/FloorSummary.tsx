@@ -25,7 +25,7 @@ function StoppedBreakdown({ floor }: { floor: FloorState }) {
   const counts = new Map<StatusKey, number>();
   for (const t of floor.looms) {
     const s = statusOf(t);
-    if (s !== "RUN") counts.set(s, (counts.get(s) ?? 0) + 1);
+    if (s !== "RUN" && s !== "UNMONITORED") counts.set(s, (counts.get(s) ?? 0) + 1);
   }
   return (
     <div className="mt-1 flex flex-wrap gap-2">
@@ -42,7 +42,7 @@ function StoppedBreakdown({ floor }: { floor: FloorState }) {
 
 export function FloorSummary({ floor, now }: Props) {
   const s = summarizeFloor(floor.looms, now);
-  const targetRatio = s.targetMeters > 0 ? Math.min(1, s.meters / s.targetMeters) : 0;
+  const targetRatio = s.meters !== null && s.targetMeters ? Math.min(1, s.meters / s.targetMeters) : 0;
   const ink = { color: hsl("var(--ds-ink)") };
   return (
     <section
@@ -55,9 +55,9 @@ export function FloorSummary({ floor, now }: Props) {
         <div>
           <div className="text-[2em] font-extrabold leading-none tabular-nums" style={ink}>
             {s.running}
-            <span className="text-[0.5em] font-bold text-muted-foreground">/{s.total}</span>
+            <span className="text-[0.5em] font-bold text-muted-foreground">/{s.monitored}</span>
           </div>
-          <Caption>Çalışıyor</Caption>
+          <Caption>Çalışıyor{s.unmonitored > 0 ? ` · ${s.unmonitored} izlenmiyor` : ""}</Caption>
         </div>
       </Block>
       <Block>
@@ -80,20 +80,22 @@ export function FloorSummary({ floor, now }: Props) {
       <Block className="col-span-2 md:col-span-1">
         <div className="min-w-0 flex-1">
           <div className="flex items-baseline justify-between gap-2">
-            <span className="text-[1.5em] font-extrabold tabular-nums" style={ink}>{formatNumber(s.meters)} m</span>
-            <span className="text-[0.85em] font-semibold tabular-nums text-muted-foreground">hedef {formatNumber(s.targetMeters)} m</span>
+            <span className="text-[1.5em] font-extrabold tabular-nums" style={ink}>{s.meters === null ? "—" : `${formatNumber(s.meters)} m`}</span>
+            {s.targetMeters !== null && (
+              <span className="text-[0.85em] font-semibold tabular-nums text-muted-foreground">hedef {formatNumber(s.targetMeters)} m</span>
+            )}
           </div>
           <div className="mt-1.5 h-2.5 overflow-hidden rounded-full" style={{ background: hsl("var(--ds-ink)", 0.1) }}>
             <div className="h-full rounded-full transition-[width] duration-1000" style={{ width: `${targetRatio * 100}%`, background: hsl("var(--ds-run)") }} />
           </div>
-          <Caption>Vardiya hedefi</Caption>
+          <Caption>{s.meters === null ? "Vardiya metresi — sayaç bağlı değil" : "Vardiya hedefi"}</Caption>
         </div>
       </Block>
       <Block className="col-span-2 justify-between md:col-span-1 md:justify-start">
         <div className="text-right">
           <div className="text-[2em] font-extrabold leading-none tabular-nums" style={ink}>{formatFactory(now, "HH:mm")}</div>
           <Caption>
-            {floor.shift.name} · {formatShortDuration(floor.shift.endsAt - now)} kaldı
+            {floor.shift ? `${floor.shift.name} · ${formatShortDuration(floor.shift.endsAt - now)} kaldı` : "Vardiya tanımı yok"}
           </Caption>
         </div>
       </Block>

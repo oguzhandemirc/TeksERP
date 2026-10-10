@@ -237,6 +237,8 @@ describe("⭐ rejim kapısı — anahtarın kendisi asla kapının arkasında ol
       devereEnabled: false,
       // Z1: dokuma ETKİN değer (üretim && dokuma) — üretim varsayılan açık, dokuma kapalı ⇒ kapalı.
       dokumaEnabled: false,
+      // Tezgah izleme de ETKİN değer (üretim && tezgah) — tezgah varsayılan kapalı ⇒ kapalı.
+      tezgahEnabled: false,
     });
   });
 

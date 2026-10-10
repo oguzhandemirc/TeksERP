@@ -19,13 +19,13 @@ export function HallSection({ hall, looms, now, highlight, columns }: Props) {
   const s = summarizeFloor(looms, now);
   const ratio = (s.todayPct ?? 0) / 100;
   return (
-    <section aria-label={`Hol ${hall}`} className="space-y-2">
+    <section aria-label={hall} className="space-y-2">
       <header className="flex items-center gap-3">
         <h2 className="text-[1.15em] font-extrabold" style={{ color: hsl("var(--ds-ink)") }}>
-          Hol {hall}
+          {hall}
         </h2>
         <span className="text-[0.9em] font-semibold tabular-nums text-muted-foreground">
-          {s.running}/{s.total}
+          {s.running}/{s.monitored}
         </span>
         <div className="h-1.5 w-24 overflow-hidden rounded-full" style={{ background: hsl("var(--ds-ink)", 0.1) }} title="Holün bugünkü çalışma süresi payı: çalışılan süre / planlı süre">
           <div className="h-full rounded-full transition-[width] duration-1000" style={{ width: `${ratio * 100}%`, background: hsl("var(--ds-run)") }} />

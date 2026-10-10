@@ -21,6 +21,7 @@ import {
   Wrench,
   type LucideIcon,
   AlertOctagon,
+  MonitorPlay,
   Layers,
 } from "lucide-react";
 import type { OperationGroupKey } from "./groups-config";
@@ -39,6 +40,7 @@ import {
 } from "./production-regime";
 import { isWeavingOrdersVisible } from "./WeavingOrders/weaving-regime";
 import { isMachineStopsVisible } from "./MachineStops/stop-regime";
+import { isWeavingFloorVisible } from "./WeavingFloor/floor-regime";
 import { isWarpBeamsVisible } from "./WarpBeams/warp-beam-regime";
 
 /**
@@ -93,6 +95,12 @@ export interface OperationsVisibilityContext {
    * (`weaving-order` · `machine-run` · `machine-doff` router'ları).
    */
   dokumaEnabled: boolean;
+  /**
+   * TEZGAH İZLEME modülü (`tezgah.enabled`) — ETKİN değer (`production && tezgah`);
+   * tek çözüm noktası `useOperationsVisibilityContext`. Dokuma işinin KARDEŞİ.
+   * Backend kapısı `requireTezgahEnabled` (`/api/loom-floor`).
+   */
+  tezgahEnabled: boolean;
   /**
    * Ön muhasebe modülü açık mı (`finance.enabled`) — fiilen "bu bir TİCARET
    * kurulumu" anahtarı. Tanımlar menüsünün cari rejimi buna bakar: bayrak
@@ -275,6 +283,18 @@ export const operationsTiles: OperationsTile[] = [
     group: "production",
     permissionAny: ["loom:manual-entry", "loom:classify"],
     visibleWhen: isMachineStopsVisible,
+  },
+  {
+    // TEZGAH SALONU (canlı ekran): backend `/api/loom-floor` `requireTezgahEnabled` +
+    // `loom:live-view`; karo aynı bayrak ve izinle (route `ProtectedRoute` ile birebir).
+    key: "weaving-floor",
+    title: "Tezgah Salonu",
+    description: "Holdeki tezgahlar canlı: çalışan, duran, hedef süreyi aşan duruşlar; tam ekran / TV kipi",
+    icon: MonitorPlay,
+    to: "/operations/weaving-floor",
+    group: "production",
+    permission: "loom:live-view",
+    visibleWhen: isWeavingFloorVisible,
   },
   {
     // LEVENTLER (2026-09-14, devere Faz 1b): backend `warp-beam.routes` `requireDevereEnabled`

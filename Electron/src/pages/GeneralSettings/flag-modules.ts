@@ -57,14 +57,13 @@ export type PlanlananModulSahibi = "planlanan:fason" | "planlanan:kartela";
 /**
  * Bir ayar satırının sahibi.
  *
- * ⚠️ `ModuleFlagKey`in TAMAMI kullanılmaz — `SettingsModuleState` beş anahtar
- * çözer (`kumasTeknikEnabled`/`tezgahEnabled` yer tutucu, arkalarında bugün tek
- * satır yok). Sahibi o iki anahtar olan bir bayrak doğarsa `SettingsModuleState`
- * genişletilmeden derleme geçmez — istenen budur.
+ * ⚠️ `ModuleFlagKey`in TAMAMI kullanılmaz — `kumasTeknikEnabled` yer tutucudur
+ * (arkasında bugün tek satır yok). Sahibi o anahtar olan bir bayrak doğarsa
+ * `SettingsModuleState` genişletilmeden derleme geçmez — istenen budur.
  */
 export type HideableModule = Exclude<
   ModuleFlagKey,
-  "kumasTeknikEnabled" | "tezgahEnabled" | "emanetEnabled"
+  "kumasTeknikEnabled" | "emanetEnabled"
 >;
 
 export type FlagOwner = HideableModule | "cekirdek" | PlanlananModulSahibi;
@@ -107,6 +106,8 @@ export const FLAG_MODULE: Readonly<Record<FlagRowKey | SystemSettingKey, FlagOwn
   devereBeamWeavingLinkRequired: "devereEnabled",
   dokumaRunWeavingOrderRequired: "dokumaEnabled",
   dokumaOrderLineLinkRequired: "dokumaEnabled",
+  // Tezgah Salonu (2026-10-10): iletim payı tezgah izleme modülünün sayısal ayarı.
+  tezgahEscalationGraceMinutes: "tezgahEnabled",
 
   // --- ÜRETİM (`operations/work-orders` · KK1 · Tambur · Kurşun · Parti) -----
   targetQuantityEnabled: "productionEnabled",

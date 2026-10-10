@@ -50,13 +50,14 @@ export function usePricingEnabled(): boolean {
  * fabrikaya demo düğmeleri gösterirdi.
  */
 /**
- * Tezgah izleme modülü açık mı (`tezgah.enabled`). Yüklenene dek KAPALI —
- * fail-closed: modülün yüzeyleri (Hazır Sebepler'deki duruş sekmesi) referans
- * profilde hiç belirmemeli, "bir an görünüp kaybolan" sekme de sıfır fark değildir.
+ * Tezgah izleme modülü açık mı (`tezgah.enabled`, ebeveyni `production.enabled`).
+ * Yüklenene dek KAPALI — fail-closed: modülün yüzeyleri (Hazır Sebepler'deki hedef
+ * süre alanı) referans profilde hiç belirmemeli.
  */
 export function useTezgahEnabled(): boolean {
   const q = useFeatureFlags();
-  return q.data?.data?.tezgahEnabled ?? false;
+  const d = q.data?.data;
+  return (d?.productionEnabled ?? false) && (d?.tezgahEnabled ?? false);
 }
 
 /**

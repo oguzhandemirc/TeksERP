@@ -51,6 +51,9 @@ export function useOperationsVisibilityContext(): OperationsVisibilityContext {
   // karo bir an belirip kaybolmamalı ("sıfır görünür fark"); backend kapısı
   // `requireDokumaEnabled` aynı sırayı ölçer.
   const dokumaEnabled = productionEnabled && (flagsQuery.data?.data?.dokumaEnabled ?? false);
+  // Tezgah izleme de ETKİN değer (production && tezgah) — dokumanın kardeşi, çocuğu değil;
+  // backend kapısı `requireTezgahEnabled` aynı sırayı ölçer. Belirsizken FALSE.
+  const tezgahEnabled = productionEnabled && (flagsQuery.data?.data?.tezgahEnabled ?? false);
   // Rapor listesi: alan yoksa/yüklenmediyse de `null` — "boş liste = hepsi açık" yalnız
   // backend'in gerçekten boş dizi söylediği durumdur (fail-closed, K5).
   const reportsClosedKeys: readonly string[] | null = flagsQuery.data?.data?.reportsClosedKeys ?? null;
@@ -74,6 +77,7 @@ export function useOperationsVisibilityContext(): OperationsVisibilityContext {
     depoMultiEnabled,
     devereEnabled,
     dokumaEnabled,
+    tezgahEnabled,
     reportsClosedKeys,
     isReportOpen,
     flagsReady,

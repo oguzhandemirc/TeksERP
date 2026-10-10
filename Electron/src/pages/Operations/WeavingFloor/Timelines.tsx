@@ -4,7 +4,6 @@ import { BellRing, CirclePlay, CircleStop, Crown, Hand, Scroll, type LucideIcon 
 import { formatFactory } from "@/lib/factory-time";
 import { cn } from "@/lib/utils";
 import { TIER_COLOR, hsl } from "./palette";
-import { reasonOf } from "./stopReasons";
 import { escalationDueAt, escalationTierOf, formatShortDuration } from "./metrics";
 import type { LoomEvent, LoomEventKind, OpenStop, Person } from "./types";
 
@@ -39,13 +38,31 @@ interface ChainStep {
   color: string;
 }
 
+const NO_ATTENDANT: Person = { id: "-", name: "Görevli atanmadı", role: "ATTENDANT" };
+
+/**
+ * Bildirim kanalı yokken (gerçek veri, bu dilim) zincir yerine tek satır: hedef + pay
+ * ve patrona iletimin olması gereken saat. Saat fabrika diliminden.
+ */
+export function EscalationDueLine({ stop }: { stop: OpenStop }) {
+  const due = escalationDueAt(stop);
+  if (stop.targetMin === null || due === null) return null;
+  return (
+    <p className="text-sm text-muted-foreground">
+      Hedef {stop.targetMin} dk{stop.graceMin > 0 ? ` + pay ${stop.graceMin} dk` : ""} · patrona iletim zamanı{" "}
+      <span className="font-semibold tabular-nums text-foreground">{clock(due)}</span>
+    </p>
+  );
+}
+
 /** Uyarı zinciri (detay): üç kademe, gerçekleşen yanar, bekleyen soluk ve beklenen saatiyle. */
 export function AlertChainTimeline({ stop, now }: { stop: OpenStop; now: number }) {
   const tier = escalationTierOf(stop, now);
   const ownerDue = escalationDueAt(stop);
+  const attendant = stop.attendant ?? NO_ATTENDANT;
   const steps: ChainStep[] = [
-    { Icon: BellRing, title: "Görevliye bildirildi", person: stop.attendant, at: stop.notifiedAt, color: "var(--ds-ink)" },
-    { Icon: Hand, title: stop.respondedAt ? "Görevli tezgahta" : "Görevli bekleniyor", person: stop.attendant, at: stop.respondedAt, color: "var(--ds-run)" },
+    { Icon: BellRing, title: "Görevliye bildirildi", person: attendant, at: stop.notifiedAt, color: "var(--ds-ink)" },
+    { Icon: Hand, title: stop.respondedAt ? "Görevli tezgahta" : "Görevli bekleniyor", person: attendant, at: stop.respondedAt, color: "var(--ds-run)" },
     { Icon: Crown, title: tier === "ESCALATED" ? "Patrona iletildi" : "Hedef aşılırsa patrona", person: OWNER_ROLE, at: stop.escalatedAt, color: "var(--ds-escalated)" },
   ];
   return (
@@ -92,12 +109,11 @@ export function RecentEvents({ events, now }: { events: readonly LoomEvent[]; no
     <ol className="space-y-1.5" aria-label="Son olaylar">
       {visible.map((e, i) => {
         const style = EVENT_STYLE[e.kind];
-        const reason = e.reasonCode ? reasonOf(e.reasonCode) : null;
         return (
           <li key={`${e.at}-${e.kind}-${i}`} className="flex items-center gap-2.5 text-sm">
             <span className="w-11 shrink-0 tabular-nums text-muted-foreground">{clock(e.at)}</span>
             <style.Icon className="h-4 w-4 shrink-0" style={{ color: hsl(style.color) }} />
-            <span className="font-medium">{reason ? reason.label : style.text}</span>
+            <span className="font-medium">{e.label ?? style.text}</span>
             {e.person && <span className="text-muted-foreground">{e.person.name}</span>}
             {i === 0 && <span className="ml-auto text-xs text-muted-foreground">{formatShortDuration(now - e.at)} önce</span>}
           </li>

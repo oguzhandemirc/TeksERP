@@ -17,7 +17,7 @@ import type { AgingReport } from "./service";
 let closed: string[] = [];
 vi.mock("@/pages/Operations/useOperationsVisibility", () => ({
   useOperationsVisibilityContext: (): OperationsVisibilityContext => ({
-    shipmentConfirmationEnabled: false, depoMultiEnabled: false, devereEnabled: false, dokumaEnabled: false,
+    shipmentConfirmationEnabled: false, depoMultiEnabled: false, devereEnabled: false, dokumaEnabled: false, tezgahEnabled: false,
     financeEnabled: true, productionEnabled: true, ticaretEnabled: false, iplikEnabled: false,
     reportsClosedKeys: closed,
     isReportOpen: (key: string) => !closed.includes(key),

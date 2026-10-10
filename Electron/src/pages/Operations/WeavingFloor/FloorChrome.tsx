@@ -18,7 +18,7 @@ export function SampleDataBadge() {
   );
 }
 
-const LEGEND: StatusKey[] = ["RUN", "UNPLANNED", "SETUP", "PLANNED", "NON_SCHEDULED"];
+const LEGEND: StatusKey[] = ["RUN", "UNPLANNED", "SETUP", "PLANNED", "NON_SCHEDULED", "UNMONITORED"];
 
 /** Renk + şekil anahtarı ve iki yüzdenin tanımı — tek satır, yazı yalnız burada. */
 export function StatusLegend() {
@@ -40,6 +40,8 @@ export function StatusLegend() {
 
 interface FullscreenHeaderProps {
   now: number;
+  /** Önizleme verisi mi — "Örnek veri" rozeti yalnız o zaman. */
+  sampleData: boolean;
   /** Son veri tazelemesinin anı — TV'ye bakan ekranın canlı olduğunu görsün. */
   updatedAt: number;
   /** Yoksa (TV kipi) çıkış düğmesi çizilmez. */
@@ -47,13 +49,13 @@ interface FullscreenHeaderProps {
   legend?: React.ReactNode;
 }
 
-export function FullscreenHeader({ now, updatedAt, onExit, legend }: FullscreenHeaderProps) {
+export function FullscreenHeader({ now, sampleData, updatedAt, onExit, legend }: FullscreenHeaderProps) {
   return (
     <div className="flex items-center gap-4 px-6 pt-4">
       <h1 className="whitespace-nowrap text-[1.6em] font-extrabold" style={{ color: hsl("var(--ds-ink)") }}>
         Tezgah Salonu
       </h1>
-      <SampleDataBadge />
+      {sampleData && <SampleDataBadge />}
       <div className="min-w-0 flex-1">{legend}</div>
       <span
         className="inline-flex items-center gap-1.5 whitespace-nowrap text-[0.8em] font-semibold tabular-nums text-muted-foreground"

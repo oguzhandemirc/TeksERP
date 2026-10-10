@@ -1,108 +1,48 @@
 // =============================================================================
-// TEZGAH SALONU — dokuma tezgahlarının canlı görünümü (ŞİMDİLİK ÖRNEK VERİ)
+// TEZGAH SALONU — uygulama ekranı (gerçek veri; `/operations/weaving-floor`)
 // =============================================================================
-// Veri tek kapıdan: `useLoomFloorLive` (bugün mock; ağ/IPC yok). Tasarım kararları
-// ve gerçek veriye geçiş: docs/design/DOKUMA-CANLI-EKRAN.md.
-// `tv` = salon TV'si kipi: açılışta tam ekran, menü/düğme/çıkış yok, dokunuş detay açmaz.
+// Kapı: route `loom:live-view` + `ROUTE_MODULE` `tezgahEnabled`; backend aynı iki kapı.
+// Veri `useLoomFloorLive` (5 sn yoklama); görünüm `WeavingFloorView`. Örnek veri
+// yalnız geliştirme önizlemesinde (`preview/weavingFloorPreview.tsx`).
 // =============================================================================
-import { useCallback, useMemo, useState } from "react";
-import { Maximize2 } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { WifiOff } from "lucide-react";
 import { PageBody, PageShell } from "@/components/layout/PageShell";
 import { PageHeader } from "@/components/layout/PageHeader";
-import { TabPortalProvider } from "@/components/layout/tabs/tab-portal";
-import { cn } from "@/lib/utils";
-import { FloorSummary } from "./FloorSummary";
-import { FullscreenHeader, SampleDataBadge, StatusLegend } from "./FloorChrome";
-import { HallSection } from "./HallSection";
-import { LoomDetailSheet } from "./LoomDetailSheet";
-import { OverdueStrip } from "./OverdueStrip";
-import { ShowFilterPicker, showFilterPredicate, type ShowFilter } from "./ShowFilterPicker";
-import { hsl } from "./palette";
-import { shiftStarLoom, summarizeFloor } from "./metrics";
-import { useFullscreen } from "./useFullscreen";
+import { formatFactory } from "@/lib/factory-time";
 import { useLoomFloorLive } from "./useLoomFloorLive";
-import "./weaving-floor.css";
+import { WeavingFloorView } from "./WeavingFloorView";
 
-function bestHallOf(halls: readonly { hall: string; pct: number | null }[]): string | null {
-  const ranked = halls.filter((h) => h.pct !== null).sort((a, b) => b.pct! - a.pct!);
-  return ranked[0]?.hall ?? null;
+/** Tazeleme koptuğunda eldeki veri gösterilir ama yaşı açıkça yazılır. */
+function StaleNotice({ updatedAt }: { updatedAt: number }) {
+  return (
+    <span className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-full bg-destructive/10 px-2.5 py-0.5 text-xs font-bold text-destructive">
+      <WifiOff className="h-3.5 w-3.5" />
+      Bağlantı yok — son veri {formatFactory(updatedAt, "HH:mm:ss")}
+    </span>
+  );
 }
 
-const noSelect = () => undefined;
-
 export function WeavingFloorPage({ tv = false }: { tv?: boolean }) {
-  const { floor, now } = useLoomFloorLive();
-  const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [filter, setFilter] = useState<ShowFilter>("ALL");
-  const [root, setRoot] = useState<HTMLDivElement | null>(null);
-  const fullscreen = useFullscreen(root, { locked: tv });
-  const select = useCallback((id: string) => setSelectedId(id), []);
-  const onSelect = tv ? noSelect : select;
-
-  const predicate = showFilterPredicate(filter, now);
-  const halls = floor.halls.map((hall) => {
-    const all = floor.looms.filter((t) => t.hall === hall);
-    return { hall, all, visible: all.filter(predicate), pct: summarizeFloor(all, now).todayPct };
-  });
-  const bestHall = bestHallOf(halls);
-  const starId = useMemo(() => shiftStarLoom(floor.looms), [floor.looms]);
-  const selected = floor.looms.find((t) => t.id === selectedId) ?? null;
-  const empty = halls.every((h) => h.visible.length === 0);
-  // Tam ekranda bütün holler aynı kolon ızgarasında: en kalabalık hol tek satıra sığar.
-  const columns = fullscreen.active ? Math.max(...halls.map((h) => h.all.length)) : undefined;
-
+  const live = useLoomFloorLive();
+  if (!live.floor) {
+    return (
+      <PageShell>
+        <PageHeader title="Tezgah Salonu" />
+        <PageBody className="p-4">
+          <p className="py-10 text-center text-muted-foreground">
+            {live.error ? `Salon verisi okunamadı: ${live.error.message}` : "Salon verisi yükleniyor…"}
+          </p>
+        </PageBody>
+      </PageShell>
+    );
+  }
   return (
-    <PageShell>
-      <div
-        ref={setRoot}
-        className={cn("relative flex min-h-0 flex-1 flex-col", fullscreen.active && "fixed inset-0 z-[60] text-[1.3rem]")}
-        style={{ background: hsl("var(--ds-floor)") }}
-      >
-        <TabPortalProvider value={root}>
-          {fullscreen.active ? (
-            <FullscreenHeader
-              now={now}
-              updatedAt={floor.updatedAt}
-              onExit={tv ? undefined : fullscreen.exit}
-              legend={<StatusLegend />}
-            />
-          ) : (
-            <PageHeader
-              title="Tezgah Salonu"
-              titleExtra={<SampleDataBadge />}
-              actions={
-                <>
-                  <ShowFilterPicker value={filter} onChange={setFilter} />
-                  <Button variant="outline" onClick={fullscreen.enter}>
-                    <Maximize2 className="mr-1.5 h-4 w-4" />
-                    Tam ekran
-                  </Button>
-                </>
-              }
-            />
-          )}
-          <PageBody className={cn("min-h-0 space-y-4 p-4", fullscreen.active && "space-y-3 px-6 pt-3")}>
-            <FloorSummary floor={floor} now={now} />
-            <OverdueStrip looms={floor.looms} now={now} onSelect={onSelect} />
-            {halls
-              .filter((h) => h.visible.length > 0)
-              .map((h) => (
-                <HallSection
-                  key={h.hall}
-                  hall={h.hall}
-                  looms={h.visible}
-                  now={now}
-                  columns={columns}
-                  highlight={{ starId, bestHall: h.hall === bestHall, onSelect }}
-                />
-              ))}
-            {empty && <p className="py-10 text-center text-muted-foreground">Bu seçimde tezgah yok — Göster: Tümü ile hepsini açın.</p>}
-            {!fullscreen.active && <StatusLegend />}
-          </PageBody>
-          <LoomDetailSheet loom={selected} now={now} onClose={() => setSelectedId(null)} />
-        </TabPortalProvider>
-      </div>
-    </PageShell>
+    <WeavingFloorView
+      floor={live.floor}
+      now={live.now}
+      sampleData={false}
+      tv={tv}
+      notice={live.stale ? <StaleNotice updatedAt={live.floor.updatedAt} /> : undefined}
+    />
   );
 }

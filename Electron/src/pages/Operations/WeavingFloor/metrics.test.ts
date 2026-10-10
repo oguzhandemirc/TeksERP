@@ -9,15 +9,20 @@ import {
   shouldEscalate,
   targetProgress,
 } from "./metrics";
-import { ESCALATION_SETTINGS } from "./stopReasons";
+import { ESCALATION_SETTINGS, reasonOf } from "./stopReasons";
 import type { OpenStop } from "./types";
 
 const MIN = 60_000;
 const T0 = Date.UTC(2026, 9, 9, 8, 0);
 
 function stop(reasonCode: string, over: Partial<OpenStop> = {}): OpenStop {
+  const r = reasonOf(reasonCode);
   return {
     reasonCode,
+    label: r.label,
+    lossClass: r.lossClass,
+    targetMin: r.targetMin,
+    graceMin: ESCALATION_SETTINGS.graceMin,
     startedAt: T0,
     attendant: { id: "g", name: "Görevli", role: "ATTENDANT" },
     notifiedAt: T0 + 5_000,
@@ -104,6 +109,14 @@ describe("shouldEscalate — patrona iletim (hedef + pay)", () => {
     expect(shouldEscalate(s, T0 + 6 * MIN, 2)).toBe(false);
     expect(escalationTierOf(s, T0 + 6 * MIN)).toBe("OVERDUE");
     expect(shouldEscalate(s, T0 + 7 * MIN, 2)).toBe(true);
+  });
+
+  it("⭐ hedef ve pay DURUŞA DONMUŞ değerden okunur, katalogdan değil", () => {
+    const s = stop("ATKI_KOPUSU", { targetMin: 20, graceMin: 3 }); // katalogda 5 dk
+    expect(escalationTierOf(s, T0 + 10 * MIN)).toBe("WITHIN");
+    expect(escalationTierOf(s, T0 + 20 * MIN)).toBe("OVERDUE");
+    expect(escalationDueAt(s)).toBe(T0 + 23 * MIN);
+    expect(escalationTierOf(stop("ATKI_KOPUSU", { targetMin: null }), T0 + 600 * MIN)).toBe("UNTRACKED");
   });
 
   it("zaten iletilmiş ya da izlenmeyen duruş yeniden iletilmez", () => {

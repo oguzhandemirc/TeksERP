@@ -38,6 +38,8 @@ export interface ReasonPreset {
   legacyTexts?: string[];
   /** Yalnız `MACHINE_STOP`ta dolu (zorunlu; MINOR süre sınıfıdır, seçilemez). Duruşa kopyalanıp donar. */
   stopLossClass?: StopLossClass | null;
+  /** Yalnız `MACHINE_STOP` (NON_SCHEDULED hariç): hedef müdahale süresi (dk, 1..1440); null = izlenmez. Duruşa sebep kararında donar. */
+  targetMinutes?: number | null;
 }
 
 /** Sebebe verilebilen kayıp sınıfları — `MINOR` bilinçli dışarıda (süre sınıfı, sebep değil). */
@@ -48,6 +50,15 @@ export const STOP_LOSS_CLASS_OPTIONS: { value: StopLossClass; label: string; hin
   { value: "PLANNED", label: "Planlı", hint: "Planlı bakım, mola dışı planlı duruş" },
   { value: "NON_SCHEDULED", label: "Çalışma dışı", hint: "Sipariş yok, vardiya dışı — POT'a hiç girmez" },
 ];
+
+/** Hedef süre girdisi → API değeri: boş = null (izlenmez); geçersiz = undefined (kaydet kapalı). */
+export function parseStopTarget(text: string): number | null | undefined {
+  const t = text.trim();
+  if (t === "") return null;
+  if (!/^\d+$/.test(t)) return undefined;
+  const n = Number(t);
+  return n >= 1 && n <= 1440 ? n : undefined;
+}
 
 /**
  * true olan listelerde kayda METİN de yazılır (`Roll.entryReason` / `Roll.cancelReason`
@@ -166,12 +177,19 @@ export const reasonPresetService = {
     label: string;
     fullText?: string | null;
     stopLossClass?: StopLossClass | null;
+    targetMinutes?: number | null;
   }): Promise<ReasonPreset> =>
     apiClient.post<ReasonPreset>("/api/reason-presets", input).then((r) => r.data),
 
   update: (
     id: string,
-    input: { label?: string; fullText?: string | null; isActive?: boolean; stopLossClass?: StopLossClass | null },
+    input: {
+      label?: string;
+      fullText?: string | null;
+      isActive?: boolean;
+      stopLossClass?: StopLossClass | null;
+      targetMinutes?: number | null;
+    },
   ): Promise<ReasonPreset> =>
     apiClient.patch<ReasonPreset>(`/api/reason-presets/${id}`, input).then((r) => r.data),
 

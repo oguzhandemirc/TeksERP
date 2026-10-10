@@ -180,7 +180,8 @@ describe("Sistem Profili ekranı", () => {
   it("§4 yer tutucu modüller 'yüzeyi yok' rozetiyle gösterilir", async () => {
     renderWithProviders(<ModuleProfilePage />);
     await waitFor(() => expect(screen.getByText(/Kumaş teknik kartı · yüzeyi yok/)).toBeTruthy());
-    expect(screen.getByText(/Tezgah izleme · yüzeyi yok/)).toBeTruthy();
+    // Tezgah izlemenin yüzeyi var (Tezgah Salonu) — artık yer tutucu değil.
+    expect(screen.queryByText(/Tezgah izleme · yüzeyi yok/)).toBeNull();
   });
 
   it("§5 tutarsızlık bantları: çoklu depo + PIN", async () => {

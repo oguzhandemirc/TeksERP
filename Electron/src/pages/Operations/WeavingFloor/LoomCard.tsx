@@ -8,7 +8,7 @@ import { AlertChainMini, StatusShape, TimerRing } from "./Markers";
 import { LoomFigure } from "./LoomFigure";
 import { STATUS_COLOR, STATUS_LABEL, TIER_COLOR, TIER_LABEL, hsl, statusOf } from "./palette";
 import { escalationTierOf, formatTimer, targetProgress, todayAvailabilityPct } from "./metrics";
-import { reasonOf } from "./stopReasons";
+import { reasonIconOf } from "./stopReasons";
 import type { LiveLoom, OpenStop } from "./types";
 
 interface Props {
@@ -75,19 +75,23 @@ function RunningFooter({ loom }: { loom: LiveLoom }) {
   );
 }
 
+function UnmonitoredFooter() {
+  return <div className="flex h-6 items-center text-xs font-semibold text-muted-foreground">İzlenmiyor</div>;
+}
+
 function ariaLabelOf(t: LiveLoom, now: number): string {
+  if (!t.monitored) return `Tezgah ${t.code}, izlenmiyor`;
   const today = todayAvailabilityPct(t);
   const todayText = today === null ? "" : `, bugün %${today}`;
   if (!t.openStop) return `Tezgah ${t.code}, çalışıyor${todayText}`;
-  const r = reasonOf(t.openStop.reasonCode);
-  return `Tezgah ${t.code}, duruyor: ${r.label}, ${formatTimer(now - t.openStop.startedAt)}, ${TIER_LABEL[escalationTierOf(t.openStop, now)]}${todayText}`;
+  return `Tezgah ${t.code}, duruyor: ${t.openStop.label}, ${formatTimer(now - t.openStop.startedAt)}, ${TIER_LABEL[escalationTierOf(t.openStop, now)]}${todayText}`;
 }
 
 function LoomCardImpl({ loom: t, now, star, onSelect }: Props) {
   const status = statusOf(t);
   const color = STATUS_COLOR[status];
-  const stop = t.openStop;
-  const reason = stop ? reasonOf(stop.reasonCode) : null;
+  const stop = t.monitored ? t.openStop : null;
+  const reasonIcon = stop ? reasonIconOf(stop.reasonCode, stop.lossClass) : null;
   const tier = stop ? escalationTierOf(stop, now) : null;
   const justStopped = stop !== null && now - stop.startedAt < 4_000;
   const ringColor = tier === "ESCALATED" ? "var(--ds-escalated)" : color;
@@ -112,7 +116,7 @@ function LoomCardImpl({ loom: t, now, star, onSelect }: Props) {
           {t.code}
           {star && <Star className="h-4 w-4 fill-current" style={{ color: hsl("var(--ds-over)") }} aria-label="Vardiyanın yıldızı" />}
         </span>
-        {stop && tier !== "UNTRACKED" ? (
+        {stop && stop.attendant && tier !== "UNTRACKED" ? (
           <AlertChainMini stop={stop} tier={tier!} now={now} compact />
         ) : (
           <StatusShape status={status} className="h-5 w-5" />
@@ -120,17 +124,17 @@ function LoomCardImpl({ loom: t, now, star, onSelect }: Props) {
       </div>
       <div className="relative">
         <LoomFigure
-          running={!stop}
-          rpm={t.rpm}
+          running={status === "RUN"}
+          rpm={t.rpm ?? 0}
           beamRatio={t.beam ? t.beam.remainingM / t.beam.totalM : 0}
           fabricColor={t.job?.color ?? "#999"}
           statusColor={color}
-          className={cn("w-full transition-opacity", stop && "opacity-45")}
+          className={cn("w-full transition-opacity", status !== "RUN" && "opacity-45")}
         />
-        {reason && (
+        {reasonIcon && (
           <StatusShape
             status={status}
-            icon={reason.icon}
+            icon={reasonIcon}
             className="absolute left-1/2 top-1/2 h-[3.2em] w-[3.2em] -translate-x-1/2 -translate-y-1/2 drop-shadow"
           />
         )}
@@ -140,7 +144,7 @@ function LoomCardImpl({ loom: t, now, star, onSelect }: Props) {
           </span>
         )}
       </div>
-      {stop ? <StoppedFooter stop={stop} now={now} /> : <RunningFooter loom={t} />}
+      {!t.monitored ? <UnmonitoredFooter /> : stop ? <StoppedFooter stop={stop} now={now} /> : <RunningFooter loom={t} />}
       <span className="sr-only">{STATUS_LABEL[status]}</span>
     </button>
   );

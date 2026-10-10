@@ -15,6 +15,8 @@ const SHAPE_PATH: Record<StatusKey, string> = {
   SETUP: "M12 1 23 12 12 23 1 12Z",
   PLANNED: "M6 2h12a4 4 0 0 1 4 4v12a4 4 0 0 1-4 4H6a4 4 0 0 1-4-4V6a4 4 0 0 1 4-4Z",
   NON_SCHEDULED: "M12 2a10 10 0 1 1 0 20a10 10 0 1 1 0-20Z",
+  // izlenmiyor: kesik çizgili kare
+  UNMONITORED: "M4 4h16v16H4Z",
 };
 
 interface ShapeProps {
@@ -26,7 +28,7 @@ interface ShapeProps {
 /** Durum şekli + içinde sebep simgesi. */
 export function StatusShape({ status, icon: Icon, className }: ShapeProps) {
   const color = hsl(STATUS_COLOR[status]);
-  const hollow = status === "NON_SCHEDULED";
+  const hollow = status === "NON_SCHEDULED" || status === "UNMONITORED";
   return (
     <span className={cn("relative inline-grid place-items-center", className)}>
       <svg viewBox="0 0 24 24" className="absolute inset-0 h-full w-full" aria-hidden="true">
@@ -71,8 +73,9 @@ interface ChainProps {
 
 /** Uyarı zinciri: görevliye bildirildi → müdahalede → patrona iletildi. */
 export function AlertChainMini({ stop, tier, now, compact = false, className }: ChainProps) {
+  const notified = stop.notifiedAt !== null && stop.notifiedAt <= now;
   const steps = [
-    { Icon: BellRing, lit: stop.notifiedAt <= now, color: "var(--ds-ink)", label: `${stop.attendant.name} bildirim aldı` },
+    { Icon: BellRing, lit: notified, color: "var(--ds-ink)", label: notified && stop.attendant ? `${stop.attendant.name} bildirim aldı` : "Görevliye bildirim yok" },
     { Icon: Hand, lit: stop.respondedAt !== null, color: "var(--ds-run)", label: stop.respondedAt ? "Görevli tezgahta" : "Görevli henüz gelmedi" },
     { Icon: Crown, lit: tier === "ESCALATED", color: "var(--ds-escalated)", label: tier === "ESCALATED" ? "Patrona iletildi" : "Patrona iletilmedi" },
   ];

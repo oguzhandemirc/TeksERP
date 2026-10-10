@@ -96,6 +96,8 @@ export interface SettingsModuleState {
   devereEnabled: boolean;
   /** Dokuma — ETKİN değer `production && dokuma` (backend `requireDokumaEnabled` aynası); Z1 alt bayraklarının kilidi. */
   dokumaEnabled: boolean;
+  /** Tezgah izleme — ETKİN değer `production && tezgah` (backend `requireTezgahEnabled` aynası). */
+  tezgahEnabled: boolean;
 }
 
 /**
@@ -120,6 +122,7 @@ export function resolveSettingsModuleState(
     depoMultiEnabled: flags?.depoMultiEnabled ?? false,
     devereEnabled: flags?.devereEnabled ?? false,
     dokumaEnabled: (flags?.productionEnabled ?? true) && (flags?.dokumaEnabled ?? false),
+    tezgahEnabled: (flags?.productionEnabled ?? true) && (flags?.tezgahEnabled ?? false),
   };
 }
 

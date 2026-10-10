@@ -31,7 +31,7 @@ vi.mock("@/pages/Operations/useOperationsVisibility", () => ({
     shipmentConfirmationEnabled: false,
     depoMultiEnabled: false,
     devereEnabled: false,
-    dokumaEnabled: true,
+    dokumaEnabled: true, tezgahEnabled: true,
     financeEnabled: true,
     productionEnabled: true,
     ticaretEnabled: true,
@@ -105,7 +105,7 @@ describe("Modüller → Raporlar bölümü", () => {
 
   it("§3b saf yüklem: ctx'te olmayan modül anahtarı (yüzeysiz) KİLİTLEMEZ; planlanan/çekirdek kilitlemez", () => {
     const base: OperationsVisibilityContext = {
-      shipmentConfirmationEnabled: false, depoMultiEnabled: false, devereEnabled: false, dokumaEnabled: false,
+      shipmentConfirmationEnabled: false, depoMultiEnabled: false, devereEnabled: false, dokumaEnabled: false, tezgahEnabled: false,
       financeEnabled: false, productionEnabled: true, ticaretEnabled: false, iplikEnabled: false,
       reportsClosedKeys: [], isReportOpen: () => true, flagsReady: true, flagsFailed: false,
     };
@@ -115,7 +115,7 @@ describe("Modüller → Raporlar bölümü", () => {
     expect(isReportModuleClosed(fason, base)).toBe(false);
     expect(isReportModuleClosed(finance, base)).toBe(true);
     expect(isReportModuleClosed(dokuma, base)).toBe(true);
-    expect(isReportModuleClosed({ ...finance, modul: "tezgahEnabled" }, base)).toBe(false);
+    expect(isReportModuleClosed({ ...finance, modul: "kumasTeknikEnabled" }, base)).toBe(false);
   });
 
   it("§4 ⭐ toggle TEK listeye yazar: kapat → anahtar sıralı kümeye girer; aç → çıkar; null gönderilmez", async () => {

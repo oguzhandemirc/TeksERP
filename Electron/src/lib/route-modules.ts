@@ -22,7 +22,7 @@
 // =============================================================================
 import type { OperationsVisibilityContext } from "@/pages/Operations/tile-config";
 
-/** Bağlamda karşılığı olan modül anahtarları (kumasTeknik/tezgah ekransız — tabloya giremez). */
+/** Bağlamda karşılığı olan modül anahtarları (kumasTeknik ekransız — tabloya giremez). */
 export type RouteModuleFlag = Extract<
   keyof OperationsVisibilityContext,
   | "productionEnabled"
@@ -32,6 +32,7 @@ export type RouteModuleFlag = Extract<
   | "depoMultiEnabled"
   | "devereEnabled"
   | "dokumaEnabled"
+  | "tezgahEnabled"
 >;
 
 /** Ekran anahtarı (route yolunun ilk iki segmenti; hub tek segment) → modül. */
@@ -72,6 +73,8 @@ export const ROUTE_MODULE: Readonly<Record<string, RouteModuleFlag>> = {
   "operations/machine-stops": "dokumaEnabled",
   "reports/dokuma": "dokumaEnabled",
   "operations/warp-beams": "devereEnabled",
+  // ── TEZGAH İZLEME ───────────────────────────────────────────────────────
+  "operations/weaving-floor": "tezgahEnabled",
 };
 
 /** `:id` · `new` · `edit` segmentleri ebeveyne katlanır (manifesto EKRAN seviyesinde). */
