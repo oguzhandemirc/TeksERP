@@ -79,6 +79,7 @@ type Sinif = "PREVIEW_ON_TYPING" | "PREVIEW_ON_OPEN" | "AUTOSAVE" | "BOOT" | "TI
  * `serverWarnings` bayrağı taşımalı, yoksa kullanıcı yazarken tost yağar.
  */
 const OTOMATIK_YAZIMLAR: readonly { yer: string; sinif: Sinif; zarfUyarisi: boolean }[] = [
+  { yer: "Electron/src/pages/ShiftDefinitions/ShiftActiveDialog.tsx::shiftDefinitionService.preview", sinif: "PREVIEW_ON_OPEN", zarfUyarisi: false },
   { yer: "Electron/src/components/merge/MergeDialog.tsx::mergeService.preview", sinif: "PREVIEW_ON_OPEN", zarfUyarisi: false },
   { yer: "Electron/src/hooks/useDeviceAnnounce.ts::apiClient", sinif: "BOOT", zarfUyarisi: false },
   { yer: "Electron/src/pages/Definitions/DocumentTemplates/DocumentPreview.tsx::printedDocumentService.getSampleHtml", sinif: "PREVIEW_ON_TYPING", zarfUyarisi: false },
