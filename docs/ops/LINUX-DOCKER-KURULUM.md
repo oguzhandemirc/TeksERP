@@ -242,4 +242,10 @@ Elle kurulmuş (§2) bir sunucuyu güncelleyici düzenine alır (plan `GUNCELLEY
 
 **Geri dönüş:** köprü yalnız konak bağıdır, `umount` her an geri alır; birime ve veriye dokunulmaz.
 
+**Ön denetim — güncelleme sunucusu adresi:** `<kök>/guncelleyici/ayar.json` `guncellemeSunucusu` grup yayınının kökü `https://indir.etkiliyazilim.com` olmalı (`deploy/dagitim.json` `indirmeKoku`). 0.2.3/0.2.4'ün `kur`/`gecis` varsayılanı ESKİ adrestir (`https://guncelleme.etkiliyazilim.com`, `--sunucu` verilmezse) ve orada `/<grup>/backend-oci/` yoktur → `durum` `MANIFEST_INDIRILEMEDI` (HTTP 404), karar `GUNCEL/ADAY_YOK`. Düzeltme: dosyanın `.yedek-<damga>` kopyası alınır, yalnız bu anahtar değiştirilir (sahip/kip korunur); güncelleyici ayarı her turda yeniden okur, yeniden başlatma gerekmez.
+
+**Onay:** kirada `guncelleme.kip = ONAYLI` ise aday `HAZIR / ONAY_BEKLIYOR`da bekler; kurulum panelden onaylanır (Sistem → Güncellemeler "Şimdi kur" = `POST /api/guncelleme/onay` `{surum, zamanlama: HEMEN}`, `license:manage`).
+
+**Uygulama kaydı (deneme sunucusu, 2026-10-10, UTC):** yedek (uygulama aracı `.tkenc` + `yedek-elle/…pre-2.15.2.dump`) → 19:34:50 köprü (A.3) → `KIRA_YOK` düştü, `MANIFEST_INDIRILEMEDI` (eski adres) → 19:46:43 `ayar.json` adresi düzeltildi → 19:50:36 indirme → 19:52:49 güncelleyici 0.2.3 → 0.2.4 kendini yeniledi (`kendi.json` `DOGRULANDI`, `lkgSurum 0.2.4`) → 19:57:09 panel onayı → 19:57:28 backend işlemi YEDEK adımında `YEDEK_HATASI` (`EACCES … /var/lib/tekserp/yedek-anahtar/ders.tkpub`) → 19:57:38 kendiliğinden geri döndü (2.15.1 UP, göç 374) → 20:06 köprü kaldırıldı; 0.2.4 kirayı birimden okuyor (karar `KUR`, politika kaynağı `KIRA`). **Backend 2.15.2'ye GEÇMEDİ:** güncelleyicinin araç konteyneri bağ taşıdığında `--user 0:0` alır, şablonun `cap_drop: ALL`ı yüzünden yetkisiz root, `yedek_anahtar` biriminin 0700 (10001) dizinini açamaz — yedek alıcısı kurulmuş her Linux kurulumunda backend güncellemesi bugün YEDEK adımında geri döner (ürün hatası, açık).
+
 Yeni kurulumda aynı adımları `kur --tar <paket> --proje <proje> [--uygula]` yapar (önkoşul `yapilandirma/.env`; tekrarlanabilir — ikinci koşum yapılacak bir şey bulmaz).
