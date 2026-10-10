@@ -34,6 +34,11 @@ fn dl_err(code: &'static str, message: impl Into<String>) -> DlError {
     DlError { code, message: message.into() }
 }
 
+/// Yerel dosya hatası: disk doluysa `DISK_DOLU` (ön kontrol başka dosya sistemini ölçmüş olabilir), ağ hatası sanılmaz.
+fn io_err(e: std::io::Error) -> DlError {
+    dl_err(if crate::platform::is_disk_full(&e) { codes::DISK_DOLU } else { codes::INDIRME_HATASI }, e.to_string())
+}
+
 /// Dosyanın sha256'sı (küçük harf hex) — akışla, bellekte tutmadan.
 pub fn sha256_file(env: &Env, p: &Path) -> std::io::Result<String> {
     let mut f = env.fs.open_read(p)?;
@@ -146,7 +151,7 @@ pub fn download(env: &Env, spec: &Spec, progress: &mut dyn FnMut(u64, u64), stop
             401 | 403 => return Err(rejected(&r)),
             s => return Err(dl_err(codes::INDIRME_HATASI, format!("HTTP {s}"))),
         }
-        let mut out = env.fs.open_append(&spec.part).map_err(|e| dl_err(codes::INDIRME_HATASI, e.to_string()))?;
+        let mut out = env.fs.open_append(&spec.part).map_err(io_err)?;
         let mut body = r.body;
         let mut buf = vec![0u8; CHUNK];
         loop {
@@ -159,7 +164,7 @@ pub fn download(env: &Env, spec: &Spec, progress: &mut dyn FnMut(u64, u64), stop
                 let _ = env.fs.remove_file(&spec.part);
                 return Err(dl_err(codes::PAKET_OZETI, "sunucu imzalı boydan fazla veri gönderdi"));
             }
-            std::io::Write::write_all(&mut out, &buf[..n]).map_err(|e| dl_err(codes::INDIRME_HATASI, e.to_string()))?;
+            std::io::Write::write_all(&mut out, &buf[..n]).map_err(io_err)?;
             have += n as u64;
             progress(have, spec.size);
             if stop() {
@@ -167,7 +172,7 @@ pub fn download(env: &Env, spec: &Spec, progress: &mut dyn FnMut(u64, u64), stop
                 return Err(dl_err(codes::INDIRME_HATASI, "durdurma istendi (parça korundu)"));
             }
         }
-        out.sync().map_err(|e| dl_err(codes::INDIRME_HATASI, e.to_string()))?;
+        out.sync().map_err(io_err)?;
         if have < spec.size {
             return Err(dl_err(codes::INDIRME_HATASI, format!("bağlantı erken kapandı ({have}/{} bayt; sonraki turda devam)", spec.size)));
         }
@@ -177,5 +182,5 @@ pub fn download(env: &Env, spec: &Spec, progress: &mut dyn FnMut(u64, u64), stop
         let _ = env.fs.remove_file(&spec.part);
         return Err(dl_err(codes::PAKET_OZETI, "paketin sha256'sı imzalı bildirimdekiyle aynı değil"));
     }
-    env.fs.rename(&spec.part, &spec.dest).map_err(|e| dl_err(codes::INDIRME_HATASI, e.to_string()))
+    env.fs.rename(&spec.part, &spec.dest).map_err(io_err)
 }

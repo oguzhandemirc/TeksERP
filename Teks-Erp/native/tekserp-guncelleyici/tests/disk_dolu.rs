@@ -224,6 +224,26 @@ fn yedek_alan_yoksa_islem_baslamaz() {
     });
 }
 
+/// İndirme yazımında disk dolarsa (ön kontrol başka dosya sistemini ölçmüş olabilir — ayrı bağlı iş diski) kod
+/// `DISK_DOLU`dur, `INDIRME_HATASI` değil (ağ sorunu sanılmaz); işlem açılmaz, yer açılınca indirme sürer.
+#[test]
+fn indirme_yaziminda_disk_dolu() {
+    senaryo("indirme_yaziminda_disk_dolu", |p, ctx| {
+        let w = World::new_in(p, "indirme-dolu", Setup::default());
+        w.crash.fill_disk(true);
+        w.run(1).unwrap();
+        let st = w.status().expect("durum");
+        assert_eq!(st.error_code.as_deref(), Some("DISK_DOLU"), "{ctx}: {:?}", st.message);
+        let j = Journal::open(&RealFs, &w.layout.journal_file()).unwrap();
+        assert!(j.last_op().is_none(), "{ctx}: indirme bitmeden işlem açıldı");
+        assert_eq!(w.current().as_deref(), Some(OLD), "{ctx}");
+        w.crash.free_disk();
+        w.run_to_rest(2);
+        assert_eq!(w.state(), Some(State::Succeeded), "{ctx}");
+        assert_invariants(&w, ctx);
+    });
+}
+
 /// Disk formülü iki platformda AYNI biçim (§5 madde 4): Windows da yedek payını (DB × 1,2) sayar — aynı boş alan,
 /// DB boyu karar verir; yer yoksa indirme bile başlamaz.
 #[test]
