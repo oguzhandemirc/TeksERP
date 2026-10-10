@@ -388,6 +388,10 @@ pub struct Faults {
     pub images: Mutex<Vec<FakeImage>>,
     /// `docker load` çağrı sayısı.
     pub image_loads: AtomicU64,
+    /// İmajdan göç adı okuma konteyneri (`docker run … /bin/sh -c`) sayısı — şema ön denetiminin Linux paket yanı.
+    pub image_migration_reads: AtomicU64,
+    /// İmajın göç adı okuması düşer (konteyner açılamadı).
+    pub image_migrations_unreadable: AtomicBool,
     /// `docker load` daemon hatasıyla düşer (hiçbir şey yüklenmez).
     pub load_fails: AtomicBool,
     /// `docker load` etiketli imajı bırakıp düşer (yarım yükleme artığı).
@@ -901,6 +905,23 @@ impl FakeProcs {
                 }
             }
             ["run", "--rm", "--no-deps", "-T", "--name", _, rest @ ..] => self.tool_container(rest),
+            // Şema ön denetimi: göç adları imajdan — ağsız, salt okunur, yetkisiz, bağsız; yüklenen NESNE (tutamaç) koşar.
+            ["run", "--rm", "--pull", "never", "--network", "none", "--read-only", "--cap-drop", "ALL", "--security-opt", "no-new-privileges:true", "--user", "10001:10001", "--name", _, "--entrypoint", "/bin/sh", id, "-c", betik]
+                if *betik == tekserp_guncelleyici::platform::linux::docker::GOC_ADLARI_BETIGI =>
+            {
+                self.w.faults.image_migration_reads.fetch_add(1, Ordering::SeqCst);
+                if self.w.faults.image_migrations_unreadable.load(Ordering::SeqCst) {
+                    return fail_out(125, "docker: Error response from daemon: failed to create task");
+                }
+                let images = self.w.faults.images.lock().unwrap();
+                let Some(i) = images.iter().find(|i| i.id == *id) else {
+                    return fail_out(125, &format!("Unable to find image '{id}' locally"));
+                };
+                let pre = format!("{}:", tekserp_guncelleyici::platform::linux::docker::IMAJ_DEPOSU);
+                let v = i.tags.iter().find_map(|t| t.strip_prefix(&pre)).unwrap_or_default();
+                ok_out(&(1..=migrations_of(v)).map(|n| format!("{n:04}_goc\n")).collect::<String>())
+            }
+            ["run", ..] => panic!("sahte docker: tanınmayan run (ağ/kimlik/yetki/bağ kuralı dışı): {sub:?}"),
             _ => fail_out(125, &format!("sahte docker: bilinmeyen {sub:?}")),
         }
     }

@@ -32,6 +32,11 @@ pub const INSPECT_FORMAT: &str =
 /// Konteynerin yeniden başlatma politikası (bakım çiti W2: `stop` edilen konteyneri açılışta başlatmayan politika şart).
 pub const RESTART_POLICY_FORMAT: &str = "{{.HostConfig.RestartPolicy.Name}}";
 
+/// Paketin göç adlarını imajdan okuyan betik — açılış betiğinin `sema_denetle` ölçütü (`migration.sql` taşıyan dizin,
+/// `WORKDIR /app`); eşliğini `test_sema_hizasi` ölçer.
+pub const GOC_ADLARI_BETIGI: &str =
+    "for d in /app/prisma/migrations/*/; do if [ -f \"${d}migration.sql\" ]; then basename \"$d\"; fi; done";
+
 /// `docker volume inspect` tek değer: birimin konaktaki dizini.
 pub const BIRIM_YOLU_FORMAT: &str = "{{.Mountpoint}}";
 
@@ -307,9 +312,15 @@ impl Baglar {
 /// tarafından konaktan okunup özel alana kopyalanır (`kurulum_alicilari`) — araca yetki eklenmez.
 pub struct DockerAraclar {
     pub komut: Arc<DockerKomut>,
+    /// İmajın göç adları, yerel imaj tutamacı (`docker_id`) başına: aynı nesne aynı içeriktir, her turda konteyner açılmaz.
+    goc_onbellegi: Mutex<std::collections::HashMap<String, Vec<String>>>,
 }
 
 impl DockerAraclar {
+    pub fn new(komut: Arc<DockerKomut>) -> DockerAraclar {
+        DockerAraclar { komut, goc_onbellegi: Mutex::new(std::collections::HashMap::new()) }
+    }
+
     fn arac(&self, env: &Env, arac: &str, svc: &str, baglar: &Baglar, komut: &[String], timeout: Duration) -> Result<CmdOut, String> {
         let name = self.komut.arac_adi(arac);
         let rm = self.komut.docker().args(["rm", "-f", &name]).timeout(Duration::from_secs(60));
@@ -457,6 +468,56 @@ impl crate::platform::Araclar for DockerAraclar {
         k.push("--anahtar".into());
         k.push(b.yol(key, false));
         self.arac_ok(env, "yedek-coz", &b, &k, timeout).map(|_| ())
+    }
+    /// Göçler paketin dizininde değil İMAJIN içinde: güncelleyicinin yükleme kaydındaki nesneden (etiket değil), ağsız,
+    /// salt okunur, yetkisiz (10001, `cap-drop ALL`) ve bağsız bir konteynerle okunur. Kayıt yok · okunamadı · boş küme
+    /// ⇒ hata (`SEMA_OLCULEMEDI`; boş küme "uyumlu"ya dönüşmez — açılış betiğiyle aynı fail-closed).
+    fn paket_goclari(&self, env: &Env, _version_dir: &Path, surum: &str) -> Result<Vec<String>, String> {
+        let k = imaj::kayit_oku(env.fs.as_ref(), &self.komut.layout, surum)
+            .ok_or_else(|| format!("{surum} imajının yükleme kaydı yok — göç adları imajdan okunamadı"))?;
+        if let Some(v) = self.goc_onbellegi.lock().unwrap_or_else(|e| e.into_inner()).get(&k.docker_id) {
+            return Ok(v.clone());
+        }
+        let name = self.komut.arac_adi("goc-adlari");
+        let rm = self.komut.docker().args(["rm", "-f", &name]).timeout(Duration::from_secs(60));
+        let _ = env.procs.run(&rm);
+        let c = self.komut.docker().args(["run", "--rm", "--pull", "never", "--network", "none", "--read-only"]).args([
+            "--cap-drop",
+            "ALL",
+            "--security-opt",
+            "no-new-privileges:true",
+            "--user",
+            "10001:10001",
+            "--name",
+            &name,
+            "--entrypoint",
+            "/bin/sh",
+            &k.docker_id,
+            "-c",
+            GOC_ADLARI_BETIGI,
+        ]);
+        let out = env.procs.run(&c).map_err(|e| format!("imajdan göç adları: {e}"));
+        if out.as_ref().map_or(true, |o| o.timed_out || o.code.is_none()) {
+            let _ = env.procs.run(&rm);
+        }
+        let out = out?;
+        if !out.ok() {
+            return Err(describe_failure("imajdan göç adları (docker run)", &out));
+        }
+        let mut adlar = Vec::new();
+        for l in String::from_utf8_lossy(&out.stdout).lines().map(str::trim).filter(|l| !l.is_empty()) {
+            if !l.bytes().all(|b| b.is_ascii_alphanumeric() || matches!(b, b'_' | b'.' | b'-')) || l.starts_with('.') {
+                return Err(format!("imajdan göç adları: tanınmayan ad {l:?}"));
+            }
+            adlar.push(l.to_string());
+        }
+        adlar.sort();
+        adlar.dedup();
+        if adlar.is_empty() {
+            return Err(format!("{surum} imajında göç bulunamadı (/app/prisma/migrations)"));
+        }
+        self.goc_onbellegi.lock().unwrap_or_else(|e| e.into_inner()).insert(k.docker_id, adlar.clone());
+        Ok(adlar)
     }
     /// İmajdaki `goc` aracı (`CONCURRENTLY` kuralı onda, L5); compose dosyası `current`ten ⇒ yeni sürümün imajı.
     fn migrate_deploy(&self, env: &Env, _version_dir: &Path, _be: &BackendEnv, timeout: Duration) -> Result<CmdOut, String> {
@@ -700,7 +761,7 @@ pub fn arka_ucu(komut: Arc<DockerKomut>) -> crate::platform::Arka {
         ortam: crate::settings::OrtamKipi::Compose,
         guncelleyici_paket_yolu: super::birim::IKILI,
         saglik: Arc::new(DockerSaglik { komut: Arc::clone(&komut) }),
-        araclar: Arc::new(DockerAraclar { komut }),
+        araclar: Arc::new(DockerAraclar::new(komut)),
         pg: Arc::new(super::IskeletPg),
         kendi: Arc::new(super::kendi::AtomikAdlandirma),
         cit: crate::platform::CitKipi::YenidenBaslatmaPolitikasi,
@@ -861,7 +922,7 @@ mod tests {
     #[test]
     fn araclar_adli_konteynerde_bagli_dizinle() {
         let (p, komut, env) = kur(|_| out(0, "3 4\n"));
-        let a = DockerAraclar { komut };
+        let a = DockerAraclar::new(komut);
         let be = crate::settings::backend_env_from_bytes_in(
             b"POSTGRES_PASSWORD=x\nPOSTGRES_DB=fabrika\n",
             &Layout::new(Path::new("/opt/tekserp"), Path::new("/var/lib/tekserp")),
@@ -924,7 +985,7 @@ mod tests {
                 out(0, "")
             }
         });
-        let a = DockerAraclar { komut };
+        let a = DockerAraclar::new(komut);
         let be = crate::settings::backend_env_from_bytes_in(
             b"POSTGRES_PASSWORD=x\n",
             &Layout::new(Path::new("/opt/tekserp"), Path::new("/var/lib/tekserp")),
@@ -954,8 +1015,62 @@ mod tests {
         assert!(!calls.iter().any(|c| c.contains(&"ls".to_string())), "alıcı listesi konteynerden okunmaz");
         // Birim çözülemezse alıcısız yedek SESSİZCE alınmaz.
         let (_, komut, env) = kur(|_| out(1, ""));
-        let e = DockerAraclar { komut }.kurulum_alicilari(&env, &be, &ara).unwrap_err();
+        let e = DockerAraclar::new(komut).kurulum_alicilari(&env, &be, &ara).unwrap_err();
         assert!(e.contains("yedek_anahtar birimi tekserp_l4b_yedek_anahtar"), "{e}");
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    /// Saha hatası (deneme sunucusu): Linux paketinde göçler imajın içinde, dizinde değil — ön denetim her turda
+    /// ölçülemedi diyordu. Göç adları yüklenen NESNEDEN, ağsız/salt okunur/yetkisiz/bağsız konteynerle okunur.
+    #[test]
+    fn paket_goclari_imajdan_agsiz_yetkisiz_onbellekli() {
+        let root = std::env::temp_dir().join(format!("tekserp-dk-goc-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        let layout = Layout::new(&root, &root.join("veri"));
+        let kayit = |surum: &str, id: &str| imaj::Kayit {
+            v: 1,
+            surum: surum.into(),
+            etiket: format!("tekserp-korumali:{surum}"),
+            kimlik: "sha256:c".into(),
+            katmanlar: vec!["sha256:l".into()],
+            docker_id: id.into(),
+            zaman: "2026-10-11T00:00:00Z".into(),
+        };
+        imaj::kayit_yaz(&crate::env::RealFs, &layout, &kayit("2.15.3", "sha256:iyi")).unwrap();
+        imaj::kayit_yaz(&crate::env::RealFs, &layout, &kayit("2.15.4", "sha256:bos")).unwrap();
+        imaj::kayit_yaz(&crate::env::RealFs, &layout, &kayit("2.15.5", "sha256:bozuk")).unwrap();
+        let (p, komut, env) = kur_l(layout.clone(), |a| match a.iter().find(|x| x.starts_with("sha256:")).map(String::as_str) {
+            Some("sha256:iyi") => out(0, "0002_b\n0001_a\n\n0001_a\n"),
+            Some("sha256:bos") => out(0, ""),
+            Some("sha256:bozuk") => out(0, "0001_a\n../kac\n"),
+            _ => out(0, ""),
+        });
+        let a = DockerAraclar::new(komut);
+        let yok = Path::new("/yok");
+        assert_eq!(a.paket_goclari(&env, yok, "2.15.3").unwrap(), ["0001_a", "0002_b"].map(str::to_string).to_vec());
+        assert_eq!(a.paket_goclari(&env, yok, "2.15.3").unwrap().len(), 2, "önbellekten");
+        let calls: Vec<Vec<String>> = p.calls.lock().unwrap().iter().map(|(a, _)| a.clone()).collect();
+        let runs: Vec<&Vec<String>> = calls.iter().filter(|c| c.first().is_some_and(|x| x == "run")).collect();
+        assert_eq!(runs.len(), 1, "aynı nesne için tek konteyner: {calls:?}");
+        assert_eq!(calls[0], ["rm", "-f", "tekserp-arac-tekserp_l4b-goc-adlari"], "önce yetim silinir");
+        let r = runs[0];
+        assert!(duzen::compose_basi_coz(r).is_none() && !r.iter().any(|x| x == "compose"), "compose değil (ortam/parola/bağ yok): {r:?}");
+        for w in [["--network", "none"], ["--user", "10001:10001"], ["--cap-drop", "ALL"], ["--entrypoint", "/bin/sh"], ["--pull", "never"]]
+        {
+            assert!(r.windows(2).any(|x| x == w), "{w:?} yok: {r:?}");
+        }
+        assert!(r.contains(&"--read-only".to_string()) && r.contains(&"no-new-privileges:true".to_string()), "{r:?}");
+        assert!(!r.iter().any(|x| x == "-v" || x == "--volume" || x == "--mount" || x.contains("cap-add") || x == "--privileged"), "{r:?}");
+        assert!(r.windows(2).any(|x| x == ["sha256:iyi", "-c"]), "yüklenen nesne (etiket değil) koşar: {r:?}");
+        assert_eq!(r.last().map(String::as_str), Some(GOC_ADLARI_BETIGI));
+        let e = a.paket_goclari(&env, yok, "2.15.4").unwrap_err();
+        assert!(e.contains("göç bulunamadı"), "boş küme uyumlu sayılmaz: {e}");
+        let e = a.paket_goclari(&env, yok, "2.15.5").unwrap_err();
+        assert!(e.contains("tanınmayan ad"), "{e}");
+        let e = a.paket_goclari(&env, yok, "9.9.9").unwrap_err();
+        assert!(e.contains("yükleme kaydı yok"), "{e}");
+        let (_, komut, env) = kur_l(layout, |_| out(125, ""));
+        assert!(DockerAraclar::new(komut).paket_goclari(&env, yok, "2.15.3").is_err(), "konteyner açılamazsa hata");
         let _ = std::fs::remove_dir_all(&root);
     }
 
@@ -968,7 +1083,7 @@ mod tests {
                 out(0, "")
             }
         });
-        DockerAraclar { komut }.imaj_buda(&env, &["1.4.0".into(), "1.3.0".into()]);
+        DockerAraclar::new(komut).imaj_buda(&env, &["1.4.0".into(), "1.3.0".into()]);
         let rms: Vec<String> =
             p.calls.lock().unwrap().iter().filter(|(a, _)| a.get(1).map(String::as_str) == Some("rm")).map(|(a, _)| a[2].clone()).collect();
         assert_eq!(rms, ["tekserp-korumali:1.2.0", "tekserp-korumali:2.14.0-ders.5fb46d862"].map(str::to_string).to_vec());

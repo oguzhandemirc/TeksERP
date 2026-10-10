@@ -687,7 +687,7 @@ fn gecis_uygula(u: &mut Uygulayici, s: &Secenek, e: &Envanter) -> Result<(), Str
     })?;
     let komut = Arc::new(DockerKomut::new(&l, &e.proje)?);
     let denv = docker_env(u.b.env, &komut);
-    let araclar = DockerAraclar { komut: Arc::clone(&komut) };
+    let araclar = DockerAraclar::new(Arc::clone(&komut));
     let dir = l.version_dir(&e.surum);
     u.kalem("COMPOSE", |_| araclar.compose_denetle(&denv, &dir, &e.surum))?;
     u.kalem("IMAJ", |u| {
@@ -869,7 +869,7 @@ pub fn kur(b: &Baglam, s: &Secenek) -> u32 {
         Err(e) => return dur(b, &e),
     };
     let denv = docker_env(b.env, &komut);
-    let araclar = DockerAraclar { komut: Arc::clone(&komut) };
+    let araclar = DockerAraclar::new(Arc::clone(&komut));
     if calistir(b.env, &docker_cmd().args(["image", "inspect", "--format", "{{.Id}}", pg_imaj.as_str()]), "docker image inspect").is_err() {
         return dur(b, &format!("PG imajı {pg_imaj} yerelde yok (pull_policy: never) — önce `docker pull {pg_imaj}`"));
     }

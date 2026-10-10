@@ -64,6 +64,11 @@ pub trait Araclar: Send + Sync {
     ) -> Result<(), String>;
     fn backup_decrypt(&self, env: &Env, tools_dir: &Path, input: &Path, output: &Path, key: &Path, timeout: Duration)
         -> Result<(), String>;
+    /// Paketin göç adları — şema hizasının paket yanı (`sema::verdict`). Varsayılan (Windows): sürüm dizinindeki
+    /// `prisma/migrations`. Göçleri dizinde değil imajın içinde taşıyan arka uç (Linux) onları imajdan okur.
+    fn paket_goclari(&self, env: &Env, version_dir: &Path, _surum: &str) -> Result<Vec<String>, String> {
+        crate::sema::package_migrations(env.fs.as_ref(), version_dir).map_err(|e| e.to_string())
+    }
     /// Göç aracının ham çıktısı (zaman aşımı/çıkış kodu kararı çağıranın).
     fn migrate_deploy(&self, env: &Env, version_dir: &Path, be: &BackendEnv, timeout: Duration) -> Result<CmdOut, String>;
     /// İmajların ayrı dosya sisteminde durduğu dizin (Docker kökü) — disk ön kontrolü onu da ölçer. Windows: yok.

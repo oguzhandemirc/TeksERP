@@ -112,6 +112,11 @@ pub fn backup_decrypt(env: &Env, tools_dir: &Path, input: &Path, output: &Path, 
     env.arka.araclar.backup_decrypt(env, tools_dir, input, output, key, timeout)
 }
 
+/// Paketin göç adları (`Araclar::paket_goclari`): Windows sürüm dizininden, Linux imajın içinden.
+pub fn package_migrations(env: &Env, version_dir: &Path, surum: &str) -> Result<Vec<String>, String> {
+    env.arka.araclar.paket_goclari(env, version_dir, surum)
+}
+
 /// `prisma migrate deploy` — sürümün kendi göç aracı (çalışma dizini sürüm dizini).
 pub fn migrate_deploy(env: &Env, version_dir: &Path, be: &BackendEnv, timeout: Duration) -> Result<CmdOut, String> {
     env.arka.araclar.migrate_deploy(env, version_dir, be, timeout)

@@ -240,7 +240,7 @@ fn kurulum_yuklu_etiketi_olcer_yuklemez() {
     let arsiv = w.layout.root.join("arsiv-yuklu.tar.gz");
     std::fs::write(&arsiv, oci_image_archive(NEW)).unwrap();
     let env = w.env();
-    let a = docker::DockerAraclar { komut: Arc::new(docker::DockerKomut::new(&w.layout, "tekserp").unwrap()) };
+    let a = docker::DockerAraclar::new(Arc::new(docker::DockerKomut::new(&w.layout, "tekserp").unwrap()));
     assert_eq!(a.imaj_kaydet_ya_da_yukle(&env, &arsiv, NEW, &kimlik), Ok(false), "yüklü etiket yeniden yüklenmez");
     assert_eq!(w.faults.image_loads.load(Ordering::SeqCst), 0, "docker load çağrılmamalı");
     let k = imaj::kayit_oku(&RealFs, &w.layout, NEW).expect("kayıt yazılmalı");
@@ -264,7 +264,7 @@ fn kurulum_yabanci_etiket_dokunulmaz() {
     let arsiv = w.layout.root.join("arsiv-yabanci.tar.gz");
     std::fs::write(&arsiv, oci_image_archive(NEW)).unwrap();
     let env = w.env();
-    let a = docker::DockerAraclar { komut: Arc::new(docker::DockerKomut::new(&w.layout, "tekserp").unwrap()) };
+    let a = docker::DockerAraclar::new(Arc::new(docker::DockerKomut::new(&w.layout, "tekserp").unwrap()));
     let e = a.imaj_kaydet_ya_da_yukle(&env, &arsiv, NEW, &oci_image_id(NEW)).unwrap_err();
     assert_eq!(e.0, "IMAJ_KIMLIGI", "{e:?}");
     assert_eq!(w.faults.image_loads.load(Ordering::SeqCst), 0);

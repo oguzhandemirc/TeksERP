@@ -16,6 +16,10 @@ COPY goc yedek-zamanlayici.sh /usr/local/bin/
 ARG SURUM
 ARG GOC_SAYISI
 ARG GOC_DUSER=0
+# Göçler korumalı imajdaki yerinde (`/app/prisma/migrations/<ad>/migration.sql`, adlar `goc` aracınınkiyle aynı):
+# güncelleyicinin şema ön denetimi onları imajdan okur — paket dizininde göç yoktur.
+RUN i=1; while [ "$i" -le "$GOC_SAYISI" ]; do d=/app/prisma/migrations/$(printf 'duman_%03d' "$i"); \
+      mkdir -p "$d" && echo "-- duman" >"$d/migration.sql"; i=$((i + 1)); done
 ENV TEKSERP_DUMAN_SURUM=${SURUM} TEKSERP_DUMAN_GOC=${GOC_SAYISI} TEKSERP_DUMAN_GOC_DUSER=${GOC_DUSER}
 USER 10001:10001
 ENTRYPOINT []

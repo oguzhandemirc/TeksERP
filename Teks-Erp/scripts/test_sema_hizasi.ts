@@ -12,7 +12,9 @@
 //      (`deploy/hizmet/sema-hizasi.ps1`) literallerinde BAYT-EŞİT · Rust testi vektörleri okur
 //   §2 PS davranışı (pwsh): `PaketGocAdlari` + `SemaIleride` her vektörde beklenen
 //   §3 güncelleyici: `schema_check` hazırlıktan SONRA, HAZIR/uygulamadan ÖNCE; ileride → BEKLİYOR + `SEMA_ILERIDE`;
-//      ölçüt `sema::ahead` (ad kümesi), sayı (`migration_count`) DEĞİL
+//      ölçüt `sema::ahead` (ad kümesi), sayı (`migration_count`) DEĞİL; paket yanı platform dikişinden
+//      (`tools::package_migrations` → `Araclar::paket_goclari`): Windows sürüm dizini, Linux İMAJIN içi — yüklenen
+//      nesneden, ağsız/salt okunur/yetkisiz/bağsız konteynerle, açılış betiğinin `sema_denetle` ölçütüyle; boş küme hata
 //   §4 setup + geçiş: ortak PS'i yükler; setup göç ÖNCESİ engel + göç SONRASI ad eşitliği (sayı sorgusu yok);
 //      geçiş fazla/bekleyen göçü ortak işlevle; çağrılar `@( )` ile sarılır (tek elemanlı sonuç açılmasın)
 //   §5 kod aynası: `codes.rs` · panel "Sorun" etiketi · onay kuralı bekleyiş nedeni · GUNCELLEYICI.md §12
@@ -139,6 +141,11 @@ const YOL = {
   ipc: "Teks-Erp/native/tekserp-guncelleyici/src/ipc.rs",
   ipcTs: "Teks-Erp/src/lib/license/updater-ipc.ts",
   kart: "Electron/src/pages/System/ServerUpdates/UpdateCards.tsx",
+  // §3 paket yanı: platform dikişi (Windows dizin · Linux imaj) + imajın açılış betiği (aynı ölçüt)
+  platform: "Teks-Erp/native/tekserp-guncelleyici/src/platform/mod.rs",
+  toolsRs: "Teks-Erp/native/tekserp-guncelleyici/src/tools.rs",
+  docker: "Teks-Erp/native/tekserp-guncelleyici/src/platform/linux/docker.rs",
+  acilis: "Teks-Erp/docker/entrypoint.sh",
 } as const;
 type Ad = keyof typeof YOL;
 type Kaynaklar = Record<Ad, string>;
@@ -211,7 +218,18 @@ function guncelleyici(k: Kaynaklar): string[] {
     const dal = cyc.slice(cagri, cyc.indexOf("return idle;", cagri));
     if (!/State::Waiting/.test(dal)) ih.push("şema ileride dalı BEKLİYOR yazmıyor");
   }
-  for (const p of ["sema::verdict(", "sema::package_migrations(", "tools::finished_migrations(", "codes::SEMA_ILERIDE"]) if (!chk.includes(p)) ih.push(`schema_check ${p} kullanmıyor`);
+  for (const p of ["sema::verdict(", "tools::package_migrations(", "tools::finished_migrations(", "codes::SEMA_ILERIDE"]) if (!chk.includes(p)) ih.push(`schema_check ${p} kullanmıyor`);
+  if (chk.includes("sema::package_migrations(")) ih.push("schema_check paketin göçlerini dizinden okuyor (platform dikişi atlandı — Linux paketinde dizin yok, her tur ölçülemedi)");
+  if (!rustGovde(k.toolsRs, "package_migrations")?.includes("araclar.paket_goclari(")) ih.push("tools::package_migrations Araclar::paket_goclari'ye gitmiyor");
+  if (!rustGovde(k.platform, "paket_goclari")?.includes("crate::sema::package_migrations(")) ih.push("Araclar::paket_goclari varsayılanı (Windows) sürüm dizinini okumuyor");
+  const dg = rustGovde(k.docker, "paket_goclari") ?? "";
+  for (const p of ['"--network", "none"', '"--read-only"', '"--cap-drop"', '"no-new-privileges:true"', '"10001:10001"', "imaj::kayit_oku(", "&k.docker_id", "GOC_ADLARI_BETIGI", "adlar.is_empty()"]) {
+    if (!dg.includes(p)) ih.push(`Linux paket_goclari ${p} taşımıyor (imajdan ağsız/salt okunur/yetkisiz okuma, yüklenen nesne, boş küme hata)`);
+  }
+  if (/self\.komut\.compose\(|"-v"|cap-add|--privileged/.test(dg)) ih.push("Linux paket_goclari compose/bağ/yetki taşıyor (göç adı okuması ortamsız ve yetkisiz)");
+  const betik = literal(k.docker, /pub const GOC_ADLARI_BETIGI: &str =\s*"((?:[^"\\]|\\.)*)";/);
+  if (!betik?.includes("for d in /app/prisma/migrations/*/;") || !betik.includes("migration.sql")) ih.push("GOC_ADLARI_BETIGI imajın göç dizinini (/app/prisma/migrations/<ad>/migration.sql) okumuyor");
+  if (!/for d in prisma\/migrations\/\*\/; do\s*\n\s*if \[ -f "\$\{d\}migration\.sql" \]/.test(k.acilis)) ih.push("açılış betiğinin sema_denetle ölçütü değişti — GOC_ADLARI_BETIGI ile birlikte güncelleyin");
   if (/migration_count/.test(chk)) ih.push("schema_check sayı karşılaştırıyor (migration_count) — ölçüt ad kümesi");
   if (!/let extra = ahead\(&db, &package\);/.test(rustGovde(k.sema, "verdict") ?? "")) ih.push("sema::verdict ölçütü sema::ahead( (ad kümesi) kullanmıyor");
   const fm = rustGovde(k.tools, "finished_migrations");
@@ -451,6 +469,13 @@ if (eksik.length === 0) {
     { ad: "K10 setup çağrısı @( ) siz", dosya: "kurulum", eski: "$ileri = @(SemaIleride $once $paketGoclari)", yeni: "$ileri = SemaIleride $once $paketGoclari", yuklem: kurulumGecis, parca: "@( ) ile sarılmamış" },
     { ad: "K11 panel etiketi düştü", dosya: "etiket", eski: /\n\s*SEMA_ILERIDE: "[^"]*",/, yeni: "", yuklem: aynalar, parca: "panel" },
     { ad: "K12 onay kuralı genel dala düştü", dosya: "onay", eski: /\n\s*if \(hataKodu === "SEMA_ILERIDE"\)[^\n]*/, yeni: "", yuklem: aynalar, parca: "installWaitingReason" },
+    { ad: "K25 schema_check göçleri yine dizinden okur", dosya: "engine", eski: "tools::package_migrations(&self.env, &self.layout.version_dir(&m.surum), &m.surum)", yeni: "sema::package_migrations(self.env.fs.as_ref(), &self.layout.version_dir(&m.surum)).map_err(|e| e.to_string())", yuklem: guncelleyici, parca: "dizinden okuyor" },
+    { ad: "K26 Linux göç okuması ağa açık", dosya: "docker", eski: '"--network", "none", ', yeni: "", yuklem: guncelleyici, parca: '"--network", "none"' },
+    { ad: "K27 Linux göç okuması kök kimlikle", dosya: "docker", eski: '"10001:10001"', yeni: '"0:0"', yuklem: guncelleyici, parca: '"10001:10001"' },
+    { ad: "K28 Linux boş göç kümesi uyumlu sayılır", dosya: "docker", eski: "if adlar.is_empty() {", yeni: "if false {", yuklem: guncelleyici, parca: "adlar.is_empty()" },
+    { ad: "K29 Windows varsayılanı dizini okumaz", dosya: "platform", eski: "crate::sema::package_migrations(env.fs.as_ref(), version_dir)", yeni: "Ok::<Vec<String>, std::io::Error>(vec![])", yuklem: guncelleyici, parca: "varsayılanı (Windows)" },
+    { ad: "K30 Linux betiği göç dizinini okumaz", dosya: "docker", eski: "for d in /app/prisma/migrations/*/;", yeni: "for d in /app/migrations/*/;", yuklem: guncelleyici, parca: "GOC_ADLARI_BETIGI imajın" },
+    { ad: "K31 açılış betiğinin ölçütü ayrıştı", dosya: "acilis", eski: 'if [ -f "${d}migration.sql" ]', yeni: 'if [ -d "${d}" ]', yuklem: guncelleyici, parca: "sema_denetle ölçütü" },
     { ad: "K15 ölçülemedi günlüğe yazılmaz", dosya: "engine", eski: 'self.log.info(&format!("{}: {message}", codes::SEMA_OLCULEMEDI));', yeni: "", yuklem: olculemedi, parca: "günlüğe" },
     { ad: "K16 ölçülemedi durum dosyasına yazılmaz", dosya: "engine", eski: "*self.notice.borrow_mut() = Some(Notice { code: codes::SEMA_OLCULEMEDI.into(), message });", yeni: "let _ = message;", yuklem: olculemedi, parca: "durum dosyasına" },
     { ad: "K17 ölçülemedi engele döndü", dosya: "engine", eski: "message });\n                Ok(())", yeni: "message });\n                Err(fail(codes::SEMA_OLCULEMEDI, String::new()))", yuklem: olculemedi, parca: "engel/sorun" },

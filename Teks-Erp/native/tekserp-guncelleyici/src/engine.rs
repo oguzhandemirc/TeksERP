@@ -1550,7 +1550,7 @@ impl Engine {
     /// uyumlu → sürer · ileride → `SEMA_ILERIDE`, BEKLİYOR (geri indirme yok) · ölçülemedi → `SEMA_OLCULEMEDI` BİLGİ:
     /// güncelleme durmaz (göç adımı DB ister, düşerse telafiyle döner) ama kod günlüğe ve `durum.bilgi`ye yazılır.
     fn schema_check(&self, inputs: &Inputs, m: &ReleaseManifest) -> Result<(), Fail> {
-        let package = sema::package_migrations(self.env.fs.as_ref(), &self.layout.version_dir(&m.surum)).map_err(|e| e.to_string());
+        let package = tools::package_migrations(&self.env, &self.layout.version_dir(&m.surum), &m.surum);
         let db = tools::finished_migrations(&self.env, &inputs.backend);
         match sema::verdict(db, package) {
             sema::Verdict::Aligned => Ok(()),

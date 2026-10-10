@@ -219,10 +219,20 @@ yedek=$(sudo sh -c "ls -t '$IS'/yedek/*/yedek.json | head -1")
 [ "$(sudo jq -r .kurulumAlicisi "$yedek")" = 1 ] || dur "güncelleme öncesi yedeğin kurulum alıcısı 1 değil: $(sudo cat "$yedek")"
 sudo sed -n 2p "$(dirname "$yedek")/db.dump.tkenc" | grep -q 'DUMAN-kurulum' || dur "güncelleme öncesi yedek kurulum alıcısına şifrelenmedi"
 echo "   güncelleme öncesi yedek: kurulum alıcısı + geçici anahtar"
+olculemedi=$(sudo sh -c "cat $KOK/guncelleyici/gunluk/*.log" | grep -c SEMA_OLCULEMEDI || true)
+[ "$olculemedi" = 0 ] || dur "şema ön denetimi Linux paketinde ölçülemedi ($olculemedi satır) — göç adları imajdan okunmadı"
 
 adim "3. göç düşer: 0.0.3-duman → GERI_DONDU + veri geri yüklendi"
 pgc "INSERT INTO duman_veri VALUES (501, 'gocten once')" >/dev/null
+# Önce şema ön denetiminin GERÇEKTEN koştuğu: veritabanında imajın tanımadığı bitmiş göç varken aday hizmete
+# dokunulmadan BEKLİYOR (SEMA_ILERIDE); göç satırı kalkınca aynı aday kendiliğinden sürer.
+pgc "INSERT INTO _prisma_migrations (id, checksum, finished_at, migration_name, applied_steps_count) VALUES ('duman_yabanci', 'duman', now(), 'duman_yabanci', 1)" >/dev/null
 yayinla 0.0.3-duman
+for _ in $(seq 600); do [ "$(durum .hataKodu)" = SEMA_ILERIDE ] && break; sleep 0.5; done
+[ "$(durum .durum) $(durum .hataKodu)" = "BEKLIYOR SEMA_ILERIDE" ] || dur "ileri şemada ön denetim durdurmadı: $(durum .durum) $(durum .hataKodu) $(durum .mesaj)"
+degismez 0.0.2-duman "şema ileride"
+pgc "DELETE FROM _prisma_migrations WHERE id = 'duman_yabanci'" >/dev/null
+echo "   şema ön denetimi imajdan ölçtü: BEKLİYOR (SEMA_ILERIDE), hizmete dokunulmadı"
 [ "$(bekle_sonuc 0.0.3-duman)" = GERI_DONDU ] || dur "0.0.3-duman GERI_DONDU değil: $(durum .son)"
 [ "$(durum .son.veriGeriYuklendi)" = true ] || dur "veri geri yüklenmedi: $(durum .son)"
 degismez 0.0.2-duman "göç düşer"

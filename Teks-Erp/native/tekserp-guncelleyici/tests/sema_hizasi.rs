@@ -71,7 +71,11 @@ fn same_rule_as_shared_vectors() {
 }
 
 fn ahead_world(tag: &str, finished: u64, foreign: Option<&str>, setup: Setup) -> World {
-    let w = World::new(tag, setup);
+    ahead_world_in(Profil::Windows, tag, finished, foreign, setup)
+}
+
+fn ahead_world_in(profil: Profil, tag: &str, finished: u64, foreign: Option<&str>, setup: Setup) -> World {
+    let w = World::new_in(profil, tag, setup);
     w.db.lock().unwrap().finished = finished;
     w.db.lock().unwrap().total = finished;
     *w.faults.foreign_migration.lock().unwrap() = foreign.map(str::to_string);
@@ -170,4 +174,47 @@ fn unmeasured_schema_while_ready_is_info_not_problem() {
     w.run(1).unwrap();
     let st = w.status().unwrap();
     assert_eq!((st.state, st.notice), (State::Ready, None));
+}
+
+// ── Linux (OCI): göçler paket dizininde değil imajın içinde ─────────────────────────────────────
+
+fn image_reads(w: &World) -> u64 {
+    w.faults.image_migration_reads.load(std::sync::atomic::Ordering::SeqCst)
+}
+
+/// Saha hatası (deneme sunucusu, 0.2.4): Linux paketinde `prisma/migrations` dizini yok, ön denetim her turda
+/// ölçülemedi diyordu — ileri şema durdurma+yedek+geçişten SONRA imajın açılışında yakalanıyordu. Göç adları imajdan
+/// okunur: ileri şema Windows'taki gibi hizmete dokunmadan BEKLİYOR.
+#[test]
+fn linux_schema_ahead_reads_image_and_waits() {
+    let w = ahead_world_in(Profil::Linux, "li-sema-ileride", migrations_of(NEW) + 1, None, Setup::default());
+    let log = w.run_logged(1);
+    assert_waits_untouched(&w, 5, "0005_goc", "Linux ilk tur");
+    assert!(image_reads(&w) >= 1, "göç adları imajdan okunmadı");
+    assert!(!log.contains("SEMA_OLCULEMEDI"), "Linux'ta şema ölçüldü, ölçülemedi denmez:\n{log}");
+    w.run(2).unwrap();
+    assert_waits_untouched(&w, 5, "0005_goc", "Linux sonraki turlar");
+}
+
+/// Uyumlu şemada Linux güncellemesi sürer ve ön denetim ölçülemedi DEMEZ (her turdaki bilgi gürültüsü kalktı).
+#[test]
+fn linux_schema_aligned_proceeds_without_unmeasured() {
+    let w = ahead_world_in(Profil::Linux, "li-sema-esit", migrations_of(NEW), None, Setup::default());
+    let log = w.run_logged(1);
+    assert!(!log.contains("SEMA_OLCULEMEDI"), "{log}");
+    assert!(image_reads(&w) >= 1, "göç adları imajdan okunmadı");
+    w.run_to_rest(0);
+    let st = w.status().unwrap();
+    assert_eq!(st.state, State::Succeeded, "{:?} {:?}", st.error_code, st.message);
+    assert_eq!(w.current().as_deref(), Some(NEW));
+}
+
+/// İmaj okunamazsa boş küme "uyumlu" sayılmaz: `SEMA_OLCULEMEDI` BİLGİ, nedenli (Windows'taki okunamayan dizinle aynı).
+#[test]
+fn linux_image_unreadable_is_unmeasured_not_aligned() {
+    let w = ahead_world_in(Profil::Linux, "li-sema-olculemedi", migrations_of(NEW) - 1, None, Setup::default());
+    w.faults.image_migrations_unreadable.store(true, std::sync::atomic::Ordering::SeqCst);
+    let log = w.run_logged(1);
+    let line = log.lines().find(|l| l.contains("SEMA_OLCULEMEDI")).unwrap_or_else(|| panic!("ölçülemedi sessiz geçti:\n{log}"));
+    assert!(line.contains("imajdan göç adları"), "neden imajın okunamaması: {line}");
 }

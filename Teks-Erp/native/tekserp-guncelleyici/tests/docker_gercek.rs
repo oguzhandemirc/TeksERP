@@ -99,7 +99,7 @@ fn docker_gercek_hizmet_ve_arac() {
         protect: Arc::new(tekserp_guncelleyici::platform::linux::koruma::DirectoryProtect),
         arka: docker::arka_ucu(Arc::clone(&p.komut)),
     };
-    let a = docker::DockerAraclar { komut: Arc::clone(&p.komut) };
+    let a = docker::DockerAraclar::new(Arc::clone(&p.komut));
     // Backend başlatması etiketi güncelleyicinin kaydına karşı ölçer: test imajı sürüm etiketiyle kaydedilip yüklenir.
     sh(&["tag", &imaj, ETIKET]);
     let arsiv = root.join("imaj.tar");
@@ -217,7 +217,7 @@ fn imaj_bozuk() {
         protect: Arc::new(tekserp_guncelleyici::platform::linux::koruma::DirectoryProtect),
         arka: docker::arka_ucu(Arc::clone(&komut)),
     };
-    let a = docker::DockerAraclar { komut: Arc::clone(&komut) };
+    let a = docker::DockerAraclar::new(Arc::clone(&komut));
     let yok = || sh(&["image", "ls", "-q", &tag]).is_empty();
 
     // Kimlik bildirimle tutmuyor: yüklemeden ÖNCE red.
@@ -277,7 +277,7 @@ fn gercek_compose_sablonu() {
         protect: Arc::new(tekserp_guncelleyici::platform::linux::koruma::DirectoryProtect),
         arka: docker::arka_ucu(Arc::clone(&komut)),
     };
-    let a = docker::DockerAraclar { komut: Arc::clone(&komut) };
+    let a = docker::DockerAraclar::new(Arc::clone(&komut));
     let denetle = |compose: &str, ortam: &str| {
         std::fs::write(dir.join("docker-compose.yml"), compose.replace("@@SURUM@@", &surum)).unwrap();
         std::fs::write(root.join("yapilandirma/.env"), format!("POSTGRES_PASSWORD=p\nJWT_SECRET=j\n{ortam}")).unwrap();
@@ -344,7 +344,7 @@ fn docker_gercek_yerel_compose_birlesir() {
         protect: Arc::new(tekserp_guncelleyici::platform::linux::koruma::DirectoryProtect),
         arka: docker::arka_ucu(Arc::clone(&komut)),
     };
-    let a = docker::DockerAraclar { komut: Arc::clone(&komut) };
+    let a = docker::DockerAraclar::new(Arc::clone(&komut));
     a.compose_denetle(&env, &surum, v).expect("imzalı + yerel birleşik yapılandırma kurallardan geçmeli");
     let o = Command::new("docker").args(komut.compose().args.iter()).args(["config", "--format", "json"]).output().unwrap();
     assert!(o.status.success(), "{}", String::from_utf8_lossy(&o.stderr));
