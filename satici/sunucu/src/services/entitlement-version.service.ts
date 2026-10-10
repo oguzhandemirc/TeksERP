@@ -16,7 +16,7 @@ import { notifyDoorbell } from "./doorbell";
 import {
   assertLongHorizonApproval,
   checkModuleFormat,
-  installationCapabilities,
+  signingCapabilities,
   planEntitlementSigner,
   isValidityEndRequired,
   resolveOfflineHorizon,
@@ -152,7 +152,7 @@ export interface ChangeInput {
   readonly reason: string;
   readonly actor: string;
   readonly nowMs?: number;
-  /** Kurulumun yetenekleri; verilmezse kayıttan (`installationCapabilities`). */
+  /** İmza planının yetenekleri; verilmezse kayıttan (`signingCapabilities`). */
   readonly capabilities?: readonly string[];
   /** Arayüzün gördüğü plan: uyuşmazsa 409 DURUM_CAKISMASI — parola hiçbir sürece gitmez. */
   readonly expectedSigner?: SignerPlanKind;
@@ -173,7 +173,7 @@ async function prepareChange(ctx: VendorContext, g: ChangeInput) {
   const hak = await loadEntitlementTree(prisma, g.entitlementId);
   if (hak.kurulum.durum === "IPTAL" || !hak.kurulum.aktif) throw stateConflict("İptal edilmiş ya da pasif kurulumun hakkı imzalanamaz");
   const nowMs = g.nowMs ?? Date.now();
-  const plan = planEntitlementSigner(ctx.keys, hak.kurulum.sinif, g.capabilities ?? installationCapabilities(hak.kurulum), nowMs);
+  const plan = planEntitlementSigner(ctx.keys, hak.kurulum.sinif, g.capabilities ?? signingCapabilities(hak.kurulum), nowMs);
   if (g.expectedSigner !== undefined && g.expectedSigner !== plan.kind) {
     throw new VendorError(409, "DURUM_CAKISMASI", PLAN_CHANGED_MESSAGE[plan.kind], { imzaci: plan.kind });
   }

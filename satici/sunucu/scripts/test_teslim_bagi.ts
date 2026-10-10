@@ -12,6 +12,8 @@
 //   §4 aynı kirayı yeniden veren yollar kiranın BAĞLI olduğu sürümü teslim eder: yoklama tekrarı (REPEAT) ve
 //      etkinleştirme tekrarı — araya giren yeni HAK sürümü o yanıta girmez
 //   §5 sürüm geri dönüşü: yetenek bildirmeyen yoklama (eski derlemeye dönen fabrika) AYNI yanıtta ara imzalı HAK almaz
+//   §6 hiç etkinleşmemiş kurulum: imza planının beklenen yeteneği (`signingCapabilities`) teslime GİRMEZ — teslim kayıttan
+//      (`installationCapabilities`, boş) ya da gövdeden seçilir
 // ⭐ KALICI SONDA ✓K (her koşumda): §2 yetenekli kurulum GERÇEKTEN ara imzalı HAK + iptal alır (her yere eski biçim
 //    veren kör bağ yeşil veremez) · §3 yeteneksiz kurulumun güncel sürümü GERÇEKTEN ara imzalıdır (eşitlik tesadüf değil).
 // Koşum: node ../../scripts/agir-is.mjs -- npx tsx scripts/test_teslim_bagi.ts   (kendi _test DB'si)
@@ -185,6 +187,19 @@ async function main(): Promise<void> {
     kontrol("§5a eski derlemeye dönen fabrika AYNI yanıtta kök imzalı v1 alır (ara imzalı v2/v3 değil), kira v1'e bağlı; kolon boşaldı",
       geri.status === 200 && geri.json.hak === v1Y && kiraGeri.hakSurum === 1 && kiraGeri.hakOzeti === jwsDigest(v1Y) && instGeri.yetenekler.length === 0,
       `${yanitOzeti(geri)} kolon=${instGeri.yetenekler.join()}`);
+
+    console.log("\n§6 hiç etkinleşmemiş kurulum: beklenen yetenek yalnız imzaya, teslim kayıttan");
+    const { findEntitlementForDelivery } = await import("../src/services/lease.service");
+    const kN = await kurulumFiksturu(ctx, { ilkImzaParolasi: ARA_PAROLASI });
+    temizlenecek.push(kN.kurulumDbId);
+    const instN = await prisma.kurulum.findUniqueOrThrow({ where: { id: kN.kurulumDbId } });
+    const hakN = await prisma.hak.findUniqueOrThrow({ where: { id: kN.hakId } });
+    const v1N = await prisma.hakSurumu.findUniqueOrThrow({ where: { hakId_surum: { hakId: kN.hakId, surum: 1 } } });
+    const kayittan = await findEntitlementForDelivery(prisma, instN, hakN);
+    const govdeden = await findEntitlementForDelivery(prisma, instN, hakN, { capabilities: YETENEKLER });
+    kontrol("§6a ETKINLESMEDI: v1 ara imzalı (imza planı beklenen yetenek) ama kayıttan teslim YETENEKSİZ yoldan (withheld) · gövdede hak-ara bildirene ara v1",
+      instN.durum === "ETKINLESMEDI" && instN.yetenekler.length === 0 && v1N.imzalayanKid === f.ara.kid && kayittan?.surum === 1 && kayittan.withheld !== undefined && govdeden?.belge === v1N.belge && govdeden.withheld === undefined,
+      JSON.stringify({ k: kayittan && { s: kayittan.surum, w: kayittan.withheld }, g: govdeden?.surum }));
   } finally {
     await sunucu?.durdur();
     await temizleIptalBelgeleri(YUKLEYEN);

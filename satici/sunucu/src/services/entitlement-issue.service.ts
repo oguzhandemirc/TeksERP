@@ -7,7 +7,16 @@ import { VendorError, badRequest } from "../lib/errors";
 import { lockInstallation, lockInstallations } from "../lib/locks";
 import { prisma, type Db, type Tx } from "../lib/prisma";
 import type { VendorContext } from "./context";
-import { installationCapabilities, isEntitlementWithin, newestLegacyVersion, planEntitlementSigner, type EntitlementBreadth, type SignerPlanKind } from "./entitlement-policy";
+import {
+  isEntitlementWithin,
+  newestLegacyVersion,
+  planEntitlementSigner,
+  signingCapabilities,
+  signingCapabilitySource,
+  type EntitlementBreadth,
+  type SignerPlanKind,
+  type SigningCapabilitySource,
+} from "./entitlement-policy";
 import {
   entitlementVersionAudit,
   loadEntitlementTree,
@@ -27,7 +36,7 @@ export async function issueEntitlementVersion(ctx: VendorContext, g: ChangeInput
 export async function issueEntitlementVersion(ctx: VendorContext, g: ChangeInput & { password: Buffer; allowQueue: true }): Promise<IssuedEntitlementChange>;
 export async function issueEntitlementVersion(ctx: VendorContext, g: ChangeInput & { password: Buffer; allowQueue?: true }): Promise<HakSurumu | IssuedEntitlementChange> {
   const hak = await loadEntitlementTree(prisma, g.entitlementId);
-  const plan = planEntitlementSigner(ctx.keys, hak.kurulum.sinif, g.capabilities ?? installationCapabilities(hak.kurulum), g.nowMs ?? Date.now());
+  const plan = planEntitlementSigner(ctx.keys, hak.kurulum.sinif, g.capabilities ?? signingCapabilities(hak.kurulum), g.nowMs ?? Date.now());
   if (plan.kind === "KUYRUK") {
     g.password.fill(0);
     if (!g.allowQueue) throw new VendorError(409, "DURUM_CAKISMASI", "Bu HAK değişikliği kök imzası bekler (kuyruk)", { imzaci: "KUYRUK" });
@@ -52,11 +61,17 @@ export async function issueEntitlementVersion(ctx: VendorContext, g: ChangeInput
 export async function previewEntitlementSigner(
   ctx: VendorContext,
   g: { entitlementId: string; capabilities?: readonly string[]; nowMs: number },
-): Promise<{ imzaci: SignerPlanKind; kid: string | null; neden: string | null; bekleyenTalep: string | null }> {
+): Promise<{ imzaci: SignerPlanKind; kid: string | null; neden: string | null; bekleyenTalep: string | null; yetenekKaynagi?: SigningCapabilitySource }> {
   const hak = await loadEntitlementTree(prisma, g.entitlementId);
-  const plan = planEntitlementSigner(ctx.keys, hak.kurulum.sinif, g.capabilities ?? installationCapabilities(hak.kurulum), g.nowMs);
+  const plan = planEntitlementSigner(ctx.keys, hak.kurulum.sinif, g.capabilities ?? signingCapabilities(hak.kurulum), g.nowMs);
   const pending = await prisma.hakKokTalebi.findFirst({ where: { hakId: hak.id, durum: "BEKLIYOR" }, select: { id: true } });
-  return { imzaci: plan.kind, kid: plan.kind === "KUYRUK" ? null : plan.kid, neden: plan.kind === "KUYRUK" ? plan.reason : null, bekleyenTalep: pending?.id ?? null };
+  return {
+    imzaci: plan.kind,
+    kid: plan.kind === "KUYRUK" ? null : plan.kid,
+    neden: plan.kind === "KUYRUK" ? plan.reason : null,
+    bekleyenTalep: pending?.id ?? null,
+    ...(g.capabilities === undefined ? { yetenekKaynagi: signingCapabilitySource(hak.kurulum) } : {}),
+  };
 }
 
 /** Fabrikanın elindeki HAK (yoklamanın `hak` alanı): kimlik + sürüm (+ yeni fabrikada bayt özeti). */
@@ -128,8 +143,8 @@ export interface ReissueResult {
 }
 
 /**
- * Yetenekli kurulumların HAK'larını değişiklik OLMADAN ara imzacıyla yeniden basar (G4 §2.6-3; acil iptal turunda
- * "yeniden basılmış HAK" bu yoldan doğar) — TEK parola, her imza parolanın KOPYASIYLA, kopya ve asıl iş bitince
+ * Yetenekli (ve hiç etkinleşmemiş — beklenen yetenek) kurulumların HAK'larını değişiklik OLMADAN ara imzacıyla yeniden
+ * basar (G4 §2.6-3; acil iptal turunda "yeniden basılmış HAK" bu yoldan doğar) — TEK parola, her imza parolanın KOPYASIYLA, kopya ve asıl iş bitince
  * sıfırlanır. Plan ARA olmayan, kök kuyruğu bekleyen ya da uzun ufku YENİ verecek (ikinci onay ister) HAK atlanır.
  */
 export async function prepareIntermediateReissue(
@@ -143,7 +158,7 @@ export async function prepareIntermediateReissue(
     const results: ReissueResult[] = [];
     for (const id of [...new Set(g.entitlementIds)]) {
       const hak = await loadEntitlementTree(prisma, id);
-      const caps = (g.capabilitiesOf ?? installationCapabilities)(hak.kurulum);
+      const caps = g.capabilitiesOf?.(hak.kurulum) ?? signingCapabilities(hak.kurulum);
       const plan = planEntitlementSigner(ctx.keys, hak.kurulum.sinif, caps, nowMs);
       const skip = (neden: string) => results.push({ hakId: id, durum: "ATLANDI", neden });
       if (plan.kind !== "ARA") {

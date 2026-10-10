@@ -14,7 +14,9 @@
 //      kira defteri ve zincir ucu değişmez, talep ACİL + bildirim talep başına bir kez; elinde geniş v1'i sunan da 403;
 //      fabrikanın elindeki kira + HAK fabrika durum makinesinde P'ye dek NORMAL, P'den sonra EK_SURE (aniden durmaz)
 //   §5 kök imzası içe aktarılınca eski derleme güncel şartlı kök imzalı v3'ü alır (200, talep IMZALANDI)
-//   §6 etkinleştirme: yeteneksiz derleme kod TÜKETMEDEN 403 (acil talep); aynı kod yetenekli derlemeyle 200
+//   §6 etkinleştirme: yeteneksiz derleme kod TÜKETMEDEN 403 (acil talep); aynı kod yetenekli derlemeyle 200; yeni kurulumun
+//      ara imzalı ilk HAK'ı (beklenen yetenek): eski derleme 403 + TEK acil talep → kök içe aktarımı sonrası aynı kodla 200
+//      (kök v2); yetenekli derleme ara v1'i alır ve yetenek kümesi yazılır
 //   KİRA BAĞI KAPISI (`lease-binding.ts`) — bağlanamayan kira (`hak: null`, alıcının elinde bağlayacak HAK yok) HİÇBİR
 //   yoldan çıkmaz; kural tek yardımcıda:
 //   §7 DR devri (yeteneksiz DR, istek elindeki HAK'ı bildirmez): ön denetim 403 — devir YAZILMAZ (ana ETKİN), nonce ve
@@ -315,6 +317,30 @@ async function main(): Promise<void> {
       `${red.status} ${red.kod ?? ""} kod=${kod.durum}`);
     const ok = await etkinlestir(kE, aE, YETENEKLER);
     kontrol("§6b aynı kod yetenekli derlemeyle 200 ve ara imzalı güncel v2", ok.status === 200 && ok.json.hak === v2E.belge && kiraYuku(ok.json).hakSurum === 2, `${ok.status} ${ok.kod ?? ""}`);
+
+    // Yeni kurulumun ilk HAK'ı kök töreni beklemez: plan beklenen yetenekle ARA; eski derleme gelirse kapı aynen işler.
+    const kF = await yeni({ ilkImzaParolasi: ARA_PAROLASI });
+    const aF = kurulumAnahtariUret();
+    const v1F = await prisma.hakSurumu.findUniqueOrThrow({ where: { hakId_surum: { hakId: kF.hakId, surum: 1 } } });
+    const redF = await etkinlestir(kF, aF);
+    const kodF = await prisma.etkinlestirmeKodu.findFirstOrThrow({ where: { kurulumId: kF.kurulumDbId }, orderBy: { createdAt: "desc" } });
+    const talepF = await acikTalep(kF.hakId);
+    kontrol("§6c ⭐ ara imzalı TEK v1 + yeteneksiz etkinleştirme → 403 KIRA_VERILMEDI, kod AKTIF, kurulum ETKINLESMEDI, TEK acil talep + bildirim",
+      v1F.imzalayanKid === f.ara.kid && redF.status === 403 && redF.kod === "KIRA_VERILMEDI" && kodF.durum === "AKTIF" &&
+        (await prisma.kurulum.findUniqueOrThrow({ where: { id: kF.kurulumDbId } })).durum === "ETKINLESMEDI" && talepF.length === 1 && talepF[0]!.acil && (await bildirimSay(kF.kurulumDbId, "KOK_IMZASI_ACIL")) === 2,
+      `${v1F.imzalayanKid} ${redF.status} ${redF.kod ?? ""} kod=${kodF.durum} talep=${talepF.length}`);
+    const kokF = signDocument({ typ: TYP.HAK, schema: EntitlementSchema, payload: talepF[0]!.yuk as unknown as EntitlementDoc, key: { kid: f.kok.kid, privateKey: f.kok.privateKey } });
+    const iceF = await importRootSignedEntitlement(ctx, { talepId: talepF[0]!.id, belge: kokF, actor: "bekci" });
+    const okF = await etkinlestir(kF, aF);
+    kontrol("§6d ✓K kök içe aktarımı sonrası AYNI kodla yeteneksiz etkinleştirme 200, yanıtta kök imzalı v2, kira v2'ye bağlı",
+      iceF.durum === "IMZALANDI" && iceF.surum === 2 && okF.status === 200 && okF.json.hak === kokF && kiraYuku(okF.json).hakSurum === 2, `${iceF.durum} ${okF.status} ${okF.kod ?? ""}`);
+    const kY = await yeni({ ilkImzaParolasi: ARA_PAROLASI });
+    const v1Y = await prisma.hakSurumu.findUniqueOrThrow({ where: { hakId_surum: { hakId: kY.hakId, surum: 1 } } });
+    const okY = await etkinlestir(kY, kurulumAnahtariUret(), YETENEKLER);
+    const kurY = await prisma.kurulum.findUniqueOrThrow({ where: { id: kY.kurulumDbId } });
+    kontrol("§6e yetenekli etkinleştirme → 200, teslim ara imzalı v1, Kurulum.yetenekler yazıldı (ETKIN), kuyruk yok",
+      v1Y.imzalayanKid === f.ara.kid && okY.status === 200 && okY.json.hak === v1Y.belge && kurY.durum === "ETKIN" && JSON.stringify(kurY.yetenekler) === JSON.stringify(YETENEKLER) && (await acikTalep(kY.hakId)).length === 0,
+      `${okY.status} ${okY.kod ?? ""} ${JSON.stringify(kurY.yetenekler)}`);
 
     await kiraBagiYollari({ ctx, prisma, genel, yeni, araSurum, acikTalep, bildirimSay, importRootSignedEntitlement, kokImzala: (yuk) => signDocument({ typ: TYP.HAK, schema: EntitlementSchema, payload: yuk, key: { kid: f.kok.kid, privateKey: f.kok.privateKey } }), parmakIzi: f.parmakIzi });
   } finally {

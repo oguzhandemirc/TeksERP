@@ -32,6 +32,7 @@ import {
 } from "../../src/lisans-protokol";
 import {
   fiksturKur,
+  kurulumAnahtariUret,
   sertifikaBas,
   sertifikaYuku,
   type Fikstur,
@@ -244,7 +245,7 @@ export async function kanalFiksturu(kod: string): Promise<string> {
 
 export async function kurulumFiksturu(
   ctx: VendorContext,
-  g: { sinif?: LicenseClass; kanal?: string; moduller?: string[]; tesisId?: string; musteriId?: string } = {},
+  g: { sinif?: LicenseClass; kanal?: string; moduller?: string[]; tesisId?: string; musteriId?: string; ilkImzaParolasi?: string } = {},
 ): Promise<KurulumFiksturu> {
   const svc = await import("../../src/services/entitlement.service");
   const musteriId = g.musteriId ?? (await svc.createCustomer({ name: `Bekçi Tekstil ${randomUUID().slice(0, 8)}`, actor: "bekci" })).id;
@@ -264,9 +265,33 @@ export async function kurulumFiksturu(
     ...(svc.isValidityEndRequired(kurulum.sinif) ? { validUntil: new Date(Date.now() + 30 * DAY_MS) } : {}),
     actor: "bekci",
   });
-  await runAsCli(() => svc.issueEntitlementVersion(ctx, { entitlementId: hak.id, password: passwordBuffer(TEST_KOK_PAROLASI), reason: "bekçi fikstürü", actor: "bekci" }));
+  // Varsayılan v1 kökle (eski derleme düzeni): `capabilities: []` beklenen yeteneği (ETKINLESMEDI → ara) bilerek ezer.
+  // `ilkImzaParolasi` verilirse v1 yeni kurulumun gerçek yolundan (plan kayıttan → ara imzacı) o parolayla basılır.
+  await runAsCli(() =>
+    svc.issueEntitlementVersion(
+      ctx,
+      g.ilkImzaParolasi === undefined
+        ? { entitlementId: hak.id, password: passwordBuffer(TEST_KOK_PAROLASI), capabilities: [], reason: "bekçi fikstürü", actor: "bekci" }
+        : { entitlementId: hak.id, password: passwordBuffer(g.ilkImzaParolasi), reason: "bekçi fikstürü (ilk HAK, beklenen yetenek)", actor: "bekci" },
+    ),
+  );
   const kod = await svc.createActivationCode(ctx, { installationDbId: kurulum.id, actor: "bekci" });
   return { musteriId, tesisId, kurulumDbId: kurulum.id, kurulumId: kurulum.kurulumId, hakId: hak.id, lisansNo: hak.lisansNo, kod: kod.code };
+}
+
+/**
+ * Yetenek bildirmeyen ESKİ derlemeyle etkinleşmiş kurulum (ETKIN + boş küme): imza planı beklenen yeteneği değil kayıtlı
+ * boş kümeyi okur (kök/kuyruk). Gerçek etkinleştirme gerektirmeyen bekçiler içindir; etkinleştirme yolunu ölçen bekçi
+ * uçtan geçer.
+ */
+export async function eskiDerlemeEtkin(kurulumDbId: string, f: Fikstur): Promise<void> {
+  const { prisma } = await import("../../src/lib/prisma");
+  const a = kurulumAnahtariUret();
+  const n = await prisma.kurulum.updateMany({
+    where: { id: kurulumDbId, durum: "ETKINLESMEDI" },
+    data: { durum: "ETKIN", yetenekler: [], acikAnahtar: a.x, anahtarKimligi: a.kid, kabulEdilenParmakIzi: { ...f.parmakIzi } },
+  });
+  if (n.count !== 1) throw new Error("fikstür: kurulum ETKINLESMEDI değil");
 }
 
 /**

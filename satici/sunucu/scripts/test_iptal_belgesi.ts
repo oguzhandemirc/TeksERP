@@ -15,10 +15,14 @@
 //   §7 ⭐ `tekserp-iptal`e ISTEMCI GİREMEZ (ISTEMCI-ANAHTARI-KOK-ALTINDA.md §3.1, I1): satır kullanımı kapalı enum
 //      (ISTEMCI · PAKET yok) · ISTEMCI satırlı kök imzalı belge deftere girmez (400 BELGE_SEMA) · `iptal-uret` ISTEMCI
 //      sertifikalı dosyayı reddeder (tanınmayan tür ya da yanlış etiketli türde kullanım sertifikadan doğrulanır)
+//   §8 hiç etkinleşmemiş kurulumun ilk HAK'ı ara imzalıdır (beklenen yetenek): o HAK iptal dağıtımını engeller, varsayılan
+//      toplu yeniden basım onu İMZALANACAK sayar (atlamaz), basımdan sonra HAK engeli kalkar
 //   §6 tek seçim: dağıtım kapısının engel denetimi "eski derlemeye giden aday"ı (en yeni ara imzasız sürüm) KENDİ seçmez —
 //      teslim seçimiyle (genişlik kapısı) aynı saf yardımcıyı (`newestLegacyVersion`) okur; ara imza yüklemi başka yerde yok
 // ⭐ KALICI SONDA ✓K (her koşumda): §2a geçerli belge GERÇEKTEN eklenir · §3c engeller kalkınca belge GERÇEKTEN dağıtılır
-//    (her şeyi bekleten kör kapı yeşil veremez) · §4c `--uygula` GERÇEKTEN siler.
+//    (her şeyi bekleten kör kapı yeşil veremez) · §4c `--uygula` GERÇEKTEN siler · §8d basım GERÇEKTEN engeli kaldırır.
+// NEGATİF SONDA (2026-10-10, dosya DIŞI, cp + shasum ile geri alındı): toplu basım varsayılanı eski `installationCapabilities`
+//   → §8c ❌ (ATLANDI) · §8d ❌ (HAK engeli kalır).
 // Koşum: node ../../scripts/agir-is.mjs -- npx tsx scripts/test_iptal_belgesi.ts   (kendi _test DB'si)
 // =============================================================================
 import { spawnSync } from "node:child_process";
@@ -35,6 +39,7 @@ import {
   SATICI_KOKU,
   TEST_KOK_PAROLASI,
   anahtarOrtamiKur,
+  eskiDerlemeEtkin,
   hedefDbKapisi,
   kapat,
   kontrol,
@@ -209,6 +214,7 @@ async function main(): Promise<void> {
     console.log("\n§5 donem-ice-aktar (konteyner CLI'ı)");
     const kQ = await kurulumFiksturu(ctx);
     temizlenecek.push(kQ.kurulumDbId);
+    await eskiDerlemeEtkin(kQ.kurulumDbId, f);
     const { exportRootQueue } = await import("../src/services/root-queue.service");
     const koksuzDizin = path.join(tmp, "koksuz");
     mkdirSync(koksuzDizin, { mode: 0o700 });
@@ -234,6 +240,29 @@ async function main(): Promise<void> {
     writeFileSync(path.join(tmp, "bozuk.json"), JSON.stringify({ v: 1, tur: "baska-bir-sey" }));
     const bozuk = cli(["donem-ice-aktar", `--dosya=${path.join(tmp, "bozuk.json")}`], { env: ortamDegiskenleri });
     kontrol("§5c tanınmayan içe aktarma dosyası → çıkış 2", bozuk.status === 2 && /tanınmıyor/.test(bozuk.stderr), `${bozuk.status}`);
+
+    console.log("\n§8 hiç etkinleşmemiş kurulumun ara imzalı ilk HAK'ı: iptal kapısı + toplu yeniden basım");
+    const kN = await kurulumFiksturu(ctx, { ilkImzaParolasi: ARA_PAROLASI });
+    temizlenecek.push(kN.kurulumDbId);
+    const nV1 = await prisma.hakSurumu.findUniqueOrThrow({ where: { hakId_surum: { hakId: kN.hakId, surum: 1 } } });
+    kontrol("§8a ETKINLESMEDI kurulumun ilk HAK'ı ara imzacıyla (beklenen yetenek), kök kuyruğu yok",
+      nV1.imzalayanKid === yeniAra.kid && (await prisma.hakKokTalebi.count({ where: { hakId: kN.hakId } })) === 0, nV1.imzalayanKid);
+    const s8Sira = ((await prisma.iptalBelgesi.aggregate({ _max: { sira: true } }))._max.sira ?? 0) + 1;
+    const s8 = iptalBas(f.kok, iptalYuku(f, { sira: s8Sira, iptaller: [...s5Satirlar, { kid: yeniAra.kid, sertifikaId: randomUUID(), kullanim: "HAK" as const, tarih: msToIso(Date.now()), neden: "bekçi: ikinci ara" }] }));
+    const s8Ekle = await ekle(s8);
+    const nEngel = (d: Awaited<ReturnType<typeof distributableRevocation>>) => (d.bekleyen?.engeller ?? []).some((e) => e.tur === "HAK" && e.hakId === kN.hakId);
+    const nOnce = await distributableRevocation(prisma, ctx.keys);
+    kontrol("§8b ETKINLESMEDI kurulumun ara v1'i iptal dağıtımını ENGELLER (HAK engeli)", s8Ekle === "EKLENDI" && nOnce.bekleyen?.sira === s8Sira && nEngel(nOnce), `${s8Ekle} ${JSON.stringify(nOnce.bekleyen)}`);
+    const ucuncuAra = anahtarUret("ara-2026-3");
+    await araYaz(ortam.dizin, f, ucuncuAra, { baslangic: msToIso(Date.now() - 3_600_000) });
+    ekKidler.push(ucuncuAra.kid);
+    ctx.keys = KeyStore.load(ctx.config);
+    const nBasim = await runAsCli(() => hakSvc.prepareIntermediateReissue(ctx, { entitlementIds: [kN.hakId], password: passwordBuffer(ARA_PAROLASI), reason: "acil iptal turu", actor: "bekci" }));
+    const nYazilan = await prisma.$transaction((tx) => hakSvc.recordIntermediateReissueTx(tx, nBasim.prepared));
+    kontrol("§8c ⭐ varsayılan toplu yeniden basım ETKINLESMEDI kurulumu İMZALANACAK sayar (yeni ara ile v2)",
+      nBasim.results[0]?.durum === "IMZALANACAK" && nYazilan.length === 1 && nYazilan[0]!.surum === 2 && nYazilan[0]!.imzalayanKid === ucuncuAra.kid, JSON.stringify(nBasim.results));
+    const nSonra = await distributableRevocation(prisma, ctx.keys);
+    kontrol("§8d ✓K basım sonrası kurulumun HAK engeli KALKTI (yalnız yüklü anahtar engeli kalır)", !nEngel(nSonra) && (nSonra.bekleyen?.engeller ?? []).every((e) => e.tur === "ANAHTAR"), JSON.stringify(nSonra.bekleyen));
 
     console.log("\n§7 tekserp-iptal'e ISTEMCI GİREMEZ");
     const kullanimlar = REVOCATION_USAGES as readonly string[];

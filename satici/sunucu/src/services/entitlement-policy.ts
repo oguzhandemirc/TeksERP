@@ -105,6 +105,28 @@ export function installationCapabilities(installation: { readonly yetenekler: un
   return parsed.success ? parsed.data : [];
 }
 
+/** Hiç konuşmamış (ETKINLESMEDI) kurulumun İMZA planında varsayılan yeteneği: eski derleme değil, bilinmeyen derlemedir. */
+export const FIRST_ENTITLEMENT_EXPECTED: readonly string[] = ["hak-ara"];
+
+export type SigningCapabilitySource = "KURULUM" | "BEKLENEN" | "YOK";
+
+/** İmza planının yetenek kaynağı (SAF): kayıtlı küme → KURULUM; boş + ETKINLESMEDI → BEKLENEN; aksi YOK (fail-closed). */
+export function signingCapabilitySource(installation: { readonly yetenekler: unknown; readonly durum: string }): SigningCapabilitySource {
+  if (installationCapabilities(installation).length > 0) return "KURULUM";
+  return installation.durum === "ETKINLESMEDI" ? "BEKLENEN" : "YOK";
+}
+
+/**
+ * İMZA PLANININ yetenekleri — TEK okuma yeri (`planEntitlementSigner`in girdisi). Teslim, kira, parmak izi ve P modeli
+ * bunu OKUMAZ (`installationCapabilities`): beklenen küme yalnız imzacıyı seçer; eski derleme etkinleşirse teslim
+ * yeteneksiz yoldan gider (kira bağı kapısı + acil kök talebi).
+ */
+export function signingCapabilities(installation: { readonly yetenekler: unknown; readonly durum: string }): string[] {
+  const source = signingCapabilitySource(installation);
+  if (source === "KURULUM") return installationCapabilities(installation);
+  return source === "BEKLENEN" ? [...FIRST_ENTITLEMENT_EXPECTED] : [];
+}
+
 /**
  * Yetenek kapısı (SAF): `hak-ara` bildiren kuruluma geçerli ara imzacı; yoksa (ya da yetenek yoksa) VDS'te duran kök
  * (A düzeni); o da yoksa kök kuyruğu. Yeni biçim (ara imzalı HAK) eski derlemeye ASLA gitmez: onu yalnız

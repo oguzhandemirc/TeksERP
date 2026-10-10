@@ -22,12 +22,16 @@
 //   §8 toplu yeniden basım servisi: tek parola, yetenekliler ARA imzalı yeni sürüm, yeteneksiz atlanır; yanlış parola
 //      hiçbir sürüm yazmaz
 //   §9 anahtar süresi (K4): kullanım başına en yeni sertifikanın bitişine 30/15/7/1 gün kala bildirim, eşik başına TEK
+//   §10 imza yetenek kaynağı (`signingCapabilities`): hiç etkinleşmemiş kurulumun ilk HAK'ı ara imzacıyla (kök VDS'te olsa
+//      da), ETKIN + boş küme bugünkü gibi KÖK/KUYRUK; beklenen küme teslime girmez; portal planı `yetenekKaynagi` taşır
 // ⭐ KALICI SONDA ✓K (her koşumda): §1b ara GERÇEKTEN imzalar (kör RED değil) · §2g ERİŞİM'de ara imzası
 //    parolayı alt sürece GERÇEKTEN yazar · §4c onaylı uzun ufuk GERÇEKTEN imzalanır · §5f kök yokken yoklama GERÇEKTEN 200.
 // NEGATİF SONDA (dosya DIŞI, cp + shasum ile geri alındı; 2026-10-04): `SIGNING_ORIGINS.ARA` eski `[TAILNET, CLI]` → §0a ❌ ·
 //   §2g ❌ (ERİŞİM 404); `"GENEL"` eklendi → §0a ❌ · §2g ❌ (GENEL imzaladı).
 // NEGATİF SONDA (tünel kapatma T1, 2026-10-05): `SIGNING_ORIGINS.ARA`ya "TAILNET" geri → §0a · §2g ❌ · düzenek portal
 //   isteklerine Access JWT'si eklemedi → §7a–§7i ❌ (taşıma ERİŞİM'den gerçekten geçiyor); cp + shasum ile geri alındı.
+// NEGATİF SONDA (2026-10-10, dosya DIŞI, cp + shasum ile geri alındı): `signingCapabilitySource` ETKINLESMEDI'yi de YOK
+//   sayar (eski davranış) → §10a · §10b ❌, §10c çöker (kuyruk); test_genislik_kapisi §6c ve test_teslim_bagi §6 fikstürü çöker.
 // Koşum: node ../../scripts/agir-is.mjs -- npx tsx scripts/test_ara_imzaci.ts   (kendi _test DB'si)
 // =============================================================================
 import type { Socket } from "node:net";
@@ -55,6 +59,7 @@ import {
   SATICI_KOKU,
   TEST_KOK_PAROLASI,
   anahtarOrtamiKur,
+  eskiDerlemeEtkin,
   etkinlestirmeGovdesi,
   hedefDbKapisi,
   imzaliPost,
@@ -321,6 +326,7 @@ async function main(): Promise<void> {
     kontrol("§5c bekleyen kök talebi varken ikinci talep de imzalı sürüm de 409 (kuyruk sessizce ezilmez)", !ikinci.ok && ikinci.kod === "409 DURUM_CAKISMASI" && !kokluImza.ok && kokluImza.kod === "409 DURUM_CAKISMASI", `${ikinci.ok ? "GECTI" : ikinci.kod} / ${kokluImza.ok ? "GECTI" : kokluImza.kod}`);
     const gecYazim = await dene(() => prisma.$transaction((tx) => hakSvc.recordEntitlementVersionTx(tx, hazirSurum)));
     kontrol("§5d TOCTOU: imzası kuyruktan ÖNCE hazırlanmış sürüm, talep doğduktan sonra YAZILAMAZ (yazıcı kilit altında yeniden bakar) → 409", !gecYazim.ok && gecYazim.kod === "409 DURUM_CAKISMASI" && (await prisma.hak.findUniqueOrThrow({ where: { id: kP.hakId } })).guncelSurum === once.guncelSurum, gecYazim.ok ? "YAZILDI" : gecYazim.kod);
+    await eskiDerlemeEtkin(k1.kurulumDbId, f);
     const imzaliYol = await dene(() => runAsCli(() => hakSvc.issueEntitlementVersion(ctxKoksuz, { entitlementId: k1.hakId, password: passwordBuffer("parola-kullanilmaz-2"), reason: "kuyruk düz biçimde", actor: "bekci" })));
     kontrol("§5e düz (kuyruğa izinsiz) çağrı KUYRUK planında 409 — imzalı sürüm beklenen yerde sessiz kuyruk yok", !imzaliYol.ok && imzaliYol.kod === "409 DURUM_CAKISMASI");
     const yoklama = await imzaliPost(sunucu2.genel, ENDPOINTS.POLL, {
@@ -388,8 +394,10 @@ async function main(): Promise<void> {
     const cYk = (await portalGiris(portalKoksuz.portal, "/portal/api", yonetici, { adimKaydir: 1 })).cerez!;
     const kW = await kurulumFiksturu(ctx);
     temizlenecek.push(kW.kurulumDbId);
+    await eskiDerlemeEtkin(kW.kurulumDbId, f);
     const planY = await portalIstek(portal.portal, `/portal/api/haklar/${kW.hakId}/imza-plani`, { cerez: cO });
-    kontrol("§7a GET imza-plani: yeteneksiz + kök → KOK (kid ile)", planY.status === 200 && planY.veri.imzaci === "KOK" && planY.veri.kid === f.kok.kid, JSON.stringify(planY.veri));
+    kontrol("§7a GET imza-plani: eski derlemeyle etkin (yeteneksiz) + kök → KOK (kid ile), yetenek kaynağı YOK",
+      planY.status === 200 && planY.veri.imzaci === "KOK" && planY.veri.kid === f.kok.kid && planY.veri.yetenekKaynagi === "YOK", JSON.stringify(planY.veri));
     const surum = (taban: string, cerez: string, govde: Record<string, unknown>) => portalIstek(taban, `/portal/api/haklar/${kW.hakId}/surum`, { cerez, govde: { clientToken: randomUUID(), sebep: "portal bekçisi", ...govde } });
     const pUyusmaz = await surum(portal.portal, cO, { imzaci: "ARA", imzaParolasi: YANLIS });
     const sayac = (await prisma.portalKullanici.findUniqueOrThrow({ where: { id: op.id } })).imzaBasarisiz;
@@ -414,7 +422,7 @@ async function main(): Promise<void> {
       `${opUzun.status} / ${yUzunOnaysiz.status} ${yUzunOnaysiz.kod} / ${yUzun.status} ${yUzun.kod ?? ""}`);
     const toplu = await portalIstek(portal.portal, "/portal/api/haklar/toplu-yeniden-bas", { cerez: cY, govde: { clientToken: randomUUID(), imzaParolasi: ARA_PAROLASI, sebep: "toplu", hakIdleri: [kW.hakId] } });
     const sonuclar = (toplu.veri.sonuclar ?? []) as { durum: string; neden: string }[];
-    kontrol("§7i toplu yeniden basım rotası: kurulum kaydı yetenek taşımadıkça ATLAR (kolon entegrasyonda bağlanır)", toplu.status === 201 && sonuclar.length === 1 && sonuclar[0]!.durum === "ATLANDI" && /hak-ara/.test(sonuclar[0]!.neden), `${toplu.status} ${JSON.stringify(sonuclar)}`);
+    kontrol("§7i toplu yeniden basım rotası: eski derlemeyle etkin (yeteneksiz) kurulumu ATLAR", toplu.status === 201 && sonuclar.length === 1 && sonuclar[0]!.durum === "ATLANDI" && /hak-ara/.test(sonuclar[0]!.neden), `${toplu.status} ${JSON.stringify(sonuclar)}`);
 
     console.log("\n§8 toplu yeniden basım servisi");
     const kT1 = await kurulumFiksturu(ctx);
@@ -441,6 +449,34 @@ async function main(): Promise<void> {
     const ikinciTur = await scanKeyExpiry(ctx.keys, bitis - 28 * DAY_MS);
     const yedi = await scanKeyExpiry(ctx.keys, bitis - 6 * DAY_MS);
     kontrol("§9b tarama: eşik başına TEK satır (3 anahtar × 2 kanal = 6), aynı eşik ikinci tur 0, yeni eşik (7) yeni 6", ilk === 6 && ikinciTur === 0 && yedi === 6, `${ilk}/${ikinciTur}/${yedi}`);
+
+    console.log("\n§10 hiç etkinleşmemiş kurulumun imza planı: beklenen yetenek (yalnız imzaya)");
+    const kurulumGibi = (durum: string, yetenekler: unknown) => ({ durum, yetenekler });
+    const kaynakVe = (durum: string, yetenekler: unknown) => `${hakSvc.signingCapabilitySource(kurulumGibi(durum, yetenekler))}:${hakSvc.signingCapabilities(kurulumGibi(durum, yetenekler)).join("+")}`;
+    kontrol("§10a yetenek kaynağı: ETKINLESMEDI + boş/biçimsiz → BEKLENEN hak-ara · ETKIN/DEVREDILDI + boş → YOK (fail-closed) · kayıtlı küme → KURULUM aynen",
+      kaynakVe("ETKINLESMEDI", []) === "BEKLENEN:hak-ara" && kaynakVe("ETKINLESMEDI", "bozuk") === "BEKLENEN:hak-ara" && kaynakVe("ETKIN", []) === "YOK:" && kaynakVe("DEVREDILDI", []) === "YOK:" &&
+        kaynakVe("ETKIN", ["hak-ara", "iptal"]) === "KURULUM:hak-ara+iptal" && kaynakVe("ETKIN", ["iptal"]) === "KURULUM:iptal",
+      [kaynakVe("ETKINLESMEDI", []), kaynakVe("ETKIN", []), kaynakVe("ETKIN", ["iptal"])].join(" "));
+    const planOf = (keys: KeyStore, durum: string) => hakSvc.planEntitlementSigner(keys, "URETIM", hakSvc.signingCapabilities(kurulumGibi(durum, [])), Date.now());
+    const pKokVar = planOf(ctx.keys, "ETKINLESMEDI");
+    const pEtkinKoksuz = planOf(koksuz, "ETKIN");
+    const pAraYok = planOf(hicbiri, "ETKINLESMEDI");
+    kontrol("§10b plan: ETKINLESMEDI + kök VDS'te → ARA (kök değil) · ETKINLESMEDI köksüz → ARA · ETKIN + boş köksüz → KUYRUK YETENEK_YOK (bugünkü) · ETKINLESMEDI + ara yok → KUYRUK ARA_IMZACI_YOK",
+      pKokVar.kind === "ARA" && planOf(koksuz, "ETKINLESMEDI").kind === "ARA" && pEtkinKoksuz.kind === "KUYRUK" && pEtkinKoksuz.reason === "YETENEK_YOK" && pAraYok.kind === "KUYRUK" && pAraYok.reason === "ARA_IMZACI_YOK",
+      `${pKokVar.kind} ${pEtkinKoksuz.kind}/${pEtkinKoksuz.kind === "KUYRUK" ? pEtkinKoksuz.reason : ""} ${pAraYok.kind}/${pAraYok.kind === "KUYRUK" ? pAraYok.reason : ""}`);
+    const kN = await kurulumFiksturu(ctxKoksuz, { ilkImzaParolasi: ARA_PAROLASI });
+    temizlenecek.push(kN.kurulumDbId);
+    const nV1 = await prisma.hakSurumu.findUniqueOrThrow({ where: { hakId_surum: { hakId: kN.hakId, surum: 1 } } });
+    const nDogru = verifyEntitlement(nV1.belge, f.kokler, { nowMs: Date.now() });
+    kontrol("§10c ⭐ köksüz satıcıda yeni kurulumun İLK HAK'ı ara imzacıyla imzalandı (kuyruk yok) ve kod aynı oturumda üretildi",
+      nV1.imzalayanKid === f.ara.kid && nDogru.ok && nDogru.value.signer.kind === "ARA" && (await prisma.hakKokTalebi.count({ where: { hakId: kN.hakId } })) === 0 && kN.kod.length > 0,
+      nV1.imzalayanKid);
+    const planN = await portalIstek(portalKoksuz.portal, `/portal/api/haklar/${kN.hakId}/imza-plani`, { cerez: cYk });
+    kontrol("§10d GET imza-plani (köksüz): ETKINLESMEDI → ARA, yetenek kaynağı BEKLENEN",
+      planN.status === 200 && planN.veri.imzaci === "ARA" && planN.veri.kid === f.ara.kid && planN.veri.yetenekKaynagi === "BEKLENEN", JSON.stringify(planN.veri));
+    const nTeslim = await hakSvc.deliverableEntitlement(prisma, await prisma.hak.findUniqueOrThrow({ where: { id: kN.hakId } }), hakSvc.installationCapabilities(await prisma.kurulum.findUniqueOrThrow({ where: { id: kN.kurulumDbId } })));
+    kontrol("§10e beklenen küme TESLİME girmez: kayıttan teslim yeteneksiz yoldan (ara v1 eski derlemeye gitmez → withheld)",
+      nTeslim?.surum === 1 && nTeslim.withheld !== undefined && nTeslim.withheld.broaderVersion === null, JSON.stringify(nTeslim && { s: nTeslim.surum, w: nTeslim.withheld }));
   } finally {
     await sunucu2?.durdur();
     await portal?.kapat();
