@@ -742,15 +742,15 @@ impl FakeProcs {
 
     fn docker(&self, c: &Cmd, args: &[String]) -> CmdOut {
         let fake = FakeServices { w: self.w.clone() };
-        let sub: Vec<String> = if args.first().map(String::as_str) == Some("compose") {
-            assert_eq!(args.get(3).map(String::as_str), Some("-f"), "compose başı: {args:?}");
-            let f = PathBuf::from(&args[4]);
+        let sub: Vec<String> = if let Some((files, i)) = tekserp_guncelleyici::platform::linux::duzen::compose_basi_coz(args) {
+            assert_eq!(args.get(3).map(String::as_str), Some("--project-directory"), "compose başı: {args:?}");
+            let f = PathBuf::from(files.first().copied().unwrap_or_else(|| panic!("compose başında -f yok: {args:?}")));
             // `config` hazırlıkta paketin kendi dosyasını denetler; geri kalan her çağrı `current`ten.
-            if args.get(9).map(String::as_str) == Some("config") {
+            if args.get(i).map(String::as_str) == Some("config") {
                 return compose_config(&f);
             }
             assert!(f.ends_with("current/docker-compose.yml"), "compose dosyası current'ten: {f:?}");
-            args[9..].to_vec()
+            args[i..].to_vec()
         } else {
             args.to_vec()
         };
@@ -968,7 +968,10 @@ fn writes_disk(prog: &str, args: &[String]) -> bool {
 
 /// `docker [compose <baş>] <alt komut>` salt-okur mu (durum/kök/etiket sorgusu).
 fn docker_salt_okur(args: &[String]) -> bool {
-    let sub = if args.first().map(String::as_str) == Some("compose") { args.get(9..) } else { args.get(..) };
+    let sub = match tekserp_guncelleyici::platform::linux::duzen::compose_basi_coz(args) {
+        Some((_, i)) => args.get(i..),
+        None => args.get(..),
+    };
     matches!(
         sub.unwrap_or_default().iter().map(String::as_str).collect::<Vec<_>>().as_slice(),
         ["ps" | "inspect" | "info" | "config", ..] | ["image", "ls" | "inspect", ..]

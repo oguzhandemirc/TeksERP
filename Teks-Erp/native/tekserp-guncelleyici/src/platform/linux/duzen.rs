@@ -34,29 +34,62 @@ pub fn valid_project(name: &str) -> bool {
         && name.len() <= 63
 }
 
-/// HER `docker compose` çağrısının ortak başı (§1.2): `compose -p <proje> -f current/docker-compose.yml
-/// --env-file yapilandirma/.env --env-file yapilandirma/pg.env` — elle müdahale de aynı satırı kullanır.
+/// Kurulumun yerel ek compose dosyası (`yapilandirma/docker-compose.yerel.yml`): imzalı dosyanın taşımadığı yerel
+/// katman (bulut kenarı, bulut ortamı). Kurallar BİRLEŞİK yapılandırmaya uygulanır (`compose::ihlaller`) ⇒ yerel
+/// dosya sertleştirmeyi gevşetemez; içindeki göreli yollar `<KOK>`e göre çözülür (`--project-directory`).
+pub const YEREL_COMPOSE: &str = "docker-compose.yerel.yml";
+
+pub fn yerel_compose(l: &Layout) -> PathBuf {
+    l.root.join(p::CONFIG).join(YEREL_COMPOSE)
+}
+
+/// HER `docker compose` çağrısının ortak başı (§1.2): `compose -p <proje> --project-directory <KOK>
+/// -f current/docker-compose.yml [-f yapilandirma/docker-compose.yerel.yml] --env-file yapilandirma/.env
+/// --env-file yapilandirma/pg.env` — elle müdahale de aynı satırı kullanır. Yerel dosya VARSA eklenir (compose onu
+/// konaktan okur; varlığı da konaktan ölçülür).
 pub fn compose_args(l: &Layout, project: &str) -> Result<Vec<String>, String> {
     compose_args_for(l, project, &compose_file(l))
 }
 
 /// Aynı baş, başka compose dosyasıyla: hazırlıkta paketin (henüz `current` olmayan) dosyası denetlenir.
 pub fn compose_args_for(l: &Layout, project: &str, file: &Path) -> Result<Vec<String>, String> {
+    let yerel = yerel_compose(l);
+    compose_args_with(l, project, file, std::fs::symlink_metadata(&yerel).is_ok().then_some(yerel.as_path()))
+}
+
+/// Başın saf kurucusu (yerel dosya kararı çağıranda).
+pub fn compose_args_with(l: &Layout, project: &str, file: &Path, yerel: Option<&Path>) -> Result<Vec<String>, String> {
     if !valid_project(project) {
         return Err(format!("compose proje adı geçersiz: {project:?}"));
     }
-    let s = |x: PathBuf| x.to_string_lossy().into_owned();
-    Ok(vec![
-        "compose".into(),
-        "-p".into(),
-        project.into(),
-        "-f".into(),
-        s(file.to_path_buf()),
-        "--env-file".into(),
-        s(l.backend_env()),
-        "--env-file".into(),
-        s(pg_env(l)),
-    ])
+    let s = |x: &Path| x.to_string_lossy().into_owned();
+    let mut v: Vec<String> =
+        vec!["compose".into(), "-p".into(), project.into(), "--project-directory".into(), s(&l.root), "-f".into(), s(file)];
+    if let Some(y) = yerel {
+        v.extend(["-f".into(), s(y)]);
+    }
+    v.extend(["--env-file".into(), s(&l.backend_env()), "--env-file".into(), s(&pg_env(l))]);
+    Ok(v)
+}
+
+/// Başın bayrakları (her biri tek değer alır).
+const BAS_BAYRAKLARI: [&str; 4] = ["-p", "--project-directory", "-f", "--env-file"];
+
+/// `compose <baş> <alt komut…>` çağrısını çözer: (`-f` dosyaları sırasıyla, alt komutun başladığı indeks). `compose`
+/// değilse `None`. Tanı ve testler başı sabit indeksle değil bununla okur.
+pub fn compose_basi_coz(args: &[String]) -> Option<(Vec<&str>, usize)> {
+    if args.first().map(String::as_str) != Some("compose") {
+        return None;
+    }
+    let mut files = Vec::new();
+    let mut i = 1;
+    while i < args.len() && BAS_BAYRAKLARI.contains(&args[i].as_str()) {
+        if args[i] == "-f" {
+            files.push(args.get(i + 1)?.as_str());
+        }
+        i += 2;
+    }
+    Some((files, i.min(args.len())))
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -134,10 +167,24 @@ mod tests {
                 ("/var/lib/tekserp/guncelleme/is".into(), Sahip::Guncelleyici, 0o700),
             ]
         );
+        let file = compose_file(&l);
         assert_eq!(
-            compose_args(&l, "tekserp").unwrap().join(" "),
-            "compose -p tekserp -f /opt/tekserp/current/docker-compose.yml --env-file /opt/tekserp/yapilandirma/.env --env-file /opt/tekserp/yapilandirma/pg.env"
+            compose_args_with(&l, "tekserp", &file, None).unwrap().join(" "),
+            "compose -p tekserp --project-directory /opt/tekserp -f /opt/tekserp/current/docker-compose.yml --env-file /opt/tekserp/yapilandirma/.env --env-file /opt/tekserp/yapilandirma/pg.env"
         );
+        let yerel = yerel_compose(&l);
+        assert_eq!(yerel, Path::new("/opt/tekserp/yapilandirma/docker-compose.yerel.yml"));
+        let bas = compose_args_with(&l, "tekserp", &file, Some(&yerel)).unwrap();
+        assert_eq!(
+            bas.join(" "),
+            "compose -p tekserp --project-directory /opt/tekserp -f /opt/tekserp/current/docker-compose.yml -f /opt/tekserp/yapilandirma/docker-compose.yerel.yml --env-file /opt/tekserp/yapilandirma/.env --env-file /opt/tekserp/yapilandirma/pg.env"
+        );
+        let mut tam = bas.clone();
+        tam.extend(["up".into(), "-d".into()]);
+        let (files, i) = compose_basi_coz(&tam).unwrap();
+        assert_eq!(files, vec!["/opt/tekserp/current/docker-compose.yml", "/opt/tekserp/yapilandirma/docker-compose.yerel.yml"]);
+        assert_eq!(&tam[i..], ["up", "-d"]);
+        assert!(compose_basi_coz(&["image".into(), "ls".into()]).is_none());
         for bad in ["", "Tekserp", "-x", "a b", "a;b", "_x"] {
             assert!(compose_args(&l, bad).is_err(), "{bad:?}");
         }

@@ -4,8 +4,10 @@
 # ŞABLON: `@@SURUM@@` paketleyicide sürümle doldurulur ve dosya imzalı pakette `docker-compose.yml` adıyla
 # `/opt/tekserp/surumler/<sürüm>/` altına girer (imaj etiketi compose ile AYNI adımda değişir; `.env`de
 # TEKSERP_IMAJ yok). Doldurulmamış şablon açılmaz (geçersiz imaj adı). Güncelleyici her çağrıda:
-#   docker compose -p <proje> -f /opt/tekserp/current/docker-compose.yml \
+#   docker compose -p <proje> --project-directory /opt/tekserp -f /opt/tekserp/current/docker-compose.yml \
+#     [-f /opt/tekserp/yapilandirma/docker-compose.yerel.yml] \
 #     --env-file /opt/tekserp/yapilandirma/.env --env-file /opt/tekserp/yapilandirma/pg.env …
+# Yerel dosya (varsa) kurulumun imzasız katmanıdır (bulut kenarı); kurallar birleşik yapılandırmaya uygulanır.
 # Elle (güncelleyicisiz) kurulumun dosyası yanındaki `docker-compose.yml`dir; bu dosya ONUN AYNISIDIR,
 # farkı yalnız `# GUNCELLEYICI` işaretli satırlar + imaj satırlarıdır (test_docker_hijyeni §7 ölçer —
 # ortak bir satırı yalnız birinde değiştirmek kırmızıdır). Tasarım: docs/design/GUNCELLEYICI-SAGLAMLIK.md §1.2.

@@ -625,6 +625,41 @@ impl DockerAraclar {
     }
 }
 
+impl DockerAraclar {
+    /// Kurulum ve geçişin imaj adımı (R17): etiket Docker'da YOKSA `imaj_yukle`; VARSA yeniden yüklenmez — arşiv ölçülür
+    /// (kimlik = künye, tek etiket), etiketin katmanları arşivin `diff_ids`iyle aynıysa güncelleyicinin kaydı yazılır.
+    /// Tutmazsa `IMAJ_KIMLIGI` ve etikete DOKUNULMAZ (çalışan bir konteynerin imajı olabilir). Dönüş: yüklendi mi.
+    pub fn imaj_kaydet_ya_da_yukle(&self, env: &Env, archive: &Path, surum: &str, kimlik: &str) -> Result<bool, (&'static str, String)> {
+        let tag = crate::oci::image_tag(surum);
+        let Some((docker_id, layers)) = etiket_olc(env.procs.as_ref(), &self.komut, &tag).map_err(|e| (codes::IMAJ_YUKLENEMEDI, e))? else {
+            return self.imaj_yukle(env, archive, surum, kimlik).map(|()| true);
+        };
+        let fs = env.fs.as_ref();
+        let k = |m: String| (codes::IMAJ_KIMLIGI, m);
+        let olcum = imaj::olc(fs, archive).map_err(k)?;
+        if olcum.kimlik != kimlik {
+            return Err(k(format!("imaj arşivinin kimliği {} — künye {kimlik}", olcum.kimlik)));
+        }
+        if olcum.etiketler != [tag.clone()] {
+            return Err(k(format!("imaj arşivinin etiketleri {:?} — yalnız {tag} bekleniyor", olcum.etiketler)));
+        }
+        if layers != olcum.katmanlar {
+            return Err(k(format!("Docker'daki {tag} paketteki imaj değil (katmanlar tutmuyor) — etikete dokunulmadı")));
+        }
+        let kayit = imaj::Kayit {
+            v: 1,
+            surum: surum.to_string(),
+            etiket: tag,
+            kimlik: olcum.kimlik,
+            katmanlar: layers,
+            docker_id,
+            zaman: tekserp_hizmet::timefmt::iso_millis(env.clock.now_ms()),
+        };
+        imaj::kayit_yaz(fs, &self.komut.layout, &kayit).map_err(|e| (codes::IMAJ_YUKLENEMEDI, format!("imaj kaydı yazılamadı: {e}")))?;
+        Ok(false)
+    }
+}
+
 /// Kuruluma bağlı Linux arka ucu (`platform::baglam`).
 pub fn arka_ucu(komut: Arc<DockerKomut>) -> crate::platform::Arka {
     crate::platform::Arka {
@@ -681,11 +716,10 @@ mod tests {
         (procs, komut, env)
     }
     fn alt_komut(args: &[String]) -> Vec<String> {
-        // compose -p P -f F --env-file A --env-file B <alt komut …>
-        if args.first().map(String::as_str) == Some("compose") {
-            args[9..].to_vec()
-        } else {
-            args.to_vec()
+        // compose -p P --project-directory K -f F [-f Y] --env-file A --env-file B <alt komut …>
+        match duzen::compose_basi_coz(args) {
+            Some((_, i)) => args[i..].to_vec(),
+            None => args.to_vec(),
         }
     }
 
@@ -757,13 +791,15 @@ mod tests {
         assert_eq!(alt_komut(&stop.0), ["stop", "-t", "45", "backend"]);
         // Birim her hedefte koşar; Windows'ta `Path::join` `\` ekler — ölçülen compose başının biçimi, ayraç değil.
         let root_s = root.to_string_lossy().replace('\\', "/");
-        let head: Vec<String> = ups[0].0[..9].iter().map(|a| a.replace('\\', "/").replace(&root_s, "/opt/tekserp")).collect();
+        let head: Vec<String> = ups[0].0[..11].iter().map(|a| a.replace('\\', "/").replace(&root_s, "/opt/tekserp")).collect();
         assert_eq!(
             head,
             [
                 "compose",
                 "-p",
                 "tekserp_l4b",
+                "--project-directory",
+                "/opt/tekserp",
                 "-f",
                 "/opt/tekserp/current/docker-compose.yml",
                 "--env-file",

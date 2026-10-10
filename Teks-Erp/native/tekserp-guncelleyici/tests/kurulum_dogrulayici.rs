@@ -319,3 +319,56 @@ fn baska_urunun_imzali_paketi_reddedilir() {
     assert_eq!(e2.kod, kod::URUN, "{e2:?}");
     assert!(ac.join("dist").join("server.js").is_file(), "onarımda kurulu dizin silinmez");
 }
+
+/// Linux (§8.1 madde 1): `kurulum-paket --tar` OCI teslim tar'ını gömülü çapayla baştan doğrular.
+fn oci_tar(dir: &Path, imzalayan: &SigningKey, edit: &dyn Fn(&mut Value), ek: &[(String, Vec<u8>)]) -> PathBuf {
+    let mut files = oci_files(NEW, &oci_default_updater(), imzalayan, "paket-2026", None, edit);
+    files.extend(ek.iter().cloned());
+    let t = dir.join(oci_package_name(NEW));
+    std::fs::write(&t, ustar_of(&files)).unwrap();
+    t
+}
+
+#[test]
+fn oci_paketi_dogrulanir_ve_acilir() {
+    let d = gecici("oci");
+    let k = anahtar(31);
+    let hedef = d.join("surumler").join(NEW);
+    std::fs::create_dir_all(d.join("surumler")).unwrap();
+    let tar = oci_tar(&d, &k, &|_| {}, &[]);
+    assert_eq!(kurulum::oci_surumu(&tar).unwrap(), NEW);
+    let (v, kunye) = kurulum::oci_paketi(&tar, &hedef, &kume(&k)).unwrap();
+    assert_eq!((v["tur"].as_str(), v["surum"].as_str()), (Some("oci"), Some(NEW)));
+    assert_eq!(kunye.image_id, oci_image_id(NEW));
+    assert!(hedef.join("PAKET-DOCKER.json.jws").is_file() && hedef.join("tekserp-guncelleyici").is_file());
+    // Onarım kolu: açılmış OCI dizini yeniden ölçülür.
+    let o = kurulum::surum_dizini(&hedef, &kume(&k)).unwrap();
+    assert_eq!((o["platform"].as_str(), o["surum"].as_str()), (Some("linux-x64-oci"), Some(NEW)));
+    // Var olan hedefe açılmaz.
+    assert_eq!(kurulum::oci_paketi(&tar, &hedef, &kume(&k)).unwrap_err().kod, kod::HEDEF_VAR);
+}
+
+#[test]
+fn oci_paketi_ikili_ozeti_tutmazsa_hedef_silinir() {
+    let d = gecici("oci-ikili");
+    let k = anahtar(32);
+    let hedef = d.join(NEW);
+    let tar = oci_tar(&d, &k, &|j| j["guncelleyici"]["sha256"] = json!("0".repeat(64)), &[]);
+    let e = kurulum::oci_paketi(&tar, &hedef, &kume(&k)).unwrap_err();
+    assert_eq!(e.kod, "BUTUNLUK_GECERSIZ", "{e:?}");
+    assert!(!hedef.exists(), "yarım/kurcalı içerik kalmamalı");
+}
+
+#[test]
+fn oci_paketi_fazla_uye_ve_yabanci_anahtar_reddedilir() {
+    let d = gecici("oci-fazla");
+    let k = anahtar(33);
+    let hedef = d.join(NEW);
+    let tar = oci_tar(&d, &k, &|_| {}, &[("fazla.txt".into(), b"x".to_vec())]);
+    let e = kurulum::oci_paketi(&tar, &hedef, &kume(&k)).unwrap_err();
+    assert_eq!(e.kod, "PAKET_YOL", "{e:?}");
+    assert!(!hedef.exists());
+    let tar = oci_tar(&d, &anahtar(34), &|_| {}, &[]);
+    assert!(kurulum::oci_paketi(&tar, &hedef, &kume(&k)).is_err(), "yabancı anahtarla imzalı paket açıldı");
+    assert!(!hedef.exists());
+}

@@ -267,6 +267,17 @@ pub fn service_command(command: &str, args: &[String]) -> Result<u32, String> {
     linux::service_command(command, args)
 }
 
+/// Linux kurulum/geçiş komutları (`kur` · `gecis`, L7): yalnız Linux/Docker düzeninin işi.
+#[cfg(windows)]
+pub fn kurulum_command(command: &str, _args: &[String]) -> Result<u32, String> {
+    Err(format!("`{command}` yalnız Linux/Docker kurulumunda (Windows: setup + gecis.ps1)"))
+}
+
+#[cfg(not(windows))]
+pub fn kurulum_command(command: &str, args: &[String]) -> Result<u32, String> {
+    linux::kurulum_command(command, args)
+}
+
 /// Tanı paketinin platform ölçümleri (W4; fail-soft): Windows'ta SCM hizmetleri, başka yerde Docker + systemd + `df`.
 #[cfg(windows)]
 pub fn tani_olcumleri(h: &crate::tani::TaniHedefi) -> Vec<crate::tani::Olcum> {

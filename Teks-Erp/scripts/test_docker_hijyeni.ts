@@ -581,6 +581,8 @@ function bulutOrnekStatik(ornek: string, teslim: string): string[] {
   const izinli = new Set(["NET_BIND_SERVICE", "SETUID", "SETGID", "CHOWN"]);
   if (ek.some((c) => !izinli.has(c))) ih.push(`kenar beyansız yetki ekliyor (${ek.join(",")})`);
   if (!/no-new-privileges:true/.test(kenar)) ih.push("kenar no-new-privileges taşımıyor");
+  // Güncelleyici düzeninde bu dosya `yapilandirma/docker-compose.yerel.yml`dir; birleşik yapılandırma kuralı her serviste ister.
+  if (!/^ {4}pull_policy: never$/m.test(kenar)) ih.push("kenar `pull_policy: never` taşımıyor (yerel compose kuralı)");
   for (const m of kenar.matchAll(/^ {6}- (\.\/kenar\/\S+)$/gm)) if (!m[1].endsWith(":ro")) ih.push(`kenar bağı salt okunur değil: ${m[1]}`);
   if (/bulut-ornek/.test(teslim.split("\n").filter((l) => !/^\s*#/.test(l)).join("\n"))) ih.push("bulut örneği müşteri teslim paketine giriyor");
   return ih;
@@ -597,6 +599,7 @@ function bulutOrnekStatik(ornek: string, teslim: string): string[] {
     ["kenar port yayını", bo.replace("    network_mode: host\n", '    ports: ["443:443"]\n'), tp],
     ["kenar cap_drop kalktı", bo.replace('    cap_drop: ["ALL"]\n', ""), tp],
     ["kenara SYS_ADMIN", bo.replace('"CHOWN"]', '"CHOWN", "SYS_ADMIN"]'), tp],
+    ["kenar pull_policy kalktı", bo.replace("    pull_policy: never\n", ""), tp],
     ["teslim pakete girdi", bo, tp.replace('cp "$BURASI/.env.ornek"', 'cp "$BURASI/docker-compose.bulut-ornek.yml" "$SAHNE/"\ncp "$BURASI/.env.ornek"')],
   ];
   for (const [ad, o, t] of sondalar) check(`§5k sonda: ${ad} → kırmızı`, (o !== bo || t !== tp) && bulutOrnekStatik(o, t).length > 0, o !== bo || t !== tp ? "" : "MUTASYON UYGULANMADI");

@@ -19,6 +19,9 @@
 //!   kurulum-paket --zip <z> --hedef <d>                 setup.exe: backend paketini aç + doğrula (§1.5)
 //!   kurulum-pg --kunye <pg.json> --zip <z> --hedef <d>  setup.exe: PG paketini aç + doğrula (§1.6)
 //!   kurulum-dizin --dizin <d>                         setup.exe onarımı: açılmış sürüm dizinini yeniden ölç
+//!   kurulum-paket --tar <t> --hedef <d>                Linux: OCI teslim paketini aç + doğrula (§8.1 madde 1)
+//!   kur --tar <t> --proje <p> [--uygula]               Linux yeni kurulum (§8.1; varsayılan KURU)
+//!   gecis --kok <d> --tar <t> [--uygula --onay <N>]    Linux elle kurulumdan geçiş; `--geri-al` tersi (§8.2)
 //!   tani --kok <KOK> [--veri <D>] [--ad <ad>] --cikti <z>  tanı paketi (sırsız zip; gönderilmez — `tani.rs`)
 //!
 //! Sözleşme: docs/design/GUNCELLEYICI.md §4–§13.
@@ -123,8 +126,9 @@ fn main() -> ExitCode {
         "hizmet" | "hizmet-kur" | "hizmet-kaldir" => tekserp_guncelleyici::platform::service_command(&command, &args),
         "kurulum-paket" | "kurulum-pg" | "kurulum-dizin" => tekserp_guncelleyici::kurulum::komut(&command, &args),
         "tani" => tekserp_guncelleyici::tani::komut(&args, &identity()),
+        "kur" | "gecis" => tekserp_guncelleyici::platform::kurulum_command(&command, &args),
         _ => Err(
-            "kullanım: tekserp-guncelleyici <hizmet|tur|onar|durum|cit|hizmet-kur|hizmet-kaldir|kunye|kurulum-paket|kurulum-pg|kurulum-dizin|tani> [--kok <dizin>] [--veri <dizin>] [--ad <hizmet adı>]"
+            "kullanım: tekserp-guncelleyici <hizmet|tur|onar|durum|cit|hizmet-kur|hizmet-kaldir|kunye|kurulum-paket|kurulum-pg|kurulum-dizin|tani|kur|gecis> [--kok <dizin>] [--veri <dizin>] [--ad <hizmet adı>]"
                 .into(),
         ),
     };

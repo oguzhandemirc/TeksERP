@@ -5,6 +5,7 @@
 # müşteri yerindeki sunucuya gelen port açılmaz. Runbook: docs/ops/LINUX-DOCKER-KURULUM.md §10.
 # Kullanım: docker-compose.yml'nin yanına `docker-compose.override.yml` adıyla kopyalanır
 # (compose onu kendiliğinden birleştirir; teslim dosyasına dokunulmaz). Compose v2.24+ (`!override`).
+# Güncelleyici düzeninde aynı dosya `yapilandirma/docker-compose.yerel.yml`dir (runbook §11; `gecis` taşır).
 #
 # Tasarımdan (docs/design/BULUT-KURULUM.md T3 · §1.3) bilinçli sapma: kenar Docker'ın port yayınıyla
 # DEĞİL konak ağıyla dinler. Docker'ın yayımladığı port ufw'nin önünden geçer; konak ağında 443'e
@@ -27,6 +28,9 @@ services:
 
   kenar:
     image: ${TEKSERP_KENAR_IMAJ:-nginx:1.27-alpine}
+    # İmaj önceden `docker pull` ile yerelde; güncelleyici düzeninde (bu dosya `yapilandirma/docker-compose.yerel.yml`)
+    # birleşik yapılandırmanın kuralı her serviste `pull_policy: never` ister.
+    pull_policy: never
     restart: unless-stopped
     network_mode: host
     read_only: true

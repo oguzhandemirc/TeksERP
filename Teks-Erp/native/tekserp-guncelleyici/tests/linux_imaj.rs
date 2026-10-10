@@ -228,3 +228,46 @@ fn kurulu_surum_dizini_silinmez() {
     assert!(w.layout.version_dir(NEW).is_dir(), "current'in gösterdiği sürüm dizini silindi");
     assert!(w.layout.version_dir(OLD).is_dir());
 }
+
+/// Kurulum/geçiş (R17): etiket zaten yüklüyse yeniden YÜKLENMEZ — arşiv ölçülür, katmanlar tutuyorsa kayıt yazılır.
+#[test]
+fn kurulum_yuklu_etiketi_olcer_yuklemez() {
+    use std::sync::Arc;
+    use tekserp_guncelleyici::platform::linux::docker;
+    let w = linux("li-kur-yuklu");
+    let kimlik = oci_image_id(NEW);
+    w.faults.images.lock().unwrap().push(FakeImage { id: docker_handle(&kimlik), tags: vec![new_tag()], layers: vec![oci_layer_id(NEW)] });
+    let arsiv = w.layout.root.join("arsiv-yuklu.tar.gz");
+    std::fs::write(&arsiv, oci_image_archive(NEW)).unwrap();
+    let env = w.env();
+    let a = docker::DockerAraclar { komut: Arc::new(docker::DockerKomut::new(&w.layout, "tekserp").unwrap()) };
+    assert_eq!(a.imaj_kaydet_ya_da_yukle(&env, &arsiv, NEW, &kimlik), Ok(false), "yüklü etiket yeniden yüklenmez");
+    assert_eq!(w.faults.image_loads.load(Ordering::SeqCst), 0, "docker load çağrılmamalı");
+    let k = imaj::kayit_oku(&RealFs, &w.layout, NEW).expect("kayıt yazılmalı");
+    assert_eq!((k.docker_id.as_str(), k.katmanlar.clone()), (docker_handle(&kimlik).as_str(), vec![oci_layer_id(NEW)]));
+    // Etiket yoksa yükler (sayaç bir artar) — aynı işlev.
+    w.docker_forget(&new_tag());
+    std::fs::remove_file(imaj::kayit_yolu(&w.layout, NEW)).unwrap();
+    assert_eq!(a.imaj_kaydet_ya_da_yukle(&env, &arsiv, NEW, &kimlik), Ok(true));
+    assert_eq!(w.faults.image_loads.load(Ordering::SeqCst), 1);
+    assert!(imaj::kayit_oku(&RealFs, &w.layout, NEW).is_some());
+}
+
+/// Yabancı katmanlı etiket: `IMAJ_KIMLIGI`, kayıt yazılmaz, etikete dokunulmaz (silinmez, yeniden yüklenmez).
+#[test]
+fn kurulum_yabanci_etiket_dokunulmaz() {
+    use std::sync::Arc;
+    use tekserp_guncelleyici::platform::linux::docker;
+    let w = linux("li-kur-yabanci");
+    w.docker_retag(&new_tag());
+    let once = w.faults.images.lock().unwrap().clone();
+    let arsiv = w.layout.root.join("arsiv-yabanci.tar.gz");
+    std::fs::write(&arsiv, oci_image_archive(NEW)).unwrap();
+    let env = w.env();
+    let a = docker::DockerAraclar { komut: Arc::new(docker::DockerKomut::new(&w.layout, "tekserp").unwrap()) };
+    let e = a.imaj_kaydet_ya_da_yukle(&env, &arsiv, NEW, &oci_image_id(NEW)).unwrap_err();
+    assert_eq!(e.0, "IMAJ_KIMLIGI", "{e:?}");
+    assert_eq!(w.faults.image_loads.load(Ordering::SeqCst), 0);
+    assert!(imaj::kayit_oku(&RealFs, &w.layout, NEW).is_none());
+    assert_eq!(*w.faults.images.lock().unwrap(), once, "etiket/imaj kümesi değişmemeli");
+}

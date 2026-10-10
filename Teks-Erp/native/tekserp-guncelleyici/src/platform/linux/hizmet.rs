@@ -80,7 +80,7 @@ fn simdi_ms() -> i64 {
     tekserp_hizmet::timefmt::now_ms()
 }
 
-fn ad_arg(args: &[String]) -> Result<String, String> {
+pub(crate) fn ad_arg(args: &[String]) -> Result<String, String> {
     let ad = crate::cli::flag_value(args, tekserp_hizmet::contract::ARG_SERVICE_NAME).unwrap_or_else(|| birim::VARSAYILAN_AD.into());
     if birim::ad_gecerli(&ad) {
         Ok(ad)
@@ -136,7 +136,7 @@ fn dosya_yaz(hedef: &Path, icerik: &[u8]) -> io::Result<()> {
     std::fs::set_permissions(hedef, std::fs::Permissions::from_mode(0o644))
 }
 
-fn systemctl(args: &[&str]) -> Result<(), String> {
+pub(crate) fn systemctl(args: &[&str]) -> Result<(), String> {
     let out = std::process::Command::new("systemctl").args(args).output().map_err(|e| format!("systemctl {}: {e}", args.join(" ")))?;
     if out.status.success() {
         Ok(())
@@ -233,7 +233,7 @@ fn calis(args: &[String]) -> Result<u32, String> {
     Ok(kod)
 }
 
-fn root_gerekli(komut: &str) -> Result<(), String> {
+pub(crate) fn root_gerekli(komut: &str) -> Result<(), String> {
     if super::sys::euid() == 0 {
         Ok(())
     } else {
@@ -241,30 +241,58 @@ fn root_gerekli(komut: &str) -> Result<(), String> {
     }
 }
 
+/// Taban birim + ek dosya + `daemon-reload` + `enable` (başlatmaz). Dönüş: ne yapıldı (insan için).
+pub(crate) fn birim_kaydet(kok: &Path, veri: &Path, ad: &str) -> Result<&'static str, String> {
+    let metin = birim::taban_birim(kok, veri, ad)?;
+    let dizin = Path::new(birim::SYSTEMD_DIZINI);
+    let dosya = birim::birim_dosyasi(dizin, ad);
+    let onceki = std::fs::read(&dosya).ok();
+    if onceki.as_deref() != Some(metin.as_bytes()) {
+        dosya_yaz(&dosya, metin.as_bytes()).map_err(|e| format!("{}: {e}", dosya.display()))?;
+    }
+    ek_dosyayi_yaz(dizin, ad)?;
+    systemctl(&["daemon-reload"])?;
+    systemctl(&["enable", &format!("{ad}.service")])?;
+    Ok(match onceki {
+        None => "kaydedildi",
+        Some(b) if b == metin.as_bytes() => "zaten kayıtlı (taban birim aynı)",
+        Some(_) => "taban birimi yeniden yazıldı",
+    })
+}
+
+/// Durdur + devre dışı + yalnız kendi dosyalarımızı sil + `daemon-reload`.
+pub(crate) fn birim_sil(ad: &str) -> Result<(), String> {
+    let birim_adi = format!("{ad}.service");
+    if let Err(e) = systemctl(&["disable", "--now", &birim_adi]) {
+        eprintln!("UYARI: {e}");
+    }
+    let dizin = Path::new(birim::SYSTEMD_DIZINI);
+    let ek = birim::ek_dosya(dizin, ad);
+    let _ = std::fs::remove_file(&ek);
+    if let Some(d) = ek.parent() {
+        let _ = std::fs::remove_dir(d); // boşsa (yerel ek dosyalar kalırsa dizin de kalır)
+    }
+    match std::fs::remove_file(birim::birim_dosyasi(dizin, ad)) {
+        Ok(()) => {}
+        Err(e) if e.kind() == io::ErrorKind::NotFound => {}
+        Err(e) => return Err(format!("taban birim silinemedi: {e}")),
+    }
+    systemctl(&["daemon-reload"])?;
+    let _ = systemctl(&["reset-failed", &birim_adi]);
+    Ok(())
+}
+
 /// `hizmet-kur`: taban birim + ek dosya + `daemon-reload` + `enable` (başlatmaz — kurulum başlatır).
 fn kur(args: &[String]) -> Result<u32, String> {
     let kok = crate::cli::root_arg(args)?;
     let veri = crate::cli::flag_value(args, "--veri").map_or_else(|| PathBuf::from(super::duzen::VARSAYILAN_VERI), PathBuf::from);
     let ad = ad_arg(args)?;
-    let metin = birim::taban_birim(&kok, &veri, &ad)?;
+    birim::taban_birim(&kok, &veri, &ad)?;
     root_gerekli("hizmet-kur")?;
-    let dizin = Path::new(birim::SYSTEMD_DIZINI);
-    let dosya = birim::birim_dosyasi(dizin, &ad);
-    let onceki = std::fs::read(&dosya).ok();
-    if onceki.as_deref() != Some(metin.as_bytes()) {
-        dosya_yaz(&dosya, metin.as_bytes()).map_err(|e| format!("{}: {e}", dosya.display()))?;
-    }
-    ek_dosyayi_yaz(dizin, &ad)?;
-    systemctl(&["daemon-reload"])?;
-    systemctl(&["enable", &format!("{ad}.service")])?;
+    let ne = birim_kaydet(&kok, &veri, &ad)?;
     if !birim::asil_ikili(&kok).is_file() {
         eprintln!("UYARI: {} yok — birim başlatılmadan önce ikili oraya konmalı", birim::asil_ikili(&kok).display());
     }
-    let ne = match onceki {
-        None => "kaydedildi",
-        Some(b) if b == metin.as_bytes() => "zaten kayıtlı (taban birim aynı)",
-        Some(_) => "taban birimi yeniden yazıldı",
-    };
     println!("{ad}.service {ne} (kök {}, veri {}); başlatmak için: systemctl start {ad}.service", kok.display(), veri.display());
     Ok(0)
 }
@@ -273,24 +301,8 @@ fn kur(args: &[String]) -> Result<u32, String> {
 fn kaldir(args: &[String]) -> Result<u32, String> {
     let ad = ad_arg(args)?;
     root_gerekli("hizmet-kaldir")?;
-    let birim_adi = format!("{ad}.service");
-    if let Err(e) = systemctl(&["disable", "--now", &birim_adi]) {
-        eprintln!("UYARI: {e}");
-    }
-    let dizin = Path::new(birim::SYSTEMD_DIZINI);
-    let ek = birim::ek_dosya(dizin, &ad);
-    let _ = std::fs::remove_file(&ek);
-    if let Some(d) = ek.parent() {
-        let _ = std::fs::remove_dir(d); // boşsa (yerel ek dosyalar kalırsa dizin de kalır)
-    }
-    match std::fs::remove_file(birim::birim_dosyasi(dizin, &ad)) {
-        Ok(()) => {}
-        Err(e) if e.kind() == io::ErrorKind::NotFound => {}
-        Err(e) => return Err(format!("taban birim silinemedi: {e}")),
-    }
-    systemctl(&["daemon-reload"])?;
-    let _ = systemctl(&["reset-failed", &birim_adi]);
-    println!("{birim_adi} kaldırıldı");
+    birim_sil(&ad)?;
+    println!("{ad}.service kaldırıldı");
     Ok(0)
 }
 

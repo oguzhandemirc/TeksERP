@@ -296,3 +296,66 @@ fn gercek_compose_sablonu() {
     let e = denetle(&sablon, "TEKSERP_DINLE=0.0.0.0\n").unwrap_err();
     assert!(e.contains("backend: port yalnız bu makineye değil"), "{e}");
 }
+
+/// Yerel ek compose dosyası (L7, plan §1.2) GERÇEK compose ile: göreli yollar `--project-directory <KOK>`e çözülür,
+/// `--env-file` verildiği için `<KOK>/.env` OTOMATİK yüklenmez ve kurallar birleşik yapılandırmaya uygulanır (yerel
+/// dosya sertleştirmeyi gevşetemez). Yalnız `compose config` — imaj ve daemon işi yok.
+#[test]
+fn docker_gercek_yerel_compose_birlesir() {
+    if std::env::var("TEKSERP_DOCKER_TEST").as_deref() != Ok("1") {
+        eprintln!("⏭ docker_gercek_yerel_compose_birlesir: TEKSERP_DOCKER_TEST=1 verilmedi (CI native-linux koşar)");
+        return;
+    }
+    let v = "0.0.2-l7";
+    let root = std::env::temp_dir().join(format!("tekserp_l7_{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&root);
+    let surum = root.join("surumler").join(v);
+    std::fs::create_dir_all(&surum).unwrap();
+    std::fs::create_dir_all(root.join("yapilandirma")).unwrap();
+    std::fs::write(
+        surum.join("docker-compose.yml"),
+        format!(
+            "services:\n  backend:\n    image: tekserp-korumali:{v}\n    pull_policy: never\n    read_only: true\n    cap_drop: [\"ALL\"]\n    security_opt: [\"no-new-privileges:true\"]\n    user: \"10001:10001\"\n    environment:\n      SIZINTI: ${{SIZINTI:-yok}}\n      PG: ${{TEKSERP_PG_IMAJ:-bos}}\n"
+        ),
+    )
+    .unwrap();
+    std::fs::write(root.join(".env"), "SIZINTI=evet\n").unwrap();
+    std::fs::write(root.join("yapilandirma/.env"), "POSTGRES_PASSWORD=x\n").unwrap();
+    std::fs::write(root.join("yapilandirma/pg.env"), "TEKSERP_PG_IMAJ=postgres:16-bookworm\n").unwrap();
+    let yerel = root.join("yapilandirma/docker-compose.yerel.yml");
+    std::fs::write(
+        &yerel,
+        "services:\n  kenar:\n    image: nginx:1.27-alpine\n    pull_policy: never\n    network_mode: host\n    volumes:\n      - ./kenar/site.conf:/etc/nginx/conf.d/default.conf:ro\n",
+    )
+    .unwrap();
+    std::os::unix::fs::symlink(&surum, root.join("current")).unwrap();
+    let layout = Layout::new(&root, &root.join("veri"));
+    let komut = Arc::new(DockerKomut::new(&layout, "tekserp_l7").unwrap());
+    assert!(komut.compose().args.iter().any(|a| a.to_string_lossy() == yerel.to_string_lossy()), "yerel dosya başa girmedi");
+    let procs: Arc<dyn Procs> = Arc::new(RealProcs);
+    let fs: Arc<dyn Fs> = Arc::new(tekserp_guncelleyici::env::RealFs);
+    let env = Env {
+        fs: Arc::clone(&fs),
+        svc: Arc::new(DockerServices::new(Arc::clone(&komut), Arc::clone(&procs), Arc::clone(&fs), 5)),
+        procs: Arc::clone(&procs),
+        net: Arc::new(tekserp_guncelleyici::env::RealNet::new(None).unwrap()),
+        clock: Arc::new(tekserp_guncelleyici::env::SystemClock),
+        events: Arc::new(tekserp_guncelleyici::platform::linux::olay::StderrEvents { journald: false }),
+        protect: Arc::new(tekserp_guncelleyici::platform::linux::koruma::DirectoryProtect),
+        arka: docker::arka_ucu(Arc::clone(&komut)),
+    };
+    let a = docker::DockerAraclar { komut: Arc::clone(&komut) };
+    a.compose_denetle(&env, &surum, v).expect("imzalı + yerel birleşik yapılandırma kurallardan geçmeli");
+    let o = Command::new("docker").args(komut.compose().args.iter()).args(["config", "--format", "json"]).output().unwrap();
+    assert!(o.status.success(), "{}", String::from_utf8_lossy(&o.stderr));
+    let cfg: serde_json::Value = serde_json::from_slice(&o.stdout).unwrap();
+    let kaynak = cfg["services"]["kenar"]["volumes"][0]["source"].as_str().unwrap_or_default().to_string();
+    assert_eq!(Path::new(&kaynak), root.join("kenar/site.conf"), "göreli yol köke çözülmeli");
+    assert_eq!(cfg["services"]["backend"]["environment"]["SIZINTI"], "yok", "<KOK>/.env otomatik yüklenmemeli");
+    assert_eq!(cfg["services"]["backend"]["environment"]["PG"], "postgres:16-bookworm", "pg.env okunmalı");
+    // Yerel dosya sertleştirmeyi gevşetemez.
+    std::fs::write(&yerel, "services:\n  backend:\n    privileged: true\n").unwrap();
+    let e = a.compose_denetle(&env, &surum, v).unwrap_err();
+    assert!(e.contains("privileged"), "{e}");
+    let _ = std::fs::remove_dir_all(&root);
+}

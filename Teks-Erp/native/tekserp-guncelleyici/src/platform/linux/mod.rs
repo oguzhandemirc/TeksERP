@@ -13,6 +13,8 @@ pub mod duzen;
 pub mod hizmet;
 pub mod kendi;
 pub mod koruma;
+#[cfg(unix)]
+pub mod kurulum;
 pub mod olay;
 #[cfg(unix)]
 pub mod sys;
@@ -165,6 +167,17 @@ impl Services for NoServices {
 #[cfg(unix)]
 pub fn service_command(command: &str, args: &[String]) -> Result<u32, String> {
     hizmet::komut(command, args)
+}
+
+/// Kurulum ve geçiş komutları (`kur` · `gecis`, L7).
+#[cfg(unix)]
+pub fn kurulum_command(command: &str, args: &[String]) -> Result<u32, String> {
+    kurulum::komut(command, args)
+}
+
+#[cfg(not(unix))]
+pub fn kurulum_command(command: &str, _args: &[String]) -> Result<u32, String> {
+    Err(unsupported(&format!("`{command}` (Linux kurulumu)")))
 }
 
 #[cfg(not(unix))]

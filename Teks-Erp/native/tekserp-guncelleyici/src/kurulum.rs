@@ -4,8 +4,9 @@
 //! paketin İÇİNDEKİ ikili doğrulayıcı olamaz — doğruladığı paketin parçasıdır.
 //!
 //!   kurulum-paket --zip <backend zip> --hedef <YOK olan dizin>
+//!   kurulum-paket --tar <OCI teslim tar'ı> --hedef <YOK olan dizin>   (Linux, §8.1 madde 1 — `kur`/`gecis` de bunu çağırır)
 //!   kurulum-pg    --kunye <pg.json> --zip <PG zip> --hedef <YOK olan dizin>
-//!   kurulum-dizin --dizin <açılmış sürüm dizini>     (onarım: var olan dizini yeniden ölçer, SİLMEZ)
+//!   kurulum-dizin --dizin <açılmış sürüm dizini>     (onarım: var olan dizini yeniden ölçer, SİLMEZ; OCI dizini de)
 //!
 //! Anahtar kümesi gömülü çapanın BÜTÜN PAKET anahtarlarıdır (tek kip; kurulumda HAK — sınıf — henüz yoktur).
 //! Çıktı stdout'a TEK satır JSON. Doğrulama hatasında `{"tamam":false,"kod","mesaj"}` + çıkış 3 ve
@@ -114,11 +115,74 @@ pub fn backend_paketi(zip: &Path, hedef: &Path, trust: &PackageTrust) -> Result<
     }))
 }
 
+/// OCI teslim tar'ının sürümü: üye kümesinde TEK `tekserp-korumali_<v>_linux-amd64.tar.gz` (açmadan ölçülür).
+pub fn oci_surumu(tar: &Path) -> Result<String, KurulumHatasi> {
+    let mut f = std::fs::File::open(tar).map_err(|e| hata(kod::GIRDI, format!("paket okunamadı ({}): {e}", tar.display())))?;
+    let len = f.metadata().map_err(|e| hata(kod::GIRDI, format!("paket ölçülemedi: {e}")))?.len();
+    let uyeler = crate::tar::scan(&mut f, len, &ExtractLimits::default()).map_err(|m| hata(kod::PAKET_ACILAMADI, m))?;
+    let surumler: Vec<&str> = uyeler
+        .iter()
+        .filter_map(|m| m.name.strip_prefix(&format!("{}_", crate::oci::IMAJ_ADI))?.strip_suffix("_linux-amd64.tar.gz"))
+        .collect();
+    match surumler.as_slice() {
+        [v] if crate::version::parse(v).is_some() => Ok((*v).to_string()),
+        _ => Err(hata(kod::PAKET_ACILAMADI, format!("OCI paketinde tek imaj arşivi yok ya da sürümü geçersiz: {surumler:?}"))),
+    }
+}
+
+/// OCI (Linux) teslim paketi: üye kümesi TAM (`oci::members`) → güvenli açma → imzalı künye + listedeki her üye
+/// (`oci::verify_dir`) → paketteki güncelleyici ikilisinin sha256'sı künyedekiyle aynı. Hata ⇒ hedef SİLİNİR.
+pub fn oci_paketi(tar: &Path, hedef: &Path, trust: &PackageTrust) -> Result<(Value, crate::oci::OciKunye), KurulumHatasi> {
+    hedef_hazir(hedef)?;
+    let boy = std::fs::metadata(tar).map_err(|e| hata(kod::GIRDI, format!("paket okunamadı ({}): {e}", tar.display())))?.len();
+    if boy == 0 || boy > release::PACKAGE_MAX_BYTES {
+        return Err(hata(kod::PAKET_ACILAMADI, format!("paket boyu sınır dışı: {boy} B")));
+    }
+    let surum = oci_surumu(tar)?;
+    let stats =
+        RealFs.extract_tar(tar, hedef, &crate::oci::members(&surum), &ExtractLimits::default()).map_err(|m| acma_hatasi(hedef, m))?;
+    let k = crate::oci::verify_dir(hedef, &RealFs, trust).map_err(|e| temizle(hedef, e.code, e.message))?;
+    if k.identity.surum != surum {
+        return Err(temizle(hedef, crate::codes::BUTUNLUK_GECERSIZ, format!("künye sürümü {} — imaj arşivi {surum}", k.identity.surum)));
+    }
+    let ikili = sha256_hex(&hedef.join(crate::oci::GUNCELLEYICI))
+        .map_err(|e| temizle(hedef, kod::GIRDI, format!("güncelleyici okunamadı: {e}")))?;
+    if ikili != k.updater_sha256 {
+        return Err(temizle(hedef, crate::codes::BUTUNLUK_GECERSIZ, "paketteki güncelleyici ikilisi künyedeki özetle aynı değil"));
+    }
+    let v = json!({
+        "tamam": true,
+        "tur": "oci",
+        "surum": k.identity.surum,
+        "paketId": k.identity.package_id,
+        "kid": k.identity.kid,
+        "musteri": k.identity.musteri,
+        "imajKimligi": k.image_id,
+        "guncelleyiciSha256": k.updater_sha256,
+        "dosya": stats.files,
+        "bayt": stats.bytes,
+    });
+    Ok((v, k))
+}
+
 /// Onarım: daha önce açılmış sürüm dizini yeniden ölçülür (`butunluk.jws` + imzalı listedeki her dosya).
 /// Dizin kurulu sistemin parçasıdır — hata olsa da SİLİNMEZ; karar çağıranındır (yeniden açma).
 pub fn surum_dizini(dizin: &Path, trust: &PackageTrust) -> Result<Value, KurulumHatasi> {
     if !dizin.is_dir() {
         return Err(hata(kod::GIRDI, format!("sürüm dizini yok: {}", dizin.display())));
+    }
+    if dizin.join(crate::oci::KUNYE_JWS).is_file() {
+        let k = crate::oci::verify_dir(dizin, &RealFs, trust).map_err(|e| hata(e.code, e.message))?;
+        return Ok(json!({
+            "tamam": true,
+            "tur": "dizin",
+            "platform": k.platform,
+            "surum": k.identity.surum,
+            "paketId": k.identity.package_id,
+            "kid": k.identity.kid,
+            "musteri": k.identity.musteri,
+            "imajKimligi": k.image_id,
+        }));
     }
     let id = package::verify_dir(dizin, &RealFs, trust, None).map_err(|e| hata(e.code, e.message))?;
     if id.urun != release::UPDATE_PRODUCT {
@@ -230,6 +294,7 @@ pub fn komut(command: &str, args: &[String]) -> Result<u32, String> {
     let kabul = kurulum_guveni(&anchor, PackageMode::Kabul, now);
     let gerek = |ad: &str| bayrak(args, ad).ok_or_else(|| format!("{command}: {ad} <yol> gerekli"));
     let sonuc = match command {
+        "kurulum-paket" if bayrak(args, "--tar").is_some() => oci_paketi(&gerek("--tar")?, &gerek("--hedef")?, &kabul).map(|(v, _)| v),
         "kurulum-paket" => backend_paketi(&gerek("--zip")?, &gerek("--hedef")?, &kabul),
         "kurulum-pg" => pg_paketi(&gerek("--kunye")?, &gerek("--zip")?, &gerek("--hedef")?, &kabul),
         "kurulum-dizin" => surum_dizini(&gerek("--dizin")?, &kurulum_guveni(&anchor, PackageMode::Yerlesik, now)),
