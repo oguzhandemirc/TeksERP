@@ -99,7 +99,6 @@ const DISLAMALAR: K5Dislama[] = [
   { dosya: "Electron/src/components/layout/LicenseLockGate.tsx", ad: "LicenseLockGate", gerekce: "kısıtlı kip kilidi oturum-dışında çizilmez", kanit: { dosya: APP, desen: /\{!oturumDisi && <LicenseLockGate \/>\}/ } },
   { dosya: APP, ad: "FactoryTimezoneLoader", gerekce: "fabrika saat dilimi bayrak ucundan yalnız oturum-içi dalda yüklenir (K5'te varsayılan dilim)", kanit: { dosya: APP, desen: /\{!oturumDisi && <FactoryTimezoneLoader \/>\}/ } },
   { dosya: APP, ad: "ScanSeriesLoader", gerekce: "okutma seri tablosu K5'te yüklenmez", kanit: { dosya: APP, desen: /if \(!userId \|\| suspended\) return;/ } },
-  { dosya: "Electron/src/pages/Operations/WeavingFloor/WeavingFloorTvScreen.tsx", ad: "WeavingFloorTvScreen", gerekce: "Salon TV'si oturum-içi dalda çizilir; K5 `oturumDisi` dalı önce gelir", kanit: { dosya: APP, desen: /if \(oturumDisi\) \{[\s\S]{0,200}?\} else if \(hashPath === TEZGAH_TV_PATH\)/ } },
   { dosya: "Electron/src/providers/PreferencesProvider.tsx", ad: "PreferencesProvider", gerekce: "tercih sorgusu K5'te kapalı; kayıt yalnız ayar ekranlarından (kabuk)", kanit: { dosya: "Electron/src/providers/PreferencesProvider.tsx", desen: /const enabled = hydrated && !!user && !licenseSuspended;/ } },
 ];
 
