@@ -148,7 +148,7 @@ function createLoom(r: Random, seed: LoomSeed, open: OpenStop | null): LiveLoom 
       producedM: Math.min(plannedM, r.range(0.1, 0.9) * plannedM + meters),
     },
     // 9 numaralı tezgahın leventi bitmek üzere — "levent az" uyarısı açılışta görünsün.
-    beam: { no: `LV-${String(200 + seed.seq)}`, totalM, remainingM: Math.round(totalM * (seed.seq === 9 ? 0.04 : r.range(0.12, 0.92))) },
+    beams: [{ no: `LV-${String(200 + seed.seq)}`, slot: 1, warpSpec: null, totalM, remainingM: Math.round(totalM * (seed.seq === 9 ? 0.04 : r.range(0.12, 0.92))) }],
     source: "SIMULATED",
   };
 }

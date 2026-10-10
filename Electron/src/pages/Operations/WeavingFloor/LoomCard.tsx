@@ -1,15 +1,15 @@
 // Tek tezgah kartı — numara, canlı figür, alt şerit: çalışırken "bugün %" çubuğu,
 // dururken halka + büyük sayaç ("bugün %" figürün köşesinde — sayaç ezilmesin); uyarı
-// zinciri sağ üstte. Tıklanınca detay.
+// zinciri sağ üstte; takılı levent figürün sol altında (ilk bitecek olanın kalanı). Tıklanınca detay.
 import { memo } from "react";
-import { Star } from "lucide-react";
+import { Cylinder, Star } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { AlertChainMini, StatusShape, TimerRing } from "./Markers";
 import { LoomFigure } from "./LoomFigure";
 import { STATUS_COLOR, STATUS_LABEL, TIER_COLOR, TIER_LABEL, hsl, statusOf } from "./palette";
-import { escalationTierOf, formatTimer, targetProgress, todayAvailabilityPct } from "./metrics";
+import { criticalBeamOf, escalationTierOf, figureBeamRatio, formatNumber, formatTimer, isBeamLow, targetProgress, todayAvailabilityPct } from "./metrics";
 import { reasonIconOf } from "./stopReasons";
-import type { LiveLoom, OpenStop } from "./types";
+import type { BeamState, LiveLoom, OpenStop } from "./types";
 
 interface Props {
   loom: LiveLoom;
@@ -51,6 +51,25 @@ function TodayPct({ pct }: { pct: number | null }) {
   );
 }
 
+/** Levent rozeti: kalan metre (az kalınca uyarı rengi); levent no ve diğer yuvalar ipucunda. */
+function BeamBadge({ beams }: { beams: BeamState[] }) {
+  const b = criticalBeamOf(beams);
+  if (!b) return null;
+  const low = isBeamLow(b);
+  const title = beams.map((x) => `Levent ${x.no}${x.slot !== null ? ` (yuva ${x.slot})` : ""}: ${formatNumber(x.remainingM)} m kaldı`).join("\n");
+  return (
+    <span
+      className="absolute bottom-0 left-0 flex items-center gap-0.5 rounded-md px-1 text-xs font-semibold leading-tight tabular-nums"
+      style={{ background: hsl("var(--ds-tile)", 0.85), color: hsl(low ? "var(--ds-over)" : "var(--ds-ink)", low ? 1 : 0.7) }}
+      title={title}
+      data-testid="beam-badge"
+    >
+      <Cylinder className="h-3 w-3 shrink-0" aria-hidden />
+      {formatNumber(b.remainingM)} m{beams.length > 1 && <small className="ml-0.5 font-medium">+{beams.length - 1}</small>}
+    </span>
+  );
+}
+
 function StoppedFooter({ stop, now }: { stop: OpenStop; now: number }) {
   const tier = escalationTierOf(stop, now);
   const color = TIER_COLOR[tier];
@@ -79,12 +98,17 @@ function UnmonitoredFooter() {
   return <div className="flex h-6 items-center text-xs font-semibold text-muted-foreground">İzlenmiyor</div>;
 }
 
+function beamText(t: LiveLoom): string {
+  const b = criticalBeamOf(t.beams);
+  return b ? `, levent ${b.no} ${formatNumber(b.remainingM)} m kaldı` : "";
+}
+
 function ariaLabelOf(t: LiveLoom, now: number): string {
-  if (!t.monitored) return `Tezgah ${t.code}, izlenmiyor`;
+  if (!t.monitored) return `Tezgah ${t.code}, izlenmiyor${beamText(t)}`;
   const today = todayAvailabilityPct(t);
   const todayText = today === null ? "" : `, bugün %${today}`;
-  if (!t.openStop) return `Tezgah ${t.code}, çalışıyor${todayText}`;
-  return `Tezgah ${t.code}, duruyor: ${t.openStop.label}, ${formatTimer(now - t.openStop.startedAt)}, ${TIER_LABEL[escalationTierOf(t.openStop, now)]}${todayText}`;
+  if (!t.openStop) return `Tezgah ${t.code}, çalışıyor${todayText}${beamText(t)}`;
+  return `Tezgah ${t.code}, duruyor: ${t.openStop.label}, ${formatTimer(now - t.openStop.startedAt)}, ${TIER_LABEL[escalationTierOf(t.openStop, now)]}${todayText}${beamText(t)}`;
 }
 
 function LoomCardImpl({ loom: t, now, star, onSelect }: Props) {
@@ -126,7 +150,7 @@ function LoomCardImpl({ loom: t, now, star, onSelect }: Props) {
         <LoomFigure
           running={status === "RUN"}
           rpm={t.rpm ?? 0}
-          beamRatio={t.beam ? t.beam.remainingM / t.beam.totalM : 0}
+          beamRatio={figureBeamRatio(t)}
           fabricColor={t.job?.color ?? "#999"}
           statusColor={color}
           className={cn("w-full transition-opacity", status !== "RUN" && "opacity-45")}
@@ -138,6 +162,7 @@ function LoomCardImpl({ loom: t, now, star, onSelect }: Props) {
             className="absolute left-1/2 top-1/2 h-[3.2em] w-[3.2em] -translate-x-1/2 -translate-y-1/2 drop-shadow"
           />
         )}
+        <BeamBadge beams={t.beams} />
         {stop && (
           <span className="absolute bottom-0 right-0 rounded-md px-1 leading-tight" style={{ background: hsl("var(--ds-tile)", 0.85) }}>
             <TodayPct pct={todayAvailabilityPct(t)} />

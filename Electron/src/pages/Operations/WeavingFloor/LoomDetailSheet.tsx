@@ -7,7 +7,7 @@ import { LoomFigure } from "./LoomFigure";
 import { AlertChainTimeline, EscalationDueLine, RecentEvents } from "./Timelines";
 import { LOOM_TYPE_LABEL, STATUS_COLOR, STATUS_LABEL, TIER_COLOR, TIER_LABEL, hsl, statusOf } from "./palette";
 import { reasonIconOf } from "./stopReasons";
-import { escalationTierOf, formatNumber, formatTimer, targetProgress } from "./metrics";
+import { escalationTierOf, figureBeamRatio, formatNumber, formatTimer, targetProgress } from "./metrics";
 import type { LiveLoom, OpenStop } from "./types";
 
 interface Props {
@@ -74,7 +74,7 @@ function DetailBody({ loom: t, now }: { loom: LiveLoom; now: number }) {
         <LoomFigure
           running={status === "RUN"}
           rpm={t.rpm ?? 0}
-          beamRatio={t.beam ? t.beam.remainingM / t.beam.totalM : 0}
+          beamRatio={figureBeamRatio(t)}
           fabricColor={t.job?.color ?? "#999"}
           statusColor={STATUS_COLOR[status]}
           className="mx-auto h-36 w-auto"
@@ -89,8 +89,8 @@ function DetailBody({ loom: t, now }: { loom: LiveLoom; now: number }) {
       <Section title={t.dayBreakdown ? "Bugünkü duruşlar" : "Duruşlar"}>
         <StopBreakdown loom={t} now={now} />
       </Section>
-      {(t.job || t.beam) && (
-        <Section title={t.beam ? "Dokuma işi ve levent" : "Dokuma işi"}>
+      {(t.job || t.beams.length > 0) && (
+        <Section title={t.beams.length === 0 ? "Dokuma işi" : t.job ? "Dokuma işi ve levent" : "Levent"}>
           <JobAndBeam loom={t} />
         </Section>
       )}

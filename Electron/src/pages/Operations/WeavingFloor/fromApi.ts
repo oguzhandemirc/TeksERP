@@ -1,8 +1,8 @@
 // =============================================================================
 // TEL → EKRAN — `GET /api/loom-floor` cevabını `FloorState`e çevirir (saf, birim testli)
 // =============================================================================
-// Ölçülmeyen alan UYDURULMAZ: sayaç (atkı/metre), devir, levent ve uyarı zinciri
-// kişisi bugün yok → `null`; ekran "—" basar ya da bloğu çizmez.
+// Ölçülmeyen alan UYDURULMAZ: sayaç (atkı/metre), devir ve uyarı zinciri kişisi bugün
+// yok → `null`; ekran "—" basar ya da bloğu çizmez. Levent yalnız sunucu ölçüyorsa dolar.
 // =============================================================================
 import type { LoomFloorDto, WireLoom, WireLossClass } from "./service";
 import type { FloorState, LiveLoom, LoomEvent, LossClass, OpenStop, StopRecord, StopTotal } from "./types";
@@ -102,7 +102,7 @@ function loomOf(l: WireLoom): LiveLoom {
           producedM: null,
         }
       : null,
-    beam: null,
+    beams: (l.beams ?? []).map((b) => ({ no: b.beamNo, slot: b.position, warpSpec: b.warpSpecCode, totalM: b.plannedLengthM, remainingM: b.remainingM })),
     source: l.source,
   };
 }

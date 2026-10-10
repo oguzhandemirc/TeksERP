@@ -1,7 +1,7 @@
 // =============================================================================
 // SÜRE · KADEME · ÖZET — saf hesaplar (bileşen değil; birim testli)
 // =============================================================================
-import type { LiveLoom, OpenStop, StopTotal } from "./types";
+import type { BeamState, LiveLoom, OpenStop, StopTotal } from "./types";
 
 const MINUTE = 60_000;
 const pad2 = (n: number) => String(n).padStart(2, "0");
@@ -180,3 +180,30 @@ export function stopTotalsOf(t: LiveLoom, now: number): StopTotal[] {
 
 /** Metre ve atkı biçimi — saat değil, sayı (tr-TR binlik ayırıcı). */
 export const formatNumber = (n: number): string => Math.round(n).toLocaleString("tr-TR");
+
+/** Kalan iplik bu oranın altına inince levent uyarı rengine döner. */
+export const LOW_BEAM_RATIO = 0.08;
+
+/** Kalan / plan uzunluğu (0..1); payda yoksa null — oran uydurulmaz. */
+export function beamRatioOf(b: BeamState): number | null {
+  if (b.totalM === null || b.totalM <= 0) return null;
+  return Math.min(1, Math.max(0, b.remainingM / b.totalM));
+}
+
+/** Kartın gösterdiği levent: kalanı en az olan (ilk bitecek); eşitlikte küçük yuva. */
+export function criticalBeamOf(beams: readonly BeamState[]): BeamState | null {
+  let best: BeamState | null = null;
+  for (const b of beams) if (best === null || b.remainingM < best.remainingM) best = b;
+  return best;
+}
+
+/** Figürdeki levent kalınlığı: ilk bitecek leventin oranı; levent yoksa ya da oran yoksa 0. */
+export function figureBeamRatio(t: LiveLoom): number {
+  const b = criticalBeamOf(t.beams);
+  return b ? (beamRatioOf(b) ?? 0) : 0;
+}
+
+export function isBeamLow(b: BeamState): boolean {
+  const r = beamRatioOf(b);
+  return r !== null && r < LOW_BEAM_RATIO;
+}

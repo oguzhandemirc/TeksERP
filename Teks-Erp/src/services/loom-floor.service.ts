@@ -2,7 +2,8 @@
 // TeksERP — TEZGAH SALONU (okuma): tezgah başına şu anki durum · duruş süresi · bugün %
 // =============================================================================
 // Canlı ekranın TEK veri ucu (DOKUMA-CANLI-EKRAN §9.6). Kaynak DEFTERLERDİR — duruş
-// (`MachineStopEvent`), koşum (`MachineRun`), indirme (`DoffEvent`); audit'ten hiçbir şey
+// (`MachineStopEvent`), koşum (`MachineRun`), indirme (`DoffEvent`), takılı levent (`mountedBeamViewsTx`,
+// `GET /warp-beams/mounted` ile aynı helper); audit'ten hiçbir şey
 // türetilmez. "Bugün %" = fabrika günü başından ŞU ANA kadarki pencerenin karne terimleri
 // (`loom-shift-terms.helper`, tek helper) → oran `loom-efficiency.helper` (tek yazar).
 // Tezgah kümesi `LOOM_MACHINE_WHERE`; liste ve özet AYNI kümeden, bellekte doğar.
@@ -13,7 +14,8 @@ import type { MachineDataSource, MachineMonitoringState, MachineStopLossClass, P
 import prisma from "../lib/prisma";
 import { factoryDayStart } from "../constants/time";
 import { LOOM_MACHINE_WHERE, MINOR_STOP_THRESHOLD_SEC } from "../constants/loom-shift";
-import { readDokumaEnabled, readTezgahEscalationGraceMinutes } from "./system-setting.service";
+import { readDevereEnabled, readDevereMountTracking, readDokumaEnabled, readTezgahEscalationGraceMinutes } from "./system-setting.service";
+import { mountedBeamViewsTx, type MountedBeamView } from "./helpers/warp-beam-mount.helper";
 import { computeShiftTermsPure, type ShiftBreakdownRow, type ShiftTerms } from "./helpers/loom-shift-terms.helper";
 import { computeMachineKpis } from "./helpers/loom-efficiency.helper";
 import {
@@ -77,6 +79,8 @@ export interface LoomFloorLoomDto {
   targetUnitsPerMin: number | null;
   /** Açık koşumun dokuma işi — yalnız `dokumaEnabled` açıkken dolar. */
   job: LoomFloorJobDto | null;
+  /** Takılı leventler (yuva sırasıyla) — yalnız devere + levent tezgah bağı defteri açıkken dizi; kapalıyken null. */
+  beams: MountedBeamView[] | null;
   recentStops: LoomFloorStopRow[];
   source: MachineDataSource;
 }
@@ -88,6 +92,8 @@ export interface LoomFloorDto {
   /** Fabrikanın şu anki iletim payı (dk) — yeni açılan duruşa donacak değer. */
   graceMinutes: number;
   dokumaEnabled: boolean;
+  /** Levent tezgah bağı ölçülüyor mu (devere ∧ `devere.mountTracking`) — kapalıyken her tezgahta `beams: null`. */
+  beamTracking: boolean;
   summary: FloorCounts;
   halls: FloorHallSummary[];
   looms: LoomFloorLoomDto[];
@@ -197,7 +203,7 @@ function openStopDto(s: StopRow, src: FloorSources, currentGrace: number, now: D
   };
 }
 
-function loomDto(loom: LoomRow, src: FloorSources, ctx: { dayStart: Date; now: Date; grace: number; byStop: Map<string, StopRow[]>; byRun: Map<string, RunRow[]>; byDoff: Map<string, Array<{ machineId: string; counterSource: MachineDataSource }>> }): { dto: LoomFloorLoomDto; terms: ShiftTerms } {
+function loomDto(loom: LoomRow, src: FloorSources, ctx: { dayStart: Date; now: Date; grace: number; beamsBy: Map<string, MountedBeamView[]> | null; byStop: Map<string, StopRow[]>; byRun: Map<string, RunRow[]>; byDoff: Map<string, Array<{ machineId: string; counterSource: MachineDataSource }>> }): { dto: LoomFloorLoomDto; terms: ShiftTerms } {
   const stops = ctx.byStop.get(loom.id) ?? [];
   const runs = ctx.byRun.get(loom.id) ?? [];
   const terms = todayTerms(loom, { stops, runs, doffSources: (ctx.byDoff.get(loom.id) ?? []).map((d) => d.counterSource) }, src, ctx);
@@ -222,6 +228,7 @@ function loomDto(loom: LoomRow, src: FloorSources, ctx: { dayStart: Date; now: D
       },
       targetUnitsPerMin: openRun?.targetUnitsPerMin ?? loom.machineSpec?.nominalUnitsPerMin ?? null,
       job: openRun?.weavingOrderId ? (src.jobs.get(openRun.weavingOrderId) ?? null) : null,
+      beams: ctx.beamsBy ? (ctx.beamsBy.get(loom.id) ?? []) : null,
       recentStops: recent.map((s) => ({ id: s.id, reasonCode: s.reasonCode, lossClass: s.lossClass, startedAt: s.startedAt, endedAt: s.endedAt })),
       source: terms.source,
     },
@@ -234,12 +241,14 @@ export async function getLoomFloor(now: Date = new Date()): Promise<ApiResponse<
   const dokumaEnabled = await readDokumaEnabled();
   const grace = await readTezgahEscalationGraceMinutes();
   const src = await loadSources(dayStart, now, dokumaEnabled);
+  const beamTracking = (await readDevereEnabled()) && (await readDevereMountTracking());
+  const beamsBy = beamTracking ? await mountedBeamViewsTx(prisma, src.looms.map((l) => l.id)) : null;
   const shift = await prisma.shiftInstance.findFirst({
     where: { startsAt: { lte: now }, endsAt: { gt: now }, isCancelled: false },
     select: { startsAt: true, endsAt: true, shiftDefinition: { select: { name: true } } },
     orderBy: { startsAt: "desc" },
   });
-  const ctx = { dayStart, now, grace, byStop: groupBy(src.stops), byRun: groupBy(src.runs), byDoff: groupBy(src.doffs) };
+  const ctx = { dayStart, now, grace, beamsBy, byStop: groupBy(src.stops), byRun: groupBy(src.runs), byDoff: groupBy(src.doffs) };
   const built = src.looms.map((l) => loomDto(l, src, ctx));
   const cores = built.map(({ dto, terms }) => ({
     hallId: dto.hallId, hallName: dto.hallName, state: dto.state,
@@ -254,6 +263,7 @@ export async function getLoomFloor(now: Date = new Date()): Promise<ApiResponse<
       shift: shift ? { name: shift.shiftDefinition.name, startsAt: shift.startsAt, endsAt: shift.endsAt } : null,
       graceMinutes: grace,
       dokumaEnabled,
+      beamTracking,
       summary: countFloor(cores),
       halls: summarizeHalls(cores),
       looms: built.map((b) => b.dto),

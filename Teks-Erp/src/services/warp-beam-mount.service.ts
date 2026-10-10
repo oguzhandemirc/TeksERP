@@ -25,7 +25,8 @@ import {
   assertSlotFreeTx,
   isStatusEventKind,
   loadLoomMachineTx,
-  mountedBeamsOnMachineTx,
+  mountedBeamViewsTx,
+  type MountedBeamView,
 } from "./helpers/warp-beam-mount.helper";
 import { closeToMeasuredTx, loadBeamTx, readRemainingM, remainingMTx } from "./helpers/warp-beam-ledger.helper";
 
@@ -210,13 +211,7 @@ export async function cancelStatusEvent(id: string, eventId: string, reason: str
   return { success: true, data: await freshDto(id), message: `${result.beamNo}: ${result.cancelKind} — durum ${result.backTo}` };
 }
 
-/** Makinedeki bağlı leventler (tablet Dokuma paneli + panel). */
-export async function listMountedOnMachine(machineId: string): Promise<ApiResponse<Array<{ id: string; beamNo: string; position: number | null; warpSpecCode: string; remainingM: number }>>> {
-  const rows = await mountedBeamsOnMachineTx(prisma, machineId);
-  const out = [];
-  for (const r of rows) {
-    const spec = await prisma.warpSpec.findUniqueOrThrow({ where: { id: r.warpSpecId }, select: { code: true } });
-    out.push({ id: r.id, beamNo: r.beamNo, position: r.currentPosition, warpSpecCode: spec.code, remainingM: Number(await readRemainingM(prisma, r.id)) });
-  }
-  return { success: true, data: out };
+/** Makinedeki bağlı leventler (tablet Dokuma paneli + panel) — Tezgah Salonu ile aynı helper. */
+export async function listMountedOnMachine(machineId: string): Promise<ApiResponse<MountedBeamView[]>> {
+  return { success: true, data: (await mountedBeamViewsTx(prisma, [machineId])).get(machineId) ?? [] };
 }

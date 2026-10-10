@@ -23,7 +23,7 @@ router.use(requirePermission("loom:live-view"));
  *     summary: Tezgah Salonu — tezgah başına şu anki durum, açık duruşun süresi/hedefi, bugün % (süre payı) ve salon/hol özeti
  *     security: [{ bearerAuth: [] }]
  *     responses:
- *       200: { description: "Salon durumu (asOf · shift · graceMinutes · summary · halls · looms)" }
+ *       200: { description: "Salon durumu (asOf · shift · graceMinutes · beamTracking · summary · halls · looms; looms[].beams yalnız devere + levent bağı defteri açıkken dizi, kapalıyken null)" }
  *       403: { description: Tezgah izleme modülü kapalı (MODULE_DISABLED) ya da loom:live-view yok }
  */
 router.get("/", async (_req, res, next) => {

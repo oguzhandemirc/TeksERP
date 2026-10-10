@@ -3,8 +3,8 @@ import { Cylinder } from "lucide-react";
 import { StatusShape } from "./Markers";
 import { STATUS_COLOR, hsl } from "./palette";
 import { reasonIconOf } from "./stopReasons";
-import { availabilityPct, formatNumber, formatShortDuration, performancePct, stopTotalsOf } from "./metrics";
-import type { LiveLoom } from "./types";
+import { availabilityPct, beamRatioOf, formatNumber, formatShortDuration, isBeamLow, performancePct, stopTotalsOf } from "./metrics";
+import type { BeamState, LiveLoom } from "./types";
 
 function Figure({ value, label, unit }: { value: string; label: string; unit?: string }) {
   return (
@@ -69,12 +69,30 @@ function Bar({ ratio, color }: { ratio: number; color: string }) {
   );
 }
 
-/** Kalan iplik bu oranın altına inince levent uyarı rengine döner. */
-const LOW_BEAM_RATIO = 0.08;
+function BeamRow({ beam: b }: { beam: BeamState }) {
+  const ratio = beamRatioOf(b);
+  const low = isBeamLow(b);
+  return (
+    <div className="space-y-1.5">
+      <div className="flex items-center gap-2">
+        <Cylinder className="h-4 w-4" style={{ color: hsl(low ? "var(--ds-over)" : "var(--ds-ink)") }} />
+        <span className="font-semibold">Levent {b.no}</span>
+        {b.slot !== null && <span className="text-xs text-muted-foreground">yuva {b.slot}</span>}
+        <span className="ml-auto text-sm font-semibold tabular-nums" style={{ color: low ? hsl("var(--ds-over)") : undefined }}>
+          {formatNumber(b.remainingM)} m kaldı
+        </span>
+      </div>
+      {ratio !== null && <Bar ratio={ratio} color={hsl(low ? "var(--ds-over)" : "var(--ds-warp)")} />}
+      {(b.warpSpec || b.totalM !== null) && (
+        <div className="text-xs tabular-nums text-muted-foreground">
+          {[b.warpSpec && `Çözgü ${b.warpSpec}`, b.totalM !== null && `plan ${formatNumber(b.totalM)} m`].filter(Boolean).join(" · ")}
+        </div>
+      )}
+    </div>
+  );
+}
 
 export function JobAndBeam({ loom: t }: { loom: LiveLoom }) {
-  const beamRatio = t.beam ? t.beam.remainingM / t.beam.totalM : 0;
-  const beamLow = beamRatio < LOW_BEAM_RATIO;
   return (
     <div className="space-y-4">
       {t.job && (
@@ -96,18 +114,9 @@ export function JobAndBeam({ loom: t }: { loom: LiveLoom }) {
           )}
         </div>
       )}
-      {t.beam && (
-        <div className="space-y-1.5">
-          <div className="flex items-center gap-2">
-            <Cylinder className="h-4 w-4" style={{ color: hsl(beamLow ? "var(--ds-over)" : "var(--ds-ink)") }} />
-            <span className="font-semibold">Levent {t.beam.no}</span>
-            <span className="ml-auto text-sm font-semibold tabular-nums" style={{ color: beamLow ? hsl("var(--ds-over)") : undefined }}>
-              {formatNumber(t.beam.remainingM)} m kaldı
-            </span>
-          </div>
-          <Bar ratio={beamRatio} color={hsl(beamLow ? "var(--ds-over)" : "var(--ds-warp)")} />
-        </div>
-      )}
+      {t.beams.map((b) => (
+        <BeamRow key={`${b.slot ?? ""}-${b.no}`} beam={b} />
+      ))}
     </div>
   );
 }

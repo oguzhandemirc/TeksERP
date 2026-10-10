@@ -26,7 +26,9 @@ function advanceRunning(r: Random, t: LiveLoom, now: number, dtMs: number): Live
   const rpm = Math.round(t.targetRpm! * r.range(0.9, 1));
   const picks = (rpm * dtMs) / MINUTE;
   const meters = metersOf(picks, t.picksPerCm!);
-  const remainingM = t.beam ? Math.max(0, t.beam.remainingM - meters * 1.08) : 0;
+  // Önizleme tek yuvalıdır: levent dizisinin ilk elemanı.
+  const beam = t.beams[0] ?? null;
+  const remainingM = beam ? Math.max(0, beam.remainingM - meters * 1.08) : 0;
   const next: LiveLoom = {
     ...t,
     rpm,
@@ -39,9 +41,9 @@ function advanceRunning(r: Random, t: LiveLoom, now: number, dtMs: number): Live
     },
     today: { runSec: t.today.runSec + dtMs / 1000, plannedSec: t.today.plannedSec + dtMs / 1000 },
     job: t.job ? { ...t.job, producedM: (t.job.producedM ?? 0) + meters } : null,
-    beam: t.beam ? { ...t.beam, remainingM } : null,
+    beams: beam ? [{ ...beam, remainingM }] : [],
   };
-  const beamEmpty = t.beam !== null && remainingM <= 0;
+  const beamEmpty = beam !== null && remainingM <= 0;
   if (!beamEmpty && r.next() >= dtMs / 1000 / MEAN_RUN_SEC) return next;
   const reason = beamEmpty ? "LEVENT_BAGLAMA" : r.weighted(SUDDEN_STOP_WEIGHTS);
   const open = openStopOf(reason, now, t.hall, null);
@@ -58,14 +60,15 @@ function advanceRunning(r: Random, t: LiveLoom, now: number, dtMs: number): Live
 }
 
 function closeStop(r: Random, t: LiveLoom, open: OpenStop, now: number): LiveLoom {
-  const beam = open.reasonCode === "LEVENT_BAGLAMA" && t.beam ? { ...t.beam, no: `${t.beam.no}+`, remainingM: t.beam.totalM } : t.beam;
+  const old = t.beams[0];
+  const beams = open.reasonCode === "LEVENT_BAGLAMA" && old ? [{ ...old, no: `${old.no}+`, remainingM: old.totalM ?? old.remainingM }] : t.beams;
   return {
     ...t,
     openStop: null,
     rpm: Math.round(t.targetRpm! * r.range(0.9, 1)),
     stops: [...t.stops, { reasonCode: open.reasonCode, label: open.label, lossClass: open.lossClass, startedAt: open.startedAt, endedAt: now }],
     events: withEvents(t, { at: now, kind: "RUN" }),
-    beam,
+    beams,
   };
 }
 

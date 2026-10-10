@@ -14,15 +14,23 @@
 //   §5 cevap: şekil (anahtar kümesi) · LIVE + açık duruş → STOPPED · OFF → UNMONITORED · kademe
 //      donmuş değerden · hol özeti · fabrika günü SINIRI (önceki günün duruşu yok, günü kesen duruş
 //      gün başından sayılır, `now` sonrası yok)
+//   §6 levent alanı: devere ∧ levent tezgah bağı açıkken `beams` = `GET /warp-beams/mounted` ile AYNI
+//      helper'ın çıktısı (yuva sırası · kalan DEFTERDEN, plan değil) · leventsiz tezgahta [] · bağ
+//      defteri ya da devere kapalıyken her tezgahta null, `beamTracking` false
 //
-// Global ayar yazar (`production.enabled` · `tezgah.enabled` · `tezgah.escalationGraceMinutes`);
+// Global ayar yazar (`production.enabled` · `tezgah.enabled` · `tezgah.escalationGraceMinutes` ·
+// `devere.enabled` · `devere.mountTracking` · `iplik.enabled`);
 // bulduğu değere `finally`de döner (satırsızsa satırsız bırakır).
 //
 // NEGATİF SONDALAR (2026-10-10, cp + sha256 geri alındı):
 //   ① classify yolundan donma alanları (`targetMinutes`/`escalationGraceMinutes`) düşürüldü → §4c/§4d/§4e/§5i ❌ · ② `openStopDto` donmuş pay
 //   yerine o anki ayarı okudu → §5f/§5i ❌ · ③ route'tan `requireTezgahEnabled` çıkarıldı → §2b/§2c/§2d ❌
+//   ④ salonda levent kapısı kaldırıldı (`beamsBy` hep dolu) → §6f/§6g ❌ · ⑤ helper kalanı plan uzunluğundan
+//   verdi → §6c ❌ · ⑥ salona `prisma.warpBeam.findMany` kopyası eklendi → §6h ❌
 // =============================================================================
-import { MachineStopLossClass, ReasonPresetKind } from "@prisma/client";
+import { readFileSync } from "node:fs";
+import path from "node:path";
+import { MachineStopLossClass, ReasonPresetKind, WarpBeamOrigin, WarpKgSource } from "@prisma/client";
 import type { Request, Response } from "express";
 import prisma, { pool } from "../src/lib/prisma";
 import { AppError } from "../src/utils/app-error";
@@ -31,6 +39,9 @@ import loomFloorRouter from "../src/routes/loom-floor.routes";
 import { getLoomFloor, type LoomFloorDto } from "../src/services/loom-floor.service";
 import { classifyStop, closeManualStop, openManualStop, reclassifyStop } from "../src/services/machine-stop.service";
 import { ReasonPresetService } from "../src/services/reason-preset.service";
+import { createWarpBeam } from "../src/services/warp-beam.service";
+import { windWarpBeam } from "../src/services/warp-beam-wind.service";
+import { listMountedOnMachine, mountBeam } from "../src/services/warp-beam-mount.service";
 import { SETTING_KEYS } from "../src/services/system-setting.service";
 import { countFloor, escalationDueAt, loomStopTier, type FloorLoomCore } from "../src/services/helpers/loom-floor.helper";
 import { aggregateMachineKpis } from "../src/services/helpers/loom-efficiency.helper";
@@ -59,10 +70,13 @@ const kod = (e: AppError | null): string => String(e?.details?.code ?? e?.status
 const MIN = 60_000;
 
 const ek = Date.now().toString(36);
-const ids = { station: "", looms: [] as string[], presets: [] as string[] };
+const ids = { station: "", looms: [] as string[], presets: [] as string[], beams: [] as string[], spec: "", yarn: "", sub: "" };
 
 // ── global ayar: bul → yaz → finally'de geri yaz ─────────────────────────────
-const YONETILEN = [SETTING_KEYS.PRODUCTION_ENABLED, SETTING_KEYS.TEZGAH_ENABLED, SETTING_KEYS.TEZGAH_ESCALATION_GRACE_MINUTES];
+const YONETILEN = [
+  SETTING_KEYS.PRODUCTION_ENABLED, SETTING_KEYS.TEZGAH_ENABLED, SETTING_KEYS.TEZGAH_ESCALATION_GRACE_MINUTES,
+  SETTING_KEYS.DEVERE_ENABLED, SETTING_KEYS.DEVERE_MOUNT_TRACKING, SETTING_KEYS.IPLIK_ENABLED,
+];
 const ilk = new Map<string, unknown>();
 async function ayarlariSakla(): Promise<void> {
   const rows = await prisma.systemSetting.findMany({ where: { key: { in: YONETILEN } }, select: { key: true, value: true } });
@@ -225,11 +239,11 @@ async function govde(): Promise<void> {
   const r = await getLoomFloor(simdi);
   const d: LoomFloorDto = r.data!;
   const anahtar = (o: object) => Object.keys(o).sort().join(",");
-  check("§5a üst şekil", anahtar(d) === "asOf,dokumaEnabled,factoryDayStart,graceMinutes,halls,looms,shift,summary", anahtar(d));
+  check("§5a üst şekil", anahtar(d) === "asOf,beamTracking,dokumaEnabled,factoryDayStart,graceMinutes,halls,looms,shift,summary", anahtar(d));
   check("§5b fabrika günü başı = factoryDayStart(now) · üst pay o anki ayar (3)", d.factoryDayStart.getTime() === gunBasi.getTime() && d.graceMinutes === 3);
   const t = (id: string) => d.looms.find((l) => l.id === id)!;
   const l1 = t(duran);
-  check("§5c tezgah şekli", !!l1 && anahtar(l1) === "code,hallId,hallName,id,job,monitoringState,name,openStop,recentStops,source,state,targetUnitsPerMin,today", l1 ? anahtar(l1) : "yok");
+  check("§5c tezgah şekli", !!l1 && anahtar(l1) === "beams,code,hallId,hallName,id,job,monitoringState,name,openStop,recentStops,source,state,targetUnitsPerMin,today", l1 ? anahtar(l1) : "yok");
   check("§5d openStop şekli", !!l1?.openStop && anahtar(l1.openStop) === "escalationDueAt,graceMinutes,id,lossClass,reasonCode,reasonLabel,requiresReason,source,startedAt,targetMinutes,tier", l1?.openStop ? anahtar(l1.openStop) : "yok");
   check("§5e LIVE + açık duruş → STOPPED, açık duruş Z", l1?.state === "STOPPED" && l1.openStop?.id === Z.data.id);
   check("§5f kademe DONMUŞ hedeften: 30 dk ≥ 10 → OVERDUE (katalog 45 olsa WITHIN olurdu) · iletim anı +10+7",
@@ -253,10 +267,77 @@ async function govde(): Promise<void> {
       && hol.stoppedByClass.UNPLANNED === 1 && hol.stoppedByClass.SETUP === 1 && hol.nowPct === 33,
     hol ? JSON.stringify({ ...hol, stoppedByClass: undefined }) : "hol yok");
   check("§5n hol bugün % = izlenen üç tezgahın ΣAPT/ΣPOT'u", hol?.todayPct === aggregateMachineKpis(izlenenler).availabilityPct, `${hol?.todayPct}`);
+
+  await leventAlani(station.id, calisan, duran, simdi);
+}
+
+// ── §6 levent alanı ─────────────────────────────────────────────────────────
+async function leventAlani(stationId: string, takili: string, leventsiz: string, simdi: Date): Promise<void> {
+  await ayarYaz(SETTING_KEYS.IPLIK_ENABLED, false); // fason köken: iplik defteri devre dışı, yalnız levent defteri ölçülür
+  await prisma.station.update({ where: { id: stationId }, data: { consumesWarpBeam: true } });
+  await prisma.machine.update({ where: { id: takili }, data: { warpBeamSlots: 2 } });
+  const yarn = await prisma.item.create({ data: { code: `TEST-LF-IP-${ek}`, name: `TEST-LF iplik ${ek}`, itemType: "YARN", unit: "KG", linearDensityDen: 300 }, select: { id: true } });
+  ids.yarn = yarn.id;
+  const spec = await prisma.warpSpec.create({ data: { code: `TEST-LF-CK-${ek}`, name: `TEST-LF çözgü ${ek}`, yarnItemId: yarn.id, endsCount: 3500 }, select: { id: true, code: true } });
+  ids.spec = spec.id;
+  const sub = await prisma.subcontractor.create({ data: { code: `TEST-LF-F-${ek}`, name: `TEST-LF fasoncu ${ek}` }, select: { id: true } });
+  ids.sub = sub.id;
+  const sar = async (plan: number, sarilan: number) => {
+    const p = await createWarpBeam({ warpSpecId: spec.id, plannedLengthM: plan, originKind: WarpBeamOrigin.SUBCONTRACT, subcontractorId: sub.id });
+    ids.beams.push(p.data.id);
+    await windWarpBeam(p.data.id, { lengthM: sarilan, kgSource: WarpKgSource.THEORETICAL });
+    return p.data;
+  };
+  await ayarYaz(SETTING_KEYS.DEVERE_ENABLED, true);
+  await ayarYaz(SETTING_KEYS.DEVERE_MOUNT_TRACKING, true);
+  const A = await sar(1000, 800);
+  const B = await sar(600, 500);
+  await mountBeam(A.id, { machineId: takili, position: 2 });
+  await mountBeam(B.id, { machineId: takili, position: 1 });
+
+  const acik = (await getLoomFloor(simdi)).data!;
+  const l = acik.looms.find((x) => x.id === takili);
+  check("§6a bağ defteri açık → beamTracking true", acik.beamTracking === true);
+  check("§6b takılı iki levent yuva sırasıyla (B yuva 1, A yuva 2)",
+    l?.beams?.length === 2 && l.beams[0]!.beamNo === B.beamNo && l.beams[0]!.position === 1 && l.beams[1]!.beamNo === A.beamNo && l.beams[1]!.position === 2,
+    JSON.stringify(l?.beams?.map((b) => [b.beamNo, b.position])));
+  check("§6c kalan DEFTERDEN (sarılan 800/500), plan ayrı alanda (1000/600) · çözgü kodu",
+    l?.beams?.[1]?.remainingM === 800 && l.beams[1]!.plannedLengthM === 1000 && l.beams[0]!.remainingM === 500 && l.beams[0]!.plannedLengthM === 600 && l.beams[0]!.warpSpecCode === spec.code,
+    JSON.stringify(l?.beams));
+  const tekKaynak = await listMountedOnMachine(takili);
+  check("§6d tek kaynak: salonun `beams`i `GET /warp-beams/mounted` cevabıyla BİREBİR", JSON.stringify(tekKaynak.data) === JSON.stringify(l?.beams));
+  check("§6e leventsiz tezgahta beams = [] (ölçülüyor, takılı yok)", Array.isArray(acik.looms.find((x) => x.id === leventsiz)?.beams) && acik.looms.find((x) => x.id === leventsiz)!.beams!.length === 0);
+
+  await ayarYaz(SETTING_KEYS.DEVERE_MOUNT_TRACKING, false);
+  const bagKapali = (await getLoomFloor(simdi)).data!;
+  check("§6f bağ defteri KAPALI → beamTracking false, her tezgahta beams null (bugünkü davranış)",
+    bagKapali.beamTracking === false && bagKapali.looms.every((x) => x.beams === null), `${bagKapali.looms.filter((x) => x.beams !== null).length} dolu`);
+  await ayarYaz(SETTING_KEYS.DEVERE_MOUNT_TRACKING, true);
+  await ayarYaz(SETTING_KEYS.DEVERE_ENABLED, false);
+  const devereKapali = (await getLoomFloor(simdi)).data!;
+  check("§6g devere KAPALI (bağ defteri açık kalsa da) → beams null — kapalı modülün verisi görünmez",
+    devereKapali.beamTracking === false && devereKapali.looms.every((x) => x.beams === null));
+
+  // Yapısal: iki okuyucu da yüklemi helper'dan alır — salonda ikinci levent sorgusu yok.
+  const kaynak = (f: string) => readFileSync(path.join(__dirname, "..", f), "utf8");
+  const salon = kaynak("src/services/loom-floor.service.ts");
+  const mounted = kaynak("src/services/warp-beam-mount.service.ts");
+  const mountedGovde = mounted.slice(mounted.indexOf("export async function listMountedOnMachine"));
+  check("§6h salon levendi yalnız `mountedBeamViewsTx`ten okur (kendi `warpBeam`/`warpBeamEvent` sorgusu yok)",
+    /mountedBeamViewsTx\(/.test(salon) && !/\.warpBeam(Event)?\.\w+\(/.test(salon) && !/remainingByBeam|readRemainingM/.test(salon));
+  check("§6i `GET /warp-beams/mounted` aynı helper'ı çağırır", /mountedBeamViewsTx\(prisma, \[machineId\]\)/.test(mountedGovde.slice(0, mountedGovde.indexOf("\n}\n"))));
 }
 
 async function cleanup(): Promise<void> {
   try {
+    if (ids.beams.length) {
+      await prisma.yarnMovement.deleteMany({ where: { warpBeamId: { in: ids.beams } } });
+      await prisma.warpBeamEvent.deleteMany({ where: { beamId: { in: ids.beams } } });
+      await prisma.warpBeam.deleteMany({ where: { id: { in: ids.beams } } });
+    }
+    if (ids.spec) await prisma.warpSpec.deleteMany({ where: { id: ids.spec } });
+    if (ids.yarn) await prisma.item.deleteMany({ where: { id: ids.yarn } });
+    if (ids.sub) await prisma.subcontractor.deleteMany({ where: { id: ids.sub } });
     if (ids.looms.length) {
       const stops = await prisma.machineStopEvent.findMany({ where: { machineId: { in: ids.looms } }, select: { id: true } });
       const sid = stops.map((s) => s.id);

@@ -45,6 +45,16 @@ export interface WireBreakdownRow {
   stopSec: number;
 }
 
+/** Takılı levent — backend `MountedBeamView` aynası (`GET /api/warp-beams/mounted/:id` ile aynı helper). */
+export interface WireMountedBeam {
+  id: string;
+  beamNo: string;
+  position: number | null;
+  warpSpecCode: string;
+  remainingM: number;
+  plannedLengthM: number;
+}
+
 export interface WireLoom {
   id: string;
   code: string;
@@ -57,6 +67,8 @@ export interface WireLoom {
   today: { potSec: number; aptSec: number; availabilityPct: number | null; stopCount: number; breakdown: WireBreakdownRow[] };
   targetUnitsPerMin: number | null;
   job: { weavingOrderNumber: string; itemName: string; colorName: string | null; colorHex: string | null; plannedM: number | null } | null;
+  /** null = levent tezgah bağı ölçülmüyor (devere ya da bağ defteri kapalı); [] = takılı levent yok. */
+  beams: WireMountedBeam[] | null;
   recentStops: { id: string; reasonCode: string | null; lossClass: WireLossClass | null; startedAt: string; endedAt: string | null }[];
   source: string;
 }
@@ -67,6 +79,7 @@ export interface LoomFloorDto {
   shift: { name: string; startsAt: string; endsAt: string } | null;
   graceMinutes: number;
   dokumaEnabled: boolean;
+  beamTracking: boolean;
   summary: WireFloorCounts;
   halls: (WireFloorCounts & { hallId: string; hallName: string })[];
   looms: WireLoom[];

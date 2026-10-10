@@ -12,6 +12,7 @@ import { AppError } from "../../utils/app-error";
 import { readDevereEnabled, readDevereMountTracking, readDokumaEnabled } from "../system-setting.service";
 import { WARP_BEAM_STATUS_EVENT_KINDS, type WarpBeamEventKind } from "../../constants/warp-beam";
 import { OPEN_MACHINE_RUN_WHERE } from "./machine-run-open.helper";
+import { remainingByBeam } from "./warp-beam.helper";
 
 type Client = Prisma.TransactionClient;
 
@@ -45,13 +46,53 @@ export const ACTIVE_FORWARD_EVENT_SQL = `
     AND NOT EXISTS (SELECT 1 FROM warp_beam_events r WHERE r."reversesEventId" = e.id)
   ORDER BY e."beamId", e."createdAt" DESC`;
 
-/** Makinede şu an bağlı leventler (durum kolonundan — "şu an ne"). */
+/** "Bu makinelerde şu an bağlı" yüklemi (durum kolonundan — "şu an ne"); okuyucuların tek kaynağı. */
+function mountedOnMachinesWhere(machineIds: string[]): Prisma.WarpBeamWhereInput {
+  return { status: WarpBeamStatus.MOUNTED, currentMachineId: { in: machineIds } };
+}
+
+/** Makinede şu an bağlı leventler (yuva sırasıyla). */
 export async function mountedBeamsOnMachineTx(client: Pick<Client, "warpBeam">, machineId: string) {
   return client.warpBeam.findMany({
-    where: { status: WarpBeamStatus.MOUNTED, currentMachineId: machineId },
+    where: mountedOnMachinesWhere([machineId]),
     orderBy: { currentPosition: "asc" },
     select: { id: true, beamNo: true, currentPosition: true, warpSpecId: true },
   });
+}
+
+export interface MountedBeamView {
+  id: string;
+  beamNo: string;
+  position: number | null;
+  warpSpecCode: string;
+  remainingM: number;
+  /** Leventin plan uzunluğu — ekranın kalan oranının paydası. */
+  plannedLengthM: number;
+}
+
+/**
+ * Makinelerde bağlı leventler + kalan metre (gösterim okuyucusu, kilitsiz) — `GET /warp-beams/mounted/:id`
+ * ve Tezgah Salonu AYNI helper'ı çağırır; makine başına yuva sırasıyla. Defter yazan yol bunu çağırmaz
+ * (kalanı yalnız `remainingMTx`ten okur).
+ */
+export async function mountedBeamViewsTx(client: Pick<Client, "warpBeam" | "warpBeamEvent">, machineIds: string[]): Promise<Map<string, MountedBeamView[]>> {
+  const out = new Map<string, MountedBeamView[]>();
+  if (machineIds.length === 0) return out;
+  const rows = await client.warpBeam.findMany({
+    where: mountedOnMachinesWhere(machineIds),
+    orderBy: [{ currentPosition: "asc" }, { beamNo: "asc" }],
+    select: { id: true, beamNo: true, currentPosition: true, currentMachineId: true, plannedLengthM: true, warpSpec: { select: { code: true } } },
+  });
+  const remaining = await remainingByBeam(client, rows.map((r) => r.id));
+  for (const r of rows) {
+    const list = out.get(r.currentMachineId!) ?? [];
+    list.push({
+      id: r.id, beamNo: r.beamNo, position: r.currentPosition, warpSpecCode: r.warpSpec.code,
+      remainingM: remaining.get(r.id) ?? 0, plannedLengthM: Number(r.plannedLengthM),
+    });
+    out.set(r.currentMachineId!, list);
+  }
+  return out;
 }
 
 /** Makinede AÇIK koşum sayısı — tezgah tarafının yüklemi (`OPEN_MACHINE_RUN_WHERE`), ikinci kopya yok. */

@@ -74,7 +74,12 @@ export interface WeavingJob {
 
 export interface BeamState {
   no: string;
-  totalM: number;
+  /** Tezgahtaki yuva (1..); bilinmiyorsa null. */
+  slot: number | null;
+  /** Çözgü kodu; önizlemede null. */
+  warpSpec: string | null;
+  /** Oranın paydası (leventin plan uzunluğu); null = oran çizilmez. */
+  totalM: number | null;
   remainingM: number;
 }
 
@@ -128,7 +133,8 @@ export interface LiveLoom {
   dayBreakdown: StopTotal[] | null;
   events: LoomEvent[];
   job: WeavingJob | null;
-  beam: BeamState | null;
+  /** Takılı leventler (yuva sırasıyla); levent ölçülmüyorsa ya da takılı yoksa boş. */
+  beams: BeamState[];
   /** Veri kaynağı beyanı (`MACHINE` · `OPERATOR` · `SIMULATED` …). */
   source: string;
 }
