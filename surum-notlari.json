@@ -17,6 +17,21 @@
   ],
   "yayinlar": [
     {
+      "id": "2026-10-11b",
+      "durum": "TASLAK — terfide kullanıcı onayı",
+      "baslik": "Panelin kendini güncellemesi düzeltildi",
+      "surumler": {
+        "panel": "1.6.1"
+      },
+      "maddeler": [
+        {
+          "kapsam": "panel",
+          "tip": "duzeltme",
+          "metin": "Güncelleme indirme izni düzeltildi: 1.5.0 ve 1.6.0 sürümleri yeni sürümü indirmeye izin alamadığı için kendini güncelleyemiyordu. Bu sürüm o bilgisayarlarda bir kez elle kurulur; sonraki güncellemeler yine kendiliğinden gelir."
+        }
+      ]
+    },
+    {
       "id": "2026-10-11",
       "durum": "TASLAK — terfide kullanıcı onayı",
       "baslik": "Tezgah Salonu, Vardiya Tanımları ve şifreli bağlantı",
