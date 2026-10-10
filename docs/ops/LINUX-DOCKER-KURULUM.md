@@ -224,6 +224,22 @@ Elle kurulmuş (§2) bir sunucuyu güncelleyici düzenine alır (plan `GUNCELLEY
 3. **Uygula:** aynı komut + `--uygula --onay 10`. Kalemler: günlük (`<kök>/gecis/<damga>/gunluk.jsonl`) · iskelet (dizinler, `guncelleyici/ayar.json`, `yapilandirma/pg.env` = çalışan PG imajı, yedek alan) · paket `surumler/<v>` · `.env` → `yapilandirma/.env` (kopya), override → `yapilandirma/docker-compose.yerel.yml` · compose kuralları · imaj kaydı · `current` · yeni compose ile `up -d` + sağlık (sürüm aynı, lisans kötüleşmez) · eski `docker-compose.yml`, `.env`, override → `gecis/<damga>/geri/` · ikili `guncelleyici/` + `tekserp-guncelleyici.service`. Sağlıklı olana dek (birim başlamazsa da) her hata kendiliğinden geri alınır: eski dosyalar yerinde, eski compose ile `up -d`; yaratılanlar silinmez, `gecis/<damga>/geri-alinan/`e taşınır. Çıkış: 0 tamam · 3 durdu · 4 geri alındı · 5 geri alma eksik.
 4. **Sonra her compose çağrısı** güncelleyicinin başıyla: `docker compose -p <proje> --project-directory <kök> -f <kök>/current/docker-compose.yml -f <kök>/yapilandirma/docker-compose.yerel.yml --env-file <kök>/yapilandirma/.env --env-file <kök>/yapilandirma/pg.env …` (yerel dosya yoksa o `-f` düşer). Kökteki `kenar/` yerinde kalır; yerel dosyadaki göreli yollar köke göre çözülür. Veri kökü `/var/lib/tekserp` sabittir (şablonun bağ kaynağı) — aynı konakta ikinci güncelleyicili kurulum bugün yok.
 5. **Geri al:** `sudo tekserp-guncelleyici gecis --geri-al --kok <kök>` (KURU plan) → `--uygula --onay <N>`. Yalnız güncelleyici hiç işlem yapmadıysa (`/var/lib/tekserp/guncelleme/is/islem.jsonl` yok/boş) ve `current` hâlâ geçişin sürümündeyse; değilse geri alma elle/yedekten (§6).
-6. **Bilinen açık (2026-10-10):** Linux'ta güncelleyici kirayı `<kök>/lisans/kira.jws`ten okur, backend ise `<proje>_lisans` Docker biriminde tutar ⇒ etkin kurulumda da `durum` `DONDURULDU/KIRA_YOK` gösterir ve güncelleme başlamaz; düzeltilene dek güncelleme §3 ile elle yapılır (arşiv 2026-10-10 P1a geçiş notu).
+6. **Kira yeri (düzeltildi, güncelleyici 0.2.4):** Linux'ta güncelleyici kirayı/HAK'ı backend'in `<proje>_lisans` Docker biriminden okur (`docker volume inspect --format '{{.Mountpoint}}' <proje>_lisans`); konakta `<kök>/lisans` kopyası/bağı YOKTUR. 0.2.3 bunu bilmez (`durum` `DONDURULDU/KIRA_YOK`, `onar` `KendiDogrulanmadi`) ⇒ 0.2.3'lü kurulumlar §11.1'deki geçişle 0.2.4'e alınır.
+
+### 11.1 Mevcut 0.2.3 kurulumun 0.2.4'e geçişi (kira yeri düzeltmesi)
+
+0.2.3 kirayı birimde göremediği için kendini güncelleyemez; iki yoldan biri. Aşağıda `<kök>` = kurulum dizini (örn. `/opt/tekserp/ders`), `<proje>` = compose proje adı (örn. `tekserp-ders`). **Bu bölüm bir tarifedir; sunucuya uygulama ayrı, kullanıcı onaylı adımdır.**
+
+**Yol A — salt okunur bağ köprüsü (güncelleyici kendini yeniler):**
+1. 0.2.4'lü güncelleyiciyi taşıyan backend sürümü grup kanalında yayınlanmış olmalı (yoksa B'ye geç).
+2. Birimin konak yolunu ölç: `M=$(docker volume inspect --format '{{.Mountpoint}}' <proje>_lisans)` (genelde `/var/lib/docker/volumes/<proje>_lisans/_data`).
+3. Köprü (root): `install -d -m 0700 <kök>/lisans && mount --bind "$M" <kök>/lisans && mount -o remount,bind,ro <kök>/lisans`. **Sembolik bağ ÇALIŞMAZ** (güvenilmez okuma bağı reddeder); bağ SALT OKUNURDUR, güncelleyici oraya yazmaz.
+4. Güncelleyici tur atar (60 sn): `sudo <kök>/guncelleyici/tekserp-guncelleyici durum` artık `KIRA_YOK` değil; kanaldaki sürüm "önce güncelleyici" kuralıyla 0.2.4'e geçer.
+5. Doğrula: `<veri>/guncelleme/is/kendi.json` `lkgSurum` = `0.2.4` ve `durum` sağlıklı.
+6. Köprüyü kaldır: `umount <kök>/lisans && rmdir <kök>/lisans` (0.2.4 `<kök>/lisans`e bakmaz; kalması zararsız ama karışıklık yaratır). Köprü yeniden açılışta zaten düşer (kalıcı DEĞİL; `/etc/fstab`a yazılmaz).
+
+**Yol B — elle güncelleme (§3):** köprü kurmadan yeni imzalı paketi §3 ile uygula; sonra `gecis` zaten yapılmışsa `<kök>/current` paketin 0.2.4 ikilisini taşır, hizmet yeniden başlatılınca (`systemctl restart tekserp-guncelleyici`) 0.2.4 çalışır. Doğrulama A.4–A.5 ile aynıdır.
+
+**Geri dönüş:** köprü yalnız konak bağıdır, `umount` her an geri alır; birime ve veriye dokunulmaz.
 
 Yeni kurulumda aynı adımları `kur --tar <paket> --proje <proje> [--uygula]` yapar (önkoşul `yapilandirma/.env`; tekrarlanabilir — ikinci koşum yapılacak bir şey bulmaz).

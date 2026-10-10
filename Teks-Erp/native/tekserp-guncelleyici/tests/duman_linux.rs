@@ -107,13 +107,7 @@ fn duman_linux_hazirla() {
 
     // Betiğin okuduğu yollar (güncelleyicinin düzeninden — betik elle kurmaz).
     let l = Layout::new(Path::new(&girdi["kok"].as_str().expect("girdi.kok")), Path::new(&girdi["veri"].as_str().expect("girdi.veri")));
-    let yollar = [
-        ("NIYET", l.intent_file()),
-        ("DURUM", l.status_file()),
-        ("LISANS", l.default_license_dir()),
-        ("IS", l.work()),
-        ("KANAL", kanal.clone()),
-    ];
+    let yollar = [("NIYET", l.intent_file()), ("DURUM", l.status_file()), ("IS", l.work()), ("KANAL", kanal.clone())];
     let metin: String = yollar.iter().map(|(k, p)| format!("{k}={}\n", p.display())).collect();
     yaz(&dir.join("yollar.env"), metin.as_bytes());
 }

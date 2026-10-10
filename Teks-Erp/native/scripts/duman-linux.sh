@@ -111,7 +111,7 @@ degismez() {
 yayinla() {
   KIRA=$((KIRA + 1))
   cp "$KANAL/$1/surum.json" "$KANAL/.son.json" && mv -f "$KANAL/.son.json" "$KANAL/son.json"
-  sudo install -m 0600 "$FX/lisans/kira-$KIRA.jws" "$LISANS/kira.jws"
+  sudo install -o 10001 -g 10001 -m 0600 "$FX/lisans/kira-$KIRA.jws" "$LISANS/kira.jws"
   sudo sh -c "jq --arg t '$(date -u +%Y-%m-%dT%H:%M:%S.000Z)' '.yazildi = \$t' '$FX/niyet.json' > '$NIYET.yeni' && chown 10001:10001 '$NIYET.yeni' && chmod 0600 '$NIYET.yeni' && mv -f '$NIYET.yeni' '$NIYET'"
   echo "   yayın $1 · kira-$KIRA"
 }
@@ -167,9 +167,6 @@ sudo truncate -s 3G "$LOOP"
 sudo mkfs.ext4 -q -m 0 -F "$LOOP"
 sudo install -d -m 0700 "$IS"
 sudo mount -o loop "$LOOP" "$IS"
-sudo install -d -m 0700 "$LISANS"
-sudo install -m 0600 "$FX/lisans/kira-1.jws" "$LISANS/kira.jws"
-sudo install -m 0600 "$FX/lisans/hak.jws" "$LISANS/hak.jws"
 V1=$(cut -d' ' -f1 <<<"${SURUMLER[0]}")
 cp "$KANAL/$V1/surum.json" "$KANAL/son.json"
 python3 -I "$IMAJ_DIZINI/cdn.py" "$FX/cdn" "$PORT" &
@@ -189,6 +186,12 @@ grep -q "KURU koşum" "$FX/kur-kuru.txt" || dur "KURU koşum satırı yok"
 if sudo test -e "$KOK/current" || sudo test -e "$KOK/surumler"; then dur "KURU koşum diske yazdı"; fi
 "${KUR[@]}" --uygula | tee "$FX/kur.txt"
 grep -q "^TAMAM: kurulum $V1" "$FX/kur.txt" || dur "kur --uygula TAMAM demedi"
+# Kira konakta değil backend'in `lisans` biriminde yaşar (compose onu `kur --uygula`da yaratır); güncelleyici onu
+# `docker volume inspect` ile okur. Konakta `$KOK/lisans` OLMAMALI (gerçek kurulumdaki gibi).
+LISANS=$(docker volume inspect -f '{{.Mountpoint}}' "${PROJE}_lisans") || dur "${PROJE}_lisans birimi yok"
+sudo install -o 10001 -g 10001 -m 0600 "$FX/lisans/kira-1.jws" "$LISANS/kira.jws"
+sudo install -o 10001 -g 10001 -m 0600 "$FX/lisans/hak.jws" "$LISANS/hak.jws"
+sudo test ! -e "$KOK/lisans" || dur "konakta $KOK/lisans var — kira birimde olmalı"
 [ "$(systemctl is-enabled "$AD.service")" = enabled ] || dur "birim etkin (enabled) değil"
 systemctl show -p DropInPaths --value "$AD.service" | grep -q 50-tekserp.conf || dur "güncelleyicinin ek dosyası yok"
 sudo "$G" kunye | jq -e '.testCapasi == true' >/dev/null || dur "kurulan ikili paketteki test çapalı ikili değil"
