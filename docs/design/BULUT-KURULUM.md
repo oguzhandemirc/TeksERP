@@ -189,7 +189,7 @@ Tek kaynak yine `protocol/guncelleme*.ts` dosyalarıdır (w2). Rust aynası ve v
 2. İndirilen paketin boyu ve sha256'sı = bildirimdeki.
 3. Paket içi `PAKET-DOCKER.json.jws` → imzalı liste → listedeki her dosyanın özeti.
 4. `docker load` → yüklenen imajın config özeti = `imaj.kimlik`. Değilse imaj silinir (`PAKET_BAGI`).
-5. İmaj içi bütünlük listesi açılışta ve günlük olarak native çekirdekte doğrulanır (G13, uygulandı 2026-10-08 — LINUX-DOCKER §8 son madde): imza `imaj-imzala.mjs` ile ince son katmanda (`/app/butunluk-liste.txt` + `butunluk-zincir.jws`/`butunluk.jws`, label `tr.tekserp.butunluk`), imzalı etiket yalnız imajın kendi çekirdeğiyle öz-denetim `GECERLI` ise kalır; yükleyici zincirli listeyi kök çapasıyla okur. Teslim yalnız imzalı imajla; açık borç: Docker derlemesinin kayıtlı kökeni (üretim imzası bugün `--ci-atla` cümlesi ister).
+5. İmaj içi bütünlük listesi açılışta ve günlük olarak native çekirdekte doğrulanır (G13, uygulandı 2026-10-08 — LINUX-DOCKER §8 son madde): imza `imaj-imzala.mjs` ile ince son katmanda (`/app/butunluk-liste.txt` + `butunluk-zincir.jws`/`butunluk.jws`, label `tr.tekserp.butunluk`), imzalı etiket yalnız imajın kendi çekirdeğiyle öz-denetim `GECERLI` ise kalır; yükleyici zincirli listeyi kök çapasıyla okur. Teslim yalnız imzalı imajla; derleme kökeni kayıtlıdır (CI `docker-linux-x64` + `imaj-kunye.json`, imza `--ci-kosu=<koşu>` ile; `--ci-atla` yalnız kullanıcının kendi cümlesiyle kaçış — LINUX-DOCKER §8.4).
 
 ### 4.4 Adımlar (Windows §8'in karşılığı)
 
