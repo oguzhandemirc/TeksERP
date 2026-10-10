@@ -17,43 +17,53 @@
   ],
   "yayinlar": [
     {
-      "id": "2026-10-08d",
+      "id": "2026-10-11",
       "durum": "TASLAK — terfide kullanıcı onayı",
-      "baslik": "Tablet internet adresli sunucuya da bağlanır",
-      "surumler": {
-        "tablet": "1.3.0"
-      },
-      "maddeler": [
-        {
-          "kapsam": "tablet",
-          "tip": "yeni",
-          "metin": "“Adresi yaz”a size verilen …etkiliyazilim.com adresi yazılabilir; tablet sertifikayı kendisi doğrular, kod sorulmaz, “Ekle”ye dokunun."
-        },
-        {
-          "kapsam": "tablet",
-          "tip": "iyilestirme",
-          "metin": "Fabrika ağındaki sunucu eskisi gibi QR ya da doğrulama koduyla eklenir."
-        },
-        {
-          "kapsam": "tablet",
-          "tip": "iyilestirme",
-          "metin": "Bağlanamayınca tablet sebebini söyler: saat yanlış, ağ bağlantıyı denetliyor, adres sertifikayla eşleşmiyor ya da sunucuya ulaşılamıyor."
-        },
-        {
-          "kapsam": "tablet",
-          "tip": "iyilestirme",
-          "metin": "Ayarlar'da sunucunun nasıl doğrulandığı görünür; sunucu değişirse tablet yeniden eklemenizi ister."
-        }
-      ]
-    },
-    {
-      "id": "2026-10-08c",
-      "durum": "TASLAK — terfide kullanıcı onayı",
-      "baslik": "Panel sunucuya yalnız şifreli bağlanır",
+      "baslik": "Tezgah Salonu, Vardiya Tanımları ve şifreli bağlantı",
       "surumler": {
         "panel": "1.6.0"
       },
       "maddeler": [
+        {
+          "kapsam": "panel",
+          "tip": "yeni",
+          "metin": "Operasyon ekranında yeni “Tezgah Salonu” karosu: her tezgahın çalışıp çalışmadığı, duruş sebebi ve ne kadar süredir durduğu tek bakışta görünür; hedef süresini aşan duruşlar öne çıkar. Karo, Genel Ayarlar'da “Tezgah izleme” modülü açıksa ve kullanıcının izni varsa görünür."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "yeni",
+          "metin": "Tezgah kartında takılı leventin kalan metresi küçük bir rozetle yazılır; tezgahta birden çok levent varsa ilk bitecek olan gösterilir. Karta tıklayınca bütün leventler kalan metreleriyle listelenir."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "yeni",
+          "metin": "Tezgah kartı durumun nereden geldiğini yazar: ölçülen, elle girilen ya da simüle. Sensörü olmayan tezgah, elle girilen duruş kaydıyla boyanır. Durumu hiç bilinmeyen tezgah gri kartta “Veri yok” olarak görünür."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "yeni",
+          "metin": "Tezgah Salonu'nu salondaki televizyonda göstermek için ekranın üstündeki “TV kipi” düğmesine basın: menü ve düğmeler kalkar, ekran kendini tazeler. Bağlantı koparsa başlıkta “Bağlantı yok” ve son verinin saati yazar. TV kipinden çıkmak için programı yeniden açın."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "iyilestirme",
+          "metin": "“Hazır Sebepler” ekranında tezgah duruş sebeplerine hedef süre (dakika) girilebilir; duruş bu süreyi aşınca Tezgah Salonu'nda uyarı rengine döner."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "yeni",
+          "metin": "Tanımlar ekranında yeni “Vardiya Tanımları” karosu (dokuma açık fabrikalarda): vardiyanın başlangıç saati, süresi, planlı molası ve çalışılan günler buradan girilir. Kaydetmeden önce takvimde neyin değişeceği gösterilir; kullanılmayan vardiya silinmez, arşive alınır."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "duzeltme",
+          "metin": "İki adımlı doğrulama artık masaüstü panelden kurulabiliyor: Kullanıcılar ekranında kullanıcıyı açın, “İki Adımlı” sekmesinde “Kurulumu başlat”, ardından “Bu bilgisayarda kurulumu aç” düğmesine basın ve karekodu telefondaki doğrulama uygulamasıyla okutun. Başka bir kullanıcı için açarken önce sizin oturumunuz kapanır, kurulum bitince yeniden giriş yaparsınız."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "iyilestirme",
+          "metin": "Tezgah kartındaki levent rozeti ve Vardiya Tanımları ekranı sunucunun da güncellenmesini gerektirir. Sunucu güncellenmeden rozet görünmez, Vardiya Tanımları listesi yüklenemedi uyarısı verir; panelin öteki ekranları eski sunucuyla aynen çalışır."
+        },
         {
           "kapsam": "panel",
           "tip": "yeni",
@@ -113,6 +123,36 @@
           "kapsam": "panel",
           "tip": "iyilestirme",
           "metin": "Sunucunun diskinde yer kalmadığı için güncelleme yapılamazsa panel artık çareyi yazar: sunucuda yer açın, sonra güncellemeyi yeniden onaylayın. Güncelleme henüz başlamadan bekliyorsa yer açılınca kendiliğinden sürer."
+        }
+      ]
+    },
+    {
+      "id": "2026-10-08d",
+      "durum": "TASLAK — terfide kullanıcı onayı",
+      "baslik": "Tablet internet adresli sunucuya da bağlanır",
+      "surumler": {
+        "tablet": "1.3.0"
+      },
+      "maddeler": [
+        {
+          "kapsam": "tablet",
+          "tip": "yeni",
+          "metin": "“Adresi yaz”a size verilen …etkiliyazilim.com adresi yazılabilir; tablet sertifikayı kendisi doğrular, kod sorulmaz, “Ekle”ye dokunun."
+        },
+        {
+          "kapsam": "tablet",
+          "tip": "iyilestirme",
+          "metin": "Fabrika ağındaki sunucu eskisi gibi QR ya da doğrulama koduyla eklenir."
+        },
+        {
+          "kapsam": "tablet",
+          "tip": "iyilestirme",
+          "metin": "Bağlanamayınca tablet sebebini söyler: saat yanlış, ağ bağlantıyı denetliyor, adres sertifikayla eşleşmiyor ya da sunucuya ulaşılamıyor."
+        },
+        {
+          "kapsam": "tablet",
+          "tip": "iyilestirme",
+          "metin": "Ayarlar'da sunucunun nasıl doğrulandığı görünür; sunucu değişirse tablet yeniden eklemenizi ister."
         }
       ]
     },

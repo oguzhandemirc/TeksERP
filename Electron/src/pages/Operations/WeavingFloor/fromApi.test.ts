@@ -166,4 +166,15 @@ describe("fromApi — durum kaynağı", () => {
   it("eski sunucu `stateSource` göndermez → null (kaynak uydurulmaz)", () => {
     expect(fromApi(dto([loom({})])).looms[0]!.stateSource).toBeNull();
   });
+
+  // Panel 1.6.0 backend 2.15.1'de de çalışır: o sunucu `beams`/`beamTracking` alanlarını hiç göndermez.
+  it("eski sunucu `beams` ve `beamTracking` göndermez → levent boş, kart rozeti yok (çökme yok)", () => {
+    const eskiLoom: Partial<WireLoom> = loom({});
+    delete eskiLoom.beams;
+    const eskiDto: Partial<LoomFloorDto> = dto([eskiLoom as WireLoom]);
+    delete eskiDto.beamTracking;
+    const t = fromApi(eskiDto as LoomFloorDto).looms[0]!;
+    expect(t.beams).toEqual([]);
+    expect(criticalBeamOf(t.beams)).toBeFalsy();
+  });
 });
