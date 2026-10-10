@@ -21,8 +21,21 @@ import { useDeviceScanner } from "@/hooks/useDeviceScanner";
 import { useDeviceAnnounce } from "@/hooks/useDeviceAnnounce";
 import { useScannerStore } from "@/store/scanner";
 import { useMachineConfig } from "@/hooks/useMachineConfig";
+import { useHashPath } from "@/lib/use-hash-path";
+import { TEZGAH_TV_PATH } from "@/pages/Operations/WeavingFloor/tv-entry";
+import { WeavingFloorTvScreen } from "@/pages/Operations/WeavingFloor/WeavingFloorTvScreen";
 
+/**
+ * Oturum-içi TEK giriş (App `Root` bunu yalnız oturum-dışı dalı DEĞİLKEN çizer; K5'te bağlanmaz):
+ * salon TV'si (`#/tezgah-tv`) menü/sekme kabuğu olmadan, diğer her yol kabukla. Oturum-içi yeni
+ * bir yüzey buradan dallanır ki lisans K5 kapısının arkasında kalsın (`test_lisans_k5_giris`).
+ */
 export function AppShell() {
+  const hashPath = useHashPath();
+  return hashPath === TEZGAH_TV_PATH ? <WeavingFloorTvScreen /> : <MenuShell />;
+}
+
+function MenuShell() {
   const [collapsed, setCollapsed] = useState(() => {
     try {
       return localStorage.getItem("sidebar.collapsed") === "1";

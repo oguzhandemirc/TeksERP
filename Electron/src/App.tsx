@@ -19,8 +19,6 @@ import { tokenStore } from "@/lib/secure-token";
 import { decodeJwt, jwtPayloadExpiryMs } from "@/lib/jwt";
 import { canEnterApp } from "@/types/auth";
 import { TOTP_ENROLL_PATH } from "@/lib/totp-enroll-url";
-import { TEZGAH_TV_PATH } from "@/pages/Operations/WeavingFloor/tv-entry";
-import { WeavingFloorTvScreen } from "@/pages/Operations/WeavingFloor/WeavingFloorTvScreen";
 import { useHashPath } from "@/lib/use-hash-path";
 import { loadScanSeries } from "@/lib/scanner/barcode-kind";
 import { DEFAULT_STALE_MS, applyQueryFreshness } from "@/lib/query-freshness";
@@ -145,11 +143,9 @@ function Root() {
   let kabuk;
   if (oturumDisi) {
     kabuk = <RouterProvider router={authRouter} />;
-  } else if (hashPath === TEZGAH_TV_PATH) {
-    // Salon TV'si: menü/sekme kabuğu ÇİZİLMEZ. Oturum düşerse yukarıdaki dal girişe götürür,
-    // giriş aynı yola döner (`AuthLanding` gidilmek istenen yolu korur).
-    kabuk = <WeavingFloorTvScreen />;
   } else {
+    // Oturum-içi her yüzey (salon TV'si `#/tezgah-tv` dahil) AppShell'den dallanır: K5'te bağlanmaz.
+    // Oturum düşerse yukarıdaki dal girişe götürür, giriş aynı yola döner (`AuthLanding`).
     kabuk = <AppShell />;
   }
   // ⚠️ KURULUM TETİĞİ HER EKRANDA, TEK YERDE: yalnız kabukta çizildiğinde giriş

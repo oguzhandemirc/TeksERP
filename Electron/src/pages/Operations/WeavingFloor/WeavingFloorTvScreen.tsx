@@ -1,4 +1,4 @@
-// Salon TV'si — kabuksuz ekran (App `Root` `#/tezgah-tv`te bunu çizer): kapılar `tv-entry`
+// Salon TV'si — kabuksuz ekran (`AppShell` `#/tezgah-tv`te bunu çizer; K5'te bağlanmaz): kapılar `tv-entry`
 // (`tvGateOf`), görünüm `WeavingFloorPage tv`. Sayfa başlığı router ister; TV'nin adres
 // çubuğuyla bağı yok, bu yüzden kendi bellek router'ı içinde çizilir.
 import { MemoryRouter } from "react-router-dom";

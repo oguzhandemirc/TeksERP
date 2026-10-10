@@ -1,12 +1,12 @@
 // =============================================================================
 // TEZGAH SALONU — TV BAĞLANTISI (menüsüz kip, DOKUMA-CANLI-EKRAN §9 madde 4)
 // =============================================================================
-// `#/tezgah-tv` sekme/menü kabuğu çizilmeden salonu TV kipinde açar (App `Root` kapısı).
+// `#/tezgah-tv` sekme/menü kabuğu çizilmeden salonu TV kipinde açar (`AppShell` dalı, App `Root` oturum-içi).
 // Kapılar uygulama route'uyla AYNI: izin `loom:live-view` + `operations/weaving-floor`
 // ekranının modülü (`tezgahEnabled`); gerçek kapı yine backend'dir.
 // =============================================================================
 
-/** TV bağlantısının hash yolu — App kapısı, panel düğmesi ve bağlantı üreteci aynı sabitten. */
+/** TV bağlantısının hash yolu — AppShell dalı, panel düğmesi ve bağlantı üreteci aynı sabitten. */
 export const TEZGAH_TV_PATH = "/tezgah-tv";
 /** Modül kapısı bu ekran anahtarından okunur (`ROUTE_MODULE`); ayrı modül anahtarı yok. */
 export const TEZGAH_TV_SCREEN = "/operations/weaving-floor";
